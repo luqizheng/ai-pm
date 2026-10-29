@@ -1,0 +1,40 @@
+# AI-PM V2 "AI lead" trust model — deterministic policy (single source of truth).
+# Mirrored verbatim in crates/pm-application/src/policy_engine.rs (DEFAULT_POLICY_YAML)
+# and crates/pm-application/tests/policy_engine.rs (POLICY_YAML).
+policy_id: ai-pm-ai-lead-v2
+
+defaults:
+  effect: auto_apply         # blacklist model: anything not matched below is auto-applied
+
+escalate:                    # pre-execution human review; never evaluated for red lines
+  when:
+    - confidence: low
+    - blast_radius_above: 10
+    - unresolved_conflict: true
+    - anomaly_baseline: true # M1: parses but never fires (no behavioral-baseline detector yet)
+
+red_lines:                   # pre-confirmation required, per role
+  - command: release_version
+    required_role: release_manager
+  - command: external_commitment
+    required_role: account_owner
+  - command: sign_acceptance
+    required_role: authorized_acceptor
+  - command: destructive_write
+    required_role: project_owner
+  - command: grant_permission
+    required_role: project_owner
+  - command: change_policy
+    required_role: platform_admin
+  - command: spend_above_quota
+    required_role: quota_approver
+
+post_execution:
+  notify: always             # parsed-ignored in M1 (notification stream lands in a later task)
+  veto_window:
+    default: 4h
+    by_command_type:
+      adjust_milestone_plan: 24h
+  sampling:                  # parsed-ignored in M1
+    base_rate: 0.05
+    risk_weighted: true
