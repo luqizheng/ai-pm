@@ -21,15 +21,3 @@
 | 数据库错误 | 500 | `{error: "internal"}` |
 
 启动时自动执行 `migrations/`。服务层入口：`pm_application::ingestion::submit_event`（Task 16 的 MCP 工具将直接消费它）。
-
-## 壳认证与前端业务端点（shell_routes）
-
-同一服务还挂载前端壳与业务端点（契约见 `frontend/src/api/mock/fixtures.ts`，路由聚合在 `src/shell_routes.rs`，由 main.rs merge）：
-
-- 壳认证：`POST /v1/iam/auth/{login,refresh,logout}`、`GET /v1/iam/auth/setup-status`——migration 0005 本地会话表实现，任意口令可登录（IAM 上游接管前的过渡）
-- DB 菜单：`GET /v1/pure/get-async-routes`（静态树，菜单表落地后改查库）
-- 用户目录：`GET /v1/iam/users/simple`
-- 业务读端点：`GET /v1/pm/{principals,projects,requirements,tasks,approvals,audit-logs}`（`project_id` 过滤 + page/size 分页，需 Bearer 会话）
-- 审批决策：`POST /v1/pm/approvals/{id}/decide`（`{decision: approved|rejected, reason}` → `{id, status, decided_at}`；事务落 approval_request + 审计，驳回另记 human_intervention(veto) 并置提案 vetoed；重复决策 409）
-
-前端联调：`cd frontend && pnpm dev`（`.env.development` 置 `VITE_USE_MOCK = 0`，vite 代理 `/api → 127.0.0.1:8080`）。演示数据：`docker exec -i aipm-pg-dev psql -U aipm -d aipm < scripts/seed-demo.sql`（固定 UUID 幂等）。
