@@ -28,6 +28,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await?;
     tracing::info!(port, "pm-api listening");
 
-    axum::serve(listener, pm_api::routes::router(pool)).await?;
+    let app = pm_api::routes::router(pool.clone())
+        .merge(pm_api::shell_routes::router().with_state(pool));
+    axum::serve(listener, app).await?;
     Ok(())
 }
