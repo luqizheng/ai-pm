@@ -1,0 +1,6 @@
+[package]
+name = "pm-domain"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

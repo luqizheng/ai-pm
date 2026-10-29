@@ -1,0 +1,6 @@
+[package]
+name = "pm-mcp"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

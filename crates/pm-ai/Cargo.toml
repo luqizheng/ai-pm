@@ -1,0 +1,6 @@
+[package]
+name = "pm-ai"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

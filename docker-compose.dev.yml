@@ -1,0 +1,15 @@
+services:
+  aipm-pg-dev:
+    image: postgres:16
+    container_name: aipm-pg-dev
+    environment:
+      POSTGRES_USER: aipm
+      POSTGRES_PASSWORD: aipm
+      POSTGRES_DB: aipm
+    ports:
+      - "5433:5432"
+    volumes:
+      - aipm_pg_data:/var/lib/postgresql/data
+
+volumes:
+  aipm_pg_data:

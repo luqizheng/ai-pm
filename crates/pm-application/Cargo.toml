@@ -1,0 +1,6 @@
+[package]
+name = "pm-application"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
