@@ -2,14 +2,16 @@
 
 use async_trait::async_trait;
 use pm_domain::{AnalysisResult, EventId, ProjectId};
+use serde::{Deserialize, Serialize};
 
 use crate::skill_router::SkillId;
 
 /// Everything a model needs to analyze one inbound event.
 ///
 /// Filled by the orchestrator's context builder (Task 12); `payload` carries
-/// the raw inbound event payload.
-#[derive(Debug, Clone)]
+/// the raw inbound event payload. Serialized whole into
+/// `ai.analysis_run.context_snapshot` JSONB.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisContext {
     pub project_id: ProjectId,
     pub event_id: EventId,
@@ -55,6 +57,28 @@ pub trait AnalysisModel: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    // Per brief: model.rs is the Task 12 contract; behavior tests live in
-    // fake_model.rs against the trait's only M1 implementation.
+    use super::*;
+
+    #[test]
+    fn analysis_context_json_roundtrip_preserves_all_fields() {
+        let context = AnalysisContext {
+            project_id: uuid::Uuid::nil(),
+            event_id: uuid::Uuid::nil(),
+            event_type: "technical_design_submitted".to_string(),
+            payload: serde_json::json!({ "fixture": "cache_overlap" }),
+            task: Some(serde_json::json!({ "id": "TASK-102", "revision": 7 })),
+            requirement_revision: None,
+            milestone: Some(serde_json::json!({ "id": "MILESTONE-1" })),
+            config: serde_json::json!({ "automation_mode": "ai_lead" }),
+            policy_version: 1,
+        };
+        let json = serde_json::to_string(&context).unwrap();
+        let back: AnalysisContext = serde_json::from_str(&json).unwrap();
+        // PartialEq is intentionally not derived (review fix kept to the
+        // prescribed derive set), so compare via the serialized form.
+        assert_eq!(
+            serde_json::to_value(&back).unwrap(),
+            serde_json::to_value(&context).unwrap()
+        );
+    }
 }

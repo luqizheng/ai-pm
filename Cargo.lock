@@ -1040,6 +1040,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "pm-domain",
+ "serde",
  "serde_json",
  "tokio",
  "uuid",
