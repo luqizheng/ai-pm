@@ -1,0 +1,190 @@
+//! Project bootstrap (Task 8): idempotent project creation plus the full
+//! principal / AI-configuration / skill-binding set a project needs before it
+//! can receive events.
+//!
+//! One call to [`bootstrap_project`] creates, in a single transaction:
+//!
+//! - a `core.customer` (name = project code, looked up first: reused when a
+//!   bootstrap for the same code ran before),
+//! - three `core.principal` rows — the human owner, the AI PM and the dev
+//!   agent — with code-suffixed display names,
+//! - the `core.project` row (`status = 'planning'`, `code` UNIQUE),
+//! - three `core.project_member` rows (human → `owner`, ai_pm → `ai_pm`,
+//!   dev_agent → `developer`),
+//! - the `ai.project_ai_config` row (fake model, `ai_lead`, policy version 1)
+//!   bound to the AI PM principal, and
+//! - five `ai.project_skill_binding` rows pinning every 0003-seeded skill at
+//!   `v1`.
+//!
+//! A second call with the same project code fails with
+//! [`BootstrapError::Duplicate`] — `core.project.code` is UNIQUE; bootstrap
+//! never upserts and never produces a second project.
+
+use pm_domain::{PrincipalId, ProjectId};
+use sqlx::PgPool;
+use uuid::Uuid;
+
+/// Everything [`bootstrap_project`] needs: the unique project code and its
+/// display name.
+pub struct BootstrapRequest {
+    pub project_code: String,
+    pub project_name: String,
+}
+
+/// The ids a successful bootstrap created (or reused, for the customer).
+#[derive(Debug, Clone)]
+pub struct BootstrapOutcome {
+    pub customer_id: Uuid,
+    pub project_id: ProjectId,
+    pub ai_principal_id: PrincipalId,
+    pub dev_agent_id: PrincipalId,
+    pub human_id: PrincipalId,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum BootstrapError {
+    #[error("project code `{0}` already exists")]
+    Duplicate(String),
+    #[error("database error: {0}")]
+    Db(sqlx::Error),
+}
+
+/// The five skill definitions seeded by `migrations/0003_platform.sql`. Every
+/// bootstrap binds all of them at their seed version.
+const SKILL_IDS: [&str; 5] = [
+    "requirement_analysis",
+    "task_analysis",
+    "risk_detection",
+    "architecture_consistency",
+    "scheduling_orchestration",
+];
+
+/// Bootstraps one project: customer (idempotent by code), the three principals,
+/// the project, its members, the AI configuration and the five skill bindings —
+/// all inside one transaction. Fails with [`BootstrapError::Duplicate`] when
+/// the project code is already taken.
+pub async fn bootstrap_project(
+    pool: &PgPool,
+    req: BootstrapRequest,
+) -> Result<BootstrapOutcome, BootstrapError> {
+    let mut tx = pool.begin().await.map_err(BootstrapError::Db)?;
+
+    // Friendly duplicate check before any inserts; the UNIQUE(project.code)
+    // violation on the insert below is the race-safe backstop.
+    let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM core.project WHERE code = $1")
+        .bind(&req.project_code)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(BootstrapError::Db)?;
+    if existing.is_some() {
+        return Err(BootstrapError::Duplicate(req.project_code));
+    }
+
+    // Customer is idempotent by name (= project code); the table has no UNIQUE
+    // constraint on name, so look up first, insert only when missing.
+    let customer_id: Uuid = match sqlx::query_scalar("SELECT id FROM core.customer WHERE name = $1")
+        .bind(&req.project_code)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(BootstrapError::Db)?
+    {
+        Some(id) => id,
+        None => {
+            sqlx::query_scalar("INSERT INTO core.customer (name) VALUES ($1) RETURNING id")
+                .bind(&req.project_code)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(BootstrapError::Db)?
+        }
+    };
+
+    let human_id =
+        insert_principal(&mut tx, "human", &format!("owner-{}", req.project_code)).await?;
+    let ai_principal_id =
+        insert_principal(&mut tx, "ai_pm", &format!("ai-pm-{}", req.project_code)).await?;
+    let dev_agent_id =
+        insert_principal(&mut tx, "dev_agent", &format!("dev-agent-{}", req.project_code)).await?;
+
+    let project_id: ProjectId = match sqlx::query_scalar(
+        "INSERT INTO core.project (customer_id, code, name, status) \
+         VALUES ($1, $2, $3, 'planning') RETURNING id",
+    )
+    .bind(customer_id)
+    .bind(&req.project_code)
+    .bind(&req.project_name)
+    .fetch_one(&mut *tx)
+    .await
+    {
+        Ok(id) => id,
+        Err(sqlx::Error::Database(db)) if db.is_unique_violation() => {
+            return Err(BootstrapError::Duplicate(req.project_code));
+        }
+        Err(e) => return Err(BootstrapError::Db(e)),
+    };
+
+    insert_member(&mut tx, project_id, human_id, "owner").await?;
+    insert_member(&mut tx, project_id, ai_principal_id, "ai_pm").await?;
+    insert_member(&mut tx, project_id, dev_agent_id, "developer").await?;
+
+    sqlx::query(
+        "INSERT INTO ai.project_ai_config \
+         (project_id, ai_principal_id, model_provider, model_name, model_config, automation_mode, policy_version) \
+         VALUES ($1, $2, 'fake', 'fake', '{}'::jsonb, 'ai_lead', 1)",
+    )
+    .bind(project_id)
+    .bind(ai_principal_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(BootstrapError::Db)?;
+
+    for skill_id in SKILL_IDS {
+        sqlx::query(
+            "INSERT INTO ai.project_skill_binding (project_id, skill_id, skill_version) \
+             VALUES ($1, $2, 'v1')",
+        )
+        .bind(project_id)
+        .bind(skill_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(BootstrapError::Db)?;
+    }
+
+    tx.commit().await.map_err(BootstrapError::Db)?;
+
+    Ok(BootstrapOutcome {
+        customer_id,
+        project_id,
+        ai_principal_id,
+        dev_agent_id,
+        human_id,
+    })
+}
+
+async fn insert_principal(
+    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    kind: &str,
+    display_name: &str,
+) -> Result<PrincipalId, BootstrapError> {
+    sqlx::query_scalar("INSERT INTO core.principal (kind, display_name) VALUES ($1, $2) RETURNING id")
+        .bind(kind)
+        .bind(display_name)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(BootstrapError::Db)
+}
+
+async fn insert_member(
+    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    project_id: ProjectId,
+    principal_id: PrincipalId,
+    role: &str,
+) -> Result<(), BootstrapError> {
+    sqlx::query("INSERT INTO core.project_member (project_id, principal_id, role) VALUES ($1, $2, $3)")
+        .bind(project_id)
+        .bind(principal_id)
+        .bind(role)
+        .execute(&mut **tx)
+        .await
+        .map_err(BootstrapError::Db)?;
+    Ok(())
+}
