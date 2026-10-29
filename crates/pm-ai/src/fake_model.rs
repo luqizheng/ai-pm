@@ -75,6 +75,12 @@ fn id(text: &str) -> uuid::Uuid {
     text.parse().expect("hard-coded uuid must parse")
 }
 
+// Whole-second dates only: PG timestamptz keeps microseconds, so these
+// round-trip exactly for executor-side assertions.
+fn fixed_date(text: &str) -> chrono::DateTime<chrono::Utc> {
+    text.parse().expect("hard-coded date must parse")
+}
+
 fn project_id() -> uuid::Uuid {
     id("11111111-1111-4111-8111-111111111111")
 }
@@ -126,7 +132,7 @@ fn cache_overlap_result() -> AnalysisResult {
                 command: ProjectCommand::AdjustMilestonePlan {
                     project_id: project_id(),
                     milestone_id: milestone_id(),
-                    new_planned_at: Some(chrono::Utc::now() + chrono::Duration::days(3)),
+                    new_planned_at: Some(fixed_date("2026-11-06T09:00:00Z")),
                     expected_revision: 4,
                 },
                 rationale: "缓存选型未定将阻塞里程碑验收，计划顺延 3 天以容纳调研结论。".to_string(),
@@ -249,7 +255,11 @@ mod tests {
 
         match &result.proposals[2].command {
             ProjectCommand::AdjustMilestonePlan { new_planned_at, .. } => {
-                assert!(new_planned_at.is_some(), "milestone should move 3 days");
+                assert_eq!(
+                    new_planned_at,
+                    &Some("2026-11-06T09:00:00Z".parse::<chrono::DateTime<chrono::Utc>>().unwrap()),
+                    "milestone move must be the fixed whole-second date"
+                );
             }
             other => panic!("expected adjust_milestone_plan, got {}", other.kind()),
         }
