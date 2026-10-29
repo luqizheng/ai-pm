@@ -20,9 +20,13 @@
 //! [`CommandSource::RedlineApproval`] flow; in M1 the executor rejects every
 //! non-human actor outright (`RedLineBlocked`) before any transaction opens.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use pm_domain::{AuditId, CommandError, MilestoneId, ProjectCommand, ProjectId, TaskId, TaskStatus};
+use pm_domain::{
+    AuditId, CommandError, MilestoneId, PrincipalId, ProjectCommand, ProjectId, RequirementId,
+    RevisionId, TaskId, TaskStatus,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::Row;
@@ -143,9 +147,19 @@ impl PgCommandExecutor {
     }
 
     /// Handler registry check — the orchestrator validates executability with
-    /// this before dispatching.
+    /// this before dispatching. `rollback_command` is registered because its
+    /// handler exists — [`PgCommandExecutor::compensate`] — but note its entry
+    /// point is `compensate`, not `execute` (see `execute`).
     pub fn has_handler(&self, kind: &str) -> bool {
-        matches!(kind, "update_task_status" | "sign_acceptance")
+        matches!(
+            kind,
+            "create_task"
+                | "update_task_status"
+                | "approve_requirement_revision"
+                | "adjust_milestone_plan"
+                | "sign_acceptance"
+                | "rollback_command"
+        )
     }
 
     /// Executes one command in a single transaction and writes its audit row.
@@ -163,18 +177,45 @@ impl PgCommandExecutor {
             return Err(CommandError::RedLineBlocked { command: cmd.kind() });
         }
         match cmd {
+            ProjectCommand::CreateTask {
+                project_id,
+                title,
+                description,
+                assignee_id,
+            } => {
+                self.create_task(project_id, title, description, assignee_id, &ctx)
+                    .await
+            }
             ProjectCommand::UpdateTaskStatus {
                 task_id,
                 expected_revision,
                 new_status,
             } => self.update_task_status(task_id, expected_revision, new_status, &ctx).await,
+            ProjectCommand::ApproveRequirementRevision {
+                project_id,
+                requirement_id,
+                revision_id,
+            } => {
+                self.approve_requirement_revision(project_id, requirement_id, revision_id, &ctx)
+                    .await
+            }
+            ProjectCommand::AdjustMilestonePlan {
+                project_id,
+                milestone_id,
+                new_planned_at,
+                expected_revision,
+            } => {
+                self.adjust_milestone_plan(project_id, milestone_id, new_planned_at, expected_revision, &ctx)
+                    .await
+            }
             ProjectCommand::SignAcceptance {
                 project_id,
                 milestone_id,
                 expected_revision,
             } => self.sign_acceptance(project_id, milestone_id, expected_revision, &ctx).await,
-            // `change_policy` is a red line with no M1 handler; every other
-            // variant without a handler fails the same way (Task 7 adds them).
+            // `rollback_command` executes through `compensate()`, not here.
+            // `change_policy` is a red line with no M1 handler; it fails the
+            // same way as any other handler-less command.
             other => Err(CommandError::NotHandled {
                 command: other.kind().to_string(),
             }),
@@ -410,6 +451,319 @@ impl PgCommandExecutor {
             resulting_revision,
         })
     }
+
+    /// CreateTask: insert the `delivery.task` row at `status = 'backlog'`,
+    /// `revision = 1` and audit with a [`CompensationSpec::Delete`] — the
+    /// rollback removes the created row. There is no expected_revision: a new
+    /// object has no prior state to guard.
+    async fn create_task(
+        &self,
+        project_id: ProjectId,
+        title: String,
+        description: String,
+        assignee_id: Option<PrincipalId>,
+        ctx: &ExecutionContext,
+    ) -> Result<ExecutionReceipt, CommandError> {
+        if project_id != ctx.project_id {
+            return Err(CommandError::Validation(format!(
+                "command targets project {project_id} but the execution context is project {}",
+                ctx.project_id
+            )));
+        }
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        let task_id: TaskId = sqlx::query_scalar(
+            "INSERT INTO delivery.task (project_id, title, description, assignee_id, status, revision) \
+             VALUES ($1, $2, $3, $4, 'backlog', 1) RETURNING id",
+        )
+        .bind(project_id)
+        .bind(&title)
+        .bind(&description)
+        .bind(assignee_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        let after = json!({
+            "id": task_id,
+            "title": title,
+            "status": "backlog",
+            "revision": 1,
+        });
+        let compensation = CompensationSpec::Delete {
+            table: CompensableTable::Task,
+            target_id: task_id,
+        };
+        let audit_id = insert_audit(
+            &mut tx,
+            ctx,
+            "create_task",
+            "task",
+            Some(task_id),
+            // A new row has no prior state; the compensation is a delete.
+            &Value::Null,
+            &after,
+            Some(&compensation),
+            audit_source(ctx),
+        )
+        .await?;
+        tx.commit().await.map_err(db_err)?;
+        Ok(ExecutionReceipt {
+            audit_id,
+            command_kind: "create_task",
+            target_id: task_id,
+            resulting_revision: 1,
+        })
+    }
+
+    /// ApproveRequirementRevision: lock the requirement row → lock and
+    /// ownership-check the target revision → supersede the currently approved
+    /// revision (when there is one and it is not the target) → approve the
+    /// target → move `current_revision_id` and bump `row_revision`. The
+    /// compensation restores the pointer plus `row_revision` and both
+    /// revisions' states; the pointer may be SQL NULL (first approval), which
+    /// the snapshot carries as a JSON null field.
+    async fn approve_requirement_revision(
+        &self,
+        project_id: ProjectId,
+        requirement_id: RequirementId,
+        revision_id: RevisionId,
+        ctx: &ExecutionContext,
+    ) -> Result<ExecutionReceipt, CommandError> {
+        if project_id != ctx.project_id {
+            return Err(CommandError::Validation(format!(
+                "command targets project {project_id} but the execution context is project {}",
+                ctx.project_id
+            )));
+        }
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        let row = sqlx::query(
+            "SELECT current_revision_id, row_revision FROM delivery.requirement \
+             WHERE id = $1 AND project_id = $2 FOR UPDATE",
+        )
+        .bind(requirement_id)
+        .bind(ctx.project_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        let (current_revision_id, row_revision) = match row {
+            Some(row) => (
+                row.get::<Option<Uuid>, _>("current_revision_id"),
+                row.get::<i64, _>("row_revision"),
+            ),
+            None => {
+                return Err(CommandError::Validation(format!(
+                    "requirement {requirement_id} not found in project {}",
+                    ctx.project_id
+                )))
+            }
+        };
+
+        // The target revision must exist and belong to this requirement (its
+        // FK (project_id, requirement_id) then also pins the project).
+        let rev = sqlx::query(
+            "SELECT state, version FROM delivery.requirement_revision \
+             WHERE id = $1 AND requirement_id = $2 FOR UPDATE",
+        )
+        .bind(revision_id)
+        .bind(requirement_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        let (target_state, target_version) = match rev {
+            Some(row) => (
+                row.get::<String, _>("state"),
+                i64::from(row.get::<i32, _>("version")),
+            ),
+            None => {
+                return Err(CommandError::Validation(format!(
+                    "revision {revision_id} does not belong to requirement {requirement_id}"
+                )))
+            }
+        };
+
+        // Supersede the currently approved revision — unless the target already
+        // is the current one (re-approval), where there is nothing to supersede.
+        let mut superseded = None;
+        if let Some(old_id) = current_revision_id.filter(|old| *old != revision_id) {
+            let old = sqlx::query(
+                "SELECT state, version FROM delivery.requirement_revision \
+                 WHERE id = $1 AND requirement_id = $2 FOR UPDATE",
+            )
+            .bind(old_id)
+            .bind(requirement_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db_err)?;
+            let (old_state, old_version) = match old {
+                Some(row) => (
+                    row.get::<String, _>("state"),
+                    i64::from(row.get::<i32, _>("version")),
+                ),
+                None => {
+                    return Err(CommandError::Validation(format!(
+                        "current revision {old_id} of requirement {requirement_id} not found"
+                    )))
+                }
+            };
+            sqlx::query("UPDATE delivery.requirement_revision SET state = 'superseded' WHERE id = $1")
+                .bind(old_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(db_err)?;
+            superseded = Some((old_id, old_state, old_version));
+        }
+
+        sqlx::query(
+            "UPDATE delivery.requirement_revision SET state = 'approved', approved_by = $2 WHERE id = $1",
+        )
+        .bind(revision_id)
+        .bind(ctx.actor_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        sqlx::query(
+            "UPDATE delivery.requirement SET current_revision_id = $2, row_revision = row_revision + 1 WHERE id = $1",
+        )
+        .bind(requirement_id)
+        .bind(revision_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        let resulting_revision = row_revision + 1;
+
+        let mut entries = vec![
+            SnapshotEntry {
+                table: CompensableTable::Requirement,
+                target_id: requirement_id,
+                fields: json!({
+                    "current_revision_id": current_revision_id,
+                    "row_revision": resulting_revision,
+                }),
+            },
+            SnapshotEntry {
+                table: CompensableTable::RequirementRevision,
+                target_id: revision_id,
+                fields: json!({ "state": target_state, "version": target_version }),
+            },
+        ];
+        if let Some((old_id, old_state, old_version)) = superseded {
+            entries.push(SnapshotEntry {
+                table: CompensableTable::RequirementRevision,
+                target_id: old_id,
+                fields: json!({ "state": old_state, "version": old_version }),
+            });
+        }
+        let compensation = CompensationSpec::Restore(entries);
+
+        let before = json!({
+            "current_revision_id": current_revision_id,
+            "row_revision": row_revision,
+        });
+        let after = json!({
+            "current_revision_id": revision_id,
+            "row_revision": resulting_revision,
+        });
+        let audit_id = insert_audit(
+            &mut tx,
+            ctx,
+            "approve_requirement_revision",
+            "requirement",
+            Some(requirement_id),
+            &before,
+            &after,
+            Some(&compensation),
+            audit_source(ctx),
+        )
+        .await?;
+        tx.commit().await.map_err(db_err)?;
+        Ok(ExecutionReceipt {
+            audit_id,
+            command_kind: "approve_requirement_revision",
+            target_id: requirement_id,
+            resulting_revision,
+        })
+    }
+
+    /// AdjustMilestonePlan: lock the milestone row → revision guard → swap
+    /// `planned_at` (a `None` stores SQL NULL) and bump `revision`. The
+    /// compensation restores the previous `planned_at` — possibly SQL NULL —
+    /// guarded at the resulting revision.
+    async fn adjust_milestone_plan(
+        &self,
+        project_id: ProjectId,
+        milestone_id: MilestoneId,
+        new_planned_at: Option<chrono::DateTime<chrono::Utc>>,
+        expected_revision: i64,
+        ctx: &ExecutionContext,
+    ) -> Result<ExecutionReceipt, CommandError> {
+        if project_id != ctx.project_id {
+            return Err(CommandError::Validation(format!(
+                "command targets project {project_id} but the execution context is project {}",
+                ctx.project_id
+            )));
+        }
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        let row = sqlx::query(
+            "SELECT planned_at, revision FROM delivery.milestone WHERE id = $1 AND project_id = $2 FOR UPDATE",
+        )
+        .bind(milestone_id)
+        .bind(ctx.project_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        let (planned_before, revision) = match row {
+            Some(row) => (
+                row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("planned_at"),
+                row.get::<i64, _>("revision"),
+            ),
+            None => {
+                return Err(CommandError::Validation(format!(
+                    "milestone {milestone_id} not found in project {}",
+                    ctx.project_id
+                )))
+            }
+        };
+        if revision != expected_revision {
+            return Err(CommandError::RevisionConflict {
+                expected: expected_revision,
+                actual: revision,
+            });
+        }
+        sqlx::query(
+            "UPDATE delivery.milestone SET planned_at = $2, revision = revision + 1 WHERE id = $1",
+        )
+        .bind(milestone_id)
+        .bind(new_planned_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        let resulting_revision = revision + 1;
+        let before = json!({ "planned_at": planned_before, "revision": revision });
+        let after = json!({ "planned_at": new_planned_at, "revision": resulting_revision });
+        let compensation = CompensationSpec::Restore(vec![SnapshotEntry {
+            table: CompensableTable::Milestone,
+            target_id: milestone_id,
+            fields: json!({ "planned_at": planned_before, "revision": resulting_revision }),
+        }]);
+        let audit_id = insert_audit(
+            &mut tx,
+            ctx,
+            "adjust_milestone_plan",
+            "milestone",
+            Some(milestone_id),
+            &before,
+            &after,
+            Some(&compensation),
+            audit_source(ctx),
+        )
+        .await?;
+        tx.commit().await.map_err(db_err)?;
+        Ok(ExecutionReceipt {
+            audit_id,
+            command_kind: "adjust_milestone_plan",
+            target_id: milestone_id,
+            resulting_revision,
+        })
+    }
 }
 
 /// Applies a compensation spec inside the caller's transaction. Returns the
@@ -489,8 +843,16 @@ async fn restore_entry(
             "snapshot entry is missing its revision column `{revcol}`"
         ))
     })?;
-    let set_cols: Vec<&String> = fields.keys().filter(|key| *key != revcol).collect();
-    if set_cols.is_empty() {
+    // JSON null fields mean SQL NULL for any column type: they are written as
+    // NULL literals, not bound parameters — a TEXT-typed NULL parameter fails
+    // to prepare against non-text columns (uuid, timestamptz, …).
+    let (null_pairs, set_pairs): (Vec<_>, Vec<_>) = fields
+        .iter()
+        .filter(|(key, _)| key.as_str() != revcol)
+        .partition(|(_, value)| value.is_null());
+    let null_cols: Vec<&String> = null_pairs.into_iter().map(|(key, _)| key).collect();
+    let set_cols: Vec<&String> = set_pairs.into_iter().map(|(key, _)| key).collect();
+    if set_cols.is_empty() && null_cols.is_empty() {
         return Err(CommandError::Validation(
             "snapshot entry has no columns to restore".to_string(),
         ));
@@ -518,13 +880,32 @@ async fn restore_entry(
             actual,
         });
     }
+    // String snapshots may target non-text columns (uuid ids, timestamptz
+    // plans): a TEXT-typed parameter does not assignment-cast into them, so
+    // those assignments get an explicit `::type` cast.
+    let types = column_types(tx, table).await?;
     // Params: $1 = target id, $2 = expected revision, $3.. = column values.
+    // Null columns come first (no parameters), then the value columns in order.
     let mut sql = format!("UPDATE {table} SET ");
+    for (idx, col) in null_cols.iter().enumerate() {
+        if idx > 0 {
+            sql.push_str(", ");
+        }
+        sql.push_str(&format!("{col} = NULL"));
+    }
+    if !null_cols.is_empty() && !set_cols.is_empty() {
+        sql.push_str(", ");
+    }
     for (idx, col) in set_cols.iter().enumerate() {
         if idx > 0 {
             sql.push_str(", ");
         }
-        sql.push_str(&format!("{} = ${}", col, idx + 3));
+        match types.get(*col) {
+            Some(data_type) if data_type != "text" && fields[*col].is_string() => {
+                sql.push_str(&format!("{col} = ${}::{data_type}", idx + 3));
+            }
+            _ => sql.push_str(&format!("{col} = ${}", idx + 3)),
+        }
     }
     sql.push_str(&format!(", {revcol} = $2 + 1 WHERE {pk} = $1"));
     let mut query = sqlx::query(&sql).bind(entry.target_id).bind(expected);
@@ -536,6 +917,36 @@ async fn restore_entry(
     let mut after = entry.fields.clone();
     after[revcol] = json!(resulting_revision);
     Ok((before, after, resulting_revision))
+}
+
+/// Column data types for a schema-qualified table, read from the catalog.
+/// Used by [`restore_entry`] to decide which SET assignments need an explicit
+/// cast when replaying a stored snapshot.
+async fn column_types(
+    tx: &mut Tx,
+    table: &str,
+) -> Result<HashMap<String, String>, CommandError> {
+    let (schema, name) = table.split_once('.').ok_or_else(|| {
+        CommandError::Validation(format!("table `{table}` must be schema-qualified"))
+    })?;
+    let rows = sqlx::query(
+        "SELECT column_name, data_type FROM information_schema.columns \
+         WHERE table_schema = $1 AND table_name = $2",
+    )
+    .bind(schema)
+    .bind(name)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.get::<String, _>("column_name"),
+                row.get::<String, _>("data_type"),
+            )
+        })
+        .collect())
 }
 
 /// Writes one `governance.audit_log` row and returns its id. `source` is the
