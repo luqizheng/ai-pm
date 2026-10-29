@@ -4,6 +4,13 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+axum.workspace = true
+pm-application = { path = "../../crates/pm-application" }
+serde_json.workspace = true
+sqlx.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tower.workspace = true
