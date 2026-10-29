@@ -118,6 +118,15 @@ async fn audit_rows_for(pool: &PgPool, target_id: Uuid) -> Vec<(String, Option<U
         .collect()
 }
 
+async fn audit_source_of(pool: &PgPool, audit_id: Uuid) -> (String, Option<Uuid>) {
+    let row = sqlx::query("SELECT source_kind, source_ref FROM governance.audit_log WHERE id = $1")
+        .bind(audit_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    (row.get("source_kind"), row.get("source_ref"))
+}
+
 /// 1) execute UpdateTaskStatus{expected_revision: 1, Done} → revision=2,
 ///    status=done; audit row carries before/after plus a Restore compensation
 ///    snapshot of the old status guarded at the resulting revision.
@@ -255,6 +264,13 @@ async fn compensate_restores_previous_status_and_marks_original_audit(pool: PgPo
     .await
     .unwrap();
     assert_eq!(compensated, Some(rollback.audit_id));
+
+    // Source identity: the executed row points at its channel, the rollback
+    // row at the audit row it undoes.
+    let executed = audit_source_of(&pool, receipt.audit_id).await;
+    assert_eq!(executed, ("bootstrap".to_string(), None));
+    let rolled_back = audit_source_of(&pool, rollback.audit_id).await;
+    assert_eq!(rolled_back, ("rollback".to_string(), Some(receipt.audit_id)));
 
     let audits = audit_rows_for(&pool, f.task_id).await;
     assert_eq!(
@@ -397,6 +413,7 @@ async fn test_redline_rejected_for_ai_actor(pool: PgPool) {
     let (status, revision) = milestone_state(&pool, milestone_id).await;
     assert_eq!((status.as_str(), revision), ("planned", 1), "blocked command must not change state");
 
+    let approval_id = Uuid::new_v4();
     let receipt = ex
         .execute(
             ProjectCommand::SignAcceptance {
@@ -407,13 +424,18 @@ async fn test_redline_rejected_for_ai_actor(pool: PgPool) {
             ctx(
                 &f,
                 ActorKind::Human,
-                CommandSource::RedlineApproval { approval_id: Uuid::new_v4() },
+                CommandSource::RedlineApproval { approval_id },
             ),
         )
         .await
         .expect("authorized human passes the red line");
     assert_eq!(receipt.command_kind, "sign_acceptance");
     assert_eq!(receipt.resulting_revision, 2);
+
+    // The approval flow (Task 15) joins approvals to their audit row through
+    // the persisted source identity.
+    let source = audit_source_of(&pool, receipt.audit_id).await;
+    assert_eq!(source, ("redline_approval".to_string(), Some(approval_id)));
 
     let (status, revision) = milestone_state(&pool, milestone_id).await;
     assert_eq!((status.as_str(), revision), ("accepted", 2));

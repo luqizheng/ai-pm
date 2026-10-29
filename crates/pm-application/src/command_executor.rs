@@ -250,6 +250,8 @@ impl PgCommandExecutor {
             &before,
             &after,
             inverse.as_ref(),
+            // The rollback's source identity is the audit row it undoes.
+            ("rollback", Some(target_audit_id)),
         )
         .await?;
         sqlx::query("UPDATE governance.audit_log SET compensated_command_id = $1 WHERE id = $2")
@@ -327,6 +329,7 @@ impl PgCommandExecutor {
             &before,
             &after,
             Some(&compensation),
+            audit_source(ctx),
         )
         .await?;
         tx.commit().await.map_err(db_err)?;
@@ -396,6 +399,7 @@ impl PgCommandExecutor {
             &before,
             &after,
             None,
+            audit_source(ctx),
         )
         .await?;
         tx.commit().await.map_err(db_err)?;
@@ -534,7 +538,9 @@ async fn restore_entry(
     Ok((before, after, resulting_revision))
 }
 
-/// Writes one `governance.audit_log` row and returns its id.
+/// Writes one `governance.audit_log` row and returns its id. `source` is the
+/// `(source_kind, source_ref)` identity of the write (see [`audit_source`] for
+/// command executions; compensations pass `("rollback", original audit id)`).
 #[allow(clippy::too_many_arguments)]
 async fn insert_audit(
     tx: &mut Tx,
@@ -545,6 +551,7 @@ async fn insert_audit(
     before_data: &Value,
     after_data: &Value,
     compensation: Option<&CompensationSpec>,
+    source: (&'static str, Option<Uuid>),
 ) -> Result<AuditId, CommandError> {
     let analysis_run_id = match &ctx.source {
         CommandSource::AiProposal { run_id, .. } => Some(*run_id),
@@ -553,8 +560,8 @@ async fn insert_audit(
     let compensation = compensation.map(|spec| serde_json::to_value(spec).expect("CompensationSpec serializes"));
     sqlx::query_scalar(
         "INSERT INTO governance.audit_log \
-         (project_id, actor_id, action, target_type, target_id, before_data, after_data, compensation_command, analysis_run_id) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
+         (project_id, actor_id, action, target_type, target_id, before_data, after_data, compensation_command, analysis_run_id, source_kind, source_ref) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
     )
     .bind(ctx.project_id)
     .bind(ctx.actor_id)
@@ -565,9 +572,25 @@ async fn insert_audit(
     .bind(after_data)
     .bind(compensation)
     .bind(analysis_run_id)
+    .bind(source.0)
+    .bind(source.1)
     .fetch_one(&mut **tx)
     .await
     .map_err(db_err)
+}
+
+/// The audit identity of a command execution: `(source_kind, source_ref)` —
+/// the join anchor Task 15's approval flow reads (`analysis_run_id` keeps
+/// carrying the AiProposal run id as before).
+fn audit_source(ctx: &ExecutionContext) -> (&'static str, Option<Uuid>) {
+    match &ctx.source {
+        CommandSource::AiProposal { proposal_id, .. } => ("ai_proposal", Some(*proposal_id)),
+        CommandSource::HumanIntervention { intervention_id } => {
+            ("human_intervention", Some(*intervention_id))
+        }
+        CommandSource::RedlineApproval { approval_id } => ("redline_approval", Some(*approval_id)),
+        CommandSource::Bootstrap => ("bootstrap", None),
+    }
 }
 
 /// Binds a snapshot field value with the right Postgres representation. SQLx
