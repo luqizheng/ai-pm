@@ -17,12 +17,15 @@ pub struct ClaimedJob {
 /// Claim one claimable job of `job_type` for `worker_id`, granting a lease
 /// of `lease_secs`. Returns `None` when nothing is claimable.
 ///
-/// Candidate rows are `status = 'queued'`, due (`available_at <= now()`),
-/// free of a live lease (`lease_until IS NULL OR lease_until < now()`), and
-/// owned by a project whose AI config is enabled and in `ai_lead` mode
+/// Candidate rows are either due queued jobs (`status = 'queued'` and
+/// `available_at <= now()`) or expired leases (`status = 'running'` and
+/// `lease_until < now()`) — claiming is itself the reclaim path for a
+/// crashed worker, so no separate reaper is needed. In both cases the
+/// owning project's AI config must be enabled and in `ai_lead` mode
 /// (frozen / `controlled` projects yield no candidates). `SKIP LOCKED`
-/// keeps concurrent workers off each other's rows; claiming also sets the
-/// lease, so a claimed job cannot be handed out twice within its lease.
+/// keeps concurrent workers off each other's rows; claiming also
+/// (re)grants the lease, so a claimed job cannot be handed out twice
+/// within its lease.
 pub async fn claim(
     pool: &sqlx::PgPool,
     job_type: &str,
@@ -40,9 +43,10 @@ pub async fn claim(
              AND cfg.enabled
              AND cfg.automation_mode = 'ai_lead'
             WHERE job.job_type = $1
-              AND job.status = 'queued'
-              AND job.available_at <= now()
-              AND (job.lease_until IS NULL OR job.lease_until < now())
+              AND (
+                    (job.status = 'queued' AND job.available_at <= now())
+                 OR (job.status = 'running' AND job.lease_until < now())
+                  )
             ORDER BY job.available_at
             FOR UPDATE OF job SKIP LOCKED
             LIMIT 1

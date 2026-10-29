@@ -1,5 +1,9 @@
 //! Task 10 acceptance: lease-based claim / complete / fail, the freeze
 //! filter at claim time, and exponential backoff on failure.
+//!
+//! Holding claims use 3600s leases: with claim-time reclaim, a short lease
+//! would let a later assertion run into an expired-lease reclaim of a job
+//! another step in the same test still "holds" under load.
 
 use pm_infrastructure::job_queue;
 use uuid::Uuid;
@@ -126,10 +130,10 @@ async fn claim_hands_out_distinct_jobs(pool: sqlx::PgPool) {
     let (job_a, event_a) = seed_job(&pool, &seed).await;
     let (job_b, event_b) = seed_job(&pool, &seed).await;
 
-    let first = job_queue::claim(&pool, JOB_TYPE, "worker-1", 60)
+    let first = job_queue::claim(&pool, JOB_TYPE, "worker-1", 3600)
         .await
         .expect("first claim must get a job");
-    let second = job_queue::claim(&pool, JOB_TYPE, "worker-2", 60)
+    let second = job_queue::claim(&pool, JOB_TYPE, "worker-2", 3600)
         .await
         .expect("second claim must get the other job");
     assert_ne!(first.job_id, second.job_id);
@@ -141,7 +145,7 @@ async fn claim_hands_out_distinct_jobs(pool: sqlx::PgPool) {
     }
 
     assert!(
-        job_queue::claim(&pool, JOB_TYPE, "worker-3", 60)
+        job_queue::claim(&pool, JOB_TYPE, "worker-3", 3600)
             .await
             .is_none(),
         "exhausted queue must claim nothing"
@@ -153,7 +157,7 @@ async fn leased_job_is_not_reclaimable_within_lease(pool: sqlx::PgPool) {
     let seed = seed_project(&pool).await;
     let (job_id, _) = seed_job(&pool, &seed).await;
 
-    let claimed = job_queue::claim(&pool, JOB_TYPE, "worker-1", 300)
+    let claimed = job_queue::claim(&pool, JOB_TYPE, "worker-1", 3600)
         .await
         .expect("claim");
     assert_eq!(claimed.job_id, job_id);
@@ -165,7 +169,7 @@ async fn leased_job_is_not_reclaimable_within_lease(pool: sqlx::PgPool) {
     assert_eq!(owner.as_deref(), Some("worker-1"));
 
     assert!(
-        job_queue::claim(&pool, JOB_TYPE, "worker-2", 300)
+        job_queue::claim(&pool, JOB_TYPE, "worker-2", 3600)
             .await
             .is_none(),
         "a job inside its lease must not be handed out again"
@@ -177,16 +181,32 @@ async fn test_expired_lease_reclaimable(pool: sqlx::PgPool) {
     let seed = seed_project(&pool).await;
     let (job_id, _) = seed_job(&pool, &seed).await;
 
-    let claimed = job_queue::claim(&pool, JOB_TYPE, "worker-1", 300)
+    // Real crash semantics: a worker holds the job (running, live lease)
+    // and then dies — the lease runs out while status stays 'running'.
+    // Claiming is the reclaim path, so the next claim must hand the job to
+    // a new worker (M1 needs no separate reaper process).
+    let claimed = job_queue::claim(&pool, JOB_TYPE, "worker-1", 3600)
         .await
         .expect("claim");
     assert_eq!(claimed.job_id, job_id);
 
-    // Simulate the worker dying and its lease running out: the job is put
-    // back to queued with lease_until in the past — the state a lease
-    // reaper would leave behind. The claim predicate's `lease_until <
-    // now()` branch must let it through again. (No reaper in M1; this
-    // verifies the reclaimable side of the predicate.)
+    sqlx::query("UPDATE integration.job SET lease_until = now() - interval '5 seconds' WHERE id = $1")
+        .bind(job_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let reclaimed = job_queue::claim(&pool, JOB_TYPE, "worker-2", 3600)
+        .await
+        .expect("expired lease on a running job must be reclaimable");
+    assert_eq!(reclaimed.job_id, job_id);
+    let (status, _, lease_future, _, owner, _) = job_state(&pool, job_id).await;
+    assert_eq!(status, "running");
+    assert!(lease_future);
+    assert_eq!(owner.as_deref(), Some("worker-2"), "lease must change hands");
+
+    // Reaper fallback shape: a queued row with a stale lease in the past
+    // is equally claimable.
     sqlx::query(
         "UPDATE integration.job \
          SET status = 'queued', lease_until = now() - interval '5 seconds' \
@@ -196,15 +216,10 @@ async fn test_expired_lease_reclaimable(pool: sqlx::PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-
-    let reclaimed = job_queue::claim(&pool, JOB_TYPE, "worker-2", 300)
+    let fallback = job_queue::claim(&pool, JOB_TYPE, "worker-3", 3600)
         .await
-        .expect("expired lease must be reclaimable");
-    assert_eq!(reclaimed.job_id, job_id);
-    let (status, _, lease_future, _, owner, _) = job_state(&pool, job_id).await;
-    assert_eq!(status, "running");
-    assert!(lease_future);
-    assert_eq!(owner.as_deref(), Some("worker-2"), "lease must change hands");
+        .expect("queued row with a stale lease must be claimable");
+    assert_eq!(fallback.job_id, job_id);
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -212,7 +227,7 @@ async fn complete_marks_job_done(pool: sqlx::PgPool) {
     let seed = seed_project(&pool).await;
     let (job_id, _) = seed_job(&pool, &seed).await;
 
-    let claimed = job_queue::claim(&pool, JOB_TYPE, "worker-1", 300)
+    let claimed = job_queue::claim(&pool, JOB_TYPE, "worker-1", 3600)
         .await
         .expect("claim");
     assert_eq!(claimed.job_id, job_id);
@@ -223,7 +238,7 @@ async fn complete_marks_job_done(pool: sqlx::PgPool) {
     assert!(!lease_future);
     assert_eq!(owner, None);
     assert!(
-        job_queue::claim(&pool, JOB_TYPE, "worker-2", 60)
+        job_queue::claim(&pool, JOB_TYPE, "worker-2", 3600)
             .await
             .is_none(),
         "completed job must not be handed out again"
@@ -266,7 +281,7 @@ async fn fail_backs_off_then_marks_failed(pool: sqlx::PgPool) {
     );
 
     assert!(
-        job_queue::claim(&pool, JOB_TYPE, "worker-1", 60)
+        job_queue::claim(&pool, JOB_TYPE, "worker-1", 3600)
             .await
             .is_none(),
         "a job backing off must not be claimable"
@@ -297,7 +312,7 @@ async fn controlled_mode_jobs_are_not_claimable(pool: sqlx::PgPool) {
     .await
     .unwrap();
     assert!(
-        job_queue::claim(&pool, JOB_TYPE, "worker-1", 60)
+        job_queue::claim(&pool, JOB_TYPE, "worker-1", 3600)
             .await
             .is_none(),
         "controlled-mode project must yield no candidates"
@@ -312,7 +327,7 @@ async fn controlled_mode_jobs_are_not_claimable(pool: sqlx::PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-    let claimed = job_queue::claim(&pool, JOB_TYPE, "worker-1", 60)
+    let claimed = job_queue::claim(&pool, JOB_TYPE, "worker-1", 3600)
         .await
         .expect("ai_lead project must be claimable again");
     assert_eq!(claimed.job_id, job_a);
@@ -325,7 +340,7 @@ async fn controlled_mode_jobs_are_not_claimable(pool: sqlx::PgPool) {
         .await
         .unwrap();
     assert!(
-        job_queue::claim(&pool, JOB_TYPE, "worker-2", 60)
+        job_queue::claim(&pool, JOB_TYPE, "worker-2", 3600)
             .await
             .is_none(),
         "disabled config must yield no candidates"
@@ -335,7 +350,7 @@ async fn controlled_mode_jobs_are_not_claimable(pool: sqlx::PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let claimed = job_queue::claim(&pool, JOB_TYPE, "worker-2", 60)
+    let claimed = job_queue::claim(&pool, JOB_TYPE, "worker-2", 3600)
         .await
         .expect("enabled config claims again");
     assert_eq!(claimed.job_id, job_b);
