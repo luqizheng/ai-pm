@@ -895,7 +895,9 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "sqlx",
  "thiserror",
+ "uuid",
 ]
 
 [[package]]
