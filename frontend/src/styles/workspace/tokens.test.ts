@@ -31,14 +31,23 @@ function block(selector: string): string {
 function varsOf(blockBody: string): Map<string, string> {
   const map = new Map<string, string>();
   for (const m of blockBody.matchAll(/--([a-z0-9-]+)\s*:\s*([^;]+);/g)) {
-    // 统一剥掉 ws- 前缀存取；桥接变量（--surface-base 等）本就无前缀
-    map.set(m[1].replace(/^ws-/, ""), m[2].trim());
+    // 全名存取：--ws-* 与同名 PRISM 别名（--text-primary 等）不互相覆盖
+    map.set(m[1], m[2].trim());
   }
   return map;
 }
 
-const dark = varsOf(block(":root"));
-const light = varsOf(block('[data-theme="light"]'));
+/** ws 视图：剥掉 ws- 前缀（对比度断言用） */
+function wsView(full: Map<string, string>): Map<string, string> {
+  const view = new Map<string, string>();
+  for (const [name, value] of full) {
+    if (name.startsWith("ws-")) view.set(name.slice(3), value);
+  }
+  return view;
+}
+
+const dark = wsView(varsOf(block(":root")));
+const light = wsView(varsOf(block('[data-theme="light"]')));
 
 /** 相对亮度（WCAG 2.x） */
 function luminance(hex: string): number {
@@ -164,19 +173,15 @@ describe("workspace tokens", () => {
     expect(light.get("canvas")!.toLowerCase()).toBe("#f7f8fa");
   });
 
-  it("color-scheme 限定在 .workspace-shell 作用域（不泄漏到存量页的 UA 控件）", () => {
-    // :root / [data-theme] 级别不得再声明 color-scheme（终审 I2）
-    expect(block(":root")).not.toMatch(/color-scheme:/);
-    expect(block('[data-theme="light"]')).not.toMatch(/color-scheme:/);
-    const shellStart = css.indexOf(".workspace-shell");
-    const shellScope = css.slice(shellStart, shellStart + 400);
-    expect(shellScope).toMatch(/color-scheme:\s*dark/);
-    expect(css).toMatch(
-      /\[data-theme="light"\]\s+\.workspace-shell\s*\{[^}]*color-scheme:\s*light/
-    );
+  it("color-scheme 跟随全应用主题（传统页与工作区同轨，用户裁决 2026-10-31）", () => {
+    // 传统页已并入 V1.1 配色（PRISM 变量换轨），深浅与 UA 控件随主题走
+    expect(block(":root")).toMatch(/color-scheme:\s*dark/);
+    expect(block('[data-theme="light"]')).toMatch(/color-scheme:\s*light/);
+    // 壳不再单独声明 color-scheme（由根级统管）
+    expect(css).not.toMatch(/\.workspace-shell\s*\{[^}]*color-scheme/);
   });
 
-  it(".workspace-shell 作用域内提供 --prism-* 桥接（复用 PRISM 组件在深色下正确显色）", () => {
+  it("PRISM 变量在 :root 级换轨到 --ws-*（传统页与工作区同轨 V1.1 配色，用户裁决 2026-10-31）", () => {
     const bridged = [
       "surface-base",
       "surface-raised",
@@ -230,19 +235,22 @@ describe("workspace tokens", () => {
       "shadow-accent",
       "shadow-accent-lg"
     ];
-    const shellIdx = css.indexOf(".workspace-shell");
-    expect(shellIdx, "缺少 .workspace-shell 桥接块").toBeGreaterThanOrEqual(0);
-    const scope = css.slice(
-      shellIdx,
-      css.indexOf("}", css.indexOf("{", shellIdx))
-    );
+    // 全名视图：别名（--surface-base / --text-primary 等）不带 ws- 前缀
+    const rootVars = varsOf(block(":root"));
     for (const name of bridged) {
+      const value = rootVars.get(name);
+      expect(value, `:root 缺少 PRISM 别名 --${name}`).toBeTruthy();
+      // 每个别名必须指向 --ws-*（跟随主题）或按设计规则降级为 none——
+      // 不允许残留 PRISM 硬编码色（蓝 #2E5BFF 系/rgba）
       expect(
-        scope.includes(`--${name}:`),
-        `桥接块缺少 --${name}（应映射到 var(--ws-…)）`
+        value!.startsWith("var(--ws-") || value === "none",
+        `--${name} 应换轨到 var(--ws-…) 或 none，实际：${value}`
       ).toBe(true);
     }
-    // 终审 M5：veil 不得硬编码 rgba（浅色主题下不可见），必须走主题 token
-    expect(scope).not.toMatch(/rgba\(/);
+    // PRISM 蓝不得以任何形式残留在别名值里
+    for (const name of bridged) {
+      expect(rootVars.get(name)!.toLowerCase()).not.toContain("#2e5bff");
+      expect(rootVars.get(name)!.toLowerCase()).not.toContain("rgba(46");
+    }
   });
 });
