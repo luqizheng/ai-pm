@@ -65,7 +65,7 @@ defineExpose({ focusInput });
 </script>
 
 <template>
-  <div class="ws-commandbar" data-test="command-bar">
+  <div class="workspace-commandbar" data-test="command-bar">
     <div class="ws-commandbar-panel" data-test="command-panel">
       <header class="ws-commandbar-head">
         <span class="ws-commandbar-head-spark" aria-hidden="true">✦</span>
@@ -162,10 +162,6 @@ defineExpose({ focusInput });
 </template>
 
 <style scoped>
-.ws-commandbar {
-  padding: 12px 24px 16px;
-}
-
 /* 原型对齐：指令栏为 main 列底部的大圆角面板（头部 ✦ 角色 · 上下文，
  * 输入独占一行，页脚左侧工具、右侧发送） */
 .ws-commandbar-panel {

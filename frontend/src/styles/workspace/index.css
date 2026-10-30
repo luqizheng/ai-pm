@@ -41,7 +41,9 @@
   border-bottom: 1px solid var(--ws-border);
 }
 
-/* 主列（含总控台与指令栏）：右栏关闭时由网格自然扩展 */
+/* 主列（含总控台与指令栏）：右栏关闭时由网格自然扩展。
+ * 滚动收敛在 .workspace-main-scroll —— main 本体 overflow:hidden，
+ * 否则长页内容会从盒子下方渗出、盖住指令栏（用户验收反馈）。 */
 .workspace-main {
   grid-column: 2;
   grid-row: 2;
@@ -49,12 +51,13 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .workspace-main-scroll {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
 }
 
 /* 左导航 / 右上下文列容器 */
@@ -74,14 +77,12 @@
   overflow-y: auto;
 }
 
-/* AI 指令栏：main 列底部固定（不跨右栏） */
+/* AI 指令栏：壳级独立组件，全部工作区页共用。
+ * 浮动停靠面板——四周留边悬浮于主区底部，滚动区在其上方独立滚动，
+ * 天然不遮挡页面内容（用户验收反馈：原 sticky/渗出会盖住卡片）。 */
 .workspace-commandbar {
-  position: sticky;
-  bottom: 0;
-  min-height: var(--ws-commandbar-height-min);
-  max-height: var(--ws-commandbar-height-max);
-  background: var(--ws-elevated);
-  border-top: 1px solid var(--ws-border);
+  flex: none;
+  margin: 0 24px 16px;
 }
 
 /* 通用交互面 */

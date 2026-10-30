@@ -56,4 +56,20 @@ describe("workspace 布局契约", () => {
     expect(body).toMatch(/grid-column:\s*3\s*;/);
     expect(body).toMatch(/grid-row:\s*2/);
   });
+
+  it("滚动收敛在 main-scroll（内容不得渗出盖住指令栏，用户反馈）", () => {
+    const main = ruleBody(".workspace-main");
+    expect(main).toMatch(/overflow:\s*hidden/);
+    const scroll = ruleBody(".workspace-main-scroll");
+    expect(scroll).toMatch(/overflow-y:\s*auto/);
+  });
+
+  it("指令栏为浮动停靠面板：四周留边悬浮于主区底部，不遮挡内容", () => {
+    const body = ruleBody(".workspace-commandbar");
+    // 不再使用 sticky/覆盖式定位——停靠在滚动区下方，天然不遮内容
+    expect(body).not.toMatch(/position:\s*sticky/);
+    expect(body).not.toMatch(/position:\s*absolute/);
+    expect(body).toMatch(/margin:\s*0\s+24px\s+16px/);
+    expect(body).toMatch(/flex:\s*none/);
+  });
 });
