@@ -1,0 +1,23 @@
+workspace:
+  shell:
+    breadcrumb: 面包屑
+    theme: 切换主题
+    notifications: 通知
+    account: 账户
+    collapse: 折叠导航
+    expand: 展开导航
+  nav:
+    groupWorkspace: 工作空间
+    groupModules: 研发模块
+    groupClassic: 传统视图
+    console: 项目总控
+    team: AI 团队
+    goals: 目标计划
+    activity: 项目动态
+    requirements: 需求管理
+    decisions: 决策中心
+    knowledge: 项目知识
+    artifacts: 产物验收
+    classicOverview: 概览
+  service:
+    ok: 服务正常

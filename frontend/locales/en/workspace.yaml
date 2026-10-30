@@ -1,0 +1,23 @@
+workspace:
+  shell:
+    breadcrumb: Breadcrumb
+    theme: Toggle theme
+    notifications: Notifications
+    account: Account
+    collapse: Collapse navigation
+    expand: Expand navigation
+  nav:
+    groupWorkspace: Workspace
+    groupModules: R&D modules
+    groupClassic: Classic views
+    console: Project Console
+    team: AI Team
+    goals: Goals & Plans
+    activity: Activity
+    requirements: Requirements
+    decisions: Decisions
+    knowledge: Knowledge
+    artifacts: Artifacts
+    classicOverview: Overview
+  service:
+    ok: All services normal
