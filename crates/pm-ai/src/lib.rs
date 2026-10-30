@@ -12,6 +12,6 @@ pub use context::{build, fail_run, finish_run, save_snapshot, start_run, Context
 pub use fake_model::FakeModel;
 pub use model::{AnalysisContext, AnalysisModel, ModelError};
 pub use openai_adapter::{OpenAiCompatibleModel, SYSTEM_PROMPT};
-pub use orchestrator::{Orchestrator, OrchestratorError};
+pub use orchestrator::{HandleOutcome, Orchestrator, OrchestratorError};
 pub use self_review::{self_review_json, review_proposals, ProposalOutcome};
 pub use skill_router::{route, SkillId};

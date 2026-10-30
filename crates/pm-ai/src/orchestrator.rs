@@ -5,11 +5,14 @@
 //! plan:
 //!
 //! 1. [`context::start_run`] — `AlreadyDone` means an idempotent
-//!    redelivery: return `Ok` (the job completes, it does not fail).
+//!    redelivery: return `Ok(Completed)` (the job completes, it does not
+//!    fail).
 //! 2. [`context::build`] — `NotFound` (a dangling or foreign ref) fails
-//!    the run with `context_not_found`, fails the job with backoff, and
-//!    returns `Ok`; the retry opens a *fresh* run row per the Task 12
-//!    rulings.
+//!    the run with `context_not_found` and fails the job itself (queued
+//!    again with backoff), returning `Ok(RetryScheduled)` so the caller
+//!    knows NOT to complete the job — a `complete` here would erase the
+//!    scheduled retry. When the job is re-claimed after its backoff, the
+//!    retry opens a *fresh* run row per the Task 12 rulings.
 //! 3. [`context::save_snapshot`].
 //! 4. [`skill_router::route`] — no skills for this event type → the run
 //!    completes with an empty self-review and the event becomes
@@ -80,8 +83,8 @@ pub struct Orchestrator {
 ///
 /// `RunAlreadyDone` is part of the interface for callers that want to
 /// distinguish a redelivery; `handle_ai_job` itself maps an
-/// `AlreadyDone` start onto plain `Ok` — an idempotent redelivery is a
-/// normal completion, not a job failure.
+/// `AlreadyDone` start onto `Ok(HandleOutcome::Completed)` — an
+/// idempotent redelivery is a normal completion, not a job failure.
 #[derive(Debug, thiserror::Error)]
 pub enum OrchestratorError {
     #[error("analysis run already done for this event")]
@@ -92,10 +95,30 @@ pub enum OrchestratorError {
     Db(#[from] sqlx::Error),
 }
 
+/// What the caller (the worker loop) must do with the claimed job after
+/// [`Orchestrator::handle_ai_job`] returned `Ok`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HandleOutcome {
+    /// The chain finished normally (or the event was an idempotent
+    /// redelivery): the caller marks the job completed.
+    Completed,
+    /// The orchestrator already failed the job itself (`job_queue::fail`:
+    /// back to `queued` with backoff, attempts incremented). The caller
+    /// must leave the job alone — completing it here would erase the
+    /// scheduled retry.
+    RetryScheduled,
+}
+
 impl Orchestrator {
     /// Runs the full main chain for `job`; see the module docs for the
-    /// fixed step order and each branch's side effects.
-    pub async fn handle_ai_job(&self, job: &ClaimedJob) -> Result<(), OrchestratorError> {
+    /// fixed step order and each branch's side effects. The returned
+    /// [`HandleOutcome`] tells the caller whether to complete the job
+    /// (`Completed`) or hands-off because the orchestrator already
+    /// scheduled its retry (`RetryScheduled`).
+    pub async fn handle_ai_job(
+        &self,
+        job: &ClaimedJob,
+    ) -> Result<HandleOutcome, OrchestratorError> {
         // Step 1: run lifecycle. AlreadyDone = idempotent redelivery.
         let run_id = match context::start_run(&self.pool, job.event_id).await {
             Ok(run_id) => run_id,
@@ -104,7 +127,7 @@ impl Orchestrator {
                     event_id = %job.event_id,
                     "analysis already completed; redelivery is a no-op"
                 );
-                return Ok(());
+                return Ok(HandleOutcome::Completed);
             }
             Err(context::ContextError::EventNotFound(id)) => {
                 // Unreachable after a claim (the job row FKs the event);
@@ -118,7 +141,7 @@ impl Orchestrator {
                     JOB_BACKOFF_BASE_SECS,
                 )
                 .await?;
-                return Ok(());
+                return Ok(HandleOutcome::RetryScheduled);
             }
             Err(context::ContextError::Db(e)) => return Err(OrchestratorError::Db(e)),
             // start_run never returns NotFound; the arm keeps the match
@@ -126,8 +149,11 @@ impl Orchestrator {
             Err(context::ContextError::NotFound { .. }) => unreachable!("start_run has no refs"),
         };
 
-        // Step 2: context. NotFound fails the run and the job; the retry
-        // opens a fresh run row (Task 12 ruling 1).
+        // Step 2: context. NotFound fails the run and the job (queued
+        // again with backoff); `RetryScheduled` tells the caller the job
+        // was already handled and must not be completed. The eventual
+        // retry — a fresh claim after backoff — opens a fresh run row
+        // (Task 12 ruling 1).
         let ctx = match context::build(&self.pool, job.event_id).await {
             Ok(ctx) => ctx,
             Err(err @ (context::ContextError::NotFound { .. }
@@ -142,7 +168,7 @@ impl Orchestrator {
                     JOB_BACKOFF_BASE_SECS,
                 )
                 .await?;
-                return Ok(());
+                return Ok(HandleOutcome::RetryScheduled);
             }
             // build never returns AlreadyDone; same defensive treatment.
             Err(err @ context::ContextError::AlreadyDone(_)) => {
@@ -156,7 +182,7 @@ impl Orchestrator {
                     JOB_BACKOFF_BASE_SECS,
                 )
                 .await?;
-                return Ok(());
+                return Ok(HandleOutcome::RetryScheduled);
             }
             Err(context::ContextError::Db(e)) => return Err(OrchestratorError::Db(e)),
         };
@@ -177,7 +203,7 @@ impl Orchestrator {
             .bind(job.event_id)
             .execute(&self.pool)
             .await?;
-            return Ok(());
+            return Ok(HandleOutcome::Completed);
         }
 
         // Step 5: analysis. A model failure is terminal for this run row
@@ -345,7 +371,7 @@ impl Orchestrator {
             event_status,
             "analysis chain complete"
         );
-        Ok(())
+        Ok(HandleOutcome::Completed)
     }
 
     /// Step 6 existence check: the command's target row must exist and

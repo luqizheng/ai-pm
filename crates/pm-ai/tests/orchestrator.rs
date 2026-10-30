@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
 use pm_ai::model::{AnalysisModel, ModelError};
-use pm_ai::orchestrator::{Orchestrator, OrchestratorError};
+use pm_ai::orchestrator::{HandleOutcome, Orchestrator, OrchestratorError};
 use pm_ai::FakeModel;
 use pm_application::{PgCommandExecutor, PolicyEngine};
 use pm_infrastructure::job_queue::{self, ClaimedJob};
@@ -46,6 +46,12 @@ fn milestone_id() -> Uuid {
 }
 /// The milestone move the fixture proposes, whole-second on purpose.
 const MOVED_PLANNED_AT: &str = "2026-11-06T09:00:00Z";
+
+/// The orchestrator's job-fail backoff base (mirrored from
+/// `orchestrator::JOB_BACKOFF_BASE_SECS`; the test pins the observable
+/// effect — `available_at = fail_time + base * 2^attempts` — not the
+/// constant itself).
+const JOB_BACKOFF_BASE_SECS: i64 = 5;
 
 /// The fixed date compared as an instant, not a string format.
 fn moved_planned_at() -> DateTime<Utc> {
@@ -229,10 +235,11 @@ async fn happy_cache_overlap_applies_all_three_proposals_end_to_end(pool: sqlx::
     });
     let job = seed_job(&pool, &seed, "technical_design_submitted", payload).await;
 
-    orchestrator(&pool)
+    let outcome = orchestrator(&pool)
         .handle_ai_job(&job)
         .await
         .expect("happy path must succeed");
+    assert_eq!(outcome, HandleOutcome::Completed);
 
     // TASK-102: status flip + revision 7 -> 8.
     let (status, revision): (String, i64) =
@@ -381,10 +388,11 @@ async fn redline_acceptance_waits_for_human_pre_confirmation(pool: sqlx::PgPool)
     });
     let job = seed_job(&pool, &seed, "milestone_check", payload).await;
 
-    orchestrator(&pool)
+    let outcome = orchestrator(&pool)
         .handle_ai_job(&job)
         .await
         .expect("a red line is a normal outcome, not an error");
+    assert_eq!(outcome, HandleOutcome::Completed);
 
     // One pending approval request naming the required role.
     let approvals: Vec<(String, String, Uuid)> = sqlx::query_as(
@@ -465,10 +473,11 @@ async fn injection_attempt_payload_still_requires_pre_confirmation(pool: sqlx::P
     });
     let job = seed_job(&pool, &seed, "milestone_check", payload).await;
 
-    orchestrator(&pool)
+    let outcome = orchestrator(&pool)
         .handle_ai_job(&job)
         .await
         .expect("injection text must not turn the run into an error");
+    assert_eq!(outcome, HandleOutcome::Completed);
 
     let (status, required_role): (String, String) = sqlx::query_as(
         "SELECT p.status, a.required_role \
@@ -513,10 +522,11 @@ async fn handle_ai_job_is_idempotent_on_redelivery(pool: sqlx::PgPool) {
     let job = seed_job(&pool, &seed, "technical_design_submitted", payload).await;
     let orchestrator = orchestrator(&pool);
 
-    orchestrator
+    let outcome = orchestrator
         .handle_ai_job(&job)
         .await
         .expect("first delivery must succeed");
+    assert_eq!(outcome, HandleOutcome::Completed);
 
     let proposals = count(
         &pool,
@@ -550,11 +560,13 @@ async fn handle_ai_job_is_idempotent_on_redelivery(pool: sqlx::PgPool) {
     .await;
     assert_eq!((proposals, audits, notifications, approvals, runs), (3, 3, 3, 0, 1));
 
-    // Redelivery of the same (completed) job returns Ok without writing.
-    orchestrator
+    // Redelivery of the same (completed) job returns Ok(Completed)
+    // without writing — the caller may complete it again, harmlessly.
+    let outcome = orchestrator
         .handle_ai_job(&job)
         .await
         .expect("redelivery is a normal, already-done path");
+    assert_eq!(outcome, HandleOutcome::Completed);
 
     assert_eq!(
         count(
@@ -665,4 +677,89 @@ async fn model_timeout_fails_run_and_leaves_event_untouched(pool: sqlx::PgPool) 
             .unwrap();
     assert_eq!(job_status, "queued", "below max attempts the job returns to queued");
     assert_eq!(attempts, 1);
+}
+
+/// Fix-round regression: a dangling `task_ref` (valid UUID, no row) must
+/// fail the run with `context_not_found` and have the ORCHESTRATOR fail
+/// the job itself, surfacing `RetryScheduled` — the worker must not call
+/// `complete` on it, or the scheduled retry would be erased. Asserts the
+/// full post-state: job queued with attempts=1 and a future
+/// `available_at`, run terminally failed, event untouched, no proposals.
+#[sqlx::test(migrations = "../../migrations")]
+async fn context_not_found_schedules_retry_and_leaves_the_job_queued(pool: sqlx::PgPool) {
+    let seed = seed_world(&pool).await;
+    let payload = json!({
+        "fixture": "cache_overlap",
+        // A well-formed UUID that no row carries: context::build must
+        // reject it as NotFound without probing other projects.
+        "task_ref": Uuid::new_v4().to_string(),
+        "milestone_ref": milestone_id().to_string(),
+    });
+    let job = seed_job(&pool, &seed, "technical_design_submitted", payload).await;
+
+    // Clock taken before the call: `available_at` must land at least the
+    // backoff base beyond it, proving the retry was pushed into the
+    // future — a comparison against `Utc::now()` at assert time would be
+    // flaky on a loaded host that stalls between fail and assert.
+    let before = Utc::now();
+    let outcome = orchestrator(&pool)
+        .handle_ai_job(&job)
+        .await
+        .expect("a dangling ref is a normal, retryable outcome");
+    assert_eq!(
+        outcome,
+        HandleOutcome::RetryScheduled,
+        "the orchestrator failed the job itself; the worker must not complete it"
+    );
+
+    // The job sits queued for a retry: attempts bumped once, backoff in
+    // the future, the failure reason recorded — and NOT completed (a
+    // `complete` after the internal fail would show status='completed').
+    let (job_status, attempts, available_at, last_error): (String, i32, DateTime<Utc>, String) =
+        sqlx::query_as(
+            "SELECT status, attempts, available_at, last_error \
+             FROM integration.job WHERE id = $1",
+        )
+        .bind(job.job_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(job_status, "queued", "a complete() after the internal fail would have made this 'completed'");
+    assert_eq!(attempts, 1);
+    assert!(
+        available_at > before + Duration::seconds(JOB_BACKOFF_BASE_SECS),
+        "backoff must push the retry into the future: available_at={available_at}, before={before}"
+    );
+    assert_eq!(last_error, "context_not_found");
+
+    // The run is terminally failed with the coarse context code.
+    let (run_status, failure_code, finished): (String, Option<String>, bool) = sqlx::query_as(
+        "SELECT status, failure_code, finished_at IS NOT NULL \
+         FROM ai.analysis_run WHERE event_id = $1",
+    )
+    .bind(job.event_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(run_status, "failed");
+    assert_eq!(failure_code.as_deref(), Some("context_not_found"));
+    assert!(finished);
+
+    // No proposal may exist, and the event keeps its untouched status.
+    assert_eq!(
+        count(
+            &pool,
+            "SELECT count(*) FROM ai.change_proposal WHERE project_id = $1",
+            seed.project_id
+        )
+        .await,
+        0
+    );
+    let event_status: String =
+        sqlx::query_scalar("SELECT status FROM integration.inbound_event WHERE id = $1")
+            .bind(job.event_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(event_status, "received");
 }

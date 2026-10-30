@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use pm_ai::model::AnalysisModel;
-use pm_ai::orchestrator::Orchestrator;
+use pm_ai::orchestrator::{HandleOutcome, Orchestrator};
 use pm_ai::FakeModel;
 use pm_application::{PgCommandExecutor, PolicyEngine};
 use pm_infrastructure::job_queue::{self, ClaimedJob};
@@ -15,8 +15,11 @@ use tracing_subscriber::EnvFilter;
 /// values the orchestrator uses when it fails a job itself.
 const MAX_JOB_ATTEMPTS: i32 = 5;
 const JOB_BACKOFF_BASE_SECS: i64 = 5;
-/// Lease length for a claimed job, in seconds.
-const LEASE_SECS: i64 = 60;
+/// Lease length for a claimed job, in seconds. One hour, matching the
+/// Task 10 claim hardening: a real model analysis runs far longer than a
+/// minute, and an expired lease would let another worker double-claim a
+/// live analysis.
+const LEASE_SECS: i64 = 3600;
 /// Idle poll interval.
 const POLL_INTERVAL_MS: u64 = 60;
 /// Default on-disk policy — the red-line single source of truth
@@ -70,15 +73,23 @@ async fn main() {
     }
 }
 
-/// One claimed job: the orchestrator's `Ok` (including the idempotent
-/// already-done redelivery path) completes the job; a `Model`/`Db` error
+/// One claimed job: `Completed` (including the idempotent already-done
+/// redelivery path) completes the job; `RetryScheduled` means the
+/// orchestrator already failed the job with backoff — touching it here
+/// (a `complete`) would erase the scheduled retry; a `Model`/`Db` error
 /// fails it with backoff so the queue retries.
 async fn handle_job(orchestrator: &Orchestrator, job: &ClaimedJob) {
     match orchestrator.handle_ai_job(job).await {
-        Ok(()) => {
+        Ok(HandleOutcome::Completed) => {
             if let Err(e) = job_queue::complete(&orchestrator.pool, job.job_id).await {
                 tracing::error!(job_id = %job.job_id, error = %e, "job complete failed");
             }
+        }
+        Ok(HandleOutcome::RetryScheduled) => {
+            tracing::info!(
+                job_id = %job.job_id,
+                "retry already scheduled by the orchestrator; leaving the job queued"
+            );
         }
         Err(e) => {
             tracing::warn!(job_id = %job.job_id, error = %e, "job failed, backing off");
