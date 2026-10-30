@@ -15,9 +15,14 @@ dependencies = [
 name = "ai-pm-worker"
 version = "0.1.0"
 dependencies = [
+ "pm-ai",
+ "pm-application",
+ "pm-infrastructure",
+ "sqlx",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -1041,11 +1046,13 @@ dependencies = [
  "chrono",
  "pm-application",
  "pm-domain",
+ "pm-infrastructure",
  "serde",
  "serde_json",
  "sqlx",
  "thiserror",
  "tokio",
+ "tracing",
  "uuid",
 ]
 

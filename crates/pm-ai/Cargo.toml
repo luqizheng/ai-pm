@@ -8,10 +8,12 @@ async-trait.workspace = true
 chrono.workspace = true
 pm-application = { path = "../pm-application" }
 pm-domain = { path = "../pm-domain" }
+pm-infrastructure = { path = "../pm-infrastructure" }
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

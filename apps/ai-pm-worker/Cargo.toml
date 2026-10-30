@@ -4,6 +4,11 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+pm-ai = { path = "../../crates/pm-ai" }
+pm-application = { path = "../../crates/pm-application" }
+pm-infrastructure = { path = "../../crates/pm-infrastructure" }
+sqlx.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+uuid.workspace = true
