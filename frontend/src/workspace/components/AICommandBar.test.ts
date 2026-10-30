@@ -6,7 +6,11 @@ import { mountShell } from "../../shell/test-utils";
 import { useWorkspaceStore } from "../store";
 
 vi.mock("vue-router", () => ({
-  useRoute: () => ({ path: "/workspace/proj-worldmap/console", params: {}, query: {} }),
+  useRoute: () => ({
+    path: "/workspace/proj-worldmap/console",
+    params: {},
+    query: {}
+  }),
   useRouter: () => ({ push: vi.fn() })
 }));
 
@@ -45,15 +49,15 @@ describe("AICommandBar（指令栏）", () => {
 
   it("发送 → user 气泡 + submitting（阶段文案 + 可取消）", async () => {
     const { w, store } = await mounted();
-    await w.find("[data-test='command-input']").setValue("分析当前迭代的主要风险");
+    await w
+      .find("[data-test='command-input']")
+      .setValue("分析当前迭代的主要风险");
     await w.find("[data-test='command-send']").trigger("click");
     expect(store.commandMessages.some(m => m.role === "user")).toBe(true);
     expect(w.find("[data-test='command-phase']").exists()).toBe(true);
     expect(w.find("[data-test='command-cancel']").exists()).toBe(true);
     // 生命周期硬规则：无回执不得出现完成态
-    expect(
-      store.commandMessages.some(m => m.role === "assistant")
-    ).toBe(false);
+    expect(store.commandMessages.some(m => m.role === "assistant")).toBe(false);
   });
 
   it("submitting 期间重复发送被忽略", async () => {
@@ -69,32 +73,34 @@ describe("AICommandBar（指令栏）", () => {
 
   it("800ms 后 mock 回执 → assistant 气泡，回到 idle", async () => {
     const { w, store } = await mounted();
-    await w.find("[data-test='command-input']").setValue("分析当前迭代的主要风险");
+    await w
+      .find("[data-test='command-input']")
+      .setValue("分析当前迭代的主要风险");
     await w.find("[data-test='command-send']").trigger("click");
     vi.advanceTimersByTime(800);
     await nextTick();
-    expect(
-      store.commandMessages.some(m => m.role === "assistant")
-    ).toBe(true);
+    expect(store.commandMessages.some(m => m.role === "assistant")).toBe(true);
     expect(w.find("[data-test='command-phase']").exists()).toBe(false);
   });
 
   it("取消 → 无 assistant 气泡且回 idle", async () => {
     const { w, store } = await mounted();
-    await w.find("[data-test='command-input']").setValue("分析当前迭代的主要风险");
+    await w
+      .find("[data-test='command-input']")
+      .setValue("分析当前迭代的主要风险");
     await w.find("[data-test='command-send']").trigger("click");
     await w.find("[data-test='command-cancel']").trigger("click");
     vi.advanceTimersByTime(2000);
     await nextTick();
-    expect(
-      store.commandMessages.some(m => m.role === "assistant")
-    ).toBe(false);
+    expect(store.commandMessages.some(m => m.role === "assistant")).toBe(false);
     expect(w.find("[data-test='command-phase']").exists()).toBe(false);
   });
 
   it("Esc 清空本地消息", async () => {
     const { w, store } = await mounted();
-    await w.find("[data-test='command-input']").setValue("分析当前迭代的主要风险");
+    await w
+      .find("[data-test='command-input']")
+      .setValue("分析当前迭代的主要风险");
     await w.find("[data-test='command-send']").trigger("click");
     vi.advanceTimersByTime(800);
     await nextTick();

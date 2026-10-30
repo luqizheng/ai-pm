@@ -9,7 +9,9 @@ const { t } = useI18n();
   <section class="ws-card ws-briefing" aria-label="AI briefing">
     <div class="ws-briefing-meta">
       <span class="ws-briefing-author">{{ briefing.author }}</span>
-      <span class="ws-briefing-time">· {{ t("workspace.briefing.today") }}</span>
+      <span class="ws-briefing-time"
+        >· {{ t("workspace.briefing.today") }}</span
+      >
     </div>
     <p class="ws-briefing-body">{{ briefing.body }}</p>
     <p class="ws-briefing-suggestion">

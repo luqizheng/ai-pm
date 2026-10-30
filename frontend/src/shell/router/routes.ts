@@ -47,8 +47,7 @@ export const staticRoutes: RouteRecordRaw[] = [
       {
         path: "console",
         name: "workspace-console",
-        component: () =>
-          import("../../workspace/console/ConsolePage.vue"),
+        component: () => import("../../workspace/console/ConsolePage.vue"),
         meta: { title: "项目总控" }
       },
       {

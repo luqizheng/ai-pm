@@ -6,7 +6,11 @@ import { useWorkspaceStore } from "../store";
 import { attentionItems, contextAdvice } from "../fixtures";
 
 vi.mock("vue-router", () => ({
-  useRoute: () => ({ path: "/workspace/proj-worldmap/console", params: {}, query: {} }),
+  useRoute: () => ({
+    path: "/workspace/proj-worldmap/console",
+    params: {},
+    query: {}
+  }),
   useRouter: () => ({ push: vi.fn() })
 }));
 

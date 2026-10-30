@@ -100,9 +100,7 @@ describe("WorkspaceShell（V1.1 三栏壳）", () => {
 
   it("传统视图概览入口跳转 /dashboard", async () => {
     const w = mountShellWithSlots();
-    const overview = w
-      .findAll("button, a")
-      .find(el => el.text() === "概览");
+    const overview = w.findAll("button, a").find(el => el.text() === "概览");
     expect(overview).toBeTruthy();
     await overview!.trigger("click");
     expect(push).toHaveBeenCalledWith("/dashboard");

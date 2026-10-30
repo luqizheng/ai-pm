@@ -37,9 +37,7 @@ describe("workspace fixtures（V1.1 演示数据）", () => {
 
   it("AI 负责人简报署名与建议为供稿原文", () => {
     expect(briefing.author).toBe("元构");
-    expect(briefing.suggestion).toBe(
-      "优先确认地形渲染方案，再推进相关实现。"
-    );
+    expect(briefing.suggestion).toBe("优先确认地形渲染方案，再推进相关实现。");
     expect(briefing.body.trim()).not.toBe("");
   });
 

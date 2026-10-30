@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted } from "vue";
 import { storeToRefs } from "pinia";
+import { RouterView } from "vue-router";
 import TopBar from "./TopBar.vue";
 import LeftSidebar from "./LeftSidebar.vue";
 import ContextSidebar from "./ContextSidebar.vue";
@@ -52,7 +53,10 @@ onBeforeUnmount(() => {
     <LeftSidebar class="workspace-leftnav" />
     <main class="workspace-main">
       <div class="workspace-main-scroll">
-        <slot name="main" />
+        <!-- 路由用法：子路由（总控台等）经默认 RouterView 渲染；显式用法可覆写 main 插槽 -->
+        <slot name="main">
+          <RouterView />
+        </slot>
       </div>
       <slot name="commandbar">
         <AICommandBar />

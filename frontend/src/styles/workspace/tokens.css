@@ -20,25 +20,25 @@
 
   /* Surface —— 设计系统 V1.0 §1.1（深色列） */
   --ws-canvas: #111318;
-  --ws-sidebar: #171A21;
-  --ws-surface: #1D212A;
-  --ws-elevated: #252A35;
-  --ws-border: #353B48;
+  --ws-sidebar: #171a21;
+  --ws-surface: #1d212a;
+  --ws-elevated: #252a35;
+  --ws-border: #353b48;
 
   /* Text / Accent */
-  --ws-text-primary: #E9ECF3;
-  --ws-text-secondary: #99A2B2;
-  --ws-accent: #8B83F6;
+  --ws-text-primary: #e9ecf3;
+  --ws-text-secondary: #99a2b2;
+  --ws-accent: #8b83f6;
 
   /* 语义色（深色：基准即达 4.5:1，-text 与基准一致） */
-  --ws-color-info: #6EA8FE;
-  --ws-color-success: #34C08B;
-  --ws-color-warning: #E0B15E;
-  --ws-color-danger: #F07E88;
-  --ws-color-info-text: #6EA8FE;
-  --ws-color-success-text: #34C08B;
-  --ws-color-warning-text: #E0B15E;
-  --ws-color-danger-text: #F07E88;
+  --ws-color-info: #6ea8fe;
+  --ws-color-success: #34c08b;
+  --ws-color-warning: #e0b15e;
+  --ws-color-danger: #f07e88;
+  --ws-color-info-text: #6ea8fe;
+  --ws-color-success-text: #34c08b;
+  --ws-color-warning-text: #e0b15e;
+  --ws-color-danger-text: #f07e88;
 
   /* 形状 / 密度 —— V1.0 §1.2 */
   --ws-radius-card: 8px;
@@ -65,27 +65,27 @@
 [data-theme="light"] {
   color-scheme: light;
 
-  --ws-canvas: #F7F8FA;
-  --ws-sidebar: #F0F2F6;
-  --ws-surface: #FFFFFF;
-  --ws-elevated: #E9ECF2;
-  --ws-border: #DDE2EA;
+  --ws-canvas: #f7f8fa;
+  --ws-sidebar: #f0f2f6;
+  --ws-surface: #ffffff;
+  --ws-elevated: #e9ecf2;
+  --ws-border: #dde2ea;
 
   /* 次文字 #647085：压深自设计稿 #697386，画布上达 AA（分析稿 A6） */
   --ws-text-primary: #202532;
   --ws-text-secondary: #647085;
-  --ws-accent: #6258D9;
+  --ws-accent: #6258d9;
 
   /* 语义色（分析稿候选起点；warning 候选 #D9A441 对白表面仅 2.25:1，
      不达 3:1，改用 PRISM warning 族；-text 变体承载 4.5:1 文字用途） */
-  --ws-color-info: #3B82F6;
-  --ws-color-success: #22A06B;
-  --ws-color-warning: #B45309;
-  --ws-color-danger: #E16B73;
-  --ws-color-info-text: #1D4ED8;
-  --ws-color-success-text: #15803D;
-  --ws-color-warning-text: #92400E;
-  --ws-color-danger-text: #B42318;
+  --ws-color-info: #3b82f6;
+  --ws-color-success: #22a06b;
+  --ws-color-warning: #b45309;
+  --ws-color-danger: #e16b73;
+  --ws-color-info-text: #1d4ed8;
+  --ws-color-success-text: #15803d;
+  --ws-color-warning-text: #92400e;
+  --ws-color-danger-text: #b42318;
 
   --ws-focus-ring: 0 0 0 2px var(--ws-canvas), 0 0 0 4px var(--ws-accent);
 }

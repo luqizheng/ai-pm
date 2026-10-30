@@ -47,27 +47,72 @@ const groups = computed<NavGroup[]>(() => [
     key: "workspace",
     labelKey: "workspace.nav.groupWorkspace",
     items: [
-      { key: "console", labelKey: "workspace.nav.console", icon: Map, to: workspaceTo("console") },
-      { key: "team", labelKey: "workspace.nav.team", icon: Users, to: workspaceTo("team") },
-      { key: "goals", labelKey: "workspace.nav.goals", icon: ListTree, to: workspaceTo("goals") },
-      { key: "activity", labelKey: "workspace.nav.activity", icon: Activity, to: workspaceTo("activity") }
+      {
+        key: "console",
+        labelKey: "workspace.nav.console",
+        icon: Map,
+        to: workspaceTo("console")
+      },
+      {
+        key: "team",
+        labelKey: "workspace.nav.team",
+        icon: Users,
+        to: workspaceTo("team")
+      },
+      {
+        key: "goals",
+        labelKey: "workspace.nav.goals",
+        icon: ListTree,
+        to: workspaceTo("goals")
+      },
+      {
+        key: "activity",
+        labelKey: "workspace.nav.activity",
+        icon: Activity,
+        to: workspaceTo("activity")
+      }
     ]
   },
   {
     key: "modules",
     labelKey: "workspace.nav.groupModules",
     items: [
-      { key: "requirements", labelKey: "workspace.nav.requirements", icon: FileText, to: workspaceTo("requirements") },
-      { key: "decisions", labelKey: "workspace.nav.decisions", icon: Scale, to: workspaceTo("decisions") },
-      { key: "knowledge", labelKey: "workspace.nav.knowledge", icon: BookOpen, to: workspaceTo("knowledge") },
-      { key: "artifacts", labelKey: "workspace.nav.artifacts", icon: PackageCheck, to: workspaceTo("artifacts") }
+      {
+        key: "requirements",
+        labelKey: "workspace.nav.requirements",
+        icon: FileText,
+        to: workspaceTo("requirements")
+      },
+      {
+        key: "decisions",
+        labelKey: "workspace.nav.decisions",
+        icon: Scale,
+        to: workspaceTo("decisions")
+      },
+      {
+        key: "knowledge",
+        labelKey: "workspace.nav.knowledge",
+        icon: BookOpen,
+        to: workspaceTo("knowledge")
+      },
+      {
+        key: "artifacts",
+        labelKey: "workspace.nav.artifacts",
+        icon: PackageCheck,
+        to: workspaceTo("artifacts")
+      }
     ]
   },
   {
     key: "classic",
     labelKey: "workspace.nav.groupClassic",
     items: [
-      { key: "classic-overview", labelKey: "workspace.nav.classicOverview", icon: LayoutDashboard, to: "/dashboard" }
+      {
+        key: "classic-overview",
+        labelKey: "workspace.nav.classicOverview",
+        icon: LayoutDashboard,
+        to: "/dashboard"
+      }
     ]
   }
 ]);
@@ -102,14 +147,22 @@ function onItem(item: NavItem) {
 
     <div class="ws-leftnav-footer">
       <div class="ws-service" data-test="service-ok">
-        <span class="ws-service-dot" data-test="service-dot" aria-hidden="true" />
+        <span
+          class="ws-service-dot"
+          data-test="service-dot"
+          aria-hidden="true"
+        />
         <span class="ws-nav-label">{{ t("workspace.service.ok") }}</span>
       </div>
       <button
         type="button"
         class="ws-icon-btn ws-focusable"
         data-test="sidebar-toggle"
-        :aria-label="store.sidebarCollapsed ? t('workspace.shell.expand') : t('workspace.shell.collapse')"
+        :aria-label="
+          store.sidebarCollapsed
+            ? t('workspace.shell.expand')
+            : t('workspace.shell.collapse')
+        "
         @click="store.toggleSidebar()"
       >
         <ChevronLeft :size="16" aria-hidden="true" />

@@ -189,7 +189,10 @@ describe("workspace tokens", () => {
     ];
     const shellIdx = css.indexOf(".workspace-shell");
     expect(shellIdx, "缺少 .workspace-shell 桥接块").toBeGreaterThanOrEqual(0);
-    const scope = css.slice(shellIdx, css.indexOf("}", css.indexOf("{", shellIdx)));
+    const scope = css.slice(
+      shellIdx,
+      css.indexOf("}", css.indexOf("{", shellIdx))
+    );
     for (const name of bridged) {
       expect(
         scope.includes(`--${name}:`),

@@ -3,15 +3,17 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { PanelRightClose, Sparkles } from "lucide-vue-next";
 import { useWorkspaceStore } from "../store";
-import { attentionItems, contextAdvice, contextPlaceholders } from "../fixtures";
+import {
+  attentionItems,
+  contextAdvice,
+  contextPlaceholders
+} from "../fixtures";
 
 const { t } = useI18n();
 const store = useWorkspaceStore();
 
 /** 未选中时默认展示首条待办（与 V1.1 原型一致：地形渲染架构评审即选中态） */
-const activeItem = computed(
-  () => store.selectedAttention ?? attentionItems[0]
-);
+const activeItem = computed(() => store.selectedAttention ?? attentionItems[0]);
 
 const advice = computed(() => store.selectedAttention?.advice ?? contextAdvice);
 </script>

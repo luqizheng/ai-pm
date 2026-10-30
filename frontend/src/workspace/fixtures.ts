@@ -151,8 +151,7 @@ export const dynamics: DynamicEntry[] = [
 ];
 
 /** 右栏默认 AI 建议（V1.1 右侧上下文栏图面） */
-export const contextAdvice =
-  "先验证 Shader 原型性能，再做正式架构选择";
+export const contextAdvice = "先验证 Shader 原型性能，再做正式架构选择";
 
 /** 右栏两个大占位区（V1.1 图面） */
 export const contextPlaceholders = ["批量原型验证", "补充证据"];
