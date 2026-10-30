@@ -168,4 +168,59 @@ AI 负责组合这些受控组件，不能直接注入任意前端代码。
 
 ---
 
+## 六、前端工程落地
+
+推荐的项目结构：参考
+
+```text
+src/
+  app/
+    router/
+    providers/
+    theme/
+
+  workspace/
+    shell/
+      TopBar.tsx
+      LeftSidebar.tsx
+      MainWorkspace.tsx
+      ContextSidebar.tsx
+      AICommandBar.tsx
+
+    layouts/
+      OverviewLayout.tsx
+      SplitLayout.tsx
+      TimelineLayout.tsx
+      ExplorerLayout.tsx
+
+    registry/
+      component-registry.ts
+      workspace-schema.ts
+      workspace-renderer.tsx
+
+    state/
+      workspace-store.ts
+
+  features/
+    dashboard/
+    goals/
+    agent-runs/
+    decisions/
+    knowledge/
+    artifacts/
+    classic/
+
+  components/
+    ui/
+    domain/
+    ai/
+
+  styles/
+    tokens.css
+    typography.css
+    density.css
+```
+
+---
+
 （记录截止此处，待续）
