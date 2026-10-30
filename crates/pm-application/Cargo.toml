@@ -17,3 +17,5 @@ uuid.workspace = true
 [dev-dependencies]
 serde_json.workspace = true
 sqlx.workspace = true
+pm-ai = { path = "../pm-ai" }
+pm-infrastructure = { path = "../pm-infrastructure" }
