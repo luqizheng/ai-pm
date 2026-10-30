@@ -53,3 +53,14 @@ workspace:
     title: Page not found or access denied
     body: This project has no workspace data, or the link is wrong.
     back: Back to overview
+  commandbar:
+    chipRole: AI Lead
+    chipContext: Current page context
+    placeholder: e.g. Analyze the main risks of this iteration and suggest adjustments
+    needProject: Select a project first
+    send: Send
+    phase: AI is analyzing…
+    cancel: Cancel
+    reference: "/ Reference"
+    atAgent: "{'@'} Agent"
+    mockReply: Received "{prompt}". Demo mode only; the real AI session arrives in the next milestone.

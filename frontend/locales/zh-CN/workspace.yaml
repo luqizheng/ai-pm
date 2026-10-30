@@ -53,3 +53,14 @@ workspace:
     title: 页面不存在或无权访问
     body: 当前项目没有工作空间数据，或链接有误。
     back: 返回概览
+  commandbar:
+    chipRole: AI 研发负责人
+    chipContext: 当前页面上下文
+    placeholder: 例如：分析当前迭代的主要风险，并提出调整建议
+    needProject: 请先选择项目
+    send: 发送
+    phase: AI 正在分析…
+    cancel: 取消
+    reference: "/ 引用"
+    atAgent: "{'@'} Agent"
+    mockReply: 已收到指令「{prompt}」。当前为演示模式，正式 AI 会话将在下一里程碑接入。

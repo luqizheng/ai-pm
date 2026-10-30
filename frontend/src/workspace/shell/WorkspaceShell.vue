@@ -4,6 +4,7 @@ import { storeToRefs } from "pinia";
 import TopBar from "./TopBar.vue";
 import LeftSidebar from "./LeftSidebar.vue";
 import ContextSidebar from "./ContextSidebar.vue";
+import AICommandBar from "../components/AICommandBar.vue";
 import { useWorkspaceStore } from "../store";
 
 defineProps<{ project: string; page: string }>();
@@ -53,7 +54,9 @@ onBeforeUnmount(() => {
       <div class="workspace-main-scroll">
         <slot name="main" />
       </div>
-      <slot name="commandbar" />
+      <slot name="commandbar">
+        <AICommandBar />
+      </slot>
     </main>
     <aside v-if="contextOpen" class="workspace-context">
       <slot name="context">
