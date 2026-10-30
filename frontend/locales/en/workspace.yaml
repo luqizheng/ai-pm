@@ -64,3 +64,5 @@ workspace:
     reference: "/ Reference"
     atAgent: "{'@'} Agent"
     mockReply: Received "{prompt}". Demo mode only; the real AI session arrives in the next milestone.
+  entry:
+    preview: AI Workspace (Preview)

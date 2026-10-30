@@ -2,8 +2,15 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
+import { demoProjectId } from "@/workspace/fixtures";
 
 const { t } = useI18n();
+const router = useRouter();
+
+function openWorkspace() {
+  router.push(`/workspace/${demoProjectId}/console`);
+}
 
 interface Metric {
   label: string;
@@ -29,6 +36,14 @@ const metrics: Metric[] = [
   <section class="ui-dashboard">
     <header class="ui-dashboard__header">
       <h1 class="ui-dashboard__title">{{ t("system.dashboard.title") }}</h1>
+      <button
+        type="button"
+        class="ui-dashboard__workspace-entry"
+        data-test="workspace-entry"
+        @click="openWorkspace"
+      >
+        {{ t("workspace.entry.preview") }}
+      </button>
     </header>
 
     <div class="ui-dashboard__metrics">
@@ -73,6 +88,23 @@ const metrics: Metric[] = [
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-h2);
   color: var(--text-primary);
+}
+
+.ui-dashboard__workspace-entry {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-small);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+.ui-dashboard__workspace-entry:hover {
+  background: var(--surface-hover-veil);
 }
 
 /* 指标卡 4 → 2 → 1 列（Phase 2 §4.2） */

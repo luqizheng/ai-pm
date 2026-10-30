@@ -64,3 +64,5 @@ workspace:
     reference: "/ 引用"
     atAgent: "{'@'} Agent"
     mockReply: 已收到指令「{prompt}」。当前为演示模式，正式 AI 会话将在下一里程碑接入。
+  entry:
+    preview: AI 工作空间（预览）
