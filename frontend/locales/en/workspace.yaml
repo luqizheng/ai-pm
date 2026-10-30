@@ -21,6 +21,7 @@ workspace:
     artifacts: Artifacts
     classicOverview: Overview
   service:
+    iteration: Current iteration
     ok: All services normal
   briefing:
     today: Today

@@ -184,6 +184,18 @@ describe("WorkspaceShell（V1.1 三栏壳）", () => {
     expect(text).toContain("项目总控");
   });
 
+  it("TopBar 有 Atlas R&D 品牌标识（原型对齐）", () => {
+    const w = mountShellWithSlots();
+    expect(w.find("[data-test='brand']").exists()).toBe(true);
+    expect(w.find(".workspace-topbar").text()).toContain("Atlas R&D");
+  });
+
+  it("左栏底部展示当前迭代（原型对齐）", () => {
+    const w = mountShellWithSlots();
+    expect(w.text()).toContain("当前迭代");
+    expect(w.text()).toContain("Iteration 2.0");
+  });
+
   it("TopBar 主题切换按钮往返深浅主题", async () => {
     const w = mountShellWithSlots();
     expect(document.documentElement.dataset.theme).toBe("dark");

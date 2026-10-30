@@ -40,6 +40,21 @@ describe("AICommandBar（指令栏）", () => {
     expect(w.text()).toContain("当前页面上下文");
   });
 
+  it("指令栏为原型大面板形态：面板容器 + 页脚动作行（发送在页脚）", async () => {
+    const { w } = await mounted();
+    expect(w.find("[data-test='command-panel']").exists()).toBe(true);
+    const footer = w.find("[data-test='command-footer']");
+    expect(footer.exists()).toBe(true);
+    expect(
+      footer.find("[data-test='command-send']").exists(),
+      "发送按钮应在页脚动作行"
+    ).toBe(true);
+    expect(
+      footer.find("[data-test='command-reference']").exists(),
+      "引用工具应在页脚动作行"
+    ).toBe(true);
+  });
+
   it("无项目上下文时输入禁用并有提示", () => {
     const w = mountShell(AICommandBar);
     const input = w.find("[data-test='command-input']");

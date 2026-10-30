@@ -15,6 +15,7 @@ import {
   Users
 } from "lucide-vue-next";
 import { useWorkspaceStore } from "../store";
+import { demoProject } from "../fixtures";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -146,6 +147,12 @@ function onItem(item: NavItem) {
     </div>
 
     <div class="ws-leftnav-footer">
+      <div class="ws-iteration">
+        <span class="ws-iteration-label">
+          {{ t("workspace.service.iteration") }}
+        </span>
+        <span class="ws-iteration-value">{{ demoProject.iteration }}</span>
+      </div>
       <div class="ws-service" data-test="service-ok">
         <span
           class="ws-service-dot"
@@ -241,5 +248,22 @@ function onItem(item: NavItem) {
   height: 8px;
   border-radius: 50%;
   background: var(--ws-color-success);
+}
+
+.ws-iteration {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.ws-iteration-label {
+  font-size: var(--ws-font-size-caption);
+  color: var(--ws-text-secondary);
+}
+
+.ws-iteration-value {
+  font-size: var(--ws-font-size-caption);
+  font-weight: 600;
 }
 </style>

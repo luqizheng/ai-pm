@@ -21,6 +21,7 @@ workspace:
     artifacts: 产物验收
     classicOverview: 概览
   service:
+    iteration: 当前迭代
     ok: 服务正常
   briefing:
     today: 今天

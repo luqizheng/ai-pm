@@ -27,9 +27,13 @@
     minmax(0, 1fr);
 }
 
-/* 顶栏横跨三栏 */
+/* 顶栏横跨三栏。
+ * 显式定位说明（用户验收反馈的栏位错位根因）：CSS Grid 自动放置会把
+ * 「锁行不锁列」的项目先于全自动项目放置——右栏（grid-row:2）先抢第 2 列，
+ * 主区被挤到第 3 列。三个栏位子项因此全部显式声明列位，不依赖自动放置。 */
 .workspace-topbar {
   grid-column: 1 / -1;
+  grid-row: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -39,6 +43,8 @@
 
 /* 主列（含总控台与指令栏）：右栏关闭时由网格自然扩展 */
 .workspace-main {
+  grid-column: 2;
+  grid-row: 2;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -53,6 +59,7 @@
 
 /* 左导航 / 右上下文列容器 */
 .workspace-leftnav {
+  grid-column: 1;
   grid-row: 2;
   background: var(--ws-sidebar);
   border-right: 1px solid var(--ws-border);
@@ -60,6 +67,7 @@
 }
 
 .workspace-context {
+  grid-column: 3;
   grid-row: 2;
   background: var(--ws-sidebar);
   border-left: 1px solid var(--ws-border);

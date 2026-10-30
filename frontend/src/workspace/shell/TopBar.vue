@@ -26,6 +26,11 @@ const isDark = computed(() => theme.theme.value === "dark");
 <template>
   <header class="workspace-topbar ws-topbar">
     <nav class="ws-breadcrumb" :aria-label="t('workspace.shell.breadcrumb')">
+      <span class="ws-brand" data-test="brand">
+        <span class="ws-brand-mark" aria-hidden="true">✦</span>
+        <span class="ws-brand-name">Atlas R&amp;D</span>
+      </span>
+      <ChevronRight :size="14" class="ws-breadcrumb-sep" aria-hidden="true" />
       <span class="ws-breadcrumb-project">{{ project }}</span>
       <ChevronRight :size="14" class="ws-breadcrumb-sep" aria-hidden="true" />
       <span class="ws-breadcrumb-page">{{ page }}</span>
@@ -91,6 +96,32 @@ const isDark = computed(() => theme.theme.value === "dark");
   align-items: center;
   gap: 6px;
   font-size: var(--ws-font-size-body);
+}
+
+/* 品牌位（原型对齐：Atlas R&D 标识 + 面包屑） */
+.ws-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 4px;
+}
+
+.ws-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--ws-radius-card);
+  background: var(--ws-accent);
+  color: var(--ws-canvas);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ws-brand-name {
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .ws-breadcrumb-project {

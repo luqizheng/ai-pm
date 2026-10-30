@@ -66,41 +66,9 @@ defineExpose({ focusInput });
 
 <template>
   <div class="ws-commandbar" data-test="command-bar">
-    <div
-      v-if="store.commandMessages.length"
-      class="ws-commandbar-messages"
-      role="log"
-    >
-      <div
-        v-for="message in store.commandMessages"
-        :key="message.id"
-        class="ws-command-msg"
-        :class="`is-${message.role}`"
-      >
-        {{ message.text }}
-      </div>
-    </div>
-
-    <div
-      v-if="phase === 'submitting'"
-      class="ws-commandbar-phase"
-      data-test="command-phase"
-    >
-      <span class="ws-commandbar-phase-text">
-        {{ t("workspace.commandbar.phase") }}
-      </span>
-      <button
-        type="button"
-        class="ws-commandbar-cancel ws-focusable"
-        data-test="command-cancel"
-        @click="cancel"
-      >
-        {{ t("workspace.commandbar.cancel") }}
-      </button>
-    </div>
-
-    <div class="ws-commandbar-row">
-      <div class="ws-commandbar-chip">
+    <div class="ws-commandbar-panel" data-test="command-panel">
+      <header class="ws-commandbar-head">
+        <span class="ws-commandbar-head-spark" aria-hidden="true">✦</span>
         <span class="ws-chip-role">
           {{ t("workspace.commandbar.chipRole") }}
         </span>
@@ -108,10 +76,44 @@ defineExpose({ focusInput });
         <span class="ws-chip-context">
           {{ t("workspace.commandbar.chipContext") }}
         </span>
+        <span v-if="!hasProject" class="ws-commandbar-hint">
+          {{ t("workspace.commandbar.needProject") }}
+        </span>
+      </header>
+
+      <div
+        v-if="store.commandMessages.length"
+        class="ws-commandbar-messages"
+        role="log"
+      >
+        <div
+          v-for="message in store.commandMessages"
+          :key="message.id"
+          class="ws-command-msg"
+          :class="`is-${message.role}`"
+        >
+          {{ message.text }}
+        </div>
       </div>
-      <span v-if="!hasProject" class="ws-commandbar-hint">
-        {{ t("workspace.commandbar.needProject") }}
-      </span>
+
+      <div
+        v-if="phase === 'submitting'"
+        class="ws-commandbar-phase"
+        data-test="command-phase"
+      >
+        <span class="ws-commandbar-phase-text">
+          {{ t("workspace.commandbar.phase") }}
+        </span>
+        <button
+          type="button"
+          class="ws-commandbar-cancel ws-focusable"
+          data-test="command-cancel"
+          @click="cancel"
+        >
+          {{ t("workspace.commandbar.cancel") }}
+        </button>
+      </div>
+
       <input
         ref="inputEl"
         v-model="draft"
@@ -124,42 +126,68 @@ defineExpose({ focusInput });
         @keydown.enter="submit"
         @keydown.esc="store.clearCommandMessages()"
       />
-      <button
-        type="button"
-        class="ws-commandbar-tool ws-focusable"
-        data-test="command-reference"
-        disabled
-      >
-        {{ t("workspace.commandbar.reference") }}
-      </button>
-      <button
-        type="button"
-        class="ws-commandbar-tool ws-focusable"
-        data-test="command-at-agent"
-        disabled
-      >
-        {{ t("workspace.commandbar.atAgent") }}
-      </button>
-      <button
-        type="button"
-        class="ws-commandbar-send ws-focusable"
-        data-test="command-send"
-        :disabled="!hasProject || phase === 'submitting'"
-        @click="submit"
-      >
-        {{ t("workspace.commandbar.send") }}
-        <ArrowUp :size="14" aria-hidden="true" />
-      </button>
+
+      <footer class="ws-commandbar-footer" data-test="command-footer">
+        <div class="ws-commandbar-tools">
+          <button
+            type="button"
+            class="ws-commandbar-tool ws-focusable"
+            data-test="command-reference"
+            disabled
+          >
+            {{ t("workspace.commandbar.reference") }}
+          </button>
+          <button
+            type="button"
+            class="ws-commandbar-tool ws-focusable"
+            data-test="command-at-agent"
+            disabled
+          >
+            {{ t("workspace.commandbar.atAgent") }}
+          </button>
+        </div>
+        <button
+          type="button"
+          class="ws-commandbar-send ws-focusable"
+          data-test="command-send"
+          :disabled="!hasProject || phase === 'submitting'"
+          @click="submit"
+        >
+          {{ t("workspace.commandbar.send") }}
+          <ArrowUp :size="14" aria-hidden="true" />
+        </button>
+      </footer>
     </div>
   </div>
 </template>
 
 <style scoped>
 .ws-commandbar {
-  padding: 10px 16px 12px;
+  padding: 12px 24px 16px;
+}
+
+/* 原型对齐：指令栏为 main 列底部的大圆角面板（头部 ✦ 角色 · 上下文，
+ * 输入独占一行，页脚左侧工具、右侧发送） */
+.ws-commandbar-panel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--ws-elevated);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-dialog);
+}
+
+.ws-commandbar-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--ws-font-size-caption);
+}
+
+.ws-commandbar-head-spark {
+  color: var(--ws-accent);
+  font-size: 12px;
 }
 
 .ws-commandbar-messages {
@@ -181,7 +209,7 @@ defineExpose({ focusInput });
 
 .ws-command-msg.is-user {
   align-self: flex-end;
-  background: var(--ws-elevated);
+  background: var(--ws-surface);
 }
 
 .ws-command-msg.is-assistant {
@@ -207,30 +235,12 @@ defineExpose({ focusInput });
   font-size: var(--ws-font-size-caption);
 }
 
-.ws-commandbar-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ws-commandbar-chip {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--ws-font-size-caption);
-  padding: 4px 10px;
-  border: 1px solid var(--ws-border);
-  border-radius: 999px;
-  background: var(--ws-surface);
-}
-
 .ws-chip-role {
   color: var(--ws-accent);
   font-weight: 600;
 }
 
-/* 紫色克制：chip 角色用 AI 紫，上下文文案保持中性 */
+/* 紫色克制：角色名用 AI 紫，上下文文案保持中性 */
 .ws-chip-context {
   color: var(--ws-text-secondary);
 }
@@ -240,15 +250,15 @@ defineExpose({ focusInput });
 }
 
 .ws-commandbar-hint {
-  flex: none;
+  margin-left: auto;
   font-size: var(--ws-font-size-caption);
   color: var(--ws-color-warning-text);
 }
 
 .ws-commandbar-input {
-  flex: 1;
-  min-width: 0;
-  height: 36px;
+  width: 100%;
+  box-sizing: border-box;
+  height: 40px;
   padding: 0 12px;
   border: 1px solid var(--ws-border);
   border-radius: var(--ws-radius-card);
@@ -262,12 +272,24 @@ defineExpose({ focusInput });
   cursor: not-allowed;
 }
 
+.ws-commandbar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ws-commandbar-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .ws-commandbar-tool {
-  flex: none;
-  height: 32px;
+  height: 28px;
   padding: 0 10px;
   border: 1px solid var(--ws-border);
-  border-radius: var(--ws-radius-card);
+  border-radius: 999px;
   background: transparent;
   color: var(--ws-text-secondary);
   font-size: var(--ws-font-size-caption);
@@ -280,7 +302,6 @@ defineExpose({ focusInput });
 }
 
 .ws-commandbar-send {
-  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 4px;

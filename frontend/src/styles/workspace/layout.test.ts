@@ -1,0 +1,59 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+
+/**
+ * 布局契约（用户验收反馈：栏位错位）。
+ *
+ * 根因：CSS Grid 自动放置中，「锁行不锁列」的项目先于全自动项目放置，
+ * 右栏（grid-row:2）会抢在主区（全自动）前面拿第 2 列。
+ * 契约：三个栏位子项必须显式声明 grid-column，不依赖自动放置。
+ */
+const css = readFileSync(
+  resolve(process.cwd(), "src/styles/workspace/index.css"),
+  "utf8"
+).replace(/\/\*[\s\S]*?\*\//g, "");
+
+function ruleBody(selector: string): string {
+  const re = new RegExp(
+    `${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`
+  );
+  const m = css.match(re);
+  expect(m, `index.css 缺少 ${selector} 规则`).toBeTruthy();
+  return m![1];
+}
+
+describe("workspace 布局契约", () => {
+  it("shell 三列模板：左导航 | 自适应主区 | 右上下文", () => {
+    const body = ruleBody(".workspace-shell");
+    expect(body).toMatch(/display:\s*grid/);
+    expect(body).toMatch(/grid-template-columns/);
+    expect(body).toMatch(/var\(--ws-sidebar-current\)/);
+    expect(body).toMatch(/minmax\(0,\s*1fr\)/);
+    expect(body).toMatch(/var\(--ws-context-width\)/);
+  });
+
+  it("顶栏横跨全部列（首行）", () => {
+    const body = ruleBody(".workspace-topbar");
+    expect(body).toMatch(/grid-column:\s*1\s*\/\s*-1/);
+    expect(body).toMatch(/grid-row:\s*1/);
+  });
+
+  it("左导航显式定位第 1 列", () => {
+    const body = ruleBody(".workspace-leftnav");
+    expect(body).toMatch(/grid-column:\s*1\s*;/);
+    expect(body).toMatch(/grid-row:\s*2/);
+  });
+
+  it("主区显式定位第 2 列（中间列，不依赖自动放置）", () => {
+    const body = ruleBody(".workspace-main");
+    expect(body).toMatch(/grid-column:\s*2\s*;/);
+    expect(body).toMatch(/grid-row:\s*2/);
+  });
+
+  it("右上下文显式定位第 3 列", () => {
+    const body = ruleBody(".workspace-context");
+    expect(body).toMatch(/grid-column:\s*3\s*;/);
+    expect(body).toMatch(/grid-row:\s*2/);
+  });
+});
