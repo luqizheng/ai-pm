@@ -21,6 +21,8 @@ workspace:
     classicOverview: Overview
   service:
     ok: All services normal
+  briefing:
+    today: Today
   context:
     title: Context
     collapse: Collapse context panel
@@ -30,3 +32,24 @@ workspace:
       decision: Decision
       acceptance: Acceptance
       blocker: Blocker
+  console:
+    title: Project Console
+    runningBadge: Project running
+    demoData: Demo data
+    needAttention: Needs your attention
+    needAttentionCount: "{count} items"
+    goals: Goals progress
+    dynamics: Activity
+    kind:
+      decision: Decision
+      acceptance: Acceptance
+      blocker: Blocker
+  dynamics:
+    kind:
+      change: Change
+      failure: Failure
+      decision: Decision
+  unavailable:
+    title: Page not found or access denied
+    body: This project has no workspace data, or the link is wrong.
+    back: Back to overview

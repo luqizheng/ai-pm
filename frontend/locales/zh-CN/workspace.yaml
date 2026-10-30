@@ -21,6 +21,8 @@ workspace:
     classicOverview: 概览
   service:
     ok: 服务正常
+  briefing:
+    today: 今天
   context:
     title: 上下文
     collapse: 折叠上下文栏
@@ -30,3 +32,24 @@ workspace:
       decision: 决策
       acceptance: 验收
       blocker: 阻塞
+  console:
+    title: 项目总控
+    runningBadge: 项目运行中
+    demoData: 演示数据
+    needAttention: 需要你处理
+    needAttentionCount: "{count} 项"
+    goals: 目标进展
+    dynamics: 项目动态
+    kind:
+      decision: 决策
+      acceptance: 验收
+      blocker: 阻塞
+  dynamics:
+    kind:
+      change: 变更
+      failure: 失败
+      decision: 决策
+  unavailable:
+    title: 页面不存在或无权访问
+    body: 当前项目没有工作空间数据，或链接有误。
+    back: 返回概览
