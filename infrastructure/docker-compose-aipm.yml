@@ -1,8 +1,8 @@
 # ai-pm 平台服务（本仓自有，非模板内容）。
-# 镜像由仓库根 Dockerfile 按 target 构建：
-#   docker build --target runtime-pm-api       -t aipm/pm-api:0.1.0 .
-#   docker build --target runtime-pm-worker    -t aipm/pm-worker:0.1.0 .
-#   docker build --target runtime-ai-pm-worker -t aipm/ai-pm-worker:0.1.0 .
+# 镜像来源：
+#   ai-pm 仓（本仓）：    docker build --target runtime-pm-api ... -t aipm/pm-api:0.1.0 . 等
+#   ai-pm-web 仓：        docker build --target runtime-bff -t aipm/aipm-bff:0.1.0 .
+#                         docker build --target runtime-web -t aipm/aipm-web:0.1.0 .
 # 全部挂 superpowers 网络（与 lmms 栈同网络，服务名互访）。
 
 services:
@@ -59,6 +59,32 @@ services:
     depends_on:
       aipm-pg:
         condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - superpowers
+
+  # ai-pm-web 前端仓：Rust BFF（与 ai-pm 共享 aipm 库，只做门面不做迁移）
+  aipm-bff:
+    image: ${AIPM_REGISTRY:-aipm}/aipm-bff:${AIPM_VERSION:-0.1.0}
+    environment:
+      DATABASE_URL: postgres://aipm:aipm@aipm-pg:5432/aipm
+      IAM_MODE: local
+    ports:
+      - "8080:8080"
+    depends_on:
+      aipm-pg:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - superpowers
+
+  # ai-pm-web 前端静态站（nginx 伺服 dist，/api 反代 aipm-bff）
+  aipm-web:
+    image: ${AIPM_REGISTRY:-aipm}/aipm-web:${AIPM_VERSION:-0.1.0}
+    ports:
+      - "8091:80"
+    depends_on:
+      - aipm-bff
     restart: unless-stopped
     networks:
       - superpowers
