@@ -58,6 +58,10 @@
 
   /* 焦点（键盘章：可见焦点样式） */
   --ws-focus-ring: 0 0 0 2px var(--ws-canvas), 0 0 0 4px var(--ws-accent);
+
+  /* 悬浮/按压薄纱（终审 M5：随主题走，供 PRISM veil 桥接） */
+  --ws-hover-veil: rgba(233, 236, 243, 0.06);
+  --ws-active-veil: rgba(233, 236, 243, 0.1);
 }
 
 [data-theme="light"] {
@@ -84,12 +88,17 @@
   --ws-color-danger-text: #b42318;
 
   --ws-focus-ring: 0 0 0 2px var(--ws-canvas), 0 0 0 4px var(--ws-accent);
+
+  /* 浅色薄纱（对齐 PRISM 浅色 veil 口径） */
+  --ws-hover-veil: rgba(23, 24, 28, 0.04);
+  --ws-active-veil: rgba(23, 24, 28, 0.07);
 }
 
 /* ---------------------------------------------------------------------------
  * PRISM 桥接：仅作用于 .workspace-shell 内部。
  * PRISM 组件（components/ui）消费 --prism-*（见 styles/prism/tokens.css），
  * 在工作区深色画布上直接用会发灰——这里把工作区内取值换轨到 --ws-*。
+ * 终审 M5：补全缺口变量；veil/阴影/渐变随主题或按「少阴影、无渐变」设计规则降级。
  * ------------------------------------------------------------------------- */
 .workspace-shell {
   /* color-scheme 限定在工作区作用域（终审 I2）：不泄漏到存量页的
@@ -100,28 +109,64 @@
   --surface-base: var(--ws-surface);
   --surface-raised: var(--ws-elevated);
   --surface-overlay: var(--ws-elevated);
-  --surface-hover-veil: rgba(233, 236, 243, 0.06);
-  --surface-active-veil: rgba(233, 236, 243, 0.1);
+  --surface-ink: var(--ws-canvas);
+  --surface-disabled: var(--ws-elevated);
+  --surface-highlight: var(--ws-elevated);
+  --surface-hover-veil: var(--ws-hover-veil);
+  --surface-active-veil: var(--ws-active-veil);
 
   --text-primary: var(--ws-text-primary);
   --text-secondary: var(--ws-text-secondary);
   --text-tertiary: var(--ws-text-secondary);
   --text-inverse: var(--ws-canvas);
+  --text-disabled: var(--ws-text-secondary);
 
   --border-default: var(--ws-border);
   --border-subtle: var(--ws-border);
   --border-strong: var(--ws-border);
+  --border-data: var(--ws-border);
+  --border-hover-strong: var(--ws-accent);
 
   --accent: var(--ws-accent);
   --accent-hover: var(--ws-accent);
   --accent-pressed: var(--ws-accent);
   --accent-subtle: var(--ws-elevated);
   --accent-contrast-text: var(--ws-canvas);
+  --accent-deep: var(--ws-accent);
+  --accent-wash: var(--ws-elevated);
+  --accent-disabled: var(--ws-border);
+  /* 设计规则：避免大面积渐变 → 工作区内渐变降级为 none（终审 M5） */
+  --accent-gradient: none;
+  --accent-gradient-hover: none;
+  --accent-gradient-pressed: none;
+  --border-accent-glow: none;
+  --danger-focus-glow: none;
+
+  /* 焦点光晕统一接工作区 focus ring（键盘章：可见焦点样式） */
+  --focus-glow: var(--ws-focus-ring);
+  --focus-glow-ink: var(--ws-canvas);
+  --input-focus-glow: var(--ws-focus-ring);
 
   --info: var(--ws-color-info);
   --success: var(--ws-color-success);
   --warning: var(--ws-color-warning);
   --danger: var(--ws-color-danger);
+  --info-strong: var(--ws-color-info-text);
+  --success-strong: var(--ws-color-success-text);
+  --warning-strong: var(--ws-color-warning-text);
+  --danger-strong: var(--ws-color-danger-text);
+  --info-subtle: var(--ws-elevated);
+  --success-subtle: var(--ws-elevated);
+  --warning-subtle: var(--ws-elevated);
+  --danger-subtle: var(--ws-elevated);
+
+  /* 设计规则：轻边框、少阴影 → 深色下阴影整体降级为 none（终审 M5） */
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-accent: none;
+  --shadow-accent-lg: none;
 }
 
 [data-theme="light"] .workspace-shell {

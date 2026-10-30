@@ -8,6 +8,8 @@ import { createPinia } from "pinia";
 import { createMemoryHistory, createRouter, RouterView } from "vue-router";
 import { i18n } from "../../shell/i18n";
 import { staticRoutes } from "../../shell/router/routes";
+import { installAuthGuard } from "../../shell/router/guard";
+import { saveSession } from "../../shell/api/token-storage";
 import { THEME_STORAGE_KEY } from "../useTheme";
 
 /** happy-dom 的 matchMedia 不随视口变化：本文件统一桩为桌面基准（断点不命中） */
@@ -39,6 +41,52 @@ async function mountAt(path: string) {
   await router.push(path);
   await flushPromises();
   return w;
+}
+
+/** 需要继续导航的用例：同时暴露 router（真实参数响应性） */
+async function mountRouterAt(path: string) {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: staticRoutes
+  });
+  const App = defineComponent({ render: () => h(RouterView) });
+  const w = mount(App, {
+    global: { plugins: [createPinia(), i18n, router] }
+  });
+  await router.push(path);
+  await flushPromises();
+  return { w, router };
+}
+
+/** 带 auth 守卫的挂载（M6：守卫回归用测试钉住） */
+async function mountGuardedAt(path: string, opts?: { session?: boolean }) {
+  localStorage.clear();
+  if (opts?.session) {
+    saveSession({
+      accessToken: "test-access",
+      refreshToken: "test-refresh",
+      expiresIn: 3600,
+      user: {
+        id: "1",
+        username: "admin",
+        nickname: "管理员",
+        roles: ["admin"],
+        permissions: []
+      }
+    });
+  }
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: staticRoutes
+  });
+  installAuthGuard(router);
+  const App = defineComponent({ render: () => h(RouterView) });
+  const w = mount(App, {
+    global: { plugins: [createPinia(), i18n, router] }
+  });
+  await router.push(path);
+  await flushPromises();
+  return { w, router };
 }
 
 describe("P0 验收（总控台竖切）", () => {
@@ -126,5 +174,46 @@ describe("P0 验收（总控台竖切）", () => {
     expect(w.find(".ui-dashboard__title").exists()).toBe(true);
     // 预览入口在
     expect(w.find("[data-test='workspace-entry']").exists()).toBe(true);
+  });
+
+  it("跨项目参数导航：项目上下文跟随新参数（M1）", async () => {
+    const { w, router } = await mountRouterAt("/workspace/proj-other/console");
+    expect(w.text()).toContain("页面不存在或无权访问");
+    // 同一壳实例（同路由记录复用），上下文必须跟随新参数，而不是停留在首次挂载
+    await router.push("/workspace/proj-worldmap/console");
+    await flushPromises();
+    const input = w.find("[data-test='command-input']");
+    expect(input.attributes("disabled")).toBeUndefined();
+    await input.setValue("导航后的指令");
+    await w.find("[data-test='command-send']").trigger("click");
+    expect(w.text()).toContain("导航后的指令");
+  });
+
+  it("非总控台工作区页（ComingSoon）指令栏有项目上下文（M4）", async () => {
+    const { w } = await mountRouterAt("/workspace/proj-worldmap/team");
+    const input = w.find("[data-test='command-input']");
+    expect(input.attributes("disabled")).toBeUndefined();
+    expect(w.text()).not.toContain("请先选择项目");
+  });
+
+  it("降级页面包屑不冒充演示项目（M3）", async () => {
+    const { w } = await mountRouterAt("/workspace/proj-other/console");
+    expect(w.text()).toContain("proj-other");
+    expect(w.text()).not.toContain("世界地图编辑器");
+  });
+
+  it("守卫：未登录访问工作区 → 重定向登录页（M6）", async () => {
+    const { router } = await mountGuardedAt("/workspace/proj-worldmap/console");
+    await flushPromises();
+    expect(router.currentRoute.value.name).toBe("login");
+  });
+
+  it("守卫：已登录访问工作区 → 正常渲染（M6）", async () => {
+    const { w } = await mountGuardedAt("/workspace/proj-worldmap/console", {
+      session: true
+    });
+    await flushPromises();
+    expect(w.text()).toContain("项目总控");
+    expect(w.text()).toContain("项目运行中");
   });
 });

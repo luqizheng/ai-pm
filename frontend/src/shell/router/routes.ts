@@ -3,7 +3,7 @@ import AppShell from "../components/AppShell.vue";
 import ComingSoon from "../views/ComingSoon.vue";
 import LoginPage from "../views/login/LoginPage.vue";
 import NotFound from "../views/NotFound.vue";
-import { demoProject } from "../../workspace/fixtures";
+import { demoProject, demoProjectId } from "../../workspace/fixtures";
 
 /** 静态路由（不需要 DB 菜单即可访问） */
 export const staticRoutes: RouteRecordRaw[] = [
@@ -39,7 +39,11 @@ export const staticRoutes: RouteRecordRaw[] = [
     path: "/workspace/:projectId",
     component: () => import("../../workspace/shell/WorkspaceShell.vue"),
     props: route => ({
-      project: demoProject.name,
+      // 终审 M3：非演示项目降级时面包屑显示真实参数，不冒充演示项目名
+      project:
+        String(route.params.projectId) === demoProjectId
+          ? demoProject.name
+          : String(route.params.projectId),
       page: String(route.meta.title ?? "")
     }),
     redirect: to => `/workspace/${String(to.params.projectId)}/console`,

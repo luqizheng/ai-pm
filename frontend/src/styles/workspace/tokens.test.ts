@@ -182,20 +182,53 @@ describe("workspace tokens", () => {
       "surface-raised",
       "surface-sunken",
       "surface-overlay",
+      "surface-hover-veil",
+      "surface-active-veil",
+      "surface-ink",
+      "surface-disabled",
+      "surface-highlight",
       "text-primary",
       "text-secondary",
       "text-tertiary",
+      "text-disabled",
       "border-default",
       "border-subtle",
+      "border-data",
+      "border-hover-strong",
       "accent",
       "accent-hover",
       "accent-pressed",
       "accent-subtle",
       "accent-contrast-text",
+      "accent-deep",
+      "accent-wash",
+      "accent-disabled",
+      "accent-gradient",
+      "accent-gradient-hover",
+      "accent-gradient-pressed",
+      "border-accent-glow",
+      "danger-focus-glow",
+      "focus-glow",
+      "focus-glow-ink",
+      "input-focus-glow",
       "info",
       "success",
       "warning",
-      "danger"
+      "danger",
+      "info-strong",
+      "success-strong",
+      "warning-strong",
+      "danger-strong",
+      "info-subtle",
+      "success-subtle",
+      "warning-subtle",
+      "danger-subtle",
+      "shadow-xs",
+      "shadow-sm",
+      "shadow-md",
+      "shadow-lg",
+      "shadow-accent",
+      "shadow-accent-lg"
     ];
     const shellIdx = css.indexOf(".workspace-shell");
     expect(shellIdx, "缺少 .workspace-shell 桥接块").toBeGreaterThanOrEqual(0);
@@ -209,5 +242,7 @@ describe("workspace tokens", () => {
         `桥接块缺少 --${name}（应映射到 var(--ws-…)）`
       ).toBe(true);
     }
+    // 终审 M5：veil 不得硬编码 rgba（浅色主题下不可见），必须走主题 token
+    expect(scope).not.toMatch(/rgba\(/);
   });
 });

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from "vue";
+import { onBeforeUnmount, onMounted, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { RouterView } from "vue-router";
+import { RouterView, useRoute } from "vue-router";
 import TopBar from "./TopBar.vue";
 import LeftSidebar from "./LeftSidebar.vue";
 import ContextSidebar from "./ContextSidebar.vue";
@@ -12,6 +12,17 @@ defineProps<{ project: string; page: string }>();
 
 const store = useWorkspaceStore();
 const { sidebarCollapsed, contextOpen } = storeToRefs(store);
+
+// 项目上下文由壳统一持有（终审 M1/M4）：projectId 是整个工作区路由段的
+// 上下文，跟随参数同步 —— 参数导航/前进后退不落旧值，非总控台页同样有上下文。
+const route = useRoute();
+watch(
+  () => String(route.params.projectId ?? ""),
+  id => {
+    if (id) store.setProject(id);
+  },
+  { immediate: true }
+);
 
 // 响应式契约（B-2 沿用）：主区 <1280px 收起右栏，<1024px 左栏折叠至图标栏
 const NARROW_QUERY = "(max-width: 1280px)";

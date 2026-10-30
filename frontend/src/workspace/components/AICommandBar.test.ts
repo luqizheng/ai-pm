@@ -109,6 +109,22 @@ describe("AICommandBar（指令栏）", () => {
     expect(store.commandMessages).toHaveLength(0);
   });
 
+  it("Esc 在 submitting 期间取消分析并清理回执定时器（无孤儿气泡）", async () => {
+    const { w, store } = await mounted();
+    await w
+      .find("[data-test='command-input']")
+      .setValue("分析当前迭代的主要风险");
+    await w.find("[data-test='command-send']").trigger("click");
+    expect(w.find("[data-test='command-phase']").exists()).toBe(true);
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+    );
+    vi.advanceTimersByTime(2000);
+    await nextTick();
+    expect(store.commandMessages).toHaveLength(0);
+    expect(w.find("[data-test='command-phase']").exists()).toBe(false);
+  });
+
   it("「/ 引用」「@ Agent」为禁用占位", async () => {
     const { w } = await mounted();
     expect(

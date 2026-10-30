@@ -49,6 +49,8 @@ function onWindowKeydown(e: KeyboardEvent) {
     return;
   }
   if (e.key === "Escape") {
+    // 终审 M2：Esc 同时取消进行中的分析，清掉回执定时器，杜绝孤儿气泡
+    cancel();
     store.clearCommandMessages();
   }
 }

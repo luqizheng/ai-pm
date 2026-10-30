@@ -18,12 +18,10 @@ const store = useWorkspaceStore();
 const projectId = computed(() => String(route.params.projectId ?? ""));
 const available = computed(() => projectId.value === demoProjectId);
 
-// setup 阶段写入现场（首渲染即带选中态，与 V1.1 原型一致：默认选中首条待处理）
-if (available.value) {
-  store.setProject(projectId.value);
-  if (!store.selectedAttentionId) {
-    store.selectAttention(attentionItems[0].id);
-  }
+// setup 阶段写入现场（首渲染即带选中态，与 V1.1 原型一致：默认选中首条待处理）。
+// projectId 由 WorkspaceShell 统一同步（终审 M1/M4），这里只管选中态。
+if (available.value && !store.selectedAttentionId) {
+  store.selectAttention(attentionItems[0].id);
 }
 </script>
 
