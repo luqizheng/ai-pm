@@ -221,6 +221,65 @@ src/
     density.css
 ```
 
+### 主题令牌示例
+
+```css
+:root {
+  --canvas: #F7F8FA;
+  --sidebar: #F0F2F6;
+  --surface: #FFFFFF;
+  --surface-raised: #E9ECF2;
+  --border: #DDE2EA;
+
+  --text-primary: #202532;
+  --text-secondary: #697386;
+  --accent: #6258D9;
+
+  --space-unit: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --sidebar-width: 232px;
+  --context-width: 320px;
+  --topbar-height: 52px;
+}
+
+[data-theme="dark"] {
+  --canvas: #111318;
+  --sidebar: #171A21;
+  --surface: #1D212A;
+  --surface-raised: #252A35;
+  --border: #353B48;
+
+  --text-primary: #E9ECF3;
+  --text-secondary: #99A2B2;
+  --accent: #8B83F6;
+}
+
+.workspace-shell {
+  display: grid;
+  grid-template-columns:
+    var(--sidebar-width)
+    minmax(0, 1fr)
+    var(--context-width);
+  height: calc(100dvh - var(--topbar-height));
+  background: var(--canvas);
+  color: var(--text-primary);
+}
+
+.workspace-main {
+  min-width: 0;
+  overflow: auto;
+}
+
+.workspace-shell[data-context-open="false"] {
+  grid-template-columns:
+    var(--sidebar-width)
+    minmax(0, 1fr);
+}
+```
+
 ---
 
 （记录截止此处，待续）
