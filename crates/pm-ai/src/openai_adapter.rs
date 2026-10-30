@@ -54,11 +54,19 @@ impl OpenAiCompatibleModel {
     /// `base_url` is the API root without a trailing slash (e.g.
     /// `https://open.bigmodel.cn/api/paas/v4`); `/chat/completions` is
     /// appended per request. `timeout` bounds the whole request (connect +
-    /// headers + body) and surfaces as `ModelError::Timeout`.
+    /// headers + body) and surfaces as `ModelError::Timeout`; it must be
+    /// positive (panics otherwise). The client pins `no_proxy()`: it talks
+    /// straight to the configured `base_url`, so system/environment proxy
+    /// detection must never divert requests (a stale OS proxy would
+    /// hijack them); callers needing a proxy should front `base_url`.
+    ///
+    /// # Panics
+    /// Panics if `timeout` is negative.
     pub fn new(base_url: &str, model: &str, api_key: &str, timeout: chrono::Duration) -> Self {
         Self {
             client: reqwest::Client::builder()
-                .timeout(timeout.to_std().unwrap_or_default())
+                .no_proxy()
+                .timeout(timeout.to_std().expect("timeout must be positive"))
                 .build()
                 .expect("reqwest client must build"),
             base_url: base_url.trim_end_matches('/').to_string(),
