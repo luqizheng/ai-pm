@@ -55,6 +55,48 @@ export const staticRoutes: RouteRecordRaw[] = [
         meta: { title: "项目总控" }
       },
       {
+        path: "team",
+        name: "workspace-team",
+        component: () => import("../../workspace/pages/TeamPage.vue"),
+        meta: { title: "AI 团队" }
+      },
+      {
+        path: "goals",
+        name: "workspace-goals",
+        component: () => import("../../workspace/pages/GoalsPage.vue"),
+        meta: { title: "目标计划" }
+      },
+      {
+        path: "activity",
+        name: "workspace-activity",
+        component: () => import("../../workspace/pages/ActivityPage.vue"),
+        meta: { title: "项目动态" }
+      },
+      {
+        path: "requirements",
+        name: "workspace-requirements",
+        component: () => import("../../workspace/pages/RequirementsPage.vue"),
+        meta: { title: "需求管理" }
+      },
+      {
+        path: "decisions",
+        name: "workspace-decisions",
+        component: () => import("../../workspace/pages/DecisionsPage.vue"),
+        meta: { title: "决策中心" }
+      },
+      {
+        path: "knowledge",
+        name: "workspace-knowledge",
+        component: () => import("../../workspace/pages/KnowledgePage.vue"),
+        meta: { title: "项目知识" }
+      },
+      {
+        path: "artifacts",
+        name: "workspace-artifacts",
+        component: () => import("../../workspace/pages/ArtifactsPage.vue"),
+        meta: { title: "产物验收" }
+      },
+      {
         path: ":page",
         name: "workspace-page",
         component: ComingSoon,

@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { goals } from "../fixtures";
+import { goals, type Goal } from "../fixtures";
 
 const { t } = useI18n();
+
+/** 当前推进中的里程碑；无则取首个 */
+function activeMilestone(goal: Goal): string {
+  return (
+    goal.milestones.find(m => m.status === "active")?.name ??
+    goal.milestones[0]?.name ??
+    ""
+  );
+}
 </script>
 
 <template>
@@ -17,7 +26,7 @@ const { t } = useI18n();
       >
         <div class="ws-goal-head">
           <span class="ws-goal-name">{{ goal.name }}</span>
-          <span class="ws-goal-milestone">{{ goal.milestone }}</span>
+          <span class="ws-goal-milestone">{{ activeMilestone(goal) }}</span>
         </div>
         <div
           class="ws-goal-progress"

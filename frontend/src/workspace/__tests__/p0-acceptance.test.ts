@@ -216,4 +216,32 @@ describe("P0 验收（总控台竖切）", () => {
     expect(w.text()).toContain("项目总控");
     expect(w.text()).toContain("项目运行中");
   });
+
+  it("全部工作区页签渲染对应页面（mock 数据，非建设中）（/goal 全页签）", async () => {
+    const { w, router } = await mountRouterAt("/workspace/proj-worldmap/team");
+    const cases: [string, string][] = [
+      ["team", "AI 团队"],
+      ["goals", "目标计划"],
+      ["activity", "项目动态"],
+      ["requirements", "需求管理"],
+      ["decisions", "决策中心"],
+      ["knowledge", "项目知识"],
+      ["artifacts", "产物验收"]
+    ];
+    for (const [slug, heading] of cases) {
+      await router.push(`/workspace/proj-worldmap/${slug}`);
+      await flushPromises();
+      expect(w.text(), `${slug} 应渲染「${heading}」`).toContain(heading);
+      expect(w.text(), `${slug} 不应落在建设中占位`).not.toContain(
+        "该页面正在迁移"
+      );
+    }
+    // mock 数据随页可见：目标计划有里程碑，产物验收有高保数据模块
+    await router.push("/workspace/proj-worldmap/goals");
+    await flushPromises();
+    expect(w.text()).toContain("架构评审通过");
+    await router.push("/workspace/proj-worldmap/artifacts");
+    await flushPromises();
+    expect(w.text()).toContain("高保数据模块");
+  });
 });

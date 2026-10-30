@@ -72,3 +72,65 @@ workspace:
     mockReply: 已收到指令「{prompt}」。当前为演示模式，正式 AI 会话将在下一里程碑接入。
   entry:
     preview: AI 工作空间（预览）
+  pages:
+    goals:
+      title: 目标计划
+      subtitle: 项目 → 目标 → 里程碑 → 任务
+      milestones: 里程碑
+      tasks: 任务
+      msDone: 已达成
+      msActive: 进行中
+      msPending: 未开始
+      taskDone: 已完成
+      taskDoing: 进行中
+      taskTodo: 未开始
+    team:
+      title: AI 团队
+      subtitle: Agent 状态与当前工作
+      working: 执行中
+      waitingApproval: 等待审批
+      idle: 空闲
+      completed: 已完成任务
+      lastActive: 最近活跃
+      currentTask: 当前工作
+    activity:
+      title: 项目动态
+      subtitle: 重要变更、执行失败与近期决策
+      kindChange: 变更
+      kindFailure: 失败
+      kindDecision: 决策
+    requirements:
+      title: 需求管理
+      subtitle: 需求清单与验收标准
+      draft: 草稿
+      reviewing: 评审中
+      confirmed: 已确认
+      implementing: 实现中
+      accepted: 已验收
+      acceptance: 验收标准
+      source: 来源
+    decisions:
+      title: 决策中心
+      subtitle: 双方案对比与证据
+      pending: 待决策
+      decided: 已决策
+      pros: 优势
+      cons: 劣势
+      evidence: 证据
+      impact: 影响范围
+      conclusion: 结论
+    knowledge:
+      title: 项目知识
+      subtitle: 文档树与阅读器
+      version: 版本
+      updated: 更新
+      source: 来源
+    artifacts:
+      title: 产物验收
+      subtitle: 产品与交付物的测试、审批状态
+      testPassed: 测试通过
+      testFailed: 测试未过
+      testRunning: 测试中
+      approvalPending: 待审批
+      approvalApproved: 已通过
+      approvalRejected: 已驳回

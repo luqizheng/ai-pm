@@ -72,3 +72,65 @@ workspace:
     mockReply: Received "{prompt}". Demo mode only; the real AI session arrives in the next milestone.
   entry:
     preview: AI Workspace (Preview)
+  pages:
+    goals:
+      title: Goals & Plans
+      subtitle: Project → Goals → Milestones → Tasks
+      milestones: Milestones
+      tasks: Tasks
+      msDone: Done
+      msActive: In progress
+      msPending: Not started
+      taskDone: Done
+      taskDoing: In progress
+      taskTodo: To do
+    team:
+      title: AI Team
+      subtitle: Agent status and current work
+      working: Working
+      waitingApproval: Awaiting approval
+      idle: Idle
+      completed: Completed tasks
+      lastActive: Last active
+      currentTask: Current work
+    activity:
+      title: Activity
+      subtitle: Key changes, failures and recent decisions
+      kindChange: Change
+      kindFailure: Failure
+      kindDecision: Decision
+    requirements:
+      title: Requirements
+      subtitle: Requirement list and acceptance criteria
+      draft: Draft
+      reviewing: In review
+      confirmed: Confirmed
+      implementing: Implementing
+      accepted: Accepted
+      acceptance: Acceptance criteria
+      source: Source
+    decisions:
+      title: Decisions
+      subtitle: Side-by-side options with evidence
+      pending: Pending
+      decided: Decided
+      pros: Pros
+      cons: Cons
+      evidence: Evidence
+      impact: Impact
+      conclusion: Conclusion
+    knowledge:
+      title: Knowledge
+      subtitle: Document tree and reader
+      version: Version
+      updated: Updated
+      source: Source
+    artifacts:
+      title: Artifacts
+      subtitle: Test and approval status of products and deliverables
+      testPassed: Tests passed
+      testFailed: Tests failed
+      testRunning: Tests running
+      approvalPending: Awaiting approval
+      approvalApproved: Approved
+      approvalRejected: Rejected
