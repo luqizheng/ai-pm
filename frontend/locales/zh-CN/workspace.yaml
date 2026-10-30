@@ -2,7 +2,9 @@ workspace:
   shell:
     breadcrumb: 面包屑
     theme: 切换主题
-    toClassic: 传统模式
+    modeSwitch: 视图切换
+    modeAi: AI 模式
+    modeClassic: 传统模式
     notifications: 通知
     account: 账户
     collapse: 折叠导航
@@ -29,6 +31,7 @@ workspace:
     title: 上下文
     collapse: 折叠上下文栏
     reopen: 重开上下文栏
+    show: 显示上下文
     currentTodo: 当前待办事项
     aiAdvice: AI 建议
     kind:

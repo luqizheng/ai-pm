@@ -2,7 +2,9 @@ workspace:
   shell:
     breadcrumb: Breadcrumb
     theme: Toggle theme
-    toClassic: Classic mode
+    modeSwitch: View mode
+    modeAi: AI mode
+    modeClassic: Classic mode
     notifications: Notifications
     account: Account
     collapse: Collapse navigation
@@ -29,6 +31,7 @@ workspace:
     title: Context
     collapse: Collapse context panel
     reopen: Reopen context panel
+    show: Show context
     currentTodo: Current to-do
     aiAdvice: AI advice
     kind:

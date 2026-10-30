@@ -220,4 +220,33 @@ describe("WorkspaceShell（V1.1 三栏壳）", () => {
     await toggle.trigger("click");
     expect(push).toHaveBeenCalledWith("/dashboard");
   });
+
+  it("模式切换为带文字的分段控件（用户反馈：图标按钮不可发现）", () => {
+    const w = mountShellWithSlots();
+    const switchGroup = w.find("[data-test='mode-switch']");
+    expect(switchGroup.exists()).toBe(true);
+    const text = switchGroup.text();
+    expect(text).toContain("AI 模式");
+    expect(text).toContain("传统模式");
+    // 当前所在段标记 aria-pressed，目标段可点
+    const current = switchGroup.find("[aria-pressed='true']");
+    expect(current.exists()).toBe(true);
+    expect(current.text()).toContain("AI 模式");
+    const target = switchGroup.find("[aria-pressed='false']");
+    expect(target.exists()).toBe(true);
+    expect(target.text()).toContain("传统模式");
+  });
+
+  it("右栏收起后重开按钮带文字（用户反馈：图标不可发现）", async () => {
+    const w = mountShell(WorkspaceShell, {
+      props: { project: "世界地图编辑器", page: "项目总控" },
+      slots: { main: "<div data-test='main-slot' />" }
+    });
+    await w.find("[data-test='context-collapse']").trigger("click");
+    const reopen = w.find("[data-test='context-reopen']");
+    expect(reopen.exists()).toBe(true);
+    expect(reopen.text()).toContain("显示上下文");
+    await reopen.trigger("click");
+    expect(w.find(".workspace-shell").attributes("data-context")).toBe("open");
+  });
 });

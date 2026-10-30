@@ -16,4 +16,15 @@ describe("Topbar（传统壳顶栏）", () => {
     await toggle.trigger("click");
     expect(w.emitted("workspace")).toHaveLength(1);
   });
+
+  it("模式切换按钮带可见文字（用户反馈：图标不可发现）", () => {
+    const w = mountShell(Topbar, {
+      props: {
+        user: { name: "管理员", roles: ["admin"] }
+      }
+    });
+    expect(w.find("[data-test='mode-toggle-ai']").text()).toContain(
+      "AI 工作空间"
+    );
+  });
 });

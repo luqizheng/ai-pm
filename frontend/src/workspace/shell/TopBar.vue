@@ -5,7 +5,6 @@ import { useRouter } from "vue-router";
 import {
   Bell,
   ChevronRight,
-  LayoutDashboard,
   Moon,
   PanelRightOpen,
   Sun,
@@ -39,12 +38,12 @@ const isDark = computed(() => theme.theme.value === "dark");
       <button
         v-if="!store.contextOpen"
         type="button"
-        class="ws-icon-btn ws-focusable"
+        class="ws-reopen-btn ws-focusable"
         data-test="context-reopen"
-        :aria-label="t('workspace.context.reopen')"
         @click="store.toggleContext()"
       >
         <PanelRightOpen :size="16" aria-hidden="true" />
+        <span>{{ t("workspace.context.show") }}</span>
       </button>
       <button
         type="button"
@@ -56,16 +55,29 @@ const isDark = computed(() => theme.theme.value === "dark");
         <Sun v-if="isDark" :size="16" aria-hidden="true" />
         <Moon v-else :size="16" aria-hidden="true" />
       </button>
-      <button
-        type="button"
-        class="ws-icon-btn ws-focusable"
-        data-test="mode-toggle"
-        :aria-label="t('workspace.shell.toClassic')"
-        :title="t('workspace.shell.toClassic')"
-        @click="router.push('/dashboard')"
+      <div
+        class="ws-mode-switch"
+        role="group"
+        data-test="mode-switch"
+        :aria-label="t('workspace.shell.modeSwitch')"
       >
-        <LayoutDashboard :size="16" aria-hidden="true" />
-      </button>
+        <button
+          type="button"
+          class="ws-mode-seg ws-focusable is-active"
+          aria-pressed="true"
+        >
+          {{ t("workspace.shell.modeAi") }}
+        </button>
+        <button
+          type="button"
+          class="ws-mode-seg ws-focusable"
+          data-test="mode-toggle"
+          aria-pressed="false"
+          @click="router.push('/dashboard')"
+        >
+          {{ t("workspace.shell.modeClassic") }}
+        </button>
+      </div>
       <button
         type="button"
         class="ws-icon-btn ws-focusable"
@@ -163,5 +175,51 @@ const isDark = computed(() => theme.theme.value === "dark");
 .ws-icon-btn:disabled {
   cursor: default;
   opacity: 0.5;
+}
+.ws-reopen-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-card);
+  background: var(--ws-elevated);
+  color: var(--ws-text-primary);
+  font-size: var(--ws-font-size-caption);
+  cursor: pointer;
+}
+
+.ws-reopen-btn:hover {
+  background: var(--ws-surface);
+}
+
+.ws-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-card);
+  overflow: hidden;
+}
+
+.ws-mode-seg {
+  height: 28px;
+  padding: 0 12px;
+  border: none;
+  background: transparent;
+  color: var(--ws-text-secondary);
+  font-size: var(--ws-font-size-caption);
+  cursor: pointer;
+}
+
+.ws-mode-seg.is-active {
+  background: var(--ws-elevated);
+  color: var(--ws-accent);
+  font-weight: 600;
+}
+
+.ws-mode-seg:not(.is-active):hover {
+  background: var(--ws-elevated);
+  color: var(--ws-text-primary);
 }
 </style>

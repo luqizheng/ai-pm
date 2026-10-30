@@ -73,13 +73,13 @@ const emit = defineEmits<{
     <div class="ui-topbar__actions">
       <button
         type="button"
-        class="ui-topbar__icon-button"
+        class="ui-topbar__ai-entry"
         data-test="mode-toggle-ai"
         :aria-label="t('shell.actions.aiWorkspace')"
-        :title="t('shell.actions.aiWorkspace')"
         @click="emit('workspace')"
       >
-        <Sparkles :size="18" aria-hidden="true" />
+        <Sparkles :size="16" aria-hidden="true" />
+        <span>{{ t("shell.actions.aiWorkspace") }}</span>
       </button>
 
       <button
@@ -261,5 +261,24 @@ const emit = defineEmits<{
   .ui-topbar__kbd {
     display: none;
   }
+}
+
+.ui-topbar__ai-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.ui-topbar__ai-entry:hover {
+  background: var(--surface-hover-veil);
 }
 </style>
