@@ -7,6 +7,7 @@ edition.workspace = true
 axum.workspace = true
 chrono.workspace = true
 pm-application = { path = "../../crates/pm-application" }
+pm-mcp = { path = "../../crates/pm-mcp" }
 serde.workspace = true
 uuid.workspace = true
 serde_json.workspace = true

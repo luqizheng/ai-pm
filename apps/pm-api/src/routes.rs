@@ -68,6 +68,9 @@ pub fn router(pool: PgPool) -> Router {
     );
     let executor = Arc::new(PgCommandExecutor::new(pool.clone(), policy));
     let state = AppState { pool, executor };
+    // The MCP service clones the pool inside its own state factory; it cannot
+    // share `state` (different service type), hence a separate handle.
+    let mcp_pool = state.pool.clone();
     Router::new()
         .route("/api/v1/events", post(submit_event_handler))
         .route("/api/v1/supervision/veto", post(veto_handler))
@@ -81,6 +84,7 @@ pub fn router(pool: PgPool) -> Router {
             "/api/v1/projects/{project_id}/notifications",
             get(notifications_handler),
         )
+        .nest_service("/mcp", pm_mcp::PmMcpServer::streamable_http_service(mcp_pool))
         .with_state(state)
 }
 
