@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted } from "vue";
 import { storeToRefs } from "pinia";
 import TopBar from "./TopBar.vue";
 import LeftSidebar from "./LeftSidebar.vue";
+import ContextSidebar from "./ContextSidebar.vue";
 import { useWorkspaceStore } from "../store";
 
 defineProps<{ project: string; page: string }>();
@@ -55,7 +56,9 @@ onBeforeUnmount(() => {
       <slot name="commandbar" />
     </main>
     <aside v-if="contextOpen" class="workspace-context">
-      <slot name="context" />
+      <slot name="context">
+        <ContextSidebar />
+      </slot>
     </aside>
   </div>
 </template>

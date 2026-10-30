@@ -21,3 +21,12 @@ workspace:
     classicOverview: Overview
   service:
     ok: All services normal
+  context:
+    title: Context
+    collapse: Collapse context panel
+    currentTodo: Current to-do
+    aiAdvice: AI advice
+    kind:
+      decision: Decision
+      acceptance: Acceptance
+      blocker: Blocker

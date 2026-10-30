@@ -21,3 +21,12 @@ workspace:
     classicOverview: 概览
   service:
     ok: 服务正常
+  context:
+    title: 上下文
+    collapse: 折叠上下文栏
+    currentTodo: 当前待办事项
+    aiAdvice: AI 建议
+    kind:
+      decision: 决策
+      acceptance: 验收
+      blocker: 阻塞
