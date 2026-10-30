@@ -30,7 +30,9 @@ const BRAND_FILE = join(FRONTEND_SRC, "styles", "prism", "tokens.brand.css");
 const DEFAULT_SCAN_ROOTS = [
   join(FRONTEND_SRC, "components", "ui"),
   join(FRONTEND_SRC, "styles", "prism"),
-  join(FRONTEND_SRC, "shell")
+  join(FRONTEND_SRC, "styles", "workspace"),
+  join(FRONTEND_SRC, "shell"),
+  join(FRONTEND_SRC, "workspace")
 ];
 
 const scanRootIndex = process.argv.indexOf("--scan-root");
@@ -40,10 +42,20 @@ const SCAN_ROOTS =
     : DEFAULT_SCAN_ROOTS;
 
 /** 允许出现裸色值的文件（token 定义处本身） */
-const ALLOW_RAW_COLOR_FILES = new Set([TOKENS_FILE, BRAND_FILE]);
+const WORKSPACE_TOKENS_FILE = join(
+  FRONTEND_SRC,
+  "styles",
+  "workspace",
+  "tokens.css"
+);
+const ALLOW_RAW_COLOR_FILES = new Set([
+  TOKENS_FILE,
+  BRAND_FILE,
+  WORKSPACE_TOKENS_FILE
+]);
 
-/** 允许引用未在 tokens.css 中定义的变量前缀（如第三方库变量） */
-const ALLOWED_VAR_PREFIXES = ["el-", "reka-", "vi-"];
+/** 允许引用未在 tokens.css 中定义的变量前缀（如第三方库变量；ws- 为工作区 token 层） */
+const ALLOWED_VAR_PREFIXES = ["el-", "reka-", "vi-", "ws-"];
 
 /** CSS 具名色 —— 出现在颜色类属性上或在值中单独出现时即为裸色值 */
 const NAMED_COLORS = [

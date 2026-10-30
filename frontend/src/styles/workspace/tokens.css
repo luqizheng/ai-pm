@@ -1,0 +1,125 @@
+/* ============================================================================
+ * AI Workspace — token 层（工作区视觉唯一真源）
+ *
+ * 权威来源：ai-pm/docs/ai-pm-ui-design-system-v1.md（§1.1/§1.2/§二/§六）
+ *           + ai-pm-ui-console-v1-1.md（总控台 V1.1）
+ * 规则：
+ *   1. workspace 组件禁止裸色值，一切颜色引用本文件的 --ws-* 变量。
+ *   2. 深色为默认工作主题（用户裁决 2026-10-31）：:root 即深色，
+ *      浅色通过 [data-theme="light"] 覆盖；index.html 预挂载脚本在首帧前
+ *      写入 data-theme，防闪烁。
+ *   3. 语义色带 -text 变体：基准值用于徽标/填充/描边（对表面 ≥3:1），
+ *      -text 用于彩色文字（对表面 ≥4.5:1）。契约见同目录 tokens.test.ts。
+ *   4. 与 PRISM token 层（styles/prism/tokens.css）并存：本文件不改
+ *      PRISM 任何变量；桥接块在 .workspace-shell 作用域内把 PRISM 变量
+ *      映射到 --ws-*，让工作区复用的 PRISM 组件跟随工作区主题。
+ * ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* Surface —— 设计系统 V1.0 §1.1（深色列） */
+  --ws-canvas: #111318;
+  --ws-sidebar: #171A21;
+  --ws-surface: #1D212A;
+  --ws-elevated: #252A35;
+  --ws-border: #353B48;
+
+  /* Text / Accent */
+  --ws-text-primary: #E9ECF3;
+  --ws-text-secondary: #99A2B2;
+  --ws-accent: #8B83F6;
+
+  /* 语义色（深色：基准即达 4.5:1，-text 与基准一致） */
+  --ws-color-info: #6EA8FE;
+  --ws-color-success: #34C08B;
+  --ws-color-warning: #E0B15E;
+  --ws-color-danger: #F07E88;
+  --ws-color-info-text: #6EA8FE;
+  --ws-color-success-text: #34C08B;
+  --ws-color-warning-text: #E0B15E;
+  --ws-color-danger-text: #F07E88;
+
+  /* 形状 / 密度 —— V1.0 §1.2 */
+  --ws-radius-card: 8px;
+  --ws-radius-dialog: 12px;
+  --ws-space-unit: 4px;
+  --ws-font-size-page: 21px;
+  --ws-font-size-section: 15px;
+  --ws-font-size-body: 13px;
+  --ws-font-size-caption: 12px;
+  --ws-row-height: 36px;
+
+  /* 布局尺寸 —— V1.0 §二 Shell 图 */
+  --ws-sidebar-width: 232px;
+  --ws-sidebar-collapsed: 60px;
+  --ws-context-width: 320px;
+  --ws-topbar-height: 52px;
+  --ws-commandbar-height-min: 72px;
+  --ws-commandbar-height-max: 120px;
+
+  /* 焦点（键盘章：可见焦点样式） */
+  --ws-focus-ring: 0 0 0 2px var(--ws-canvas), 0 0 0 4px var(--ws-accent);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --ws-canvas: #F7F8FA;
+  --ws-sidebar: #F0F2F6;
+  --ws-surface: #FFFFFF;
+  --ws-elevated: #E9ECF2;
+  --ws-border: #DDE2EA;
+
+  /* 次文字 #647085：压深自设计稿 #697386，画布上达 AA（分析稿 A6） */
+  --ws-text-primary: #202532;
+  --ws-text-secondary: #647085;
+  --ws-accent: #6258D9;
+
+  /* 语义色（分析稿候选起点；warning 候选 #D9A441 对白表面仅 2.25:1，
+     不达 3:1，改用 PRISM warning 族；-text 变体承载 4.5:1 文字用途） */
+  --ws-color-info: #3B82F6;
+  --ws-color-success: #22A06B;
+  --ws-color-warning: #B45309;
+  --ws-color-danger: #E16B73;
+  --ws-color-info-text: #1D4ED8;
+  --ws-color-success-text: #15803D;
+  --ws-color-warning-text: #92400E;
+  --ws-color-danger-text: #B42318;
+
+  --ws-focus-ring: 0 0 0 2px var(--ws-canvas), 0 0 0 4px var(--ws-accent);
+}
+
+/* ---------------------------------------------------------------------------
+ * PRISM 桥接：仅作用于 .workspace-shell 内部。
+ * PRISM 组件（components/ui）消费 --prism-*（见 styles/prism/tokens.css），
+ * 在工作区深色画布上直接用会发灰——这里把工作区内取值换轨到 --ws-*。
+ * ------------------------------------------------------------------------- */
+.workspace-shell {
+  --surface-sunken: var(--ws-canvas);
+  --surface-base: var(--ws-surface);
+  --surface-raised: var(--ws-elevated);
+  --surface-overlay: var(--ws-elevated);
+  --surface-hover-veil: rgba(233, 236, 243, 0.06);
+  --surface-active-veil: rgba(233, 236, 243, 0.1);
+
+  --text-primary: var(--ws-text-primary);
+  --text-secondary: var(--ws-text-secondary);
+  --text-tertiary: var(--ws-text-secondary);
+  --text-inverse: var(--ws-canvas);
+
+  --border-default: var(--ws-border);
+  --border-subtle: var(--ws-border);
+  --border-strong: var(--ws-border);
+
+  --accent: var(--ws-accent);
+  --accent-hover: var(--ws-accent);
+  --accent-pressed: var(--ws-accent);
+  --accent-subtle: var(--ws-elevated);
+  --accent-contrast-text: var(--ws-canvas);
+
+  --info: var(--ws-color-info);
+  --success: var(--ws-color-success);
+  --warning: var(--ws-color-warning);
+  --danger: var(--ws-color-danger);
+}

@@ -10,6 +10,19 @@
     />
     <title>AI-PM 平台</title>
     <link rel="icon" href="/favicon.ico" />
+    <script>
+      // 工作区主题防闪烁：必须在首帧前写入 data-theme（默认深色，用户裁决 2026-10-31）。
+      // 键值与 src/workspace/useTheme.ts 的 THEME_STORAGE_KEY 一致。
+      (function () {
+        try {
+          var t = localStorage.getItem("aipm.theme");
+          document.documentElement.dataset.theme =
+            t === "light" || t === "dark" ? t : "dark";
+        } catch (e) {
+          document.documentElement.dataset.theme = "dark";
+        }
+      })();
+    </script>
   </head>
 
   <body>

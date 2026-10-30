@@ -6,6 +6,7 @@ import ShellApp from "./ShellApp.vue";
 import { onUnauthorized } from "./api/client";
 import { useAuthStore } from "./store/auth";
 import "@/styles/prism/index.css";
+import "@/styles/workspace/index.css";
 
 /**
  * PRISM 壳的应用入口。
