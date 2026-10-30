@@ -1,0 +1,126 @@
+overview:
+  pageTitle: 概览
+  scopeAll: 全部项目汇总
+  statProjects: 项目
+  statRequirements: 需求
+  statTasks: 任务
+  statApprovals: 待审批
+  recentTasks: 最近更新的任务
+  pendingApprovals: 待审批（红线确认）
+  queueEmpty: 队列为空
+  queueEmptyHint: AI 发起红线操作时会在此等待人工确认。
+  empty: 暂无数据
+projects:
+  pageTitle: 项目
+  subtitle: 客户项目清单与基础信息。
+  emptyHint: 项目由后端创建后展示在这里。
+requirements:
+  pageTitle: 需求
+  subtitle: 需求清单；正文以 Markdown + Git 管理，此处展示权威状态。
+  emptyHint: 暂无需求。
+tasks:
+  pageTitle: 任务
+  subtitle: 全部项目的任务清单。
+  emptyHint: 暂无任务。
+  new: 新建任务
+  edit: 编辑
+  newTitle: 新建任务
+  editTitle: 编辑任务
+  titlePlaceholder: 任务标题
+  titleRequired: 请填写任务标题
+  projectRequired: 请选择所属项目
+  descLabel: 描述（可选）
+  created: 任务已创建
+  updated: 任务已更新
+  failed: 操作失败
+approvals:
+  pageTitle: 审批确认
+  subtitle: AI 红线操作的事前确认队列；通过/驳回操作待后端命令通道就绪后开放。
+  emptyHint: 队列为空
+  emptyDetail: AI 发起红线操作（发布、验收签署等）时会在此等待人工确认。
+  approve: 通过
+  reject: 驳回
+  approveTitle: 通过红线确认
+  rejectTitle: 驳回红线确认
+  reasonPlaceholder: 填写决策理由（必填，将记入审计日志）
+  reasonRequired: 请填写决策理由
+  decided: 决策已提交
+  decideFailed: 决策失败
+revisions:
+  open: 修订
+  title: 修订历史
+  empty: 暂无修订
+  newLabel: 新建修订（Markdown）
+  newPlaceholder: 以 Markdown 撰写本修订的需求正文
+  newSubmit: 提交修订
+  approve: 定稿
+  created: 修订已创建
+  approved: 已定稿，旧定稿已转为已作废
+  failed: 操作失败
+audit:
+  pageTitle: 审计日志
+  subtitle: 所有权威状态变更（含 AI 执行的命令与人工干预）的不可变记录。
+  emptyHint: 暂无审计记录。
+settings:
+  pageTitle: 设置
+  subtitle: 前端运行状态与环境说明。
+  mode: 数据模式
+  modeMock: MOCK 数据（VITE_USE_MOCK=1）
+  modeBackend: 后端 API
+  apiBase: API 地址
+  backendStatus: 后端状态
+  backendHint: >-
+    pm-api 已实现壳认证与 /v1/pm/* 读端点——当前模式（VITE_USE_MOCK=0）下数据来自 PostgreSQL。
+    写操作（审批决策、需求编辑等）待命令通道端点落地；接口契约以 src/api/mock/fixtures.ts 为准。
+columns:
+  code: 编码
+  name: 项目
+  status: 状态
+  revision: 版本
+  actions: 操作
+  updatedAt: 更新时间
+  title: 标题
+  rowRevision: 行版本
+  createdAt: 创建日期
+  task: 任务
+  priority: 优先级
+  assignee: 负责人
+  project: 所属项目
+  proposal: 变更提案
+  requiredRole: 所需角色
+  decidedBy: 处理人
+  decisionReason: 决策理由
+  actor: 操作者
+  action: 动作
+  target: 对象
+status:
+  planning: 规划中
+  active: 进行中
+  paused: 已暂停
+  archived: 已归档
+  draft: 草稿
+  approved: 已通过
+  superseded: 已作废
+  backlog: 待办
+  in_progress: 进行中
+  in_review: 评审中
+  done: 已完成
+  blocked: 受阻
+  cancelled: 已取消
+  pending: 待处理
+  rejected: 已驳回
+  low: 低
+  normal: 普通
+  high: 高
+  urgent: 紧急
+  human: 人类
+  dev_agent: 开发 Agent
+  ai_pm: AI-PM
+  service: 服务
+  liveTitle: 实时动态
+  liveWaiting: 等待变更事件…
+scope:
+  label: 项目范围
+  all: 全部项目
+unassigned: 未分配
+loadFailed: 加载失败
