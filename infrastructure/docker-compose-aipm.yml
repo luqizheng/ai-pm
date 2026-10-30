@@ -1,0 +1,67 @@
+# ai-pm 平台服务（本仓自有，非模板内容）。
+# 镜像由仓库根 Dockerfile 按 target 构建：
+#   docker build --target runtime-pm-api       -t aipm/pm-api:0.1.0 .
+#   docker build --target runtime-pm-worker    -t aipm/pm-worker:0.1.0 .
+#   docker build --target runtime-ai-pm-worker -t aipm/ai-pm-worker:0.1.0 .
+# 全部挂 superpowers 网络（与 lmms 栈同网络，服务名互访）。
+
+services:
+  aipm-pg:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: aipm
+      POSTGRES_PASSWORD: aipm
+      POSTGRES_DB: aipm
+    volumes:
+      - aipm_pg_data:/var/lib/postgresql/data
+    ports:
+      # 宿主机工具连库：5433 = aipm-pg-dev（独立旧容器），5434 = coder-test-pg（共享测试容器），错开到 5435
+      - "5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aipm -d aipm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - superpowers
+
+  pm-api:
+    image: ${AIPM_REGISTRY:-aipm}/pm-api:${AIPM_VERSION:-0.1.0}
+    environment:
+      DATABASE_URL: postgres://aipm:aipm@aipm-pg:5432/aipm
+      PM_API_PORT: "8090"
+    ports:
+      - "8090:8090"
+    depends_on:
+      aipm-pg:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - superpowers
+
+  pm-worker:
+    image: ${AIPM_REGISTRY:-aipm}/pm-worker:${AIPM_VERSION:-0.1.0}
+    environment:
+      DATABASE_URL: postgres://aipm:aipm@aipm-pg:5432/aipm
+    depends_on:
+      aipm-pg:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - superpowers
+
+  ai-pm-worker:
+    image: ${AIPM_REGISTRY:-aipm}/ai-pm-worker:${AIPM_VERSION:-0.1.0}
+    environment:
+      DATABASE_URL: postgres://aipm:aipm@aipm-pg:5432/aipm
+      AI_PM_POLICY_FILE: /app/policies/ai-pm-ai-lead-v2.yaml
+    depends_on:
+      aipm-pg:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - superpowers
+
+volumes:
+  aipm_pg_data:

@@ -1,0 +1,7 @@
+# 编译缓存加速 - 要求本机装有 sccache 且在 PATH, 没有的机器删掉本节即可
+[build]
+rustc-wrapper = "sccache"
+
+# lmms 私有 crate registry（消费基座 crates：{ version = "x", registry = "kellnr" }）
+[registries.kellnr]
+index = "sparse+http://192.168.2.12:16444/api/v1/crates/"

@@ -3,11 +3,11 @@
 - 日期：2026-10-30
 - 状态：draft（brainstorming 产出，用户已裁决范围，待批准）
 - 仓库：ai-pm（本仓）+ low-memory-micro-services（../low-memory-micro-services，基座）
-- 前置事实：基座 libs 版本 1.6.0 已合并 main（本地）；内网断（kellnr/GitLab 不可达）；**用户裁决「先不发内网」**——因此 crate 通道 = **path 依赖先行**
+- 前置事实：基座 libs 1.6.0 已合并 main；**2026-10-30 晚 WireGuard 已连、kellnr 可达（200）**——crate 通道改为 **kellnr registry 版本依赖**（用户二次裁决）；compose 走 lmms 发布的基础模板复制
 
 ## 一、意图与背景
 
-用户裁决（2026-10-30）：对接范围 **A+B+C 全量**（鉴权 + 错误基座 + 运行时融合），通道 **path 先行**。
+用户裁决（2026-10-30）：对接范围 **A+B+C 全量**（鉴权 + 错误基座 + 运行时融合），通道 **kellnr 版本依赖 + compose 模板复制**（2026-10-30 二次裁决，取代早先的 path 先行）。
 
 两边现状：
 
@@ -20,7 +20,7 @@
 
 **信任模型**：调用方（Java pm 平台的 AI agent、运维脚本）向 lmms token-service 获取 token（client_credentials 或 API key），持 `Authorization: Bearer` 调用 ai-pm；**ai-pm 用 common-jwt 的 JWKSCache 本地验签**（信任 lmms token-service 的 JWKS），不逐请求外呼。
 
-1. **依赖**（path）：`digua_common_jwt`、`digua_authz`（权限码常量）。Cargo.toml 以 `path = "../../low-memory-micro-services/libs/common-jwt"` 形式引用；升级约定：基座 kellnr 发版后将 path 换版本号。
+1. **依赖**（kellnr）：`digua_common_jwt`、`digua_authz`（权限码常量）。`.cargo/config.toml` 定义 `[registries.kellnr]`，Cargo.toml 以 `{ version = "1.6.0", registry = "kellnr" }` 引用；升级=改版本号（kellnr 上游发版由 lmms `coder release publish rust` 负责）。
 2. **挂点**：`pm_api::routes::router` 加 `middleware::from_fn_with_state` 鉴权层——`Authorization: Bearer <jwt>` 验签 + 过期校验；`/health`、`/.well-known/jwks.json`（如透传）、Token 校验自用端点豁免；`/mcp`（streamable-http）在同一层校验（rmcp 挂载前的 HTTP 中间件，不进 MCP 协议层）。
 3. **权限执行**：token claims 中的 scope/permission 字段对照 `authz::perms` 的 `PM_MCP_READ`（只读工具）、`PM_MCP_DOCUMENT_WRITE`（文档写入类工具）、`PM_TASK_UPDATE`（任务状态类工具）映射到 pm-mcp 各 tool 与对应 REST 路由；具体 claim 字段名以 token-service 实际签发为准（建造者核对 `services/token-service` 的 claims 构造）。
 4. **配置与降级**：`AI_PM_AUTH_MODE = jwks | off`（默认 **jwks**，fail-closed；`off` 仅限本地开发显式设置）；`AI_PM_JWKS_URL`（默认 lmms token-service 地址）、`AI_PM_JWKS_ISSUER`。jwks 拉取失败 → 401 + 明确错误码（不静默放行）。
@@ -40,7 +40,7 @@
 ## 五、约束与非目标
 
 - **ai-pm 并行会话风险**：本仓有其他会话活跃开发。对策——动手前 `git status` 体检（本轮已做：clean、master==origin）；对接代码全部落在**新增文件/新增模块**（auth 中间件模块、新 compose 文件、新增 error 转换层），避免改现役文件；每完成一小步立即 commit。
-- **内网断**：path 依赖免疫；kellnr 切换、CI 联动等内网动作延后（与「先不发内网」裁决一致）。
+- **内网**：WireGuard 已连、kellnr/npm/maven registry 可达；docker registry（192.168.2.182）仍故障，镜像推送仍挂起。
 - 非目标：DB 层替换（裁决不对接）；Java pm 侧改造；ai-pm 进 lmms 的 dist 分发体系；Rust 之外的语言集成。
 - lmms 基座为 **path 引用**：两仓必须同机共存于 `D:\kudi-project\templates\` 下；基座改动即时生效是特性也是风险（对接期间基座不动 main 之外的分支）。
 
@@ -49,7 +49,8 @@
 | # | 裁决 | 内容 |
 |---|---|---|
 | 1 | 范围 | A+B+C 全量（鉴权 + 错误基座 + 运行时），一次设计分三阶段实施 |
-| 2 | 通道 | path 依赖先行；kellnr 恢复发版后切版本依赖 |
+| 2 | 通道 | ~~path 先行~~ → **kellnr 版本依赖**（2026-10-30 晚二次裁决，WireGuard 连通后） |
+| 5 | compose | 不手写：消费 lmms 发布的 compose 基础模板（`pnpm run compose:template`）复制适配；同名项目并入 superpowers 网络 |
 | 3 | DB 层 | 不对接，ai-pm 保留自家 PG 栈 |
 | 4 | 安全默认 | 鉴权默认 fail-closed（jwks 模式），off 仅显式开发用 |
 
@@ -67,5 +68,5 @@
 2. `AI_PM_AUTH_MODE=off` 时行为与现状一致（本地开发可用）。
 3. jwks 不可达时启动/请求 fail-closed，错误信息明确。
 4. 错误响应结构两边同构；OTLP 导出在 lmms 观测栈可见 ai-pm 的 traces。
-5. `docker compose -f docker-compose.ai-pm.yml up` 起通全栈（含 PG），与 lmms 基础设施网络互通。
+5. `docker compose -f infrastructure/docker-compose.yml up -d aipm-pg pm-api ...` 起通 ai-pm 服务（编排=模板复制 + docker-compose-aipm.yml，见 infrastructure/ADAPTATION.md），与 lmms 基础设施网络互通。
 6. ai-pm 现有测试全绿；新增鉴权/转换层测试覆盖每个验收点。
