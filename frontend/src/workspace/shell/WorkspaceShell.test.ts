@@ -200,4 +200,12 @@ describe("WorkspaceShell（V1.1 三栏壳）", () => {
     expect(w.find("[data-test='service-ok']").text()).toContain("服务正常");
     expect(w.find("[data-test='service-dot']").exists()).toBe(true);
   });
+
+  it("TopBar 模式切换按钮跳转传统模式（/dashboard）", async () => {
+    const w = mountShellWithSlots();
+    const toggle = w.find("[data-test='mode-toggle']");
+    expect(toggle.exists()).toBe(true);
+    await toggle.trigger("click");
+    expect(push).toHaveBeenCalledWith("/dashboard");
+  });
 });

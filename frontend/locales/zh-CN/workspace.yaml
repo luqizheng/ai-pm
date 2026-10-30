@@ -2,6 +2,7 @@ workspace:
   shell:
     breadcrumb: 面包屑
     theme: 切换主题
+    toClassic: 传统模式
     notifications: 通知
     account: 账户
     collapse: 折叠导航

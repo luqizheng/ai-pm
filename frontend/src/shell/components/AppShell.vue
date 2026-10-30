@@ -16,6 +16,7 @@ import {
   useSidebarCollapsed
 } from "../composables/useResponsive";
 import { useI18n } from "vue-i18n";
+import { demoProjectId } from "@/workspace/fixtures";
 
 const { t } = useI18n();
 
@@ -170,6 +171,7 @@ function closeTab(path: string) {
         @notifications="router.push('/notification')"
         @profile="router.push('/profile')"
         @logout="onLogout"
+        @workspace="router.push(`/workspace/${demoProjectId}/console`)"
       />
 
       <!-- 折叠开关：仅在桌面 -->

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 import {
   Bell,
   ChevronRight,
+  LayoutDashboard,
   Moon,
   PanelRightOpen,
   Sun,
@@ -15,6 +17,7 @@ import { useWorkspaceStore } from "../store";
 defineProps<{ project: string; page: string }>();
 
 const { t } = useI18n();
+const router = useRouter();
 const theme = useTheme();
 const store = useWorkspaceStore();
 const isDark = computed(() => theme.theme.value === "dark");
@@ -47,6 +50,16 @@ const isDark = computed(() => theme.theme.value === "dark");
       >
         <Sun v-if="isDark" :size="16" aria-hidden="true" />
         <Moon v-else :size="16" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class="ws-icon-btn ws-focusable"
+        data-test="mode-toggle"
+        :aria-label="t('workspace.shell.toClassic')"
+        :title="t('workspace.shell.toClassic')"
+        @click="router.push('/dashboard')"
+      >
+        <LayoutDashboard :size="16" aria-hidden="true" />
       </button>
       <button
         type="button"

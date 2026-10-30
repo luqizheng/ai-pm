@@ -2,6 +2,7 @@ workspace:
   shell:
     breadcrumb: Breadcrumb
     theme: Toggle theme
+    toClassic: Classic mode
     notifications: Notifications
     account: Account
     collapse: Collapse navigation

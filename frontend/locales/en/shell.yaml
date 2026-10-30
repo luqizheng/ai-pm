@@ -3,6 +3,7 @@ shell:
   search:
     placeholder: Search…
   actions:
+    aiWorkspace: AI Workspace
     refresh: Refresh
     notifications: Notifications
     collapseSidebar: Collapse sidebar

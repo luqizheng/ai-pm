@@ -72,4 +72,12 @@ describe("AppShell", () => {
     await nextTick();
     expect(w.findAll(".ui-tabbar__tab").length).toBeGreaterThan(0);
   });
+
+  it("顶栏模式切换按钮跳转 AI 工作空间总控台", async () => {
+    const w = mountShell(AppShell);
+    const toggle = w.find("[data-test='mode-toggle-ai']");
+    expect(toggle.exists()).toBe(true);
+    await toggle.trigger("click");
+    expect(push).toHaveBeenCalledWith("/workspace/proj-worldmap/console");
+  });
 });

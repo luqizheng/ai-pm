@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, RefreshCw, Search } from "lucide-vue-next";
+import { Bell, RefreshCw, Search, Sparkles } from "lucide-vue-next";
 import { Avatar } from "@/components/ui/avatar";
 import UserMenu from "./UserMenu.vue";
 import { useI18n } from "vue-i18n";
@@ -31,6 +31,7 @@ const emit = defineEmits<{
   notifications: [];
   profile: [];
   logout: [];
+  workspace: [];
 }>();
 </script>
 
@@ -70,6 +71,17 @@ const emit = defineEmits<{
     </button>
 
     <div class="ui-topbar__actions">
+      <button
+        type="button"
+        class="ui-topbar__icon-button"
+        data-test="mode-toggle-ai"
+        :aria-label="t('shell.actions.aiWorkspace')"
+        :title="t('shell.actions.aiWorkspace')"
+        @click="emit('workspace')"
+      >
+        <Sparkles :size="18" aria-hidden="true" />
+      </button>
+
       <button
         type="button"
         class="ui-topbar__icon-button"

@@ -3,6 +3,7 @@ shell:
   search:
     placeholder: 搜索…
   actions:
+    aiWorkspace: AI 工作空间
     refresh: 刷新
     notifications: 通知
     collapseSidebar: 收起侧边栏
