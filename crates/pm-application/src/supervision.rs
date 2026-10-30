@@ -11,10 +11,13 @@
 //!   notification('veto_applied') → [`VetoOutcome::RolledBack`];
 //!   `AlreadyCompensated` → intervention('veto') (idempotent, one row per
 //!   veto attempt) → [`VetoOutcome::AlreadyCompensated`] (HTTP 200);
-//!   `RevisionConflict` → intervention('rollback_failed') →
-//!   [`SupervisionError::Command`] (HTTP 409) — a rollback never overwrites
-//!   newer state. The veto window is deliberately *not* checked here: the
-//!   「随时否决」 semantics keep the veto available after the window closes.
+//!   `RevisionConflict` / `Validation` (an irreversible command carries no
+//!   compensation spec) → intervention('rollback_failed', executed_at NULL)
+//!   with notification('rollback_failed') → [`SupervisionError::Command`]
+//!   (HTTP 409) — a rollback never overwrites newer state, and a veto of
+//!   something un-undoable is still on record. The veto window is
+//!   deliberately *not* checked here: the 「随时否决」 semantics keep the
+//!   veto available after the window closes.
 //! * `redline_pending` / `escalated` → the proposal closes as `vetoed` (and
 //!   its still-pending approval request is rejected with the veto reason, so
 //!   a closed proposal can never be approved afterwards) →
@@ -182,6 +185,7 @@ pub async fn veto(
                         Some(executed_audit_id),
                         req.actor_id,
                         &req.reason,
+                        Some(chrono::Utc::now()),
                     )
                     .await?;
                     notify(
@@ -212,6 +216,7 @@ pub async fn veto(
                         Some(executed_audit_id),
                         req.actor_id,
                         &req.reason,
+                        Some(chrono::Utc::now()),
                     )
                     .await?;
                     tx.commit().await?;
@@ -219,7 +224,9 @@ pub async fn veto(
                 }
                 // The target moved on since the proposal executed: the
                 // rollback is refused (never overwriting newer state) and the
-                // failure lands as intervention('rollback_failed').
+                // failure lands as intervention('rollback_failed',
+                // executed_at NULL — nothing was executed) plus its feed
+                // notification: the veto attempt must stay on record.
                 Err(err @ CommandError::RevisionConflict { .. }) => {
                     let mut tx = pool.begin().await?;
                     record_intervention(
@@ -231,6 +238,52 @@ pub async fn veto(
                         Some(executed_audit_id),
                         req.actor_id,
                         &req.reason,
+                        None,
+                    )
+                    .await?;
+                    notify(
+                        &mut tx,
+                        req.project_id,
+                        "rollback_failed",
+                        json!({
+                            "proposal_id": req.proposal_id,
+                            "command_type": command_type,
+                            "reason": req.reason,
+                        }),
+                    )
+                    .await?;
+                    tx.commit().await?;
+                    Err(SupervisionError::Command(err))
+                }
+                // An irreversible command (e.g. an approved `sign_acceptance`
+                // carries no compensation spec) can be vetoed but never rolled
+                // back: the refusal is recorded exactly like a revision
+                // conflict — intervention('rollback_failed', executed_at NULL)
+                // + feed notification — so the human veto never vanishes
+                // without a trace, and surfaces as a 409, not a bare 500.
+                Err(err @ CommandError::Validation(_)) => {
+                    let mut tx = pool.begin().await?;
+                    record_intervention(
+                        &mut tx,
+                        intervention_id,
+                        req.project_id,
+                        "rollback_failed",
+                        Some(req.proposal_id),
+                        Some(executed_audit_id),
+                        req.actor_id,
+                        &req.reason,
+                        None,
+                    )
+                    .await?;
+                    notify(
+                        &mut tx,
+                        req.project_id,
+                        "rollback_failed",
+                        json!({
+                            "proposal_id": req.proposal_id,
+                            "command_type": command_type,
+                            "reason": req.reason,
+                        }),
                     )
                     .await?;
                     tx.commit().await?;
@@ -267,6 +320,7 @@ pub async fn veto(
                 None,
                 req.actor_id,
                 &req.reason,
+                Some(chrono::Utc::now()),
             )
             .await?;
             tx.commit().await?;
@@ -454,6 +508,7 @@ async fn set_automation_mode(
         None,
         actor_id,
         reason,
+        Some(chrono::Utc::now()),
     )
     .await?;
     notify(
@@ -492,7 +547,10 @@ pub async fn notifications_feed(
 }
 
 /// One `governance.human_intervention` row — the durable record of a human
-/// power being exercised.
+/// power being exercised. `executed_at` is `Some(now)` for interventions that
+/// took effect (veto applied, freeze flipped) and `None` for recorded-but-not-
+/// executed outcomes (`rollback_failed`: the refusal is the record; nothing
+/// was executed).
 #[allow(clippy::too_many_arguments)]
 async fn record_intervention(
     tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
@@ -503,11 +561,12 @@ async fn record_intervention(
     target_command_id: Option<AuditId>,
     actor_id: PrincipalId,
     reason: &str,
+    executed_at: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO governance.human_intervention \
          (id, project_id, intervention_type, target_proposal_id, target_command_id, actor_id, reason, executed_at) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, now())",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(intervention_id)
     .bind(project_id)
@@ -516,6 +575,7 @@ async fn record_intervention(
     .bind(target_command_id)
     .bind(actor_id)
     .bind(reason)
+    .bind(executed_at)
     .execute(&mut **tx)
     .await
     .map(|_| ())

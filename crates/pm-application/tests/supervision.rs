@@ -437,6 +437,78 @@ async fn veto_reports_rollback_failed_when_target_moved_on(pool: sqlx::PgPool) {
     assert_eq!(failures, 1, "the failed rollback is on record");
 }
 
+/// (2b) vetoing an executed-but-irreversible proposal (an approved
+/// `sign_acceptance` carries no compensation spec) must still put the human
+/// veto on record: intervention('rollback_failed', executed_at NULL) plus the
+/// feed notification — never a silent refusal.
+#[sqlx::test(migrations = "../../migrations")]
+async fn veto_of_irreversible_command_records_rollback_failed(pool: sqlx::PgPool) {
+    let seed = seed_world(&pool).await;
+    run_redline_acceptance(&pool, &seed).await;
+
+    // The human approves the red line; sign_acceptance executes (irreversible).
+    let (approval_id, proposal_id): (Uuid, Uuid) = sqlx::query_as(
+        "SELECT id, proposal_id FROM governance.approval_request WHERE project_id = $1",
+    )
+    .bind(seed.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let outcome = decide_approval(
+        &pool,
+        &test_executor(&pool),
+        DecideRequest {
+            approval_id,
+            actor_id: seed.human_id,
+            decision: Decision::Approve,
+            reason: "验收确认".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+    assert!(matches!(outcome, DecisionOutcome::Executed { .. }));
+
+    // The later veto cannot roll it back — but must be fully recorded.
+    let err = veto(
+        &pool,
+        &test_executor(&pool),
+        VetoRequest {
+            project_id: seed.project_id,
+            proposal_id,
+            actor_id: seed.human_id,
+            reason: "客户撤回验收".to_string(),
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, SupervisionError::Command(CommandError::Validation(_))),
+        "expected Validation (no compensation spec), got {err:?}"
+    );
+
+    let (failures, not_executed): (i64, i64) = sqlx::query_as(
+        "SELECT count(*), count(*) FILTER (WHERE executed_at IS NULL) \
+         FROM governance.human_intervention \
+         WHERE project_id = $1 AND intervention_type = 'rollback_failed'",
+    )
+    .bind(seed.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(failures, 1, "the veto must be on record");
+    assert_eq!(not_executed, 1, "rollback_failed is recorded as not executed");
+
+    let notifications: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM integration.notification \
+         WHERE project_id = $1 AND kind = 'rollback_failed'",
+    )
+    .bind(seed.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(notifications, 1, "the feed carries the refused rollback");
+}
+
 /// (3) Approve executes the red line exactly once through the human channel;
 /// a repeat decision is `AlreadyDecided` and executes nothing more.
 #[sqlx::test(migrations = "../../migrations")]

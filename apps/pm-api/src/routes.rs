@@ -163,6 +163,13 @@ async fn veto_handler(State(state): State<AppState>, Json(req): Json<VetoRequest
             })),
         )
             .into_response(),
+        // An irreversible proposal (no stored compensation spec) refuses the
+        // rollback; the service already recorded intervention('rollback_failed').
+        Err(SupervisionError::Command(CommandError::Validation(detail))) => (
+            StatusCode::CONFLICT,
+            Json(json!({ "error": "rollback_failed", "detail": detail })),
+        )
+            .into_response(),
         Err(SupervisionError::NotFound(detail)) => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "proposal_not_found", "detail": detail })),
