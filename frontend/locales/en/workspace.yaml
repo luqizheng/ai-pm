@@ -26,6 +26,7 @@ workspace:
   context:
     title: Context
     collapse: Collapse context panel
+    reopen: Reopen context panel
     currentTodo: Current to-do
     aiAdvice: AI advice
     kind:

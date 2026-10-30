@@ -18,7 +18,8 @@ const NARROW_QUERY = "(max-width: 1280px)";
 const COMPACT_QUERY = "(max-width: 1024px)";
 
 function onNarrow(e: { matches: boolean }) {
-  if (e.matches) store.contextOpen = false;
+  // 收窄收起、变宽恢复（终审 I1）：断点隐藏是自动行为，不吞用户手动重开
+  store.contextOpen = !e.matches;
 }
 
 function onCompact(e: { matches: boolean }) {

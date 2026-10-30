@@ -16,8 +16,6 @@
  * ========================================================================== */
 
 :root {
-  color-scheme: dark;
-
   /* Surface —— 设计系统 V1.0 §1.1（深色列） */
   --ws-canvas: #111318;
   --ws-sidebar: #171a21;
@@ -63,8 +61,6 @@
 }
 
 [data-theme="light"] {
-  color-scheme: light;
-
   --ws-canvas: #f7f8fa;
   --ws-sidebar: #f0f2f6;
   --ws-surface: #ffffff;
@@ -96,6 +92,10 @@
  * 在工作区深色画布上直接用会发灰——这里把工作区内取值换轨到 --ws-*。
  * ------------------------------------------------------------------------- */
 .workspace-shell {
+  /* color-scheme 限定在工作区作用域（终审 I2）：不泄漏到存量页的
+     UA 控件（滚动条/原生表单），存量浅色页观感零破坏（spec A9） */
+  color-scheme: dark;
+
   --surface-sunken: var(--ws-canvas);
   --surface-base: var(--ws-surface);
   --surface-raised: var(--ws-elevated);
@@ -122,4 +122,8 @@
   --success: var(--ws-color-success);
   --warning: var(--ws-color-warning);
   --danger: var(--ws-color-danger);
+}
+
+[data-theme="light"] .workspace-shell {
+  color-scheme: light;
 }

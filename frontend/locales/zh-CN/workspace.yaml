@@ -26,6 +26,7 @@ workspace:
   context:
     title: 上下文
     collapse: 折叠上下文栏
+    reopen: 重开上下文栏
     currentTodo: 当前待办事项
     aiAdvice: AI 建议
     kind:

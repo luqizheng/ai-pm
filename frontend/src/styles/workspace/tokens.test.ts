@@ -159,11 +159,21 @@ describe("workspace tokens", () => {
     }
   });
 
-  it("深色为默认（:root 即深色），color-scheme 随主题声明", () => {
+  it("深色为默认（:root 即深色）", () => {
     expect(dark.get("canvas")!.toLowerCase()).toBe("#111318");
     expect(light.get("canvas")!.toLowerCase()).toBe("#f7f8fa");
-    expect(block(":root")).toMatch(/color-scheme:\s*dark/);
-    expect(block('[data-theme="light"]')).toMatch(/color-scheme:\s*light/);
+  });
+
+  it("color-scheme 限定在 .workspace-shell 作用域（不泄漏到存量页的 UA 控件）", () => {
+    // :root / [data-theme] 级别不得再声明 color-scheme（终审 I2）
+    expect(block(":root")).not.toMatch(/color-scheme:/);
+    expect(block('[data-theme="light"]')).not.toMatch(/color-scheme:/);
+    const shellStart = css.indexOf(".workspace-shell");
+    const shellScope = css.slice(shellStart, shellStart + 400);
+    expect(shellScope).toMatch(/color-scheme:\s*dark/);
+    expect(css).toMatch(
+      /\[data-theme="light"\]\s+\.workspace-shell\s*\{[^}]*color-scheme:\s*light/
+    );
   });
 
   it(".workspace-shell 作用域内提供 --prism-* 桥接（复用 PRISM 组件在深色下正确显色）", () => {

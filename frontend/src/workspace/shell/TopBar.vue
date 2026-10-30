@@ -1,13 +1,22 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { Bell, ChevronRight, Moon, Sun, User } from "lucide-vue-next";
+import {
+  Bell,
+  ChevronRight,
+  Moon,
+  PanelRightOpen,
+  Sun,
+  User
+} from "lucide-vue-next";
 import { useTheme } from "../useTheme";
+import { useWorkspaceStore } from "../store";
 
 defineProps<{ project: string; page: string }>();
 
 const { t } = useI18n();
 const theme = useTheme();
+const store = useWorkspaceStore();
 const isDark = computed(() => theme.theme.value === "dark");
 </script>
 
@@ -19,6 +28,16 @@ const isDark = computed(() => theme.theme.value === "dark");
       <span class="ws-breadcrumb-page">{{ page }}</span>
     </nav>
     <div class="ws-topbar-actions">
+      <button
+        v-if="!store.contextOpen"
+        type="button"
+        class="ws-icon-btn ws-focusable"
+        data-test="context-reopen"
+        :aria-label="t('workspace.context.reopen')"
+        @click="store.toggleContext()"
+      >
+        <PanelRightOpen :size="16" aria-hidden="true" />
+      </button>
       <button
         type="button"
         class="ws-icon-btn ws-focusable"

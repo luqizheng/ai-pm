@@ -128,6 +128,45 @@ describe("WorkspaceShell（V1.1 三栏壳）", () => {
     );
   });
 
+  it("右栏收起后 TopBar 出现重开按钮并恢复右栏（终审 I1）", async () => {
+    // 不提供 context 插槽 → fallback 渲染 ContextSidebar（其内有折叠按钮）
+    const w = mountShell(WorkspaceShell, {
+      props: { project: "世界地图编辑器", page: "项目总控" },
+      slots: { main: "<div data-test='main-slot' />" }
+    });
+    expect(
+      w.find("[data-test='context-reopen']").exists(),
+      "右栏打开时不应出现重开按钮"
+    ).toBe(false);
+    await w.find("[data-test='context-collapse']").trigger("click");
+    expect(w.find(".workspace-shell").attributes("data-context")).toBe(
+      "closed"
+    );
+    const reopen = w.find("[data-test='context-reopen']");
+    expect(reopen.exists()).toBe(true);
+    await reopen.trigger("click");
+    expect(w.find(".workspace-shell").attributes("data-context")).toBe("open");
+    expect(
+      w.find("[data-test='context-reopen']").exists(),
+      "右栏恢复后重开按钮消失"
+    ).toBe(false);
+  });
+
+  it("窗口从窄断点变宽后右栏自动恢复（终审 I1）", async () => {
+    const listeners = stubMatchMedia({});
+    const w = mountShellWithSlots();
+    fire(listeners, "(max-width: 1280px)");
+    await nextTick();
+    expect(w.find(".workspace-shell").attributes("data-context")).toBe(
+      "closed"
+    );
+    for (const cb of listeners.get("(max-width: 1280px)") ?? []) {
+      cb({ matches: false });
+    }
+    await nextTick();
+    expect(w.find(".workspace-shell").attributes("data-context")).toBe("open");
+  });
+
   it("紧凑断点（≤1024px）左栏折叠至图标栏", async () => {
     const listeners = stubMatchMedia({});
     const w = mountShellWithSlots();
