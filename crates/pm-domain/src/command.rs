@@ -102,7 +102,7 @@ mod tests {
             ProjectCommand::UpdateTaskStatus {
                 task_id: TaskId::nil(),
                 expected_revision: 3,
-                new_status: TaskStatus::InProgress,
+                new_status: TaskStatus::Running,
             },
             ProjectCommand::ApproveRequirementRevision {
                 project_id: ProjectId::nil(),

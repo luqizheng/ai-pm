@@ -6,6 +6,7 @@ pub mod ids;
 pub mod policy;
 pub mod proposal;
 pub mod task;
+pub mod waiting;
 
 pub use command::{ProjectCommand, Reversibility};
 pub use error::CommandError;
