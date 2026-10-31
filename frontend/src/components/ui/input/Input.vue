@@ -4,6 +4,8 @@ import { cn } from "@/lib/cn";
 import { FORM_FIELD_ERROR_ID } from "../form-field/context";
 
 interface Props {
+  /** 原生 id（便于外部 label 的 for 关联） */
+  id?: string;
   modelValue?: string | number;
   type?: string;
   placeholder?: string;
@@ -14,6 +16,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  id: undefined,
   modelValue: "",
   type: "text",
   placeholder: undefined,
@@ -41,6 +44,7 @@ function onInput(event: Event) {
 
 <template>
   <input
+    :id="props.id"
     :type="type"
     :value="modelValue"
     :placeholder="placeholder"

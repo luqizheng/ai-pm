@@ -32,6 +32,7 @@ workspace:
     decisions: 决策中心
     knowledge: 项目知识
     artifacts: 产物验收
+    models: 模型配置
     classicOverview: 概览
   service:
     iteration: 当前迭代
@@ -99,6 +100,40 @@ workspace:
   entry:
     preview: AI 工作空间（预览）
   pages:
+    models:
+      title: 模型配置
+      subtitle: 配置 OpenAI 兼容的模型供应商，AI-PM 的分析与提案都使用这里的模型。
+      securityNote: API Key 以 AES-256-GCM 密文保存，保存后只显示末 4 位。
+      loading: 正在加载供应商配置…
+      empty: 暂无供应商配置。
+      loadFailed: 加载失败
+      saved: 配置已保存
+      saveFailed: 保存失败
+      keyCleared: Key 已清除
+      save: 保存
+      clearKey: 清除 Key
+      test: 测试连接
+      testOk: 连通正常（{ms} ms）
+      testFailed: 连接失败
+      testUsesSaved: 测试使用已保存的配置；改动后请先保存再测试。
+      enabled: 已启用
+      disabled: 未启用
+      enableLabel: 启用该供应商
+      timeoutInvalid: 超时须为 1–600 秒
+      keyConfigured: "已配置（{hint}）"
+      keyMissing: 未配置；Ollama 等本地模型可留空
+      keyPlaceholder: 填入新的 Key（留空表示不修改）
+      fields:
+        baseUrl: API 地址
+        model: 模型
+        apiKey: API Key
+        timeout: 超时（秒）
+      providers:
+        deepseek: DeepSeek
+        openai: OpenAI
+        glm: 智谱 GLM
+        minimax: MiniMax
+        ollama: Ollama（本地）
     goals:
       title: 目标计划
       subtitle: 项目 → 目标 → 里程碑 → 任务
@@ -110,6 +145,11 @@ workspace:
       taskDone: 已完成
       taskDoing: 进行中
       taskTodo: 未开始
+      project: 项目
+      pickProjectShort: 选择项目
+      pickProject: 请先在「项目范围」中选择一个项目
+      loadFailed: 加载失败，请稍后重试
+      empty: 暂无里程碑或任务
     team:
       title: AI 团队
       subtitle: Agent 状态与当前工作

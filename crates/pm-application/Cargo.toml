@@ -4,7 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+aes-gcm.workspace = true
 chrono.workspace = true
+getrandom.workspace = true
 pm-domain = { path = "../pm-domain" }
 serde.workspace = true
 sha2.workspace = true

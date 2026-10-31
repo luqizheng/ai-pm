@@ -73,6 +73,12 @@ export const staticRoutes: RouteRecordRaw[] = [
         meta: { title: "目标计划" }
       },
       {
+        path: "models",
+        name: "workspace-models",
+        component: () => import("../../workspace/pages/ModelsPage.vue"),
+        meta: { title: "模型配置" } // i18n-ignore: route meta 直接作为页签标题
+      },
+      {
         path: "activity",
         name: "workspace-activity",
         component: () => import("../../workspace/pages/ActivityPage.vue"),

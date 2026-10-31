@@ -7,6 +7,7 @@ import {
   Bot,
   BookOpen,
   ChevronLeft,
+  Cpu,
   FileText,
   LayoutDashboard,
   ListTree,
@@ -102,6 +103,12 @@ const groups = computed<NavGroup[]>(() => [
         labelKey: "workspace.nav.artifacts",
         icon: PackageCheck,
         to: workspaceTo("artifacts")
+      },
+      {
+        key: "models",
+        labelKey: "workspace.nav.models",
+        icon: Cpu,
+        to: workspaceTo("models")
       }
     ]
   },

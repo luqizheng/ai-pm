@@ -928,6 +928,74 @@ export const sessions = [
 ];
 
 /**
+ * 全局 LLM 供应商配置（ai.llm_provider）。
+ * API Key 明文不回传，只有 has_api_key 与末 4 位提示。
+ */
+export interface MockLlmProvider {
+  provider: string;
+  base_url: string;
+  model: string;
+  has_api_key: boolean;
+  api_key_hint: string | null;
+  enabled: boolean;
+  timeout_secs: number;
+  updated_at: string;
+}
+
+export const llmProviders: MockLlmProvider[] = [
+  {
+    provider: "deepseek",
+    base_url: "https://api.deepseek.com/v1",
+    model: "deepseek-chat",
+    has_api_key: false,
+    api_key_hint: null,
+    enabled: false,
+    timeout_secs: 120,
+    updated_at: daysAgo(0, 9)
+  },
+  {
+    provider: "openai",
+    base_url: "https://api.openai.com/v1",
+    model: "gpt-4o-mini",
+    has_api_key: false,
+    api_key_hint: null,
+    enabled: false,
+    timeout_secs: 120,
+    updated_at: daysAgo(0, 9)
+  },
+  {
+    provider: "glm",
+    base_url: "https://open.bigmodel.cn/api/paas/v4",
+    model: "glm-4-plus",
+    has_api_key: false,
+    api_key_hint: null,
+    enabled: false,
+    timeout_secs: 120,
+    updated_at: daysAgo(0, 9)
+  },
+  {
+    provider: "minimax",
+    base_url: "https://api.minimax.chat/v1",
+    model: "MiniMax-Text-01",
+    has_api_key: false,
+    api_key_hint: null,
+    enabled: false,
+    timeout_secs: 120,
+    updated_at: daysAgo(0, 9)
+  },
+  {
+    provider: "ollama",
+    base_url: "http://127.0.0.1:11434/v1",
+    model: "qwen2.5:7b",
+    has_api_key: false,
+    api_key_hint: null,
+    enabled: false,
+    timeout_secs: 120,
+    updated_at: daysAgo(0, 9)
+  }
+];
+
+/**
  * DB 菜单（GET /v1/pure/get-async-routes 的 data）。
  * component 字符串对应 src/shell/views/<component>.vue。
  */
@@ -1034,7 +1102,11 @@ export const mockAsyncRoutes = [
         path: "/audit/operation-logs",
         name: "AuditOperationLogs",
         component: "audit/operation-log",
-        meta: { title: "操作日志", icon: "scroll-text", auths: ["AUD_LOG_READ"] }
+        meta: {
+          title: "操作日志",
+          icon: "scroll-text",
+          auths: ["AUD_LOG_READ"]
+        }
       }
     ]
   },
@@ -1219,12 +1291,79 @@ export function resolveMock(
       };
     }
 
+    // LLM 供应商连通性测试
+    const llmTest = pathname.match(/^\/v1\/pm\/llm\/providers\/([^/]+)\/test$/);
+    if (llmTest) {
+      const row = llmProviders.find(item => item.provider === llmTest[1]);
+      if (!row) return { status: 404, body: { message: "unknown provider" } };
+      return {
+        status: 200,
+        body: { ok: true, latency_ms: 42, message: "HTTP 200" }
+      };
+    }
+
     switch (pathname) {
       case "/v1/iam/auth/login":
       case "/v1/iam/auth/refresh":
         return { status: 200, body: loginResult() };
       case "/v1/iam/auth/logout":
         return { status: 200, body: {} };
+    }
+    return undefined;
+  }
+
+  if (method === "PUT") {
+    // LLM 供应商配置：api_key 缺省/空串 = 保持原值；clear_api_key = 删除
+    const updateProvider = pathname.match(
+      /^\/v1\/pm\/llm\/providers\/([^/]+)$/
+    );
+    if (updateProvider) {
+      const row = llmProviders.find(
+        item => item.provider === updateProvider[1]
+      );
+      if (!row) return { status: 404, body: { message: "unknown provider" } };
+      const payload = (body ?? {}) as {
+        base_url?: string;
+        model?: string;
+        api_key?: string;
+        clear_api_key?: boolean;
+        enabled?: boolean;
+        timeout_secs?: number;
+      };
+      const baseUrl = (payload.base_url ?? "").trim().replace(/\/+$/, "");
+      if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+        return {
+          status: 400,
+          body: { message: "base_url must start with http:// or https://" }
+        };
+      }
+      if (!(payload.model ?? "").trim()) {
+        return { status: 400, body: { message: "model is required" } };
+      }
+      if (
+        payload.timeout_secs === undefined ||
+        payload.timeout_secs < 1 ||
+        payload.timeout_secs > 600
+      ) {
+        return {
+          status: 400,
+          body: { message: "timeout_secs must be between 1 and 600" }
+        };
+      }
+      row.base_url = baseUrl;
+      row.model = (payload.model ?? "").trim();
+      row.enabled = Boolean(payload.enabled);
+      row.timeout_secs = payload.timeout_secs;
+      if (payload.clear_api_key) {
+        row.has_api_key = false;
+        row.api_key_hint = null;
+      } else if (payload.api_key && payload.api_key.trim() !== "") {
+        const key = payload.api_key.trim();
+        row.has_api_key = true;
+        row.api_key_hint = `****${key.slice(-4)}`;
+      }
+      row.updated_at = new Date().toISOString();
+      return { status: 200, body: row };
     }
     return undefined;
   }
@@ -1340,6 +1479,11 @@ export function resolveMock(
       return { status: 200, body: list(approvals) };
     case "/v1/pm/audit-logs":
       return { status: 200, body: list(auditLogs) };
+    case "/v1/pm/llm/providers":
+      return {
+        status: 200,
+        body: { items: llmProviders, total: llmProviders.length }
+      };
   }
 
   // 修订历史：GET /v1/pm/requirements/{id}/revisions

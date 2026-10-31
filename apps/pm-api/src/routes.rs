@@ -121,6 +121,8 @@ fn build_router(
         // `/v1/pm/*` 业务端点（Slice A，前端经典页契约；无 /api 前缀——vite
         // 代理剥掉 /api 后直达这里）。
         .merge(crate::pm_lists::router())
+        // 全局模型供应商配置（deepseek/openai/glm/minimax/ollama）。
+        .merge(crate::llm_configs::router())
         // 审计实时流（SSE）。EventSource 无法带 Authorization，token 走
         // `?access_token=`；auth 层只对本路径放行 query token。
         .route(
