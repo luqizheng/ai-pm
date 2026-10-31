@@ -88,6 +88,19 @@ pub fn router(pool: PgPool) -> Router {
         .with_state(state)
 }
 
+/// The same route table guarded by the bearer-auth layer (`auth::require_bearer`).
+/// Served by `main.rs` under `AI_PM_AUTH_MODE=jwks` (the default, fail-closed);
+/// the bare [`router`] stays the `off`-mode/test shape so existing tests keep
+/// exercising the unauthenticated contract. The layer wraps everything routed
+/// above, including the nested `/mcp` service.
+pub fn router_with_auth(pool: PgPool, jwks: Arc<digua_common_jwt::JWKSCache>) -> Router {
+    let auth = crate::auth::AuthState { jwks };
+    router(pool).layer(axum::middleware::from_fn_with_state(
+        auth,
+        crate::auth::require_bearer,
+    ))
+}
+
 // ---------------------------------------------------------------- ingestion
 
 use pm_application::ingestion::{IngestionError, SubmitEventRequest, SubmitOutcome, submit_event};
