@@ -15,4 +15,9 @@ pub use error::CommandError;
 pub use ids::*;
 pub use policy::PolicyDecision;
 pub use proposal::{AnalysisResult, Confidence, Finding, Proposal, RiskLevel};
-pub use task::TaskStatus;
+pub use task::{LegacyMapping, TaskStatus};
+pub use task_run::{FailureCategory, FailureRecord, OutcomeVerdict, RetryCounters, RetryPolicy, RunOutcome};
+pub use task_transition::{
+    allowed_edges, validate_transition, SupersedeIntent, TransitionError, TransitionInput,
+};
+pub use waiting::{WaitingContext, WaitingReason};

@@ -68,10 +68,10 @@ fn valid_analysis() -> serde_json::Value {
                     "data": {
                         "task_id": "22222222-2222-4222-8222-222222222222",
                         "expected_revision": 7,
-                        "new_status": "needs_info"
+                        "new_status": "awaiting_decision"
                     }
                 },
-                "rationale": "TASK-102 依赖尚未裁决的缓存选型，先置为 needs_info 等待架构决议。",
+                "rationale": "TASK-102 依赖尚未裁决的缓存选型，先置为等待决策（needs_info 语义并入 awaiting_decision）等待架构决议。",
                 "risk_level": "low",
                 "confidence": "high",
                 "evidence": ["ADR-008"]
@@ -143,7 +143,7 @@ async fn ok_response_parses_analysis_result_with_snake_case_enums() {
     // Bonus: adjacent tag + task status snake_case survived the round trip.
     match &result.proposals[0].command {
         ProjectCommand::UpdateTaskStatus { new_status, .. } => {
-            assert_eq!(*new_status, TaskStatus::NeedsInfo);
+            assert_eq!(*new_status, TaskStatus::AwaitingDecision);
         }
         other => panic!("expected update_task_status, got {}", other.kind()),
     }

@@ -75,7 +75,7 @@ fn update_task_status() -> ProjectCommand {
     ProjectCommand::UpdateTaskStatus {
         task_id: pm_domain::TaskId::nil(),
         expected_revision: 1,
-        new_status: pm_domain::TaskStatus::InProgress,
+        new_status: pm_domain::TaskStatus::Running,
     }
 }
 

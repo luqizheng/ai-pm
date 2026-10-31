@@ -59,6 +59,7 @@ impl TaskStatus {
         }
     }
 
+    #[allow(clippy::should_implement_trait)] // 仓库惯例：inherent from_str/as_str 配对
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "draft" => Some(TaskStatus::Draft),
@@ -79,8 +80,8 @@ impl TaskStatus {
     }
 
     /// Maps the legacy 5-value status (`ai-pm-task-state-machine-v1.md` §九 M1–M4
-    /// + V3 L1). Returns `None` for values outside the legacy set — the strict
-    /// [`TaskStatus::from_str`] owns the 13-value set.
+    /// 与 V3 L1 追加记录). Returns `None` for values outside the legacy set —
+    /// the strict [`TaskStatus::from_str`] owns the 13-value set.
     ///
     /// `in_progress` is deliberately [`LegacyMapping::Ambiguous`]: it splits into
     /// `Claimed`/`Running` depending on whether an active Run exists, a fact this

@@ -140,7 +140,7 @@ async fn update_task_status_executes_and_writes_audit_with_restore_compensation(
             ProjectCommand::UpdateTaskStatus {
                 task_id: f.task_id,
                 expected_revision: 1,
-                new_status: TaskStatus::Done,
+                new_status: TaskStatus::Completed,
             },
             ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
         )
@@ -195,7 +195,7 @@ async fn stale_expected_revision_conflicts_and_leaves_row_untouched(pool: PgPool
         ProjectCommand::UpdateTaskStatus {
             task_id: f.task_id,
             expected_revision: 1,
-            new_status: TaskStatus::Done,
+            new_status: TaskStatus::Completed,
         },
         ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
     )
@@ -207,7 +207,7 @@ async fn stale_expected_revision_conflicts_and_leaves_row_untouched(pool: PgPool
             ProjectCommand::UpdateTaskStatus {
                 task_id: f.task_id,
                 expected_revision: 1,
-                new_status: TaskStatus::InProgress,
+                new_status: TaskStatus::Running,
             },
             ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
         )
@@ -236,7 +236,7 @@ async fn compensate_restores_previous_status_and_marks_original_audit(pool: PgPo
             ProjectCommand::UpdateTaskStatus {
                 task_id: f.task_id,
                 expected_revision: 1,
-                new_status: TaskStatus::Done,
+                new_status: TaskStatus::Completed,
             },
             ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
         )
@@ -294,7 +294,7 @@ async fn compensating_same_audit_twice_fails_with_already_compensated(pool: PgPo
             ProjectCommand::UpdateTaskStatus {
                 task_id: f.task_id,
                 expected_revision: 1,
-                new_status: TaskStatus::Done,
+                new_status: TaskStatus::Completed,
             },
             ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
         )
@@ -329,7 +329,7 @@ async fn test_compensate_after_further_change_conflicts(pool: PgPool) {
             ProjectCommand::UpdateTaskStatus {
                 task_id: f.task_id,
                 expected_revision: 1,
-                new_status: TaskStatus::Done,
+                new_status: TaskStatus::Completed,
             },
             ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
         )
@@ -339,7 +339,7 @@ async fn test_compensate_after_further_change_conflicts(pool: PgPool) {
         ProjectCommand::UpdateTaskStatus {
             task_id: f.task_id,
             expected_revision: 2,
-            new_status: TaskStatus::InProgress,
+            new_status: TaskStatus::Running,
         },
         ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
     )
@@ -994,7 +994,7 @@ async fn test_every_auto_command_declares_compensation(pool: PgPool) {
                 let cmd = ProjectCommand::UpdateTaskStatus {
                     task_id: f.task_id,
                     expected_revision: 1,
-                    new_status: TaskStatus::InProgress,
+                    new_status: TaskStatus::Running,
                 };
                 assert!(!policy.is_redline(&cmd));
                 let receipt = ex

@@ -561,7 +561,7 @@ async fn s3_second_agent_on_same_expected_revision_gets_revision_conflict(pool: 
             ProjectCommand::UpdateTaskStatus {
                 task_id: task_102_id(),
                 expected_revision: 7,
-                new_status: TaskStatus::NeedsInfo,
+                new_status: TaskStatus::AwaitingDecision,
             },
             direct(seed.dev_agent_id),
         )
@@ -575,7 +575,7 @@ async fn s3_second_agent_on_same_expected_revision_gets_revision_conflict(pool: 
             ProjectCommand::UpdateTaskStatus {
                 task_id: task_102_id(),
                 expected_revision: 7,
-                new_status: TaskStatus::Done,
+                new_status: TaskStatus::Completed,
             },
             direct(agent_b),
         )
@@ -615,7 +615,7 @@ async fn s3_second_agent_on_same_expected_revision_gets_revision_conflict(pool: 
             ProjectCommand::UpdateTaskStatus {
                 task_id: task_102_id(),
                 expected_revision: 8,
-                new_status: TaskStatus::Done,
+                new_status: TaskStatus::Completed,
             },
             direct(agent_b),
         )

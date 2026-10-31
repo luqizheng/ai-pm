@@ -109,7 +109,7 @@ fn cache_overlap_result() -> AnalysisResult {
                 command: ProjectCommand::UpdateTaskStatus {
                     task_id: task_102_id(),
                     expected_revision: 7,
-                    new_status: TaskStatus::NeedsInfo,
+                    new_status: TaskStatus::AwaitingDecision,
                 },
                 rationale: "TASK-102 的实现依赖 ADR-008 尚未裁决的缓存选型，先置为 needs_info 等待架构决议。".to_string(),
                 risk_level: RiskLevel::Low,
@@ -241,7 +241,7 @@ mod tests {
 
         match &result.proposals[0].command {
             ProjectCommand::UpdateTaskStatus { new_status, .. } => {
-                assert_eq!(*new_status, TaskStatus::NeedsInfo);
+                assert_eq!(*new_status, TaskStatus::AwaitingDecision);
             }
             other => panic!("expected update_task_status, got {}", other.kind()),
         }

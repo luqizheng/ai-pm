@@ -33,6 +33,7 @@ impl WaitingReason {
         }
     }
 
+    #[allow(clippy::should_implement_trait)] // 仓库惯例：inherent from_str/as_str 配对
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "needs_info" => Some(WaitingReason::NeedsInfo),
