@@ -10,6 +10,8 @@ use pm_ai::FakeModel;
 use pm_application::project_import::{import_id_for_event, run_import_job};
 use pm_application::{PgCommandExecutor, PolicyEngine};
 use pm_infrastructure::job_queue::{self, ClaimedJob};
+use pm_infrastructure::outbox_handlers::TaskReadyHandler;
+use pm_infrastructure::outbox_worker::OutboxWorker;
 use sqlx::PgPool;
 use tracing_subscriber::EnvFilter;
 
@@ -79,6 +81,18 @@ async fn main() {
                 }
             }
         }
+    });
+
+    // 第三条循环：outbox 事件分发（spec §20）。只注册 TaskReady → 创建 queued
+    // Run；未注册事件（如 DeliverySubmitted，开关默认关闭）明确死信、可 replay，
+    // 绝不假装消费。
+    let outbox_pool = pool.clone();
+    let outbox_worker_id = worker_id.clone();
+    tokio::spawn(async move {
+        OutboxWorker::new(outbox_pool.clone(), outbox_worker_id)
+            .with_handler("TaskReady", Arc::new(TaskReadyHandler::new(outbox_pool)))
+            .run()
+            .await
     });
 
     loop {

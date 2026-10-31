@@ -116,7 +116,7 @@ async fn revision_conflict_leaves_no_event(pool: PgPool) {
     );
 }
 #[sqlx::test(migrations = "../../migrations")]
-async fn submitted_transition_enqueues_delivery_submitted(pool: PgPool) {
+async fn submitted_transition_is_gated_off_by_default(pool: PgPool) {
     let f = seed(&pool, "OUTBOX-W3").await;
     sqlx::query("UPDATE delivery.task SET status = 'running' WHERE id = $1")
         .bind(f.task_id)
@@ -136,13 +136,14 @@ async fn submitted_transition_enqueues_delivery_submitted(pool: PgPool) {
         .await
         .expect("running -> submitted must execute");
 
-    let event_type: String =
-        sqlx::query_scalar("SELECT event_type FROM integration.outbox_event WHERE project_id = $1")
-            .bind(f.project_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(event_type, "DeliverySubmitted");
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM integration.outbox_event")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        count, 0,
+        "DeliverySubmitted is gated off until review orchestration lands"
+    );
 }
 /// A port that always fails, to prove the write is part of the business
 /// transaction: if the event cannot be written, the status change rolls back.
