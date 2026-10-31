@@ -9,6 +9,7 @@ pub mod llm_configs;
 pub mod pm_imports;
 pub mod pm_lists;
 pub mod pm_repositories;
+pub mod pm_runs;
 pub mod pm_writes;
 pub mod routes;
 pub mod support;

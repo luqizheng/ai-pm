@@ -121,6 +121,8 @@ fn build_router(
         // `/v1/pm/*` 业务端点（Slice A，前端经典页契约；无 /api 前缀——vite
         // 代理剥掉 /api 后直达这里）。
         .merge(crate::pm_lists::router())
+        // 任务执行 Run（AI 执行中心数据源；见 workspace-execution-artifacts plan）。
+        .merge(crate::pm_runs::router())
         // 全局模型供应商配置（deepseek/openai/glm/minimax/ollama）。
         .merge(crate::llm_configs::router())
         // 项目 ↔ 代码仓库关系 + 项目级 SSH 凭据（P0 CRUD）。
