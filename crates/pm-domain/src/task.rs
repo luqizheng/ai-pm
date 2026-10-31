@@ -10,7 +10,7 @@ use crate::waiting::WaitingReason;
 /// The four [`TaskStatus::TERMINAL`] states have no outgoing edges; `Superseded`
 /// accepts a fixed `allowed_from` set (§11.2). Transition legality is enforced by
 /// [`crate::task_transition`], not by this enum.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
     Draft,

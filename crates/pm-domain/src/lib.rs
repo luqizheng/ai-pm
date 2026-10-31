@@ -6,6 +6,7 @@ pub mod ids;
 pub mod policy;
 pub mod proposal;
 pub mod task;
+pub mod task_run;
 pub mod task_transition;
 pub mod waiting;
 
