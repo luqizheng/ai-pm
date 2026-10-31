@@ -2,6 +2,13 @@ system:
   profile:
     title: Profile settings
     roles: Roles
+    changePassword: Change password
+    oldPassword: Current password
+    newPassword: New password
+    confirmPassword: Confirm new password
+    passwordMismatch: The two new passwords do not match
+    passwordSuccess: Password updated
+    passwordFailed: Failed to update password
   permission:
     title: Permissions
     caption: Permission list
@@ -99,6 +106,13 @@ system:
     draft: Draft
     publish: Activate
     clone: Clone
+    create: New version
+    edit: Edit draft
+    description: Description
+    routesJson: Routes JSON
+    routesJsonInvalid: Routes JSON must be a valid array
+    createSuccess: Draft version created
+    updateSuccess: Draft updated
   audit:
     title: Audit logs
     loginLog: Login logs
@@ -134,6 +148,10 @@ system:
     draft: Draft
     published: Published
     revoked: Revoked
+    inbox:
+      title: Announcement center
+      caption: Announcements visible to me
+      markRead: Mark as read
     publish: Publish
     revoke: Revoke
     pinned: Pinned

@@ -1045,6 +1045,12 @@ export const mockAsyncRoutes = [
     meta: { title: "公告管理", icon: "megaphone" }
   },
   {
+    path: "/inbox",
+    name: "NotificationInbox",
+    component: "notification/inbox",
+    meta: { title: "公告中心", icon: "bell" }
+  },
+  {
     path: "/config-items",
     name: "SystemConfig",
     component: "config/item",

@@ -5,6 +5,7 @@ import { mountShell } from "@/shell/test-utils";
 import Page from "./index.vue";
 
 const listMenuConfigs = vi.fn();
+const createConfig = vi.fn();
 
 vi.mock("@/shell/api", () => ({
   listMenuConfigs: (...args: unknown[]) => listMenuConfigs(...args),
@@ -12,8 +13,19 @@ vi.mock("@/shell/api", () => ({
   cloneMenuConfig: vi.fn()
 }));
 
+vi.mock("@/shell/api/prue", () => ({
+  prue: {
+    configs: {
+      create: (...args: unknown[]) => createConfig(...args)
+    }
+  }
+}));
+
 vi.mock("@/shell/store/auth", () => ({
-  useAuthStore: () => ({ hasPermission: () => true })
+  useAuthStore: () => ({
+    hasPermission: () => true,
+    hasRole: () => true
+  })
 }));
 
 describe("菜单管理", () => {
@@ -42,6 +54,42 @@ describe("菜单管理", () => {
 
     expect(listMenuConfigs).toHaveBeenCalled();
     expect(w.text()).toContain("系统管理");
+  });
+
+  it("新建版本：提交合法 JSON 走 SDK create", async () => {
+    createConfig.mockResolvedValueOnce({
+      id: "mc-9",
+      version: 1,
+      name: "v9",
+      description: null,
+      status: "draft",
+      is_active: false,
+      created_by: null,
+      created_at: "",
+      updated_at: "",
+      published_at: null,
+      routes_etag: "e9"
+    });
+    const w = mountShell(Page);
+    await nextTick();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await nextTick();
+
+    const create = w.findAll("button").find(b => b.text() === "新建版本");
+    await create?.trigger("click");
+    await nextTick();
+
+    const form = document.querySelector("form");
+    form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await nextTick();
+
+    expect(createConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "",
+        routes_json: [expect.objectContaining({ path: "/dashboard" })]
+      })
+    );
   });
 
   it("无数据时显示空态", async () => {

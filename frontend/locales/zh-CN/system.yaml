@@ -2,6 +2,13 @@ system:
   profile:
     title: 个人设置
     roles: 角色
+    changePassword: 修改密码
+    oldPassword: 旧密码
+    newPassword: 新密码
+    confirmPassword: 确认新密码
+    passwordMismatch: 两次输入的新密码不一致
+    passwordSuccess: 密码已修改
+    passwordFailed: 修改失败
   permission:
     title: 权限管理
     caption: 权限列表
@@ -99,6 +106,13 @@ system:
     draft: 草稿
     publish: 启用
     clone: 克隆
+    create: 新建版本
+    edit: 编辑草稿
+    description: 描述
+    routesJson: 路由 JSON
+    routesJsonInvalid: 路由 JSON 必须是合法的数组
+    createSuccess: 已创建草稿版本
+    updateSuccess: 草稿已更新
   audit:
     title: 审计日志
     loginLog: 登录日志
@@ -134,6 +148,10 @@ system:
     draft: 草稿
     published: 已发布
     revoked: 已撤销
+    inbox:
+      title: 公告中心
+      caption: 我可见的公告
+      markRead: 标记已读
     publish: 发布
     revoke: 撤销
     pinned: 置顶
