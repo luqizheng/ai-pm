@@ -64,31 +64,60 @@ impl OutboxHandler for TaskReadyHandler {
         };
 
         // 执行资格：只有仍处于可调度态（ready）且已指派 Agent 的任务才建 Run。
-        // 状态已变化（过期事件）或未指派，则确认消费但不产生副作用。
+        // 状态已变化（过期事件）或未指派，则确认消费但不产生副作用（留痕，不静默）。
         if status != "ready" || assignee_id.is_none() {
+            let reason = if status != "ready" {
+                "task_not_ready"
+            } else {
+                "no_assignee"
+            };
+            tracing::info!(%task_id, reason, "TaskReady consumed without scheduling");
             tx.commit().await.map_err(|e| e.to_string())?;
             return Ok(());
         }
 
-        // 幂等：已有活跃 Run（queued/claimed/running，B1 统一集合）则不再新建。
-        let active: i64 = sqlx::query_scalar(
+        // 任务级幂等（L0）：已有活跃 Run 则不再新建。集合复用 run_dispatch 的单一真源
+        // （ACTIVE_RUN_STATUSES_SQL），与迁移谓词 uq_task_run_active 保持一致。
+        let active: i64 = sqlx::query_scalar(&format!(
             "SELECT count(*) FROM delivery.task_run \
-             WHERE task_id = $1 AND status IN ('queued', 'claimed', 'running')",
-        )
+             WHERE task_id = $1 AND status IN ({})",
+            pm_application::run_dispatch::ACTIVE_RUN_STATUSES_SQL
+        ))
         .bind(task_id)
         .fetch_one(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
         if active > 0 {
+            tracing::info!(%task_id, reason = "active_run_exists", "TaskReady consumed: active run exists");
             tx.commit().await.map_err(|e| e.to_string())?;
             return Ok(());
         }
 
-        // B3-6：建 Run + 递增 attempt_no / task.attempt_count 复用 application 的
-        // 共享封装（此处已持有 task 行锁，满足 B2 的 INSERT 顺序要求）。
-        pm_application::run_dispatch::insert_task_run(&mut tx, event.project_id, task_id)
-            .await
-            .map_err(|e| e.to_string())?;
+        // L1 事件级幂等 + B3-6 共享封装：把创建它的事件 id 绑定进 Run（此处已持有
+        // task 行锁，满足 B2 的 INSERT 顺序要求）。
+        match pm_application::run_dispatch::insert_task_run(
+            &mut tx,
+            event.project_id,
+            task_id,
+            Some(event.id),
+        )
+        .await
+        {
+            Ok(_) => {}
+            // L2 冲突降级：uq_task_run_source_event（同一事件已建 Run，如旧事件 replay
+            // 而旧 Run 已终态）或 uq_task_run_active（并发先到者已建）冲突 → 幂等成功
+            // 确认消费，**不进死信**。冲突时整个事务回滚，计数不会半更新。
+            Err(sqlx::Error::Database(db)) if db.code().as_deref() == Some("23505") => {
+                tracing::info!(
+                    %task_id,
+                    event_id = %event.id,
+                    "TaskReady consumed: idempotent conflict, run already exists"
+                );
+                tx.rollback().await.map_err(|e| e.to_string())?;
+                return Ok(());
+            }
+            Err(e) => return Err(e.to_string()),
+        }
 
         tx.commit().await.map_err(|e| e.to_string())?;
         Ok(())

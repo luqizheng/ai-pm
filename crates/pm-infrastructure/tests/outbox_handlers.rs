@@ -222,3 +222,41 @@ async fn redelivery_does_not_create_a_second_run_after_claim(pool: PgPool) {
         "a claimed active run must collapse redelivery to a no-op"
     );
 }
+/// L1+L2：旧事件 replay —— 旧 Run 已终态（脱离活跃集合）、任务又回到 ready 时，
+/// **同一事件**（同 `event.id`）再次消费必须不新建 Run：由 `uq_task_run_source_event`
+/// 触发 23505，handler 降级为幂等成功（返回 Ok，不进死信、不重复递增计数）。
+/// 这是任务级判据（active Run）覆盖不到、只能靠事件级幂等兜住的场景。
+#[sqlx::test(migrations = "../../migrations")]
+async fn replayed_event_after_terminal_run_creates_no_new_run(pool: PgPool) {
+    let s = seed_task(&pool, "OH-9", "ready", true).await;
+    let handler = TaskReadyHandler::new(pool.clone());
+    let e = event(&s, "k9");
+    handler.handle(&e).await.unwrap();
+
+    // 旧 Run 落终态（不再活跃）——模拟「事件 replay 时上一次执行已结束」。
+    sqlx::query("UPDATE delivery.task_run SET status = 'succeeded' WHERE task_id = $1")
+        .bind(s.task_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    handler
+        .handle(&e)
+        .await
+        .expect("L2: same-event replay must be consumed idempotently, not dead-lettered");
+    assert_eq!(
+        run_count(&pool, s.task_id).await,
+        1,
+        "L1: one outbox event must map to at most one run"
+    );
+    let attempt_count: i32 =
+        sqlx::query_scalar("SELECT attempt_count FROM delivery.task WHERE id = $1")
+            .bind(s.task_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        attempt_count, 1,
+        "the rolled-back idempotent conflict must not bump attempt_count"
+    );
+}

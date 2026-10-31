@@ -121,10 +121,15 @@ pub struct CreatedRun {
 ///
 /// 前置条件（B2）：调用者必须已在**同一事务**内对 `delivery.task` 对应行加
 /// `FOR UPDATE`。新 Run 的 INSERT 必须在取得 task 行锁之后执行。
+///
+/// `source_event_id`（L1 事件级幂等，`docs/ai-pm-taskready-idempotency-v1.md` §五）：
+/// 由 outbox 事件触发时传入事件行 id，使「一个事件至多创建一条 Run」由
+/// `uq_task_run_source_event` 兜底；租约恢复路径（非事件触发）传 `None`。
 pub async fn insert_task_run(
     tx: &mut Transaction<'_, Postgres>,
     project_id: Uuid,
     task_id: Uuid,
+    source_event_id: Option<Uuid>,
 ) -> Result<CreatedRun, sqlx::Error> {
     let attempt_no: i32 = sqlx::query_scalar(
         "SELECT coalesce(max(attempt_no), 0) + 1 FROM delivery.task_run WHERE task_id = $1",
@@ -135,12 +140,13 @@ pub async fn insert_task_run(
 
     let run_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.task_run \
-         (project_id, task_id, attempt_no, status, stage, next_dispatch_at) \
-         VALUES ($1, $2, $3, 'queued', 'dispatch', now()) RETURNING id",
+         (project_id, task_id, attempt_no, status, stage, next_dispatch_at, source_event_id) \
+         VALUES ($1, $2, $3, 'queued', 'dispatch', now(), $4) RETURNING id",
     )
     .bind(project_id)
     .bind(task_id)
     .bind(attempt_no)
+    .bind(source_event_id)
     .fetch_one(&mut **tx)
     .await?;
 
@@ -405,7 +411,7 @@ pub async fn claim_once(
             let from = TaskStatus::from_str(&task_state).unwrap_or(TaskStatus::Claimed);
             apply_transition(&mut tx, task_id, from, TaskStatus::Ready, &ctx).await?;
         }
-        let created = insert_task_run(&mut tx, project_id, task_id).await?;
+        let created = insert_task_run(&mut tx, project_id, task_id, None).await?;
         sqlx::query("UPDATE delivery.task_run SET supersedes_run_id = $2 WHERE id = $1")
             .bind(created.run_id)
             .bind(superseded_run_id)
