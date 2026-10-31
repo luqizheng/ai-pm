@@ -154,6 +154,8 @@ curl -i -X POST http://127.0.0.1:8090/mcp \
 - `pm_get_task_context` / `pm_get_submission_status` 只需 `PM_MCP_READ`；
 - `PM_MCP_TASK_UPDATE` 暂无对应工具，等任务更新工具落地后接入映射。
 - 只解析 POST（GET 是 SSE 传输）；请求体上限 256 KiB，超限 413 `IAM_REQUEST_TOO_LARGE`。
+- `AI_PM_AUTH_MODE=off`（本地开发）没有 claims，`/mcp` 的权限门被显式跳过
+  （`build_router(..., guard_mcp=false)`）；这是**仅限本机**的旁路，生产/联调必须用 `jwks` 模式。
 MCP 客户端请求必须带 `Host` 头（rmcp `allowed_hosts` 校验），否则 400 `missing Host header`。
 ## 十、知识空间 V1（Markdown + Git）
 
