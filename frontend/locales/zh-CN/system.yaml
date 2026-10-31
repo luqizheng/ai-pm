@@ -134,3 +134,12 @@ system:
     draft: 草稿
     published: 已发布
     revoked: 已撤销
+    publish: 发布
+    revoke: 撤销
+    pinned: 置顶
+    popover: 弹窗提醒
+    scopeType: 接收范围
+    scopeId: 接收对象 ID
+    scopeTypeRole: 角色
+    scopeTypeUser: 用户
+    scopeTypeDept: 部门
