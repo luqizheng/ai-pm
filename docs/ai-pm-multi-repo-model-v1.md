@@ -17,6 +17,7 @@
 | 版本 | 日期 | 变更内容 |
 | --- | --- | --- |
 | V1 | 2026-10-31 | 首次成型：四概念分层、跨仓库交付清单、契约结构、DB 重构、知识两层、冲突协调、拆分策略、页面影响、实施切片 |
+| V1.1 | 2026-10-31 | §7.4 追加注记：父任务状态聚合表（旧词汇 `completed / partial / needs_recovery / changes_requested`）不再作为独立算法维护，统一引用 `ai-pm-task-state-machine-v1.md` §十三（§十 Q3 裁决：基于必需交付门槛的确定性聚合）；本稿 §7.4 仅保留多仓库特有交付门槛条件 |
 
 ---
 
@@ -711,6 +712,9 @@ map-core/                          # 各代码仓库自带仓库级知识
 | 部分 `completed` + 集成任务未通过 | `partial` |
 | 存在 `needs_recovery` | `needs_recovery` |
 | 存在 `changes_requested` | `changes_requested` |
+
+> **V1.1 追加注记（2026-10-31，源自 `ai-pm-task-state-machine-v1.md` §十 Q3 裁决）**
+> 上表〔整理〕为早期推断稿，**不再作为独立聚合算法维护**。任务级聚合已统一裁决为「**基于必需交付门槛的确定性聚合**（Deterministic Delivery-Gate Aggregation）」：不采用状态枚举优先级排序（含本表的隐含优先级），聚合判定顺序、终态处理、可选子任务、失败恢复与父子一致性约束以 [ai-pm-task-state-machine-v1.md §十三](ai-pm-task-state-machine-v1.md) 为准。本稿 §7.4 仅保留**多仓库特有的交付门槛条件**：每个必需仓库的基准版本（base commit）、Commit 可读性、验证结果及集成状态。多仓库只是增加交付条件，不另设父任务状态优先级算法。
 
 ---
 
