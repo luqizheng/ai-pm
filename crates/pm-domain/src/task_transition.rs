@@ -88,6 +88,44 @@ pub fn validate_transition(input: &TransitionInput) -> Result<(), TransitionErro
             "waiting context must be resolved before leaving AwaitingDecision",
         ));
     }
+    // §三 E1：Running → Submitted 不能只依据 Codex 的文字声明。
+    if input.from == TaskStatus::Running && input.to == TaskStatus::Submitted
+        && !input.delivery_submitted
+    {
+        return Err(TransitionError::MissingEvidence(
+            "delivery manifest must be submitted (E1)",
+        ));
+    }
+    // §三 E2：Reviewing → Completed 不能只依赖测试全部通过。
+    if input.from == TaskStatus::Reviewing
+        && input.to == TaskStatus::Completed
+        && !input.acceptance_evidence_complete
+    {
+        return Err(TransitionError::MissingEvidence(
+            "acceptance evidence must be complete (E2)",
+        ));
+    }
+    // §19.2：Running → Failed 需要终止性失败条件（B4-A..B4-D）。retryable 的
+    // Execution/Infrastructure/Validation/Unknown 失败是临时故障证据，单独不构成
+    // 任务级失败；B4-C（重试耗尽）与 B4-B（总期限耗尽）独立放行。
+    if input.from == TaskStatus::Running && input.to == TaskStatus::Failed {
+        let terminating_failure = input
+            .failure
+            .as_ref()
+            .is_some_and(|f| {
+                matches!(
+                    f.category,
+                    crate::task_run::FailureCategory::Permission
+                        | crate::task_run::FailureCategory::PolicyViolation
+                        | crate::task_run::FailureCategory::MissingDependency
+                )
+            });
+        if !(input.retry_exhausted || input.deadline_exhausted || terminating_failure) {
+            return Err(TransitionError::MissingEvidence(
+                "no terminating failure condition (B4-A..B4-D)",
+            ));
+        }
+    }
     // §11.2 / §11.5 supersession constraints.
     if input.to == TaskStatus::Superseded {
         let intent = input.supersede.as_ref().ok_or_else(|| {
@@ -163,8 +201,12 @@ pub struct TransitionInput {
     pub deadline_exhausted: bool,
     /// §19.5 structured failure driving `Running → Failed` (B4-A/B4-D).
     pub failure: Option<crate::task_run::FailureRecord>,
-    /// Present only for `→ Superseded` (§11.1 必填信息).
+    /// §11.1 必填信息 (→ Superseded 时)。
     pub supersede: Option<SupersedeIntent>,
+    /// §三 E1：交付清单已提交且 Commit 可读取（Running → Submitted 时必须为 true）。
+    pub delivery_submitted: bool,
+    /// §三 E2：验收证据与审批策略均满足（Reviewing → Completed 时必须为 true）。
+    pub acceptance_evidence_complete: bool,
 }
 
 impl TransitionInput {
@@ -182,6 +224,8 @@ impl TransitionInput {
             deadline_exhausted: false,
             failure: None,
             supersede: None,
+            delivery_submitted: false,
+            acceptance_evidence_complete: false,
         }
     }
 
@@ -325,17 +369,22 @@ mod tests {
 
     #[test]
     fn running_branches_match_ruling_19_6() {
-        // 成功→Submitted；临时故障→新 Run（域内不表达）；外部处理→Blocked；
-        // 人工决策→AwaitingDecision；终止条件→Failed；取消→Cancelled。
-        for to in [
-            Submitted, Blocked, AwaitingDecision, Failed, Cancelled,
-        ] {
+        // 成功→Submitted（须携带交付证据，E1）；临时故障→新 Run（域内不表达）；
+        // 外部处理→Blocked；人工决策→AwaitingDecision；终止条件→Failed（须满足
+        // B4-A..B4-D 之一）；取消→Cancelled。
+        for to in [Blocked, AwaitingDecision, Cancelled] {
             let input = TransitionInput::minimal(Running, to);
             assert!(
                 validate_transition(&input).is_ok(),
                 "Running -> {to:?} must be allowed at matrix level"
             );
         }
+        let mut submitted = TransitionInput::minimal(Running, Submitted);
+        submitted.delivery_submitted = true;
+        assert!(validate_transition(&submitted).is_ok());
+        let mut failed = TransitionInput::minimal(Running, Failed);
+        failed.retry_exhausted = true;
+        assert!(validate_transition(&failed).is_ok());
         // Running → Superseded 额外受取代守卫约束（§11.2/§11.6）。
         assert!(validate_transition(&valid_supersede(Running)).is_ok());
         // Running 没有直达 Ready/Completed/ChangesRequested 的边。
@@ -441,5 +490,80 @@ mod tests {
             resolved.waiting_resolved = true;
             assert!(validate_transition(&resolved).is_ok());
         }
+    }
+
+    #[test]
+    fn running_to_failed_requires_terminating_failure_evidence() {
+        use crate::task_run::{FailureCategory, FailureRecord};
+        // §19.2 B4-A：退出码非零是证据之一，不单独构成任务失败——retryable 的
+        // Execution 失败（临时故障）不得进入 Failed。
+        let mut input = TransitionInput::minimal(Running, Failed);
+        input.failure = Some(FailureRecord {
+            run_id: uuid::Uuid::new_v4(),
+            category: FailureCategory::Execution,
+            retryable: true,
+            reason_code: "compile_error".to_string(),
+            exit_code: Some(1),
+            timeout_seconds: None,
+            evidence_ref: None,
+        });
+        assert_eq!(
+            validate_transition(&input),
+            Err(TransitionError::MissingEvidence(
+                "no terminating failure condition (B4-A..B4-D)",
+            ))
+        );
+        // B4-D 不可恢复集：权限拒绝 → 允许 Failed。
+        let mut permission = TransitionInput::minimal(Running, Failed);
+        permission.failure = Some(FailureRecord {
+            run_id: uuid::Uuid::new_v4(),
+            category: FailureCategory::Permission,
+            retryable: false,
+            reason_code: "permission_denied".to_string(),
+            exit_code: None,
+            timeout_seconds: None,
+            evidence_ref: None,
+        });
+        assert!(validate_transition(&permission).is_ok());
+        // B4-C：重试耗尽 → 允许 Failed（无需 failure 记录）。
+        let mut exhausted = TransitionInput::minimal(Running, Failed);
+        exhausted.retry_exhausted = true;
+        assert!(validate_transition(&exhausted).is_ok());
+        // B4-B：总期限耗尽 → 允许 Failed。
+        let mut deadline = TransitionInput::minimal(Running, Failed);
+        deadline.deadline_exhausted = true;
+        assert!(validate_transition(&deadline).is_ok());
+    }
+
+    #[test]
+    fn submitted_requires_delivery_evidence() {
+        // §三 E1：Running → Submitted 不能只依据 Codex 的文字声明，必须验证
+        // Commit、文件变更、测试结果和交付清单。
+        let input = TransitionInput::minimal(Running, Submitted);
+        assert_eq!(
+            validate_transition(&input),
+            Err(TransitionError::MissingEvidence(
+                "delivery manifest must be submitted (E1)",
+            ))
+        );
+        let mut with_evidence = TransitionInput::minimal(Running, Submitted);
+        with_evidence.delivery_submitted = true;
+        assert!(validate_transition(&with_evidence).is_ok());
+    }
+
+    #[test]
+    fn completed_requires_acceptance_evidence() {
+        // §三 E2：Reviewing → Completed 不能只依赖测试全部通过，还要确认验收
+        // 标准和审批策略均已满足。
+        let input = TransitionInput::minimal(Reviewing, Completed);
+        assert_eq!(
+            validate_transition(&input),
+            Err(TransitionError::MissingEvidence(
+                "acceptance evidence must be complete (E2)",
+            ))
+        );
+        let mut complete = TransitionInput::minimal(Reviewing, Completed);
+        complete.acceptance_evidence_complete = true;
+        assert!(validate_transition(&complete).is_ok());
     }
 }
