@@ -69,3 +69,25 @@
 | Q1 | 「产物」定义：以**需求修订**为准，还是纳入知识文档 / 里程碑验收？ | 首版以需求修订为主，知识文档作补充 |
 | Q2 | 「验收结论」数据源：需求正文验收条件段 vs 里程碑 `sign_acceptance` | 首版只读需求正文验收段 |
 | Q3 | 导航 5 项 vs 9 项 | 待用户裁决（本计划不动） |
+---
+
+## 完成证据（2026-10-31）
+
+**后端（`pm-api`）**：
+- Task 1 `581b0ff`：`GET /v1/pm/task-runs`（`delivery.task_run` ⋈ `delivery.task` + `task_run_failure`），测试 `apps/pm-api/tests/task_runs.rs`（2 条）。
+- Task 2 `e59477d`：`GET /v1/pm/artifacts`（`delivery.requirement_revision` ⋈ `delivery.requirement`），测试 `apps/pm-api/tests/artifacts.rs`（2 条）。
+- `pm-api` 全量：`73 tests run: 73 passed`。
+
+**前端**：
+- Task 3 `8a952ff`：`frontend/src/api/execution.ts` / `frontend/src/api/artifacts.ts`（任务专属类型，未动共享 `types.ts`）。
+- Task 4 `1682abe`：`ExecutionPage.vue` 接真后端（项目选择 + Run 列表 + 失败摘要 +「执行步骤/工具调用/日志」空态），`useMock` 分支保留 fixtures。
+- Task 5 `c675d0b`：`ArtifactsPage.vue` 接真后端（需求修订清单 + 元数据 + Diff/测试/评论空态），`useMock` 分支保留 fixtures。
+- `style(workspace)` `d7adde6`：本线两文件 prettier 格式修正。
+
+**门禁**：前端 `typecheck` 绿；`test:unit` `87 files / 528 passed`；`check:i18n` `722 key` 双语对齐、无新增硬编码；本线两文件 `eslint` 0 错误；后端 `pm-api` 全量 73 passed。
+
+**偏差 / 未竟**：
+- 「版本 Diff」未由相邻 Markdown 计算：`/v1/pm/artifacts` 只返回 `content_hash` 不含正文，故文件 Diff / 测试报告 / 评论显示**空态**（不造假），待产物管线接入。
+- 未新增迁移（复用 `0010` 的 `task_run`、`0002` 的 `requirement_revision`）；迁移序号仍 ≥0011。
+- 导航 5 项 vs 9 项仍未裁决（本计划未动导航）。
+- Q1/Q2 待裁（产物语义、验收结论数据源）——首版按"产物=需求修订、只读需求正文"落地。
