@@ -14,6 +14,8 @@ edition = "2021"
 tokio = { version = "1", features = ["full"] }
 # HTTP layer
 axum = "0.8"
+# SSE: broadcast receiver -> Stream adapter
+tokio-stream = { version = "0.1", features = ["sync"] }
 # Database (no TLS feature: local Postgres only; no offline mode, `query!` macros are banned)
 sqlx = { version = "0.8", default-features = false, features = [
     "runtime-tokio",

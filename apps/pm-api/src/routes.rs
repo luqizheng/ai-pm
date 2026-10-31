@@ -56,18 +56,30 @@ use uuid::Uuid;
 pub(crate) struct AppState {
     pub(crate) pool: PgPool,
     pub(crate) executor: Arc<PgCommandExecutor>,
+    pub(crate) audit_feed: crate::audit_stream::AuditFeed,
 }
 
 /// The pm-api route table, stateful over the shared connection pool and
 /// executor. Used by `main.rs` and by `tests/routes.rs` so tests exercise the
-/// real routes.
+/// real routes. The audit feed is process-local here; `main.rs` uses
+/// [`router_with_feed`] so it can also spawn the PG listener.
 pub fn router(pool: PgPool) -> Router {
+    router_with_feed(pool, crate::audit_stream::AuditFeed::new())
+}
+
+/// Same route table over an explicit audit feed. `main.rs` calls this with the
+/// feed whose PG listener it owns.
+pub fn router_with_feed(pool: PgPool, audit_feed: crate::audit_stream::AuditFeed) -> Router {
     let policy = Arc::new(
         PolicyEngine::from_yaml(include_str!("../../../policies/ai-pm-ai-lead-v2.yaml"))
             .expect("canonical policy yaml must parse"),
     );
     let executor = Arc::new(PgCommandExecutor::new(pool.clone(), policy));
-    let state = AppState { pool, executor };
+    let state = AppState {
+        pool,
+        executor,
+        audit_feed,
+    };
     // The MCP service clones the pool inside its own state factory; it cannot
     // share `state` (different service type), hence a separate handle.
     let mcp_pool = state.pool.clone();
@@ -87,6 +99,12 @@ pub fn router(pool: PgPool) -> Router {
         // `/v1/pm/*` 业务端点（Slice A，前端经典页契约；无 /api 前缀——vite
         // 代理剥掉 /api 后直达这里）。
         .merge(crate::pm_lists::router())
+        // 审计实时流（SSE）。EventSource 无法带 Authorization，token 走
+        // `?access_token=`；auth 层只对本路径放行 query token。
+        .route(
+            "/v1/pm/events/stream",
+            get(crate::audit_stream::stream_handler),
+        )
         .nest_service("/mcp", pm_mcp::PmMcpServer::streamable_http_service(mcp_pool))
         .with_state(state)
 }
@@ -97,8 +115,17 @@ pub fn router(pool: PgPool) -> Router {
 /// exercising the unauthenticated contract. The layer wraps everything routed
 /// above, including the nested `/mcp` service.
 pub fn router_with_auth(pool: PgPool, jwks: Arc<digua_common_jwt::JWKSCache>) -> Router {
+    router_with_auth_and_feed(pool, jwks, crate::audit_stream::AuditFeed::new())
+}
+
+/// [`router_with_auth`] over an explicit audit feed (see [`router_with_feed`]).
+pub fn router_with_auth_and_feed(
+    pool: PgPool,
+    jwks: Arc<digua_common_jwt::JWKSCache>,
+    audit_feed: crate::audit_stream::AuditFeed,
+) -> Router {
     let auth = crate::auth::AuthState { jwks };
-    router(pool).layer(axum::middleware::from_fn_with_state(
+    router_with_feed(pool, audit_feed).layer(axum::middleware::from_fn_with_state(
         auth,
         crate::auth::require_bearer,
     ))

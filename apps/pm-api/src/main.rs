@@ -33,10 +33,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(8090);
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await?;
 
+    // Audit SSE: one dedicated LISTEN connection feeds the process-local
+    // broadcast. Spawned for both auth modes; a PG blip only delays reconnects.
+    let audit_feed = pm_api::audit_stream::AuditFeed::new();
+    tokio::spawn(pm_api::audit_stream::run_listener(
+        pool.clone(),
+        audit_feed.clone(),
+    ));
+
     let mode = std::env::var("AI_PM_AUTH_MODE").unwrap_or_else(|_| "jwks".to_string());
     let app = if mode == "off" {
         tracing::warn!("AI_PM_AUTH_MODE=off — bearer auth disabled (local development only)");
-        pm_api::routes::router(pool)
+        pm_api::routes::router_with_feed(pool, audit_feed)
     } else {
         let jwks_url = std::env::var("AI_PM_JWKS_URL")
             .unwrap_or_else(|_| "http://127.0.0.1:8082/.well-known/jwks.json".to_string());
@@ -58,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .init_with_refresh_loop(Duration::from_secs(30))
             .await;
         tracing::info!(mode = "jwks", "pm-api bearer auth enabled");
-        pm_api::routes::router_with_auth(pool, jwks)
+        pm_api::routes::router_with_auth_and_feed(pool, jwks, audit_feed)
     };
     tracing::info!(port, "pm-api listening");
 

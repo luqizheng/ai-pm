@@ -2,6 +2,7 @@
 //! binary (`main.rs`) and the integration tests (`tests/routes.rs`) drive the
 //! exact same route table.
 
+pub mod audit_stream;
 pub mod auth;
 pub mod pm_lists;
 pub mod pm_writes;

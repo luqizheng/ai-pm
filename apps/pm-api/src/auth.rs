@@ -39,10 +39,10 @@ pub async fn require_bearer(
     request: Request,
     next: Next,
 ) -> Response {
-    let Some(token) = bearer_token(&headers) else {
+    let Some(token) = request_token(&headers, request.uri()) else {
         return unauthorized("IAM_AUTH_1005", "missing bearer token");
     };
-    match verify_token(&token, &auth.jwks, None).await {
+    match verify_token(token, &auth.jwks, None).await {
         Ok(claims) if claims.get("tid").is_some() => {
             let mut request = request;
             request.extensions_mut().insert(claims);
@@ -51,6 +51,30 @@ pub async fn require_bearer(
         Ok(_) => unauthorized("IAM_AUTH_1004", "token missing tenant claim (tid)"),
         Err(_) => unauthorized("IAM_AUTH_1004", "invalid token"),
     }
+}
+
+/// SSE 路径：`EventSource` 不能带自定义头，只能把 token 放 query。
+const SSE_PATH: &str = "/v1/pm/events/stream";
+
+/// Header first; the query fallback is scoped to the one SSE endpoint so the
+/// token-in-URL surface never widens beyond it.
+fn request_token<'a>(headers: &'a HeaderMap, uri: &'a axum::http::Uri) -> Option<&'a str> {
+    bearer_token(headers).or_else(|| {
+        if uri.path() == SSE_PATH {
+            query_access_token(uri)
+        } else {
+            None
+        }
+    })
+}
+
+/// Extracts `access_token` from the raw query string (JWTs are base64url + dots,
+/// no percent-decoding needed).
+fn query_access_token(uri: &axum::http::Uri) -> Option<&str> {
+    uri.query()?.split('&').find_map(|pair| {
+        let (key, value) = pair.split_once('=')?;
+        (key == "access_token" && !value.is_empty()).then_some(value)
+    })
 }
 
 /// Extracts the raw JWT from an `Authorization: Bearer <jwt>` header.
