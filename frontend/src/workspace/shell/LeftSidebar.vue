@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import {
   Activity,
+  Bot,
   BookOpen,
   ChevronLeft,
   FileText,

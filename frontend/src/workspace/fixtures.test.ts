@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  agentRun,
   agents,
   artifacts,
   attentionItems,
@@ -69,6 +70,11 @@ describe("workspace fixtures（V1.1 演示数据）", () => {
       expect(g.description.trim()).not.toBe("");
       expect(g.progress).toBeGreaterThanOrEqual(0);
       expect(g.progress).toBeLessThanOrEqual(100);
+      // V1.2：GOAL 编码 + 进度依据（不得是无依据的 AI 估算百分比）
+      expect(g.code).toMatch(/^GOAL-\d{3}$/);
+      expect(g.progressBasis.trim()).not.toBe("");
+      // 依赖链（V1.2：依赖图）
+      expect(g.dependencies.length).toBeGreaterThanOrEqual(2);
       // 里程碑与任务树（用户目标：里程碑、项目、产品等 mock 数据）
       expect(g.milestones.length).toBeGreaterThanOrEqual(2);
       for (const m of g.milestones) {
@@ -78,8 +84,20 @@ describe("workspace fixtures（V1.1 演示数据）", () => {
       }
       expect(g.tasks.length).toBeGreaterThanOrEqual(2);
       for (const t of g.tasks) {
-        expect(["done", "doing", "todo"]).toContain(t.status);
+        // V1.2 扩展态：blocked / awaiting-acceptance
+        expect([
+          "done",
+          "doing",
+          "todo",
+          "blocked",
+          "awaiting-acceptance"
+        ]).toContain(t.status);
         expect(t.owner.trim()).not.toBe("");
+      }
+      // AI 提议的计划（草案）与已批准计划分离
+      for (const p of g.proposedTasks) {
+        expect(p.status).toBe("proposed");
+        expect(p.owner.trim()).not.toBe("");
       }
     }
     expect(dynamics.length).toBeGreaterThanOrEqual(3);
@@ -126,6 +144,11 @@ describe("workspace fixtures（V1.1 演示数据）", () => {
     expect(decisions.some(d => d.status === "pending")).toBe(true);
     expect(decisions.some(d => d.status === "decided")).toBe(true);
     for (const d of decisions) {
+      // V1.2：正式决策的完整字段
+      expect(d.background.trim()).not.toBe("");
+      expect(d.recommendation.trim()).not.toBe("");
+      expect(d.risks.length).toBeGreaterThanOrEqual(1);
+      expect(d.dimensions.length).toBeGreaterThanOrEqual(2);
       expect(d.options.length).toBeGreaterThanOrEqual(2);
       for (const o of d.options) {
         expect(o.pros.length).toBeGreaterThanOrEqual(1);
@@ -133,7 +156,14 @@ describe("workspace fixtures（V1.1 演示数据）", () => {
       }
       expect(d.evidence.length).toBeGreaterThanOrEqual(1);
       expect(d.impact.trim()).not.toBe("");
+      if (d.status === "decided") {
+        expect(d.decidedBy!.trim()).not.toBe("");
+        expect(d.approvedAt!.trim()).not.toBe("");
+        expect(d.verification!.length).toBeGreaterThanOrEqual(1);
+      }
     }
+    // V1.2：需求变化触发重新评估提示（系统主动提示，不让 Agent 按旧决策执行）
+    expect(decisions.some(d => d.reassess)).toBe(true);
     // 地形渲染评审与总控台待处理项同一叙事
     expect(decisions.some(d => d.title.includes("地形渲染"))).toBe(true);
   });
@@ -148,6 +178,15 @@ describe("workspace fixtures（V1.1 演示数据）", () => {
       expect(doc.updatedAt.trim()).not.toBe("");
       expect(doc.source.trim()).not.toBe("");
       expect(doc.body.length).toBeGreaterThanOrEqual(2);
+      // V1.2：人工批准的正式事实与 AI 维护摘要分离 + 引用关系
+      expect(["approved", "ai-draft"]).toContain(doc.review);
+      expect(doc.approvedFacts!.length).toBeGreaterThanOrEqual(1);
+      expect(doc.aiSummary!.trim()).not.toBe("");
+      expect(doc.references.length).toBeGreaterThanOrEqual(1);
+      for (const ref of doc.references) {
+        expect(["decision", "requirement", "artifact"]).toContain(ref.kind);
+        expect(ref.title.trim()).not.toBe("");
+      }
     }
   });
 
@@ -158,10 +197,50 @@ describe("workspace fixtures（V1.1 演示数据）", () => {
       expect(["pending", "approved", "rejected"]).toContain(a.approval);
       expect(a.version.trim()).not.toBe("");
       expect(a.owner.trim()).not.toBe("");
+      // V1.2：文件 Diff + 行级评论 + 测试报告 + 验收标准 + 整体判定
+      expect(a.files.length).toBeGreaterThanOrEqual(1);
+      for (const f of a.files) {
+        expect(f.diff.length).toBeGreaterThanOrEqual(1);
+      }
+      expect(a.testReport.length).toBeGreaterThanOrEqual(1);
+      expect(a.acceptanceCriteria.length).toBeGreaterThanOrEqual(1);
+      for (const c of a.acceptanceCriteria) {
+        expect(typeof c.passed).toBe("boolean");
+      }
+      // 「部分检查通过」与「整体符合验收标准」必须可区分
+      expect(["partial", "meets", "not-met"]).toContain(a.verdict);
+      expect(a.linkedTask.trim()).not.toBe("");
     }
     const gaobao = artifacts.find(a => a.name.includes("高保数据模块"));
     expect(gaobao).toBeTruthy();
     expect(gaobao!.testStatus).toBe("passed");
     expect(gaobao!.approval).toBe("pending");
+    // 功能测试通过但性能验证未完成 → 部分检查通过（V1.2 明确要求可区分）
+    expect(gaobao!.verdict).toBe("partial");
+  });
+
+  it("AI 执行中心：执行步骤区分四类事件，进度用检查点而非百分比（V1.2）", () => {
+    const types = new Set(agentRun.steps.map(s => s.type));
+    for (const type of ["thought", "tool", "state", "approval"]) {
+      expect(types.has(type as never), `缺少事件类型 ${type}`).toBe(true);
+    }
+    expect(agentRun.steps.length).toBeGreaterThanOrEqual(6);
+    for (const step of agentRun.steps) {
+      expect(["done", "running", "waiting"]).toContain(step.status);
+      expect(step.title.trim()).not.toBe("");
+      expect(step.detail.trim()).not.toBe("");
+      if (step.type === "tool") {
+        expect(step.tool).toBeTruthy();
+        expect(step.tool!.name.trim()).not.toBe("");
+      }
+    }
+    // 可验证的阶段状态、已完成检查点、剩余工作——不是 AI 估算百分比
+    expect(agentRun.phase.trim()).not.toBe("");
+    expect(agentRun.checkpoints.length).toBeGreaterThanOrEqual(1);
+    expect(agentRun.remaining.length).toBeGreaterThanOrEqual(1);
+    // 存在等待人工审批的步骤（与 Agent 等待审批一致）
+    expect(
+      agentRun.steps.some(s => s.type === "approval" && s.status === "waiting")
+    ).toBe(true);
   });
 });

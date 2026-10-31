@@ -1,4 +1,4 @@
-import { http } from "./client";
+import { iam } from "./iam";
 
 /** `GET /v1/iam/users/simple` 的单条记录（仅 id + 昵称） */
 export interface UserSimple {
@@ -26,5 +26,5 @@ export interface ListUsersSimpleParams {
  * 供 `useUserDirectory` 一次性拉全量后缓存。
  */
 export function listUsersSimple(params: ListUsersSimpleParams = {}) {
-  return http.get<UserSimpleListResponse>("/v1/iam/users/simple", params);
+  return iam.users.pageSimple(params);
 }

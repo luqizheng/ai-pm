@@ -17,8 +17,9 @@ export function mockPlugin(enabled: boolean): Plugin {
     configureServer(server: ViteDevServer) {
       const middleware: Connect.NextHandleFunction = (req, res, next) => {
         const url = new URL(req.url ?? "/", "http://localhost");
-        // 归一化 /api 前缀：直连 /v1/* 与走代理前缀的 /api/v1/* 都拦截
-        const pathname = url.pathname.replace(/^\/api(?=\/)/, "");
+        // 归一化代理前缀：直连 /v1/* 与走 /api（pm-api/BFF）、/gw（lmms 网关）
+        // 的 /v1/* 都拦截
+        const pathname = url.pathname.replace(/^\/(api|gw)(?=\/)/, "");
         if (!pathname.startsWith("/v1/")) return next();
 
         // 请求体（审批 decide 等端点需要）；登录体不参与匹配，解析失败按 undefined 处理

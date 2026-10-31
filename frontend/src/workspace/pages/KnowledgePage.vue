@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { FileText, Folder } from "lucide-vue-next";
+import { FileText, Folder, Link2 } from "lucide-vue-next";
 import PageHeader from "./PageHeader.vue";
 import { docTree, knowledgeDocs, type DocNode } from "../fixtures";
 
@@ -20,6 +20,12 @@ function onPick(node: DocNode) {
     selectedId.value = node.id;
   }
 }
+
+const refLabel: Record<string, string> = {
+  decision: "workspace.pages.decisions.title",
+  requirement: "workspace.pages.requirements.title",
+  artifact: "workspace.pages.artifacts.title"
+};
 </script>
 
 <template>
@@ -28,6 +34,7 @@ function onPick(node: DocNode) {
       :title="t('workspace.pages.knowledge.title')"
       :subtitle="t('workspace.pages.knowledge.subtitle')"
     />
+    <!-- V1.2 三层：知识树 | Markdown 阅读区 | 证据与引用关系 -->
     <div class="ws-knowledge-body">
       <aside class="ws-card ws-tree" aria-label="doc tree">
         <template v-for="group in groups" :key="group.id">
@@ -63,7 +70,26 @@ function onPick(node: DocNode) {
       </aside>
 
       <article v-if="selected" class="ws-card ws-reader" data-test="doc-reader">
-        <h2 class="ws-reader-title">{{ selected.title }}</h2>
+        <div class="ws-reader-head">
+          <h2 class="ws-reader-title">{{ selected.title }}</h2>
+          <span
+            class="ws-badge"
+            :class="
+              selected.review === 'approved'
+                ? 'is-review-approved'
+                : 'is-review-draft'
+            "
+            data-test="doc-review"
+          >
+            {{
+              t(
+                selected.review === "approved"
+                  ? "workspace.pages.knowledgeExtra.reviewApproved"
+                  : "workspace.pages.knowledgeExtra.reviewAiDraft"
+              )
+            }}
+          </span>
+        </div>
         <div class="ws-reader-meta">
           <span
             >{{ t("workspace.pages.knowledge.version") }}
@@ -78,7 +104,46 @@ function onPick(node: DocNode) {
         <div class="ws-reader-body">
           <p v-for="(para, i) in selected.body" :key="i">{{ para }}</p>
         </div>
+        <!-- V1.2：人工批准的正式事实（AI 摘要不得覆盖） -->
+        <div class="ws-facts" data-test="doc-approved-facts">
+          <h3 class="ws-reader-label">
+            {{ t("workspace.pages.knowledgeExtra.approvedFacts") }}
+          </h3>
+          <ul class="ws-facts-list">
+            <li v-for="(fact, i) in selected.approvedFacts" :key="i">
+              {{ fact }}
+            </li>
+          </ul>
+        </div>
+        <div class="ws-ai-summary" data-test="doc-ai-summary">
+          <h3 class="ws-reader-label">
+            {{ t("workspace.pages.knowledgeExtra.aiSummary") }}
+          </h3>
+          <p>{{ selected.aiSummary }}</p>
+        </div>
       </article>
+
+      <aside
+        v-if="selected"
+        class="ws-card ws-evidence"
+        aria-label="evidence"
+        data-test="doc-evidence"
+      >
+        <h3 class="ws-reader-label">
+          <Link2 :size="13" aria-hidden="true" />
+          {{ t("workspace.pages.knowledgeExtra.references") }}
+        </h3>
+        <div
+          v-for="(ref, i) in selected.references"
+          :key="i"
+          class="ws-ref"
+          data-test="doc-reference"
+        >
+          <span class="ws-ref-kind">{{ t(refLabel[ref.kind]) }}</span>
+          <span class="ws-ref-title">{{ ref.title }}</span>
+          <span class="ws-ref-id">{{ ref.id }}</span>
+        </div>
+      </aside>
     </div>
   </div>
 </template>
@@ -89,17 +154,18 @@ function onPick(node: DocNode) {
   flex-direction: column;
   gap: 16px;
   padding: 20px 24px 32px;
-  max-width: 1080px;
+  max-width: 1200px;
 }
 
 .ws-knowledge-body {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 240px minmax(0, 1fr) 240px;
   gap: 12px;
   align-items: start;
 }
 
-.ws-tree {
+.ws-tree,
+.ws-evidence {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -157,10 +223,34 @@ function onPick(node: DocNode) {
   padding: 16px;
 }
 
+.ws-reader-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .ws-reader-title {
   margin: 0;
   font-size: var(--ws-font-size-section);
   font-weight: 600;
+}
+
+.ws-badge {
+  flex: none;
+  font-size: var(--ws-font-size-caption);
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid currentcolor;
+}
+
+/* 紫色克制：审核状态用语义色 */
+.ws-badge.is-review-approved {
+  color: var(--ws-color-success-text);
+}
+
+.ws-badge.is-review-draft {
+  color: var(--ws-color-warning-text);
 }
 
 .ws-reader-meta {
@@ -185,5 +275,74 @@ function onPick(node: DocNode) {
   margin: 0;
   font-size: var(--ws-font-size-body);
   line-height: 1.8;
+}
+
+.ws-reader-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  font-size: var(--ws-font-size-caption);
+  font-weight: 600;
+  color: var(--ws-text-secondary);
+}
+
+/* 人工批准的正式事实：与 AI 摘要视觉分离 */
+.ws-facts {
+  padding: 10px 12px;
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-card);
+  background: var(--ws-elevated);
+}
+
+.ws-facts-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: var(--ws-font-size-caption);
+  line-height: 1.7;
+}
+
+.ws-ai-summary {
+  padding: 10px 12px;
+  border: 1px dashed var(--ws-border);
+  border-radius: var(--ws-radius-card);
+}
+
+.ws-ai-summary p {
+  margin: 0;
+  font-size: var(--ws-font-size-caption);
+  line-height: 1.7;
+  color: var(--ws-text-secondary);
+}
+
+/* 证据与引用关系（右层） */
+.ws-evidence {
+  gap: 8px;
+}
+
+.ws-ref {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-card);
+  background: var(--ws-elevated);
+}
+
+.ws-ref-kind {
+  font-size: var(--ws-font-size-caption);
+  color: var(--ws-text-secondary);
+}
+
+.ws-ref-title {
+  font-size: var(--ws-font-size-caption);
+  font-weight: 600;
+}
+
+.ws-ref-id {
+  font-size: var(--ws-font-size-caption);
+  color: var(--ws-text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 </style>

@@ -7,6 +7,7 @@ import {
   saveSession,
   type StoredUser
 } from "./token-storage";
+import { iam } from "./iam";
 
 export interface LoginResult {
   access_token: string;
@@ -43,9 +44,9 @@ export const http: HttpClient = createHttp({
     const refreshToken = getRefreshToken();
     if (!refreshToken) return undefined;
     try {
-      const result = await http.post<LoginResult>("/v1/iam/auth/refresh", {
-        refresh_token: refreshToken
-      });
+      // 刷新走 iam-services SDK（iam 链路不轮换：响应中的 refresh_token 与
+      // 传入值相同，saveSession 原样回存无副作用）
+      const result = await iam.auth.refresh(refreshToken);
       saveSession({
         accessToken: result.access_token,
         refreshToken: result.refresh_token,

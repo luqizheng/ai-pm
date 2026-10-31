@@ -14,6 +14,7 @@ workspace:
     groupModules: R&D modules
     groupClassic: Classic views
     console: Project Console
+    execution: Execution Hub
     team: AI Team
     goals: Goals & Plans
     activity: Activity
@@ -134,3 +135,56 @@ workspace:
       approvalPending: Awaiting approval
       approvalApproved: Approved
       approvalRejected: Rejected
+    goalsExtra:
+      viewTree: Goal tree
+      viewDeps: Dependency graph
+      viewTimeline: Timeline
+      dependencies: Dependencies
+      viewBlockedDecision: View blocking decision
+      proposed: AI-proposed plan (draft, not executed until approved)
+      approvedPlan: Approved plan
+      taskBlocked: Pending decision
+      taskAwaiting: Awaiting acceptance
+    execution:
+      title: Execution Hub
+      subtitle: Timeline, tool calls and logs (progress = verifiable state, not estimates)
+      thought: AI reasoning
+      tool: Tool call
+      state: Business state change
+      approval: Approval request
+      phase: Phase
+      checkpoints: Completed checkpoints
+      remaining: Remaining work
+      toolCall: Tool call
+      logs: Logs
+      codeChange: Code change
+      noSelection: Select a step to see tool calls, logs and code changes
+      stepWaiting: Waiting
+      stepRunning: Running
+      stepDone: Done
+    decisionsExtra:
+      background: Background
+      dimensions: Comparison dimensions
+      recommendation: AI recommendation
+      risks: Risks
+      decidedBy: Decided by
+      approvedAt: Approved at
+      verification: Follow-up verification
+      reassessTitle: Re-evaluation suggested
+    knowledgeExtra:
+      approvedFacts: Human-approved facts
+      aiSummary: AI-maintained summary (never overrides facts)
+      references: Evidence & references
+      reviewApproved: Approved
+      reviewAiDraft: AI draft
+    artifactsExtra:
+      files: Changed files
+      diffLabel: Unified diff
+      comments: Line comments
+      testReport: Test report
+      acceptanceLabel: Requirement acceptance criteria
+      linkedTask: Linked task
+      verdictPartial: Partial checks passed
+      verdictMeets: Meets acceptance criteria
+      verdictNotMet: Not met
+      lineLabel: Line

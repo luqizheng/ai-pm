@@ -61,6 +61,12 @@ export const staticRoutes: RouteRecordRaw[] = [
         meta: { title: "AI 团队" }
       },
       {
+        path: "execution",
+        name: "workspace-execution",
+        component: () => import("../../workspace/pages/ExecutionPage.vue"),
+        meta: { title: "AI 执行中心" }
+      },
+      {
         path: "goals",
         name: "workspace-goals",
         component: () => import("../../workspace/pages/GoalsPage.vue"),

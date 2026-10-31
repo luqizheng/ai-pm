@@ -14,6 +14,7 @@ workspace:
     groupModules: 研发模块
     groupClassic: 传统视图
     console: 项目总控
+    execution: AI 执行中心
     team: AI 团队
     goals: 目标计划
     activity: 项目动态
@@ -134,3 +135,56 @@ workspace:
       approvalPending: 待审批
       approvalApproved: 已通过
       approvalRejected: 已驳回
+    goalsExtra:
+      viewTree: 目标树
+      viewDeps: 依赖图
+      viewTimeline: 时间线
+      dependencies: 依赖关系
+      viewBlockedDecision: 查看阻塞的架构决策
+      proposed: AI 提议的计划（草案，未批准不执行）
+      approvedPlan: 已批准执行的计划
+      taskBlocked: 待决策
+      taskAwaiting: 待验收
+    execution:
+      title: AI 执行中心
+      subtitle: 执行时间线、工具调用与日志（进度=可验证状态，非估算百分比）
+      thought: AI 思考摘要
+      tool: 工具执行
+      state: 业务状态变化
+      approval: 人工审批请求
+      phase: 阶段状态
+      checkpoints: 已完成检查点
+      remaining: 剩余工作
+      toolCall: 工具调用
+      logs: 日志
+      codeChange: 代码变化
+      noSelection: 选择左侧步骤查看工具调用、日志与代码变化
+      stepWaiting: 等待中
+      stepRunning: 执行中
+      stepDone: 已完成
+    decisionsExtra:
+      background: 问题背景
+      dimensions: 比较维度
+      recommendation: AI 推荐理由
+      risks: 风险
+      decidedBy: 决策人
+      approvedAt: 批准时间
+      verification: 后续验证结果
+      reassessTitle: 建议重新评估
+    knowledgeExtra:
+      approvedFacts: 人工批准的正式事实
+      aiSummary: AI 维护摘要（不覆盖正式事实）
+      references: 证据与引用关系
+      reviewApproved: 已批准
+      reviewAiDraft: AI 起草
+    artifactsExtra:
+      files: 变更文件
+      diffLabel: 统一 Diff
+      comments: 行级评论
+      testReport: 测试报告
+      acceptanceLabel: 需求验收标准
+      linkedTask: 关联任务
+      verdictPartial: 部分检查通过
+      verdictMeets: 符合验收标准
+      verdictNotMet: 未达验收标准
+      lineLabel: 行

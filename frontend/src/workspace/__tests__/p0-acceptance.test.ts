@@ -220,6 +220,7 @@ describe("P0 验收（总控台竖切）", () => {
   it("全部工作区页签渲染对应页面（mock 数据，非建设中）（/goal 全页签）", async () => {
     const { w, router } = await mountRouterAt("/workspace/proj-worldmap/team");
     const cases: [string, string][] = [
+      ["execution", "AI 执行中心"],
       ["team", "AI 团队"],
       ["goals", "目标计划"],
       ["activity", "项目动态"],

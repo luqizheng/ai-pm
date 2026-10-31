@@ -1,5 +1,6 @@
 import { http } from "./client";
 import type { LoginResult } from "./client";
+import { iam } from "./iam";
 
 export interface LoginRequest {
   username: string;
@@ -78,16 +79,17 @@ export interface MenuConfigListResponse {
   total: number;
 }
 
-export function login(data: LoginRequest) {
-  return http.post<LoginResult>("/v1/iam/auth/login", data);
+/** 登录 —— lmms iam-service（经 iam-services SDK，走 /gw → api-gateway） */
+export function login(data: LoginRequest): Promise<LoginResult> {
+  return iam.auth.login(data);
 }
 
 export function logout() {
-  return http.post<void>("/v1/iam/auth/logout");
+  return iam.auth.logout();
 }
 
-export function getSetupStatus() {
-  return http.get<SetupStatus>("/v1/iam/auth/setup-status");
+export function getSetupStatus(): Promise<SetupStatus> {
+  return iam.auth.setupStatus();
 }
 
 /** 拉取当前激活的动态路由树 */

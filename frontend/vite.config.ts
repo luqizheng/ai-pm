@@ -24,12 +24,18 @@ export default async ({ mode }: ConfigEnv): Promise<UserConfigExport> => {
     server: {
       port: VITE_PORT,
       host: "0.0.0.0",
-      // 本地跨域代理：/api 前缀转发到 pm-api（PM_API_URL 环境变量可覆盖目标）
+      // 本地跨域代理：/api 前缀转发到 pm-api（PM_API_URL 环境变量可覆盖目标）；
+      // /gw 前缀转发到 lmms api-gateway（iam-services SDK 的 IAM 调用走这里）
       proxy: {
         "/api": {
           target: process.env.PM_API_URL ?? "http://127.0.0.1:8080",
           changeOrigin: true,
           rewrite: (p: string) => p.replace(/^\/api/, "")
+        },
+        "/gw": {
+          target: process.env.LMMS_GATEWAY_URL ?? "http://127.0.0.1:3000",
+          changeOrigin: true,
+          rewrite: (p: string) => p.replace(/^\/gw/, "")
         }
       },
       // 预热文件以提前转换和缓存结果，降低启动期间的初始页面加载时长并防止转换瀑布
