@@ -248,7 +248,7 @@ async fn happy_cache_overlap_applies_all_three_proposals_end_to_end(pool: sqlx::
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(status, "needs_info");
+    assert_eq!(status, "awaiting_decision");
     assert_eq!(revision, 8, "executed proposal bumps the revision by one");
 
     // The investigation task was created in backlog.

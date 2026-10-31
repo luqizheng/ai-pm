@@ -598,7 +598,7 @@ async fn s3_second_agent_on_same_expected_revision_gets_revision_conflict(pool: 
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(status, "needs_info", "agent B must not have flipped it to done");
+    assert_eq!(status, "awaiting_decision", "agent B must not have flipped it to completed");
     assert_eq!(revision, 8);
     let audits: i64 =
         sqlx::query_scalar("SELECT count(*) FROM governance.audit_log WHERE target_id = $1")

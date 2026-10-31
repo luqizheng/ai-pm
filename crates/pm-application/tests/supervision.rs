@@ -415,7 +415,7 @@ async fn veto_reports_rollback_failed_when_target_moved_on(pool: sqlx::PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(status, "needs_info");
+    assert_eq!(status, "awaiting_decision");
     assert_eq!(revision, 9);
     let compensated: Option<Uuid> = sqlx::query_scalar(
         "SELECT compensated_command_id FROM governance.audit_log WHERE id = $1",
