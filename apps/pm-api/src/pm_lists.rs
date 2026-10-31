@@ -18,7 +18,7 @@ use pm_application::rows::{
     RequirementRevisionRow, RequirementRow, TaskRow,
 };
 
-pub fn router() -> Router<AppState> {
+pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/v1/pm/principals", get(principals))
         .route("/v1/pm/projects", get(projects))

@@ -94,10 +94,10 @@ pub async fn require_mcp_permission(
         Err(_) => {
             return (
                 StatusCode::PAYLOAD_TOO_LARGE,
-                Json(Value::from(json!({
+                Json(json!({
                     "code": "IAM_REQUEST_TOO_LARGE",
                     "message": "mcp request body exceeds the 256 KiB limit"
-                }))),
+                })),
             )
                 .into_response()
         }
@@ -169,9 +169,9 @@ fn bearer_token(headers: &HeaderMap) -> Option<&str> {
 
 fn unauthorized(code: &str, message: &str) -> Response {
     let body = json!({ "code": code, "message": message });
-    (StatusCode::UNAUTHORIZED, Json(Value::from(body))).into_response()
+    (StatusCode::UNAUTHORIZED, Json(body)).into_response()
 }
 fn forbidden(code: &str, message: &str) -> Response {
     let body = json!({ "code": code, "message": message });
-    (StatusCode::FORBIDDEN, Json(Value::from(body))).into_response()
+    (StatusCode::FORBIDDEN, Json(body)).into_response()
 }

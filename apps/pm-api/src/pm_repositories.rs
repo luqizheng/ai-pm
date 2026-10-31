@@ -22,7 +22,7 @@ use pm_application::repository::{
     update_repository,
 };
 
-pub fn router() -> Router<AppState> {
+pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route(
             "/v1/pm/projects/{project_id}/repositories",

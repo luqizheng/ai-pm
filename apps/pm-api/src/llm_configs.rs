@@ -22,7 +22,7 @@ use pm_application::llm_config::{
     UpdateLlmProviderRequest,
 };
 
-pub fn router() -> Router<AppState> {
+pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/v1/pm/llm/providers", get(list_handler))
         .route("/v1/pm/llm/providers/{provider}", put(update_handler))

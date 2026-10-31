@@ -125,7 +125,7 @@ pub(crate) async fn stream_handler(
             .event("audit")
             .json_data(&*log)
             .ok()
-            .map(|event| Ok::<_, Infallible>(event)),
+            .map(Ok::<_, Infallible>),
         Err(err) => {
             // A lagging client skips frames; the stream itself stays open.
             tracing::warn!(error = %err, "sse subscriber lagged; frame skipped");

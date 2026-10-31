@@ -15,7 +15,7 @@ use axum::response::{IntoResponse, Response};
 use pm_application::knowledge::{self, KnowledgeError, KnowledgeRoot};
 use pm_application::knowledge_index;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::json;
 use uuid::Uuid;
 
 use crate::routes::AppState;
@@ -78,5 +78,5 @@ fn error_response(err: KnowledgeError) -> Response {
         KnowledgeError::Db(_) => (StatusCode::INTERNAL_SERVER_ERROR, "KNOWLEDGE_INTERNAL"),
     };
     let body = json!({ "code": code, "message": err.to_string() });
-    (status, Json(Value::from(body))).into_response()
+    (status, Json(body)).into_response()
 }
