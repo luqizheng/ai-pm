@@ -341,7 +341,7 @@ async fn streamable_http_smoke_lists_tools_and_serves_calls(pool: PgPool) {
     let client = reqwest::Client::builder().no_proxy().build().unwrap();
     let url = format!("http://{addr}/mcp");
 
-    // tools/list: the three tool names are registered. The streamable HTTP
+    // tools/list: the four tool names are registered. The streamable HTTP
     // server rejects requests whose Accept header lacks both JSON and SSE,
     // so every request below carries it.
     let body: Value = client
@@ -366,6 +366,7 @@ async fn streamable_http_smoke_lists_tools_and_serves_calls(pool: PgPool) {
         vec![
             "pm_get_submission_status",
             "pm_get_task_context",
+            "pm_submit_document",
             "pm_submit_technical_design",
         ]
     );
