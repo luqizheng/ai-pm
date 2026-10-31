@@ -1,6 +1,7 @@
 import { http } from "./client";
 import type { LoginResult } from "./client";
 import { iam } from "./iam";
+import { prue } from "./prue";
 
 export interface LoginRequest {
   username: string;
@@ -67,10 +68,10 @@ export interface AsyncRoutesResponse {
 export interface MenuConfigItem {
   id: string;
   name: string;
-  description?: string;
+  description?: string | null;
   version: number;
   is_active: boolean;
-  created_by?: string;
+  created_by?: string | null;
   created_at: string;
 }
 
@@ -92,34 +93,24 @@ export function getSetupStatus(): Promise<SetupStatus> {
   return iam.auth.setupStatus();
 }
 
-/** 拉取当前激活的动态路由树 */
+/** 拉取当前激活的动态路由树（prue-services SDK，信封已在 SDK 内解包） */
 export async function getAsyncRoutes(): Promise<RouteNode[]> {
-  const result = await http.get<AsyncRoutesResponse>(
-    "/v1/pure/get-async-routes"
-  );
-  if (!result || result.code !== 0) return [];
-  return result.data ?? [];
+  return prue.routes.getAsync();
 }
 
 /** 菜单配置版本列表 */
 export async function listMenuConfigs(): Promise<MenuConfigListResponse> {
-  const result = await http.get<{
-    code: number;
-    message: string;
-    data: MenuConfigListResponse;
-  }>("/v1/pure/menu-configs");
-  if (!result || result.code !== 0) return { items: [], total: 0 };
-  return result.data ?? { items: [], total: 0 };
+  return prue.configs.list();
 }
 
 /** 发布某个菜单配置版本（激活它） */
 export async function publishMenuConfig(id: string): Promise<void> {
-  await http.post(`/v1/pure/menu-configs/${id}/publish`);
+  await prue.configs.publish(id);
 }
 
 /** 克隆某个菜单配置版本 */
 export async function cloneMenuConfig(id: string): Promise<void> {
-  await http.post(`/v1/pure/menu-configs/${id}/clone`);
+  await prue.configs.clone(id);
 }
 
 export { http, translateError } from "./client";
