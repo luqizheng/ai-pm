@@ -77,12 +77,12 @@ vite 代理见 `frontend/vite.config.ts`（`/api`→`PM_API_URL ?? 8090`；`/gw`
 9. **菜单为空属预期**：`/v1/pure/get-async-routes` 返回 `{code:0,data:[]}`（prue 库无菜单数据，播种属 lmms
    demo-data 范畴）。静态路由（dashboard/profile/workspace）兜底可达。
 
-## 六、上游待反馈清单（SDK 扩展协议）
+## 六、上游缺陷反馈（SDK 扩展协议）——2026-10-31 已上游落地（lmms 本地 commit，沿例未 push）
 
-- [ ] iam-service：V003 种子与首用户注册的唯一键冲突
-- [ ] iam-services SDK：HttpCore fetch 未 bind
-- [ ] api-gateway compose：gateway 缺 token-service healthy 依赖（JWKS 竞态）
-- [ ] （可选）token-service 密钥持久化挂载，避免重启全员掉线
+- [x] iam-service：V003 种子与首用户注册的唯一键冲突 → `c59891c2`（查存在优先复用 + 权限绑定幂等补齐；镜像重建后生效）
+- [x] iam-services SDK：HttpCore fetch 未 bind → `ec305975`（六 SDK 统一 `fetch.bind(globalThis)`；**npm 发新版后 ai-pm 可摘除 iam.ts 的本地 bind 注入**）
+- [x] api-gateway compose：gateway 缺 token-service healthy 依赖（JWKS 竞态）→ `2df3d618`
+- [ ] （非缺陷）token-service 密钥持久化挂载——上游注释表明不挂载是有意设计（下游经 JWKS 动态取钥），维持现状；重启全员重登属已知代价
 
 ## 七、Slice A 联调（/v1/pm/* 业务端点，2026-10-31）
 
