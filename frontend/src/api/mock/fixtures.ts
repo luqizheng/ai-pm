@@ -816,6 +816,95 @@ export const files = [
   }
 ] satisfies MockRecord[];
 
+/** GET /v1/iam/permissions（PermissionResponse 形状；category 出参为字符串） */
+export const iamPermissions = [
+  {
+    id: "perm-1",
+    code: "IAM_USER_READ",
+    name: "读取用户",
+    description: "查看用户列表与详情",
+    category: "1",
+    resource: "user",
+    action: "read",
+    sort_order: 1,
+    status: "active",
+    created_at: daysAgo(120),
+    updated_at: daysAgo(10)
+  },
+  {
+    id: "perm-2",
+    code: "CFG_CONFIG_READ",
+    name: "读取配置",
+    description: "查看配置中心条目",
+    category: "2",
+    resource: "config",
+    action: "read",
+    sort_order: 2,
+    status: "active",
+    created_at: daysAgo(120),
+    updated_at: daysAgo(10)
+  }
+] satisfies MockRecord[];
+
+/** GET /v1/iam/org-units（部门树，OrgUnitResponse 形状） */
+export const orgUnits = [
+  {
+    id: "org-1",
+    parent_id: null,
+    name: "总公司",
+    code: "HQ",
+    level: 1,
+    sort_order: 1,
+    status: "active",
+    created_at: daysAgo(100),
+    updated_at: daysAgo(8),
+    children: [
+      {
+        id: "org-2",
+        parent_id: "org-1",
+        name: "研发部",
+        code: "RD",
+        level: 2,
+        sort_order: 1,
+        status: "active",
+        created_at: daysAgo(90),
+        updated_at: daysAgo(8),
+        children: []
+      },
+      {
+        id: "org-3",
+        parent_id: "org-1",
+        name: "交付部",
+        code: "DELIVERY",
+        level: 2,
+        sort_order: 2,
+        status: "active",
+        created_at: daysAgo(90),
+        updated_at: daysAgo(8),
+        children: []
+      }
+    ]
+  }
+];
+
+/** GET /v1/api-keys（ApiKeySummary 形状） */
+export const apiKeys = [
+  {
+    id: "ak-001",
+    name: "CI 流水线密钥",
+    permissions: ["IAM_USER_READ", "FILE_READ"],
+    status: "active",
+    created_at: daysAgo(20)
+  },
+  {
+    id: "ak-002",
+    name: "pm-worker 服务密钥",
+    permissions: ["PM_TASK_UPDATE"],
+    status: "disabled",
+    created_at: daysAgo(45)
+  }
+] satisfies MockRecord[];
+
 /** GET /v1/iam/auth/sessions（裸数组，SessionInfo 形状） */
 export const sessions = [
   {
@@ -1210,6 +1299,12 @@ export function resolveMock(
       return { status: 200, body: paginate(iamUsers, query) };
     case "/v1/iam/roles":
       return { status: 200, body: paginate(iamRoles, query) };
+    case "/v1/iam/permissions":
+      return { status: 200, body: paginate(iamPermissions, query) };
+    case "/v1/iam/org-units":
+      return { status: 200, body: orgUnits };
+    case "/v1/api-keys":
+      return { status: 200, body: paginate(apiKeys, query) };
     case "/v1/iam/auth/sessions":
       return { status: 200, body: sessions };
     case "/v1/pure/menu-configs":
