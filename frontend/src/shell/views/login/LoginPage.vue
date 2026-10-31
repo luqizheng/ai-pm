@@ -34,6 +34,7 @@ async function onSubmit() {
     const redirect = (route.query.redirect as string | undefined) ?? "/";
     await router.replace(redirect);
   } catch (error) {
+    console.error("[login] signIn failed:", error);
     const code = (error as { code?: string }).code;
     errorMessage.value = code ? code : t("shell.login.failed");
   } finally {

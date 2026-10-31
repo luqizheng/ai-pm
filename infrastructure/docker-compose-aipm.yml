@@ -31,6 +31,9 @@ services:
     environment:
       DATABASE_URL: postgres://aipm:aipm@aipm-pg:5432/aipm
       PM_API_PORT: "8090"
+      # 鉴权（slice B）：默认 jwks fail-closed，JWKS 取自同网络（superpowers）的 lmms token-service
+      AI_PM_AUTH_MODE: "jwks"
+      AI_PM_JWKS_URL: http://token-service:8082/.well-known/jwks.json
     ports:
       - "8090:8090"
     depends_on:

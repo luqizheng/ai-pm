@@ -28,7 +28,7 @@ export default async ({ mode }: ConfigEnv): Promise<UserConfigExport> => {
       // /gw 前缀转发到 lmms api-gateway（iam-services SDK 的 IAM 调用走这里）
       proxy: {
         "/api": {
-          target: process.env.PM_API_URL ?? "http://127.0.0.1:8080",
+          target: process.env.PM_API_URL ?? "http://127.0.0.1:8090",
           changeOrigin: true,
           rewrite: (p: string) => p.replace(/^\/api/, "")
         },

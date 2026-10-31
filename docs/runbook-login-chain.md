@@ -1,0 +1,85 @@
+# 登录链路联调 Runbook（Slice B）
+
+> 2026-10-31 首次全链路打通记录。链路：**浏览器(8848) → vite 代理 → lmms api-gateway(3000) → iam-service(9081→8081) → token-service(8082, RS256 签发) → pm-api(8090, JWKSCache 本地验签)**。
+
+## 一、端口与通道
+
+| 通道 | 前缀 | 目标 | 用途 |
+|---|---|---|---|
+| IAM | `/gw` | api-gateway `127.0.0.1:3000` | 登录/refresh/logout/setup-status、users/simple、菜单 get-async-routes |
+| PM 业务 | `/api` | pm-api `127.0.0.1:8090` | `/v1/pm/*`（slice A 实现）、events/supervision、`/mcp` |
+
+vite 代理见 `frontend/vite.config.ts`（`/api`→`PM_API_URL ?? 8090`；`/gw`→`LMMS_GATEWAY_URL ?? 3000`）。
+
+## 二、起栈步骤
+
+1. **lmms 鉴权栈**（在 `low-memory-micro-services/infrastructure/`，项目名同为 `infrastructure` → 与 ai-pm 栈共享 `infrastructure_superpowers` 网络）：
+   ```bash
+   docker compose -f docker-compose-infra.yml -f docker-compose-services.yml \
+     up -d --no-deps consul redis mysql rabbitmq token-service iam-service api-gateway prue_backend
+   ```
+   基础设施四件套与 lmms 服务镜像本机已有，`--no-deps` 防止触碰 ai-pm 的 aipm-* 容器。
+
+2. **pm-api 原生**（dev 循环推荐；容器版需重建 aipm/pm-api 镜像）：
+   ```bash
+   cd ai-pm
+   DATABASE_URL="postgres://aipm:aipm@127.0.0.1:5433/aipm" \
+   PM_API_PORT=8090 \
+   AI_PM_AUTH_MODE=jwks \
+   AI_PM_JWKS_URL=http://127.0.0.1:8082/.well-known/jwks.json \
+   cargo run -p pm-api
+   ```
+   `AI_PM_AUTH_MODE=off` 为本地免鉴权（行为与 slice B 之前一致）。
+
+3. **前端**：`cd frontend && pnpm dev`（`.env.development` 已 `VITE_USE_MOCK=0`）。
+
+## 三、首次初始化（新 mysql 卷时）
+
+- `GET :3000/v1/iam/auth/setup-status` → `{"setup_required":true,"user_count":0}` 时：
+  ```bash
+  curl -X POST :3000/v1/iam/auth/register -H "Content-Type: application/json" \
+    -d '{"username":"admin","password":"Admin@123456","nickname":"Admin"}'
+  ```
+  首用户自动获得 `tenant_admin` + 全部启用权限。
+
+## 四、验收矩阵（2026-10-31 全部通过）
+
+| 用例 | 结果 |
+|---|---|
+| 无 token 打 pm-api `/api/v1/*` 与 `/mcp` | 401 `IAM_AUTH_1005` |
+| 伪造 token | 401 `IAM_AUTH_1004` |
+| 登录 token 带 Bearer | 200（notifications 空 feed） |
+| gateway login → JWT（RS256, kid=default, aud=coder-micro-services, 含 tid/roles/permissions） | 200, expires_in=900 |
+| refresh（不轮换） | 200 |
+| logout → 204 → 原 token 再访问 | 401 `Token revoked`（gateway Redis jti 黑名单生效） |
+| 浏览器真实登录 | 8848→守卫放行 `/dashboard`，localStorage 四键（prism_access_token 等），role=tenant_admin |
+| 前端 vitest | 389/389 |
+| ai-pm cargo test | 31 套件全绿（含 auth 5 用例） |
+
+## 五、坑清单（务必读）
+
+1. **cargo 代理**：git 全局 `http.proxy`（v2ray 127.0.0.1:10808）会被 cargo 回退采用。命令须带
+   `CARGO_HTTP_PROXY="" NO_PROXY=192.168.2.12`（前者屏蔽死代理，外网走 rsproxy；后者内网 kellnr 直连）。
+2. **reqwest 系统代理**：Windows 注册表残留 `ProxyServer=127.0.0.1:10808`（即使 ProxyEnable=0）会被 reqwest
+   的 system-proxy 探测采用 → pm-api 的 JWKS 拉取必须 `.no_proxy()`（已在 `main.rs` 固化）。
+3. **gateway JWKS 起动竞态**（上游缺陷）：gateway 不 depends_on token-service healthy，同批启动可能缓存到空
+   JWKS → 一律 `Invalid or expired token`。**修复：`docker restart infrastructure-api-gateway-1`**（重拉 JWKS）。
+4. **token-service 密钥不持久**：compose 不挂载 keys 卷，重启即重新生成 → 所有旧 token 失效，全员重登。
+5. **iam V003 种子 × 首用户注册冲突**（上游缺陷，待反馈）：V003 播种 `tenant_admin` 角色（tenant_id 默认 1），
+   首用户注册又无条件 INSERT 同码角色 → 唯一键冲突 500。**绕过：删种子行**
+   `DELETE FROM iam_role_permissions WHERE role_id='role-tenant-admin-seed'; DELETE FROM iam_roles WHERE id='role-tenant-admin-seed';`
+6. **iam-services SDK fetch 未绑定**（上游缺陷，待反馈）：`HttpCore` 默认捕获未 bind 的原生 fetch，浏览器端
+   `Illegal invocation`。下游已在 `frontend/src/shell/api/iam.ts` 注入 `fetch: fetch.bind(globalThis)`；
+   上游修复（`options.fetch ?? fetch.bind(globalThis)`）随 SDK 扩展协议反馈 lmms。
+7. **dev PG 迁移残留**：`_sqlx_migrations` 若记录了已删除的迁移版本 → `VersionMissing(N)`。清法：
+   `DELETE FROM _sqlx_migrations WHERE version=N;`（本次清的是 version=5 "auth local"）。
+8. **8848 端口占用**：并行会话可能有旧 vite 实例占 8848 → 新实例落到 8849。浏览器验证前先看 vite 启动日志的实际端口。
+9. **菜单为空属预期**：`/v1/pure/get-async-routes` 返回 `{code:0,data:[]}`（prue 库无菜单数据，播种属 lmms
+   demo-data 范畴）。静态路由（dashboard/profile/workspace）兜底可达。
+
+## 六、上游待反馈清单（SDK 扩展协议）
+
+- [ ] iam-service：V003 种子与首用户注册的唯一键冲突
+- [ ] iam-services SDK：HttpCore fetch 未 bind
+- [ ] api-gateway compose：gateway 缺 token-service healthy 依赖（JWKS 竞态）
+- [ ] （可选）token-service 密钥持久化挂载，避免重启全员掉线
