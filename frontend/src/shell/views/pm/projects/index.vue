@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { DataTable, PageHeader, type TableColumn } from "@/shell/components";
 import { statusVariant } from "@/api/status";
@@ -11,6 +13,7 @@ import type { Project } from "@/api/types";
 
 const { t } = useI18n();
 const toast = useToast();
+const router = useRouter();
 
 const columns: TableColumn[] = [
   { label: t("pm.columns.code"), prop: "code" },
@@ -22,6 +25,11 @@ const columns: TableColumn[] = [
     prop: "updated_at",
     slot: "updatedAt",
     numeric: true
+  },
+  {
+    label: t("pm.columns.actions"),
+    prop: "_actions",
+    slot: "actions"
   }
 ];
 
@@ -51,6 +59,10 @@ async function load() {
   } finally {
     loading.value = false;
   }
+}
+
+function openRepositories(row: Record<string, unknown>) {
+  router.push(`/projects/${String(row.id)}/repositories`);
 }
 
 onMounted(load);
@@ -95,6 +107,11 @@ onMounted(load);
       <template #updatedAt="{ row }">{{
         formatDateTime(row.updated_at)
       }}</template>
+      <template #actions="{ row }">
+        <Button size="sm" variant="ghost" @click="openRepositories(row)">
+          {{ t("pm.repositories.pageTitle") }}
+        </Button>
+      </template>
     </DataTable>
   </section>
 </template>

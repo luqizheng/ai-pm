@@ -9,6 +9,7 @@ pub mod llm_config;
 pub mod pm_write;
 pub mod policy_engine;
 pub mod read;
+pub mod repository;
 pub mod rows;
 pub mod supervision;
 
@@ -30,6 +31,11 @@ pub use llm_config::{
 };
 pub use policy_engine::{PolicyContext, PolicyEngine, PolicyLoadError};
 pub use read::{ReadError, TaskContextRow, task_context};
+pub use repository::{
+    CreateRepositoryRequest, REPOSITORY_ROLES, RepositoryError, RepositoryRow, SshKeyView,
+    UpdateRepositoryRequest, create_repository, delete_repository, delete_ssh_key,
+    generate_ssh_key, get_ssh_key, list_repositories, open_ssh_private_key, update_repository,
+};
 pub use supervision::{
     DecideRequest, Decision, DecisionOutcome, NotificationRow, SupervisionError, VetoOutcome,
     VetoRequest, decide_approval, freeze, notifications_feed, unfreeze, veto,

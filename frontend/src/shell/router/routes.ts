@@ -30,6 +30,13 @@ export const staticRoutes: RouteRecordRaw[] = [
         name: "profile",
         component: () => import("../views/profile/ProfileView.vue"),
         meta: { title: "个人设置", icon: "settings" }
+      },
+      {
+        // 项目 ↔ 代码仓库关系（P0 CRUD）：静态挂 shell，不依赖 DB 菜单 publish。
+        path: "projects/:projectId/repositories",
+        name: "project-repositories",
+        component: () => import("../views/projects/repositories/index.vue"),
+        meta: { title: "代码仓库" } // i18n-ignore: route meta 直接作为页签标题
       }
     ]
   },

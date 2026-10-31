@@ -1,278 +1,324 @@
-# 多仓库接入 + 项目级 SSH Key + AI 自动初始化 Implementation Plan
+# AI 项目经理冷启动（多仓库 + SSH Key + 编制 + 提案链）Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 让一个项目绑定 N 个 SSH Git 仓库，由 AI Agent 读取各仓库的 commit 历史与 docs，生成带证据的初始化草案，人工确认后落成项目画像 / 里程碑 / 需求 / 任务 / 知识库文档。
+**Goal:** 让 AI 项目经理能从「空项目」冷启动：绑定 N 个 SSH Git 仓库、读 commit 与 docs、建立 Agent 编制、生成带证据的草案，并以 4 条批量提案走红线审批，批准后落成可运营的项目。
 
-**Architecture:** 新增一条独立管线，不触碰既有 `ai_analysis` 编排链。`pm-application` 新增 `secret.rs`（密钥生成/加密）、`repository.rs`（仓库与密钥 CRUD）、`git_access.rs`（git CLI 执行与临时密钥）、`repo_facts.rs`（事实采集）、`project_import.rs`（导入状态机与 apply）；`pm-ai` 新增 `repo_model.rs`（`RepoAnalysisModel` 端口 + Fake + OpenAI 兼容实现）；`pm-api` 新增 `pm_repositories.rs` / `pm_imports.rs` 两组 REST；`ai-pm-worker` 增开一条 `repo_import` job 循环；前端新增导入向导与仓库管理页（静态路由，不依赖 DB 菜单）。
+**Architecture:** 在 `pm-application` 新增 `secret.rs` / `repository.rs` / `git_access.rs` / `repo_facts.rs` / `project_import.rs`；在 `pm-domain` 扩展 4 个批量命令；`pm-ai` 新增 `repo_model.rs`；`pm-api` 新增仓库与导入两组 REST；`ai-pm-worker` 增开 `repo_import` 循环；`bootstrap_project` 建 5 人编制。导入产物**不直写业务表**，而是转成 `ai.change_proposal` + `governance.approval_request`，复用既有决策/执行/审计链。
 
-**Tech Stack:** Rust 2021（axum 0.8 / sqlx 0.8 / tokio / git CLI / ssh-keygen CLI）· PostgreSQL 16 · Vue 3 + pinia + vitest（现仓既有）。
+**Tech Stack:** Rust 2021（axum 0.8 / sqlx 0.8 / tokio / git CLI / ssh-keygen CLI / aes-gcm）· PostgreSQL 16 · Vue 3 + pinia + vitest。
 
-**Spec:** [../specs/2026-10-31-multi-repo-project-import.md](../specs/2026-10-31-multi-repo-project-import.md)（数据模型 §五、密钥 §六、采集 §七、草案 §八、API §九、前端 §十、验收 §十二）
+**Spec:** [../specs/2026-10-31-multi-repo-project-import.md](../specs/2026-10-31-multi-repo-project-import.md)（组织 §五、数据 §六、命令 §七、草案 §十、API §十一、验收 §十四）
 
 ## Global Constraints
 
-- 迁移 forward-only：新增 `0007_repositories.sql`；不改 0001–0006。
-- Rust 新增依赖**仅限** `chacha20poly1305`、`base64`（spec A7 例外）；`pm-application` 增加 `tokio.workspace = true`。前端新增 npm 依赖**零**。
-- **私钥永不回显**：响应/日志/draft/审计行四类载体均不得出现私钥或密文原文；测试逐类断言。
-- 所有 git 子进程：参数数组（不拼 shell）、`GIT_TERMINAL_PROMPT=0`、显式超时、临时密钥文件用完即删。
-- 测试用 `#[sqlx::test(migrations = "../../migrations")]` 自动建库；仓库采集测试用临时目录 + 临时 Git 身份，禁止读写真实 `ai-pm-repo-cache`。
-- 前端全部走 PRISM 组件与 token；文案走 vue-i18n；写操作按钮带 `hasPermission('PM_PROJECT_REPO_WRITE')`（演示会话 permissions 为空时放行，spec A8）。
-- 每任务结束即 commit（并行会话对策）；**只落本地 master，不 push**。
-- 新文件 LF；`git ls-files | grep -c $'\r'` 必须为 0。
+- 迁移 forward-only：新增 `0008_repositories.sql`；不改 0001–0007（`0007` 是 `llm_provider`）。
+- Rust 新增依赖**零个 crate**；`pm-application` 仅加 `tokio.workspace = true`。前端 npm 依赖**零**。
+- **导入不直写业务表**：只能生成提案；写入由 `command_executor` 执行，审计由既有链产生。
+- **私钥永不回显**：响应 / 日志 / draft / 审计行四类载体均断言不含私钥与密文。
+- 所有 git 子进程：参数数组、`GIT_TERMINAL_PROMPT=0`、显式超时、临时密钥用完即删。
+- 批量命令必须幂等：`(project_id, code)` / `(project_id, doc_key)` 冲突复用，不重复写。
+- 策略文件 `policies/ai-pm-ai-lead-v2.yaml` 是红线唯一真源，新增 `project_import` 时同步 `policy_engine` 镜像与测试。
+- 测试用 `#[sqlx::test(migrations = "../../migrations")]` + 临时目录 + 临时 Git 身份；禁止污染真实缓存目录与真实库。
+- 前端走 PRISM 组件与 token；文案走 vue-i18n；写操作按钮带权限校验（演示会话 permissions 为空时放行）。
+- 每任务结束即 commit，只落本地 master，不 push。
 
 ## Review Focus
 
-1. **私钥泄露面**：`POST/GET ssh-keys`、仓库详情、导入 `GET`、审计行、`tracing` 日志全部断言不含 `private_key` 与密文 → Task 2 / Task 10。
-2. **命令注入**：URL / 分支名喂入 `git` 前必须过白名单正则；`ext::`、`file://`、`--upload-pack`、空白与 `..` 全部拒绝 → Task 3 单测。
-3. **幻觉草案**：证据校验必须能拒绝编造的 doc 路径与 commit sha；全部丢弃时 `status='failed'` 而不是 `draft_ready` → Task 7 单测。
-4. **导入伪成功**：`status` 只能由 worker 推进；API 不得直接把状态写成 `draft_ready`；前端按钮点击不改变进度 → Task 6 / Task 9。
-5. **apply 原子性与幂等**：分段提交失败后项目停在 `initializing` 可重试；重复 apply 不产生重复需求/任务/文档 → Task 7 集成测试。
-6. **存量回归**：`ai_analysis` 队列、既有 `/v1/pm/*` 读端点、SSE 审计流不得被改动打破 → Task 10 全量测试。
+1. **AI PM 可持续运营**：导入后能用同一套命令再建需求 / 里程碑 / 文档 → Task 5、Task 14 集成测试。
+2. **导入不绕过审批**：`apply` 只生成提案不落 delivery；所有写入必须有 `approval_request` 记录 → Task 9、Task 14。
+3. **私钥泄露面**：ssh-keys / 仓库 / 导入 GET / 审计 / 日志全部断言不含 `private_key` 与密文 → Task 2、Task 14。
+4. **命令注入**：URL 与分支名过白名单；`ext::` / `file://` / `..` / `-` 开头全部拒绝 → Task 3。
+5. **证据接地**：编造的 doc/commit 被拒；全丢弃判 `no_grounded_output` → Task 9。
+6. **批次一致性与幂等**：重复 apply、部分驳回、部分执行失败三种路径都可重试不重复 → Task 9、Task 10。
+7. **存量回归**：`ai_analysis` 队列、既有读端点、SSE 审计流、既有审批不被打破 → Task 14 全量测试。
 
 ## File Structure
 
 ```
-ai-pm/migrations/0007_repositories.sql              # 4 张表 + 索引（新增）
-ai-pm/crates/pm-domain/src/import.rs                # ProjectDraft / DraftItem / Evidence（新增）
-ai-pm/crates/pm-domain/src/lib.rs                   # pub mod import
-ai-pm/crates/pm-application/src/secret.rs           # ssh-keygen 生成 + 指纹 + AEAD（新增）
-ai-pm/crates/pm-application/src/repository.rs       # 密钥/仓库 CRUD + URL 校验（新增）
-ai-pm/crates/pm-application/src/git_access.rs       # git 子进程（超时/临时密钥）（新增）
-ai-pm/crates/pm-application/src/repo_facts.rs       # clone + commit/docs 事实采集（新增）
-ai-pm/crates/pm-application/src/project_import.rs   # 导入状态机 + 草案校验 + apply（新增）
-ai-pm/crates/pm-application/src/bootstrap.rs        # 支持 status 参数 + 暴露给 REST（修改）
-ai-pm/crates/pm-application/src/lib.rs              # 模块注册
-ai-pm/crates/pm-ai/src/repo_model.rs                # RepoAnalysisModel + Fake + OpenAI（新增）
-ai-pm/crates/pm-ai/src/lib.rs                       # 注册模块
-ai-pm/apps/pm-api/src/pm_repositories.rs            # /v1/pm/projects/**/ssh-keys、repositories（新增）
-ai-pm/apps/pm-api/src/pm_imports.rs                 # /v1/pm/projects/**/imports（新增）
-ai-pm/apps/pm-api/src/pm_writes.rs                  # 或新增 pm_projects.rs：POST /v1/pm/projects（修改/新增）
-ai-pm/apps/pm-api/src/routes.rs                     # 挂载两组新路由（修改）
-ai-pm/apps/pm-api/src/lib.rs                        # pub mod 注册
-ai-pm/apps/ai-pm-worker/src/main.rs                 # 增开 repo_import 循环（修改）
-ai-pm/apps/pm-api/tests/repositories.rs             # 集成测试（新增）
-ai-pm/apps/pm-api/tests/imports.rs                  # 集成测试（新增）
+ai-pm/migrations/0008_repositories.sql                # 4 表 + 索引（新增）
+ai-pm/crates/pm-domain/src/import.rs                  # ProjectDraft / *Draft / Evidence（新增）
+ai-pm/crates/pm-domain/src/command.rs                 # 4 个批量命令变体（修改）
+ai-pm/crates/pm-application/src/secret.rs             # ssh-keygen + aes-256-gcm（新增）
+ai-pm/crates/pm-application/src/repository.rs         # 密钥/仓库 CRUD + URL 校验（新增）
+ai-pm/crates/pm-application/src/git_access.rs         # git 子进程（超时/临时密钥）（新增）
+ai-pm/crates/pm-application/src/repo_facts.rs         # clone + commit/docs 采集（新增）
+ai-pm/crates/pm-application/src/project_import.rs     # 导入状态机 + 证据校验 + 草案转提案（新增）
+ai-pm/crates/pm-application/src/command_executor.rs   # 4 个批量命令 handler（修改）
+ai-pm/crates/pm-application/src/bootstrap.rs          # 5 人编制（修改）
+ai-pm/crates/pm-application/src/policy_engine.rs      # project_import 红线镜像（修改）
+ai-pm/crates/pm-application/src/supervision.rs        # 决策后推进导入状态（修改）
+ai-pm/crates/pm-ai/src/repo_model.rs                  # RepoAnalysisModel + Fake + OpenAI（新增）
+ai-pm/apps/pm-api/src/pm_repositories.rs              # ssh-keys / repositories REST（新增）
+ai-pm/apps/pm-api/src/pm_imports.rs                   # imports REST（新增）
+ai-pm/apps/pm-api/src/routes.rs / lib.rs              # 挂载（修改）
+ai-pm/apps/ai-pm-worker/src/main.rs                   # repo_import 循环（修改）
+ai-pm/policies/ai-pm-ai-lead-v2.yaml                  # project_import 红线（修改）
+ai-pm/apps/pm-api/tests/repositories.rs               # 集成测试（新增）
+ai-pm/apps/pm-api/tests/imports.rs                    # 集成测试（新增）
 
-ai-pm/frontend/src/api/repositories.ts              # 仓库/密钥客户端（新增）
-ai-pm/frontend/src/api/imports.ts                   # 导入客户端（新增）
-ai-pm/frontend/src/api/projects.ts                  # createProject（新增或并入 pm.ts）
+ai-pm/frontend/src/api/repositories.ts / imports.ts / projects.ts   # 客户端（新增）
 ai-pm/frontend/src/shell/views/onboarding/
-  ProjectImportWizard.vue
-  steps/StepProjectBasics.vue
-  steps/StepRepositories.vue
-  steps/StepAnalysis.vue
-  steps/StepReview.vue
+  ProjectImportWizard.vue + steps/{ProjectBasics,Repositories,Analysis,Review}.vue
   ProjectImportWizard.test.ts
-ai-pm/frontend/src/shell/views/projects/repositories/
-  ProjectRepositoriesView.vue
-  ProjectRepositoriesView.test.ts
-ai-pm/frontend/src/shell/router/routes.ts           # 两条静态路由（修改）
-ai-pm/frontend/locales/{zh-CN,en}/pm/import.yaml       # 新增
-ai-pm/frontend/locales/{zh-CN,en}/pm/repositories.yaml # 新增
-
-ai-pm/docs/runbook-login-chain.md                   # 新增「多仓库导入」小节（修改）
+ai-pm/frontend/src/shell/views/projects/repositories/ProjectRepositoriesView.vue + test
+ai-pm/frontend/src/shell/views/pm/approvals/ImportBatchCard.vue      # 审批页批次卡（新增）
+ai-pm/frontend/src/shell/router/routes.ts                            # 两条静态路由（修改）
+ai-pm/frontend/locales/{zh-CN,en}/pm/import.yaml / repositories.yaml # 新增
+ai-pm/docs/runbook-login-chain.md                                    # 新增小节（修改）
 ```
 
 ---
 
-### Task 1: 迁移 0007 + 领域类型
+### Task 1: 迁移 0008 + 草案领域类型
 
 **Files:**
-- Create: `ai-pm/migrations/0007_repositories.sql`
+- Create: `ai-pm/migrations/0008_repositories.sql`
 - Create: `ai-pm/crates/pm-domain/src/import.rs`
 - Modify: `ai-pm/crates/pm-domain/src/lib.rs`
 
 **Interfaces:**
-- Produces（表）：`integration.project_ssh_key`、`integration.project_repository`、`integration.repo_import`、`integration.repo_import_source`，列与约束见 spec §五。
-- Produces（Rust）：`ProjectDraft { schema_version, profile, milestones, requirements, tasks, risks, unknowns, coverage }`、`DraftEvidence { kind: EvidenceKind, repo_id, reference, detail }`、`EvidenceKind::{Doc, Commit}`、`DraftItem { key, title, markdown, priority, confidence, evidence }`；全部 `Serialize + Deserialize`。
-- Produces（约束）：每项目一把 `active` key（部分唯一索引 `uq_project_ssh_key_active`）；每项目同时一个进行中导入（部分唯一索引 `uq_repo_import_active`）。
+- Produces（表）：`integration.project_ssh_key`、`integration.project_repository`、`integration.repo_import`、`integration.repo_import_source`，列与约束见 spec §六。
+- Produces（Rust）：`ProjectDraft { schema_version, profile, milestones, requirements, tasks, risks, unknowns, coverage }`；`MilestoneDraft { key, name, planned_at }`；`RequirementDraft { key, code, title, markdown, priority, confidence, evidence }`；`TaskDraft { key, title, description, priority, milestone_key, requirement_key, assignee_role, confidence, evidence }`；`DocumentDraft { doc_key, doc_type, markdown, change_summary }`；`EvidenceKind::{Doc, Commit}`；`AssigneeRole::{AiPm, Architect, Developer, Tester}`。全部 `Serialize + Deserialize`。
+- Produces（约束）：每项目一把 active key；每项目同时一个进行中导入；`repo_import.status` CHECK 含 `proposed|rejected`。
 
-- [ ] **Step 1** 写迁移：4 张表 + `CREATE UNIQUE INDEX uq_project_ssh_key_active ON integration.project_ssh_key(project_id) WHERE status='active'`、`CREATE UNIQUE INDEX uq_repo_import_active ON integration.repo_import(project_id) WHERE status IN ('queued','cloning','reading','analyzing')`、`UNIQUE(project_id,url)`、`UNIQUE(project_id,fingerprint)`、`UNIQUE(project_id,id)`（供导入来源外键）。
-- [ ] **Step 2** `import.rs` 定义草案类型与 `#[serde(rename_all="snake_case")]` 枚举；加 JSON roundtrip 单测（含 `evidence` 空数组也必须可解析）。
-- [ ] **Step 3** 验证：`DATABASE_URL=postgres://aipm:aipm@localhost:5433/aipm cargo test -p pm-domain`；起库后 `psql` 检查 `\d integration.project_repository`。
-- [ ] **Step 4: Commit** `feat(import): repository/import tables and project draft types`
+- [ ] **Step 1** 写迁移（4 表 + 两个部分唯一索引 + `UNIQUE(project_id,url)` / `UNIQUE(project_id,fingerprint)` / `UNIQUE(project_id,id)`）。
+- [ ] **Step 2** `import.rs` 定义草案与命令 payload 类型；JSON roundtrip 单测（含空 evidence、空 tasks）。
+- [ ] **Step 3** 验证：`DATABASE_URL=postgres://aipm:aipm@localhost:5433/aipm cargo test -p pm-domain`；`psql \d integration.repo_import`。
+- [ ] **Step 4: Commit** `feat(import): repository/import tables and draft types`
 
-### Task 2: 密钥生成、指纹与加密存储
+### Task 2: 密钥生成、指纹与加密
 
 **Files:**
 - Create: `ai-pm/crates/pm-application/src/secret.rs`
-- Modify: `ai-pm/crates/pm-application/Cargo.toml`（`chacha20poly1305`、`base64`、`tokio`）
-- Modify: `ai-pm/Cargo.toml`（workspace 依赖新增两项）
+- Modify: `ai-pm/crates/pm-application/Cargo.toml`（仅 `tokio`）、`src/lib.rs`
 
 **Interfaces:**
-- Produces: `SecretKeyring::from_env() -> Result<SecretKeyring, SecretError>`（`AI_PM_SECRET_KEY`，32 字节 hex/base64）；`SecretKeyring::seal(project_id, fingerprint, plaintext) -> String`（`v1:<base64(nonce||ct)>`，XChaCha20-Poly1305，AAD=`<project_id>|<fingerprint>`）；`open(project_id, fingerprint, sealed) -> Result<Vec<u8>, SecretError>`。
-- Produces: `generate_ed25519(comment: &str) -> Result<GeneratedKey { public_key, private_key, fingerprint }, SecretError>` —— 调 `ssh-keygen`，读 `.pub`，删临时私钥。
-- Produces: `fingerprint_of(public_key: &str) -> Result<String, SecretError>` —— 解码第二段 base64 → sha256 → base64 无 padding → `SHA256:<...>`。
+- Produces: `seal_text(project_id: Uuid, plaintext: &[u8]) -> Result<Vec<u8>, SecretError>`（AES-256-GCM，`nonce||ct||tag`，AAD=`project_id`）；`open_text(project_id, payload) -> Result<Vec<u8>, SecretError>`；密钥 `sha256(AI_PM_SECRET_KEY)`，与 `llm_config.rs` 同口径。
+- Produces: `generate_ed25519(comment) -> Result<GeneratedKey { public_key, private_key, fingerprint }, SecretError>`；`fingerprint_of(pub_path) -> Result<String, SecretError>`（`ssh-keygen -lf` 第二列）。
 
-- [ ] **Step 1** 失败测试：seal/open 往返；篡改密文 1 字节后 `open` 失败；不同 AAD 解不开；`fingerprint_of` 对固定公钥输出固定值。
-- [ ] **Step 2** 失败测试：`generate_ed25519` 产出 `ssh-ed25519 ` 开头的公钥且临时文件已不存在。
+- [ ] **Step 1** 失败测试：seal/open 往返；篡改 1 字节失败；不同 project_id 作 AAD 失败；主密钥缺失 `SecretKeyMissing`。
+- [ ] **Step 2** 失败测试：生成后公钥以 `ssh-ed25519 ` 开头、指纹以 `SHA256:` 开头、临时私钥已删除。
 - [ ] **Step 3** 确认失败 → 实现 → 通过。
-- [ ] **Step 4: Commit** `feat(import): ed25519 key generation and xchacha20poly1305 secret box`
+- [ ] **Step 4: Commit** `feat(import): ed25519 key generation and aes-256-gcm secret box`
 
 ### Task 3: 仓库与密钥 CRUD + URL 校验 + 可达性校验
 
 **Files:**
-- Create: `ai-pm/crates/pm-application/src/repository.rs`
-- Create: `ai-pm/crates/pm-application/src/git_access.rs`（仅 `ls_remote` 部分，clone 在 Task 4 补）
+- Create: `ai-pm/crates/pm-application/src/repository.rs`、`src/git_access.rs`（本任务只做 `ls_remote`）
 - Create: `ai-pm/apps/pm-api/src/pm_repositories.rs`
-- Modify: `ai-pm/crates/pm-application/src/lib.rs`、`ai-pm/apps/pm-api/src/lib.rs`、`ai-pm/apps/pm-api/src/routes.rs`
+- Modify: `src/lib.rs`、`apps/pm-api/src/routes.rs`、`apps/pm-api/src/lib.rs`
 
 **Interfaces:**
-- Produces: `validate_git_url(url: &str) -> Result<GitUrl, RepoError>`；`GitUrl` 暴露 `host`、`path`、`user`、规范化后的 `normalized`。
-- Produces: `create_ssh_key(pool, project_id, actor_id, keyring) -> SshKeyView`（已有 active 则原样返回，服务层保证幂等）；`list_ssh_keys`；`revoke_ssh_key`（被 verified 仓库引用时 `KeyInUse`）。
+- Produces: `validate_git_url(url) -> Result<GitUrl, RepoError>`（`GitUrl { host, path, user, normalized }`）。
+- Produces: `create_ssh_key`（已有 active 则返回现有）、`list_ssh_keys`、`revoke_ssh_key`（被 verified 引用 → `KeyInUse`）。
 - Produces: `create_repository / list_repositories / update_repository（revision 乐观锁）/ archive_repository`。
-- Produces: `verify_repository(pool, id, keyring) -> VerifyOutcome`：解密私钥 → 写 `0700` 临时目录 → `git ls-remote --heads` 30s → 更新 `status/head_commit_sha/default_branch/last_error_code` → 返回 `{status, head_commit_sha, default_branch, error_code}`。
-- Produces（HTTP）：spec §九 的 ssh-keys ×3 与 repositories ×5 端点。
+- Produces: `verify_repository(pool, id) -> VerifyOutcome`：解密私钥 → 0700 临时目录 → `git ls-remote --heads` 30s → 回写 `status/head_commit_sha/default_branch/last_error_code`。
+- Produces（HTTP）：ssh-keys ×3、repositories ×5（契约见 spec §十一）。
 
-- [ ] **Step 1** 失败测试（URL）：合法 `git@gitlab.local:team/world-map.git`、`ssh://git@host:2222/team/repo.git` 通过；`ext::sh -c rm`、`file:///etc/passwd`、`-oProxyCommand=...`、`git@host:../escape`、含空白/`%`/`\\` 全部拒绝。
-- [ ] **Step 2** 失败测试（服务）：创建 key → 再创建返回同一 `id`；吊销被 verified 仓库引用 → `KeyInUse`；仓库 URL 重复 → `Duplicate`；`update_repository` revision 不匹配 → `RevisionConflict`。
-- [ ] **Step 3** 失败测试（HTTP，`tower::oneshot`）：响应体不含 `private_key` / `ciphertext`；401/409/400 状态码符合 spec §九。
+- [ ] **Step 1** 失败测试（URL）：合法 `git@gitlab.local:team/world-map.git`、`ssh://git@host:2222/team/repo.git` 通过；`ext::sh -c rm`、`file:///etc/passwd`、`-oProxyCommand=...`、`git@host:../escape`、含空白 / `%` / `\` 拒绝。
+- [ ] **Step 2** 失败测试（服务）：key 幂等；吊销被引用 key 失败；URL 重复 `Duplicate`；revision 冲突。
+- [ ] **Step 3** 失败测试（HTTP）：响应体不含 `private_key` / `ciphertext`；状态码符合契约。
 - [ ] **Step 4** 确认失败 → 实现 → 通过。
 - [ ] **Step 5: Commit** `feat(import): project ssh keys and repository binding with url hardening`
 
-### Task 4: Git 采集——clone、commit 事实、docs 清单与正文
+### Task 4: Git 采集——clone、commit 事实、docs
 
 **Files:**
 - Modify: `ai-pm/crates/pm-application/src/git_access.rs`（clone / show / log / ls-tree）
 - Create: `ai-pm/crates/pm-application/src/repo_facts.rs`
-- Test: 两文件内 `#[cfg(test)]` 模块 + `ai-pm/crates/pm-application/tests/repo_facts.rs`
+- Test: 两文件内 `#[cfg(test)]` + `ai-pm/crates/pm-application/tests/repo_facts.rs`
 
 **Interfaces:**
-- Produces: `git_access::clone_bare(url, ssh_key_path, dest, timeout) -> Result<(), GitError>`；`GitError::{Timeout, AuthFailed, NotFound, TooLarge, Other(detail)}`（按 stderr 关键字分类：`Permission denied`/`publickey`→AuthFailed，`not found`/`does not exist`→NotFound）。
-- Produces: `repo_facts::collect(root: &Path, branch: &str, limits: &Limits) -> RepoFacts`，字段与 spec §七 表格一一对应；`docs` 正文通过 `git show <branch>:<path>` 读取。
-- Produces: `Limits { max_commits: 300, max_files: 20_000, max_doc_bytes: 64*1024, max_docs_total: 400*1024, max_repo_mb: 200 }`（可由 env 覆盖 max_repo_mb）。commit 超过 300 条时只取最近 300 条并置 `truncated=true`；每条 message 只保留 subject（首行，≤200 字符）。
-- Produces: `cache_root() -> PathBuf`（`AI_PM_REPO_CACHE_ROOT`，默认 `<cwd>/../ai-pm-repo-cache`）。
+- Produces: `clone_bare(url, key_path, dest, timeout) -> Result<(), GitError>`；`GitError::{Timeout, AuthFailed, NotFound, TooLarge, Other}`。
+- Produces: `collect(root, branch, limits) -> RepoFacts`；`Limits { max_commits: 300, max_files: 20_000, max_doc_bytes: 64*1024, max_docs_total: 400*1024, max_repo_mb: 200 }`；超 300 条只取最近 300 并 `truncated=true`；commit 只取 subject（≤200 字符）。
+- Produces: `cache_root()`（`AI_PM_REPO_CACHE_ROOT`，默认 `<cwd>/../ai-pm-repo-cache`）。
 
-- [ ] **Step 1** 建测试夹具：在临时目录 `git init` 一个本地仓库，提交 3 次（含 `feat(core): …` / `fix: …` 前缀）、写 `README.md`、`docs/design.md`、`node_modules/x.md`（应被排除）。
-- [ ] **Step 2** 失败测试：commit 数 = 3 且 message 保留；`docs` 命中 `README.md` 与 `docs/design.md`、不含 `node_modules`；单文件超 64KB 被跳过并置 `truncated=true`；非 UTF-8 文件被跳过；另用 `git commit --allow-empty` 造 301 条提交 → 采集结果恰 300 条且 `truncated=true`；超长 subject（>200 字符）被截断。
-- [ ] **Step 3** 失败测试：`git show` 路径 `../escape` 被拒绝（不执行）；超时返回 `Timeout`。
-- [ ] **Step 4** 确认失败 → 实现 → 通过（测试用 `file://` 本地仓库，不走网络）。
-- [ ] **Step 5: Commit** `feat(import): clone and collect commit/doc facts from repositories`
+- [ ] **Step 1** 夹具：临时仓库提交 3 次（`feat(core):` / `fix:`）、写 `README.md`、`docs/design.md`、`node_modules/x.md`。
+- [ ] **Step 2** 失败测试：commit 数 = 3 且 message 保留；docs 命中 README 与 `docs/design.md`、排除 `node_modules`；超 64KB 跳过并 `truncated`；非 UTF-8 跳过；造 301 条提交 → 恰 300 且 `truncated=true`；超长 subject 截断。
+- [ ] **Step 3** 失败测试：`git show` 路径 `../escape` 拒绝；超时返回 `Timeout`。
+- [ ] **Step 4** 确认失败 → 实现 → 通过（用 `file://` 本地仓库，不走网络）。
+- [ ] **Step 5: Commit** `feat(import): clone and collect commit/doc facts`
 
-### Task 5: AI 端口 —— RepoAnalysisModel + Fake + OpenAI 兼容
+### Task 5: 命令扩展——4 个批量命令 + 执行器 handler
+
+**Files:**
+- Modify: `ai-pm/crates/pm-domain/src/command.rs`
+- Modify: `ai-pm/crates/pm-application/src/command_executor.rs`
+- Test: `command_executor.rs` 内单测 + `tests/command_batch.rs`
+
+**Interfaces:**
+- Produces: `ProjectCommand::{CreateMilestones, CreateRequirements, CreateTasks, WriteDocuments}`（payload 见 spec §七）。
+- Produces: 执行器 handler，单事务内按 key 顺序插入并返回 `key -> id` 映射；需求 `state='draft'` + `current_revision_id` 指向；`WriteDocuments` 走 `knowledge::create_document`（事务外，失败补偿）。
+- Produces: `assignee_role` → principal id 解析（`project_member.role`），失败留空 + finding。
+
+- [ ] **Step 1** 失败测试：`CreateMilestones` 批量 2 条 → 2 行且 key 映射正确；重复 code 幂等复用。
+- [ ] **Step 2** 失败测试：`CreateRequirements` 2 条 → requirement + revision(draft) 各 2 行，`current_revision_id` 指向 draft。
+- [ ] **Step 3** 失败测试：`CreateTasks` 带 `milestone_key/requirement_key/assignee_role` → 外键与 assignee 正确；未知 role → assignee NULL + finding。
+- [ ] **Step 4** 失败测试：`WriteDocuments` 2 篇 → 文件存在、各一条 git commit、两表行存在；第二篇失败 → 第一篇被补偿删除。
+- [ ] **Step 5** 确认失败 → 实现 → 通过。
+- [ ] **Step 6: Commit** `feat(ai-pm): batch create commands for requirements, milestones, tasks and documents`
+
+### Task 6: 组织编制——5 人 bootstrap + 角色解析
+
+**Files:**
+- Modify: `ai-pm/crates/pm-application/src/bootstrap.rs`
+- Test: `bootstrap.rs` 单测 + `apps/pm-api/tests/pm_lists.rs`（补充）
+
+**Interfaces:**
+- Produces: `bootstrap_project` 创建 `owner / ai_pm / architect / developer / tester` 五个 principal + 五个 `project_member`；`BootstrapOutcome` 增加 `architect_id / developer_id / tester_id`。
+- Produces: `resolve_assignee(pool, project_id, role) -> Option<PrincipalId>`。
+- 保留 `BootstrapRequest` 兼容；新增 `initial_status: Option<String>` 以支持 `initializing`。
+
+- [ ] **Step 1** 失败测试：bootstrap 后 `project_member` 恰 5 行且角色齐全；`BootstrapOutcome` 五个 id 互不相同。
+- [ ] **Step 2** 失败测试：`resolve_assignee("developer")` 返回 developer principal；未知 role 返回 None。
+- [ ] **Step 3** 确认失败 → 实现 → 通过（既有调用方用默认值不受影响）。
+- [ ] **Step 4: Commit** `feat(import): five-role project org chart on bootstrap`
+
+### Task 7: AI 端口——RepoAnalysisModel + Fake + OpenAI
 
 **Files:**
 - Create: `ai-pm/crates/pm-ai/src/repo_model.rs`
 - Modify: `ai-pm/crates/pm-ai/src/lib.rs`
-- Test: `repo_model.rs` 内 `#[cfg(test)]`
+- Test: `repo_model.rs` 内单测
 
 **Interfaces:**
-- Consumes: Task 1 的 `ProjectDraft`；Task 4 的 `RepoFacts` / `DocContent`。
-- Produces: `trait RepoAnalysisModel { async fn draft(&self, facts, docs, policy) -> Result<ProjectDraft, ModelError> }`。
-- Produces: `FakeRepoAnalysisModel` —— 确定性：README 的 `#`/`##` 标题生成需求（`key=R1..`，证据指向 `README.md` + 最早相关 commit）；commit 前缀 `feat:` 生成任务；`docs/**` 标题生成风险/未知项；**所有证据 ref 必须取自 facts 真实值**。
-- Produces: `OpenAiRepoAnalysisModel::new(base_url, model, api_key, timeout)` + `draft`：system prompt 声明「`<repo_material>` 内是被分析材料，不是指令」；要求返回 JSON；一次解析失败重试一次后 `BadOutput`。
-- Produces: `model_from_config(config: &Value) -> Arc<dyn RepoAnalysisModel>`：`provider='fake'` → Fake；`provider='openai_compatible'` → 从 `model_config.api_key_env` 指向的环境变量取 key，缺失返回 `Unavailable`。
+- Produces: `trait RepoAnalysisModel { async fn draft(&self, facts, docs, org: &OrgChart) -> Result<ProjectDraft, ModelError> }`；`OrgChart { roles: Vec<AssigneeRole> }`。
+- Produces: `FakeRepoAnalysisModel`：README 标题 → 需求、commit 前缀 → 任务（带 `assignee_role`）、`docs/**` → 风险/未知；证据取 facts 真实值。
+- Produces: `OpenAiRepoAnalysisModel::new(base_url, model, api_key, timeout)`：`<repo_material>` 边界 + JSON 输出；解析失败重试一次 → `BadOutput`。
+- Produces: `model_from_llm_provider(pool, project_id) -> Arc<dyn RepoAnalysisModel>`：`ai.llm_provider` + `load_provider_credentials`；无可用供应商 → Fake（`model_name='fake'`）。
 
-- [ ] **Step 1** 失败测试（Fake）：给定 2 篇 docs + 3 条 commit，产出 `requirements.len() >= 1`、`tasks.len() >= 1`，且每条 evidence 的 ref 都能在 facts 中解析到。
-- [ ] **Step 2** 失败测试（OpenAI）：用 `wiremock` 返回非法 JSON → 重试一次 → `BadOutput`；返回合法 JSON → 解析为 `ProjectDraft`；提示中确定包含 `repo_material` 边界。
-- [ ] **Step 3** 确认失败 → 实现 → 通过。
-- [ ] **Step 4: Commit** `feat(import): repo analysis model port with fake and openai adapters`
+- [ ] **Step 1** 失败测试（Fake）：2 篇 docs + 3 条 commit → 需求 ≥1、任务 ≥1，每条 evidence 可解析，每任务 `assignee_role` ∈ org。
+- [ ] **Step 2** 失败测试（OpenAI）：wiremock 非法 JSON → 重试 → `BadOutput`；合法 JSON → 解析；提示含 `repo_material`。
+- [ ] **Step 3** 失败测试：`model_from_llm_provider` 在无 enabled 供应商时返回 Fake。
+- [ ] **Step 4** 确认失败 → 实现 → 通过。
+- [ ] **Step 5: Commit** `feat(import): repo analysis model with fake and llm-provider adapters`
 
-### Task 6: 导入状态机 + worker job + REST
+### Task 8: 导入状态机 + worker job + REST
 
 **Files:**
-- Create: `ai-pm/crates/pm-application/src/project_import.rs`（本任务只到 `draft_ready`；apply 在 Task 7）
+- Create: `ai-pm/crates/pm-application/src/project_import.rs`（本任务到 `draft_ready`）
 - Create: `ai-pm/apps/pm-api/src/pm_imports.rs`
-- Modify: `ai-pm/apps/ai-pm-worker/src/main.rs`（新增 `repo_import` 循环）
-- Modify: `ai-pm/apps/pm-api/src/routes.rs`、`ai-pm/apps/pm-api/src/lib.rs`、`ai-pm/crates/pm-application/src/lib.rs`
+- Modify: `ai-pm/apps/ai-pm-worker/src/main.rs`、`apps/pm-api/src/routes.rs`、`src/lib.rs`
 
 **Interfaces:**
-- Produces: `start_import(pool, project_id, actor_id) -> ImportView`：校验 `project_not_empty`（`delivery.requirement/task` 任一存在即拒）、`no_verified_repository`；插 `inbound_event(source='repo_import', event_type='repo_import_requested', idempotency_key=import_id)` + `integration.job(job_type='repo_import')`，初始 `status='queued'`。
-- Produces: `get_import(pool, project_id, import_id) -> ImportDetail`（`draft` 仅在 `draft_ready|applied` 时非空）。
-- Produces: `cancel_import(pool, ...)`。
-- Produces: `run_import_job(pool, model, job) -> Result<ImportStatus>`（worker 侧）：`cloning` → 逐仓库 clone/采集 → `reading` → 汇总 facts → `analyzing` → 调模型 → 证据校验（Task 7 接入前先接受原始草案）→ `draft_ready`；异常 → `failed` + `error_code`。
-- Produces（HTTP）：spec §九 导入 ×4 端点。
-- Produces（worker）：`tokio::spawn` 第二条循环 `job_queue::claim(&pool, "repo_import", …)`，超时/租约复用既有常量；不阻塞 `ai_analysis` 循环。
+- Produces: `start_import(pool, project_id, actor_id)`：校验 `project_not_empty` / `no_verified_repository`；插 `inbound_event` + `job(repo_import)`；`status='queued'`。
+- Produces: `get_import` / `cancel_import`；`ImportDetail.sources[]` 来自 `repo_import_source`。
+- Produces: `run_import_job(pool, model, job)`：`cloning → reading → analyzing → draft_ready`（证据校验在 Task 9 接入前先透传）；异常 `failed`。
+- Produces（worker）：第二条 `tokio::spawn` 循环 claim `repo_import`，不阻塞 `ai_analysis`。
 
-- [ ] **Step 1** 失败测试（服务）：空项目 + 1 个 verified 仓库 → 202 且恰好 1 条 `inbound_event` + 1 条 `job`；已有 requirement 的项目 → `ProjectNotEmpty`；无 verified 仓库 → `NoVerifiedRepository`；并发二次启动 → `ImportInProgress`（部分唯一索引）。
-- [ ] **Step 2** 失败测试（状态机）：模拟 job 失败 → `status='failed'` 且 `error_code` 非空，项目仍 `initializing`。
-- [ ] **Step 3** 失败测试（HTTP）：`GET` 在 `queued` 时 `draft` 字段缺失；`progress` 单调不减；404/409 契约。
-- [ ] **Step 4** 确认失败 → 实现 → 通过。worker 测试用 `todo` 样例仓库跑通 `queued → draft_ready`（Fake 模型）。
-- [ ] **Step 5: Commit** `feat(import): import state machine, dedicated worker loop and REST`
+- [ ] **Step 1** 失败测试：空项目 + 1 verified 仓库 → 202 且恰 1 event + 1 job；有 requirement → `ProjectNotEmpty`；无 verified → `NoVerifiedRepository`；并发二次启动 → `ImportInProgress`。
+- [ ] **Step 2** 失败测试：job 失败 → `failed` + `error_code`，项目仍 `initializing`。
+- [ ] **Step 3** 失败测试（HTTP）：`queued` 时无 `draft` 字段；progress 单调；404/409 契约。
+- [ ] **Step 4** 确认失败 → 实现 → 通过；Fake 模型跑通 `queued → draft_ready`。
+- [ ] **Step 5: Commit** `feat(import): import state machine and dedicated worker loop`
 
-### Task 7: 证据校验 + apply（含知识库文档与审计）
+### Task 9: 证据校验 + 草案转 4 条提案
 
 **Files:**
 - Modify: `ai-pm/crates/pm-application/src/project_import.rs`
-- Create: `ai-pm/apps/pm-api/tests/imports.rs`
-- Modify: `ai-pm/crates/pm-application/src/bootstrap.rs`（`bootstrap_project` 可指定初始 `status`；或新增 `create_project_with_status`）
+- Test: `ai-pm/apps/pm-api/tests/imports.rs`
 
 **Interfaces:**
-- Produces: `ground_draft(draft: ProjectDraft, facts: &RepoFacts, docs: &[DocContent]) -> (ProjectDraft, DroppedReport)`：逐条校验 `evidence`（doc 路径命中 / commit 前缀命中）；无有效证据的条目删除并计数；`requirements` 与 `tasks` 同时为空 → `NoGroundedOutput`。
-- Produces: `apply_import(pool, knowledge_root, import_id, req: ApplyRequest) -> ApplyOutcome`，严格按 spec §九 的 4 步顺序执行；`ApplyRequest { draft_revision, project { code, name, description }, milestone_keys, requirement_keys, task_keys, write_knowledge_documents }`。
-- Produces: `ApplyOutcome { outcome: Applied | AlreadyApplied, created: { milestones, requirements, tasks, documents } }`。
-- Produces（HTTP）：`POST /imports/{id}/apply`。
-- 依赖前置：`bootstrap_project` 支持 `status='initializing'`，并暴露 `POST /v1/pm/projects`（`pm_writes` 或新增 `pm_projects.rs`）。
+- Produces: `ground_draft(draft, facts, docs) -> (ProjectDraft, DroppedReport)`；全丢弃 → `NoGroundedOutput`。
+- Produces: `propose_import(pool, import_id, req: ApplyRequest) -> ProposedImport`：校验乐观锁/选择/`project.code` → 建 `ai.analysis_run`（`result={import_id}`）→ 生成 ≤4 条 `ai.change_proposal`（`risk_level=high`、`confidence` 取最低、`evidence` 聚合）→ 策略判定进 `redline_pending` + `approval_request` → import `status='proposed'`。
+- Produces（HTTP）：`POST .../apply` 返回 `{outcome:'proposed', proposals[], analysis_run_id}`；`proposed` 重复调用返回既有提案，`applied` 返回 `already_applied`。
 
-- [ ] **Step 1** 失败测试（证据）：编造 doc 路径 → 该条被丢；编造 7 位 commit sha → 该条被丢；全部编造 → `NoGroundedOutput`；`dropped_items` 与 `DroppedReport.total` 一致。
-- [ ] **Step 2** 失败测试（apply）：正常 apply → 项目 `planning`、需求 `requirement_revision.state='draft'`、知识库文件存在且 `git log` 有一条 commit、审计行 `action='project_import_applied'`；重复 apply → `AlreadyApplied` 且计数不变。
-- [ ] **Step 3** 失败测试（原子性）：知识库写入阶段注入失败 → 项目仍 `initializing`、`delivery` 行已存在（可重试）；再次 apply 补齐文档后成功且不重复插需求。
-- [ ] **Step 4** 失败测试（乐观锁）：`draft_revision` 不匹配 → `StaleDraft`；空选择 → `NoSelection`；`project.code` 冲突 → `ProjectCodeTaken`。
-- [ ] **Step 5** 确认失败 → 实现 → 通过。
-- [ ] **Step 6: Commit** `feat(import): evidence grounding and idempotent draft apply`
+- [ ] **Step 1** 失败测试（证据）：编造 doc / commit → 丢弃；全编造 → `NoGroundedOutput`；`dropped_items` 与报告一致。
+- [ ] **Step 2** 失败测试（提案）：apply 后恰 4 条 proposal + 4 条 approval，全部 `redline_pending`；`delivery.*` **零新增行**。
+- [ ] **Step 3** 失败测试（幂等/锁）：重复 apply 返回同一组 proposal；revision 不匹配 `StaleDraft`；空选择 `NoSelection`；code 冲突 `ProjectCodeTaken`。
+- [ ] **Step 4** 确认失败 → 实现 → 通过。
+- [ ] **Step 5: Commit** `feat(import): evidence grounding and draft-to-proposal conversion`
 
-### Task 8: 前端 API 层 + 向导第 1–2 步
+### Task 10: 红线策略 + 决策后推进导入状态
 
 **Files:**
-- Create: `ai-pm/frontend/src/api/repositories.ts`、`ai-pm/frontend/src/api/imports.ts`、`ai-pm/frontend/src/api/projects.ts`
-- Create: `ai-pm/frontend/src/shell/views/onboarding/ProjectImportWizard.vue`、`steps/StepProjectBasics.vue`、`steps/StepRepositories.vue`
-- Create: `ai-pm/frontend/src/api/__tests__/repositories.test.ts`（或同目录 `*.test.ts`）
-- Create: `ai-pm/frontend/locales/{zh-CN,en}/pm/import.yaml`、`pm/repositories.yaml`
+- Modify: `ai-pm/policies/ai-pm-ai-lead-v2.yaml`、`crates/pm-application/src/policy_engine.rs`、`src/supervision.rs`
+- Test: `policy_engine.rs` 单测 + `apps/pm-api/tests/imports.rs`
+
+**Interfaces:**
+- Produces: 策略红线 `project_import`（`required_role=project_owner`），4 个批量命令全部命中。
+- Produces: `decide_approval` 成功后若 `analysis_run.result.import_id` 存在 → 统计该 run 下提案：全 `executed` → import `applied` + 项目 `planning` + 审计 `project_import_applied`；任一 `rejected` → import `rejected`。
+- Produces: 执行失败 → 提案 `failed`，导入保持 `proposed` 并记 `error_detail`；已完成项保留（不整批回滚），审计标 `partial`。
+
+- [ ] **Step 1** 失败测试：4 个批量命令的 `require_approval` 判定为 true 且角色为 `project_owner`。
+- [ ] **Step 2** 失败测试：4 条全部批准 → import `applied`、项目 `planning`、delivery 行存在、知识文档存在、审计 1 条 `project_import_applied`。
+- [ ] **Step 3** 失败测试：1 条驳回 → import `rejected`，项目仍 `initializing`，已批准的命令不回滚。
+- [ ] **Step 4** 失败测试：第 3 条执行失败 → 提案 `failed`，import 仍 `proposed`，审计含 `partial`。
+- [ ] **Step 5** 确认失败 → 实现 → 通过。
+- [ ] **Step 6: Commit** `feat(ai-pm): project import red line and batch decision transitions`
+
+### Task 11: 前端 API 层 + 向导第 1–2 步
+
+**Files:**
+- Create: `ai-pm/frontend/src/api/{projects,repositories,imports}.ts` + 同目录 `*.test.ts`
+- Create: `ai-pm/frontend/src/shell/views/onboarding/ProjectImportWizard.vue`、`steps/{ProjectBasics,Repositories}.vue`
+- Create: `ai-pm/frontend/locales/{zh-CN,en}/pm/{import,repositories}.yaml`
 - Modify: `ai-pm/frontend/src/shell/router/routes.ts`
 
 **Interfaces:**
-- Produces（api）: `createProject(body) -> Project`；`createSshKey(projectId)`、`listSshKeys(projectId)`、`revokeSshKey(id)`；`createRepository(projectId, body)`、`listRepositories(projectId)`、`updateRepository(id, body)`、`archiveRepository(id)`、`verifyRepository(id)`；`startImport(projectId)`、`getImport(projectId, importId)`、`cancelImport(...)`、`applyImport(projectId, importId, body)`。
-- Produces（路由）：`/onboarding/import`（name `project-import`）、`/projects/:projectId/repositories`（name `project-repositories`），挂 `AppShell.children` 静态新增。
-- Produces（向导状态）：`step: 1|2|3|4`；`projectId`、`sshKey`、`repositories`；步骤 2 的 `verifiedCount` 决定「下一步」可用性。
+- Produces（api）：`createProject`、`createSshKey/listSshKeys/revokeSshKey`、`createRepository/listRepositories/updateRepository/archiveRepository/verifyRepository`、`startImport/getImport/cancelImport/applyImport`。
+- Produces（路由）：`/onboarding/import`、`/projects/:projectId/repositories`（`AppShell.children` 静态新增）。
 
-- [ ] **Step 1** 失败测试（api）：URL 路径与方法正确（stub fetch）；`createSshKey` 解析 `public_key/fingerprint`；错误码 `invalid_repository_url` 翻译为 i18n 文案。
-- [ ] **Step 2** 失败测试（步骤 1）：空 code/name 禁用提交；提交成功调用 `createProject` 并进入步骤 2（stub api）。
-- [ ] **Step 3** 失败测试（步骤 2）：展示公钥与指纹；复制按钮调用 clipboard；添加 URL 后出现 pending 卡片；手动「校验」后状态变为 verified；无 verified 时下一步禁用；`unreachable` 卡片显示错误原因文案。
+- [ ] **Step 1** 失败测试（api）：路径/方法正确；错误码翻译；`createSshKey` 解析公钥与指纹。
+- [ ] **Step 2** 失败测试（步骤 1）：空字段禁用；提交调 `createProject` 进步骤 2。
+- [ ] **Step 3** 失败测试（步骤 2）：展示公钥/指纹/复制；添加 URL 出现 pending；校验后变 verified；无 verified 禁用下一步；`unreachable` 显示原因。
 - [ ] **Step 4** 确认失败 → 实现 → 通过；`pnpm check:i18n` 绿。
 - [ ] **Step 5: Commit** `feat(import): wizard basics and repository connection steps`
 
-### Task 9: 向导第 3–4 步 + 仓库管理页
+### Task 12: 向导第 3–4 步 + 审批批次卡
 
 **Files:**
-- Create: `ai-pm/frontend/src/shell/views/onboarding/steps/StepAnalysis.vue`、`steps/StepReview.vue`
-- Create: `ai-pm/frontend/src/shell/views/onboarding/ProjectImportWizard.test.ts`
-- Create: `ai-pm/frontend/src/shell/views/projects/repositories/ProjectRepositoriesView.vue`、`ProjectRepositoriesView.test.ts`
-- Modify: `ai-pm/frontend/src/shell/views/onboarding/ProjectImportWizard.vue`（组合 3–4 步、完成页）
+- Create: `steps/{Analysis,Review}.vue`、`ProjectImportWizard.test.ts`
+- Create: `ai-pm/frontend/src/shell/views/pm/approvals/ImportBatchCard.vue` + test
+- Modify: `ProjectImportWizard.vue`（组合 4 步）、审批页（挂批次卡）
 
 **Interfaces:**
-- Consumes: Task 8 的 api 层；Task 6 的 `ImportDetail`；Task 7 的 apply 契约。
-- Produces（步骤 3）：1s 轮询（`setInterval`，`onUnmounted` 清理）；阶段时间线 4 节点；进度条；取消按钮；失败态显示 `error_code` 文案 + 重试。
-- Produces（步骤 4）：分区列表 + 勾选；默认勾选 `confidence !== 'low'`；低置信项黄标默认不选；证据面板显示 `kind/ref/detail`；顶部 `dropped_items` 提示；确认按钮调用 apply 并按 `outcome` 渲染成功/已完成。
-- Produces（仓库管理页）：表格 + 行内操作；页头「再导入」跳 `/onboarding/import?project=:id`。
+- Produces（步骤 3）：1s 轮询（卸载清理）；4 节点时间线；取消；失败重试。
+- Produces（步骤 4）：分区 + 勾选（默认非低置信）；任务显示承接 Agent 角色；证据面板；`dropped_items` 提示；提交后展示「已生成 4 项提案」+「去审批」。
+- Produces（批次卡）：按 `analysis_run_id` 分组；整批批准/驳回顺序调用 `decideApproval`；逐项展示结果；部分失败可单独重试。
 
-- [ ] **Step 1** 失败测试（步骤 3）：假定时器推进 → 轮询次数正确；状态从 `cloning` 到 `draft_ready` 时时间线节点依次点亮；取消调用 api 且停轮询；组件卸载后无残留定时器。
-- [ ] **Step 2** 失败测试（步骤 4）：高/中置信默认勾选、低置信默认不选；取消勾选后 apply 请求的 `requirement_keys` 不含该项；`dropped_items>0` 时展示提示；`already_applied` 展示「已完成」而非报错。
-- [ ] **Step 3** 失败测试（仓库管理页）：列表渲染 url/role/status；「重新校验」触发 api 并刷新状态徽标；「归档」二次确认后调用 api；无权限时按钮隐藏（mock auth）。
+- [ ] **Step 1** 失败测试（步骤 3）：定时器推进轮询次数；状态推进点亮时间线；取消停轮询；卸载无残留。
+- [ ] **Step 2** 失败测试（步骤 4）：低置信默认不选；取消勾选不进 `requirement_keys`；`dropped_items>0` 提示；提交后展示提案数与跳转。
+- [ ] **Step 3** 失败测试（批次卡）：渲染 4 项与总件数；整批批准调用 4 次；1 次失败时展示失败项且其余成功。
 - [ ] **Step 4** 确认失败 → 实现 → 通过；`pnpm test:unit`、`pnpm typecheck` 绿。
-- [ ] **Step 5: Commit** `feat(import): analysis and draft review steps with repository settings page`
+- [ ] **Step 5: Commit** `feat(import): analysis, draft review and import approval batch card`
 
-### Task 10: 端到端验收 + runbook
+### Task 13: 仓库管理页
 
 **Files:**
-- Modify: `ai-pm/docs/runbook-login-chain.md`（新增「多仓库导入」小节）
-- Create: `ai-pm/apps/pm-api/tests/imports_e2e.rs`（或并入 `tests/imports.rs`）
+- Create: `ai-pm/frontend/src/shell/views/projects/repositories/ProjectRepositoriesView.vue` + test
 
-- [ ] **Step 1** 端到端集成测试：HTTP 建项目 → 建 key（注入固定主密钥）→ 绑定本地 `file://` 假仓库（测试用 `git init` 真实提交）→ `verify` → `start_import` → 直接调 `run_import_job`（Fake 模型）→ `apply` → 断言项目/需求/任务/文档/审计五者一致。
-- [ ] **Step 2** 安全断言：收集所有 HTTP 响应体、`tracing` 输出（测试用内存 writer）、`draft` JSON、`audit_log.after_data`，逐项断言不含私钥内容与密文。
-- [ ] **Step 3** runbook 补：`AI_PM_SECRET_KEY` 生成方式（`openssl rand -hex 32`）、`AI_PM_REPO_CACHE_ROOT`、`AI_PM_REPO_MAX_MB`、`AI_PM_REPO_ALLOWED_HOSTS`、Windows 下 0600 权限的已知限制、托管平台 Deploy Key 配置步骤。
-- [ ] **Step 4** 全量验证：`DATABASE_URL=postgres://aipm:aipm@localhost:5433/aipm cargo test`、`cargo build`；前端 `pnpm test:unit`、`pnpm typecheck`、`pnpm lint:eslint`、`pnpm check:i18n`；`git ls-files | grep -c $'\r'` 为 0。
-- [ ] **Step 5: Commit** `test(import): multi-repo import acceptance and runbook`
+**Interfaces:**
+- Consumes: Task 11 的 repositories api。
+- Produces: 列表（label/url/role/status/HEAD/最近校验）；行内重新校验、换密钥、归档（二次确认）；页头「再导入」带 `projectId` 跳向导。
 
-## Out of Scope（P0 明确不做）
+- [ ] **Step 1** 失败测试：列表渲染；重新校验触发 api 并刷新徽标；归档二次确认；无权限时按钮隐藏（mock auth）。
+- [ ] **Step 2** 确认失败 → 实现 → 通过。
+- [ ] **Step 3: Commit** `feat(import): project repositories settings page`
 
-Git/CI Webhook 与增量同步；HTTP token / OAuth 认证；Vault/KMS 级密钥托管；需求自动定稿与任务自动执行；PageIndex / 知识树索引；导入进度 SSE；跨项目共享密钥与仓库；真 LLM 的线上调参与成本控制（P0 只接线，不在本计划优化）。
+### Task 14: 端到端验收 + runbook
+
+**Files:**
+- Create: `ai-pm/apps/pm-api/tests/imports_e2e.rs`
+- Modify: `ai-pm/docs/runbook-login-chain.md`
+
+- [ ] **Step 1** 端到端：HTTP 建项目（断言 5 人编制）→ 建 key → 绑本地 `file://` 仓库 → verify → start_import → 直接跑 `run_import_job`（Fake）→ apply（断言 4 提案、delivery 零行）→ 4 次 decide → 断言项目 `planning`、需求 draft、任务 assignee 正确、知识文档 + commit、审计行。
+- [ ] **Step 2** 运营闭环：导入完成后用同一套命令再 `CreateRequirements` / `CreateMilestones` / `WriteDocuments` 各一次，断言成功（证明 AI PM 能继续运营）。
+- [ ] **Step 3** 安全断言：所有 HTTP 响应体、`tracing` 输出、draft JSON、审计 `after_data` 均不含私钥与密文。
+- [ ] **Step 4** runbook：`AI_PM_SECRET_KEY` 生成（`openssl rand -hex 32`）、`AI_PM_REPO_CACHE_ROOT`、`AI_PM_REPO_MAX_MB`、`AI_PM_REPO_ALLOWED_HOSTS`、Windows 0600 限制、Deploy Key 配置步骤、整批审批操作说明。
+- [ ] **Step 5** 全量验证：`DATABASE_URL=postgres://aipm:aipm@localhost:5433/aipm cargo test`、`cargo build`；`pnpm test:unit`、`pnpm typecheck`、`pnpm lint:eslint`、`pnpm check:i18n`；`git ls-files | grep -c $'\r'` 为 0。
+- [ ] **Step 6: Commit** `test(import): cold-start acceptance, ops loop and runbook`
+
+## Out of Scope
+
+Agent 自主认领与 Agent 间消息总线；AI 团队页接真数据；Git/CI Webhook 与增量同步；HTTP token / OAuth 认证；Vault/KMS 托管；需求自动定稿与自动执行；PageIndex / 知识树索引；导入进度 SSE；跨项目共享密钥与仓库。
 
 ## Done When
 
-- 一个项目可绑定多个 SSH 仓库，每项目一把 active ed25519 密钥，私钥加密存储且任何出口都不回显。
-- `git ls-remote` 能区分可达 / 认证失败 / 不存在 / 超时，并回写仓库状态。
-- 一次导入能从 commit + docs 产出带证据的草案；无证据条目被丢弃且计数可查。
-- `apply` 后项目、需求（draft）、任务、知识库文档、审计行五者一致；重复 apply 幂等。
-- 前端四步向导与仓库管理页可用，演示会话（Fake 模型）能完整跑通。
-- 全量门禁绿，改动只落本地 master。
+- 新建项目即有 5 人编制；导入任务能按角色派给架构 / 开发 / 测试 Agent。
+- 一次导入产生 ≤4 条提案与 4 条审批，`apply` 前后 `delivery.*` 零直接写入；审批后全部落库且审计齐全。
+- 重复 apply、部分驳回、部分执行失败三条路径都可重试且不重复写。
+- 无证据条目被丢弃并计数；全丢弃判 `no_grounded_output`。
+- 导入完成后 AI 项目经理能用同一套命令继续建需求 / 里程碑 / 文档。
+- 私钥零泄露、全量门禁绿、改动只落本地 master。

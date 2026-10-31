@@ -59,6 +59,54 @@ revisions:
   created: 修订已创建
   approved: 已定稿，旧定稿已转为已作废
   failed: 操作失败
+repositories:
+  pageTitle: 代码仓库
+  subtitle: 管理项目关联的代码仓库与访问密钥。
+  new: 新增仓库
+  newTitle: 新增代码仓库
+  editTitle: 编辑代码仓库
+  name: 仓库名称
+  namePlaceholder: 例如：主仓库 / 文档仓库
+  url: 仓库地址
+  urlPlaceholder: git{'@'}gitlab.local:team/repo.git
+  urlHint: 仅支持 SSH 形式：git{'@'}host:path 或 ssh://user{'@'}host/path
+  roleLabel: 用途
+  defaultBranch: 默认分支
+  defaultBranchPlaceholder: main
+  updatedAt: 更新时间
+  description: 备注（可选）
+  nameRequired: 请填写仓库名称
+  urlRequired: 请填写仓库地址
+  save: 保存
+  edit: 编辑
+  delete: 删除
+  deleteTitle: 删除仓库
+  deleteConfirm: 确定删除「{name}」吗？该操作不可撤销。
+  created: 仓库已添加
+  updated: 仓库已更新
+  deleted: 仓库已删除
+  failed: 操作失败
+  emptyHint: 还没有关联仓库，点击右上角「新增仓库」开始。
+  sshKeyTitle: 项目 SSH 密钥
+  sshKeyHint: 将该公钥添加到代码托管平台的 Deploy Key（只读权限即可），AI 项目经理才能访问上述仓库。
+  sshKeyEmpty: 还没有生成密钥。
+  generate: 生成密钥
+  regenerate: 重新生成
+  regenerateConfirm: 重新生成后，托管平台上的旧公钥立即失效，需要重新配置。
+  copy: 复制公钥
+  copied: 公钥已复制
+  copyFailed: 复制失败，请手动选择公钥复制
+  fingerprint: 指纹
+  createdAt: 创建时间
+  deleteKey: 删除密钥
+  deleteKeyConfirm: 删除后已绑定的仓库将无法被访问，确定删除？
+  keyGenerated: 密钥已生成
+  keyDeleted: 密钥已删除
+  role:
+    main: 主仓库
+    docs: 文档仓库
+    service: 服务仓库
+    infra: 基础设施仓库
 audit:
   pageTitle: 审计日志
   subtitle: 所有权威状态变更（含 AI 执行的命令与人工干预）的不可变记录。

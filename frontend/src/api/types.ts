@@ -111,3 +111,27 @@ export interface RequirementRevision {
   approved_by: string | null;
   created_at: string;
 }
+/** integration.project_repository（0008）：项目 ↔ 代码仓库的关系 */
+export type RepositoryRole = "main" | "docs" | "service" | "infra";
+
+export interface Repository {
+  id: string;
+  project_id: string;
+  name: string;
+  url: string;
+  role: RepositoryRole;
+  default_branch: string | null;
+  description: string | null;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** integration.project_ssh_key（0008）：只回公钥与指纹，私钥永不回显 */
+export interface SshKey {
+  project_id: string;
+  label: string;
+  public_key: string;
+  fingerprint: string;
+  created_at: string;
+}

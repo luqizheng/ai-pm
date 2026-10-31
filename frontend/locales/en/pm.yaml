@@ -59,6 +59,54 @@ revisions:
   created: Revision created
   approved: Approved; the previous approved revision is now superseded
   failed: Operation failed
+repositories:
+  pageTitle: Code repositories
+  subtitle: Manage the repositories linked to this project and their access key.
+  new: Add repository
+  newTitle: Add code repository
+  editTitle: Edit code repository
+  name: Repository name
+  namePlaceholder: "e.g. main / docs"
+  url: Repository URL
+  urlPlaceholder: git{'@'}gitlab.local:team/repo.git
+  urlHint: "SSH only: git{'@'}host:path or ssh://user{'@'}host/path"
+  roleLabel: Purpose
+  defaultBranch: Default branch
+  defaultBranchPlaceholder: main
+  updatedAt: Updated at
+  description: Notes (optional)
+  nameRequired: Repository name is required
+  urlRequired: Repository URL is required
+  save: Save
+  edit: Edit
+  delete: Delete
+  deleteTitle: Delete repository
+  deleteConfirm: 'Delete "{name}"? This cannot be undone.'
+  created: Repository added
+  updated: Repository updated
+  deleted: Repository deleted
+  failed: Operation failed
+  emptyHint: No repositories linked yet. Use "Add repository" to start.
+  sshKeyTitle: Project SSH key
+  sshKeyHint: Add this public key as a read-only Deploy Key on your Git host so the AI project manager can access the repositories above.
+  sshKeyEmpty: No key generated yet.
+  generate: Generate key
+  regenerate: Regenerate
+  regenerateConfirm: Regenerating invalidates the old public key immediately; you must reconfigure your Git host.
+  copy: Copy public key
+  copied: Public key copied
+  copyFailed: Copy failed — select and copy manually
+  fingerprint: Fingerprint
+  createdAt: Created at
+  deleteKey: Delete key
+  deleteKeyConfirm: Bound repositories will lose access after deletion. Continue?
+  keyGenerated: Key generated
+  keyDeleted: Key deleted
+  role:
+    main: Main
+    docs: Docs
+    service: Service
+    infra: Infrastructure
 audit:
   pageTitle: Audit log
   subtitle: Immutable record of every authoritative state change, including AI-executed commands and human interventions.
