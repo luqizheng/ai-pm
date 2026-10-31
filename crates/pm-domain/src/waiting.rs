@@ -2,6 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::ids::PrincipalId;
+use crate::task_transition::TransitionError;
+
 /// Why a task sits in `AwaitingDecision`.
 ///
 /// Four reasons share one task state (§12.2 底注：「同一任务状态下的等待原因示例，
@@ -38,5 +41,86 @@ impl WaitingReason {
             "external_dependency" => Some(WaitingReason::ExternalDependency),
             _ => None,
         }
+    }
+}
+
+/// Structured waiting context attached to a task in `AwaitingDecision` (§12.4).
+///
+/// 「状态」和「等待上下文」分开存储：the status stays a plain enum value; everything
+/// that explains *why* it waits lives here. History is append-only — a task that
+/// leaves the waiting state keeps its past contexts (storage responsibility of
+/// Slice B; this type only models one context).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WaitingContext {
+    pub reason: WaitingReason,
+    /// Open questions the task waits on (§12.3: 设置 waiting_reason 时列出具体问题).
+    pub questions: Vec<String>,
+    /// Who was asked (user/actor the request was directed at), if known.
+    pub requested_from: Option<PrincipalId>,
+    pub since: chrono::DateTime<chrono::Utc>,
+    /// When the wait should escalate (提醒/升级, §12.3 等待超时) — Q2.2 pending.
+    pub deadline: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl WaitingContext {
+    /// §12.3: 进入等待必须列出具体问题；空问题集的等待不是等待。
+    pub fn new(
+        reason: WaitingReason,
+        questions: Vec<String>,
+    ) -> Result<Self, TransitionError> {
+        if questions.is_empty() {
+            return Err(TransitionError::EmptyQuestions);
+        }
+        Ok(Self {
+            reason,
+            questions,
+            requested_from: None,
+            since: chrono::Utc::now(),
+            deadline: None,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ids::PrincipalId;
+    use crate::task_transition::TransitionError;
+
+    #[test]
+    fn waiting_reason_roundtrip_covers_all_variants() {
+        let all = [
+            (WaitingReason::NeedsInfo, "needs_info"),
+            (WaitingReason::NeedsDecision, "needs_decision"),
+            (WaitingReason::NeedsApproval, "needs_approval"),
+            (WaitingReason::ExternalDependency, "external_dependency"),
+        ];
+        for (reason, text) in all {
+            assert_eq!(reason.as_str(), text);
+            assert_eq!(WaitingReason::from_str(text), Some(reason));
+        }
+        assert_eq!(WaitingReason::from_str("waiting"), None);
+    }
+
+    #[test]
+    fn context_rejects_empty_questions() {
+        // §12.3: 进入 AwaitingDecision 时须“列出具体问题”——没有待解决问题的
+        // 等待不是等待。
+        let err = WaitingContext::new(WaitingReason::NeedsInfo, Vec::new())
+            .expect_err("empty questions must be rejected");
+        assert_eq!(err, TransitionError::EmptyQuestions);
+    }
+
+    #[test]
+    fn context_accepts_needs_info_with_questions() {
+        let ctx = WaitingContext::new(
+            WaitingReason::NeedsInfo,
+            vec!["接口契约字段 A 的类型是什么？".to_string()],
+        )
+        .expect("questions present");
+        assert_eq!(ctx.reason, WaitingReason::NeedsInfo);
+        assert_eq!(ctx.questions.len(), 1);
+        assert_eq!(ctx.requested_from, None::<PrincipalId>);
+        assert_eq!(ctx.deadline, None);
     }
 }
