@@ -1,10 +1,10 @@
-# 任务状态机 V1 · Slice B（持久层 + Outbox）实施计划
+﻿# 任务状态机 V1 · Slice B（持久层 + Outbox）实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把 Slice A 的纯域模型落到 PostgreSQL：新增 `0009`/`0010` 迁移（Run、等待、取代关系、任务级策略覆盖、Outbox 五组表 + 13 值 status 约束 + 默认值），并交付首版最小可靠 Outbox（同事务写入、租约领取、退避重试、死信与人工重放）。
+**Goal:** 把 Slice A 的纯域模型落到 PostgreSQL：**一个** `0009` 迁移（Run、等待、取代关系、任务级策略覆盖、Outbox 五组表 + `delivery.task` 新列 + 13 值 status 约束 + 默认值），并交付首版最小可靠 Outbox（同事务写入、租约领取、退避重试、死信与人工重放）。
 
-**Architecture:** **本系统是新系统，库里没有任何存量业务数据**，因此**不做任何数据回填**：`0009` 建表 + `delivery.task` 新列（失败记录不可变触发器），`0010` 把 `status` 默认值改 `draft` 并追加 13 值 CHECK；开发库里可能残留的演示数据按「重建 dev 库 + 重放新种子」处置，不进迁移脚本。Outbox 落在 `pm-infrastructure`（`outbox.rs` 负责持久化状态机，`outbox_worker.rs` 负责注册表与分发循环），`apps/pm-worker` 只做进程接线，不承载业务规则。
+**Architecture:** **新系统，库里没有存量业务数据，开发库可以直接 drop 重建**，因此迁移文件里**不含任何回填语句**：`0009` 一次性建全表、加列、改默认值、加 CHECK。开发库按「drop database → 重新 migrate → 重放 `scripts/seed-demo.sql`」处置。Outbox 落在 `pm-infrastructure`（`outbox.rs` 负责持久化状态机，`outbox_worker.rs` 负责注册表与分发循环），`apps/pm-worker` 只做进程接线，不承载业务规则。
 
 **Tech Stack:** Rust 1.99 / sqlx 0.8（`runtime-tokio` + `postgres` + `migrate`，无 `query!` 离线模式）/ PostgreSQL 16（`aipm-pg-dev`，`localhost:5433`）/ async-trait（workspace 既有依赖，零新增 crate）。
 
@@ -23,8 +23,8 @@
 - **Outbox 默认参数**（本计划钉死，实施时集中为常量）：`lease = 60s`、`max_attempts = 5`、`backoff_base = 5s`（`next_attempt_at = now() + base * 2^attempts`）、空闲轮询 `100ms`。
 - **同事务写入**（§20.6 第 1 条）：`append` 只接受 `&mut Transaction`，不接受 `&PgPool`——从签名上杜绝「业务提交了、事件丢了」。
 - **至少一次投递**（§20.6 第 3 条）：消费者必须幂等；DB 侧以 `idempotency_key` 唯一约束保证同一语义事件只落一行。
-- **迁移文件一经提交不可改写**：sqlx 会校验已应用迁移的 checksum；任何后续变更一律新建 `0011+`。
-- **无数据回填**：库内没有存量业务数据，`0009`/`0010` 只含 DDL；开发库按「重建 + 重放 `scripts/seed-demo.sql`」处置（见 Task 2 Step 5）。
+- **迁移文件一经提交不可改写**：sqlx 会校验已应用迁移的 checksum；任何后续变更一律新建 `0010+`。
+- **无数据回填**：库内没有存量业务数据，**开发库可随时 drop 重建**，`0009` 只含 DDL + 默认值 + 约束；开发库按「drop → migrate → 重放 `scripts/seed-demo.sql`」处置（见 Task 1 Step 6）。
 - 既有约束不变：无新增 crate 依赖、每个任务 TDD（先失败测试）、每任务结束即 commit（只落本地）。
 
 ## Decision Gate（实施前需需求方确认）
@@ -37,18 +37,17 @@
 
 ## Review Focus
 
-1. **演示数据/开发库残留旧值**：新系统虽无业务数据，但 dev 库可能有 `seed-demo.sql` 灌入的 `backlog`/`in_review` 行，`0010` 的 CHECK 会让这些行在下次写入时被拒。Task 2 的 Step 5 先重建 dev 库并以新值重放种子，再让 `pm-api` 启动跑迁移。
-2. **CHECK 漏值导致线上 500**：13 值必须逐值插入成功。Task 2 用一条循环测试覆盖全部 13 个状态，另加 `backlog`/`in_progress`/`done`/`in_review`/`needs_info` 五个旧值各一条拒绝断言。
-3. **约束切换与写路径不同步**：`create_task`、`CreateTask` 命令处理器、`seed-demo.sql` 仍在写 `'backlog'`；Task 2 必须同 commit 改完，否则新数据库上创建任务直接 500。
-4. **Outbox 事件在业务提交后丢失**：`append` 若接受 `&PgPool` 就会有人在事务外调用。Task 3 的测试必须在一个**回滚**事务里 append 后断言查不到，在**提交**事务里 append 后断言可查。
+1. **演示数据/开发库残留旧值**：新系统虽无业务数据，但 dev 库可能有 `seed-demo.sql` 灌入的 `backlog`/`in_review` 行，`0009` 的 CHECK 会让这些行在下次写入时被拒。Task 1 的 Step 6 直接 drop 重建开发库并以新值重放种子，再让 `pm-api` 启动跑迁移。
+2. **CHECK 漏值导致线上 500**：13 值必须逐值插入成功。Task 1 用一条循环测试覆盖全部 13 个状态，另加 `backlog`/`in_progress`/`done`/`in_review`/`needs_info` 五个旧值各一条拒绝断言。
+3. **约束切换与写路径不同步**：`create_task`、`CreateTask` 命令处理器、`seed-demo.sql` 仍在写 `'backlog'`；Task 1 Step 4 必须同 commit 改完，否则新数据库上创建任务直接 500。
+4. **Outbox 事件在业务提交后丢失**：`append` 若接受 `&PgPool` 就会有人在事务外调用。Task 2 的测试必须在一个**回滚**事务里 append 后断言查不到，在**提交**事务里 append 后断言可查。
 5. **重复投递变成重复执行**：同一 `idempotency_key` 二次 append 必须被唯一约束拒绝；租约过期后 `claim` 会重投**同一行**（`id` 不变），测试用 `lease_secs = 0` 复现。
 
 ## 文件结构
 
 | 动作 | 路径 | 职责 |
 | --- | --- | --- |
-| Create | `migrations/0009_task_state_schema.sql` | 纯增量 DDL：`task_run` / `task_run_failure`（含不可变触发器）/ `task_supersession` / `task_waiting` / `task_policy_override` / `outbox_event` + `delivery.task` 四个新列 |
-| Create | `migrations/0010_task_state_constraint.sql` | `status` 默认值改 `draft` + 追加 `task_status_valid` 与 `task_failure_category_valid` 两条 CHECK（**不含任何回填语句**） |
+| Create | `migrations/0009_task_state_machine.sql` | 建表（`task_run` / `task_run_failure` 含不可变触发器 / `task_supersession` / `task_waiting` / `task_policy_override` / `outbox_event`）+ `delivery.task` 新列 + `status` 默认值 `draft` + 13 值 CHECK + 失败类别 CHECK（**不含回填语句**） |
 | Create | `crates/pm-infrastructure/src/outbox.rs` | Outbox 持久化状态机：`append` / `claim` / `complete` / `fail` / `dead_letter` / `replay` / `list_dead_letters` |
 | Create | `crates/pm-infrastructure/src/outbox_worker.rs` | `OutboxHandler` 端口 + 事件类型注册表 + `dispatch_once` 单步分发 |
 | Modify | `crates/pm-infrastructure/src/lib.rs` | 导出 `outbox` / `outbox_worker` 及其公开类型 |
@@ -56,22 +55,25 @@
 | Modify | `crates/pm-application/src/pm_write.rs:16-17,263,290-294` | `TASK_STATUSES` → 13 值；`create_task` 落 `draft`；文档注释同步 |
 | Modify | `crates/pm-application/src/command_executor.rs:455-490` | `CreateTask` 处理器与补偿快照改 `draft` |
 | Modify | `apps/pm-worker/{Cargo.toml,src/main.rs}` | Outbox Worker 进程接线（替换空壳 `println!`） |
-| Modify | 既有测试与 `scripts/seed-demo.sql` | 旧状态字面量机械替换（清单见 Task 2 Step 3） |
-| Create | `crates/pm-infrastructure/tests/migration_0009.rs` | 新表/新列/约束/触发器 |
+| Modify | 既有测试与 `scripts/seed-demo.sql` | 旧状态字面量机械替换（清单见 Task 1 Step 4） |
+| Create | `crates/pm-infrastructure/tests/migration_0009.rs` | 新表/新列/约束/触发器/默认值 |
 | Create | `crates/pm-infrastructure/tests/outbox.rs` | 写入/领取/完成/失败/死信/重放 |
 | Create | `crates/pm-infrastructure/tests/outbox_worker.rs` | 注册表分发、未知类型、空闲 |
 
 ---
 
-### Task 1 — 0009：Run、等待、取代、策略覆盖与 Outbox 表
+### Task 1 — 0009：表结构、状态词表与写路径切换
 
 **Files:**
-- Create: `migrations/0009_task_state_schema.sql`
+- Create: `migrations/0009_task_state_machine.sql`
 - Create: `crates/pm-infrastructure/tests/migration_0009.rs`
+- Modify: `crates/pm-application/src/pm_write.rs:16-17,263,290-294`
+- Modify: `crates/pm-application/src/command_executor.rs:455-490`
+- Modify: 既有测试与 `scripts/seed-demo.sql`（Step 4 清单）
 
 **Interfaces:**
 - Consumes: 既有 schema（`delivery.task(project_id, id)` 唯一键、`core.principal`、`core.project`）；`sqlx::test(migrations = "../../migrations")` 既有惯例。
-- Produces: 表 `delivery.task_run` / `delivery.task_run_failure` / `delivery.task_supersession` / `delivery.task_waiting` / `delivery.task_policy_override` / `integration.outbox_event`；`delivery.task` 新列 `superseded_by_task_id, attempt_count, consecutive_failure_count, last_failure_category, retry_exhausted`。Task 2/3/4/5 只依赖这些名字。
+- Produces: 表 `delivery.task_run` / `delivery.task_run_failure` / `delivery.task_supersession` / `delivery.task_waiting` / `delivery.task_policy_override` / `integration.outbox_event`；`delivery.task` 新列 `superseded_by_task_id, attempt_count, consecutive_failure_count, last_failure_category, retry_exhausted`；`delivery.task.status` 默认值 `draft`、约束 `task_status_valid`（13 值）与 `task_failure_category_valid`（7 值或 NULL）；`pm_write::TASK_STATUSES` 变为 13 值常量（Slice C 的 PATCH 禁改 status 仍另行实施）。Task 2/3/4 只依赖这些名字。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -201,20 +203,77 @@ async fn outbox_defaults_to_pending_and_rejects_duplicate_idempotency_key(pool: 
         "idempotency_key must be globally unique"
     );
 }
+
+async fn seed_project_only(pool: &PgPool) -> Uuid {
+    let customer_id: Uuid =
+        sqlx::query_scalar("INSERT INTO core.customer (name) VALUES ('m9c') RETURNING id")
+            .fetch_one(pool).await.unwrap();
+    sqlx::query_scalar(
+        "INSERT INTO core.project (customer_id, code, name) VALUES ($1, 'M9-C', 'm9c') RETURNING id",
+    ).bind(customer_id).fetch_one(pool).await.unwrap()
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn constraint_accepts_all_thirteen_values_and_rejects_legacy_ones(pool: PgPool) {
+    let project_id = seed_project_only(&pool).await;
+
+    for status in [
+        "draft", "ready", "claimed", "running", "awaiting_decision", "blocked",
+        "submitted", "reviewing", "completed", "changes_requested", "failed",
+        "cancelled", "superseded",
+    ] {
+        sqlx::query("INSERT INTO delivery.task (project_id, title, status) VALUES ($1, $2, $3)")
+            .bind(project_id).bind(format!("ok {status}")).bind(status)
+            .execute(&pool).await.unwrap_or_else(|e| panic!("{status} must be accepted: {e}"));
+    }
+    for legacy in ["backlog", "in_progress", "in_review", "done", "needs_info"] {
+        let err = sqlx::query(
+            "INSERT INTO delivery.task (project_id, title, status) VALUES ($1, $2, $3)",
+        ).bind(project_id).bind(format!("legacy {legacy}")).bind(legacy)
+         .execute(&pool).await;
+        assert!(err.is_err(), "{legacy} must be rejected by the 13-state CHECK");
+    }
+
+    let default_status: String = sqlx::query_scalar(
+        "INSERT INTO delivery.task (project_id, title) VALUES ($1, 'default') RETURNING status",
+    ).bind(project_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(default_status, "draft");
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn failure_category_constraint_accepts_seven_values(pool: PgPool) {
+    let project_id = seed_project_only(&pool).await;
+    let task_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.task (project_id, title, status) VALUES ($1, 'cat', 'failed') RETURNING id",
+    ).bind(project_id).fetch_one(&pool).await.unwrap();
+    for category in [
+        "infrastructure", "execution", "validation", "permission",
+        "policy_violation", "missing_dependency", "unknown",
+    ] {
+        sqlx::query("UPDATE delivery.task SET last_failure_category = $2 WHERE id = $1")
+            .bind(task_id).bind(category).execute(&pool).await.unwrap();
+    }
+    assert!(
+        sqlx::query("UPDATE delivery.task SET last_failure_category = 'bogus' WHERE id = $1")
+            .bind(task_id).execute(&pool).await.is_err(),
+        "unknown failure categories must be rejected"
+    );
+}
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `bash scripts/cargo-test.sh -p pm-infrastructure`
-Expected: FAIL —— `relation "delivery.task_run" does not exist`。
+Expected: FAIL —— `relation "delivery.task_run" does not exist`；且 `status='backlog'` 仍可插入、`last_failure_category='bogus'` 被接受、默认值仍是 `backlog`。
 
-- [ ] **Step 3: 写 `migrations/0009_task_state_schema.sql`**
+- [ ] **Step 3: 写 `migrations/0009_task_state_machine.sql`**
 
-按以下顺序写全（列名、类型、约束与索引逐字照录；`delivery.task` 只加列不改既有语义）：
+按以下顺序写全（列名、类型、约束与索引逐字照录；**最后一个语句块是默认值与 CHECK，紧跟在建表之后，文件内没有任何 UPDATE/INSERT 回填**）：
 
 ```sql
--- 0009_task_state_schema: Run / 等待 / 取代关系 / 任务级策略覆盖 / Outbox（纯增量）
--- 规格：ai-pm-task-state-machine-v1.md §11.5 §12.4 §19.5 §20.4
+-- 0009_task_state_machine: Run / 等待 / 取代关系 / 任务级策略覆盖 / Outbox
+--                          + 13 值 status 约束与默认值（新系统，无回填）
+-- 规格：ai-pm-task-state-machine-v1.md §11.5 §12.4 §19.5 §20.4 §21.1
 
 ALTER TABLE delivery.task
     ADD COLUMN superseded_by_task_id UUID,
@@ -349,110 +408,6 @@ CREATE TABLE integration.outbox_event (
 );
 CREATE INDEX idx_outbox_claim ON integration.outbox_event(status, next_attempt_at)
     WHERE status IN ('pending', 'processing');
-```
-
-- [ ] **Step 4: 跑测试确认通过**
-
-Run: `bash scripts/cargo-test.sh -p pm-infrastructure`
-Expected: PASS（既有 `platform_schema` / `job_queue` 套件同时保持全绿）。
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add migrations/0009_task_state_schema.sql crates/pm-infrastructure/tests/migration_0009.rs
-git commit -m "feat(db): add task run, waiting, supersession, policy override and outbox tables"
-```
-
----
-
-### Task 2 — 0010：默认值与 13 值 status 约束
-
-**Files:**
-- Create: `migrations/0010_task_state_constraint.sql`
-- Modify: `crates/pm-infrastructure/tests/migration_0009.rs`
-- Modify: `crates/pm-application/src/pm_write.rs:16-17,263,290-294`
-- Modify: `crates/pm-application/src/command_executor.rs:455-490`
-- Modify: 既有测试与 `scripts/seed-demo.sql`（Step 3 清单）
-
-**Interfaces:**
-- Consumes: Task 1 的全部表与 `delivery.task` 新列。
-- Produces: `delivery.task.status` 默认值 `draft`；约束 `task_status_valid`（13 值）与 `task_failure_category_valid`（7 值或 NULL）；`pm_write::TASK_STATUSES` 变为 13 值常量（Slice C 的 PATCH 禁改 status 仍另行实施）。
-
-- [ ] **Step 1: 写失败测试（新库上直接验证约束与默认值）**
-
-无存量数据，测试不需要「旧库 -> 迁移」的场景铺陈：`#[sqlx::test(migrations = "../../migrations")]` 起一个全新库，直接断言 13 值可写、旧值被拒、默认值为 `draft`。
-
-```rust
-// 追加到 crates/pm-infrastructure/tests/migration_0009.rs
-async fn seed_project_only(pool: &PgPool) -> Uuid {
-    let customer_id: Uuid =
-        sqlx::query_scalar("INSERT INTO core.customer (name) VALUES ('m9c') RETURNING id")
-            .fetch_one(pool).await.unwrap();
-    sqlx::query_scalar(
-        "INSERT INTO core.project (customer_id, code, name) VALUES ($1, 'M9-C', 'm9c') RETURNING id",
-    ).bind(customer_id).fetch_one(pool).await.unwrap()
-}
-
-#[sqlx::test(migrations = "../../migrations")]
-async fn constraint_accepts_all_thirteen_values_and_rejects_legacy_ones(pool: PgPool) {
-    let project_id = seed_project_only(&pool).await;
-
-    for status in [
-        "draft", "ready", "claimed", "running", "awaiting_decision", "blocked",
-        "submitted", "reviewing", "completed", "changes_requested", "failed",
-        "cancelled", "superseded",
-    ] {
-        sqlx::query("INSERT INTO delivery.task (project_id, title, status) VALUES ($1, $2, $3)")
-            .bind(project_id).bind(format!("ok {status}")).bind(status)
-            .execute(&pool).await.unwrap_or_else(|e| panic!("{status} must be accepted: {e}"));
-    }
-    for legacy in ["backlog", "in_progress", "in_review", "done", "needs_info"] {
-        let err = sqlx::query(
-            "INSERT INTO delivery.task (project_id, title, status) VALUES ($1, $2, $3)",
-        ).bind(project_id).bind(format!("legacy {legacy}")).bind(legacy)
-         .execute(&pool).await;
-        assert!(err.is_err(), "{legacy} must be rejected after 0010");
-    }
-
-    let default_status: String = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title) VALUES ($1, 'default') RETURNING status",
-    ).bind(project_id).fetch_one(&pool).await.unwrap();
-    assert_eq!(default_status, "draft");
-}
-
-#[sqlx::test(migrations = "../../migrations")]
-async fn failure_category_constraint_accepts_seven_values(pool: PgPool) {
-    let project_id = seed_project_only(&pool).await;
-    let task_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status) VALUES ($1, 'cat', 'failed') RETURNING id",
-    ).bind(project_id).fetch_one(&pool).await.unwrap();
-    for category in [
-        "infrastructure", "execution", "validation", "permission",
-        "policy_violation", "missing_dependency", "unknown",
-    ] {
-        sqlx::query("UPDATE delivery.task SET last_failure_category = $2 WHERE id = $1")
-            .bind(task_id).bind(category).execute(&pool).await.unwrap();
-    }
-    assert!(
-        sqlx::query("UPDATE delivery.task SET last_failure_category = 'bogus' WHERE id = $1")
-            .bind(task_id).execute(&pool).await.is_err(),
-        "unknown failure categories must be rejected"
-    );
-}
-```
-
-- [ ] **Step 2: 跑测试确认失败**
-
-Run: `bash scripts/cargo-test.sh -p pm-infrastructure`
-Expected: FAIL —— `13 values` 循环里 `last_failure_category` 未加约束（`'bogus'` 被接受）、`status='backlog'` 仍可插入、默认值仍是 `backlog`。
-
-- [ ] **Step 3: 写 `migrations/0010_task_state_constraint.sql` 并同步写路径**
-
-迁移**只含约束与默认值，不含任何回填语句**：
-
-```sql
--- 0010_task_state_constraint: 收紧 13 值 status 与失败类别约束
--- 新系统无存量业务数据：本文件不写任何 UPDATE/INSERT 回填。
 
 ALTER TABLE delivery.task ALTER COLUMN status SET DEFAULT 'draft';
 
@@ -467,7 +422,9 @@ ALTER TABLE delivery.task
             'policy_violation', 'missing_dependency', 'unknown'));
 ```
 
-同 commit 内改完下列字面量（**只改字面量与文档注释，不改行为**）：
+- [ ] **Step 4: 同 commit 改完旧状态字面量**
+
+CHECK 一旦生效，任何还在写 `'backlog'` 的路径都会失败。**只改字面量与文档注释，不改行为**：
 
 | 文件 | 位置 | 改动 |
 | --- | --- | --- |
@@ -488,40 +445,39 @@ ALTER TABLE delivery.task
 | 同上 | L395, L406, L407, L419 | PATCH 值 `done` → `completed` |
 | `apps/pm-api/tests/pm_lists.rs` | L28 | seed `'backlog'` → `'draft'` |
 
-- [ ] **Step 4: 跑测试确认通过**
+- [ ] **Step 5: 跑全量测试确认通过**
 
 Run: `bash scripts/cargo-test.sh`
-Expected: PASS —— nextest 全量绿（含新增约束用例与改写后的既有套件），doctest 绿。
+Expected: PASS —— nextest 全量绿（含 `migration_0009` 的 8 个用例与改写后的既有套件），doctest 绿。
 
-- [ ] **Step 5: 重建开发库并重放种子（无数据回填的配套动作）**
+- [ ] **Step 6: drop 重建开发库并重放种子**
 
-新系统无业务数据，dev 库里的演示行按「丢弃重建」处置，避免 `0010` 的 CHECK 拒绝旧字面量：
+新系统无业务数据，dev 库**直接 drop 重建**，不做任何数据搬运：
 
 ```bash
-# 1) 停掉连库进程（pm-api / ai-pm-worker / pm-worker），避免删库时被占用
-# 2) 重建 dev 库（卷内只有演示数据）
-docker compose -f docker-compose.dev.yml down -v
-docker compose -f docker-compose.dev.yml up -d
-# 3) 启动一次 pm-api 让 sqlx::migrate! 跑完 0001–0010，再灌演示数据
+# 1) 停掉连库进程（pm-api / ai-pm-worker / pm-worker）
+# 2) 重建库（Postgres 16 的 WITH (FORCE) 会断开残留连接）
+docker exec aipm-pg-dev psql -U aipm -d postgres \
+  -c "DROP DATABASE IF EXISTS aipm WITH (FORCE)" -c "CREATE DATABASE aipm"
+# 3) 启动一次 pm-api 跑迁移 0001–0009，再灌演示数据
 cargo run -p pm-api   # 迁移完成后 Ctrl+C
 docker exec -i aipm-pg-dev psql -U aipm -d aipm < scripts/seed-demo.sql
 ```
 
 Expected: `seed-demo.sql` 无约束错误；`SELECT status, count(*) FROM delivery.task GROUP BY 1` 只出现 13 值之一。
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add migrations/0010_task_state_constraint.sql crates/pm-infrastructure/tests/migration_0009.rs \
+git add migrations/0009_task_state_machine.sql crates/pm-infrastructure/tests/migration_0009.rs \
         crates/pm-application apps scripts/seed-demo.sql crates/pm-ai/tests/orchestrator.rs \
         crates/pm-mcp/tests/tools.rs
-git commit -m "feat(db): default tasks to draft and enforce the 13-state constraint"
+git commit -m "feat(db): task run, waiting, supersession, policy override and outbox schema with the 13-state constraint"
 ```
-
 
 ---
 
-### Task 3 — Outbox：事务内写入 + 租约领取 + 退避重试
+### Task 2 — Outbox：事务内写入 + 租约领取 + 退避重试
 
 **Files:**
 - Create: `crates/pm-infrastructure/src/outbox.rs`
@@ -530,7 +486,7 @@ git commit -m "feat(db): default tasks to draft and enforce the 13-state constra
 
 **Interfaces:**
 - Consumes: Task 1 的 `integration.outbox_event`。
-- Produces（Task 4/5 直接调用，名字与签名不变）：
+- Produces（Task 3/4 直接调用，名字与签名不变）：
   - `pub struct NewOutboxEvent<'a> { pub project_id: uuid::Uuid, pub event_type: &'a str, pub aggregate_type: &'a str, pub aggregate_id: &'a str, pub payload: serde_json::Value, pub idempotency_key: &'a str }`
   - `pub struct ClaimedOutboxEvent { pub id: uuid::Uuid, pub project_id: uuid::Uuid, pub event_type: String, pub aggregate_type: String, pub aggregate_id: String, pub payload: serde_json::Value, pub attempts: i32, pub schema_version: i32, pub idempotency_key: String }`
   - `#[derive(Debug, PartialEq, Eq)] pub enum OutboxFailOutcome { Retried, DeadLettered }`
@@ -691,14 +647,14 @@ git commit -m "feat(outbox): transactional append with lease-based claim and ret
 
 ---
 
-### Task 4 — 死信查询与人工重放
+### Task 3 — 死信查询与人工重放
 
 **Files:**
 - Modify: `crates/pm-infrastructure/src/outbox.rs`
 - Modify: `crates/pm-infrastructure/tests/outbox.rs`
 
 **Interfaces:**
-- Consumes: Task 3 的 `fail` / `claim`。
+- Consumes: Task 2 的 `fail` / `claim`。
 - Produces：
   - `pub async fn dead_letter(pool: &sqlx::PgPool, id: uuid::Uuid, reason: &str) -> Result<(), sqlx::Error>`
   - `pub async fn replay(pool: &sqlx::PgPool, id: uuid::Uuid) -> Result<(), ReplayError>`
@@ -761,7 +717,7 @@ Expected: FAIL —— `outbox::dead_letter` / `list_dead_letters` / `replay` 未
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `bash scripts/cargo-test.sh -p pm-infrastructure`
-Expected: PASS（新增 2 个用例 + Task 3 五个用例全绿）。
+Expected: PASS（新增 2 个用例 + Task 2 五个用例全绿）。
 
 - [ ] **Step 5: Commit**
 
@@ -772,7 +728,7 @@ git commit -m "feat(outbox): dead letter listing and manual replay"
 
 ---
 
-### Task 5 — Worker：注册表分发与进程接线
+### Task 4 — Worker：注册表分发与进程接线
 
 **Files:**
 - Create: `crates/pm-infrastructure/src/outbox_worker.rs`
@@ -781,7 +737,7 @@ git commit -m "feat(outbox): dead letter listing and manual replay"
 - Modify: `apps/pm-worker/{Cargo.toml,src/main.rs}`
 
 **Interfaces:**
-- Consumes: Task 3/4 的 `outbox::{append, claim, complete, fail, dead_letter}` 与 `ClaimedOutboxEvent`。
+- Consumes: Task 2/3 的 `outbox::{append, claim, complete, fail, dead_letter}` 与 `ClaimedOutboxEvent`。
 - Produces：
   - `#[async_trait::async_trait] pub trait OutboxHandler: Send + Sync { async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String>; }`
   - `#[derive(Debug, PartialEq, Eq)] pub enum DispatchOutcome { Delivered, Retried, DeadLettered, Idle }`
@@ -906,18 +862,18 @@ git commit -m "feat(worker): dispatch outbox events with a handler registry"
 
 | # | 风险 | 处置 |
 | --- | --- | --- |
-| R1 | 迁移**不可回滚**（Postgres DDL 虽可事务回滚，但已发布的迁移文件不能改） | `0009`/`0010` 一经提交禁改，后续变更新建 `0011+`（改已应用文件会触发 sqlx checksum 校验失败，直接拒绝启动） |
-| R2 | CHECK 收紧与写路径不同步 → 创建任务 500 | Task 2 把 `pm_write` / `command_executor` / `seed-demo.sql` / 全部测试字面量放同一 commit；Step 4 跑全量而非单包 |
-| R3 | 开发库里残留 `seed-demo.sql` 灌入的旧状态行，`0010` 之后被拒写 | Task 2 Step 5 重建 dev 库并重放**已改值**的种子；新系统无业务数据，重建不丢东西 |
+| R1 | 迁移**不可回滚**（Postgres DDL 虽可事务回滚，但已发布的迁移文件不能改） | `0009` 一经提交禁改，后续变更新建 `0010+`（改已应用文件会触发 sqlx checksum 校验失败，直接拒绝启动） |
+| R2 | CHECK 收紧与写路径不同步 → 创建任务 500 | Task 1 Step 4 把 `pm_write` / `command_executor` / `seed-demo.sql` / 全部测试字面量放同一 commit；Step 5 跑全量而非单包 |
+| R3 | 开发库里残留 `seed-demo.sql` 灌入的旧状态行，`0009` 之后被拒写 | Task 1 Step 6 直接 drop 重建开发库并重放**已改值**的种子；新系统无业务数据，重建不丢东西 |
 | R4 | 全量测试需要改写十余处断言，机械替换可能改变语义 | 逐处对照「种子值 / 执行后值 / 补偿快照值」三类；补偿回滚断言必须等于**种子**值（如 seed 改成 `running` 后，回滚后仍是 `running`） |
 | R5 | PM 进程仍在运行 `pm-api.exe` 时重建会锁文件 | 用 `CARGO_TARGET_DIR` 或先停服务；`scripts/cargo-test.sh` 使用独立临时目录，不额外占用工作区 |
 | R6 | Outbox 首版无真实 handler，事件一律死信 | **D4 的既定口径**：不静默 delivered；Slice C/D 注册真实 handler 后，对历史死信可用 `replay` 重放 |
 
 ## Self-Review 记录
 
-- **规格覆盖**：§九 M4（lowercase snake_case 存储）→ Task 1/2；§11.5（双向关系 + 多后继 + 自取代/重复边约束）→ Task 1；§12.4（等待上下文分离 + 历史保留 + 单活跃）→ Task 1；§19.4/19.5（计数位 + 不可变失败记录 + Run 快照字段）→ Task 1；§20.2–20.6（同事务写入 / 最小 Worker / 至少一次 / 死信与重放 / 幂等）→ Task 3/4/5；§21.1（lowercase snake_case）→ 全部 DDL 与枚举字符串。**§九 M1–M3（legacy 回填）不适用**：新系统无存量数据。
+- **规格覆盖**：§九 M4（lowercase snake_case 存储）→ Task 1；§11.5（双向关系 + 多后继 + 自取代/重复边约束）→ Task 1；§12.4（等待上下文分离 + 历史保留 + 单活跃）→ Task 1；§19.4/19.5（计数位 + 不可变失败记录 + Run 快照字段）→ Task 1；§20.2–20.6（同事务写入 / 最小 Worker / 至少一次 / 死信与重放 / 幂等）→ Task 2/3/4；§21.1（lowercase snake_case）→ 全部 DDL 与枚举字符串。**§九 M1–M3（legacy 回填）不适用**：新系统无存量数据。
 - **明确不在本计划**：`completion_evaluator`、风险评估器、策略合成引擎、Reviewer 编排、任务类型/项目策略表、`PATCH` 禁改 status、前端徽标（均为 Slice C/D 或详情页稿待裁项）。Task 1 只落 `task_policy_override` **存储**，不落解析器。
-- **类型一致性**：`ClaimedOutboxEvent` 字段在 Task 3 定义、Task 4/5 复用；`OutboxFailOutcome` 只在 Task 3 内部与 Task 5 映射使用；`ReplayError` 仅 Task 4 暴露。`NewOutboxEvent` 全字段与 `integration.outbox_event` 列一一对应（`schema_version` 走默认值 1，不在结构体里重复）。
-- **Review Focus 五项**均有钉死测试：dev 库残留旧值（Task 2 Step 5 重建 + 种子重放）、CHECK 漏值（Task 2 13 值循环 + 5 个旧值拒绝 + 失败类别 7 值）、写路径不同步（Task 2 Step 3 清单 + 全量跑）、事务外丢失（Task 3 `append_is_visible_only_after_commit`）、重复投递（Task 3 `expired_lease_is_reclaimed_as_the_same_row` + 唯一键断言）。
-- **比例检查**：计划 1 个迁移 DDL + 1 个约束迁移 + 2 个测试文件（迁移/Outbox）+ 2 个实现文件 + 1 处进程接线；无「TBD」「适当处理」类空步，无超出规格的抽象。
-- **依赖顺序**：Task 2 依赖 Task 1 的表；Task 3 依赖 Task 1 的 `outbox_event`；Task 4 依赖 Task 3 的 `fail`；Task 5 依赖 Task 3/4。任务内 TDD 红→绿，逐任务 commit。
+- **类型一致性**：`ClaimedOutboxEvent` 字段在 Task 2 定义、Task 3/4 复用；`OutboxFailOutcome` 只在 Task 2 内部与 Task 4 映射使用；`ReplayError` 仅 Task 3 暴露。`NewOutboxEvent` 全字段与 `integration.outbox_event` 列一一对应（`schema_version` 走默认值 1，不在结构体里重复）。
+- **Review Focus 五项**均有钉死测试：dev 库残留旧值（Task 1 Step 6 drop 重建 + 种子重放）、CHECK 漏值（Task 1 13 值循环 + 5 个旧值拒绝 + 失败类别 7 值）、写路径不同步（Task 1 Step 4 清单 + 全量跑）、事务外丢失（Task 2 `append_is_visible_only_after_commit`）、重复投递（Task 2 `expired_lease_is_reclaimed_as_the_same_row` + 唯一键断言）。
+- **比例检查**：计划 1 个迁移文件 + 2 个测试文件（迁移/Outbox）+ 2 个实现文件 + 1 处进程接线；无「TBD」「适当处理」类空步，无超出规格的抽象。
+- **依赖顺序**：Task 2 依赖 Task 1 的 `outbox_event`；Task 3 依赖 Task 2 的 `fail`；Task 4 依赖 Task 2/3。任务内 TDD 红→绿，逐任务 commit。
