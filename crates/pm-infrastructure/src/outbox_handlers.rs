@@ -70,10 +70,10 @@ impl OutboxHandler for TaskReadyHandler {
             return Ok(());
         }
 
-        // 幂等：已有有效 Run（queued/running）则不再新建。
+        // 幂等：已有活跃 Run（queued/claimed/running，B1 统一集合）则不再新建。
         let active: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM delivery.task_run \
-             WHERE task_id = $1 AND status IN ('queued', 'running')",
+             WHERE task_id = $1 AND status IN ('queued', 'claimed', 'running')",
         )
         .bind(task_id)
         .fetch_one(&mut *tx)
@@ -84,26 +84,9 @@ impl OutboxHandler for TaskReadyHandler {
             return Ok(());
         }
 
-        let next_attempt: i32 = sqlx::query_scalar(
-            "SELECT coalesce(max(attempt_no), 0) + 1 FROM delivery.task_run WHERE task_id = $1",
-        )
-        .bind(task_id)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
-        sqlx::query(
-            "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status) \
-             VALUES ($1, $2, $3, 'queued')",
-        )
-        .bind(event.project_id)
-        .bind(task_id)
-        .bind(next_attempt)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
-        sqlx::query("UPDATE delivery.task SET attempt_count = attempt_count + 1 WHERE id = $1")
-            .bind(task_id)
-            .execute(&mut *tx)
+        // B3-6：建 Run + 递增 attempt_no / task.attempt_count 复用 application 的
+        // 共享封装（此处已持有 task 行锁，满足 B2 的 INSERT 顺序要求）。
+        pm_application::run_dispatch::insert_task_run(&mut tx, event.project_id, task_id)
             .await
             .map_err(|e| e.to_string())?;
 

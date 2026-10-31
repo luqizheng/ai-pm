@@ -15,6 +15,7 @@ pub mod read;
 pub mod repo_facts;
 pub mod repository;
 pub mod rows;
+pub mod run_dispatch;
 pub mod secret;
 pub mod supervision;
 

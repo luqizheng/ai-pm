@@ -5,6 +5,10 @@ edition.workspace = true
 
 [dependencies]
 pm-domain = { path = "../pm-domain" }
+# 依赖倒置：infrastructure 复用 application 定义的 Run 创建 / 调度服务与端口
+# （R7 端口在 pm-application，适配器在此）。application 的生产依赖不反向包含
+# pm-infrastructure（其对该 crate 仅在 dev-dependencies 中）。
+pm-application = { path = "../pm-application" }
 sqlx.workspace = true
 uuid.workspace = true
 serde_json.workspace = true

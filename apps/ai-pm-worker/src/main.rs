@@ -95,6 +95,35 @@ async fn main() {
             .await
     });
 
+    // 第四条循环：Run 调度（Slice D1）。R4：开关只控制**领取**新 Run；租约过期
+    // 回收在本循环内持续运行，不因调度关闭而停摆。
+    let dispatch_pool = pool.clone();
+    let dispatch_worker_id = worker_id.clone();
+    tokio::spawn(async move {
+        let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
+        let mode = pm_application::run_dispatch::DispatchMode::from_env();
+        tracing::info!(mode = ?mode, lease_secs = cfg.lease_secs, "run dispatch loop started");
+        loop {
+            match pm_application::run_dispatch::claim_once(
+                &dispatch_pool,
+                &dispatch_worker_id,
+                &cfg,
+                mode,
+            )
+            .await
+            {
+                Ok(Some(_)) => continue,
+                Ok(None) => {
+                    tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "run dispatch failed; backing off");
+                    tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await
+                }
+            }
+        }
+    });
+
     loop {
         match job_queue::claim(&pool, "ai_analysis", &worker_id, LEASE_SECS).await {
             Some(job) => handle_job(&orchestrator, &job).await,
