@@ -23,7 +23,8 @@ vi.mock("@/api/repositories", () => ({
 }));
 
 vi.mock("vue-router", () => ({
-  useRoute: () => ({ params: { projectId: "project-1" } })
+  useRoute: () => ({ params: { projectId: "project-1" } }),
+  useRouter: () => ({ push: vi.fn() })
 }));
 
 vi.mock("@/api/scope", () => ({

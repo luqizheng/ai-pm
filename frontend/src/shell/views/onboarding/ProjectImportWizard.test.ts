@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import ProjectImportWizard from "./ProjectImportWizard.vue";
-import { mountShell } from "../../../test-utils";
+import { mountShell } from "../../test-utils";
 
 const createProject = vi.fn();
 const createSshKey = vi.fn();
