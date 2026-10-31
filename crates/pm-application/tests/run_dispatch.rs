@@ -592,3 +592,194 @@ async fn handler_and_claim_do_not_deadlock_or_duplicate(pool: PgPool) {
     .unwrap();
     assert!(active <= 1, "I1: at most one active run");
 }
+async fn insert_policy(pool: &PgPool, scope: &str, key: &str, required: bool, actor: Uuid) {
+    sqlx::query(
+        "INSERT INTO delivery.policy_scope (scope, scope_key, require_human_approval, updated_by) \
+         VALUES ($1, $2, $3, $4) \
+         ON CONFLICT (scope, scope_key) DO UPDATE \
+            SET require_human_approval = EXCLUDED.require_human_approval, updated_at = now()",
+    )
+    .bind(scope)
+    .bind(key)
+    .bind(required)
+    .bind(actor)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn release_backoff(pool: &PgPool, run_id: Uuid) {
+    sqlx::query("UPDATE delivery.task_run SET next_dispatch_at = now() WHERE id = $1")
+        .bind(run_id)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+/// R5：项目级策略要求审批时，领取被拒；补足 approved 证据后放行。
+#[sqlx::test(migrations = "../../migrations")]
+async fn r5_project_level_requirement_blocks_until_approved(pool: PgPool) {
+    let fx = seed(&pool, "RD-R5P", true).await;
+    insert_policy(&pool, "project", &fx.project_id.to_string(), true, fx.human_id).await;
+    let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(out.kind, pm_application::run_dispatch::ClaimKind::Skipped);
+    let reason: Option<String> =
+        sqlx::query_scalar("SELECT release_reason FROM delivery.task_run WHERE id = $1")
+            .bind(out.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(reason.as_deref(), Some("policy_requires_approval"));
+
+    let _ = grant_approval(&pool, fx.project_id, fx.task_id, fx.human_id, "approved").await;
+    release_backoff(&pool, out.run_id).await;
+    let out2 = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(out2.kind, pm_application::run_dispatch::ClaimKind::Claimed);
+}
+
+/// R5：低层（任务级 false）**不得**放宽高层（项目级 true）的强制审批。
+#[sqlx::test(migrations = "../../migrations")]
+async fn r5_lower_level_false_cannot_relax_a_higher_requirement(pool: PgPool) {
+    let fx = seed(&pool, "RD-R5L", true).await;
+    insert_policy(&pool, "project", &fx.project_id.to_string(), true, fx.human_id).await;
+    sqlx::query(
+        "INSERT INTO delivery.task_policy_override \
+         (task_id, project_id, require_human_approval, updated_by) VALUES ($1, $2, false, $3)",
+    )
+    .bind(fx.task_id)
+    .bind(fx.project_id)
+    .bind(fx.human_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        out.kind,
+        pm_application::run_dispatch::ClaimKind::Skipped,
+        "a task-level false must not relax a project-level requirement"
+    );
+}
+
+/// R5：organization 与 task_type 层级同样参与合成。
+#[sqlx::test(migrations = "../../migrations")]
+async fn r5_organization_and_task_type_levels_are_synthesized(pool: PgPool) {
+    let fx = seed(&pool, "RD-R5O", true).await;
+    insert_policy(&pool, "organization", "*", true, fx.human_id).await;
+    let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(out.kind, pm_application::run_dispatch::ClaimKind::Skipped, "org level gates");
+
+    sqlx::query("DELETE FROM delivery.policy_scope WHERE scope = 'organization'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE delivery.task SET task_type = 'refactor' WHERE id = $1")
+        .bind(fx.task_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    insert_policy(&pool, "task_type", "refactor", true, fx.human_id).await;
+    release_backoff(&pool, out.run_id).await;
+    let out2 = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        out2.kind,
+        pm_application::run_dispatch::ClaimKind::Skipped,
+        "task_type level gates"
+    );
+}
+
+/// T19：B3 恢复二分——未启动保持同一 Run；已启动则新建 Run 并 supersede。
+#[sqlx::test(migrations = "../../migrations")]
+async fn t19_b3_recovery_split_unstarted_keeps_run_started_supersedes(pool: PgPool) {
+    let fx = seed(&pool, "RD-T19", true).await;
+    let cfg = cfg();
+    let first = claim_once(&pool, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    // 未启动执行器：租约过期 → 同一 Run 恢复。
+    sqlx::query("UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1")
+        .bind(first.run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let recovered = claim_once(&pool, "w2", &cfg, DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(recovered.run_id, first.run_id, "unstarted: the same run is recovered");
+
+    // 已启动执行器：租约过期 → 旧 Run 隔离 + 新建 Run 并 supersede。
+    sqlx::query(
+        "UPDATE delivery.task_run \
+            SET status = 'claimed', executor_session = 'sess-old', lease_owner = 'w2', \
+                lease_expires_at = now() - interval '1 second' \
+          WHERE id = $1",
+    )
+    .bind(first.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let superseded = claim_once(&pool, "w3", &cfg, DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_ne!(superseded.run_id, first.run_id, "started: a new run supersedes");
+    assert_eq!(run_status(&pool, first.run_id).await, "timed_out");
+    let supersedes: Option<Uuid> =
+        sqlx::query_scalar("SELECT supersedes_run_id FROM delivery.task_run WHERE id = $1")
+            .bind(superseded.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(supersedes, Some(first.run_id));
+    let _ = fx;
+}
+
+/// T26：重试耗尽后不再新建 Run，且记 `retry_exhausted`。
+#[sqlx::test(migrations = "../../migrations")]
+async fn t26_exhausted_retry_creates_no_new_run(pool: PgPool) {
+    let fx = seed(&pool, "RD-T26", true).await;
+    sqlx::query("UPDATE delivery.task SET retry_exhausted = true WHERE id = $1")
+        .bind(fx.task_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let before: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.task_run WHERE task_id = $1")
+        .bind(fx.task_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(out.kind, pm_application::run_dispatch::ClaimKind::Skipped);
+    let reason: Option<String> =
+        sqlx::query_scalar("SELECT release_reason FROM delivery.task_run WHERE id = $1")
+            .bind(out.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(reason.as_deref(), Some("retry_exhausted"));
+    let after: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.task_run WHERE task_id = $1")
+        .bind(fx.task_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(after, before, "an exhausted retry budget must not spawn a new run");
+}

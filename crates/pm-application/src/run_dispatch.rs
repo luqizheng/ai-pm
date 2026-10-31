@@ -332,7 +332,7 @@ pub async fn claim_once(
 
     // ② 锁任务行（顺序固定：run → task）。B2：新 Run 的 INSERT 必须在此之后。
     let task = sqlx::query(
-        "SELECT status, revision, retry_exhausted FROM delivery.task \
+        "SELECT status, revision, retry_exhausted, task_type FROM delivery.task \
           WHERE id = $1 AND project_id = $2 FOR UPDATE",
     )
     .bind(task_id)
@@ -351,6 +351,7 @@ pub async fn claim_once(
     };
     let task_state: String = task.get("status");
     let retry_exhausted: bool = task.get("retry_exhausted");
+    let task_type: Option<String> = task.get("task_type");
 
     // ③ 任务已终态 / 被取代 → Run 是死记录，落 cancelled，不动任务。
     let terminal_or_gone = TaskStatus::from_str(&task_state)
@@ -455,7 +456,9 @@ pub async fn claim_once(
     }
 
     // ⑥ 可领取性判定（全部通过才领取）。
-    let assessment = claimability_assessment(&mut tx, task_id, retry_exhausted).await?;
+    let assessment =
+        claimability_assessment(&mut tx, project_id, task_id, retry_exhausted, task_type.as_deref())
+            .await?;
     if let Some(reason) = assessment.deny {
         requeue_with_backoff(&mut tx, run_id, dispatch_attempts, cfg, reason).await?;
         audit_run(
@@ -557,20 +560,56 @@ pub async fn apply_transition(
     Ok(())
 }
 
-/// 有效审批评估（R5）：返回 `(required, status, execution_enabled)`。
-/// 任务级 `require_human_approval` 为真时必须存在 `approved` 证据；未决（pending）
-/// 或缺少证据（unknown）都**不得默认放行**。策略读取失败由 `Err` 上抛，调用方拒绝领取。
+/// 有效审批评估（R5）：**多级合成** organization → project → task_type → task。
+/// 任一层级要求人工审批即视为必须审批；任务级 `false` **不得**放宽高层的 `true`。
+/// 需要审批时必须存在 `approved` 证据；未决（pending）或缺证据（unknown）都**不得
+/// 默认放行**。各层级读取失败由 `Err` 上抛，调用方拒绝领取。
 async fn assess_approval(
     tx: &mut Transaction<'_, Postgres>,
+    project_id: Uuid,
     task_id: Uuid,
+    task_type: Option<&str>,
 ) -> Result<(bool, &'static str, bool), sqlx::Error> {
-    let requires: Option<bool> = sqlx::query_scalar(
-        "SELECT require_human_approval FROM delivery.task_policy_override WHERE task_id = $1",
+    let organization: Option<bool> = sqlx::query_scalar(
+        "SELECT require_human_approval FROM delivery.policy_scope \
+          WHERE scope = 'organization' AND scope_key = '*'",
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+    let project: Option<bool> = sqlx::query_scalar(
+        "SELECT require_human_approval FROM delivery.policy_scope \
+          WHERE scope = 'project' AND scope_key = $1",
+    )
+    .bind(project_id.to_string())
+    .fetch_optional(&mut **tx)
+    .await?;
+    let task_type_level: Option<bool> = match task_type {
+        Some(kind) => {
+            sqlx::query_scalar(
+                "SELECT require_human_approval FROM delivery.policy_scope \
+                  WHERE scope = 'task_type' AND scope_key = $1",
+            )
+            .bind(kind)
+            .fetch_optional(&mut **tx)
+            .await?
+        }
+        None => None,
+    };
+    // 任务级（既有 override；NULL/缺行都视为该层不表态）。
+    let task_level: Option<bool> = sqlx::query_scalar(
+        "SELECT coalesce(require_human_approval, false) FROM delivery.task_policy_override \
+          WHERE task_id = $1",
     )
     .bind(task_id)
     .fetch_optional(&mut **tx)
     .await?;
-    if requires != Some(true) {
+
+    // 「更严者胜」：任一层级为 true 即要求审批（低层无法放宽高层）。
+    let required = [organization, project, task_type_level, task_level]
+        .into_iter()
+        .flatten()
+        .any(|value| value);
+    if !required {
         return Ok((false, "approved", true));
     }
     let approved: i64 = sqlx::query_scalar(
@@ -608,8 +647,10 @@ pub struct ClaimAssessment {
 /// 可领取性判定（§5.6 清单，全部通过才领取）。
 async fn claimability_assessment(
     tx: &mut Transaction<'_, Postgres>,
+    project_id: Uuid,
     task_id: Uuid,
     retry_exhausted: bool,
+    task_type: Option<&str>,
 ) -> Result<ClaimAssessment, sqlx::Error> {
     let mut assessment = ClaimAssessment {
         deny: None,
@@ -620,7 +661,7 @@ async fn claimability_assessment(
         assessment.deny = Some("retry_exhausted");
         return Ok(assessment);
     }
-    let (required, status, enabled) = assess_approval(tx, task_id).await?;
+    let (required, status, enabled) = assess_approval(tx, project_id, task_id, task_type).await?;
     assessment.approval_required = required;
     assessment.approval_status = status;
     if !enabled {
