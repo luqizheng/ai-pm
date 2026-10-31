@@ -667,7 +667,7 @@ git commit -m "feat(outbox): transactional append with lease-based claim and ret
   - `pub enum ReplayError { NotFound, NotDeadLetter }`（`thiserror::Error`，`#[error("outbox event not found")]` / `#[error("only dead-letter events can be replayed")]`）
   - 重放语义：`status = 'pending'`、`attempts = 0`、`next_attempt_at = now()`、清 `locked_until`/`lease_owner`；`last_error` 保留供追溯。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```rust
 #[sqlx::test(migrations = "../../migrations")]
@@ -709,26 +709,28 @@ async fn replay_rejects_missing_and_live_events(pool: PgPool) {
 }
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `bash scripts/cargo-test.sh -p pm-infrastructure`
 Expected: FAIL —— `outbox::dead_letter` / `list_dead_letters` / `replay` 未定义。
 
-- [ ] **Step 3: 实现三个函数**
+- [x] **Step 3: 实现三个函数**
 
 `dead_letter`：`UPDATE ... SET status = 'dead_letter', last_error = $2, locked_until = NULL, lease_owner = NULL WHERE id = $1`（幂等，重复调用不报错）。`replay`：先查 `status`，缺失 → `NotFound`，非 `dead_letter` → `NotDeadLetter`，否则一条 `UPDATE` 完成重置。`list_dead_letters`：`SELECT ... WHERE status = 'dead_letter' ORDER BY created_at DESC LIMIT $1`。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `bash scripts/cargo-test.sh -p pm-infrastructure`
 Expected: PASS（新增 2 个用例 + Task 2 五个用例全绿）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/pm-infrastructure/src/outbox.rs crates/pm-infrastructure/tests/outbox.rs
 git commit -m "feat(outbox): dead letter listing and manual replay"
 ```
+
+**Task 3 完成证据（2026-10-31）**：红→绿留痕——首跑 `E0425`/`E0433`（`replay`/`dead_letter` 未定义）；实现后 `-p pm-infrastructure` **26/26 绿**（新增 2 用例：死信列表带 reason 且 replay 后同 id 领取 attempts=1、replay 拒缺失行 `NotFound` 与活事件 `NotDeadLetter`）。commit `ba76485`（`thiserror` 随 Cargo.lock 入库）。
 
 ---
 
@@ -749,7 +751,7 @@ git commit -m "feat(outbox): dead letter listing and manual replay"
   - `impl OutboxWorker { pub fn new(pool: sqlx::PgPool, worker_id: String) -> Self; pub fn with_handler(self, event_type: &'static str, handler: std::sync::Arc<dyn OutboxHandler>) -> Self; pub async fn dispatch_once(&self) -> Result<DispatchOutcome, sqlx::Error>; pub async fn run(self) -> std::convert::Infallible; }`
   - 常量 `pub const OUTBOX_IDLE_POLL_MS: u64 = 100;`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```rust
 // crates/pm-infrastructure/tests/outbox_worker.rs
@@ -835,23 +837,23 @@ async fn unregistered_event_type_goes_to_dead_letter(pool: PgPool) {
 }
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `bash scripts/cargo-test.sh -p pm-infrastructure`
 Expected: FAIL —— module `outbox_worker` 未定义。
 
-- [ ] **Step 3: 实现注册表与 `dispatch_once`，并接线 `apps/pm-worker`**
+- [x] **Step 3: 实现注册表与 `dispatch_once`，并接线 `apps/pm-worker`**
 
 `dispatch_once`：`claim` 为空 → `Idle`；命中注册表 → `handler.handle(&event)`，`Ok` → `outbox::complete` → `Delivered`，`Err(msg)` → `outbox::fail(..., OUTBOX_MAX_ATTEMPTS, OUTBOX_BACKOFF_BASE_SECS)`，按返回映射 `Retried`/`DeadLettered`；未命中注册表 → `outbox::dead_letter(pool, id, &format!("no handler registered for {event_type}"))` → `DeadLettered`。`run`：`loop { match self.dispatch_once().await { Ok(Idle) => sleep(IDLE_POLL_MS), Ok(_) => continue, Err(e) => { tracing::warn!(...); sleep(IDLE_POLL_MS) } } }`。
 
 `apps/pm-worker/src/main.rs`：读 `DATABASE_URL`（缺失即 `expect`，与 `ai-pm-worker` 同风格）、`PgPoolOptions::max_connections(5)`、构造 `OutboxWorker`、**首版不注册任何 handler**（注释指向 Slice C/D 的 MCP 调度与知识回写），`tracing::info!` 后进入 `run().await`。`apps/pm-worker/Cargo.toml` 增 `sqlx`/`uuid`/`pm-infrastructure`。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `bash scripts/cargo-test.sh`
 Expected: PASS —— 全量绿；`cargo build` 亦通过（`pm-worker` 由 workspace 编译）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/pm-infrastructure/src/outbox_worker.rs crates/pm-infrastructure/src/lib.rs \
@@ -859,6 +861,8 @@ git add crates/pm-infrastructure/src/outbox_worker.rs crates/pm-infrastructure/s
         apps/pm-worker
 git commit -m "feat(worker): dispatch outbox events with a handler registry"
 ```
+
+**Task 4 完成证据（2026-10-31）**：**偏差留痕**——plan 字面指引（`fail` 传 `OUTBOX_MAX_ATTEMPTS=5`、`new()` 无预算入口）与测试「第二次失败即触顶」矛盾，首跑按字面实现留红证据：`handler_failure_hits_the_retry_ceiling_then_dead_letters` 断言 `left: Retried, right: DeadLettered`（其余 28/29 绿）。最小修正：`OutboxWorker` 增 `with_retry_limits(max_attempts, backoff_base_secs)` builder，生产默认仍为常量 5/5，测试用例显式 `.with_retry_limits(2, 5)` 钉死触顶路径。修正后 `-p pm-infrastructure` **29/29 绿**；全量 `bash scripts/cargo-test.sh` **268 passed**（较 Task 1 基线 258 增 10）+ 6 组 doctest ok + `cargo build` 10.9s 通过。commit `84805b0`。另两处必要补充：`outbox_worker` 的 `run()` 需 `tokio`（文件结构表未列，实现指引 sleep 必需）；库内引用修正为 `crate::outbox`（首跑 `E0433` 留痕）。
 
 ---
 
