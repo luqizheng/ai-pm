@@ -78,7 +78,63 @@ pub fn validate_transition(input: &TransitionInput) -> Result<(), TransitionErro
             to: input.to,
         });
     }
+    // §12.3 关键约束：未解除的等待不得**恢复执行**（Ready/Running）；取消走取消
+    // 流程，不要求先解决等待。内容核对归调用方，域层只认显式标志。
+    if input.from == TaskStatus::AwaitingDecision
+        && !input.waiting_resolved
+        && matches!(input.to, TaskStatus::Ready | TaskStatus::Running)
+    {
+        return Err(TransitionError::MissingEvidence(
+            "waiting context must be resolved before leaving AwaitingDecision",
+        ));
+    }
+    // §11.2 / §11.5 supersession constraints.
+    if input.to == TaskStatus::Superseded {
+        let intent = input.supersede.as_ref().ok_or_else(|| {
+            TransitionError::SupersessionViolation(
+                "superseding_task_id, reason and actor are required".to_string(),
+            )
+        })?;
+        let task_id = input.task_id.ok_or_else(|| {
+            TransitionError::SupersessionViolation("task identity is required".to_string())
+        })?;
+        if intent.superseding_task_id == task_id {
+            return Err(TransitionError::SupersessionViolation(
+                "a task cannot supersede itself".to_string(),
+            ));
+        }
+        if intent.reason.trim().is_empty() {
+            return Err(TransitionError::SupersessionViolation(
+                "a non-empty reason is required".to_string(),
+            ));
+        }
+        // §11.5 第 5 条：新任务必须先存在，才能正式完成取代操作。
+        if !input.replacement_task_exists {
+            return Err(TransitionError::MissingEvidence(
+                "replacement task must exist before superseding",
+            ));
+        }
+        // §11.2 stop_active_run_before_finalization：停止 Run 是迁入终态的前置
+        // 守卫，不是事后补偿（§11.6：不能因点击「取代」就假定执行已结束）。
+        if input.from == TaskStatus::Running && !input.active_run_stopped {
+            return Err(TransitionError::MissingEvidence(
+                "active run must be stopped before superseding",
+            ));
+        }
+    }
     Ok(())
+}
+
+/// Explicit supersession intent (§11.5)：旧任务保存 `superseded_by_task_id`，
+/// 关联表记录取代关系；本结构承载迁移校验所需的最小必填信息。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SupersedeIntent {
+    /// The replacement task (must already exist; caller persists the relation).
+    pub superseding_task_id: crate::ids::TaskId,
+    /// 为什么取代（必填，落审计）。
+    pub reason: String,
+    /// 谁发起取代（必填，落审计）。
+    pub actor: crate::ids::PrincipalId,
 }
 
 /// Facts a caller must supply for one transition. External realities (an active
@@ -107,6 +163,8 @@ pub struct TransitionInput {
     pub deadline_exhausted: bool,
     /// §19.5 structured failure driving `Running → Failed` (B4-A/B4-D).
     pub failure: Option<crate::task_run::FailureRecord>,
+    /// Present only for `→ Superseded` (§11.1 必填信息).
+    pub supersede: Option<SupersedeIntent>,
 }
 
 impl TransitionInput {
@@ -123,6 +181,7 @@ impl TransitionInput {
             retry_exhausted: false,
             deadline_exhausted: false,
             failure: None,
+            supersede: None,
         }
     }
 
@@ -142,6 +201,7 @@ impl TransitionInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ids::{PrincipalId, TaskId};
     use TaskStatus::*;
 
     /// The exact set of edges this module must accept, kept in test-local form so
@@ -150,6 +210,22 @@ mod tests {
         let mut edges = allowed_edges().to_vec();
         edges.sort();
         edges
+    }
+
+    /// A supersession input that satisfies every §11.2/§11.5 constraint, so
+    /// matrix-level tests exercise the edge, not the guards.
+    fn valid_supersede(from: TaskStatus) -> TransitionInput {
+        let mut input = TransitionInput::for_task(uuid::Uuid::new_v4(), from, Superseded);
+        input.supersede = Some(SupersedeIntent {
+            superseding_task_id: uuid::Uuid::new_v4(),
+            reason: "superseded by a newer task".to_string(),
+            actor: PrincipalId::nil(),
+        });
+        input.replacement_task_exists = true;
+        if from == Running {
+            input.active_run_stopped = true;
+        }
+        input
     }
 
     #[test]
@@ -239,10 +315,10 @@ mod tests {
     fn supersede_allowed_from_ruled_sources() {
         // §11.2 allowed_from: Draft, Ready, Blocked, Running, Submitted, Reviewing.
         for from in [Draft, Ready, Blocked, Running, Submitted, Reviewing] {
-            let input = TransitionInput::minimal(from, Superseded);
+            let input = valid_supersede(from);
             assert!(
                 validate_transition(&input).is_ok(),
-                "{from:?} -> Superseded must be allowed at matrix level"
+                "{from:?} -> Superseded must be allowed with a valid intent"
             );
         }
     }
@@ -252,7 +328,7 @@ mod tests {
         // 成功→Submitted；临时故障→新 Run（域内不表达）；外部处理→Blocked；
         // 人工决策→AwaitingDecision；终止条件→Failed；取消→Cancelled。
         for to in [
-            Submitted, Blocked, AwaitingDecision, Failed, Cancelled, Superseded,
+            Submitted, Blocked, AwaitingDecision, Failed, Cancelled,
         ] {
             let input = TransitionInput::minimal(Running, to);
             assert!(
@@ -260,10 +336,110 @@ mod tests {
                 "Running -> {to:?} must be allowed at matrix level"
             );
         }
+        // Running → Superseded 额外受取代守卫约束（§11.2/§11.6）。
+        assert!(validate_transition(&valid_supersede(Running)).is_ok());
         // Running 没有直达 Ready/Completed/ChangesRequested 的边。
         for to in [Ready, Completed, ChangesRequested, Reviewing, Draft, Claimed] {
             let input = TransitionInput::minimal(Running, to);
             assert!(validate_transition(&input).is_err(), "Running -> {to:?}");
+        }
+    }
+
+    #[test]
+    fn supersede_requires_intent_and_distinct_task() {
+        let task = TaskId::nil();
+        // 无 intent → 违反（必填：superseding_task_id / 原因 / 操作者，§11.1）。
+        let mut input = TransitionInput::for_task(task, Draft, Superseded);
+        input.replacement_task_exists = true;
+        assert!(matches!(
+            validate_transition(&input),
+            Err(TransitionError::SupersessionViolation(_))
+        ));
+        // 自我取代 → 违反（§11.5 禁止任务取代自身）。
+        let mut self_input = TransitionInput::for_task(task, Draft, Superseded);
+        self_input.replacement_task_exists = true;
+        self_input.supersede = Some(SupersedeIntent {
+            superseding_task_id: task,
+            reason: "replaced by itself".to_string(),
+            actor: PrincipalId::nil(),
+        });
+        assert!(matches!(
+            validate_transition(&self_input),
+            Err(TransitionError::SupersessionViolation(_))
+        ));
+        // 空原因 → 违反（原因必填）。
+        let mut empty_reason = TransitionInput::for_task(task, Draft, Superseded);
+        empty_reason.replacement_task_exists = true;
+        empty_reason.supersede = Some(SupersedeIntent {
+            superseding_task_id: uuid::Uuid::new_v4(),
+            reason: String::new(),
+            actor: PrincipalId::nil(),
+        });
+        assert!(matches!(
+            validate_transition(&empty_reason),
+            Err(TransitionError::SupersessionViolation(_))
+        ));
+    }
+
+    #[test]
+    fn supersede_requires_existing_replacement_task() {
+        // §11.5 第 5 条：新任务必须先存在，才能正式完成取代操作。
+        let task = TaskId::nil();
+        let mut input = TransitionInput::for_task(task, Ready, Superseded);
+        input.supersede = Some(SupersedeIntent {
+            superseding_task_id: uuid::Uuid::new_v4(),
+            reason: "split into TASK-X".to_string(),
+            actor: PrincipalId::nil(),
+        });
+        assert_eq!(
+            validate_transition(&input),
+            Err(TransitionError::MissingEvidence(
+                "replacement task must exist before superseding",
+            ))
+        );
+        input.replacement_task_exists = true;
+        assert!(validate_transition(&input).is_ok());
+    }
+
+    #[test]
+    fn running_supersede_requires_stopped_active_run() {
+        // §11.2 stop_active_run_before_finalization：Running 迁入终态前必须先停 Run；
+        // 不能因为用户点击了「取代」就假定执行已经结束（§11.6）。
+        let task = TaskId::nil();
+        let mut input = TransitionInput::for_task(task, Running, Superseded);
+        input.supersede = Some(SupersedeIntent {
+            superseding_task_id: uuid::Uuid::new_v4(),
+            reason: "superseded by TASK-Y".to_string(),
+            actor: PrincipalId::nil(),
+        });
+        input.replacement_task_exists = true;
+        input.active_run_stopped = false;
+        assert_eq!(
+            validate_transition(&input),
+            Err(TransitionError::MissingEvidence(
+                "active run must be stopped before superseding",
+            ))
+        );
+        input.active_run_stopped = true;
+        assert!(validate_transition(&input).is_ok());
+    }
+
+    #[test]
+    fn awaiting_decision_requires_resolved_context_to_leave() {
+        // §12.3 关键约束：不要在收到任何回复后就自动恢复任务——域层强制显式
+        // waiting_resolved 标志，内容核对由调用方负责。
+        for to in [Ready, Running] {
+            let input = TransitionInput::minimal(AwaitingDecision, to);
+            assert_eq!(
+                validate_transition(&input),
+                Err(TransitionError::MissingEvidence(
+                    "waiting context must be resolved before leaving AwaitingDecision",
+                )),
+                "AwaitingDecision -> {to:?} without resolution must be refused"
+            );
+            let mut resolved = TransitionInput::minimal(AwaitingDecision, to);
+            resolved.waiting_resolved = true;
+            assert!(validate_transition(&resolved).is_ok());
         }
     }
 }
