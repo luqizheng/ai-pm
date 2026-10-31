@@ -211,6 +211,18 @@ workspace:
       approvalPending: 待审批
       approvalApproved: 已通过
       approvalRejected: 已驳回
+      project: 项目
+      pickProjectShort: 选择项目
+      pickProject: 请先在「项目范围」中选择一个项目
+      loadFailed: 加载失败，请稍后重试
+      empty: 暂无产物
+      stateDraft: 草稿
+      stateApproved: 已批准
+      stateSuperseded: 已取代
+      diffPending: 文件级 Diff、测试报告与评论待产物管线接入后展示
+      hashLabel: 内容指纹
+      approvedByLabel: 批准人
+      noApprover: 待批准
     goalsExtra:
       viewTree: 目标树
       viewDeps: 依赖图

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRoute, useRouter } from "vue-router";
 import PageHeader from "./PageHeader.vue";
 import {
   artifacts,
@@ -8,8 +9,20 @@ import {
   type DiffLineType,
   type TestStatus
 } from "../fixtures";
+import { listArtifacts, type ArtifactRecord } from "@/api/artifacts";
+import { SCOPE_ALL, useScopeStore } from "@/api/scope";
+import { formatDate } from "@/api/format";
 
 const { t } = useI18n();
+const router = useRouter();
+const route = useRoute();
+const scope = useScopeStore();
+
+/** mock 模式用演示数据；真后端模式按项目读产物（需求修订）。单测一律走 fixtures。 */
+const useMock =
+  import.meta.env.VITE_USE_MOCK === "1" || import.meta.env.MODE === "test";
+
+/* ---------------------------------------------------------- mock 分支 */
 
 const testLabel: Record<TestStatus, string> = {
   passed: "workspace.pages.artifacts.testPassed",
@@ -75,6 +88,95 @@ function onPick(id: string) {
   const artifact = artifacts.find(a => a.id === id);
   selectedFile.value = artifact?.files[0]?.path ?? "";
 }
+
+/* ------------------------------------------------------ 真后端分支 */
+
+const apiArtifacts = ref<ArtifactRecord[]>([]);
+const selectedApiId = ref("");
+const selectedApi = computed(() =>
+  apiArtifacts.value.find(item => item.id === selectedApiId.value)
+);
+
+const stateLabel: Record<string, string> = {
+  draft: "workspace.pages.artifacts.stateDraft",
+  approved: "workspace.pages.artifacts.stateApproved",
+  superseded: "workspace.pages.artifacts.stateSuperseded"
+};
+
+const stateClass: Record<string, string> = {
+  draft: "is-state-draft",
+  approved: "is-state-approved",
+  superseded: "is-state-superseded"
+};
+
+function stateText(state: string): string {
+  const key = stateLabel[state];
+  return key ? String(t(key)) : state;
+}
+
+/** 项目来源：显式 scope 选择 > 路由里是真实 UUID 时用它；否则提示先选项目。 */
+const projectId = computed<string | undefined>(() => {
+  if (scope.projectIdParam) return scope.projectIdParam;
+  const param = String(route.params.projectId ?? "");
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param)
+  ) {
+    return param;
+  }
+  return undefined;
+});
+
+const selectedProjectId = computed({
+  get: () => (scope.currentProjectId === SCOPE_ALL ? "" : scope.currentProjectId),
+  set: (value: string) => {
+    scope.currentProjectId = value || SCOPE_ALL;
+  }
+});
+
+async function loadArtifacts() {
+  if (useMock) return;
+  failed.value = false;
+  if (!projectId.value) {
+    apiArtifacts.value = [];
+    selectedApiId.value = "";
+    return;
+  }
+  loading.value = true;
+  try {
+    const page = await listArtifacts({
+      project_id: projectId.value,
+      page: 1,
+      size: 200
+    });
+    apiArtifacts.value = page.items ?? [];
+    selectedApiId.value = apiArtifacts.value[0]?.id ?? "";
+  } catch {
+    failed.value = true;
+    apiArtifacts.value = [];
+  } finally {
+    loading.value = false;
+  }
+}
+
+const loading = ref(false);
+const failed = ref(false);
+let initialised = false;
+
+onMounted(async () => {
+  if (useMock) return;
+  try {
+    await scope.ensureLoaded();
+  } catch {
+    failed.value = true;
+    return;
+  }
+  initialised = true;
+  await loadArtifacts();
+});
+
+watch(projectId, () => {
+  if (!useMock && initialised) void loadArtifacts();
+});
 </script>
 
 <template>
@@ -83,164 +185,262 @@ function onPick(id: string) {
       :title="t('workspace.pages.artifacts.title')"
       :subtitle="t('workspace.pages.artifacts.subtitle')"
     />
-    <!-- V1.2：主从布局——左产物清单，右审查详情 -->
-    <div class="ws-artifacts-body">
-      <aside class="ws-card ws-artifact-list" aria-label="artifacts">
-        <button
-          v-for="artifact in artifacts"
-          :key="artifact.id"
-          type="button"
-          class="ws-artifact-row ws-focusable"
-          :class="{ 'is-selected': selectedId === artifact.id }"
-          data-test="artifact-item"
-          @click="onPick(artifact.id)"
-        >
-          <span class="ws-artifact-name">{{ artifact.name }}</span>
-          <span class="ws-artifact-version">{{ artifact.version }}</span>
-          <span class="ws-badge" :class="testClass[artifact.testStatus]">
-            {{ t(testLabel[artifact.testStatus]) }}
-          </span>
-        </button>
-      </aside>
 
-      <article v-if="selected" class="ws-artifact-detail">
-        <!-- V1.2：整体判定横幅——「部分检查通过」≠「符合验收标准」 -->
-        <div
-          class="ws-verdict"
-          :class="verdictClass[selected.verdict]"
-          data-test="artifact-verdict"
-          role="status"
-        >
-          {{ t(verdictLabel[selected.verdict]) }}
-        </div>
-
-        <section class="ws-card ws-detail-card">
-          <div class="ws-detail-head">
-            <div class="ws-detail-id">
-              <span class="ws-detail-name">{{ selected.name }}</span>
-              <span class="ws-detail-version">{{ selected.version }}</span>
-            </div>
-            <div class="ws-detail-badges">
-              <span class="ws-badge" :class="testClass[selected.testStatus]">
-                {{ t(testLabel[selected.testStatus]) }}
-              </span>
-              <span class="ws-badge" :class="approvalClass[selected.approval]">
-                {{ t(approvalLabel[selected.approval]) }}
-              </span>
-            </div>
-          </div>
-          <div class="ws-detail-meta">
-            <span>{{ selected.type }}</span>
-            <span>{{ selected.owner }}</span>
-            <span>{{ selected.updatedAt }}</span>
-            <span>
-              {{ t("workspace.pages.artifactsExtra.linkedTask") }}：{{
-                selected.linkedTask
-              }}
+    <template v-if="useMock">
+      <!-- V1.2：主从布局——左产物清单，右审查详情 -->
+      <div class="ws-artifacts-body">
+        <aside class="ws-card ws-artifact-list" aria-label="artifacts">
+          <button
+            v-for="artifact in artifacts"
+            :key="artifact.id"
+            type="button"
+            class="ws-artifact-row ws-focusable"
+            :class="{ 'is-selected': selectedId === artifact.id }"
+            data-test="artifact-item"
+            @click="onPick(artifact.id)"
+          >
+            <span class="ws-artifact-name">{{ artifact.name }}</span>
+            <span class="ws-artifact-version">{{ artifact.version }}</span>
+            <span class="ws-badge" :class="testClass[artifact.testStatus]">
+              {{ t(testLabel[artifact.testStatus]) }}
             </span>
+          </button>
+        </aside>
+
+        <article v-if="selected" class="ws-artifact-detail">
+          <!-- V1.2：整体判定横幅——「部分检查通过」≠「符合验收标准」 -->
+          <div
+            class="ws-verdict"
+            :class="verdictClass[selected.verdict]"
+            data-test="artifact-verdict"
+            role="status"
+          >
+            {{ t(verdictLabel[selected.verdict]) }}
           </div>
 
-          <!-- 文件 + 统一 Diff + 行级评论 -->
-          <div class="ws-detail-block">
-            <h3 class="ws-detail-label">
-              {{ t("workspace.pages.artifactsExtra.files") }} ·
-              {{ t("workspace.pages.artifactsExtra.diffLabel") }}
-            </h3>
-            <div class="ws-file-tabs">
-              <button
-                v-for="file in selected.files"
-                :key="file.path"
-                type="button"
-                class="ws-file-tab ws-focusable"
-                :class="{ 'is-active': currentFile?.path === file.path }"
-                data-test="artifact-file"
-                @click="selectedFile = file.path"
-              >
-                {{ file.path }}
-              </button>
-            </div>
-            <div v-if="currentFile" class="ws-diff" data-test="artifact-diff">
-              <div
-                v-for="(line, i) in currentFile.diff"
-                :key="i"
-                class="ws-diff-line"
-                :class="diffClass[line.type]"
-              >
-                <span class="ws-diff-sign">
-                  {{
-                    line.type === "add" ? "+" : line.type === "del" ? "-" : " "
-                  }}
+          <section class="ws-card ws-detail-card">
+            <div class="ws-detail-head">
+              <div class="ws-detail-id">
+                <span class="ws-detail-name">{{ selected.name }}</span>
+                <span class="ws-detail-version">{{ selected.version }}</span>
+              </div>
+              <div class="ws-detail-badges">
+                <span class="ws-badge" :class="testClass[selected.testStatus]">
+                  {{ t(testLabel[selected.testStatus]) }}
                 </span>
-                <span class="ws-diff-text">{{ line.text }}</span>
+                <span class="ws-badge" :class="approvalClass[selected.approval]">
+                  {{ t(approvalLabel[selected.approval]) }}
+                </span>
               </div>
             </div>
-            <div
-              v-if="currentFile?.comments.length"
-              class="ws-comments"
-              data-test="artifact-comments"
-            >
-              <h4 class="ws-detail-label">
-                {{ t("workspace.pages.artifactsExtra.comments") }}
-              </h4>
-              <div
-                v-for="(comment, i) in currentFile.comments"
-                :key="i"
-                class="ws-comment"
-              >
-                <span class="ws-comment-line">
-                  {{ t("workspace.pages.artifactsExtra.lineLabel") }}
-                  {{ comment.line }}
-                </span>
-                <span class="ws-comment-author">{{ comment.author }}</span>
-                <span class="ws-comment-text">{{ comment.text }}</span>
-              </div>
+            <div class="ws-detail-meta">
+              <span>{{ selected.type }}</span>
+              <span>{{ selected.owner }}</span>
+              <span>{{ selected.updatedAt }}</span>
+              <span>
+                {{ t("workspace.pages.artifactsExtra.linkedTask") }}：{{
+                  selected.linkedTask
+                }}
+              </span>
             </div>
-          </div>
 
-          <!-- 测试报告 -->
-          <div class="ws-detail-block">
-            <h3 class="ws-detail-label">
-              {{ t("workspace.pages.artifactsExtra.testReport") }}
-            </h3>
-            <ul class="ws-tests" data-test="artifact-tests">
-              <li
-                v-for="(item, i) in selected.testReport"
-                :key="i"
-                class="ws-test-row"
-              >
-                <span class="ws-test-name">{{ item.name }}</span>
-                <span class="ws-badge" :class="testResultClass[item.result]">
-                  {{ item.result }}
-                </span>
-              </li>
-            </ul>
-          </div>
-
-          <!-- 需求验收标准核对 -->
-          <div class="ws-detail-block">
-            <h3 class="ws-detail-label">
-              {{ t("workspace.pages.artifactsExtra.acceptanceLabel") }}
-            </h3>
-            <ul class="ws-criteria" data-test="artifact-criteria">
-              <li
-                v-for="(item, i) in selected.acceptanceCriteria"
-                :key="i"
-                class="ws-criterion"
-              >
-                <span
-                  class="ws-criterion-mark"
-                  :class="item.passed ? 'is-test-passed' : 'is-test-failed'"
-                  aria-hidden="true"
+            <!-- 文件 + 统一 Diff + 行级评论 -->
+            <div class="ws-detail-block">
+              <h3 class="ws-detail-label">
+                {{ t("workspace.pages.artifactsExtra.files") }} ·
+                {{ t("workspace.pages.artifactsExtra.diffLabel") }}
+              </h3>
+              <div class="ws-file-tabs">
+                <button
+                  v-for="file in selected.files"
+                  :key="file.path"
+                  type="button"
+                  class="ws-file-tab ws-focusable"
+                  :class="{ 'is-active': currentFile?.path === file.path }"
+                  data-test="artifact-file"
+                  @click="selectedFile = file.path"
                 >
-                  {{ item.passed ? "✓" : "✗" }}
+                  {{ file.path }}
+                </button>
+              </div>
+              <div v-if="currentFile" class="ws-diff" data-test="artifact-diff">
+                <div
+                  v-for="(line, i) in currentFile.diff"
+                  :key="i"
+                  class="ws-diff-line"
+                  :class="diffClass[line.type]"
+                >
+                  <span class="ws-diff-sign">
+                    {{
+                      line.type === "add" ? "+" : line.type === "del" ? "-" : " "
+                    }}
+                  </span>
+                  <span class="ws-diff-text">{{ line.text }}</span>
+                </div>
+              </div>
+              <div
+                v-if="currentFile?.comments.length"
+                class="ws-comments"
+                data-test="artifact-comments"
+              >
+                <h4 class="ws-detail-label">
+                  {{ t("workspace.pages.artifactsExtra.comments") }}
+                </h4>
+                <div
+                  v-for="(comment, i) in currentFile.comments"
+                  :key="i"
+                  class="ws-comment"
+                >
+                  <span class="ws-comment-line">
+                    {{ t("workspace.pages.artifactsExtra.lineLabel") }}
+                    {{ comment.line }}
+                  </span>
+                  <span class="ws-comment-author">{{ comment.author }}</span>
+                  <span class="ws-comment-text">{{ comment.text }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 测试报告 -->
+            <div class="ws-detail-block">
+              <h3 class="ws-detail-label">
+                {{ t("workspace.pages.artifactsExtra.testReport") }}
+              </h3>
+              <ul class="ws-tests" data-test="artifact-tests">
+                <li
+                  v-for="(item, i) in selected.testReport"
+                  :key="i"
+                  class="ws-test-row"
+                >
+                  <span class="ws-test-name">{{ item.name }}</span>
+                  <span class="ws-badge" :class="testResultClass[item.result]">
+                    {{ item.result }}
+                  </span>
+                </li>
+              </ul>
+            </div>
+
+            <!-- 需求验收标准核对 -->
+            <div class="ws-detail-block">
+              <h3 class="ws-detail-label">
+                {{ t("workspace.pages.artifactsExtra.acceptanceLabel") }}
+              </h3>
+              <ul class="ws-criteria" data-test="artifact-criteria">
+                <li
+                  v-for="(item, i) in selected.acceptanceCriteria"
+                  :key="i"
+                  class="ws-criterion"
+                >
+                  <span
+                    class="ws-criterion-mark"
+                    :class="item.passed ? 'is-test-passed' : 'is-test-failed'"
+                    aria-hidden="true"
+                  >
+                    {{ item.passed ? "✓" : "✗" }}
+                  </span>
+                  <span class="ws-criterion-text">{{ item.text }}</span>
+                </li>
+              </ul>
+            </div>
+          </section>
+        </article>
+      </div>
+    </template>
+
+    <template v-else>
+      <div class="ws-toolbar">
+        <label class="ws-toolbar-label" for="artifacts-project">
+          {{ t("workspace.pages.artifacts.project") }}
+        </label>
+        <select
+          id="artifacts-project"
+          v-model="selectedProjectId"
+          class="ws-toolbar-select"
+        >
+          <option value="">
+            {{ t("workspace.pages.artifacts.pickProjectShort") }}
+          </option>
+          <option v-for="p in scope.projects" :key="p.id" :value="p.id">
+            {{ p.name }}
+          </option>
+        </select>
+      </div>
+      <p v-if="!projectId" class="ws-hint" data-test="artifacts-pick-project">
+        {{ t("workspace.pages.artifacts.pickProject") }}
+      </p>
+      <p v-else-if="failed" class="ws-hint" data-test="artifacts-failed">
+        {{ t("workspace.pages.artifacts.loadFailed") }}
+      </p>
+      <p
+        v-else-if="!loading && !apiArtifacts.length"
+        class="ws-hint"
+        data-test="artifacts-empty"
+      >
+        {{ t("workspace.pages.artifacts.empty") }}
+      </p>
+      <div v-else class="ws-artifacts-body">
+        <aside class="ws-card ws-artifact-list" aria-label="artifacts">
+          <button
+            v-for="item in apiArtifacts"
+            :key="item.id"
+            type="button"
+            class="ws-artifact-row ws-focusable"
+            :class="{ 'is-selected': selectedApiId === item.id }"
+            data-test="artifact-row"
+            @click="selectedApiId = item.id"
+          >
+            <span class="ws-artifact-name">{{ item.requirement_title }}</span>
+            <span class="ws-artifact-version">v{{ item.version }}</span>
+            <span class="ws-badge" :class="stateClass[item.state]">
+              {{ stateText(item.state) }}
+            </span>
+          </button>
+        </aside>
+
+        <article
+          v-if="selectedApi"
+          class="ws-artifact-detail"
+          data-test="artifact-detail"
+        >
+          <section class="ws-card ws-detail-card">
+            <div class="ws-detail-head">
+              <div class="ws-detail-id">
+                <span class="ws-detail-name">{{
+                  selectedApi.requirement_title
+                }}</span>
+                <span class="ws-detail-version"
+                  >v{{ selectedApi.version }} ·
+                  {{ selectedApi.requirement_code }}</span
+                >
+              </div>
+              <div class="ws-detail-badges">
+                <span class="ws-badge" :class="stateClass[selectedApi.state]">
+                  {{ stateText(selectedApi.state) }}
                 </span>
-                <span class="ws-criterion-text">{{ item.text }}</span>
-              </li>
-            </ul>
-          </div>
-        </section>
-      </article>
-    </div>
+              </div>
+            </div>
+            <div class="ws-detail-meta">
+              <span>
+                {{ t("workspace.pages.artifacts.hashLabel") }}：{{
+                  selectedApi.content_hash.slice(0, 12)
+                }}
+              </span>
+              <span>
+                {{ t("workspace.pages.artifacts.approvedByLabel") }}：{{
+                  selectedApi.approved_by
+                    ? t("workspace.pages.artifacts.approvalApproved")
+                    : t("workspace.pages.artifacts.noApprover")
+                }}
+              </span>
+              <span>{{ formatDate(selectedApi.created_at) }}</span>
+            </div>
+            <p class="ws-hint" data-test="artifact-diff-pending">
+              {{ t("workspace.pages.artifacts.diffPending") }}
+            </p>
+          </section>
+        </article>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -251,6 +451,33 @@ function onPick(id: string) {
   gap: 16px;
   padding: 20px 24px 32px;
   max-width: 1200px;
+}
+
+.ws-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-toolbar-label {
+  font-size: var(--ws-font-size-caption);
+  color: var(--ws-text-secondary);
+}
+
+.ws-toolbar-select {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-card);
+  background: var(--ws-surface);
+  color: var(--ws-text-primary);
+  font-size: var(--ws-font-size-caption);
+}
+
+.ws-hint {
+  margin: 0;
+  font-size: var(--ws-font-size-caption);
+  color: var(--ws-text-secondary);
 }
 
 .ws-artifacts-body {
@@ -315,7 +542,8 @@ function onPick(id: string) {
 
 /* 紫色克制：测试/审批状态用语义色 */
 .ws-badge.is-test-passed,
-.ws-badge.is-approval-approved {
+.ws-badge.is-approval-approved,
+.ws-badge.is-state-approved {
   color: var(--ws-color-success-text);
 }
 
@@ -325,8 +553,13 @@ function onPick(id: string) {
 }
 
 .ws-badge.is-test-running,
-.ws-badge.is-approval-pending {
+.ws-badge.is-approval-pending,
+.ws-badge.is-state-draft {
   color: var(--ws-color-warning-text);
+}
+
+.ws-badge.is-state-superseded {
+  color: var(--ws-text-secondary);
 }
 
 .ws-badge.is-ctx {

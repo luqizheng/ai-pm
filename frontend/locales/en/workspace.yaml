@@ -211,6 +211,18 @@ workspace:
       approvalPending: Awaiting approval
       approvalApproved: Approved
       approvalRejected: Rejected
+      project: Project
+      pickProjectShort: Select project
+      pickProject: Select a project in Project Scope first
+      loadFailed: Load failed, please retry
+      empty: No artifacts
+      stateDraft: Draft
+      stateApproved: Approved
+      stateSuperseded: Superseded
+      diffPending: File diff, test report and comments appear once the artifact pipeline is wired
+      hashLabel: Content hash
+      approvedByLabel: Approved by
+      noApprover: Pending
     goalsExtra:
       viewTree: Goal tree
       viewDeps: Dependency graph
