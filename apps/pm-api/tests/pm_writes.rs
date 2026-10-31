@@ -285,6 +285,35 @@ async fn create_task_defaults_and_contract_shape(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../../migrations")]
+async fn create_task_falls_back_to_global_human_when_project_has_no_members(pool: PgPool) {
+    // 兼容无 project_member 行的种子/导入数据：actor 回退到全局第一个 human。
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "TSK-0".into(), project_name: "t".into() }).await.unwrap();
+    let bare_project = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO core.project (id, customer_id, code, name) \
+         VALUES ($1, $2, 'BARE-1', 'no members')",
+    )
+    .bind(bare_project)
+    .bind(boot.customer_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = router(pool.clone());
+
+    let response = app
+        .oneshot(request(
+            "POST",
+            "/v1/pm/tasks".into(),
+            Some(json!({ "project_id": bare_project, "title": "orphan project task" })),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED, "memberless project must still accept creates");
+    let task = body_json(response).await;
+    assert_eq!(task["status"], json!("backlog"));
+}
+
+#[sqlx::test(migrations = "../../migrations")]
 async fn create_task_validation_errors(pool: PgPool) {
     let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "TSK-2".into(), project_name: "t".into() }).await.unwrap();
     let app = router(pool.clone());

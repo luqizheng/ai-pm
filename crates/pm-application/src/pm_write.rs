@@ -30,9 +30,11 @@ impl From<sqlx::Error> for PmWriteError {
     }
 }
 
-/// 解析项目的操作者：owner 角色的 human principal（V1 身份约定，见模块注释）。
+/// 解析项目的操作者（V1 身份约定，见模块注释）。三级回退：
+/// ① owner 角色 human 成员 → ② 任意 human 成员 → ③ 全局第一个 active human
+/// principal（兼容无成员行的种子/导入数据；iam↔principal 映射表落地后收紧）。
 pub async fn owner_actor(pool: &PgPool, project_id: Uuid) -> Result<Uuid, PmWriteError> {
-    sqlx::query_scalar(
+    let owner: Option<Uuid> = sqlx::query_scalar(
         "SELECT p.id FROM core.project_member m \
          JOIN core.principal p ON p.id = m.principal_id \
          WHERE m.project_id = $1 AND m.role = 'owner' AND p.kind = 'human' AND p.is_active \
@@ -40,8 +42,28 @@ pub async fn owner_actor(pool: &PgPool, project_id: Uuid) -> Result<Uuid, PmWrit
     )
     .bind(project_id)
     .fetch_optional(pool)
+    .await?;
+    if let Some(actor) = owner {
+        return Ok(actor);
+    }
+    let member: Option<Uuid> = sqlx::query_scalar(
+        "SELECT p.id FROM core.project_member m \
+         JOIN core.principal p ON p.id = m.principal_id \
+         WHERE m.project_id = $1 AND p.kind = 'human' AND p.is_active \
+         LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+    if let Some(actor) = member {
+        return Ok(actor);
+    }
+    sqlx::query_scalar(
+        "SELECT id FROM core.principal WHERE kind = 'human' AND is_active ORDER BY created_at LIMIT 1",
+    )
+    .fetch_optional(pool)
     .await?
-    .ok_or(PmWriteError::Validation("project has no owner principal"))
+    .ok_or(PmWriteError::Validation("no human principal available as actor"))
 }
 
 async fn append_audit(
