@@ -539,6 +539,305 @@ function loginResult() {
   };
 }
 
+// ---------- lmms 基础服务（iam/audit/config/file/notification/prue）mock 数据 ----------
+// 字段对齐各 *-services SDK 的 DTO（即后端 serde 序列化）。
+
+/** GET /v1/iam/users（全量用户，UserResponse 形状） */
+export const iamUsers = [
+  {
+    id: "usr-admin",
+    username: "admin",
+    email: "admin@digua.dev",
+    phone: null,
+    nickname: "管理员",
+    avatar: null,
+    status: "active",
+    email_verified: true,
+    phone_verified: false,
+    last_login_at: daysAgo(0, 9),
+    last_login_ip: "10.0.0.1",
+    created_at: daysAgo(120),
+    updated_at: daysAgo(1)
+  },
+  {
+    id: "usr-zhang",
+    username: "zhangwei",
+    email: "zhangwei@digua.dev",
+    phone: null,
+    nickname: "张伟",
+    avatar: null,
+    status: "active",
+    email_verified: true,
+    phone_verified: false,
+    last_login_at: daysAgo(1, 14),
+    last_login_ip: "10.0.0.2",
+    created_at: daysAgo(90),
+    updated_at: daysAgo(2)
+  },
+  {
+    id: "usr-li",
+    username: "lina",
+    email: "lina@digua.dev",
+    phone: null,
+    nickname: "李娜",
+    avatar: null,
+    status: "disabled",
+    email_verified: false,
+    phone_verified: false,
+    last_login_at: daysAgo(30),
+    last_login_ip: "10.0.0.3",
+    created_at: daysAgo(85),
+    updated_at: daysAgo(30)
+  }
+] satisfies MockRecord[];
+
+/** GET /v1/iam/roles（RoleResponse 形状；data_scope 出参为字符串） */
+export const iamRoles = [
+  {
+    id: "role-admin",
+    name: "管理员",
+    code: "admin",
+    description: "平台管理员",
+    data_scope: "1",
+    status: "active",
+    created_at: daysAgo(120),
+    updated_at: daysAgo(10)
+  },
+  {
+    id: "role-owner",
+    name: "项目负责人",
+    code: "project_owner",
+    description: "项目内全权",
+    data_scope: "2",
+    status: "active",
+    created_at: daysAgo(100),
+    updated_at: daysAgo(9)
+  },
+  {
+    id: "role-guest",
+    name: "访客",
+    code: "guest",
+    description: "只读",
+    data_scope: "5",
+    status: "disabled",
+    created_at: daysAgo(60),
+    updated_at: daysAgo(60)
+  }
+] satisfies MockRecord[];
+
+/** GET /v1/pure/menu-configs（MenuConfigSummary 形状） */
+export const menuConfigs = [
+  {
+    id: "mc-1",
+    version: 1,
+    name: "v1 基线菜单",
+    description: "首次灌入的基线菜单树",
+    status: "published",
+    is_active: true,
+    created_by: "usr-admin",
+    created_at: daysAgo(30),
+    updated_at: daysAgo(29),
+    published_at: daysAgo(29),
+    routes_etag: "mock-etag-v1"
+  },
+  {
+    id: "mc-2",
+    version: 2,
+    name: "v2 系统页扩展",
+    description: "追加系统管理与审计入口",
+    status: "draft",
+    is_active: false,
+    created_by: "usr-admin",
+    created_at: daysAgo(3),
+    updated_at: daysAgo(2),
+    published_at: null,
+    routes_etag: "mock-etag-v2"
+  }
+];
+
+/** GET /v1/notification/announcements（裸数组，Announcement 形状） */
+export const announcements = [
+  {
+    id: 1,
+    title: "平台维护窗口公告",
+    body: "本周六 22:00-24:00 平台升级，期间服务短暂不可用。",
+    publish_at: daysAgo(5),
+    pinned: 1,
+    popover: 0,
+    status: "published",
+    created_by: "usr-admin",
+    created_at: daysAgo(6),
+    expire_at: null
+  },
+  {
+    id: 2,
+    title: "新权限模型征求意见",
+    body: "拟引入数据范围（data_scope）到角色维度，欢迎反馈。",
+    publish_at: daysAgo(1),
+    pinned: 0,
+    popover: 1,
+    status: "draft",
+    created_by: "usr-admin",
+    created_at: daysAgo(2),
+    expire_at: null
+  }
+];
+
+/** GET /v1/audit/login（LoginLog 形状） */
+export const auditLoginLogs = [
+  {
+    id: 1,
+    user_id: "usr-admin",
+    username: "admin",
+    success: true,
+    ip_address: "10.0.0.1",
+    request_id: "req-l-001",
+    created_at: daysAgo(0, 9),
+    fail_reason: null,
+    location: null,
+    user_agent: "Chrome/126"
+  },
+  {
+    id: 2,
+    user_id: "usr-zhang",
+    username: "zhangwei",
+    success: false,
+    ip_address: "10.0.0.2",
+    request_id: "req-l-002",
+    created_at: daysAgo(1, 22),
+    fail_reason: "invalid credentials",
+    location: null,
+    user_agent: "Firefox/127"
+  },
+  {
+    id: 3,
+    user_id: "usr-li",
+    username: "lina",
+    success: true,
+    ip_address: "10.0.0.3",
+    request_id: "req-l-003",
+    created_at: daysAgo(3, 11),
+    fail_reason: null,
+    location: null,
+    user_agent: "Chrome/125"
+  }
+];
+
+/** GET /v1/audit/operation（OperationLog 形状） */
+export const auditOperationLogs = [
+  {
+    id: 1,
+    user_id: "usr-admin",
+    action: "user.create",
+    resource: "iam_user",
+    request_id: "req-o-001",
+    created_at: daysAgo(1, 10),
+    resource_id: "usr-li",
+    before_value: null,
+    after_value: '{"username":"lina"}',
+    ip_address: "10.0.0.1",
+    user_agent: "Chrome/126"
+  },
+  {
+    id: 2,
+    user_id: "usr-zhang",
+    action: "role.assign",
+    resource: "iam_user",
+    request_id: "req-o-002",
+    created_at: daysAgo(2, 15),
+    resource_id: "usr-zhang",
+    before_value: "[]",
+    after_value: '["project_owner"]',
+    ip_address: "10.0.0.2",
+    user_agent: "Firefox/127"
+  }
+];
+
+/** GET /v1/config/item（ConfigItem 形状） */
+export const configItems = [
+  {
+    id: "cfg-1",
+    namespace_id: "ns-aipm-prod",
+    key: "db.pool.max",
+    value: "20",
+    value_type: "number",
+    is_secret: false,
+    created_at: daysAgo(40),
+    updated_at: daysAgo(5),
+    description: "连接池上限",
+    value_masked: false
+  },
+  {
+    id: "cfg-2",
+    namespace_id: "ns-aipm-prod",
+    key: "llm.api_key",
+    value: "********",
+    value_type: "string",
+    is_secret: true,
+    created_at: daysAgo(40),
+    updated_at: daysAgo(5),
+    description: "LLM 网关密钥",
+    value_masked: true
+  }
+] satisfies MockRecord[];
+
+/** GET /v1/file/list（FileInfo 形状） */
+export const files = [
+  {
+    id: "file-001",
+    filename: "需求规格-v2.pdf",
+    content_type: "application/pdf",
+    size: 483_211,
+    storage_path: "/data/files/file-001",
+    tenant_id: 1,
+    is_temporary: false,
+    created_at: daysAgo(12),
+    updated_at: daysAgo(12),
+    hash: "mock-hash-1",
+    user_id: "usr-admin",
+    expires_at: null,
+    url: "/v1/file/file-001"
+  },
+  {
+    id: "file-002",
+    filename: "架构评审纪要.docx",
+    content_type:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    size: 92_400,
+    storage_path: "/data/files/file-002",
+    tenant_id: 1,
+    is_temporary: false,
+    created_at: daysAgo(4),
+    updated_at: daysAgo(4),
+    hash: "mock-hash-2",
+    user_id: "usr-zhang",
+    expires_at: null,
+    url: "/v1/file/file-002"
+  }
+] satisfies MockRecord[];
+
+/** GET /v1/iam/auth/sessions（裸数组，SessionInfo 形状） */
+export const sessions = [
+  {
+    id: "ses-001",
+    user_id: "usr-admin",
+    client_ip: "10.0.0.1",
+    user_agent: "Chrome/126",
+    created_at: daysAgo(0, 9),
+    expires_at: daysAgo(-30),
+    is_current: true
+  },
+  {
+    id: "ses-002",
+    user_id: "usr-admin",
+    client_ip: "10.0.0.9",
+    user_agent: "Edge/126",
+    created_at: daysAgo(2, 20),
+    expires_at: daysAgo(-28),
+    is_current: false
+  }
+];
+
 /**
  * DB 菜单（GET /v1/pure/get-async-routes 的 data）。
  * component 字符串对应 src/shell/views/<component>.vue。
@@ -599,6 +898,74 @@ export const mockAsyncRoutes = [
     name: "PmSettings",
     component: "pm/settings",
     meta: { title: "设置", icon: "sliders-horizontal" }
+  },
+  {
+    path: "/system",
+    name: "SystemGroup",
+    meta: { title: "系统管理" },
+    children: [
+      {
+        path: "/system/users",
+        name: "SystemUsers",
+        component: "system/user",
+        meta: { title: "用户管理", icon: "users", auths: ["IAM_USER_READ"] }
+      },
+      {
+        path: "/system/roles",
+        name: "SystemRoles",
+        component: "system/role",
+        meta: { title: "角色管理", icon: "key-round", auths: ["IAM_ROLE_READ"] }
+      },
+      {
+        path: "/system/menus",
+        name: "SystemMenus",
+        component: "system/menu",
+        meta: { title: "菜单配置", icon: "list-tree", auths: ["IAM_MENU_READ"] }
+      },
+      {
+        path: "/system/sessions",
+        name: "SystemSessions",
+        component: "system/session",
+        meta: { title: "在线会话", icon: "monitor-dot" }
+      }
+    ]
+  },
+  {
+    path: "/audit-center",
+    name: "AuditGroup",
+    meta: { title: "审计" },
+    children: [
+      {
+        path: "/audit/login-logs",
+        name: "AuditLoginLogs",
+        component: "audit/login-log",
+        meta: { title: "登录日志", icon: "log-in", auths: ["AUD_LOG_READ"] }
+      },
+      {
+        path: "/audit/operation-logs",
+        name: "AuditOperationLogs",
+        component: "audit/operation-log",
+        meta: { title: "操作日志", icon: "scroll-text", auths: ["AUD_LOG_READ"] }
+      }
+    ]
+  },
+  {
+    path: "/notifications",
+    name: "SystemNotification",
+    component: "notification/announcement",
+    meta: { title: "公告管理", icon: "megaphone" }
+  },
+  {
+    path: "/config-items",
+    name: "SystemConfig",
+    component: "config/item",
+    meta: { title: "系统配置", icon: "settings-2", auths: ["CFG_CONFIG_READ"] }
+  },
+  {
+    path: "/files",
+    name: "SystemFiles",
+    component: "file",
+    meta: { title: "文件管理", icon: "folder-open", auths: ["FILE_READ"] }
   }
 ];
 
@@ -838,6 +1205,28 @@ export function resolveMock(
         body: { items, total: items.length, page: 1, size: items.length }
       };
     }
+    // ---- lmms 基础服务端点（系统页） ----
+    case "/v1/iam/users":
+      return { status: 200, body: paginate(iamUsers, query) };
+    case "/v1/iam/roles":
+      return { status: 200, body: paginate(iamRoles, query) };
+    case "/v1/iam/auth/sessions":
+      return { status: 200, body: sessions };
+    case "/v1/pure/menu-configs":
+      return {
+        status: 200,
+        body: { items: menuConfigs, total: menuConfigs.length }
+      };
+    case "/v1/notification/announcements":
+      return { status: 200, body: announcements };
+    case "/v1/audit/login":
+      return { status: 200, body: paginate(auditLoginLogs, query) };
+    case "/v1/audit/operation":
+      return { status: 200, body: paginate(auditOperationLogs, query) };
+    case "/v1/config/item":
+      return { status: 200, body: paginate(configItems, query) };
+    case "/v1/file/list":
+      return { status: 200, body: paginate(files, query) };
     case "/v1/pm/principals":
       return { status: 200, body: list(principals) };
     case "/v1/pm/projects":
