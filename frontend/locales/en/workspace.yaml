@@ -1,4 +1,14 @@
 workspace:
+  spec:
+    fallback: "Cannot render: {reason}"
+    overflow: More components
+  focus:
+    title: Focus view
+    back: Back to previous page
+    subject: Current object
+    timeline: Timeline
+    timelineEmpty: No timeline data yet
+    unknownType: Unsupported object type — degraded to text
   shell:
     breadcrumb: Breadcrumb
     theme: Toggle theme
@@ -35,6 +45,21 @@ workspace:
     show: Show context
     currentTodo: Current to-do
     aiAdvice: AI advice
+    tabs:
+      context: Context
+      evidence: Evidence
+    fields:
+      workspace: Current workspace
+      task: Current task
+      owner: Owner
+      permission: Permission
+    owner:
+      devAgent: Dev agent
+      aiPm: AI-PM assistant
+    permission:
+      highRisk: High-risk actions need human approval
+      readOnly: Read-only
+    evidenceEmpty: No evidence yet
     kind:
       decision: Decision
       acceptance: Acceptance

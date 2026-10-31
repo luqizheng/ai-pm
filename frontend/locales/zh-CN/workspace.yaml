@@ -1,4 +1,14 @@
 workspace:
+  spec:
+    fallback: 无法渲染：{reason}
+    overflow: 更多组件
+  focus:
+    title: 聚焦视图
+    back: 返回原页
+    subject: 当前对象
+    timeline: 时间线
+    timelineEmpty: 暂无时间线数据
+    unknownType: 不支持的对象类型，已降级为文本
   shell:
     breadcrumb: 面包屑
     theme: 切换主题
@@ -35,6 +45,21 @@ workspace:
     show: 显示上下文
     currentTodo: 当前待办事项
     aiAdvice: AI 建议
+    tabs:
+      context: 上下文
+      evidence: 证据
+    fields:
+      workspace: 当前工作区
+      task: 当前任务
+      owner: 负责人
+      permission: 权限
+    owner:
+      devAgent: 开发 Agent
+      aiPm: AI-PM 助理
+    permission:
+      highRisk: 高风险操作需要人工审批
+      readOnly: 只读浏览
+    evidenceEmpty: 暂无证据引用
     kind:
       decision: 决策
       acceptance: 验收

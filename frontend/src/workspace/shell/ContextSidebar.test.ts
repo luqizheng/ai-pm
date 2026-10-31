@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ContextSidebar from "./ContextSidebar.vue";
 import { mountShell } from "../../shell/test-utils";
 import { useWorkspaceStore } from "../store";
-import { attentionItems, contextAdvice } from "../fixtures";
+import { attentionItems, contextAdvice, knowledgeDocs } from "../fixtures";
 
 vi.mock("vue-router", () => ({
   useRoute: () => ({
     path: "/workspace/proj-worldmap/console",
+    name: "workspace-console",
+    meta: { title: "项目总控" },
     params: {},
     query: {}
   }),
@@ -55,5 +57,24 @@ describe("ContextSidebar（右栏上下文）", () => {
     const { w, store } = mounted();
     await w.find("[data-test='context-collapse']").trigger("click");
     expect(store.contextOpen).toBe(false);
+  });
+
+  it("V1.2 上下文四要素随页面显示", () => {
+    const { w } = mounted();
+    const text = w.text();
+    expect(text).toContain("当前工作区");
+    expect(text).toContain("项目总控");
+    expect(text).toContain("当前任务");
+    expect(text).toContain("负责人");
+    expect(text).toContain("高风险操作需要人工审批");
+  });
+
+  it("证据页签显示引用关系", async () => {
+    const { w } = mounted();
+    await w.find("[data-test='context-tab-evidence']").trigger("click");
+    expect(w.find("[data-test='context-evidence']").exists()).toBe(true);
+    expect(w.text()).toContain("证据");
+    expect(w.text()).toContain(knowledgeDocs[0].references[0].title);
+    expect(w.find("[data-test='context-fields']").exists()).toBe(false);
   });
 });

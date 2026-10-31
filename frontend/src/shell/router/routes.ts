@@ -103,6 +103,34 @@ export const staticRoutes: RouteRecordRaw[] = [
         meta: { title: "产物验收" }
       },
       {
+        path: "focus/:objectType/:id",
+        name: "workspace-focus",
+        component: () => import("../../workspace/focus/FocusView.vue"),
+        meta: { title: "" }
+      },
+      {
+        path: "classic/overview",
+        redirect: to => `/workspace/${String(to.params.projectId)}/console`
+      },
+      {
+        path: "classic/requirements",
+        name: "workspace-classic-requirements",
+        component: () => import("../../shell/views/pm/requirements/index.vue"),
+        meta: { title: "需求管理" } // i18n-ignore: route meta 直接作为页签标题
+      },
+      {
+        path: "classic/tasks",
+        name: "workspace-classic-tasks",
+        component: () => import("../../shell/views/pm/tasks/index.vue"),
+        meta: { title: "任务" } // i18n-ignore: route meta 直接作为页签标题
+      },
+      {
+        path: "classic/approvals",
+        name: "workspace-classic-approvals",
+        component: () => import("../../shell/views/pm/approvals/index.vue"),
+        meta: { title: "审批确认" } // i18n-ignore: route meta 直接作为页签标题
+      },
+      {
         path: ":page",
         name: "workspace-page",
         component: ComingSoon,

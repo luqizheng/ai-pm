@@ -8,6 +8,18 @@ export interface CommandMessage {
   text: string;
 }
 
+/** /focus 的主对象（WorkspaceSpec.subject 的本地形态）。 */
+export interface WorkspaceSubject {
+  type: string;
+  id: string;
+}
+
+/** 可恢复的页面现场：query + 滚动位置（无损往返 §1.4）。 */
+export interface ViewState {
+  query: Record<string, string>;
+  scrollTop: number;
+}
+
 let messageSeq = 0;
 
 /**
@@ -16,6 +28,8 @@ let messageSeq = 0;
  */
 export const useWorkspaceStore = defineStore("workspace", () => {
   const projectId = ref("");
+  const subject = ref<WorkspaceSubject | null>(null);
+  const viewStates = ref<Record<string, ViewState>>({});
   const selectedAttentionId = ref<string | null>(null);
   const sidebarCollapsed = ref(false);
   const contextOpen = ref(true);
@@ -27,6 +41,28 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   function setProject(id: string) {
     projectId.value = id;
+  }
+
+  function setSubject(next: WorkspaceSubject | null) {
+    subject.value = next;
+  }
+
+  /** 进入 /focus 前记录来源页现场，按 route name 分桶。 */
+  function captureViewState(
+    route: { name?: string | symbol | null; query?: Record<string, unknown> },
+    scrollTop = 0
+  ) {
+    const key = String(route.name ?? "");
+    if (!key) return;
+    const query: Record<string, string> = {};
+    for (const [name, value] of Object.entries(route.query ?? {})) {
+      if (typeof value === "string") query[name] = value;
+    }
+    viewStates.value[key] = { query, scrollTop };
+  }
+
+  function restoreViewState(routeName: string): ViewState | undefined {
+    return viewStates.value[routeName];
   }
 
   function selectAttention(id: string | null) {
@@ -52,12 +88,16 @@ export const useWorkspaceStore = defineStore("workspace", () => {
 
   return {
     projectId,
+    subject,
     selectedAttentionId,
     selectedAttention,
     sidebarCollapsed,
     contextOpen,
     commandMessages,
     setProject,
+    setSubject,
+    captureViewState,
+    restoreViewState,
     selectAttention,
     toggleSidebar,
     toggleContext,
