@@ -35,6 +35,7 @@ use uuid::Uuid;
 
 use crate::bootstrap::resolve_assignee;
 use crate::knowledge::{self, CreateDocumentRequest, KnowledgeRoot};
+use crate::outbox::{OutboxAppend, OutboxEvent, PgOutboxAppend};
 use crate::policy_engine::PolicyEngine;
 
 /// Who issues a command. The executor only branches on [`ActorKind::Human`]
@@ -140,13 +141,48 @@ pub struct ExecutionReceipt {
 pub struct PgCommandExecutor {
     pool: sqlx::PgPool,
     policy: Arc<PolicyEngine>,
+    /// §20.6.1：outbox 事件与业务状态变更写在同一事务里（`append` 收 `&mut tx`）。
+    outbox: Arc<dyn OutboxAppend>,
 }
 
 type Tx = sqlx::Transaction<'static, sqlx::Postgres>;
 
+/// §20.7 L3：任务状态迁移的目标状态 → 需异步分发的 outbox 事件。只登记语义无
+/// 歧义的迁移边：进入 `ready` 即「任务满足执行条件」（TaskReady），进入
+/// `submitted` 即「交付已提交」（DeliverySubmitted）。`RunRequested` /
+/// `RunCompleted` / `ReviewCompleted` / `KnowledgeBaseWriteRequested` 的触发动作
+/// 是创建 Run、评审结论落库与知识回写请求——这些业务动作目前没有落点，故不
+/// 由纯状态列变更产生（§20.6「不假装消费」）。
+fn outbox_event_for_task_target(to: &str) -> Option<&'static str> {
+    match to {
+        "ready" => Some("TaskReady"),
+        "submitted" => Some("DeliverySubmitted"),
+        _ => None,
+    }
+}
+
 impl PgCommandExecutor {
     pub fn new(pool: sqlx::PgPool, policy: Arc<PolicyEngine>) -> Self {
-        Self { pool, policy }
+        Self {
+            pool,
+            policy,
+            outbox: Arc::new(PgOutboxAppend),
+        }
+    }
+
+    /// 构造一个注入自定义 outbox 端口的执行器。端口可替换，正是为了证明网页
+    /// 「事件写入与业务状态变更同事务」——测试注入一个必失败的端口，验证写入
+    /// 失败会让整个业务变更回滚。
+    pub fn with_outbox(
+        pool: sqlx::PgPool,
+        policy: Arc<PolicyEngine>,
+        outbox: Arc<dyn OutboxAppend>,
+    ) -> Self {
+        Self {
+            pool,
+            policy,
+            outbox,
+        }
     }
 
     /// Handler registry check — the orchestrator validates executability with
@@ -390,6 +426,34 @@ impl PgCommandExecutor {
             audit_source(ctx),
         )
         .await?;
+        // §20.6.1 / §20.7 L3：状态迁移成功的同时，在同一事务内登记需异步分发的
+        // 事件；幂等键以迁移后的 revision 钉死，重复执行同一迁移不会重复写事件。
+        if let Some(event_type) = outbox_event_for_task_target(new_status.as_str())
+            .filter(|event_type| crate::outbox::event_is_enabled(event_type))
+        {
+            let aggregate_id = task_id.to_string();
+            let idempotency_key =
+                format!("task:{task_id}:{event_type}:rev{resulting_revision}");
+            self.outbox
+                .append(
+                    &mut tx,
+                    OutboxEvent {
+                        project_id: ctx.project_id,
+                        event_type,
+                        aggregate_type: "Task",
+                        aggregate_id: &aggregate_id,
+                        payload: json!({
+                            "task_id": task_id,
+                            "from": status_before,
+                            "to": new_status.as_str(),
+                            "revision": resulting_revision,
+                        }),
+                        idempotency_key: &idempotency_key,
+                    },
+                )
+                .await
+                .map_err(db_err)?;
+        }
         tx.commit().await.map_err(db_err)?;
         Ok(ExecutionReceipt {
             audit_id,

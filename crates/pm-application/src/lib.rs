@@ -7,6 +7,7 @@ pub mod ingestion;
 pub mod knowledge;
 pub mod knowledge_index;
 pub mod llm_config;
+pub mod outbox;
 pub mod pm_write;
 pub mod policy_engine;
 pub mod project_import;
@@ -26,6 +27,7 @@ pub use command_executor::{
     PgCommandExecutor, SnapshotEntry,
 };
 pub use pm_domain::CommandError;
+pub use outbox::{OutboxAppend, OutboxEvent, PgOutboxAppend};
 pub use ingestion::{IngestionError, SubmitEventRequest, SubmitOutcome, submit_event};
 pub use knowledge::{
     CreateDocumentRequest, CreatedDocument, DocumentContent, DocumentSummary, KnowledgeError,
