@@ -14,6 +14,7 @@
     "preview:build": "pnpm build && vite preview",
     "typecheck": "pnpm run build:packages && vue-tsc --noEmit --skipLibCheck",
     "check:prism-tokens": "node ../scripts/check-prism-tokens.js",
+    "check:i18n": "node ../scripts/check-i18n-namespace.js && node ../scripts/check-i18n-hardcode.js",
     "test:unit": "pnpm run build:packages && vitest run --reporter=verbose",
     "test:unit:watch": "vitest",
     "clean:cache": "rimraf .eslintcache && rimraf pnpm-lock.yaml && rimraf node_modules && pnpm store prune && pnpm install",

@@ -71,4 +71,5 @@ pnpm build               # 构建（会先构建 @digua/* 基础包）
 pnpm test:unit           # 单测
 pnpm typecheck           # 类型检查
 pnpm lint:eslint         # 规范
+pnpm check:i18n          # i18n 门禁：命名空间对齐 + 硬编码中文（存量基线在 scripts/i18n-hardcode-baseline.json）
 ```
