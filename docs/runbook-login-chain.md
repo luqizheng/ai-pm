@@ -101,3 +101,24 @@ vite 代理见 `frontend/vite.config.ts`（`/api`→`PM_API_URL ?? 8090`；`/gw`
    V1 约定写操作 actor = 项目 owner human principal；JWT sub↔principal 映射表留后续里程碑）。
 4. **已知边界**：SSE `/v1/pm/events/stream` 未实现（overview 实时面板自动隐藏，属预期）；decide 的
    approve 执行期冲突（目标 revision 漂移）返回 409 `command execution failed`。
+
+## 八、真后端模式的动态菜单（prue_menu_configs）
+
+`VITE_USE_MOCK=0` 时左导航来自 prue_backend 的激活菜单版本（`prue_menu_configs`，mysql superpowers 库）。
+无激活行时所有动态页（pm 经典页 + 系统页）不可达（静态 dashboard/profile/workspace 除外）。
+
+播种方式（对齐 `frontend/src/api/mock/fixtures.ts` 的 `mockAsyncRoutes`，含系统页全量树）：
+
+```bash
+# 1) 从 dev server 抽取权威树（浏览器 console 或 evaluate）：
+#    (await import("/src/api/mock/fixtures.ts")).mockAsyncRoutes
+# 2) 写入激活版本（utf8mb4 必须，否则中文乱码）：
+docker exec -i infrastructure-mysql-1 sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" \
+  --default-character-set=utf8mb4 superpowers' <<'SQL'
+INSERT INTO prue_menu_configs (id, version, name, routes_json, status, is_active, created_by, published_at)
+VALUES ('menu-seed-0001', 1, '联调初始菜单', '<mockAsyncRoutes 的 JSON>', 'published', 1, 'seed', now())
+ON DUPLICATE KEY UPDATE routes_json=VALUES(routes_json), is_active=1, status='published', published_at=now();
+SQL
+```
+
+正式维护走批三交付的「菜单配置」页（版本创建/草稿编辑/发布）。重新登录后生效（guard 拉取一次）。
