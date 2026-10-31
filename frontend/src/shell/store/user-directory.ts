@@ -1,12 +1,16 @@
 import { ref } from "vue";
 import { defineStore } from "pinia";
-import { listUsersSimple } from "../api/users";
+import { listPrincipals } from "../../api/pm";
 
 /** 分页拉取时的单页条数 */
 const PAGE_SIZE = 200;
 
 /**
  * 用户目录：userId → 昵称 缓存。
+ *
+ * 数据源是 ai-pm 的 `/v1/pm/principals`（principal 显示名），而不是 iam 的
+ * users/simple：任务经办人 / 审批人 / 审计人都在 principals ID 空间，两侧
+ * 同空间昵称才能解析（iam 登录身份与 principals 的映射属后续里程碑）。
  *
  * - **懒加载**：首次调用 {@link useUserDirectory.ensureLoaded} 时拉取；
  * - **只拉一次**：全量拉取结果按会话缓存在内存里，后续调用直接命中；
@@ -23,10 +27,10 @@ export const useUserDirectory = defineStore("prism-user-directory", () => {
     const merged: Record<string, string> = {};
     let page = 1;
     for (;;) {
-      const result = await listUsersSimple({ page, size: PAGE_SIZE });
+      const result = await listPrincipals({ page, size: PAGE_SIZE });
       const items = result?.items ?? [];
-      for (const user of items) {
-        if (user?.id) merged[user.id] = user.nickname || user.id;
+      for (const principal of items) {
+        if (principal?.id) merged[principal.id] = principal.display_name || principal.id;
       }
       const total = result?.total ?? items.length;
       // 空页或已到末页即结束
