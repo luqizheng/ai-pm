@@ -515,7 +515,7 @@ stateDiagram-v2
 | 9 | 基线可解析 | `coalesce(task_repository.base_commit, project_repository.head_commit_sha) IS NOT NULL` | `baseline_unavailable` |
 | 10 | **有效审批策略检查**（R5）：不得只读 `task_policy_override`；综合组织 / 项目 / 任务类型 / 任务级限制，低层不得放宽高层的强制审批 | 复用现有策略解析能力合成"是否需要人工审批"；审批状态未知 / 缺批准证据 / 策略读取失败 → **拒绝领取**并记 `release_reason='policy_requires_approval'` | `policy_requires_approval` / `approval_status_unknown` |
 
-> 判定 10 的边界：`task_policy_override` 存的是**差异**（NULL = 继承）。D1 只读这一列，**不做完整策略合成**（§15.6 能力类/约束类运算需先落类型化实现，列入 D2 依赖）。这是有意的范围收缩，不是遗漏。
+> 判定 10 的落地（R5，**已实现**）：新增 `delivery.policy_scope`（迁移 `0013`，`scope ∈ organization/project/task_type`）+ 既有 `delivery.task_policy_override`（task 级）+ 新增 `delivery.task.task_type` 列。解析语义为**更严者胜**：任一层级 `require_human_approval = true` 即要求审批，**任务级 `false` 不得放宽高层 `true`**。需要审批时必须有 `approved` 证据；未决 / 缺证据 / 读取失败 → 拒绝领取。完整能力类 / 约束类合成（§15.6）仍留 D2。
 
 ### 5.7 多仓执行上下文
 
