@@ -3,5 +3,8 @@
 //! exact same route table.
 
 pub mod auth;
+pub mod pm_lists;
+pub mod pm_writes;
 pub mod routes;
+pub mod support;
 

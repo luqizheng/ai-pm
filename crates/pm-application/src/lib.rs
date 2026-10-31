@@ -3,8 +3,10 @@
 pub mod bootstrap;
 pub mod command_executor;
 pub mod ingestion;
+pub mod pm_write;
 pub mod policy_engine;
 pub mod read;
+pub mod rows;
 pub mod supervision;
 
 pub use bootstrap::{BootstrapError, BootstrapOutcome, BootstrapRequest, bootstrap_project};

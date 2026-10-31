@@ -53,9 +53,9 @@ use uuid::Uuid;
 /// executor's red-line set comes from the one canonical policy file — the
 /// single source of truth, loaded once per process here.
 #[derive(Clone)]
-struct AppState {
-    pool: PgPool,
-    executor: Arc<PgCommandExecutor>,
+pub(crate) struct AppState {
+    pub(crate) pool: PgPool,
+    pub(crate) executor: Arc<PgCommandExecutor>,
 }
 
 /// The pm-api route table, stateful over the shared connection pool and
@@ -84,6 +84,9 @@ pub fn router(pool: PgPool) -> Router {
             "/api/v1/projects/{project_id}/notifications",
             get(notifications_handler),
         )
+        // `/v1/pm/*` 业务端点（Slice A，前端经典页契约；无 /api 前缀——vite
+        // 代理剥掉 /api 后直达这里）。
+        .merge(crate::pm_lists::router())
         .nest_service("/mcp", pm_mcp::PmMcpServer::streamable_http_service(mcp_pool))
         .with_state(state)
 }
