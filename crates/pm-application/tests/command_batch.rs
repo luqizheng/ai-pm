@@ -357,5 +357,4 @@ async fn write_documents_batch_commits_and_compensates(pool: PgPool) {
     assert_eq!(remaining, 2);
 
     let _ = std::fs::remove_dir_all(root);
-    drop(fx.human_id);
 }

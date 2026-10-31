@@ -14,6 +14,38 @@ use crate::pm_write::{PmWriteError, owner_actor};
 use crate::repo_facts::{self, RepoAnalysisModel, RepoMaterial, pm_ai_port::ModelError};
 use pm_domain::import::{Evidence, EvidenceKind, ProjectDraft};
 
+/// `list_imports` 的结果行（14 列）。
+type ImportListRow = (
+    Uuid,
+    String,
+    i32,
+    String,
+    i64,
+    Option<Uuid>,
+    DateTime<Utc>,
+    Option<DateTime<Utc>>,
+    Option<DateTime<Utc>>,
+);
+/// `get_import` 的结果行（14 列，含草案与阶段详情）。
+type ImportDetailRow = (
+    Uuid,
+    String,
+    i32,
+    Option<String>,
+    String,
+    Option<serde_json::Value>,
+    i64,
+    i32,
+    Option<String>,
+    Option<String>,
+    Option<Uuid>,
+    DateTime<Utc>,
+    Option<DateTime<Utc>>,
+    Option<DateTime<Utc>>,
+);
+/// `get_import` 的来源快照行（8 列）。
+type ImportSourceRow = (Uuid, String, Option<String>, i32, i32, i64, bool, Option<String>);
+
 #[derive(Debug, thiserror::Error)]
 pub enum ImportError {
     #[error("project not found")]
@@ -124,17 +156,7 @@ pub async fn list_imports(
     pool: &PgPool,
     project_id: Uuid,
 ) -> Result<Vec<ImportListItem>, ImportError> {
-    let rows: Vec<(
-        Uuid,
-        String,
-        i32,
-        String,
-        i64,
-        Option<Uuid>,
-        DateTime<Utc>,
-        Option<DateTime<Utc>>,
-        Option<DateTime<Utc>>,
-    )> = sqlx::query_as(
+    let rows: Vec<ImportListRow> = sqlx::query_as(
         "SELECT id, status, progress, model_name, draft_revision, analysis_run_id, \
                 created_at, proposed_at, applied_at \
          FROM integration.repo_import WHERE project_id = $1 ORDER BY created_at DESC",
@@ -271,22 +293,7 @@ pub async fn get_import(
     project_id: Uuid,
     import_id: Uuid,
 ) -> Result<ImportDetail, ImportError> {
-    let row: Option<(
-        Uuid,
-        String,
-        i32,
-        Option<String>,
-        String,
-        Option<serde_json::Value>,
-        i64,
-        i32,
-        Option<String>,
-        Option<String>,
-        Option<Uuid>,
-        DateTime<Utc>,
-        Option<DateTime<Utc>>,
-        Option<DateTime<Utc>>,
-    )> = sqlx::query_as(
+    let row: Option<ImportDetailRow> = sqlx::query_as(
         "SELECT project_id, status, progress, stage_detail, model_name, draft, \
                 draft_revision, dropped_items, error_code, error_detail, analysis_run_id, \
                 created_at, proposed_at, applied_at \
@@ -319,7 +326,7 @@ pub async fn get_import(
         draft_value.and_then(|value| serde_json::from_value::<ProjectDraft>(value).ok())
     };
 
-    let sources: Vec<(Uuid, String, Option<String>, i32, i32, i64, bool, Option<String>)> =
+    let sources: Vec<ImportSourceRow> =
         sqlx::query_as(
             "SELECT s.repository_id, r.name, s.head_commit_sha, s.commit_count, s.doc_count, \
                     s.size_bytes, s.truncated, s.error_code \
@@ -820,7 +827,7 @@ pub async fn propose_import(
     }
     if status == "proposed" {
         let run_id = analysis_run_id.ok_or(ImportError::InvalidState("proposed without run"))?;
-        return Ok(existing_proposals(pool, project_id, run_id).await?);
+        return existing_proposals(pool, project_id, run_id).await;
     }
     if status != "draft_ready" {
         return Err(ImportError::InvalidState("import is not ready to apply"));
