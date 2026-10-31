@@ -127,8 +127,12 @@ fn build_router(
             "/v1/pm/events/stream",
             get(crate::audit_stream::stream_handler),
         )
-        // 知识空间（V1 只读）：正文来自 Git 知识仓库，见 knowledge-space plan。
+        // 知识空间（只读 + 树检索）：正文来自 Git 知识仓库，见 knowledge-space plan。
         .route("/v1/pm/documents", get(crate::documents::list_handler))
+        .route(
+            "/v1/pm/documents/search",
+            get(crate::documents::search_handler),
+        )
         .route(
             "/v1/pm/documents/{document_id}",
             get(crate::documents::get_handler),

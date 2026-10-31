@@ -3,15 +3,17 @@
 //! `GET /v1/pm/documents?project_id=` — document list with latest revision.
 //! `GET /v1/pm/documents/{id}?project_id=` — Markdown body read from the Git
 //! knowledge root, with a hash check against the recorded revision.
+//! `GET /v1/pm/documents/search?project_id=&q=` — Markdown tree section search.
 //!
-//! Writes are intentionally absent: the quality gate / red-line workflow must
-//! land before any external writer is exposed.
+//! Writes are intentionally absent from REST: they go through the MCP tool
+//! `pm_submit_document` (quality gate / red-line workflow first).
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use pm_application::knowledge::{self, KnowledgeError, KnowledgeRoot};
+use pm_application::knowledge_index;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -21,6 +23,23 @@ use crate::routes::AppState;
 #[derive(Debug, Deserialize)]
 pub(crate) struct ProjectQuery {
     pub(crate) project_id: Uuid,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct SearchQuery {
+    pub(crate) project_id: Uuid,
+    pub(crate) q: String,
+}
+
+pub(crate) async fn search_handler(
+    State(state): State<AppState>,
+    Query(query): Query<SearchQuery>,
+) -> Response {
+    let root = KnowledgeRoot::from_env();
+    match knowledge_index::search_documents(&state.pool, &root, query.project_id, &query.q).await {
+        Ok(items) => Json(json!({ "items": items })).into_response(),
+        Err(err) => error_response(err),
+    }
 }
 
 pub(crate) async fn list_handler(

@@ -13,6 +13,7 @@ use pm_application::knowledge::{
     CreateDocumentRequest, KnowledgeError, KnowledgeRoot, content_hash, create_document,
     list_documents, read_document,
 };
+use pm_application::knowledge_index::search_documents;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -179,6 +180,69 @@ async fn router_requires_project_query() -> StatusCode {
         .await
         .unwrap()
         .status()
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn search_hits_sections_with_locators(pool: PgPool) {
+    let boot = project(&pool, "KN-S").await;
+    let root = temp_root();
+    create_document(
+        &pool,
+        &root,
+        boot.project_id,
+        boot.human_id,
+        CreateDocumentRequest {
+            doc_key: "ARCH-S".to_string(),
+            doc_type: "architecture".to_string(),
+            markdown:
+                "# 架构约束\n\n## 背景\n\n地图太大。\n\n## 决策\n\n采用 LOD 分块加载。\n"
+                    .to_string(),
+            change_summary: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let hits = search_documents(&pool, &root, boot.project_id, "lod")
+        .await
+        .unwrap();
+    assert_eq!(hits.len(), 1, "only the 决策 section mentions lod");
+    assert_eq!(hits[0].section.title, "决策");
+    assert_eq!(hits[0].section.anchor, "决策");
+    assert!(hits[0].section.start_line > 1);
+    assert_eq!(hits[0].score, 1);
+
+    let none = search_documents(&pool, &root, boot.project_id, "不存在")
+        .await
+        .unwrap();
+    assert!(none.is_empty());
+
+    cleanup(&root);
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn rest_search_with_blank_query_is_empty(pool: PgPool) {
+    let boot = project(&pool, "KN-Q").await;
+    let response = router(pool)
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/v1/pm/documents/search?project_id={}&q=",
+                    boot.project_id
+                ))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = serde_json::from_slice(
+        &axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["items"], json!([]));
 }
 
 fn commit_count(root: &KnowledgeRoot) -> usize {

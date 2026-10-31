@@ -189,3 +189,20 @@ MCP 客户端请求必须带 `Host` 头（rmcp `allowed_hosts` 校验），否�
   ```
   注意：含中文的 body 必须走 UTF-8 文件（`--data-binary @file`），直接 `-d` 会因终端编码报
   `invalid unicode code point`；项目必须已有 `ai_pm` principal（`bootstrap_project` 会建）。
+## 十一、Markdown 树索引（V1 检索层）
+
+自建标题/章节树，不依赖 PageIndex（设计稿 §九 路径 A）：
+
+- 解析：按 ATX 标题（`#`~`######`，必须后跟空格）建树；章节正文为标题后至下一个标题前；
+  重复标题锚点追加序号（`a` / `a-2`）；首个标题前内容作 `preamble` 章节。
+- 检索：`GET /v1/pm/documents/search?project_id=<uuid>&q=<keyword>`（`/api` 前缀经 vite 代理）。
+  每篇文档先走 `read_document`（含 content_hash 漂移校验），再做大小写不敏感匹配：
+  标题命中 +2、正文命中 +1，按分数/路径/行号排序，上限 20 条。
+- 返回定位：`canonical_path` + `anchor` + `start_line` + `content`，可直接回溯章节。
+- 边界：V1 为内存扫描（文档量小、无倒排索引）；`PageIndex` / 向量检索作为可替换的
+  KnowledgeIndexer 适配留后续；空 `q` 返回空列表。
+
+```bash
+curl "http://127.0.0.1:8090/v1/pm/documents/search?project_id=<uuid>&q=LOD" \
+  -H "Authorization: Bearer <jwt>"
+```

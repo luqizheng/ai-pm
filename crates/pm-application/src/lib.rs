@@ -4,6 +4,7 @@ pub mod bootstrap;
 pub mod command_executor;
 pub mod ingestion;
 pub mod knowledge;
+pub mod knowledge_index;
 pub mod pm_write;
 pub mod policy_engine;
 pub mod read;
@@ -21,6 +22,7 @@ pub use knowledge::{
     CreateDocumentRequest, CreatedDocument, DocumentContent, DocumentSummary, KnowledgeError,
     KnowledgeRoot, content_hash, create_document, list_documents, read_document,
 };
+pub use knowledge_index::{MarkdownSection, SearchHit, parse_markdown_tree, search_documents};
 pub use policy_engine::{PolicyContext, PolicyEngine, PolicyLoadError};
 pub use read::{ReadError, TaskContextRow, task_context};
 pub use supervision::{
