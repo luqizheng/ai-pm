@@ -149,7 +149,8 @@ export type TaskStatus =
   | "todo"
   | "blocked"
   | "awaiting-acceptance"
-  | "proposed";
+  | "proposed"
+  | "cancelled";
 
 export interface GoalTask {
   id: string;

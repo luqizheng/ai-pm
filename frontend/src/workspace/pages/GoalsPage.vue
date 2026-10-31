@@ -1,13 +1,30 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { GitBranch } from "lucide-vue-next";
 import PageHeader from "./PageHeader.vue";
 import { goals, type MilestoneStatus, type TaskStatus } from "../fixtures";
+import {
+  buildPageGoals,
+  milestoneStatusOf,
+  principalNameMap,
+  type PageGoal
+} from "./goals-model";
+import { listMilestones, listPrincipals, listTasks } from "@/api/pm";
+import { SCOPE_ALL, useScopeStore } from "@/api/scope";
+import { formatDate } from "@/api/format";
+import type { Principal, Task } from "@/api/types";
+import type { Milestone as ApiMilestone } from "@/api/workspace-view";
 
 const { t } = useI18n();
 const router = useRouter();
+const route = useRoute();
+const scope = useScopeStore();
+
+/** mock 模式用演示数据；真后端模式按项目读里程碑 + 任务。单测一律走 fixtures。 */
+const useMock =
+  import.meta.env.VITE_USE_MOCK === "1" || import.meta.env.MODE === "test";
 
 /** V1.2：三种可切换视图（目标树 / 依赖图 / 时间线） */
 const view = ref<"tree" | "deps" | "timeline">("tree");
@@ -52,7 +69,8 @@ const taskLabel: Record<TaskStatus, string> = {
   todo: "workspace.pages.goals.taskTodo",
   blocked: "workspace.pages.goalsExtra.taskBlocked",
   "awaiting-acceptance": "workspace.pages.goalsExtra.taskAwaiting",
-  proposed: "workspace.pages.goalsExtra.proposed"
+  proposed: "workspace.pages.goalsExtra.proposed",
+  cancelled: "workspace.pages.goalsExtra.taskCancelled"
 };
 
 const taskClass: Record<TaskStatus, string> = {
@@ -61,12 +79,123 @@ const taskClass: Record<TaskStatus, string> = {
   todo: "task-todo",
   blocked: "task-blocked",
   "awaiting-acceptance": "task-awaiting",
-  proposed: "task-proposed"
+  proposed: "task-proposed",
+  cancelled: "task-cancelled"
 };
 
 const allMilestones = goals.flatMap(goal =>
   goal.milestones.map(ms => ({ ...ms, goalCode: goal.code }))
 );
+
+/* ---------------------------------------------------------------- 真后端模式 */
+
+
+const loading = ref(false);
+const failed = ref(false);
+const apiMilestones = ref<ApiMilestone[]>([]);
+const apiTasks = ref<Task[]>([]);
+const apiPrincipals = ref<Principal[]>([]);
+
+/** 项目来源：显式 scope 选择 > 路由里是真实 UUID 时用它；否则提示先选项目。 */
+const projectId = computed<string | undefined>(() => {
+  if (scope.projectIdParam) return scope.projectIdParam;
+  const param = String(route.params.projectId ?? "");
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param)
+  ) {
+    return param;
+  }
+  return undefined;
+});
+
+const selectedProjectId = computed({
+  get: () => (scope.currentProjectId === SCOPE_ALL ? "" : scope.currentProjectId),
+  set: (value: string) => {
+    scope.currentProjectId = value || SCOPE_ALL;
+  }
+});
+
+const principalNames = computed<Record<string, string>>(() =>
+  principalNameMap(apiPrincipals.value)
+);
+
+const pageGoals = computed<PageGoal[]>(() => {
+  if (useMock) return goals;
+  return buildPageGoals(
+    apiMilestones.value,
+    apiTasks.value,
+    principalNames.value,
+    {
+      noPlannedDate: String(t("workspace.pages.goalsExtra.noPlannedDate")),
+      unassigned: String(t("workspace.pages.goalsExtra.unassigned")),
+      basisByTasks: (done, total) =>
+        String(
+          t("workspace.pages.goalsExtra.basisByTasks", { done, total })
+        ),
+      formatPlannedAt: formatDate
+    }
+  );
+});
+
+const timelineItems = computed(() => {
+  if (useMock) return allMilestones;
+  return pageGoals.value.map(goal => ({
+    id: goal.id,
+    name: goal.name,
+    status: milestoneStatusOf(goal),
+    due: goal.selfDue ?? "—",
+    goalCode: goal.code
+  }));
+});
+
+const hasDependencies = computed(() =>
+  pageGoals.value.some(goal => goal.dependencies.length > 0)
+);
+
+async function loadGoals() {
+  if (useMock) return;
+  failed.value = false;
+  if (!projectId.value) {
+    apiMilestones.value = [];
+    apiTasks.value = [];
+    return;
+  }
+  loading.value = true;
+  try {
+    const [milestones, tasks, principals] = await Promise.all([
+      listMilestones({ project_id: projectId.value, page: 1, size: 200 }),
+      listTasks({ project_id: projectId.value, page: 1, size: 200 }),
+      listPrincipals({ page: 1, size: 200 })
+    ]);
+    apiMilestones.value = milestones.items ?? [];
+    apiTasks.value = tasks.items ?? [];
+    apiPrincipals.value = principals.items ?? [];
+  } catch {
+    failed.value = true;
+    apiMilestones.value = [];
+    apiTasks.value = [];
+  } finally {
+    loading.value = false;
+  }
+}
+
+let initialised = false;
+
+onMounted(async () => {
+  if (useMock) return;
+  try {
+    await scope.ensureLoaded();
+  } catch {
+    failed.value = true;
+    return;
+  }
+  initialised = true;
+  await loadGoals();
+});
+
+watch(projectId, () => {
+  if (!useMock && initialised) void loadGoals();
+});
 </script>
 
 <template>
@@ -75,6 +204,31 @@ const allMilestones = goals.flatMap(goal =>
       :title="t('workspace.pages.goals.title')"
       :subtitle="t('workspace.pages.goals.subtitle')"
     />
+
+    <div v-if="!useMock" class="ws-toolbar">
+      <label class="ws-toolbar-label" for="goals-project">
+        {{ t("workspace.pages.goals.project") }}
+      </label>
+      <select id="goals-project" v-model="selectedProjectId" class="ws-toolbar-select">
+        <option value="">{{ t("workspace.pages.goals.pickProjectShort") }}</option>
+        <option v-for="p in scope.projects" :key="p.id" :value="p.id">
+          {{ p.name }}
+        </option>
+      </select>
+    </div>
+    <p v-if="!useMock && !projectId" class="ws-hint" data-test="goals-pick-project">
+      {{ t("workspace.pages.goals.pickProject") }}
+    </p>
+    <p v-else-if="failed" class="ws-hint" data-test="goals-failed">
+      {{ t("workspace.pages.goals.loadFailed") }}
+    </p>
+    <p
+      v-else-if="!useMock && !loading && !pageGoals.length"
+      class="ws-hint"
+      data-test="goals-empty"
+    >
+      {{ t("workspace.pages.goals.empty") }}
+    </p>
 
     <!-- 三视图切换（V1.2） -->
     <div class="ws-view-switch" role="tablist">
@@ -96,7 +250,7 @@ const allMilestones = goals.flatMap(goal =>
     <!-- 视图一：目标树 -->
     <template v-if="view === 'tree'">
       <section
-        v-for="goal in goals"
+        v-for="goal in pageGoals"
         :key="goal.id"
         class="ws-card ws-goal-card"
         data-test="goal-card"
@@ -125,8 +279,10 @@ const allMilestones = goals.flatMap(goal =>
           <div class="ws-goal-bar" :style="{ width: `${goal.progress}%` }" />
         </div>
 
-        <h3 class="ws-goal-sub">{{ t("workspace.pages.goals.milestones") }}</h3>
-        <ul class="ws-milestones">
+        <h3 v-if="goal.milestones.length" class="ws-goal-sub">
+          {{ t("workspace.pages.goals.milestones") }}
+        </h3>
+        <ul v-if="goal.milestones.length" class="ws-milestones">
           <li
             v-for="ms in goal.milestones"
             :key="ms.id"
@@ -180,7 +336,11 @@ const allMilestones = goals.flatMap(goal =>
         </template>
 
         <!-- 依赖关系块（原型对齐） -->
-        <div class="ws-dep-block" data-test="goal-dependencies">
+        <div
+          v-if="goal.dependencies.length"
+          class="ws-dep-block"
+          data-test="goal-dependencies"
+        >
           <div class="ws-dep-title">
             <GitBranch :size="13" aria-hidden="true" />
             {{ t("workspace.pages.goalsExtra.dependencies") }}
@@ -211,8 +371,11 @@ const allMilestones = goals.flatMap(goal =>
 
     <!-- 视图二：依赖图（链式节点） -->
     <template v-else-if="view === 'deps'">
+      <p v-if="!hasDependencies" class="ws-hint" data-test="deps-empty">
+        {{ t("workspace.pages.goalsExtra.noDependencies") }}
+      </p>
       <section
-        v-for="goal in goals"
+        v-for="goal in pageGoals"
         :key="goal.id"
         class="ws-card ws-depview"
         data-test="dep-chain"
@@ -239,7 +402,7 @@ const allMilestones = goals.flatMap(goal =>
     <template v-else>
       <section class="ws-card ws-timeline" data-test="timeline">
         <div
-          v-for="ms in allMilestones"
+          v-for="ms in timelineItems"
           :key="ms.id"
           class="ws-tl-item"
           data-test="timeline-item"
@@ -263,6 +426,33 @@ const allMilestones = goals.flatMap(goal =>
   gap: 16px;
   padding: 20px 24px 32px;
   max-width: 960px;
+}
+
+.ws-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-toolbar-label {
+  font-size: var(--ws-font-size-caption);
+  color: var(--ws-text-secondary);
+}
+
+.ws-toolbar-select {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-card);
+  background: var(--ws-surface);
+  color: var(--ws-text-primary);
+  font-size: var(--ws-font-size-caption);
+}
+
+.ws-hint {
+  margin: 0;
+  font-size: var(--ws-font-size-caption);
+  color: var(--ws-text-secondary);
 }
 
 /* 三视图切换（分段样式与顶栏模式开关一致） */
@@ -426,6 +616,11 @@ const allMilestones = goals.flatMap(goal =>
 
 .ws-badge.task-awaiting {
   color: var(--ws-color-warning-text);
+}
+
+.ws-badge.task-cancelled {
+  color: var(--ws-text-secondary);
+  text-decoration: line-through;
 }
 
 /* 草案任务：虚线描边区分（未批准不执行） */

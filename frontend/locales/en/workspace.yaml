@@ -145,6 +145,11 @@ workspace:
       taskDone: Done
       taskDoing: In progress
       taskTodo: To do
+      project: Project
+      pickProjectShort: Select a project
+      pickProject: Pick a project in the project scope first
+      loadFailed: Failed to load, retry shortly
+      empty: No milestones or tasks yet
     team:
       title: AI Team
       subtitle: Agent status and current work
@@ -216,6 +221,11 @@ workspace:
       approvedPlan: Approved plan
       taskBlocked: Pending decision
       taskAwaiting: Awaiting acceptance
+      taskCancelled: Cancelled
+      noPlannedDate: No planned date
+      basisByTasks: Based on completed tasks ({done}/{total})
+      unassigned: Tasks without a milestone
+      noDependencies: No dependency data
     execution:
       title: Execution Hub
       subtitle: Timeline, tool calls and logs (progress = verifiable state, not estimates)
@@ -242,6 +252,24 @@ workspace:
       approvedAt: Approved at
       verification: Follow-up verification
       reassessTitle: Re-evaluation suggested
+      project: Project
+      pickProjectShort: Select a project
+      pickProject: Pick a project in the project scope first
+      loadFailed: Failed to load, retry shortly
+      empty: No approvals or decisions yet
+      approvalTitle: Approval request
+      noRationale: No change rationale
+      requiredRoleValue: "Required role: {role}"
+      risk:
+        low: Low
+        medium: Medium
+        high: High
+      reasonPlaceholder: Enter a decision reason (required)
+      reasonRequired: A decision reason is required
+      approve: Approve
+      reject: Reject
+      submitDone: Decision submitted
+      submitFailed: Failed to submit decision
     knowledgeExtra:
       approvedFacts: Human-approved facts
       aiSummary: AI-maintained summary (never overrides facts)

@@ -40,6 +40,37 @@ pub struct RequirementRow {
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct MilestoneRow {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub name: String,
+    pub planned_at: Option<DateTime<Utc>>,
+    pub status: String,
+    pub revision: i64,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct DecisionRow {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub status: String,
+    pub required_role: String,
+    pub decided_by: Option<Uuid>,
+    pub decision_reason: Option<String>,
+    pub decided_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub proposal_id: Option<Uuid>,
+    pub proposal_status: Option<String>,
+    pub target_type: Option<String>,
+    pub command_type: Option<String>,
+    pub rationale: Option<String>,
+    pub risk_level: Option<String>,
+    pub evidence: Option<serde_json::Value>,
+    pub proposed_data: Option<serde_json::Value>,
+    pub analysis_run_id: Option<Uuid>,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct TaskRow {
     pub id: Uuid,
     pub project_id: Uuid,

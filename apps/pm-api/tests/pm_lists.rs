@@ -45,7 +45,9 @@ async fn empty_database_lists_answer_zero_totals(pool: PgPool) {
         "/v1/pm/principals",
         "/v1/pm/requirements",
         "/v1/pm/tasks",
+        "/v1/pm/milestones",
         "/v1/pm/approvals",
+        "/v1/pm/decisions",
         "/v1/pm/audit-logs",
     ] {
         let response = app.clone().oneshot(get(path.to_string())).await.unwrap();
@@ -134,6 +136,143 @@ async fn task_row_shape_matches_frontend_contract(pool: PgPool) {
         "priority", "assignee_id", "revision", "created_at", "updated_at",
     ] {
         assert!(task.get(field).is_some(), "task row must carry `{field}`");
+    }
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn milestones_list_scopes_orders_and_carries_task_link(pool: PgPool) {
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "MS-1".into(), project_name: "ms".into() }).await.unwrap();
+    let other = bootstrap_project(&pool, BootstrapRequest { project_code: "MS-2".into(), project_name: "ms2".into() }).await.unwrap();
+    let milestone_id = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO delivery.milestone (id, project_id, name, planned_at, status) \
+         VALUES ($1, $2, 'M-A', now() + interval '2 days', 'active')",
+    )
+    .bind(milestone_id)
+    .bind(boot.project_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO delivery.milestone (id, project_id, name, planned_at, status) \
+         VALUES ($1, $2, 'M-OTHER', now(), 'planned')",
+    )
+    .bind(uuid::Uuid::new_v4())
+    .bind(other.project_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO delivery.task (id, project_id, milestone_id, title, status, priority) \
+         VALUES ($1, $2, $3, 'linked', 'in_progress', 'normal')",
+    )
+    .bind(uuid::Uuid::new_v4())
+    .bind(boot.project_id)
+    .bind(milestone_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = router(pool.clone());
+
+    let response = app
+        .clone()
+        .oneshot(get(format!("/v1/pm/milestones?project_id={}", boot.project_id)))
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    assert_eq!(body["total"], json!(1), "filter must scope milestones to project");
+    let milestone = &body["items"][0];
+    assert_eq!(milestone["name"], json!("M-A"));
+    assert_eq!(milestone["status"], json!("active"));
+    for field in ["id", "project_id", "name", "planned_at", "status", "revision"] {
+        assert!(milestone.get(field).is_some(), "milestone row must carry `{field}`");
+    }
+
+    let response = app
+        .oneshot(get(format!("/v1/pm/tasks?project_id={}", boot.project_id)))
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    assert_eq!(
+        body["items"][0]["milestone_id"],
+        json!(milestone_id.to_string()),
+        "task must keep its milestone link"
+    );
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn decisions_join_change_proposal_fields(pool: PgPool) {
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-1".into(), project_name: "dec".into() }).await.unwrap();
+    let event_id = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO integration.inbound_event \
+         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash) \
+         VALUES ($1, $2, $3, 'pm', 'requirement_changed', 'dec-1', '{}', 'hash')",
+    )
+    .bind(event_id)
+    .bind(boot.project_id)
+    .bind(boot.human_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let run_id = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO ai.analysis_run \
+         (id, project_id, event_id, model_name, policy_version, config_snapshot) \
+         VALUES ($1, $2, $3, 'test-model', 1, '{}')",
+    )
+    .bind(run_id)
+    .bind(boot.project_id)
+    .bind(event_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let proposal_id = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO ai.change_proposal \
+         (id, project_id, analysis_run_id, proposal_seq, target_type, command_type, \
+          proposed_data, rationale, evidence, risk_level) \
+         VALUES ($1, $2, $3, 1, 'task', 'update_task', '{}', \
+                 '把任务拆成两步以降低风险', '[{\"kind\":\"doc\",\"title\":\"REQ-1\"}]', 'high')",
+    )
+    .bind(proposal_id)
+    .bind(boot.project_id)
+    .bind(run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO governance.approval_request \
+         (id, project_id, proposal_id, required_role) VALUES ($1, $2, $3, 'project_owner')",
+    )
+    .bind(uuid::Uuid::new_v4())
+    .bind(boot.project_id)
+    .bind(proposal_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = router(pool.clone());
+
+    let response = app
+        .oneshot(get(format!("/v1/pm/decisions?project_id={}", boot.project_id)))
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    assert_eq!(body["total"], json!(1));
+    let decision = &body["items"][0];
+    assert_eq!(decision["status"], json!("pending"));
+    assert_eq!(decision["rationale"], json!("把任务拆成两步以降低风险"));
+    assert_eq!(decision["target_type"], json!("task"));
+    assert_eq!(decision["command_type"], json!("update_task"));
+    assert_eq!(decision["risk_level"], json!("high"));
+    assert_eq!(decision["proposal_id"], json!(proposal_id.to_string()));
+    assert!(decision["evidence"].is_array(), "evidence must stay an array");
+    for field in [
+        "id", "project_id", "status", "required_role", "decided_by",
+        "decision_reason", "decided_at", "created_at", "proposal_status",
+        "proposed_data", "analysis_run_id",
+    ] {
+        assert!(decision.get(field).is_some(), "decision row must carry `{field}`");
     }
 }
 

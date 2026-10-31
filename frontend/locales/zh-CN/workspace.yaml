@@ -221,6 +221,11 @@ workspace:
       approvedPlan: 已批准执行的计划
       taskBlocked: 待决策
       taskAwaiting: 待验收
+      taskCancelled: 已取消
+      noPlannedDate: 未设定计划日期
+      basisByTasks: 按已完成任务数（{done}/{total}）
+      unassigned: 未归入里程碑的任务
+      noDependencies: 暂无依赖关系数据
     execution:
       title: AI 执行中心
       subtitle: 执行时间线、工具调用与日志（进度=可验证状态，非估算百分比）
@@ -247,6 +252,24 @@ workspace:
       approvedAt: 批准时间
       verification: 后续验证结果
       reassessTitle: 建议重新评估
+      project: 项目
+      pickProjectShort: 选择项目
+      pickProject: 请先在「项目范围」中选择一个项目
+      loadFailed: 加载失败，请稍后重试
+      empty: 暂无审批或决策记录
+      approvalTitle: 审批请求
+      noRationale: 暂无变更理由
+      requiredRoleValue: 要求角色：{role}
+      risk:
+        low: 低
+        medium: 中
+        high: 高
+      reasonPlaceholder: 填写决策理由（必填）
+      reasonRequired: 决策理由不能为空
+      approve: 批准
+      reject: 驳回
+      submitDone: 决策已提交
+      submitFailed: 决策提交失败
     knowledgeExtra:
       approvedFacts: 人工批准的正式事实
       aiSummary: AI 维护摘要（不覆盖正式事实）

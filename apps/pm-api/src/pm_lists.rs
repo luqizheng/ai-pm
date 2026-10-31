@@ -14,8 +14,8 @@ use uuid::Uuid;
 use crate::routes::AppState;
 use crate::support::{ApiResult, Paging, paging, project_filter};
 use pm_application::rows::{
-    ApprovalRow, AuditLogRow, PrincipalRow, ProjectRow, RequirementRevisionRow, RequirementRow,
-    TaskRow,
+    ApprovalRow, AuditLogRow, DecisionRow, MilestoneRow, PrincipalRow, ProjectRow,
+    RequirementRevisionRow, RequirementRow, TaskRow,
 };
 
 pub fn router() -> Router<AppState> {
@@ -24,7 +24,9 @@ pub fn router() -> Router<AppState> {
         .route("/v1/pm/projects", get(projects))
         .route("/v1/pm/requirements", get(requirements))
         .route("/v1/pm/tasks", get(tasks))
+        .route("/v1/pm/milestones", get(milestones))
         .route("/v1/pm/approvals", get(approvals))
+        .route("/v1/pm/decisions", get(decisions))
         .route("/v1/pm/audit-logs", get(audit_logs))
         .route(
             "/v1/pm/requirements/{requirement_id}/revisions",
@@ -132,6 +134,32 @@ async fn tasks(
     Ok(Json(page.to_response(items, total)))
 }
 
+async fn milestones(
+    State(state): State<AppState>,
+    Query(params): Query<HashMap<String, String>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let page = paging(&params);
+    let project_id = project_filter(&params);
+    let items: Vec<MilestoneRow> = sqlx::query_as(
+        "SELECT id, project_id, name, planned_at, status, revision \
+         FROM delivery.milestone \
+         WHERE ($1::uuid IS NULL OR project_id = $1) \
+         ORDER BY planned_at NULLS LAST, name ASC LIMIT $2 OFFSET $3",
+    )
+    .bind(project_id)
+    .bind(page.size)
+    .bind(page.offset)
+    .fetch_all(&state.pool)
+    .await?;
+    let total: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM delivery.milestone WHERE ($1::uuid IS NULL OR project_id = $1)",
+    )
+    .bind(project_id)
+    .fetch_one(&state.pool)
+    .await?;
+    Ok(Json(page.to_response(items, total)))
+}
+
 async fn approvals(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
@@ -151,6 +179,39 @@ async fn approvals(
     .await?;
     let total: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM governance.approval_request WHERE ($1::uuid IS NULL OR project_id = $1)",
+    )
+    .bind(project_id)
+    .fetch_one(&state.pool)
+    .await?;
+    Ok(Json(page.to_response(items, total)))
+}
+
+/// 决策中心读模型：审批请求 + 关联变更提案（左连接，提案缺失时字段为 null）。
+async fn decisions(
+    State(state): State<AppState>,
+    Query(params): Query<HashMap<String, String>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let page = paging(&params);
+    let project_id = project_filter(&params);
+    let items: Vec<DecisionRow> = sqlx::query_as(
+        "SELECT a.id, a.project_id, a.status, a.required_role, a.decided_by, \
+                a.decision_reason, a.decided_at, a.created_at, \
+                p.id AS proposal_id, p.status AS proposal_status, p.target_type, \
+                p.command_type, p.rationale, p.risk_level, p.evidence, \
+                p.proposed_data, p.analysis_run_id \
+         FROM governance.approval_request a \
+         LEFT JOIN ai.change_proposal p ON p.id = a.proposal_id \
+         WHERE ($1::uuid IS NULL OR a.project_id = $1) \
+         ORDER BY a.created_at DESC LIMIT $2 OFFSET $3",
+    )
+    .bind(project_id)
+    .bind(page.size)
+    .bind(page.offset)
+    .fetch_all(&state.pool)
+    .await?;
+    let total: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.approval_request \
+         WHERE ($1::uuid IS NULL OR project_id = $1)",
     )
     .bind(project_id)
     .fetch_one(&state.pool)

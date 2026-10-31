@@ -10,6 +10,7 @@ import type {
   RequirementRevision,
   Task
 } from "./types";
+import type { DecisionRecord, Milestone } from "./workspace-view";
 
 /**
  * AI-PM 业务端点（pm-api 契约）。
@@ -38,10 +39,23 @@ export function listTasks(
   return http.get<Paged<Task>>("/v1/pm/tasks", params);
 }
 
+export function listMilestones(
+  params: { project_id?: string; page?: number; size?: number } = {}
+) {
+  return http.get<Paged<Milestone>>("/v1/pm/milestones", params);
+}
+
 export function listApprovals(
   params: { project_id?: string; page?: number; size?: number } = {}
 ) {
   return http.get<Paged<ApprovalRequest>>("/v1/pm/approvals", params);
+}
+
+/** 决策中心读模型（审批请求 + 关联变更提案），created_at DESC。 */
+export function listDecisions(
+  params: { project_id?: string; page?: number; size?: number } = {}
+) {
+  return http.get<Paged<DecisionRecord>>("/v1/pm/decisions", params);
 }
 
 export function listAuditLogs(
