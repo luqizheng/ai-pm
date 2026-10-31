@@ -1,4 +1,6 @@
 /target
+# clippy 专用 target 目录（scripts/clippy.sh 使用，与 dev 产物隔离）
+/.target-clippy/
 .env
 /node_modules
 /.superpowers/

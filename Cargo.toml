@@ -9,6 +9,24 @@ members = [
 version = "0.1.0"
 edition = "2021"
 
+# dev 档位：工作区 debug = 1（行表，panic 仍有「文件:行号」），依赖不带
+# 调试信息。dev 默认的完整 DWARF 是编译时间与 target 体积的大头（本仓
+# 实测 target 53G），服务端项目日常不做变量级调试。要逐变量排查某个依赖
+# 时，临时给那**一个**包加 debug = 2。
+[profile.dev]
+debug = 1
+
+[profile.dev.package."*"]
+debug = false
+
+# clippy 专用 profile：lint 只做 HIR/MIR 静态分析，产物直接丢弃。
+# dev 默认带完整 debuginfo（debug = true），编译与落盘都为此付费，而 clippy
+# 完全用不上；这里关掉调试信息、保持 O0。lint 结论与 opt-level 无关，
+# 门禁语义不变。用法：cargo lint ...（别名见 .cargo/config.toml）。
+[profile.clippy]
+inherits = "dev"
+debug = 0
+
 [workspace.dependencies]
 # Async runtime
 tokio = { version = "1", features = ["full"] }

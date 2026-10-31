@@ -15,3 +15,15 @@ registry = "sparse+https://rsproxy.cn/index/"
 # rsproxy 直连）+ NO_PROXY=192.168.2.12（内网 kellnr 直连）
 [registries.kellnr]
 index = "sparse+http://192.168.2.12:16444/api/v1/crates/"
+# rust-lld 链接器（仅 Windows MSVC host；Linux/Docker 构建不受影响）。
+# 实测 lld 比 link.exe 快 ~35–40%，本仓 pm-api / pm-worker / ai-pm-worker
+# 三个 bin 与测试二进制的链接段都受益。回退：删掉本段（会再触发一次全量
+# 重编，因为 -C linker 进了编译指纹）。
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"
+
+# clippy 走专用 profile（定义见根 Cargo.toml `[profile.clippy]`）：
+# `cargo lint ...` == `cargo clippy --profile clippy ...`，不再继承 dev 的
+# 完整 debuginfo。本地内环推荐 `bash scripts/clippy.sh`（自动只验改动面）。
+[alias]
+lint = "clippy --profile clippy"
