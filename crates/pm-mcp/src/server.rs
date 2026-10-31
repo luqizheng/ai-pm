@@ -28,7 +28,8 @@ use sqlx::PgPool;
 use std::sync::Arc;
 
 use crate::tools::{
-    self, SubmissionStatusArgs, SubmitTechnicalDesignArgs, TaskContextArgs, ToolError,
+    self, SubmissionStatusArgs, SubmitDocumentArgs, SubmitTechnicalDesignArgs, TaskContextArgs,
+    ToolError,
 };
 
 /// The MCP server over the shared pool: owns the rmcp tool router generated
@@ -101,6 +102,20 @@ impl PmMcpServer {
         Parameters(args): Parameters<TaskContextArgs>,
     ) -> Result<CallToolResult, ErrorData> {
         Self::tool_result(tools::get_task_context(&self.pool, args).await)
+    }
+
+    #[tool(
+        name = "pm_submit_document",
+        description = "Create one Git-backed knowledge document (Markdown body + commit + \
+                       revision row). Requires PM_MCP_DOCUMENT_WRITE. The project must already \
+                       have an ai_pm principal; the same doc_key cannot be created twice."
+    )]
+    pub async fn submit_document(
+        &self,
+        Parameters(args): Parameters<SubmitDocumentArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let root = pm_application::knowledge::KnowledgeRoot::from_env();
+        Self::tool_result(tools::submit_document(&self.pool, &root, args).await)
     }
 }
 

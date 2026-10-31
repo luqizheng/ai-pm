@@ -158,7 +158,7 @@ MCP 客户端请求必须带 `Host` 头（rmcp `allowed_hosts` 校验），否�
 ## 十、知识空间 V1（Markdown + Git）
 
 正文权威在**独立 Git 知识仓库**，PostgreSQL 只存身份/路径/版本/Commit/哈希（`ai.project_document`
-+ `ai.document_revision`，迁移 0006）。V1 只开放读接口，写入走应用服务（质量门与红线落地前不开放外部写）。
++ `ai.document_revision`，迁移 0006）。写入只经应用服务（质量门与红线落地前不开放 REST 写）。
 
 - 根目录：`AI_PM_KNOWLEDGE_ROOT`；未设置时默认 `<cwd>/../ai-pm-knowledge`（与 ai-pm 平级）。
   仓库必须**独立**（不能是 ai-pm 的子目录），首次使用自动 `git init` + 铺 `templates/`，
@@ -174,3 +174,18 @@ MCP 客户端请求必须带 `Host` 头（rmcp `allowed_hosts` 校验），否�
   409 `KNOWLEDGE_DOCUMENT_STALE`（不会静默返回旧内容）。
 - 前端：`/workspace/:projectId/knowledge`；真后端模式下页面内选择项目后展示文档树与正文，
   mock 模式继续使用 fixtures。
+- 写入（MCP 工具 `pm_submit_document`）：参数 `project_id / doc_key / doc_type / markdown /
+  change_summary?`；服务层写文件 → `git commit` → 两表落库，返回 `document_id / revision_no /
+  git_commit_sha / content_hash / canonical_path`。调用者需带 `PM_MCP_DOCUMENT_WRITE`（jwks 模式
+  由 `/mcp` 中间件强制；**off 模式无权限门，仅限本地开发**）。实际 `created_by` 记为项目的
+  `ai_pm` principal；同 `doc_key` 重复创建返回 conflict 且不产生新 commit。
+  ```bash
+  # 本地 off 模式实例（8091）验证写入；文档随后由 8090 正常读取
+  curl -X POST :8091/mcp -H "Host: 127.0.0.1:8091" -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" --data-binary @mcp-doc.json
+  # mcp-doc.json = {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pm_submit_document",
+  #   "arguments":{"project_id":"<uuid>","doc_key":"ARCH-002","doc_type":"knowledge","markdown":"# ..."}}}
+  git -C "$AI_PM_KNOWLEDGE_ROOT" log --oneline -1
+  ```
+  注意：含中文的 body 必须走 UTF-8 文件（`--data-binary @file`），直接 `-d` 会因终端编码报
+  `invalid unicode code point`；项目必须已有 `ai_pm` principal（`bootstrap_project` 会建）。

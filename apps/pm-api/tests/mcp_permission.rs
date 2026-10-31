@@ -216,3 +216,30 @@ async fn write_permission_does_not_replace_mcp_read(pool: PgPool) {
     let body = body_json(response).await;
     assert!(body["message"].as_str().unwrap().contains("PM_MCP_READ"));
 }
+#[sqlx::test(migrations = "../../migrations")]
+async fn document_write_tool_requires_document_write(pool: PgPool) {
+    let token = sign(&["PM_MCP_READ"]);
+    let response = router_with_auth(pool, test_jwks())
+        .oneshot(mcp_tool_call(
+            Some(&token),
+            "pm_submit_document",
+            json!({
+                "project_id": Uuid::new_v4(),
+                "doc_key": "ARCH-1",
+                "doc_type": "architecture",
+                "markdown": "# 架构约束",
+                "change_summary": null
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let body = body_json(response).await;
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("PM_MCP_DOCUMENT_WRITE"),
+        "message must name the write permission: {body}"
+    );
+}

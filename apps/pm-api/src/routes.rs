@@ -68,8 +68,17 @@ pub fn router(pool: PgPool) -> Router {
 }
 
 /// Same route table over an explicit audit feed. `main.rs` calls this with the
-/// feed whose PG listener it owns.
+/// feed whose PG listener it owns. The `off` mode (local development) keeps the
+/// MCP service unguarded — permissions only exist once bearer auth is on.
 pub fn router_with_feed(pool: PgPool, audit_feed: crate::audit_stream::AuditFeed) -> Router {
+    build_router(pool, audit_feed, false)
+}
+
+fn build_router(
+    pool: PgPool,
+    audit_feed: crate::audit_stream::AuditFeed,
+    guard_mcp: bool,
+) -> Router {
     let policy = Arc::new(
         PolicyEngine::from_yaml(include_str!("../../../policies/ai-pm-ai-lead-v2.yaml"))
             .expect("canonical policy yaml must parse"),
@@ -83,14 +92,19 @@ pub fn router_with_feed(pool: PgPool, audit_feed: crate::audit_stream::AuditFeed
     // The MCP service clones the pool inside its own state factory; it cannot
     // share `state` (different service type), hence a separate handle.
     let mcp_pool = state.pool.clone();
-    // `/mcp` is permission-gated: auth runs outside (claims verified), this
-    // inner layer demands PM_MCP_READ and, for `tools/call`, the tool's write
-    // permission. Wrapping in a Router keeps the rmcp service untouched.
-    let mcp_router: Router<AppState> = Router::new()
-        .fallback_service(pm_mcp::PmMcpServer::streamable_http_service(mcp_pool))
-        .layer(axum::middleware::from_fn(
-            crate::auth::require_mcp_permission,
-        ));
+    let mcp_service = pm_mcp::PmMcpServer::streamable_http_service(mcp_pool);
+    // `/mcp` is permission-gated when auth is on: the outer layer verifies
+    // claims, this inner layer demands PM_MCP_READ plus the tool's write
+    // permission. In `off` mode there are no claims, so the gate is skipped.
+    let mcp_router: Router<AppState> = if guard_mcp {
+        Router::new()
+            .fallback_service(mcp_service)
+            .layer(axum::middleware::from_fn(
+                crate::auth::require_mcp_permission,
+            ))
+    } else {
+        Router::new().fallback_service(mcp_service)
+    };
     Router::new()
         .route("/api/v1/events", post(submit_event_handler))
         .route("/api/v1/supervision/veto", post(veto_handler))
@@ -139,7 +153,7 @@ pub fn router_with_auth_and_feed(
     audit_feed: crate::audit_stream::AuditFeed,
 ) -> Router {
     let auth = crate::auth::AuthState { jwks };
-    router_with_feed(pool, audit_feed).layer(axum::middleware::from_fn_with_state(
+    build_router(pool, audit_feed, true).layer(axum::middleware::from_fn_with_state(
         auth,
         crate::auth::require_bearer,
     ))

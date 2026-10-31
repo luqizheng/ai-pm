@@ -17,6 +17,9 @@
 //!   panic" contract.
 
 use pm_application::ingestion::{IngestionError, SubmitEventRequest, submit_event};
+use pm_application::knowledge::{
+    self, CreateDocumentRequest, KnowledgeError, KnowledgeRoot,
+};
 use pm_application::read::{ReadError, task_context};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -61,6 +64,21 @@ pub struct TaskContextArgs {
     pub project_id: Uuid,
     /// The task to read (UUID string of `delivery.task.id`).
     pub task_ref: String,
+}
+
+/// Arguments of `pm_submit_document`: creates one Git-backed knowledge document.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SubmitDocumentArgs {
+    /// Project the document belongs to.
+    pub project_id: Uuid,
+    /// Stable document key (`[A-Za-z0-9._-]`), unique per project.
+    pub doc_key: String,
+    /// One of requirement / decision / architecture / knowledge.
+    pub doc_type: String,
+    /// Authoritative Markdown body (LF).
+    pub markdown: String,
+    /// Optional human-readable reason for this revision.
+    pub change_summary: Option<String>,
 }
 
 /// Everything a tool failure can be, kept coarse on purpose: the MCP layer
@@ -236,5 +254,75 @@ pub async fn get_task_context(pool: &PgPool, args: TaskContextArgs) -> Result<Va
         "revision": row.revision,
         "requirement": row.requirement,
         "milestone": row.milestone,
+    }))
+}
+/// Creates one knowledge document: Markdown body + Git commit + identity/revision
+/// rows. The acting principal is the project's `ai_pm` (knowledge maintainer per
+/// design §四); MCP callers are dev agents and must hold
+/// `PM_MCP_DOCUMENT_WRITE` (enforced by the pm-api middleware).
+pub async fn submit_document(
+    pool: &PgPool,
+    root: &KnowledgeRoot,
+    args: SubmitDocumentArgs,
+) -> Result<Value, ToolError> {
+    let actor_id: Uuid = sqlx::query_scalar(
+        "SELECT pm.principal_id FROM core.project_member pm \
+         JOIN core.principal p ON p.id = pm.principal_id \
+         WHERE pm.project_id = $1 AND p.kind = 'ai_pm' \
+         ORDER BY pm.principal_id LIMIT 1",
+    )
+    .bind(args.project_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(ToolError::Db)?
+    .ok_or_else(|| {
+        ToolError::NotFound(format!(
+            "project {} has no ai_pm principal",
+            args.project_id
+        ))
+    })?;
+
+    let created = knowledge::create_document(
+        pool,
+        root,
+        args.project_id,
+        actor_id,
+        CreateDocumentRequest {
+            doc_key: args.doc_key,
+            doc_type: args.doc_type,
+            markdown: args.markdown,
+            change_summary: args.change_summary,
+        },
+    )
+    .await
+    .map_err(|err| match err {
+        KnowledgeError::NotFound => ToolError::NotFound(format!(
+            "project {} not found or has no document",
+            args.project_id
+        )),
+        KnowledgeError::Exists(key) => {
+            ToolError::Conflict(format!("document {key} already exists"))
+        }
+        KnowledgeError::InvalidKey(key) => {
+            ToolError::InvalidRequest(format!("invalid doc_key {key}"))
+        }
+        KnowledgeError::InvalidType(doc_type) => {
+            ToolError::InvalidRequest(format!("invalid doc_type {doc_type}"))
+        }
+        KnowledgeError::Stale => {
+            ToolError::Conflict("document content drifted from its recorded hash".into())
+        }
+        KnowledgeError::Config(message)
+        | KnowledgeError::Io(message)
+        | KnowledgeError::Git(message) => ToolError::InvalidRequest(message),
+        KnowledgeError::Db(err) => ToolError::Db(err),
+    })?;
+
+    Ok(json!({
+        "document_id": created.document_id,
+        "revision_no": created.revision_no,
+        "git_commit_sha": created.git_commit_sha,
+        "content_hash": created.content_hash,
+        "canonical_path": created.canonical_path,
     }))
 }
