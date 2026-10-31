@@ -25,14 +25,24 @@ shell:
     logout: 退出登录
   login:
     title: AI-PM 平台
+    tagline: 项目、需求、任务与审批，走同一条主干
+    pointProjects: 项目、需求、任务在同一处推进
+    pointApprovals: 审批流转留痕，审计可回放
+    pointAi: 业务视图之外，另有 AI 协作台
+    consoleLabel: PRISM 控制台
+    heading: 登录
     subtitle: 使用你的账号登录
     username: 用户名
     usernamePlaceholder: 请输入用户名
     password: 密码
     passwordPlaceholder: 请输入密码
+    passwordShow: 显示密码
+    passwordHide: 隐藏密码
+    usernameRequired: 请填写用户名
+    passwordRequired: 请填写密码
     submit: 登录
-    missingFields: 请输入用户名与密码
-    failed: 登录失败，请检查用户名与密码
+    failed: 用户名或密码不正确，请重新输入
+    securityNote: 会话凭证仅保存在本机浏览器，退出登录后清除
   status:
     notFoundTitle: 页面不存在
     notFoundHint: 你访问的地址可能已被移动或删除

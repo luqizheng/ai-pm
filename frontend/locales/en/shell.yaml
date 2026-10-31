@@ -25,14 +25,24 @@ shell:
     logout: Sign out
   login:
     title: AI-PM Console
+    tagline: Projects, requirements, tasks and approvals on one spine
+    pointProjects: Projects, requirements and tasks move in one place
+    pointApprovals: Approvals leave a trail, audits replay it
+    pointAi: An AI workspace beside the business views
+    consoleLabel: PRISM Console
+    heading: Sign in
     subtitle: Sign in with your account
     username: Username
     usernamePlaceholder: Enter your username
     password: Password
     passwordPlaceholder: Enter your password
+    passwordShow: Show password
+    passwordHide: Hide password
+    usernameRequired: Username is required
+    passwordRequired: Password is required
     submit: Sign in
-    missingFields: Enter username and password
-    failed: Sign-in failed, check your username and password
+    failed: Incorrect username or password, please try again
+    securityNote: Credentials stay in this browser and are cleared on sign-out
   status:
     notFoundTitle: Page not found
     notFoundHint: The address may have been moved or removed

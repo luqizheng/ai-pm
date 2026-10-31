@@ -238,4 +238,13 @@
   --focus-glow: rgba(46, 91, 255, 0.18);
   --input-focus-glow: rgba(46, 91, 255, 0.15);
   --danger-focus-glow: rgba(220, 38, 38, 0.12);
+
+  /* 来源：登录页重设计（2026-10-31）
+   * 只有版面尺寸，不是新的视觉语言 —— 颜色 / 字阶 / 间距 / 圆角沿用上面既有 token。
+   * 命名落在 size- 族，与控件尺寸系一起审阅；组件层因此不必出现裸 px。
+   * 注意：本文件与 docs/prism/phase1-visual-direction.md 附录是逐字契约，
+   *       不要用 prettier --write 处理本文件（会把 hex 改小写，契约测试即红）。 */
+  --size-login-panel: 400px;
+  --size-login-form: 360px;
+  --size-login-mark: 32px;
 }
