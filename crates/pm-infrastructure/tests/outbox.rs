@@ -117,3 +117,40 @@ async fn fail_retries_with_backoff_until_the_ceiling(pool: PgPool) {
         "attempts >= max_attempts must dead-letter"
     );
 }
+#[sqlx::test(migrations = "../../migrations")]
+async fn dead_letter_is_listed_with_its_reason_and_can_be_replayed(pool: PgPool) {
+    let project_id = seed_project(&pool).await;
+    let mut tx = pool.begin().await.unwrap();
+    let id = outbox::append(&mut tx, event(project_id, "k-dead")).await.unwrap();
+    tx.commit().await.unwrap();
+    outbox::dead_letter(&pool, id, "no handler registered for TaskReady").await.unwrap();
+
+    let rows = outbox::list_dead_letters(&pool, 10).await.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, id);
+    assert_eq!(
+        rows[0].last_error.as_deref(),
+        Some("no handler registered for TaskReady")
+    );
+
+    outbox::replay(&pool, id).await.expect("dead-letter replay is allowed");
+    let reclaimed = outbox::claim(&pool, "worker-a", 60).await.expect("replayed event is claimable");
+    assert_eq!(reclaimed.id, id);
+    assert_eq!(reclaimed.attempts, 1, "replay resets attempts");
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn replay_rejects_missing_and_live_events(pool: PgPool) {
+    let project_id = seed_project(&pool).await;
+    assert!(matches!(
+        outbox::replay(&pool, Uuid::new_v4()).await,
+        Err(outbox::ReplayError::NotFound)
+    ));
+    let mut tx = pool.begin().await.unwrap();
+    let id = outbox::append(&mut tx, event(project_id, "k-live")).await.unwrap();
+    tx.commit().await.unwrap();
+    assert!(matches!(
+        outbox::replay(&pool, id).await,
+        Err(outbox::ReplayError::NotDeadLetter)
+    ));
+}

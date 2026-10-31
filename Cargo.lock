@@ -1618,6 +1618,7 @@ dependencies = [
  "pm-domain",
  "serde_json",
  "sqlx",
+ "thiserror",
  "tokio",
  "uuid",
 ]
