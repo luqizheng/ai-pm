@@ -40,12 +40,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         let jwks_url = std::env::var("AI_PM_JWKS_URL")
             .unwrap_or_else(|_| "http://127.0.0.1:8082/.well-known/jwks.json".to_string());
+        // The JWKS endpoint is an intranet address: build the fetch client with
+        // `.no_proxy()` so the Windows system proxy (stale v2rayN ProxyServer
+        // registry value) can never hijack the token-service call.
+        let jwks_http = reqwest::Client::builder().no_proxy().build()?;
         let jwks = Arc::new(digua_common_jwt::JWKSCache::new(
             digua_common_jwt::JwksConfig {
                 url: jwks_url,
                 ..Default::default()
             },
-            reqwest::Client::new(),
+            jwks_http,
         ));
         // Fail-closed startup: wait briefly for the first JWKS fetch before
         // serving. If the fetch never lands, the cache has no keys and every
