@@ -140,7 +140,7 @@ async fn update_task_status_executes_and_writes_audit_with_restore_compensation(
             ProjectCommand::UpdateTaskStatus {
                 task_id: f.task_id,
                 expected_revision: 1,
-                new_status: TaskStatus::Completed,
+                new_status: TaskStatus::Ready,
             },
             ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
         )
@@ -151,7 +151,7 @@ async fn update_task_status_executes_and_writes_audit_with_restore_compensation(
     assert_eq!(receipt.resulting_revision, 2);
 
     let (status, revision) = task_state(&pool, f.task_id).await;
-    assert_eq!((status.as_str(), revision), ("completed", 2));
+    assert_eq!((status.as_str(), revision), ("ready", 2));
 
     let row = sqlx::query(
         "SELECT action, target_type, target_id, before_data, after_data, compensation_command, compensated_command_id \
@@ -168,7 +168,7 @@ async fn update_task_status_executes_and_writes_audit_with_restore_compensation(
     let before: Value = row.get("before_data");
     assert_eq!(before, json!({ "status": "draft", "revision": 1 }));
     let after: Value = row.get("after_data");
-    assert_eq!(after, json!({ "status": "completed", "revision": 2 }));
+    assert_eq!(after, json!({ "status": "ready", "revision": 2 }));
 
     let compensation: Value = row.get("compensation_command");
     let spec: CompensationSpec = serde_json::from_value(compensation).expect("compensation spec roundtrips");
@@ -195,7 +195,7 @@ async fn stale_expected_revision_conflicts_and_leaves_row_untouched(pool: PgPool
         ProjectCommand::UpdateTaskStatus {
             task_id: f.task_id,
             expected_revision: 1,
-            new_status: TaskStatus::Completed,
+            new_status: TaskStatus::Ready,
         },
         ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
     )
@@ -207,7 +207,7 @@ async fn stale_expected_revision_conflicts_and_leaves_row_untouched(pool: PgPool
             ProjectCommand::UpdateTaskStatus {
                 task_id: f.task_id,
                 expected_revision: 1,
-                new_status: TaskStatus::Running,
+                new_status: TaskStatus::Ready,
             },
             ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
         )
@@ -219,7 +219,7 @@ async fn stale_expected_revision_conflicts_and_leaves_row_untouched(pool: PgPool
     }
 
     let (status, revision) = task_state(&pool, f.task_id).await;
-    assert_eq!((status.as_str(), revision), ("completed", 2), "conflicting command must not change state");
+    assert_eq!((status.as_str(), revision), ("ready", 2), "conflicting command must not change state");
     let audits = audit_rows_for(&pool, f.task_id).await;
     assert_eq!(audits.len(), 1, "rejected command must not write an audit row");
 }
@@ -233,15 +233,15 @@ async fn compensate_restores_previous_status_and_marks_original_audit(pool: PgPo
 
     let receipt = ex
         .execute(
-            ProjectCommand::UpdateTaskStatus {
-                task_id: f.task_id,
-                expected_revision: 1,
-                new_status: TaskStatus::Completed,
-            },
-            ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
-        )
-        .await
-        .expect("execute succeeds");
+ProjectCommand::UpdateTaskStatus {
+            task_id: f.task_id,
+            expected_revision: 1,
+            new_status: TaskStatus::Ready,
+        },
+        ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
+    )
+    .await
+    .expect("execute succeeds");
 
     let rollback = ex
         .compensate(receipt.audit_id, "wrong move", ctx(&f, ActorKind::Human, CommandSource::HumanIntervention {
@@ -291,15 +291,15 @@ async fn compensating_same_audit_twice_fails_with_already_compensated(pool: PgPo
 
     let receipt = ex
         .execute(
-            ProjectCommand::UpdateTaskStatus {
-                task_id: f.task_id,
-                expected_revision: 1,
-                new_status: TaskStatus::Completed,
-            },
-            ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
-        )
-        .await
-        .expect("execute succeeds");
+ProjectCommand::UpdateTaskStatus {
+            task_id: f.task_id,
+            expected_revision: 1,
+            new_status: TaskStatus::Ready,
+        },
+        ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
+    )
+    .await
+    .expect("execute succeeds");
     ex.compensate(receipt.audit_id, "first rollback", ctx(&f, ActorKind::Human, CommandSource::Bootstrap))
         .await
         .expect("first compensation succeeds");
@@ -329,7 +329,7 @@ async fn test_compensate_after_further_change_conflicts(pool: PgPool) {
             ProjectCommand::UpdateTaskStatus {
                 task_id: f.task_id,
                 expected_revision: 1,
-                new_status: TaskStatus::Completed,
+                new_status: TaskStatus::Ready,
             },
             ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
         )
@@ -339,7 +339,7 @@ async fn test_compensate_after_further_change_conflicts(pool: PgPool) {
         ProjectCommand::UpdateTaskStatus {
             task_id: f.task_id,
             expected_revision: 2,
-            new_status: TaskStatus::Running,
+            new_status: TaskStatus::Claimed,
         },
         ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
     )
@@ -356,7 +356,7 @@ async fn test_compensate_after_further_change_conflicts(pool: PgPool) {
     }
 
     let (status, revision) = task_state(&pool, f.task_id).await;
-    assert_eq!((status.as_str(), revision), ("running", 3), "newer state must not be overwritten");
+    assert_eq!((status.as_str(), revision), ("claimed", 3), "newer state must not be overwritten");
     let audits = audit_rows_for(&pool, f.task_id).await;
     assert_eq!(audits.len(), 2, "failed compensation must not write a rollback audit row");
     assert!(audits.iter().all(|(_, compensated)| compensated.is_none()));
@@ -994,7 +994,7 @@ async fn test_every_auto_command_declares_compensation(pool: PgPool) {
                 let cmd = ProjectCommand::UpdateTaskStatus {
                     task_id: f.task_id,
                     expected_revision: 1,
-                    new_status: TaskStatus::Running,
+                    new_status: TaskStatus::Ready,
                 };
                 assert!(!policy.is_redline(&cmd));
                 let receipt = ex

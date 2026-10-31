@@ -24,8 +24,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use pm_domain::{
-    AuditId, CommandError, MilestoneId, PrincipalId, ProjectCommand, ProjectId, RequirementId,
-    RevisionId, TaskId, TaskStatus,
+    validate_transition, AuditId, CommandError, MilestoneId, PrincipalId, ProjectCommand, ProjectId,
+    RequirementId, RevisionId, TaskId, TaskStatus, TransitionInput,
 };
 use pm_domain::import::{DocumentDraft, MilestoneDraft, RequirementDraft, TaskDraft};
 use serde::{Deserialize, Serialize};
@@ -63,6 +63,8 @@ pub enum CommandSource {
         approval_id: Uuid,
     },
     Bootstrap,
+    /// 平台内部动作（如 Run 调度领取、租约回收）——无人类/提案身份。
+    System,
 }
 
 /// Execution identity: which project, which principal, on whose behalf, from
@@ -364,9 +366,9 @@ impl PgCommandExecutor {
         })
     }
 
-    /// UpdateTaskStatus: `delivery.task` row lock → revision guard → status
-    /// swap with `revision + 1` → audit row with a Restore snapshot of the old
-    /// status.
+    /// UpdateTaskStatus: 经**唯一受守卫的迁移服务** [`apply_task_transition`] 执行
+    /// （`validate_transition` + 行锁 + revision guard + 审计），再在同一事务内
+    /// 登记异步事件。R1：任何 Task 状态变更都必须走这条统一通道。
     async fn update_task_status(
         &self,
         task_id: TaskId,
@@ -375,55 +377,14 @@ impl PgCommandExecutor {
         ctx: &ExecutionContext,
     ) -> Result<ExecutionReceipt, CommandError> {
         let mut tx = self.pool.begin().await.map_err(db_err)?;
-        let row = sqlx::query(
-            "SELECT status, revision FROM delivery.task WHERE id = $1 AND project_id = $2 FOR UPDATE",
-        )
-        .bind(task_id)
-        .bind(ctx.project_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(db_err)?;
-        let (status_before, revision) = match row {
-            Some(row) => (row.get::<String, _>("status"), row.get::<i64, _>("revision")),
-            None => {
-                return Err(CommandError::Validation(format!(
-                    "task {task_id} not found in project {}",
-                    ctx.project_id
-                )))
-            }
-        };
-        if revision != expected_revision {
-            return Err(CommandError::RevisionConflict {
-                expected: expected_revision,
-                actual: revision,
-            });
-        }
-        sqlx::query(
-            "UPDATE delivery.task SET status = $1, revision = revision + 1, updated_at = now() WHERE id = $2",
-        )
-        .bind(new_status.as_str())
-        .bind(task_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(db_err)?;
-        let resulting_revision = revision + 1;
-        let before = json!({ "status": status_before, "revision": revision });
-        let after = json!({ "status": new_status.as_str(), "revision": resulting_revision });
-        let compensation = CompensationSpec::Restore(vec![SnapshotEntry {
-            table: CompensableTable::Task,
-            target_id: task_id,
-            fields: json!({ "status": status_before.clone(), "revision": resulting_revision }),
-        }]);
-        let audit_id = insert_audit(
+        let facts = TransitionFacts::for_command_channel();
+        let (audit_id, resulting_revision) = apply_task_transition(
             &mut tx,
+            task_id,
+            Some(expected_revision),
+            new_status,
+            &facts,
             ctx,
-            "update_task_status",
-            "task",
-            Some(task_id),
-            &before,
-            &after,
-            Some(&compensation),
-            audit_source(ctx),
         )
         .await?;
         // §20.6.1 / §20.7 L3：状态迁移成功的同时，在同一事务内登记需异步分发的
@@ -432,8 +393,7 @@ impl PgCommandExecutor {
             .filter(|event_type| crate::outbox::event_is_enabled(event_type))
         {
             let aggregate_id = task_id.to_string();
-            let idempotency_key =
-                format!("task:{task_id}:{event_type}:rev{resulting_revision}");
+            let idempotency_key = format!("task:{task_id}:{event_type}:rev{resulting_revision}");
             self.outbox
                 .append(
                     &mut tx,
@@ -444,7 +404,6 @@ impl PgCommandExecutor {
                         aggregate_id: &aggregate_id,
                         payload: json!({
                             "task_id": task_id,
-                            "from": status_before,
                             "to": new_status.as_str(),
                             "revision": resulting_revision,
                         }),
@@ -1479,6 +1438,7 @@ fn audit_source(ctx: &ExecutionContext) -> (&'static str, Option<Uuid>) {
         }
         CommandSource::RedlineApproval { approval_id } => ("redline_approval", Some(*approval_id)),
         CommandSource::Bootstrap => ("bootstrap", None),
+        CommandSource::System => ("system", None),
     }
 }
 
@@ -1541,4 +1501,164 @@ fn validate_batch(len: usize, what: &str) -> Result<(), CommandError> {
 
 fn db_err(e: sqlx::Error) -> CommandError {
     CommandError::Db(e)
+}
+/// 一次状态迁移必须供给的外部事实（§7.3：域层无 I/O，事实由调用方提供）。
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TransitionFacts {
+    pub waiting_resolved: bool,
+    pub replacement_task_exists: bool,
+    pub active_run_stopped: bool,
+    pub retry_exhausted: bool,
+    pub deadline_exhausted: bool,
+    pub delivery_submitted: bool,
+    pub acceptance_evidence_complete: bool,
+}
+
+
+impl TransitionFacts {
+    /// 既有命令通道的事实：交付证据（Running→Submitted / Reviewing→Completed）
+    /// 的完整校验属 D4；此处保持既有行为不变，其余事实保持默认 false。
+    pub fn for_command_channel() -> Self {
+        Self {
+            delivery_submitted: true,
+            acceptance_evidence_complete: true,
+            ..Self::default()
+        }
+    }
+
+    /// 调度/回收路径的事实：全部为默认（`ready↔claimed` 等 guard-free 边）。
+    pub fn for_dispatch() -> Self {
+        Self::default()
+    }
+}
+
+/// **Task 状态变更的唯一受守卫入口（R1）**：行锁 → revision guard →
+/// `pm-domain::validate_transition` → 状态推进 → 审计。`update_task_status`
+/// 命令通道与 `run_dispatch` 领取/回收都复用本函数，因此不存在第二条绕过
+/// 状态机的写入路径。调用方负责事务边界与（如适用）outbox 事件登记。
+pub(crate) async fn apply_task_transition(
+    tx: &mut Tx,
+    task_id: Uuid,
+    expected_revision: Option<i64>,
+    to: TaskStatus,
+    facts: &TransitionFacts,
+    ctx: &ExecutionContext,
+) -> Result<(AuditId, i64), CommandError> {
+    let row = sqlx::query(
+        "SELECT status, revision FROM delivery.task WHERE id = $1 AND project_id = $2 FOR UPDATE",
+    )
+    .bind(task_id)
+    .bind(ctx.project_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    let row = row.ok_or_else(|| {
+        CommandError::Validation(format!(
+            "task {task_id} not found in project {}",
+            ctx.project_id
+        ))
+    })?;
+    let status_before: String = row.get("status");
+    let revision: i64 = row.get("revision");
+    if let Some(expected) = expected_revision {
+        if revision != expected {
+            return Err(CommandError::RevisionConflict {
+                expected,
+                actual: revision,
+            });
+        }
+    }
+    let from = TaskStatus::from_str(&status_before)
+        .ok_or_else(|| CommandError::Validation(format!("unknown task status `{status_before}`")))?;
+    let input = TransitionInput {
+        task_id: Some(task_id),
+        from,
+        to,
+        waiting: None,
+        waiting_resolved: facts.waiting_resolved,
+        replacement_task_exists: facts.replacement_task_exists,
+        active_run_stopped: facts.active_run_stopped,
+        retry_exhausted: facts.retry_exhausted,
+        deadline_exhausted: facts.deadline_exhausted,
+        failure: None,
+        supersede: None,
+        delivery_submitted: facts.delivery_submitted,
+        acceptance_evidence_complete: facts.acceptance_evidence_complete,
+    };
+    validate_transition(&input).map_err(|e| {
+        CommandError::Validation(format!(
+            "state machine refused {} -> {}: {e}",
+            status_before,
+            to.as_str()
+        ))
+    })?;
+    sqlx::query(
+        "UPDATE delivery.task SET status = $1, revision = revision + 1, updated_at = now() WHERE id = $2",
+    )
+    .bind(to.as_str())
+    .bind(task_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    let resulting_revision = revision + 1;
+    let before = json!({ "status": status_before, "revision": revision });
+    let after = json!({ "status": to.as_str(), "revision": resulting_revision });
+    let compensation = CompensationSpec::Restore(vec![SnapshotEntry {
+        table: CompensableTable::Task,
+        target_id: task_id,
+        fields: json!({ "status": status_before, "revision": resulting_revision }),
+    }]);
+    let audit_id = insert_audit(
+        tx,
+        ctx,
+        "update_task_status",
+        "task",
+        Some(task_id),
+        &before,
+        &after,
+        Some(&compensation),
+        audit_source(ctx),
+    )
+    .await?;
+    Ok((audit_id, resulting_revision))
+}
+
+/// 解析平台内部动作（调度/回收）的执行身份：三级回退取项目的人类操作者，
+/// 与 `pm_write::owner_actor` 同口径。审计 actor 必须存在（FK）。
+pub(crate) async fn system_context(
+    tx: &mut Tx,
+    project_id: ProjectId,
+) -> Result<ExecutionContext, CommandError> {
+    let owner: Option<Uuid> = sqlx::query_scalar(
+        "SELECT p.id FROM core.project_member m \
+           JOIN core.principal p ON p.id = m.principal_id \
+          WHERE m.project_id = $1 AND m.role = 'owner' AND p.kind = 'human' AND p.is_active \
+          LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    let actor_id = match owner {
+        Some(id) => id,
+        None => sqlx::query_scalar(
+            "SELECT p.id FROM core.project_member m \
+               JOIN core.principal p ON p.id = m.principal_id \
+              WHERE m.project_id = $1 AND p.kind = 'human' AND p.is_active \
+              LIMIT 1",
+        )
+        .bind(project_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(db_err)?
+        .ok_or_else(|| {
+            CommandError::Validation("no human principal available as actor".to_string())
+        })?,
+    };
+    Ok(ExecutionContext {
+        project_id,
+        actor_id,
+        actor_kind: ActorKind::Service,
+        source: CommandSource::System,
+    })
 }

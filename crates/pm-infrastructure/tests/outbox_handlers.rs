@@ -197,3 +197,28 @@ async fn worker_dispatches_task_ready_end_to_end(pool: PgPool) {
     );
     assert_eq!(run_count(&pool, s.task_id).await, 1);
 }
+/// B1 回归：Run 被领取进入 `claimed` 后，at-least-once 的重复投递必须坍缩为 no-op
+/// ——不得新建第二条活跃 Run，也不得因唯一索引冲突而上抛（不进死信）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn redelivery_does_not_create_a_second_run_after_claim(pool: PgPool) {
+    let s = seed_task(&pool, "OH-8", "ready", true).await;
+    let handler = TaskReadyHandler::new(pool.clone());
+    handler.handle(&event(&s, "k8")).await.unwrap();
+
+    // 模拟被领取：活跃集合必须包含 `claimed`（B1 的统一判据）。
+    sqlx::query("UPDATE delivery.task_run SET status = 'claimed' WHERE task_id = $1")
+        .bind(s.task_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    handler
+        .handle(&event(&s, "k8b"))
+        .await
+        .expect("B1: redelivery after a claim must be consumed without error");
+    assert_eq!(
+        run_count(&pool, s.task_id).await,
+        1,
+        "a claimed active run must collapse redelivery to a no-op"
+    );
+}

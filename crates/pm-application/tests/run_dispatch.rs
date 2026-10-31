@@ -3,7 +3,8 @@
 
 use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
 use pm_application::run_dispatch::{
-    claim_once, workspace_path_for, DispatchMode, RunDispatchConfig,
+    accept_executor_result, claim_once, renew_lease, workspace_path_for, DispatchMode,
+    RunDispatchConfig,
 };
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -13,6 +14,7 @@ struct Fx {
     task_id: Uuid,
     repo_id: Uuid,
     run_id: Uuid,
+    human_id: Uuid,
 }
 
 fn cfg() -> RunDispatchConfig {
@@ -76,6 +78,7 @@ async fn seed(pool: &PgPool, code: &str, assigned: bool) -> Fx {
         task_id,
         repo_id,
         run_id,
+        human_id: outcome.human_id,
     }
 }
 
@@ -355,4 +358,237 @@ fn workspace_path_is_stable_safe_and_id_keyed() {
     assert_ne!(renamed, a, "name change yields a different safe-name segment");
     let same_id = workspace_path_for(id, "x");
     assert!(same_id.ends_with(&id.to_string()), "the id suffix keeps the mapping unique");
+}
+async fn grant_approval(
+    pool: &PgPool,
+    project_id: Uuid,
+    task_id: Uuid,
+    actor: Uuid,
+    status: &str,
+) -> Uuid {
+    let event_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO integration.inbound_event \
+         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash) \
+         VALUES ($1, $2, $3, 'test', 'bug_report', $4, '{}', 'h')",
+    )
+    .bind(event_id)
+    .bind(project_id)
+    .bind(actor)
+    .bind(Uuid::new_v4().to_string())
+    .execute(pool)
+    .await
+    .unwrap();
+    let analysis_run_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO ai.analysis_run \
+         (id, project_id, event_id, model_name, policy_version, config_snapshot) \
+         VALUES ($1, $2, $3, 'm', 1, '{}')",
+    )
+    .bind(analysis_run_id)
+    .bind(project_id)
+    .bind(event_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    let proposal_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO ai.change_proposal \
+         (id, project_id, analysis_run_id, proposal_seq, target_type, target_id, command_type, \
+          proposed_data, rationale, risk_level, status) \
+         VALUES ($1, $2, $3, 0, 'task', $4, 'update_task_status', '{}', 'r', 'low', 'proposed')",
+    )
+    .bind(proposal_id)
+    .bind(project_id)
+    .bind(analysis_run_id)
+    .bind(task_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO governance.approval_request \
+         (id, project_id, proposal_id, status, required_role) \
+         VALUES ($1, $2, $3, $4, 'project_owner')",
+    )
+    .bind(Uuid::new_v4())
+    .bind(project_id)
+    .bind(proposal_id)
+    .bind(status.to_string())
+    .execute(pool)
+    .await
+    .unwrap();
+    proposal_id
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn lease_renewal_requires_the_current_owner(pool: PgPool) {
+    let _fx = seed(&pool, "RD-T13", true).await;
+    let out = claim_once(&pool, "owner", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(renew_lease(&pool, out.run_id, "owner", 300).await.unwrap());
+    assert!(
+        !renew_lease(&pool, out.run_id, "intruder", 300).await.unwrap(),
+        "a non-owner must not renew the lease"
+    );
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn outcome_stays_null_until_a_terminal_result(pool: PgPool) {
+    let _fx = seed(&pool, "RD-T20", true).await;
+    let cfg = cfg();
+    let out = claim_once(&pool, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    let outcome: Option<String> =
+        sqlx::query_scalar("SELECT outcome FROM delivery.task_run WHERE id = $1")
+            .bind(out.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(outcome.is_none(), "S2: a claimed run must not carry an outcome");
+    sqlx::query("UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1")
+        .bind(out.run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let again = claim_once(&pool, "w2", &cfg, DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(again.run_id, out.run_id);
+    let outcome2: Option<String> =
+        sqlx::query_scalar("SELECT outcome FROM delivery.task_run WHERE id = $1")
+            .bind(out.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(
+        outcome2.is_none(),
+        "an unstarted lease expiry must not be recorded as timed_out"
+    );
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn policy_snapshot_records_the_minimal_fields(pool: PgPool) {
+    let _fx = seed(&pool, "RD-T24", true).await;
+    let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    let snap: serde_json::Value =
+        sqlx::query_scalar("SELECT policy_snapshot FROM delivery.task_run WHERE id = $1")
+            .bind(out.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(snap["snapshot_scope"], serde_json::json!("d1-minimal"));
+    assert_eq!(snap["approval_required"], serde_json::json!(false));
+    assert_eq!(snap["execution_enabled"], serde_json::json!(true));
+    assert!(snap["captured_at"].is_string());
+    assert!(snap["repository_baselines"].is_array());
+    assert!(snap.get("policy_version").is_some());
+    assert!(snap.get("approval_status").is_some());
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn approval_gate_blocks_until_approved_evidence_exists(pool: PgPool) {
+    let fx = seed(&pool, "RD-T21", true).await;
+    let cfg = cfg();
+    sqlx::query(
+        "INSERT INTO delivery.task_policy_override \
+         (task_id, project_id, require_human_approval, updated_by) VALUES ($1, $2, true, $3)",
+    )
+    .bind(fx.task_id)
+    .bind(fx.project_id)
+    .bind(fx.human_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let out = claim_once(&pool, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(out.kind, pm_application::run_dispatch::ClaimKind::Skipped);
+    let reason: Option<String> =
+        sqlx::query_scalar("SELECT release_reason FROM delivery.task_run WHERE id = $1")
+            .bind(out.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(reason.as_deref(), Some("policy_requires_approval"));
+
+    let _approved = grant_approval(&pool, fx.project_id, fx.task_id, fx.human_id, "approved").await;
+    // 首次 skip 已写入退避窗口：把下一次可领取时刻拨到当下再试。
+    sqlx::query("UPDATE delivery.task_run SET next_dispatch_at = now() WHERE id = $1")
+        .bind(out.run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let out2 = claim_once(&pool, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        out2.kind,
+        pm_application::run_dispatch::ClaimKind::Claimed,
+        "approved evidence must unlock the claim"
+    );
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn fencing_rejects_stale_executor_sessions(pool: PgPool) {
+    let _fx = seed(&pool, "RD-T25", true).await;
+    let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    sqlx::query("UPDATE delivery.task_run SET executor_session = 'sess-live' WHERE id = $1")
+        .bind(out.run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(accept_executor_result(&pool, out.run_id, "sess-live").await.unwrap());
+    assert!(
+        !accept_executor_result(&pool, out.run_id, "sess-stale").await.unwrap(),
+        "a stale executor session must be fenced out"
+    );
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn handler_and_claim_do_not_deadlock_or_duplicate(pool: PgPool) {
+    use pm_infrastructure::outbox::ClaimedOutboxEvent;
+    use pm_infrastructure::outbox_handlers::TaskReadyHandler;
+    use pm_infrastructure::outbox_worker::OutboxHandler;
+
+    let fx = seed(&pool, "RD-T17", true).await;
+    let handler = TaskReadyHandler::new(pool.clone());
+    let event = ClaimedOutboxEvent {
+        id: Uuid::new_v4(),
+        project_id: fx.project_id,
+        event_type: "TaskReady".to_string(),
+        aggregate_type: "Task".to_string(),
+        aggregate_id: fx.task_id.to_string(),
+        payload: serde_json::json!({ "task_id": fx.task_id }),
+        attempts: 1,
+        schema_version: 1,
+        idempotency_key: "t17".to_string(),
+    };
+    let cfg = cfg();
+    let (handled, _claimed) = tokio::join!(
+        handler.handle(&event),
+        claim_once(&pool, "w1", &cfg, DispatchMode::On),
+    );
+    handled.expect("B2: handler must not error (no deadlock, no unique violation)");
+    let active: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM delivery.task_run \
+          WHERE task_id = $1 AND status IN ('queued', 'claimed', 'running')",
+    )
+    .bind(fx.task_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(active <= 1, "I1: at most one active run");
 }

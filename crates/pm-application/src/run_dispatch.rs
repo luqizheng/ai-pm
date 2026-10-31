@@ -13,7 +13,11 @@
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
-use pm_domain::{validate_transition, TaskStatus, TransitionInput};
+use pm_domain::TaskStatus;
+
+use crate::command_executor::{
+    apply_task_transition, system_context, ExecutionContext, TransitionFacts,
+};
 
 /// Run 生命周期状态（S4：独立于 [`TaskStatus`] 的枚举，避免同名 `claimed` 混用）。
 pub mod run_status {
@@ -362,13 +366,19 @@ pub async fn claim_once(
         }));
     }
 
+    // R1：构造系统执行身份（审计 actor 必须存在）；所有 Task 状态变更经统一
+    // 受守卫服务 apply_task_transition。
+    let ctx = system_context(&mut tx, project_id)
+        .await
+        .map_err(|e| RunDispatchError::Transition(e.to_string()))?;
+
     // ④ 回收分支：候选原本是 `claimed` 且租约已过期。
     if run_state == run_status::CLAIMED {
         if executor_session.is_none() {
             // B3-1：执行器尚未启动 → 恢复**同一** Run（重置租约回队列），不新建、不记失败。
             // 任务仍在 claimed：把它退回 ready 以便重新领取（同一 Run）。
             if task_state == "claimed" {
-                apply_transition(&mut tx, task_id, TaskStatus::Claimed, TaskStatus::Ready).await?;
+                apply_transition(&mut tx, task_id, TaskStatus::Claimed, TaskStatus::Ready, &ctx).await?;
             }
             requeue_for_redispatch(&mut tx, run_id).await?;
             audit_run(
@@ -392,7 +402,7 @@ pub async fn claim_once(
         // 任务先退回 ready，统一走「正常领取」路径重建。
         if task_state == "claimed" || task_state == "running" {
             let from = TaskStatus::from_str(&task_state).unwrap_or(TaskStatus::Claimed);
-            apply_transition(&mut tx, task_id, from, TaskStatus::Ready).await?;
+            apply_transition(&mut tx, task_id, from, TaskStatus::Ready, &ctx).await?;
         }
         let created = insert_task_run(&mut tx, project_id, task_id).await?;
         sqlx::query("UPDATE delivery.task_run SET supersedes_run_id = $2 WHERE id = $1")
@@ -428,6 +438,14 @@ pub async fn claim_once(
     }
     if task_state != "ready" {
         requeue_with_backoff(&mut tx, run_id, dispatch_attempts, cfg, "task_not_ready").await?;
+        audit_run(
+            &mut tx,
+            project_id,
+            "skip_task_run",
+            run_id,
+            serde_json::json!({ "release_reason": "task_not_ready", "dispatch_attempts": dispatch_attempts + 1 }),
+        )
+        .await?;
         tx.commit().await?;
         return Ok(Some(ClaimOutcome {
             run_id,
@@ -437,8 +455,17 @@ pub async fn claim_once(
     }
 
     // ⑥ 可领取性判定（全部通过才领取）。
-    if let Some(reason) = claimability_denial(&mut tx, task_id, retry_exhausted, cfg).await? {
+    let assessment = claimability_assessment(&mut tx, task_id, retry_exhausted).await?;
+    if let Some(reason) = assessment.deny {
         requeue_with_backoff(&mut tx, run_id, dispatch_attempts, cfg, reason).await?;
+        audit_run(
+            &mut tx,
+            project_id,
+            "skip_task_run",
+            run_id,
+            serde_json::json!({ "release_reason": reason, "dispatch_attempts": dispatch_attempts + 1 }),
+        )
+        .await?;
         tx.commit().await?;
         return Ok(Some(ClaimOutcome {
             run_id,
@@ -448,7 +475,7 @@ pub async fn claim_once(
     }
 
     // ⑦ 状态推进（R1：经统一守卫 validate_transition，与 Run 更新同事务）。
-    apply_transition(&mut tx, task_id, TaskStatus::Ready, TaskStatus::Claimed).await?;
+    apply_transition(&mut tx, task_id, TaskStatus::Ready, TaskStatus::Claimed, &ctx).await?;
 
     sqlx::query(
         "UPDATE delivery.task_run \
@@ -464,6 +491,22 @@ pub async fn claim_once(
     .await?;
 
     let baselines = snapshot_repositories(&mut tx, run_id, project_id, task_id).await?;
+
+    // S3：D1 最小 policy_snapshot（兼容 0010 预置列；完整策略合成留 D2）。
+    let policy_snapshot = serde_json::json!({
+        "policy_version": serde_json::Value::Null,
+        "captured_at": chrono::Utc::now().to_rfc3339(),
+        "approval_required": assessment.approval_required,
+        "approval_status": assessment.approval_status,
+        "execution_enabled": true,
+        "repository_baselines": baselines.clone(),
+        "snapshot_scope": "d1-minimal",
+    });
+    sqlx::query("UPDATE delivery.task_run SET policy_snapshot = $2 WHERE id = $1")
+        .bind(run_id)
+        .bind(&policy_snapshot)
+        .execute(&mut *tx)
+        .await?;
 
     // Probe 模式：立即释放回 queued（不启动执行器）。
     if mode == DispatchMode::Probe {
@@ -497,46 +540,103 @@ pub async fn claim_once(
     }))
 }
 
-/// R1：Task 状态变更的唯一受守卫入口（在既有事务内复用）。`run_dispatch` 与既有
-/// `update_task_status` 都经由本函数，因此不存在「第二条绕过状态机的写入路径」。
+/// R1：Task 状态变更经**统一受守卫服务**（`pm-domain::validate_transition` +
+/// 行锁 + 审计）。`run_dispatch` 与既有 `update_task_status` 都经由同一条通道，
+/// 因此不存在「第二条绕过状态机的写入路径」。`_from` 仅作调用点自述——实际前态
+/// 由服务在行锁内从数据库读取并校验。
 pub async fn apply_transition(
-    tx: &mut Transaction<'_, Postgres>,
+    tx: &mut Transaction<'static, Postgres>,
     task_id: Uuid,
-    from: TaskStatus,
+    _from: TaskStatus,
     to: TaskStatus,
+    ctx: &ExecutionContext,
 ) -> Result<(), RunDispatchError> {
-    validate_transition(&TransitionInput::for_task(task_id, from, to))
+    apply_task_transition(tx, task_id, None, to, &TransitionFacts::for_dispatch(), ctx)
+        .await
         .map_err(|e| RunDispatchError::Transition(e.to_string()))?;
-    sqlx::query(
-        "UPDATE delivery.task SET status = $1, revision = revision + 1, updated_at = now() \
-          WHERE id = $2",
-    )
-    .bind(to.as_str())
-    .bind(task_id)
-    .execute(&mut **tx)
-    .await?;
     Ok(())
 }
 
-/// 可领取性判定（§5.6 清单的子集，R5 有效审批取最小可判定集合；全量策略合成留 D2）。
-/// 返回 `Some(release_reason)` 表示拒绝领取。
-async fn claimability_denial(
+/// 有效审批评估（R5）：返回 `(required, status, execution_enabled)`。
+/// 任务级 `require_human_approval` 为真时必须存在 `approved` 证据；未决（pending）
+/// 或缺少证据（unknown）都**不得默认放行**。策略读取失败由 `Err` 上抛，调用方拒绝领取。
+async fn assess_approval(
+    tx: &mut Transaction<'_, Postgres>,
+    task_id: Uuid,
+) -> Result<(bool, &'static str, bool), sqlx::Error> {
+    let requires: Option<bool> = sqlx::query_scalar(
+        "SELECT require_human_approval FROM delivery.task_policy_override WHERE task_id = $1",
+    )
+    .bind(task_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if requires != Some(true) {
+        return Ok((false, "approved", true));
+    }
+    let approved: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM ai.change_proposal cp \
+           JOIN governance.approval_request ar ON ar.proposal_id = cp.id \
+          WHERE cp.target_id = $1 AND ar.status = 'approved'",
+    )
+    .bind(task_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if approved > 0 {
+        return Ok((true, "approved", true));
+    }
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM ai.change_proposal cp \
+           JOIN governance.approval_request ar ON ar.proposal_id = cp.id \
+          WHERE cp.target_id = $1 AND ar.status = 'pending'",
+    )
+    .bind(task_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if pending > 0 {
+        return Ok((true, "pending", false));
+    }
+    Ok((true, "unknown", false))
+}
+
+/// 可领取性判定的结果：`deny` 非空表示拒绝；审批字段供 policy_snapshot 记录。
+pub struct ClaimAssessment {
+    pub deny: Option<&'static str>,
+    pub approval_required: bool,
+    pub approval_status: &'static str,
+}
+
+/// 可领取性判定（§5.6 清单，全部通过才领取）。
+async fn claimability_assessment(
     tx: &mut Transaction<'_, Postgres>,
     task_id: Uuid,
     retry_exhausted: bool,
-    cfg: &RunDispatchConfig,
-) -> Result<Option<&'static str>, sqlx::Error> {
+) -> Result<ClaimAssessment, sqlx::Error> {
+    let mut assessment = ClaimAssessment {
+        deny: None,
+        approval_required: false,
+        approval_status: "approved",
+    };
     if retry_exhausted {
-        return Ok(Some("retry_exhausted"));
+        assessment.deny = Some("retry_exhausted");
+        return Ok(assessment);
+    }
+    let (required, status, enabled) = assess_approval(tx, task_id).await?;
+    assessment.approval_required = required;
+    assessment.approval_status = status;
+    if !enabled {
+        assessment.deny = Some("policy_requires_approval");
+        return Ok(assessment);
     }
     // 无活跃等待
-    let waiting: Option<Uuid> =
-        sqlx::query_scalar("SELECT id FROM delivery.task_waiting WHERE task_id = $1 AND ended_at IS NULL LIMIT 1")
-            .bind(task_id)
-            .fetch_optional(&mut **tx)
-            .await?;
+    let waiting: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM delivery.task_waiting WHERE task_id = $1 AND ended_at IS NULL LIMIT 1",
+    )
+    .bind(task_id)
+    .fetch_optional(&mut **tx)
+    .await?;
     if waiting.is_some() {
-        return Ok(Some("task_waiting"));
+        assessment.deny = Some("task_waiting");
+        return Ok(assessment);
     }
     // 判定 4：已指派且执行端为 dev_agent。
     let assignee_is_executor: Option<bool> = sqlx::query_scalar(
@@ -548,17 +648,8 @@ async fn claimability_denial(
     .fetch_optional(&mut **tx)
     .await?;
     if assignee_is_executor != Some(true) {
-        return Ok(Some("no_executor_assignee"));
-    }
-    // R5（最小）：任务级强制审批。未知/读取失败不默认放行——列缺失视为未知。
-    let requires: Option<bool> = sqlx::query_scalar(
-        "SELECT require_human_approval FROM delivery.task_policy_override WHERE task_id = $1",
-    )
-    .bind(task_id)
-    .fetch_optional(&mut **tx)
-    .await?;
-    if requires == Some(true) {
-        return Ok(Some("policy_requires_approval"));
+        assessment.deny = Some("no_executor_assignee");
+        return Ok(assessment);
     }
     // 至少一个可写仓库
     let writable: i64 = sqlx::query_scalar(
@@ -568,7 +659,8 @@ async fn claimability_denial(
     .fetch_one(&mut **tx)
     .await?;
     if writable == 0 {
-        return Ok(Some("no_repository_scope"));
+        assessment.deny = Some("no_repository_scope");
+        return Ok(assessment);
     }
     // 全部声明仓库已达 verified
     let unverified: i64 = sqlx::query_scalar(
@@ -581,7 +673,8 @@ async fn claimability_denial(
     .fetch_one(&mut **tx)
     .await?;
     if unverified > 0 {
-        return Ok(Some("repository_not_verified"));
+        assessment.deny = Some("repository_not_verified");
+        return Ok(assessment);
     }
     // 基线可解析
     let unbounded: i64 = sqlx::query_scalar(
@@ -594,10 +687,10 @@ async fn claimability_denial(
     .fetch_one(&mut **tx)
     .await?;
     if unbounded > 0 {
-        return Ok(Some("baseline_unavailable"));
+        assessment.deny = Some("baseline_unavailable");
+        return Ok(assessment);
     }
-    let _ = cfg;
-    Ok(None)
+    Ok(assessment)
 }
 
 /// 写入本 Run 的多仓基线快照，返回给审计的摘要。
@@ -766,6 +859,24 @@ pub async fn renew_lease(
     .execute(pool)
     .await?;
     Ok(updated.rows_affected() == 1)
+}
+
+/// fencing（T25）：仅**当前 Run 的当前执行会话**可回传结果。被回收 / 被替代的旧
+/// 执行实例（过期 session 或非活跃 Run）一律拒绝，防止迟到结果污染新 Run。
+pub async fn accept_executor_result(
+    pool: &PgPool,
+    run_id: Uuid,
+    executor_session: &str,
+) -> Result<bool, RunDispatchError> {
+    let current: Option<bool> = sqlx::query_scalar(
+        "SELECT (status IN ('claimed', 'running') AND executor_session = $2) \
+           FROM delivery.task_run WHERE id = $1",
+    )
+    .bind(run_id)
+    .bind(executor_session)
+    .fetch_optional(pool)
+    .await?;
+    Ok(current == Some(true))
 }
 
 /// 写一条 `governance.audit_log`（与业务变更同事务）。actor 取项目 owner（三级回退）。

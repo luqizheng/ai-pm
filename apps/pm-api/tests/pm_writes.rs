@@ -69,7 +69,7 @@ async fn seed_pending_approval(pool: &PgPool, project_id: Uuid, actor_id: Uuid) 
     let proposal_id = Uuid::new_v4();
     let proposed_data = json!({
         "kind": "update_task_status",
-        "data": { "task_id": task_id, "expected_revision": 2, "new_status": "completed" }
+        "data": { "task_id": task_id, "expected_revision": 2, "new_status": "submitted" }
     });
     sqlx::query(
         "INSERT INTO ai.change_proposal \

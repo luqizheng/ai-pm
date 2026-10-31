@@ -615,12 +615,12 @@ async fn s3_second_agent_on_same_expected_revision_gets_revision_conflict(pool: 
             ProjectCommand::UpdateTaskStatus {
                 task_id: task_102_id(),
                 expected_revision: 8,
-                new_status: TaskStatus::Completed,
-            },
-            direct(agent_b),
-        )
-        .await
-        .expect("a retry on the current revision must succeed");
+new_status: TaskStatus::Cancelled,
+        },
+        direct(agent_b),
+    )
+    .await
+    .expect("a retry on the current revision must succeed");
     assert_eq!(retried.resulting_revision, 9);
 }
 
