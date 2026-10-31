@@ -27,10 +27,12 @@ workspace:
     execution: AI 执行中心
     team: AI 团队
     goals: 目标计划
+    goalsPlan: 目标与计划
     activity: 项目动态
     requirements: 需求管理
     decisions: 决策中心
     knowledge: 项目知识
+    projectCognition: 项目认知
     artifacts: 产物验收
     models: 模型配置
     classicOverview: 概览

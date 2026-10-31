@@ -52,4 +52,13 @@ describe("useWorkspaceStore", () => {
     s.clearCommandMessages();
     expect(s.commandMessages).toHaveLength(0);
   });
+
+  it("navMode 默认传统模式，setNavMode 可切换", () => {
+    const s = useWorkspaceStore();
+    expect(s.navMode).toBe("classic");
+    s.setNavMode("ai");
+    expect(s.navMode).toBe("ai");
+    s.setNavMode("classic");
+    expect(s.navMode).toBe("classic");
+  });
 });

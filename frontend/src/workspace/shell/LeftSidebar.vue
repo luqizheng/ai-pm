@@ -2,40 +2,15 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
-import {
-  Activity,
-  Bot,
-  BookOpen,
-  ChevronLeft,
-  Cpu,
-  FileText,
-  LayoutDashboard,
-  ListTree,
-  Map,
-  PackageCheck,
-  Scale,
-  Users
-} from "lucide-vue-next";
+import { ChevronLeft } from "lucide-vue-next";
 import { useWorkspaceStore } from "../store";
 import { demoProject } from "../fixtures";
+import { NAV_GROUPS, type NavItemDef } from "../nav-config";
 
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const store = useWorkspaceStore();
-
-interface NavItem {
-  key: string;
-  labelKey: string;
-  icon: typeof Map;
-  to: string;
-}
-
-interface NavGroup {
-  key: string;
-  labelKey: string;
-  items: NavItem[];
-}
 
 const projectId = computed(
   () => (route.params.projectId as string | undefined) ?? ""
@@ -45,95 +20,17 @@ function workspaceTo(slug: string): string {
   return `/workspace/${projectId.value}/${slug}`;
 }
 
-const groups = computed<NavGroup[]>(() => [
-  {
-    key: "workspace",
-    labelKey: "workspace.nav.groupWorkspace",
-    items: [
-      {
-        key: "console",
-        labelKey: "workspace.nav.console",
-        icon: Map,
-        to: workspaceTo("console")
-      },
-      {
-        key: "team",
-        labelKey: "workspace.nav.team",
-        icon: Users,
-        to: workspaceTo("team")
-      },
-      {
-        key: "goals",
-        labelKey: "workspace.nav.goals",
-        icon: ListTree,
-        to: workspaceTo("goals")
-      },
-      {
-        key: "activity",
-        labelKey: "workspace.nav.activity",
-        icon: Activity,
-        to: workspaceTo("activity")
-      }
-    ]
-  },
-  {
-    key: "modules",
-    labelKey: "workspace.nav.groupModules",
-    items: [
-      {
-        key: "requirements",
-        labelKey: "workspace.nav.requirements",
-        icon: FileText,
-        to: workspaceTo("requirements")
-      },
-      {
-        key: "decisions",
-        labelKey: "workspace.nav.decisions",
-        icon: Scale,
-        to: workspaceTo("decisions")
-      },
-      {
-        key: "knowledge",
-        labelKey: "workspace.nav.knowledge",
-        icon: BookOpen,
-        to: workspaceTo("knowledge")
-      },
-      {
-        key: "artifacts",
-        labelKey: "workspace.nav.artifacts",
-        icon: PackageCheck,
-        to: workspaceTo("artifacts")
-      },
-      {
-        key: "models",
-        labelKey: "workspace.nav.models",
-        icon: Cpu,
-        to: workspaceTo("models")
-      }
-    ]
-  },
-  {
-    key: "classic",
-    labelKey: "workspace.nav.groupClassic",
-    items: [
-      {
-        key: "classic-overview",
-        labelKey: "workspace.nav.classicOverview",
-        icon: LayoutDashboard,
-        to: "/dashboard"
-      }
-    ]
-  }
-]);
+// 导航集由当前模式决定：传统 9 项 / AI(V1.2) 5 项（见 nav-config）。
+const groups = computed(() => NAV_GROUPS[store.navMode]);
 
 const activeTo = computed(() => route.path);
 
-function isActive(item: NavItem): boolean {
-  return activeTo.value === item.to;
+function isActive(item: NavItemDef): boolean {
+  return activeTo.value === workspaceTo(item.slug);
 }
 
-function onItem(item: NavItem) {
-  router.push(item.to);
+function onItem(item: NavItemDef) {
+  router.push(workspaceTo(item.slug));
 }
 </script>
 

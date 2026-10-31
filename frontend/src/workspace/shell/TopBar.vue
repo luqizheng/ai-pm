@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import {
   Bell,
   ChevronRight,
@@ -12,14 +12,35 @@ import {
 } from "lucide-vue-next";
 import { useTheme } from "../useTheme";
 import { useWorkspaceStore } from "../store";
+import { navDefaultSlug, navSlugs, type NavMode } from "../nav-config";
 
 defineProps<{ project: string; page: string }>();
 
 const { t } = useI18n();
+const route = useRoute();
 const router = useRouter();
 const theme = useTheme();
 const store = useWorkspaceStore();
 const isDark = computed(() => theme.theme.value === "dark");
+
+// 两套导航的全部 slug 并集：切模式时只在这两套之间做回退，
+// focus / classic/* 等共享路由不劫持。
+const ALL_NAV_SLUGS = new Set([...navSlugs("classic"), ...navSlugs("ai")]);
+
+function currentSlug(): string {
+  return route.path.split("/").filter(Boolean)[2] ?? "";
+}
+
+function switchMode(mode: NavMode) {
+  if (store.navMode === mode) return;
+  store.setNavMode(mode);
+  const slug = currentSlug();
+  // 目标模式也有当前页 → 原地不动（记住当前页）
+  if (navSlugs(mode).includes(slug)) return;
+  if (!ALL_NAV_SLUGS.has(slug)) return;
+  const projectId = String(route.params.projectId ?? "");
+  router.push(`/workspace/${projectId}/${navDefaultSlug(mode)}`);
+}
 </script>
 
 <template>
@@ -63,17 +84,21 @@ const isDark = computed(() => theme.theme.value === "dark");
       >
         <button
           type="button"
-          class="ws-mode-seg ws-focusable is-active"
-          aria-pressed="true"
+          class="ws-mode-seg ws-focusable"
+          :class="{ 'is-active': store.navMode === 'ai' }"
+          data-test="mode-ai"
+          :aria-pressed="store.navMode === 'ai'"
+          @click="switchMode('ai')"
         >
           {{ t("workspace.shell.modeAi") }}
         </button>
         <button
           type="button"
           class="ws-mode-seg ws-focusable"
+          :class="{ 'is-active': store.navMode === 'classic' }"
           data-test="mode-toggle"
-          aria-pressed="false"
-          @click="router.push('/dashboard')"
+          :aria-pressed="store.navMode === 'classic'"
+          @click="switchMode('classic')"
         >
           {{ t("workspace.shell.modeClassic") }}
         </button>

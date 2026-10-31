@@ -1,6 +1,7 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import { attentionItems, type AttentionItem } from "./fixtures";
+import type { NavMode } from "./nav-config";
 
 export interface CommandMessage {
   id: string;
@@ -34,6 +35,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
   const sidebarCollapsed = ref(false);
   const contextOpen = ref(true);
   const commandMessages = ref<CommandMessage[]>([]);
+  const navMode = ref<NavMode>("classic");
 
   const selectedAttention = computed<AttentionItem | undefined>(() =>
     attentionItems.find(item => item.id === selectedAttentionId.value)
@@ -77,6 +79,10 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     contextOpen.value = !contextOpen.value;
   }
 
+  function setNavMode(mode: NavMode) {
+    navMode.value = mode;
+  }
+
   function pushCommandMessage(role: CommandMessage["role"], text: string) {
     messageSeq += 1;
     commandMessages.value.push({ id: `msg-${messageSeq}`, role, text });
@@ -94,6 +100,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     sidebarCollapsed,
     contextOpen,
     commandMessages,
+    navMode,
     setProject,
     setSubject,
     captureViewState,
@@ -101,6 +108,7 @@ export const useWorkspaceStore = defineStore("workspace", () => {
     selectAttention,
     toggleSidebar,
     toggleContext,
+    setNavMode,
     pushCommandMessage,
     clearCommandMessages
   };

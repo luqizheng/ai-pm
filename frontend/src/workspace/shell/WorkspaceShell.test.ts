@@ -79,31 +79,63 @@ describe("WorkspaceShell（V1.1 三栏壳）", () => {
     expect(w.find("[data-test='ctx-slot']").exists()).toBe(true);
   });
 
-  it("左导航渲染 V1.1 双分组 IA 与传统视图组", () => {
+  it("左导航默认渲染传统模式 9 项（工作空间组 + 研发模块组）", () => {
     const w = mountShellWithSlots();
-    const text = w.text();
-    // 工作空间组
-    for (const label of ["项目总控", "AI 团队", "目标计划", "项目动态"]) {
-      expect(text).toContain(label);
+    const nav = w.find(".workspace-leftnav").text();
+    for (const label of [
+      "项目总控",
+      "AI 团队",
+      "目标计划",
+      "项目动态",
+      "需求管理",
+      "决策中心",
+      "项目知识",
+      "产物验收",
+      "模型配置"
+    ]) {
+      expect(nav).toContain(label);
     }
-    // 研发模块组
-    for (const label of ["需求管理", "决策中心", "项目知识", "产物验收"]) {
-      expect(text).toContain(label);
-    }
-    // 传统视图组
-    expect(text).toContain("传统视图");
-    expect(text).toContain("概览");
-    // 分组标题
-    expect(text).toContain("工作空间");
-    expect(text).toContain("研发模块");
+    expect(nav).toContain("工作空间");
+    expect(nav).toContain("研发模块");
+    // 「传统视图」组 / 概览入口已随裁决移除
+    expect(nav).not.toContain("传统视图");
+    expect(nav).not.toContain("概览");
   });
 
-  it("传统视图概览入口跳转 /dashboard", async () => {
+  it("切到 AI 模式后左导航渲染 V1.2 五项，被裁项隐藏", async () => {
     const w = mountShellWithSlots();
-    const overview = w.findAll("button, a").find(el => el.text() === "概览");
-    expect(overview).toBeTruthy();
-    await overview!.trigger("click");
-    expect(push).toHaveBeenCalledWith("/dashboard");
+    await w.find("[data-test='mode-ai']").trigger("click");
+    const nav = w.find(".workspace-leftnav").text();
+    for (const label of [
+      "目标与计划",
+      "AI 执行中心",
+      "决策中心",
+      "项目认知",
+      "产物验收"
+    ]) {
+      expect(nav).toContain(label);
+    }
+    for (const label of [
+      "项目总控",
+      "AI 团队",
+      "项目动态",
+      "模型配置",
+      "需求管理",
+      "项目知识"
+    ]) {
+      expect(nav).not.toContain(label);
+    }
+  });
+
+  it("模式来回切换：AI → 传统，左栏恢复 9 项", async () => {
+    const w = mountShellWithSlots();
+    await w.find("[data-test='mode-ai']").trigger("click");
+    expect(w.find(".workspace-leftnav").text()).toContain("AI 执行中心");
+    await w.find("[data-test='mode-toggle']").trigger("click");
+    const nav = w.find(".workspace-leftnav").text();
+    expect(nav).toContain("项目总控");
+    expect(nav).toContain("模型配置");
+    expect(nav).not.toContain("AI 执行中心");
   });
 
   it("点击折叠按钮后壳根进入 collapsed 形态", async () => {
@@ -213,12 +245,12 @@ describe("WorkspaceShell（V1.1 三栏壳）", () => {
     expect(w.find("[data-test='service-dot']").exists()).toBe(true);
   });
 
-  it("TopBar 模式切换按钮跳转传统模式（/dashboard）", async () => {
+  it("模式切换在壳内换导航集，不跳 /dashboard；单模式页回退到目标默认页", async () => {
     const w = mountShellWithSlots();
-    const toggle = w.find("[data-test='mode-toggle']");
-    expect(toggle.exists()).toBe(true);
-    await toggle.trigger("click");
-    expect(push).toHaveBeenCalledWith("/dashboard");
+    // 当前页 console 仅存在于传统模式 → 切 AI 回退到 AI 默认页 goals
+    await w.find("[data-test='mode-ai']").trigger("click");
+    expect(push).toHaveBeenCalledWith("/workspace/proj-worldmap/goals");
+    expect(push).not.toHaveBeenCalledWith("/dashboard");
   });
 
   it("模式切换为带文字的分段控件（用户反馈：图标按钮不可发现）", () => {
@@ -228,13 +260,13 @@ describe("WorkspaceShell（V1.1 三栏壳）", () => {
     const text = switchGroup.text();
     expect(text).toContain("AI 模式");
     expect(text).toContain("传统模式");
-    // 当前所在段标记 aria-pressed，目标段可点
+    // 默认传统模式：当前段为「传统模式」，目标段「AI 模式」可点
     const current = switchGroup.find("[aria-pressed='true']");
     expect(current.exists()).toBe(true);
-    expect(current.text()).toContain("AI 模式");
+    expect(current.text()).toContain("传统模式");
     const target = switchGroup.find("[aria-pressed='false']");
     expect(target.exists()).toBe(true);
-    expect(target.text()).toContain("传统模式");
+    expect(target.text()).toContain("AI 模式");
   });
 
   it("右栏收起后重开按钮带文字（用户反馈：图标不可发现）", async () => {

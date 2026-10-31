@@ -107,9 +107,8 @@ describe("P0 验收（总控台竖切）", () => {
     expect(text).toContain("批量原型验证");
     // 指令栏
     expect(text).toContain("AI 研发负责人");
-    // 左导航 IA
+    // 左导航 IA（默认传统模式）
     expect(text).toContain("研发模块");
-    expect(text).toContain("传统视图");
   });
 
   it("index.html 含主题防闪烁预挂载脚本", () => {
