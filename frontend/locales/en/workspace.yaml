@@ -126,6 +126,17 @@ workspace:
       version: Version
       updated: Updated
       source: Source
+      empty: No knowledge documents
+      project: Project
+      pickProjectShort: Select a project
+      pickProject: Pick a project in the project scope first
+      loadFailed: Failed to load, retry shortly
+      referencesPending: References arrive in a later milestone
+      types:
+        requirement: Requirements
+        decision: Decisions
+        architecture: Architecture
+        knowledge: Knowledge
     artifacts:
       title: Artifacts
       subtitle: Test and approval status of products and deliverables

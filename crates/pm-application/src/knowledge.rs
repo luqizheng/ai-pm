@@ -126,6 +126,7 @@ impl KnowledgeRoot {
         std::fs::create_dir_all(&self.root).map_err(io_error)?;
 
         if self.root.join(".git").exists() {
+            self.configure_repo()?;
             return self.ensure_templates();
         }
         if let Ok(toplevel) = git(
@@ -142,7 +143,16 @@ impl KnowledgeRoot {
             }
         }
         git(&self.root, &["init"])?;
+        self.configure_repo()?;
         self.ensure_templates()
+    }
+
+    /// Windows checkouts must not rewrite line endings: the recorded
+    /// `content_hash` is computed over the file as written (LF).
+    fn configure_repo(&self) -> Result<(), KnowledgeError> {
+        git(&self.root, &["config", "core.autocrlf", "false"])?;
+        git(&self.root, &["config", "core.longpaths", "true"])?;
+        Ok(())
     }
 
     fn ensure_templates(&self) -> Result<(), KnowledgeError> {

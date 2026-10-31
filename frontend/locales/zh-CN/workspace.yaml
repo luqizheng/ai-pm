@@ -126,6 +126,17 @@ workspace:
       version: 版本
       updated: 更新
       source: 来源
+      empty: 暂无知识文档
+      project: 项目
+      pickProjectShort: 选择项目
+      pickProject: 请先在「项目范围」中选择一个项目
+      loadFailed: 加载失败，请稍后重试
+      referencesPending: 引用关系待后续里程碑接入
+      types:
+        requirement: 需求
+        decision: 决策
+        architecture: 架构
+        knowledge: 知识
     artifacts:
       title: 产物验收
       subtitle: 产品与交付物的测试、审批状态
