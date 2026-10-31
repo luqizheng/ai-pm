@@ -243,6 +243,20 @@ workspace:
       stepWaiting: 等待中
       stepRunning: 执行中
       stepDone: 已完成
+      project: 项目
+      pickProjectShort: 选择项目
+      pickProject: 请先在「项目范围」中选择一个项目
+      loadFailed: 加载失败，请稍后重试
+      empty: 暂无执行记录
+      detailsPending: 执行步骤、工具调用与日志待执行器接入后展示
+      attempt: 第 {n} 次尝试
+      failureReason: 失败原因
+      runQueued: 待执行
+      runRunning: 执行中
+      runSucceeded: 已完成
+      runFailed: 失败
+      runTimedOut: 超时
+      runCancelled: 已取消
     decisionsExtra:
       background: 问题背景
       dimensions: 比较维度

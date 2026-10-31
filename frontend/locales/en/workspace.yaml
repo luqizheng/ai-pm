@@ -243,6 +243,20 @@ workspace:
       stepWaiting: Waiting
       stepRunning: Running
       stepDone: Done
+      project: Project
+      pickProjectShort: Select project
+      pickProject: Select a project in Project Scope first
+      loadFailed: Load failed, please retry
+      empty: No execution runs
+      detailsPending: Steps, tool calls and logs appear once the executor is wired
+      attempt: Attempt {n}
+      failureReason: Failure reason
+      runQueued: Queued
+      runRunning: Running
+      runSucceeded: Succeeded
+      runFailed: Failed
+      runTimedOut: Timed out
+      runCancelled: Cancelled
     decisionsExtra:
       background: Background
       dimensions: Comparison dimensions
