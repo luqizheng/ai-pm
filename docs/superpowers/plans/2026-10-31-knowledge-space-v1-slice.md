@@ -1,6 +1,6 @@
 # 知识空间 V1 竖切（Markdown 文档登记 + 读取）Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 把设计稿 `docs/ai-pm-markdown-knowledge-space.md` 的第一步落成可运行的竖切：**Git 知识仓库 + 文档登记表 + 只读 REST + 前端知识页真数据**。正文只存在 Markdown 文件，PostgreSQL 只存身份/路径/版本/哈希/Commit，不存正文。
 
@@ -47,41 +47,41 @@ ai-pm/docs/runbook-login-chain.md                # 新增「知识空间」小�
 
 ### Task 1 — 迁移：文档身份与修订表
 
-- [ ] `0006_knowledge_documents.sql`：按设计稿 §7.2 落 `ai.project_document`（`doc_key`/`doc_type`/`canonical_path`/`lifecycle_state`，`UNIQUE(project_id, doc_key)`、`UNIQUE(project_id, canonical_path)`）与 `ai.document_revision`（`revision_no`/`git_commit_sha`/`content_hash`/`status`/`change_summary`/`created_by`，`UNIQUE(document_id, revision_no)`）。
-- [ ] `doc_type` 加 CHECK：`requirement|decision|architecture|knowledge`；`status` CHECK：`draft|published|rejected|rolled_back`。
-- [ ] 迁移随 `sqlx::migrate!` 应用；验证 `\d ai.project_document`。
-- [ ] Commit：`feat(knowledge): document identity and revision tables`
+- [x] `0006_knowledge_documents.sql`：按设计稿 §7.2 落 `ai.project_document`（`doc_key`/`doc_type`/`canonical_path`/`lifecycle_state`，`UNIQUE(project_id, doc_key)`、`UNIQUE(project_id, canonical_path)`）与 `ai.document_revision`（`revision_no`/`git_commit_sha`/`content_hash`/`status`/`change_summary`/`created_by`，`UNIQUE(document_id, revision_no)`）。
+- [x] `doc_type` 加 CHECK：`requirement|decision|architecture|knowledge`；`status` CHECK：`draft|published|rejected|rolled_back`。
+- [x] 迁移随 `sqlx::migrate!` 应用；验证 `\d ai.project_document`。
+- [x] Commit：`feat(knowledge): document identity and revision tables`
 
 ### Task 2 — knowledge 服务：根目录、模板、路径、Git 提交
 
-- [ ] `knowledge.rs`：`KnowledgeRoot`（`AI_PM_KNOWLEDGE_ROOT`，默认 `<ai-pm>/../ai-pm-knowledge`；`ensure_ready()` 建目录、`git init`、写入 `templates/{requirement,change-request,adr}.md`，幂等）。
-- [ ] `canonical_path(project_code, doc_type, doc_key)` → `projects/<code>/<doc_type>/<doc_key>.md`；`doc_key` 白名单 + `..` 拒绝。
-- [ ] `create_document(...)`：写文件（不存在才写，存在且内容相同视为幂等）、`git add` + `git commit`（固定 author `AI-PM <ai-pm@local>`）、插入 `project_document` + `document_revision`（`revision_no=1`，`status='published'`），返回 `{document_id, revision, commit_sha, content_hash}`。
-- [ ] 单测：路径生成、非法 key 拒绝、模板幂等初始化（tempdir）。
-- [ ] Commit：`feat(knowledge): markdown root, templates and git commits`
+- [x] `knowledge.rs`：`KnowledgeRoot`（`AI_PM_KNOWLEDGE_ROOT`，默认 `<ai-pm>/../ai-pm-knowledge`；`ensure_ready()` 建目录、`git init`、写入 `templates/{requirement,change-request,adr}.md`，幂等）。
+- [x] `canonical_path(project_code, doc_type, doc_key)` → `projects/<code>/<doc_type>/<doc_key>.md`；`doc_key` 白名单 + `..` 拒绝。
+- [x] `create_document(...)`：写文件（不存在才写，存在且内容相同视为幂等）、`git add` + `git commit`（固定 author `AI-PM <ai-pm@local>`）、插入 `project_document` + `document_revision`（`revision_no=1`，`status='published'`），返回 `{document_id, revision, commit_sha, content_hash}`。
+- [x] 单测：路径生成、非法 key 拒绝、模板幂等初始化（tempdir）。
+- [x] Commit：`feat(knowledge): markdown root, templates and git commits`
 
 ### Task 3 — 读取用例与 REST
 
-- [ ] `knowledge::list_documents(pool, project_id)`：返回 id/doc_key/doc_type/current revision/updated_at（跨项目隔离）。
-- [ ] `knowledge::read_document(pool, project_id, document_id)`：取最新 `published` revision → 读文件 → 返回 `{document, revision, markdown, content_hash}`；文件哈希与 `content_hash` 不一致时返回 `Stale`（不静默返回旧内容）。
-- [ ] `apps/pm-api/src/documents.rs`：`GET /v1/pm/documents?project_id=`、`GET /v1/pm/documents/{id}?project_id=`；无 project_id 时 400。
-- [ ] 集成测试（tempdir + 真 git）：创建 → 列表 → 读取内容；跨项目 404；改文件后 `Stale`。
-- [ ] Commit：`feat(pm-api): read knowledge documents`
+- [x] `knowledge::list_documents(pool, project_id)`：返回 id/doc_key/doc_type/current revision/updated_at（跨项目隔离）。
+- [x] `knowledge::read_document(pool, project_id, document_id)`：取最新 `published` revision → 读文件 → 返回 `{document, revision, markdown, content_hash}`；文件哈希与 `content_hash` 不一致时返回 `Stale`（不静默返回旧内容）。
+- [x] `apps/pm-api/src/documents.rs`：`GET /v1/pm/documents?project_id=`、`GET /v1/pm/documents/{id}?project_id=`；无 project_id 时 400。
+- [x] 集成测试（tempdir + 真 git）：创建 → 列表 → 读取内容；跨项目 404；改文件后 `Stale`。
+- [x] Commit：`feat(pm-api): read knowledge documents`
 
 ### Task 4 — 前端知识页接真数据
 
-- [ ] `frontend/src/api/documents.ts`：`listDocuments(projectId)` / `getDocument(id, projectId)`（`@/api/client` 既有封装）。
-- [ ] `KnowledgePage.vue`：左树来自列表（按 doc_type 分组），中栏渲染 markdown 纯文本段落，右栏保留 references 占位（无数据时显示空态）；mock 模式仍走 fixtures。
-- [ ] 新增/补齐 i18n key（zh-CN / en 同步）；`pnpm check:i18n` 绿。
-- [ ] 单测：有数据渲染、空态、接口失败降级。
-- [ ] Commit：`feat(workspace): knowledge page reads real documents`
+- [x] `frontend/src/api/documents.ts`：`listDocuments(projectId)` / `getDocument(id, projectId)`（`@/api/client` 既有封装）。
+- [x] `KnowledgePage.vue`：左树来自列表（按 doc_type 分组），中栏渲染 markdown 纯文本段落，右栏保留 references 占位（无数据时显示空态）；mock 模式仍走 fixtures。
+- [x] 新增/补齐 i18n key（zh-CN / en 同步）；`pnpm check:i18n` 绿。
+- [x] 单测：有数据渲染、空态、接口失败降级。
+- [x] Commit：`feat(workspace): knowledge page reads real documents`
 
 ### Task 5 — 文档与端到端验收
 
-- [ ] runbook 新增「知识空间」小节：`AI_PM_KNOWLEDGE_ROOT`、首次初始化、目录约定、只读边界。
-- [ ] 起栈验证：service 层创建一篇文档 → 浏览器 `/workspace/<projectId>/knowledge` 能看到标题与正文。
-- [ ] 全量回归：`cargo test -p pm-api -p pm-application`、`pnpm test:unit`、`pnpm check:i18n`。
-- [ ] Commit：`docs(runbook): knowledge space v1`
+- [x] runbook 新增「知识空间」小节：`AI_PM_KNOWLEDGE_ROOT`、首次初始化、目录约定、只读边界。
+- [x] 起栈验证：service 层创建一篇文档 → 浏览器 `/workspace/<projectId>/knowledge` 能看到标题与正文。
+- [x] 全量回归：`cargo test -p pm-api -p pm-application`、`pnpm test:unit`、`pnpm check:i18n`。
+- [x] Commit：`docs(runbook): knowledge space v1`
 
 ## 明确不做（后续里程碑）
 

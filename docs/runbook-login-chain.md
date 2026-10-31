@@ -152,3 +152,22 @@ curl -i -X POST http://127.0.0.1:8090/mcp \
 边界：当前是**端点级** `PM_MCP_READ`；按 tool 细分的 `PM_MCP_DOCUMENT_WRITE`（推送文档）与
 `PM_MCP_TASK_UPDATE`（改任务状态）尚未强制，需解析 JSON-RPC body 后另立任务。MCP 客户端请求
 必须带 `Host` 头（rmcp `allowed_hosts` 校验），否则 400 `missing Host header`。
+## 十、知识空间 V1（Markdown + Git）
+
+正文权威在**独立 Git 知识仓库**，PostgreSQL 只存身份/路径/版本/Commit/哈希（`ai.project_document`
++ `ai.document_revision`，迁移 0006）。V1 只开放读接口，写入走应用服务（质量门与红线落地前不开放外部写）。
+
+- 根目录：`AI_PM_KNOWLEDGE_ROOT`；未设置时默认 `<cwd>/../ai-pm-knowledge`（与 ai-pm 平级）。
+  仓库必须**独立**（不能是 ai-pm 的子目录），首次使用自动 `git init` + 铺 `templates/`，
+  并设置 `core.autocrlf=false`（保证 Windows 下哈希与文件一致）。
+- 目录约定：`projects/<project-code>/<doc_type>/<doc_key>.md`；`doc_type` ∈
+  `requirement | decision | architecture | knowledge`；`doc_key` 仅 `[A-Za-z0-9._-]`。
+- 读取：
+  ```bash
+  curl "http://127.0.0.1:8090/v1/pm/documents?project_id=<uuid>" -H "Authorization: Bearer <jwt>"
+  curl "http://127.0.0.1:8090/v1/pm/documents/<document-id>?project_id=<uuid>" -H "Authorization: Bearer <jwt>"
+  ```
+  详情返回 `markdown` 正文 + `git_commit_sha` + `content_hash`；文件被手改导致哈希不符时返回
+  409 `KNOWLEDGE_DOCUMENT_STALE`（不会静默返回旧内容）。
+- 前端：`/workspace/:projectId/knowledge`；真后端模式下页面内选择项目后展示文档树与正文，
+  mock 模式继续使用 fixtures。
