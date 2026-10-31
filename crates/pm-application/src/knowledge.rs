@@ -439,6 +439,46 @@ fn write_and_commit(
     Ok((head_sha(root.path())?, hash))
 }
 
+/// Deletes one document (file + git commit + both rows). Used as the
+/// compensating action when a batch document write fails halfway.
+pub async fn delete_document(
+    pool: &PgPool,
+    root: &KnowledgeRoot,
+    project_id: Uuid,
+    document_id: Uuid,
+) -> Result<(), KnowledgeError> {
+    let canonical: Option<String> = sqlx::query_scalar(
+        "SELECT canonical_path FROM ai.project_document WHERE id = $1 AND project_id = $2",
+    )
+    .bind(document_id)
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+    let path = canonical.ok_or(KnowledgeError::NotFound)?;
+
+    let abs = safe_join(root.path(), &path)?;
+    if abs.exists() {
+        std::fs::remove_file(&abs).map_err(io_error)?;
+        git(root.path(), &["add", "-A", "--", &path])?;
+        git(
+            root.path(),
+            &["commit", "-m", "docs: rollback batch import", "--", &path],
+        )?;
+    }
+
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM ai.document_revision WHERE document_id = $1")
+        .bind(document_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM ai.project_document WHERE id = $1")
+        .bind(document_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
 /// Lowercase hex sha256 used for `content_hash`.
 pub fn content_hash(markdown: &str) -> String {
     let digest = Sha256::digest(markdown.as_bytes());

@@ -3,6 +3,7 @@
 pub mod command;
 pub mod error;
 pub mod ids;
+pub mod import;
 pub mod policy;
 pub mod proposal;
 pub mod task;

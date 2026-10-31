@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { useConfirm } from "@/shell/composables/useConfirm";
 import { useScopeStore } from "@/api/scope";
 import { formatDateTime } from "@/api/format";
 import {
+  archiveRepository,
   createRepository,
   deleteRepository,
   deleteSshKey,
@@ -25,12 +26,14 @@ import {
   getSshKey,
   listRepositories,
   updateRepository,
+  verifyRepository,
   type RepositoryPayload
 } from "@/api/repositories";
 import type { Repository, RepositoryRole, SshKey } from "@/api/types";
 
 const { t } = useI18n();
 const route = useRoute();
+const router = useRouter();
 const toast = useToast();
 const confirm = useConfirm();
 const scope = useScopeStore();
@@ -66,11 +69,12 @@ const columns = computed<TableColumn[]>(() => [
   { label: t("pm.repositories.name"), prop: "name", slot: "name" },
   { label: t("pm.repositories.url"), prop: "url", slot: "url" },
   { label: t("pm.repositories.roleLabel"), prop: "role", slot: "role" },
-  {
-    label: t("pm.repositories.defaultBranch"),
-    prop: "default_branch",
-    slot: "branch"
+{
+    label: t("pm.repositories.roleLabel"),
+    prop: "role",
+    slot: "role"
   },
+  { label: t("pm.repositories.status"), prop: "status", slot: "status" },
   {
     label: t("pm.repositories.updatedAt"),
     prop: "updated_at",
@@ -234,6 +238,48 @@ function closeDialog() {
   editing.value = null;
 }
 
+function statusVariant(
+  value: unknown
+): "success" | "danger" | "warning" | "neutral" {
+  if (value === "verified") return "success";
+  if (value === "unreachable") return "danger";
+  if (value === "pending") return "warning";
+  return "neutral";
+}
+
+async function verifyRow(row: Repository) {
+  try {
+    await verifyRepository(row.id);
+    await load();
+  } catch (error) {
+    failure(error);
+  }
+}
+
+async function archive(row: Repository) {
+  const ok = await confirm.confirm({
+    title: t("pm.repositories.archiveTitle"),
+    description: t("pm.repositories.archiveConfirm", { name: row.name }),
+    confirmLabel: t("pm.repositories.archive"),
+    danger: true
+  });
+  if (!ok) return;
+  try {
+    await archiveRepository(row.id);
+    toast.toast({
+      variant: "success",
+      title: t("pm.repositories.archivedHint")
+    });
+    await load();
+  } catch (error) {
+    failure(error);
+  }
+}
+
+function importAgain() {
+  void router.push(`/onboarding/import?projectId=${projectId.value}`);
+}
+
 async function remove(row: Repository) {
   const ok = await confirm.confirm({
     title: t("pm.repositories.deleteTitle"),
@@ -300,6 +346,9 @@ onMounted(async () => {
   <section class="ui-page">
     <PageHeader :title="t('pm.repositories.pageTitle')" :subtitle="subtitle">
       <template #actions>
+        <Button size="sm" variant="secondary" @click="importAgain">
+          {{ t("pm.repositories.importAgain") }}
+        </Button>
         <Button size="sm" @click="openCreate">
           {{ t("pm.repositories.new") }}
         </Button>
@@ -381,6 +430,11 @@ onMounted(async () => {
           t(`pm.repositories.role.${String(row.role)}`)
         }}</Badge>
       </template>
+      <template #status="{ row }">
+        <Badge :variant="statusVariant(row.status)">
+          {{ t(`pm.import.${String(row.status)}`) }}
+        </Badge>
+      </template>
       <template #branch="{ row }">{{ row.default_branch || "—" }}</template>
       <template #updatedAt="{ row }">{{
         formatDateTime(row.updated_at)
@@ -390,9 +444,23 @@ onMounted(async () => {
           <Button
             size="sm"
             variant="ghost"
+            @click="verifyRow(asRepository(row))"
+          >
+            {{ t("pm.repositories.verify") }}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
             @click="openEdit(asRepository(row))"
           >
             {{ t("pm.repositories.edit") }}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            @click="archive(asRepository(row))"
+          >
+            {{ t("pm.repositories.archive") }}
           </Button>
           <Button size="sm" variant="ghost" @click="remove(asRepository(row))">
             {{ t("pm.repositories.delete") }}

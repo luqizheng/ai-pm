@@ -6,7 +6,9 @@
 //! rows, and the cross-project invisibility rule of `task_context`
 //! (`task.project_id != project_id` → `ReadError::NotFound`).
 
-use pm_application::bootstrap::{BootstrapError, BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{
+    BootstrapError, BootstrapRequest, bootstrap_project, resolve_assignee,
+};
 use pm_application::read::{ReadError, task_context};
 use serde_json::{Value, json};
 use sqlx::{PgPool, Row};
@@ -61,23 +63,28 @@ async fn bootstrap_rejects_duplicate_project_code_without_second_project(pool: P
     assert_eq!(first.project_id, project_id);
 }
 
-/// Step 1 test 2: one bootstrap call seeds 3 principals (human/ai_pm/dev_agent,
-/// code-suffixed display names), 3 project_member rows (owner/ai_pm/developer),
-/// the AI config (fake model, ai_lead, policy_version 1) and 5 skill bindings
-/// pinned to the 0003 seed at 'v1'.
+/// Step 1 test 2: one bootstrap call seeds 5 principals
+/// (human/ai_pm/architect/developer/tester, code-suffixed display names) and 5
+/// project_member rows, the AI config (fake model, ai_lead, policy_version 1)
+/// and 5 skill bindings pinned to the 0003 seed at 'v1'.
 #[sqlx::test(migrations = "../../migrations")]
 async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
     let outcome = bootstrap_project(&pool, req("TP-2", "seeded project")).await.unwrap();
 
-    // The three principal ids are distinct and resolve to the right kinds and
+    // The five principal ids are distinct and resolve to the right kinds and
     // display names (base name + code suffix).
     assert_ne!(outcome.human_id, outcome.ai_principal_id);
     assert_ne!(outcome.ai_principal_id, outcome.dev_agent_id);
     assert_ne!(outcome.human_id, outcome.dev_agent_id);
+    assert_ne!(outcome.architect_id, outcome.developer_id);
+    assert_ne!(outcome.architect_id, outcome.tester_id);
+    assert_ne!(outcome.developer_id, outcome.tester_id);
     for (id, kind, prefix) in [
         (outcome.human_id, "human", "owner-"),
         (outcome.ai_principal_id, "ai_pm", "ai-pm-"),
-        (outcome.dev_agent_id, "dev_agent", "dev-agent-"),
+        (outcome.architect_id, "dev_agent", "architect-"),
+        (outcome.developer_id, "dev_agent", "dev-agent-"),
+        (outcome.tester_id, "dev_agent", "tester-"),
     ] {
         let row = sqlx::query("SELECT kind, display_name FROM core.principal WHERE id = $1")
             .bind(id)
@@ -95,7 +102,7 @@ async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(principal_count, 3, "bootstrap must create exactly 3 principals");
+    assert_eq!(principal_count, 5, "bootstrap must create exactly 5 principals");
 
     // Project members: each principal has exactly the expected role.
     let roles: Vec<(Uuid, String)> = sqlx::query_as(
@@ -109,8 +116,10 @@ async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
         roles,
         vec![
             (outcome.ai_principal_id, "ai_pm".to_string()),
-            (outcome.dev_agent_id, "developer".to_string()),
+            (outcome.architect_id, "architect".to_string()),
+            (outcome.developer_id, "developer".to_string()),
             (outcome.human_id, "owner".to_string()),
+            (outcome.tester_id, "tester".to_string()),
         ]
     );
 
@@ -264,4 +273,25 @@ async fn task_context_returns_requirement_and_milestone_json(pool: PgPool) {
     let bare = task_context(&pool, project_id, bare_id).await.unwrap();
     assert_eq!(bare.requirement, None);
     assert_eq!(bare.milestone, None);
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn resolve_assignee_maps_agent_roles(pool: PgPool) {
+    let outcome = bootstrap_project(&pool, req("TP-3", "roles")).await.unwrap();
+    assert_eq!(
+        resolve_assignee(&pool, outcome.project_id, "developer").await.unwrap(),
+        Some(outcome.developer_id)
+    );
+    assert_eq!(
+        resolve_assignee(&pool, outcome.project_id, "architect").await.unwrap(),
+        Some(outcome.architect_id)
+    );
+    assert_eq!(
+        resolve_assignee(&pool, outcome.project_id, "tester").await.unwrap(),
+        Some(outcome.tester_id)
+    );
+    assert_eq!(
+        resolve_assignee(&pool, outcome.project_id, "unknown").await.unwrap(),
+        None
+    );
 }

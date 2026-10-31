@@ -8,21 +8,16 @@
 //! 库里只存 `nonce || ciphertext || tag`，AAD 绑定 `project_id`；私钥明文永不回显。
 //! 操作走 `pm_write::owner_actor` 的身份约定并写 `governance.audit_log`。
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
-
-use aes_gcm::aead::{Aead, KeyInit, Payload};
-use aes_gcm::{Aes256Gcm, Nonce};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::git_access::{self, GitError};
 use crate::pm_write::{PmWriteError, owner_actor};
+use crate::secret::{self, SecretError};
 
 pub const REPOSITORY_ROLES: [&str; 4] = ["main", "docs", "service", "infra"];
-const NONCE_LEN: usize = 12;
 const MAX_URL_LEN: usize = 512;
 const MAX_NAME_LEN: usize = 120;
 const MAX_BRANCH_LEN: usize = 200;
@@ -44,6 +39,10 @@ pub enum RepositoryError {
     RevisionConflict,
     #[error("invalid repository role")]
     InvalidRole,
+    #[error("ssh key is still referenced by a verified repository")]
+    KeyInUse,
+    #[error("git access failed: {0}")]
+    Git(String),
     #[error("{0}")]
     Validation(&'static str),
     #[error("AI_PM_SECRET_KEY is not set")]
@@ -59,6 +58,25 @@ pub enum RepositoryError {
 impl From<sqlx::Error> for RepositoryError {
     fn from(e: sqlx::Error) -> Self {
         RepositoryError::Db(e)
+    }
+}
+
+impl From<SecretError> for RepositoryError {
+    fn from(e: SecretError) -> Self {
+        match e {
+            SecretError::KeyMissing => RepositoryError::SecretKeyMissing,
+            SecretError::Crypto => RepositoryError::Crypto,
+            SecretError::SshKeygen(detail) => RepositoryError::SshKeygen(detail),
+            SecretError::Fingerprint => {
+                RepositoryError::SshKeygen("ssh-keygen produced no fingerprint".to_string())
+            }
+        }
+    }
+}
+
+impl From<GitError> for RepositoryError {
+    fn from(e: GitError) -> Self {
+        RepositoryError::Git(e.to_string())
     }
 }
 
@@ -84,6 +102,12 @@ pub struct RepositoryRow {
     pub role: String,
     pub default_branch: Option<String>,
     pub description: Option<String>,
+    pub ssh_key_id: Option<Uuid>,
+    pub status: String,
+    pub head_commit_sha: Option<String>,
+    pub last_verified_at: Option<DateTime<Utc>>,
+    pub last_error_code: Option<String>,
+    pub last_error_detail: Option<String>,
     pub revision: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -96,7 +120,17 @@ pub struct SshKeyView {
     pub label: String,
     pub public_key: String,
     pub fingerprint: String,
+    pub status: String,
     pub created_at: DateTime<Utc>,
+}
+
+/// 校验后的 git 地址。`normalized` 是写库的规范形式。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitUrl {
+    pub user: String,
+    pub host: String,
+    pub path: String,
+    pub normalized: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -126,47 +160,88 @@ pub struct UpdateRepositoryRequest {
 
 // -------------------------------------------------------------------- ssh key
 
-/// 读取项目密钥（无密钥返回 None）。响应只含公钥与指纹。
+/// 读取项目的 active 密钥（无密钥返回 None）。响应只含公钥与指纹。
 pub async fn get_ssh_key(
     pool: &PgPool,
     project_id: Uuid,
 ) -> Result<Option<SshKeyView>, RepositoryError> {
-    let row: Option<(String, String, String, DateTime<Utc>)> = sqlx::query_as(
-        "SELECT label, public_key, fingerprint, created_at \
-         FROM integration.project_ssh_key WHERE project_id = $1",
+    let row: Option<(String, String, String, String, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT label, public_key, fingerprint, status, created_at \
+         FROM integration.project_ssh_key WHERE project_id = $1 AND status = 'active'",
     )
     .bind(project_id)
     .fetch_optional(pool)
     .await?;
-    Ok(row.map(|(label, public_key, fingerprint, created_at)| SshKeyView {
-        project_id,
-        label,
-        public_key,
-        fingerprint,
-        created_at,
-    }))
+    Ok(row.map(
+        |(label, public_key, fingerprint, status, created_at)| SshKeyView {
+            project_id,
+            label,
+            public_key,
+            fingerprint,
+            status,
+            created_at,
+        },
+    ))
 }
 
-/// 生成（或重新生成）项目密钥：一个项目一把，重复调用即替换。
-pub async fn generate_ssh_key(
+/// 列出项目所有密钥（含已吊销），供管理页展示。
+pub async fn list_ssh_keys(
+    pool: &PgPool,
+    project_id: Uuid,
+) -> Result<Vec<SshKeyView>, RepositoryError> {
+    let rows: Vec<(String, String, String, String, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT label, public_key, fingerprint, status, created_at \
+         FROM integration.project_ssh_key WHERE project_id = $1 ORDER BY created_at DESC",
+    )
+    .bind(project_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(
+            |(label, public_key, fingerprint, status, created_at)| SshKeyView {
+                project_id,
+                label,
+                public_key,
+                fingerprint,
+                status,
+                created_at,
+            },
+        )
+        .collect())
+}
+
+/// 生成或复用项目密钥。`rotate=false` 时已有 active 直接返回（向导幂等）；
+/// `rotate=true` 时覆盖为新的密钥对（管理页「重新生成」）。
+pub async fn ensure_ssh_key(
     pool: &PgPool,
     project_id: Uuid,
     actor_id: Option<Uuid>,
+    rotate: bool,
 ) -> Result<SshKeyView, RepositoryError> {
+    if !rotate {
+        if let Some(existing) = get_ssh_key(pool, project_id).await? {
+            return Ok(existing);
+        }
+    }
+
     let code = project_code(pool, project_id).await?;
-    let generated = generate_ed25519(&format!("ai-pm:{code}"))?;
-    let ciphertext = seal_bytes(project_id, generated.private_key.as_bytes())?;
+    let generated = secret::generate_ed25519(&format!("ai-pm:{code}"))?;
+    let ciphertext = secret::seal_text(project_id, generated.private_key.as_bytes())?;
     let actor = resolve_actor(pool, project_id, actor_id).await?;
 
     let mut tx = pool.begin().await?;
     let (created_at,): (DateTime<Utc>,) = sqlx::query_as(
         "INSERT INTO integration.project_ssh_key \
-         (project_id, public_key, private_key_ciphertext, fingerprint) \
-         VALUES ($1, $2, $3, $4) \
+         (project_id, public_key, private_key_ciphertext, fingerprint, status, created_by) \
+         VALUES ($1, $2, $3, $4, 'active', $5) \
          ON CONFLICT (project_id) DO UPDATE SET \
              public_key = EXCLUDED.public_key, \
              private_key_ciphertext = EXCLUDED.private_key_ciphertext, \
              fingerprint = EXCLUDED.fingerprint, \
+             status = 'active', \
+             revoked_at = NULL, \
+             created_by = EXCLUDED.created_by, \
              updated_at = now() \
          RETURNING created_at",
     )
@@ -174,13 +249,18 @@ pub async fn generate_ssh_key(
     .bind(&generated.public_key)
     .bind(&ciphertext)
     .bind(&generated.fingerprint)
+    .bind(actor)
     .fetch_one(&mut *tx)
     .await?;
     append_audit(
         &mut tx,
         project_id,
         actor,
-        "ssh_key.generated",
+        if rotate {
+            "ssh_key.rotated"
+        } else {
+            "ssh_key.generated"
+        },
         "project_ssh_key",
         Some(project_id),
     )
@@ -192,8 +272,61 @@ pub async fn generate_ssh_key(
         label: "default".to_string(),
         public_key: generated.public_key,
         fingerprint: generated.fingerprint,
+        status: "active".to_string(),
         created_at,
     })
+}
+
+/// 兼容既有调用方：等同于 rotate=true。
+pub async fn generate_ssh_key(
+    pool: &PgPool,
+    project_id: Uuid,
+    actor_id: Option<Uuid>,
+) -> Result<SshKeyView, RepositoryError> {
+    ensure_ssh_key(pool, project_id, actor_id, true).await
+}
+
+/// 吊销密钥；仍被 verified 仓库引用时拒绝。
+pub async fn revoke_ssh_key(
+    pool: &PgPool,
+    project_id: Uuid,
+    actor_id: Option<Uuid>,
+) -> Result<(), RepositoryError> {
+    let in_use: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM integration.project_repository \
+         WHERE project_id = $1 AND status = 'verified'",
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await?;
+    if in_use > 0 {
+        return Err(RepositoryError::KeyInUse);
+    }
+    let actor = resolve_actor(pool, project_id, actor_id).await?;
+    let mut tx = pool.begin().await?;
+    let affected = sqlx::query(
+        "UPDATE integration.project_ssh_key \
+         SET status = 'revoked', revoked_at = now(), updated_at = now() \
+         WHERE project_id = $1 AND status = 'active'",
+    )
+    .bind(project_id)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    if affected == 0 {
+        return Err(RepositoryError::SshKeyNotFound);
+    }
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "ssh_key.revoked",
+        "project_ssh_key",
+        Some(project_id),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 pub async fn delete_ssh_key(
@@ -229,7 +362,7 @@ pub fn open_ssh_private_key(
     project_id: Uuid,
     ciphertext: &[u8],
 ) -> Result<String, RepositoryError> {
-    let plain = open_bytes(project_id, ciphertext)?;
+    let plain = secret::open_text(project_id, ciphertext)?;
     String::from_utf8(plain).map_err(|_| RepositoryError::Crypto)
 }
 
@@ -241,8 +374,9 @@ pub async fn list_repositories(
 ) -> Result<Vec<RepositoryRow>, RepositoryError> {
     project_code(pool, project_id).await?;
     let rows = sqlx::query_as::<_, RepositoryRow>(
-        "SELECT id, project_id, name, url, role, default_branch, description, revision, \
-                created_at, updated_at \
+        "SELECT id, project_id, name, url, role, default_branch, description, \
+                ssh_key_id, status, head_commit_sha, last_verified_at, \
+                last_error_code, last_error_detail, revision, created_at, updated_at \
          FROM integration.project_repository \
          WHERE project_id = $1 \
          ORDER BY created_at ASC, name ASC",
@@ -273,7 +407,8 @@ pub async fn create_repository(
          (project_id, name, url, role, default_branch, description) \
          VALUES ($1, $2, $3, $4, $5, $6) \
          RETURNING id, project_id, name, url, role, default_branch, description, \
-                   revision, created_at, updated_at",
+                   ssh_key_id, status, head_commit_sha, last_verified_at, \
+                   last_error_code, last_error_detail, revision, created_at, updated_at",
     )
     .bind(project_id)
     .bind(&name)
@@ -332,7 +467,8 @@ pub async fn update_repository(
              revision = revision + 1, updated_at = now() \
          WHERE id = $1 \
          RETURNING id, project_id, name, url, role, default_branch, description, \
-                   revision, created_at, updated_at",
+                   ssh_key_id, status, head_commit_sha, last_verified_at, \
+                   last_error_code, last_error_detail, revision, created_at, updated_at",
     )
     .bind(repository_id)
     .bind(&name)
@@ -389,6 +525,194 @@ pub async fn delete_repository(
     .await?;
     tx.commit().await?;
     Ok(())
+}
+
+// ------------------------------------------------------------------- internals
+
+/// 一次可达性校验的结果（同时已回写到仓库行）。
+#[derive(Debug, Clone, Serialize)]
+pub struct VerifyOutcome {
+    pub repository_id: Uuid,
+    pub status: String,
+    pub default_branch: Option<String>,
+    pub head_commit_sha: Option<String>,
+    pub error_code: Option<String>,
+    pub error_detail: Option<String>,
+}
+
+/// 归档：保留行与历史，只把状态置 `archived`。
+pub async fn archive_repository(
+    pool: &PgPool,
+    repository_id: Uuid,
+    actor_id: Option<Uuid>,
+) -> Result<RepositoryRow, RepositoryError> {
+    let mut tx = pool.begin().await?;
+    let project_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT project_id FROM integration.project_repository WHERE id = $1")
+            .bind(repository_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let project_id = project_id.ok_or(RepositoryError::NotFound)?;
+    let actor = resolve_actor(pool, project_id, actor_id).await?;
+
+    let row = sqlx::query_as::<_, RepositoryRow>(
+        "UPDATE integration.project_repository \
+         SET status = 'archived', revision = revision + 1, updated_at = now() \
+         WHERE id = $1 \
+         RETURNING id, project_id, name, url, role, default_branch, description, \
+                   ssh_key_id, status, head_commit_sha, last_verified_at, \
+                   last_error_code, last_error_detail, revision, created_at, updated_at",
+    )
+    .bind(repository_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "repository.archived",
+        "project_repository",
+        Some(repository_id),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(row)
+}
+
+/// `git ls-remote --heads` 校验可达性并回写状态。
+///
+/// SSH 地址必须有 active 项目密钥；本地 `file://`（测试夹具）走匿名。
+/// 失败不返回 Err（除数据库错误），而是把仓库标记为 `unreachable` 并给出
+/// 稳定错误码，供前端展示原因。
+pub async fn verify_repository(
+    pool: &PgPool,
+    repository_id: Uuid,
+    actor_id: Option<Uuid>,
+) -> Result<VerifyOutcome, RepositoryError> {
+    let row: Option<(Uuid, String, Option<String>)> = sqlx::query_as(
+        "SELECT project_id, url, default_branch \
+         FROM integration.project_repository WHERE id = $1",
+    )
+    .bind(repository_id)
+    .fetch_optional(pool)
+    .await?;
+    let (project_id, url, current_branch) = row.ok_or(RepositoryError::NotFound)?;
+    let actor = resolve_actor(pool, project_id, actor_id).await?;
+
+    let key_ciphertext: Option<Vec<u8>> = sqlx::query_scalar(
+        "SELECT private_key_ciphertext FROM integration.project_ssh_key \
+         WHERE project_id = $1 AND status = 'active'",
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let is_ssh = url.starts_with("ssh://") || url.starts_with("git@");
+    let outcome = if is_ssh && key_ciphertext.is_none() {
+        VerifyOutcome {
+            repository_id,
+            status: "unreachable".to_string(),
+            default_branch: current_branch,
+            head_commit_sha: None,
+            error_code: Some("ssh_key_missing".to_string()),
+            error_detail: Some("project has no active ssh key".to_string()),
+        }
+    } else {
+        let material = match key_ciphertext {
+            Some(bytes) => {
+                let private = open_ssh_private_key(project_id, &bytes)?;
+                Some(git_access::write_temp_key(&private)?)
+            }
+            None => None,
+        };
+        let key_path = material.as_ref().map(|m| m.key_path());
+        let result = git_access::ls_remote(
+            &url,
+            key_path.as_deref(),
+            std::time::Duration::from_secs(30),
+        )
+        .await;
+        match result {
+            Ok(heads) => {
+                let branch = current_branch
+                    .clone()
+                    .filter(|wanted| heads.iter().any(|h| &h.branch == wanted))
+                    .or_else(|| {
+                        heads
+                            .iter()
+                            .find(|h| h.branch == "main")
+                            .map(|h| h.branch.clone())
+                    })
+                    .or_else(|| {
+                        heads
+                            .iter()
+                            .find(|h| h.branch == "master")
+                            .map(|h| h.branch.clone())
+                    })
+                    .or_else(|| heads.first().map(|h| h.branch.clone()));
+                let sha = branch.as_ref().and_then(|branch| {
+                    heads.iter().find(|h| &h.branch == branch).map(|h| h.sha.clone())
+                });
+                VerifyOutcome {
+                    repository_id,
+                    status: "verified".to_string(),
+                    default_branch: branch,
+                    head_commit_sha: sha,
+                    error_code: None,
+                    error_detail: None,
+                }
+            }
+            Err(err) => {
+                let (code, detail) = match &err {
+                    GitError::Timeout => ("timeout", "git ls-remote timed out".to_string()),
+                    GitError::AuthFailed => ("auth_failed", err.to_string()),
+                    GitError::NotFound => ("not_found", err.to_string()),
+                    GitError::TooLarge => ("too_large", err.to_string()),
+                    GitError::Other(msg) => ("git_failed", msg.clone()),
+                    GitError::Io(msg) => ("git_failed", msg.clone()),
+                };
+                let detail = detail.chars().take(500).collect::<String>();
+                VerifyOutcome {
+                    repository_id,
+                    status: "unreachable".to_string(),
+                    default_branch: current_branch,
+                    head_commit_sha: None,
+                    error_code: Some(code.to_string()),
+                    error_detail: Some(detail),
+                }
+            }
+        }
+    };
+
+    let mut tx = pool.begin().await?;
+    sqlx::query(
+        "UPDATE integration.project_repository SET \
+             status = $2, default_branch = $3, head_commit_sha = $4, \
+             last_verified_at = now(), last_error_code = $5, last_error_detail = $6, \
+             revision = revision + 1, updated_at = now() \
+         WHERE id = $1",
+    )
+    .bind(repository_id)
+    .bind(&outcome.status)
+    .bind(&outcome.default_branch)
+    .bind(&outcome.head_commit_sha)
+    .bind(&outcome.error_code)
+    .bind(&outcome.error_detail)
+    .execute(&mut *tx)
+    .await?;
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "repository.verified",
+        "project_repository",
+        Some(repository_id),
+    )
+    .await?;
+    tx.commit().await?;
+
+    Ok(outcome)
 }
 
 // ------------------------------------------------------------------- internals
@@ -476,7 +800,7 @@ fn normalize_role(raw: &str) -> Result<String, RepositoryError> {
 
 /// 只接受 `ssh://[user@]host[:port]/path` 与 `git@host:path` 两种 git over SSH
 /// 形式；拒绝 `ext::`、`file://`、`http(s)://`、`-` 开头、空白、`..`、`%`、反斜杠。
-fn normalize_url(raw: &str) -> Result<String, RepositoryError> {
+pub fn validate_git_url(raw: &str) -> Result<GitUrl, RepositoryError> {
     let url = raw.trim();
     if url.is_empty() || url.len() > MAX_URL_LEN {
         return Err(RepositoryError::InvalidUrl);
@@ -521,7 +845,36 @@ fn normalize_url(raw: &str) -> Result<String, RepositoryError> {
     if path.is_empty() || path.starts_with('/') || !path.chars().all(path_char) {
         return Err(RepositoryError::InvalidUrl);
     }
-    Ok(url.to_string())
+    if let Some(allowed) = allowed_hosts() {
+        if !allowed.iter().any(|item| item == host) {
+            return Err(RepositoryError::InvalidUrl);
+        }
+    }
+    Ok(GitUrl {
+        user: user.to_string(),
+        host: host.to_string(),
+        path: path.to_string(),
+        normalized: url.to_string(),
+    })
+}
+
+/// `AI_PM_REPO_ALLOWED_HOSTS`（逗号分隔）存在时只允许这些 host。
+fn allowed_hosts() -> Option<Vec<String>> {
+    let raw = std::env::var("AI_PM_REPO_ALLOWED_HOSTS").ok()?;
+    let hosts: Vec<String> = raw
+        .split(',')
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
+        .collect();
+    if hosts.is_empty() {
+        None
+    } else {
+        Some(hosts)
+    }
+}
+
+fn normalize_url(raw: &str) -> Result<String, RepositoryError> {
+    validate_git_url(raw).map(|url| url.normalized)
 }
 
 fn host_char(c: char) -> bool {
@@ -534,113 +887,6 @@ fn path_char(c: char) -> bool {
 
 // ---------------------------------------------------------------- key + crypto
 
-struct GeneratedKey {
-    public_key: String,
-    private_key: String,
-    fingerprint: String,
-}
-
-struct TempDir(PathBuf);
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-fn generate_ed25519(comment: &str) -> Result<GeneratedKey, RepositoryError> {
-    let dir = TempDir(std::env::temp_dir().join(format!("ai-pm-ssh-{}", Uuid::new_v4())));
-    std::fs::create_dir_all(&dir.0).map_err(|e| RepositoryError::SshKeygen(e.to_string()))?;
-    let key_path = dir.0.join("id_ed25519");
-
-    let output = Command::new("ssh-keygen")
-        .args(["-q", "-t", "ed25519", "-N", "", "-C", comment, "-f"])
-        .arg(&key_path)
-        .output()
-        .map_err(|e| RepositoryError::SshKeygen(e.to_string()))?;
-    if !output.status.success() {
-        return Err(RepositoryError::SshKeygen(
-            String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        ));
-    }
-
-    let pub_path = key_path.with_extension("pub");
-    let public_key = std::fs::read_to_string(&pub_path)
-        .map_err(|e| RepositoryError::SshKeygen(e.to_string()))?
-        .trim()
-        .to_string();
-    let private_key = std::fs::read_to_string(&key_path)
-        .map_err(|e| RepositoryError::SshKeygen(e.to_string()))?;
-    let fingerprint = fingerprint_of(&pub_path)?;
-
-    Ok(GeneratedKey {
-        public_key,
-        private_key,
-        fingerprint,
-    })
-}
-
-fn fingerprint_of(pub_path: &Path) -> Result<String, RepositoryError> {
-    let output = Command::new("ssh-keygen")
-        .arg("-lf")
-        .arg(pub_path)
-        .output()
-        .map_err(|e| RepositoryError::SshKeygen(e.to_string()))?;
-    if !output.status.success() {
-        return Err(RepositoryError::SshKeygen(
-            String::from_utf8_lossy(&output.stderr).trim().to_string(),
-        ));
-    }
-    String::from_utf8_lossy(&output.stdout)
-        .split_whitespace()
-        .nth(1)
-        .map(str::to_string)
-        .ok_or_else(|| RepositoryError::SshKeygen("unexpected ssh-keygen -lf output".to_string()))
-}
-
-fn cipher() -> Result<Aes256Gcm, RepositoryError> {
-    let raw = std::env::var("AI_PM_SECRET_KEY").map_err(|_| RepositoryError::SecretKeyMissing)?;
-    let raw = raw.trim();
-    if raw.is_empty() {
-        return Err(RepositoryError::SecretKeyMissing);
-    }
-    let key: [u8; 32] = Sha256::digest(raw.as_bytes()).into();
-    Aes256Gcm::new_from_slice(&key).map_err(|_| RepositoryError::Crypto)
-}
-
-fn seal_bytes(project_id: Uuid, plain: &[u8]) -> Result<Vec<u8>, RepositoryError> {
-    let mut nonce = [0u8; NONCE_LEN];
-    getrandom::fill(&mut nonce).map_err(|_| RepositoryError::Crypto)?;
-    let encrypted = cipher()?
-        .encrypt(
-            Nonce::from_slice(&nonce),
-            Payload {
-                msg: plain,
-                aad: project_id.as_bytes(),
-            },
-        )
-        .map_err(|_| RepositoryError::Crypto)?;
-    let mut out = Vec::with_capacity(NONCE_LEN + encrypted.len());
-    out.extend_from_slice(&nonce);
-    out.extend_from_slice(&encrypted);
-    Ok(out)
-}
-
-fn open_bytes(project_id: Uuid, payload: &[u8]) -> Result<Vec<u8>, RepositoryError> {
-    if payload.len() <= NONCE_LEN {
-        return Err(RepositoryError::Crypto);
-    }
-    let (nonce, ciphertext) = payload.split_at(NONCE_LEN);
-    cipher()?
-        .decrypt(
-            Nonce::from_slice(nonce),
-            Payload {
-                msg: ciphertext,
-                aad: project_id.as_bytes(),
-            },
-        )
-        .map_err(|_| RepositoryError::Crypto)
-}
 
 #[cfg(test)]
 mod tests {

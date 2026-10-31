@@ -59,6 +59,14 @@ revisions:
   created: Revision created
   approved: Approved; the previous approved revision is now superseded
   failed: Operation failed
+importBatch:
+  title: 'Project cold start ({count} proposals)'
+  approveAll: Approve all
+  rejectAll: Reject all
+  reason: Batch decision (cold-start import)
+  partial: '{count} items failed; retry them individually'
+  done: Batch decision submitted
+
 repositories:
   pageTitle: Code repositories
   subtitle: Manage the repositories linked to this project and their access key.
@@ -71,6 +79,13 @@ repositories:
   urlPlaceholder: git{'@'}gitlab.local:team/repo.git
   urlHint: "SSH only: git{'@'}host:path or ssh://user{'@'}host/path"
   roleLabel: Purpose
+  status: Status
+  verify: Verify
+  archive: Archive
+  archiveTitle: Archive repository
+  archiveConfirm: 'Archiving "{name}" keeps its history but excludes it from imports.'
+  archivedHint: Repository archived
+  importAgain: Import again
   defaultBranch: Default branch
   defaultBranchPlaceholder: main
   updatedAt: Updated at
@@ -175,3 +190,60 @@ scope:
   all: All projects
 unassigned: Unassigned
 loadFailed: Failed to load
+import:
+  pageTitle: Import project
+  subtitle: Bind repositories; the AI project manager reads commits and docs to draft the project.
+  stepBasics: Project
+  stepRepositories: Repositories
+  stepAnalysis: AI analysis
+  stepReview: Review draft
+  code: Project code
+  codePlaceholder: e.g. MAP-001
+  name: Project name
+  namePlaceholder: e.g. World map editor
+  description: Description (optional)
+  required: Project code and name are required
+  next: Next
+  back: Back
+  createProject: Create project
+  projectCreated: Project created with a five-role team
+  addRepository: Add repository
+  repositoryName: Repository name
+  repositoryUrl: Repository URL
+  repositoryRole: Role
+  verify: Verify
+  verified: Connected
+  unreachable: Unreachable
+  pending: Pending verification
+  archived: Archived
+  writeDocuments: Also write knowledge documents
+  noVerified: At least one connected repository is required
+  startAnalysis: Start analysis
+  analyzing: Analyzing…
+  cancel: Cancel
+  cancelled: Cancelled
+  failed: Analysis failed
+  stageClone: Cloning
+  stageRead: Reading commits and docs
+  stageModel: AI analysis
+  stageDraft: Drafting
+  demoModel: Demo model
+  truncatedHint: Material was truncated; the draft may be incomplete
+  droppedHint: '{count} items without evidence were dropped'
+  selectAll: Select all
+  profile: Profile
+  milestones: Milestones
+  requirements: Requirements
+  tasks: Tasks
+  risks: Risks
+  unknowns: Open questions
+  assignee: Agent
+  evidence: Evidence
+  confidenceLow: Low confidence
+  submitProposals: Create proposals
+  proposed: '{count} proposals created; awaiting approval'
+  goApprovals: Go to approvals
+  retry: Retry
+  loadFailed: Failed to load
+  applyFailed: Failed to create proposals
+  repoFailed: Repository operation failed

@@ -330,3 +330,114 @@ async fn unknown_project_is_404(pool: PgPool) {
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["message"], "project not found");
 }
+fn init_local_repo() -> (std::path::PathBuf, String) {
+    let root = std::env::temp_dir().join(format!("ai-pm-api-repo-{}", Uuid::new_v4()));
+    let path = root.join("repo");
+    std::fs::create_dir_all(&path).unwrap();
+    let run = |args: &[&str]| {
+        let status = std::process::Command::new("git")
+            .args(args)
+            .current_dir(&path)
+            .env("GIT_AUTHOR_NAME", "Test")
+            .env("GIT_AUTHOR_EMAIL", "test@example.com")
+            .env("GIT_COMMITTER_NAME", "Test")
+            .env("GIT_COMMITTER_EMAIL", "test@example.com")
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?} failed");
+    };
+    run(&["init", "-q", "-b", "main"]);
+    std::fs::write(path.join("README.md"), "# demo\n").unwrap();
+    run(&["add", "."]);
+    run(&["-c", "commit.gpgsign=false", "commit", "-q", "-m", "init"]);
+    let url = format!("file://{}", path.to_string_lossy().replace('\\', "/"));
+    (root, url)
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn ssh_key_create_is_idempotent_and_revoke_blocks_verified_reference(pool: PgPool) {
+    with_secret();
+    let app = router(pool.clone());
+    let project_id = seed_project(&pool, "REPO-4").await;
+    let keys_uri = format!("/v1/pm/projects/{project_id}/ssh-keys");
+
+    let (status, first) = body_json(
+        app.clone()
+            .oneshot(json_request("POST", &keys_uri, json!({})))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {first}");
+    let (status, second) = body_json(
+        app.clone()
+            .oneshot(json_request("POST", &keys_uri, json!({})))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(first["fingerprint"], second["fingerprint"], "幂等复用同一把 key");
+
+    let (root, local_url) = init_local_repo();
+    let (status, repo) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &format!("/v1/pm/projects/{project_id}/repositories"),
+                json!({ "name": "本地夹具", "url": "git@example.invalid:team/demo.git", "role": "main" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "body: {repo}");
+    let repo_id = repo["id"].as_str().unwrap().to_string();
+    sqlx::query("UPDATE integration.project_repository SET url = $2 WHERE id = $1")
+        .bind(Uuid::parse_str(&repo_id).unwrap())
+        .bind(&local_url)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (status, verified) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &format!("/v1/pm/repositories/{repo_id}/verify"),
+                json!({}),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let _ = std::fs::remove_dir_all(root);
+    assert_eq!(status, StatusCode::OK, "body: {verified}");
+    assert_eq!(verified["status"], "verified");
+    assert_eq!(verified["default_branch"], "main");
+    assert_eq!(verified["head_commit_sha"].as_str().unwrap().len(), 40);
+
+    let (status, body) = body_json(
+        app.clone()
+            .oneshot(delete(&keys_uri))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "body: {body}");
+    assert_eq!(
+        body["message"],
+        "ssh key is still referenced by a verified repository"
+    );
+
+    let (status, listed) = body_json(
+        app.clone()
+            .oneshot(get(&format!("/v1/pm/projects/{project_id}/ssh-keys")))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(listed["total"], 1);
+    assert_eq!(listed["items"][0]["status"], "active");
+}

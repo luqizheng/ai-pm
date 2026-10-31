@@ -38,6 +38,15 @@ red_lines:                   # pre-confirmation required, per role
     required_role: platform_admin
   - command: spend_above_quota
     required_role: quota_approver
+  # 冷启动导入：4 个批量命令共用 project_import 红线语义，执行前须 owner 确认。
+  - command: create_milestones
+    required_role: project_owner
+  - command: create_requirements
+    required_role: project_owner
+  - command: create_tasks
+    required_role: project_owner
+  - command: write_documents
+    required_role: project_owner
 
 post_execution:
   notify: always             # parsed-ignored in M1 (notification stream lands in a later task)

@@ -1,5 +1,5 @@
-//! `/v1/pm/projects/{id}/repositories` 与 `/v1/pm/projects/{id}/ssh-key`
-//! （P0：项目 ↔ 代码仓库关系的纯 CRUD）。
+//! `/v1/pm/projects/{id}/repositories`、`/v1/pm/projects/{id}/ssh-keys` 与
+//! `/v1/pm/repositories/{id}/*`：仓库关系 CRUD、项目级密钥管理与可达性校验。
 //!
 //! 错误体沿用 `support` 的 `{message}` 约定：@digua/http 对带 `code` 的错误体
 //! 会先走错误码翻译，未知码会把 message 覆盖成码本身；只给 message 才能原样透传。
@@ -10,16 +10,18 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
 };
+use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::routes::AppState;
 use pm_application::repository::{
-    CreateRepositoryRequest, RepositoryError, UpdateRepositoryRequest, create_repository,
-    delete_repository, delete_ssh_key, generate_ssh_key, get_ssh_key, list_repositories,
-    update_repository,
+    CreateRepositoryRequest, RepositoryError, UpdateRepositoryRequest, archive_repository,
+    create_repository, delete_repository, delete_ssh_key, ensure_ssh_key, generate_ssh_key,
+    get_ssh_key, list_repositories, list_ssh_keys, revoke_ssh_key, update_repository,
+    verify_repository,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -33,10 +35,26 @@ pub(crate) fn router() -> Router<AppState> {
             axum::routing::patch(update_handler).delete(delete_handler),
         )
         .route(
+            "/v1/pm/repositories/{repository_id}/verify",
+            post(verify_handler),
+        )
+        .route(
+            "/v1/pm/repositories/{repository_id}/archive",
+            post(archive_handler),
+        )
+        // 旧名字（首版前端）：一项目一把，POST 视为重新生成。
+        .route(
             "/v1/pm/projects/{project_id}/ssh-key",
             get(get_key_handler)
                 .post(generate_key_handler)
                 .delete(delete_key_handler),
+        )
+        // 新契约：list / create（幂等）/ revoke。
+        .route(
+            "/v1/pm/projects/{project_id}/ssh-keys",
+            get(list_keys_handler)
+                .post(create_key_handler)
+                .delete(revoke_key_handler),
         )
 }
 
@@ -53,6 +71,14 @@ fn repository_error(err: RepositoryError) -> Response {
         ),
         RepositoryError::RevisionConflict => (StatusCode::CONFLICT, "revision conflict"),
         RepositoryError::InvalidRole => (StatusCode::BAD_REQUEST, "invalid repository role"),
+        RepositoryError::KeyInUse => (
+            StatusCode::CONFLICT,
+            "ssh key is still referenced by a verified repository",
+        ),
+        RepositoryError::Git(detail) => {
+            tracing::error!(detail = %detail, "git access failed");
+            (StatusCode::BAD_GATEWAY, "git access failed")
+        }
         RepositoryError::Validation(message) => (StatusCode::BAD_REQUEST, message),
         RepositoryError::SecretKeyMissing | RepositoryError::Crypto => (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -70,11 +96,7 @@ fn repository_error(err: RepositoryError) -> Response {
             (StatusCode::INTERNAL_SERVER_ERROR, "internal error")
         }
     };
-    (
-        status,
-        Json(json!({ "message": message })),
-    )
-        .into_response()
+    (status, Json(json!({ "message": message }))).into_response()
 }
 
 async fn list_handler(
@@ -122,6 +144,26 @@ async fn delete_handler(
     }
 }
 
+async fn verify_handler(
+    State(state): State<AppState>,
+    Path(repository_id): Path<Uuid>,
+) -> Response {
+    match verify_repository(&state.pool, repository_id, None).await {
+        Ok(outcome) => (StatusCode::OK, Json(outcome)).into_response(),
+        Err(err) => repository_error(err),
+    }
+}
+
+async fn archive_handler(
+    State(state): State<AppState>,
+    Path(repository_id): Path<Uuid>,
+) -> Response {
+    match archive_repository(&state.pool, repository_id, None).await {
+        Ok(row) => (StatusCode::OK, Json(row)).into_response(),
+        Err(err) => repository_error(err),
+    }
+}
+
 async fn get_key_handler(
     State(state): State<AppState>,
     Path(project_id): Path<Uuid>,
@@ -148,6 +190,47 @@ async fn delete_key_handler(
     Path(project_id): Path<Uuid>,
 ) -> Response {
     match delete_ssh_key(&state.pool, project_id, None).await {
+        Ok(()) => (StatusCode::OK, Json(json!({ "project_id": project_id }))).into_response(),
+        Err(err) => repository_error(err),
+    }
+}
+
+async fn list_keys_handler(
+    State(state): State<AppState>,
+    Path(project_id): Path<Uuid>,
+) -> Response {
+    match list_ssh_keys(&state.pool, project_id).await {
+        Ok(items) => {
+            let total = items.len();
+            (StatusCode::OK, Json(json!({ "items": items, "total": total }))).into_response()
+        }
+        Err(err) => repository_error(err),
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct CreateKeyRequest {
+    #[serde(default)]
+    rotate: bool,
+}
+
+async fn create_key_handler(
+    State(state): State<AppState>,
+    Path(project_id): Path<Uuid>,
+    body: Option<Json<CreateKeyRequest>>,
+) -> Response {
+    let rotate = body.map(|Json(req)| req.rotate).unwrap_or(false);
+    match ensure_ssh_key(&state.pool, project_id, None, rotate).await {
+        Ok(view) => (StatusCode::OK, Json(view)).into_response(),
+        Err(err) => repository_error(err),
+    }
+}
+
+async fn revoke_key_handler(
+    State(state): State<AppState>,
+    Path(project_id): Path<Uuid>,
+) -> Response {
+    match revoke_ssh_key(&state.pool, project_id, None).await {
         Ok(()) => (StatusCode::OK, Json(json!({ "project_id": project_id }))).into_response(),
         Err(err) => repository_error(err),
     }

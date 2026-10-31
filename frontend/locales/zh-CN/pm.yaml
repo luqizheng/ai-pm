@@ -59,6 +59,14 @@ revisions:
   created: 修订已创建
   approved: 已定稿，旧定稿已转为已作废
   failed: 操作失败
+importBatch:
+  title: "项目冷启动（{count} 项提案）"
+  approveAll: 整批批准
+  rejectAll: 整批驳回
+  reason: 批量审批（冷启动导入）
+  partial: "有 {count} 项失败，可单独重试"
+  done: 批次审批完成
+
 repositories:
   pageTitle: 代码仓库
   subtitle: 管理项目关联的代码仓库与访问密钥。
@@ -71,6 +79,13 @@ repositories:
   urlPlaceholder: git{'@'}gitlab.local:team/repo.git
   urlHint: 仅支持 SSH 形式：git{'@'}host:path 或 ssh://user{'@'}host/path
   roleLabel: 用途
+  status: 状态
+  verify: 校验
+  archive: 归档
+  archiveTitle: 归档仓库
+  archiveConfirm: 归档「{name}」后仍保留历史，但不再参与导入。
+  archivedHint: 仓库已归档
+  importAgain: 再导入
   defaultBranch: 默认分支
   defaultBranchPlaceholder: main
   updatedAt: 更新时间
@@ -173,3 +188,60 @@ scope:
   all: 全部项目
 unassigned: 未分配
 loadFailed: 加载失败
+import:
+  pageTitle: 导入项目
+  subtitle: 绑定代码仓库，由 AI 项目经理读取 commit 与 docs 生成项目草案。
+  stepBasics: 项目信息
+  stepRepositories: 连接仓库
+  stepAnalysis: AI 分析
+  stepReview: 草案审阅
+  code: 项目编码
+  codePlaceholder: 例如 MAP-001
+  name: 项目名称
+  namePlaceholder: 例如 世界地图编辑器
+  description: 项目描述（可选）
+  required: 请填写项目编码与名称
+  next: 下一步
+  back: 上一步
+  createProject: 创建项目
+  projectCreated: 项目已创建，已自动建立五人编制
+  addRepository: 添加仓库
+  repositoryName: 仓库名称
+  repositoryUrl: 仓库地址
+  repositoryRole: 用途
+  verify: 校验
+  verified: 已连通
+  unreachable: 不可达
+  pending: 待校验
+  archived: 已归档
+  writeDocuments: 同时写入知识文档
+  noVerified: 至少需要一个已连通的仓库
+  startAnalysis: 开始分析
+  analyzing: 分析中…
+  cancel: 取消
+  cancelled: 已取消
+  failed: 分析失败
+  stageClone: 克隆仓库
+  stageRead: 读取 commit 与 docs
+  stageModel: AI 分析
+  stageDraft: 生成草案
+  demoModel: 演示模型
+  truncatedHint: 材料已截断，草案可能不完整
+  droppedHint: "有 {count} 条无证据条目已被丢弃"
+  selectAll: 全选
+  profile: 项目画像
+  milestones: 里程碑
+  requirements: 需求
+  tasks: 任务
+  risks: 风险
+  unknowns: 待确认问题
+  assignee: 承接 Agent
+  evidence: 证据
+  confidenceLow: 低置信
+  submitProposals: 生成提案
+  proposed: "已生成 {count} 项提案，等待审批"
+  goApprovals: 去审批
+  retry: 重试
+  loadFailed: 加载失败
+  applyFailed: 生成提案失败
+  repoFailed: 仓库操作失败

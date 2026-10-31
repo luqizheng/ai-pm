@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::ids::{AuditId, MilestoneId, PrincipalId, ProjectId, RequirementId, RevisionId, TaskId};
+use crate::import::{DocumentDraft, MilestoneDraft, RequirementDraft, TaskDraft};
 use crate::task::TaskStatus;
 
 /// A single state-changing operation against a project.
@@ -49,6 +50,22 @@ pub enum ProjectCommand {
         target_audit_id: AuditId,
         reason: String,
     },
+    /// 冷启动批量建里程碑；项目取自执行上下文。
+    CreateMilestones {
+        milestones: Vec<MilestoneDraft>,
+    },
+    /// 冷启动批量建需求（落 `draft`，不自动定稿）。
+    CreateRequirements {
+        requirements: Vec<RequirementDraft>,
+    },
+    /// 冷启动批量建任务；`assignee_role` 解析成对应 Agent principal。
+    CreateTasks {
+        tasks: Vec<TaskDraft>,
+    },
+    /// 冷启动批量写知识文档（文件 + git commit + 两表）。
+    WriteDocuments {
+        documents: Vec<DocumentDraft>,
+    },
 }
 
 impl ProjectCommand {
@@ -61,6 +78,10 @@ impl ProjectCommand {
             ProjectCommand::SignAcceptance { .. } => "sign_acceptance",
             ProjectCommand::ChangePolicy { .. } => "change_policy",
             ProjectCommand::RollbackCommand { .. } => "rollback_command",
+            ProjectCommand::CreateMilestones { .. } => "create_milestones",
+            ProjectCommand::CreateRequirements { .. } => "create_requirements",
+            ProjectCommand::CreateTasks { .. } => "create_tasks",
+            ProjectCommand::WriteDocuments { .. } => "write_documents",
         }
     }
 
@@ -129,6 +150,45 @@ mod tests {
                 target_audit_id: AuditId::nil(),
                 reason: "signed in error".to_string(),
             },
+            ProjectCommand::CreateMilestones {
+                milestones: vec![MilestoneDraft {
+                    key: "M1".to_string(),
+                    name: "核心地形系统".to_string(),
+                    planned_at: None,
+                }],
+            },
+            ProjectCommand::CreateRequirements {
+                requirements: vec![RequirementDraft {
+                    key: "R1".to_string(),
+                    code: "REQ-001".to_string(),
+                    title: "地形分块加载".to_string(),
+                    markdown: "支持分块与 LOD。".to_string(),
+                    priority: "high".to_string(),
+                    confidence: crate::proposal::Confidence::High,
+                    evidence: Vec::new(),
+                }],
+            },
+            ProjectCommand::CreateTasks {
+                tasks: vec![TaskDraft {
+                    key: "T1".to_string(),
+                    title: "实现分块加载器".to_string(),
+                    description: String::new(),
+                    priority: "high".to_string(),
+                    milestone_key: Some("M1".to_string()),
+                    requirement_key: Some("R1".to_string()),
+                    assignee_role: Some(crate::import::AssigneeRole::Developer),
+                    confidence: crate::proposal::Confidence::High,
+                    evidence: Vec::new(),
+                }],
+            },
+            ProjectCommand::WriteDocuments {
+                documents: vec![DocumentDraft {
+                    doc_key: "architecture".to_string(),
+                    doc_type: "architecture".to_string(),
+                    markdown: "# 架构".to_string(),
+                    change_summary: None,
+                }],
+            },
         ]
     }
 
@@ -166,6 +226,10 @@ mod tests {
                 "sign_acceptance",
                 "change_policy",
                 "rollback_command",
+                "create_milestones",
+                "create_requirements",
+                "create_tasks",
+                "write_documents",
             ]
         );
     }

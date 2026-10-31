@@ -6,6 +6,8 @@
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
     routing::{get, post},
 };
 use std::collections::HashMap;
@@ -13,6 +15,7 @@ use uuid::Uuid;
 
 use crate::routes::AppState;
 use crate::support::{ApiResult, Paging, paging, project_filter};
+use pm_application::bootstrap::{BootstrapError, BootstrapRequest, bootstrap_project};
 use pm_application::rows::{
     ApprovalRow, AuditLogRow, DecisionRow, MilestoneRow, PrincipalRow, ProjectRow,
     RequirementRevisionRow, RequirementRow, TaskRow,
@@ -21,7 +24,7 @@ use pm_application::rows::{
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/v1/pm/principals", get(principals))
-        .route("/v1/pm/projects", get(projects))
+        .route("/v1/pm/projects", get(projects).post(create_project_handler))
         .route("/v1/pm/requirements", get(requirements))
         .route("/v1/pm/tasks", get(tasks))
         .route("/v1/pm/milestones", get(milestones))
@@ -80,6 +83,74 @@ async fn projects(
         .fetch_one(&state.pool)
         .await?;
     Ok(Json(page.to_response(items, total)))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct CreateProjectBody {
+    code: String,
+    name: String,
+    #[serde(default)]
+    description: String,
+}
+
+/// `POST /v1/pm/projects`：建项目并自动落 5 人编制（owner/ai_pm/architect/developer/tester）。
+async fn create_project_handler(
+    State(state): State<AppState>,
+    Json(body): Json<CreateProjectBody>,
+) -> Response {
+    let code = body.code.trim();
+    let name = body.name.trim();
+    if code.is_empty() || name.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "message": "project code and name are required" })),
+        )
+            .into_response();
+    }
+    match bootstrap_project(
+        &state.pool,
+        BootstrapRequest {
+            project_code: code.to_string(),
+            project_name: name.to_string(),
+        },
+    )
+    .await
+    {
+        Ok(outcome) => {
+            if !body.description.trim().is_empty() {
+                let _ = sqlx::query("UPDATE core.project SET description = $2 WHERE id = $1")
+                    .bind(outcome.project_id)
+                    .bind(body.description.trim())
+                    .execute(&state.pool)
+                    .await;
+            }
+            match sqlx::query_as::<_, ProjectRow>(
+                "SELECT id, customer_id, code, name, description, status, revision, created_at, updated_at \
+                 FROM core.project WHERE id = $1",
+            )
+            .bind(outcome.project_id)
+            .fetch_one(&state.pool)
+            .await
+            {
+                Ok(row) => (StatusCode::CREATED, Json(row)).into_response(),
+                Err(err) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "message": err.to_string() })),
+                )
+                    .into_response(),
+            }
+        }
+        Err(BootstrapError::Duplicate(code)) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({ "message": format!("project code `{code}` already exists") })),
+        )
+            .into_response(),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "message": err.to_string() })),
+        )
+            .into_response(),
+    }
 }
 
 async fn requirements(

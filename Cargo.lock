@@ -1561,7 +1561,9 @@ dependencies = [
  "axum",
  "chrono",
  "digua_common_jwt",
+ "pm-ai",
  "pm-application",
+ "pm-domain",
  "pm-mcp",
  "reqwest",
  "serde",
@@ -1592,6 +1594,7 @@ dependencies = [
  "sha2",
  "sqlx",
  "thiserror",
+ "tokio",
  "uuid",
 ]
 

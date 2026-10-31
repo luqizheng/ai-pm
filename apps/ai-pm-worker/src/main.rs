@@ -7,8 +7,10 @@ use std::sync::Arc;
 use pm_ai::model::AnalysisModel;
 use pm_ai::orchestrator::{HandleOutcome, Orchestrator};
 use pm_ai::FakeModel;
+use pm_application::project_import::{import_id_for_event, run_import_job};
 use pm_application::{PgCommandExecutor, PolicyEngine};
 use pm_infrastructure::job_queue::{self, ClaimedJob};
+use sqlx::PgPool;
 use tracing_subscriber::EnvFilter;
 
 /// Attempts ceiling / backoff base handed to `job_queue::fail`; the same
@@ -65,10 +67,72 @@ async fn main() {
     let worker_id = format!("ai-pm-worker-{}", uuid::Uuid::new_v4());
     tracing::info!(service = "ai-pm-worker", %worker_id, "started");
 
+    // 第二条循环：冷启动 `repo_import` job，与 `ai_analysis` 互不阻塞。
+    let repo_pool = pool.clone();
+    let repo_worker_id = worker_id.clone();
+    tokio::spawn(async move {
+        loop {
+            match job_queue::claim(&repo_pool, "repo_import", &repo_worker_id, LEASE_SECS).await {
+                Some(job) => handle_repo_job(&repo_pool, &job).await,
+                None => {
+                    tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await
+                }
+            }
+        }
+    });
+
     loop {
         match job_queue::claim(&pool, "ai_analysis", &worker_id, LEASE_SECS).await {
             Some(job) => handle_job(&orchestrator, &job).await,
             None => tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await,
+        }
+    }
+}
+
+async fn handle_repo_job(pool: &PgPool, job: &ClaimedJob) {
+    let import_id = match import_id_for_event(pool, job.event_id).await {
+        Ok(Some(import_id)) => import_id,
+        other => {
+            tracing::error!(job_id = %job.job_id, ?other, "repo import job has no import id");
+            let _ = job_queue::fail(
+                pool,
+                job.job_id,
+                "repo import job has no import id",
+                MAX_JOB_ATTEMPTS,
+                JOB_BACKOFF_BASE_SECS,
+            )
+            .await;
+            return;
+        }
+    };
+    let (model, model_name) = pm_ai::repo_model::model_from_llm_provider(pool, job.project_id).await;
+    if let Err(e) = sqlx::query("UPDATE integration.repo_import SET model_name = $2 WHERE id = $1")
+        .bind(import_id)
+        .bind(&model_name)
+        .execute(pool)
+        .await
+    {
+        tracing::error!(job_id = %job.job_id, error = %e, "model_name write failed");
+    }
+    match run_import_job(pool, model.as_ref(), import_id).await {
+        Ok(()) => {
+            if let Err(e) = job_queue::complete(pool, job.job_id).await {
+                tracing::error!(job_id = %job.job_id, error = %e, "job complete failed");
+            }
+        }
+        Err(e) => {
+            tracing::warn!(job_id = %job.job_id, error = %e, "repo import job failed, backing off");
+            if let Err(e) = job_queue::fail(
+                pool,
+                job.job_id,
+                &e.to_string(),
+                MAX_JOB_ATTEMPTS,
+                JOB_BACKOFF_BASE_SECS,
+            )
+            .await
+            {
+                tracing::error!(job_id = %job.job_id, error = %e, "job fail failed");
+            }
         }
     }
 }

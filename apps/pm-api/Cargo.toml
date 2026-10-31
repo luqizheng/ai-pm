@@ -21,3 +21,5 @@ tracing-subscriber.workspace = true
 
 [dev-dependencies]
 tower.workspace = true
+pm-ai = { path = "../../crates/pm-ai" }
+pm-domain = { path = "../../crates/pm-domain" }

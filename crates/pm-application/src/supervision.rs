@@ -343,13 +343,14 @@ pub async fn decide_approval(
     executor: &PgCommandExecutor,
     req: DecideRequest,
 ) -> Result<DecisionOutcome, SupervisionError> {
-    let (proposal_id, project_id, command_type, proposed_data): (
+    let (proposal_id, project_id, analysis_run_id, command_type, proposed_data): (
         ProposalId,
         ProjectId,
+        Uuid,
         String,
         serde_json::Value,
     ) = sqlx::query_as(
-        "SELECT p.id, p.project_id, p.command_type, p.proposed_data \
+        "SELECT p.id, p.project_id, p.analysis_run_id, p.command_type, p.proposed_data \
          FROM governance.approval_request a \
          JOIN ai.change_proposal p ON p.id = a.proposal_id \
          WHERE a.id = $1",
@@ -402,6 +403,8 @@ pub async fn decide_approval(
             )
             .await?;
             tx.commit().await?;
+            let _ = crate::project_import::advance_import_after_decision(pool, analysis_run_id)
+                .await;
             Ok(DecisionOutcome::Rejected)
         }
         Decision::Approve => {
@@ -432,6 +435,11 @@ pub async fn decide_approval(
                     .bind(receipt.audit_id)
                     .execute(pool)
                     .await?;
+                    let _ = crate::project_import::advance_import_after_decision(
+                        pool,
+                        analysis_run_id,
+                    )
+                    .await;
                     Ok(DecisionOutcome::Executed { receipt })
                 }
                 // The human approved, but execution failed (target gone or
@@ -441,6 +449,11 @@ pub async fn decide_approval(
                         .bind(proposal_id)
                         .execute(pool)
                         .await?;
+                    let _ = crate::project_import::advance_import_after_decision(
+                        pool,
+                        analysis_run_id,
+                    )
+                    .await;
                     Err(SupervisionError::Command(err))
                 }
             }

@@ -14,11 +14,13 @@ import {
 import ScopeSelect from "@/shell/views/pm/components/ScopeSelect.vue";
 import { useUserDirectory } from "@/shell/store/user-directory";
 import { translateError } from "@/shell/api";
-import { useScopeStore } from "@/api/scope";
+import { useScopeStore, SCOPE_ALL } from "@/api/scope";
 import { statusVariant } from "@/api/status";
 import { formatDateTime } from "@/api/format";
 import { decideApproval, listApprovals } from "@/api/pm";
-import type { ApprovalRequest } from "@/api/types";
+import { listImports } from "@/api/imports";
+import ImportBatchCard from "./ImportBatchCard.vue";
+import type { ApprovalRequest, ImportListItem } from "@/api/types";
 
 const { t } = useI18n();
 const toast = useToast();
@@ -42,6 +44,7 @@ const columns: TableColumn[] = [
 
 const rows = ref<ApprovalRequest[]>([]);
 const total = ref(0);
+const importBatches = ref<ImportListItem[]>([]);
 const page = ref(1);
 const pageSize = 10;
 const loading = ref(false);
@@ -93,6 +96,15 @@ async function load() {
     });
     rows.value = result.items ?? [];
     total.value = result.total ?? 0;
+    const projectId = scope.projectIdParam;
+    if (projectId && projectId !== SCOPE_ALL) {
+      const batches = await listImports(projectId).catch(() => ({ items: [], total: 0 }));
+      importBatches.value = (batches.items ?? []).filter(
+        item => item.status === "proposed"
+      );
+    } else {
+      importBatches.value = [];
+    }
   } catch (error) {
     toast.toast({
       variant: "danger",
@@ -158,6 +170,14 @@ onMounted(load);
         <ScopeSelect />
       </template>
     </PageHeader>
+
+    <ImportBatchCard
+      v-for="batch in importBatches"
+      :key="batch.id"
+      :project-id="String(scope.projectIdParam)"
+      :import-id="batch.id"
+      @decided="load"
+    />
 
     <DataTable
       :columns="columns"

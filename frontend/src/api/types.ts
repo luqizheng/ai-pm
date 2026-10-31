@@ -111,8 +111,9 @@ export interface RequirementRevision {
   approved_by: string | null;
   created_at: string;
 }
-/** integration.project_repository（0008）：项目 ↔ 代码仓库的关系 */
+/** integration.project_repository（0008/0009）：项目 ↔ 代码仓库的关系 */
 export type RepositoryRole = "main" | "docs" | "service" | "infra";
+export type RepositoryStatus = "pending" | "verified" | "unreachable" | "archived";
 
 export interface Repository {
   id: string;
@@ -122,16 +123,150 @@ export interface Repository {
   role: RepositoryRole;
   default_branch: string | null;
   description: string | null;
+  ssh_key_id: string | null;
+  status: RepositoryStatus;
+  head_commit_sha: string | null;
+  last_verified_at: string | null;
+  last_error_code: string | null;
+  last_error_detail: string | null;
   revision: number;
   created_at: string;
   updated_at: string;
 }
 
-/** integration.project_ssh_key（0008）：只回公钥与指纹，私钥永不回显 */
+/** integration.project_ssh_key（0008/0009）：只回公钥与指纹，私钥永不回显 */
 export interface SshKey {
   project_id: string;
   label: string;
   public_key: string;
   fingerprint: string;
+  status: "active" | "revoked";
   created_at: string;
+}
+
+export type ImportStatus =
+  | "queued"
+  | "cloning"
+  | "reading"
+  | "analyzing"
+  | "draft_ready"
+  | "proposed"
+  | "applied"
+  | "rejected"
+  | "failed"
+  | "cancelled";
+
+export interface Evidence {
+  kind: "doc" | "commit";
+  repo_id: string;
+  ref: string;
+  detail: string;
+}
+
+export interface DraftRequirement {
+  key: string;
+  code: string;
+  title: string;
+  markdown: string;
+  priority: string;
+  confidence: "low" | "medium" | "high";
+  evidence: Evidence[];
+}
+
+export interface DraftTask {
+  key: string;
+  title: string;
+  description: string;
+  priority: string;
+  milestone_key: string | null;
+  requirement_key: string | null;
+  assignee_role: "ai_pm" | "architect" | "developer" | "tester" | null;
+  confidence: "low" | "medium" | "high";
+  evidence: Evidence[];
+}
+
+export interface DraftMilestone {
+  key: string;
+  name: string;
+  planned_at: string | null;
+}
+
+export interface ProjectDraft {
+  schema_version: number;
+  profile: {
+    suggested_code: string;
+    suggested_name: string;
+    summary: string;
+    domain: string;
+    tech_stack: string[];
+  };
+  milestones: DraftMilestone[];
+  requirements: DraftRequirement[];
+  tasks: DraftTask[];
+  risks: { description: string; severity: string; evidence: Evidence[] }[];
+  unknowns: { question: string; why_blocking: string }[];
+  coverage: {
+    repos: {
+      repository_id: string;
+      head_commit_sha: string;
+      commits_analyzed: number;
+      docs_analyzed: number;
+      truncated: boolean;
+    }[];
+  };
+}
+
+export interface ImportSource {
+  repository_id: string;
+  label: string;
+  head_commit_sha: string | null;
+  commit_count: number;
+  doc_count: number;
+  size_bytes: number;
+  truncated: boolean;
+  error_code: string | null;
+}
+
+export interface ProjectImport {
+  id: string;
+  project_id: string;
+  status: ImportStatus;
+  progress: number;
+  stage_detail: string | null;
+  model_name: string;
+  draft: ProjectDraft | null;
+  draft_revision: number;
+  dropped_items: number;
+  error_code: string | null;
+  error_detail: string | null;
+  analysis_run_id: string | null;
+  created_at: string;
+  proposed_at: string | null;
+  applied_at: string | null;
+  sources: ImportSource[];
+}
+
+export interface ImportListItem {
+  id: string;
+  status: ImportStatus;
+  progress: number;
+  model_name: string;
+  draft_revision: number;
+  analysis_run_id: string | null;
+  created_at: string;
+  proposed_at: string | null;
+  applied_at: string | null;
+}
+
+export interface ProposalRef {
+  kind: string;
+  proposal_id: string;
+  approval_id: string;
+  item_count: number;
+}
+
+export interface ProposedImport {
+  outcome: "proposed" | "already_applied";
+  proposals?: ProposalRef[];
+  analysis_run_id?: string;
 }

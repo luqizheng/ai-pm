@@ -27,11 +27,14 @@ use pm_domain::{
     AuditId, CommandError, MilestoneId, PrincipalId, ProjectCommand, ProjectId, RequirementId,
     RevisionId, TaskId, TaskStatus,
 };
+use pm_domain::import::{DocumentDraft, MilestoneDraft, RequirementDraft, TaskDraft};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::Row;
 use uuid::Uuid;
 
+use crate::bootstrap::resolve_assignee;
+use crate::knowledge::{self, CreateDocumentRequest, KnowledgeRoot};
 use crate::policy_engine::PolicyEngine;
 
 /// Who issues a command. The executor only branches on [`ActorKind::Human`]
@@ -159,6 +162,10 @@ impl PgCommandExecutor {
                 | "adjust_milestone_plan"
                 | "sign_acceptance"
                 | "rollback_command"
+                | "create_milestones"
+                | "create_requirements"
+                | "create_tasks"
+                | "write_documents"
         )
     }
 
@@ -213,6 +220,16 @@ impl PgCommandExecutor {
                 milestone_id,
                 expected_revision,
             } => self.sign_acceptance(project_id, milestone_id, expected_revision, &ctx).await,
+            ProjectCommand::CreateMilestones { milestones } => {
+                self.create_milestones(milestones, &ctx).await
+            }
+            ProjectCommand::CreateRequirements { requirements } => {
+                self.create_requirements(requirements, &ctx).await
+            }
+            ProjectCommand::CreateTasks { tasks } => self.create_tasks(tasks, &ctx).await,
+            ProjectCommand::WriteDocuments { documents } => {
+                self.write_documents(documents, &ctx).await
+            }
             // `rollback_command` executes through `compensate()`, not here.
             // `change_policy` is a red line with no M1 handler; it fails the
             // same way as any other handler-less command.
@@ -452,7 +469,404 @@ impl PgCommandExecutor {
         })
     }
 
-    /// CreateTask: insert the `delivery.task` row at `status = 'backlog'`,
+    /// 冷启动批量建里程碑：同一项目内按名称幂等复用。
+    async fn create_milestones(
+        &self,
+        milestones: Vec<MilestoneDraft>,
+        ctx: &ExecutionContext,
+    ) -> Result<ExecutionReceipt, CommandError> {
+        validate_batch(milestones.len(), "milestone")?;
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        let mut items = Vec::new();
+        for draft in milestones {
+            let name = draft.name.trim();
+            if name.is_empty() {
+                return Err(CommandError::Validation(
+                    "milestone name is required".to_string(),
+                ));
+            }
+            let existing: Option<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM delivery.milestone WHERE project_id = $1 AND name = $2",
+            )
+            .bind(ctx.project_id)
+            .bind(name)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db_err)?;
+            let (id, created) = match existing {
+                Some(id) => (id, false),
+                None => {
+                    let id: Uuid = sqlx::query_scalar(
+                        "INSERT INTO delivery.milestone (project_id, name, planned_at) \
+                         VALUES ($1, $2, $3) RETURNING id",
+                    )
+                    .bind(ctx.project_id)
+                    .bind(name)
+                    .bind(draft.planned_at)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(db_err)?;
+                    (id, true)
+                }
+            };
+            items.push(json!({"key": draft.key, "name": name, "id": id, "created": created}));
+        }
+        let after = json!({"items": items});
+        let audit_id = insert_audit(
+            &mut tx,
+            ctx,
+            "create_milestones",
+            "project",
+            Some(ctx.project_id),
+            &Value::Null,
+            &after,
+            None,
+            audit_source(ctx),
+        )
+        .await?;
+        tx.commit().await.map_err(db_err)?;
+        Ok(ExecutionReceipt {
+            audit_id,
+            command_kind: "create_milestones",
+            target_id: ctx.project_id,
+            resulting_revision: 0,
+        })
+    }
+
+    /// 冷启动批量建需求：需求落 `draft`，revision 也落 `draft`；`(project, code)` 幂等。
+    async fn create_requirements(
+        &self,
+        requirements: Vec<RequirementDraft>,
+        ctx: &ExecutionContext,
+    ) -> Result<ExecutionReceipt, CommandError> {
+        validate_batch(requirements.len(), "requirement")?;
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        let mut items = Vec::new();
+        for draft in requirements {
+            let code = draft.code.trim();
+            let title = draft.title.trim();
+            if code.is_empty() || title.is_empty() {
+                return Err(CommandError::Validation(
+                    "requirement code and title are required".to_string(),
+                ));
+            }
+            let existing: Option<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM delivery.requirement WHERE project_id = $1 AND code = $2",
+            )
+            .bind(ctx.project_id)
+            .bind(code)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db_err)?;
+            if let Some(id) = existing {
+                items.push(json!({"key": draft.key, "code": code, "id": id, "created": false}));
+                continue;
+            }
+
+            let content = json!({
+                "title": title,
+                "markdown": draft.markdown,
+                "priority": draft.priority,
+            });
+            let content_text = serde_json::to_string(&content).unwrap_or_default();
+            let hash = knowledge::content_hash(&content_text);
+            let requirement_id: Uuid = sqlx::query_scalar(
+                "INSERT INTO delivery.requirement (project_id, code, title, status) \
+                 VALUES ($1, $2, $3, 'draft') RETURNING id",
+            )
+            .bind(ctx.project_id)
+            .bind(code)
+            .bind(title)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(db_err)?;
+            let revision_id: Uuid = sqlx::query_scalar(
+                "INSERT INTO delivery.requirement_revision \
+                 (requirement_id, project_id, version, content, state, content_hash, created_by) \
+                 VALUES ($1, $2, 1, $3, 'draft', $4, $5) RETURNING id",
+            )
+            .bind(requirement_id)
+            .bind(ctx.project_id)
+            .bind(&content)
+            .bind(&hash)
+            .bind(ctx.actor_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(db_err)?;
+            sqlx::query("UPDATE delivery.requirement SET current_revision_id = $2 WHERE id = $1")
+                .bind(requirement_id)
+                .bind(revision_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(db_err)?;
+            items.push(json!({
+                "key": draft.key,
+                "code": code,
+                "id": requirement_id,
+                "revision_id": revision_id,
+                "created": true,
+            }));
+        }
+        let after = json!({"items": items});
+        let audit_id = insert_audit(
+            &mut tx,
+            ctx,
+            "create_requirements",
+            "project",
+            Some(ctx.project_id),
+            &Value::Null,
+            &after,
+            None,
+            audit_source(ctx),
+        )
+        .await?;
+        tx.commit().await.map_err(db_err)?;
+        Ok(ExecutionReceipt {
+            audit_id,
+            command_kind: "create_requirements",
+            target_id: ctx.project_id,
+            resulting_revision: 0,
+        })
+    }
+
+    /// 冷启动批量建任务：`milestone_key` / `requirement_key` 在 apply 阶段已
+    /// 解析成里程碑名称与需求 code；`assignee_role` 解析成对应 Agent principal。
+    /// 解析不到的引用不阻断整批，留空并计入 findings。
+    async fn create_tasks(
+        &self,
+        tasks: Vec<TaskDraft>,
+        ctx: &ExecutionContext,
+    ) -> Result<ExecutionReceipt, CommandError> {
+        validate_batch(tasks.len(), "task")?;
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        let mut items = Vec::new();
+        let mut findings: Vec<serde_json::Value> = Vec::new();
+
+        for draft in tasks {
+            let title = draft.title.trim();
+            if title.is_empty() {
+                return Err(CommandError::Validation("task title is required".to_string()));
+            }
+
+            let milestone_id: Option<Uuid> = match draft.milestone_key.as_deref() {
+                Some(name) if !name.trim().is_empty() => {
+                    sqlx::query_scalar(
+                        "SELECT id FROM delivery.milestone WHERE project_id = $1 AND name = $2",
+                    )
+                    .bind(ctx.project_id)
+                    .bind(name.trim())
+                    .fetch_optional(&mut *tx)
+                    .await
+                    .map_err(db_err)?
+                }
+                _ => None,
+            };
+            if draft.milestone_key.is_some() && milestone_id.is_none() {
+                findings.push(json!({
+                    "kind": "milestone_unresolved",
+                    "key": draft.key,
+                    "ref": draft.milestone_key,
+                }));
+            }
+
+            let requirement: Option<(Uuid, Option<Uuid>)> = match draft.requirement_key.as_deref() {
+                Some(code) if !code.trim().is_empty() => sqlx::query_as(
+                    "SELECT id, current_revision_id FROM delivery.requirement \
+                     WHERE project_id = $1 AND code = $2",
+                )
+                .bind(ctx.project_id)
+                .bind(code.trim())
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(db_err)?,
+                _ => None,
+            };
+            if draft.requirement_key.is_some() && requirement.is_none() {
+                findings.push(json!({
+                    "kind": "requirement_unresolved",
+                    "key": draft.key,
+                    "ref": draft.requirement_key,
+                }));
+            }
+
+            let assignee_id: Option<PrincipalId> = match draft.assignee_role {
+                Some(role) => match resolve_assignee(&self.pool, ctx.project_id, role.as_str())
+                    .await
+                    .map_err(|e| CommandError::Validation(e.to_string()))?
+                {
+                    Some(id) => Some(id),
+                    None => {
+                        findings.push(json!({
+                            "kind": "assignee_unresolved",
+                            "key": draft.key,
+                            "role": role.as_str(),
+                        }));
+                        None
+                    }
+                },
+                None => None,
+            };
+
+            let existing: Option<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM delivery.task WHERE project_id = $1 AND title = $2",
+            )
+            .bind(ctx.project_id)
+            .bind(title)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db_err)?;
+            let (task_id, created) = match existing {
+                Some(id) => (id, false),
+                None => {
+                    let id: Uuid = sqlx::query_scalar(
+                        "INSERT INTO delivery.task \
+                         (project_id, milestone_id, title, description, status, priority, assignee_id) \
+                         VALUES ($1, $2, $3, $4, 'backlog', $5, $6) RETURNING id",
+                    )
+                    .bind(ctx.project_id)
+                    .bind(milestone_id)
+                    .bind(title)
+                    .bind(&draft.description)
+                    .bind(&draft.priority)
+                    .bind(assignee_id)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(db_err)?;
+                    (id, true)
+                }
+            };
+
+            if let Some((requirement_id, Some(revision_id))) = requirement {
+                sqlx::query(
+                    "INSERT INTO delivery.task_requirement \
+                     (project_id, task_id, requirement_id, revision_id) \
+                     VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+                )
+                .bind(ctx.project_id)
+                .bind(task_id)
+                .bind(requirement_id)
+                .bind(revision_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(db_err)?;
+            }
+
+            items.push(json!({
+                "key": draft.key,
+                "id": task_id,
+                "created": created,
+                "assignee_id": assignee_id,
+            }));
+        }
+
+        let after = json!({ "items": items, "findings": findings });
+        let audit_id = insert_audit(
+            &mut tx,
+            ctx,
+            "create_tasks",
+            "project",
+            Some(ctx.project_id),
+            &Value::Null,
+            &after,
+            None,
+            audit_source(ctx),
+        )
+        .await?;
+        tx.commit().await.map_err(db_err)?;
+        Ok(ExecutionReceipt {
+            audit_id,
+            command_kind: "create_tasks",
+            target_id: ctx.project_id,
+            resulting_revision: 0,
+        })
+    }
+
+    /// 批量写知识文档：文件 + git commit + 两表。DB 事务不覆盖文件写入，
+    /// 失败时补偿删除本次已写文档（保留此前已存在、被复用的文档）。
+    async fn write_documents(
+        &self,
+        documents: Vec<DocumentDraft>,
+        ctx: &ExecutionContext,
+    ) -> Result<ExecutionReceipt, CommandError> {
+        validate_batch(documents.len(), "document")?;
+        let root = KnowledgeRoot::from_env();
+        root.ensure_ready()
+            .map_err(|e| CommandError::Validation(format!("knowledge root unavailable: {e}")))?;
+
+        let mut items = Vec::new();
+        let mut created: Vec<Uuid> = Vec::new();
+        for draft in documents {
+            let existing: Option<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM ai.project_document WHERE project_id = $1 AND doc_key = $2",
+            )
+            .bind(ctx.project_id)
+            .bind(&draft.doc_key)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(db_err)?;
+            if let Some(id) = existing {
+                items.push(json!({"doc_key": draft.doc_key, "document_id": id, "created": false}));
+                continue;
+            }
+            match knowledge::create_document(
+                &self.pool,
+                &root,
+                ctx.project_id,
+                ctx.actor_id,
+                CreateDocumentRequest {
+                    doc_key: draft.doc_key.clone(),
+                    doc_type: draft.doc_type.clone(),
+                    markdown: draft.markdown.clone(),
+                    change_summary: draft.change_summary.clone(),
+                },
+            )
+            .await
+            {
+                Ok(doc) => {
+                    created.push(doc.document_id);
+                    items.push(json!({
+                        "doc_key": draft.doc_key,
+                        "document_id": doc.document_id,
+                        "git_commit_sha": doc.git_commit_sha,
+                        "created": true,
+                    }));
+                }
+                Err(err) => {
+                    for id in created {
+                        let _ =
+                            knowledge::delete_document(&self.pool, &root, ctx.project_id, id).await;
+                    }
+                    return Err(CommandError::Validation(format!(
+                        "document write failed: {err}"
+                    )));
+                }
+            }
+        }
+
+        let after = json!({"items": items});
+        let mut tx = self.pool.begin().await.map_err(db_err)?;
+        let audit_id = insert_audit(
+            &mut tx,
+            ctx,
+            "write_documents",
+            "project",
+            Some(ctx.project_id),
+            &Value::Null,
+            &after,
+            None,
+            audit_source(ctx),
+        )
+        .await?;
+        tx.commit().await.map_err(db_err)?;
+        Ok(ExecutionReceipt {
+            audit_id,
+            command_kind: "write_documents",
+            target_id: ctx.project_id,
+            resulting_revision: 0,
+        })
+    }
+
+    /// CreateTask: insert the `delivery.task` row at `status = 'draft'`,
     /// `revision = 1` and audit with a [`CompensationSpec::Delete`] — the
     /// rollback removes the created row. There is no expected_revision: a new
     /// object has no prior state to guard.
@@ -1042,6 +1456,23 @@ fn validate_identifier(name: &str) -> Result<(), CommandError> {
             "invalid column identifier `{name}` in compensation spec"
         )))
     }
+}
+
+/// 单条批量命令的条目上限（spec §十六：建议 ≤200，超出拆批）。
+const MAX_BATCH_ITEMS: usize = 200;
+
+fn validate_batch(len: usize, what: &str) -> Result<(), CommandError> {
+    if len == 0 {
+        return Err(CommandError::Validation(format!(
+            "{what} batch is empty"
+        )));
+    }
+    if len > MAX_BATCH_ITEMS {
+        return Err(CommandError::Validation(format!(
+            "{what} batch exceeds {MAX_BATCH_ITEMS} items"
+        )));
+    }
+    Ok(())
 }
 
 fn db_err(e: sqlx::Error) -> CommandError {

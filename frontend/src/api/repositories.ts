@@ -1,5 +1,11 @@
 import { http } from "@/shell/api";
-import type { ListResponse, Repository, RepositoryRole, SshKey } from "./types";
+import type {
+  ListResponse,
+  Repository,
+  RepositoryRole,
+  RepositoryStatus,
+  SshKey
+} from "./types";
 
 /**
  * 项目 ↔ 代码仓库关系（pm-api `/v1/pm/*`，P0 纯 CRUD）。
@@ -52,5 +58,43 @@ export function generateSshKey(projectId: string) {
 export function deleteSshKey(projectId: string) {
   return http.delete<{ project_id: string }>(
     `/v1/pm/projects/${projectId}/ssh-key`
+  );
+}
+export interface VerifyOutcome {
+  repository_id: string;
+  status: RepositoryStatus;
+  default_branch: string | null;
+  head_commit_sha: string | null;
+  error_code: string | null;
+  error_detail: string | null;
+}
+
+/** `git ls-remote` 校验可达性并回写 verified/unreachable。 */
+export function verifyRepository(id: string) {
+  return http.post<VerifyOutcome>(`/v1/pm/repositories/${id}/verify`, {});
+}
+
+/** 归档（保留行与历史，只把 status 置 archived）。 */
+export function archiveRepository(id: string) {
+  return http.post<Repository>(`/v1/pm/repositories/${id}/archive`, {});
+}
+
+export function listSshKeys(projectId: string) {
+  return http.get<ListResponse<SshKey>>(
+    `/v1/pm/projects/${projectId}/ssh-keys`
+  );
+}
+
+/** 幂等：已有 active 返回现有；`rotate=true` 才重新生成。 */
+export function createSshKey(projectId: string, rotate = false) {
+  return http.post<SshKey>(`/v1/pm/projects/${projectId}/ssh-keys`, {
+    rotate
+  });
+}
+
+/** 吊销；仍被 verified 仓库引用时返回 409 key_in_use。 */
+export function revokeSshKey(projectId: string) {
+  return http.delete<{ project_id: string }>(
+    `/v1/pm/projects/${projectId}/ssh-keys`
   );
 }

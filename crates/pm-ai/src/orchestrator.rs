@@ -386,6 +386,10 @@ impl Orchestrator {
     ) -> Result<bool, sqlx::Error> {
         let exists = match command {
             ProjectCommand::CreateTask { .. } | ProjectCommand::ChangePolicy { .. } => true,
+            ProjectCommand::CreateMilestones { .. }
+            | ProjectCommand::CreateRequirements { .. }
+            | ProjectCommand::CreateTasks { .. }
+            | ProjectCommand::WriteDocuments { .. } => true,
             ProjectCommand::UpdateTaskStatus { task_id, .. } => {
                 sqlx::query_scalar::<_, bool>(
                     "SELECT EXISTS(SELECT 1 FROM delivery.task \
@@ -712,6 +716,10 @@ fn command_target(command: &ProjectCommand) -> (&'static str, Option<uuid::Uuid>
         ProjectCommand::RollbackCommand {
             target_audit_id, ..
         } => ("audit_log", Some(*target_audit_id), None),
+        ProjectCommand::CreateMilestones { .. }
+        | ProjectCommand::CreateRequirements { .. }
+        | ProjectCommand::CreateTasks { .. }
+        | ProjectCommand::WriteDocuments { .. } => ("project", None, None),
     }
 }
 

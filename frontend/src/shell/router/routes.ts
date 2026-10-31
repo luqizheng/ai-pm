@@ -37,6 +37,13 @@ export const staticRoutes: RouteRecordRaw[] = [
         name: "project-repositories",
         component: () => import("../views/projects/repositories/index.vue"),
         meta: { title: "代码仓库" } // i18n-ignore: route meta 直接作为页签标题
+      },
+      {
+        // 冷启动导入向导：静态路由，不依赖 DB 菜单。
+        path: "onboarding/import",
+        name: "project-import",
+        component: () => import("../views/onboarding/ProjectImportWizard.vue"),
+        meta: { title: "导入项目" } // i18n-ignore: route meta 直接作为页签标题
       }
     ]
   },

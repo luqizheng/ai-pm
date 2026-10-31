@@ -29,6 +29,7 @@ use uuid::Uuid;
 pub struct BootstrapRequest {
     pub project_code: String,
     pub project_name: String,
+
 }
 
 /// The ids a successful bootstrap created (or reused, for the customer).
@@ -37,7 +38,11 @@ pub struct BootstrapOutcome {
     pub customer_id: Uuid,
     pub project_id: ProjectId,
     pub ai_principal_id: PrincipalId,
+    /// 兼容旧字段名：P0 起指向 developer principal。
     pub dev_agent_id: PrincipalId,
+    pub developer_id: PrincipalId,
+    pub architect_id: PrincipalId,
+    pub tester_id: PrincipalId,
     pub human_id: PrincipalId,
 }
 
@@ -66,6 +71,15 @@ const SKILL_IDS: [&str; 5] = [
 pub async fn bootstrap_project(
     pool: &PgPool,
     req: BootstrapRequest,
+) -> Result<BootstrapOutcome, BootstrapError> {
+    bootstrap_project_with_status(pool, req, None).await
+}
+
+/// 同 [`bootstrap_project`]，可指定初始项目状态（导入用 `initializing`）。
+pub async fn bootstrap_project_with_status(
+    pool: &PgPool,
+    req: BootstrapRequest,
+    initial_status: Option<&str>,
 ) -> Result<BootstrapOutcome, BootstrapError> {
     let mut tx = pool.begin().await.map_err(BootstrapError::Db)?;
 
@@ -102,16 +116,38 @@ pub async fn bootstrap_project(
         insert_principal(&mut tx, "human", &format!("owner-{}", req.project_code)).await?;
     let ai_principal_id =
         insert_principal(&mut tx, "ai_pm", &format!("ai-pm-{}", req.project_code)).await?;
-    let dev_agent_id =
-        insert_principal(&mut tx, "dev_agent", &format!("dev-agent-{}", req.project_code)).await?;
+    let architect_id = insert_principal(
+        &mut tx,
+        "dev_agent",
+        &format!("architect-{}", req.project_code),
+    )
+    .await?;
+    let developer_id = insert_principal(
+        &mut tx,
+        "dev_agent",
+        &format!("dev-agent-{}", req.project_code),
+    )
+    .await?;
+    let tester_id =
+        insert_principal(&mut tx, "dev_agent", &format!("tester-{}", req.project_code)).await?;
 
+    let status = match initial_status {
+        None | Some("planning") => "planning",
+        Some("initializing") => "initializing",
+        Some(other) => {
+            return Err(BootstrapError::Db(sqlx::Error::Protocol(format!(
+                "unsupported initial project status `{other}`"
+            ))))
+        }
+    };
     let project_id: ProjectId = match sqlx::query_scalar(
         "INSERT INTO core.project (customer_id, code, name, status) \
-         VALUES ($1, $2, $3, 'planning') RETURNING id",
+         VALUES ($1, $2, $3, $4) RETURNING id",
     )
     .bind(customer_id)
     .bind(&req.project_code)
     .bind(&req.project_name)
+    .bind(status)
     .fetch_one(&mut *tx)
     .await
     {
@@ -124,7 +160,9 @@ pub async fn bootstrap_project(
 
     insert_member(&mut tx, project_id, human_id, "owner").await?;
     insert_member(&mut tx, project_id, ai_principal_id, "ai_pm").await?;
-    insert_member(&mut tx, project_id, dev_agent_id, "developer").await?;
+    insert_member(&mut tx, project_id, architect_id, "architect").await?;
+    insert_member(&mut tx, project_id, developer_id, "developer").await?;
+    insert_member(&mut tx, project_id, tester_id, "tester").await?;
 
     sqlx::query(
         "INSERT INTO ai.project_ai_config \
@@ -155,9 +193,29 @@ pub async fn bootstrap_project(
         customer_id,
         project_id,
         ai_principal_id,
-        dev_agent_id,
+        dev_agent_id: developer_id,
+        developer_id,
+        architect_id,
+        tester_id,
         human_id,
     })
+}
+
+/// 按 `core.project_member.role` 解析承接任务的 principal；未知角色返回 None。
+pub async fn resolve_assignee(
+    pool: &PgPool,
+    project_id: ProjectId,
+    role: &str,
+) -> Result<Option<PrincipalId>, BootstrapError> {
+    sqlx::query_scalar(
+        "SELECT principal_id FROM core.project_member \
+         WHERE project_id = $1 AND role = $2 LIMIT 1",
+    )
+    .bind(project_id)
+    .bind(role)
+    .fetch_optional(pool)
+    .await
+    .map_err(BootstrapError::Db)
 }
 
 async fn insert_principal(

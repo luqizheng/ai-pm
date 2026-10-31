@@ -1,0 +1,174 @@
+//! `/v1/pm/projects/{id}/imports`：冷启动导入的启动、轮询、取消与 apply。
+//!
+//! apply 只生成提案（`outcome='proposed'`），不直写 `delivery.*`；写入由既有
+//! 审批链的 `decide` 执行。
+
+use axum::{
+    Json, Router,
+    extract::{Path, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    routing::{get, post},
+};
+use serde_json::json;
+use uuid::Uuid;
+
+use crate::routes::AppState;
+use pm_application::project_import::{
+    ApplyRequest, ImportError, cancel_import, get_import, import_proposals, list_imports,
+    propose_import, start_import,
+};
+
+pub(crate) fn router() -> Router<AppState> {
+    Router::new()
+        .route(
+            "/v1/pm/projects/{project_id}/imports",
+            get(list_handler).post(start_handler),
+        )
+        .route(
+            "/v1/pm/projects/{project_id}/imports/{import_id}",
+            get(get_handler),
+        )
+        .route(
+            "/v1/pm/projects/{project_id}/imports/{import_id}/cancel",
+            post(cancel_handler),
+        )
+        .route(
+            "/v1/pm/projects/{project_id}/imports/{import_id}/apply",
+            post(apply_handler),
+        )
+        .route(
+            "/v1/pm/projects/{project_id}/imports/{import_id}/proposals",
+            get(proposals_handler),
+        )
+}
+
+fn import_error(err: ImportError) -> Response {
+    let (status, body) = match err {
+        ImportError::ProjectNotFound => (
+            StatusCode::NOT_FOUND,
+            json!({ "error": "project_not_found" }),
+        ),
+        ImportError::NoVerifiedRepository => (
+            StatusCode::CONFLICT,
+            json!({ "error": "no_verified_repository" }),
+        ),
+        ImportError::ProjectNotEmpty => (
+            StatusCode::CONFLICT,
+            json!({ "error": "project_not_empty" }),
+        ),
+        ImportError::ImportInProgress => (
+            StatusCode::CONFLICT,
+            json!({ "error": "import_in_progress" }),
+        ),
+        ImportError::AlreadyApplied => (
+            StatusCode::CONFLICT,
+            json!({ "error": "already_applied" }),
+        ),
+        ImportError::NotFound => (StatusCode::NOT_FOUND, json!({ "error": "import_not_found" })),
+        ImportError::NotCancellable => (
+            StatusCode::CONFLICT,
+            json!({ "error": "not_cancellable" }),
+        ),
+        ImportError::StaleDraft => (StatusCode::CONFLICT, json!({ "error": "stale_draft" })),
+        ImportError::NoSelection => (StatusCode::UNPROCESSABLE_ENTITY, json!({ "error": "no_selection" })),
+        ImportError::ProjectCodeTaken => (
+            StatusCode::CONFLICT,
+            json!({ "error": "project_code_taken" }),
+        ),
+        ImportError::NoGroundedOutput => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            json!({ "error": "no_grounded_output" }),
+        ),
+        ImportError::InvalidState(detail) => (
+            StatusCode::CONFLICT,
+            json!({ "error": "invalid_state", "detail": detail }),
+        ),
+        ImportError::Model(detail) => {
+            tracing::error!(detail = %detail, "import model error");
+            (StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": "model_failed" }))
+        }
+        ImportError::Git(detail) => {
+            tracing::error!(detail = %detail, "import git error");
+            (StatusCode::BAD_GATEWAY, json!({ "error": "git_failed" }))
+        }
+        ImportError::Db(err) => {
+            tracing::error!(error = %err, "import endpoint database error");
+            (StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": "internal" }))
+        }
+    };
+    (status, Json(body)).into_response()
+}
+
+async fn list_handler(
+    State(state): State<AppState>,
+    Path(project_id): Path<Uuid>,
+) -> Response {
+    match list_imports(&state.pool, project_id).await {
+        Ok(items) => {
+            let total = items.len();
+            (StatusCode::OK, Json(json!({ "items": items, "total": total }))).into_response()
+        }
+        Err(err) => import_error(err),
+    }
+}
+
+async fn start_handler(
+    State(state): State<AppState>,
+    Path(project_id): Path<Uuid>,
+) -> Response {
+    match start_import(&state.pool, project_id, None).await {
+        Ok(outcome) => (StatusCode::ACCEPTED, Json(outcome)).into_response(),
+        Err(err) => import_error(err),
+    }
+}
+
+async fn get_handler(
+    State(state): State<AppState>,
+    Path((project_id, import_id)): Path<(Uuid, Uuid)>,
+) -> Response {
+    match get_import(&state.pool, project_id, import_id).await {
+        Ok(detail) => (StatusCode::OK, Json(detail)).into_response(),
+        Err(err) => import_error(err),
+    }
+}
+
+async fn cancel_handler(
+    State(state): State<AppState>,
+    Path((project_id, import_id)): Path<(Uuid, Uuid)>,
+) -> Response {
+    match cancel_import(&state.pool, project_id, import_id).await {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(json!({ "status": "cancelled" })),
+        )
+            .into_response(),
+        Err(err) => import_error(err),
+    }
+}
+
+async fn proposals_handler(
+    State(state): State<AppState>,
+    Path((project_id, import_id)): Path<(Uuid, Uuid)>,
+) -> Response {
+    match import_proposals(&state.pool, project_id, import_id).await {
+        Ok(proposed) => (StatusCode::OK, Json(proposed)).into_response(),
+        Err(err) => import_error(err),
+    }
+}
+
+async fn apply_handler(
+    State(state): State<AppState>,
+    Path((project_id, import_id)): Path<(Uuid, Uuid)>,
+    Json(req): Json<ApplyRequest>,
+) -> Response {
+    match propose_import(&state.pool, project_id, import_id, req).await {
+        Ok(proposed) => (StatusCode::OK, Json(proposed)).into_response(),
+        Err(ImportError::AlreadyApplied) => (
+            StatusCode::OK,
+            Json(json!({ "outcome": "already_applied" })),
+        )
+            .into_response(),
+        Err(err) => import_error(err),
+    }
+}

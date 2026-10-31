@@ -208,3 +208,42 @@ MCP 客户端请求必须带 `Host` 头（rmcp `allowed_hosts` 校验），否�
 curl "http://127.0.0.1:8090/v1/pm/documents/search?project_id=<uuid>&q=LOD" \
   -H "Authorization: Bearer <jwt>"
 ```
+## 十二、项目冷启动导入（多仓库 + SSH Key + 提案审批）
+
+### 12.1 环境变量
+
+| 变量 | 必填 | 说明 |
+|---|---|---|
+| `AI_PM_SECRET_KEY` | 是（写密钥/导入时） | 主密钥；`sha256` 派生 AES-256-GCM 密钥，同时保护 LLM API Key 与 SSH 私钥。缺失时密钥端点 503 `secret_key_unavailable`，fail-closed，不回退明文。 |
+| `AI_PM_REPO_CACHE_ROOT` | 否 | bare clone 缓存根，默认 `<cwd>/../ai-pm-repo-cache`。 |
+| `AI_PM_REPO_MAX_MB` | 否 | 单仓库裸包上限，默认 200；超限导入失败 `repo_too_large`。 |
+| `AI_PM_REPO_ALLOWED_HOSTS` | 否 | 逗号分隔的 host 白名单；设置后只允许这些 host 的仓库。 |
+| `AI_PM_KNOWLEDGE_ROOT` | 否 | 知识正文 Git 根，默认 `<cwd>/../ai-pm-knowledge`；必须是独立仓库，不能落在 ai-pm 工作树内。 |
+
+生成主密钥：
+
+```bash
+export AI_PM_SECRET_KEY="$(openssl rand -hex 32)"
+```
+
+### 12.2 Deploy Key 配置
+
+1. 调 `POST /v1/pm/projects/<uuid>/ssh-keys` 生成（幂等，已有 active 直接返回）；响应只有公钥与指纹，私钥永不出库。
+2. 把 `public_key` 配到代码托管平台的项目 Deploy Key，只给读权限。
+3. 在 `POST /v1/pm/projects/<uuid>/repositories` 绑定仓库地址，仅接受 `git@host:path` 与 `ssh://user@host:port/path`。
+4. 调 `POST /v1/pm/repositories/<id>/verify` 做 `git ls-remote` 校验；返回 `verified` / `unreachable` 与稳定错误码（`auth_failed` / `timeout` / `not_found`）。
+5. 吊销密钥：`DELETE /v1/pm/projects/<uuid>/ssh-keys`；仍被 verified 仓库引用时返回 409 `key_in_use`。
+
+> Windows 已知限制：临时私钥目录没有 POSIX 0600 语义，只能依赖用户目录 ACL；生产建议跑在 Linux。
+
+### 12.3 四步导入与整批审批
+
+1. `POST /v1/pm/projects` 建项目（自动落 owner / ai_pm / architect / developer / tester 五人编制）。
+2. 向导第 2 步绑定并校验仓库；至少一个 `verified` 才能继续。
+3. `POST /v1/pm/projects/<uuid>/imports` 启动导入（202）；worker 的 `repo_import` 循环执行 `queued → cloning → reading → analyzing → draft_ready`。
+4. `GET /v1/pm/projects/<uuid>/imports/<import_id>` 每秒轮询；失败时 `error_code` 可见。
+5. `POST .../apply` 选择条目并生成 ≤4 条提案（里程碑 / 需求 / 任务 / 文档），全部进入 `redline_pending`，`delivery.*` 此时零写入。
+6. 审批页按 `analysis_run_id` 展示批次卡；「整批批准」顺序调用 4 次 `POST /v1/pm/approvals/<id>/decide`。最后一条执行完成后：导入 `applied`、项目 `planning`、审计 `project_import_applied`。
+7. 任一驳回 → 导入 `rejected`、项目保持 `initializing`，已批准部分不回滚；执行失败 → 提案 `failed`、导入保持 `proposed` 并标 `partial`。
+
+演示环境无可用 LLM 供应商时自动回退 Fake（`model_name='fake'`），四步向导仍可跑通；审阅页会标注「演示模型」。
