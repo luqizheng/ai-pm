@@ -1,6 +1,7 @@
 //! MCP endpoint permission gate (integration spec Phase 1 §3): every `/mcp`
-//! call requires `PM_MCP_READ`; missing permission → 403 `IAM_PERM_3001`,
-//! while the rest of the API is unaffected by the permission claim.
+//! call requires `PM_MCP_READ`, and write tools additionally require their
+//! per-tool permission (`PM_MCP_DOCUMENT_WRITE`). The rest of the API is
+//! unaffected by the permission claim.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,6 +14,7 @@ use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
+use uuid::Uuid;
 
 const PRIVATE_PEM: &str = include_str!("keys/private.pem");
 const PUBLIC_PEM: &str = include_str!("keys/public.pem");
@@ -38,7 +40,7 @@ fn sign(permissions: &[&str]) -> String {
     .expect("test token must sign")
 }
 
-fn mcp_request(token: Option<&str>) -> Request<Body> {
+fn mcp_post(token: Option<&str>, body: String) -> Request<Body> {
     let mut builder = Request::builder()
         .method("POST")
         .uri("/mcp")
@@ -48,7 +50,24 @@ fn mcp_request(token: Option<&str>) -> Request<Body> {
     if let Some(token) = token {
         builder = builder.header("authorization", format!("Bearer {token}"));
     }
-    builder.body(Body::from(INITIALIZE_BODY)).unwrap()
+    builder.body(Body::from(body)).unwrap()
+}
+
+fn mcp_request(token: Option<&str>) -> Request<Body> {
+    mcp_post(token, INITIALIZE_BODY.to_string())
+}
+
+fn mcp_tool_call(token: Option<&str>, tool: &str, arguments: Value) -> Request<Body> {
+    mcp_post(
+        token,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": { "name": tool, "arguments": arguments }
+        })
+        .to_string(),
+    )
 }
 
 async fn body_json(response: axum::response::Response) -> Value {
@@ -119,4 +138,81 @@ async fn non_mcp_routes_ignore_the_permission_claim(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
+}
+fn submit_arguments() -> Value {
+    json!({
+        "project_id": Uuid::new_v4(),
+        "task_ref": Uuid::new_v4().to_string(),
+        "idempotency_key": "tool-gate-1",
+        "fixture": "design-v1",
+        "summary": "gate test"
+    })
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn write_tool_without_document_write_is_forbidden(pool: PgPool) {
+    // PM_MCP_READ alone must not open the document-write tool.
+    let token = sign(&["PM_MCP_READ"]);
+    let response = router_with_auth(pool, test_jwks())
+        .oneshot(mcp_tool_call(
+            Some(&token),
+            "pm_submit_technical_design",
+            submit_arguments(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let body = body_json(response).await;
+    assert_eq!(body["code"], json!("IAM_PERM_3001"));
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("PM_MCP_DOCUMENT_WRITE"),
+        "message must name the missing tool permission: {body}"
+    );
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn write_tool_with_document_write_passes_the_gate(pool: PgPool) {
+    let token = sign(&["PM_MCP_READ", "PM_MCP_DOCUMENT_WRITE"]);
+    let response = router_with_auth(pool, test_jwks())
+        .oneshot(mcp_tool_call(
+            Some(&token),
+            "pm_submit_technical_design",
+            submit_arguments(),
+        ))
+        .await
+        .unwrap();
+    assert_ne!(response.status(), StatusCode::FORBIDDEN);
+    assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+    // The tool itself may answer isError (unknown project), but the gate is open.
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn read_tool_needs_only_mcp_read(pool: PgPool) {
+    let token = sign(&["PM_MCP_READ"]);
+    let response = router_with_auth(pool, test_jwks())
+        .oneshot(mcp_tool_call(
+            Some(&token),
+            "pm_get_task_context",
+            json!({ "project_id": Uuid::new_v4(), "task_ref": Uuid::new_v4().to_string() }),
+        ))
+        .await
+        .unwrap();
+    assert_ne!(response.status(), StatusCode::FORBIDDEN);
+    assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn write_permission_does_not_replace_mcp_read(pool: PgPool) {
+    // Endpoint gate still applies first: no PM_MCP_READ → 403 even for initialize.
+    let token = sign(&["PM_MCP_DOCUMENT_WRITE"]);
+    let response = router_with_auth(pool, test_jwks())
+        .oneshot(mcp_request(Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let body = body_json(response).await;
+    assert!(body["message"].as_str().unwrap().contains("PM_MCP_READ"));
 }

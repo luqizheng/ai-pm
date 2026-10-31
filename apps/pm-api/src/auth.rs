@@ -57,13 +57,20 @@ pub async fn require_bearer(
 const SSE_PATH: &str = "/v1/pm/events/stream";
 
 /// MCP endpoint gate (integration spec Phase 1 §3): every `/mcp` call needs
-/// `PM_MCP_READ`. Per-tool write permissions (`PM_MCP_DOCUMENT_WRITE` /
-/// `PM_MCP_TASK_UPDATE`) are a follow-up — the JSON-RPC body is not parsed here.
+/// `PM_MCP_READ`; a `tools/call` for a write tool additionally needs its
+/// per-tool permission. Only POSTs are parsed — GET is the SSE transport.
 const MCP_READ_PERMISSION: &str = "PM_MCP_READ";
+const MCP_BODY_LIMIT: usize = 256 * 1024;
+
+/// tool name → additionally required permission (read tools need only
+/// `PM_MCP_READ`). `PM_MCP_TASK_UPDATE` stays unassigned until a task-update
+/// tool exists.
+const MCP_TOOL_PERMISSIONS: [(&str, &str); 1] =
+    [("pm_submit_technical_design", "PM_MCP_DOCUMENT_WRITE")];
 
 /// Permission gate layered *inside* [`require_bearer`], so claims are already
 /// verified and present in the request extensions.
-pub async fn require_mcp_read(
+pub async fn require_mcp_permission(
     claims: Option<Extension<Value>>,
     request: Request,
     next: Next,
@@ -72,11 +79,51 @@ pub async fn require_mcp_read(
         // Unreachable when the bearer layer is present; fail closed anyway.
         return unauthorized("IAM_AUTH_1005", "missing bearer token");
     };
-    if has_permission(&claims, MCP_READ_PERMISSION) {
-        next.run(request).await
-    } else {
-        forbidden("IAM_PERM_3001", "permission denied: PM_MCP_READ required")
+    if !has_permission(&claims, MCP_READ_PERMISSION) {
+        return forbidden("IAM_PERM_3001", "permission denied: PM_MCP_READ required");
     }
+    if request.method() != axum::http::Method::POST {
+        return next.run(request).await;
+    }
+
+    let (parts, body) = request.into_parts();
+    let bytes = match axum::body::to_bytes(body, MCP_BODY_LIMIT).await {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                Json(Value::from(json!({
+                    "code": "IAM_REQUEST_TOO_LARGE",
+                    "message": "mcp request body exceeds the 256 KiB limit"
+                }))),
+            )
+                .into_response()
+        }
+    };
+    if let Some(permission) = required_tool_permission(&bytes) {
+        if !has_permission(&claims, permission) {
+            return forbidden(
+                "IAM_PERM_3001",
+                &format!("permission denied: {permission} required"),
+            );
+        }
+    }
+    next.run(Request::from_parts(parts, axum::body::Body::from(bytes)))
+        .await
+}
+
+/// Maps a `tools/call` body to the write permission it needs; read tools and
+/// non-tool JSON-RPC frames need nothing beyond `PM_MCP_READ`.
+fn required_tool_permission(body: &[u8]) -> Option<&'static str> {
+    let value: Value = serde_json::from_slice(body).ok()?;
+    if value.get("method")?.as_str()? != "tools/call" {
+        return None;
+    }
+    let tool = value.get("params")?.get("name")?.as_str()?;
+    MCP_TOOL_PERMISSIONS
+        .iter()
+        .find(|(name, _)| *name == tool)
+        .map(|(_, permission)| *permission)
 }
 
 /// `permissions` is the array claim token-service issues (`["IAM_SYSTEM_READ"]`).
