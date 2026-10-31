@@ -5,11 +5,12 @@
   "type": "module",
   "description": "AI-PM 平台前端 —— PRISM 壳 + 项目管理业务视图",
   "scripts": {
-    "dev": "NODE_OPTIONS=--max-old-space-size=4096 vite",
+    "dev": "node ../scripts/sync-vditor-assets.js && NODE_OPTIONS=--max-old-space-size=4096 vite",
     "serve": "pnpm dev",
-    "build": "pnpm run build:packages && rimraf dist && NODE_OPTIONS=--max-old-space-size=8192 vite build",
-    "build:staging": "pnpm run build:packages && rimraf dist && vite build --mode staging",
+    "build": "pnpm run build:packages && node ../scripts/sync-vditor-assets.js && rimraf dist && NODE_OPTIONS=--max-old-space-size=8192 vite build",
+    "build:staging": "pnpm run build:packages && node ../scripts/sync-vditor-assets.js && rimraf dist && vite build --mode staging",
     "build:packages": "pnpm --filter @digua/contracts --filter @digua/http run build",
+    "sync:vditor": "node ../scripts/sync-vditor-assets.js",
     "preview": "vite preview",
     "preview:build": "pnpm build && vite preview",
     "typecheck": "pnpm run build:packages && vue-tsc --noEmit --skipLibCheck",
@@ -45,6 +46,7 @@
     "prue-services": "1.10.1",
     "reka-ui": "^2.11.0",
     "tailwind-merge": "^3.7.0",
+    "vditor": "^4.0.1",
     "vue": "^3.5.35",
     "vue-i18n": "^11.4.5",
     "vue-router": "^5.1.0"

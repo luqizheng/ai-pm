@@ -20,3 +20,6 @@ tests/**/coverage/
 *.njsproj
 *.sln
 tsconfig.tsbuildinfo
+# Vditor 运行时资源（由 ../scripts/sync-vditor-assets.js 生成，勿手工维护）
+public/vditor/
+.tmp-vitest/

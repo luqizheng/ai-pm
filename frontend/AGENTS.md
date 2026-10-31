@@ -24,6 +24,7 @@ PRISM 控制台 —— 公司自有的 admin 前端。**独立工程**，不基�
 |------|------|
 | `src/styles/prism/` | **PRISM 设计系统 token 层**（唯一真源，见下） |
 | `src/components/ui/` | 组件基座（reka-ui + scoped CSS + token） |
+| `src/components/ui/markdown-editor/` | **Markdown / 富文本编辑器底座**（Vditor 封装，只认端口） |
 | `src/lib/` | 通用工具（cn 等） |
 | `src/shell/api/` | 后端接口封装（基于 `@digua/http`） |
 | `src/shell/store/` | Pinia store（auth / menu） |
@@ -47,6 +48,67 @@ PRISM 控制台 —— 公司自有的 admin 前端。**独立工程**，不基�
    门禁：`node ../scripts/check-vitest-coverage.js`。
 7. **写操作按钮必须带权限校验**：`v-if="auth.hasPermission('<权限码>')"`。
 8. **组件必须自带焦点环**，不依赖全局样式；`prefers-reduced-motion` 逐项降级。
+9. **长文本 / 富文本录入一律用 `MarkdownField`**，禁止自己用 `<textarea>` 拼 Markdown 编辑器。
+   详见下节「富文本 / Markdown 录入」。
+
+## 富文本 / Markdown 录入（强制使用公共组件）
+
+**结论：只要页面要"写一段内容"，就用 `MarkdownField`。不要新建编辑器、不要引第三方编辑器。**
+
+```ts
+import { MarkdownField } from "@/shell/components";
+```
+
+| 场景 | 用法 |
+|------|------|
+| 新建 / 编辑表单里的正文 | `<MarkdownField v-model="form.content" label="需求描述" />` |
+| 详情页只读展示 | `<MarkdownField v-model="detail.content" mode="view" />` |
+| 表单校验报错 | 传 `error="..."`；有 error 时不再显示 `description` |
+| 纯编辑区（不带 label / 错误位） | 直接用底座 `@/components/ui/markdown-editor` 的 `MarkdownEditor` |
+
+最小可用示例：
+
+```vue
+<MarkdownField
+  v-model="form.content"
+  label="需求描述"
+  required
+  height="520"
+  :error="errors.content"
+/>
+```
+
+### 硬性规则
+
+1. **禁止引入其他编辑器**（tiptap / milkdown / quill / bytemd / wangEditor …）。
+   需要新能力先改底座 `src/components/ui/markdown-editor/`，不要在业务页里另起一套。
+2. **正文只存 Markdown 字符串**，`v-model` 就是唯一的真源。
+   附件一律写成 `/v1/file/{id}`；**禁止把预签名 URL 写进正文**（15 分钟就失效，文档等于损坏）。
+3. **不要自己写上传**。`MarkdownField` 已把 `uploader` / `resolveUrl` 默认接到
+   `src/shell/api/attachments.ts`（走 `file-services`，预签名带缓存）。
+   只有测试或要换存储后端时才显式传这两个 prop。
+4. **单文件上限默认 100MiB**（multipart 上限）。确实要更大就别在组件里放大，
+   改走预签名分片上传——RustFS 不支持 POST Object 表单直传。
+5. **提示文案走 i18n**（`markdown.*` 命名空间），不要在组件里硬编码中文。
+
+### 底座分层的分工（改代码前先看）
+
+- `components/ui/markdown-editor/MarkdownEditor.vue`：编辑态，**只认端口**，不 import shell 层。
+- `.../MarkdownViewer.vue`：只读渲染，附件链接自动换成可下载卡片。
+- `.../file-ref.ts`：`/v1/file/{id}` 引用约定 + 就地把引用换成临时地址（只改 DOM，不回写正文）。
+- `.../upload-handler.ts`：粘贴 / 拖拽 / 工具栏三条路径的统一上传回调。
+- `shell/components/MarkdownField.vue`：业务字段，默认接好上面所有东西。
+- `shell/api/attachments.ts`：`file-services` 适配器，含 15 分钟签名缓存。
+
+### Vditor 三个已踩过的坑（改底座前必读）
+
+1. **`upload.handler` 的返回值和官方类型不一致**：返回 string 会被当成提示条且**不插入内容**；
+   只有返回 `null` 才算成功，插入要自己调 `insertValue`。按文档写会静默失效。
+2. **解析引擎 Lute 默认从 unpkg 加载**，内网必失败且编辑器起不来。
+   已由 `../scripts/sync-vditor-assets.js` 同步到 `public/vditor/`，`cdn` 指向同源，
+   `dev` / `build` 前自动执行。**首次进编辑页要加载约 3.6MB（gzip 后约 1MB），需在 nginx 开 gzip。**
+3. **`mode`（`wysiwyg` / `ir` / `sv`）构造时固定，不能运行时切换**，
+   要切换只能销毁重建，撤销栈与光标会丢。当前产品口径是统一富文本界面、底层存 Markdown。
 
 ## lmms 基础服务 SDK（必须用上游包，禁止自建）
 

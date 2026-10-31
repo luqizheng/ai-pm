@@ -3,6 +3,7 @@ export { default as ConfirmHost } from "./ConfirmHost.vue";
 export { default as DataTable } from "./DataTable.vue";
 export type { QueryField, TableColumn } from "./DataTable.vue";
 export { default as FormDialog } from "./FormDialog.vue";
+export { default as MarkdownField } from "./MarkdownField.vue";
 export { default as PageHeader } from "./PageHeader.vue";
 export { default as Sidebar } from "./Sidebar.vue";
 export { default as SidebarMenuItem } from "./SidebarMenuItem.vue";
