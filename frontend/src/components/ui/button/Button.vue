@@ -73,9 +73,13 @@ const isDisabled = computed(() => props.disabled || props.loading);
   cursor: not-allowed;
 }
 
-/* Primary — Phase 1R §6.1 */
+/* Primary — Phase 1R §6.1
+ * 底色与渐变分开声明：app 级换轨（styles/workspace/tokens.css）把
+ * --accent-gradient 置为 none，简写 background 会连底色一起清空，
+ * 主按钮只剩一圈看不见的透明 —— 故底色走 background-color 兜底。 */
 .ui-button--primary {
-  background: var(--accent-gradient);
+  background-color: var(--accent);
+  background-image: var(--accent-gradient);
   color: var(--accent-contrast-text);
   box-shadow:
     inset 0 1px 0 0 var(--surface-highlight),
@@ -83,14 +87,16 @@ const isDisabled = computed(() => props.disabled || props.loading);
 }
 
 .ui-button--primary:hover:not(:disabled) {
-  background: var(--accent-gradient-hover);
+  background-color: var(--accent-hover);
+  background-image: var(--accent-gradient-hover);
   box-shadow:
     inset 0 1px 0 0 var(--surface-highlight),
     var(--shadow-accent-lg);
 }
 
 .ui-button--primary:active:not(:disabled) {
-  background: var(--accent-gradient-pressed);
+  background-color: var(--accent-pressed);
+  background-image: var(--accent-gradient-pressed);
   box-shadow:
     inset 0 1px 0 0 var(--surface-highlight),
     var(--shadow-accent);
@@ -98,7 +104,8 @@ const isDisabled = computed(() => props.disabled || props.loading);
 }
 
 .ui-button--primary:disabled {
-  background: var(--surface-disabled);
+  background-color: var(--surface-disabled);
+  background-image: none;
   color: var(--text-disabled);
   box-shadow: none;
 }
