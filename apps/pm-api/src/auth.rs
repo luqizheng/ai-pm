@@ -17,7 +17,7 @@
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::{Request, State};
+use axum::extract::{Extension, Request, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
@@ -56,6 +56,37 @@ pub async fn require_bearer(
 /// SSE 路径：`EventSource` 不能带自定义头，只能把 token 放 query。
 const SSE_PATH: &str = "/v1/pm/events/stream";
 
+/// MCP endpoint gate (integration spec Phase 1 §3): every `/mcp` call needs
+/// `PM_MCP_READ`. Per-tool write permissions (`PM_MCP_DOCUMENT_WRITE` /
+/// `PM_MCP_TASK_UPDATE`) are a follow-up — the JSON-RPC body is not parsed here.
+const MCP_READ_PERMISSION: &str = "PM_MCP_READ";
+
+/// Permission gate layered *inside* [`require_bearer`], so claims are already
+/// verified and present in the request extensions.
+pub async fn require_mcp_read(
+    claims: Option<Extension<Value>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let Some(Extension(claims)) = claims else {
+        // Unreachable when the bearer layer is present; fail closed anyway.
+        return unauthorized("IAM_AUTH_1005", "missing bearer token");
+    };
+    if has_permission(&claims, MCP_READ_PERMISSION) {
+        next.run(request).await
+    } else {
+        forbidden("IAM_PERM_3001", "permission denied: PM_MCP_READ required")
+    }
+}
+
+/// `permissions` is the array claim token-service issues (`["IAM_SYSTEM_READ"]`).
+fn has_permission(claims: &Value, code: &str) -> bool {
+    claims
+        .get("permissions")
+        .and_then(Value::as_array)
+        .is_some_and(|granted| granted.iter().any(|item| item.as_str() == Some(code)))
+}
+
 /// Header first; the query fallback is scoped to the one SSE endpoint so the
 /// token-in-URL surface never widens beyond it.
 fn request_token<'a>(headers: &'a HeaderMap, uri: &'a axum::http::Uri) -> Option<&'a str> {
@@ -90,4 +121,8 @@ fn bearer_token(headers: &HeaderMap) -> Option<&str> {
 fn unauthorized(code: &str, message: &str) -> Response {
     let body = json!({ "code": code, "message": message });
     (StatusCode::UNAUTHORIZED, Json(Value::from(body))).into_response()
+}
+fn forbidden(code: &str, message: &str) -> Response {
+    let body = json!({ "code": code, "message": message });
+    (StatusCode::FORBIDDEN, Json(Value::from(body))).into_response()
 }

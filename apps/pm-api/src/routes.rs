@@ -83,6 +83,12 @@ pub fn router_with_feed(pool: PgPool, audit_feed: crate::audit_stream::AuditFeed
     // The MCP service clones the pool inside its own state factory; it cannot
     // share `state` (different service type), hence a separate handle.
     let mcp_pool = state.pool.clone();
+    // `/mcp` is permission-gated: auth runs outside (claims verified), this
+    // inner layer demands PM_MCP_READ. Wrapping in a Router keeps the rmcp
+    // service untouched (fallback service = any subpath).
+    let mcp_router: Router<AppState> = Router::new()
+        .fallback_service(pm_mcp::PmMcpServer::streamable_http_service(mcp_pool))
+        .layer(axum::middleware::from_fn(crate::auth::require_mcp_read));
     Router::new()
         .route("/api/v1/events", post(submit_event_handler))
         .route("/api/v1/supervision/veto", post(veto_handler))
@@ -105,7 +111,7 @@ pub fn router_with_feed(pool: PgPool, audit_feed: crate::audit_stream::AuditFeed
             "/v1/pm/events/stream",
             get(crate::audit_stream::stream_handler),
         )
-        .nest_service("/mcp", pm_mcp::PmMcpServer::streamable_http_service(mcp_pool))
+        .nest("/mcp", mcp_router)
         .with_state(state)
 }
 

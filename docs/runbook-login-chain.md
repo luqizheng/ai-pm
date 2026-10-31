@@ -135,3 +135,20 @@ SQL
 ```
 
 正式维护走批三交付的「菜单配置」页（版本创建/草稿编辑/发布）。重新登录后生效（guard 拉取一次）。
+## 九、MCP 端点权限（2026-10-31）
+
+`/mcp` 在 bearer 层内再加一道权限门：claims 的 `permissions` 必须含 `PM_MCP_READ`（lmms
+`contracts/permissions.yaml` 定义），否则 **403 `IAM_PERM_3001`**；无 token / 伪造 token 仍是
+401 `IAM_AUTH_1004/1005`。守卫只作用于 `/mcp`，其余 `/v1/pm/*` 路由不受影响。
+
+```bash
+# 浏览器登录 token 只有 IAM_SYSTEM_READ → 403
+curl -i -X POST http://127.0.0.1:8090/mcp \
+  -H "Authorization: Bearer <jwt>" -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"gate","version":"1"}}}'
+```
+
+边界：当前是**端点级** `PM_MCP_READ`；按 tool 细分的 `PM_MCP_DOCUMENT_WRITE`（推送文档）与
+`PM_MCP_TASK_UPDATE`（改任务状态）尚未强制，需解析 JSON-RPC body 后另立任务。MCP 客户端请求
+必须带 `Host` 头（rmcp `allowed_hosts` 校验），否则 400 `missing Host header`。
