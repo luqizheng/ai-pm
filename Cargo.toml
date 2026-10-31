@@ -47,3 +47,5 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Dev dependencies
 wiremock = "0.6"
+# lmms 基座 crates（kellnr 私有 registry；token 在 ~/.cargo/credentials.toml [registries.kellnr]）
+digua_common_jwt = { version = "1.6.0", registry = "kellnr" }

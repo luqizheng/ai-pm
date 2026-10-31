@@ -2,6 +2,16 @@
 [build]
 rustc-wrapper = "sccache"
 
+# crates.io 走 rsproxy 镜像（与 lmms 根 .cargo/config.toml 同款，国内直连不依赖代理）
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
+
 # lmms 私有 crate registry（消费基座 crates：{ version = "x", registry = "kellnr" }）
+# 代理注意：git 全局 http.proxy（v2ray 127.0.0.1:10808）会被 cargo 回退采用。本机 v2ray
+# 未运行/只管外网，cargo 命令须带环境变量：CARGO_HTTP_PROXY=""（屏蔽死代理回退，外网走
+# rsproxy 直连）+ NO_PROXY=192.168.2.12（内网 kellnr 直连）
 [registries.kellnr]
 index = "sparse+http://192.168.2.12:16444/api/v1/crates/"
