@@ -99,8 +99,21 @@ vite 代理见 `frontend/vite.config.ts`（`/api`→`PM_API_URL ?? 8090`；`/gw`
    审批页对 pending 单同意/驳回 → 审计页出现 `task.create` / `approval.decide` / `requirement.approve_revision`。
 3. **昵称显示**：user-directory 已切 `/v1/pm/principals`（iam 用户与 principals 是两个 ID 空间，
    V1 约定写操作 actor = 项目 owner human principal；JWT sub↔principal 映射表留后续里程碑）。
-4. **已知边界**：SSE `/v1/pm/events/stream` 未实现（overview 实时面板自动隐藏，属预期）；decide 的
-   approve 执行期冲突（目标 revision 漂移）返回 409 `command execution failed`。
+4. **审计实时流（SSE，2026-10-31 已实现）**：`GET /v1/pm/events/stream?access_token=<jwt>`，帧名 `event: audit`，
+   数据为 `AuditLog` JSON。链路：`governance.audit_log INSERT` → 触发器 `pg_notify('pm_audit')`（迁移 0005）
+   → pm-api 专用 `PgListener` → 进程内 `broadcast` → SSE。业务写路径零改动，直接 INSERT 也会推送。
+   EventSource 带不了 Authorization，query token **仅对本路径**放行。
+   边界：V1 全租户全推（audit_log 无 tenant 列，单租户前提）；多实例各自 LISTEN；慢客户端可能丢帧
+   （broadcast 容量 256，`Lagged` 跳过，流不断）。
+   ```bash
+   # 终端 A：订阅（token 从 gateway 登录获取）
+   curl -N "http://127.0.0.1:8090/v1/pm/events/stream?access_token=<jwt>"
+   # 终端 B：触发一次写操作，A 侧应出现 event: audit（action=task.create）
+   curl -X POST http://127.0.0.1:8090/v1/pm/tasks \
+     -H "Authorization: Bearer <jwt>" -H "Content-Type: application/json" \
+     -d '{"project_id":"<uuid>","title":"sse smoke"}'
+   ```
+   decide 的 approve 执行期冲突（目标 revision 漂移）返回 409 `command execution failed`。
 
 ## 八、真后端模式的动态菜单（prue_menu_configs）
 

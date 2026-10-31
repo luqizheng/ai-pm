@@ -9,6 +9,8 @@ overview:
   pendingApprovals: Pending approvals (red-line confirmations)
   queueEmpty: Queue is empty
   queueEmptyHint: Red-line operations raised by AI will wait here for human confirmation.
+  liveTitle: Live activity
+  liveWaiting: Waiting for change events…
   empty: No data
 projects:
   pageTitle: Projects
@@ -119,8 +121,7 @@ status:
   dev_agent: Dev agent
   ai_pm: AI-PM
   service: Service
-  liveTitle: Live activity
-  liveWaiting: Waiting for change events…
+
 scope:
   label: Project scope
   all: All projects

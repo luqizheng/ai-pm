@@ -9,6 +9,8 @@ overview:
   pendingApprovals: 待审批（红线确认）
   queueEmpty: 队列为空
   queueEmptyHint: AI 发起红线操作时会在此等待人工确认。
+  liveTitle: 实时动态
+  liveWaiting: 等待变更事件…
   empty: 暂无数据
 projects:
   pageTitle: 项目
@@ -117,8 +119,7 @@ status:
   dev_agent: 开发 Agent
   ai_pm: AI-PM
   service: 服务
-  liveTitle: 实时动态
-  liveWaiting: 等待变更事件…
+
 scope:
   label: 项目范围
   all: 全部项目
