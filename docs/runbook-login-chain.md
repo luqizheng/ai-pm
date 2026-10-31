@@ -83,3 +83,21 @@ vite 代理见 `frontend/vite.config.ts`（`/api`→`PM_API_URL ?? 8090`；`/gw`
 - [ ] iam-services SDK：HttpCore fetch 未 bind
 - [ ] api-gateway compose：gateway 缺 token-service healthy 依赖（JWKS 竞态）
 - [ ] （可选）token-service 密钥持久化挂载，避免重启全员掉线
+
+## 七、Slice A 联调（/v1/pm/* 业务端点，2026-10-31）
+
+后端已实现 `/v1/pm/*`（六列表 + revisions 列表/创建/定稿 + tasks 创建/编辑 + 审批决策），契约源
+`frontend/src/api/pm.ts` + `mock/fixtures.ts`；测试 19 例（tests/pm_lists.rs + pm_writes.rs）。
+
+1. **演示种子**（幂等，可重复执行）：
+   ```bash
+   docker exec -i aipm-pg-dev psql -U aipm -d aipm < scripts/seed-demo.sql
+   ```
+   内容：AIDEMO 项目 + 3 principals + 3 需求（含定稿链）+ 6 任务 + 1 条 **pending 审批**（完整链
+   event→run→proposal→approval，同意会真实执行 `update_task_status` 提案命令）+ 审计行。
+2. **验收路径**：8849 登录 → 经典页六页签看真数据 → 任务页新建/编辑（乐观锁）→ 需求页修订/定稿 →
+   审批页对 pending 单同意/驳回 → 审计页出现 `task.create` / `approval.decide` / `requirement.approve_revision`。
+3. **昵称显示**：user-directory 已切 `/v1/pm/principals`（iam 用户与 principals 是两个 ID 空间，
+   V1 约定写操作 actor = 项目 owner human principal；JWT sub↔principal 映射表留后续里程碑）。
+4. **已知边界**：SSE `/v1/pm/events/stream` 未实现（overview 实时面板自动隐藏，属预期）；decide 的
+   approve 执行期冲突（目标 revision 漂移）返回 409 `command execution failed`。
