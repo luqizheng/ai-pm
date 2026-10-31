@@ -48,6 +48,21 @@ PRISM 控制台 —— 公司自有的 admin 前端。**独立工程**，不基�
 7. **写操作按钮必须带权限校验**：`v-if="auth.hasPermission('<权限码>')"`。
 8. **组件必须自带焦点环**，不依赖全局样式；`prefers-reduced-motion` 逐项降级。
 
+## lmms 基础服务 SDK（必须用上游包，禁止自建）
+
+上游 lmms（coder-micro-services）以 npm 包提供微服务客户端，发布到私有 registry
+`http://192.168.2.12:14873/`（域名别名 `npm.kudi.repos`），随上游 tag 发版：
+`iam-services`（登录/用户管理/token 管理）、`audit-services`（日志/合规导出/保留策略）、
+`config-services`（配置中心）、`file-services`（multipart 上传/下载/预签名）、
+`notification-services`（公告/未读数，不含 WS）、`prue-services`（动态路由/菜单配置版本）。
+
+**硬性规则**：
+1. 凡调用上述基础服务的 HTTP API，一律 `import` 对应 `*-services` 包——DTO、路径、错误归一以上游 SDK 为准；**禁止手写 fetch/axios 客户端、手抄 DTO/路径、复制上游实现**。
+2. 升级走 registry 版本依赖（`pnpm add <svc>-services@<ver>` / `pnpm up`），**不做 fork**；SDK 缺能力到上游 lmms 仓提需求（上游改 → 发布 → 下游升包）。
+3. 机器 `~/.npmrc` 需含 `//192.168.2.12:14873/:_authToken=<令牌>`（与 `npm.kudi.repos` 令牌通用）。
+
+> 现状（2026-10-31）：壳的 IAM 调用已走 `iam-services`（`src/shell/api/iam.ts`，`/gw` 代理到 api-gateway）；`/v1/pure/*` 菜单调用为存量手写，待换 `prue-services`。`@digua/contracts`/`@digua/http` 同出自 lmms（现为 `packages/` 下 vendor 副本，升级走 registry）。
+
 ## 常用命令
 
 ```bash
