@@ -119,7 +119,9 @@ const projectId = computed<string | undefined>(() => {
   if (scope.projectIdParam) return scope.projectIdParam;
   const param = String(route.params.projectId ?? "");
   if (
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param)
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      param
+    )
   ) {
     return param;
   }
@@ -127,7 +129,8 @@ const projectId = computed<string | undefined>(() => {
 });
 
 const selectedProjectId = computed({
-  get: () => (scope.currentProjectId === SCOPE_ALL ? "" : scope.currentProjectId),
+  get: () =>
+    scope.currentProjectId === SCOPE_ALL ? "" : scope.currentProjectId,
   set: (value: string) => {
     scope.currentProjectId = value || SCOPE_ALL;
   }
@@ -228,7 +231,10 @@ watch(projectId, () => {
                 <span class="ws-badge" :class="testClass[selected.testStatus]">
                   {{ t(testLabel[selected.testStatus]) }}
                 </span>
-                <span class="ws-badge" :class="approvalClass[selected.approval]">
+                <span
+                  class="ws-badge"
+                  :class="approvalClass[selected.approval]"
+                >
                   {{ t(approvalLabel[selected.approval]) }}
                 </span>
               </div>
@@ -272,7 +278,11 @@ watch(projectId, () => {
                 >
                   <span class="ws-diff-sign">
                     {{
-                      line.type === "add" ? "+" : line.type === "del" ? "-" : " "
+                      line.type === "add"
+                        ? "+"
+                        : line.type === "del"
+                          ? "-"
+                          : " "
                     }}
                   </span>
                   <span class="ws-diff-text">{{ line.text }}</span>

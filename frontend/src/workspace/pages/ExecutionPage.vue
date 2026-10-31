@@ -83,7 +83,9 @@ const projectId = computed<string | undefined>(() => {
   if (scope.projectIdParam) return scope.projectIdParam;
   const param = String(route.params.projectId ?? "");
   if (
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param)
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      param
+    )
   ) {
     return param;
   }
@@ -91,7 +93,8 @@ const projectId = computed<string | undefined>(() => {
 });
 
 const selectedProjectId = computed({
-  get: () => (scope.currentProjectId === SCOPE_ALL ? "" : scope.currentProjectId),
+  get: () =>
+    scope.currentProjectId === SCOPE_ALL ? "" : scope.currentProjectId,
   set: (value: string) => {
     scope.currentProjectId = value || SCOPE_ALL;
   }
@@ -182,7 +185,9 @@ watch(projectId, () => {
               {{ t("workspace.pages.execution.remaining") }}
             </h3>
             <ul class="ws-run-list">
-              <li v-for="(item, i) in agentRun.remaining" :key="i">{{ item }}</li>
+              <li v-for="(item, i) in agentRun.remaining" :key="i">
+                {{ item }}
+              </li>
             </ul>
           </div>
         </div>
@@ -240,7 +245,9 @@ watch(projectId, () => {
               <div class="ws-tool-row">
                 <span class="ws-tool-key">name</span>
                 <span class="ws-tool-val">{{ selected.tool.name }}</span>
-                <span class="ws-tool-dur">{{ selected.tool.durationMs }}ms</span>
+                <span class="ws-tool-dur"
+                  >{{ selected.tool.durationMs }}ms</span
+                >
               </div>
               <div class="ws-tool-row">
                 <span class="ws-tool-key">input</span>
@@ -299,11 +306,7 @@ watch(projectId, () => {
           </option>
         </select>
       </div>
-      <p
-        v-if="!projectId"
-        class="ws-hint"
-        data-test="execution-pick-project"
-      >
+      <p v-if="!projectId" class="ws-hint" data-test="execution-pick-project">
         {{ t("workspace.pages.execution.pickProject") }}
       </p>
       <p v-else-if="failed" class="ws-hint" data-test="execution-failed">
