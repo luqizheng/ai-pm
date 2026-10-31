@@ -498,7 +498,7 @@ git commit -m "feat(db): task run, waiting, supersession, policy override and ou
   - `pub async fn fail(pool: &sqlx::PgPool, id: uuid::Uuid, error: &str, max_attempts: i32, backoff_base_secs: i64) -> Result<OutboxFailOutcome, sqlx::Error>`
   - 常量 `pub const OUTBOX_MAX_ATTEMPTS: i32 = 5; pub const OUTBOX_BACKOFF_BASE_SECS: i64 = 5; pub const OUTBOX_LEASE_SECS: i64 = 60;`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```rust
 // crates/pm-infrastructure/tests/outbox.rs
@@ -623,29 +623,31 @@ async fn fail_retries_with_backoff_until_the_ceiling(pool: PgPool) {
 }
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `bash scripts/cargo-test.sh -p pm-infrastructure`
 Expected: FAIL —— `unresolved import pm_infrastructure::outbox`。
 
-- [ ] **Step 3: 实现 `outbox.rs` + 导出 + 依赖**
+- [x] **Step 3: 实现 `outbox.rs` + 导出 + 依赖**
 
 `append` 用 `sqlx::query_scalar("INSERT ... RETURNING id")` 在传入的 `tx` 上执行（签名强制事务内）。`claim` 采用与 `job_queue::claim` 同构的单条 CTE：候选 `(status = 'pending' AND next_attempt_at <= now()) OR (status = 'processing' AND locked_until < now())`，`FOR UPDATE SKIP LOCKED ORDER BY next_attempt_at LIMIT 1`，随后 `UPDATE SET status='processing', attempts = attempts + 1, locked_until = now() + make_interval(secs => $2::float8), lease_owner = $3`。`complete` 置 `delivered` + `delivered_at = now()` + 清租约。`fail` 的 `CASE`：`attempts >= max_attempts` → `dead_letter`（并写 `last_error`）；否则 `pending` + `next_attempt_at = now() + backoff_base_secs * power(2.0, attempts)`。全部沿用 `job_queue` 的 `map(|_| ())` / `ok()?` 风格，不引入新错误类型。
 
 `lib.rs` 增 `pub mod outbox;`；`Cargo.toml` 增 `serde_json`/`chrono`（dev-dep 已有同名项则可提升到 `[dependencies]`，避免重复声明）。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `bash scripts/cargo-test.sh -p pm-infrastructure`
 Expected: PASS（5 个 outbox 用例全绿）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/pm-infrastructure/src/outbox.rs crates/pm-infrastructure/src/lib.rs \
         crates/pm-infrastructure/Cargo.toml crates/pm-infrastructure/tests/outbox.rs
 git commit -m "feat(outbox): transactional append with lease-based claim and retry"
 ```
+
+**Task 2 完成证据（2026-10-31）**：红→绿留痕——首跑 `E0432: unresolved import pm_infrastructure::outbox`；实现后 `bash scripts/cargo-test.sh -p pm-infrastructure` **24/24 绿**（新增 outbox 5 用例：回滚事务内 append 不可见 / 提交后可见、claim 租约领取且 attempts=1、租约过期同 id 重投 attempts=2、complete 置 `delivered`+`delivered_at`、fail 按 `attempts >= max_attempts` 退避重试→触顶死信），既有 job_queue / migration_0009 / schema 套件无回归。commit `1263c91`（`Cargo.lock` 随 serde_json/chrono 提升为正式依赖一并入库）。
 
 ---
 
