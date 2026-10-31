@@ -215,7 +215,7 @@ curl "http://127.0.0.1:8090/v1/pm/documents/search?project_id=<uuid>&q=LOD" \
 | 变量 | 必填 | 说明 |
 |---|---|---|
 | `AI_PM_SECRET_KEY` | 是（写密钥/导入时） | 主密钥；`sha256` 派生 AES-256-GCM 密钥，同时保护 LLM API Key 与 SSH 私钥。缺失时密钥端点 503 `secret_key_unavailable`，fail-closed，不回退明文。 |
-| `AI_PM_REPO_CACHE_ROOT` | 否 | bare clone 缓存根，默认 `<cwd>/../ai-pm-repo-cache`。 |
+| `AI_PM_REPO_CACHE_ROOT` | 否 | bare clone 缓存根，默认系统临时目录下的 `ai-pm-repo-cache`（不得落在仓库工作区内）。 |
 | `AI_PM_REPO_MAX_MB` | 否 | 单仓库裸包上限，默认 200；超限导入失败 `repo_too_large`。 |
 | `AI_PM_REPO_ALLOWED_HOSTS` | 否 | 逗号分隔的 host 白名单；设置后只允许这些 host 的仓库。 |
 | `AI_PM_KNOWLEDGE_ROOT` | 否 | 知识正文 Git 根，默认 `<cwd>/../ai-pm-knowledge`；必须是独立仓库，不能落在 ai-pm 工作树内。 |

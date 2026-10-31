@@ -304,14 +304,7 @@ async fn approvals_execute_import_and_project_becomes_planning(pool: PgPool) {
     .unwrap();
     assert_eq!(audit, 1);
 
-    // AI PM 能继续运营：导入后仍可批量建需求。
-    let ai_pm: Uuid = sqlx::query_scalar(
-        "SELECT principal_id FROM core.project_member WHERE project_id = $1 AND role = 'ai_pm'",
-    )
-    .bind(project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    // 导入后 owner 仍可继续批量建需求：批量命令是红线，必须由人经审批通道执行。
     executor
         .execute(
             pm_domain::ProjectCommand::CreateRequirements {
@@ -327,9 +320,11 @@ async fn approvals_execute_import_and_project_becomes_planning(pool: PgPool) {
             },
             pm_application::command_executor::ExecutionContext {
                 project_id,
-                actor_id: ai_pm,
-                actor_kind: pm_application::command_executor::ActorKind::AiPm,
-                source: pm_application::command_executor::CommandSource::Bootstrap,
+                actor_id: owner,
+                actor_kind: pm_application::command_executor::ActorKind::Human,
+                source: pm_application::command_executor::CommandSource::RedlineApproval {
+                    approval_id: Uuid::new_v4(),
+                },
             },
         )
         .await

@@ -88,14 +88,13 @@ pub struct RepoFacts {
     pub size_bytes: u64,
 }
 
-/// 仓库缓存根：`AI_PM_REPO_CACHE_ROOT`，默认 `<cwd>/../ai-pm-repo-cache`。
+/// 仓库缓存根：`AI_PM_REPO_CACHE_ROOT`；未设置时落在系统临时目录
+/// （`ai-pm-repo-cache`），绝不写进仓库工作区——否则 `apps/*` 这类
+/// workspace 成员 glob 会把 bare clone 当成 crate，直接打断构建。
 pub fn cache_root() -> PathBuf {
     match std::env::var("AI_PM_REPO_CACHE_ROOT") {
         Ok(raw) if !raw.trim().is_empty() => PathBuf::from(raw.trim()),
-        _ => std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join("..")
-            .join("ai-pm-repo-cache"),
+        _ => std::env::temp_dir().join("ai-pm-repo-cache"),
     }
 }
 

@@ -18,7 +18,6 @@ use uuid::Uuid;
 
 struct Fixture {
     project_id: Uuid,
-    ai_id: Uuid,
     human_id: Uuid,
 }
 
@@ -34,7 +33,6 @@ async fn seed(pool: &PgPool, code: &str) -> Fixture {
     .unwrap();
     Fixture {
         project_id: outcome.project_id,
-        ai_id: outcome.ai_principal_id,
         human_id: outcome.human_id,
     }
 }
@@ -44,11 +42,15 @@ fn executor(pool: &PgPool) -> PgCommandExecutor {
 }
 
 fn ctx(fx: &Fixture) -> ExecutionContext {
+    // The four batch commands are red lines (`project_owner` in the policy):
+    // only a human coming through the red-line approval flow may execute them.
     ExecutionContext {
         project_id: fx.project_id,
-        actor_id: fx.ai_id,
-        actor_kind: ActorKind::AiPm,
-        source: CommandSource::Bootstrap,
+        actor_id: fx.human_id,
+        actor_kind: ActorKind::Human,
+        source: CommandSource::RedlineApproval {
+            approval_id: Uuid::new_v4(),
+        },
     }
 }
 
@@ -174,6 +176,13 @@ async fn create_requirements_batch_writes_draft_revisions(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn create_tasks_resolves_links_and_agents(pool: PgPool) {
     let fx = seed(&pool, "BATCH-T").await;
+    // "未解析角色" 需要真的没有对应成员：bootstrap 默认会编制 architect，
+    // 所以先移除它，才能覆盖 findings 里的 assignee_unresolved 分支。
+    sqlx::query("DELETE FROM core.project_member WHERE project_id = $1 AND role = 'architect'")
+        .bind(fx.project_id)
+        .execute(&pool)
+        .await
+        .unwrap();
     let executor = executor(&pool);
     executor
         .execute(
