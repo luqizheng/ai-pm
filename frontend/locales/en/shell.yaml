@@ -12,6 +12,14 @@ shell:
     closeTab: Close tab
   tabs:
     label: Open pages
+    scrollPrev: Scroll tabs left
+    scrollNext: Scroll tabs right
+    reload: Reload
+    close: Close
+    closeOthers: Close others
+    closeLeft: Close left
+    closeRight: Close right
+    closeAll: Close all
   nav:
     label: Main navigation
     breadcrumb: Breadcrumb

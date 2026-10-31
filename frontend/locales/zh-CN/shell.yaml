@@ -12,6 +12,14 @@ shell:
     closeTab: 关闭标签页
   tabs:
     label: 已打开页面
+    scrollPrev: 向左滚动标签页
+    scrollNext: 向右滚动标签页
+    reload: 重新加载
+    close: 关闭
+    closeOthers: 关闭其他
+    closeLeft: 关闭左侧
+    closeRight: 关闭右侧
+    closeAll: 关闭全部
   nav:
     label: 主导航
     breadcrumb: 面包屑

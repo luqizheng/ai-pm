@@ -33,6 +33,7 @@ const mainRef = ref<HTMLElement | null>(null);
 const liveMessage = ref("");
 const commandOpen = ref(false);
 const tabs = ref<TabItem[]>([]);
+const reloadKey = ref(0);
 
 const activePath = computed(() => route.path);
 
@@ -108,17 +109,15 @@ watch(
 );
 
 // 打开过的页面进标签栏
-watch(
-  () => route.path,
-  path => {
-    if (!path || path === "/login" || path === "/") return;
-    const title = (route.meta?.title as string | undefined) ?? path;
-    if (!tabs.value.some(tab => tab.path === path)) {
-      tabs.value = [...tabs.value, { path, title }];
-    }
-  },
-  { immediate: true }
-);
+function ensureTab(path: string) {
+  if (!path || path === "/login" || path === "/") return;
+  const title = (route.meta?.title as string | undefined) ?? path;
+  if (!tabs.value.some(tab => tab.path === path)) {
+    tabs.value = [...tabs.value, { path, title }];
+  }
+}
+
+watch(() => route.path, ensureTab, { immediate: true });
 
 function closeTab(path: string) {
   const index = tabs.value.findIndex(tab => tab.path === path);
@@ -126,6 +125,55 @@ function closeTab(path: string) {
   if (path === route.path) {
     const next = tabs.value[index - 1] ?? tabs.value[index];
     if (next) router.push(next.path);
+  }
+}
+
+const isClosable = (tab: TabItem) => tab.closable !== false;
+
+function reloadTab(path: string) {
+  if (path === route.path) reloadKey.value += 1;
+  else router.push(path);
+}
+
+function closeOthers(path: string) {
+  const index = tabs.value.findIndex(tab => tab.path === path);
+  if (index < 0) return;
+  tabs.value = tabs.value.filter((tab, i) => i === index || !isClosable(tab));
+  if (path !== route.path && !tabs.value.some(tab => tab.path === route.path)) {
+    router.push(path);
+  }
+}
+
+function closeLeft(path: string) {
+  const index = tabs.value.findIndex(tab => tab.path === path);
+  if (index <= 0) return;
+  tabs.value = tabs.value.filter((tab, i) => i >= index || !isClosable(tab));
+  if (path !== route.path && !tabs.value.some(tab => tab.path === route.path)) {
+    router.push(path);
+  }
+}
+
+function closeRight(path: string) {
+  const index = tabs.value.findIndex(tab => tab.path === path);
+  if (index < 0) return;
+  tabs.value = tabs.value.filter((tab, i) => i <= index || !isClosable(tab));
+  if (path !== route.path && !tabs.value.some(tab => tab.path === route.path)) {
+    router.push(path);
+  }
+}
+
+function closeAll() {
+  const currentPath = route.path;
+  tabs.value = tabs.value.filter(tab => !isClosable(tab));
+  if (tabs.value.some(tab => tab.path === currentPath)) return;
+  if (
+    currentPath === "/dashboard" ||
+    currentPath === "/login" ||
+    currentPath === "/"
+  ) {
+    ensureTab(currentPath);
+  } else {
+    router.push("/dashboard");
   }
 }
 </script>
@@ -197,6 +245,11 @@ function closeTab(path: string) {
         :active-path="activePath"
         @select="path => router.push(path)"
         @close="closeTab"
+        @reload="reloadTab"
+        @close-others="closeOthers"
+        @close-left="closeLeft"
+        @close-right="closeRight"
+        @close-all="closeAll"
       />
 
       <main
@@ -205,7 +258,9 @@ function closeTab(path: string) {
         class="ui-app-shell__main"
         tabindex="-1"
       >
-        <RouterView />
+        <RouterView v-slot="{ Component }">
+          <component :is="Component" :key="reloadKey" />
+        </RouterView>
       </main>
       <p class="ui-sr-only" role="status" aria-live="polite">
         {{ liveMessage }}
