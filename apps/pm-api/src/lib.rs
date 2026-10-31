@@ -4,6 +4,7 @@
 
 pub mod audit_stream;
 pub mod auth;
+pub mod documents;
 pub mod pm_lists;
 pub mod pm_writes;
 pub mod routes;

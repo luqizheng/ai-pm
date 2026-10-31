@@ -111,6 +111,12 @@ pub fn router_with_feed(pool: PgPool, audit_feed: crate::audit_stream::AuditFeed
             "/v1/pm/events/stream",
             get(crate::audit_stream::stream_handler),
         )
+        // 知识空间（V1 只读）：正文来自 Git 知识仓库，见 knowledge-space plan。
+        .route("/v1/pm/documents", get(crate::documents::list_handler))
+        .route(
+            "/v1/pm/documents/{document_id}",
+            get(crate::documents::get_handler),
+        )
         .nest("/mcp", mcp_router)
         .with_state(state)
 }
