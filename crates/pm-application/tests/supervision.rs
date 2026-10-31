@@ -70,7 +70,7 @@ struct Seed {
 
 /// Bootstrap-equivalent rows whose ids match the FakeModel fixtures: customer,
 /// project, AI principal, human supervisor, dev agent, `ai_lead` config,
-/// TASK-102 at revision 7 (`in_progress`) and the milestone at revision 4.
+/// TASK-102 at revision 7 (`running`) and the milestone at revision 4.
 async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     let customer_id = Uuid::new_v4();
     let ai_principal_id = Uuid::new_v4();
@@ -132,7 +132,7 @@ async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     sqlx::query(
         "INSERT INTO delivery.task \
          (id, project_id, milestone_id, title, status, revision) \
-         VALUES ($1, $2, $3, 'TASK-102 implement cache layer', 'in_progress', 7)",
+         VALUES ($1, $2, $3, 'TASK-102 implement cache layer', 'running', 7)",
     )
     .bind(task_102_id())
     .bind(project_id())
@@ -294,7 +294,7 @@ async fn veto_executed_proposal_rolls_back_then_reports_already_compensated(pool
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(status, "in_progress");
+    assert_eq!(status, "running");
     assert_eq!(revision, 9);
 
     // The original audit row points at its rollback row.

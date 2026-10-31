@@ -255,7 +255,7 @@ async fn task_context_returns_requirement_and_milestone_json(pool: PgPool) {
     let row = task_context(&pool, project_id, task_id).await.unwrap();
     assert_eq!(row.task_id, task_id);
     assert_eq!(row.title, "implement login");
-    assert_eq!(row.status, "backlog");
+    assert_eq!(row.status, "draft");
     assert_eq!(row.revision, 1);
     assert_eq!(row.requirement, Some(json!({"goal": "login v2"})), "latest linked revision must win");
     let milestone = row.milestone.expect("milestone must be present");

@@ -721,7 +721,7 @@ impl PgCommandExecutor {
                     let id: Uuid = sqlx::query_scalar(
                         "INSERT INTO delivery.task \
                          (project_id, milestone_id, title, description, status, priority, assignee_id) \
-                         VALUES ($1, $2, $3, $4, 'backlog', $5, $6) RETURNING id",
+                         VALUES ($1, $2, $3, $4, 'draft', $5, $6) RETURNING id",
                     )
                     .bind(ctx.project_id)
                     .bind(milestone_id)
@@ -887,7 +887,7 @@ impl PgCommandExecutor {
         let mut tx = self.pool.begin().await.map_err(db_err)?;
         let task_id: TaskId = sqlx::query_scalar(
             "INSERT INTO delivery.task (project_id, title, description, assignee_id, status, revision) \
-             VALUES ($1, $2, $3, $4, 'backlog', 1) RETURNING id",
+             VALUES ($1, $2, $3, $4, 'draft', 1) RETURNING id",
         )
         .bind(project_id)
         .bind(&title)
@@ -899,7 +899,7 @@ impl PgCommandExecutor {
         let after = json!({
             "id": task_id,
             "title": title,
-            "status": "backlog",
+            "status": "draft",
             "revision": 1,
         });
         let compensation = CompensationSpec::Delete {

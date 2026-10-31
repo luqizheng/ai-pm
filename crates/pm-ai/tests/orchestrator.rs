@@ -125,7 +125,7 @@ async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     sqlx::query(
         "INSERT INTO delivery.task \
          (id, project_id, milestone_id, title, status, revision) \
-         VALUES ($1, $2, $3, 'TASK-102 implement cache layer', 'in_progress', 7)",
+         VALUES ($1, $2, $3, 'TASK-102 implement cache layer', 'running', 7)",
     )
     .bind(task_102_id())
     .bind(project_id())
@@ -261,7 +261,7 @@ async fn happy_cache_overlap_applies_all_three_proposals_end_to_end(pool: sqlx::
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(created_status, "backlog");
+    assert_eq!(created_status, "draft");
     assert_eq!(created_revision, 1);
 
     // The milestone moved to the fixture's fixed date, revision 4 -> 5.

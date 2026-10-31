@@ -127,7 +127,7 @@ async fn seed_delivery_rows(pool: &sqlx::PgPool, seed: &Seed) -> (Uuid, Uuid, Uu
     sqlx::query(
         "INSERT INTO delivery.task \
          (id, project_id, milestone_id, title, description, status, priority, revision) \
-         VALUES ($1, $2, $3, 'Write API spec', 'OpenAPI 3.1 first pass', 'in_progress', 'high', 7)",
+         VALUES ($1, $2, $3, 'Write API spec', 'OpenAPI 3.1 first pass', 'running', 'high', 7)",
     )
     .bind(task_id)
     .bind(seed.project_id)

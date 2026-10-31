@@ -13,8 +13,21 @@ use uuid::Uuid;
 
 use crate::rows::{RequirementRevisionRow, TaskRow};
 
-pub const TASK_STATUSES: [&str; 6] =
-    ["backlog", "in_progress", "in_review", "done", "blocked", "cancelled"];
+pub const TASK_STATUSES: [&str; 13] = [
+    "draft",
+    "ready",
+    "claimed",
+    "running",
+    "awaiting_decision",
+    "blocked",
+    "submitted",
+    "reviewing",
+    "completed",
+    "changes_requested",
+    "failed",
+    "cancelled",
+    "superseded",
+];
 pub const TASK_PRIORITIES: [&str; 4] = ["low", "normal", "high", "urgent"];
 
 pub enum PmWriteError {
@@ -260,7 +273,7 @@ pub struct CreateTaskRequest {
     pub assignee_id: Option<Uuid>,
 }
 
-/// 创建任务：status 固定 backlog、revision=1、priority 缺省 normal。
+/// 创建任务：status 固定 draft、revision=1、priority 缺省 normal。
 pub async fn create_task(
     pool: &PgPool,
     req: CreateTaskRequest,
@@ -290,7 +303,7 @@ pub async fn create_task(
     sqlx::query(
         "INSERT INTO delivery.task \
          (id, project_id, milestone_id, title, description, status, priority, assignee_id, revision) \
-         VALUES ($1, $2, $3, $4, $5, 'backlog', $6, $7, 1)",
+         VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, 1)",
     )
     .bind(task_id)
     .bind(project_id)

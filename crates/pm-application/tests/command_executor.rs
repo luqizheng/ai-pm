@@ -166,7 +166,7 @@ async fn update_task_status_executes_and_writes_audit_with_restore_compensation(
     assert_eq!(row.get::<Uuid, _>("target_id"), f.task_id);
     assert!(row.get::<Option<Uuid>, _>("compensated_command_id").is_none());
     let before: Value = row.get("before_data");
-    assert_eq!(before, json!({ "status": "backlog", "revision": 1 }));
+    assert_eq!(before, json!({ "status": "draft", "revision": 1 }));
     let after: Value = row.get("after_data");
     assert_eq!(after, json!({ "status": "completed", "revision": 2 }));
 
@@ -178,7 +178,7 @@ async fn update_task_status_executes_and_writes_audit_with_restore_compensation(
             assert_eq!(entries[0].table, CompensableTable::Task);
             assert_eq!(entries[0].target_id, f.task_id);
             // old status, guarded at the executed command's resulting revision
-            assert_eq!(entries[0].fields, json!({ "status": "backlog", "revision": 2 }));
+            assert_eq!(entries[0].fields, json!({ "status": "draft", "revision": 2 }));
         }
         other => panic!("expected Restore compensation, got {other:?}"),
     }
@@ -254,7 +254,7 @@ async fn compensate_restores_previous_status_and_marks_original_audit(pool: PgPo
     assert_eq!(rollback.resulting_revision, 3);
 
     let (status, revision) = task_state(&pool, f.task_id).await;
-    assert_eq!((status.as_str(), revision), ("backlog", 3));
+    assert_eq!((status.as_str(), revision), ("draft", 3));
 
     let compensated: Option<Uuid> = sqlx::query_scalar(
         "SELECT compensated_command_id FROM governance.audit_log WHERE id = $1",
@@ -314,7 +314,7 @@ async fn compensating_same_audit_twice_fails_with_already_compensated(pool: PgPo
     }
 
     let (status, revision) = task_state(&pool, f.task_id).await;
-    assert_eq!((status.as_str(), revision), ("backlog", 3), "double compensation must not re-bump");
+    assert_eq!((status.as_str(), revision), ("draft", 3), "double compensation must not re-bump");
 }
 
 /// 5) execute → execute a second legal change (revision moves on) → compensate
@@ -609,7 +609,7 @@ async fn create_task_inserts_row_and_audits_delete_compensation(pool: PgPool) {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(row.get::<String, _>("status"), "backlog");
+    assert_eq!(row.get::<String, _>("status"), "draft");
     assert_eq!(row.get::<i64, _>("revision"), 1);
     assert_eq!(row.get::<String, _>("title"), "Write fallback plan");
     assert_eq!(row.get::<Option<Uuid>, _>("assignee_id"), Some(f.human_id));

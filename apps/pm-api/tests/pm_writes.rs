@@ -33,7 +33,7 @@ async fn seed_pending_approval(pool: &PgPool, project_id: Uuid, actor_id: Uuid) 
     let task_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO delivery.task (id, project_id, title, status, revision) \
-         VALUES ($1, $2, 'DECIDE-TASK', 'in_progress', 2)",
+         VALUES ($1, $2, 'DECIDE-TASK', 'running', 2)",
     )
     .bind(task_id)
     .bind(project_id)
@@ -266,7 +266,7 @@ async fn create_task_defaults_and_contract_shape(pool: PgPool) {
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
     let task = body_json(response).await;
-    assert_eq!(task["status"], json!("backlog"));
+    assert_eq!(task["status"], json!("draft"));
     assert_eq!(task["priority"], json!("normal"));
     assert_eq!(task["revision"], json!(1));
     assert_eq!(task["title"], json!("new task"), "title must be trimmed");
@@ -310,7 +310,7 @@ async fn create_task_falls_back_to_global_human_when_project_has_no_members(pool
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED, "memberless project must still accept creates");
     let task = body_json(response).await;
-    assert_eq!(task["status"], json!("backlog"));
+    assert_eq!(task["status"], json!("draft"));
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -370,7 +370,7 @@ async fn update_task_full_fields_with_optimistic_lock(pool: PgPool) {
                 "revision": task["revision"],
                 "title": "renamed",
                 "description": "updated",
-                "status": "in_progress",
+                "status": "running",
                 "priority": "high",
                 "assignee_id": boot.dev_agent_id
             })),
@@ -380,7 +380,7 @@ async fn update_task_full_fields_with_optimistic_lock(pool: PgPool) {
     assert_eq!(response.status(), StatusCode::OK);
     let updated = body_json(response).await;
     assert_eq!(updated["title"], json!("renamed"));
-    assert_eq!(updated["status"], json!("in_progress"));
+    assert_eq!(updated["status"], json!("running"));
     assert_eq!(updated["priority"], json!("high"));
     assert_eq!(updated["assignee_id"], json!(boot.dev_agent_id.to_string()));
     assert_eq!(updated["revision"], json!(2), "revision must bump");
@@ -392,7 +392,7 @@ async fn update_task_full_fields_with_optimistic_lock(pool: PgPool) {
         .oneshot(request(
             "PATCH",
             format!("/v1/pm/tasks/{task_id}"),
-            Some(json!({ "revision": 1, "title": "stale", "status": "done", "priority": "low" })),
+            Some(json!({ "revision": 1, "title": "stale", "status": "completed", "priority": "low" })),
         ))
         .await
         .unwrap();
@@ -403,8 +403,8 @@ async fn update_task_full_fields_with_optimistic_lock(pool: PgPool) {
     // 非法 status / priority / title → 400。
     for bad in [
         json!({ "revision": 2, "title": "x", "status": "doing", "priority": "low" }),
-        json!({ "revision": 2, "title": "x", "status": "done", "priority": "urgentest" }),
-        json!({ "revision": 2, "title": " ", "status": "done", "priority": "low" }),
+        json!({ "revision": 2, "title": "x", "status": "completed", "priority": "urgentest" }),
+        json!({ "revision": 2, "title": " ", "status": "completed", "priority": "low" }),
     ] {
         let response = app
             .clone()
@@ -416,7 +416,7 @@ async fn update_task_full_fields_with_optimistic_lock(pool: PgPool) {
 
     let response = app
         .oneshot(request("PATCH", format!("/v1/pm/tasks/{}", Uuid::new_v4()), Some(json!({
-            "revision": 1, "title": "ghost", "status": "done", "priority": "low"
+            "revision": 1, "title": "ghost", "status": "completed", "priority": "low"
         }))))
         .await
         .unwrap();

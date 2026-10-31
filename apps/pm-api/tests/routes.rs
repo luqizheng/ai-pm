@@ -98,7 +98,7 @@ async fn seed_executed_proposal(pool: &PgPool, project_id: Uuid, actor_id: Uuid)
     let task_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO delivery.task (id, project_id, title, status, revision) \
-         VALUES ($1, $2, 'SUP-TASK revert me', 'done', 4)",
+         VALUES ($1, $2, 'SUP-TASK revert me', 'completed', 4)",
     )
     .bind(task_id)
     .bind(project_id)
@@ -107,14 +107,14 @@ async fn seed_executed_proposal(pool: &PgPool, project_id: Uuid, actor_id: Uuid)
     .unwrap();
 
     // The audit row of the executed command, carrying the status-recovery
-    // snapshot (restore status 'done' -> 'in_progress', guarded at revision 4).
+    // snapshot (restore status 'completed' -> 'running', guarded at revision 4).
     let audit_id = Uuid::new_v4();
     let compensation = serde_json::json!({
         "Restore": [
             {
                 "table": "task",
                 "target_id": task_id,
-                "fields": { "status": "in_progress", "revision": 4 }
+                "fields": { "status": "running", "revision": 4 }
             }
         ]
     });
@@ -127,8 +127,8 @@ async fn seed_executed_proposal(pool: &PgPool, project_id: Uuid, actor_id: Uuid)
     .bind(project_id)
     .bind(actor_id)
     .bind(task_id)
-    .bind(serde_json::json!({ "status": "in_progress", "revision": 3 }))
-    .bind(serde_json::json!({ "status": "done", "revision": 4 }))
+    .bind(serde_json::json!({ "status": "running", "revision": 3 }))
+    .bind(serde_json::json!({ "status": "completed", "revision": 4 }))
     .bind(compensation)
     .execute(pool)
     .await
@@ -230,7 +230,7 @@ async fn veto_rolls_back_executed_proposal_over_http(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(status, "in_progress");
+    assert_eq!(status, "running");
     assert_eq!(revision, 5);
 
     // Intervention and feed notification exist.

@@ -265,7 +265,7 @@ async fn task_context_returns_task_of_own_project(pool: PgPool) {
     .unwrap();
     assert_eq!(context["task_id"], json!(task_id));
     assert_eq!(context["title"], "rewrite ingest path");
-    assert_eq!(context["status"], "backlog");
+    assert_eq!(context["status"], "draft");
     assert_eq!(context["revision"], 1);
     assert!(context["requirement"].is_null());
     assert!(context["milestone"].is_null());

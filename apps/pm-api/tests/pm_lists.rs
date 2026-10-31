@@ -25,7 +25,7 @@ async fn seed_task(pool: &PgPool, project_id: uuid::Uuid, title: &str, age_secs:
     let id = uuid::Uuid::new_v4();
     sqlx::query(
         "INSERT INTO delivery.task (id, project_id, title, status, priority, created_at, updated_at) \
-         VALUES ($1, $2, $3, 'backlog', 'normal', now() - make_interval(secs => $4), now() - make_interval(secs => $4))",
+         VALUES ($1, $2, $3, 'draft', 'normal', now() - make_interval(secs => $4), now() - make_interval(secs => $4))",
     )
     .bind(id)
     .bind(project_id)
@@ -164,7 +164,7 @@ async fn milestones_list_scopes_orders_and_carries_task_link(pool: PgPool) {
     .unwrap();
     sqlx::query(
         "INSERT INTO delivery.task (id, project_id, milestone_id, title, status, priority) \
-         VALUES ($1, $2, $3, 'linked', 'in_progress', 'normal')",
+         VALUES ($1, $2, $3, 'linked', 'running', 'normal')",
     )
     .bind(uuid::Uuid::new_v4())
     .bind(boot.project_id)

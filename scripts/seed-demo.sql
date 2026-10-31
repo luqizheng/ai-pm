@@ -61,12 +61,12 @@ ON CONFLICT DO NOTHING;
 
 -- 4) 任务（多状态多优先级） --------------------------------------------------
 INSERT INTO delivery.task (id, project_id, milestone_id, title, description, status, priority, assignee_id, revision, created_at, updated_at) VALUES
-  ('88888888-8888-8888-8888-888888888801', '22222222-2222-2222-2222-222222222222', NULL, '打通网关登录链路',   'gateway→iam→token 全链',     'done',        'high',   '33333333-3333-3333-3333-333333333331', 3, now() - interval '9 days',  now() - interval '2 days'),
-  ('88888888-8888-8888-8888-888888888802', '22222222-2222-2222-2222-222222222222', NULL, 'pm-api JWKS 验签',   'Bearer 中间件 + tid 强制',   'in_review',   'high',   '33333333-3333-3333-3333-333333333333', 2, now() - interval '7 days',  now() - interval '1 day'),
-  ('88888888-8888-8888-8888-888888888803', '22222222-2222-2222-2222-222222222222', NULL, '/v1/pm 列表端点',    '六组裸 payload 列表',        'in_progress', 'urgent', '33333333-3333-3333-3333-333333333333', 1, now() - interval '5 days',  now() - interval '5 hours'),
-  ('88888888-8888-8888-8888-888888888804', '22222222-2222-2222-2222-222222222222', NULL, '任务编辑乐观锁',     'revision 不匹配 409',        'backlog',     'normal', NULL,                                   1, now() - interval '4 days',  now() - interval '4 days'),
+  ('88888888-8888-8888-8888-888888888801', '22222222-2222-2222-2222-222222222222', NULL, '打通网关登录链路',   'gateway→iam→token 全链',     'completed',   'high',   '33333333-3333-3333-3333-333333333331', 3, now() - interval '9 days',  now() - interval '2 days'),
+  ('88888888-8888-8888-8888-888888888802', '22222222-2222-2222-2222-222222222222', NULL, 'pm-api JWKS 验签',   'Bearer 中间件 + tid 强制',   'reviewing',   'high',   '33333333-3333-3333-3333-333333333333', 2, now() - interval '7 days',  now() - interval '1 day'),
+  ('88888888-8888-8888-8888-888888888803', '22222222-2222-2222-2222-222222222222', NULL, '/v1/pm 列表端点',    '六组裸 payload 列表',        'running',     'urgent', '33333333-3333-3333-3333-333333333333', 1, now() - interval '5 days',  now() - interval '5 hours'),
+  ('88888888-8888-8888-8888-888888888804', '22222222-2222-2222-2222-222222222222', NULL, '任务编辑乐观锁',     'revision 不匹配 409',        'draft',       'normal', NULL,                                   1, now() - interval '4 days',  now() - interval '4 days'),
   ('88888888-8888-8888-8888-888888888805', '22222222-2222-2222-2222-222222222222', NULL, 'SSE 审计实时流',     'overview 实时面板',          'blocked',     'normal', NULL,                                   1, now() - interval '3 days',  now() - interval '3 days'),
-  ('88888888-8888-8888-8888-888888888806', '22222222-2222-2222-2222-222222222222', NULL, '演示种子脚本',       '本脚本',                     'done',        'low',    '33333333-3333-3333-3333-333333333331', 2, now() - interval '2 days',  now() - interval '6 hours')
+  ('88888888-8888-8888-8888-888888888806', '22222222-2222-2222-2222-222222222222', NULL, '演示种子脚本',       '本脚本',                     'completed',   'low',    '33333333-3333-3333-3333-333333333331', 2, now() - interval '2 days',  now() - interval '6 hours')
 ON CONFLICT DO NOTHING;
 
 -- 5) 待审批链（event → run → proposal → pending approval） -------------------
@@ -84,7 +84,7 @@ INSERT INTO ai.change_proposal (id, project_id, analysis_run_id, proposal_seq, t
   ('99999999-9999-9999-9999-999999999903', '22222222-2222-2222-2222-222222222222',
    '99999999-9999-9999-9999-999999999902', 0, 'task', '88888888-8888-8888-8888-888888888804', 1,
    'update_task_status',
-   '{"kind": "update_task_status", "data": {"task_id": "88888888-8888-8888-8888-888888888804", "expected_revision": 1, "new_status": "in_progress"}}',
+   '{"kind": "update_task_status", "data": {"task_id": "88888888-8888-8888-8888-888888888804", "expected_revision": 1, "new_status": "running"}}',
    '看板丢序根因在状态未及时流转，建议将任务编辑乐观锁任务置为进行中', '[]', 'medium', 'medium', 'proposed',
    now() - interval '6 hours')
 ON CONFLICT DO NOTHING;

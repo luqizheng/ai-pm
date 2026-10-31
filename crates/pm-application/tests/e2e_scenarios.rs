@@ -84,7 +84,7 @@ struct Seed {
 
 /// Bootstrap-equivalent rows whose ids match the FakeModel fixtures: customer,
 /// project, AI principal, human supervisor, dev agent, `ai_lead` config,
-/// TASK-102 at revision 7 (`in_progress`) and the milestone at revision 4.
+/// TASK-102 at revision 7 (`running`) and the milestone at revision 4.
 async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     let customer_id = Uuid::new_v4();
     let ai_principal_id = Uuid::new_v4();
@@ -148,7 +148,7 @@ async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     sqlx::query(
         "INSERT INTO delivery.task \
          (id, project_id, milestone_id, title, status, revision) \
-         VALUES ($1, $2, $3, 'TASK-102 implement cache layer', 'in_progress', 7)",
+         VALUES ($1, $2, $3, 'TASK-102 implement cache layer', 'running', 7)",
     )
     .bind(task_102_id())
     .bind(project_id())
@@ -1060,14 +1060,14 @@ async fn s7_second_veto_on_rolled_back_proposal_is_already_compensated(pool: sql
     let VetoOutcome::RolledBack { new_audit_id } = first else {
         panic!("expected RolledBack, got {first:?}");
     };
-    // The task is restored: back to in_progress, revision forward-only.
+    // The task is restored: back to running, revision forward-only.
     let (status, revision): (String, i64) =
         sqlx::query_as("SELECT status, revision FROM delivery.task WHERE id = $1")
             .bind(task_102_id())
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(status, "in_progress");
+    assert_eq!(status, "running");
     assert_eq!(revision, 9, "7 seeded -> 8 executed -> 9 restored");
 
     let audits_after_first = scalar_i64(
@@ -1100,7 +1100,7 @@ async fn s7_second_veto_on_rolled_back_proposal_is_already_compensated(pool: sql
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(status, "in_progress");
+    assert_eq!(status, "running");
     assert_eq!(revision, 9);
     let audits_after_second = scalar_i64(
         &pool,
@@ -1231,7 +1231,7 @@ async fn s9_task_context_from_wrong_project_is_not_found(pool: sqlx::PgPool) {
         .await
         .expect("the owning project must read its own task");
     assert_eq!(own.task_id, task_102_id());
-    assert_eq!(own.status, "in_progress");
+    assert_eq!(own.status, "running");
     assert_eq!(own.revision, 7);
 
     // Cross-project: NotFound.
