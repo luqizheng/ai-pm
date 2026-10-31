@@ -12,9 +12,5 @@ import { getAccessToken } from "./token-storage";
  */
 export const iam: IamServices = createIamServices({
   baseUrl: import.meta.env.VITE_IAM_BASE_URL ?? "/gw",
-  getToken: () => getAccessToken(),
-  // SDK 的 HttpCore 默认捕获**未 bind 的原生 fetch**，浏览器里以方法形式调用会抛
-  // "Illegal invocation"（Node 无此限制，故上游测试未暴露）。显式注入绑定版 fetch，
-  // 上游修复（HttpCore 内 fetch.bind）随 SDK 扩展协议反馈 lmms。
-  fetch: fetch.bind(globalThis)
+  getToken: () => getAccessToken()
 });
