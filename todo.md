@@ -7,9 +7,9 @@
 **本版（v2，2026-11-01）的合并口径**：
 
 - 依据 A：`target.md` —— 技术顾问**只按产品描述**制定的 12 阶段路线（P0–P11），他看不到本仓库实况。
-- 依据 B：仓库实测 —— `migrations/`（0001–0018）、`crates/`（8 个包）、`apps/`（pm-api / ai-pm-worker / pm-worker）、`frontend/src/shell/views/`、`git log`。
+- 依据 B：仓库实测 —— `migrations/`（0001–0018，18 个迁移 / 43 张表）、`crates/`（5 个包：pm-application / pm-domain / pm-ai / pm-infrastructure / pm-mcp）、`apps/`（3 个：pm-api / ai-pm-worker / pm-worker，合计 8 个 workspace 成员）、`frontend/src/shell/views/` + `frontend/src/workspace/`、`git log`。
 - 冲突时**以实测为准**：顾问的路线用来「补漏」，不用来「重排已完成的活」。已实现的部分不再重复开工（§1 逐项给了证据）。
-- **2026-11-01 增量**：多租户 / Agent / Executor 身份边界由 `docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`（Accepted）裁定；M1 拆为 **T-021a（β，身份归因）** / **T-021b（α+γ+δ，Tenant + Agent + Run 身份列）**；迁移号顺移（T-024 → `0021`、T-041 → `0022`）；ADR 未决项登记为 T-055~T-058。**T-020 已过稿、T-021a 已实施并验收**（交付见 §13 归档）。
+- **2026-11-01 增量**：多租户 / Agent / Executor 身份边界由 `docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`（Accepted）裁定；M1 拆为 **T-021a（β，身份归因）** / **T-021b（α+γ+δ，Tenant + Agent + Run 身份列）**；迁移号顺移（T-024 → `0021`、T-041 → `0022`）；ADR 未决项登记为 T-055~T-058，T-021a 遗留登记为 T-059。**T-020 已过稿、T-021a 已实施并验收**（交付见 §13 归档）。
 
 ---
 
@@ -49,16 +49,19 @@
 **通用验收命令**：
 
 ```bash
-# 后端（需先启动 dev 库）
+# 后端（需先启动 dev 库；dev 库常驻 5433）
 docker compose -f docker-compose.dev.yml up -d
-DATABASE_URL=postgres://aipm:aipm@127.0.0.1:5433/aipm bash scripts/cargo-test.sh
+DATABASE_URL=postgres://aipm:aipm@127.0.0.1:5433/aipm cargo test --workspace
 cargo check --workspace --all-targets
 
 # 前端
 cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 ```
 
-> 沙箱注意：子进程写 `%TEMP%` 可能 `os error 5`，跑测试前把 `TEMP`/`TMP` 指到工作区内目录（如 `target/testtmp`）。
+> 环境注意（2026-11-01 实测）：
+> - **本机没装 `cargo-nextest`**，`scripts/cargo-test.sh` 会在第一步直接退出 —— 用 `cargo test --workspace`；装了 nextest 再改回脚本。
+> - **`TEMP`/`TMP` 保持系统默认**：指向工作区内（如 `target/testtmp`）会让 knowledge 测试报 `knowledge root ... is inside git repository`。
+> - 子进程写 `%TEMP%` 偶发 `os error 5`（沙箱噪声），换目录重跑即可。
 
 ---
 
@@ -74,9 +77,9 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 | P5 交付与验收 | Delivery Manifest 多仓、Commit 追踪、文件清单、测试证据、Baseline Validation、交付历史 | `0011` 已有 `task_repository`/`task_run_repository`；**缺 `task_workspace`/`task_repository_commit`**、缺校验服务与历史视图 | 🟡 只有骨架 | 整块 → T-040/T-041 |
 | P6 知识库与 PageIndex | Markdown 事实源、写入、索引、检索、上下文组装、执行后回写 | Markdown+Git 事实源（`0006`）、提案/质量门/红线（`0014`）、标题树索引（`knowledge_index.rs`）、`knowledge_reference` | 🟡 单仓闭环完成一半 | 缺可替换索引层与**执行后知识回写** → T-042/T-043（D5）、T-060 |
 | P7 Review 与审批 | 独立 Reviewer Run、Findings、四值结论、审批引擎、策略分层 | `governance.approval_request`、`policy_engine` + `0016` 内容寻址四层合成；`pm-ai/self_review.rs` **只审导入提案**，不审交付 | 🟡 审批完成，Review 未做 | 独立 Reviewer Run 与 Findings → T-042/T-043 |
-| P8 Outbox 可靠异步 | 同事务写入、Worker、幂等、重试、死信、重放、监控 | `0010` `outbox_event` 已含 `attempts`/`dead_letter`/`locked_until`；`outbox_worker` **只注册 `TaskReady`** | 🟡 地基完成 | 业务事件覆盖（RunCompleted/DeliverySubmitted/ReviewCompleted/KnowledgeBaseWriteRequested）、死信重放、监控 → T-061 |
+| P8 Outbox 可靠异步 | 同事务写入、Worker、幂等、重试、死信、重放、监控 | `0010:123` `integration.outbox_event` 已含 `attempts`/`dead_letter`/`locked_until`/`idempotency_key`；`crates/pm-infrastructure/src/outbox_worker.rs` + `apps/ai-pm-worker/src/main.rs:93` **只注册 `TaskReady`** | 🟡 地基完成 | 业务事件覆盖（RunCompleted/DeliverySubmitted/ReviewCompleted/KnowledgeBaseWriteRequested）、死信重放、监控 → T-061 |
 | P9 多 Agent 协作 | Agent 角色、能力、任务分解、协作、上下文传递 | 只有 `project_member` 的 5 个固定角色；无 Agent 运行时 | ❌ 主动不做 | 与已裁定「不造自研多 Agent 运行时」冲突，延后（§12） |
-| P10 研发管理工作台 | 六大工作区 + 11 个页面 | 经典页 `overview/projects/tasks/requirements/approvals/audit/settings/customers`；`workspace/:projectId` 下 `console/team/execution/goals/models/activity/requirements/knowledge`；`GET /v1/pm/task-runs` 只读 | 🟡 页面骨架齐 | 执行中心接真 Run 数据、交付验收页 → T-070 |
+| P10 研发管理工作台 | 六大工作区 + 11 个页面 | 经典页 `frontend/src/shell/views/pm/`：`overview/projects/tasks/requirements/approvals/audit/settings/customers`（8）；工作区 `frontend/src/workspace/`：`console` + `focus` + `pages/`（Team/Execution/Goals/Models/Activity/Requirements/Knowledge/Artifacts/Decisions）；`GET /v1/pm/task-runs` 只读（`apps/pm-api/src/pm_runs.rs:20`） | 🟡 页面骨架齐 | 执行中心接真 Run 数据、交付验收页 → T-070 |
 | P11 规模化与自动化 | 多项目调度、并发控制、配额、自动规划 | 无 | ❌ 延后 | 需单仓闭环先稳定（§12） |
 
 **结论（这一版的真实工作量）**：平台已有「任务 + Run + 调度 + 租约 + MCP + 审批 + 知识单仓」的底座，顾问路线里**真正从零开始**的只有 4 块——
@@ -92,7 +95,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 2. 排序理由（为什么不按 P0→P11 顺次做）
 
-- **身份先于执行器**：`governance.audit_log` 的 `actor` 曾由 `owner_actor`（`crates/pm-application/src/pm_write.rs:92`）三级回退猜出来 —— **T-021a 已改为真实 principal**（token → `core.principal_identity` → `core.principal`，审计三列齐备）。D3/D4/D5 每一步都要往审计里写执行证据（进程生命周期、逐仓 commit、验收裁决），身份已就位，后续切片直接受益。
+- **身份先于执行器**：`governance.audit_log` 的 `actor` 曾由 `owner_actor`（`crates/pm-application/src/pm_write.rs:93`，三级回退）猜出来 —— **T-021a 已改为真实 principal**（token → `core.principal_identity` → `core.principal`，审计三列齐备；`owner_actor` 已退场为 `#[cfg(test)]` 夹具）。D3/D4/D5 每一步都要往审计里写执行证据（进程生命周期、逐仓 commit、验收裁决），身份已就位，后续切片直接受益。
 - **租户边界先于执行器**：T-021b（α/γ/δ）提供 `tenant_id`、`agent_id`、`executor_id` 三类列，是 T-030/T-031 落库与 Registry 的前提（ADR-0001 §5/§10）；且 α 必须先于 γ/δ（Agent 与 Run 都挂在租户上）。
 - **T-022 只依赖 T-021a**：可见性按 `project_member` 过滤，不需要 `tenant_id`；租户维度过滤在 T-021b 之后叠加，不改变 T-022 语义。
 - **Task 依赖先于 D4/D5**：D5 的「完成后解锁下游任务」和 D3 领取前的等待判定都依赖它；现在 `task_waiting` 只能记原因、记不了关系。
@@ -117,7 +120,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **交付**：`8dcdcc3` docs(principal)（v1 草稿）→ `d6a38e4` docs(identity)（ADR-0001 + v1 §7/§8/§12 回填）。v1 稿按 ADR-0001 收窄为 **β 范围**：`tenant_id` → `claims_tenant_key`、§10 补「Agent 非认证主体 / 共享 key 归因塌陷」、§11 验收矩阵 C29–C42。**用户已过稿**（批准进入 T-021a）。
   - **本条按 §0.1 执行**：完整 brainstorming 流程（先看现状 → 一次一问 → 2–3 方案 → 分节确认 → 落稿提交），不得直接产出文档。
   - **目标**：一份可实施的 v1 设计依据：身份映射模型、自动 provision 流程、鉴权矩阵、迁移 DDL 草案、验收矩阵、遗留取舍。
-  - **依据**：`apps/pm-api/src/auth.rs`（验签 + `PM_MCP_READ` 门）、`migrations/0001_core.sql:31-39`（`core.principal`）、`crates/pm-application/src/pm_write.rs:92`（`owner_actor`）、`docs/runbook-login-chain.md`（lmms claims：`sub`/`tid`/`roles`/`permissions`）。
+  - **依据**：`apps/pm-api/src/auth.rs`（验签 + `PM_MCP_READ` 门）、`migrations/0001_core.sql:31-39`（`core.principal`）、`crates/pm-application/src/pm_write.rs:93`（`owner_actor`，T-021a 后已降为 `#[cfg(test)]` 夹具）、`docs/runbook-login-chain.md`（lmms claims：`sub`/`tid`/`roles`/`permissions`）。
   - **已裁定的上位约束（不得推翻）**：
     - **方案 C —— 自动 provision 但默认未激活**：首次见到未知 identity 时创建 `core.principal(kind='human', is_active=false)` + 身份映射行，**不自动授予任何项目成员资格**；管理端显式激活后方可使用。建身份与给权限解耦，`is_active` 是现成开关。
     - 映射键必须是三元组 `(provider, claims_tenant_key, subject)`：lmms 是多租户签发方（`tid` 为强制 claim），只用 `sub` 会在跨租户同名 subject 时串号。
@@ -137,8 +140,8 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **遗留（T-059）**：MCP 审计三列未能落地——rmcp 3.8 的 `StreamableHttpService` 工厂拿不到请求上下文，会话在 `spawn` 子任务里跑，task-local 不继承（见 v1 §7/§12）。
   - **目标**：真实调用者身份贯穿全部 HTTP 写路径与审计；未激活身份 fail-closed。MCP 工具 actor 契约**不变**（D2）。
   - **依据**：`docs/ai-pm-principal-identity-v1.md`（本文 = β 范围）+ `docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`。
-  - **做**：迁移 `0018_principal_identity.sql`（`core.principal_identity` + 审计三列；上游 `tid` 落 `claims_tenant_key TEXT`，**不叫 `tenant_id`**）；auth 中间件 claims → 解析/自动 provision → typed extension（不再只塞裸 `Value`）；新增 `GET /v1/pm/me`；HTTP 写路径把 `owner_actor` 换成真实 principal（`pm_write.rs:210/280/369/460`、`apps/pm-api/src/pm_writes.rs:87`、`pm_repositories.rs`、`repository.rs:735`、`project_import.rs:240/1130`、`command_executor.rs:1627` 同口径）；审计 `actor_id` 写真实身份。（原清单列的 `project_import_advance.rs:38` **不在模块树**，实际推进函数是 `project_import.rs::advance_import_after_decision`，由 `supervision` 调用——已更正。）
-  - **MCP 工具不替换 actor**（代码事实：`crates/pm-mcp/src/tools.rs:179-201` 解析项目内 `dev_agent`、`:320/386-398` 解析 `ai_pm`，**无 `owner_actor` 调用点**）；原计划在审计同时写 `actor_identity_id` / `actor_client` / `actor_auth_mode` —— **未落地，受 rmcp transport 限制，转 T-059**。
+  - **做**：迁移 `0018_principal_identity.sql`（`core.principal_identity` + 审计三列；上游 `tid` 落 `claims_tenant_key TEXT`，**不叫 `tenant_id`**）；auth 中间件 claims → 解析/自动 provision → typed extension（不再只塞裸 `Value`）；新增 `GET /v1/pm/me`；HTTP 写路径把 `owner_actor` 换成真实 principal —— `pm_write.rs` 的 `create_revision`/`approve_revision`/`create_task`/`update_task`、`apps/pm-api/src/pm_writes.rs` 的 5 个 handler（41/156/166/179/190）、`pm_repositories.rs`、`repository.rs` 的 9 个写函数（`ensure_ssh_key`/`generate_ssh_key`/`revoke_ssh_key`/`delete_ssh_key`/`create_repository`/`update_repository`/`delete_repository`/`archive_repository`/`verify_repository`）、`project_import.rs::start_import`（189）与 `advance_import_after_decision`（1095）、`command_executor.rs::system_context`（1628）同口径；审计 `actor_id` 写真实身份。（原清单列的 `project_import_advance.rs` **不在模块树**——`lib.rs` 未声明，文件不参与编译；实际推进函数是 `project_import.rs::advance_import_after_decision`，由 `supervision` 调用。）
+  - **MCP 工具不替换 actor**（代码事实：`crates/pm-mcp/src/tools.rs:179-183` 解析项目内 `dev_agent`、`:312-332` 与 `:386-398` 解析 `ai_pm`，**无 `owner_actor` 调用点**）；原计划在审计同时写 `actor_identity_id` / `actor_client` / `actor_auth_mode` —— **未落地，受 rmcp transport 限制，转 T-059**。
   - **不做**：不改 `core.principal.kind` 取值集合；不建 `core.tenant` / Agent 模型 / Run 身份列（归 T-021b）；`is_admin` 暂取 token `roles`（≤15 分钟窗口，T-021b 收口）；不做 per-project 调用方绑定（D2 待裁 #12 仍开放，见 T-051）。
   - **验收**：`docs/ai-pm-principal-identity-v1.md` §11 的 C29–C42；D2 的 C1–C28 不回归；`cargo test` 全绿。
 
@@ -249,7 +252,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 - [ ] **T-061 Outbox 业务事件覆盖与死信重放（P8）**
   - **目标**：把 outbox 从「一个 TaskReady 处理器」补成事件体系。
-  - **依据**：`0010:122-144`（`outbox_event` 已含 `attempts`/`dead_letter`/`locked_until`/`idempotency_key`）、`apps/ai-pm-worker/src/main.rs`（只注册 `TaskReady`）、`target.md` §P8 首批事件清单。
+  - **依据**：`0010:123-144`（`outbox_event` 已含 `attempts`/`dead_letter`/`locked_until`/`idempotency_key`）、`apps/ai-pm-worker/src/main.rs`（只注册 `TaskReady`）、`target.md` §P8 首批事件清单。
   - **做**：为 `RunCompleted`/`DeliverySubmitted`/`ReviewCompleted`/`KnowledgeBaseWriteRequested` 建真实生产者（必须同事务写入）；死信重放接口；事件状态监控（计数/积压/失败率）。
   - **不做**：不为凑事件数造无业务语义的 Handler（target.md 明确）。**能搭车的先搭**：`RunCompleted` 可随 T-031 落，`DeliverySubmitted` 随 T-041，`ReviewCompleted` 随 T-043。
   - **验收**：四条事件均有生产端与消费端；重复投递不产生副作用；死信重放幂等；监控页或指标可读。
@@ -290,7 +293,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 | 客户 G1–G4（建项客户必选、客户详情页、可见性、客户级 AI 上下文） | 🟡 延后，**非必须完成项**（G3=可见性已并入 T-022） | 出现「按客户聚合跨项目视图」或「客户维度权限隔离」的真实需求；重启前回 `docs/ai-pm-customer-master-data-v1.md` §2 复核 5 条裁定 |
 | 项目 tag（标签）归纳轴 | ❌ 放弃，不实施 | 需先解决 4 条阻塞（AI 分类半成品收编、project 属性直写 SQL 无命令通道、词表跨客户泄露面、与项目隔离原则冲突） |
 | 平台内置 AI 编程助手 / 为单一编码工具深度定制 | ❌ 已推翻，不再进入设计讨论 | 无（见 `docs/ai-pm-mcp-executor-positioning-v1.md`「明确被推翻的路线」） |
-| 租户费用核算/配额聚合（ADR-0001 R4）、`project_member` 的 human/agent 授权状态机（R5） | 🟡 V1 不做（`task_run.tenant_id` 已留载体） | 出现租户级计费/配额真实需求；或 D3 接入后发现 agent 授权需要独立生命周期 |
+| 租户费用核算/配额聚合（ADR-0001 R4）、`project_member` 的 human/agent 授权状态机（R5） | 🟡 V1 不做（`task_run.tenant_id` 载体由 T-021b 的 α 阶段 `0019_tenant.sql` 预留，**当前未建**） | 出现租户级计费/配额真实需求；或 D3 接入后发现 agent 授权需要独立生命周期 |
 
 > 注意：客户 G3（可见性）与 T-022 是**同一件事**；T-022 作为身份切片的自然延伸，客户功能本身（G1/G2/G4）仍延后。
 
@@ -321,3 +324,11 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 - **提交**：随 T-021a 的迁移改动一并修掉（`cb633b8`）。
 - **内容**：`migrations/0010_task_state_machine.sql` 头注释「0009_task_state_machine」→「0010_task_state_machine」。纯注释，无行为变化。
+
+### 文档一致性巡检（todo.md 完成度审计）—— 2026-11-01 完成
+
+- **提交**：`d3b144e` docs(adr)（ADR-0001 事实表 + 前向列表述校正）→ `f7b1ecc` fix(bootstrap)（模块头注释）→ `chore(todo)` → `chore(memory)`。
+- **ADR-0001 修正**：F1「17 迁移 / 42 表」→ **18 迁移 / 43 张表**；F2 写清 7 张不带 `project_id` 的表归属（业务 3 + 全局 3 + 租户键表 1），全库 **36 带 / 7 不带**；F3「4 个 principal」→ **5 个**（`bootstrap.rs:172-189`：owner human + `ai_pm` + architect / developer / tester）；§3.4 计数自检「3 + 39 = 42」→ **3 + 39 + 1(`principal_identity`) = 43**；§8 方案 B「42 张表」→ 43；§9 与 §12 R4 的 `task_run.tenant_id` 标为 **T-021b 前向列（当前 `delivery.task_run` 无该列）**。
+- **todo.md 修正**：§12 表格「`task_run.tenant_id` 已留载体」→「载体由 T-021b 的 α 阶段 `0019_tenant.sql` 预留，**当前未建**」；T-061 依据 `0010:122-144` → `0010:123-144`（122 是注释行，表体 123-142）。
+- **代码注释修正**：`crates/pm-application/src/bootstrap.rs` 模块头写「three `core.principal` / three `core.project_member`」，实际 **5 / 5**（`bootstrap.rs:218-222`）；注释改正。纯注释，零行为变化。
+- **实测**：`cargo test --workspace` 退出码 0 —— **64 个 `test result: ok`、401 passed、0 failed、0 ignored、0 panicked**。
