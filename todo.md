@@ -7,8 +7,9 @@
 **本版（v2，2026-11-01）的合并口径**：
 
 - 依据 A：`target.md` —— 技术顾问**只按产品描述**制定的 12 阶段路线（P0–P11），他看不到本仓库实况。
-- 依据 B：仓库实测 —— `migrations/`（0001–0017）、`crates/`（8 个包）、`apps/`（pm-api / ai-pm-worker / pm-worker）、`frontend/src/shell/views/`、`git log`。
+- 依据 B：仓库实测 —— `migrations/`（0001–0018）、`crates/`（8 个包）、`apps/`（pm-api / ai-pm-worker / pm-worker）、`frontend/src/shell/views/`、`git log`。
 - 冲突时**以实测为准**：顾问的路线用来「补漏」，不用来「重排已完成的活」。已实现的部分不再重复开工（§1 逐项给了证据）。
+- **2026-11-01 增量**：多租户 / Agent / Executor 身份边界由 `docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`（Accepted）裁定；M1 拆为 **T-021a（β，身份归因）** / **T-021b（α+γ+δ，Tenant + Agent + Run 身份列）**；迁移号顺移（T-024 → `0021`、T-041 → `0022`）；ADR 未决项登记为 T-055~T-058。**T-020 已过稿、T-021a 已实施并验收**（交付见 §13 归档）。
 
 ---
 
@@ -19,7 +20,7 @@
 > **用户裁定（2026-11-01）**：「任务开始前都要按照 superpower 的 /brainstorming 来执行。」
 > 触发命令：`/brainstorm`（等价于调用 `superpowers:brainstorming` 技能）。
 
-**适用范围（必须走）**：新增功能、新建组件、改动行为、新增迁移、新增接口、改变既有契约、以及**任何需要做设计决策的任务**——包括本清单里标了「出设计稿」的 T-020 / T-023 / T-030 / T-040 / T-042 / T-060。
+**适用范围（必须走）**：新增功能、新建组件、改动行为、新增迁移、新增接口、改变既有契约、以及**任何需要做设计决策的任务**——包括本清单里标了「出设计稿」的 T-020 / T-023 / T-030 / T-040 / T-042 / T-060。**T-021b 的 α 阶段虽已有 ADR 定边界，仍需按 §0.1 走一遍设计确认（逐表迁移方案先评审，不改表）**。
 
 **豁免范围（可跳过，但不得跳过「读依据」）**：纯机械动作，不产生任何设计决策的任务——T-050（修一行注释）。判据：**如果做这件事不需要在两个以上方案之间选择，就不必 brainstorm**。
 
@@ -65,7 +66,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 | 顾问阶段 | 顾问要求（target.md 摘要） | 实测证据 | 判定 | 剩余差距 |
 |---|---|---|---|---|
-| P0 项目与仓库基础 | 项目、仓库、多对多关联、成员角色、环境/系统配置 | `0001_core` + `0017`（客户）、`0008`（`project_ssh_key`/`project_repository`/verify）、`bootstrap` 落 5 人编制、`0007`/`0003`（LLM 与技能配置） | ✅ 基本完成 | **权限层只有「验签 + `PM_MCP_READ`」，身份未落到 `core.principal`** → T-020~T-022 |
+| P0 项目与仓库基础 | 项目、仓库、多对多关联、成员角色、环境/系统配置 | `0001_core` + `0017`（客户）、`0008`（`project_ssh_key`/`project_repository`/verify）、`bootstrap` 落 5 人编制、`0007`/`0003`（LLM 与技能配置）、`0018`（`core.principal_identity` + 审计三列） | ✅ 基本完成 | 身份归因已落地（T-021a：token → `core.principal` 映射 + 未激活 fail-closed + `GET /v1/pm/me`）；**仍缺租户维度**（全库零 `tenant` 列）与**按成员过滤的可见性** → T-021b / T-022 |
 | P1 Task 任务管理核心 | 模型、13 态状态机、依赖、类型、输入、变更记录、事件 | `0002`+`0015`（契约：goal/constraints/验收条目/交付物/知识引用）、`0010`（状态机 + `apply_task_transition` + `task_supersession`/`task_waiting`/`task_policy_override`）、`outbox` TaskReady | 🟡 除依赖外完成 | **前置/后置任务依赖零表零列**（`grep task_dependency` 无命中）→ T-023/T-024；逐字段变更历史未做（仅审计 + supersession） |
 | P2 Run 执行管理核心 | 生命周期、调度、领取、租约、恢复、重试、策略快照 | `0011`/`0012`/`0013`、`run_dispatch.rs`（24 用例全绿）、`0016` 四层策略合成 | ✅ 完成 | 无（D1/D2/D2.1 已签收） |
 | P3 MCP 接入层 | claim / get_task / context / start_run / heartbeat / progress / submit_delivery / complete_run | `pm-mcp` 11 工具：`pm_claim_task`、`pm_get_task_context`、`pm_get_run_context`、`pm_report_progress`、`pm_submit_result`、`pm_get_submission_status` + 5 个文档工具；run 级 `lease_token` | ✅ 已收敛 | 顾问列的 `start_run`/`heartbeat`/`submit_delivery`/`complete_run` 在 D2 契约里**合并**为 `report_progress`/`pm_submit_result`，不是缺失 |
@@ -80,7 +81,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 **结论（这一版的真实工作量）**：平台已有「任务 + Run + 调度 + 租约 + MCP + 审批 + 知识单仓」的底座，顾问路线里**真正从零开始**的只有 4 块——
 
-1. **身份归因**（审计 actor 现在是猜出来的）→ §4
+1. **多租户/Agent 数据边界**（身份归因已于 T-021a 落地；全库仍零租户列）→ §4（ADR-0001 / T-021b）
 2. **Task 依赖**（P1 明确要求，实测没有）→ §5
 3. **执行引擎 + 多仓交付**（P4 + P5）→ §6/§7
 4. **独立 Review + 失败判定 + 知识回写**（P7 后半 + P6 后半）→ §8
@@ -91,7 +92,9 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 2. 排序理由（为什么不按 P0→P11 顺次做）
 
-- **身份先于执行器**：`governance.audit_log` 的 `actor` 目前由 `owner_actor`（`crates/pm-application/src/pm_write.rs:92`）三级回退猜出来。D3/D4/D5 每一步都要往审计里写执行证据（进程生命周期、逐仓 commit、验收裁决），身份不先修，写进去的都是假 actor，越晚回填越贵。
+- **身份先于执行器**：`governance.audit_log` 的 `actor` 曾由 `owner_actor`（`crates/pm-application/src/pm_write.rs:92`）三级回退猜出来 —— **T-021a 已改为真实 principal**（token → `core.principal_identity` → `core.principal`，审计三列齐备）。D3/D4/D5 每一步都要往审计里写执行证据（进程生命周期、逐仓 commit、验收裁决），身份已就位，后续切片直接受益。
+- **租户边界先于执行器**：T-021b（α/γ/δ）提供 `tenant_id`、`agent_id`、`executor_id` 三类列，是 T-030/T-031 落库与 Registry 的前提（ADR-0001 §5/§10）；且 α 必须先于 γ/δ（Agent 与 Run 都挂在租户上）。
+- **T-022 只依赖 T-021a**：可见性按 `project_member` 过滤，不需要 `tenant_id`；租户维度过滤在 T-021b 之后叠加，不改变 T-022 语义。
 - **Task 依赖先于 D4/D5**：D5 的「完成后解锁下游任务」和 D3 领取前的等待判定都依赖它；现在 `task_waiting` 只能记原因、记不了关系。
 - **D 系列硬顺序**：`docs/ai-pm-slice-d-execution-pipeline-v1.md` §3.2 规定 D1→D2→D3→D4→D5，跳步会得到「契约字段无来源」或「基线可被事后篡改」。D1/D2 已完成。
 - **工作台跟随真实能力**：target.md 明确「不要先做与实际状态机脱节的假数据页」。执行中心与交付验收页排在 T-031/T-041 之后。
@@ -104,17 +107,20 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ---
 
-## 4. M1 · 主体身份（P0 权限层的唯一缺口）
+## 4. M1 · 主体身份与多租户边界（P0 权限层 + 数据边界）
 
-> 现状：`core.principal` 只有 `id/kind/display_name/is_active/created_at`，**全库无 tenant 列**；`require_bearer` 验签后把 `sub`/`tid`/`permissions` 塞进 extensions 从不落库；`owner_actor` 用「项目 owner → 任意 human → 全库第一个 human」猜 actor。结论：**审计里的 actor 不是真实调用者**。
+> 现状（2026-11-01 更新）：**T-020 已过稿、T-021a（β）已实施验收** —— token 三元组 `(provider, claims_tenant_key, subject)` → `core.principal_identity` → `core.principal`，审计三列齐备，未激活 fail-closed，`owner_actor` 已退场（仅留 `cfg(test)` 夹具）。**仍未做**：全库零 `tenant` 列（T-021b α）、可见性未按成员过滤（T-022）、MCP 侧审计三列未落地（T-059）。
+>
+> 架构边界已裁定：`docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`（Accepted 2026-11-01）。**T-021a** = 身份归因与审计（β，**已完成**）；**T-021b** = Tenant 实体 + `tenant_id` + Agent 三层 + Run 身份列（α/γ/δ，**待开工**）。
 
-- [ ] **T-020 出设计稿 `docs/ai-pm-principal-identity-v1.md`**
+- [x] **T-020 出设计稿 `docs/ai-pm-principal-identity-v1.md`**（领用 2026-11-01 / AI）
+  - **交付**：`8dcdcc3` docs(principal)（v1 草稿）→ `d6a38e4` docs(identity)（ADR-0001 + v1 §7/§8/§12 回填）。v1 稿按 ADR-0001 收窄为 **β 范围**：`tenant_id` → `claims_tenant_key`、§10 补「Agent 非认证主体 / 共享 key 归因塌陷」、§11 验收矩阵 C29–C42。**用户已过稿**（批准进入 T-021a）。
   - **本条按 §0.1 执行**：完整 brainstorming 流程（先看现状 → 一次一问 → 2–3 方案 → 分节确认 → 落稿提交），不得直接产出文档。
   - **目标**：一份可实施的 v1 设计依据：身份映射模型、自动 provision 流程、鉴权矩阵、迁移 DDL 草案、验收矩阵、遗留取舍。
   - **依据**：`apps/pm-api/src/auth.rs`（验签 + `PM_MCP_READ` 门）、`migrations/0001_core.sql:31-39`（`core.principal`）、`crates/pm-application/src/pm_write.rs:92`（`owner_actor`）、`docs/runbook-login-chain.md`（lmms claims：`sub`/`tid`/`roles`/`permissions`）。
   - **已裁定的上位约束（不得推翻）**：
     - **方案 C —— 自动 provision 但默认未激活**：首次见到未知 identity 时创建 `core.principal(kind='human', is_active=false)` + 身份映射行，**不自动授予任何项目成员资格**；管理端显式激活后方可使用。建身份与给权限解耦，`is_active` 是现成开关。
-    - 映射键必须是三元组 `(provider, tenant_id, subject)`：lmms 是多租户签发方（`tid` 为强制 claim），只用 `sub` 会在跨租户同名 subject 时串号。
+    - 映射键必须是三元组 `(provider, claims_tenant_key, subject)`：lmms 是多租户签发方（`tid` 为强制 claim），只用 `sub` 会在跨租户同名 subject 时串号。
     - 未激活身份一律 fail-closed，错误码沿用 lmms 风格（如 `IAM_PERM_3002`），响应体不泄露存在性。
   - **要在对话中裁清的点**（逐条一问一答，裁完再写结论，不要由 AI 自行拟定）：
     1. 映射载体：独立表 `core.principal_identity` vs `core.principal` 加列（多 provider 演进）。
@@ -122,16 +128,29 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
     3. `owner_actor` 的去留边界：哪些保留给 bootstrap/系统内部路径，哪些业务写路径必须换真实 principal。
     4. 存量数据迁移路径：现有 `core.principal` 无 identity，走「首次登录认领」还是「管理端手工绑定」。
   - **不做**：不改代码；不动 D3/D4/D5；不顺带做 RBAC 角色体系（V1 只做身份归因 + 成员资格）。
-  - **验收**：文档含「字段 → 库内来源」映射表与验收矩阵（编号续 D2 的 C28 之后）；用户过稿确认后才可进 T-021。
+  - **验收**：文档含「字段 → 库内来源」映射表与验收矩阵（编号续 D2 的 C28 之后）；用户过稿确认后才可进 T-021a。
 
-- [ ] **T-021 实施身份映射与鉴权（待 T-020 过稿）**
-  - **目标**：真实调用者身份贯穿所有 PM 写路径与审计；未激活身份 fail-closed。
-  - **依据**：T-020 的稿。
-  - **做**：迁移 `0018_principal_identity.sql`；auth 中间件解析 claims → 解析/自动 provision principal → 注入 typed extension（不再只塞裸 `Value`）；新增 `GET /v1/pm/me`；替换 `pm_write`/`pm_lists`/`pm_repositories`/MCP 工具里的 `owner_actor` 调用点；审计 `actor` 写真实身份。
-  - **不做**：不改 `core.principal.kind` 取值集合；不做 per-project 调用方绑定（D2 待裁 #12 仍开放，见 T-051）。
-  - **验收**：用例覆盖「首次登录自动 provision 为未激活 + 业务请求 403」「激活后可写」「审计 actor == JWT sub 对应 principal」；D2 的 C1–C28 不回归；`cargo test` 全绿。
+- [x] **T-021a 实施身份归因与审计（β）**（领用 2026-11-01 / AI）
+  - **交付**：`d6a38e4` docs(identity) → `cb633b8` feat(identity)（26 文件）。迁移 `0018` + auth 三层（typed claims → resolve_principal → require_active）+ `GET /v1/pm/me` + `PATCH /v1/pm/principals/{id}` + 8 处写路径 actor 改造。
+  - **实测**：`cargo check --workspace --all-targets` 0 error；`cargo test --workspace` 退出码 0，**64 个 `test result: ok`、0 失败**；新增 `principal_identity.rs` 11 例（C30–C42）。
+  - **结论**：审计 `actor_id` 100% 有来源（真实 principal），`owner_actor` 退场；未激活身份 fail-closed；上游 `tid` 落 `claims_tenant_key`（**不是**内部 `tenant_id`，留给 T-021b）。
+  - **遗留（T-059）**：MCP 审计三列未能落地——rmcp 3.8 的 `StreamableHttpService` 工厂拿不到请求上下文，会话在 `spawn` 子任务里跑，task-local 不继承（见 v1 §7/§12）。
+  - **目标**：真实调用者身份贯穿全部 HTTP 写路径与审计；未激活身份 fail-closed。MCP 工具 actor 契约**不变**（D2）。
+  - **依据**：`docs/ai-pm-principal-identity-v1.md`（本文 = β 范围）+ `docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`。
+  - **做**：迁移 `0018_principal_identity.sql`（`core.principal_identity` + 审计三列；上游 `tid` 落 `claims_tenant_key TEXT`，**不叫 `tenant_id`**）；auth 中间件 claims → 解析/自动 provision → typed extension（不再只塞裸 `Value`）；新增 `GET /v1/pm/me`；HTTP 写路径把 `owner_actor` 换成真实 principal（`pm_write.rs:210/280/369/460`、`apps/pm-api/src/pm_writes.rs:87`、`pm_repositories.rs`、`repository.rs:735`、`project_import.rs:240/1130`、`command_executor.rs:1627` 同口径）；审计 `actor_id` 写真实身份。（原清单列的 `project_import_advance.rs:38` **不在模块树**，实际推进函数是 `project_import.rs::advance_import_after_decision`，由 `supervision` 调用——已更正。）
+  - **MCP 工具不替换 actor**（代码事实：`crates/pm-mcp/src/tools.rs:179-201` 解析项目内 `dev_agent`、`:320/386-398` 解析 `ai_pm`，**无 `owner_actor` 调用点**）；原计划在审计同时写 `actor_identity_id` / `actor_client` / `actor_auth_mode` —— **未落地，受 rmcp transport 限制，转 T-059**。
+  - **不做**：不改 `core.principal.kind` 取值集合；不建 `core.tenant` / Agent 模型 / Run 身份列（归 T-021b）；`is_admin` 暂取 token `roles`（≤15 分钟窗口，T-021b 收口）；不做 per-project 调用方绑定（D2 待裁 #12 仍开放，见 T-051）。
+  - **验收**：`docs/ai-pm-principal-identity-v1.md` §11 的 C29–C42；D2 的 C1–C28 不回归；`cargo test` 全绿。
 
-- [ ] **T-022 可见性收口（待 T-021）**
+- [ ] **T-021b 实施 Tenant 基础设施 + Agent 模型 + Run 身份归因（α+γ+δ；T-021a 已完成，待开工）**
+  - **目标**：`core.tenant` / `core.tenant_member` / 租户业务数据 `tenant_id` 一次建对；Agent 三层；Run 身份字段。表清单与约束模式见 `docs/ai-pm-adr-0001-tenant-agent-executor-identity.md` §3（**已锁定，不得临时扩表**）。
+  - **α（Tenant，迁移 `0019_tenant.sql`）**：`core.tenant` + `core.tenant_member`；ADR-0001 §3.4 的 39 张表加 `tenant_id NOT NULL` + 组合外键（三种形态见 §3.5）；`principal_identity` 补 `tenant_id UUID` 外键（`claims_tenant_key` 解析得到，无回填）；`is_admin` 由 token `roles` 改读 `tenant_member.role`。
+  - **γ+δ（Agent 与 Run，迁移 `0020_agent_run_identity.sql`）**：`agent_definition`（全局可复用）+ `tenant_agent`（租户实例，`principal_id` → `kind='dev_agent'`）；项目授权**复用** `project_member`，不建 grant 表；`tenant_agent.is_enabled=false` → MCP 领取 403。`delivery.task_run` 加 `agent_id`（→ `core.principal`，与审计 `actor_id` 同一 id 空间）、`triggered_by_user_id`（→ human principal）、`executor_id`（可空、**无 FK**，Registry 归 T-030）；**不写** `created_by`/`approved_by`（审计行已承载，避免双写）。
+  - **α 必交（缺一不许进代码）**：逐表迁移方案（§3.4 清单逐条 DDL + 迁移序号）、组合外键约束、`information_schema` 断言（XT-3）、跨租户隔离测试（XT-1/2、FK-1/2）、管理员撤权即时生效测试（RV-1/2）。
+  - **不做**：不建 Executor Registry（T-030 / D3）；不做费用核算聚合（R4）；不改 Git 凭据层级（R3）。
+  - **验收**：ADR-0001 §10 的 XT / FK / RV / AG / EX 全绿；T-021a 的 C29–C42 不回归。
+
+- [ ] **T-022 可见性收口（待 T-021a）**
   - **目标**：把「按 `project_member` 过滤」从「全局可见」改为真实按成员过滤（客户 G3 与本文同源）。
   - **依据**：`docs/ai-pm-customer-master-data-v1.md` §2 裁定 5 与 §6 G3。
   - **做**：客户列表 / 项目列表按当前 principal 的 membership 过滤；无成员关系的资源返回「不存在」而非「无权限」（不泄露存在性）。
@@ -155,7 +174,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **验收**：含状态与失败路径图、边表 DDL 草案、验收矩阵；用户过稿后才可进 T-024。
 
 - [ ] **T-024 实施 Task 依赖（待 T-023 过稿）**
-  - **做**：迁移 `0019_task_dependency.sql`；建/删边的接口或命令通道；领取前判定「有未完成前置 → Skip 并写 `release_reason`」；上游完成时投递下游 `TaskReady`（走 outbox，不得旁路插入 run）。
+  - **做**：迁移 `0021_task_dependency.sql`；建/删边的接口或命令通道；领取前判定「有未完成前置 → Skip 并写 `release_reason`」；上游完成时投递下游 `TaskReady`（走 outbox，不得旁路插入 run）。
   - **不做**：不改 13 态状态机取值；不做自动排期。
   - **验收**：用例覆盖「建边」「环拒绝」「跨项目拒绝」「前置未完成时领取 Skip」「前置完成解锁下游」「重复事件不产生第二个活跃 run」。
 
@@ -178,7 +197,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **验收**：含状态机图 + 端口 trait 签名 + 测试计划（含假执行端）；用户过稿后才可进 T-031。
 
 - [ ] **T-031 实施 D3（前置：T-030 已确认）**
-  - **做**：`pm-application` 执行器端口 + `CodexExecutor` 适配器；run 状态迁移走 `apply_task_transition`（不得旁路）；填 `executor_kind`/`executor_session`；启动/终止/超时均写审计（真实 actor 依赖 T-021）。
+  - **做**：`pm-application` 执行器端口 + `CodexExecutor` 适配器；run 状态迁移走 `apply_task_transition`（不得旁路）；填 `executor_kind`/`executor_session`；启动/终止/超时均写审计（真实 actor 依赖 T-021a；`executor_id` 列已由 T-021b 预留，Registry 本阶段建）。
   - **不做**：不越界到 D4/D5；不改 D2 工具面契约字段。
   - **验收**：假执行端跑通「启动→心跳→正常结束」与「启动→超时→强制终止」两条路径；`cargo test` 全绿；D1/D2 用例不回归。
 
@@ -195,7 +214,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **验收**：含 DDL 草案、对账规则、验收矩阵（建议 C 系列续编号）；用户过稿后才可进 T-041。
 
 - [ ] **T-041 实施 D4（前置：T-040 已确认）**
-  - **做**：迁移 `0020_delivery_manifest.sql`；`pm_submit_result` 的交付段落两表；Baseline Validation（base_commit 与仓库实际 HEAD 对账）；交付清单只读接口（前端页在 T-070）。
+  - **做**：迁移 `0022_delivery_manifest.sql`；`pm_submit_result` 的交付段落两表；Baseline Validation（base_commit 与仓库实际 HEAD 对账）；交付清单只读接口（前端页在 T-070）。
   - **不做**：不做自动 merge/推远端；不做审批流改造。
   - **验收**：三仓任务可插入完整链路并逐仓对账；基线漂移被拒；只读仓出现 commit 整单驳回；`cargo test` 全绿。
 
@@ -250,11 +269,15 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 11. 技术债与已开放待裁（可搭车，勿单独开切片）
 
-- [ ] **T-050 迁移文件头注释残留**：`migrations/0010_task_state_machine.sql` 头注释仍写「0009_task_state_machine」。纯注释修复，随下一条涉迁移的任务搭车。
 - [ ] **T-051 待裁 #12 执行端预注册档位**：V1 已明确接受横向越权面（持有效 bearer 可领取任意项目任务），档位机制待首批执行端接入后再裁。**保持开放，不主动实施**。
 - [ ] **T-052 待裁 #13 验收条目版本化**：`task_acceptance_criterion` 已有 `updated_at`；若 D5 证据锚定需要更强不变性，再开 forward-only 追加迁移。**保持开放，等 D5 需求明确**。
 - [ ] **T-053 estimation PRD 未落库**：`docs/ai-pm-estimation-prd-v1.md` 有完整 PRD，但零迁移、零代码（`grep estimation migrations/` 无命中）。属独立大块，需先裁 P0 范围再排期。
 - [ ] **T-054 逐字段变更历史缺失**（顾问 P1「Task 变更记录」的剩余部分）：现只有 `task_supersession` 与审计行，没有字段级 diff。先观察 D4/D5 是否需要「回放某次交付时的任务原貌」，需要再开表。
+- [ ] **T-055 私有部署认证 provider（ADR-0001 R1）**：客户可能没有 lmms。`core.principal_identity.provider` 维度已预留，加 `provider='local'/'oidc'` 的解析器**不改表结构**；属独立任务，不是 T-021a/b 的一部分。**保持开放，等私有部署立项**。
+- [ ] **T-056 私有部署首管理员 bootstrap（ADR-0001 R2）**：现只有 env 指定 `AI_PM_FIRST_ADMIN_TENANT/SUBJECT`，私有部署装完无人可激活。候选：`AI_PM_BOOTSTRAP_FIRST_ADMIN=false`（默认关，私有部署建议开，首个登录者 `is_active=true` + `tenant_admin`）。**与 T-055 同批裁**。
+- [ ] **T-057 Git 凭据层级（ADR-0001 R3）**：现为项目级 `integration.project_ssh_key`，与 ADR §6「凭据归属平台或 Tenant」不一致。V1 不动，待首批私有部署需求明确后裁。
+- [ ] **T-058 `tenant_admin` 跨项目可见性（ADR-0001 R6）**：与 T-022 一起裁。默认**不可见非成员项目**（仍按 `project_member` 过滤）；若运维需要全租户只读视图，另开审计专用入口，不放宽业务列表。
+- [ ] **T-059 MCP 审计三列（T-021a 遗留）**：MCP 工具写 `governance.audit_log` 时补 `actor_identity_id` / `actor_client` / `actor_auth_mode`。阻塞：rmcp 3.8 的 `StreamableHttpService::new(factory)` 工厂闭包不接收 `http::Request`（拿不到 axum extensions），且会话在 `tokio::spawn` 子任务运行（task-local 不继承）。候选方案：① 换/包 transport，把请求扩展带进会话；② 自研极薄 `/mcp` 转发层（解析 JSON-RPC 后直接调 `pm_mcp::tools`，绕开 rmcp 会话）；③ 接受 NULL 并只保留 HTTP 路径归因。**保持开放，等 D3 执行端接入时一并裁**（执行端接入后 MCP 归因才有真实使用方）。
 
 ---
 
@@ -267,6 +290,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 | 客户 G1–G4（建项客户必选、客户详情页、可见性、客户级 AI 上下文） | 🟡 延后，**非必须完成项**（G3=可见性已并入 T-022） | 出现「按客户聚合跨项目视图」或「客户维度权限隔离」的真实需求；重启前回 `docs/ai-pm-customer-master-data-v1.md` §2 复核 5 条裁定 |
 | 项目 tag（标签）归纳轴 | ❌ 放弃，不实施 | 需先解决 4 条阻塞（AI 分类半成品收编、project 属性直写 SQL 无命令通道、词表跨客户泄露面、与项目隔离原则冲突） |
 | 平台内置 AI 编程助手 / 为单一编码工具深度定制 | ❌ 已推翻，不再进入设计讨论 | 无（见 `docs/ai-pm-mcp-executor-positioning-v1.md`「明确被推翻的路线」） |
+| 租户费用核算/配额聚合（ADR-0001 R4）、`project_member` 的 human/agent 授权状态机（R5） | 🟡 V1 不做（`task_run.tenant_id` 已留载体） | 出现租户级计费/配额真实需求；或 D3 接入后发现 agent 授权需要独立生命周期 |
 
 > 注意：客户 G3（可见性）与 T-022 是**同一件事**；T-022 作为身份切片的自然延伸，客户功能本身（G1/G2/G4）仍延后。
 
@@ -279,3 +303,21 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 - **提交**：`1fae9e3` feat(api/web): 客户主数据 0017（23 文件）→ `8afc24a` docs(customer) → `cf454bc` chore(memory) → `5298b8c` chore(todo)；D2.1 遗留用例 `d7519d8`。
 - **关键结论**：客户升为一等实体（`code` 部分唯一索引、`placeholder` 存量不自动归并）；建项可挂已有客户；G1–G4 延后但仍可重启。
 - **实测**：cargo check 0 error、vue-tsc 0 error、customers 8/8、pm_lists 9/9、run_dispatch 24/24。
+
+### T-020 主体身份 v1 设计稿 —— 2026-11-01 完成
+
+- **提交**：`8dcdcc3` docs(principal): 主体身份 v1 设计依据 → `d6a38e4` docs(identity): ADR-0001 + v1 实施记录回填。
+- **关键结论**：身份映射定在独立表 `core.principal_identity`（三元组唯一）；未知身份自动 provision 但**默认未激活**（方案 C），未激活 fail-closed，只留 `/health` 与 `GET /v1/pm/me`；`owner_actor` 双轨制（请求内真实 principal / 请求外 `ai-pm-dispatch`）；上游 `tid` 落 `claims_tenant_key`（**不是**内部 `tenant_id`，留给 T-021b）。V1 范围 = β（身份归因），Tenant/Agent/Run 身份列归 T-021b。
+- **上位裁定**：ADR-0001 Accepted（D1–D6），T-021 拆为 T-021a（β）/ T-021b（α+γ+δ）。
+
+### T-021a 主体身份归因与审计三列（β）—— 2026-11-01 完成
+
+- **提交**：`d6a38e4` docs(identity) → `cb633b8` feat(identity)（26 文件：迁移 `0018` + auth 三层 + `/v1/pm/me` + `PATCH /v1/pm/principals/{id}` + 写路径 actor 改造 + 11 例新测试）。
+- **实测**：`cargo check --workspace --all-targets` 0 error；`cargo test --workspace` 退出码 0，64 个 `test result: ok`、0 失败。
+- **关键结论**：审计 `actor_id` 100% 有来源（真实 principal，`owner_actor` 退场）；三列 `actor_identity_id` / `actor_client` / `actor_auth_mode` 描述身份与 token 形态；服务 token（`roles=["service"]`）与跨租户 token（`ct=true`）业务面 403 且不 provision；`is_admin` 暂取 token `roles`（≤15 分钟窗口，T-021b 收口为读 `tenant_member.role`）。
+- **未落地**：MCP 侧审计三列受 rmcp 3.8 transport 限制 → **T-059**（保持开放，等 D3 执行端接入时一并裁）。
+
+### T-050 迁移文件头注释残留 —— 2026-11-01 完成
+
+- **提交**：随 T-021a 的迁移改动一并修掉（`cb633b8`）。
+- **内容**：`migrations/0010_task_state_machine.sql` 头注释「0009_task_state_machine」→「0010_task_state_machine」。纯注释，无行为变化。
