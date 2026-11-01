@@ -399,7 +399,7 @@ VALUES ($1, $2, (SELECT tenant_id FROM core.project WHERE id = $2), ...)
 |---|---|---|---|
 | `GET` | `/v1/pm/tenants/{tenant_id}/members` | `owner` / `admin` | 列表（含 `principal_id`、`display_name`、`role`、`is_active`、`created_at`） |
 | `GET` | `/v1/pm/tenants/{tenant_id}/members/{principal_id}` | `owner` / `admin` | 单条详情 |
-| `POST` | `/v1/pm/tenants/{tenant_id}/members` | `owner` / `admin` | body `{principal_id, role}`；role 只能 `member`（见 5.2） |
+| `POST` | `/v1/pm/tenants/{tenant_id}/members` | `owner` / `admin` | body `{principal_id, role}`；`owner` 可设 `member` 或 `admin`，`admin` 只能设 `member`；两边都不能设 `owner`（见 5.2） |
 | `PATCH` | `/v1/pm/tenants/{tenant_id}/members/{principal_id}/role` | `owner` / `admin` | body `{role}`；普通角色变更 |
 | `DELETE` | `/v1/pm/tenants/{tenant_id}/members/{principal_id}` | `owner` / `admin` | 移除成员 |
 | `POST` | `/v1/pm/tenants/{tenant_id}/owner-transfer` | **仅 `owner`** | body `{new_owner_principal_id}`；单事务原子交换（Q11） |
