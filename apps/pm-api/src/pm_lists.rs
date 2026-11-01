@@ -14,8 +14,10 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::routes::AppState;
-use crate::support::{ApiResult, Paging, paging, project_filter};
-use pm_application::bootstrap::{BootstrapError, BootstrapRequest, bootstrap_project};
+use crate::support::{ApiResult, Paging, customer_filter, paging, project_filter};
+use pm_application::bootstrap::{
+    BootstrapError, BootstrapRequest, bootstrap_project, bootstrap_project_for_customer,
+};
 use pm_application::rows::{
     ApprovalRow, AuditLogRow, DecisionRow, MilestoneRow, PrincipalRow, ProjectRow,
     RequirementRevisionRow, RequirementRow, TaskRow,
@@ -75,17 +77,28 @@ async fn projects(
     Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
+    let customer_id = customer_filter(&params);
+    // customer_id 是 NOT NULL 外键，INNER JOIN 不会丢行；COALESCE 只为让行结构
+    // 保持 String（前端不需要区分「有客户但没名字」）。
     let items: Vec<ProjectRow> = sqlx::query_as(
-        "SELECT id, customer_id, code, name, description, status, revision, created_at, updated_at \
-         FROM core.project ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+        "SELECT p.id, p.customer_id, COALESCE(c.name, '') AS customer_name, \
+                COALESCE(c.status, 'active') AS customer_status, \
+                p.code, p.name, p.description, p.status, p.revision, p.created_at, p.updated_at \
+         FROM core.project p JOIN core.customer c ON c.id = p.customer_id \
+         WHERE ($1::uuid IS NULL OR p.customer_id = $1) \
+         ORDER BY p.created_at DESC LIMIT $2 OFFSET $3",
     )
+    .bind(customer_id)
     .bind(page.size)
     .bind(page.offset)
     .fetch_all(&state.pool)
     .await?;
-    let total: i64 = sqlx::query_scalar("SELECT count(*) FROM core.project")
-        .fetch_one(&state.pool)
-        .await?;
+    let total: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.project WHERE ($1::uuid IS NULL OR customer_id = $1)",
+    )
+    .bind(customer_id)
+    .fetch_one(&state.pool)
+    .await?;
     Ok(Json(page.to_response(items, total)))
 }
 
@@ -95,6 +108,9 @@ struct CreateProjectBody {
     name: String,
     #[serde(default)]
     description: String,
+    /// 0017：挂到已有客户主数据。缺省时退回旧行为（按 code 隐式造 placeholder 客户）。
+    #[serde(default)]
+    customer_id: Option<Uuid>,
 }
 
 /// `POST /v1/pm/projects`：建项目并自动落 5 人编制（owner/ai_pm/architect/developer/tester）。
@@ -111,15 +127,17 @@ async fn create_project_handler(
         )
             .into_response();
     }
-    match bootstrap_project(
-        &state.pool,
-        BootstrapRequest {
-            project_code: code.to_string(),
-            project_name: name.to_string(),
-        },
-    )
-    .await
-    {
+    let request = BootstrapRequest {
+        project_code: code.to_string(),
+        project_name: name.to_string(),
+    };
+    let outcome = match body.customer_id {
+        Some(customer_id) => {
+            bootstrap_project_for_customer(&state.pool, request, customer_id, None).await
+        }
+        None => bootstrap_project(&state.pool, request).await,
+    };
+    match outcome {
         Ok(outcome) => {
             if !body.description.trim().is_empty() {
                 let _ = sqlx::query("UPDATE core.project SET description = $2 WHERE id = $1")
@@ -129,8 +147,11 @@ async fn create_project_handler(
                     .await;
             }
             match sqlx::query_as::<_, ProjectRow>(
-                "SELECT id, customer_id, code, name, description, status, revision, created_at, updated_at \
-                 FROM core.project WHERE id = $1",
+                "SELECT p.id, p.customer_id, COALESCE(c.name, '') AS customer_name, \
+                        COALESCE(c.status, 'active') AS customer_status, \
+                        p.code, p.name, p.description, p.status, p.revision, p.created_at, p.updated_at \
+                 FROM core.project p JOIN core.customer c ON c.id = p.customer_id \
+                 WHERE p.id = $1",
             )
             .bind(outcome.project_id)
             .fetch_one(&state.pool)
@@ -147,6 +168,13 @@ async fn create_project_handler(
         Err(BootstrapError::Duplicate(code)) => (
             StatusCode::CONFLICT,
             Json(serde_json::json!({ "message": format!("project code `{code}` already exists") })),
+        )
+            .into_response(),
+        Err(BootstrapError::CustomerNotFound(customer_id)) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "message": format!("customer `{customer_id}` not found or archived")
+            })),
         )
             .into_response(),
         Err(err) => (

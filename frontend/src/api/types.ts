@@ -15,18 +15,32 @@ export interface Paged<T> extends ListResponse<T> {
   size: number;
 }
 
-/** core.customer */
+/**
+ * core.customer（0017 客户主数据）。
+ * status: active 正常 / archived 已归档 / placeholder 未归类（旧 bootstrap 按项目 code 隐式生成）。
+ */
 export interface Customer {
   id: string;
+  code: string | null;
   name: string;
+  short_name: string | null;
+  industry: string | null;
+  notes: string | null;
+  parent_id: string | null;
   status: string;
+  project_count: number;
   created_at: string;
+  updated_at: string;
 }
 
 /** core.project */
 export interface Project {
   id: string;
   customer_id: string;
+  /** 冗余客户显示名，读端点 JOIN 取得 */
+  customer_name: string;
+  /** 客户状态，用于把未归类客户渲染成提示而非真实客户名 */
+  customer_status: string;
   code: string;
   name: string;
   description: string | null;

@@ -2,10 +2,13 @@
 //! principal / AI-configuration / skill-binding set a project needs before it
 //! can receive events.
 //!
-//! One call to [`bootstrap_project`] creates, in a single transaction:
+//! One call creates, in a single transaction:
 //!
-//! - a `core.customer` (name = project code, looked up first: reused when a
-//!   bootstrap for the same code ran before),
+//! - a `core.customer` — **only** on the legacy path
+//!   ([`bootstrap_project`] / [`bootstrap_project_with_status`]), where the
+//!   customer is looked up by `name = project code` and created when missing.
+//!   [`bootstrap_project_for_customer`] instead requires an existing customer
+//!   id maintained through `/v1/pm/customers` (0017 客户主数据),
 //! - three `core.principal` rows — the human owner, the AI PM and the dev
 //!   agent — with code-suffixed display names,
 //! - the `core.project` row (`status = 'planning'`, `code` UNIQUE),
@@ -29,7 +32,6 @@ use uuid::Uuid;
 pub struct BootstrapRequest {
     pub project_code: String,
     pub project_name: String,
-
 }
 
 /// The ids a successful bootstrap created (or reused, for the customer).
@@ -50,8 +52,17 @@ pub struct BootstrapOutcome {
 pub enum BootstrapError {
     #[error("project code `{0}` already exists")]
     Duplicate(String),
+    /// 指定客户不存在，或已归档（0017 起建项必须挂在一个可用的客户上）。
+    #[error("customer `{0}` not found or archived")]
+    CustomerNotFound(Uuid),
     #[error("database error: {0}")]
     Db(sqlx::Error),
+}
+
+/// 客户归属来源：主数据（0017 起）或隐式占位（0017 之前的兼容路径）。
+enum CustomerTarget {
+    Existing(Uuid),
+    Implicit,
 }
 
 /// The five skill definitions seeded by `migrations/0003_platform.sql`. Every
@@ -64,10 +75,10 @@ const SKILL_IDS: [&str; 5] = [
     "scheduling_orchestration",
 ];
 
-/// Bootstraps one project: customer (idempotent by code), the three principals,
-/// the project, its members, the AI configuration and the five skill bindings —
-/// all inside one transaction. Fails with [`BootstrapError::Duplicate`] when
-/// the project code is already taken.
+/// **兼容路径**：客户按 `name = project code` 隐式创建（建为 `placeholder`）。
+///
+/// 0017 起新代码应改用 [`bootstrap_project_for_customer`]，把项目挂到经
+/// `/v1/pm/customers` 维护的客户主数据上；保留本函数只为既有调用方与测试。
 pub async fn bootstrap_project(
     pool: &PgPool,
     req: BootstrapRequest,
@@ -79,6 +90,39 @@ pub async fn bootstrap_project(
 pub async fn bootstrap_project_with_status(
     pool: &PgPool,
     req: BootstrapRequest,
+    initial_status: Option<&str>,
+) -> Result<BootstrapOutcome, BootstrapError> {
+    bootstrap_inner(pool, req, CustomerTarget::Implicit, initial_status).await
+}
+
+/// 把项目挂到**已存在**的客户上（0017 客户主数据路径）。
+///
+/// 校验客户存在且未归档，不再隐式创建客户——一个客户对多个项目由调用方
+/// 传入同一个 `customer_id` 即可。客户不可用时报
+/// [`BootstrapError::CustomerNotFound`]，事务不留下任何行。
+pub async fn bootstrap_project_for_customer(
+    pool: &PgPool,
+    req: BootstrapRequest,
+    customer_id: Uuid,
+    initial_status: Option<&str>,
+) -> Result<BootstrapOutcome, BootstrapError> {
+    bootstrap_inner(
+        pool,
+        req,
+        CustomerTarget::Existing(customer_id),
+        initial_status,
+    )
+    .await
+}
+
+/// Bootstraps one project: customer resolution, the five principals, the
+/// project, its members, the AI configuration and the five skill bindings —
+/// all inside one transaction. Fails with [`BootstrapError::Duplicate`] when
+/// the project code is already taken.
+async fn bootstrap_inner(
+    pool: &PgPool,
+    req: BootstrapRequest,
+    customer: CustomerTarget,
     initial_status: Option<&str>,
 ) -> Result<BootstrapOutcome, BootstrapError> {
     let mut tx = pool.begin().await.map_err(BootstrapError::Db)?;
@@ -94,21 +138,34 @@ pub async fn bootstrap_project_with_status(
         return Err(BootstrapError::Duplicate(req.project_code));
     }
 
-    // Customer is idempotent by name (= project code); the table has no UNIQUE
-    // constraint on name, so look up first, insert only when missing.
-    let customer_id: Uuid = match sqlx::query_scalar("SELECT id FROM core.customer WHERE name = $1")
-        .bind(&req.project_code)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(BootstrapError::Db)?
-    {
-        Some(id) => id,
-        None => {
-            sqlx::query_scalar("INSERT INTO core.customer (name) VALUES ($1) RETURNING id")
+    let customer_id: Uuid = match customer {
+        CustomerTarget::Existing(id) => {
+            let found: Option<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM core.customer WHERE id = $1 AND status <> 'archived'",
+            )
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(BootstrapError::Db)?;
+            found.ok_or(BootstrapError::CustomerNotFound(id))?
+        }
+        // 兼容路径：客户按 name（= project code）幂等，name 无唯一约束故先查后插。
+        CustomerTarget::Implicit => {
+            match sqlx::query_scalar("SELECT id FROM core.customer WHERE name = $1")
+                .bind(&req.project_code)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(BootstrapError::Db)?
+            {
+                Some(id) => id,
+                None => sqlx::query_scalar(
+                    "INSERT INTO core.customer (name, status) VALUES ($1, 'placeholder') RETURNING id",
+                )
                 .bind(&req.project_code)
                 .fetch_one(&mut *tx)
                 .await
-                .map_err(BootstrapError::Db)?
+                .map_err(BootstrapError::Db)?,
+            }
         }
     };
 

@@ -56,6 +56,8 @@ export const projects = [
   {
     id: "prj-shield",
     customer_id: "cus-xinghe",
+    customer_name: "星河集团",
+    customer_status: "active",
     code: "SHIELD",
     name: "星河客服中台",
     description: "面向星河集团的多渠道客服与工单中台。",
@@ -67,6 +69,8 @@ export const projects = [
   {
     id: "prj-atlas",
     customer_id: "cus-yunfan",
+    customer_name: "云帆科技",
+    customer_status: "active",
     code: "ATLAS",
     name: "云帆数据门户",
     description: "云帆科技统一数据门户与自助报表。",
@@ -78,6 +82,8 @@ export const projects = [
   {
     id: "prj-horizon",
     customer_id: "cus-xinghe",
+    customer_name: "星河集团",
+    customer_status: "active",
     code: "HORIZON",
     name: "星河移动端",
     description: "客服中台配套的移动端 App，规划阶段。",
@@ -85,6 +91,36 @@ export const projects = [
     revision: 2,
     created_at: daysAgo(10),
     updated_at: daysAgo(3)
+  }
+] satisfies MockRecord[];
+
+/** core.customer（0017 客户主数据）：一个客户对应多个项目 */
+export const customers = [
+  {
+    id: "cus-xinghe",
+    code: "XINGHE",
+    name: "星河集团股份有限公司",
+    short_name: "星河集团",
+    industry: "零售",
+    notes: null,
+    parent_id: null,
+    status: "active",
+    project_count: 2,
+    created_at: daysAgo(90),
+    updated_at: daysAgo(2)
+  },
+  {
+    id: "cus-yunfan",
+    code: "YUNFAN",
+    name: "云帆科技有限公司",
+    short_name: "云帆科技",
+    industry: "软件",
+    notes: null,
+    parent_id: null,
+    status: "active",
+    project_count: 1,
+    created_at: daysAgo(70),
+    updated_at: daysAgo(5)
   }
 ] satisfies MockRecord[];
 
@@ -1471,6 +1507,8 @@ export function resolveMock(
       return { status: 200, body: list(principals) };
     case "/v1/pm/projects":
       return { status: 200, body: list(projects) };
+    case "/v1/pm/customers":
+      return { status: 200, body: paginate(customers, query) };
     case "/v1/pm/requirements":
       return { status: 200, body: list(requirements) };
     case "/v1/pm/tasks":

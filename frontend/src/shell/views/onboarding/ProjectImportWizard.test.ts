@@ -13,9 +13,14 @@ const startImport = vi.fn();
 const getImport = vi.fn();
 const cancelImport = vi.fn();
 const applyImport = vi.fn();
+const listCustomers = vi.fn();
 
 vi.mock("@/api/projects", () => ({
   createProject: (...args: unknown[]) => createProject(...args)
+}));
+
+vi.mock("@/api/customers", () => ({
+  listCustomers: (...args: unknown[]) => listCustomers(...args)
 }));
 
 vi.mock("@/api/repositories", () => ({
@@ -82,6 +87,7 @@ beforeEach(() => {
     created_at: "2026-10-31T00:00:00Z"
   });
   listRepositories.mockResolvedValue({ items: [], total: 0 });
+  listCustomers.mockResolvedValue({ items: [], total: 0 });
 });
 
 describe("冷启动导入向导", () => {
@@ -95,7 +101,7 @@ describe("冷启动导入向导", () => {
 
     const createButton = wrapper
       .findAll("button")
-      .find(button => button.attributes("disabled") === undefined);
+      .find(button => button.text().includes("创建项目"));
     expect(createButton, "创建按钮应可用").toBeTruthy();
     await createButton!.trigger("click");
     await flushPromises();
@@ -122,7 +128,7 @@ describe("冷启动导入向导", () => {
     await inputs[1].setValue("导入项目二");
     const createButton = wrapper
       .findAll("button")
-      .find(button => button.attributes("disabled") === undefined);
+      .find(button => button.text().includes("创建项目"));
     await createButton!.trigger("click");
     await flushPromises();
 
@@ -155,7 +161,7 @@ describe("冷启动导入向导", () => {
     await inputs[1].setValue("导入项目三");
     await wrapper
       .findAll("button")
-      .find(button => button.attributes("disabled") === undefined)!
+      .find(button => button.text().includes("创建项目"))!
       .trigger("click");
     await flushPromises();
 

@@ -14,8 +14,8 @@
 BEGIN;
 
 -- 1) 客户与项目 ------------------------------------------------------------
-INSERT INTO core.customer (id, name, status, created_at) VALUES
-  ('11111111-1111-1111-1111-111111111111', '盾牌科技', 'active', now() - interval '30 days')
+INSERT INTO core.customer (id, code, name, short_name, industry, status, created_at) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'DUNPAI', '盾牌科技（演示）', '盾牌科技', '软件', 'active', now() - interval '30 days')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO core.project (id, customer_id, code, name, description, status, revision, created_at, updated_at) VALUES

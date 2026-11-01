@@ -16,6 +16,42 @@ projects:
   pageTitle: 项目
   subtitle: 客户项目清单与基础信息。
   emptyHint: 项目由后端创建后展示在这里。
+customer:
+  pageTitle: 客户
+  subtitle: 客户主数据；一个客户可以包含多个项目。
+  emptyHint: 暂无客户；新建项目时可直接选择或留空。
+  colName: 客户
+  colCode: 客户编码
+  colStatus: 状态
+  colProjects: 项目数
+  all: 全部客户
+  none: 不指定客户
+  unassigned: 未归类
+  select: 所属客户
+  selectHint: 一个客户可包含多个项目；留空则生成「未归类」客户，待后续合并。
+  required: 请选择所属客户
+  new: 新建客户
+  newTitle: 新建客户
+  editTitle: 编辑客户
+  code: 客户编码
+  codePlaceholder: 例如 BANK-SH
+  name: 客户全称
+  namePlaceholder: 例如 中国某某银行股份有限公司
+  shortName: 简称
+  shortNamePlaceholder: 例如 某某银行
+  industry: 行业
+  industryPlaceholder: 例如 金融
+  notes: 备注
+  statusActive: 正常
+  statusArchived: 已归档
+  statusPlaceholder: 未归类
+  created: 客户已创建
+  updated: 客户已更新
+  codeRequired: 请填写客户编码
+  nameRequired: 请填写客户全称
+  searchPlaceholder: 搜索客户
+  search: 查询
+  loadFailed: 客户加载失败
 requirements:
   pageTitle: 需求
   subtitle: 需求清单；正文以 Markdown + Git 管理，此处展示权威状态。
@@ -140,6 +176,7 @@ settings:
 columns:
   code: 编码
   name: 项目
+  customer: 客户
   status: 状态
   revision: 版本
   actions: 操作

@@ -121,6 +121,7 @@ fn build_router(
         // `/v1/pm/*` 业务端点（Slice A，前端经典页契约；无 /api 前缀——vite
         // 代理剥掉 /api 后直达这里）。
         .merge(crate::pm_lists::router())
+        .merge(crate::customers::router())
         // 任务执行 Run（AI 执行中心数据源；见 workspace-execution-artifacts plan）。
         .merge(crate::pm_runs::router())
         // 产物（需求修订）列表——AI 产物验收中心数据源。

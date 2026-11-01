@@ -97,3 +97,8 @@ pub fn paging(params: &HashMap<String, String>) -> Paging {
 pub fn project_filter(params: &HashMap<String, String>) -> Option<Uuid> {
     params.get("project_id").and_then(|v| Uuid::parse_str(v).ok())
 }
+
+/// 可选的 customer_id 过滤参数（非法值视为未传）。项目列表按客户聚合时使用。
+pub fn customer_filter(params: &HashMap<String, String>) -> Option<Uuid> {
+    params.get("customer_id").and_then(|v| Uuid::parse_str(v).ok())
+}

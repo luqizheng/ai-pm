@@ -19,7 +19,9 @@ import type { DecisionRecord, Milestone } from "./workspace-view";
  * 列表统一 { items, total }；pm-api 实现时按此交付。
  */
 
-export function listProjects(params: { page?: number; size?: number } = {}) {
+export function listProjects(
+  params: { customer_id?: string; page?: number; size?: number } = {}
+) {
   return http.get<Paged<Project>>("/v1/pm/projects", params);
 }
 

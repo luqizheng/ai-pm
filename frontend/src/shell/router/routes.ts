@@ -44,6 +44,13 @@ export const staticRoutes: RouteRecordRaw[] = [
         name: "project-import",
         component: () => import("../views/onboarding/ProjectImportWizard.vue"),
         meta: { title: "导入项目" } // i18n-ignore: route meta 直接作为页签标题
+      },
+      {
+        // 客户主数据（0017）：静态路由，不依赖 DB 菜单。
+        path: "customers",
+        name: "customers",
+        component: () => import("../views/pm/customers/index.vue"),
+        meta: { title: "客户" } // i18n-ignore: route meta 直接作为页签标题
       }
     ]
   },

@@ -9,6 +9,7 @@ import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { PageHeader } from "@/shell/components";
 import { createProject } from "@/api/projects";
+import { listCustomers } from "@/api/customers";
 import {
   createRepository,
   createSshKey,
@@ -22,6 +23,7 @@ import {
   startImport
 } from "@/api/imports";
 import type {
+  Customer,
   ProjectDraft,
   ProjectImport,
   ProposedImport,
@@ -38,7 +40,30 @@ const toast = useToast();
 const step = ref(0);
 const busy = ref(false);
 const projectId = ref("");
-const form = ref({ code: "", name: "", description: "" });
+const form = ref({ code: "", name: "", description: "", customer_id: "none" });
+
+/** 客户主数据（0017）。建项时选已有客户，缺省则落为「未归类」客户。 */
+const NONE_CUSTOMER = "none";
+const customers = ref<Customer[]>([]);
+const customerOptions = computed(() => [
+  { value: NONE_CUSTOMER, label: t("pm.customer.none") },
+  ...customers.value.map(item => ({
+    value: item.id,
+    label:
+      item.status === "placeholder"
+        ? `${t("pm.customer.unassigned")} · ${item.short_name || item.name}`
+        : item.short_name || item.name
+  }))
+]);
+
+async function loadCustomers() {
+  try {
+    const result = await listCustomers({ size: 200, status: "active" });
+    customers.value = result.items ?? [];
+  } catch {
+    customers.value = [];
+  }
+}
 
 const repos = ref<Repository[]>([]);
 const sshKey = ref<SshKey | null>(null);
@@ -121,7 +146,11 @@ async function submitBasics() {
     const project = await createProject({
       code: form.value.code.trim(),
       name: form.value.name.trim(),
-      description: form.value.description.trim()
+      description: form.value.description.trim(),
+      // 未选客户时不下发该字段，交由后端走兼容路径（落 placeholder 客户）。
+      ...(form.value.customer_id && form.value.customer_id !== NONE_CUSTOMER
+        ? { customer_id: form.value.customer_id }
+        : {})
     });
     projectId.value = project.id;
     await Promise.all([loadRepos(), ensureKey()]);
@@ -301,6 +330,7 @@ onMounted(async () => {
   if (typeof window !== "undefined") {
     window.addEventListener("beforeunload", stopPolling);
   }
+  loadCustomers();
   const existing = String(route.query.projectId ?? "");
   if (existing) {
     projectId.value = existing;
@@ -359,6 +389,15 @@ onBeforeUnmount(() => {
       <div class="field">
         <label class="field__label">{{ t("pm.import.description") }}</label>
         <Input v-model="form.description" />
+      </div>
+      <div class="field">
+        <label class="field__label">{{ t("pm.customer.select") }}</label>
+        <Select
+          v-model="form.customer_id"
+          :options="customerOptions"
+          :aria-label="t('pm.customer.select')"
+        />
+        <p class="hint">{{ t("pm.customer.selectHint") }}</p>
       </div>
       <p v-if="!canNextBasics" class="hint">{{ t("pm.import.required") }}</p>
       <div class="actions">

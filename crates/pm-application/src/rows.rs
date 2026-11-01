@@ -14,10 +14,32 @@ pub struct PrincipalRow {
     pub created_at: DateTime<Utc>,
 }
 
+/// 客户主数据（0017）。`status`：`active` / `archived` / `placeholder`
+/// （`placeholder` = 旧 bootstrap 以项目 code 隐式造的未归类客户，待人工合并）。
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct CustomerRow {
+    pub id: Uuid,
+    pub code: Option<String>,
+    pub name: String,
+    pub short_name: Option<String>,
+    pub industry: Option<String>,
+    pub notes: Option<String>,
+    pub parent_id: Option<Uuid>,
+    pub status: String,
+    /// 该客户下的项目数（列表端点按 customer 聚合统计）。
+    pub project_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct ProjectRow {
     pub id: Uuid,
     pub customer_id: Uuid,
+    /// 冗余客户显示名，读端点 LEFT JOIN 得来；写端点插入后同样带出，避免前端二次请求。
+    pub customer_name: String,
+    /// 客户状态：`active` / `archived` / `placeholder`（未归类历史客户）。
+    pub customer_status: String,
     pub code: String,
     pub name: String,
     pub description: Option<String>,

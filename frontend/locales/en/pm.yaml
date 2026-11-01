@@ -16,6 +16,42 @@ projects:
   pageTitle: Projects
   subtitle: Customer projects and their basic information.
   emptyHint: Projects will appear here once created by the backend.
+customer:
+  pageTitle: Customers
+  subtitle: Customer master data; one customer can own several projects.
+  emptyHint: No customers yet; pick one when creating a project or leave it empty.
+  colName: Customer
+  colCode: Customer code
+  colStatus: Status
+  colProjects: Projects
+  all: All customers
+  none: No customer
+  unassigned: Unclassified
+  select: Customer
+  selectHint: One customer can own several projects; leave empty to create an unclassified customer for later merge.
+  required: Please choose a customer
+  new: New customer
+  newTitle: New customer
+  editTitle: Edit customer
+  code: Customer code
+  codePlaceholder: e.g. BANK-SH
+  name: Legal name
+  namePlaceholder: e.g. Example Bank Co., Ltd.
+  shortName: Short name
+  shortNamePlaceholder: e.g. Example Bank
+  industry: Industry
+  industryPlaceholder: e.g. Finance
+  notes: Notes
+  statusActive: Active
+  statusArchived: Archived
+  statusPlaceholder: Unclassified
+  created: Customer created
+  updated: Customer updated
+  codeRequired: Customer code is required
+  nameRequired: Customer name is required
+  searchPlaceholder: Search customers
+  search: Search
+  loadFailed: Failed to load customers
 requirements:
   pageTitle: Requirements
   subtitle: Requirement list; authoritative status only — content lives in Markdown + Git.
@@ -142,6 +178,7 @@ settings:
 columns:
   code: Code
   name: Project
+  customer: Customer
   status: Status
   revision: Revision
   actions: Actions
