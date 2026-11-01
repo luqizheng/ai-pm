@@ -1,8 +1,8 @@
-# D4 · 多仓库交付与结果回写 v1.1（T-040 设计稿）
+# D4 · 多仓库交付与结果回写 v1.1（T-040 设计稿 / T-041 已实施）
 
 > **标注图例**：〔评审收编〕= 2026-11-01 外部专家评审意见收编进正文（评审原文与逐条对照见 `docs/ai-pm-slice-d4-delivery-review.md`；逐项核对报告经用户确认 + Q1/Q2 补充裁决后收编）。
-> 状态：**V1.1 评审收编完毕**——4 项 P0 + 4 项 P1 + 数据模型/管线/审计修订 + 验收 C85–C97 已并入正文；T-041 准入条件（P0 修复完成、相关 P1 规则明确）已在设计层面满足，经用户过稿确认后进入 T-041 实施
-> 日期：2026-11-01（V1.1 评审收编）
+> 状态：**V1.1 评审收编完毕 + T-041 已实施（2026-11-02）**——4 项 P0 + 4 项 P1 + 数据模型/管线/审计修订 + 验收 C85–C97 已并入正文；T-041 准入条件（P0 修复完成、相关 P1 规则明确）已在设计层面满足，经用户过稿确认后进入 T-041 实施。实施记录见 §9。
+> 日期：2026-11-01（V1.1 评审收编）/ 2026-11-02（T-041 实施回填 §9）
 > 版本：V1.1（2026-11-01 外部评审收编；V1 = 同日过稿）
 > 一句话：`delivery.task_repository_commit` 逐仓落「基线 → 结果 commit → 证据」（基线事实取 `task_run_repository` 领取快照，不重复落列），`pm_submit_result` 契约定稿（只加 `integration_status`），提交管线以 **⓪ 幂等识别（`request_fingerprint`）+ 事务内 fencing（`lock_lease` 复用）+ `SubmitOutcome` 事务结果模型 + 契约仓全集校验 + 实际工作区 HEAD 校验** 重构，任务状态迁移统一经 D1 `update_task_status` 命令管线 + `validate_transition`；外键 `ON DELETE RESTRICT` 保交付历史；应交付 vs 实交付对账由聚合视图陈述事实（分母只计可写仓），任务裁决归 D5。
 > 上位依据：`target.md` §P5 八模块、`docs/ai-pm-multi-repo-model-v1.md` §3.2/§3.3/§4.4/§4.5、`docs/ai-pm-slice-d-execution-pipeline-v1.md` §三 D4 行 + Q2/Q5 + §15.5（不变量：`write_access=false` 不得出现 Commit）、D2 冻结的 `pm_submit_result` draft 形状（D4 拥有定稿权）、`0011_run_dispatch.sql`（`task_run_repository` 基线快照 + `PRIMARY KEY (run_id, repository_id)`）、todo.md T-040、评审记录 `docs/ai-pm-slice-d4-delivery-review.md`。
@@ -364,3 +364,77 @@ Integration = failed
 - 不做全局仓库实体（C3 裁定维持）。
 - 〔评审收编八章〕不引入新的交付状态机：Run 状态 / Task 状态 / `integration_status` / `delivery_state` 各司其职，`delivery_state` 仅是视图列，永不成任务状态字段。
 - 〔评审收编 Q2〕不做 Run 物理删除：生命周期保持终态语义（reconcile/terminate），交付历史受 RESTRICT 保护；清理执行记录的操作不得连带删除交付证据。
+
+---
+
+## 9. 实施记录（T-041，2026-11-02）
+
+> 依据：本稿 V1.1 已过稿；todo.md T-041 行于 2026-11-02 领用。
+> 验收命令：`DATABASE_URL=postgres://aipm:aipm@127.0.0.1:5433/aipm cargo test --workspace`（74 个测试二进制全绿）+ `cargo check --workspace --all-targets`（无警告）。
+
+### 9.1 落地物清单
+
+| 落点 | 文件 | 内容 |
+|---|---|---|
+| 迁移 | `migrations/0022_delivery_manifest.sql` | ① `delivery.task_run` 补 `UNIQUE (project_id, id)`（组合外键父键，Q5）；② 补 `integration_status`（Run 级单一事实来源）；③ 补 `request_fingerprint`（幂等指纹）；④ 建 `delivery.task_repository_commit`；⑤ 建视图 `delivery.v_task_delivery_manifest` |
+| 管线 | `crates/pm-application/src/delivery/mod.rs` | ⓪~⑦ 单事务管线、`SubmitOutcome` 结果模型、`request_fingerprint`、§4.2 九项输入校验 |
+| git 校验 | `crates/pm-application/src/delivery/git_verify.rs` | 四项校验（对象类型 / 后代 / == 工作区 HEAD / 变更计数现算）+ 超时约束 |
+| 读模型 | `crates/pm-application/src/delivery/manifest.rs` | `read_manifest` / `list_manifest`（只读投影，20 列） |
+| git 通道 | `crates/pm-application/src/git_access.rs` | 新增 `GitOutput` + `git_run`（非零退出码原样带回——`merge-base --is-ancestor` 用退出码表达「是/否」） |
+| 租约 | `crates/pm-application/src/run_context.rs` | `lock_lease` 由私有改为 `pub(crate)`（D4 复用做事务内 fencing） |
+| 契约 | `crates/pm-mcp/src/tools.rs` | `pm_submit_result` 定稿（去 `Unsupported`、补 `integration_status`、改 async 真实落库）+ `map_delivery_error` + `submit_result_with`（可注入工作区根） |
+| 只读接口 | `apps/pm-api/src/pm_delivery.rs` | `GET /v1/pm/tasks/{task_id}/delivery`（前端页归 T-070） |
+| 租编 | `crates/pm-infrastructure/tests/tenant_schema.rs` | `TENANT_TABLES` 收编 `delivery.task_repository_commit`（41 张） |
+
+### 9.2 实施中的具体裁定
+
+| # | 裁点 | 结论与理由 |
+|---|---|---|
+| I-D4-1 | `task_repository_commit → task_repository` 组合外键 | **不成立**。`task_repository` 主键是 `(task_id, repository_id)`，本表无 `task_id` 列（Task 身份经 `task_run` 传递）。为此外键新增 `task_id` 会复制 Run 已有的关联、破坏单一事实源。仓归属由 `(project_id, repository_id)` 与 `(project_id, task_run_id)` 两条组合外键保证〔评审收编 3.1 的「不得为此外键破坏既有模型」〕 |
+| I-D4-2 | 事务所有权建模 | `finish_rejected` **按值**接收事务（`Tx = Transaction<'static, Postgres>`）并自行 COMMIT。理由：驳回是业务结果（要落审计），不能靠调用方 `?` 提前返回把事务丢掉；按值接收让「收尾」与「提交」同处一个函数，不存在半提交路径 |
+| I-D4-3 | 可写仓漏报**不驳回** | D4 §5 明示 `submitted` ≠ 交付完整。提交 2/3 个仓仍是有效的 D4 交付事实，视图据此显示 `partial`；「应交付 vs 实交付」的最终裁决归 D5。驳回权只保留给**事实冲突**（只读仓有变化 / 基线漂移 / git 校验失败 / 仓不在契约） |
+| I-D4-4 | 落库的 `commit_sha` 取值 | 取**工作区实际 HEAD**（`rev-parse HEAD`），不取执行端声明。执行端声明只做一致性比对——不等即驳回。依据：Q-D4-2 双保险的 git 侧 |
+| I-D4-5 | `changed_files` 的权威 | Git 现算（`diff --name-status base..commit`）；执行端上报计数只做比对，不一致即驳回（Q-D4-3） |
+| I-D4-6 | 审计 actor 回退 | 项目 human 成员 → 平台 service principal（`DISPATCH_SERVICE_PRINCIPAL`）。保证「项目无 human 成员」时提交不会因 `RowNotFound` 失败 |
+| I-D4-7 | `request_fingerprint` 落 Run 列 | Run 级落列（`delivery.task_run.request_fingerprint`），不落仓级。理由：指纹覆盖整单（含 `integration_status`），仓级无处安放 |
+| I-D4-8 | `pm_submit_result` 的返回形状 | 业务驳回**不是异常**：管线把驳回作为 `SubmitOutcome::Rejected` 返回（审计已持久），工具层照样回 200 并带 `outcome: "rejected"` + 机器可读 `code`。调用方据此知道「没有交付」而不是「调用失败」。真正的异常（租约失效 / DB 错误）才映射到 `ToolError` |
+| I-D4-9 | git 校验异常的落点 | git 失败与超时统一走 Rejected 路径（`commit_not_descendant`），**不**用独立的 `git_verification_failed` 错误码——错误码表是 §4.1 的九项，不额外扩张 |
+
+### 9.3 验收矩阵落地情况（C71–C97，27 条）
+
+| # | 用例 | 位置 |
+|---|---|---|
+| C71 | 迁移形状断言 | `crates/pm-application/tests/delivery.rs::c71_migration_shape_is_in_place` |
+| C72 | 三仓交付 | `delivery.rs::c72_three_repository_delivery_lands_commits_and_submits_the_task` |
+| C73 | 只读仓有 commit → 整单驳回 | `delivery.rs::c73_readonly_repository_with_a_commit_rejects_the_whole_order` |
+| C74 | 基线漂移 | `delivery.rs::c74_baseline_drift_is_rejected` |
+| C75 | commit 非后代 | `delivery.rs::c75_commit_that_is_not_a_descendant_is_rejected` |
+| C76 | commit 不存在 | `delivery.rs::c76_nonexistent_commit_is_rejected` |
+| C77 + C91 | 仓不在契约（应用层 + 库层外键） | `delivery.rs::c77_c91_repository_outside_the_contract_is_rejected` |
+| C78 + C85 | 幂等重放（成功提交后重复调用） | `delivery.rs::c78_repeated_submission_after_success_replays_the_same_manifest` |
+| C79 | `integration_status` 非法 | `delivery.rs::c79_invalid_integration_status_is_rejected` |
+| C80 | 租约过期 | `delivery.rs::c80_expired_lease_does_not_land_a_row` |
+| C81 | `not_run` 如实记录 | `delivery.rs::c81_not_run_delivery_is_recorded_as_a_fact` |
+| C82 | 视图三态 | `delivery.rs::c82_manifest_view_reports_the_three_states` |
+| C83 | `latest_run` / `latest_submitted_run` 分离 | `delivery.rs::c83_view_separates_the_latest_run_from_the_latest_submitted_run` |
+| C84 + C85 | MCP 端到端落库 + 幂等重放 | `crates/pm-mcp/tests/contract.rs::c84_c85_submit_result_lands_the_delivery_and_replays` |
+| C86 | 同 Run 不同 commit → 冲突 | `delivery.rs::c86_same_run_with_a_different_commit_is_a_conflict` |
+| C87 | 只读仓漏报但实际已变 | `delivery.rs::c87_readonly_repository_moved_but_not_reported_rejects_the_whole_order` |
+| C88 | 上报非 HEAD 的 commit | `delivery.rs::c88_commit_that_is_not_the_workspace_head_is_rejected` |
+| C89 | `changed_files` 与 Git 计数不一致 | `delivery.rs::c89_changed_files_must_match_the_git_count` |
+| C90 | 最新 Run 未提交不得借用旧 Run | `delivery.rs::c90_latest_run_without_submission_does_not_borrow_the_previous_run` |
+| C92 | 驳回审计持久 | `delivery.rs::c92_rejection_is_audited_with_a_summary` |
+| C93 | 旧 generation 不能提交 | `delivery.rs::c93_a_stale_lease_generation_cannot_submit` |
+| C94 | git 超时整单驳回 | `delivery.rs::c94_git_timeout_rejects_the_whole_order` |
+| C95 | 分母只计可写仓 | `delivery.rs::c95_readonly_repositories_do_not_count_towards_the_delivery_denominator` |
+| C96 | 重复 `repository_id` | `delivery.rs::c96_duplicate_repository_id_is_rejected` |
+| C97 | RESTRICT 保交付历史 | `delivery.rs::c97_deleting_a_run_must_not_drop_the_delivery_history` |
+
+C11（D2 遗留）随 D4 定稿重写：`crates/pm-mcp/tests/contract.rs::c11_submit_result_rejects_a_repository_outside_the_contract`——从「shape-first 不碰表」改为「真实落库 + 整单驳回 + 0 行 commit + 任务状态不动 + 驳回审计 1 条」。
+
+### 9.4 与后续切片的口径
+
+- **D5 的接口点**：D5 通过 `delivery.task_run` 加 `run_kind` 列区分 review run 并重建 `uq_task_run_active` 索引。D4 的视图按 `attempt_no` 排序取 `latest_run` / `latest_submitted_run`，与该重建不冲突。
+- **`integration_status` 的消费方**：D4 只落事实。`passed` / `failed` / `not_run` 的**判读**（何时算失败、何时算完成）归 D5 的完成判定器；`not_run` 在 D4 不被推断为 `failed`。
+- **`partial` 的裁决方**：D4 视图如实显示 `partial`，**不**改任务状态。`changes_requested` 的裁决归 D5。
+- **`DeliverySubmitted` 事件**：D1 已在 `submitted` 迁移边登记 `outbox_event_for_task_target`（默认只开 `TaskReady`），D4 不新增生产者；T-061 的「搭车」项随 T-041 落地。

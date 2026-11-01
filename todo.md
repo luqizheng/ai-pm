@@ -162,10 +162,13 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 > T-040 设计稿已交付并过稿（`6f66305`，归档见 §13）；本节剩 T-041 实施。
 
-- [ ] **T-041 实施 D4（前置：T-040 已确认 ✅）**
+- [x] **T-041 实施 D4（前置：T-040 已确认 ✅）**（2026-11-02 领用，执行者：Trae）
   - **做**：迁移 `0022_delivery_manifest.sql`；`pm_submit_result` 的交付段落两表；Baseline Validation（base_commit 与仓库实际 HEAD 对账）；交付清单只读接口（前端页在 T-070）。
   - **不做**：不做自动 merge/推远端；不做审批流改造。
   - **验收**：三仓任务可插入完整链路并逐仓对账；基线漂移被拒；只读仓出现 commit 整单驳回；`cargo test` 全绿。
+  - **实施口径**：`delivery.task_repository_commit` + `task_run.integration_status`（交付段落两表）；`pm-application::delivery` 单事务管线（⓪幂等识别 → ①fencing → ②契约仓全集 → ③上报校验 → ④只读仓事实 → ⑤基线比对 → ⑥git 校验 → ⑦落库）；git 校验跑在**当前 Run 的实际工作区**（对象类型 / 后代 / ==HEAD / 变更计数现算）；任务状态迁移统一经 D1 `update_task_status` 通道；`ON DELETE RESTRICT` 保交付历史；视图 `v_task_delivery_manifest` 只陈述事实（分母只计可写仓，`latest_run`/`latest_submitted_run` 分离）；只读接口 `GET /v1/pm/tasks/{task_id}/delivery`。设计稿 §9 实施记录（落地物 / 9 项实施裁定 / C71–C97 逐条落点）。
+  - **关键结论**：① 可写仓漏报**不驳回**——D4 只记事实（视图 `partial`），最终裁决归 D5；② `commit_sha` 落**工作区实际 HEAD**，执行端声明只做一致性比对；③ 业务驳回**不是事务失败**（`SubmitOutcome::Rejected` 正常 COMMIT，驳回审计可靠存在、0 行 commit）；④ `task_repository_commit → task_repository` 组合外键**不成立**（`task_repository` 主键含 `task_id`，本表无此列），仓归属由两条 `(project_id, …)` 组合外键保证。
+  - **交付**：见本节末尾「交付记录」；`cargo test --workspace` 全绿（74 个测试二进制）、`cargo check --workspace --all-targets` 0 error / 0 warning；C71–C97 27 条 + C11 重写 + C84/C85 MCP 端到端。
 
 ---
 
