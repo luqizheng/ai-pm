@@ -19,8 +19,11 @@ pub struct ClaimOutcome {
     pub run_id: Uuid,
     pub task_id: Uuid,
     pub kind: ClaimKind,
-    /// Model A 签发的一次性租约明文；Model B 与未真正领取的分支都为 `None`。
+    /// T-032（ADR-0002 L1/B1）：Model A / Model B **统一签发**的一次性租约明文；
+    /// 仅未真正领取的分支为 `None`。worker 拿到后注入执行端环境（L2）。
     pub lease_token: Option<String>,
+    /// T-032 T2：本次执行权世代（首次领取=1，重领递增）；未领取分支为 0。
+    pub lease_generation: i32,
 }
 
 
@@ -46,8 +49,7 @@ pub(crate) struct ClaimOptions<'a> {
     /// Model A 恒 `false`（A-1：执行端显式请求不受 `AI_PM_RUN_DISPATCH` 约束）。
     gate_by_dispatch_mode: bool,
     mode: DispatchMode,
-    /// 只有 Model A 签发 `lease_token`。
-    issue_token: bool,
+
     client_name: Option<&'a str>,
     client_version: Option<&'a str>,
 }
@@ -61,6 +63,8 @@ pub struct ClaimedTaskRun {
     pub attempt_no: i32,
     /// 32 字节随机数的小写 hex（64 字符），**只返回这一次**。
     pub lease_token: String,
+    /// T-032 T2：本次执行权世代（MCP 请求必须携带，服务端双验证）。
+    pub lease_generation: i32,
     pub lease_expires_at: chrono::DateTime<chrono::Utc>,
     pub git_branch: String,
     pub stage: String,
@@ -119,7 +123,7 @@ pub async fn claim_once_with_policy(
             task_filter: None,
             gate_by_dispatch_mode: true,
             mode,
-            issue_token: false,
+
             client_name: None,
             client_version: None,
         },
@@ -179,7 +183,6 @@ pub async fn claim_task_run_with_policy(
             task_filter: Some(task_id),
             gate_by_dispatch_mode: false,
             mode: DispatchMode::On,
-            issue_token: true,
             client_name: Some(client_name),
             client_version,
         },
@@ -188,13 +191,14 @@ pub async fn claim_task_run_with_policy(
     .await?;
     let outcome = outcome.ok_or(RunDispatchError::NoRunnableRun)?;
     let lease_token = outcome.lease_token.ok_or(RunDispatchError::NoRunnableRun)?;
-    let (attempt_no, lease_expires_at, stage, git_branch): (
+    let (attempt_no, lease_expires_at, stage, git_branch, lease_generation): (
         i32,
         Option<chrono::DateTime<chrono::Utc>>,
         Option<String>,
         Option<String>,
+        i32,
     ) = sqlx::query_as(
-        "SELECT r.attempt_no, r.lease_expires_at, r.stage, t.git_branch \
+        "SELECT r.attempt_no, r.lease_expires_at, r.stage, t.git_branch, r.lease_generation \
            FROM delivery.task_run r JOIN delivery.task t ON t.id = r.task_id \
           WHERE r.id = $1 AND r.project_id = $2",
     )
@@ -207,6 +211,7 @@ pub async fn claim_task_run_with_policy(
         task_id: outcome.task_id,
         attempt_no,
         lease_token,
+        lease_generation,
         lease_expires_at: lease_expires_at
             .ok_or_else(|| RunDispatchError::InvalidOption("lease_expires_at missing".into()))?,
         git_branch: git_branch
@@ -233,7 +238,7 @@ pub(crate) async fn claim_core(
             .ok_or_else(|| RunDispatchError::InvalidOption("Model A requires a project scope".into()))?;
         sqlx::query(
             "SELECT r.id, r.task_id, r.project_id, r.status, r.dispatch_attempts, \
-                    r.executor_session, r.attempt_no \
+                    r.executor_session, r.stage, r.lease_generation, r.attempt_no \
                FROM delivery.task_run r \
               WHERE r.task_id = $1 AND r.project_id = $2 \
                 AND ((r.status = 'queued'  AND r.next_dispatch_at <= now()) \
@@ -249,7 +254,7 @@ pub(crate) async fn claim_core(
     } else {
         sqlx::query(
             "SELECT r.id, r.task_id, r.project_id, r.status, r.dispatch_attempts, \
-                    r.executor_session, r.attempt_no \
+                    r.executor_session, r.stage, r.lease_generation, r.attempt_no \
                FROM delivery.task_run r \
               WHERE (r.status = 'queued'  AND r.next_dispatch_at <= now()) \
                  OR (r.status = 'claimed' AND r.lease_expires_at < now()) \
@@ -302,6 +307,8 @@ pub(crate) async fn claim_core(
     let run_state: String = candidate.get("status");
     let dispatch_attempts: i32 = candidate.get("dispatch_attempts");
     let executor_session: Option<String> = candidate.get("executor_session");
+    let candidate_stage: Option<String> = candidate.get("stage");
+    let _lease_generation_prev: i32 = candidate.get("lease_generation");
 
     // ② 锁任务行（顺序固定：run → task）。B2：新 Run 的 INSERT 必须在此之后。
     let task = sqlx::query(
@@ -324,6 +331,7 @@ pub(crate) async fn claim_core(
             task_id,
             kind: ClaimKind::Cancelled,
             lease_token: None,
+            lease_generation: 0,
         }));
     };
     let mut task_state: String = task.get("status");
@@ -345,6 +353,7 @@ pub(crate) async fn claim_core(
             task_id,
             kind: ClaimKind::Cancelled,
             lease_token: None,
+            lease_generation: 0,
         }));
     }
 
@@ -356,7 +365,14 @@ pub(crate) async fn claim_core(
 
     // ④ 回收分支：候选原本是 `claimed` 且租约已过期。
     if run_state == run_status::CLAIMED {
-        if executor_session.is_none() {
+        // T-032 T1：starting 判定 = **启动意图未确认**。`executor_session` 是启动
+        // 意图（spawn 前写入）；`stage='dispatch'` 表示进程身份尚未确认（spawn
+        // 失败残留 / spawn 后未落库的崩溃窗口）。二者任一成立 → B3-1 同 Run 重领
+        // （session 由下一轮 claim_and_start 生成新值覆盖，覆盖前留事件）；
+        // 仅 stage='started'（进程身份已确认）才走 B3-2 隔离。
+        let unstarted =
+            executor_session.is_none() || candidate_stage.as_deref() == Some(run_stage::DISPATCH);
+        if unstarted {
             // B3-1：执行器尚未启动 → 恢复**同一** Run（重置租约回队列），不新建、不记失败。
             // 任务仍在 claimed：把它退回 ready 以便重新领取（同一 Run）。
             if task_state == "claimed" {
@@ -380,6 +396,7 @@ pub(crate) async fn claim_core(
                     task_id,
                     kind: ClaimKind::Claimed,
                     lease_token: None,
+                    lease_generation: 0,
                 }));
             }
         } else {
@@ -400,6 +417,7 @@ pub(crate) async fn claim_core(
                     task_id,
                     kind: ClaimKind::Reclaimed,
                     lease_token: None,
+                    lease_generation: 0,
                 }));
             }
             run_id = created.run_id;
@@ -434,6 +452,7 @@ pub(crate) async fn claim_core(
             task_id,
             kind: ClaimKind::Skipped,
             lease_token: None,
+            lease_generation: 0,
         }));
     }
 
@@ -464,6 +483,7 @@ pub(crate) async fn claim_core(
             task_id,
             kind: ClaimKind::Skipped,
             lease_token: None,
+            lease_generation: 0,
         }));
     }
 
@@ -490,6 +510,7 @@ pub(crate) async fn claim_core(
                 task_id,
                 kind: ClaimKind::Skipped,
                 lease_token: None,
+                lease_generation: 0,
             }));
         }
         Err(error) => {
@@ -513,6 +534,7 @@ pub(crate) async fn claim_core(
                 task_id,
                 kind: ClaimKind::Skipped,
                 lease_token: None,
+                lease_generation: 0,
             }));
         }
     }
@@ -541,16 +563,23 @@ pub(crate) async fn claim_core(
             task_id,
             kind: ClaimKind::Skipped,
             lease_token: None,
+            lease_generation: 0,
         }));
     }
 
     // ⑧ 状态推进（R1：经统一守卫 validate_transition，与 Run 更新同事务）。
     apply_transition(&mut tx, task_id, TaskStatus::Ready, TaskStatus::Claimed, &ctx).await?;
 
-    // ⑨ 租约签发（D 裁决）：明文只返回给 Model A；库内只存 sha256 小写 hex。
-    //    Model B 不签发 → 写入 NULL（覆盖过期旧 Run 可能残留的 hash，验收 C17）。
+    // ⑨ 租约签发（D 裁决 + T-032 终裁）：Model A / Model B **统一签发**明文
+    //    token（ADR-0002 L1：执行端 MCP 认证凭据；worker 注入执行端环境 L2），
+    //    库内只存 sha256 小写 hex。generation 每次「成功获取执行权」递增
+    //    （首次=1，重领+1，心跳不递增——T2）；deadline_at 仅首次固化
+    //    （COALESCE），重领不得重置或延长（T3）。
     let (lease_token, lease_owner) = match opts.lease_owner {
-        LeaseOwner::Worker(worker) => (None, worker.to_string()),
+        LeaseOwner::Worker(worker) => {
+            let token = crate::run_context::generate_lease_token()?;
+            (Some(token), worker.to_string())
+        }
         LeaseOwner::Mcp { client_name } => {
             let token = crate::run_context::generate_lease_token()?;
             let prefix = token[..8].to_string();
@@ -561,14 +590,18 @@ pub(crate) async fn claim_core(
         .as_deref()
         .map(crate::run_context::hash_lease_token);
 
-    sqlx::query(
+    let lease_generation: i32 = sqlx::query_scalar(
         "UPDATE delivery.task_run \
             SET status = 'claimed', stage = 'dispatch', claimed_at = now(), \
                 lease_owner = $2, heartbeat_at = now(), \
                 lease_expires_at = now() + make_interval(secs => $3::float8), \
                 lease_token_hash = $4, client_name = $5, client_version = $6, \
-                timeout_seconds = $7 \
-          WHERE id = $1",
+                timeout_seconds = $7, \
+                lease_generation = COALESCE(lease_generation, 0) + 1, \
+                deadline_at = COALESCE(deadline_at, \
+                    now() + make_interval(secs => COALESCE($7::int, $8::int)::float8)) \
+          WHERE id = $1 \
+         RETURNING lease_generation",
     )
     .bind(run_id)
     .bind(&lease_owner)
@@ -577,7 +610,8 @@ pub(crate) async fn claim_core(
     .bind(opts.client_name)
     .bind(opts.client_version)
     .bind(cfg.timeout_secs)
-    .execute(&mut *tx)
+    .bind(cfg.deadline_default_secs as i32)
+    .fetch_one(&mut *tx)
     .await?;
 
     // R-F12：`git_branch` 是平台生成的普通字段（不属状态机），幂等回填即可。
@@ -623,10 +657,11 @@ pub(crate) async fn claim_core(
             "task_id": task_id,
             "lease_owner": lease_owner,
             "lease_secs": cfg.lease_secs,
+            "lease_generation": lease_generation,
             "repositories": baselines,
             "git_branch": git_branch,
             "mode": format!("{:?}", opts.mode),
-            "model": if opts.issue_token { "mcp" } else { "worker" },
+            "model": if opts.task_filter.is_some() { "mcp" } else { "worker" },
             "client_name": opts.client_name,
             "client_version": opts.client_version,
         }),
@@ -639,6 +674,7 @@ pub(crate) async fn claim_core(
         task_id,
         kind: ClaimKind::Claimed,
         lease_token,
+        lease_generation,
     }))
 }
 

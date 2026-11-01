@@ -284,6 +284,7 @@ async fn c3_c4_c24_c25_contract_shape_and_values(pool: PgPool) {
         project_id: fx.project_id,
         run_id: claimed["run_id"].as_str().unwrap().parse().unwrap(),
         lease_token: claimed["lease_token"].as_str().unwrap().to_string(),
+            lease_generation: claimed["lease_generation"].as_i64().unwrap() as i32,
     };
     let value = get_run_context(&pool, args).await.unwrap();
 
@@ -321,6 +322,7 @@ async fn c18_empty_contract_is_still_schema_valid(pool: PgPool) {
             project_id: fx.project_id,
             run_id: claimed["run_id"].as_str().unwrap().parse().unwrap(),
             lease_token: claimed["lease_token"].as_str().unwrap().to_string(),
+            lease_generation: claimed["lease_generation"].as_i64().unwrap() as i32,
         },
     )
     .await
@@ -345,6 +347,7 @@ async fn c5_c6_errors_are_tool_errors_without_leaking_credentials(pool: PgPool) 
             project_id: other.project_id,
             run_id,
             lease_token: lease_token.clone(),
+            lease_generation: 1,
         },
     )
     .await
@@ -358,6 +361,7 @@ async fn c5_c6_errors_are_tool_errors_without_leaking_credentials(pool: PgPool) 
             project_id: fx.project_id,
             run_id,
             lease_token: "wrong-token".to_string(),
+            lease_generation: 1,
         },
     )
     .await
@@ -380,6 +384,7 @@ async fn c5_c6_errors_are_tool_errors_without_leaking_credentials(pool: PgPool) 
             project_id: fx.project_id,
             run_id,
             lease_token,
+            lease_generation: 1,
         },
     )
     .await
@@ -434,6 +439,7 @@ async fn c11_submit_result_is_shape_first_and_touches_no_table(pool: PgPool) {
         project_id: fx.project_id,
         run_id,
         lease_token: claimed["lease_token"].as_str().unwrap().to_string(),
+            lease_generation: claimed["lease_generation"].as_i64().unwrap() as i32,
         repositories: vec![SubmittedRepository {
             repository_id: Uuid::new_v4(),
             base_commit: "headsha".to_string(),
@@ -477,6 +483,7 @@ async fn report_progress_tool_renews_and_reports(pool: PgPool) {
             project_id: fx.project_id,
             run_id,
             lease_token,
+            lease_generation: 1,
             stage: "started".to_string(),
             note: Some("located the renderer".to_string()),
             blocked: false,

@@ -61,21 +61,19 @@ impl RunExecutor for FakeExecutor {
     async fn start(
         &self,
         _run: &pm_application::run_dispatch::ExecutableRun,
-    ) -> Result<pm_application::run_dispatch::ExecutorSession, pm_application::run_dispatch::ExecutorError>
+        session: &str,
+    ) -> Result<(), pm_application::run_dispatch::ExecutorError>
     {
         let behavior = self.behavior.lock().unwrap().clone();
         match behavior {
             Behavior::StartFail(detail) => {
                 Err(pm_application::run_dispatch::ExecutorError::Other(detail))
             }
+            // T-032 T1：session 由编排器前置生成并持久化（启动意图），适配器
+            // 只接收与记录——不再自行生成。
             Behavior::Exit(_) | Behavior::Hang => {
-                let session = format!("fake:{}", Uuid::new_v4());
-                self.started.lock().unwrap().push(session.clone());
-                Ok(pm_application::run_dispatch::ExecutorSession {
-                    session,
-                    run_id: _run.run_id,
-                    workspace_root: "./run-workspaces".into(),
-                })
+                self.started.lock().unwrap().push(session.to_string());
+                Ok(())
             }
         }
     }
@@ -85,14 +83,19 @@ impl RunExecutor for FakeExecutor {
         _session: &pm_application::run_dispatch::ExecutorSession,
     ) -> Result<pm_application::run_dispatch::ExecutorProgress, pm_application::run_dispatch::ExecutorError>
     {
+        use pm_application::run_dispatch::ExitOutcome;
         let behavior = self.behavior.lock().unwrap().clone();
         Ok(match behavior {
             Behavior::Exit(code) => pm_application::run_dispatch::ExecutorProgress::Done {
-                exit_code: Some(code),
+                outcome: if code == 0 {
+                    ExitOutcome::Success
+                } else {
+                    ExitOutcome::NonZeroExit { code }
+                },
             },
             Behavior::Hang => pm_application::run_dispatch::ExecutorProgress::Running,
             Behavior::StartFail(_) => pm_application::run_dispatch::ExecutorProgress::Done {
-                exit_code: None,
+                outcome: ExitOutcome::Lost,
             },
         })
     }
@@ -122,6 +125,9 @@ fn cfg() -> RunDispatchConfig {
         max_run_attempts: 3,
         max_infrastructure_attempts: 5,
         timeout_secs: 1800,
+            deadline_default_secs: 3600,
+            agent_heartbeat_stale_secs: 900,
+            progress_stale_secs: 3600,
     }
 }
 
@@ -289,7 +295,9 @@ async fn c60_timeout_terminates_and_marks_timed_out(pool: PgPool) {
     let cfg = cfg();
 
     claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap();
-    sqlx::query("UPDATE delivery.task_run SET timeout_seconds = 0 WHERE id = $1")
+    // T-032 T3 终裁：deadline_at 在首次 claim 时已固化（= now + timeout_seconds）
+    // ——事后改 timeout_seconds 不影响在跑 Run；测试造超时改为直接压缩 deadline。
+    sqlx::query("UPDATE delivery.task_run SET deadline_at = now() - interval '1 second' WHERE id = $1")
         .bind(fx.run_id)
         .execute(&pool)
         .await

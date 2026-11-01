@@ -88,10 +88,16 @@ pub struct LeaseState {
     pub lease_expires_at: DateTime<Utc>,
     pub client_name: Option<String>,
     pub client_version: Option<String>,
+    /// T-032 T2：库内当前执行权世代（执行端请求携带值必须与此一致）。
+    pub lease_generation: i32,
+    /// 既有 `executor_session`：**非 None 表示平台已写入启动意图 / spawn 身份**
+    /// （Model B）——执行端首报 `started` 不得覆盖它（T-031 实施裁定 2）。
+    pub executor_session: Option<String>,
 }
 
 const LEASE_SELECT: &str = "SELECT r.id, r.task_id, r.status, r.stage, r.attempt_no, \
         r.lease_expires_at, r.lease_token_hash, r.client_name, r.client_version, \
+        r.lease_generation, r.deadline_at, r.executor_session, \
         (r.lease_expires_at IS NOT NULL AND r.lease_expires_at > now()) AS lease_live \
    FROM delivery.task_run r \
   WHERE r.id = $1 AND r.project_id = $2";
@@ -107,14 +113,25 @@ fn lease_row(row: &sqlx::postgres::PgRow) -> Result<LeaseState, LeaseError> {
         lease_expires_at: lease_expires_at.ok_or(LeaseError::Expired)?,
         client_name: row.get("client_name"),
         client_version: row.get("client_version"),
+        lease_generation: row.get("lease_generation"),
+        executor_session: row.get("executor_session"),
     })
 }
 
-fn verify_row(row: &sqlx::postgres::PgRow, token: &str) -> Result<LeaseState, LeaseError> {
+fn verify_row(
+    row: &sqlx::postgres::PgRow,
+    token: &str,
+    generation: i32,
+) -> Result<LeaseState, LeaseError> {
     let stored: Option<String> = row.get("lease_token_hash");
-    // Model B / 存量 Run 的 hash 为 NULL：一律拒绝，不 panic、不泄露（验收 C17）。
+    // hash 为 NULL：无凭据 Run，一律拒绝，不 panic、不泄露（验收 C17）。
     let stored = stored.ok_or(LeaseError::Forbidden)?;
     if stored != hash_lease_token(token) {
+        return Err(LeaseError::Forbidden);
+    }
+    // T-032 T2 终裁：MCP 必须同时验证 token 与 generation——**旧 generation
+    // 永远不能重新获得授权**（租约所有权已递增到下一代）。
+    if row.get::<i32, _>("lease_generation") != generation {
         return Err(LeaseError::Forbidden);
     }
     let status: String = row.get("status");
@@ -125,6 +142,14 @@ fn verify_row(row: &sqlx::postgres::PgRow, token: &str) -> Result<LeaseState, Le
     if !live {
         return Err(LeaseError::Expired);
     }
+    // T-032 T3 终裁：绝对执行截止优先于租约续期——deadline 已过的请求即使
+    // token/generation/租约全部有效也必须拒绝。
+    let deadline_at: Option<DateTime<Utc>> = row.get("deadline_at");
+    if let Some(deadline) = deadline_at {
+        if deadline <= Utc::now() {
+            return Err(LeaseError::Expired);
+        }
+    }
     lease_row(row)
 }
 
@@ -134,6 +159,7 @@ pub async fn verify_lease(
     project_id: Uuid,
     run_id: Uuid,
     token: &str,
+    generation: i32,
 ) -> Result<LeaseState, LeaseError> {
     let row = sqlx::query(LEASE_SELECT)
         .bind(run_id)
@@ -141,7 +167,7 @@ pub async fn verify_lease(
         .fetch_optional(pool)
         .await?
         .ok_or(LeaseError::NotFound)?;
-    verify_row(&row, token)
+    verify_row(&row, token, generation)
 }
 
 /// 事务内加行锁校验（续租/进度上报）。
@@ -150,6 +176,7 @@ async fn lock_lease(
     project_id: Uuid,
     run_id: Uuid,
     token: &str,
+    generation: i32,
 ) -> Result<LeaseState, LeaseError> {
     let sql = format!("{LEASE_SELECT} FOR UPDATE OF r");
     let row = sqlx::query(&sql)
@@ -158,7 +185,7 @@ async fn lock_lease(
         .fetch_optional(&mut **tx)
         .await?
         .ok_or(LeaseError::NotFound)?;
-    verify_row(&row, token)
+    verify_row(&row, token, generation)
 }
 
 // ---------------------------------------------------------------------------
@@ -251,13 +278,16 @@ pub struct PolicyView {
 }
 
 /// 读取本 Run 的完整执行契约（只读、不续租）。
+///
+/// T-032 T2：`generation` 为执行端领取时拿到的执行权世代，服务端双验证。
 pub async fn get_run_context(
     pool: &PgPool,
     project_id: Uuid,
     run_id: Uuid,
     lease_token: &str,
+    generation: i32,
 ) -> Result<RunContract, LeaseError> {
-    let lease = verify_lease(pool, project_id, run_id, lease_token).await?;
+    let lease = verify_lease(pool, project_id, run_id, lease_token, generation).await?;
 
     let run = sqlx::query(
         "SELECT attempt_no, stage, timeout_seconds, lease_expires_at, policy_snapshot \
@@ -431,15 +461,19 @@ pub struct RenewedLease {
 ///
 /// 与既有 `run_dispatch::renew_lease` 的差别是四项都补齐：token 凭证、过期拒绝、
 /// 同事务、审计留痕。
+///
+/// T-032：`generation` 双验证（T2）；本通道是**执行端 Agent 心跳**（T4）——
+/// 刷新 `last_agent_heartbeat_at`；deadline 已过一律拒绝（T3，verify_row 内）。
 pub async fn renew_lease_by_token(
     pool: &PgPool,
     project_id: Uuid,
     run_id: Uuid,
     lease_token: &str,
     cfg: &RunDispatchConfig,
+    generation: i32,
 ) -> Result<RenewedLease, LeaseError> {
     let mut tx = pool.begin().await?;
-    let renewed = renew_lease_in_tx(&mut tx, project_id, run_id, lease_token, cfg).await?;
+    let renewed = renew_lease_in_tx(&mut tx, project_id, run_id, lease_token, cfg, generation).await?;
     tx.commit().await?;
     Ok(renewed)
 }
@@ -450,11 +484,13 @@ async fn renew_lease_in_tx(
     run_id: Uuid,
     lease_token: &str,
     cfg: &RunDispatchConfig,
+    generation: i32,
 ) -> Result<RenewedLease, LeaseError> {
-    let lease = lock_lease(tx, project_id, run_id, lease_token).await?;
+    let lease = lock_lease(tx, project_id, run_id, lease_token, generation).await?;
     let expires_at: DateTime<Utc> = sqlx::query_scalar(
         "UPDATE delivery.task_run \
-            SET lease_expires_at = now() + make_interval(secs => $2::float8), heartbeat_at = now() \
+            SET lease_expires_at = now() + make_interval(secs => $2::float8), heartbeat_at = now(), \
+                last_agent_heartbeat_at = now() \
           WHERE id = $1 RETURNING lease_expires_at",
     )
     .bind(run_id)
@@ -490,10 +526,17 @@ pub struct ProgressReport<'a> {
     pub blocked: bool,
 }
 
-/// 进度上报 = 续租 +（首次 `started`）阶段推进 + 审计，全部**单事务**。
+/// 进度上报 = 续租 +（首次 `started` 且平台尚未写入启动意图）阶段推进 + 审计，
+/// 全部**单事务**。
 ///
 /// `claimed → running` 由平台经 `apply_task_transition` 写（R1 红线：不允许
 /// 第二条绕过状态机的写入路径）；Run 自身的 `status/stage` 与执行会话同事务写。
+///
+/// T-032：`generation` 双验证（T2）；本通道刷新 **Agent 心跳**（T4）——
+/// `last_agent_heartbeat_at = now()`；**仅 stage 变化才刷 `last_progress_at`**
+/// （心跳不能自动视为执行进展）；首报 `started` 分支只在平台尚未写入
+/// `executor_session`（无启动意图）时才写 mcp session——平台 spawn（Model B）
+/// 的 session 由编排器前置写入，执行端**不得覆盖**。
 pub async fn report_progress(
     pool: &PgPool,
     project_id: Uuid,
@@ -501,19 +544,26 @@ pub async fn report_progress(
     lease_token: &str,
     report: ProgressReport<'_>,
     cfg: &RunDispatchConfig,
+    generation: i32,
 ) -> Result<RenewedLease, LeaseError> {
     let mut tx = pool.begin().await?;
-    let lease = lock_lease(&mut tx, project_id, run_id, lease_token).await?;
+    let lease = lock_lease(&mut tx, project_id, run_id, lease_token, generation).await?;
 
+    let stage_changed = lease.stage.as_deref() != Some(report.stage);
     let expires_at: DateTime<Utc> = sqlx::query_scalar(
         "UPDATE delivery.task_run \
-            SET lease_expires_at = now() + make_interval(secs => $2::float8), heartbeat_at = now() \
+            SET lease_expires_at = now() + make_interval(secs => $2::float8), heartbeat_at = now(), \
+                last_agent_heartbeat_at = now(), \
+                last_progress_at = CASE WHEN $3::text IS DISTINCT FROM stage \
+                                        THEN now() ELSE last_progress_at END \
           WHERE id = $1 RETURNING lease_expires_at",
     )
     .bind(run_id)
     .bind(cfg.lease_secs)
+    .bind(report.stage)
     .fetch_one(&mut *tx)
     .await?;
+    let _ = stage_changed; // 进展判定已在 SQL CASE 内完成（与 stage 读取同事务一致）
     audit_run(
         &mut tx,
         project_id,
@@ -530,7 +580,13 @@ pub async fn report_progress(
         .fetch_one(&mut *tx)
         .await?;
 
-    if report.stage == run_stage::STARTED && lease.status == run_status::CLAIMED {
+    // T-032：平台已写入启动意图（executor_session 非空 = Model B spawn）→
+    // 首报不写 mcp session、claimed→running 由编排器推进（T-031 实施裁定 2 +
+    // T1 终裁：执行端不得覆盖平台 session）。
+    if report.stage == run_stage::STARTED
+        && lease.status == run_status::CLAIMED
+        && lease.executor_session.is_none()
+    {
         // 首报 started：任务状态经唯一受守卫通道推进。
         let ctx = system_context(&mut tx, project_id)
             .await

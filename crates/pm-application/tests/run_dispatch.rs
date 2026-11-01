@@ -25,6 +25,9 @@ fn cfg() -> RunDispatchConfig {
         max_run_attempts: 3,
         max_infrastructure_attempts: 5,
         timeout_secs: 1800,
+            deadline_default_secs: 3600,
+            agent_heartbeat_stale_secs: 900,
+            progress_stale_secs: 3600,
     }
 }
 
@@ -182,7 +185,7 @@ async fn started_lost_run_is_isolated_and_superseded(pool: PgPool) {
     let cfg = cfg();
     let claimed = claim_once(&pool, "w1", &cfg, DispatchMode::On).await.unwrap().unwrap();
     // 执行器已启动（记录 session），随后租约过期。
-    sqlx::query("UPDATE delivery.task_run SET executor_session = 'sess-1', lease_expires_at = now() - interval '1 second' WHERE id = $1")
+    sqlx::query("UPDATE delivery.task_run SET executor_session = 'sess-1', stage = 'started', lease_expires_at = now() - interval '1 second' WHERE id = $1")
         .bind(claimed.run_id)
         .execute(&pool)
         .await
@@ -560,14 +563,14 @@ async fn fencing_rejects_stale_executor_sessions(pool: PgPool) {
         .await
         .unwrap()
         .unwrap();
-    sqlx::query("UPDATE delivery.task_run SET executor_session = 'sess-live' WHERE id = $1")
+    sqlx::query("UPDATE delivery.task_run SET executor_session = 'sess-live', stage = 'started' WHERE id = $1")
         .bind(out.run_id)
         .execute(&pool)
         .await
         .unwrap();
-    assert!(accept_executor_result(&pool, out.run_id, "sess-live").await.unwrap());
+    assert!(accept_executor_result(&pool, out.run_id, "sess-live", 1).await.unwrap());
     assert!(
-        !accept_executor_result(&pool, out.run_id, "sess-stale").await.unwrap(),
+        !accept_executor_result(&pool, out.run_id, "sess-stale", 1).await.unwrap(),
         "a stale executor session must be fenced out"
     );
 }
@@ -743,7 +746,7 @@ async fn t19_b3_recovery_split_unstarted_keeps_run_started_supersedes(pool: PgPo
     // 已启动执行器：租约过期 → 旧 Run 隔离 + 新建 Run 并 supersede。
     sqlx::query(
         "UPDATE delivery.task_run \
-            SET status = 'claimed', executor_session = 'sess-old', lease_owner = 'w2', \
+            SET status = 'claimed', stage = 'started', executor_session = 'sess-old', lease_owner = 'w2', \
                 lease_expires_at = now() - interval '1 second' \
           WHERE id = $1",
     )

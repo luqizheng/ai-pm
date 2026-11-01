@@ -489,6 +489,9 @@ pub struct RunContextArgs {
     pub run_id: Uuid,
     /// The one-time plaintext token `pm_claim_task` returned.
     pub lease_token: String,
+    /// T-032 T2：执行权世代（`pm_claim_task` 返回）。服务端与 token 双验证；
+    /// 租约重领后旧 generation 永不重新获得授权。
+    pub lease_generation: i32,
 }
 
 /// Arguments of `pm_report_progress`：续租 + 阶段推进 + 审计（单事务）。
@@ -497,6 +500,8 @@ pub struct ReportProgressArgs {
     pub project_id: Uuid,
     pub run_id: Uuid,
     pub lease_token: String,
+    /// T-032 T2：执行权世代（与 token 双验证）。
+    pub lease_generation: i32,
     /// Report the durable stage; `started` is the only one that advances state.
     pub stage: String,
     /// Free-form progress note (audited, never stored in the contract).
@@ -535,6 +540,8 @@ pub struct SubmitResultArgs {
     pub project_id: Uuid,
     pub run_id: Uuid,
     pub lease_token: String,
+    /// T-032 T2：执行权世代（D4 落库时经 `accept_executor_result` 双验证）。
+    pub lease_generation: i32,
     pub repositories: Vec<SubmittedRepository>,
     pub summary: String,
     pub knowledge_proposals: Vec<KnowledgeProposalInput>,
@@ -593,6 +600,7 @@ pub async fn claim_task(pool: &PgPool, args: ClaimTaskArgs) -> Result<Value, Too
         "task_id": claimed.task_id,
         "attempt_no": claimed.attempt_no,
         "lease_token": claimed.lease_token,
+        "lease_generation": claimed.lease_generation,
         "lease_expires_at": claimed.lease_expires_at,
         "git_branch": claimed.git_branch,
         "stage": claimed.stage,
@@ -606,6 +614,7 @@ pub async fn get_run_context(pool: &PgPool, args: RunContextArgs) -> Result<Valu
         args.project_id,
         args.run_id,
         &args.lease_token,
+        args.lease_generation,
     )
     .await
     .map_err(map_lease_error_v2)?;
@@ -626,6 +635,7 @@ pub async fn report_progress(pool: &PgPool, args: ReportProgressArgs) -> Result<
             blocked: args.blocked,
         },
         &cfg,
+        args.lease_generation,
     )
     .await
     .map_err(map_lease_error_v2)?;

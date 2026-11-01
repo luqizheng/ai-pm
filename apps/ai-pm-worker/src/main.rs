@@ -149,6 +149,14 @@ async fn main() {
                     tracing::warn!(error = %e, "poll_active_runs failed; backing off");
                 }
             }
+            // T-032 D3：终态僵尸进程兜底（终止顺序反转引入的窗口——Run 已终态
+            // 但 terminate 失败，reconcile_orphans 不覆盖终态行）。
+            if let Err(e) =
+                pm_application::run_executor::cleanup_finished_processes(&dispatch_pool, run_executor.as_ref())
+                    .await
+            {
+                tracing::warn!(error = %e, "finished-run cleanup failed");
+            }
             tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await;
         }
     });

@@ -25,3 +25,13 @@ libc = "0.2"
 sqlx.workspace = true
 tokio.workspace = true
 uuid.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# T-032 §5：Windows Job Object（JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE）——
+# 子进程完整回收的平台原语（Codex 派生的 Cargo/Git/Shell 全量终止）。
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }

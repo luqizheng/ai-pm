@@ -195,6 +195,11 @@ pub const DISPATCH_SERVICE_PRINCIPAL: Uuid = Uuid::from_u128(1);
 /// D2 的**对外**续租通道是 [`crate::run_context::renew_lease_by_token`]：本函数
 /// 以 `lease_owner` 为凭证且不写审计，不能作为 MCP 入口（见 D2 设计 §4.3）。
 /// D2 起补上租约过期与 `running` 态检查——过期租约不得被续活。
+///
+/// T-032 T3：**绝对执行截止优先于租约续期**——`deadline_at` 已过的续租一律拒绝
+/// （平台兜底续租也不例外）；续租不重置/延长 deadline（固化语义）。
+/// 平台 poll 兜底续租是**进程存活**信号，不写 `last_agent_heartbeat_at`
+/// （心跳 ≠ 进展 ≠ 进程存活，四信号分立）。
 pub async fn renew_lease(
     pool: &PgPool,
     run_id: Uuid,
@@ -205,7 +210,8 @@ pub async fn renew_lease(
         "UPDATE delivery.task_run \
             SET lease_expires_at = now() + make_interval(secs => $3::float8), heartbeat_at = now() \
           WHERE id = $1 AND lease_owner = $2 AND status IN ('claimed', 'running') \
-            AND lease_expires_at > now()",
+            AND lease_expires_at > now() \
+            AND (deadline_at IS NULL OR deadline_at > now())",
     )
     .bind(run_id)
     .bind(lease_owner)
@@ -216,19 +222,23 @@ pub async fn renew_lease(
 }
 
 
-/// fencing（T25）：仅**当前 Run 的当前执行会话**可回传结果。被回收 / 被替代的旧
-/// 执行实例（过期 session 或非活跃 Run）一律拒绝，防止迟到结果污染新 Run。
+/// fencing（T25 + T-032 T2 终裁）：仅**当前 Run 的当前执行会话、当前执行权世代**
+/// 可回传结果。被回收 / 被替代的旧执行实例（过期 session、旧 generation、非活跃
+/// Run）一律拒绝——**旧 generation 永远不能重新获得授权**——防止迟到结果污染新 Run。
 pub async fn accept_executor_result(
     pool: &PgPool,
     run_id: Uuid,
     executor_session: &str,
+    lease_generation: i32,
 ) -> Result<bool, RunDispatchError> {
     let current: Option<bool> = sqlx::query_scalar(
-        "SELECT (status IN ('claimed', 'running') AND executor_session = $2) \
+        "SELECT (status IN ('claimed', 'running') AND executor_session = $2 \
+                 AND lease_generation = $3) \
            FROM delivery.task_run WHERE id = $1",
     )
     .bind(run_id)
     .bind(executor_session)
+    .bind(lease_generation)
     .fetch_optional(pool)
     .await?;
     Ok(current == Some(true))

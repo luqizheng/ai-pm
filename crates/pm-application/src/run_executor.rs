@@ -14,9 +14,10 @@ use uuid::Uuid;
 
 use crate::command_executor::{apply_task_transition, system_context, TransitionFacts};
 use crate::run_dispatch::{
-    audit_run, claim_once, recover_lost_run, renew_lease, ClaimKind, DispatchMode,
-    RunDispatchConfig, RunDispatchError, ExecutableRun, ExecutorProgress, ExecutorSession,
-    RunExecutor, RunRepositoryBaseline, TerminateReason, workspace_root_from_env,
+    append_executor_event, audit_run, claim_once, recover_lost_run, renew_lease, run_status,
+    ClaimKind, DispatchMode, ExitOutcome, RunDispatchConfig, RunDispatchError, ExecutableRun,
+    ExecutorProgress, ExecutorSession, RunExecutor, RunRepositoryBaseline, TerminateReason,
+    workspace_root_from_env,
 };
 use pm_domain::TaskStatus;
 
@@ -59,34 +60,84 @@ pub async fn claim_and_start(
     let (run_id, task_id) = (outcome.run_id, outcome.task_id);
     let project_id = project_of(pool, run_id).await?;
 
-    let executable = executable_run(pool, run_id, task_id, project_id).await?;
-    match executor.start(&executable).await {
-        Ok(session) => {
+    let mut executable = executable_run(pool, run_id, task_id, project_id).await?;
+    executable.lease_token = outcome.lease_token.clone();
+    executable.lease_generation = outcome.lease_generation;
+
+    // T-032 T1 终裁：session 由编排器生成，并在 spawn **之前**持久化——
+    // `executor_session` 是启动意图，不等于进程已经启动。崩溃窗口收窄为：
+    // 「意图已落库，spawn 未执行」→ reconcile 按 stage='dispatch' 识别可安全重领。
+    let session_text = format!("{}:{}", executor.kind(), Uuid::new_v4());
+    {
+        let mut tx = pool.begin().await?;
+        let prev_session: Option<String> = sqlx::query_scalar(
+            "SELECT executor_session FROM delivery.task_run \
+              WHERE id = $1 AND status = 'claimed' AND stage = 'dispatch' FOR UPDATE",
+        )
+        .bind(run_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .flatten();
+        let updated = sqlx::query(
+            "UPDATE delivery.task_run \
+                SET executor_kind = $2, executor_session = $3 \
+              WHERE id = $1 AND status = 'claimed' AND stage = 'dispatch'",
+        )
+        .bind(run_id)
+        .bind(executor.kind())
+        .bind(&session_text)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        if updated != 1 {
+            // 已被回收路径接管或状态漂移：本 worker 不再启动。
+            tx.commit().await?;
+            return Ok(StartOutcome::Skipped { run_id });
+        }
+        // T1 约束②：旧 session（spawn 失败残留）被覆盖前保留历史——
+        // events 文件 + 审计双留痕，库内不另设历史表。
+        if let Some(old) = &prev_session {
+            append_executor_event(
+                &workspace_root_from_env(),
+                run_id,
+                &serde_json::json!({
+                    "event": "session_replaced",
+                    "old_session": old,
+                    "new_session": session_text,
+                    "at": chrono::Utc::now().to_rfc3339(),
+                }),
+            );
+            audit_run(
+                &mut tx,
+                project_id,
+                "executor_session_replaced",
+                run_id,
+                serde_json::json!({
+                    "old_session": old,
+                    "new_session": session_text,
+                }),
+            )
+            .await?;
+        }
+        tx.commit().await?;
+    }
+
+    match executor.start(&executable, &session_text).await {
+        Ok(()) => {
+            // 启动确认：条件 UPDATE 带 session 匹配（防竞态），与任务推进同事务
+            // （D1 §九问题 4：claimed→running 由编排器经受守卫入口推进）。
             let mut tx = pool.begin().await?;
-            // 先写执行会话（条件 UPDATE 防竞态），再推进状态（D1 §九问题 4：
-            // claimed→running 由 D3 在执行端启动成功后经平台写入，不由执行端直写）。
             let updated = sqlx::query(
                 "UPDATE delivery.task_run \
-                    SET executor_kind = $2, executor_session = $3 \
-                  WHERE id = $1 AND status IN ('claimed', 'running')",
+                    SET status = 'running', stage = 'started', started_at = now() \
+                  WHERE id = $1 AND status = 'claimed' AND executor_session = $2",
             )
             .bind(run_id)
-            .bind(executor.kind())
-            .bind(&session.session)
+            .bind(&session_text)
             .execute(&mut *tx)
             .await?
             .rows_affected();
             if updated == 1 {
-                // Run 侧：running + stage=started（与 D2 首报 started 的落点一致）；
-                // 任务侧：经唯一受守卫入口 apply_task_transition 推进。
-                sqlx::query(
-                    "UPDATE delivery.task_run \
-                        SET status = 'running', stage = 'started', started_at = now() \
-                      WHERE id = $1 AND status = 'claimed'",
-                )
-                .bind(run_id)
-                .execute(&mut *tx)
-                .await?;
                 let ctx = system_context(&mut tx, project_id)
                     .await
                     .map_err(|e| RunDispatchError::Transition(e.to_string()))?;
@@ -107,8 +158,9 @@ pub async fn claim_and_start(
                     run_id,
                     serde_json::json!({
                         "executor_kind": executor.kind(),
-                        "executor_session": session.session,
-                        "workspace_root": session.workspace_root,
+                        "executor_session": session_text,
+                        "workspace_root": workspace_root_from_env(),
+                        "lease_generation": outcome.lease_generation,
                     }),
                 )
                 .await?;
@@ -116,11 +168,13 @@ pub async fn claim_and_start(
             tx.commit().await?;
             Ok(StartOutcome::Started {
                 run_id,
-                session: session.session,
+                session: session_text,
             })
         }
         Err(error) => {
             let detail = error.to_string();
+            // T1 终裁：spawn 失败保留 executor_session（启动失败痕迹），stage 仍为
+            // dispatch → B3-1 扩展判定可在下一轮同 Run 重领并覆盖 session。
             start_failed(pool, run_id, project_id, cfg, &detail).await?;
             Ok(StartOutcome::StartFailed {
                 run_id,
@@ -130,8 +184,16 @@ pub async fn claim_and_start(
     }
 }
 
-/// 监控一轮本 worker 名下的已启动 Run：超时强杀 / 兜底续租 / 收尾回写。
+/// 监控一轮本 worker 名下的已启动 Run：四信号分立判定 / 兜底续租 / 收尾回写。
 /// 返回本轮处理的 Run 数。
+///
+/// 判定顺序（T-032 T3/T4 终裁）：
+/// ① **绝对截止**（`deadline_at` 固化值，优先于一切信号，续租不影响）；
+/// ② **Agent 心跳失效**（进程存活但 `last_agent_heartbeat_at` 停滞超阈值——
+///    仅对已上报过心跳的 Run 判定，从未接入 MCP 的 Run 不受此约束）；
+/// ③ **长期无进展**（`last_progress_at` 停滞超阈值；心跳 ≠ 进展）；
+/// ④ 存量 fallback：`deadline_at` 为 NULL 的行按 `began_at + timeout_seconds` 判定；
+/// ⑤ 存活探测 + 兜底续租（deadline 已过时续租天然失败 → B3-2）。
 pub async fn poll_active_runs(
     pool: &PgPool,
     executor: &dyn RunExecutor,
@@ -140,7 +202,8 @@ pub async fn poll_active_runs(
 ) -> Result<usize, RunDispatchError> {
     let rows = sqlx::query(
         "SELECT r.id, r.task_id, r.project_id, r.status, r.executor_session, \
-                r.lease_expires_at, r.timeout_seconds, \
+                r.lease_expires_at, r.timeout_seconds, r.deadline_at, \
+                r.last_agent_heartbeat_at, r.last_progress_at, \
                 coalesce(r.started_at, r.claimed_at) AS began_at \
            FROM delivery.task_run r \
           WHERE r.status IN ('claimed', 'running') \
@@ -157,9 +220,14 @@ pub async fn poll_active_runs(
         let run_id: Uuid = row.get("id");
         let task_id: Uuid = row.get("task_id");
         let project_id: Uuid = row.get("project_id");
+        let status: String = row.get("status");
         let session_text: String = row.get("executor_session");
         let timeout_seconds: Option<i32> = row.get("timeout_seconds");
         let lease_expires_at: Option<chrono::DateTime<chrono::Utc>> = row.get("lease_expires_at");
+        let deadline_at: Option<chrono::DateTime<chrono::Utc>> = row.get("deadline_at");
+        let agent_heartbeat_at: Option<chrono::DateTime<chrono::Utc>> =
+            row.get("last_agent_heartbeat_at");
+        let last_progress_at: Option<chrono::DateTime<chrono::Utc>> = row.get("last_progress_at");
         let began_at: Option<chrono::DateTime<chrono::Utc>> = row.get("began_at");
         let session = ExecutorSession {
             session: session_text,
@@ -167,15 +235,48 @@ pub async fn poll_active_runs(
             workspace_root: workspace_root_from_env(),
         };
 
-        // ① 超时判定：started（或领取）时刻 + timeout_seconds 耗尽 → 统一终止管线。
-        if timed_out(began_at, timeout_seconds) {
+        // ① 绝对截止（T3：固化值，优先于租约与一切其他信号）。
+        if deadline_exceeded(deadline_at) {
+            let _ = executor.terminate(&session, TerminateReason::TimedOut).await;
+            record_termination(pool, run_id, project_id, "timeout").await?;
+            handled += 1;
+            continue;
+        }
+        // ④ 存量 fallback：无固化 deadline 的行沿用 began_at + timeout_seconds。
+        if deadline_at.is_none() && timed_out(began_at, timeout_seconds) {
             let _ = executor.terminate(&session, TerminateReason::TimedOut).await;
             record_termination(pool, run_id, project_id, "timeout").await?;
             handled += 1;
             continue;
         }
 
-        // ② 存活探测 + 兜底续租（Q-D3-4：防执行端长静默被误杀）。
+        // ②③ 心跳 / 进展分离（T4）：running（进程已确认启动）才判定；
+        //    心跳停滞 = Agent 死锁；无进展 = 长期停滞。二者独立阈值独立判定，
+        //    心跳刷新不视为进展。从未上报过心跳/进展的 Run（spawn 后未接 MCP）
+        //    列为 NULL，不受判定。
+        if status == run_status::RUNNING {
+            if stale_since(agent_heartbeat_at, cfg.agent_heartbeat_stale_secs) {
+                tracing::warn!(run = %run_id, "agent heartbeat lost; terminating");
+                let _ = executor
+                    .terminate(&session, TerminateReason::HeartbeatLost)
+                    .await;
+                record_termination(pool, run_id, project_id, "agent_heartbeat_lost").await?;
+                handled += 1;
+                continue;
+            }
+            if stale_since(last_progress_at, cfg.progress_stale_secs) {
+                tracing::warn!(run = %run_id, "progress stalled; terminating");
+                let _ = executor
+                    .terminate(&session, TerminateReason::ProgressStalled)
+                    .await;
+                record_termination(pool, run_id, project_id, "progress_stalled").await?;
+                handled += 1;
+                continue;
+            }
+        }
+
+        // ⑤ 存活探测 + 兜底续租（Q-D3-4：防执行端长静默被误杀；deadline 已过时
+        //    续租天然失败 → B3-2 隔离）。
         let progress = match executor.poll(&session).await {
             Ok(progress) => progress,
             Err(error) => {
@@ -184,6 +285,14 @@ pub async fn poll_active_runs(
             }
         };
         match progress {
+            ExecutorProgress::Uncertain => {
+                // T1 终裁：三重证据无法确证进程已死 → 按「可能存活」处理，
+                // 告警并保留回收任务，**不得**静默判定回收。
+                tracing::warn!(
+                    run = %run_id,
+                    "orphan liveness uncertain (pid file missing but evidence inconclusive); keeping for next round"
+                );
+            }
             ExecutorProgress::Pending | ExecutorProgress::Running => {
                 let expiring_soon = lease_expires_at
                     .map(|at| at < chrono::Utc::now() + chrono::Duration::seconds(cfg.lease_secs / 2))
@@ -191,8 +300,8 @@ pub async fn poll_active_runs(
                 if expiring_soon {
                     let renewed = renew_lease(pool, run_id, worker_id, cfg.lease_secs).await?;
                     if !renewed {
-                        // 租约续不上（已过期/已被回收路径接管）：失联处理——
-                        // 杀进程 + B3-2 隔离旧 Run 并新建重试 Run（Q-D3-4 语义）。
+                        // 租约续不上（已过期/已被回收路径接管/deadline 已过）：
+                        // 杀进程 + B3-2 隔离旧 Run 并新建重试 Run。
                         tracing::info!(run = %run_id, "lease unrenewable; reclaiming as lost");
                         let _ = executor
                             .terminate(&session, TerminateReason::LeaseReclaimed)
@@ -202,8 +311,8 @@ pub async fn poll_active_runs(
                     }
                 }
             }
-            ExecutorProgress::Done { exit_code } => {
-                finish_run(pool, run_id, project_id, exit_code).await?;
+            ExecutorProgress::Done { outcome } => {
+                finish_run(pool, run_id, project_id, outcome).await?;
                 handled += 1;
             }
         }
@@ -213,6 +322,10 @@ pub async fn poll_active_runs(
 
 /// 用户取消（Q-D3-5：与超时同一条终止管线，终态不同）。
 /// Run 不在执行中 / 无执行会话时返回 `false`。
+///
+/// T-032 D3 终裁：**先撤销凭据（落终态），进程终止作为后续资源清理**——凭据
+/// 撤销是 DB 事务（原子且即时），进程终止存在竞态。即使 terminate 失败，
+/// Run 已终态 + token 已撤销；残留进程由 [`cleanup_finished_processes`] 兜底。
 pub async fn cancel_run(
     pool: &PgPool,
     executor: &dyn RunExecutor,
@@ -233,6 +346,12 @@ pub async fn cancel_run(
     if !matches!(status.as_str(), "claimed" | "running") {
         return Ok(false);
     }
+    // ① 先落终态 + 撤凭据（原子）。
+    let confirmed = record_termination(pool, run_id, project_id, "user_cancel").await?;
+    if !confirmed {
+        return Ok(false);
+    }
+    // ② 后终止进程（资源清理；失败由兜底清理路径重试）。
     if let Some(session_text) = session_text {
         let session = ExecutorSession {
             session: session_text,
@@ -240,21 +359,36 @@ pub async fn cancel_run(
             workspace_root: workspace_root_from_env(),
         };
         // 进程可能已自行退出：terminate 内部先 try_wait，不强杀尸体。
-        let _ = executor.terminate(&session, TerminateReason::Cancelled).await;
+        if let Err(error) = executor.terminate(&session, TerminateReason::Cancelled).await {
+            tracing::warn!(
+                run = %run_id,
+                error = %error,
+                "post-termination process cleanup failed; finished-run cleanup will retry"
+            );
+            append_executor_event(
+                &workspace_root_from_env(),
+                run_id,
+                &serde_json::json!({
+                    "event": "terminate_cleanup_pending",
+                    "at": chrono::Utc::now().to_rfc3339(),
+                }),
+            );
+        }
     }
-    record_termination(pool, run_id, project_id, "user_cancel").await?;
     Ok(true)
 }
 
-/// 平台重启后的孤儿 reconcile（Q-D3-5 / 设计稿 §3 异常路径②）。
+/// 平台重启后的孤儿 reconcile（Q-D3-5 / 设计稿 §3 异常路径② + T1 三重证据）。
 ///
 /// 孤儿 = `claimed/running` 且 `executor_session` 非空且租约**未过期**的 Run
 /// （过期的由 `claim_once` 回收路径按 B3-2 处理，不在此重复）。对每个孤儿
 /// `poll` 一次：
-/// - `Done{Some(0)}` → 正常收尾 `succeeded`；
-/// - `Done{Some(n)}` → 收尾 `failed` + `exit_code` failure 行；
-/// - `Done{None}` → 进程被外部/信号终止且退出码不可归因 → 按失联处理
+/// - `Done{Success}` → 正常收尾 `succeeded`；
+/// - `Done{NonZeroExit}` → 收尾 `failed` + failure 行；
+/// - `Done{Signaled|Lost}` → 进程被外部/信号终止且退出码不可归因 → 按失联处理
 ///   （B3-2：旧 Run `timed_out` + 新 Run 重试）；
+/// - `Uncertain` → 三重证据无法确证进程已死（T1 终裁）：告警 + 保留，**不得**
+///   静默判定回收；
 /// - `Running`/`Pending` → 进程跨重启仍存活，保留：执行端心跳继续续租，
 ///   租约过期后由回收路径接管（本 worker 不再续，`lease_owner` 不匹配）。
 pub async fn reconcile_orphans(
@@ -289,13 +423,19 @@ pub async fn reconcile_orphans(
             Err(_) => continue,
         };
         match progress {
-            ExecutorProgress::Done { exit_code: Some(code) } => {
-                finish_run(pool, run_id, project_id, Some(code)).await?;
+            ExecutorProgress::Done { outcome } => {
+                if matches!(outcome, ExitOutcome::Success) {
+                    finish_run(pool, run_id, project_id, outcome).await?;
+                } else {
+                    recover_lost(pool, run_id, task_id, project_id, cfg).await?;
+                }
                 handled += 1;
             }
-            ExecutorProgress::Done { exit_code: None } => {
-                recover_lost(pool, run_id, task_id, project_id, cfg).await?;
-                handled += 1;
+            ExecutorProgress::Uncertain => {
+                tracing::warn!(
+                    run = %run_id,
+                    "orphan reconcile: liveness uncertain (T1 three-evidence inconclusive); keeping"
+                );
             }
             ExecutorProgress::Pending | ExecutorProgress::Running => {}
         }
@@ -303,7 +443,73 @@ pub async fn reconcile_orphans(
     Ok(handled)
 }
 
+/// T-032 D3 终裁：**终态僵尸进程兜底**。终止顺序反转（先撤凭据后杀进程）引入
+/// 的窗口——Run 已终态但 terminate 失败时，`reconcile_orphans`（只扫
+/// `claimed/running`）不覆盖终态行。本清理对近期终态且 session 非空的 Run 补
+/// terminate；worker 主循环周期性调用。失败仅告警（下一轮重试）。
+pub async fn cleanup_finished_processes(
+    pool: &PgPool,
+    executor: &dyn RunExecutor,
+) -> Result<usize, RunDispatchError> {
+    let rows = sqlx::query(
+        "SELECT id, executor_session FROM delivery.task_run \
+          WHERE status IN ('succeeded', 'failed', 'timed_out', 'cancelled') \
+            AND executor_session IS NOT NULL \
+            AND finished_at > now() - interval '1 hour' \
+          ORDER BY finished_at DESC \
+          LIMIT 64",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut handled = 0;
+    for row in rows {
+        let run_id: Uuid = row.get("id");
+        let session_text: String = row.get("executor_session");
+        let session = ExecutorSession {
+            session: session_text,
+            run_id,
+            workspace_root: workspace_root_from_env(),
+        };
+        match executor
+            .terminate(&session, TerminateReason::LeaseReclaimed)
+            .await
+        {
+            Ok(()) => {
+                append_executor_event(
+                    &workspace_root_from_env(),
+                    run_id,
+                    &serde_json::json!({
+                        "event": "finished_run_cleanup",
+                        "at": chrono::Utc::now().to_rfc3339(),
+                    }),
+                );
+                handled += 1;
+            }
+            Err(error) => {
+                tracing::warn!(
+                    run = %run_id,
+                    error = %error,
+                    "finished-run process cleanup failed; retry next round"
+                );
+            }
+        }
+    }
+    Ok(handled)
+}
+
 // ------------------------------------------------------------------ internals
+
+/// T-032 T3：绝对截止判定——固化 `deadline_at` 已过即超时（NULL 不判定）。
+fn deadline_exceeded(deadline_at: Option<chrono::DateTime<chrono::Utc>>) -> bool {
+    matches!(deadline_at, Some(at) if at <= chrono::Utc::now())
+}
+
+/// T-032 T4：停滞判定——`at` 距今超过 `stale_secs` 即停滞（NULL 不判定）。
+fn stale_since(at: Option<chrono::DateTime<chrono::Utc>>, stale_secs: i64) -> bool {
+    matches!(at, Some(at) if (chrono::Utc::now() - at) > chrono::Duration::seconds(stale_secs))
+}
+
 
 fn timed_out(
     began_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -333,13 +539,16 @@ async fn executable_run(
     project_id: Uuid,
 ) -> Result<ExecutableRun, RunDispatchError> {
     let row = sqlx::query(
-        "SELECT attempt_no, timeout_seconds FROM delivery.task_run WHERE id = $1",
+        "SELECT attempt_no, timeout_seconds, lease_generation, deadline_at \
+           FROM delivery.task_run WHERE id = $1",
     )
     .bind(run_id)
     .fetch_one(pool)
     .await?;
     let attempt_no: i32 = row.get("attempt_no");
     let timeout_seconds: Option<i32> = row.get("timeout_seconds");
+    let lease_generation: i32 = row.get("lease_generation");
+    let deadline_at: Option<chrono::DateTime<chrono::Utc>> = row.get("deadline_at");
     let baseline_rows = sqlx::query(
         "SELECT tr.repository_id, tr.base_ref, \
                 coalesce(tr.base_commit, pr.head_commit_sha) AS base_commit, \
@@ -368,6 +577,10 @@ async fn executable_run(
         project_id,
         attempt_no,
         timeout_seconds,
+        lease_generation,
+        // 一次性明文不在库内（只存 hash）：由 claim_and_start 从 ClaimOutcome 注入。
+        lease_token: None,
+        deadline_at,
         repositories,
     })
 }
@@ -470,16 +683,24 @@ async fn start_failed(
     Ok(())
 }
 
-/// 终止收尾（Q-D3-5）：条件 UPDATE 先到先得 + failure 行 + 审计同事务。
-/// `reason_code`：`timeout` → Run `timed_out` + execution failure；
-/// `user_cancel` → Run `cancelled`；其余终止原因不落此路径（失联走 B3-2）。
+/// 终止收尾（Q-D3-5 + T-032 D3 终裁）：条件 UPDATE 先到先得 + failure 行 +
+/// 审计同事务；**本函数即「撤销凭据」动作**（终态 + 清 lease_token_hash 原子
+/// 落库）——调用方（cancel_run / poll）必须在调用它**之后**才 terminate 进程。
+/// `reason_code`：`timeout` → `timed_out`；`user_cancel` → `cancelled`；
+/// `agent_heartbeat_lost` / `progress_stalled` → `failed`（执行类失败）；
+/// 失联走 B3-2，不落此路径。返回是否命中（Run 确实处于活跃态并被收尾）。
 async fn record_termination(
     pool: &PgPool,
     run_id: Uuid,
     project_id: Uuid,
     reason_code: &str,
-) -> Result<(), RunDispatchError> {
-    let terminal = if reason_code == "timeout" { "timed_out" } else { "cancelled" };
+) -> Result<bool, RunDispatchError> {
+    let terminal = match reason_code {
+        "timeout" => "timed_out",
+        "user_cancel" => "cancelled",
+        // 心跳丢失 / 进展停滞：执行类失败（Agent 死锁 / 长期停滞），终态 failed。
+        _ => "failed",
+    };
     let mut tx = pool.begin().await?;
     let updated = sqlx::query(
         "UPDATE delivery.task_run \
@@ -487,7 +708,7 @@ async fn record_termination(
                 termination_reason = $4, \
                 lease_owner = NULL, lease_expires_at = NULL, lease_token_hash = NULL \
           WHERE id = $1 AND status IN ('claimed', 'running') \
-        RETURNING task_id",
+         RETURNING task_id",
     )
     .bind(run_id)
     .bind(project_id)
@@ -497,19 +718,36 @@ async fn record_termination(
     .await?;
     let Some(_task_id): Option<Uuid> = updated.map(|row| row.get("task_id")) else {
         tx.commit().await?;
-        return Ok(());
+        return Ok(false);
     };
-    if reason_code == "timeout" {
-        sqlx::query(
-            "INSERT INTO delivery.task_run_failure \
-             (run_id, project_id, category, retryable, reason_code, timeout_seconds, tenant_id) \
-             SELECT $1, $2, 'execution', false, 'timeout', timeout_seconds, tenant_id \
-               FROM delivery.task_run WHERE id = $1",
-        )
-        .bind(run_id)
-        .bind(project_id)
-        .execute(&mut *tx)
-        .await?;
+    match reason_code {
+        "timeout" => {
+            sqlx::query(
+                "INSERT INTO delivery.task_run_failure \
+                 (run_id, project_id, category, retryable, reason_code, timeout_seconds, tenant_id) \
+                 SELECT $1, $2, 'execution', false, 'timeout', timeout_seconds, tenant_id \
+                   FROM delivery.task_run WHERE id = $1",
+            )
+            .bind(run_id)
+            .bind(project_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+        "agent_heartbeat_lost" | "progress_stalled" => {
+            sqlx::query(
+                "INSERT INTO delivery.task_run_failure \
+                 (run_id, project_id, category, retryable, reason_code, tenant_id) \
+                 SELECT $1, $2, 'execution', false, $3, tenant_id \
+                   FROM delivery.task_run WHERE id = $1 \
+                 ON CONFLICT (run_id) DO NOTHING",
+            )
+            .bind(run_id)
+            .bind(project_id)
+            .bind(reason_code)
+            .execute(&mut *tx)
+            .await?;
+        }
+        _ => {}
     }
     audit_run(
         &mut tx,
@@ -520,17 +758,18 @@ async fn record_termination(
     )
     .await?;
     tx.commit().await?;
-    Ok(())
+    Ok(true)
 }
 
-/// 进程自然退出的收尾：退出码决定 `succeeded`/`failed`；任务状态不动（D5 裁决）。
+/// 进程自然退出的收尾（T-032 §6.4：结构化 `ExitOutcome` 决定终态）；
+/// 任务状态不动（D5 裁决）。
 async fn finish_run(
     pool: &PgPool,
     run_id: Uuid,
     project_id: Uuid,
-    exit_code: Option<i32>,
+    outcome: ExitOutcome,
 ) -> Result<(), RunDispatchError> {
-    let succeeded = exit_code == Some(0);
+    let succeeded = matches!(outcome, ExitOutcome::Success);
     let mut tx = pool.begin().await?;
     let updated = sqlx::query(
         "UPDATE delivery.task_run \
@@ -549,14 +788,22 @@ async fn finish_run(
         return Ok(());
     };
     if !succeeded {
+        let (reason_code, exit_code): (&str, Option<i32>) = match outcome {
+            ExitOutcome::NonZeroExit { code } => ("exit_code", Some(code)),
+            ExitOutcome::Signaled { .. } => ("signaled", None),
+            ExitOutcome::Lost => ("exit_code_lost", None),
+            ExitOutcome::Killed { .. } => ("killed", None),
+            ExitOutcome::Success => unreachable!("succeeded handled above"),
+        };
         sqlx::query(
             "INSERT INTO delivery.task_run_failure \
              (run_id, project_id, category, retryable, reason_code, exit_code, tenant_id) \
-             SELECT $1, $2, 'execution', false, 'exit_code', $3, tenant_id \
+             SELECT $1, $2, 'execution', false, $3, $4, tenant_id \
                FROM delivery.task_run WHERE id = $1",
         )
         .bind(run_id)
         .bind(project_id)
+        .bind(reason_code)
         .bind(exit_code)
         .execute(&mut *tx)
         .await?;
@@ -566,7 +813,7 @@ async fn finish_run(
         project_id,
         "run_finished",
         run_id,
-        serde_json::json!({ "exit_code": exit_code, "result": if succeeded { "succeeded" } else { "failed" } }),
+        serde_json::json!({ "outcome": format!("{outcome:?}"), "result": if succeeded { "succeeded" } else { "failed" } }),
     )
     .await?;
     tx.commit().await?;

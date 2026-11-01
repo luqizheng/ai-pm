@@ -125,6 +125,13 @@ pub struct RunDispatchConfig {
     pub max_infrastructure_attempts: i32,
     /// Run 超时（D2 契约 `run.timeout_seconds` 的库内来源，领取时写入）。
     pub timeout_secs: i32,
+    /// T-032 T3：`task.timeout_seconds` 缺省时的绝对执行截止兜底（秒）。
+    /// `deadline_at = 首次 claim 时刻 + COALESCE(timeout_seconds, 本值)`。
+    pub deadline_default_secs: i64,
+    /// T-032 T4：Agent 心跳失效阈值（秒）——进程存活但心跳停滞超阈值即终止。
+    pub agent_heartbeat_stale_secs: i64,
+    /// T-032 T4：无进展阈值（秒）——`last_progress_at` 停滞超阈值即终止。
+    pub progress_stale_secs: i64,
 }
 
 
@@ -142,6 +149,9 @@ impl RunDispatchConfig {
             max_run_attempts: num("AI_PM_MAX_RUN_ATTEMPTS", 3) as i32,
             max_infrastructure_attempts: num("AI_PM_MAX_INFRA_ATTEMPTS", 5) as i32,
             timeout_secs: num("AI_PM_RUN_TIMEOUT_SECS", 1800) as i32,
+            deadline_default_secs: num("AI_PM_RUN_DEADLINE_DEFAULT_SECS", 3600),
+            agent_heartbeat_stale_secs: num("AI_PM_RUN_AGENT_HEARTBEAT_STALE_SECS", 900),
+            progress_stale_secs: num("AI_PM_RUN_PROGRESS_STALE_SECS", 3600),
         }
     }
 

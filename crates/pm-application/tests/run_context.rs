@@ -34,6 +34,9 @@ fn cfg() -> RunDispatchConfig {
         max_run_attempts: 3,
         max_infrastructure_attempts: 5,
         timeout_secs: 1800,
+            deadline_default_secs: 3600,
+            agent_heartbeat_stale_secs: 900,
+            progress_stale_secs: 3600,
     }
 }
 
@@ -331,7 +334,7 @@ async fn c3_c24_c25_run_context_maps_every_contract_field(pool: PgPool) {
         .await
         .unwrap();
 
-    let contract = get_run_context(&pool, fx.project_id, claimed.run_id, &claimed.lease_token)
+    let contract = get_run_context(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, claimed.lease_generation)
         .await
         .unwrap();
     assert_eq!(contract.contract_version, 1);
@@ -405,17 +408,17 @@ async fn c5_c6_c7_c17_c28_lease_rejections(pool: PgPool) {
         .unwrap();
     let other = seed(&pool, "D2-C6-OTHER").await;
 
-    let err = get_run_context(&pool, other.project_id, claimed.run_id, &claimed.lease_token)
+    let err = get_run_context(&pool, other.project_id, claimed.run_id, &claimed.lease_token, claimed.lease_generation)
         .await
         .unwrap_err();
     assert!(matches!(err, LeaseError::NotFound), "cross-project reads as not found");
 
-    let err = get_run_context(&pool, fx.project_id, claimed.run_id, "deadbeef")
+    let err = get_run_context(&pool, fx.project_id, claimed.run_id, "deadbeef", claimed.lease_generation)
         .await
         .unwrap_err();
     assert!(matches!(err, LeaseError::Forbidden));
 
-    let err = get_run_context(&pool, fx.project_id, claimed.run_id, "")
+    let err = get_run_context(&pool, fx.project_id, claimed.run_id, "", claimed.lease_generation)
         .await
         .unwrap_err();
     assert!(matches!(err, LeaseError::Forbidden));
@@ -428,7 +431,7 @@ async fn c5_c6_c7_c17_c28_lease_rejections(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let err = get_run_context(&pool, fx.project_id, claimed.run_id, &claimed.lease_token)
+    let err = get_run_context(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, claimed.lease_generation)
         .await
         .unwrap_err();
     assert!(matches!(err, LeaseError::Forbidden));
@@ -446,7 +449,7 @@ async fn c5_c6_c7_c17_c28_lease_rejections(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let err = get_run_context(&pool, fx.project_id, claimed.run_id, &claimed.lease_token)
+    let err = get_run_context(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, claimed.lease_generation)
         .await
         .unwrap_err();
     assert!(matches!(err, LeaseError::Expired));
@@ -462,14 +465,16 @@ async fn c5_c6_c7_c17_c28_lease_rejections(pool: PgPool) {
         .await
         .unwrap()
         .unwrap();
-    assert!(worker_claim.lease_token.is_none());
+    // T-032（ADR-0002 L1）：Model B 也统一签发 lease_token（执行端 MCP 凭据）。
+    assert!(worker_claim.lease_token.is_some(), "Model B also issues a lease token");
+    assert_eq!(worker_claim.lease_generation, 1, "first valid claim is generation 1");
     let hash: Option<String> =
         sqlx::query_scalar("SELECT lease_token_hash FROM delivery.task_run WHERE id = $1")
             .bind(worker_claim.run_id)
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert!(hash.is_none(), "Model B never stores a lease token hash");
+    assert!(hash.is_some(), "T-032: Model B stores a lease token hash too");
     // claim_once 取最早的候选 Run，可能来自本测试先前任一项目；按 Run 自身的
     // project 校验，再用另一个项目验证「跨项目不可见」。
     let worker_project: Uuid =
@@ -478,7 +483,7 @@ async fn c5_c6_c7_c17_c28_lease_rejections(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    let err = get_run_context(&pool, worker_project, worker_claim.run_id, "anything")
+    let err = get_run_context(&pool, worker_project, worker_claim.run_id, "anything", worker_claim.lease_generation)
         .await
         .unwrap_err();
     assert!(matches!(err, LeaseError::Forbidden));
@@ -487,7 +492,7 @@ async fn c5_c6_c7_c17_c28_lease_rejections(pool: PgPool) {
     } else {
         fx.project_id
     };
-    let err = get_run_context(&pool, foreign_project, worker_claim.run_id, "anything")
+    let err = get_run_context(&pool, foreign_project, worker_claim.run_id, "anything", worker_claim.lease_generation)
         .await
         .unwrap_err();
     assert!(matches!(err, LeaseError::NotFound), "a run of another project is invisible");
@@ -517,6 +522,7 @@ async fn c8_c9_c22_report_progress_renews_and_advances_once(pool: PgPool) {
             blocked: false,
         },
         &cfg(),
+        claimed.lease_generation,
     )
     .await
     .unwrap();
@@ -566,6 +572,7 @@ async fn c8_c9_c22_report_progress_renews_and_advances_once(pool: PgPool) {
             blocked: false,
         },
         &cfg(),
+        claimed.lease_generation,
     )
     .await
     .unwrap();
@@ -594,7 +601,7 @@ async fn c10_c15_renewal_rejects_wrong_and_expired_tokens(pool: PgPool) {
     .await
     .unwrap();
 
-    let err = renew_lease_by_token(&pool, fx.project_id, claimed.run_id, "wrong", &cfg())
+    let err = renew_lease_by_token(&pool, fx.project_id, claimed.run_id, "wrong", &cfg(), claimed.lease_generation)
         .await
         .unwrap_err();
     assert!(matches!(err, LeaseError::Forbidden));
@@ -618,7 +625,7 @@ async fn c10_c15_renewal_rejects_wrong_and_expired_tokens(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let err = renew_lease_by_token(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, &cfg())
+    let err = renew_lease_by_token(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, &cfg(), claimed.lease_generation)
         .await
         .unwrap_err();
     assert!(
@@ -642,8 +649,8 @@ async fn c23_concurrent_renewals_are_monotonic(pool: PgPool) {
         .unwrap();
     let cfg = cfg();
     let (a, b) = tokio::join!(
-        renew_lease_by_token(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, &cfg),
-        renew_lease_by_token(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, &cfg),
+        renew_lease_by_token(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, &cfg, claimed.lease_generation),
+        renew_lease_by_token(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, &cfg, claimed.lease_generation),
     );
     let first = a.expect("concurrent renewal a");
     let second = b.expect("concurrent renewal b");
@@ -656,7 +663,7 @@ async fn c23_concurrent_renewals_are_monotonic(pool: PgPool) {
             .unwrap();
     assert_eq!(stored, max, "the lease never moves backwards");
 
-    let wrong = renew_lease_by_token(&pool, fx.project_id, claimed.run_id, "wrong", &cfg)
+    let wrong = renew_lease_by_token(&pool, fx.project_id, claimed.run_id, "wrong", &cfg, claimed.lease_generation)
         .await
         .unwrap_err();
     assert!(matches!(wrong, LeaseError::Forbidden));
@@ -705,7 +712,7 @@ async fn c19_reclaim_invalidates_the_old_token(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let err = get_run_context(&pool, fx.project_id, first.run_id, &first.lease_token)
+    let err = get_run_context(&pool, fx.project_id, first.run_id, &first.lease_token, first.lease_generation)
         .await
         .unwrap_err();
     assert!(matches!(err, LeaseError::Expired));
@@ -715,11 +722,25 @@ async fn c19_reclaim_invalidates_the_old_token(pool: PgPool) {
         .unwrap();
     assert_eq!(second.run_id, first.run_id, "B3-1 reuses the same run");
     assert_ne!(second.lease_token, first.lease_token);
-    let old = get_run_context(&pool, fx.project_id, first.run_id, &first.lease_token)
+    // T-032 T2：重领 = 成功获取执行权 → generation 递增；旧 generation 永不授权。
+    assert_eq!(
+        second.lease_generation,
+        first.lease_generation + 1,
+        "B3-1 reclaim bumps the lease generation"
+    );
+    let old = get_run_context(&pool, fx.project_id, first.run_id, &first.lease_token, first.lease_generation)
         .await
         .unwrap_err();
     assert!(matches!(old, LeaseError::Forbidden), "the old token is invalidated");
-    get_run_context(&pool, fx.project_id, second.run_id, &second.lease_token)
+    // 旧 token + 新 generation 同样拒绝（generation 与 token 双验证）。
+    let old_gen = get_run_context(&pool, fx.project_id, first.run_id, &second.lease_token, first.lease_generation)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(old_gen, LeaseError::Forbidden),
+        "a stale generation never regains authorization, even with the fresh token"
+    );
+    get_run_context(&pool, fx.project_id, second.run_id, &second.lease_token, second.lease_generation)
         .await
         .expect("the new token works");
 }

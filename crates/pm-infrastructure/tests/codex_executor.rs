@@ -1,13 +1,14 @@
-//! T-031 进程管理层测试（`docs/ai-pm-slice-d3-executor-adapter-v1.md` §5 第二层）：
-//! `AI_PM_CODEX_BIN` 指向假脚本、`file://` 裸仓作 origin，验收 C67–C70。
+//! T-031/T-032 进程管理层测试（`docs/ai-pm-slice-d3-executor-adapter-v1.md` §5 第二层
+//! + `docs/ai-pm-slice-d3-executor-hardening-v1.md` §5/§6/§8）：
+//! `AI_PM_CODEX_BIN` 指向假脚本、`file://` 裸仓作 origin，验收 C67–C73。
 //! 编排语义（FakeExecutor）见 `pm-application/tests/run_executor.rs`。
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use pm_application::run_dispatch::{
-    ExecutableRun, ExecutorProgress, ExecutorSession, RunExecutor, RunRepositoryBaseline,
-    TerminateReason,
+ExecutableRun, ExitOutcome, ExecutorProgress, ExecutorSession,
+    RunExecutor, RunRepositoryBaseline, TerminateReason,
 };
 use pm_domain::SYSTEM_TENANT;
 use pm_infrastructure::codex_executor::CodexExecutor;
@@ -151,6 +152,9 @@ fn executable_run(run_id: Uuid, project_id: Uuid, repo_id: Uuid, base_commit: &s
         project_id,
         attempt_no: 1,
         timeout_seconds: None,
+        lease_generation: 1,
+        lease_token: Some("f".repeat(64)),
+        deadline_at: None,
         repositories: vec![RunRepositoryBaseline {
             repository_id: repo_id,
             base_ref: "main".to_string(),
@@ -159,6 +163,20 @@ fn executable_run(run_id: Uuid, project_id: Uuid, repo_id: Uuid, base_commit: &s
             workspace_path: format!("repos/test-{repo_id}"),
         }],
     }
+}
+
+/// T-032 T1：session 由编排器前置生成——测试同构：先造 session 再 start，
+/// 然后手工组装 ExecutorSession（workspace_root 为测试 root）。
+fn make_session(run: &ExecutableRun, root: &Path) -> (String, ExecutorSession) {
+    let session = format!("codex:{}", Uuid::new_v4());
+    (
+        session.clone(),
+        ExecutorSession {
+            session,
+            run_id: run.run_id,
+            workspace_root: root.to_string_lossy().to_string(),
+        },
+    )
 }
 
 /// 等待进程退出（轮询 poll，最多 10s）。
@@ -187,7 +205,11 @@ async fn c67_spawn_records_session_pid_and_reaps_exit_code(pool: PgPool) {
 
     let executor = executor(pool, &exit0, &workspace.0);
     let run = executable_run(Uuid::new_v4(), project_id, repo_id, &base_commit);
-    let session = executor.start(&run).await.expect("start must succeed");
+    let (session_text, session) = make_session(&run, &workspace.0);
+    executor
+        .start(&run, &session_text)
+        .await
+        .expect("start must succeed");
 
     // pid 文件 + 日志文件就位（C69 的派生规则同源）。
     let run_root = workspace.0.join(run.run_id.to_string());
@@ -198,8 +220,10 @@ async fn c67_spawn_records_session_pid_and_reaps_exit_code(pool: PgPool) {
     let progress = wait_done(&executor, &session).await;
     assert_eq!(
         progress,
-        ExecutorProgress::Done { exit_code: Some(0) },
-        "fake codex must be reaped with its exit code"
+        ExecutorProgress::Done {
+            outcome: ExitOutcome::Success
+        },
+        "fake codex must be reaped with a structured Success outcome"
     );
 }
 
@@ -216,7 +240,8 @@ async fn c68_terminate_kills_a_hung_process(pool: PgPool) {
 
     let executor = executor(pool, &hang, &workspace.0);
     let run = executable_run(Uuid::new_v4(), project_id, repo_id, &base_commit);
-    let session = executor.start(&run).await.expect("start must succeed");
+    let (session_text, session) = make_session(&run, &workspace.0);
+    executor.start(&run, &session_text).await.expect("start must succeed");
     assert_eq!(executor.poll(&session).await.unwrap(), ExecutorProgress::Running);
 
     executor
@@ -224,9 +249,14 @@ async fn c68_terminate_kills_a_hung_process(pool: PgPool) {
         .await
         .expect("terminate must succeed");
 
-    // 进程确实死亡：句柄已移除，poll 走孤儿路径返回 Done{None}（退出码不可归因）。
+    // 进程确实死亡：句柄已移除，poll 走孤儿路径 Done{Lost}（退出码不可归因）。
     let progress = executor.poll(&session).await.unwrap();
-    assert_eq!(progress, ExecutorProgress::Done { exit_code: None });
+    assert_eq!(
+        progress,
+        ExecutorProgress::Done {
+            outcome: ExitOutcome::Lost
+        }
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -242,7 +272,8 @@ async fn c69_workspace_layout_matches_the_ruled_derivation(pool: PgPool) {
 
     let executor = executor(pool, &exit0, &workspace.0);
     let run = executable_run(Uuid::new_v4(), project_id, repo_id, &base_commit);
-    let session = executor.start(&run).await.expect("start must succeed");
+    let (session_text, session) = make_session(&run, &workspace.0);
+    executor.start(&run, &session_text).await.expect("start must succeed");
 
     let run_root = workspace.0.join(run.run_id.to_string());
     let worktree = run_root.join(&run.repositories[0].workspace_path);
@@ -267,7 +298,8 @@ async fn c70_worktree_is_checked_out_at_the_locked_base_commit(pool: PgPool) {
 
     let executor = executor(pool, &exit0, &workspace.0);
     let run = executable_run(Uuid::new_v4(), project_id, repo_id, &base_commit);
-    executor.start(&run).await.expect("start must succeed");
+    let (session_text, _session) = make_session(&run, &workspace.0);
+    executor.start(&run, &session_text).await.expect("start must succeed");
 
     let worktree = workspace
         .0
@@ -279,4 +311,136 @@ async fn c70_worktree_is_checked_out_at_the_locked_base_commit(pool: PgPool) {
         .unwrap();
     assert_eq!(String::from_utf8_lossy(&head.stdout).trim(), base_commit);
     assert!(worktree.join("README.md").exists(), "seed file must be checked out");
+}
+
+/// T-032 §6.3（C71）：一次性 token 明文经日志管道脱敏——stdout 上报的 token
+/// 在 `stdout.log` 中以 `[REDACTED]` 出现，且 `process.json` / `mcp.json` /
+/// events 文件均不含 token 明文（凭据禁止面）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn c71_lease_token_is_redacted_in_logs_and_never_persisted(pool: PgPool) {
+    let project_id = seed_project(&pool, "c71").await;
+    let workspace = TempDir::create("c71-ws");
+    let scripts = TempDir::create("c71-bin");
+    let (bare, base_commit) = seed_bare_repo("c71");
+    let (_exit0, _) = write_scripts(&scripts.0);
+    let repo_id = Uuid::new_v4();
+    let url = format!("file://{}", bare.0.join("origin.git").display());
+    seed_repo_row(&pool, project_id, repo_id, &url).await;
+
+    // 脚本回显 token（Windows cmd 需避开特殊字符；token 是纯 hex）。
+    let token = "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
+    #[cfg(windows)]
+    let echo_script = format!("@echo {token}\r\n@exit 0\r\n");
+    #[cfg(not(windows))]
+    let echo_script = format!("#!/bin/sh\necho {token}\nexit 0\n");
+    let echo_path = scripts.0.join("fake-echo.cmd");
+    std::fs::write(&echo_path, &echo_script).unwrap();
+    #[cfg(not(windows))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&echo_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    let executor = executor(pool, &echo_path, &workspace.0);
+    let run = ExecutableRun {
+        lease_token: Some(token.to_string()),
+        ..executable_run(Uuid::new_v4(), project_id, repo_id, &base_commit)
+    };
+    let (session_text, _session) = make_session(&run, &workspace.0);
+    executor.start(&run, &session_text).await.expect("start must succeed");
+
+    let run_root = workspace.0.join(run.run_id.to_string());
+    let stdout_log = run_root.join("logs").join("stdout.log");
+    let mut body = String::new();
+    for _ in 0..50 {
+        if let Ok(text) = std::fs::read_to_string(&stdout_log) {
+            if text.contains(token) || text.contains("[REDACTED]") {
+                body = text;
+                break;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(body.contains("[REDACTED]"), "token must be redacted in logs");
+    assert!(!body.contains(token), "raw token must never hit the log file");
+
+    // 禁止面：pid 文件、mcp.json、events 均不含明文。
+    for probe in [
+        run_root.join("process.json"),
+        run_root.join("mcp.json"),
+        run_root.join("logs").join("executor-events.jsonl"),
+    ] {
+        if let Ok(text) = std::fs::read_to_string(&probe) {
+            assert!(!text.contains(token), "token leaked into {}", probe.display());
+        }
+    }
+}
+
+/// T-032 §5（C72）：孤儿三重证据——pid 文件存在但身份锚点不匹配（模拟 PID
+/// 重用）时判定原进程已死（Done{Lost}），不误认无辜进程。
+#[sqlx::test(migrations = "../../migrations")]
+async fn c72_orphan_pid_reuse_is_detected_via_identity_anchor(pool: PgPool) {
+    let project_id = seed_project(&pool, "c72").await;
+    let workspace = TempDir::create("c72-ws");
+    let scripts = TempDir::create("c72-bin");
+    let (bare, base_commit) = seed_bare_repo("c72");
+    let (_exit0, hang) = write_scripts(&scripts.0);
+    let repo_id = Uuid::new_v4();
+    let url = format!("file://{}", bare.0.join("origin.git").display());
+    seed_repo_row(&pool, project_id, repo_id, &url).await;
+
+    let first = executor(pool.clone(), &hang, &workspace.0);
+    let run = executable_run(Uuid::new_v4(), project_id, repo_id, &base_commit);
+    let (session_text, session) = make_session(&run, &workspace.0);
+    first.start(&run, &session_text).await.expect("start must succeed");
+
+    // 篡改 pid 文件的身份锚点 → 模拟「该 PID 已被另一个进程占用」。
+    let pid_path = workspace.0.join(run.run_id.to_string()).join("process.json");
+    let mut payload: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&pid_path).unwrap()).unwrap();
+    payload["identity_hint"] = serde_json::json!("999999999999");
+    std::fs::write(&pid_path, serde_json::to_vec(&payload).unwrap()).unwrap();
+
+    // 模拟平台重启：内存句柄随进程丢失，用全新 executor 实例走孤儿判定路径。
+    let rebooted = executor(pool, &hang, &workspace.0);
+    let progress = rebooted.poll(&session).await.unwrap();
+    assert_eq!(
+        progress,
+        ExecutorProgress::Done {
+            outcome: ExitOutcome::Lost
+        },
+        "mismatched identity anchor must read as original-process-dead (PID reuse)"
+    );
+}
+
+/// T-032 T1（C73）：pid 文件缺失但 run 目录已初始化 → 三重证据不足 →
+/// `Uncertain`（按可能存活处理，不静默回收）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn c73_missing_pid_file_with_initialized_run_dir_is_uncertain(pool: PgPool) {
+    let project_id = seed_project(&pool, "c73").await;
+    let workspace = TempDir::create("c73-ws");
+    let scripts = TempDir::create("c73-bin");
+    let (bare, base_commit) = seed_bare_repo("c73");
+    let (exit0, _) = write_scripts(&scripts.0);
+    let repo_id = Uuid::new_v4();
+    let url = format!("file://{}", bare.0.join("origin.git").display());
+    seed_repo_row(&pool, project_id, repo_id, &url).await;
+
+    let first = executor(pool.clone(), &exit0, &workspace.0);
+    let run = executable_run(Uuid::new_v4(), project_id, repo_id, &base_commit);
+    let (session_text, session) = make_session(&run, &workspace.0);
+    first.start(&run, &session_text).await.expect("start must succeed");
+
+    // 删除 pid 文件（保留 run 目录与 logs）→ 证据不足。先收割自然退出（内存
+    // 句柄移除），再模拟「平台重启」：用全新 executor 实例走孤儿判定路径。
+    let _ = wait_done(&first, &session).await;
+    std::fs::remove_file(workspace.0.join(run.run_id.to_string()).join("process.json")).unwrap();
+
+    let rebooted = executor(pool, &exit0, &workspace.0);
+    let progress = rebooted.poll(&session).await.unwrap();
+    assert_eq!(
+        progress,
+        ExecutorProgress::Uncertain,
+        "missing pid file with initialized run dir must be Uncertain, never auto-reclaimed"
+    );
 }
