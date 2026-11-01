@@ -26,6 +26,7 @@ pub mod run_context;
 pub mod run_dispatch;
 pub mod secret;
 pub mod supervision;
+pub mod task_dependency;
 
 pub use actor::AuditActor;
 pub use bootstrap::{
@@ -78,4 +79,8 @@ pub use repository::{
 pub use supervision::{
     DecideRequest, Decision, DecisionOutcome, NotificationRow, SupervisionError, VetoOutcome,
     VetoRequest, decide_approval, freeze, notifications_feed, unfreeze, veto,
+};
+pub use task_dependency::{
+    DependencyEdge, DependencyError, DependencyGraph, add_dependency, list_dependencies,
+    remove_dependency,
 };

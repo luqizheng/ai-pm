@@ -152,6 +152,10 @@ pub async fn update_task(
         )
         .await?;
     }
+    // T-024 D4：UI 直写终态的路径同样触发下游解锁（与命令通道共用同一解锁函数）。
+    if crate::task_dependency::SATISFIED_STATUSES.contains(&status) {
+        crate::task_dependency::unlock_downstream(&mut tx, project_id, task_id).await?;
+    }
     tx.commit().await?;
 
     task_row(pool, task_id).await

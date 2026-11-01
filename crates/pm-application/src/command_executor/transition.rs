@@ -119,6 +119,18 @@ pub(crate) async fn apply_task_transition(
         audit_source(ctx),
     )
     .await?;
+    // D4（T-024）：上游进入终态时，在**同一事务**里解锁满足依赖的 blocked 下游。
+    // `unlock_downstream` 会反过来调用本函数（`blocked → ready`），因此必须用
+    // `Box::pin` 打断 async 递归的类型尺寸计算，否则无法求出 future 大小。
+    if crate::task_dependency::unlocks_downstream(to) {
+        Box::pin(crate::task_dependency::unlock_downstream(
+            tx,
+            ctx.project_id,
+            task_id,
+        ))
+        .await
+        .map_err(db_err)?;
+    }
     Ok((audit_id, resulting_revision))
 }
 

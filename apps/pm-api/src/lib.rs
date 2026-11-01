@@ -16,5 +16,6 @@ pub mod pm_writes;
 pub mod principals;
 pub mod routes;
 pub mod support;
+pub mod task_dependencies;
 pub mod tenant_members;
 

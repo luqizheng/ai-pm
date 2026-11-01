@@ -146,6 +146,8 @@ fn build_router(
         .merge(crate::pm_repositories::router())
         // 冷启动导入：启动 / 轮询 / 取消 / apply（提案链）。
         .merge(crate::pm_imports::router())
+        // Task 前置依赖（T-024）：建边 / 删边 / 上下游查询。
+        .merge(crate::task_dependencies::router())
         // 审计实时流（SSE）。EventSource 无法带 Authorization，token 走
         // `?access_token=`；auth 层只对本路径放行 query token。
         .route(

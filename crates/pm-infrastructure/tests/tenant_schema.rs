@@ -1,17 +1,17 @@
 //! 多租户结构不变量（T-021b 验收 XT-3 / TN-7 / TN-8）。
 //!
-//! 用 `information_schema` 机械断言，而不是靠代码评审：39 张租户业务表全部有
+//! 用 `information_schema` 机械断言，而不是靠代码评审：40 张租户业务表全部有
 //! `tenant_id UUID NOT NULL`，除伪根表 `delivery.policy_scope` 外都至少有一条
 //! `(tenant_id, *)` 组合外键（ADR-0001 §3.5 I1）。
 
 use sqlx::{PgPool, Row};
 
-/// ADR-0001 §3.4 + 本设计稿的四类划分：39 张。
+/// ADR-0001 §3.4 + 本设计稿的四类划分：40 张（T-024 新增 `task_dependency`）。
 const TENANT_TABLES: &[(&str, &str)] = &[
     // A 根表（2）
     ("core", "customer"),
     ("core", "project"),
-    // B 直挂 project（33）
+    // B 直挂 project（34）
     ("core", "project_member"),
     ("delivery", "requirement"),
     ("delivery", "requirement_revision"),
@@ -26,6 +26,7 @@ const TENANT_TABLES: &[(&str, &str)] = &[
     ("delivery", "task_run_repository"),
     ("delivery", "task_acceptance_criterion"),
     ("delivery", "task_knowledge_ref"),
+    ("delivery", "task_dependency"),
     ("integration", "inbound_event"),
     ("integration", "job"),
     ("integration", "notification"),

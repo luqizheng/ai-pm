@@ -454,6 +454,36 @@ pub(crate) async fn claim_core(
         }));
     }
 
+    // ⑤½ 依赖判定（T-024 / 设计稿 §5.2）：前置未满足时 Run 退避回队列——
+    // **不**判失败、不改任务状态、不写 `task_run_failure`，它只是「此刻还不能
+    // 执行」。位置在候选锁定之后、租约签发与 fencing 之前；Model A/B 共用同一
+    // 套判定，不复制逻辑。
+    if !crate::task_dependency::dependencies_satisfied(&mut tx, project_id, task_id).await? {
+        if opts.task_filter.is_some() {
+            tx.rollback().await?;
+            return Err(RunDispatchError::TaskNotReady("dependency_unmet".into()));
+        }
+        requeue_with_backoff(&mut tx, run_id, dispatch_attempts, cfg, "dependency_unmet").await?;
+        audit_run(
+            &mut tx,
+            project_id,
+            "skip_task_run",
+            run_id,
+            serde_json::json!({
+                "release_reason": "dependency_unmet",
+                "dispatch_attempts": dispatch_attempts + 1,
+            }),
+        )
+        .await?;
+        tx.commit().await?;
+        return Ok(Some(ClaimOutcome {
+            run_id,
+            task_id,
+            kind: ClaimKind::Skipped,
+            lease_token: None,
+        }));
+    }
+
     // ⑥ 执行策略门（G5）：读取失败不得默认放行，且拒绝路径审计要留下失败快照。
     match policy.execution_enabled() {
         Ok(true) => {}
