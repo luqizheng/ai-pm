@@ -143,15 +143,9 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 7. M4 · 交付与验收（D4）
 
-- [ ] **T-040 出设计稿 `docs/ai-pm-slice-d4-delivery-v1.md`**
-  - **本条按 §0.1 执行**：完整 brainstorming。
-  - **目标**：每个仓库独立记录基线、Commit、变更清单、验证证据，形成可对账的交付清单（target.md §P5 Delivery Manifest 字段表）。
-  - **依据**：`docs/ai-pm-multi-repo-model-v1.md`（ER + P0-2/P2-1 里程碑）、`docs/ai-pm-slice-d-execution-pipeline-v1.md` §D4、「只读仓出现 commit 即整单驳回」的裁定；现状 `0011` 只有 `task_repository` / `task_run_repository`。
-  - **要在稿里裁清的点**：`task_workspace` 与 `task_repository_commit` 的列集；基线唯一基准（D1 锁定的 `base_commit`）如何防事后篡改；文件清单存全量还是 diff 摘要；测试证据的形态（命令+结果+时间 vs 产物路径）；「交付历史」视图按 run 还是按仓库聚合。
-  - **不做**：不做 Review 裁决（D5）；不追求跨仓原子事务（多仓各自提交，只做「整单一致性」判定）。
-  - **验收**：含 DDL 草案、对账规则、验收矩阵（建议 C 系列续编号）；用户过稿后才可进 T-041。
+> T-040 设计稿已交付并过稿（`6f66305`，归档见 §13）；本节剩 T-041 实施。
 
-- [ ] **T-041 实施 D4（前置：T-040 已确认）**
+- [ ] **T-041 实施 D4（前置：T-040 已确认 ✅）**
   - **做**：迁移 `0022_delivery_manifest.sql`；`pm_submit_result` 的交付段落两表；Baseline Validation（base_commit 与仓库实际 HEAD 对账）；交付清单只读接口（前端页在 T-070）。
   - **不做**：不做自动 merge/推远端；不做审批流改造。
   - **验收**：三仓任务可插入完整链路并逐仓对账；基线漂移被拒；只读仓出现 commit 整单驳回；`cargo test` 全绿。
@@ -471,3 +465,11 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 - **实施期裁定**（详见设计稿 §8.2）：① Model B spawn 场景无 token 可下发 → 执行端 MCP 心跳通道 V1 不可用，租约由编排器 poll 兜底维持，token 下发随 D4 裁；② running 失联回收由编排器补齐（claim 候选只覆盖 claimed）；③ 失败行受 0010「每 Run 至多一条」约束——首败留痕、重试只递增计数；④ CLI 参数 `AI_PM_CODEX_ARGS` 留白（接入期调优）。
 - **验收**：C59–C70 全覆盖 + reconcile/回归 3 例；`cargo test --workspace` 退出码 0 —— **72 个 `test result: ok`、456 passed、0 failed**；`cargo check --workspace --all-targets` 0 error 0 warning；Windows 实机验证假脚本 spawn/收割/强杀与 `file://` 镜像 + worktree checkout。
 - **关键结论**：执行实例从「永久 queued」变为可启动、可监控、可终止、可恢复；Run 终态写入全部条件 UPDATE，与执行端 `submit_result` / 失联回收竞态先到先得；任务状态只经 `apply_task_transition`（D3 自身不裁决任务级失败，归 D5）。
+### T-040 D4 多仓库交付设计稿 —— 2026-11-01 完成
+
+- **提交**：`6f66305` docs(delivery)。
+- **目标**：每仓独立记录基线、Commit、证据，形成可对账的交付清单；交付 `docs/ai-pm-slice-d4-delivery-v1.md`。
+- **依据**：target.md §P5 八模块；multi-repo §3.2/§3.3（结果契约与校验规则）/§4.4（DDL 草案）/§4.5（清单表还是视图）；slice-d §三 D4 行 + Q2/Q5 + §15.5 不变量；D2 冻结的 `pm_submit_result` draft（D4 定稿权）。
+- **六项裁定（用户逐项确认，Q-D4-1…6）**：① 不建 `task_workspace`（D3 派生规则 + 既有列已承担，只建 `task_repository_commit`）；② 基线防篡改双保险（声明比对快照 + 镜像仓 `merge-base --is-ancestor` 祖先校验 + 回读 author/时间）；③ 文件清单 = 计数落库 + git 现算（`diff --name-status`）；④ 测试证据 draft 原样落 `test_evidence` JSONB；⑤ 交付历史 = per-run 表 + 按 task 聚合视图 `v_task_delivery_manifest`；⑥ `integration_status` 契约补字段 + `task_run` 新列 + 视图算整单三态（裁决归 D5）。
+- **验收**：表/列/视图 DDL、七步提交管线、错误码表、C71–C84 验收矩阵齐备；**三节逐节过稿**（数据模型与校验管线 / 契约定稿与错误码 / 测试计划与实施顺序）。
+- **不做**：不做 Review 裁决（D5）；不建 task_workspace；不做全局仓库实体（C3 维持）；不做自动 merge/推远端。
