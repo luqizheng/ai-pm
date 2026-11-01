@@ -9,11 +9,12 @@
 //!   customer is looked up by `name = project code` and created when missing.
 //!   [`bootstrap_project_for_customer`] instead requires an existing customer
 //!   id maintained through `/v1/pm/customers` (0017 客户主数据),
-//! - three `core.principal` rows — the human owner, the AI PM and the dev
-//!   agent — with code-suffixed display names,
+//! - five `core.principal` rows — the human owner, the AI PM and three dev
+//!   agents (architect / developer / tester) — with code-suffixed display
+//!   names,
 //! - the `core.project` row (`status = 'planning'`, `code` UNIQUE),
-//! - three `core.project_member` rows (human → `owner`, ai_pm → `ai_pm`,
-//!   dev_agent → `developer`),
+//! - five `core.project_member` rows (human → `owner`, ai_pm → `ai_pm`,
+//!   dev_agent → `architect` / `developer` / `tester`),
 //! - the `ai.project_ai_config` row (fake model, `ai_lead`, policy version 1)
 //!   bound to the AI PM principal, and
 //! - five `ai.project_skill_binding` rows pinning every 0003-seeded skill at
