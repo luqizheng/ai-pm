@@ -171,7 +171,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 8. M5 · Review、失败恢复与知识回写（D5）
 
-- [ ] **T-042 出设计稿 `docs/ai-pm-slice-d5-review-v1.md`**
+- [~] **T-042 出设计稿 `docs/ai-pm-slice-d5-review-v1.md`**（2026-11-02 CodeArts：brainstorming 七题裁定 Q-D5-1…Q-D5-7 已逐题确认，设计稿已落盘，**待过稿**）
   - **本条按 §0.1 执行**：完整 brainstorming。
   - **目标**：形成可审计的闭环——失败判定（B4）、独立 Review Run、知识回写。
   - **依据**：`target.md` §P7 五条边界（Reviewer 是独立 Run、默认只读、Review 失败 ≠ Run 失败、必须区分「需要审批」与「已经审批」、高层强制审批不可被任务级放宽——最后一条 D2.1 已实现）；`delivery.task_acceptance_criterion`（`0015`，逐条留痕已建表）；`0014` 知识提案/质量门（回写只能走提案，不得直写）。
@@ -188,7 +188,8 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 9. M6 · 知识索引与 Outbox 补齐（可与 M4/M5 搭车）
 
-- [ ] **T-060 索引层可替换化 + 完整检索（P6 后半）**
+- [~] **T-060 索引层可替换化 + 完整检索（P6 后半）**（2026-11-02 开工：设计稿落盘，待过稿）
+  - **设计稿**：`docs/ai-pm-t060-knowledge-index-v1.md`（Q1–Q4 + A-1~A-6 已由用户逐条裁定）。
   - **本条按 §0.1 执行**（涉及选型与端口设计）。
   - **目标**：把现在的标题树内存扫描换成「可替换索引器端口 + 落库索引状态 + 增量重建」，检索质量与规模可演进。
   - **依据**：`crates/pm-application/src/knowledge_index.rs`（当前为内存扫描）、`knowledge_indexer.rs`、`0014` 的 `ai.document_index_state`、`docs/ai-pm-markdown-knowledge-space.md` §十一（「PageIndex / 向量检索作为可替换的 KnowledgeIndexer 适配留后续」）。
