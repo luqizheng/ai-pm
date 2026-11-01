@@ -142,7 +142,8 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **不做**：不推翻 T-024 架构；不重新设计依赖边表；评审 §9.3 P2 六项不在本次范围；不做随机碰撞式并发测试。
   - **验收**：C59–C68 中 ★ 最低集全绿（C63/C65/C67 无法覆盖须报告说明理由）；`cargo test --workspace` + `cargo check --workspace --all-targets` 全绿；T-023/T-024 实施记录回填；T-025 验收矩阵及测试映射落盘。
   - **红线**：不得为了让测试通过而降低现有状态机、租户隔离和事务一致性要求。
-  - **进度（2026-11-01）**：**P0 两项（§一/§二）已修复并验收**——项目级图锁 `pg_advisory_xact_lock`（建边/删边/终态迁移统一取锁、取锁点先于任何行锁、零迁移）+ 并发测试 6 例全绿（73 套件 462 passed 0 failed）；审查五分类与验收映射见任务书 §十。P1 四项（§三~§六）待续。
+  - **进度（2026-11-01）**：**P0 两项（§一/§二）已修复并验收**——项目级图锁 `pg_advisory_xact_lock`（建边/删边/终态迁移统一取锁、取锁点先于任何行锁、零迁移）+ 并发测试 6 例全绿（73 套件 462 passed 0 failed）；审查五分类与验收映射见任务书 §十。
+  - **进度（2026-11-02）**：**P1 §三（Blocked 解锁语义）已按方案 A 修复并验收**——`has_active_waiting` 谓词（活跃 `task_waiting` → 依赖满足也不解锁；因该表枚举无依赖类原因，此谓词即等价「无其它阻塞源」）+ C61 用例（blocked+needs_approval 保持阻塞、0 `TaskReady`；等待解除后一次放行）+ 零迁移；实测 `task_dependency` 11 / `task_dependency_concurrency` 6 / `pm-api task_dependencies` 8 全绿。§五 已发现 `pm_write::update_task` 缺行锁+图锁（待裁是否并入）。P1 剩余 §四/§五/§六 待续，详见任务书 §10.5 / §10.6。
 
 ---
 

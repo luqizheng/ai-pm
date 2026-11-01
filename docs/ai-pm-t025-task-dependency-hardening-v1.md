@@ -1,6 +1,6 @@
 # T-025：Task Dependency 并发与解锁正确性加固（任务书）
 
-> 状态：**实施中（2026-11-01：P0 两项已修复并验收，见 §十；P1 四项待续）**（编号核实 2026-11-01：`todo.md` 中 T-025~T-029 段位空缺，暂用 **T-025**，落在 M2 段位、与 T-023 设计稿 → T-024 实施 → T-025 加固语义连续；如需换号，本文档与 `todo.md` 登记行各改一处）
+> 状态：**实施中（2026-11-01：P0 两项已修复并验收；2026-11-02：P1 §三 已按方案 A 修复并验收，均见 §十；P1 §四/§五/§六 待续）**（编号核实 2026-11-01：`todo.md` 中 T-025~T-029 段位空缺，暂用 **T-025**，落在 M2 段位、与 T-023 设计稿 → T-024 实施 → T-025 加固语义连续；如需换号，本文档与 `todo.md` 登记行各改一处）
 > 类型：专项审查 + 最小修复（T-024 追补，**不推翻现有架构**）
 > 来源：专家评审 `docs/ai-pm-task-dependency-review.md`（2026-11-01）§9.1 P0 ×2 + §9.2 P1 ×4；任务定义由用户最终裁定
 > 前置：T-023 / T-024 已交付归档（`docs/ai-pm-task-dependency-v1.md` §10；`todo.md` §13）
@@ -206,6 +206,7 @@
 | C60 ★ | 建边与上游完成并发 | `::c60_edge_insertion_racing_with_upstream_completion_still_unlocks`（4 轮 × 双启动序） | ✅ 两序皆解锁、`TaskReady` 恰 1 条 |
 | C64 ★ | 多上游并发完成 | `::c64_concurrent_completion_of_multiple_upstreams_unlocks_once`（5 轮） | ✅ 单次有效解锁 |
 | C65 | 删边与上游完成并发 | `::c65_edge_removal_racing_with_upstream_completion_still_unlocks`（4 轮 × 双启动序） | ✅ 无漏解锁、上游状态不被误迁 |
+| C61 ★ | `blocked` + `needs_approval` 不被依赖解锁 | `task_dependency.rs::c61_active_waiting_survives_dependency_satisfaction` | ✅ 保持 `blocked`、0 条 `TaskReady`；等待解除后一次放行 |
 | — | 图锁互斥 / MVCC 隔离 / 提交后可见 | `::graph_lock_serializes_writers_and_exposes_committed_edges`（屏障式定向） | ✅ |
 | — | 跨项目不阻塞 | `::graph_locks_of_different_projects_do_not_block` | ✅ |
 
@@ -214,7 +215,44 @@
 - `cargo test --workspace`：**73 套件、462 passed、0 failed**（含新增 6 例并发测试；T-024 基线 441 无回归）。
 - `cargo check --workspace --all-targets`：0 error 0 warning。
 
-### 10.5 待办（后续领取）
+### 10.5 审查结论与修复记录（§三 Blocked 解锁语义，2026-11-02，方案 A）
 
-- §三~§六（P1 四项）尚未审查：Blocked 解锁语义 / Run 退避与执行预算 / 终态写入入口全量扫描 / 租户隔离。
-- §七 其余场景待 P1 审查后补：C61（needs_approval 不被依赖解锁）、C62（unmet 不耗执行预算）、C63（failed 恢复路径）、C66（跨租户）、C67（大规模解锁）、C68（全部终态入口一致副作用）。
+五分类（对应 §八 交付要求）：
+
+1. **已确认 Bug**：`unlock_task_if_ready` 原判定只有 `status == "blocked"` + `dependencies_satisfied` 两条，缺少「其它阻塞源是否仍在」这一维。`blocked` 任务若同时存在活跃 `task_waiting`（`needs_info / needs_decision / needs_approval / external_dependency`），依赖一满足就会迁 `ready` 并发 `TaskReady`；而领取侧又会因活跃等待拒绝（`run_dispatch/policy.rs:171-180`，`deny = "task_waiting"`）。故障形态不是「错误执行」，而是**状态谎报 + 事件污染 + 永远领不到的 Run + 无限退避**——比单纯卡住更难排查。
+2. **潜在风险**：`delivery.task_waiting` 目前**没有任何业务写入代码**（全仓只有领取侧读取，测试直接 INSERT），所以该缺陷当前只能由历史数据或未来审批/等待流触发。它不是「已发生的线上事故」，但是必然发生的正确性缺口。
+3. **现有实现已正确解决的部分**：`task_waiting.reason` 的 CHECK 不含依赖类原因（`0010_task_state_machine.sql:94-95`），因此「存在活跃等待」恰好等价于「依赖之外的阻塞仍在」；`uq_task_waiting_active` 保证每任务至多一条活跃行，判定无歧义；终态集合单点定义、解锁仍走唯一受守卫入口（不需要第二套状态写入口）。
+4. **建议修改位置（已实施）**：
+   - `task_dependency.rs::has_active_waiting`（新增，`:123-146`）：`project_id + task_id` 限定的 `EXISTS(... ended_at IS NULL)`。
+   - `task_dependency.rs::unlock_task_if_ready`（`:426-431`）：依赖满足后追加一重门禁，仍有活跃等待 → 不解锁。
+   - 新增 `tests/task_dependency.rs::c61_active_waiting_survives_dependency_satisfaction`。
+5. **数据库迁移是否必要**：**否**——纯运行时谓词，零 DDL，不触碰迁移号（0024/0026 号段争议与本次无关）。
+
+**方案选型（用户裁定 2026-11-02：A）**
+
+| 方案 | 结论 |
+|---|---|
+| A 最小谓词（本次采纳） | 以「活跃 `task_waiting` 存在」为门禁。因为该表枚举里不存在依赖类原因，这一条即等价「无其它阻塞源」。~10 行、零迁移、不新增抽象。 |
+| B Blocker 聚合（评审 §3.1 推荐） | **本次不采纳**，登记为 P2（与评审 §9.3 #12 `try_unblock_task` 合并）。理由：需要定义「哪些表算阻塞源」并持续维护，v1 无第二种阻塞写入者，收益为零；若做成 SQL 视图还要吃迁移号。 |
+| C 依赖写入 `task_waiting` | **否决**：与 T-023 F2（关系只存边表）冲突，且一任务一活跃等待无法同时表达依赖与审批。 |
+
+**A 的代价（必须与实现同在文档里，否则就是隐瞒）**
+
+- **对称义务**：任何「解除等待」的写入路径都必须重新触发一次解锁判定，否则任务会停在 `blocked`。当前仓库没有 waiting 写入口，所以无人违反；未来审批/等待流落地时必须接上（方案 B 同样不免除这条义务——聚合只改判定，不产生触发）。
+- **只影响 `blocked` 起点**：`draft` 不自动进 `ready`（D7），`AwaitingDecision` 有独立的 `waiting_resolved` 守卫，均不受本次改动影响。
+
+**实测（本工作树 `feat/t025-dependency-p1`，隔离实例 5434）**
+
+- `cargo test -p pm-application --test task_dependency`：**11 passed / 0 failed**（含新增 C61）。
+- `cargo test -p pm-application --test task_dependency_concurrency`：6 passed / 0 failed（P0 用例无回归）。
+- `cargo test -p pm-api --test task_dependencies`：8 passed / 0 failed（C43–C48 / C57 无回归）。
+- `cargo check --workspace --all-targets`：0 error 0 warning。
+- 未跑全仓 `cargo test --workspace`：共享实例 `template1` 的迁移 1 校验和已漂移（另一 session 占用该模板库），本工作树改用独立容器 `aipm-pg-t025:5434`，**没有重建共享模板、没有干扰其它 session**。全仓回归留到归档前在有窗口时补跑。
+
+### 10.6 待办（后续领取）
+
+- §四 / §五 / §六（P1 剩余三项）尚未审查：Run 退避与执行预算 / 终态写入入口全量扫描 / 租户隔离。
+- **§五 已发现一处待裁缺口**（2026-11-02 扫描结论）：`pm_write::update_task`（UI 直写）既不 `FOR UPDATE` 行锁、也不取项目图锁，P0-2 的竞态在同一路径可复发；本次未动，等用户裁定是否并入 T-025。
+- §七 其余场景：C62（unmet 不耗执行预算）、C63（failed 恢复路径）、C66（跨租户）、C67（大规模解锁）、C68（全部终态入口一致副作用）。
+- 方案 B（Blocker 聚合）与评审 §9.3 #12 `try_unblock_task` 合并，登记 P2；若未来出现第二种阻塞写入源，优先做这一项。
+- 全仓 `cargo test --workspace` 回归待归档前补跑。

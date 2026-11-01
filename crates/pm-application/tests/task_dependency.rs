@@ -57,6 +57,41 @@ async fn seed_task(pool: &PgPool, project_id: Uuid, status: &str) -> Uuid {
     .unwrap()
 }
 
+/// 种子一条活跃等待（`delivery.task_waiting`）。仓库当前没有业务写入口，
+/// 该表只有领取侧读取，因此 C61 只能按库层语义直接种入（T-025 §三）。
+async fn seed_waiting(
+    pool: &PgPool,
+    project_id: Uuid,
+    task_id: Uuid,
+    reason: &str,
+    question: &str,
+) {
+    sqlx::query(
+        "INSERT INTO delivery.task_waiting (project_id, task_id, reason, questions, tenant_id) \
+         VALUES ($1, $2, $3, jsonb_build_array($4), \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
+    )
+    .bind(project_id)
+    .bind(task_id)
+    .bind(reason)
+    .bind(question)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// 结束活跃等待（模拟「等待已被解决」这一外部事实）。
+async fn end_waiting(pool: &PgPool, task_id: Uuid) {
+    sqlx::query(
+        "UPDATE delivery.task_waiting SET ended_at = now() \
+          WHERE task_id = $1 AND ended_at IS NULL",
+    )
+    .bind(task_id)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
 async fn seed_run(pool: &PgPool, project_id: Uuid, task_id: Uuid) -> Uuid {
     sqlx::query_scalar(
         "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
@@ -461,6 +496,66 @@ async fn c58_rejected_edge_leaves_no_partial_rows_or_audit(pool: PgPool) {
     let graph = list_dependencies(&pool, b).await.unwrap();
     assert_eq!(graph.upstream.len(), 1);
     assert!(graph.downstream.is_empty());
+}
+
+// --------------------------------------------------------------------- C61
+
+/// C61（T-025 §三 / 评审 §3.1）：`blocked` 任务同时存在 `needs_approval` 等待时，
+/// 依赖满足**不得**解除阻塞；等待真正结束后，下一次解锁判定必须能放行。
+///
+/// 现状的故障形态不是「错误执行」而是「状态 + 事件污染」：状态被谎报为 `ready`、
+/// 发出 `TaskReady`、建出领不到的 Run（领取侧以 `deny = task_waiting` 拒绝）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn c61_active_waiting_survives_dependency_satisfaction(pool: PgPool) {
+    let fx = seed_project(&pool, "TD-C61").await;
+    let upstream = seed_task(&pool, fx.project_id, "reviewing").await;
+    let done = seed_task(&pool, fx.project_id, "completed").await;
+    let downstream = seed_task(&pool, fx.project_id, "blocked").await;
+    add_dependency(&pool, downstream, upstream, &actor(&fx))
+        .await
+        .unwrap();
+    assert_eq!(task_status(&pool, downstream).await, "blocked");
+
+    // 非依赖类阻塞：等待人工审批（按库层语义种入，见 `seed_waiting`）。
+    seed_waiting(
+        &pool,
+        fx.project_id,
+        downstream,
+        "needs_approval",
+        "approve the migration plan",
+    )
+    .await;
+
+    // 依赖满足的触发点：上游进入终态。
+    transition(&pool, &fx, upstream, TaskStatus::Completed).await;
+
+    assert_eq!(
+        task_status(&pool, downstream).await,
+        "blocked",
+        "an active needs_approval must survive dependency satisfaction"
+    );
+    assert_eq!(
+        task_ready_events(&pool, fx.project_id, downstream).await,
+        0,
+        "no TaskReady may be emitted while a non-dependency blocker is active"
+    );
+
+    // 等待解除后的重评估（对称义务）：加一条已满足的边触发一次解锁判定。
+    end_waiting(&pool, downstream).await;
+    add_dependency(&pool, downstream, done, &actor(&fx))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        task_status(&pool, downstream).await,
+        "ready",
+        "once the waiting is over, the satisfied graph must unlock"
+    );
+    assert_eq!(
+        task_ready_events(&pool, fx.project_id, downstream).await,
+        1,
+        "the deferred unlock must produce exactly one TaskReady"
+    );
 }
 
 /// D5 的终态集合：`failed` 必须排除在「已满足」之外（失败上游需重试/取消/取代）。

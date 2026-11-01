@@ -120,6 +120,31 @@ pub(crate) async fn dependencies_satisfied(
     .await
 }
 
+/// T-025 §三（评审 §3.1 / C61）：任务是否仍有**非依赖类**阻塞未解除。
+///
+/// `delivery.task_waiting.reason` 的取值（`0010_task_state_machine.sql`）只有
+/// `needs_info / needs_decision / needs_approval / external_dependency`——**没有依赖类
+/// 原因**（T-023 F2：任务间关系只存在于边表）。因此「存在一条活跃 waiting 行」恰好
+/// 等价于「依赖之外的阻塞源仍在生效」，依赖满足不得据此把任务迁到 `ready`。
+///
+/// 选型：v1 取最小谓词，不引入 Blocker 聚合视图（评审 §3.1 方案 B 登记为 P2，见
+/// 任务书 §10.6）。**对称义务**：任何解除等待的写入路径都必须重新触发一次解锁
+/// 判定，否则任务会停在 `blocked`（当前仓库尚无 waiting 写入口）。
+pub(crate) async fn has_active_waiting(
+    tx: &mut Tx,
+    project_id: Uuid,
+    task_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM delivery.task_waiting \
+                          WHERE project_id = $1 AND task_id = $2 AND ended_at IS NULL)",
+    )
+    .bind(project_id)
+    .bind(task_id)
+    .fetch_one(&mut **tx)
+    .await
+}
+
 /// 任务的前置/后置关系（GET）。调用方负责可见性（T-022）与租户前置校验。
 pub async fn list_dependencies(
     pool: &PgPool,
@@ -396,6 +421,12 @@ async fn unlock_task_if_ready(
         return Ok(false);
     }
     if !dependencies_satisfied(tx, project_id, task_id).await? {
+        return Ok(false);
+    }
+    // T-025 §三（C61）：依赖满足 ≠ 所有阻塞解除。仍有活跃 waiting（信息/决策/
+    // 审批/外部依赖）时保持 `blocked`；否则会把状态谎报为 `ready`，并产生一条
+    // 领取侧必然拒绝（`deny = task_waiting`）的 Run。
+    if has_active_waiting(tx, project_id, task_id).await? {
         return Ok(false);
     }
 
