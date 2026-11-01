@@ -490,6 +490,7 @@ pub struct ReviewFinding {
 1. **Review 失败 ≠ Run 失败**：review run 的 `failed`/`timed_out` 不触碰 delivery run 的 status/outcome、不触发任务 `failed` 迁移、不计入 `consecutive_failure_count`；「Reviewer 成功发现问题」（`changes_requested`）中 delivery run 与任务 `failed` 均不被触碰——验收锚点（D 系列稿 §八）由此保证。
 2. 审查基准不可变：D4 双保险 + submitted 无新 run 源（§3.2）+ 库层触发器（§2.5）。
 3. 待审批可见性：`task_waiting` 活跃行 + pending 审批行同事务落（矩阵 approved/inconclusive/降级路径），Decision Center/T-070 读此二源。
+4. **review 失败恢复绝不创建 delivery run**〔最终判断补充〕：review run 失败恢复链（重试/降级人工）产生的 run `run_kind` 恒为 `'review'`；delivery run 的新建只属 D1/D3 执行重试链（`run_kind='delivery'`），两条恢复链 `run_kind` 各自恒定、互不越界。机械验证见 §10 C136。
 
 ---
 
@@ -507,6 +508,15 @@ pub struct ReviewFinding {
 | 6 | `delivery.rejected` 审计 | 证据 | 只留证据、不计数、不触发任务级判定（执行端可修正重报）；B4-D 的 rejected 理由码映射留演进位 |
 | 7 | `needs_recovery`（终止无法确认） | **排除** | 恢复控制状态等人工，失败判定服务不得触碰 |
 | — | review run 终态 | **排除** | Q-D5-4 从属裁定 5：review 失败走降级人工，不经失败判定 |
+
+**恢复链 `run_kind` 恒定性（硬约束）〔最终判断补充〕**：
+
+| 触发失败的对象 | 恢复动作 | 新建 Run 的 `run_kind` | 是否创建 delivery run |
+|---|---|---|---|
+| review run（`failed`/`timed_out`） | 重试 review | **`'review'`**（`attempt_no+1`） | **❌ 绝不创建** |
+| delivery run（B4-A/B） | 重试交付 | **`'delivery'`**（`attempt_no+1`） | ✅ 合法（这是 D1/D3 的执行重试，不属 review 恢复） |
+
+> **为什么必须写死**：review run 失败是「审查能力失效」，不是「交付物可能有问题」——若 review 失败恢复路径创建 delivery run，等于用一次审查引擎故障去触发交付被重做（推翻已通过 D4 事实记录的成功交付），直接违反 `§5.4` 不变量 1 与 D 系列稿 §八验收锚点「Reviewer 成功发现问题/审查失败不被记为执行失败」。两条恢复链的 `run_kind` 各自恒定，互不越界。
 
 ### 6.2 部署形态（Q9.2 落定：worker 进程内周期作业）
 
@@ -530,8 +540,8 @@ Review Run 终态
   ┌─────────────────┐                       ┌─────────────────┐
   │ 是否允许重试？   │── 是 ────────────────→│ 是否允许重试？   │── 是 ────→ 创建新 Review Run
   │ （B4-A/B4-B）   │                       │ （B4-C/D）      │    （attempt_no+1）
-  └────────┬────────┘                       └────────┬────────┘
-           | 否                                      | 否
+  └────────┬────────┘                       └────────┬────────┘    ✗ 绝不创建 Delivery Run
+           | 否                                      | 否              （review 恢复链 run_kind 恒为 'review'）
            v                                         v
   保留失败历史（触发器禁 UPDATE）              保留失败历史
        |                                             |
@@ -551,9 +561,10 @@ Review Run 终态
 
 **关键不变量**：
 1. **Review Run failed 不等于 Delivery Run failed**：上图左支（failed）只影响 review run 自身，不触碰 delivery run。
-2. **重试保留历史**：新 run `attempt_no+1`，旧 run 行历史保留（触发器禁 UPDATE + `task_run_failure` 不可变）。
-3. **耗尽降级人工**：`consecutive_failure_count` 达阈值 → 走右支（B4-C），task `→failed`，不反复尝试。
-4. **不可恢复类立即失败**：B4-D（permission/missing_dependency）→ 直接右支，不走重试路径。
+2. **Review 失败恢复绝不创建 Delivery Run**〔最终判断补充〕：左支全部路径不产生任何 `run_kind='delivery'` 的 run（重试创建的是 `run_kind='review'` 的 run）；右支（B4）针对的是 **delivery run 自身的失败**，其重试创建 delivery run 属 D1/D3 执行重试、不是 review 恢复。该约束以 C136（delivery_run 零 INSERT 断言）机械验证。
+3. **重试保留历史**：新 run `attempt_no+1`，旧 run 行历史保留（触发器禁 UPDATE + `task_run_failure` 不可变）。
+4. **耗尽降级人工**：`consecutive_failure_count` 达阈值 → 走右支（B4-C），task `→failed`，不反复尝试。
+5. **不可恢复类立即失败**：B4-D（permission/missing_dependency）→ 直接右支，不走重试路径。
 
 **与您提供的流程图等价性**：
 - 您的流程图：`Review Run failed → 记录失败原因 → 是否允许重试？ → 是/否 → 创建新 Run / 保留失败历史`
@@ -651,10 +662,11 @@ stateDiagram-v2
 | C133 | I1–I5 审批继承禁令〔D4 规则表〕 | I1 三重绑定、I2 锚定回读、I3 新交付新 run、I4 once-written、I5 部分唯一索引——五规则全部有载体 |
 | C134 | 失败恢复流程图等价性〔D5 流程图〕 | 左支（failed→重试→降级人工）与右支（failed→task failed）双路覆盖；与您提供的流程图等价（核心路径完全等价，本图为 D5 全场景覆盖版） |
 | C135 | 状态转换矩阵完备性〔D2 矩阵〕 | 4 行主干 × 3 策略分支 = 12 格无空缺；inconclusive/failed 的 Task 列修正为 `reviewing`（不退出），与您裁定一致 |
+| C136 | review 失败恢复零 delivery run 创建〔最终判断补充〕 | review run `failed`/`timed_out` 触发的恢复链（重试 attempt_no+1 / 降级人工）中，`delivery.task_run` 表 **零 `run_kind='delivery'` INSERT**（DB 层断言）；重试新建行的 `run_kind='review'`；原 delivery run status/outcome 全程不变（与 C111/C127 互为印证） |
 
 **评审场景四 → 编号映射**：①=C124（并发 C120）②=C127 ③=C111 ④=C125 ⑤=C126 ⑥=C103 ⑦=C115 ⑧=C128 ⑨=C129 ⑩=C130——10 场景全部有编号承载，其中 ③⑥⑦ 由既有用例覆盖。
 **D2–D5 规则 → 编号映射**：R1=C131、R2–R7=C132、I1–I5=C133、流程图=C134、矩阵=C135——5 项必须补充全部有编号承载。
-**验收矩阵终态**：**C98–C135，共 38 条**，覆盖 V1.1 全部裁定 + 评审 P0×6/P1×4 + 评审补充场景 10 项 + 五项必须补充。
+**验收矩阵终态**：**C98–C136，共 39 条**，覆盖 V1.1 全部裁定 + 评审 P0×6/P1×4 + 评审补充场景 10 项 + 五项必须补充 + 最终判断补充（C136 review 失败恢复零 delivery run 创建）。
 
 ---
 
@@ -671,7 +683,7 @@ stateDiagram-v2
 | 4 | 完成判定器 + `review_approval` 审批端点（§5.2 单事务 + §5.2.1 流程图 + §5.2.2 禁令）+ `task_waiting` 接线 | D4 | 3 |
 | 5 | 失败判定作业（§6，`run_kind='delivery'` 谓词）+ worker 循环族指标 + §6.3 失败恢复流程图 | D5 | 1（可与 2–4 并行） |
 | 6 | 知识回写 handler + 三事件生产者（事务边界按 §7.1） | D6 | 4 |
-| 7 | 用例 C98–C135 + 文档回填 + `cargo test --workspace` 全绿 | D6 | 1–6 |
+| 7 | 用例 C98–C136 + 文档回填 + `cargo test --workspace` 全绿 | D6 | 1–6 |
 
 **门禁**：D1/D2/D3/D4 用例不回归；默认环境行为不变；`Reviewing→Failed` 边不存在的断言进 C111/C114；R1–R7 规则表每条为实施硬门禁（违反任一条 = 验收失败）。
 
