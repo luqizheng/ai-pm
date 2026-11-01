@@ -171,7 +171,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 8. M5 · Review、失败恢复与知识回写（D5）
 
-- [~] **T-042 出设计稿 `docs/ai-pm-slice-d5-review-v1.md`**（2026-11-02 CodeArts：七题裁定 Q-D5-1…7 收编 v1 后，评审 P0×6/P1×4 已全量收编升级 **V1.1**——CHECK 隔离/策略版本锚定/审批三重绑定+单事务/run_kind 扫描谓词/幂等矩阵/事务边界表/迁移号 0026+统一台账 `docs/ai-pm-migration-ledger.md`/触发器/完备映射矩阵；同日评审补充场景 10 项收编（+C124–C130，矩阵终态 **C98–C130**，`apply_task_transition`→`update_task_status` 一致性清零）；**待过稿**）
+- [~] **T-042 出设计稿 `docs/ai-pm-slice-d5-review-v1.md`**（2026-11-02 CodeArts：七题裁定 Q-D5-1…7 收编 v1 → 评审 P0×6/P1×4 收编 V1.1 → 评审补充场景 10 项收编（+C124–C130）→ **最终架构判断：有条件通过，暂缓 T-043，先修订再过稿**；D1 架构原则 + 七项裁定表修订（§0 + §1 增架构原则列）/ D2 状态转换矩阵 + 幂等规则表（§3.5 + §3.6）/ D4 审批事务流程图 + 继承禁令（§5.2.1 + §5.2.2）/ D5 失败恢复流程图（§6.3）/ D6 验收矩阵终态 C98–C135；**待过稿**）
   - **本条按 §0.1 执行**：完整 brainstorming。
   - **目标**：形成可审计的闭环——失败判定（B4）、独立 Review Run、知识回写。
   - **依据**：`target.md` §P7 五条边界（Reviewer 是独立 Run、默认只读、Review 失败 ≠ Run 失败、必须区分「需要审批」与「已经审批」、高层强制审批不可被任务级放宽——最后一条 D2.1 已实现）；`delivery.task_acceptance_criterion`（`0015`，逐条留痕已建表）；`0014` 知识提案/质量门（回写只能走提案，不得直写）。
@@ -188,8 +188,8 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 9. M6 · 知识索引与 Outbox 补齐（可与 M4/M5 搭车）
 
-- [~] **T-060 索引层可替换化 + 完整检索（P6 后半）**（2026-11-02 开工：v1.2 已收录专家评审并逐条处置，待复审后实施）
-  - **设计稿**：`docs/ai-pm-t060-knowledge-index-v1.md`（Q1–Q4 + A-1~A-6 已裁定；两轮评审均为「修改后过稿」。v1.1 补并发转换原语、`index_version` 边界、状态不变量、故障分级、K-17~K-25；v1.2 收录专家评审全文（§12），补当前生效修订校验、`KnowledgeSearchService` 职责分离、分页语义、索引表级故障回退、清理生命周期、证据契约；待复审）。
+- [~] **T-060 索引层可替换化 + 完整检索（P6 后半）**（2026-11-02 开工：v1.3 已补 Project 级写入协调与并发模型，待复审后实施）
+  - **设计稿**：`docs/ai-pm-t060-knowledge-index-v1.md`（Q1–Q4 + A-1~A-6 已裁定；两轮评审均为「修改后过稿」。v1.1 补并发转换原语、`index_version` 边界、状态不变量、故障分级、K-17~K-25；v1.2 收录专家评审全文（§12），补当前生效修订校验、`KnowledgeSearchService` 职责分离、分页语义、索引表级故障回退、清理生命周期、证据契约；v1.3 增补 Project 级 `KnowledgeWriteCoordinator`（§5.8：跨实例会话锁、串行范围覆盖同步重建、`operation_id` 幂等、`base_revision` 校验、K-26~K-30）；待复审）。
   - **本条按 §0.1 执行**（涉及选型与端口设计）。
   - **目标**：把现在的标题树内存扫描换成「可替换索引器端口 + 落库索引状态 + 增量重建」，检索质量与规模可演进。
   - **依据**：`crates/pm-application/src/knowledge_index.rs`（当前为内存扫描）、`knowledge_indexer.rs`、`0014` 的 `ai.document_index_state`、`docs/ai-pm-markdown-knowledge-space.md` §十一（「PageIndex / 向量检索作为可替换的 KnowledgeIndexer 适配留后续」）。
