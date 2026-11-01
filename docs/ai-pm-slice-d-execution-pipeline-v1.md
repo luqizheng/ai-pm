@@ -2,8 +2,8 @@
 
 > 面向：技术评审方 / 实施方（含 Codex 执行端）
 > 日期：2026-10-31
-> 状态：**设计依据 v1（已裁决，可实施）**（本文只定义 D1 的实施范围；D2–D5 仅作范围锚定）
-> 裁决记录：B1–B3 / R1–R7 / S1–S6 / Q1–Q10 已全部并入围（正文就地修订，汇总清单见 §十一），D1 按统一清单实施
+> 状态：**设计依据 v1.1（已裁决，可实施）**（本文只定义 D1 的实施范围；D2–D5 仅作范围锚定）
+> 裁决记录：B1–B3 / R1–R7 / S1–S6 / Q1–Q10 已全部并入围（正文就地修订，汇总清单见 §十一）；2026-11-01 专家终审：P0-1～P0-4 / P1-1～P1-3 / 数据库 8 项 / T27–T34 已并入围（见 §5.5.3 与 §十一），修订后冻结 D1 设计
 > 前置基线：`59a686b`（Outbox 事务端口）、`bd7e4ef`（`TaskReadyHandler`）、`581b0ff`（`GET /v1/pm/task-runs`）
 > 依据：`docs/ai-pm-outbox-wiring-review.md`、`docs/ai-pm-task-state-machine-v1.md`（§15 §19 §20）、`docs/ai-pm-multi-repo-model-v1.md`（§2 §4 §6）、`docs/ai-pm-mcp-executor-positioning-v1.md`（§5 §6）
 
@@ -84,6 +84,7 @@ flowchart TD
 | I2 | 任务状态只能经 `pm-domain::validate_transition` 变更，并留审计 | `pm-application` 唯一写入点 |
 | I3 | 执行端不得直写任务或 Run 状态；只能经 MCP 上报，由平台裁决 | D2 接口设计 |
 | I4 | 失败不覆盖历史：重试新建 Run，失败记录不可变 | `UNIQUE(task_id, attempt_no)` + `task_run_failure` 触发器 |
+| I5 | Task 与 Run 的对应状态迁移必须在**同一事务**内完成；任一迁移失败，整体回滚（`ready→claimed` 由 D1 领取事务保证；`claimed→running` 由 D3 同样遵守） | §5.4.1 / §5.5.3 |
 
 ### 2.3 三层状态必须分开（决定 D1 的数据模型）
 
@@ -195,12 +196,12 @@ D1（领取） ──► D2（发上下文） ──► D3（真启动） ──
 | --- | --- | --- | --- |
 | 1 | 复用现有表与 Outbox，先检查 `TaskReadyHandler` | 已存在且已注册（`apps/ai-pm-worker/src/main.rs:93`）；**创建流程不变，仅把活跃 Run 判据统一为 `queued/claimed/running`**（B1/Q6） | 重复投递不新建 Run、不产生虚假死信 |
 | 2 | 原子领取 `queued` Run，多 Worker 并发不重复 | `SELECT … FOR UPDATE SKIP LOCKED` + 任务行锁 + 部分唯一索引 | T1 / T2 / T14 |
-| 3 | 租约、心跳、超时检测、崩溃恢复 | `lease_owner`/`lease_expires_at`/`heartbeat_at` + 候选条件内回收 | T3 / T13 |
+| 3 | 租约、心跳、超时检测、崩溃恢复 | `lease_owner`/`lease_expires_at`/`heartbeat_at` + `recover_expired_leases()` 独立回收（§5.4.2 / §5.9） | T3 / T13 / T19 / T32 |
 | 4 | 领取前校验状态、资格、策略、仓库基线 | 可领取性判定清单（§5.6），**全部通过才领取** | T5 / T6 / T7 / T11 |
 | 5 | 支持一任务多仓库，不得一对一 | `delivery.task_repository` + `delivery.task_run_repository` | T8 / T9 |
 | 6 | 排队 / 领取 / 启动三态区分 | Run 增 `claimed`；Task `ready→claimed→running` 一一对应 | T2 / T11 |
 | 7 | 不得绕过 Task 状态机 | **方案 A（R1）**：在既有 `update_task_status` 统一迁移逻辑内接入 `pm-domain::validate_transition`；`run_dispatch` 复用该统一路径，**不新增绕过守卫的第二写入点** | T11 / T12 / T18 |
-| 8 | 失败/超时/重跑保留历史 | 复用 `UNIQUE(task_id,attempt_no)` + `task_run_failure` 不可变 | T3（旧 Run 落 `timed_out` 并留档，新 Run `attempt_no+1`，历史不被覆盖） |
+| 8 | 失败/超时/重跑保留历史 | 复用 `UNIQUE(task_id,attempt_no)` + `task_run_failure` 不可变 | T3 / T19 / T27（已启动失联：终止确认后新建 Run `attempt_no+1` 并留档；终止无法确认 → `needs_recovery`，禁止新建；历史不被覆盖） |
 | 9 | 预留执行器接口，不真启动 | `RunExecutor` 端口 + `NoopExecutor`（**不得伪造执行成功**）；**默认不领取** | 开关默认 `off`；测试内开启 `probe`/`on` |
 | 10 | 不引入独立队列/第二套调度 | 复用 `task_run` 表 + 同一 worker 进程内**第四条**循环（S1） | 无新增中间件 |
 
@@ -216,6 +217,9 @@ D1（领取） ──► D2（发上下文） ──► D3（真启动） ──
 
 -- 1) 状态：新增 claimed（已签发租约、执行端尚未启动）。
 --    R2：不依赖隐式约束名——按 pg_constraint 元数据识别 status 的 CHECK 并 DROP；
+--        终审收紧（DB-1）：仅删除「约束定义以 status 列为 CHECK 目标」的约束
+--        （PostgreSQL 规范化输出形如 CHECK ((status = ANY (ARRAY[...])))），
+--        其他恰好包含 status 字样的复合约束不受影响；
 --        若一个都没找到则显式失败（结构不符合预期，不得静默跳过）。
 DO $$
 DECLARE c RECORD; dropped INT := 0;
@@ -223,9 +227,9 @@ BEGIN
     FOR c IN
         SELECT conname
           FROM pg_constraint
-         WHERE conrelid = 'delivery.task_run'::regclass
-           AND contype = 'c'
-           AND pg_get_constraintdef(oid) LIKE '%status%'
+          WHERE conrelid = 'delivery.task_run'::regclass
+            AND contype = 'c'
+            AND pg_get_constraintdef(oid) ~ 'CHECK\s*\(\s*\(?\s*status\s*=\s*ANY'
     LOOP
         EXECUTE format('ALTER TABLE delivery.task_run DROP CONSTRAINT %I', c.conname);
         dropped := dropped + 1;
@@ -326,6 +330,11 @@ CREATE INDEX IF NOT EXISTS idx_task_repository_repo
     ON delivery.task_repository(repository_id, created_at DESC);
 ```
 
+> **级联与更新语义（终审 DB-3）**：
+> - `(project_id, task_id) → delivery.task ... ON DELETE CASCADE`：任务删除时级联删除其仓库声明行；
+> - `(project_id, repository_id) → integration.project_repository`：**无级联**（默认 `NO ACTION`）——仓库仍被任一任务声明引用时不可删除，必须先解除声明；更新主键同样被拒；
+> - 声明表本身可 UPDATE（`write_access`/`base_ref`/`path_scope` 等），但**已领取 Run 的基线以 `task_run_repository` 快照为准**（见 §5.3.3 不可变快照不变量），声明变更不回写历史 Run。
+
 #### 5.3.3 Run ↔ 仓库（事实：本次领取锁定的基线）
 
 ```sql
@@ -345,7 +354,14 @@ CREATE TABLE IF NOT EXISTS delivery.task_run_repository (
 );
 ```
 
-> 为什么 `run_id` 用单列外键而非 `(project_id, run_id)` 组合外键：`delivery.task_run` 目前**没有** `UNIQUE(project_id, id)`（0010 只建了 `UNIQUE(task_id, attempt_no)`），组合外键无法成立。补这个唯一约束属 multi-repo §4.4 的既有意图，但会牵动 D4 的建表顺序，**列入 Q5**，不在 D1 强行加。项目隔离已由 `(project_id, repository_id)` 组合外键保证。
+> **不可变快照不变量（终审 DB-8）**：`task_run_repository` 是**不可变快照**：
+> 1. 仅在领取事务内 INSERT；
+> 2. 正常业务流程**不存在任何 UPDATE 路径**（§5.7 各字段「可变=否」即来源于此）；
+> 3. Task 的仓库声明事后增删改，**不影响**已领取 Run 的快照；
+> 4. 历史 Run 必须能仅凭自身快照独立还原当时的仓库基线。
+> D1 由应用层保证（无 UPDATE 代码路径 + 集成测试 T30 断言）；D4 建 `task_workspace` 时追加 DB 触发器禁止 UPDATE 作为最后兜底。
+
+> 为什么 `run_id` 用单列外键而非 `(project_id, run_id)` 组合外键：`delivery.task_run` 目前**没有** `UNIQUE(project_id, id)`（0010 只建了 `UNIQUE(task_id, attempt_no)`），组合外键无法成立。补这个唯一约束属 multi-repo §4.4 的既有意图，但会牵动 D4 的建表顺序，**列入 Q5**，不在 D1 强行加。项目隔离已由 `(project_id, repository_id)` 组合外键保证（终审 DB-4：可接受；D4 补 `UNIQUE(project_id, id)` 后评估是否升级为组合外键，使项目一致性在数据库层闭环）。
 
 #### 5.3.4 兼容性说明
 
@@ -362,30 +378,49 @@ CREATE TABLE IF NOT EXISTS delivery.task_run_repository (
 
 ```text
 BEGIN
-  ① 选候选 Run：queued，或 claimed 且租约已过期
-     → SELECT … FOR UPDATE SKIP LOCKED LIMIT 1        （不阻塞其他 Worker）
+  ① 选候选 Run：按入口二选一（§5.4.2，同一扫描 SQL）
+      dispatch_once()            → queued 且 next_dispatch_at <= now()
+      recover_expired_leases()   → claimed 且租约已过期
+      → SELECT … FOR UPDATE SKIP LOCKED LIMIT 1        （不阻塞其他 Worker）
   ② 锁任务行：SELECT … FROM delivery.task FOR UPDATE  （与 TaskReadyHandler 同一把锁）
   ③ 重新校验该 Run 状态仍可领取                        （行锁只保护 run，任务锁后才可信）
   ④ 可领取性判定（§5.6），任一不过 → 走「不领取」分支
+     （回收入口不走本清单，走 §5.5.3 恢复协议分支判定）
   ⑤ 状态推进：validate_transition(ready→claimed) → UPDATE task
-              UPDATE run SET status='claimed', 租约…
-              INSERT task_run_repository × N
+               UPDATE run SET status='claimed', 租约…
+               INSERT task_run_repository × N
+     ※ I5：task 与 run 的状态迁移同事务，任一失败整体回滚；
+       run_dispatch 复用 update_task_status 统一路径，不拆分事务边界。
   ⑥ 审计 + COMMIT
 ```
+
+> 恢复入口（`recover_expired_leases()`）复用同一事务模板（同样的锁序 run→task、同样的审计提交），仅在 ④⑤ 步走 §5.5.3 分支判定，不重复实现第二套事务逻辑。
 
 #### 5.4.2 候选选取（对应 ①，复用 outbox 的 reclaim 范式）
 
 ```sql
-SELECT r.id, r.task_id, r.project_id, r.status, r.dispatch_attempts
+SELECT r.id, r.task_id, r.project_id, r.status, r.stage,
+       r.executor_session, r.dispatch_attempts
 FROM delivery.task_run r
-WHERE (r.status = 'queued'    AND r.next_dispatch_at <= now())
-   OR (r.status = 'claimed'   AND r.lease_expires_at < now())
+WHERE (r.status = 'queued'    AND r.next_dispatch_at <= now())   -- dispatch_once() 入口
+   OR (r.status = 'claimed'   AND r.lease_expires_at < now())    -- recover_expired_leases() 入口
 ORDER BY r.next_dispatch_at, r.created_at
 FOR UPDATE OF r SKIP LOCKED
 LIMIT 1;
 ```
 
-> 设计要点：**「领取」与「回收」是同一条路径**。租约过期的 Run 不是由独立的 reaper 扫描，而是被下一次领取语句直接命中——与 `outbox::claim` 的做法一致（`outbox.rs:72-82` 注释明确此意图），因此**不需要第二套调度系统**（需求 10）。
+> **两入口共享同一扫描与事务模板（终审 P0-4）**：`dispatch_once()` 与 `recover_expired_leases()` 是两个独立 application 操作（§5.9），前者只取 `queued` 候选且受调度开关控制，后者只取过期租约候选且持续运行；仍复用 `delivery.task_run` 表与同一 worker 进程，**不需要第二套调度系统**（需求 10）。
+
+> **恢复分支判定（终审 P0-2，必须按 stage 二分，不得把所有过期 claimed Run 当成同一种情况处理）**：
+
+| 当前状态 | `stage` | `executor_session` | 恢复方式 | 计数影响 |
+| --- | --- | --- | --- | --- |
+| `claimed` | `dispatch` | `NULL` | **B3-1**：同一 Run 重置回 `queued`（清空租约字段，`next_dispatch_at=now()`），不新建、不记执行失败，`outcome` 保持 `NULL` | `attempt_no`/`attempt_count` 不变；`consecutive_failure_count` 不变 |
+| `claimed` | `started` | 非空 | **B3-2**：执行器隔离协议（§5.5.3）——终止确认成功后才新建替代 Run；终止无法确认 → `needs_recovery`，禁止新建 | 新 Run `attempt_no+1`、`attempt_count+1`；旧 Run 落 `timed_out` + `task_run_failure(category='infrastructure')`；`consecutive_failure_count` 不变（基础设施失败） |
+| `running` | `started` | 非空 | **B3-2** 同上（单次预算耗尽或执行端失联） | 同上 |
+| `queued` | — | — | 正常领取（走 §5.6 可领取性判定） | 仅「不领取」分支递增 `dispatch_attempts` |
+
+> `stage` 判据优先于 `executor_session`：领取事务写 `stage='dispatch'`；`claimed→running` 同事务写 `stage='started'`（§5.5.2）。`executor_session` 作辅证，两者不一致时以 `stage` 为准并记审计告警。
 
 #### 5.4.3 为什么不会重复领取（三条独立防线）
 
@@ -420,7 +455,7 @@ LIMIT 1;
 | 心跳 | 执行端经 MCP 上报进度时续租 `lease_expires_at = now() + lease`，并写 `heartbeat_at` | D2 暴露通道；D1 提供 `renew_lease()` |
 | 心跳间隔 | 60s（租约的 1/5），连续 5 次缺失才判死 | D3 定，D1 只提供能力 |
 | 超时检测 | 单次 Run 预算独立于租约：`timeout_seconds`（0010 已有列），默认 1800 | spec §19.4 `run_timeout` |
-| 崩溃恢复（B3 二分） | ① **执行器尚未启动**（Run 仍 `claimed`、`executor_session IS NULL`）：租约过期 → **可恢复同一 Run**（重置租约回 `queued`），不新建、不记执行失败；② **已启动执行器失联/超时**：先隔离旧执行实例并记录旧 Run 终止结果，再**新建** Run（`attempt_no+1`、`supersedes_run_id` 指向旧 Run），旧 Run 落 `timed_out` + `task_run_failure(category='infrastructure', reason_code='lease_expired', retryable=true)` | spec §19.2 B4-B / §19.5 + 本节 §5.5.1 B3 规则 |
+| 崩溃恢复（B3 二分） | ① **执行器尚未启动**（`stage='dispatch'`、`executor_session IS NULL`）：租约过期 → **B3-1 恢复同一 Run**（清租约回 `queued`，不新建、不记执行失败，`outcome` 保持 `NULL`）；② **已启动执行器失联/超时**（`stage='started'`）：**B3-2 执行器隔离协议（§5.5.3）**——冻结旧实例回传权限（fencing）→ 请求 D3 终止旧执行器 → **终止确认成功后**记录旧 Run 终止结果并**新建** Run（`attempt_no+1`、`supersedes_run_id` 指向旧 Run），旧 Run 落 `timed_out` + `task_run_failure(category='infrastructure', reason_code='lease_expired', retryable=true)`；**终止无法确认 → `needs_recovery`（恢复控制状态），保留旧 Run 与全部证据，禁止创建新 Run** | spec §19.2 B4-B / §19.5 + §5.5.1 / §5.5.3 |
 | 心跳 vs 超时 | **租约 << 单次预算**（300s vs 1800s）。若两者等长，一次网络抖动会被误判为超时 | 设计约束 |
 
 租约状态迁移：
@@ -428,14 +463,14 @@ LIMIT 1;
 ```mermaid
 stateDiagram-v2
     [*] --> queued: TaskReadyHandler
-    queued --> claimed: claim（行锁 + 任务锁）
-    claimed --> queued: 资格不满足（退避回队）
-    claimed --> timed_out: 租约过期（执行端失联）
-    claimed --> running: D3 执行端启动成功
+    queued --> claimed: claim（行锁 + 任务锁，同事务写 stage='dispatch'）
+    claimed --> queued: 资格不满足（退避回队）；stage=dispatch 租约过期恢复（B3-1）
+    claimed --> timed_out: stage=started 租约过期，终止确认成功（B3-2，§5.5.3）
+    claimed --> running: D3 执行端启动成功（同事务写 stage='started'）
     claimed --> cancelled: 任务被取消
     running --> succeeded: D4 结果回传
     running --> failed: 失败判定（D5）
-    running --> timed_out: 单次预算耗尽
+    running --> timed_out: 单次预算耗尽/失联，终止确认成功（B3-2，§5.5.3）
     running --> cancelled: 主动终止
     succeeded --> [*]
     failed --> [*]
@@ -443,22 +478,48 @@ stateDiagram-v2
     cancelled --> [*]
 ```
 
-> 注意三点（并入 B3）：
-> 1. `claimed → queued` 用于两类：① 资格不满足后的退避回队（同一行回队列，不新建 Run）；② **执行器尚未启动**时的租约过期恢复（同一 Run 重置租约，**不记执行失败**）。
-> 2. 只有**已启动执行器**的 Run 失联/超时才走 `claimed/running → timed_out`；同事务先隔离旧实例、记录终止结果，再新建 `queued` Run（`attempt_no+1`、`supersedes_run_id` 指向旧 Run），旧行永久保留。
+> 注意四点（并入 B3）：
+> 1. `claimed → queued` 用于两类：① 资格不满足后的退避回队（同一行回队列，不新建 Run）；② **执行器尚未启动**（`stage='dispatch'`）时的租约过期恢复（同一 Run 重置租约，**不记执行失败**）。
+> 2. 只有**已启动执行器**（`stage='started'`）的 Run 失联/超时才走 `claimed/running → timed_out`，且必须先按 §5.5.3 协议完成隔离与终止确认；同事务先冻结旧实例回传权限、记录终止结果，再新建 `queued` Run（`attempt_no+1`、`supersedes_run_id` 指向旧 Run），旧行永久保留。**终止无法确认时不得迁移、不得新建**（`needs_recovery`，见 §5.5.3）。
 > 3. 绝不把「已启动失联」写成「本行回到 queued」，否则 `attempt_no` 与执行失败计数都会失真。
+> 4. **`needs_recovery` 不加入 Run 状态集合**（C1 裁决）：它是恢复控制状态，落 Delivery 层（D4 交付状态机）；D1 阶段以 `termination_reason='termination_unconfirmed'` + 审计 `needs_recovery` + 人工介入标记承载。
 
 #### 5.5.1 恢复与计数规则（B3 / Q9）
 
 **B3 规则（七条，强制）**：
 
-1. 未真正启动执行器的租约过期 → **可恢复同一 Run**（不新建、不计执行失败）。
-2. 已启动执行器的 Run 超时或失联 → 先**隔离旧执行实例**、记录旧 Run 终止结果（`terminated_at`/`termination_reason`/`task_run_failure`），再创建新 Run。
-3. 每次创建新 Run 都递增 `attempt_no` 与 `task.attempt_count`，保留历史 Run。
-4. **基础设施故障不计入任务执行的连续失败次数**（`consecutive_failure_count`），但必须有**独立重试上限**与人工介入机制。
+1. 未真正启动执行器的租约过期 → **可恢复同一 Run**（不新建、不计执行失败，不递增任何计数）。
+2. 已启动执行器的 Run 超时或失联 → 按 **§5.5.3 恢复协议**执行：先冻结旧实例回传权限（fencing）、请求 D3 终止旧执行器并取得终止确认（含凭据），**确认成功后**记录旧 Run 终止结果（`terminated_at`/`termination_reason`/`task_run_failure`）并创建新 Run；**终止无法确认 → 进入 `needs_recovery`，保留旧 Run 与全部证据，禁止创建新 Run**。
+3. 只有**真正创建替代 Run** 时才递增 `attempt_no` 与 `task.attempt_count`；未启动恢复（B3-1）不递增任何计数，保留历史 Run。
+4. **基础设施故障不计入任务执行的连续失败次数**（`consecutive_failure_count`），但必须有**独立重试上限**（`infrastructure_retry_count`，§5.3.1 已补列）与人工介入机制。
 5. `max_run_attempts` 按**执行阶段**计算，不得与整个 Task 生命周期累计次数混用。
-6. 创建 Run、递增计数、重试资格判断、审计写入**封装为共享操作**，由 `TaskReadyHandler` 与恢复路径复用，禁止复制两套逻辑。
+6. 创建 Run、递增计数、重试资格判断、审计写入**封装为统一领域操作 `create_task_run(task_id, reason, attempt_policy)`**，由全部调用方复用，禁止复制多套逻辑（见下）。
 7. 若现有字段不足以表达执行阶段或基础设施重试次数，**提出最小 Schema 变更**，不得用含糊计数代替（见 §5.5.2）。
+
+**P1-1：统一 Run 创建操作 `create_task_run`（终审，B3-6 落地）**
+
+```text
+create_task_run(
+    task_id,
+    reason,          -- task_ready | lease_expired_started | manual_retry | ...
+    attempt_policy,  -- max_run_attempts / max_infrastructure_attempts 等
+)
+```
+
+至少统一负责：
+
+- 锁定 Task（与全局锁序一致：先 run 后 task 时须先持 task 锁才允许 INSERT）。
+- 判断是否存在活跃 Run（`queued/claimed/running`）。
+- 校验重试资格（`attempt_count < max_run_attempts`、`retry_exhausted=false`）。
+- 计算 `attempt_no`。
+- 更新 `attempt_count`。
+- 创建 Run（含 `stage='dispatch'` 初始值）。
+- 创建必要的失败关联记录（`task_run_failure`、`supersedes_run_id` 指向）。
+- 写审计（同事务）。
+
+三个调用方——`TaskReadyHandler`（排队）、D1 领取路径（B3-1 之外的替代 Run 创建）、故障恢复路径（B3-2）——只表达业务意图，不重复实现数据库规则。
+
+尤其需要注意：**`TaskReadyHandler` 的重复事件不能因为 Run 已经 `claimed` 而产生错误死信**——活跃 Run 幂等判据统一为 `queued/claimed/running`（B1/Q6）。这部分 T15 保留为强制回归测试。
 
 **Q9 计数语义（先定名，再实现）**：
 
@@ -476,9 +537,47 @@ stateDiagram-v2
 
 现有 `task_run_failure.category` 含 `'infrastructure'`，但缺少「执行阶段」与「基础设施重试计数」的承载。最小补齐（纳入 `0011`）：
 
-- `delivery.task_run.stage` 已在 0010 预留（当前留空）：D1 明确定义阶段取值（至少 `dispatch` / `started`），恢复规则据此二分（B3-1 vs B3-2）；
-- 新增 `delivery.task_run.infrastructure_retry_count INT NOT NULL DEFAULT 0`（或等价独立列），用于基础设施类失败的**独立重试上限**；
+- `delivery.task_run.stage` 已在 0010 预留（当前留空）：D1 明确定义阶段取值（`dispatch` / `started`），恢复规则据此二分（B3-1 vs B3-2）；**领取事务写 `stage='dispatch'`；`claimed→running` 同事务写 `stage='started'`（D3）**。恢复分支以 `stage` 为主判据、`executor_session` 为辅证（§5.4.2）；
+- 基础设施重试承载列 `delivery.task_run.infrastructure_retry_count INT NOT NULL DEFAULT 0` **已定义于 §5.3.1（迁移 0011 补列），本节不重复添加**（终审 DB-2：统一定义一次，避免迁移实现重复添加）；
 - `max_infrastructure_attempts` 作为配置（读 `AI_PM_*`，不硬编码），与 `max_run_attempts` 分离。
+
+#### 5.5.3 执行器隔离与恢复协议（终审 P0-1，B3-2 的强制顺序）
+
+> **核心区分**：Fencing 与 Isolation 是两个不同的问题——
+>
+> | 维度 | Fencing（围栏） | Isolation（隔离） |
+> | --- | --- | --- |
+> | 解决什么 | 拒绝旧实例的**过期写入**（迟到 MCP 回传、迟到结果提交） | 真正**阻止旧实例继续操作资源**（改文件、提交 Git） |
+> | D1 责任 | ✅ 回传权限冻结：租约回收即失效旧 `lease_owner`/`executor_session`，T25 按其拒绝迟到回传 | ❌ 不负责进程终止 |
+> | D3 责任 | — | ✅ `RunExecutor::terminate()` 启动、监控、**终止**并返回终止凭据 |
+>
+> **数据库中的租约过期 ≠ 操作系统中的进程已经死亡。** 租约过期只是平台侧的推理依据；在拿到可验证的终止结果之前，必须假设旧 Codex 进程仍在修改代码、仍在提交 Git。因此 **B3-2 的顺序是硬性的**：隔离确认完成之前，不允许创建新 Run——否则两个 Codex 会同时操作同一个项目工作区。
+
+**恢复协议（终审 P0-1）**：
+
+```mermaid
+flowchart TD
+    START([发现租约过期]) --> Q1{执行器是否启动<br/>stage = ?}
+    Q1 -->|dispatch| RESUME[恢复同一 Run<br/>B3-1：清租约回 queued]
+    Q1 -->|started| FENCE[冻结旧 Run 的回传权限<br/>fencing：旧 lease_owner / executor_session 即刻失效]
+    FENCE --> TERM[请求 D3 终止旧执行器<br/>RunExecutor::terminate]
+    TERM --> Q2{确认终止<br/>终止凭据可验证？}
+    Q2 -->|是| EVID[记录 termination 证据<br/>terminated_at / termination_reason / task_run_failure]
+    EVID --> NEW[创建新 Run<br/>create_task_run：attempt_no+1、supersedes_run_id]
+    Q2 -->|否| REC[进入 needs_recovery<br/>恢复控制状态，保留旧 Run 与全部证据]
+    REC --> BLOCK[禁止启动新执行实例<br/>人工介入]
+```
+
+**四条强制要求**：
+
+1. 旧实例的**回传权限必须先失效**（fencing 先于终止请求：冻结后旧实例的任何 MCP 回传按 T25 被拒）。
+2. 旧进程必须有**可验证的终止结果**（终止凭据：`terminated_at` + `termination_reason` + D3 `terminate()` 返回的确认证据）。
+3. **终止无法确认时，不允许启动新的执行实例**（不创建替代 Run；旧 Run 未终态 + `uq_task_run_active` 在数据库层天然阻止新活跃 Run）。
+4. 进入人工恢复状态（`needs_recovery`）时，**保留旧 Run 和相关证据**（审计 `needs_recovery` 行 + 人工介入标记，见 §5.8）。
+
+**`needs_recovery` 的归属（终审明确）**：它是**恢复控制状态或 Delivery 层状态**（C1 裁决：`needs_recovery` 下沉 Delivery 层，D4 交付状态机承载），**不得加入现有 Run 状态集合**（§5.3.1 的 CHECK 七值不变）。D1 阶段的承载方式：旧 Run 保持原状态 + `termination_reason='termination_unconfirmed'` + 审计动作 `needs_recovery` + 人工介入标记；D4 起在 Delivery 层正式建模。
+
+**分期落地**：D1 不启动 Codex（NoopExecutor 不产生已启动实例），因此 D1 实装 **B3-1 全部** + **B3-2 的 fencing 与证据部分**（回传权限冻结、终止请求端口、`needs_recovery` 兜底）；`terminate()` 的真实终止确认由 D3 实装后闭环，D3 接入前 B3-2 的终止确认默认走 `needs_recovery`，**绝不跳过确认直接新建 Run**。
 
 ---
 
@@ -486,19 +585,24 @@ stateDiagram-v2
 
 ---
 
-**S3（D1 最小 `policy_snapshot` 字段）**：D1 明确并测试以下最小字段，且与现有一行 `policy_snapshot JSONB`（0010:30）兼容：
+**S3（D1 最小 `policy_snapshot` 字段，版本口径已统一——终审 P1-2）**：D1 明确并测试以下最小字段，且与现有一行 `policy_snapshot JSONB`（0010:30）兼容。**版本口径唯一**：D2.1 已完成四层合成（迁移 `0016`），canonical 有效策略 SHA256 已就绪，`policy_version` 自领取路径启用起即为**内容寻址 hash 前 12 位，不再写 `NULL`**；本文档其余章节（§九、§十三）与之一致，`snapshot_scope` 统一为 `composed-v1`：
 
 | 字段 | 含义 |
 | --- | --- |
-| `policy_version` | 策略版本号（D1 写 `NULL`；**D2.1 起**为内容寻址 hash 前 12 位） |
+| `policy_hash` | 有效策略内容的 SHA256（D2.1 canonical 合成结果） |
+| `policy_version` | `policy_hash` 前 12 位（不再写 `NULL`） |
 | `captured_at` | 快照生成时刻 |
 | `approval_required` | 本次执行是否需人工审批（由 R5 有效合成得出） |
 | `approval_status` | 审批证据状态（`approved` / `pending` / `unknown`） |
 | `execution_enabled` | 是否允许执行（策略合成结果） |
 | `repository_baselines` | 本次锁定的多仓基线摘要 |
-| `snapshot_scope` | 快照范围标记（D1 为 `d1-minimal`；**D2.1 起**为 `composed-v1`） |
+| `snapshot_scope` | 快照范围标记（`composed-v1`） |
 
-> **策略未知时不得默认允许执行**：策略读取失败 / 审批状态未知时 `execution_enabled=false`。完整策略合成留 D2。
+> **两条强制要求（终审 P1-2）**：
+> 1. **Run 领取时必须持久化当时的有效策略快照**，后续策略修改不能改变历史 Run 的策略依据（快照不可变，同 §5.3.3 快照不变量）；
+> 2. **策略版本标识不是策略快照本身**——`policy_hash`/`policy_version` 只是寻址与引用，`policy_snapshot` JSONB 必须保存完整、可审计的实际内容，不得只存 hash 而丢失内容。
+
+> **策略未知时不得默认允许执行**：策略读取失败 / 审批状态未知时 `execution_enabled=false`。
 
 ### 5.6 可领取性判定清单（全部通过才领取）
 
@@ -527,17 +631,32 @@ stateDiagram-v2
 | `base_ref` | `task_repository.base_ref` | 否 |
 | `base_commit` | `task_repository.base_commit` **优先**，否则 `project_repository.head_commit_sha` | **否**（`base_commit IS NOT NULL` 且 D1 之后无 UPDATE 路径） |
 | `write_access` | `task_repository.write_access` | 否 |
-| `workspace_path` | **R6 固定算法：`repos/<safe-name>-<repository_id>`**（或 `repos/<repository_id>`）；唯一、稳定、可复现，防非法字符与路径穿越；仓库改名不改变既有映射 | 否（positioning Q7：执行端不得自定布局） |
+| `workspace_path` | **R6 冻结算法（终审 P0-3）：`repos/<repository_id>`**。`repository_id` 为 UUID：天然唯一、稳定、可复现；不存在名称清洗碰撞、同名冲突与路径穿越问题；仓库改名不改变映射。**仓库显示名称与工作区路径分离**——如需友好目录名，另设显示字段，但不参与物理路径计算 | 否（positioning Q7：执行端不得自定布局） |
 | `path_scope` | `task_repository.path_scope` | 否 |
 
 不变量：**`write_access=false` 的仓库不得出现任何 Commit**（D4 校验，D1 只保证快照正确）。
+
+**Run workspace 根目录布局（终审 P0-3）**：同一 Run 的多个仓库必须处于**同一个 Run workspace 根目录**之下：
+
+```text
+workspace/
+  run.json
+  repos/
+    <repository-id-A>/
+    <repository-id-B>/
+    <repository-id-C>/
+```
+
+这样 D2 下发上下文时，Codex 不需要自行决定目录布局（positioning Q7 的物理承载）。
 
 ### 5.8 审计
 
 | 动作 | `action` | `target_type` / `target_id` | `after_data` |
 | --- | --- | --- | --- |
 | 领取成功 | `claim_task_run` | `task_run` / run_id | `{task_id, attempt_no, lease_owner, lease_expires_at, repositories:[{repository_id, base_commit}]}` |
-| 回收（过期） | `reclaim_task_run` | `task_run` / 旧 run_id | `{reason:'lease_expired', new_run_id, attempt_no}` |
+| 回收（B3-1 未启动恢复） | `reclaim_task_run` | `task_run` / 旧 run_id | `{reason:'lease_expired', stage:'dispatch', outcome:null, new_run_id:null}` |
+| 回收（B3-2 已启动隔离） | `supersede_task_run` | `task_run` / 旧 run_id | `{reason, stage:'started', old_executor_session, terminated_at, termination_reason, termination_confirmed, fencing:'revoked', new_run_id, attempt_no}`（终审 DB-8：必须含旧执行器身份、恢复原因与 fencing 结果） |
+| 恢复人工介入 | `needs_recovery` | `task_run` / 旧 run_id | `{reason:'termination_unconfirmed', evidence:{old_executor_session, last_heartbeat_at}, manual_intervention:true}` |
 | 不领取 | `skip_task_run` | `task_run` / run_id | `{release_reason, dispatch_attempts}` |
 | 续租 | `renew_run_lease` | `task_run` / run_id | `{lease_expires_at}` |
 
@@ -576,9 +695,28 @@ pub trait RunExecutor: Send + Sync {
 
 **D1 的接线方式（R4 / R7，关键决策）**：调度器注册 `NoopExecutor`；**领取**由 `AI_PM_RUN_DISPATCH` 控制，**租约健康检查与过期恢复持续运行、不受该开关影响**。
 
+**两个独立的 application 操作（终审 P0-4，必须拆分）**：
+
+```text
+dispatch_once()             -- 新 Run 领取：受 AI_PM_RUN_DISPATCH 开关控制
+recover_expired_leases()    -- 过期租约恢复：持续运行，不受开关控制
+```
+
+同一个 Worker 进程可以运行两个循环，也可以由一个循环调用两个操作；关键是两个操作的**边界必须独立**——各自具备独立的生命周期、独立的错误处理（一个操作崩溃不拖垮另一个）、独立的运行指标（分别计数：领取成功数 / 恢复次数 / needs_recovery 次数）。两者共享同一候选扫描 SQL 与事务模板（§5.4.1 / §5.4.2），不重复实现事务逻辑。
+
+| 操作 | 开关 off | 开关 on |
+| --- | --- | --- |
+| 新 Run 领取（`dispatch_once`） | **禁止** | 允许 |
+| 过期租约检查（`recover_expired_leases`） | **持续运行** | 持续运行 |
+| 未启动 Run 恢复（B3-1） | **允许** | 允许 |
+| 已启动实例隔离（B3-2） | **允许** | 允许 |
+| running 实例监控 | **持续运行** | 持续运行 |
+
+> 不需要第二套调度服务/独立 reaper 进程；但健康检查必须具备**独立的生命周期、错误处理和运行指标**——否则「Worker 调度循环异常退出且无新实例启动」时健康检查会一起停摆（T32 验收）。
+
 | 开关 / 维度 | 行为 | 用途 |
 | --- | --- | --- |
-| `AI_PM_RUN_DISPATCH=off`（默认） | **不领取**新 Run；**仍持续**做租约健康检查与过期恢复 | 生产默认，避免「领取后无人执行」的抖动，同时不让 `claimed` 永久残留 |
+| `AI_PM_RUN_DISPATCH=off`（默认） | **不领取**新 Run（`dispatch_once()` 不执行）；**仍持续**做租约健康检查与过期恢复（`recover_expired_leases()` 持续运行） | 生产默认，避免「领取后无人执行」的抖动，同时不让 `claimed` 永久残留 |
 | `AI_PM_RUN_DISPATCH=probe` | 领取全流程后立即按 B3-1 释放回 `queued`（写 `release_reason='probe_release'`） | 验证真实链路与并发正确性，不启动执行器 |
 | `AI_PM_RUN_DISPATCH=on` | 领取后交给已注册的 `RunExecutor` | D3 接入 Codex 后启用 |
 
@@ -593,7 +731,7 @@ pub trait RunExecutor: Send + Sync {
 | 是否新增中间件 | 否。复用 `delivery.task_run` 作队列，复用同一 worker 进程 |
 | 是否与 Outbox 重复 | 不重复。Outbox 解决「事件不丢」，`task_run` 解决「执行不重」。前者是消息语义，后者是资源语义（租约） |
 | 是否两套重试 | 同构而非重复：Outbox 重试=`attempts/max_attempts`；Run 重试=`attempt_no/max_run_attempts`，语义不同（一次事件分发 vs 一次执行） |
-| 是否有第二个 reaper | 无。回收是领取语句的候选条件，不是独立进程 |
+| 是否有第二个 reaper | 无独立 reaper **进程/服务**。`recover_expired_leases()` 是同一 worker 进程内的独立 application 操作（§5.9，终审 P0-4），与 `dispatch_once()` 共享候选扫描范式与事务模板（§5.4.2），不引入第二套调度系统 |
 
 ---
 
@@ -604,7 +742,7 @@ pub trait RunExecutor: Send + Sync {
 | # | 验收要求（原文） | 证据形式 |
 | --- | --- | --- |
 | 1 | 并发 Worker 不会领取同一个有效 Run | T1/T2：8 路并发，`count(status='claimed')=1` |
-| 2 | Worker 崩溃后 Run 能按租约规则恢复 | T3/T19：**未启动执行器**→ 同一 Run 恢复（B3-1）；**已启动失联**→ 旧 Run 终止结果被记录 + 新 Run `attempt_no+1`（B3-2） |
+| 2 | Worker 崩溃后 Run 能按租约规则恢复 | T3/T19：**未启动执行器**→ 同一 Run 恢复（B3-1）；**已启动失联**→ 终止确认后旧 Run 终止结果被记录 + 新 Run `attempt_no+1`（B3-2）；**终止无法确认**→ `needs_recovery`、不新建（T27/T34） |
 | 3 | 已取消/失效/不满足策略的任务不会被启动 | T4/T5/T6/T7：四类各一条，断言「无 `claimed` 行 + 有 `skip`/`cancel` 审计」 |
 | 4 | 多仓库任务能正确关联执行上下文 | T8/T9：3 仓 → 3 行快照，`base_commit` 与仓库 HEAD 一致，`workspace_path` 唯一 |
 | 5 | 调度过程产生可追踪审计记录 | T10：每次领取恰 1 行 `claim_task_run`，与 Run 同事务 |
@@ -616,7 +754,7 @@ pub trait RunExecutor: Send + Sync {
 | --- | --- | --- |
 | T1 | 8 个并发 claim（独立连接） | 恰 1 成功；`task_run` 恰 1 行 `claimed`；task 恰迁移一次（`revision` +1） |
 | T2 | 同一 Run 连续 claim 两次 | 第 2 次返回 `None`；`dispatch_attempts` 不变 |
-| T3 | 租约过期回收 | 旧 Run 落 `status='timed_out'` 且新增 failure 行（`retryable=true`）；同事务**新建** Run（`run_id` 不同、`attempt_no=2`）；旧行字段不被改写 |
+| T3 | **已启动执行器失联后租约过期回收（B3-2，§5.5.3）** | 旧 Run `stage='started'` 落 `status='timed_out'` 且新增 failure 行（`category='infrastructure'`、`retryable=true`）；**终止确认成功前置**（terminated 凭据在案）；同事务**新建** Run（`run_id` 不同、`attempt_no=2`、`supersedes_run_id` 指向旧）；旧行字段不被改写；`consecutive_failure_count` 不变 |
 | T4 | task 已 `cancelled` 但 Run 仍 `queued` | 该 Run 落 `cancelled`；task 状态不变；审计 `skip_task_run(task_terminal)` |
 | T5 | `assignee` 为 `human` 或为空 | 不领取；`release_reason='no_executor_assignee'` |
 | T6 | `retry_exhausted=true` | 不领取；`release_reason='retry_exhausted'` |
@@ -632,33 +770,41 @@ pub trait RunExecutor: Send + Sync {
 | T16 | **R2 回归**：旧 status CHECK 处理 | 迁移后旧 status 约束确被替换（`pg_constraint` 实测）；插 `claimed` 成功、插非法值仍被拒 |
 | T17 | **B2 回归**：并发建 Run + 领取/回收 | 无 `deadlock detected`、无第 2 条活跃 Run；锁序为 run→task，且新 Run 的 INSERT 在 task 锁之后 |
 | T18 | **R1 回归**：统一写入路径 | `run_dispatch` 走 `update_task_status`；`draft`/`submitted` 强行 claim 被 `validate_transition` 拒（同 T11，但覆盖新路径） |
-| T19 | **B3 二分**：未启动 vs 已启动恢复 | 未启动租约过期 → 同一 `run_id` 重置为 `queued`、`outcome=NULL`、不记执行失败；已启动失联 → 旧 Run `terminated_at` 非空 + `supersedes_run_id` 指向旧、新 Run `attempt_no=2` |
+| T19 | **B3 二分**：未启动 vs 已启动恢复（§5.4.2 分支表） | 未启动（`stage='dispatch'`）租约过期 → 同一 `run_id` 重置为 `queued`、`outcome=NULL`、不记执行失败、不递增任何计数；已启动（`stage='started'`）失联 → 终止确认成功后旧 Run `terminated_at` 非空 + `supersedes_run_id` 指向旧、新 Run `attempt_no=2` |
 | T20 | **S2**：`status`/`outcome` 一致性 | 新建 `queued/claimed/running` 时 `outcome=NULL`；终态 `outcome` 与实际一致；未启动租约过期**不**写 `outcome='timed_out'` |
 | T21 | **R5**：有效审批 | required+pending/unknown → 拒绝领取并记 `release_reason`；approved → 放行；策略读取失败 → 拒绝（不得默认放行） |
-| T22 | **R6**：`workspace_path` | 唯一、稳定、可复现；仓库改名不改既有映射；非法字符 / 路径穿越被拒 |
-| T23 | **R4**：开关拆分 | `off` 下不领取但**持续**回收过期 `claimed`；`running` 不被开关终止 |
+| T22 | **R6**：`workspace_path` | 恒为 `repos/<repository_id>`（冻结算法）；同一 Run 内唯一；仓库改名后映射不变；仓库显示名不参与路径计算 |
+| T23 | **R4**：开关拆分（§5.9） | `off` 下 `dispatch_once()` 不领取，但 `recover_expired_leases()` **持续**回收过期 `claimed`（B3-1/B3-2 分支正确）；`running` 不被开关终止 |
 | T24 | **S3**：`policy_snapshot` | 7 个最小字段齐备；`execution_enabled` 在策略未知时为 `false` |
 | T25 | **fencing**：旧执行器迟到回传 | 租约被回收后旧执行器（旧 `executor_session`）回传结果被拒（按 `run_id`+`executor_session` 校验），不污染新 Run |
 | T26 | **耗尽**：重试次数耗尽 | 达 `max_run_attempts` / `max_infrastructure_attempts` 后不再新建 Run，置 `release_reason='retry_exhausted'` 并留人工介入标记 |
+| T27 | **隔离协议**：旧 Codex 进程未能确认终止（§5.5.3） | **不启动替代 Run**；旧 Run 保留 + `termination_reason='termination_unconfirmed'`；审计 `needs_recovery` + 人工介入标记；`uq_task_run_active` 阻止新活跃 Run |
+| T28 | **恢复竞态**：两个 Worker 同时恢复同一过期 Run | 只有一个恢复操作成功（行锁 + `SKIP LOCKED`）；另一方 `SKIP LOCKED` 跳过，无重复新建 |
+| T29 | **恢复事务失败**：恢复过程中数据库事务失败 | 整体回滚（I5）：旧 Run 状态、Task 状态、审计保持一致，无半提交 |
+| T30 | **快照不可变**：领取后修改 Task 仓库声明 | 历史 Run 的 `task_run_repository` 快照不改变；新领取才使用新声明 |
+| T31 | **路径稳定**：仓库改名后再次计算 `workspace_path` | 路径保持 `repos/<repository_id>` 不变（id 基路径，与名称无关） |
+| T32 | **健康检查独立**：调度关闭且调度循环异常退出 | `recover_expired_leases()` 仍能独立运行并按 B3-1/B3-2 恢复过期租约（§5.9 两操作边界独立） |
+| T33 | **策略快照锚定**：策略在 Run 领取后发生变化 | 历史 Run 使用原 `policy_snapshot`（含 `policy_hash`/`policy_version`），不受后续策略修改影响 |
+| T34 | **隔离兜底**：旧执行器终止确认失败 | 禁止新 Run 获得冲突工作区的写权限（不创建替代 Run；工作区不重复分配给两个实例） |
 
 测试文件规划（与现有约定一致）：
 
 | 文件 | 内容 |
 | --- | --- |
 | `crates/pm-infrastructure/tests/migration_0011.rs` | 迁移可重复执行、动态约束替换（T16）、唯一索引拒绝重复活跃 Run、S6 冲突中止（预置两条活跃 Run 断言 `RAISE`） |
-| `crates/pm-application/tests/run_dispatch.rs` | T1–T4、T6–T10、T13–T20、T23–T26 |
-| `crates/pm-application/tests/policy_gate.rs`（或并入上者） | T5、T21、T24（R5/S3 有效审批与快照） |
+| `crates/pm-application/tests/run_dispatch.rs` | T1–T4、T6–T10、T13–T20、T22–T32、T34 |
+| `crates/pm-application/tests/policy_gate.rs`（或并入上者） | T5、T21、T24、T33（R5/S3 有效审批与快照锚定） |
 | `crates/pm-application/tests/state_transition_guard.rs` | T11/T12/T18（R1 统一写入路径 + `validate_transition` 守卫） |
 
 ### 6.3 门禁
 
 | 项 | 阈值 |
 | --- | --- |
-| 后端全量测试 | 基线全绿（以 `HEAD` 实测为准）+ 新增 T1–T26，**全绿** |
+| 后端全量测试 | 基线全绿（以 `HEAD` 实测为准）+ T1–T34，**全绿**（T27/T28/T34 为终审必须项） |
 | `cargo build` | 通过，无新 warning |
 | 依赖方向 | `pm-application` 不新增对 `pm-infrastructure` 的生产依赖（R7：端口在 `pm-application`，`CodexExecutor` 适配器留 `pm-infrastructure`） |
 | 迁移可重入 | `0011` 重复执行不报错；动态约束处理幂等（R2） |
-| 并发/恢复 | 必含真实 PostgreSQL 并发领取、并发建 Run、租约过期、Worker 崩溃、旧执行器迟到回传、事务回滚、死锁风险（T15–T19、T25） |
+| 并发/恢复 | 必含真实 PostgreSQL 并发领取、并发建 Run、租约过期、Worker 崩溃、旧执行器迟到回传、终止确认失败、恢复竞态、事务回滚、死锁风险（T15–T19、T25、T27–T30、T34） |
 | 状态转换 | 关键转换经统一路径与 `validate_transition`（T11/T12/T18） |
 | **禁用** | 不得以 Mock 数据访问替代真实库；不得降低既有状态机 / Outbox 幂等 / 审计约束 |
 
@@ -730,7 +876,11 @@ pub trait RunExecutor: Send + Sync {
 | --- | --- | --- | --- |
 | B1 | 活跃 Run 统一为 `queued/claimed/running`；同步检查 handler 幂等查询、领取/回收、唯一索引 | `outbox_handlers.rs:74-77`、`run_dispatch.rs`、`uq_task_run_active` | 重复投递不新建 Run、不产生虚假死信（T15） |
 | B2 | 全局锁序 `run→task`；**新 Run 的 INSERT 必须在取得 task 行锁之后**；覆盖唯一索引冲突等待 | `run_dispatch.rs`、`outbox_handlers.rs` 注释固定 | 并发无死锁、无第二活跃 Run（T17） |
-| B3 | 恢复二分（未启动=重领同一 Run；已启动=隔离旧实例+新建）；每次新建递增 `attempt_no` 与 `attempt_count`；基础设施失败独立上限；共享创建封装；计数先定名 | §5.5.1 / §5.5.2、共享 Run 创建封装 | T19/T26 + 计数断言 |
+| B3 | 恢复二分（未启动=重领同一 Run；已启动=隔离旧实例+新建，且**终止确认成功才新建**）；只有真正创建替代 Run 才递增 `attempt_no` 与 `attempt_count`；基础设施失败独立上限；统一创建封装；计数先定名 | §5.5.1 / §5.5.2 / §5.5.3、`create_task_run` 统一封装 | T19/T26/T27/T34 + 计数断言 |
+| **P0-1**（终审） | 执行器隔离硬顺序：fencing 先行 → 请求 D3 终止 → **终止确认成功**才记录终止结果并新建 Run；失败走 `needs_recovery`，保留旧 Run 与证据、禁止新建；租约过期 ≠ 进程死亡 | §5.5.3、§5.4.2、§5.8 | T27 / T34 |
+| **P0-2**（终审） | `claimed` 租约过期恢复按 `stage` 二分（dispatch/started），状态图与恢复规则一致，消除 T3/T19 冲突；未启动恢复不增计数 | §5.4.2、§5.5、T3/T19 | T19 / T28 |
+| **P0-3**（终审） | `workspace_path` 冻结为 `repos/<repository_id>`；显示名称与物理路径分离；同 Run 多仓同根目录 | §5.7、R6 | T22 / T31 |
+| **P0-4**（终审） | `dispatch_once()` / `recover_expired_leases()` 两操作拆分；健康检查独立生命周期、错误处理、运行指标 | §5.9、§5.10、R4 | T23 / T32 |
 
 ### 11.2 需改项（R1–R7，全部纳入 D1，不留作已知风险）
 
@@ -741,8 +891,12 @@ pub trait RunExecutor: Send + Sync {
 | R3 | 活跃 Run 统一 `queued/claimed/running`；删除无用途的旧索引 `idx_task_run_active` | `0011` 第 5-6 步 | T17 + 索引存在性 |
 | R4 | 调度开关**只控领取**；回收/健康检查持续；`running` 不因开关终止 | worker 第四条循环、`run_dispatch.rs` | T23 |
 | R5 | 有效审批策略检查（组织/项目/类型/任务级合成）；未知/缺证据/读取失败 → 拒绝领取并记原因；能力不足先提最小补齐 | 策略解析接入、`run_dispatch.rs` | T21/T24 |
-| R6 | `workspace_path` 固定算法 `repos/<safe-name>-<repository_id>`（或 `repos/<repository_id>`）；唯一/稳定/可复现；防非法字符与穿越；改名不改映射 | `run_dispatch.rs` | T22 |
+| R6 | `workspace_path` **冻结算法 `repos/<repository_id>`**（终审 P0-3，safe-name 方案废弃）；唯一/稳定/可复现；显示名称与路径分离；同 Run 多仓同根目录 | `run_dispatch.rs` | T22/T31 |
 | R7 | 端口在 `pm-application`，`CodexExecutor` 适配器在 `pm-infrastructure` 或独立 crate；`NoopExecutor` 不得伪造成功 | `pm-application` 端口、worker 接线 | 依赖方向门禁 + Noop 行为断言 |
+| **P1-1**（终审） | 统一领域操作 `create_task_run(task_id, reason, attempt_policy)`：锁 Task/判活跃/校资格/算 attempt_no/更 attempt_count/建 Run/建失败关联/写审计；三调用方不复写规则；重复事件不死信 | §5.5.1（B3-6 落地） | T15 强制回归 |
+| **P1-2**（终审） | 策略快照版本口径统一：`policy_version`=canonical sha256 前 12 位（不再写 `NULL`）；快照存完整可审计内容；领取后不可变 | S3、§九、§十三 | T24 / T33 |
+| **P1-3**（终审） | I5：Task 与 Run 对应状态迁移同事务完成，任一失败整体回滚 | §2.2（I5）、§5.4.1 | T29 |
+| **测试扩充**（终审） | 新增 T27–T34（T27/T28/T34 必须加入） | §6.2、§6.3 | 全绿 |
 
 ### 11.3 细节项（S1–S6，全部纳入文档/实现/测试）
 
@@ -765,7 +919,7 @@ pub trait RunExecutor: Send + Sync {
 
 **顺序固定（Q10）**：
 
-1. **先提交独立 `docs:` 变更**：本文档（标注「D1 设计依据 v1」，含 B1–B3、Q1–Q10）；
+1. **先提交独立 `docs:` 变更**：本文档（标注「D1 设计依据 v1.1」，含 B1–B3、Q1–Q10 及 2026-11-01 终审 P0/P1 修订）与评审记录 `docs/ai-pm-slice-d-execution-pipeline-review.md`；
 2. **再提交实现**：`0011` 迁移 + 共享创建封装 + `validate_transition` 接入 + `run_dispatch` + R5/R6/R7 + 开关；
 3. 两次提交**不得合并**。
 
@@ -805,8 +959,10 @@ pub trait RunExecutor: Send + Sync {
 | 术语 | 定义 |
 | --- | --- |
 | **领取（claim）** | 平台在单事务内为某 Worker 锁定一条 Run、锁定任务行、锁定多仓基线并签发租约 |
-| **租约（lease）** | 有时间上限的执行权；到期未续即视为持有者已死 |
-| **回收（reclaim）** | 租约过期后由下一次领取同事务完成的接管：**未启动执行器**时恢复同一 Run（B3-1）；**已启动失联**时旧 Run 落 `timed_out`、记录终止结果并新建 Run（B3-2） |
-| **围栏（fencing）** | 拒绝被回收/被替代的旧执行实例的迟到回传，防止其污染新 Run（T25） |
+| **租约（lease）** | 有时间上限的执行权；到期未续仅表示平台侧失去租约证据，**不等于持有进程已死亡**——进程终止必须经隔离协议确认（§5.5.3） |
+| **回收（reclaim）** | 租约过期后的接管：**未启动执行器**（`stage='dispatch'`）时恢复同一 Run（B3-1）；**已启动失联**（`stage='started'`）时按 §5.5.3 协议冻结回传、请求终止，终止确认成功后旧 Run 落 `timed_out`、记录终止结果并新建 Run（B3-2）；终止无法确认 → `needs_recovery` |
+| **围栏（fencing）** | 拒绝被回收/被替代的旧执行实例的**迟到写入**（迟到 MCP 回传，T25）；只解决「拒绝过期写入」，不负责进程终止 |
+| **隔离（isolation）** | 真正**阻止旧执行实例继续操作资源**（改文件、提交 Git）：由 D3 `RunExecutor::terminate()` 执行并返回终止凭据；fencing ≠ isolation，前者是平台侧拒绝写入，后者是执行器生命周期终结（§5.5.3） |
+| **needs_recovery** | 恢复控制状态：终止无法确认时进入；保留旧 Run 与全部证据、禁止启动新执行实例，等待人工介入。落 Delivery 层（D4），**不加入 Run 状态集合**（C1） |
 | **基线（baseline）** | 领取时锁定的每仓 `base_commit`，是后续「提交是否为基线后代」判定的唯一锚点 |
 | **就绪（TaskReady）** | 任务满足执行条件、等待调度的语义；在数据上表现为一条 `queued` Run |
