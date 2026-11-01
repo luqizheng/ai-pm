@@ -15,7 +15,8 @@
 - **延后项（非阻塞、非必做）**：
   - G1 建项客户可留空 → 落 `placeholder`，UI 显示「未归类 · <code>」
   - G2 客户详情页未做（项目列表客户筛选等价替代）
-  - G3 按 `project_member` 过滤未实现（auth 层只验签，principal 未映射到 `core.principal`）
+  - G3 按 `project_member` 过滤未实现 —— **原因已变**：principal 映射（T-021a）已落地，
+    剩下的是「按成员过滤列表」本身，属 `todo.md` 的 **T-022**（与客户 G3 同一件事）。
   - G4 客户级 AI 上下文（术语表/验收偏好/红线）→ v2
 - **重启条件**：需要「按客户聚合跨项目视图」或「客户维度权限隔离」的真实需求时再启动；
   重启前回到 `docs/ai-pm-customer-master-data-v1.md` §2 重新确认 5 条裁定是否仍成立。
@@ -31,13 +32,35 @@
 
 ---
 
-## 当前主路径（2026-11-01）
+## 多租户 / Agent / Executor 身份边界 — ADR-0001（Accepted 2026-11-01）
 
-客户后续工作让位后，主路径回到：
+- **裁定**：V1 建 `core.tenant` + `core.tenant_member`，租户业务数据加 `tenant_id`（用户选方案①）；
+  架构边界见 `docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`（D1–D6）。
+- **六条实施边界（不得推翻）**：①不机械扩散 `tenant_id`（全局定义/字典/系统配置不加）；
+  ②`agent_definition` 全局可复用、`tenant_agent` 租户实例、项目授权复用 `project_member`；
+  ③Agent 用 attribution-only principal，**不发独立凭据**，不改真人 API Key 与 MCP 认证协议；
+  ④Executor Registry 移出 V1（归 T-030/D3），Run 只预留可空 `executor_id`；
+  ⑤`tenant_member.role` 是租户成员角色**唯一事实源**，token `roles` 只作提示，管理员操作必须查库；
+  ⑥Run 记 `agent_id` / `triggered_by_user_id` / 可空 `executor_id`，`created_by`/`approved_by` 不重复写 Run。
+- **「这批 codex 属于谁」**：归属 = **使用那把 key 的真人**（上游保证 API Key 必绑 user）；
+  Agent 不构成独立认证主体，代理是执行主体、真人是授权/操作主体，两者都留在审计里。
+- **「有 key 就被系统调度」在代码上不成立**：Model A 是显式拉取式（`pm_claim_task` 带 task_id），
+  Model B 才受 `AI_PM_RUN_DISPATCH` 门控，D3 零实现。
+- **T-021 拆分**：T-021a（β 身份归因，**已完成**）→ T-021b（α+γ+δ，**待开工**）。
+  α 阶段**必须先出逐表迁移方案供评审**（39 张表逐条 DDL + 迁移序号 + 组合外键 + 隔离/撤权测试），不许一次性机械改造。
+- **私有部署**：用户问过「有没有必要继续多租户，私有部署怎么办」——ADR 采用「部署 = 租户」的折中：
+  单租户私有部署时只有一行 `core.tenant`；非 lmms 的认证 provider 留 T-055，首管理员 bootstrap 留 T-056。
 
-1. **G3 主体身份**（principal 映射到 `core.principal`）——客户视图可见性与 tag 聚合都卡在这里，
-   但它本身是 auth 层的独立切片，不必绑客户功能一起做。
-2. 其余按既有 plans 目录推进：`docs/superpowers/plans/`（2026-10-31 系列）。
+---
+
+## 当前主路径（2026-11-01 更新）
+
+1. **T-021b**（Tenant 实体 + `tenant_id` + Agent 三层 + Run 身份列，α+γ+δ）——T-021a 已落地，
+   α 阶段**先出逐表迁移方案供评审**再改表；是 T-030/T-031 执行引擎落库的前提。
+2. **T-022** 可见性收口（按 `project_member` 过滤）——客户 G3 同源，依赖 T-021a 已完成。
+3. **T-023/T-024** Task 依赖（零表零列，是 P1 唯一硬缺口）。
+4. 其余按 `todo.md` 的里程碑顺序推进：D3（T-030/031）→ D4（T-040/041）→ D5（T-042/043）→
+   T-060/T-061 → T-070；P9/P11 维持不做。
 
 ---
 
@@ -45,15 +68,16 @@
 
 - **建立（2026-11-01）**：用户要求「增加 todo.md，把要做的事情写入，我会安排 AI 去读，然后用目标来执行」。
 - **定位**：项目**唯一**待办队列，取代此前「无集中 backlog、靠文档状态与记忆约束」的隐式状态。
-- **结构**：§0 读取协议（一次领一条、状态机、交付三条定义、docs 与 feat 分开提交）→ §1 状态快照 →
-  §2 P0 清场（T-001 客户 0017 提交）→ §3 主线主体身份（T-020 设计稿 / T-021 实施 / T-022 可见性）→
-  §4 D3（T-030 / T-031）→ §5 D4/D5（T-040 / T-041）→ §6 技术债与开放待裁（T-050~T-053）→
-  §7 明确延后/放弃（防重新提议）→ §8 归档。
-- **任务编号约定**：`T-0X0` 段位即优先级（001 清场 / 02x 身份 / 03x D3 / 04x D4D5 / 05x 技术债）。
-- **方案 C（主体身份）已裁决（2026-11-01）**：未知 JWT subject → 自动 provision 为
-  `core.principal(kind='human', is_active=false)`，不自动授予成员资格；映射键为
-  `(provider, tenant_id, subject)` 三元组（lmms 多租户，`tid` 必带，只用 `sub` 会跨租户串号）。
-- **维护规则**：状态原地改、条目只追加不删、完成后移 §8 归档并回填 commit。
+- **结构（v2，2026-11-01）**：§0 开工前置（§0.1 强制 brainstorming + §0.2 读取执行协议）→ §1 顾问路线 ↔ 实测状态 →
+  §2 排序理由 → §3 M0 清场 → §4 M1 主体身份与多租户边界（T-020/T-021a/T-021b/T-022）→
+  §5 M2 Task 依赖 → §6 M3 D3 → §7 M4 D4 → §8 M5 D5 → §9 M6 索引与 Outbox → §10 M7 工作台 →
+  §11 技术债与开放待裁（T-050~T-059）→ §12 明确延后/放弃 → §13 归档。
+- **任务编号约定（v2 改）**：编号只是**稳定 ID**，**排序以里程碑（§3–§10）为准**，不再按段位推断优先级。
+- **方案 C（主体身份）已裁决并实施（2026-11-01，T-021a）**：未知 JWT subject → 自动 provision 为
+  `core.principal(kind='human', is_active=false)`（未激活 fail-closed），不自动授予成员资格；
+  映射键为 `(provider, claims_tenant_key, subject)` 三元组——落库列名是 `claims_tenant_key`
+  （上游 `tid` 原文），**不是**内部 `tenant_id`（内部租户主键留给 T-021b）。
+- **维护规则**：状态原地改、条目只追加不删、完成后移 §13 归档并回填 commit。
 
 ---
 
