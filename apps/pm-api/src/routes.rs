@@ -147,6 +147,37 @@ fn build_router(
             "/v1/pm/documents/{document_id}",
             get(crate::documents::get_handler),
         )
+        // 知识空间 V2：提案 / 红线确认 / 否决回滚 / 索引 / 引用 / 需求迁移。
+        .route(
+            "/v1/pm/documents/proposals",
+            get(crate::documents::list_proposals_handler)
+                .post(crate::documents::submit_proposal_handler),
+        )
+        .route(
+            "/v1/pm/documents/proposals/{proposal_id}/confirm",
+            post(crate::documents::confirm_redline_handler),
+        )
+        .route(
+            "/v1/pm/documents/revisions/{revision_id}/veto",
+            post(crate::documents::veto_revision_handler),
+        )
+        .route(
+            "/v1/pm/documents/revisions/{revision_id}/reindex",
+            post(crate::documents::reindex_handler),
+        )
+        .route(
+            "/v1/pm/documents/{document_id}/references",
+            get(crate::documents::list_references_handler)
+                .post(crate::documents::add_reference_handler),
+        )
+        .route(
+            "/v1/pm/documents/{document_id}/index-state",
+            get(crate::documents::index_state_handler),
+        )
+        .route(
+            "/v1/pm/requirements/revisions/{revision_id}/migrate",
+            post(crate::documents::migrate_requirement_handler),
+        )
         .nest("/mcp", mcp_router)
         .with_state(state)
 }

@@ -83,6 +83,8 @@ pub enum KnowledgeError {
     NotFound,
     #[error("document content drifted from its recorded hash")]
     Stale,
+    #[error("knowledge conflict: {0}")]
+    Conflict(String),
     #[error("knowledge root misconfigured: {0}")]
     Config(String),
     #[error("knowledge root io error: {0}")]
@@ -439,6 +441,47 @@ fn write_and_commit(
     Ok((head_sha(root.path())?, hash))
 }
 
+/// V2：写入一份**新修订**（允许覆盖已有文件）并提交；内容与现有文件相同时复用
+/// 当前 HEAD，不产生重复提交。返回 `(commit_sha, content_hash)`。
+pub(crate) fn write_revision(
+    root: &KnowledgeRoot,
+    relative: &str,
+    markdown: &str,
+    message: &str,
+) -> Result<(String, String), KnowledgeError> {
+    let abs = safe_join(root.path(), relative)?;
+    let hash = content_hash(markdown);
+    if abs.exists() {
+        let existing = std::fs::read_to_string(&abs).map_err(io_error)?;
+        if existing == markdown {
+            return Ok((head_sha(root.path())?, hash));
+        }
+    }
+    if let Some(parent) = abs.parent() {
+        std::fs::create_dir_all(parent).map_err(io_error)?;
+    }
+    std::fs::write(&abs, markdown.as_bytes()).map_err(io_error)?;
+    git(root.path(), &["add", "--", relative])?;
+    git(root.path(), &["commit", "-m", message, "--", relative])?;
+    Ok((head_sha(root.path())?, hash))
+}
+
+/// 否决窗口：对指定修订的 Git 提交做一次反向提交（revert），返回新的 HEAD。
+/// 若该提交已被撤销（无可暂存变更）则返回当前 HEAD，保证重复否决幂等。
+pub(crate) fn revert_commit(
+    root: &KnowledgeRoot,
+    sha: &str,
+    message: &str,
+) -> Result<String, KnowledgeError> {
+    git(root.path(), &["revert", "--no-commit", sha])?;
+    let staged = git(root.path(), &["diff", "--cached", "--name-only"])?;
+    if staged.trim().is_empty() {
+        return head_sha(root.path());
+    }
+    git(root.path(), &["commit", "-m", message])?;
+    head_sha(root.path())
+}
+
 /// Deletes one document (file + git commit + both rows). Used as the
 /// compensating action when a batch document write fails halfway.
 pub async fn delete_document(
@@ -467,6 +510,16 @@ pub async fn delete_document(
     }
 
     let mut tx = pool.begin().await?;
+    // V2：提案行通过 FKs 引用文档/修订；删除文档前先解绑，避免外键阻止级联。
+    sqlx::query(
+        "UPDATE ai.document_proposal SET resulting_revision_id = NULL, document_id = NULL \
+          WHERE project_id = $1 AND (document_id = $2 OR resulting_revision_id IN \
+              (SELECT id FROM ai.document_revision WHERE document_id = $2))",
+    )
+    .bind(project_id)
+    .bind(document_id)
+    .execute(&mut *tx)
+    .await?;
     sqlx::query("DELETE FROM ai.document_revision WHERE document_id = $1")
         .bind(document_id)
         .execute(&mut *tx)
@@ -489,7 +542,7 @@ pub fn content_hash(markdown: &str) -> String {
     out
 }
 
-fn safe_join(root: &Path, relative: &str) -> Result<PathBuf, KnowledgeError> {
+pub(crate) fn safe_join(root: &Path, relative: &str) -> Result<PathBuf, KnowledgeError> {
     let rel = Path::new(relative);
     if rel.is_absolute() || rel.components().any(|c| !matches!(c, Component::Normal(_))) {
         return Err(KnowledgeError::Config(format!(
@@ -499,7 +552,7 @@ fn safe_join(root: &Path, relative: &str) -> Result<PathBuf, KnowledgeError> {
     Ok(root.join(rel))
 }
 
-fn git(root: &Path, args: &[&str]) -> Result<String, KnowledgeError> {
+pub(crate) fn git(root: &Path, args: &[&str]) -> Result<String, KnowledgeError> {
     let output = Command::new("git")
         .arg("-C")
         .arg(root)
@@ -519,7 +572,7 @@ fn git(root: &Path, args: &[&str]) -> Result<String, KnowledgeError> {
     }
 }
 
-fn head_sha(root: &Path) -> Result<String, KnowledgeError> {
+pub(crate) fn head_sha(root: &Path) -> Result<String, KnowledgeError> {
     git(root, &["rev-parse", "HEAD"])
 }
 

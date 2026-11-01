@@ -28,8 +28,9 @@ use sqlx::PgPool;
 use std::sync::Arc;
 
 use crate::tools::{
-    self, SubmissionStatusArgs, SubmitDocumentArgs, SubmitTechnicalDesignArgs, TaskContextArgs,
-    ToolError,
+    self, ConfirmDocumentProposalArgs, ProposeDocumentArgs, SubmissionStatusArgs,
+    SubmitDocumentArgs, SubmitTechnicalDesignArgs, TaskContextArgs, ToolError,
+    VetoDocumentRevisionArgs,
 };
 
 /// The MCP server over the shared pool: owns the rmcp tool router generated
@@ -116,6 +117,48 @@ impl PmMcpServer {
     ) -> Result<CallToolResult, ErrorData> {
         let root = pm_application::knowledge::KnowledgeRoot::from_env();
         Self::tool_result(tools::submit_document(&self.pool, &root, args).await)
+    }
+
+    #[tool(
+        name = "pm_propose_document",
+        description = "Submit a Markdown proposal through the knowledge quality gates. A clean \
+                       proposal is auto-committed to Git; a red-line one (external_commitment / \
+                       delete_history / rewrite_delivered) is held pending human confirmation \
+                       and is NOT written to Git. Requires PM_MCP_DOCUMENT_WRITE."
+    )]
+    pub async fn propose_document(
+        &self,
+        Parameters(args): Parameters<ProposeDocumentArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let root = pm_application::knowledge::KnowledgeRoot::from_env();
+        Self::tool_result(tools::propose_document(&self.pool, &root, args).await)
+    }
+
+    #[tool(
+        name = "pm_confirm_document_proposal",
+        description = "Human confirmation of a red-line knowledge proposal; commits it to Git \
+                       and records redline_confirmed_by. Requires PM_MCP_DOCUMENT_WRITE."
+    )]
+    pub async fn confirm_document_proposal(
+        &self,
+        Parameters(args): Parameters<ConfirmDocumentProposalArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let root = pm_application::knowledge::KnowledgeRoot::from_env();
+        Self::tool_result(tools::confirm_document_proposal(&self.pool, &root, args).await)
+    }
+
+    #[tool(
+        name = "pm_veto_document_revision",
+        description = "Veto a published knowledge revision within the veto window: Git revert + \
+                       revision rolled_back + pointer fallback + index re-follow + audit. Requires \
+                       PM_MCP_DOCUMENT_WRITE."
+    )]
+    pub async fn veto_document_revision(
+        &self,
+        Parameters(args): Parameters<VetoDocumentRevisionArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let root = pm_application::knowledge::KnowledgeRoot::from_env();
+        Self::tool_result(tools::veto_document_revision(&self.pool, &root, args).await)
     }
 }
 

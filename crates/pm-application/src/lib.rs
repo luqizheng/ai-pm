@@ -6,6 +6,11 @@ pub mod git_access;
 pub mod ingestion;
 pub mod knowledge;
 pub mod knowledge_index;
+pub mod knowledge_indexer;
+pub mod knowledge_migrate;
+pub mod knowledge_proposal;
+pub mod knowledge_quality;
+pub mod knowledge_reference;
 pub mod llm_config;
 pub mod outbox;
 pub mod pm_write;
@@ -35,6 +40,19 @@ pub use knowledge::{
     KnowledgeRoot, content_hash, create_document, delete_document, list_documents, read_document,
 };
 pub use knowledge_index::{MarkdownSection, SearchHit, parse_markdown_tree, search_documents};
+pub use knowledge_indexer::{
+    FallbackSearchResult, IndexReference, IndexStateRow, KnowledgeIndexer, MarkdownTreeIndexer,
+    RetrievedSection, index_revision, index_states, search_with_fallback,
+};
+pub use knowledge_migrate::{migrate_requirement_revision, rollback_requirement_migration};
+pub use knowledge_proposal::{
+    ProposalOutcome, ProposalRequest, ProposalRow, RevisionVetoOutcome, confirm_redline_proposal,
+    list_proposals, submit_proposal, veto_revision,
+};
+pub use knowledge_quality::{GateFailure, GateInput, QualityGateResult};
+pub use knowledge_reference::{
+    AddReferenceRequest, ReferenceRow, add_reference, list_references,
+};
 pub use llm_config::{
     LlmConfigError, LlmProviderRow, PROVIDERS, UpdateLlmProviderRequest, list_providers,
     load_provider_credentials, update_provider,

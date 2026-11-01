@@ -364,10 +364,13 @@ async fn streamable_http_smoke_lists_tools_and_serves_calls(pool: PgPool) {
     assert_eq!(
         names,
         vec![
+            "pm_confirm_document_proposal",
             "pm_get_submission_status",
             "pm_get_task_context",
+            "pm_propose_document",
             "pm_submit_document",
             "pm_submit_technical_design",
+            "pm_veto_document_revision",
         ]
     );
 

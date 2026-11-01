@@ -65,9 +65,12 @@ const MCP_BODY_LIMIT: usize = 256 * 1024;
 /// tool name → additionally required permission (read tools need only
 /// `PM_MCP_READ`). `PM_MCP_TASK_UPDATE` stays unassigned until a task-update
 /// tool exists.
-const MCP_TOOL_PERMISSIONS: [(&str, &str); 2] = [
+const MCP_TOOL_PERMISSIONS: [(&str, &str); 5] = [
     ("pm_submit_technical_design", "PM_MCP_DOCUMENT_WRITE"),
     ("pm_submit_document", "PM_MCP_DOCUMENT_WRITE"),
+    ("pm_propose_document", "PM_MCP_DOCUMENT_WRITE"),
+    ("pm_confirm_document_proposal", "PM_MCP_DOCUMENT_WRITE"),
+    ("pm_veto_document_revision", "PM_MCP_DOCUMENT_WRITE"),
 ];
 
 /// Permission gate layered *inside* [`require_bearer`], so claims are already

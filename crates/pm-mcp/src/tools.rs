@@ -81,6 +81,49 @@ pub struct SubmitDocumentArgs {
     pub change_summary: Option<String>,
 }
 
+/// Arguments of `pm_propose_document`: submit a proposal through the quality gates.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ProposeDocumentArgs {
+    pub project_id: Uuid,
+    /// Stable document key (`[A-Za-z0-9._-]`), unique per project.
+    pub doc_key: String,
+    /// One of requirement / decision / architecture / knowledge.
+    pub doc_type: String,
+    /// Proposed Markdown body (LF); must carry `source_events:` or a doc link.
+    pub markdown: String,
+    /// Required when rewriting an official document.
+    pub change_summary: Option<String>,
+    /// Provenance: outbox event id (either this or `analysis_run_id`/`source_ref`).
+    pub source_event_id: Option<Uuid>,
+    /// Provenance: analysis run id.
+    pub analysis_run_id: Option<Uuid>,
+    /// Provenance: explicit source marker (e.g. `requirement_revision:<id>`).
+    pub source_ref: Option<String>,
+    /// Red-line declaration: external_commitment | delete_history | rewrite_delivered.
+    pub redline_kind: Option<String>,
+    /// Optimistic concurrency: the hash this proposal is based on.
+    pub base_content_hash: Option<String>,
+}
+
+/// Arguments of `pm_confirm_document_proposal`: human confirmation of a red-line proposal.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ConfirmDocumentProposalArgs {
+    pub project_id: Uuid,
+    pub proposal_id: Uuid,
+    /// Must be a human principal.
+    pub confirmed_by: Uuid,
+}
+
+/// Arguments of `pm_veto_document_revision`: roll back a published revision.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct VetoDocumentRevisionArgs {
+    pub project_id: Uuid,
+    pub revision_id: Uuid,
+    /// Must be a human principal.
+    pub vetoed_by: Uuid,
+    pub reason: String,
+}
+
 /// Everything a tool failure can be, kept coarse on purpose: the MCP layer
 /// renders only the message text (`isError` result), so the variants exist to
 /// make the failure modes explicit and matchable in tests.
@@ -295,11 +338,22 @@ pub async fn submit_document(
         },
     )
     .await
-    .map_err(|err| match err {
-        KnowledgeError::NotFound => ToolError::NotFound(format!(
-            "project {} not found or has no document",
-            args.project_id
-        )),
+    .map_err(map_knowledge_error)?;
+
+    Ok(json!({
+        "document_id": created.document_id,
+        "revision_no": created.revision_no,
+        "git_commit_sha": created.git_commit_sha,
+        "content_hash": created.content_hash,
+        "canonical_path": created.canonical_path,
+    }))
+}
+
+fn map_knowledge_error(err: KnowledgeError) -> ToolError {
+    match err {
+        KnowledgeError::NotFound => {
+            ToolError::NotFound("knowledge document or project not found".to_string())
+        }
         KnowledgeError::Exists(key) => {
             ToolError::Conflict(format!("document {key} already exists"))
         }
@@ -312,17 +366,92 @@ pub async fn submit_document(
         KnowledgeError::Stale => {
             ToolError::Conflict("document content drifted from its recorded hash".into())
         }
+        KnowledgeError::Conflict(message) => ToolError::Conflict(message),
         KnowledgeError::Config(message)
         | KnowledgeError::Io(message)
         | KnowledgeError::Git(message) => ToolError::InvalidRequest(message),
         KnowledgeError::Db(err) => ToolError::Db(err),
-    })?;
+    }
+}
 
-    Ok(json!({
-        "document_id": created.document_id,
-        "revision_no": created.revision_no,
-        "git_commit_sha": created.git_commit_sha,
-        "content_hash": created.content_hash,
-        "canonical_path": created.canonical_path,
-    }))
+async fn ai_pm_principal(pool: &PgPool, project_id: Uuid) -> Result<Uuid, ToolError> {
+    sqlx::query_scalar(
+        "SELECT pm.principal_id FROM core.project_member pm \
+         JOIN core.principal p ON p.id = pm.principal_id \
+         WHERE pm.project_id = $1 AND p.kind = 'ai_pm' \
+         ORDER BY pm.principal_id LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(ToolError::Db)?
+    .ok_or_else(|| {
+        ToolError::NotFound(format!("project {project_id} has no ai_pm principal"))
+    })
+}
+
+/// 知识空间 V2：提交提案（质量门 → 自动提交 / 红线挂起 / 拒绝）。
+pub async fn propose_document(
+    pool: &PgPool,
+    root: &KnowledgeRoot,
+    args: ProposeDocumentArgs,
+) -> Result<Value, ToolError> {
+    let created_by = ai_pm_principal(pool, args.project_id).await?;
+    let outcome = pm_application::knowledge_proposal::submit_proposal(
+        pool,
+        root,
+        pm_application::knowledge_proposal::ProposalRequest {
+            project_id: args.project_id,
+            doc_key: args.doc_key,
+            doc_type: args.doc_type,
+            markdown: args.markdown,
+            change_summary: args.change_summary,
+            source_event_id: args.source_event_id,
+            analysis_run_id: args.analysis_run_id,
+            source_ref: args.source_ref,
+            redline_kind: args.redline_kind,
+            base_content_hash: args.base_content_hash,
+            created_by,
+        },
+    )
+    .await
+    .map_err(map_knowledge_error)?;
+    Ok(serde_json::to_value(outcome).unwrap_or_default())
+}
+
+/// 人类确认红线提案。
+pub async fn confirm_document_proposal(
+    pool: &PgPool,
+    root: &KnowledgeRoot,
+    args: ConfirmDocumentProposalArgs,
+) -> Result<Value, ToolError> {
+    let outcome = pm_application::knowledge_proposal::confirm_redline_proposal(
+        pool,
+        root,
+        args.proposal_id,
+        args.project_id,
+        args.confirmed_by,
+    )
+    .await
+    .map_err(map_knowledge_error)?;
+    Ok(serde_json::to_value(outcome).unwrap_or_default())
+}
+
+/// 否决窗口：回滚已发布修订。
+pub async fn veto_document_revision(
+    pool: &PgPool,
+    root: &KnowledgeRoot,
+    args: VetoDocumentRevisionArgs,
+) -> Result<Value, ToolError> {
+    let outcome = pm_application::knowledge_proposal::veto_revision(
+        pool,
+        root,
+        args.project_id,
+        args.revision_id,
+        args.vetoed_by,
+        &args.reason,
+    )
+    .await
+    .map_err(map_knowledge_error)?;
+    Ok(serde_json::to_value(outcome).unwrap_or_default())
 }
