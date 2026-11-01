@@ -43,6 +43,17 @@ pub(crate) async fn apply_task_transition(
     facts: &TransitionFacts,
     ctx: &ExecutionContext,
 ) -> Result<(AuditId, i64), CommandError> {
+    // T-025 P0（评审 §2.2）：终态迁移与依赖图写操作（建边/删边）共用项目级图锁，
+    // 且取锁必须先于下方 FOR UPDATE——「上游完成」与「并发建边」可证明串行：
+    // 后到者必然看到先到者已提交的边或状态，漏解锁与漏检环都不可能。
+    // 非终态迁移（ready/claimed/running 往返）不取锁，调度热路径零开销；
+    // 解锁路径（blocked→ready）运行在建边/终态事务已持有的图锁内（xact lock
+    // 可重入，且 Ready 非终态本就不会再取）。取锁点先于任何行锁 → 无死锁。
+    if crate::task_dependency::unlocks_downstream(to) {
+        crate::task_dependency::acquire_project_graph_lock(tx, ctx.project_id)
+            .await
+            .map_err(db_err)?;
+    }
     let row = sqlx::query(
         "SELECT status, revision FROM delivery.task WHERE id = $1 AND project_id = $2 FOR UPDATE",
     )

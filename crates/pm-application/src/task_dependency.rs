@@ -82,6 +82,25 @@ impl From<sqlx::Error> for DependencyError {
     }
 }
 
+/// 项目级依赖图写锁（T-025 P0，评审 §2.1/§2.2）：同一项目的建边、删边与终态
+/// 解锁传播共用这把事务级 advisory lock，使「检环 → 插边」与「终态 → 扫下游」
+/// 形成可证明的串行关系——后到的事务必然看到先到者已提交的图/状态，漏检环
+/// 与漏解锁都不可能。
+///
+/// 硬规则：取锁必须发生在事务内**任何行锁之前**（否则出现「持行锁等图锁」与
+/// 「持图锁等行锁」互相等待）。`pg_advisory_xact_lock` 同事务可重入，嵌套调用
+/// （解锁路径再走受守卫入口）安全；事务结束自动释放。跨项目互不阻塞。
+pub(crate) async fn acquire_project_graph_lock(
+    tx: &mut Tx,
+    project_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))")
+        .bind(project_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
 /// 依赖满足的唯一判定（D5）：全部前置状态 ∈ [`SATISFIED_STATUSES`]。
 pub(crate) async fn dependencies_satisfied(
     tx: &mut Tx,
@@ -157,7 +176,18 @@ pub async fn add_dependency(
 ) -> Result<DependencyGraph, DependencyError> {
     let mut tx = pool.begin().await?;
 
-    // ① 锁下游任务行（与解锁路径同一加锁顺序：先被依赖方，后依赖方）。
+    // ⓪ 无锁预读项目（图锁键）：取锁必须先于任何行锁（T-025 P0）。预读后行
+    //    若消失，① 的 FOR UPDATE 返回 None → TaskNotFound。本项目内的并发
+    //    建边/删边/终态迁移由此全序化（设计稿评审 §2.1：并发反向边恰一成功）。
+    let graph_key: Uuid =
+        sqlx::query_scalar("SELECT project_id FROM delivery.task WHERE id = $1")
+            .bind(task_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(DependencyError::TaskNotFound)?;
+    acquire_project_graph_lock(&mut tx, graph_key).await?;
+
+    // ① 锁下游任务行（项目图锁已持有：检环/插边/解锁判定在本项目内串行）。
     let downstream = sqlx::query(
         "SELECT project_id, status FROM delivery.task WHERE id = $1 FOR UPDATE",
     )
@@ -263,6 +293,17 @@ pub async fn remove_dependency(
     actor: &AuditActor,
 ) -> Result<bool, DependencyError> {
     let mut tx = pool.begin().await?;
+
+    // ⓪ 与 add_dependency 同款：先无锁预读项目取图锁，再锁行（T-025 P0）。
+    //    删边同样修改依赖图，必须与建边/终态迁移共用同一把锁。
+    let graph_key: Uuid =
+        sqlx::query_scalar("SELECT project_id FROM delivery.task WHERE id = $1")
+            .bind(task_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(DependencyError::TaskNotFound)?;
+    acquire_project_graph_lock(&mut tx, graph_key).await?;
+
     let downstream =
         sqlx::query("SELECT project_id FROM delivery.task WHERE id = $1 FOR UPDATE")
             .bind(task_id)
