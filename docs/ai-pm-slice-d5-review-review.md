@@ -139,18 +139,31 @@
 
 收编落点：§6.1 恢复链 `run_kind` 恒定性硬约束表 + §6.3 流程图显式标注「✗ 绝不创建 Delivery Run」+ 关键不变量第 2 条 + §5.4 硬不变量第 4 条 + §10 **C136**（`delivery.task_run` 表零 `run_kind='delivery'` INSERT 的 DB 层断言）。
 
-### 7.2 补充 5 待补全：Knowledge Proposal 的事务边界（P1）
+### 7.2 补充 5 已收编：Knowledge Proposal 的事务边界（P1）
 
-§7.1 现有事务边界表已覆盖：
+评审补全的原文（流程图）：
+
+```
+Task completed
+       |
+       v
+创建 Knowledge Proposal
+       |
+       v
+status = draft
+```
+
+收编落点：设计稿 **§7.1.1**——流程图 + 三节点语义表（`Task completed` = 既成事实因、不可回滚，属 §7.1 同事务原子集；`创建 Knowledge Proposal` = 因果动作果、异步执行、幂等键 `knowledge_writeback:{review_run_id}`；`status = draft` = 初始且唯一落库状态）。同时固化因果方向不可逆：completed 为因、提案为果，果失败不回滚因（重试/死信重放补建），反向不成立。
+
+§7.1 事务边界表（已存在，本次确认）：
 
 | 集合 | 动作 | 事务归属 | 失败语义 |
 |---|---|---|---|
 | 同事务原子集 | `reviewing→completed` + `task_waiting` 结行 + 审计 + `ReviewCompleted` 事件 + `KnowledgeBaseWriteRequested` 事件 | 单事务 | 任一失败全回滚，completed 不落 |
 | 异步集 | 消费 `KnowledgeBaseWriteRequested` → 查重 + INSERT `draft` 提案 → outbox 标 delivered | handler 独立事务 | 重试 → 死信 → 重放补建；completed 不回滚 |
 
-**待您补全的「明确：」内容候选**（请指认或补充）：
-- a) `draft` 提案创建的幂等键与唯一约束口径（现为事件级 `knowledge_writeback:{review_run_id}` + 应用层 `(project_id, doc_key, 活跃状态集)` 查重）
-- b) completed 与提案创建的**因果关系方向**（completed 为因、提案为果，果失败不回滚因；还是二者需强一致）
-- c) 死信重放的触发与超时口径（现只写「T-061 死信重放可补」）
-- d) 提案创建失败时 Decision Center/T-070 的可见性（缺窗期内是否显示「提案待生成」态）
-- e) 多租户下 `doc_key` 的命名空间规则
+**候选点 a/c/d/e 的处置**（评审未逐条答复，按现有设计固化，如有异议请指出）：
+- a) 幂等：事件级 `knowledge_writeback:{review_run_id}`（outbox UNIQUE 兜底）+ 应用层 `(project_id, doc_key, 活跃状态集)` 查重——**维持**。
+- c) 死信重放：沿用 T-061 死信重放机制——**维持**。
+- d) 可见性：缺窗期提案暂缺，属可接受最终一致——**维持**（T-070 页面按提案存在性展示）。
+- e) `doc_key` 命名空间：按 `(tenant_id, project_id, doc_key)` 隔离——**维持**。

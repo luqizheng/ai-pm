@@ -582,6 +582,28 @@ Review Run 终态
 | **同事务原子集** | `reviewing→completed` 迁移 + `task_waiting` 结行 + 审计 + `ReviewCompleted` 事件 + `KnowledgeBaseWriteRequested` 事件（approve 路径含审批行 UPDATE——§5.2 同一事务） | 单事务，任一失败全回滚——completed 不落、事件不落、审批不留痕 | 回滚后任务停 `reviewing` + pending 审批行，可重裁决 |
 | **异步集** | 消费 `KnowledgeBaseWriteRequested` → 事务内查重 + INSERT `ai.document_proposal(draft)` → outbox 标 delivered | 消费 handler 独立事务 | at-least-once 重试 → 耗尽死信 → T-061 死信重放可补；**completed 不回滚**——提案非 completed 的裁决依据，缺窗期「执行记录提案暂缺」为可接受最终一致 |
 
+### 7.1.1 `completed → 提案 draft` 流程图〔最终判断补充 5〕
+
+```
+Task completed
+       |
+       v
+创建 Knowledge Proposal
+       |
+       v
+status = draft
+```
+
+节点语义（可验证定义）：
+
+| 节点 | 语义 | 事务归属 |
+|---|---|---|
+| `Task completed` | **既成事实（因）**：§5 矩阵 `approved`×放行分支在原子集内落定，**不可回滚** | 同事务原子集（§7.1 上表） |
+| `创建 Knowledge Proposal` | **因果动作（果）**：由 `KnowledgeBaseWriteRequested` 事件触发，异步执行，幂等键 `knowledge_writeback:{review_run_id}` | 消费 handler 独立事务 |
+| `status = draft` | 提案**初始且唯一**的落库状态；后续质量门/红线/确认由 0014 既有提案流接管，D5 不越界 | 与创建同事务 |
+
+**因果方向（不可逆）**：completed 为因、提案为果——果（提案创建）失败**不回滚**因（completed），经重试/死信重放补建；反向亦不成立（提案未建不阻塞 completed）。缺窗期「执行记录提案暂缺」为可接受最终一致（§7.1 上表异步集失败语义）。
+
 ### 7.2 其余裁点
 
 | 裁点 | 结论 |
