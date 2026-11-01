@@ -30,6 +30,17 @@
 - **术语约定**：项目级叫 tag，工作项级叫 category（`estimation.estimate_item.category`，PRD 未落库）。
 - 与客户维度正交：客户答「活是谁的」，tag 答「活是什么性质」。
 
+## Worker 容量感知调度 — 放弃（1.0 不做）
+
+- **裁定（2026-11-01）**：放弃。worker 上报 CPU/内存供服务做负载感知并行调度的提案，1.0 不做。
+- **提案内容（已 brainstorming 收敛但未落盘）**：Pull + 容量限流模型；独立平台级 `delivery.worker_node`
+  表（容量 cpu/mem + 实时 cpu%/已用mem + 心跳，不带 tenant_id）；双通道上报（Model B 直接 upsert、
+  Model A 新增 `pm_report_worker_capacity` MCP 工具）；`claim_once` 顶部插容量闸（静态上限 env
+  `AI_PM_WORKER_MAX_RUNS` 默认 4 + 动态软闸 cpu>85%/mem>0.9 + 新鲜度窗）；仅限 Model B 自主领取。
+- **5 问全走推荐项**，用户在确认前 NACK。无任何代码/迁移（`0022` 未建）/文档残留。
+- **重启条件**：未来某版本真正需要「服务按 worker 负载决定并行派几个」时再提；重启前须重新走
+  `todo.md` §0.1 brainstorming，且需先确认 D3 执行引擎（T-030）与 Executor Registry 状态（ADR-0001 ④）。
+
 ---
 
 ## 多租户 / Agent / Executor 身份边界 — ADR-0001（Accepted 2026-11-01）
