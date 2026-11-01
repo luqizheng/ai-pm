@@ -1,6 +1,6 @@
 # D3 · Codex 执行引擎适配器 v1（T-030 设计稿）
 
-> 状态：**已过稿**（四节逐节确认，2026-11-01；过稿后进入 T-031 实施）
+> 状态：**已实施（T-031 交付，见 §8）**（四节逐节确认，2026-11-01）
 > 日期：2026-11-01
 > 一句话：平台以**本地子进程**方式 spawn Codex CLI，`RunExecutor` 端口 + `CodexExecutor` 适配器填 D1 预留的全部接缝（`executor_kind`/`executor_session`/租约/失联回收），执行端经 D2 MCP 工具上报与心跳，平台监控循环负责兜底续租、超时强杀与重启 reconcile。
 > 上位依据：`target.md` §P4 模块表（RunExecutor / Codex CLI Adapter / Workspace / Git Worktree / Checkout / Process / Log / Timeout / Cancel / Recovery）、`docs/ai-pm-slice-d-execution-pipeline-v1.md` §5.9（预留端口与 R4 接线）、§九（D3 待裁问题 4/5）、`crates/pm-application/src/run_context.rs`（D2 分工：不启动进程、不写交付、不裁决任务）、`0011_run_dispatch.sql:39-40`（`executor_kind`/`executor_session` 已预留）、todo.md T-030。
@@ -136,3 +136,30 @@ stateDiagram-v2
 - 不做容器/远程执行隔离（P11 规模化）。
 - 不做 SSE 实时日志流（T-070 前端需要时再加）。
 - 不改 D2 工具面契约字段；不改 13 态状态机取值。
+---
+
+## 8. 实施记录（T-031 交付，2026-11-01）
+
+### 8.1 交付物
+
+| 落点 | 内容 |
+|---|---|
+| `run_dispatch/port.rs` | 端口补全：`ExecutableRun.timeout_seconds` Option 化；`ExecutorSession{run_id, workspace_root}`；`ExecutorProgress::Done{exit_code}`；`workspace_root_from_env()` 共享派生规则 |
+| `pm-application/src/run_executor.rs` | 编排器：`claim_and_start` / `poll_active_runs` / `cancel_run` / `reconcile_orphans`；Run 终态一律条件 UPDATE（`WHERE status IN ('claimed','running')`）先到先得 |
+| `run_dispatch/lease.rs` | `recover_lost_run` 共享封装（从 claim.rs B3-2 提取；`claim_core` 与 reconcile 复用） |
+| `pm-infrastructure/src/codex_executor.rs` | `CodexExecutor`：镜像仓（`clone --mirror` + `fetch --all`）→ `worktree add --detach <base_commit>` → spawn → pid 文件 → 日志重定向；终止管线 Unix `SIGTERM→宽限→SIGKILL` / Windows 强杀 |
+| `apps/ai-pm-worker/src/main.rs` | 第四循环改造：`AI_PM_RUN_EXECUTOR=codex\|mock\|noop` 装配（缺省 noop）+ 启动孤儿 reconcile + `claim_and_start`/`poll_active_runs` 主循环 |
+
+### 8.2 实施期裁定（与设计稿的差异，均有依据）
+
+1. **执行端 MCP 心跳通道 V1 不可用**：`claim_and_start` 走 Model B（D1 裁定 worker 不签发 `lease_token` 明文），spawn 的执行端无 MCP 凭据——租约续期由编排器 poll 兜底通道（Q-D3-4 平台侧）维持；token 下发与 `pm_submit_result`（D4）一起裁。
+2. **`claimed→running` 由编排器推进**：start 成功后编排器在 start 的事务里经受守卫入口 `apply_task_transition` 推进任务 + Run `running/stage='started'/started_at`——这正是 D1 §九问题 4 的本意（「D3 在执行端启动成功后经平台写入，不得由 MCP 直写」）；D2 的执行端首报路径保留给 Model A（自拉）场景。
+3. **running 失联回收**：`claim_once` 回收候选只覆盖 `claimed`（D1 语义），running 的失联由编排器补齐——租约续不上（过期/被回收）→ `terminate(LeaseReclaimed)` + `recover_lost_run`（B3-2 隔离 + 新 Run 重试）。
+4. **start 失败的任务回退**：按 B3-1 语义经 `apply_task_transition` 把任务 `claimed→ready`（失败行受 0010「每 Run 至多一条」唯一约束——首败留痕 `executor_start_failed`，重试只递增 `infrastructure_retry_count`，耗尽证据落 `release_reason='infrastructure_exhausted'` + 审计）。
+5. **CLI 参数留白**：`AI_PM_CODEX_ARGS`（空格分割，默认空）+ 环境变量注入 `AI_PM_RUN_ID/TASK_ID/PROJECT_ID/ATTEMPT_NO/WORKSPACE_ROOT`（`AI_PM_LEASE_TOKEN` 留空待 D4）；V1 只保证进程生命周期正确，Codex 编排参数属接入期调优。
+
+### 8.3 实测
+
+- `cargo test --workspace`：退出码 0 —— **72 个 `test result: ok`、456 passed、0 failed**（新增：pm-application `run_executor` 11 例、pm-infrastructure `codex_executor` 4 例）。
+- `cargo check --workspace --all-targets`：0 error 0 warning。
+- Windows 实机验证：假脚本（`cmd /C`）spawn/收割/强杀、`file://` 裸仓镜像 + worktree checkout 到 `base_commit` 全部通过（C67–C70）。
