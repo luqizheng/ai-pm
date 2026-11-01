@@ -209,15 +209,18 @@ impl PmMcpServer {
 
     #[tool(
         name = "pm_submit_result",
-        description = "Frozen draft shape for per-repository commits and test evidence. D2 only \
-                       publishes the shape (implemented_in D4): the call touches no table and \
-                       answers Unsupported with {implemented_in: D4, schema: draft}."
+        description = "Submit the delivery of one run: per-repository commits, changed-file \
+                       counts and test evidence. The platform verifies each declared commit \
+                       against the actual git workspace (it must equal the workspace HEAD and \
+                       descend from the locked baseline), records the delivery manifest, and \
+                       advances the task to submitted. A business rejection is answered with \
+                       outcome='rejected' plus a machine-readable code, not a tool failure."
     )]
     pub async fn submit_result(
         &self,
         Parameters(args): Parameters<SubmitResultArgs>,
     ) -> Result<CallToolResult, ErrorData> {
-        Self::tool_result(tools::submit_result(args))
+        Self::tool_result(tools::submit_result(&self.pool, args).await)
     }
 }
 

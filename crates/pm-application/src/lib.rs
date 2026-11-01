@@ -3,6 +3,7 @@
 pub mod actor;
 pub mod bootstrap;
 pub mod command_executor;
+pub mod delivery;
 pub mod git_access;
 pub mod ingestion;
 pub mod knowledge;

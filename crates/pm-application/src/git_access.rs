@@ -220,6 +220,46 @@ pub async fn git_stdout(
     Ok(output.stdout)
 }
 
+/// 一条 git 命令的完整结果：D4 的校验需要**退出码**（`merge-base --is-ancestor`
+/// 以退出码表达「是/否」），[`git_stdout`] 只区分「成功/失败」不够用。
+#[derive(Debug, Clone)]
+pub struct GitOutput {
+    pub code: i32,
+    pub stdout: Vec<u8>,
+    pub stderr: String,
+}
+
+impl GitOutput {
+    pub fn ok(&self) -> bool {
+        self.code == 0
+    }
+    pub fn stdout_text(&self) -> String {
+        String::from_utf8_lossy(&self.stdout).trim().to_string()
+    }
+}
+
+/// 在本地仓库根执行一条只读 git 命令，**返回退出码**（不把非零退出当错误）。
+///
+/// 与 [`git_stdout`] 的差别只有一处：非零退出码不转成 [`GitError`]，而是原样
+/// 带回给调用方判断——`git merge-base --is-ancestor A B` 的「不是祖先」正是
+/// 退出码 1 而非错误输出。
+pub async fn git_run(root: &Path, args: &[&str], timeout: Duration) -> Result<GitOutput, GitError> {
+    let mut cmd = prepare_command(None, None);
+    cmd.arg("-C").arg(root).args(args);
+    cmd.kill_on_drop(true);
+    let child = cmd.spawn().map_err(|e| GitError::Io(e.to_string()))?;
+    let output = match tokio::time::timeout(timeout, child.wait_with_output()).await {
+        Ok(Ok(out)) => out,
+        Ok(Err(e)) => return Err(GitError::Io(e.to_string())),
+        Err(_) => return Err(GitError::Timeout),
+    };
+    Ok(GitOutput {
+        code: output.status.code().unwrap_or(-1),
+        stdout: output.stdout,
+        stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+    })
+}
+
 /// 目录占用字节数（符号链接按链接本身计）。
 pub fn directory_size(path: &Path) -> u64 {
     let mut total = 0u64;

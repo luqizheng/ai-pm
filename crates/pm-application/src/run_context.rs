@@ -171,7 +171,10 @@ pub async fn verify_lease(
 }
 
 /// 事务内加行锁校验（续租/进度上报）。
-async fn lock_lease(
+///
+/// D4 的提交管线复用本函数做 **fencing**——在事务内持 Run 行锁重验 token /
+/// generation / 状态 / 过期，防止迟到结果污染已被回收的 Run。
+pub(crate) async fn lock_lease(
     tx: &mut Transaction<'static, Postgres>,
     project_id: Uuid,
     run_id: Uuid,

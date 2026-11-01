@@ -11,14 +11,39 @@ use pm_application::pm_write::{
     update_task, AcceptanceCriterionInput, DeliverableInput, KnowledgeRefInput, UpdateTaskRequest,
 };
 use pm_mcp::tools::{
-    claim_task, get_run_context, report_progress, submit_result, ClaimTaskArgs, KnowledgeProposalInput,
-    ReportProgressArgs, RunContextArgs, SubmitResultArgs, SubmittedRepository, ToolError,
+    claim_task, get_run_context, report_progress, submit_result, submit_result_with, ClaimTaskArgs,
+    KnowledgeProposalInput, ReportProgressArgs, RunContextArgs, SubmitResultArgs, SubmittedRepository,
+    ToolError,
 };
 use serde::Deserialize;
 use serde_json::Value;
 use sqlx::PgPool;
+use std::path::Path;
 use uuid::Uuid;
 use pm_domain::SYSTEM_TENANT;
+
+/// 在工作区里执行 git 命令（D4 校验跑在真实 Git 工作区上）。
+fn git(root: &Path, args: &[&str]) {
+    let status = std::process::Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .env("GIT_AUTHOR_NAME", "Test")
+        .env("GIT_AUTHOR_EMAIL", "test@example.com")
+        .env("GIT_COMMITTER_NAME", "Test")
+        .env("GIT_COMMITTER_EMAIL", "test@example.com")
+        .status()
+        .expect("git must be installed for the D4 MCP tests");
+    assert!(status.success(), "git {args:?} failed in {root:?}");
+}
+
+fn head_sha(root: &Path) -> String {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(root)
+        .output()
+        .expect("git rev-parse");
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
 
 struct Fx {
     project_id: Uuid,
@@ -392,83 +417,231 @@ async fn c5_c6_errors_are_tool_errors_without_leaking_credentials(pool: PgPool) 
     assert!(matches!(err, ToolError::LeaseExpired(_)));
 }
 
+/// C11（D4 定稿后重写）：`pm_submit_result` **真实落库**——D2 的 shape-first
+/// 语义作废。本用例覆盖「上报仓不在任务契约」这条驳回路径：整单驳回、0 行
+/// commit、任务状态不动、驳回审计持久。
 #[sqlx::test(migrations = "../../migrations")]
-async fn c11_submit_result_is_shape_first_and_touches_no_table(pool: PgPool) {
-    let fx = seed(&pool, "D2-MCP-C11", true).await;
+async fn c11_submit_result_rejects_a_repository_outside_the_contract(pool: PgPool) {
+    let fx = seed(&pool, "D4-MCP-C11", true).await;
     let claimed = claim(&pool, &fx).await;
     let run_id: Uuid = claimed["run_id"].as_str().unwrap().parse().unwrap();
 
-    async fn counts(pool: &PgPool) -> (i64, i64, i64, i64, i64) {
-        let mut out = (0i64, 0i64, 0i64, 0i64, 0i64);
-        for (index, table) in [
-            "delivery.task_run",
-            "delivery.task_run_repository",
-            "governance.audit_log",
-            "integration.inbound_event",
-            "delivery.task_run_failure",
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            let count: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM {table}"))
-                .fetch_one(pool)
-                .await
-                .unwrap();
-            match index {
-                0 => out.0 = count,
-                1 => out.1 = count,
-                2 => out.2 = count,
-                3 => out.3 = count,
-                _ => out.4 = count,
-            }
-        }
-        out
-    }
-
-    let before_counts = counts(&pool).await;
-    let before_task: (String, i64, Option<String>, Option<String>) = sqlx::query_as(
-        "SELECT t.status, t.revision, r.lease_owner, r.lease_token_hash \
-           FROM delivery.task t JOIN delivery.task_run r ON r.task_id = t.id WHERE t.id = $1",
+    let before_task: (String, i64) = sqlx::query_as(
+        "SELECT t.status, t.revision FROM delivery.task t WHERE t.id = $1",
     )
     .bind(fx.task_id)
     .fetch_one(&pool)
     .await
     .unwrap();
 
-    let err = submit_result(SubmitResultArgs {
+    let value = submit_result(
+        &pool,
+        SubmitResultArgs {
+            project_id: fx.project_id,
+            run_id,
+            lease_token: claimed["lease_token"].as_str().unwrap().to_string(),
+            lease_generation: claimed["lease_generation"].as_i64().unwrap() as i32,
+            integration_status: None,
+            repositories: vec![SubmittedRepository {
+                repository_id: Uuid::new_v4(),
+                base_commit: "headsha".to_string(),
+                commit_sha: "newsha".to_string(),
+                changed_files: 12,
+                tests: vec![],
+            }],
+            summary: "done".to_string(),
+            knowledge_proposals: vec![KnowledgeProposalInput {
+                document_id: fx.document_id,
+                change_summary: "update terrain ADR".to_string(),
+            }],
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(value["outcome"], "rejected");
+    assert_eq!(value["code"], "repo_not_in_contract");
+    assert_eq!(value["submitted_repository_count"], 1);
+
+    let commits: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.task_repository_commit")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(commits, 0, "a rejected submission must not land any commit row");
+
+    let after_task: (String, i64) = sqlx::query_as(
+        "SELECT t.status, t.revision FROM delivery.task t WHERE t.id = $1",
+    )
+    .bind(fx.task_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        after_task, before_task,
+        "a rejected submission must not move the task"
+    );
+
+    let rejected_audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log WHERE action = 'delivery.rejected'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(rejected_audits, 1, "the rejection must be auditable");
+}
+
+/// C84 / C85（D4 定稿）：`pm_submit_result` **真实落库**的端到端路径。
+///
+/// C84：成功提交 → 交付段落两表落库（`task_repository_commit` + `task_run.
+/// integration_status`）、任务 `running→submitted`、`delivery.submitted` 审计。
+/// C85：成功提交后重复请求 → 返回原结果（幂等 200），不产生第二份审计。
+#[sqlx::test(migrations = "../../migrations")]
+async fn c84_c85_submit_result_lands_the_delivery_and_replays(pool: PgPool) {
+    let fx = seed(&pool, "D4-MCP-C84", true).await;
+
+    // 交付校验跑在**实际 Git 工作区**上：先造出工作区与基线 commit，再领取
+    // Run（领取时的基线快照必须等于工作区的初始 HEAD）。
+    let repository_id: Uuid = sqlx::query_scalar(
+        "SELECT repository_id FROM delivery.task_repository WHERE task_id = $1",
+    )
+    .bind(fx.task_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let workspace_path: String =
+        pm_application::run_dispatch::workspace_path_for(repository_id, "world-view");
+    let workspace_root = std::env::temp_dir().join(format!("ai-pm-d4-mcp-{}", Uuid::new_v4()));
+
+    // Run 的 id 在领取后才知道——先领取，再按 run_id 落工作区。
+    let claimed = claim(&pool, &fx).await;
+    let run_id: Uuid = claimed["run_id"].as_str().unwrap().parse().unwrap();
+    let lease_token = claimed["lease_token"].as_str().unwrap().to_string();
+    let lease_generation = claimed["lease_generation"].as_i64().unwrap() as i32;
+
+    let worktree = workspace_root.join(run_id.to_string()).join(&workspace_path);
+    std::fs::create_dir_all(&worktree).unwrap();
+    git(&worktree, &["init", "-q", "-b", "main"]);
+    std::fs::write(worktree.join("README.md"), "# base\n").unwrap();
+    git(&worktree, &["add", "."]);
+    git(&worktree, &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "base"]);
+    let base_commit = head_sha(&worktree);
+
+    // 领取快照的基线是 `task_repository.base_commit`——把它对齐到工作区 HEAD，
+    // 否则库层防篡改（基线比对）会先于 git 校验驳回。
+    sqlx::query(
+        "UPDATE delivery.task_repository SET base_commit = $2 WHERE task_id = $1",
+    )
+    .bind(fx.task_id)
+    .bind(&base_commit)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE delivery.task_run_repository SET base_commit = $2 WHERE run_id = $1",
+    )
+    .bind(run_id)
+    .bind(&base_commit)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // 落一个新 commit 作为交付结果。
+    std::fs::write(worktree.join("change.md"), "changed\n").unwrap();
+    git(&worktree, &["add", "."]);
+    git(&worktree, &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "change"]);
+    let commit_sha = head_sha(&worktree);
+
+    // 执行器首报 `started` → 任务 `claimed → running`。交付迁移的合法边是
+    // `running → submitted`（D1 状态机 E1 守卫）。
+    report_progress(
+        &pool,
+        ReportProgressArgs {
+            project_id: fx.project_id,
+            run_id,
+            lease_token: lease_token.clone(),
+            lease_generation,
+            stage: "started".to_string(),
+            note: None,
+            blocked: false,
+        },
+    )
+    .await
+    .unwrap();
+
+    let options = pm_application::delivery::DeliveryOptions {
+        workspace_base: workspace_root.clone(),
+        git_timeout: std::time::Duration::from_secs(30),
+    };
+    let args = SubmitResultArgs {
         project_id: fx.project_id,
         run_id,
-        lease_token: claimed["lease_token"].as_str().unwrap().to_string(),
-            lease_generation: claimed["lease_generation"].as_i64().unwrap() as i32,
+        lease_token: lease_token.clone(),
+        lease_generation,
+        integration_status: Some("passed".to_string()),
         repositories: vec![SubmittedRepository {
-            repository_id: Uuid::new_v4(),
-            base_commit: "headsha".to_string(),
-            commit_sha: "newsha".to_string(),
-            changed_files: 12,
+            repository_id,
+            base_commit: base_commit.clone(),
+            commit_sha: commit_sha.clone(),
+            changed_files: 1,
             tests: vec![],
         }],
         summary: "done".to_string(),
-        knowledge_proposals: vec![KnowledgeProposalInput {
-            document_id: fx.document_id,
-            change_summary: "update terrain ADR".to_string(),
-        }],
-    })
-    .unwrap_err();
-    assert!(matches!(err, ToolError::Unsupported(_)));
-    let text = err.to_string();
-    assert!(text.contains(r#""implemented_in":"D4""#), "{text}");
-    assert!(text.contains(r#""schema":"draft""#), "{text}");
+        knowledge_proposals: vec![],
+    };
 
-    assert_eq!(counts(&pool).await, before_counts, "shape-first touches no table");
-    let after_task: (String, i64, Option<String>, Option<String>) = sqlx::query_as(
-        "SELECT t.status, t.revision, r.lease_owner, r.lease_token_hash \
-           FROM delivery.task t JOIN delivery.task_run r ON r.task_id = t.id WHERE t.id = $1",
+    // C84：成功提交 → 真实落库。
+    let value = submit_result_with(&pool, args.clone(), &options).await.unwrap();
+    assert_eq!(value["outcome"], "accepted");
+    assert_eq!(value["integration_status"], "passed");
+    assert_eq!(value["commit_count"], 1);
+
+    let commits: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.task_repository_commit")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(commits, 1, "the accepted submission must land a commit row");
+
+    let stored_integration: String =
+        sqlx::query_scalar("SELECT integration_status FROM delivery.task_run WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stored_integration, "passed");
+
+    let task_status: String =
+        sqlx::query_scalar("SELECT status FROM delivery.task WHERE id = $1")
+            .bind(fx.task_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(task_status, "submitted", "the task must advance to submitted");
+
+    let submitted_audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log WHERE action = 'delivery.submitted'",
     )
-    .bind(fx.task_id)
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(after_task, before_task, "submit_result did not mutate task/lease state");
+    assert_eq!(submitted_audits, 1);
+
+    // C85：重复请求 → 幂等返回原结果，不产生第二份审计。
+    let replay = submit_result_with(&pool, args, &options).await.unwrap();
+    assert_eq!(replay["outcome"], "accepted");
+    assert_eq!(replay["commit_count"], 1);
+    let commits_after: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.task_repository_commit")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(commits_after, 1, "the replay must not land a second commit row");
+    let audits_after: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log WHERE action = 'delivery.submitted'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audits_after, 1, "the replay must not produce a second audit");
 }
 
 #[sqlx::test(migrations = "../../migrations")]

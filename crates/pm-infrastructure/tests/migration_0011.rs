@@ -72,10 +72,14 @@ async fn old_status_constraint_is_replaced_not_stacked(pool: PgPool) {
     let t = seed_task(&pool, p).await;
     // 若旧约束未被 DROP，则它与新约束 AND，claimed 会被拒——上面的插入成功即证明已被替换。
     insert_run(&pool, p, t, 1, "claimed").await.unwrap();
+    // 谓词按「约束落在 status 列上」限定，避免把别的列的 CHECK（如 0022 的
+    // integration_status）误计入。
     let defs: Vec<String> = sqlx::query_scalar(
-        "SELECT pg_get_constraintdef(oid) FROM pg_constraint \
-          WHERE conrelid = 'delivery.task_run'::regclass AND contype = 'c' \
-            AND pg_get_constraintdef(oid) LIKE '%status%'",
+        "SELECT pg_get_constraintdef(c.oid) FROM pg_constraint c \
+          WHERE c.conrelid = 'delivery.task_run'::regclass AND c.contype = 'c' \
+            AND c.conkey = ARRAY[(SELECT attnum FROM pg_attribute \
+                                  WHERE attrelid = 'delivery.task_run'::regclass \
+                                    AND attname = 'status')]",
     )
     .fetch_all(&pool)
     .await

@@ -534,7 +534,8 @@ pub struct KnowledgeProposalInput {
     pub change_summary: String,
 }
 
-/// Arguments of `pm_submit_result`：形状冻结为 **draft**，D4 定稿并落库。
+/// Arguments of `pm_submit_result`：**D4 定稿**（在 D2 draft 形状上只加
+/// `integration_status`）。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct SubmitResultArgs {
     pub project_id: Uuid,
@@ -542,6 +543,9 @@ pub struct SubmitResultArgs {
     pub lease_token: String,
     /// T-032 T2：执行权世代（D4 落库时经 `accept_executor_result` 双验证）。
     pub lease_generation: i32,
+    /// Run 级集成事实（`passed` / `failed` / `not_run`）；缺省 `not_run`。
+    #[serde(default)]
+    pub integration_status: Option<String>,
     pub repositories: Vec<SubmittedRepository>,
     pub summary: String,
     pub knowledge_proposals: Vec<KnowledgeProposalInput>,
@@ -648,10 +652,96 @@ pub async fn report_progress(pool: &PgPool, args: ReportProgressArgs) -> Result<
     }))
 }
 
-/// shape-first（D2 §4.4）：**不触库**——不校验 token、不查询任何表。
-/// 形状降级为 draft（D4 拥有定稿权），因此直接返回 `Unsupported`。
-pub fn submit_result(_args: SubmitResultArgs) -> Result<Value, ToolError> {
-    Err(ToolError::Unsupported(
-        r#"{"implemented_in":"D4","schema":"draft"}"#.to_string(),
-    ))
+/// D4 定稿实现：真实落库（交付段落两表 + Run 级集成事实 + 任务状态迁移）。
+///
+/// 错误映射（设计稿 §4.1 九项错误码）：
+/// - `lease_invalid` / `lease_expired` → `Forbidden` / `LeaseExpired`；
+/// - 其余业务驳回（`readonly_repo_commit` / `baseline_mismatch` /
+///   `commit_not_descendant` / `repo_not_in_contract` / `submit_conflict` /
+///   `integration_status_invalid` / `invalid_request`）→ `Conflict`（409 语义），
+///   错误文本带机器可读错误码。
+///
+/// **业务驳回不是异常**：管线把驳回作为 `SubmitOutcome::Rejected` 返回（审计已
+/// 持久），工具层照样回 200 并带上 `outcome: "rejected"` 与驳回原因——调用方
+/// 据此知道「没有交付」而不是「调用失败」。
+pub async fn submit_result(pool: &PgPool, args: SubmitResultArgs) -> Result<Value, ToolError> {
+    submit_result_with(pool, args, &pm_application::delivery::DeliveryOptions::from_env()).await
+}
+
+/// 同 [`submit_result`]，但可注入工作区根与 git 超时（测试用——避免靠环境变量
+/// 传路径，那会与同进程内的并行用例抢同一个全局变量）。
+pub async fn submit_result_with(
+    pool: &PgPool,
+    args: SubmitResultArgs,
+    options: &pm_application::delivery::DeliveryOptions,
+) -> Result<Value, ToolError> {
+    let request = pm_application::delivery::SubmitResultRequest {
+        project_id: args.project_id,
+        run_id: args.run_id,
+        lease_token: args.lease_token,
+        lease_generation: args.lease_generation,
+        integration_status: args.integration_status,
+        repositories: args
+            .repositories
+            .into_iter()
+            .map(|repo| pm_application::delivery::SubmittedRepository {
+                repository_id: repo.repository_id,
+                base_commit: repo.base_commit,
+                commit_sha: repo.commit_sha,
+                changed_files: repo.changed_files,
+                tests: repo
+                    .tests
+                    .into_iter()
+                    .map(|test| pm_application::delivery::SubmittedTest {
+                        name: test.name,
+                        passed: test.passed,
+                        evidence_ref: test.evidence_ref,
+                    })
+                    .collect(),
+            })
+            .collect(),
+        summary: args.summary,
+        knowledge_proposals: args
+            .knowledge_proposals
+            .into_iter()
+            .map(|proposal| pm_application::delivery::KnowledgeProposalInput {
+                document_id: proposal.document_id,
+                change_summary: proposal.change_summary,
+            })
+            .collect(),
+    };
+
+    let outcome = pm_application::delivery::submit_delivery_with(pool, &request, options)
+        .await
+        .map_err(map_delivery_error)?;
+
+    Ok(match outcome {
+        pm_application::delivery::SubmitOutcome::Accepted { manifest } => json!({
+            "outcome": "accepted",
+            "run_id": manifest.run_id,
+            "task_id": manifest.task_id,
+            "integration_status": manifest.integration_status,
+            "commit_count": manifest.commit_count,
+            "knowledge_proposal_count": manifest.knowledge_proposal_count,
+            "repositories": manifest.repositories,
+        }),
+        pm_application::delivery::SubmitOutcome::Rejected { rejection } => json!({
+            "outcome": "rejected",
+            "code": rejection.code,
+            "message": rejection.message,
+            "submitted_repository_count": rejection.submitted_repository_count,
+            "knowledge_proposal_count": rejection.knowledge_proposal_count,
+        }),
+    })
+}
+
+/// D4 错误码 → MCP 工具错误。
+fn map_delivery_error(err: pm_application::delivery::DeliveryError) -> ToolError {
+    use pm_application::delivery::DeliveryError as E;
+    match err {
+        E::LeaseInvalid(message) => ToolError::Forbidden(message),
+        E::LeaseExpired(message) => ToolError::LeaseExpired(message),
+        E::Db(error) => ToolError::Db(error),
+        other => ToolError::Conflict(format!("{}: {other}", other.code())),
+    }
 }

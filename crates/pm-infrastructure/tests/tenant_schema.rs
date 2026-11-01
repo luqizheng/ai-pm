@@ -6,12 +6,13 @@
 
 use sqlx::{PgPool, Row};
 
-/// ADR-0001 §3.4 + 本设计稿的四类划分：40 张（T-024 新增 `task_dependency`）。
+/// ADR-0001 §3.4 + 本设计稿的四类划分：41 张（T-024 新增 `task_dependency`；
+/// T-041 新增 `task_repository_commit`）。
 const TENANT_TABLES: &[(&str, &str)] = &[
     // A 根表（2）
     ("core", "customer"),
     ("core", "project"),
-    // B 直挂 project（34）
+    // B 直挂 project（35）
     ("core", "project_member"),
     ("delivery", "requirement"),
     ("delivery", "requirement_revision"),
@@ -24,6 +25,7 @@ const TENANT_TABLES: &[(&str, &str)] = &[
     ("delivery", "task_policy_override"),
     ("delivery", "task_repository"),
     ("delivery", "task_run_repository"),
+    ("delivery", "task_repository_commit"),
     ("delivery", "task_acceptance_criterion"),
     ("delivery", "task_knowledge_ref"),
     ("delivery", "task_dependency"),

@@ -138,6 +138,8 @@ fn build_router(
         .merge(crate::tenant_members::router())
         // 任务执行 Run（AI 执行中心数据源；见 workspace-execution-artifacts plan）。
         .merge(crate::pm_runs::router())
+        // 交付清单（Slice D4：基线 → 结果 commit → 证据；只读）。
+        .merge(crate::pm_delivery::router())
         // 产物（需求修订）列表——AI 产物验收中心数据源。
         .merge(crate::pm_artifacts::router())
         // 全局模型供应商配置（deepseek/openai/glm/minimax/ollama）。
