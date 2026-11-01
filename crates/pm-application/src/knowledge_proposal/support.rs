@@ -1,0 +1,51 @@
+use super::*;
+use serde::Serialize;use sqlx::{PgPool, Postgres, Row, Transaction};use uuid::Uuid;use crate::knowledge::{self, KnowledgeError, KnowledgeRoot};use crate::knowledge_quality::{self, GateFailure, GateInput, QualityGateResult};
+
+pub(crate) async fn require_human(pool: &PgPool, principal_id: Uuid) -> Result<(), KnowledgeError> {
+    let kind: Option<String> =
+        sqlx::query_scalar("SELECT kind FROM core.principal WHERE id = $1")
+            .bind(principal_id)
+            .fetch_optional(pool)
+            .await?;
+    match kind.as_deref() {
+        Some("human") => Ok(()),
+        Some(other) => Err(KnowledgeError::Conflict(format!(
+            "principal {principal_id} is `{other}`, a human confirmation is required"
+        ))),
+        None => Err(KnowledgeError::NotFound),
+    }
+}
+
+
+pub(crate) async fn audit(
+    tx: &mut Transaction<'_, Postgres>,
+    project_id: Uuid,
+    actor_id: Uuid,
+    action: &str,
+    target_type: &str,
+    target_id: Uuid,
+    after_data: serde_json::Value,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO governance.audit_log \
+         (project_id, actor_id, action, target_type, target_id, after_data, source_kind, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, 'knowledge_v2', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
+    )
+    .bind(project_id)
+    .bind(actor_id)
+    .bind(action)
+    .bind(target_type)
+    .bind(target_id)
+    .bind(after_data)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+
+/// 供索引层复用的质量门结果序列化。
+pub fn gates_as_json(result: &QualityGateResult) -> serde_json::Value {
+    serde_json::to_value(result).unwrap_or_default()
+}
+
