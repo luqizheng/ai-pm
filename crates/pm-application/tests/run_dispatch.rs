@@ -473,7 +473,7 @@ async fn outcome_stays_null_until_a_terminal_result(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../../migrations")]
-async fn policy_snapshot_records_the_minimal_fields(pool: PgPool) {
+async fn policy_snapshot_records_the_composed_policy(pool: PgPool) {
     let _fx = seed(&pool, "RD-T24", true).await;
     let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
         .await
@@ -485,12 +485,16 @@ async fn policy_snapshot_records_the_minimal_fields(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(snap["snapshot_scope"], serde_json::json!("d1-minimal"));
+    assert_eq!(snap["snapshot_scope"], serde_json::json!("composed-v1"));
+    assert_eq!(snap["policy_schema"], serde_json::json!("composed-v1"));
     assert_eq!(snap["approval_required"], serde_json::json!(false));
     assert_eq!(snap["execution_enabled"], serde_json::json!(true));
     assert!(snap["captured_at"].is_string());
     assert!(snap["repository_baselines"].is_array());
-    assert!(snap.get("policy_version").is_some());
+    assert_eq!(snap["effective_policy"]["auto_accept"], serde_json::json!(true));
+    assert_eq!(snap["effective_policy"]["additional_checks"], serde_json::json!([]));
+    assert_eq!(snap["policy_version"].as_str().unwrap().len(), 12);
+    assert_eq!(snap["policy_hash"].as_str().unwrap().len(), 64);
     assert!(snap.get("approval_status").is_some());
 }
 

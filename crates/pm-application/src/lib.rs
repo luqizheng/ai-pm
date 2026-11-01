@@ -14,6 +14,7 @@ pub mod knowledge_reference;
 pub mod llm_config;
 pub mod outbox;
 pub mod pm_write;
+pub mod policy_composition;
 pub mod policy_engine;
 pub mod project_import;
 pub mod read;

@@ -18,6 +18,7 @@ use pm_domain::TaskStatus;
 use crate::command_executor::{
     apply_task_transition, system_context, ExecutionContext, TransitionFacts,
 };
+use crate::policy_composition::{EffectivePolicy, PolicyLayer, PolicyLayers, POLICY_SCHEMA};
 
 /// Run 生命周期状态（S4：独立于 [`TaskStatus`] 的枚举，避免同名 `claimed` 混用）。
 pub mod run_status {
@@ -864,15 +865,19 @@ async fn claim_core(
 
     let baselines = snapshot_repositories(&mut tx, run_id, project_id, task_id).await?;
 
-    // S3：D1 最小 policy_snapshot（兼容 0010 预置列；完整策略合成留策略阶段）。
+    // D2.1：完整策略快照（§15.5）。`policy_hash`/`policy_version` 为内容寻址，
+    // `execution_enabled` 由策略门与审批证据推导，不再是字面量。
     let policy_snapshot = serde_json::json!({
-        "policy_version": serde_json::Value::Null,
+        "policy_schema": POLICY_SCHEMA,
+        "policy_version": assessment.policy_version,
+        "policy_hash": assessment.policy_hash,
         "captured_at": chrono::Utc::now().to_rfc3339(),
         "approval_required": assessment.approval_required,
         "approval_status": assessment.approval_status,
-        "execution_enabled": true,
+        "execution_enabled": assessment.execution_enabled,
         "repository_baselines": baselines.clone(),
-        "snapshot_scope": "d1-minimal",
+        "snapshot_scope": POLICY_SCHEMA,
+        "effective_policy": assessment.effective_policy.to_snapshot_json(),
     });
     sqlx::query("UPDATE delivery.task_run SET policy_snapshot = $2 WHERE id = $1")
         .bind(run_id)
@@ -953,57 +958,97 @@ pub async fn apply_transition(
     Ok(())
 }
 
-/// 有效审批评估（R5）：**多级合成** organization → project → task_type → task。
-/// 任一层级要求人工审批即视为必须审批；任务级 `false` **不得**放宽高层的 `true`。
-/// 需要审批时必须存在 `approved` 证据；未决（pending）或缺证据（unknown）都**不得
-/// 默认放行**。各层级读取失败由 `Err` 上抛，调用方拒绝领取。
-async fn assess_approval(
+/// 读取单一作用域层的策略声明；缺行返回 `None`（该层不表态）。
+async fn load_scope_layer(
     tx: &mut Transaction<'_, Postgres>,
-    project_id: Uuid,
+    scope: &str,
+    scope_key: &str,
+) -> Result<Option<PolicyLayer>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT auto_accept, auto_merge, auto_publish_knowledge, \
+                require_human_approval, additional_checks \
+           FROM delivery.policy_scope \
+          WHERE scope = $1 AND scope_key = $2",
+    )
+    .bind(scope)
+    .bind(scope_key)
+    .fetch_optional(&mut **tx)
+    .await?;
+    row.map(|row| {
+        Ok(PolicyLayer {
+            auto_accept: row.get("auto_accept"),
+            auto_merge: row.get("auto_merge"),
+            auto_publish_knowledge: row.get("auto_publish_knowledge"),
+            require_human_approval: row.get("require_human_approval"),
+            additional_checks: decode_checks(row.get("additional_checks"))?,
+        })
+    })
+    .transpose()
+}
+
+/// 任务级覆盖；缺行返回 `None`，`NULL` 列由 `PolicyLayer` 逐字段表达。
+async fn load_task_layer(
+    tx: &mut Transaction<'_, Postgres>,
     task_id: Uuid,
-    task_type: Option<&str>,
-) -> Result<(bool, &'static str, bool), sqlx::Error> {
-    let organization: Option<bool> = sqlx::query_scalar(
-        "SELECT require_human_approval FROM delivery.policy_scope \
-          WHERE scope = 'organization' AND scope_key = '*'",
-    )
-    .fetch_optional(&mut **tx)
-    .await?;
-    let project: Option<bool> = sqlx::query_scalar(
-        "SELECT require_human_approval FROM delivery.policy_scope \
-          WHERE scope = 'project' AND scope_key = $1",
-    )
-    .bind(project_id.to_string())
-    .fetch_optional(&mut **tx)
-    .await?;
-    let task_type_level: Option<bool> = match task_type {
-        Some(kind) => {
-            sqlx::query_scalar(
-                "SELECT require_human_approval FROM delivery.policy_scope \
-                  WHERE scope = 'task_type' AND scope_key = $1",
-            )
-            .bind(kind)
-            .fetch_optional(&mut **tx)
-            .await?
-        }
-        None => None,
-    };
-    // 任务级（既有 override；NULL/缺行都视为该层不表态）。
-    let task_level: Option<bool> = sqlx::query_scalar(
-        "SELECT coalesce(require_human_approval, false) FROM delivery.task_policy_override \
+) -> Result<Option<PolicyLayer>, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT auto_accept, auto_merge, auto_publish_knowledge, \
+                require_human_approval, additional_checks \
+           FROM delivery.task_policy_override \
           WHERE task_id = $1",
     )
     .bind(task_id)
     .fetch_optional(&mut **tx)
     .await?;
+    row.map(|row| {
+        Ok(PolicyLayer {
+            auto_accept: row.get("auto_accept"),
+            auto_merge: row.get("auto_merge"),
+            auto_publish_knowledge: row.get("auto_publish_knowledge"),
+            require_human_approval: row.get("require_human_approval"),
+            additional_checks: decode_checks(row.get("additional_checks"))?,
+        })
+    })
+    .transpose()
+}
 
-    // 「更严者胜」：任一层级为 true 即要求审批（低层无法放宽高层）。
-    let required = [organization, project, task_type_level, task_level]
-        .into_iter()
-        .flatten()
-        .any(|value| value);
+/// 四层策略读取（§15.4）：organization → project → task_type → task。
+async fn load_policy_layers(
+    tx: &mut Transaction<'_, Postgres>,
+    project_id: Uuid,
+    task_id: Uuid,
+    task_type: Option<&str>,
+) -> Result<PolicyLayers, sqlx::Error> {
+    let organization = load_scope_layer(tx, "organization", "*").await?;
+    let project = load_scope_layer(tx, "project", &project_id.to_string()).await?;
+    let task_type_layer = match task_type {
+        Some(kind) => load_scope_layer(tx, "task_type", kind).await?,
+        None => None,
+    };
+    let task = load_task_layer(tx, task_id).await?;
+    Ok(PolicyLayers {
+        organization,
+        project,
+        task_type: task_type_layer,
+        task,
+    })
+}
+
+/// `additional_checks` 必须是数组；脏数据上抛为策略读取失败，**不得静默忽略**。
+fn decode_checks(value: serde_json::Value) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+    serde_json::from_value(value).map_err(|error| sqlx::Error::Decode(Box::new(error)))
+}
+
+/// 有效审批评估（R5）：`required` 已由四层合成给出，因此任务级 `false`
+/// 无法放宽高层 `true`。需要审批时必须存在 `approved` 证据；未决（pending）
+/// 或缺证据（unknown）都**不得**默认放行。
+async fn assess_approval(
+    tx: &mut Transaction<'_, Postgres>,
+    task_id: Uuid,
+    required: bool,
+) -> Result<(&'static str, bool), sqlx::Error> {
     if !required {
-        return Ok((false, "approved", true));
+        return Ok(("approved", true));
     }
     let approved: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM ai.change_proposal cp \
@@ -1014,7 +1059,7 @@ async fn assess_approval(
     .fetch_one(&mut **tx)
     .await?;
     if approved > 0 {
-        return Ok((true, "approved", true));
+        return Ok(("approved", true));
     }
     let pending: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM ai.change_proposal cp \
@@ -1025,16 +1070,21 @@ async fn assess_approval(
     .fetch_one(&mut **tx)
     .await?;
     if pending > 0 {
-        return Ok((true, "pending", false));
+        return Ok(("pending", false));
     }
-    Ok((true, "unknown", false))
+    Ok(("unknown", false))
 }
-
-/// 可领取性判定的结果：`deny` 非空表示拒绝；审批字段供 policy_snapshot 记录。
+        /// 可领取性判定的结果：`deny` 非空表示拒绝；策略字段供 `policy_snapshot` 记录。
 pub struct ClaimAssessment {
     pub deny: Option<&'static str>,
     pub approval_required: bool,
     pub approval_status: &'static str,
+    /// 策略门 + 审批证据的最终可执行判定；**不是**字面量，也不等同于 `auto_accept`
+    /// （后者只决定验收是否自动化，不决定本次能否启动）。
+    pub execution_enabled: bool,
+    pub policy_version: String,
+    pub policy_hash: String,
+    pub effective_policy: EffectivePolicy,
 }
 
 /// 可领取性判定（§5.6 清单，全部通过才领取）。
@@ -1045,19 +1095,27 @@ async fn claimability_assessment(
     retry_exhausted: bool,
     task_type: Option<&str>,
 ) -> Result<ClaimAssessment, sqlx::Error> {
+    let layers = load_policy_layers(tx, project_id, task_id, task_type).await?;
+    let effective = EffectivePolicy::compose(&layers);
+    let (approval_status, execution_enabled) =
+        assess_approval(tx, task_id, effective.require_human_approval).await?;
+    let policy_hash = effective.content_hash();
+    let policy_version = policy_hash[..12].to_string();
+
     let mut assessment = ClaimAssessment {
         deny: None,
-        approval_required: false,
-        approval_status: "approved",
+        approval_required: effective.require_human_approval,
+        approval_status,
+        execution_enabled,
+        policy_version,
+        policy_hash,
+        effective_policy: effective,
     };
     if retry_exhausted {
         assessment.deny = Some("retry_exhausted");
         return Ok(assessment);
     }
-    let (required, status, enabled) = assess_approval(tx, project_id, task_id, task_type).await?;
-    assessment.approval_required = required;
-    assessment.approval_status = status;
-    if !enabled {
+    if !assessment.execution_enabled {
         assessment.deny = Some("policy_requires_approval");
         return Ok(assessment);
     }
