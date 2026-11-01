@@ -447,8 +447,19 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 - **代码注释修正**：`crates/pm-application/src/bootstrap.rs` 模块头写「three `core.principal` / three `core.project_member`」，实际 **5 / 5**（`bootstrap.rs:218-222`）；注释改正。纯注释，零行为变化。
 - **实测**：`cargo test --workspace` 退出码 0 —— **64 个 `test result: ok`、401 passed、0 failed、0 ignored、0 panicked**。
 
-### T-022 可见性收口（按 `project_member` 过滤）—— 2026-11-01 完成
+### T-041 实施 D4（多仓库交付与结果回写）—— 2026-11-02 完成
 
+- **提交**：`6bbc906` feat(delivery)（16 文件：迁移 0022 + `pm-application::delivery` 三模块 + `git_access` 通道 + `pm_submit_result` 定稿 + 只读接口 + 27 条用例）→ `8b43eca` docs(d4)（设计稿 §9 实施记录 + 迁移台账 + todo 勾选）→ `chore(todo)`（归档）→ `chore(memory)`，四者分开提交（§0.2 第 5 条：一任务一 commit）。
+- **目标**：D4 证明「AI 实际交付了什么」——逐仓落 commit + 证据的事实层，任务最终裁决留给 D5。
+- **依据**：`docs/ai-pm-slice-d4-delivery-v1.md` V1.1（已过稿，6 项裁定 + 评审收编 4×P0 / 4×P1）。
+- **做**：迁移 `0022_delivery_manifest.sql`（`task_run` 补 `UNIQUE (project_id, id)` / `integration_status` / `request_fingerprint`；建 `delivery.task_repository_commit`；建视图 `v_task_delivery_manifest`）；`pm-application::delivery` 单事务管线 ⓪~⑦；`delivery/git_verify.rs` 四项 git 校验；`delivery/manifest.rs` 清单读模型；`pm_submit_result` 定稿（去 `Unsupported`、只加 `integration_status`）；`GET /v1/pm/tasks/{task_id}/delivery` 只读接口；tenant_schema 收编新表（40 → 41）。
+- **不做**：不做自动 merge / 推远端；不做审批流改造；不引入新的交付状态机；不做 Run 物理删除。
+- **实施期裁定（9 项，详见设计稿 §9.2）**：① `task_repository_commit → task_repository` 组合外键**不成立**（后者主键含 `task_id`，本表无此列），仓归属改由两条 `(project_id, …)` 组合外键保证；② 事务所有权按值传给收尾函数（`finish_rejected` 自行 COMMIT），杜绝半提交路径；③ **可写仓漏报不驳回**——D4 只记事实，视图显示 `partial`，裁决归 D5；④ 落库 `commit_sha` 取**工作区实际 HEAD**，执行端声明只做一致性比对；⑤ `changed_files` 以 Git 现算为准；⑥ 审计 actor 回退到平台 service principal；⑦ 指纹落 Run 级列（覆盖整单）；⑧ 业务驳回不是异常（工具层回 200 + `outcome: "rejected"` + 机器可读 `code`）；⑨ git 失败与超时统一走 `commit_not_descendant`，不扩张错误码表。
+- **验收**：`docs/ai-pm-slice-d4-delivery-v1.md` §6 的 C71–C97（27 条）；实测 `cargo test --workspace` 退出码 0 —— **74 个 `test result: ok`、0 failed**；`cargo check --workspace --all-targets` 0 error / 0 warning；D1/D2/D3 既有用例不回归。
+- **关键结论**：① 幂等识别**必须在管线最前部**（⓪，先于 fencing）——成功提交后 Run 已非活跃，幂等若放在 UNIQUE 冲突分支就永远不可达；② 校验范围 = **契约仓全集**而非上报集合（否则漏报只读仓即绕过）；③ 三层边界不可越：D3 证明执行过什么、D4 证明交付了什么、D5 才判断是否满足要求；④ `submitted` ≠ 交付完整 ≠ 任务完成。
+- **遗留**：`integration_status` 的判读（何时算失败/完成）、`partial` 的裁决、review run 的 `run_kind` 划分 → 全部归 T-043（D5）；交付验收前端页 → T-070；`DeliverySubmitted` 事件的消费端 → T-061。
+
+### T-022 可见性收口（按 `project_member` 过滤）—— 2026-11-01 完成
 - **提交**：feat(api) + docs(todo) + chore(memory)，三者分开提交。
 - **用户裁定**：① 建项时把调用者写为 `project_member(owner)`（否则新项目对创建者不可见）；② 零项目客户对同租户活跃成员可见（待归类池，不阻塞「先建客户→再建项目」）；③ 收口范围 = 全部 `project_id` 维度读端点。
 - **做**：
