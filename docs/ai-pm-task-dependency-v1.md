@@ -1,6 +1,6 @@
 # Task 依赖与解锁 v1（T-023 设计稿）
 
-> 状态：**设计稿，待用户过稿**（过稿后才可实施 T-024）
+> 状态：**已实施（T-024 交付，见 §10）**
 > 日期：2026-11-01
 > 一句话：用独立边表 `delivery.task_dependency` 表达「任务 → 前置任务」，写边时用递归 CTE 拒绝环，上游进入终态时在同一事务里解锁下游并投递 `TaskReady`。
 > 上位依据：`target.md` §P1「Task 依赖」、`docs/ai-pm-task-state-machine-v1.md`（13 态与 B3 `Blocked→Ready`）、`docs/ai-pm-slice-d-execution-pipeline-v1.md`（D1 领取与 outbox）、`todo.md` T-023。
@@ -264,3 +264,50 @@ stateDiagram-v2
 - 不做跨项目依赖（D3）。
 - 不改 13 态状态机取值；不新增任务状态。
 - 不做「依赖变更后自动重排 Run」——领取时的动态判定已经覆盖。
+---
+
+## 10. 实施记录（T-024 交付，2026-11-01）
+
+### 10.1 交付物
+
+| 落点 | 内容 |
+|---|---|
+| `migrations/0021_task_dependency.sql` | §3.1 DDL 原样落地（边表 + 双复合外键 + `(tenant_id,id)` 唯一键 + upstream 索引） |
+| `crates/pm-application/src/task_dependency.rs` | `dependencies_satisfied`（唯一判定）、`add_dependency`、`remove_dependency`、`list_dependencies`、`unlock_downstream` / `unlock_task_if_ready`、常量 `SATISFIED_STATUSES(_SQL)`、`unlocks_downstream` |
+| `command_executor/transition.rs` | `apply_task_transition` 末尾：终态 ∈ D5 集合时同事务 `unlock_downstream`（`Box::pin` 打断 async 互递归） |
+| `run_dispatch/claim.rs` | `claim_core` 在「任务必须 ready」判定之后、策略门之前插入依赖判定；未满足 → `requeue_with_backoff("dependency_unmet")` + `ClaimKind::Skipped` |
+| `pm_write/task.rs` | UI 直写终态的历史路径（`update_task` 的裸 UPDATE）同样接入解锁（见 §10.2 偏差 1） |
+| `apps/pm-api/src/task_dependencies.rs` | §4.1 三端点 + `project_in_tenant` / `require_project_visible` 前置（T-022）+ 审计经 `pm_write::append_audit_with_after` |
+| `pm-infrastructure/tests/tenant_schema.rs` | `task_dependency` 收编进租户表清单（39 → 40，XT-3 机械断言覆盖） |
+
+### 10.2 与设计稿的偏差（实施期裁定，均有依据）
+
+1. **`pm_write::update_task` 也接入解锁**：设计稿 §5.3 只写了「唯一受守卫入口 `apply_task_transition`」，但实测 UI 的 `PATCH /v1/pm/tasks/{id}` 走的是 `pm_write::update_task` 的**历史直写路径**（不走受守卫入口）。若不接入，「人在 UI 上完成任务」不会解锁下游，语义出现双源。解锁函数与命令通道路径共用同一个 `unlock_downstream`，不引入第二套谓词。
+2. **Model A 遇到依赖未满足**：设计稿 §5.2 只规定了 Model B 的退避语义。Model A（指定任务领取）沿用 D1 既有「前置失败回滚不退避」约定：`rollback` + `RunDispatchError::TaskNotReady("dependency_unmet")`，不改变无人值守队列的节奏。
+3. **`superseded` 触发暂无端到端写入方**：应用层尚无取代命令（`TransitionInput.supersede` 恒为 `None`，`grep SupersedeIntent` 无命中），C53 的 `superseded` 分支无法端到端驱动。以 `cancelled` 端到端验证 + D5 集合单元测试（`unlocks_downstream` 覆盖 `completed/cancelled/superseded`、排除 `failed`）兜底；取代命令落地时无需再改本切片。
+
+### 10.3 验收矩阵 → 用例映射
+
+| 场景 | 用例 |
+|---|---|
+| C43 建边 + 双向查询 + 审计 | `pm-api/tests/task_dependencies.rs::c43_add_edge_lists_both_directions_and_audits` |
+| C44 自依赖 409 | `::c44_self_dependency_is_rejected` |
+| C45 两跳成环 409 | `::c45_two_hop_cycle_is_rejected` |
+| C46 跨项目 409 | `::c46_cross_project_dependency_is_rejected` |
+| C47 重复边 409 | `::c47_duplicate_edge_is_rejected` |
+| C48 非待办状态 409 | `::c48_ready_task_cannot_gain_an_edge` |
+| C49 前置未满足 → Skip | `pm-application/tests/task_dependency.rs::c49_unmet_dependency_requeues_the_run_without_failure` |
+| C50 前置满足可领取 | `::c50_satisfied_dependency_allows_claim` |
+| C51 终态解锁 + TaskReady + 领取 | `::c51_terminal_upstream_unlocks_blocked_downstream` |
+| C52 多上游只完成一个不解锁 | `::c52_one_of_two_upstreams_completed_keeps_downstream_blocked` |
+| C53 cancelled 解锁（superseded 见 §10.2 偏差 3） | `::c53_cancelled_upstream_also_unlocks` + `::d5_satisfied_set_excludes_failed` |
+| C54 重复 TaskReady 单 Run | `::c54_repeated_task_ready_consumption_creates_a_single_run` |
+| C55 加已满足边立即解锁 | `::c55_adding_an_already_satisfied_edge_unlocks_immediately` |
+| C56 删边解锁 | `::c56_removing_an_edge_unlocks_the_downstream` |
+| C57 非成员 404 | `pm-api/tests/task_dependencies.rs::c57_non_member_gets_404` |
+| C58 事务回滚无残留 | `pm-application/tests/task_dependency.rs::c58_rejected_edge_leaves_no_partial_rows_or_audit` |
+
+### 10.4 实测
+
+- `cargo test --workspace`（`DATABASE_URL=postgres://…5433/aipm`）：退出码 0 —— **70 个 `test result: ok`、441 passed、0 failed**（新增：pm-application `task_dependency` 10 例、pm-api `task_dependencies` 8 例 + 1 例单元测试）。
+- `cargo check --workspace --all-targets`：0 error 0 warning。
