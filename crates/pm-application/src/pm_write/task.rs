@@ -1,5 +1,7 @@
 use super::*;
 
+use pm_domain::TaskStatus;
+
 /// 创建任务：status 固定 draft、revision=1、priority 缺省 normal。
 pub async fn create_task(
     pool: &PgPool,
@@ -64,6 +66,8 @@ pub async fn update_task(
     if !TASK_STATUSES.contains(&status) {
         return Err(PmWriteError::Validation("invalid status"));
     }
+    let new_status =
+        TaskStatus::from_str(status).ok_or(PmWriteError::Validation("invalid status"))?;
     let priority = req.priority.as_deref().unwrap_or_default();
     if !TASK_PRIORITIES.contains(&priority) {
         return Err(PmWriteError::Validation("invalid priority"));
@@ -78,8 +82,23 @@ pub async fn update_task(
         }
     }
     let mut tx = pool.begin().await?;
+    // T-025 §五（C68）：UI 直写**终态**同样是依赖图的写者——与 `add_dependency` /
+    // `remove_dependency` / `apply_task_transition` 共用同一把项目级图锁（键由
+    // project_id 派生），且取锁必须先于事务内任何行锁，否则「并发建边 vs 直写完成」
+    // 仍会漏解锁（P0-2 在同一条路径复发）。非终态直写不取图锁，保持热路径零开销。
+    // 预读 project_id 只为拿到锁键；行消失时下面的 `FOR UPDATE` 返回 NotFound。
+    if crate::task_dependency::unlocks_downstream(new_status) {
+        let graph_key: Uuid =
+            sqlx::query_scalar("SELECT project_id FROM delivery.task WHERE id = $1")
+                .bind(task_id)
+                .fetch_optional(&mut *tx)
+                .await?
+                .ok_or(PmWriteError::NotFound("not found"))?;
+        crate::task_dependency::acquire_project_graph_lock(&mut tx, graph_key).await?;
+    }
+    // 乐观锁校验必须与 UPDATE 原子：原实现为无锁读 → 两个 PATCH 可同时通过校验。
     let (project_id, current_revision): (Uuid, i64) =
-        sqlx::query_as("SELECT project_id, revision FROM delivery.task WHERE id = $1")
+        sqlx::query_as("SELECT project_id, revision FROM delivery.task WHERE id = $1 FOR UPDATE")
             .bind(task_id)
             .fetch_optional(&mut *tx)
             .await?
@@ -152,8 +171,9 @@ pub async fn update_task(
         )
         .await?;
     }
-    // T-024 D4：UI 直写终态的路径同样触发下游解锁（与命令通道共用同一解锁函数）。
-    if crate::task_dependency::SATISFIED_STATUSES.contains(&status) {
+    // T-024 D4 / T-025 §五：UI 直写终态的路径同样触发下游解锁（与命令通道共用同一
+    // 解锁函数与同一终态集合定义）。
+    if crate::task_dependency::unlocks_downstream(new_status) {
         crate::task_dependency::unlock_downstream(&mut tx, project_id, task_id).await?;
     }
     tx.commit().await?;

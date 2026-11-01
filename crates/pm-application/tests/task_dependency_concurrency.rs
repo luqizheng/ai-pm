@@ -17,6 +17,7 @@ use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
 use pm_application::command_executor::{
     ActorKind, CommandSource, ExecutionContext, PgCommandExecutor,
 };
+use pm_application::pm_write::{UpdateTaskRequest, update_task};
 use pm_application::task_dependency::{DependencyError, add_dependency, remove_dependency};
 use pm_application::PolicyEngine;
 use pm_domain::{ProjectCommand, SYSTEM_TENANT, TaskStatus};
@@ -410,4 +411,117 @@ async fn c65_edge_removal_racing_with_upstream_completion_still_unlocks(pool: Pg
             );
         }
     }
+}
+
+// ------------------------------------------------- C68 / UI 直写路径的图锁覆盖
+
+/// UI 直写终态（`pm_write::update_task`）的最小请求：只改 status + revision。
+async fn ui_complete(pool: &PgPool, task_id: Uuid, actor_id: Uuid, revision: i64) {
+    update_task(
+        pool,
+        task_id,
+        UpdateTaskRequest {
+            revision: Some(revision),
+            title: Some("ui write".to_string()),
+            description: None,
+            status: Some("completed".to_string()),
+            priority: Some("normal".to_string()),
+            assignee_id: None,
+            goal: None,
+            constraints: None,
+            deliverables: None,
+            acceptance_criteria: None,
+            knowledge_refs: None,
+        },
+        &AuditActor::principal(actor_id),
+    )
+    .await
+    .expect("the UI direct write must succeed");
+}
+
+/// C68（T-025 §五）：UI 直写终态必须触发与命令通道一致的依赖解锁副作用。
+#[sqlx::test(migrations = "../../migrations")]
+async fn c68_ui_direct_write_to_terminal_unlocks_downstream(pool: PgPool) {
+    let fx = seed_project(&pool, "TDC68").await;
+    let upstream = seed_task(&pool, fx.project_id, "reviewing").await;
+    let downstream = seed_task(&pool, fx.project_id, "blocked").await;
+    add_dependency(&pool, downstream, upstream, &AuditActor::principal(fx.actor_id))
+        .await
+        .unwrap();
+
+    ui_complete(&pool, upstream, fx.actor_id, 1).await;
+
+    assert_eq!(task_status(&pool, upstream).await, "completed");
+    assert_eq!(task_status(&pool, downstream).await, "ready");
+    assert_eq!(
+        task_ready_events(&pool, fx.project_id, downstream).await,
+        1,
+        "the UI path must produce exactly one TaskReady"
+    );
+}
+
+/// 直写路径必须与建边/终态迁移共用同一把项目级图锁（否则 P0-2 在这条路径复发）。
+/// 定向验证（非随机碰撞）：另一事务持图锁期间，直写终态必须等锁，且可在
+/// `pg_locks` 观察到「advisory 锁未授予」；放行后直写完成并触发解锁。
+#[sqlx::test(migrations = "../../migrations")]
+async fn ui_terminal_write_waits_for_the_project_graph_lock(pool: PgPool) {
+    let fx = seed_project(&pool, "TDC68LK").await;
+    let upstream = seed_task(&pool, fx.project_id, "reviewing").await;
+    let downstream = seed_task(&pool, fx.project_id, "blocked").await;
+    add_dependency(&pool, downstream, upstream, &AuditActor::principal(fx.actor_id))
+        .await
+        .unwrap();
+
+    // 连接 1：像并发图写者一样持锁不放。
+    let mut conn1 = pool.acquire().await.unwrap();
+    let mut tx1 = conn1.begin().await.unwrap();
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))")
+        .bind(fx.project_id)
+        .execute(&mut *tx1)
+        .await
+        .unwrap();
+
+    let writer = {
+        let pool = pool.clone();
+        let (task, actor) = (upstream, fx.actor_id);
+        tokio::spawn(async move { ui_complete(&pool, task, actor, 1).await })
+    };
+
+    // 屏障点：等到直写确实开始排队（advisory 锁出现未授予记录，与键无关——
+    // 该测试库由本用例独占）。
+    let mut observed = false;
+    for _ in 0..200 {
+        let waiting: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        if waiting > 0 {
+            observed = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert!(
+        observed,
+        "the UI terminal write must wait on the project graph lock"
+    );
+    assert_eq!(
+        task_status(&pool, upstream).await,
+        "reviewing",
+        "no task row may change before the graph lock is granted"
+    );
+
+    // 放行：直写完成并触发解锁。
+    tx1.commit().await.unwrap();
+    writer.await.unwrap();
+
+    assert_eq!(task_status(&pool, upstream).await, "completed");
+    assert_eq!(task_status(&pool, downstream).await, "ready");
+    assert_eq!(
+        task_ready_events(&pool, fx.project_id, downstream).await,
+        1,
+        "exactly one TaskReady after the lock is released"
+    );
 }
