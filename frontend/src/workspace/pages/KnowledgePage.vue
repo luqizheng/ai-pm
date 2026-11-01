@@ -7,10 +7,15 @@ import { docTree, knowledgeDocs } from "../fixtures";
 import {
   getDocument,
   listDocuments,
+  listProposals,
+  confirmProposal as confirmProposalApi,
+  vetoRevision as vetoRevisionApi,
+  type DocumentProposal,
   type KnowledgeDocument,
   type KnowledgeDocumentSummary
 } from "@/api/documents";
 import { SCOPE_ALL, useScopeStore } from "@/api/scope";
+import { useAuthStore } from "@/shell/store/auth";
 import { useRoute } from "vue-router";
 
 const { t } = useI18n();
@@ -19,6 +24,11 @@ const useMock =
   import.meta.env.VITE_USE_MOCK === "1" || import.meta.env.MODE === "test";
 const scope = useScopeStore();
 const route = useRoute();
+const auth = useAuthStore();
+const proposals = ref<DocumentProposal[]>([]);
+const canGovern = computed(() =>
+  auth.hasPermission("PM_MCP_DOCUMENT_WRITE")
+);
 
 /**
  * 项目来源：显式 scope 选择 > 路由里是真实 UUID 时用它；都没有时提示先选项目。
@@ -150,8 +160,11 @@ async function loadDetail(id: string) {
   if (useMock || !projectId.value) return;
   try {
     detail.value = await getDocument(id, projectId.value);
+    const result = await listProposals(projectId.value, id);
+    proposals.value = result.items ?? [];
   } catch {
     detail.value = null;
+    proposals.value = [];
     failed.value = true;
   }
 }
@@ -160,6 +173,7 @@ async function loadList() {
   if (useMock) return;
   failed.value = false;
   detail.value = null;
+  proposals.value = [];
   if (!projectId.value) {
     summaries.value = [];
     selectedId.value = "";
@@ -183,6 +197,24 @@ async function loadList() {
 function onPick(node: TreeNode) {
   selectedId.value = node.id;
   if (!useMock) void loadDetail(node.id);
+}
+
+async function onConfirmProposal(item: DocumentProposal) {
+  if (useMock || !projectId.value || !auth.user) return;
+  await confirmProposalApi(item.id, projectId.value, auth.user.id);
+  await loadDetail(selectedId.value);
+}
+
+async function onVetoProposal(item: DocumentProposal) {
+  if (useMock || !projectId.value || !auth.user || !item.resulting_revision_id)
+    return;
+  await vetoRevisionApi(
+    item.resulting_revision_id,
+    projectId.value,
+    auth.user.id,
+    t("workspace.pages.knowledge.governance.vetoReason")
+  );
+  await loadList();
 }
 
 let initialised = false;
@@ -315,6 +347,61 @@ const refLabel: Record<string, string> = {
         <div class="ws-reader-source">{{ selected.source }}</div>
         <div class="ws-reader-body">
           <p v-for="(para, i) in selected.body" :key="i">{{ para }}</p>
+        </div>
+        <div
+          v-if="!useMock && proposals.length"
+          class="ws-facts"
+          data-test="doc-governance"
+        >
+          <h3 class="ws-reader-label">
+            {{ t("workspace.pages.knowledge.governance.title") }}
+          </h3>
+          <div
+            v-for="item in proposals.slice(0, 5)"
+            :key="item.id"
+            class="ws-ref"
+            :data-test="`doc-proposal-${item.status}`"
+          >
+            <span class="ws-ref-kind">
+              {{ typeLabels[item.doc_type] }} · {{ item.status }}
+            </span>
+            <span v-if="item.change_summary" class="ws-ref-title">
+              {{ item.change_summary }}
+            </span>
+            <ul
+              v-if="item.quality_gate_result?.failures?.length"
+              class="ws-facts-list"
+            >
+              <li
+                v-for="failure in item.quality_gate_result.failures"
+                :key="`${failure.gate}-${failure.code}`"
+              >
+                {{ failure.gate }}: {{ failure.code }}
+              </li>
+            </ul>
+            <button
+              v-if="item.status === 'redline_pending' && canGovern"
+              type="button"
+              class="ws-tree-node ws-focusable"
+              data-test="confirm-redline"
+              @click="onConfirmProposal(item)"
+            >
+              {{ t("workspace.pages.knowledge.governance.confirm") }}
+            </button>
+            <button
+              v-if="
+                item.status === 'committed' &&
+                item.resulting_revision_id &&
+                canGovern
+              "
+              type="button"
+              class="ws-tree-node ws-focusable"
+              data-test="veto-revision"
+              @click="onVetoProposal(item)"
+            >
+              {{ t("workspace.pages.knowledge.governance.veto") }}
+            </button>
+          </div>
         </div>
         <!-- V1.2：人工批准的正式事实（AI 摘要不得覆盖） -->
         <div

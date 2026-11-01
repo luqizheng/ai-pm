@@ -204,6 +204,11 @@ workspace:
         decision: Decisions
         architecture: Architecture
         knowledge: Knowledge
+      governance:
+        title: Quality gates & proposals
+        confirm: Confirm red-line
+        veto: Veto
+        vetoReason: Vetoed from the knowledge page
     artifacts:
       title: Artifacts
       subtitle: Test and approval status of products and deliverables

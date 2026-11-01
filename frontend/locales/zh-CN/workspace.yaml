@@ -204,6 +204,11 @@ workspace:
         decision: 决策
         architecture: 架构
         knowledge: 知识
+      governance:
+        title: 质量门与提案
+        confirm: 确认红线
+        veto: 否决
+        vetoReason: 知识页发起否决
     artifacts:
       title: 产物验收
       subtitle: 产品与交付物的测试、审批状态

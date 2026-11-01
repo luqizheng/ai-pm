@@ -34,7 +34,8 @@ function parseAppendixTokens(): Record<string, string> {
   const doc = readFileSync(findPrismSpec(), "utf8");
   const appendixIndex = doc.indexOf("## 附录");
   if (appendixIndex === -1) throw new Error("规范里没有找到附录小节");
-  const fence = doc.slice(appendixIndex).match(/```css\n([\s\S]*?)\n```/);
+  // Windows 检出可能把规范文档写成 CRLF；围栏匹配需容忍 `\r\n`。
+  const fence = doc.slice(appendixIndex).match(/```css\r?\n([\s\S]*?)\r?\n```/);
   if (!fence) throw new Error("规范附录里没有找到 css 围栏块");
 
   const values: Record<string, string> = {};
