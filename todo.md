@@ -12,6 +12,7 @@
 - **2026-11-01 增量**：多租户 / Agent / Executor 身份边界由 `docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`（Accepted）裁定；M1 拆为 **T-021a（β，身份归因）** / **T-021b（α+γ+δ，Tenant + Agent + Run 身份列）**；迁移号顺移（T-024 → `0021`、T-041 → `0022`）；ADR 未决项登记为 T-055~T-058，T-021a 遗留登记为 T-059。**T-020 已过稿、T-021a 已实施并验收**（交付见 §13 归档）。
 - **2026-11-01 增量（二）**：执行端接入转入待实施——runbook 落盘（`docs/ai-pm-executor-onboarding-runbook-v1.md`，`3811a37`），新增 **§10.5 M8**（T-080 执行端 URL 引导式接入 / T-081 `/mcp` 跨机暴露 / T-082 `pm_list_tasks`）；用户确认 trae / codex / workbuddy / z-code / dsh 均为候选执行端。
 - **2026-11-01 增量（三）**：Project Discovery（项目接入与认知建立）设计稿 V1.1 落盘（`docs/ai-pm-project-discovery-v1.md`，`203d11e` + DDL 草案 `4373e55`；已并入用户 Q1–Q7 裁决），新增 **§10.6 M9**（T-083~T-086）。核心边界：Discovery 独立于 Repository Import / Task / Run 四个业务域；Web 与 Codex `/pm-learn` 是同一 `DiscoverySession` 的两个 producer。
+- **2026-11-01 增量（四）**：用户提供《Codex 自动初始化与开发环境接入（Codex Bootstrap）》设计供稿并落盘（`docs/ai-pm-codex-bootstrap-v1.md`，`3c614be`，**未过稿**），新增 **§10.7 M10**（T-087~T-092，T-092 为 V2 延后条目）。核心原则：安装说明负责指导安装、安装程序负责保证安装正确、服务端负责验证安装结果；MCP ≠ Worker；凭证走一次性授权码 + 短期凭证，安装指令不传长期 Token；验收矩阵 BOOT-01~14。本稿是 M8 T-080（onboarding URL）的深化延伸，实施前必须先过 T-087 设计定稿。
 
 ---
 
@@ -280,6 +281,53 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **验收**：≥1 个执行端实测「读本地仓库 → 澄清 → `pm_discovery_submit_*` → Web 确认」闭环；未激活路径给出明确指引而非报错。
 
 > **P2 延后（不在本节领取）**：多仓库架构关联分析（跨仓调用关系 / 依赖图 / 部署拓扑 / 微服务边界）、持续认知自动更新。T-083~T-086 稳定后再评估。
+
+---
+
+## 10.7 M10 · Codex 环境自动初始化（Codex Bootstrap，2026-11-01 用户新增）
+
+> **设计依据**：`docs/ai-pm-codex-bootstrap-v1.md`（V1 用户供稿：ADR + 安装协议 + 界面原型，**未过稿**；用户稿自称 Slice F — Codex Environment Bootstrap，验收矩阵 BOOT-01~14）。
+> **核心原则**：安装说明负责指导安装，安装程序负责保证安装正确，PM-AI 服务端负责验证安装结果——不让 AI 仅凭一段 Markdown 猜测如何修改配置文件。
+> **三组件分离**：平台端 Worker（Run 调度/租约/回收，属服务端）≠ 开发机端 Runner（本地执行环境管理与 Codex 实例调度）≠ Codex 端 Skill+MCP（工作规范 + 平台接口）。
+> **与 M8 的关系**：本稿是 T-080「粘贴 URL → 帮我安装」的深化延伸（Plugin + Worker 安装程序 + 设备授权 + 自检）；前置依赖 T-080/T-081。
+> **状态**：**全部条目为未过稿设计**——T-087 定稿过稿前，T-088~T-091 不得开工。
+
+- [ ] **T-087 Codex Bootstrap 设计稿定稿（用户供稿 → 正式设计稿）**
+  - **本条按 §0.1 执行**：完整 brainstorming。
+  - **目标**：把用户供稿整理为可实施的正式设计稿（沿用 `docs/ai-pm-codex-bootstrap-v1.md` 演进或另立定稿版），BOOT-01~14 映射为项目验收矩阵编号（续 C 系列）。
+  - **要在稿里裁清的点**：
+    1. 与 `ai-pm-mcp-executor-positioning-v1.md`（executor-neutral）及 §12「不为单一编码工具深度定制」裁定书的边界——`pm-ai-codex/` 包是 Codex 首发目标还是唯一目标，包结构与 Skill 如何保持 executor-neutral 演进（trae / workbuddy / z-code / dsh 复用面）。
+    2. 与 T-080 onboarding URL 的合并/分层关系——`/install/codex` 是否就是 T-080 的分工具变体，两条任务线是否收编为一条。
+    3. OAuth 设备授权 vs 现行「lmms 签发绑真人 API Key」链路（runbook §二）的关系与取舍；与 ADR-0001 R1（私有部署 provider）的衔接。
+    4. 服务端六对象（device / runner / runner_registration / runner_heartbeat / runner_capability / runner_project_binding）与既有 `core.principal` / `core.tenant_agent` / T-021b `executor_id` 的归位——新表还是挂既有表。
+    5. V1 是否含 Runner 二进制安装（还是 V1 仅 Skill+MCP 配置 + 设备注册，Runner 二进制归 V2——影响 BOOT-05 的 V1 判定）。
+    6. 跨机前提：Remote MCP 依赖 T-081 `/mcp` 跨机暴露，V1 范围内是同机先行还是等 T-081。
+  - **不做**：不改 11 个 MCP 工具契约；不动鉴权三层链（T-081 范围除外）；不顺带实施。
+  - **验收**：正式稿含授权时序图、DDL 草案、BOOT→验收编号映射表、V1/V2 范围切分表；用户过稿后方可进 T-088~T-091。
+
+- [ ] **T-088 服务端 Bootstrap API + Device/Runner 注册域（前置：T-087 已过稿）**
+  - **做**：六张服务端对象表 + 一次性授权码签发/换取；短期访问凭证 + 刷新凭证颁发；设备授权撤销（撤销后立即阻止新任务领取，在途 Run 受控终止，旧凭证回写被拒）；Runner 心跳与能力上报；项目绑定读写；审计与版本记录。
+  - **不做**：不做费用/配额（§12 R4 延后）；不改租户/项目/principal 权限模型（Runner 授权挂既有模型）；不改任务状态机（状态变更仍由平台后端统一处理）。
+  - **验收**：BOOT-07/08/12/14 对应用例全绿；撤销授权后「新领取被拒 + 旧凭证回写被拒」两条路径有测试；`cargo test --workspace` 全绿。
+
+- [ ] **T-089 安装包与 Worker 安装程序（前置：T-087 已过稿）**
+  - **做**：`pm-ai-codex/` 包结构（plugin 配置 + `.mcp.json` + `skills/` + `manifest.json`）；`install-worker.ps1` / `install-worker.sh`（环境识别、下载、SHA-256 与版本校验、装用户目录、幂等重跑、不覆盖用户已有 Codex 配置、失败可恢复）；`verify-install` 自检脚本。
+  - **不做**：不在 URL 或指引内容中传递凭据；不绕过执行端自身的权限审批机制；不做执行端软件本身的安装。
+  - **验收**：BOOT-01~05/11/13 对应场景（V1 平台范围按 T-087 裁定）；覆盖「已装过 Worker 重跑」「已有 Codex 配置不被破坏」「下载校验失败中断且可重试」三态。
+
+- [ ] **T-090 Bootstrap Skill + MCP 配置 + 自检闭环（前置：T-088 / T-089 完成）**
+  - **做**：`pm-ai-bootstrap` SKILL.md（八步 lifecycle：取包 → 环境识别 → 装 Worker → 连 MCP → 注册 → 绑项目/仓库 → 自检 → Ready）；Remote MCP 配置写入；自检（MCP 连通 / Worker 心跳 / Workspace 创建 / 仓库访问 / 任务读取权限）；`pm-task-execution` / `pm-learn`（对接 T-086）/ `pm-knowledge` 各 SKILL.md 归位。
+  - **不做**：不做无人值守调度（T-092）；Skill 不绕过 MCP 工具直写平台。
+  - **验收**：BOOT-02/06/09/10；≥1 个真实执行端实测「复制初始化指令 → 全自动初始化 → Ready → `pm_list_tasks` 可读」全程无手工编辑配置文件；未激活/未授权路径给出明确指引而非报错。
+
+- [ ] **T-091 前端两页（图1/图2 原型；前置：T-088 完成）**
+  - **做**：「Codex 环境接入」入口卡片（复制初始化指令，含部署地址替换提示）；「开发环境」管理页（设备列表 / 在线状态 / Runner 版本与系统 / 绑定项目 / 最后心跳 / MCP·Worker 健康徽标 / 查看详情 / 撤销授权 / 添加开发环境）。
+  - **不做**：不做假数据页（`VITE_USE_MOCK=0` 必须能跑）；不进 Agent 管理页（P9 延后）。
+  - **验收**：真库下能看到 T-088 注册的设备；撤销授权 UI 操作后服务端即时生效；`vue-tsc` 0 error；vitest 全绿。
+
+- [ ] **T-092 V2 无人值守 Runner（延后，V1 稳定前不要领取）**
+  - **范围**：Runner 常驻运行、平台自主调度 Run、自动创建 Workspace、启动 Codex、收集 Commit 与 Delivery Manifest、回传证据、Worker 自动升级与故障恢复、安装包版本与服务端 API 版本分离 + MCP 能力协商。
+  - **重启条件**：V1（T-087~T-091）闭环稳定后另立设计稿；稿中必须裁清与 T-030/T-031（平台侧 `CodexExecutor` 本地子进程）的边界与复用关系。
 
 ---
 
