@@ -13,7 +13,7 @@
 |---|---|---|
 | Q-D5-1 | Reviewer Run 落库形态 | **复用 `delivery.task_run`**：加 `run_kind` 两值列 + `role_id` + `input_manifest_hash`；`uq_task_run_active` 收窄为仅约束 `run_kind='delivery'`；生命周期/attempt/失败记录/审计/事件/详情页 run 列表全部复用。不建独立 review_run 表（Q8.5 双轨成本否决），不落无 Run 实体（违反 target.md §P7） |
 | Q-D5-2 | Reviewer 执行形态 | **V1 = 平台内确定性校验 Run**：worker 执行确定性校验管线产出 findings + verdict，`executor_kind='platform'`（凭据面列库层强制 NULL，P0-1）；保留 `timed_out`（受 run 预算约束）；Codex 只读 Reviewer Run（Q8.3 L2 完整版）留**同骨架扩展位**——未来填 executor 列即可，findings/verdict/事件模型零改动。V1 无 LLM 审查（Q8.1 清单矩阵未定义前不自由发挥） |
-| Q-D5-3 | 编排与触发 | **两拍编排**：① `DeliverySubmitted` 事件 handler 轻拍——B1 守卫（最新 delivery run 的视图对账 = `delivered`）通过后同事务 `submitted→reviewing`（经 `apply_task_transition`）+ 创建 queued review run；② worker 独立循环领取 review run → running → 校验管线（慢操作全在这拍）→ findings + verdict → review run 终态 → 按 §5 映射推进 task。锚定哈希口径、单活跃 review run、失效规则三从属裁定见 §3.3 |
+| Q-D5-3 | 编排与触发 | **两拍编排**：① `DeliverySubmitted` 事件 handler 轻拍——B1 守卫（最新 delivery run 的视图对账 = `delivered`）通过后同事务 `submitted→reviewing`（经 `update_task_status` + `validate_transition`）+ 创建 queued review run；② worker 独立循环领取 review run → running → 校验管线（慢操作全在这拍）→ findings + verdict → review run 终态 → 按 §5 映射推进 task。锚定哈希口径、单活跃 review run、失效规则三从属裁定见 §3.3 |
 | Q-D5-4 | 四值结论 → task 状态 | **§5 映射矩阵 + 五从属裁点**：待审批停 `reviewing` + `task_waiting(reason='needs_approval')`（不新增状态不加边，`awaiting_decision` 保持执行期专用）；审批走新表 `governance.review_approval`（不碰 `approval_request` 旧契约）；`integration_status=failed` 人机均不可越、`not_run`/manual 未决仅人工可裁；`additional_checks` 非空保守降级人工（fail-closed）；「Review 失败 ≠ Run 失败」为硬不变量 |
 | Q-D5-5 | 失败判定服务（B4） | **输入清单 1–7**（§6）+ **Q9.2 落定 worker 进程内周期作业**（与 TaskReady 领取、lease 回收、review 领取并列，共享扫描 SQL 与事务模板；判定动作全条件 UPDATE，`task_run_failure` 行存在即幂等标记）；`task_deadline` 总期限 V1 不做（无计时器基础设施，留演进位）；partial + delivery run 已终态走重试路径（不判 changes_requested） |
 | Q-D5-6 | 数据模型 | **run 行即报告头**（verdict 落 `task_run.review_verdict` 列）+ 三张新表（`delivery.review_finding` / `delivery.acceptance_criterion_verdict` / `governance.review_approval`）+ run 六列追加；`acceptance_criterion_verdict` 兑现 `0015` 预留组合外键；**T-052/T-054 均不触发**（条目修订漂移由 criteria 快照哈希 + 完成判定器校验兜底）；迁移 `0026` 单迁移收编（P1-1：0024 → 0026） |
@@ -239,7 +239,7 @@ CREATE TRIGGER trg_review_report_immutable BEFORE UPDATE ON delivery.task_run
 
 | 拍 | 执行者 | 动作（单事务） | 失败 → |
 |---|---|---|---|
-| ① 轻拍 | `DeliverySubmitted` 事件 handler（outbox） | **幂等判据前置**〔评审收编 P0-5〕：事务内查重——存在锚定 `(task_id, input_manifest_hash)` 的任意 review run（含重试 run）→ 幂等返回成功（不建 run、不重复审计）。未命中 → B1 守卫：对最新 delivery run 查 `v_task_delivery_manifest`，`delivery_state='delivered'` 才继续；通过 → `submitted→reviewing`（经 `apply_task_transition`，B1 级）+ 创建 review run（`run_kind='review'`、`role_id='reviewer'`、`executor_kind='platform'`、status `queued`、锚定哈希 + `review_policy_version` 落行）+ 审计 `review.queued` | `delivery_state='partial'` → 不推进（停 `submitted` 等执行端同 run 补交，D4 幂等语义支持追加仓）；哈希计算失败 → 事件重试（at-least-once，幂等判据兜底） |
+| ① 轻拍 | `DeliverySubmitted` 事件 handler（outbox） | **幂等判据前置**〔评审收编 P0-5〕：事务内查重——存在锚定 `(task_id, input_manifest_hash)` 的任意 review run（含重试 run）→ 幂等返回成功（不建 run、不重复审计）。未命中 → B1 守卫：对最新 delivery run 查 `v_task_delivery_manifest`，`delivery_state='delivered'` 才继续；通过 → `submitted→reviewing`（经 `update_task_status` + `validate_transition`，B1 级）+ 创建 review run（`run_kind='review'`、`role_id='reviewer'`、`executor_kind='platform'`、status `queued`、锚定哈希 + `review_policy_version` 落行）+ 审计 `review.queued` | `delivery_state='partial'` → 不推进（停 `submitted` 等执行端同 run 补交，D4 幂等语义支持追加仓）；哈希计算失败 → 事件重试（at-least-once，幂等判据兜底） |
 | ② 领取拍 | worker review 领取循环（新增，与 TaskReady 领取/lease 回收/失败判定作业并列，共享候选扫描 SQL 与事务模板） | **超时回收前置**〔评审收编 P0-5〕：先回收卡死 run——`running` 且超 review 预算 → 条件 UPDATE 置 `timed_out`（先到先得）→ 走重试；再领取 queued review run → `running` → **确定性校验管线（§4）** → findings 落库 + 逐条裁决落库 + `review_verdict` 落 run 行 → review run `succeeded` → 按 §5 映射推进 task → 审计 `review.completed` / `review.changes_requested` | 管线异常 → review run `failed`（`task_run_failure` 不可变）→ 重试 `attempt_no+1` 新 review run；超预算 → `timed_out`；重试耗尽 → 降级人工（§5 矩阵） |
 
 `Reviewing → Reviewing` 无状态变化；review 编排期间任务始终停在 `reviewing`，直至 §5 矩阵命中出口。
@@ -318,7 +318,7 @@ pub struct ReviewFinding {
 2. **锚定回读校验**：`delivery_manifest_hash` == 被审 delivery run 的 `reviewed_manifest_hash` 且 review run `succeeded`——漂移 → 409 `anchor_drift`，审批行保持 pending；
 3. E2 前置全集复核（§5.3 表）——approve 路径必过（含硬禁令：`integration_status='failed'` 时 approve 直接拒绝）；
 4. UPDATE 审批行（`status`/`decided_by`/`decision_reason`/`decided_at`）；
-5. `apply_task_transition`（approve → `reviewing→completed`；reject → `reviewing→changes_requested`，`decision_reason` 转 finding INSERT）；
+5. `update_task_status` + `validate_transition`（D4 V1.1 统一入口；approve → `reviewing→completed`；reject → `reviewing→changes_requested`，`decision_reason` 转 finding INSERT）；
 6. `task_waiting` 活跃行结行（`ended_at`/`ended_by`/`resolution_note`）；
 7. 审计 + （approve → completed 时）两事件同事务写（§7）。
 
@@ -352,7 +352,7 @@ pub struct ReviewFinding {
 |---|---|---|---|
 | 1 | delivery run 终态 `failed`（含 `task_run_failure` 证据） | B4-A | 可重试未耗尽 → task 留 `running` + 新 run（`attempt_no+1`）；基础设施类走独立计数（Q9.1） |
 | 2 | delivery run 终态 `timed_out`（D3 `deadline_at` 绝对截止） | B4-B | 同上；`task_deadline` 总期限 **V1 不做**（演进位） |
-| 3 | `attempt_count` 达 `max_run_attempts` 或 `consecutive_failure_count` 达阈值 | B4-C | task `running→failed`（经 `apply_task_transition`）+ `FailureRecord` + `last_failure_category` + 审计 `task.failed` |
+| 3 | `attempt_count` 达 `max_run_attempts` 或 `consecutive_failure_count` 达阈值 | B4-C | task `running→failed`（经 `update_task_status` + `validate_transition`）+ `FailureRecord` + `last_failure_category` + 审计 `task.failed` |
 | 4 | 运行时事实类不可恢复（executor 终态回报 permission/missing_dependency 等） | B4-D | 立即 `→failed`，不为计数反复尝试 |
 | 5 | partial 停 `submitted` + delivery run 已终态（执行端未交齐即结束） | B4-A 变体 | 按 Run 级失败处理：可重试 → 新 run 重新交付；耗尽 → task failed。**不判 changes_requested**（补交 ≠ 修改重做） |
 | 6 | `delivery.rejected` 审计 | 证据 | 只留证据、不计数、不触发任务级判定（执行端可修正重报）；B4-D 的 rejected 理由码映射留演进位 |
@@ -446,6 +446,15 @@ stateDiagram-v2
 | C121 | 并发创建 review run〔P1-3〕 | 双事务并发建同锚定 review run：`uq_task_review_active` 单胜，败者 409 |
 | C122 | 并发重试 review run〔P1-3〕 | 双 worker 同时重试 failed run：旧 run 终态条件 UPDATE 先到先得，仅单重试 run 落地 |
 | C123 | 不可变触发器〔P1-3〕 | 三新表 UPDATE 被拒；review run 的 `role_id`/双哈希/`review_policy_version` UPDATE 被拒；`review_verdict` 非 NULL 后改值被拒；delivery 行更新不受影响 |
+| C124 | 串行重复消费〔评审场景四-1〕 | 同一 `DeliverySubmitted` 先后消费两次：第二次幂等返回（无第二个 review run、无重复审计、无重复状态迁移），仍单活跃 review run（并发版见 C120） |
+| C125 | 审批裁决并发互斥〔评审场景四-4〕 | 两审批人同时裁决同一 pending 行：行锁单胜，败者 409 `already_decided`；任务状态只被推进一次、事件只落一份 |
+| C126 | 审批锚定防御〔评审场景四-5〕 | pending 审批行锚定的 delivery run 与裁决时最新交付不一致（测试构造库态）：裁决 409 `anchor_drift`、审批行保持 pending、任务状态不变。V1 触发路径为理论防御（D4 防篡改 + §2.5 once-written），随 L2 扩展激活 |
+| C127 | review worker 崩溃恢复端到端〔评审场景四-2〕 | review run `running` 中 worker 崩溃 → 卡死 → 拍②回收前置置 `timed_out` → 重试 `attempt_no+1` → 管线完成 → task 按 §5.1 推进；**全程无新 delivery run 创建**、原 delivery run status/outcome 不变 |
+| C128 | completed 后异步集崩溃恢复〔评审场景四-8〕 | completed 原子集成功后 handler 崩溃 → outbox 重投 → 提案最终建出（事件 delivered）；重试耗尽 → 死信 → 死信重放补建提案。completed 状态全程不变 |
+| C129 | 重审历史保留〔评审场景四-9〕 | 同 task 两轮 review（第一轮 `changes_requested` → 重试交付 → 第二轮 `approved`）：第一轮 findings/裁决行/`review_verdict` 全量保留可查，第二轮为新 run 新行（`UNIQUE(criterion_id, review_run_id)` 不冲突） |
+| C130 | 全只读仓交付进 review〔评审场景四-10〕 | 契约仓全为 `write_access=false`（D4 V1.1 Q1：0/0 判 `delivered`）→ 拍① B1 守卫通过 → `reviewing` → 管线全过（L1 对账空集成立）→ `approved` → 按策略推进 |
+
+**评审场景四 → 编号映射**：①=C124（并发 C120）②=C127 ③=C111 ④=C125 ⑤=C126 ⑥=C103 ⑦=C115 ⑧=C128 ⑨=C129 ⑩=C130——10 场景全部有编号承载，其中 ③⑥⑦ 由既有用例覆盖。
 
 ---
 
@@ -460,7 +469,7 @@ stateDiagram-v2
 | 4 | 完成判定器 + `review_approval` 审批端点（§5.2 单事务）+ `task_waiting` 接线 | 3 |
 | 5 | 失败判定作业（§6，`run_kind='delivery'` 谓词）+ worker 循环族指标 | 1（可与 2–4 并行） |
 | 6 | 知识回写 handler + 三事件生产者（事务边界按 §7.1） | 4 |
-| 7 | 用例 C98–C123 + 文档回填 + `cargo test --workspace` 全绿 | — |
+| 7 | 用例 C98–C130 + 文档回填 + `cargo test --workspace` 全绿 | — |
 
 **门禁**：D1/D2/D3/D4 用例不回归；默认环境行为不变；`Reviewing→Failed` 边不存在的断言进 C111/C114。
 

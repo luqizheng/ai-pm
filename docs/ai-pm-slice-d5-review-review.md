@@ -53,3 +53,23 @@
 ## 四、验收矩阵增量
 
 原 C98–C119 保留，新增：C120（并发消费幂等）/ C121（并发创建唯一索引）/ C122（并发重试先到先得）/ C123（触发器拒改受保护列）。触发器相关断言并入 C98（迁移断言扩：四 CHECK + 两触发器存在性）。
+---
+
+## 五、第四轮补充：验收场景清单收编（评审「四、建议增加的验收场景」）
+
+评审补充 10 个验收场景，逐一对账现有 C98–C123：3 个由既有用例覆盖（③→C111、⑥→C103、⑦→C115），7 个补新编号 **C124–C130**：
+
+| 场景 | 编号 | 断言要点 |
+|---|---|---|
+| ① 同一 `DeliverySubmitted` 消费两次 → 单活跃 Review | **C124**（串行版；并发版 C120 既有） | 第二次幂等返回，无第二 run/重复审计/重复迁移 |
+| ② Review Worker 执行中崩溃 → 恢复且不创建 Delivery Run | **C127** | running 卡死 → 拍②回收 `timed_out` → 重试 → 推进；全程无新 delivery run |
+| ③ Review Run failed → 原 Delivery Run 保持 `succeeded` | C111（既有） | delivery run status/outcome 全程不变 |
+| ④ 两审批人并发审批 → 唯一有效结果 | **C125** | FOR UPDATE 行锁单胜，败者 409 `already_decided`，状态/事件只落一份 |
+| ⑤ 审批后 Delivery 变化 → 旧审批不可用于新交付 | **C126** | 锚定回读 409 `anchor_drift` 保持 pending；测试构造库态直测（V1 为理论防御，随 L2 激活） |
+| ⑥ `integration_status=failed` → 人/机均不能 completed | C103（既有） | §5.2 步骤 3 拒绝 approve |
+| ⑦ Worker 多实例扫描 → 失败判定不重复 | C115（既有） | 条件 UPDATE 只判一次 |
+| ⑧ Task completed 后崩溃 → 提案不丢失 | **C128** | outbox 重投补建 → 死信重放可补；completed 不回滚 |
+| ⑨ 历史 Review 重新执行 → 旧报告完整保留 | **C129** | 两轮 review，第一轮 findings/裁决/verdict 全量可查，第二轮新行 |
+| ⑩ 全只读仓交付 → 正常进入 Review | **C130** | D4 V1.1 Q1 delivered(0/0) → B1 守卫过 → 管线全过 → approved |
+
+**附带一致性修正**：设计稿全文 `apply_task_transition`（9 处）→ `update_task_status` + `validate_transition`——D4 V1.1 已裁定旧名称废弃且代码中不存在，D5 稿沿用属笔误级偏差，本轮一并清零。实施顺序用例范围更新为 **C98–C130**（设计稿 §11）。
