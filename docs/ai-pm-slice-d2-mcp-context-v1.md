@@ -49,7 +49,7 @@ D2 落地前的三个硬缺口：
 | --- | --- |
 | `pm_submit_result` 的实际落库 | 归 D4（`task_repository_commit` / 交付清单） |
 | `task.request_decision` / `knowledge.propose_change` | 依赖 C 级审批编排，归 D5 |
-| 完整策略合成（能力类 AND / 约束类累加） | D1 §九 #1 留口，需策略引擎类型化，另立阶段 |
+| 完整策略合成（能力类 AND / 约束类累加） | ~~D1 §九 #1 留口，需策略引擎类型化，另立阶段~~ **V1.2 修订（2026-11-01）：已并入 D2.1 并完成**，见 `docs/ai-pm-d2-1-policy-composition-v1.md` |
 | 进程启动与终止 | 归 D3 |
 | 前端执行中心改造 | 数据源已具备（`GET /v1/pm/task-runs`） |
 
@@ -166,7 +166,7 @@ D2 落地前的三个硬缺口：
     "approval_required": true,
     "approval_status": "approved",
     "execution_enabled": true,
-    "snapshot_scope": "d1-minimal"
+    "snapshot_scope": "composed-v1"
   }
 }
 ```
@@ -181,7 +181,7 @@ D2 落地前的三个硬缺口：
 | `acceptance_criteria[]` | `delivery.task_acceptance_criterion` | 否（0 条合法，D5 按策略判定） |
 | `repositories[]` | `delivery.task_run_repository` **JOIN** `integration.project_repository` | 否（领取时已锁定） |
 | `knowledge_refs[]` | `delivery.task_knowledge_ref` **JOIN** `ai.project_document` + 最新 `document_revision` | 否 |
-| `policy.*` | `delivery.task_run.policy_snapshot`（D1 已写 `d1-minimal`） | 否 |
+| `policy.*` | `delivery.task_run.policy_snapshot`（D2.1 起为 `composed-v1`，D1/D2 原为 `d1-minimal`） | 否 |
 | `run.lease.heartbeat_interval_secs` | 配置 `AI_PM_RUN_HEARTBEAT_SECS`，默认 60 | 否 |
 
 > **禁止**：契约中出现任何工具相关字段（tool 名、prompt 模板、model 名）。角色指令属平台配置，不进契约（positioning §五）。
@@ -351,7 +351,7 @@ flowchart LR
 
 | D1 留口 | D2 处置 |
 | --- | --- |
-| #2 `policy_version` / `policy_hash` 口径 | 仍写 `NULL`；`0014` 不引入策略版本表，留策略阶段 |
+| #2 `policy_version` / `policy_hash` 口径 | ~~仍写 `NULL`；`0014` 不引入策略版本表，留策略阶段~~ **V1.2 修订（2026-11-01）：已完成**——内容寻址（canonical 有效策略 sha256，version = 前 12 位），不新增版本表，见 `docs/ai-pm-d2-1-policy-composition-v1.md` |
 | #3 续租对外通道与鉴权 | `pm_report_progress` + `renew_lease_by_token`（本文 §4.3 §6.2） |
 | #4 `claimed→running` 触发者 | `pm_report_progress(stage='started')` 由**平台经 `apply_task_transition`** 写 `running` 与 `executor_session` |
 | #6 系统 actor 缺失降级 | `audit_run` 回退链追加 `kind='service'`（`0014` 无需建表） |
@@ -432,7 +432,7 @@ flowchart LR
 | 启动/终止执行进程 | D3 | 记录 `executor_kind`/`executor_session`，不拉起进程 |
 | 逐仓 commit 与交付清单 | D4 | 冻结 `submit_result` schema，不落库 |
 | 失败判定与任务状态裁决 | D5 | 只写 `run_blocked` 审计，不改任务状态 |
-| 完整策略合成 | 策略阶段 | 只透传 `d1-minimal` 快照 |
+| 完整策略合成 | ~~策略阶段~~ **已完成（D2.1）** | 四层合成快照 `composed-v1`，见 `docs/ai-pm-d2-1-policy-composition-v1.md` |
 | 执行端能力分档（无人值守/自动批准） | 后续 | 只记录 `client_name`/`client_version`，不据此调整租约 |
 
 ---
@@ -448,6 +448,15 @@ flowchart LR
 | P2 并入 | deliverables 改 JSONB 对象数组（§5）；ordinal 允许间隙 + `updated_at`（§5）；删 token 索引、保留 `(project_id, id)` 唯一（D5 证据 FK 预留，§5）；knowledge_refs **live 语义**显式声明（§4.2）；git_branch 幂等回填（§6.3）；pm_submit_result 降级 draft（§4.4）；威胁模型明示（§6.1） |
 | 矩阵扩容 | C1–C14 → C1–C28（新增覆盖：过期续租 / 双入口并发 / NULL hash / 空值合法性 / 旧 token 失效 / 冻结名单 / owner 格式 / 运行态续租 / 并发续租 / revision 取最新 / 排序 / 前置条件 / 客户端落库 / 编码严格匹配） |
 | 遗留代码债（S1 顺带） | `migrations/0010` 文件头注释仍写「0009_task_state_machine」（迁移号顺移残留）；`audit_run` 回退链补 `kind='service'`（平台专用 principal `ai-pm-dispatch` 种子化，`after_data` 强制携带 client_name/lease_owner） |
+
+### V1.2 修订记录（2026-11-01，D2.1 回填）
+
+| 原口径 | 修订 |
+| --- | --- |
+| §1.3「完整策略合成另立阶段」 | 已并入 D2.1 并完成，见 `docs/ai-pm-d2-1-policy-composition-v1.md` |
+| §6.4「`policy_version` 仍写 `NULL`」 | 已改为内容寻址（canonical 有效策略 sha256，version = 前 12 位） |
+| §九「只透传 `d1-minimal` 快照」 | 已升为 `composed-v1`；`PolicyView` 契约字段不变 |
+| §4.2 示例 `d1-minimal` | 示例同步为 `composed-v1` |
 
 ### 待裁清单（V1.1 后仍开放）
 

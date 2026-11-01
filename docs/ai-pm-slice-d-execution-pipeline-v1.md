@@ -490,13 +490,13 @@ stateDiagram-v2
 
 | 字段 | 含义 |
 | --- | --- |
-| `policy_version` | 策略版本号（D1 若引擎未暴露，写 `NULL` 并注明） |
+| `policy_version` | 策略版本号（D1 写 `NULL`；**D2.1 起**为内容寻址 hash 前 12 位） |
 | `captured_at` | 快照生成时刻 |
 | `approval_required` | 本次执行是否需人工审批（由 R5 有效合成得出） |
 | `approval_status` | 审批证据状态（`approved` / `pending` / `unknown`） |
 | `execution_enabled` | 是否允许执行（策略合成结果） |
 | `repository_baselines` | 本次锁定的多仓基线摘要 |
-| `snapshot_scope` | 快照范围标记（如 `d1-minimal`），供 D2 扩展识别 |
+| `snapshot_scope` | 快照范围标记（D1 为 `d1-minimal`；**D2.1 起**为 `composed-v1`） |
 
 > **策略未知时不得默认允许执行**：策略读取失败 / 审批状态未知时 `execution_enabled=false`。完整策略合成留 D2。
 
@@ -515,7 +515,7 @@ stateDiagram-v2
 | 9 | 基线可解析 | `coalesce(task_repository.base_commit, project_repository.head_commit_sha) IS NOT NULL` | `baseline_unavailable` |
 | 10 | **有效审批策略检查**（R5）：不得只读 `task_policy_override`；综合组织 / 项目 / 任务类型 / 任务级限制，低层不得放宽高层的强制审批 | 复用现有策略解析能力合成"是否需要人工审批"；审批状态未知 / 缺批准证据 / 策略读取失败 → **拒绝领取**并记 `release_reason='policy_requires_approval'` | `policy_requires_approval` / `approval_status_unknown` |
 
-> 判定 10 的落地（R5，**已实现**）：新增 `delivery.policy_scope`（迁移 `0013`，`scope ∈ organization/project/task_type`）+ 既有 `delivery.task_policy_override`（task 级）+ 新增 `delivery.task.task_type` 列。解析语义为**更严者胜**：任一层级 `require_human_approval = true` 即要求审批，**任务级 `false` 不得放宽高层 `true`**。需要审批时必须有 `approved` 证据；未决 / 缺证据 / 读取失败 → 拒绝领取。完整能力类 / 约束类合成（§15.6）仍留 D2。
+> 判定 10 的落地（R5，**已实现**）：新增 `delivery.policy_scope`（迁移 `0013`，`scope ∈ organization/project/task_type`）+ 既有 `delivery.task_policy_override`（task 级）+ 新增 `delivery.task.task_type` 列。解析语义为**更严者胜**：任一层级 `require_human_approval = true` 即要求审批，**任务级 `false` 不得放宽高层 `true`**。需要审批时必须有 `approved` 证据；未决 / 缺证据 / 读取失败 → 拒绝领取。完整能力类 / 约束类合成（§15.6）**已由 D2.1 完成**（迁移 `0016` + `policy_composition`），见 `docs/ai-pm-d2-1-policy-composition-v1.md`。
 
 ### 5.7 多仓执行上下文
 
@@ -691,8 +691,8 @@ pub trait RunExecutor: Send + Sync {
 
 | # | 问题 | 留口方式 |
 | --- | --- | --- |
-| 1 | 完整策略合成（§15.6 能力类 AND / 约束类累加） | `policy_snapshot` 列已在，D1 只填最小可判定集合，合成在 D2 |
-| 2 | `policy_version` / `policy_hash` 的生成口径 | 需策略引擎暴露版本号，D1 留 `NULL` 并注明 |
+| 1 | 完整策略合成（§15.6 能力类 AND / 约束类累加） | **已由 D2.1 完成**（2026-11-01）：四层合成 + 迁移 `0016`，见 `docs/ai-pm-d2-1-policy-composition-v1.md` |
+| 2 | `policy_version` / `policy_hash` 的生成口径 | **已由 D2.1 完成**：内容寻址（canonical 有效策略 sha256，version = 前 12 位），见同上 |
 | 3 | 续租的对外通道与鉴权 | D1 只提供 `renew_lease()`；HTTP/MCP 由 D2 定义 |
 | 4 | `claimed→running` 的实际触发者 | 必须由 D3 在执行端启动成功后经平台写入，**不得由 MCP 直写** |
 | 5 | 取消传播到运行中实例 | D1 只处理 `queued/claimed`；`running` 的 kill 属 D3 |
@@ -777,8 +777,8 @@ pub trait RunExecutor: Send + Sync {
 
 | # | 风险 / 留口 | 归属 | 说明 |
 | --- | --- | --- | --- |
-| 1 | 完整策略合成（能力类 AND / 约束类累加） | D2 | D1 只做「可领取性 + 有效审批」，合成在 D2 |
-| 2 | `policy_version` / `policy_hash` 生成口径 | D2 | D1 若引擎未暴露则写 `NULL` 并注明 |
+| 1 | 完整策略合成（能力类 AND / 约束类累加） | ~~D2~~ **已完成（D2.1）** | D1 只做「可领取性 + 有效审批」，合成由 D2.1 落地（迁移 `0016` + `policy_composition`） |
+| 2 | `policy_version` / `policy_hash` 生成口径 | ~~D2~~ **已完成（D2.1）** | 内容寻址：canonical 有效策略 sha256，`policy_version` 取前 12 位；不再写 `NULL` |
 | 3 | `claimed→running` 触发者 | D3 | 必须由平台在启动成功后写入，MCP 不得直写 |
 | 4 | 取消传播到运行中实例 | D3 | D1 处理 `queued/claimed`；`running` 的 kill 属 D3 |
 | 5 | 系统 actor 缺失时审计降级 | D2 | 现依赖 `owner_actor`，D2 引入 `service` 类型 principal |
