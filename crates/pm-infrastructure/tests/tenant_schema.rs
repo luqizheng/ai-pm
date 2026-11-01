@@ -165,6 +165,109 @@ async fn tn7_policy_scope_is_unique_per_tenant(pool: PgPool) {
     assert_eq!(total, 2, "two tenants may each own an organization policy");
 }
 
+/// XT-4 / FK-1 / FK-2 / EX-1：库层隔离不是靠代码纪律。
+#[sqlx::test(migrations = "../../migrations")]
+async fn xt4_fk_and_executor_columns_are_enforced_by_the_database(pool: PgPool) {
+    let tenant_a: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO core.tenant (provider, external_key, display_name) \
+         VALUES ('lmms', 'a', 'a') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let tenant_b: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO core.tenant (provider, external_key, display_name) \
+         VALUES ('lmms', 'b', 'b') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let customer_a: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (tenant_id, name, status) VALUES ($1, 'ca', 'active') RETURNING id",
+    )
+    .bind(tenant_a)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let customer_b: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (tenant_id, name, status) VALUES ($1, 'cb', 'active') RETURNING id",
+    )
+    .bind(tenant_b)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    // XT-4：两个租户各自建同 code 的项目都成功（I4-1）。
+    let mut projects = Vec::new();
+    for (tenant, customer) in [(tenant_a, customer_a), (tenant_b, customer_b)] {
+        let project: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO core.project (tenant_id, customer_id, code, name) \
+             VALUES ($1, $2, 'SAME-CODE', 'same') RETURNING id",
+        )
+        .bind(tenant)
+        .bind(customer)
+        .fetch_one(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("two tenants must share a project code: {e}"));
+        projects.push(project);
+    }
+
+    // FK-2：project 挂到别的租户的客户 → 组合外键拒绝。
+    let cross_customer = sqlx::query(
+        "INSERT INTO core.project (tenant_id, customer_id, code, name) \
+         VALUES ($1, $2, 'CROSS', 'cross')",
+    )
+    .bind(tenant_a)
+    .bind(customer_b)
+    .execute(&pool)
+    .await;
+    assert!(
+        cross_customer.is_err(),
+        "project must not point at another tenant's customer"
+    );
+
+    // FK-1：task 的 tenant_id 与 project 所属租户不一致 → 组合外键拒绝。
+    let cross_task = sqlx::query(
+        "INSERT INTO delivery.task (tenant_id, project_id, title, status) \
+         VALUES ($1, $2, 'cross', 'draft')",
+    )
+    .bind(tenant_b)
+    .bind(projects[0])
+    .execute(&pool)
+    .await;
+    assert!(
+        cross_task.is_err(),
+        "task tenant_id must match its project's tenant"
+    );
+
+    // EX-1：executor_id 可空也可有值（Registry 未建，无外键）。
+    // 一个 task 只能有一个 active run（uq_task_run_active），故每次用新 task。
+    for executor in [None, Some(uuid::Uuid::new_v4())] {
+        let task: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO delivery.task (tenant_id, project_id, title, status) \
+             VALUES ($1, $2, 'ok', 'draft') RETURNING id",
+        )
+        .bind(tenant_a)
+        .bind(projects[0])
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO delivery.task_run \
+             (tenant_id, project_id, task_id, attempt_no, executor_id) \
+             VALUES ($1, $2, $3, 1, $4)",
+        )
+        .bind(tenant_a)
+        .bind(projects[0])
+        .bind(task)
+        .bind(executor)
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("executor_id {executor:?} must be writable: {e}"));
+    }
+}
+
 /// TN-8：`idempotency_key` 唯一性按租户划分（I4-3）——跨租户可共存，同租户内重复被拒。
 #[sqlx::test(migrations = "../../migrations")]
 async fn tn8_outbox_idempotency_key_is_scoped_per_tenant(pool: PgPool) {

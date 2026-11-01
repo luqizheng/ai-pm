@@ -149,6 +149,68 @@ async fn world(pool: &PgPool) -> World {
 
 // ────────────────────────────────────────────────────────────── RV-1 / RV-2
 
+/// 用户补充要求 §5 第 1 条的字面场景：**Admin 可以把另一个 Admin 降为 Member**
+/// ——但不能再把他提回去（第 5 条：不得提升超过自身权限）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn rv1b_admin_can_demote_another_admin_but_cannot_promote_back(pool: PgPool) {
+    let w = world(&pool).await;
+    let admin_token = token("usr-admin", json!(["tenant_admin"]));
+
+    // 造第二个 admin（一个从未登录过的 principal，直接绑定成员行）。
+    let second_admin: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.principal (kind, display_name, is_active) \
+         VALUES ('human', 'usr-admin-2', true) RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO core.tenant_member (tenant_id, principal_id, role) \
+         VALUES ($1, $2, 'admin')",
+    )
+    .bind(w.tenant_id)
+    .bind(second_admin)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // admin 降另一个 admin → 允许。
+    let (status, _) = call(
+        &w.app,
+        "PATCH",
+        &format!(
+            "/v1/pm/tenants/{}/members/{}/role",
+            w.tenant_id, second_admin
+        ),
+        &admin_token,
+        Some(json!({ "role": "member" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "admin 可以降级另一个 admin");
+    let role: String =
+        sqlx::query_scalar("SELECT role FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2")
+            .bind(w.tenant_id)
+            .bind(second_admin)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(role, "member");
+
+    // admin 想把他提回 admin → 403（不得提升超过自身权限）。
+    let (status, _) = call(
+        &w.app,
+        "PATCH",
+        &format!(
+            "/v1/pm/tenants/{}/members/{}/role",
+            w.tenant_id, second_admin
+        ),
+        &admin_token,
+        Some(json!({ "role": "admin" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
 #[sqlx::test(migrations = "../../migrations")]
 async fn rv1_rv2_admin_demoted_to_member_loses_access_on_the_same_jwt(pool: PgPool) {
     let w = world(&pool).await;
