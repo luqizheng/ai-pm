@@ -69,7 +69,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 | 顾问阶段 | 顾问要求（target.md 摘要） | 实测证据 | 判定 | 剩余差距 |
 |---|---|---|---|---|
-| P0 项目与仓库基础 | 项目、仓库、多对多关联、成员角色、环境/系统配置 | `0001_core` + `0017`（客户）、`0008`（`project_ssh_key`/`project_repository`/verify）、`bootstrap` 落 5 人编制、`0007`/`0003`（LLM 与技能配置）、`0018`（`core.principal_identity` + 审计三列） | ✅ 基本完成 | 身份归因已落地（T-021a：token → `core.principal` 映射 + 未激活 fail-closed + `GET /v1/pm/me`）；**仍缺租户维度**（全库零 `tenant` 列）与**按成员过滤的可见性** → T-021b / T-022 |
+| P0 项目与仓库基础 | 项目、仓库、多对多关联、成员角色、环境/系统配置 | `0001_core` + `0017`（客户）、`0008`（`project_ssh_key`/`project_repository`/verify）、`bootstrap` 落 5 人编制、`0007`/`0003`（LLM 与技能配置）、`0018`（`core.principal_identity` + 审计三列）、`0019`/`0020`（租户 + Agent + Run 身份列） | ✅ 完成 | 身份归因（T-021a）、租户边界（T-021b）、按 `project_member` 过滤的可见性（T-022）均已落地 |
 | P1 Task 任务管理核心 | 模型、13 态状态机、依赖、类型、输入、变更记录、事件 | `0002`+`0015`（契约：goal/constraints/验收条目/交付物/知识引用）、`0010`（状态机 + `apply_task_transition` + `task_supersession`/`task_waiting`/`task_policy_override`）、`outbox` TaskReady | 🟡 除依赖外完成 | **前置/后置任务依赖零表零列**（`grep task_dependency` 无命中）→ T-023/T-024；逐字段变更历史未做（仅审计 + supersession） |
 | P2 Run 执行管理核心 | 生命周期、调度、领取、租约、恢复、重试、策略快照 | `0011`/`0012`/`0013`、`run_dispatch.rs`（24 用例全绿）、`0016` 四层策略合成 | ✅ 完成 | 无（D1/D2/D2.1 已签收） |
 | P3 MCP 接入层 | claim / get_task / context / start_run / heartbeat / progress / submit_delivery / complete_run | `pm-mcp` 11 工具：`pm_claim_task`、`pm_get_task_context`、`pm_get_run_context`、`pm_report_progress`、`pm_submit_result`、`pm_get_submission_status` + 5 个文档工具；run 级 `lease_token` | ✅ 已收敛 | 顾问列的 `start_run`/`heartbeat`/`submit_delivery`/`complete_run` 在 D2 契约里**合并**为 `report_progress`/`pm_submit_result`，不是缺失 |
@@ -117,16 +117,12 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 > - 租户：39 张业务表全部 `tenant_id NOT NULL` + 组合外键；`core.tenant` / `core.tenant_member` / `governance.tenant_audit_log` 就位；`tenant_member.role`（owner/admin/member）是唯一事实源，成员管理 6 端点已开。
 > - Agent：`ai.agent_definition` / `core.tenant_agent` 三层结构 + `dev_agent` 租户级复用；`task_run` 已有 `agent_id` / `triggered_by_user_id` / `executor_id`。
 >
-> **仍未做**：可见性未按成员过滤（T-022）、MCP 侧审计三列未落地（T-059）、`tenant_agent.is_enabled=false` 的 MCP 领取门（D3 执行端接入时补，见 T-059）。
+> **已完成（T-022）**：可见性已按 `core.project_member` 收口（客户/项目/项目维度读端点，非成员 404）。
+> **仍未做**：MCP 侧审计三列未落地（T-059）、`tenant_agent.is_enabled=false` 的 MCP 领取门（D3 执行端接入时补，见 T-059）。
 >
 > 架构边界已裁定：`docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`（Accepted，已按实施结果修订）。设计依据：`docs/ai-pm-tenant-infrastructure-v1.md`。
 
-- [ ] **T-022 可见性收口（T-021a / T-021b 已完成，待开工）**
-  - **目标**：把「按 `project_member` 过滤」从「全局可见」改为真实按成员过滤（客户 G3 与本文同源）。
-  - **依据**：`docs/ai-pm-customer-master-data-v1.md` §2 裁定 5 与 §6 G3。
-  - **做**：客户列表 / 项目列表按当前 principal 的 membership 过滤；无成员关系的资源返回「不存在」而非「无权限」（不泄露存在性）。
-  - **不做**：不重开 tag 轴（已放弃）；不做客户级 AI 上下文（G4，v2）。
-  - **验收**：非成员访问他人客户/项目返回 404；成员访问正常；`pm_lists` / `customers` 测试补齐多身份场景。
+> §4 队列已清空：T-020 / T-021a / T-021b / T-022 全部归档（见 §13）。
 
 ---
 
@@ -339,3 +335,14 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 - **todo.md 修正**：§12 表格「`task_run.tenant_id` 已留载体」→「载体由 T-021b 的 α 阶段 `0019_tenant.sql` 预留，**当前未建**」；T-061 依据 `0010:122-144` → `0010:123-144`（122 是注释行，表体 123-142）。
 - **代码注释修正**：`crates/pm-application/src/bootstrap.rs` 模块头写「three `core.principal` / three `core.project_member`」，实际 **5 / 5**（`bootstrap.rs:218-222`）；注释改正。纯注释，零行为变化。
 - **实测**：`cargo test --workspace` 退出码 0 —— **64 个 `test result: ok`、401 passed、0 failed、0 ignored、0 panicked**。
+
+### T-022 可见性收口（按 `project_member` 过滤）—— 2026-11-01 完成
+
+- **提交**：feat(api) + docs(todo) + chore(memory)，三者分开提交。
+- **用户裁定**：① 建项时把调用者写为 `project_member(owner)`（否则新项目对创建者不可见）；② 零项目客户对同租户活跃成员可见（待归类池，不阻塞「先建客户→再建项目」）；③ 收口范围 = 全部 `project_id` 维度读端点。
+- **做**：
+  - `pm-application::bootstrap` 新增 `bootstrap_project_owned` / `bootstrap_project_for_customer_owned`：真实调用者占 owner 位，不造 `owner-<code>` 合成 principal；既有包装仍走合成路径（测试/导入不变）。
+  - `/v1/pm/projects`、`/v1/pm/customers`（列表/详情/PATCH）、`requirements` / `tasks` / `milestones` / `approvals` / `decisions` / `audit-logs` / `task-runs` / `artifacts` / `revisions` 一律按 `core.project_member` 过滤；显式 `project_id` 不可见 → 404。
+  - `repositories` / `imports` / `documents` 的项目边界从「租户」升级为「租户 + 成员」；客户可见性谓词提为 `CUSTOMER_VISIBLE`（成员任一项目或零项目）。
+- **不做**：不改 MCP 工具面；`pm_writes` 的写端点仍只校验租户（T-022 定义为读端点收口）。
+- **验收**：新增 `apps/pm-api/tests/visibility.rs` 3 例（双向成员视角、零项目客户、显式 project_id 404、建项自动 owner）；`cargo test --workspace` 退出码 0。
