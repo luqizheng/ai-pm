@@ -13,6 +13,7 @@
 - **2026-11-01 增量（二）**：执行端接入转入待实施——runbook 落盘（`docs/ai-pm-executor-onboarding-runbook-v1.md`，`3811a37`），新增 **§10.5 M8**（T-080 执行端 URL 引导式接入 / T-081 `/mcp` 跨机暴露 / T-082 `pm_list_tasks`）；用户确认 trae / codex / workbuddy / z-code / dsh 均为候选执行端。
 - **2026-11-01 增量（三）**：Project Discovery（项目接入与认知建立）设计稿 V1.1 落盘（`docs/ai-pm-project-discovery-v1.md`，`203d11e` + DDL 草案 `4373e55`；已并入用户 Q1–Q7 裁决），新增 **§10.6 M9**（T-083~T-086）。核心边界：Discovery 独立于 Repository Import / Task / Run 四个业务域；Web 与 Codex `/pm-learn` 是同一 `DiscoverySession` 的两个 producer。
 - **2026-11-01 增量（四）**：用户提供《Codex 自动初始化与开发环境接入（Codex Bootstrap）》设计供稿并落盘（`docs/ai-pm-codex-bootstrap-v1.md`，`3c614be`，**未过稿**），新增 **§10.7 M10**（T-087~T-092，T-092 为 V2 延后条目）。核心原则：安装说明负责指导安装、安装程序负责保证安装正确、服务端负责验证安装结果；MCP ≠ Worker；凭证走一次性授权码 + 短期凭证，安装指令不传长期 Token；验收矩阵 BOOT-01~14。本稿是 M8 T-080（onboarding URL）的深化延伸，实施前必须先过 T-087 设计定稿。
+- **2026-11-01 增量（五）**：T-031 外部评审（六项意见，材料包 `docs/ai-pm-t031-executor-expert-review-pack.md`）；其中 Q2 执行端身份经架构专家裁决落盘 **ADR-0002**（`docs/ai-pm-adr-0002-executor-credential-separation.md`，Accepted：Model A/B 统一 lease_token、修订 D2 R-G4、终止顺序反转、T-051 升级安全前置、新增 execution_mode 列）；T-032 设计稿落盘（`docs/ai-pm-slice-d3-executor-hardening-v1.md`，**待过稿**），登记于 §6 M3。
 
 ---
 
@@ -131,13 +132,27 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 5. M2 · Task 依赖与解锁（补 P1 的唯一硬缺口）
 
-> §5 队列已清空：T-023（设计稿 `9fbb92a`，用户已过稿）/ T-024（实施）均已交付归档（见 §13）。
+> T-023（设计稿 `9fbb92a`，用户已过稿）/ T-024（实施）均已交付归档（见 §13）；本节现存追补条目 T-025（编号核实 2026-11-01：T-025~T-029 段位空缺，可用）。
+
+- [ ] **T-025 Task Dependency 并发与解锁正确性加固（T-024 追补）**
+  - **任务书**：`docs/ai-pm-t025-task-dependency-hardening-v1.md`（用户最终裁定，2026-11-01）；评审依据 `docs/ai-pm-task-dependency-review.md` §9.1 / §9.2 / §7。
+  - **本条按 §0.1 执行**：审查报告先行；修复方案（锁协议选型、Blocked 判定模型）经用户确认后再编码。
+  - **做**：专项审查 6 项（并发建边环检测 / 建边与终态迁移竞态 / Blocked 解锁语义 / Run 退避与执行预算 / 终态写入入口 / 租户隔离）→ 审查报告（五分类：确认 Bug / 潜在风险 / 已正确解决 / 建议修改位置 / 迁移是否必要）→ 实施修复 → 新增并发测试 C59–C68（双独立连接 + 显式 barrier，真实 PostgreSQL）。
+  - **不做**：不推翻 T-024 架构；不重新设计依赖边表；评审 §9.3 P2 六项不在本次范围；不做随机碰撞式并发测试。
+  - **验收**：C59–C68 中 ★ 最低集全绿（C63/C65/C67 无法覆盖须报告说明理由）；`cargo test --workspace` + `cargo check --workspace --all-targets` 全绿；T-023/T-024 实施记录回填；T-025 验收矩阵及测试映射落盘。
+  - **红线**：不得为了让测试通过而降低现有状态机、租户隔离和事务一致性要求。
+  - **进度（2026-11-01）**：**P0 两项（§一/§二）已修复并验收**——项目级图锁 `pg_advisory_xact_lock`（建边/删边/终态迁移统一取锁、取锁点先于任何行锁、零迁移）+ 并发测试 6 例全绿（73 套件 462 passed 0 failed）；审查五分类与验收映射见任务书 §十。P1 四项（§三~§六）待续。
 
 ---
 
 ## 6. M3 · Codex 执行引擎（D3）
 
-> §6 队列已清空：T-030（设计稿 `edf230f`，已过稿）/ T-031（实施 `6f3ded4`）均已交付归档（见 §13）。
+> T-030（设计稿 `edf230f`，已过稿）/ T-031（实施 `6f3ded4`）已交付归档（见 §13）。T-031 外部评审后新增可靠性加固任务：
+
+- [ ] **T-032 实施 D3.1 可靠性与启动协议加固（前置：设计稿 `docs/ai-pm-slice-d3-executor-hardening-v1.md` 已落盘，待过稿）**
+  - **做**：① 两阶段启动协议（launch_intent 持久化 + `stage='starting'` + pid 文件原子写 + reconcile 扩展）；② 执行端凭据下发（按 ADR-0002：修订 D2 R-G4、`AI_PM_LEASE_TOKEN` 注入、七项 MCP 校验、generation 裁定点留痕）；③ 心跳/存活分离（`last_agent_heartbeat_at`/`last_progress_at` + 绝对截止强制化 + 终止顺序反转「先撤凭据后杀进程」+ 终态僵尸兜底）；④ 子进程完整回收（Windows Job Object / Unix Process Group / PID 创建时间比对）；⑤ 补充项：镜像仓锁、workspace_path 二次校验、日志限制脱敏、结构化 ExitOutcome、`executor-events.jsonl`；⑥ CodexLaunchProfile（`AI_PM_CODEX_ARGS` 降级为覆盖项）。
+  - **不做**：不新增凭据体系（lease_token 唯一）；不动 13 态状态机（`starting` 落 stage）；不落 Executor Registry；不提前 D5；不引容器/远程。
+  - **验收**：设计稿 §8 十二条（评审 8 条 + ADR-0002 增补 4 条）+ **§8.1 生命周期一致性总验收**（用户最终裁决：11 步生命周期链路 + 两个故障窗口 + 5 场景必测矩阵——spawn 后崩溃 / 重复启动 / 取消竞态 / 子进程失联 / 重启恢复；Q1/Q2/Q3 不独立验收，整体构成执行可靠性与安全闭环）；`cargo test --workspace` 全绿；T-031/D1/D2 既有用例不回归。
 
 ---
 
@@ -322,7 +337,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 11. 技术债与已开放待裁（可搭车，勿单独开切片）
 
-- [ ] **T-051 待裁 #12 执行端预注册档位**：V1 已明确接受横向越权面（持有效 bearer 可领取任意项目任务），档位机制待首批执行端接入后再裁。**保持开放，不主动实施**。
+- [ ] **T-051 待裁 #12 执行端预注册档位**：V1 已明确接受横向越权面（持有效 bearer 可领取任意项目任务），档位机制待首批执行端接入后再裁。**保持开放，不主动实施**。**ADR-0002 D5 门控升级：per-project 调用方绑定改为「多租户 / 跨机执行上线前置」（与 T-081 跨机暴露同批）；单机 V1（T-041）不受阻。**
 - [ ] **T-052 待裁 #13 验收条目版本化**：`task_acceptance_criterion` 已有 `updated_at`；若 D5 证据锚定需要更强不变性，再开 forward-only 追加迁移。**保持开放，等 D5 需求明确**。
 - [ ] **T-053 estimation PRD 未落库**：`docs/ai-pm-estimation-prd-v1.md` 有完整 PRD，但零迁移、零代码（`grep estimation migrations/` 无命中）。属独立大块，需先裁 P0 范围再排期。
 - [ ] **T-054 逐字段变更历史缺失**（顾问 P1「Task 变更记录」的剩余部分）：现只有 `task_supersession` 与审计行，没有字段级 diff。先观察 D4/D5 是否需要「回放某次交付时的任务原貌」，需要再开表。
@@ -330,7 +345,8 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 - [ ] **T-056 私有部署首管理员 bootstrap（ADR-0001 R2）**：现只有 env 指定 `AI_PM_FIRST_ADMIN_TENANT/SUBJECT`，私有部署装完无人可激活。候选：`AI_PM_BOOTSTRAP_FIRST_ADMIN=false`（默认关，私有部署建议开，首个登录者 `is_active=true` + `tenant_admin`）。**与 T-055 同批裁**。
 - [ ] **T-057 Git 凭据层级（ADR-0001 R3）**：现为项目级 `integration.project_ssh_key`，与 ADR §6「凭据归属平台或 Tenant」不一致。V1 不动，待首批私有部署需求明确后裁。
 - [ ] **T-058 `tenant_admin` 跨项目可见性（ADR-0001 R6）**：与 T-022 一起裁。默认**不可见非成员项目**（仍按 `project_member` 过滤）；若运维需要全租户只读视图，另开审计专用入口，不放宽业务列表。
-- [ ] **T-059 MCP 审计三列（T-021a 遗留）**：MCP 工具写 `governance.audit_log` 时补 `actor_identity_id` / `actor_client` / `actor_auth_mode`。阻塞：rmcp 3.8 的 `StreamableHttpService::new(factory)` 工厂闭包不接收 `http::Request`（拿不到 axum extensions），且会话在 `tokio::spawn` 子任务运行（task-local 不继承）。候选方案：① 换/包 transport，把请求扩展带进会话；② 自研极薄 `/mcp` 转发层（解析 JSON-RPC 后直接调 `pm_mcp::tools`，绕开 rmcp 会话）；③ 接受 NULL 并只保留 HTTP 路径归因。**保持开放，等 D3 执行端接入时一并裁**（执行端接入后 MCP 归因才有真实使用方）。
+- [ ] **T-059 MCP 审计三列（T-021a 遗留）**：MCP 工具写 `governance.audit_log` 时补 `actor_identity_id` / `actor_client` / `actor_auth_mode`。阻塞：rmcp 3.8 的 `StreamableHttpService::new(factory)` 工厂闭包不接收 `http::Request`（拿不到 axum extensions），且会话在 `tokio::spawn` 子任务运行（task-local 不继承）。候选方案：① 换/包 transport，把请求扩展带进会话；② 自研极薄 `/mcp` 转发层（解析 JSON-RPC 后直接调 `pm_mcp::tools`，绕开 rmcp 会话）；③ 接受 NULL 并只保留 HTTP 路径归因。**保持开放，等 D3 执行端接入时一并裁**（执行端接入后 MCP 归因才有真实使用方）。**2026-11-01 ADR-0002 移交（专家复审 §五，P1）**：本任务追加 `task_run.execution_mode` 列（`human`/`spawn`，`remote`/`container` 预留）+ `triggered_by_user_id` 可空性核查——该子项是普通列迁移，**不受 rmcp transport 阻塞，可先行**；审计三列仍受 rmcp 阻塞。
+- [ ] **T-093 Executor 生命周期管理能力（ADR-0002 专家复审 §五 新建，P2）**：执行器**管理面**能力——Run 执行时间线查询（消费 `executor-events.jsonl`）、执行器实例状态展示、手动管理入口。**不含数据面正确性项**（启动持久化协议 / 子进程回收维持 P0 在 T-032）。前置：T-032 交付后按需立项。
 
 ---
 
@@ -449,6 +465,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 - **实施期偏差**（详见设计稿 §10.2）：① UI 直写终态路径（`pm_write::update_task`）同样接入解锁，否则「人在 UI 完成任务」不解锁下游；② Model A 依赖未满足沿用 D1「回滚不退避」约定（`TaskNotReady("dependency_unmet")`）；③ `superseded` 无端到端写入方（应用层无取代命令），以 `cancelled` 端到端 + D5 集合单测兜底。
 - **验收**：C43–C58 全覆盖（映射见设计稿 §10.3）；`cargo test --workspace` 退出码 0 —— **70 个 `test result: ok`、441 passed、0 failed**；`cargo check --workspace --all-targets` 0 error 0 warning。
 - **关键结论**：依赖满足只有一套谓词（调度领取 / 建删边解锁 / 终态级联共用）；解锁产生的状态变更仍走 `apply_task_transition`（审计 action=`update_task_status`、actor=`ai-pm-dispatch`）；`TaskReady` 与迁移同事务写入，重复解锁不产生第二个语义键。
+- **追补立项**：**T-025**（并发正确性加固，任务书 `docs/ai-pm-t025-task-dependency-hardening-v1.md`）——441 passed 只覆盖串行语义，并发场景（C59/C60）未验证；依据专家评审 `docs/ai-pm-task-dependency-review.md`（2026-11-01，基础架构 8.5/10）。
 ### T-030 D3 执行引擎适配器设计稿 —— 2026-11-01 完成
 
 - **提交**：`edf230f` docs(executor)。
