@@ -18,7 +18,7 @@ pub(crate) use crate::repo_facts::{self, RepoAnalysisModel, RepoMaterial, pm_ai_
 pub(crate) use pm_domain::import::{Evidence, EvidenceKind, ProjectDraft};
 
 /// `list_imports` 的结果行（14 列）。
-type ImportListRow = (
+pub(crate) type ImportListRow = (
     Uuid,
     String,
     i32,
@@ -30,7 +30,7 @@ type ImportListRow = (
     Option<DateTime<Utc>>,
 );
 /// `get_import` 的结果行（14 列，含草案与阶段详情）。
-type ImportDetailRow = (
+pub(crate) type ImportDetailRow = (
     Uuid,
     String,
     i32,
@@ -47,7 +47,7 @@ type ImportDetailRow = (
     Option<DateTime<Utc>>,
 );
 /// `get_import` 的来源快照行（8 列）。
-type ImportSourceRow = (Uuid, String, Option<String>, i32, i32, i64, bool, Option<String>);
+pub(crate) type ImportSourceRow = (Uuid, String, Option<String>, i32, i32, i64, bool, Option<String>);
 
 mod advance;
 mod grounding;

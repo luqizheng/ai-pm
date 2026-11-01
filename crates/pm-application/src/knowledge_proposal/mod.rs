@@ -95,7 +95,7 @@ pub struct RevisionVetoOutcome {
 
 
 #[derive(Debug, Clone)]
-struct CurrentDoc {
+pub(crate) struct CurrentDoc {
     document_id: Option<Uuid>,
     revision_id: Option<Uuid>,
     revision_no: i32,

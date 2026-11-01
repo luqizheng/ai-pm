@@ -169,5 +169,5 @@ pub struct PgCommandExecutor {
     outbox: Arc<dyn OutboxAppend>,
 }
 
-type Tx = sqlx::Transaction<'static, sqlx::Postgres>;
+pub(crate) type Tx = sqlx::Transaction<'static, sqlx::Postgres>;
 
