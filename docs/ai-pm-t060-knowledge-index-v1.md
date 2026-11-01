@@ -1,7 +1,7 @@
-# T-060 · 知识索引层可替换化与完整检索（P6 后半 · 设计稿 v1.2）
+# T-060 · 知识索引层可替换化与完整检索（P6 后半 · 设计稿 v1.3）
 
-> 状态：**有条件通过（v1.2 已收录专家评审全文并逐条处置，待复审）**
-> 版本：v1.0（2026-11-02 落盘，Q1–Q4 + A-1~A-6 已裁定）→ v1.1（2026-11-02 评审修订：并发一致性、版本边界、状态不变量、故障分级、检索正确性、性能验证、K-17~K-25）→ **v1.2（2026-11-02 收录专家评审 v2 原文，补当前生效修订校验、检索服务职责分离、分页语义、索引表级故障回退）**
+> 状态：**有条件通过（v1.3 增补 Project 级写入协调与并发模型，待复审）**
+> 版本：v1.0（2026-11-02 落盘，Q1–Q4 + A-1~A-6 已裁定）→ v1.1（2026-11-02 评审修订：并发一致性、版本边界、状态不变量、故障分级、检索正确性、性能验证、K-17~K-25）→ v1.2（2026-11-02 收录专家评审 v2 原文，补当前生效修订校验、检索服务职责分离、分页语义、索引表级故障回退）→ **v1.3（2026-11-02 裁定：Project 级 Knowledge Write Coordinator + 写入幂等 / base_revision 校验 / 跨实例协调）**
 > 评审结论：修改后过稿；**不推翻现有架构，不扩大本期范围**。
 > 一句话：把「每次检索都逐篇读 Git + 全量扫描」换成「落库章节索引 + 可替换端口 + 发布即重建 + 索引不可用时回退直读」，不引入分词扩展、不引入向量库、不改检索响应契约。
 > 上位依据：`todo.md` §9 M6（T-060）、`docs/ai-pm-markdown-knowledge-space.md` §九/§十一（A 路径与可替换适配层）、`docs/ai-pm-knowledge-v2-implementation.md` §3（索引现状）、`migrations/0014_knowledge_v2.sql:60-79`、`migrations/0019_tenant.sql`（租户纪律）、`AGENTS.md` 规则 1（新项目无存量数据，直接改契约）。
@@ -55,6 +55,24 @@
 | P2-2 | 证据契约 | **已采纳**：`SearchHit` 内部携带 `revision_id + revision_hash`，证据绑定修订而非文档 | §3.3、§11 |
 | P2-3 | 索引清理生命周期 | **已采纳**：revision 删除双级联；provider 废弃按 provider 手动清理；不新增 Job | §4.4 |
 
+### 0.4 Project 级写入协调裁定（v1.3）
+
+**原则**：Agent 执行并行化与知识库写入并行化是两个独立问题。允许多个 Agent 并行工作，**不意味着允许它们并发修改同一 Project 知识库**。
+
+| # | 约束 | 落地 |
+|---|---|---|
+| 1 | 同一 Project 可有多个 Agent，在不同任务 / Repository 上并行执行 | 与写入模型解耦（本稿不改执行器） |
+| 2 | 所有写入必须经过统一 Coordinator，不得绕过修改正文或索引数据 | §5.8：四个写入点 + 手动 reindex 全部经 `KnowledgeWriteCoordinator` |
+| 3 | 同一 Project 的变更串行协调，范围覆盖文档变更、Revision 发布、同步重建的完成/失败判定 | §5.8：锁覆盖「业务事务 → 提交 → `rebuild_document` 结果落定」 |
+| 4 | 不同 Project 并行，不设全局写锁 | §5.8：锁键 = `project_id` |
+| 5 | 保留 Revision 级重建互斥作为防御性保护 | §5.3 原语不变，锁序 `project → revision` |
+| 6 | 章节与状态仍由 DB 事务保证原子性；索引失败不回滚已发布的 Git Revision | §5.3 / §5.4 不变 |
+| 7 | 写入命令幂等：同一 `operation_id` 不重复产生 Revision；并发修改校验 `base_revision` | §4.5 幂等账本 + §5.8 写入流程 |
+| 8 | 多实例部署时协调跨实例有效，不能仅靠进程内 Mutex | §5.8：PG **会话级 advisory lock**（数据库级互斥） |
+| 9 | 不引入新 Job / Outbox / Worker，保留同步重建 | §5.7 不变 |
+
+**归属**：Coordinator 是**Project 级应用服务**，不属于任何 Agent，也不属于某个 Executor。调用方（REST、MCP 工具、未来的执行器）都只是它的客户端；Agent 角色增加或执行器更换时，一致性边界不随之改变。
+
 ---
 
 ## 1. 现状与缺口（实测证据）
@@ -79,9 +97,9 @@
 
 检索只是这条链路的出口；本切片建立的是**协议与边界**（产物形状、转换原语、有效性判定、回退契约），而不是「把 Markdown 搜索搬进 PostgreSQL」。
 
-**目标**：索引可重建且幂等、状态与正文哈希及版本一致、哈希/版本漂移即失效、检索接口向后兼容、外部 provider 只需实现同一端口、证据可回溯。
+**目标**：索引可重建且幂等、状态与正文哈希及版本一致、哈希/版本漂移即失效、检索接口向后兼容、外部 provider 只需实现同一端口、证据可回溯；**同一 Project 的写入与同步索引重建由跨实例有效的 Coordinator 串行协调，写入命令按 `operation_id` 幂等并按 `base_revision` 拒绝过期修改**。
 
-**非目标**：不引入向量库、不引入分词扩展、不重写 Git 事实源、不新增后台作业/事件（归 T-061）、不做监控页、不做读时惰性重建。
+**非目标**：不引入向量库、不引入分词扩展、不重写 Git 事实源、不新增后台作业/事件（归 T-061）、不做监控页、不做读时惰性重建；**不设全局写锁、不改 Agent 并行执行模型、不引入额外分布式锁服务（协调只依赖 PostgreSQL）**。
 
 ---
 
@@ -92,11 +110,12 @@
 ```mermaid
 flowchart LR
   subgraph 写入
-    P1["create_document（MCP）"] --> RB
-    P2["finalize_committed（自动提交）"] --> RB
-    P3["confirm_redline_proposal（红线确认）"] --> RB
-    P4["veto_revision（回滚）"] --> RB
-    RB["DbSectionIndexer::rebuild_document"] --> TR["apply_transition（唯一转换原语 + advisory lock）"]
+    P1["create_document（MCP）"] --> CO
+    P2["finalize_committed（自动提交）"] --> CO
+    P3["confirm_redline_proposal（红线确认）"] --> CO
+    P4["veto_revision（回滚）"] --> CO
+    CO["KnowledgeWriteCoordinator（project 级串行 · 幂等 · base_revision）"] --> RB
+    RB["DbSectionIndexer::rebuild_document"] --> TR["apply_transition（唯一转换原语 + revision 级锁）"]
     TR --> T1[("ai.document_section_index")]
     TR --> T2[("ai.document_index_state")]
   end
@@ -110,6 +129,7 @@ flowchart LR
   end
 ```
 
+- 写入侧一律进 **`KnowledgeWriteCoordinator`**（§5.8），锁按 `project_id` 串行，覆盖到同步重建结果落定；读取侧**不取该锁**（检索是只读，回退路径的漂移清理只取 revision 级锁）。
 - **端口与实现均在 `pm-application`**（与现状一致，该 crate 已依赖 sqlx/tracing）。
 - `knowledge_index.rs` 退化为**纯解析 + 打分纯函数 + 回退直读扫描**。
 - 回退器保留 Git 权威读路径（`knowledge::read_document`，含 `content_hash` 校验）。
@@ -127,6 +147,8 @@ flowchart LR
 | 索引重建（`rebuild_document`）与检索（`search`）本身 | `KnowledgeIndexer` 实现（`DbSectionIndexer`） |
 
 这样未来接 PageIndex 时，只替换 `KnowledgeIndexer` 实现，回退机制与分页语义**不随 provider 绑定**。`search_with_fallback` 作为函数名退役，其逻辑全部收进 `KnowledgeSearchService::search`。
+
+与读取侧并列的第二个应用服务是 **`KnowledgeWriteCoordinator`**（§5.8）：前者管「怎么读」，后者管「谁能写、按什么顺序写」。两者都按 **Project** 定位，都不属于某个 Agent，也不属于某个 provider 实现。
 
 ### 3.3 端口契约
 
@@ -206,7 +228,7 @@ ALTER TABLE ai.document_section_index
 - `section_no` = 解析顺序（含 level 0 的 `preamble`），重建时连续重排。
 - 租户纪律按 `0019`：`tenant_id NOT NULL` + 两条 `(tenant_id, *)` 组合外键（`uq_document_revision_tenant_id` 已存在）。
 - `provider` 为维度列；`(document_revision_id, provider)` 唯一键在 `document_index_state` 上已存在。
-- `tenant_schema.rs` 的 `TENANT_TABLES` 从 40 增至 41。
+- `tenant_schema.rs` 的 `TENANT_TABLES` 由 40 增至 **42**（本表 + §4.5 幂等账本）。
 - **状态表唯一键核对（评审 P0-2）**：`ai.document_index_state` 的既有约束为 `UNIQUE (document_revision_id, provider)`
   （`0014:75`），本稿 UPSERT 的冲突目标与此**一致**；迁移 `0019` 已为其加 `tenant_id` 与 `(tenant_id, document_revision_id)`
   组合外键（`ON DELETE CASCADE`），无需改动。
@@ -249,6 +271,39 @@ ALTER TABLE ai.document_section_index
 | provider 废弃 | 按 `provider` 一次性手动清理（`DELETE … WHERE provider = $1`） | 不新增 Job、不做定期清理任务 |
 | 历史修订 | **允许保留历史派生数据**（级联/人工清理），但**不参与检索**（§6.1 只取最新 published） | — |
 
+### 4.5 写入幂等账本（`ai.knowledge_write_operation`）
+
+写入命令的 `operation_id` 去重记录，同表写入业务事务内：
+
+```sql
+CREATE TABLE IF NOT EXISTS ai.knowledge_write_operation (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id    UUID NOT NULL,
+    project_id   UUID NOT NULL,
+    operation_id TEXT NOT NULL,
+    command      TEXT NOT NULL CHECK (
+        command IN ('create_document', 'submit_proposal', 'confirm_redline', 'veto_revision')
+    ),
+    -- 本次操作产出的提案 / 修订（veto 可能两者皆空，用 NULL）
+    proposal_id  UUID,
+    revision_id  UUID,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (project_id, operation_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_write_op_revision
+    ON ai.knowledge_write_operation (revision_id)
+    WHERE revision_id IS NOT NULL;
+
+ALTER TABLE ai.knowledge_write_operation
+    ADD CONSTRAINT fk_knowledge_write_op_tenant_project
+        FOREIGN KEY (tenant_id, project_id) REFERENCES core.project (tenant_id, id);
+```
+
+- **不是 outbox、不是 job**：没有消费者、没有事件、没有后台扫描；只用于「同一 `operation_id` 重放时返回既有结果」。
+- 插入与业务写入**同一事务**：唯一键冲突即代表重放，回滚本事务并读取既有行返回（不二次发布）。
+- 生命周期：随 `core.project` 存在；不做定期清理（人工按 `created_at` 清理即可，同 §4.4 口径）。
+
 ---
 
 ## 5. 重建语义与触发点
@@ -263,6 +318,8 @@ ALTER TABLE ai.document_section_index
 | 4 | `veto_revision`（`veto.rs:5-121`） | tx 内：被否决修订标 stale，上一修订插 `pending` | tx 内仅改业务状态；提交后：被否决修订 `apply_transition(Stale)`（清空产物），生效修订 `rebuild_document`（A-1） |
 
 `knowledge_migrate` 走 `submit_proposal`，自动获得索引。
+
+**四个写入点全部经 `KnowledgeWriteCoordinator`（§5.8）**：取 project 锁 → 幂等预占 → `base_revision` 校验 → 业务事务提交（含 §4.5 账本行）→ 同步 `rebuild_document` → 释放锁。
 
 ### 5.2 重建流程（`rebuild_document`）
 
@@ -321,6 +378,7 @@ async fn apply_transition(
 - **项目级全量**：新增 `POST /v1/pm/documents/reindex?project_id=` → 顺序遍历该项目**全部 published 修订**，逐个 `rebuild_document`；响应 `{ reindexed, stale, failed, superseded }`（只返回计数，不返回逐条明细）。
 - `index_version` 上调（如 `v1` → `v2`）后的**既定动作**：改常量 → 全部行自动失效（§4.2）→ 调项目级全量重建 → 恢复直查。不做自动后台触发，不做双版本并存（`AGENTS.md` 规则 1）。
 - 项目级入口带 `project_in_tenant` 边界校验，与其余端点一致。
+- 两个 reindex 入口都**写索引数据**，因此同样经 `KnowledgeWriteCoordinator` 取 project 锁（§5.8）；项目级重建会长时间持锁，按项目逐个执行，不并发。
 
 ### 5.6 性能验证（评审项 6）
 
@@ -331,6 +389,61 @@ async fn apply_transition(
 ### 5.7 为什么不做后台 job（被否方案记录）
 
 `integration.job` 与 `OutboxWorker` 可用，但新增作业类型意味着（a）新建 worker 循环、（b）处理「已发布未索引」窗口、（c）与 T-061 事件语义重叠。发布点唯一的额外 IO 是刚写完的 Git 文件，失败已降级处理；按 YAGNI 否决。**若 K-23 实测显示发布请求不可接受**，再单独开切片改为异步——不在本稿内预留开关。
+
+### 5.8 Project 级写入协调（`KnowledgeWriteCoordinator`，v1.3）
+
+#### 5.8.1 执行模型
+
+- **Agent 并行 ≠ 写入并行**：同一 Project 可有多个 Agent 在不同任务 / Repository 上并行执行；但对同一 Project 知识库的写入**串行**。
+- 协调范围（写操作全集）：`create_document`、提案自动提交 / 红线确认、`veto_revision`、单修订 reindex、项目级全量 reindex。**任何绕过 Coordinator 直接改正文或索引数据的路径都不允许。**
+- 读**不参与**协调：`GET /search`、`GET /documents/{id}` 只读；回退路径的漂移清理只走 revision 级原语（§5.3），不取 project 锁。
+- 锁粒度 = `project_id`：不同 Project 完全并行，**无全局写锁**。
+
+#### 5.8.2 锁实现（跨实例有效）
+
+```rust
+/// 持有期间独占该 Project 的写入权；连接不归还池，避免锁残留。
+pub struct ProjectWriteGuard { conn: Option<sqlx::PgConnection> }
+
+pub async fn acquire(
+    pool: &PgPool, project_id: Uuid, timeout: Duration,
+) -> Result<ProjectWriteGuard, KnowledgeError>;
+```
+
+| 项 | 设计 |
+|---|---|
+| 锁类型 | **会话级** `pg_try_advisory_lock(hashtextextended('ai.project_knowledge_write:' || $project_id, 0))`（不用进程内 Mutex，也不引入外部锁服务） |
+| 为何不用事务级 | 协调范围跨「业务事务提交 → 同步重建结果落定」两个事务；`pg_advisory_xact_lock` 在 commit 时即释放，覆盖不到重建判定 |
+| 获取 | 循环 `try` + 短退避，总等待 ≤ `KNOWLEDGE_WRITE_LOCK_TIMEOUT_MS`（默认 10 s）；超时 → `KnowledgeError::ProjectWriteBusy` → **409 `KNOWLEDGE_PROJECT_BUSY`** |
+| 释放 | 显式 `pg_advisory_unlock` 后 `detach()`（连接关闭、不归还池）；异常 / panic 路径同样 `detach()`，会话结束由 PG 释放，**不留死锁** |
+| 跨实例 | 锁在 PostgreSQL 内，多实例天然共享；实例崩溃时连接断开即自动释放 |
+| 锁序 | 固定 `project → revision`（§5.3 的 revision 级锁在 project 锁内获取），任何路径不得反序，避免死锁 |
+
+#### 5.8.3 一次写入的五个步骤
+
+1. **取锁**：`acquire(project_id, timeout)`；失败 409（可重试，不是数据冲突）。
+2. **`base_revision` 校验**（锁内读当前 head = 该文档最新 published 修订）：
+   - 请求携带 `base_revision_id`（新建文档要求 `NULL`）；
+   - 与当前 head 不一致 → **409 `KNOWLEDGE_REVISION_CONFLICT`**，不产生 Revision；
+   - 取代原 `base_content_hash`（`AGENTS.md` 规则 1：不留两套基准字段）；
+   - `veto_revision` 不按 head 比较（它作用于显式指定的 revision），但仍需 project 锁与幂等账本。
+3. **幂等预占**（在业务事务内、**先于**正文写 Git）：`INSERT INTO ai.knowledge_write_operation (...) ON CONFLICT (project_id, operation_id) DO NOTHING RETURNING id`。
+   - 无返回行 ⇒ 重放：读取既有行，按其 `proposal_id` / `revision_id` 返回既有结果，**不再写 Git、不再重建**；若既有行已提交但重建结果未落定，则补跑一次幂等重建（§5.3 保证重复执行无副作用）。
+   - 有返回行 ⇒ 继续执行；若事务失败（含 Git 写入失败），账本行随事务回滚，重试可重新执行，**不会产生第二条 Revision**（Git 同内容重写哈希不变）。
+4. **业务事务提交**：正文写 Git + revision 落库 + 回填账本 `revision_id` + 状态业务字段，一次提交。
+5. **同步重建 → 释放锁**：`rebuild_document` 结果落定（`Indexed` / `Stale` / `Failed` / `Superseded`）后释放 project 锁；重建失败只记录，不阻断已提交的发布（§5.4）。
+
+#### 5.8.4 与 revision 级锁的关系
+
+- project 锁**消除同 Project 内的跨修订竞争**（P0-1 的两条重建交错在协调后不会发生）。
+- revision 级锁**保留为防御层**：读路径的 `apply_transition(Stale)`、手动 reindex、未来若出现未走 Coordinator 的内部调用，仍由 §5.3 的锁内前置条件重算兜底（`Superseded`）。
+- 因此本稿**同时保留**「project 串行」与「revision 互斥」，二者不是替代关系。
+
+#### 5.8.5 明确的边界
+
+- 不引入新的 Job / Outbox / Worker / 事件：协调是**请求内**的排队，没有后台补偿。
+- 不改 Agent 执行模型：Agent 仍可并行跑任务，只是写知识库时必须排队。
+- 协调服务是 **Project 级、与 Agent / Executor 无关**的组件，放在 `pm-application`。
 
 ---
 
@@ -457,6 +570,9 @@ SELECT *, score + ref_boost AS total FROM scored
 | 锁内前置条件已变化 | `IndexOutcome::Superseded` | reindex → 409（提示「状态已变化，请重试」） |
 | 手动 reindex 指向非 published 修订 | `KnowledgeError::Conflict` | 409 |
 | 同一修订并发转换 | advisory lock 串行化；`UNIQUE(document_revision_id, provider, section_no)` 兜底 | — |
+| Project 写锁等待超时（§5.8） | `KnowledgeError::ProjectWriteBusy` | **409** `KNOWLEDGE_PROJECT_BUSY`（排队超时，可重试） |
+| `base_revision` 与当前 head 不一致（§5.8） | `KnowledgeError::RevisionConflict` | **409** `KNOWLEDGE_REVISION_CONFLICT`（不产生 Revision） |
+| 同一 `operation_id` 重复提交（§4.5） | 重放既有结果（内部 `Replayed` 标记） | **200**，响应与首次一致，不新增字段 |
 | 索引层整体不可用（章节/状态查询失败），但权威清单可读 | 不报错 | **200**，整项目回退直读（§6.5）；`warn!` 带 `reason=index_infra_error` |
 | 权威元数据 / 连接池不可用 | `KnowledgeError::IndexUnavailable` | **503** `KNOWLEDGE_INDEX_UNAVAILABLE` |
 | Git 根不可读 | `KnowledgeError::IndexUnavailable` | **503** `KNOWLEDGE_INDEX_UNAVAILABLE` |
@@ -468,6 +584,9 @@ SELECT *, score + ref_boost AS total FROM scored
 - `warn!` `knowledge_index_superseded`（provider / revision_id）
 - `info!` `knowledge_search_fallback`（project_id / stale_count / infra=false）
 - `error!` `knowledge_search_unavailable`（project_id / error）
+- `info!` `knowledge_write_locked`（project_id / wait_ms）
+- `warn!` `knowledge_write_busy`（project_id / wait_ms）
+- `info!` `knowledge_write_replayed`（project_id / operation_id / revision_id）
 
 ---
 
@@ -491,7 +610,7 @@ SELECT *, score + ref_boost AS total FROM scored
 | K-12 | 响应兼容 | REST JSON 字段集合与改造前一致（无 `revision_hash`） | `apps/pm-api/tests/documents.rs` |
 | K-13 | 回退语义 | 状态缺失/`failed` 时回退直读仍能命中；`used_fallback` 只在内部 | `knowledge_index_v2.rs` |
 | K-14 | 两路径打分一致 | 同一文档「索引态」与「强制回退态」排名与分值相同 | 同上 |
-| K-15 | 租户结构不变量 | 新表进 `TENANT_TABLES`（41 张），`tenant_id NOT NULL` + 两条组合外键 | `crates/pm-infrastructure/tests/tenant_schema.rs` |
+| K-15 | 租户结构不变量 | 新表进 `TENANT_TABLES`（**42** 张：章节索引 + 幂等账本），`tenant_id NOT NULL` + 组合外键齐备 | `crates/pm-infrastructure/tests/tenant_schema.rs` |
 | K-16 | 迁移可重复 | `0024` 空库应用成功，表/索引/约束齐备 | `crates/pm-infrastructure/tests/migration_0024.rs` |
 | **K-17** | **并发一致性（评审 1）** | 对同一 `(revision, provider)` 并发执行「重建」与「漂移清理」：两者串行化；后到旧操作返回 `Superseded` 且**不删除**新产物；结束后 INV-1/INV-2 成立 | `knowledge_index_v2.rs` |
 | **K-18** | **版本参与有效性（评审 2）** | 把 state 的 `index_version` 改为 `v0` → 检索走回退、不返回旧索引内容；全量重建后恢复 DB 直查 | 同上 |
@@ -502,16 +621,21 @@ SELECT *, score + ref_boost AS total FROM scored
 | **K-23** | **大文档性能（评审 6 / P1-6）** | ≥200 标题、≥200 KB：记录**单文档章节数**、**重建总耗时**、**章节批量写入耗时**；章节行数正确、状态一致、重建耗时 ≤ 10 s（宽松上限），实测值回填 §5.6 | 同上 |
 | **K-24** | **混合分页（评审 5 / P1-3）** | 部分文档走 DB、部分走回退且存在**同一章节两路都命中**：合并后 `limit/offset` 无重复、无缺口，**DB 行优先**，顺序稳定（复跑两次一致） | 同上 |
 | **K-25** | **版本升级全量入口（评审 2 / P0-3）** | 改 `index_version` 常量后旧索引即时失效；`POST /documents/reindex?project_id=` 覆盖全部 published 修订，返回 `{reindexed, stale, failed, superseded}` 计数正确，重建后恢复 DB 直查 | 同上 |
+| **K-26** | **同 Project 写串行（v1.3）** | 同一 project 并发发起两个写（不同文档）：整个过程串行（第二次在第一次重建落定后才开始），两篇索引互不交叉；`knowledge_write_locked` 记录 `wait_ms` | `knowledge_index_v2.rs` |
+| **K-27** | **`operation_id` 幂等（v1.3）** | 同一 `operation_id` 连续提交两次：只产生 1 条 revision、1 条账本行；第二次返回与首次一致的结果，且不重写 Git、不重复重建 | 同上 |
+| **K-28** | **`base_revision` 冲突（v1.3）** | 携带过期 `base_revision_id`（已被他人推进）→ 409 `KNOWLEDGE_REVISION_CONFLICT`，revision 计数不变 | 同上 |
+| **K-29** | **跨实例协调与跨项目并行（v1.3）** | 用两个独立 pool 模拟两实例：同 project 写入串行（无并发重建）；不同 project 写入并行（总耗时明显小于串行累加） | 同上 |
+| **K-30** | **锁释放兜底（v1.3）** | 持锁连接被强制关闭（模拟实例崩溃）→ 后续写入在超时内取得锁，无死锁残留；连接池未被耗尽的持锁连接污染 | 同上 |
 
 > **编号对齐说明（评审 P0-P1 提供的 K-17～K-25 与本稿编号的差异）**：语义相同者已直接对齐（K-17 并发、K-18 版本失效、K-19 清理一致性、K-20 整体故障、K-21 空锚点、K-22 跨租户）。评审矩阵中「K-23 混合分页 → 本稿 K-24」「K-24 provider 版本升级 → 本稿 K-25」「K-25 大文档重建性能 → 本稿 K-23」（本稿在 v1.1 已先占了 K-23 给性能）。实施时以**本稿编号**为准。
 
-T-060 验收四条 ↔ 用例：可重建且幂等 → K-02；状态与正文哈希一致 → K-02/K-03/K-19；接口向后兼容 → K-12（+K-11）；哈希漂移索引失效 → K-03/K-19。v1.1 评审七项 ↔ K-17~K-25；v2 评审矩阵 ↔ §12.7 编号映射。
+T-060 验收四条 ↔ 用例：可重建且幂等 → K-02；状态与正文哈希一致 → K-02/K-03/K-19；接口向后兼容 → K-12（+K-11）；哈希漂移索引失效 → K-03/K-19。v1.1 评审七项 ↔ K-17~K-25；v2 评审矩阵 ↔ §12.7 编号映射；v1.3 写入协调 ↔ K-26~K-30（同 Project 串行 K-26、`operation_id` 幂等 K-27、`base_revision` K-28、跨实例 / 跨项目 K-29、锁释放 K-30）。
 
 ---
 
 ## 9. 不做与风险
 
-**不做**：向量检索、中文分词扩展、后台索引作业、outbox 事件、监控页、自动修复索引失败（只在读路径标记 + 回退）、读时惰性重建、历史修订章节的历史查询视图、双版本索引并存。
+**不做**：向量检索、中文分词扩展、后台索引作业、outbox 事件、监控页、自动修复索引失败（只在读路径标记 + 回退）、读时惰性重建、历史修订章节的历史查询视图、双版本索引并存；**不设全局写锁、不引入外部锁服务、不改 Agent 并行执行模型、不做按时长细分的锁降级**。
 
 **风险与缓解**：
 1. **打分公式两处实现（SQL / Rust）漂移** → K-14 钉住等价；公式只在 §6.2 维护，改动必须双改并跑 K-14/K-21。
@@ -520,6 +644,8 @@ T-060 验收四条 ↔ 用例：可重建且幂等 → K-02；状态与正文哈
 4. **`ILIKE` 级全表扫** → 单项目章节量级可接受；换 FTS 只替换端口实现，不动契约。
 5. **版本升级需要全量重建** → 由 §5.5 项目级入口承接；旧版本产物自动失效（不会误用），退化为回退直读（不会丢结果）。
 6. **迁移号冲突** → `0023` 属 T-032；本稿用 `0024`。
+7. **写锁排队拉长发布请求**（§5.8）→ 仅同 Project 串行，超时 409 可重试；`wait_ms` 入日志，K-26/K-29 验证；若长期排队严重，再评估按文档细分锁（本稿不提前做）。
+8. **项目级全量 reindex 长时间持锁**（§5.5）→ 按项目逐个执行、期间同项目写入排队；该入口是运维动作，不在常规发布路径上。
 
 ---
 
@@ -527,19 +653,21 @@ T-060 验收四条 ↔ 用例：可重建且幂等 → K-02；状态与正文哈
 
 | 文件 | 改动 |
 |---|---|
-| `migrations/0024_knowledge_section_index.sql` | 新建（§4.1） |
+| `migrations/0024_knowledge_section_index.sql` | 新建（§4.1 章节索引表 + §4.5 幂等账本表） |
+| `crates/pm-application/src/knowledge_write_coordinator.rs` | **新建**：`KnowledgeWriteCoordinator` / `ProjectWriteGuard`（project 级会话 advisory lock、超时、释放与 `detach()` 兜底）；写入五步编排（§5.8.3） |
 | `crates/pm-application/src/knowledge_indexer.rs` | 端口新契约 + `DbSectionIndexer`（`rebuild_document` / `search`）+ `apply_transition`（锁内重算前置条件）+ `DirectReadFallback` + `rebuild_quietly` |
 | `crates/pm-application/src/knowledge_search.rs` | **新建**：`KnowledgeSearchService::search`（取当前修订 + 四要素判定 + DB/回退编排 + 合并去重 + 排序 + 分页 + 故障分档）；`SearchPage` / `FallbackSearchResult` |
 | `crates/pm-application/src/knowledge_index.rs` | 保留解析；新增 `score_section`（含空锚点保护）；`search_documents` 更名 `scan_documents_direct`（仅回退用）；`SearchHit` 增 `revision_id`、`revision_hash`（均不序列化） |
-| `crates/pm-application/src/knowledge.rs` | `CreatedDocument` 增 `revision_id`；`create_document` 提交后重建；`KnowledgeError` 增 `IndexUnavailable` |
-| `crates/pm-application/src/knowledge_proposal/{submit,veto}.rs` | 删 `pending` 插入；提交后重建；veto 用 `apply_transition(Stale)` + 重建生效修订 |
-| `apps/pm-api/src/documents.rs` | `search_handler` 走 `KnowledgeSearchService::search` + `tenant_id` + `limit`/`offset`；`reindex_handler` 改 `DbSectionIndexer`；新增项目级 `reindex_project_handler`；`error_response` 增 503 映射 |
+| `crates/pm-application/src/knowledge.rs` | `CreatedDocument` 增 `revision_id`；入参增 `operation_id` / `base_revision_id`（替换 `base_content_hash`）；`create_document` 提交后重建；`KnowledgeError` 增 `IndexUnavailable` / `ProjectWriteBusy` / `RevisionConflict` |
+| `crates/pm-application/src/knowledge_proposal/{submit,veto}.rs` | 删 `pending` 插入；经 Coordinator（幂等 + `base_revision` 校验）；提交后重建；veto 用 `apply_transition(Stale)` + 重建生效修订 |
+| `apps/pm-api/src/documents.rs` | `search_handler` 走 `KnowledgeSearchService::search` + `tenant_id` + `limit`/`offset`；`reindex_handler` 改 `DbSectionIndexer` 并经 Coordinator；新增项目级 `reindex_project_handler`；`error_response` 增 503 / 409 映射 |
+| `apps/pm-mcp`（`pm_submit_document`） | 透传 `operation_id` / `base_revision_id`（写入协调的唯一入口不变） |
 | `apps/pm-api/src/routes.rs` | 新增 `POST /v1/pm/documents/reindex`（§5.5） |
 | `crates/pm-application/src/lib.rs` | 重导出更新 |
-| `crates/pm-infrastructure/tests/tenant_schema.rs` | 表清单加新表（40 → 41） |
+| `crates/pm-infrastructure/tests/tenant_schema.rs` | 表清单加新表（40 → **42**） |
 | `crates/pm-infrastructure/tests/migration_0024.rs` | 新建 |
 | `crates/pm-application/tests/knowledge_v2.rs`、`apps/pm-api/tests/documents.rs` | 适配新契约 + K-12 / K-20 |
-| `crates/pm-application/tests/knowledge_index_v2.rs` | 新建（K-02~K-11、K-13、K-14、K-17~K-25） |
+| `crates/pm-application/tests/knowledge_index_v2.rs` | 新建（K-02~K-11、K-13、K-14、K-17~K-30） |
 | `docs/ai-pm-knowledge-v2-implementation.md` | 实施完成后回填「索引层 V2」章节与 K-23 实测耗时 |
 
 **验收命令**：`cargo test --workspace`、`cargo check --workspace --all-targets`（`todo.md` §0.2 通用命令）。
@@ -551,6 +679,7 @@ T-060 验收四条 ↔ 用例：可重建且幂等 → K-02；状态与正文哈
 - **T-061**：本稿不写 outbox 事件；`knowledge_index_failed` / `knowledge_search_unavailable` 日志与 `document_index_state` 可直接作为后续指标来源。
 - **D5（T-042/T-043）**：`SearchHit.revision_id` / `revision_hash`（内部字段）与 `locator`（anchor/start_line）即证据回填所需的版本与定位信息。**证据必须绑定具体修订**，不能只绑 `document_id`——文档再次发布后，历史 Run 的证据不得被解释为最新正文。
 - **未来 provider（PageIndex / 向量）**：实现同一 trait（`provider` / `index_version` / `rebuild_document` / `search`），并复用 §4.2 四要素有效性判定与 §5.3 转换原语；**自带派生表**，不共用 `document_section_index`；切换不改业务调用点。
+- **Agent / Executor 扩展（平台层）**：`KnowledgeWriteCoordinator` 是 **Project 级公共边界**，不属于任何 Agent 或 Executor。新增 Agent 角色、更换执行器、增加并行度都不改变写入一致性模型；新写入方只需作为 Coordinator 的客户端接入（`operation_id` + `base_revision_id`）。
 
 ---
 
