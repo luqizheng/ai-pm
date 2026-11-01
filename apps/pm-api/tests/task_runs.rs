@@ -1,4 +1,4 @@
-﻿//! `GET /v1/pm/task-runs` 集成测试：真实数据库 + 真 HTTP router（无 socket）。
+//! `GET /v1/pm/task-runs` 集成测试：真实数据库 + 真 HTTP router（无 socket）。
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
@@ -8,6 +8,8 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
 use pm_domain::SYSTEM_TENANT;
+
+mod common;
 
 fn get(uri: &str) -> Request<Body> {
     Request::builder()
@@ -24,7 +26,7 @@ async fn body_json(response: axum::response::Response) -> (StatusCode, serde_jso
 }
 
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
-    bootstrap_project(
+    let project_id = bootstrap_project(
         pool,
         BootstrapRequest {
             project_code: code.to_string(),
@@ -34,7 +36,9 @@ async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
     )
     .await
     .unwrap()
-    .project_id
+    .project_id;
+    common::join_dev(pool, project_id).await;
+    project_id
 }
 
 async fn seed_task(pool: &PgPool, project_id: Uuid, title: &str) -> Uuid {

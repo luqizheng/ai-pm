@@ -101,22 +101,17 @@ fn import_error(err: ImportError) -> Response {
     (status, Json(body)).into_response()
 }
 
-/// 租户边界（对外入口）：跨租户的 project 一律按不存在处理。
+/// 租户 + 成员边界（对外入口，T-022）：跨租户或调用者不是项目成员的
+/// project 一律按不存在处理。
 async fn project_in_tenant(
     pool: &sqlx::PgPool,
     project_id: Uuid,
     tenant_id: Uuid,
+    principal_id: Uuid,
 ) -> Result<(), Response> {
-    match sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM core.project WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(project_id)
-    .bind(tenant_id)
-    .fetch_optional(pool)
-    .await
-    {
-        Ok(Some(_)) => Ok(()),
-        Ok(None) => Err(import_error(ImportError::ProjectNotFound)),
+    match crate::support::project_visible(pool, project_id, tenant_id, principal_id).await {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(import_error(ImportError::ProjectNotFound)),
         Err(err) => Err(import_error(ImportError::Db(err))),
     }
 }
@@ -126,7 +121,7 @@ async fn list_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     match list_imports(&state.pool, project_id).await {
@@ -143,7 +138,7 @@ async fn start_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let actor = principal.audit_actor();
@@ -158,7 +153,7 @@ async fn get_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path((project_id, import_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     match get_import(&state.pool, project_id, import_id).await {
@@ -172,7 +167,7 @@ async fn cancel_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path((project_id, import_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     match cancel_import(&state.pool, project_id, import_id).await {
@@ -190,7 +185,7 @@ async fn proposals_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path((project_id, import_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     match import_proposals(&state.pool, project_id, import_id).await {
@@ -205,7 +200,7 @@ async fn apply_handler(
     Path((project_id, import_id)): Path<(Uuid, Uuid)>,
     Json(req): Json<ApplyRequest>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     match propose_import(&state.pool, project_id, import_id, req).await {

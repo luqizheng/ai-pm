@@ -15,9 +15,11 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiResult, Paging, customer_filter, paging, project_filter};
+use crate::support::{
+    ApiResult, Paging, customer_filter, paging, project_filter, require_project_visible,
+};
 use pm_application::bootstrap::{
-    BootstrapError, BootstrapRequest, bootstrap_project, bootstrap_project_for_customer,
+    BootstrapError, BootstrapRequest, bootstrap_project_for_customer_owned, bootstrap_project_owned,
 };
 use pm_application::rows::{
     ApprovalRow, AuditLogRow, DecisionRow, MilestoneRow, PrincipalRow, ProjectRow,
@@ -86,26 +88,35 @@ async fn projects(
     let page = paging(&params);
     let customer_id = customer_filter(&params);
     // customer_id 是 NOT NULL 外键，INNER JOIN 不会丢行；COALESCE 只为让行结构
-    // 保持 String（前端不需要区分「有客户但没名字」）。
+    // 保持 String（前端不需要区分「有客户但没名字」）。可见性（T-022）：只列
+    // 调用者在 `core.project_member` 里的项目。
     let items: Vec<ProjectRow> = sqlx::query_as(
         "SELECT p.id, p.customer_id, COALESCE(c.name, '') AS customer_name, \
                 COALESCE(c.status, 'active') AS customer_status, \
                 p.code, p.name, p.description, p.status, p.revision, p.created_at, p.updated_at \
          FROM core.project p JOIN core.customer c ON c.id = p.customer_id \
-         WHERE p.tenant_id = $4 AND ($1::uuid IS NULL OR p.customer_id = $1) \
+         WHERE p.tenant_id = $5 \
+           AND EXISTS (SELECT 1 FROM core.project_member m \
+                        WHERE m.project_id = p.id AND m.principal_id = $4) \
+           AND ($1::uuid IS NULL OR p.customer_id = $1) \
          ORDER BY p.created_at DESC LIMIT $2 OFFSET $3",
     )
     .bind(customer_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM core.project \
-          WHERE tenant_id = $2 AND ($1::uuid IS NULL OR customer_id = $1)",
+        "SELECT count(*) FROM core.project p \
+          WHERE p.tenant_id = $3 \
+            AND EXISTS (SELECT 1 FROM core.project_member m \
+                         WHERE m.project_id = p.id AND m.principal_id = $2) \
+            AND ($1::uuid IS NULL OR p.customer_id = $1)",
     )
     .bind(customer_id)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
@@ -138,6 +149,7 @@ async fn create_project_handler(
         )
             .into_response();
     }
+    // T-022：调用者必须是 owner 成员，且只能挂到自己可见的客户上。
     let request = BootstrapRequest {
         project_code: code.to_string(),
         project_name: name.to_string(),
@@ -145,9 +157,38 @@ async fn create_project_handler(
     };
     let outcome = match body.customer_id {
         Some(customer_id) => {
-            bootstrap_project_for_customer(&state.pool, request, customer_id, None).await
+            match crate::customers::customer_visible_to(
+                &state.pool,
+                caller.tenant_id,
+                customer_id,
+                caller.principal_id,
+            )
+            .await
+            {
+                Ok(true) => {}
+                // 与 `BootstrapError::CustomerNotFound` 同一响应：不可见客户等同
+                // 不存在，保持建项接口既有的 400 契约。
+                Ok(false) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(serde_json::json!({
+                            "message": format!("customer `{customer_id}` not found or archived")
+                        })),
+                    )
+                        .into_response()
+                }
+                Err(err) => return crate::support::ApiError::from(err).into_response(),
+            }
+            bootstrap_project_for_customer_owned(
+                &state.pool,
+                request,
+                customer_id,
+                caller.principal_id,
+                None,
+            )
+            .await
         }
-        None => bootstrap_project(&state.pool, request).await,
+        None => bootstrap_project_owned(&state.pool, request, caller.principal_id).await,
     };
     match outcome {
         Ok(outcome) => {
@@ -205,23 +246,36 @@ async fn requirements(
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
     let project_id = project_filter(&params);
+    if let Some(project_id) = project_id {
+        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
+            .await?;
+    }
     let items: Vec<RequirementRow> = sqlx::query_as(
-        "SELECT id, project_id, code, title, status, current_revision_id, row_revision, created_at \
-         FROM delivery.requirement \
-         WHERE tenant_id = $4 AND ($1::uuid IS NULL OR project_id = $1) \
-         ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        "SELECT r.id, r.project_id, r.code, r.title, r.status, r.current_revision_id, \
+                r.row_revision, r.created_at \
+         FROM delivery.requirement r \
+         WHERE r.tenant_id = $5 \
+           AND EXISTS (SELECT 1 FROM core.project_member m \
+                        WHERE m.project_id = r.project_id AND m.principal_id = $4) \
+           AND ($1::uuid IS NULL OR r.project_id = $1) \
+         ORDER BY r.created_at DESC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.requirement \
-          WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
+        "SELECT count(*) FROM delivery.requirement r \
+          WHERE r.tenant_id = $3 \
+            AND EXISTS (SELECT 1 FROM core.project_member m \
+                         WHERE m.project_id = r.project_id AND m.principal_id = $2) \
+            AND ($1::uuid IS NULL OR r.project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
@@ -235,23 +289,36 @@ async fn tasks(
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
     let project_id = project_filter(&params);
+    if let Some(project_id) = project_id {
+        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
+            .await?;
+    }
     let items: Vec<TaskRow> = sqlx::query_as(
-        "SELECT id, project_id, milestone_id, title, description, status, priority, assignee_id, revision, created_at, updated_at \
-         FROM delivery.task \
-         WHERE tenant_id = $4 AND ($1::uuid IS NULL OR project_id = $1) \
-         ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        "SELECT t.id, t.project_id, t.milestone_id, t.title, t.description, t.status, \
+                t.priority, t.assignee_id, t.revision, t.created_at, t.updated_at \
+         FROM delivery.task t \
+         WHERE t.tenant_id = $5 \
+           AND EXISTS (SELECT 1 FROM core.project_member m \
+                        WHERE m.project_id = t.project_id AND m.principal_id = $4) \
+           AND ($1::uuid IS NULL OR t.project_id = $1) \
+         ORDER BY t.created_at DESC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.task \
-          WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
+        "SELECT count(*) FROM delivery.task t \
+          WHERE t.tenant_id = $3 \
+            AND EXISTS (SELECT 1 FROM core.project_member m \
+                         WHERE m.project_id = t.project_id AND m.principal_id = $2) \
+            AND ($1::uuid IS NULL OR t.project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
@@ -265,23 +332,35 @@ async fn milestones(
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
     let project_id = project_filter(&params);
+    if let Some(project_id) = project_id {
+        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
+            .await?;
+    }
     let items: Vec<MilestoneRow> = sqlx::query_as(
-        "SELECT id, project_id, name, planned_at, status, revision \
-         FROM delivery.milestone \
-         WHERE tenant_id = $4 AND ($1::uuid IS NULL OR project_id = $1) \
-         ORDER BY planned_at NULLS LAST, name ASC LIMIT $2 OFFSET $3",
+        "SELECT m.id, m.project_id, m.name, m.planned_at, m.status, m.revision \
+         FROM delivery.milestone m \
+         WHERE m.tenant_id = $5 \
+           AND EXISTS (SELECT 1 FROM core.project_member pm \
+                        WHERE pm.project_id = m.project_id AND pm.principal_id = $4) \
+           AND ($1::uuid IS NULL OR m.project_id = $1) \
+         ORDER BY m.planned_at NULLS LAST, m.name ASC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.milestone \
-          WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
+        "SELECT count(*) FROM delivery.milestone m \
+          WHERE m.tenant_id = $3 \
+            AND EXISTS (SELECT 1 FROM core.project_member pm \
+                         WHERE pm.project_id = m.project_id AND pm.principal_id = $2) \
+            AND ($1::uuid IS NULL OR m.project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
@@ -295,23 +374,36 @@ async fn approvals(
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
     let project_id = project_filter(&params);
+    if let Some(project_id) = project_id {
+        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
+            .await?;
+    }
     let items: Vec<ApprovalRow> = sqlx::query_as(
-        "SELECT id, project_id, proposal_id, status, required_role, decided_by, decision_reason, decided_at, created_at \
-         FROM governance.approval_request \
-         WHERE tenant_id = $4 AND ($1::uuid IS NULL OR project_id = $1) \
-         ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        "SELECT a.id, a.project_id, a.proposal_id, a.status, a.required_role, a.decided_by, \
+                a.decision_reason, a.decided_at, a.created_at \
+         FROM governance.approval_request a \
+         WHERE a.tenant_id = $5 \
+           AND EXISTS (SELECT 1 FROM core.project_member m \
+                        WHERE m.project_id = a.project_id AND m.principal_id = $4) \
+           AND ($1::uuid IS NULL OR a.project_id = $1) \
+         ORDER BY a.created_at DESC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM governance.approval_request \
-          WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
+        "SELECT count(*) FROM governance.approval_request a \
+          WHERE a.tenant_id = $3 \
+            AND EXISTS (SELECT 1 FROM core.project_member m \
+                         WHERE m.project_id = a.project_id AND m.principal_id = $2) \
+            AND ($1::uuid IS NULL OR a.project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
@@ -326,6 +418,10 @@ async fn decisions(
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
     let project_id = project_filter(&params);
+    if let Some(project_id) = project_id {
+        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
+            .await?;
+    }
     let items: Vec<DecisionRow> = sqlx::query_as(
         "SELECT a.id, a.project_id, a.status, a.required_role, a.decided_by, \
                 a.decision_reason, a.decided_at, a.created_at, \
@@ -334,20 +430,28 @@ async fn decisions(
                 p.proposed_data, p.analysis_run_id \
          FROM governance.approval_request a \
          LEFT JOIN ai.change_proposal p ON p.id = a.proposal_id \
-         WHERE a.tenant_id = $4 AND ($1::uuid IS NULL OR a.project_id = $1) \
+         WHERE a.tenant_id = $5 \
+           AND EXISTS (SELECT 1 FROM core.project_member m \
+                        WHERE m.project_id = a.project_id AND m.principal_id = $4) \
+           AND ($1::uuid IS NULL OR a.project_id = $1) \
          ORDER BY a.created_at DESC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM governance.approval_request \
-         WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
+        "SELECT count(*) FROM governance.approval_request a \
+         WHERE a.tenant_id = $3 \
+           AND EXISTS (SELECT 1 FROM core.project_member m \
+                        WHERE m.project_id = a.project_id AND m.principal_id = $2) \
+           AND ($1::uuid IS NULL OR a.project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
@@ -361,23 +465,35 @@ async fn audit_logs(
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
     let project_id = project_filter(&params);
+    if let Some(project_id) = project_id {
+        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
+            .await?;
+    }
     let items: Vec<AuditLogRow> = sqlx::query_as(
-        "SELECT id, project_id, actor_id, action, target_type, target_id, created_at \
-         FROM governance.audit_log \
-         WHERE tenant_id = $4 AND ($1::uuid IS NULL OR project_id = $1) \
-         ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        "SELECT g.id, g.project_id, g.actor_id, g.action, g.target_type, g.target_id, g.created_at \
+         FROM governance.audit_log g \
+         WHERE g.tenant_id = $5 \
+           AND EXISTS (SELECT 1 FROM core.project_member m \
+                        WHERE m.project_id = g.project_id AND m.principal_id = $4) \
+           AND ($1::uuid IS NULL OR g.project_id = $1) \
+         ORDER BY g.created_at DESC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM governance.audit_log \
-          WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
+        "SELECT count(*) FROM governance.audit_log g \
+          WHERE g.tenant_id = $3 \
+            AND EXISTS (SELECT 1 FROM core.project_member m \
+                         WHERE m.project_id = g.project_id AND m.principal_id = $2) \
+            AND ($1::uuid IS NULL OR g.project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
@@ -391,13 +507,17 @@ async fn revisions(
     Path(requirement_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let items: Vec<RequirementRevisionRow> = sqlx::query_as(
-        "SELECT id, requirement_id, project_id, version, content, state, content_hash, \
-                created_by, approved_by, created_at \
-         FROM delivery.requirement_revision \
-         WHERE requirement_id = $1 AND tenant_id = $2 ORDER BY version DESC",
+        "SELECT rv.id, rv.requirement_id, rv.project_id, rv.version, rv.content, rv.state, \
+                rv.content_hash, rv.created_by, rv.approved_by, rv.created_at \
+         FROM delivery.requirement_revision rv \
+         WHERE rv.requirement_id = $1 AND rv.tenant_id = $2 \
+           AND EXISTS (SELECT 1 FROM core.project_member m \
+                        WHERE m.project_id = rv.project_id AND m.principal_id = $3) \
+         ORDER BY rv.version DESC",
     )
     .bind(requirement_id)
     .bind(caller.tenant_id)
+    .bind(caller.principal_id)
     .fetch_all(&state.pool)
     .await?;
     let total = items.len() as i64;

@@ -1,4 +1,4 @@
-﻿//! `/v1/pm/customers` 与「建项挂客户」契约测试（0017 客户主数据）。
+//! `/v1/pm/customers` 与「建项挂客户」契约测试（0017 客户主数据）。
 //!
 //! 覆盖：建档 / code 冲突 / 搜索过滤 / 建项携带 customer_id / 未知客户 400 /
 //! 归档客户拒绝建项 / 兼容路径落 placeholder / 项目列表返回 customer_name。
@@ -11,6 +11,8 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use pm_domain::SYSTEM_TENANT;
+
+mod common;
 
 fn get(uri: &str) -> Request<Body> {
     Request::builder()
@@ -191,7 +193,7 @@ async fn unknown_customer_is_rejected(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn legacy_bootstrap_marks_placeholder_customer(pool: PgPool) {
     let app = router(pool.clone());
-    bootstrap_project(
+    let legacy = bootstrap_project(
         &pool,
         BootstrapRequest {
             project_code: "LEGACY-1".into(),
@@ -201,6 +203,7 @@ async fn legacy_bootstrap_marks_placeholder_customer(pool: PgPool) {
     )
     .await
     .unwrap();
+    common::join_dev(&pool, legacy.project_id).await;
 
     let response = app
         .clone()

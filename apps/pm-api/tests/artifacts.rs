@@ -1,4 +1,4 @@
-﻿//! `GET /v1/pm/artifacts` 集成测试：真实数据库 + 真 HTTP router（无 socket）。
+//! `GET /v1/pm/artifacts` 集成测试：真实数据库 + 真 HTTP router（无 socket）。
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
@@ -8,6 +8,8 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
 use pm_domain::SYSTEM_TENANT;
+
+mod common;
 
 fn get(uri: &str) -> Request<Body> {
     Request::builder()
@@ -34,6 +36,7 @@ async fn seed(pool: &PgPool, code: &str) -> Uuid {
     )
     .await
     .unwrap();
+    common::join_dev(pool, outcome.project_id).await;
     let requirement_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.requirement (project_id, code, title, tenant_id) \
          VALUES ($1, 'REQ-1', '产物需求', \

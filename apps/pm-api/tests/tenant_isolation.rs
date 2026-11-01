@@ -65,8 +65,8 @@ async fn me(app: &Router, token: &str) -> Value {
     .await
 }
 
-/// 在一个租户下建「客户 + 项目」，返回项目 id。
-async fn seed_project(pool: &PgPool, tenant_id: Uuid, code: &str) -> Uuid {
+/// 在一个租户下建「客户 + 项目」，并把 `owner` 写成项目成员（T-022），返回项目 id。
+async fn seed_project(pool: &PgPool, tenant_id: Uuid, code: &str, owner: Uuid) -> Uuid {
     let customer: Uuid = sqlx::query_scalar(
         "INSERT INTO core.customer (tenant_id, name, status) VALUES ($1, $2, 'active') RETURNING id",
     )
@@ -75,7 +75,7 @@ async fn seed_project(pool: &PgPool, tenant_id: Uuid, code: &str) -> Uuid {
     .fetch_one(pool)
     .await
     .unwrap();
-    sqlx::query_scalar(
+    let project_id: Uuid = sqlx::query_scalar(
         "INSERT INTO core.project (tenant_id, customer_id, code, name, status) \
          VALUES ($1, $2, $3, $3, 'planning') RETURNING id",
     )
@@ -84,11 +84,23 @@ async fn seed_project(pool: &PgPool, tenant_id: Uuid, code: &str) -> Uuid {
     .bind(code)
     .fetch_one(pool)
     .await
-    .unwrap()
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO core.project_member (tenant_id, project_id, principal_id, role) \
+         VALUES ($1, $2, $3, 'owner')",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(owner)
+    .execute(pool)
+    .await
+    .unwrap();
+    project_id
 }
 
 /// 造一个**已激活的 owner**，其 token 是 `(lmms, tid, sub)` 三元组。
-async fn seed_owner(pool: &PgPool, tid: &str, sub: &str) -> Uuid {
+/// 返回 `(tenant_id, principal_id)`。
+async fn seed_owner(pool: &PgPool, tid: &str, sub: &str) -> (Uuid, Uuid) {
     let tenant: Uuid = sqlx::query_scalar(
         "INSERT INTO core.tenant (provider, external_key, display_name) \
          VALUES ('lmms', $1, $1) \
@@ -126,15 +138,15 @@ async fn seed_owner(pool: &PgPool, tid: &str, sub: &str) -> Uuid {
     .execute(pool)
     .await
     .unwrap();
-    tenant
+    (tenant, principal)
 }
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn xt1_xt2_cross_tenant_project_is_invisible_and_unwritable(pool: PgPool) {
-    let tenant_a = seed_owner(&pool, "1", "usr-a").await;
-    let tenant_b = seed_owner(&pool, "2", "usr-b").await;
-    let project_a = seed_project(&pool, tenant_a, "ISO-A").await;
-    let project_b = seed_project(&pool, tenant_b, "ISO-B").await;
+    let (tenant_a, owner_a) = seed_owner(&pool, "1", "usr-a").await;
+    let (tenant_b, owner_b) = seed_owner(&pool, "2", "usr-b").await;
+    let project_a = seed_project(&pool, tenant_a, "ISO-A", owner_a).await;
+    let project_b = seed_project(&pool, tenant_b, "ISO-B", owner_b).await;
 
     let app = router_with_auth_config(pool.clone(), test_jwks(), AuthConfig::default());
     let a_token = token_for("usr-a", 1);

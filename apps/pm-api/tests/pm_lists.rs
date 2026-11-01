@@ -1,4 +1,4 @@
-﻿//! `/v1/pm/*` 列表端点契约测试（Slice A）。契约源：`frontend/src/api/pm.ts` +
+//! `/v1/pm/*` 列表端点契约测试（Slice A）。契约源：`frontend/src/api/pm.ts` +
 //! `frontend/src/api/mock/fixtures.ts`（活文档）——裸 `{items,total,page,size}`
 //! payload、`project_id?` 过滤、`created_at DESC`、page 默认 1 / size 默认 10
 //! 夹在 [1,200]；revisions 列表 `{items,total}`（version DESC，未知 rid 空列表）。
@@ -11,6 +11,8 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use pm_domain::SYSTEM_TENANT;
+
+mod common;
 
 fn get(uri: String) -> Request<Body> {
     Request::builder().method("GET").uri(uri).body(Body::empty()).unwrap()
@@ -66,6 +68,7 @@ async fn empty_database_lists_answer_zero_totals(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn tasks_pagination_clamps_and_slices(pool: PgPool) {
     let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "PG-1".into(), project_name: "pg".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    common::join_dev(&pool, boot.project_id).await;
     for i in 0..3 {
         seed_task(&pool, boot.project_id, &format!("task-{i}"), i).await;
     }
@@ -95,7 +98,9 @@ async fn tasks_pagination_clamps_and_slices(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn project_scoped_lists_filter_by_project(pool: PgPool) {
     let a = bootstrap_project(&pool, BootstrapRequest { project_code: "FLT-A".into(), project_name: "a".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    common::join_dev(&pool, a.project_id).await;
     let b = bootstrap_project(&pool, BootstrapRequest { project_code: "FLT-B".into(), project_name: "b".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    common::join_dev(&pool, b.project_id).await;
     seed_task(&pool, a.project_id, "in-a", 10).await;
     seed_task(&pool, b.project_id, "in-b", 5).await;
     let app = router(pool.clone());
@@ -113,6 +118,7 @@ async fn project_scoped_lists_filter_by_project(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn lists_order_created_at_desc(pool: PgPool) {
     let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "ORD-1".into(), project_name: "o".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    common::join_dev(&pool, boot.project_id).await;
     let first = seed_task(&pool, boot.project_id, "oldest", 100).await;
     let last = seed_task(&pool, boot.project_id, "newest", 0).await;
     let app = router(pool.clone());
@@ -128,6 +134,7 @@ async fn lists_order_created_at_desc(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn task_row_shape_matches_frontend_contract(pool: PgPool) {
     let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "SHP-1".into(), project_name: "s".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    common::join_dev(&pool, boot.project_id).await;
     seed_task(&pool, boot.project_id, "shaped", 0).await;
     let app = router(pool.clone());
 
@@ -145,6 +152,7 @@ async fn task_row_shape_matches_frontend_contract(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn milestones_list_scopes_orders_and_carries_task_link(pool: PgPool) {
     let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "MS-1".into(), project_name: "ms".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    common::join_dev(&pool, boot.project_id).await;
     let other = bootstrap_project(&pool, BootstrapRequest { project_code: "MS-2".into(), project_name: "ms2".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let milestone_id = uuid::Uuid::new_v4();
     sqlx::query(
@@ -209,6 +217,7 @@ async fn milestones_list_scopes_orders_and_carries_task_link(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn decisions_join_change_proposal_fields(pool: PgPool) {
     let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-1".into(), project_name: "dec".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    common::join_dev(&pool, boot.project_id).await;
     let event_id = uuid::Uuid::new_v4();
     sqlx::query(
         "INSERT INTO integration.inbound_event \
@@ -304,6 +313,7 @@ async fn revisions_unknown_requirement_answers_empty_list(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn revisions_list_orders_by_version_desc(pool: PgPool) {
     let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "REV-1".into(), project_name: "r".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    common::join_dev(&pool, boot.project_id).await;
     let requirement_id = uuid::Uuid::new_v4();
     sqlx::query(
         "INSERT INTO delivery.requirement (id, project_id, code, title, status, tenant_id) \

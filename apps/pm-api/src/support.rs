@@ -102,3 +102,38 @@ pub fn project_filter(params: &HashMap<String, String>) -> Option<Uuid> {
 pub fn customer_filter(params: &HashMap<String, String>) -> Option<Uuid> {
     params.get("customer_id").and_then(|v| Uuid::parse_str(v).ok())
 }
+
+/// 项目可见性（T-022）：同一个租户内，只有 `core.project_member` 里有调用者的
+/// 项目才可见；跨租户与「同租户非成员」一律按不存在处理。
+pub async fn project_visible(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+    tenant_id: Uuid,
+    principal_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS ( \
+             SELECT 1 FROM core.project p \
+             JOIN core.project_member m ON m.project_id = p.id \
+              WHERE p.id = $1 AND p.tenant_id = $2 AND m.principal_id = $3)",
+    )
+    .bind(project_id)
+    .bind(tenant_id)
+    .bind(principal_id)
+    .fetch_one(pool)
+    .await
+}
+
+/// 显式 `project_id` 过滤时的不存在语义：不可见即 404（不泄露存在性）。
+pub async fn require_project_visible(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+    tenant_id: Uuid,
+    principal_id: Uuid,
+) -> ApiResult<()> {
+    if project_visible(pool, project_id, tenant_id, principal_id).await? {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound("project not found"))
+    }
+}

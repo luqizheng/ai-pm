@@ -30,7 +30,8 @@ pub mod supervision;
 pub use actor::AuditActor;
 pub use bootstrap::{
     BootstrapError, BootstrapOutcome, BootstrapRequest, bootstrap_project,
-    bootstrap_project_for_customer, bootstrap_project_with_status, resolve_assignee,
+    bootstrap_project_for_customer, bootstrap_project_for_customer_owned,
+    bootstrap_project_owned, bootstrap_project_with_status, resolve_assignee,
 };
 pub use command_executor::{
     ActorKind, CommandSource, CompensationSpec, CompensableTable, ExecutionContext, ExecutionReceipt,

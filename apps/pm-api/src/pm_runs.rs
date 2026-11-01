@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiResult, paging, project_filter};
+use crate::support::{ApiResult, paging, project_filter, require_project_visible};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new().route("/v1/pm/task-runs", get(task_runs))
@@ -43,6 +43,10 @@ async fn task_runs(
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
     let project_id = project_filter(&params);
+    if let Some(project_id) = project_id {
+        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
+            .await?;
+    }
     let items: Vec<TaskRunRow> = sqlx::query_as(
         "SELECT r.id, r.task_id, t.title AS task_title, r.attempt_no, r.status, r.outcome, \
                 r.created_at, r.started_at, r.finished_at, \
@@ -50,20 +54,28 @@ async fn task_runs(
          FROM delivery.task_run r \
          JOIN delivery.task t ON t.id = r.task_id \
          LEFT JOIN delivery.task_run_failure f ON f.run_id = r.id \
-         WHERE r.tenant_id = $4 AND ($1::uuid IS NULL OR r.project_id = $1) \
+         WHERE r.tenant_id = $5 \
+           AND EXISTS (SELECT 1 FROM core.project_member m \
+                        WHERE m.project_id = r.project_id AND m.principal_id = $4) \
+           AND ($1::uuid IS NULL OR r.project_id = $1) \
          ORDER BY r.created_at DESC, r.attempt_no DESC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.task_run \
-          WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
+        "SELECT count(*) FROM delivery.task_run r \
+          WHERE r.tenant_id = $3 \
+            AND EXISTS (SELECT 1 FROM core.project_member m \
+                         WHERE m.project_id = r.project_id AND m.principal_id = $2) \
+            AND ($1::uuid IS NULL OR r.project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.principal_id)
     .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;

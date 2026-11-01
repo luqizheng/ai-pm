@@ -1,4 +1,4 @@
-﻿//! `/v1/pm/projects/{id}/repositories` 与 `/v1/pm/projects/{id}/ssh-key`
+//! `/v1/pm/projects/{id}/repositories` 与 `/v1/pm/projects/{id}/ssh-key`
 //! 的 HTTP 契约（P0 CRUD）。全程用真实 router + `#[sqlx::test]` 临时库，
 //! 断言两件关键事：CRUD 语义正确，且私钥永不回显。
 
@@ -11,6 +11,8 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
 use pm_domain::SYSTEM_TENANT;
+
+mod common;
 
 fn with_secret() {
     std::env::set_var("AI_PM_SECRET_KEY", "test-secret-for-repositories");
@@ -49,7 +51,7 @@ fn delete(uri: &str) -> Request<Body> {
 }
 
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
-    bootstrap_project(
+    let project_id = bootstrap_project(
         pool,
         BootstrapRequest {
             project_code: code.to_string(),
@@ -59,7 +61,9 @@ async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
     )
     .await
     .unwrap()
-    .project_id
+    .project_id;
+    common::join_dev(pool, project_id).await;
+    project_id
 }
 
 #[sqlx::test(migrations = "../../migrations")]

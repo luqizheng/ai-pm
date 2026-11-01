@@ -11,7 +11,9 @@
 //!   id maintained through `/v1/pm/customers` (0017 客户主数据),
 //! - five `core.principal` rows — the human owner, the AI PM and three dev
 //!   agents (architect / developer / tester) — with code-suffixed display
-//!   names,
+//!   names. On the owned path ([`bootstrap_project_owned`] /
+//!   [`bootstrap_project_for_customer_owned`], T-022) the synthetic human is
+//!   skipped and the real caller takes the owner slot,
 //! - the `core.project` row (`status = 'planning'`, `code` UNIQUE),
 //! - five `core.project_member` rows (human → `owner`, ai_pm → `ai_pm`,
 //!   dev_agent → `architect` / `developer` / `tester`),
@@ -27,6 +29,15 @@
 use pm_domain::{PrincipalId, ProjectId};
 use sqlx::PgPool;
 use uuid::Uuid;
+
+/// 项目创建时的归属主体：真实调用者（T-022）或兼容路径的合成 owner。
+#[derive(Debug, Clone, Copy)]
+enum ProjectOwner {
+    /// 兼容路径：新建 `owner-<code>` 合成 principal（测试与旧调用方）。
+    Synthetic,
+    /// 真实调用者：不造合成 principal，直接写 `project_member(role='owner')`。
+    Principal(PrincipalId),
+}
 
 /// Everything [`bootstrap_project`] needs: the unique project code and its
 /// display name, plus the owning tenant (T-021b：根表由调用方显式给租户).
@@ -94,7 +105,32 @@ pub async fn bootstrap_project_with_status(
     req: BootstrapRequest,
     initial_status: Option<&str>,
 ) -> Result<BootstrapOutcome, BootstrapError> {
-    bootstrap_inner(pool, req, CustomerTarget::Implicit, initial_status).await
+    bootstrap_inner(
+        pool,
+        req,
+        CustomerTarget::Implicit,
+        initial_status,
+        ProjectOwner::Synthetic,
+    )
+    .await
+}
+
+/// T-022：建项时把**真实调用者**写成 `project_member(role='owner')`，不再造
+/// `owner-<code>` 合成 principal。可见性按 `project_member` 过滤后，创建者必须
+/// 在成员表里，否则新项目对他自己不可见。
+pub async fn bootstrap_project_owned(
+    pool: &PgPool,
+    req: BootstrapRequest,
+    owner: PrincipalId,
+) -> Result<BootstrapOutcome, BootstrapError> {
+    bootstrap_inner(
+        pool,
+        req,
+        CustomerTarget::Implicit,
+        None,
+        ProjectOwner::Principal(owner),
+    )
+    .await
 }
 
 /// 把项目挂到**已存在**的客户上（0017 客户主数据路径）。
@@ -113,6 +149,25 @@ pub async fn bootstrap_project_for_customer(
         req,
         CustomerTarget::Existing(customer_id),
         initial_status,
+        ProjectOwner::Synthetic,
+    )
+    .await
+}
+
+/// [`bootstrap_project_for_customer`] 的归属版本：真实调用者写为 owner 成员（T-022）。
+pub async fn bootstrap_project_for_customer_owned(
+    pool: &PgPool,
+    req: BootstrapRequest,
+    customer_id: Uuid,
+    owner: PrincipalId,
+    initial_status: Option<&str>,
+) -> Result<BootstrapOutcome, BootstrapError> {
+    bootstrap_inner(
+        pool,
+        req,
+        CustomerTarget::Existing(customer_id),
+        initial_status,
+        ProjectOwner::Principal(owner),
     )
     .await
 }
@@ -126,6 +181,7 @@ async fn bootstrap_inner(
     req: BootstrapRequest,
     customer: CustomerTarget,
     initial_status: Option<&str>,
+    owner: ProjectOwner,
 ) -> Result<BootstrapOutcome, BootstrapError> {
     let mut tx = pool.begin().await.map_err(BootstrapError::Db)?;
     let tenant_id = req.tenant_id;
@@ -182,8 +238,13 @@ async fn bootstrap_inner(
         }
     };
 
-    let human_id =
-        insert_principal(&mut tx, "human", &format!("owner-{}", req.project_code)).await?;
+    // 真实调用者路径不造合成 human principal：调用者本身就是 owner。
+    let human_id = match owner {
+        ProjectOwner::Synthetic => {
+            insert_principal(&mut tx, "human", &format!("owner-{}", req.project_code)).await?
+        }
+        ProjectOwner::Principal(principal_id) => principal_id,
+    };
     let ai_principal_id =
         insert_principal(&mut tx, "ai_pm", &format!("ai-pm-{}", req.project_code)).await?;
     // `dev_agent` 是**租户级**实例（ADR-0001 D3）：同一租户的多个项目复用同一组

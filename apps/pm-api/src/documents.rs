@@ -21,22 +21,17 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 
-/// 租户边界（对外入口）：跨租户的 project 一律按不存在处理，不泄露存在性。
+/// 租户 + 成员边界（对外入口，T-022）：跨租户或调用者不是项目成员的
+/// project 一律按不存在处理，不泄露存在性。
 async fn project_in_tenant(
     pool: &sqlx::PgPool,
     project_id: Uuid,
     tenant_id: Uuid,
+    principal_id: Uuid,
 ) -> Result<(), Response> {
-    match sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM core.project WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(project_id)
-    .bind(tenant_id)
-    .fetch_optional(pool)
-    .await
-    {
-        Ok(Some(_)) => Ok(()),
-        Ok(None) => Err((
+    match crate::support::project_visible(pool, project_id, tenant_id, principal_id).await {
+        Ok(true) => Ok(()),
+        Ok(false) => Err((
             StatusCode::NOT_FOUND,
             Json(json!({
                 "code": "KNOWLEDGE_PROJECT_NOT_FOUND",
@@ -64,7 +59,7 @@ pub(crate) async fn search_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Query(query): Query<SearchQuery>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let root = KnowledgeRoot::from_env();
@@ -79,7 +74,7 @@ pub(crate) async fn list_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Query(query): Query<ProjectQuery>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     match knowledge::list_documents(&state.pool, query.project_id).await {
@@ -94,7 +89,7 @@ pub(crate) async fn get_handler(
     Path(document_id): Path<Uuid>,
     Query(query): Query<ProjectQuery>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let root = KnowledgeRoot::from_env();
@@ -167,7 +162,7 @@ pub(crate) async fn submit_proposal_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Json(body): Json<ProposalBody>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let root = KnowledgeRoot::from_env();
@@ -201,7 +196,7 @@ pub(crate) async fn list_proposals_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Query(query): Query<ProposalQuery>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     match pm_application::knowledge_proposal::list_proposals(
@@ -222,7 +217,7 @@ pub(crate) async fn confirm_redline_handler(
     Path(proposal_id): Path<Uuid>,
     Json(body): Json<ConfirmRedlineBody>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let root = KnowledgeRoot::from_env();
@@ -246,7 +241,7 @@ pub(crate) async fn veto_revision_handler(
     Path(revision_id): Path<Uuid>,
     Json(body): Json<VetoRevisionBody>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let root = KnowledgeRoot::from_env();
@@ -271,7 +266,7 @@ pub(crate) async fn list_references_handler(
     Path(document_id): Path<Uuid>,
     Query(query): Query<ProjectQuery>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     match pm_application::knowledge_reference::list_references(
@@ -292,7 +287,7 @@ pub(crate) async fn add_reference_handler(
     Path(document_id): Path<Uuid>,
     Json(body): Json<AddReferenceBody>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let id = pm_application::knowledge_reference::add_reference(
@@ -326,7 +321,7 @@ pub(crate) async fn index_state_handler(
     Path(document_id): Path<Uuid>,
     Query(query): Query<ProjectQuery>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     match pm_application::knowledge_indexer::index_states(
@@ -347,7 +342,7 @@ pub(crate) async fn reindex_handler(
     Path(revision_id): Path<Uuid>,
     Json(body): Json<ReindexBody>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let root = KnowledgeRoot::from_env();
@@ -372,7 +367,7 @@ pub(crate) async fn migrate_requirement_handler(
     Path(revision_id): Path<Uuid>,
     Json(body): Json<MigrateRequirementBody>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let root = KnowledgeRoot::from_env();

@@ -1,4 +1,4 @@
-﻿//! Knowledge space V1 integration: create (file + commit + rows), list, read,
+//! Knowledge space V1 integration: create (file + commit + rows), list, read,
 //! project isolation and drift detection. Every case uses a temporary Git root
 //! so the real knowledge repository is never touched.
 
@@ -20,6 +20,8 @@ use tower::ServiceExt;
 use uuid::Uuid;
 use pm_domain::SYSTEM_TENANT;
 
+mod common;
+
 fn temp_root() -> KnowledgeRoot {
     let path: PathBuf = std::env::temp_dir().join(format!("ai-pm-kn-int-{}", Uuid::new_v4()));
     KnowledgeRoot::new(path)
@@ -39,7 +41,7 @@ fn request(doc_key: &str) -> CreateDocumentRequest {
 }
 
 async fn project(pool: &PgPool, code: &str) -> pm_application::bootstrap::BootstrapOutcome {
-    bootstrap_project(
+    let boot = bootstrap_project(
         pool,
         BootstrapRequest {
             project_code: code.to_string(),
@@ -48,7 +50,9 @@ async fn project(pool: &PgPool, code: &str) -> pm_application::bootstrap::Bootst
         },
     )
     .await
-    .unwrap()
+    .unwrap();
+    common::join_dev(pool, boot.project_id).await;
+    boot
 }
 
 #[sqlx::test(migrations = "../../migrations")]

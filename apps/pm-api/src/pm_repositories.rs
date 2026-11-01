@@ -100,22 +100,17 @@ fn repository_error(err: RepositoryError) -> Response {
     (status, Json(json!({ "message": message }))).into_response()
 }
 
-/// 租户边界（对外入口）：跨租户的 project / repository 一律按不存在处理。
+/// 租户 + 成员边界（对外入口，T-022）：跨租户或调用者不是项目成员的
+/// project 一律按不存在处理。
 async fn project_in_tenant(
     pool: &sqlx::PgPool,
     project_id: Uuid,
     tenant_id: Uuid,
+    principal_id: Uuid,
 ) -> Result<(), Response> {
-    match sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM core.project WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(project_id)
-    .bind(tenant_id)
-    .fetch_optional(pool)
-    .await
-    {
-        Ok(Some(_)) => Ok(()),
-        Ok(None) => Err(repository_error(RepositoryError::ProjectNotFound)),
+    match crate::support::project_visible(pool, project_id, tenant_id, principal_id).await {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(repository_error(RepositoryError::ProjectNotFound)),
         Err(err) => Err(repository_error(RepositoryError::Db(err))),
     }
 }
@@ -144,7 +139,7 @@ async fn list_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     match list_repositories(&state.pool, project_id).await {
@@ -162,7 +157,7 @@ async fn create_handler(
     Path(project_id): Path<Uuid>,
     Json(req): Json<CreateRepositoryRequest>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let actor = principal.audit_actor();
@@ -238,7 +233,7 @@ async fn get_key_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     match get_ssh_key(&state.pool, project_id).await {
@@ -253,7 +248,7 @@ async fn generate_key_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let actor = principal.audit_actor();
@@ -268,7 +263,7 @@ async fn delete_key_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let actor = principal.audit_actor();
@@ -283,7 +278,7 @@ async fn list_keys_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     match list_ssh_keys(&state.pool, project_id).await {
@@ -307,7 +302,7 @@ async fn create_key_handler(
     Path(project_id): Path<Uuid>,
     body: Option<Json<CreateKeyRequest>>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let rotate = body.map(|Json(req)| req.rotate).unwrap_or(false);
@@ -323,7 +318,7 @@ async fn revoke_key_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let actor = principal.audit_actor();
