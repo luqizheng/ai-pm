@@ -53,13 +53,7 @@ async fn empty_database_lists_answer_zero_totals(pool: PgPool) {
         let response = app.clone().oneshot(get(path.to_string())).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK, "{path} must be 200");
         let body = body_json(response).await;
-        if path == "/v1/pm/principals" {
-            // 0015 幂等种入的平台 service principal（ai-pm-dispatch）是审计兜底
-            // 身份，不属于空库的业务人员数据。
-            assert_eq!(body["total"], json!(1), "{path} total is the service principal");
-            assert_eq!(body["items"][0]["kind"], json!("service"), "{path} item kind");
-            continue;
-        }
+
         assert_eq!(body["items"], json!([]), "{path} items must be empty");
         assert_eq!(body["total"], json!(0), "{path} total must be 0");
         assert_eq!(body["page"], json!(1), "{path} default page");
