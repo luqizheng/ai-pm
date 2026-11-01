@@ -2,7 +2,7 @@
 
 > 本文件是**唯一待办队列**。每条任务自包含，供 AI 直接领取执行。
 > 维护规则：状态原地改（`[ ]` → `[~]` → `[x]`），条目只追加不删除；做完的移到 §13 归档。
-> 编号只是稳定 ID，**排序以里程碑（§3–§10.5）为准**，不再按编号段位推断优先级。
+> 编号只是稳定 ID，**排序以里程碑（§3–§10.6）为准**，不再按编号段位推断优先级。
 
 **本版（v2，2026-11-01）的合并口径**：
 
@@ -11,6 +11,7 @@
 - 冲突时**以实测为准**：顾问的路线用来「补漏」，不用来「重排已完成的活」。已实现的部分不再重复开工（§1 逐项给了证据）。
 - **2026-11-01 增量**：多租户 / Agent / Executor 身份边界由 `docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`（Accepted）裁定；M1 拆为 **T-021a（β，身份归因）** / **T-021b（α+γ+δ，Tenant + Agent + Run 身份列）**；迁移号顺移（T-024 → `0021`、T-041 → `0022`）；ADR 未决项登记为 T-055~T-058，T-021a 遗留登记为 T-059。**T-020 已过稿、T-021a 已实施并验收**（交付见 §13 归档）。
 - **2026-11-01 增量（二）**：执行端接入转入待实施——runbook 落盘（`docs/ai-pm-executor-onboarding-runbook-v1.md`，`3811a37`），新增 **§10.5 M8**（T-080 执行端 URL 引导式接入 / T-081 `/mcp` 跨机暴露 / T-082 `pm_list_tasks`）；用户确认 trae / codex / workbuddy / z-code / dsh 均为候选执行端。
+- **2026-11-01 增量（三）**：Project Discovery（项目接入与认知建立）设计稿 V1.1 落盘（`docs/ai-pm-project-discovery-v1.md`，`203d11e` + DDL 草案 `4373e55`；已并入用户 Q1–Q7 裁决），新增 **§10.6 M9**（T-083~T-086）。核心边界：Discovery 独立于 Repository Import / Task / Run 四个业务域；Web 与 Codex `/pm-learn` 是同一 `DiscoverySession` 的两个 producer。
 
 ---
 
@@ -242,6 +243,46 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ---
 
+## 10.6 M9 · Project Discovery（项目接入与认知建立，2026-11-01 用户新增）
+
+> **设计依据**：`docs/ai-pm-project-discovery-v1.md`（V1.1，已并入用户 Q1–Q7 裁决；主稿 `203d11e`、DDL 草案 `4373e55`）。
+> **核心边界**：Discovery 独立于 Repository Import / Task / Run 四个业务域——Import 接入仓库，Discovery 理解项目，Task 推动变化，Run 执行工作。
+> **双入口**：Web（Git URL 自动分析，= 已落地 `repo_import`）与 Codex `/pm-learn`（本地深度分析）是同一 `DiscoverySession` 的两个 producer（`source∈{WEB,CODEX,SYSTEM}`）。
+> **前置**：Codex 入口依赖 T-080/T-081（MCP 执行端接入）；Web 入口与数据模型可先做。
+
+- [ ] **T-083 实施 DiscoverySession 数据模型（迁移 `0022_discovery.sql` + 领域层）**
+  - **目标**：落 `discovery` schema 7 张表 + `repo_import.discovery_session_id` 单向 FK；`pm-application::discovery` 提供 session / message / finding / question / answer / proposal 的读写与状态机。
+  - **依据**：设计稿 §四 + 附录 A DDL 草案；0019 多租户模式（`tenant_id` + 组合 FK + 每表 `(tenant_id,id)` 唯一）。
+  - **做**：迁移按附录 A；同步更新 schema 计数 / 租户隔离测试期望（现有 43 张 → +7）；四类 `finding.kind` 的 CHECK 与 `confidence∈[0,1]`；`proposal.base_revision_id`（= Q7 base_version）；`repo_import` 只加单向 FK，不做反向。
+  - **不做**：不做 Web UI；不做 MCP 工具；不做跨仓库深度分析（P2）。
+  - **验收**：`cargo test --workspace` 全绿；新库从零迁移无错；`information_schema` 断言 7 张新表均有 `tenant_id` 且组合 FK 指向 `core.project(tenant_id,id)`；确认无反向 FK。
+
+- [ ] **T-084 Web 项目访谈与发现卡片（P0）**
+  - **目标**：把现有 `repo_import` 的 `draft_ready + unknowns` 升级为 session 驱动的访谈 UI；发现卡片支持四类 finding 展示与用户确认。
+  - **依据**：设计稿 §五 / §六；现有 `crates/pm-application/src/project_import/`（lifecycle / proposal）与前端 `Review.vue`；`discovery` 表来自 T-083。
+  - **做**：`/v1/pm/projects/{id}/discovery/sessions` 读写端点；发现卡片（待确认徽标 + 分析证据[file+说明] + 四选一确认 + 确认按钮）；用户选择写 `discovery_answer` 并把 `verification_status` 从 `PENDING` 推进；Web 创建的 session 挂 `source=WEB`。
+  - **不做**：不做自由聊天；不做 AI 主动 tool-loop；不改现有 import 的 clone/read/analyze；不改 T-022 可见性语义。
+  - **验收**：Fake 模型下首轮 `unknowns` 能在卡片呈现；回答后 session 状态与 finding 校验状态正确；`vue-tsc` 0 error；vitest 全绿。
+
+- [ ] **T-085 MCP `pm_discovery_*` 工具（P0）**
+  - **目标**：6 个语义工具接入 `pm_mcp`，全部 propose-only。
+  - **依据**：设计稿 §八；`crates/pm-mcp/src/tools.rs` 现有 `pm_submit_document` / `propose_document` 风格；Q2 裁定（不实现别名）。
+  - **做**：`pm_discovery_get` / `pm_discovery_get_context` / `pm_discovery_submit_findings` / `pm_discovery_submit_answers` / `pm_discovery_submit_proposal` / `pm_discovery_complete`；`submit_proposal` 复用 `propose_document` 链（带 `base_revision_id`）。
+  - **不做**：不做命名别名；不做通用写；不改 11 个现有工具契约；不做跨仓库分析。
+  - **验收**：工具在 `/mcp` 可列；三态用例（空 session / 有 finding / 非法 kind）；propose-only 断言（不直写 `ai.project_document`）；`cargo test` 全绿。
+
+- [ ] **T-086 `/pm-learn` Skill（P1，executor-neutral）**
+  - **前置**：T-085 完成 + T-080/T-081（MCP 执行端接入）可用。
+  - **目标**：交付一份 executor-neutral 的 `SKILL.md`，装进 Trae / Codex / Claude Code 等任意 MCP-capable 执行端；走 `pm_discovery_*` 完成「读码 → 澄清 → 提交」。
+  - **依据**：设计稿 §七；`docs/ai-pm-mcp-executor-positioning-v1.md` §3.4 A1–A6（工具无关性）；`docs/ai-pm-executor-onboarding-runbook-v1.md`。
+  - **做**：SKILL.md（命令流程：取 session → 读已有知识 → 分析本地 Git → 澄清 → 提交 findings/answers/proposal → complete）；在 Trae 实测一轮。
+  - **不做**：不写死 Trae 专有 API；不给 skill 知识库最终写入权；不做无人值守。
+  - **验收**：≥1 个执行端实测「读本地仓库 → 澄清 → `pm_discovery_submit_*` → Web 确认」闭环；未激活路径给出明确指引而非报错。
+
+> **P2 延后（不在本节领取）**：多仓库架构关联分析（跨仓调用关系 / 依赖图 / 部署拓扑 / 微服务边界）、持续认知自动更新。T-083~T-086 稳定后再评估。
+
+---
+
 ## 11. 技术债与已开放待裁（可搭车，勿单独开切片）
 
 - [ ] **T-051 待裁 #12 执行端预注册档位**：V1 已明确接受横向越权面（持有效 bearer 可领取任意项目任务），档位机制待首批执行端接入后再裁。**保持开放，不主动实施**。
@@ -266,6 +307,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 | 项目 tag（标签）归纳轴 | ❌ 放弃，不实施 | 需先解决 4 条阻塞（AI 分类半成品收编、project 属性直写 SQL 无命令通道、词表跨客户泄露面、与项目隔离原则冲突） |
 | 平台内置 AI 编程助手 / 为单一编码工具深度定制 | ❌ 已推翻，不再进入设计讨论 | 无（见 `docs/ai-pm-mcp-executor-positioning-v1.md`「明确被推翻的路线」） |
 | 租户费用核算/配额聚合（ADR-0001 R4）、`project_member` 的 human/agent 授权状态机（R5） | 🟡 V1 不做（`task_run.tenant_id` 载体由 T-021b 的 α 阶段 `0019_tenant.sql` 预留，**当前未建**） | 出现租户级计费/配额真实需求；或 D3 接入后发现 agent 授权需要独立生命周期 |
+| Project Discovery P2（多仓库关联分析 / 持续认知自动更新） | 🟡 延后（设计稿 §十一 已划定 V1 不做范围） | T-083~T-086 完成且单仓 Discovery 闭环稳定后再评估 |
 
 > 注意：客户 G3（可见性）与 T-022 是**同一件事**；T-022 作为身份切片的自然延伸，客户功能本身（G1/G2/G4）仍延后。
 
