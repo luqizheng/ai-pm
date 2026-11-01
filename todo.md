@@ -14,6 +14,7 @@
 - **2026-11-01 增量（三）**：Project Discovery（项目接入与认知建立）设计稿 V1.1 落盘（`docs/ai-pm-project-discovery-v1.md`，`203d11e` + DDL 草案 `4373e55`；已并入用户 Q1–Q7 裁决），新增 **§10.6 M9**（T-083~T-086）。核心边界：Discovery 独立于 Repository Import / Task / Run 四个业务域；Web 与 Codex `/pm-learn` 是同一 `DiscoverySession` 的两个 producer。
 - **2026-11-01 增量（四）**：用户提供《Codex 自动初始化与开发环境接入（Codex Bootstrap）》设计供稿并落盘（`docs/ai-pm-codex-bootstrap-v1.md`，`3c614be`，**未过稿**），新增 **§10.7 M10**（T-087~T-092，T-092 为 V2 延后条目）。核心原则：安装说明负责指导安装、安装程序负责保证安装正确、服务端负责验证安装结果；MCP ≠ Worker；凭证走一次性授权码 + 短期凭证，安装指令不传长期 Token；验收矩阵 BOOT-01~14。本稿是 M8 T-080（onboarding URL）的深化延伸，实施前必须先过 T-087 设计定稿。
 - **2026-11-01 增量（五）**：T-031 外部评审（六项意见，材料包 `docs/ai-pm-t031-executor-expert-review-pack.md`）；其中 Q2 执行端身份经架构专家裁决落盘 **ADR-0002**（`docs/ai-pm-adr-0002-executor-credential-separation.md`，Accepted：Model A/B 统一 lease_token、修订 D2 R-G4、终止顺序反转、T-051 升级安全前置、新增 execution_mode 列）；T-032 设计稿落盘（`docs/ai-pm-slice-d3-executor-hardening-v1.md`，**待过稿**），登记于 §6 M3。
+- **2026-11-01 增量（六）**：`docs/ai-pm-codex-bootstrap-v1.md` 外部专家评审落盘（`docs/ai-pm-codex-bootstrap-review.md`，**有条件过稿**）：总体方向通过；须修正 6 项 P0（V1 与 D3/T-031 职责边界、Device/Runner/Agent Principal 身份关系对齐、三凭证分离、七步撤销协议、Project Binding 与 Repository Access 分层、Ready 服务端状态机）+ 补 3 章节（版本兼容协议、安装失败与重初始化协议、数据模型归属）+ 验收补 BOOT-15~25；专家建议的 T-087~T-092 六任务拆分与 §10.7 既有编号重叠且划分不同，**编号以既有为准**，拆分内容作 T-087 定稿输入；两条新增实施依赖：T-087 须等 T-032 收敛、服务端授权能力先于管理页。**用户确认后评审修订已收编进设计稿 V1.1**（6 项 P0 + 3 章节并入正文，章节重排 §〇~§十二；收编逐条对照见评审记录）。
 
 ---
 
@@ -149,10 +150,11 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 > T-030（设计稿 `edf230f`，已过稿）/ T-031（实施 `6f3ded4`）已交付归档（见 §13）。T-031 外部评审后新增可靠性加固任务：
 
-- [ ] **T-032 实施 D3.1 可靠性与启动协议加固（前置：设计稿 `docs/ai-pm-slice-d3-executor-hardening-v1.md` 已落盘，待过稿）**
-  - **做**：① 两阶段启动协议（launch_intent 持久化 + `stage='starting'` + pid 文件原子写 + reconcile 扩展）；② 执行端凭据下发（按 ADR-0002：修订 D2 R-G4、`AI_PM_LEASE_TOKEN` 注入、七项 MCP 校验、generation 裁定点留痕）；③ 心跳/存活分离（`last_agent_heartbeat_at`/`last_progress_at` + 绝对截止强制化 + 终止顺序反转「先撤凭据后杀进程」+ 终态僵尸兜底）；④ 子进程完整回收（Windows Job Object / Unix Process Group / PID 创建时间比对）；⑤ 补充项：镜像仓锁、workspace_path 二次校验、日志限制脱敏、结构化 ExitOutcome、`executor-events.jsonl`；⑥ CodexLaunchProfile（`AI_PM_CODEX_ARGS` 降级为覆盖项）。
-  - **不做**：不新增凭据体系（lease_token 唯一）；不动 13 态状态机（`starting` 落 stage）；不落 Executor Registry；不提前 D5；不引容器/远程。
-  - **验收**：设计稿 §8 十二条（评审 8 条 + ADR-0002 增补 4 条）+ **§8.1 生命周期一致性总验收**（用户最终裁决：11 步生命周期链路 + 两个故障窗口 + 5 场景必测矩阵——spawn 后崩溃 / 重复启动 / 取消竞态 / 子进程失联 / 重启恢复；Q1/Q2/Q3 不独立验收，整体构成执行可靠性与安全闭环）；`cargo test --workspace` 全绿；T-031/D1/D2 既有用例不回归。
+- [x] **T-032 实施 D3.1 可靠性与启动协议加固（设计稿 `docs/ai-pm-slice-d3-executor-hardening-v1.md` **已过稿并实施**，2026-11-01 T1–T4 终裁并入；实施记录见设计稿 §10）**
+  - **做**：① 启动持久化协议（T1 终裁 ii：**`executor_session` 前置即启动意图，零迁移**；pid 文件原子写；reconcile 三重证据判定「PID 文件不存在 ≠ 进程不存在」；spawn 失败 session 保留 + `session_replaced` 事件留痕）；② 执行端凭据下发（按 ADR-0002：修订 D2 R-G4、`AI_PM_LEASE_TOKEN` 注入、七项 MCP 校验、**T2 终裁 a：`lease_generation`（首次领取=1，重领+1，心跳/失败不递增，MCP 双验证）**）；③ 心跳/存活分离（**T3 终裁 i：`deadline_at` 首次 claim 固化，重领/续租不得重置延长，绝对截止优先于续期** + `last_agent_heartbeat_at`/`last_progress_at`（**心跳 ≠ 进展**）+ 终止顺序反转「先撤凭据后杀进程」+ 终态僵尸兜底）；④ 子进程完整回收（Windows Job Object / Unix Process Group / PID 创建时间比对）；⑤ 补充项：镜像仓锁、workspace_path 二次校验、日志限制脱敏、结构化 ExitOutcome、`executor-events.jsonl`；⑥ CodexLaunchProfile（`AI_PM_CODEX_ARGS` 降级为覆盖项）。**迁移：新增 forward-only `0023_run_executor_hardening.sql`（四列一并；0011/0015 已应用不得回改；0022 号段冲突已解：T-041 保留 0022 / T-083 顺移 0024）**。
+  - **不做**：不新增凭据体系（lease_token 唯一）；不动 13 态状态机（starting 以 executor_session 前置表达，无新状态无新枚举）；不落 Executor Registry；不提前 D5；不引容器/远程。
+  - **验收（已通过）**：设计稿 §8 十二条 + **§8.1 生命周期一致性总验收**（11 步链路 + 两个故障窗口 + 5 场景必测矩阵 + **端到端五项：启动崩溃恢复 / 旧 generation fencing / 绝对截止 / 心跳与进展分离 / 子进程终止回收**；Q1/Q2/Q3 不独立验收）；`cargo test --workspace` **73 套件 / 465 passed / 0 failed**（T-031 基线 456 → 净增 9：C71 日志脱敏禁止面 / C72 PID 重用身份锚点 / C73 孤儿 Uncertain / c19 generation 递增）；`cargo check --workspace --all-targets` 0 error / 0 warning；T-031/D1/D2 既有用例不回归。
+  - **实施口径微调**：starting 载体复用既有 `stage` 列（`dispatch`=意图未确认 / `started`=已确认，B3-1 判定扩展）；`lease_generation` 新行 `DEFAULT 0`（claim 递增后首次=1，符合终裁）。详见设计稿 §10。
 
 ---
 
@@ -255,7 +257,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 > **双入口**：Web（Git URL 自动分析，= 已落地 `repo_import`）与 Codex `/pm-learn`（本地深度分析）是同一 `DiscoverySession` 的两个 producer（`source∈{WEB,CODEX,SYSTEM}`）。
 > **前置**：Codex 入口依赖 T-080/T-081（MCP 执行端接入）；Web 入口与数据模型可先做。
 
-- [ ] **T-083 实施 DiscoverySession 数据模型（迁移 `0022_discovery.sql` + 领域层）**
+- [ ] **T-083 实施 DiscoverySession 数据模型（迁移 `0024_discovery.sql` + 领域层）**
   - **目标**：落 `discovery` schema 7 张表 + `repo_import.discovery_session_id` 单向 FK；`pm-application::discovery` 提供 session / message / finding / question / answer / proposal 的读写与状态机。
   - **依据**：设计稿 §四 + 附录 A DDL 草案；0019 多租户模式（`tenant_id` + 组合 FK + 每表 `(tenant_id,id)` 唯一）。
   - **做**：迁移按附录 A；同步更新 schema 计数 / 租户隔离测试期望（现有 43 张 → +7）；四类 `finding.kind` 的 CHECK 与 `confidence∈[0,1]`；`proposal.base_revision_id`（= Q7 base_version）；`repo_import` 只加单向 FK，不做反向。
@@ -295,9 +297,11 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 > **三组件分离**：平台端 Worker（Run 调度/租约/回收，属服务端）≠ 开发机端 Runner（本地执行环境管理与 Codex 实例调度）≠ Codex 端 Skill+MCP（工作规范 + 平台接口）。
 > **与 M8 的关系**：本稿是 T-080「粘贴 URL → 帮我安装」的深化延伸（Plugin + Worker 安装程序 + 设备授权 + 自检）；前置依赖 T-080/T-081。
 > **状态**：**全部条目为未过稿设计**——T-087 定稿过稿前，T-088~T-091 不得开工。
+> **评审（2026-11-01）**：外部专家评审已落盘 `docs/ai-pm-codex-bootstrap-review.md`——**有条件过稿**；6 项 P0 修正 + 3 个新增章节 + 验收补 BOOT-15~25 **已收编进设计稿 V1.1**（章节重排 §〇~§十二）；专家建议的任务编号与本节既有编号重叠，以本节为准（对照见评审记录 §九）。
 
 - [ ] **T-087 Codex Bootstrap 设计稿定稿（用户供稿 → 正式设计稿）**
   - **本条按 §0.1 执行**：完整 brainstorming。
+  - **评审输入（2026-11-01）**：专家评审 6 项 P0 修正与 3 个新增章节**已收编进设计稿 V1.1**（`docs/ai-pm-codex-bootstrap-v1.md`，正文含〔评审收编〕标注，逐条对照见 `docs/ai-pm-codex-bootstrap-review.md`）；定稿时基于 V1.1 做最终裁决。其中身份关系不得另起认证协议（对齐 ADR-0001 / ADR-0002 / T-032）；V2 须复用 D3 已有 CodexExecutor（BOOT-25）；新增硬依赖——本条的身份与协议裁决须等 T-032 收敛后进行。
   - **目标**：把用户供稿整理为可实施的正式设计稿（沿用 `docs/ai-pm-codex-bootstrap-v1.md` 演进或另立定稿版），BOOT-01~14 映射为项目验收矩阵编号（续 C 系列）。
   - **要在稿里裁清的点**：
     1. 与 `ai-pm-mcp-executor-positioning-v1.md`（executor-neutral）及 §12「不为单一编码工具深度定制」裁定书的边界——`pm-ai-codex/` 包是 Codex 首发目标还是唯一目标，包结构与 Skill 如何保持 executor-neutral 演进（trae / workbuddy / z-code / dsh 复用面）。

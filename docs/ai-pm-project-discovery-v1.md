@@ -96,7 +96,7 @@
 
 ## 四、数据模型（Q1 裁决后）
 
-在 `project` 下新增独立**认知域**（`discovery_*` 表，候选迁移 `0022_discovery.sql`），**不绑执行端实例**。
+在 `project` 下新增独立**认知域**（`discovery_*` 表，候选迁移 `0024_discovery.sql`），**不绑执行端实例**。
 
 ### 4.1 表结构与关系
 
@@ -340,7 +340,7 @@ Project Onboarding **不是一次性初始化**。闭环：
 | 优先级 | 功能 | 说明 |
 | --- | --- | --- |
 | P0 | Project / Repository 接入 | 已落地（0008/0009/0019） |
-| P0 | `DiscoverySession` 数据模型 | 新增 `0022_discovery.sql`（含 finding/proposal/base_version） |
+| P0 | `DiscoverySession` 数据模型 | 新增 `0024_discovery.sql`（含 finding/proposal/base_version） |
 | P0 | Web 项目访谈 | 扩展现有 import 访谈 UI + 发现卡片 |
 | P0 | MCP `pm_discovery_*` 接口 | 新增 6 个语义工具 |
 | P1 | `/pm-learn` Skill | executor-neutral SKILL.md |
@@ -373,14 +373,14 @@ Project Onboarding **不是一次性初始化**。闭环：
 
 ---
 
-## 附录 A：迁移 `0022_discovery.sql` DDL 草案（待实施）
+## 附录 A：迁移 `0024_discovery.sql` DDL 草案（待实施）
 
-> **状态**：草案。经评审确认后落到 `migrations/0022_discovery.sql`；届时需同步更新 schema 计数 / 租户隔离测试期望（现有权威口径「43 张表」与 `core_schema` 断言）。本草案遵循 0019 多租户模式：`tenant_id` + `(tenant_id, project_id)` 组合 FK + 每表 `(tenant_id, id)` 唯一。
+> **状态**：草案。经评审确认后落到 `migrations/0024_discovery.sql`；届时需同步更新 schema 计数 / 租户隔离测试期望（现有权威口径「43 张表」与 `core_schema` 断言）。本草案遵循 0019 多租户模式：`tenant_id` + `(tenant_id, project_id)` 组合 FK + 每表 `(tenant_id, id)` 唯一。
 >
 > 依赖前提（0019 已建立）：`core.project` / `integration.project_repository` / `ai.project_document` / `ai.document_revision` / `ai.document_proposal` 均具备 `(tenant_id, id)` 唯一，可作为组合 FK 目标。
 
 ```sql
--- 0022_discovery: 项目认知域（Discovery）。
+-- 0024_discovery: 项目认知域（Discovery）。
 -- 与 0009 repo_import（仓库接入）是不同业务域：Import 负责接入，Discovery 负责理解项目。
 -- forward-only；遵循 0019 多租户模式。
 
