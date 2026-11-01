@@ -788,3 +788,70 @@ async fn t26_exhausted_retry_creates_no_new_run(pool: PgPool) {
         .unwrap();
     assert_eq!(after, before, "an exhausted retry budget must not spawn a new run");
 }
+/// R5：某一层策略读取失败（脏 `additional_checks`）必须上抛，禁止默认放行。
+#[sqlx::test(migrations = "../../migrations")]
+async fn policy_layer_read_failure_fails_closed(pool: PgPool) {
+    let fx = seed(&pool, "RD-R5F", true).await;
+    // 0016 的 CHECK 保证 `additional_checks` 是数组；本测试在独享库里临时移除它，
+    // 构造「某层读取失败」这一真实路径，而不是伪造一个错误值绕过存储。
+    sqlx::query(
+        "ALTER TABLE delivery.policy_scope \
+         DROP CONSTRAINT policy_scope_additional_checks_array",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO delivery.policy_scope \
+         (scope, scope_key, require_human_approval, additional_checks, updated_by) \
+         VALUES ('project', $1, false, '{}'::jsonb, $2)",
+    )
+    .bind(fx.project_id.to_string())
+    .bind(fx.human_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let result = claim_once(&pool, "w1", &cfg(), DispatchMode::On).await;
+    assert!(
+        result.is_err(),
+        "a policy layer decode failure must surface, not be treated as allow"
+    );
+    assert_eq!(run_status(&pool, fx.run_id).await, "queued");
+    assert_eq!(task_status(&pool, fx.task_id).await, "ready");
+}
+
+/// R5：审批请求仍为 pending 时拒绝领取，并保留 pending 证据（不得当作已批准）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn pending_approval_evidence_blocks_the_claim(pool: PgPool) {
+    let fx = seed(&pool, "RD-R5PD", true).await;
+    insert_policy(&pool, "project", &fx.project_id.to_string(), true, fx.human_id).await;
+    let proposal = grant_approval(&pool, fx.project_id, fx.task_id, fx.human_id, "pending").await;
+
+    let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(out.kind, pm_application::run_dispatch::ClaimKind::Skipped);
+    let reason: Option<String> =
+        sqlx::query_scalar("SELECT release_reason FROM delivery.task_run WHERE id = $1")
+            .bind(out.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(reason.as_deref(), Some("policy_requires_approval"));
+
+    let status: String = sqlx::query_scalar(
+        "SELECT status FROM governance.approval_request WHERE proposal_id = $1",
+    )
+    .bind(proposal)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        status, "pending",
+        "a pending request must not be treated as approved evidence"
+    );
+    assert_eq!(run_status(&pool, fx.run_id).await, "queued");
+    assert_eq!(task_status(&pool, fx.task_id).await, "ready");
+}
