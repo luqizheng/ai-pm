@@ -112,19 +112,16 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 4. M1 · 主体身份与多租户边界（P0 权限层 + 数据边界）
 
-> 现状（2026-11-01 更新）：**T-020 已过稿、T-021a（β）已实施验收**（两条已按「做完的移到 §13 归档」移出本节，完整记录见 §13）—— token 三元组 `(provider, claims_tenant_key, subject)` → `core.principal_identity` → `core.principal`，审计三列齐备，未激活 fail-closed，`owner_actor` 已退场（仅留 `cfg(test)` 夹具）。**仍未做**：全库零 `tenant` 列（T-021b α）、可见性未按成员过滤（T-022）、MCP 侧审计三列未落地（T-059）。
+> 现状（2026-11-01 更新）：**T-020 / T-021a（β）/ T-021b（α+γ/δ）三条均已实施验收**（按「做完的移到 §13 归档」移出本节，完整记录见 §13）。
+> - 身份：token 三元组 → `core.principal_identity(provider, tenant_id, subject)` → `core.principal`，审计三列齐备，未激活 fail-closed，`owner_actor` 已退场。
+> - 租户：39 张业务表全部 `tenant_id NOT NULL` + 组合外键；`core.tenant` / `core.tenant_member` / `governance.tenant_audit_log` 就位；`tenant_member.role`（owner/admin/member）是唯一事实源，成员管理 6 端点已开。
+> - Agent：`ai.agent_definition` / `core.tenant_agent` 三层结构 + `dev_agent` 租户级复用；`task_run` 已有 `agent_id` / `triggered_by_user_id` / `executor_id`。
 >
-> 架构边界已裁定：`docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`（Accepted 2026-11-01）。**T-021a** = 身份归因与审计（β，**已完成**）；**T-021b** = Tenant 实体 + `tenant_id` + Agent 三层 + Run 身份列（α/γ+δ，**待开工**）。
+> **仍未做**：可见性未按成员过滤（T-022）、MCP 侧审计三列未落地（T-059）、`tenant_agent.is_enabled=false` 的 MCP 领取门（D3 执行端接入时补，见 T-059）。
+>
+> 架构边界已裁定：`docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`（Accepted，已按实施结果修订）。设计依据：`docs/ai-pm-tenant-infrastructure-v1.md`。
 
-- [ ] **T-021b 实施 Tenant 基础设施 + Agent 模型 + Run 身份归因（α+γ+δ；T-021a 已完成，待开工）**
-  - **目标**：`core.tenant` / `core.tenant_member` / 租户业务数据 `tenant_id` 一次建对；Agent 三层；Run 身份字段。表清单与约束模式见 `docs/ai-pm-adr-0001-tenant-agent-executor-identity.md` §3（**已锁定，不得临时扩表**）。
-  - **α（Tenant，迁移 `0019_tenant.sql`）**：`core.tenant` + `core.tenant_member`；ADR-0001 §3.4 的 39 张表加 `tenant_id NOT NULL` + 组合外键（三种形态见 §3.5）；`principal_identity` 补 `tenant_id UUID` 外键（`claims_tenant_key` 解析得到，无回填）；`is_admin` 由 token `roles` 改读 `tenant_member.role`。
-  - **γ+δ（Agent 与 Run，迁移 `0020_agent_run_identity.sql`）**：`agent_definition`（全局可复用）+ `tenant_agent`（租户实例，`principal_id` → `kind='dev_agent'`）；项目授权**复用** `project_member`，不建 grant 表；`tenant_agent.is_enabled=false` → MCP 领取 403。`delivery.task_run` 加 `agent_id`（→ `core.principal`，与审计 `actor_id` 同一 id 空间）、`triggered_by_user_id`（→ human principal）、`executor_id`（可空、**无 FK**，Registry 归 T-030）；**不写** `created_by`/`approved_by`（审计行已承载，避免双写）。
-  - **α 必交（缺一不许进代码）**：逐表迁移方案（§3.4 清单逐条 DDL + 迁移序号）、组合外键约束、`information_schema` 断言（XT-3）、跨租户隔离测试（XT-1/2、FK-1/2）、管理员撤权即时生效测试（RV-1/2）。
-  - **不做**：不建 Executor Registry（T-030 / D3）；不做费用核算聚合（R4）；不改 Git 凭据层级（R3）。
-  - **验收**：ADR-0001 §10 的 XT / FK / RV / AG / EX 全绿；T-021a 的 C29–C42 不回归。
-
-- [ ] **T-022 可见性收口（T-021a 已完成，待开工）**
+- [ ] **T-022 可见性收口（T-021a / T-021b 已完成，待开工）**
   - **目标**：把「按 `project_member` 过滤」从「全局可见」改为真实按成员过滤（客户 G3 与本文同源）。
   - **依据**：`docs/ai-pm-customer-master-data-v1.md` §2 裁定 5 与 §6 G3。
   - **做**：客户列表 / 项目列表按当前 principal 的 membership 过滤；无成员关系的资源返回「不存在」而非「无权限」（不泄露存在性）。
@@ -310,6 +307,30 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 - **提交**：随 T-021a 的迁移改动一并修掉（`cb633b8`）。
 - **内容**：`migrations/0010_task_state_machine.sql` 头注释「0009_task_state_machine」→「0010_task_state_machine」。纯注释，无行为变化。
+
+### T-021b 多租户基础设施 + Agent 三层 + Run 身份归因（α+γ/δ）—— 2026-11-01 完成
+
+- **提交**：`e4d10d4` feat(tenant)（85 文件）→ `c9f99b8` docs(adr)（ADR-0001 按实施结果修订 + 设计稿分类/矩阵校正）。
+- **目标**：`core.tenant` / `core.tenant_member` / 39 张业务表 `tenant_id` 一次建对；Agent 三层；Run 身份字段；租户成员角色的正式写入路径。
+- **依据**：`docs/ai-pm-tenant-infrastructure-v1.md`（**用户过稿**，含 11 项裁定）+ `docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`。
+- **α（`0019_tenant.sql`）**：
+  - 新表 `core.tenant` / `core.tenant_member(role IN owner/admin/member)` / `governance.tenant_audit_log`；系统租户幂等种子 `(provider='system', external_key='default')`。
+  - 39 张业务表全部 `tenant_id UUID NOT NULL`；四类划分（A 根表 2 / B 直挂 project 33 / C 锚定父行 3 / D 伪根表 1）。
+  - 组合外键：B 类统一 `(tenant_id, project_id) → core.project(tenant_id, id)`；C 类锚定各自父行；**跨表 10 处单列 FK 一并换成组合 FK**（否则两份 tenant_id 可以各自不相同）。
+  - **I4 四处**全局唯一改租户内：`core.project.code`、`core.customer.code`、`integration.outbox_event.idempotency_key`、`delivery.policy_scope` 主键。
+  - **I5 十五张表**补 `UNIQUE(tenant_id, id)`（其中 5 张今天没有：`requirement_revision` / `task_run` / `document_revision` / `change_proposal` / `approval_request`）——这是 ADR §3.5 示例未覆盖、实施期才发现的结构性缺口。
+  - `core.principal_identity` 收敛：删 `claims_tenant_key`，改 `tenant_id UUID`，唯一键 `(provider, tenant_id, subject)`（ADR §7.1 的移交完成）。
+- **γ+δ（`0020_agent_run_identity.sql`）**：`ai.agent_definition`（全局三行种子）+ `core.tenant_agent`（租户实例，`UNIQUE(principal_id)`）；`delivery.task_run` 加 `agent_id` / `triggered_by_user_id`（均有 FK）、`executor_id`（可空、无 FK，D6）。`dev_agent` 由 per-project 提为**租户级复用**（`bootstrap::ensure_tenant_agents`），`ai_pm` 仍 per-project。
+- **auth 链**：`resolve_or_provision` 先按 `(provider, tid)` upsert `core.tenant`（Q1 镜像上游、自动建即生效），再按三元组查 identity；`is_admin` 每请求查 `core.tenant_member.role`（D5），token `roles` 不再参与授权；env 对命中时首管理员直接 `role='owner'` + 激活（Q2 冷启动唯一入口）。`dev-off` 挂系统租户 owner。
+- **Tenant Member Role Management API**（用户补充要求）：`GET/POST /v1/pm/tenants/{tid}/members`、`GET/DELETE .../members/{pid}`、`PATCH .../members/{pid}/role`、`POST .../owner-transfer`。全部走 `apply_member_change`：单事务 → 锁 `core.tenant` 行串行化本租户成员变更 → 校验调用者权限 → 锁目标行 → 校验角色转换 + 最后 owner 保护 → 写 DML → 写 `tenant_audit_log`（同事务，失败即回滚）。
+- **写/读路径**：生产 53 处 INSERT 补 `tenant_id`（B 类用父行子查询、A/D 类显式）；测试 200 处 INSERT 同步；对外入口（`pm_lists` / `customers` / `pm_runs` / `pm_writes` / `pm_repositories` / `pm_imports` / `documents` / `pm_artifacts` / `principals`）加租户谓词，内部流转靠组合外键蕴含（Q5 分层）。
+- **不做**：Executor Registry（T-030）；费用核算聚合（R4）；Git 凭据层级（R3）；`tenant_agent.is_enabled=false` 的 MCP 领取门（待 D3 执行端接入）。
+- **实测**：`cargo test --workspace` 退出码 0（详见「T-021b 交付」的最终数字）；新增 `tenant_members.rs` 11 例（RV-1..RV-10 + TN-4/TN-5）、`tenant_schema.rs` 5 例（XT-3 ×3 + TN-7/TN-8）、`tenant_isolation.rs` 1 例（XT-1/XT-2）。
+- **关键结论**：
+  - `tenant_member.role` 成为唯一事实源后，撤权在**下一次请求**即生效，不等 token 过期（RV-2/RV-3 用同一张 JWT 验证）。
+  - 组合外键使「两份 tenant_id 不一致」在 DB 层不可能出现；`information_schema` 断言把 I1 变成机器可验证的不变量。
+  - `admin` 只能**往下降**（可把另一 admin 降为 member，不能提权、不能碰 owner），同时满足用户补充要求第 1 条与第 5 条。
+- **遗留**：`tenant_agent.is_enabled=false` 的门控未接（D3 执行端尚无）；`governance.approval_request.project_id` 与 `tenant_id` 之间没有直接组合外键（靠 `(tenant_id, proposal_id)` 传递保证一致），属可接受缺口。
 
 ### 文档一致性巡检（todo.md 完成度审计）—— 2026-11-01 完成
 
