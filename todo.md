@@ -2,7 +2,7 @@
 
 > 本文件是**唯一待办队列**。每条任务自包含，供 AI 直接领取执行。
 > 维护规则：状态原地改（`[ ]` → `[~]` → `[x]`），条目只追加不删除；做完的移到 §13 归档。
-> 编号只是稳定 ID，**排序以里程碑（§3–§10）为准**，不再按编号段位推断优先级。
+> 编号只是稳定 ID，**排序以里程碑（§3–§10.5）为准**，不再按编号段位推断优先级。
 
 **本版（v2，2026-11-01）的合并口径**：
 
@@ -10,6 +10,7 @@
 - 依据 B：仓库实测 —— `migrations/`（0001–0018，18 个迁移 / 43 张表）、`crates/`（5 个包：pm-application / pm-domain / pm-ai / pm-infrastructure / pm-mcp）、`apps/`（3 个：pm-api / ai-pm-worker / pm-worker，合计 8 个 workspace 成员）、`frontend/src/shell/views/` + `frontend/src/workspace/`、`git log`。
 - 冲突时**以实测为准**：顾问的路线用来「补漏」，不用来「重排已完成的活」。已实现的部分不再重复开工（§1 逐项给了证据）。
 - **2026-11-01 增量**：多租户 / Agent / Executor 身份边界由 `docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`（Accepted）裁定；M1 拆为 **T-021a（β，身份归因）** / **T-021b（α+γ+δ，Tenant + Agent + Run 身份列）**；迁移号顺移（T-024 → `0021`、T-041 → `0022`）；ADR 未决项登记为 T-055~T-058，T-021a 遗留登记为 T-059。**T-020 已过稿、T-021a 已实施并验收**（交付见 §13 归档）。
+- **2026-11-01 增量（二）**：执行端接入转入待实施——runbook 落盘（`docs/ai-pm-executor-onboarding-runbook-v1.md`，`3811a37`），新增 **§10.5 M8**（T-080 执行端 URL 引导式接入 / T-081 `/mcp` 跨机暴露 / T-082 `pm_list_tasks`）；用户确认 trae / codex / workbuddy / z-code / dsh 均为候选执行端。
 
 ---
 
@@ -216,6 +217,40 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **做**：run 列表与详情（状态、租约、executor_session、日志入口）；交付清单页（多仓 commit + 证据）；空态与错误态。
   - **不做**：不做假数据页（`VITE_USE_MOCK=0` 必须能跑）；不做 Agent 管理页（P9 延后）。
   - **验收**：真库下能看到 T-031 产生的 run 与 T-041 产生的交付；`vue-tsc` 0 error；vitest 全绿。
+
+---
+
+## 10.5 M8 · 执行端接入与 Onboarding（2026-11-01 用户新增）
+
+> 背景：用户确认 z-code / dsh 均支持 MCP，执行端接入从「设计讨论」转入「待实施」；配套 runbook 已落盘（`docs/ai-pm-executor-onboarding-runbook-v1.md`，`3811a37`）。本节三条为 runbook §十缺口与用户裁定的接入方式的落地条目。
+
+- [ ] **T-080 执行端 URL 引导式接入（onboarding endpoint）设计稿 + 实施**
+  - **本条按 §0.1 执行**：完整 brainstorming。
+  - **用户描述的流程（2026-11-01 原话口径）**：用户第一次安装工具 → 打开 trae / codex 等执行端 → **粘贴平台 URL** → 对 agent 说「**帮我安装**」→ **agent 根据 URL 提供的安装方法进行安装**（写本工具的 MCP 配置、引导填 key、验证连通），全程无手工编辑配置文件。
+  - **目标**：平台暴露一个稳定、agent 可读的接入 URL，返回分工具的安装指引；执行端 agent 拉取后按指引完成配置与自检，把「粘贴 URL + 一句话」变成全部安装操作。
+  - **依据**：`docs/ai-pm-executor-onboarding-runbook-v1.md`（§三 配置契约 / §十一 R1 用户已定向）；`docs/ai-pm-mcp-executor-positioning-v1.md` §3.4 A5（transport 无关）、Q9/Q10（首批执行端与预注册档位）；`crates/pm-mcp/src/server.rs`（Streamable HTTP、loopback 现状）。
+  - **要在稿里裁清的点**：
+    1. URL 形态：静态 Markdown 指引页 vs 结构化 JSON（`?tool=trae` 按工具变体）vs 两者（人看页 + agent 读机器可读）。
+    2. 指引内容边界：URL 只含配置片段与验证步骤，**不承载 key**（密钥由用户在安装过程中另行输入，不得出现在 URL 或指引内容里）。
+    3. 验证闭环：安装完成的判定 = `GET /health` 200 + `GET /v1/pm/me` 200（含 `is_active` 状态提示，未激活给出下一步指引）。
+    4. 与预注册档位（T-051）的关系：onboarding 是否顺带登记 `client_name` 档位。
+    5. 人工档租约 / 心跳默认值（runbook G5 / R3）是否随 onboarding 指引下发。
+  - **不做**：不在 URL 或指引中传递凭据；不负责安装执行端软件本身（装 trae/codex 是用户自己的事）；不做无人值守 Runner（T-030 范围）；不改 11 个 MCP 工具的契约。
+  - **验收**：用 ≥2 个不同执行端（建议 trae + codex，z-code / dsh 跟进）实测「粘贴 URL → 帮我安装 → 配置就位 → `/v1/pm/me` 200」全程无手工编辑配置文件；未激活路径给出明确指引而非报错。
+
+- [ ] **T-081 `/mcp` 跨机暴露（runbook G1；T-080 跨机场景的前置）**
+  - **目标**：`/mcp` 从 loopback-only（`server.rs:10-14`，M1 本地单机设计）放开到受控跨机访问：host 白名单配置化 + TLS/反向代理 + 鉴权加固，支撑多 PC / 多人接入。
+  - **依据**：`crates/pm-mcp/src/server.rs:10-14`；`docs/ai-pm-executor-onboarding-runbook-v1.md` §十 G1 / §十一 R2。
+  - **做**：`allowed_hosts` 从代码默认改为可配置；部署侧 TLS / 反代方案；跨机安全评审（key 传输路径、Host 头校验语义变化、请求来源限制）。
+  - **不做**：不做 MCP OAuth（定位文档 M1 scope cut，需另行立项才动）；不动鉴权三层链（bearer → resolve → active）。
+  - **验收**：另一台 PC 的执行端可完成 T-080 的安装验证闭环；同机用例与 rmcp 契约测试不回归。
+
+- [ ] **T-082 `pm_list_tasks` MCP 工具（runbook G3）**
+  - **目标**：执行端不切 Web 控制台即可发现可领取任务：`project_id` 范围内 `ready` 状态任务的只读列表。
+  - **依据**：`docs/ai-pm-executor-onboarding-runbook-v1.md` §十 G3 / §十一 R4；`docs/ai-pm-mcp-executor-positioning-v1.md` §4.3（`task.list` 对应项）。
+  - **做**：新增只读工具，复用 T-022 可见性语义（持 key 真人 + 租户内 + `project_member`）；命名跟随现有 `pm_*`（Q1 命名收敛前不引入新命名体系）。
+  - **不做**：不做按执行端能力 / 档位过滤（归 T-051）；不改 `pm_claim_task` 契约。
+  - **验收**：空项目 / 有 ready 任务 / 非本租户 三态用例；`cargo test --workspace` 全绿。
 
 ---
 
