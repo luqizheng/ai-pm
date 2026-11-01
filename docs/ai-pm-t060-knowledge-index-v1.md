@@ -1,7 +1,7 @@
-# T-060 · 知识索引层可替换化与完整检索（P6 后半 · 设计稿 v1.1）
+# T-060 · 知识索引层可替换化与完整检索（P6 后半 · 设计稿 v1.2）
 
-> 状态：**修改后过稿（v1.1 已按评审意见修订，待复审）**
-> 版本：v1.0（2026-11-02 落盘，Q1–Q4 + A-1~A-6 已裁定）→ **v1.1（2026-11-02 评审修订：并发一致性、版本边界、状态不变量、故障分级、检索正确性、性能验证、K-17~K-25）**
+> 状态：**有条件通过（v1.2 已收录专家评审全文并逐条处置，待复审）**
+> 版本：v1.0（2026-11-02 落盘，Q1–Q4 + A-1~A-6 已裁定）→ v1.1（2026-11-02 评审修订：并发一致性、版本边界、状态不变量、故障分级、检索正确性、性能验证、K-17~K-25）→ **v1.2（2026-11-02 收录专家评审 v2 原文，补当前生效修订校验、检索服务职责分离、分页语义、索引表级故障回退）**
 > 评审结论：修改后过稿；**不推翻现有架构，不扩大本期范围**。
 > 一句话：把「每次检索都逐篇读 Git + 全量扫描」换成「落库章节索引 + 可替换端口 + 发布即重建 + 索引不可用时回退直读」，不引入分词扩展、不引入向量库、不改检索响应契约。
 > 上位依据：`todo.md` §9 M6（T-060）、`docs/ai-pm-markdown-knowledge-space.md` §九/§十一（A 路径与可替换适配层）、`docs/ai-pm-knowledge-v2-implementation.md` §3（索引现状）、`migrations/0014_knowledge_v2.sql:60-79`、`migrations/0019_tenant.sql`（租户纪律）、`AGENTS.md` 规则 1（新项目无存量数据，直接改契约）。
@@ -36,6 +36,24 @@
 | 5 | 检索正确性：空锚点加成保护、租户查询约束、混合分页测试 | §6.1 SQL（空锚点 + `tenant_id` 条件）、§6.5、K-21 / K-22 / K-24 |
 | 6 | 性能验证：不假定毫秒级，补大文档重建耗时与章节数测试 | §5.6（删除「毫秒级」论断，改为实测回填 + 上限断言）；K-23 |
 | 7 | 补 K-17~K-25 | §8 测试矩阵 |
+
+### 0.3 专家评审 v2 处置摘要（原文见 §12）
+
+| 编号 | 问题 | 处置 | 落点 |
+|---|---|---|---|
+| P0-1 | 同步重建的跨修订并发：旧修订不得覆盖当前生效修订的检索状态 | **已采纳**：锁内增加「当前生效修订」校验，非最新 published → `Superseded`；本期只索引当前生效修订 | §5.3 |
+| P0-2 | 状态与产物原子性、状态表唯一键核对、`index_version` 参与判定 | **已采纳**：核对 `0014:75` 唯一键为 `(document_revision_id, provider)`，与本稿 UPSERT 目标一致；INV-1/INV-2；`index_version` 已进 §4.2/§6.1 | §4.1、§4.2、§5.3 |
+| P0-3 | 版本升级的失效与全量重建机制 | **已采纳**（v1.1）：四要素有效性 + 项目级全量重建入口 | §5.5、§6.1 |
+| P1-1 | 回退路径的 stale 清理不完整 | **已采纳**（v1.1）：读路径只能经 `apply_transition(Stale)`，清空产物 | §5.3、§6.4 |
+| P1-2 | 索引不可用的故障边界（单篇 / 整体 / 元数据不可用） | **已采纳并细化**：新增「仅索引表不可用 → 整项目回退」一档；元数据不可用才 503 | §6.5、§7 |
+| P1-3 | 分页总数语义未定义 | **已采纳**：offset 分页、不承诺 total/has_more、全局统一排序、合并后分页、重复以 DB 优先 | §6.3、§6.4、K-24 |
+| P1-4 | 引用加成的空锚点 | **已采纳**（v1.1）：双向非空约束 | §6.1、§6.2 |
+| P1-5 | 多租户查询边界 | **已采纳**（v1.1）：SQL 显式 `tenant_id`；`tenant_id` 由修订行带出并由组合外键强制一致 | §6.1、§4.1 |
+| P1-6 | 同步重建的性能假设缺证据 | **已采纳**（v1.1）：撤回毫秒级论断；K-23 记录章节数、重建与批量写入耗时 | §5.6、K-23 |
+| P1-7 | `search_with_fallback` 职责边界 | **已采纳**：端口只做 provider 重建/检索；编排归独立 `KnowledgeSearchService` | §3.2 |
+| P2-1 | 不为未来 provider 预设同一物理表 | **已采纳**：`document_index_state` 为通用状态；`document_section_index` 仅属 `db-section` | §4.1、§11 |
+| P2-2 | 证据契约 | **已采纳**：`SearchHit` 内部携带 `revision_id + revision_hash`，证据绑定修订而非文档 | §3.3、§11 |
+| P2-3 | 索引清理生命周期 | **已采纳**：revision 删除双级联；provider 废弃按 provider 手动清理；不新增 Job | §4.4 |
 
 ---
 
@@ -83,10 +101,10 @@ flowchart LR
     TR --> T2[("ai.document_index_state")]
   end
   subgraph 读取
-    Q["GET /v1/pm/documents/search"] --> S["search_with_fallback"]
-    S --> DB["DB 索引检索 + 打分 + 分页"]
-    S --> FB["DirectReadFallback（读 Git + parse + 同一打分函数）"]
-    DB --> M["合并 / 去重 / 排序 / 分页"]
+    Q["GET /v1/pm/documents/search"] --> S["KnowledgeSearchService（编排）"]
+    S --> DB["DbSectionIndexer.search：索引检索 + 打分 + 分页"]
+    S --> FB["DirectReadFallback：读 Git + parse + 同一打分函数"]
+    DB --> M["合并 / 去重（DB 优先） / 排序 / 分页"]
     FB --> M
     M --> R["{ items: [...] }（形状不变）"]
   end
@@ -96,7 +114,21 @@ flowchart LR
 - `knowledge_index.rs` 退化为**纯解析 + 打分纯函数 + 回退直读扫描**。
 - 回退器保留 Git 权威读路径（`knowledge::read_document`，含 `content_hash` 校验）。
 
-### 3.2 端口契约
+### 3.2 检索编排服务（评审 P1-7）
+
+职责分离，端口只做「provider 的重建与检索」，**不承担 fallback 编排**：
+
+| 职责 | 归属 |
+|---|---|
+| 取当前 published 修订、判定索引有效性（§4.2 四要素） | `KnowledgeSearchService`（应用服务，`knowledge_search.rs`） |
+| 调用 DB 索引检索（`KnowledgeIndexer::search`） | `KnowledgeSearchService` → `DbSectionIndexer` |
+| 识别未索引/失效文档，调用 `DirectReadFallback`，并触发 `apply_transition(Stale)` | `KnowledgeSearchService` |
+| 合并去重（DB 优先）、全局排序、offset 分页 | `KnowledgeSearchService` |
+| 索引重建（`rebuild_document`）与检索（`search`）本身 | `KnowledgeIndexer` 实现（`DbSectionIndexer`） |
+
+这样未来接 PageIndex 时，只替换 `KnowledgeIndexer` 实现，回退机制与分页语义**不随 provider 绑定**。`search_with_fallback` 作为函数名退役，其逻辑全部收进 `KnowledgeSearchService::search`。
+
+### 3.3 端口契约
 
 ```rust
 pub const DB_SECTION_PROVIDER: &str = "db-section";
@@ -124,9 +156,10 @@ pub trait KnowledgeIndexer: Send + Sync {
 }
 ```
 
-- `search` 在**索引基础设施不可用**时必须返回 `Err`（新增 `KnowledgeError::IndexUnavailable`），**不得返回空 Vec**（见 §6.5）。
+- `search` 在**权威元数据或索引基础设施不可用**时必须返回 `Err`（新增 `KnowledgeError::IndexUnavailable`），**不得返回空 Vec**（见 §6.5）。
+- 端口**不编排**：取当前修订、有效性判定、回退、合并、排序、分页均由 `KnowledgeSearchService` 负责（§3.2）。
 - 删除的旧契约（`AGENTS.md` 规则 1，不留过渡层）：`IndexReference`、`RetrievedSection`、`index_document`、`index_revision`、`MARKDOWN_TREE_PROVIDER` / `MARKDOWN_TREE_INDEX_VERSION`。
-- `SearchHit` 增 `revision_hash: String`（`#[serde(skip_serializing)]`）——供 D5 证据回溯，对 REST 响应**不可见**（守 A-4）。
+- `SearchHit` 增 `revision_id: Uuid` 与 `revision_hash: String`，均 `#[serde(skip_serializing)]`——证据必须绑定**具体修订**而非文档（评审 P2-2），对 REST 响应**不可见**（守 A-4）。
 
 ---
 
@@ -174,6 +207,15 @@ ALTER TABLE ai.document_section_index
 - 租户纪律按 `0019`：`tenant_id NOT NULL` + 两条 `(tenant_id, *)` 组合外键（`uq_document_revision_tenant_id` 已存在）。
 - `provider` 为维度列；`(document_revision_id, provider)` 唯一键在 `document_index_state` 上已存在。
 - `tenant_schema.rs` 的 `TENANT_TABLES` 从 40 增至 41。
+- **状态表唯一键核对（评审 P0-2）**：`ai.document_index_state` 的既有约束为 `UNIQUE (document_revision_id, provider)`
+  （`0014:75`），本稿 UPSERT 的冲突目标与此**一致**；迁移 `0019` 已为其加 `tenant_id` 与 `(tenant_id, document_revision_id)`
+  组合外键（`ON DELETE CASCADE`），无需改动。
+- **`tenant_id` 的来源（评审 P1-5）**：章节行的 `tenant_id` 由修订行带出（不单独取参），并由
+  `fk_document_section_tenant_revision (tenant_id, document_revision_id)` 强制与修订租户一致——数据库层保证
+  「章节租户 = 修订租户」，不依赖应用层填充正确。
+- **物理模型边界（评审 P2-1）**：`document_index_state` 是 **provider 通用状态表**；`document_section_index` 只属
+  `db-section` 这一实现。未来 PageIndex（无 `section_no` / `level` / `start_line` 等字段）**自带派生表**，
+  可替换的是端口契约，不是物理数据模型。
 
 ### 4.2 有效性判定（评审项 2）
 
@@ -196,6 +238,16 @@ ALTER TABLE ai.document_section_index
 | `stale` | 磁盘正文与修订哈希不一致 | **必须为 0 行** | 重建遇漂移；读路径发现漂移（同一原语） |
 | `failed` | 文件缺失 / 无标题 / 解析失败 | **必须为 0 行** | 重建失败（唯一原语） |
 | `pending` | 同步路径**不再写入**（CHECK 保留，不删枚举） | — | 无 |
+
+### 4.4 索引清理生命周期（评审 P2-3）
+
+| 事件 | 行为 | 实现 |
+|---|---|---|
+| 修订删除 | 章节行与状态行**双双级联删除** | 两条 `(tenant_id, document_revision_id)` 组合外键均 `ON DELETE CASCADE`（状态表见 `0019:360-363`，章节表见本迁移） |
+| 文档删除 | 沿用 `ai.document_revision` 既有外键行为，本期不改 | 不新增逻辑 |
+| 修订被否决（veto） | 状态 `stale` + 章节清空（§5.1 #4） | `apply_transition(Stale)` |
+| provider 废弃 | 按 `provider` 一次性手动清理（`DELETE … WHERE provider = $1`） | 不新增 Job、不做定期清理任务 |
+| 历史修订 | **允许保留历史派生数据**（级联/人工清理），但**不参与检索**（§6.1 只取最新 published） | — |
 
 ---
 
@@ -239,6 +291,8 @@ async fn apply_transition(
 1. **取得锁**：`SELECT pg_advisory_xact_lock(hashtextextended('ai.document_section_index:' || $revision_id || ':' || $provider, 0))`（与 `task_dependency.rs:97` 同一手法）。锁粒度 = `(revision, provider)`，成功重建、`stale` 清理、`failed` 清理**共用同一把锁**。
 2. **锁内重算前置条件**（关键：不信任锁外观测，避免「旧操作删掉新产物」）：
    - 重读修订行：仍为 `published`、属于 `project_id` / `tenant_id`；
+   - **当前生效修订校验（评审 P0-1）**：按 `document_id` 取 `ORDER BY revision_no DESC LIMIT 1` 的最新 published 修订；
+     若它不是本次 `revision_id` → **`Superseded`**（历史修订不重建、不写状态、不参与检索）。本期只索引当前生效修订。
    - 重读磁盘文件并计算哈希 `h_disk`；
    - 若 `t = Indexed` 且 `h_disk ≠ revision.content_hash` → **就地降级**为 `Stale`，继续执行清理；
    - 若 `t = Indexed` 且解析无标题 → **就地降级**为 `Failed`；
@@ -350,32 +404,46 @@ SELECT *, score + ref_boost AS total FROM scored
 - 同分次序：`canonical_path` → `start_line` → `section_no`。
 - 回退路径用 `knowledge_index::score_section(...)` 纯函数，公式逐项对应（含空锚点保护）；K-14 钉住两路径等价。
 
-### 6.3 分页与响应（A-4）
+### 6.3 分页与响应（A-4 / 评审 P1-3）
 
 - `SearchQuery` 增 `limit`/`offset`（缺省 20 / 0；`limit` 夹在 `1..=100`，`offset` 负数按 0）。
+- **本期只做 offset 分页，语义明确为**：
+  - **不返回 `total`，不返回 `has_more`**（响应结构不扩展）；
+  - **排序全局唯一**（§6.2 的 `score desc → canonical_path → start_line → section_no`），与数据来自 DB 还是回退无关；
+  - **先合并去重、再排序、最后分页**（不各自分页后再拼，避免页边界错位）；
+  - 不承诺跨页快照稳定（两次请求之间若有新发布，结果可能移动；这是可接受的）。
+- 两路候选各取 `limit + offset` 条，足以覆盖合并后的前 `limit + offset` 条（§6.4 第 3～5 步）。
 - 响应仍是 `{ "items": [ SearchHit… ] }`，字段集合与改造前**完全一致**；`revision_hash` 不进 JSON。
-- 前端 `frontend/src/api/documents.ts` 无需改动。
+- 前端 `frontend/src/api/documents.ts` 无需改动（不传新参数即保持旧行为）。
 
-### 6.4 回退合并（`search_with_fallback`）
+### 6.4 回退合并（`KnowledgeSearchService::search`）
 
 1. 取每篇文档最新 published 修订 + 该 provider 状态（一次查询，带 `tenant_id`）。
 2. 分类：满足 §4.2 四要素 → DB 路径；否则 → 回退候选。
 3. DB 路径：跑 §6.1（取 `limit + offset` 条）。
 4. 回退候选：逐篇 `read_document`（哈希校验失败 → 该篇作废并 `apply_transition(Stale)`）→ `parse_markdown_tree` → `score_section`，取前 `limit + offset` 条。
-5. 合并按 `(document_id, anchor)` 去重（DB 优先）→ 统一排序 → 跳过 `offset` → 取 `limit`。
+5. 合并按 `(document_id, anchor)` 去重（**同键以 DB 行为准**）→ 统一排序 → 跳过 `offset` → 取 `limit`。
 6. 返回 `FallbackSearchResult { used_fallback, stale_revision_ids, hits }`；handler 只序列化 `hits`。
+7. **去重键与分页边界（评审 P1-3 边界用例，K-24）**：同一章节同时出现在 DB 与回退时只保留 DB 那条，且不产生重复行或跨页缺口。
 
-### 6.5 故障分级（评审项 4）
+### 6.5 故障分级（评审项 4 / 评审 P1-2）
+
+故障按**影响范围**分三档处理，不允许「部分成功」冒充「完整结果」：
 
 | 故障 | 判定 | 行为 |
 |---|---|---|
 | **单篇索引不可用**（`stale` / `failed` / 无状态 / 版本不符 / 哈希不符） | 该修订 | 仅该篇走回退直读；其余篇正常出结果；`used_fallback = true`（内部可见） |
 | **单篇回退也失败**（文件缺失 / IO 错误） | 该篇 | 该篇缺席，`warn!` 记录；请求整体仍 `200` |
-| **索引基础设施故障**（查状态/查章节 SQL 失败、连接池耗尽、`document_index_state` 不可读） | 全局 | 返回 `Err(KnowledgeError::IndexUnavailable)` → **HTTP 503** `KNOWLEDGE_INDEX_UNAVAILABLE`；**绝不**返回 `200 { items: [] }` |
-| **Git 根不可读**（`KnowledgeRoot` 缺失 / 权限错误） | 全局 | 同上 `503` |
+| **索引层整体不可用**（章节索引表不可读、索引 SQL 执行失败、`provider` 初始化失败）但**权威清单可读** | 全局 | **整项目**回退直读（所有文档走 `read_document` + `parse_markdown_tree`），`warn!(knowledge_search_fallback, infra=true, reason)`；结果仍 `200`，不返回任何 DB 索引残留 |
+| **权威元数据不可用**（`project_document` / `document_revision` 查询失败、连接池不可用） | 全局 | 返回 `Err(KnowledgeError::IndexUnavailable)` → **HTTP 503** `KNOWLEDGE_INDEX_UNAVAILABLE`；**绝不**返回 `200 { items: [] }` |
+| **Git 根不可读**（`KnowledgeRoot` 缺失 / 权限错误） | 全局 | 同上 `503`（此时既无索引也无直读，无法产出可信结果） |
 | **确无匹配** | — | `200 { items: [] }`（唯一允许空结果的场景） |
 
-判定原则：**只有「查询确实没命中」才允许空结果**；任何基础设施层失败都必须以非 2xx 暴露，避免前端把故障当「没数据」。
+判定原则（评审 P1-2 四条）：
+1. 索引查询失败时**不返回部分成功结果**冒充完整结果（要么整项目回退，要么明确报错）。
+2. 只要权威文档清单与修订元数据可读，就**整体回退直读**，保持可用性。
+3. 权威元数据也不可用时，返回**明确错误**而非空列表（空结果与检索失败是两种业务含义）。
+4. 每次回退都 `tracing` 记录**原因**（`reason` 字段：`index_state_missing` / `index_stale` / `index_failed` / `index_version_mismatch` / `index_infra_error`）。
 
 ---
 
@@ -389,7 +457,9 @@ SELECT *, score + ref_boost AS total FROM scored
 | 锁内前置条件已变化 | `IndexOutcome::Superseded` | reindex → 409（提示「状态已变化，请重试」） |
 | 手动 reindex 指向非 published 修订 | `KnowledgeError::Conflict` | 409 |
 | 同一修订并发转换 | advisory lock 串行化；`UNIQUE(document_revision_id, provider, section_no)` 兜底 | — |
-| 索引/状态查询或连接池故障 | `KnowledgeError::IndexUnavailable` | **503** `KNOWLEDGE_INDEX_UNAVAILABLE` |
+| 索引层整体不可用（章节/状态查询失败），但权威清单可读 | 不报错 | **200**，整项目回退直读（§6.5）；`warn!` 带 `reason=index_infra_error` |
+| 权威元数据 / 连接池不可用 | `KnowledgeError::IndexUnavailable` | **503** `KNOWLEDGE_INDEX_UNAVAILABLE` |
+| Git 根不可读 | `KnowledgeError::IndexUnavailable` | **503** `KNOWLEDGE_INDEX_UNAVAILABLE` |
 | 跨租户 | 组合外键拒绝；所有查询显式带 `tenant_id` | 404 / 403 由 `project_in_tenant` 处理 |
 
 日志（本期只做日志；指标/监控页归 T-061）：
@@ -426,14 +496,16 @@ SELECT *, score + ref_boost AS total FROM scored
 | **K-17** | **并发一致性（评审 1）** | 对同一 `(revision, provider)` 并发执行「重建」与「漂移清理」：两者串行化；后到旧操作返回 `Superseded` 且**不删除**新产物；结束后 INV-1/INV-2 成立 | `knowledge_index_v2.rs` |
 | **K-18** | **版本参与有效性（评审 2）** | 把 state 的 `index_version` 改为 `v0` → 检索走回退、不返回旧索引内容；全量重建后恢复 DB 直查 | 同上 |
 | **K-19** | **状态-产物不变量（评审 3）** | 遍历全部路径（成功 / 哈希漂移 / 无标题 / veto / 读路径漂移）：`status ≠ indexed ⇒ 章节=0`；`indexed ⇒ 章节>0 ∧ 哈希 ∧ 版本一致` | 同上 |
-| **K-20** | **故障不伪装空结果（评审 4）** | 注入状态/章节查询失败 → `KNOWLEDGE_INDEX_UNAVAILABLE`（503），响应不是 `200 {items:[]}`；真无匹配时才 200 空 | `apps/pm-api/tests/documents.rs` |
-| **K-21** | **空锚点保护（评审 5）** | 章节 `anchor=''` 与 `section_anchor=NULL/''` 的引用均不产生 +2；非空相等才 +2 | `knowledge_index_v2.rs` |
-| **K-22** | **租户约束（评审 5）** | 构造两租户同构数据，检索只出本租户结果；SQL 显式 `tenant_id` 条件生效 | 同上 |
-| **K-23** | **大文档性能（评审 6）** | ≥200 标题、≥200 KB：章节行数正确、状态一致、耗时 ≤ 10 s（宽松上限），并输出实测值 | 同上 |
-| **K-24** | **混合分页（评审 5）** | 部分文档走 DB、部分走回退：合并后 `limit/offset` 无重复、无缺口，顺序稳定（复跑两次一致） | 同上 |
-| **K-25** | **版本升级全量入口（评审 2）** | `POST /documents/reindex?project_id=` 覆盖全部 published 修订，返回 `{reindexed, stale, failed, superseded}` 计数正确 | 同上 |
+| **K-20** | **故障不伪装空结果（评审 4 / P1-2）** | 注入章节/状态查询失败（权威清单可读）→ 整项目回退直读且 `200`；再注入修订元数据查询失败 → `KNOWLEDGE_INDEX_UNAVAILABLE`（503）；两例均**不是** `200 {items:[]}`；真无匹配时才 200 空 | `apps/pm-api/tests/documents.rs` |
+| **K-21** | **空锚点保护（评审 5 / P1-4）** | 章节 `anchor=''` 与 `section_anchor=NULL/''` 的引用均不产生 +2；非空相等才 +2 | `knowledge_index_v2.rs` |
+| **K-22** | **租户约束（评审 5 / P1-5）** | 构造两租户同构数据，检索只出本租户结果；SQL 显式 `tenant_id` 条件生效 | 同上 |
+| **K-23** | **大文档性能（评审 6 / P1-6）** | ≥200 标题、≥200 KB：记录**单文档章节数**、**重建总耗时**、**章节批量写入耗时**；章节行数正确、状态一致、重建耗时 ≤ 10 s（宽松上限），实测值回填 §5.6 | 同上 |
+| **K-24** | **混合分页（评审 5 / P1-3）** | 部分文档走 DB、部分走回退且存在**同一章节两路都命中**：合并后 `limit/offset` 无重复、无缺口，**DB 行优先**，顺序稳定（复跑两次一致） | 同上 |
+| **K-25** | **版本升级全量入口（评审 2 / P0-3）** | 改 `index_version` 常量后旧索引即时失效；`POST /documents/reindex?project_id=` 覆盖全部 published 修订，返回 `{reindexed, stale, failed, superseded}` 计数正确，重建后恢复 DB 直查 | 同上 |
 
-T-060 验收四条 ↔ 用例：可重建且幂等 → K-02；状态与正文哈希一致 → K-02/K-03/K-19；接口向后兼容 → K-12（+K-11）；哈希漂移索引失效 → K-03/K-19。评审七项 ↔ K-17~K-25 如上。
+> **编号对齐说明（评审 P0-P1 提供的 K-17～K-25 与本稿编号的差异）**：语义相同者已直接对齐（K-17 并发、K-18 版本失效、K-19 清理一致性、K-20 整体故障、K-21 空锚点、K-22 跨租户）。评审矩阵中「K-23 混合分页 → 本稿 K-24」「K-24 provider 版本升级 → 本稿 K-25」「K-25 大文档重建性能 → 本稿 K-23」（本稿在 v1.1 已先占了 K-23 给性能）。实施时以**本稿编号**为准。
+
+T-060 验收四条 ↔ 用例：可重建且幂等 → K-02；状态与正文哈希一致 → K-02/K-03/K-19；接口向后兼容 → K-12（+K-11）；哈希漂移索引失效 → K-03/K-19。v1.1 评审七项 ↔ K-17~K-25；v2 评审矩阵 ↔ §12.7 编号映射。
 
 ---
 
@@ -456,11 +528,12 @@ T-060 验收四条 ↔ 用例：可重建且幂等 → K-02；状态与正文哈
 | 文件 | 改动 |
 |---|---|
 | `migrations/0024_knowledge_section_index.sql` | 新建（§4.1） |
-| `crates/pm-application/src/knowledge_indexer.rs` | 端口新契约 + `DbSectionIndexer` + `apply_transition`（锁内重算前置条件）+ `DirectReadFallback` + `search_with_fallback` + `rebuild_quietly` |
-| `crates/pm-application/src/knowledge_index.rs` | 保留解析；新增 `score_section`（含空锚点保护）；`search_documents` 更名 `scan_documents_direct`（仅回退用）；`SearchHit` 增 `revision_hash`（不序列化） |
+| `crates/pm-application/src/knowledge_indexer.rs` | 端口新契约 + `DbSectionIndexer`（`rebuild_document` / `search`）+ `apply_transition`（锁内重算前置条件）+ `DirectReadFallback` + `rebuild_quietly` |
+| `crates/pm-application/src/knowledge_search.rs` | **新建**：`KnowledgeSearchService::search`（取当前修订 + 四要素判定 + DB/回退编排 + 合并去重 + 排序 + 分页 + 故障分档）；`SearchPage` / `FallbackSearchResult` |
+| `crates/pm-application/src/knowledge_index.rs` | 保留解析；新增 `score_section`（含空锚点保护）；`search_documents` 更名 `scan_documents_direct`（仅回退用）；`SearchHit` 增 `revision_id`、`revision_hash`（均不序列化） |
 | `crates/pm-application/src/knowledge.rs` | `CreatedDocument` 增 `revision_id`；`create_document` 提交后重建；`KnowledgeError` 增 `IndexUnavailable` |
 | `crates/pm-application/src/knowledge_proposal/{submit,veto}.rs` | 删 `pending` 插入；提交后重建；veto 用 `apply_transition(Stale)` + 重建生效修订 |
-| `apps/pm-api/src/documents.rs` | `search_handler` 走 `search_with_fallback` + `tenant_id` + `limit`/`offset`；`reindex_handler` 改 `DbSectionIndexer`；新增项目级 `reindex_project_handler`；`error_response` 增 503 映射 |
+| `apps/pm-api/src/documents.rs` | `search_handler` 走 `KnowledgeSearchService::search` + `tenant_id` + `limit`/`offset`；`reindex_handler` 改 `DbSectionIndexer`；新增项目级 `reindex_project_handler`；`error_response` 增 503 映射 |
 | `apps/pm-api/src/routes.rs` | 新增 `POST /v1/pm/documents/reindex`（§5.5） |
 | `crates/pm-application/src/lib.rs` | 重导出更新 |
 | `crates/pm-infrastructure/tests/tenant_schema.rs` | 表清单加新表（40 → 41） |
@@ -476,5 +549,202 @@ T-060 验收四条 ↔ 用例：可重建且幂等 → K-02；状态与正文哈
 ## 11. 与后续切片的接口
 
 - **T-061**：本稿不写 outbox 事件；`knowledge_index_failed` / `knowledge_search_unavailable` 日志与 `document_index_state` 可直接作为后续指标来源。
-- **D5（T-042/T-043）**：`SearchHit.revision_hash`（内部字段）与 `locator`（anchor/start_line）即证据回填所需的版本与定位信息。
-- **未来 provider（PageIndex / 向量）**：实现同一 trait（`provider` / `index_version` / `rebuild_document` / `search`），并复用 §4.2 四要素有效性判定与 §5.3 转换原语；切换不改业务调用点。
+- **D5（T-042/T-043）**：`SearchHit.revision_id` / `revision_hash`（内部字段）与 `locator`（anchor/start_line）即证据回填所需的版本与定位信息。**证据必须绑定具体修订**，不能只绑 `document_id`——文档再次发布后，历史 Run 的证据不得被解释为最新正文。
+- **未来 provider（PageIndex / 向量）**：实现同一 trait（`provider` / `index_version` / `rebuild_document` / `search`），并复用 §4.2 四要素有效性判定与 §5.3 转换原语；**自带派生表**，不共用 `document_section_index`；切换不改业务调用点。
+
+---
+
+## 12. 评审记录（2026-11-02 · 专家评审 v2 全文）
+
+> 本节为专家评审原文的格式化收录，保留其结论与论证，**不作改写**；逐条处置见 §0.3，测试编号对齐见 §8。
+
+### 12.1 结论与总体评价
+
+- **结论：有条件通过，修改后过稿**（P6 后半）。
+- 方向正确，架构基本成立，但仍有几个影响**数据正确性**与**检索完整性**的 P0/P1 级问题。
+- 认可的核心判断：**Git 是唯一权威正文，DB 是可重建的派生索引；索引不可用时回退直读，不让索引故障影响知识发布。**
+- 认可的范围控制：**不引入向量库、不引入中文分词扩展、不新增后台 Job。**
+- 不建议直接进入实施；问题不在整体架构，而在几个边界条件：**索引状态与索引产物的一致性、发布与索引之间的并发、回退检索的完整性、多租户约束**。
+
+### 12.2 必须修改的问题（P0）
+
+#### P0-1 · 同步重建存在并发覆盖旧状态的风险（§5.2、§5.3）
+
+当前设计：发布修订 R1 → 事务提交 → 调用 `rebuild_document(R1)` → 重建读取 Git 文件 → 删除旧索引并写入新索引。问题在于 **Git 文件与 DB 修订之间存在并发窗口**：
+
+- R1 发布成功并开始重建；R2 随后发布，Git 文件已更新；R1 的重建读到 R2 的文件；哈希不匹配，R1 被标记 `stale`；R2 开始重建并成功。这个例子本身可以正确收敛。
+- 更危险的是**两个重建操作的执行顺序**：R2 重建先完成写入 `indexed`，R1 重建后完成写入 `stale`。虽然 R1/R2 是不同 revision，但必须确保 R1 的状态变化**不会破坏 R2 当前检索状态**。
+
+现有 advisory lock 以 `revision_id` 为粒度，只能防止同一修订并发重建，**不能协调同一 document 的不同 revision**。
+
+建议：
+1. 保留 revision 级 advisory lock，增加 **document 当前生效修订校验**；
+2. 写入索引状态前重新检查最新 published 修订（按 `revision_no DESC LIMIT 1`）；
+3. 若当前 published 已不是本次重建的 revision：可保留历史修订的状态记录，但**不允许旧修订覆盖当前修订的状态**；检索只认最新 published revision；
+4. 区分「历史修订是否可被索引」与「当前修订是否参与检索」两个概念；**本期只允许当前生效修订进入索引**，避免无意义的历史索引重建。
+
+#### P0-2 · 索引产物与状态更新必须具有原子性（§5.2）
+
+设计用一个事务完成 `DELETE` 旧章节 + `INSERT` 新章节 + `UPSERT document_index_state`，方向正确。但**状态表的唯一键、UPSERT 冲突目标和现有迁移定义必须核实**，尤其是 `UNIQUE (document_revision_id, provider)`；若实际约束不一致，重建会出现无法预期的冲突。
+
+建议明确：
+1. 章节数据与状态**同一事务提交**；
+2. `indexed` 时章节数据**必须完整**；
+3. `stale` / `failed` 时章节数据**必须为空**；
+4. 不允许「`indexed` 但无章节」（除非明确支持空章节文档）；
+5. **`index_version` 也作为有效性判定条件**：`status = indexed AND indexed_content_hash = revision.content_hash AND index_version = current_index_version AND provider = current_provider`。当前 §6.1 只检查 hash，未检查 `index_version`，会导致解析规则升级后旧索引仍被当作有效索引。
+
+#### P0-3 · 索引版本升级没有明确的失效与重建机制（§3.2、§4.2、§6.1）
+
+设计定义了 `DB_SECTION_INDEX_VERSION = "v1"` 并写入状态表，但**没有定义版本升级后的行为**。未来 v2 增加前言/代码块处理或内容规范化、v3 接入 PageIndex 时，**旧索引即使正文 hash 一致，也不代表索引结构符合当前解析规则**。
+
+建议：
+- `index_version` 必须参与有效性判断；
+- `provider` 与 `index_version` 不匹配时，旧索引不能参与检索；
+- 不允许把旧版本索引当作当前版本索引；
+- 本期不做后台重建，但**必须有明确的全量重建入口**。
+
+此项作为**过稿条件**。
+
+### 12.3 重要修改（P1）
+
+#### P1-1 · 回退路径的状态清理不完整（§4.2、§5.2、§6.4）
+
+§4.2 规定 `stale` / `failed` 时「产物已清空」，而 §6.4 的读路径「仅标记 `stale`」，两者不一致：当前索引有 10 个章节 → 发现正文 hash 漂移 → 读路径把状态更新为 `stale` → **但没有删除原有 10 个章节**。虽然 SQL 主检索通过 `status = 'indexed'` 排除它们，数据库仍残留过期数据。
+
+建议统一为：发现 hash 不一致 → 事务内 `DELETE` 该 `(revision, provider)` 章节 + `UPDATE state = stale` → 回退直读。并注意并发：**清理操作不能删除另一个已成功完成的重建结果**，用条件更新或同一 revision 的 advisory lock 保证状态转换安全。
+
+#### P1-2 · 「索引不可用时回退」缺少完整故障边界（§3.1、§6.4、§7）
+
+当前回退只覆盖：状态行不存在、`failed`、`stale`、hash 不一致；**未覆盖**：DB 索引查询 SQL 执行失败、索引表暂时不可访问、`provider` 初始化失败、索引版本不匹配。
+
+建议把故障分两类：**单篇文档索引无效 → 该文档回退直读**；**索引整体不可用 → 整个项目回退直读**。但需明确前提：**DB 整体不可用时，不能假设还能从 DB 获取最新 revision 元数据**，因此整体回退的可用性取决于文档列表及 revision 元数据能否从其他路径取得。
+
+本期至少明确：
+1. 索引查询失败时**不返回部分成功结果**冒充完整结果；
+2. 若能够获取权威文档清单，则**整体回退**；
+3. 若权威元数据也不可用，则**返回明确错误**，而不是空列表；
+4. 日志记录**回退原因**。
+
+（对知识库检索尤其重要：**空结果与检索失败是两种完全不同的业务含义**。）
+
+#### P1-3 · 分页总数语义没有定义（§6.3）
+
+当前增加 `limit` / `offset`，但未定义：是否返回 `total`、是否需要 `has_more`、DB 与 fallback 合并后的分页是否一致、是否保证不同页之间稳定。
+
+认可「保持现有 REST 响应结构不变，不为分页引入新响应字段」，但至少应明确：
+- 本期采用 **offset 分页**；**不承诺 `total`**；排序必须**全局统一**；**DB 与 fallback 合并之后才分页**。
+
+§6.4 第 3～5 步顺序正确；`limit + offset` 分别取两路候选再合并去重排序，理论上足以取得全局前 `limit + offset` 条。需补测试的边界：**同一章节同时出现在 DB 与 fallback 时，DB 结果优先，且不导致分页重复或遗漏**。
+
+#### P1-4 · 引用加成需要排除空锚点（§6.1、§6.2）
+
+当前 SQL 使用 `coalesce(kr.section_anchor, '') = base.anchor`，若前言章节 `anchor` 为空，可能出现**空锚点引用被错误加分**。
+
+建议改为显式三条件：`kr.section_anchor IS NOT NULL AND kr.section_anchor <> '' AND kr.section_anchor = base.anchor`。另外，引用加成只认**当前 published revision 的有效锚点**——该裁定正确，不要扩大到历史修订。
+
+#### P1-5 · 多租户查询边界还需要明确（§4.1、§6.1、§7）
+
+DDL 对租户的约束做得不错（`tenant_id NOT NULL`、project 组合外键、revision 组合外键），但**检索 SQL 只通过 `project_id` 过滤**。
+
+建议：
+- 检索入口必须使用**经过租户授权校验的 `project_id`**，并尽可能在查询中同时带入 `tenant_id`（`WHERE d.project_id = $1 AND d.tenant_id = $tenant_id`）；
+- **不能把「UUID 不易猜测」当成租户隔离机制**；
+- 确认 `document_section_index.tenant_id` 与 revision 所属 `tenant_id` **永远一致**，而不仅依赖应用层填充。
+
+#### P1-6 · 同步重建的性能假设缺少证据（§5.3、§5.4、§9）
+
+否决后台 Job 的理由是「解析是纯内存操作、唯一 IO 是刚写完的 Git 文件，同步成本以毫秒计」，该判断**缺少实测依据**：文档可能包含大量 Markdown 章节、批量 `INSERT` 规模不确定、Git 读文件可能涉及磁盘或远程存储、发布请求还要承担 DB 写入及索引事务。
+
+建议增加明确规模约束与性能验收：记录**单文档章节数**、测量**重建耗时**、测量**章节批量写入耗时**、验证较大文档不会明显拖慢发布请求。本期仍可不做后台 Job，但**不要把毫秒级当作已证明的事实**。
+
+#### P1-7 · `search_with_fallback` 的职责边界不够清晰（§3.1、§3.2）
+
+目前同时存在 `KnowledgeIndexer`（`rebuild_document` + `search`）、`search_with_fallback`、`DirectReadFallback`、`DbSectionIndexer`，**需要明确谁负责**：查询最新 published revision、判断索引状态、选择 DB 或 Git、去重、排序、分页。
+
+建议：**`KnowledgeIndexer` 只负责索引 provider 的重建与检索，不负责整个系统的 fallback 编排**；由独立应用服务 `KnowledgeSearchService` 负责取当前 published revisions、调用 `KnowledgeIndexer.search`、识别未索引/失效文档、调用 `DirectReadFallback`、合并去重、统一排序、分页。这样以后替换 PageIndex 不会把回退机制绑定到 provider 实现。若项目已有明确端口组织方式可沿用现有命名，**重点是职责不能混淆**。
+
+### 12.4 架构方向建议（P2）
+
+#### P2-1 · `document_section_index` 不要过早承担所有未来 provider 的存储
+
+当前 `UNIQUE (document_revision_id, provider, section_no)` 并通过 `provider` 区分实现，适合当前 DB Section Index；但未来 PageIndex / 向量索引未必具有 `section_no` / `level` / `title` / `anchor` / `content` / `start_line`，可能**是完全不同的索引产物结构**。
+
+建议：本期保留 `document_section_index`；`document_index_state` 作为 **provider 通用状态表**；**不要提前规定未来所有 provider 必须共用 `document_section_index`**，未来 provider 可拥有自己的派生表。**可替换的是端口契约，不是所有 provider 必须共用一套物理数据模型。**
+
+#### P2-2 · `SearchHit.revision_hash` 的位置合理，但建议补充证据契约
+
+赞成 `revision_hash` 内部携带、不暴露 REST。后续 D5 需要证据回溯，建议明确原则：`SearchHit` 携带 `document_id` / `revision_id` / `revision_hash` / `anchor` / `start_line` / `content`；**证据必须绑定具体 revision，不能只绑定 `document_id`**——否则文档再次发布后，历史 Run 的证据可能被错误解释为最新正文。不需要提前改 D5 实现，只需保证 M6 检索结果保留足够信息。
+
+#### P2-3 · 建议补充索引清理策略
+
+目前只讨论当前修订索引、veto 被否决修订清理、重建幂等，**未明确**历史修订、被删除文档、孤儿索引的生命周期。本期至少确定：
+1. revision 删除时**级联删除章节索引**；
+2. document 删除时**清理关联索引状态**；
+3. provider 废弃时**可按 provider 清理**；
+4. **不做定期清理任务**（不为此增加新 Job）。
+
+### 12.5 评审肯定的既有裁定
+
+| 设计决策 | 评价 |
+|---|---|
+| Git 是唯一权威正文 | 保留 |
+| DB 存派生章节索引 | 保留 |
+| 写入后事务外同步重建 | 保留 |
+| 索引失败不影响发布 | 保留 |
+| 不引入 pgvector | 保留 |
+| 不引入中文分词扩展 | 保留 |
+| 关键词 + 结构化加权 | 保留 |
+| 当前 published 修订引用加成 | 保留 |
+| 响应 JSON 不变 | 保留 |
+| provider 同时具备 rebuild / search | 保留 |
+| 索引异常时回退直读 | 保留 |
+
+> 尤其赞同 Q4：**一个可替换的索引器不应只有 `search()`，还应有 `rebuild_document()`**；否则未来换 provider 时，业务层仍需知道如何重建旧索引，这不是真正的可替换。
+
+### 12.6 对并发问题的进一步澄清
+
+需修正一个判断：不同 revision 的索引状态分别按 `revision_id` 隔离，§6.1 又只读最新 published revision，因此**旧 revision 的重建本身不会直接覆盖新 revision 的索引状态**。
+
+真正需要防范的是**同一 revision 的成功重建与 stale/failed 清理并发竞争**：
+1. 重建 A 读取文件，判断 hash 正确；
+2. 重建 B 读取文件，发现 hash 不一致；
+3. A 成功写入章节与 `indexed` 状态；
+4. B 随后执行 `stale` 清理，删除 A 写入的章节。
+
+因此 §5.2 的 advisory lock **必须覆盖所有状态转换**，而不仅是成功重建的 `INSERT` 事务。建议：
+- 同一 `revision + provider` 的**重建、`stale`、`failed` 全部使用同一把锁**；
+- 读文件、校验 hash、解析、写入状态的**并发边界必须明确**；
+- **不允许较早的重建结果覆盖较新的状态判定**；
+- 不同 revision 的旧索引可保留为历史派生数据，但**不能参与当前检索**。
+
+### 12.7 评审建议的验收矩阵（含本稿编号映射）
+
+| 评审 ID | 测试 | 核心断言 | 优先级 | 本稿 ID |
+|---|---|---|---|---|
+| K-17 | 同 revision 并发重建 | `indexed` / `stale` 不发生交叉覆盖 | P0 | K-17 |
+| K-18 | `index_version` 不匹配 | 旧版本不能参与检索 | P0 | K-18 |
+| K-19 | `stale` 清理一致性 | `stale` / `failed` 状态下无章节残留 | P1 | K-19 |
+| K-20 | 整体索引故障 | 明确回退或明确报错，不伪造空结果 | P1 | K-20 |
+| K-21 | 引用空锚点 | 空锚点不获得引用加成 | P1 | K-21 |
+| K-22 | 跨租户检索 | 不能检索其他租户的文档 | P1 | K-22 |
+| K-23 | 混合分页 | DB + fallback 合并后无重复、无遗漏 | P1 | **K-24** |
+| K-24 | provider 版本升级 | 旧版本索引失效 | P0 | **K-25** |
+| K-25 | 大文档重建性能 | 记录耗时和章节规模 | P1 | **K-23** |
+
+### 12.8 最终裁决（修改后过稿）
+
+- **不建议推翻现有架构，也不建议扩大 M6 的功能范围。**
+
+**必须处理**：
+1. 同 revision 并发状态转换安全；
+2. `index_version` 参与有效性判断；
+3. 旧版本索引失效规则。
+
+**建议处理**：
+4. `stale` / `failed` 清理原子性；
+5. 整体索引故障的回退边界；
+6. 分页、引用及租户约束；
+7. 重建性能验收。
+
+**不建议增加**：向量数据库、中文分词、后台 Job、新增 outbox 事件、监控管理页面、未来 PageIndex 的提前实现。
