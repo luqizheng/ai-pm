@@ -311,3 +311,16 @@ stateDiagram-v2
 
 - `cargo test --workspace`（`DATABASE_URL=postgres://…5433/aipm`）：退出码 0 —— **70 个 `test result: ok`、441 passed、0 failed**（新增：pm-application `task_dependency` 10 例、pm-api `task_dependencies` 8 例 + 1 例单元测试）。
 - `cargo check --workspace --all-targets`：0 error 0 warning。
+### 10.5 追补加固（T-025 P0，2026-11-01）
+
+专家评审（`docs/ai-pm-task-dependency-review.md` §2.1/§2.2）确认两个 P0 并发缺口，已修复（实施记录见 `docs/ai-pm-t025-task-dependency-hardening-v1.md` §十）：
+
+| 缺口 | 修复 |
+|---|---|
+| **并发建边绕过环检测**（§4.2 校验顺序在并发下不成立：`FOR UPDATE` 锁下游、上游无锁，两事务互不阻塞且检环快照互不可见 → 双双通过成环） | 项目级图锁 `pg_advisory_xact_lock(hashtextextended($project_id::text, 0))`：`add_dependency` / `remove_dependency` 事务内**先无锁预读 `project_id` 取锁、再 `FOR UPDATE` 锁行**；同项目图写全序化，后到者检环必见先到者已提交的边 → 恰一成功 |
+| **建边与上游完成竞态**（终态扫边看不到未提交的新边 → 永久漏解锁） | `apply_task_transition` 在终态（D5 集合）迁移入口、行锁**之前**取同一把图锁；「完成上游」与「建边/删边」串行，两序皆闭合（后到者的扫边/解锁判定必见对方已提交效果） |
+
+- 取锁硬规则：所有取锁点先于该事务第一个行锁（终态迁移唯一入口为命令通道 `update_task_status`，`begin()` 后立即取锁）→ 无「持行锁等图锁」交错，无新死锁；非终态迁移（ready/claimed/running）不取锁，调度热路径零开销；xact lock 同事务可重入，解锁路径（blocked→ready）在已持有的图锁内执行。
+- **无迁移**：advisory lock 为运行时机制，零 DDL。
+- 新增并发测试 `pm-application/tests/task_dependency_concurrency.rs`（6 例，双独立连接 + 定向屏障 + 黑盒并发断言最终态）：图锁互斥 / 跨项目不阻塞 / MVCC 可见性，C59（12 轮并发反向边恰一成功）、C60（4×2 序建边 vs 完成）、C64（并发双上游完成单次解锁）、C65（4×2 序删边 vs 完成）。
+- 实测：`cargo test --workspace` **73 套件 462 passed 0 failed**；`cargo check --workspace --all-targets` 0 error 0 warning。

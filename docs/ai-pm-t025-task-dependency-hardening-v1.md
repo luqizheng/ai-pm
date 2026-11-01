@@ -1,0 +1,220 @@
+# T-025：Task Dependency 并发与解锁正确性加固（任务书）
+
+> 状态：**实施中（2026-11-01：P0 两项已修复并验收，见 §十；P1 四项待续）**（编号核实 2026-11-01：`todo.md` 中 T-025~T-029 段位空缺，暂用 **T-025**，落在 M2 段位、与 T-023 设计稿 → T-024 实施 → T-025 加固语义连续；如需换号，本文档与 `todo.md` 登记行各改一处）
+> 类型：专项审查 + 最小修复（T-024 追补，**不推翻现有架构**）
+> 来源：专家评审 `docs/ai-pm-task-dependency-review.md`（2026-11-01）§9.1 P0 ×2 + §9.2 P1 ×4；任务定义由用户最终裁定
+> 前置：T-023 / T-024 已交付归档（`docs/ai-pm-task-dependency-v1.md` §10；`todo.md` §13）
+> 一句话：基于 T-024 已实施的 Task Dependency v1，进行一次针对生产环境正确性的专项审查和修正——**先审查报告，后实施修复**，最小范围，并发行为必须以真实并发测试验证。
+
+---
+
+## 0. 目标与硬边界
+
+**目标**（用户裁定原文）：
+
+> 基于 T-024 已实施的 Task Dependency v1，进行一次针对生产环境正确性的专项审查和修正。
+>
+> 禁止推翻现有架构，禁止重新设计依赖边表，优先进行最小范围修复。
+
+**范围**：评审文档 §9.1 P0 两项（并发建边环检测、建边与终态迁移竞态）+ §9.2 P1 四项（Blocked 解锁条件、`dependency_unmet` 计数、终态写入入口审计、租户隔离）。评审文档 §9.3 的 P2 六项（依赖满足策略可配置、解锁审计增强、依赖图查询、大规模解锁优化、依赖类型扩展、`try_unblock_task` 抽象）**不在本次范围**。
+
+**流程**：按 `todo.md` §0.1 执行——审查报告先行（读代码 + 构造并发验证）；修复方案（锁协议选型、Blocked 判定模型修正）涉及设计决策，须经用户确认后方可进入编码。
+
+---
+
+## 一、并发建边与环检测（P0 ↔ 评审 §2.1 / C59）
+
+检查 `add_dependency`（`crates/pm-application/src/task_dependency.rs`）中递归 CTE 的并发安全性。
+
+重点验证：
+
+- 两个事务同时添加 A → B、B → A 时，是否可能同时通过环检测；
+- 不同事务同时修改同一个项目的依赖图时，是否可能产生环。
+
+如果存在风险，设计项目级事务锁或等效串行化机制。要求：
+
+- 所有建边入口使用统一锁协议；
+- 环检测与插入边处于同一事务；
+- 不影响不同项目之间的并发操作；
+- 不引入新的死锁风险。
+
+（评审给出的候选方案：`pg_advisory_xact_lock(hashtextextended($project_id::text, 0))`，且锁必须在任何任务行锁**之前**获取，避免锁顺序反转——最终方案以审查报告 + 用户确认为准。）
+
+---
+
+## 二、建边与上游终态迁移竞态（P0 ↔ 评审 §2.2 / C60）
+
+检查 `add_dependency` 与 `unlock_downstream` 的事务隔离及行锁行为。
+
+构造以下并发场景：
+
+1. B 为 `blocked`，A 为 `running`；
+2. T1 添加 B → A；
+3. T2 将 A 转为 `completed`；
+4. 两个事务交错执行并提交。
+
+**确保最终 B 一定能被正确解锁。**
+
+检查所有锁的获取顺序，避免通过新增行锁或 advisory lock 引入死锁。
+
+---
+
+## 三、Blocked 解锁语义（P1 ↔ 评审 §3.1 / C61）
+
+检查当前 `unlock_downstream` 和 `unlock_task_if_ready` 是否可能解除非依赖原因造成的阻塞。
+
+特别关注 `task_waiting.reason` 的四类等待：
+
+- `needs_info`
+- `needs_decision`
+- `needs_approval`
+- `external_dependency`
+
+**确保依赖满足不会错误地解除其他有效阻塞条件。**
+
+如果当前模型无法区分阻塞来源，提出最小兼容的领域模型修正方案（评审倾向方案 B：统一 Blocker 聚合判定；若 v1 采用更小修正，须在审查报告中说明理由与代价）。
+
+---
+
+## 四、Run 退避与执行预算（P1 ↔ 评审 §3.2 / C62）
+
+检查 `dependency_unmet` 使用的 `release_back`（接入点 `run_dispatch/claim.rs`）：
+
+- 是否消耗最大执行尝试次数；
+- 是否可能将 Run 标记为 exhausted / dead；
+- 是否影响真正的执行失败统计。
+
+**确保依赖等待不消耗执行失败预算。**
+
+优先复用现有调度设施，不要引入不必要的新状态。
+
+---
+
+## 五、终态写入入口（P1 ↔ 评审 §4.3 / C68）
+
+扫描所有修改 `delivery.task.status` 的业务代码。检查：
+
+- `apply_task_transition`（`command_executor/transition.rs`）；
+- `pm_write::update_task`（UI 直写历史路径，T-024 实施记录 §10.2 偏差 1 已接入）；
+- 其他直接 UPDATE 路径；
+- 系统任务及后台操作。
+
+**确保所有终态迁移都能触发一致的依赖解锁副作用。**
+
+---
+
+## 六、租户隔离（P1 ↔ 评审 §5 / C66）
+
+检查 `task_dependency`：
+
+- RLS 是否完整；
+- `tenant_id` 是否正确约束；
+- API 的 upstream/downstream 查询是否严格限制项目与租户；
+- 是否存在跨租户访问或修改风险。
+
+对照基准：T-021b（`0019_tenant.sql` 模式）与 ADR-0001 的 RLS 约束。注意：进 `tenant_schema.rs` 表清单（39 → 40，XT-3 机械断言）**不等于**隔离完整——表清单只证明「表被登记」，不证明「策略正确生效」。
+
+---
+
+## 七、新增测试（↔ 评审 §7 / C59–C68）
+
+至少增加（用户裁定最低集）：
+
+- 并发反向建边不能形成环（C59）；
+- 建边与上游完成并发不能漏解锁（C60）；
+- `needs_approval` 不会被依赖解锁错误解除（C61）；
+- `dependency_unmet` 不会耗尽执行失败预算（C62）；
+- 多个上游并发完成不会产生重复有效解锁（C64）；
+- 不同租户之间不能访问依赖关系（C66）。
+
+评审文档 §7 全集（另含 C63 上游 failed 恢复路径 / C65 删边与完成并发 / C67 大量下游解锁 / C68 全部终态入口一致副作用）应尽量覆盖；无法覆盖的项须在审查报告中说明理由。
+
+**方法论硬要求**：并发用例必须使用**两个独立数据库连接 + 显式事务屏障（barrier）**构造交错（两个事务各自开启、各自执行到关键点、屏障对齐后各自提交），必须使用**真实 PostgreSQL 集成测试**验证并发行为；禁止随机碰撞式并发测试——不可重复、不可调试的测试不能作为验收证据。
+
+---
+
+## 八、交付要求
+
+**先输出审查报告，再实施修复。** 报告需要区分：
+
+1. 已确认的 Bug；
+2. 潜在风险；
+3. 现有实现已经正确解决的问题；
+4. 建议修改的代码位置；
+5. 数据库迁移是否必要。
+
+> 迁移号对账提示（2026-11-01 登记 T-025 时发现）：`todo.md` 中 T-041 写 `0022_delivery_manifest.sql`、T-083 写 `0022_discovery.sql`，两者预留号冲突；`0021` 已被 T-024 占用。若 T-025 需要迁移，取下一个空闲迁移号并在 `todo.md` 登记时一并澄清该冲突。
+
+修复完成后：
+
+- 运行 `cargo test --workspace`（dev 库常驻 5433）；
+- 运行 `cargo check --workspace --all-targets`；
+- 检查迁移兼容性；
+- 更新 T-023/T-024 实施记录（`docs/ai-pm-task-dependency-v1.md`）；
+- 新增 T-025 验收矩阵及测试映射（编号续 C58，见 §九）。
+
+**红线**：不得为了让测试通过而降低现有状态机、租户隔离和事务一致性要求。
+
+---
+
+## 九、验收矩阵（续 C58；标注 ★ 者为用户裁定最低集）
+
+| # | 场景 | 预期 | 对应章节 |
+|---|---|---|---|
+| C59 ★ | 两个事务同时建立反向依赖 | 至多一个成功，不能形成环 | §一 |
+| C60 ★ | 建边与上游完成并发发生 | 最终下游必须解锁 | §二 |
+| C61 ★ | `blocked` 任务同时存在 `needs_approval` | 依赖满足后仍保持 `blocked` | §三 |
+| C62 ★ | `dependency_unmet` 超过普通重试上限 | 不消耗执行失败预算 | §四 |
+| C63 | 上游 `failed` | 下游保持阻塞，存在明确恢复路径 | §三/§八（报告说明） |
+| C64 ★ | 多个上游并发完成 | 只产生一次有效解锁 | §一/§二 |
+| C65 | 删除依赖与上游完成并发 | 不发生漏解锁或错误状态迁移 | §二 |
+| C66 ★ | 不同租户访问边表 | 无法读取或修改其他租户的数据 | §六 |
+| C67 | 大量下游同时解锁 | 事务耗时和锁竞争在约定范围内 | 报告说明（P2 规模优化不在本次） |
+| C68 | 所有终态写入入口 | 都触发一致的解锁副作用 | §五 |
+---
+
+## 十、实施记录
+
+### 10.1 审查结论（P0 部分，2026-11-01）
+
+五分类（对应 §八 交付要求）：
+
+1. **已确认 Bug**：
+   - P0-1 并发建边绕过环检测——`add_dependency` 仅 `FOR UPDATE` 锁下游行（`task_dependency.rs` 原 :161-163），上游行无锁（原 :172 普通 SELECT），无任何图级串行化；两事务锁不同行互不阻塞，递归 CTE 快照互不可见 → 双双通过 → 成环。
+   - P0-2 建边与上游完成竞态——`unlock_downstream` 扫边用普通 SELECT（MVCC 快照），建边事务未提交的边不可见；建边事务的解锁判定同样读不到并发完成的终态 → 交错即漏解锁且永不补偿。
+2. **潜在风险**：`add_dependency` ① 的注释声称「与解锁路径同一加锁顺序：先被依赖方，后依赖方」，但代码从未锁上游——注释与实现不符（已随修复一并修正）。
+3. **现有实现已正确解决**：`unlock_downstream` 固定 `ORDER BY t.id` 加锁防死锁；`ON CONFLICT DO NOTHING` 兜底并发重复边；`unlock_task_if_ready` 锁后重读状态、重复调用幂等；解锁迁移走唯一受守卫入口。
+4. **建议修改位置**：`task_dependency.rs`（图锁函数 + add/remove 入口改造）、`command_executor/transition.rs`（终态入口取锁）、新增并发测试——**均已实施**（§10.2）。
+5. **数据库迁移是否必要**：**否**——advisory lock 为运行时机制，零 DDL，不触碰迁移号。
+
+### 10.2 修复记录（§一 / §二，2026-11-01 完成）
+
+| 落点 | 改动 |
+|---|---|
+| `task_dependency.rs::acquire_project_graph_lock`（新增） | `pg_advisory_xact_lock(hashtextextended($project_id::text, 0))`；同事务可重入，事务结束自动释放 |
+| `task_dependency.rs::add_dependency` | `begin()` 后**无锁预读** `project_id` → 取图锁 → `FOR UPDATE` 锁下游做权威校验（预读 TOCTOU 后果仅为 `TaskNotFound`）；修正失实注释 |
+| `task_dependency.rs::remove_dependency` | 同款预读 + 取锁（删边同样是图修改） |
+| `command_executor/transition.rs::apply_task_transition` | `unlocks_downstream(to)` 为真时在 `FOR UPDATE` **之前**取图锁；非终态热路径（ready/claimed/running）零开销 |
+
+死锁分析：全部取锁点先于该事务第一个行锁——终态迁移唯一入口为命令通道 `executor.rs::update_task_status`（`begin()` 后立即调 `apply_task_transition`）；`run_dispatch`（→Ready/Claimed）、`run_executor`/`run_context`（→Running）、解锁路径（→Ready）均非终态不取锁；`unlock_task_if_ready` 在已持图锁内调非终态迁移，可重入安全。
+
+### 10.3 验收映射（本轮完成部分）
+
+| # | 场景 | 用例 | 结果 |
+|---|---|---|---|
+| C59 ★ | 并发反向建边不能形成环 | `task_dependency_concurrency.rs::c59_concurrent_reverse_edges_cannot_form_a_cycle`（12 轮，双连接并发） | ✅ 恰一成功、败者为 `Cycle`、库内无环 |
+| C60 ★ | 建边与上游完成并发 | `::c60_edge_insertion_racing_with_upstream_completion_still_unlocks`（4 轮 × 双启动序） | ✅ 两序皆解锁、`TaskReady` 恰 1 条 |
+| C64 ★ | 多上游并发完成 | `::c64_concurrent_completion_of_multiple_upstreams_unlocks_once`（5 轮） | ✅ 单次有效解锁 |
+| C65 | 删边与上游完成并发 | `::c65_edge_removal_racing_with_upstream_completion_still_unlocks`（4 轮 × 双启动序） | ✅ 无漏解锁、上游状态不被误迁 |
+| — | 图锁互斥 / MVCC 隔离 / 提交后可见 | `::graph_lock_serializes_writers_and_exposes_committed_edges`（屏障式定向） | ✅ |
+| — | 跨项目不阻塞 | `::graph_locks_of_different_projects_do_not_block` | ✅ |
+
+### 10.4 实测
+
+- `cargo test --workspace`：**73 套件、462 passed、0 failed**（含新增 6 例并发测试；T-024 基线 441 无回归）。
+- `cargo check --workspace --all-targets`：0 error 0 warning。
+
+### 10.5 待办（后续领取）
+
+- §三~§六（P1 四项）尚未审查：Blocked 解锁语义 / Run 退避与执行预算 / 终态写入入口全量扫描 / 租户隔离。
+- §七 其余场景待 P1 审查后补：C61（needs_approval 不被依赖解锁）、C62（unmet 不耗执行预算）、C63（failed 恢复路径）、C66（跨租户）、C67（大规模解锁）、C68（全部终态入口一致副作用）。
