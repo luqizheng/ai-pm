@@ -1,14 +1,21 @@
-# AI-PM 项目接入与认知建立（Project Onboarding / Project Discovery）设计 V1
+# AI-PM 项目接入与认知建立（Project Onboarding / Project Discovery）设计 V1.1
 
-> **文档性质**：设计依据（brainstorming 定稿，待评审 → 确认后进入实施计划）
-> **版本**：V1
+> **文档性质**：设计依据（brainstorming 定稿 → 用户逐项评审 Q1–Q7 后修订，待评审 → 确认后进入实施计划）
+> **版本**：V1.1
 > **日期**：2026-11-01
-> **来源**：与人类产品经理的多轮架构讨论（含双入口原型图、统一 Discovery Session 原型图）
+> **来源**：与人类产品经理的多轮架构讨论（含双入口原型图、统一 Discovery Session 原型图、发现卡片原型图）
 > **遵循**：`todo.md` §0.1 brainstorming 硬门禁；`AGENTS.md` 新项目无存量兼容约束
 > **上位文档**：
 > - `docs/superpowers/specs/2026-10-31-multi-repo-project-import.md`（Web 入口的已落地实现依据）
 > - `docs/ai-pm-mcp-executor-positioning-v1.md`（执行端 × MCP 定位基线，本设计遵守其 §4.2 知识污染红线与 §3.4 工具无关性）
 > - `docs/ai-pm-markdown-knowledge-space.md`（Git 为权威 + PageIndex，本设计的 ProjectKnowledge 承载层）
+
+### 变更记录
+
+| 版本 | 日期 | 变更内容 | 触发 |
+| --- | --- | --- | --- |
+| V1 | 2026-11-01 | 首次落盘：双入口统一 DiscoverySession 模型 | 产品讨论定稿 |
+| V1.1 | 2026-11-01 | 并入用户逐项评审 **Q1–Q7 裁决**：①四域边界（Import/Discovery/Task/Run）②Q1 独立建表 + 单向 FK + source/kind 分离 ③Q3 四类 finding + confidence/verification_status ④Q4 多仓库支持边界 ⑤新增 Q5 并行 Session / Q6 暂停恢复 / Q7 版本乐观并发 ⑥发现卡片 UI | 用户评审 |
 
 ---
 
@@ -26,7 +33,22 @@
 
 ---
 
-## 一、双入口统一模型（关键架构决策）
+## 一、四个业务域边界（关键架构前提）
+
+**Discovery 是独立于 Repository Import、Task、Run 的业务域。** 这四个概念边界一旦确定，后续 Web / Codex / MCP / 多 Agent 的架构才清晰：
+
+| 业务域 | 职责 | 权威表 |
+| --- | --- | --- |
+| **Repository Import** | 把代码仓库**接入**系统（clone / 读 / 授权） | `integration.repo_import` |
+| **Discovery** | **理解**项目（建认知、提问、确认、提案） | `discovery_session` 及子表 |
+| **Task** | **推动**项目发生变化（业务任务） | `delivery.task` |
+| **Run** | **执行**具体工作（一次执行实例） | `delivery.task_run` |
+
+> 关键裁定：**不把 `repo_import` 扩展为统一 Session 表**。否则未来 Discovery 来源扩大到 `/pm-learn`、手动认知更新、Task 执行中发现、定期健康检查、其他 Agent 主动发起时，它会长成一个职责不清的通用工作流表。二者是不同的业务概念。
+
+---
+
+## 二、双入口统一模型
 
 两个入口**不是两套独立的项目初始化流程**，而是**两个 producer 向同一个 `DiscoverySession` 写，最后汇入同一个 `ProjectKnowledge`**。
 
@@ -58,70 +80,150 @@
 
 ---
 
-## 二、与既有资产的关系（避免重做）
+## 三、与既有资产的关系（避免重做）
 
 | 本设计概念 | 既有资产 | 处置 |
 | --- | --- | --- |
-| Web 自动分析 + 访谈 | `multi-repo-project-import`（0009 实现：clone→read→analyze→draft_ready→apply→4 提案→审批） | **reframe 成 `DiscoverySession(source=WEB)`**，复用其 `RepoAnalysisModel::draft` + `ProjectDraft` + 证据接地 |
-| `DiscoverySession` / `Message` / `Question` / `Answer` / `Proposal` | `ProjectDraft`(含 `unknowns`) + 提案链 | 提升为独立 session 模型，新增子表；`unknowns` 映射为 `discovery_question` |
-| 三类信息 fact / confirmed / speculation | `ground_draft` 仅丢弃无据项 | **扩展**：显式标注 provenance，speculation 禁止自动晋升知识库 |
+| Web 自动分析 + 访谈 | `multi-repo-project-import`（0009 实现：clone→read→analyze→draft_ready→apply→4 提案→审批） | **作为 `DiscoverySession(source=WEB)` 的一个 producer**，复用其 `RepoAnalysisModel::draft` + `ProjectDraft` + 证据接地 |
+| `DiscoverySession` / `Message` / `Question` / `Answer` / `Proposal` | `ProjectDraft`(含 `unknowns`) + 提案链 | **独立建表**（Q1），新增子表；`unknowns` 映射为 `discovery_question` |
+| 四类信息 observed / user_confirmed / speculation / contradicted | `ground_draft` 仅丢弃无据项 | **扩展**：显式 provenance + confidence + verification_status |
 | `ProjectRepository` | `integration.project_repository`(0008) + `repo_import_source`(0009) | 直接复用，不加新绑定表 |
-| `ProjectKnowledge` / `Document` / `Version` | `ai.project_document` + `document_revision`(0006) + PageIndex（`ai-pm-markdown-knowledge-space`，已 23/23） | 复用；`DiscoveryProposal` → 现有 `propose_document` 知识提案链 |
+| `ProjectKnowledge` / `Document` / `Version` | `ai.project_document` + `document_revision`(0006) + PageIndex（`ai-pm-markdown-knowledge-space`，已 23/23） | 复用；`DiscoveryProposal` → 现有 `propose_document` 知识提案链（含 base_revision/hash 漂移检测） |
 | Codex `/pm-learn` + MCP | `ai-pm-mcp-executor-positioning-v1` §4.1 九工具 / §4.2 禁直写 | 新增 `pm_discovery_*` 语义工具，propose-only |
 | 多 Agent 认知分工 | import 已建 5 人编制（owner / ai_pm / architect / developer / tester） | 编制映射到 discovery 角色分工（V1 不并行） |
 
 ---
 
-## 三、数据模型（核心新增）
+## 四、数据模型（Q1 裁决后）
 
-在 `project` 下新增独立**认知域**（`discovery_*` 表，候选迁移 `0022_discovery.sql`），**不绑执行端实例**：
+在 `project` 下新增独立**认知域**（`discovery_*` 表，候选迁移 `0022_discovery.sql`），**不绑执行端实例**。
+
+### 4.1 表结构与关系
 
 ```
 Project
-├── ProjectRepository        (既有 integration.project_repository)
+├── ProjectRepository            (既有 integration.project_repository)
 │     ├── Repository A / B / C
-├── DiscoverySession         (新增，统一认知过程)
-│     ├── DiscoveryMessage   (AI ↔ 用户对话记录，带 source)
-│     ├── DiscoveryFinding   (AI 发现：事实 / 推测，带 evidence + kind)
-│     ├── DiscoveryQuestion  (AI 需用户澄清的问题)
-│     ├── DiscoveryAnswer    (用户确认 / 补充)
-│     └── DiscoveryProposal  (对知识库的变更提案)
-└── ProjectKnowledge         (复用 ai.project_document + document_revision)
+├── repo_import                  (既有，接入过程；新增 discovery_session_id 单向 FK)
+│     └── discovery_session_id ──┐
+├── discovery_session  ◄──────────┘  (新增，独立认知过程)
+│     ├── discovery_message      (对话记录，带 source)
+│     ├── discovery_finding      (发现：四类 kind + evidence + confidence + verification_status)
+│     ├── discovery_finding_repository  (finding ↔ 多仓库，Q4)
+│     ├── discovery_question     (待用户澄清)
+│     ├── discovery_answer       (用户确认/补充)
+│     └── discovery_proposal     (知识变更提案，带 base_version)
+└── ProjectKnowledge            (复用 ai.project_document + document_revision)
       ├── KnowledgeDocument
       └── KnowledgeVersion
 ```
 
-**关键字段约定：**
+> **关联方向（Q1 关键）**：只保留 **`repo_import.discovery_session_id → discovery_session.id`** 一个方向，不做双向外键。旧的 `repo_import` 记录保持兼容，新的导入流程挂接 `DiscoverySession`。
+
+### 4.2 关键字段约定
 
 | 实体 | 职责 | 关键字段 |
 | --- | --- | --- |
-| `discovery_session` | 一次项目认知建立过程 | `id, project_id, source∈{WEB,CODEX}, status, created_at` |
+| `discovery_session` | 一次项目认知建立过程 | `id, project_id, source, kind, status, created_by, created_at, updated_at` |
 | `discovery_message` | 对话记录 | `session_id, speaker∈{ai,user}, source, content, seq` |
-| `discovery_finding` | 项目事实或推测 | `session_id, kind∈{fact,confirmed,speculation}, claim, evidence[], actor_role?` |
-| `discovery_question` | 待用户澄清 | `session_id, question, why_blocking, status∈{open,answered}` |
+| `discovery_finding` | 项目发现 | `session_id, kind, content, confidence, verification_status, actor_role?` |
+| `discovery_finding_repository` | finding ↔ 仓库（多对多） | `finding_id, repository_id` |
+| `discovery_question` | 待用户澄清 | `session_id, question, why_blocking, status∈{open,answered,deferred}` |
 | `discovery_answer` | 用户回答 | `question_id, answer, answered_by` |
-| `discovery_proposal` | 知识库变更提案 | `session_id, target_doc, action∈{add,modify}, content, evidence[], status∈{pending,approved,rejected}` |
+| `discovery_proposal` | 知识库变更提案 | `session_id, target_document, base_version, proposed_content, action∈{add,modify}, evidence[], status∈{pending,approved,rejected,conflict}` |
 
-**三类信息严格区分（守知识污染红线）：**
-- `fact`：AI 从代码/文档中**确认**的内容（有 evidence 引用）。
-- `confirmed`：用户**明确告诉** AI 的内容。
-- `speculation`：AI 根据代码/文档**推断但未确认**的内容。
-- **规则**：`speculation` 可存在于 session，但**禁止自动写入 `KnowledgeDocument`**；只有 `fact`/`confirmed` 或经用户批准的提案才能晋升为正式知识。
+**`source` 与 `kind` 必须分开，不可混为一谈（Q1）：**
 
-**状态机（`discovery_session.status`）：**
-- `in_progress`：学习中
-- `needs_user_input`：等待用户回答
-- `review_required`：等待用户审核知识提案
-- `completed`：本轮学习完成（**不等于项目已完全理解**）
-- `paused`：暂时中断
+| 字段 | 取值 | 含义 |
+| --- | --- | --- |
+| `source` | `WEB` / `CODEX` / `SYSTEM` | 来自什么入口/执行端 |
+| `kind` | `INITIAL_ONBOARDING` / `UPDATE` / `TASK_DISCOVERY` | 什么业务类型的认知过程 |
+| `status` | `IN_PROGRESS` / `NEEDS_USER_INPUT` / `REVIEW_REQUIRED` / `COMPLETED` / `PAUSED` | 过程状态 |
+
+### 4.3 四类 finding 与知识晋升规则（Q3 裁决）
+
+| kind | UI 展示 | 能否进入正式知识 |
+| --- | --- | --- |
+| `observed` | 已观察到 | 可以，仍需按知识审核策略处理 |
+| `user_confirmed` | 用户已确认 | 可以 |
+| `speculation` | 待确认 | **不可以直接进入正式知识** |
+| `contradicted` | 存在冲突 | **不可自动覆盖原知识**（必须走提案） |
+
+`discovery_finding` 增两个字段：
+- `confidence`（0–1）：**模型判断的辅助信息，不能代替事实确认**。
+- `verification_status`：如 `PENDING` / `CONFIRMED` / `REJECTED` / `CONFLICT`。
+
+JSON 示例：
+
+```json
+{
+  "kind": "speculation",
+  "content": "支付模块可能尚未完成",
+  "confidence": 0.78,
+  "evidence": [
+    {
+      "repository": "backend",
+      "file": "src/payment/mod.rs",
+      "description": "存在未实现的支付接口"
+    }
+  ],
+  "verification_status": "PENDING"
+}
+```
+
+**冲突处理（易忽略）**：AI 发现的信息若与现有知识库冲突（`contradicted`），**不能直接覆盖原知识**；必须生成知识变更提案，由用户确认后更新，并保留历史版本。
+
+### 4.4 并发、恢复与版本控制（Q5 / Q6 / Q7）
+
+- **Q5 并行 Session**：允许 Web 与 Codex 同时对同一项目发起 `DiscoverySession`（并行采集）；但**知识提案统一审核**，不在采集阶段争抢写入。
+- **Q6 暂停与恢复**：session 支持 `PAUSED` → `IN_PROGRESS`、跨天恢复、增量提交（不要求一次访谈跑完）。
+- **Q7 防并发覆盖（版本乐观并发控制）**：每个知识提案携带 `target_document` + `base_version` + `proposed_content` + `evidence`；正式写入时校验 `base_version` 是否仍有效，无效则拒绝并置 `status=conflict`，**不允许后写者静默覆盖**。
+  - 复用既有 `document_revision` / `propose_document` 的 `base_revision_id` 与内容 hash 漂移检测（`KnowledgeError::Conflict("document content drifted from its recorded hash")`）。
+
+### 4.5 状态机与成熟度
+
+**状态机（`discovery_session.status`）**：`IN_PROGRESS` / `NEEDS_USER_INPUT` / `REVIEW_REQUIRED` / `COMPLETED` / `PAUSED`。
+- `COMPLETED` = **本轮学习完成，不等于项目已完全理解**。
 
 **认知成熟度**：用多维度状态表达（背景 / 架构 / 当前情况 / 需求 / 决策 各自成熟度），**不用单一百分比**。
 
-**session 不绑 Codex 实例**：可由多个来源贡献，甚至 Web 起头、Codex 续同一 session（`source` 记录每条产出来源）。
+**session 不绑执行端实例**：可由多个来源贡献，甚至 Web 起头、Codex 续同一 session（`source` 记录每条产出来源）。
 
 ---
 
-## 四、Web 入口（P0，部分已落地）
+## 五、发现与确认 UI（Q3 原型）
+
+「项目认知发现」卡片是把 `discovery_finding(kind=speculation)` 变成可裁决交互的核心组件：
+
+```
+┌──────────────────────────────────────────────┐
+│ 项目认知发现                          [待确认] │
+│                                                │
+│ 支付模块可能尚未完成                            │
+│                                                │
+│ AI 根据代码分析推断：支付接口中存在尚未实现的逻辑。 │
+│                                                │
+│ 分析证据                                        │
+│   backend/src/payment/mod.rs                    │
+│   发现未实现的支付接口。                         │
+│                                                │
+│ 请确认实际情况                                  │
+│   ● 确实尚未完成                                │
+│   ○ 已经通过外部服务实现                        │
+│   ○ 目前没有计划实现                            │
+│   ○ 暂时无法确认                                │
+│                                                │
+│               [        确认        ]            │
+└──────────────────────────────────────────────┘
+```
+
+- 卡片头部显示 kind 徽标（`待确认` / `已确认` / `存在冲突`）。
+- 「分析证据」展示 `evidence[].file` + `description`，让用户能回到代码核对。
+- 用户选择即写 `discovery_answer`，并把 `verification_status` 从 `PENDING` 推进到 `CONFIRMED` / `REJECTED`；若选项对应外部实现，则同时产生一条 `user_confirmed` finding。
+
+---
+
+## 六、Web 入口（P0，部分已落地）
 
 创建项目后**不立即进入普通项目首页**，而是进入**项目接入向导**（原型图：Step 1/4「让 AI 先了解你的项目」）。
 
@@ -138,19 +240,19 @@ Project
 | 技术决策 | 收集已知决策及原因 | decisions/ |
 | 待确认事项 | 记录无法确认的信息 | open-questions.md |
 
-3. 把现有 `draft_ready + unknowns` **升级为 session 驱动的访谈 UI**：findings / questions / answers 可视化，用户逐条回答。
-4. 审核 `DiscoveryProposal` → 批准后实体化为知识文件（复用 `propose_document`）。
+3. 把现有 `draft_ready + unknowns` **升级为 session 驱动的访谈 UI**：findings / questions / answers 可视化，用户逐条回答（见 §五 发现卡片）。
+4. 审核 `DiscoveryProposal` → 批准后实体化为知识文件（复用 `propose_document`，校验 `base_version`）。
 
 ---
 
-## 五、Codex `/pm-learn` Skill（P1，executor-neutral）
+## 七、Codex `/pm-learn` Skill（P1，executor-neutral）
 
 交付物：一份 `SKILL.md`（命令式，名 `/pm-learn`），装进任意 MCP-capable 执行端（Trae / Codex / Claude Code / Cursor …），**禁止写死 Trae 专有 API**（守 §3.4 工具无关性 A1–A6）。
 
 ```
 /pm-learn
- ├─ MCP 获取项目接入 Session（pm_discovery_get）
- ├─ 读取项目已有知识（pm_discovery_context）
+ ├─ MCP 获取项目认知 Session（pm_discovery_get）
+ ├─ 读取项目已有知识（pm_discovery_get_context）
  ├─ 分析当前 Git 仓库（grep / 读文件 / 读 README* / docs/**）
  ├─ 检查已有文档和代码
  ├─ 与用户澄清（多轮）
@@ -161,8 +263,8 @@ Project
 
 **重要边界：Skill 不直接拥有项目知识库的最终写入权。** 它只能提交：
 - 新发现的信息（finding）
-- 用户确认的信息（confirmed）
-- 建议新增 / 修改的知识文件（proposal）
+- 用户确认的信息（user_confirmed）
+- 建议新增 / 修改的知识文件（proposal，含 `base_version`）
 - 证据来源（evidence）
 - 尚未解决的问题（open-questions）
 
@@ -170,25 +272,24 @@ Project
 
 ---
 
-## 六、MCP 接口（新增 `pm_discovery_*` 语义工具）
+## 八、MCP 接口（Q2 裁决）
 
-> 命名沿用既有 `pm_<verb>_<noun>`（如 `pm_submit_document`）；`pm.discovery.*` 为讨论用点分简写。命名最终需与 `ai-pm-mcp-executor-positioning-v1` Q1（`pm_*` vs `task.*`/`knowledge.*`）一并冻结。
+> **命名**：为 `pm_discovery_*`，**不实现别名**（MCP Tool 名是对外契约，不宜频繁改名）。域划分：`pm_*` = AI-PM 业务域；`task_*` = Task 生命周期；`knowledge_*` = 知识库操作；Discovery 是独立业务过程，故 `pm_discovery_*` 合理。最终命名与 `ai-pm-mcp-executor-positioning-v1` Q1 一并冻结。
 
 | MCP Tool | 作用 | 落到既有链 |
 | --- | --- | --- |
 | `pm_discovery_get` | 获取项目认知 Session | 读 `discovery_session` |
-| `pm_discovery_context` | 获取已有知识、仓库信息、待确认问题 | 读 knowledge + session |
-| `pm_discovery_submit_findings` | 提交 AI 分析发现（含 kind + evidence） | 写 `discovery_finding` |
-| `pm_discovery_ask_question` | 提交需用户澄清的问题 | 写 `discovery_question` |
-| `pm_discovery_submit_answers` | 回传用户回答 | 写 `discovery_answer` |
-| `pm_discovery_submit_proposal` | 提交知识库变更提案 | **复用 `propose_document`** 知识提案链 |
-| `pm_discovery_complete` | 提交本轮学习完成状态 | 置 `status=completed / review_required` |
+| `pm_discovery_get_context` | 获取已有知识、仓库信息、待确认问题 | 读 knowledge + session |
+| `pm_discovery_submit_findings` | 提交 AI 分析发现（含 kind / evidence / confidence / verification_status） | 写 `discovery_finding` + `_repository` |
+| `pm_discovery_submit_answers` | 回传用户回答（也可承载 AI 提问） | 写 `discovery_answer` / `discovery_question` |
+| `pm_discovery_submit_proposal` | 提交知识库变更提案（含 base_version） | **复用 `propose_document`** 知识提案链 |
+| `pm_discovery_complete` | 提交本轮学习完成状态 | 置 `status=COMPLETED / REVIEW_REQUIRED` |
 
-所有写回均为 **propose，非直写**（守 §4.2 污染红线）。
+所有写回均为 **propose，非直写**（守 §4.2 污染红线）。`ask_question` 在 V1 可由 `pm_discovery_submit_answers` 的 question 载荷承载，暂不单列工具。
 
 ---
 
-## 七、持续认知过程（非一次性）
+## 九、持续认知过程（非一次性）
 
 Project Onboarding **不是一次性初始化**。闭环：
 
@@ -206,9 +307,7 @@ Project Onboarding **不是一次性初始化**。闭环：
 
 ---
 
-## 八、多 Agent 认知分工（V1 不实现，预留）
-
-未来一个项目可有多个 Agent 各负认知任务：
+## 十、多 Agent 认知分工（V1 不实现，预留）
 
 | Agent | 负责学习 |
 | --- | --- |
@@ -220,34 +319,55 @@ Project Onboarding **不是一次性初始化**。闭环：
 
 ---
 
-## 九、V1 实施顺序与 YAGNI
+## 十一、多仓库支持边界（Q4）
+
+**V1 必须支持**：
+1. 一个项目关联多个仓库（复用 `project_repository`）。
+2. 每个 Finding 可关联一个或多个仓库（`discovery_finding_repository`）。
+3. 每个仓库拥有独立的分析状态（复用 `repo_import_source.status`）。
+4. `DiscoverySession` 可以分析多个仓库。
+
+**V1 不做（留 P2）**：
+- 自动识别跨仓库调用关系。
+- 自动生成完整系统依赖图。
+- 自动判断多个仓库的部署拓扑。
+- 自动识别微服务之间的业务边界。
+
+---
+
+## 十二、V1 实施顺序与 YAGNI
 
 | 优先级 | 功能 | 说明 |
 | --- | --- | --- |
 | P0 | Project / Repository 接入 | 已落地（0008/0009/0019） |
-| P0 | `DiscoverySession` 数据模型 | 新增 `0022_discovery.sql` |
-| P0 | Web 项目访谈 | 扩展现有 import 访谈 UI |
-| P0 | MCP `pm_discovery_*` 接口 | 新增工具面 |
+| P0 | `DiscoverySession` 数据模型 | 新增 `0022_discovery.sql`（含 finding/proposal/base_version） |
+| P0 | Web 项目访谈 | 扩展现有 import 访谈 UI + 发现卡片 |
+| P0 | MCP `pm_discovery_*` 接口 | 新增 6 个语义工具 |
 | P1 | `/pm-learn` Skill | executor-neutral SKILL.md |
 | P1 | Git 仓库结构与文档分析 | 复用 `RepoAnalysisModel` |
-| P1 | 知识提案及审核 | 复用 `propose_document` |
+| P1 | 知识提案及审核（含版本校验） | 复用 `propose_document` |
 | P2 | 多仓库架构关联分析 | 逐步增强 |
 | P2 | 持续项目认知更新 | 后续增强 |
 
 **V1 可限制代码分析深度，但数据库与 Session 模型须支持多仓库。**
 
-**YAGNI（v1 不做）**：不并行多 Agent 访谈、不用单一百分比成熟度、不双端直写知识、不自动终止 session（由用户在 Web 点批准）。
+**YAGNI（v1 不做）**：不并行多 Agent 访谈、不用单一百分比成熟度、不双端直写知识、不自动终止 session（由用户在 Web 点批准）、不做跨仓库深度分析（Q4）。
 
 ---
 
-## 十、开放待裁
+## 十三、已裁决结论（Q1–Q7）
 
-| # | 问题 | 影响 | 建议 |
-| --- | --- | --- | --- |
-| Q1 | `DiscoverySession` 是新建独立表，还是把现有 `repo_import` 直接扩展为统一 session（加 `source`/`status`/`kind`）？ | 迁移与既有 import 测试兼容性 | 倾向**新建 `discovery_session`**，让 `repo_import(source=WEB)` 作为首个 producer 挂接，避免撼动已验收的 import 链路 |
-| Q2 | MCP 命名 `pm_discovery_*` 与定位文档 Q1（`pm_*` vs `task.*`/`knowledge.*`）如何统一 | 对外契约 | 先按 `pm_discovery_*`，待 Q1 裁决时一并收敛 |
-| Q3 | `discovery_finding.kind` 的 speculation 在 UI 如何呈现与晋级 | 用户体验 / 知识可信度 | 默认折叠为「待确认」，晋级需用户显式确认 |
-| Q4 | 多仓库关联分析（P2）的边界 | 复杂度 | 留待 P2 单独设计，本 V1 仅保证数据模型可扩展 |
+| 编号 | 裁决 |
+| --- | --- |
+| **Q1** | **新建独立 `discovery_session`**；`repo_import` 保持独立，仅通过 `repo_import.discovery_session_id` 单向关联；`source` 与 `kind` 分开 |
+| **Q2** | 暂用 `pm_discovery_*`，不实现别名；统一命名裁决前保持单一体系 |
+| **Q3** | finding 分 `observed / user_confirmed / speculation / contradicted`；speculation 默认待确认、禁止直接晋级；增 `confidence` + `verification_status`；冲突走提案不覆盖 |
+| **Q4** | V1 支持多仓库关联，不做跨仓库深度分析（P2） |
+| **Q5** | 允许并行 `DiscoverySession`，知识提案统一审核 |
+| **Q6** | Session 支持暂停、恢复、增量提交 |
+| **Q7** | 知识提案采用 `base_version` 版本校验，防并发覆盖 |
+
+**核心结论**：Discovery 是独立于 Repository Import、Task、Run 的业务域。Import 负责把仓库接入系统，Discovery 负责理解项目，Task 负责推动项目变化，Run 负责执行具体工作。四个边界确定后，Web / Codex / MCP / 多 Agent 的架构自然清晰。
 
 ---
 
