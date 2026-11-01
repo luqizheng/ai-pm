@@ -1,7 +1,36 @@
+# 本地开发 + 测试共用的 PostgreSQL（postgres:16）。
+#
+# ── 性能参数（仅限本地开发/测试，生产库不得照搬）────────────────────────────
+# fsync=off / synchronous_commit=off / full_page_writes=off
+#   关闭 WAL 落盘同步。数据库测试的绝对大头是 `#[sqlx::test]`：每个用例都会
+#   CREATE DATABASE 再重跑 migrations/ 的全部迁移（DDL + 索引密集，每次提交都
+#   触发 fsync）。关掉同步后，迁移应用从 ~1.1s/次 降到 ~0.35s/次（纯迁移段约
+#   8x），几十上百个用例叠加后是测试墙钟的主要提速来源。
+#   代价：进程/主机崩溃时本地库可能损坏 —— 本地开发可接受，严禁用于生产。
+# max_connections=200
+#   sqlx 测试的 master 池固定 20 连接，每个用例池上限 5；nextest 全局并行时
+#   会逼近 postgres 默认的 100 上限，调大以避免测试排队等连接。
+# shared_buffers=256MB
+#   减少 DDL / 写入的磁盘往返。
+#
+# 修改本文件后必须重建容器才生效（数据保留在 aipm_pg_data 卷中）：
+#   docker compose -f docker-compose.dev.yml up -d
 services:
   aipm-pg-dev:
     image: postgres:16
     container_name: aipm-pg-dev
+    command:
+      - postgres
+      - -c
+      - fsync=off
+      - -c
+      - synchronous_commit=off
+      - -c
+      - full_page_writes=off
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=256MB
     environment:
       POSTGRES_USER: aipm
       POSTGRES_PASSWORD: aipm
