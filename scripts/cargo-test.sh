@@ -19,6 +19,13 @@
 #   bash scripts/cargo-test.sh --no-capture       # 透传任意 nextest 选项
 #
 # 数据库：集成测试默认连本机开发库，可用 DATABASE_URL 覆盖。
+#
+# 模板库：`#[sqlx::test]` 每个用例都会从头跑 20 个迁移（约 1.9s/用例，全仓
+#   298 个 DB 用例）。因此跑测试前先把迁移预跑进 template1，每个用例的建库
+#   就退化成文件拷贝（sqlx 建库是裸 `create database "<name>"`，默认模板即
+#   template1），迁移段被 sqlx 的 `_sqlx_migrations` 记账直接跳过。
+#   见 crates/pm-infrastructure/examples/seed_test_template.rs。
+#   预建失败（库没起等）只告警不阻断：慢路径仍然正确。AIPM_TEST_SKIP_TEMPLATE=1 可跳过。
 set -uo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -29,6 +36,12 @@ export DATABASE_URL="${DATABASE_URL:-postgres://aipm:aipm@127.0.0.1:5433/aipm}"
 if ! command -v cargo-nextest >/dev/null 2>&1; then
     echo "[test] 未找到 cargo-nextest，先跑：cargo install cargo-nextest --locked" >&2
     exit 1
+fi
+
+if [ "${AIPM_TEST_SKIP_TEMPLATE:-0}" != "1" ]; then
+    if ! cargo run -q -p pm-infrastructure --example seed_test_template; then
+        echo "[test] 模板库预建失败，回退为逐用例重跑迁移（测试仍正确，只是更慢）" >&2
+    fi
 fi
 
 tmp_root="${TMPDIR:-/tmp}"

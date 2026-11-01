@@ -12,6 +12,32 @@
 
 运行测试：`DATABASE_URL=postgres://aipm:aipm@localhost:5433/aipm cargo test`（推荐 `bash scripts/cargo-test.sh`，走 nextest 全局并行）。
 
+### 测试提速：模板库（`template1`）预建
+
+`#[sqlx::test]` 每个用例都会从头跑一遍 `migrations/`（20 个迁移 ≈1.9s/用例；
+全仓 298 个 DB 用例，光建库+迁移就约 1500s 串行 CPU）。sqlx 0.8 建库语句是裸
+`create database "<name>"`，Postgres 默认以 `template1` 为模板，所以只要跑测试前
+把迁移预跑进 `template1`（连 `_sqlx_migrations` 记账行一并写入），每个用例的建库
+就退化成文件拷贝，sqlx 查到迁移已全部 applied（checksum 一致）直接跳过全部 DDL：
+
+| 场景 | 单个 schema 用例 | 8 个 schema 用例（串行） |
+|------|-----------------|-------------------------|
+| 逐用例重跑迁移（旧） | 5.15s | 48.2s |
+| 模板库克隆（新） | 0.33s | 3.55s |
+
+`scripts/cargo-test.sh` 会自动执行
+`cargo run -q -p pm-infrastructure --example seed_test_template`
+（见 `crates/pm-infrastructure/examples/seed_test_template.rs`）。它按迁移文件
+版本+checksum 记指纹：迁移没变则跳过（不付重建成本），新增/改动则自动重建，
+因此不会出现 sqlx 的 "migration was previously applied but has been modified"。
+直接 `cargo test` 不预建也能跑，只是回到慢路径。
+
+> 该步骤会 DROP `template1` 里除系统 schema 外的一切对象，并改变该实例上**所有**
+> 后续 `CREATE DATABASE` 的初始内容 —— **仅限本地 dev/test 库**；非 localhost 的
+> `DATABASE_URL` 默认拒绝执行（`AIPM_TEST_TEMPLATE_FORCE=1` 可覆盖）。
+> `AIPM_TEST_SKIP_TEMPLATE=1` 可跳过预建；`AIPM_TEST_TEMPLATE_DB=xxx` 可换模板库名。
+
+
 ## pm-api（REST）
 
 启动：`DATABASE_URL=postgres://aipm:aipm@localhost:5433/aipm cargo run -p pm-api`（监听 `0.0.0.0:8090`，可用 `PM_API_PORT` 覆盖）。

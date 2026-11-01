@@ -13,8 +13,15 @@
 # shared_buffers=256MB
 #   减少 DDL / 写入的磁盘往返。
 #
-# 修改本文件后必须重建容器才生效（数据保留在 aipm_pg_data 卷中）：
+#   修改本文件后必须重建容器才生效（数据保留在 aipm_pg_data 卷中）：
 #   docker compose -f docker-compose.dev.yml up -d
+#
+# ── 测试模板库（template1）──────────────────────────────────────────────────
+# scripts/cargo-test.sh 会把 migrations/ 预先跑进 template1（见
+# crates/pm-infrastructure/examples/seed_test_template.rs），让 `#[sqlx::test]`
+# 的建库变成文件拷贝、跳过全部 DDL（单用例 5.15s → 0.33s）。代价是 template1
+# 不再是空库：该实例上后续任何 CREATE DATABASE 都会带上业务 schema。
+# 这同样只适用于本地开发/测试库，生产库不得照搬。
 services:
   aipm-pg-dev:
     image: postgres:16
