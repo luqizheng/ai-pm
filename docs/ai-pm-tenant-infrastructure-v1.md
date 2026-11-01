@@ -55,6 +55,8 @@
 
 A(2) + B(33) + C(3) + D(1) = **39** ✓
 
+> **实施期修正**：`governance.approval_request` **实际有 `project_id` 列**（`0003` 建表时就有，只是没有指向 `core.project` 的外键），因此它按 B 类的口径处理没有语义问题（实现上取自 `change_proposal` 的租户，两种取法等价，因为组合外键 `(tenant_id, proposal_id)` 强制两者一致）。**C 类实际是 2 张**（`delivery.task_run_failure` / `integration.repo_import_source`）；`policy_scope` 的显式赋值使「需显式给租户」的表从 2 张增至 3 张。
+
 ### 3.2 A 类：根表（2 张）
 
 ```sql
@@ -420,12 +422,14 @@ VALUES ($1, $2, (SELECT tenant_id FROM core.project WHERE id = $2), ...)
 | 操作者 \ 目标值 | `member` | `admin` | `owner` | 移除 |
 |---|---|---|---|---|
 | `owner` | ✓ | ✓ | →owner-transfer | ✓（非最后 owner） |
-| `admin` | ✓ | ✗（含自己） | ✗ | ✓（仅 `member` 目标） |
+| `admin` | ✓ | ✗（提权一律禁止，含自己） | ✗ | ✓（`admin`/`member` 目标；不能碰 owner） |
 | `member` | ✗ | ✗ | ✗ | ✗ |
+
+> **管理矩阵的实质**：`admin` 只能**往下降**——把 `admin` 或 `member` 设为 `member`、移除 `admin`/`member`；不能把任何人设为 `admin`/`owner`，也不能操作 `owner`。这同时满足用户补充要求 §5 的第 1 条（Admin 可把其他 Admin 降为 Member）与第 5 条（Admin 无法提升自己或他人超过自身权限）。
 
 ### 5.3 事务模板（用户补充 §4）
 
-所有写操作走同一个函数 `apply_member_change(tx, op)`，**单事务**：
+所有写操作走同一个函数 `apply_member_change(pool, caller, tenant_id, op)`——**单事务**，内部依次 `authorize`（纯规则判定）→ `apply_writes`（落地 DML）→ `insert_audit`：
 
 ```rust
 // 1) 序列化该租户的全部成员变更（Q：并发安全的关键）

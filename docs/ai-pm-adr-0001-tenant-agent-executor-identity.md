@@ -71,8 +71,8 @@
 | 表 | 说明 |
 |---|---|
 | **`core.tenant`（新）** | `id UUID`、`provider TEXT`、`external_key TEXT`（= lmms `claims.tid` 字符串化）、`display_name`、`is_active`、`UNIQUE(provider, external_key)` |
-| **`core.tenant_member`（新）** | `(tenant_id, principal_id)` 主键；`role IN ('tenant_admin','member')`；D5 的唯一事实源 |
-| `core.principal_identity`（T-021a 建） | 三元组 `(provider, claims_tenant_key, subject)` 的映射；`claims_tenant_key` 是上游 `tid` 原文，不是内部 `tenant_id`（见 §7 交接） |
+| **`core.tenant_member`（新）** | `(tenant_id, principal_id)` 主键；`role IN ('owner','admin','member')`（V1 三级，`owner` 唯一且受「最后一个 owner」保护）；D5 的唯一事实源 |
+| `core.principal_identity`（T-021b 已在 0019 改造） | `(provider, tenant_id, subject)` → `principal_id`；上游 `tid` 不再单独存列，`core.tenant.external_key` 是其唯一载体（见 §7.1） |
 
 ### 3.4 租户业务数据（**加** `tenant_id`）——39 张现有表
 
@@ -122,10 +122,11 @@ ALTER TABLE integration.repo_import_source
 
 不变量：
 
-- **I1**：每张租户业务表必须有 `tenant_id`（非空）+ 至少一个组合外键；评审/测试用 `information_schema` 机械断言（§10 XT-3）。
+- **I1**：每张租户业务表必须有 `tenant_id NOT NULL`；**除 `delivery.policy_scope`（伪根表，`scope_key` 是文本、没有可锚定的 UUID 父键）外**，必须至少一个以 `tenant_id` 打头的组合外键。评审/测试用 `information_schema` 机械断言（§10 XT-3）。
 - **I2**：既有 `(project_id, id)` 复合键**保留**（子表已有大量 `FOREIGN KEY (project_id, 父id)`），新增 `(tenant_id, id)` 只用于租户级锚定。
 - **I3**：查询过滤用 `tenant_id`，不允许靠 project join「推导」——推导只用于建设期赋值，不用于读路径。
-- **I4（既有全局唯一约束必须改租户内唯一）**：`code` 类命名空间今天全库唯一，租户化后会出现"两个租户不能建同名 code"的假冲突与跨租户探测面。需改的三处：`core.project.code`（`0001:21` `UNIQUE`）、`core.customer` 的 `customer_code_uniq`（`0017:18`）、`integration.outbox_event.idempotency_key`（`0010:138`）。其余 `UNIQUE(...)` 均以 `project_id`/`task_id`/`id` 为前缀，不受影响；纯 UUID 列的唯一约束（如 `source_proposal_id`、`proposal_id`）保持原样。
+- **I4（既有全局唯一约束必须改租户内唯一）**：`code` 类命名空间今天全库唯一，租户化后会出现"两个租户不能建同名 code"的假冲突与跨租户探测面。需改的**四处**：`core.project.code`（`0001:21` `UNIQUE`）、`core.customer` 的 `customer_code_uniq`（`0017:18`）、`integration.outbox_event.idempotency_key`（`0010:138`）、`delivery.policy_scope` 的 `PRIMARY KEY (scope, scope_key)`（否则两个租户不能各有一行 organization 策略）。其余 `UNIQUE(...)` 均以 `project_id`/`task_id`/`id` 为前缀，不受影响；纯 UUID 列的唯一约束（如 `source_proposal_id`、`proposal_id`）保持原样。
+- **I5（作组合外键目标的表必须有 `UNIQUE(tenant_id, id)`）**：15 张表被组合外键引用——`core.customer`、`core.project`、`delivery.milestone`、`delivery.requirement`、`delivery.requirement_revision`、`delivery.task`、`delivery.task_run`、`integration.inbound_event`、`integration.project_repository`、`integration.repo_import`、`ai.analysis_run`、`ai.project_document`、`ai.document_revision`、`ai.change_proposal`、`governance.approval_request`。其中 5 张今天**没有**任何可复用的唯一键（`requirement_revision` / `task_run` / `document_revision` / `change_proposal` / `approval_request`），必须新增；其余在保留既有 `(project_id, id)` 的同时追加 `(tenant_id, id)`（I2）。
 
 ---
 
@@ -169,10 +170,10 @@ MCP 工具口径不变（D2 契约）：工具代表代理，actor = 项目内 `
 ## 6. 权限与撤权
 
 - 有效权限 = Tenant 策略 ∩ Project 授权 ∩ Agent 角色 ∩ 本次 Run 授权；下层不得放宽上层。
-- `tenant_admin` 只来自 `tenant_member.role`（D5）。鉴权中间件在**每次请求**查库；token `roles` 只用于日志提示。
+- `owner` / `admin` 只来自 `tenant_member.role`（D5）。鉴权中间件在**每次请求**查库；token `roles` 只用于日志提示。
 - 撤权即时生效：把 `tenant_member` 行降级/删除后，同一张仍在有效期内的 token 立刻失去管理端点权限（不再等 ≤15 分钟过期，`ai-pm-principal-identity-v1.md` §10.1 的已知缺口由此关闭）。
-- **两级角色不合并**：`tenant_member.role` 是**租户级**管理权（管理 principal、租户配置、启停 Agent）；项目内权限仍由 `project_member.role`（owner/developer/ai_pm）决定。`tenant_admin` **不自动**成为项目 owner，也不自动获得项目内业务写权限——可见性仍按 `project_member` 过滤（T-022）。跨项目可见的例外范围见 R6。
-- Agent 永不拥有 `tenant_admin`；需要人工审批的操作不得由 Agent 自行批准。
+- **两级角色不合并**：`tenant_member.role` 是**租户级**管理权（管理 principal、租户配置、启停 Agent）；项目内权限仍由 `project_member.role`（owner/developer/ai_pm）决定。`owner` / `admin` **不自动**成为项目 owner，也不自动获得项目内业务写权限——可见性仍按 `project_member` 过滤（T-022）。跨项目可见的例外范围见 R6。
+- Agent 永不拥有 `owner` / `admin`；需要人工审批的操作不得由 Agent 自行批准。
 - 凭据隔离：模型凭据与 Git 凭据分开；凭据归属平台或 Tenant（当前 Git 是项目级 `integration.project_ssh_key`，**与本节原则存在偏差**，见 §12 未决 R3）；明文不落 Task/Run/日志/知识库/Git。
 
 ---
@@ -187,12 +188,16 @@ MCP 工具口径不变（D2 契约）：工具代表代理，actor = 项目内 `
 | T-051（待裁 #12） | **仍开放**：per-project 调用方绑定未纳入本 ADR |
 | 客户主数据 G1–G4 | 不变；`core.customer` 只是新增 `tenant_id`，语义不加码 |
 
-### 7.1 β → α 的列名移交（显式，防止后续被"顺手清理"）
+### 7.1 β → α 的列名移交（已完成，留档）
 
-T-021a 先落库，此时 `core.tenant` 尚不存在，因此：
+T-021a 先落库时 `core.tenant` 尚不存在，因此 `principal_identity` 曾用
+`claims_tenant_key TEXT`（上游 `tid` 原文），**不叫** `tenant_id`。
 
-- `principal_identity` 用 `claims_tenant_key TEXT`（上游 `tid` 原文），**不叫** `tenant_id`。
-- T-021b（α）建 `core.tenant` 后：`principal_identity.tenant_id UUID REFERENCES core.tenant(id)`，由 `(provider, claims_tenant_key)` 解析得到；**没有回填脚本**（新项目，无存量），直接改契约 + 重跑测试。
+**T-021b 已在 `0019_tenant.sql` 完成收敛**（裁定 Q3）：删除 `claims_tenant_key`，
+改为 `tenant_id UUID NOT NULL REFERENCES core.tenant(id)`，唯一键改为
+`(provider, tenant_id, subject)`。上游 `tid` 的原文只保留在
+`core.tenant.external_key` 一处，避免同一事实两个来源。无回填脚本——
+新项目、dev 库重建（`AGENTS.md` 规则 1）。
 
 ---
 
@@ -243,7 +248,7 @@ T-021a 先落库，此时 `core.tenant` 尚不存在，因此：
 | XT-4 | 租户 A 与租户 B 各建同 `code` 的 project / customer | 两者都成功（I4：全局唯一约束已改租户内唯一） |
 | FK-1 | 插入 `tenant_id=B` 而 `project_id` 属于 A | 违反外键被拒（DB 层，不经应用代码） |
 | FK-2 | `core.project` 的 `customer_id` 跨租户 | 违反外键被拒 |
-| RV-1 | `tenant_member.role` 由 `tenant_admin` 降为 `member` | 同一有效 token **立即**失去 `PATCH /v1/pm/principals/*` 权限 |
+| RV-1 | `tenant_member.role` 由 `admin` 降为 `member` | 同一有效 token **立即**失去成员管理端点权限 |
 | RV-2 | token `roles` 含 `tenant_admin` 但库内无成员行 | 403（D5：token 不作为事实源） |
 | AG-1 | MCP 写路径 | `audit_log.actor_id` = `dev_agent` principal；`actor_identity_id` = 真人；`task_run.agent_id` 与 `actor_id` 同一 id |
 | AG-2 | 未启用的 `tenant_agent` 调 `pm_claim_task` | 403；无 run 产生 |
@@ -267,4 +272,4 @@ T-021a 先落库，此时 `core.tenant` 尚不存在，因此：
 | R3 | Git 凭据现为**项目级**（`integration.project_ssh_key`），与 §6「归属平台或 Tenant」不一致 | 待首批私有部署需求明确后裁；V1 不动 |
 | R4 | 费用核算/配额聚合视图 | V1 不做；`task_run.tenant_id` 载体**待 T-021b 建**（当前 `delivery.task_run` 无该列） |
 | R5 | `project_member` 是否需要区分"human 授权"与"agent 授权"的独立状态机 | 等 D3 执行端接入后观察；V1 只复用现有 `role` 列 |
-| R6 | `tenant_admin` 是否可见非成员项目（审计/客户/任务列表） | 与 T-022 一起裁：默认**不可见**（按 `project_member` 过滤），管理端点只暴露 principal 与租户配置。若运维需要"全租户只读视图"，另开审计专用入口，不放宽业务列表 |
+| R6 | `owner` / `admin` 是否可见非成员项目（审计/客户/任务列表） | 与 T-022 一起裁：默认**不可见**（按 `project_member` 过滤），管理端点只暴露 principal 与租户配置。若运维需要"全租户只读视图"，另开审计专用入口，不放宽业务列表 |
