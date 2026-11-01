@@ -2,8 +2,8 @@
 //!
 //! 与命令通道（`command_executor`，走提案/红线治理）不同，这些是人在 UI 上的
 //! 直接操作：本地事务落地 + `governance.audit_log` 行（动作名对齐前端审计页
-//! 词汇）。操作者解析采用 V1 约定：取该项目的 owner human principal（bootstrap
-//! 与演示种子都保证存在）；iam 登录身份到 principal 的映射表留后续里程碑。
+//! 词汇）。操作者由调用方显式传入（T-021a：HTTP handler 取 `AuthedPrincipal`），
+//! 应用层不再自行猜测 actor。
 
 use serde::Deserialize;
 use serde_json::json;
@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::actor::AuditActor;
 use crate::rows::{RequirementRevisionRow, TaskRow};
 
 pub const TASK_STATUSES: [&str; 13] = [
@@ -86,9 +87,9 @@ impl From<sqlx::Error> for PmWriteError {
     }
 }
 
-/// 解析项目的操作者（V1 身份约定，见模块注释）。三级回退：
-/// ① owner 角色 human 成员 → ② 任意 human 成员 → ③ 全局第一个 active human
-/// principal（兼容无成员行的种子/导入数据；iam↔principal 映射表落地后收紧）。
+/// 测试夹具：解析项目的操作者（三级回退）。生产路径不再调用——actor 必须由
+/// 调用方显式传入（T-021a / `docs/ai-pm-principal-identity-v1.md` Q3）。
+#[cfg(test)]
 pub async fn owner_actor(pool: &PgPool, project_id: Uuid) -> Result<Uuid, PmWriteError> {
     let owner: Option<Uuid> = sqlx::query_scalar(
         "SELECT p.id FROM core.project_member m \
@@ -125,19 +126,23 @@ pub async fn owner_actor(pool: &PgPool, project_id: Uuid) -> Result<Uuid, PmWrit
 async fn append_audit(
     tx: &mut sqlx::PgConnection,
     project_id: Uuid,
-    actor_id: Uuid,
+    actor: &AuditActor,
     action: &str,
     target_type: &str,
     target_id: Option<Uuid>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO governance.audit_log \
-         (id, project_id, actor_id, action, target_type, target_id) \
-         VALUES ($1, $2, $3, $4, $5, $6)",
+         (id, project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, \
+          action, target_type, target_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
     )
     .bind(Uuid::new_v4())
     .bind(project_id)
-    .bind(actor_id)
+    .bind(actor.principal_id)
+    .bind(actor.identity_id)
+    .bind(&actor.client)
+    .bind(&actor.auth_mode)
     .bind(action)
     .bind(target_type)
     .bind(target_id)
@@ -150,7 +155,7 @@ async fn append_audit(
 async fn append_audit_with_after(
     tx: &mut sqlx::PgConnection,
     project_id: Uuid,
-    actor_id: Uuid,
+    actor: &AuditActor,
     action: &str,
     target_type: &str,
     target_id: Option<Uuid>,
@@ -158,12 +163,16 @@ async fn append_audit_with_after(
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO governance.audit_log \
-         (id, project_id, actor_id, action, target_type, target_id, after_data) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+         (id, project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, \
+          action, target_type, target_id, after_data) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
     )
     .bind(Uuid::new_v4())
     .bind(project_id)
-    .bind(actor_id)
+    .bind(actor.principal_id)
+    .bind(actor.identity_id)
+    .bind(&actor.client)
+    .bind(&actor.auth_mode)
     .bind(action)
     .bind(target_type)
     .bind(target_id)
@@ -192,6 +201,7 @@ pub async fn create_revision(
     pool: &PgPool,
     requirement_id: Uuid,
     req: CreateRevisionRequest,
+    actor: &AuditActor,
 ) -> Result<RequirementRevisionRow, PmWriteError> {
     let markdown = req
         .content
@@ -207,7 +217,6 @@ pub async fn create_revision(
             .fetch_optional(pool)
             .await?
             .ok_or(PmWriteError::NotFound("not found"))?;
-    let actor = owner_actor(pool, project_id).await?;
 
     let mut tx = pool.begin().await?;
     let version: i32 = sqlx::query_scalar(
@@ -232,7 +241,7 @@ pub async fn create_revision(
     .bind(version)
     .bind(json!({ "markdown": markdown }))
     .bind(&content_hash)
-    .bind(actor)
+    .bind(actor.principal_id)
     .execute(&mut *tx)
     .await?;
     append_audit(
@@ -263,6 +272,7 @@ pub async fn approve_revision(
     pool: &PgPool,
     requirement_id: Uuid,
     revision_id: Uuid,
+    actor: &AuditActor,
 ) -> Result<RequirementRevisionRow, PmWriteError> {
     let mut tx = pool.begin().await?;
     let (project_id, state): (Uuid, String) = sqlx::query_as(
@@ -277,13 +287,12 @@ pub async fn approve_revision(
     if state != "draft" {
         return Err(PmWriteError::Conflict("not a draft revision"));
     }
-    let actor = owner_actor(pool, project_id).await?;
 
     sqlx::query(
         "UPDATE delivery.requirement_revision SET state = 'approved', approved_by = $2 WHERE id = $1",
     )
     .bind(revision_id)
-    .bind(actor)
+    .bind(actor.principal_id)
     .execute(&mut *tx)
     .await?;
     sqlx::query(
@@ -347,6 +356,7 @@ pub struct CreateTaskRequest {
 pub async fn create_task(
     pool: &PgPool,
     req: CreateTaskRequest,
+    actor: &AuditActor,
 ) -> Result<TaskRow, PmWriteError> {
     // mock 契约：project 未知（含缺省）→ 404，先于 title 校验。
     let project_id = req
@@ -366,7 +376,6 @@ pub async fn create_task(
     if !TASK_PRIORITIES.contains(&priority) {
         return Err(PmWriteError::Validation("invalid priority"));
     }
-    let actor = owner_actor(pool, project_id).await?;
 
     let mut tx = pool.begin().await?;
     let task_id = Uuid::new_v4();
@@ -428,6 +437,7 @@ pub async fn update_task(
     pool: &PgPool,
     task_id: Uuid,
     req: UpdateTaskRequest,
+    actor: &AuditActor,
 ) -> Result<TaskRow, PmWriteError> {
     let status = req.status.as_deref().unwrap_or_default();
     if !TASK_STATUSES.contains(&status) {
@@ -457,7 +467,6 @@ pub async fn update_task(
     if req.revision.unwrap_or(current_revision + 1) != current_revision {
         return Err(PmWriteError::Conflict("revision conflict"));
     }
-    let actor = owner_actor(pool, project_id).await?;
 
     sqlx::query(
         "UPDATE delivery.task \
@@ -665,11 +674,11 @@ async fn replace_knowledge_refs(
 pub async fn record_decision_audit(
     pool: &PgPool,
     project_id: Uuid,
-    actor_id: Uuid,
+    actor: &AuditActor,
     approval_id: Uuid,
 ) -> Result<(), PmWriteError> {
     let mut tx = pool.begin().await?;
-    append_audit(&mut tx, project_id, actor_id, "approval.decide", "approval_request", Some(approval_id)).await?;
+    append_audit(&mut tx, project_id, actor, "approval.decide", "approval_request", Some(approval_id)).await?;
     tx.commit().await?;
     Ok(())
 }

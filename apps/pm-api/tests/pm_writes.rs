@@ -492,7 +492,11 @@ async fn create_revision_appends_draft_with_hash(pool: PgPool) {
     let revision = body_json(response).await;
     assert_eq!(revision["version"], json!(4), "version must be max+1");
     assert_eq!(revision["state"], json!("draft"));
-    assert_eq!(revision["created_by"], json!(boot.human_id.to_string()));
+    // `router` 是 off 模式：actor 固定为注入的 `dev-off` principal（T-021a）。
+    assert_eq!(
+        revision["created_by"],
+        json!(pm_api::auth::DEV_OFF_PRINCIPAL.to_string())
+    );
     assert!(revision["approved_by"].is_null());
     let hash = revision["content_hash"].as_str().unwrap();
     assert_eq!(hash.len(), 64, "content_hash must be sha256 hex");
@@ -559,7 +563,11 @@ async fn approve_revision_promotes_and_supersedes(pool: PgPool) {
     assert_eq!(response.status(), StatusCode::OK);
     let revision = body_json(response).await;
     assert_eq!(revision["state"], json!("approved"));
-    assert_eq!(revision["approved_by"], json!(boot.human_id.to_string()));
+    // off 模式：actor 固定为 `dev-off`（T-021a；真实调用者见 principal_identity 用例）。
+    assert_eq!(
+        revision["approved_by"],
+        json!(pm_api::auth::DEV_OFF_PRINCIPAL.to_string())
+    );
 
     let (req_status, current, row_revision): (String, Option<Uuid>, i64) = sqlx::query_as(
         "SELECT status, current_revision_id, row_revision FROM delivery.requirement WHERE id = $1",

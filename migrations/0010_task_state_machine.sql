@@ -1,4 +1,4 @@
--- 0009_task_state_machine: Run / 等待 / 取代关系 / 任务级策略覆盖 / Outbox
+-- 0010_task_state_machine: Run / 等待 / 取代关系 / 任务级策略覆盖 / Outbox
 --                          + 13 值 status 约束与默认值（新系统，无回填）
 -- 规格：docs/ai-pm-task-state-machine-v1.md §11.5 §12.4 §19.5 §20.4 §21.1
 

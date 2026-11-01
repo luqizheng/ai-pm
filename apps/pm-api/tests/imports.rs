@@ -77,7 +77,7 @@ async fn seed_project_with_repo(pool: &PgPool, code: &str) -> (Uuid, Uuid, Repo)
     let created = pm_application::repository::create_repository(
         pool,
         outcome.project_id,
-        None,
+        &pm_application::actor::AuditActor::principal(outcome.human_id),
         pm_application::repository::CreateRepositoryRequest {
             name: "主仓库".to_string(),
             url: "git@example.invalid:team/demo.git".to_string(),
@@ -101,7 +101,9 @@ async fn seed_project_with_repo(pool: &PgPool, code: &str) -> (Uuid, Uuid, Repo)
 }
 
 async fn prepare_draft(pool: &PgPool, project_id: Uuid) -> (Uuid, ProjectDraft) {
-    let started = start_import(pool, project_id, None).await.unwrap();
+    let started = start_import(pool, project_id, &pm_application::actor::AuditActor::dispatch())
+        .await
+        .unwrap();
     let model = FakeRepoAnalysisModel;
     run_import_job(pool, &model, started.import_id).await.unwrap();
     let detail = pm_application::project_import::get_import(pool, project_id, started.import_id)

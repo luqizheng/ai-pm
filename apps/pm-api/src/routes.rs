@@ -71,7 +71,17 @@ pub fn router(pool: PgPool) -> Router {
 /// feed whose PG listener it owns. The `off` mode (local development) keeps the
 /// MCP service unguarded — permissions only exist once bearer auth is on.
 pub fn router_with_feed(pool: PgPool, audit_feed: crate::audit_stream::AuditFeed) -> Router {
-    build_router(pool, audit_feed, false)
+    // `off` 模式不再拆掉身份门：注入固定的 `dev-off` principal
+    // （写请求时落库），handlers 与审计仍有 actor（v1 §6 / C42）。
+    let auth = crate::auth::AuthState {
+        jwks: None,
+        pool: pool.clone(),
+        config: crate::auth::AuthConfig::default(),
+    };
+    build_router(pool, audit_feed, false).layer(axum::middleware::from_fn_with_state(
+        auth,
+        crate::auth::inject_dev_principal,
+    ))
 }
 
 fn build_router(
@@ -122,6 +132,8 @@ fn build_router(
         // 代理剥掉 /api 后直达这里）。
         .merge(crate::pm_lists::router())
         .merge(crate::customers::router())
+        // 主体自查与管理端激活/停用（T-021a）。
+        .merge(crate::principals::router())
         // 任务执行 Run（AI 执行中心数据源；见 workspace-execution-artifacts plan）。
         .merge(crate::pm_runs::router())
         // 产物（需求修订）列表——AI 产物验收中心数据源。
@@ -198,11 +210,53 @@ pub fn router_with_auth_and_feed(
     jwks: Arc<digua_common_jwt::JWKSCache>,
     audit_feed: crate::audit_stream::AuditFeed,
 ) -> Router {
-    let auth = crate::auth::AuthState { jwks };
-    build_router(pool, audit_feed, true).layer(axum::middleware::from_fn_with_state(
-        auth,
-        crate::auth::require_bearer,
-    ))
+    router_with_auth_config_and_feed(
+        pool,
+        jwks,
+        crate::auth::AuthConfig::from_env(),
+        audit_feed,
+    )
+}
+
+/// [`router_with_auth`] with an explicit first-admin pair (tests pass the pair
+/// directly instead of mutating process-wide env vars).
+pub fn router_with_auth_config(
+    pool: PgPool,
+    jwks: Arc<digua_common_jwt::JWKSCache>,
+    config: crate::auth::AuthConfig,
+) -> Router {
+    router_with_auth_config_and_feed(pool, jwks, config, crate::audit_stream::AuditFeed::new())
+}
+
+/// [`router_with_auth_and_feed`] with an explicit auth config, over an explicit
+/// audit feed.
+///
+/// Layer order (outermost first): `require_bearer` → `resolve_principal`
+/// → `require_active` → routes (v1 §6).
+pub fn router_with_auth_config_and_feed(
+    pool: PgPool,
+    jwks: Arc<digua_common_jwt::JWKSCache>,
+    config: crate::auth::AuthConfig,
+    audit_feed: crate::audit_stream::AuditFeed,
+) -> Router {
+    let auth = crate::auth::AuthState {
+        jwks: Some(jwks),
+        pool: pool.clone(),
+        config,
+    };
+    build_router(pool, audit_feed, true)
+        .layer(axum::middleware::from_fn_with_state(
+            auth.clone(),
+            crate::auth::require_active,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            auth.clone(),
+            crate::auth::resolve_principal,
+        ))
+        .layer(axum::middleware::from_fn_with_state(
+            auth,
+            crate::auth::require_bearer,
+        ))
 }
 
 // ---------------------------------------------------------------- ingestion

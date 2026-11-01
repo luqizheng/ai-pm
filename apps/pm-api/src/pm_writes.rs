@@ -5,7 +5,7 @@
 
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -14,6 +14,7 @@ use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::{ApiError, ApiResult};
 use pm_application::pm_write::{
@@ -37,6 +38,7 @@ pub struct DecideBody {
 
 pub(crate) async fn decide_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(approval_id): Path<Uuid>,
     Json(body): Json<DecideBody>,
 ) -> Response {
@@ -83,17 +85,14 @@ pub(crate) async fn decide_handler(
         }
     };
 
-    // V1 身份约定：操作者取项目 owner human principal。
-    let actor_id = match pm_write::owner_actor(&state.pool, project_id).await {
-        Ok(actor) => actor,
-        Err(err) => return ApiError::from(err).into_response(),
-    };
+    // T-021a：操作者 = 真实调用者的 principal（不再按项目 owner 猜测）。
+    let actor = principal.audit_actor();
     match pm_application::decide_approval(
         &state.pool,
         &state.executor,
         DecideRequest {
             approval_id,
-            actor_id,
+            actor_id: actor.principal_id,
             decision,
             reason,
         },
@@ -102,8 +101,7 @@ pub(crate) async fn decide_handler(
     {
         Ok(_) => {
             if let Err(err) =
-                pm_write::record_decision_audit(&state.pool, project_id, actor_id, approval_id)
-                    .await
+                pm_write::record_decision_audit(&state.pool, project_id, &actor, approval_id).await
             {
                 return ApiError::from(err).into_response();
             }
@@ -155,18 +153,22 @@ pub(crate) async fn decide_handler(
 
 pub(crate) async fn create_task_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Json(body): Json<CreateTaskRequest>,
 ) -> ApiResult<Response> {
-    let task = pm_write::create_task(&state.pool, body).await?;
+    let actor = principal.audit_actor();
+    let task = pm_write::create_task(&state.pool, body, &actor).await?;
     Ok((StatusCode::CREATED, Json(task)).into_response())
 }
 
 pub(crate) async fn update_task_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(task_id): Path<Uuid>,
     Json(body): Json<UpdateTaskRequest>,
 ) -> ApiResult<Response> {
-    let task = pm_write::update_task(&state.pool, task_id, body).await?;
+    let actor = principal.audit_actor();
+    let task = pm_write::update_task(&state.pool, task_id, body, &actor).await?;
     Ok((StatusCode::OK, Json(task)).into_response())
 }
 
@@ -174,17 +176,22 @@ pub(crate) async fn update_task_handler(
 
 pub(crate) async fn create_revision_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(requirement_id): Path<Uuid>,
     Json(body): Json<CreateRevisionRequest>,
 ) -> ApiResult<Response> {
-    let revision = pm_write::create_revision(&state.pool, requirement_id, body).await?;
+    let actor = principal.audit_actor();
+    let revision = pm_write::create_revision(&state.pool, requirement_id, body, &actor).await?;
     Ok((StatusCode::CREATED, Json(revision)).into_response())
 }
 
 pub(crate) async fn approve_revision_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path((requirement_id, revision_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Response> {
-    let revision = pm_write::approve_revision(&state.pool, requirement_id, revision_id).await?;
+    let actor = principal.audit_actor();
+    let revision =
+        pm_write::approve_revision(&state.pool, requirement_id, revision_id, &actor).await?;
     Ok((StatusCode::OK, Json(revision)).into_response())
 }

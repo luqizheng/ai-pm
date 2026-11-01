@@ -1623,41 +1623,15 @@ pub(crate) async fn apply_task_transition(
     Ok((audit_id, resulting_revision))
 }
 
-/// 解析平台内部动作（调度/回收）的执行身份：三级回退取项目的人类操作者，
-/// 与 `pm_write::owner_actor` 同口径。审计 actor 必须存在（FK）。
+/// 解析平台内部动作（调度/回收）的执行身份：固定 `ai-pm-dispatch` service
+/// principal（`0015` 幂等种子）。平台动作没有认证身份，审计三列为 NULL。
 pub(crate) async fn system_context(
-    tx: &mut Tx,
+    _tx: &mut Tx,
     project_id: ProjectId,
 ) -> Result<ExecutionContext, CommandError> {
-    let owner: Option<Uuid> = sqlx::query_scalar(
-        "SELECT p.id FROM core.project_member m \
-           JOIN core.principal p ON p.id = m.principal_id \
-          WHERE m.project_id = $1 AND m.role = 'owner' AND p.kind = 'human' AND p.is_active \
-          LIMIT 1",
-    )
-    .bind(project_id)
-    .fetch_optional(&mut **tx)
-    .await
-    .map_err(db_err)?;
-    let actor_id = match owner {
-        Some(id) => id,
-        None => sqlx::query_scalar(
-            "SELECT p.id FROM core.project_member m \
-               JOIN core.principal p ON p.id = m.principal_id \
-              WHERE m.project_id = $1 AND p.kind = 'human' AND p.is_active \
-              LIMIT 1",
-        )
-        .bind(project_id)
-        .fetch_optional(&mut **tx)
-        .await
-        .map_err(db_err)?
-        // G6：项目无 human 成员时回退到平台 service principal（`0015` 幂等种子），
-        // 不再因 RowNotFound 让调度/回收失败。
-        .unwrap_or(crate::run_dispatch::DISPATCH_SERVICE_PRINCIPAL),
-    };
     Ok(ExecutionContext {
         project_id,
-        actor_id,
+        actor_id: crate::run_dispatch::DISPATCH_SERVICE_PRINCIPAL,
         actor_kind: ActorKind::Service,
         source: CommandSource::System,
     })

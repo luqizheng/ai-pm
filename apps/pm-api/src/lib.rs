@@ -13,6 +13,7 @@ pub mod pm_lists;
 pub mod pm_repositories;
 pub mod pm_runs;
 pub mod pm_writes;
+pub mod principals;
 pub mod routes;
 pub mod support;
 

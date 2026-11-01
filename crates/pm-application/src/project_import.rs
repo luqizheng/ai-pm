@@ -10,7 +10,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::git_access;
-use crate::pm_write::{PmWriteError, owner_actor};
+use crate::actor::AuditActor;
+use crate::pm_write::PmWriteError;
 use crate::repo_facts::{self, RepoAnalysisModel, RepoMaterial, pm_ai_port::ModelError};
 use pm_domain::import::{Evidence, EvidenceKind, ProjectDraft};
 
@@ -188,7 +189,7 @@ pub async fn list_imports(
 pub async fn start_import(
     pool: &PgPool,
     project_id: Uuid,
-    actor_id: Option<Uuid>,
+    actor: &AuditActor,
 ) -> Result<StartImport, ImportError> {
     let project_exists: Option<Uuid> = sqlx::query_scalar("SELECT id FROM core.project WHERE id = $1")
         .bind(project_id)
@@ -235,10 +236,7 @@ pub async fn start_import(
         return Err(ImportError::ImportInProgress);
     }
 
-    let actor = match actor_id {
-        Some(id) => id,
-        None => owner_actor(pool, project_id).await?,
-    };
+    let actor_id = actor.principal_id;
     let import_id = Uuid::new_v4();
     let payload = serde_json::json!({ "import_id": import_id });
     let payload_text = payload.to_string();
@@ -251,7 +249,7 @@ pub async fn start_import(
          VALUES ($1, $2, 'repo_import', 'repo_import_requested', $3, $4, $5) RETURNING id",
     )
     .bind(project_id)
-    .bind(actor)
+    .bind(actor_id)
     .bind(import_id.to_string())
     .bind(&payload)
     .bind(&payload_hash)
@@ -272,7 +270,7 @@ pub async fn start_import(
     )
     .bind(import_id)
     .bind(project_id)
-    .bind(actor)
+    .bind(actor_id)
     .execute(&mut *tx)
     .await?;
     sqlx::query("UPDATE core.project SET status = 'initializing' WHERE id = $1 AND status = 'planning'")
@@ -1097,6 +1095,7 @@ pub async fn import_proposals(
 pub async fn advance_import_after_decision(
     pool: &PgPool,
     analysis_run_id: Uuid,
+    actor: &AuditActor,
 ) -> Result<(), ImportError> {
     let import: Option<(Uuid, Uuid)> = sqlx::query_as(
         "SELECT id, project_id FROM integration.repo_import WHERE analysis_run_id = $1",
@@ -1127,7 +1126,6 @@ pub async fn advance_import_after_decision(
         return Ok(());
     }
     if statuses.iter().all(|status| status == "executed") {
-        let actor = owner_actor(pool, project_id).await?;
         let mut tx = pool.begin().await?;
         sqlx::query(
             "UPDATE integration.repo_import SET status = 'applied', applied_at = now(), \
@@ -1148,7 +1146,7 @@ pub async fn advance_import_after_decision(
              VALUES ($1, $2, 'project_import_applied', 'project', $1, $3, $4)",
         )
         .bind(project_id)
-        .bind(actor)
+        .bind(actor.principal_id)
         .bind(serde_json::json!({ "import_id": import_id }))
         .bind(analysis_run_id)
         .execute(&mut *tx)

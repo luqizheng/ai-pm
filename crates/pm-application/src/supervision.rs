@@ -403,8 +403,12 @@ pub async fn decide_approval(
             )
             .await?;
             tx.commit().await?;
-            let _ = crate::project_import::advance_import_after_decision(pool, analysis_run_id)
-                .await;
+            let _ = crate::project_import::advance_import_after_decision(
+                pool,
+                analysis_run_id,
+                &crate::actor::AuditActor::principal(req.actor_id),
+            )
+            .await;
             Ok(DecisionOutcome::Rejected)
         }
         Decision::Approve => {
@@ -438,6 +442,7 @@ pub async fn decide_approval(
                     let _ = crate::project_import::advance_import_after_decision(
                         pool,
                         analysis_run_id,
+                        &crate::actor::AuditActor::principal(req.actor_id),
                     )
                     .await;
                     Ok(DecisionOutcome::Executed { receipt })
@@ -452,6 +457,7 @@ pub async fn decide_approval(
                     let _ = crate::project_import::advance_import_after_decision(
                         pool,
                         analysis_run_id,
+                        &crate::actor::AuditActor::principal(req.actor_id),
                     )
                     .await;
                     Err(SupervisionError::Command(err))

@@ -3,11 +3,11 @@
 //!
 //! 错误体沿用 `support` 的 `{message}` 约定：@digua/http 对带 `code` 的错误体
 //! 会先走错误码翻译，未知码会把 message 覆盖成码本身；只给 message 才能原样透传。
-//! 身份沿用 `pm_write::owner_actor` 的 V1 约定（iam↔principal 映射表落地后收紧）。
+//! 身份沿用调用方传入的 `AuthedPrincipal`（T-021a）。
 
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -16,6 +16,7 @@ use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use pm_application::repository::{
     CreateRepositoryRequest, RepositoryError, UpdateRepositoryRequest, archive_repository,
@@ -114,10 +115,12 @@ async fn list_handler(
 
 async fn create_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
     Json(req): Json<CreateRepositoryRequest>,
 ) -> Response {
-    match create_repository(&state.pool, project_id, None, req).await {
+    let actor = principal.audit_actor();
+    match create_repository(&state.pool, project_id, &actor, req).await {
         Ok(row) => (StatusCode::CREATED, Json(row)).into_response(),
         Err(err) => repository_error(err),
     }
@@ -125,10 +128,12 @@ async fn create_handler(
 
 async fn update_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(repository_id): Path<Uuid>,
     Json(req): Json<UpdateRepositoryRequest>,
 ) -> Response {
-    match update_repository(&state.pool, repository_id, None, req).await {
+    let actor = principal.audit_actor();
+    match update_repository(&state.pool, repository_id, &actor, req).await {
         Ok(row) => (StatusCode::OK, Json(row)).into_response(),
         Err(err) => repository_error(err),
     }
@@ -136,9 +141,11 @@ async fn update_handler(
 
 async fn delete_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(repository_id): Path<Uuid>,
 ) -> Response {
-    match delete_repository(&state.pool, repository_id, None).await {
+    let actor = principal.audit_actor();
+    match delete_repository(&state.pool, repository_id, &actor).await {
         Ok(()) => (StatusCode::OK, Json(json!({ "id": repository_id }))).into_response(),
         Err(err) => repository_error(err),
     }
@@ -146,9 +153,11 @@ async fn delete_handler(
 
 async fn verify_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(repository_id): Path<Uuid>,
 ) -> Response {
-    match verify_repository(&state.pool, repository_id, None).await {
+    let actor = principal.audit_actor();
+    match verify_repository(&state.pool, repository_id, &actor).await {
         Ok(outcome) => (StatusCode::OK, Json(outcome)).into_response(),
         Err(err) => repository_error(err),
     }
@@ -156,9 +165,11 @@ async fn verify_handler(
 
 async fn archive_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(repository_id): Path<Uuid>,
 ) -> Response {
-    match archive_repository(&state.pool, repository_id, None).await {
+    let actor = principal.audit_actor();
+    match archive_repository(&state.pool, repository_id, &actor).await {
         Ok(row) => (StatusCode::OK, Json(row)).into_response(),
         Err(err) => repository_error(err),
     }
@@ -177,9 +188,11 @@ async fn get_key_handler(
 
 async fn generate_key_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    match generate_ssh_key(&state.pool, project_id, None).await {
+    let actor = principal.audit_actor();
+    match generate_ssh_key(&state.pool, project_id, &actor).await {
         Ok(view) => (StatusCode::OK, Json(view)).into_response(),
         Err(err) => repository_error(err),
     }
@@ -187,9 +200,11 @@ async fn generate_key_handler(
 
 async fn delete_key_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    match delete_ssh_key(&state.pool, project_id, None).await {
+    let actor = principal.audit_actor();
+    match delete_ssh_key(&state.pool, project_id, &actor).await {
         Ok(()) => (StatusCode::OK, Json(json!({ "project_id": project_id }))).into_response(),
         Err(err) => repository_error(err),
     }
@@ -216,11 +231,13 @@ struct CreateKeyRequest {
 
 async fn create_key_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
     body: Option<Json<CreateKeyRequest>>,
 ) -> Response {
     let rotate = body.map(|Json(req)| req.rotate).unwrap_or(false);
-    match ensure_ssh_key(&state.pool, project_id, None, rotate).await {
+    let actor = principal.audit_actor();
+    match ensure_ssh_key(&state.pool, project_id, &actor, rotate).await {
         Ok(view) => (StatusCode::OK, Json(view)).into_response(),
         Err(err) => repository_error(err),
     }
@@ -228,9 +245,11 @@ async fn create_key_handler(
 
 async fn revoke_key_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    match revoke_ssh_key(&state.pool, project_id, None).await {
+    let actor = principal.audit_actor();
+    match revoke_ssh_key(&state.pool, project_id, &actor).await {
         Ok(()) => (StatusCode::OK, Json(json!({ "project_id": project_id }))).into_response(),
         Err(err) => repository_error(err),
     }

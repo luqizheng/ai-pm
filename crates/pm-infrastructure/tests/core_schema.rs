@@ -4,5 +4,6 @@ async fn core_schema_ready(pool: sqlx::PgPool) {
         "SELECT count(*)::int8 FROM information_schema.tables \
          WHERE table_schema = 'core'"
     ).fetch_one(&pool).await.unwrap();
-    assert_eq!(n, 4);
+    // customer / project / principal / project_member + principal_identity（0018）
+    assert_eq!(n, 5);
 }

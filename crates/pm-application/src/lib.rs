@@ -1,5 +1,6 @@
 //! pm-application: use cases, ports and application services.
 
+pub mod actor;
 pub mod bootstrap;
 pub mod command_executor;
 pub mod git_access;
@@ -26,6 +27,7 @@ pub mod run_dispatch;
 pub mod secret;
 pub mod supervision;
 
+pub use actor::AuditActor;
 pub use bootstrap::{
     BootstrapError, BootstrapOutcome, BootstrapRequest, bootstrap_project,
     bootstrap_project_for_customer, bootstrap_project_with_status, resolve_assignee,

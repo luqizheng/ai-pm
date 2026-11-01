@@ -5,7 +5,7 @@
 
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -13,6 +13,7 @@ use axum::{
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use pm_application::project_import::{
     ApplyRequest, ImportError, cancel_import, get_import, import_proposals, list_imports,
@@ -115,9 +116,11 @@ async fn list_handler(
 
 async fn start_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    match start_import(&state.pool, project_id, None).await {
+    let actor = principal.audit_actor();
+    match start_import(&state.pool, project_id, &actor).await {
         Ok(outcome) => (StatusCode::ACCEPTED, Json(outcome)).into_response(),
         Err(err) => import_error(err),
     }

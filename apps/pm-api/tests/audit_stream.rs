@@ -114,6 +114,25 @@ async fn forged_query_token_is_unauthorized(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn query_token_streams_published_audit_events(pool: PgPool) {
+    // T-021a：SSE 属业务端点，token 的 (provider, tid, sub) 必须映射到已激活
+    // principal，否则首次见到会 provision 为未激活并 403。
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "SSE-1".to_string(),
+            project_name: "sse".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO core.principal_identity \
+             (provider, claims_tenant_key, subject, principal_id) VALUES ('lmms', '1', 'usr-1', $1)",
+    )
+    .bind(boot.human_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     let (addr, feed) = spawn_server(pool).await;
     let mut stream = open_stream(&addr, &format!("?access_token={}", valid_token())).await;
 

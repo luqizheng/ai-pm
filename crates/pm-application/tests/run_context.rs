@@ -170,6 +170,7 @@ async fn write_full_contract(pool: &PgPool, fx: &Fx) -> Uuid {
                 is_required: true,
             }]),
         },
+        &pm_application::actor::AuditActor::dispatch(),
     )
     .await
     .unwrap();

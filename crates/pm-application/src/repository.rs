@@ -6,7 +6,8 @@
 //!
 //! 密钥策略与 `llm_config.rs` 一致：`AI_PM_SECRET_KEY` → `sha256` → AES-256-GCM，
 //! 库里只存 `nonce || ciphertext || tag`，AAD 绑定 `project_id`；私钥明文永不回显。
-//! 操作走 `pm_write::owner_actor` 的身份约定并写 `governance.audit_log`。
+//! 操作者由调用方显式传入（T-021a：HTTP handler 取 `AuthedPrincipal`），
+//! 并写 `governance.audit_log`。
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::git_access::{self, GitError};
-use crate::pm_write::{PmWriteError, owner_actor};
+use crate::actor::AuditActor;
+use crate::pm_write::PmWriteError;
 use crate::secret::{self, SecretError};
 
 pub const REPOSITORY_ROLES: [&str; 4] = ["main", "docs", "service", "infra"];
@@ -216,7 +218,7 @@ pub async fn list_ssh_keys(
 pub async fn ensure_ssh_key(
     pool: &PgPool,
     project_id: Uuid,
-    actor_id: Option<Uuid>,
+    actor: &AuditActor,
     rotate: bool,
 ) -> Result<SshKeyView, RepositoryError> {
     if !rotate {
@@ -228,7 +230,6 @@ pub async fn ensure_ssh_key(
     let code = project_code(pool, project_id).await?;
     let generated = secret::generate_ed25519(&format!("ai-pm:{code}"))?;
     let ciphertext = secret::seal_text(project_id, generated.private_key.as_bytes())?;
-    let actor = resolve_actor(pool, project_id, actor_id).await?;
 
     let mut tx = pool.begin().await?;
     let (created_at,): (DateTime<Utc>,) = sqlx::query_as(
@@ -249,7 +250,7 @@ pub async fn ensure_ssh_key(
     .bind(&generated.public_key)
     .bind(&ciphertext)
     .bind(&generated.fingerprint)
-    .bind(actor)
+    .bind(actor.principal_id)
     .fetch_one(&mut *tx)
     .await?;
     append_audit(
@@ -281,16 +282,16 @@ pub async fn ensure_ssh_key(
 pub async fn generate_ssh_key(
     pool: &PgPool,
     project_id: Uuid,
-    actor_id: Option<Uuid>,
+    actor: &AuditActor,
 ) -> Result<SshKeyView, RepositoryError> {
-    ensure_ssh_key(pool, project_id, actor_id, true).await
+    ensure_ssh_key(pool, project_id, actor, true).await
 }
 
 /// 吊销密钥；仍被 verified 仓库引用时拒绝。
 pub async fn revoke_ssh_key(
     pool: &PgPool,
     project_id: Uuid,
-    actor_id: Option<Uuid>,
+    actor: &AuditActor,
 ) -> Result<(), RepositoryError> {
     let in_use: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM integration.project_repository \
@@ -302,7 +303,6 @@ pub async fn revoke_ssh_key(
     if in_use > 0 {
         return Err(RepositoryError::KeyInUse);
     }
-    let actor = resolve_actor(pool, project_id, actor_id).await?;
     let mut tx = pool.begin().await?;
     let affected = sqlx::query(
         "UPDATE integration.project_ssh_key \
@@ -332,9 +332,8 @@ pub async fn revoke_ssh_key(
 pub async fn delete_ssh_key(
     pool: &PgPool,
     project_id: Uuid,
-    actor_id: Option<Uuid>,
+    actor: &AuditActor,
 ) -> Result<(), RepositoryError> {
-    let actor = resolve_actor(pool, project_id, actor_id).await?;
     let mut tx = pool.begin().await?;
     let affected = sqlx::query("DELETE FROM integration.project_ssh_key WHERE project_id = $1")
         .bind(project_id)
@@ -390,7 +389,7 @@ pub async fn list_repositories(
 pub async fn create_repository(
     pool: &PgPool,
     project_id: Uuid,
-    actor_id: Option<Uuid>,
+    actor: &AuditActor,
     req: CreateRepositoryRequest,
 ) -> Result<RepositoryRow, RepositoryError> {
     project_code(pool, project_id).await?;
@@ -399,7 +398,6 @@ pub async fn create_repository(
     let role = normalize_role(req.role.as_deref().unwrap_or("main"))?;
     let default_branch = optional_text(req.default_branch, MAX_BRANCH_LEN)?;
     let description = optional_text(req.description, MAX_DESCRIPTION_LEN)?;
-    let actor = resolve_actor(pool, project_id, actor_id).await?;
 
     let mut tx = pool.begin().await?;
     let row = sqlx::query_as::<_, RepositoryRow>(
@@ -439,7 +437,7 @@ pub async fn create_repository(
 pub async fn update_repository(
     pool: &PgPool,
     repository_id: Uuid,
-    actor_id: Option<Uuid>,
+    actor: &AuditActor,
     req: UpdateRepositoryRequest,
 ) -> Result<RepositoryRow, RepositoryError> {
     let name = require_text(Some(req.name), "repository name is required", MAX_NAME_LEN)?;
@@ -459,7 +457,6 @@ pub async fn update_repository(
     if revision != req.revision {
         return Err(RepositoryError::RevisionConflict);
     }
-    let actor = resolve_actor(pool, project_id, actor_id).await?;
 
     let row = sqlx::query_as::<_, RepositoryRow>(
         "UPDATE integration.project_repository SET \
@@ -499,7 +496,7 @@ pub async fn update_repository(
 pub async fn delete_repository(
     pool: &PgPool,
     repository_id: Uuid,
-    actor_id: Option<Uuid>,
+    actor: &AuditActor,
 ) -> Result<(), RepositoryError> {
     let mut tx = pool.begin().await?;
     let project_id: Option<Uuid> =
@@ -508,7 +505,6 @@ pub async fn delete_repository(
             .fetch_optional(&mut *tx)
             .await?;
     let project_id = project_id.ok_or(RepositoryError::NotFound)?;
-    let actor = resolve_actor(pool, project_id, actor_id).await?;
 
     sqlx::query("DELETE FROM integration.project_repository WHERE id = $1")
         .bind(repository_id)
@@ -544,7 +540,7 @@ pub struct VerifyOutcome {
 pub async fn archive_repository(
     pool: &PgPool,
     repository_id: Uuid,
-    actor_id: Option<Uuid>,
+    actor: &AuditActor,
 ) -> Result<RepositoryRow, RepositoryError> {
     let mut tx = pool.begin().await?;
     let project_id: Option<Uuid> =
@@ -553,7 +549,6 @@ pub async fn archive_repository(
             .fetch_optional(&mut *tx)
             .await?;
     let project_id = project_id.ok_or(RepositoryError::NotFound)?;
-    let actor = resolve_actor(pool, project_id, actor_id).await?;
 
     let row = sqlx::query_as::<_, RepositoryRow>(
         "UPDATE integration.project_repository \
@@ -588,7 +583,7 @@ pub async fn archive_repository(
 pub async fn verify_repository(
     pool: &PgPool,
     repository_id: Uuid,
-    actor_id: Option<Uuid>,
+    actor: &AuditActor,
 ) -> Result<VerifyOutcome, RepositoryError> {
     let row: Option<(Uuid, String, Option<String>)> = sqlx::query_as(
         "SELECT project_id, url, default_branch \
@@ -598,7 +593,6 @@ pub async fn verify_repository(
     .fetch_optional(pool)
     .await?;
     let (project_id, url, current_branch) = row.ok_or(RepositoryError::NotFound)?;
-    let actor = resolve_actor(pool, project_id, actor_id).await?;
 
     let key_ciphertext: Option<Vec<u8>> = sqlx::query_scalar(
         "SELECT private_key_ciphertext FROM integration.project_ssh_key \
@@ -725,33 +719,26 @@ async fn project_code(pool: &PgPool, project_id: Uuid) -> Result<String, Reposit
         .ok_or(RepositoryError::ProjectNotFound)
 }
 
-async fn resolve_actor(
-    pool: &PgPool,
-    project_id: Uuid,
-    actor_id: Option<Uuid>,
-) -> Result<Uuid, RepositoryError> {
-    match actor_id {
-        Some(id) => Ok(id),
-        None => Ok(owner_actor(pool, project_id).await?),
-    }
-}
-
 async fn append_audit(
     tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
     project_id: Uuid,
-    actor_id: Uuid,
+    actor: &AuditActor,
     action: &str,
     target_type: &str,
     target_id: Option<Uuid>,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO governance.audit_log \
-         (id, project_id, actor_id, action, target_type, target_id) \
-         VALUES ($1, $2, $3, $4, $5, $6)",
+         (id, project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, \
+          action, target_type, target_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
     )
     .bind(Uuid::new_v4())
     .bind(project_id)
-    .bind(actor_id)
+    .bind(actor.principal_id)
+    .bind(actor.identity_id)
+    .bind(&actor.client)
+    .bind(&actor.auth_mode)
     .bind(action)
     .bind(target_type)
     .bind(target_id)

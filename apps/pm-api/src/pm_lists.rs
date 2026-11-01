@@ -54,21 +54,26 @@ async fn principals(
     Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let page: Paging = paging(&params);
+    let is_active = params.get("is_active").and_then(|value| value.parse::<bool>().ok());
     // 平台专用 service principal（`ai-pm-dispatch`，0015 幂等种子）是审计兜底
     // 身份，不属于可指派的人员/代理列表，故不对外暴露。
     let items: Vec<PrincipalRow> = sqlx::query_as(
         "SELECT id, kind, display_name, is_active, created_at FROM core.principal \
-          WHERE kind <> 'service' \
+          WHERE kind <> 'service' AND ($3::bool IS NULL OR is_active = $3) \
           ORDER BY created_at DESC LIMIT $1 OFFSET $2",
     )
     .bind(page.size)
     .bind(page.offset)
+    .bind(is_active)
     .fetch_all(&state.pool)
     .await?;
-    let total: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM core.principal WHERE kind <> 'service'")
-            .fetch_one(&state.pool)
-            .await?;
+    let total: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.principal \
+          WHERE kind <> 'service' AND ($1::bool IS NULL OR is_active = $1)",
+    )
+    .bind(is_active)
+    .fetch_one(&state.pool)
+    .await?;
     Ok(Json(page.to_response(items, total)))
 }
 

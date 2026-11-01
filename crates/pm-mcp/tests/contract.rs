@@ -146,6 +146,7 @@ async fn seed(pool: &PgPool, code: &str, with_contract: bool) -> Fx {
                     is_required: true,
                 }]),
             },
+            &pm_application::actor::AuditActor::principal(author),
         )
         .await
         .unwrap();

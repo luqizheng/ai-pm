@@ -101,6 +101,17 @@ async fn valid_token_reaches_the_real_route(pool: PgPool) {
     )
     .await
     .unwrap();
+    // T-021a：token 的 (provider, tid, sub) 必须先映射到一个已激活 principal，
+    // 否则按方案 C 首次见到会 provision 为未激活并 403（该行为由 C33 覆盖）。
+    sqlx::query(
+        "INSERT INTO core.principal_identity \
+             (provider, claims_tenant_key, subject, principal_id) VALUES ('lmms', '1', $1, $2)",
+    )
+    .bind(boot.human_id.to_string())
+    .bind(boot.human_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     let app = router_with_auth(pool, test_jwks());
     let token = sign(
         json!({ "sub": boot.human_id, "tid": 1, "username": "alice", "roles": ["tenant_admin"], "permissions": [] }),
@@ -122,8 +133,9 @@ async fn valid_token_reaches_the_real_route(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn off_mode_keeps_legacy_open_behaviour(pool: PgPool) {
-    // `router` (what main.rs serves with AI_PM_AUTH_MODE=off) has no auth
-    // layer: requests pass through exactly as before Slice B.
+    // `router` (what main.rs serves with AI_PM_AUTH_MODE=off) injects the fixed
+    // `dev-off` principal instead of removing the gates: unauthenticated reads
+    // still pass (C42), and the empty database stays empty.
     let app = router(pool);
     let response = app.oneshot(bearer(None)).await.unwrap();
     assert_ne!(

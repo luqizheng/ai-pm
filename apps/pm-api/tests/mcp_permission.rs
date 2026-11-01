@@ -9,7 +9,8 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use digua_common_jwt::{JWKSCache, sign_token};
-use pm_api::routes::router_with_auth;
+use pm_api::auth::AuthConfig;
+use pm_api::routes::router_with_auth_config;
 use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -38,6 +39,19 @@ fn sign(permissions: &[&str]) -> String {
         Duration::from_secs(300),
     )
     .expect("test token must sign")
+}
+
+/// 本文件的 token 都是 `usr-1`；配置成首管理员，使其首次请求即激活，
+/// 这样这些用例只考察权限门，不撞上 T-021a 的未激活 fail-closed。
+fn app(pool: PgPool) -> axum::Router {
+    router_with_auth_config(
+        pool,
+        test_jwks(),
+        AuthConfig {
+            first_admin_tenant: Some("1".to_string()),
+            first_admin_subject: Some("usr-1".to_string()),
+        },
+    )
 }
 
 fn mcp_post(token: Option<&str>, body: String) -> Request<Body> {
@@ -79,7 +93,7 @@ async fn body_json(response: axum::response::Response) -> Value {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn mcp_without_token_is_unauthorized(pool: PgPool) {
-    let response = router_with_auth(pool, test_jwks())
+    let response = app(pool)
         .oneshot(mcp_request(None))
         .await
         .unwrap();
@@ -89,7 +103,7 @@ async fn mcp_without_token_is_unauthorized(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn mcp_without_mcp_read_is_forbidden(pool: PgPool) {
     let token = sign(&["IAM_SYSTEM_READ"]);
-    let response = router_with_auth(pool, test_jwks())
+    let response = app(pool)
         .oneshot(mcp_request(Some(&token)))
         .await
         .unwrap();
@@ -102,7 +116,7 @@ async fn mcp_without_mcp_read_is_forbidden(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn mcp_with_mcp_read_passes_the_gate(pool: PgPool) {
     let token = sign(&["PM_MCP_READ"]);
-    let response = router_with_auth(pool, test_jwks())
+    let response = app(pool)
         .oneshot(mcp_request(Some(&token)))
         .await
         .unwrap();
@@ -126,7 +140,7 @@ async fn non_mcp_routes_ignore_the_permission_claim(pool: PgPool) {
     .unwrap();
     // Permissionless token: the gate must only touch /mcp.
     let token = sign(&[]);
-    let response = router_with_auth(pool, test_jwks())
+    let response = app(pool)
         .oneshot(
             Request::builder()
                 .method("GET")
@@ -153,7 +167,7 @@ fn submit_arguments() -> Value {
 async fn write_tool_without_document_write_is_forbidden(pool: PgPool) {
     // PM_MCP_READ alone must not open the document-write tool.
     let token = sign(&["PM_MCP_READ"]);
-    let response = router_with_auth(pool, test_jwks())
+    let response = app(pool)
         .oneshot(mcp_tool_call(
             Some(&token),
             "pm_submit_technical_design",
@@ -176,7 +190,7 @@ async fn write_tool_without_document_write_is_forbidden(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn write_tool_with_document_write_passes_the_gate(pool: PgPool) {
     let token = sign(&["PM_MCP_READ", "PM_MCP_DOCUMENT_WRITE"]);
-    let response = router_with_auth(pool, test_jwks())
+    let response = app(pool)
         .oneshot(mcp_tool_call(
             Some(&token),
             "pm_submit_technical_design",
@@ -192,7 +206,7 @@ async fn write_tool_with_document_write_passes_the_gate(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn read_tool_needs_only_mcp_read(pool: PgPool) {
     let token = sign(&["PM_MCP_READ"]);
-    let response = router_with_auth(pool, test_jwks())
+    let response = app(pool)
         .oneshot(mcp_tool_call(
             Some(&token),
             "pm_get_task_context",
@@ -208,7 +222,7 @@ async fn read_tool_needs_only_mcp_read(pool: PgPool) {
 async fn write_permission_does_not_replace_mcp_read(pool: PgPool) {
     // Endpoint gate still applies first: no PM_MCP_READ → 403 even for initialize.
     let token = sign(&["PM_MCP_DOCUMENT_WRITE"]);
-    let response = router_with_auth(pool, test_jwks())
+    let response = app(pool)
         .oneshot(mcp_request(Some(&token)))
         .await
         .unwrap();
@@ -219,7 +233,7 @@ async fn write_permission_does_not_replace_mcp_read(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn document_write_tool_requires_document_write(pool: PgPool) {
     let token = sign(&["PM_MCP_READ"]);
-    let response = router_with_auth(pool, test_jwks())
+    let response = app(pool)
         .oneshot(mcp_tool_call(
             Some(&token),
             "pm_submit_document",
