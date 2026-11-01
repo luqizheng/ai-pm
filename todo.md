@@ -150,7 +150,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **不做**：不建 Executor Registry（T-030 / D3）；不做费用核算聚合（R4）；不改 Git 凭据层级（R3）。
   - **验收**：ADR-0001 §10 的 XT / FK / RV / AG / EX 全绿；T-021a 的 C29–C42 不回归。
 
-- [ ] **T-022 可见性收口（待 T-021a）**
+- [ ] **T-022 可见性收口（T-021a 已完成，待开工）**
   - **目标**：把「按 `project_member` 过滤」从「全局可见」改为真实按成员过滤（客户 G3 与本文同源）。
   - **依据**：`docs/ai-pm-customer-master-data-v1.md` §2 裁定 5 与 §6 G3。
   - **做**：客户列表 / 项目列表按当前 principal 的 membership 过滤；无成员关系的资源返回「不存在」而非「无权限」（不泄露存在性）。
