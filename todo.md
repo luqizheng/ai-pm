@@ -42,7 +42,7 @@
 2. **开工前必读「依据」**。依据里的文档是上位约束，冲突时以文档为准，不要凭本文件的一句话自由发挥。
 3. **不要越过「不做」边界**。每条都写了不做什么，越界产出等于返工。
 4. **交付定义 = 三条同时成立**：① 验收命令全绿；② 设计文档/实现记录已回填；③ 已按提交纪律提交。
-5. **提交纪律**（沿用 D1 的 Q10）：`docs(...)` 与 `feat(...)` **必须分开提交**，不得合并成一个 commit。提交前清场，工作区不得混入无关改动。
+5. **提交纪律**（沿用 D1 的 Q10；2026-11-01 用户补充）：`docs(...)` 与 `feat(...)` **必须分开提交**，不得合并成一个 commit；**每完成一个任务条目单独 commit 一次，不得把多个条目的改动整批合并成一个 commit**。提交前清场，工作区不得混入无关改动。
 6. **完成后**：把本行改成 `[x]` 并补一行「交付：<commit> + <关键结论>」，同时追加当日 `.workbuddy/memory/YYYY-MM-DD.md`。
 7. **任务不存在时**：如果发现要做的活不在本清单里，先补一条到本文件（含目标/依据/验收），再执行，不要直接动手。
 
@@ -128,22 +128,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 5. M2 · Task 依赖与解锁（补 P1 的唯一硬缺口）
 
-- [ ] **T-023 出设计稿 `docs/ai-pm-task-dependency-v1.md`**
-  - **本条按 §0.1 执行**：完整 brainstorming。
-  - **目标**：前置/后置任务关系可建、可查、可裁决。
-  - **依据**：`target.md` §P1「Task 依赖：前置任务、后置任务、依赖关系」；实测 `grep task_dependency|depends_on|blocked_by` **零命中**，`delivery.task_waiting`（`0010:90`）只存等待原因与解锁条件，没有依赖边；`outbox` 只有 `TaskReady` 一个处理器。
-  - **要在稿里裁清的点**：
-    1. 载体：独立边表 `delivery.task_dependency(task_id, depends_on_task_id)` vs 复用 `task_waiting`（后者是「等什么」的状态，语义不同，倾向独立表）。
-    2. 环检测时机：写边时校验 vs 调度时探测（写时校验可给出明确 409）。
-    3. 跨项目依赖是否允许（V1 建议禁止，与项目隔离原则一致）。
-    4. 解锁触发：终态时发 `TaskReady` 事件 vs 调度器轮询——选前者可复用现成 outbox 幂等。
-  - **不做**：不做子任务树/工作项分解（P9 范畴）；不做甘特排期与关键路径。
-  - **验收**：含状态与失败路径图、边表 DDL 草案、验收矩阵；用户过稿后才可进 T-024。
-
-- [ ] **T-024 实施 Task 依赖（待 T-023 过稿）**
-  - **做**：迁移 `0021_task_dependency.sql`；建/删边的接口或命令通道；领取前判定「有未完成前置 → Skip 并写 `release_reason`」；上游完成时投递下游 `TaskReady`（走 outbox，不得旁路插入 run）。
-  - **不做**：不改 13 态状态机取值；不做自动排期。
-  - **验收**：用例覆盖「建边」「环拒绝」「跨项目拒绝」「前置未完成时领取 Skip」「前置完成解锁下游」「重复事件不产生第二个活跃 run」。
+> §5 队列已清空：T-023（设计稿 `9fbb92a`，用户已过稿）/ T-024（实施）均已交付归档（见 §13）。
 
 ---
 
@@ -346,3 +331,19 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - `repositories` / `imports` / `documents` 的项目边界从「租户」升级为「租户 + 成员」；客户可见性谓词提为 `CUSTOMER_VISIBLE`（成员任一项目或零项目）。
 - **不做**：不改 MCP 工具面；`pm_writes` 的写端点仍只校验租户（T-022 定义为读端点收口）。
 - **验收**：新增 `apps/pm-api/tests/visibility.rs` 3 例（双向成员视角、零项目客户、显式 project_id 404、建项自动 owner）；`cargo test --workspace` 退出码 0。
+### T-023 Task 依赖与解锁设计稿 —— 2026-11-01 完成
+
+- **提交**：`9fbb92a` docs(task-dependency)。
+- **目标**：前置/后置任务关系可建、可查、可裁决；交付 `docs/ai-pm-task-dependency-v1.md`。
+- **依据**：`target.md` §P1「Task 依赖」；实测依赖载体零命中、`task_waiting` 语义不同、`outbox` 仅 `TaskReady` 一个 handler。
+- **用户已裁定四项**：D1 独立边表 `delivery.task_dependency`；D2 写边事务内递归 CTE 检环（409）；D3 禁止跨项目（同项目由双复合外键保证）；D4 上游终态同事务解锁下游并投递 `TaskReady`。本稿另定 D5–D8（满足集合 = completed/cancelled/superseded、只给 draft/blocked 建边、建边不改状态、删边不级联改状态）。
+- **验收**：状态图、DDL 草案、C43–C58 验收矩阵齐备；**用户已过稿**（指示「请继续」进入 T-024）。
+
+### T-024 实施 Task 依赖 —— 2026-11-01 完成
+
+- **提交**：`583e4f8` feat(task-dependency)（12 文件：迁移 0021 + 模块 + 三处接入 + 端点 + 19 例用例）→ `17f6bd9` docs(task-dependency)（实施记录回填 §10）→ `chore(todo)`（纪律补充 + 归档）→ `chore(memory)`，四者分开提交（§0.2 第 5 条：一任务一 commit）。
+- **做**：迁移 `0021_task_dependency.sql`；`pm-application::task_dependency`（`dependencies_satisfied` 唯一判定 / `add` / `remove` / `list` / `unlock_downstream`）；`apply_task_transition` 终态接入级联解锁（`blocked→ready` 走受守卫入口 + 同事务 `TaskReady`，幂等键沿用命令通道约定）；`claim_core` 领取判定（未满足 → `release_reason='dependency_unmet'` 回退避，不判失败）；pm-api 三端点 + T-022 可见性 + `task.dependency.add/remove` 审计；tenant_schema 收编新表（39 → 40）。
+- **不做**：不改 13 态状态机取值；不做自动排期/甘特；不做跨项目依赖；不做子任务树。
+- **实施期偏差**（详见设计稿 §10.2）：① UI 直写终态路径（`pm_write::update_task`）同样接入解锁，否则「人在 UI 完成任务」不解锁下游；② Model A 依赖未满足沿用 D1「回滚不退避」约定（`TaskNotReady("dependency_unmet")`）；③ `superseded` 无端到端写入方（应用层无取代命令），以 `cancelled` 端到端 + D5 集合单测兜底。
+- **验收**：C43–C58 全覆盖（映射见设计稿 §10.3）；`cargo test --workspace` 退出码 0 —— **70 个 `test result: ok`、441 passed、0 failed**；`cargo check --workspace --all-targets` 0 error 0 warning。
+- **关键结论**：依赖满足只有一套谓词（调度领取 / 建删边解锁 / 终态级联共用）；解锁产生的状态变更仍走 `apply_task_transition`（审计 action=`update_task_status`、actor=`ai-pm-dispatch`）；`TaskReady` 与迁移同事务写入，重复解锁不产生第二个语义键。
