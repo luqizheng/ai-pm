@@ -371,4 +371,159 @@ Project Onboarding **不是一次性初始化**。闭环：
 
 ---
 
+---
+
+## 附录 A：迁移 `0022_discovery.sql` DDL 草案（待实施）
+
+> **状态**：草案。经评审确认后落到 `migrations/0022_discovery.sql`；届时需同步更新 schema 计数 / 租户隔离测试期望（现有权威口径「43 张表」与 `core_schema` 断言）。本草案遵循 0019 多租户模式：`tenant_id` + `(tenant_id, project_id)` 组合 FK + 每表 `(tenant_id, id)` 唯一。
+>
+> 依赖前提（0019 已建立）：`core.project` / `integration.project_repository` / `ai.project_document` / `ai.document_revision` / `ai.document_proposal` 均具备 `(tenant_id, id)` 唯一，可作为组合 FK 目标。
+
+```sql
+-- 0022_discovery: 项目认知域（Discovery）。
+-- 与 0009 repo_import（仓库接入）是不同业务域：Import 负责接入，Discovery 负责理解项目。
+-- forward-only；遵循 0019 多租户模式。
+
+CREATE SCHEMA IF NOT EXISTS discovery;
+
+-- 1. 认知会话：一次项目认知建立过程；不绑执行端实例，可多来源贡献；允许并行（Q5）。
+CREATE TABLE discovery.discovery_session (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    project_id UUID NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('WEB','CODEX','SYSTEM')),
+    kind TEXT NOT NULL CHECK (kind IN ('INITIAL_ONBOARDING','UPDATE','TASK_DISCOVERY')),
+    status TEXT NOT NULL DEFAULT 'IN_PROGRESS' CHECK (status IN (
+        'IN_PROGRESS','NEEDS_USER_INPUT','REVIEW_REQUIRED','COMPLETED','PAUSED'
+    )),
+    created_by UUID NOT NULL REFERENCES core.principal(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (tenant_id, id),
+    FOREIGN KEY (tenant_id, project_id) REFERENCES core.project (tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX idx_discovery_session_project
+    ON discovery.discovery_session(tenant_id, project_id, created_at DESC);
+CREATE INDEX idx_discovery_session_status
+    ON discovery.discovery_session(tenant_id, status);
+
+-- 2. 对话消息。
+CREATE TABLE discovery.discovery_message (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    session_id UUID NOT NULL,
+    speaker TEXT NOT NULL CHECK (speaker IN ('ai','user')),
+    source TEXT NOT NULL CHECK (source IN ('WEB','CODEX','SYSTEM')),
+    content TEXT NOT NULL,
+    seq BIGINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (tenant_id, id),
+    UNIQUE (tenant_id, session_id, seq),
+    FOREIGN KEY (tenant_id, session_id) REFERENCES discovery.discovery_session (tenant_id, id) ON DELETE CASCADE
+);
+
+-- 3. 发现：四类 provenance（Q3）+ 可信度 + 校验状态。
+CREATE TABLE discovery.discovery_finding (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    session_id UUID NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('observed','user_confirmed','speculation','contradicted')),
+    content TEXT NOT NULL,
+    confidence DOUBLE PRECISION CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1)),
+    verification_status TEXT NOT NULL DEFAULT 'PENDING'
+        CHECK (verification_status IN ('PENDING','CONFIRMED','REJECTED','CONFLICT')),
+    evidence JSONB NOT NULL DEFAULT '[]'::jsonb,   -- [{repository, file, description}]
+    actor_role TEXT,                                -- 预留多 Agent 分工
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (tenant_id, id),
+    FOREIGN KEY (tenant_id, session_id) REFERENCES discovery.discovery_session (tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX idx_discovery_finding_session
+    ON discovery.discovery_finding(tenant_id, session_id, kind);
+
+-- 4. finding ↔ 仓库（多对多；Q4 V1 支持多仓库关联）。
+CREATE TABLE discovery.discovery_finding_repository (
+    tenant_id UUID NOT NULL,
+    finding_id UUID NOT NULL,
+    repository_id UUID NOT NULL,
+    PRIMARY KEY (tenant_id, finding_id, repository_id),
+    FOREIGN KEY (tenant_id, finding_id)
+        REFERENCES discovery.discovery_finding (tenant_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, repository_id)
+        REFERENCES integration.project_repository (tenant_id, id) ON DELETE CASCADE
+);
+
+-- 5. 待澄清问题。
+CREATE TABLE discovery.discovery_question (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    session_id UUID NOT NULL,
+    question TEXT NOT NULL,
+    why_blocking TEXT,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','answered','deferred')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (tenant_id, id),
+    FOREIGN KEY (tenant_id, session_id) REFERENCES discovery.discovery_session (tenant_id, id) ON DELETE CASCADE
+);
+CREATE INDEX idx_discovery_question_session
+    ON discovery.discovery_question(tenant_id, session_id, status);
+
+-- 6. 用户回答。
+CREATE TABLE discovery.discovery_answer (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    question_id UUID NOT NULL,
+    answer TEXT NOT NULL,
+    answered_by UUID NOT NULL REFERENCES core.principal(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (tenant_id, id),
+    FOREIGN KEY (tenant_id, question_id)
+        REFERENCES discovery.discovery_question (tenant_id, id) ON DELETE CASCADE
+);
+
+-- 7. 知识变更提案（Q7：base_revision_id 即 base_version，写入前校验；失效置 conflict）。
+CREATE TABLE discovery.discovery_proposal (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    session_id UUID NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('add','modify')),
+    target_document TEXT NOT NULL,          -- 目标文档 key/path
+    document_id UUID,                        -- modify 时指向既有 ai.project_document
+    base_revision_id UUID,                   -- Q7 提交时的知识版本；add 时为 NULL
+    proposed_content TEXT NOT NULL,
+    evidence JSONB NOT NULL DEFAULT '[]'::jsonb,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending','approved','rejected','conflict')),
+    document_proposal_id UUID,               -- 落地到 ai.document_proposal 后的关联
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (tenant_id, id),
+    FOREIGN KEY (tenant_id, session_id) REFERENCES discovery.discovery_session (tenant_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, document_id) REFERENCES ai.project_document (tenant_id, id),
+    FOREIGN KEY (tenant_id, base_revision_id) REFERENCES ai.document_revision (tenant_id, id),
+    FOREIGN KEY (tenant_id, document_proposal_id) REFERENCES ai.document_proposal (tenant_id, id)
+);
+CREATE INDEX idx_discovery_proposal_session
+    ON discovery.discovery_proposal(tenant_id, session_id, status);
+
+-- 8. 唯一关联方向（Q1）：repo_import → discovery_session，不做反向 FK。
+--    注：组合 FK 不能用 ON DELETE SET NULL（tenant_id NOT NULL），保留默认 NO ACTION。
+ALTER TABLE integration.repo_import
+    ADD COLUMN discovery_session_id UUID,
+    ADD CONSTRAINT fk_repo_import_tenant_discovery_session
+        FOREIGN KEY (tenant_id, discovery_session_id)
+        REFERENCES discovery.discovery_session (tenant_id, id);
+CREATE INDEX idx_repo_import_discovery_session
+    ON integration.repo_import(tenant_id, discovery_session_id);
+```
+
+### 附录 A.1 落地注意
+
+1. **测试期望同步**：本迁移新增 7 张表（含 join 表），激活前需更新 `core_schema` / 租户隔离计数断言（现有权威口径 43 张）。
+2. **`discovery` 新 schema 的权限**：确认应用角色对该 schema 有 USAGE/CREATE（参照既有 schema grant）。若团队不愿引入新 schema，可改落 `integration`，但会削弱「四域边界」表达。
+3. **`base_version` 语义**：DDL 用 `base_revision_id` 承载（指向 `ai.document_revision`），比裸 BIGINT 更类型安全；Q7 的"版本失效即 conflict"由应用层在写入 `ai.document_proposal` 时校验（复用既有 hash 漂移检测）。
+4. **并行 session（Q5）**：刻意不加「每项目唯一进行中」的部分唯一索引，与 `repo_import` 的单导入约束区分。
+
+---
+
 _本方案为产品设计参考，具体实施请结合公司合规与法务要求确认。_
