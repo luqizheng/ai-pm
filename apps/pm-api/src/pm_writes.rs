@@ -26,6 +26,45 @@ fn conflict(message: &'static str) -> Response {
     (StatusCode::CONFLICT, Json(json!({ "message": message }))).into_response()
 }
 
+// ------------------------------------------------------- tenant pre-checks
+//
+// 写路径的租户边界在**对外入口**校验：目标行不属于调用者租户时一律 404
+// （不泄露存在性）。内部应用层函数继续只看 `project_id`（组合外键已保证同租户）。
+
+async fn project_in_tenant(pool: &sqlx::PgPool, project_id: Uuid, tenant_id: Uuid) -> ApiResult<()> {
+    let found: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM core.project WHERE id = $1 AND tenant_id = $2")
+            .bind(project_id)
+            .bind(tenant_id)
+            .fetch_optional(pool)
+            .await?;
+    found.map(|_| ()).ok_or(ApiError::NotFound("unknown project"))
+}
+
+async fn task_in_tenant(pool: &sqlx::PgPool, task_id: Uuid, tenant_id: Uuid) -> ApiResult<()> {
+    let found: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM delivery.task WHERE id = $1 AND tenant_id = $2")
+            .bind(task_id)
+            .bind(tenant_id)
+            .fetch_optional(pool)
+            .await?;
+    found.map(|_| ()).ok_or(ApiError::NotFound("not found"))
+}
+
+async fn requirement_in_tenant(
+    pool: &sqlx::PgPool,
+    requirement_id: Uuid,
+    tenant_id: Uuid,
+) -> ApiResult<()> {
+    let found: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM delivery.requirement WHERE id = $1 AND tenant_id = $2")
+            .bind(requirement_id)
+            .bind(tenant_id)
+            .fetch_optional(pool)
+            .await?;
+    found.map(|_| ()).ok_or(ApiError::NotFound("not found"))
+}
+
 // ------------------------------------------------------------------ decide
 
 #[derive(Debug, Deserialize)]
@@ -44,9 +83,11 @@ pub(crate) async fn decide_handler(
 ) -> Response {
     // mock 校验顺序：存在性 → pending → decision → reason。
     let (project_id, status): (Uuid, String) = match sqlx::query_as(
-        "SELECT project_id, status FROM governance.approval_request WHERE id = $1",
+        "SELECT project_id, status FROM governance.approval_request \
+          WHERE id = $1 AND tenant_id = $2",
     )
     .bind(approval_id)
+    .bind(principal.tenant_id)
     .fetch_optional(&state.pool)
     .await
     {
@@ -156,6 +197,9 @@ pub(crate) async fn create_task_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Json(body): Json<CreateTaskRequest>,
 ) -> ApiResult<Response> {
+    if let Some(project_id) = body.project_id {
+        project_in_tenant(&state.pool, project_id, principal.tenant_id).await?;
+    }
     let actor = principal.audit_actor();
     let task = pm_write::create_task(&state.pool, body, &actor).await?;
     Ok((StatusCode::CREATED, Json(task)).into_response())
@@ -167,6 +211,7 @@ pub(crate) async fn update_task_handler(
     Path(task_id): Path<Uuid>,
     Json(body): Json<UpdateTaskRequest>,
 ) -> ApiResult<Response> {
+    task_in_tenant(&state.pool, task_id, principal.tenant_id).await?;
     let actor = principal.audit_actor();
     let task = pm_write::update_task(&state.pool, task_id, body, &actor).await?;
     Ok((StatusCode::OK, Json(task)).into_response())
@@ -180,6 +225,7 @@ pub(crate) async fn create_revision_handler(
     Path(requirement_id): Path<Uuid>,
     Json(body): Json<CreateRevisionRequest>,
 ) -> ApiResult<Response> {
+    requirement_in_tenant(&state.pool, requirement_id, principal.tenant_id).await?;
     let actor = principal.audit_actor();
     let revision = pm_write::create_revision(&state.pool, requirement_id, body, &actor).await?;
     Ok((StatusCode::CREATED, Json(revision)).into_response())
@@ -190,6 +236,7 @@ pub(crate) async fn approve_revision_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path((requirement_id, revision_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Response> {
+    requirement_in_tenant(&state.pool, requirement_id, principal.tenant_id).await?;
     let actor = principal.audit_actor();
     let revision =
         pm_write::approve_revision(&state.pool, requirement_id, revision_id, &actor).await?;

@@ -7,12 +7,13 @@
 
 use axum::{
     Json, Router,
-    extract::{Query, State},
+    extract::{Extension, Query, State},
     routing::get,
 };
 use std::collections::HashMap;
 use uuid::Uuid;
 
+use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::{ApiResult, paging, project_filter};
 
@@ -37,6 +38,7 @@ pub(crate) struct TaskRunRow {
 
 async fn task_runs(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
@@ -48,18 +50,21 @@ async fn task_runs(
          FROM delivery.task_run r \
          JOIN delivery.task t ON t.id = r.task_id \
          LEFT JOIN delivery.task_run_failure f ON f.run_id = r.id \
-         WHERE ($1::uuid IS NULL OR r.project_id = $1) \
+         WHERE r.tenant_id = $4 AND ($1::uuid IS NULL OR r.project_id = $1) \
          ORDER BY r.created_at DESC, r.attempt_no DESC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.task_run WHERE ($1::uuid IS NULL OR project_id = $1)",
+        "SELECT count(*) FROM delivery.task_run \
+          WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
     Ok(Json(page.to_response(items, total)))

@@ -30,6 +30,8 @@ async fn me_handler(Extension(principal): Extension<AuthedPrincipal>) -> Json<se
         "display_name": principal.display_name,
         "is_active": principal.is_active,
         "is_admin": principal.is_admin,
+        "tenant_id": principal.tenant_id,
+        "tenant_role": principal.tenant_role.as_str(),
         "provider": principal.provider,
         "claims_tenant_key": principal.claims_tenant_key,
         "subject": principal.subject,
@@ -55,12 +57,17 @@ async fn update_handler(
         )
             .into_response();
     }
-    // 平台 service principal（`ai-pm-dispatch`）不参与人员激活开关。
+    // 平台 service principal（`ai-pm-dispatch`）不参与人员激活开关；
+    // 且只能操作**本租户**的成员（跨租户 id 一律按不存在处理）。
     let affected = sqlx::query(
-        "UPDATE core.principal SET is_active = $2 WHERE id = $1 AND kind <> 'service'",
+        "UPDATE core.principal SET is_active = $2 \
+          WHERE id = $1 AND kind <> 'service' \
+            AND EXISTS (SELECT 1 FROM core.tenant_member m \
+                         WHERE m.principal_id = core.principal.id AND m.tenant_id = $3)",
     )
     .bind(principal_id)
     .bind(body.is_active)
+    .bind(caller.tenant_id)
     .execute(&state.pool)
     .await;
     match affected {

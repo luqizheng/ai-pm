@@ -1,4 +1,4 @@
-//! 主体身份验收（T-021a / `docs/ai-pm-principal-identity-v1.md` §11 C29–C42）。
+﻿//! 主体身份验收（T-021a / `docs/ai-pm-principal-identity-v1.md` §11 C29–C42）。
 //!
 //! 驱动 `router_with_auth_config`（显式首管理员配置，避免改进程环境变量）；
 //! 签名沿用 `tests/keys/` 的测试密钥对。
@@ -14,6 +14,8 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 use tower::ServiceExt;
+use pm_domain::SYSTEM_TENANT;
+use uuid::Uuid;
 
 const PRIVATE_PEM: &str = include_str!("keys/private.pem");
 const PUBLIC_PEM: &str = include_str!("keys/public.pem");
@@ -66,6 +68,21 @@ fn first_admin(sub: &str) -> AuthConfig {
         first_admin_tenant: Some("1".to_string()),
         first_admin_subject: Some(sub.to_string()),
     }
+}
+
+/// 与测试 token（`tid: 1`）对齐的租户：真实 auth 链会把 `(lmms, "1")` 镜像成
+/// `core.tenant`，夹具必须先建同一行，否则 bootstrap 出来的项目落在别的租户上，
+/// 带租户谓词的写路径会返回 404。
+async fn lmms_tid1_tenant(pool: &PgPool) -> Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO core.tenant (provider, external_key, display_name) \
+         VALUES ('lmms', '1', 'lmms:1') \
+         ON CONFLICT (provider, external_key) DO UPDATE SET display_name = core.tenant.display_name \
+         RETURNING id",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap()
 }
 
 /// 迁移 `0015` 已种子 `ai-pm-dispatch`（kind='service'），因此 `kind='human'`
@@ -193,11 +210,13 @@ async fn c34_inactive_principal_is_fail_closed_on_mcp(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn c35_admin_activates_then_the_same_token_can_write_with_real_actor(pool: PgPool) {
+    let tenant_id = lmms_tid1_tenant(&pool).await;
     let begin = bootstrap_project(
         &pool,
         BootstrapRequest {
             project_code: "ACT-1".to_string(),
             project_name: "activation".to_string(),
+            tenant_id,
         },
     )
     .await
@@ -264,11 +283,13 @@ async fn c35_admin_activates_then_the_same_token_can_write_with_real_actor(pool:
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn c38_actor_is_the_caller_not_the_project_owner(pool: PgPool) {
+    let tenant_id = lmms_tid1_tenant(&pool).await;
     let begin = bootstrap_project(
         &pool,
         BootstrapRequest {
             project_code: "OWN-1".to_string(),
             project_name: "owner".to_string(),
+            tenant_id,
         },
     )
     .await
@@ -317,11 +338,13 @@ async fn c36_concurrent_first_login_creates_one_principal(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn c37_browser_and_api_key_tokens_resolve_to_one_principal(pool: PgPool) {
+    let tenant_id = lmms_tid1_tenant(&pool).await;
     let begin = bootstrap_project(
         &pool,
         BootstrapRequest {
             project_code: "KEY-1".to_string(),
             project_name: "keys".to_string(),
+            tenant_id,
         },
     )
     .await
@@ -428,6 +451,7 @@ async fn c42_off_mode_injects_dev_off_principal_and_audits_it(pool: PgPool) {
         BootstrapRequest {
             project_code: "OFF-1".to_string(),
             project_name: "off".to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await

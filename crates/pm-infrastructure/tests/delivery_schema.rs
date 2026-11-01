@@ -1,3 +1,4 @@
+use pm_domain::SYSTEM_TENANT;
 use serde_json::json;
 use sqlx::types::uuid::Uuid;
 use sqlx::PgPool;
@@ -5,9 +6,10 @@ use sqlx::PgPool;
 /// customer → project → principal seed; returns (project_id, principal_id).
 async fn seed_project(pool: &PgPool, project_code: &str) -> (Uuid, Uuid) {
     let customer_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO core.customer (name) VALUES ($1) RETURNING id",
+        "INSERT INTO core.customer (name, tenant_id) VALUES ($1, $2) RETURNING id",
     )
     .bind(format!("customer {project_code}"))
+    .bind(SYSTEM_TENANT)
     .fetch_one(pool)
     .await
     .unwrap();
@@ -21,12 +23,13 @@ async fn seed_project(pool: &PgPool, project_code: &str) -> (Uuid, Uuid) {
     .unwrap();
 
     let project_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO core.project (customer_id, code, name) \
-         VALUES ($1, $2, $3) RETURNING id",
+        "INSERT INTO core.project (customer_id, code, name, tenant_id) \
+         VALUES ($1, $2, $3, $4) RETURNING id",
     )
     .bind(customer_id)
     .bind(project_code)
     .bind(format!("project {project_code}"))
+    .bind(SYSTEM_TENANT)
     .fetch_one(pool)
     .await
     .unwrap();
@@ -36,8 +39,8 @@ async fn seed_project(pool: &PgPool, project_code: &str) -> (Uuid, Uuid) {
 
 async fn insert_requirement(pool: &PgPool, project_id: Uuid, code: &str) -> Uuid {
     sqlx::query_scalar(
-        "INSERT INTO delivery.requirement (project_id, code, title) \
-         VALUES ($1, $2, $3) RETURNING id",
+        "INSERT INTO delivery.requirement (project_id, code, title, tenant_id) \
+         VALUES ($1, $2, $3, (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(code)
@@ -61,8 +64,9 @@ async fn requirement_revision_roundtrip(pool: sqlx::PgPool) {
     for (version, content, content_hash) in contents {
         let revision_id: Uuid = sqlx::query_scalar(
             "INSERT INTO delivery.requirement_revision \
-             (requirement_id, project_id, version, content, state, content_hash, created_by) \
-             VALUES ($1, $2, $3, $4, 'draft', $5, $6) RETURNING id",
+             (requirement_id, project_id, version, content, state, content_hash, created_by, tenant_id) \
+             VALUES ($1, $2, $3, $4, 'draft', $5, $6, \
+                     (SELECT tenant_id FROM core.project WHERE id = $2)) RETURNING id",
         )
         .bind(requirement_id)
         .bind(project_id)
@@ -79,8 +83,9 @@ async fn requirement_revision_roundtrip(pool: sqlx::PgPool) {
     // Inserting a duplicate (requirement_id, version) must fail with a unique violation.
     let duplicate = sqlx::query(
         "INSERT INTO delivery.requirement_revision \
-         (requirement_id, project_id, version, content, state, content_hash, created_by) \
-         VALUES ($1, $2, 2, $3, 'draft', 'hash-duplicate', $4)",
+         (requirement_id, project_id, version, content, state, content_hash, created_by, tenant_id) \
+         VALUES ($1, $2, 2, $3, 'draft', 'hash-duplicate', $4, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(requirement_id)
     .bind(project_id)
@@ -129,8 +134,9 @@ async fn cross_project_revision_rejected(pool: sqlx::PgPool) {
 
     let cross_project = sqlx::query(
         "INSERT INTO delivery.requirement_revision \
-         (requirement_id, project_id, version, content, state, content_hash, created_by) \
-         VALUES ($1, $2, 1, $3, 'draft', 'hash-cross', $4)",
+         (requirement_id, project_id, version, content, state, content_hash, created_by, tenant_id) \
+         VALUES ($1, $2, 1, $3, 'draft', 'hash-cross', $4, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(requirement_id)
     .bind(project_b_id)

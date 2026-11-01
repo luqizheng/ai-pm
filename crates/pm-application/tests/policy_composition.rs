@@ -1,4 +1,4 @@
-//! D2.1 真实 PostgreSQL 集成测试：四层策略合成落 Run 快照、内容寻址版本可复现。
+﻿//! D2.1 真实 PostgreSQL 集成测试：四层策略合成落 Run 快照、内容寻址版本可复现。
 //!
 //! 纯合成规则的单测在 `pm-application/src/policy_composition.rs`；本文件只验证
 //! 「读库 → 合成 → 写入 `policy_snapshot`」这条真实链路。
@@ -7,6 +7,7 @@ use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
 use pm_application::run_dispatch::{ClaimKind, DispatchMode, RunDispatchConfig, claim_once};
 use sqlx::PgPool;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 struct Project {
     project_id: Uuid,
@@ -31,6 +32,7 @@ async fn seed_project(pool: &PgPool, code: &str) -> Project {
         BootstrapRequest {
             project_code: code.to_string(),
             project_name: code.to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
@@ -42,8 +44,9 @@ async fn seed_project(pool: &PgPool, code: &str) -> Project {
     .await
     .unwrap();
     let repository_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO integration.project_repository (project_id, name, url, status, head_commit_sha) \
-         VALUES ($1, 'web', $2, 'verified', 'headsha') RETURNING id",
+        "INSERT INTO integration.project_repository (project_id, name, url, status, head_commit_sha, tenant_id) \
+         VALUES ($1, 'web', $2, 'verified', 'headsha', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(outcome.project_id)
     .bind(format!("git@host:{code}-web"))
@@ -65,8 +68,9 @@ async fn add_ready_task(
     task_type: Option<&str>,
 ) -> (Uuid, Uuid) {
     let task_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id, task_type) \
-         VALUES ($1, $2, 'ready', 1, $3, $4) RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id, task_type, tenant_id) \
+         VALUES ($1, $2, 'ready', 1, $3, $4, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project.project_id)
     .bind(title.to_string())
@@ -77,8 +81,9 @@ async fn add_ready_task(
     .unwrap();
     sqlx::query(
         "INSERT INTO delivery.task_repository \
-         (task_id, project_id, repository_id, write_access, base_ref) \
-         VALUES ($1, $2, $3, true, 'main')",
+         (task_id, project_id, repository_id, write_access, base_ref, tenant_id) \
+         VALUES ($1, $2, $3, true, 'main', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(task_id)
     .bind(project.project_id)
@@ -87,8 +92,8 @@ async fn add_ready_task(
     .await
     .unwrap();
     let run_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status) \
-         VALUES ($1, $2, 1, 'queued') RETURNING id",
+        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
+         VALUES ($1, $2, 1, 'queued', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project.project_id)
     .bind(task_id)
@@ -112,9 +117,9 @@ async fn upsert_scope(
     sqlx::query(
         "INSERT INTO delivery.policy_scope \
          (scope, scope_key, require_human_approval, auto_accept, auto_merge, \
-          auto_publish_knowledge, additional_checks, updated_by) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
-         ON CONFLICT (scope, scope_key) DO UPDATE SET \
+          auto_publish_knowledge, additional_checks, updated_by, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
+         ON CONFLICT (tenant_id, scope, scope_key) DO UPDATE SET \
             require_human_approval = EXCLUDED.require_human_approval, \
             auto_accept = EXCLUDED.auto_accept, \
             auto_merge = EXCLUDED.auto_merge, \
@@ -130,6 +135,7 @@ async fn upsert_scope(
     .bind(auto_publish_knowledge)
     .bind(serde_json::json!(checks))
     .bind(actor)
+    .bind(SYSTEM_TENANT)
     .execute(pool)
     .await
     .unwrap();
@@ -181,8 +187,8 @@ async fn four_layer_capability_composition_lands_in_snapshot(pool: PgPool) {
     // 任务级试图重新打开 auto_accept：低层不能放宽高层的关闭。
     sqlx::query(
         "INSERT INTO delivery.task_policy_override \
-         (task_id, project_id, auto_accept, additional_checks, updated_by) \
-         VALUES ($1, $2, true, '[]', $3)",
+         (task_id, project_id, auto_accept, additional_checks, updated_by, tenant_id) \
+         VALUES ($1, $2, true, '[]', $3, (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(_task_id)
     .bind(project.project_id)

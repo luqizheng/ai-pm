@@ -1,4 +1,4 @@
-//! Slice D1 `run_dispatch` 真实数据库集成测试：并发领取、租约回收（B3-1/B3-2）、
+﻿//! Slice D1 `run_dispatch` 真实数据库集成测试：并发领取、租约回收（B3-1/B3-2）、
 //! 可领取性判定、多仓快照、审计、开关语义与工作区路径算法（R6）。
 
 use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
@@ -8,6 +8,7 @@ use pm_application::run_dispatch::{
 };
 use sqlx::PgPool;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 struct Fx {
     project_id: Uuid,
@@ -33,6 +34,7 @@ async fn seed(pool: &PgPool, code: &str, assigned: bool) -> Fx {
         BootstrapRequest {
             project_code: code.to_string(),
             project_name: code.to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
@@ -45,8 +47,9 @@ async fn seed(pool: &PgPool, code: &str, assigned: bool) -> Fx {
     .unwrap();
     let assignee: Option<Uuid> = if assigned { Some(agent) } else { None };
     let task_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id) \
-         VALUES ($1, 't', 'ready', 1, $2) RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id, tenant_id) \
+         VALUES ($1, 't', 'ready', 1, $2, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(outcome.project_id)
     .bind(assignee)
@@ -55,8 +58,8 @@ async fn seed(pool: &PgPool, code: &str, assigned: bool) -> Fx {
     .unwrap();
     let repo_id = add_repo(pool, outcome.project_id, code, "web", "verified").await;
     sqlx::query(
-        "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, write_access, base_ref) \
-         VALUES ($1, $2, $3, true, 'main')",
+        "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, write_access, base_ref, tenant_id) \
+         VALUES ($1, $2, $3, true, 'main', (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(task_id)
     .bind(outcome.project_id)
@@ -66,8 +69,8 @@ async fn seed(pool: &PgPool, code: &str, assigned: bool) -> Fx {
     .unwrap();
     // TaskReadyHandler 的常态产物：一条待调度的 queued Run。
     let run_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status) \
-         VALUES ($1, $2, 1, 'queued') RETURNING id",
+        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
+         VALUES ($1, $2, 1, 'queued', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(outcome.project_id)
     .bind(task_id)
@@ -85,8 +88,9 @@ async fn seed(pool: &PgPool, code: &str, assigned: bool) -> Fx {
 
 async fn add_repo(pool: &PgPool, project_id: Uuid, code: &str, name: &str, status: &str) -> Uuid {
     sqlx::query_scalar(
-        "INSERT INTO integration.project_repository (project_id, name, url, status, head_commit_sha) \
-         VALUES ($1, $2, $3, $4, 'headsha') RETURNING id",
+        "INSERT INTO integration.project_repository (project_id, name, url, status, head_commit_sha, tenant_id) \
+         VALUES ($1, $2, $3, $4, 'headsha', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(name.to_string())
@@ -266,8 +270,8 @@ async fn multi_repository_snapshot_has_unique_paths(pool: PgPool) {
     for name in ["svc", "docs"] {
         let repo = add_repo(&pool, fx.project_id, "RD-C8", name, "verified").await;
         sqlx::query(
-            "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, write_access, base_ref) \
-             VALUES ($1, $2, $3, $4, 'main')",
+            "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, write_access, base_ref, tenant_id) \
+             VALUES ($1, $2, $3, $4, 'main', (SELECT tenant_id FROM core.project WHERE id = $2))",
         )
         .bind(fx.task_id)
         .bind(fx.project_id)
@@ -315,8 +319,9 @@ async fn off_mode_does_not_claim_but_still_reclaims(pool: PgPool) {
     let claimed = claim_once(&pool, "w1", &cfg, DispatchMode::On).await.unwrap().unwrap();
     // 再放一条 queued（另一任务），off 下不得领取。
     let task2: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id) \
-         VALUES ($1, 't2', 'ready', 1, (SELECT assignee_id FROM delivery.task WHERE id = $2)) RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id, tenant_id) \
+         VALUES ($1, 't2', 'ready', 1, (SELECT assignee_id FROM delivery.task WHERE id = $2), \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(fx.project_id)
     .bind(fx.task_id)
@@ -324,7 +329,8 @@ async fn off_mode_does_not_claim_but_still_reclaims(pool: PgPool) {
     .await
     .unwrap();
     let run2: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status) VALUES ($1, $2, 1, 'queued') RETURNING id",
+        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
+         VALUES ($1, $2, 1, 'queued', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(fx.project_id)
     .bind(task2)
@@ -370,8 +376,9 @@ async fn grant_approval(
     let event_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO integration.inbound_event \
-         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash) \
-         VALUES ($1, $2, $3, 'test', 'bug_report', $4, '{}', 'h')",
+         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash, tenant_id) \
+         VALUES ($1, $2, $3, 'test', 'bug_report', $4, '{}', 'h', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(event_id)
     .bind(project_id)
@@ -383,8 +390,8 @@ async fn grant_approval(
     let analysis_run_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO ai.analysis_run \
-         (id, project_id, event_id, model_name, policy_version, config_snapshot) \
-         VALUES ($1, $2, $3, 'm', 1, '{}')",
+         (id, project_id, event_id, model_name, policy_version, config_snapshot, tenant_id) \
+         VALUES ($1, $2, $3, 'm', 1, '{}', (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(analysis_run_id)
     .bind(project_id)
@@ -396,8 +403,9 @@ async fn grant_approval(
     sqlx::query(
         "INSERT INTO ai.change_proposal \
          (id, project_id, analysis_run_id, proposal_seq, target_type, target_id, command_type, \
-          proposed_data, rationale, risk_level, status) \
-         VALUES ($1, $2, $3, 0, 'task', $4, 'update_task_status', '{}', 'r', 'low', 'proposed')",
+          proposed_data, rationale, risk_level, status, tenant_id) \
+         VALUES ($1, $2, $3, 0, 'task', $4, 'update_task_status', '{}', 'r', 'low', 'proposed', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(proposal_id)
     .bind(project_id)
@@ -408,8 +416,9 @@ async fn grant_approval(
     .unwrap();
     sqlx::query(
         "INSERT INTO governance.approval_request \
-         (id, project_id, proposal_id, status, required_role) \
-         VALUES ($1, $2, $3, $4, 'project_owner')",
+         (id, project_id, proposal_id, status, required_role, tenant_id) \
+         VALUES ($1, $2, $3, $4, 'project_owner', \
+                 (SELECT tenant_id FROM ai.change_proposal WHERE id = $3))",
     )
     .bind(Uuid::new_v4())
     .bind(project_id)
@@ -504,7 +513,8 @@ async fn approval_gate_blocks_until_approved_evidence_exists(pool: PgPool) {
     let cfg = cfg();
     sqlx::query(
         "INSERT INTO delivery.task_policy_override \
-         (task_id, project_id, require_human_approval, updated_by) VALUES ($1, $2, true, $3)",
+         (task_id, project_id, require_human_approval, updated_by, tenant_id) VALUES ($1, $2, true, $3, \
+             (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(fx.task_id)
     .bind(fx.project_id)
@@ -599,15 +609,16 @@ async fn handler_and_claim_do_not_deadlock_or_duplicate(pool: PgPool) {
 }
 async fn insert_policy(pool: &PgPool, scope: &str, key: &str, required: bool, actor: Uuid) {
     sqlx::query(
-        "INSERT INTO delivery.policy_scope (scope, scope_key, require_human_approval, updated_by) \
-         VALUES ($1, $2, $3, $4) \
-         ON CONFLICT (scope, scope_key) DO UPDATE \
+        "INSERT INTO delivery.policy_scope (scope, scope_key, require_human_approval, updated_by, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5) \
+         ON CONFLICT (tenant_id, scope, scope_key) DO UPDATE \
             SET require_human_approval = EXCLUDED.require_human_approval, updated_at = now()",
     )
     .bind(scope)
     .bind(key)
     .bind(required)
     .bind(actor)
+    .bind(SYSTEM_TENANT)
     .execute(pool)
     .await
     .unwrap();
@@ -655,7 +666,8 @@ async fn r5_lower_level_false_cannot_relax_a_higher_requirement(pool: PgPool) {
     insert_policy(&pool, "project", &fx.project_id.to_string(), true, fx.human_id).await;
     sqlx::query(
         "INSERT INTO delivery.task_policy_override \
-         (task_id, project_id, require_human_approval, updated_by) VALUES ($1, $2, false, $3)",
+         (task_id, project_id, require_human_approval, updated_by, tenant_id) VALUES ($1, $2, false, $3, \
+             (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(fx.task_id)
     .bind(fx.project_id)
@@ -803,11 +815,12 @@ async fn policy_layer_read_failure_fails_closed(pool: PgPool) {
     .unwrap();
     sqlx::query(
         "INSERT INTO delivery.policy_scope \
-         (scope, scope_key, require_human_approval, additional_checks, updated_by) \
-         VALUES ('project', $1, false, '{}'::jsonb, $2)",
+         (scope, scope_key, require_human_approval, additional_checks, updated_by, tenant_id) \
+         VALUES ('project', $1, false, '{}'::jsonb, $2, $3)",
     )
     .bind(fx.project_id.to_string())
     .bind(fx.human_id)
+    .bind(SYSTEM_TENANT)
     .execute(&pool)
     .await
     .unwrap();

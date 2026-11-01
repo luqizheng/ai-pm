@@ -199,8 +199,9 @@ pub async fn submit_proposal(
          (project_id, document_id, doc_key, doc_type, canonical_path, base_revision_id, \
           base_content_hash, proposed_markdown, proposed_content_hash, change_summary, \
           source_event_id, analysis_run_id, status, quality_gate_result, redline_kind, \
-          rejection_reason, created_by) \
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id",
+          rejection_reason, created_by, tenant_id) \
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(req.project_id)
     .bind(current_document_id)
@@ -415,8 +416,9 @@ pub async fn veto_revision(
     if let Some((restored_id, _)) = restored {
         sqlx::query(
             "INSERT INTO ai.document_index_state \
-             (project_id, document_revision_id, provider, status) \
-             VALUES ($1, $2, 'markdown-tree', 'pending') \
+             (project_id, document_revision_id, provider, status, tenant_id) \
+             VALUES ($1, $2, 'markdown-tree', 'pending', \
+                     (SELECT tenant_id FROM core.project WHERE id = $1)) \
              ON CONFLICT (document_revision_id, provider) \
              DO UPDATE SET status = 'pending', updated_at = now()",
         )
@@ -518,8 +520,9 @@ async fn finalize_committed(
             id
         }
         None => sqlx::query_scalar(
-            "INSERT INTO ai.project_document (project_id, doc_key, doc_type, canonical_path) \
-             VALUES ($1, $2, $3, $4) RETURNING id",
+            "INSERT INTO ai.project_document (project_id, doc_key, doc_type, canonical_path, tenant_id) \
+             VALUES ($1, $2, $3, $4, \
+                     (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
         )
         .bind(project_id)
         .bind(doc_key)
@@ -541,8 +544,9 @@ async fn finalize_committed(
         "INSERT INTO ai.document_revision \
          (project_id, document_id, revision_no, git_commit_sha, content_hash, status, \
           change_summary, created_by, source_event_id, analysis_run_id, \
-          redline_confirmed_by, published_at) \
-         VALUES ($1,$2,$3,$4,$5,'published',$6,$7,$8,$9,$10,now()) RETURNING id",
+          redline_confirmed_by, published_at, tenant_id) \
+         VALUES ($1,$2,$3,$4,$5,'published',$6,$7,$8,$9,$10,now(), \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(document_id)
@@ -569,8 +573,9 @@ async fn finalize_committed(
 
     sqlx::query(
         "INSERT INTO ai.document_index_state \
-         (project_id, document_revision_id, provider, status) \
-         VALUES ($1, $2, 'markdown-tree', 'pending') \
+         (project_id, document_revision_id, provider, status, tenant_id) \
+         VALUES ($1, $2, 'markdown-tree', 'pending', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) \
          ON CONFLICT (document_revision_id, provider) DO NOTHING",
     )
     .bind(project_id)
@@ -633,8 +638,9 @@ async fn audit(
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO governance.audit_log \
-         (project_id, actor_id, action, target_type, target_id, after_data, source_kind) \
-         VALUES ($1, $2, $3, $4, $5, $6, 'knowledge_v2')",
+         (project_id, actor_id, action, target_type, target_id, after_data, source_kind, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, 'knowledge_v2', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(actor_id)

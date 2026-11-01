@@ -520,8 +520,9 @@ impl PgCommandExecutor {
                 Some(id) => (id, false),
                 None => {
                     let id: Uuid = sqlx::query_scalar(
-                        "INSERT INTO delivery.milestone (project_id, name, planned_at) \
-                         VALUES ($1, $2, $3) RETURNING id",
+                        "INSERT INTO delivery.milestone (project_id, name, planned_at, tenant_id) \
+                         VALUES ($1, $2, $3, (SELECT tenant_id FROM core.project WHERE id = $1)) \
+                         RETURNING id",
                     )
                     .bind(ctx.project_id)
                     .bind(name)
@@ -594,8 +595,9 @@ impl PgCommandExecutor {
             let content_text = serde_json::to_string(&content).unwrap_or_default();
             let hash = knowledge::content_hash(&content_text);
             let requirement_id: Uuid = sqlx::query_scalar(
-                "INSERT INTO delivery.requirement (project_id, code, title, status) \
-                 VALUES ($1, $2, $3, 'draft') RETURNING id",
+                "INSERT INTO delivery.requirement (project_id, code, title, status, tenant_id) \
+                 VALUES ($1, $2, $3, 'draft', (SELECT tenant_id FROM core.project WHERE id = $1)) \
+                 RETURNING id",
             )
             .bind(ctx.project_id)
             .bind(code)
@@ -605,8 +607,9 @@ impl PgCommandExecutor {
             .map_err(db_err)?;
             let revision_id: Uuid = sqlx::query_scalar(
                 "INSERT INTO delivery.requirement_revision \
-                 (requirement_id, project_id, version, content, state, content_hash, created_by) \
-                 VALUES ($1, $2, 1, $3, 'draft', $4, $5) RETURNING id",
+                 (requirement_id, project_id, version, content, state, content_hash, created_by, tenant_id) \
+                 VALUES ($1, $2, 1, $3, 'draft', $4, $5, \
+                         (SELECT tenant_id FROM core.project WHERE id = $2)) RETURNING id",
             )
             .bind(requirement_id)
             .bind(ctx.project_id)
@@ -743,8 +746,9 @@ impl PgCommandExecutor {
                 None => {
                     let id: Uuid = sqlx::query_scalar(
                         "INSERT INTO delivery.task \
-                         (project_id, milestone_id, title, description, status, priority, assignee_id) \
-                         VALUES ($1, $2, $3, $4, 'draft', $5, $6) RETURNING id",
+                         (project_id, milestone_id, title, description, status, priority, assignee_id, tenant_id) \
+                         VALUES ($1, $2, $3, $4, 'draft', $5, $6, \
+                                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
                     )
                     .bind(ctx.project_id)
                     .bind(milestone_id)
@@ -762,8 +766,9 @@ impl PgCommandExecutor {
             if let Some((requirement_id, Some(revision_id))) = requirement {
                 sqlx::query(
                     "INSERT INTO delivery.task_requirement \
-                     (project_id, task_id, requirement_id, revision_id) \
-                     VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+                     (project_id, task_id, requirement_id, revision_id, tenant_id) \
+                     VALUES ($1, $2, $3, $4, \
+                             (SELECT tenant_id FROM core.project WHERE id = $1)) ON CONFLICT DO NOTHING",
                 )
                 .bind(ctx.project_id)
                 .bind(task_id)
@@ -909,8 +914,10 @@ impl PgCommandExecutor {
         }
         let mut tx = self.pool.begin().await.map_err(db_err)?;
         let task_id: TaskId = sqlx::query_scalar(
-            "INSERT INTO delivery.task (project_id, title, description, assignee_id, status, revision) \
-             VALUES ($1, $2, $3, $4, 'draft', 1) RETURNING id",
+            "INSERT INTO delivery.task \
+             (project_id, title, description, assignee_id, status, revision, tenant_id) \
+             VALUES ($1, $2, $3, $4, 'draft', 1, \
+                     (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
         )
         .bind(project_id)
         .bind(&title)
@@ -1408,8 +1415,9 @@ async fn insert_audit(
     let compensation = compensation.map(|spec| serde_json::to_value(spec).expect("CompensationSpec serializes"));
     sqlx::query_scalar(
         "INSERT INTO governance.audit_log \
-         (project_id, actor_id, action, target_type, target_id, before_data, after_data, compensation_command, analysis_run_id, source_kind, source_ref) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
+         (project_id, actor_id, action, target_type, target_id, before_data, after_data, compensation_command, analysis_run_id, source_kind, source_ref, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(ctx.project_id)
     .bind(ctx.actor_id)

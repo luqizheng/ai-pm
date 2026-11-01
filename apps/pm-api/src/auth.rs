@@ -9,13 +9,16 @@
 //!
 //! 1. [`require_bearer`] — verify the signature and the mandatory `tid` claim,
 //!    then turn the raw claims into a typed [`AuthenticatedIdentity`].
-//! 2. [`resolve_principal`] — reject service / cross-tenant tokens, map the
-//!    `(provider, claims_tenant_key, subject)` triple to a `core.principal`
-//!    (provisioning unknown identities as **inactive**), and insert
-//!    [`AuthedPrincipal`].
+//! 2. [`resolve_principal`] — reject service / cross-tenant tokens, mirror the
+//!    upstream `tid` into `core.tenant`, map `(provider, tenant_id, subject)`
+//!    to a `core.principal` (provisioning unknown identities as **inactive**
+//!    tenant `member`s), and insert [`AuthedPrincipal`].
 //! 3. [`require_active`] — fail closed (`IAM_PERM_3002`) unless the principal
 //!    is activated; `/health` and `GET /v1/pm/me` stay reachable for
 //!    self-inspection.
+//!
+//! 租户角色（`is_admin`）每请求查 `core.tenant_member.role`，token `roles`
+//! 不参与授权（ADR-0001 D5）——降级/删除成员后旧 JWT 立即失去管理权。
 //!
 //! `AI_PM_AUTH_MODE=off` no longer removes the gates: it injects a fixed
 //! `dev-off` human principal (`is_active=true`) so handlers still receive an
@@ -34,9 +37,13 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use pm_application::actor::AuditActor;
+use pm_domain::TenantRole;
 
 /// The `off`-mode principal (fixed id so tests and dev seeds are stable).
 pub const DEV_OFF_PRINCIPAL: Uuid = Uuid::from_u128(0x00ff);
+
+/// 系统租户：由 `0019_tenant.sql` 幂等种子，`dev-off` 与测试夹具共用（Q6）。
+pub const SYSTEM_TENANT: Uuid = Uuid::from_u128(0x10);
 
 /// Environment-driven knobs for identity resolution.
 #[derive(Debug, Clone, Default)]
@@ -142,6 +149,11 @@ pub struct AuthedPrincipal {
     pub identity_id: Option<Uuid>,
     pub display_name: String,
     pub is_active: bool,
+    /// 租户维度（T-021b）：所有租户业务写入的 `tenant_id` 来源。
+    pub tenant_id: Uuid,
+    /// `core.tenant_member.role` 的当前值；无成员行时落 `Member`（最小权限）。
+    pub tenant_role: TenantRole,
+    /// 是否可进入租户管理面 = `tenant_role.is_tenant_admin()`。
     pub is_admin: bool,
     pub auth_mode: String,
     pub provider: String,
@@ -262,14 +274,28 @@ pub async fn inject_dev_principal(
             | &axum::http::Method::OPTIONS
     );
     if writes {
-        if let Err(err) = sqlx::query(
-            "INSERT INTO core.principal (id, kind, display_name, is_active) \
-             VALUES ($1, 'human', 'dev-off', true) ON CONFLICT (id) DO NOTHING",
-        )
-        .bind(DEV_OFF_PRINCIPAL)
-        .execute(&auth.pool)
-        .await
-        {
+        // principal 与 tenant_member 一起物化到系统租户（Q6）；只随写请求落库，
+        // 保证空库下 `GET` 仍返回零总数。
+        let seed = async {
+            sqlx::query(
+                "INSERT INTO core.principal (id, kind, display_name, is_active) \
+                 VALUES ($1, 'human', 'dev-off', true) ON CONFLICT (id) DO NOTHING",
+            )
+            .bind(DEV_OFF_PRINCIPAL)
+            .execute(&auth.pool)
+            .await?;
+            sqlx::query(
+                "INSERT INTO core.tenant_member (tenant_id, principal_id, role) \
+                 VALUES ($1, $2, 'owner') ON CONFLICT (tenant_id, principal_id) DO NOTHING",
+            )
+            .bind(SYSTEM_TENANT)
+            .bind(DEV_OFF_PRINCIPAL)
+            .execute(&auth.pool)
+            .await?;
+            Ok::<(), sqlx::Error>(())
+        }
+        .await;
+        if let Err(err) = seed {
             tracing::error!(error = %err, "failed to materialise the dev-off principal");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -284,6 +310,8 @@ pub async fn inject_dev_principal(
         identity_id: None,
         display_name: "dev-off".to_string(),
         is_active: true,
+        tenant_id: SYSTEM_TENANT,
+        tenant_role: TenantRole::Owner,
         is_admin: true,
         auth_mode: "off".to_string(),
         provider: "dev-off".to_string(),
@@ -298,14 +326,17 @@ async fn resolve_or_provision(
     auth: &AuthState,
     identity: &AuthenticatedIdentity,
 ) -> Result<AuthedPrincipal, sqlx::Error> {
+    // Q1：上游 tid 1:1 镜像为 core.tenant（自动建即生效）。
+    let tenant_id = ensure_tenant(auth, identity).await?;
+
     let existing: Option<(Uuid, Uuid, bool, String)> = sqlx::query_as(
         "SELECT pi.id, pi.principal_id, p.is_active, p.display_name \
            FROM core.principal_identity pi \
            JOIN core.principal p ON p.id = pi.principal_id \
-          WHERE pi.provider = $1 AND pi.claims_tenant_key = $2 AND pi.subject = $3",
+          WHERE pi.provider = $1 AND pi.tenant_id = $2 AND pi.subject = $3",
     )
     .bind(identity.provider)
-    .bind(&identity.claims_tenant_key)
+    .bind(tenant_id)
     .bind(&identity.subject)
     .fetch_optional(&auth.pool)
     .await?;
@@ -322,16 +353,31 @@ async fn resolve_or_provision(
             .await?;
             row
         }
-        None => provision_principal(auth, identity).await?,
+        None => provision_principal(auth, identity, tenant_id).await?,
     };
+
+    // D5：角色唯一事实源是库内的 tenant_member.role，不是 token roles。
+    let role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM core.tenant_member \
+          WHERE tenant_id = $1 AND principal_id = $2",
+    )
+    .bind(tenant_id)
+    .bind(principal_id)
+    .fetch_optional(&auth.pool)
+    .await?;
+    let tenant_role = role
+        .as_deref()
+        .and_then(TenantRole::parse)
+        .unwrap_or_else(TenantRole::min_privilege);
 
     Ok(AuthedPrincipal {
         principal_id,
         identity_id: Some(identity_id),
         display_name,
         is_active,
-        // 临时口径（v1 §6.2）：T-021b 起改读 core.tenant_member.role。
-        is_admin: identity.roles.iter().any(|role| role == "tenant_admin"),
+        tenant_id,
+        tenant_role,
+        is_admin: tenant_role.is_tenant_admin(),
         auth_mode: identity.auth_mode().to_string(),
         provider: identity.provider.to_string(),
         claims_tenant_key: identity.claims_tenant_key.clone(),
@@ -340,15 +386,63 @@ async fn resolve_or_provision(
     })
 }
 
-/// 首次见到未知三元组：建 principal（默认未激活）+ identity 行。
+/// 按 `(provider, tid)` 找租户，没有就建（显示名取 `provider:tid`）。
+/// 并发输家（`ON CONFLICT` 未插入）再读一次赢家的行。
+async fn ensure_tenant(
+    auth: &AuthState,
+    identity: &AuthenticatedIdentity,
+) -> Result<Uuid, sqlx::Error> {
+    let existing: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM core.tenant WHERE provider = $1 AND external_key = $2",
+    )
+    .bind(identity.provider)
+    .bind(&identity.claims_tenant_key)
+    .fetch_optional(&auth.pool)
+    .await?;
+    if let Some(id) = existing {
+        return Ok(id);
+    }
+
+    let display_name = format!("{}:{}", identity.provider, identity.claims_tenant_key);
+    let inserted: Option<Uuid> = sqlx::query_scalar(
+        "INSERT INTO core.tenant (provider, external_key, display_name) \
+         VALUES ($1, $2, $3) \
+         ON CONFLICT (provider, external_key) DO NOTHING \
+         RETURNING id",
+    )
+    .bind(identity.provider)
+    .bind(&identity.claims_tenant_key)
+    .bind(&display_name)
+    .fetch_optional(&auth.pool)
+    .await?;
+
+    match inserted {
+        Some(id) => Ok(id),
+        None => Ok(sqlx::query_scalar(
+            "SELECT id FROM core.tenant WHERE provider = $1 AND external_key = $2",
+        )
+        .bind(identity.provider)
+        .bind(&identity.claims_tenant_key)
+        .fetch_one(&auth.pool)
+        .await?),
+    }
+}
+
+/// 首次见到未知三元组：建 principal（默认未激活）+ identity 行 + tenant_member 行。
 /// 并发输家（identity 行已存在）删掉自己刚建的 principal 后复用赢家的行。
+///
+/// 首次管理员的 env 对（`AI_PM_FIRST_ADMIN_TENANT` + `SUBJECT`）命中时：
+/// principal 直接激活，且 `tenant_member.role = 'owner'`（Q2 冷启动唯一入口）。
 async fn provision_principal(
     auth: &AuthState,
     identity: &AuthenticatedIdentity,
+    tenant_id: Uuid,
 ) -> Result<(Uuid, Uuid, bool, String), sqlx::Error> {
-    let is_active = auth
+    let is_first_admin = auth
         .config
         .is_first_admin(&identity.claims_tenant_key, &identity.subject);
+    let is_active = is_first_admin;
+    let role = if is_first_admin { "owner" } else { "member" };
     let display_name = identity.display_name().to_string();
     let mut tx = auth.pool.begin().await?;
 
@@ -365,20 +459,33 @@ async fn provision_principal(
 
     let inserted: Option<(Uuid, Uuid)> = sqlx::query_as(
         "INSERT INTO core.principal_identity \
-             (provider, claims_tenant_key, subject, principal_id) \
+             (provider, tenant_id, subject, principal_id) \
          VALUES ($1, $2, $3, $4) \
-         ON CONFLICT (provider, claims_tenant_key, subject) DO NOTHING \
+         ON CONFLICT (provider, tenant_id, subject) DO NOTHING \
          RETURNING id, principal_id",
     )
     .bind(identity.provider)
-    .bind(&identity.claims_tenant_key)
+    .bind(tenant_id)
     .bind(&identity.subject)
     .bind(principal_id)
     .fetch_optional(&mut *tx)
     .await?;
 
     let resolved = match inserted {
-        Some((identity_id, winner)) => (identity_id, winner, is_active, display_name),
+        Some((identity_id, winner)) => {
+            // 成员行必须在 identity 抢占成功之后插入：并发输家会删 principal，
+            // 若提前插了 tenant_member 会因外键而删不掉。
+            sqlx::query(
+                "INSERT INTO core.tenant_member (tenant_id, principal_id, role) \
+                 VALUES ($1, $2, $3) ON CONFLICT (tenant_id, principal_id) DO NOTHING",
+            )
+            .bind(tenant_id)
+            .bind(winner)
+            .bind(role)
+            .execute(&mut *tx)
+            .await?;
+            (identity_id, winner, is_active, display_name)
+        }
         None => {
             // 并发输家：刚建的 principal 未被任何行引用，直接删掉。
             sqlx::query("DELETE FROM core.principal WHERE id = $1")
@@ -390,10 +497,10 @@ async fn provision_principal(
                     "SELECT pi.id, pi.principal_id, p.is_active, p.display_name \
                        FROM core.principal_identity pi \
                        JOIN core.principal p ON p.id = pi.principal_id \
-                      WHERE pi.provider = $1 AND pi.claims_tenant_key = $2 AND pi.subject = $3",
+                      WHERE pi.provider = $1 AND pi.tenant_id = $2 AND pi.subject = $3",
                 )
                 .bind(identity.provider)
-                .bind(&identity.claims_tenant_key)
+                .bind(tenant_id)
                 .bind(&identity.subject)
                 .fetch_one(&mut *tx)
                 .await?;

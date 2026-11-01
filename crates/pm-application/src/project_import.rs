@@ -245,8 +245,9 @@ pub async fn start_import(
     let mut tx = pool.begin().await?;
     let event_id: Uuid = sqlx::query_scalar(
         "INSERT INTO integration.inbound_event \
-         (project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash) \
-         VALUES ($1, $2, 'repo_import', 'repo_import_requested', $3, $4, $5) RETURNING id",
+         (project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash, tenant_id) \
+         VALUES ($1, $2, 'repo_import', 'repo_import_requested', $3, $4, $5, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(actor_id)
@@ -256,8 +257,9 @@ pub async fn start_import(
     .fetch_one(&mut *tx)
     .await?;
     sqlx::query(
-        "INSERT INTO integration.job (project_id, event_id, job_type) \
-         VALUES ($1, $2, 'repo_import')",
+        "INSERT INTO integration.job (project_id, event_id, job_type, tenant_id) \
+         VALUES ($1, $2, 'repo_import', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(event_id)
@@ -265,8 +267,9 @@ pub async fn start_import(
     .await?;
     sqlx::query(
         "INSERT INTO integration.repo_import \
-         (id, project_id, requested_by, status, progress, model_name) \
-         VALUES ($1, $2, $3, 'queued', 0, 'fake')",
+         (id, project_id, requested_by, status, progress, model_name, tenant_id) \
+         VALUES ($1, $2, $3, 'queued', 0, 'fake', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(import_id)
     .bind(project_id)
@@ -558,8 +561,9 @@ pub async fn run_import_job(
         let facts_json = serde_json::to_value(&facts).unwrap_or(serde_json::Value::Null);
         sqlx::query(
             "INSERT INTO integration.repo_import_source \
-             (import_id, repository_id, head_commit_sha, commit_count, doc_count, size_bytes, truncated, facts) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
+             (import_id, repository_id, head_commit_sha, commit_count, doc_count, size_bytes, truncated, facts, tenant_id) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, \
+                     (SELECT tenant_id FROM integration.repo_import WHERE id = $1)) \
              ON CONFLICT (import_id, repository_id) DO UPDATE SET \
                  head_commit_sha = EXCLUDED.head_commit_sha, commit_count = EXCLUDED.commit_count, \
                  doc_count = EXCLUDED.doc_count, size_bytes = EXCLUDED.size_bytes, \
@@ -623,8 +627,10 @@ pub async fn run_import_job(
 
 async fn record_source_error(pool: &PgPool, import_id: Uuid, repository_id: Uuid, code: &str) {
     let _ = sqlx::query(
-        "INSERT INTO integration.repo_import_source (import_id, repository_id, error_code) \
-         VALUES ($1, $2, $3) \
+        "INSERT INTO integration.repo_import_source \
+         (import_id, repository_id, error_code, tenant_id) \
+         VALUES ($1, $2, $3, \
+                 (SELECT tenant_id FROM integration.repo_import WHERE id = $1)) \
          ON CONFLICT (import_id, repository_id) DO UPDATE SET error_code = EXCLUDED.error_code",
     )
     .bind(import_id)
@@ -993,8 +999,9 @@ pub async fn propose_import(
     .await?;
     let run_id: Uuid = sqlx::query_scalar(
         "INSERT INTO ai.analysis_run \
-         (project_id, event_id, status, model_name, policy_version, config_snapshot, result, finished_at) \
-         VALUES ($1, $2, 'succeeded', $3, 1, '{}'::jsonb, $4, now()) RETURNING id",
+         (project_id, event_id, status, model_name, policy_version, config_snapshot, result, finished_at, tenant_id) \
+         VALUES ($1, $2, 'succeeded', $3, 1, '{}'::jsonb, $4, now(), \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(event_id)
@@ -1018,8 +1025,9 @@ pub async fn propose_import(
         let proposal_id: Uuid = sqlx::query_scalar(
             "INSERT INTO ai.change_proposal \
              (project_id, analysis_run_id, proposal_seq, target_type, target_id, command_type, \
-              proposed_data, rationale, evidence, risk_level, confidence, status) \
-             VALUES ($1, $2, $3, 'project', $4, $5, $6, $7, $8, 'high', $9, 'redline_pending') \
+              proposed_data, rationale, evidence, risk_level, confidence, status, tenant_id) \
+             VALUES ($1, $2, $3, 'project', $4, $5, $6, $7, $8, 'high', $9, 'redline_pending', \
+                     (SELECT tenant_id FROM core.project WHERE id = $1)) \
              RETURNING id",
         )
         .bind(project_id)
@@ -1034,8 +1042,10 @@ pub async fn propose_import(
         .fetch_one(&mut *tx)
         .await?;
         let approval_id: Uuid = sqlx::query_scalar(
-            "INSERT INTO governance.approval_request (project_id, proposal_id, required_role) \
-             VALUES ($1, $2, 'project_owner') RETURNING id",
+            "INSERT INTO governance.approval_request \
+             (project_id, proposal_id, required_role, tenant_id) \
+             VALUES ($1, $2, 'project_owner', \
+                     (SELECT tenant_id FROM ai.change_proposal WHERE id = $2)) RETURNING id",
         )
         .bind(project_id)
         .bind(proposal_id)
@@ -1142,8 +1152,9 @@ pub async fn advance_import_after_decision(
         .await?;
         sqlx::query(
             "INSERT INTO governance.audit_log \
-             (project_id, actor_id, action, target_type, target_id, after_data, analysis_run_id) \
-             VALUES ($1, $2, 'project_import_applied', 'project', $1, $3, $4)",
+             (project_id, actor_id, action, target_type, target_id, after_data, analysis_run_id, tenant_id) \
+             VALUES ($1, $2, 'project_import_applied', 'project', $1, $3, $4, \
+                     (SELECT tenant_id FROM core.project WHERE id = $1))",
         )
         .bind(project_id)
         .bind(actor.principal_id)

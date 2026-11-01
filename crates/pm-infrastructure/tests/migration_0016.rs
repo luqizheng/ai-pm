@@ -1,6 +1,7 @@
 //! 0016_policy_composition 迁移验证：能力类三列与 `additional_checks` 存在、
 //! 缺省语义正确、CHECK 拒绝非数组、迁移可重入。真实数据库，不 Mock。
 
+use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -26,10 +27,12 @@ async fn defaults_are_null_capabilities_and_empty_checks(pool: PgPool) {
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO delivery.policy_scope (scope, scope_key, require_human_approval, updated_by) \
-         VALUES ('organization', '*', false, $1)",
+        "INSERT INTO delivery.policy_scope \
+         (scope, scope_key, require_human_approval, updated_by, tenant_id) \
+         VALUES ('organization', '*', false, $1, $2)",
     )
     .bind(actor)
+    .bind(SYSTEM_TENANT)
     .execute(&pool)
     .await
     .unwrap();
@@ -63,10 +66,12 @@ async fn additional_checks_rejects_non_array_values(pool: PgPool) {
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO delivery.policy_scope (scope, scope_key, require_human_approval, updated_by) \
-         VALUES ('project', 'p', false, $1)",
+        "INSERT INTO delivery.policy_scope \
+         (scope, scope_key, require_human_approval, updated_by, tenant_id) \
+         VALUES ('project', 'p', false, $1, $2)",
     )
     .bind(actor)
+    .bind(SYSTEM_TENANT)
     .execute(&pool)
     .await
     .unwrap();

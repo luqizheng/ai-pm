@@ -5,6 +5,7 @@
 //! would let a later assertion run into an expired-lease reclaim of a job
 //! another step in the same test still "holds" under load.
 
+use pm_domain::SYSTEM_TENANT;
 use pm_infrastructure::job_queue;
 use uuid::Uuid;
 
@@ -23,17 +24,19 @@ async fn seed_project(pool: &sqlx::PgPool) -> Seed {
     let project_id = Uuid::new_v4();
     let principal_id = Uuid::new_v4();
 
-    sqlx::query("INSERT INTO core.customer (id, name) VALUES ($1, 'Acme')")
+    sqlx::query("INSERT INTO core.customer (id, name, tenant_id) VALUES ($1, 'Acme', $2)")
         .bind(customer_id)
+        .bind(SYSTEM_TENANT)
         .execute(pool)
         .await
         .unwrap();
     sqlx::query(
-        "INSERT INTO core.project (id, customer_id, code, name) \
-         VALUES ($1, $2, 'P1', 'Queue Project')",
+        "INSERT INTO core.project (id, customer_id, code, name, tenant_id) \
+         VALUES ($1, $2, 'P1', 'Queue Project', $3)",
     )
     .bind(project_id)
     .bind(customer_id)
+    .bind(SYSTEM_TENANT)
     .execute(pool)
     .await
     .unwrap();
@@ -44,8 +47,9 @@ async fn seed_project(pool: &sqlx::PgPool) -> Seed {
         .unwrap();
     sqlx::query(
         "INSERT INTO ai.project_ai_config \
-         (project_id, ai_principal_id, model_provider, model_name, automation_mode, enabled) \
-         VALUES ($1, $2, 'test', 'fake-model', 'ai_lead', true)",
+         (project_id, ai_principal_id, model_provider, model_name, automation_mode, enabled, tenant_id) \
+         VALUES ($1, $2, 'test', 'fake-model', 'ai_lead', true, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(principal_id)
@@ -67,8 +71,9 @@ async fn seed_job(pool: &sqlx::PgPool, seed: &Seed) -> (Uuid, Uuid) {
 
     sqlx::query(
         "INSERT INTO integration.inbound_event \
-         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash) \
-         VALUES ($1, $2, $3, 'test', 'requirement.created', $4, '{}', 'hash')",
+         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash, tenant_id) \
+         VALUES ($1, $2, $3, 'test', 'requirement.created', $4, '{}', 'hash', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(event_id)
     .bind(seed.project_id)
@@ -78,8 +83,8 @@ async fn seed_job(pool: &sqlx::PgPool, seed: &Seed) -> (Uuid, Uuid) {
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO integration.job (id, project_id, event_id, job_type) \
-         VALUES ($1, $2, $3, $4)",
+        "INSERT INTO integration.job (id, project_id, event_id, job_type, tenant_id) \
+         VALUES ($1, $2, $3, $4, (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(job_id)
     .bind(seed.project_id)

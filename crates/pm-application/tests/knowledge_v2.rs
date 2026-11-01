@@ -1,4 +1,4 @@
-//! 知识空间 V2 真实数据库集成测试：质量门 8 项、提案流、红线确认、否决回滚、
+﻿//! 知识空间 V2 真实数据库集成测试：质量门 8 项、提案流、红线确认、否决回滚、
 //! 索引回退、证据引用与需求正文迁移。每个用例使用独立临时 Git 知识根，不触碰
 //! 真实知识仓库。
 
@@ -14,6 +14,7 @@ use pm_application::knowledge_reference::{self, AddReferenceRequest};
 use pm_application::knowledge_quality::{GateFailure, QualityGateResult};
 use sqlx::PgPool;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 fn temp_root() -> KnowledgeRoot {
     KnowledgeRoot::new(
@@ -69,6 +70,7 @@ async fn boot(pool: &PgPool, code: &str) -> Boot {
         BootstrapRequest {
             project_code: code.to_string(),
             project_name: format!("{code} project"),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
@@ -522,8 +524,9 @@ async fn requirement_body_migration_is_reversible_and_leaves_pg_untouched(pool: 
     let root = temp_root();
 
     let requirement_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.requirement (project_id, code, title) \
-         VALUES ($1, 'REQ-100', '迁移需求') RETURNING id",
+        "INSERT INTO delivery.requirement (project_id, code, title, tenant_id) \
+         VALUES ($1, 'REQ-100', '迁移需求', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(boot.project_id)
     .fetch_one(&pool)
@@ -531,8 +534,9 @@ async fn requirement_body_migration_is_reversible_and_leaves_pg_untouched(pool: 
     .unwrap();
     let revision_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.requirement_revision \
-         (requirement_id, project_id, version, content, state, content_hash, created_by) \
-         VALUES ($1, $2, 1, $3, 'approved', 'req-hash', $4) RETURNING id",
+         (requirement_id, project_id, version, content, state, content_hash, created_by, tenant_id) \
+         VALUES ($1, $2, 1, $3, 'approved', 'req-hash', $4, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2)) RETURNING id",
     )
     .bind(requirement_id)
     .bind(boot.project_id)

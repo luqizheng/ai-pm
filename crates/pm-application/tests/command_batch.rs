@@ -1,4 +1,4 @@
-//! 冷启动批量命令（CreateMilestones / CreateRequirements / CreateTasks /
+﻿//! 冷启动批量命令（CreateMilestones / CreateRequirements / CreateTasks /
 //! WriteDocuments）的执行器集成测试。
 
 use std::sync::Arc;
@@ -15,6 +15,7 @@ use pm_domain::proposal::Confidence;
 use pm_domain::ProjectCommand;
 use sqlx::PgPool;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 struct Fixture {
     project_id: Uuid,
@@ -27,6 +28,7 @@ async fn seed(pool: &PgPool, code: &str) -> Fixture {
         BootstrapRequest {
             project_code: code.to_string(),
             project_name: code.to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await

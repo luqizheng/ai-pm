@@ -1,14 +1,18 @@
+use pm_domain::SYSTEM_TENANT;
 use pm_infrastructure::outbox::{self, NewOutboxEvent, OutboxFailOutcome};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 async fn seed_project(pool: &PgPool) -> Uuid {
-    let customer_id: Uuid =
-        sqlx::query_scalar("INSERT INTO core.customer (name) VALUES ('ob') RETURNING id")
-            .fetch_one(pool).await.unwrap();
+    let customer_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (name, tenant_id) VALUES ('ob', $1) RETURNING id",
+    )
+    .bind(SYSTEM_TENANT)
+    .fetch_one(pool).await.unwrap();
     sqlx::query_scalar(
-        "INSERT INTO core.project (customer_id, code, name) VALUES ($1, 'OB-1', 'ob') RETURNING id",
-    ).bind(customer_id).fetch_one(pool).await.unwrap()
+        "INSERT INTO core.project (customer_id, code, name, tenant_id) \
+         VALUES ($1, 'OB-1', 'ob', $2) RETURNING id",
+    ).bind(customer_id).bind(SYSTEM_TENANT).fetch_one(pool).await.unwrap()
 }
 
 fn event<'a>(project_id: Uuid, key: &'a str) -> NewOutboxEvent<'a> {

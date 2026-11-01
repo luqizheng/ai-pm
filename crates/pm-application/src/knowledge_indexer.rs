@@ -151,8 +151,9 @@ async fn upsert_state(
     sqlx::query(
         "INSERT INTO ai.document_index_state \
          (project_id, document_revision_id, provider, indexed_content_hash, index_version, \
-          status, last_error, indexed_at, updated_at) \
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now()) \
+          status, last_error, indexed_at, updated_at, tenant_id) \
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now(), \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) \
          ON CONFLICT (document_revision_id, provider) DO UPDATE SET \
             status = EXCLUDED.status, \
             indexed_content_hash = EXCLUDED.indexed_content_hash, \

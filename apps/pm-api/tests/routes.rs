@@ -1,4 +1,4 @@
-//! REST route smoke test (Task 9, Step 1): drive the real pm-api router with
+﻿//! REST route smoke test (Task 9, Step 1): drive the real pm-api router with
 //! `tower::ServiceExt::oneshot` — no socket — and assert the HTTP contract of
 //! `POST /api/v1/events`: 202 + `{event_id, processing_status: "queued"}` on
 //! first submission, 200 + `processing_status: "duplicate"` with the same
@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 fn post_events(body: Value) -> Request<Body> {
     Request::builder()
@@ -38,6 +39,7 @@ async fn post_events_accepts_then_replays_as_duplicate(pool: PgPool) {
         BootstrapRequest {
             project_code: "API-1".to_string(),
             project_name: "api project".to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
@@ -97,8 +99,9 @@ async fn post_events_accepts_then_replays_as_duplicate(pool: PgPool) {
 async fn seed_executed_proposal(pool: &PgPool, project_id: Uuid, actor_id: Uuid) -> Uuid {
     let task_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO delivery.task (id, project_id, title, status, revision) \
-         VALUES ($1, $2, 'SUP-TASK revert me', 'completed', 4)",
+        "INSERT INTO delivery.task (id, project_id, title, status, revision, tenant_id) \
+         VALUES ($1, $2, 'SUP-TASK revert me', 'completed', 4, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(task_id)
     .bind(project_id)
@@ -120,8 +123,9 @@ async fn seed_executed_proposal(pool: &PgPool, project_id: Uuid, actor_id: Uuid)
     });
     sqlx::query(
         "INSERT INTO governance.audit_log \
-         (id, project_id, actor_id, action, target_type, target_id, before_data, after_data, compensation_command) \
-         VALUES ($1, $2, $3, 'update_task_status', 'task', $4, $5, $6, $7)",
+         (id, project_id, actor_id, action, target_type, target_id, before_data, after_data, compensation_command, tenant_id) \
+         VALUES ($1, $2, $3, 'update_task_status', 'task', $4, $5, $6, $7, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(audit_id)
     .bind(project_id)
@@ -139,8 +143,9 @@ async fn seed_executed_proposal(pool: &PgPool, project_id: Uuid, actor_id: Uuid)
     let run_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO integration.inbound_event \
-         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash) \
-         VALUES ($1, $2, $3, 'test', 'bug_report', 'sup-seed-1', '{}', 'hash')",
+         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash, tenant_id) \
+         VALUES ($1, $2, $3, 'test', 'bug_report', 'sup-seed-1', '{}', 'hash', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(event_id)
     .bind(project_id)
@@ -149,8 +154,10 @@ async fn seed_executed_proposal(pool: &PgPool, project_id: Uuid, actor_id: Uuid)
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO ai.analysis_run (id, project_id, event_id, model_name, policy_version, config_snapshot) \
-         VALUES ($1, $2, $3, 'fake-model', 1, '{}')",
+        "INSERT INTO ai.analysis_run \
+         (id, project_id, event_id, model_name, policy_version, config_snapshot, tenant_id) \
+         VALUES ($1, $2, $3, 'fake-model', 1, '{}', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(run_id)
     .bind(project_id)
@@ -163,9 +170,10 @@ async fn seed_executed_proposal(pool: &PgPool, project_id: Uuid, actor_id: Uuid)
     sqlx::query(
         "INSERT INTO ai.change_proposal \
          (id, project_id, analysis_run_id, proposal_seq, target_type, target_id, command_type, \
-          proposed_data, rationale, risk_level, status, executed_at, executed_audit_id) \
+          proposed_data, rationale, risk_level, status, executed_at, executed_audit_id, tenant_id) \
          VALUES ($1, $2, $3, 0, 'task', $4, 'update_task_status', '{}', 'because', 'low', \
-                 'executed', now(), $5)",
+                 'executed', now(), $5, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(proposal_id)
     .bind(project_id)
@@ -197,6 +205,7 @@ async fn veto_rolls_back_executed_proposal_over_http(pool: PgPool) {
         BootstrapRequest {
             project_code: "SUP-1".to_string(),
             project_name: "supervision smoke".to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
@@ -262,6 +271,7 @@ async fn veto_unknown_proposal_answers_404(pool: PgPool) {
         BootstrapRequest {
             project_code: "SUP-2".to_string(),
             project_name: "supervision smoke 2".to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
@@ -293,14 +303,16 @@ async fn notifications_feed_over_http(pool: PgPool) {
         BootstrapRequest {
             project_code: "SUP-FEED".to_string(),
             project_name: "feed smoke".to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
     .unwrap();
     for (idx, kind) in ["older_first", "newer_second"].iter().enumerate() {
         sqlx::query(
-            "INSERT INTO integration.notification (project_id, kind, payload, created_at) \
-             VALUES ($1, $2, $3, now() - make_interval(mins => $4))",
+            "INSERT INTO integration.notification (project_id, kind, payload, created_at, tenant_id) \
+             VALUES ($1, $2, $3, now() - make_interval(mins => $4), \
+                     (SELECT tenant_id FROM core.project WHERE id = $1))",
         )
         .bind(boot.project_id)
         .bind(kind)

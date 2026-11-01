@@ -1,4 +1,4 @@
-//! `/v1/pm/*` 列表端点契约测试（Slice A）。契约源：`frontend/src/api/pm.ts` +
+﻿//! `/v1/pm/*` 列表端点契约测试（Slice A）。契约源：`frontend/src/api/pm.ts` +
 //! `frontend/src/api/mock/fixtures.ts`（活文档）——裸 `{items,total,page,size}`
 //! payload、`project_id?` 过滤、`created_at DESC`、page 默认 1 / size 默认 10
 //! 夹在 [1,200]；revisions 列表 `{items,total}`（version DESC，未知 rid 空列表）。
@@ -10,6 +10,7 @@ use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
+use pm_domain::SYSTEM_TENANT;
 
 fn get(uri: String) -> Request<Body> {
     Request::builder().method("GET").uri(uri).body(Body::empty()).unwrap()
@@ -24,8 +25,9 @@ async fn body_json(response: axum::response::Response) -> Value {
 async fn seed_task(pool: &PgPool, project_id: uuid::Uuid, title: &str, age_secs: i32) -> uuid::Uuid {
     let id = uuid::Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO delivery.task (id, project_id, title, status, priority, created_at, updated_at) \
-         VALUES ($1, $2, $3, 'draft', 'normal', now() - make_interval(secs => $4), now() - make_interval(secs => $4))",
+        "INSERT INTO delivery.task (id, project_id, title, status, priority, created_at, updated_at, tenant_id) \
+         VALUES ($1, $2, $3, 'draft', 'normal', now() - make_interval(secs => $4), now() - make_interval(secs => $4), \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(id)
     .bind(project_id)
@@ -63,7 +65,7 @@ async fn empty_database_lists_answer_zero_totals(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn tasks_pagination_clamps_and_slices(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "PG-1".into(), project_name: "pg".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "PG-1".into(), project_name: "pg".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     for i in 0..3 {
         seed_task(&pool, boot.project_id, &format!("task-{i}"), i).await;
     }
@@ -92,8 +94,8 @@ async fn tasks_pagination_clamps_and_slices(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn project_scoped_lists_filter_by_project(pool: PgPool) {
-    let a = bootstrap_project(&pool, BootstrapRequest { project_code: "FLT-A".into(), project_name: "a".into() }).await.unwrap();
-    let b = bootstrap_project(&pool, BootstrapRequest { project_code: "FLT-B".into(), project_name: "b".into() }).await.unwrap();
+    let a = bootstrap_project(&pool, BootstrapRequest { project_code: "FLT-A".into(), project_name: "a".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    let b = bootstrap_project(&pool, BootstrapRequest { project_code: "FLT-B".into(), project_name: "b".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     seed_task(&pool, a.project_id, "in-a", 10).await;
     seed_task(&pool, b.project_id, "in-b", 5).await;
     let app = router(pool.clone());
@@ -110,7 +112,7 @@ async fn project_scoped_lists_filter_by_project(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn lists_order_created_at_desc(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "ORD-1".into(), project_name: "o".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "ORD-1".into(), project_name: "o".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let first = seed_task(&pool, boot.project_id, "oldest", 100).await;
     let last = seed_task(&pool, boot.project_id, "newest", 0).await;
     let app = router(pool.clone());
@@ -125,7 +127,7 @@ async fn lists_order_created_at_desc(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn task_row_shape_matches_frontend_contract(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "SHP-1".into(), project_name: "s".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "SHP-1".into(), project_name: "s".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     seed_task(&pool, boot.project_id, "shaped", 0).await;
     let app = router(pool.clone());
 
@@ -142,12 +144,13 @@ async fn task_row_shape_matches_frontend_contract(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn milestones_list_scopes_orders_and_carries_task_link(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "MS-1".into(), project_name: "ms".into() }).await.unwrap();
-    let other = bootstrap_project(&pool, BootstrapRequest { project_code: "MS-2".into(), project_name: "ms2".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "MS-1".into(), project_name: "ms".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    let other = bootstrap_project(&pool, BootstrapRequest { project_code: "MS-2".into(), project_name: "ms2".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let milestone_id = uuid::Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO delivery.milestone (id, project_id, name, planned_at, status) \
-         VALUES ($1, $2, 'M-A', now() + interval '2 days', 'active')",
+        "INSERT INTO delivery.milestone (id, project_id, name, planned_at, status, tenant_id) \
+         VALUES ($1, $2, 'M-A', now() + interval '2 days', 'active', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(milestone_id)
     .bind(boot.project_id)
@@ -155,8 +158,9 @@ async fn milestones_list_scopes_orders_and_carries_task_link(pool: PgPool) {
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO delivery.milestone (id, project_id, name, planned_at, status) \
-         VALUES ($1, $2, 'M-OTHER', now(), 'planned')",
+        "INSERT INTO delivery.milestone (id, project_id, name, planned_at, status, tenant_id) \
+         VALUES ($1, $2, 'M-OTHER', now(), 'planned', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(uuid::Uuid::new_v4())
     .bind(other.project_id)
@@ -164,8 +168,9 @@ async fn milestones_list_scopes_orders_and_carries_task_link(pool: PgPool) {
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO delivery.task (id, project_id, milestone_id, title, status, priority) \
-         VALUES ($1, $2, $3, 'linked', 'running', 'normal')",
+        "INSERT INTO delivery.task (id, project_id, milestone_id, title, status, priority, tenant_id) \
+         VALUES ($1, $2, $3, 'linked', 'running', 'normal', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(uuid::Uuid::new_v4())
     .bind(boot.project_id)
@@ -203,12 +208,13 @@ async fn milestones_list_scopes_orders_and_carries_task_link(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn decisions_join_change_proposal_fields(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-1".into(), project_name: "dec".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-1".into(), project_name: "dec".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let event_id = uuid::Uuid::new_v4();
     sqlx::query(
         "INSERT INTO integration.inbound_event \
-         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash) \
-         VALUES ($1, $2, $3, 'pm', 'requirement_changed', 'dec-1', '{}', 'hash')",
+         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash, tenant_id) \
+         VALUES ($1, $2, $3, 'pm', 'requirement_changed', 'dec-1', '{}', 'hash', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(event_id)
     .bind(boot.project_id)
@@ -219,8 +225,9 @@ async fn decisions_join_change_proposal_fields(pool: PgPool) {
     let run_id = uuid::Uuid::new_v4();
     sqlx::query(
         "INSERT INTO ai.analysis_run \
-         (id, project_id, event_id, model_name, policy_version, config_snapshot) \
-         VALUES ($1, $2, $3, 'test-model', 1, '{}')",
+         (id, project_id, event_id, model_name, policy_version, config_snapshot, tenant_id) \
+         VALUES ($1, $2, $3, 'test-model', 1, '{}', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(run_id)
     .bind(boot.project_id)
@@ -232,9 +239,10 @@ async fn decisions_join_change_proposal_fields(pool: PgPool) {
     sqlx::query(
         "INSERT INTO ai.change_proposal \
          (id, project_id, analysis_run_id, proposal_seq, target_type, command_type, \
-          proposed_data, rationale, evidence, risk_level) \
+          proposed_data, rationale, evidence, risk_level, tenant_id) \
          VALUES ($1, $2, $3, 1, 'task', 'update_task', '{}', \
-                 '把任务拆成两步以降低风险', '[{\"kind\":\"doc\",\"title\":\"REQ-1\"}]', 'high')",
+                 '把任务拆成两步以降低风险', '[{\"kind\":\"doc\",\"title\":\"REQ-1\"}]', 'high', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(proposal_id)
     .bind(boot.project_id)
@@ -244,7 +252,9 @@ async fn decisions_join_change_proposal_fields(pool: PgPool) {
     .unwrap();
     sqlx::query(
         "INSERT INTO governance.approval_request \
-         (id, project_id, proposal_id, required_role) VALUES ($1, $2, $3, 'project_owner')",
+         (id, project_id, proposal_id, required_role, tenant_id) \
+         VALUES ($1, $2, $3, 'project_owner', \
+                 (SELECT tenant_id FROM ai.change_proposal WHERE id = $3))",
     )
     .bind(uuid::Uuid::new_v4())
     .bind(boot.project_id)
@@ -293,11 +303,12 @@ async fn revisions_unknown_requirement_answers_empty_list(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn revisions_list_orders_by_version_desc(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "REV-1".into(), project_name: "r".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "REV-1".into(), project_name: "r".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let requirement_id = uuid::Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO delivery.requirement (id, project_id, code, title, status) \
-         VALUES ($1, $2, 'REQ-1', 'rev requirement', 'draft')",
+        "INSERT INTO delivery.requirement (id, project_id, code, title, status, tenant_id) \
+         VALUES ($1, $2, 'REQ-1', 'rev requirement', 'draft', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(requirement_id)
     .bind(boot.project_id)
@@ -307,8 +318,9 @@ async fn revisions_list_orders_by_version_desc(pool: PgPool) {
     for version in 1..=3 {
         sqlx::query(
             "INSERT INTO delivery.requirement_revision \
-             (id, requirement_id, project_id, version, content, state, content_hash, created_by) \
-             VALUES ($1, $2, $3, $4, '{}', 'draft', 'hash', $5)",
+             (id, requirement_id, project_id, version, content, state, content_hash, created_by, tenant_id) \
+             VALUES ($1, $2, $3, $4, '{}', 'draft', 'hash', $5, \
+                     (SELECT tenant_id FROM core.project WHERE id = $3))",
         )
         .bind(uuid::Uuid::new_v4())
         .bind(requirement_id)

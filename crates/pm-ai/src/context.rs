@@ -119,8 +119,9 @@ pub async fn start_run(pool: &sqlx::PgPool, event_id: EventId) -> Result<RunId, 
     sqlx::query(
         "INSERT INTO ai.analysis_run \
          (id, project_id, event_id, status, model_name, policy_version, \
-          config_snapshot, attempt_count, started_at) \
-         VALUES ($1, $2, $3, 'analyzing', $4, $5, $6, $7, now())",
+          config_snapshot, attempt_count, started_at, tenant_id) \
+         VALUES ($1, $2, $3, 'analyzing', $4, $5, $6, $7, now(), \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(run_id)
     .bind(project_id)

@@ -5,5 +5,6 @@ async fn core_schema_ready(pool: sqlx::PgPool) {
          WHERE table_schema = 'core'"
     ).fetch_one(&pool).await.unwrap();
     // customer / project / principal / project_member + principal_identity（0018）
-    assert_eq!(n, 5);
+    // + tenant / tenant_member（0019）+ tenant_agent（0020）
+    assert_eq!(n, 8);
 }

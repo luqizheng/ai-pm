@@ -8,6 +8,7 @@ axum.workspace = true
 chrono.workspace = true
 digua_common_jwt.workspace = true
 pm-application = { path = "../../crates/pm-application" }
+pm-domain = { path = "../../crates/pm-domain" }
 pm-mcp = { path = "../../crates/pm-mcp" }
 serde.workspace = true
 uuid.workspace = true

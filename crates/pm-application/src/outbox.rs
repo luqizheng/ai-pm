@@ -46,9 +46,10 @@ impl OutboxAppend for PgOutboxAppend {
     ) -> Result<Uuid, sqlx::Error> {
         let inserted: Option<Uuid> = sqlx::query_scalar(
             "INSERT INTO integration.outbox_event \
-             (project_id, event_type, aggregate_type, aggregate_id, payload, idempotency_key) \
-             VALUES ($1, $2, $3, $4, $5, $6) \
-             ON CONFLICT (idempotency_key) DO NOTHING \
+             (project_id, event_type, aggregate_type, aggregate_id, payload, idempotency_key, tenant_id) \
+             VALUES ($1, $2, $3, $4, $5, $6, \
+                     (SELECT tenant_id FROM core.project WHERE id = $1)) \
+             ON CONFLICT (tenant_id, idempotency_key) DO NOTHING \
              RETURNING id",
         )
         .bind(event.project_id)
@@ -63,9 +64,12 @@ impl OutboxAppend for PgOutboxAppend {
             Some(id) => Ok(id),
             None => {
                 sqlx::query_scalar(
-                    "SELECT id FROM integration.outbox_event WHERE idempotency_key = $1",
+                    "SELECT id FROM integration.outbox_event \
+                      WHERE idempotency_key = $1 \
+                        AND tenant_id = (SELECT tenant_id FROM core.project WHERE id = $2)",
                 )
                 .bind(event.idempotency_key)
+                .bind(event.project_id)
                 .fetch_one(&mut **tx)
                 .await
             }

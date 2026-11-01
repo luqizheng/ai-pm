@@ -1,4 +1,4 @@
-//! Task 18 — end-to-end scenario acceptance suite (主稿 §17.1, the M1 rows).
+﻿//! Task 18 — end-to-end scenario acceptance suite (主稿 §17.1, the M1 rows).
 //!
 //! Ten scenarios over the real Postgres and the real main chain. Every test
 //! is self-contained: the shared fixture world (ids matching the FakeModel's
@@ -36,6 +36,7 @@ use pm_domain::{
 use pm_infrastructure::job_queue;
 use serde_json::{Value, json};
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 // ---------------------------------------------------------------------------
 // Fixture world (copied from the Task 15 suite's conventions: the seeded rows
@@ -91,17 +92,19 @@ async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     let human_id = Uuid::new_v4();
     let dev_agent_id = Uuid::new_v4();
 
-    sqlx::query("INSERT INTO core.customer (id, name) VALUES ($1, 'Acme')")
+    sqlx::query("INSERT INTO core.customer (id, name, tenant_id) VALUES ($1, 'Acme', $2)")
         .bind(customer_id)
+        .bind(SYSTEM_TENANT)
         .execute(pool)
         .await
         .unwrap();
     sqlx::query(
-        "INSERT INTO core.project (id, customer_id, code, name) \
-         VALUES ($1, $2, 'FIXTURE', 'Scenario Project')",
+        "INSERT INTO core.project (id, customer_id, code, name, tenant_id) \
+         VALUES ($1, $2, 'FIXTURE', 'Scenario Project', $3)",
     )
     .bind(project_id())
     .bind(customer_id)
+    .bind(SYSTEM_TENANT)
     .execute(pool)
     .await
     .unwrap();
@@ -126,8 +129,9 @@ async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     .unwrap();
     sqlx::query(
         "INSERT INTO ai.project_ai_config \
-         (project_id, ai_principal_id, model_provider, model_name, automation_mode, enabled) \
-         VALUES ($1, $2, 'test', 'fake-model', 'ai_lead', true)",
+         (project_id, ai_principal_id, model_provider, model_name, automation_mode, enabled, tenant_id) \
+         VALUES ($1, $2, 'test', 'fake-model', 'ai_lead', true, \
+                  (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id())
     .bind(ai_principal_id)
@@ -136,8 +140,9 @@ async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO delivery.milestone (id, project_id, name, status, revision, planned_at) \
-         VALUES ($1, $2, 'Design freeze', 'planned', 4, $3)",
+        "INSERT INTO delivery.milestone (id, project_id, name, status, revision, planned_at, tenant_id) \
+         VALUES ($1, $2, 'Design freeze', 'planned', 4, $3, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(milestone_id())
     .bind(project_id())
@@ -147,8 +152,9 @@ async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     .unwrap();
     sqlx::query(
         "INSERT INTO delivery.task \
-         (id, project_id, milestone_id, title, status, revision) \
-         VALUES ($1, $2, $3, 'TASK-102 implement cache layer', 'running', 7)",
+         (id, project_id, milestone_id, title, status, revision, tenant_id) \
+         VALUES ($1, $2, $3, 'TASK-102 implement cache layer', 'running', 7, \
+                  (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(task_102_id())
     .bind(project_id())
@@ -1221,6 +1227,7 @@ async fn s9_task_context_from_wrong_project_is_not_found(pool: sqlx::PgPool) {
         BootstrapRequest {
             project_code: "S9-OTHER".to_string(),
             project_name: "other project".to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await

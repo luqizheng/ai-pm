@@ -1,4 +1,4 @@
-//! `/v1/pm/*` 写端点契约测试（Slice A）：decide / revisions create+approve /
+﻿//! `/v1/pm/*` 写端点契约测试（Slice A）：decide / revisions create+approve /
 //! tasks create+update。契约源：`frontend/src/api/pm.ts` 注释与
 //! `frontend/src/api/mock/fixtures.ts`（校验顺序 404 → 409 → 400 decision →
 //! 400 reason；错误体 `{message}`）。
@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 fn request(method: &str, uri: String, body: Option<Value>) -> Request<Body> {
     let mut builder = Request::builder().method(method).uri(uri);
@@ -32,8 +33,9 @@ async fn body_json(response: axum::response::Response) -> Value {
 async fn seed_pending_approval(pool: &PgPool, project_id: Uuid, actor_id: Uuid) -> Uuid {
     let task_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO delivery.task (id, project_id, title, status, revision) \
-         VALUES ($1, $2, 'DECIDE-TASK', 'running', 2)",
+        "INSERT INTO delivery.task (id, project_id, title, status, revision, tenant_id) \
+         VALUES ($1, $2, 'DECIDE-TASK', 'running', 2, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(task_id)
     .bind(project_id)
@@ -44,8 +46,9 @@ async fn seed_pending_approval(pool: &PgPool, project_id: Uuid, actor_id: Uuid) 
     let event_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO integration.inbound_event \
-         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash) \
-         VALUES ($1, $2, $3, 'test', 'bug_report', $4, '{}', 'hash')",
+         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash, tenant_id) \
+         VALUES ($1, $2, $3, 'test', 'bug_report', $4, '{}', 'hash', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(event_id)
     .bind(project_id)
@@ -56,8 +59,10 @@ async fn seed_pending_approval(pool: &PgPool, project_id: Uuid, actor_id: Uuid) 
     .unwrap();
     let run_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO ai.analysis_run (id, project_id, event_id, model_name, policy_version, config_snapshot) \
-         VALUES ($1, $2, $3, 'fake-model', 1, '{}')",
+        "INSERT INTO ai.analysis_run \
+         (id, project_id, event_id, model_name, policy_version, config_snapshot, tenant_id) \
+         VALUES ($1, $2, $3, 'fake-model', 1, '{}', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(run_id)
     .bind(project_id)
@@ -74,8 +79,9 @@ async fn seed_pending_approval(pool: &PgPool, project_id: Uuid, actor_id: Uuid) 
     sqlx::query(
         "INSERT INTO ai.change_proposal \
          (id, project_id, analysis_run_id, proposal_seq, target_type, target_id, command_type, \
-          proposed_data, rationale, risk_level, status) \
-         VALUES ($1, $2, $3, 0, 'task', $4, 'update_task_status', $5, 'because', 'low', 'proposed')",
+          proposed_data, rationale, risk_level, status, tenant_id) \
+         VALUES ($1, $2, $3, 0, 'task', $4, 'update_task_status', $5, 'because', 'low', 'proposed', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(proposal_id)
     .bind(project_id)
@@ -89,8 +95,9 @@ async fn seed_pending_approval(pool: &PgPool, project_id: Uuid, actor_id: Uuid) 
     let approval_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO governance.approval_request \
-         (id, project_id, proposal_id, status, required_role) \
-         VALUES ($1, $2, $3, 'pending', 'project_owner')",
+         (id, project_id, proposal_id, status, required_role, tenant_id) \
+         VALUES ($1, $2, $3, 'pending', 'project_owner', \
+                 (SELECT tenant_id FROM ai.change_proposal WHERE id = $3))",
     )
     .bind(approval_id)
     .bind(project_id)
@@ -138,7 +145,7 @@ async fn decide_unknown_approval_is_404_even_with_invalid_body(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn decide_rejects_invalid_decision_and_empty_reason_with_400(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-1".into(), project_name: "d".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-1".into(), project_name: "d".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let approval_id = seed_pending_approval(&pool, boot.project_id, boot.human_id).await;
     let app = router(pool.clone());
 
@@ -170,7 +177,7 @@ async fn decide_rejects_invalid_decision_and_empty_reason_with_400(pool: PgPool)
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn decide_approve_executes_proposal_and_answers_contract_body(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-2".into(), project_name: "d".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-2".into(), project_name: "d".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let approval_id = seed_pending_approval(&pool, boot.project_id, boot.human_id).await;
     let app = router(pool.clone());
 
@@ -205,7 +212,7 @@ async fn decide_approve_executes_proposal_and_answers_contract_body(pool: PgPool
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn decide_reject_vetoes_proposal_and_answers_contract_body(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-3".into(), project_name: "d".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-3".into(), project_name: "d".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let approval_id = seed_pending_approval(&pool, boot.project_id, boot.human_id).await;
     let app = router(pool.clone());
 
@@ -228,7 +235,7 @@ async fn decide_reject_vetoes_proposal_and_answers_contract_body(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn decide_twice_conflicts_with_409(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-4".into(), project_name: "d".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-4".into(), project_name: "d".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let approval_id = seed_pending_approval(&pool, boot.project_id, boot.human_id).await;
     let app = router(pool.clone());
     let body = json!({ "decision": "rejected", "reason": "first" });
@@ -253,7 +260,7 @@ async fn decide_twice_conflicts_with_409(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn create_task_defaults_and_contract_shape(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "TSK-1".into(), project_name: "t".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "TSK-1".into(), project_name: "t".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let app = router(pool.clone());
 
     let response = app
@@ -287,14 +294,15 @@ async fn create_task_defaults_and_contract_shape(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn create_task_falls_back_to_global_human_when_project_has_no_members(pool: PgPool) {
     // 兼容无 project_member 行的种子/导入数据：actor 回退到全局第一个 human。
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "TSK-0".into(), project_name: "t".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "TSK-0".into(), project_name: "t".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let bare_project = uuid::Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO core.project (id, customer_id, code, name) \
-         VALUES ($1, $2, 'BARE-1', 'no members')",
+        "INSERT INTO core.project (id, customer_id, code, name, tenant_id) \
+         VALUES ($1, $2, 'BARE-1', 'no members', $3)",
     )
     .bind(bare_project)
     .bind(boot.customer_id)
+    .bind(SYSTEM_TENANT)
     .execute(&pool)
     .await
     .unwrap();
@@ -315,7 +323,7 @@ async fn create_task_falls_back_to_global_human_when_project_has_no_members(pool
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn create_task_validation_errors(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "TSK-2".into(), project_name: "t".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "TSK-2".into(), project_name: "t".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let app = router(pool.clone());
 
     let response = app
@@ -346,7 +354,7 @@ async fn create_task_validation_errors(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn update_task_full_fields_with_optimistic_lock(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "TSK-3".into(), project_name: "t".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "TSK-3".into(), project_name: "t".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let app = router(pool.clone());
 
     let created = app
@@ -434,8 +442,9 @@ async fn seed_requirement_with_revisions(
 ) -> (Uuid, Uuid) {
     let requirement_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO delivery.requirement (id, project_id, code, title, status) \
-         VALUES ($1, $2, 'REQ-9', 'seeded', 'draft')",
+        "INSERT INTO delivery.requirement (id, project_id, code, title, status, tenant_id) \
+         VALUES ($1, $2, 'REQ-9', 'seeded', 'draft', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(requirement_id)
     .bind(project_id)
@@ -457,8 +466,9 @@ async fn seed_requirement_with_revisions(
         }
         sqlx::query(
             "INSERT INTO delivery.requirement_revision \
-             (id, requirement_id, project_id, version, content, state, content_hash, created_by, approved_by) \
-             VALUES ($1, $2, $3, $4, '{}', $5, 'hash', $6, $7)",
+             (id, requirement_id, project_id, version, content, state, content_hash, created_by, approved_by, tenant_id) \
+             VALUES ($1, $2, $3, $4, '{}', $5, 'hash', $6, $7, \
+                     (SELECT tenant_id FROM core.project WHERE id = $3))",
         )
         .bind(revision_id)
         .bind(requirement_id)
@@ -476,7 +486,7 @@ async fn seed_requirement_with_revisions(
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn create_revision_appends_draft_with_hash(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "REV-2".into(), project_name: "r".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "REV-2".into(), project_name: "r".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let (requirement_id, _) = seed_requirement_with_revisions(&pool, boot.project_id, boot.human_id, &[1], 0).await;
     let app = router(pool.clone());
 
@@ -514,7 +524,7 @@ async fn create_revision_appends_draft_with_hash(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn create_revision_validation(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "REV-3".into(), project_name: "r".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "REV-3".into(), project_name: "r".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let (requirement_id, _) = seed_requirement_with_revisions(&pool, boot.project_id, boot.human_id, &[], 0).await;
     let app = router(pool.clone());
 
@@ -546,7 +556,7 @@ async fn create_revision_validation(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn approve_revision_promotes_and_supersedes(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "REV-4".into(), project_name: "r".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "REV-4".into(), project_name: "r".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     // 版本 1 已 approved、版本 3 是 draft：定稿 3 后 1 必须转 superseded。
     let (requirement_id, draft_id) =
         seed_requirement_with_revisions(&pool, boot.project_id, boot.human_id, &[1], 3).await;
@@ -593,7 +603,7 @@ async fn approve_revision_promotes_and_supersedes(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn approve_revision_conflicts_for_non_draft_or_unknown(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "REV-5".into(), project_name: "r".into() }).await.unwrap();
+    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "REV-5".into(), project_name: "r".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
     let (requirement_id, _) =
         seed_requirement_with_revisions(&pool, boot.project_id, boot.human_id, &[1], 0).await;
     let app = router(pool.clone());

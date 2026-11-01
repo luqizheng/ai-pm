@@ -1,6 +1,7 @@
 //! 0014_knowledge_v2 迁移验证：三张新表与 document_revision 补列存在、DDL 为
 //! forward-only。真实数据库，不 Mock。
 
+use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -41,15 +42,19 @@ async fn knowledge_v2_tables_and_columns_exist(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn proposal_status_check_rejects_unknown_value(pool: PgPool) {
-    let customer: uuid::Uuid =
-        sqlx::query_scalar("INSERT INTO core.customer (name) VALUES ('v2') RETURNING id")
+    let customer: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (name, tenant_id) VALUES ('v2', $1) RETURNING id",
+    )
+            .bind(SYSTEM_TENANT)
             .fetch_one(&pool)
             .await
             .unwrap();
     let project: uuid::Uuid = sqlx::query_scalar(
-        "INSERT INTO core.project (customer_id, code, name) VALUES ($1, 'V2-MIG', 'v2') RETURNING id",
+        "INSERT INTO core.project (customer_id, code, name, tenant_id) \
+         VALUES ($1, 'V2-MIG', 'v2', $2) RETURNING id",
     )
     .bind(customer)
+    .bind(SYSTEM_TENANT)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -63,9 +68,10 @@ async fn proposal_status_check_rejects_unknown_value(pool: PgPool) {
     let err = sqlx::query(
         "INSERT INTO ai.document_proposal \
          (project_id, doc_key, doc_type, canonical_path, proposed_markdown, \
-          proposed_content_hash, status, created_by) \
+          proposed_content_hash, status, created_by, tenant_id) \
          VALUES ($1, 'REQ-1', 'requirement', 'projects/X/requirement/REQ-1.md', \
-                 '# x', 'h', 'bogus', $2)",
+                 '# x', 'h', 'bogus', $2, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project)
     .bind(actor)

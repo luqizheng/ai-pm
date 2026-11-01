@@ -101,10 +101,34 @@ fn import_error(err: ImportError) -> Response {
     (status, Json(body)).into_response()
 }
 
+/// 租户边界（对外入口）：跨租户的 project 一律按不存在处理。
+async fn project_in_tenant(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+    tenant_id: Uuid,
+) -> Result<(), Response> {
+    match sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM core.project WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(project_id)
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(Some(_)) => Ok(()),
+        Ok(None) => Err(import_error(ImportError::ProjectNotFound)),
+        Err(err) => Err(import_error(ImportError::Db(err))),
+    }
+}
+
 async fn list_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+        return resp;
+    }
     match list_imports(&state.pool, project_id).await {
         Ok(items) => {
             let total = items.len();
@@ -119,6 +143,9 @@ async fn start_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+        return resp;
+    }
     let actor = principal.audit_actor();
     match start_import(&state.pool, project_id, &actor).await {
         Ok(outcome) => (StatusCode::ACCEPTED, Json(outcome)).into_response(),
@@ -128,8 +155,12 @@ async fn start_handler(
 
 async fn get_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path((project_id, import_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+        return resp;
+    }
     match get_import(&state.pool, project_id, import_id).await {
         Ok(detail) => (StatusCode::OK, Json(detail)).into_response(),
         Err(err) => import_error(err),
@@ -138,8 +169,12 @@ async fn get_handler(
 
 async fn cancel_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path((project_id, import_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+        return resp;
+    }
     match cancel_import(&state.pool, project_id, import_id).await {
         Ok(()) => (
             StatusCode::OK,
@@ -152,8 +187,12 @@ async fn cancel_handler(
 
 async fn proposals_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path((project_id, import_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+        return resp;
+    }
     match import_proposals(&state.pool, project_id, import_id).await {
         Ok(proposed) => (StatusCode::OK, Json(proposed)).into_response(),
         Err(err) => import_error(err),
@@ -162,9 +201,13 @@ async fn proposals_handler(
 
 async fn apply_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path((project_id, import_id)): Path<(Uuid, Uuid)>,
     Json(req): Json<ApplyRequest>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+        return resp;
+    }
     match propose_import(&state.pool, project_id, import_id, req).await {
         Ok(proposed) => (StatusCode::OK, Json(proposed)).into_response(),
         Err(ImportError::AlreadyApplied) => (

@@ -9,7 +9,7 @@
 //! `pm_submit_document` (quality gate / red-line workflow first).
 
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Extension, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use pm_application::knowledge::{self, KnowledgeError, KnowledgeRoot};
@@ -18,7 +18,35 @@ use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+
+/// 租户边界（对外入口）：跨租户的 project 一律按不存在处理，不泄露存在性。
+async fn project_in_tenant(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+    tenant_id: Uuid,
+) -> Result<(), Response> {
+    match sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM core.project WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(project_id)
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(Some(_)) => Ok(()),
+        Ok(None) => Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "code": "KNOWLEDGE_PROJECT_NOT_FOUND",
+                "message": "project not found",
+            })),
+        )
+            .into_response()),
+        Err(err) => Err(error_response(KnowledgeError::Db(err))),
+    }
+}
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct ProjectQuery {
@@ -33,8 +61,12 @@ pub(crate) struct SearchQuery {
 
 pub(crate) async fn search_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Query(query): Query<SearchQuery>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id).await {
+        return resp;
+    }
     let root = KnowledgeRoot::from_env();
     match knowledge_index::search_documents(&state.pool, &root, query.project_id, &query.q).await {
         Ok(items) => Json(json!({ "items": items })).into_response(),
@@ -44,8 +76,12 @@ pub(crate) async fn search_handler(
 
 pub(crate) async fn list_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Query(query): Query<ProjectQuery>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id).await {
+        return resp;
+    }
     match knowledge::list_documents(&state.pool, query.project_id).await {
         Ok(items) => Json(json!({ "items": items })).into_response(),
         Err(err) => error_response(err),
@@ -54,9 +90,13 @@ pub(crate) async fn list_handler(
 
 pub(crate) async fn get_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(document_id): Path<Uuid>,
     Query(query): Query<ProjectQuery>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id).await {
+        return resp;
+    }
     let root = KnowledgeRoot::from_env();
     match knowledge::read_document(&state.pool, &root, query.project_id, document_id).await {
         Ok(document) => Json(document).into_response(),
@@ -124,8 +164,12 @@ pub(crate) struct MigrateRequirementBody {
 
 pub(crate) async fn submit_proposal_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Json(body): Json<ProposalBody>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id).await {
+        return resp;
+    }
     let root = KnowledgeRoot::from_env();
     let outcome = pm_application::knowledge_proposal::submit_proposal(
         &state.pool,
@@ -154,8 +198,12 @@ pub(crate) async fn submit_proposal_handler(
 
 pub(crate) async fn list_proposals_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Query(query): Query<ProposalQuery>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id).await {
+        return resp;
+    }
     match pm_application::knowledge_proposal::list_proposals(
         &state.pool,
         query.project_id,
@@ -170,9 +218,13 @@ pub(crate) async fn list_proposals_handler(
 
 pub(crate) async fn confirm_redline_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(proposal_id): Path<Uuid>,
     Json(body): Json<ConfirmRedlineBody>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id).await {
+        return resp;
+    }
     let root = KnowledgeRoot::from_env();
     match pm_application::knowledge_proposal::confirm_redline_proposal(
         &state.pool,
@@ -190,9 +242,13 @@ pub(crate) async fn confirm_redline_handler(
 
 pub(crate) async fn veto_revision_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(revision_id): Path<Uuid>,
     Json(body): Json<VetoRevisionBody>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id).await {
+        return resp;
+    }
     let root = KnowledgeRoot::from_env();
     match pm_application::knowledge_proposal::veto_revision(
         &state.pool,
@@ -211,9 +267,13 @@ pub(crate) async fn veto_revision_handler(
 
 pub(crate) async fn list_references_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(document_id): Path<Uuid>,
     Query(query): Query<ProjectQuery>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id).await {
+        return resp;
+    }
     match pm_application::knowledge_reference::list_references(
         &state.pool,
         query.project_id,
@@ -228,9 +288,13 @@ pub(crate) async fn list_references_handler(
 
 pub(crate) async fn add_reference_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(document_id): Path<Uuid>,
     Json(body): Json<AddReferenceBody>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id).await {
+        return resp;
+    }
     let id = pm_application::knowledge_reference::add_reference(
         &state.pool,
         pm_application::knowledge_reference::AddReferenceRequest {
@@ -258,9 +322,13 @@ pub(crate) async fn add_reference_handler(
 
 pub(crate) async fn index_state_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(document_id): Path<Uuid>,
     Query(query): Query<ProjectQuery>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id).await {
+        return resp;
+    }
     match pm_application::knowledge_indexer::index_states(
         &state.pool,
         query.project_id,
@@ -275,9 +343,13 @@ pub(crate) async fn index_state_handler(
 
 pub(crate) async fn reindex_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(revision_id): Path<Uuid>,
     Json(body): Json<ReindexBody>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id).await {
+        return resp;
+    }
     let root = KnowledgeRoot::from_env();
     let indexer =
         pm_application::knowledge_indexer::MarkdownTreeIndexer::new(state.pool.clone(), root);
@@ -296,9 +368,13 @@ pub(crate) async fn reindex_handler(
 
 pub(crate) async fn migrate_requirement_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(revision_id): Path<Uuid>,
     Json(body): Json<MigrateRequirementBody>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id).await {
+        return resp;
+    }
     let root = KnowledgeRoot::from_env();
     match pm_application::knowledge_migrate::migrate_requirement_revision(
         &state.pool,

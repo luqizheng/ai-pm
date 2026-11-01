@@ -23,4 +23,5 @@ uuid.workspace = true
 
 [dev-dependencies]
 axum.workspace = true
+pm-domain = { path = "../pm-domain" }
 reqwest.workspace = true

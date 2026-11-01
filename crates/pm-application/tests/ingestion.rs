@@ -1,4 +1,4 @@
-//! Idempotent inbound event ingestion tests (Task 9, Step 1).
+﻿//! Idempotent inbound event ingestion tests (Task 9, Step 1).
 //!
 //! Contract under test: `submit_event` runs the event insert plus the
 //! `ai_analysis` job insert in one transaction, deduplicates on
@@ -16,11 +16,13 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 fn seed(code: &str) -> BootstrapRequest {
     BootstrapRequest {
         project_code: code.to_string(),
         project_name: format!("project {code}"),
+        tenant_id: SYSTEM_TENANT,
     }
 }
 

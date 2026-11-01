@@ -1,4 +1,4 @@
-//! Outbox 生产写入点（spec §20.6.1 / §20.7 L3）：任务状态迁移在同一条业务事务里
+﻿//! Outbox 生产写入点（spec §20.6.1 / §20.7 L3）：任务状态迁移在同一条业务事务里
 //! 登记异步事件；迁移失败（revision 冲突）则事务回滚，不留下事件。
 
 use std::sync::Arc;
@@ -11,6 +11,7 @@ use pm_application::command_executor::{
 use pm_domain::{CommandError, ProjectCommand, TaskStatus};
 use sqlx::PgPool;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 struct Fixture {
     project_id: Uuid,
@@ -24,13 +25,15 @@ async fn seed(pool: &PgPool, code: &str) -> Fixture {
         BootstrapRequest {
             project_code: code.to_string(),
             project_name: code.to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
     .unwrap();
     let task_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status, revision) \
-         VALUES ($1, 'seeded task', 'draft', 1) RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, revision, tenant_id) \
+         VALUES ($1, 'seeded task', 'draft', 1, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(outcome.project_id)
     .fetch_one(pool)

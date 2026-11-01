@@ -1,4 +1,4 @@
-//! `/v1/pm/customers` 与「建项挂客户」契约测试（0017 客户主数据）。
+﻿//! `/v1/pm/customers` 与「建项挂客户」契约测试（0017 客户主数据）。
 //!
 //! 覆盖：建档 / code 冲突 / 搜索过滤 / 建项携带 customer_id / 未知客户 400 /
 //! 归档客户拒绝建项 / 兼容路径落 placeholder / 项目列表返回 customer_name。
@@ -10,6 +10,7 @@ use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
+use pm_domain::SYSTEM_TENANT;
 
 fn get(uri: &str) -> Request<Body> {
     Request::builder()
@@ -195,6 +196,7 @@ async fn legacy_bootstrap_marks_placeholder_customer(pool: PgPool) {
         BootstrapRequest {
             project_code: "LEGACY-1".into(),
             project_name: "兼容路径".into(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await

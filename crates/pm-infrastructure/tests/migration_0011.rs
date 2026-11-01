@@ -1,20 +1,25 @@
 //! 0011_run_dispatch 迁移验证（R2 / R3 / S6）：约束被正确替换、唯一活跃索引生效、
 //! 无用途旧索引被删除、新列与新表存在。真实数据库，不 Mock。
 
+use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
-    let customer_id: Uuid =
-        sqlx::query_scalar("INSERT INTO core.customer (name) VALUES ('m') RETURNING id")
+    let customer_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (name, tenant_id) VALUES ('m', $1) RETURNING id",
+    )
+            .bind(SYSTEM_TENANT)
             .fetch_one(pool)
             .await
             .unwrap();
     sqlx::query_scalar(
-        "INSERT INTO core.project (customer_id, code, name) VALUES ($1, $2, 'm') RETURNING id",
+        "INSERT INTO core.project (customer_id, code, name, tenant_id) \
+         VALUES ($1, $2, 'm', $3) RETURNING id",
     )
     .bind(customer_id)
     .bind(code.to_string())
+    .bind(SYSTEM_TENANT)
     .fetch_one(pool)
     .await
     .unwrap()
@@ -22,8 +27,8 @@ async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
 
 async fn seed_task(pool: &PgPool, project_id: Uuid) -> Uuid {
     sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status, revision) \
-         VALUES ($1, 't', 'ready', 1) RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, revision, tenant_id) \
+         VALUES ($1, 't', 'ready', 1, (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .fetch_one(pool)
@@ -33,8 +38,8 @@ async fn seed_task(pool: &PgPool, project_id: Uuid) -> Uuid {
 
 async fn insert_run(pool: &PgPool, project_id: Uuid, task_id: Uuid, attempt: i32, status: &str) -> Result<Uuid, sqlx::Error> {
     sqlx::query_scalar(
-        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status) \
-         VALUES ($1, $2, $3, $4) RETURNING id",
+        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
+         VALUES ($1, $2, $3, $4, (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(task_id)
@@ -134,16 +139,17 @@ async fn task_repository_cross_project_fk_is_enforced(pool: PgPool) {
     let p2 = seed_project(&pool, "MIG-6B").await;
     let t1 = seed_task(&pool, p1).await;
     let other_repo: Uuid = sqlx::query_scalar(
-        "INSERT INTO integration.project_repository (project_id, name, url, status) \
-         VALUES ($1, 'other', 'git@host:other', 'verified') RETURNING id",
+        "INSERT INTO integration.project_repository (project_id, name, url, status, tenant_id) \
+         VALUES ($1, 'other', 'git@host:other', 'verified', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(p2)
     .fetch_one(&pool)
     .await
     .unwrap();
     let err = sqlx::query(
-        "INSERT INTO delivery.task_repository (task_id, project_id, repository_id) \
-         VALUES ($1, $2, $3)",
+        "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, tenant_id) \
+         VALUES ($1, $2, $3, (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(t1)
     .bind(p1)

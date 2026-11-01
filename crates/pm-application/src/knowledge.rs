@@ -300,8 +300,8 @@ pub async fn create_document(
 
     let mut tx = pool.begin().await?;
     let document_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO ai.project_document (project_id, doc_key, doc_type, canonical_path) \
-         VALUES ($1, $2, $3, $4) RETURNING id",
+        "INSERT INTO ai.project_document (project_id, doc_key, doc_type, canonical_path, tenant_id) \
+         VALUES ($1, $2, $3, $4, (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(&req.doc_key)
@@ -312,8 +312,9 @@ pub async fn create_document(
 
     sqlx::query(
         "INSERT INTO ai.document_revision \
-         (project_id, document_id, revision_no, git_commit_sha, content_hash, status, change_summary, created_by) \
-         VALUES ($1, $2, 1, $3, $4, 'published', $5, $6)",
+         (project_id, document_id, revision_no, git_commit_sha, content_hash, status, change_summary, created_by, tenant_id) \
+         VALUES ($1, $2, 1, $3, $4, 'published', $5, $6, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(document_id)

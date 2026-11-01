@@ -10,6 +10,7 @@ use pm_application::command_executor::{
 };
 use pm_application::PolicyEngine;
 use pm_domain::{CommandError, ProjectCommand, TaskStatus};
+use pm_domain::SYSTEM_TENANT;
 use serde_json::{json, Value};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
@@ -23,7 +24,10 @@ struct Fixture {
 
 /// customer → project → (human, ai_pm) principals → task in `backlog`, revision 1.
 async fn seed(pool: &PgPool) -> Fixture {
-    let customer_id: Uuid = sqlx::query_scalar("INSERT INTO core.customer (name) VALUES ('cust') RETURNING id")
+    let customer_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (name, tenant_id) VALUES ('cust', $1) RETURNING id",
+    )
+        .bind(SYSTEM_TENANT)
         .fetch_one(pool)
         .await
         .unwrap();
@@ -40,15 +44,18 @@ async fn seed(pool: &PgPool) -> Fixture {
     .await
     .unwrap();
     let project_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO core.project (customer_id, code, name) VALUES ($1, 'CMD-1', 'command channel') RETURNING id",
+        "INSERT INTO core.project (customer_id, code, name, tenant_id) \
+         VALUES ($1, 'CMD-1', 'command channel', $2) RETURNING id",
     )
     .bind(customer_id)
+    .bind(SYSTEM_TENANT)
     .fetch_one(pool)
     .await
     .unwrap();
     let task_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, description) \
-         VALUES ($1, 'seeded task', 'created by test seed') RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, description, tenant_id) \
+         VALUES ($1, 'seeded task', 'created by test seed', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .fetch_one(pool)
@@ -64,7 +71,8 @@ async fn seed(pool: &PgPool) -> Fixture {
 
 async fn seed_milestone(pool: &PgPool, project_id: Uuid) -> Uuid {
     sqlx::query_scalar(
-        "INSERT INTO delivery.milestone (project_id, name) VALUES ($1, 'm1') RETURNING id",
+        "INSERT INTO delivery.milestone (project_id, name, tenant_id) \
+         VALUES ($1, 'm1', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .fetch_one(pool)
@@ -465,8 +473,8 @@ async fn seed_requirement_with_current(
     code: &str,
 ) -> RequirementFixture {
     let requirement_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.requirement (project_id, code, title) \
-         VALUES ($1, $2, 'seeded requirement') RETURNING id",
+        "INSERT INTO delivery.requirement (project_id, code, title, tenant_id) \
+         VALUES ($1, $2, 'seeded requirement', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(code)
@@ -475,8 +483,9 @@ async fn seed_requirement_with_current(
     .unwrap();
     let current_revision_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.requirement_revision \
-         (requirement_id, project_id, version, content, state, content_hash, created_by, approved_by) \
-         VALUES ($1, $2, 1, '{\"text\": \"v1\"}', 'approved', 'hash-1', $3, $3) RETURNING id",
+         (requirement_id, project_id, version, content, state, content_hash, created_by, approved_by, tenant_id) \
+         VALUES ($1, $2, 1, '{\"text\": \"v1\"}', 'approved', 'hash-1', $3, $3, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2)) RETURNING id",
     )
     .bind(requirement_id)
     .bind(project_id)
@@ -492,8 +501,9 @@ async fn seed_requirement_with_current(
         .unwrap();
     let draft_revision_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.requirement_revision \
-         (requirement_id, project_id, version, content, state, content_hash, created_by) \
-         VALUES ($1, $2, 2, '{\"text\": \"v2\"}', 'draft', 'hash-2', $3) RETURNING id",
+         (requirement_id, project_id, version, content, state, content_hash, created_by, tenant_id) \
+         VALUES ($1, $2, 2, '{\"text\": \"v2\"}', 'draft', 'hash-2', $3, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2)) RETURNING id",
     )
     .bind(requirement_id)
     .bind(project_id)
@@ -517,8 +527,8 @@ async fn seed_requirement_without_current(
     code: &str,
 ) -> (Uuid, Uuid) {
     let requirement_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.requirement (project_id, code, title) \
-         VALUES ($1, $2, 'seeded requirement') RETURNING id",
+        "INSERT INTO delivery.requirement (project_id, code, title, tenant_id) \
+         VALUES ($1, $2, 'seeded requirement', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(code)
@@ -527,8 +537,9 @@ async fn seed_requirement_without_current(
     .unwrap();
     let draft_revision_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.requirement_revision \
-         (requirement_id, project_id, version, content, state, content_hash, created_by) \
-         VALUES ($1, $2, 1, '{\"text\": \"v1\"}', 'draft', 'hash-1', $3) RETURNING id",
+         (requirement_id, project_id, version, content, state, content_hash, created_by, tenant_id) \
+         VALUES ($1, $2, 1, '{\"text\": \"v1\"}', 'draft', 'hash-1', $3, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2)) RETURNING id",
     )
     .bind(requirement_id)
     .bind(project_id)
@@ -541,8 +552,8 @@ async fn seed_requirement_without_current(
 
 async fn seed_milestone_with_plan(pool: &PgPool, project_id: Uuid, planned_at: DateTime<Utc>) -> Uuid {
     sqlx::query_scalar(
-        "INSERT INTO delivery.milestone (project_id, name, planned_at) \
-         VALUES ($1, 'planned milestone', $2) RETURNING id",
+        "INSERT INTO delivery.milestone (project_id, name, planned_at, tenant_id) \
+         VALUES ($1, 'planned milestone', $2, (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(planned_at)

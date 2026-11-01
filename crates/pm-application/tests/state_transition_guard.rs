@@ -1,4 +1,4 @@
-//! R1：Task 状态变更统一经 `pm-domain::validate_transition` 守卫的回归测试。
+﻿//! R1：Task 状态变更统一经 `pm-domain::validate_transition` 守卫的回归测试。
 //!
 //! 既有 `update_task_status` 用例过去可直写非法边（如 `draft→completed`）；接入
 //! 统一守卫后这些边必须被拒，且拒绝不得改动状态。真实数据库，不 Mock。
@@ -13,6 +13,7 @@ use pm_application::PolicyEngine;
 use pm_domain::{CommandError, ProjectCommand, TaskStatus};
 use sqlx::PgPool;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 async fn seed(pool: &PgPool, code: &str, status: &str) -> (Uuid, Uuid, Uuid) {
     let o = bootstrap_project(
@@ -20,13 +21,14 @@ async fn seed(pool: &PgPool, code: &str, status: &str) -> (Uuid, Uuid, Uuid) {
         BootstrapRequest {
             project_code: code.to_string(),
             project_name: code.to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
     .unwrap();
     let task: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status, revision) \
-         VALUES ($1, 't', $2, 1) RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, revision, tenant_id) \
+         VALUES ($1, 't', $2, 1, (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(o.project_id)
     .bind(status.to_string())
@@ -141,8 +143,8 @@ async fn dispatch_path_uses_the_same_guard(pool: PgPool) {
     use pm_application::run_dispatch::{claim_once, DispatchMode, RunDispatchConfig};
     let (p, _a, t) = seed(&pool, "STG-4", "draft").await;
     let run: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status) \
-         VALUES ($1, $2, 1, 'queued') RETURNING id",
+        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
+         VALUES ($1, $2, 1, 'queued', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(p)
     .bind(t)

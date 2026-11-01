@@ -1,4 +1,4 @@
-//! Audit SSE contract: auth surface, `text/event-stream` framing and the
+﻿//! Audit SSE contract: auth surface, `text/event-stream` framing and the
 //! `pm_audit` trigger payload. Split into two stable halves — the transport is
 //! driven by `AuditFeed::publish` (no PG timing), while the trigger is proven
 //! with a direct `LISTEN` in the test process.
@@ -18,6 +18,7 @@ use sqlx::postgres::PgListener;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tower::ServiceExt;
+use pm_domain::SYSTEM_TENANT;
 
 const PRIVATE_PEM: &str = include_str!("keys/private.pem");
 const PUBLIC_PEM: &str = include_str!("keys/public.pem");
@@ -121,13 +122,24 @@ async fn query_token_streams_published_audit_events(pool: PgPool) {
         BootstrapRequest {
             project_code: "SSE-1".to_string(),
             project_name: "sse".to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
     .unwrap();
     sqlx::query(
+        "INSERT INTO core.tenant (provider, external_key, display_name) \
+         VALUES ('lmms', '1', 'lmms:1') ON CONFLICT (provider, external_key) DO NOTHING",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
         "INSERT INTO core.principal_identity \
-             (provider, claims_tenant_key, subject, principal_id) VALUES ('lmms', '1', 'usr-1', $1)",
+             (provider, tenant_id, subject, principal_id) \
+         VALUES ('lmms', \
+                 (SELECT id FROM core.tenant WHERE provider = 'lmms' AND external_key = '1'), \
+                 'usr-1', $1)",
     )
     .bind(boot.human_id)
     .execute(&pool)
@@ -173,6 +185,7 @@ async fn audit_insert_fires_pm_audit_notification(pool: PgPool) {
         BootstrapRequest {
             project_code: "SSE-1".to_string(),
             project_name: "sse project".to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
@@ -183,8 +196,9 @@ async fn audit_insert_fires_pm_audit_notification(pool: PgPool) {
 
     let target = uuid::Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO governance.audit_log (project_id, actor_id, action, target_type, target_id) \
-         VALUES ($1, $2, 'task.create', 'task', $3)",
+        "INSERT INTO governance.audit_log (project_id, actor_id, action, target_type, target_id, tenant_id) \
+         VALUES ($1, $2, 'task.create', 'task', $3, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(boot.project_id)
     .bind(boot.human_id)

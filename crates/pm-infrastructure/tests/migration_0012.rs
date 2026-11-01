@@ -2,20 +2,25 @@
 //! 列存在、事件级部分唯一索引拒绝「同一事件第二条 Run」、不同事件可并存、NULL
 //! 不受约束，且与任务级唯一索引的谓词单一真源一致。真实数据库，不 Mock。
 
+use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
-    let customer_id: Uuid =
-        sqlx::query_scalar("INSERT INTO core.customer (name) VALUES ('m') RETURNING id")
+    let customer_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (name, tenant_id) VALUES ('m', $1) RETURNING id",
+    )
+            .bind(SYSTEM_TENANT)
             .fetch_one(pool)
             .await
             .unwrap();
     sqlx::query_scalar(
-        "INSERT INTO core.project (customer_id, code, name) VALUES ($1, $2, 'm') RETURNING id",
+        "INSERT INTO core.project (customer_id, code, name, tenant_id) \
+         VALUES ($1, $2, 'm', $3) RETURNING id",
     )
     .bind(customer_id)
     .bind(code.to_string())
+    .bind(SYSTEM_TENANT)
     .fetch_one(pool)
     .await
     .unwrap()
@@ -23,8 +28,8 @@ async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
 
 async fn seed_task(pool: &PgPool, project_id: Uuid) -> Uuid {
     sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status, revision) \
-         VALUES ($1, 't', 'ready', 1) RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, revision, tenant_id) \
+         VALUES ($1, 't', 'ready', 1, (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .fetch_one(pool)
@@ -42,8 +47,9 @@ async fn insert_run(
 ) -> Result<Uuid, sqlx::Error> {
     sqlx::query_scalar(
         "INSERT INTO delivery.task_run \
-             (project_id, task_id, attempt_no, status, source_event_id) \
-         VALUES ($1, $2, $3, $4, $5) RETURNING id",
+             (project_id, task_id, attempt_no, status, source_event_id, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(task_id)

@@ -6,12 +6,13 @@
 
 use axum::{
     Json, Router,
-    extract::{Query, State},
+    extract::{Extension, Query, State},
     routing::get,
 };
 use std::collections::HashMap;
 use uuid::Uuid;
 
+use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::{ApiResult, paging, project_filter};
 
@@ -34,6 +35,7 @@ pub(crate) struct ArtifactRow {
 
 async fn artifacts(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
@@ -44,19 +46,21 @@ async fn artifacts(
                 rv.created_at, rv.approved_by \
          FROM delivery.requirement_revision rv \
          JOIN delivery.requirement r ON r.id = rv.requirement_id \
-         WHERE ($1::uuid IS NULL OR rv.project_id = $1) \
-         ORDER BY rv.created_at DESC LIMIT $2 OFFSET $3",
+         WHERE rv.tenant_id = $4 AND ($1::uuid IS NULL OR rv.project_id = $1) \
+         ORDER BY rv.created_at DESC, rv.version DESC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM delivery.requirement_revision \
-         WHERE ($1::uuid IS NULL OR project_id = $1)",
+         WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
     Ok(Json(page.to_response(items, total)))

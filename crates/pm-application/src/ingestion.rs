@@ -67,10 +67,19 @@ pub async fn submit_event(
 
     let mut tx = pool.begin().await.map_err(IngestionError::Db)?;
 
+    // 先解析租户：project 不存在时子查询会返回 NULL，只会撞 NOT NULL 约束，
+    // 掩盖掉原本清晰的 UnknownProject 语义，故显式查一次。
+    let tenant_id: uuid::Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+        .bind(req.project_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(IngestionError::Db)?
+        .ok_or(IngestionError::UnknownProject)?;
+
     let inserted: Option<(EventId, String)> = sqlx::query_as(
         "INSERT INTO integration.inbound_event \
-         (project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7) \
+         (project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
          ON CONFLICT (project_id, source, idempotency_key) DO NOTHING \
          RETURNING id, status",
     )
@@ -81,6 +90,7 @@ pub async fn submit_event(
     .bind(&req.idempotency_key)
     .bind(&req.payload)
     .bind(&payload_hash)
+    .bind(tenant_id)
     .fetch_optional(&mut *tx)
     .await
     .map_err(fk_to_unknown_project)?;
@@ -88,11 +98,12 @@ pub async fn submit_event(
     match inserted {
         Some((event_id, _)) => {
             sqlx::query(
-                "INSERT INTO integration.job (project_id, event_id, job_type) \
-                 VALUES ($1, $2, 'ai_analysis')",
+                "INSERT INTO integration.job (project_id, event_id, job_type, tenant_id) \
+                 VALUES ($1, $2, 'ai_analysis', $3)",
             )
             .bind(req.project_id)
             .bind(event_id)
+            .bind(tenant_id)
             .execute(&mut *tx)
             .await
             .map_err(fk_to_unknown_project)?;

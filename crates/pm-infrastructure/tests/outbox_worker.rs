@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use pm_domain::SYSTEM_TENANT;
 use pm_infrastructure::outbox::{self, NewOutboxEvent};
 use pm_infrastructure::outbox_worker::{DispatchOutcome, OutboxHandler, OutboxWorker};
 use sqlx::PgPool;
@@ -17,12 +18,15 @@ impl OutboxHandler for CountingHandler {
 }
 
 async fn seed_event(pool: &PgPool, key: &str) -> Uuid {
-    let customer_id: Uuid =
-        sqlx::query_scalar("INSERT INTO core.customer (name) VALUES ('ow') RETURNING id")
-            .fetch_one(pool).await.unwrap();
+    let customer_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (name, tenant_id) VALUES ('ow', $1) RETURNING id",
+    )
+    .bind(SYSTEM_TENANT)
+        .fetch_one(pool).await.unwrap();
     let project_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO core.project (customer_id, code, name) VALUES ($1, $2, 'ow') RETURNING id",
-    ).bind(customer_id).bind(format!("OW-{key}")).fetch_one(pool).await.unwrap();
+        "INSERT INTO core.project (customer_id, code, name, tenant_id) \
+         VALUES ($1, $2, 'ow', $3) RETURNING id",
+    ).bind(customer_id).bind(format!("OW-{key}")).bind(SYSTEM_TENANT).fetch_one(pool).await.unwrap();
     let mut tx = pool.begin().await.unwrap();
     let id = outbox::append(&mut tx, NewOutboxEvent {
         project_id,

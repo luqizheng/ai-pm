@@ -100,10 +100,53 @@ fn repository_error(err: RepositoryError) -> Response {
     (status, Json(json!({ "message": message }))).into_response()
 }
 
+/// 租户边界（对外入口）：跨租户的 project / repository 一律按不存在处理。
+async fn project_in_tenant(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+    tenant_id: Uuid,
+) -> Result<(), Response> {
+    match sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM core.project WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(project_id)
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(Some(_)) => Ok(()),
+        Ok(None) => Err(repository_error(RepositoryError::ProjectNotFound)),
+        Err(err) => Err(repository_error(RepositoryError::Db(err))),
+    }
+}
+
+async fn repository_in_tenant(
+    pool: &sqlx::PgPool,
+    repository_id: Uuid,
+    tenant_id: Uuid,
+) -> Result<(), Response> {
+    match sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM integration.project_repository WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(repository_id)
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await
+    {
+        Ok(Some(_)) => Ok(()),
+        Ok(None) => Err(repository_error(RepositoryError::NotFound)),
+        Err(err) => Err(repository_error(RepositoryError::Db(err))),
+    }
+}
+
 async fn list_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+        return resp;
+    }
     match list_repositories(&state.pool, project_id).await {
         Ok(items) => {
             let total = items.len();
@@ -119,6 +162,9 @@ async fn create_handler(
     Path(project_id): Path<Uuid>,
     Json(req): Json<CreateRepositoryRequest>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+        return resp;
+    }
     let actor = principal.audit_actor();
     match create_repository(&state.pool, project_id, &actor, req).await {
         Ok(row) => (StatusCode::CREATED, Json(row)).into_response(),
@@ -132,6 +178,9 @@ async fn update_handler(
     Path(repository_id): Path<Uuid>,
     Json(req): Json<UpdateRepositoryRequest>,
 ) -> Response {
+    if let Err(resp) = repository_in_tenant(&state.pool, repository_id, principal.tenant_id).await {
+        return resp;
+    }
     let actor = principal.audit_actor();
     match update_repository(&state.pool, repository_id, &actor, req).await {
         Ok(row) => (StatusCode::OK, Json(row)).into_response(),
@@ -144,6 +193,9 @@ async fn delete_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(repository_id): Path<Uuid>,
 ) -> Response {
+    if let Err(resp) = repository_in_tenant(&state.pool, repository_id, principal.tenant_id).await {
+        return resp;
+    }
     let actor = principal.audit_actor();
     match delete_repository(&state.pool, repository_id, &actor).await {
         Ok(()) => (StatusCode::OK, Json(json!({ "id": repository_id }))).into_response(),
@@ -156,6 +208,9 @@ async fn verify_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(repository_id): Path<Uuid>,
 ) -> Response {
+    if let Err(resp) = repository_in_tenant(&state.pool, repository_id, principal.tenant_id).await {
+        return resp;
+    }
     let actor = principal.audit_actor();
     match verify_repository(&state.pool, repository_id, &actor).await {
         Ok(outcome) => (StatusCode::OK, Json(outcome)).into_response(),
@@ -168,6 +223,9 @@ async fn archive_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(repository_id): Path<Uuid>,
 ) -> Response {
+    if let Err(resp) = repository_in_tenant(&state.pool, repository_id, principal.tenant_id).await {
+        return resp;
+    }
     let actor = principal.audit_actor();
     match archive_repository(&state.pool, repository_id, &actor).await {
         Ok(row) => (StatusCode::OK, Json(row)).into_response(),
@@ -177,8 +235,12 @@ async fn archive_handler(
 
 async fn get_key_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+        return resp;
+    }
     match get_ssh_key(&state.pool, project_id).await {
         Ok(Some(view)) => (StatusCode::OK, Json(view)).into_response(),
         Ok(None) => repository_error(RepositoryError::SshKeyNotFound),
@@ -191,6 +253,9 @@ async fn generate_key_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+        return resp;
+    }
     let actor = principal.audit_actor();
     match generate_ssh_key(&state.pool, project_id, &actor).await {
         Ok(view) => (StatusCode::OK, Json(view)).into_response(),
@@ -203,6 +268,9 @@ async fn delete_key_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+        return resp;
+    }
     let actor = principal.audit_actor();
     match delete_ssh_key(&state.pool, project_id, &actor).await {
         Ok(()) => (StatusCode::OK, Json(json!({ "project_id": project_id }))).into_response(),
@@ -212,8 +280,12 @@ async fn delete_key_handler(
 
 async fn list_keys_handler(
     State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+        return resp;
+    }
     match list_ssh_keys(&state.pool, project_id).await {
         Ok(items) => {
             let total = items.len();
@@ -235,6 +307,9 @@ async fn create_key_handler(
     Path(project_id): Path<Uuid>,
     body: Option<Json<CreateKeyRequest>>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+        return resp;
+    }
     let rotate = body.map(|Json(req)| req.rotate).unwrap_or(false);
     let actor = principal.audit_actor();
     match ensure_ssh_key(&state.pool, project_id, &actor, rotate).await {
@@ -248,6 +323,9 @@ async fn revoke_key_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id).await {
+        return resp;
+    }
     let actor = principal.audit_actor();
     match revoke_ssh_key(&state.pool, project_id, &actor).await {
         Ok(()) => (StatusCode::OK, Json(json!({ "project_id": project_id }))).into_response(),

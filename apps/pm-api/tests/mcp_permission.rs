@@ -1,4 +1,4 @@
-//! MCP endpoint permission gate (integration spec Phase 1 §3): every `/mcp`
+﻿//! MCP endpoint permission gate (integration spec Phase 1 §3): every `/mcp`
 //! call requires `PM_MCP_READ`, and write tools additionally require their
 //! per-tool permission (`PM_MCP_DOCUMENT_WRITE`). The rest of the API is
 //! unaffected by the permission claim.
@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 const PRIVATE_PEM: &str = include_str!("keys/private.pem");
 const PUBLIC_PEM: &str = include_str!("keys/public.pem");
@@ -134,6 +135,7 @@ async fn non_mcp_routes_ignore_the_permission_claim(pool: PgPool) {
         BootstrapRequest {
             project_code: "MCP-1".to_string(),
             project_name: "mcp project".to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await

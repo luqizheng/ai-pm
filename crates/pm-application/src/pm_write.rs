@@ -134,8 +134,9 @@ async fn append_audit(
     sqlx::query(
         "INSERT INTO governance.audit_log \
          (id, project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, \
-          action, target_type, target_id) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+          action, target_type, target_id, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(Uuid::new_v4())
     .bind(project_id)
@@ -164,8 +165,9 @@ async fn append_audit_with_after(
     sqlx::query(
         "INSERT INTO governance.audit_log \
          (id, project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, \
-          action, target_type, target_id, after_data) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+          action, target_type, target_id, after_data, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(Uuid::new_v4())
     .bind(project_id)
@@ -232,8 +234,9 @@ pub async fn create_revision(
     let revision_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO delivery.requirement_revision \
-         (id, requirement_id, project_id, version, content, state, content_hash, created_by) \
-         VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7)",
+         (id, requirement_id, project_id, version, content, state, content_hash, created_by, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, \
+                 (SELECT tenant_id FROM core.project WHERE id = $3))",
     )
     .bind(revision_id)
     .bind(requirement_id)
@@ -381,8 +384,9 @@ pub async fn create_task(
     let task_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO delivery.task \
-         (id, project_id, milestone_id, title, description, status, priority, assignee_id, revision) \
-         VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, 1)",
+         (id, project_id, milestone_id, title, description, status, priority, assignee_id, revision, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, 1, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(task_id)
     .bind(project_id)
@@ -608,7 +612,9 @@ async fn replace_acceptance_criteria(
     for entry in &normalized {
         sqlx::query(
             "INSERT INTO delivery.task_acceptance_criterion \
-             (project_id, task_id, ordinal, text, verification_kind) VALUES ($1, $2, $3, $4, $5)",
+             (project_id, task_id, ordinal, text, verification_kind, tenant_id) \
+             VALUES ($1, $2, $3, $4, $5, \
+                     (SELECT tenant_id FROM core.project WHERE id = $1))",
         )
         .bind(project_id)
         .bind(task_id)
@@ -656,7 +662,9 @@ async fn replace_knowledge_refs(
     for item in &input {
         sqlx::query(
             "INSERT INTO delivery.task_knowledge_ref \
-             (project_id, task_id, document_id, is_required) VALUES ($1, $2, $3, $4) \
+             (project_id, task_id, document_id, is_required, tenant_id) \
+             VALUES ($1, $2, $3, $4, \
+                     (SELECT tenant_id FROM core.project WHERE id = $1)) \
              ON CONFLICT (task_id, document_id) DO NOTHING",
         )
         .bind(project_id)

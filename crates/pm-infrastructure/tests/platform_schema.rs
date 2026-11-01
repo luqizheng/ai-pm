@@ -1,12 +1,14 @@
+use pm_domain::SYSTEM_TENANT;
 use sqlx::types::uuid::Uuid;
 use sqlx::PgPool;
 
 /// customer → project → principal seed; returns (project_id, principal_id).
 async fn seed_project(pool: &PgPool, project_code: &str) -> (Uuid, Uuid) {
     let customer_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO core.customer (name) VALUES ($1) RETURNING id",
+        "INSERT INTO core.customer (name, tenant_id) VALUES ($1, $2) RETURNING id",
     )
     .bind(format!("customer {project_code}"))
+    .bind(SYSTEM_TENANT)
     .fetch_one(pool)
     .await
     .unwrap();
@@ -20,12 +22,13 @@ async fn seed_project(pool: &PgPool, project_code: &str) -> (Uuid, Uuid) {
     .unwrap();
 
     let project_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO core.project (customer_id, code, name) \
-         VALUES ($1, $2, $3) RETURNING id",
+        "INSERT INTO core.project (customer_id, code, name, tenant_id) \
+         VALUES ($1, $2, $3, $4) RETURNING id",
     )
     .bind(customer_id)
     .bind(project_code)
     .bind(format!("project {project_code}"))
+    .bind(SYSTEM_TENANT)
     .fetch_one(pool)
     .await
     .unwrap();
@@ -42,8 +45,9 @@ async fn insert_inbound_event(
 ) -> Uuid {
     sqlx::query_scalar(
         "INSERT INTO integration.inbound_event \
-         (project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash) \
-         VALUES ($1, $2, $3, 'issue_commented', $4, $5, $6) RETURNING id",
+         (project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash, tenant_id) \
+         VALUES ($1, $2, $3, 'issue_commented', $4, $5, $6, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(actor_id)
@@ -75,8 +79,9 @@ async fn idempotency_key_unique(pool: sqlx::PgPool) {
     // must be rejected by the unique constraint.
     let duplicate = sqlx::query(
         "INSERT INTO integration.inbound_event \
-         (project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash) \
-         VALUES ($1, $2, 'git', 'issue_commented', 'push-001', $3, 'hash-duplicate')",
+         (project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash, tenant_id) \
+         VALUES ($1, $2, 'git', 'issue_commented', 'push-001', $3, 'hash-duplicate', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(actor_id)
@@ -103,8 +108,8 @@ async fn job_unique_per_type_and_skill_seed(pool: sqlx::PgPool) {
     let event_id = insert_inbound_event(&pool, project_id, actor_id, "git", "push-002").await;
 
     let job_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO integration.job (project_id, event_id, job_type) \
-         VALUES ($1, $2, 'analyze') RETURNING id",
+        "INSERT INTO integration.job (project_id, event_id, job_type, tenant_id) \
+         VALUES ($1, $2, 'analyze', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(event_id)
@@ -114,8 +119,8 @@ async fn job_unique_per_type_and_skill_seed(pool: sqlx::PgPool) {
 
     // A second job of the same (event_id, job_type) must be rejected.
     let duplicate = sqlx::query(
-        "INSERT INTO integration.job (project_id, event_id, job_type) \
-         VALUES ($1, $2, 'analyze')",
+        "INSERT INTO integration.job (project_id, event_id, job_type, tenant_id) \
+         VALUES ($1, $2, 'analyze', (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(event_id)
@@ -131,8 +136,9 @@ async fn job_unique_per_type_and_skill_seed(pool: sqlx::PgPool) {
 
     // A different job_type on the same event is allowed.
     let other_type: Uuid = sqlx::query_scalar(
-        "INSERT INTO integration.job (project_id, event_id, job_type) \
-         VALUES ($1, $2, 'dispatch_notification') RETURNING id",
+        "INSERT INTO integration.job (project_id, event_id, job_type, tenant_id) \
+         VALUES ($1, $2, 'dispatch_notification', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(event_id)

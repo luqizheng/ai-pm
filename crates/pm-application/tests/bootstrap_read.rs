@@ -1,4 +1,4 @@
-//! Project bootstrap and project-scoped read service tests (Task 8, Step 1).
+﻿//! Project bootstrap and project-scoped read service tests (Task 8, Step 1).
 //!
 //! Bootstrap semantics under test: idempotency guard on `core.project.code`
 //! (second call with the same code → `BootstrapError::Duplicate`, no second
@@ -13,11 +13,13 @@ use pm_application::read::{ReadError, task_context};
 use serde_json::{Value, json};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 fn req(code: &str, name: &str) -> BootstrapRequest {
     BootstrapRequest {
         project_code: code.to_string(),
         project_name: name.to_string(),
+        tenant_id: SYSTEM_TENANT,
     }
 }
 
@@ -79,12 +81,11 @@ async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
     assert_ne!(outcome.architect_id, outcome.developer_id);
     assert_ne!(outcome.architect_id, outcome.tester_id);
     assert_ne!(outcome.developer_id, outcome.tester_id);
+    // 项目内主体（human / ai_pm）带项目 code 后缀；`dev_agent` 是**租户级**实例
+    // （ADR-0001 D3），名字不随项目走，且同租户的第二个项目会复用同一批 id。
     for (id, kind, prefix) in [
         (outcome.human_id, "human", "owner-"),
         (outcome.ai_principal_id, "ai_pm", "ai-pm-"),
-        (outcome.architect_id, "dev_agent", "architect-"),
-        (outcome.developer_id, "dev_agent", "dev-agent-"),
-        (outcome.tester_id, "dev_agent", "tester-"),
     ] {
         let row = sqlx::query("SELECT kind, display_name FROM core.principal WHERE id = $1")
             .bind(id)
@@ -98,6 +99,22 @@ async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
             "display_name `{display}` must carry the base name and the code suffix"
         );
     }
+    for id in [outcome.architect_id, outcome.developer_id, outcome.tester_id] {
+        let row = sqlx::query("SELECT kind FROM core.principal WHERE id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|_| panic!("principal {id} missing"));
+        assert_eq!(row.get::<String, _>("kind"), "dev_agent");
+    }
+    let tenant_agents: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.tenant_agent WHERE tenant_id = $1",
+    )
+    .bind(SYSTEM_TENANT)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(tenant_agents, 3, "tenant must own exactly three dev agents");
     // 0015 幂等种入的平台 service principal（ai-pm-dispatch）不属于 bootstrap
     // 产物，统计时排除它。
     let principal_count: i64 =
@@ -172,7 +189,8 @@ async fn task_context_hides_tasks_from_other_projects(pool: PgPool) {
     let b = bootstrap_project(&pool, req("TP-B", "project b")).await.unwrap();
 
     let task_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title) VALUES ($1, 'b task') RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, tenant_id) \
+         VALUES ($1, 'b task', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(b.project_id)
     .fetch_one(&pool)
@@ -195,15 +213,16 @@ async fn task_context_returns_requirement_and_milestone_json(pool: PgPool) {
     let project_id = outcome.project_id;
 
     let milestone_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.milestone (project_id, name) VALUES ($1, 'M1') RETURNING id",
+        "INSERT INTO delivery.milestone (project_id, name, tenant_id) \
+         VALUES ($1, 'M1', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .fetch_one(&pool)
     .await
     .unwrap();
     let requirement_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.requirement (project_id, code, title) \
-         VALUES ($1, 'REQ-1', 'login') RETURNING id",
+        "INSERT INTO delivery.requirement (project_id, code, title, tenant_id) \
+         VALUES ($1, 'REQ-1', 'login', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .fetch_one(&pool)
@@ -212,8 +231,9 @@ async fn task_context_returns_requirement_and_milestone_json(pool: PgPool) {
     // Two revisions; the latest linked one must win.
     let v1_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.requirement_revision \
-         (requirement_id, project_id, version, content, state, content_hash, created_by) \
-         VALUES ($1, $2, 1, '{\"goal\":\"login v1\"}'::jsonb, 'superseded', 'hash1', $3) RETURNING id",
+         (requirement_id, project_id, version, content, state, content_hash, created_by, tenant_id) \
+         VALUES ($1, $2, 1, '{\"goal\":\"login v1\"}'::jsonb, 'superseded', 'hash1', $3, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2)) RETURNING id",
     )
     .bind(requirement_id)
     .bind(project_id)
@@ -223,8 +243,9 @@ async fn task_context_returns_requirement_and_milestone_json(pool: PgPool) {
     .unwrap();
     let v2_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.requirement_revision \
-         (requirement_id, project_id, version, content, state, content_hash, created_by) \
-         VALUES ($1, $2, 2, '{\"goal\":\"login v2\"}'::jsonb, 'approved', 'hash2', $3) RETURNING id",
+         (requirement_id, project_id, version, content, state, content_hash, created_by, tenant_id) \
+         VALUES ($1, $2, 2, '{\"goal\":\"login v2\"}'::jsonb, 'approved', 'hash2', $3, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2)) RETURNING id",
     )
     .bind(requirement_id)
     .bind(project_id)
@@ -233,8 +254,8 @@ async fn task_context_returns_requirement_and_milestone_json(pool: PgPool) {
     .await
     .unwrap();
     let task_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, milestone_id, title) \
-         VALUES ($1, $2, 'implement login') RETURNING id",
+        "INSERT INTO delivery.task (project_id, milestone_id, title, tenant_id) \
+         VALUES ($1, $2, 'implement login', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(milestone_id)
@@ -243,8 +264,8 @@ async fn task_context_returns_requirement_and_milestone_json(pool: PgPool) {
     .unwrap();
     for revision_id in [v1_id, v2_id] {
         sqlx::query(
-            "INSERT INTO delivery.task_requirement (project_id, task_id, requirement_id, revision_id) \
-             VALUES ($1, $2, $3, $4)",
+            "INSERT INTO delivery.task_requirement (project_id, task_id, requirement_id, revision_id, tenant_id) \
+             VALUES ($1, $2, $3, $4, (SELECT tenant_id FROM core.project WHERE id = $1))",
         )
         .bind(project_id)
         .bind(task_id)
@@ -267,7 +288,8 @@ async fn task_context_returns_requirement_and_milestone_json(pool: PgPool) {
 
     // A task without requirement links or milestone → both None.
     let bare_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title) VALUES ($1, 'bare') RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, tenant_id) \
+         VALUES ($1, 'bare', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .fetch_one(&pool)

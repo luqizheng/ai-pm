@@ -1,4 +1,4 @@
-//! Knowledge write path: the MCP `pm_submit_document` tool creates a
+﻿//! Knowledge write path: the MCP `pm_submit_document` tool creates a
 //! Git-backed document (file + commit + identity/revision rows) and refuses
 //! duplicates or invalid types. Uses a temporary Git root per test.
 
@@ -10,6 +10,7 @@ use pm_application::knowledge::KnowledgeRoot;
 use pm_mcp::tools::{submit_document, SubmitDocumentArgs, ToolError};
 use sqlx::PgPool;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 fn temp_root() -> KnowledgeRoot {
     KnowledgeRoot::new(std::env::temp_dir().join(format!("ai-pm-doc-write-{}", Uuid::new_v4())))
@@ -46,6 +47,7 @@ async fn submit_document_writes_file_commit_and_rows(pool: PgPool) {
         BootstrapRequest {
             project_code: "DOC-1".to_string(),
             project_name: "doc project".to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
@@ -105,6 +107,7 @@ async fn invalid_doc_type_is_rejected_before_writing(pool: PgPool) {
         BootstrapRequest {
             project_code: "DOC-2".to_string(),
             project_name: "doc project".to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await

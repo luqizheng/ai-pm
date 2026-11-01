@@ -52,8 +52,9 @@ pub async fn advance_import_after_decision(
         .await?;
         sqlx::query(
             "INSERT INTO governance.audit_log \
-             (project_id, actor_id, action, target_type, target_id, after_data, analysis_run_id) \
-             VALUES ($1, $2, 'project_import_applied', 'project', $1, $3, $4)",
+             (project_id, actor_id, action, target_type, target_id, after_data, analysis_run_id, tenant_id) \
+             VALUES ($1, $2, 'project_import_applied', 'project', $1, $3, $4, \
+                     (SELECT tenant_id FROM core.project WHERE id = $1))",
         )
         .bind(project_id)
         .bind(actor)

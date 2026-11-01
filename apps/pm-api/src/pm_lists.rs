@@ -5,7 +5,7 @@
 
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -13,6 +13,7 @@ use axum::{
 use std::collections::HashMap;
 use uuid::Uuid;
 
+use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::{ApiResult, Paging, customer_filter, paging, project_filter};
 use pm_application::bootstrap::{
@@ -79,6 +80,7 @@ async fn principals(
 
 async fn projects(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
@@ -90,18 +92,21 @@ async fn projects(
                 COALESCE(c.status, 'active') AS customer_status, \
                 p.code, p.name, p.description, p.status, p.revision, p.created_at, p.updated_at \
          FROM core.project p JOIN core.customer c ON c.id = p.customer_id \
-         WHERE ($1::uuid IS NULL OR p.customer_id = $1) \
+         WHERE p.tenant_id = $4 AND ($1::uuid IS NULL OR p.customer_id = $1) \
          ORDER BY p.created_at DESC LIMIT $2 OFFSET $3",
     )
     .bind(customer_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM core.project WHERE ($1::uuid IS NULL OR customer_id = $1)",
+        "SELECT count(*) FROM core.project \
+          WHERE tenant_id = $2 AND ($1::uuid IS NULL OR customer_id = $1)",
     )
     .bind(customer_id)
+    .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
     Ok(Json(page.to_response(items, total)))
@@ -121,6 +126,7 @@ struct CreateProjectBody {
 /// `POST /v1/pm/projects`：建项目并自动落 5 人编制（owner/ai_pm/architect/developer/tester）。
 async fn create_project_handler(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Json(body): Json<CreateProjectBody>,
 ) -> Response {
     let code = body.code.trim();
@@ -135,6 +141,7 @@ async fn create_project_handler(
     let request = BootstrapRequest {
         project_code: code.to_string(),
         project_name: name.to_string(),
+        tenant_id: caller.tenant_id,
     };
     let outcome = match body.customer_id {
         Some(customer_id) => {
@@ -156,9 +163,10 @@ async fn create_project_handler(
                         COALESCE(c.status, 'active') AS customer_status, \
                         p.code, p.name, p.description, p.status, p.revision, p.created_at, p.updated_at \
                  FROM core.project p JOIN core.customer c ON c.id = p.customer_id \
-                 WHERE p.id = $1",
+                 WHERE p.id = $1 AND p.tenant_id = $2",
             )
             .bind(outcome.project_id)
+            .bind(caller.tenant_id)
             .fetch_one(&state.pool)
             .await
             {
@@ -192,6 +200,7 @@ async fn create_project_handler(
 
 async fn requirements(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
@@ -199,18 +208,21 @@ async fn requirements(
     let items: Vec<RequirementRow> = sqlx::query_as(
         "SELECT id, project_id, code, title, status, current_revision_id, row_revision, created_at \
          FROM delivery.requirement \
-         WHERE ($1::uuid IS NULL OR project_id = $1) \
+         WHERE tenant_id = $4 AND ($1::uuid IS NULL OR project_id = $1) \
          ORDER BY created_at DESC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.requirement WHERE ($1::uuid IS NULL OR project_id = $1)",
+        "SELECT count(*) FROM delivery.requirement \
+          WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
     Ok(Json(page.to_response(items, total)))
@@ -218,6 +230,7 @@ async fn requirements(
 
 async fn tasks(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
@@ -225,18 +238,21 @@ async fn tasks(
     let items: Vec<TaskRow> = sqlx::query_as(
         "SELECT id, project_id, milestone_id, title, description, status, priority, assignee_id, revision, created_at, updated_at \
          FROM delivery.task \
-         WHERE ($1::uuid IS NULL OR project_id = $1) \
+         WHERE tenant_id = $4 AND ($1::uuid IS NULL OR project_id = $1) \
          ORDER BY created_at DESC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.task WHERE ($1::uuid IS NULL OR project_id = $1)",
+        "SELECT count(*) FROM delivery.task \
+          WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
     Ok(Json(page.to_response(items, total)))
@@ -244,6 +260,7 @@ async fn tasks(
 
 async fn milestones(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
@@ -251,18 +268,21 @@ async fn milestones(
     let items: Vec<MilestoneRow> = sqlx::query_as(
         "SELECT id, project_id, name, planned_at, status, revision \
          FROM delivery.milestone \
-         WHERE ($1::uuid IS NULL OR project_id = $1) \
+         WHERE tenant_id = $4 AND ($1::uuid IS NULL OR project_id = $1) \
          ORDER BY planned_at NULLS LAST, name ASC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.milestone WHERE ($1::uuid IS NULL OR project_id = $1)",
+        "SELECT count(*) FROM delivery.milestone \
+          WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
     Ok(Json(page.to_response(items, total)))
@@ -270,6 +290,7 @@ async fn milestones(
 
 async fn approvals(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
@@ -277,18 +298,21 @@ async fn approvals(
     let items: Vec<ApprovalRow> = sqlx::query_as(
         "SELECT id, project_id, proposal_id, status, required_role, decided_by, decision_reason, decided_at, created_at \
          FROM governance.approval_request \
-         WHERE ($1::uuid IS NULL OR project_id = $1) \
+         WHERE tenant_id = $4 AND ($1::uuid IS NULL OR project_id = $1) \
          ORDER BY created_at DESC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM governance.approval_request WHERE ($1::uuid IS NULL OR project_id = $1)",
+        "SELECT count(*) FROM governance.approval_request \
+          WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
     Ok(Json(page.to_response(items, total)))
@@ -297,6 +321,7 @@ async fn approvals(
 /// 决策中心读模型：审批请求 + 关联变更提案（左连接，提案缺失时字段为 null）。
 async fn decisions(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
@@ -309,19 +334,21 @@ async fn decisions(
                 p.proposed_data, p.analysis_run_id \
          FROM governance.approval_request a \
          LEFT JOIN ai.change_proposal p ON p.id = a.proposal_id \
-         WHERE ($1::uuid IS NULL OR a.project_id = $1) \
+         WHERE a.tenant_id = $4 AND ($1::uuid IS NULL OR a.project_id = $1) \
          ORDER BY a.created_at DESC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM governance.approval_request \
-         WHERE ($1::uuid IS NULL OR project_id = $1)",
+         WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
     Ok(Json(page.to_response(items, total)))
@@ -329,6 +356,7 @@ async fn decisions(
 
 async fn audit_logs(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
@@ -336,18 +364,21 @@ async fn audit_logs(
     let items: Vec<AuditLogRow> = sqlx::query_as(
         "SELECT id, project_id, actor_id, action, target_type, target_id, created_at \
          FROM governance.audit_log \
-         WHERE ($1::uuid IS NULL OR project_id = $1) \
+         WHERE tenant_id = $4 AND ($1::uuid IS NULL OR project_id = $1) \
          ORDER BY created_at DESC LIMIT $2 OFFSET $3",
     )
     .bind(project_id)
     .bind(page.size)
     .bind(page.offset)
+    .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM governance.audit_log WHERE ($1::uuid IS NULL OR project_id = $1)",
+        "SELECT count(*) FROM governance.audit_log \
+          WHERE tenant_id = $2 AND ($1::uuid IS NULL OR project_id = $1)",
     )
     .bind(project_id)
+    .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
     Ok(Json(page.to_response(items, total)))
@@ -356,15 +387,17 @@ async fn audit_logs(
 /// 修订历史：`{items,total}`（version DESC；未知 requirement 不 404，返回空列表）。
 async fn revisions(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Path(requirement_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let items: Vec<RequirementRevisionRow> = sqlx::query_as(
         "SELECT id, requirement_id, project_id, version, content, state, content_hash, \
                 created_by, approved_by, created_at \
          FROM delivery.requirement_revision \
-         WHERE requirement_id = $1 ORDER BY version DESC",
+         WHERE requirement_id = $1 AND tenant_id = $2 ORDER BY version DESC",
     )
     .bind(requirement_id)
+    .bind(caller.tenant_id)
     .fetch_all(&state.pool)
     .await?;
     let total = items.len() as i64;

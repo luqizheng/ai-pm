@@ -13,7 +13,7 @@
 
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::get,
@@ -22,6 +22,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use uuid::Uuid;
 
+use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::{ApiResult, paging};
 use pm_application::rows::CustomerRow;
@@ -47,19 +48,27 @@ const CUSTOMER_COLUMNS: &str = "c.id, c.code, c.name, c.short_name, c.industry, 
      c.parent_id, c.status, c.created_at, c.updated_at, \
      (SELECT count(*) FROM core.project p WHERE p.customer_id = c.id)::bigint AS project_count";
 
+/// 租户边界：客户是 A 类根表，列表/详情/写一律带 `tenant_id` 谓词，
+/// 跨租户的 id 一律按不存在处理（404，不泄露存在性）。
 async fn fetch_customer(
     pool: &sqlx::PgPool,
+    tenant_id: Uuid,
     customer_id: Uuid,
 ) -> Result<Option<CustomerRow>, sqlx::Error> {
-    let sql = format!("SELECT {CUSTOMER_COLUMNS} FROM core.customer c WHERE c.id = $1");
+    let sql = format!(
+        "SELECT {CUSTOMER_COLUMNS} FROM core.customer c \
+          WHERE c.id = $1 AND c.tenant_id = $2"
+    );
     sqlx::query_as::<_, CustomerRow>(&sql)
         .bind(customer_id)
+        .bind(tenant_id)
         .fetch_optional(pool)
         .await
 }
 
 async fn list_customers(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
@@ -76,7 +85,8 @@ async fn list_customers(
 
     let sql = format!(
         "SELECT {CUSTOMER_COLUMNS} FROM core.customer c \
-         WHERE ($1::text IS NULL OR c.name ILIKE $1 OR c.code ILIKE $1 OR c.short_name ILIKE $1) \
+         WHERE c.tenant_id = $5 \
+           AND ($1::text IS NULL OR c.name ILIKE $1 OR c.code ILIKE $1 OR c.short_name ILIKE $1) \
            AND ($2::text IS NULL OR c.status = $2) \
          ORDER BY c.created_at DESC LIMIT $3 OFFSET $4"
     );
@@ -85,16 +95,19 @@ async fn list_customers(
         .bind(status.as_deref())
         .bind(page.size)
         .bind(page.offset)
+        .bind(caller.tenant_id)
         .fetch_all(&state.pool)
         .await?;
 
     let total: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM core.customer c \
-         WHERE ($1::text IS NULL OR c.name ILIKE $1 OR c.code ILIKE $1 OR c.short_name ILIKE $1) \
+         WHERE c.tenant_id = $3 \
+           AND ($1::text IS NULL OR c.name ILIKE $1 OR c.code ILIKE $1 OR c.short_name ILIKE $1) \
            AND ($2::text IS NULL OR c.status = $2)",
     )
     .bind(query.as_deref())
     .bind(status.as_deref())
+    .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await?;
 
@@ -103,9 +116,10 @@ async fn list_customers(
 
 async fn get_customer(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Path(customer_id): Path<Uuid>,
 ) -> ApiResult<Response> {
-    match fetch_customer(&state.pool, customer_id).await? {
+    match fetch_customer(&state.pool, caller.tenant_id, customer_id).await? {
         Some(row) => Ok(Json(row).into_response()),
         None => Err(crate::support::ApiError::NotFound("customer not found")),
     }
@@ -152,6 +166,7 @@ fn trimmed(value: &str) -> Option<String> {
 
 async fn create_customer(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Json(body): Json<CreateCustomerBody>,
 ) -> Response {
     let Some(code) = trimmed(&body.code) else {
@@ -162,7 +177,7 @@ async fn create_customer(
     };
 
     if let Some(parent_id) = body.parent_id {
-        match customer_exists(&state.pool, parent_id).await {
+        match customer_exists(&state.pool, caller.tenant_id, parent_id).await {
             Ok(true) => {}
             Ok(false) => return bad_request("parent customer not found".into()),
             Err(err) => return internal(err),
@@ -170,8 +185,9 @@ async fn create_customer(
     }
 
     let inserted: Result<Uuid, sqlx::Error> = sqlx::query_scalar(
-        "INSERT INTO core.customer (code, name, short_name, industry, notes, parent_id, status) \
-         VALUES ($1, $2, $3, $4, $5, $6, 'active') RETURNING id",
+        "INSERT INTO core.customer \
+         (code, name, short_name, industry, notes, parent_id, status, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, 'active', $7) RETURNING id",
     )
     .bind(&code)
     .bind(&name)
@@ -179,6 +195,7 @@ async fn create_customer(
     .bind(trimmed_opt(body.industry.as_deref()))
     .bind(trimmed_opt(body.notes.as_deref()))
     .bind(body.parent_id)
+    .bind(caller.tenant_id)
     .fetch_one(&state.pool)
     .await;
 
@@ -190,7 +207,7 @@ async fn create_customer(
         Err(err) => return internal(err),
     };
 
-    match fetch_customer(&state.pool, customer_id).await {
+    match fetch_customer(&state.pool, caller.tenant_id, customer_id).await {
         Ok(Some(row)) => (StatusCode::CREATED, Json(row)).into_response(),
         Ok(None) => internal(sqlx::Error::RowNotFound),
         Err(err) => internal(err),
@@ -218,10 +235,11 @@ struct UpdateCustomerBody {
 /// `PATCH /v1/pm/customers/{id}`：字段缺省即不改；可空文本传空串即清空。
 async fn update_customer(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Path(customer_id): Path<Uuid>,
     Json(body): Json<UpdateCustomerBody>,
 ) -> Response {
-    let current = match fetch_customer(&state.pool, customer_id).await {
+    let current = match fetch_customer(&state.pool, caller.tenant_id, customer_id).await {
         Ok(Some(row)) => row,
         Ok(None) => return crate::support::ApiError::NotFound("customer not found").into_response(),
         Err(err) => return internal(err),
@@ -261,7 +279,7 @@ async fn update_customer(
         Some(pid) if pid == customer_id => {
             return bad_request("customer cannot be its own parent".into());
         }
-        Some(pid) => match customer_exists(&state.pool, pid).await {
+        Some(pid) => match customer_exists(&state.pool, caller.tenant_id, pid).await {
             Ok(true) => Some(pid),
             Ok(false) => return bad_request("parent customer not found".into()),
             Err(err) => return internal(err),
@@ -271,7 +289,7 @@ async fn update_customer(
     let updated = sqlx::query(
         "UPDATE core.customer SET code = $2, name = $3, short_name = $4, industry = $5, \
                 notes = $6, status = $7, parent_id = $8, updated_at = now() \
-         WHERE id = $1",
+         WHERE id = $1 AND tenant_id = $9",
     )
     .bind(customer_id)
     .bind(&code)
@@ -281,6 +299,7 @@ async fn update_customer(
     .bind(trimmed_opt_or(body.notes.as_deref(), current.notes))
     .bind(&status)
     .bind(parent_id)
+    .bind(caller.tenant_id)
     .execute(&state.pool)
     .await;
 
@@ -293,18 +312,24 @@ async fn update_customer(
         };
     }
 
-    match fetch_customer(&state.pool, customer_id).await {
+    match fetch_customer(&state.pool, caller.tenant_id, customer_id).await {
         Ok(Some(row)) => Json(row).into_response(),
         Ok(None) => crate::support::ApiError::NotFound("customer not found").into_response(),
         Err(err) => internal(err),
     }
 }
 
-async fn customer_exists(pool: &sqlx::PgPool, customer_id: Uuid) -> Result<bool, sqlx::Error> {
-    let found: Option<Uuid> = sqlx::query_scalar("SELECT id FROM core.customer WHERE id = $1")
-        .bind(customer_id)
-        .fetch_optional(pool)
-        .await?;
+async fn customer_exists(
+    pool: &sqlx::PgPool,
+    tenant_id: Uuid,
+    customer_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let found: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM core.customer WHERE id = $1 AND tenant_id = $2")
+            .bind(customer_id)
+            .bind(tenant_id)
+            .fetch_optional(pool)
+            .await?;
     Ok(found.is_some())
 }
 

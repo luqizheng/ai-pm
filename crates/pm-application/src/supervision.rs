@@ -584,8 +584,9 @@ async fn record_intervention(
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO governance.human_intervention \
-         (id, project_id, intervention_type, target_proposal_id, target_command_id, actor_id, reason, executed_at) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+         (id, project_id, intervention_type, target_proposal_id, target_command_id, actor_id, reason, executed_at, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(intervention_id)
     .bind(project_id)
@@ -611,8 +612,10 @@ async fn notify(
     payload: serde_json::Value,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "INSERT INTO integration.notification (project_id, source_proposal_id, kind, payload) \
-         VALUES ($1, NULL, $2, $3)",
+        "INSERT INTO integration.notification \
+         (project_id, source_proposal_id, kind, payload, tenant_id) \
+         VALUES ($1, NULL, $2, $3, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(kind)

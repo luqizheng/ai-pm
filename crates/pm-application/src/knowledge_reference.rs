@@ -61,8 +61,9 @@ pub async fn add_reference(
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO ai.knowledge_reference \
          (project_id, document_id, document_revision_id, section_anchor, section_title, \
-          start_line, reference_kind, source_kind, source_id, created_by) \
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
+          start_line, reference_kind, source_kind, source_id, created_by, tenant_id) \
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(req.project_id)
     .bind(req.document_id)

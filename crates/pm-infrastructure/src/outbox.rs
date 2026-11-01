@@ -56,8 +56,9 @@ pub async fn append(
 ) -> Result<uuid::Uuid, sqlx::Error> {
     sqlx::query_scalar(
         "INSERT INTO integration.outbox_event \
-         (project_id, event_type, aggregate_type, aggregate_id, payload, idempotency_key) \
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+         (project_id, event_type, aggregate_type, aggregate_id, payload, idempotency_key, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(event.project_id)
     .bind(event.event_type)

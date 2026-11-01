@@ -1,4 +1,4 @@
-//! Slice D2 契约与租约的真实 PostgreSQL 集成测试
+﻿//! Slice D2 契约与租约的真实 PostgreSQL 集成测试
 //! （`docs/ai-pm-slice-d2-mcp-context-v1.md` §七：C1–C28 中属 pm-application 层的部分）。
 //!
 //! 断言的是 **pm-application 层 `LeaseError` / `RunDispatchError` 变体**，不是
@@ -18,6 +18,7 @@ use pm_application::run_dispatch::{
 };
 use sqlx::PgPool;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 struct Fx {
     project_id: Uuid,
@@ -38,8 +39,9 @@ fn cfg() -> RunDispatchConfig {
 
 async fn add_repo(pool: &PgPool, project_id: Uuid, code: &str) -> Uuid {
     sqlx::query_scalar(
-        "INSERT INTO integration.project_repository (project_id, name, url, status, head_commit_sha) \
-         VALUES ($1, 'world-view', $2, 'verified', 'headsha') RETURNING id",
+        "INSERT INTO integration.project_repository (project_id, name, url, status, head_commit_sha, tenant_id) \
+         VALUES ($1, 'world-view', $2, 'verified', 'headsha', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(format!("git@host:{code}"))
@@ -54,6 +56,7 @@ async fn seed(pool: &PgPool, code: &str) -> Fx {
         BootstrapRequest {
             project_code: code.to_string(),
             project_name: code.to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
@@ -65,8 +68,9 @@ async fn seed(pool: &PgPool, code: &str) -> Fx {
     .await
     .unwrap();
     let task_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id, task_type) \
-         VALUES ($1, '确定地形渲染架构', 'ready', 1, $2, 'architecture') RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id, task_type, tenant_id) \
+         VALUES ($1, '确定地形渲染架构', 'ready', 1, $2, 'architecture', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(outcome.project_id)
     .bind(agent_id)
@@ -75,8 +79,9 @@ async fn seed(pool: &PgPool, code: &str) -> Fx {
     .unwrap();
     let repo_id = add_repo(pool, outcome.project_id, code).await;
     sqlx::query(
-        "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, write_access, base_ref, path_scope) \
-         VALUES ($1, $2, $3, true, 'main', ARRAY['crates/terrain/**'])",
+        "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, write_access, base_ref, path_scope, tenant_id) \
+         VALUES ($1, $2, $3, true, 'main', ARRAY['crates/terrain/**'], \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(task_id)
     .bind(outcome.project_id)
@@ -85,8 +90,8 @@ async fn seed(pool: &PgPool, code: &str) -> Fx {
     .await
     .unwrap();
     let run_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status) \
-         VALUES ($1, $2, 1, 'queued') RETURNING id",
+        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
+         VALUES ($1, $2, 1, 'queued', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(outcome.project_id)
     .bind(task_id)
@@ -104,8 +109,9 @@ async fn seed(pool: &PgPool, code: &str) -> Fx {
 /// 通过 **pm_write 契约写路径**（待裁 #11 已并入 D2）写入完整契约，不依赖 SQL 手动种子。
 async fn write_full_contract(pool: &PgPool, fx: &Fx) -> Uuid {
     let document_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO ai.project_document (project_id, doc_key, doc_type, canonical_path) \
-         VALUES ($1, 'architecture.terrain', 'architecture', 'architecture/terrain.md') RETURNING id",
+        "INSERT INTO ai.project_document (project_id, doc_key, doc_type, canonical_path, tenant_id) \
+         VALUES ($1, 'architecture.terrain', 'architecture', 'architecture/terrain.md', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(fx.project_id)
     .fetch_one(pool)
@@ -120,8 +126,9 @@ async fn write_full_contract(pool: &PgPool, fx: &Fx) -> Uuid {
     for revision_no in [1, 2] {
         sqlx::query(
             "INSERT INTO ai.document_revision \
-             (project_id, document_id, revision_no, git_commit_sha, content_hash, status, created_by) \
-             VALUES ($1, $2, $3, $4, $5, 'published', $6)",
+             (project_id, document_id, revision_no, git_commit_sha, content_hash, status, created_by, tenant_id) \
+             VALUES ($1, $2, $3, $4, $5, 'published', $6, \
+                     (SELECT tenant_id FROM core.project WHERE id = $1))",
         )
         .bind(fx.project_id)
         .bind(document_id)
@@ -264,8 +271,9 @@ async fn c2_c26_claim_preconditions(pool: PgPool) {
 
     // 无 Run：TaskReadyHandler 尚未创建。
     let no_run_task: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status, assignee_id) \
-         VALUES ($1, 'no-run', 'ready', $2) RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, assignee_id, tenant_id) \
+         VALUES ($1, 'no-run', 'ready', $2, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(fx.project_id)
     .bind(fx.agent_id)
@@ -273,8 +281,10 @@ async fn c2_c26_claim_preconditions(pool: PgPool) {
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, write_access, base_ref) \
-         SELECT $1, $2, repository_id, true, 'main' FROM delivery.task_repository WHERE task_id = $3",
+        "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, write_access, base_ref, tenant_id) \
+         SELECT $1, $2, repository_id, true, 'main', \
+                (SELECT tenant_id FROM core.project WHERE id = $2) \
+         FROM delivery.task_repository WHERE task_id = $3",
     )
     .bind(no_run_task)
     .bind(fx.project_id)
@@ -290,7 +300,8 @@ async fn c2_c26_claim_preconditions(pool: PgPool) {
     // 非 ready：附当前状态。
     let not_ready_task = no_run_task;
     sqlx::query(
-        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status) VALUES ($1, $2, 1, 'queued')",
+        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
+         VALUES ($1, $2, 1, 'queued', (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(fx.project_id)
     .bind(not_ready_task)
@@ -760,14 +771,19 @@ async fn c12_policy_failure_refuses_the_claim_with_an_audit_snapshot(pool: PgPoo
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn c13_project_without_human_members_claims_and_audits_as_service(pool: PgPool) {
-    let customer: Uuid = sqlx::query_scalar("INSERT INTO core.customer (name) VALUES ('no-human') RETURNING id")
+    let customer: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (name, tenant_id) VALUES ('no-human', $1) RETURNING id",
+    )
+        .bind(SYSTEM_TENANT)
         .fetch_one(&pool)
         .await
         .unwrap();
     let project_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO core.project (customer_id, code, name) VALUES ($1, 'D2-C13', 'no-human') RETURNING id",
+        "INSERT INTO core.project (customer_id, code, name, tenant_id) \
+         VALUES ($1, 'D2-C13', 'no-human', $2) RETURNING id",
     )
     .bind(customer)
+    .bind(SYSTEM_TENANT)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -779,8 +795,9 @@ async fn c13_project_without_human_members_claims_and_audits_as_service(pool: Pg
     .await
     .unwrap();
     let task_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status, assignee_id) \
-         VALUES ($1, 'no-human', 'ready', $2) RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, assignee_id, tenant_id) \
+         VALUES ($1, 'no-human', 'ready', $2, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(agent)
@@ -789,8 +806,8 @@ async fn c13_project_without_human_members_claims_and_audits_as_service(pool: Pg
     .unwrap();
     let repo_id = add_repo(&pool, project_id, "D2-C13").await;
     sqlx::query(
-        "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, write_access, base_ref) \
-         VALUES ($1, $2, $3, true, 'main')",
+        "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, write_access, base_ref, tenant_id) \
+         VALUES ($1, $2, $3, true, 'main', (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(task_id)
     .bind(project_id)
@@ -799,7 +816,8 @@ async fn c13_project_without_human_members_claims_and_audits_as_service(pool: Pg
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status) VALUES ($1, $2, 1, 'queued')",
+        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
+         VALUES ($1, $2, 1, 'queued', (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(task_id)

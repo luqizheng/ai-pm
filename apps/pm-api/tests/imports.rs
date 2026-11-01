@@ -1,4 +1,4 @@
-//! 冷启动导入的集成测试：启动 → Fake 模型分析 → 草案 → 4 条提案 → 审批执行。
+﻿//! 冷启动导入的集成测试：启动 → Fake 模型分析 → 草案 → 4 条提案 → 审批执行。
 //!
 //! 全程真实 PostgreSQL（`#[sqlx::test]`）与真实 Git 仓库；不访问网络。
 
@@ -21,6 +21,7 @@ use pm_domain::import::{
 use pm_domain::proposal::Confidence;
 use sqlx::PgPool;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 struct Repo {
     root: PathBuf,
@@ -68,6 +69,7 @@ async fn seed_project_with_repo(pool: &PgPool, code: &str) -> (Uuid, Uuid, Repo)
         BootstrapRequest {
             project_code: code.to_string(),
             project_name: code.to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
         Some("initializing"),
     )

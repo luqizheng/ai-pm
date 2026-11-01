@@ -1,4 +1,4 @@
-//! Slice D2 MCP 层契约测试
+﻿//! Slice D2 MCP 层契约测试
 //! （`docs/ai-pm-slice-d2-mcp-context-v1.md` §七：C3/C4/C5/C6/C11/C18/C24/C25）。
 //!
 //! 这一层只验证**工具形状与错误契约**：字段值来自真实库，`ToolError` 映射到
@@ -18,6 +18,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 struct Fx {
     project_id: Uuid,
@@ -32,6 +33,7 @@ async fn seed(pool: &PgPool, code: &str, with_contract: bool) -> Fx {
         BootstrapRequest {
             project_code: code.to_string(),
             project_name: code.to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
@@ -43,8 +45,9 @@ async fn seed(pool: &PgPool, code: &str, with_contract: bool) -> Fx {
     .await
     .unwrap();
     let task_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id, task_type) \
-         VALUES ($1, '确定地形渲染架构', 'ready', 1, $2, 'architecture') RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id, task_type, tenant_id) \
+         VALUES ($1, '确定地形渲染架构', 'ready', 1, $2, 'architecture', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(outcome.project_id)
     .bind(agent_id)
@@ -52,8 +55,9 @@ async fn seed(pool: &PgPool, code: &str, with_contract: bool) -> Fx {
     .await
     .unwrap();
     let repo_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO integration.project_repository (project_id, name, url, status, head_commit_sha) \
-         VALUES ($1, 'world-view', $2, 'verified', 'headsha') RETURNING id",
+        "INSERT INTO integration.project_repository (project_id, name, url, status, head_commit_sha, tenant_id) \
+         VALUES ($1, 'world-view', $2, 'verified', 'headsha', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(outcome.project_id)
     .bind(format!("git@host:{code}"))
@@ -61,8 +65,9 @@ async fn seed(pool: &PgPool, code: &str, with_contract: bool) -> Fx {
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, write_access, base_ref, path_scope) \
-         VALUES ($1, $2, $3, true, 'main', ARRAY['crates/terrain/**'])",
+        "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, write_access, base_ref, path_scope, tenant_id) \
+         VALUES ($1, $2, $3, true, 'main', ARRAY['crates/terrain/**'], \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(task_id)
     .bind(outcome.project_id)
@@ -71,7 +76,8 @@ async fn seed(pool: &PgPool, code: &str, with_contract: bool) -> Fx {
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status) VALUES ($1, $2, 1, 'queued')",
+        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
+         VALUES ($1, $2, 1, 'queued', (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(outcome.project_id)
     .bind(task_id)
@@ -80,8 +86,9 @@ async fn seed(pool: &PgPool, code: &str, with_contract: bool) -> Fx {
     .unwrap();
 
     let document_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO ai.project_document (project_id, doc_key, doc_type, canonical_path) \
-         VALUES ($1, 'architecture.terrain', 'architecture', 'architecture/terrain.md') RETURNING id",
+        "INSERT INTO ai.project_document (project_id, doc_key, doc_type, canonical_path, tenant_id) \
+         VALUES ($1, 'architecture.terrain', 'architecture', 'architecture/terrain.md', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(outcome.project_id)
     .fetch_one(pool)
@@ -98,8 +105,9 @@ async fn seed(pool: &PgPool, code: &str, with_contract: bool) -> Fx {
         for revision_no in [1, 2] {
             sqlx::query(
                 "INSERT INTO ai.document_revision \
-                 (project_id, document_id, revision_no, git_commit_sha, content_hash, status, created_by) \
-                 VALUES ($1, $2, $3, $4, $5, 'published', $6)",
+                 (project_id, document_id, revision_no, git_commit_sha, content_hash, status, created_by, tenant_id) \
+                 VALUES ($1, $2, $3, $4, $5, 'published', $6, \
+                         (SELECT tenant_id FROM core.project WHERE id = $1))",
             )
             .bind(outcome.project_id)
             .bind(document_id)

@@ -1,4 +1,4 @@
-//! `GET /v1/pm/artifacts` 集成测试：真实数据库 + 真 HTTP router（无 socket）。
+﻿//! `GET /v1/pm/artifacts` 集成测试：真实数据库 + 真 HTTP router（无 socket）。
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
@@ -7,6 +7,7 @@ use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 fn get(uri: &str) -> Request<Body> {
     Request::builder()
@@ -28,13 +29,15 @@ async fn seed(pool: &PgPool, code: &str) -> Uuid {
         BootstrapRequest {
             project_code: code.to_string(),
             project_name: code.to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
     .unwrap();
     let requirement_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.requirement (project_id, code, title) \
-         VALUES ($1, 'REQ-1', '产物需求') RETURNING id",
+        "INSERT INTO delivery.requirement (project_id, code, title, tenant_id) \
+         VALUES ($1, 'REQ-1', '产物需求', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(outcome.project_id)
     .fetch_one(pool)
@@ -45,8 +48,9 @@ async fn seed(pool: &PgPool, code: &str) -> Uuid {
     for (version, state) in [(1_i32, "superseded"), (2_i32, "approved")] {
         sqlx::query(
             "INSERT INTO delivery.requirement_revision \
-             (requirement_id, project_id, version, content, state, content_hash, created_by) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7)",
+             (requirement_id, project_id, version, content, state, content_hash, created_by, tenant_id) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, \
+                     (SELECT tenant_id FROM core.project WHERE id = $2))",
         )
         .bind(requirement_id)
         .bind(outcome.project_id)

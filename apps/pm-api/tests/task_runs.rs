@@ -1,4 +1,4 @@
-//! `GET /v1/pm/task-runs` 集成测试：真实数据库 + 真 HTTP router（无 socket）。
+﻿//! `GET /v1/pm/task-runs` 集成测试：真实数据库 + 真 HTTP router（无 socket）。
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
@@ -7,6 +7,7 @@ use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 fn get(uri: &str) -> Request<Body> {
     Request::builder()
@@ -28,6 +29,7 @@ async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
         BootstrapRequest {
             project_code: code.to_string(),
             project_name: code.to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
@@ -37,7 +39,8 @@ async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
 
 async fn seed_task(pool: &PgPool, project_id: Uuid, title: &str) -> Uuid {
     sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status) VALUES ($1, $2, 'ready') RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, tenant_id) \
+         VALUES ($1, $2, 'ready', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(title)
@@ -52,8 +55,8 @@ async fn lists_runs_with_task_title_and_failure_summary(pool: PgPool) {
     let task_id = seed_task(&pool, project_id, "run task").await;
 
     sqlx::query(
-        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status) \
-         VALUES ($1, $2, 1, 'queued')",
+        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
+         VALUES ($1, $2, 1, 'queued', (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(task_id)
@@ -61,8 +64,9 @@ async fn lists_runs_with_task_title_and_failure_summary(pool: PgPool) {
     .await
     .unwrap();
     let failed: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, outcome) \
-         VALUES ($1, $2, 2, 'failed', 'failed') RETURNING id",
+        "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, outcome, tenant_id) \
+         VALUES ($1, $2, 2, 'failed', 'failed', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(task_id)
@@ -70,8 +74,9 @@ async fn lists_runs_with_task_title_and_failure_summary(pool: PgPool) {
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO delivery.task_run_failure (run_id, project_id, category, retryable, reason_code) \
-         VALUES ($1, $2, 'execution', true, 'BOOM')",
+        "INSERT INTO delivery.task_run_failure (run_id, project_id, category, retryable, reason_code, tenant_id) \
+         VALUES ($1, $2, 'execution', true, 'BOOM', \
+                 (SELECT tenant_id FROM delivery.task_run WHERE id = $1))",
     )
     .bind(failed)
     .bind(project_id)

@@ -349,8 +349,9 @@ impl Orchestrator {
 
         sqlx::query(
             "INSERT INTO ai.agent_feedback \
-             (project_id, recipient_id, related_event_id, feedback_type, content) \
-             VALUES ($1, $2, $3, 'decision', $4)",
+             (project_id, recipient_id, related_event_id, feedback_type, content, tenant_id) \
+             VALUES ($1, $2, $3, 'decision', $4, \
+                     (SELECT tenant_id FROM core.project WHERE id = $1))",
         )
         .bind(ctx.project_id)
         .bind(event_actor_id)
@@ -461,8 +462,9 @@ impl Orchestrator {
             "INSERT INTO ai.change_proposal \
              (id, project_id, analysis_run_id, proposal_seq, target_type, target_id, \
               expected_revision, command_type, proposed_data, rationale, evidence, \
-              risk_level, confidence, status) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+              risk_level, confidence, status, tenant_id) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, \
+                     (SELECT tenant_id FROM core.project WHERE id = $2))",
         )
         .bind(proposal_id)
         .bind(project_id)
@@ -525,8 +527,9 @@ impl Orchestrator {
                 let veto_until = chrono::Utc::now() + self.policy.veto_window(command);
                 sqlx::query(
                     "INSERT INTO integration.notification \
-                     (project_id, source_proposal_id, kind, payload, veto_window_until) \
-                     VALUES ($1, $2, 'change_applied', $3, $4)",
+                     (project_id, source_proposal_id, kind, payload, veto_window_until, tenant_id) \
+                     VALUES ($1, $2, 'change_applied', $3, $4, \
+                             (SELECT tenant_id FROM core.project WHERE id = $1))",
                 )
                 .bind(project_id)
                 .bind(proposal_id)
@@ -587,8 +590,9 @@ impl Orchestrator {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             "INSERT INTO governance.approval_request \
-             (project_id, proposal_id, required_role, status) \
-             VALUES ($1, $2, $3, 'pending')",
+             (project_id, proposal_id, required_role, status, tenant_id) \
+             VALUES ($1, $2, $3, 'pending', \
+                     (SELECT tenant_id FROM ai.change_proposal WHERE id = $2))",
         )
         .bind(project_id)
         .bind(proposal_id)
@@ -663,8 +667,9 @@ impl Orchestrator {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             "INSERT INTO integration.notification \
-             (project_id, source_proposal_id, kind, payload, veto_window_until) \
-             VALUES ($1, $2, $3, $4, $5)",
+             (project_id, source_proposal_id, kind, payload, veto_window_until, tenant_id) \
+             VALUES ($1, $2, $3, $4, $5, \
+                     (SELECT tenant_id FROM core.project WHERE id = $1))",
         )
         .bind(project_id)
         .bind(proposal_id)

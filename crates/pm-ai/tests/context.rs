@@ -5,6 +5,7 @@
 //! rulings under test are documented on `pm_ai::context` itself.
 
 use pm_ai::context::{build, fail_run, finish_run, save_snapshot, start_run, ContextError};
+use pm_domain::SYSTEM_TENANT;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -32,18 +33,20 @@ async fn seed_project(pool: &sqlx::PgPool) -> Seed {
     let project_id = Uuid::new_v4();
     let principal_id = Uuid::new_v4();
 
-    sqlx::query("INSERT INTO core.customer (id, name) VALUES ($1, 'Acme')")
+    sqlx::query("INSERT INTO core.customer (id, name, tenant_id) VALUES ($1, 'Acme', $2)")
         .bind(customer_id)
+        .bind(SYSTEM_TENANT)
         .execute(pool)
         .await
         .unwrap();
     sqlx::query(
-        "INSERT INTO core.project (id, customer_id, code, name) \
-         VALUES ($1, $2, $3, 'Context Project')",
+        "INSERT INTO core.project (id, customer_id, code, name, tenant_id) \
+         VALUES ($1, $2, $3, 'Context Project', $4)",
     )
     .bind(project_id)
     .bind(customer_id)
     .bind(project_id.to_string())
+    .bind(SYSTEM_TENANT)
     .execute(pool)
     .await
     .unwrap();
@@ -55,8 +58,9 @@ async fn seed_project(pool: &sqlx::PgPool) -> Seed {
     sqlx::query(
         "INSERT INTO ai.project_ai_config \
          (project_id, ai_principal_id, model_provider, model_name, model_config, \
-          policy_version, automation_mode, enabled) \
-         VALUES ($1, $2, 'test', $3, $4, $5, 'ai_lead', true)",
+          policy_version, automation_mode, enabled, tenant_id) \
+         VALUES ($1, $2, 'test', $3, $4, $5, 'ai_lead', true, \
+                  (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(principal_id)
@@ -78,8 +82,9 @@ async fn seed_event(pool: &sqlx::PgPool, seed: &Seed, event_type: &str, payload:
     let event_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO integration.inbound_event \
-         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash) \
-         VALUES ($1, $2, $3, 'test', $4, $5, $6, 'hash')",
+         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash, tenant_id) \
+         VALUES ($1, $2, $3, 'test', $4, $5, $6, 'hash', \
+                  (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(event_id)
     .bind(seed.project_id)
@@ -96,7 +101,10 @@ async fn seed_event(pool: &sqlx::PgPool, seed: &Seed, event_type: &str, payload:
 /// One bare task row (no milestone) in the given project.
 async fn seed_task(pool: &sqlx::PgPool, project_id: Uuid) -> Uuid {
     let task_id = Uuid::new_v4();
-    sqlx::query("INSERT INTO delivery.task (id, project_id, title) VALUES ($1, $2, 'Foreign task')")
+    sqlx::query(
+        "INSERT INTO delivery.task (id, project_id, title, tenant_id) \
+         VALUES ($1, $2, 'Foreign task', (SELECT tenant_id FROM core.project WHERE id = $2))",
+    )
         .bind(task_id)
         .bind(project_id)
         .execute(pool)
@@ -115,8 +123,9 @@ async fn seed_delivery_rows(pool: &sqlx::PgPool, seed: &Seed) -> (Uuid, Uuid, Uu
     let revision_id = Uuid::new_v4();
 
     sqlx::query(
-        "INSERT INTO delivery.milestone (id, project_id, name, status, revision) \
-         VALUES ($1, $2, 'Design frozen', 'planned', 4)",
+        "INSERT INTO delivery.milestone (id, project_id, name, status, revision, tenant_id) \
+         VALUES ($1, $2, 'Design frozen', 'planned', 4, \
+                  (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(milestone_id)
     .bind(seed.project_id)
@@ -126,8 +135,9 @@ async fn seed_delivery_rows(pool: &sqlx::PgPool, seed: &Seed) -> (Uuid, Uuid, Uu
 
     sqlx::query(
         "INSERT INTO delivery.task \
-         (id, project_id, milestone_id, title, description, status, priority, revision) \
-         VALUES ($1, $2, $3, 'Write API spec', 'OpenAPI 3.1 first pass', 'running', 'high', 7)",
+         (id, project_id, milestone_id, title, description, status, priority, revision, tenant_id) \
+         VALUES ($1, $2, $3, 'Write API spec', 'OpenAPI 3.1 first pass', 'running', 'high', 7, \
+                  (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(task_id)
     .bind(seed.project_id)
@@ -137,8 +147,9 @@ async fn seed_delivery_rows(pool: &sqlx::PgPool, seed: &Seed) -> (Uuid, Uuid, Uu
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO delivery.requirement (id, project_id, code, title, status) \
-         VALUES ($1, $2, $3, 'Cache overlap handling', 'approved')",
+        "INSERT INTO delivery.requirement (id, project_id, code, title, status, tenant_id) \
+         VALUES ($1, $2, $3, 'Cache overlap handling', 'approved', \
+                  (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(requirement_id)
     .bind(seed.project_id)
@@ -149,8 +160,9 @@ async fn seed_delivery_rows(pool: &sqlx::PgPool, seed: &Seed) -> (Uuid, Uuid, Uu
 
     sqlx::query(
         "INSERT INTO delivery.requirement_revision \
-         (id, requirement_id, project_id, version, content, state, content_hash, created_by) \
-         VALUES ($1, $2, $3, 2, $4, 'approved', 'hash-1', $5)",
+         (id, requirement_id, project_id, version, content, state, content_hash, created_by, tenant_id) \
+         VALUES ($1, $2, $3, 2, $4, 'approved', 'hash-1', $5, \
+                  (SELECT tenant_id FROM core.project WHERE id = $3))",
     )
     .bind(revision_id)
     .bind(requirement_id)

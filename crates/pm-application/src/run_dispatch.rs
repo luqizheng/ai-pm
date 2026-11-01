@@ -168,8 +168,9 @@ pub async fn insert_task_run(
 
     let run_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.task_run \
-         (project_id, task_id, attempt_no, status, stage, next_dispatch_at, source_event_id) \
-         VALUES ($1, $2, $3, 'queued', 'dispatch', now(), $4) RETURNING id",
+         (project_id, task_id, attempt_no, status, stage, next_dispatch_at, source_event_id, tenant_id) \
+         VALUES ($1, $2, $3, 'queued', 'dispatch', now(), $4, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(task_id)
@@ -1217,8 +1218,9 @@ async fn snapshot_repositories(
         let workspace_path = workspace_path_for(repository_id, &repo_name);
         sqlx::query(
             "INSERT INTO delivery.task_run_repository \
-             (run_id, project_id, repository_id, base_ref, base_commit, write_access, workspace_path, path_scope) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) \
+             (run_id, project_id, repository_id, base_ref, base_commit, write_access, workspace_path, path_scope, tenant_id) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, \
+                     (SELECT tenant_id FROM core.project WHERE id = $2)) \
              ON CONFLICT (run_id, repository_id) DO NOTHING",
         )
         .bind(run_id)
@@ -1260,8 +1262,8 @@ async fn isolate_started_run(
     // 失败记录不可变（append-only）；基础设施类失败不计入任务执行连续失败（B3-4）。
     sqlx::query(
         "INSERT INTO delivery.task_run_failure \
-         (run_id, project_id, category, retryable, reason_code, timeout_seconds) \
-         SELECT $1, project_id, 'infrastructure', true, 'lease_lost', $2 \
+         (run_id, project_id, category, retryable, reason_code, timeout_seconds, tenant_id) \
+         SELECT $1, project_id, 'infrastructure', true, 'lease_lost', $2, tenant_id \
            FROM delivery.task_run WHERE id = $1",
     )
     .bind(run_id)
@@ -1428,8 +1430,9 @@ pub(crate) async fn audit_run(
 
     sqlx::query(
         "INSERT INTO governance.audit_log \
-         (project_id, actor_id, action, target_type, target_id, after_data, source_kind) \
-         VALUES ($1, $2, $3, 'task_run', $4, $5, 'run_dispatch')",
+         (project_id, actor_id, action, target_type, target_id, after_data, source_kind, tenant_id) \
+         VALUES ($1, $2, $3, 'task_run', $4, $5, 'run_dispatch', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(actor)

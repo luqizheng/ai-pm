@@ -1,4 +1,4 @@
-//! Auth middleware tests (Slice B 登录链路): drive `router_with_auth` with
+﻿//! Auth middleware tests (Slice B 登录链路): drive `router_with_auth` with
 //! `tower::ServiceExt::oneshot` — no socket — and assert the bearer contract:
 //! missing token → 401 `IAM_AUTH_1005`; forged/undecodable token → 401
 //! `IAM_AUTH_1004`; a validly signed token carrying `tid` passes through to
@@ -21,6 +21,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 use tower::ServiceExt;
+use pm_domain::SYSTEM_TENANT;
 
 const PRIVATE_PEM: &str = include_str!("keys/private.pem");
 const PUBLIC_PEM: &str = include_str!("keys/public.pem");
@@ -97,6 +98,7 @@ async fn valid_token_reaches_the_real_route(pool: PgPool) {
         BootstrapRequest {
             project_code: "AUTH-1".to_string(),
             project_name: "auth project".to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
@@ -104,8 +106,18 @@ async fn valid_token_reaches_the_real_route(pool: PgPool) {
     // T-021a：token 的 (provider, tid, sub) 必须先映射到一个已激活 principal，
     // 否则按方案 C 首次见到会 provision 为未激活并 403（该行为由 C33 覆盖）。
     sqlx::query(
+        "INSERT INTO core.tenant (provider, external_key, display_name) \
+         VALUES ('lmms', '1', 'lmms:1') ON CONFLICT (provider, external_key) DO NOTHING",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
         "INSERT INTO core.principal_identity \
-             (provider, claims_tenant_key, subject, principal_id) VALUES ('lmms', '1', $1, $2)",
+             (provider, tenant_id, subject, principal_id) \
+         VALUES ('lmms', \
+                 (SELECT id FROM core.tenant WHERE provider = 'lmms' AND external_key = '1'), \
+                 $1, $2)",
     )
     .bind(boot.human_id.to_string())
     .bind(boot.human_id)

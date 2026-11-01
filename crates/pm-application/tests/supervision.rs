@@ -1,4 +1,4 @@
-//! Task 15 acceptance: the three human powers of the V2 supervision desk —
+﻿//! Task 15 acceptance: the three human powers of the V2 supervision desk —
 //! veto (post-hoc rollback through real snapshot compensation), the freeze
 //! brake (claim-level stop of the AI), and red-line confirmation — plus the
 //! notification feed, against a real Postgres with the deterministic
@@ -27,6 +27,7 @@ use pm_application::{CommandError, PgCommandExecutor, PolicyEngine};
 use pm_infrastructure::job_queue::{self, ClaimedJob};
 use serde_json::{Value, json};
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 /// FakeModel's embedded project id (mirrors the fixture string).
 fn project_id() -> Uuid {
@@ -77,17 +78,19 @@ async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     let human_id = Uuid::new_v4();
     let dev_agent_id = Uuid::new_v4();
 
-    sqlx::query("INSERT INTO core.customer (id, name) VALUES ($1, 'Acme')")
+    sqlx::query("INSERT INTO core.customer (id, name, tenant_id) VALUES ($1, 'Acme', $2)")
         .bind(customer_id)
+        .bind(SYSTEM_TENANT)
         .execute(pool)
         .await
         .unwrap();
     sqlx::query(
-        "INSERT INTO core.project (id, customer_id, code, name) \
-         VALUES ($1, $2, 'FIXTURE', 'Supervision Project')",
+        "INSERT INTO core.project (id, customer_id, code, name, tenant_id) \
+         VALUES ($1, $2, 'FIXTURE', 'Supervision Project', $3)",
     )
     .bind(project_id())
     .bind(customer_id)
+    .bind(SYSTEM_TENANT)
     .execute(pool)
     .await
     .unwrap();
@@ -110,8 +113,9 @@ async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     .unwrap();
     sqlx::query(
         "INSERT INTO ai.project_ai_config \
-         (project_id, ai_principal_id, model_provider, model_name, automation_mode, enabled) \
-         VALUES ($1, $2, 'test', 'fake-model', 'ai_lead', true)",
+         (project_id, ai_principal_id, model_provider, model_name, automation_mode, enabled, tenant_id) \
+         VALUES ($1, $2, 'test', 'fake-model', 'ai_lead', true, \
+                  (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id())
     .bind(ai_principal_id)
@@ -120,8 +124,9 @@ async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO delivery.milestone (id, project_id, name, status, revision, planned_at) \
-         VALUES ($1, $2, 'Design freeze', 'planned', 4, $3)",
+        "INSERT INTO delivery.milestone (id, project_id, name, status, revision, planned_at, tenant_id) \
+         VALUES ($1, $2, 'Design freeze', 'planned', 4, $3, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(milestone_id())
     .bind(project_id())
@@ -131,8 +136,9 @@ async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     .unwrap();
     sqlx::query(
         "INSERT INTO delivery.task \
-         (id, project_id, milestone_id, title, status, revision) \
-         VALUES ($1, $2, $3, 'TASK-102 implement cache layer', 'running', 7)",
+         (id, project_id, milestone_id, title, status, revision, tenant_id) \
+         VALUES ($1, $2, $3, 'TASK-102 implement cache layer', 'running', 7, \
+                  (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(task_102_id())
     .bind(project_id())
@@ -161,8 +167,9 @@ async fn seed_job(
 
     sqlx::query(
         "INSERT INTO integration.inbound_event \
-         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash) \
-         VALUES ($1, $2, $3, 'test', $4, $5, $6, 'hash')",
+         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash, tenant_id) \
+         VALUES ($1, $2, $3, 'test', $4, $5, $6, 'hash', \
+                  (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(event_id)
     .bind(seed.project_id)
@@ -174,8 +181,8 @@ async fn seed_job(
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO integration.job (id, project_id, event_id, job_type) \
-         VALUES ($1, $2, $3, 'ai_analysis')",
+        "INSERT INTO integration.job (id, project_id, event_id, job_type, tenant_id) \
+         VALUES ($1, $2, $3, 'ai_analysis', (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(job_id)
     .bind(seed.project_id)
@@ -801,6 +808,7 @@ async fn notifications_feed_orders_desc_and_paginates(pool: sqlx::PgPool) {
         BootstrapRequest {
             project_code: "SUP-FEED".to_string(),
             project_name: "supervision feed".to_string(),
+            tenant_id: SYSTEM_TENANT,
         },
     )
     .await
@@ -811,8 +819,9 @@ async fn notifications_feed_orders_desc_and_paginates(pool: sqlx::PgPool) {
     let kinds = ["a_oldest", "b_middle", "c_middle", "d_middle", "e_newest"];
     for (idx, kind) in kinds.iter().enumerate() {
         sqlx::query(
-            "INSERT INTO integration.notification (project_id, kind, payload, created_at) \
-             VALUES ($1, $2, $3, now() - make_interval(mins => $4))",
+            "INSERT INTO integration.notification (project_id, kind, payload, created_at, tenant_id) \
+             VALUES ($1, $2, $3, now() - make_interval(mins => $4), \
+                     (SELECT tenant_id FROM core.project WHERE id = $1))",
         )
         .bind(boot.project_id)
         .bind(kind)

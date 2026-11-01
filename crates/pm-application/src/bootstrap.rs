@@ -29,10 +29,11 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 /// Everything [`bootstrap_project`] needs: the unique project code and its
-/// display name.
+/// display name, plus the owning tenant (T-021b：根表由调用方显式给租户).
 pub struct BootstrapRequest {
     pub project_code: String,
     pub project_name: String,
+    pub tenant_id: Uuid,
 }
 
 /// The ids a successful bootstrap created (or reused, for the customer).
@@ -127,24 +128,30 @@ async fn bootstrap_inner(
     initial_status: Option<&str>,
 ) -> Result<BootstrapOutcome, BootstrapError> {
     let mut tx = pool.begin().await.map_err(BootstrapError::Db)?;
+    let tenant_id = req.tenant_id;
 
-    // Friendly duplicate check before any inserts; the UNIQUE(project.code)
+    // Friendly duplicate check before any inserts; the UNIQUE(tenant_id, code)
     // violation on the insert below is the race-safe backstop.
-    let existing: Option<Uuid> = sqlx::query_scalar("SELECT id FROM core.project WHERE code = $1")
-        .bind(&req.project_code)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(BootstrapError::Db)?;
+    let existing: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM core.project WHERE tenant_id = $1 AND code = $2")
+            .bind(tenant_id)
+            .bind(&req.project_code)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(BootstrapError::Db)?;
     if existing.is_some() {
         return Err(BootstrapError::Duplicate(req.project_code));
     }
 
     let customer_id: Uuid = match customer {
         CustomerTarget::Existing(id) => {
+            // 租户谓词：跨租户的 customer_id 视为不存在，不泄露存在性。
             let found: Option<Uuid> = sqlx::query_scalar(
-                "SELECT id FROM core.customer WHERE id = $1 AND status <> 'archived'",
+                "SELECT id FROM core.customer \
+                  WHERE id = $1 AND tenant_id = $2 AND status <> 'archived'",
             )
             .bind(id)
+            .bind(tenant_id)
             .fetch_optional(&mut *tx)
             .await
             .map_err(BootstrapError::Db)?;
@@ -152,16 +159,21 @@ async fn bootstrap_inner(
         }
         // 兼容路径：客户按 name（= project code）幂等，name 无唯一约束故先查后插。
         CustomerTarget::Implicit => {
-            match sqlx::query_scalar("SELECT id FROM core.customer WHERE name = $1")
-                .bind(&req.project_code)
-                .fetch_optional(&mut *tx)
-                .await
-                .map_err(BootstrapError::Db)?
+            match sqlx::query_scalar(
+                "SELECT id FROM core.customer WHERE tenant_id = $1 AND name = $2",
+            )
+            .bind(tenant_id)
+            .bind(&req.project_code)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(BootstrapError::Db)?
             {
                 Some(id) => id,
                 None => sqlx::query_scalar(
-                    "INSERT INTO core.customer (name, status) VALUES ($1, 'placeholder') RETURNING id",
+                    "INSERT INTO core.customer (tenant_id, name, status) \
+                     VALUES ($1, $2, 'placeholder') RETURNING id",
                 )
+                .bind(tenant_id)
                 .bind(&req.project_code)
                 .fetch_one(&mut *tx)
                 .await
@@ -174,20 +186,9 @@ async fn bootstrap_inner(
         insert_principal(&mut tx, "human", &format!("owner-{}", req.project_code)).await?;
     let ai_principal_id =
         insert_principal(&mut tx, "ai_pm", &format!("ai-pm-{}", req.project_code)).await?;
-    let architect_id = insert_principal(
-        &mut tx,
-        "dev_agent",
-        &format!("architect-{}", req.project_code),
-    )
-    .await?;
-    let developer_id = insert_principal(
-        &mut tx,
-        "dev_agent",
-        &format!("dev-agent-{}", req.project_code),
-    )
-    .await?;
-    let tester_id =
-        insert_principal(&mut tx, "dev_agent", &format!("tester-{}", req.project_code)).await?;
+    // `dev_agent` 是**租户级**实例（ADR-0001 D3）：同一租户的多个项目复用同一组
+    // Agent，项目授权仍写 `project_member`，不另造 grant 表。
+    let (architect_id, developer_id, tester_id) = ensure_tenant_agents(&mut tx, tenant_id).await?;
 
     let status = match initial_status {
         None | Some("planning") => "planning",
@@ -199,9 +200,10 @@ async fn bootstrap_inner(
         }
     };
     let project_id: ProjectId = match sqlx::query_scalar(
-        "INSERT INTO core.project (customer_id, code, name, status) \
-         VALUES ($1, $2, $3, $4) RETURNING id",
+        "INSERT INTO core.project (tenant_id, customer_id, code, name, status) \
+         VALUES ($1, $2, $3, $4, $5) RETURNING id",
     )
+    .bind(tenant_id)
     .bind(customer_id)
     .bind(&req.project_code)
     .bind(&req.project_name)
@@ -216,16 +218,16 @@ async fn bootstrap_inner(
         Err(e) => return Err(BootstrapError::Db(e)),
     };
 
-    insert_member(&mut tx, project_id, human_id, "owner").await?;
-    insert_member(&mut tx, project_id, ai_principal_id, "ai_pm").await?;
-    insert_member(&mut tx, project_id, architect_id, "architect").await?;
-    insert_member(&mut tx, project_id, developer_id, "developer").await?;
-    insert_member(&mut tx, project_id, tester_id, "tester").await?;
+    insert_member(&mut tx, tenant_id, project_id, human_id, "owner").await?;
+    insert_member(&mut tx, tenant_id, project_id, ai_principal_id, "ai_pm").await?;
+    insert_member(&mut tx, tenant_id, project_id, architect_id, "architect").await?;
+    insert_member(&mut tx, tenant_id, project_id, developer_id, "developer").await?;
+    insert_member(&mut tx, tenant_id, project_id, tester_id, "tester").await?;
 
     sqlx::query(
         "INSERT INTO ai.project_ai_config \
-         (project_id, ai_principal_id, model_provider, model_name, model_config, automation_mode, policy_version) \
-         VALUES ($1, $2, 'fake', 'fake', '{}'::jsonb, 'ai_lead', 1)",
+         (project_id, tenant_id, ai_principal_id, model_provider, model_name, model_config, automation_mode, policy_version) \
+         VALUES ($1, (SELECT tenant_id FROM core.project WHERE id = $1), $2, 'fake', 'fake', '{}'::jsonb, 'ai_lead', 1)",
     )
     .bind(project_id)
     .bind(ai_principal_id)
@@ -235,8 +237,8 @@ async fn bootstrap_inner(
 
     for skill_id in SKILL_IDS {
         sqlx::query(
-            "INSERT INTO ai.project_skill_binding (project_id, skill_id, skill_version) \
-             VALUES ($1, $2, 'v1')",
+            "INSERT INTO ai.project_skill_binding (project_id, tenant_id, skill_id, skill_version) \
+             VALUES ($1, (SELECT tenant_id FROM core.project WHERE id = $1), $2, 'v1')",
         )
         .bind(project_id)
         .bind(skill_id)
@@ -289,18 +291,74 @@ async fn insert_principal(
         .map_err(BootstrapError::Db)
 }
 
+/// 取（或建）该租户的三个 `dev_agent` 实例，返回 (architect, developer, tester)。
+///
+/// 租户级而非项目级：第二次及以后建项目时直接复用，不重复造 principal——
+/// 这正是 ADR-0001 D3 的三层结构（`agent_definition` 全局 → `tenant_agent` 租户
+/// → `project_member` 项目授权）。
+async fn ensure_tenant_agents(
+    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tenant_id: Uuid,
+) -> Result<(PrincipalId, PrincipalId, PrincipalId), BootstrapError> {
+    let found: Vec<(String, Uuid)> = sqlx::query_as(
+        "SELECT d.code, ta.principal_id \
+           FROM core.tenant_agent ta \
+           JOIN ai.agent_definition d ON d.id = ta.agent_definition_id \
+          WHERE ta.tenant_id = $1",
+    )
+    .bind(tenant_id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(BootstrapError::Db)?;
+
+    let mut ids = std::collections::HashMap::new();
+    for (code, principal_id) in found {
+        ids.insert(code, principal_id);
+    }
+
+    for code in ["architect", "developer", "tester"] {
+        if ids.contains_key(code) {
+            continue;
+        }
+        let principal_id =
+            insert_principal(tx, "dev_agent", &format!("{code}-{tenant_id}")).await?;
+        sqlx::query(
+            "INSERT INTO core.tenant_agent (tenant_id, agent_definition_id, principal_id) \
+             SELECT $1, d.id, $2 FROM ai.agent_definition d WHERE d.code = $3",
+        )
+        .bind(tenant_id)
+        .bind(principal_id)
+        .bind(code)
+        .execute(&mut **tx)
+        .await
+        .map_err(BootstrapError::Db)?;
+        ids.insert(code.to_string(), principal_id);
+    }
+
+    Ok((
+        ids["architect"],
+        ids["developer"],
+        ids["tester"],
+    ))
+}
+
 async fn insert_member(
     tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tenant_id: Uuid,
     project_id: ProjectId,
     principal_id: PrincipalId,
     role: &str,
 ) -> Result<(), BootstrapError> {
-    sqlx::query("INSERT INTO core.project_member (project_id, principal_id, role) VALUES ($1, $2, $3)")
-        .bind(project_id)
-        .bind(principal_id)
-        .bind(role)
-        .execute(&mut **tx)
-        .await
-        .map_err(BootstrapError::Db)?;
+    sqlx::query(
+        "INSERT INTO core.project_member (tenant_id, project_id, principal_id, role) \
+         VALUES ($1, $2, $3, $4)",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(principal_id)
+    .bind(role)
+    .execute(&mut **tx)
+    .await
+    .map_err(BootstrapError::Db)?;
     Ok(())
 }

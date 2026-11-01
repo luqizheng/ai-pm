@@ -1,4 +1,4 @@
-//! MCP tool layer tests (Task 16, Step 1).
+﻿//! MCP tool layer tests (Task 16, Step 1).
 //!
 //! Contract under test: the three tool functions in `pm_mcp::tools` are thin,
 //! DB-testable wrappers — `pm_submit_technical_design` reuses the idempotent
@@ -22,17 +22,22 @@ use pm_mcp::tools::{
 use serde_json::{Value, json};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
+use pm_domain::SYSTEM_TENANT;
 
 fn seed(code: &str) -> BootstrapRequest {
     BootstrapRequest {
         project_code: code.to_string(),
         project_name: format!("project {code}"),
+        tenant_id: SYSTEM_TENANT,
     }
 }
 
 /// Minimal `delivery.task` row; the tools only need its id, project and title.
 async fn insert_task(pool: &PgPool, project_id: Uuid, title: &str) -> Uuid {
-    sqlx::query_scalar("INSERT INTO delivery.task (project_id, title) VALUES ($1, $2) RETURNING id")
+    sqlx::query_scalar(
+        "INSERT INTO delivery.task (project_id, title, tenant_id) \
+         VALUES ($1, $2, (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
+    )
         .bind(project_id)
         .bind(title)
         .fetch_one(pool)
@@ -47,8 +52,9 @@ async fn insert_event(pool: &PgPool, project_id: Uuid, actor_id: Uuid) -> Uuid {
     let event_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO integration.inbound_event \
-         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash) \
-         VALUES ($1, $2, $3, 'mcp', 'technical_design_submitted', 'seed-key', '{}', 'seed-hash')",
+         (id, project_id, actor_id, source, event_type, idempotency_key, payload, payload_hash, tenant_id) \
+         VALUES ($1, $2, $3, 'mcp', 'technical_design_submitted', 'seed-key', '{}', 'seed-hash', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(event_id)
     .bind(project_id)
@@ -56,7 +62,10 @@ async fn insert_event(pool: &PgPool, project_id: Uuid, actor_id: Uuid) -> Uuid {
     .execute(pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO integration.job (project_id, event_id, job_type) VALUES ($1, $2, 'ai_analysis')")
+    sqlx::query(
+        "INSERT INTO integration.job (project_id, event_id, job_type, tenant_id) \
+         VALUES ($1, $2, 'ai_analysis', (SELECT tenant_id FROM core.project WHERE id = $1))",
+    )
         .bind(project_id)
         .bind(event_id)
         .execute(pool)
@@ -77,8 +86,9 @@ async fn insert_analysis_run(
     // external input, hence interpolation instead of a bind parameter.
     let sql = format!(
         "INSERT INTO ai.analysis_run (project_id, event_id, status, model_name, policy_version, \
-         config_snapshot, created_at) \
-         VALUES ($1, $2, $3, 'fake', 1, '{{}}'::jsonb, {created_at_expr}) RETURNING id"
+         config_snapshot, created_at, tenant_id) \
+         VALUES ($1, $2, $3, 'fake', 1, '{{}}'::jsonb, {created_at_expr}, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id"
     );
     sqlx::query_scalar(&sql)
         .bind(project_id)
@@ -100,8 +110,9 @@ async fn insert_proposal(
     sqlx::query_scalar(
         "INSERT INTO ai.change_proposal \
          (project_id, analysis_run_id, proposal_seq, target_type, command_type, proposed_data, \
-          rationale, risk_level, status) \
-         VALUES ($1, $2, $3, 'task', $4, '{}'::jsonb, 'because', 'low', $5) RETURNING id",
+          rationale, risk_level, status, tenant_id) \
+         VALUES ($1, $2, $3, 'task', $4, '{}'::jsonb, 'because', 'low', $5, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(run_id)

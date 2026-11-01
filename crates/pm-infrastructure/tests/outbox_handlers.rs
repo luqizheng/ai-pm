@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use pm_domain::SYSTEM_TENANT;
 use pm_infrastructure::outbox::{self, ClaimedOutboxEvent, NewOutboxEvent};
 use pm_infrastructure::outbox_handlers::TaskReadyHandler;
 use pm_infrastructure::outbox_worker::{DispatchOutcome, OutboxHandler, OutboxWorker};
@@ -16,8 +17,10 @@ struct Seeded {
 
 /// customer → Agent principal → project → 一个任务（指定状态与是否指派）。
 async fn seed_task(pool: &PgPool, code: &str, status: &str, assigned: bool) -> Seeded {
-    let customer_id: Uuid =
-        sqlx::query_scalar("INSERT INTO core.customer (name) VALUES ('oh') RETURNING id")
+    let customer_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (name, tenant_id) VALUES ('oh', $1) RETURNING id",
+    )
+    .bind(SYSTEM_TENANT)
             .fetch_one(pool)
             .await
             .unwrap();
@@ -28,17 +31,20 @@ async fn seed_task(pool: &PgPool, code: &str, status: &str, assigned: bool) -> S
     .await
     .unwrap();
     let project_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO core.project (customer_id, code, name) VALUES ($1, $2, 'oh') RETURNING id",
+        "INSERT INTO core.project (customer_id, code, name, tenant_id) \
+         VALUES ($1, $2, 'oh', $3) RETURNING id",
     )
     .bind(customer_id)
     .bind(code.to_string())
+    .bind(SYSTEM_TENANT)
     .fetch_one(pool)
     .await
     .unwrap();
     let assignee: Option<Uuid> = if assigned { Some(agent_id) } else { None };
     let task_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id) \
-         VALUES ($1, 'seeded', $2, 1, $3) RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id, tenant_id) \
+         VALUES ($1, 'seeded', $2, 1, $3, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(status.to_string())

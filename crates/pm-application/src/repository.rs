@@ -234,8 +234,9 @@ pub async fn ensure_ssh_key(
     let mut tx = pool.begin().await?;
     let (created_at,): (DateTime<Utc>,) = sqlx::query_as(
         "INSERT INTO integration.project_ssh_key \
-         (project_id, public_key, private_key_ciphertext, fingerprint, status, created_by) \
-         VALUES ($1, $2, $3, $4, 'active', $5) \
+         (project_id, public_key, private_key_ciphertext, fingerprint, status, created_by, tenant_id) \
+         VALUES ($1, $2, $3, $4, 'active', $5, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) \
          ON CONFLICT (project_id) DO UPDATE SET \
              public_key = EXCLUDED.public_key, \
              private_key_ciphertext = EXCLUDED.private_key_ciphertext, \
@@ -402,8 +403,9 @@ pub async fn create_repository(
     let mut tx = pool.begin().await?;
     let row = sqlx::query_as::<_, RepositoryRow>(
         "INSERT INTO integration.project_repository \
-         (project_id, name, url, role, default_branch, description) \
-         VALUES ($1, $2, $3, $4, $5, $6) \
+         (project_id, name, url, role, default_branch, description, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) \
          RETURNING id, project_id, name, url, role, default_branch, description, \
                    ssh_key_id, status, head_commit_sha, last_verified_at, \
                    last_error_code, last_error_detail, revision, created_at, updated_at",
@@ -730,8 +732,9 @@ async fn append_audit(
     sqlx::query(
         "INSERT INTO governance.audit_log \
          (id, project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, \
-          action, target_type, target_id) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+          action, target_type, target_id, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(Uuid::new_v4())
     .bind(project_id)

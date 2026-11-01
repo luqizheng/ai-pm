@@ -2,20 +2,26 @@
 //! 契约四列、两张关联表、run 级凭据三列、service principal 种子；并验证
 //! forward-only 可重入与约束/外键。真实数据库，不 Mock。
 
+use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
-    let customer: Uuid = sqlx::query_scalar("INSERT INTO core.customer (name) VALUES ($1) RETURNING id")
+    let customer: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (name, tenant_id) VALUES ($1, $2) RETURNING id",
+    )
         .bind(format!("c-{code}"))
+        .bind(SYSTEM_TENANT)
         .fetch_one(pool)
         .await
         .unwrap();
     sqlx::query_scalar(
-        "INSERT INTO core.project (customer_id, code, name) VALUES ($1, $2, $2) RETURNING id",
+        "INSERT INTO core.project (customer_id, code, name, tenant_id) \
+         VALUES ($1, $2, $2, $3) RETURNING id",
     )
     .bind(customer)
     .bind(code)
+    .bind(SYSTEM_TENANT)
     .fetch_one(pool)
     .await
     .unwrap()
@@ -23,7 +29,8 @@ async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
 
 async fn seed_task(pool: &PgPool, project_id: Uuid, title: &str) -> Uuid {
     sqlx::query_scalar(
-        "INSERT INTO delivery.task (project_id, title, status) VALUES ($1, $2, 'ready') RETURNING id",
+        "INSERT INTO delivery.task (project_id, title, status, tenant_id) \
+         VALUES ($1, $2, 'ready', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(title)
@@ -105,8 +112,10 @@ async fn acceptance_criterion_constraints(pool: PgPool) {
     let task_id = seed_task(&pool, project_id, "acc").await;
 
     sqlx::query(
-        "INSERT INTO delivery.task_acceptance_criterion (project_id, task_id, ordinal, text, verification_kind) \
-         VALUES ($1, $2, 10, 'compare shaders', 'review')",
+        "INSERT INTO delivery.task_acceptance_criterion \
+         (project_id, task_id, ordinal, text, verification_kind, tenant_id) \
+         VALUES ($1, $2, 10, 'compare shaders', 'review', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(task_id)
@@ -115,8 +124,9 @@ async fn acceptance_criterion_constraints(pool: PgPool) {
     .expect("a valid criterion is accepted");
 
     let duplicate_ordinal = sqlx::query(
-        "INSERT INTO delivery.task_acceptance_criterion (project_id, task_id, ordinal, text) \
-         VALUES ($1, $2, 10, 'second')",
+        "INSERT INTO delivery.task_acceptance_criterion \
+         (project_id, task_id, ordinal, text, tenant_id) \
+         VALUES ($1, $2, 10, 'second', (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(task_id)
@@ -125,8 +135,10 @@ async fn acceptance_criterion_constraints(pool: PgPool) {
     assert!(duplicate_ordinal.is_err(), "ordinal is unique per task");
 
     let unknown_kind = sqlx::query(
-        "INSERT INTO delivery.task_acceptance_criterion (project_id, task_id, ordinal, text, verification_kind) \
-         VALUES ($1, $2, 20, 'x', 'magic')",
+        "INSERT INTO delivery.task_acceptance_criterion \
+         (project_id, task_id, ordinal, text, verification_kind, tenant_id) \
+         VALUES ($1, $2, 20, 'x', 'magic', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(task_id)
@@ -135,8 +147,9 @@ async fn acceptance_criterion_constraints(pool: PgPool) {
     assert!(unknown_kind.is_err(), "verification_kind is constrained");
 
     let empty_text = sqlx::query(
-        "INSERT INTO delivery.task_acceptance_criterion (project_id, task_id, ordinal, text) \
-         VALUES ($1, $2, 30, '   ')",
+        "INSERT INTO delivery.task_acceptance_criterion \
+         (project_id, task_id, ordinal, text, tenant_id) \
+         VALUES ($1, $2, 30, '   ', (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(task_id)
@@ -156,8 +169,9 @@ async fn deleting_task_cascades_criteria_and_refs(pool: PgPool) {
     .await
     .unwrap();
     let document_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO ai.project_document (project_id, doc_key, doc_type, canonical_path) \
-         VALUES ($1, 'ARCH-1', 'architecture', 'architecture/arch-1.md') RETURNING id",
+        "INSERT INTO ai.project_document (project_id, doc_key, doc_type, canonical_path, tenant_id) \
+         VALUES ($1, 'ARCH-1', 'architecture', 'architecture/arch-1.md', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .fetch_one(&pool)
@@ -166,8 +180,9 @@ async fn deleting_task_cascades_criteria_and_refs(pool: PgPool) {
     let _ = actor;
 
     sqlx::query(
-        "INSERT INTO delivery.task_acceptance_criterion (project_id, task_id, ordinal, text) \
-         VALUES ($1, $2, 1, 'criterion')",
+        "INSERT INTO delivery.task_acceptance_criterion \
+         (project_id, task_id, ordinal, text, tenant_id) \
+         VALUES ($1, $2, 1, 'criterion', (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(task_id)
@@ -175,7 +190,8 @@ async fn deleting_task_cascades_criteria_and_refs(pool: PgPool) {
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO delivery.task_knowledge_ref (project_id, task_id, document_id) VALUES ($1, $2, $3)",
+        "INSERT INTO delivery.task_knowledge_ref (project_id, task_id, document_id, tenant_id) \
+         VALUES ($1, $2, $3, (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(task_id)
@@ -209,8 +225,9 @@ async fn knowledge_ref_rejects_cross_project_document(pool: PgPool) {
     let other_project_id = seed_project(&pool, "M15-REF-B").await;
     let task_id = seed_task(&pool, project_id, "ref").await;
     let foreign_doc: Uuid = sqlx::query_scalar(
-        "INSERT INTO ai.project_document (project_id, doc_key, doc_type, canonical_path) \
-         VALUES ($1, 'ARCH-1', 'architecture', 'architecture/arch-1.md') RETURNING id",
+        "INSERT INTO ai.project_document (project_id, doc_key, doc_type, canonical_path, tenant_id) \
+         VALUES ($1, 'ARCH-1', 'architecture', 'architecture/arch-1.md', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(other_project_id)
     .fetch_one(&pool)
@@ -218,7 +235,8 @@ async fn knowledge_ref_rejects_cross_project_document(pool: PgPool) {
     .unwrap();
 
     let err = sqlx::query(
-        "INSERT INTO delivery.task_knowledge_ref (project_id, task_id, document_id) VALUES ($1, $2, $3)",
+        "INSERT INTO delivery.task_knowledge_ref (project_id, task_id, document_id, tenant_id) \
+         VALUES ($1, $2, $3, (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(task_id)
