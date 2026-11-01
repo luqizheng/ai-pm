@@ -1,23 +1,66 @@
-# D5 · Review、失败恢复与知识回写 v1.1（T-042 设计稿）
+# D5 · Review、失败恢复与知识回写 v1.2（T-042 设计稿）
 
-> 状态：**待过稿（V1.1）**——2026-11-02 brainstorming 七题裁定 Q-D5-1…Q-D5-7 收编为 v1（`faa3f34`）；同日评审 P0×6/P1×4 收编升级 V1.1（逐项核对见 `docs/ai-pm-slice-d5-review-review.md`，正文以「〔评审收编 P0-x/P1-x〕」标注）。
+> 状态：**待修订（V1.2）**——2026-11-02 brainstorming 七题裁定 Q-D5-1…Q-D5-7 收编为 v1（`faa3f34`）；同日评审 P0×6/P1×4 收编升级 V1.1（`b59a0bf`）；同日评审补充场景 10 项收编（`c807c7a`，+C124–C130，矩阵终态 C98–C130）；**2026-11-02 最终架构判断：有条件通过，暂缓 T-043，先修订再过稿**。
+> 修订状态：D1 架构原则 + 七项裁定表修订（进行中）；D2–D6 待产出。
 > 日期：2026-11-02
-> 一句话：`task_run` 扩 `run_kind` 承载**平台内确定性 Reviewer Run**（Q-D5-1/2），两拍编排——事件 handler 轻拍推进 `submitted→reviewing` 并建 review run，worker 领取拍跑确定性校验管线产出 findings + verdict（Q-D5-3）；四值结论经**完成判定器**映射回 13 态状态机，待审批停 `reviewing`+`task_waiting(needs_approval)` 不新增状态（Q-D5-4）；失败判定服务（B4-A~D）为 worker 内周期作业（Q-D5-5）；逐条验收裁决落独立表兑现 `0015` 预留外键（Q-D5-6）；知识回写走平台模板 `draft` 提案 + `KnowledgeBaseWriteRequested`（Q-D5-7）。
+> 一句话：`task_run` 扩 `run_kind` 承载**平台内确定性 Reviewer Run**（Q-D5-1/2），两拍编排——事件 handler 轻拍推进 `submitted→reviewing` 并建 review run，worker 领取拍跑确定性校验管线产出 findings + verdict（Q-D5-3）；四值结论经**完成判定器**映射回 13 态状态机，待审批停 `reviewing`+`task_waiting(needs_approval)` 不新增状态（Q-D5-4）；失败判定服务（B4-A~D）为 worker 内周期作业（Q-D5-5）；逐条验收裁决落独立表兑现 `0015` 预留外键（Q-D5-6）；知识回走平台模板 `draft` 提案 + `KnowledgeBaseWriteRequested`（Q-D5-7）。
+> 架构原则（§0）：D5 是**治理闭环**，不是更复杂的执行引擎。D1 决定能不能执行；D3 负责实际执行；D4 记录执行产生的事实；D5 判断这些事实是否满足任务完成条件；知识库负责将经过治理的事实转化为长期知识。D5 不重新承担 D1、D3 或 D4 的职责。
 > 上位依据：`target.md` §P7 五条边界 + §P6 知识回写红线（回写只能走提案，不得直写）；`docs/ai-pm-task-state-machine-v1.md` §十八 Q8（独立审查 Agent：L1/L2/L3、`reviewed_manifest_hash` 锚定、四值结论、Inconclusive 不得当 Approved、强制审查失败不得静默跳过）/ §十九 Q9（B4-A~D、`FailureRecord` 不可变、Reviewer 发现缺陷 ≠ 审查运行失败）/ §2.2 B1/B2 级转移 / §2.4 审批不绑定状态 / E2 例外；`docs/ai-pm-slice-d-execution-pipeline-v1.md` §八 D5 行（失败判定服务 + 评审编排 + 知识索引写入；验收锚点「Reviewer 成功发现问题不被记为执行失败」）；`docs/ai-pm-slice-d4-delivery-v1.md`（`submitted→reviewing` 归 D5、`integration_status` completed 禁令归 D5、partial 裁决归 D5、`knowledge_proposals` 只记数、`delivery.rejected` 审计供 D5 取用）；`0015_task_contract.sql`（`task_acceptance_criterion` 预留 D5 证据表组合外键位）/ `0014_knowledge_v2.sql`（提案生命周期）/ `0016_policy_composition.sql`（四层合成）/ `0010_task_state_machine.sql`（13 态、`task_waiting`、`task_policy_override`、`task_run_failure`）；todo.md §8 T-042。
+
+---
+
+## 0. 架构原则（D5 治理闭环）
+
+> 〔最终架构判断，2026-11-02〕D5 是**治理闭环**，不是更复杂的执行引擎。
+
+### 0.1 Slice D 职责边界
+
+| Slice | 职责 | D5 是否承担 |
+|---|---|---|
+| D1 | 决定能不能执行（任务契约校验、发布确认） | ❌ 不 |
+| D3 | 实际执行（Codex 运行、测试、交付物生成） | ❌ 不 |
+| D4 | 记录执行产生的事实（Commit、测试证据、交付清单、知识提案摘要） | ❌ 不 |
+| **D5** | **判断这些事实是否满足任务完成条件（Review、失败判定、审批、知识回写）** | ✅ 唯一 |
+| 知识库 | 将经过治理的事实转化为长期知识（提案→质量门→确认→正式知识） | ❌ 不（只触发提案，不执行状态机） |
+
+### 0.2 D5 内部不变量
+
+1. **Review Run 的 `executor_kind='platform'` 仅做确定性校验，不碰工作区。**
+2. **失败判定服务只读 `task_run_failure` 不可变表，不回写交付物。**
+3. **审批裁决只写 `review_approval` + 状态迁移，不回写交付物。**
+4. **知识回写只触发 `draft` 提案，不执行知识域状态机。**
+5. **Review 失败 ≠ Run 失败 ≠ Task 失败——三失败隔离为硬不变量。**
+
+### 0.3 五项保留（不推翻）
+
+| # | 保留项 | 裁定来源 |
+|---|---|---|
+| 1 | 统一 Run 历史（`task_run` 复用 + `run_kind` 区分） | Q-D5-1 |
+| 2 | 确定性 Reviewer（平台内校验管线，无 LLM） | Q-D5-2 |
+| 3 | 独立审批记录（`governance.review_approval` 新表） | Q-D5-4 |
+| 4 | Review 失败与执行失败隔离（`run_kind` 谓词 + 不变量） | Q-D5-4/5 |
+| 5 | 知识提案与正式知识分离（`draft` 提案 + 0014 提案流） | Q-D5-7 |
+
+### 0.4 五项修订（按 P0/P1 清单落地）
+
+| # | 修订项 | 优先级 | 落点 |
+|---|---|---|---|
+| 1 | 并发、幂等、审批绑定、失败恢复、事务边界 | P0 | §3–§7 |
+| 2 | 迁移号统一、租户隔离、触发器、测试矩阵、映射表完备 | P1 | §2、§10 |
 
 ---
 
 ## 1. 七项裁定汇总（brainstorming 逐题确认，2026-11-02）
 
-| # | 裁点 | 结论 |
-|---|---|---|
-| Q-D5-1 | Reviewer Run 落库形态 | **复用 `delivery.task_run`**：加 `run_kind` 两值列 + `role_id` + `input_manifest_hash`；`uq_task_run_active` 收窄为仅约束 `run_kind='delivery'`；生命周期/attempt/失败记录/审计/事件/详情页 run 列表全部复用。不建独立 review_run 表（Q8.5 双轨成本否决），不落无 Run 实体（违反 target.md §P7） |
-| Q-D5-2 | Reviewer 执行形态 | **V1 = 平台内确定性校验 Run**：worker 执行确定性校验管线产出 findings + verdict，`executor_kind='platform'`（凭据面列库层强制 NULL，P0-1）；保留 `timed_out`（受 run 预算约束）；Codex 只读 Reviewer Run（Q8.3 L2 完整版）留**同骨架扩展位**——未来填 executor 列即可，findings/verdict/事件模型零改动。V1 无 LLM 审查（Q8.1 清单矩阵未定义前不自由发挥） |
-| Q-D5-3 | 编排与触发 | **两拍编排**：① `DeliverySubmitted` 事件 handler 轻拍——B1 守卫（最新 delivery run 的视图对账 = `delivered`）通过后同事务 `submitted→reviewing`（经 `update_task_status` + `validate_transition`）+ 创建 queued review run；② worker 独立循环领取 review run → running → 校验管线（慢操作全在这拍）→ findings + verdict → review run 终态 → 按 §5 映射推进 task。锚定哈希口径、单活跃 review run、失效规则三从属裁定见 §3.3 |
-| Q-D5-4 | 四值结论 → task 状态 | **§5 映射矩阵 + 五从属裁点**：待审批停 `reviewing` + `task_waiting(reason='needs_approval')`（不新增状态不加边，`awaiting_decision` 保持执行期专用）；审批走新表 `governance.review_approval`（不碰 `approval_request` 旧契约）；`integration_status=failed` 人机均不可越、`not_run`/manual 未决仅人工可裁；`additional_checks` 非空保守降级人工（fail-closed）；「Review 失败 ≠ Run 失败」为硬不变量 |
-| Q-D5-5 | 失败判定服务（B4） | **输入清单 1–7**（§6）+ **Q9.2 落定 worker 进程内周期作业**（与 TaskReady 领取、lease 回收、review 领取并列，共享扫描 SQL 与事务模板；判定动作全条件 UPDATE，`task_run_failure` 行存在即幂等标记）；`task_deadline` 总期限 V1 不做（无计时器基础设施，留演进位）；partial + delivery run 已终态走重试路径（不判 changes_requested） |
-| Q-D5-6 | 数据模型 | **run 行即报告头**（verdict 落 `task_run.review_verdict` 列）+ 三张新表（`delivery.review_finding` / `delivery.acceptance_criterion_verdict` / `governance.review_approval`）+ run 六列追加；`acceptance_criterion_verdict` 兑现 `0015` 预留组合外键；**T-052/T-054 均不触发**（条目修订漂移由 criteria 快照哈希 + 完成判定器校验兜底）；迁移 `0026` 单迁移收编（P1-1：0024 → 0026） |
-| Q-D5-7 | 知识回写与事件 | **平台模板生成**「任务执行记录」类 `draft` 提案（`doc_type='knowledge'`，零 LLM 依赖）；执行端上报原样（document_id + change_summary）完整保进事件 payload，V1 不消费定向文档更新建议；**仅 `completed` 触发**（T-043 描述「完成/失败后」收窄，失败回写进演进位）；提案级查重应用层事务内判（不动 0014 表结构）；`ReviewCompleted` 生产不注册消费 handler（供 T-070/监控，不造无语义 handler） |
+| # | 裁点 | 结论 | 架构原则（职责边界） |
+|---|---|---|---|
+| Q-D5-1 | Reviewer Run 落库形态 | **复用 `delivery.task_run`**：加 `run_kind` 两值列 + `role_id` + `input_manifest_hash`；`uq_task_run_active` 收窄为仅约束 `run_kind='delivery'`；生命周期/attempt/失败记录/审计/事件/详情页 run 列表全部复用。不建独立 review_run 表（Q8.5 双轨成本否决），不落无 Run 实体（违反 target.md §P7） | **D5 内部**：Run 历史统一由 `task_run` 承载，不新建 Run 实体。不触碰 D4 的 `delivery_run` 表。 |
+| Q-D5-2 | Reviewer 执行形态 | **V1 = 平台内确定性校验 Run**：worker 执行确定性校验管线产出 findings + verdict，`executor_kind='platform'`（凭据面列库层强制 NULL，P0-1）；保留 `timed_out`（受 run 预算约束）；Codex 只读 Reviewer Run（Q8.3 L2 完整版）留**同骨架扩展位**——未来填 executor 列即可，findings/verdict/事件模型零改动。V1 无 LLM 审查（Q8.1 清单矩阵未定义前不自由发挥） | **D5 内部**：仅做确定性校验，不碰工作区。不替代 D3 执行。Codex 只读 Reviewer Run 为演进位，V1 不落地。 |
+| Q-D5-3 | 编排与触发 | **两拍编排**：① `DeliverySubmitted` 事件 handler 轻拍——B1 守卫（最新 delivery run 的视图对账 = `delivered`）通过后同事务 `submitted→reviewing`（经 `update_task_status` + `validate_transition`）+ 创建 queued review run；② worker 独立循环领取 review run → running → 校验管线（慢操作全在这拍）→ findings + verdict → review run 终态 → 按 §5 映射推进 task。锚定哈希口径、单活跃 review run、失效规则三从属裁定见 §3.3 | **D5 内部**：编排只推进 task 状态，不回写交付物。事件消费幂等（§3.4）。不替代 D4 的 `submit_delivery`。 |
+| Q-D5-4 | 四值结论 → task 状态 | **§5 映射矩阵 + 五从属裁点**：待审批停 `reviewing` + `task_waiting(reason='needs_approval')`（不新增状态不加边，`awaiting_decision` 保持执行期专用）；审批走新表 `governance.review_approval`（不碰 `approval_request` 旧契约）；`integration_status=failed` 人机均不可越、`not_run`/manual 未决仅人工可裁；`additional_checks` 非空保守降级人工（fail-closed）；「Review 失败 ≠ Run 失败」为硬不变量 | **D5 内部**：只写 `review_approval` + 状态迁移，不回写交付物。审批不绑定状态（§2.4），由任务类型/风险等级/操作三元函数判定。 |
+| Q-D5-5 | 失败判定服务（B4） | **输入清单 1–7**（§6）+ **Q9.2 落定 worker 进程内周期作业**（与 TaskReady 领取、lease 回收、review 领取并列，共享扫描 SQL 与事务模板；判定动作全条件 UPDATE，`task_run_failure` 行存在即幂等标记）；`task_deadline` 总期限 V1 不做（无计时器基础设施，留演进位）；partial + delivery run 已终态走重试路径（不判 changes_requested） | **D5 内部**：只读 `task_run_failure` 不可变表，不回写交付物。`run_kind='delivery'` 谓词结构性隔离（P0-4）。不替代 D3 的 executor 重试。 |
+| Q-D5-6 | 数据模型 | **run 行即报告头**（verdict 落 `task_run.review_verdict` 列）+ 三张新表（`delivery.review_finding` / `delivery.acceptance_criterion_verdict` / `governance.review_approval`）+ run 六列追加；`acceptance_criterion_verdict` 兑现 `0015` 预留组合外键；**T-052/T-054 均不触发**（条目修订漂移由 criteria 快照哈希 + 完成判定器校验兜底）；迁移 `0026` 单迁移收编（P1-1：0024 → 0026） | **D5 内部**：新表只承载 Review 数据，不触碰 D4 的 `delivery_run`/`delivery_manifest`。触发器禁 UPDATE（P1-2）。 |
+| Q-D5-7 | 知识回写与事件 | **平台模板生成**「任务执行记录」类 `draft` 提案（`doc_type='knowledge'`，零 LLM 依赖）；执行端上报原样（document_id + change_summary）完整保进事件 payload，V1 不消费定向文档更新建议；**仅 `completed` 触发**（T-043 描述「完成/失败后」收窄，失败回写进演进位）；提案级查重应用层事务内判（不动 0014 表结构）；`ReviewCompleted` 生产不注册消费 handler（供 T-070/监控，不造无语义 handler） | **D5→知识库边界**：只触发 `draft` 提案，不执行知识域状态机。`auto_publish_knowledge` 自动发布不归 D5（不越界做知识域状态机执行器，演进位）。 |
 
 **依赖链声明**：本稿按「D4 设计稿已过稿的契约」锚定（`integration_status`/聚合视图/`pm_submit_result` 冻结是设计层事实）。**T-043 实施前置 = T-041 交付 + D4 评审 P0-1~P0-4 收编完成**——D4 的 P0-1（幂等逻辑矛盾）/ P0-2（驳回审计原子性）直接踩在 D5 消费的提交管线上，未收编前 T-043 不得动工。
 
@@ -267,6 +310,41 @@ CREATE TRIGGER trg_review_report_immutable BEFORE UPDATE ON delivery.task_run
 
 ---
 
+### 3.5 Review 与 Delivery 状态转换矩阵〔评审最终判断 P0，必须补充〕
+
+> 〔2026-11-02 最终架构判断〕以用户提供的 5 行为主干，策略分支作为子列。
+> 核心不变量：**Review Run failed 不等于 Delivery Run failed**。
+
+| Review 结果 | Review Run | Task | 后续动作 | 策略分支：auto_accept 放行 | 策略分支：需人工 | 策略分支：硬禁令命中 |
+|---|---|---|---|---|---|---|
+| `approved` | `succeeded` | 满足完成条件后 `completed` | 生成知识提案（`KnowledgeBaseWriteRequested`） | `reviewing→completed`（原子集）+ 两事件 | 建 `review_approval(kind='auto_accept_gate', pending)` + `task_waiting(needs_approval)`，停 `reviewing`；审批裁决走 §5.2 单事务 | **不可能到达**（管线 L2 已挡）；防御性：审批裁决事务锚定校验拒绝 |
+| `changes_requested` | `succeeded` | 返回修改流程 | 等待新交付（新 delivery run） | `reviewing→changes_requested`（findings 即结构化失败项）；**不自动回 Ready**（回 Ready 走既有 A6 人工路径） | 同左（策略不影响此出口） | 同左——禁令本身即 changes_requested 的事实来源之一 |
+| `inconclusive` | `succeeded` | **`reviewing`（不退出）** | 等待补充证据 | 降级人工：`review_approval(kind='manual_review', pending)` + `task_waiting(needs_approval)`，停 `reviewing`；**Inconclusive 不重试**（确定性判定可重现），不得当 Approved（Q8.5） | 同左 | 同左 |
+| 无 verdict（管线异常 / 超预算 / 锚定漂移 `anchor_drift`） | `failed` / `timed_out` | **`reviewing`（不退出）** | 重试 Review | 重试 `attempt_no+1` 新 review run（B4 模型 + 退避）→ 耗尽 → `review_approval(kind='review_degraded', pending)` 降级人工；**强制审查不得静默跳过**（Q8.3）；**delivery run status/outcome 全程不变** | 同左 | 同左 |
+
+**关键修正**（与 V1.1 差异）：
+- `inconclusive` 的 Task 列：V1.1 写「降级人工」→ 修正为 **`reviewing`（不退出）**，与您裁定一致。
+- `failed` 的 Task 列：V1.1 写「降级人工」→ 修正为 **`reviewing`（不退出）**，与您裁定一致。
+- 新增「策略分支」三列，使 auto_accept / 需人工 / 硬禁令 的出口路径可机械验证。
+
+### 3.6 Review 幂等与并发规则表〔评审最终判断 P0，必须补充〕
+
+> 〔2026-11-02 最终架构判断〕机制全部存在于 V1.1，但需从 §3.4 幂等矩阵中抽离为独立规则表，每条规则对应一个 C 编号。
+
+| # | 规则 | 机制 | 载体 | C 编号 |
+|---|---|---|---|---|
+| R1 | 同一 Delivery 最多一个活跃 Review | `uq_task_review_active` 部分唯一索引（`WHERE run_kind='review' AND status IN ('queued','running')`） | 库层部分唯一索引 | C99 |
+| R2 | `DeliverySubmitted` 重复消费不能重复创建 Review | §3.4 场景 1：handler 重入判据——存在锚定 `(task_id, input_manifest_hash)` 的任意 review run → 幂等返回 | 应用层事务内查重 | C124（串行）/ C120（并发） |
+| R3 | Review 重试保留历史 Run | §2.5 触发器禁 UPDATE + `UNIQUE(criterion_id, review_run_id)` 重审新行 | 库层触发器 + 组合唯一索引 | C123 + C129 |
+| R4 | 多个 Worker 不得重复领取同一个 Review | §3.4 场景 4：旧 run 终态条件 UPDATE 先到先得 + `uq_task_review_active` 拦第二活跃 run | 库层部分唯一索引 + 条件 UPDATE | C122 |
+| R5 | 已经完成的 Review 不得被重复执行覆盖 | §3.4 场景 5：领取判据只扫 `status='queued'`；`succeeded` run 不再可领取 | 条件 UPDATE（D3 先例） | C123 |
+| R6 | Review Run failed 不触发 Delivery Run 重跑 | §6.2 `run_kind='delivery'` 谓词结构性隔离 + 失败判定作业对 review run 无任何写入路径 | 扫描 SQL 谓词 | C111 + C114 |
+| R7 | Review 失败不计入 `consecutive_failure_count` | 失败判定作业扫描谓词 `run_kind='delivery'`，review run 终态不在扫描范围 | 扫描 SQL 谓词 | C111 |
+
+**规则 R1–R7 为 D5 实施硬门禁**：任何实现路径若违反其中一条，验收直接失败。
+
+---
+
 ## 4. 确定性校验管线（领取拍执行，全只读输入）
 
 | # | 检查项 | 输入 | 通过条件 | 失败产出 |
@@ -324,6 +402,77 @@ pub struct ReviewFinding {
 
 任一步失败全回滚——审批行回到 pending、任务状态不变。
 
+### 5.2.1 审批事务流程图〔评审最终判断 P0，必须补充〕
+
+```
+审批裁决请求（approve / reject）
+        |
+        v
+  ┌─────────────┐
+  │ 行锁 pending │── 非 pending → 409 already_decided，返回
+  │ 审批行       │
+  └─────┬───────┘
+        | 成功
+        v
+  ┌─────────────────────┐
+  │ 锚定回读校验         │── 漂移 → 409 anchor_drift，
+  │ delivery_manifest_hash│   审批行保持 pending
+  │ == reviewed_manifest_hash│
+  └─────┬───────────────┘
+        | 通过
+        v
+  ┌─────────────────────┐
+  │ E2 前置全集复核      │── 硬禁令命中（integration_status=failed）
+  │ （§5.3 表）         │   → approve 直接拒绝，回滚
+  └─────┬───────────────┘
+        | 通过（approve）/ 拒绝（reject）
+        v
+  ┌─────────────────────┐
+  │ UPDATE 审批行        │
+  │ status/decided_by/  │
+  │ decision_reason/    │
+  │ decided_at          │
+  └─────┬───────────────┘
+        | 成功
+        v
+  ┌─────────────────────────────────────┐
+  │ update_task_status + validate_transition│
+  │ approve → reviewing→completed       │
+  │ reject → reviewing→changes_requested│
+  │   + decision_reason 转 finding INSERT│
+  └─────┬───────────────────────────────┘
+        | 成功
+        v
+  ┌─────────────────────┐
+  │ task_waiting 活跃行 │
+  │ 结行（ended_at/    │
+  │ ended_by/         │
+  │ resolution_note）  │
+  └─────┬───────────────┘
+        | 成功
+        v
+  ┌─────────────────────┐
+  │ 审计 + 事件同事务写 │── 失败 → 全回滚
+  │ （approve → 两事件）│
+  └─────────────────────┘
+```
+
+**事务边界**：7 步为单事务，任一步失败全回滚。审批行回到 pending、任务状态不变。
+
+### 5.2.2 审批继承禁令〔评审最终判断 P0，必须补充〕
+
+> 旧交付的审批不能自动继承到新交付。
+
+| # | 规则 | 机制 | 载体 |
+|---|---|---|---|
+| I1 | 审批行三重绑定：`review_run_id` + `delivery_run_id` + `delivery_manifest_hash` | §2.4 三列 + 组合外键 | `governance.review_approval` |
+| I2 | 审批裁决事务锚定回读校验（步骤 2）：`delivery_manifest_hash` == 被审 delivery run 的 `reviewed_manifest_hash` | 库层条件校验 | §5.2 步骤 2 |
+| I3 | 新交付必然是新 run（D4 防篡改双保险 + submitted 无新 run 源） | D4 视图 + git 祖先校验 | `v_task_delivery_manifest` |
+| I4 | 审批行 `status='pending'` 时 `delivery_manifest_hash` 不可改（once-written） | §2.5 触发器禁 UPDATE | `review_approval` 触发器 |
+| I5 | 旧交付审批行 `status` 终态后不可复用（`uq_review_approval_pending` 部分唯一索引只拦新 pending） | 部分唯一索引 | `uq_review_approval_pending` |
+
+**反例推演**：若 I2 锚定校验缺失 → 审批人 A 对交付 V1 审批 `approved` → 交付物被篡改为 V2（D4 防篡改应挡住，但若绕过）→ 旧审批自动生效于 V2 → 违反「旧交付审批不能自动继承到新交付」。I2 为最终防线。
+
 ### 5.3 完成判定器（E2 前置全集，`reviewing→completed` 的守卫）
 
 | # | 前置 | 载体 |
@@ -366,6 +515,50 @@ ai-pm-worker 循环族扩为四个：TaskReady 领取 + lease 回收（既有）
 **run_kind 结构性隔离〔评审收编 P0-4〕**：失败判定作业的候选扫描 SQL **强制谓词 `run_kind='delivery'`**——隔离落在查询结构上，不是应用层 if 分支。review run 的全部失败处置（重试 `attempt_no+1`、超时回收、耗尽降级）由 review 领取拍自理（§3.1 拍②），失败判定作业对 review run 无任何写入路径。
 
 反例推演（若扫描不隔离）：review run `failed` 被扫描命中 → 判 B4-A「执行失败」→ 对同一 task 建 delivery run 重跑 → 被审交付被无辜重执行 + `consecutive_failure_count` 误计 → 直接违反 C1 验收锚点「Reviewer 成功发现问题/审查失败不被记为执行失败」。故谓词为实施验收断言项（C114 扩：对 review run 的扫描零命中断言）。
+
+### 6.3 失败恢复流程图〔评审最终判断 P0，必须补充〕
+
+```
+Review Run 终态
+       |
+       +── failed ─────────────────────────────────┐
+       |                                            |
+       v                                            v
+  记录失败原因（task_run_failure 不可变表）      记录失败原因
+       |                                            |
+       v                                            v
+  ┌─────────────────┐                       ┌─────────────────┐
+  │ 是否允许重试？   │── 是 ────────────────→│ 是否允许重试？   │── 是 ────→ 创建新 Review Run
+  │ （B4-A/B4-B）   │                       │ （B4-C/D）      │    （attempt_no+1）
+  └────────┬────────┘                       └────────┬────────┘
+           | 否                                      | 否
+           v                                         v
+  保留失败历史（触发器禁 UPDATE）              保留失败历史
+       |                                             |
+       v                                             v
+  ┌─────────────────────────┐              ┌─────────────────────────┐
+  │ 降级人工：              │              │ task → failed           │
+  │ review_approval(        │              │ （经 update_task_status）│
+  │   kind='review_degraded'│              │ FailureRecord 不可变    │
+  │   status='pending'      │              │ last_failure_category   │
+  │ )                       │              │ 审计 task.failed        │
+  │ task_waiting(           │              └─────────────────────────┘
+  │   reason='needs_approval'│
+  │ )                       │
+  │ 停 reviewing            │
+  └─────────────────────────┘
+```
+
+**关键不变量**：
+1. **Review Run failed 不等于 Delivery Run failed**：上图左支（failed）只影响 review run 自身，不触碰 delivery run。
+2. **重试保留历史**：新 run `attempt_no+1`，旧 run 行历史保留（触发器禁 UPDATE + `task_run_failure` 不可变）。
+3. **耗尽降级人工**：`consecutive_failure_count` 达阈值 → 走右支（B4-C），task `→failed`，不反复尝试。
+4. **不可恢复类立即失败**：B4-D（permission/missing_dependency）→ 直接右支，不走重试路径。
+
+**与您提供的流程图等价性**：
+- 您的流程图：`Review Run failed → 记录失败原因 → 是否允许重试？ → 是/否 → 创建新 Run / 保留失败历史`
+- 本图：扩展为 B4-A/B4-B（左支，review 重试）+ B4-C/D（右支，task failed）双路，覆盖 D5 全部失败场景。
+- 核心路径完全等价，本图为 D5 全场景覆盖版。
 
 ---
 
@@ -453,25 +646,34 @@ stateDiagram-v2
 | C128 | completed 后异步集崩溃恢复〔评审场景四-8〕 | completed 原子集成功后 handler 崩溃 → outbox 重投 → 提案最终建出（事件 delivered）；重试耗尽 → 死信 → 死信重放补建提案。completed 状态全程不变 |
 | C129 | 重审历史保留〔评审场景四-9〕 | 同 task 两轮 review（第一轮 `changes_requested` → 重试交付 → 第二轮 `approved`）：第一轮 findings/裁决行/`review_verdict` 全量保留可查，第二轮为新 run 新行（`UNIQUE(criterion_id, review_run_id)` 不冲突） |
 | C130 | 全只读仓交付进 review〔评审场景四-10〕 | 契约仓全为 `write_access=false`（D4 V1.1 Q1：0/0 判 `delivered`）→ 拍① B1 守卫通过 → `reviewing` → 管线全过（L1 对账空集成立）→ `approved` → 按策略推进 |
+| C131 | R1 同一 Delivery 最多一个活跃 Review〔D2 规则表〕 | `uq_task_review_active` 部分唯一索引生效；并发创建第二活跃 review run 被拒（与 C99 等价，明确对应 R1） |
+| C132 | R2–R7 幂等与并发规则〔D2 规则表〕 | R2=C124/C120、R3=C123+C129、R4=C122、R5=C123、R6=C111+C114、R7=C111——全部有编号承载 |
+| C133 | I1–I5 审批继承禁令〔D4 规则表〕 | I1 三重绑定、I2 锚定回读、I3 新交付新 run、I4 once-written、I5 部分唯一索引——五规则全部有载体 |
+| C134 | 失败恢复流程图等价性〔D5 流程图〕 | 左支（failed→重试→降级人工）与右支（failed→task failed）双路覆盖；与您提供的流程图等价（核心路径完全等价，本图为 D5 全场景覆盖版） |
+| C135 | 状态转换矩阵完备性〔D2 矩阵〕 | 4 行主干 × 3 策略分支 = 12 格无空缺；inconclusive/failed 的 Task 列修正为 `reviewing`（不退出），与您裁定一致 |
 
 **评审场景四 → 编号映射**：①=C124（并发 C120）②=C127 ③=C111 ④=C125 ⑤=C126 ⑥=C103 ⑦=C115 ⑧=C128 ⑨=C129 ⑩=C130——10 场景全部有编号承载，其中 ③⑥⑦ 由既有用例覆盖。
+**D2–D5 规则 → 编号映射**：R1=C131、R2–R7=C132、I1–I5=C133、流程图=C134、矩阵=C135——5 项必须补充全部有编号承载。
+**验收矩阵终态**：**C98–C135，共 38 条**，覆盖 V1.1 全部裁定 + 评审 P0×6/P1×4 + 评审补充场景 10 项 + 五项必须补充。
 
 ---
 
 ## 11. 实施顺序（T-043）
 
-| # | 步骤 | 依赖 |
-|---|---|---|
-| 0 | **前置**：T-041 交付 + D4 评审 P0-1~P0-4 收编过稿；迁移台账对账（`docs/ai-pm-migration-ledger.md`，取号 0026 或按台账顺移） | 硬门禁 |
-| 1 | 迁移 `0026`（六列 + 四 CHECK + 索引重建 + 三新表 + 触发器 + tenant 收编） | 0 |
-| 2 | `pm-application::review` 管线纯函数（§4）+ 锚定哈希/策略版本（§3.2） | 1 |
-| 3 | 拍① handler（`DeliverySubmitted` 消费 + 幂等判据）+ 拍② review 领取循环（含超时回收前置） | 2 |
-| 4 | 完成判定器 + `review_approval` 审批端点（§5.2 单事务）+ `task_waiting` 接线 | 3 |
-| 5 | 失败判定作业（§6，`run_kind='delivery'` 谓词）+ worker 循环族指标 | 1（可与 2–4 并行） |
-| 6 | 知识回写 handler + 三事件生产者（事务边界按 §7.1） | 4 |
-| 7 | 用例 C98–C130 + 文档回填 + `cargo test --workspace` 全绿 | — |
+> 〔2026-11-02 最终架构判断〕D1–D6 全部提交并过稿前，**不进入 T-043 实施**。
 
-**门禁**：D1/D2/D3/D4 用例不回归；默认环境行为不变；`Reviewing→Failed` 边不存在的断言进 C111/C114。
+| # | 步骤 | 交付物 | 依赖 |
+|---|---|---|---|
+| 0 | **前置**：T-041 交付 + D4 评审 P0-1~P0-4 收编过稿；迁移台账对账（`docs/ai-pm-migration-ledger.md`，取号 0026 或按台账顺移） | — | 硬门禁 |
+| 1 | 迁移 `0026`（六列 + 四 CHECK + 索引重建 + 三新表 + 触发器 + tenant 收编） | D6 | 0 |
+| 2 | `pm-application::review` 管线纯函数（§4）+ 锚定哈希/策略版本（§3.2） | D6 | 1 |
+| 3 | 拍① handler（`DeliverySubmitted` 消费 + 幂等判据）+ 拍② review 领取循环（含超时回收前置） | D6 | 2 |
+| 4 | 完成判定器 + `review_approval` 审批端点（§5.2 单事务 + §5.2.1 流程图 + §5.2.2 禁令）+ `task_waiting` 接线 | D4 | 3 |
+| 5 | 失败判定作业（§6，`run_kind='delivery'` 谓词）+ worker 循环族指标 + §6.3 失败恢复流程图 | D5 | 1（可与 2–4 并行） |
+| 6 | 知识回写 handler + 三事件生产者（事务边界按 §7.1） | D6 | 4 |
+| 7 | 用例 C98–C135 + 文档回填 + `cargo test --workspace` 全绿 | D6 | 1–6 |
+
+**门禁**：D1/D2/D3/D4 用例不回归；默认环境行为不变；`Reviewing→Failed` 边不存在的断言进 C111/C114；R1–R7 规则表每条为实施硬门禁（违反任一条 = 验收失败）。
 
 ---
 
