@@ -15,9 +15,9 @@
 
 | # | 事实 | 证据 |
 |---|---|---|
-| F1 | **全库无租户概念**：17 个迁移、42 张表，`tenant` 零命中 | `migrations/*.sql` 全量 grep 无 `tenant` |
-| F2 | 42 张表中 **39 张是租户业务数据**，且其中 36 张已带 `project_id`（6 张不带的：`core.customer`、`core.project`、`core.principal`、`ai.skill_definition`、`ai.llm_provider`、`integration.repo_import_source`），多数已有 `UNIQUE(project_id, id)` 复合键 | `0001:42/45`、`0002:12-13`、`0003:17`、`0006:17-19`、`0008:30-31`；`migrations/*.sql` 逐表核对 |
-| F3 | Agent 今天**没有实体层**：`bootstrap.rs:175-189` 每个项目建 4 个 `core.principal`（owner human / `ai_pm` / 两个 `dev_agent`），`project_member` 直接挂项目 | `core.principal.kind IN ('human','dev_agent','ai_pm','service')`（`0001:33-35`） |
+| F1 | **全库无内部租户概念**：18 个迁移、43 张表，**无 `core.tenant` 表、无任何 `tenant_id` 列**（唯一带 tenant 字样的是 0018 的 `claims_tenant_key` = 上游 `tid` 原文，不是内部租户键） | `migrations/*.sql` 全量 grep：无 `CREATE TABLE core.tenant`、无 `tenant_id UUID` 列 |
+| F2 | 43 张表中 **39 张是租户业务数据**（§3.4 清单），其中 **36 张已带 `project_id`**（3 张不带：`core.customer`、`core.project`、`integration.repo_import_source`）；另有 3 张全局表（`core.principal`、`ai.skill_definition`、`ai.llm_provider`）与 1 张租户键表（`core.principal_identity`）也不带 —— **全库 7 张不带 / 36 张带**，多数带表已有 `UNIQUE(project_id, id)` 复合键 | `0001:42/45`、`0002:12-13`、`0003:17`、`0006:17-19`、`0008:30-31`；`migrations/*.sql` 逐表核对（`CREATE TABLE` 全量 43 张 + 逐表 `project_id` 扫描） |
+| F3 | Agent 今天**没有实体层**：`bootstrap.rs:172-189` 每个项目建 **5** 个 `core.principal`（owner human / `ai_pm` / 3 个 `dev_agent`：architect / developer / tester）与 5 个 `project_member` 行，`project_member` 直接挂项目 | `core.principal.kind IN ('human','dev_agent','ai_pm','service')`（`0001:33-35`） |
 | F4 | 上游身份侧**已多租户**：`tid` 是强制 claim；API Key token 的 `sub` 是绑定的真实 user_id（未绑定 400）；`roles=["service"]` 打业务端点一律 403 | `docs/ai-pm-principal-identity-v1.md` §4、`apps/pm-api/src/auth.rs` |
 
 结论：身份侧已经多租户，**数据侧没有边界**。若等第二个租户出现再补，就要面对全库迁移 + 每一行历史数据的归属判断 + 权限体系重写——这正是 `AGENTS.md` 规则 1 要避免的形态。因此 **V1 一次建对**。
@@ -86,7 +86,7 @@
 
 新增租户业务表：**`core.tenant_agent`**（`(tenant_id, id)` 唯一键，`principal_id` 指向 `dev_agent` principal，`is_enabled`）。
 
-> 计数自检：3（全局）+ 39（业务）= 42，与现有迁移表数一致；`core.tenant` / `tenant_member` / `principal_identity` / `agent_definition` / `tenant_agent` 为新增表。
+> 计数自检：3（全局：`core.principal` / `ai.skill_definition` / `ai.llm_provider`）+ 39（业务）+ 1（`core.principal_identity`，租户键表）= **43**，与现有迁移表数一致；`core.tenant` / `core.tenant_member` / `agent_definition` / `core.tenant_agent` 为新增表。
 
 ### 3.5 约束模式（三种形态，逐表 DDL 在 T-021b 迁移方案中展开）
 
@@ -201,7 +201,7 @@ T-021a 先落库，此时 `core.tenant` 尚不存在，因此：
 | 方案 | 内容 | 拒绝理由 |
 |---|---|---|
 | A. 部署 = 租户 | 不建 `core.tenant`；隔离由部署拓扑承担；数据按 `project_id` 隔离 | **用户裁定拒绝**：Tenant 是产品架构的数据隔离/归属/核算边界；等第二租户出现再改 = 全库迁移 + 历史归属判断 + 权限体系重构 |
-| B. 全表机械加 `tenant_id` | 42 张表一律加列 | **用户裁定拒绝**：全局定义/字典/系统配置不属于租户业务数据，机械扩散会制造永远为常量的列与错误语义 |
+| B. 全表机械加 `tenant_id` | 43 张表一律加列 | **用户裁定拒绝**：全局定义/字典/系统配置不属于租户业务数据，机械扩散会制造永远为常量的列与错误语义 |
 | C. 只加顶层实体 + 读路径推导 | `customer`/`project` 加 `tenant_id`，其余靠 join 推导 | 拒绝：读路径每处都要 join，且无法用库内约束防跨租户子行（I1/I3 的防线失效） |
 | D. Agent 作为认证主体（独立凭据） | Agent 领自己的 token | 拒绝：上游 `roles=["service"]` 打业务面 403；要支持需改上游签发 + 放宽业务面闸门，属另一个 ADR |
 
@@ -212,7 +212,7 @@ T-021a 先落库，此时 `core.tenant` 尚不存在，因此：
 **正面**
 
 - 隔离在库内可证明：组合外键使「tenant_id 与父行不一致」的写入在 DB 层被拒，不依赖代码纪律。
-- 费用核算/配额有了确定载体（`task_run.tenant_id`）。
+- 费用核算/配额有了确定载体（`task_run.tenant_id`）——**T-021b 落地后成立**；当前 `delivery.task_run` 尚无 `tenant_id` 列（见 §12 R4）。
 - Agent 模型只加两张表，`project_member` 复用，不产生第三套授权体系。
 - 撤权即时生效（D5），关闭 token 有效期内仍可管理的管理面缺口。
 
@@ -265,6 +265,6 @@ T-021a 先落库，此时 `core.tenant` 尚不存在，因此：
 | R1 | 无 lmms 的私有部署认证（`provider='local'/'oidc'`） | 独立任务；`provider` 维度已预留，不改本 ADR 的表结构 |
 | R2 | 私有部署首管理员 bootstrap（是否允许"首个登录者即 admin"） | 与 R1 同批裁；默认仍按 env 指定 |
 | R3 | Git 凭据现为**项目级**（`integration.project_ssh_key`），与 §6「归属平台或 Tenant」不一致 | 待首批私有部署需求明确后裁；V1 不动 |
-| R4 | 费用核算/配额聚合视图 | V1 不做；`task_run.tenant_id` 已具备载体 |
+| R4 | 费用核算/配额聚合视图 | V1 不做；`task_run.tenant_id` 载体**待 T-021b 建**（当前 `delivery.task_run` 无该列） |
 | R5 | `project_member` 是否需要区分"human 授权"与"agent 授权"的独立状态机 | 等 D3 执行端接入后观察；V1 只复用现有 `role` 列 |
 | R6 | `tenant_admin` 是否可见非成员项目（审计/客户/任务列表） | 与 T-022 一起裁：默认**不可见**（按 `project_member` 过滤），管理端点只暴露 principal 与租户配置。若运维需要"全租户只读视图"，另开审计专用入口，不放宽业务列表 |
