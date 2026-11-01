@@ -384,7 +384,6 @@ pub(crate) async fn claim_core(
             }
         } else {
             // B3-2：执行器已启动且失联 → 隔离旧实例、记录终止结果，再新建 Run。
-            isolate_started_run(&mut tx, run_id, cfg).await?;
             let superseded_run_id = run_id;
             // 任务先退回 ready，统一走「正常领取」路径重建。
             if task_state == "claimed" || task_state == "running" {
@@ -392,24 +391,8 @@ pub(crate) async fn claim_core(
                 apply_transition(&mut tx, task_id, from, TaskStatus::Ready, &ctx).await?;
                 task_state = "ready".to_string();
             }
-            let created = insert_task_run(&mut tx, project_id, task_id, None).await?;
-            sqlx::query("UPDATE delivery.task_run SET supersedes_run_id = $2 WHERE id = $1")
-                .bind(created.run_id)
-                .bind(superseded_run_id)
-                .execute(&mut *tx)
-                .await?;
-            audit_run(
-                &mut tx,
-                project_id,
-                "reclaim_task_run",
-                superseded_run_id,
-                serde_json::json!({
-                    "reason": "lease_expired_started",
-                    "new_run_id": created.run_id,
-                    "attempt_no": created.attempt_no,
-                }),
-            )
-            .await?;
+            let created =
+                recover_lost_run(&mut tx, superseded_run_id, task_id, project_id, cfg).await?;
             if opts.task_filter.is_none() {
                 tx.commit().await?;
                 return Ok(Some(ClaimOutcome {

@@ -134,6 +134,39 @@ pub(crate) async fn requeue_for_redispatch(
 }
 
 
+/// B3-2 共享收尾：隔离已启动的失联 Run 并新建重试 Run（`supersedes_run_id` 指向
+/// 旧 Run）+ 审计。`claim_core` 的回收分支与 `run_executor::reconcile_orphans`
+/// 必须复用本函数，不得各写一套。前置（B2）：调用者已持有 task 行锁。
+pub(crate) async fn recover_lost_run(
+    tx: &mut Transaction<'_, Postgres>,
+    run_id: Uuid,
+    task_id: Uuid,
+    project_id: Uuid,
+    cfg: &RunDispatchConfig,
+) -> Result<CreatedRun, sqlx::Error> {
+    isolate_started_run(tx, run_id, cfg).await?;
+    let created = insert_task_run(tx, project_id, task_id, None).await?;
+    sqlx::query("UPDATE delivery.task_run SET supersedes_run_id = $2 WHERE id = $1")
+        .bind(created.run_id)
+        .bind(run_id)
+        .execute(&mut **tx)
+        .await?;
+    audit_run(
+        tx,
+        project_id,
+        "reclaim_task_run",
+        run_id,
+        serde_json::json!({
+            "reason": "lease_expired_started",
+            "new_run_id": created.run_id,
+            "attempt_no": created.attempt_no,
+        }),
+    )
+    .await?;
+    Ok(created)
+}
+
+
 /// Run 落 `cancelled`（任务终态/不存在），并留审计。
 pub(crate) async fn cancel_run(
     tx: &mut Transaction<'_, Postgres>,

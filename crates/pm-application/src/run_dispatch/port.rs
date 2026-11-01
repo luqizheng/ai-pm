@@ -75,7 +75,8 @@ pub struct ExecutableRun {
     pub task_id: Uuid,
     pub project_id: Uuid,
     pub attempt_no: i32,
-    pub timeout_seconds: i32,
+    /// D2 契约 `run.timeout_seconds` 的库内值；`None` = 未配置（不超时判定）。
+    pub timeout_seconds: Option<i32>,
     /// D1 产出：按仓库锁定的基线（含 `workspace_path`）。
     pub repositories: Vec<RunRepositoryBaseline>,
 }
@@ -92,19 +93,31 @@ pub struct RunRepositoryBaseline {
 }
 
 
-/// 执行端会话（D3 填充）。
-#[derive(Debug, Clone)]
-pub struct ExecutorSession {
-    pub session: String,
+/// 运行期工作区根（T-030 Q-D3-2）：`{root}/{run_id}/{workspace_path}`。
+/// 编排器与适配器共用同一派生规则，进程重启后仍能定位既有目录。
+pub fn workspace_root_from_env() -> String {
+    std::env::var("AI_PM_WORKSPACE_ROOT").unwrap_or_else(|_| "./run-workspaces".to_string())
 }
 
 
-/// 一次轮询得到的阶段进度。
+/// 执行端会话（D3 填充）。`session` 格式 `{kind}:{uuid-v4}`（T-030 Q-D3-6）；
+/// `workspace_root` 是本 Run 的运行期目录根（`{AI_PM_WORKSPACE_ROOT}/{run_id}`），
+/// 编排器与适配器据此定位 pid 文件与日志。
+#[derive(Debug, Clone)]
+pub struct ExecutorSession {
+    pub session: String,
+    pub run_id: Uuid,
+    pub workspace_root: String,
+}
+
+
+/// 一次轮询得到的阶段进度。`Done` 携带进程退出码：`Some(0)` = 正常结束；
+/// `Some(n≠0)` = 执行失败；`None` = 被信号/外部终止（退出码不可归因）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecutorProgress {
     Pending,
     Running,
-    Done,
+    Done { exit_code: Option<i32> },
 }
 
 

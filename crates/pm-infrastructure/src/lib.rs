@@ -1,5 +1,6 @@
 //! pm-infrastructure: database repositories, external integrations, adapters.
 
+pub mod codex_executor;
 pub mod job_queue;
 pub mod outbox;
 pub mod outbox_handlers;

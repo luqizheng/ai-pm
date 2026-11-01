@@ -95,32 +95,61 @@ async fn main() {
             .await
     });
 
-    // 第四条循环：Run 调度（Slice D1）。R4：开关只控制**领取**新 Run；租约过期
-    // 回收在本循环内持续运行，不因调度关闭而停摆。
+    // 第四条循环：Run 调度与执行（Slice D1/D3）。R4：开关只控制**领取**新 Run；
+    // 租约过期回收在本循环内持续运行，不因调度关闭而停摆。执行器由
+    // `AI_PM_RUN_EXECUTOR` 选择（codex/mock → CodexExecutor 适配器；缺省 noop →
+    // 领取即 start 失败退避，不伪造执行成功）。
     let dispatch_pool = pool.clone();
     let dispatch_worker_id = worker_id.clone();
     tokio::spawn(async move {
         let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
         let mode = pm_application::run_dispatch::DispatchMode::from_env();
-        tracing::info!(mode = ?mode, lease_secs = cfg.lease_secs, "run dispatch loop started");
+        let run_executor: Arc<dyn pm_application::run_dispatch::RunExecutor> =
+            match std::env::var("AI_PM_RUN_EXECUTOR").as_deref() {
+                Ok("codex") | Ok("mock") => {
+                    Arc::new(pm_infrastructure::codex_executor::CodexExecutor::from_env(
+                        dispatch_pool.clone(),
+                    ))
+                }
+                _ => Arc::new(pm_application::run_dispatch::NoopExecutor),
+            };
+        // 启动时一次孤儿 reconcile（T-030 §3 异常路径②）；失败只告警。
+        match pm_application::run_executor::reconcile_orphans(&dispatch_pool, run_executor.as_ref(), &cfg)
+            .await
+        {
+            Ok(n) if n > 0 => tracing::info!(reconciled = n, "orphan runs reconciled at startup"),
+            Ok(_) => {}
+            Err(e) => tracing::warn!(error = %e, "orphan reconcile failed; relying on lease recovery"),
+        }
+        tracing::info!(mode = ?mode, lease_secs = cfg.lease_secs, executor = run_executor.kind(), "run dispatch loop started");
         loop {
-            match pm_application::run_dispatch::claim_once(
+            match pm_application::run_executor::claim_and_start(
                 &dispatch_pool,
+                run_executor.as_ref(),
                 &dispatch_worker_id,
                 &cfg,
-                mode,
             )
             .await
             {
-                Ok(Some(_)) => continue,
-                Ok(None) => {
-                    tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await
-                }
+                Ok(_) => {}
                 Err(e) => {
-                    tracing::warn!(error = %e, "run dispatch failed; backing off");
-                    tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await
+                    tracing::warn!(error = %e, "claim_and_start failed; backing off");
                 }
             }
+            match pm_application::run_executor::poll_active_runs(
+                &dispatch_pool,
+                run_executor.as_ref(),
+                &dispatch_worker_id,
+                &cfg,
+            )
+            .await
+            {
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!(error = %e, "poll_active_runs failed; backing off");
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await;
         }
     });
 

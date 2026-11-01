@@ -24,6 +24,7 @@ pub mod repository;
 pub mod rows;
 pub mod run_context;
 pub mod run_dispatch;
+pub mod run_executor;
 pub mod secret;
 pub mod supervision;
 pub mod task_dependency;
@@ -68,6 +69,9 @@ pub use read::{ReadError, TaskContextRow, task_context};
 pub use run_context::{
     CONTRACT_VERSION, LeaseError, LeaseState, ProgressReport, RenewedLease, RunContract,
     get_run_context, hash_lease_token, renew_lease_by_token, report_progress,
+};
+pub use run_executor::{
+    StartOutcome, cancel_run, claim_and_start, poll_active_runs, reconcile_orphans,
 };
 pub use repository::{
     CreateRepositoryRequest, GitUrl, REPOSITORY_ROLES, RepositoryError, RepositoryRow, SshKeyView,
