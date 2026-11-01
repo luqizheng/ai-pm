@@ -453,7 +453,7 @@ flowchart LR
 
 | # | 议题 | 建议 |
 | --- | --- | --- |
-| 11 | 契约七类字段的**写路径归属**（评审 R-F6：`pm_write` 现不写 goal/constraints/deliverables，工具面亦无写入口——0014 建好后生产任务契约是空壳） | **建议并入 D2**：扩展 `pm_write::update_task`（扩 UpdateTaskRequest + 两张关联表增删命令），比另立 slice 便宜；若另立须写入 §1.3「不做」 |
+| 11 | 契约七类字段的**写路径归属**（评审 R-F6：`pm_write` 现不写 goal/constraints/deliverables，工具面亦无写入口——0014 建好后生产任务契约是空壳） | **已裁决（2026-11-01）：并入 D2**——扩展 `pm_write::update_task`（扩 `UpdateTaskRequest` 契约四字段 + `task_acceptance_criterion` / `task_knowledge_ref` 两表的增删命令），实现纳入 S2；S2 交付时契约读写闭环，C3 测试不再依赖 SQL 手动种子 |
 | 12 | 执行端预注册档位（positioning §4.4 方案 C）与 per-project 调用方绑定 | V1 接受横向越权面（§6.1 威胁模型），档位机制待首批执行端接入后裁 |
 | 13 | 验收条目完整修订留痕（版本化） | `updated_at` 已加；若 D5 证据锚定需要更强不变性，forward-only 追加迁移 |
 
