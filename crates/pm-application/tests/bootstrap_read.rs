@@ -98,10 +98,13 @@ async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
             "display_name `{display}` must carry the base name and the code suffix"
         );
     }
-    let principal_count: i64 = sqlx::query_scalar("SELECT count(*) FROM core.principal")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    // 0015 幂等种入的平台 service principal（ai-pm-dispatch）不属于 bootstrap
+    // 产物，统计时排除它。
+    let principal_count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM core.principal WHERE kind <> 'service'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(principal_count, 5, "bootstrap must create exactly 5 principals");
 
     // Project members: each principal has exactly the expected role.

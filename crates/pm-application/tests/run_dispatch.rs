@@ -23,6 +23,7 @@ fn cfg() -> RunDispatchConfig {
         backoff_cap_secs: 300,
         max_run_attempts: 3,
         max_infrastructure_attempts: 5,
+        timeout_secs: 1800,
     }
 }
 

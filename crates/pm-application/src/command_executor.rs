@@ -1651,9 +1651,9 @@ pub(crate) async fn system_context(
         .fetch_optional(&mut **tx)
         .await
         .map_err(db_err)?
-        .ok_or_else(|| {
-            CommandError::Validation("no human principal available as actor".to_string())
-        })?,
+        // G6：项目无 human 成员时回退到平台 service principal（`0015` 幂等种子），
+        // 不再因 RowNotFound 让调度/回收失败。
+        .unwrap_or(crate::run_dispatch::DISPATCH_SERVICE_PRINCIPAL),
     };
     Ok(ExecutionContext {
         project_id,

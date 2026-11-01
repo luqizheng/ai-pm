@@ -154,6 +154,7 @@ async fn dispatch_path_uses_the_same_guard(pool: PgPool) {
         backoff_cap_secs: 300,
         max_run_attempts: 3,
         max_infrastructure_attempts: 5,
+        timeout_secs: 1800,
     };
     let out = claim_once(&pool, "w1", &cfg, DispatchMode::On)
         .await

@@ -135,6 +135,15 @@ pub enum ToolError {
     InvalidRequest(String),
     #[error("conflict: {0}")]
     Conflict(String),
+    /// D2：run 级凭据不匹配 / 缺失 / 非活跃。绝不回显 hash 或正确 owner。
+    #[error("forbidden: {0}")]
+    Forbidden(String),
+    /// D2：租约已过期——正确 token 也必须重新领取。
+    #[error("lease expired: {0}")]
+    LeaseExpired(String),
+    /// D2 shape-first：D4 才实现的动作，不触库。
+    #[error("unsupported: {0}")]
+    Unsupported(String),
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
 }
@@ -454,4 +463,185 @@ pub async fn veto_document_revision(
     .await
     .map_err(map_knowledge_error)?;
     Ok(serde_json::to_value(outcome).unwrap_or_default())
+}
+
+// ---------------------------------------------------------------------------
+// Slice D2：执行端三工具 + submit_result shape-first
+// ---------------------------------------------------------------------------
+
+/// Arguments of `pm_claim_task`：执行端按 task 显式领取（Model A）。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ClaimTaskArgs {
+    /// Project scope; a task of another project reads as not found.
+    pub project_id: Uuid,
+    /// The task to claim (`delivery.task.id`).
+    pub task_id: Uuid,
+    /// Executor identity, recorded on the Run (`client_name`).
+    pub client_name: String,
+    /// Executor build/version, recorded but not used for tiering in V1.
+    pub client_version: Option<String>,
+}
+
+/// Arguments of `pm_get_run_context`：凭租约读取本 Run 的执行契约。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct RunContextArgs {
+    pub project_id: Uuid,
+    pub run_id: Uuid,
+    /// The one-time plaintext token `pm_claim_task` returned.
+    pub lease_token: String,
+}
+
+/// Arguments of `pm_report_progress`：续租 + 阶段推进 + 审计（单事务）。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ReportProgressArgs {
+    pub project_id: Uuid,
+    pub run_id: Uuid,
+    pub lease_token: String,
+    /// Report the durable stage; `started` is the only one that advances state.
+    pub stage: String,
+    /// Free-form progress note (audited, never stored in the contract).
+    pub note: Option<String>,
+    /// Mark the execution as blocked (audited; task status stays unchanged in D2).
+    #[serde(default)]
+    pub blocked: bool,
+}
+
+/// One repository result inside the frozen `pm_submit_result` shape.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SubmittedRepository {
+    pub repository_id: Uuid,
+    pub base_commit: String,
+    pub commit_sha: String,
+    pub changed_files: i32,
+    pub tests: Vec<SubmittedTest>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SubmittedTest {
+    pub name: String,
+    pub passed: bool,
+    pub evidence_ref: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct KnowledgeProposalInput {
+    pub document_id: Uuid,
+    pub change_summary: String,
+}
+
+/// Arguments of `pm_submit_result`：形状冻结为 **draft**，D4 定稿并落库。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SubmitResultArgs {
+    pub project_id: Uuid,
+    pub run_id: Uuid,
+    pub lease_token: String,
+    pub repositories: Vec<SubmittedRepository>,
+    pub summary: String,
+    pub knowledge_proposals: Vec<KnowledgeProposalInput>,
+}
+
+fn map_dispatch_error_v2(err: pm_application::run_dispatch::RunDispatchError) -> ToolError {
+    use pm_application::run_dispatch::RunDispatchError as E;
+    match err {
+        E::TaskNotFound => ToolError::NotFound("task not found in this project".to_string()),
+        E::NoRunnableRun => ToolError::NotFound(
+            "no runnable run for the task (wait for the TaskReady event)".to_string(),
+        ),
+        E::TaskNotReady(state) => {
+            ToolError::Conflict(format!("task is not ready (current status: {state})"))
+        }
+        E::RunAlreadyClaimed => {
+            ToolError::Conflict("the task already has an active run".to_string())
+        }
+        E::Transition(message) => ToolError::Conflict(message),
+        E::NoActor | E::InvalidOption(_) | E::Random => {
+            ToolError::InvalidRequest(err.to_string())
+        }
+        E::Db(e) => ToolError::Db(e),
+    }
+}
+
+fn map_lease_error_v2(err: pm_application::run_context::LeaseError) -> ToolError {
+    use pm_application::run_context::LeaseError as E;
+    match err {
+        E::NotFound => ToolError::NotFound("run not found in this project".to_string()),
+        E::Forbidden => ToolError::Forbidden("lease credential rejected".to_string()),
+        E::Expired => {
+            ToolError::LeaseExpired("lease expired; claim the task again".to_string())
+        }
+        E::Conflict(message) => ToolError::Conflict(message),
+        E::Db(e) => ToolError::Db(e),
+        E::Random => ToolError::InvalidRequest("lease token generation failed".to_string()),
+    }
+}
+
+/// Model A 领取：一次调用拿到 Run 与一次性租约明文。
+pub async fn claim_task(pool: &PgPool, args: ClaimTaskArgs) -> Result<Value, ToolError> {
+    let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
+    let claimed = pm_application::run_dispatch::claim_task_run(
+        pool,
+        args.project_id,
+        args.task_id,
+        &args.client_name,
+        args.client_version.as_deref(),
+        &cfg,
+    )
+    .await
+    .map_err(map_dispatch_error_v2)?;
+    Ok(json!({
+        "run_id": claimed.run_id,
+        "task_id": claimed.task_id,
+        "attempt_no": claimed.attempt_no,
+        "lease_token": claimed.lease_token,
+        "lease_expires_at": claimed.lease_expires_at,
+        "git_branch": claimed.git_branch,
+        "stage": claimed.stage,
+    }))
+}
+
+/// 读取本 Run 的执行契约（只读、不续租）。
+pub async fn get_run_context(pool: &PgPool, args: RunContextArgs) -> Result<Value, ToolError> {
+    let contract = pm_application::run_context::get_run_context(
+        pool,
+        args.project_id,
+        args.run_id,
+        &args.lease_token,
+    )
+    .await
+    .map_err(map_lease_error_v2)?;
+    serde_json::to_value(contract).map_err(|e| ToolError::InvalidRequest(e.to_string()))
+}
+
+/// 续租（= 心跳）+ 首次 `started` 阶段推进 + 审计，单事务完成。
+pub async fn report_progress(pool: &PgPool, args: ReportProgressArgs) -> Result<Value, ToolError> {
+    let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
+    let renewed = pm_application::run_context::report_progress(
+        pool,
+        args.project_id,
+        args.run_id,
+        &args.lease_token,
+        pm_application::run_context::ProgressReport {
+            stage: &args.stage,
+            note: args.note.as_deref(),
+            blocked: args.blocked,
+        },
+        &cfg,
+    )
+    .await
+    .map_err(map_lease_error_v2)?;
+    Ok(json!({
+        "run_id": renewed.run_id,
+        "stage": renewed.stage,
+        "status": renewed.status,
+        "task_status": renewed.task_status,
+        "lease_expires_at": renewed.lease_expires_at,
+    }))
+}
+
+/// shape-first（D2 §4.4）：**不触库**——不校验 token、不查询任何表。
+/// 形状降级为 draft（D4 拥有定稿权），因此直接返回 `Unsupported`。
+pub fn submit_result(_args: SubmitResultArgs) -> Result<Value, ToolError> {
+    Err(ToolError::Unsupported(
+        r#"{"implemented_in":"D4","schema":"draft"}"#.to_string(),
+    ))
 }

@@ -29,7 +29,50 @@ pub const TASK_STATUSES: [&str; 13] = [
     "superseded",
 ];
 pub const TASK_PRIORITIES: [&str; 4] = ["low", "normal", "high", "urgent"];
+/// 验收项的验证方式（D2 `0015` 的 CHECK 取值）。
+pub const VERIFICATION_KINDS: [&str; 4] = ["manual", "automated_test", "artifact_exists", "review"];
 
+fn default_true() -> bool {
+    true
+}
+
+/// 双 Option 反序列化：字段缺失 = `None`（不改），显式 `null` = `Some(None)`（清空）。
+fn double_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    Ok(Some(Option::<T>::deserialize(deserializer)?))
+}
+
+/// 交付物条目（D2 §5：JSONB 对象数组，`id` 供 D4 对账锚定）。
+#[derive(Debug, Deserialize)]
+pub struct DeliverableInput {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub path: String,
+}
+
+/// 逐条验收项（D2 C 裁决：独立表逐条留痕）。
+#[derive(Debug, Deserialize)]
+pub struct AcceptanceCriterionInput {
+    /// 允许间隙；缺省时按 `max+10` 追加（禁止全量重排）。
+    #[serde(default)]
+    pub ordinal: Option<i32>,
+    pub text: String,
+    #[serde(default)]
+    pub verification_kind: Option<String>,
+}
+
+/// 任务 → 知识文档引用（C2：以 `document_id` 为准）。
+#[derive(Debug, Deserialize)]
+pub struct KnowledgeRefInput {
+    pub document_id: Uuid,
+    #[serde(default = "default_true")]
+    pub is_required: bool,
+}
+
+#[derive(Debug)]
 pub enum PmWriteError {
     NotFound(&'static str),
     Conflict(&'static str),
@@ -98,6 +141,33 @@ async fn append_audit(
     .bind(action)
     .bind(target_type)
     .bind(target_id)
+    .execute(tx)
+    .await?;
+    Ok(())
+}
+
+/// 人工写路径的审计行（D2 契约变更需要 `after_data` 快照）。
+async fn append_audit_with_after(
+    tx: &mut sqlx::PgConnection,
+    project_id: Uuid,
+    actor_id: Uuid,
+    action: &str,
+    target_type: &str,
+    target_id: Option<Uuid>,
+    after: serde_json::Value,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO governance.audit_log \
+         (id, project_id, actor_id, action, target_type, target_id, after_data) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(project_id)
+    .bind(actor_id)
+    .bind(action)
+    .bind(target_type)
+    .bind(target_id)
+    .bind(after)
     .execute(tx)
     .await?;
     Ok(())
@@ -334,9 +404,26 @@ pub struct UpdateTaskRequest {
     pub priority: Option<String>,
     #[serde(default)]
     pub assignee_id: Option<Uuid>,
+    /// D2 契约：目标。缺失=不改，`null`=清空。
+    #[serde(default, deserialize_with = "double_option")]
+    pub goal: Option<Option<String>>,
+    #[serde(default)]
+    pub constraints: Option<serde_json::Value>,
+    #[serde(default)]
+    pub deliverables: Option<Vec<DeliverableInput>>,
+    /// 提供即**全量替换**（空数组=清空）。
+    #[serde(default)]
+    pub acceptance_criteria: Option<Vec<AcceptanceCriterionInput>>,
+    /// 提供即**全量替换**（空数组=清空）。
+    #[serde(default)]
+    pub knowledge_refs: Option<Vec<KnowledgeRefInput>>,
 }
 
 /// 全字段编辑 + revision 乐观锁（不匹配 409），成功后 revision+1。
+///
+/// D2 起同时承担契约写路径（待裁 #11 已裁决并入 D2）：`goal` / `constraints` /
+/// `deliverables` 与 `task_acceptance_criterion` / `task_knowledge_ref` 两表的
+/// 增删都在**同一事务**内完成，保证契约读写闭环、C3 不再依赖 SQL 手动种子。
 pub async fn update_task(
     pool: &PgPool,
     task_id: Uuid,
@@ -353,6 +440,11 @@ pub async fn update_task(
     let title = req.title.as_deref().map(str::trim).unwrap_or_default();
     if title.is_empty() {
         return Err(PmWriteError::Validation("title is required"));
+    }
+    if let Some(constraints) = &req.constraints {
+        if !constraints.is_object() {
+            return Err(PmWriteError::Validation("constraints must be a JSON object"));
+        }
     }
     let mut tx = pool.begin().await?;
     let (project_id, current_revision): (Uuid, i64) =
@@ -381,10 +473,191 @@ pub async fn update_task(
     .bind(req.assignee_id)
     .execute(&mut *tx)
     .await?;
+
+    let mut contract_audit = serde_json::Map::new();
+    if let Some(goal) = req.goal {
+        sqlx::query("UPDATE delivery.task SET goal = $2, updated_at = now() WHERE id = $1")
+            .bind(task_id)
+            .bind(&goal)
+            .execute(&mut *tx)
+            .await?;
+        contract_audit.insert("goal".into(), json!(goal));
+    }
+    if let Some(constraints) = req.constraints {
+        sqlx::query("UPDATE delivery.task SET constraints = $2, updated_at = now() WHERE id = $1")
+            .bind(task_id)
+            .bind(&constraints)
+            .execute(&mut *tx)
+            .await?;
+        contract_audit.insert("constraints".into(), constraints);
+    }
+    if let Some(deliverables) = req.deliverables {
+        let normalized = normalize_deliverables(deliverables)?;
+        sqlx::query("UPDATE delivery.task SET deliverables = $2, updated_at = now() WHERE id = $1")
+            .bind(task_id)
+            .bind(json!(normalized))
+            .execute(&mut *tx)
+            .await?;
+        contract_audit.insert("deliverables".into(), json!(normalized));
+    }
+    if let Some(criteria) = req.acceptance_criteria {
+        let count = replace_acceptance_criteria(&mut tx, project_id, task_id, criteria).await?;
+        contract_audit.insert("acceptance_criteria".into(), json!(count));
+    }
+    if let Some(refs) = req.knowledge_refs {
+        let count = replace_knowledge_refs(&mut tx, project_id, task_id, refs).await?;
+        contract_audit.insert("knowledge_refs".into(), json!(count));
+    }
+
     append_audit(&mut tx, project_id, actor, "task.update", "task", Some(task_id)).await?;
+    if !contract_audit.is_empty() {
+        append_audit_with_after(
+            &mut tx,
+            project_id,
+            actor,
+            "task.update_contract",
+            "task",
+            Some(task_id),
+            json!({ "contract": contract_audit }),
+        )
+        .await?;
+    }
     tx.commit().await?;
 
     task_row(pool, task_id).await
+}
+
+fn normalize_deliverables(
+    input: Vec<DeliverableInput>,
+) -> Result<Vec<serde_json::Value>, PmWriteError> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::with_capacity(input.len());
+    for item in input {
+        let path = item.path.trim().to_string();
+        if path.is_empty() {
+            return Err(PmWriteError::Validation("deliverable path is required"));
+        }
+        if !seen.insert(path.clone()) {
+            return Err(PmWriteError::Validation("duplicate deliverable path"));
+        }
+        let id = item
+            .id
+            .map(|id| id.trim().to_string())
+            .filter(|id| !id.is_empty())
+            .unwrap_or_else(|| Uuid::new_v4().to_string());
+        out.push(json!({ "id": id, "path": path }));
+    }
+    Ok(out)
+}
+
+/// 全量替换验收项；`ordinal` 缺省按 `max+10` 追加（允许间隙，不重排既有条目）。
+async fn replace_acceptance_criteria(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    project_id: Uuid,
+    task_id: Uuid,
+    input: Vec<AcceptanceCriterionInput>,
+) -> Result<usize, PmWriteError> {
+    struct Normalized {
+        ordinal: i32,
+        text: String,
+        kind: String,
+    }
+    let mut normalized: Vec<Normalized> = Vec::with_capacity(input.len());
+    let mut next = 10i32;
+    for item in input {
+        let text = item.text.trim().to_string();
+        if text.is_empty() {
+            return Err(PmWriteError::Validation("acceptance criterion text is required"));
+        }
+        let kind = item
+            .verification_kind
+            .unwrap_or_else(|| "manual".to_string());
+        if !VERIFICATION_KINDS.contains(&kind.as_str()) {
+            return Err(PmWriteError::Validation("invalid verification_kind"));
+        }
+        let ordinal = match item.ordinal {
+            Some(ordinal) if ordinal >= 1 => ordinal,
+            Some(_) => return Err(PmWriteError::Validation("ordinal must be >= 1")),
+            None => next,
+        };
+        if normalized.iter().any(|entry| entry.ordinal == ordinal) {
+            return Err(PmWriteError::Validation("duplicate acceptance ordinal"));
+        }
+        next = ordinal.max(next) + 10;
+        normalized.push(Normalized {
+            ordinal,
+            text,
+            kind,
+        });
+    }
+
+    sqlx::query("DELETE FROM delivery.task_acceptance_criterion WHERE task_id = $1 AND project_id = $2")
+        .bind(task_id)
+        .bind(project_id)
+        .execute(&mut **tx)
+        .await?;
+    for entry in &normalized {
+        sqlx::query(
+            "INSERT INTO delivery.task_acceptance_criterion \
+             (project_id, task_id, ordinal, text, verification_kind) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(project_id)
+        .bind(task_id)
+        .bind(entry.ordinal)
+        .bind(&entry.text)
+        .bind(&entry.kind)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(normalized.len())
+}
+
+/// 全量替换知识引用；文档必须属于同一项目（跨项目一律拒绝）。
+async fn replace_knowledge_refs(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    project_id: Uuid,
+    task_id: Uuid,
+    input: Vec<KnowledgeRefInput>,
+) -> Result<usize, PmWriteError> {
+    let mut seen = std::collections::HashSet::new();
+    for item in &input {
+        if !seen.insert(item.document_id) {
+            return Err(PmWriteError::Validation("duplicate knowledge document_id"));
+        }
+    }
+    let ids: Vec<Uuid> = input.iter().map(|item| item.document_id).collect();
+    let found: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM ai.project_document WHERE project_id = $1 AND id = ANY($2)",
+    )
+    .bind(project_id)
+    .bind(&ids)
+    .fetch_one(&mut **tx)
+    .await?;
+    if found as usize != ids.len() {
+        return Err(PmWriteError::Validation(
+            "knowledge_refs contain a document outside this project",
+        ));
+    }
+
+    sqlx::query("DELETE FROM delivery.task_knowledge_ref WHERE task_id = $1 AND project_id = $2")
+        .bind(task_id)
+        .bind(project_id)
+        .execute(&mut **tx)
+        .await?;
+    for item in &input {
+        sqlx::query(
+            "INSERT INTO delivery.task_knowledge_ref \
+             (project_id, task_id, document_id, is_required) VALUES ($1, $2, $3, $4) \
+             ON CONFLICT (task_id, document_id) DO NOTHING",
+        )
+        .bind(project_id)
+        .bind(task_id)
+        .bind(item.document_id)
+        .bind(item.is_required)
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(input.len())
 }
 
 /// 审批决策的审计行（action='approval.decide'，approve/reject 都落一条；
