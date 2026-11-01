@@ -135,21 +135,9 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 6. M3 · Codex 执行引擎（D3）
 
-- [ ] **T-030 出设计稿 `docs/ai-pm-slice-d3-executor-adapter-v1.md`**
-  - **本条按 §0.1 执行**：完整 brainstorming。
-  - **目标**：定义「能启动、监控、终止执行实例」的端口与适配器契约，以及 run 在 `claimed → running → 终止` 的合法迁移。
-  - **依据**：`target.md` §P4 模块表（RunExecutor / Codex CLI Adapter / Workspace / Git Worktree / Checkout / Process / Log / Timeout / Cancel / Recovery）；`docs/ai-pm-slice-d-execution-pipeline-v1.md` §三/§九；`crates/pm-application/src/run_context.rs`；`0011_run_dispatch.sql:39-40`（`executor_kind`/`executor_session` 列已存在，D3 只填值）。
-  - **要在稿里裁清的点**：
-    1. 进程启动方式：本地子进程 vs 容器 vs 远程 MCP 客户端（现网是「执行端自己拉 MCP」，三者成本差异大）。
-    2. 工作区：D3 只造运行期目录，还是直接落 `task_workspace`（后者属 D4，写清边界与命名约定）。
-    3. 日志落点：文件 / 表 / SSE 流式。
-    4. 心跳与租约续期责任方：复用 `renew_lease_by_token` 还是执行器自管。
-    5. 终止语义：SIGTERM 宽限期 → 超时强杀 → run 落哪个终态；用户取消与超时是否同一路径。
-    6. `executor_session` 标识格式；假执行端（fail-injection）注入点。
-  - **不做**：不写 `task_workspace`/`task_repository_commit`（D4）；不做失败判定与任务状态裁决（D5）；不实现仓库级策略。
-  - **验收**：含状态机图 + 端口 trait 签名 + 测试计划（含假执行端）；用户过稿后才可进 T-031。
+> T-030 设计稿已交付并过稿（`edf230f`，归档见 §13）；本节剩 T-031 实施。
 
-- [ ] **T-031 实施 D3（前置：T-030 已确认）**
+- [ ] **T-031 实施 D3（前置：T-030 已确认 ✅）**
   - **做**：`pm-application` 执行器端口 + `CodexExecutor` 适配器；run 状态迁移走 `apply_task_transition`（不得旁路）；填 `executor_kind`/`executor_session`；启动/终止/超时均写审计（真实 actor 依赖 T-021a；`executor_id` 列已由 T-021b 预留，Registry 本阶段建）。
   - **不做**：不越界到 D4/D5；不改 D2 工具面契约字段。
   - **验收**：假执行端跑通「启动→心跳→正常结束」与「启动→超时→强制终止」两条路径；`cargo test` 全绿；D1/D2 用例不回归。
@@ -382,3 +370,11 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 - **实施期偏差**（详见设计稿 §10.2）：① UI 直写终态路径（`pm_write::update_task`）同样接入解锁，否则「人在 UI 完成任务」不解锁下游；② Model A 依赖未满足沿用 D1「回滚不退避」约定（`TaskNotReady("dependency_unmet")`）；③ `superseded` 无端到端写入方（应用层无取代命令），以 `cancelled` 端到端 + D5 集合单测兜底。
 - **验收**：C43–C58 全覆盖（映射见设计稿 §10.3）；`cargo test --workspace` 退出码 0 —— **70 个 `test result: ok`、441 passed、0 failed**；`cargo check --workspace --all-targets` 0 error 0 warning。
 - **关键结论**：依赖满足只有一套谓词（调度领取 / 建删边解锁 / 终态级联共用）；解锁产生的状态变更仍走 `apply_task_transition`（审计 action=`update_task_status`、actor=`ai-pm-dispatch`）；`TaskReady` 与迁移同事务写入，重复解锁不产生第二个语义键。
+### T-030 D3 执行引擎适配器设计稿 —— 2026-11-01 完成
+
+- **提交**：`edf230f` docs(executor)。
+- **目标**：定义「能启动、监控、终止执行实例」的端口与适配器契约，交付 `docs/ai-pm-slice-d3-executor-adapter-v1.md`。
+- **依据**：`target.md` §P4 十模块表；slice-d §5.9 预留的 `RunExecutor` 端口与 R4 接线；D3 待裁问题表第 4/5 条；`0011` 已预留 `executor_kind`/`executor_session`。
+- **六项裁定（用户逐项确认，Q-D3-1…6）**：① 本地子进程 spawn Codex CLI（容器归 P11）；② 工作区不建新表——`{AI_PM_WORKSPACE_ROOT}/{run_id}/{workspace_path}`，复用 D1 已写的 `task_run_repository.workspace_path`；③ 日志文件事实源（`logs/stdout.log`/`stderr.log`，路径确定性派生）；④ 双通道续租（执行端 MCP 心跳 + 平台 poll 兜底，防长编译误杀）；⑤ 统一终止管线分终态（SIGTERM→宽限→强杀；取消→`cancelled`、超时→`timed_out`）；⑥ `executor_session = {kind}:{uuid-v4}` + 三层 fail-injection（FakeExecutor / `AI_PM_CODEX_BIN` 假脚本 / `AI_PM_RUN_EXECUTOR` 注册表，缺省 noop）。
+- **验收**：状态图、端口类型补全清单、C59–C70 测试矩阵、实施顺序齐备；**四节逐节过稿**（架构组件 / 数据流 / 错误恢复 / 测试计划）。
+- **不做**：不写 `task_workspace`/`task_repository_commit`（D4）；不做失败判定与任务状态裁决（D5）；Run 的 `failed`/`timed_out` 只记录事实不动任务状态机。
