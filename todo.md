@@ -137,12 +137,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 6. M3 · Codex 执行引擎（D3）
 
-> T-030 设计稿已交付并过稿（`edf230f`，归档见 §13）；本节剩 T-031 实施。
-
-- [ ] **T-031 实施 D3（前置：T-030 已确认 ✅）**
-  - **做**：`pm-application` 执行器端口 + `CodexExecutor` 适配器；run 状态迁移走 `apply_task_transition`（不得旁路）；填 `executor_kind`/`executor_session`；启动/终止/超时均写审计（真实 actor 依赖 T-021a；`executor_id` 列已由 T-021b 预留，Registry 本阶段建）。
-  - **不做**：不越界到 D4/D5；不改 D2 工具面契约字段。
-  - **验收**：假执行端跑通「启动→心跳→正常结束」与「启动→超时→强制终止」两条路径；`cargo test` 全绿；D1/D2 用例不回归。
+> §6 队列已清空：T-030（设计稿 `edf230f`，已过稿）/ T-031（实施 `6f3ded4`）均已交付归档（见 §13）。
 
 ---
 
@@ -468,3 +463,11 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 - **六项裁定（用户逐项确认，Q-D3-1…6）**：① 本地子进程 spawn Codex CLI（容器归 P11）；② 工作区不建新表——`{AI_PM_WORKSPACE_ROOT}/{run_id}/{workspace_path}`，复用 D1 已写的 `task_run_repository.workspace_path`；③ 日志文件事实源（`logs/stdout.log`/`stderr.log`，路径确定性派生）；④ 双通道续租（执行端 MCP 心跳 + 平台 poll 兜底，防长编译误杀）；⑤ 统一终止管线分终态（SIGTERM→宽限→强杀；取消→`cancelled`、超时→`timed_out`）；⑥ `executor_session = {kind}:{uuid-v4}` + 三层 fail-injection（FakeExecutor / `AI_PM_CODEX_BIN` 假脚本 / `AI_PM_RUN_EXECUTOR` 注册表，缺省 noop）。
 - **验收**：状态图、端口类型补全清单、C59–C70 测试矩阵、实施顺序齐备；**四节逐节过稿**（架构组件 / 数据流 / 错误恢复 / 测试计划）。
 - **不做**：不写 `task_workspace`/`task_repository_commit`（D4）；不做失败判定与任务状态裁决（D5）；Run 的 `failed`/`timed_out` 只记录事实不动任务状态机。
+### T-031 实施 D3 执行引擎 —— 2026-11-01 完成
+
+- **提交**：`6f3ded4` feat(run-executor)（13 文件：端口补全 + 编排器 + CodexExecutor + worker 接线 + 15 例用例）→ `a690e4c` docs(executor)（实施记录回填 §8）→ `chore(todo)` → `chore(memory)`，分开提交。
+- **做**：端口补全（`timeout_seconds` Option 化 / `ExecutorSession{run_id, workspace_root}` / `ExecutorProgress::Done{exit_code}` / `workspace_root_from_env`）；编排器 `claim_and_start`/`poll_active_runs`/`cancel_run`/`reconcile_orphans`（Run 终态条件 UPDATE 先到先得）；start 成功后编排器经受守卫入口推进 `claimed→running`（D1 §九问题 4）；start 失败按 B3-1 把任务 `claimed→ready`（经 `apply_task_transition`）+ 基础设施退避（耗尽落 `failed`）；租约续不上 → `terminate(LeaseReclaimed)` + B3-2（`recover_lost_run` 提取为共享封装）；`CodexExecutor`（镜像仓 + worktree checkout `base_commit` + spawn + pid 文件 + 日志落盘 + Unix SIGTERM→宽限→强杀 / Windows 强杀）；worker 第四循环接线 `AI_PM_RUN_EXECUTOR=codex|mock|noop`（缺省 noop）+ 启动孤儿 reconcile。
+- **不做**：不写 `task_workspace`/`task_repository_commit`（D4）；不改 D2 工具面；不做失败判定与任务状态裁决（D5）；不做容器隔离（P11）。
+- **实施期裁定**（详见设计稿 §8.2）：① Model B spawn 场景无 token 可下发 → 执行端 MCP 心跳通道 V1 不可用，租约由编排器 poll 兜底维持，token 下发随 D4 裁；② running 失联回收由编排器补齐（claim 候选只覆盖 claimed）；③ 失败行受 0010「每 Run 至多一条」约束——首败留痕、重试只递增计数；④ CLI 参数 `AI_PM_CODEX_ARGS` 留白（接入期调优）。
+- **验收**：C59–C70 全覆盖 + reconcile/回归 3 例；`cargo test --workspace` 退出码 0 —— **72 个 `test result: ok`、456 passed、0 failed**；`cargo check --workspace --all-targets` 0 error 0 warning；Windows 实机验证假脚本 spawn/收割/强杀与 `file://` 镜像 + worktree checkout。
+- **关键结论**：执行实例从「永久 queued」变为可启动、可监控、可终止、可恢复；Run 终态写入全部条件 UPDATE，与执行端 `submit_result` / 失联回收竞态先到先得；任务状态只经 `apply_task_transition`（D3 自身不裁决任务级失败，归 D5）。
