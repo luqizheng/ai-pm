@@ -3,7 +3,7 @@
 | 项 | 内容 |
 | --- | --- |
 | 任务 | T-070 执行中心接真数据 + 交付验收页（M7，前置 T-031 / T-041 已完成） |
-| 状态 | 待用户确认 |
+| 状态 | **已实施**（2026-11-02 用户以「执行」过稿并同日落地，实施记录见 §十） |
 | 日期 | 2026-11-02 |
 | 前置文档 | `ai-pm-task-state-machine-v1.md`（13 态 / E2 门）、`ai-pm-slice-d4-delivery-v1.md`（§2.3 清单读模型）、`ai-pm-slice-d5-review-v1.md`（§5.2 审批裁决）、`ai-pm-task-detail-page-v1.md`（页面契约 / W1 写路径红线）、`ai-pm-multi-repo-model-v1.md`（§8.3 交付清单口径）、`ai-pm-ui-pages-v1-2.md`（V1.2 原型） |
 | 上位约束 | `target.md` §P10「AI 执行中心 / 交付验收」两行；`AGENTS.md`（无存量兼容负担）；todo.md §0.1/§0.2 |
@@ -255,3 +255,59 @@ POST /review-approvals/{id}/decision（T-043 既有单事务：
 - **执行日志内容读取**：随 M8 / T-081 跨机暴露一并设计。
 - **验收资格判定的「未解决 blocker」简化口径**（§四取最新成功 review run）：若后续 review 重审频率高，可演进为 finding 级 resolved 标记（需加列），V1 不做。
 - **审批写操作权限码**：decision 端点与验收按钮 V1 均仅做成员可见性校验（全库权限码体系未覆盖审批域，§6.3）；权限码体系落位时统一补齐，属横向课题非本任务范围。
+
+## 十、实施记录（2026-11-02 · V1 落地）
+
+> 依据：本稿 §一～§九 全部条款；用户以「执行」过稿（状态自「待用户确认」转「已实施」）。
+> 执行方式：独立 worktree `feat/t070-delivery-acceptance`（基于 master `8fe3b84`），与并行会话隔离。
+> **零新增迁移**（§5.5）、**零新增写路径**（§5.4 / Q3）、**13 态状态机零改动**（Q3）。
+
+### 10.1 文件级落地对照
+
+| 层 | 文件 | 落地 |
+| --- | --- | --- |
+| 应用层 | `crates/pm-application/src/acceptance_overview.rs` | ✅ 新建。`load_facts`（一条 SQL：Q1 状态过滤 + 左连 `v_task_delivery_manifest` 聚合 + 最新 delivery run + 最新**成功** review run 的 blocker 集 + 审批状态）→ `build_overview` 纯函数：`classify_badge`（§四规则唯一实现，`blocked > eligible > missing` 互斥）、`classify_review_status`（`awaiting_decision > running > decided > none`）、按处理优先级排序（blocked → missing → eligible，组内 `created_at DESC`）、三指标汇总。9 条纯函数单测 |
+| API | `apps/pm-api/src/pm_acceptance.rs` | ✅ 新建。`GET /v1/pm/acceptance-overview?project_id=`（缺参 400、不可见 404）；`GET /v1/pm/tasks/{task_id}/review-findings`（blocker 置顶，携带所属 review run）、`/criterion-verdicts`（LEFT JOIN LATERAL 取每标准**最新一次成功 review run** 的裁决，未覆盖 `evaluated=false`、`verdict=null`）、`/review-approvals`（复用 `pm_reviews::ApprovalRow` 同一读模型的 task 级投影） |
+| API | `apps/pm-api/src/pm_runs.rs` | ✅ 列表补 `run_kind` / `agent_id` / `executor_kind` / `executor_session` / `lease_expires_at` + `task_id` / `run_kind` 过滤（非法值视为未传，与 `project_filter` 同口径）；新增 `GET /v1/pm/task-runs/{run_id}`：阶段时间线 + 租约 + 执行器 + `task_run_repository` 各仓基线（`workspace_path` = 日志定位文本），**不读日志内容**；404 口径与 `/delivery` 一致 |
+| API | `apps/pm-api/src/support.rs` / `pm_delivery.rs` | ✅ `require_task_project` 自 `pm_delivery.rs` 上收到 `support.rs` 供三个证据端点共用（任务不存在 / 跨租户 / 非成员一律 404） |
+| API | `apps/pm-api/src/routes.rs` / `lib.rs` | ✅ 注册 `pm_acceptance::router()` |
+| 测试 | `apps/pm-api/tests/acceptance.rs`（3 条） | ✅ 真库种子覆盖 §四五场景：blocked(blocker) / blocked(integration failed) / missing(partial) / missing(bare, **Q1**) / eligible(awaiting_decision)；`completed` 不入集；三指标；排序；`review_status` + `pending_approval_id`；findings 置顶序；verdicts 最新成功 run 口径；审批历史；400 / 404 边界（含跨项目任务） |
+| 测试 | `apps/pm-api/tests/task_runs.rs`（+2 条） | ✅ 新列可见、`run_kind` / `task_id` 过滤、非法 `run_kind` 忽略；run 详情租约 / 执行器 / 基线 + 404 |
+| 前端 API | `frontend/src/api/acceptance.ts`（新）/ `review.ts`（新）/ `execution.ts`（扩） | ✅ overview + `TaskDeliveryRow`（D4 清单类型化）；findings / verdicts / approvals / `decideReviewApproval`（直打 `POST /v1/pm/review-approvals/{id}/decision`，`ReviewDecisionOutcome` 与 D5 `ApprovalOutcome` tagged union 同构）；`TaskRun` 补执行上下文列、`TaskRunDetail` + `getTaskRun`、`listTaskRuns` 增 `task_id` / `run_kind` |
+| 前端页 | `frontend/src/workspace/pages/DeliveryPage.vue` | ✅ 新建。三指标条（点数字过滤）+ 左栏待验收列表 + 右栏七段详情（①资格横幅 ②多仓清单 ③逐条裁决 ④findings ⑤Agent 执行情况（delivery/review 分轨）⑥审批历史 ⑦动作区）。**mock / 真后端在数据层分叉、模板唯一**（天然同构）；徽标 / 横幅 / 按钮可用性全部消费后端字段，组件内无任何资格推导 |
+| 前端页 | `frontend/src/workspace/pages/ExecutionPage.vue` + `components/RunContextPanel.vue`（新） | ✅ 替换 `detailsPending` 占位：真后端分支按选中 run 拉详情端点，渲染租约（到期 / 心跳）、执行器（kind / session）、阶段、各仓基线与日志定位；mock 分支用同一面板消费 `agentRun` 新增字段（两分支同构）；详情头增 `run_kind` 徽标 |
+| 前端 | `frontend/src/workspace/acceptance/fixtures.ts`（新，由 `fixtures.ts` 统一 re-export） | ✅ 与五个端点响应**完全同构**的演示数据（5 任务覆盖全部徽标与动作区状态）；`agentRun` 增 `leaseExpiresAt / heartbeatAt / executorKind / executorSession / baselines` |
+| 前端 | `nav-config.ts` / `shell/router/routes.ts` / `locales/{zh-CN,en}/workspace.yaml` | ✅ AI 模式导航第 6 项「交付验收」（`ClipboardCheck`）；路由 `/workspace/:projectId/delivery`；`workspace.nav.delivery` + `workspace.pages.delivery.*`（70 键）+ `pages.execution.*` 租约 / 执行器 / 分轨键，双语对齐；删除已无引用的 `detailsPending` |
+| 前端测试 | `DeliveryPage.test.ts`（8 条）/ `pages.test.ts`（+1）/ `fixtures.test.ts`（+3）/ `nav-config.test.ts` / `WorkspaceShell.test.ts` | ✅ 三指标与徽标互斥、**「待补充」零交付任务不被过滤（Q1 回归）**、指标过滤、详情分段渲染（含部分交付「未交付」红标、`running` 态无按钮）、退回无理由被拦截且不调端点、通过 → 调用既有 decision 端点 + 回执 + 原位刷新（overview 二次拉取）、退回理由透传、`none` 态提示、失败态不伪装空态；ExecutionPage 上下文面板租约 / 会话 / 基线渲染且无日志正文区；导航 6 项与壳层标签 |
+
+### 10.2 关键实现决策（与本稿的偏差及原因）
+
+| # | 决策 | 原因 |
+| --- | --- | --- |
+| 1 | `review_status` 优先级固定为 `awaiting_decision > running > decided > none` | 存在 pending 审批行即唯一可操作态，必须压过「重审进行中」；审查曾失败但无审批行的任务按 `none` 呈现（其任务通常已不在待验收集合） |
+| 2 | 最新 delivery run 直接取自 `task_run`（与视图 `latest_run` 同序），不依赖视图行 | 无任何 `task_repository` 的任务不在视图里，但 Q1 要求它们出现在总表且能带出 run 事实 |
+| 3 | `eligible` 的「所有 required 仓已交付」用视图 `actual_delivery_count ≥ expected_delivery_count` 判定；`missing_repos` 按行 `delivery_required AND commit_sha IS NULL` 聚合 | 与 `/delivery` 端点同一事实源，三指标与清单卡不可能互相矛盾 |
+| 4 | `DeliveryPage` 的 `useMock` 不含 `MODE === "test"`（兄弟页含） | 单测要覆盖「退回必填理由」「通过后原位刷新」等**真实交互路径**，用 api 替身而非演示分支；演示分支（`VITE_USE_MOCK=1`）走同一模板 |
+| 5 | 演示数据放 `workspace/acceptance/fixtures.ts` 而非并入 `workspace/fixtures.ts` | heredoc 写入 1100 行文件在 Git Bash 下被截断（已知坑）；文件名保持 `fixtures.ts` 以命中 i18n 硬编码门禁的演示数据豁免规则（`(^|/)fixtures\.ts$`），由 `fixtures.ts` re-export 保持单一出口 |
+| 6 | 路由 `meta.title: "交付验收"` 加 `// i18n-ignore` | 与同文件既有路由（`代码仓库` / `导入项目`）同款：route meta 直接作页签标题 |
+| 7 | 不加审批权限码（§6.3 裁定照办） | decision 端点现状仅成员可见性校验，凭空造码会把按钮锁死；AGENTS 规则 7 的例外以代码评审检查点形式标注 |
+
+### 10.3 验收证据（2026-11-02）
+
+| 门禁 | 结果 |
+| --- | --- |
+| `cargo check --workspace --all-targets` | 退出码 0，**0 error / 0 warning** |
+| `bash scripts/cargo-test.sh`（nextest 全量 + doctest；template1 指纹预建） | 退出码 0，**609 tests run / 609 passed / 0 skipped**（基线 587 + 本稿 14 + 同日 rebase 带入的 T-080 用例） |
+| `pnpm typecheck`（vue-tsc） | 退出码 0 |
+| `pnpm test:unit`（vitest） | 退出码 0，**89 文件 / 545 passed**（基线 88 / 533，+12） |
+| `pnpm check:i18n`（命名空间对齐 + 硬编码） | ✓ 838 key 双语完全对齐；204 源文件无新增硬编码中文 |
+| `pnpm check:prism-tokens` | ✓ 157 tokens 已定义，无裸色值 |
+| `eslint --max-warnings 0 <本稿改动的 15 个文件>` | 0 问题（仓级 `pnpm lint` 在 master 上已有与本稿无关的 prettier 存量债，未触碰） |
+
+对 §八 验收标准：1（三指标与库内事实一致、零交付 Submitted 任务出现）→ `acceptance.rs::overview_counts_badges_and_review_status`；2（六段证据全部来自后端字段、前端无资格判定）→ `DeliveryPage.vue` 内无 badge 推导代码 + `DeliveryPage.test.ts` 详情分段用例；3（通过 / 退回走通、审批历史新行）→ 复用 D5 单事务（`decide_review_approval` 既有用例）+ 前端提交 / 刷新用例；4（run 详情租约 / executor_session / 基线、无日志读取）→ `task_runs.rs::run_detail_returns_lease_executor_and_repo_baselines` + `pages.test.ts` 上下文面板用例；5（`VITE_USE_MOCK=0` 可跑、vue-tsc 0 error、vitest 全绿、i18n 门禁）→ 上表。
+
+### 10.4 遗留（在 §九 基础上新增）
+
+- **真库端到端联调**：本稿用例以 `#[sqlx::test]` 种子覆盖了 T-031 run / T-041 交付 / T-043 审批的全部事实形态，但未在 dev 栈上用浏览器走一遍完整验收动线（需 pm-api + pm-worker + 前端三者同时起且有真实 Agent 交付）；建议随下一次 E2E runbook 一并补。
+- **仓级 `pnpm lint`**：master 存量 prettier 债（`workspace/spec/*`、`registry/*`、`session/*` 等 20 余文件），与本稿无关、未触碰；属横向清理课题。
+- **`.gitattributes` 缺失**：仓库无行尾声明、本机全局 `autocrlf=true`，新 worktree 签出即 CRLF，sqlx 迁移校验和与 `template1` 预建不一致（`VersionMismatch`）；本次已把两处 checkout 归一为 LF 并重建 template1，但根治需 `* text=auto eol=lf`（横向课题，建议单独裁定）。

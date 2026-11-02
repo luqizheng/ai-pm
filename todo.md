@@ -85,7 +85,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 | P7 Review 与审批 | 独立 Reviewer Run、Findings、四值结论、审批引擎、策略分层 | `governance.approval_request`、`policy_engine` + `0016` 内容寻址四层合成；`pm-ai/self_review.rs` **只审导入提案**，不审交付 | 🟡 审批完成，Review 未做 | 独立 Reviewer Run 与 Findings → T-042/T-043 |
 | P8 Outbox 可靠异步 | 同事务写入、Worker、幂等、重试、死信、重放、监控 | ✅ `0010:123` `integration.outbox_event`（`attempts`/`dead_letter`/`locked_until`/`idempotency_key`）+ `outbox_worker.rs`；**2026-11-02 T-061 补齐**：`EventCatalog` 单一真源（5 项事件目录）、`RunCompleted` 生产者 + 记录型 Handler（advisory lock 并发幂等）、死信重放 + 状态监控三端点、两个 worker 统一 `register_all_handlers` 装配 | 🟢 事件体系闭环 | 通知/死信数据保留与清理策略、执行中心接真数据 → T-070 / 后续议题 |
 | P9 多 Agent 协作 | Agent 角色、能力、任务分解、协作、上下文传递 | 只有 `project_member` 的 5 个固定角色；无 Agent 运行时 | ❌ 主动不做 | 与已裁定「不造自研多 Agent 运行时」冲突，延后（§12） |
-| P10 研发管理工作台 | 六大工作区 + 11 个页面 | 经典页 `frontend/src/shell/views/pm/`：`overview/projects/tasks/requirements/approvals/audit/settings/customers`（8）；工作区 `frontend/src/workspace/`：`console` + `focus` + `pages/`（Team/Execution/Goals/Models/Activity/Requirements/Knowledge/Artifacts/Decisions）；`GET /v1/pm/task-runs` 只读（`apps/pm-api/src/pm_runs.rs:20`） | 🟡 页面骨架齐 | 执行中心接真 Run 数据、交付验收页 → T-070 |
+| P10 研发管理工作台 | 六大工作区 + 11 个页面 | 经典页 `frontend/src/shell/views/pm/`：`overview/projects/tasks/requirements/approvals/audit/settings/customers`（8）；工作区 `frontend/src/workspace/`：`console` + `focus` + `pages/`（Team/Execution/Goals/Models/Activity/Requirements/Knowledge/Artifacts/Decisions）；`GET /v1/pm/task-runs` + `GET /v1/pm/task-runs/{id}`（租约 / 执行器 / 基线）；**2026-11-02 T-070 落地**：`GET /v1/pm/acceptance-overview` 项目级验收聚合 + 任务级 findings / verdicts / approvals 证据端点；`pages/DeliveryPage`（交付验收工作台）+ ExecutionPage 真 run 详情面板 | 🟢 执行中心与交付验收已接真数据 | 真库浏览器 E2E 动线随 runbook 补；部分通过 → T-071 保持开放 |
 | P11 规模化与自动化 | 多项目调度、并发控制、配额、自动规划 | 无 | ❌ 延后 | 需单仓闭环先稳定（§12） |
 
 **结论（这一版的真实工作量）**：平台已有「任务 + Run + 调度 + 租约 + MCP + 审批 + 知识单仓」的底座，顾问路线里**真正从零开始**的只有 4 块——
@@ -229,12 +229,15 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 10. M7 · 工作台补齐（P10 的两个真空）
 
-- [~] **T-070 执行中心接真数据 + 交付验收页（前置：T-031 / T-041）**（2026-11-02 领用，执行者：Trae · 设计稿阶段，稿：`docs/ai-pm-delivery-acceptance-workbench-v1.md` 待确认）
+- [x] **T-070 执行中心接真数据 + 交付验收页（前置：T-031 / T-041）**（2026-11-02 领用 → 2026-11-02 完成，执行者：ZCode · 设计稿 `docs/ai-pm-delivery-acceptance-workbench-v1.md` 用户以「执行」过稿，**已实施，实施记录见设计稿 §十**）
   - **目标**：把 `workspace/:projectId/execution` 从骨架换成真实 run 数据；新增交付验收视图（Commit / 测试证据 / 审批结论）。
   - **依据**：`GET /v1/pm/task-runs`（`apps/pm-api/src/pm_runs.rs`，现只有读端点）、`target.md` §P10「AI 执行中心 / 交付验收」两行、`docs/ai-pm-task-detail-page-v1.md`（页面契约）。
   - **做**：run 列表与详情（状态、租约、executor_session、日志入口）；交付清单页（多仓 commit + 证据）；空态与错误态。
   - **不做**：不做假数据页（`VITE_USE_MOCK=0` 必须能跑）；不做 Agent 管理页（P9 延后）。
   - **验收**：真库下能看到 T-031 产生的 run 与 T-041 产生的交付；`vue-tsc` 0 error；vitest 全绿。
+  - **交付**：后端——`pm-application/acceptance_overview.rs`（项目级聚合读模型：Q1 状态过滤 + §四徽标判定唯一实现 + 动作区状态 + 处理优先级排序）、`pm-api/pm_acceptance.rs`（`GET /v1/pm/acceptance-overview` + 任务级 `review-findings` / `criterion-verdicts` / `review-approvals`）、`pm_runs.rs`（列表补 run_kind / executor / lease 列与 `task_id` / `run_kind` 过滤，新增 `GET /v1/pm/task-runs/{run_id}` 租约 + 各仓基线，不读日志内容）；前端——`DeliveryPage.vue`（三指标 + 总表 + 七段详情 + 通过/退回复用 D5 decision 端点，组件内零资格推导）、`RunContextPanel.vue` 接入 ExecutionPage 两分支、`api/{acceptance,review}.ts` + `execution.ts` 扩展、AI 模式导航第 6 项、70 键双语文案、同构 fixtures。**零新增迁移、零新增写路径、状态机零改动**。
+  - **验收证据**：`cargo check --workspace --all-targets` 0 error / 0 warning；`bash scripts/cargo-test.sh` **609 passed / 0 failed**（+14 本任务用例：应用层 9 + API 5）；`pnpm typecheck` 0 error；`pnpm test:unit` **89 文件 / 545 passed**（+12）；`pnpm check:i18n` 838 key 双语对齐、无新增硬编码；`pnpm check:prism-tokens` ✓。
+  - **遗留**：真库浏览器端到端动线（需 dev 栈三件套 + 真实 Agent 交付）随 E2E runbook 补；仓级 `pnpm lint` 的 master 存量 prettier 债（与本任务无关）；`.gitattributes` 缺失致新 worktree CRLF 与 `template1` 校验和不一致（横向课题，建议 `* text=auto eol=lf` 单独裁定）。
 
 - [ ] **T-071 待裁 #13 分阶段交付 / 部分通过（partial approval）**：**保持开放，不主动实施**（2026-11-02 T-070 设计裁定，用户确认 V1 明确不支持）。13 态状态机无部分完成语义；部分通过涉及交付范围拆分与任务拆分，是领域模型变更而非 UI 功能。触发条件：业务真出现分阶段交付需求，届时与「任务拆分 / 交付范围 / 验收生命周期」一并出设计稿（依据：`docs/ai-pm-delivery-acceptance-workbench-v1.md` §九）。
 
