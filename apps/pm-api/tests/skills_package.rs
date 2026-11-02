@@ -126,6 +126,11 @@ async fn zip_contains_all_whitelisted_entries(pool: sqlx::PgPool) {
     let mut archive = zip_bytes(&mut cursor);
     let bootstrap = archive.remove("skills/pm-ai-bootstrap/SKILL.md").expect("entry");
     assert!(String::from_utf8_lossy(&bootstrap).starts_with("---"));
+    // T-090 正文进了包（不是占位骨架）
+    assert!(
+        String::from_utf8_lossy(&bootstrap).contains("七步生命周期"),
+        "bootstrap SKILL.md should carry the seven-step lifecycle body"
+    );
     let script = archive.remove("skills/scripts/verify-install.sh").expect("entry");
     let script = String::from_utf8_lossy(&script);
     assert!(script.contains("verify-install"), "usage line missing");
