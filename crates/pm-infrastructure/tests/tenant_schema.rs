@@ -1,24 +1,27 @@
 //! 多租户结构不变量（T-021b 验收 XT-3 / TN-7 / TN-8）。
 //!
-//! 用 `information_schema` 机械断言，而不是靠代码评审：53 张租户业务表全部有
+//! 用 `information_schema` 机械断言，而不是靠代码评审：55 张租户业务表全部有
 //! `tenant_id UUID NOT NULL`，除伪根表 `delivery.policy_scope` 外都至少有一条
 //! `(tenant_id, *)` 组合外键（ADR-0001 §3.5 I1）。
 
 use sqlx::{PgPool, Row};
 
-/// ADR-0001 §3.4 + 本设计稿的四类划分：53 张（T-024 新增 `task_dependency`；
+/// ADR-0001 §3.4 + 本设计稿的四类划分：55 张（T-024 新增 `task_dependency`；
 /// T-041 新增 `task_repository_commit`；T-043 新增 `review_finding` /
 /// `acceptance_criterion_verdict` / `review_approval`；T-060 新增
 /// `document_section_index` / `knowledge_write_operation`；T-083 新增
 /// `discovery_session` / `discovery_message` / `discovery_finding` /
 /// `discovery_finding_repository` / `discovery_question` / `discovery_answer` /
-/// `discovery_proposal`）。
+/// `discovery_proposal`；T-088 新增 `devenv.device` /
+/// `devenv.device_project_binding`）。
 const TENANT_TABLES: &[(&str, &str)] = &[
     // A 根表（2）
     ("core", "customer"),
     ("core", "project"),
-    // B 直挂 project（39）
+    // B 直挂 project（41）
     ("core", "project_member"),
+    ("devenv", "device"),
+    ("devenv", "device_project_binding"),
     ("discovery", "discovery_session"),
     ("delivery", "requirement"),
     ("delivery", "requirement_revision"),

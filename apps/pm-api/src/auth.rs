@@ -169,6 +169,7 @@ impl AuthedPrincipal {
             identity_id: self.identity_id,
             client: self.client.clone(),
             auth_mode: Some(self.auth_mode.clone()),
+            claimed_device_id: None,
         }
     }
 }

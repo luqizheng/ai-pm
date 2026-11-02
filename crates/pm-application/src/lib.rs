@@ -2,9 +2,12 @@
 
 pub mod acceptance_overview;
 pub mod actor;
+pub mod authz;
 pub mod bootstrap;
+pub mod caller;
 pub mod command_executor;
 pub mod delivery;
+pub mod devenv;
 pub mod discovery;
 pub mod git_access;
 pub mod ingestion;
@@ -42,6 +45,8 @@ pub use acceptance_overview::{
     load_overview,
 };
 pub use actor::AuditActor;
+pub use authz::{AuthzError, ExecutorKind, require_project_member, resolve_project_executor};
+pub use caller::{CallerContext, DeviceClaim, DeviceClaimIgnoredReason, HumanActor};
 pub use bootstrap::{
     BootstrapError, BootstrapOutcome, BootstrapRequest, bootstrap_project,
     bootstrap_project_for_customer, bootstrap_project_for_customer_owned,
