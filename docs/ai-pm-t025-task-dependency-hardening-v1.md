@@ -1,6 +1,6 @@
 # T-025：Task Dependency 并发与解锁正确性加固（任务书）
 
-> 状态：**实施中（2026-11-01：P0 两项已修复并验收；2026-11-02：P1 §三（方案 A）+ §五（UI 直写入口行锁+图锁）+ §六（跨租户 404）已修复并验收，均见 §十；仅 §四 待续）**（编号核实 2026-11-01：`todo.md` 中 T-025~T-029 段位空缺，暂用 **T-025**，落在 M2 段位、与 T-023 设计稿 → T-024 实施 → T-025 加固语义连续；如需换号，本文档与 `todo.md` 登记行各改一处）
+> 状态：**P1 四项全部完成并验收（2026-11-02：§三 方案 A / §五 行锁+图锁 / §六 跨租户 404 / §四 预算核实+C62，均见 §十）；C59–C66、C68 全绿，C67 按 P2 说明；遗留两项待裁（见 §10.9）**（编号核实 2026-11-01：`todo.md` 中 T-025~T-029 段位空缺，暂用 **T-025**，落在 M2 段位、与 T-023 设计稿 → T-024 实施 → T-025 加固语义连续；如需换号，本文档与 `todo.md` 登记行各改一处）
 > 类型：专项审查 + 最小修复（T-024 追补，**不推翻现有架构**）
 > 来源：专家评审 `docs/ai-pm-task-dependency-review.md`（2026-11-01）§9.1 P0 ×2 + §9.2 P1 ×4；任务定义由用户最终裁定
 > 前置：T-023 / T-024 已交付归档（`docs/ai-pm-task-dependency-v1.md` §10；`todo.md` §13）
@@ -209,6 +209,9 @@
 | C61 ★ | `blocked` + `needs_approval` 不被依赖解锁 | `task_dependency.rs::c61_active_waiting_survives_dependency_satisfaction` | ✅ 保持 `blocked`、0 条 `TaskReady`；等待解除后一次放行 |
 | C68 | 所有终态写入入口一致副作用 | `task_dependency_concurrency.rs::c68_ui_direct_write_to_terminal_unlocks_downstream` + `::ui_terminal_write_waits_for_the_project_graph_lock` | ✅ 两入口解锁一致；直写等图锁、放行后恰 1 条 `TaskReady` |
 | C66 ★ | 跨租户访问边表 | `pm-api/tests/task_dependencies.rs::c66_cross_tenant_dependency_access_is_invisible` | ✅ 读/写/删一律 404；跨租户上游 = `task_not_found`（非 409） |
+| C62 ★ | `dependency_unmet` 超过普通重试上限 | `task_dependency.rs::c62_dependency_unmet_never_consumes_the_execution_budget`（6 轮 > 3/5 双上限） | ✅ 仍 `queued`、0 `task_run_failure`、infra 计数 0；上游完成后同一条 Run 可领取 |
+| C63 | 上游 `failed` | `::c63_failed_upstream_keeps_the_downstream_blocked` | ✅ 保持 `blocked`、0 `TaskReady`；删边后解锁（恢复路径明确） |
+| C67 | 大量下游同时解锁 | —（见 §10.8 说明） | ⏸ P2 规模优化不在本次范围，无基准数据 |
 | — | 图锁互斥 / MVCC 隔离 / 提交后可见 | `::graph_lock_serializes_writers_and_exposes_committed_edges`（屏障式定向） | ✅ |
 | — | 跨项目不阻塞 | `::graph_locks_of_different_projects_do_not_block` | ✅ |
 
@@ -295,11 +298,40 @@
 - `cargo test -p pm-infrastructure --test tenant_schema`：6 passed（I1/I5 机械断言）。
 - `cargo check --workspace --all-targets`：exit 0。
 
-### 10.8 待办（后续领取）
+### 10.8 审查结论与修复记录（§四 Run 退避与执行预算，2026-11-02）
 
-- §四（P1 最后一项）尚未审查：`dependency_unmet` 的退避与执行预算；代码面结论已倾向「不消耗失败预算」（`requeue_with_backoff` 不写 `task_run_failure`、`dispatch_attempts` 无上限判定），缺 C62 证据。
+五分类：
+
+1. **已确认 Bug**：**无**。核实结论（代码 + 用例）：`dependency_unmet` 走 `requeue_with_backoff`（`run_dispatch/lease.rs`），只做四件事——`status='queued'`、`lease_*` 清空、`dispatch_attempts+1`、`next_dispatch_at = now() + LEAST(cap, 2^attempts)` + `release_reason`；**不写 `task_run_failure`、不迁任务状态、不碰 `infrastructure_retry_count`、不把 Run 判失败**。
+2. **潜在风险（已登记，非 Bug）**：
+   - `dispatch_attempts` 全仓**没有任何上限判定**——`max_run_attempts` 只存在于 `RunDispatchConfig` 与 `pm-domain::RetryCounters`（后者在应用层未接线）。所以依赖等待不会「耗尽」，但反过来也没有显式上限防护：未来若有人给 dispatch 计数加阈值，依赖等待会被误算成失败。**约束应入文档**：`dispatch_attempts` 是退避计数，不参与失败判定。
+   - `dispatch_attempts` 的指数增长会顶到 `backoff_cap_secs`（默认 300s）：等待越久，解锁后重领延迟越长。这是**延迟**问题，不是预算问题；C67（大规模/长等待优化）属 P2。
+   - `max_infrastructure_attempts` 只在 `run_executor::release_after_start_failure` 里用 `infrastructure_retry_count` 判定，依赖路径根本不经过它（C62 断言 `infrastructure_retry_count = 0`）。
+3. **现有实现已正确解决的部分**：`requeue_with_backoff`（计数）与 `requeue_for_redispatch`（不计数）分离，语义清楚；Model A 显式请求遇到依赖未满足直接回 `TaskNotReady("dependency_unmet")`，**不进退避队列**（不污染无人值守节奏）；每次退避都写一条 `skip_task_run` 审计，可观测。
+4. **建议修改位置**：**无需改代码**。新增 C62 用例把上述结论钉成证据；C63 用例补齐 `failed` 上游的阻塞语义与恢复路径。
+5. **数据库迁移是否必要**：**否**——零 DDL。
+
+**C62 断言明细**（连续 6 轮，已超过 `max_run_attempts = 3` 与 `max_infrastructure_attempts = 5`）：
+
+- Run 始终 `queued`，`release_reason = dependency_unmet`，`dispatch_attempts` 恰为 1…6（只有退避计数在动）。
+- `task_run_failure` 计数 0；`infrastructure_retry_count` 0。
+- 任务三元组（`status`、`retry_exhausted`、`attempt_count`）与首轮前完全一致。
+- `skip_task_run` 审计恰 6 条。
+- 上游完成后同一条 Run 能被正常领取（`ClaimKind::Claimed`）——退避不是永久禁用。
+
+**C63 断言明细**：`failed` 上游使下游保持 `blocked` 且不发 `TaskReady`；删边后立即 `ready` + 1 条 `TaskReady`。恢复路径在 v1 只有人工动作（重跑上游 / 删边 / 换新任务）；「人工豁免依赖」属评审 §9.3 #7（策略可配置）P2。
+
+**C67（大量下游解锁）未覆盖的理由**：该场景需要规模基准与监控指标（评审 §6.3：规模假设 + 三项指标），评审明确列为 P2 第 10 项，任务书 §0 也把它排除在本次范围。当前实现为同步事务内逐个 `ORDER BY id` 加锁解锁，正确性已由 C64/C65 覆盖，**性能基线未测**，不做无数据的断言。
+
+**实测（隔离实例 5434）**
+
+- `cargo test -p pm-application`：**22 个测试二进制、200 passed、0 failed**（本次全量口径，含 C61/C62/C63/C68 新增用例）。
+- `cargo test -p pm-api --test task_dependencies`：9 passed；`--test pm_writes`：13 passed；`pm-mcp contract`：6 passed；`pm-infrastructure tenant_schema`：6 passed。
+- `cargo check --workspace --all-targets`：exit 0。
+
+### 10.9 待办（后续领取）
+
 - **§五 遗留一项待裁**：`pm_write::update_task` 依旧不经 `validate_transition`（可直写任意状态字面量，绕过状态机与 E1/E4 守卫）。本次只并入行锁 + 图锁，状态机校验需单独裁定（会改 UI 契约与错误码）。
 - **§六 遗留一项（P2）**：`list_dependencies` 加 `tenant_id` 过滤（现依赖调用方前置校验）。
-- §七 其余场景：C63（failed 恢复路径）、C67（大规模解锁）。
-- 方案 B（Blocker 聚合）与评审 §9.3 #12 `try_unblock_task` 合并，登记 P2；若未来出现第二种阻塞写入源，优先做这一项。
-- 全仓 `cargo test --workspace` 回归待归档前补跑。
+- **C67 / 方案 B / 依赖完成策略可配置**：评审 §9.3 P2，本次明确不做；需要规模基准或策略裁定后再立项。
+- 全仓 `cargo test --workspace` 回归待归档前补跑（需共享库有窗口，或改指向隔离实例）。

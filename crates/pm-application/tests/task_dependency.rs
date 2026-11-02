@@ -558,6 +558,147 @@ async fn c61_active_waiting_survives_dependency_satisfaction(pool: PgPool) {
     );
 }
 
+// --------------------------------------------------------------------- C62
+
+/// C62（T-025 §四 / 评审 §3.2）：`dependency_unmet` 只退避回队，**不消耗执行失败预算**。
+///
+/// 口径：连续 6 次（已超过 `max_run_attempts = 3` 与 `max_infrastructure_attempts = 5`）
+/// 之后，同一条 Run 仍 `queued`、无 `task_run_failure`、`infrastructure_retry_count`
+/// 仍为 0、任务状态/`retry_exhausted`/`attempt_count` 全不变；上游完成后它仍能被
+/// 正常领取（退避不是永久禁用）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn c62_dependency_unmet_never_consumes_the_execution_budget(pool: PgPool) {
+    let fx = seed_project(&pool, "TD-C62").await;
+    let upstream = seed_task(&pool, fx.project_id, "reviewing").await;
+    let downstream = seed_task(&pool, fx.project_id, "ready").await;
+    let run = seed_run(&pool, fx.project_id, downstream).await;
+    // D6 不允许给 ready 任务加边 → 直接插边（模拟历史已存在的依赖）。
+    sqlx::query(
+        "INSERT INTO delivery.task_dependency \
+         (tenant_id, project_id, task_id, depends_on_task_id, created_by) \
+         VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $1, $2, $3, $4)",
+    )
+    .bind(fx.project_id)
+    .bind(downstream)
+    .bind(upstream)
+    .bind(fx.actor_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let task_before: (String, bool, i32) = sqlx::query_as(
+        "SELECT status, retry_exhausted, attempt_count FROM delivery.task WHERE id = $1",
+    )
+    .bind(downstream)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    for attempt in 1..=6i32 {
+        // 只清指数退避，让同一条 Run 立刻重新成为候选；不触碰任何计数。
+        sqlx::query("UPDATE delivery.task_run SET next_dispatch_at = now() WHERE id = $1")
+            .bind(run)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let outcome = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+            .await
+            .unwrap()
+            .expect("a candidate run exists");
+        assert_eq!(outcome.kind, ClaimKind::Skipped);
+        let (reason, attempts, infra, status): (Option<String>, i32, i32, String) =
+            sqlx::query_as(
+                "SELECT release_reason, dispatch_attempts, infrastructure_retry_count, status \
+                   FROM delivery.task_run WHERE id = $1",
+            )
+            .bind(run)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(status, "queued", "round {attempt}: the run must stay claimable");
+        assert_eq!(reason.as_deref(), Some("dependency_unmet"));
+        assert_eq!(attempts, attempt, "only the dispatch backoff counter moves");
+        assert_eq!(infra, 0, "round {attempt}: infra budget must stay untouched");
+    }
+
+    let failures: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.task_run_failure WHERE run_id = $1")
+            .bind(run)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(failures, 0, "dependency waits are not execution failures");
+
+    let task_after: (String, bool, i32) = sqlx::query_as(
+        "SELECT status, retry_exhausted, attempt_count FROM delivery.task WHERE id = $1",
+    )
+    .bind(downstream)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(task_after, task_before, "the task must be untouched");
+
+    let skips: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log \
+          WHERE project_id = $1 AND action = 'skip_task_run' \
+            AND after_data->>'release_reason' = 'dependency_unmet'",
+    )
+    .bind(fx.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(skips, 6, "each deferral leaves exactly one audit row");
+
+    // 依赖真正满足后，同一条 Run 仍能被领取（退避不是永久禁用）。
+    transition(&pool, &fx, upstream, TaskStatus::Completed).await;
+    make_claimable(&pool, fx.project_id, downstream, "C62").await;
+    sqlx::query("UPDATE delivery.task_run SET next_dispatch_at = now() WHERE id = $1")
+        .bind(run)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let claimed = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .expect("the deferred run must become claimable");
+    assert_eq!(claimed.kind, ClaimKind::Claimed);
+    assert_eq!(run_status(&pool, run).await, "claimed");
+}
+
+// --------------------------------------------------------------------- C63
+
+/// C63（T-025 §八 / 评审 §4.1）：`failed` 上游**不算满足**，下游保持阻塞；恢复路径
+/// 是人工动作（重跑上游 / 删边 / 换新任务），删边后立即解锁。
+#[sqlx::test(migrations = "../../migrations")]
+async fn c63_failed_upstream_keeps_the_downstream_blocked(pool: PgPool) {
+    let fx = seed_project(&pool, "TD-C63").await;
+    let upstream = seed_task(&pool, fx.project_id, "failed").await;
+    let downstream = seed_task(&pool, fx.project_id, "blocked").await;
+
+    add_dependency(&pool, downstream, upstream, &actor(&fx))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        task_status(&pool, downstream).await,
+        "blocked",
+        "a failed upstream must not satisfy a dependency"
+    );
+    assert_eq!(
+        task_ready_events(&pool, fx.project_id, downstream).await,
+        0,
+        "no TaskReady may be emitted for an unmet (failed) upstream"
+    );
+
+    // 恢复路径：人工删掉这条阻塞边（v1 唯一的自动化可达路径）。
+    let removed = remove_dependency(&pool, downstream, upstream, &actor(&fx))
+        .await
+        .unwrap();
+    assert!(removed);
+    assert_eq!(task_status(&pool, downstream).await, "ready");
+    assert_eq!(task_ready_events(&pool, fx.project_id, downstream).await, 1);
+}
+
 /// D5 的终态集合：`failed` 必须排除在「已满足」之外（失败上游需重试/取消/取代）。
 #[test]
 fn d5_satisfied_set_excludes_failed() {
