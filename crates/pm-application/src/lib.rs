@@ -5,6 +5,7 @@ pub mod actor;
 pub mod bootstrap;
 pub mod command_executor;
 pub mod delivery;
+pub mod discovery;
 pub mod git_access;
 pub mod ingestion;
 pub mod knowledge;
@@ -124,4 +125,11 @@ pub use supervision::{
 pub use task_dependency::{
     DependencyEdge, DependencyError, DependencyGraph, add_dependency, list_dependencies,
     remove_dependency,
+};
+pub use discovery::{
+    DiscoveryError, DiscoveryFindingView, DiscoveryMessageView, DiscoveryProposalView,
+    DiscoveryQuestionView, DiscoverySessionDetail, DiscoverySessionView, NewFinding, NewProposal,
+    add_finding, add_proposal, add_question, answer_question, append_message, create_session,
+    defer_question, get_session, get_session_detail, list_findings, list_messages, list_questions,
+    list_sessions, set_finding_verification, set_proposal_status, transition_session,
 };

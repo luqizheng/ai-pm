@@ -154,6 +154,8 @@ fn build_router(
         .merge(crate::pm_repositories::router())
         // 冷启动导入：启动 / 轮询 / 取消 / apply（提案链）。
         .merge(crate::pm_imports::router())
+        // 项目认知访谈（T-084）：DiscoverySession 读写 + 发现卡片确认（source=WEB）。
+        .merge(crate::pm_discovery::router())
         // Task 前置依赖（T-024）：建边 / 删边 / 上下游查询。
         .merge(crate::task_dependencies::router())
         // Outbox 运维（T-061）：死信列表 / 死信重放 / 事件状态监控。

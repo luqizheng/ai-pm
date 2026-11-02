@@ -284,3 +284,39 @@ import:
   loadFailed: Failed to load
   applyFailed: Failed to create proposals
   repoFailed: Repository operation failed
+discovery:
+  title: Project discovery interview
+  subtitle: Confirm AI findings and open questions one by one to build durable project knowledge.
+  start: Start discovery interview
+  started: Discovery interview created
+  questions: Open questions
+  findings: Project discovery findings
+  answerPlaceholder: Type your answer
+  submitAnswer: Submit answer
+  defer: Defer
+  statusAnswered: Answered
+  statusDeferred: Deferred
+  evidence: Analysis evidence
+  confidence: Confidence
+  choiceConfirmed: Confirmed as described
+  choiceResolved: Solved by other means
+  choiceRejected: Does not match reality
+  choiceUnsure: Cannot confirm yet
+  resolvedDefault: 'Confirmed by user: solved by other means'
+  notePlaceholder: Additional note (optional)
+  confirm: Confirm
+  complete: Mark interview complete
+  actionFailed: Discovery interview action failed
+  kindObserved: Observed
+  kindUserConfirmed: User confirmed
+  kindSpeculation: Pending confirmation
+  kindContradicted: Conflict detected
+  verificationPending: Pending
+  verificationConfirmed: Confirmed
+  verificationRejected: Rejected
+  verificationConflict: Conflict
+  sessionInProgress: In progress
+  sessionNeedsUserInput: Waiting for input
+  sessionReviewRequired: Review required
+  sessionCompleted: Completed
+  sessionPaused: Paused

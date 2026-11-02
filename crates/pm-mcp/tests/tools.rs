@@ -377,6 +377,12 @@ async fn streamable_http_smoke_lists_tools_and_serves_calls(pool: PgPool) {
         vec![
             "pm_claim_task",
             "pm_confirm_document_proposal",
+            "pm_discovery_complete",
+            "pm_discovery_get",
+            "pm_discovery_get_context",
+            "pm_discovery_submit_answers",
+            "pm_discovery_submit_findings",
+            "pm_discovery_submit_proposal",
             "pm_get_run_context",
             "pm_get_submission_status",
             "pm_get_task_context",

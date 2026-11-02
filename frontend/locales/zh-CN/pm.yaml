@@ -282,3 +282,39 @@ import:
   loadFailed: 加载失败
   applyFailed: 生成提案失败
   repoFailed: 仓库操作失败
+discovery:
+  title: 项目认知访谈
+  subtitle: 逐条确认 AI 的发现与待澄清问题，沉淀可维护的项目认知。
+  start: 开始认知访谈
+  started: 认知访谈已创建
+  questions: 待澄清问题
+  findings: 项目认知发现
+  answerPlaceholder: 请输入回答
+  submitAnswer: 提交回答
+  defer: 暂缓
+  statusAnswered: 已回答
+  statusDeferred: 已暂缓
+  evidence: 分析证据
+  confidence: 置信度
+  choiceConfirmed: 确认属实
+  choiceResolved: 已通过其他方式解决
+  choiceRejected: 与实际不符
+  choiceUnsure: 暂时无法确认
+  resolvedDefault: 由用户确认：已通过其他方式解决
+  notePlaceholder: 补充说明（可选）
+  confirm: 确认
+  complete: 标记访谈完成
+  actionFailed: 认知访谈操作失败
+  kindObserved: 已观察到
+  kindUserConfirmed: 用户已确认
+  kindSpeculation: 待确认
+  kindContradicted: 存在冲突
+  verificationPending: 待确认
+  verificationConfirmed: 已确认
+  verificationRejected: 已确认不符
+  verificationConflict: 存在冲突
+  sessionInProgress: 进行中
+  sessionNeedsUserInput: 等待用户输入
+  sessionReviewRequired: 待审核
+  sessionCompleted: 已完成
+  sessionPaused: 已暂停

@@ -763,3 +763,468 @@ fn map_delivery_error(err: pm_application::delivery::DeliveryError) -> ToolError
         other => ToolError::Conflict(format!("{}: {other}", other.code())),
     }
 }
+// ---------------------------------------------------------------------------
+// T-085：Discovery 认知域六工具（propose-only，§4.2 污染红线）
+// ---------------------------------------------------------------------------
+
+/// Arguments of `pm_discovery_get` / `pm_discovery_get_context`.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct DiscoveryGetArgs {
+    pub project_id: Uuid,
+    /// Session id; omit to resolve the project's live session
+    /// (an `IN_PROGRESS` one first, else the most recent).
+    pub session_id: Option<Uuid>,
+}
+
+/// One finding inside `pm_discovery_submit_findings`.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct DiscoveryFindingInput {
+    /// One of observed / user_confirmed / speculation / contradicted.
+    pub kind: String,
+    pub content: String,
+    /// Model confidence within [0,1]; auxiliary, never a fact substitute.
+    pub confidence: Option<f64>,
+    /// Provenance list: [{repository, file, description}].
+    #[serde(default)]
+    pub evidence: serde_json::Value,
+    #[serde(default)]
+    pub repository_ids: Vec<Uuid>,
+    pub actor_role: Option<String>,
+}
+
+/// Arguments of `pm_discovery_submit_findings`.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct DiscoverySubmitFindingsArgs {
+    pub project_id: Uuid,
+    pub session_id: Uuid,
+    pub findings: Vec<DiscoveryFindingInput>,
+}
+
+/// One AI question inside `pm_discovery_submit_answers`.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct DiscoveryQuestionInput {
+    pub question: String,
+    pub why_blocking: Option<String>,
+    /// Anchor a question to a finding (discovery card flow).
+    pub finding_id: Option<Uuid>,
+}
+
+/// One user answer relayed inside `pm_discovery_submit_answers`.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct DiscoveryAnswerInput {
+    pub question_id: Uuid,
+    pub answer: String,
+}
+
+/// Arguments of `pm_discovery_submit_answers`.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct DiscoverySubmitAnswersArgs {
+    pub project_id: Uuid,
+    pub session_id: Uuid,
+    #[serde(default)]
+    pub questions: Vec<DiscoveryQuestionInput>,
+    #[serde(default)]
+    pub answers: Vec<DiscoveryAnswerInput>,
+}
+
+/// Arguments of `pm_discovery_submit_proposal`: records a `discovery_proposal`
+/// row and routes the content through the existing `propose_document` chain
+/// (with `base_revision_id` for Q7 optimistic concurrency). Propose-only:
+/// never writes `ai.project_document` directly.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct DiscoverySubmitProposalArgs {
+    pub project_id: Uuid,
+    pub session_id: Uuid,
+    /// add | modify. `modify` requires `document_id` + `base_revision_id`.
+    pub action: String,
+    /// Target document path as recorded on the discovery proposal.
+    pub target_document: String,
+    /// Stable document key for the knowledge chain (`[A-Za-z0-9._-]`).
+    pub doc_key: String,
+    /// One of requirement / decision / architecture / knowledge.
+    pub doc_type: String,
+    /// Required for modify: the existing `ai.project_document` id.
+    pub document_id: Option<Uuid>,
+    /// Q7 base version: the published revision this proposal is based on.
+    pub base_revision_id: Option<Uuid>,
+    /// Proposed Markdown body (LF).
+    pub proposed_content: String,
+    pub change_summary: Option<String>,
+    /// Provenance marker, e.g. `discovery_session:<id>`.
+    pub source_ref: Option<String>,
+    pub redline_kind: Option<String>,
+    /// Idempotency key for the knowledge chain.
+    pub operation_id: String,
+}
+
+/// Arguments of `pm_discovery_complete`.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct DiscoveryCompleteArgs {
+    pub project_id: Uuid,
+    pub session_id: Uuid,
+    /// COMPLETED or REVIEW_REQUIRED; the user approves in the Web console.
+    pub status: String,
+}
+
+fn map_discovery_error(err: pm_application::discovery::DiscoveryError) -> ToolError {
+    use pm_application::discovery::DiscoveryError as E;
+    match err {
+        E::SessionNotFound => ToolError::NotFound(
+            "discovery session not found; ask the user to start one in the Web console".into(),
+        ),
+        E::FindingNotFound => ToolError::NotFound("discovery finding not found".into()),
+        E::QuestionNotFound => ToolError::NotFound("discovery question not found".into()),
+        E::ProposalNotFound => ToolError::NotFound("discovery proposal not found".into()),
+        E::ProjectNotFound | E::ImportNotFound => {
+            ToolError::NotFound("project or import not found".into())
+        }
+        E::InvalidTransition { from, to } => ToolError::Conflict(format!(
+            "invalid session status transition from {from} to {to}"
+        )),
+        E::Validation(message) => ToolError::InvalidRequest(message),
+        E::Db(err) => ToolError::Db(err),
+    }
+}
+
+async fn project_tenant(pool: &PgPool, project_id: Uuid) -> Result<Uuid, ToolError> {
+    sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(ToolError::Db)?
+        .ok_or_else(|| ToolError::NotFound(format!("project {project_id} not found")))
+}
+
+/// Session id resolution: explicit id must belong to the project; otherwise
+/// pick the project's live session (`IN_PROGRESS` first, else most recent).
+async fn resolve_session(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    session_id: Option<Uuid>,
+) -> Result<Uuid, ToolError> {
+    if let Some(id) = session_id {
+        let ok: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM discovery.discovery_session \
+             WHERE tenant_id = $1 AND id = $2 AND project_id = $3",
+        )
+        .bind(tenant_id)
+        .bind(id)
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(ToolError::Db)?;
+        return ok.ok_or_else(|| {
+            ToolError::NotFound(format!("discovery session {id} not found in project"))
+        });
+    }
+    let rows: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM discovery.discovery_session \
+         WHERE tenant_id = $1 AND project_id = $2 \
+         ORDER BY (status = 'IN_PROGRESS') DESC, created_at DESC, id LIMIT 1",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .fetch_all(pool)
+    .await
+    .map_err(ToolError::Db)?;
+    rows.into_iter().next().ok_or_else(|| {
+        ToolError::NotFound(
+            "project has no discovery session; ask the user to start one in the Web console"
+                .into(),
+        )
+    })
+}
+
+/// `pm_discovery_get`：读项目认知 session（findings / questions / proposals）。
+pub async fn discovery_get(pool: &PgPool, args: DiscoveryGetArgs) -> Result<Value, ToolError> {
+    let tenant_id = project_tenant(pool, args.project_id).await?;
+    let session_id =
+        resolve_session(pool, tenant_id, args.project_id, args.session_id).await?;
+    let detail =
+        pm_application::discovery::get_session_detail(pool, tenant_id, session_id)
+            .await
+            .map_err(map_discovery_error)?;
+    serde_json::to_value(detail).map_err(|err| ToolError::InvalidRequest(err.to_string()))
+}
+
+/// `pm_discovery_get_context`：已有知识 + 仓库 + 待确认问题（/pm-learn 第一步）。
+pub async fn discovery_get_context(
+    pool: &PgPool,
+    args: DiscoveryGetArgs,
+) -> Result<Value, ToolError> {
+    let tenant_id = project_tenant(pool, args.project_id).await?;
+    let session_id =
+        resolve_session(pool, tenant_id, args.project_id, args.session_id).await?;
+    let detail =
+        pm_application::discovery::get_session_detail(pool, tenant_id, session_id)
+            .await
+            .map_err(map_discovery_error)?;
+    let documents = pm_application::knowledge::list_documents(pool, args.project_id)
+        .await
+        .map_err(map_knowledge_error)?;
+    let repositories: Vec<(Uuid, String, String, String)> = sqlx::query_as(
+        "SELECT id, name, url, status FROM integration.project_repository \
+         WHERE tenant_id = $1 AND project_id = $2 AND status <> 'archived' \
+         ORDER BY created_at",
+    )
+    .bind(tenant_id)
+    .bind(args.project_id)
+    .fetch_all(pool)
+    .await
+    .map_err(ToolError::Db)?;
+    let open_questions: Vec<Value> = detail
+        .questions
+        .iter()
+        .filter(|question| question.status == "open")
+        .map(|question| {
+            json!({
+                "id": question.id,
+                "question": question.question,
+                "why_blocking": question.why_blocking,
+                "finding_id": question.finding_id,
+            })
+        })
+        .collect();
+    Ok(json!({
+        "session": {
+            "id": detail.session.id,
+            "status": detail.session.status,
+            "kind": detail.session.kind,
+            "source": detail.session.source,
+        },
+        "documents": documents,
+        "repositories": repositories
+            .into_iter()
+            .map(|(id, name, url, status)| json!({
+                "id": id, "name": name, "url": url, "status": status
+            }))
+            .collect::<Vec<Value>>(),
+        "open_questions": open_questions,
+    }))
+}
+
+/// `pm_discovery_submit_findings`：采集层写 `discovery_finding`（含仓库关联）。
+pub async fn discovery_submit_findings(
+    pool: &PgPool,
+    args: DiscoverySubmitFindingsArgs,
+) -> Result<Value, ToolError> {
+    if args.findings.is_empty() {
+        return Err(ToolError::InvalidRequest(
+            "findings must not be empty".into(),
+        ));
+    }
+    let tenant_id = project_tenant(pool, args.project_id).await?;
+    let mut added = Vec::with_capacity(args.findings.len());
+    for finding in args.findings {
+        let view = pm_application::discovery::add_finding(
+            pool,
+            tenant_id,
+            args.session_id,
+            pm_application::discovery::NewFinding {
+                kind: finding.kind,
+                content: finding.content,
+                confidence: finding.confidence,
+                evidence: finding.evidence,
+                repository_ids: finding.repository_ids,
+                verification_status: None,
+                actor_role: finding.actor_role,
+            },
+        )
+        .await
+        .map_err(map_discovery_error)?;
+        added.push(view);
+    }
+    Ok(json!({ "added": added.len(), "findings": added }))
+}
+
+/// `pm_discovery_submit_answers`：提交 AI 问题与用户回答回传（采集层）。
+pub async fn discovery_submit_answers(
+    pool: &PgPool,
+    args: DiscoverySubmitAnswersArgs,
+) -> Result<Value, ToolError> {
+    if args.questions.is_empty() && args.answers.is_empty() {
+        return Err(ToolError::InvalidRequest(
+            "questions and answers must not both be empty".into(),
+        ));
+    }
+    let tenant_id = project_tenant(pool, args.project_id).await?;
+    let actor_id = ai_pm_principal(pool, args.project_id).await?;
+    let mut questions_added = 0usize;
+    for question in args.questions {
+        pm_application::discovery::add_question(
+            pool,
+            tenant_id,
+            args.session_id,
+            &question.question,
+            question.why_blocking.as_deref(),
+            question.finding_id,
+        )
+        .await
+        .map_err(map_discovery_error)?;
+        questions_added += 1;
+    }
+    let mut answers_submitted = 0usize;
+    for answer in args.answers {
+        pm_application::discovery::answer_question(
+            pool,
+            tenant_id,
+            answer.question_id,
+            &answer.answer,
+            actor_id,
+        )
+        .await
+        .map_err(map_discovery_error)?;
+        answers_submitted += 1;
+    }
+    Ok(json!({
+        "questions_added": questions_added,
+        "answers_submitted": answers_submitted,
+    }))
+}
+
+/// `pm_discovery_submit_proposal`：propose-only——先走既有 `propose_document`
+/// 知识提案链，再把结果镜像到 `discovery_proposal`（Q7 base_revision 失效置
+/// conflict，质量门拒绝置 rejected，红线/通过回填 document_proposal_id）。
+pub async fn discovery_submit_proposal(
+    pool: &PgPool,
+    root: &KnowledgeRoot,
+    args: DiscoverySubmitProposalArgs,
+) -> Result<Value, ToolError> {
+    let tenant_id = project_tenant(pool, args.project_id).await?;
+    let created_by = ai_pm_principal(pool, args.project_id).await?;
+    let outcome = pm_application::knowledge_proposal::submit_proposal(
+        pool,
+        root,
+        pm_application::knowledge_proposal::ProposalRequest {
+            project_id: args.project_id,
+            doc_key: args.doc_key.clone(),
+            doc_type: args.doc_type,
+            markdown: args.proposed_content.clone(),
+            change_summary: args.change_summary,
+            source_event_id: None,
+            analysis_run_id: None,
+            source_ref: args.source_ref.clone(),
+            redline_kind: args.redline_kind,
+            base_revision_id: args.base_revision_id,
+            operation_id: args.operation_id,
+            created_by,
+        },
+    )
+    .await;
+
+    let outcome = match outcome {
+        Ok(outcome) => outcome,
+        Err(KnowledgeError::Conflict(message))
+        | Err(KnowledgeError::RevisionConflict(message)) => {
+            let proposal = pm_application::discovery::add_proposal(
+                pool,
+                tenant_id,
+                args.session_id,
+                pm_application::discovery::NewProposal {
+                    action: args.action,
+                    target_document: args.target_document,
+                    document_id: args.document_id,
+                    base_revision_id: args.base_revision_id,
+                    proposed_content: args.proposed_content,
+                    evidence: json!([]),
+                },
+            )
+            .await
+            .map_err(map_discovery_error)?;
+            pm_application::discovery::set_proposal_status(
+                pool,
+                tenant_id,
+                proposal.id,
+                "conflict",
+                None,
+            )
+            .await
+            .map_err(map_discovery_error)?;
+            return Err(ToolError::Conflict(format!(
+                "base revision drifted (Q7): {message}"
+            )));
+        }
+        Err(err) => return Err(map_knowledge_error(err)),
+    };
+
+    let discovery_proposal = pm_application::discovery::add_proposal(
+        pool,
+        tenant_id,
+        args.session_id,
+        pm_application::discovery::NewProposal {
+            action: args.action,
+            target_document: args.target_document,
+            document_id: args.document_id,
+            base_revision_id: args.base_revision_id,
+            proposed_content: args.proposed_content,
+            evidence: json!([]),
+        },
+    )
+    .await
+    .map_err(map_discovery_error)?;
+
+    Ok(match &outcome {
+        pm_application::knowledge_proposal::ProposalOutcome::Rejected { proposal_id, failures } => {
+            pm_application::discovery::set_proposal_status(
+                pool,
+                tenant_id,
+                discovery_proposal.id,
+                "rejected",
+                None,
+            )
+            .await
+            .map_err(map_discovery_error)?;
+            json!({
+                "discovery_proposal_id": discovery_proposal.id,
+                "outcome": { "outcome": "rejected", "proposal_id": proposal_id, "failures": failures },
+            })
+        }
+        other => {
+            let document_proposal_id = match other {
+                pm_application::knowledge_proposal::ProposalOutcome::RedlinePending { proposal_id } => *proposal_id,
+                pm_application::knowledge_proposal::ProposalOutcome::Committed { proposal_id, .. } => *proposal_id,
+                pm_application::knowledge_proposal::ProposalOutcome::Duplicate { .. } => discovery_proposal.id,
+                pm_application::knowledge_proposal::ProposalOutcome::Rejected { .. } => unreachable!(),
+            };
+            let linked = pm_application::discovery::link_proposal_document(
+                pool,
+                tenant_id,
+                discovery_proposal.id,
+                document_proposal_id,
+            )
+            .await
+            .map_err(map_discovery_error)?;
+            json!({
+                "discovery_proposal_id": linked.id,
+                "status": linked.status,
+                "outcome": other,
+            })
+        }
+    })
+}
+
+/// `pm_discovery_complete`：置本轮学习完成状态（COMPLETED / REVIEW_REQUIRED）。
+pub async fn discovery_complete(
+    pool: &PgPool,
+    args: DiscoveryCompleteArgs,
+) -> Result<Value, ToolError> {
+    if args.status != "COMPLETED" && args.status != "REVIEW_REQUIRED" {
+        return Err(ToolError::InvalidRequest(
+            "status must be COMPLETED or REVIEW_REQUIRED".into(),
+        ));
+    }
+    let tenant_id = project_tenant(pool, args.project_id).await?;
+    let session = pm_application::discovery::transition_session(
+        pool,
+        tenant_id,
+        args.session_id,
+        &args.status,
+    )
+    .await
+    .map_err(map_discovery_error)?;
+    Ok(json!({
+        "session_id": session.id,
+        "status": session.status,
+    }))
+}

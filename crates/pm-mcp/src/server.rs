@@ -28,9 +28,11 @@ use sqlx::PgPool;
 use std::sync::Arc;
 
 use crate::tools::{
-    self, ClaimTaskArgs, ConfirmDocumentProposalArgs, ProposeDocumentArgs, ReportProgressArgs,
-    RunContextArgs, SubmissionStatusArgs, SubmitDocumentArgs, SubmitResultArgs,
-    SubmitTechnicalDesignArgs, TaskContextArgs, ToolError, VetoDocumentRevisionArgs,
+    self, ClaimTaskArgs, ConfirmDocumentProposalArgs, DiscoveryCompleteArgs, DiscoveryGetArgs,
+    DiscoverySubmitAnswersArgs, DiscoverySubmitFindingsArgs, DiscoverySubmitProposalArgs,
+    ProposeDocumentArgs, ReportProgressArgs, RunContextArgs, SubmissionStatusArgs,
+    SubmitDocumentArgs, SubmitResultArgs, SubmitTechnicalDesignArgs, TaskContextArgs, ToolError,
+    VetoDocumentRevisionArgs,
 };
 
 /// The MCP server over the shared pool: owns the rmcp tool router generated
@@ -159,6 +161,85 @@ impl PmMcpServer {
     ) -> Result<CallToolResult, ErrorData> {
         let root = pm_application::knowledge::KnowledgeRoot::from_env();
         Self::tool_result(tools::veto_document_revision(&self.pool, &root, args).await)
+    }
+
+    #[tool(
+        name = "pm_discovery_get",
+        description = "Read one project discovery session (findings / questions / proposals). \
+                       Omit session_id to resolve the project's live session. Answers not-found \
+                       when the project has no session yet."
+    )]
+    pub async fn discovery_get(
+        &self,
+        Parameters(args): Parameters<DiscoveryGetArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Self::tool_result(tools::discovery_get(&self.pool, args).await)
+    }
+
+    #[tool(
+        name = "pm_discovery_get_context",
+        description = "Gather /pm-learn working context for one project: the discovery session \
+                       summary, existing knowledge documents, linked repositories and the open \
+                       questions waiting for user clarification."
+    )]
+    pub async fn discovery_get_context(
+        &self,
+        Parameters(args): Parameters<DiscoveryGetArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Self::tool_result(tools::discovery_get_context(&self.pool, args).await)
+    }
+
+    #[tool(
+        name = "pm_discovery_submit_findings",
+        description = "Submit AI analysis findings (observed / user_confirmed / speculation / \
+                       contradicted) with evidence and optional repository links. Collection \
+                       only: nothing is written to the official knowledge base."
+    )]
+    pub async fn discovery_submit_findings(
+        &self,
+        Parameters(args): Parameters<DiscoverySubmitFindingsArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Self::tool_result(tools::discovery_submit_findings(&self.pool, args).await)
+    }
+
+    #[tool(
+        name = "pm_discovery_submit_answers",
+        description = "Submit AI clarification questions and/or relay user answers into the \
+                       discovery session. Collection only; final knowledge stays propose-only."
+    )]
+    pub async fn discovery_submit_answers(
+        &self,
+        Parameters(args): Parameters<DiscoverySubmitAnswersArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Self::tool_result(tools::discovery_submit_answers(&self.pool, args).await)
+    }
+
+    #[tool(
+        name = "pm_discovery_submit_proposal",
+        description = "Submit a knowledge-base change proposal from a discovery session. Routes \
+                       through the existing propose_document chain (quality gates, red-line hold, \
+                       base_revision_id optimistic concurrency) and mirrors the outcome onto a \
+                       discovery_proposal row. Requires PM_MCP_DOCUMENT_WRITE."
+    )]
+    pub async fn discovery_submit_proposal(
+        &self,
+        Parameters(args): Parameters<DiscoverySubmitProposalArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let root = pm_application::knowledge::KnowledgeRoot::from_env();
+        Self::tool_result(tools::discovery_submit_proposal(&self.pool, &root, args).await)
+    }
+
+    #[tool(
+        name = "pm_discovery_complete",
+        description = "Mark one discovery round as COMPLETED or REVIEW_REQUIRED. The user still \
+                       approves proposals in the Web console; this only closes the collection \
+                       round."
+    )]
+    pub async fn discovery_complete(
+        &self,
+        Parameters(args): Parameters<DiscoveryCompleteArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Self::tool_result(tools::discovery_complete(&self.pool, args).await)
     }
 
     #[tool(

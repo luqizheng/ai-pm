@@ -12,6 +12,7 @@ pub mod onboarding;
 pub mod pm_acceptance;
 pub mod pm_artifacts;
 pub mod pm_delivery;
+pub mod pm_discovery;
 pub mod pm_imports;
 pub mod pm_lists;
 pub mod pm_repositories;

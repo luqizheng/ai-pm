@@ -22,6 +22,7 @@ import {
   getImport,
   startImport
 } from "@/api/imports";
+import DiscoveryPanel from "./DiscoveryPanel.vue";
 import type {
   Customer,
   ProjectDraft,
@@ -578,6 +579,12 @@ onBeforeUnmount(() => {
             · {{ item.question }}
           </p>
         </div>
+
+        <DiscoveryPanel
+          v-if="projectId && importId"
+          :project-id="projectId"
+          :import-id="importId"
+        />
 
         <p v-if="detail?.dropped_items" class="hint hint--warning">
           {{ t("pm.import.droppedHint", { count: detail?.dropped_items ?? 0 }) }}
