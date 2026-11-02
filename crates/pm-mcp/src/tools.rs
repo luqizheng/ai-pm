@@ -318,6 +318,75 @@ pub async fn get_task_context(
         "milestone": row.milestone,
     }))
 }
+
+/// Arguments of `pm_list_tasks`（T-082，runbook G3）：项目内 `ready` 任务的只读
+/// 列表，附最新 `queued` Run 的 id（执行端据此判断「能不能直接领」）。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ListTasksArgs {
+    /// Project scope; another project's tasks read as not found.
+    pub project_id: Uuid,
+    /// Page size (1..=100); defaults to 20.
+    #[serde(default)]
+    #[schemars(range(min = 1, max = 100))]
+    pub limit: Option<u32>,
+}
+
+/// 列出项目内 `ready` 任务（T-082）：真人成员门在前（非成员 404），随后按
+/// priority（urgent→low）+ created_at 排序；每行附最新 `queued` Run 的 id——
+/// 无 queued run 的 ready 任务领了会 `NoRunnableRun`，故以字段提示而非硬过滤。
+pub async fn list_tasks(
+    pool: &PgPool,
+    args: ListTasksArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    ensure_member(pool, caller, args.project_id).await?;
+    let limit = args.limit.unwrap_or(20).clamp(1, 100) as i64;
+    let rows: Vec<(Uuid, String, String, String, Option<Uuid>, Option<Uuid>, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+        "SELECT t.id, t.title, t.priority, t.status, t.assignee_id, \
+                q.run_id, t.created_at \
+         FROM delivery.task t \
+         LEFT JOIN LATERAL ( \
+             SELECT r.id AS run_id FROM delivery.task_run r \
+              WHERE r.task_id = t.id AND r.status = 'queued' \
+              ORDER BY r.attempt_no DESC LIMIT 1 \
+         ) q ON TRUE \
+         WHERE t.project_id = $1 AND t.status = 'ready' \
+         ORDER BY CASE t.priority \
+                    WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 \
+                    WHEN 'normal' THEN 2 ELSE 3 END, \
+                  t.created_at ASC \
+         LIMIT $2",
+    )
+    .bind(args.project_id)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .map_err(ToolError::Db)?;
+
+    let total: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM delivery.task WHERE project_id = $1 AND status = 'ready'",
+    )
+    .bind(args.project_id)
+    .fetch_one(pool)
+    .await
+    .map_err(ToolError::Db)?;
+
+    let tasks: Vec<Value> = rows
+        .into_iter()
+        .map(|(id, title, priority, status, assignee_id, queued_run_id, created_at)| {
+            json!({
+                "task_id": id,
+                "title": title,
+                "priority": priority,
+                "status": status,
+                "assignee_id": assignee_id,
+                "queued_run_id": queued_run_id,
+                "created_at": created_at,
+            })
+        })
+        .collect();
+    Ok(json!({ "tasks": tasks, "total": total }))
+}
 /// Creates one knowledge document: Markdown body + Git commit + identity/revision
 /// rows. The acting principal is the project's `ai_pm` (knowledge maintainer per
 /// design §四); MCP callers are dev agents and must hold

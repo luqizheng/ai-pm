@@ -31,7 +31,7 @@ use std::sync::Arc;
 use crate::tools::{
     self, ClaimTaskArgs, ConfirmDocumentProposalArgs, DiscoveryCompleteArgs, DiscoveryGetArgs,
     DiscoverySubmitAnswersArgs, DiscoverySubmitFindingsArgs, DiscoverySubmitProposalArgs,
-    ProposeDocumentArgs, ReportProgressArgs, RunContextArgs, SubmissionStatusArgs,
+    ListTasksArgs, ProposeDocumentArgs, ReportProgressArgs, RunContextArgs, SubmissionStatusArgs,
     SubmitDocumentArgs, SubmitResultArgs, SubmitTechnicalDesignArgs, TaskContextArgs, ToolError,
     VetoDocumentRevisionArgs,
 };
@@ -124,6 +124,28 @@ impl PmMcpServer {
             async {
                 let caller = crate::caller::caller_from_ctx(&ctx)?;
                 tools::get_task_context(&self.pool, args, &caller).await
+            }
+            .await,
+        )
+    }
+
+    #[tool(
+        name = "pm_list_tasks",
+        description = "List the ready tasks of one project (read-only, T-082): ordered by \
+                       priority then creation time, each row carrying the id of its latest \
+                       queued run (null when the task has no claimable run yet). A project \
+                       you are not a member of reads as not found. Use pm_claim_task with \
+                       the task_id afterwards."
+    )]
+    pub async fn list_tasks(
+        &self,
+        Parameters(args): Parameters<ListTasksArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::list_tasks(&self.pool, args, &caller).await
             }
             .await,
         )

@@ -14,11 +14,11 @@ use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
 use pm_application::caller::{CallerContext, DeviceClaim, DeviceClaimIgnoredReason, HumanActor};
 use pm_domain::SYSTEM_TENANT;
 use pm_mcp::tools::{
-    ToolError, claim_task, get_run_context, get_submission_status, get_task_context,
+    ToolError, claim_task, get_run_context, get_submission_status, get_task_context, list_tasks,
     report_progress, submit_technical_design,
 };
 use pm_mcp::tools::{
-    ClaimTaskArgs, ReportProgressArgs, RunContextArgs, SubmissionStatusArgs,
+    ClaimTaskArgs, ListTasksArgs, ReportProgressArgs, RunContextArgs, SubmissionStatusArgs,
     SubmitTechnicalDesignArgs, TaskContextArgs,
 };
 use sqlx::PgPool;
@@ -71,6 +71,15 @@ async fn seed_fixture(pool: &PgPool) -> Fx {
         "INSERT INTO core.tenant_member (tenant_id, principal_id, role)          VALUES ($1, $2, 'member') ON CONFLICT (tenant_id, principal_id) DO NOTHING",
     )
     .bind(SYSTEM_TENANT)
+    .bind(a.human_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    // member 也是 project_b 的成员（用于「空项目」用例：成员可见但无 ready 任务）
+    sqlx::query(
+        "INSERT INTO core.project_member (project_id, principal_id, role, tenant_id)          SELECT id, $2, 'member', tenant_id FROM core.project WHERE id = $1",
+    )
+    .bind(b.project_id)
     .bind(a.human_id)
     .execute(pool)
     .await
@@ -570,4 +579,74 @@ async fn run_tools_still_gate_on_membership(pool: PgPool) {
     .unwrap();
     assert_eq!(actor_id, dev_agent);
     assert_eq!(audit_device, None);
+}
+
+// ── T-082：pm_list_tasks 三态 + limit 裁剪 + queued_run_id ────────────────
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn t082_list_tasks_three_states_and_limit(pool: PgPool) {
+    let fx = seed_fixture(&pool).await;
+    let member = member_caller(fx.member, fx.member_identity);
+    let intruder = caller(fx.outsider, fx.outsider_identity, DeviceClaim::absent());
+
+    // 空项目 → tasks: [] / total: 0（注意 project_b 无 ready 任务）
+    let empty = list_tasks(&pool, ListTasksArgs { project_id: fx.project_b, limit: None }, &member)
+        .await
+        .unwrap();
+    assert_eq!(empty["tasks"].as_array().unwrap().len(), 0);
+    assert_eq!(empty["total"], serde_json::json!(0));
+
+    // 造 ready 任务：a 项目已有 1 个（seed_claimable_task），再加 1 个优先级更低的
+    let low: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.task (project_id, title, status, revision, priority, tenant_id)          VALUES ($1, 'low-task', 'ready', 1, 'low',                  (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
+    )
+    .bind(fx.project_a)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    // 非成员 → 404
+    let err = list_tasks(&pool, ListTasksArgs { project_id: fx.project_a, limit: None }, &intruder)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ToolError::NotFound(_)), "got {err:?}");
+
+    // 成员 → 两条按 priority 排序（high 的 claimable 在前），queued_run_id 有值
+    let listed = list_tasks(&pool, ListTasksArgs { project_id: fx.project_a, limit: None }, &member)
+        .await
+        .unwrap();
+    let arr = listed["tasks"].as_array().unwrap();
+    assert_eq!(arr.len(), 2, "{listed}");
+    assert_eq!(listed["total"], serde_json::json!(2));
+    assert_eq!(arr[0]["task_id"], serde_json::Value::String(fx.task_a.to_string()));
+    assert_eq!(arr[0]["priority"], serde_json::json!("normal"), "claimable 任务默认 normal 优先级");
+    assert_eq!(arr[1]["task_id"], serde_json::Value::String(low.to_string()));
+    assert_eq!(arr[1]["priority"], serde_json::json!("low"));
+    // seed_run 造了 queued run → 第一行有 queued_run_id
+    let _ = seed_run(&pool, fx.project_a, fx.task_a).await;
+    let listed2 = list_tasks(&pool, ListTasksArgs { project_id: fx.project_a, limit: None }, &member)
+        .await
+        .unwrap();
+    let arr2 = listed2["tasks"].as_array().unwrap();
+    assert!(
+        arr2[0]["queued_run_id"].is_string(),
+        "有 queued run 的任务带 run id"
+    );
+    assert!(
+        arr2[1]["queued_run_id"].is_null(),
+        "无 queued run 的 ready 任务该字段为 null（提示而非硬过滤）"
+    );
+
+    // limit=1 → 只回一条，total 仍为全量
+    let limited = list_tasks(&pool, ListTasksArgs { project_id: fx.project_a, limit: Some(1) }, &member)
+        .await
+        .unwrap();
+    assert_eq!(limited["tasks"].as_array().unwrap().len(), 1);
+    assert_eq!(limited["total"], serde_json::json!(2));
+
+    // limit 越界被裁剪到 100（不报错）
+    let big = list_tasks(&pool, ListTasksArgs { project_id: fx.project_a, limit: Some(500) }, &member)
+        .await
+        .unwrap();
+    assert_eq!(big["total"], serde_json::json!(2));
 }

@@ -419,6 +419,7 @@ async fn streamable_http_smoke_lists_tools_and_serves_calls(pool: PgPool) {
             "pm_get_run_context",
             "pm_get_submission_status",
             "pm_get_task_context",
+            "pm_list_tasks",
             "pm_propose_document",
             "pm_report_progress",
             "pm_submit_document",
