@@ -351,6 +351,70 @@ workspace:
       decisionAlreadyDecided: This approval was already decided
       decisionFailed: Submission failed
       runsEmpty: No run records
+
+    bootstrap:
+      title: Environment Setup
+      pill: Auto-setup supported
+      desc: Send the instruction below to Codex to initialize this dev environment (skill install, MCP config, device registration and checks — no manual config editing).
+      instruction:
+        title: PM-AI Bootstrap
+        body: |-
+          Please initialize the current dev environment.
+          1. Read the PM-AI install guide (address below).
+          2. Inspect the current executor and OS environment.
+          3. Install the PM-AI skill pack and write this tool's MCP config per the guide (ask me for the API key when needed; the key must never appear in the instruction or URL).
+          4. Verify platform connectivity per the guide (/health and /v1/pm/me).
+          5. Ask me which Project to bind, register this device and verify repository access.
+          6. Run the full environment self-check and submit the result to the platform.
+          7. Finish once the environment reaches Ready.
+        urlLabel: "Install URL:"
+      copy: Copy install instruction
+      copied: Copied
+      copyFailed: Copy failed — please select and copy the text manually
+      replaceHint: Example address; replace with the actual PM-AI deployment address in production.
+    devices:
+      title: Dev Environments
+      subtitle: Directory of registered dev environments — readiness is a snapshot of the latest check and does not stay valid forever.
+      addHint: To add an environment, use the install instruction on the Console "Environment Setup" card.
+      add: Add environment
+      metrics:
+        active: Active
+        ready: Ready
+        total: Total
+      status:
+        active: Active
+        revoked: Revoked
+      readiness:
+        none: Not checked
+        installed: Installed
+        connected: Connected
+        authenticated: Authenticated
+        ready: Ready
+        degraded: Degraded
+        failed: Failed
+      lastCheck: Last check
+      neverChecked: Never checked
+      checkSummary: repos verified {verified}/{declared}
+      snapshotNote: Readiness is a snapshot — expired auth, revoked bindings or MCP outage degrade it; the next check is authoritative.
+      bindings: Project bindings
+      noBindings: No project bindings yet
+      selectOne: Select a device on the left to see details
+      accessible: Accessible
+      inaccessible: Not accessible
+      verifiedCount: repos verified {verified}/{declared}
+      revoke: Revoke
+      unbind: Unbind
+      confirmRevoke: Revoke the registration of "{name}"? The device will no longer count as a valid registered device (your account and repository permissions are unaffected).
+      confirmUnbind: Unbind this device from the project? (history rows are kept)
+      fields:
+        executor: Executor
+        platform: Platform
+        lifecycle: Lifecycle
+        readiness: Readiness
+        lastCheck: Last check
+      boundAt: Bound at
+      unboundAt: Unbound at
+
     decisionsExtra:
       background: Background
       dimensions: Comparison dimensions

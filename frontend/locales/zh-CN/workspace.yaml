@@ -351,6 +351,70 @@ workspace:
       decisionAlreadyDecided: 该审批已被处理
       decisionFailed: 提交失败
       runsEmpty: 暂无执行记录
+
+    bootstrap:
+      title: 环境接入
+      pill: 支持自动初始化
+      desc: 将以下指令发送给 Codex，即可初始化当前开发环境（技能安装、MCP 配置、设备登记与自检全程无手工编辑配置文件）。
+      instruction:
+        title: PM-AI Bootstrap
+        body: |-
+          请初始化当前开发环境。
+          1. 阅读 PM-AI 安装说明（安装地址见下）。
+          2. 检查当前执行端与操作系统环境。
+          3. 安装 PM-AI 技能包，并按说明写入本工具的 MCP 配置（需要 API Key 时向我索取；Key 不得出现在安装指令或 URL 中）。
+          4. 按说明验证平台连通（/health 与 /v1/pm/me）。
+          5. 引导我确认要绑定的 Project，登记本设备并验证仓库访问。
+          6. 执行完整环境自检，并把结果提交给平台。
+          7. 确认开发环境达到 Ready 状态后结束。
+        urlLabel: 安装地址：
+      copy: 复制初始化指令
+      copied: 已复制
+      copyFailed: 复制失败，请手动选择文本复制
+      replaceHint: 示例地址，正式环境请替换为 PM-AI 的实际部署地址。
+    devices:
+      title: 开发环境
+      subtitle: 已登记的开发环境目录——就绪状态是最近一次自检的快照，不因曾经通过而长期有效。
+      addHint: 添加开发环境请使用「项目总控 → 环境接入」卡片的初始化指令。
+      add: 添加开发环境
+      metrics:
+        active: 已登记（有效）
+        ready: 已就绪
+        total: 全部
+      status:
+        active: 有效
+        revoked: 已撤销
+      readiness:
+        none: 未自检
+        installed: 已安装
+        connected: 已连接
+        authenticated: 已认证
+        ready: 就绪
+        degraded: 部分能力异常
+        failed: 失败
+      lastCheck: 最后自检
+      neverChecked: 从未自检
+      checkSummary: 仓库验证 {verified}/{declared}
+      snapshotNote: 就绪是快照——认证过期、绑定撤销或 MCP 不可用都会使其退化，以下一次自检为准。
+      bindings: 项目绑定
+      noBindings: 尚无项目绑定
+      selectOne: 选择左侧设备查看详情
+      accessible: 可进入
+      inaccessible: 不可进入
+      verifiedCount: 仓库验证 {verified}/{declared}
+      revoke: 撤销授权
+      unbind: 解绑
+      confirmRevoke: 确认撤销「{name}」的登记？撤销后该设备不再作为有效登记设备（不会影响你的账号与其他仓库权限）。
+      confirmUnbind: 确认解除该设备与此项目的绑定？（解绑不影响行历史）
+      fields:
+        executor: 执行端
+        platform: 平台
+        lifecycle: 生命周期
+        readiness: 就绪
+        lastCheck: 最后自检
+      boundAt: 绑定于
+      unboundAt: 解绑于
+
     decisionsExtra:
       background: 问题背景
       dimensions: 比较维度

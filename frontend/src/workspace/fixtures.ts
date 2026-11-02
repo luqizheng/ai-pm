@@ -1138,3 +1138,4 @@ export const contextPlaceholders = ["批量原型验证", "补充证据"];
 
 /* 交付验收工作台（T-070）演示数据：独立模块（浏览器侧同族 fixtures），这里统一出口。 */
 export * from "./acceptance/fixtures";
+export * from "./devices/fixtures";

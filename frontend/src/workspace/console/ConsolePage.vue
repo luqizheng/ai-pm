@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { attentionItems, demoProject, demoProjectId } from "../fixtures";
 import { useWorkspaceStore } from "../store";
+import BootstrapCard from "./BootstrapCard.vue";
 import BriefingCard from "./BriefingCard.vue";
 import MetricCards from "./MetricCards.vue";
 import AttentionList from "./AttentionList.vue";
@@ -40,6 +41,7 @@ if (available.value && !store.selectedAttentionId) {
       </p>
     </header>
     <BriefingCard />
+    <BootstrapCard />
     <MetricCards />
     <AttentionList />
     <GoalStrip />
