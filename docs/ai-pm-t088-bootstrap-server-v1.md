@@ -2,12 +2,12 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 文档性质 | 设计稿（实施前定稿）——T-088 服务端实施基线 |
+| 文档性质 | 设计稿 + 实施记录——T-088 服务端实施基线 |
 | 版本 | **V1.1**（2026-11-02，按 T-088 V1 评审意见修订：P0×5 + P1×3 + 新增 C177~C184；保留 V1 的 D1~D5 用户裁决与总体架构） |
-| 状态 | **待用户过稿**——过稿后方可进入 T-088 实施 |
+| 状态 | **已过稿并实施**（2026-11-02 用户过稿；同日实施完成——实施记录见 §十五） |
 | 上位约束 | `docs/ai-pm-codex-bootstrap-v1.md` **V1.3（已过稿，M10 实施基线）**；`docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`；`docs/ai-pm-adr-0002-executor-credential-separation.md`；`docs/ai-pm-principal-identity-v1.md` |
-| 关联条目 | todo.md §10.7 T-088（服务端）／T-089（技能包）／T-081（跨机暴露）／§10.5 T-082；§11 T-051（**本条关闭**）、T-059（**审计字段本条升级**） |
-| 本轮改动 | **仅本设计稿**——未修改任何代码、迁移或其他实施文件（见 §十三声明） |
+| 关联条目 | todo.md §10.7 T-088（服务端，已实施）／T-089（技能包）／T-081（跨机暴露）／§10.5 T-082；§11 T-051（**已关闭**）、T-059（**rmcp 阻塞已解除**） |
+| 实施记录 | **§十五**（2026-11-02，提交链 `d855987` → `96cb392` → `33fc743` → `df83f01`，91 套件 / 662 passed / 0 FAILED） |
 
 ---
 
@@ -910,3 +910,47 @@ ON CONFLICT (id) DO NOTHING;
 | `confirmed_by` / `vetoed_by` 客户端自称 | 服务端以认证调用人覆盖（参数保留仅为 wire 兼容） | §4.6 |
 | 归因审计失败策略 | 失败不升级为拒绝；进错误日志与监控；业务审计失败仍走事务一致性 | §8.2、M4 |
 | 非工具请求的归因审计噪声 | 仅 `tools/call` 触发查询与忽略审计 | §4.3、M3 |
+
+---
+
+## 十五、实施记录（2026-11-02）〔已实施〕
+
+### 15.1 提交链
+
+`d855987` feat(devenv) 步 1 → `96cb392` feat(audit-actor) 步 2 → `33fc743` feat(api-devenv) 步 3 → `df83f01` feat(mcp-caller) 步 4/5 → docs(t088) 本节 → chore(todo) → chore(memory)。
+
+**验收总况**：`cargo test --workspace` 退出 0——**91 套件 ok / 662 passed / 0 FAILED**；`cargo check --workspace --all-targets` 0 error / 0 warning（M9 discovery 测试存量 1 条 unused warning 与本条无关）。
+
+### 15.2 落地物（按步）
+
+| 步 | 提交 | 内容 |
+| --- | --- | --- |
+| 1 | `d855987` | 迁移 `0027_devenv.sql`（devenv 两表 + 四条跨租户组合 FK + 两张审计表 `claimed_device_id`）；`caller.rs`（HumanActor/DeviceClaim/CallerContext 三层）；`authz.rs`（require_project_member 真人+租户维度；resolve_project_executor dev_agent/ai_pm 缺失即报错）；`devenv/`（register/bind/unbind/checks/revoke/list/get，D5 id 优先 + ON CONFLICT 并发闸 + 重绑清 verified 同事务 + 服务端算 readiness）；`AuditActor` 增 `claimed_device_id`；`tests/devenv.rs` 14 用例（C177 跨租户四例 DB 拒绝 / C181 并发收敛 / C182 Ready 不随调用人变 / C183 解绑重绑 / 迁移形状） |
+| 2 | `96cb392` | **12 处生产审计 INSERT 统一四列**（8 处升级 + 4 处补 device 列，跨三 crate）；`ExecutionContext.actor_id → actor: AuditActor`（+`actor_id()` 访问器）；`DecideRequest`/`VetoRequest` 增 `#[serde(skip)] actor`（pm-api 填、legacy 回退仅执行主体）；`audit_run_as` 显式入口（audit_run 猜人回退仅存 worker 路径）；outbox handler 的 claimed_device_id 与 `task_run.executor_id` 同源同值；`tests/audit_actor_coverage.rs` 清单驱动两道闸（C174/C180） |
+| 3 | `33fc743` | `auth.rs`：`AuthedPrincipal::human_actor()` + resolve_principal / inject_dev_principal 同点插 `Extension<HumanActor>`（唯一生产点）；`device_claim.rs`：attach_device_claim 唯一校验点（仅 tools/call 查询与忽略审计；四类非法 → ignored(reason) 不拒绝；忽略事件写 tenant_audit_log；写失败不升级 M4）；`pm_devices.rs` 八端点；`tests/pm_devices.rs` 5 用例（C176 HTTP 侧 / C184 仅 tools/call） |
+| 4/5 | `df83f01` | `pm-mcp/caller.rs`：caller_from_ctx 只读 extensions（无 IO，C179）+ authorize（真人成员门 → 执行主体 → 项目级 AuditActor）+ ensure_member；server.rs 17 handler 增 `ctx: RequestContext<RoleServer>`；tools.rs 16 参数结构全接（get_submission_status 经 inbound_event 反查）；confirmed_by/vetoed_by 以认证调用人覆盖（§4.6）；Run 路径：ClaimOptions.audit_actor → executor_id 落列 + audit_run_opt、report_progress_as、SubmitResultRequest.caller 全管线透传；`tests/caller_ctx.rs` 6 用例（C173 家族覆盖+零副作用 / C176 同源同值 / C178 映射+不回退）；tools.rs smoke 加模拟鉴权层（**C175 端到端注入证据**）；既有 3 文件 39 调用点 + doc_write.rs 补测试调用人 |
+
+### 15.3 实施期裁定与发现
+
+1. **T-059 的「rmcp 拿不到请求」阻塞前提不成立**（实施前 spike 实证）：rmcp 3.8 `tower.rs:1538/2069/2154/2275` 注入 `http::request::Parts` → `service.rs:1579` swap 进 `RequestContext.extensions`，官方文档即此用法。**候选①/②之争消解为「α：原生通道」**，零 rmcp 改动、零 transport 风险、T-081 契约测试不受影响。T-059 审计列随之解阻（本条已落列，剩 `execution_mode` 归 T-059）。
+2. **审计点盘点修正**：V1.1 稿 12 处 → 实施中新增 `device_claim.rs` 忽略事件 1 处 = **13 处**；清单闸门（C180）在步 3 后实测逮到该新增点并要求登记——机制按设计工作。
+3. **`no_executor_assignee` 政策**：claim 政策要求任务 assignee = dev_agent + 至少一可写仓——测试夹具照 contract.rs 同构（assignee + verified repo + task_repository 行）。
+4. **MCP 客户端须发 `Accept: application/json, text/event-stream`**（rmcp 否则 406）与 `Host` 头（stateless 直答要求）——进 T-089/T-090 的指引与适配层。
+5. **reqwest 测试 `.no_proxy()`**（本机代理 10808 拦截 loopback）——沿用仓内既有配方。
+6. **`audit_log.actor_identity_id` / `claimed_device_id` 都有 FK**——测试必须种真实 `principal_identity` / `devenv.device` 行，不能伪造 id；这也实证了「设备声明不可能指向不存在的设备」的库层保证。
+7. **bootstrap 不建 `tenant_member`**（生产由登录链建）——涉及设备登记的测试夹具需补成员行；`fk_device_tenant_owner` 的 NO ACTION 语义与 M2 成文规则一致。
+
+### 15.4 验收对照（§9.1 → 实测）
+
+| 编号 | 结果 | 落点 |
+| --- | --- | --- |
+| C145/C146/C147/C149/C151/C157/C161 | ✅ | devenv 端点 + checks + 审计（devenv.rs / pm_devices.rs） |
+| C152/C156 | ✅ | 身份对齐与 Binding 事实语义（devenv.rs / caller_ctx.rs） |
+| C163/C164/C165/C167/C168/C171 | ✅ | pm_devices 5 + caller_ctx 6 + devenv 14 |
+| C173 | ✅ | caller_ctx（家族覆盖 + 零副作用 + inbound_event 反查）+ pm-api 六行矩阵部分 |
+| C174/C180 | ✅ | audit_actor_coverage 清单两道闸（13 处生产 INSERT 全四列、无清单外写入点） |
+| C175 | ✅ | tools.rs smoke（真实 HTTP→rmcp→handler 的 extension 注入证据） |
+| C176 | ✅ | pm_devices HTTP 侧 + caller_ctx 四类声明不落归因 |
+| C177/C178/C179/C181/C182/C183 | ✅ | devenv.rs（DB 拒绝四例 / dev_agent 映射说明 / 并发收敛 / 多 Project Ready / 解绑重绑） |
+| C184 | ✅ | pm_devices（initialize/tools_list 不写忽略审计） |
+| **未验（非本条范围）** | — | C141/C143/C150/C159 等 T-089 侧；C148 升级场景；T-081 七项身份门禁（C166）跨机实施时补 |
