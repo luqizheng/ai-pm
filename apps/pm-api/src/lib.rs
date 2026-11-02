@@ -9,6 +9,7 @@ pub mod documents;
 pub mod llm_configs;
 pub mod outbox_ops;
 pub mod onboarding;
+pub mod pm_acceptance;
 pub mod pm_artifacts;
 pub mod pm_delivery;
 pub mod pm_imports;

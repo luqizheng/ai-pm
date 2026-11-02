@@ -1,5 +1,6 @@
 //! pm-application: use cases, ports and application services.
 
+pub mod acceptance_overview;
 pub mod actor;
 pub mod bootstrap;
 pub mod command_executor;
@@ -35,6 +36,10 @@ pub mod secret;
 pub mod supervision;
 pub mod task_dependency;
 
+pub use acceptance_overview::{
+    AcceptanceBadge, AcceptanceCounts, AcceptanceOverview, AcceptanceTask, ReviewStatus,
+    load_overview,
+};
 pub use actor::AuditActor;
 pub use bootstrap::{
     BootstrapError, BootstrapOutcome, BootstrapRequest, bootstrap_project,

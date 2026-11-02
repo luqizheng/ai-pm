@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiError, ApiResult, require_project_visible};
+use crate::support::{ApiResult, require_task_project};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new().route(
@@ -24,36 +24,12 @@ pub(crate) fn router() -> Router<AppState> {
     )
 }
 
-/// 任务的项目边界：不存在 / 跨租户 / 非成员 → 404。
-async fn require_task_project(
-    state: &AppState,
-    task_id: Uuid,
-    principal: &AuthedPrincipal,
-) -> ApiResult<Uuid> {
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(task_id)
-    .bind(principal.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?;
-    let project_id = project_id.ok_or(ApiError::NotFound("task_not_found"))?;
-    require_project_visible(
-        &state.pool,
-        project_id,
-        principal.tenant_id,
-        principal.principal_id,
-    )
-    .await?;
-    Ok(project_id)
-}
-
 async fn list_handler(
     State(state): State<AppState>,
     Extension(principal): Extension<AuthedPrincipal>,
     Path(task_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let project_id = require_task_project(&state, task_id, &principal).await?;
+    let project_id = require_task_project(&state.pool, task_id, &principal).await?;
     let rows = pm_application::delivery::list_manifest(&state.pool, project_id, task_id).await?;
     Ok(Json(serde_json::json!({
         "task_id": task_id,

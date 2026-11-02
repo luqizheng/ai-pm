@@ -143,6 +143,9 @@ fn build_router(
         .merge(crate::pm_delivery::router())
         // Review 审批（Slice D5：pending 审批列表 + 裁决单事务；T-043）。
         .merge(crate::pm_reviews::router())
+        // 交付验收工作台（T-070）：项目级聚合读模型 + 任务级验收证据（findings /
+        // 逐条裁决 / 审批历史）；全部只读，验收动作复用上面的 decision 端点。
+        .merge(crate::pm_acceptance::router())
         // 产物（需求修订）列表——AI 产物验收中心数据源。
         .merge(crate::pm_artifacts::router())
         // 全局模型供应商配置（deepseek/openai/glm/minimax/ollama）。

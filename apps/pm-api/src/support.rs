@@ -155,3 +155,22 @@ pub async fn require_project_visible(
         Err(ApiError::NotFound("project not found"))
     }
 }
+
+/// 任务级端点的项目边界：任务不存在 / 跨租户 / 调用者非项目成员一律 404，
+/// 返回任务所属 `project_id`（D4 交付清单与 T-070 验收证据端点共用同一口径）。
+pub async fn require_task_project(
+    pool: &sqlx::PgPool,
+    task_id: Uuid,
+    principal: &crate::auth::AuthedPrincipal,
+) -> ApiResult<Uuid> {
+    let project_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(task_id)
+    .bind(principal.tenant_id)
+    .fetch_optional(pool)
+    .await?;
+    let project_id = project_id.ok_or(ApiError::NotFound("task_not_found"))?;
+    require_project_visible(pool, project_id, principal.tenant_id, principal.principal_id).await?;
+    Ok(project_id)
+}
