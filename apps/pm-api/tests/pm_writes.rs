@@ -378,7 +378,7 @@ async fn update_task_full_fields_with_optimistic_lock(pool: PgPool) {
                 "revision": task["revision"],
                 "title": "renamed",
                 "description": "updated",
-                "status": "running",
+                "status": "ready",
                 "priority": "high",
                 "assignee_id": boot.dev_agent_id
             })),
@@ -388,7 +388,7 @@ async fn update_task_full_fields_with_optimistic_lock(pool: PgPool) {
     assert_eq!(response.status(), StatusCode::OK);
     let updated = body_json(response).await;
     assert_eq!(updated["title"], json!("renamed"));
-    assert_eq!(updated["status"], json!("running"));
+    assert_eq!(updated["status"], json!("ready"));
     assert_eq!(updated["priority"], json!("high"));
     assert_eq!(updated["assignee_id"], json!(boot.dev_agent_id.to_string()));
     assert_eq!(updated["revision"], json!(2), "revision must bump");

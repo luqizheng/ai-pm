@@ -145,35 +145,45 @@ pub(crate) async fn has_active_waiting(
     .await
 }
 
-/// 任务的前置/后置关系（GET）。调用方负责可见性（T-022）与租户前置校验。
+/// 任务的前置/后置关系（GET）。`tenant_id` 供应用层纵深防御（T-025 §10.9 遗留二）：
+/// HTTP 层已做 T-022 可见性，这里再把查询锚定在租户内——即使上层校验被绕过，
+/// 跨租户 task_id 也读不出任何边。
 pub async fn list_dependencies(
     pool: &PgPool,
+    tenant_id: Uuid,
     task_id: Uuid,
 ) -> Result<DependencyGraph, DependencyError> {
-    let _ = sqlx::query("SELECT 1 FROM delivery.task WHERE id = $1")
-        .bind(task_id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or(DependencyError::TaskNotFound)?;
+    let _ = sqlx::query(
+        "SELECT 1 FROM delivery.task WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(task_id)
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or(DependencyError::TaskNotFound)?;
 
+    // 边表行与任务同租户（tenant_id NOT NULL + 组合外键，I1/I5）；边查询同样
+    // 按 tenant 锚定，保证返回的相邻任务都属于本租户。
     let upstream = sqlx::query(
         "SELECT t.id, t.title, t.status \
            FROM delivery.task_dependency d \
            JOIN delivery.task t ON t.project_id = d.project_id AND t.id = d.depends_on_task_id \
-          WHERE d.task_id = $1 \
+          WHERE d.task_id = $1 AND d.tenant_id = $2 \
           ORDER BY t.created_at, t.id",
     )
     .bind(task_id)
+    .bind(tenant_id)
     .fetch_all(pool)
     .await?;
     let downstream = sqlx::query(
         "SELECT t.id, t.title, t.status \
            FROM delivery.task_dependency d \
            JOIN delivery.task t ON t.project_id = d.project_id AND t.id = d.task_id \
-          WHERE d.depends_on_task_id = $1 \
+          WHERE d.depends_on_task_id = $1 AND d.tenant_id = $2 \
           ORDER BY t.created_at, t.id",
     )
     .bind(task_id)
+    .bind(tenant_id)
     .fetch_all(pool)
     .await?;
 
@@ -317,7 +327,8 @@ pub async fn add_dependency(
     unlock_task_if_ready(&mut tx, project_id, task_id).await?;
 
     tx.commit().await?;
-    list_dependencies(pool, task_id).await
+    // 收尾回读：边事务内已校验租户归属（I3），按该租户锚定。
+    list_dependencies(pool, tenant_id, task_id).await
 }
 
 /// 删边（DELETE）：幂等；删除成功后做一次解锁判定（D8）。

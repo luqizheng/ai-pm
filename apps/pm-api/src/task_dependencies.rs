@@ -85,7 +85,8 @@ async fn list_handler(
     Path(task_id): Path<Uuid>,
 ) -> ApiResult<Json<DependencyGraph>> {
     require_task_project(&state, task_id, &principal).await?;
-    let graph = task_dependency::list_dependencies(&state.pool, task_id).await?;
+    let graph =
+        task_dependency::list_dependencies(&state.pool, principal.tenant_id, task_id).await?;
     Ok(Json(graph))
 }
 

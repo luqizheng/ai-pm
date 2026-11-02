@@ -624,6 +624,12 @@ pub(crate) async fn claim_core(
         .as_deref()
         .map(crate::run_context::hash_lease_token);
 
+    // T-059 / ADR-0002 L5：执行形态由领取通道显式表达（替代 lease_owner 前缀推导）。
+    let execution_mode = match opts.lease_owner {
+        LeaseOwner::Worker(_) => "spawn",
+        LeaseOwner::Mcp { .. } => "human",
+    };
+
     let lease_generation: i32 = sqlx::query_scalar(
         "UPDATE delivery.task_run \
             SET status = 'claimed', stage = 'dispatch', claimed_at = now(), \
@@ -634,7 +640,8 @@ pub(crate) async fn claim_core(
                 lease_generation = COALESCE(lease_generation, 0) + 1, \
                 deadline_at = COALESCE(deadline_at, \
                     now() + make_interval(secs => COALESCE($7::int, $8::int)::float8)), \
-                executor_id = COALESCE($9, executor_id) \
+                executor_id = COALESCE($9, executor_id), \
+                execution_mode = $10 \
           WHERE id = $1 \
          RETURNING lease_generation",
     )
@@ -648,6 +655,7 @@ pub(crate) async fn claim_core(
     .bind(cfg.deadline_default_secs as i32)
     // T-088：已校验的设备归因（ADR-0001 D6 无 FK 前向列；自报不作凭证）。
     .bind(opts.audit_actor.and_then(|a| a.claimed_device_id))
+    .bind(execution_mode)
     .fetch_one(&mut *tx)
     .await?;
 

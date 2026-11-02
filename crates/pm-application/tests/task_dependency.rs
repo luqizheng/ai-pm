@@ -493,7 +493,7 @@ async fn c58_rejected_edge_leaves_no_partial_rows_or_audit(pool: PgPool) {
 
     // 上游仍是 draft，解锁判定不应改动它（D7：draft 不自动进 ready）。
     assert_eq!(task_status(&pool, b).await, "draft");
-    let graph = list_dependencies(&pool, b).await.unwrap();
+    let graph = list_dependencies(&pool, SYSTEM_TENANT, b).await.unwrap();
     assert_eq!(graph.upstream.len(), 1);
     assert!(graph.downstream.is_empty());
 }
@@ -708,4 +708,50 @@ fn d5_satisfied_set_excludes_failed() {
     assert!(unlocks_downstream(TaskStatus::Cancelled));
     assert!(unlocks_downstream(TaskStatus::Superseded));
     assert!(!unlocks_downstream(TaskStatus::Failed));
+}
+// ------------------- T-025 §10.9 遗留二（2026-11-03）-------------------
+
+/// 遗留二：`list_dependencies` 按租户锚定——跨租户 task_id 读不出任何边
+/// （即使上层可见性校验被绕过，应用层也不跨租户返回数据）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn t025_list_dependencies_is_tenant_scoped(pool: PgPool) {
+    let fx = seed_project(&pool, "TD-LIST-T").await;
+    let other_tenant: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.tenant (provider, external_key, display_name) \
+         VALUES ('lmms', 'td-list-other', 'other') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let other_member: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.principal (kind, display_name, is_active) \
+         VALUES ('human', 'other', true) RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO core.tenant_member (tenant_id, principal_id, role) VALUES ($1, $2, 'member')",
+    )
+    .bind(other_tenant)
+    .bind(other_member)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // 本租户：一条边可见
+    let upstream = seed_task(&pool, fx.project_id, "ready").await;
+    let downstream = seed_task(&pool, fx.project_id, "draft").await;
+    add_dependency(&pool, downstream, upstream, &AuditActor::principal(fx.actor_id))
+        .await
+        .unwrap();
+
+    let graph = list_dependencies(&pool, SYSTEM_TENANT, downstream).await.unwrap();
+    assert_eq!(graph.upstream.len(), 1);
+
+    // 跨租户 task_id（同一 UUID，换租户视角）→ 404 语义（TaskNotFound）
+    let err = list_dependencies(&pool, other_tenant, downstream)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, DependencyError::TaskNotFound), "got {err:?}");
 }

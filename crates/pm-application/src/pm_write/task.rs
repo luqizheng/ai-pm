@@ -97,15 +97,45 @@ pub async fn update_task(
         crate::task_dependency::acquire_project_graph_lock(&mut tx, graph_key).await?;
     }
     // 乐观锁校验必须与 UPDATE 原子：原实现为无锁读 → 两个 PATCH 可同时通过校验。
-    let (project_id, current_revision): (Uuid, i64) =
-        sqlx::query_as("SELECT project_id, revision FROM delivery.task WHERE id = $1 FOR UPDATE")
-            .bind(task_id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .ok_or(PmWriteError::NotFound("not found"))?;
+    let (project_id, current_revision, current_status): (Uuid, i64, String) = sqlx::query_as(
+        "SELECT project_id, revision, status FROM delivery.task WHERE id = $1 FOR UPDATE",
+    )
+    .bind(task_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(PmWriteError::NotFound("not found"))?;
     // mock 契约：revision 缺省/不匹配都是 409 revision conflict。
     if req.revision.unwrap_or(current_revision + 1) != current_revision {
         return Err(PmWriteError::Conflict("revision conflict"));
+    }
+
+    // T-025 §10.9 遗留一（P2）：直写状态走与 `apply_task_transition` 同一张合法边表
+    // ——UI 不得绕过 13 态状态机（terminal → any、非法回退等）。其余字段照常直写；
+    // 状态未变（same → same）是 no-op，不触发校验。UI 路径不带守卫证据，故任何
+    // 「边合法但缺证据」的迁移同样在此被拒（走命令通道带证据执行）。
+    let from_status = TaskStatus::from_str(&current_status)
+        .ok_or(PmWriteError::Validation("invalid current status"))?;
+    if new_status != from_status {
+        let input = pm_domain::task_transition::TransitionInput {
+            task_id: None,
+            from: from_status,
+            to: new_status,
+            waiting: None,
+            waiting_resolved: false,
+            replacement_task_exists: false,
+            active_run_stopped: false,
+            retry_exhausted: false,
+            deadline_exhausted: false,
+            failure: None,
+            supersede: None,
+            delivery_submitted: false,
+            acceptance_evidence_complete: false,
+        };
+        pm_domain::task_transition::validate_transition(&input).map_err(|_| {
+            PmWriteError::Validation(
+                "status transition rejected by the state machine (use the command channel with guard evidence)",
+            )
+        })?;
     }
 
     sqlx::query(

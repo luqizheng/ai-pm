@@ -294,8 +294,8 @@ pub(crate) async fn insert_review_run(
         "INSERT INTO delivery.task_run \
          (project_id, task_id, attempt_no, status, run_kind, role_id, executor_kind, \
           input_manifest_hash, reviewed_manifest_hash, review_policy_version, next_dispatch_at, \
-          tenant_id) \
-         VALUES ($1, $2, $3, 'queued', 'review', $4, $5, $6, $7, $8, now(), \
+          execution_mode, tenant_id) \
+         VALUES ($1, $2, $3, 'queued', 'review', $4, $5, $6, $7, $8, now(), 'spawn', \
                  (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)

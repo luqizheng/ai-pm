@@ -368,9 +368,9 @@ async fn schedule_retry(
             "INSERT INTO delivery.task_run \
              (project_id, task_id, attempt_no, status, run_kind, role_id, executor_kind, \
               input_manifest_hash, reviewed_manifest_hash, review_policy_version, \
-              supersedes_run_id, next_dispatch_at, tenant_id) \
+              supersedes_run_id, next_dispatch_at, execution_mode, tenant_id) \
              VALUES ($1, $2, $3, 'queued', 'review', $4, 'platform', $5, $6, $7, $8, now(), \
-                     (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
+                     'spawn', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
         )
         .bind(project_id)
         .bind(task_id)

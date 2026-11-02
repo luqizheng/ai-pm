@@ -424,7 +424,11 @@ async fn ui_complete(pool: &PgPool, task_id: Uuid, actor_id: Uuid, revision: i64
             revision: Some(revision),
             title: Some("ui write".to_string()),
             description: None,
-            status: Some("completed".to_string()),
+            // T-025 遗留一落地后的约束：UI 直写必须走合法边且不缺守卫证据。
+            // `reviewing → completed` 的 E2 证据（验收完备）只有 D5 判定器/命令
+            // 通道能提供——UI 直写该边被拒是正确行为。图锁覆盖改用 UI 可达的
+            // 终态边 `ready → cancelled`（guard-free）。
+            status: Some("cancelled".to_string()),
             priority: Some("normal".to_string()),
             assignee_id: None,
             goal: None,
@@ -443,7 +447,7 @@ async fn ui_complete(pool: &PgPool, task_id: Uuid, actor_id: Uuid, revision: i64
 #[sqlx::test(migrations = "../../migrations")]
 async fn c68_ui_direct_write_to_terminal_unlocks_downstream(pool: PgPool) {
     let fx = seed_project(&pool, "TDC68").await;
-    let upstream = seed_task(&pool, fx.project_id, "reviewing").await;
+    let upstream = seed_task(&pool, fx.project_id, "ready").await;
     let downstream = seed_task(&pool, fx.project_id, "blocked").await;
     add_dependency(&pool, downstream, upstream, &AuditActor::principal(fx.actor_id))
         .await
@@ -451,7 +455,7 @@ async fn c68_ui_direct_write_to_terminal_unlocks_downstream(pool: PgPool) {
 
     ui_complete(&pool, upstream, fx.actor_id, 1).await;
 
-    assert_eq!(task_status(&pool, upstream).await, "completed");
+    assert_eq!(task_status(&pool, upstream).await, "cancelled");
     assert_eq!(task_status(&pool, downstream).await, "ready");
     assert_eq!(
         task_ready_events(&pool, fx.project_id, downstream).await,
@@ -466,7 +470,7 @@ async fn c68_ui_direct_write_to_terminal_unlocks_downstream(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn ui_terminal_write_waits_for_the_project_graph_lock(pool: PgPool) {
     let fx = seed_project(&pool, "TDC68LK").await;
-    let upstream = seed_task(&pool, fx.project_id, "reviewing").await;
+    let upstream = seed_task(&pool, fx.project_id, "ready").await;
     let downstream = seed_task(&pool, fx.project_id, "blocked").await;
     add_dependency(&pool, downstream, upstream, &AuditActor::principal(fx.actor_id))
         .await
@@ -509,7 +513,7 @@ async fn ui_terminal_write_waits_for_the_project_graph_lock(pool: PgPool) {
     );
     assert_eq!(
         task_status(&pool, upstream).await,
-        "reviewing",
+        "ready",
         "no task row may change before the graph lock is granted"
     );
 
@@ -517,11 +521,73 @@ async fn ui_terminal_write_waits_for_the_project_graph_lock(pool: PgPool) {
     tx1.commit().await.unwrap();
     writer.await.unwrap();
 
-    assert_eq!(task_status(&pool, upstream).await, "completed");
+    assert_eq!(task_status(&pool, upstream).await, "cancelled");
     assert_eq!(task_status(&pool, downstream).await, "ready");
     assert_eq!(
         task_ready_events(&pool, fx.project_id, downstream).await,
         1,
         "exactly one TaskReady after the lock is released"
+    );
+}
+// ------------------------- T-025 §10.9 遗留收口（2026-11-03） -------------------------
+
+/// 遗留一：UI 直写非法边被状态机拒绝（`reviewing → completed` 缺 E2 证据；
+/// `draft → running` 不在合法边表）——不再能绕过 13 态状态机。
+#[sqlx::test(migrations = "../../migrations")]
+async fn t025_ui_direct_write_rejects_illegal_transitions(pool: PgPool) {
+    let fx = seed_project(&pool, "TDC-T090A").await;
+    let reviewing = seed_task(&pool, fx.project_id, "reviewing").await;
+    let draft = seed_task(&pool, fx.project_id, "draft").await;
+
+    // reviewing → completed：边合法但缺 E2 验收证据（只有 D5 判定器/命令通道能给）
+    let err = update_task(
+        &pool,
+        reviewing,
+        UpdateTaskRequest {
+            revision: Some(1),
+            title: Some("x".to_string()),
+            description: None,
+            status: Some("completed".to_string()),
+            priority: Some("normal".to_string()),
+            assignee_id: None,
+            goal: None,
+            constraints: None,
+            deliverables: None,
+            acceptance_criteria: None,
+            knowledge_refs: None,
+        },
+        &AuditActor::principal(fx.actor_id),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, pm_application::pm_write::PmWriteError::Validation(_)),
+        "got {err:?}"
+    );
+
+    // draft → running：不在合法边表
+    let err = update_task(
+        &pool,
+        draft,
+        UpdateTaskRequest {
+            revision: Some(1),
+            title: Some("x".to_string()),
+            description: None,
+            status: Some("running".to_string()),
+            priority: Some("normal".to_string()),
+            assignee_id: None,
+            goal: None,
+            constraints: None,
+            deliverables: None,
+            acceptance_criteria: None,
+            knowledge_refs: None,
+        },
+        &AuditActor::principal(fx.actor_id),
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, pm_application::pm_write::PmWriteError::Validation(_)),
+        "got {err:?}"
     );
 }
