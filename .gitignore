@@ -5,3 +5,6 @@
 /node_modules
 /.superpowers/
 run-workspaces/
+# 本地运行时产物（dev 服务日志 / knowledge git 根 / repo clone 缓存）
+/logs/
+/data/
