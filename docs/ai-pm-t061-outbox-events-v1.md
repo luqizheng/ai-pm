@@ -26,6 +26,7 @@ V1 设计评审结论：**有条件通过，暂不进入实施**。本版逐条�
 | §4.2 | 细节 | 审计与通知必须原子提交，不得「审计成功通知失败仍标记 delivered」 | §5.6 事务边界图（与 P0-2 合并） |
 | 测试补充 | — | 并发重复消费 / 跨项目重放攻击 / env 绕过阻断 / 原子回滚 / replay 后重复消费 | E-04 / E-09 / E-17 ~ E-21 |
 | 架构建议 | — | `EventCatalog` 应成为整个 Outbox 的**契约中心** | §6.3 新增六问 |
+| 评审补充（第二轮） | — | `pm-worker` 零 Handler 空壳与 `ai-pm-worker` 共享同一 outbox 表——消费者能力不一致会产生**假死信**；统一 Handler 装配升格为**正式设计约束**（非实施备注），并明确「Handler 集合一致 ≠ 并发消费安全」 | §2 消费边界裁定 / §6.2.1 正文 / §7（E-23）/ §8（Q7）/ §10 #8 |
 
 评审确认保留、本版不动的裁定：`RunCompleted` 在终态事务中产生、幂等键用 `run_id`、`RunRequested` 不做、`ReviewCompleted` / `KnowledgeBaseWriteRequested` 暂不造 handler、单条死信重放、重放不等待消费完成、`failure_rate` 不统计 `pending`、`processing` 纳入积压年龄、Worker 启动目录校验、不新增消息队列、不新增 Schema。
 
@@ -80,7 +81,8 @@ Err(_) => matches!(event_type, "TaskReady" | "DeliverySubmitted"),
 |---|---|---|
 | `RunCompleted` 语义 | **有消费者的事实通知事件（Fact Notification）**：生产者 = Run 终态事务；消费者 = `RunCompletedHandler`；消费动作 = 记审计事实 + 生成执行完成通知；**不改 Run 状态、不触发 D5 失败判定、不重新调度 Task** | Run 终态的状态推进已由 D5 失败判定作业扫描 `delivery.task_run` 驱动；再造一个业务状态消费者会与失败判定**抢状态**。它的职责是**记录不可逆业务事实**（某次 Run 已结束）并接入既有通知通道，与 `TaskReady` / `DeliverySubmitted` 的业务职责不混淆 |
 | 死信重放形态 | **REST 端点 + 项目成员级运维能力**（V1 取舍：沿用 `require_project_visible`，**不新建运维角色 / 权限码体系**；重放须记审计，见 §4.5） | 复用已存在的 `outbox::list_dead_letters` / `outbox::replay`；走现有 `require_project_visible` 租户隔离；排障是人用场景。**明确**：V1 语义是「项目成员可操作本项目死信」，不是「独立运维角色授权」 |
-| 事件监控形态 | **REST 只读端点** | 不引入 Prometheus 依赖；与现有 `/v1/pm/*` 契约一致 |
+| 事件监控形态 | **REST 只读端点** | 不引入 Prometheus 依赖；与现有 `/v1/pm/*` 契约一致。 |
+| Worker 消费边界 | **共享同一 outbox 表的所有消费者实例必须具备一致的 Handler 注册能力**——统一装配入口 `register_all_handlers`，两个 Worker main 都调用（§6.2.1） | 零 Handler 空壳参与共享队列领取，会把另一 Worker **可正常处理**的事件经重试误判为死信——这是部署装配不一致导致的**假死信**，不是业务失败。**不做**多队列 / 消费者分组（评审裁定：不趁机扩展，YAGNI） |
 
 ### 2.1 不做（YAGNI）
 
@@ -413,7 +415,50 @@ pub fn event_is_enabled(event_type: &str) -> bool {
 
 理由：Worker 的 `None` 分支会把未知事件死信。启动时校验能把「配错了」变成启动失败，而不是运行期积累死信。
 
-**补充（实施期发现的部署事实）**：`pm-worker` 与 `ai-pm-worker` 在同一 compose 中竞争**同一张** outbox 表。`pm-worker` 目前是零 handler 空壳——它抢到的事件会被无条件死信，**制造假的「no handler」死信**。装配方案：抽 `register_all_handlers(worker, pool)` 共享装配函数，两个 worker 的 main 都调用——两者注册同一套 handler，谁抢到都能正确消费。目录校验（§6.2）保证「注册表 = 目录」之后，这套装配就是自洽的。
+`pm-worker` / `ai-pm-worker` 共享同一 outbox 表的消费能力一致性约束见 **§6.2.1（正式设计约束，非实施备注）**。
+
+### 6.2.1 Worker 共享 Outbox 的 Handler 装配约束
+
+**背景与问题**
+
+实施阶段发现，`pm-worker` 与 `ai-pm-worker` 在同一 Compose 部署中同时消费同一张 outbox 表。其中 `pm-worker` 曾以**零 Handler 空壳**方式启动，而 `ai-pm-worker` 注册了实际业务 Handler。
+
+由于两个 Worker 共享同一消费队列，`pm-worker` 可能先于 `ai-pm-worker` 领取某个事件；若该 Worker 未注册对应 Handler，就会把本来可由另一个 Worker 正常处理的事件判定为处理失败，经过重试后进入死信。
+
+该问题属于**部署装配不一致导致的错误死信**，不应被视为正常业务失败。准确的定义是：这不是普通的 Handler 代码缺失，而是**共享队列的消费者能力不一致**。
+
+**设计裁定**
+
+V1 采用**统一 Handler 装配**方案（保留两个 Worker，不合并进程）：
+
+- 提供统一的 `register_all_handlers` 注册入口（落在 `pm-infrastructure::outbox_handlers`，签名按现有基础设施实际类型：`register_all_handlers(worker: &mut OutboxWorker, pool: &PgPool)`——统一的是装配入口，不新造 HandlerRegistry 抽象）。
+- `pm-worker` 与 `ai-pm-worker` 的 main **均调用** `register_all_handlers`。
+- 两个 Worker 对共享 outbox 的**消费能力必须保持一致**，不允许任何一个以零 Handler 空壳身份参与消费。
+- Handler 的业务实现与注册清单**统一维护**，避免各 Worker 独立维护 Handler 白名单。
+- 两个 Worker 保留各自独立的运行配置、进程职责与生命周期管理；**统一的是 Handler 注册能力，不是强制合并 Worker 进程**。
+
+**实现约束**
+
+1. `register_all_handlers` 必须覆盖 V1 中所有允许被生产 Worker 消费的事件类型（即 `CATALOG` 中 `has_handler = true` 的全集）。
+2. 新增 Handler 时，必须同步纳入统一注册入口。
+3. 环境变量只能控制事件是否**启用生产**，不能使未注册 Handler 的事件变成可消费事件（与 §6.1 的目录优先语义一致）。
+4. Worker 启动时校验 Handler 注册完整性（§6.2 的「注册表 vs `CATALOG`」校验）；不满足共享 outbox 消费契约时，**拒绝启动消费循环**（fail fast，不是运行期静默）。
+5. **不得**通过忽略未知事件、直接确认未知事件、或跳过死信记录的方式规避该问题——无法处理的事件**不应被静默吞掉**（§20.6「不假装消费」）。
+
+**并发边界（评审额外确认）**
+
+「Handler 集合一致」**不等于**「并发消费安全」。统一装配只消除装配不一致导致的假死信；若 `register_all_handlers` 中的 Handler 会执行有副作用的业务操作，两个 Worker 同时领取事件时仍依赖既有机制：
+
+- **原子领取**：`claim` 的 `FOR UPDATE SKIP LOCKED` + 租约，保证同一事件同一时刻只被一个实例持有。
+- **Handler 幂等**：租约过期等导致的重复投递，由各 Handler 的幂等锚点兜底（`RunCompletedHandler` 见 §5.6.1 的 advisory lock 方案，E-17 并发用例）。
+
+**验收要求**
+
+- 两个 Worker 的启动入口均调用同一 `register_all_handlers`。
+- 两个 Worker 的 Handler 注册集合一致（= `CATALOG` 中 `has_handler = true` 全集）。
+- 任意一个 Worker 领取共享 outbox 中的已注册事件，都能找到对应 Handler。
+- 部署级测试（E-23）防止某个 Worker 退化为零 Handler 空壳。
+- 不再出现因 Worker 之间 Handler 注册不一致而产生的假死信。
 
 ### 6.3 `EventCatalog` 的定位：整个系统 Outbox 的契约中心（评审架构建议）
 
@@ -461,6 +506,7 @@ todo §9 原验收句「四条事件均有生产端与消费端」按 P1-1 修�
 | E-16 | 死信重放后事件**被真的消费掉**（端到端：replay → dispatch_once → delivered） | `pm-application/tests/outbox_ops.rs` |
 | **E-21** | **replay 后重复消费不产生第二份通知**：replay → 两次 dispatch（模拟重复投递）→ 仍只有一份 `RunCompleted` 通知/审计 | 同上 |
 | **E-22** | **重放审计**：replay 成功与失败（404/409）均写入 `governance.audit_log`（含操作者、project_id、event_id、结果）（P1-4） | `apps/pm-api/tests/outbox_ops.rs` |
+| **E-23** | **部署级装配一致性**：`register_all_handlers` 装配后的 handler 集合 = `CATALOG` 中 `has_handler = true` 全集；两个 Worker main 均经该统一入口装配（防「零 Handler 空壳」退化，§6.2.1） | `pm-infrastructure/tests/outbox_worker.rs` |
 
 ---
 
@@ -474,6 +520,7 @@ todo §9 原验收句「四条事件均有生产端与消费端」按 P1-1 修�
 | Q4 | 死信重放是否跨项目批量 | **否**——一条一次 | YAGNI（§二） |
 | Q5 | `RunCompletedHandler` 并发幂等机制 | **事务级 `pg_advisory_xact_lock`（键 = run_id）+ 同事务条件 INSERT**（P0-2） | `WHERE NOT EXISTS` 有检查-插入竞态窗口，与至少一次投递冲突；advisory lock 不新增 Schema、不加唯一约束，事务结束自动释放 |
 | Q6 | 无 handler 事件能否经环境变量开启 | **否**（P0-4） | 目录优先；`has_handler = false` 一律禁产，env 只能在 `has_handler = true` 集合内收窄——「不产生悬空事件」不可配置突破 |
+| Q7 | 共享同一 outbox 表的两个 Worker 如何避免互相死信 | **统一 Handler 装配**（评审补充第二轮，§6.2.1）：`register_all_handlers` 是**唯一**生产装配入口，`pm-worker` 与 `ai-pm-worker` 的 main 都调用；启动校验（§6.2）不满足即拒绝启动消费循环 | 同一共享队列的所有消费者必须有一致的消费能力，否则零 Handler 实例会把**可处理**事件经重试误判为死信（**假死信**，非业务失败）。**不扩展**多队列 / 消费者分组（YAGNI）。边界：「集合一致」≠「并发安全」——并发仍靠 claim 原子领取（`SKIP LOCKED` + 租约）+ Handler 幂等（§5.6.1） |
 
 ### 8.1 死信查询与重放的既存隔离缺陷（本次一并修，P0-3 扩大范围）
 
@@ -509,15 +556,15 @@ pub async fn replay(
 | `crates/pm-infrastructure/src/outbox.rs` | 改 | `list_dead_letters` 加 `project_id` 过滤；`replay` 契约改 `(pool, project_id, event_id)` + **原子 UPDATE**（`WHERE id AND project_id AND status='dead_letter'`，§4.5） |
 | `crates/pm-infrastructure/src/outbox_handlers.rs` | 改 | 新增 `RunCompletedHandler`（**advisory lock 幂等**，§5.6.1）+ `register_all_handlers(worker, pool)` 共享装配 |
 | `crates/pm-infrastructure/src/outbox_worker.rs` | 改 | 启动时校验「注册表 vs `CATALOG`」一致，不匹配即 panic（fail fast） |
-| `apps/ai-pm-worker/src/main.rs` | 改 | 改用 `register_all_handlers`（注册 `TaskReady` / `DeliverySubmitted` / `RunCompleted`） |
-| `apps/pm-worker/src/main.rs` | 改 | 同上——消除「零 handler 空壳抢事件 → 假死信」（§6.2 补充） |
+| `apps/ai-pm-worker/src/main.rs` | 改 | 改用 `register_all_handlers`（注册 `TaskReady` / `DeliverySubmitted` / `RunCompleted`，§6.2.1 统一装配入口） |
+| `apps/pm-worker/src/main.rs` | 改 | 同上——消除「零 handler 空壳抢事件 → 假死信」（§6.2.1 正式设计约束：共享队列消费者能力必须一致） |
 | `apps/pm-api/src/outbox_ops.rs` | 新建 | 三个端点 + **重放审计**（§4.5）：`GET /v1/pm/outbox/dead-letters` / `POST /v1/pm/outbox/events/{id}/replay` / `GET /v1/pm/outbox/stats` |
 | `apps/pm-api/src/routes.rs` | 改 | 挂载 `outbox_ops::router()` |
 | `crates/pm-application/tests/outbox_events.rs` | 新建 | E-01 ~ E-03 + E-19（目录/env 语义） |
 | `crates/pm-application/tests/outbox_ops.rs` | 新建 | E-05 ~ E-09 + E-16 + E-18a + E-21 |
 | `apps/pm-api/tests/outbox_ops.rs` | 新建 | E-10 ~ E-14 + E-18b + E-22（HTTP 契约） |
 | `crates/pm-infrastructure/tests/outbox_handlers.rs` | 新建 | E-04 + E-17（并发）+ E-20（原子回滚） |
-| `crates/pm-infrastructure/tests/outbox_worker.rs` | 改 | E-15（目录一致性校验） |
+| `crates/pm-infrastructure/tests/outbox_worker.rs` | 改 | E-15（目录一致性校验）+ E-23（部署级装配一致性，§6.2.1） |
 | `crates/pm-infrastructure/tests/outbox.rs` | 改 | `list_dead_letters` / `replay` 签名同步改 |
 | `crates/pm-application/tests/review.rs` | 改 | **P0-4 连带**：`enable_notification_events()` 不再能开启 `ReviewCompleted` / `KnowledgeBaseWriteRequested`；相关 T-043 断言改为「默认不产生」（§6.1 影响标注） |
 
@@ -538,6 +585,7 @@ pub async fn replay(
 | 5 | Worker 启动即 panic 会不会太激进 | 只在**注册表与目录不一致**时 panic（配置错误）；正常运行路径不受影响 |
 | 6 | P0-4 行为收紧影响既有 T-043 测试 | 实施清单已列 `review.rs` 同步改（断言「默认不产生」）；**不为旧测试给目录开兼容口子**（`AGENTS.md` 规则 1 判据：「以前是这样」不是存在理由） |
 | 7 | advisory lock 的键碰撞 | `hashtextextended` 是 64 位 hash，两个不同 run_id 碰撞仅导致**多余串行化**（不会错误跳过写入——条件 INSERT 的判定键仍是 run_id 本身），正确性不受影响 |
+| 8 | 「Handler 集合一致」被误认为并发消费安全（§6.2.1 并发边界） | 统一装配只消除**装配不一致导致的假死信**。两 Worker 并发领取同一事件的并发安全仍由既有机制承担：claim 的 `FOR UPDATE SKIP LOCKED` + 租约保证同一事件同一时刻只被一个实例持有；租约过期导致的重复投递由各 Handler 幂等锚点兜底（§5.6.1）。E-17 并发用例继续有效，与装配一致性（E-23）互不替代 |
 
 ---
 
