@@ -79,7 +79,29 @@ MCP 端点信息（同机阶段）：
 }
 ```
 
-〔待确认〕**接入向导**：建议平台提供「执行端接入」页，按工具生成对应格式的配置片段 + 登记档位（transport / 自治档 / 租约档），把 Q9/Q10/Q11 一次收口。是否进 V1 待评审。
+〔待确认〕**接入向导**：~~建议平台提供「执行端接入」页~~ → **已实施（T-080，2026-11-02）**，见 §3.1。
+
+### 3.1 接入向导（T-080，已实施）
+
+平台暴露一条**公开、agent 可读**的接入 URL，用户粘给执行端 agent 并说「帮我安装」即可，全程不用手改配置文件。
+
+| 入口 | 返回 |
+| --- | --- |
+| `GET /install` | 工具清单（slug / 显示名 / 配置格式 / 是否已核实） |
+| `GET /install/{tool}` | 该工具的接入指引：配置片段 + 验证步骤 + 未激活下一步 + 租约建议 |
+
+- **内容协商**：默认 Markdown（人看）；`Accept: application/json` 或 `?format=json` → JSON（agent 读）。同一份事实的两种渲染。
+- **免鉴权**：agent 在拿到 API Key **之前**就要拉取它，所以 `/install*` 与 `/health` 不在 bearer 三层链内。
+- **平台地址**来自 `AI_PM_PUBLIC_BASE_URL`（缺省 `http://127.0.0.1:8090`；用缺省值时 JSON 标 `base_url_source: "default"`）。
+- **不含任何凭据**：key 只以 `<API_KEY>` 占位符出现，由 agent 向用户索取后写入配置。
+- **未知 slug 不 404**：落通用 `mcpServers` 条目——任何支持 MCP 的客户端都能接入。
+- 首批已核实格式：`trae`（MCP 界面 / HTTP 类型）、`codex`（`~/.codex/config.toml`，TOML）、`workbuddy`（`mcp.json`）；`z-code` / `dsh` / `deepseek-harness` / `opencode` / `pi` 走通用条目。
+
+**安装完成的判定**：`GET /health` → 200，且 `GET /v1/pm/me` → 200 且 `is_active: true`。若 `is_active: false`，指引会给出 `PATCH /v1/pm/principals/{id}` 这一步（与 §二 第 4 步同一条路径）。
+
+〔已核实：`docs/ai-pm-t080-executor-onboarding-url-v1.md`；`apps/pm-api/src/onboarding.rs`〕
+
+**⚠ 与上表的差异**：上表「必带头 `Host`」应读作**建议显式带**——rmcp 优先读客户端自带的 `Host`，缺失才回落 `uri.authority()`；而 pm-api 是 `nest("/mcp", …)`，rmcp 源码明确提示 nest 可能丢掉 hyper 合成的 `Host`，显式带上更稳。向导生成的 `Host` 值从部署地址推导（带非默认端口），不是写死 `127.0.0.1`。〔已核实 `rmcp-3.8.0/…/streamable_http_server/tower.rs`〕
 
 ---
 

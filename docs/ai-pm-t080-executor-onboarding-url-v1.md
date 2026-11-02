@@ -5,7 +5,7 @@
 | 文档性质 | 设计稿（接口契约 + 指引内容契约 + 测试矩阵），已过稿 |
 | 版本 | V1（2026-11-02） |
 | 记录 | 司南（产品经理 Agent）按用户 11 问裁定落盘 |
-| 状态 | **已过稿**（2026-11-02 用户逐节确认 §一–§五）→ 可进入实施 |
+| 状态 | **服务端已实施**（2026-11-02）：§六.1 自动化用例全绿；M-01/M-02 真实执行端实测待用户完成 |
 | 上位约束 | `docs/ai-pm-executor-onboarding-runbook-v1.md`、`docs/ai-pm-mcp-executor-positioning-v1.md`、`docs/ai-pm-principal-identity-v1.md`、`docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`、`docs/ai-pm-codex-bootstrap-v1.md`（T-087 的直系前身）、`docs/ai-pm-architecture-principles.md` |
 | 关联条目 | todo.md §10.5 M8：T-080（本条）/ T-081（`/mcp` 跨机暴露）/ T-082（`pm_list_tasks`）；T-051（预注册档位，保持开放）；T-059（MCP 审计三列） |
 | 前置 | 无（不依赖 T-081；跨机场景在 T-081 完成后自然可用） |
@@ -332,4 +332,49 @@ M-01/M-02 满足 todo.md T-080 的验收句「用 ≥2 个不同执行端实测�
 
 ## 十一、实施记录（2026-11-02，Trae）
 
-> 待实施后回填。
+### 11.1 落地文件
+
+| 文件 | 动作 | 说明 |
+| --- | --- | --- |
+| `crates/pm-application/src/onboarding/mod.rs` | 新增 | `Guide` / `ToolInfo` / `Step` / `VerifyStep` / `Activation` / `NextSteps` / `LeaseHint` / `Catalog`；`install_guide()`、`tool_catalog()`；`host_header_for()`（Host 值从部署地址推导） |
+| `crates/pm-application/src/onboarding/catalog.rs` | 新增 | 8 条内置工具条目（3 已核实 + 5 通用）+ `GENERIC` 兜底 + `is_valid_slug()` |
+| `crates/pm-application/src/onboarding/render.rs` | 新增 | `to_markdown()` / `catalog_to_markdown()` |
+| `crates/pm-application/src/lib.rs` | 改 | `pub mod onboarding;` + 关键类型再导出 |
+| `apps/pm-api/src/onboarding.rs` | 新增 | `GET /install`、`GET /install/{tool}`；内容协商；`AI_PM_PUBLIC_BASE_URL` 读取 |
+| `apps/pm-api/src/routes.rs` | 改 | 新增 `GET /health`；`merge(crate::onboarding::router())` |
+| `apps/pm-api/src/auth.rs` | 改 | 新增 `is_public_path()`；`require_bearer` / `resolve_principal` / `require_active` 三层各自放行 |
+| `apps/pm-api/src/lib.rs` | 改 | `pub mod onboarding;` |
+| `apps/pm-api/tests/onboarding.rs` | 新增 | O-01~O-14 共 8 个用例 |
+
+无迁移（零表结构变更）。
+
+### 11.2 实现期做出的三个细节决定（设计稿未写死）
+
+1. **JSON 响应带 `charset=utf-8`**。首版只发 `application/json`，实测窄接口客户端（PowerShell 5 的 `Invoke-WebRequest`）按 ISO-8859-1 解码，中文全成乱码。虽然 RFC 8259 规定 JSON 默认 UTF-8，但显式声明 charset 零成本且消除歧义，故加上。Markdown 分支本来就带 charset。
+2. **`negotiate()` 的错误类型改为 `NegotiateError`**。原设计让它返回 `Result<Format, Response>`，clippy 报 `result_large_err`（Response ≥128 字节）。改为只携带原因的小枚举 + `IntoResponse`，调用处 `err.into_response()`。
+3. **未知 slug 的 `tool.slug` 返回 `"generic"`**，而不是回显请求里的 slug。理由：通用条目在语义上就是一个条目（`display_name = "通用 MCP 客户端"`），回显任意 slug 会让 `tool` 字段自相矛盾。
+
+### 11.3 验收证据
+
+| 项 | 命令 | 结果 |
+| --- | --- | --- |
+| 用例 | `cargo test -p pm-api --test onboarding` | **8 passed / 0 failed** |
+| 全量回归 | `DATABASE_URL=…:5433/aipm cargo test --workspace` | 退出码 **0**，无 `test result: FAILED` |
+| 类型检查 | `cargo check --workspace --all-targets` | 退出码 **0**，0 error / 0 warning |
+| Lint | `cargo clippy --workspace --all-targets` | 新增四个文件 **0 命中**（其余警告为仓内既有） |
+
+**真实二进制冒烟**（临时库 `aipm_smoke`，`AI_PM_AUTH_MODE=off`、`AI_PM_PUBLIC_BASE_URL=http://192.168.1.50:8090`、`PM_API_PORT=8099`）：
+
+- `GET /health` → `{"service":"pm-api","status":"ok"}`
+- `GET /install/trae` → Markdown：平台地址 / 配置片段（`Host: 192.168.1.50:8090`，**非**写死回环）/ 三步验证 / 未激活下一步 / 开始干活 / 租约建议 / 已知约束
+- `GET /install/codex?format=json` → `application/json; charset=utf-8`，TOML 片段：
+  `[mcp_servers.ai-pm]` + `url` + `http_headers = { Authorization = "Bearer <API_KEY>", Host = "…" }`
+- 冒烟结束后已 `DROP DATABASE aipm_smoke`，未触碰开发库 `aipm`。
+
+### 11.4 待用户实测（本稿不代做）
+
+M-01（Trae）与 M-02（Codex）需要真实执行端，必须由用户在本机执行，见 §六.2。完成前 T-080 只能算「服务端就绪」，不算「验收完成」。
+
+### 11.5 发现的环境问题（与本条无关，记录备查）
+
+本机开发库 `aipm` 的 `_sqlx_migrations` 在第 10 号迁移上校验和不匹配（`VersionMismatch(10)`），`cargo run -p pm-api` 会直接退出。这是既有的本地库漂移，`migrations/` 无未提交改动。按 AGENTS.md「不考虑迁移兼容」，重建开发库即可；本次冒烟改用临时库绕开，未动 `aipm`。
