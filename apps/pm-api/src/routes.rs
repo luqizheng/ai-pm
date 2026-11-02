@@ -152,6 +152,8 @@ fn build_router(
         .merge(crate::pm_imports::router())
         // Task 前置依赖（T-024）：建边 / 删边 / 上下游查询。
         .merge(crate::task_dependencies::router())
+        // Outbox 运维（T-061）：死信列表 / 死信重放 / 事件状态监控。
+        .merge(crate::outbox_ops::router())
         // 审计实时流（SSE）。EventSource 无法带 Authorization，token 走
         // `?access_token=`；auth 层只对本路径放行 query token。
         .route(

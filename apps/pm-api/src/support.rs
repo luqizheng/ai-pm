@@ -50,6 +50,24 @@ impl From<pm_application::pm_write::PmWriteError> for ApiError {
     }
 }
 
+impl From<pm_application::outbox_ops::ReplayError> for ApiError {
+    fn from(e: pm_application::outbox_ops::ReplayError) -> Self {
+        match e {
+            // 跨项目事件与不存在事件统一 404（防事件 ID 探测）。
+            pm_application::outbox_ops::ReplayError::NotFound => {
+                ApiError::NotFound("outbox event not found")
+            }
+            pm_application::outbox_ops::ReplayError::NotDeadLetter => {
+                ApiError::Conflict("outbox event is not dead-lettered")
+            }
+            pm_application::outbox_ops::ReplayError::Db(detail) => {
+                tracing::error!(error = %detail, "outbox replay failed");
+                ApiError::Internal(sqlx::Error::Protocol(detail))
+            }
+        }
+    }
+}
+
 pub type ApiResult<T> = Result<T, ApiError>;
 
 pub const DEFAULT_PAGE: i64 = 1;
