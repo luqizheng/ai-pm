@@ -49,6 +49,26 @@ pub const ACTIVE_RUN_STATUSES: [&str; 3] = [
 /// `SQL IN (...)` 片段，供各查询复用，杜绝各处手写不一致的集合。
 pub const ACTIVE_RUN_STATUSES_SQL: &str = "'queued', 'claimed', 'running'";
 
+/// Run 种类（D5 Q-D5-1）：`delivery` = D1/D3 执行 Run；`review` = D5 Reviewer Run。
+///
+/// 两条恢复链的 `run_kind` 各自恒定、互不越界（D5 §5.4 不变量 4）。活跃 Run
+/// 的判定必须带上本谓词——收窄后的 `uq_task_run_active` 只约束 delivery，
+/// 若计数不带谓词，一个活跃 review run 会挡住 delivery run 的创建与领取。
+pub mod run_kind {
+    pub const DELIVERY: &str = "delivery";
+    pub const REVIEW: &str = "review";
+}
+
+/// `run_kind = 'delivery'` 谓词片段（与 [`ACTIVE_RUN_STATUSES_SQL`] 配套使用）。
+pub const DELIVERY_RUN_KIND_SQL: &str = "run_kind = 'delivery'";
+
+/// Reviewer Run 的活跃状态集合（D5 §2.1 `uq_task_review_active` 的谓词：
+/// review run 不走 `claimed`——`executor_kind='platform'`，领取即 `running`）。
+pub const ACTIVE_REVIEW_STATUSES: [&str; 2] = [run_status::QUEUED, run_status::RUNNING];
+
+/// `SQL IN (...)` 片段，与 [`ACTIVE_REVIEW_STATUSES`] 一致。
+pub const ACTIVE_REVIEW_STATUSES_SQL: &str = "'queued', 'running'";
+
 mod claim;
 mod lease;
 mod policy;

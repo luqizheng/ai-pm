@@ -140,6 +140,8 @@ fn build_router(
         .merge(crate::pm_runs::router())
         // 交付清单（Slice D4：基线 → 结果 commit → 证据；只读）。
         .merge(crate::pm_delivery::router())
+        // Review 审批（Slice D5：pending 审批列表 + 裁决单事务；T-043）。
+        .merge(crate::pm_reviews::router())
         // 产物（需求修订）列表——AI 产物验收中心数据源。
         .merge(crate::pm_artifacts::router())
         // 全局模型供应商配置（deepseek/openai/glm/minimax/ollama）。

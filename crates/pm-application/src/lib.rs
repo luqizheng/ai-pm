@@ -22,6 +22,7 @@ pub mod project_import;
 pub mod read;
 pub mod repo_facts;
 pub mod repository;
+pub mod review;
 pub mod rows;
 pub mod run_context;
 pub mod run_dispatch;
@@ -80,6 +81,15 @@ pub use repository::{
     delete_repository, delete_ssh_key, ensure_ssh_key, generate_ssh_key, get_ssh_key,
     list_repositories, list_ssh_keys, open_ssh_private_key, revoke_ssh_key, update_repository,
     validate_git_url, verify_repository,
+};
+pub use review::{
+    advance_after_review, collect_review_input, decide_review_approval, enqueue_review, evaluate,
+    input_manifest_hash, judge_delivery_failures, review_policy_version, review_step,
+    reviewed_manifest_hash, ApprovalError, ApprovalOutcome, ArtifactProbe, CollectedReview,
+    CompletionGate, CriterionAnchor, CriterionOutcome, CriterionSnapshot, CriterionVerdict,
+    EnqueueOutcome, FailureJudgeReport, KnowledgeWriteback, RepositoryAnchor, ReviewConfig,
+    ReviewDecisionRequest, ReviewError, ReviewFinding, ReviewInput, ReviewOutcome, ReviewStep,
+    ReviewVerdict, ReviewedDelivery, Severity, TestEvidence,
 };
 pub use supervision::{
     DecideRequest, Decision, DecisionOutcome, NotificationRow, SupervisionError, VetoOutcome,

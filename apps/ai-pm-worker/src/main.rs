@@ -10,7 +10,7 @@ use pm_ai::FakeModel;
 use pm_application::project_import::{import_id_for_event, run_import_job};
 use pm_application::{PgCommandExecutor, PolicyEngine};
 use pm_infrastructure::job_queue::{self, ClaimedJob};
-use pm_infrastructure::outbox_handlers::TaskReadyHandler;
+use pm_infrastructure::outbox_handlers::{DeliverySubmittedHandler, TaskReadyHandler};
 use pm_infrastructure::outbox_worker::OutboxWorker;
 use sqlx::PgPool;
 use tracing_subscriber::EnvFilter;
@@ -83,14 +83,18 @@ async fn main() {
         }
     });
 
-    // 第三条循环：outbox 事件分发（spec §20）。只注册 TaskReady → 创建 queued
-    // Run；未注册事件（如 DeliverySubmitted，开关默认关闭）明确死信、可 replay，
-    // 绝不假装消费。
+    // 第三条循环：outbox 事件分发（spec §20）。注册 TaskReady → 创建 queued
+    // Run；DeliverySubmitted → D5 拍①（推进 reviewing + 建 review run，幂等）。
+    // 其余未注册事件明确死信、可 replay，绝不假装消费。
     let outbox_pool = pool.clone();
     let outbox_worker_id = worker_id.clone();
     tokio::spawn(async move {
         OutboxWorker::new(outbox_pool.clone(), outbox_worker_id)
-            .with_handler("TaskReady", Arc::new(TaskReadyHandler::new(outbox_pool)))
+            .with_handler("TaskReady", Arc::new(TaskReadyHandler::new(outbox_pool.clone())))
+            .with_handler(
+                "DeliverySubmitted",
+                Arc::new(DeliverySubmittedHandler::new(outbox_pool)),
+            )
             .run()
             .await
     });
@@ -156,6 +160,33 @@ async fn main() {
                     .await
             {
                 tracing::warn!(error = %e, "finished-run cleanup failed");
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await;
+        }
+    });
+
+    // 第五条循环：D5 review 领取拍（确定性校验管线 → findings/verdict → 推进任务）。
+    // 与失败判定作业并列，共享事务模板但不共享错误处理（§6.2）。
+    let review_pool = pool.clone();
+    tokio::spawn(async move {
+        let outbox: Arc<dyn pm_application::outbox::OutboxAppend> =
+            Arc::new(pm_application::outbox::PgOutboxAppend);
+        pm_application::review::run_review_loop(review_pool, outbox).await
+    });
+
+    // 第六条循环：D5 失败判定作业（B4-A~D）。扫描谓词强制 run_kind='delivery'，
+    // 对 review run 零写入路径（§6.2 结构性隔离）。
+    let judge_pool = pool.clone();
+    tokio::spawn(async move {
+        loop {
+            let report = pm_application::review::judge_failures_once(&judge_pool).await;
+            if report.judged > 0 {
+                tracing::info!(
+                    judged = report.judged,
+                    retries = report.retries,
+                    task_failures = report.task_failures,
+                    "failure judge step"
+                );
             }
             tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await;
         }

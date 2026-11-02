@@ -76,11 +76,14 @@ impl OutboxHandler for TaskReadyHandler {
             return Ok(());
         }
 
-        // 任务级幂等（L0）：已有活跃 Run 则不再新建。集合复用 run_dispatch 的单一真源
-        // （ACTIVE_RUN_STATUSES_SQL），与迁移谓词 uq_task_run_active 保持一致。
+        // 任务级幂等（L0）：已有活跃 Run 则不再新建。三处口径必须一致：
+        // 状态集合复用 run_dispatch 的单一真源（ACTIVE_RUN_STATUSES_SQL），
+        // 且**必须带 `run_kind = 'delivery'` 谓词**——收窄后的 uq_task_run_active
+        // 只约束 delivery，若计数不带谓词，活跃 review run 会挡住 delivery run。
         let active: i64 = sqlx::query_scalar(&format!(
             "SELECT count(*) FROM delivery.task_run \
-             WHERE task_id = $1 AND status IN ({})",
+             WHERE task_id = $1 AND {} AND status IN ({})",
+            pm_application::run_dispatch::DELIVERY_RUN_KIND_SQL,
             pm_application::run_dispatch::ACTIVE_RUN_STATUSES_SQL
         ))
         .bind(task_id)
@@ -121,5 +124,45 @@ impl OutboxHandler for TaskReadyHandler {
 
         tx.commit().await.map_err(|e| e.to_string())?;
         Ok(())
+    }
+}
+
+/// `DeliverySubmitted` 的消费 handler（D5 拍①）：推进 `submitted→reviewing` 并为
+/// 本次交付创建一条 queued review run。
+///
+/// 幂等由 D5 应用层判据承担（存在锚定 `(task_id, input_manifest_hash)` 的任意
+/// review run → 幂等返回），因此重复消费坍缩为一次创建；`23505`（并发先到者已建，
+/// `uq_task_review_active` / 锚定冲突）同样降级为幂等成功，**不进死信**。
+pub struct DeliverySubmittedHandler {
+    pool: PgPool,
+}
+
+impl DeliverySubmittedHandler {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait::async_trait]
+impl OutboxHandler for DeliverySubmittedHandler {
+    async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
+        let task_id = task_id_of(event)
+            .ok_or_else(|| "DeliverySubmitted payload is missing a task_id".to_string())?;
+        match pm_application::review::enqueue_review(&self.pool, event.project_id, task_id).await {
+            Ok(outcome) => {
+                tracing::info!(%task_id, ?outcome, "DeliverySubmitted consumed");
+                Ok(())
+            }
+            Err(pm_application::review::ReviewError::Db(sqlx::Error::Database(db)))
+                if db.code().as_deref() == Some("23505") =>
+            {
+                tracing::info!(
+                    %task_id,
+                    "DeliverySubmitted consumed: idempotent conflict, review run already exists"
+                );
+                Ok(())
+            }
+            Err(error) => Err(error.to_string()),
+        }
     }
 }

@@ -1,18 +1,19 @@
 //! 多租户结构不变量（T-021b 验收 XT-3 / TN-7 / TN-8）。
 //!
-//! 用 `information_schema` 机械断言，而不是靠代码评审：40 张租户业务表全部有
+//! 用 `information_schema` 机械断言，而不是靠代码评审：44 张租户业务表全部有
 //! `tenant_id UUID NOT NULL`，除伪根表 `delivery.policy_scope` 外都至少有一条
 //! `(tenant_id, *)` 组合外键（ADR-0001 §3.5 I1）。
 
 use sqlx::{PgPool, Row};
 
-/// ADR-0001 §3.4 + 本设计稿的四类划分：41 张（T-024 新增 `task_dependency`；
-/// T-041 新增 `task_repository_commit`）。
+/// ADR-0001 §3.4 + 本设计稿的四类划分：44 张（T-024 新增 `task_dependency`；
+/// T-041 新增 `task_repository_commit`；T-043 新增 `review_finding` /
+/// `acceptance_criterion_verdict` / `review_approval`）。
 const TENANT_TABLES: &[(&str, &str)] = &[
     // A 根表（2）
     ("core", "customer"),
     ("core", "project"),
-    // B 直挂 project（35）
+    // B 直挂 project（38）
     ("core", "project_member"),
     ("delivery", "requirement"),
     ("delivery", "requirement_revision"),
@@ -29,6 +30,8 @@ const TENANT_TABLES: &[(&str, &str)] = &[
     ("delivery", "task_acceptance_criterion"),
     ("delivery", "task_knowledge_ref"),
     ("delivery", "task_dependency"),
+    ("delivery", "review_finding"),
+    ("delivery", "acceptance_criterion_verdict"),
     ("integration", "inbound_event"),
     ("integration", "job"),
     ("integration", "notification"),
@@ -48,6 +51,7 @@ const TENANT_TABLES: &[(&str, &str)] = &[
     ("ai", "knowledge_reference"),
     ("governance", "human_intervention"),
     ("governance", "audit_log"),
+    ("governance", "review_approval"),
     // C 锚定非 project 父行（3）
     ("governance", "approval_request"),
     ("delivery", "task_run_failure"),

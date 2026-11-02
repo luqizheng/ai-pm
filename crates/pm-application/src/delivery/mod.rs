@@ -757,6 +757,32 @@ async fn persist_accepted(
     )
     .await?;
 
+    // D5 拍① 的触发源（§9）：交付事实与事件**同事务**。幂等键以 delivery run 钉死
+    // ——同一 run 的重复提交坍缩为同一事件；消费侧另有锚定哈希判据兜底。
+    if crate::outbox::event_is_enabled("DeliverySubmitted") {
+        use crate::outbox::{OutboxAppend, OutboxEvent};
+        let aggregate_id = request.run_id.to_string();
+        let idempotency_key = format!("delivery_submitted:{}", request.run_id);
+        crate::outbox::PgOutboxAppend
+            .append(
+                tx,
+                OutboxEvent {
+                    project_id: request.project_id,
+                    event_type: "DeliverySubmitted",
+                    aggregate_type: "TaskRun",
+                    aggregate_id: &aggregate_id,
+                    payload: serde_json::json!({
+                        "task_id": task_id,
+                        "run_id": request.run_id,
+                        "integration_status": integration_status,
+                        "commit_count": entries.len(),
+                    }),
+                    idempotency_key: &idempotency_key,
+                },
+            )
+            .await?;
+    }
+
     Ok(DeliveryManifest {
         run_id: request.run_id,
         task_id: *task_id,

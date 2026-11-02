@@ -1,4 +1,4 @@
-﻿//! Outbox 生产写入点（spec §20.6.1 / §20.7 L3）：任务状态迁移在同一条业务事务里
+//! Outbox 生产写入点（spec §20.6.1 / §20.7 L3）：任务状态迁移在同一条业务事务里
 //! 登记异步事件；迁移失败（revision 冲突）则事务回滚，不留下事件。
 
 use std::sync::Arc;
@@ -119,7 +119,7 @@ async fn revision_conflict_leaves_no_event(pool: PgPool) {
     );
 }
 #[sqlx::test(migrations = "../../migrations")]
-async fn submitted_transition_is_gated_off_by_default(pool: PgPool) {
+async fn submitted_transition_enqueues_delivery_submitted(pool: PgPool) {
     let f = seed(&pool, "OUTBOX-W3").await;
     sqlx::query("UPDATE delivery.task SET status = 'running' WHERE id = $1")
         .bind(f.task_id)
@@ -139,14 +139,16 @@ async fn submitted_transition_is_gated_off_by_default(pool: PgPool) {
         .await
         .expect("running -> submitted must execute");
 
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM integration.outbox_event")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(
-        count, 0,
-        "DeliverySubmitted is gated off until review orchestration lands"
-    );
+    // D5：`DeliverySubmitted` 已有真实消费 handler（拍①），故默认开启产生。
+    let (event_type, idempotency_key): (String, String) = sqlx::query_as(
+        "SELECT event_type, idempotency_key FROM integration.outbox_event WHERE project_id = $1",
+    )
+    .bind(f.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(event_type, "DeliverySubmitted");
+    assert!(idempotency_key.starts_with(&format!("task:{}", f.task_id)));
 }
 /// A port that always fails, to prove the write is part of the business
 /// transaction: if the event cannot be written, the status change rolls back.

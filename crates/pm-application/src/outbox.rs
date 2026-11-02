@@ -79,12 +79,13 @@ impl OutboxAppend for PgOutboxAppend {
 /// 某事件类型当前是否允许产生（§20.6：对暂不支持的事件用功能开关关闭，不产生
 /// 无 handler 可消费的悬空事件）。
 ///
-/// `AI_PM_OUTBOX_EVENTS` 为逗号分隔的允许清单；未设置时默认**只开**有真实消费
-/// handler 的事件（当前仅 `TaskReady`）。`DeliverySubmitted` 待 Review 编排落地后
-/// 再经开关开启；设成空串即关闭全部事件的产生。
+/// `AI_PM_OUTBOX_EVENTS` 为逗号分隔的允许清单；未设置时默认只开**已有真实消费
+/// handler 的事件**（当前 `TaskReady` 与 `DeliverySubmitted`——后者由 D5 拍①
+/// 消费）。`ReviewCompleted` / `KnowledgeBaseWriteRequested` 是领域通知事件，
+/// V1 不注册 handler（供 T-070 / 监控），故默认不产生；需要时经开关开启。
 pub fn event_is_enabled(event_type: &str) -> bool {
     match std::env::var("AI_PM_OUTBOX_EVENTS") {
         Ok(value) => value.split(',').map(str::trim).any(|item| item == event_type),
-        Err(_) => event_type == "TaskReady",
+        Err(_) => matches!(event_type, "TaskReady" | "DeliverySubmitted"),
     }
 }

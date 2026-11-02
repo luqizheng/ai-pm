@@ -240,7 +240,7 @@ pub(crate) async fn claim_core(
             "SELECT r.id, r.task_id, r.project_id, r.status, r.dispatch_attempts, \
                     r.executor_session, r.stage, r.lease_generation, r.attempt_no \
                FROM delivery.task_run r \
-              WHERE r.task_id = $1 AND r.project_id = $2 \
+              WHERE r.task_id = $1 AND r.project_id = $2 AND r.run_kind = 'delivery' \
                 AND ((r.status = 'queued'  AND r.next_dispatch_at <= now()) \
                   OR (r.status = 'claimed' AND r.lease_expires_at < now())) \
               ORDER BY r.attempt_no DESC, r.created_at \
@@ -256,8 +256,9 @@ pub(crate) async fn claim_core(
             "SELECT r.id, r.task_id, r.project_id, r.status, r.dispatch_attempts, \
                     r.executor_session, r.stage, r.lease_generation, r.attempt_no \
                FROM delivery.task_run r \
-              WHERE (r.status = 'queued'  AND r.next_dispatch_at <= now()) \
-                 OR (r.status = 'claimed' AND r.lease_expires_at < now()) \
+              WHERE r.run_kind = 'delivery' \
+                AND ((r.status = 'queued'  AND r.next_dispatch_at <= now()) \
+                  OR (r.status = 'claimed' AND r.lease_expires_at < now())) \
               ORDER BY r.next_dispatch_at, r.created_at \
               FOR UPDATE OF r SKIP LOCKED \
               LIMIT 1",
@@ -284,7 +285,8 @@ pub(crate) async fn claim_core(
             }
             let active: i64 = sqlx::query_scalar(concat!(
                 "SELECT count(*) FROM delivery.task_run \
-                  WHERE task_id = $1 AND status IN (",
+                  WHERE task_id = $1 AND ",
+                "run_kind = 'delivery' AND status IN (",
                 "'queued', 'claimed', 'running'",
                 ")"
             ))

@@ -16,8 +16,11 @@ pub async fn insert_task_run(
     task_id: Uuid,
     source_event_id: Option<Uuid>,
 ) -> Result<CreatedRun, sqlx::Error> {
+    // attempt_no 按 kind 分轨：`uq_task_run_attempt_delivery` 只约束 delivery 行，
+    // 因此计数也必须只看 delivery——否则 review run 的序号会把 delivery 的序号顶高。
     let attempt_no: i32 = sqlx::query_scalar(
-        "SELECT coalesce(max(attempt_no), 0) + 1 FROM delivery.task_run WHERE task_id = $1",
+        "SELECT coalesce(max(attempt_no), 0) + 1 FROM delivery.task_run \
+          WHERE task_id = $1 AND run_kind = 'delivery'",
     )
     .bind(task_id)
     .fetch_one(&mut **tx)
@@ -25,8 +28,9 @@ pub async fn insert_task_run(
 
     let run_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.task_run \
-         (project_id, task_id, attempt_no, status, stage, next_dispatch_at, source_event_id, tenant_id) \
-         VALUES ($1, $2, $3, 'queued', 'dispatch', now(), $4, \
+         (project_id, task_id, attempt_no, status, stage, next_dispatch_at, source_event_id, \
+          run_kind, tenant_id) \
+         VALUES ($1, $2, $3, 'queued', 'dispatch', now(), $4, 'delivery', \
                  (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)

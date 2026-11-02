@@ -130,6 +130,31 @@ async fn active_run_index_predicates_match_the_single_source(pool: PgPool) {
             "uq_task_run_active predicate must cover `{status}`; got: {active_def}"
         );
     }
+    // D5 收窄（0026）：活跃 delivery Run 的判定必须带 run_kind 谓词，否则一个
+    // 活跃 review run 会挡住 delivery run 的创建（§2.1 反例）。
+    assert!(
+        active_def.contains("run_kind") && active_def.contains("delivery"),
+        "uq_task_run_active must be narrowed to run_kind='delivery'; got: {active_def}"
+    );
+
+    // D5 对偶约束：同一 task 至多一个活跃 review run（§3.6 R1）。
+    let review_def: String = sqlx::query_scalar(
+        "SELECT indexdef FROM pg_indexes \
+          WHERE schemaname = 'delivery' AND indexname = 'uq_task_review_active'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    for status in pm_application::run_dispatch::ACTIVE_REVIEW_STATUSES {
+        assert!(
+            review_def.contains(status),
+            "uq_task_review_active predicate must cover `{status}`; got: {review_def}"
+        );
+    }
+    assert!(
+        review_def.contains("run_kind") && review_def.contains("review"),
+        "uq_task_review_active must be scoped to run_kind='review'; got: {review_def}"
+    );
 
     let event_def: String = sqlx::query_scalar(
         "SELECT indexdef FROM pg_indexes \
