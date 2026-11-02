@@ -219,6 +219,7 @@
 
 - `cargo test --workspace`：**73 套件、462 passed、0 failed**（含新增 6 例并发测试；T-024 基线 441 无回归）。
 - `cargo check --workspace --all-targets`：0 error 0 warning。
+- **2026-11-02 全仓复核（T-025 全部改动后，隔离实例 5434）**：**74 套件、496 passed、0 failed**，无 panic；同时 `cargo check --workspace --all-targets` exit 0。
 
 ### 10.5 审查结论与修复记录（§三 Blocked 解锁语义，2026-11-02，方案 A）
 
@@ -327,6 +328,7 @@
 
 - `cargo test -p pm-application`：**22 个测试二进制、200 passed、0 failed**（本次全量口径，含 C61/C62/C63/C68 新增用例）。
 - `cargo test -p pm-api --test task_dependencies`：9 passed；`--test pm_writes`：13 passed；`pm-mcp contract`：6 passed；`pm-infrastructure tenant_schema`：6 passed。
+- `cargo test --workspace`（隔离实例 5434，T-025 全部改动后）：**74 套件、496 passed、0 failed**。
 - `cargo check --workspace --all-targets`：exit 0。
 
 ### 10.9 待办（后续领取）
@@ -334,4 +336,4 @@
 - **§五 遗留一项待裁**：`pm_write::update_task` 依旧不经 `validate_transition`（可直写任意状态字面量，绕过状态机与 E1/E4 守卫）。本次只并入行锁 + 图锁，状态机校验需单独裁定（会改 UI 契约与错误码）。
 - **§六 遗留一项（P2）**：`list_dependencies` 加 `tenant_id` 过滤（现依赖调用方前置校验）。
 - **C67 / 方案 B / 依赖完成策略可配置**：评审 §9.3 P2，本次明确不做；需要规模基准或策略裁定后再立项。
-- 全仓 `cargo test --workspace` 回归待归档前补跑（需共享库有窗口，或改指向隔离实例）。
+- ~~全仓 `cargo test --workspace` 回归~~：**已完成**（74 套件 / 496 passed / 0 failed，隔离实例 5434）。
