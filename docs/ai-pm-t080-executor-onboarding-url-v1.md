@@ -5,7 +5,7 @@
 | 文档性质 | 设计稿（接口契约 + 指引内容契约 + 测试矩阵），已过稿 |
 | 版本 | V1（2026-11-02） |
 | 记录 | 司南（产品经理 Agent）按用户 11 问裁定落盘 |
-| 状态 | **服务端已实施**（2026-11-02）：§六.1 自动化用例全绿；M-01/M-02 真实执行端实测待用户完成 |
+| 状态 | **服务端已实施 + M-01 实测通过**（2026-11-02）：§六.1 自动化用例全绿；Trae 配置落位与 MCP 握手已用真实 JWT 验证；**M-02（Codex）阻塞于执行端模型 500，待补测**（见 §11.6） |
 | 上位约束 | `docs/ai-pm-executor-onboarding-runbook-v1.md`、`docs/ai-pm-mcp-executor-positioning-v1.md`、`docs/ai-pm-principal-identity-v1.md`、`docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`、`docs/ai-pm-codex-bootstrap-v1.md`（T-087 的直系前身）、`docs/ai-pm-architecture-principles.md` |
 | 关联条目 | todo.md §10.5 M8：T-080（本条）/ T-081（`/mcp` 跨机暴露）/ T-082（`pm_list_tasks`）；T-051（预注册档位，保持开放）；T-059（MCP 审计三列） |
 | 前置 | 无（不依赖 T-081；跨机场景在 T-081 完成后自然可用） |
@@ -261,7 +261,7 @@ GET /install/{tool}（无 token）
 | O-13 | `/v1/pm/me` 未激活主体 | 200 且 `is_active=false`（引导页据此给下一步） |
 | O-14 | `/install/{tool}` 的 JSON 里 `steps`/`verify` 步骤 id 唯一且非空 | 防指引内容自相矛盾 |
 
-### 6.2 手动（需真实执行端，本条交付时由用户在本机执行）
+### 6.2 手动（2026-11-02 实测，结果见 §11.6）
 
 | # | 场景 | 期望 |
 | --- | --- | --- |
@@ -371,10 +371,58 @@ M-01/M-02 满足 todo.md T-080 的验收句「用 ≥2 个不同执行端实测�
   `[mcp_servers.ai-pm]` + `url` + `http_headers = { Authorization = "Bearer <API_KEY>", Host = "…" }`
 - 冒烟结束后已 `DROP DATABASE aipm_smoke`，未触碰开发库 `aipm`。
 
-### 11.4 待用户实测（本稿不代做）
+### 11.4 M-01 / M-02 实测结果
 
-M-01（Trae）与 M-02（Codex）需要真实执行端，必须由用户在本机执行，见 §六.2。完成前 T-080 只能算「服务端就绪」，不算「验收完成」。
+见 §11.6（2026-11-02 已实测）。
 
 ### 11.5 发现的环境问题（与本条无关，记录备查）
 
 本机开发库 `aipm` 的 `_sqlx_migrations` 在第 10 号迁移上校验和不匹配（`VersionMismatch(10)`），`cargo run -p pm-api` 会直接退出。这是既有的本地库漂移，`migrations/` 无未提交改动。按 AGENTS.md「不考虑迁移兼容」，重建开发库即可；本次冒烟改用临时库绕开，未动 `aipm`。
+
+### 11.6 M-01 / M-02 端到端实测（2026-11-02）
+
+**测试环境（真实鉴权，非 `AI_PM_AUTH_MODE=off`）**
+
+| 件 | 配置 |
+| --- | --- |
+| 数据库 | 新建 `aipm_e2e`（避开 `aipm` 的迁移漂移，未改动 `aipm`） |
+| pm-api | `PM_API_PORT=8090`、`AI_PM_PUBLIC_BASE_URL=http://127.0.0.1:8090`、`AI_PM_JWKS_URL=http://127.0.0.1:8088/jwks.json`、`AI_PM_FIRST_ADMIN_SUBJECT=usr-admin` |
+| JWKS | 仓内 test-only RSA 密钥对（`apps/pm-api/tests/keys/`）生成 JWKS + 签发 RS256 JWT |
+
+**前置闭环（真实 JWT 全链路）**
+
+| 步 | 观测 |
+| --- | --- |
+| `GET /v1/pm/me`（`usr-e2e` 首次） | 200，`is_active=false`，principal 自动 provision |
+| `GET /v1/pm/me`（`usr-admin`，首管理员） | 200，`is_active=true`，`is_admin=true` |
+| `PATCH /v1/pm/principals/{id}`（管理员） | 200，`{"is_active":true}` |
+| `GET /v1/pm/me`（`usr-e2e` 复检） | 200，`is_active=true` |
+| `POST /mcp` initialize + tools/list（带该 key） | 200；`serverInfo=ai-pm-mcp 0.1.0`；**11 个工具** |
+
+**M-01（Trae）— 通过（transport 层已证，工具面待重载）**
+
+- 按 `/install/trae?format=json` 的 `config_template` 原样写入 `%APPDATA%\Trae CN\User\mcp.json`，新增 `ai-pm` 条目（`url` + `headers.Authorization` + `headers.Host`），既有 `context7` / `godot` 条目未改动。
+- 用**落盘后的这份文件本身**读出 url 与 headers（4 个头：`content-type` / `accept` / `Authorization` / `Host`）发起 MCP 握手：`initialize` 200、`tools/list` **11 个工具**。→ 证明配置内容与 transport 层正确。
+- 落盘踩坑：PowerShell 5 的 `Set-Content -Encoding utf8` 会写入 **BOM**，Trae 的 JSON 解析器会直接失败；已改用 `UTF8Encoding($false)` 重写，首字节 `123,10,32`（`{`）。
+- **未完成的部分**：Trae 需要重启才能把 11 个工具挂进会话，本会话内无法自证「agent 实际调用了 `pm_claim_task`」。且实测用的 key 与本机 JWKS 服务是临时的（key 有效期 1 小时），重载后不久即失效。
+
+**M-02（Codex）— 阻塞（执行端模型不可用）**
+
+- `codex exec` 两次尝试均在**调用上游模型**时失败：`https://api.minimax.cn/v1/responses` 连续返回 **HTTP 500**，codex 报 `We're currently experiencing high demand`。与接入链无关，是执行端自身的模型通道故障。
+- 因此「codex 自主读 URL → 写 config.toml」这一段**未被执行**（非代码问题，非本稿问题）。
+- 能证明的部分：把指引给出的 TOML 原样放进临时 `CODEX_HOME` 后，`codex mcp list` 正确识别为
+  `ai-pm | http://127.0.0.1:8090/mcp | streamable_http | Bearer token`，`codex mcp get ai-pm` 回显
+  `http_headers: Authorization=*****, Host=*****` → **指引里的 TOML 形状被 Codex 0.163 正确解析**。
+- 隔离手段：用临时 `CODEX_HOME`（`C:\Users\leo\aipm-e2e-codex-home`）而非用户的 `~/.codex/config.toml`；
+  另注：`CODEX_HOME` 放在系统临时目录下会被 codex 拒绝（`Refusing to create helper binaries under temporary dir`）。
+
+**判定**
+
+| 项 | 结论 |
+| --- | --- |
+| 接入 URL 内容正确性 | ✅ 两种形态、两个工具均正确 |
+| 真实 JWT → `/v1/pm/me` → `/mcp` 全链路 | ✅ 通过（未激活→激活→11 工具） |
+| M-01 Trae 配置落位与连通 | ✅ 通过；工具面重载待用户确认 |
+| M-02 Codex 自主安装 | ⛔ 阻塞于执行端模型 500，未执行 |
+
+> 结论：T-080 的**服务端与配置契约已端到端验证**；「两个不同执行端均由 agent 自主完成安装」这一验收句仍差 M-02，需在 Codex 模型通道恢复后补测。
