@@ -76,16 +76,92 @@ impl OutboxAppend for PgOutboxAppend {
         }
     }
 }
+/// 事件类型的**单一真源**（T-061 §6）：谁生产、谁消费、默认是否生产。
+///
+/// 事件类型过去散落在 `event_is_enabled` 的 match、Worker 的 `.with_handler`
+/// 调用与各生产点的字符串字面量里，三处不同步就会出「产生了但没人消费」或
+/// 「消费了但没人产生」。本目录把三处收敛到一处。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EventSpec {
+    pub event_type: &'static str,
+    /// 是否存在真实消费 handler。`false` 的类型**禁止生产**——生产了也没人
+    /// 消费，只会变成死信污染运维面板（§20.6「不假装消费」）。
+    pub has_handler: bool,
+    /// 默认是否生产。环境变量只能在 `has_handler = true` 的集合内收窄，
+    /// 不能突破 `has_handler` 限制。
+    pub enabled_by_default: bool,
+    /// 生产者所在位置（文档用）。
+    pub producer: &'static str,
+}
+
+/// 全部已登记事件类型。`RunRequested` **刻意不在此列**：建 Run 的动作已由
+/// `TaskReady` handler 承担，再发一条是重复语义（`target.md` §P8「不为凑数
+/// 造 Handler」）。
+pub const CATALOG: &[EventSpec] = &[
+    EventSpec {
+        event_type: "TaskReady",
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "task_dependency.rs",
+    },
+    EventSpec {
+        event_type: "DeliverySubmitted",
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "delivery/mod.rs",
+    },
+    EventSpec {
+        event_type: "ReviewCompleted",
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "review/decide.rs",
+    },
+    EventSpec {
+        event_type: "KnowledgeBaseWriteRequested",
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "review/decide.rs",
+    },
+    EventSpec {
+        event_type: "RunCompleted",
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "run_executor.rs",
+    },
+];
+
+/// 查目录条目。未登记的事件类型**一律视为不可生产**。
+pub fn event_spec(event_type: &str) -> Option<&'static EventSpec> {
+    CATALOG.iter().find(|spec| spec.event_type == event_type)
+}
+
+/// 目录中所有**有消费者**的事件类型（`register_all_handlers` 必须覆盖全集）。
+pub fn handled_event_types() -> impl Iterator<Item = &'static str> {
+    CATALOG
+        .iter()
+        .filter(|spec| spec.has_handler)
+        .map(|spec| spec.event_type)
+}
+
 /// 某事件类型当前是否允许产生（§20.6：对暂不支持的事件用功能开关关闭，不产生
 /// 无 handler 可消费的悬空事件）。
 ///
-/// `AI_PM_OUTBOX_EVENTS` 为逗号分隔的允许清单；未设置时默认只开**已有真实消费
-/// handler 的事件**（当前 `TaskReady` 与 `DeliverySubmitted`——后者由 D5 拍①
-/// 消费）。`ReviewCompleted` / `KnowledgeBaseWriteRequested` 是领域通知事件，
-/// V1 不注册 handler（供 T-070 / 监控），故默认不产生；需要时经开关开启。
+/// **目录优先**（T-061 §6.1）：
+/// 1. 未登记的类型 → `false`；
+/// 2. `has_handler = false` 的类型 → `false`，**环境变量不能突破**——否则
+///    管理员配一个无 handler 的事件类型即可制造悬空事件，随后被 Worker 死信；
+/// 3. `AI_PM_OUTBOX_EVENTS`（逗号分隔）存在时，只能在 `has_handler = true` 的
+///    集合内**收窄**选择；
+/// 4. 否则按目录的 `enabled_by_default`。
 pub fn event_is_enabled(event_type: &str) -> bool {
-    match std::env::var("AI_PM_OUTBOX_EVENTS") {
-        Ok(value) => value.split(',').map(str::trim).any(|item| item == event_type),
-        Err(_) => matches!(event_type, "TaskReady" | "DeliverySubmitted"),
+    let Some(spec) = event_spec(event_type) else {
+        return false;
+    };
+    if !spec.has_handler {
+        return false;
     }
+    if let Ok(value) = std::env::var("AI_PM_OUTBOX_EVENTS") {
+        return value.split(',').map(str::trim).any(|item| item == event_type);
+    }
+    spec.enabled_by_default
 }

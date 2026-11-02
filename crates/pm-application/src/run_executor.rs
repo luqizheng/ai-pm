@@ -13,6 +13,7 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::command_executor::{apply_task_transition, system_context, TransitionFacts};
+use crate::outbox::OutboxAppend;
 use crate::run_dispatch::{
     append_executor_event, audit_run, claim_once, recover_lost_run, renew_lease, run_status,
     ClaimKind, DispatchMode, ExitOutcome, RunDispatchConfig, RunDispatchError, ExecutableRun,
@@ -716,7 +717,7 @@ async fn record_termination(
     .bind(reason_code)
     .fetch_optional(&mut *tx)
     .await?;
-    let Some(_task_id): Option<Uuid> = updated.map(|row| row.get("task_id")) else {
+    let Some(task_id): Option<Uuid> = updated.map(|row| row.get("task_id")) else {
         tx.commit().await?;
         return Ok(false);
     };
@@ -757,6 +758,7 @@ async fn record_termination(
         serde_json::json!({ "termination_reason": reason_code, "result": terminal }),
     )
     .await?;
+    emit_run_completed(&mut tx, project_id, run_id, task_id, terminal, None).await?;
     tx.commit().await?;
     Ok(true)
 }
@@ -783,7 +785,7 @@ async fn finish_run(
     .bind(if succeeded { "succeeded" } else { "failed" })
     .fetch_optional(&mut *tx)
     .await?;
-    let Some(_task_id): Option<Uuid> = updated.map(|row| row.get("task_id")) else {
+    let Some(task_id): Option<Uuid> = updated.map(|row| row.get("task_id")) else {
         tx.commit().await?;
         return Ok(());
     };
@@ -816,7 +818,65 @@ async fn finish_run(
         serde_json::json!({ "outcome": format!("{outcome:?}"), "result": if succeeded { "succeeded" } else { "failed" } }),
     )
     .await?;
+    emit_run_completed(
+        &mut tx,
+        project_id,
+        run_id,
+        task_id,
+        if succeeded { "succeeded" } else { "failed" },
+        None,
+    )
+    .await?;
     tx.commit().await?;
+    Ok(())
+}
+
+/// 在 Run 终态事务里产生 `RunCompleted` 事实通知事件（T-061 §5）。
+///
+/// 语义：**有消费者的事实通知事件**——消费者是 `RunCompletedHandler`，消费动作
+/// 是记审计 + 生成执行完成通知；**不改 Run 状态、不触发 D5 失败判定、不重新
+/// 调度 Task**（状态推进权归 D5 失败判定作业）。
+///
+/// 幂等键 `run_completed:<run_id>`：一个 Run 只可能有一次终态（条件 UPDATE
+/// `WHERE status IN ('claimed','running')` 先到先得，第二个到达者直接返回，
+/// **不写事件**），run_id 同时是生产端与消费端的幂等锚点。
+///
+/// 与终态、审计**同事务**追加——「状态已变、事件没写」不可表示。
+async fn emit_run_completed(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    project_id: Uuid,
+    run_id: Uuid,
+    task_id: Uuid,
+    status: &str,
+    attempt_no: Option<i32>,
+) -> Result<(), RunDispatchError> {
+    if !crate::outbox::event_is_enabled("RunCompleted") {
+        return Ok(());
+    }
+    let aggregate_id = run_id.to_string();
+    let idempotency_key = format!("run_completed:{run_id}");
+    let mut payload = serde_json::json!({
+        "run_id": run_id,
+        "task_id": task_id,
+        "status": status,
+        "outcome": status,
+    });
+    if let Some(attempt_no) = attempt_no {
+        payload["attempt_no"] = serde_json::json!(attempt_no);
+    }
+    crate::outbox::PgOutboxAppend
+        .append(
+            tx,
+            crate::outbox::OutboxEvent {
+                project_id,
+                event_type: "RunCompleted",
+                aggregate_type: "TaskRun",
+                aggregate_id: &aggregate_id,
+                payload,
+                idempotency_key: &idempotency_key,
+            },
+        )
+        .await?;
     Ok(())
 }
 

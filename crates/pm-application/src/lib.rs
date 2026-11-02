@@ -17,6 +17,7 @@ pub mod knowledge_search;
 pub mod knowledge_write_coordinator;
 pub mod llm_config;
 pub mod outbox;
+pub mod outbox_ops;
 pub mod pm_write;
 pub mod policy_composition;
 pub mod policy_engine;
@@ -45,6 +46,10 @@ pub use command_executor::{
 };
 pub use pm_domain::CommandError;
 pub use outbox::{OutboxAppend, OutboxEvent, PgOutboxAppend};
+pub use outbox_ops::{
+    DeadLetterListing, DeadLetterRow, EventTypeCounts, OutboxStats, ReplayError, ReplayOutcome,
+    StatusCounts, dead_letters, replay, stats,
+};
 pub use ingestion::{IngestionError, SubmitEventRequest, SubmitOutcome, submit_event};
 pub use knowledge::{
     CreateDocumentRequest, CreatedDocument, DocumentContent, DocumentSummary, KnowledgeError,

@@ -302,7 +302,12 @@ fn outbox() -> pm_application::outbox::PgOutboxAppend {
     pm_application::outbox::PgOutboxAppend
 }
 
-/// 让 `ReviewCompleted` / `KnowledgeBaseWriteRequested` 事件在测试里可见。
+/// 让 D5 的领域通知事件在测试里可见。
+///
+/// T-061（P0-4）之后 `AI_PM_OUTBOX_EVENTS` **不能**突破事件目录的
+/// `has_handler` 限制——`ReviewCompleted` / `KnowledgeBaseWriteRequested`
+/// 没有消费 handler，因此**任何开关配置都无法让它们产生**（否则会产生
+/// 悬空事件并被 Worker 死信）。这两个事件的断言已相应改为「不产生」。
 fn enable_notification_events() {
     std::env::set_var(
         "AI_PM_OUTBOX_EVENTS",
@@ -422,7 +427,9 @@ async fn c100_delivered_auto_accept_completes_with_proposal_and_events(pool: PgP
     assert_eq!(status, "draft");
     assert_eq!(doc_key, format!("task-{}", fx.task_id));
 
-    // 两事件同事务写（开关已开）。
+    // D5 的两个领域通知事件**不产生**：T-061（P0-4）之后事件目录是单一真源，
+    // 无消费 handler 的事件类型**禁止生产**——`AI_PM_OUTBOX_EVENTS` 也不能突破。
+    // 否则会产生悬空事件，随后被 Worker 死信（假死信污染运维面板）。
     let events: Vec<String> = sqlx::query_scalar(
         "SELECT event_type FROM integration.outbox_event WHERE project_id = $1 ORDER BY event_type",
     )
@@ -430,10 +437,13 @@ async fn c100_delivered_auto_accept_completes_with_proposal_and_events(pool: PgP
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert!(events.iter().any(|e| e == "ReviewCompleted"), "events: {events:?}");
     assert!(
-        events.iter().any(|e| e == "KnowledgeBaseWriteRequested"),
-        "events: {events:?}"
+        !events.iter().any(|e| e == "ReviewCompleted"),
+        "an event without a handler must not be produced: {events:?}"
+    );
+    assert!(
+        !events.iter().any(|e| e == "KnowledgeBaseWriteRequested"),
+        "an event without a handler must not be produced: {events:?}"
     );
     assert_eq!(audit_count(&pool, "review.completed").await, 1);
 }
@@ -512,7 +522,6 @@ async fn c101_require_human_approval_stops_at_a_pending_approval(pool: PgPool) {
 async fn c102_approve_completes_and_reject_requests_changes(pool: PgPool) {
     // ── approve ──────────────────────────────────────────────────────
     let fx = seed_delivered(&pool, "D5-C102A", true, "passed").await;
-    enable_notification_events();
     insert_criterion(&pool, fx.project_id, fx.task_id, 10, "manual").await;
     enqueue_review(&pool, fx.project_id, fx.task_id).await.unwrap();
     let step = review_step(&pool, &outbox(), &ReviewConfig::from_env()).await.unwrap();
