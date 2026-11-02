@@ -1,7 +1,7 @@
 # T-060 · 知识索引层可替换化与完整检索（P6 后半 · 设计稿 v1.3）
 
-> 状态：**有条件通过（v1.3 增补 Project 级写入协调与并发模型，待复审）**
-> 版本：v1.0（2026-11-02 落盘，Q1–Q4 + A-1~A-6 已裁定）→ v1.1（2026-11-02 评审修订：并发一致性、版本边界、状态不变量、故障分级、检索正确性、性能验证、K-17~K-25）→ v1.2（2026-11-02 收录专家评审 v2 原文，补当前生效修订校验、检索服务职责分离、分页语义、索引表级故障回退）→ **v1.3（2026-11-02 裁定：Project 级 Knowledge Write Coordinator + 写入幂等 / base_revision 校验 / 跨实例协调）**
+> 状态：**已实施（2026-11-02 落地，实施记录见 §13）**
+> 版本：v1.0（2026-11-02 落盘，Q1–Q4 + A-1~A-6 已裁定）→ v1.1（2026-11-02 评审修订：并发一致性、版本边界、状态不变量、故障分级、检索正确性、性能验证、K-17~K-25）→ v1.2（2026-11-02 收录专家评审 v2 原文，补当前生效修订校验、检索服务职责分离、分页语义、索引表级故障回退）→ **v1.3（2026-11-02 裁定：Project 级 Knowledge Write Coordinator + 写入幂等 / base_revision 校验 / 跨实例协调；同日实施落地）**
 > 评审结论：修改后过稿；**不推翻现有架构，不扩大本期范围**。
 > 一句话：把「每次检索都逐篇读 Git + 全量扫描」换成「落库章节索引 + 可替换端口 + 发布即重建 + 索引不可用时回退直读」，不引入分词扩展、不引入向量库、不改检索响应契约。
 > 上位依据：`todo.md` §9 M6（T-060）、`docs/ai-pm-markdown-knowledge-space.md` §九/§十一（A 路径与可替换适配层）、`docs/ai-pm-knowledge-v2-implementation.md` §3（索引现状）、`migrations/0014_knowledge_v2.sql:60-79`、`migrations/0019_tenant.sql`（租户纪律）、`AGENTS.md` 规则 1（新项目无存量数据，直接改契约）。
@@ -228,7 +228,7 @@ ALTER TABLE ai.document_section_index
 - `section_no` = 解析顺序（含 level 0 的 `preamble`），重建时连续重排。
 - 租户纪律按 `0019`：`tenant_id NOT NULL` + 两条 `(tenant_id, *)` 组合外键（`uq_document_revision_tenant_id` 已存在）。
 - `provider` 为维度列；`(document_revision_id, provider)` 唯一键在 `document_index_state` 上已存在。
-- `tenant_schema.rs` 的 `TENANT_TABLES` 由 40 增至 **42**（本表 + §4.5 幂等账本）。
+- `tenant_schema.rs` 的 `TENANT_TABLES` 由 44 增至 **46**（本表 + §4.5 幂等账本）。
 - **状态表唯一键核对（评审 P0-2）**：`ai.document_index_state` 的既有约束为 `UNIQUE (document_revision_id, provider)`
   （`0014:75`），本稿 UPSERT 的冲突目标与此**一致**；迁移 `0019` 已为其加 `tenant_id` 与 `(tenant_id, document_revision_id)`
   组合外键（`ON DELETE CASCADE`），无需改动。
@@ -385,6 +385,7 @@ async fn apply_transition(
 - 本稿**撤回 v1.0 中「毫秒级」的论断**：重建成本 = 解析 + 章节行插入 + 锁等待，随章节数线性增长，具体值必须实测。
 - 验证方式（K-23）：构造 ≥ 200 个标题、≥ 200 KB 的 Markdown，在测试库执行一次重建，断言（a）章节行数与标题数一致、（b）`indexed` 状态与哈希一致、（c）耗时不超过 **10 s**（防病态退化的宽松上限，不是 SLA）；耗时同时 `info!` 输出并在实施后回填本节实测值。
 - 回归保护：该用例随 `knowledge_index_v2.rs` 常态运行（不 `#[ignore]`），保证任何让重建退化为秒级以上的改动都会被看见。
+- **实测值（2026-11-02，K-23）**：**221 章节 / 268,303 字节（262 KB）→ 重建 84 ms**（含解析 + 221 行落库 + 状态 upsert，本机 `#[sqlx::test]` 临时库）。结论：同步重建对发布请求不可见（< 0.1 s），§5.7「不改异步」成立；10 s 上限留作病态退化守卫。实测由用例内 `println!("K23_PERF ...")` 输出，可复跑取数。
 
 ### 5.7 为什么不做后台 job（被否方案记录）
 
@@ -610,7 +611,7 @@ SELECT *, score + ref_boost AS total FROM scored
 | K-12 | 响应兼容 | REST JSON 字段集合与改造前一致（无 `revision_hash`） | `apps/pm-api/tests/documents.rs` |
 | K-13 | 回退语义 | 状态缺失/`failed` 时回退直读仍能命中；`used_fallback` 只在内部 | `knowledge_index_v2.rs` |
 | K-14 | 两路径打分一致 | 同一文档「索引态」与「强制回退态」排名与分值相同 | 同上 |
-| K-15 | 租户结构不变量 | 新表进 `TENANT_TABLES`（**42** 张：章节索引 + 幂等账本），`tenant_id NOT NULL` + 组合外键齐备 | `crates/pm-infrastructure/tests/tenant_schema.rs` |
+| K-15 | 租户结构不变量 | 新表进 `TENANT_TABLES`（**46** 张：章节索引 + 幂等账本），`tenant_id NOT NULL` + 组合外键齐备 | `crates/pm-infrastructure/tests/tenant_schema.rs` |
 | K-16 | 迁移可重复 | `0024` 空库应用成功，表/索引/约束齐备 | `crates/pm-infrastructure/tests/migration_0024.rs` |
 | **K-17** | **并发一致性（评审 1）** | 对同一 `(revision, provider)` 并发执行「重建」与「漂移清理」：两者串行化；后到旧操作返回 `Superseded` 且**不删除**新产物；结束后 INV-1/INV-2 成立 | `knowledge_index_v2.rs` |
 | **K-18** | **版本参与有效性（评审 2）** | 把 state 的 `index_version` 改为 `v0` → 检索走回退、不返回旧索引内容；全量重建后恢复 DB 直查 | 同上 |
@@ -664,7 +665,7 @@ T-060 验收四条 ↔ 用例：可重建且幂等 → K-02；状态与正文哈
 | `apps/pm-mcp`（`pm_submit_document`） | 透传 `operation_id` / `base_revision_id`（写入协调的唯一入口不变） |
 | `apps/pm-api/src/routes.rs` | 新增 `POST /v1/pm/documents/reindex`（§5.5） |
 | `crates/pm-application/src/lib.rs` | 重导出更新 |
-| `crates/pm-infrastructure/tests/tenant_schema.rs` | 表清单加新表（40 → **42**） |
+| `crates/pm-infrastructure/tests/tenant_schema.rs` | 表清单加新表（44 → **46**） |
 | `crates/pm-infrastructure/tests/migration_0024.rs` | 新建 |
 | `crates/pm-application/tests/knowledge_v2.rs`、`apps/pm-api/tests/documents.rs` | 适配新契约 + K-12 / K-20 |
 | `crates/pm-application/tests/knowledge_index_v2.rs` | 新建（K-02~K-11、K-13、K-14、K-17~K-30） |
@@ -877,3 +878,63 @@ DDL 对租户的约束做得不错（`tenant_id NOT NULL`、project 组合外键
 7. 重建性能验收。
 
 **不建议增加**：向量数据库、中文分词、后台 Job、新增 outbox 事件、监控管理页面、未来 PageIndex 的提前实现。
+
+---
+
+## 13. 实施记录（2026-11-02 · v1.3 落地）
+
+> 实施依据：本稿 v1.3。**契约按 AGENTS.md 规则 1 直接改**——旧契约
+> （`IndexReference` / `RetrievedSection` / `index_document` / `index_revision` /
+> `MARKDOWN_TREE_PROVIDER` / `MARKDOWN_TREE_INDEX_VERSION` / `search_with_fallback` /
+> `search_documents`）**已删除**，不留迁移脚本 / 双写 / 兼容分支 / 回退开关。
+
+### 13.1 文件级落地对照（§10 清单）
+
+| 文件 | 落地情况 |
+|---|---|
+| `migrations/0024_knowledge_section_index.sql` | ✅ 新建。`ai.document_section_index`（章节索引派生表）+ `ai.knowledge_write_operation`（写入幂等账本）；两条组合外键把 `tenant_id` 与 `core.project` / `ai.document_revision` 绑死 |
+| `crates/pm-application/src/knowledge_write_coordinator.rs` | ✅ 新建。`ProjectWriteGuard`（会话级 `pg_try_advisory_lock` + `detach()` 不归还池 + `Drop` 兜底）、`claim_operation` / `complete_operation` / `find_operation`、`current_head`、`check_base_revision` |
+| `crates/pm-application/src/knowledge_indexer.rs` | ✅ 端口新契约 `KnowledgeIndexer { provider, index_version, rebuild_document, search }` + `DbSectionIndexer` + **唯一原语** `apply_transition`（`pg_advisory_xact_lock` 锁内重算前置条件 → 章节与状态同事务）+ `rebuild_quietly` / `mark_stale` / `index_states` |
+| `crates/pm-application/src/knowledge_search.rs` | ✅ 新建。`KnowledgeSearchService::search`（四要素判定 → DB/回退编排 → 合并去重 → 排序 → 分页）；`FallbackSearchResult` / `FallbackReason` / `SearchPage::normalized` |
+| `crates/pm-application/src/knowledge_index.rs` | ✅ 保留纯函数解析 + 新增 `raw_score` / `score_section` / `doc_type_weight`；`search_documents` → `scan_documents_direct`（仅回退用）；`SearchHit` 增 `revision_id` / `revision_hash`（均 `#[serde(skip_serializing)]`） |
+| `crates/pm-application/src/knowledge.rs` | ✅ `CreatedDocument` 增 `revision_id`；入参增 `operation_id` / `base_revision_id`（替换 `base_content_hash`）；`KnowledgeError` 增 `IndexUnavailable` / `ProjectWriteBusy` / `RevisionConflict` |
+| `crates/pm-application/src/knowledge_proposal/{submit,veto}.rs` | ✅ 删 `pending` 插入；经 Coordinator（幂等 + `base_revision` 校验）；提交后重建；veto = `mark_stale(被否决)` + 重建生效修订 |
+| `apps/pm-api/src/documents.rs` | ✅ `search_handler` 走 `KnowledgeSearchService` + `limit`/`offset`；`reindex_handler` 走 `DbSectionIndexer` 并经 Coordinator；新增 `reindex_project_handler`（`{reindexed, stale, failed, superseded}`）；`error_response` 增 503 / 409 映射 |
+| `apps/pm-api/src/routes.rs` | ✅ 新增 `POST /v1/pm/documents/reindex` |
+| `crates/pm-mcp/src/tools.rs` | ✅ 四个工具 args 增 `operation_id`；`ProposeDocumentArgs.base_content_hash` → `base_revision_id`；`map_knowledge_error` 处理三个新错误变体 |
+| `frontend/src/api/documents.ts` + `KnowledgePage.vue` | ✅ `SubmitProposalPayload` 增必填 `operation_id`、改 `base_revision_id`；`confirmProposal` / `vetoRevision` 增 `operationId` 入参并透传（幂等键绑定被操作对象 id） |
+| `crates/pm-infrastructure/tests/tenant_schema.rs` | ✅ 表清单 44 → **46** 张，新增 `document_section_index` + `knowledge_write_operation` |
+| `crates/pm-infrastructure/tests/migration_0024.rs` | ✅ 新建，8 条（表存在 / 唯一键 / 章节号重复拒绝 / 账本幂等 / command 枚举封闭 / 级联删除 / 跨租户拒绝 / DDL forward-only） |
+| `crates/pm-application/tests/knowledge_index_v2.rs` | ✅ 新建，**29 条**（K-02~K-30 全覆盖，另加账本记录、基线语义、状态视图三条） |
+| `apps/pm-api/tests/knowledge_index_v2.rs` | ✅ 新建，1 条（K-12 响应契约 + K-20①整项目回退 200 / K-20②权威元数据不可用 503） |
+
+### 13.2 关键实现决策（与本稿的偏差及原因）
+
+| # | 偏差 | 原因 |
+|---|---|---|
+| 1 | `check_base_revision(None, _)` **放行**（只在显式声明基线时校验） | 原语义把「未声明基线」当「必须等于 head」，会把「放弃乐观并发」的合法调用误判为冲突。**新建文档另有一条硬规则**：携带 `base_revision_id` 直接 `RevisionConflict`（没有既有文档可作基线） |
+| 2 | SQL 打分拆成「标题 CASE」+「锚点 CASE」**两个独立加法项** | 原写法把锚点命中放在标题 CASE 的 `ELSE` 分支里——标题命中则锚点不计分，与 §6.2 口径不一致。K-14 钉住 SQL / Rust 两路径等价 |
+| 3 | `raw` / `score` / `ref_boost` 显式 `::bigint` | PG 表达式默认 `INT4`，与 Rust `i64` 不兼容 |
+| 4 | 回退路径**只扫失效的那几篇**（按 `stale_revision_ids` 逐篇直读） | 原实现全量扫所有文档：浪费，且会把已索引文档重复计入 |
+| 5 | 回退路径的引用加成改由 `reference_boosts()` 提供 | 与 SQL 路径同口径（只认当前修订 + 非空锚点），K-14 一致性 |
+| 6 | `load_doc_states` / 回退直读失败 → `KnowledgeError::IndexUnavailable` | §6.5 故障分级：**权威元数据不可读必须 503，绝不退化成 200 空结果**（伪装成「无匹配」） |
+| 7 | `KnowledgeSearchService.indexer` 类型为 `Arc<dyn KnowledgeIndexer>`，提供 `with_indexer()` | 端口可替换性落地（§3.3），测试可注入替身 |
+| 8 | `scan_documents_direct` 单篇读失败 → `continue` + `warn!` | 单篇失效只该让**该篇**回退，不该让整次检索失败 |
+
+### 13.3 验收证据（2026-11-02）
+
+| 门禁 | 结果 |
+|---|---|
+| `DATABASE_URL=postgres://aipm:aipm@127.0.0.1:5433/aipm cargo test --workspace` | 退出码 0；**78 个套件 / 566 passed / 0 failed**（日志 `target/t060-run5.log`，连续两跑结果一致） |
+| `cargo check --workspace --all-targets` | 退出码 0，**0 error / 0 warning** |
+| K-23 性能实测 | 221 章节 / 268,303 B → **84 ms**（见 §5.6） |
+| `pnpm typecheck`（frontend） | 退出码 0 |
+| `pnpm test:unit`（frontend） | 退出码 0；**88 套件 / 533 passed** |
+
+新增测试分布：`knowledge_index_v2.rs` 应用层 29 条 + 迁移 8 条 + API 契约 1 条 = **38 条新增**。
+
+### 13.4 遗留
+
+- **T-061**：`RunCompleted` 生产者、死信重放接口、事件监控指标——本稿**不写 outbox 事件**（§9 明确不做）；`knowledge_index_failed` / `knowledge_search_unavailable` 日志与 `document_index_state` 可直接作为指标来源。
+- **未来 provider（PageIndex / 向量）**：实现同一 trait + 自带派生表，切换不改业务调用点（§11）。
+- **§9 风险 1（打分公式双实现）**：公式只在 §6.2 维护；K-14 / K-21 为守门用例。

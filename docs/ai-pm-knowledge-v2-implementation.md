@@ -62,6 +62,8 @@ published 修订 ──veto──→ rolled_back（Git revert + 指针回退 + �
 
 ## 四、索引层（`knowledge_indexer`）
 
+> ⚠️ **本节描述的是 T-060 之前的状态**。T-060（2026-11-02）已整体重做索引层，**旧契约全部删除**（`IndexReference` / `RetrievedSection` / `index_document` / `index_revision` / `MARKDOWN_TREE_PROVIDER` / `MARKDOWN_TREE_INDEX_VERSION` / `search_with_fallback` / `search_documents`），**没有迁移脚本 / 双写 / 兼容分支**（`AGENTS.md` 规则 1）。**现行为见 §十「索引层 V2（T-060）」。**
+
 - `KnowledgeIndexer` trait：`provider` / `index_document` / `search`，可替换为 B/C 路径（外部 PageIndex 需另行评估数据出境）。
 - A 路径 `MarkdownTreeIndexer`：解析标题树，检索时校验 `content_hash`。
 - `index_revision`：哈希漂移 → `stale`；解析失败 → `failed`；成功 → `indexed`。
@@ -134,3 +136,64 @@ V2 专项测试：`crates/pm-application/tests/knowledge_v2.rs`（10 项：自�
 | 3 | 索引 A 路径 | 标题树 + 关键词检索，**不是**向量/语义检索；`KnowledgeIndexer` 已可替换 |
 | 4 | 需求正文双轨 | PG `requirement_revision` 仍服务旧页面；Markdown 为镜像，切换读取源需单独裁决 |
 | 5 | 否决窗口 | 仅后端校验，前端未显示剩余窗口时间 |
+
+---
+
+## 十、索引层 V2（T-060 · 2026-11-02）
+
+> 设计真源：`docs/ai-pm-t060-knowledge-index-v1.md` v1.3（§13 实施记录）
+> 迁移：`0024_knowledge_section_index.sql`（`0024` 归 T-060；T-083 Discovery 顺移到下一空号）
+
+### 10.1 三层架构
+
+| 层 | 位置 | 职责 |
+| --- | --- | --- |
+| 纯函数 | `knowledge_index.rs` | Markdown 解析 + 打分口径（`raw_score` / `score_section` / `doc_type_weight`） |
+| provider 端口 | `knowledge_indexer.rs` | `KnowledgeIndexer { provider, index_version, rebuild_document, search }`；`DbSectionIndexer` 为唯一实现 |
+| 应用服务 | `knowledge_search.rs` | `KnowledgeSearchService::search`：四要素有效性判定 → DB/回退编排 → 合并去重 → 排序 → 分页 |
+
+**数据模型**：`ai.document_section_index`（章节索引派生表，`UNIQUE (document_revision_id, provider, section_no)`）+ `ai.knowledge_write_operation`（写入幂等账本，`UNIQUE (project_id, operation_id)`）。两者均带 `tenant_id NOT NULL` 与 `(tenant_id, *)` 组合外键。
+
+### 10.2 唯一状态转换原语 `apply_transition`
+
+写索引产物与状态的**唯一入口**：`(revision, provider)` 级 `pg_advisory_xact_lock` → 锁内**重算**前置条件 → 章节与状态**同事务**原子写 → 提交。
+
+不变量（INV-1 / INV-2）：
+- `status ≠ 'indexed'` ⇒ 该 `(revision, provider)` 章节行数 = 0；
+- `status = 'indexed'` ⇒ 哈希与版本均匹配当前修订 ∧ 章节行数 > 0。
+
+任何路径（发布 / 单修订 reindex / 项目级全量 reindex / 读路径漂移 / veto）都只能经它写入。
+
+### 10.3 检索与回退
+
+- **有效性四要素**：provider 匹配 ∧ `status='indexed'` ∧ `index_version` 匹配 ∧ `indexed_content_hash = revision.content_hash`。
+- **打分**：标题全等 6 / 标题包含 3 / 锚点包含 2 / 正文出现次数 `min(3, count)`；类型权重 architecture·decision ×1.2、requirement ×1.1、其余 ×1.0；引用加成 +2（只认当前修订 + 非空锚点相等）。SQL 与 Rust 两处实现由 K-14 钉住等价。
+- **分页**：`limit` 夹 1..=100（缺省 20）、`offset` 缺省 0；**响应体不变**（不返回 `total` / `has_more`）。
+- **故障分级**：单篇失效 → 该篇回退直读；索引层整体不可用 → 整项目回退（仍 200）；**权威元数据不可读 → 503 `KNOWLEDGE_INDEX_UNAVAILABLE`，绝不返回 200 空结果**。
+
+### 10.4 Project 级写入协调（`knowledge_write_coordinator.rs`）
+
+- **同一 Project 的知识库写入串行**（Agent 并行 ≠ 写入并行）；锁粒度 = `project_id`，不同 Project 完全并行。
+- 锁实现：PostgreSQL **会话级** `pg_try_advisory_lock`（跨实例有效，实例崩溃自动释放）；持锁连接**不归还池**（`detach()`），避免锁被继承。
+- 写入五步：取锁 → `base_revision` 校验 → 幂等预占 → 业务事务提交 → 同步重建 → 释放锁。
+- 超时 → 409 `KNOWLEDGE_PROJECT_BUSY`；基线过期 → 409 `KNOWLEDGE_REVISION_CONFLICT`。
+- 幂等键 `operation_id` 覆盖四个写命令：`create_document` / `submit_proposal` / `confirm_redline` / `veto_revision`。
+
+### 10.5 新增接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/v1/pm/documents/reindex?project_id=` | 项目级全量重建，返回 `{reindexed, stale, failed, superseded}` |
+
+`GET /v1/pm/documents/search` 响应体不变，新增可选 `limit` / `offset`。
+
+### 10.6 验证证据
+
+| 门禁 | 结果 |
+| --- | --- |
+| `cargo test --workspace` | 退出码 0；78 套件 / **566 passed** / 0 failed（连续两跑一致） |
+| `cargo check --workspace --all-targets` | 退出码 0，0 error / 0 warning |
+| K-23 性能 | 221 章节 / 262 KB → **重建 84 ms** |
+| `pnpm typecheck` / `pnpm test:unit` | 退出码 0；88 套件 / 533 passed |
+
+新增测试：`crates/pm-application/tests/knowledge_index_v2.rs`（29 条）、`crates/pm-infrastructure/tests/migration_0024.rs`（8 条）、`apps/pm-api/tests/knowledge_index_v2.rs`（1 条）。
