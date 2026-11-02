@@ -213,23 +213,33 @@ pub async fn add_dependency(
     acquire_project_graph_lock(&mut tx, graph_key).await?;
 
     // ① 锁下游任务行（项目图锁已持有：检环/插边/解锁判定在本项目内串行）。
+    //    T-025 §六（C66）：tenant_id 一并取回，供 ② 做跨租户判定（I3）。
     let downstream = sqlx::query(
-        "SELECT project_id, status FROM delivery.task WHERE id = $1 FOR UPDATE",
+        "SELECT project_id, tenant_id, status FROM delivery.task WHERE id = $1 FOR UPDATE",
     )
     .bind(task_id)
     .fetch_optional(&mut *tx)
     .await?
     .ok_or(DependencyError::TaskNotFound)?;
     let project_id: Uuid = downstream.get("project_id");
+    let tenant_id: Uuid = downstream.get("tenant_id");
     let status: String = downstream.get("status");
 
     // ② 上游必须存在且同项目（D3）。
-    let upstream = sqlx::query("SELECT project_id FROM delivery.task WHERE id = $1")
+    let upstream = sqlx::query("SELECT project_id, tenant_id FROM delivery.task WHERE id = $1")
         .bind(depends_on_task_id)
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(DependencyError::TaskNotFound)?;
     let upstream_project: Uuid = upstream.get("project_id");
+    let upstream_tenant: Uuid = upstream.get("tenant_id");
+    // T-025 §六（C66）：跨租户一律当「不存在」——模块契约写的是「不存在 / 跨租户 /
+    // 非成员一律 404，不泄露存在性」。原实现把别的租户的任务报成 `CrossProject`
+    // （409 CROSS_PROJECT_DEPENDENCY），与 404 形成存在性 oracle。同租户跨项目仍是
+    // 409（D3，C46 契约不变）。
+    if upstream_tenant != tenant_id {
+        return Err(DependencyError::TaskNotFound);
+    }
     if upstream_project != project_id {
         return Err(DependencyError::CrossProject);
     }

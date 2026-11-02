@@ -1,6 +1,6 @@
 # T-025：Task Dependency 并发与解锁正确性加固（任务书）
 
-> 状态：**实施中（2026-11-01：P0 两项已修复并验收；2026-11-02：P1 §三（方案 A）+ §五（UI 直写入口行锁+图锁）已修复并验收，均见 §十；P1 §四/§六 待续）**（编号核实 2026-11-01：`todo.md` 中 T-025~T-029 段位空缺，暂用 **T-025**，落在 M2 段位、与 T-023 设计稿 → T-024 实施 → T-025 加固语义连续；如需换号，本文档与 `todo.md` 登记行各改一处）
+> 状态：**实施中（2026-11-01：P0 两项已修复并验收；2026-11-02：P1 §三（方案 A）+ §五（UI 直写入口行锁+图锁）+ §六（跨租户 404）已修复并验收，均见 §十；仅 §四 待续）**（编号核实 2026-11-01：`todo.md` 中 T-025~T-029 段位空缺，暂用 **T-025**，落在 M2 段位、与 T-023 设计稿 → T-024 实施 → T-025 加固语义连续；如需换号，本文档与 `todo.md` 登记行各改一处）
 > 类型：专项审查 + 最小修复（T-024 追补，**不推翻现有架构**）
 > 来源：专家评审 `docs/ai-pm-task-dependency-review.md`（2026-11-01）§9.1 P0 ×2 + §9.2 P1 ×4；任务定义由用户最终裁定
 > 前置：T-023 / T-024 已交付归档（`docs/ai-pm-task-dependency-v1.md` §10；`todo.md` §13）
@@ -208,6 +208,7 @@
 | C65 | 删边与上游完成并发 | `::c65_edge_removal_racing_with_upstream_completion_still_unlocks`（4 轮 × 双启动序） | ✅ 无漏解锁、上游状态不被误迁 |
 | C61 ★ | `blocked` + `needs_approval` 不被依赖解锁 | `task_dependency.rs::c61_active_waiting_survives_dependency_satisfaction` | ✅ 保持 `blocked`、0 条 `TaskReady`；等待解除后一次放行 |
 | C68 | 所有终态写入入口一致副作用 | `task_dependency_concurrency.rs::c68_ui_direct_write_to_terminal_unlocks_downstream` + `::ui_terminal_write_waits_for_the_project_graph_lock` | ✅ 两入口解锁一致；直写等图锁、放行后恰 1 条 `TaskReady` |
+| C66 ★ | 跨租户访问边表 | `pm-api/tests/task_dependencies.rs::c66_cross_tenant_dependency_access_is_invisible` | ✅ 读/写/删一律 404；跨租户上游 = `task_not_found`（非 409） |
 | — | 图锁互斥 / MVCC 隔离 / 提交后可见 | `::graph_lock_serializes_writers_and_exposes_committed_edges`（屏障式定向） | ✅ |
 | — | 跨项目不阻塞 | `::graph_locks_of_different_projects_do_not_block` | ✅ |
 
@@ -270,10 +271,35 @@
 - `cargo test -p pm-api --test pm_writes`：13 passed；`cargo test -p pm-mcp --test contract`：6 passed（`update_task` 契约无回归）。
 - `cargo check --workspace --all-targets`：exit 0，无新 warning。
 
-### 10.7 待办（后续领取）
+### 10.7 审查结论与修复记录（§六 租户隔离，2026-11-02）
 
-- §四 / §六（P1 剩余两项）尚未审查：Run 退避与执行预算 / 租户隔离。
+**前提纠正（重要）**：本仓**不使用 PostgreSQL RLS**——全 `migrations/` 没有任何 `CREATE POLICY` / `ENABLE ROW LEVEL SECURITY`。ADR-0001 的隔离模型是三条：`tenant_id NOT NULL`（I1）、以 `tenant_id` 打头的组合外键（I1/I5）、**读路径按 tenant 过滤且不靠 project join 推导**（I3），并用 `information_schema` 机械断言（XT-3）。因此「RLS 是否完整」这个问题在本仓不成立，§六 的正确问法是「I1/I3/I5 在本表是否落实」。
+
+五分类：
+
+1. **已确认 Bug（本次修复）**：`add_dependency` 的上游查询不做租户判定——拿别的租户的任务 id 当上游会得到 `CrossProject`（409 `CROSS_PROJECT_DEPENDENCY`），而不存在的 id 得到 404 `task_not_found`。这构成**跨租户存在性 oracle**，且与模块自述契约（「不存在 / 跨租户 / 非调用方成员一律 404，不泄露存在性」）直接矛盾。
+2. **潜在风险（未改，登记 P2）**：`list_dependencies(task_id)` 只按 `task_id` 过滤，没有 project/tenant 条件（严格按 I3，读路径应带 tenant 过滤）。当前唯一调用方是 API 且已过 `require_task_project`（`tenant_id` + 项目可见性），所以**现在没有可利用的外部面**；但它是 `pub` 的应用层函数，第二个消费者（MCP / 报表 / 导出）复用时即成为跨租户泄露面。修复方式需要改签名（加 `tenant_id`），属契约改动，本次不动。
+3. **现有实现已正确解决的部分**：
+   - `0021_task_dependency.sql` 结构齐备：`tenant_id UUID NOT NULL`、`UNIQUE(tenant_id, id)`、三条组合外键（`(tenant_id, project_id)`→`core.project`、`(project_id, task_id)`/`(project_id, depends_on_task_id)`→`delivery.task`）、`UNIQUE(task_id, depends_on_task_id)` 兜底重复边。
+   - INSERT 的 `tenant_id` 由 `(SELECT tenant_id FROM core.project WHERE id = $1)` 派生——与父项目必然一致，组合外键是第二道保险，**写入侧不可能伪造归属**。
+   - `tenant_schema.rs` 的 41 张表清单 + XT-3 机械断言覆盖本表（`tenant_id` 非空 + 以 `tenant_id` 打头的组合外键），实测 6 passed。
+   - API 三入口（GET / POST / DELETE）都先过 `require_task_project`：按 `(id, tenant_id)` 查任务，再 `require_project_visible`——跨租户与「非项目成员」都是 404。
+   - DELETE 幂等返回 204（边不存在也 204），不构成存在性 oracle。
+4. **建议修改位置（已实施）**：`task_dependency.rs::add_dependency`——下游行与上游行都取 `tenant_id`；跨租户 → `TaskNotFound`（404），同租户跨项目仍 `CrossProject`（409，C46 契约不变）。新增 `apps/pm-api/tests/task_dependencies.rs::c66_cross_tenant_dependency_access_is_invisible`。
+5. **数据库迁移是否必要**：**否**——零 DDL。
+
+**实测**
+
+- `cargo test -p pm-api --test task_dependencies`：**9 passed**（C43–C48 / C57 / C66，C46 的 409 语义未变）。
+- `cargo test -p pm-application --test task_dependency`：11 passed；`--test task_dependency_concurrency`：8 passed。
+- `cargo test -p pm-infrastructure --test tenant_schema`：6 passed（I1/I5 机械断言）。
+- `cargo check --workspace --all-targets`：exit 0。
+
+### 10.8 待办（后续领取）
+
+- §四（P1 最后一项）尚未审查：`dependency_unmet` 的退避与执行预算；代码面结论已倾向「不消耗失败预算」（`requeue_with_backoff` 不写 `task_run_failure`、`dispatch_attempts` 无上限判定），缺 C62 证据。
 - **§五 遗留一项待裁**：`pm_write::update_task` 依旧不经 `validate_transition`（可直写任意状态字面量，绕过状态机与 E1/E4 守卫）。本次只并入行锁 + 图锁，状态机校验需单独裁定（会改 UI 契约与错误码）。
-- §七 其余场景：C62（unmet 不耗执行预算）、C63（failed 恢复路径）、C66（跨租户）、C67（大规模解锁）。
+- **§六 遗留一项（P2）**：`list_dependencies` 加 `tenant_id` 过滤（现依赖调用方前置校验）。
+- §七 其余场景：C63（failed 恢复路径）、C67（大规模解锁）。
 - 方案 B（Blocker 聚合）与评审 §9.3 #12 `try_unblock_task` 合并，登记 P2；若未来出现第二种阻塞写入源，优先做这一项。
 - 全仓 `cargo test --workspace` 回归待归档前补跑。

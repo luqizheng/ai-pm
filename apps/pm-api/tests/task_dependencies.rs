@@ -510,3 +510,127 @@ async fn delete_edge_is_idempotent(pool: PgPool) {
         "delete must be audited exactly once"
     );
 }
+
+// --------------------------------------------------------------------- C66
+
+/// C66（T-025 §六 / ADR-0001 I1+I3）：不同租户之间**读不到也改不了**彼此的依赖边；
+/// 用别的租户的任务 id 作为上游时，必须与「任务不存在」同一个 404，不泄露存在性。
+#[sqlx::test(migrations = "../../migrations")]
+async fn c66_cross_tenant_dependency_access_is_invisible(pool: PgPool) {
+    let tenant_a = seed_tenant(&pool, "1").await;
+    let alice = seed_member(&pool, tenant_a, "alice").await;
+    let tenant_b = seed_tenant(&pool, "2").await;
+    let bob = seed_member(&pool, tenant_b, "bob").await;
+    let customer_a = seed_customer(&pool, tenant_a, "CA").await;
+    let customer_b = seed_customer(&pool, tenant_b, "CB").await;
+    let project_a = seed_project(&pool, tenant_a, customer_a, "PA", alice).await;
+    let project_b = seed_project(&pool, tenant_b, customer_b, "PB", bob).await;
+
+    let a_down = seed_task(&pool, project_a, "a-down", "draft").await;
+    let a_up = seed_task(&pool, project_a, "a-up", "draft").await;
+    let b_down = seed_task(&pool, project_b, "b-down", "draft").await;
+    let b_up = seed_task(&pool, project_b, "b-up", "draft").await;
+
+    let app = router_with_auth_config(pool.clone(), test_jwks(), AuthConfig::default());
+    let alice_token = token_for("alice", 1);
+    let bob_token = token_for("bob", 2);
+
+    // B 租户内先建成一条合法边（证明 B 的图本身可用）。
+    let (status, _) = body_json(
+        app.clone()
+            .oneshot(request(
+                "POST",
+                &deps_uri(b_down),
+                &bob_token,
+                Some(json!({ "depends_on_task_id": b_up })),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    // A 的成员对 B 的任务：读 / 写 / 删一律 404（处理函数按 tenant 过滤任务）。
+    for (method, uri) in [
+        ("GET", deps_uri(b_down)),
+        ("DELETE", edge_uri(b_down, b_up)),
+    ] {
+        let (status, _) = body_json(
+            app.clone()
+                .oneshot(request(method, &uri, &alice_token, None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{method} {uri}");
+    }
+    let (status, _) = body_json(
+        app.clone()
+            .oneshot(request(
+                "POST",
+                &deps_uri(b_down),
+                &alice_token,
+                Some(json!({ "depends_on_task_id": b_up })),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "A must not write edges on B's task");
+
+    // 跨租户上游：与「不存在」同一个 404（不是 409 的存在性 oracle）。
+    let (status, body) = body_json(
+        app.clone()
+            .oneshot(request(
+                "POST",
+                &deps_uri(a_down),
+                &alice_token,
+                Some(json!({ "depends_on_task_id": b_up })),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "body: {body}");
+    assert_eq!(body["message"], "task_not_found");
+
+    // 同租户内的正常路径不受影响（A 的边可建、可读），B 的边仍是 1 条。
+    let (status, _) = body_json(
+        app.clone()
+            .oneshot(request(
+                "POST",
+                &deps_uri(a_down),
+                &alice_token,
+                Some(json!({ "depends_on_task_id": a_up })),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, body) = body_json(
+        app.oneshot(request("GET", &deps_uri(a_down), &alice_token, None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["upstream"].as_array().unwrap().len(), 1);
+
+    let a_edges: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM delivery.task_dependency WHERE project_id = $1",
+    )
+    .bind(project_a)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(a_edges, 1, "the rejected cross-tenant edge must not be persisted");
+    let b_edges: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM delivery.task_dependency WHERE project_id = $1",
+    )
+    .bind(project_b)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(b_edges, 1, "tenant B's edge must be untouched");
+}
