@@ -10,6 +10,7 @@
 | 0001–0021 | `migrations/0001_core.sql` … `0021_task_dependency.sql` | 既有 | 已应用 |
 | 0022 | `0022_delivery_manifest.sql` | T-041（D4） | 已应用（2026-11-02） |
 | 0023 | `0023_run_executor_hardening.sql` | T-032 | 已应用 |
+| 0026 | `0026_delivery_review.sql` | T-043（D5） | 已应用（2026-11-02） |
 
 ## 二、已预留（设计稿已过稿/提交，未实施）
 
@@ -17,7 +18,6 @@
 |---|---|---|---|---|
 | 0024 | **T-060（知识索引 V2）** | `docs/ai-pm-t060-knowledge-index-v1.md` §4（`0b26e6b`） | `0024_knowledge_section_index.sql` | 先到先得 |
 | 0024 | ~~T-083（Discovery 数据模型）~~ → **实施时顺移** | `todo.md:261` + `docs/ai-pm-project-discovery-v1.md` §附录A | `0024_discovery.sql`（原预留） | 与 T-060 撞号，**T-083 实施时取下一空号并回填本表** |
-| 0026 | **T-043（D5 实施）** | `docs/ai-pm-slice-d5-review-v1.md` §2（V1.1） | `0026_delivery_review.sql` | 评审 P1-1 收编：0024 → 0026 |
 | 0025 | 空闲（缓冲） | — | — | 供 T-083 或下一任务顺移 |
 
 ## 三、纪律

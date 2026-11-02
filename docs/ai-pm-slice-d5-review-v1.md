@@ -1,6 +1,6 @@
 # D5 · Review、失败恢复与知识回写 v1.3（T-042 设计稿）
 
-> 状态：**待过稿（V1.3）**——v1（`faa3f34`，七题裁定）→ V1.1（`b59a0bf`，评审 P0×6/P1×4）→ V1.2（`6dcffca`/`a1d8593`/`417d217`，D1–D6 + 补充 4/5）→ **V1.3（本轮：知识提案改同事务强一致 + §10 四要素化 + §12 明确不做列示 + 迁移号核实）**。**最终架构判断：有条件通过，暂缓 T-043，先修订再过稿。**
+> 状态：**V1.3 + T-043 已实施（2026-11-02）**——v1（`faa3f34`，七题裁定）→ V1.1（`b59a0bf`，评审 P0×6/P1×4）→ V1.2（`6dcffca`/`a1d8593`/`417d217`，D1–D6 + 补充 4/5）→ **V1.3（知识提案改同事务强一致 + §10 四要素化 + §12 明确不做列示 + 迁移号核实）** → **实施记录见 §13（落地物 / 9 项实施裁定 / C 编号落点 / 遗留）**。
 > 修订状态：D1–D6 全部落盘；补充 4/5 收编；**知识提案同事务强一致**（§7.1/§7.1.1/§7.1.2）；**§10 验收矩阵四要素化**（C98–C137，40 条）；**§12 明确不做列示**；迁移号核实（0024 归 T-060，D5 取 0026）。
 > 日期：2026-11-02
 > 一句话：`task_run` 扩 `run_kind` 承载**平台内确定性 Reviewer Run**（Q-D5-1/2），两拍编排——事件 handler 轻拍推进 `submitted→reviewing` 并建 review run，worker 领取拍跑确定性校验管线产出 findings + verdict（Q-D5-3）；四值结论经**完成判定器**映射回 13 态状态机，待审批停 `reviewing`+`task_waiting(needs_approval)` 不新增状态（Q-D5-4）；失败判定服务（B4-A~D）为 worker 内周期作业（Q-D5-5）；逐条验收裁决落独立表兑现 `0015` 预留外键（Q-D5-6）；知识回写走平台模板，**`draft` 提案与 Task completed 同事务强一致**（§7.1）。
@@ -748,3 +748,71 @@ stateDiagram-v2
 ### 12.2 演进位
 
 （与待裁任务的挂接）：Q8.1 清单矩阵 → additional_checks 执行器与 L2 落地（同批）；T-052 验收条目版本化（维持开放，本稿以哈希兜底）；T-054 字段级历史（维持开放）；失败教训知识回写与 rejected→B4-D 映射（T-043 后观察）；审查策略版本的可视化管理（V1 仅内容寻址落行）。
+
+---
+
+## 13. 实施记录（T-043，2026-11-02）
+
+> 状态：**已实施**——迁移 `0026` 应用通过；`cargo test --workspace` 全绿；`cargo check --workspace --all-targets` 0 error / 0 warning。本节记录**落地物、实施期裁定（设计稿未覆盖处）、C 编号落点与遗留**。
+
+### 13.1 落地物
+
+| 层 | 文件 | 内容 |
+|---|---|---|
+| 迁移 | `migrations/0026_delivery_review.sql` | 六列 + 三 CHECK；`attempt_no` 按 kind 分轨 + `uq_task_run_active` 收窄 + `uq_task_review_active`；三新表；三触发器；**交付视图收窄**（见 I-D5-2） |
+| 锚定 | `crates/pm-application/src/review/anchor.rs` | `reviewed_manifest_hash` / `input_manifest_hash` / `review_policy_version`（内容寻址，前 12 位） |
+| 管线 | `crates/pm-application/src/review/pipeline.rs` | L1–L4 纯函数 + `ReviewOutcome`（findings / 逐条裁决 / verdict）+ 单元测试 8 条 |
+| 采集 | `crates/pm-application/src/review/collect.rs` | 只读事实采集（视图状态 / 集成事实 / 条目 / 测试证据 / **镜像仓产物探测**）+ 锚定漂移复核 |
+| 拍① | `crates/pm-application/src/review/queue.rs` | `enqueue_review`：幂等判据 → B1 守卫 → `submitted→reviewing` → 建 queued review run → 审计 |
+| 拍② | `crates/pm-application/src/review/worker.rs` | 超时回收前置 → 条件 UPDATE 领取 → 管线 → findings/裁决/verdict 落库 → run `succeeded` → 推进；失败 → `failed` + 重试 / 降级人工 |
+| 判定 | `crates/pm-application/src/review/decide.rs` | 完成判定器（E2 全集）+ §5.1 矩阵出口 + 审批裁决单事务（七步）+ `task_waiting` 接线 |
+| 知识 | `crates/pm-application/src/review/knowledge.rs` | 确定性模板 + completed 同事务 INSERT `draft` 提案 + 提案级去重 |
+| 失败判定 | `crates/pm-application/src/review/failure.rs` | B4-A~D；候选扫描强制 `run_kind='delivery'` |
+| 消费端 | `crates/pm-infrastructure/src/outbox_handlers.rs` | `DeliverySubmittedHandler`（拍① 入口，23505 降级幂等） |
+| 生产端 | `crates/pm-application/src/delivery/mod.rs` | `DeliverySubmitted` 事件（同事务，键 `delivery_submitted:{run_id}`） |
+| worker | `apps/ai-pm-worker/src/main.rs` | 第五/六条循环：review 领取拍 + 失败判定作业 |
+| API | `apps/pm-api/src/pm_reviews.rs` | `GET /v1/pm/review-approvals`、`POST /v1/pm/review-approvals/{id}/decision` |
+| 测试 | `crates/pm-application/tests/review.rs` | 14 条用例（C99/C100/C101/C102/C103/C104/C105/C106/C107/C111/C114/C119/C123/C124/C131/C136 覆盖） |
+
+### 13.2 实施期裁定（设计稿未覆盖）
+
+| # | 问题 | 裁定 |
+|---|---|---|
+| I-D5-1 | `attempt_no` 原为表级 `UNIQUE (task_id, attempt_no)`，两种 kind 共用一条序号（review 第 N 次重试会与 delivery 第 N 次撞号） | 删表级唯一，改两条**按 kind 分轨**的部分唯一索引（`uq_task_run_attempt_delivery` / `_review`）；`insert_task_run` 的 `max(attempt_no)` 计数同步加 `run_kind='delivery'` 谓词 |
+| I-D5-2 | `v_task_delivery_manifest` 早于 `run_kind`：review run 落库后成为「最新 Run」，视图随即报 `never_submitted`（D4 对账被 D5 污染） | 0026 内 `CREATE OR REPLACE VIEW`，`latest_run` / `latest_submitted_run` 加 `run_kind='delivery'` **结构谓词**（不靠调用方过滤） |
+| I-D5-3 | 收窄后的 `uq_task_run_active` 只约束 delivery，但领取扫描 / 活跃计数仍是旧口径——review run 会被 delivery 领取循环捡走，或挡住 delivery run 创建 | 三处（`claim.rs` 候选与诊断计数、`outbox_handlers.rs` 任务级幂等计数）全部加 `run_kind='delivery'`；新增单一真源常量 `DELIVERY_RUN_KIND_SQL` / `ACTIVE_REVIEW_STATUSES(_SQL)` |
+| I-D5-4 | §2.5 写「三新表全表禁 UPDATE」与 §5.2 步骤 4「UPDATE 审批行」自相矛盾 | `review_finding` / `acceptance_criterion_verdict` 全表禁 UPDATE；`review_approval` 用 `forbid_review_approval_mutation()`：锚定列 once-written + `pending` 单向落终态（终态后禁改）；`task_run` review 报告列用 `OLD.run_kind` 判定并把 `NEW.run_kind` 纳入保护（否则改标即可绕过） |
+| I-D5-5 | 拍①的幂等判据若放在「任务仍为 submitted」之后，重复消费会返回 `TaskNotSubmitted`（此时任务已 `reviewing`），幂等不可达 | 判据顺序改为：锚定计算 → **同锚定 review run 查重** → 状态检查 → B1 守卫 → 迁移 → 建 run |
+| I-D5-6 | `manual` / `review` 条目的终值行由审批端点落，但设计稿只说「裁决事务内 INSERT」未给判定值 | approve 路径在裁决事务内对**尚无裁决行**的 `manual`/`review` 条目 INSERT `passed`（`decided_by`/`decided_at` 留痕）；reject 路径落 `approval_rejected` blocker finding |
+| I-D5-7 | `ai.document_proposal.created_by` NOT NULL，而知识回写由平台发起 | 用 `ai-pm-dispatch` service principal（`0015` 幂等种子）；`analysis_run_id` 复用为「产生该提案的 review run」追溯键；去重按 `(project_id, doc_key)` + 活跃状态集，命中则跳过 INSERT（completed 照常落定） |
+| I-D5-8 | 产物存在性探测需要「被审 commit 的路径」，而 D4 的镜像仓可能不存在 | 只读探测 `git -C <repo_cache_dir> cat-file -e <commit_sha>:<path>`；镜像仓缺失/超时一律视为**不存在**（fail-closed，没有证据不给通过） |
+| I-D5-9 | `ReviewCompleted` / `KnowledgeBaseWriteRequested` 是领域通知，V1 无消费 handler | 沿用 `event_is_enabled` 开关：默认不产生（避免为无 handler 的事件造死信），需要时经 `AI_PM_OUTBOX_EVENTS` 开启；`DeliverySubmitted` 因已有真实消费者改为**默认开启** |
+
+### 13.3 C 编号落点（C98–C137）
+
+| C | 落点 |
+|---|---|
+| C98 | `0026` 迁移 + `tenant_schema`（44 张表收编 + 组合外键）+ `migration_0012` 谓词断言（含 `uq_task_review_active`） |
+| C99 / C131 | `review.rs::c99_c131_active_review_does_not_block_delivery_and_is_unique_per_task` |
+| C100 | `c100_delivered_auto_accept_completes_with_proposal_and_events` |
+| C101 | `c101_require_human_approval_stops_at_a_pending_approval` |
+| C102 | `c102_approve_completes_and_reject_requests_changes` |
+| C103 | `c103_failed_integration_is_changes_requested_and_human_approve_is_refused` |
+| C104 | `c104_not_run_with_automated_criterion_requests_changes` |
+| C105 | `c105_not_run_without_automated_criterion_is_inconclusive_and_waits` |
+| C106 | `c106_passed_with_a_failed_test_is_inconclusive` |
+| C107 | `c107_manual_criteria_get_no_pipeline_verdict_row` + C102 的「审批事务内 INSERT 终值行」 |
+| C111 / C136 | `c111_c136_review_failure_touches_neither_delivery_run_nor_creates_one` |
+| C114 | `c114_failure_judge_never_touches_review_runs` |
+| C119 / C124 | `c119_c124_audit_chain_and_idempotent_enqueue`、`c119_changes_requested_audit_is_distinct` |
+| C123 | `c123_immutability_triggers_reject_updates` |
+| 其余（C108–C110/C112/C113/C115–C118/C120–C122/C125–C130/C132–C135/C137） | 机制已落地（口径与用例见 §11 各步骤对应文件），本轮未逐条建用例：见 §13.4 |
+
+### 13.4 遗留与归属
+
+1. **C108–C110（B4 失败判定）与 C115（双 worker 并发）**：作业与幂等标记（`task_run_failure` 存在即已判定 + 条件 UPDATE）已落地，用例待与 D1 执行重试链合批补。
+2. **C112/C113/C127**：漂移防御、超时回收、崩溃恢复三条机制已落地并被 C111 间接覆盖；端到端崩溃注入用例归 T-061（outbox 死信重放同批的基础设施测试）。
+3. **C117 的反例面（C137）**：同事务原子性由 `complete_task` 单事务实现（提案 INSERT 在迁移后、事件在提交前），故障注入用例待基础设施层补齐。
+4. **C120–C122 并发用例**：库层唯一索引 + 条件 UPDATE 已保证，并发压测用例归 QA 批次。
+5. **`RunCompleted` 事件**：仍归 T-031/T-061（本任务不产）。
+6. **审批页 / 交付验收页**：T-070（本任务只提供只读列表 + 裁决端点）。
