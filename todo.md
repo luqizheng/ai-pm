@@ -388,11 +388,13 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **不做**：不装 Runner / 不做无人值守（T-092）；Skill 不绕过 MCP 工具直写平台；不做授权码流程。
   - **验收**：C139/C143/C146/C147/C157 + **评审新增 C168/C169/C172**；**真实两机拓扑**（服务器栈 + Windows PC）实测「复制初始化指令 → 全自动初始化 → Ready → `pm_list_tasks` 可读」全程无手工编辑配置文件；**评审 P1-3：Ready 四层可判且为快照——认证过期 / 绑定撤销 / MCP 不可用时可退化**；未激活 / zip 校验失败 / 声明仓库全部不可访问 三条失败路径给出明确指引而非报错；**评审 P1-3：从干净 Windows 环境开始**（无既有技能包、无既有 MCP 配置）；M-01（Trae 同机）作回归基线。
 
-- [ ] **T-091 前端两页（图1/图2 原型；前置：T-088 完成）**〔V1 字段按定稿 §九 修订 2026-11-02〕
+- [x] **T-091 前端两页（图1/图2 原型；前置：T-088 完成 ✅）**〔2026-11-03 领用 → **同日实施完成**〕
+  - **交付**：`3e829ec` feat(frontend)。**验收：vue-tsc 0 error；pnpm test:unit 91 文件 553 passed（+4）；check:i18n 920 key 对齐；check:prism-tokens ✓。**
   - **做**：「环境接入」入口卡片（= T-080 遗留的前端任务：复制初始化指令，含部署地址替换提示）；「开发环境」管理页（设备列表 / **四层就绪徽标**（Installed / Connected / Authenticated / Ready）+ **生命周期徽标**（Active / Revoked，评审 P1-1 两列拆分）**无在线徽标** / 执行端种类与版本 / 绑定项目与已验证仓库 / **最后自检**时间与逐项结果 / [MCP 正常] [仓库可访问] 徽标 **无 Worker 徽标** / 查看详情 / 撤销授权 / 解绑 / 添加开发环境）；可见范围跟随 T-088 的 `tenant_member.role` 语义；**评审 P1-3：页面必须呈现「就绪是快照」的事实——自检时间与逐项结果可见，readiness 退化时页面同步反映**。
   - **不做**：不做假数据页（`VITE_USE_MOCK=0` 必须能跑）；不进 Agent 管理页（P9 延后）；不画 Runner 版本 / 心跳 / 在线列（V2）。
   - **验收**：真库下能看到 T-088 登记的设备与自检结果；撤销授权 UI 操作后目录状态即时生效；`vue-tsc` 0 error；vitest 全绿。
 
+  - **实现要点**：① DevicesPage（AI/classic 双模式导航）：三指标 + 设备列表（生命周期/就绪徽标/最后自检）+ 详情（字段表 + 快照说明条 + 绑定列表：project_accessible 后端派生、verified/declared、解绑、撤销）；**零在线徽标/零 Worker 徽标/页面零推导**（V1.3 §九）；② BootstrapCard 挂项目总控（T-080 遗留前端）：标准安装指令七步版 + 复制按钮，地址取同源 origin，**指令不承载凭据**；③ api/devices.ts 全套端点绑定；④ devices/fixtures.ts 四设备覆盖全部状态组合（C182 前端投影）+ 4 测试用例钉语义；⑤ mock 与真后端数据层分叉、模板唯一（VITE_USE_MOCK=0 可跑）。
 - [ ] **T-092 V2 无人值守 Runner（延后，V1 稳定前不要领取）**
   - **范围**：Runner 常驻运行、平台自主调度 Run、自动创建 Workspace、启动 Codex、收集 Commit 与 Delivery Manifest、回传证据、Worker 自动升级与故障恢复、安装包版本与服务端 API 版本分离 + MCP 能力协商。
   - **重启条件**：V1（T-087~T-091）闭环稳定后另立设计稿；稿中必须裁清与 T-030/T-031（平台侧 `CodexExecutor` 本地子进程）的边界与复用关系。
