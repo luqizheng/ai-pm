@@ -106,14 +106,23 @@ fn build_router(
     // `/mcp` is permission-gated when auth is on: the outer layer verifies
     // claims, this inner layer demands PM_MCP_READ plus the tool's write
     // permission. In `off` mode there are no claims, so the gate is skipped.
+    //
+    // T-088：`attach_device_claim` 是 `X-AI-PM-Device-Id` 的**唯一**校验点，挂在
+    // 最内层（紧贴 rmcp）——权限拒绝的请求不触发设备查询；两种模式都挂（off 模式
+    // 仍有 dev-off principal）。它只注入 `DeviceClaim`，绝不改变鉴权结果。
+    let device_layer = axum::middleware::from_fn_with_state(
+        state.clone(),
+        crate::device_claim::attach_device_claim,
+    );
     let mcp_router: Router<AppState> = if guard_mcp {
         Router::new()
             .fallback_service(mcp_service)
+            .layer(device_layer)
             .layer(axum::middleware::from_fn(
                 crate::auth::require_mcp_permission,
             ))
     } else {
-        Router::new().fallback_service(mcp_service)
+        Router::new().fallback_service(mcp_service).layer(device_layer)
     };
     Router::new()
         .route("/health", get(health_handler))
@@ -162,6 +171,8 @@ fn build_router(
         .merge(crate::outbox_ops::router())
         // 执行端接入引导（T-080）：公开的 `/install`、`/install/{tool}`。
         .merge(crate::onboarding::router())
+        // 开发环境目录（T-088）：设备登记 / 绑定 / 自检 / 撤销。
+        .merge(crate::pm_devices::router())
         // 审计实时流（SSE）。EventSource 无法带 Authorization，token 走
         // `?access_token=`；auth 层只对本路径放行 query token。
         .route(

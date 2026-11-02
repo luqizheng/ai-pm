@@ -172,6 +172,18 @@ impl AuthedPrincipal {
             claimed_device_id: None,
         }
     }
+
+    /// T-088：请求级真人身份（`HumanActor`）——**唯一生产点**在鉴权层，供 `/mcp`
+    /// 工具层经 rmcp `RequestContext.extensions` 只读取用。
+    pub fn human_actor(&self) -> pm_application::caller::HumanActor {
+        pm_application::caller::HumanActor {
+            principal_id: self.principal_id,
+            tenant_id: self.tenant_id,
+            identity_id: self.identity_id,
+            client: self.client.clone(),
+            auth_mode: self.auth_mode.clone(),
+        }
+    }
 }
 
 /// The bearer gate: verify the JWT, require `tid`, and forward typed claims.
@@ -232,6 +244,8 @@ pub async fn resolve_principal(
     match resolve_or_provision(&auth, &identity).await {
         Ok(principal) => {
             let mut request = request;
+            // T-088：HumanActor 与 AuthedPrincipal 同点生产，供 /mcp 工具层只读。
+            request.extensions_mut().insert(principal.human_actor());
             request.extensions_mut().insert(principal);
             next.run(request).await
         }
@@ -325,7 +339,7 @@ pub async fn inject_dev_principal(
         }
     }
     let mut request = request;
-    request.extensions_mut().insert(AuthedPrincipal {
+    let principal = AuthedPrincipal {
         principal_id: DEV_OFF_PRINCIPAL,
         identity_id: None,
         display_name: "dev-off".to_string(),
@@ -338,7 +352,9 @@ pub async fn inject_dev_principal(
         claims_tenant_key: "-".to_string(),
         subject: "dev-off".to_string(),
         client: None,
-    });
+    };
+    request.extensions_mut().insert(principal.human_actor());
+    request.extensions_mut().insert(principal);
     next.run(request).await
 }
 
