@@ -220,6 +220,7 @@
 - `cargo test --workspace`：**73 套件、462 passed、0 failed**（含新增 6 例并发测试；T-024 基线 441 无回归）。
 - `cargo check --workspace --all-targets`：0 error 0 warning。
 - **2026-11-02 全仓复核（T-025 全部改动后，隔离实例 5434）**：**74 套件、496 passed、0 failed**，无 panic；同时 `cargo check --workspace --all-targets` exit 0。
+- **2026-11-02 合并前复核（rebase 到 T-043 `60ef4d2` 之后）**：**75 套件、522 passed、0 failed**（增量来自 T-043 的 D5 用例，T-025 用例无回归）。
 
 ### 10.5 审查结论与修复记录（§三 Blocked 解锁语义，2026-11-02，方案 A）
 
@@ -328,7 +329,7 @@
 
 - `cargo test -p pm-application`：**22 个测试二进制、200 passed、0 failed**（本次全量口径，含 C61/C62/C63/C68 新增用例）。
 - `cargo test -p pm-api --test task_dependencies`：9 passed；`--test pm_writes`：13 passed；`pm-mcp contract`：6 passed；`pm-infrastructure tenant_schema`：6 passed。
-- `cargo test --workspace`（隔离实例 5434，T-025 全部改动后）：**74 套件、496 passed、0 failed**。
+- `cargo test --workspace`（隔离实例 5434，T-025 全部改动后）：**75 套件、522 passed、0 failed**（rebase 到 T-043 之后的最终复核；rebase 前为 74/496）。
 - `cargo check --workspace --all-targets`：exit 0。
 
 ### 10.9 待办（后续领取）
