@@ -16,6 +16,7 @@
 - **2026-11-01 增量（五）**：T-031 外部评审（六项意见，材料包 `docs/ai-pm-t031-executor-expert-review-pack.md`）；其中 Q2 执行端身份经架构专家裁决落盘 **ADR-0002**（`docs/ai-pm-adr-0002-executor-credential-separation.md`，Accepted：Model A/B 统一 lease_token、修订 D2 R-G4、终止顺序反转、T-051 升级安全前置、新增 execution_mode 列）；T-032 设计稿落盘（`docs/ai-pm-slice-d3-executor-hardening-v1.md`，**待过稿**），登记于 §6 M3。
 - **2026-11-01 增量（六）**：`docs/ai-pm-codex-bootstrap-v1.md` 外部专家评审落盘（`docs/ai-pm-codex-bootstrap-review.md`，**有条件过稿**）：总体方向通过；须修正 6 项 P0（V1 与 D3/T-031 职责边界、Device/Runner/Agent Principal 身份关系对齐、三凭证分离、七步撤销协议、Project Binding 与 Repository Access 分层、Ready 服务端状态机）+ 补 3 章节（版本兼容协议、安装失败与重初始化协议、数据模型归属）+ 验收补 BOOT-15~25；专家建议的 T-087~T-092 六任务拆分与 §10.7 既有编号重叠且划分不同，**编号以既有为准**，拆分内容作 T-087 定稿输入；两条新增实施依赖：T-087 须等 T-032 收敛、服务端授权能力先于管理页。**用户确认后评审修订已收编进设计稿 V1.1**（6 项 P0 + 3 章节并入正文，章节重排 §〇~§十二；收编逐条对照见评审记录）。
 - **2026-11-02 增量（七）**：**T-080 服务端完成**（§10.5 M8）——新增公开端点 `GET /install` / `GET /install/{tool}`（同一 URL 内容协商：Markdown 给人 / JSON 给 agent）、补建此前从未实现的 `GET /health`、`auth::is_public_path()` 让三层鉴权链放行接入页；设计稿 `docs/ai-pm-t080-executor-onboarding-url-v1.md`（11 问裁定）已过稿并实施，交付见 §13 归档。**遗留**：Trae / Codex 真实执行端实测（M-01/M-02）待用户执行，完成前只算「服务端就绪」。
+- **2026-11-02 增量（八）**：**T-087 Codex Bootstrap 定稿完成（V1.2，待用户过稿）**——按 §0.1 brainstorming 六项裁清点逐项裁决（用户确认）+ 16 条派生裁定（用户授权「后面按照推荐」）+ 独立 builder-check 审稿六问收编；全部裁决索引见设计稿 §〇-A。核心：V1 按**真实两机拓扑**（服务器栈 + Windows PC）、**不装 Runner 二进制**、MCP 凭据**沿用 lmms 真人 key**（授权码 / 设备令牌整块归 V2/T-055）、V1 两张新表 `devenv.device` + `device_project_binding`（迁移 **0027**）、`/install/{tool}` 与 Bootstrap **两条任务线收编为一条**、中立技能包 `pm-ai-skills`（源目录 = 仓库 `skills/`，与 M9 T-086 落点一致）+ 薄适配层。**联动**：T-051 关闭于 T-088（claim 校验 `project_member`）；T-081 并入 M10 V1 前置（限定部署层）；T-082 升级为 T-090 硬前置；T-059 的薄转发层随 T-088 落地；BOOT-01~25 映射 C138~C162。T-088~T-091 范围已按定稿 §十三 修订。
 
 ---
 
@@ -271,16 +272,16 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **不做**：不在 URL 或指引中传递凭据；不负责安装执行端软件本身（装 trae/codex 是用户自己的事）；不做无人值守 Runner（T-030 范围）；不改 11 个 MCP 工具的契约。
   - **验收**：用 ≥2 个不同执行端（建议 trae + codex，z-code / dsh 跟进）实测「粘贴 URL → 帮我安装 → 配置就位 → `/v1/pm/me` 200」全程无手工编辑配置文件；未激活路径给出明确指引而非报错。
 
-- [ ] **T-081 `/mcp` 跨机暴露（runbook G1；T-080 跨机场景的前置）**
+- [ ] **T-081 `/mcp` 跨机暴露（runbook G1；T-080 跨机场景的前置；**2026-11-02 T-087 定稿：并入 M10 V1 前置**）**
   - **目标**：`/mcp` 从 loopback-only（`server.rs:10-14`，M1 本地单机设计）放开到受控跨机访问：host 白名单配置化 + TLS/反向代理 + 鉴权加固，支撑多 PC / 多人接入。
-  - **依据**：`crates/pm-mcp/src/server.rs:10-14`；`docs/ai-pm-executor-onboarding-runbook-v1.md` §十 G1 / §十一 R2。
-  - **做**：`allowed_hosts` 从代码默认改为可配置；部署侧 TLS / 反代方案；跨机安全评审（key 传输路径、Host 头校验语义变化、请求来源限制）。
+  - **依据**：`crates/pm-mcp/src/server.rs:10-14`；`docs/ai-pm-executor-onboarding-runbook-v1.md` §十 G1 / §十一 R2；`docs/ai-pm-codex-bootstrap-v1.md` §〇-A 裁清点 1。
+  - **做**：`allowed_hosts` 从代码默认改为可配置；部署侧 TLS / 反代方案；跨机安全评审（key 传输路径、Host 头校验语义变化、请求来源限制）。**范围限定部署层**（绑定地址 / 反代 / TLS / `Host` 校验语义，transport 无关）——rmcp `allowed_hosts` 放开是一行配置，T-088 薄转发层候选①/②皆存活（定稿派生 16）。
   - **不做**：不做 MCP OAuth（定位文档 M1 scope cut，需另行立项才动）；不动鉴权三层链（bearer → resolve → active）。
-  - **验收**：另一台 PC 的执行端可完成 T-080 的安装验证闭环；同机用例与 rmcp 契约测试不回归。
+  - **验收**：另一台 PC 的执行端可完成 T-080 的安装验证闭环；同机用例与 rmcp 契约测试不回归。**T-088 须继承本验收为回归项**。
 
-- [ ] **T-082 `pm_list_tasks` MCP 工具（runbook G3）**
+- [ ] **T-082 `pm_list_tasks` MCP 工具（runbook G3；**2026-11-02 T-087 定稿：升级为 T-090 硬前置**）**
   - **目标**：执行端不切 Web 控制台即可发现可领取任务：`project_id` 范围内 `ready` 状态任务的只读列表。
-  - **依据**：`docs/ai-pm-executor-onboarding-runbook-v1.md` §十 G3 / §十一 R4；`docs/ai-pm-mcp-executor-positioning-v1.md` §4.3（`task.list` 对应项）。
+  - **依据**：`docs/ai-pm-executor-onboarding-runbook-v1.md` §十 G3 / §十一 R4；`docs/ai-pm-mcp-executor-positioning-v1.md` §4.3（`task.list` 对应项）；`docs/ai-pm-codex-bootstrap-v1.md` §四（自检「任务可读」依赖）。
   - **做**：新增只读工具，复用 T-022 可见性语义（持 key 真人 + 租户内 + `project_member`）；命名跟随现有 `pm_*`（Q1 命名收敛前不引入新命名体系）。
   - **不做**：不做按执行端能力 / 档位过滤（归 T-051）；不改 `pm_claim_task` 契约。
   - **验收**：空项目 / 有 ready 任务 / 非本租户 三态用例；`cargo test --workspace` 全绿。
@@ -329,14 +330,15 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 10.7 M10 · Codex 环境自动初始化（Codex Bootstrap，2026-11-01 用户新增）
 
-> **设计依据**：`docs/ai-pm-codex-bootstrap-v1.md`（V1 用户供稿：ADR + 安装协议 + 界面原型，**未过稿**；用户稿自称 Slice F — Codex Environment Bootstrap，验收矩阵 BOOT-01~14）。
+> **设计依据**：`docs/ai-pm-codex-bootstrap-v1.md`（**V1.2 T-087 定稿，待过稿**；V1 用户供稿 → V1.1 评审收编 → V1.2 定稿，裁决索引见 §〇-A；验收矩阵 BOOT-01~25 → C138~C162）。
 > **核心原则**：安装说明负责指导安装，安装程序负责保证安装正确，PM-AI 服务端负责验证安装结果——不让 AI 仅凭一段 Markdown 猜测如何修改配置文件。
-> **三组件分离**：平台端 Worker（Run 调度/租约/回收，属服务端）≠ 开发机端 Runner（本地执行环境管理与 Codex 实例调度）≠ Codex 端 Skill+MCP（工作规范 + 平台接口）。
-> **与 M8 的关系**：本稿是 T-080「粘贴 URL → 帮我安装」的深化延伸（Plugin + Worker 安装程序 + 设备授权 + 自检）；前置依赖 T-080/T-081。
-> **状态**：**全部条目为未过稿设计**——T-087 定稿过稿前，T-088~T-091 不得开工。
+> **三组件分离**：平台端 Worker（Run 调度/租约/回收，属服务端）≠ 开发机端 Runner（本地执行环境管理与 Codex 实例调度，**V2**）≠ Codex 端 Skill+MCP（工作规范 + 平台接口，**V1 全部**）。
+> **与 M8 的关系**：定稿裁定**合并**——`/install/{tool}` 是唯一稳定入口，T-080 遗留前端卡片 = T-091；T-081 并入 V1 前置（限定部署层）；T-082 升级为 T-090 硬前置。
+> **状态（2026-11-02 更新）**：**T-087 定稿完成（V1.2），待用户过稿**——过稿前 T-088~T-091 仍不得开工；过稿后按设计稿 §十三 依赖图领取（T-088 关键路径，T-089 可并行，T-090 收口且硬依赖 T-082，T-091 随 T-088 后）。
 > **评审（2026-11-01）**：外部专家评审已落盘 `docs/ai-pm-codex-bootstrap-review.md`——**有条件过稿**；6 项 P0 修正 + 3 个新增章节 + 验收补 BOOT-15~25 **已收编进设计稿 V1.1**（章节重排 §〇~§十二）；专家建议的任务编号与本节既有编号重叠，以本节为准（对照见评审记录 §九）。
 
-- [ ] **T-087 Codex Bootstrap 设计稿定稿（用户供稿 → 正式设计稿）**
+- [~] **T-087 Codex Bootstrap 设计稿定稿（用户供稿 → 正式设计稿）**（2026-11-02 领用，执行者：ZCode · **定稿完成，待用户过稿**）
+  - **进度（2026-11-02）**：按 §0.1 完整 brainstorming——六项裁清点逐问逐答（用户确认：①两机拓扑 ②不装 Runner ③lmms key ④两表 ⑤合并 `/install` ⑥中立包 α），其后用户授权「后面按照推荐」，派生裁定 1~10 + builder-check 补裁 11~16 均标〔我的裁定〕可否决；设计稿演进为 **V1.2**（`75bb74b`，含 §〇-A 裁决汇总、§5.0 接入时序图、§5.6 DDL 草案 `0027_devenv.sql`、§十 BOOT→C138~C162 映射与 V1/V2 判定、§十一 切分表、§十三 任务分工与依赖图）。**验收四件套齐备**（时序图 / DDL / BOOT 映射 / V1-V2 切分）。待用户过稿后翻 `[x]` 归档。
   - **本条按 §0.1 执行**：完整 brainstorming。
   - **评审输入（2026-11-01）**：专家评审 6 项 P0 修正与 3 个新增章节**已收编进设计稿 V1.1**（`docs/ai-pm-codex-bootstrap-v1.md`，正文含〔评审收编〕标注，逐条对照见 `docs/ai-pm-codex-bootstrap-review.md`）；定稿时基于 V1.1 做最终裁决。其中身份关系不得另起认证协议（对齐 ADR-0001 / ADR-0002 / T-032）；V2 须复用 D3 已有 CodexExecutor（BOOT-25）；新增硬依赖——本条的身份与协议裁决须等 T-032 收敛后进行。
   - **目标**：把用户供稿整理为可实施的正式设计稿（沿用 `docs/ai-pm-codex-bootstrap-v1.md` 演进或另立定稿版），BOOT-01~14 映射为项目验收矩阵编号（续 C 系列）。
@@ -350,25 +352,25 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **不做**：不改 11 个 MCP 工具契约；不动鉴权三层链（T-081 范围除外）；不顺带实施。
   - **验收**：正式稿含授权时序图、DDL 草案、BOOT→验收编号映射表、V1/V2 范围切分表；用户过稿后方可进 T-088~T-091。
 
-- [ ] **T-088 服务端 Bootstrap API + Device/Runner 注册域（前置：T-087 已过稿）**
-  - **做**：六张服务端对象表 + 一次性授权码签发/换取；短期访问凭证 + 刷新凭证颁发；设备授权撤销（撤销后立即阻止新任务领取，在途 Run 受控终止，旧凭证回写被拒）；Runner 心跳与能力上报；项目绑定读写；审计与版本记录。
-  - **不做**：不做费用/配额（§12 R4 延后）；不改租户/项目/principal 权限模型（Runner 授权挂既有模型）；不改任务状态机（状态变更仍由平台后端统一处理）。
-  - **验收**：BOOT-07/08/12/14 对应用例全绿；撤销授权后「新领取被拒 + 旧凭证回写被拒」两条路径有测试；`cargo test --workspace` 全绿。
+- [ ] **T-088 服务端：薄转发层 + claim 成员校验 + `devenv` 域 + Bootstrap 端点（前置：T-087 已过稿 + T-081）**〔范围按定稿 §十三 修订 2026-11-02〕
+  - **做**：① **薄转发层**（调用人身份进 MCP 工具上下文；T-059 候选①/②择一，**继承 T-081 两机安装闭环为回归项**）→ claim 校验调用人是 `project_member`（**T-051 关闭**）+ 读 `X-AI-PM-Device-Id` 自报头落 `task_run.executor_id`（校验深度：存在 + owner = 调用人 + 未撤销才写，否则忽略 + 审计，**不拒绝**）；② 迁移 `0027_devenv.sql`（`devenv.device` + `devenv.device_project_binding`，0019 多租户模式）；③ 端点 `POST/GET /v1/pm/devices`、`GET /{id}`、`POST /{id}/bindings`（载荷 `declared_repository_ids` ⊆ `project_repository`）、`DELETE /{id}/bindings/{bid}`、`POST /{id}/checks`（`ready`/`degraded`/`failed` 唯一写者）、`POST /{id}/revoke`；可见范围按 `tenant_member.role`（member 见/撤自己的，owner/admin 全租户）；④ `/install/{tool}` JSON 增 `bootstrap` 段 + `GET /install/packages/pm-ai-skills-<ver>.zip` 同源下发；⑤ 登记/绑定/撤销/自检/归因忽略全部写 `governance.audit_log`。
+  - **不做**：不发任何凭据（无授权码 / 设备令牌 / 刷新令牌——归 V2/T-055）；不建 runner / registration / capability / heartbeat 四表；不做费用/配额；不改租户/项目/principal 权限模型；不改任务状态机；不改 11 个既有 MCP 工具契约。
+  - **验收**：C145/C146/C147/C149/C151/C152/C156/C157/C161 对应用例；claim 非成员 404（T-022 语义）+ 成员可领；自报头四种非法值均忽略且审计；`information_schema` 断言两新表 `tenant_id` + 组合 FK；`cargo test --workspace` 全绿；T-081 跨机闭环与 rmcp 契约测试不回归。
 
-- [ ] **T-089 安装包与 Worker 安装程序（前置：T-087 已过稿）**
-  - **做**：`pm-ai-codex/` 包结构（plugin 配置 + `.mcp.json` + `skills/` + `manifest.json`）；`install-worker.ps1` / `install-worker.sh`（环境识别、下载、SHA-256 与版本校验、装用户目录、幂等重跑、不覆盖用户已有 Codex 配置、失败可恢复）；`verify-install` 自检脚本。
-  - **不做**：不在 URL 或指引内容中传递凭据；不绕过执行端自身的权限审批机制；不做执行端软件本身的安装。
-  - **验收**：BOOT-01~05/11/13 对应场景（V1 平台范围按 T-087 裁定）；覆盖「已装过 Worker 重跑」「已有 Codex 配置不被破坏」「下载校验失败中断且可重试」三态。
+- [ ] **T-089 中立技能包与分发（前置：T-087 已过稿；可与 T-088 并行）**〔范围按定稿 §十三 修订 2026-11-02〕
+  - **做**：技能包源目录 = 仓库 `skills/`（M9 T-086 已在此落 `pm-learn/SKILL.md`，直接复用）：补 `pm-ai-bootstrap/` `pm-task-execution/` `pm-knowledge/` 三个 SKILL.md 位置 + `scripts/verify-install.{ps1,sh}` + `release-manifest.json` 生成；pm-api 构建期内嵌打包为 `pm-ai-skills-<ver>.zip`（`include_bytes`，SHA-256 覆盖整包）；`/install/{tool}` 渲染适配——Codex 渲染 `plugin.json` + `.mcp.json`（布局二选一**以测试 PC 真实 Codex 版本实测为准**），trae / z-code / 通用给「技能目录落盘」指令。**包内不含任何部署地址、不引用 Codex 专有 API**。
+  - **不做**：**不做 `install-worker.*`**（V1 无 Runner 二进制）；不在 URL 或指引内容中传递凭据；不绕过执行端权限审批；不做执行端软件本身的安装；不写 `pm-learn` 的内容（归 M9）。
+  - **验收**：C138/C139/C140/C141(Windows)/C143/C148/C150/C159(V1 口径：SHA-256 + manifest 最低兼容)；覆盖「相同版本重跑幂等」「配置写入失败保留原配置」「zip 校验失败中断可重试」三态。
 
-- [ ] **T-090 Bootstrap Skill + MCP 配置 + 自检闭环（前置：T-088 / T-089 完成）**
-  - **做**：`pm-ai-bootstrap` SKILL.md（八步 lifecycle：取包 → 环境识别 → 装 Worker → 连 MCP → 注册 → 绑项目/仓库 → 自检 → Ready）；Remote MCP 配置写入；自检（MCP 连通 / Worker 心跳 / Workspace 创建 / 仓库访问 / 任务读取权限）；`pm-task-execution` / `pm-learn`（对接 T-086）/ `pm-knowledge` 各 SKILL.md 归位。
-  - **不做**：不做无人值守调度（T-092）；Skill 不绕过 MCP 工具直写平台。
-  - **验收**：BOOT-02/06/09/10；≥1 个真实执行端实测「复制初始化指令 → 全自动初始化 → Ready → `pm_list_tasks` 可读」全程无手工编辑配置文件；未激活/未授权路径给出明确指引而非报错。
+- [ ] **T-090 Bootstrap Skill + 自检闭环（前置：T-088 / T-089 完成 + **T-082 `pm_list_tasks` 硬前置**）**〔范围按定稿 §十三 修订 2026-11-02〕
+  - **做**：`pm-ai-bootstrap` SKILL.md（**七步** lifecycle：读 `/install/{tool}` → 识别环境 → 写 MCP 配置（向用户索取 key，key 不进指令/URL）→ 验 `/health` + `/v1/pm/me` → `POST /devices` 登记并写本地 `device.json` → 用户确认 Project 与声明仓库子集 → 自检三项（`tools/list` / `pm_list_tasks` / Git 访问）上报 `/checks` → Ready）；重新初始化规则（本地 `device.json` 存活且服务端未 revoked → 复用，否则新注册）；`pm-task-execution` SKILL.md 带 `X-AI-PM-Device-Id` 自报头写入配置；`pm-knowledge` SKILL.md；`pm-learn` 对接 M9 已落盘内容。
+  - **不做**：不装 Runner / 不做无人值守（T-092）；Skill 不绕过 MCP 工具直写平台；不做授权码流程。
+  - **验收**：C139/C143/C146/C147/C157；**真实两机拓扑**（服务器栈 + Windows PC）实测「复制初始化指令 → 全自动初始化 → Ready → `pm_list_tasks` 可读」全程无手工编辑配置文件；未激活 / zip 校验失败 / 声明仓库全部不可访问 三条失败路径给出明确指引而非报错；M-01（Trae 同机）作回归基线。
 
-- [ ] **T-091 前端两页（图1/图2 原型；前置：T-088 完成）**
-  - **做**：「Codex 环境接入」入口卡片（复制初始化指令，含部署地址替换提示）；「开发环境」管理页（设备列表 / 在线状态 / Runner 版本与系统 / 绑定项目 / 最后心跳 / MCP·Worker 健康徽标 / 查看详情 / 撤销授权 / 添加开发环境）。
-  - **不做**：不做假数据页（`VITE_USE_MOCK=0` 必须能跑）；不进 Agent 管理页（P9 延后）。
-  - **验收**：真库下能看到 T-088 注册的设备；撤销授权 UI 操作后服务端即时生效；`vue-tsc` 0 error；vitest 全绿。
+- [ ] **T-091 前端两页（图1/图2 原型；前置：T-088 完成）**〔V1 字段按定稿 §九 修订 2026-11-02〕
+  - **做**：「环境接入」入口卡片（= T-080 遗留的前端任务：复制初始化指令，含部署地址替换提示）；「开发环境」管理页（设备列表 / §六状态徽标 **无在线徽标** / 执行端种类与版本 / 绑定项目与已验证仓库 / **最后自检**时间与结果 / [MCP 正常] [仓库可访问] 徽标 **无 Worker 徽标** / 查看详情 / 撤销授权 / 解绑 / 添加开发环境）；可见范围跟随 T-088 的 `tenant_member.role` 语义。
+  - **不做**：不做假数据页（`VITE_USE_MOCK=0` 必须能跑）；不进 Agent 管理页（P9 延后）；不画 Runner 版本 / 心跳 / 在线列（V2）。
+  - **验收**：真库下能看到 T-088 登记的设备与自检结果；撤销授权 UI 操作后目录状态即时生效；`vue-tsc` 0 error；vitest 全绿。
 
 - [ ] **T-092 V2 无人值守 Runner（延后，V1 稳定前不要领取）**
   - **范围**：Runner 常驻运行、平台自主调度 Run、自动创建 Workspace、启动 Codex、收集 Commit 与 Delivery Manifest、回传证据、Worker 自动升级与故障恢复、安装包版本与服务端 API 版本分离 + MCP 能力协商。
@@ -378,7 +380,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 11. 技术债与已开放待裁（可搭车，勿单独开切片）
 
-- [ ] **T-051 待裁 #12 执行端预注册档位**：V1 已明确接受横向越权面（持有效 bearer 可领取任意项目任务），档位机制待首批执行端接入后再裁。**保持开放，不主动实施**。**ADR-0002 D5 门控升级：per-project 调用方绑定改为「多租户 / 跨机执行上线前置」（与 T-081 跨机暴露同批）；单机 V1（T-041）不受阻。**
+- [ ] **T-051 待裁 #12 执行端预注册档位**：V1 已明确接受横向越权面（持有效 bearer 可领取任意项目任务），档位机制待首批执行端接入后再裁。**保持开放，不主动实施**。**ADR-0002 D5 门控升级：per-project 调用方绑定改为「多租户 / 跨机执行上线前置」（与 T-081 跨机暴露同批）；单机 V1（T-041）不受阻。** **2026-11-02 T-087 定稿：本条关闭于 T-088**——跨机 V1 成为现实，claim 校验调用人 `project_member` 即本条的核心机制，落 T-088 薄转发层；档位机制（按执行端能力/档位过滤）仍留观察。
 - [ ] **T-052 待裁 #13 验收条目版本化**：`task_acceptance_criterion` 已有 `updated_at`；若 D5 证据锚定需要更强不变性，再开 forward-only 追加迁移。**保持开放，等 D5 需求明确**。
 - [ ] **T-053 estimation PRD 未落库**：`docs/ai-pm-estimation-prd-v1.md` 有完整 PRD，但零迁移、零代码（`grep estimation migrations/` 无命中）。属独立大块，需先裁 P0 范围再排期。
 - [ ] **T-054 逐字段变更历史缺失**（顾问 P1「Task 变更记录」的剩余部分）：现只有 `task_supersession` 与审计行，没有字段级 diff。先观察 D4/D5 是否需要「回放某次交付时的任务原貌」，需要再开表。
@@ -386,7 +388,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 - [ ] **T-056 私有部署首管理员 bootstrap（ADR-0001 R2）**：现只有 env 指定 `AI_PM_FIRST_ADMIN_TENANT/SUBJECT`，私有部署装完无人可激活。候选：`AI_PM_BOOTSTRAP_FIRST_ADMIN=false`（默认关，私有部署建议开，首个登录者 `is_active=true` + `tenant_admin`）。**与 T-055 同批裁**。
 - [ ] **T-057 Git 凭据层级（ADR-0001 R3）**：现为项目级 `integration.project_ssh_key`，与 ADR §6「凭据归属平台或 Tenant」不一致。V1 不动，待首批私有部署需求明确后裁。
 - [ ] **T-058 `tenant_admin` 跨项目可见性（ADR-0001 R6）**：与 T-022 一起裁。默认**不可见非成员项目**（仍按 `project_member` 过滤）；若运维需要全租户只读视图，另开审计专用入口，不放宽业务列表。
-- [ ] **T-059 MCP 审计三列（T-021a 遗留）**：MCP 工具写 `governance.audit_log` 时补 `actor_identity_id` / `actor_client` / `actor_auth_mode`。阻塞：rmcp 3.8 的 `StreamableHttpService::new(factory)` 工厂闭包不接收 `http::Request`（拿不到 axum extensions），且会话在 `tokio::spawn` 子任务运行（task-local 不继承）。候选方案：① 换/包 transport，把请求扩展带进会话；② 自研极薄 `/mcp` 转发层（解析 JSON-RPC 后直接调 `pm_mcp::tools`，绕开 rmcp 会话）；③ 接受 NULL 并只保留 HTTP 路径归因。**保持开放，等 D3 执行端接入时一并裁**（执行端接入后 MCP 归因才有真实使用方）。**2026-11-01 ADR-0002 移交（专家复审 §五，P1）**：本任务追加 `task_run.execution_mode` 列（`human`/`spawn`，`remote`/`container` 预留）+ `triggered_by_user_id` 可空性核查——该子项是普通列迁移，**不受 rmcp transport 阻塞，可先行**；审计三列仍受 rmcp 阻塞。
+- [ ] **T-059 MCP 审计三列（T-021a 遗留）**：MCP 工具写 `governance.audit_log` 时补 `actor_identity_id` / `actor_client` / `actor_auth_mode`。阻塞：rmcp 3.8 的 `StreamableHttpService::new(factory)` 工厂闭包不接收 `http::Request`（拿不到 axum extensions），且会话在 `tokio::spawn` 子任务运行（task-local 不继承）。候选方案：① 换/包 transport，把请求扩展带进会话；② 自研极薄 `/mcp` 转发层（解析 JSON-RPC 后直接调 `pm_mcp::tools`，绕开 rmcp 会话）；③ 接受 NULL 并只保留 HTTP 路径归因。**保持开放，等 D3 执行端接入时一并裁**（执行端接入后 MCP 归因才有真实使用方）。**2026-11-01 ADR-0002 移交（专家复审 §五，P1）**：本任务追加 `task_run.execution_mode` 列（`human`/`spawn`，`remote`/`container` 预留）+ `triggered_by_user_id` 可空性核查——该子项是普通列迁移，**不受 rmcp transport 阻塞，可先行**；审计三列仍受 rmcp 阻塞。**2026-11-02 T-087 定稿联动**：审计三列与 claim 成员校验共享「调用人身份进工具上下文」基础设施缺口，薄转发层落 T-088（候选①/②择一）后，本条的 rmcp 阻塞随之解除——审计三列可在 T-088 之后搭车落地。
 - [ ] **T-093 Executor 生命周期管理能力（ADR-0002 专家复审 §五 新建，P2）**：执行器**管理面**能力——Run 执行时间线查询（消费 `executor-events.jsonl`）、执行器实例状态展示、手动管理入口。**不含数据面正确性项**（启动持久化协议 / 子进程回收维持 P0 在 T-032）。前置：T-032 交付后按需立项。
 
 ---
