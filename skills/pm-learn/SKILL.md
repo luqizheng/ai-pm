@@ -64,7 +64,8 @@ AI-PM 平台是唯一的知识入库方。所有写回都是 propose-only。
 
 ### 5. 提交发现
 
-调用 `pm_discovery_submit_findings`：
+调用 `pm_discovery_submit_findings`（**必填** `project_id` + `session_id`——Step 1 记下的
+那个；submit 系列工具里只有 `pm_discovery_get` 能省略 session_id 自动解析活跃会话）：
 
 - `kind` 取值：`observed` / `user_confirmed` / `speculation` / `contradicted`；
 - 每条带 `evidence: [{repository, file, description}]`，出处必须真实来自
@@ -76,12 +77,19 @@ AI-PM 平台是唯一的知识入库方。所有写回都是 propose-only。
 ### 6. 提交知识提案（propose-only）
 
 若本轮产生了值得沉淀的知识（新增文档或修订既有文档），
-调用 `pm_discovery_submit_proposal`：
+调用 `pm_discovery_submit_proposal`（**必填** `project_id` + `session_id`；提案为
+扁平参数）：
 
-- `action: add`：新文档（`doc_key` + `doc_type` + `proposed_content`）；
+- 公共字段：`action`（`add` | `modify`）、`target_document`（discovery 侧记录的
+  目标文档路径）、`doc_key`（`[A-Za-z0-9._-]`，知识链稳定键）、`doc_type`
+  （requirement / decision / architecture / knowledge）、`proposed_content`
+  （LF Markdown 正文）、`operation_id`（知识链幂等键，按对象生成）、
+  `change_summary` 与 `source_ref`（建议带 `discovery_session:<id>`）；
+- `action: add`：新文档（无需 `document_id` / `base_revision_id`）；
 - `action: modify`：修订既有文档——必须带 `document_id` 与
   `base_revision_id`（从 `pm_discovery_get_context` 的 documents 或平台读出）；
-- 平台会走既有质量门与红线审查：提案可能被自动提交、挂起待人工确认或拒绝；
+- 平台会走既有质量门与红线审查：提案可能被自动提交（outcome=committed，
+  返回 git_commit_sha）、挂起待人工确认或拒绝；
   `base_revision_id` 失效时返回 conflict——此时重新读取最新版本后可重试
   **一次**，再次失败即停止并汇报。
 
