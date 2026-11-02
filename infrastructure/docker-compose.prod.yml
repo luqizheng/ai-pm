@@ -75,3 +75,7 @@ services:
   #  / consul-template）：按 spec 表格，host port 保留（ops 直连），restart 已在
   #  base 文件里有，本 overlay 不动。
   # ─────────────────────────────────────────────────────────────────────────
+
+# PG 方言变体追加：postgres 生产态不发布端口（与上方 mysql 同款收敛）。
+  postgres:
+    ports: !override []

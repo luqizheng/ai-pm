@@ -1,26 +1,24 @@
-# Infrastructure services - shared base (dev & prod)
-# Consul mode (dev -dev vs prod server), port publishing, restart policy,
-# and resource limits are applied via override/prod compose files.
 services:
   consul:
-    image: ${BASE_REGISTRY}hashicorp/consul:2.0.1
+    image: ${consul:-hashicorp/consul:2.0.1}
     hostname: consul
     ports:
-      - "8500:8500"
-      - "8502:8502"
+      - 8500:8500
+      - 8502:8502
     volumes:
       - ./config/consul/connect.hcl:/consul/config/connect.hcl:ro
     command: agent -dev -node=consul-server -bind=0.0.0.0 -client=0.0.0.0
     healthcheck:
-      test: ["CMD-SHELL", "consul members && nc -z 127.0.0.1 8502"]
+      test:
+        - CMD-SHELL
+        - consul members && nc -z 127.0.0.1 8502
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - superpowers
-
   registrator:
-    image: ${BASE_REGISTRY}gliderlabs/registrator:master
+    image: ${registrator:-gliderlabs/registrator:master}
     depends_on:
       consul:
         condition: service_healthy
@@ -28,14 +26,14 @@ services:
       - /var/run/docker.sock:/tmp/docker.sock
     environment:
       DOCKER_HOST: unix:///tmp/docker.sock
-      REGISTRATOR_RESYNC: "30s"
-    command: ["consul://consul:8500"]
+      REGISTRATOR_RESYNC: 30s
+    command:
+      - consul://consul:8500
     restart: unless-stopped
     networks:
       - superpowers
-
   redis:
-    image: ${BASE_REGISTRY}redis:7-alpine
+    image: ${redis:-redis:7-alpine}
     hostname: ${REDIS_HOST}
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
@@ -44,15 +42,17 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        - CMD
+        - redis-cli
+        - ping
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - superpowers
-
   mysql:
-    image: ${BASE_REGISTRY}mysql:8.0
+    image: ${mysql:-mysql:8.0}
     hostname: ${MYSQL_HOST}
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -62,30 +62,34 @@ services:
       MYSQL_HOST_AUTH_METHOD: ${MYSQL_HOST_AUTH_METHOD}
     volumes:
       - mysql_data:/var/lib/mysql
-      # Bootstrap SQL runs once on first init (empty data dir only; run `down -v` to re-apply).
       - ./mysql-init:/docker-entrypoint-initdb.d:ro
     command:
       - --default-authentication-plugin=mysql_native_password
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
-      # Replication prerequisites (binary log + GTID). Required by mysql-replica.
-      # Removing these after replica is provisioned breaks replication — revert
-      # via mysqldump-restore cycle if needed (see docs-site/runbooks/mysql-replication.md).
       - --server-id=1
       - --log-bin=mysql-bin
       - --binlog-format=ROW
       - --gtid-mode=ON
       - --enforce-gtid-consistency=ON
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      test:
+        - CMD
+        - mysqladmin
+        - ping
+        - -h
+        - localhost
+        - -uroot
+        - -p${MYSQL_ROOT_PASSWORD}
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - superpowers
-
+    profiles:
+      - mysql
   rabbitmq:
-    image: ${BASE_REGISTRY}rabbitmq:3.13-management-alpine
+    image: ${rabbitmq:-rabbitmq:3.13-management-alpine}
     hostname: rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
@@ -95,19 +99,40 @@ services:
       - ./config/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
       - ./config/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test:
+        - CMD
+        - rabbitmq-diagnostics
+        - -q
+        - ping
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - superpowers
-
+  postgres:
+    image: ${BASE_REGISTRY}postgres:16
+    hostname: ${POSTGRES_HOST:-postgres}
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-coder}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-coder}
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - superpowers
 volumes:
-  consul_data:
-  redis_data:
-  mysql_data:
-  rabbitmq_data:
-
+  consul_data: null
+  redis_data: null
+  mysql_data: null
+  rabbitmq_data: null
+  postgres_data: null
 networks:
   superpowers:
     driver: bridge

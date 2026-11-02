@@ -1,7 +1,8 @@
 {
   "name": "coder-compose-template",
   "version": "1.6.0",
-  "generatedAt": "2026-10-30T15:24:37.135Z",
-  "fileCount": 55,
+  "dialect": "postgres",
+  "generatedAt": "2026-11-02T23:14:56.506Z",
+  "fileCount": 53,
   "source": "low-memory-micro-services/infrastructure"
 }
