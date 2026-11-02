@@ -15,6 +15,7 @@
 - **2026-11-01 增量（四）**：用户提供《Codex 自动初始化与开发环境接入（Codex Bootstrap）》设计供稿并落盘（`docs/ai-pm-codex-bootstrap-v1.md`，`3c614be`，**未过稿**），新增 **§10.7 M10**（T-087~T-092，T-092 为 V2 延后条目）。核心原则：安装说明负责指导安装、安装程序负责保证安装正确、服务端负责验证安装结果；MCP ≠ Worker；凭证走一次性授权码 + 短期凭证，安装指令不传长期 Token；验收矩阵 BOOT-01~14。本稿是 M8 T-080（onboarding URL）的深化延伸，实施前必须先过 T-087 设计定稿。
 - **2026-11-01 增量（五）**：T-031 外部评审（六项意见，材料包 `docs/ai-pm-t031-executor-expert-review-pack.md`）；其中 Q2 执行端身份经架构专家裁决落盘 **ADR-0002**（`docs/ai-pm-adr-0002-executor-credential-separation.md`，Accepted：Model A/B 统一 lease_token、修订 D2 R-G4、终止顺序反转、T-051 升级安全前置、新增 execution_mode 列）；T-032 设计稿落盘（`docs/ai-pm-slice-d3-executor-hardening-v1.md`，**待过稿**），登记于 §6 M3。
 - **2026-11-01 增量（六）**：`docs/ai-pm-codex-bootstrap-v1.md` 外部专家评审落盘（`docs/ai-pm-codex-bootstrap-review.md`，**有条件过稿**）：总体方向通过；须修正 6 项 P0（V1 与 D3/T-031 职责边界、Device/Runner/Agent Principal 身份关系对齐、三凭证分离、七步撤销协议、Project Binding 与 Repository Access 分层、Ready 服务端状态机）+ 补 3 章节（版本兼容协议、安装失败与重初始化协议、数据模型归属）+ 验收补 BOOT-15~25；专家建议的 T-087~T-092 六任务拆分与 §10.7 既有编号重叠且划分不同，**编号以既有为准**，拆分内容作 T-087 定稿输入；两条新增实施依赖：T-087 须等 T-032 收敛、服务端授权能力先于管理页。**用户确认后评审修订已收编进设计稿 V1.1**（6 项 P0 + 3 章节并入正文，章节重排 §〇~§十二；收编逐条对照见评审记录）。
+- **2026-11-02 增量（七）**：**T-080 服务端完成**（§10.5 M8）——新增公开端点 `GET /install` / `GET /install/{tool}`（同一 URL 内容协商：Markdown 给人 / JSON 给 agent）、补建此前从未实现的 `GET /health`、`auth::is_public_path()` 让三层鉴权链放行接入页；设计稿 `docs/ai-pm-t080-executor-onboarding-url-v1.md`（11 问裁定）已过稿并实施，交付见 §13 归档。**遗留**：Trae / Codex 真实执行端实测（M-01/M-02）待用户执行，完成前只算「服务端就绪」。
 
 ---
 
@@ -243,7 +244,13 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 > 背景：用户确认 z-code / dsh 均支持 MCP，执行端接入从「设计讨论」转入「待实施」；配套 runbook 已落盘（`docs/ai-pm-executor-onboarding-runbook-v1.md`，`3811a37`）。本节三条为 runbook §十缺口与用户裁定的接入方式的落地条目。
 
-- [ ] **T-080 执行端 URL 引导式接入（onboarding endpoint）设计稿 + 实施**
+- [x] **T-080 执行端 URL 引导式接入（onboarding endpoint）设计稿 + 实施**（2026-11-02 完成服务端，执行者：Trae · 设计稿 `docs/ai-pm-t080-executor-onboarding-url-v1.md` 已过稿并实施）
+  - **实施结果**：新增公开端点 `GET /install`（工具清单）与 `GET /install/{tool}`（分工具指引），同一 URL 内容协商（默认 Markdown / `Accept: application/json` 或 `?format=json` → JSON）；**补建 `GET /health`**（此前只在 `auth.rs` 放行名单里、路由实际不存在）；`is_public_path()` 让三层鉴权链各自放行 `/health` 与 `/install*`，`/v1/pm/me` 保持要 bearer。
+  - **11 问裁定**：双形态内容协商 / 路径变体 `/install/{tool}` / 用户把 key 交给 agent 写入配置 / `/health` + `/v1/pm/me` 双验证且未激活给下一步 / 不登记 T-051 档位 / 指引给租约建议值但不改服务端默认 / 工具清单内置代码 + `AI_PM_PUBLIC_BASE_URL` 注入地址 / 接入页完全公开 / 只做服务端（前端归 T-091）/ 已核实清单 + 通用 MCP 兜底（未知 slug 不 404）/ 验证到 `/v1/pm/me` 为止、领取另起一节。
+  - **工具覆盖**：`trae` / `codex` / `workbuddy` 已核实格式；`z-code` / `dsh` / `deepseek-harness` / `opencode` / `pi` 与任何未知 slug 落通用 `mcpServers` 条目。
+  - **验收证据**：`cargo test -p pm-api --test onboarding` 8 passed / 0 failed；`cargo test --workspace` 退出码 0；`cargo check --workspace --all-targets` 0 error 0 warning；新增文件 clippy 0 命中；真实二进制冒烟验证 Markdown/JSON 两形态与 `Host` 头从部署地址推导。
+  - **仍未完成**：M-01（Trae）/ M-02（Codex）真实执行端实测需用户在本机执行——完成前只算「服务端就绪」。
+  - **剩余正文（原始任务描述）**：
   - **本条按 §0.1 执行**：完整 brainstorming。
   - **用户描述的流程（2026-11-01 原话口径）**：用户第一次安装工具 → 打开 trae / codex 等执行端 → **粘贴平台 URL** → 对 agent 说「**帮我安装**」→ **agent 根据 URL 提供的安装方法进行安装**（写本工具的 MCP 配置、引导填 key、验证连通），全程无手工编辑配置文件。
   - **目标**：平台暴露一个稳定、agent 可读的接入 URL，返回分工具的安装指引；执行端 agent 拉取后按指引完成配置与自检，把「粘贴 URL + 一句话」变成全部安装操作。
@@ -394,6 +401,16 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 ---
 
 ## 13. 归档
+
+### T-080 执行端 URL 引导式接入（onboarding endpoint）—— 2026-11-02 服务端完成
+
+- **提交**：`e4d27a2` docs(t080) 设计稿 → `7933ebd` feat(onboarding) → `8d5cef3` docs(t080) 实施记录 → `chore(memory)` → `chore(todo)`。
+- **目标**：用户粘一条 URL 给执行端 agent 说「帮我安装」，agent 拉取后自己写 MCP 配置、索取 key、验证连通，全程不手改配置文件；URL 与指引内容不承载任何凭据。
+- **交付**：`crates/pm-application/src/onboarding/`（`Guide` 契约 + 8 条工具清单 + Markdown/JSON 双渲染，纯数据无状态）；`apps/pm-api/src/onboarding.rs`（`GET /install`、`GET /install/{tool}`，内容协商）；**补建 `GET /health`**；`auth::is_public_path()` 让三层鉴权链各自放行 `/health` 与 `/install*`；8 个集成用例。
+- **11 问裁定**：双形态内容协商 / 路径变体 / 用户把 key 交给 agent / `/health` + `/v1/pm/me` 双验证且未激活给下一步 / 不登记 T-051 档位 / 租约只给建议值不改默认 / 清单内置代码 + `AI_PM_PUBLIC_BASE_URL` 注入 / 完全公开 / 只做服务端 / 已核实清单 + 通用兜底（未知 slug 不 404）/ 验证到 `/v1/pm/me` 为止。
+- **实测**：`cargo test -p pm-api --test onboarding` 8/8；`cargo test --workspace` 退出码 0；`cargo check --workspace --all-targets` 0 error 0 warning；新增文件 clippy 0 命中；真实二进制冒烟验证两形态与 `Host` 从部署地址推导。
+- **关键结论**：`/health` 此前只存在于放行名单、路由从未实现（runbook 的部署校验第一步一直 404）；公开路径必须在**三层链各自**放行，只跳一层等于没跳；`Host` 头写死回环会在跨机部署下指向错误 authority，须从 `AI_PM_PUBLIC_BASE_URL` 推导——runbook「必带头 Host」据此更正为「建议显式带」；工具格式分「已核实 / 通用兜底」两档，不猜 z-code / dsh 的格式。
+- **未完成**：M-01（Trae）/ M-02（Codex）真实执行端实测需用户在本机执行，完成前只算「服务端就绪」。
 
 ### T-001 提交客户主数据（0017）与延后裁定 —— 2026-11-01 完成
 
