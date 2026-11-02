@@ -213,12 +213,14 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 10. M7 · 工作台补齐（P10 的两个真空）
 
-- [ ] **T-070 执行中心接真数据 + 交付验收页（前置：T-031 / T-041）**
+- [~] **T-070 执行中心接真数据 + 交付验收页（前置：T-031 / T-041）**（2026-11-02 领用，执行者：Trae · 设计稿阶段，稿：`docs/ai-pm-delivery-acceptance-workbench-v1.md` 待确认）
   - **目标**：把 `workspace/:projectId/execution` 从骨架换成真实 run 数据；新增交付验收视图（Commit / 测试证据 / 审批结论）。
   - **依据**：`GET /v1/pm/task-runs`（`apps/pm-api/src/pm_runs.rs`，现只有读端点）、`target.md` §P10「AI 执行中心 / 交付验收」两行、`docs/ai-pm-task-detail-page-v1.md`（页面契约）。
   - **做**：run 列表与详情（状态、租约、executor_session、日志入口）；交付清单页（多仓 commit + 证据）；空态与错误态。
   - **不做**：不做假数据页（`VITE_USE_MOCK=0` 必须能跑）；不做 Agent 管理页（P9 延后）。
   - **验收**：真库下能看到 T-031 产生的 run 与 T-041 产生的交付；`vue-tsc` 0 error；vitest 全绿。
+
+- [ ] **T-071 待裁 #13 分阶段交付 / 部分通过（partial approval）**：**保持开放，不主动实施**（2026-11-02 T-070 设计裁定，用户确认 V1 明确不支持）。13 态状态机无部分完成语义；部分通过涉及交付范围拆分与任务拆分，是领域模型变更而非 UI 功能。触发条件：业务真出现分阶段交付需求，届时与「任务拆分 / 交付范围 / 验收生命周期」一并出设计稿（依据：`docs/ai-pm-delivery-acceptance-workbench-v1.md` §九）。
 
 ---
 
