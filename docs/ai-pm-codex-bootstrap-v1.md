@@ -4,12 +4,12 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 文档性质 | 设计稿（ADR + Bootstrap 安装协议 + 开发环境领域模型 + 界面原型），**定稿候选，待用户过稿** |
+| 文档性质 | 设计稿（ADR + Bootstrap 安装协议 + 开发环境领域模型 + 界面原型），**已过稿——M10（T-088~T-091）实施基线** |
 | 版本 | **V1.3**（2026-11-02 外部专家评审收编，§〇-B；V1.2 = 2026-11-02 T-087 定稿；V1.1 = 2026-11-01 评审收编；V1 = 同日用户供稿） |
-| 记录 | 司南（产品经理 Agent）按用户供稿整理落盘（V1）；外部专家评审收编（V1.1）；ZCode 按 §0.1 brainstorming 六项裁清点定稿（V1.2）；第二份外部专家评审收编（V1.3，有条件通过，P0×5 + P1×4 + 任务约束×3） |
-| 状态 | **T-087 定稿 + 第二轮评审收编完成，待用户过稿**——过稿后 T-088~T-091 解禁（§十三给出修订后的任务分工与依赖） |
+| 记录 | 司南（产品经理 Agent）按用户供稿整理落盘（V1）；外部专家评审收编（V1.1）；ZCode 按 §0.1 brainstorming 六项裁清点定稿（V1.2）；第二份外部专家评审收编（V1.3，有条件通过，P0×5 + P1×4 + 任务约束×3）；**用户过稿（2026-11-02）** |
+| 状态 | **已过稿（2026-11-02）**——T-087 归档于 todo.md §13；**T-088~T-091 解禁**，按 §十三 依赖图领取 |
 | 上位约束 | `ai-pm-mcp-executor-positioning-v1.md`、`ai-pm-executor-onboarding-runbook-v1.md`、`ai-pm-adr-0001-tenant-agent-executor-identity.md`、`ai-pm-principal-identity-v1.md`、`ai-pm-adr-0002-executor-credential-separation.md`、`ai-pm-multi-repo-model-v1.md`、`ai-pm-slice-d-execution-pipeline-v1.md`、`ai-pm-slice-d3-executor-hardening-v1.md`（T-032） |
-| 关联条目 | todo.md §10.7 M10（T-087~T-092）；M8 T-080（onboarding URL，本稿的直系前身，**两条任务线已收编为一条**）；评审记录 `ai-pm-codex-bootstrap-review.md`（第一轮）与 `ai-pm-codex-bootstrap-review2.md`（第二轮，本轮） |
+| 关联条目 | todo.md §10.7 M10（T-087~T-092，T-087 已归档 §13）；M8 T-080（onboarding URL，本稿的直系前身，**两条任务线已收编为一条**）；评审记录 `ai-pm-codex-bootstrap-review.md`（第一轮）与 `ai-pm-codex-bootstrap-review2.md`（第二轮，本轮） |
 
 ---
 
