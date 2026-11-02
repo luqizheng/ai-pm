@@ -130,6 +130,12 @@ export const staticRoutes: RouteRecordRaw[] = [
         meta: { title: "产物验收" }
       },
       {
+        path: "delivery",
+        name: "workspace-delivery",
+        component: () => import("../../workspace/pages/DeliveryPage.vue"),
+        meta: { title: "交付验收" } // i18n-ignore: route meta 直接作为页签标题
+      },
+      {
         path: "focus/:objectType/:id",
         name: "workspace-focus",
         component: () => import("../../workspace/focus/FocusView.vue"),

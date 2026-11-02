@@ -4,8 +4,14 @@ import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 import { Flag, CircleCheck } from "lucide-vue-next";
 import PageHeader from "./PageHeader.vue";
-import { agentRun, type RunEventType } from "../fixtures";
-import { listTaskRuns, type TaskRun } from "@/api/execution";
+import RunContextPanel from "../components/RunContextPanel.vue";
+import { agentRun, type RunBaseline, type RunEventType } from "../fixtures";
+import {
+  getTaskRun,
+  listTaskRuns,
+  type TaskRun,
+  type TaskRunDetail
+} from "@/api/execution";
 import { SCOPE_ALL, useScopeStore } from "@/api/scope";
 import { formatDate } from "@/api/format";
 
@@ -125,6 +131,35 @@ async function loadRuns() {
   }
 }
 
+/** 选中 Run 的详情（租约 / 执行器 / 各仓基线）——T-070 §5.2。 */
+const runDetail = ref<TaskRunDetail | null>(null);
+const runDetailFailed = ref(false);
+
+const runDetailBaselines = computed<RunBaseline[]>(
+  () =>
+    runDetail.value?.repositories.map(repo => ({
+      repositoryName: repo.repository_name,
+      baseRef: repo.base_ref,
+      baseCommit: repo.base_commit,
+      workspacePath: repo.workspace_path
+    })) ?? []
+);
+
+async function loadRunDetail(runId: string) {
+  runDetail.value = null;
+  runDetailFailed.value = false;
+  if (useMock || !runId) return;
+  try {
+    runDetail.value = await getTaskRun(runId);
+  } catch {
+    runDetailFailed.value = true;
+  }
+}
+
+watch(selectedRunId, runId => {
+  void loadRunDetail(runId);
+});
+
 let initialised = false;
 
 onMounted(async () => {
@@ -191,6 +226,13 @@ watch(projectId, () => {
             </ul>
           </div>
         </div>
+        <RunContextPanel
+          :lease-expires-at="agentRun.leaseExpiresAt"
+          :heartbeat-at="agentRun.heartbeatAt"
+          :executor-kind="agentRun.executorKind"
+          :executor-session="agentRun.executorSession"
+          :baselines="agentRun.baselines"
+        />
       </section>
 
       <!-- 中央双栏：左执行步骤 / 右步骤详情 -->
@@ -350,6 +392,13 @@ watch(projectId, () => {
             <span class="ws-badge" :class="runStatusClass[selectedRun.status]">
               {{ runStatusText(selectedRun.status) }}
             </span>
+            <span class="ws-badge is-kind">
+              {{
+                selectedRun.run_kind === "review"
+                  ? t("workspace.pages.execution.runKindReview")
+                  : t("workspace.pages.execution.runKindDelivery")
+              }}
+            </span>
             <h2 class="ws-detail-title">{{ selectedRun.task_title }}</h2>
           </div>
           <p class="ws-detail-text">
@@ -369,8 +418,25 @@ watch(projectId, () => {
             }}
             / {{ selectedRun.failure_reason }}
           </p>
-          <p class="ws-hint" data-test="run-details-pending">
-            {{ t("workspace.pages.execution.detailsPending") }}
+          <RunContextPanel
+            :lease-expires-at="
+              runDetail?.lease_expires_at ?? selectedRun.lease_expires_at
+            "
+            :executor-kind="
+              runDetail?.executor_kind ?? selectedRun.executor_kind
+            "
+            :executor-session="
+              runDetail?.executor_session ?? selectedRun.executor_session
+            "
+            :stage="runDetail?.stage ?? null"
+            :baselines="runDetailBaselines"
+          />
+          <p
+            v-if="runDetailFailed"
+            class="ws-hint"
+            data-test="run-detail-failed"
+          >
+            {{ t("workspace.pages.execution.runDetailLoadFailed") }}
           </p>
         </article>
       </div>
@@ -557,6 +623,11 @@ watch(projectId, () => {
 
 /* Run 状态（真后端）：待执行/执行中/完成/失败 */
 .ws-badge.is-waiting {
+  color: var(--ws-text-secondary);
+}
+
+/* run_kind 徽标（delivery/review 分轨，0026 起按 kind 编号） */
+.ws-badge.is-kind {
   color: var(--ws-text-secondary);
 }
 

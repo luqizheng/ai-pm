@@ -3,6 +3,7 @@ import {
   Activity,
   Bot,
   BookOpen,
+  ClipboardCheck,
   Cpu,
   FileText,
   ListTree,
@@ -15,7 +16,7 @@ import {
 /**
  * 工作空间导航模式（用户裁决 2026-11-01）：
  *   - classic：传统模式，9 项（工作空间组 4 + 研发模块组 5）
- *   - ai：V1.2 UI，5 项（工作空间组单组，五个核心研发工作模式）
+ *   - ai：V1.2 UI，6 项（工作空间组单组；T-070 增补交付验收）
  *
  * 两种模式共用同一套 /workspace/:projectId/<slug> 路由；模式只决定左栏展示哪些
  * 入口，不改变已注册的页面。顶栏模式段控件在同一壳内切换（不跳 /dashboard）。
@@ -139,6 +140,12 @@ const aiGroups: NavGroupDef[] = [
         slug: "artifacts",
         labelKey: "workspace.nav.artifacts",
         icon: PackageCheck
+      },
+      {
+        key: "delivery",
+        slug: "delivery",
+        labelKey: "workspace.nav.delivery",
+        icon: ClipboardCheck
       }
     ]
   }

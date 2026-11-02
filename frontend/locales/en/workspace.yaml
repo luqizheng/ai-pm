@@ -35,6 +35,7 @@ workspace:
     projectCognition: Project Cognition
     artifacts: Artifacts
     models: Models
+    delivery: Delivery Acceptance
     classicOverview: Overview
   service:
     iteration: Current iteration
@@ -267,7 +268,6 @@ workspace:
       pickProject: Select a project in Project Scope first
       loadFailed: Load failed, please retry
       empty: No execution runs
-      detailsPending: Steps, tool calls and logs appear once the executor is wired
       attempt: Attempt {n}
       failureReason: Failure reason
       runQueued: Queued
@@ -276,6 +276,81 @@ workspace:
       runFailed: Failed
       runTimedOut: Timed out
       runCancelled: Cancelled
+      runDetailLoadFailed: Failed to load run details
+      lease: Lease
+      leaseUntil: Lease until {time}
+      noLease: No lease
+      heartbeat: Last heartbeat {time}
+      executor: Executor
+      executorSession: Session {session}
+      baselines: Locked baselines
+      logLocator: Log locator
+      stage: Stage
+      runKindDelivery: Delivery
+      runKindReview: Review
+    delivery:
+      title: Delivery Acceptance
+      subtitle: Project-wide pending deliveries with per-task acceptance evidence
+      metricPending: Pending
+      metricEligible: Eligible
+      metricBlocked: Blocked
+      project: Project
+      pickProjectShort: Select project
+      pickProject: Select a project in "Project scope" first
+      loadFailed: Load failed, please retry later
+      empty: No deliveries awaiting acceptance
+      listTitle: Pending tasks
+      badgeEligible: Eligible
+      badgeBlocked: Blocked
+      badgeMissing: Missing
+      blockers: "{n} blockers"
+      expectedRepos: "{delivered}/{expected} repos delivered"
+      missingRepos: "Missing: {repos}"
+      integrationPassed: Integration passed
+      integrationFailed: Integration failed
+      integrationNotRun: Integration not run
+      reviewNone: Review not started
+      reviewRunning: Review in progress, awaiting its conclusion
+      reviewAwaiting: Awaiting acceptance decision
+      reviewDecided: Decision recorded
+      eligibleBanner: Delivery evidence complete — ready for acceptance
+      notEligibleBanner: Not ready for acceptance
+      sectionDelivery: Delivery manifest
+      sectionVerdicts: Acceptance criteria
+      sectionFindings: Review findings
+      sectionRuns: Agent runs
+      sectionApprovals: Approval history
+      sectionAction: Acceptance action
+      deliveryStateDelivered: Delivered
+      deliveryStatePartial: Partial
+      deliveryStateNeverSubmitted: Never submitted
+      repoNotDelivered: Not delivered
+      testsSummary: "Tests {passed}/{total} passed"
+      noEvidence: No review or delivery records yet
+      verdictPassed: Passed
+      verdictFailed: Failed
+      verdictNotEvaluable: Not evaluable
+      verdictAwaitingManual: Awaiting manual decision
+      verdictNotEvaluated: Not covered by review
+      severityBlocker: Blocker
+      severityWarning: Warning
+      severityInfo: Info
+      noFindings: No findings
+      findingLocation: Location
+      findingEvidence: Evidence
+      approvalPending: Pending
+      approvalApproved: Approved
+      approvalRejected: Rejected
+      approvalReason: Reason
+      approve: Approve
+      reject: Reject
+      reasonPlaceholder: Reason (required for rejection)
+      rejectReasonRequired: A reason is required to reject
+      decisionCompleted: Task completed
+      decisionChangesRequested: Changes requested
+      decisionAlreadyDecided: This approval was already decided
+      decisionFailed: Submission failed
+      runsEmpty: No run records
     decisionsExtra:
       background: Background
       dimensions: Comparison dimensions

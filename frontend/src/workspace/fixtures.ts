@@ -989,6 +989,14 @@ export interface RunStep {
   checkpoint?: boolean;
 }
 
+/** 本 Run 锁定的一仓基线（T-070 §6.4：mock 分支与真后端详情同构）。 */
+export interface RunBaseline {
+  repositoryName: string;
+  baseRef: string;
+  baseCommit: string;
+  workspacePath: string;
+}
+
 export interface AgentRun {
   id: string;
   title: string;
@@ -999,6 +1007,12 @@ export interface AgentRun {
   checkpoints: string[];
   remaining: string[];
   steps: RunStep[];
+  /** 租约 / 执行器定位（内容定位，不读日志内容——设计稿 §二非目标）。 */
+  leaseExpiresAt?: string;
+  heartbeatAt?: string;
+  executorKind?: string;
+  executorSession?: string;
+  baselines?: RunBaseline[];
 }
 
 export const agentRun: AgentRun = {
@@ -1017,6 +1031,24 @@ export const agentRun: AgentRun = {
     "海拔权重补齐（山地用例失败根因）",
     "10km² 生成时间 ≤ 3s 达标",
     "性能回归测试（gt-6）"
+  ],
+  leaseExpiresAt: "2026-11-01T09:45:00Z",
+  heartbeatAt: "2026-11-01T09:31:00Z",
+  executorKind: "codex",
+  executorSession: "sess-forest-v02",
+  baselines: [
+    {
+      repositoryName: "worldmap-gen",
+      baseRef: "main",
+      baseCommit: "b19c4e7",
+      workspacePath: "/ws/run-forest-v02/worldmap-gen"
+    },
+    {
+      repositoryName: "shared-contracts",
+      baseRef: "main",
+      baseCommit: "77aa90c",
+      workspacePath: "/ws/run-forest-v02/shared-contracts"
+    }
   ],
   steps: [
     {
@@ -1103,3 +1135,6 @@ export const contextAdvice = "先验证 Shader 原型性能，再做正式架构
 
 /** 右栏两个大占位区（V1.1 图面） */
 export const contextPlaceholders = ["批量原型验证", "补充证据"];
+
+/* 交付验收工作台（T-070）演示数据：独立模块（浏览器侧同族 fixtures），这里统一出口。 */
+export * from "./acceptance/fixtures";

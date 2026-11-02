@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  acceptanceDetails,
+  acceptanceOverview,
   agentRun,
   agents,
   artifacts,
@@ -242,5 +244,53 @@ describe("workspace fixtures（V1.1 演示数据）", () => {
     expect(
       agentRun.steps.some(s => s.type === "approval" && s.status === "waiting")
     ).toBe(true);
+  });
+});
+
+describe("交付验收 fixtures（T-070）：与后端契约同构、徽标互斥、证据表齐全", () => {
+  it("project_id 等于 demoProjectId，三指标由任务徽标推得", () => {
+    expect(acceptanceOverview.project_id).toBe(demoProjectId);
+    expect(acceptanceOverview.total).toBe(acceptanceOverview.tasks.length);
+    const count = (badge: string) =>
+      acceptanceOverview.tasks.filter(t => t.badge === badge).length;
+    expect(acceptanceOverview.counts).toEqual({
+      pending: acceptanceOverview.tasks.length,
+      eligible: count("eligible"),
+      blocked: count("blocked")
+    });
+  });
+
+  it("每个任务恰好一个合法徽标；pending 审批仅在 awaiting_decision 时存在", () => {
+    for (const task of acceptanceOverview.tasks) {
+      expect(["eligible", "blocked", "missing"]).toContain(task.badge);
+      if (task.review_status === "awaiting_decision") {
+        expect(task.pending_approval_id).not.toBeNull();
+      } else {
+        expect(task.pending_approval_id).toBeNull();
+      }
+    }
+    // Q1：存在零交付（待补充）的任务，证明总表不以交付状态筛任务。
+    expect(
+      acceptanceOverview.tasks.some(
+        t => t.badge === "missing" && t.delivery_summary.expected_repos === 0
+      )
+    ).toBe(true);
+  });
+
+  it("每个任务都有证据表，且 pending 审批 id 能在审批历史里找到", () => {
+    for (const task of acceptanceOverview.tasks) {
+      const detail = acceptanceDetails[task.task_id];
+      expect(detail, task.task_id).toBeDefined();
+      if (task.pending_approval_id) {
+        expect(
+          detail.approvals.some(
+            a => a.id === task.pending_approval_id && a.status === "pending"
+          )
+        ).toBe(true);
+      }
+      for (const run of detail.runs) {
+        expect(run.task_id).toBe(task.task_id);
+      }
+    }
   });
 });

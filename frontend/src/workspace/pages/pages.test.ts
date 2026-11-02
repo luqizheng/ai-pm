@@ -123,6 +123,23 @@ describe("ExecutionPage（AI 执行中心 V1.2）", () => {
       "gen/forest.rs"
     );
   });
+
+  it("执行上下文面板：租约 / 执行器会话 / 各仓基线与日志定位（T-070，无日志内容）", () => {
+    const w = mountShell(ExecutionPage);
+    const ctx = w.find("[data-test='run-context']");
+    expect(ctx.exists()).toBe(true);
+    expect(ctx.find("[data-test='run-lease']").text()).toContain("租约至");
+    expect(ctx.find("[data-test='run-executor']").text()).toContain(
+      agentRun.executorSession!
+    );
+    const baselines = ctx.findAll("[data-test='run-baseline']");
+    expect(baselines).toHaveLength(agentRun.baselines!.length);
+    expect(baselines[0].text()).toContain("worldmap-gen");
+    expect(baselines[0].text()).toContain("main@b19c4e7");
+    expect(baselines[0].text()).toContain("/ws/run-forest-v02/worldmap-gen");
+    // 只做定位，不渲染任何日志正文区。
+    expect(w.find("[data-test='run-details-pending']").exists()).toBe(false);
+  });
 });
 
 describe("TeamPage（AI 团队）", () => {

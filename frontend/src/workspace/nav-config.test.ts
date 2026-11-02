@@ -20,13 +20,14 @@ describe("workspace 导航模式配置", () => {
     ]);
   });
 
-  it("AI 模式（V1.2）5 项：单工作空间组", () => {
+  it("AI 模式（V1.2 + T-070）6 项：单工作空间组，交付验收殿后", () => {
     expect(navSlugs("ai")).toEqual([
       "goals",
       "execution",
       "decisions",
       "knowledge",
-      "artifacts"
+      "artifacts",
+      "delivery"
     ]);
     expect(NAV_GROUPS.ai).toHaveLength(1);
     expect(NAV_GROUPS.ai[0].key).toBe("workspace");

@@ -102,7 +102,7 @@ describe("WorkspaceShell（V1.1 三栏壳）", () => {
     expect(nav).not.toContain("概览");
   });
 
-  it("切到 AI 模式后左导航渲染 V1.2 五项，被裁项隐藏", async () => {
+  it("切到 AI 模式后左导航渲染 V1.2 五项 + 交付验收，被裁项隐藏", async () => {
     const w = mountShellWithSlots();
     await w.find("[data-test='mode-ai']").trigger("click");
     const nav = w.find(".workspace-leftnav").text();
@@ -111,7 +111,8 @@ describe("WorkspaceShell（V1.1 三栏壳）", () => {
       "AI 执行中心",
       "决策中心",
       "项目认知",
-      "产物验收"
+      "产物验收",
+      "交付验收"
     ]) {
       expect(nav).toContain(label);
     }
