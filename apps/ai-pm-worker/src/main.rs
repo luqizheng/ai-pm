@@ -10,7 +10,7 @@ use pm_ai::FakeModel;
 use pm_application::project_import::{import_id_for_event, run_import_job};
 use pm_application::{PgCommandExecutor, PolicyEngine};
 use pm_infrastructure::job_queue::{self, ClaimedJob};
-use pm_infrastructure::outbox_handlers::{DeliverySubmittedHandler, TaskReadyHandler};
+use pm_infrastructure::outbox_handlers::register_all_handlers;
 use pm_infrastructure::outbox_worker::OutboxWorker;
 use sqlx::PgPool;
 use tracing_subscriber::EnvFilter;
@@ -83,20 +83,22 @@ async fn main() {
         }
     });
 
-    // 第三条循环：outbox 事件分发（spec §20）。注册 TaskReady → 创建 queued
-    // Run；DeliverySubmitted → D5 拍①（推进 reviewing + 建 review run，幂等）。
+    // 第三条循环：outbox 事件分发（spec §20）。**统一 Handler 装配**
+    // （T-061 §6.2.1）：本 worker 与 `pm-worker` 共享同一张 outbox 表，注册
+    // 集合必须一致——否则零 Handler 实例会把可处理事件误判为死信。
+    // 装配集合：TaskReady → 创建 queued Run；DeliverySubmitted → D5 拍①；
+    // RunCompleted → 记审计 + 生成执行完成通知（记录型）。
     // 其余未注册事件明确死信、可 replay，绝不假装消费。
     let outbox_pool = pool.clone();
     let outbox_worker_id = worker_id.clone();
     tokio::spawn(async move {
-        OutboxWorker::new(outbox_pool.clone(), outbox_worker_id)
-            .with_handler("TaskReady", Arc::new(TaskReadyHandler::new(outbox_pool.clone())))
-            .with_handler(
-                "DeliverySubmitted",
-                Arc::new(DeliverySubmittedHandler::new(outbox_pool)),
-            )
-            .run()
-            .await
+        let worker = register_all_handlers(
+            OutboxWorker::new(outbox_pool.clone(), outbox_worker_id),
+            &outbox_pool,
+        );
+        // 目录一致性校验：不一致即 panic（fail fast）。
+        worker.assert_catalog_consistent();
+        worker.run().await
     });
 
     // 第四条循环：Run 调度与执行（Slice D1/D3）。R4：开关只控制**领取**新 Run；

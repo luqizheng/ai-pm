@@ -1,9 +1,14 @@
 //! `pm-worker`: claims outbox events and dispatches them to registered
-//! handlers. First version registers no handlers — every claimed event
-//! dead-letters with `no handler registered for <type>` and stays
-//! visible for manual `replay` (decision D4); real handlers arrive with
-//! Slice C/D (MCP scheduling, knowledge write-back).
+//! handlers.
+//!
+//! **统一 Handler 装配**（T-061 §6.2.1）：`pm-worker` 与 `ai-pm-worker` 共享
+//! 同一张 outbox 表——任一实例抢到的事件都必须能被正确消费。零 Handler 空壳
+//! 参与共享队列领取，会把另一 Worker **可正常处理**的事件经重试误判为死信
+//! （**假死信**，非业务失败）。因此两个 Worker 都经同一个入口
+//! `register_all_handlers` 装配，注册集合必须覆盖 `EventCatalog` 中
+//! `has_handler = true` 的全集——由启动时的目录一致性校验保证。
 
+use pm_infrastructure::outbox_handlers::register_all_handlers;
 use pm_infrastructure::outbox_worker::OutboxWorker;
 use tracing_subscriber::EnvFilter;
 
@@ -23,9 +28,14 @@ async fn main() {
         .expect("database pool");
 
     let worker_id = format!("pm-worker-{}", uuid::Uuid::new_v4());
-    // 首版不注册任何 handler：事件一律死信并保留 last_error 供 replay，
-    // 真实 handler（MCP 调度 / 知识回写）在 Slice C/D 经 with_handler 注册。
-    let worker = OutboxWorker::new(pool, worker_id.clone());
-    tracing::info!(service = "pm-worker", %worker_id, "started");
+    let worker = register_all_handlers(OutboxWorker::new(pool.clone(), worker_id.clone()), &pool);
+    // 目录一致性校验：不一致即 panic（fail fast），不带着假死信配置进入消费循环。
+    worker.assert_catalog_consistent();
+    tracing::info!(
+        service = "pm-worker",
+        %worker_id,
+        handlers = ?worker.handled_event_types(),
+        "started"
+    );
     worker.run().await;
 }

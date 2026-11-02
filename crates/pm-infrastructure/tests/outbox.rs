@@ -121,6 +121,8 @@ async fn fail_retries_with_backoff_until_the_ceiling(pool: PgPool) {
         "attempts >= max_attempts must dead-letter"
     );
 }
+/// 死信落定后的状态可见性（列表 / 重放 / 项目隔离在应用层
+/// `pm_application::outbox_ops` 服务中验证，见 `pm-application/tests/outbox_ops.rs`）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn dead_letter_is_listed_with_its_reason_and_can_be_replayed(pool: PgPool) {
     let project_id = seed_project(&pool).await;
@@ -129,32 +131,40 @@ async fn dead_letter_is_listed_with_its_reason_and_can_be_replayed(pool: PgPool)
     tx.commit().await.unwrap();
     outbox::dead_letter(&pool, id, "no handler registered for TaskReady").await.unwrap();
 
-    let rows = outbox::list_dead_letters(&pool, 10).await.unwrap();
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].id, id);
+    let row: (String, Option<String>) = sqlx::query_as(
+        "SELECT status, last_error FROM integration.outbox_event WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row.0, "dead_letter");
     assert_eq!(
-        rows[0].last_error.as_deref(),
+        row.1.as_deref(),
         Some("no handler registered for TaskReady")
     );
+}
 
-    outbox::replay(&pool, id).await.expect("dead-letter replay is allowed");
+/// 未注册 handler 的事件被 Worker 死信后可被重新领取（replay 路径的底层语义）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn a_dead_lettered_event_can_be_parked_and_reclaimed(pool: PgPool) {
+    let project_id = seed_project(&pool).await;
+    let mut tx = pool.begin().await.unwrap();
+    let id = outbox::append(&mut tx, event(project_id, "k-reclaim")).await.unwrap();
+    tx.commit().await.unwrap();
+    outbox::dead_letter(&pool, id, "no handler registered for TaskReady").await.unwrap();
+
+    // 重放的等价底层操作（应用层服务用带 project_id 的原子 UPDATE 实现）。
+    sqlx::query(
+        "UPDATE integration.outbox_event \
+         SET status = 'pending', attempts = 0, next_attempt_at = now() \
+         WHERE id = $1 AND status = 'dead_letter'",
+    )
+    .bind(id)
+    .execute(&pool)
+    .await
+    .unwrap();
     let reclaimed = outbox::claim(&pool, "worker-a", 60).await.expect("replayed event is claimable");
     assert_eq!(reclaimed.id, id);
     assert_eq!(reclaimed.attempts, 1, "replay resets attempts");
-}
-
-#[sqlx::test(migrations = "../../migrations")]
-async fn replay_rejects_missing_and_live_events(pool: PgPool) {
-    let project_id = seed_project(&pool).await;
-    assert!(matches!(
-        outbox::replay(&pool, Uuid::new_v4()).await,
-        Err(outbox::ReplayError::NotFound)
-    ));
-    let mut tx = pool.begin().await.unwrap();
-    let id = outbox::append(&mut tx, event(project_id, "k-live")).await.unwrap();
-    tx.commit().await.unwrap();
-    assert!(matches!(
-        outbox::replay(&pool, id).await,
-        Err(outbox::ReplayError::NotDeadLetter)
-    ));
 }

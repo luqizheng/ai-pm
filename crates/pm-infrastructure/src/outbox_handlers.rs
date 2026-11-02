@@ -9,11 +9,13 @@
 //! 任务的并发消费串行化；「已有 queued/running Run 则跳过」让至少一次投递下的重复
 //! 消费坍缩为一次创建；任务已不在可调度态（过期事件）则确认消费但不产生副作用。
 
+use std::sync::Arc;
+
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::outbox::ClaimedOutboxEvent;
-use crate::outbox_worker::OutboxHandler;
+use crate::outbox_worker::{OutboxHandler, OutboxWorker};
 
 /// `TaskReady` 的消费 handler：为可调度的任务创建一条待执行 Run。
 pub struct TaskReadyHandler {
@@ -165,4 +167,119 @@ impl OutboxHandler for DeliverySubmittedHandler {
             Err(error) => Err(error.to_string()),
         }
     }
+}
+
+/// `RunCompleted` 的消费 handler（**记录型**事实通知，T-061 §5.6）。
+///
+/// 语义：记录「某次 Run 已经结束」这一不可逆业务事实——写一条
+/// `governance.audit_log` + 一条 `integration.notification`。
+/// **不改 Run 状态、不触发 D5 失败判定、不重新调度 Task**（状态推进权归 D5
+/// 失败判定作业，本 handler 不与之争夺）。
+///
+/// 并发幂等（P0-2）：Outbox 是至少一次投递——租约过期、重复投递会让两个
+/// Worker 同时处理同一事件。裸 `WHERE NOT EXISTS` 有「检查—插入」竞态窗口
+/// （A、B 同查不存在 → 同插 → 双份），因此用**事务级 advisory lock**（键 =
+/// run_id）串行化整个「检查 + 写入」过程。审计与通知**同一事务**原子提交：
+/// 任一失败则两项一起回滚，事件不标记 delivered。
+pub struct RunCompletedHandler {
+    pool: PgPool,
+}
+
+impl RunCompletedHandler {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+/// 从载荷取 run_id（与生产端同构：payload.run_id 优先，回退 aggregate_id）。
+fn run_id_of(event: &ClaimedOutboxEvent) -> Option<Uuid> {
+    event
+        .payload
+        .get("run_id")
+        .and_then(|value| value.as_str())
+        .and_then(|text| Uuid::parse_str(text).ok())
+        .or_else(|| Uuid::parse_str(&event.aggregate_id).ok())
+}
+
+#[async_trait::async_trait]
+impl OutboxHandler for RunCompletedHandler {
+    async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
+        let run_id = run_id_of(event)
+            .ok_or_else(|| "RunCompleted payload is missing a run_id".to_string())?;
+        let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
+
+        // ① 事务级 advisory lock：键 = run_id。事务结束自动释放，无需手工归还；
+        //    后到的并发 Worker 在此排队，因此「检查 + 写入」窗口被串行化。
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))")
+            .bind(run_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // ② 审计事实（幂等锚点：project_id + action + target_id = run_id）。
+        //    `governance.audit_log` 无唯一约束 → 靠锁内的条件 INSERT 保证唯一。
+        sqlx::query(
+            "INSERT INTO governance.audit_log \
+             (project_id, actor_id, action, target_type, target_id, after_data, source_kind, tenant_id) \
+             SELECT $1, $2, 'run_completed_event', 'task_run', $3, $4, 'run_dispatch', \
+                    (SELECT tenant_id FROM core.project WHERE id = $1) \
+             WHERE NOT EXISTS ( \
+                 SELECT 1 FROM governance.audit_log \
+                  WHERE target_id = $3 AND action = 'run_completed_event' AND project_id = $1)",
+        )
+        .bind(event.project_id)
+        .bind(pm_application::run_dispatch::DISPATCH_SERVICE_PRINCIPAL)
+        .bind(run_id)
+        .bind(event.payload.clone())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        // ③ 执行完成通知（幂等锚点：project_id + kind + payload->>'run_id'）。
+        //    `source_proposal_id` 是 UUID UNIQUE 且此处必须为 NULL（`notify` 现有
+        //    实现同样是 NULL）——本通知不来自任何提案。
+        sqlx::query(
+            "INSERT INTO integration.notification \
+             (project_id, source_proposal_id, kind, payload, tenant_id) \
+             SELECT $1, NULL, 'run_completed', $2, \
+                    (SELECT tenant_id FROM core.project WHERE id = $1) \
+             WHERE NOT EXISTS ( \
+                 SELECT 1 FROM integration.notification \
+                  WHERE project_id = $1 AND kind = 'run_completed' \
+                    AND payload->>'run_id' = $3)",
+        )
+        .bind(event.project_id)
+        .bind(event.payload.clone())
+        .bind(run_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        // ④ 审计与通知同事务提交：不可能出现「审计成功、通知失败、却 delivered」。
+        tx.commit().await.map_err(|e| e.to_string())?;
+        tracing::info!(%run_id, "RunCompleted consumed: audit + notification recorded");
+        Ok(())
+    }
+}
+
+/// **唯一的生产 Handler 装配入口**（T-061 §6.2.1）。
+///
+/// `pm-worker` 与 `ai-pm-worker` 共享同一张 outbox 表——任一实例抢到的事件都
+/// 必须能被正确消费。零 Handler 空壳参与共享队列领取，会把另一 Worker **可正常
+/// 处理**的事件经重试误判为死信（**假死信**，非业务失败）。
+///
+/// 两个 Worker 的运行配置、进程职责与生命周期各自独立；**统一的是 Handler
+/// 注册能力**。装配集合必须覆盖 `EventCatalog` 中 `has_handler = true` 的全集
+/// ——由 `OutboxWorker::assert_catalog_consistent` 在启动时校验。
+///
+/// 并发边界：「集合一致」不等于「并发安全」——原子领取（`SKIP LOCKED` + 租约）
+/// 与各 Handler 的幂等锚点另行保证（`RunCompletedHandler` 见其 advisory lock）。
+pub fn register_all_handlers(worker: OutboxWorker, pool: &PgPool) -> OutboxWorker {
+    worker
+        .with_handler("TaskReady", Arc::new(TaskReadyHandler::new(pool.clone())))
+        .with_handler(
+            "DeliverySubmitted",
+            Arc::new(DeliverySubmittedHandler::new(pool.clone())),
+        )
+        .with_handler("RunCompleted", Arc::new(RunCompletedHandler::new(pool.clone())))
 }

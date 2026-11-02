@@ -211,25 +211,6 @@ pub async fn fail(
         _ => OutboxFailOutcome::Retried,
     })
 }
-/// Why a manual `replay` was refused.
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
-pub enum ReplayError {
-    #[error("outbox event not found")]
-    NotFound,
-    #[error("only dead-letter events can be replayed")]
-    NotDeadLetter,
-}
-
-/// One row of the dead-letter listing, for operator triage.
-pub struct DeadLetterRow {
-    pub id: uuid::Uuid,
-    pub event_type: String,
-    pub aggregate_type: String,
-    pub aggregate_id: String,
-    pub attempts: i32,
-    pub last_error: Option<String>,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-}
 
 /// Park an event in the dead letter bin with a human-readable `reason`.
 ///
@@ -255,68 +236,3 @@ pub async fn dead_letter(
     .map(|_| ())
 }
 
-/// List the most recently dead-lettered events, newest first.
-pub async fn list_dead_letters(
-    pool: &sqlx::PgPool,
-    limit: i64,
-) -> Result<Vec<DeadLetterRow>, sqlx::Error> {
-    sqlx::query_as::<_, (uuid::Uuid, String, String, String, i32, Option<String>, chrono::DateTime<chrono::Utc>)>(
-        "SELECT id, event_type, aggregate_type, aggregate_id, attempts, last_error, created_at \
-         FROM integration.outbox_event \
-         WHERE status = 'dead_letter' \
-         ORDER BY created_at DESC \
-         LIMIT $1",
-    )
-    .bind(limit)
-    .fetch_all(pool)
-    .await
-    .map(|rows| {
-        rows.into_iter()
-            .map(
-                |(id, event_type, aggregate_type, aggregate_id, attempts, last_error, created_at)| {
-                    DeadLetterRow {
-                        id,
-                        event_type,
-                        aggregate_type,
-                        aggregate_id,
-                        attempts,
-                        last_error,
-                        created_at,
-                    }
-                },
-            )
-            .collect()
-    })
-}
-
-/// Manually re-queue a dead-lettered event after operator triage.
-///
-/// Resets `status` to `pending`, zeroes `attempts` and clears the lease;
-/// `last_error` is kept for the audit trail. Only dead-lettered events
-/// are replayable — a live event is still in flight and replaying it
-/// would duplicate delivery.
-pub async fn replay(pool: &sqlx::PgPool, id: uuid::Uuid) -> Result<(), ReplayError> {
-    let status: Option<String> =
-        sqlx::query_scalar("SELECT status FROM integration.outbox_event WHERE id = $1")
-            .bind(id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|_| ReplayError::NotFound)?;
-    match status {
-        None => Err(ReplayError::NotFound),
-        Some(s) if s == "dead_letter" => {
-            sqlx::query(
-                "UPDATE integration.outbox_event \
-                 SET status = 'pending', attempts = 0, next_attempt_at = now(), \
-                     lease_owner = NULL, locked_until = NULL \
-                 WHERE id = $1",
-            )
-            .bind(id)
-            .execute(pool)
-            .await
-            .map_err(|_| ReplayError::NotFound)?;
-            Ok(())
-        }
-        Some(_) => Err(ReplayError::NotDeadLetter),
-    }
-}

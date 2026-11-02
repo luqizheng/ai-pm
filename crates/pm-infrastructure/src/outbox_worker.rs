@@ -70,6 +70,36 @@ impl OutboxWorker {
         self
     }
 
+    /// 已注册的事件类型（`register_all_handlers` 的装配结果校验用）。
+    pub fn handled_event_types(&self) -> Vec<&'static str> {
+        let mut types: Vec<&'static str> = self.handlers.keys().copied().collect();
+        types.sort_unstable();
+        types
+    }
+
+    /// 启动前校验：**注册表 == 事件目录**（T-061 §6.2）。
+    ///
+    /// 两个方向都要查：
+    /// - 注册了目录里没有的类型 → 拼写错或目录已删，会造成永不消费的死信；
+    /// - 目录里 `has_handler = true` 却没注册 → 该事件被领取后必然死信。
+    ///
+    /// 不匹配即 **panic**（fail fast）：Worker 的 `None` 分支会把未知事件死信，
+    /// 与其运行期静默积累死信，不如启动失败。
+    pub fn assert_catalog_consistent(&self) {
+        for registered in self.handlers.keys() {
+            assert!(
+                pm_application::outbox::event_spec(registered).is_some(),
+                "outbox handler registered for `{registered}`, which is not in EventCatalog"
+            );
+        }
+        for expected in pm_application::outbox::handled_event_types() {
+            assert!(
+                self.handlers.contains_key(expected),
+                "EventCatalog declares `{expected}` as handled, but no handler is registered"
+            );
+        }
+    }
+
     /// Override the retry budget. Production wiring keeps the crate
     /// defaults; tests shrink the ceiling to exercise the dead-letter
     /// path without waiting out five backoff cycles.
