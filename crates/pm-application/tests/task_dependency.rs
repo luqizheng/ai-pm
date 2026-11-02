@@ -164,7 +164,7 @@ fn executor(pool: &PgPool) -> PgCommandExecutor {
 fn ctx(project_id: Uuid, actor_id: Uuid) -> ExecutionContext {
     ExecutionContext {
         project_id,
-        actor_id,
+        actor: pm_application::actor::AuditActor::principal(actor_id),
         actor_kind: ActorKind::Human,
         source: CommandSource::Bootstrap,
     }

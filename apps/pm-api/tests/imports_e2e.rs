@@ -426,7 +426,7 @@ async fn cold_start_import_runs_end_to_end(pool: PgPool) {
     let executor = PgCommandExecutor::new(pool.clone(), Arc::new(PolicyEngine::for_tests()));
     let context = || ExecutionContext {
         project_id,
-        actor_id: owner,
+        actor: pm_application::actor::AuditActor::principal(owner),
         actor_kind: ActorKind::Human,
         source: CommandSource::RedlineApproval {
             approval_id: Uuid::new_v4(),

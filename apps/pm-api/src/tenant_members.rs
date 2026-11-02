@@ -563,9 +563,9 @@ async fn insert_audit(
 ) -> Result<(), Response> {
     sqlx::query(
         "INSERT INTO governance.tenant_audit_log \
-         (tenant_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, \
+         (tenant_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
           action, target_principal_id, before_data, after_data) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+         VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, $8, $9)",
     )
     .bind(tenant_id)
     .bind(actor.id)

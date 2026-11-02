@@ -746,6 +746,7 @@ async fn persist_accepted(
     audit_delivery(
         tx,
         request.project_id,
+        None,
         "delivery.submitted",
         request.run_id,
         serde_json::json!({
@@ -810,6 +811,7 @@ async fn finish_rejected(
     audit_delivery(
         &mut tx,
         request.project_id,
+        None,
         "delivery.rejected",
         request.run_id,
         serde_json::json!({
@@ -825,31 +827,47 @@ async fn finish_rejected(
 }
 
 /// 写一条 `governance.audit_log`（与业务变更同事务）。
+///
+/// T-088：`caller` 是认证调用人的完整审计身份（真人三列 + 设备归因）；`None`
+/// 时回退为仅执行主体（项目 human 成员 / dispatch service，真人三列 NULL——不猜）。
 async fn audit_delivery(
     tx: &mut Tx,
     project_id: Uuid,
+    caller: Option<&crate::actor::AuditActor>,
     action: &str,
     run_id: Uuid,
     after: serde_json::Value,
 ) -> Result<(), DeliveryError> {
-    let actor: Option<Uuid> = sqlx::query_scalar(
-        "SELECT p.id FROM core.project_member m \
-           JOIN core.principal p ON p.id = m.principal_id \
-          WHERE m.project_id = $1 AND p.kind = 'human' AND p.is_active \
-          LIMIT 1",
-    )
-    .bind(project_id)
-    .fetch_optional(&mut **tx)
-    .await?;
-    let actor = actor.unwrap_or(crate::run_dispatch::DISPATCH_SERVICE_PRINCIPAL);
+    let actor = match caller {
+        Some(a) => a.clone(),
+        None => {
+            let guessed: Option<Uuid> = sqlx::query_scalar(
+                "SELECT p.id FROM core.project_member m \
+                   JOIN core.principal p ON p.id = m.principal_id \
+                  WHERE m.project_id = $1 AND p.kind = 'human' AND p.is_active \
+                  LIMIT 1",
+            )
+            .bind(project_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+            crate::actor::AuditActor::principal(
+                guessed.unwrap_or(crate::run_dispatch::DISPATCH_SERVICE_PRINCIPAL),
+            )
+        }
+    };
     sqlx::query(
         "INSERT INTO governance.audit_log \
-         (project_id, actor_id, action, target_type, target_id, after_data, source_kind, tenant_id) \
-         VALUES ($1, $2, $3, 'task_run', $4, $5, 'run_dispatch', \
+         (project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
+          action, target_type, target_id, after_data, source_kind, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'task_run', $8, $9, 'run_dispatch', \
                  (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
-    .bind(actor)
+    .bind(actor.principal_id)
+    .bind(actor.identity_id)
+    .bind(&actor.client)
+    .bind(&actor.auth_mode)
+    .bind(actor.claimed_device_id)
     .bind(action)
     .bind(run_id)
     .bind(after)

@@ -125,7 +125,7 @@ pub async fn veto_revision(
     audit(
         &mut tx,
         project_id,
-        vetoed_by,
+        &crate::actor::AuditActor::principal(vetoed_by),
         "veto_document_revision",
         "document_revision",
         revision_id,
@@ -290,7 +290,7 @@ pub(crate) async fn finalize_committed(
     audit(
         &mut tx,
         project_id,
-        redline_confirmed_by.unwrap_or(created_by),
+        &crate::actor::AuditActor::principal(redline_confirmed_by.unwrap_or(created_by)),
         "commit_document_revision",
         "document_revision",
         revision_id,

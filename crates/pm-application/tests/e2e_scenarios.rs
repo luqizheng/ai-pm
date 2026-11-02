@@ -556,7 +556,7 @@ async fn s3_second_agent_on_same_expected_revision_gets_revision_conflict(pool: 
     let executor = test_executor(&pool);
     let direct = |actor_id: Uuid| ExecutionContext {
         project_id: seed.project_id,
-        actor_id,
+        actor: pm_application::actor::AuditActor::principal(actor_id),
         actor_kind: ActorKind::DevAgent,
         source: CommandSource::Bootstrap,
     };
@@ -696,6 +696,7 @@ async fn s4_auto_applied_milestone_change_veto_restores_data_and_closes_audit_ch
             proposal_id,
             actor_id: seed.human_id,
             reason: "排期不能动，回滚".to_string(),
+            actor: None,
         },
     )
     .await
@@ -820,6 +821,7 @@ async fn s5_redline_becomes_pending_approval_and_approve_executes_once(pool: sql
             actor_id: seed.human_id,
             decision: Decision::Approve,
             reason: "验收确认".to_string(),
+            actor: None,
         },
     )
     .await
@@ -867,6 +869,7 @@ async fn s5_redline_becomes_pending_approval_and_approve_executes_once(pool: sql
             actor_id: seed.human_id,
             decision: Decision::Approve,
             reason: "duplicate click".to_string(),
+            actor: None,
         },
     )
     .await
@@ -955,7 +958,7 @@ async fn s6_change_policy_proposal_is_never_executed_and_leaves_a_failed_record(
             },
             ExecutionContext {
                 project_id: seed.project_id,
-                actor_id: seed.human_id,
+                actor: pm_application::actor::AuditActor::principal(seed.human_id),
                 actor_kind: ActorKind::Human,
                 source: CommandSource::Bootstrap,
             },
@@ -1059,6 +1062,7 @@ async fn s7_second_veto_on_rolled_back_proposal_is_already_compensated(pool: sql
             proposal_id,
             actor_id: seed.human_id,
             reason: "第一次否决：方向错误".to_string(),
+            actor: None,
         },
     )
     .await
@@ -1093,6 +1097,7 @@ async fn s7_second_veto_on_rolled_back_proposal_is_already_compensated(pool: sql
             proposal_id,
             actor_id: seed.human_id,
             reason: "重复否决（幂等）".to_string(),
+            actor: None,
         },
     )
     .await

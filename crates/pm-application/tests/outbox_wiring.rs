@@ -53,7 +53,7 @@ fn executor(pool: &PgPool) -> PgCommandExecutor {
 fn ctx(f: &Fixture) -> ExecutionContext {
     ExecutionContext {
         project_id: f.project_id,
-        actor_id: f.actor_id,
+        actor: pm_application::actor::AuditActor::principal(f.actor_id),
         actor_kind: ActorKind::Human,
         source: CommandSource::Bootstrap,
     }

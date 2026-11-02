@@ -278,7 +278,29 @@ pub(crate) async fn audit_run(
         .await?
         .unwrap_or(DISPATCH_SERVICE_PRINCIPAL),
     };
+    audit_run_as(
+        tx,
+        project_id,
+        &crate::actor::AuditActor::principal(actor),
+        action,
+        run_id,
+        after,
+    )
+    .await
+}
 
+/// 同 [`audit_run`]，但由调用方**显式**给出完整审计身份（T-088）：MCP 路径传入
+/// 认证调用人（执行主体 = 项目 `dev_agent`，真人三列 + 设备归因来自 `CallerContext`）。
+/// 这是 T-021a「actor 必须由调用方显式传入」在 Run 路径上的落点；[`audit_run`]
+/// 的猜人回退只服务于没有调用人的 worker / 后台路径。
+pub(crate) async fn audit_run_as(
+    tx: &mut Transaction<'_, Postgres>,
+    project_id: Uuid,
+    actor: &crate::actor::AuditActor,
+    action: &str,
+    run_id: Uuid,
+    after: serde_json::Value,
+) -> Result<(), sqlx::Error> {
     let mut after = after;
     let run_meta: Option<(Option<String>, Option<String>)> = sqlx::query_as(
         "SELECT lease_owner, client_name FROM delivery.task_run WHERE id = $1",
@@ -293,12 +315,17 @@ pub(crate) async fn audit_run(
 
     sqlx::query(
         "INSERT INTO governance.audit_log \
-         (project_id, actor_id, action, target_type, target_id, after_data, source_kind, tenant_id) \
-         VALUES ($1, $2, $3, 'task_run', $4, $5, 'run_dispatch', \
+         (project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
+          action, target_type, target_id, after_data, source_kind, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'task_run', $8, $9, 'run_dispatch', \
                  (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
-    .bind(actor)
+    .bind(actor.principal_id)
+    .bind(actor.identity_id)
+    .bind(&actor.client)
+    .bind(&actor.auth_mode)
+    .bind(actor.claimed_device_id)
     .bind(action)
     .bind(run_id)
     .bind(after)

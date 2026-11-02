@@ -452,7 +452,7 @@ impl PgCommandExecutor {
             .bind(ctx.project_id)
             .bind(&content)
             .bind(&hash)
-            .bind(ctx.actor_id)
+            .bind(ctx.actor_id())
             .fetch_one(&mut *tx)
             .await
             .map_err(db_err)?;
@@ -677,7 +677,7 @@ impl PgCommandExecutor {
                 &self.pool,
                 &root,
                 ctx.project_id,
-                ctx.actor_id,
+                ctx.actor_id(),
                 CreateDocumentRequest {
                     doc_key: draft.doc_key.clone(),
                     doc_type: draft.doc_type.clone(),
@@ -901,7 +901,7 @@ impl PgCommandExecutor {
             "UPDATE delivery.requirement_revision SET state = 'approved', approved_by = $2 WHERE id = $1",
         )
         .bind(revision_id)
-        .bind(ctx.actor_id)
+        .bind(ctx.actor_id())
         .execute(&mut *tx)
         .await
         .map_err(db_err)?;

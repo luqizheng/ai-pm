@@ -88,9 +88,19 @@ pub enum CommandSource {
 #[derive(Debug, Clone)]
 pub struct ExecutionContext {
     pub project_id: ProjectId,
-    pub actor_id: pm_domain::PrincipalId,
+    /// 执行主体 + 认证身份（T-021a 三列 + T-088 设备归因列）。`actor.principal_id`
+    /// 是执行主体（human / ai_pm / dev_agent / service）；真人身份列来自认证上下文，
+    /// 后台动作为 NULL；`claimed_device_id` 仅归因。
+    pub actor: crate::actor::AuditActor,
     pub actor_kind: ActorKind,
     pub source: CommandSource,
+}
+
+impl ExecutionContext {
+    /// 执行主体 principal（兼容旧读法）。
+    pub fn actor_id(&self) -> pm_domain::PrincipalId {
+        self.actor.principal_id
+    }
 }
 
 

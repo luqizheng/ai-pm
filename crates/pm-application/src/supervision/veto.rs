@@ -8,6 +8,11 @@ pub async fn veto(
     executor: &PgCommandExecutor,
     req: VetoRequest,
 ) -> Result<VetoOutcome, SupervisionError> {
+    // T-088：优先用认证调用人的完整审计身份；缺省回退为仅执行主体（真人三列 NULL，不猜）。
+    let actor = req
+        .actor
+        .clone()
+        .unwrap_or_else(|| crate::actor::AuditActor::principal(req.actor_id));
     let (status, executed_audit_id, command_type): (String, Option<Uuid>, String) =
         sqlx::query_as(
             "SELECT status, executed_audit_id, command_type \
@@ -40,7 +45,7 @@ pub async fn veto(
             let intervention_id = Uuid::new_v4();
             let ctx = ExecutionContext {
                 project_id: req.project_id,
-                actor_id: req.actor_id,
+                actor: actor.clone(),
                 actor_kind: ActorKind::Human,
                 source: CommandSource::HumanIntervention { intervention_id },
             };

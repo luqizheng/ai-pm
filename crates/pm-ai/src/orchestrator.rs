@@ -507,7 +507,7 @@ impl Orchestrator {
                 command.clone(),
                 ExecutionContext {
                     project_id,
-                    actor_id,
+                    actor: pm_application::actor::AuditActor::principal(actor_id),
                     actor_kind: ActorKind::AiPm,
                     source: CommandSource::AiProposal { run_id, proposal_id },
                 },

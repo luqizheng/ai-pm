@@ -10,6 +10,11 @@ pub async fn decide_approval(
     executor: &PgCommandExecutor,
     req: DecideRequest,
 ) -> Result<DecisionOutcome, SupervisionError> {
+    // T-088：优先用认证调用人的完整审计身份；缺省回退为仅执行主体（真人三列 NULL，不猜）。
+    let actor = req
+        .actor
+        .clone()
+        .unwrap_or_else(|| crate::actor::AuditActor::principal(req.actor_id));
     let (proposal_id, project_id, analysis_run_id, command_type, proposed_data): (
         ProposalId,
         ProjectId,
@@ -73,7 +78,7 @@ pub async fn decide_approval(
             let _ = crate::project_import::advance_import_after_decision(
                 pool,
                 analysis_run_id,
-                &crate::actor::AuditActor::principal(req.actor_id),
+                &actor,
             )
             .await;
             Ok(DecisionOutcome::Rejected)
@@ -89,7 +94,7 @@ pub async fn decide_approval(
                     command,
                     ExecutionContext {
                         project_id,
-                        actor_id: req.actor_id,
+                        actor: actor.clone(),
                         actor_kind: ActorKind::Human,
                         source: CommandSource::RedlineApproval { approval_id: req.approval_id },
                     },
@@ -109,7 +114,7 @@ pub async fn decide_approval(
                     let _ = crate::project_import::advance_import_after_decision(
                         pool,
                         analysis_run_id,
-                        &crate::actor::AuditActor::principal(req.actor_id),
+                        &actor,
                     )
                     .await;
                     Ok(DecisionOutcome::Executed { receipt })
@@ -124,7 +129,7 @@ pub async fn decide_approval(
                     let _ = crate::project_import::advance_import_after_decision(
                         pool,
                         analysis_run_id,
-                        &crate::actor::AuditActor::principal(req.actor_id),
+                        &actor,
                     )
                     .await;
                     Err(SupervisionError::Command(err))

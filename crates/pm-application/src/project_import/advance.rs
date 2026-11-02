@@ -77,12 +77,17 @@ pub async fn advance_import_after_decision(
         .await?;
         sqlx::query(
             "INSERT INTO governance.audit_log \
-             (project_id, actor_id, action, target_type, target_id, after_data, analysis_run_id, tenant_id) \
-             VALUES ($1, $2, 'project_import_applied', 'project', $1, $3, $4, \
+             (project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
+              action, target_type, target_id, after_data, analysis_run_id, tenant_id) \
+             VALUES ($1, $2, $3, $4, $5, $6, 'project_import_applied', 'project', $1, $7, $8, \
                      (SELECT tenant_id FROM core.project WHERE id = $1))",
         )
         .bind(project_id)
         .bind(actor.principal_id)
+        .bind(actor.identity_id)
+        .bind(&actor.client)
+        .bind(&actor.auth_mode)
+        .bind(actor.claimed_device_id)
         .bind(serde_json::json!({ "import_id": import_id }))
         .bind(analysis_run_id)
         .execute(&mut *tx)

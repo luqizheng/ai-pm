@@ -86,7 +86,7 @@ async fn replay_handler(
     // 重放审计：成功与失败均记（失败尝试也是排障信息）。
     audit_replay(
         &state,
-        caller.principal_id,
+        &caller.audit_actor(),
         project_id,
         event_id,
         match &outcome {
@@ -137,19 +137,24 @@ async fn stats_handler(
 /// 审计失败而不可用更糟）。
 async fn audit_replay(
     state: &AppState,
-    actor_id: Uuid,
+    actor: &pm_application::actor::AuditActor,
     project_id: Uuid,
     event_id: Uuid,
     result: &str,
 ) -> ApiResult<()> {
     if let Err(e) = sqlx::query(
         "INSERT INTO governance.audit_log \
-         (project_id, actor_id, action, target_type, target_id, after_data, source_kind, tenant_id) \
-         VALUES ($1, $2, 'outbox_dead_letter_replay', 'outbox_event', $3, $4, 'pm_api', \
+         (project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
+          action, target_type, target_id, after_data, source_kind, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, 'outbox_dead_letter_replay', 'outbox_event', $7, $8, 'pm_api', \
                  (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
-    .bind(actor_id)
+    .bind(actor.principal_id)
+    .bind(actor.identity_id)
+    .bind(&actor.client)
+    .bind(&actor.auth_mode)
+    .bind(actor.claimed_device_id)
     .bind(event_id)
     .bind(serde_json::json!({ "result": result }))
     .execute(&state.pool)

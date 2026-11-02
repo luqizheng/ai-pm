@@ -250,6 +250,7 @@ async fn approvals_execute_import_and_project_becomes_planning(pool: PgPool) {
                 actor_id: owner,
                 decision: Decision::Approve,
                 reason: "导入验收".to_string(),
+                actor: None,
             },
         )
         .await
@@ -324,7 +325,7 @@ async fn approvals_execute_import_and_project_becomes_planning(pool: PgPool) {
             },
             pm_application::command_executor::ExecutionContext {
                 project_id,
-                actor_id: owner,
+                actor: pm_application::actor::AuditActor::principal(owner),
                 actor_kind: pm_application::command_executor::ActorKind::Human,
                 source: pm_application::command_executor::CommandSource::RedlineApproval {
                     approval_id: Uuid::new_v4(),
@@ -376,6 +377,7 @@ async fn rejecting_one_approval_marks_import_rejected(pool: PgPool) {
             actor_id: owner,
             decision: Decision::Approve,
             reason: "ok".to_string(),
+            actor: None,
         },
     )
     .await
@@ -388,6 +390,7 @@ async fn rejecting_one_approval_marks_import_rejected(pool: PgPool) {
             actor_id: owner,
             decision: Decision::Reject,
             reason: "不需要".to_string(),
+            actor: None,
         },
     )
     .await

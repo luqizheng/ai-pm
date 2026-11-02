@@ -284,6 +284,7 @@ async fn veto_executed_proposal_rolls_back_then_reports_already_compensated(pool
             proposal_id,
             actor_id: seed.human_id,
             reason: "方向错误，撤销".to_string(),
+            actor: None,
         },
     )
     .await
@@ -351,6 +352,7 @@ async fn veto_executed_proposal_rolls_back_then_reports_already_compensated(pool
             proposal_id,
             actor_id: seed.human_id,
             reason: "repeat veto".to_string(),
+            actor: None,
         },
     )
     .await
@@ -406,6 +408,7 @@ async fn veto_reports_rollback_failed_when_target_moved_on(pool: sqlx::PgPool) {
             proposal_id,
             actor_id: seed.human_id,
             reason: "too late, but try".to_string(),
+            actor: None,
         },
     )
     .await
@@ -469,6 +472,7 @@ async fn veto_of_irreversible_command_records_rollback_failed(pool: sqlx::PgPool
             actor_id: seed.human_id,
             decision: Decision::Approve,
             reason: "验收确认".to_string(),
+            actor: None,
         },
     )
     .await
@@ -484,6 +488,7 @@ async fn veto_of_irreversible_command_records_rollback_failed(pool: sqlx::PgPool
             proposal_id,
             actor_id: seed.human_id,
             reason: "客户撤回验收".to_string(),
+            actor: None,
         },
     )
     .await
@@ -539,6 +544,7 @@ async fn approve_executes_once_and_second_decide_is_already_decided(pool: sqlx::
             actor_id: seed.human_id,
             decision: Decision::Approve,
             reason: "验收确认".to_string(),
+            actor: None,
         },
     )
     .await
@@ -596,6 +602,7 @@ async fn approve_executes_once_and_second_decide_is_already_decided(pool: sqlx::
             actor_id: seed.human_id,
             decision: Decision::Approve,
             reason: "repeat".to_string(),
+            actor: None,
         },
     )
     .await
@@ -721,6 +728,7 @@ async fn frozen_project_human_confirm_still_executes(pool: sqlx::PgPool) {
             actor_id: seed.human_id,
             decision: Decision::Approve,
             reason: "冻结不影响人类确认".to_string(),
+            actor: None,
         },
     )
     .await
@@ -779,6 +787,7 @@ async fn veto_still_rolls_back_after_veto_window_expired(pool: sqlx::PgPool) {
             proposal_id,
             actor_id: seed.human_id,
             reason: "窗口过了也能否决".to_string(),
+            actor: None,
         },
     )
     .await

@@ -22,12 +22,13 @@ pub(crate) async fn insert_audit(
     let compensation = compensation.map(|spec| serde_json::to_value(spec).expect("CompensationSpec serializes"));
     sqlx::query_scalar(
         "INSERT INTO governance.audit_log \
-         (project_id, actor_id, action, target_type, target_id, before_data, after_data, compensation_command, analysis_run_id, source_kind, source_ref, tenant_id) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, \
+         (project_id, actor_id, action, target_type, target_id, before_data, after_data, compensation_command, analysis_run_id, source_kind, source_ref, \
+          actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, \
                  (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(ctx.project_id)
-    .bind(ctx.actor_id)
+    .bind(ctx.actor.principal_id)
     .bind(action)
     .bind(target_type)
     .bind(target_id)
@@ -37,6 +38,10 @@ pub(crate) async fn insert_audit(
     .bind(analysis_run_id)
     .bind(source.0)
     .bind(source.1)
+    .bind(ctx.actor.identity_id)
+    .bind(&ctx.actor.client)
+    .bind(&ctx.actor.auth_mode)
+    .bind(ctx.actor.claimed_device_id)
     .fetch_one(&mut **tx)
     .await
     .map_err(db_err)

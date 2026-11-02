@@ -338,7 +338,8 @@ pub struct ReviewFacts {
     pub extra: BTreeMap<String, serde_json::Value>,
 }
 
-/// 写一条 review 相关审计（actor 固定 service principal——审查是平台动作）。
+/// 写一条 review 相关审计（actor 固定 service principal——审查是平台动作，
+/// 真人三列与设备归因为 NULL）。
 pub(crate) async fn audit_review(
     tx: &mut Transaction<'static, sqlx::Postgres>,
     project_id: Uuid,
@@ -346,14 +347,20 @@ pub(crate) async fn audit_review(
     review_run_id: Uuid,
     after: serde_json::Value,
 ) -> Result<(), ReviewError> {
+    let actor = crate::actor::AuditActor::dispatch();
     sqlx::query(
         "INSERT INTO governance.audit_log \
-         (project_id, actor_id, action, target_type, target_id, after_data, source_kind, tenant_id) \
-         VALUES ($1, $2, $3, 'task_run', $4, $5, 'review', \
+         (project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
+          action, target_type, target_id, after_data, source_kind, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'task_run', $8, $9, 'review', \
                  (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
-    .bind(crate::run_dispatch::DISPATCH_SERVICE_PRINCIPAL)
+    .bind(actor.principal_id)
+    .bind(actor.identity_id)
+    .bind(&actor.client)
+    .bind(&actor.auth_mode)
+    .bind(actor.claimed_device_id)
     .bind(action)
     .bind(review_run_id)
     .bind(after)

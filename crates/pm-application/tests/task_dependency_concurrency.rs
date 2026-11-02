@@ -120,7 +120,7 @@ async fn complete_task(pool: PgPool, project_id: Uuid, actor_id: Uuid, task_id: 
             },
             ExecutionContext {
                 project_id,
-                actor_id,
+                actor: pm_application::actor::AuditActor::principal(actor_id),
                 actor_kind: ActorKind::Human,
                 source: CommandSource::Bootstrap,
             },

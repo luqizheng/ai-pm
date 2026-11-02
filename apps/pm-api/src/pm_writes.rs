@@ -136,6 +136,7 @@ pub(crate) async fn decide_handler(
             actor_id: actor.principal_id,
             decision,
             reason,
+            actor: Some(actor.clone()),
         },
     )
     .await

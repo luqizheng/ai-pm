@@ -48,7 +48,7 @@ fn ctx(fx: &Fixture) -> ExecutionContext {
     // only a human coming through the red-line approval flow may execute them.
     ExecutionContext {
         project_id: fx.project_id,
-        actor_id: fx.human_id,
+        actor: pm_application::actor::AuditActor::principal(fx.human_id),
         actor_kind: ActorKind::Human,
         source: CommandSource::RedlineApproval {
             approval_id: Uuid::new_v4(),

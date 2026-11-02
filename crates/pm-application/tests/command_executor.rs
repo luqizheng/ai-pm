@@ -91,7 +91,7 @@ fn ctx(fixture: &Fixture, actor_kind: ActorKind, source: CommandSource) -> Execu
     };
     ExecutionContext {
         project_id: fixture.project_id,
-        actor_id,
+        actor: pm_application::actor::AuditActor::principal(actor_id),
         actor_kind,
         source,
     }

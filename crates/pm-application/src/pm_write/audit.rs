@@ -47,9 +47,9 @@ pub(crate) async fn append_audit(
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO governance.audit_log \
-         (id, project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, \
+         (id, project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
           action, target_type, target_id, tenant_id) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, \
                  (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(Uuid::new_v4())
@@ -58,6 +58,7 @@ pub(crate) async fn append_audit(
     .bind(actor.identity_id)
     .bind(&actor.client)
     .bind(&actor.auth_mode)
+    .bind(actor.claimed_device_id)
     .bind(action)
     .bind(target_type)
     .bind(target_id)
@@ -79,9 +80,9 @@ pub(crate) async fn append_audit_with_after(
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO governance.audit_log \
-         (id, project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, \
+         (id, project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
           action, target_type, target_id, after_data, tenant_id) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, \
                  (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(Uuid::new_v4())
@@ -90,6 +91,7 @@ pub(crate) async fn append_audit_with_after(
     .bind(actor.identity_id)
     .bind(&actor.client)
     .bind(&actor.auth_mode)
+    .bind(actor.claimed_device_id)
     .bind(action)
     .bind(target_type)
     .bind(target_id)

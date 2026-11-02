@@ -69,6 +69,10 @@ pub struct VetoRequest {
     pub proposal_id: ProposalId,
     pub actor_id: PrincipalId,
     pub reason: String,
+    /// T-088：认证调用人的完整审计身份（真人三列 + 设备归因）。HTTP handler 从
+    /// `AuthedPrincipal` 填入；缺省（legacy 路由 / 测试）回退为仅 `actor_id`。
+    #[serde(skip)]
+    pub actor: Option<crate::actor::AuditActor>,
 }
 
 
@@ -104,6 +108,9 @@ pub struct DecideRequest {
     pub actor_id: PrincipalId,
     pub decision: Decision,
     pub reason: String,
+    /// T-088：认证调用人的完整审计身份（同 [`VetoRequest::actor`]）。
+    #[serde(skip)]
+    pub actor: Option<crate::actor::AuditActor>,
 }
 
 

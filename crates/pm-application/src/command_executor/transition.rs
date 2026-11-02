@@ -153,7 +153,7 @@ pub(crate) async fn system_context(
 ) -> Result<ExecutionContext, CommandError> {
     Ok(ExecutionContext {
         project_id,
-        actor_id: crate::run_dispatch::DISPATCH_SERVICE_PRINCIPAL,
+        actor: crate::actor::AuditActor::dispatch(),
         actor_kind: ActorKind::Service,
         source: CommandSource::System,
     })

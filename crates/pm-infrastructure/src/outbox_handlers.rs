@@ -218,10 +218,16 @@ impl OutboxHandler for RunCompletedHandler {
 
         // ② 审计事实（幂等锚点：project_id + action + target_id = run_id）。
         //    `governance.audit_log` 无唯一约束 → 靠锁内的条件 INSERT 保证唯一。
+        //    T-088：平台动作，真人三列 NULL；`claimed_device_id` 与 Run 领取时落下的
+        //    `task_run.executor_id` **同源同值**（设备归因在 claim 时已校验）。
         sqlx::query(
             "INSERT INTO governance.audit_log \
-             (project_id, actor_id, action, target_type, target_id, after_data, source_kind, tenant_id) \
-             SELECT $1, $2, 'run_completed_event', 'task_run', $3, $4, 'run_dispatch', \
+             (project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
+              action, target_type, target_id, after_data, source_kind, tenant_id) \
+             SELECT $1, $2, NULL, NULL, NULL, \
+                    (SELECT r.executor_id FROM delivery.task_run r \
+                      WHERE r.id = $3 AND EXISTS (SELECT 1 FROM devenv.device d WHERE d.id = r.executor_id)), \
+                    'run_completed_event', 'task_run', $3, $4, 'run_dispatch', \
                     (SELECT tenant_id FROM core.project WHERE id = $1) \
              WHERE NOT EXISTS ( \
                  SELECT 1 FROM governance.audit_log \
