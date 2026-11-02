@@ -1,6 +1,6 @@
 # T-061 · Outbox 业务事件覆盖与死信重放（P8）· 设计稿 V1.1
 
-> **状态**：V1 评审后修订稿，待用户二次确认（V1 于 2026-11-02 评审：架构方向通过，设计稿修改后再确认）
+> **状态**：**已实施完成**（V1.1 于 2026-11-02 经用户确认后实施；实施记录见 §十三）
 > **任务**：`todo.md` §9 T-061（2026-11-02 领用，执行者：Trae）
 > **上位依据**：`target.md` §P8「Outbox 与可靠异步处理」；`docs/ai-pm-task-state-machine-v1.md` §20.5 / §20.6（首版条款与验收标准）；`0010_task_state_machine.sql:123-144`（`integration.outbox_event` 已有 `attempts` / `dead_letter` / `locked_until` / `idempotency_key`）
 > **同批已落地（T-043 搭车）**：`DeliverySubmitted` / `ReviewCompleted` / `KnowledgeBaseWriteRequested` 生产者
@@ -553,7 +553,7 @@ pub async fn replay(
 | `crates/pm-application/src/outbox.rs` | 改 | 新增 `EventSpec`（含 `has_handler` / `enabled_by_default` 两字段）/ `CATALOG`；`event_is_enabled` 改**目录优先**（env 不得突破 `has_handler`，§6.1） |
 | `crates/pm-application/src/run_executor.rs` | 改 | `finish_run` / `record_termination` 同事务发 `RunCompleted`（幂等键 `run_completed:<run_id>`） |
 | `crates/pm-application/src/outbox_ops.rs` | 新建 | 运维服务层：`dead_letters(pool, project_id, limit)` + 独立 `dead_letter_total(pool, project_id)` / `replay(pool, project_id, event_id)` / `stats(pool, project_id)` |
-| `crates/pm-infrastructure/src/outbox.rs` | 改 | `list_dead_letters` 加 `project_id` 过滤；`replay` 契约改 `(pool, project_id, event_id)` + **原子 UPDATE**（`WHERE id AND project_id AND status='dead_letter'`，§4.5） |
+| `crates/pm-infrastructure/src/outbox.rs` | ~~改~~ | **实施时改为「删」**：死信查询 / 重放下沉到应用层 `outbox_ops`（`pm-api` 不依赖 `pm-infrastructure`，留在基础设施层会破坏依赖方向）。基础设施层只保留 worker 需要的 `dead_letter` —— §13.2 ① |
 | `crates/pm-infrastructure/src/outbox_handlers.rs` | 改 | 新增 `RunCompletedHandler`（**advisory lock 幂等**，§5.6.1）+ `register_all_handlers(worker, pool)` 共享装配 |
 | `crates/pm-infrastructure/src/outbox_worker.rs` | 改 | 启动时校验「注册表 vs `CATALOG`」一致，不匹配即 panic（fail fast） |
 | `apps/ai-pm-worker/src/main.rs` | 改 | 改用 `register_all_handlers`（注册 `TaskReady` / `DeliverySubmitted` / `RunCompleted`，§6.2.1 统一装配入口） |
@@ -563,9 +563,9 @@ pub async fn replay(
 | `crates/pm-application/tests/outbox_events.rs` | 新建 | E-01 ~ E-03 + E-19（目录/env 语义） |
 | `crates/pm-application/tests/outbox_ops.rs` | 新建 | E-05 ~ E-09 + E-16 + E-18a + E-21 |
 | `apps/pm-api/tests/outbox_ops.rs` | 新建 | E-10 ~ E-14 + E-18b + E-22（HTTP 契约） |
-| `crates/pm-infrastructure/tests/outbox_handlers.rs` | 新建 | E-04 + E-17（并发）+ E-20（原子回滚） |
-| `crates/pm-infrastructure/tests/outbox_worker.rs` | 改 | E-15（目录一致性校验）+ E-23（部署级装配一致性，§6.2.1） |
-| `crates/pm-infrastructure/tests/outbox.rs` | 改 | `list_dead_letters` / `replay` 签名同步改 |
+| `crates/pm-infrastructure/tests/outbox_handlers.rs` | ~~新建~~ | **实施时并入 `tests/outbox_worker.rs`**（E-04 / E-17 / E-20 同属「Worker 装配与分发」主题）—— §13.2 ② |
+| `crates/pm-infrastructure/tests/outbox_worker.rs` | 改 | E-15（目录一致性校验）+ E-23（部署级装配一致性，§6.2.1）+ E-04 / E-17 / E-20（handler 幂等，合并自原 `outbox_handlers.rs`） |
+| `crates/pm-infrastructure/tests/outbox.rs` | 改 | `list_dead_letters` / `replay` 随基础设施层实现一并删除；死信状态断言保留 |
 | `crates/pm-application/tests/review.rs` | 改 | **P0-4 连带**：`enable_notification_events()` 不再能开启 `ReviewCompleted` / `KnowledgeBaseWriteRequested`；相关 T-043 断言改为「默认不产生」（§6.1 影响标注） |
 
 **不需要新迁移**：`integration.outbox_event` 已有 `attempts` / `dead_letter` / `locked_until` / `idempotency_key` / `tenant_id`；`integration.notification` 已有 `kind` / `payload`；`governance.audit_log` 无唯一约束 → 幂等靠 advisory lock 而非 DDL。**这是本条的重要结论**——T-061 **不动 schema**（P0-2 的 advisory lock 方案正是为此选型）。
@@ -614,3 +614,76 @@ todo §9 其余验收项不变：
 DATABASE_URL=postgres://aipm:aipm@127.0.0.1:5433/aipm cargo test --workspace
 cargo check --workspace --all-targets
 ```
+
+---
+
+## 十三、实施记录（2026-11-02，Trae）
+
+### 13.1 落地结果
+
+V1.1 经用户确认后实施完成。**无新迁移**——§九「不需要新迁移」的结论成立，schema 未改动。
+
+| 评审项 | 落地位置 | 落地方式 |
+|---|---|---|
+| P0-1 `RunCompleted` 语义统一 | `crates/pm-application/src/run_executor.rs` | 两条终态路径（`finish_run` 进程退出 / `record_termination` 终止类）同事务发事件；事件类型 `RunCompleted`，幂等键 `run_completed:<run_id>` |
+| P0-2 并发幂等 | `crates/pm-infrastructure/src/outbox_handlers.rs` | `RunCompletedHandler`：`pg_advisory_xact_lock(hashtextextended(run_id::text, 0))` 包住「检查 + 审计 INSERT + 通知 INSERT」，**同一事务**提交 |
+| P0-3 replay 项目隔离 | `crates/pm-application/src/outbox_ops.rs` | `replay(pool, project_id, event_id)`：单条原子 UPDATE `WHERE id AND project_id AND status='dead_letter'`；跨项目与不存在**统一 `NotFound`** → HTTP 404 |
+| P0-4 目录优先 | `crates/pm-application/src/outbox.rs` | `CATALOG`（5 项）+ `EventSpec { has_handler, enabled_by_default, producer }`；`event_is_enabled` 未登记 / `has_handler=false` 一律 `false`，env 只能在 `has_handler=true` 集合内收窄 |
+| P1-3 `total` 独立 COUNT | `outbox_ops::dead_letters` | 列表查询 + 独立 `count(*)`，两者同 `project_id` 条件 |
+| P1-4 权限措辞 + 重放审计 | `apps/pm-api/src/outbox_ops.rs` | 三端点走 `require_project_visible`；重放写 `governance.audit_log`（`action='outbox_dead_letter_replay'`，**成功与失败均记**） |
+| §6.2.1 统一装配 | `outbox_handlers::register_all_handlers` + 两个 worker main | `pm-worker` 与 `ai-pm-worker` **均**经同一入口装配；`assert_catalog_consistent()` 启动校验（双向，不一致即 panic） |
+
+### 13.2 与 §九 清单的两处偏差（依赖方向所迫，非范围变更）
+
+**① 死信查询与重放的归属层从「基础设施层」改为「应用层」。**
+
+§九 原计划改 `crates/pm-infrastructure/src/outbox.rs` 的 `list_dead_letters` / `replay`。实施时发现：`pm-api` 只依赖 `pm-application`，**不依赖 `pm-infrastructure`**（依赖倒置：application 定义端口，infrastructure 实现适配器）。若把运维查询留在基础设施层，`pm-api` 就得反向依赖 infrastructure——违反本仓的依赖方向门禁。
+
+因此：`dead_letters` / `replay` / `stats` 三个用例**下沉到 `crates/pm-application/src/outbox_ops.rs`**（应用层服务，直接持 `PgPool`），基础设施层的同名实现**删除**（不双写、不留兼容分支——`AGENTS.md` 规则 1）。基础设施层只保留 worker 真正需要的 `dead_letter`（死信落定）。
+
+**② 用例文件合并。**
+
+§九 计划新建 `crates/pm-infrastructure/tests/outbox_handlers.rs`（E-04 / E-17 / E-20）。实施时并入 `crates/pm-infrastructure/tests/outbox_worker.rs`——E-04 / E-17 / E-20 测的都是 handler 行为，与该文件已有的 worker 用例同属「Worker 装配与分发」主题，单独开文件不增加可读性。同文件另增 E-15 / E-23（目录一致性与装配一致性）。
+
+### 13.3 §七 测试矩阵落地对照
+
+| 用例 | 落地位置 | 断言要点 |
+|---|---|---|
+| E-01 | `pm-application/tests/outbox_events.rs` | `RunCompleted` 与终态同事务产生（事件随事务可见） |
+| E-02 | 同上 | 同一 Run 只产生**一条**事件（第二个收尾者被条件 UPDATE 拒绝） |
+| E-03 | 同上 | 幂等键钉死 `run_completed:<run_id>`；同键写两次坍缩为一行 |
+| E-04 | `pm-infrastructure/tests/outbox_worker.rs` | 顺序重复消费 → 审计 1 份 + 通知 1 份 |
+| E-05 | `pm-application/tests/outbox_ops.rs` | 列表只含本项目；`total` = 项目全部死信数 |
+| E-06 | 同上 | 重放 → `pending` + `attempts` 归零 + 保留 `last_error` |
+| E-07 | 同上 | 跨项目与不存在**统一 `NotFound`**；跨项目事件未被改动 |
+| E-08 | 同上 | 本项目内非死信 → `NotDeadLetter` |
+| E-09 | 同上 | 重放**不等**消费完成（事件仍在队列里） |
+| E-10 / E-11 | `apps/pm-api/tests/outbox_ops.rs` | 列表端点返回 `items` + `total`；不泄露别项目事件 |
+| E-12 | 同上 | 重放端点 200 + `replayed: true`，库内状态转 `pending` |
+| E-13 | 同上 | 跨项目 event_id → 404（与不存在同形） |
+| E-14 | 同上 | 本项目非死信 → 409 |
+| E-15 | `pm-infrastructure/tests/outbox_worker.rs` | 目录不一致（两个方向）→ panic（fail fast） |
+| E-16 | — | **并入 E-06 / E-12**（重放后事件可被 worker 领取，走既有 `outbox::claim` 用例覆盖） |
+| E-17 | `pm-infrastructure/tests/outbox_worker.rs` | **并发**重复消费（4 个并发任务）→ 审计 1 份 + 通知 1 份 |
+| E-18a / E-18b | 两个测试文件 | `total` 独立于分页（服务层 + HTTP 层各一） |
+| E-19 | `pm-application/tests/outbox_events.rs` | env 无法开启无 handler 事件；未登记类型恒 `false` |
+| E-20 | `pm-infrastructure/tests/outbox_worker.rs` | 通知插入失败（触发器注入）→ **审计一起回滚**，无残留 |
+| E-21 | `pm-application/tests/outbox_ops.rs` | 重放后再消费 → 审计与通知各仍 1 份 |
+| E-22 | `apps/pm-api/tests/outbox_ops.rs` | 重放写审计（成功 `replayed` / 失败 `not_found` 都记） |
+| E-23 | `pm-infrastructure/tests/outbox_worker.rs` | 装配集合 == 目录 `has_handler` 全集 |
+
+### 13.4 P0-4 对既有 T-043 测试的连带修正（已按 §六.1 标注执行）
+
+`crates/pm-application/tests/review.rs` 的 `enable_notification_events()` 原用 `AI_PM_OUTBOX_EVENTS` 打开 `ReviewCompleted` / `KnowledgeBaseWriteRequested` 并断言其产生。P0-4 之后这两个事件**无消费 handler → 禁止生产**，断言已改为「不产生」。
+
+**判据**：不为旧测试给事件目录开兼容口子（`AGENTS.md` 规则 1：「以前是这样」不是存在理由）。C100 仍调用 `enable_notification_events()`——它现在恰好证明「env 无法突破目录」。
+
+### 13.5 验收结果
+
+| 命令 | 结果 |
+|---|---|
+| `cargo check --workspace --all-targets` | ✅ 0 error / 0 warning |
+| `cargo test --workspace` | ✅ 全绿（含新增 24 个用例：`outbox_events` 5 + `outbox_ops` 6 + `outbox_worker` 6 + API `outbox_ops` 7） |
+
+新增用例分布：`pm-application` 11 个、`pm-infrastructure` 6 个、`pm-api` 7 个。
+
