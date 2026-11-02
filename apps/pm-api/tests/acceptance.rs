@@ -466,7 +466,7 @@ async fn overview_counts_badges_and_review_status(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn evidence_endpoints_findings_verdicts_and_approvals(pool: PgPool) {
-    let (project_id, _hidden, blocked, _int_failed, _partial, _bare, eligible, _pending) =
+    let (_project_id, _hidden, blocked, _int_failed, _partial, _bare, eligible, _pending) =
         seed_workspace(&pool).await;
 
     // findings：blocker 置顶，携带所属 review run。
