@@ -182,10 +182,11 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **不做**：不做多 Agent 协作；不做自动修复（ChangesRequested 之后由人/新 run 处理）。
   - **验收**：含状态图、裁决表、验收矩阵；用户过稿后才可进 T-043。
 
-- [ ] **T-043 实施 D5（前置：T-042 已确认）**
+- [x] **T-043 实施 D5（前置：T-042 已确认 ✅）**（2026-11-02 领用，执行者：Trae）
   - **做**：失败判定服务；Reviewer Run 编排（只读，写 findings）；逐条 `task_acceptance_criterion` 裁决留痕；完成/失败后的知识回写（走 `knowledge_proposal`）；投递 `ReviewCompleted`/`KnowledgeBaseWriteRequested` 事件。
   - **不做**：不自动修改被审对象；不改 D2 工具面。
   - **验收**：两条闭环用例（交付通过→completed + 知识提案；交付不通过→changes_requested 且原 run 不被判失败）；`cargo test` 全绿。
+  - **交付**：见 §13 实施记录（`docs/ai-pm-slice-d5-review-v1.md`）；14 条 D5 用例（`crates/pm-application/tests/review.rs`）+ `cargo test --workspace` 全绿（75 个 `test result: ok`、516 passed、0 failed）；两条闭环（C100 自动完成含 `draft` 提案与两事件 / C103 `integration_status=failed` → changes_requested 且 delivery run 不受影响）均已实测通过。提交链 `333b7e0` feat(review) → `5c8496b` docs(d5) → `chore(todo)` → `chore(memory)`。
 
 ---
 
@@ -205,6 +206,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **依据**：`0010:123-144`（`outbox_event` 已含 `attempts`/`dead_letter`/`locked_until`/`idempotency_key`）、`apps/ai-pm-worker/src/main.rs`（只注册 `TaskReady`）、`target.md` §P8 首批事件清单。
   - **做**：为 `RunCompleted`/`DeliverySubmitted`/`ReviewCompleted`/`KnowledgeBaseWriteRequested` 建真实生产者（必须同事务写入）；死信重放接口；事件状态监控（计数/积压/失败率）。
   - **不做**：不为凑事件数造无业务语义的 Handler（target.md 明确）。**能搭车的先搭**：`RunCompleted` 可随 T-031 落，`DeliverySubmitted` 随 T-041，`ReviewCompleted` 随 T-043。
+  - **已搭车（2026-11-02，T-043 顺带落地）**：`DeliverySubmitted` 生产者（`delivery/mod.rs` 提交管线同事务）+ 消费者（`DeliverySubmittedHandler` → D5 拍①，默认开启）；`ReviewCompleted` / `KnowledgeBaseWriteRequested` 生产者（completed 同事务，经 `AI_PM_OUTBOX_EVENTS` 开关，V1 按设计不注册消费 handler）。**仍缺**：`RunCompleted` 生产者、死信重放接口、事件监控指标。
   - **验收**：四条事件均有生产端与消费端；重复投递不产生副作用；死信重放幂等；监控页或指标可读。
 
 ---
@@ -509,3 +511,15 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 - **六项裁定（用户逐项确认，Q-D4-1…6）**：① 不建 `task_workspace`（D3 派生规则 + 既有列已承担，只建 `task_repository_commit`）；② 基线防篡改双保险（声明比对快照 + 镜像仓 `merge-base --is-ancestor` 祖先校验 + 回读 author/时间）；③ 文件清单 = 计数落库 + git 现算（`diff --name-status`）；④ 测试证据 draft 原样落 `test_evidence` JSONB；⑤ 交付历史 = per-run 表 + 按 task 聚合视图 `v_task_delivery_manifest`；⑥ `integration_status` 契约补字段 + `task_run` 新列 + 视图算整单三态（裁决归 D5）。
 - **验收**：表/列/视图 DDL、七步提交管线、错误码表、C71–C84 验收矩阵齐备；**三节逐节过稿**（数据模型与校验管线 / 契约定稿与错误码 / 测试计划与实施顺序）。
 - **不做**：不做 Review 裁决（D5）；不建 task_workspace；不做全局仓库实体（C3 维持）；不做自动 merge/推远端。
+
+### T-043 实施 D5（Review / 失败恢复 / 知识回写）—— 2026-11-02 完成
+
+- **提交**：`333b7e0` feat(review)（迁移 0026 + `pm-application::review` 八模块 + `DeliverySubmitted` 生产/消费端 + 审批 API + 14 条用例）→ `5c8496b` docs(d5)（设计稿 §13 实施记录 + 迁移台账回填）→ `chore(todo)`（本条归档）→ `chore(memory)`，四者分开提交（§0.2 第 5 条：一任务一 commit）。
+- **目标**：D5 判断「D4 记录的事实是否满足任务完成条件」——独立 Reviewer Run、失败判定、审批裁决、知识回写，形成可审计的治理闭环。
+- **依据**：`docs/ai-pm-slice-d5-review-v1.md` V1.3（已过稿，七题裁定 + 评审 P0×6/P1×4 + 补充 4/5；知识提案改与 Task completed 同事务强一致；迁移号 0024 归 T-060、D5 取 0026；验收矩阵 C98–C137 共 40 条四要素化）。
+- **做**：迁移 `0026_delivery_review.sql`（`task_run` 六列 + 三 CHECK + `attempt_no` 按 kind 分轨 + `uq_task_run_active` 收窄 + `uq_task_review_active` + 三新表 + 三触发器 + **交付视图收窄**）；`pm-application::review`（`anchor` 双哈希锚定 / `pipeline` L1–L4 纯函数管线 / `collect` 只读事实采集 + 镜像仓产物探测 + 漂移复核 / `queue` 拍①轻拍 / `worker` 拍②领取循环 / `decide` 完成判定器 + §5.1 矩阵 + 审批裁决单事务 / `knowledge` 确定性模板 + completed 同事务 `draft` 提案 / `failure` B4-A~D）；`DeliverySubmitted` 事件生产端（交付提交管线同事务）+ 消费端（`DeliverySubmittedHandler` → 拍①）；worker 第五/六条循环（review 领取拍 + 失败判定作业）；`GET /v1/pm/review-approvals` + `POST /v1/pm/review-approvals/{id}/decision`；tenant_schema 收编（43 → 44 张）。
+- **不做**：不自动修改被审对象；不改 D2 工具面；不注册无消费端的语义 Handler（`ReviewCompleted` / `KnowledgeBaseWriteRequested` 默认不产生，按 `AI_PM_OUTBOX_EVENTS` 开关）；不新建 review_run 表（复用 `task_run` + `run_kind`）。
+- **实施期裁定（9 项，详见设计稿 §13.2）**：① `attempt_no` 表级唯一 → 按 kind 分轨（review 第 N 次会与 delivery 第 N 次撞号）；② **D4 视图漏 `run_kind`** → 0026 内重建视图收窄（否则 review run 落库后 D5 会把自己的审查对象判成「未交付」）；③ 三处活跃 Run 计数全部补 `run_kind='delivery'`（否则 review run 被 delivery 循环捡走或挡住 delivery run 创建）；④ §2.5「三新表全禁 UPDATE」与 §5.2「UPDATE 审批行」矛盾 → 审批表改锚定列 once-written + pending 单向落终态触发器；⑤ 拍①幂等判据必须**先于**状态检查（否则重复消费返回 `TaskNotSubmitted`，幂等不可达）；⑥ `manual`/`review` 条目终值行在审批裁决事务内 INSERT `passed`；⑦ `document_proposal.created_by` NOT NULL → service principal + `(project_id, doc_key)` 活跃状态集去重；⑧ 产物探测 `git cat-file -e`，镜像仓缺失即 fail-closed；⑨ `DeliverySubmitted` 因已有真实消费者改为默认开启。
+- **验收**：`docs/ai-pm-slice-d5-review-v1.md` §10 的 C98–C137（40 条；本轮逐条建用例 16 条，覆盖见设计稿 §13.3，其余机制已落地、故障注入与并发压测归 T-061 / QA 批次）；实测 `cargo test --workspace` 退出码 0 —— **75 个 `test result: ok`、516 passed、0 failed**；`cargo check --workspace --all-targets` 0 error / 0 warning；D1–D4 既有用例不回归。
+- **关键结论**：① **Review 失败 ≠ Run 失败 ≠ Task 失败**——review run 失败只排 `run_kind='review'` 的新 run，失败判定作业扫描谓词结构上排除 review run（C114/C136 已断言）；② 锚定（双哈希 + 策略版本）让「同一输入必得同一输出」可机械验证，漂移即本轮 verdict 不落；③ 知识提案与 completed 同事务——「完成但没有提案」在库层不可表示；④ `manual`/`review` 条目**不落管线裁决行**（只有自动条目有确定性 verdict），人工终值由审批事务补齐。
+- **遗留**：`RunCompleted` 生产者、死信重放接口、事件监控 → T-061（`DeliverySubmitted` / `ReviewCompleted` / `KnowledgeBaseWriteRequested` 已搭车）；审批页 / 交付验收页 → T-070；知识索引 → T-060。
