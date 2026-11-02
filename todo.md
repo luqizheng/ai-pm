@@ -295,34 +295,38 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 > **双入口**：Web（Git URL 自动分析，= 已落地 `repo_import`）与 Codex `/pm-learn`（本地深度分析）是同一 `DiscoverySession` 的两个 producer（`source∈{WEB,CODEX,SYSTEM}`）。
 > **前置**：Codex 入口依赖 T-080/T-081（MCP 执行端接入）；Web 入口与数据模型可先做。
 
-- [ ] **T-083 实施 DiscoverySession 数据模型（迁移 `0024_discovery.sql` + 领域层）**
+- [x] **T-083 实施 DiscoverySession 数据模型（迁移 `0025_discovery.sql` + 领域层）**（完成 2026-11-02）
   - **目标**：落 `discovery` schema 7 张表 + `repo_import.discovery_session_id` 单向 FK；`pm-application::discovery` 提供 session / message / finding / question / answer / proposal 的读写与状态机。
   - **依据**：设计稿 §四 + 附录 A DDL 草案；0019 多租户模式（`tenant_id` + 组合 FK + 每表 `(tenant_id,id)` 唯一）。
   - **做**：迁移按附录 A；同步更新 schema 计数 / 租户隔离测试期望（现有 43 张 → +7）；四类 `finding.kind` 的 CHECK 与 `confidence∈[0,1]`；`proposal.base_revision_id`（= Q7 base_version）；`repo_import` 只加单向 FK，不做反向。
   - **不做**：不做 Web UI；不做 MCP 工具；不做跨仓库深度分析（P2）。
   - **验收**：`cargo test --workspace` 全绿；新库从零迁移无错；`information_schema` 断言 7 张新表均有 `tenant_id` 且组合 FK 指向 `core.project(tenant_id,id)`；确认无反向 FK。
+  - **完成记录（2026-11-02）**：`migrations/0025_discovery.sql`（7 表 + `discovery_question.finding_id` 实施补列 + 前置补 `ai.document_proposal` 租户内唯一键——0019 清单遗漏）；`pm-application::discovery`（mod/session/message/finding/question/proposal/web 七文件）；`tenant_schema.rs` 46→53 张；新增 `discovery_schema.rs`（7 表/组合 FK/单向 FK/CHECK 断言）+ `pm-application` 集成测试 9 例 + `pm-api` HTTP 测试 6 例；全量 623 passed。
 
-- [ ] **T-084 Web 项目访谈与发现卡片（P0）**
+- [x] **T-084 Web 项目访谈与发现卡片（P0）**（完成 2026-11-02）
   - **目标**：把现有 `repo_import` 的 `draft_ready + unknowns` 升级为 session 驱动的访谈 UI；发现卡片支持四类 finding 展示与用户确认。
   - **依据**：设计稿 §五 / §六；现有 `crates/pm-application/src/project_import/`（lifecycle / proposal）与前端 `Review.vue`；`discovery` 表来自 T-083。
   - **做**：`/v1/pm/projects/{id}/discovery/sessions` 读写端点；发现卡片（待确认徽标 + 分析证据[file+说明] + 四选一确认 + 确认按钮）；用户选择写 `discovery_answer` 并把 `verification_status` 从 `PENDING` 推进；Web 创建的 session 挂 `source=WEB`。
   - **不做**：不做自由聊天；不做 AI 主动 tool-loop；不改现有 import 的 clone/read/analyze；不改 T-022 可见性语义。
   - **验收**：Fake 模型下首轮 `unknowns` 能在卡片呈现；回答后 session 状态与 finding 校验状态正确；`vue-tsc` 0 error；vitest 全绿。
+  - **完成记录（2026-11-02）**：领域组合函数 `start_session_from_import`（unknowns→questions）与 `record_finding_verification`（answer + verification + user_confirmed）；`apps/pm-api/src/pm_discovery.rs` 9 端点（含 T-022 `project_in_tenant` 边界）；前端 `api/discovery.ts` + `DiscoveryPanel.vue`（问题卡 + 四选一发现卡，PRISM token / i18n 门禁通过）+ Wizard step3 集成；组件测试 4 例；vitest 全仓 549 passed、`vue-tsc` 0 error。
 
-- [ ] **T-085 MCP `pm_discovery_*` 工具（P0）**
+- [x] **T-085 MCP `pm_discovery_*` 工具（P0）**（完成 2026-11-02）
   - **目标**：6 个语义工具接入 `pm_mcp`，全部 propose-only。
   - **依据**：设计稿 §八；`crates/pm-mcp/src/tools.rs` 现有 `pm_submit_document` / `propose_document` 风格；Q2 裁定（不实现别名）。
   - **做**：`pm_discovery_get` / `pm_discovery_get_context` / `pm_discovery_submit_findings` / `pm_discovery_submit_answers` / `pm_discovery_submit_proposal` / `pm_discovery_complete`；`submit_proposal` 复用 `propose_document` 链（带 `base_revision_id`）。
   - **不做**：不做命名别名；不做通用写；不改 11 个现有工具契约；不做跨仓库分析。
   - **验收**：工具在 `/mcp` 可列；三态用例（空 session / 有 finding / 非法 kind）；propose-only 断言（不直写 `ai.project_document`）；`cargo test` 全绿。
+  - **完成记录（2026-11-02）**：`tools.rs` 六函数（session 解析：显式 id 校验归属 / 活跃优先；`submit_proposal` 先走知识提案链再镜像 `discovery_proposal`——质量门拒绝置 rejected、Q7 base 失效置 conflict、红线 held/committed 回填 `document_proposal_id`）+ `server.rs` 注册（工具清单 11→17）；新增 `tests/discovery.rs` 6 例 + 工具清单断言更新；`cargo test --workspace` **635/635 全绿**（含 `/mcp` 17 工具 smoke 与 propose-only 断言）。
 
-- [ ] **T-086 `/pm-learn` Skill（P1，executor-neutral）**
+- [ ] **T-086 `/pm-learn` Skill（P1，executor-neutral）**（SKILL.md 已交付 2026-11-02；剩 ≥1 执行端实测）
   - **前置**：T-085 完成 + T-080/T-081（MCP 执行端接入）可用。
   - **目标**：交付一份 executor-neutral 的 `SKILL.md`，装进 Trae / Codex / Claude Code 等任意 MCP-capable 执行端；走 `pm_discovery_*` 完成「读码 → 澄清 → 提交」。
   - **依据**：设计稿 §七；`docs/ai-pm-mcp-executor-positioning-v1.md` §3.4 A1–A6（工具无关性）；`docs/ai-pm-executor-onboarding-runbook-v1.md`。
   - **做**：SKILL.md（命令流程：取 session → 读已有知识 → 分析本地 Git → 澄清 → 提交 findings/answers/proposal → complete）；在 Trae 实测一轮。
   - **不做**：不写死 Trae 专有 API；不给 skill 知识库最终写入权；不做无人值守。
   - **验收**：≥1 个执行端实测「读本地仓库 → 澄清 → `pm_discovery_submit_*` → Web 确认」闭环；未激活路径给出明确指引而非报错。
+  - **进度（2026-11-02）**：`skills/pm-learn/SKILL.md` 已落盘（前置检查指引未激活路径；八步流程；五条红线；实测清单）。**待办**：在 Trae（或任一 MCP-capable 执行端）实测一轮闭环——依赖 T-080/T-081 执行端接入可用；实测后勾选。T-090 打包时把本 SKILL 归位到 `pm-ai-codex/skills/pm-learn/`。
 
 > **P2 延后（不在本节领取）**：多仓库架构关联分析（跨仓调用关系 / 依赖图 / 部署拓扑 / 微服务边界）、持续认知自动更新。T-083~T-086 稳定后再评估。
 
