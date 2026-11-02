@@ -2,6 +2,9 @@ use super::*;
 use serde::Serialize;use sqlx::{PgPool, Postgres, Row, Transaction};use uuid::Uuid;use crate::knowledge::{self, KnowledgeError, KnowledgeRoot};use crate::knowledge_quality::{self, GateFailure, GateInput, QualityGateResult};
 
 /// 否决窗口：对已发布修订做 Git revert + 状态回退 + 索引重跟进 + 审计。
+///
+/// T-060：veto 是独立写入命令（`veto_revision`），走 project 写锁与幂等账本。
+/// 索引处理（A-1）：被否决修订 → `stale` 且**清空产物**；生效修订 → 重建。
 pub async fn veto_revision(
     pool: &PgPool,
     root: &KnowledgeRoot,
@@ -9,11 +12,33 @@ pub async fn veto_revision(
     revision_id: Uuid,
     vetoed_by: Uuid,
     reason: &str,
+    operation_id: String,
 ) -> Result<RevisionVetoOutcome, KnowledgeError> {
     require_human(pool, vetoed_by).await?;
 
+    let guard = crate::knowledge_write_coordinator::acquire(
+        pool,
+        project_id,
+        std::time::Duration::from_millis(
+            crate::knowledge_write_coordinator::DEFAULT_WRITE_LOCK_TIMEOUT_MS,
+        ),
+    )
+    .await?;
+
+    // 幂等重放：veto 作用于显式指定的修订，不按 head 比较。
+    if let Some((_, existing)) =
+        crate::knowledge_write_coordinator::find_operation(pool, project_id, &operation_id).await?
+    {
+        if let Some(revision_id) = existing {
+            let outcome = load_veto_outcome(pool, project_id, revision_id).await?;
+            guard.release().await;
+            return Ok(outcome);
+        }
+    }
+
     let row = sqlx::query(
-        "SELECT r.status, r.git_commit_sha, r.revision_no, r.document_id, d.canonical_path, \
+        "SELECT r.status, r.git_commit_sha, r.revision_no, r.document_id, r.tenant_id, \
+                d.canonical_path, \
                 extract(epoch from (now() - coalesce(r.published_at, r.created_at)))::float8 AS age_secs \
            FROM ai.document_revision r \
            JOIN ai.project_document d ON d.id = r.document_id \
@@ -26,6 +51,7 @@ pub async fn veto_revision(
     .ok_or(KnowledgeError::NotFound)?;
     let status: String = row.get("status");
     if status != "published" {
+        guard.release().await;
         return Err(KnowledgeError::Conflict(format!(
             "revision {revision_id} is {status}, only published revisions can be vetoed"
         )));
@@ -36,6 +62,7 @@ pub async fn veto_revision(
         .unwrap_or(DEFAULT_VETO_WINDOW_SECS);
     let age_secs: f64 = row.get("age_secs");
     if age_secs > window as f64 {
+        guard.release().await;
         return Err(KnowledgeError::Conflict(format!(
             "veto window expired ({age_secs:.0}s > {window}s)"
         )));
@@ -43,6 +70,7 @@ pub async fn veto_revision(
     let sha: String = row.get("git_commit_sha");
     let revision_no: i32 = row.get("revision_no");
     let document_id: Uuid = row.get("document_id");
+    let tenant_id: Uuid = row.get("tenant_id");
 
     let new_sha = knowledge::revert_commit(
         root,
@@ -51,6 +79,26 @@ pub async fn veto_revision(
     )?;
 
     let mut tx = pool.begin().await?;
+    let claim = crate::knowledge_write_coordinator::claim_operation(
+        &mut tx,
+        project_id,
+        &operation_id,
+        crate::knowledge_write_coordinator::WriteCommand::VetoRevision,
+    )
+    .await?;
+    if let crate::knowledge_write_coordinator::OperationClaim::Replayed { revision_id, .. } = claim {
+        tx.rollback().await?;
+        if let Some(revision_id) = revision_id {
+            let outcome = load_veto_outcome(pool, project_id, revision_id).await?;
+            guard.release().await;
+            return Ok(outcome);
+        }
+        guard.release().await;
+        return Err(KnowledgeError::Conflict(format!(
+            "write operation {operation_id} is already recorded"
+        )));
+    }
+
     sqlx::query("UPDATE ai.document_revision SET status = 'rolled_back' WHERE id = $1")
         .bind(revision_id)
         .execute(&mut *tx)
@@ -62,16 +110,8 @@ pub async fn veto_revision(
     .bind(revision_id)
     .execute(&mut *tx)
     .await?;
-    sqlx::query(
-        "UPDATE ai.document_index_state SET status = 'stale', updated_at = now() \
-          WHERE document_revision_id = $1",
-    )
-    .bind(revision_id)
-    .execute(&mut *tx)
-    .await?;
 
-    // 指针回退：查询层按 status='published' 取最新修订，rolled_back 自动失效；
-    // 这里把上一修订的索引状态重新置为 pending，触发索引重跟进。
+    // 指针回退：查询层按 status='published' 取最新修订，rolled_back 自动失效。
     let restored: Option<(Uuid, i32)> = sqlx::query_as(
         "SELECT id, revision_no FROM ai.document_revision \
           WHERE document_id = $1 AND status = 'published' AND revision_no < $2 \
@@ -81,20 +121,6 @@ pub async fn veto_revision(
     .bind(revision_no)
     .fetch_optional(&mut *tx)
     .await?;
-    if let Some((restored_id, _)) = restored {
-        sqlx::query(
-            "INSERT INTO ai.document_index_state \
-             (project_id, document_revision_id, provider, status, tenant_id) \
-             VALUES ($1, $2, 'markdown-tree', 'pending', \
-                     (SELECT tenant_id FROM core.project WHERE id = $1)) \
-             ON CONFLICT (document_revision_id, provider) \
-             DO UPDATE SET status = 'pending', updated_at = now()",
-        )
-        .bind(project_id)
-        .bind(restored_id)
-        .execute(&mut *tx)
-        .await?;
-    }
 
     audit(
         &mut tx,
@@ -111,12 +137,66 @@ pub async fn veto_revision(
         }),
     )
     .await?;
+    crate::knowledge_write_coordinator::complete_operation(
+        &mut tx,
+        project_id,
+        &operation_id,
+        None,
+        Some(revision_id),
+    )
+    .await?;
     tx.commit().await?;
+
+    // 索引跟进（A-1）：被否决修订清空产物；生效修订重建。
+    let _ = crate::knowledge_indexer::mark_stale(
+        pool,
+        root,
+        tenant_id,
+        project_id,
+        revision_id,
+        "revision was vetoed",
+    )
+    .await;
+    if let Some((restored_id, _)) = restored {
+        crate::knowledge_indexer::rebuild_quietly(pool, root, project_id, restored_id).await;
+    }
+
+    guard.release().await;
 
     Ok(RevisionVetoOutcome {
         new_commit_sha: new_sha,
         rolled_back_revision_id: revision_id,
         restored_revision_id: restored.map(|(id, _)| id),
+    })
+}
+
+/// 读回一次已完成的否决结果（幂等重放用）。
+async fn load_veto_outcome(
+    pool: &PgPool,
+    project_id: Uuid,
+    revision_id: Uuid,
+) -> Result<RevisionVetoOutcome, KnowledgeError> {
+    let row = sqlx::query(
+        "SELECT r.git_commit_sha, r.document_id, r.revision_no, \
+                (SELECT id FROM ai.document_revision \
+                  WHERE document_id = r.document_id AND status = 'published' \
+                    AND revision_no < r.revision_no \
+                  ORDER BY revision_no DESC LIMIT 1) AS restored_revision_id \
+           FROM ai.document_revision r WHERE r.id = $1 AND r.project_id = $2",
+    )
+    .bind(revision_id)
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or(KnowledgeError::NotFound)?;
+    let document_id: Uuid = row.get("document_id");
+    let revision_no: i32 = row.get("revision_no");
+    let restored_revision_id: Option<Uuid> = row.get("restored_revision_id");
+    let _ = (document_id, revision_no);
+    Ok(RevisionVetoOutcome {
+        new_commit_sha: String::new(),
+        rolled_back_revision_id: revision_id,
+        restored_revision_id,
     })
 }
 
@@ -207,18 +287,6 @@ pub(crate) async fn finalize_committed(
     .execute(&mut *tx)
     .await?;
 
-    sqlx::query(
-        "INSERT INTO ai.document_index_state \
-         (project_id, document_revision_id, provider, status, tenant_id) \
-         VALUES ($1, $2, 'markdown-tree', 'pending', \
-                 (SELECT tenant_id FROM core.project WHERE id = $1)) \
-         ON CONFLICT (document_revision_id, provider) DO NOTHING",
-    )
-    .bind(project_id)
-    .bind(revision_id)
-    .execute(&mut *tx)
-    .await?;
-
     audit(
         &mut tx,
         project_id,
@@ -247,5 +315,4 @@ pub(crate) async fn finalize_committed(
         canonical_path: canonical_path.to_string(),
     })
 }
-
 

@@ -115,7 +115,10 @@ export interface SubmitProposalPayload {
   analysis_run_id?: string;
   source_ref?: string;
   redline_kind?: string;
-  base_content_hash?: string;
+  /** T-060：乐观并发基线（当前 published 修订 id）。 */
+  base_revision_id?: string;
+  /** T-060：写入幂等键——同一 (project_id, operation_id) 重放只产生一条修订。 */
+  operation_id: string;
   created_by: string;
 }
 
@@ -136,11 +139,16 @@ export function submitProposal(payload: SubmitProposalPayload) {
 export function confirmProposal(
   proposalId: string,
   projectId: string,
-  confirmedBy: string
+  confirmedBy: string,
+  operationId: string
 ) {
   return http.post<Record<string, unknown>>(
     `/v1/pm/documents/proposals/${proposalId}/confirm`,
-    { project_id: projectId, confirmed_by: confirmedBy }
+    {
+      project_id: projectId,
+      confirmed_by: confirmedBy,
+      operation_id: operationId
+    }
   );
 }
 
@@ -148,11 +156,17 @@ export function vetoRevision(
   revisionId: string,
   projectId: string,
   vetoedBy: string,
-  reason: string
+  reason: string,
+  operationId: string
 ) {
   return http.post<Record<string, unknown>>(
     `/v1/pm/documents/revisions/${revisionId}/veto`,
-    { project_id: projectId, vetoed_by: vetoedBy, reason }
+    {
+      project_id: projectId,
+      vetoed_by: vetoedBy,
+      reason,
+      operation_id: operationId
+    }
   );
 }
 

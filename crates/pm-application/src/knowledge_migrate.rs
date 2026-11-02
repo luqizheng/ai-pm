@@ -53,7 +53,8 @@ pub async fn migrate_requirement_revision(
             analysis_run_id: None,
             source_ref: Some(format!("requirement_revision:{requirement_revision_id}")),
             redline_kind: None,
-            base_content_hash: None,
+            base_revision_id: None,
+            operation_id: format!("migrate_requirement:{requirement_revision_id}"),
             created_by,
         },
     )

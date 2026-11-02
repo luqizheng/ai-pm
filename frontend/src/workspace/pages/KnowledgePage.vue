@@ -201,18 +201,26 @@ function onPick(node: TreeNode) {
 
 async function onConfirmProposal(item: DocumentProposal) {
   if (useMock || !projectId.value || !auth.user) return;
-  await confirmProposalApi(item.id, projectId.value, auth.user.id);
+  // T-060：幂等键绑定提案本身——重复点击重放同一次确认，不会产生第二条修订。
+  await confirmProposalApi(
+    item.id,
+    projectId.value,
+    auth.user.id,
+    `${item.id}:confirm`
+  );
   await loadDetail(selectedId.value);
 }
 
 async function onVetoProposal(item: DocumentProposal) {
   if (useMock || !projectId.value || !auth.user || !item.resulting_revision_id)
     return;
+  // T-060：幂等键绑定被否决的修订——重复点击重放同一次否决。
   await vetoRevisionApi(
     item.resulting_revision_id,
     projectId.value,
     auth.user.id,
-    t("workspace.pages.knowledge.governance.vetoReason")
+    t("workspace.pages.knowledge.governance.vetoReason"),
+    `${item.resulting_revision_id}:veto`
   );
   await loadList();
 }

@@ -13,7 +13,7 @@ use pm_application::knowledge::{
     CreateDocumentRequest, KnowledgeError, KnowledgeRoot, content_hash, create_document,
     list_documents, read_document,
 };
-use pm_application::knowledge_index::search_documents;
+use pm_application::knowledge_index::scan_documents_direct;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -37,6 +37,8 @@ fn request(doc_key: &str) -> CreateDocumentRequest {
         doc_type: "requirement".to_string(),
         markdown: "# 需求 REQ-032\n\n地图最大尺寸 100,000 × 100,000。\n".to_string(),
         change_summary: Some("initial version".to_string()),
+        operation_id: format!("api-doc-{doc_key}-{}", Uuid::new_v4()),
+        base_revision_id: None,
     }
 }
 
@@ -98,8 +100,11 @@ async fn duplicate_creation_does_not_add_a_second_commit(pool: PgPool) {
         .await
         .unwrap();
     let before = commit_count(&root);
+    // 同一 `doc_key` 的**另一次**写入（不同 `operation_id`）→ 文档键冲突。
+    let mut second = request("REQ-001");
+    second.operation_id = format!("api-doc-REQ-001-{}", Uuid::new_v4());
     assert!(matches!(
-        create_document(&pool, &root, boot.project_id, boot.human_id, req).await,
+        create_document(&pool, &root, boot.project_id, boot.human_id, second).await,
         Err(KnowledgeError::Exists(_))
     ));
     assert_eq!(commit_count(&root), before, "duplicate must not commit again");
@@ -204,21 +209,23 @@ async fn search_hits_sections_with_locators(pool: PgPool) {
                 "# 架构约束\n\n## 背景\n\n地图太大。\n\n## 决策\n\n采用 LOD 分块加载。\n"
                     .to_string(),
             change_summary: None,
+            operation_id: format!("api-doc-ARCH-S-{}", Uuid::new_v4()),
+            base_revision_id: None,
         },
     )
     .await
     .unwrap();
 
-    let hits = search_documents(&pool, &root, boot.project_id, "lod")
+    let hits = scan_documents_direct(&pool, &root, boot.project_id, "lod", 20)
         .await
         .unwrap();
     assert_eq!(hits.len(), 1, "only the 决策 section mentions lod");
     assert_eq!(hits[0].section.title, "决策");
     assert_eq!(hits[0].section.anchor, "决策");
     assert!(hits[0].section.start_line > 1);
-    assert_eq!(hits[0].score, 1);
+    assert!(hits[0].score > 0);
 
-    let none = search_documents(&pool, &root, boot.project_id, "不存在")
+    let none = scan_documents_direct(&pool, &root, boot.project_id, "不存在", 20)
         .await
         .unwrap();
     assert!(none.is_empty());

@@ -38,7 +38,11 @@ pub struct ProposalRequest {
     /// 显式来源标记（例如需求迁移 `requirement_revision:<id>`）。
     pub source_ref: Option<String>,
     pub redline_kind: Option<String>,
-    pub base_content_hash: Option<String>,
+    /// T-060：乐观并发基线——本提案基于哪条 published 修订。
+    /// 取代原 `base_content_hash`（不留两套基准字段）。
+    pub base_revision_id: Option<Uuid>,
+    /// T-060：写入幂等键。同一 `(project_id, operation_id)` 重放只产生一条修订。
+    pub operation_id: String,
     pub created_by: Uuid,
 }
 
@@ -99,6 +103,5 @@ pub(crate) struct CurrentDoc {
     document_id: Option<Uuid>,
     revision_id: Option<Uuid>,
     revision_no: i32,
-    content_hash: Option<String>,
 }
 

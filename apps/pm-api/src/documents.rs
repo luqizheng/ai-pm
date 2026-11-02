@@ -13,7 +13,8 @@ use axum::extract::{Extension, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use pm_application::knowledge::{self, KnowledgeError, KnowledgeRoot};
-use pm_application::knowledge_index;
+use pm_application::knowledge_indexer::{DbSectionIndexer, IndexOutcome, KnowledgeIndexer, SearchPage};
+use pm_application::knowledge_search::KnowledgeSearchService;
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
@@ -52,6 +53,10 @@ pub(crate) struct ProjectQuery {
 pub(crate) struct SearchQuery {
     pub(crate) project_id: Uuid,
     pub(crate) q: String,
+    /// T-060：offset 分页（缺省 20 / 0；`limit` 夹在 1..=100）。
+    /// 响应结构不变（不新增 `total` / `has_more`）。
+    pub(crate) limit: Option<i64>,
+    pub(crate) offset: Option<i64>,
 }
 
 pub(crate) async fn search_handler(
@@ -63,8 +68,13 @@ pub(crate) async fn search_handler(
         return resp;
     }
     let root = KnowledgeRoot::from_env();
-    match knowledge_index::search_documents(&state.pool, &root, query.project_id, &query.q).await {
-        Ok(items) => Json(json!({ "items": items })).into_response(),
+    let service = KnowledgeSearchService::new(state.pool.clone(), root);
+    let page = SearchPage::normalized(query.limit, query.offset);
+    match service
+        .search(query.project_id, principal.tenant_id, &query.q, page)
+        .await
+    {
+        Ok(result) => Json(json!({ "items": result.hits })).into_response(),
         Err(err) => error_response(err),
     }
 }
@@ -116,7 +126,10 @@ pub(crate) struct ProposalBody {
     pub(crate) analysis_run_id: Option<Uuid>,
     pub(crate) source_ref: Option<String>,
     pub(crate) redline_kind: Option<String>,
-    pub(crate) base_content_hash: Option<String>,
+    /// T-060：乐观并发基线（当前 published 修订 id）。
+    pub(crate) base_revision_id: Option<Uuid>,
+    /// T-060：写入幂等键。
+    pub(crate) operation_id: String,
     pub(crate) created_by: Uuid,
 }
 
@@ -124,6 +137,8 @@ pub(crate) struct ProposalBody {
 pub(crate) struct ConfirmRedlineBody {
     pub(crate) project_id: Uuid,
     pub(crate) confirmed_by: Uuid,
+    /// T-060：写入幂等键。
+    pub(crate) operation_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -131,6 +146,8 @@ pub(crate) struct VetoRevisionBody {
     pub(crate) project_id: Uuid,
     pub(crate) vetoed_by: Uuid,
     pub(crate) reason: String,
+    /// T-060：写入幂等键。
+    pub(crate) operation_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -179,7 +196,8 @@ pub(crate) async fn submit_proposal_handler(
             analysis_run_id: body.analysis_run_id,
             source_ref: body.source_ref,
             redline_kind: body.redline_kind,
-            base_content_hash: body.base_content_hash,
+            base_revision_id: body.base_revision_id,
+            operation_id: body.operation_id,
             created_by: body.created_by,
         },
     )
@@ -227,6 +245,7 @@ pub(crate) async fn confirm_redline_handler(
         proposal_id,
         body.project_id,
         body.confirmed_by,
+        body.operation_id,
     )
     .await
     {
@@ -252,6 +271,7 @@ pub(crate) async fn veto_revision_handler(
         revision_id,
         body.vetoed_by,
         &body.reason,
+        body.operation_id,
     )
     .await
     {
@@ -346,19 +366,91 @@ pub(crate) async fn reindex_handler(
         return resp;
     }
     let root = KnowledgeRoot::from_env();
-    let indexer =
-        pm_application::knowledge_indexer::MarkdownTreeIndexer::new(state.pool.clone(), root);
-    match pm_application::knowledge_indexer::index_revision(
+    // 写索引数据 → 经 Coordinator 取 project 锁（§5.5）。
+    let guard = match pm_application::knowledge_write_coordinator::acquire(
         &state.pool,
-        &indexer,
         body.project_id,
-        revision_id,
+        std::time::Duration::from_millis(
+            pm_application::knowledge_write_coordinator::DEFAULT_WRITE_LOCK_TIMEOUT_MS,
+        ),
     )
     .await
     {
-        Ok(()) => Json(json!({ "outcome": "indexed" })).into_response(),
+        Ok(guard) => guard,
+        Err(err) => return error_response(err),
+    };
+    let indexer = DbSectionIndexer::new(state.pool.clone(), root);
+    let result = indexer.rebuild_document(body.project_id, revision_id).await;
+    guard.release().await;
+    match result {
+        Ok(outcome) => Json(json!({ "outcome": outcome })).into_response(),
         Err(err) => error_response(err),
     }
+}
+
+/// 项目级全量重建（§5.5）：顺序遍历该项目**全部 published 修订**，逐个重建。
+///
+/// 响应只返回计数，不返回逐条明细。
+pub(crate) async fn reindex_project_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Json(body): Json<ReindexBody>,
+) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, body.project_id, principal.tenant_id, principal.principal_id).await {
+        return resp;
+    }
+    let root = KnowledgeRoot::from_env();
+    let guard = match pm_application::knowledge_write_coordinator::acquire(
+        &state.pool,
+        body.project_id,
+        std::time::Duration::from_millis(
+            pm_application::knowledge_write_coordinator::DEFAULT_WRITE_LOCK_TIMEOUT_MS,
+        ),
+    )
+    .await
+    {
+        Ok(guard) => guard,
+        Err(err) => return error_response(err),
+    };
+    let revisions: Vec<Uuid> = match sqlx::query_scalar(
+        "SELECT r.id FROM ai.document_revision r \
+           JOIN ai.project_document d ON d.id = r.document_id \
+          WHERE d.project_id = $1 AND d.tenant_id = $2 AND r.status = 'published' \
+          ORDER BY d.doc_key, r.revision_no",
+    )
+    .bind(body.project_id)
+    .bind(principal.tenant_id)
+    .fetch_all(&state.pool)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(err) => {
+            guard.release().await;
+            return error_response(KnowledgeError::Db(err));
+        }
+    };
+    let indexer = DbSectionIndexer::new(state.pool.clone(), root);
+    let mut reindexed = 0i64;
+    let mut stale = 0i64;
+    let mut failed = 0i64;
+    let mut superseded = 0i64;
+    for revision_id in revisions {
+        match indexer.rebuild_document(body.project_id, revision_id).await {
+            Ok(IndexOutcome::Indexed { .. }) => reindexed += 1,
+            Ok(IndexOutcome::Stale) => stale += 1,
+            Ok(IndexOutcome::Failed { .. }) => failed += 1,
+            Ok(IndexOutcome::Superseded) => superseded += 1,
+            Err(_) => failed += 1,
+        }
+    }
+    guard.release().await;
+    Json(json!({
+        "reindexed": reindexed,
+        "stale": stale,
+        "failed": failed,
+        "superseded": superseded,
+    }))
+    .into_response()
 }
 
 pub(crate) async fn migrate_requirement_handler(
@@ -394,6 +486,16 @@ fn error_response(err: KnowledgeError) -> Response {
             (StatusCode::BAD_REQUEST, "KNOWLEDGE_INVALID_REQUEST")
         }
         KnowledgeError::Exists(_) => (StatusCode::CONFLICT, "KNOWLEDGE_DOCUMENT_EXISTS"),
+        // T-060：project 写锁排队超时（可重试，不是数据冲突）。
+        KnowledgeError::ProjectWriteBusy(_) => (StatusCode::CONFLICT, "KNOWLEDGE_PROJECT_BUSY"),
+        // T-060：base_revision 与当前 head 不一致（不产生 Revision）。
+        KnowledgeError::RevisionConflict(_) => {
+            (StatusCode::CONFLICT, "KNOWLEDGE_REVISION_CONFLICT")
+        }
+        // T-060：权威元数据 / Git 根不可用 → 503（**不是**空结果）。
+        KnowledgeError::IndexUnavailable(_) => {
+            (StatusCode::SERVICE_UNAVAILABLE, "KNOWLEDGE_INDEX_UNAVAILABLE")
+        }
         KnowledgeError::Config(_) | KnowledgeError::Io(_) | KnowledgeError::Git(_) => {
             (StatusCode::INTERNAL_SERVER_ERROR, "KNOWLEDGE_INTERNAL")
         }

@@ -91,6 +91,15 @@ pub enum KnowledgeError {
     Io(String),
     #[error("git error: {0}")]
     Git(String),
+    /// T-060：索引层与权威元数据均不可用——检索失败（**不是**空结果）。
+    #[error("knowledge index unavailable: {0}")]
+    IndexUnavailable(String),
+    /// T-060：project 写锁排队超时（可重试，不是数据冲突）。
+    #[error("knowledge project write is busy: {0}")]
+    ProjectWriteBusy(String),
+    /// T-060：`base_revision` 与当前 head 不一致（不产生 Revision）。
+    #[error("knowledge revision conflict: {0}")]
+    RevisionConflict(String),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -185,11 +194,16 @@ pub struct CreateDocumentRequest {
     pub doc_type: String,
     pub markdown: String,
     pub change_summary: Option<String>,
+    /// T-060：写入幂等键。同一 `(project_id, operation_id)` 重放只产生一条修订。
+    pub operation_id: String,
+    /// T-060：乐观并发基线。新建文档必须为 `None`。
+    pub base_revision_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CreatedDocument {
     pub document_id: Uuid,
+    pub revision_id: Uuid,
     pub revision_no: i32,
     pub git_commit_sha: String,
     pub content_hash: String,
@@ -261,6 +275,9 @@ fn validate_type(doc_type: &str) -> Result<(), KnowledgeError> {
 /// Creates one document: writes the file, commits it, then records identity and
 /// revision. Re-submitting identical content after a DB failure reuses the
 /// existing commit instead of creating a duplicate one.
+///
+/// T-060：整条写入路径经 `KnowledgeWriteCoordinator`（project 级会话锁 +
+/// `operation_id` 幂等 + `base_revision` 校验），提交后同步重建索引。
 pub async fn create_document(
     pool: &PgPool,
     root: &KnowledgeRoot,
@@ -276,6 +293,32 @@ pub async fn create_document(
 
     let path = canonical_path(&project_code, &req.doc_type, &req.doc_key)?;
 
+    // 写锁（跨实例有效）；同 Project 的知识写入串行。
+    let guard = crate::knowledge_write_coordinator::acquire(
+        pool,
+        project_id,
+        std::time::Duration::from_millis(crate::knowledge_write_coordinator::DEFAULT_WRITE_LOCK_TIMEOUT_MS),
+    )
+    .await?;
+
+    // 幂等重放：命中既有账本行 → 返回既有结果，不写 Git、不产生新修订。
+    if let Some((_, Some(revision_id))) =
+        crate::knowledge_write_coordinator::find_operation(pool, project_id, &req.operation_id)
+            .await?
+    {
+        let existing = load_created_document(pool, project_id, revision_id).await?;
+        guard.release().await;
+        return Ok(existing);
+    }
+
+    // 新建文档没有既有修订可作基线：携带 `base_revision_id` 即是契约错误。
+    if req.base_revision_id.is_some() {
+        guard.release().await;
+        return Err(KnowledgeError::RevisionConflict(
+            "a new document must not carry base_revision_id".to_string(),
+        ));
+    }
+
     let exists: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM ai.project_document WHERE project_id = $1 AND doc_key = $2")
             .bind(project_id)
@@ -283,6 +326,7 @@ pub async fn create_document(
             .fetch_optional(pool)
             .await?;
     if exists.is_some() {
+        guard.release().await;
         return Err(KnowledgeError::Exists(req.doc_key));
     }
 
@@ -299,6 +343,28 @@ pub async fn create_document(
     )?;
 
     let mut tx = pool.begin().await?;
+    // 幂等预占在业务事务内：唯一键冲突即重放，事务回滚后不产生第二条修订。
+    let claim = crate::knowledge_write_coordinator::claim_operation(
+        &mut tx,
+        project_id,
+        &req.operation_id,
+        crate::knowledge_write_coordinator::WriteCommand::CreateDocument,
+    )
+    .await?;
+    if let crate::knowledge_write_coordinator::OperationClaim::Replayed { revision_id, .. } = claim {
+        tx.rollback().await?;
+        if let Some(revision_id) = revision_id {
+            let existing = load_created_document(pool, project_id, revision_id).await?;
+            guard.release().await;
+            return Ok(existing);
+        }
+        guard.release().await;
+        return Err(KnowledgeError::Conflict(format!(
+            "write operation {} is already recorded",
+            req.operation_id
+        )));
+    }
+
     let document_id: Uuid = sqlx::query_scalar(
         "INSERT INTO ai.project_document (project_id, doc_key, doc_type, canonical_path, tenant_id) \
          VALUES ($1, $2, $3, $4, (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
@@ -310,11 +376,11 @@ pub async fn create_document(
     .fetch_one(&mut *tx)
     .await?;
 
-    sqlx::query(
+    let revision_id: Uuid = sqlx::query_scalar(
         "INSERT INTO ai.document_revision \
          (project_id, document_id, revision_no, git_commit_sha, content_hash, status, change_summary, created_by, tenant_id) \
          VALUES ($1, $2, 1, $3, $4, 'published', $5, $6, \
-                 (SELECT tenant_id FROM core.project WHERE id = $1))",
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
     .bind(project_id)
     .bind(document_id)
@@ -322,16 +388,59 @@ pub async fn create_document(
     .bind(&hash)
     .bind(&req.change_summary)
     .bind(created_by)
-    .execute(&mut *tx)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    crate::knowledge_write_coordinator::complete_operation(
+        &mut tx,
+        project_id,
+        &req.operation_id,
+        None,
+        Some(revision_id),
+    )
     .await?;
     tx.commit().await?;
 
+    // 提交后同步重建索引（失败只记录，不阻断已提交的发布）。
+    crate::knowledge_indexer::rebuild_quietly(pool, root, project_id, revision_id).await;
+
+    guard.release().await;
+
     Ok(CreatedDocument {
         document_id,
+        revision_id,
         revision_no: 1,
         git_commit_sha: commit_sha,
         content_hash: hash,
         canonical_path: path,
+    })
+}
+
+/// 读回一次已提交的文档创建结果（幂等重放用）。
+async fn load_created_document(
+    pool: &PgPool,
+    project_id: Uuid,
+    revision_id: Uuid,
+) -> Result<CreatedDocument, KnowledgeError> {
+    let row = sqlx::query(
+        "SELECT r.document_id, r.revision_no, r.git_commit_sha, r.content_hash, d.canonical_path \
+           FROM ai.document_revision r \
+           JOIN ai.project_document d ON d.id = r.document_id \
+          WHERE r.id = $1 AND r.project_id = $2",
+    )
+    .bind(revision_id)
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or(KnowledgeError::NotFound)?;
+    use sqlx::Row;
+    Ok(CreatedDocument {
+        document_id: row.get("document_id"),
+        revision_id,
+        revision_no: row.get("revision_no"),
+        git_commit_sha: row.get("git_commit_sha"),
+        content_hash: row.get("content_hash"),
+        canonical_path: row.get("canonical_path"),
     })
 }
 

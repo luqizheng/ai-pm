@@ -7,11 +7,12 @@ use std::process::Command;
 
 use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
 use pm_application::knowledge::{self, KnowledgeRoot};
-use pm_application::knowledge_indexer::{self, MarkdownTreeIndexer};
+use pm_application::knowledge_indexer::{DbSectionIndexer, KnowledgeIndexer, SearchPage};
 use pm_application::knowledge_migrate;
 use pm_application::knowledge_proposal::{self, ProposalOutcome, ProposalRequest};
 use pm_application::knowledge_reference::{self, AddReferenceRequest};
 use pm_application::knowledge_quality::{GateFailure, QualityGateResult};
+use pm_application::knowledge_search::KnowledgeSearchService;
 use sqlx::PgPool;
 use uuid::Uuid;
 use pm_domain::SYSTEM_TENANT;
@@ -107,7 +108,8 @@ fn proposal(
         analysis_run_id: None,
         source_ref: None,
         redline_kind: None,
-        base_content_hash: None,
+        base_revision_id: None,
+        operation_id: format!("kv2-{doc_key}-{}", Uuid::new_v4()),
         created_by: boot.human_id,
     }
 }
@@ -173,7 +175,10 @@ async fn clean_proposal_auto_commits_and_records_gate_result(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(index_status, "pending");
+    assert_eq!(
+        index_status, "indexed",
+        "publish must rebuild the index synchronously (T-060)"
+    );
 
     let proposals = knowledge_proposal::list_proposals(&pool, boot.project_id, Some(document_id))
         .await
@@ -289,6 +294,7 @@ async fn redline_proposal_holds_until_a_human_confirms(pool: PgPool) {
         proposal_id,
         boot.project_id,
         boot.human_id,
+        format!("kv2-confirm-{proposal_id}"),
     )
     .await
     .unwrap();
@@ -327,6 +333,7 @@ async fn non_human_cannot_confirm_a_redline_proposal(pool: PgPool) {
         proposal_id,
         boot.project_id,
         boot.ai_pm_id,
+        format!("kv2-confirm-{proposal_id}"),
     )
     .await
     .unwrap_err();
@@ -376,6 +383,7 @@ async fn veto_reverts_git_and_rolls_the_pointer_back(pool: PgPool) {
         rev2,
         boot.human_id,
         "内容有误",
+        format!("kv2-veto-{rev2}"),
     )
     .await
     .unwrap();
@@ -430,10 +438,7 @@ async fn index_hash_drift_falls_back_to_the_authoritative_file(pool: PgPool) {
         panic!("expected committed");
     };
 
-    let indexer = MarkdownTreeIndexer::new(pool.clone(), root.clone());
-    knowledge_indexer::index_revision(&pool, &indexer, boot.project_id, revision_id)
-        .await
-        .unwrap();
+    // 发布即索引：自动提交后同步重建，状态已落定。
     let status: String = sqlx::query_scalar(
         "SELECT status FROM ai.document_index_state WHERE document_revision_id = $1",
     )
@@ -443,7 +448,7 @@ async fn index_hash_drift_falls_back_to_the_authoritative_file(pool: PgPool) {
     .unwrap();
     assert_eq!(status, "indexed");
 
-    // 模拟索引停留在旧内容：索引哈希与 revision 哈希不一致。
+    // 模拟索引停留在旧内容：索引哈希与修订哈希不一致。
     sqlx::query(
         "UPDATE ai.document_index_state SET indexed_content_hash = 'stale-hash' \
           WHERE document_revision_id = $1",
@@ -453,23 +458,52 @@ async fn index_hash_drift_falls_back_to_the_authoritative_file(pool: PgPool) {
     .await
     .unwrap();
 
-    let result = knowledge_indexer::search_with_fallback(
+    let service = KnowledgeSearchService::new(pool.clone(), root.clone());
+    let result = service
+        .search(
+            boot.project_id,
+            SYSTEM_TENANT,
+            "索引正文",
+            SearchPage::normalized(None, None),
+        )
+        .await
+        .unwrap();
+    assert!(result.used_fallback, "hash drift must fall back to direct read");
+    assert_eq!(result.stale_revision_ids, vec![revision_id]);
+    assert!(
+        !result.hits.is_empty(),
+        "fallback still returns the authoritative section"
+    );
+
+    // 重建修复：状态与哈希回到一致，检索重新走 DB 路径。
+    let indexer = DbSectionIndexer::new(pool.clone(), root.clone());
+    let outcome = indexer
+        .rebuild_document(boot.project_id, revision_id)
+        .await
+        .unwrap();
+    assert!(matches!(outcome, pm_application::IndexOutcome::Indexed { .. }));
+
+    let repaired = service
+        .search(
+            boot.project_id,
+            SYSTEM_TENANT,
+            "索引正文",
+            SearchPage::normalized(None, None),
+        )
+        .await
+        .unwrap();
+    assert!(!repaired.used_fallback, "a rebuilt index must serve the DB path");
+    assert!(!repaired.hits.is_empty());
+
+    let states = pm_application::knowledge_indexer::index_states(
         &pool,
-        &root,
         boot.project_id,
-        "索引正文",
+        document_id,
     )
     .await
     .unwrap();
-    assert!(result.used_fallback, "hash drift must fall back to direct read");
-    assert_eq!(result.stale_revision_ids, vec![revision_id]);
-    assert!(!result.sections.is_empty(), "fallback still returns the authoritative section");
-
-    let states = knowledge_indexer::index_states(&pool, boot.project_id, document_id)
-        .await
-        .unwrap();
     assert_eq!(states.len(), 1);
-    assert_eq!(states[0].status, "stale");
+    assert_eq!(states[0].status, "indexed");
 
     cleanup(&root);
 }

@@ -79,6 +79,8 @@ pub struct SubmitDocumentArgs {
     pub markdown: String,
     /// Optional human-readable reason for this revision.
     pub change_summary: Option<String>,
+    /// Idempotency key: replaying the same key produces no second revision.
+    pub operation_id: String,
 }
 
 /// Arguments of `pm_propose_document`: submit a proposal through the quality gates.
@@ -101,8 +103,10 @@ pub struct ProposeDocumentArgs {
     pub source_ref: Option<String>,
     /// Red-line declaration: external_commitment | delete_history | rewrite_delivered.
     pub redline_kind: Option<String>,
-    /// Optimistic concurrency: the hash this proposal is based on.
-    pub base_content_hash: Option<String>,
+    /// Optimistic concurrency: the published revision this proposal is based on.
+    pub base_revision_id: Option<Uuid>,
+    /// Idempotency key: replaying the same key produces no second revision.
+    pub operation_id: String,
 }
 
 /// Arguments of `pm_confirm_document_proposal`: human confirmation of a red-line proposal.
@@ -112,6 +116,8 @@ pub struct ConfirmDocumentProposalArgs {
     pub proposal_id: Uuid,
     /// Must be a human principal.
     pub confirmed_by: Uuid,
+    /// Idempotency key: replaying the same key produces no second revision.
+    pub operation_id: String,
 }
 
 /// Arguments of `pm_veto_document_revision`: roll back a published revision.
@@ -122,6 +128,8 @@ pub struct VetoDocumentRevisionArgs {
     /// Must be a human principal.
     pub vetoed_by: Uuid,
     pub reason: String,
+    /// Idempotency key: replaying the same key produces no second rollback.
+    pub operation_id: String,
 }
 
 /// Everything a tool failure can be, kept coarse on purpose: the MCP layer
@@ -344,6 +352,8 @@ pub async fn submit_document(
             doc_type: args.doc_type,
             markdown: args.markdown,
             change_summary: args.change_summary,
+            operation_id: args.operation_id,
+            base_revision_id: None,
         },
     )
     .await
@@ -351,6 +361,7 @@ pub async fn submit_document(
 
     Ok(json!({
         "document_id": created.document_id,
+        "revision_id": created.revision_id,
         "revision_no": created.revision_no,
         "git_commit_sha": created.git_commit_sha,
         "content_hash": created.content_hash,
@@ -376,6 +387,10 @@ fn map_knowledge_error(err: KnowledgeError) -> ToolError {
             ToolError::Conflict("document content drifted from its recorded hash".into())
         }
         KnowledgeError::Conflict(message) => ToolError::Conflict(message),
+        // T-060：写锁排队超时（可重试）；base_revision 过期（不产生修订）。
+        KnowledgeError::ProjectWriteBusy(message) => ToolError::Conflict(message),
+        KnowledgeError::RevisionConflict(message) => ToolError::Conflict(message),
+        KnowledgeError::IndexUnavailable(message) => ToolError::Conflict(message),
         KnowledgeError::Config(message)
         | KnowledgeError::Io(message)
         | KnowledgeError::Git(message) => ToolError::InvalidRequest(message),
@@ -419,7 +434,8 @@ pub async fn propose_document(
             analysis_run_id: args.analysis_run_id,
             source_ref: args.source_ref,
             redline_kind: args.redline_kind,
-            base_content_hash: args.base_content_hash,
+            base_revision_id: args.base_revision_id,
+            operation_id: args.operation_id,
             created_by,
         },
     )
@@ -440,6 +456,7 @@ pub async fn confirm_document_proposal(
         args.proposal_id,
         args.project_id,
         args.confirmed_by,
+        args.operation_id,
     )
     .await
     .map_err(map_knowledge_error)?;
@@ -459,6 +476,7 @@ pub async fn veto_document_revision(
         args.revision_id,
         args.vetoed_by,
         &args.reason,
+        args.operation_id,
     )
     .await
     .map_err(map_knowledge_error)?;

@@ -1,12 +1,62 @@
-//! Markdown 树索引（知识空间 V2 的索引层 V1）：自建标题/章节解析 + 内存检索。
-//! 设计稿 §九 路径 A：不依赖 PageIndex 的 Markdown 支持，先把「文档树 + 章节定位」
-//! 做成可替换的检索适配层；返回的 locator（path + anchor + 行号）可回溯到具体章节。
+//! Markdown 章节解析 + 打分纯函数（T-060 / P6 后半）。
+//!
+//! 本模块只做**纯函数**与**回退直读扫描**：解析标题树、算分、逐篇读 Git 兜底。
+//! 落库索引与检索编排分别在 `knowledge_indexer`（provider 端口）与
+//! `knowledge_search`（应用服务）——三层职责不可混（设计稿 §3.2）。
 
 use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::knowledge::{self, KnowledgeError, KnowledgeRoot};
+
+/// 文档类型权重（设计稿 §6.2）：`architecture`/`decision` ×1.2、`requirement`
+/// ×1.1、其余 ×1.0。整数口径为 `(base * weight + 5) / 10`。
+pub fn doc_type_weight(doc_type: &str) -> i64 {
+    match doc_type {
+        "architecture" | "decision" => 12,
+        "requirement" => 11,
+        _ => 10,
+    }
+}
+
+/// 章节命中的原始分（未乘文档类型权重、未加引用加成）。
+///
+/// 口径逐项对应设计稿 §6.2：标题全等 6 / 标题包含 3 / 锚点包含 2 /
+/// 正文出现次数 `min(3, count)`。空锚点不参与锚点命中（评审项 5）。
+pub fn raw_score(title: &str, anchor: &str, content: &str, needle: &str) -> i64 {
+    if needle.is_empty() {
+        return 0;
+    }
+    let lower_title = title.to_lowercase();
+    let lower_anchor = anchor.to_lowercase();
+    let lower_content = content.to_lowercase();
+    let mut raw = 0;
+    if lower_title == needle {
+        raw += 6;
+    } else if lower_title.contains(needle) {
+        raw += 3;
+    }
+    if !anchor.is_empty() && lower_anchor.contains(needle) {
+        raw += 2;
+    }
+    let occurrences = lower_content.matches(needle).count() as i64;
+    raw += occurrences.min(3);
+    raw
+}
+
+/// 完整分值：`(raw * 类型权重 + 5) / 10` + 引用加成。
+///
+/// `ref_boost` 由调用方判定（只认当前 published 修订上锚点非空且相等的引用），
+/// 本函数不做引用查询，保证 SQL 路径与 Rust 路径口径逐项一致（K-14）。
+pub fn score_section(
+    doc_type: &str,
+    raw: i64,
+    ref_boost: i64,
+) -> i64 {
+    (raw * doc_type_weight(doc_type) + 5) / 10 + ref_boost
+}
+
 
 /// 一个 Markdown 章节（标题 + 正文 + 定位信息）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -24,10 +74,19 @@ pub struct MarkdownSection {
     pub start_line: usize,
 }
 
+/// 一条检索命中。`revision_id` / `revision_hash` 是**证据锚点**：证据必须绑定
+/// 具体修订而非文档——文档再次发布后，历史结论不得被解释为最新正文。
+/// 两者都不进 REST 响应（`skip_serializing`，守 A-4 响应契约不变）。
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchHit {
     pub section: MarkdownSection,
-    pub score: u32,
+    pub score: i64,
+    /// 命中的修订 id（内部证据字段，不序列化）。
+    #[serde(skip_serializing)]
+    pub revision_id: Uuid,
+    /// 命中修订的正文哈希（内部证据字段，不序列化）。
+    #[serde(skip_serializing)]
+    pub revision_hash: String,
 }
 
 /// 解析一篇 Markdown 的标题树。首个标题之前若有非空内容，作为 level 0 的
@@ -152,13 +211,16 @@ fn trim_blank_lines(text: &str) -> String {
     text.trim_matches('\n').trim().to_string()
 }
 
-/// 在项目全部文档里做关键词检索（大小写不敏感）。V1 为内存扫描：文档量小，
-/// 且每次都走 `read_document`（含 content_hash 漂移校验）。
-pub async fn search_documents(
+/// **回退直读扫描**：逐篇读 Git 权威文件并按同一打分口径算分。
+///
+/// 只在索引不可用 / 失效时使用（设计稿 §6.4 第 4 步）。正常路径走
+/// `DbSectionIndexer::search`（落库索引），本函数不承担主检索职责。
+pub async fn scan_documents_direct(
     pool: &PgPool,
     root: &KnowledgeRoot,
     project_id: Uuid,
     query: &str,
+    limit: i64,
 ) -> Result<Vec<SearchHit>, KnowledgeError> {
     let needle = query.trim().to_lowercase();
     if needle.is_empty() {
@@ -169,24 +231,32 @@ pub async fn search_documents(
     let mut hits = Vec::new();
 
     for summary in documents {
-        let content =
-            knowledge::read_document(pool, root, project_id, summary.id).await?;
+        // 单篇读失败（文件缺失 / 哈希漂移）→ 该篇缺席，整体仍可用（§6.5）。
+        let content = match knowledge::read_document(pool, root, project_id, summary.id).await {
+            Ok(content) => content,
+            Err(err) => {
+                tracing::warn!(
+                    project_id = %project_id,
+                    document_id = %summary.id,
+                    error = %err,
+                    "knowledge_search_document_unreadable"
+                );
+                continue;
+            }
+        };
+        let revision_id = current_revision_id(pool, summary.id).await?;
         for section in parse_markdown_tree(&content.canonical_path, &content.markdown) {
-            let mut score = 0;
-            if section.title.to_lowercase().contains(&needle) {
-                score += 2;
-            }
-            if section.content.to_lowercase().contains(&needle) {
-                score += 1;
-            }
-            if score > 0 {
+            let raw = raw_score(&section.title, &section.anchor, &section.content, &needle);
+            if raw > 0 {
                 hits.push(SearchHit {
                     section: MarkdownSection {
                         document_id: summary.id,
                         doc_key: summary.doc_key.clone(),
                         ..section
                     },
-                    score,
+                    score: score_section(&content.doc_type, raw, 0),
+                    revision_id: revision_id.unwrap_or_else(Uuid::nil),
+                    revision_hash: content.content_hash.clone(),
                 });
             }
         }
@@ -198,8 +268,23 @@ pub async fn search_documents(
             .then_with(|| a.section.canonical_path.cmp(&b.section.canonical_path))
             .then_with(|| a.section.start_line.cmp(&b.section.start_line))
     });
-    hits.truncate(20);
+    hits.truncate(limit.max(0) as usize);
     Ok(hits)
+}
+
+/// 文档当前生效（最新 published）修订 id。
+pub async fn current_revision_id(
+    pool: &PgPool,
+    document_id: Uuid,
+) -> Result<Option<Uuid>, KnowledgeError> {
+    Ok(sqlx::query_scalar(
+        "SELECT id FROM ai.document_revision \
+          WHERE document_id = $1 AND status = 'published' \
+          ORDER BY revision_no DESC LIMIT 1",
+    )
+    .bind(document_id)
+    .fetch_optional(pool)
+    .await?)
 }
 
 #[cfg(test)]
@@ -248,5 +333,52 @@ mod tests {
         let sections = parse_markdown_tree("p.md", "#NotAHeading\n\n正文\n");
         assert_eq!(sections.len(), 1);
         assert_eq!(sections[0].anchor, "preamble");
+    }
+
+    #[test]
+    fn raw_score_ranks_title_equality_above_title_contains() {
+        // 标题全等 6；标题包含 3（锚点与正文都不命中）。
+        let exact = raw_score("lod", "", "body", "lod");
+        let contains = raw_score("lod 决策", "", "body", "lod");
+        assert_eq!(exact, 6);
+        assert_eq!(contains, 3);
+        assert!(exact > contains);
+    }
+
+    #[test]
+    fn raw_score_counts_body_occurrences_up_to_three() {
+        assert_eq!(raw_score("t", "a", "body", "x"), 0);
+        assert_eq!(raw_score("t", "a", "x", "x"), 1);
+        assert_eq!(raw_score("t", "a", "x x", "x"), 2);
+        assert_eq!(raw_score("t", "a", "x x x x", "x"), 3);
+    }
+
+    #[test]
+    fn empty_anchor_never_scores() {
+        // 空锚点不参与锚点命中（评审项 5）。
+        assert_eq!(raw_score("t", "", "body", "anchor"), 0);
+        assert_eq!(raw_score("t", "anchor", "body", "anchor"), 2);
+    }
+
+    #[test]
+    fn doc_type_weight_ranks_decision_above_knowledge() {
+        let decision = score_section("decision", 10, 0);
+        let requirement = score_section("requirement", 10, 0);
+        let knowledge = score_section("knowledge", 10, 0);
+        assert!(decision > requirement);
+        assert!(requirement > knowledge);
+        assert_eq!(knowledge, 10);
+        assert_eq!(decision, 12);
+        assert_eq!(requirement, 11);
+    }
+
+    #[test]
+    fn reference_boost_is_added_on_top() {
+        assert_eq!(score_section("knowledge", 10, 2), 12);
+    }
+
+    #[test]
+    fn empty_needle_scores_nothing() {
+        assert_eq!(raw_score("t", "a", "c", ""), 0);
     }
 }

@@ -27,6 +27,7 @@ fn args(project_id: Uuid, doc_key: &str, doc_type: &str) -> SubmitDocumentArgs {
         doc_type: doc_type.to_string(),
         markdown: "# 架构约束\n\n地图分块 + LOD。\n".to_string(),
         change_summary: Some("initial".to_string()),
+        operation_id: format!("doc-write-{doc_key}-{}", Uuid::new_v4()),
     }
 }
 

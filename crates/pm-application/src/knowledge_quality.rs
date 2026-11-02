@@ -46,8 +46,10 @@ pub struct GateInput<'a> {
     pub source_ref: Option<&'a str>,
     pub declared_redline: Option<&'a str>,
     pub current_document_id: Option<Uuid>,
-    pub current_content_hash: Option<&'a str>,
-    pub base_content_hash: Option<&'a str>,
+    /// T-060：当前生效（最新 published）修订 id——版本检查的比对对象。
+    pub current_revision_id: Option<Uuid>,
+    /// T-060：请求声明的基线修订（取代原 `base_content_hash`）。
+    pub base_revision_id: Option<Uuid>,
 }
 
 fn fail(result: &mut QualityGateResult, gate: &str, code: &str, detail: impl Into<String>) {
@@ -106,14 +108,14 @@ pub async fn evaluate(
         );
     }
 
-    // 3) 版本检查：显式基线必须仍是当前 published 内容。
-    if let (Some(current), Some(base)) = (input.current_content_hash, input.base_content_hash) {
+    // 3) 版本检查：显式基线修订必须仍是当前 published 修订。
+    if let (Some(current), Some(base)) = (input.current_revision_id, input.base_revision_id) {
         if base != current {
             fail(
                 &mut result,
                 "version",
                 "version_conflict",
-                "base_content_hash does not match the current published revision",
+                "base_revision_id does not match the current published revision",
             );
         }
     }

@@ -13,6 +13,8 @@ pub mod knowledge_migrate;
 pub mod knowledge_proposal;
 pub mod knowledge_quality;
 pub mod knowledge_reference;
+pub mod knowledge_search;
+pub mod knowledge_write_coordinator;
 pub mod llm_config;
 pub mod outbox;
 pub mod pm_write;
@@ -48,10 +50,19 @@ pub use knowledge::{
     CreateDocumentRequest, CreatedDocument, DocumentContent, DocumentSummary, KnowledgeError,
     KnowledgeRoot, content_hash, create_document, delete_document, list_documents, read_document,
 };
-pub use knowledge_index::{MarkdownSection, SearchHit, parse_markdown_tree, search_documents};
+pub use knowledge_index::{
+    MarkdownSection, SearchHit, doc_type_weight, parse_markdown_tree, raw_score, scan_documents_direct,
+    score_section,
+};
 pub use knowledge_indexer::{
-    FallbackSearchResult, IndexReference, IndexStateRow, KnowledgeIndexer, MarkdownTreeIndexer,
-    RetrievedSection, index_revision, index_states, search_with_fallback,
+    DB_SECTION_INDEX_VERSION, DB_SECTION_PROVIDER, DbSectionIndexer, IndexOutcome, IndexStateRow,
+    KnowledgeIndexer, SectionRow, SearchPage, Transition, apply_transition, index_states,
+    mark_stale, rebuild_quietly,
+};
+pub use knowledge_search::{FallbackReason, FallbackSearchResult, KnowledgeSearchService};
+pub use knowledge_write_coordinator::{
+    OperationClaim, ProjectWriteGuard, WriteCommand, check_base_revision, claim_operation,
+    complete_operation, current_head, find_operation,
 };
 pub use knowledge_migrate::{migrate_requirement_revision, rollback_requirement_migration};
 pub use knowledge_proposal::{

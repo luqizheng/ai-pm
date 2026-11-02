@@ -186,6 +186,11 @@ fn build_router(
             "/v1/pm/documents/revisions/{revision_id}/reindex",
             post(crate::documents::reindex_handler),
         )
+        // 项目级全量重建（T-060 §5.5；索引版本升级后恢复 DB 直查）。
+        .route(
+            "/v1/pm/documents/reindex",
+            post(crate::documents::reindex_project_handler),
+        )
         .route(
             "/v1/pm/documents/{document_id}/references",
             get(crate::documents::list_references_handler)

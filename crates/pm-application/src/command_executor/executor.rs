@@ -683,6 +683,10 @@ impl PgCommandExecutor {
                     doc_type: draft.doc_type.clone(),
                     markdown: draft.markdown.clone(),
                     change_summary: draft.change_summary.clone(),
+                    // 一次命令内的批量创建天然幂等：doc_key 已是天然唯一键，
+                    // operation_id 由 draft_key 派生。
+                    operation_id: format!("command_create_document:{}", draft.doc_key),
+                    base_revision_id: None,
                 },
             )
             .await
