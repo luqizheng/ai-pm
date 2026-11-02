@@ -373,13 +373,17 @@ Project Onboarding **不是一次性初始化**。闭环：
 
 ---
 
-## 附录 A：迁移 `0025_discovery.sql` DDL 草案（待实施）
+## 附录 A：迁移 `0025_discovery.sql` DDL 草案（已实施，2026-11-02）
 
-> **状态**：草案。经评审确认后落到 `migrations/0025_discovery.sql`；届时需同步更新 schema 计数 / 租户隔离测试期望（现有权威口径「46 张表」与 `core_schema` 断言）。本草案遵循 0019 多租户模式：`tenant_id` + `(tenant_id, project_id)` 组合 FK + 每表 `(tenant_id, id)` 唯一。
+> **状态**：**已实施**（`migrations/0025_discovery.sql`，T-083，2026-11-02）。届时需同步更新 schema 计数 / 租户隔离测试期望——已更新（`tenant_schema.rs` 权威口径 46 张 → **53 张**）。本草案遵循 0019 多租户模式：`tenant_id` + `(tenant_id, project_id)` 组合 FK + 每表 `(tenant_id, id)` 唯一。
 >
 > **迁移号顺移（2026-11-02）**：本草案原预留 `0024`，但 T-060（知识索引 V2）先到先得占用 `0024`（`0024_knowledge_section_index.sql` 已应用），按 `docs/ai-pm-migration-ledger.md` 纪律顺移到 **`0025`**。
 >
-> 依赖前提（0019 已建立）：`core.project` / `integration.project_repository` / `ai.project_document` / `ai.document_revision` / `ai.document_proposal` 均具备 `(tenant_id, id)` 唯一，可作为组合 FK 目标。
+> **实施偏差（2 处，随 T-083 实施回填）**：
+> 1. `discovery_question` 增加可空 `finding_id` 列（组合 FK 指向 `discovery_finding (tenant_id,id)`）——§五 发现卡片契约「用户选择写 `discovery_answer` + `verification_status` 推进」要求 question 与 finding 可关联，原草案缺此连接。
+> 2. 前置补 `ai.document_proposal ADD CONSTRAINT uq_document_proposal_tenant_id UNIQUE (tenant_id, id)`——0019 §4 的 15 张引用表清单未含该表，而 `discovery_proposal` 的组合 FK 引用 `(tenant_id, id)`。
+>
+> 依赖前提（0019 已建立）：`core.project` / `integration.project_repository` / `ai.project_document` / `ai.document_revision` / `ai.document_proposal` 均具备 `(tenant_id, id)` 唯一，可作为组合 FK 目标（`document_proposal` 由上述偏差 2 补齐）。
 
 ```sql
 -- 0025_discovery: 项目认知域（Discovery）。
@@ -521,7 +525,7 @@ CREATE INDEX idx_repo_import_discovery_session
 
 ### 附录 A.1 落地注意
 
-1. **测试期望同步**：本迁移新增 7 张表（含 join 表），激活前需更新 `core_schema` / 租户隔离计数断言（现有权威口径 43 张）。
+1. **测试期望同步**：本迁移新增 7 张表（含 join 表），激活前需更新 `core_schema` / 租户隔离计数断言（已实施：`tenant_schema.rs` 权威口径 46 → 53 张，2026-11-02）。
 2. **`discovery` 新 schema 的权限**：确认应用角色对该 schema 有 USAGE/CREATE（参照既有 schema grant）。若团队不愿引入新 schema，可改落 `integration`，但会削弱「四域边界」表达。
 3. **`base_version` 语义**：DDL 用 `base_revision_id` 承载（指向 `ai.document_revision`），比裸 BIGINT 更类型安全；Q7 的"版本失效即 conflict"由应用层在写入 `ai.document_proposal` 时校验（复用既有 hash 漂移检测）。
 4. **并行 session（Q5）**：刻意不加「每项目唯一进行中」的部分唯一索引，与 `repo_import` 的单导入约束区分。
