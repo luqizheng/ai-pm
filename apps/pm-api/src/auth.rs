@@ -180,6 +180,11 @@ pub async fn require_bearer(
     request: Request,
     next: Next,
 ) -> Response {
+    // 公开路径（健康探针 / 接入引导）不鉴权：agent 在拿到 key 之前就要拉取
+    // 接入指引，走不到这一步就没有「粘贴 URL → 帮我安装」。
+    if is_public_path(request.uri().path()) {
+        return next.run(request).await;
+    }
     let Some(jwks) = auth.jwks.as_ref() else {
         return unauthorized("IAM_AUTH_1004", "bearer layer is not configured");
     };
@@ -209,6 +214,9 @@ pub async fn resolve_principal(
     request: Request,
     next: Next,
 ) -> Response {
+    if is_public_path(request.uri().path()) {
+        return next.run(request).await;
+    }
     let identity = request.extensions().get::<AuthenticatedIdentity>().cloned();
     let Some(identity) = identity else {
         // Unreachable when the bearer layer is present; fail closed anyway.
@@ -244,7 +252,7 @@ pub async fn resolve_principal(
 /// caller can learn its own activation state (`v1` §6 鉴权矩阵).
 pub async fn require_active(request: Request, next: Next) -> Response {
     let path = request.uri().path().to_string();
-    if is_self_service_path(&path) || request.method() == axum::http::Method::OPTIONS {
+    if is_public_path(&path) || is_self_service_path(&path) || request.method() == axum::http::Method::OPTIONS {
         return next.run(request).await;
     }
     match request.extensions().get::<AuthedPrincipal>() {
@@ -253,6 +261,17 @@ pub async fn require_active(request: Request, next: Next) -> Response {
         // Unreachable when `resolve_principal` is present; fail closed anyway.
         None => unauthorized("IAM_AUTH_1005", "missing bearer token"),
     }
+}
+
+/// 公开路径（免鉴权）：健康探针与执行端接入引导。
+///
+/// - `/health`：部署就绪探针（runbook §二 的部署校验）。
+/// - `/install`、`/install/{tool}`：执行端接入指引——agent 在拿到 API Key
+///   **之前**就要拉取它，所以必须免鉴权。
+///
+/// 公开路径不返回任何凭据：指引里只有配置片段与 `<API_KEY>` 占位符。
+pub fn is_public_path(path: &str) -> bool {
+    path == "/health" || path == "/install" || path.starts_with("/install/")
 }
 
 fn is_self_service_path(path: &str) -> bool {

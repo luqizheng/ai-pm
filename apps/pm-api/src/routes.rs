@@ -116,6 +116,7 @@ fn build_router(
         Router::new().fallback_service(mcp_service)
     };
     Router::new()
+        .route("/health", get(health_handler))
         .route("/api/v1/events", post(submit_event_handler))
         .route("/api/v1/supervision/veto", post(veto_handler))
         .route(
@@ -154,6 +155,8 @@ fn build_router(
         .merge(crate::task_dependencies::router())
         // Outbox 运维（T-061）：死信列表 / 死信重放 / 事件状态监控。
         .merge(crate::outbox_ops::router())
+        // 执行端接入引导（T-080）：公开的 `/install`、`/install/{tool}`。
+        .merge(crate::onboarding::router())
         // 审计实时流（SSE）。EventSource 无法带 Authorization，token 走
         // `?access_token=`；auth 层只对本路径放行 query token。
         .route(
@@ -277,6 +280,14 @@ pub fn router_with_auth_config_and_feed(
 // ---------------------------------------------------------------- ingestion
 
 use pm_application::ingestion::{IngestionError, SubmitEventRequest, SubmitOutcome, submit_event};
+
+/// `GET /health`：就绪探针（公开路径，见 `auth::is_public_path`）。
+///
+/// runbook §二 把它当作部署校验与执行端安装验证的第一步——路由此前只存在于
+/// `auth.rs` 的放行名单里，实际请求会 404。
+async fn health_handler() -> Json<serde_json::Value> {
+    Json(json!({ "status": "ok", "service": "pm-api" }))
+}
 
 async fn submit_event_handler(
     State(state): State<AppState>,

@@ -16,6 +16,7 @@ pub mod knowledge_reference;
 pub mod knowledge_search;
 pub mod knowledge_write_coordinator;
 pub mod llm_config;
+pub mod onboarding;
 pub mod outbox;
 pub mod outbox_ops;
 pub mod pm_write;
@@ -81,6 +82,10 @@ pub use knowledge_reference::{
 pub use llm_config::{
     LlmConfigError, LlmProviderRow, PROVIDERS, UpdateLlmProviderRequest, list_providers,
     load_provider_credentials, update_provider,
+};
+pub use onboarding::{
+    API_KEY_PLACEHOLDER, Activation, BaseUrlSource, Catalog, CatalogItem, Guide, LeaseHint,
+    NextSteps, Step, ToolInfo, VerifyStep, install_guide, tool_catalog,
 };
 pub use policy_engine::{PolicyContext, PolicyEngine, PolicyLoadError};
 pub use read::{ReadError, TaskContextRow, task_context};
