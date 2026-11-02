@@ -5,7 +5,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{BootstrapOutcome, BootstrapRequest, bootstrap_project};
 use pm_application::knowledge::KnowledgeRoot;
 use pm_mcp::tools::{submit_document, SubmitDocumentArgs, ToolError};
 use sqlx::PgPool;
@@ -18,6 +18,20 @@ fn temp_root() -> KnowledgeRoot {
 
 fn cleanup(root: &KnowledgeRoot) {
     let _ = std::fs::remove_dir_all(root.path());
+}
+
+/// T-088：直调工具函数的测试调用人（bootstrap 的 owner human，SYSTEM_TENANT）。
+fn test_caller(boot: &BootstrapOutcome) -> pm_application::caller::CallerContext {
+    pm_application::caller::CallerContext::new(
+        pm_application::caller::HumanActor {
+            principal_id: boot.human_id,
+            tenant_id: SYSTEM_TENANT,
+            identity_id: None,
+            client: Some("test".into()),
+            auth_mode: "api_key".into(),
+        },
+        pm_application::caller::DeviceClaim::absent(),
+    )
 }
 
 fn args(project_id: Uuid, doc_key: &str, doc_type: &str) -> SubmitDocumentArgs {
@@ -55,7 +69,7 @@ async fn submit_document_writes_file_commit_and_rows(pool: PgPool) {
     .unwrap();
     let root = temp_root();
 
-    let result = submit_document(&pool, &root, args(boot.project_id, "ARCH-900", "architecture"))
+    let result = submit_document(&pool, &root, args(boot.project_id, "ARCH-900", "architecture"), &test_caller(&boot))
         .await
         .unwrap();
 
@@ -94,7 +108,7 @@ async fn submit_document_writes_file_commit_and_rows(pool: PgPool) {
     assert_eq!(revisions.1, ai_pm);
 
     let before = commit_count(root.path());
-    let duplicate = submit_document(&pool, &root, args(boot.project_id, "ARCH-900", "architecture")).await;
+    let duplicate = submit_document(&pool, &root, args(boot.project_id, "ARCH-900", "architecture"), &test_caller(&boot)).await;
     assert!(matches!(duplicate, Err(ToolError::Conflict(_))));
     assert_eq!(commit_count(root.path()), before, "duplicate must not commit");
 
@@ -115,7 +129,7 @@ async fn invalid_doc_type_is_rejected_before_writing(pool: PgPool) {
     .unwrap();
     let root = temp_root();
 
-    let result = submit_document(&pool, &root, args(boot.project_id, "X-1", "spreadsheet")).await;
+    let result = submit_document(&pool, &root, args(boot.project_id, "X-1", "spreadsheet"), &test_caller(&boot)).await;
     assert!(matches!(result, Err(ToolError::InvalidRequest(_))));
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ai.project_document")
@@ -131,7 +145,17 @@ async fn invalid_doc_type_is_rejected_before_writing(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn unknown_project_is_not_found(pool: PgPool) {
     let root = temp_root();
-    let result = submit_document(&pool, &root, args(Uuid::new_v4(), "ARCH-1", "architecture")).await;
+        let synthetic = pm_application::caller::CallerContext::new(
+        pm_application::caller::HumanActor {
+            principal_id: Uuid::new_v4(),
+            tenant_id: SYSTEM_TENANT,
+            identity_id: None,
+            client: None,
+            auth_mode: "api_key".into(),
+        },
+        pm_application::caller::DeviceClaim::absent(),
+    );
+    let result = submit_document(&pool, &root, args(Uuid::new_v4(), "ARCH-1", "architecture"), &synthetic).await;
     assert!(matches!(result, Err(ToolError::NotFound(_))));
     cleanup(&root);
 }

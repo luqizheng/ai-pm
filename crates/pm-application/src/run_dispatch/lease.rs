@@ -289,6 +289,22 @@ pub(crate) async fn audit_run(
     .await
 }
 
+/// 分派器：有显式调用人 → [`audit_run_as`]；没有 → [`audit_run`]（猜人回退）。
+/// 供 claim / report_progress 等「MCP 与 worker 共用同一事务模板」的路径使用。
+pub(crate) async fn audit_run_opt(
+    tx: &mut Transaction<'_, Postgres>,
+    project_id: Uuid,
+    actor: Option<&crate::actor::AuditActor>,
+    action: &str,
+    run_id: Uuid,
+    after: serde_json::Value,
+) -> Result<(), sqlx::Error> {
+    match actor {
+        Some(a) => audit_run_as(tx, project_id, a, action, run_id, after).await,
+        None => audit_run(tx, project_id, action, run_id, after).await,
+    }
+}
+
 /// 同 [`audit_run`]，但由调用方**显式**给出完整审计身份（T-088）：MCP 路径传入
 /// 认证调用人（执行主体 = 项目 `dev_agent`，真人三列 + 设备归因来自 `CallerContext`）。
 /// 这是 T-021a「actor 必须由调用方显式传入」在 Run 路径上的落点；[`audit_run`]

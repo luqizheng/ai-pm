@@ -232,6 +232,7 @@ async fn seed_delivered(
         }],
         summary: "done".to_string(),
         knowledge_proposals: vec![],
+        caller: None,
     };
     let options = DeliveryOptions {
         workspace_base: base.clone(),

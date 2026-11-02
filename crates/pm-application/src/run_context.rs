@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::command_executor::{apply_task_transition, system_context, TransitionFacts};
 use crate::run_dispatch::{
-    audit_run, run_stage, run_status, RunDispatchConfig, RunDispatchError,
+    audit_run, audit_run_opt, run_stage, run_status, RunDispatchConfig, RunDispatchError,
 };
 use pm_domain::TaskStatus;
 
@@ -549,6 +549,45 @@ pub async fn report_progress(
     cfg: &RunDispatchConfig,
     generation: i32,
 ) -> Result<RenewedLease, LeaseError> {
+    report_progress_impl(pool, project_id, run_id, lease_token, report, cfg, generation, None).await
+}
+
+/// 同 [`report_progress`]，但由调用方**显式**给出完整审计身份（T-088 MCP 路径）。
+#[allow(clippy::too_many_arguments)]
+pub async fn report_progress_as(
+    pool: &PgPool,
+    project_id: Uuid,
+    run_id: Uuid,
+    lease_token: &str,
+    report: ProgressReport<'_>,
+    cfg: &RunDispatchConfig,
+    generation: i32,
+    actor: &crate::actor::AuditActor,
+) -> Result<RenewedLease, LeaseError> {
+    report_progress_impl(
+        pool,
+        project_id,
+        run_id,
+        lease_token,
+        report,
+        cfg,
+        generation,
+        Some(actor),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn report_progress_impl(
+    pool: &PgPool,
+    project_id: Uuid,
+    run_id: Uuid,
+    lease_token: &str,
+    report: ProgressReport<'_>,
+    cfg: &RunDispatchConfig,
+    generation: i32,
+    actor: Option<&crate::actor::AuditActor>,
+) -> Result<RenewedLease, LeaseError> {
     let mut tx = pool.begin().await?;
     let lease = lock_lease(&mut tx, project_id, run_id, lease_token, generation).await?;
 
@@ -567,9 +606,10 @@ pub async fn report_progress(
     .fetch_one(&mut *tx)
     .await?;
     let _ = stage_changed; // 进展判定已在 SQL CASE 内完成（与 stage 读取同事务一致）
-    audit_run(
+    audit_run_opt(
         &mut tx,
         project_id,
+        actor,
         "renew_run_lease",
         run_id,
         serde_json::json!({ "lease_expires_at": expires_at, "stage": report.stage }),
@@ -623,9 +663,10 @@ pub async fn report_progress(
         .await?;
         run_status_after = run_status::RUNNING.to_string();
         stage_after = Some(run_stage::STARTED.to_string());
-        audit_run(
+        audit_run_opt(
             &mut tx,
             project_id,
+            actor,
             "run_stage_started",
             run_id,
             serde_json::json!({
@@ -638,18 +679,20 @@ pub async fn report_progress(
     }
 
     if report.blocked {
-        audit_run(
+        audit_run_opt(
             &mut tx,
             project_id,
+            actor,
             "run_blocked",
             run_id,
             serde_json::json!({ "note": report.note, "stage": report.stage }),
         )
         .await?;
     } else if let Some(note) = report.note {
-        audit_run(
+        audit_run_opt(
             &mut tx,
             project_id,
+            actor,
             "run_progress_reported",
             run_id,
             serde_json::json!({ "note": note, "stage": report.stage }),

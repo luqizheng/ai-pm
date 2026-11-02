@@ -20,7 +20,11 @@ use pm_application::ingestion::{IngestionError, SubmitEventRequest, submit_event
 use pm_application::knowledge::{
     self, CreateDocumentRequest, KnowledgeError, KnowledgeRoot,
 };
+use pm_application::authz::ExecutorKind;
+use pm_application::caller::CallerContext;
 use pm_application::read::{ReadError, task_context};
+
+use crate::caller::{authorize, ensure_member};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -169,7 +173,10 @@ fn parse_task_ref(task_ref: &str) -> Result<Uuid, ToolError> {
 pub async fn submit_technical_design(
     pool: &PgPool,
     args: SubmitTechnicalDesignArgs,
+    caller: &CallerContext,
 ) -> Result<Value, ToolError> {
+    // T-088 流水线第 2 步：真人成员校验（非成员 404），再取执行主体 dev_agent。
+    let actor = authorize(pool, caller, args.project_id, ExecutorKind::DevAgent).await?;
     let task_id = parse_task_ref(&args.task_ref)?;
 
     // Task visibility first: a dangling or cross-project task_ref must fail
@@ -184,23 +191,9 @@ pub async fn submit_technical_design(
             ReadError::Db(e) => ToolError::Db(e),
         })?;
 
-    // MCP callers are dev agents: act as the project's `dev_agent` principal.
-    let actor_id: Uuid = sqlx::query_scalar(
-        "SELECT pm.principal_id FROM core.project_member pm \
-         JOIN core.principal p ON p.id = pm.principal_id \
-         WHERE pm.project_id = $1 AND p.kind = 'dev_agent' \
-         ORDER BY pm.principal_id LIMIT 1",
-    )
-    .bind(args.project_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(ToolError::Db)?
-    .ok_or_else(|| {
-        ToolError::NotFound(format!(
-            "project {} has no dev agent principal",
-            args.project_id
-        ))
-    })?;
+    // MCP callers are dev agents: act as the project's `dev_agent` principal
+    // (resolved by `authorize` above, after the human membership check).
+    let actor_id: Uuid = actor.principal_id;
 
     let outcome = submit_event(
         pool,
@@ -248,15 +241,19 @@ pub async fn submit_technical_design(
 pub async fn get_submission_status(
     pool: &PgPool,
     args: SubmissionStatusArgs,
+    caller: &CallerContext,
 ) -> Result<Value, ToolError> {
-    let event_status: String = sqlx::query_scalar(
-        "SELECT status FROM integration.inbound_event WHERE id = $1",
+    // 该工具的 wire 契约只有 event_id（冻结：不改 JSON Schema）→ 由 inbound_event
+    // 反查所属项目（id 是 PK，命中唯一），再走与其余工具一致的真人成员校验。
+    let (event_status, project_id): (String, Uuid) = sqlx::query_as(
+        "SELECT status, project_id FROM integration.inbound_event WHERE id = $1",
     )
     .bind(args.event_id)
     .fetch_optional(pool)
     .await
     .map_err(ToolError::Db)?
     .ok_or_else(|| ToolError::NotFound(format!("event {} not found", args.event_id)))?;
+    ensure_member(pool, caller, project_id).await?;
 
     let proposals: Vec<(Uuid, i32, String, String)> = sqlx::query_as(
         "SELECT p.id, p.proposal_seq, p.status, p.command_type \
@@ -298,7 +295,12 @@ pub async fn get_submission_status(
 
 /// Reads one task's context via `read::task_context` (project-scoped: a task
 /// of another project reads as `NotFound`, the same as a missing task).
-pub async fn get_task_context(pool: &PgPool, args: TaskContextArgs) -> Result<Value, ToolError> {
+pub async fn get_task_context(
+    pool: &PgPool,
+    args: TaskContextArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    ensure_member(pool, caller, args.project_id).await?;
     let task_id = parse_task_ref(&args.task_ref)?;
     let row = task_context(pool, args.project_id, task_id).await.map_err(|err| match err {
         ReadError::NotFound => ToolError::NotFound(format!(
@@ -324,23 +326,12 @@ pub async fn submit_document(
     pool: &PgPool,
     root: &KnowledgeRoot,
     args: SubmitDocumentArgs,
+    caller: &CallerContext,
 ) -> Result<Value, ToolError> {
-    let actor_id: Uuid = sqlx::query_scalar(
-        "SELECT pm.principal_id FROM core.project_member pm \
-         JOIN core.principal p ON p.id = pm.principal_id \
-         WHERE pm.project_id = $1 AND p.kind = 'ai_pm' \
-         ORDER BY pm.principal_id LIMIT 1",
-    )
-    .bind(args.project_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(ToolError::Db)?
-    .ok_or_else(|| {
-        ToolError::NotFound(format!(
-            "project {} has no ai_pm principal",
-            args.project_id
-        ))
-    })?;
+    // 文档类工具的执行主体维持现状口径：项目 `ai_pm`（真人成员校验在前）。
+    let actor_id: Uuid = authorize(pool, caller, args.project_id, ExecutorKind::AiPm)
+        .await?
+        .principal_id;
 
     let created = knowledge::create_document(
         pool,
@@ -398,29 +389,16 @@ fn map_knowledge_error(err: KnowledgeError) -> ToolError {
     }
 }
 
-async fn ai_pm_principal(pool: &PgPool, project_id: Uuid) -> Result<Uuid, ToolError> {
-    sqlx::query_scalar(
-        "SELECT pm.principal_id FROM core.project_member pm \
-         JOIN core.principal p ON p.id = pm.principal_id \
-         WHERE pm.project_id = $1 AND p.kind = 'ai_pm' \
-         ORDER BY pm.principal_id LIMIT 1",
-    )
-    .bind(project_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(ToolError::Db)?
-    .ok_or_else(|| {
-        ToolError::NotFound(format!("project {project_id} has no ai_pm principal"))
-    })
-}
-
 /// 知识空间 V2：提交提案（质量门 → 自动提交 / 红线挂起 / 拒绝）。
 pub async fn propose_document(
     pool: &PgPool,
     root: &KnowledgeRoot,
     args: ProposeDocumentArgs,
+    caller: &CallerContext,
 ) -> Result<Value, ToolError> {
-    let created_by = ai_pm_principal(pool, args.project_id).await?;
+    let created_by = authorize(pool, caller, args.project_id, ExecutorKind::AiPm)
+        .await?
+        .principal_id;
     let outcome = pm_application::knowledge_proposal::submit_proposal(
         pool,
         root,
@@ -449,13 +427,18 @@ pub async fn confirm_document_proposal(
     pool: &PgPool,
     root: &KnowledgeRoot,
     args: ConfirmDocumentProposalArgs,
+    caller: &CallerContext,
 ) -> Result<Value, ToolError> {
+    ensure_member(pool, caller, args.project_id).await?;
+    // T-088 §4.6：`confirmed_by` 参数仅为 wire 兼容保留；审计依据改为**认证调用人**
+    // （真人 Principal 是唯一授权依据，不接受客户端自称的第三人）。
+    let _ = args.confirmed_by;
     let outcome = pm_application::knowledge_proposal::confirm_redline_proposal(
         pool,
         root,
         args.proposal_id,
         args.project_id,
-        args.confirmed_by,
+        caller.human.principal_id,
         args.operation_id,
     )
     .await
@@ -468,13 +451,17 @@ pub async fn veto_document_revision(
     pool: &PgPool,
     root: &KnowledgeRoot,
     args: VetoDocumentRevisionArgs,
+    caller: &CallerContext,
 ) -> Result<Value, ToolError> {
+    ensure_member(pool, caller, args.project_id).await?;
+    // T-088 §4.6：同 confirm——`vetoed_by` 仅 wire 兼容，审计依据为认证调用人。
+    let _ = args.vetoed_by;
     let outcome = pm_application::knowledge_proposal::veto_revision(
         pool,
         root,
         args.project_id,
         args.revision_id,
-        args.vetoed_by,
+        caller.human.principal_id,
         &args.reason,
         args.operation_id,
     )
@@ -605,15 +592,22 @@ fn map_lease_error_v2(err: pm_application::run_context::LeaseError) -> ToolError
 }
 
 /// Model A 领取：一次调用拿到 Run 与一次性租约明文。
-pub async fn claim_task(pool: &PgPool, args: ClaimTaskArgs) -> Result<Value, ToolError> {
+pub async fn claim_task(
+    pool: &PgPool,
+    args: ClaimTaskArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    // T-051 关闭点：claim 必须先过真人成员校验（dev_agent 本身就是成员，不能用它校验）。
+    let actor = authorize(pool, caller, args.project_id, ExecutorKind::DevAgent).await?;
     let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
-    let claimed = pm_application::run_dispatch::claim_task_run(
+    let claimed = pm_application::run_dispatch::claim_task_run_as(
         pool,
         args.project_id,
         args.task_id,
         &args.client_name,
         args.client_version.as_deref(),
         &cfg,
+        &actor,
     )
     .await
     .map_err(map_dispatch_error_v2)?;
@@ -630,7 +624,12 @@ pub async fn claim_task(pool: &PgPool, args: ClaimTaskArgs) -> Result<Value, Too
 }
 
 /// 读取本 Run 的执行契约（只读、不续租）。
-pub async fn get_run_context(pool: &PgPool, args: RunContextArgs) -> Result<Value, ToolError> {
+pub async fn get_run_context(
+    pool: &PgPool,
+    args: RunContextArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    ensure_member(pool, caller, args.project_id).await?;
     let contract = pm_application::run_context::get_run_context(
         pool,
         args.project_id,
@@ -644,9 +643,14 @@ pub async fn get_run_context(pool: &PgPool, args: RunContextArgs) -> Result<Valu
 }
 
 /// 续租（= 心跳）+ 首次 `started` 阶段推进 + 审计，单事务完成。
-pub async fn report_progress(pool: &PgPool, args: ReportProgressArgs) -> Result<Value, ToolError> {
+pub async fn report_progress(
+    pool: &PgPool,
+    args: ReportProgressArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    let actor = authorize(pool, caller, args.project_id, ExecutorKind::DevAgent).await?;
     let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
-    let renewed = pm_application::run_context::report_progress(
+    let renewed = pm_application::run_context::report_progress_as(
         pool,
         args.project_id,
         args.run_id,
@@ -658,6 +662,7 @@ pub async fn report_progress(pool: &PgPool, args: ReportProgressArgs) -> Result<
         },
         &cfg,
         args.lease_generation,
+        &actor,
     )
     .await
     .map_err(map_lease_error_v2)?;
@@ -682,8 +687,18 @@ pub async fn report_progress(pool: &PgPool, args: ReportProgressArgs) -> Result<
 /// **业务驳回不是异常**：管线把驳回作为 `SubmitOutcome::Rejected` 返回（审计已
 /// 持久），工具层照样回 200 并带上 `outcome: "rejected"` 与驳回原因——调用方
 /// 据此知道「没有交付」而不是「调用失败」。
-pub async fn submit_result(pool: &PgPool, args: SubmitResultArgs) -> Result<Value, ToolError> {
-    submit_result_with(pool, args, &pm_application::delivery::DeliveryOptions::from_env()).await
+pub async fn submit_result(
+    pool: &PgPool,
+    args: SubmitResultArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    submit_result_with(
+        pool,
+        args,
+        &pm_application::delivery::DeliveryOptions::from_env(),
+        caller,
+    )
+    .await
 }
 
 /// 同 [`submit_result`]，但可注入工作区根与 git 超时（测试用——避免靠环境变量
@@ -692,8 +707,11 @@ pub async fn submit_result_with(
     pool: &PgPool,
     args: SubmitResultArgs,
     options: &pm_application::delivery::DeliveryOptions,
+    caller: &CallerContext,
 ) -> Result<Value, ToolError> {
+    let actor = authorize(pool, caller, args.project_id, ExecutorKind::DevAgent).await?;
     let request = pm_application::delivery::SubmitResultRequest {
+        caller: Some(actor),
         project_id: args.project_id,
         run_id: args.run_id,
         lease_token: args.lease_token,
@@ -937,7 +955,12 @@ async fn resolve_session(
 }
 
 /// `pm_discovery_get`：读项目认知 session（findings / questions / proposals）。
-pub async fn discovery_get(pool: &PgPool, args: DiscoveryGetArgs) -> Result<Value, ToolError> {
+pub async fn discovery_get(
+    pool: &PgPool,
+    args: DiscoveryGetArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    ensure_member(pool, caller, args.project_id).await?;
     let tenant_id = project_tenant(pool, args.project_id).await?;
     let session_id =
         resolve_session(pool, tenant_id, args.project_id, args.session_id).await?;
@@ -952,7 +975,9 @@ pub async fn discovery_get(pool: &PgPool, args: DiscoveryGetArgs) -> Result<Valu
 pub async fn discovery_get_context(
     pool: &PgPool,
     args: DiscoveryGetArgs,
+    caller: &CallerContext,
 ) -> Result<Value, ToolError> {
+    ensure_member(pool, caller, args.project_id).await?;
     let tenant_id = project_tenant(pool, args.project_id).await?;
     let session_id =
         resolve_session(pool, tenant_id, args.project_id, args.session_id).await?;
@@ -1008,7 +1033,9 @@ pub async fn discovery_get_context(
 pub async fn discovery_submit_findings(
     pool: &PgPool,
     args: DiscoverySubmitFindingsArgs,
+    caller: &CallerContext,
 ) -> Result<Value, ToolError> {
+    ensure_member(pool, caller, args.project_id).await?;
     if args.findings.is_empty() {
         return Err(ToolError::InvalidRequest(
             "findings must not be empty".into(),
@@ -1042,14 +1069,25 @@ pub async fn discovery_submit_findings(
 pub async fn discovery_submit_answers(
     pool: &PgPool,
     args: DiscoverySubmitAnswersArgs,
+    caller: &CallerContext,
 ) -> Result<Value, ToolError> {
+    ensure_member(pool, caller, args.project_id).await?;
     if args.questions.is_empty() && args.answers.is_empty() {
         return Err(ToolError::InvalidRequest(
             "questions and answers must not both be empty".into(),
         ));
     }
     let tenant_id = project_tenant(pool, args.project_id).await?;
-    let actor_id = ai_pm_principal(pool, args.project_id).await?;
+    // 执行主体 = 项目 ai_pm（成员校验已由上方 ensure_member 完成）。
+    let actor_id =
+        pm_application::authz::resolve_project_executor(pool, args.project_id, ExecutorKind::AiPm)
+            .await
+            .map_err(|_| {
+                ToolError::NotFound(format!(
+                    "project {} has no ai_pm principal",
+                    args.project_id
+                ))
+            })?;
     let mut questions_added = 0usize;
     for question in args.questions {
         pm_application::discovery::add_question(
@@ -1090,9 +1128,13 @@ pub async fn discovery_submit_proposal(
     pool: &PgPool,
     root: &KnowledgeRoot,
     args: DiscoverySubmitProposalArgs,
+    caller: &CallerContext,
 ) -> Result<Value, ToolError> {
     let tenant_id = project_tenant(pool, args.project_id).await?;
-    let created_by = ai_pm_principal(pool, args.project_id).await?;
+    // 真人成员校验 + 执行主体 ai_pm（维持 M9 现状口径）。
+    let created_by = authorize(pool, caller, args.project_id, ExecutorKind::AiPm)
+        .await?
+        .principal_id;
     let outcome = pm_application::knowledge_proposal::submit_proposal(
         pool,
         root,
@@ -1208,7 +1250,9 @@ pub async fn discovery_submit_proposal(
 pub async fn discovery_complete(
     pool: &PgPool,
     args: DiscoveryCompleteArgs,
+    caller: &CallerContext,
 ) -> Result<Value, ToolError> {
+    ensure_member(pool, caller, args.project_id).await?;
     if args.status != "COMPLETED" && args.status != "REVIEW_REQUIRED" {
         return Err(ToolError::InvalidRequest(
             "status must be COMPLETED or REVIEW_REQUIRED".into(),

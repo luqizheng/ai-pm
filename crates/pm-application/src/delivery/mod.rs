@@ -182,6 +182,10 @@ pub struct SubmitResultRequest {
     pub repositories: Vec<SubmittedRepository>,
     pub summary: String,
     pub knowledge_proposals: Vec<KnowledgeProposalInput>,
+    /// T-088：认证调用人的完整审计身份（MCP 路径由工具层填入；worker / 测试为 None
+    /// → 审计回退为仅执行主体）。不进 wire 契约。
+    #[serde(skip)]
+    pub caller: Option<crate::actor::AuditActor>,
 }
 
 // ---------------------------------------------------------------------------
@@ -746,7 +750,7 @@ async fn persist_accepted(
     audit_delivery(
         tx,
         request.project_id,
-        None,
+        request.caller.as_ref(),
         "delivery.submitted",
         request.run_id,
         serde_json::json!({
@@ -811,7 +815,7 @@ async fn finish_rejected(
     audit_delivery(
         &mut tx,
         request.project_id,
-        None,
+        request.caller.as_ref(),
         "delivery.rejected",
         request.run_id,
         serde_json::json!({

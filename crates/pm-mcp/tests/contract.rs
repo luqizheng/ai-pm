@@ -22,6 +22,20 @@ use std::path::Path;
 use uuid::Uuid;
 use pm_domain::SYSTEM_TENANT;
 
+/// T-088：直调工具函数用的测试调用人（SYSTEM_TENANT 成员；设备声明缺席）。
+fn test_caller(human_id: Uuid) -> pm_application::caller::CallerContext {
+    pm_application::caller::CallerContext::new(
+        pm_application::caller::HumanActor {
+            principal_id: human_id,
+            tenant_id: SYSTEM_TENANT,
+            identity_id: None,
+            client: Some("test".into()),
+            auth_mode: "api_key".into(),
+        },
+        pm_application::caller::DeviceClaim::absent(),
+    )
+}
+
 /// 在工作区里执行 git 命令（D4 校验跑在真实 Git 工作区上）。
 fn git(root: &Path, args: &[&str]) {
     let status = std::process::Command::new("git")
@@ -50,6 +64,7 @@ struct Fx {
     task_id: Uuid,
     agent_id: Uuid,
     document_id: Uuid,
+    human_id: Uuid,
 }
 
 async fn seed(pool: &PgPool, code: &str, with_contract: bool) -> Fx {
@@ -190,6 +205,7 @@ async fn seed(pool: &PgPool, code: &str, with_contract: bool) -> Fx {
         task_id,
         agent_id,
         document_id,
+        human_id: outcome.human_id,
     }
 }
 
@@ -202,7 +218,7 @@ async fn claim(pool: &PgPool, fx: &Fx) -> Value {
             client_name: "codex".to_string(),
             client_version: Some("1.2.0".to_string()),
         },
-    )
+     &test_caller(fx.human_id))
     .await
     .unwrap()
 }
@@ -311,7 +327,7 @@ async fn c3_c4_c24_c25_contract_shape_and_values(pool: PgPool) {
         lease_token: claimed["lease_token"].as_str().unwrap().to_string(),
             lease_generation: claimed["lease_generation"].as_i64().unwrap() as i32,
     };
-    let value = get_run_context(&pool, args).await.unwrap();
+    let value = get_run_context(&pool, args, &test_caller(fx.human_id)).await.unwrap();
 
     // C4：schema 校验（deny_unknown_fields 同时保证未知字段为 0）。
     let mirror: ContractMirror = serde_json::from_value(value.clone())
@@ -349,7 +365,7 @@ async fn c18_empty_contract_is_still_schema_valid(pool: PgPool) {
             lease_token: claimed["lease_token"].as_str().unwrap().to_string(),
             lease_generation: claimed["lease_generation"].as_i64().unwrap() as i32,
         },
-    )
+     &test_caller(fx.human_id))
     .await
     .unwrap();
     assert_eq!(value["acceptance_criteria"], serde_json::json!([]));
@@ -374,7 +390,7 @@ async fn c5_c6_errors_are_tool_errors_without_leaking_credentials(pool: PgPool) 
             lease_token: lease_token.clone(),
             lease_generation: 1,
         },
-    )
+     &test_caller(fx.human_id))
     .await
     .unwrap_err();
     assert!(matches!(err, ToolError::NotFound(_)));
@@ -388,7 +404,7 @@ async fn c5_c6_errors_are_tool_errors_without_leaking_credentials(pool: PgPool) 
             lease_token: "wrong-token".to_string(),
             lease_generation: 1,
         },
-    )
+     &test_caller(fx.human_id))
     .await
     .unwrap_err();
     assert!(matches!(err, ToolError::Forbidden(_)));
@@ -411,7 +427,7 @@ async fn c5_c6_errors_are_tool_errors_without_leaking_credentials(pool: PgPool) 
             lease_token,
             lease_generation: 1,
         },
-    )
+     &test_caller(fx.human_id))
     .await
     .unwrap_err();
     assert!(matches!(err, ToolError::LeaseExpired(_)));
@@ -455,7 +471,7 @@ async fn c11_submit_result_rejects_a_repository_outside_the_contract(pool: PgPoo
                 change_summary: "update terrain ADR".to_string(),
             }],
         },
-    )
+     &test_caller(fx.human_id))
     .await
     .unwrap();
 
@@ -564,7 +580,7 @@ async fn c84_c85_submit_result_lands_the_delivery_and_replays(pool: PgPool) {
             note: None,
             blocked: false,
         },
-    )
+     &test_caller(fx.human_id))
     .await
     .unwrap();
 
@@ -590,7 +606,7 @@ async fn c84_c85_submit_result_lands_the_delivery_and_replays(pool: PgPool) {
     };
 
     // C84：成功提交 → 真实落库。
-    let value = submit_result_with(&pool, args.clone(), &options).await.unwrap();
+    let value = submit_result_with(&pool, args.clone(), &options, &test_caller(fx.human_id)).await.unwrap();
     assert_eq!(value["outcome"], "accepted");
     assert_eq!(value["integration_status"], "passed");
     assert_eq!(value["commit_count"], 1);
@@ -626,7 +642,7 @@ async fn c84_c85_submit_result_lands_the_delivery_and_replays(pool: PgPool) {
     assert_eq!(submitted_audits, 1);
 
     // C85：重复请求 → 幂等返回原结果，不产生第二份审计。
-    let replay = submit_result_with(&pool, args, &options).await.unwrap();
+    let replay = submit_result_with(&pool, args, &options, &test_caller(fx.human_id)).await.unwrap();
     assert_eq!(replay["outcome"], "accepted");
     assert_eq!(replay["commit_count"], 1);
     let commits_after: i64 =
@@ -661,7 +677,7 @@ async fn report_progress_tool_renews_and_reports(pool: PgPool) {
             note: Some("located the renderer".to_string()),
             blocked: false,
         },
-    )
+     &test_caller(fx.human_id))
     .await
     .unwrap();
     assert_eq!(value["task_status"], "running");

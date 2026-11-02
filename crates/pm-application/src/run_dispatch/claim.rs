@@ -52,6 +52,10 @@ pub(crate) struct ClaimOptions<'a> {
 
     client_name: Option<&'a str>,
     client_version: Option<&'a str>,
+
+    /// T-088：认证调用人的完整审计身份（MCP 路径）；worker 路径为 None。
+    /// `claimed_device_id` 同时落 `task_run.executor_id`（同源同值，仅归因）。
+    audit_actor: Option<&'a crate::actor::AuditActor>,
 }
 
 
@@ -126,6 +130,7 @@ pub async fn claim_once_with_policy(
 
             client_name: None,
             client_version: None,
+            audit_actor: None,
         },
         policy,
     )
@@ -158,6 +163,31 @@ pub async fn claim_task_run(
         client_version,
         cfg,
         &DefaultExecutionPolicy,
+        None,
+    )
+    .await
+}
+
+/// 同 [`claim_task_run`]，但由调用方**显式**给出完整审计身份（T-088 MCP 路径）：
+/// 审计行写真人三列 + 设备归因，`task_run.executor_id` 落已校验的设备 id。
+pub async fn claim_task_run_as(
+    pool: &PgPool,
+    project_id: Uuid,
+    task_id: Uuid,
+    client_name: &str,
+    client_version: Option<&str>,
+    cfg: &RunDispatchConfig,
+    actor: &crate::actor::AuditActor,
+) -> Result<ClaimedTaskRun, RunDispatchError> {
+    claim_task_run_with_policy(
+        pool,
+        project_id,
+        task_id,
+        client_name,
+        client_version,
+        cfg,
+        &DefaultExecutionPolicy,
+        Some(actor),
     )
     .await
 }
@@ -173,6 +203,7 @@ pub async fn claim_task_run_with_policy(
     client_version: Option<&str>,
     cfg: &RunDispatchConfig,
     policy: &dyn ExecutionPolicy,
+    audit_actor: Option<&crate::actor::AuditActor>,
 ) -> Result<ClaimedTaskRun, RunDispatchError> {
     let outcome = claim_core(
         pool,
@@ -185,6 +216,7 @@ pub async fn claim_task_run_with_policy(
             mode: DispatchMode::On,
             client_name: Some(client_name),
             client_version,
+            audit_actor,
         },
         policy,
     )
@@ -601,7 +633,8 @@ pub(crate) async fn claim_core(
                 timeout_seconds = $7, \
                 lease_generation = COALESCE(lease_generation, 0) + 1, \
                 deadline_at = COALESCE(deadline_at, \
-                    now() + make_interval(secs => COALESCE($7::int, $8::int)::float8)) \
+                    now() + make_interval(secs => COALESCE($7::int, $8::int)::float8)), \
+                executor_id = COALESCE($9, executor_id) \
           WHERE id = $1 \
          RETURNING lease_generation",
     )
@@ -613,6 +646,8 @@ pub(crate) async fn claim_core(
     .bind(opts.client_version)
     .bind(cfg.timeout_secs)
     .bind(cfg.deadline_default_secs as i32)
+    // T-088：已校验的设备归因（ADR-0001 D6 无 FK 前向列；自报不作凭证）。
+    .bind(opts.audit_actor.and_then(|a| a.claimed_device_id))
     .fetch_one(&mut *tx)
     .await?;
 
@@ -650,9 +685,10 @@ pub(crate) async fn claim_core(
             .await?;
     }
 
-    audit_run(
+    audit_run_opt(
         &mut tx,
         project_id,
+        opts.audit_actor,
         "claim_task_run",
         run_id,
         serde_json::json!({

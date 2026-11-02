@@ -37,6 +37,7 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     ("crates/pm-application/src/run_dispatch/lease.rs", 1),        // A10
     ("crates/pm-infrastructure/src/outbox_handlers.rs", 1),        // A11
     ("apps/pm-api/src/outbox_ops.rs", 1),                          // A12
+    ("apps/pm-api/src/device_claim.rs", 1),                        // T-088：设备声明被忽略（tenant_audit_log）
     // T-088 新增：设备绑定审计（devenv 域）
     ("crates/pm-application/src/devenv/binding.rs", 1),
 ];

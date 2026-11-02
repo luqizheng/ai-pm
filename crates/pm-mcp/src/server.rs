@@ -14,10 +14,11 @@
 //! design. No MCP OAuth, no SSE notifications (M1 scope cut).
 
 use rmcp::{
-    ErrorData, ServerHandler,
+    ErrorData, RoleServer, ServerHandler,
     handler::server::router::tool::ToolRouter,
     handler::server::wrapper::Parameters,
     model::{CallToolResult, ContentBlock},
+    service::RequestContext,
     tool, tool_handler, tool_router,
     transport::streamable_http_server::{
         StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
@@ -77,8 +78,15 @@ impl PmMcpServer {
     pub async fn submit_technical_design(
         &self,
         Parameters(args): Parameters<SubmitTechnicalDesignArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        Self::tool_result(tools::submit_technical_design(&self.pool, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::submit_technical_design(&self.pool, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -90,8 +98,15 @@ impl PmMcpServer {
     pub async fn get_submission_status(
         &self,
         Parameters(args): Parameters<SubmissionStatusArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        Self::tool_result(tools::get_submission_status(&self.pool, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::get_submission_status(&self.pool, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -103,8 +118,15 @@ impl PmMcpServer {
     pub async fn get_task_context(
         &self,
         Parameters(args): Parameters<TaskContextArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        Self::tool_result(tools::get_task_context(&self.pool, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::get_task_context(&self.pool, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -116,9 +138,16 @@ impl PmMcpServer {
     pub async fn submit_document(
         &self,
         Parameters(args): Parameters<SubmitDocumentArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
         let root = pm_application::knowledge::KnowledgeRoot::from_env();
-        Self::tool_result(tools::submit_document(&self.pool, &root, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::submit_document(&self.pool, &root, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -131,9 +160,16 @@ impl PmMcpServer {
     pub async fn propose_document(
         &self,
         Parameters(args): Parameters<ProposeDocumentArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
         let root = pm_application::knowledge::KnowledgeRoot::from_env();
-        Self::tool_result(tools::propose_document(&self.pool, &root, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::propose_document(&self.pool, &root, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -144,9 +180,16 @@ impl PmMcpServer {
     pub async fn confirm_document_proposal(
         &self,
         Parameters(args): Parameters<ConfirmDocumentProposalArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
         let root = pm_application::knowledge::KnowledgeRoot::from_env();
-        Self::tool_result(tools::confirm_document_proposal(&self.pool, &root, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::confirm_document_proposal(&self.pool, &root, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -158,9 +201,16 @@ impl PmMcpServer {
     pub async fn veto_document_revision(
         &self,
         Parameters(args): Parameters<VetoDocumentRevisionArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
         let root = pm_application::knowledge::KnowledgeRoot::from_env();
-        Self::tool_result(tools::veto_document_revision(&self.pool, &root, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::veto_document_revision(&self.pool, &root, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -172,8 +222,15 @@ impl PmMcpServer {
     pub async fn discovery_get(
         &self,
         Parameters(args): Parameters<DiscoveryGetArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        Self::tool_result(tools::discovery_get(&self.pool, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::discovery_get(&self.pool, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -185,8 +242,15 @@ impl PmMcpServer {
     pub async fn discovery_get_context(
         &self,
         Parameters(args): Parameters<DiscoveryGetArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        Self::tool_result(tools::discovery_get_context(&self.pool, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::discovery_get_context(&self.pool, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -198,8 +262,15 @@ impl PmMcpServer {
     pub async fn discovery_submit_findings(
         &self,
         Parameters(args): Parameters<DiscoverySubmitFindingsArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        Self::tool_result(tools::discovery_submit_findings(&self.pool, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::discovery_submit_findings(&self.pool, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -210,8 +281,15 @@ impl PmMcpServer {
     pub async fn discovery_submit_answers(
         &self,
         Parameters(args): Parameters<DiscoverySubmitAnswersArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        Self::tool_result(tools::discovery_submit_answers(&self.pool, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::discovery_submit_answers(&self.pool, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -224,9 +302,16 @@ impl PmMcpServer {
     pub async fn discovery_submit_proposal(
         &self,
         Parameters(args): Parameters<DiscoverySubmitProposalArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
         let root = pm_application::knowledge::KnowledgeRoot::from_env();
-        Self::tool_result(tools::discovery_submit_proposal(&self.pool, &root, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::discovery_submit_proposal(&self.pool, &root, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -238,8 +323,15 @@ impl PmMcpServer {
     pub async fn discovery_complete(
         &self,
         Parameters(args): Parameters<DiscoveryCompleteArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        Self::tool_result(tools::discovery_complete(&self.pool, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::discovery_complete(&self.pool, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -254,8 +346,15 @@ impl PmMcpServer {
     pub async fn claim_task(
         &self,
         Parameters(args): Parameters<ClaimTaskArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        Self::tool_result(tools::claim_task(&self.pool, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::claim_task(&self.pool, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -269,8 +368,15 @@ impl PmMcpServer {
     pub async fn get_run_context(
         &self,
         Parameters(args): Parameters<RunContextArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        Self::tool_result(tools::get_run_context(&self.pool, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::get_run_context(&self.pool, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -284,8 +390,15 @@ impl PmMcpServer {
     pub async fn report_progress(
         &self,
         Parameters(args): Parameters<ReportProgressArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        Self::tool_result(tools::report_progress(&self.pool, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::report_progress(&self.pool, args, &caller).await
+            }
+            .await,
+        )
     }
 
     #[tool(
@@ -300,8 +413,15 @@ impl PmMcpServer {
     pub async fn submit_result(
         &self,
         Parameters(args): Parameters<SubmitResultArgs>,
+        ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        Self::tool_result(tools::submit_result(&self.pool, args).await)
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::submit_result(&self.pool, args, &caller).await
+            }
+            .await,
+        )
     }
 }
 

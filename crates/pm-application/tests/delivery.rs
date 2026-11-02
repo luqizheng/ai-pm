@@ -234,6 +234,7 @@ impl Fx {
             repositories,
             summary: "done".to_string(),
             knowledge_proposals: vec![],
+            caller: None,
         }
     }
 

@@ -5,6 +5,21 @@
 use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
 use pm_application::discovery::create_session;
 use pm_domain::SYSTEM_TENANT;
+
+/// T-088：直调工具函数用的测试调用人（SYSTEM_TENANT 成员；设备声明缺席）。
+fn test_caller(human_id: Uuid) -> pm_application::caller::CallerContext {
+    pm_application::caller::CallerContext::new(
+        pm_application::caller::HumanActor {
+            principal_id: human_id,
+            tenant_id: SYSTEM_TENANT,
+            identity_id: None,
+            client: Some("test".into()),
+            auth_mode: "api_key".into(),
+        },
+        pm_application::caller::DeviceClaim::absent(),
+    )
+}
+
 use pm_mcp::tools::{
     DiscoveryAnswerInput, DiscoveryCompleteArgs, DiscoveryFindingInput, DiscoveryGetArgs,
     DiscoveryQuestionInput, DiscoverySubmitAnswersArgs, DiscoverySubmitFindingsArgs,
@@ -53,7 +68,7 @@ async fn discovery_get_resolves_live_session_or_answers_not_found(pool: PgPool) 
             project_id: boot.project_id,
             session_id: None,
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap_err();
     assert!(
@@ -77,7 +92,7 @@ async fn discovery_get_resolves_live_session_or_answers_not_found(pool: PgPool) 
             project_id: boot.project_id,
             session_id: None,
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap();
     assert_eq!(detail["session"]["id"], json!(session.id));
@@ -90,7 +105,7 @@ async fn discovery_get_resolves_live_session_or_answers_not_found(pool: PgPool) 
             project_id: boot.project_id,
             session_id: Some(Uuid::new_v4()),
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap_err();
     assert!(matches!(ghost, ToolError::NotFound(_)));
@@ -120,7 +135,7 @@ async fn discovery_submit_findings_roundtrip_and_validates(pool: PgPool) {
                 finding_input("speculation", "支付模块可能尚未完成", Some(0.78)),
             ],
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap();
     assert_eq!(result["added"], 2);
@@ -133,7 +148,7 @@ async fn discovery_submit_findings_roundtrip_and_validates(pool: PgPool) {
             project_id: boot.project_id,
             session_id: Some(session.id),
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap();
     let findings = detail["findings"].as_array().unwrap();
@@ -150,7 +165,7 @@ async fn discovery_submit_findings_roundtrip_and_validates(pool: PgPool) {
             session_id: session.id,
             findings: vec![],
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap_err();
     assert!(matches!(empty, ToolError::InvalidRequest(_)));
@@ -162,7 +177,7 @@ async fn discovery_submit_findings_roundtrip_and_validates(pool: PgPool) {
             session_id: session.id,
             findings: vec![finding_input("rumor", "x", None)],
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap_err();
     assert!(
@@ -197,7 +212,7 @@ async fn discovery_submit_answers_collects_questions_and_answers(pool: PgPool) {
             }],
             answers: vec![],
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap();
     assert_eq!(result["questions_added"], 1);
@@ -208,7 +223,7 @@ async fn discovery_submit_answers_collects_questions_and_answers(pool: PgPool) {
             project_id: boot.project_id,
             session_id: Some(session.id),
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap();
     let question_id: Uuid =
@@ -225,7 +240,7 @@ async fn discovery_submit_answers_collects_questions_and_answers(pool: PgPool) {
                 answer: "外部支付服务实现".to_string(),
             }],
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap();
     assert_eq!(answered["answers_submitted"], 1);
@@ -236,7 +251,7 @@ async fn discovery_submit_answers_collects_questions_and_answers(pool: PgPool) {
             project_id: boot.project_id,
             session_id: Some(session.id),
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap();
     assert_eq!(detail["questions"][0]["status"], "answered");
@@ -249,7 +264,7 @@ async fn discovery_submit_answers_collects_questions_and_answers(pool: PgPool) {
             questions: vec![],
             answers: vec![],
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap_err();
     assert!(matches!(both_empty, ToolError::InvalidRequest(_)));
@@ -281,7 +296,7 @@ async fn discovery_context_lists_documents_repositories_and_open_questions(pool:
             }],
             answers: vec![],
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap();
 
@@ -291,7 +306,7 @@ async fn discovery_context_lists_documents_repositories_and_open_questions(pool:
             project_id: boot.project_id,
             session_id: Some(session.id),
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap();
     assert_eq!(context["session"]["id"], json!(session.id));
@@ -336,7 +351,7 @@ async fn discovery_submit_proposal_is_propose_only(pool: PgPool) {
             redline_kind: Some("external_commitment".to_string()),
             operation_id: format!("disc-prop-{}", Uuid::new_v4().simple()),
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap();
 
@@ -389,7 +404,7 @@ async fn discovery_submit_proposal_is_propose_only(pool: PgPool) {
             redline_kind: None,
             operation_id: format!("disc-prop-{}", Uuid::new_v4().simple()),
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap_err();
     assert!(matches!(modify_missing_base, ToolError::InvalidRequest(_)));
@@ -416,7 +431,7 @@ async fn discovery_complete_follows_the_state_machine(pool: PgPool) {
             session_id: session.id,
             status: "PAUSED".to_string(),
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap_err();
     assert!(matches!(invalid, ToolError::InvalidRequest(_)));
@@ -428,7 +443,7 @@ async fn discovery_complete_follows_the_state_machine(pool: PgPool) {
             session_id: session.id,
             status: "REVIEW_REQUIRED".to_string(),
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap();
     assert_eq!(review["status"], "REVIEW_REQUIRED");
@@ -440,7 +455,7 @@ async fn discovery_complete_follows_the_state_machine(pool: PgPool) {
             session_id: session.id,
             status: "COMPLETED".to_string(),
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap();
     assert_eq!(done["status"], "COMPLETED");
@@ -452,7 +467,7 @@ async fn discovery_complete_follows_the_state_machine(pool: PgPool) {
             session_id: session.id,
             status: "COMPLETED".to_string(),
         },
-    )
+     &test_caller(boot.human_id))
     .await
     .unwrap_err();
     assert!(matches!(again, ToolError::Conflict(_)));

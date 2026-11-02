@@ -10,6 +10,9 @@ pm-application = { path = "../pm-application" }
 # No TLS features are pulled: the streamable HTTP server stack is plain
 # http/tower (schannel/native-tls never enters the graph).
 rmcp = { workspace = true, features = ["transport-streamable-http-server"] }
+# T-088：工具层从 rmcp `RequestContext.extensions` 读取 pm-api 注入的 `http::request::Parts`
+# （调用人身份 / 设备声明）。与 rmcp / axum 同为 http 1.x，图中单一版本。
+http = "1"
 # JSON Schema derivation for the tool argument structs; same major as rmcp's
 # own schemars (1.x) so the trait implementations unify in one build.
 schemars = { version = "1.1", default-features = false, features = ["derive", "std", "uuid1"] }

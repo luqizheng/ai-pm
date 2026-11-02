@@ -13,6 +13,7 @@
 //!   function layer, plus the streamable HTTP service factory that pm-api
 //!   mounts under `/mcp`.
 
+pub mod caller;
 pub mod server;
 pub mod tools;
 
