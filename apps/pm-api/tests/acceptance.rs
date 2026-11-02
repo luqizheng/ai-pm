@@ -409,7 +409,7 @@ async fn overview_counts_badges_and_review_status(pool: PgPool) {
         .collect();
     assert_eq!(
         titles,
-        vec!["blocked task", "integration failed", "partial delivery", "bare task", "eligible task"],
+        vec!["integration failed", "blocked task", "bare task", "partial delivery", "eligible task"],
         "body: {body}"
     );
 
@@ -420,42 +420,42 @@ async fn overview_counts_badges_and_review_status(pool: PgPool) {
         .collect();
     assert_eq!(badges, vec!["blocked", "blocked", "missing", "missing", "eligible"]);
 
-    // blocked #1：blocker 计数来自最新成功 review run；审批已决 → decided。
-    assert_eq!(items[0]["task_id"], serde_json::json!(blocked));
-    assert_eq!(items[0]["blocker_count"], 1);
-    assert_eq!(items[0]["review_status"], "decided");
-    assert!(items[0]["pending_approval_id"].is_null());
+    // blocked #1：集成失败即阻塞，无需审查记录（组内 created_at DESC，新者在前）。
+    assert_eq!(items[0]["task_id"], serde_json::json!(int_failed));
+    assert_eq!(items[0]["delivery_summary"]["integration_status"], "failed");
+    assert_eq!(items[0]["review_status"], "none");
+
+    // blocked #2：blocker 计数来自最新成功 review run；审批已决 → decided。
+    assert_eq!(items[1]["task_id"], serde_json::json!(blocked));
+    assert_eq!(items[1]["blocker_count"], 1);
+    assert_eq!(items[1]["review_status"], "decided");
+    assert!(items[1]["pending_approval_id"].is_null());
     assert_eq!(
-        items[0]["delivery_summary"],
+        items[1]["delivery_summary"],
         serde_json::json!({
             "expected_repos": 2, "delivered_repos": 2, "missing_repos": [],
             "integration_status": "passed"
         })
     );
 
-    // blocked #2：集成失败即阻塞，无需审查记录。
-    assert_eq!(items[1]["task_id"], serde_json::json!(int_failed));
-    assert_eq!(items[1]["delivery_summary"]["integration_status"], "failed");
-    assert_eq!(items[1]["review_status"], "none");
-
-    // missing #1：部分交付，缺仓名可见。
-    assert_eq!(items[2]["task_id"], serde_json::json!(partial));
+    // missing #1（Q1）：零交付任务不被过滤，标待补充。
+    assert_eq!(items[2]["task_id"], serde_json::json!(bare));
     assert_eq!(
-        items[2]["delivery_summary"]["missing_repos"],
-        serde_json::json!(["repo-b"])
-    );
-    assert_eq!(items[2]["delivery_summary"]["delivered_repos"], 1);
-
-    // missing #2（Q1）：零交付任务不被过滤，标待补充。
-    assert_eq!(items[3]["task_id"], serde_json::json!(bare));
-    assert_eq!(
-        items[3]["delivery_summary"],
+        items[2]["delivery_summary"],
         serde_json::json!({
             "expected_repos": 0, "delivered_repos": 0, "missing_repos": [],
             "integration_status": serde_json::Value::Null
         })
     );
-    assert!(items[3]["latest_delivery_run_id"].is_null());
+    assert!(items[2]["latest_delivery_run_id"].is_null());
+
+    // missing #2：部分交付，缺仓名可见。
+    assert_eq!(items[3]["task_id"], serde_json::json!(partial));
+    assert_eq!(
+        items[3]["delivery_summary"]["missing_repos"],
+        serde_json::json!(["repo-b"])
+    );
+    assert_eq!(items[3]["delivery_summary"]["delivered_repos"], 1);
 
     // eligible：动作区状态 + pending 审批 id 直接可点。
     assert_eq!(items[4]["task_id"], serde_json::json!(eligible));

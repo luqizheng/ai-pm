@@ -125,3 +125,131 @@ async fn empty_project_returns_no_items(pool: PgPool) {
     assert_eq!(body["total"], 0);
     assert_eq!(body["items"].as_array().unwrap().len(), 0);
 }
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn list_exposes_run_kind_and_filters(pool: PgPool) {
+    let project_id = seed_project(&pool, "RUNS-3").await;
+    let task_a = seed_task(&pool, project_id, "task a").await;
+    let task_b = seed_task(&pool, project_id, "task b").await;
+
+    let base = format!("/v1/pm/task-runs?project_id={project_id}");
+    let insert = |task_id: Uuid, attempt: i32, run_kind: &str| {
+        format!(
+            "INSERT INTO delivery.task_run \
+                 (project_id, task_id, attempt_no, run_kind, status, executor_kind, executor_session, \
+                  lease_expires_at, role_id, review_policy_version, tenant_id) \
+             VALUES ('{project_id}', '{task_id}', {attempt}, '{run_kind}', 'succeeded', \
+                 {}, {}, now() + interval '5 minutes', {}, {}, \
+                 (SELECT tenant_id FROM core.project WHERE id = '{project_id}'))",
+            if run_kind == "review" { "'platform'" } else { "NULL" },
+            if run_kind == "review" { "NULL" } else { "'sess-1'" },
+            if run_kind == "review" { "'reviewer'" } else { "NULL" },
+            if run_kind == "review" { "'v1'" } else { "NULL" },
+        )
+    };
+    sqlx::query(&insert(task_a, 1, "delivery")).execute(&pool).await.unwrap();
+    sqlx::query(&insert(task_b, 1, "delivery")).execute(&pool).await.unwrap();
+    sqlx::query(&insert(task_b, 1, "review")).execute(&pool).await.unwrap();
+
+    // 列表补列：run_kind / executor / lease 直接可见。
+    let (status, body) = body_json(
+        router(pool.clone()).oneshot(get(&base)).await.unwrap()).await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    assert_eq!(body["total"], 3);
+    let items = body["items"].as_array().unwrap();
+    assert!(items.iter().all(|r| r.get("run_kind").is_some()));
+    let delivery = items.iter().find(|r| r["executor_session"] == "sess-1").unwrap();
+    assert_eq!(delivery["run_kind"], "delivery");
+    assert!(delivery["lease_expires_at"].is_string());
+
+    // run_kind=review 只出审查轨。
+    let (status, body) = body_json(
+        router(pool.clone()).oneshot(get(&format!("{base}&run_kind=review"))).await.unwrap()).await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"][0]["run_kind"], "review");
+
+    // task_id 过滤 + 非法 run_kind 视为未传。
+    let (status, body) = body_json(
+        router(pool.clone()).oneshot(get(&format!("{base}&task_id={task_a}&run_kind=bogus"))).await.unwrap()).await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"][0]["task_title"], "task a");
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn run_detail_returns_lease_executor_and_repo_baselines(pool: PgPool) {
+    let project_id = seed_project(&pool, "RUNS-4").await;
+    let task_id = seed_task(&pool, project_id, "detail task").await;
+    let repo_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO integration.project_repository (project_id, name, url, tenant_id) \
+         VALUES ($1, 'repo-x', 'ssh://git@example.com/repo-x.git', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let run_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.task_run \
+             (project_id, task_id, attempt_no, run_kind, status, stage, executor_kind, \
+              executor_session, lease_expires_at, claimed_at, heartbeat_at, started_at, \
+              deadline_at, tenant_id) \
+         VALUES ($1, $2, 1, 'delivery', 'running', 'execute', 'codex', 'sess-42', \
+                 now() + interval '10 minutes', now(), now(), now(), \
+                 now() + interval '30 minutes', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
+    )
+    .bind(project_id)
+    .bind(task_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO delivery.task_run_repository \
+             (run_id, project_id, repository_id, base_ref, base_commit, write_access, \
+              workspace_path, tenant_id) \
+         VALUES ($1, $2, $3, 'main', 'abc123', true, '/ws/run/repo-x', \
+                 (SELECT tenant_id FROM core.project WHERE id = $2))",
+    )
+    .bind(run_id)
+    .bind(project_id)
+    .bind(repo_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let (status, body) = body_json(
+        router(pool.clone())
+            .oneshot(get(&format!("/v1/pm/task-runs/{run_id}")))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    assert_eq!(body["id"], serde_json::json!(run_id));
+    assert_eq!(body["task_title"], "detail task");
+    assert_eq!(body["run_kind"], "delivery");
+    assert_eq!(body["status"], "running");
+    assert_eq!(body["stage"], "execute");
+    assert_eq!(body["executor_kind"], "codex");
+    assert_eq!(body["executor_session"], "sess-42");
+    assert!(body["lease_expires_at"].is_string());
+    assert!(body["deadline_at"].is_string());
+    let repos = body["repositories"].as_array().unwrap();
+    assert_eq!(repos.len(), 1);
+    assert_eq!(repos[0]["repository_name"], "repo-x");
+    assert_eq!(repos[0]["base_ref"], "main");
+    assert_eq!(repos[0]["base_commit"], "abc123");
+    assert_eq!(repos[0]["workspace_path"], "/ws/run/repo-x");
+
+    // 404：未知 run / 跨租户由 tenant 条件兜底。
+    let (status, _) = body_json(
+        router(pool.clone())
+            .oneshot(get(&format!("/v1/pm/task-runs/{}", Uuid::new_v4())))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
