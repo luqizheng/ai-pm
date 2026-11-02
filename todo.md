@@ -281,12 +281,13 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **不做**：不做 MCP OAuth（定位文档 M1 scope cut，需另行立项才动）；不动鉴权三层链（bearer → resolve → active）。
   - **验收（评审 P0-3 升级为七项身份链路门禁，**C166**）**：① Windows 开发机可访问服务器 `/mcp`；② 认证链路可用现有真人 API Key；③ **MCP 工具获得正确的真人 Principal 上下文**；④ **T-051 的 Project Member 校验仍然有效**；⑤ **T-059 的审计归因仍然有效**；⑥ 长连接/协议交互**不被反向代理错误截断**；⑦ 未认证与越权请求被正确拒绝。**必须从真实 Windows 开发机发起**——禁止服务器内部自测充当；同机用例与 rmcp 契约测试不回归。**T-088 须继承本验收为回归项**。
 
-- [ ] **T-082 `pm_list_tasks` MCP 工具（runbook G3；**2026-11-02 T-087 定稿：升级为 T-090 硬前置**）**
+- [x] **T-082 `pm_list_tasks` MCP 工具（runbook G3；2026-11-02 T-087 定稿：升级为 T-090 硬前置）**〔2026-11-02 领用 → **同日实施完成**〕
   - **目标**：执行端不切 Web 控制台即可发现可领取任务：`project_id` 范围内 `ready` 状态任务的只读列表。
   - **依据**：`docs/ai-pm-executor-onboarding-runbook-v1.md` §十 G3 / §十一 R4；`docs/ai-pm-mcp-executor-positioning-v1.md` §4.3（`task.list` 对应项）；`docs/ai-pm-codex-bootstrap-v1.md` §四（自检「任务可读」依赖）。
-  - **做**：新增只读工具，复用 T-022 可见性语义（持 key 真人 + 租户内 + `project_member`）；命名跟随现有 `pm_*`（Q1 命名收敛前不引入新命名体系）。
-  - **不做**：不做按执行端能力 / 档位过滤（归 T-051）；不改 `pm_claim_task` 契约。
-  - **验收**：空项目 / 有 ready 任务 / 非本租户 三态用例；`cargo test --workspace` 全绿。
+  - **做**：新增只读工具（第 18 个 MCP 工具），复用 T-088 的真人成员门（`ensure_member`，非成员 404）+ T-022 可见性；命名跟随现有 `pm_*`。
+  - **实现口径**：入参 `project_id` + 可选 `limit`（默认 20，钳到 1..=100）；范围 = 项目内 `status='ready'`；每行附**最新 `queued` Run 的 id**（无则 null——提示而非硬过滤，因为无 queued run 的 ready 任务领了会 `NoRunnableRun`）；排序 priority（urgent→high→normal→low）+ created_at；响应 `{tasks:[{task_id,title,priority,status,assignee_id,queued_run_id,created_at}], total}`；`total` 为全量 ready 数（供后续分页）。
+  - **不做**：不做按执行端能力 / 档位过滤（归 T-051）；不改 `pm_claim_task` 契约；不做 offset 分页（V1 无必要，加参数是兼容变更）；不引入状态过滤参数。
+  - **验收**：三态 + limit 用例（空项目 → `tasks: []`/`total: 0`；有 ready → 按优先级排序且 `queued_run_id` 有值/为 null；非成员 → 404；`limit=1` 截断但 `total` 仍全量；越界 limit 钳到 100 不报错）——`tests/caller_ctx.rs::t082_list_tasks_three_states_and_limit`；smoke 工具清单断言更新为 18 个；`cargo test --workspace` 全绿。
 
 ---
 
