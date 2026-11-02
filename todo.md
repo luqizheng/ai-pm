@@ -82,7 +82,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 | P5 交付与验收 | Delivery Manifest 多仓、Commit 追踪、文件清单、测试证据、Baseline Validation、交付历史 | `0011` 已有 `task_repository`/`task_run_repository`；**缺 `task_workspace`/`task_repository_commit`**、缺校验服务与历史视图 | 🟡 只有骨架 | 整块 → T-040/T-041 |
 | P6 知识库与 PageIndex | Markdown 事实源、写入、索引、检索、上下文组装、执行后回写 | Markdown+Git 事实源（`0006`）、提案/质量门/红线（`0014`）、`knowledge_reference`；**可替换索引层**（`0024` 章节索引 + provider 端口 + `apply_transition` 唯一原语 + Project 级写入协调，T-060 已落地）；**执行后知识回写**（T-043） | 🟡 索引与回写已闭环 | 缺**上下文组装**（检索结果 → 提示词注入）→ 留后续切片 |
 | P7 Review 与审批 | 独立 Reviewer Run、Findings、四值结论、审批引擎、策略分层 | `governance.approval_request`、`policy_engine` + `0016` 内容寻址四层合成；`pm-ai/self_review.rs` **只审导入提案**，不审交付 | 🟡 审批完成，Review 未做 | 独立 Reviewer Run 与 Findings → T-042/T-043 |
-| P8 Outbox 可靠异步 | 同事务写入、Worker、幂等、重试、死信、重放、监控 | `0010:123` `integration.outbox_event` 已含 `attempts`/`dead_letter`/`locked_until`/`idempotency_key`；`crates/pm-infrastructure/src/outbox_worker.rs` + `apps/ai-pm-worker/src/main.rs:93` **只注册 `TaskReady`** | 🟡 地基完成 | 业务事件覆盖（RunCompleted/DeliverySubmitted/ReviewCompleted/KnowledgeBaseWriteRequested）、死信重放、监控 → T-061 |
+| P8 Outbox 可靠异步 | 同事务写入、Worker、幂等、重试、死信、重放、监控 | ✅ `0010:123` `integration.outbox_event`（`attempts`/`dead_letter`/`locked_until`/`idempotency_key`）+ `outbox_worker.rs`；**2026-11-02 T-061 补齐**：`EventCatalog` 单一真源（5 项事件目录）、`RunCompleted` 生产者 + 记录型 Handler（advisory lock 并发幂等）、死信重放 + 状态监控三端点、两个 worker 统一 `register_all_handlers` 装配 | 🟢 事件体系闭环 | 通知/死信数据保留与清理策略、执行中心接真数据 → T-070 / 后续议题 |
 | P9 多 Agent 协作 | Agent 角色、能力、任务分解、协作、上下文传递 | 只有 `project_member` 的 5 个固定角色；无 Agent 运行时 | ❌ 主动不做 | 与已裁定「不造自研多 Agent 运行时」冲突，延后（§12） |
 | P10 研发管理工作台 | 六大工作区 + 11 个页面 | 经典页 `frontend/src/shell/views/pm/`：`overview/projects/tasks/requirements/approvals/audit/settings/customers`（8）；工作区 `frontend/src/workspace/`：`console` + `focus` + `pages/`（Team/Execution/Goals/Models/Activity/Requirements/Knowledge/Artifacts/Decisions）；`GET /v1/pm/task-runs` 只读（`apps/pm-api/src/pm_runs.rs:20`） | 🟡 页面骨架齐 | 执行中心接真 Run 数据、交付验收页 → T-070 |
 | P11 规模化与自动化 | 多项目调度、并发控制、配额、自动规划 | 无 | ❌ 延后 | 需单仓闭环先稳定（§12） |
@@ -206,13 +206,23 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **迁移号**：`0024` 归 T-060 并已应用；**T-083（Discovery）由 `0024` 顺移到 `0025`**（台账 + `docs/ai-pm-project-discovery-v1.md` 已回填）。
   - **交付**：`<feat 4df16c9>` + `<docs 1fdf1b9>` —— 关键结论：检索从「每次逐篇读 Git 全量扫」换成「落库章节索引 + 可替换端口 + 发布即重建 + 不可用回退直读」；同 Project 知识库写入**串行**（会话级 advisory lock，跨实例有效），`operation_id` 保证重放不产生第二条修订；**权威元数据不可读时必须 503，绝不返回 200 空结果**。
 
-- [ ] **T-061 Outbox 业务事件覆盖与死信重放（P8）**
+- [x] **T-061 Outbox 业务事件覆盖与死信重放（P8）**（2026-11-02 完成，执行者：Trae · 设计稿 `docs/ai-pm-t061-outbox-events-v1.md` V1.1 已过稿并实施）
   - **目标**：把 outbox 从「一个 TaskReady 处理器」补成事件体系。
   - **依据**：`0010:123-144`（`outbox_event` 已含 `attempts`/`dead_letter`/`locked_until`/`idempotency_key`）、`apps/ai-pm-worker/src/main.rs`（只注册 `TaskReady`）、`target.md` §P8 首批事件清单。
   - **做**：为 `RunCompleted`/`DeliverySubmitted`/`ReviewCompleted`/`KnowledgeBaseWriteRequested` 建真实生产者（必须同事务写入）；死信重放接口；事件状态监控（计数/积压/失败率）。
   - **不做**：不为凑事件数造无业务语义的 Handler（target.md 明确）。**能搭车的先搭**：`RunCompleted` 可随 T-031 落，`DeliverySubmitted` 随 T-041，`ReviewCompleted` 随 T-043。
-  - **已搭车（2026-11-02，T-043 顺带落地）**：`DeliverySubmitted` 生产者（`delivery/mod.rs` 提交管线同事务）+ 消费者（`DeliverySubmittedHandler` → D5 拍①，默认开启）；`ReviewCompleted` / `KnowledgeBaseWriteRequested` 生产者（completed 同事务，经 `AI_PM_OUTBOX_EVENTS` 开关，V1 按设计不注册消费 handler）。**仍缺**：`RunCompleted` 生产者、死信重放接口、事件监控指标。
+  - **已搭车（2026-11-02，T-043 顺带落地）**：`DeliverySubmitted` 生产者（`delivery/mod.rs` 提交管线同事务）+ 消费者（`DeliverySubmittedHandler` → D5 拍①，默认开启）；`ReviewCompleted` / `KnowledgeBaseWriteRequested` 生产者（completed 同事务）。**仍缺**：`RunCompleted` 生产者、死信重放接口、事件监控指标。
   - **验收**：四条事件均有生产端与消费端；重复投递不产生副作用；死信重放幂等；监控页或指标可读。
+  - **验收标准修订（设计稿 §十一，评审裁定）**：原句「四条事件均有生产端与消费端」与实际裁定不符（五种事件里两种明确无消费者）——改为 5 条：① 所有**默认启用**的事件都有生产者和消费者；② 没有消费者的事件**默认禁止生产**（环境变量亦不可开启）；③ 所有已启用事件都能通过**目录验证**；④ `RunCompleted` 有**记录型 Handler**（事实通知：审计 + 通知，不改业务状态）；⑤ 重复投递**不产生重复业务副作用**。
+  - **本轮交付**：
+    - `EventCatalog` 单一真源（`pm-application::outbox`）：`EventSpec{has_handler, enabled_by_default, producer}` + `CATALOG`（5 项）；`event_is_enabled` **目录优先**——未登记 / `has_handler=false` 一律禁产，`AI_PM_OUTBOX_EVENTS` 只能在 `has_handler=true` 集合内收窄（不得突破）。
+    - `RunCompleted` 生产者：`finish_run`（进程退出）/ `record_termination`（终止类）两条终态路径**同事务**发事件，幂等键 `run_completed:<run_id>`。
+    - `RunCompletedHandler`：**事务级 advisory lock**（`pg_advisory_xact_lock(hashtextextended(run_id,0))`）包住「检查 + 审计 INSERT + 通知 INSERT」，**同事务原子提交**——裸 `WHERE NOT EXISTS` 在至少一次投递下会双写。
+    - 死信重放：`replay(pool, project_id, event_id)` 单条原子 UPDATE `WHERE id AND project_id AND status='dead_letter'`；跨项目与不存在**统一 404**（防事件 ID 探测）。
+    - 运维端点：`GET /v1/pm/outbox/dead-letters`（项目隔离 + `total` 为项目全部死信数）/ `POST /v1/pm/outbox/events/{id}/replay`（成功与失败均写审计）/ `GET /v1/pm/outbox/stats`（`failure_rate` = 当前终态死信占比）。
+    - **统一 Handler 装配**：`register_all_handlers` 是唯一生产装配入口，`pm-worker` 与 `ai-pm-worker` **均**调用 + 启动时目录一致性校验（不一致即 panic）——消除零 handler 空壳抢事件造成的**假死信**。
+  - **不做（新项目无存量数据）**：不新增迁移（schema 未动）；不引入消息队列 / Prometheus；不为旧测试给事件目录开兼容口子（`AGENTS.md` 规则 1）。
+  - **验收**：新增 24 条用例（`outbox_events` 5 + `outbox_ops` 6 + `outbox_worker` 6 + API `outbox_ops` 7），含并发重复消费、跨项目重放攻击、env 绕过阻断、审计-通知原子回滚、replay 后重复消费；实测 `cargo test --workspace` 退出码 0（**全绿，0 failed**）；`cargo check --workspace --all-targets` 0 error / 0 warning。
 
 ---
 
@@ -543,3 +553,15 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 - **关键结论**：① **Git 是唯一权威正文，DB 是可重建的派生索引**——派生数据失效只降级性能，不丢事实；② **唯一原语 + 锁内重算前置条件**是状态/产物原子性的唯一保证，后到的旧操作返回 `Superseded` 且不删新产物；③ **Agent 执行并行 ≠ 知识写入并行**——同 Project 写入串行（会话级 advisory lock 跨实例有效、实例崩溃自动释放不留死锁），不同 Project 完全并行；④ **故障必须分级**——单篇失效→该篇回退、索引层整体不可用→整项目回退仍 200、权威元数据不可用→503，三者都不是「200 + 空结果」。
 - **迁移号**：`0024` 归 T-060 并已应用；**T-083（Discovery）由 `0024` 顺移到 `0025`**（台账 + `docs/ai-pm-project-discovery-v1.md` 已回填）。
 - **遗留**：`RunCompleted` 生产者、死信重放接口、事件监控指标 → T-061；审批页 / 交付验收页 → T-070；未来 provider（PageIndex / 向量）实现同一 trait 并自带派生表；上下文组装（检索结果 → 提示词注入）留后续切片。
+
+### T-061 实施 P8（Outbox 事件体系闭环 + 死信重放 + 监控）—— 2026-11-02 完成
+
+- **提交**：`73ca460` feat(outbox)（应用层：`EventCatalog` 单一真源 + `RunCompleted` 生产者 + `outbox_ops` 运维服务 + P0-4 连带测试修正）→ `ef83a4e` feat(outbox)（基础设施层：`RunCompletedHandler` advisory lock 幂等 + `register_all_handlers` 统一装配 + 两个 worker main）→ `61cb1c3` feat(pm-api)（三个运维端点 + 重放审计）→ `docs(t061)`（设计稿 §十三 实施记录 + §九 清单偏差标注）→ `chore(todo)`（本条归档）→ `chore(memory)`，分开提交（§0.2 第 5 条：一任务一 commit）。
+- **目标**：把 outbox 从「一个 `TaskReady` 处理器」补成**事件体系**——事件目录单一真源、生产/消费成对覆盖、死信可查可重放、状态可观测。
+- **依据**：`docs/ai-pm-t061-outbox-events-v1.md` V1.1（**两轮专家评审**后过稿：P0-1~P0-4 + P1-1~P1-4 + 第二轮「统一 Handler 装配」约束）；上位 `target.md` §P8、`docs/ai-pm-task-state-machine-v1.md` §20.5/§20.6。
+- **做**：`EventCatalog`（`EventSpec{has_handler, enabled_by_default, producer}` + 5 项目录，`event_is_enabled` **目录优先**）；`RunCompleted` 生产者（两条终态路径同事务，幂等键 `run_completed:<run_id>`）；`RunCompletedHandler`（**事务级 advisory lock** 包住「检查 + 审计 + 通知」，同事务原子提交）；死信重放（**原子 UPDATE** 同时校验 `id`/`project_id`/`status`，跨项目与不存在统一 404）；三个运维端点（列表 / 重放 / 统计，重放**成功与失败均写审计**）；`register_all_handlers` **统一装配入口**（两个 worker 均调用 + 启动时目录一致性校验）。
+- **不做**：不新增迁移（schema 未动）；不引入消息队列 / Prometheus / 事件总线；**不为无业务语义的事件造 Handler**（`ReviewCompleted` / `KnowledgeBaseWriteRequested` 保持无消费者 → 默认禁产）；不为旧测试给事件目录开兼容口子；不做通知/死信数据的保留与清理策略（另议）。
+- **验收**：新增 24 条用例（`pm-application` 11 + `pm-infrastructure` 6 + `pm-api` 7），覆盖并发重复消费（E-17，4 个并发任务只写一份）、跨项目重放攻击（E-13，统一 404）、env 绕过阻断（E-19）、审计-通知原子回滚（E-20，触发器注入失败 → 审计一起回滚）、replay 后重复消费（E-21）；实测 `cargo test --workspace` 退出码 0（**全绿，0 failed**）；`cargo check --workspace --all-targets` 0 error / 0 warning。
+- **关键结论**：① **`WHERE NOT EXISTS` 不是并发安全的唯一性保证**——至少一次投递下两个 Worker 会「同查不存在 → 同插双写」，幂等必须靠**事务级 advisory lock**（键 = 幂等锚点）把「检查 + 写入」串行化；② **API 层的项目可见性检查不能替代底层 SQL 的项目约束**——调用方可构造别项目的 `event_id`，`replay` 必须带 `project_id` 原子校验，且跨项目与不存在**同形返回**（否则成为事件 ID 探测 oracle）；③ **共享队列的消费者能力必须一致**——`pm-worker` 零 handler 空壳会把 `ai-pm-worker` 能处理的事件经重试误判为死信（**假死信**，非业务失败），「集合一致」≠「并发安全」；④ **事件目录是 Outbox 的契约中心**——`has_handler` 与 `enabled_by_default` 必须拆成两个字段，否则「有无消费者」与「默认是否生产」永远纠缠不清；⑤ **通知表的 `read_at` 不等于有清理机制**——本次只负责可靠写入，保留策略另行管理。
+- **实施期偏差（2 处，详见设计稿 §13.2）**：① 死信查询 / 重放**下沉到应用层** `outbox_ops`（`pm-api` 不依赖 `pm-infrastructure`，留在基础设施层会破坏依赖方向门禁；基础设施层同名实现直接删除，不双写）；② `tests/outbox_handlers.rs` **并入** `tests/outbox_worker.rs`（同主题）。
+- **遗留**：通知 / 死信数据的保留与清理策略；`RunCompleted` 通知在前端执行中心的呈现 → T-070；`EventCatalog` 六问（失败处理 / 可否重放 / 幂等锚点）字段化 → 后续有第六类事件时再扩（V1 保持最小投影）。
