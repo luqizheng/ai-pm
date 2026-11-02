@@ -80,7 +80,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 | P3 MCP 接入层 | claim / get_task / context / start_run / heartbeat / progress / submit_delivery / complete_run | `pm-mcp` 11 工具：`pm_claim_task`、`pm_get_task_context`、`pm_get_run_context`、`pm_report_progress`、`pm_submit_result`、`pm_get_submission_status` + 5 个文档工具；run 级 `lease_token` | ✅ 已收敛 | 顾问列的 `start_run`/`heartbeat`/`submit_delivery`/`complete_run` 在 D2 契约里**合并**为 `report_progress`/`pm_submit_result`，不是缺失 |
 | P4 Codex 执行引擎 | RunExecutor 端口、Worktree、进程管理、日志、超时、取消、执行器恢复 | **零实现**；`executor_kind`/`executor_session` 列已在 `0011:39-40` | ⬜ 未开始 | 整块 → T-030/T-031 |
 | P5 交付与验收 | Delivery Manifest 多仓、Commit 追踪、文件清单、测试证据、Baseline Validation、交付历史 | `0011` 已有 `task_repository`/`task_run_repository`；**缺 `task_workspace`/`task_repository_commit`**、缺校验服务与历史视图 | 🟡 只有骨架 | 整块 → T-040/T-041 |
-| P6 知识库与 PageIndex | Markdown 事实源、写入、索引、检索、上下文组装、执行后回写 | Markdown+Git 事实源（`0006`）、提案/质量门/红线（`0014`）、标题树索引（`knowledge_index.rs`）、`knowledge_reference` | 🟡 单仓闭环完成一半 | 缺可替换索引层与**执行后知识回写** → T-042/T-043（D5）、T-060 |
+| P6 知识库与 PageIndex | Markdown 事实源、写入、索引、检索、上下文组装、执行后回写 | Markdown+Git 事实源（`0006`）、提案/质量门/红线（`0014`）、`knowledge_reference`；**可替换索引层**（`0024` 章节索引 + provider 端口 + `apply_transition` 唯一原语 + Project 级写入协调，T-060 已落地）；**执行后知识回写**（T-043） | 🟡 索引与回写已闭环 | 缺**上下文组装**（检索结果 → 提示词注入）→ 留后续切片 |
 | P7 Review 与审批 | 独立 Reviewer Run、Findings、四值结论、审批引擎、策略分层 | `governance.approval_request`、`policy_engine` + `0016` 内容寻址四层合成；`pm-ai/self_review.rs` **只审导入提案**，不审交付 | 🟡 审批完成，Review 未做 | 独立 Reviewer Run 与 Findings → T-042/T-043 |
 | P8 Outbox 可靠异步 | 同事务写入、Worker、幂等、重试、死信、重放、监控 | `0010:123` `integration.outbox_event` 已含 `attempts`/`dead_letter`/`locked_until`/`idempotency_key`；`crates/pm-infrastructure/src/outbox_worker.rs` + `apps/ai-pm-worker/src/main.rs:93` **只注册 `TaskReady`** | 🟡 地基完成 | 业务事件覆盖（RunCompleted/DeliverySubmitted/ReviewCompleted/KnowledgeBaseWriteRequested）、死信重放、监控 → T-061 |
 | P9 多 Agent 协作 | Agent 角色、能力、任务分解、协作、上下文传递 | 只有 `project_member` 的 5 个固定角色；无 Agent 运行时 | ❌ 主动不做 | 与已裁定「不造自研多 Agent 运行时」冲突，延后（§12） |
@@ -193,14 +193,18 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 9. M6 · 知识索引与 Outbox 补齐（可与 M4/M5 搭车）
 
-- [~] **T-060 索引层可替换化 + 完整检索（P6 后半）**（2026-11-02 开工：v1.3 已补 Project 级写入协调与并发模型，待复审后实施）
-  - **设计稿**：`docs/ai-pm-t060-knowledge-index-v1.md`（Q1–Q4 + A-1~A-6 已裁定；两轮评审均为「修改后过稿」。v1.1 补并发转换原语、`index_version` 边界、状态不变量、故障分级、K-17~K-25；v1.2 收录专家评审全文（§12），补当前生效修订校验、`KnowledgeSearchService` 职责分离、分页语义、索引表级故障回退、清理生命周期、证据契约；v1.3 增补 Project 级 `KnowledgeWriteCoordinator`（§5.8：跨实例会话锁、串行范围覆盖同步重建、`operation_id` 幂等、`base_revision` 校验、K-26~K-30）；待复审）。
+- [x] **T-060 索引层可替换化 + 完整检索（P6 后半）**（2026-11-02 开工 → 2026-11-02 完成，执行者：Trae）
+  - **设计稿**：`docs/ai-pm-t060-knowledge-index-v1.md`（Q1–Q4 + A-1~A-6 已裁定；两轮评审均为「修改后过稿」。v1.1 补并发转换原语、`index_version` 边界、状态不变量、故障分级、K-17~K-25；v1.2 收录专家评审全文（§12），补当前生效修订校验、`KnowledgeSearchService` 职责分离、分页语义、索引表级故障回退、清理生命周期、证据契约；v1.3 增补 Project 级 `KnowledgeWriteCoordinator`（§5.8：跨实例会话锁、串行范围覆盖同步重建、`operation_id` 幂等、`base_revision` 校验、K-26~K-30）；**已实施，实施记录见设计稿 §13**）。
   - **本条按 §0.1 执行**（涉及选型与端口设计）。
   - **目标**：把现在的标题树内存扫描换成「可替换索引器端口 + 落库索引状态 + 增量重建」，检索质量与规模可演进。
   - **依据**：`crates/pm-application/src/knowledge_index.rs`（当前为内存扫描）、`knowledge_indexer.rs`、`0014` 的 `ai.document_index_state`、`docs/ai-pm-markdown-knowledge-space.md` §十一（「PageIndex / 向量检索作为可替换的 KnowledgeIndexer 适配留后续」）。
   - **要裁的点**：索引产物落库还是落 Git；增量触发（写入后同步 vs 后台 job）；检索排序（标题/正文/引用）是否引入向量；是否引入外部依赖。
   - **不做**：不引入必须在生产跑的向量数据库；不重写 Markdown 事实源。
   - **验收**：索引可重建且幂等；`document_index_state` 与正文哈希一致；检索接口保持向后兼容；用例覆盖「哈希漂移时索引失效」。
+  - **交付**：迁移 `0024_knowledge_section_index.sql`（`ai.document_section_index` 章节索引 + `ai.knowledge_write_operation` 写入幂等账本）；三层落地 `knowledge_index`（纯函数打分）→ `knowledge_indexer`（provider 端口 + `DbSectionIndexer` + 唯一原语 `apply_transition`）→ `knowledge_search`（`KnowledgeSearchService` 四要素判定 / DB-回退编排 / 合并排序分页）；新增 `knowledge_write_coordinator`（Project 级会话 advisory lock + `operation_id` 幂等 + `base_revision` 校验）；旧契约（`IndexReference` / `search_with_fallback` / `search_documents` 等）**直接删除**、不留过渡层（`AGENTS.md` 规则 1）；新增 `POST /v1/pm/documents/reindex`；REST/MCP/前端同步 `operation_id` + `base_revision_id`。
+  - **验收证据**：`cargo test --workspace` 退出码 0（78 套件 / 566 passed / 0 failed，连续两跑一致）；`cargo check --workspace --all-targets` 0 error 0 warning；新增 38 条测试（应用层 29 + 迁移 8 + API 契约 1）覆盖 K-02~K-30；K-23 实测 **221 章节 / 262 KB → 重建 84 ms**（预算 10 s）；前端 `pnpm typecheck` / `pnpm test:unit` 全绿（88 套件 / 533 passed）。
+  - **迁移号**：`0024` 归 T-060 并已应用；**T-083（Discovery）由 `0024` 顺移到 `0025`**（台账 + `docs/ai-pm-project-discovery-v1.md` 已回填）。
+  - **交付**：`<feat 4df16c9>` + `<docs 1fdf1b9>` —— 关键结论：检索从「每次逐篇读 Git 全量扫」换成「落库章节索引 + 可替换端口 + 发布即重建 + 不可用回退直读」；同 Project 知识库写入**串行**（会话级 advisory lock，跨实例有效），`operation_id` 保证重放不产生第二条修订；**权威元数据不可读时必须 503，绝不返回 200 空结果**。
 
 - [ ] **T-061 Outbox 业务事件覆盖与死信重放（P8）**
   - **目标**：把 outbox 从「一个 TaskReady 处理器」补成事件体系。
