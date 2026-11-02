@@ -171,6 +171,8 @@ fn build_router(
         .merge(crate::outbox_ops::router())
         // 执行端接入引导（T-080）：公开的 `/install`、`/install/{tool}`。
         .merge(crate::onboarding::router())
+        // 技能包同源分发（T-089）：manifest + zip 下载（公开，`/install*` 已放行）。
+        .merge(crate::skills_package::router())
         // 开发环境目录（T-088）：设备登记 / 绑定 / 自检 / 撤销。
         .merge(crate::pm_devices::router())
         // 审计实时流（SSE）。EventSource 无法带 Authorization，token 走

@@ -23,6 +23,7 @@ pub mod pm_runs;
 pub mod pm_writes;
 pub mod principals;
 pub mod routes;
+pub mod skills_package;
 pub mod support;
 pub mod task_dependencies;
 pub mod tenant_members;

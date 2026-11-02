@@ -153,12 +153,45 @@ async fn guide_handler(
     let (base_url, source) = platform_base_url();
     let guide = pm_application::onboarding::install_guide(&tool, &base_url, source);
     match format {
-        Format::Json => (
-            StatusCode::OK,
-            [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
-            serde_json::to_string(&guide).unwrap_or_else(|_| "{}".to_string()),
-        )
-            .into_response(),
+        Format::Json => {
+            // T-089：JSON 形态增 `bootstrap` 段——技能包地址、release manifest
+            // 摘要与 Bootstrap 端点清单（Codex Bootstrap V1.3 §〇-B 裁清点 5：
+            // `/install/{tool}` 是唯一稳定入口）。Markdown 形态不加（给人看的
+            // 指引由 T-090 按七步 lifecycle 重写）。
+            let manifest = crate::skills_package::release_manifest();
+            let bootstrap = serde_json::json!({
+                "package_url": format!(
+                    "{}/install/packages/pm-ai-skills-{}.zip",
+                    guide.platform_base_url,
+                    crate::skills_package::PACKAGE_VERSION
+                ),
+                "release_manifest": manifest,
+                "endpoints": {
+                    "devices": format!("{}/v1/pm/devices", guide.platform_base_url),
+                    "bindings": format!(
+                        "{}/v1/pm/devices/{{device_id}}/bindings",
+                        guide.platform_base_url
+                    ),
+                    "checks": format!(
+                        "{}/v1/pm/devices/{{device_id}}/checks",
+                        guide.platform_base_url
+                    ),
+                    "revoke": format!(
+                        "{}/v1/pm/devices/{{device_id}}/revoke",
+                        guide.platform_base_url
+                    ),
+                },
+                "key_handling": "API Key 由用户当面提供；只写入本工具的 MCP 配置，不进入安装指令、URL 或日志。",
+            });
+            let mut value = serde_json::to_value(&guide).unwrap_or_else(|_| serde_json::json!({}));
+            value["bootstrap"] = bootstrap;
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
+                serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string()),
+            )
+                .into_response()
+        }
         Format::Markdown => (
             StatusCode::OK,
             [(header::CONTENT_TYPE, "text/markdown; charset=utf-8")],

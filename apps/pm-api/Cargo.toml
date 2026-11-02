@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+sha2.workspace = true
 axum.workspace = true
 chrono.workspace = true
 digua_common_jwt.workspace = true

@@ -257,8 +257,13 @@ async fn no_response_carries_a_real_credential(pool: PgPool) {
                 "{uri} leaked a real credential: {line}"
             );
         }
+        // T-089 收紧启发式：`sk-` 前有词字符（如 "task-execution"）是普通英文
+        // 单词，不是 key 形态；只拦「引号/空白/行首后的 sk-<alnum>」。
+        let leak = text
+            .split(|c: char| c == '"' || c.is_whitespace())
+            .any(|token| token.starts_with("sk-") && token[3..].chars().next().map_or(false, |c| c.is_ascii_alphanumeric()));
         assert!(
-            !text.contains("sk-"),
+            !leak,
             "{uri} leaked an api-key-shaped string"
         );
     }
