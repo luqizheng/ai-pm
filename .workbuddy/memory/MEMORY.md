@@ -71,7 +71,8 @@
 2. **T-022** 可见性收口（按 `project_member` 过滤）——客户 G3 同源，依赖 T-021a 已完成。
 3. **T-023/T-024** Task 依赖（零表零列，是 P1 唯一硬缺口）。
 4. 其余按 `todo.md` 的里程碑顺序推进：D3（T-030/031）→ D4（T-040/041）→ D5（T-042/043）→
-   T-060/T-061 → T-070；P9/P11 维持不做。
+   T-060/T-061（**均已完成 2026-11-02**）→ T-070（执行中心接真数据 + 交付验收页）；
+   P9/P11 维持不做。
 5. **M8 执行端接入（§10.5，2026-11-01 用户新增）**：T-080 URL 引导式接入（粘贴 URL +「帮我安装」，
    须走 §0.1 brainstorming）→ T-081 `/mcp` 跨机暴露（G1 loopback 现状）/ T-082 `pm_list_tasks`；
    依据 `docs/ai-pm-executor-onboarding-runbook-v1.md`；候选执行端 trae/codex/workbuddy/z-code/dsh 均支持 MCP。
