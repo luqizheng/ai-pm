@@ -5,7 +5,7 @@
 | 文档性质 | 设计稿（接口契约 + 指引内容契约 + 测试矩阵），已过稿 |
 | 版本 | V1（2026-11-02） |
 | 记录 | 司南（产品经理 Agent）按用户 11 问裁定落盘 |
-| 状态 | **服务端已实施 + M-01 实测通过**（2026-11-02）：§六.1 自动化用例全绿；Trae 配置落位与 MCP 握手已用真实 JWT 验证；**M-02（Codex）阻塞于执行端模型 500，待补测**（见 §11.6） |
+| 状态 | **服务端已实施 + M-01（Trae）端到端通过**（2026-11-02）：§六.1 自动化用例全绿；Trae 从 URL 到 11 个工具全链路验证；**M-02（Codex）阻塞于执行端模型 500，待补测**（见 §11.6） |
 | 上位约束 | `docs/ai-pm-executor-onboarding-runbook-v1.md`、`docs/ai-pm-mcp-executor-positioning-v1.md`、`docs/ai-pm-principal-identity-v1.md`、`docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`、`docs/ai-pm-codex-bootstrap-v1.md`（T-087 的直系前身）、`docs/ai-pm-architecture-principles.md` |
 | 关联条目 | todo.md §10.5 M8：T-080（本条）/ T-081（`/mcp` 跨机暴露）/ T-082（`pm_list_tasks`）；T-051（预注册档位，保持开放）；T-059（MCP 审计三列） |
 | 前置 | 无（不依赖 T-081；跨机场景在 T-081 完成后自然可用） |
@@ -399,12 +399,12 @@ M-01/M-02 满足 todo.md T-080 的验收句「用 ≥2 个不同执行端实测�
 | `GET /v1/pm/me`（`usr-e2e` 复检） | 200，`is_active=true` |
 | `POST /mcp` initialize + tools/list（带该 key） | 200；`serverInfo=ai-pm-mcp 0.1.0`；**11 个工具** |
 
-**M-01（Trae）— 通过（transport 层已证，工具面待重载）**
+**M-01（Trae）— 通过（含工具展示）**
 
 - 按 `/install/trae?format=json` 的 `config_template` 原样写入 `%APPDATA%\Trae CN\User\mcp.json`，新增 `ai-pm` 条目（`url` + `headers.Authorization` + `headers.Host`），既有 `context7` / `godot` 条目未改动。
-- 用**落盘后的这份文件本身**读出 url 与 headers（4 个头：`content-type` / `accept` / `Authorization` / `Host`）发起 MCP 握手：`initialize` 200、`tools/list` **11 个工具**。→ 证明配置内容与 transport 层正确。
+- 用**落盘后的这份文件本身**读出 url 与 headers（4 个头：`content-type` / `accept` / `Authorization` / `Host`）发起 MCP 握手：`initialize` 200、`tools/list` **11 个工具**。
+- **Trae 面板实测（用户确认）**：MCP Servers 列表出现 `ai-pm`，状态正常、开关开启，展开后 11 个工具全部列出（`pm_claim_task` / `pm_confirm_document_proposal` / `pm_get_run_context` / `pm_get_submission_status` / `pm_get_task_context` / `pm_propose_document` / `pm_report_progress` / `pm_submit_document` / `pm_submit_result` / `pm_submit_technical_design` / `pm_veto_document_revision`）→ **接入链路从 URL 到工具面完整打通**。
 - 落盘踩坑：PowerShell 5 的 `Set-Content -Encoding utf8` 会写入 **BOM**，Trae 的 JSON 解析器会直接失败；已改用 `UTF8Encoding($false)` 重写，首字节 `123,10,32`（`{`）。
-- **未完成的部分**：Trae 需要重启才能把 11 个工具挂进会话，本会话内无法自证「agent 实际调用了 `pm_claim_task`」。且实测用的 key 与本机 JWKS 服务是临时的（key 有效期 1 小时），重载后不久即失效。
 
 **M-02（Codex）— 阻塞（执行端模型不可用）**
 
@@ -422,7 +422,7 @@ M-01/M-02 满足 todo.md T-080 的验收句「用 ≥2 个不同执行端实测�
 | --- | --- |
 | 接入 URL 内容正确性 | ✅ 两种形态、两个工具均正确 |
 | 真实 JWT → `/v1/pm/me` → `/mcp` 全链路 | ✅ 通过（未激活→激活→11 工具） |
-| M-01 Trae 配置落位与连通 | ✅ 通过；工具面重载待用户确认 |
+| M-01 Trae 配置落位与连通 | ✅ **通过（含 Trae 面板 11 个工具可见）** |
 | M-02 Codex 自主安装 | ⛔ 阻塞于执行端模型 500，未执行 |
 
-> 结论：T-080 的**服务端与配置契约已端到端验证**；「两个不同执行端均由 agent 自主完成安装」这一验收句仍差 M-02，需在 Codex 模型通道恢复后补测。
+> 结论：T-080 的**服务端、配置契约与其中一个真实执行端（Trae）已端到端验证**；「两个不同执行端均由 agent 自主完成安装」这一验收句仍差 M-02，需在 Codex 模型通道恢复后补测。

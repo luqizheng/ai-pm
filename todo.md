@@ -250,7 +250,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **工具覆盖**：`trae` / `codex` / `workbuddy` 已核实格式；`z-code` / `dsh` / `deepseek-harness` / `opencode` / `pi` 与任何未知 slug 落通用 `mcpServers` 条目。
   - **验收证据**：`cargo test -p pm-api --test onboarding` 8 passed / 0 failed；`cargo test --workspace` 退出码 0；`cargo check --workspace --all-targets` 0 error 0 warning；新增文件 clippy 0 命中；真实二进制冒烟验证 Markdown/JSON 两形态与 `Host` 头从部署地址推导。
   - **M-01 / M-02 实测（2026-11-02，真实 jwks 鉴权 + 仓内 test-only RSA 密钥签发 JWT，库 `aipm_e2e`）**：
-    - ✅ **M-01（Trae）通过**：按 `/install/trae?format=json` 的 `config_template` 原样写入 `%APPDATA%\Trae CN\User\mcp.json`（既有 context7 / godot 未动）；再用**落盘后的该文件**读出 url + 4 个头做 MCP 握手 → `initialize` 200、`tools/list` **11 个工具**。剩余：Trae 重启后才能把工具挂进会话（本会话无法自证 agent 实际调用 `pm_claim_task`）。
+    - ✅ **M-01（Trae）端到端通过**：按 `/install/trae?format=json` 的 `config_template` 原样写入 `%APPDATA%\Trae CN\User\mcp.json`（既有 context7 / godot 未动）；再用**落盘后的该文件**读出 url + 4 个头做 MCP 握手 → `initialize` 200、`tools/list` **11 个工具**；**Trae 面板实测确认** `ai-pm` 已启用、11 个工具全部列出 → 从 URL 到工具面完整打通。
     - ⛔ **M-02（Codex）阻塞**：`codex exec` 两次均在调用上游模型时被 **HTTP 500**（`api.minimax.cn/v1/responses`）打断，是执行端自身模型通道故障，非接入链问题。「codex 自主读 URL → 写 config.toml」未执行；但指引给的 TOML 已被 Codex 0.163 正确解析（临时 `CODEX_HOME` + `codex mcp list` → `streamable_http` / `Bearer token` / `http_headers` 回显）。
     - 前置闭环已证：真实 JWT → principal 自动 provision（`is_active=false`）→ 管理员 `PATCH` 激活 → `is_active=true` → 带该 key 的 `/mcp` 返回 11 个工具。
   - **仍未完成**：M-02 需在 Codex 模型通道恢复后补测（用户侧）。
