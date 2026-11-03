@@ -164,6 +164,15 @@ pub async fn enqueue_review(
         tx.commit().await?;
         return Ok(EnqueueOutcome::NotFound);
     };
+    // I1-A 归档守卫：项目已归档 → 消费但不创建 review run。
+    match crate::project_gate::project_activity_tx(&mut tx, project_id).await {
+        Ok(crate::project_gate::ProjectActivity::Archived) => {
+            tx.commit().await?;
+            return Ok(EnqueueOutcome::NotFound);
+        }
+        Ok(crate::project_gate::ProjectActivity::Active) => {}
+        Err(err) => return Err(ReviewError::Db(sqlx::Error::Protocol(err.to_string()))),
+    }
     let status: String = task.get("status");
 
     // 最新 delivery run（与 D4 视图「最新 Run」口径一致：attempt_no 最大）。

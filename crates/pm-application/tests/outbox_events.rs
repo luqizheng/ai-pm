@@ -82,7 +82,7 @@ async fn run_completed_is_produced_in_the_terminal_transaction(pool: PgPool) {
     let task_id = seed_task(&pool, project_id, "t").await;
     let run_id = seed_claimed_run(&pool, project_id, task_id).await;
 
-    pm_application::run_executor::cancel_run(&pool, &NoopExecutor, run_id)
+    pm_application::run_executor::cancel_run(&pool, &NoopExecutor, run_id, "user_cancel")
         .await
         .expect("cancel run");
 
@@ -110,10 +110,10 @@ async fn a_run_produces_only_one_run_completed_event(pool: PgPool) {
 
     let executor = NoopExecutor;
     // 第二个收尾者到达时 Run 已终态 → 条件 UPDATE 不命中 → 不写事件。
-    let first = pm_application::run_executor::cancel_run(&pool, &executor, run_id)
+    let first = pm_application::run_executor::cancel_run(&pool, &executor, run_id, "user_cancel")
         .await
         .expect("first terminal transition");
-    let second = pm_application::run_executor::cancel_run(&pool, &executor, run_id)
+    let second = pm_application::run_executor::cancel_run(&pool, &executor, run_id, "user_cancel")
         .await
         .expect("second terminal transition");
     assert!(first, "the first terminal transition must win");

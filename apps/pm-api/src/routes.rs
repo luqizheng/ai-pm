@@ -168,6 +168,8 @@ fn build_router(
         .merge(crate::project_members::router())
         // 仓库级 Git 能力授权（S01 · I3-B）：integration.git_capability_grant 的唯一写入路径。
         .merge(crate::git_capabilities::router())
+        // 归档与 Run 取消（S01 · I1-D/P2）：归档事务收口 + cancel_run 外部入口。
+        .merge(crate::project_lifecycle::router())
         // 任务执行 Run（AI 执行中心数据源；见 workspace-execution-artifacts plan）。
         .merge(crate::pm_runs::router())
         // 交付清单（Slice D4：基线 → 结果 commit → 证据；只读）。

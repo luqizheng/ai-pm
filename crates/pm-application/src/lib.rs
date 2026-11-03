@@ -1,6 +1,8 @@
 //! pm-application: use cases, ports and application services.
 
 pub mod acceptance_overview;
+pub mod archive;
+pub mod project_gate;
 pub mod actor;
 pub mod authz;
 pub mod bootstrap;
@@ -48,6 +50,8 @@ pub use acceptance_overview::{
     load_overview,
 };
 pub use actor::AuditActor;
+pub use archive::{ArchiveError, ArchiveOutcome, archive_project};
+pub use project_gate::{GateError, ProjectActivity, project_activity, project_activity_tx};
 pub use authz::{AuthzError, ExecutorKind, require_project_member, resolve_project_executor};
 pub use caller::{CallerContext, DeviceClaim, DeviceClaimIgnoredReason, HumanActor};
 pub use bootstrap::{

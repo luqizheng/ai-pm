@@ -344,7 +344,20 @@ pub(crate) async fn claim_core(
     let candidate_stage: Option<String> = candidate.get("stage");
     let _lease_generation_prev: i32 = candidate.get("lease_generation");
 
-    // ② 锁任务行（顺序固定：run → task）。B2：新 Run 的 INSERT 必须在此之后。
+    // I1-A 归档守卫：项目已归档 → 放弃候选（queued 已被归档事务条件取消，
+    // 此处为并发窗口的防御纵深；读不加锁，与归档事务行锁串行化）。
+    {
+        match crate::project_gate::project_activity(pool, project_id).await {
+            Ok(crate::project_gate::ProjectActivity::Archived) => {
+                tx.commit().await?;
+                return Ok(None);
+            }
+            Ok(_) => {}
+            Err(err) => return Err(RunDispatchError::Db(sqlx::Error::Protocol(err.to_string()))),
+        }
+    }
+
+// ② 锁任务行（顺序固定：run → task）。B2：新 Run 的 INSERT 必须在此之后。
     let task = sqlx::query(
         "SELECT status, revision, retry_exhausted, task_type FROM delivery.task \
           WHERE id = $1 AND project_id = $2 FOR UPDATE",

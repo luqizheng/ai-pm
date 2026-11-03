@@ -331,6 +331,7 @@ pub async fn cancel_run(
     pool: &PgPool,
     executor: &dyn RunExecutor,
     run_id: Uuid,
+    reason: &str,
 ) -> Result<bool, RunDispatchError> {
     let row = sqlx::query(
         "SELECT project_id, status, executor_session FROM delivery.task_run WHERE id = $1",
@@ -348,7 +349,7 @@ pub async fn cancel_run(
         return Ok(false);
     }
     // ① 先落终态 + 撤凭据（原子）。
-    let confirmed = record_termination(pool, run_id, project_id, "user_cancel").await?;
+    let confirmed = record_termination(pool, run_id, project_id, reason).await?;
     if !confirmed {
         return Ok(false);
     }
@@ -397,6 +398,39 @@ pub async fn reconcile_orphans(
     executor: &dyn RunExecutor,
     cfg: &RunDispatchConfig,
 ) -> Result<usize, RunDispatchError> {
+    // P3（I1，B-1 默认并入）：超窗残留进程告警——running 且租约过期超过 1 小时
+    // 仍非终态的 Run，落 `run.orphan_suspected` 审计（1 小时去重）+ warn 日志。
+    // 清理仍走既有 claim 路径的 isolate_started_run / 兜底回收；此处只补「可见性」。
+    let orphans: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT r.id, r.project_id \
+           FROM delivery.task_run r \
+          WHERE r.status = 'running' AND r.executor_session IS NOT NULL \
+            AND r.lease_expires_at < now() - interval '1 hour' \
+            AND NOT EXISTS ( \
+                 SELECT 1 FROM governance.audit_log a \
+                  WHERE a.action = 'run.orphan_suspected' AND a.target_id = r.id \
+                    AND a.created_at > now() - interval '1 hour')",
+    )
+    .fetch_all(pool)
+    .await?;
+    for (run_id, project_id) in orphans {
+        let Ok(mut tx) = pool.begin().await else { continue };
+        if crate::pm_write::append_audit(
+            &mut tx,
+            project_id,
+            &crate::actor::AuditActor::dispatch(),
+            "run.orphan_suspected",
+            "task_run",
+            Some(run_id),
+        )
+        .await
+        .is_ok()
+        {
+            let _ = tx.commit().await;
+        }
+        tracing::warn!(%run_id, %project_id, "orphan run suspected: lease expired over an hour ago");
+    }
+
     let rows = sqlx::query(
         "SELECT r.id, r.task_id, r.project_id, r.executor_session, r.lease_owner \
            FROM delivery.task_run r \
@@ -698,7 +732,8 @@ async fn record_termination(
 ) -> Result<bool, RunDispatchError> {
     let terminal = match reason_code {
         "timeout" => "timed_out",
-        "user_cancel" => "cancelled",
+        // 用户取消与归档收口（I1-D/P2）：同一「人为终止」语义 → cancelled。
+        "user_cancel" | "project_archived" => "cancelled",
         // 心跳丢失 / 进展停滞：执行类失败（Agent 死锁 / 长期停滞），终态 failed。
         _ => "failed",
     };

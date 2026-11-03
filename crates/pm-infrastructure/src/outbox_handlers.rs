@@ -44,6 +44,17 @@ impl OutboxHandler for TaskReadyHandler {
             .ok_or_else(|| "TaskReady payload is missing a task_id".to_string())?;
         let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
 
+        // I1-A 归档守卫：项目已归档 → 消费事件但**不创建 Run**（入口关闭）。
+        match pm_application::project_gate::project_activity_tx(&mut tx, event.project_id).await {
+            Ok(pm_application::project_gate::ProjectActivity::Archived) => {
+                tx.commit().await.map_err(|e| e.to_string())?;
+                tracing::info!(%task_id, "TaskReady consumed: project archived, run suppressed");
+                return Ok(());
+            }
+            Ok(pm_application::project_gate::ProjectActivity::Active) => {}
+            Err(err) => return Err(err.to_string()),
+        }
+
         let row = sqlx::query(
             "SELECT status, assignee_id FROM delivery.task \
              WHERE id = $1 AND project_id = $2 FOR UPDATE",
