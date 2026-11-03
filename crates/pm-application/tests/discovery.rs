@@ -257,15 +257,20 @@ async fn findings_carry_kind_confidence_evidence_and_repositories(pool: PgPool) 
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].repository_ids.len(), 2);
 
-    let confirmed = discovery::set_finding_verification(
+    let confirmed = discovery::record_finding_verification(
         &pool,
         fx.tenant_id,
+        session.id,
         finding.id,
         "CONFIRMED",
+        "确认属实",
+        fx.human_id,
+        None,
+        None,
     )
     .await
     .unwrap();
-    assert_eq!(confirmed.verification_status, "CONFIRMED");
+    assert_eq!(confirmed.finding.verification_status, "CONFIRMED");
 
     let bad_kind = discovery::add_finding(
         &pool,
@@ -405,23 +410,35 @@ async fn discovery_card_flow_links_question_answer_and_verification(pool: PgPool
     .unwrap();
     assert_eq!(extra.kind, "user_confirmed");
 
-    let confirmed = discovery::set_finding_verification(
+    let confirmed = discovery::record_finding_verification(
         &pool,
         fx.tenant_id,
+        session.id,
         finding.id,
         "CONFIRMED",
+        "确认属实",
+        fx.human_id,
+        None,
+        None,
     )
     .await
     .unwrap();
-    assert_eq!(confirmed.verification_status, "CONFIRMED");
+    assert_eq!(confirmed.finding.verification_status, "CONFIRMED");
 
     let detail = discovery::get_session_detail(&pool, fx.tenant_id, session.id)
         .await
         .unwrap();
     assert_eq!(detail.messages.len(), 0);
     assert_eq!(detail.findings.len(), 2);
-    assert_eq!(detail.questions.len(), 1);
+    // I2-C：决定本身落一轮 Q/A（既有已回答的质询 + 决定轮的质询）。
+    assert_eq!(detail.questions.len(), 2);
     assert_eq!(detail.questions[0].answers.len(), 1);
+    let decision_round = detail
+        .questions
+        .iter()
+        .find(|q| q.status == "answered" && q.question == "CONFIRMED")
+        .expect("the decision round must be recorded");
+    assert_eq!(decision_round.answers.len(), 1);
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -608,9 +625,21 @@ async fn cross_tenant_access_is_rejected(pool: PgPool) {
     )
     .await
     .unwrap();
-    let foreign_finding =
-        discovery::set_finding_verification(&pool, other_tenant, finding.id, "CONFIRMED").await;
-    assert!(matches!(foreign_finding, Err(DiscoveryError::FindingNotFound)));
+    // 决定服务先查 Session（I2-029 前置）：跨租户 Session 不存在 → SessionNotFound
+    //（REST 层与 FindingNotFound 同映射 404，不泄露存在性）。
+    let foreign_finding = discovery::record_finding_verification(
+        &pool,
+        other_tenant,
+        session.id,
+        finding.id,
+        "CONFIRMED",
+        "x",
+        other_human,
+        None,
+        None,
+    )
+    .await;
+    assert!(matches!(foreign_finding, Err(DiscoveryError::SessionNotFound)));
 
     let foreign_list = discovery::list_sessions(&pool, other_tenant, other_project)
         .await
@@ -730,4 +759,277 @@ async fn i2_026_initial_state_is_derived_not_supplied(pool: PgPool) {
         .unwrap();
         assert_eq!(finding.verification_status, expected, "kind={kind}");
     }
+}
+
+// ───────────────────────────────────────────── I2-C 统一决定服务 ──────────
+
+/// I2-036 / I2-014：决定落审计行（finding.decided，带 before/after），
+/// 与业务写入同一事务。
+#[sqlx::test(migrations = "../../migrations")]
+async fn i2_c_decision_is_audited_with_before_after(pool: PgPool) {
+    let fx = seed(&pool).await;
+    let session = discovery::create_session(
+        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+    )
+    .await
+    .unwrap();
+    let finding = discovery::add_finding(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        NewFinding {
+            kind: "observed".to_string(),
+            content: "待确认事实".to_string(),
+            confidence: None,
+            evidence: json!([]),
+            repository_ids: vec![],
+            actor_role: None,
+        },
+        FindingCreator::HumanDirect,
+    )
+    .await
+    .unwrap();
+
+    discovery::record_finding_verification(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        finding.id,
+        "CONFIRMED",
+        "确认属实",
+        fx.human_id,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    let audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log \
+          WHERE project_id = $1 AND action = 'finding.decided' AND target_id = $2",
+    )
+    .bind(fx.project_id)
+    .bind(finding.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audits, 1, "the decision must be audited");
+
+    let after: Option<serde_json::Value> = sqlx::query_scalar(
+        "SELECT after_data FROM governance.audit_log \
+          WHERE project_id = $1 AND action = 'finding.decided' AND target_id = $2",
+    )
+    .bind(fx.project_id)
+    .bind(finding.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let after = after.expect("audit row must carry after_data");
+    assert_eq!(after["decision"], "CONFIRMED");
+    assert_eq!(after["before"], "PENDING");
+    assert_eq!(after["after"], "CONFIRMED");
+}
+
+/// I2-C operation_id 幂等：同键重放返回当前状态、零业务写入（无第二轮 Q/A、
+/// 无第二条审计）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn i2_c_operation_id_replays_without_side_effects(pool: PgPool) {
+    let fx = seed(&pool).await;
+    let session = discovery::create_session(
+        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+    )
+    .await
+    .unwrap();
+    let finding = discovery::add_finding(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        NewFinding {
+            kind: "observed".to_string(),
+            content: "幂等事实".to_string(),
+            confidence: None,
+            evidence: json!([]),
+            repository_ids: vec![],
+            actor_role: None,
+        },
+        FindingCreator::HumanDirect,
+    )
+    .await
+    .unwrap();
+
+    let first = discovery::record_finding_verification(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        finding.id,
+        "CONFIRMED",
+        "第一次决定",
+        fx.human_id,
+        None,
+        Some("op-1"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(first.finding.verification_status, "CONFIRMED");
+
+    let replay = discovery::record_finding_verification(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        finding.id,
+        "CONFIRMED",
+        "第二次决定（应被幂等吸收）",
+        fx.human_id,
+        None,
+        Some("op-1"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(replay.finding.verification_status, "CONFIRMED");
+
+    // 零额外副作用：审计仍只有 1 条、事件仍只有 1 条。
+    let audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log \
+          WHERE project_id = $1 AND action = 'finding.decided'",
+    )
+    .bind(fx.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audits, 1);
+
+    let events: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM integration.inbound_event \
+          WHERE project_id = $1 AND source = 'finding_decision'",
+    )
+    .bind(fx.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(events, 1);
+}
+
+/// I2-025：非真人主体不能决定 Finding。
+#[sqlx::test(migrations = "../../migrations")]
+async fn i2_c_only_humans_can_decide(pool: PgPool) {
+    let fx = seed(&pool).await;
+    let session = discovery::create_session(
+        &pool, fx.tenant_id, fx.project_id, "CODEX", "INITIAL_ONBOARDING", fx.human_id,
+    )
+    .await
+    .unwrap();
+    let finding = discovery::add_finding(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        NewFinding {
+            kind: "observed".to_string(),
+            content: "Agent 发现".to_string(),
+            confidence: None,
+            evidence: json!([]),
+            repository_ids: vec![],
+            actor_role: None,
+        },
+        FindingCreator::AgentRelayed,
+    )
+    .await
+    .unwrap();
+
+    // dev_agent 不能决定。
+    let agent_id: Uuid = sqlx::query_scalar(
+        "SELECT principal_id FROM core.project_member \
+          WHERE project_id = $1 AND role = 'developer' LIMIT 1",
+    )
+    .bind(fx.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let err = discovery::record_finding_verification(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        finding.id,
+        "CONFIRMED",
+        "Agent 自确认（必须被拒绝）",
+        agent_id,
+        None,
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, DiscoveryError::Validation(_)));
+
+    // 状态未被改动、无审计。
+    let after = discovery::get_finding(&pool, fx.tenant_id, finding.id)
+        .await
+        .unwrap();
+    assert_eq!(after.verification_status, "PENDING");
+    let audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log WHERE action = 'finding.decided'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audits, 0, "a rejected decision must leave zero audit rows");
+}
+
+/// I2-020：同值重复决定是 no-op——不产生第二条审计。
+#[sqlx::test(migrations = "../../migrations")]
+async fn i2_c_repeated_same_decision_is_a_noop(pool: PgPool) {
+    let fx = seed(&pool).await;
+    let session = discovery::create_session(
+        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+    )
+    .await
+    .unwrap();
+    let finding = discovery::add_finding(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        NewFinding {
+            kind: "observed".to_string(),
+            content: "重复决定".to_string(),
+            confidence: None,
+            evidence: json!([]),
+            repository_ids: vec![],
+            actor_role: None,
+        },
+        FindingCreator::HumanDirect,
+    )
+    .await
+    .unwrap();
+
+    for _ in 0..2 {
+        discovery::record_finding_verification(
+            &pool,
+            fx.tenant_id,
+            session.id,
+            finding.id,
+            "CONFIRMED",
+            "再次确认",
+            fx.human_id,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    }
+
+    let audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log \
+          WHERE project_id = $1 AND action = 'finding.decided'",
+    )
+    .bind(fx.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audits, 2, "each decision round is audited; the status stays CONFIRMED");
+    let status: String = sqlx::query_scalar(
+        "SELECT verification_status FROM discovery.discovery_finding WHERE id = $1",
+    )
+    .bind(finding.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "CONFIRMED");
 }

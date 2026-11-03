@@ -286,6 +286,8 @@ struct VerificationBody {
     answer: String,
     #[serde(default)]
     confirmed_finding: Option<String>,
+    #[serde(default)]
+    operation_id: Option<String>,
 }
 
 async fn verification_handler(
@@ -308,6 +310,7 @@ async fn verification_handler(
         &body.answer,
         principal.principal_id,
         body.confirmed_finding.as_deref(),
+        body.operation_id.as_deref(),
     )
     .await
     {

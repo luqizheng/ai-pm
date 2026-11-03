@@ -194,6 +194,52 @@ fn parse_evidence(value: &serde_json::Value) -> Result<Vec<EvidenceRow>, Discove
     Ok(rows)
 }
 
+/// 读出证据行 → 前端兼容的 JSON 数组（事务版）。
+async fn evidence_by_finding_tx(
+    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tenant_id: Uuid,
+    finding_ids: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, serde_json::Value>, DiscoveryError> {
+    let mut map: std::collections::HashMap<Uuid, serde_json::Value> =
+        std::collections::HashMap::new();
+    if finding_ids.is_empty() {
+        return Ok(map);
+    }
+    let rows: Vec<(Uuid, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<Uuid>, Option<String>, Option<i32>)> =
+        sqlx::query_as(
+            "SELECT finding_id, evidence_type, description, file_path, symbol, code_range, \
+                    repository_id, commit_sha, attempt_no \
+             FROM discovery.discovery_finding_evidence \
+             WHERE tenant_id = $1 AND finding_id = ANY($2) \
+             ORDER BY created_at, id",
+        )
+        .bind(tenant_id)
+        .bind(finding_ids)
+        .fetch_all(&mut **tx)
+        .await?;
+
+    for (finding_id, evidence_type, description, file_path, symbol, code_range, repository_id, commit_sha, attempt_no) in rows {
+        let item = serde_json::json!({
+            "evidence_type": evidence_type,
+            "description": description,
+            "file": file_path,
+            "file_path": file_path,
+            "symbol": symbol,
+            "code_range": code_range,
+            "repository": repository_id.map(|id| id.to_string()),
+            "repository_id": repository_id,
+            "commit_sha": commit_sha,
+            "attempt_no": attempt_no,
+        });
+        map.entry(finding_id)
+            .or_insert_with(|| serde_json::json!([]))
+            .as_array_mut()
+            .expect("evidence array")
+            .push(item);
+    }
+    Ok(map)
+}
+
 /// 读出证据行 → 前端兼容的 JSON 数组。
 async fn evidence_by_finding(
     pool: &PgPool,
@@ -270,6 +316,21 @@ pub async fn add_finding(
     new_finding: NewFinding,
     creator: FindingCreator,
 ) -> Result<DiscoveryFindingView, DiscoveryError> {
+    let mut tx = pool.begin().await?;
+    let view = add_finding_in_tx(&mut tx, tenant_id, session_id, new_finding, creator).await?;
+    tx.commit().await?;
+    Ok(view)
+}
+
+/// [`add_finding`] 的事务内核——供「Finding 决定 + 质询/回答同事务」的
+/// 统一决定服务复用（I2-036：Finding 更新 + question/answer + 审计单事务）。
+pub(crate) async fn add_finding_in_tx(
+    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tenant_id: Uuid,
+    session_id: Uuid,
+    new_finding: NewFinding,
+    creator: FindingCreator,
+) -> Result<DiscoveryFindingView, DiscoveryError> {
     validate_one_of(&new_finding.kind, &FINDING_KINDS, "kind")?;
     validate_confidence(new_finding.confidence)?;
     // I2-B 定态规则（I2-023 / I2-024 / I2-026）：
@@ -287,8 +348,14 @@ pub async fn add_finding(
             "content must not be blank".to_string(),
         ));
     }
-    let session = get_session(pool, tenant_id, session_id).await?;
-    let project_id = session.project_id;
+    let project_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT project_id FROM discovery.discovery_session WHERE tenant_id = $1 AND id = $2",
+    )
+    .bind(tenant_id)
+    .bind(session_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let project_id = project_id.ok_or(DiscoveryError::SessionNotFound)?;
     let evidence_rows = parse_evidence(&new_finding.evidence)?;
     let repository_ids = new_finding.repository_ids;
     if !repository_ids.is_empty() {
@@ -301,7 +368,7 @@ pub async fn add_finding(
         .bind(tenant_id)
         .bind(project_id)
         .bind(&repository_ids)
-        .fetch_one(pool)
+        .fetch_one(&mut **tx)
         .await?;
         if found != repository_ids.len() as i64 {
             return Err(DiscoveryError::Validation(
@@ -309,7 +376,6 @@ pub async fn add_finding(
             ));
         }
     }
-    let mut tx = pool.begin().await?;
     let row: FindingRow = sqlx::query_as(&format!(
         "INSERT INTO discovery.discovery_finding \
          (tenant_id, project_id, session_id, kind, content, confidence, verification_status, actor_role) \
@@ -323,10 +389,10 @@ pub async fn add_finding(
     .bind(new_finding.confidence)
     .bind(verification_status)
     .bind(&new_finding.actor_role)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut **tx)
     .await?;
     for evidence in &evidence_rows {
-        insert_evidence(&mut tx, tenant_id, project_id, row.0, evidence).await?;
+        insert_evidence(tx, tenant_id, project_id, row.0, evidence).await?;
     }
     for repository_id in &repository_ids {
         sqlx::query(
@@ -337,11 +403,11 @@ pub async fn add_finding(
         .bind(project_id)
         .bind(row.0)
         .bind(repository_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
     }
-    tx.commit().await?;
-    let mut evidence_map = evidence_by_finding(pool, tenant_id, &[row.0]).await?;
+    let ids = vec![row.0];
+    let mut evidence_map = evidence_by_finding_tx(tx, tenant_id, &ids).await?;
     let evidence = evidence_map.remove(&row.0).unwrap_or_else(|| serde_json::json!([]));
     Ok(to_finding(row, repository_ids, evidence))
 }
@@ -474,27 +540,33 @@ pub async fn get_finding(
     Ok(to_finding(row, ids, evidence))
 }
 
-pub async fn set_finding_verification(
-    pool: &PgPool,
+/// 人工决定入口的**唯一**状态写点（I2-035：不再作为可绕过审计/锁的公开原语
+/// 存在——`pub(crate)`，仅 [`crate::discovery::web::record_finding_verification`]
+/// 的单事务决定服务可调）。
+pub(crate) async fn set_finding_verification_tx(
+    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
     tenant_id: Uuid,
     finding_id: Uuid,
     status: &str,
-) -> Result<DiscoveryFindingView, DiscoveryError> {
-    validate_one_of(status, &VERIFICATION_STATUSES, "verification_status")?;
-    let updated = sqlx::query(
+) -> Result<String, DiscoveryError> {
+    // 条件更新（I2-020）：同值重复决定是无害 no-op（rows_affected = 0），
+    // 旧状态变化后旧操作不能无条件覆盖。
+    let updated: Option<String> = sqlx::query_scalar(
         "UPDATE discovery.discovery_finding SET verification_status = $3 \
-         WHERE tenant_id = $1 AND id = $2",
+         WHERE tenant_id = $1 AND id = $2 AND verification_status IS DISTINCT FROM $3 \
+         RETURNING verification_status",
     )
     .bind(tenant_id)
     .bind(finding_id)
     .bind(status)
-    .execute(pool)
-    .await?
-    .rows_affected();
-    if updated == 0 {
-        return Err(DiscoveryError::FindingNotFound);
+    .fetch_optional(&mut **tx)
+    .await?;
+    match updated {
+        Some(after) => Ok(after),
+        // 0 行 = 该 finding 不存在，或状态已是目标值（no-op）——二者对调用方
+        // 语义一致，由调用方先 SELECT FOR UPDATE 区分。
+        None => Ok(status.to_string()),
     }
-    get_finding(pool, tenant_id, finding_id).await
 }
 
 /// 证据落库的约束违例（外键 / CHECK）映射成**业务校验错误**，不冒 500。
