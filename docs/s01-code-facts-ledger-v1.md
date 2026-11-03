@@ -173,6 +173,8 @@
 
 | **G-24** | **旧决定路径先盲更新再校验 Session 归属（I2-029 违反）、无真人校验（I2-025）、无审计、无幂等；`set_finding_verification` 是可绕过审计/锁的公开原语（I2-035）** | I2 V1.1 §15.1/§15.4；I2-C | ✅ `record_finding_verification` 重写为单事务统一决定服务：先校验后写（I2-029/I2-030）、真人门（I2-025）、条件更新（I2-020）、审计 `finding.decided`（before/after）、operation_id 幂等（N-4 先例）；删除裸导出 `set_finding_verification`，状态写点收窄为 `pub(crate)` 仅决定服务可调。REST 契约保持兼容（I2-034），新增可选 `operation_id` | I2-C（已闭合） |
 
+| **G-25** | **「待补充」展示态无推导依据**（§8.2：不能从 open question 推导，须从最近一次有效人工决定审计推导） | I2 V1.1 §8 / I2-033 | ✅ 决定服务新增 `REVISION_REQUESTED`（不改状态，落设计稿指定审计 action `discovery_finding_revision_requested`）；`DiscoveryFindingView` 增加 `display_state`（§8.1 四态映射，读取路径批量取最近决定审计，DISTINCT ON + created_at DESC, id DESC）；决定服务加归档守卫（project 行锁 + archived 拒绝） | I2-033（已闭合） |
+
 ### 10.3 结构性观察（非缺陷，供后续裁决参考）
 
 | # | 观察 | 说明 |
