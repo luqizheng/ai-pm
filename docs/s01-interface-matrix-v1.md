@@ -116,9 +116,10 @@
 | POST | `/v1/pm/projects/{project_id}/ssh-keys` | `create_key_handler` | pm_repositories.rs:299 |
 | DELETE | `/v1/pm/projects/{project_id}/ssh-keys` | `revoke_key_handler` | pm_repositories.rs:316 |
 | GET | `/v1/pm/projects/{project_id}/imports` | `list_handler` | pm_imports.rs:119 |
-| POST | `/v1/pm/projects/{project_id}/imports` | `start_handler` | pm_imports.rs:136 |
+| POST | `/v1/pm/projects/{project_id}/imports` | `start_handler` | pm_imports.rs | **请求体必填 `repository_ids`（N-3）** + 可选 `idempotency_key`（N-4） |
 | GET | `/v1/pm/projects/{project_id}/imports/{import_id}` | `get_handler` | pm_imports.rs:151 |
-| POST | `/v1/pm/projects/{project_id}/imports/{import_id}/cancel` | `cancel_handler` | pm_imports.rs:165 |
+| POST | `/v1/pm/projects/{project_id}/imports/{import_id}/cancel` | `cancel_handler` | pm_imports.rs | 支持 `proposed` 态；body 可带 `reason`（写入审计） |
+| POST | `/v1/pm/projects/{project_id}/imports/{import_id}/terminate` | `terminate_handler` | pm_imports.rs | **新增（I6-B-05）**：`proposed` 态显式终止，释放 active 名额 |
 | GET | `/v1/pm/projects/{project_id}/imports/{import_id}/proposals` | `proposals_handler` | pm_imports.rs:183 |
 | POST | `/v1/pm/projects/{project_id}/imports/{import_id}/apply` | `apply_handler` | pm_imports.rs:197 |
 
@@ -333,6 +334,7 @@
 | ⑧ | **Discovery 无 Worker 分析作业** | 唯一 clone/采集链在 Import 域（`lifecycle.rs:356/384`），facts 落 `repo_import_source`，**不落 Discovery** | I6-B-02 |
 | ⑨ | **Codex bootstrap 层缺失** | 无子命令封装/参数契约/版本探测；instruction.md 仅 3 步，无「回传证据」步骤 | T-090 |
 | ⑩ | **Discovery Session 与 Task 两套状态机并行** | `discovery/session.rs:161-176` vs Task 13 态，无交叉校验 | I6-B-05 |
+| ⑪ | **MCP 权限码只覆盖 5 个写工具**（D-11） | lmms 侧只有 `PM_MCP_READ` / `PM_MCP_DOCUMENT_WRITE` / `PM_MCP_TASK_UPDATE` 三个码，无发现族专用码；单仓收紧会打断现网执行链路 | **跨仓协同**（lmms 发码 → ai-pm 收紧 → 回归），非单仓可决 |
 
 ### 6.2 明确延后
 

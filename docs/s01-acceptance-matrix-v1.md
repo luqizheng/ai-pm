@@ -166,6 +166,7 @@
 | S01-W63（全链路审计） | S01-A039~A050 | 13 条追溯链（谁建 Project / 谁关联仓库 / 谁建 Task / 谁领取 / 谁执行 / 用哪个 Commit / 改哪些文件 / 哪些测试通过 / 哪些证据 / 谁审核 / 谁批准发布） |
 | S01-W64（E2E） | S01-A051~A060 | 端到端：建 Project → 关联多仓 → 起 Discovery → Agent 领取 → MCP 取上下文 → Codex 执行 → 回传证据 → 生成 Delivery → 人工验收 → Knowledge 发布 |
 | I1-D（归档） | S01-A061~A065 | 归档后：入口关闭、并发安全、凭据撤销、进程可控、消息安全、审计完整、故障可恢复（**七项须分别证明**，I1 §17.3） |
+| I6-B-05/06（导入契约） | S01-A066~A075 | 导入契约与审计：`repository_ids` 必填（缺省/空 → 422）、跨项目仓库拒绝（422）、导入集合在创建时固化（Source + 首轮 Attempt）、初始化操作被占有、同幂等键重放同一导入（`replayed=true` 且不新建）、`proposed` 态 terminate 后释放名额、`cancel` 带 reason 写入审计、导入启动/初始化占有/终止三类审计行可追溯。**2026-11-03 落地 7 例全绿**（`apps/pm-api/tests/import_contract.rs`） |
 
 ---
 
