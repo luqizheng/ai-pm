@@ -47,6 +47,7 @@
 |------|------|------|
 | MCP | `http://192.168.2.10:8090/mcp` | Codex / Z-Code 的 Remote MCP 入口（Host 白名单见下） |
 | pm-api REST | `http://192.168.2.10:8090/v1/pm/*` | 业务 API |
+| 接入指引 | `http://192.168.2.10:8090/install`、`/install/codex` 等 | 免鉴权；按 `AI_PM_PUBLIC_BASE_URL` 渲染执行端接入指引（slug 见索引页） |
 | 健康探针 | `http://192.168.2.10:8090/health` | 免鉴权 |
 | 登录验证 | `http://192.168.2.10:3000/v1/iam/auth/login` | api-gateway（账号密码登录入口） |
 | 首用户注册 | `http://192.168.2.10:3000/v1/iam/auth/register` | 仅当库里无用户时开放（首用户通道） |
@@ -84,6 +85,12 @@ docker exec -i infrastructure-postgres-1 psql -U postgres -d coder \
   < ~/ai-pm/infrastructure/scripts/seed-iam-platform-admin.sql
 ```
 
+> ⚠️ **裸跑 `docker compose ...` 会报 required variable 错**：test-server overlay 用
+> `:?` 强制要求 `AI_PM_MCP_ALLOWED_HOSTS` / `AI_PM_PUBLIC_BASE_URL`，而 compose CLI
+> 只自动读项目目录 `.env`（不含 prod 覆盖）。绕过方式二选一：
+> ① 一律走 `start-prod.sh`（内部 `set -a` 导出两个 env 文件）；
+> ② 手动导出后再跑：`set -a && source .env && source .env.prod && set +a && docker compose ...`
+
 ## `.env.prod` 关键项（该机实测值）
 
 ```bash
@@ -92,6 +99,7 @@ RABBITMQ_DEFAULT_PASS=guest          # 与基础 .env / rabbitmq.conf 一致
 AI_PM_FIRST_ADMIN_TENANT=1
 AI_PM_FIRST_ADMIN_SUBJECT=xOSuhTRzs-3yVuT7Gx2r0   # 注册出的 admin 的 sub
 AI_PM_MCP_ALLOWED_HOSTS=192.168.2.10  # T-081：/mcp 的 Host 白名单（rmcp DNS-rebinding 防护）
+AI_PM_PUBLIC_BASE_URL=http://192.168.2.10:8090   # /install 接入指引渲染的平台对外地址
 ```
 
 ## 已验证的完整链路（2026-11-03 实测）
@@ -102,6 +110,7 @@ AI_PM_MCP_ALLOWED_HOSTS=192.168.2.10  # T-081：/mcp 的 Host 白名单（rmcp D
 4. `POST /mcp`（`tools/call pm_list_tasks`）→ 正常返回 `{"tasks":[],"total":0}`（种子任务状态非 ready）
 5. `GET /v1/pm/me` → `is_active=true, is_admin=true, tenant_role=owner, auth_mode=interactive`
 6. `GET /v1/pm/tasks?project_id=…` → 返回种子 6 条任务
+7. `GET /install`、`/install/codex` → 接入指引正确渲染 `http://192.168.2.10:8090` 地址与 Codex TOML 配置片段
 
 ## 踩过的坑（复现要点）
 
