@@ -4,7 +4,7 @@
 
 use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
 use pm_application::discovery::{
-    self, DiscoveryError, NewFinding, NewProposal,
+    self, DiscoveryError, FindingCreator, NewFinding, NewProposal,
 };
 use pm_domain::SYSTEM_TENANT;
 use serde_json::json;
@@ -242,9 +242,9 @@ async fn findings_carry_kind_confidence_evidence_and_repositories(pool: PgPool) 
                 {"repository": "backend", "file": "src/payment/mod.rs", "description": "存在未实现的支付接口"}
             ]),
             repository_ids: vec![repo_a, repo_b],
-            verification_status: None,
             actor_role: None,
         },
+        FindingCreator::HumanDirect,
     )
     .await
     .unwrap();
@@ -277,9 +277,9 @@ async fn findings_carry_kind_confidence_evidence_and_repositories(pool: PgPool) 
             confidence: None,
             evidence: json!([]),
             repository_ids: vec![],
-            verification_status: None,
             actor_role: None,
         },
+        FindingCreator::HumanDirect,
     )
     .await
     .unwrap_err();
@@ -295,9 +295,9 @@ async fn findings_carry_kind_confidence_evidence_and_repositories(pool: PgPool) 
             confidence: Some(1.5),
             evidence: json!([]),
             repository_ids: vec![],
-            verification_status: None,
             actor_role: None,
         },
+        FindingCreator::HumanDirect,
     )
     .await
     .unwrap_err();
@@ -313,9 +313,9 @@ async fn findings_carry_kind_confidence_evidence_and_repositories(pool: PgPool) 
             confidence: None,
             evidence: json!([]),
             repository_ids: vec![Uuid::new_v4()],
-            verification_status: None,
             actor_role: None,
         },
+        FindingCreator::HumanDirect,
     )
     .await
     .unwrap_err();
@@ -345,9 +345,9 @@ async fn discovery_card_flow_links_question_answer_and_verification(pool: PgPool
             confidence: Some(0.78),
             evidence: json!([]),
             repository_ids: vec![],
-            verification_status: None,
             actor_role: None,
         },
+        FindingCreator::HumanDirect,
     )
     .await
     .unwrap();
@@ -397,9 +397,9 @@ async fn discovery_card_flow_links_question_answer_and_verification(pool: PgPool
             confidence: None,
             evidence: json!([]),
             repository_ids: vec![],
-            verification_status: None,
             actor_role: None,
         },
+        FindingCreator::HumanDirect,
     )
     .await
     .unwrap();
@@ -602,9 +602,9 @@ async fn cross_tenant_access_is_rejected(pool: PgPool) {
             confidence: None,
             evidence: json!([]),
             repository_ids: vec![],
-            verification_status: None,
             actor_role: None,
         },
+        FindingCreator::HumanDirect,
     )
     .await
     .unwrap();
@@ -618,8 +618,11 @@ async fn cross_tenant_access_is_rejected(pool: PgPool) {
     assert!(foreign_list.is_empty());
 }
 
+// ───────────────────────────────────────────── I2-B / I2-D 定态规则 ──────
+
+/// I2-023：可信 human **直接陈述** user_confirmed → 创建即 CONFIRMED。
 #[sqlx::test(migrations = "../../migrations")]
-async fn repo_import_links_to_session_in_one_direction_only(pool: PgPool) {
+async fn i2_023_human_direct_user_confirmed_starts_confirmed(pool: PgPool) {
     let fx = seed(&pool).await;
     let session = discovery::create_session(
         &pool,
@@ -631,50 +634,100 @@ async fn repo_import_links_to_session_in_one_direction_only(pool: PgPool) {
     )
     .await
     .unwrap();
-    let import: Uuid = sqlx::query_scalar(
-        "INSERT INTO integration.repo_import \
-         (tenant_id, project_id, requested_by, status) \
-         VALUES ($1, $2, $3, 'draft_ready') RETURNING id",
+
+    let finding = discovery::add_finding(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        NewFinding {
+            kind: "user_confirmed".to_string(),
+            content: "用户直接陈述：数据库使用 PostgreSQL".to_string(),
+            confidence: None,
+            evidence: json!([]),
+            repository_ids: vec![],
+            actor_role: None,
+        },
+        FindingCreator::HumanDirect,
     )
-    .bind(fx.tenant_id)
-    .bind(fx.project_id)
-    .bind(fx.human_id)
-    .fetch_one(&pool)
     .await
     .unwrap();
-    sqlx::query("UPDATE integration.repo_import SET discovery_session_id = $2 WHERE id = $1")
-        .bind(import)
-        .bind(session.id)
-        .execute(&pool)
+    assert_eq!(finding.verification_status, "CONFIRMED");
+}
+
+/// I2-024：Agent 转述的 user_confirmed → 仍 PENDING（须人工确认后才能成为已确认事实）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn i2_024_agent_relayed_user_confirmed_stays_pending(pool: PgPool) {
+    let fx = seed(&pool).await;
+    let session = discovery::create_session(
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        "CODEX",
+        "INITIAL_ONBOARDING",
+        fx.human_id,
+    )
+    .await
+    .unwrap();
+
+    let finding = discovery::add_finding(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        NewFinding {
+            kind: "user_confirmed".to_string(),
+            content: "Agent 转述用户历史发言：数据库使用 PostgreSQL".to_string(),
+            confidence: None,
+            evidence: json!([]),
+            repository_ids: vec![],
+            actor_role: None,
+        },
+        FindingCreator::AgentRelayed,
+    )
+    .await
+    .unwrap();
+    assert_eq!(finding.verification_status, "PENDING");
+}
+
+/// I2-026：外部不可指定 verification_status（字段已从创建契约删除，定态由入口
+/// 派生）——其余 kind 无论哪个通道一律 PENDING。
+#[sqlx::test(migrations = "../../migrations")]
+async fn i2_026_initial_state_is_derived_not_supplied(pool: PgPool) {
+    let fx = seed(&pool).await;
+    let session = discovery::create_session(
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        "WEB",
+        "INITIAL_ONBOARDING",
+        fx.human_id,
+    )
+    .await
+    .unwrap();
+
+    for (kind, expected, creator) in [
+        ("observed", "PENDING", FindingCreator::HumanDirect),
+        ("speculation", "PENDING", FindingCreator::HumanDirect),
+        ("contradicted", "PENDING", FindingCreator::HumanDirect),
+        ("observed", "PENDING", FindingCreator::AgentRelayed),
+        ("speculation", "PENDING", FindingCreator::AgentRelayed),
+        ("contradicted", "PENDING", FindingCreator::AgentRelayed),
+    ] {
+        let finding = discovery::add_finding(
+            &pool,
+            fx.tenant_id,
+            session.id,
+            NewFinding {
+                kind: kind.to_string(),
+                content: format!("内容 {kind}"),
+                confidence: None,
+                evidence: json!([]),
+                repository_ids: vec![],
+                actor_role: None,
+            },
+            creator,
+        )
         .await
         .unwrap();
-    let linked: Option<Uuid> = sqlx::query_scalar(
-        "SELECT discovery_session_id FROM integration.repo_import WHERE id = $1",
-    )
-    .bind(import)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(linked, Some(session.id));
-
-    let (other_tenant, other_project, other_human) = seed_other_tenant_project(&pool).await;
-    let foreign_import: Uuid = sqlx::query_scalar(
-        "INSERT INTO integration.repo_import \
-         (tenant_id, project_id, requested_by, status) \
-         VALUES ($1, $2, $3, 'draft_ready') RETURNING id",
-    )
-    .bind(other_tenant)
-    .bind(other_project)
-    .bind(other_human)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    let cross = sqlx::query(
-        "UPDATE integration.repo_import SET discovery_session_id = $2 WHERE id = $1",
-    )
-    .bind(foreign_import)
-    .bind(session.id)
-    .execute(&pool)
-    .await;
-    assert!(cross.is_err(), "cross-tenant session link must be rejected");
+        assert_eq!(finding.verification_status, expected, "kind={kind}");
+    }
 }

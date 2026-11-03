@@ -1153,9 +1153,9 @@ pub async fn discovery_submit_findings(
                 confidence: finding.confidence,
                 evidence: finding.evidence,
                 repository_ids: finding.repository_ids,
-                verification_status: None,
                 actor_role: finding.actor_role,
             },
+            pm_application::discovery::FindingCreator::AgentRelayed,
         )
         .await
         .map_err(map_discovery_error)?;

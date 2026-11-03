@@ -138,9 +138,9 @@ pub async fn record_finding_verification(
                     confidence: None,
                     evidence: serde_json::json!([]),
                     repository_ids: vec![],
-                    verification_status: None,
                     actor_role: None,
                 },
+                FindingCreator::HumanDirect,
             )
             .await?,
         ),

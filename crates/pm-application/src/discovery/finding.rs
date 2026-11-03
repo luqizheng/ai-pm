@@ -41,6 +41,17 @@ pub struct DiscoveryFindingView {
     pub created_at: DateTime<Utc>,
 }
 
+/// Finding 的创建通道（I2-B / I2-D：**入口决定定态**，外部不可指定）。
+///
+/// - [`FindingCreator::HumanDirect`]：真人在平台 UI 上的直接陈述（REST 入口，
+///   调用主体经鉴权层解析为 `core.principal.kind='human'`）。
+/// - [`FindingCreator::AgentRelayed`]：Agent 的采集回传（MCP 入口）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FindingCreator {
+    HumanDirect,
+    AgentRelayed,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct NewFinding {
     pub kind: String,
@@ -52,7 +63,6 @@ pub struct NewFinding {
     pub evidence: serde_json::Value,
     #[serde(default)]
     pub repository_ids: Vec<Uuid>,
-    pub verification_status: Option<String>,
     pub actor_role: Option<String>,
 }
 
@@ -258,10 +268,19 @@ pub async fn add_finding(
     tenant_id: Uuid,
     session_id: Uuid,
     new_finding: NewFinding,
+    creator: FindingCreator,
 ) -> Result<DiscoveryFindingView, DiscoveryError> {
     validate_one_of(&new_finding.kind, &FINDING_KINDS, "kind")?;
     validate_confidence(new_finding.confidence)?;
-    let verification_status = new_finding.verification_status.as_deref().unwrap_or("PENDING");
+    // I2-B 定态规则（I2-023 / I2-024 / I2-026）：
+    // - 外部不可指定 verification_status（字段已从契约删除，此处派生）；
+    // - 可信 human **直接陈述** user_confirmed → 创建即 CONFIRMED（同事务落库）；
+    // - Agent 转述的 user_confirmed → 仍 PENDING（须人工确认后才能成为已确认事实）；
+    // - 其余 kind 一律 PENDING。
+    let verification_status = match (&new_finding.kind[..], creator) {
+        ("user_confirmed", FindingCreator::HumanDirect) => "CONFIRMED",
+        _ => "PENDING",
+    };
     validate_one_of(verification_status, &VERIFICATION_STATUSES, "verification_status")?;
     if new_finding.content.trim().is_empty() {
         return Err(DiscoveryError::Validation(
