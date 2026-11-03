@@ -84,3 +84,20 @@
 - D-2 基线形态裁决收进 S02-04（Q-10）；迁移从 0032 起；无存量数据→兼容迁移简化；§9 工程约束（REST/MCP 双入口=V-6/DEF-04、权限一致=V-4/DEF-01）须与 DEF 清单挂钩；供稿的 S02-02 静态核验清单五项已预答 4.5 项。
 
 > C-5（S02-03 评审的确认术语三分）适用于本稿：「人类确认」=approve revision，与采纳 draft / Finding confirm 区分。
+
+---
+
+## 附录 B · 增量核验（补充 13 点之外，见 `smark-pm-s02-04-source-artifact-model-verification-v1.md`）
+
+> 2026-11-04 对照**代码与既有设计资产横向核**（附录 A 是对照供稿稿逐条核）补入四处事实。两处比 13 点中任何一条都更前置。
+
+| 编号 | 发现 | 严重度 | 关联 |
+|---|---|---|---|
+| **E-1** | **`artifact` 一词在本仓已有三个互不相同的既定义义**：①架构稿 §6.2 `artifact：设计文档、PR、Commit、测试报告`（交付侧，V2 规划未实现）②`/v1/pm/artifacts` = `requirement_revision`（AI 产出侧，**已实现**，含前端 `api/artifacts.ts` / 路由 `workspace-artifacts` / `ArtifactsPage.vue`）③`source_artifact_id` 空指针（未写入）。稿的 `source.source_artifact`（原始材料，**输入侧**）是第四套，且与前三套方向相反 | **P0（命名地基）** | 新增 **Q-18**：建议改 `source.source_input` + 列改名（空列零成本） |
+| **E-2** | **`content_hash` 实为三种语义**（修订 C-2）：REST `sha256("{rid}:{version}:{markdown}")`（`revision.rs:34-35`）· 执行器 `sha256(json!({title,markdown,priority}))`（`executor.rs:432-433`）· 知识域 `sha256(markdown)`（`knowledge.rs:646-653`）。前两者**结构不同且行间不可比**；需求域哈希当前**仅回显零比对**（唯一查重在知识域异表 `knowledge_quality.rs:78`），风险待来源关联/基线比对触发 | P1 | 新增 **Q-19** |
+| **E-3** | **`source_artifact_id` 设计来源已查明，语义与稿相反**：`0002_delivery.sql:1` 注明架构稿 §6.2–6.3 逐字复制；架构稿 `:465` 把 `artifact` 定义为**交付物**（设计文档/PR/Commit/测试报告）。故稿 §3.4「旧列数据转入关联表」有**方向性错误**（旧列原指交付物）——实际零数据零引用，风险为零但语义陷阱真实 | P1 | 新增 **Q-20** |
+| **E-4** | **「无上传设施」结论需补全**（修正新增事实第 1 条）：架构稿 `:102`/`:141` **已规划** object-storage（S3 兼容 / RustFS），但迁移/代码/编排三层**零实现** → 稿的 `storage_ref` 是本仓尚未开工的第一个存储设施，非现成能力 | P2 | 新增 **Q-21** |
+
+**口径修正 3 处**：C-2（两种→三种语义 + 补「当前零比对」）·「无上传设施」（补规划层依据）·C-4（0019 惯例细化 = `UNIQUE(tenant_id,id)` `:157-158` + `fk_*_tenant_project` 复合外键 `:241-254` + `ADD COLUMN tenant_id NOT NULL` `:103-107`，三项须同时满足）。
+
+**待裁项总计**：Q-1～Q-21（21 项编号）+ 三项待裁登记（来源继承语义 / SourceArtifact 捕获权限与红线 / 拒绝语义并入 Q-6）。
