@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
-import { ChevronLeft } from "lucide-vue-next";
+import { ChevronLeft, ChevronRight } from "lucide-vue-next";
 import { useWorkspaceStore } from "../store";
 import { demoProject } from "../fixtures";
 import { NAV_GROUPS, type NavItemDef } from "../nav-config";
@@ -35,37 +35,49 @@ function onItem(item: NavItemDef) {
 </script>
 
 <template>
-  <nav class="ws-leftnav" aria-label="workspace">
+  <!-- 折叠态（60px 图标栏）只留图标：窄栏里完整文字会逐字竖排换行（用户反馈 bugfix） -->
+  <nav
+    class="ws-leftnav"
+    :class="{ 'is-collapsed': store.sidebarCollapsed }"
+    aria-label="workspace"
+  >
     <div v-for="group in groups" :key="group.key" class="ws-nav-group">
-      <div class="ws-nav-group-label">{{ t(group.labelKey) }}</div>
+      <div v-if="!store.sidebarCollapsed" class="ws-nav-group-label">
+        {{ t(group.labelKey) }}
+      </div>
       <button
         v-for="item in group.items"
         :key="item.key"
         type="button"
         class="ws-nav-item ws-focusable"
         :class="{ 'is-active': isActive(item) }"
+        :title="store.sidebarCollapsed ? t(item.labelKey) : undefined"
         @click="onItem(item)"
       >
         <component :is="item.icon" :size="16" aria-hidden="true" />
-        <span class="ws-nav-label">{{ t(item.labelKey) }}</span>
+        <span v-if="!store.sidebarCollapsed" class="ws-nav-label">
+          {{ t(item.labelKey) }}
+        </span>
       </button>
     </div>
 
     <div class="ws-leftnav-footer">
-      <div class="ws-iteration">
-        <span class="ws-iteration-label">
-          {{ t("workspace.service.iteration") }}
-        </span>
-        <span class="ws-iteration-value">{{ demoProject.iteration }}</span>
-      </div>
-      <div class="ws-service" data-test="service-ok">
-        <span
-          class="ws-service-dot"
-          data-test="service-dot"
-          aria-hidden="true"
-        />
-        <span class="ws-nav-label">{{ t("workspace.service.ok") }}</span>
-      </div>
+      <template v-if="!store.sidebarCollapsed">
+        <div class="ws-iteration">
+          <span class="ws-iteration-label">
+            {{ t("workspace.service.iteration") }}
+          </span>
+          <span class="ws-iteration-value">{{ demoProject.iteration }}</span>
+        </div>
+        <div class="ws-service" data-test="service-ok">
+          <span
+            class="ws-service-dot"
+            data-test="service-dot"
+            aria-hidden="true"
+          />
+          <span class="ws-nav-label">{{ t("workspace.service.ok") }}</span>
+        </div>
+      </template>
       <button
         type="button"
         class="ws-icon-btn ws-focusable"
@@ -77,7 +89,12 @@ function onItem(item: NavItemDef) {
         "
         @click="store.toggleSidebar()"
       >
-        <ChevronLeft :size="16" aria-hidden="true" />
+        <ChevronRight
+          v-if="store.sidebarCollapsed"
+          :size="16"
+          aria-hidden="true"
+        />
+        <ChevronLeft v-else :size="16" aria-hidden="true" />
       </button>
     </div>
   </nav>
@@ -138,6 +155,16 @@ function onItem(item: NavItemDef) {
   justify-content: space-between;
   padding: 8px 6px 0;
   border-top: 1px solid var(--ws-border);
+}
+
+/* 折叠态：文字已由模板 v-if 隐藏，这里只负责图标在 60px 栏内居中 */
+.ws-leftnav.is-collapsed .ws-nav-item {
+  justify-content: center;
+  padding: 0;
+}
+
+.ws-leftnav.is-collapsed .ws-leftnav-footer {
+  justify-content: center;
 }
 
 .ws-service {
