@@ -8,6 +8,12 @@
 #   ./infrastructure/scripts/start-prod.sh --force-recreate   # 传透到 docker compose up
 #   ./infrastructure/scripts/start-prod.sh --pull             # 先 pull 再 up（强制刷新镜像）
 #
+# 额外 overlay（可选，放在最后叠加）：
+#   COMPOSE_OVERLAY=docker-compose.test-server.yml ./infrastructure/scripts/start-prod.sh
+#   COMPOSE_OVERLAY=/abs/path/to/overlay.yml ./infrastructure/scripts/start-prod.sh
+#   例：测试机用 docker-compose.test-server.yml 把 pm-api 的 8090 发布到宿主，
+#       供内网 Codex / Z-Code 直连 /mcp（见该文件头部说明）。
+#
 # 设计要点：
 #   - 强制 .env.prod 存在且字段填好（fail-fast 在 compose 报错之前）
 #   - compose v2.20+ 版本检查（!override 需要）
@@ -52,12 +58,17 @@ fi
 log "docker compose version: $(docker compose version | head -1)"
 
 # 3. env 分层加载（base → prod 覆盖）
+# ⚠️ 必须 `set -a` 导出：compose 的变量插值只看「进程环境变量 + 项目目录 .env」，
+#    不会读 .env.prod。若不导出，${DATABASE_URL} 等插值会静默回落到基础 .env
+#    的值，prod 覆盖形同虚设（口令改了但容器没拿到）。
 load_env() {
   local f="$1"
   [[ -f "$f" ]] || return 0
   set +u
+  set -a
   # shellcheck disable=SC1090
   source "$f"
+  set +a
   set -u
 }
 load_env "$ENV_BASE"
@@ -89,11 +100,21 @@ for arg in "$@"; do
   esac
 done
 
+# 5b. 额外 overlay（可选，最后叠加）：COMPOSE_OVERLAY=文件名或绝对路径
+COMPOSE_FILES=(-f "$COMPOSE_BASE" -f "$COMPOSE_PROD")
+if [[ -n "${COMPOSE_OVERLAY:-}" ]]; then
+  _ov="$COMPOSE_OVERLAY"
+  [[ "$_ov" != /* ]] && _ov="$INFRA_DIR/$_ov"
+  [[ -f "$_ov" ]] || die "COMPOSE_OVERLAY not found: $_ov" 10
+  COMPOSE_FILES+=(-f "$_ov")
+  log "extra overlay: $_ov"
+fi
+
 # 6. up
-[[ "$DO_PULL" -eq 1 ]] && docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_PROD" pull
-docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_PROD" up -d "${COMPOSE_ARGS[@]}" \
+[[ "$DO_PULL" -eq 1 ]] && docker compose "${COMPOSE_FILES[@]}" pull
+docker compose "${COMPOSE_FILES[@]}" up -d "${COMPOSE_ARGS[@]}" \
   || die "docker compose up failed" 20
 
-log "running: $(docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_PROD" ps --services 2>/dev/null | wc -l) services"
+log "running: $(docker compose "${COMPOSE_FILES[@]}" ps --services 2>/dev/null | wc -l) services"
 log "public endpoints: http://<host>:8091 (前端 aipm-web) / http://<host>:3000 (登录验证 api-gateway)"
 log "private: pm-api:8090 / aipm-bff:8080 / token-service:8082 / iam-service:8081 are container-network only"

@@ -1,0 +1,30 @@
+# infrastructure/docker-compose.test-server.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# 测试机 overlay —— 用于 Codex Bootstrap 两机拓扑的内网测试服务器。
+#
+# 背景：prod overlay 按生产口径把 pm-api 的宿主端口清空（外部统一走
+# aipm-web:8091 的 /api 反代）。但测试机上：
+#   1) aipm-web / aipm-bff 镜像依赖 ai-pm-web 仓（当前不可构建），反向代理不存在；
+#   2) Codex / Z-Code 侧的 Remote MCP 需要直连 pm-api 的 /mcp
+#      （见 docs/ai-pm-codex-bootstrap-v1.md §〇 两机拓扑 / T-081 跨机暴露）。
+# 因此这里把 pm-api 的 8090 重新发布到宿主，供内网测试机访问。
+#
+# 用法（叠加顺序：base → prod → test-server）：
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#                  -f docker-compose.test-server.yml up -d <services...>
+# 或用 start-prod.sh 的等价参数形式（见 scripts/start-prod.sh）。
+#
+# ⚠️ 仅限内网测试机使用；生产环境不要叠加本文件。
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  pm-api:
+    # 宿主 8090 → 容器 8090：内网测试机直连 /mcp 与 /v1/pm/*
+    ports:
+      - "8090:8090"
+
+  # token-service 额外发布 JWKS 端点，便于测试机从外部核对 JWKS 与登录链路
+  token-service:
+    ports:
+      - "8082:8082"
