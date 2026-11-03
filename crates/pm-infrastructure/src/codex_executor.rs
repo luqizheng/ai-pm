@@ -365,7 +365,10 @@ impl CodexLaunchProfile {
                  1. 调用 MCP 工具 `pm_get_run_context` 获取完整任务契约（目标 / 约束 / \
                  逐条验收 / 产物路径 / 每仓基线 / 知识引用）。\n\
                  2. 执行期间按心跳间隔调用 `pm_report_progress`（stage 变化即进展）。\n\
-                 3. 完成后调用 `pm_submit_result`；阻塞时 report blocked。\n",
+                 3. 完成后调用 `pm_submit_result`；阻塞时 report blocked。\n\
+                 4. 若产出可追溯证据（代码位置 / 测试结果 / 提交锚点），调用 \
+                 `pm_submit_evidence` 挂到相关发现上——代码类证据必须携带 \
+                 import_id / repository_id / commit_sha / attempt_no 四列。\n",
                 run_id = run.run_id,
                 attempt = run.attempt_no,
                 gen = run.lease_generation,
