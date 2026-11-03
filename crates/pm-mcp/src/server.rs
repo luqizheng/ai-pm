@@ -33,8 +33,8 @@ use crate::tools::{
     self, ClaimTaskArgs, ConfirmDocumentProposalArgs, DiscoveryCompleteArgs, DiscoveryGetArgs,
     DiscoverySubmitAnswersArgs, DiscoverySubmitFindingsArgs, DiscoverySubmitProposalArgs,
     ListTasksArgs, ProposeDocumentArgs, ReportProgressArgs, RunContextArgs, SubmissionStatusArgs,
-    SubmitDocumentArgs, SubmitResultArgs, SubmitTechnicalDesignArgs, TaskContextArgs, ToolError,
-    VetoDocumentRevisionArgs,
+    SubmitDocumentArgs, SubmitEvidenceArgs, SubmitResultArgs, SubmitTechnicalDesignArgs,
+    TaskContextArgs, ToolError, VetoDocumentRevisionArgs,
 };
 
 /// The MCP server over the shared pool: owns the rmcp tool router generated
@@ -291,6 +291,27 @@ impl PmMcpServer {
             async {
                 let caller = crate::caller::caller_from_ctx(&ctx)?;
                 tools::discovery_submit_findings(&self.pool, args, &caller).await
+            }
+            .await,
+        )
+    }
+
+    #[tool(
+        name = "pm_submit_evidence",
+        description = "Attach one evidence record to an existing discovery finding. Code / \
+                       test_result / commit evidence must carry import_id, repository_id, \
+                       commit_sha and attempt_no so the evidence is anchored to a real \
+                       analysis round."
+    )]
+    pub async fn submit_evidence(
+        &self,
+        Parameters(args): Parameters<SubmitEvidenceArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::submit_evidence(&self.pool, args, &caller).await
             }
             .await,
         )

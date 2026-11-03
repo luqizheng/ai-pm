@@ -10,7 +10,8 @@ use pm_ai::repo_model::FakeRepoAnalysisModel;
 use pm_application::bootstrap::{BootstrapRequest, bootstrap_project_with_status};
 use pm_application::command_executor::PgCommandExecutor;
 use pm_application::project_import::{
-    ApplyProject, ApplyRequest, ground_draft, propose_import, run_import_job, start_import,
+    ApplyProject, ApplyRequest, StartImportRequest, ground_draft, propose_import, run_import_job,
+    start_import,
 };
 use pm_application::repo_facts::{CommitFact, DocContent, HotFile, LanguageStat, RepoFacts};
 use pm_application::supervision::{DecideRequest, Decision, decide_approval};
@@ -103,9 +104,25 @@ async fn seed_project_with_repo(pool: &PgPool, code: &str) -> (Uuid, Uuid, Repo)
 }
 
 async fn prepare_draft(pool: &PgPool, project_id: Uuid) -> (Uuid, ProjectDraft) {
-    let started = start_import(pool, project_id, &pm_application::actor::AuditActor::dispatch())
-        .await
-        .unwrap();
+    // N-3：`repository_ids` 必填——导入集合由调用方明确指定。
+    let repository_id: Uuid = sqlx::query_scalar(
+        "SELECT id FROM integration.project_repository WHERE project_id = $1 LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let started = start_import(
+        pool,
+        project_id,
+        &pm_application::actor::AuditActor::dispatch(),
+        &StartImportRequest {
+            repository_ids: vec![repository_id],
+            idempotency_key: None,
+        },
+    )
+    .await
+    .unwrap();
     let model = FakeRepoAnalysisModel;
     run_import_job(pool, &model, started.import_id).await.unwrap();
     let detail = pm_application::project_import::get_import(pool, project_id, started.import_id)

@@ -95,9 +95,10 @@ const steps = computed(() => [
 const canNextBasics = computed(
   () => form.value.code.trim() !== "" && form.value.name.trim() !== ""
 );
-const verifiedCount = computed(
-  () => repos.value.filter(item => item.status === "verified").length
+const verifiedRepositories = computed(() =>
+  repos.value.filter(item => item.status === "verified")
 );
+const verifiedCount = computed(() => verifiedRepositories.value.length);
 const draft = computed<ProjectDraft | null>(() => detail.value?.draft ?? null);
 const roleOptions = computed(() =>
   (["main", "docs", "service", "infra"] as RepositoryRole[]).map(value => ({
@@ -245,7 +246,10 @@ async function startAnalysis() {
   if (verifiedCount.value === 0 || busy.value) return;
   busy.value = true;
   try {
-    const started = await startImport(projectId.value);
+    const started = await startImport(
+      projectId.value,
+      verifiedRepositories.value.map(item => item.id)
+    );
     importId.value = started.import_id;
     step.value = 2;
     await pollOnce();

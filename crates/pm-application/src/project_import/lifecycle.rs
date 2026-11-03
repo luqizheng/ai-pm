@@ -33,11 +33,16 @@ pub async fn list_imports(
 }
 
 
-/// 启动一次导入：校验空项目 + 至少一个 verified 仓库，落事件与 job。
+/// 启动一次导入：校验空项目 + **必填的 verified 仓库集合**，落事件与 job。
+///
+/// N-3：`repository_ids` 必填且非空——不再由服务端「取全部 verified 仓库」。
+/// N-4：客户端幂等键透传到 `integration.inbound_event.idempotency_key`，
+/// 重复请求返回**同一个导入**（`replayed = true`），不新建。
 pub async fn start_import(
     pool: &PgPool,
     project_id: Uuid,
     actor: &AuditActor,
+    req: &StartImportRequest,
 ) -> Result<StartImport, ImportError> {
     let project_exists: Option<Uuid> = sqlx::query_scalar("SELECT id FROM core.project WHERE id = $1")
         .bind(project_id)
@@ -45,6 +50,9 @@ pub async fn start_import(
         .await?;
     if project_exists.is_none() {
         return Err(ImportError::ProjectNotFound);
+    }
+    if req.repository_ids.is_empty() {
+        return Err(ImportError::RepositoryIdsRequired);
     }
 
     let requirement_count: i64 =
@@ -56,17 +64,45 @@ pub async fn start_import(
         return Err(ImportError::ProjectNotEmpty);
     }
 
-    // 仓库集合在**导入创建时**固化（I6-B-03）：之后 Worker 只处理这批仓库。
+    // 仓库集合在**导入创建时**固化（I6-B-03）：只接受本项目的 verified 仓库。
     let verified_repositories: Vec<Uuid> = sqlx::query_scalar(
         "SELECT id FROM integration.project_repository \
          WHERE tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
-           AND project_id = $1 AND status = 'verified' ORDER BY name",
+           AND project_id = $1 AND status = 'verified' AND id = ANY($2) ORDER BY name",
     )
     .bind(project_id)
+    .bind(&req.repository_ids)
     .fetch_all(pool)
     .await?;
+    if verified_repositories.len() != req.repository_ids.len() {
+        return Err(ImportError::RepositoryNotInProject);
+    }
     if verified_repositories.is_empty() {
         return Err(ImportError::NoVerifiedRepository);
+    }
+
+    // 幂等：命中既有事件则直接返回同一个导入（N-4）。
+    if let Some(key) = req.idempotency_key.as_deref() {
+        let existing: Option<(Uuid, String)> = sqlx::query_as(
+            "SELECT (payload->>'import_id')::uuid, 'replayed' FROM integration.inbound_event \
+             WHERE project_id = $1 AND source = 'repo_import' AND idempotency_key = $2",
+        )
+        .bind(project_id)
+        .bind(key)
+        .fetch_optional(pool)
+        .await?;
+        if let Some((import_id, _)) = existing {
+            let status: Option<String> =
+                sqlx::query_scalar("SELECT status FROM integration.repo_import WHERE id = $1")
+                    .bind(import_id)
+                    .fetch_optional(pool)
+                    .await?;
+            return Ok(StartImport {
+                import_id,
+                status: status.unwrap_or_else(|| "queued".to_string()),
+                replayed: true,
+            });
+        }
     }
 
     let in_progress: i64 = sqlx::query_scalar(
@@ -123,7 +159,11 @@ pub async fn start_import(
     )
     .bind(project_id)
     .bind(actor_id)
-    .bind(import_id.to_string())
+    .bind(
+        req.idempotency_key
+            .clone()
+            .unwrap_or_else(|| import_id.to_string()),
+    )
     .bind(&payload)
     .bind(&payload_hash)
     .fetch_one(&mut *tx)
@@ -190,6 +230,25 @@ pub async fn start_import(
         .execute(&mut *tx)
         .await?;
     }
+    // 审计（I6-B-06）：导入启动与初始化操作占有各一行。
+    crate::pm_write::append_audit(
+        &mut *tx,
+        project_id,
+        actor,
+        "repo_import.started",
+        "repo_import",
+        Some(import_id),
+    )
+    .await?;
+    crate::pm_write::append_audit(
+        &mut *tx,
+        project_id,
+        actor,
+        "project_initialization.acquired",
+        "project_initialization_operation",
+        Some(operation_id),
+    )
+    .await?;
     sqlx::query("UPDATE core.project SET status = 'initializing' WHERE id = $1 AND status = 'planning'")
         .bind(project_id)
         .execute(&mut *tx)
@@ -199,6 +258,7 @@ pub async fn start_import(
     Ok(StartImport {
         import_id,
         status: "queued".to_string(),
+        replayed: false,
     })
 }
 
@@ -263,6 +323,34 @@ pub async fn get_import(
         .fetch_all(pool)
         .await?;
 
+    // 轮次历史（R-4-1：成功与失败都留档）。
+    let attempt_rows: Vec<(Uuid, i32, String, Option<String>, Option<String>, DateTime<Utc>, Option<DateTime<Utc>>)> =
+        sqlx::query_as(
+            "SELECT repository_id, attempt_no, status, commit_sha, error_code, started_at, finished_at \
+             FROM integration.repo_import_source_attempt \
+             WHERE import_id = $1 ORDER BY repository_id, attempt_no",
+        )
+        .bind(import_id)
+        .fetch_all(pool)
+        .await?;
+    let mut attempts_by_repo: std::collections::HashMap<Uuid, Vec<ImportAttemptView>> =
+        std::collections::HashMap::new();
+    for (repository_id, attempt_no, status, commit_sha, error_code, started_at, finished_at) in
+        attempt_rows
+    {
+        attempts_by_repo
+            .entry(repository_id)
+            .or_default()
+            .push(ImportAttemptView {
+                attempt_no,
+                status,
+                commit_sha,
+                error_code,
+                started_at,
+                finished_at,
+            });
+    }
+
     Ok(ImportDetail {
         id: import_id,
         project_id,
@@ -292,6 +380,9 @@ pub async fn get_import(
                         size_bytes,
                         truncated,
                         error_code,
+                        attempts: attempts_by_repo
+                            .remove(&repository_id)
+                            .unwrap_or_default(),
                     }
                 },
             )
@@ -300,11 +391,16 @@ pub async fn get_import(
 }
 
 
-/// 取消导入：只允许在草案生成（`draft_ready`）及之前。
+/// 可取消/终止的导入状态：在途四态 + `draft_ready` + `proposed`（C-2）。
+///
+/// `proposed` 必须可终止——否则新唯一索引上线即引入「名额永久锁死」回归：
+/// 提案已提交但无人推进时，Project 再也无法发起新的导入。
 pub async fn cancel_import(
     pool: &PgPool,
     project_id: Uuid,
     import_id: Uuid,
+    actor: &AuditActor,
+    reason: Option<&str>,
 ) -> Result<(), ImportError> {
     let status: Option<String> =
         sqlx::query_scalar("SELECT status FROM integration.repo_import WHERE id = $1 AND project_id = $2")
@@ -313,7 +409,10 @@ pub async fn cancel_import(
             .fetch_optional(pool)
             .await?;
     let status = status.ok_or(ImportError::NotFound)?;
-    if !IN_PROGRESS.contains(&status.as_str()) && status != "draft_ready" {
+    if !IN_PROGRESS.contains(&status.as_str())
+        && status != "draft_ready"
+        && status != "proposed"
+    {
         return Err(ImportError::NotCancellable);
     }
     let mut tx = pool.begin().await?;
@@ -331,13 +430,29 @@ pub async fn cancel_import(
     .execute(&mut *tx)
     .await?;
     // 释放初始化操作（R-3-1：条件释放 + rows_affected 检查）。
-    sqlx::query(
+    let released = sqlx::query(
         "UPDATE core.project_initialization_operation \
          SET status = 'released', released_at = now() \
          WHERE import_id = $1 AND status = 'active'",
     )
     .bind(import_id)
     .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    // 审计（I6-B-06）：终止动作可追溯。
+    crate::pm_write::append_audit_with_after(
+        &mut *tx,
+        project_id,
+        actor,
+        "repo_import.terminated",
+        "repo_import",
+        Some(import_id),
+        serde_json::json!({
+            "previous_status": status,
+            "reason": reason,
+            "initialization_released": released > 0,
+        }),
+    )
     .await?;
     sqlx::query(
         "UPDATE integration.job SET status = 'cancelled' \
@@ -350,6 +465,29 @@ pub async fn cancel_import(
     Ok(())
 }
 
+
+/// 显式终止 `proposed` 态的导入（C-2）。
+///
+/// 与 `cancel_import` 的差别：**只接受 `proposed`**——在途与 `draft_ready`
+/// 走普通取消，避免一个端点承担两种语义。
+pub async fn terminate_import(
+    pool: &PgPool,
+    project_id: Uuid,
+    import_id: Uuid,
+    actor: &AuditActor,
+) -> Result<(), ImportError> {
+    let status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM integration.repo_import WHERE id = $1 AND project_id = $2")
+            .bind(import_id)
+            .bind(project_id)
+            .fetch_optional(pool)
+            .await?;
+    let status = status.ok_or(ImportError::NotFound)?;
+    if status != "proposed" {
+        return Err(ImportError::InvalidState("terminate requires proposed"));
+    }
+    cancel_import(pool, project_id, import_id, actor, Some("proposed_terminated")).await
+}
 
 pub(crate) async fn set_stage(
     pool: &PgPool,
@@ -515,6 +653,18 @@ pub async fn run_import_job(
         .bind(attempt_no)
         .execute(pool)
         .await?;
+        audit_import_event(
+            pool,
+            project_id,
+            "repo_import.attempt_succeeded",
+            import_id,
+            serde_json::json!({
+                "repository_id": repository_id,
+                "attempt_no": attempt_no,
+                "commit_sha": facts.head_commit_sha,
+            }),
+        )
+        .await;
         // 基准 write-once（N-1）：已有基准不被后续轮次覆盖。
         sqlx::query(
             "UPDATE integration.repo_import_source \
@@ -544,6 +694,14 @@ pub async fn run_import_job(
         Ok(draft) => draft,
         Err(err) => {
             let (code, detail) = model_error_code(&err);
+            audit_import_event(
+                pool,
+                project_id,
+                "repo_import.draft_failed",
+                import_id,
+                serde_json::json!({ "error_code": code }),
+            )
+            .await;
             fail_import(pool, import_id, code, &detail).await;
             return Ok(());
         }
@@ -601,10 +759,53 @@ pub async fn run_import_job(
     .bind(dropped as i32)
     .execute(&mut *tx)
     .await?;
+    crate::pm_write::append_audit_with_after(
+        &mut *tx,
+        project_id,
+        &AuditActor::dispatch(),
+        "repo_import.draft_succeeded",
+        "repo_import",
+        Some(import_id),
+        serde_json::json!({
+            "revision": revision,
+            "dropped_items": dropped,
+            "source_attempts": source_attempts,
+        }),
+    )
+    .await?;
     tx.commit().await?;
     Ok(())
 }
 
+
+/// 导入域审计（I6-B-06）：Attempt / Draft 层的动作行。
+///
+/// Worker 侧动作的执行主体是调度服务 principal（`AuditActor::dispatch()`）。
+async fn audit_import_event(
+    pool: &PgPool,
+    project_id: Uuid,
+    action: &str,
+    import_id: Uuid,
+    after: serde_json::Value,
+) {
+    let Ok(mut tx) = pool.begin().await else {
+        return;
+    };
+    if crate::pm_write::append_audit_with_after(
+        &mut *tx,
+        project_id,
+        &AuditActor::dispatch(),
+        action,
+        "repo_import",
+        Some(import_id),
+        after,
+    )
+    .await
+    .is_ok()
+    {
+        let _ = tx.commit().await;
+    }
+}
 
 /// 记一次失败轮次：Attempt 落 `failed` + 错误码与现场（R-4-1）。
 pub(crate) async fn record_attempt_failure(
@@ -616,6 +817,27 @@ pub(crate) async fn record_attempt_failure(
     detail: &str,
 ) {
     let detail: String = detail.chars().take(500).collect();
+    let project_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT project_id FROM integration.repo_import WHERE id = $1")
+            .bind(import_id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+    if let Some(project_id) = project_id {
+        audit_import_event(
+            pool,
+            project_id,
+            "repo_import.attempt_failed",
+            import_id,
+            serde_json::json!({
+                "repository_id": repository_id,
+                "attempt_no": attempt_no,
+                "error_code": code,
+            }),
+        )
+        .await;
+    }
     let _ = sqlx::query(
         "UPDATE integration.repo_import_source_attempt \
          SET status = 'failed', error_code = $3, error_detail = $4, finished_at = now() \

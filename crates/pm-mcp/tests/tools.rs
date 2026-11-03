@@ -423,6 +423,7 @@ async fn streamable_http_smoke_lists_tools_and_serves_calls(pool: PgPool) {
             "pm_propose_document",
             "pm_report_progress",
             "pm_submit_document",
+            "pm_submit_evidence",
             "pm_submit_result",
             "pm_submit_technical_design",
             "pm_veto_document_revision",

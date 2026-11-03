@@ -57,7 +57,7 @@ pub struct NewFinding {
 }
 
 /// 证据输入项。
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct EvidenceInput {
     /// 显式类型；缺省按 `system_observation` 处理（旧形状）。
     #[serde(default)]
@@ -307,27 +307,7 @@ pub async fn add_finding(
     .fetch_one(&mut *tx)
     .await?;
     for evidence in &evidence_rows {
-        sqlx::query(
-            "INSERT INTO discovery.discovery_finding_evidence \
-             (tenant_id, project_id, finding_id, evidence_type, description, file_path, symbol, \
-              code_range, import_id, repository_id, commit_sha, attempt_no) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
-        )
-        .bind(tenant_id)
-        .bind(project_id)
-        .bind(row.0)
-        .bind(&evidence.evidence_type)
-        .bind(&evidence.description)
-        .bind(&evidence.file_path)
-        .bind(&evidence.symbol)
-        .bind(&evidence.code_range)
-        .bind(evidence.import_id)
-        .bind(evidence.repository_id)
-        .bind(&evidence.commit_sha)
-        .bind(evidence.attempt_no)
-        .execute(&mut *tx)
-        .await
-        .map_err(map_evidence_error)?;
+        insert_evidence(&mut tx, tenant_id, project_id, row.0, evidence).await?;
     }
     for repository_id in &repository_ids {
         sqlx::query(
@@ -345,6 +325,80 @@ pub async fn add_finding(
     let mut evidence_map = evidence_by_finding(pool, tenant_id, &[row.0]).await?;
     let evidence = evidence_map.remove(&row.0).unwrap_or_else(|| serde_json::json!([]));
     Ok(to_finding(row, repository_ids, evidence))
+}
+
+/// 写入一条证据（I6-B-04）。
+///
+/// `attempt_no` + `import_id` + `repository_id` + `commit_sha` 把证据锚定到
+/// **某一次分析轮次**——五列组合 FK 保证「Attempt 属于其 Source」是键结构事实。
+pub async fn submit_evidence(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    finding_id: Uuid,
+    input: EvidenceInput,
+) -> Result<serde_json::Value, DiscoveryError> {
+    let rows = parse_evidence(&serde_json::json!([input]))?;
+    let evidence = rows
+        .into_iter()
+        .next()
+        .ok_or_else(|| DiscoveryError::Validation("evidence must not be empty".to_string()))?;
+    let project_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT project_id FROM discovery.discovery_finding WHERE tenant_id = $1 AND id = $2",
+    )
+    .bind(tenant_id)
+    .bind(finding_id)
+    .fetch_optional(pool)
+    .await?;
+    let project_id = project_id.ok_or(DiscoveryError::FindingNotFound)?;
+
+    let mut tx = pool.begin().await?;
+    insert_evidence(&mut tx, tenant_id, project_id, finding_id, &evidence).await?;
+    tx.commit().await?;
+
+    Ok(serde_json::json!({
+        "finding_id": finding_id,
+        "evidence_type": evidence.evidence_type,
+        "description": evidence.description,
+        "file_path": evidence.file_path,
+        "symbol": evidence.symbol,
+        "code_range": evidence.code_range,
+        "import_id": evidence.import_id,
+        "repository_id": evidence.repository_id,
+        "commit_sha": evidence.commit_sha,
+        "attempt_no": evidence.attempt_no,
+    }))
+}
+
+/// 插入一条证据行（约束违例映射成业务校验错误，不冒 500）。
+async fn insert_evidence(
+    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    finding_id: Uuid,
+    evidence: &EvidenceRow,
+) -> Result<(), DiscoveryError> {
+    sqlx::query(
+        "INSERT INTO discovery.discovery_finding_evidence \
+         (tenant_id, project_id, finding_id, evidence_type, description, file_path, symbol, \
+          code_range, import_id, repository_id, commit_sha, attempt_no) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(finding_id)
+    .bind(&evidence.evidence_type)
+    .bind(&evidence.description)
+    .bind(&evidence.file_path)
+    .bind(&evidence.symbol)
+    .bind(&evidence.code_range)
+    .bind(evidence.import_id)
+    .bind(evidence.repository_id)
+    .bind(&evidence.commit_sha)
+    .bind(evidence.attempt_no)
+    .execute(&mut **tx)
+    .await
+    .map_err(map_evidence_error)?;
+    Ok(())
 }
 
 pub async fn list_findings(

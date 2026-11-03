@@ -887,6 +887,36 @@ pub struct DiscoverySubmitFindingsArgs {
     pub findings: Vec<DiscoveryFindingInput>,
 }
 
+/// Arguments of `pm_submit_evidence`（I6-B-04：证据锚定到某一次分析轮次）。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SubmitEvidenceArgs {
+    pub project_id: Uuid,
+    /// 要挂证据的发现。
+    pub finding_id: Uuid,
+    /// code / test_result / commit / user_statement / system_observation。
+    pub evidence_type: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub file_path: Option<String>,
+    #[serde(default)]
+    pub symbol: Option<String>,
+    #[serde(default)]
+    pub code_range: Option<String>,
+    /// 代码类证据必填：导入 id。
+    #[serde(default)]
+    pub import_id: Option<Uuid>,
+    /// 代码类证据必填：仓库 id。
+    #[serde(default)]
+    pub repository_id: Option<Uuid>,
+    /// 代码类证据必填：Commit SHA。
+    #[serde(default)]
+    pub commit_sha: Option<String>,
+    /// 代码类证据必填：分析轮次号。
+    #[serde(default)]
+    pub attempt_no: Option<i32>,
+}
+
 /// One AI question inside `pm_discovery_submit_answers`.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct DiscoveryQuestionInput {
@@ -1132,6 +1162,39 @@ pub async fn discovery_submit_findings(
         added.push(view);
     }
     Ok(json!({ "added": added.len(), "findings": added }))
+}
+
+/// `pm_submit_evidence`：向既有发现补一条证据（I6-B-04）。
+///
+/// 代码类证据必须绑定 `import_id` / `repository_id` / `commit_sha` / `attempt_no`
+/// ——服务端会校验这四列与某一次分析轮次一致（DB 级组合 FK 兜底）。
+pub async fn submit_evidence(
+    pool: &PgPool,
+    args: SubmitEvidenceArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    ensure_member(pool, caller, args.project_id).await?;
+    let tenant_id = project_tenant(pool, args.project_id).await?;
+    let evidence = pm_application::discovery::submit_evidence(
+        pool,
+        tenant_id,
+        args.finding_id,
+        pm_application::discovery::EvidenceInput {
+            evidence_type: Some(args.evidence_type),
+            description: args.description,
+            file: None,
+            file_path: args.file_path,
+            symbol: args.symbol,
+            code_range: args.code_range,
+            repository_id: args.repository_id,
+            import_id: args.import_id,
+            commit_sha: args.commit_sha,
+            attempt_no: args.attempt_no,
+        },
+    )
+    .await
+    .map_err(map_discovery_error)?;
+    Ok(json!({ "evidence": evidence }))
 }
 
 /// `pm_discovery_submit_answers`：提交 AI 问题与用户回答回传（采集层）。

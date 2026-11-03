@@ -230,6 +230,16 @@ export interface ProjectDraft {
   };
 }
 
+/** 一次分析轮次（I6-B R-4-1：成功与失败都留档）。 */
+export interface ImportAttempt {
+  attempt_no: number;
+  status: string;
+  commit_sha: string | null;
+  error_code: string | null;
+  started_at: string;
+  finished_at: string | null;
+}
+
 export interface ImportSource {
   repository_id: string;
   label: string;
@@ -239,6 +249,8 @@ export interface ImportSource {
   size_bytes: number;
   truncated: boolean;
   error_code: string | null;
+  /** 该仓库的分析轮次历史。 */
+  attempts?: ImportAttempt[];
 }
 
 export interface ProjectImport {
