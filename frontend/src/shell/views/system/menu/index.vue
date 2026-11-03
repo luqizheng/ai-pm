@@ -15,11 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  DataTable,
-  FormDialog,
-  type TableColumn
-} from "@/shell/components";
+import { DataTable, FormDialog, type TableColumn } from "@/shell/components";
 
 const { t } = useI18n();
 const auth = useAuthStore();
@@ -85,7 +81,8 @@ function openCreate() {
           path: "/dashboard",
           name: "Dashboard",
           component: "dashboard/DashboardView",
-          meta: { title: "概览" }
+          // 标题存 i18n key（shell.routes.*），前端按 key 翻译；未登记的 key 回退显示原文
+          meta: { title: "shell.routes.dashboard" }
         }
       ],
       null,
@@ -102,7 +99,10 @@ async function openEdit(row: Record<string, unknown>) {
   try {
     const detail = await prue.configs.get(id);
     editingId.value = id;
-    editingEtag.value = typeof row.routes_etag === "string" ? row.routes_etag : detail.routes_etag;
+    editingEtag.value =
+      typeof row.routes_etag === "string"
+        ? row.routes_etag
+        : detail.routes_etag;
     form.value = {
       name: detail.name,
       description: detail.description ?? "",

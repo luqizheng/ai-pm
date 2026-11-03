@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { Sheet } from "./index";
+import { i18n } from "@/shell/i18n";
 
 const source = readFileSync(resolve(__dirname, "Sheet.vue"), "utf8");
 
@@ -13,6 +14,7 @@ const wrappers: Array<{ unmount: () => void }> = [];
 function mountSheet(props: Record<string, unknown> = {}) {
   const wrapper = mount(Sheet, {
     props: { open: true, title: "导航", ...props },
+    global: { plugins: [i18n] },
     attachTo: document.body,
     slots: { default: "<p>菜单</p>" }
   });

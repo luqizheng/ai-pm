@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 
 export interface CommandItem {
   id: string;
@@ -23,10 +24,21 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   open: false,
-  placeholder: "搜索…",
-  emptyText: "未找到匹配结果",
-  label: "命令面板"
+  placeholder: undefined,
+  emptyText: undefined,
+  label: undefined
 });
+
+const { t } = useI18n();
+
+// 默认文案走 i18n（调用方显式传入时优先）
+const labelText = computed(() => props.label ?? t("shell.command.label"));
+const placeholderText = computed(
+  () => props.placeholder ?? t("shell.command.placeholder")
+);
+const emptyTextText = computed(
+  () => props.emptyText ?? t("shell.command.emptyText")
+);
 
 const emit = defineEmits<{
   "update:open": [value: boolean];
@@ -96,7 +108,7 @@ function onKeydown(event: KeyboardEvent) {
     v-if="props.open"
     class="ui-command"
     role="dialog"
-    :aria-label="props.label"
+    :aria-label="labelText"
   >
     <div class="ui-command__panel">
       <input
@@ -105,8 +117,8 @@ function onKeydown(event: KeyboardEvent) {
         type="text"
         role="combobox"
         aria-expanded="true"
-        :aria-label="props.label"
-        :placeholder="props.placeholder"
+        :aria-label="labelText"
+        :placeholder="placeholderText"
         :value="query"
         @input="onInput"
         @keydown="onKeydown"
@@ -134,7 +146,7 @@ function onKeydown(event: KeyboardEvent) {
         </li>
       </ul>
       <p v-if="filtered.length === 0" class="ui-command__empty">
-        {{ props.emptyText }}
+        {{ emptyTextText }}
       </p>
     </div>
   </div>

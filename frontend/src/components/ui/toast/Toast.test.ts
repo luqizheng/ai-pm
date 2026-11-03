@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { Toast, ToastHost } from "./index";
+import { i18n } from "@/shell/i18n";
 
 const toastSource = readFileSync(resolve(__dirname, "Toast.vue"), "utf8");
 const hostSource = readFileSync(resolve(__dirname, "ToastHost.vue"), "utf8");
@@ -14,6 +15,7 @@ const wrappers: Array<{ unmount: () => void }> = [];
 function mountToast(props: Record<string, unknown> = {}) {
   const wrapper = mount(Toast, {
     props: { title: "标题", ...props },
+    global: { plugins: [i18n] },
     attachTo: document.body
   });
   wrappers.push(wrapper);
@@ -70,6 +72,13 @@ describe("Toast", () => {
     const close = document.querySelector<HTMLElement>(".ui-toast__close");
     expect(close).not.toBeNull();
     expect(close?.tagName).toBe("BUTTON");
+    expect(close?.getAttribute("aria-label")).toBe("关闭");
+  });
+
+  it("不传 closeLabel 时回退 i18n 默认文案（当前 locale）", () => {
+    mountToast({ variant: "success" });
+    const close = document.querySelector<HTMLElement>(".ui-toast__close");
+    expect(close?.getAttribute("aria-label")).toBe(String(i18n.global.t("common.close")));
     expect(close?.getAttribute("aria-label")).toBe("关闭");
   });
 
@@ -146,7 +155,10 @@ describe("Toast", () => {
   });
 
   it("ToastHost 同屏最多 1 条，新 toast 替换旧 toast", async () => {
-    const host = mount(ToastHost, { attachTo: document.body });
+    const host = mount(ToastHost, {
+      global: { plugins: [i18n] },
+      attachTo: document.body
+    });
     wrappers.push(host);
 
     host.vm.toast({ variant: "success", title: "第一条" });
@@ -162,7 +174,10 @@ describe("Toast", () => {
   });
 
   it("ToastHost 暴露 toast / dismiss 接口", async () => {
-    const host = mount(ToastHost, { attachTo: document.body });
+    const host = mount(ToastHost, {
+      global: { plugins: [i18n] },
+      attachTo: document.body
+    });
     wrappers.push(host);
 
     host.vm.toast({ variant: "info", title: "占位提示" });

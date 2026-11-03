@@ -17,6 +17,7 @@ import {
   ContextMenuTrigger
 } from "reka-ui";
 import { useI18n } from "vue-i18n";
+import { translateTitle } from "../i18n-helpers";
 
 export interface TabItem {
   path: string;
@@ -215,7 +216,9 @@ watch(
             @click="emit('select', tab.path)"
             @keydown.enter.prevent="emit('select', tab.path)"
           >
-            <span class="ui-tabbar__title">{{ tab.title }}</span>
+            <span class="ui-tabbar__title">{{
+              translateTitle(tab.title)
+            }}</span>
             <button
               v-if="tab.closable !== false"
               type="button"

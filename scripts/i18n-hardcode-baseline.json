@@ -1,34 +1,4 @@
 {
   "note": "check-i18n-hardcode.js 存量基线；新增硬编码中文必须修，勿直接重跑本参数扩容",
-  "fingerprints": [
-    "components/ui/breadcrumb/Breadcrumb.vue|withDefaults(defineProps<Props>(), { ariaLabel: \"面包屑\" });",
-    "components/ui/command/Command.vue|emptyText: \"未找到匹配结果\",",
-    "components/ui/command/Command.vue|label: \"命令面板\"",
-    "components/ui/command/Command.vue|placeholder: \"搜索…\",",
-    "components/ui/dialog/Dialog.vue|closeLabel: \"关闭\",",
-    "components/ui/pagination/Pagination.vue|:aria-label=\"`第 ${p} 页`\"",
-    "components/ui/pagination/Pagination.vue|ariaLabel: \"分页\",",
-    "components/ui/pagination/Pagination.vue|nextLabel: \"下一页\"",
-    "components/ui/pagination/Pagination.vue|prevLabel: \"上一页\",",
-    "components/ui/select/Select.vue|clearLabel: \"清除\",",
-    "components/ui/sheet/Sheet.vue|closeLabel: \"关闭\",",
-    "components/ui/toast/Toast.vue|closeLabel: \"关闭\",",
-    "shell/components/PageHeader.vue|backLabel: \"返回\"",
-    "shell/entry.ts|document.title = title ? `${title} · AI-PM 平台` : \"AI-PM 平台\";",
-    "shell/router/routes.ts|meta: { public: true, title: \"登录\" }",
-    "shell/router/routes.ts|meta: { title: \"AI 团队\" }",
-    "shell/router/routes.ts|meta: { title: \"AI 执行中心\" }",
-    "shell/router/routes.ts|meta: { title: \"个人设置\", icon: \"settings\" }",
-    "shell/router/routes.ts|meta: { title: \"产物验收\" }",
-    "shell/router/routes.ts|meta: { title: \"决策中心\" }",
-    "shell/router/routes.ts|meta: { title: \"建设中\" }",
-    "shell/router/routes.ts|meta: { title: \"概览\", icon: \"layout-dashboard\" }",
-    "shell/router/routes.ts|meta: { title: \"目标计划\" }",
-    "shell/router/routes.ts|meta: { title: \"需求管理\" }",
-    "shell/router/routes.ts|meta: { title: \"页面不存在\" }",
-    "shell/router/routes.ts|meta: { title: \"项目动态\" }",
-    "shell/router/routes.ts|meta: { title: \"项目总控\" }",
-    "shell/router/routes.ts|meta: { title: \"项目知识\" }",
-    "shell/views/system/menu/index.vue|meta: { title: \"概览\" }"
-  ]
+  "fingerprints": []
 }

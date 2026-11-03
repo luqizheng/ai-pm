@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import { useI18n } from "vue-i18n";
+
 export interface BreadcrumbItem {
   label: string;
   to?: string;
@@ -11,11 +14,18 @@ interface Props {
   ariaLabel?: string;
 }
 
-withDefaults(defineProps<Props>(), { ariaLabel: "面包屑" });
+const props = withDefaults(defineProps<Props>(), { ariaLabel: undefined });
+
+const { t } = useI18n();
+
+// 默认文案走 i18n（调用方显式传入时优先）
+const ariaLabelText = computed(
+  () => props.ariaLabel ?? t("shell.nav.breadcrumb")
+);
 </script>
 
 <template>
-  <nav class="ui-breadcrumb" :aria-label="ariaLabel">
+  <nav class="ui-breadcrumb" :aria-label="ariaLabelText">
     <ol class="ui-breadcrumb__list">
       <li
         v-for="(item, index) in items"

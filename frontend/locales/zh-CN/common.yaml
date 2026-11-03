@@ -5,6 +5,7 @@ common:
   cancel: 取消
   confirm: 确认
   close: 关闭
+  clear: 清除
   save: 保存
   search: 查询
   create: 新建

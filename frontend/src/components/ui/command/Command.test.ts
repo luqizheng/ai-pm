@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { Command } from "./index";
+import { i18n } from "@/shell/i18n";
 
 const items = [
   { id: "deploy", label: "新建部署", group: "部署" },
@@ -15,6 +16,7 @@ const wrappers: Array<{ unmount: () => void }> = [];
 function mountCommand(props: Record<string, unknown> = {}) {
   const wrapper = mount(Command, {
     props: { open: true, items, ...props },
+    global: { plugins: [i18n] },
     attachTo: document.body
   });
   wrappers.push(wrapper);
@@ -33,6 +35,19 @@ describe("Command", () => {
     const input = document.querySelector<HTMLInputElement>('[role="combobox"]');
     expect(input).not.toBeNull();
     expect(input?.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("不传文案时回退 i18n 默认（当前 locale）", () => {
+    mountCommand();
+    const dialog = document.querySelector('[role="dialog"]');
+    const input = document.querySelector<HTMLInputElement>('[role="combobox"]');
+    expect(dialog?.getAttribute("aria-label")).toBe(
+      String(i18n.global.t("shell.command.label"))
+    );
+    expect(dialog?.getAttribute("aria-label")).toBe("命令面板");
+    expect(input?.getAttribute("placeholder")).toBe(
+      String(i18n.global.t("shell.command.placeholder"))
+    );
   });
 
   it("列表项全部渲染且带 role=option", () => {

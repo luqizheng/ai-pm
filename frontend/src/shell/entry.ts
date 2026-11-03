@@ -1,6 +1,7 @@
-import { createApp } from "vue";
+import { createApp, watch } from "vue";
 import { createPinia } from "pinia";
-import { useI18n } from "./i18n";
+import { i18n, useI18n } from "./i18n";
+import { documentTitle } from "./i18n-helpers";
 import { router } from "./router";
 import ShellApp from "./ShellApp.vue";
 import { onUnauthorized } from "./api/client";
@@ -32,10 +33,14 @@ onUnauthorized(() => {
   }
 });
 
-// 页面标题随路由切换（Phase 2 §5.3）
+// 页面标题随路由切换（Phase 2 §5.3）；标题走 i18n-helpers，切语言也随当前路由刷新
 router.afterEach(to => {
-  const title = (to.meta?.title as string | undefined) ?? "";
-  document.title = title ? `${title} · AI-PM 平台` : "AI-PM 平台";
+  document.title = documentTitle(to);
+});
+
+// 切语言后标题里的页面名要跟着翻（afterEach 只在导航时触发）
+watch(i18n.global.locale, () => {
+  document.title = documentTitle(router.currentRoute.value);
 });
 
 router.isReady().then(() => {

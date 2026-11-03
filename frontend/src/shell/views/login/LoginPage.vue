@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/ui/form-field";
 import { useAuthStore } from "../../store/auth";
 import { onUnauthorized } from "../../api/client";
+import { i18n, setLocale, type SupportedLocale } from "../../i18n";
 
 const { t } = useI18n();
 
@@ -32,6 +33,18 @@ const points = computed(() => [
   t("shell.login.pointApprovals"),
   t("shell.login.pointAi")
 ]);
+
+/** 语言切换：当前语言 → 另一种语言 */
+const currentLocale = computed(
+  () => i18n.global.locale.value as SupportedLocale
+);
+const targetLocale = computed<SupportedLocale>(() =>
+  currentLocale.value === "zh-CN" ? "en" : "zh-CN"
+);
+
+function toggleLocale() {
+  setLocale(targetLocale.value);
+}
 
 function focusField(field: typeof usernameField) {
   const element = field.value?.$el as HTMLInputElement | undefined;
@@ -97,6 +110,18 @@ async function onSubmit() {
       <div class="ui-login__brand-top">
         <span class="ui-login__mark" aria-hidden="true" />
         <span class="ui-login__wordmark">{{ t("shell.login.title") }}</span>
+        <button
+          type="button"
+          class="ui-login__locale"
+          :aria-label="
+            t('shell.locale.switchTo', {
+              language: t(`shell.locale.${targetLocale}`)
+            })
+          "
+          @click="toggleLocale"
+        >
+          {{ t(`shell.locale.${targetLocale}`) }}
+        </button>
       </div>
 
       <div class="ui-login__brand-body">
@@ -250,6 +275,33 @@ async function onSubmit() {
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-caption);
   color: var(--text-primary);
+}
+
+/* 语言切换：与 wordmark 同排的轻量按钮 */
+.ui-login__locale {
+  margin-left: auto;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-decelerate),
+    color var(--duration-fast) var(--ease-decelerate);
+}
+
+.ui-login__locale:hover {
+  background: var(--surface-hover-veil);
+  color: var(--text-primary);
+}
+
+.ui-login__locale:focus-visible {
+  outline: var(--size-focus-ring) solid var(--accent);
+  outline-offset: var(--size-focus-ring);
 }
 
 .ui-login__brand-body {

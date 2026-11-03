@@ -2,6 +2,15 @@ shell:
   skipToContent: Skip to main content
   search:
     placeholder: Search…
+  command:
+    label: Command palette
+    placeholder: Search…
+    emptyText: No matching results
+  pagination:
+    ariaLabel: Pagination
+    prev: Previous page
+    next: Next page
+    pageN: Page {n}
   actions:
     aiWorkspace: AI Workspace
     refresh: Refresh
@@ -29,8 +38,12 @@ shell:
   title: AI-PM Console
   user:
     label: User
-    profile: Profile settings
+    profile: Profile
     logout: Sign out
+  locale:
+    switchTo: Switch to {language}
+    zh-CN: 中文
+    en: English
   login:
     title: AI-PM Console
     tagline: Projects, requirements, tasks and approvals on one spine
@@ -57,5 +70,50 @@ shell:
     backHome: Back to overview
     comingSoonTitle: This page is being migrated
     comingSoonHint: This menu entry has no PRISM version yet
+  routes:
+    login: Sign in
+    dashboard: Overview
+    profile: Profile
+    projectRepositories: Repositories
+    projectImport: Import project
+    customers: Customers
+    workspaceConsole: Console
+    workspaceTeam: AI Team
+    workspaceExecution: AI Execution
+    workspaceGoals: Goals & Plans
+    workspaceModels: Model Config
+    workspaceActivity: Activity
+    workspaceRequirements: Requirements
+    workspaceDecisions: Decisions
+    workspaceKnowledge: Knowledge
+    workspaceArtifacts: Artifacts
+    workspaceDelivery: Delivery
+    classicRequirements: Requirements
+    classicTasks: Tasks
+    classicApprovals: Approvals
+    comingSoon: Under construction
+    notFound: Page not found
+    system: System
+    audit: Audit Log
+    systemUser: Users
+    systemRole: Roles
+    systemPermission: Permissions
+    systemDept: Departments
+    systemMenu: Menus
+    systemSession: Online Sessions
+    systemToken: Token Clients
+    auditLoginLog: Login Logs
+    auditOperationLog: Operation Logs
+    notificationAnnouncement: Announcements
+    file: Files
+    config: Configuration
+    delivery: Delivery
+    projects: Projects
+    requirements: Requirements
+    tasks: Tasks
+    governance: Governance
+    approvals: Approvals
+    settings: Settings
+    inbox: Announcements
 
 # ── Framework system pages ─────────────────────────────────────────────

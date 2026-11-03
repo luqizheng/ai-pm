@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar } from "@/components/ui/avatar";
 import { useI18n } from "vue-i18n";
+import { i18n, setLocale, type SupportedLocale } from "../i18n";
 
 const { t } = useI18n();
 
@@ -23,8 +24,22 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{ profile: []; logout: [] }>();
 
+/** 当前语言与目标语言（单条目切换：显示「切到另一种语言」） */
+const currentLocale = computed(
+  () => i18n.global.locale.value as SupportedLocale
+);
+const targetLocale = computed<SupportedLocale>(() =>
+  currentLocale.value === "zh-CN" ? "en" : "zh-CN"
+);
+
 const items = computed<DropdownMenuItemOption[]>(() => [
   { label: props.profileLabel ?? t("shell.user.profile"), value: "profile" },
+  {
+    label: t("shell.locale.switchTo", {
+      language: t(`shell.locale.${targetLocale.value}`)
+    }),
+    value: "locale"
+  },
   {
     label: props.logoutLabel ?? t("shell.user.logout"),
     value: "logout",
@@ -34,6 +49,7 @@ const items = computed<DropdownMenuItemOption[]>(() => [
 
 function onSelect(item: DropdownMenuItemOption) {
   if (item.value === "logout") emit("logout");
+  else if (item.value === "locale") setLocale(targetLocale.value);
   else emit("profile");
 }
 </script>

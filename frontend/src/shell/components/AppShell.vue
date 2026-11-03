@@ -16,6 +16,7 @@ import {
   useSidebarCollapsed
 } from "../composables/useResponsive";
 import { useI18n } from "vue-i18n";
+import { menuTitle, routeRawTitle, routeTitle } from "../i18n-helpers";
 import { demoProjectId } from "@/workspace/fixtures";
 
 const { t } = useI18n();
@@ -40,9 +41,10 @@ const activePath = computed(() => route.path);
 const breadcrumbs = computed(() => {
   const crumbs: Array<{ label: string; to?: string }> = [];
   const node = menu.findByPath(route.path);
-  if (node) crumbs.push({ label: node.name });
-  const title = (route.meta?.title as string | undefined) ?? "";
-  if (title && (!node || node.name !== title)) crumbs.push({ label: title });
+  const nodeLabel = node ? menuTitle(node) : "";
+  if (nodeLabel) crumbs.push({ label: nodeLabel });
+  const title = routeTitle(route);
+  if (title && title !== nodeLabel) crumbs.push({ label: title });
   return crumbs;
 });
 
@@ -65,7 +67,7 @@ const commandItems = computed<CommandItem[]>(() => {
       if (node.path)
         items.push({
           id: node.path,
-          label: node.name,
+          label: menuTitle(node),
           group: t("shell.nav.group")
         });
       if (node.children.length) walk(node.children);
@@ -102,16 +104,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 watch(
   () => route.fullPath,
   () => {
-    const title = (route.meta?.title as string | undefined) ?? "";
-    liveMessage.value = title;
+    liveMessage.value = routeTitle(route);
     mainRef.value?.focus();
   }
 );
 
-// 打开过的页面进标签栏
+// 打开过的页面进标签栏：存「key 或原文」快照，TabBar 渲染时翻译，
+// 切语言后已打开的页签标题随之更新
 function ensureTab(path: string) {
   if (!path || path === "/login" || path === "/") return;
-  const title = (route.meta?.title as string | undefined) ?? path;
+  const title = routeRawTitle(route) || path;
   if (!tabs.value.some(tab => tab.path === path)) {
     tabs.value = [...tabs.value, { path, title }];
   }

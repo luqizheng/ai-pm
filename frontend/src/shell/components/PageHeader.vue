@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { ChevronLeft } from "lucide-vue-next";
+import { useI18n } from "vue-i18n";
 
 interface Props {
   /** 页面标题 */
@@ -16,8 +18,13 @@ const props = withDefaults(defineProps<Props>(), {
   title: undefined,
   subtitle: undefined,
   back: false,
-  backLabel: "返回"
+  backLabel: undefined
 });
+
+const { t } = useI18n();
+
+// 默认文案走 i18n（调用方显式传入时优先）
+const backLabelText = computed(() => props.backLabel ?? t("common.back"));
 
 const emit = defineEmits<{ back: [] }>();
 </script>
@@ -29,7 +36,7 @@ const emit = defineEmits<{ back: [] }>();
         v-if="props.back"
         type="button"
         class="ui-page-header__back"
-        :aria-label="props.backLabel"
+        :aria-label="backLabelText"
         @click="emit('back')"
       >
         <ChevronLeft :size="18" aria-hidden="true" />

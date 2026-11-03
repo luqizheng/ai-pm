@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import {
   DialogClose,
   DialogContent,
@@ -8,6 +9,7 @@ import {
   DialogRoot,
   DialogTitle
 } from "reka-ui";
+import { useI18n } from "vue-i18n";
 
 interface Props {
   /** 是否打开（v-model:open） */
@@ -26,9 +28,14 @@ const props = withDefaults(defineProps<Props>(), {
   open: false,
   title: undefined,
   description: undefined,
-  closeLabel: "关闭",
+  closeLabel: undefined,
   side: "left"
 });
+
+const { t } = useI18n();
+
+// 默认文案走 i18n（调用方显式传入时优先）
+const closeLabelText = computed(() => props.closeLabel ?? t("common.close"));
 
 const emit = defineEmits<{ "update:open": [value: boolean] }>();
 </script>
@@ -44,7 +51,7 @@ const emit = defineEmits<{ "update:open": [value: boolean] }>();
       >
         <header class="ui-sheet__header">
           <DialogTitle class="ui-sheet__title">{{ props.title }}</DialogTitle>
-          <DialogClose class="ui-sheet__close" :aria-label="props.closeLabel">
+          <DialogClose class="ui-sheet__close" :aria-label="closeLabelText">
             <slot name="close">×</slot>
           </DialogClose>
         </header>

@@ -11,6 +11,7 @@ import {
   SelectValue,
   SelectViewport
 } from "reka-ui";
+import { useI18n } from "vue-i18n";
 import { cn } from "@/lib/cn";
 import type { SelectOption } from "./types";
 
@@ -49,7 +50,7 @@ const props = withDefaults(defineProps<Props>(), {
   modelValue: undefined,
   options: () => [],
   clearable: false,
-  clearLabel: "清除",
+  clearLabel: undefined,
   placeholder: "",
   disabled: false,
   invalid: false,
@@ -61,6 +62,11 @@ const props = withDefaults(defineProps<Props>(), {
   align: "start",
   side: "bottom"
 });
+
+const { t } = useI18n();
+
+// 默认文案走 i18n（调用方显式传入时优先）
+const clearLabelText = computed(() => props.clearLabel ?? t("common.clear"));
 
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
@@ -111,7 +117,7 @@ function onUpdate(value: unknown) {
         v-if="clearable && modelValue"
         type="button"
         class="ui-select__clear"
-        :aria-label="clearLabel"
+        :aria-label="clearLabelText"
         @click.stop="onClear"
       >
         <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">

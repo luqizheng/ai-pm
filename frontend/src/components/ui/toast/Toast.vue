@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
 
 export type ToastVariant = "success" | "info" | "warning" | "danger";
 
@@ -24,10 +25,15 @@ const props = withDefaults(defineProps<Props>(), {
   variant: "info",
   description: undefined,
   closable: true,
-  closeLabel: "关闭",
+  closeLabel: undefined,
   duration: 4000,
   open: true
 });
+
+const { t } = useI18n();
+
+// 默认文案走 i18n（调用方显式传入时优先）
+const closeLabelText = computed(() => props.closeLabel ?? t("common.close"));
 
 const emit = defineEmits<{ "update:open": [value: boolean] }>();
 
@@ -86,7 +92,7 @@ function close() {
         v-if="closable"
         type="button"
         class="ui-toast__close"
-        :aria-label="closeLabel"
+        :aria-label="closeLabelText"
         @click="close"
       >
         <slot name="close">×</slot>

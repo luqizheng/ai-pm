@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { Pagination } from "./index";
+import { i18n } from "@/shell/i18n";
 
 function mountPagination(props: Record<string, unknown> = {}) {
   return mount(Pagination, {
-    props: { page: 2, total: 100, pageSize: 10, ...props }
+    props: { page: 2, total: 100, pageSize: 10, ...props },
+    global: { plugins: [i18n] }
   });
 }
 
@@ -54,7 +56,8 @@ describe("Pagination", () => {
 describe("Pagination 页码窗口", () => {
   it("总页数不多时渲染全部页码", () => {
     const w = mount(Pagination, {
-      props: { page: 1, total: 50, pageSize: 10 }
+      props: { page: 1, total: 50, pageSize: 10 },
+      global: { plugins: [i18n] }
     });
     const labels = w.findAll(".ui-pagination__button--page").map(b => b.text());
     expect(labels).toEqual(["1", "2", "3", "4", "5"]);
@@ -62,7 +65,8 @@ describe("Pagination 页码窗口", () => {
 
   it("总页数很多时只渲染窗口页码与省略号", () => {
     const w = mount(Pagination, {
-      props: { page: 50, total: 1000, pageSize: 10 }
+      props: { page: 50, total: 1000, pageSize: 10 },
+      global: { plugins: [i18n] }
     });
     const labels = w.findAll(".ui-pagination__button--page").map(b => b.text());
     expect(labels.length).toBeLessThan(10);

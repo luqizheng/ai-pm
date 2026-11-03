@@ -1,4 +1,4 @@
-import { type I18n, createI18n } from "vue-i18n";
+import { createI18n } from "vue-i18n";
 import type { App } from "vue";
 
 /**
@@ -57,12 +57,42 @@ function buildMessages() {
   return messages;
 }
 
-export const i18n: I18n = createI18n({
+/** locale 持久化键与支持语言（默认中文，切换走 setLocale） */
+export const LOCALE_STORAGE_KEY = "aipm-locale";
+export const SUPPORTED_LOCALES = ["zh-CN", "en"] as const;
+export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
+
+function initialLocale(): SupportedLocale {
+  try {
+    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
+    if (stored && (SUPPORTED_LOCALES as readonly string[]).includes(stored)) {
+      return stored as SupportedLocale;
+    }
+  } catch {
+    // localStorage 不可用（隐私模式等）时走默认语言
+  }
+  return "zh-CN";
+}
+
+// 不要显式标注 `I18n`：那会把 legacy/legacy:false 的联合类型摊宽，
+// 导致 `i18n.global.locale` 变成 `string | WritableComputedRef<string>`。
+// 让 createI18n 按 `legacy: false` 推断出 composition 模式的类型。
+export const i18n = createI18n({
   legacy: false,
-  locale: "zh-CN",
+  locale: initialLocale(),
   fallbackLocale: "en",
   messages: buildMessages()
 });
+
+/** 切换语言并持久化；页面标题等派生文案由调用方随响应式自动更新 */
+export function setLocale(locale: SupportedLocale) {
+  i18n.global.locale.value = locale;
+  try {
+    localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+  } catch {
+    // 持久化失败不影响本次切换
+  }
+}
 
 export function useI18n(app: App) {
   app.use(i18n);

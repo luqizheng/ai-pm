@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 
 interface Props {
   /** 当前页码（1 起） */
@@ -17,10 +18,23 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  ariaLabel: "分页",
-  prevLabel: "上一页",
-  nextLabel: "下一页"
+  ariaLabel: undefined,
+  prevLabel: undefined,
+  nextLabel: undefined
 });
+
+const { t } = useI18n();
+
+// 默认文案走 i18n（调用方显式传入时优先）
+const ariaLabelText = computed(
+  () => props.ariaLabel ?? t("shell.pagination.ariaLabel")
+);
+const prevLabelText = computed(
+  () => props.prevLabel ?? t("shell.pagination.prev")
+);
+const nextLabelText = computed(
+  () => props.nextLabel ?? t("shell.pagination.next")
+);
 
 const emit = defineEmits<{ "update:page": [value: number] }>();
 
@@ -64,12 +78,12 @@ function go(page: number) {
 </script>
 
 <template>
-  <nav class="ui-pagination" :aria-label="ariaLabel">
+  <nav class="ui-pagination" :aria-label="ariaLabelText">
     <button
       type="button"
       class="ui-pagination__button"
       :disabled="props.page <= 1"
-      :aria-label="props.prevLabel"
+      :aria-label="prevLabelText"
       @click="go(props.page - 1)"
     >
       ‹
@@ -84,7 +98,7 @@ function go(page: number) {
         class="ui-pagination__button ui-pagination__button--page"
         :class="{ 'is-current': p === props.page }"
         :aria-current="p === props.page ? 'page' : undefined"
-        :aria-label="`第 ${p} 页`"
+        :aria-label="t('shell.pagination.pageN', { n: p })"
         @click="go(p)"
       >
         {{ p }}
@@ -94,7 +108,7 @@ function go(page: number) {
       type="button"
       class="ui-pagination__button"
       :disabled="props.page >= totalPages"
-      :aria-label="props.nextLabel"
+      :aria-label="nextLabelText"
       @click="go(props.page + 1)"
     >
       ›

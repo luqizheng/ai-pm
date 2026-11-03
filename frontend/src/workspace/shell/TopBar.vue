@@ -13,6 +13,7 @@ import {
 import { useTheme } from "../useTheme";
 import { useWorkspaceStore } from "../store";
 import { navDefaultSlug, navSlugs, type NavMode } from "../nav-config";
+import { translateTitle } from "@/shell/i18n-helpers";
 
 defineProps<{ project: string; page: string }>();
 
@@ -53,7 +54,7 @@ function switchMode(mode: NavMode) {
       <ChevronRight :size="14" class="ws-breadcrumb-sep" aria-hidden="true" />
       <span class="ws-breadcrumb-project">{{ project }}</span>
       <ChevronRight :size="14" class="ws-breadcrumb-sep" aria-hidden="true" />
-      <span class="ws-breadcrumb-page">{{ page }}</span>
+      <span class="ws-breadcrumb-page">{{ translateTitle(page) }}</span>
     </nav>
     <div class="ws-topbar-actions">
       <button

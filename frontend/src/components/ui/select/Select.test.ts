@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { h, nextTick } from "vue";
 import { Select } from "./index";
+import { i18n } from "@/shell/i18n";
 
 const options = [
   { value: "alpha", label: "Alpha" },
@@ -22,6 +23,7 @@ const wrappers: VueWrapper[] = [];
 function mountSelect(props: Record<string, unknown> = {}) {
   const wrapper = mount(Select, {
     props: { options, ariaLabel: "选择项", ...props },
+    global: { plugins: [i18n] },
     attachTo: document.body
   });
   wrappers.push(wrapper);
@@ -177,6 +179,7 @@ describe("Select", () => {
   it("item 插槽可自定义选项内容", async () => {
     const w = mount(Select, {
       props: { options, ariaLabel: "选择项" },
+      global: { plugins: [i18n] },
       slots: {
         item: (slotProps: { option: { label: string } }) =>
           h("em", { class: "custom" }, slotProps.option.label)

@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { ChevronRight } from "lucide-vue-next";
 import type { MenuNode } from "../store/menu";
+import { menuTitle } from "../i18n-helpers";
 import { resolveIcon } from "./icons";
 
 interface Props {
@@ -20,6 +21,9 @@ const expanded = defineModel<Set<string>>("expanded", {
 });
 
 const icon = computed(() => resolveIcon(props.node.icon));
+
+// 菜单名：path 命中标题映射则翻译，否则回退后端原文（切语言响应式生效）
+const label = computed(() => menuTitle(props.node));
 
 const isActive = computed(() => props.node.path === props.activePath);
 
@@ -59,7 +63,7 @@ function toggle() {
         paddingLeft: `calc(var(--space-3) + ${props.depth} * var(--space-4))`
       }"
       :aria-current="isActive ? 'page' : undefined"
-      :aria-label="props.node.name"
+      :aria-label="label"
       @click="toggle"
     >
       <component
@@ -69,7 +73,7 @@ function toggle() {
         :size="18"
         aria-hidden="true"
       />
-      <span class="ui-sidebar__label">{{ props.node.name }}</span>
+      <span class="ui-sidebar__label">{{ label }}</span>
       <ChevronRight
         v-if="props.node.children.length"
         class="ui-sidebar__chevron"

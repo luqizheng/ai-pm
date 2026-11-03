@@ -2,6 +2,15 @@ shell:
   skipToContent: 跳到主内容
   search:
     placeholder: 搜索…
+  command:
+    label: 命令面板
+    placeholder: 搜索…
+    emptyText: 未找到匹配结果
+  pagination:
+    ariaLabel: 分页
+    prev: 上一页
+    next: 下一页
+    pageN: 第 {n} 页
   actions:
     aiWorkspace: AI 工作空间
     refresh: 刷新
@@ -31,6 +40,10 @@ shell:
     label: 用户
     profile: 个人设置
     logout: 退出登录
+  locale:
+    switchTo: 切换到 {language}
+    zh-CN: 中文
+    en: English
   login:
     title: AI-PM 平台
     tagline: 项目、需求、任务与审批，走同一条主干
@@ -57,5 +70,50 @@ shell:
     backHome: 返回概览
     comingSoonTitle: 该页面正在迁移
     comingSoonHint: 这个菜单指向的页面还没有 PRISM 版本
+  routes:
+    login: 登录
+    dashboard: 概览
+    profile: 个人设置
+    projectRepositories: 代码仓库
+    projectImport: 导入项目
+    customers: 客户
+    workspaceConsole: 项目总控
+    workspaceTeam: AI 团队
+    workspaceExecution: AI 执行中心
+    workspaceGoals: 目标计划
+    workspaceModels: 模型配置
+    workspaceActivity: 项目动态
+    workspaceRequirements: 需求管理
+    workspaceDecisions: 决策中心
+    workspaceKnowledge: 项目知识
+    workspaceArtifacts: 产物验收
+    workspaceDelivery: 交付验收
+    classicRequirements: 需求管理
+    classicTasks: 任务
+    classicApprovals: 审批确认
+    comingSoon: 建设中
+    notFound: 页面不存在
+    system: 系统管理
+    audit: 审计日志
+    systemUser: 用户管理
+    systemRole: 角色管理
+    systemPermission: 权限管理
+    systemDept: 部门管理
+    systemMenu: 菜单管理
+    systemSession: 在线会话
+    systemToken: Token 客户端
+    auditLoginLog: 登录日志
+    auditOperationLog: 操作日志
+    notificationAnnouncement: 通知公告
+    file: 文件管理
+    config: 配置中心
+    delivery: 交付
+    projects: 项目
+    requirements: 需求
+    tasks: 任务
+    governance: 治理
+    approvals: 审批确认
+    settings: 设置
+    inbox: 公告中心
 
 # ── 框架系统页 ─────────────────────────────────────────────────────────

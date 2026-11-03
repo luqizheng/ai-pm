@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { Dialog } from "./index";
+import { i18n } from "@/shell/i18n";
 
 const source = readFileSync(resolve(__dirname, "Dialog.vue"), "utf8");
 
@@ -13,6 +14,7 @@ const wrappers: Array<{ unmount: () => void }> = [];
 function mountDialog(props: Record<string, unknown> = {}) {
   const wrapper = mount(Dialog, {
     props: { open: true, title: "编辑部署", ...props },
+    global: { plugins: [i18n] },
     attachTo: document.body,
     slots: { default: "<p>表单内容</p>" }
   });
