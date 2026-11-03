@@ -31,8 +31,16 @@ services:
       # 接入指引（/install/{tool}）里的平台地址与 Host 头来源——必须写测试机对外
       # 地址，否则指引会把执行端指向回环地址。
       AI_PM_PUBLIC_BASE_URL: "${AI_PM_PUBLIC_BASE_URL:?AI_PM_PUBLIC_BASE_URL must be set on the cross-machine test server}"
+      # 知识库 Git 仓（Markdown 真源）挂到卷上：不设时落在容器内 /ai-pm-knowledge，
+      # 容器重建即丢。首用自初始化（ensure_ready 建仓+播种模板）。
+      AI_PM_KNOWLEDGE_ROOT: /data/knowledge
+    volumes:
+      - pm-api-knowledge:/data/knowledge
 
   # token-service 额外发布 JWKS 端点，便于测试机从外部核对 JWKS 与登录链路
   token-service:
     ports:
       - "8082:8082"
+
+volumes:
+  pm-api-knowledge:

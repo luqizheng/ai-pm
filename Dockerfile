@@ -41,6 +41,12 @@ RUN apt-get update \
 WORKDIR /app
 
 FROM runtime-base AS runtime-pm-api
+# 知识库是 Git-backed（Markdown 真源）：pm_submit_document / pm_discovery_submit_proposal
+# 走知识写入管线时在容器内 shell 出 `git`。2026-11-03 两机实测发现运行时镜像缺
+# git → 知识写入全部失败（本机 e2e 跑宿主二进制没暴露）。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /build/target/release/pm-api /app/pm-api
 ENV PM_API_PORT=8090
 EXPOSE 8090
