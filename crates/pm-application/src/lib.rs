@@ -10,6 +10,7 @@ pub mod delivery;
 pub mod devenv;
 pub mod discovery;
 pub mod git_access;
+pub mod git_capability;
 pub mod ingestion;
 pub mod knowledge;
 pub mod knowledge_index;
@@ -103,7 +104,8 @@ pub use onboarding::{
 pub use policy_engine::{PolicyContext, PolicyEngine, PolicyLoadError};
 pub use project_member::{
     MemberChangeOutcome, MemberOp, MemberRow, ProjectMemberError, apply_member_change,
-    caller_can_see_members, list_members, owned_project_ids, revoke_principal_memberships,
+    caller_can_see_members, is_project_manager, list_members, owned_project_ids,
+    revoke_principal_memberships,
 };
 pub use read::{ReadError, TaskContextRow, task_context};
 pub use run_context::{
@@ -144,4 +146,8 @@ pub use discovery::{
     create_session, defer_question, get_session, get_session_detail, list_findings, list_messages,
     list_questions, list_sessions, set_proposal_status, submit_evidence,
     transition_session,
+};pub use git_capability::{
+    CapabilityGrant, GitCapabilityError, effective_capabilities_for, list_grants, revoke_grant,
+    set_grant,
 };
+

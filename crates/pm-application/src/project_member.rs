@@ -172,6 +172,43 @@ pub async fn apply_member_change(
 }
 
 /// 调用人是否是该项目的管理者：项目 owner **或** 租户 owner/admin。
+///
+/// 供 Project 成员管理（apply_member_change）与 Git 能力授权管理等
+/// 「项目级管理面」共用（S01-W13 / I3-B 同口径）。
+pub async fn is_project_manager(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    actor_id: Uuid,
+) -> Result<bool, ProjectMemberError> {
+    let tenant_role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2",
+    )
+    .bind(tenant_id)
+    .bind(actor_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(db_err)?;
+    if let Some(role) = tenant_role.as_deref().and_then(TenantRole::parse) {
+        if role.is_tenant_admin() {
+            return Ok(true);
+        }
+    }
+    let project_role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM core.project_member WHERE project_id = $1 AND principal_id = $2",
+    )
+    .bind(project_id)
+    .bind(actor_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(db_err)?;
+    Ok(project_role
+        .as_deref()
+        .and_then(ProjectMemberRole::parse)
+        .is_some_and(|role| role.is_manager()))
+}
+
+/// 调用人是否是该项目的管理者：项目 owner **或** 租户 owner/admin。
 async fn is_manager(
     tx: &mut Transaction<'static, Postgres>,
     tenant_id: Uuid,
