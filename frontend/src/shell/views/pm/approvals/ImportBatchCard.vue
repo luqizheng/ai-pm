@@ -4,7 +4,7 @@ import { useI18n } from "vue-i18n";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { getImportProposals } from "@/api/imports";
+import { getImportProposals, terminateImport } from "@/api/imports";
 import { decideApproval } from "@/api/pm";
 import type { ProposalRef } from "@/api/types";
 
@@ -50,6 +50,21 @@ async function decideAll(decision: "approved" | "rejected") {
   }
 }
 
+/** C-2：提案挂起时也可显式终止导入（释放 active 名额，Project 可重新发起）。 */
+async function terminate() {
+  if (busy.value) return;
+  busy.value = true;
+  try {
+    await terminateImport(props.projectId, props.importId);
+    proposals.value = [];
+    toast.toast({ variant: "success", title: t("pm.importBatch.terminateDone") });
+  } catch {
+    toast.toast({ variant: "danger", title: t("failed") });
+  } finally {
+    busy.value = false;
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -70,6 +85,9 @@ onMounted(load);
           @click="decideAll('rejected')"
         >
           {{ t("pm.importBatch.rejectAll") }}
+        </Button>
+        <Button size="sm" variant="secondary" :disabled="busy" @click="terminate">
+          {{ t("pm.importBatch.terminate") }}
         </Button>
         <Button size="sm" :loading="busy" @click="decideAll('approved')">
           {{ t("pm.importBatch.approveAll") }}

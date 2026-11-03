@@ -99,6 +99,8 @@ importBatch:
   title: 'Project cold start ({count} proposals)'
   approveAll: Approve all
   rejectAll: Reject all
+  terminate: Terminate import
+  terminateDone: Import terminated; the slot is released
   reason: Batch decision (cold-start import)
   partial: '{count} items failed; retry them individually'
   done: Batch decision submitted

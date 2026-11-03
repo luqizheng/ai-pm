@@ -99,6 +99,8 @@ importBatch:
   title: "项目冷启动（{count} 项提案）"
   approveAll: 整批批准
   rejectAll: 整批驳回
+  terminate: 终止导入
+  terminateDone: 导入已终止，名额已释放
   reason: 批量审批（冷启动导入）
   partial: "有 {count} 项失败，可单独重试"
   done: 批次审批完成
