@@ -14,14 +14,27 @@ RUN apt-get update \
 ARG CARGO_PROXY=""
 ENV http_proxy=${CARGO_PROXY} \
     https_proxy=${CARGO_PROXY}
+# 仓库 cargo 配置：私有 registry（kellnr：digua_common_jwt 等 lmms 基座 crate）
+# 与 crates.io 镜像源（rsproxy）。不带进镜像则 cargo 报
+# "registry index was not found in any configuration: `kellnr`"。
+# ⚠️ 内网构建须能访问 192.168.2.12:16444（kellnr 匿名读可用）。
+COPY .cargo .cargo
 COPY Cargo.toml Cargo.lock ./
 COPY crates crates
 COPY apps apps
 COPY migrations migrations
 COPY policies policies
-RUN cargo build --release --bins
+# skills/：apps/pm-api/build.rs 把仓库根 skills/ 白名单打包成 zip 内嵌进二进制
+# （缺目录 → build.rs panic "skills package entry ... unreadable"）
+COPY skills skills
+# --config 'build.rustc-wrapper=""'：仓内 .cargo/config.toml 的 sccache wrapper
+# 只对本机有效，容器内无 sccache → 必须覆盖掉，否则 cargo 报 "sccache not found"。
+RUN cargo build --release --bins --config 'build.rustc-wrapper=""'
 
-FROM debian:bookworm-slim AS runtime-base
+# ⚠️ 运行时必须与构建镜像同 Debian 大版本：rust:1-slim 现在是 Debian 13 trixie
+#    （GLIBC 2.41），而 bookworm 只有 GLIBC 2.36 → 容器启动即报
+#    "weak version `GLIBC_2.39' not found"。
+FROM debian:trixie-slim AS runtime-base
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*

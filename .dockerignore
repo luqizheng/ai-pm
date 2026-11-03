@@ -1,6 +1,5 @@
 target/
 .git/
-.cargo/
 docs/
 docs-site/
 node_modules/
