@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# S01 基线 §4.4 / §11：迁移 0031 的「升级路径与环境一致性」演练。
+# S01 基线 §4.4 / §11：迁移的「升级路径与环境一致性」演练。
 #
 # 演练内容：
 #   1. 旧环境：空库按序执行 0001–0028（模拟存量部署）。
-#   2. 升级：追加执行 0031。
-#   3. 一致性：与「空库直接迁到 0031」的 Schema 逐对象比对
+#   2. 升级：追加执行 0028 之后的**全部**增量迁移（0030、0031、0032、0033）。
+#   3. 一致性：与「空库直接迁到最新」的 Schema 逐对象比对
 #      （表集合 / 列集合 / 约束集合 / 索引集合必须一致）。
 #
 # 用法：bash scripts/upgrade-drill-0028-to-0031.sh
 # 依赖：本机 5435 端口的 aipm PG 容器（docker-compose.dev.yml）。
+#
+# 文件名保留「0028-to-0031」（基线冻结时的编号），实际覆盖到**当前最新**迁移；
+# 脚本按文件名排序动态执行 0030 之后的全部迁移，新增迁移无需改脚本。
 set -euo pipefail
 
 HOST_PORT="${HOST_PORT:-5435}"
@@ -32,7 +35,7 @@ for f in migrations/0*.sql; do
   echo "  applied $base"
 done
 
-echo "── 2. 升级：0028 之后的全部增量迁移（0030、0031）──"
+echo "── 2. 升级：0028 之后的全部增量迁移（0030、0031、0032、0033）──"
 for f in migrations/0*.sql; do
   base=$(basename "$f")
   [ "$base" \< "0030_project_member_role.sql" ] && continue
@@ -40,7 +43,7 @@ for f in migrations/0*.sql; do
   echo "  applied $base"
 done
 
-echo "── 3. 新环境：全序 0001–0031 ──"
+echo "── 3. 新环境：全序 0001–0033 ──"
 $PSQL -d postgres -c "DROP DATABASE IF EXISTS $DB_FRESH;" >/dev/null
 $PSQL -d postgres -c "CREATE DATABASE $DB_FRESH;" >/dev/null
 for f in migrations/0*.sql; do
@@ -83,7 +86,7 @@ else
   exit 1
 fi
 
-echo "── 5. 0031 关键对象抽查（升级库）──"
+echo "── 5. 关键对象抽查（升级库）──"
 check() {
   local desc="$1" sql="$2" expect="$3"
   local got
@@ -115,7 +118,14 @@ check "task_repository 仓库 FK 为 RESTRICT（非 CASCADE）" \
   "SELECT count(*) FROM pg_constraint con JOIN pg_class c ON c.oid=con.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='delivery' AND c.relname='task_repository' AND con.contype='f' AND con.confdeltype='r'" 1
 check "discovery 域不得引用 repo_import（Q1 单向不变量保持）" \
   "SELECT count(*) FROM pg_constraint con JOIN pg_class c ON c.oid=con.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_class t ON t.oid=con.confrelid JOIN pg_namespace tn ON tn.oid=t.relnamespace WHERE n.nspname='discovery' AND tn.nspname='integration' AND t.relname='repo_import' AND con.contype='f'" 0
+# 0032/0033（I3 V1.1 简化裁决）：快照锚点列保留、授权表已撤下。
+check "task_run.policy_snapshot_hash 列存在（I3-D 锚点）" \
+  "SELECT count(*) FROM information_schema.columns WHERE table_schema='delivery' AND table_name='task_run' AND column_name='policy_snapshot_hash'" 1
+check "Git 能力授权表已撤下（0033）" \
+  "SELECT count(*) FROM information_schema.tables WHERE table_schema='integration' AND table_name='git_capability_grant'" 0
+check "授权表索引已随之撤下" \
+  "SELECT count(*) FROM pg_indexes WHERE schemaname='integration' AND indexname='idx_git_capability_grant_principal'" 0
 
 rm -f .workbuddy/drill_upgrade.txt .workbuddy/drill_fresh.txt .workbuddy/drill_diff.txt
 echo ""
-echo "演练通过：0028 → 0031 升级路径与环境一致性 ✅"
+echo "演练通过：0028 → 0033 升级路径与环境一致性 ✅"

@@ -146,11 +146,11 @@
 | I2-D | S01-3 | W33 | Finding 创建入口与 **P0 安全修复** | I2 V1.1 §16 | I2-B、I2-C | 0031 | 已修（同项目仓库校验 + 定态收口） | 已修（AgentRelayed 通道） | — | `finding.rs` | I2-D 双入口同修 | 串行 | G-INTERFACE | **已实施（2026-11-04，双入口同批）** |
 | I2-E | S01-3 | W37+W64 | 并发、审计推导与全量验收 | I2 V1.1 §16 | I2-C、I2-D | — | — | — | — | 集成测试 | I2-001~033 + §15.3 十五场景 | 串行 | G-ACCEPT | **已实施（2026-11-04；6 例并发/推导新绿；场景 10 由同事务结构性保证；归档竞争完整路径待 I1-D）** |
 | I3-A | S01-0→S01-1 | W02+W05 | 现有权限链路核验 | I3 §12 | — | — | — | — | — | `git_access.rs` | 交付 Git 权限现状矩阵 | 可并行 | — | 已完成（本基线 §4-D7） |
-| I3-B | S01-1 | W12+W24 | Git 操作能力模型（枚举/字段/主体/策略） | I3 §12 | I3-A | **0032**（policy_snapshot_hash + git_capability_grant） | PUT/DELETE/GET capabilities | — | — | `pm-domain::git_capability` + `pm-application::git_capability` | I3-001~006 | 串行 | G-USER(B-5/B-6) | **已实施（2026-11-04，B-6 默认方案 A）** |
-| I3-C | S01-2 | W22+W24 | Task 仓库范围 | I3 §12 | I3-B、I6-B-03 | 0031 | 需新增 | — | — | `task_repository` | I3-007~012 | 串行 | G-DDL | 仅设计 |
-| I3-D | S01-4 | — | Run 授权快照（SHA-256 内容寻址） | I3 §12 | I3-B | 需新增列 | — | — | — | `task_run` | I3-013~017 | 串行 | G-USER(B-6) | 仅设计 |
-| I3-E | S01-4 | — | 执行期强校验 | I3 §12 | I3-D、I1-A | — | — | `pm_*` 入口 | `CodexExecutor` | `git_access.rs` | I3-018~021 | 串行 | — | 仅设计 |
-| I3-F | S01-6 | W63 | 审计与回归 | I3 §12 | I3-B~I3-E、I1-D | — | — | — | — | 集成测试 | I3-022~024 | 串行 | G-ACCEPT | 仅设计 |
+| I3-B | S01-1 | W12+W24 | Git 访问模型（**V1.1 简化**：单一 `read_write` 档位） | I3 §0.0（V1.1） | I3-A | **0032**（policy_snapshot_hash）+ **0033**（DROP 授权表） | —（授权端点已撤下） | — | — | `pm-domain::repo_access` + `pm-application::repo_access` | I3-001~006（按 §0.0.6 改写） | 串行 | G-USER(B-5/B-6) | **已实施（2026-11-04；同日按 V1.1 简化裁决重做：撤下六能力/授权表/REST，判定层改单一档位）** |
+| I3-C | S01-2 | W22+W24 | Task 仓库范围 | I3 §12 | I3-B、I6-B-03 | 0031（既有 `task_repository`） | — | — | — | `task_repository` + `repo_access::build_task_repo_access_tx` | I3-007~012 | 串行 | G-DDL | **已实施（2026-11-04）：范围 = Task 关联仓 ∩ verified** |
+| I3-D | S01-4 | — | Run 授权快照（SHA-256 内容寻址） | I3 §12 | I3-B | 0032（`policy_snapshot_hash`） | — | — | — | `task_run.policy_snapshot` / `repository_policy_snapshots` | I3-013~017 | 串行 | G-USER(B-6) | **已实施（2026-11-04）：快照记「可访问仓库清单」** |
+| I3-E | S01-4 | — | 执行期强校验（快照 ∩ 现状） | I3 §12 | I3-D、I1-A | — | — | `pm_*` 入口 | `CodexExecutor` | `repo_access::execution_allows` + 执行器物化前过滤 | I3-018~021 | 串行 | — | **已实施（2026-11-04）：归档/仓库失验即时阻断** |
+| I3-F | S01-6 | W63 | 审计与回归 | I3 §12 | I3-B~I3-E、I1-D | — | — | — | — | 集成测试 | I3-022~024（按 §0.0.6 改写） | 串行 | G-ACCEPT | **部分实施（2026-11-04）：快照生成 + 归档/取消联动回归已过；直接 Git 绕过测试属 T-090 两机实测** |
 | I4-A | S01-0→S01-5 | W02+W52 | Knowledge 现状核验 | I4 §13 | — | — | — | — | — | `knowledge.rs` | 交付 `docs/s01-i4-knowledge-facts.md` | 可并行 | — | 未开工 |
 | I4-B | S01-5 | W52+W53 | Goal 领域规则 | I4 §13 | I4-A | 无需新迁移（复用 UNIQUE project_id+doc_key） | GET /projects/{id}/goal | — | — | `project_goal.rs` | I4-001~006 | 串行 | G-USER(B-4) | **已实施（2026-11-04，Q1/Q2 已裁）** |
 | I4-C | S01-5 | W53 | Goal 修改流程（复用 DocumentProposal） | I4 §13 | I4-B、T-060 | — | 既有提案管线 | 既有 propose/confirm 工具 | — | `knowledge_proposal/submit.rs`（Goal 强制红线） | I4-007~012 | 串行 | G-USER(B-4) | **已实施（2026-11-04）** |

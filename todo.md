@@ -442,13 +442,13 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **阶段记录（2026-11-03 三）**：**正式实施基线 V1.0 落盘 + 基线差异修复**——`docs/s01-implementation-baseline-v1.md`（唯一实施总基线）+ 新增第六份文件 `docs/s01-code-facts-ledger-v1.md`（差异台账 G-01～G-20 + 裁决 D-C-01/D-C-02）；按基线 §7/§8 对齐 TASK Registry 字段与验收矩阵 L1～L5 映射。**修复四处基线差异**：G-13 逐仓失败隔离（一个仓失败不中止其余）、G-11 取消态不被 Worker 覆盖、G-12 失败路径释放初始化名额（此前失败后该 Project 再也发不起导入）、G-16 仓库删除 409 映射。新增 4 例；全量 **97 套件 / 723 passed / 0 failed**。
   - **剩余**：① **MCP 权限码收紧是跨仓协同项**——lmms 只签发 `PM_MCP_READ` / `PM_MCP_DOCUMENT_WRITE` / `PM_MCP_TASK_UPDATE` 三个码，无发现族专用码；单仓擅自收紧会让现网执行端 key 立刻 403 打断 S01-4 执行链路，须按「lmms 发码 → ai-pm 收紧 → 回归」顺序做；② `proposed` terminate 的前端入口（审批页）未接；③ Discovery 侧 Worker 分析作业（自动产出 Finding）未做；④ `0031` 的 G-DDL 六项审查中「旧环境 0028→0031 真实升级」未演练（基线 §11 准入仅剩此项未满足）。
 
-- [ ] **I3-B～I3-E Git 操作能力模型与仓库写入授权（P1，缺口 D-7）**
-  - **目标**：建立 `read / modify / commit / push / create_pr / merge` 六能力授权（以 I3 §3.1 为准）。
-  - **依据**：`docs/ui/smark-pm-s01-i3-git-permission-and-repo-write-authorization-v1.md` §12；`docs/s01-implementation-plan-v1.md` §9-B5/B6。
-  - **做**：能力枚举与依赖链（modify←read、commit←modify、push←commit、merge 独立授权）；授权存储（迁移 `0031`）；Task 仓库范围（`0032` 快照列）；执行期强校验与撤权即时生效；`git_access.rs` 写命令扩展与 Push 凭据隔离。
-  - **不做**：不自动合并、不自动发布（总体计划 §0.2）；不把 `project_repository.role`（main/docs/service/infra）当权限等级复用；不改 0016 的 `auto_*` 策略字段作 Git 授权。
-  - **验收**：`I3-001~024`；默认仅 `read` 可授予；越权执行被拒且零副作用；授权快照 SHA-256 内容寻址且不可变；审计覆盖授予/变更/撤权。
-  - **门禁**：G-USER（能力枚举与 `policy_version` 类型缺口待裁）。
+- [x] **I3-B～I3-E Git 仓库访问与写入授权（P1，缺口 D-7）**（完成 2026-11-04，**同日按用户简化裁决重做**）
+  - **目标**：~~建立 `read / modify / commit / push / create_pr / merge` 六能力授权~~ → **简化裁决（2026-11-04 用户）**：「不区分，都可以读写。因为这部分太复杂。」模型收敛为 `可访问仓库 = Task 关联仓 ∩ 仓库状态 verified`，档位恒 `read_write`。
+  - **依据**：`docs/ui/smark-pm-s01-i3-git-permission-and-repo-write-authorization-v1.md` **§0.0 V1.1 简化裁决**（§0.0.3 删除项 / §0.0.4 保留项 / §0.0.6 验收映射）；台账 `docs/s01-code-facts-ledger-v1.md` **D-C-03**。
+  - **做**：迁移 `0032`（`task_run.policy_snapshot_hash` + 授权表）→ 迁移 `0033`（**撤下授权表**）；`pm-domain::repo_access`（单一档位）+ `pm-application::repo_access`（快照构建 + SHA-256 + 执行期强校验）；claim 落快照；执行器物化仓库前按快照过滤；**撤下** REST `capabilities` 三端点。
+  - **不做**：不自动合并、不自动发布（总体计划 §0.2）；不把 `project_repository.role` 当权限等级复用；不改 0016 的 `auto_*` 策略字段作 Git 授权；**不做** Push 凭据隔离与直接 Git 绕过拦截（属 T-090 两机实测项）。
+  - **验收**：`I3-001~021`（按 §0.0.6 改写）——范围内 verified 仓可访问、范围外拒绝、仓库失验拒绝、项目归档拒绝、快照缺失 deny-all、快照不可变、哈希 = SHA-256。
+  - **完成记录（2026-11-04）**：`pm-domain::repo_access` 4 例单测；`apps/pm-api/tests/run_scope_snapshot.rs` 4 例 + `repo_access_enforcement.rs` 8 例；全量回归通过。**保留的边界**：租户/项目隔离、Task 仓库范围、仓库 `verified`、Run 快照可追溯、归档与取消门禁。**已知取舍**：失去单仓操作类型分级（见设计稿 §0.0.5）。
 
 - [ ] **I2-A / I4-A / I5-A 三份代码事实核验（后续实施的硬前置）**
   - **目标**：产出 `docs/s01-i2-code-facts.md`、`docs/s01-i4-knowledge-facts.md`、`docs/s01-i5-code-facts.md`。

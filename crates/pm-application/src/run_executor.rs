@@ -596,8 +596,25 @@ async fn executable_run(
     .bind(run_id)
     .fetch_all(pool)
     .await?;
+    // I3-E 执行期强校验（V1.1 简化裁决）：仓库能否进入执行环境，以**本次 Run 的
+    // 定格访问快照**为准——不在快照内的仓（范围外 / 非 verified）不得暴露给执行端。
+    let policy_snapshot: Option<serde_json::Value> = sqlx::query_scalar(
+        "SELECT policy_snapshot FROM delivery.task_run WHERE id = $1",
+    )
+    .bind(run_id)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
     let repositories = baseline_rows
         .iter()
+        .filter(|row| {
+            let repository_id: Uuid = row.get("repository_id");
+            crate::repo_access::snapshot_allows(
+                policy_snapshot.as_ref(),
+                repository_id,
+                pm_domain::repo_access::RepoAccess::ReadWrite,
+            )
+        })
         .map(|row| RunRepositoryBaseline {
             repository_id: row.get("repository_id"),
             base_ref: row.get("base_ref"),
@@ -605,7 +622,13 @@ async fn executable_run(
             write_access: row.get("write_access"),
             workspace_path: row.get("workspace_path"),
         })
-        .collect();
+        .collect::<Vec<_>>();
+    if repositories.is_empty() {
+        // 快照缺失 / 无可访问仓库 = deny-all：不得把仓库交给执行端。
+        return Err(RunDispatchError::InvalidOption(
+            "no accessible repository in the run access snapshot".to_string(),
+        ));
+    }
     Ok(ExecutableRun {
         run_id,
         task_id,

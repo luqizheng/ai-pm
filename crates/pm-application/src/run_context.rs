@@ -205,6 +205,8 @@ pub struct RunContract {
     /// 建立前为 `null`（Agent 必须把 Goal 缺失当作显式信号，不得臆测目标）。
     #[serde(default)]
     pub goal: Option<GoalSnapshot>,
+    /// I3 V1.1 简化裁决：不再有「能力」字段——`repositories` 即本次 Run 的
+    /// 仓库范围，访问语义恒为「可读可写」（不在范围内的仓库不可访问）。
     pub acceptance_criteria: Vec<AcceptanceCriterionView>,
     pub repositories: Vec<RepositoryView>,
     pub knowledge_refs: Vec<KnowledgeRefView>,
@@ -294,6 +296,19 @@ pub struct PolicyView {
     pub snapshot_scope: String,
 }
 
+/// I3 V1.1 简化裁决：本次 Run 的每仓**访问**定格快照
+/// （`policy_snapshot.repo_access`）。
+///
+/// 执行端只读这份快照；**服务端**在执行期做实时校验时按「快照（上界）∩ 当前
+/// 现状（仓库仍 verified ∧ 项目未归档）」取交集——状态变化即时生效，
+/// 但已定格的快照不被改写。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepoAccessView {
+    pub repository_id: Uuid,
+    /// 访问档位（当前唯一档位 `read_write`）。
+    pub access: String,
+}
+
 /// 读取本 Run 的完整执行契约（只读、不续租）。
 ///
 /// T-032 T2：`generation` 为执行端领取时拿到的执行权世代，服务端双验证。
@@ -316,6 +331,8 @@ pub async fn get_run_context(
     .await?;
     let policy_snapshot: Option<serde_json::Value> = run.get("policy_snapshot");
     let policy = policy_from_snapshot(policy_snapshot.as_ref());
+    // I3 V1.1 简化裁决：访问档位不再随契约下发——执行端可见的仓库清单就是
+    // `repositories`（Task 范围快照，含 write_access），访问语义恒为「可读可写」。
 
     let task = sqlx::query(
         "SELECT id, title, task_type, status, revision, priority, goal, description, \

@@ -130,17 +130,25 @@
 **铁律（不可降级）**：I2-D 的双入口 P0 修复**不得降级为普通功能**，REST 与 MCP 必须同修防分叉（I2 V1.1 §18）。
 **身份铁律**：R2-B 必须落 `core.principal.kind=='human'` 的**可信身份**判定，而非字符串比较（防 Agent 伪造）。
 
-### 3.3 I3 · Git 权限与仓库写入授权（24）
+### 3.3 I3 · Git 权限与仓库写入授权（24，**V1.1 简化裁决后**）
 
-| 归属 TASK | 验收条目 | 覆盖的类型 |
+| 归属 TASK | 验收条目（按 I3 §0.0.6 处置） | 覆盖的类型 |
 |---|---|---|
-| I3-B | I3-001~006（能力模型与默认最小权限） | 负向（仅 read 可授予，其余默认拒绝）+ 数据（枚举 CHECK） |
-| I3-C | I3-007~012（Task 仓库范围、跨 Project 拒绝） | 正向 + 负向 |
-| I3-D | I3-013~017（授权快照 SHA-256 内容寻址、不可变、历史可查） | 数据（列约束）+ 正向 |
-| I3-E | I3-018~021（执行期强校验、撤权即时生效、Push 凭据隔离） | 负向（越权执行被拒）+ 幂等 |
-| I3-F | I3-022~024（授权授予/策略变更/撤权审计；直接 Git 绕过测试；归档与取消联动） | 审计 + 负向 |
+| I3-B | I3-001~006（**改写**：无授权概念 → 无自申请入口；范围内 verified 仓 → 生成有效快照） | 负向 + 数据 |
+| I3-C | I3-007~012（**保留 I3-004/005/013，合并 I3-007~010**；写操作不分级） | 正向 + 负向 |
+| I3-D | I3-013~017（**保留**：快照 SHA-256 内容寻址、不可变、历史可查） | 数据（列约束）+ 正向 |
+| I3-E | I3-018~021（**保留 I3-017/018，I3-016 改写为「状态变化即时阻断」**） | 负向（越权执行被拒）+ 幂等 |
+| I3-F | I3-022~024（**改写**：授权授予/撤销审计随授权模型一并撤下；保留快照生成审计与归档/取消联动） | 审计 + 负向 |
 
-**现状事实**：Git 能力授权**零实现**（无枚举、无字段、无策略、无写命令；`git_access.rs:1-4` 只读白名单）。因此 I3-001~024 全部为"待实施"，是 S01 的第二大空白区。
+**V1.1 简化裁决（2026-11-04，用户）**：「不区分，都可以读写。因为这部分太复杂。」
+→ 六能力/依赖闭包/逐主体授权表与 REST **全部废止**；模型收敛为
+`可访问仓库 = Task 关联仓 ∩ verified`，档位恒为 `read_write`。
+映射明细见 `docs/ui/smark-pm-s01-i3-git-permission-and-repo-write-authorization-v1.md` §0.0.6。
+
+**现状事实（2026-11-04 更新）**：I3-B~I3-E **已实施**（简化后）：
+`pm-domain::repo_access` + `pm-application::repo_access`（快照构建 + 执行期强校验）、
+迁移 `0032`（`policy_snapshot_hash`）+ `0033`（撤下授权表）、执行器物化仓库前按快照过滤。
+未覆盖：I3-019/I3-020（直接 Git 绕过与凭据隔离）——属 **T-090 两机实测**项。
 
 ### 3.4 I4 · Project Goal（24）
 
@@ -199,7 +207,7 @@
 | I2-C（统一决定服务） | I2-014 / I2-019 / I2-020 / I2-025 / I2-029 / I2-030 / I2-035 / I2-036 / I2-037 / I2-038 / I2-034 | 单事务决定（Finding+Q/A+审计）；审计 `finding.decided` 带 before/after；operation_id 重放零副作用；非真人被拒零审计；同值重复 no-op；跨 Session 404；裸导出删除；F3 原子性可观测（读取与 after_data 一致）；REST 契约兼容。**2026-11-04 落地 4 例新绿 + 既有 15 例回归全绿**（`crates/pm-application/tests/discovery.rs`） |
 | I2-E（并发全量验收） | §15.3 场景 1~6 / 12 / 14 / 15 | 并发决定行锁串行终态唯一；归档项目拒绝零写入；跨 Session 404；同 operation_id 不同内容幂等吸收；无审计保守展示；AI open question 不参与待补充推导。**2026-11-04 落地 6 例新绿**；场景 4/5/7/8/9 由 I2-B/D + DB 负向覆盖；场景 10（审计失败回滚）由同事务结构性保证 |
 | I4（Project Goal） | I4-001/002/007/012/019（部分） | 每项目唯一 Goal 文档（UNIQUE project_id+doc_key）；ensure 幂等；Agent 提案强制红线挂起不自动发布（Q2）；人工确认发布 rev2；过期 base 乐观并发拒绝；RunContract.goal 快照（缺失=null）。**2026-11-04 落地 3 例新绿**（`apps/pm-api/tests/project_goal.rs`） |
-| I3-B（能力模型） | I3-001~006（部分） | 六能力枚举 + 依赖链服务端校验（push 缺 commit → 422）；默认最小权限（空授权全拒绝含 read）；闭包判定（modify/commit/push 链、merge 独立）；授予/替换/撤销 + 审计；capabilities CHECK 拒未知值。**2026-11-04 落地 4 例集成 + 8 例单测全绿**（`apps/pm-api/tests/git_capabilities.rs` + `pm-domain::git_capability`） |
+| I3-B/C/D/E（**V1.1 简化模型**） | I3-001~021（按 §0.0.6 改写） | 可访问仓库 = Task 关联仓 ∩ verified；档位恒 `read_write`；claim 落快照 + SHA-256（`policy_snapshot_hash` + `repository_policy_snapshots`）；执行期 = 快照 ∩ 现状（仓库失验 / 项目归档 → 拒绝）；快照不可变；执行器物化仓库前按快照过滤。**2026-11-04 落地 4 例单测 + 12 例集成全绿**（`pm-domain::repo_access` + `apps/pm-api/tests/run_scope_snapshot.rs` + `repo_access_enforcement.rs`）。**同日按用户简化裁决撤下六能力/授权表/REST（迁移 0033）** |
 | I1-A/D（归档生命周期） | I1-001~006（守卫）+ I1-015~024（归档与 Run 取消，部分） | 统一门禁三入口接入；归档事务（P1 queued 条件取消 / N-2 Import 终态化 / P4 名额释放）；P2 外部取消入口（200/409）；重复归档 409；P3 残留进程告警。**2026-11-04 落地 5 例全绿**（`apps/pm-api/tests/project_archive.rs`）；I1-F 全链回归与 I1-E Executor 握手待 |
 | I6-B-05/06（导入契约） | S01-A066~A075 | 导入契约与审计：`repository_ids` 必填（缺省/空 → 422）、跨项目仓库拒绝（422）、导入集合在创建时固化（Source + 首轮 Attempt）、初始化操作被占有、同幂等键重放同一导入（`replayed=true` 且不新建）、`proposed` 态 terminate 后释放名额、`cancel` 带 reason 写入审计、导入启动/初始化占有/终止三类审计行可追溯。**2026-11-03 落地 7 例全绿**（`apps/pm-api/tests/import_contract.rs`） |
 

@@ -12,7 +12,6 @@ pub mod delivery;
 pub mod devenv;
 pub mod discovery;
 pub mod git_access;
-pub mod git_capability;
 pub mod ingestion;
 pub mod knowledge;
 pub mod knowledge_index;
@@ -34,6 +33,7 @@ pub mod project_goal;
 pub mod project_import;
 pub mod project_member;
 pub mod read;
+pub mod repo_access;
 pub mod repo_facts;
 pub mod repository;
 pub mod review;
@@ -150,9 +150,8 @@ pub use discovery::{
     create_session, defer_question, get_session, get_session_detail, list_findings, list_messages,
     list_questions, list_sessions, set_proposal_status, submit_evidence,
     transition_session,
-};pub use git_capability::{
-    CapabilityGrant, GitCapabilityError, RepoCapSnapshot, build_task_repo_caps_tx,
-    caps_snapshot_hash, caps_snapshot_json, effective_capabilities_for, list_grants, revoke_grant,
-    set_grant,
+};pub use repo_access::{
+    RepoAccessError, RepoAccessSnapshot, access_snapshot_hash, access_snapshot_json,
+    build_task_repo_access_tx, execution_allows, snapshot_allows,
 };
 

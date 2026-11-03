@@ -4,10 +4,10 @@ pub mod command;
 pub mod error;
 pub mod ids;
 pub mod import;
-pub mod git_capability;
 pub mod policy;
 pub mod project_member;
 pub mod proposal;
+pub mod repo_access;
 pub mod task;
 pub mod task_run;
 pub mod task_transition;
@@ -17,7 +17,7 @@ pub mod waiting;
 pub use command::{ProjectCommand, Reversibility};
 pub use error::CommandError;
 pub use ids::*;
-pub use git_capability::{GitCapability, effective_capabilities, parse_capabilities, prerequisite_violations, allows};
+pub use repo_access::{RepoAccess, parse_access_levels};
 pub use policy::PolicyDecision;
 pub use project_member::{
     PROJECT_MEMBER_AGENT_ROLES, PROJECT_MEMBER_ROLES, ProjectMemberRole, is_agent_role,

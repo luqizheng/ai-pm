@@ -206,7 +206,7 @@ S01-0 基线冻结
 | # | 位置 | 原文 | 勘误为 | 依据 |
 |---|---|---|---|---|
 | E-1 | 总体计划 §2.1、§6.4 | 任务编号写作 `I6-B-01～I6-B-08` | **`I6-B-01～I6-B-09`** | merge-spec §4/§6 与 verification-feedback C-3 均引用 I6-B-09（空库初始化 + 负向测试实测） |
-| E-2 | 总体计划 §4.2 | Git 权限 = `read/write/commit/push/merge/release` | **`read/modify/commit/push/create_pr/merge`**（以 I3 §3.1 为准） | I3 §3.1 能力集与依赖链；总体计划漏 `create_pr`、多 `release`、且 `write`/`modify` 命名不一致 |
+| E-2 | 总体计划 §4.2 | Git 权限 = `read/write/commit/push/merge/release` | ~~**`read/modify/commit/push/create_pr/merge`**（以 I3 §3.1 为准）~~ → **再勘误（2026-11-04）**：按用户简化裁决「不区分，都可以读写」改为 `可访问仓库 = Task 关联仓 ∩ verified`，档位单一 `read_write` | 原勘误依据 I3 §3.1 能力集与依赖链，随 **I3 V1.1 简化裁决**一并废止（I3 设计稿 §0.0；ledger D-C-03）；总体计划正文已同步回改 |
 | E-3 | 总体计划 §1 阶段表 | 未表达 I5 的最后实施约束 | **补注「I5 必须在 I1~I4、I6 之后实施」** | I5 V1.1 §11.2 顺序 `I1→I2→I3→I4→I6→I5` |
 | E-4 | 总体计划 §7.1 | 执行任务只列 D1~D5 | **补 D3.1**（载体编号 T-032） | `docs/ai-pm-slice-d3-executor-hardening-v1.md` 为「T-032 · D3.1 设计稿」 |
 | E-5 | 总体计划 §10.2 | 「必须对 0001–0028 完整盘点」 | 已盘点完毕，结论见 `docs/s01-migration-registry-v1.md` | 本次 Migration Registry |

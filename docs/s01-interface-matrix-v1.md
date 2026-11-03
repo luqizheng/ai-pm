@@ -314,7 +314,7 @@
 | Knowledge | ✅ 13 端点 | ✅ 4 写工具 | ❌ 不参与 | 相符（Coordinator 在 application 层） |
 | Delivery | ⚠️ 任务级 + `acceptance-overview`；**无项目级聚合** | 提交交付证据 | 聚合处理 | **缺项目级（缺陷 D-13）** |
 | Policy | ❌ 无管理端点（YAML 静态加载） | — | — | **缺口，但列为延后 C-1** |
-| Git 能力授权 | ❌ **零字段零枚举零端点** | ❌ 无 | ❌ `git_access.rs` 只读白名单 | **缺口（缺陷 D-7）** |
+| Git 仓库访问 | ✅ **无独立端点**（V1.1 简化：访问由 Task 范围 + 仓库状态决定） | ❌ 无（随 Run 契约下发仓库清单） | ✅ 执行器物化仓库前按快照过滤 | **已闭合（2026-11-04，V1.1 简化裁决）** |
 
 ---
 
@@ -325,7 +325,7 @@
 | # | 缺口 | 事实 | 归属 |
 |---|---|---|---|
 | ① | **Project 成员授权无写入路径** | `core.project_member` 全仓零 INSERT（仅测试与 `bootstrap.rs:414`）；`support.rs:135`/`pm_lists.rs:99`/`pm_runs.rs:87`/`pm_artifacts.rs:54` 只读 | S01-W13（+0030） |
-| ② | **Git 能力授权零基础** | 无权限枚举（`grep "enum .*Permission"` 无匹配）、`migrations/*.sql` 无权限字段（仅 `0010:51,156` 的失败分类 `'permission'`）、`git_access.rs:1-4` 明示只读白名单 | I3-B~I3-E（+0031/0032） |
+| ② | ~~**Git 能力授权零基础**~~ **已闭合（简化）** | 原缺口：无权限枚举、无权限字段。**2026-11-04 用户简化裁决**（「不区分，都可以读写」）→ 不再引入能力枚举与授权表；访问改由 Task 仓库范围 + 仓库 `verified` 决定，执行期以 Run 快照强校验 | I3-B~I3-E（+0032/0033） |
 | ③ | **无 Evidence 实体与回传通道** | `discovery_finding.evidence` 为 JSONB 数组（0025:61）；MCP 侧 `pm_submit_result.repositories[].tests[]`（tools.rs:599-605）与 `pm_discovery_submit_findings.findings[].evidence`（868-883）内嵌 | I6-B-04（+0031） |
 | ④ | **无项目级 Delivery 聚合** | `pm_delivery.rs:21-25` 仅任务级；`pm_acceptance.rs:43` 的 `acceptance-overview` 已是项目级聚合但只含汇总计数 | S01-W60（+0034 或视图） |
 | ⑤ | **MCP 权限码表覆盖不足** | `auth.rs:562-568` 仅 5 工具；写工具与读工具同码 | I6-B-05 |

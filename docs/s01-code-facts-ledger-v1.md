@@ -52,8 +52,8 @@
 | 3.1 | Repository 是独立实体，`project_repository` 为项目↔仓库关联表 | `[FACT]` | `0008_repositories.sql:18-33` |
 | 3.2 | `project_repository.role ∈ {main, docs, service, infra}` 是**仓库类型标签**，不是权限等级 | `[FACT]` | `0008_repositories.sql:23-24` |
 | 3.3 | `project_repository` 无 `(tenant_id, project_id, id)` 组合唯一键 → 已由 `0031` 补 | `[FACT]` | `0031_s01_discovery_import_v2.sql` 第 0 项 |
-| 3.4 | `task_repository.write_access` 是**布尔**，与 I3 的六能力模型不等价 | `[FACT]` | `0011_run_dispatch.sql:90` |
-| 3.5 | **仓库级 Git 能力授权零实现**：无枚举、无字段、无策略、无判定层 | `[DEFECT]` | `grep "enum .*Permission"` 无匹配；`migrations/*.sql` 无权限字段 |
+| 3.4 | `task_repository.write_access` 是**布尔**；I3 V1.1 简化后**不再决定访问档位**（仅作调度前置与交付规则输入） | `[FACT]` → 已改判 | `0011_run_dispatch.sql:90`；I3 设计稿 §0.0.5 |
+| 3.5 | **仓库级 Git 能力授权零实现 → 2026-11-04 简化裁决后不再需要**：授权表 `integration.git_capability_grant` 由 `0032` 建、由 `0033` 撤下；判定层改为单一 `read_write` 档位 | `[DEFECT]` → 已闭合（简化） | `0032` / `0033`；`pm-domain::repo_access` |
 | 3.6 | Git 访问层只允许只读命令（`ls-remote` / `clone` / `log` / `show` / `ls-tree`），**物理上无法 push/commit** | `[FACT]` | `crates/pm-application/src/git_access.rs:1-4` |
 | 3.7 | 仓库删除原为 CASCADE（历史引用不保护）；已由 `0031` 换轨 RESTRICT | `[DEFECT]` → 已修 | `0031` 第 11 项 |
 
@@ -177,7 +177,7 @@
 
 | **G-26** | **Project Goal 无落地机制**（Q1/Q2 已裁但未实施；Goal 提案会被质量门自动提交，违反 Q2） | I4 §3/§4；用户裁决 Q1/Q2 | ✅ `project_goal.rs`（doc_key='project-goal'，唯一性由既有 UNIQUE 保证；ensure 幂等引导）；**submit_proposal 对 Goal 提案强制红线**（Q2 结构性保证：Agent 提案含初稿只挂起不发布）；RunContract 增 goal 快照（I4-E，缺失=null 显式信号）；REST GET /projects/{id}/goal | I4-B/C/E（已闭合；I4-F 归档联动待 I1-D） |
 
-| **G-27** | **Git 能力授权零实现**（缺陷 D-7：无枚举、无字段、无策略、`git_access.rs` 物理只读） | I3 §3.1~§3.3；B-6 默认（方案 A） | ✅ 迁移 `0032`：`task_run.policy_snapshot_hash TEXT`（I3-D 填充）+ `integration.git_capability_grant`（六能力 CHECK，(tenant,project,repo,principal) 粒度）；`pm-domain::git_capability` 判定层（依赖闭包 + 默认最小权限，8 例单测）；REST PUT/DELETE/GET capabilities（管理者守卫 + 审计 + 依赖链服务端校验）；4 例集成验收 | I3-B（已闭合；I3-C Task 范围 / I3-D Run 快照填充 / I3-E 执行期强校验 / I3-F 审计回归仍待） |
+| **G-27** | **Git 能力授权零实现**（缺陷 D-7：无枚举、无字段、无策略、`git_access.rs` 物理只读） | I3 §3.1~§3.3；B-6 默认（方案 A）；**2026-11-04 用户简化裁决**（「不区分，都可以读写。因为这部分太复杂。」） | ✅ **V1.0 方案（2026-11-04 上午，已回退）**：迁移 `0032` 的 `task_run.policy_snapshot_hash TEXT` + `integration.git_capability_grant`（六能力 CHECK）+ `pm-domain::git_capability` 判定层 + REST capabilities 三端点。<br>✅ **V1.1 简化方案（同日定稿并落地）**：授权表由迁移 `0033` **撤下**、六能力/依赖闭包/逐主体授权与 REST 端点**全部废止**；判定层改 `pm-domain::repo_access`（单一 `read_write` 档位，4 例单测）；`pm-application::repo_access` 提供快照构建（Task 范围 ∩ verified）+ SHA-256 内容寻址 + 执行期强校验（快照 ∩ 现状：仓库失验 / 项目归档 → 拒绝）；claim 落快照；执行器物化仓库前按快照过滤；12 例集成验收 | I3-B/C/D/E（**已闭合，简化后**）；I3-F（直接 Git 绕过 / 凭据隔离）仍待 T-090 两机实测 |
 
 | **G-28** | **归档生命周期零实现**（`core.project.status` 消费者为零；queued 无取消路径；`cancel_run` 无外部入口；残留进程无告警——I1 核验稿三入口事实） | I1 设计稿；B-1 默认（P1~P4 并入） | ✅ `project_gate.rs` 统一门禁（三入口接入：claim_core / TaskReadyHandler / enqueue_review）+ `archive.rs` 归档事务（P1 queued 条件取消、N-2 Import 终态化、P4 名额释放）+ REST 归档与 `POST /task-runs/{id}/cancel`（P2，reason 协议化）+ P3 残留进程告警（run.orphan_suspected，1h 去重）；I1 正文回填 V1.1 | I1-A/I1-D/P1~P4（已闭合；I1-B/C 两阶段候选、I1-E Executor 握手、I1-F 全链回归仍待） |
 
@@ -185,8 +185,8 @@
 
 | # | 观察 | 说明 |
 |---|---|---|
-| O-01 | `core.project_member` 一列两义（真人角色 / Agent 职能） | 当前靠「值域白名单 + 类型层判定」分离；I3-B 引入 Git 能力后建议评估拆列 |
-| O-02 | `task_repository.write_access` 布尔 vs I3 六能力 | I3-B 需换轨（能力集合），不可复用该布尔 |
+| O-01 | `core.project_member` 一列两义（真人角色 / Agent 职能） | 当前靠「值域白名单 + 类型层判定」分离；I3 V1.1 简化后不再新增 Git 能力主体，拆列的紧迫性下降（仍建议后续裁决） |
+| O-02 | `task_repository.write_access` 布尔 vs I3 六能力 | **V1.1 简化后此张力消失**：六能力模型废止，该布尔不再承担访问档位，仅作调度前置与交付规则输入 |
 | O-03 | 提案发布（`ai.document_proposal`）与 Discovery 提案（`discovery.discovery_proposal`）并存 | 基线 §5.4 要求区分「草稿、提案与正式知识」——当前两者语义确实不同，**不得合并** |
 
 ### 10.4 差异裁决（基线与专项设计稿冲突时的裁定记录）
@@ -197,6 +197,7 @@
 |---|---|---|---|
 | **D-C-01** | 基线 §4.2 写「Evidence 的 Import 外键包含 `tenant_id, project_id, import_id`」；而 0025 的 Q1「唯一关联方向」要求 **discovery 域不得引用 `integration.repo_import`**（单向：repo_import → discovery_session） | **不加直接的 Evidence → `repo_import` 外键**，改为链式实现：Evidence → `repo_import_source(t,p,import,repository)` → `repo_import(t,p,id)`，以及 Evidence → `repo_import_source_attempt(t,p,import,repository,attempt_no)`。两条链的父键均带 `project_id`，等价满足基线要求的「同 Project 归属由数据库保证」 | ① 0025 属专项设计稿（优先级第 3 条）高于正式基线措辞（第 5 条）；② 合并规格 §2.3 的「全链归属图」中 Evidence 无直连 Import 的边，链路经 Source/Attempt；③ 直接外键在该模型下**冗余**（已被链式约束蕴含）；④ `crates/pm-infrastructure/tests/discovery_schema.rs::repo_import_link_is_single_direction` 是该不变量的机械断言，加直连外键会使其失败——说明这是**被测试固化的设计不变量**，不是疏漏 |
 | **D-C-02** | 基线 §4.2 要求保留 `UNIQUE (tenant_id, import_id, repository_id)`；迁移 `0031` 的 Source 主键恰为该三元组 | **判定为已满足**，不额外建唯一约束（主键已提供同等唯一性，且可被 FK 引用） | 避免同一三元组同时存在主键与唯一约束的冗余；四列键 `(tenant_id, project_id, import_id, repository_id)` 另建，供 Attempt / Evidence 组合 FK 引用 |
+| **D-C-03** | I3 V1.0 设计稿（专项设计稿，优先级第 3 条）要求「六能力 + 四层授权交集 + 逐主体授权表」；而 S01 实施期用户裁决为「**不区分，都可以读写。因为这部分太复杂**」 | **以用户裁决为准**：I3 走 V1.1 简化模型——`可访问仓库 = Task 关联仓 ∩ 仓库状态 verified`，档位恒 `read_write`；六能力枚举、依赖闭包、逐主体授权表（迁移 `0033` 撤下）与 REST 授权端点**一并废止**。保留的访问边界（租户/项目隔离、Task 范围、仓库状态、Run 快照、归档与取消门禁）不受影响 | ① 用户裁决是**最高优先级的需求输入**，高于任何既有设计稿；② 专项设计稿可由用户显式修订（本次为 V1.0 → V1.1 修订，保留原文作决策留痕）；③ 六能力模型在 S01 无真实业务用例，却引入一张授权表、一套闭包判定、一组端点、一次撤权语义与 24 条验收——**成本远超收益**；④ 简化后仍保留全部**安全边界**（范围/状态/归档/取消/快照可追溯），未放宽到"无约束"；⑤ 详细映射见 I3 设计稿 §0.0（删除项/保留项/副作用/验收映射） |
 
 ---
 

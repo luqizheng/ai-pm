@@ -181,11 +181,15 @@ TASK 状态、Run 状态和 Delivery 状态必须独立管理。
 - 历史 Run 保留执行时授权快照。
 - 不能仅凭历史授权快照继续执行当前已撤销的操作。
 
-Git 权限必须区分：
+Git 权限（**2026-11-04 用户简化裁决后**）：
 
-`read / modify / commit / push / create_pr / merge
+`可访问仓库 = Task 关联仓库 ∩ 仓库状态 = verified`；档位单一 `read_write`（可读即可写，写操作不再按类型分级）。
 
-（勘误 2026-11-03：原文为 `read / write / commit / push / merge / release`，与 I3 设计稿 §3.1 的能力集不一致——漏 `create_pr`、多 `release`、且 `write` 与 `modify` 命名不统一。以 I3 §3.1 为准。）`
+（勘误 2026-11-04：此前经 2026-11-03 勘误为 `read / modify / commit / push / create_pr / merge`
+（以 I3 §3.1 为准），现按**用户简化裁决**「不区分，都可以读写。因为这部分太复杂。」
+废止六能力与四层授权交集模型——I3 走 V1.1 简化模型，
+详见 `docs/ui/smark-pm-s01-i3-git-permission-and-repo-write-authorization-v1.md` §0.0。
+保留的边界不变：租户/项目隔离、Task 仓库范围、仓库状态、Run 授权快照、归档与取消门禁。）
 
 策略开启不等于权限授予。
 

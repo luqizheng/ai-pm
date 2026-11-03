@@ -679,15 +679,15 @@ pub(crate) async fn claim_core(
 
     // D2.1：完整策略快照（§15.5）。`policy_hash`/`policy_version` 为内容寻址，
     // `execution_enabled` 由策略门与审批证据推导，不再是字面量。
-    // I3-C/D：每仓 Git 能力范围快照（仓库策略 ∩ Task 范围 ∩ 仓库状态 → 闭包）
-    // 叠加进快照；其内容寻址哈希落 `policy_snapshot_hash`（B-6 方案 A）。
+    // I3-C/D（V1.1 简化裁决）：每仓**可访问**快照（Task 范围 ∩ 仓库状态 verified，
+    // 单一 `read_write` 档位）叠加进快照；其内容寻址哈希落 `policy_snapshot_hash`。
     let run_tenant: Uuid = sqlx::query_scalar(
         "SELECT tenant_id FROM delivery.task_run WHERE id = $1",
     )
     .bind(run_id)
     .fetch_one(&mut *tx)
     .await?;
-    let repo_caps = crate::git_capability::build_task_repo_caps_tx(
+    let repo_access = crate::repo_access::build_task_repo_access_tx(
         &mut tx,
         run_tenant,
         project_id,
@@ -695,7 +695,7 @@ pub(crate) async fn claim_core(
     )
     .await
     .map_err(|e| match e {
-        crate::git_capability::GitCapabilityError::Db(db) => RunDispatchError::Db(sqlx::Error::Protocol(db)),
+        crate::repo_access::RepoAccessError::Db(db) => RunDispatchError::Db(sqlx::Error::Protocol(db)),
         other => RunDispatchError::InvalidOption(other.to_string()),
     })?;
     let policy_snapshot = serde_json::json!({
@@ -709,9 +709,9 @@ pub(crate) async fn claim_core(
         "repository_baselines": baselines.clone(),
         "snapshot_scope": POLICY_SCHEMA,
         "effective_policy": assessment.effective_policy.to_snapshot_json(),
-        "git_capabilities": crate::git_capability::caps_snapshot_json(&repo_caps),
+        "repo_access": crate::repo_access::access_snapshot_json(&repo_access),
     });
-    let policy_snapshot_hash = crate::git_capability::caps_snapshot_hash(&repo_caps);
+    let policy_snapshot_hash = crate::repo_access::access_snapshot_hash(&repo_access);
     sqlx::query(
         "UPDATE delivery.task_run \
          SET policy_snapshot = $2, policy_snapshot_hash = $3, \
@@ -721,7 +721,7 @@ pub(crate) async fn claim_core(
     .bind(run_id)
     .bind(&policy_snapshot)
     .bind(&policy_snapshot_hash)
-    .bind(&crate::git_capability::caps_snapshot_json(&repo_caps))
+    .bind(&crate::repo_access::access_snapshot_json(&repo_access))
     .execute(&mut *tx)
     .await?;
 

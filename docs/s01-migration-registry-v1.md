@@ -105,7 +105,11 @@
 - 列：`write_access BOOLEAN DEFAULT true`、`base_ref`、`base_commit`、`path_scope TEXT[]`、`role CHECK IN (primary,secondary,knowledge)`。
 - 0019 追加 `fk_task_repository_tenant_project`→`core.project(tenant_id,id)` **NO ACTION**(0019:268-270)。
 
-> 注意：`task_repository.write_access` 是**布尔**（单一写权限），与 I3 §3.1 的六能力枚举（read/modify/commit/push/create_pr/merge）**语义不等价**——S01 需换轨（见 §3 M-0032-I3）。
+> 注意：`task_repository.write_access` 是**布尔**（单一写权限）。I3 V1.1 简化裁决后，
+> **它不再决定访问档位**（范围内且 verified 的仓库一律 `read_write`），
+> 仅保留两处用途：**调度前置**（至少一个可写仓库才可领取）与**交付规则**
+> （只读仓产出 commit 整单驳回）。原「与六能力枚举语义不等价 → 需换轨」的结论
+> 随六能力模型一并废止（见 §3 M-0033-I3-S）。
 
 ---
 
@@ -119,10 +123,19 @@
 |---|---|---|---|---|
 | 0030 | `s01_project_member_role` | S01-W13 | 0019 | **已实施（2026-11-03）** |
 | **0031** | `s01_discovery_import_v2` | **I6-B-08** | 0030 | **frozen（2026-11-04：§4.4 六项审查全过，含升级演练）** |
-| 0032 | `s01_git_capability_grant` | I3-B | 0031 | draft |
-| 0033 | `s01_run_policy_snapshot` | I3-D | 0032 | draft |
-| 0034 | `s01_project_goal` | I4-B/I4-C | 0031 | draft |
+| 0032 | `s01_git_capability` | I3-B | 0031 | **已实施（2026-11-04）；I3-D 的 `policy_snapshot_hash` 一并落此** |
+| **0033** | `s01_git_access_simplify` | **I3-B（V1.1 简化）** | 0032 | **已实施（2026-11-04）：DROP `integration.git_capability_grant`** |
+| 0034 | `s01_project_goal` | I4-B/I4-C | 0031 | draft（I4 复用 `ai.project_document`，实际未新增迁移） |
 | 0035 | `s01_project_delivery_read_model` | S01-W60 | 0022、0026 | draft（可能纯视图，无需新表） |
+
+> **0033 详案（`s01_git_access_simplify`）**：依 I3 设计稿 §0.0 V1.1 简化裁决
+> （用户 2026-11-04：「不区分，都可以读写。因为这部分太复杂。」），
+> 撤下 V1.0 的仓库级能力授权表 `integration.git_capability_grant`（含其索引）。
+> 0032 保留的 `task_run.policy_snapshot_hash`（I3-D 锚点）**继续使用**——
+> 快照内容由「每仓能力集」改为「每仓可访问清单（单一 `read_write` 档位）」。
+> 无回填（AGENTS.md 规则 1：授权表自 0032 起无业务存量数据）。
+> **编号勘误**：原规划的 `0033 s01_run_policy_snapshot` 未单独占用
+> （该列并入 0032），`0034 s01_project_goal` 未新增迁移（复用既有文档表）。
 
 ### 3.2 M-0031 详案（`s01_discovery_import_v2`）
 
@@ -195,8 +208,8 @@
 |---|---|---|
 | **C-10** | 合并规格中的「历史数据回填 / 旧环境兼容」要求**降级为「空库初始化 + 结构断言」**；`draft` 单列**直接删列**而非"停用保兼容" | `AGENTS.md` 硬规则 1（新项目、无存量数据、不写兼容分支）。同时删除 M-0031 中的 data_backfill 项 |
 | **C-11** | `repo_import_source` 的三列唯一键 `(tenant_id, import_id, repository_id)` **不建**（无引用方），只建四列 Project 作用域键 | merge-spec §2.1「建议简化」+ §0「R-6-1 接受并扩展」 |
-| **C-12** | `project_repository.role`（main/docs/service/infra）**不是权限等级**，不得当作 Git 能力等级复用；Git 能力另建模（0031） | `0008:23-27` 语义 + I3 §3.1 |
-| **C-13** | `delivery.task_repository.write_access BOOLEAN` 不满足 I3 六能力模型，0031 需换轨为能力集合 | I3 §3.1 依赖链（modify←read←commit←push） |
+| **C-12** | `project_repository.role`（main/docs/service/infra）**不是权限等级**，不得当作 Git 能力等级复用 | `0008:23-27` 语义 + I3 §3.1（**V1.1 简化后仍成立**：访问档位与仓库类型标签无关） |
+| **C-13** | ~~`delivery.task_repository.write_access BOOLEAN` 不满足 I3 六能力模型，0031 需换轨为能力集合~~ → **作废（2026-11-04 简化裁决）**：六能力模型废止，`write_access` 不再决定访问档位，仅作调度前置与交付规则输入 | 原依据 I3 §3.1 依赖链随 V1.1 简化裁决一并废止（见 I3 设计稿 §0.0、ledger D-C-03） |
 
 ---
 

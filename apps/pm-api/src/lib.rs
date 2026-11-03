@@ -6,7 +6,6 @@ pub mod audit_stream;
 pub mod auth;
 pub mod customers;
 pub mod device_claim;
-pub mod git_capabilities;
 pub mod documents;
 pub mod llm_configs;
 pub mod mcp_hosts;
