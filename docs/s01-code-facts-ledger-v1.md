@@ -143,7 +143,7 @@
 | G-04 | Evidence 无实体、跨项目可关联 | 基线 §4.2 D-2a | 迁移 `0031`：Evidence 表 + 组合 FK + CHECK | ✅ 闭合 |
 | G-05 | Source 缺 Project 作用域键 | 基线 §4.2 D-2a | 迁移 `0031`：Source 整表重建 + 四列键 | ✅ 闭合 |
 | G-06 | Finding 无 `project_id` | 基线 §4.2 D-2a | 迁移 `0031`：加列 + 换轨 FK | ✅ 闭合 |
-| G-07 | 仓库删除 CASCADE，历史引用不保护 | 基线 §5.1 | 迁移 `0031`：RESTRICT | ⚠️ 部分（应用层 409 映射未落地） |
+| G-07 | 仓库删除 CASCADE，历史引用不保护 | 基线 §5.1 | 迁移 `0031`：RESTRICT + 应用层 `HasHistory` → 409（见 G-16） | ✅ 闭合 |
 | G-08 | Import 名额索引未租户化 | 基线 §5.1 | 迁移 `0031`：索引重建 | ✅ 闭合 |
 
 ### 10.2 本轮新发现、待处置
@@ -160,8 +160,16 @@
 | **G-16** | **仓库删除被拒的应用层 409 映射缺失**（G-07 的应用层半边） | 基线 §3 / §4.3「错误码和业务错误映射正确」 | ✅ `repository::delete_repository` 捕获 FK 违例 → 新错误变体 `HasHistory` → HTTP 409 `repository has history and cannot be deleted` | I6-B-08（已闭合） |
 | **G-17** | **基线 §6 要求首批页面以 Project Dashboard 交付**；当前实现顺序未对齐（I5 总控台排在最后） | 基线 §6.2/§6.3 | 记入 TASK Registry 的依赖顺序：Dashboard 相关切片前置 | I5-C/I5-D |
 | **G-18** | **MCP 权限码只覆盖 5 个写工具**（缺陷 D-11）；lmms 只有 3 个 MCP 权限码，无发现族专用码 | 基线 §5.2「REST 与 MCP 必须遵循相同领域业务规则」 | **跨仓协同**：lmms 发码 → ai-pm 收紧 → 回归；单仓收紧会打断现网执行链路 | 跨仓待办 |
-| **G-19** | **无 Evidence 回传通道的 MCP 步骤**（instruction.md 只三步） | 基线 §5.3 | 已有 `pm_submit_evidence` 工具；执行端指令文件补第四步 | I6-B-05 |
+| **G-19** | **无 Evidence 回传通道的 MCP 步骤**（instruction.md 只三步） | 基线 §5.3 | `pm_submit_evidence` 工具已就位；执行端 `instruction.md` 补第四步（codex_executor.rs:367-380） | I6-B-05（工具侧闭合，指令文件待） |
 | **G-20** | **Discovery 侧无 Worker 分析作业**（事实只能外部送入） | 基线 §2「I1～I6 六个工作域」 | 记入 I6-B-02 后续扩展 | I6-B-02 |
+
+### 10.2b 2026-11-04 批次闭合
+
+| # | 差异 | 依据 | 处置 | 归属 |
+|---|---|---|---|---|
+| **G-21** | **迁移 `0031` 的「升级路径与环境一致性」未演练**（基线 §4.4 第 6 项） | 基线 §4.4 / §11 准入 | ✅ `scripts/upgrade-drill-0028-to-0031.sh`：0028 → 0030 → 0031 升级库与新全序库的表/列/约束/索引**完全一致** + 0031 十项关键对象抽查全过。基线 §11 准入 12 项全绿，`0031` 冻结 | I6-B-09（已闭合） |
+| **G-22** | **无项目级交付聚合**（缺陷 D-13） | 总体计划 §9.1 W60 / §15.E | ✅ `GET /v1/pm/projects/{id}/delivery`：只读投影 `v_task_delivery_manifest` + 任务清单 + pending 审批数；任务级卷起四态（delivered/partial/missing/no_contract）。注意视图逐仓 `delivery_state` 已是任务级口径，卷起是对状态组归类而非逐仓求交集 | S01-W60（已闭合） |
+| **G-23** | **Finding 创建初态可被外部指定**（违反 I2-026）且可信 human 直建 user_confirmed 落 PENDING（违反 I2-023） | I2 V1.1 §15.1；I2-D 双入口铁律 | ✅ `NewFinding` 创建契约删除 `verification_status`；新增 `FindingCreator` 通道（HumanDirect / AgentRelayed）：human 直建 user_confirmed → CONFIRMED（I2-023）、Agent 转述 → PENDING（I2-024）；REST 与 MCP 同批改造防分叉 | I2-B/D（已闭合） |
 
 ### 10.3 结构性观察（非缺陷，供后续裁决参考）
 
