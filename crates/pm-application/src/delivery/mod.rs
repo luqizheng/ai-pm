@@ -39,7 +39,10 @@ use crate::command_executor::{apply_task_transition, system_context, TransitionF
 pub use git_verify::{
     GitVerification, GitVerificationError, verify_repository_head, workspace_root_for_run,
 };
-pub use manifest::{DeliveryManifest, ManifestEntry, ManifestRow, list_manifest, read_manifest};
+pub use manifest::{
+    DeliveryManifest, ManifestEntry, ManifestRow, TaskDeliveryRollup, list_manifest,
+    list_project_delivery, read_manifest,
+};
 
 /// 提交管线的事务类型（`'static`——`PgPool::begin` 返回的就是它）。
 type Tx = sqlx::Transaction<'static, sqlx::Postgres>;
