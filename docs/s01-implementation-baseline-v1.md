@@ -432,7 +432,7 @@ P0/P1 必须经过正式裁决，不能由 Codex 自行决定。
 - [x] UI 高保真设计系统 V1.0 确认。
 - [x] I6-A 代码事实报告已形成。
 - [x] I6-B V1.1 完成正文合并。（`docs/ui/smark-pm-s01-i6-b-v1-1.md`，2026-11-03）
-- [ ] I6-B Migration 完成 DDL 审查。（迁移 `0031` 已实施且通过空库与 DB 级负向实测；§4.4 六项审查中「顺序 / 外键依赖 / 唯一键与 CHECK / 事务并发 / 空库迁移」已有实测证据，**「升级路径与环境一致性」未做**（旧环境 0028 → 0031 真实升级尚未演练））
+- [x] I6-B Migration 完成 DDL 审查。（§4.4 六项审查全部完成：顺序 / 外键依赖 / 唯一键与 CHECK / 事务并发 / 空库迁移（`#[sqlx::test]` 每例独立建库）/ **升级路径与环境一致性**——`scripts/upgrade-drill-0028-to-0031.sh` 实测 0028 → 0030 → 0031 升级库与新全序库的表/列/约束/索引**完全一致**，0031 十项关键对象抽查全过，2026-11-04）
 - [x] TASK 注册表与依赖关系统一。（`docs/s01-task-registry-v1.md`，字段已按 §7 补齐 `code_facts` / `ui_scope` / `test_scope` / `evidence`）
 - [x] Migration 注册表完成。（`docs/s01-migration-registry-v1.md`，0001–0031）
 - [x] 接口矩阵完成。（`docs/s01-interface-matrix-v1.md`，97 REST 端点 + 19 MCP 工具 + 两个 Worker）
