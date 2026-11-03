@@ -88,11 +88,7 @@ x-svc-registrator-labels-audit:
   - env=staging
 services:
   config-service:
-    build:
-      context: ..
-      dockerfile: services/config-service/Dockerfile
-      args:
-        SERVICE_FEATURES: postgres
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/config-service:${IMAGE_TAG:-1.6.0-pg}
     ports:
       - 8085:8081
     labels:
@@ -120,11 +116,7 @@ services:
     networks:
       - superpowers
   file-service:
-    build:
-      context: ..
-      dockerfile: services/file-service/Dockerfile
-      args:
-        SERVICE_FEATURES: postgres
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/file-service:${IMAGE_TAG:-1.6.0-pg}
     ports:
       - 8086:8082
     labels:
@@ -155,9 +147,7 @@ services:
     networks:
       - superpowers
   api-gateway:
-    build:
-      context: ..
-      dockerfile: services/api-gateway/Dockerfile
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/api-gateway:${IMAGE_TAG:-1.6.0}
     ports:
       - 3000:3000
     labels:
@@ -200,11 +190,7 @@ services:
     networks:
       - superpowers
   token-service:
-    build:
-      context: ..
-      dockerfile: services/token-service/Dockerfile
-      args:
-        SERVICE_FEATURES: postgres
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/token-service:${IMAGE_TAG:-1.6.0-pg}
     ports:
       - 8082:8082
     labels:
@@ -236,11 +222,7 @@ services:
     networks:
       - superpowers
   iam-service:
-    build:
-      context: ..
-      dockerfile: services/iam-service/Dockerfile
-      args:
-        SERVICE_FEATURES: postgres
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/iam-service:${IMAGE_TAG:-1.6.0-pg}
     ports:
       - 9081:8081
     labels:
@@ -276,11 +258,7 @@ services:
     networks:
       - superpowers
   iam-outbox-publisher:
-    build:
-      context: ..
-      dockerfile: services/iam-service/Dockerfile
-      args:
-        SERVICE_FEATURES: postgres
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/iam-service:${IMAGE_TAG:-1.6.0-pg}
     command:
       - iam_outbox_publisher
     restart: unless-stopped
@@ -314,11 +292,7 @@ services:
     networks:
       - superpowers
   prue_backend:
-    build:
-      context: ..
-      dockerfile: services/prue_backend/Dockerfile
-      args:
-        SERVICE_FEATURES: postgres
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/prue-admin-backend:${IMAGE_TAG:-1.6.0-pg}
     ports:
       - 8087:8087
     labels:
@@ -346,11 +320,7 @@ services:
     networks:
       - superpowers
   notification-service:
-    build:
-      context: ..
-      dockerfile: services/notification-service/Dockerfile
-      args:
-        SERVICE_FEATURES: postgres
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/notification-service:${IMAGE_TAG:-1.6.0-pg}
     ports:
       - 8083:8083
     labels:
@@ -390,11 +360,7 @@ services:
     networks:
       - superpowers
   notification-outbox-publisher:
-    build:
-      context: ..
-      dockerfile: services/notification-service/Dockerfile
-      args:
-        SERVICE_FEATURES: postgres
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/notification-service:${IMAGE_TAG:-1.6.0-pg}
     command:
       - ntf_outbox_publisher
     restart: unless-stopped
@@ -425,11 +391,7 @@ services:
     networks:
       - superpowers
   audit-service:
-    build:
-      context: ..
-      dockerfile: services/audit-service/Dockerfile
-      args:
-        SERVICE_FEATURES: postgres
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/audit-service:${IMAGE_TAG:-1.6.0-pg}
     ports:
       - 8084:8084
     labels:
