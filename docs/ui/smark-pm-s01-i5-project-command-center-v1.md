@@ -1,7 +1,7 @@
 # I5 · 项目总控台聚合设计稿 V1.0
 
 > 文档性质：S01 工作包设计稿  
-> 所属基线：S01 Final Design Baseline V1.3  
+> 所属基线：S01 总体实施计划 V1.0（`smark-pm-s01-overall-implementation-plan-v1.md`）  
 > 工作包：I5 — Project Command Center / 项目总控台聚合  
 > 定位：I1～I4、I6 完成后统一设计的项目级聚合入口  
 > 当前状态：设计稿，待技术核验与裁决  
