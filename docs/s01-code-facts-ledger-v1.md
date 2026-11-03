@@ -175,6 +175,8 @@
 
 | **G-25** | **「待补充」展示态无推导依据**（§8.2：不能从 open question 推导，须从最近一次有效人工决定审计推导） | I2 V1.1 §8 / I2-033 | ✅ 决定服务新增 `REVISION_REQUESTED`（不改状态，落设计稿指定审计 action `discovery_finding_revision_requested`）；`DiscoveryFindingView` 增加 `display_state`（§8.1 四态映射，读取路径批量取最近决定审计，DISTINCT ON + created_at DESC, id DESC）；决定服务加归档守卫（project 行锁 + archived 拒绝） | I2-033（已闭合） |
 
+| **G-26** | **Project Goal 无落地机制**（Q1/Q2 已裁但未实施；Goal 提案会被质量门自动提交，违反 Q2） | I4 §3/§4；用户裁决 Q1/Q2 | ✅ `project_goal.rs`（doc_key='project-goal'，唯一性由既有 UNIQUE 保证；ensure 幂等引导）；**submit_proposal 对 Goal 提案强制红线**（Q2 结构性保证：Agent 提案含初稿只挂起不发布）；RunContract 增 goal 快照（I4-E，缺失=null 显式信号）；REST GET /projects/{id}/goal | I4-B/C/E（已闭合；I4-F 归档联动待 I1-D） |
+
 ### 10.3 结构性观察（非缺陷，供后续裁决参考）
 
 | # | 观察 | 说明 |

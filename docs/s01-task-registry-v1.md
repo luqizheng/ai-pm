@@ -152,10 +152,10 @@
 | I3-E | S01-4 | — | 执行期强校验 | I3 §12 | I3-D、I1-A | — | — | `pm_*` 入口 | `CodexExecutor` | `git_access.rs` | I3-018~021 | 串行 | — | 仅设计 |
 | I3-F | S01-6 | W63 | 审计与回归 | I3 §12 | I3-B~I3-E、I1-D | — | — | — | — | 集成测试 | I3-022~024 | 串行 | G-ACCEPT | 仅设计 |
 | I4-A | S01-0→S01-5 | W02+W52 | Knowledge 现状核验 | I4 §13 | — | — | — | — | — | `knowledge.rs` | 交付 `docs/s01-i4-knowledge-facts.md` | 可并行 | — | 未开工 |
-| I4-B | S01-5 | W52+W53 | Goal 领域规则 | I4 §13 | I4-A | — | — | — | — | — | I4-001~006 | 串行 | **G-USER(B-4)** | 仅设计 |
-| I4-C | S01-5 | W53 | Goal 修改流程（复用 DocumentProposal） | I4 §13 | I4-B、T-060 | — | 需新增 | — | — | `knowledge_proposal/` | I4-007~012 | 串行 | G-USER(B-4) | 仅设计 |
+| I4-B | S01-5 | W52+W53 | Goal 领域规则 | I4 §13 | I4-A | 无需新迁移（复用 UNIQUE project_id+doc_key） | GET /projects/{id}/goal | — | — | `project_goal.rs` | I4-001~006 | 串行 | G-USER(B-4) | **已实施（2026-11-04，Q1/Q2 已裁）** |
+| I4-C | S01-5 | W53 | Goal 修改流程（复用 DocumentProposal） | I4 §13 | I4-B、T-060 | — | 既有提案管线 | 既有 propose/confirm 工具 | — | `knowledge_proposal/submit.rs`（Goal 强制红线） | I4-007~012 | 串行 | G-USER(B-4) | **已实施（2026-11-04）** |
 | I4-D | S01-5 | W52+W54 | 多 Agent Knowledge 协调 | I4 §13 | I4-C | — | — | — | — | `knowledge_write_coordinator.rs`（已覆盖） | I4-013~018 | 串行 | — | **部分已被 T-060 覆盖** |
-| I4-E | S01-4/S01-5 | — | Agent 上下文读取（Goal 版本） | I4 §13 | I4-B、I4-C | — | — | `pm_get_run_context` 扩展 | — | `run_context.rs` | I4-019~021 | 串行 | — | 仅设计 |
+| I4-E | S01-4/S01-5 | — | Agent 上下文读取（Goal 版本） | I4 §13 | I4-B、I4-C | — | — | `pm_get_run_context` 已带 goal 快照 | — | `run_context.rs` | I4-019~021 | 串行 | — | **已实施（2026-11-04）** |
 | I4-F | S01-6 | W62+W63 | 归档与审计集成 | I4 §13 | I4-C、I1-A | — | — | — | — | — | I4-022~024 | 串行 | — | 仅设计 |
 | I5-A | S01-0→S01-3 | W02+W04 | 代码事实核验（14 项） | I5 V1.1 §9.1 | I6 数据契约定稿 | — | — | — | — | — | 交付 `docs/s01-i5-code-facts.md` | 可并行 | — | 未开工 |
 | I5-B | S01-3 | W04 | 读模型契约 | I5 V1.1 §9.2 | I5-A | — | — | — | — | — | 交付 `docs/s01-i5-read-model-contract.md` | 串行 | — | 未开工 |
