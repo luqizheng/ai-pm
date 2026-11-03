@@ -24,15 +24,30 @@ COMPOSE_PROD="$INFRA_DIR/docker-compose.prod.yml"
 
 cd "$INFRA_DIR" || { echo "[start-prod] FATAL: cannot cd to $INFRA_DIR" >&2; exit 10; }
 
-die() { echo "[start-prod] FATAL: $*" >&2; exit "${2:-10}"; }
+die() { echo "[start-prod] FATAL: $1" >&2; exit "${2:-10}"; }
 log() { echo "[start-prod] $*"; }
+
+# 语义化比较 compose 版本：要求 v2.20+（更高主版本如 v5/v6 直接放行）。
+# 不再用正则匹配 —— 旧正则只认 v2.2x~v2.99，误杀 v5.x，还误放行 v2.10.3。
+compose_version_ok() {
+  local _v _major _minor
+  _v="$(docker compose version --short 2>/dev/null | head -1)"
+  _v="${_v#v}"
+  _major="${_v%%.*}"
+  _minor="$(printf '%s' "$_v" | awk -F. 'NR==1{print $2}')"
+  case "$_major" in ''|*[!0-9]*) return 1 ;; esac
+  case "$_minor" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$_major" -gt 2 ] && return 0
+  [ "$_major" -eq 2 ] && [ "$_minor" -ge 20 ] && return 0
+  return 1
+}
 
 # 1. .env.prod 必须存在
 [[ -f "$ENV_PROD" ]] || die "$ENV_PROD not found — copy from .env.prod.example and fill values" 10
 
 # 2. compose v2.20+ 检查
-if ! docker compose version | grep -qE 'v?2\.(2[0-9]|[3-9][0-9])'; then
-  die "docker compose v2.20+ required (found: $(docker compose version))" 10
+if ! compose_version_ok; then
+  die "docker compose v2.20+ required (found: $(docker compose version 2>/dev/null || echo unknown))" 10
 fi
 log "docker compose version: $(docker compose version | head -1)"
 

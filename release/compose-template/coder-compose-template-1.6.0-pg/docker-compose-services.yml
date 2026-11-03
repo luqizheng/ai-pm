@@ -1,0 +1,468 @@
+x-svc-registrator-labels-config:
+  - SERVICE_NAME=config-service
+  - SERVICE_ID=config-service
+  - SERVICE_PORT=8081
+  - SERVICE_TAGS=backend,config-service
+  - SERVICE_8081_CHECK_HTTP=/health
+  - SERVICE_8081_CHECK_INTERVAL=15s
+  - SERVICE_8081_CHECK_TIMEOUT=3s
+  - logging=loki
+  - service=config-service
+  - env=staging
+x-svc-registrator-labels-file:
+  - SERVICE_NAME=file-service
+  - SERVICE_ID=file-service
+  - SERVICE_PORT=8082
+  - SERVICE_TAGS=backend,file-service
+  - SERVICE_8082_CHECK_HTTP=/health
+  - SERVICE_8082_CHECK_INTERVAL=15s
+  - SERVICE_8082_CHECK_TIMEOUT=3s
+  - logging=loki
+  - service=file-service
+  - env=staging
+x-svc-registrator-labels-gateway:
+  - SERVICE_NAME=api-gateway
+  - SERVICE_ID=api-gateway
+  - SERVICE_PORT=3000
+  - SERVICE_TAGS=backend,api-gateway
+  - SERVICE_3000_CHECK_HTTP=/health
+  - SERVICE_3000_CHECK_INTERVAL=15s
+  - SERVICE_3000_CHECK_TIMEOUT=3s
+  - logging=loki
+  - service=api-gateway
+  - env=staging
+x-svc-registrator-labels-token:
+  - SERVICE_NAME=token-service
+  - SERVICE_ID=token-service
+  - SERVICE_PORT=8082
+  - SERVICE_TAGS=backend,token-service
+  - SERVICE_8082_CHECK_HTTP=/health
+  - SERVICE_8082_CHECK_INTERVAL=15s
+  - SERVICE_8082_CHECK_TIMEOUT=3s
+  - logging=loki
+  - service=token-service
+  - env=staging
+x-svc-registrator-labels-iam:
+  - SERVICE_NAME=iam-service
+  - SERVICE_ID=iam-service
+  - SERVICE_PORT=8081
+  - SERVICE_TAGS=backend,iam-service
+  - SERVICE_8081_CHECK_HTTP=/health
+  - SERVICE_8081_CHECK_INTERVAL=15s
+  - SERVICE_8081_CHECK_TIMEOUT=3s
+  - logging=loki
+  - service=iam-service
+  - env=staging
+x-svc-registrator-labels-prue:
+  - SERVICE_NAME=prue_backend
+  - SERVICE_ID=prue_backend
+  - SERVICE_PORT=8087
+  - SERVICE_TAGS=backend,prue_backend
+  - SERVICE_8087_CHECK_HTTP=/health
+  - SERVICE_8087_CHECK_INTERVAL=15s
+  - SERVICE_8087_CHECK_TIMEOUT=3s
+  - logging=loki
+  - service=prue_backend
+  - env=staging
+x-svc-registrator-labels-notify:
+  - SERVICE_NAME=notification-service
+  - SERVICE_ID=notification-service
+  - SERVICE_PORT=8083
+  - SERVICE_TAGS=backend,notification-service
+  - SERVICE_8083_CHECK_HTTP=/health
+  - SERVICE_8083_CHECK_INTERVAL=30s
+  - SERVICE_8083_CHECK_TIMEOUT=3s
+  - logging=loki
+  - service=notification-service
+  - env=staging
+x-svc-registrator-labels-audit:
+  - SERVICE_NAME=audit-service
+  - SERVICE_ID=audit-service
+  - SERVICE_PORT=8084
+  - SERVICE_TAGS=backend,audit-service
+  - SERVICE_8084_CHECK_HTTP=/health
+  - SERVICE_8084_CHECK_INTERVAL=30s
+  - SERVICE_8084_CHECK_TIMEOUT=3s
+  - logging=loki
+  - service=audit-service
+  - env=staging
+services:
+  config-service:
+    build:
+      context: ..
+      dockerfile: services/config-service/Dockerfile
+      args:
+        SERVICE_FEATURES: postgres
+    ports:
+      - 8085:8081
+    labels:
+      - SERVICE_NAME=config-service
+      - SERVICE_ID=config-service
+      - SERVICE_PORT=8081
+      - SERVICE_TAGS=backend,config-service
+      - SERVICE_8081_CHECK_HTTP=/health
+      - SERVICE_8081_CHECK_INTERVAL=15s
+      - SERVICE_8081_CHECK_TIMEOUT=3s
+      - logging=loki
+      - service=config-service
+      - env=staging
+    environment:
+      JWKS_URL: ${JWKS_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      RUST_LOG: info
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      SERVICE_NAME: config-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    networks:
+      - superpowers
+  file-service:
+    build:
+      context: ..
+      dockerfile: services/file-service/Dockerfile
+      args:
+        SERVICE_FEATURES: postgres
+    ports:
+      - 8086:8082
+    labels:
+      - SERVICE_NAME=file-service
+      - SERVICE_ID=file-service
+      - SERVICE_PORT=8082
+      - SERVICE_TAGS=backend,file-service
+      - SERVICE_8082_CHECK_HTTP=/health
+      - SERVICE_8082_CHECK_INTERVAL=15s
+      - SERVICE_8082_CHECK_TIMEOUT=3s
+      - logging=loki
+      - service=file-service
+      - env=staging
+    environment:
+      JWKS_URL: ${JWKS_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      STORAGE_PATH: /var/lib/file-service/storage
+      RUST_LOG: info
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      SERVICE_NAME: file-service
+    volumes:
+      - file-storage:/var/lib/file-service/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    networks:
+      - superpowers
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: services/api-gateway/Dockerfile
+    ports:
+      - 3000:3000
+    labels:
+      - SERVICE_NAME=api-gateway
+      - SERVICE_ID=api-gateway
+      - SERVICE_PORT=3000
+      - SERVICE_TAGS=backend,api-gateway
+      - SERVICE_3000_CHECK_HTTP=/health
+      - SERVICE_3000_CHECK_INTERVAL=15s
+      - SERVICE_3000_CHECK_TIMEOUT=3s
+      - logging=loki
+      - service=api-gateway
+      - env=staging
+    environment:
+      GW_SERVER_HOST: 0.0.0.0
+      GW_SERVER_PORT: '3000'
+      GW_REDIS_URL: redis://redis:6379
+      GW_REDIS_PREFIX: 'superpowers:'
+      GW_CONSUL_ADDR: http://consul:8500
+      GW_JWKS_URL: http://token-service:8082/.well-known/jwks.json
+      GW_ISSUER: superpowers-token-service
+      GW_ROUTES_DIR: /app/config/api-gateway/routes
+      GW_EVENT_BUS_URL: amqp://guest:guest@rabbitmq:5672/%2f
+      RUST_LOG: api_gateway=trace,info
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      SERVICE_NAME: api-gateway
+    volumes:
+      - ./config/api-gateway/routes:/app/config/api-gateway/routes
+      - ./config/api-gateway/api-gateway.toml:/app/config/api-gateway.toml:ro
+      - ./config/api-gateway/rate-limits.toml:/app/config/api-gateway/rate-limits.toml:ro
+    depends_on:
+      consul:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      token-service:
+        condition: service_healthy
+    networks:
+      - superpowers
+  token-service:
+    build:
+      context: ..
+      dockerfile: services/token-service/Dockerfile
+      args:
+        SERVICE_FEATURES: postgres
+    ports:
+      - 8082:8082
+    labels:
+      - SERVICE_NAME=token-service
+      - SERVICE_ID=token-service
+      - SERVICE_PORT=8082
+      - SERVICE_TAGS=backend,token-service
+      - SERVICE_8082_CHECK_HTTP=/health
+      - SERVICE_8082_CHECK_INTERVAL=15s
+      - SERVICE_8082_CHECK_TIMEOUT=3s
+      - logging=loki
+      - service=token-service
+      - env=staging
+    volumes:
+      - ../services/token-service/config:/app/config:ro
+    environment:
+      SERVICE_BOOTSTRAP_TOKENS: ${SERVICE_BOOTSTRAP_TOKENS}
+      TENANT_ID: ${TENANT_ID}
+      SWAGGER_ENABLED: 'true'
+      SERVICE_NAME: token-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      TOKEN_DATABASE_URL: ${DATABASE_URL}
+      TOKEN_DATABASE_DB_TYPE: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    networks:
+      - superpowers
+  iam-service:
+    build:
+      context: ..
+      dockerfile: services/iam-service/Dockerfile
+      args:
+        SERVICE_FEATURES: postgres
+    ports:
+      - 9081:8081
+    labels:
+      - SERVICE_NAME=iam-service
+      - SERVICE_ID=iam-service
+      - SERVICE_PORT=8081
+      - SERVICE_TAGS=backend,iam-service
+      - SERVICE_8081_CHECK_HTTP=/health
+      - SERVICE_8081_CHECK_INTERVAL=15s
+      - SERVICE_8081_CHECK_TIMEOUT=3s
+      - logging=loki
+      - service=iam-service
+      - env=staging
+    volumes:
+      - ../services/iam-service/config:/etc/iam-service
+    environment:
+      SERVICE_BOOTSTRAP_TOKEN: ${IAM_DEV_BT}
+      TENANT_ID: ${TENANT_ID}
+      TOKEN_SERVICE_URL: ${TOKEN_SERVICE_URL}
+      JWKS_URL: ${JWKS_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://${REDIS_HOST}:${REDIS_PORT}
+      CONFIG_PATH: /etc/iam-service/config.yaml
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      SERVICE_NAME: iam-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    networks:
+      - superpowers
+  iam-outbox-publisher:
+    build:
+      context: ..
+      dockerfile: services/iam-service/Dockerfile
+      args:
+        SERVICE_FEATURES: postgres
+    command:
+      - iam_outbox_publisher
+    restart: unless-stopped
+    labels:
+      - logging=loki
+      - service=iam-outbox-publisher
+      - env=staging
+    volumes:
+      - ../services/iam-service/config:/etc/iam-service
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      EVENT_BUS_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@${RABBITMQ_HOST}:${RABBITMQ_PORT}/%2f
+      EVENT_BUS_EXCHANGE: events
+      OUTBOX_POLL_INTERVAL_MS: '1000'
+      OUTBOX_BATCH_SIZE: '100'
+      CONFIG_PATH: /etc/iam-service/config.yaml
+      METRICS_FILE_PATH: /var/run/prometheus/iam_outbox.prom
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - f="$${METRICS_FILE_PATH:-/var/run/prometheus/iam_outbox.prom}"; [ -f "$$f" ] && [ $$(( $$(date +%s) - $$(stat -c %Y "$$f") )) -le 60 ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - superpowers
+  prue_backend:
+    build:
+      context: ..
+      dockerfile: services/prue_backend/Dockerfile
+      args:
+        SERVICE_FEATURES: postgres
+    ports:
+      - 8087:8087
+    labels:
+      - SERVICE_NAME=prue_backend
+      - SERVICE_ID=prue_backend
+      - SERVICE_PORT=8087
+      - SERVICE_TAGS=backend,prue_backend
+      - SERVICE_8087_CHECK_HTTP=/health
+      - SERVICE_8087_CHECK_INTERVAL=15s
+      - SERVICE_8087_CHECK_TIMEOUT=3s
+      - logging=loki
+      - service=prue_backend
+      - env=staging
+    environment:
+      JWKS_URL: ${JWKS_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      RUST_LOG: info
+      SERVICE_NAME: prue_backend
+      SERVER_PORT: '8087'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    networks:
+      - superpowers
+  notification-service:
+    build:
+      context: ..
+      dockerfile: services/notification-service/Dockerfile
+      args:
+        SERVICE_FEATURES: postgres
+    ports:
+      - 8083:8083
+    labels:
+      - SERVICE_NAME=notification-service
+      - SERVICE_ID=notification-service
+      - SERVICE_PORT=8083
+      - SERVICE_TAGS=backend,notification-service
+      - SERVICE_8083_CHECK_HTTP=/health
+      - SERVICE_8083_CHECK_INTERVAL=30s
+      - SERVICE_8083_CHECK_TIMEOUT=3s
+      - logging=loki
+      - service=notification-service
+      - env=staging
+    volumes:
+      - ../services/notification-service/config:/etc/notification-service
+    environment:
+      CONFIG_PATH: /etc/notification-service/config.yaml
+      SERVICE_BOOTSTRAP_TOKEN: ${NOTIFICATION_DEV_BT}
+      TENANT_ID: ${TENANT_ID}
+      TOKEN_SERVICE_URL: ${TOKEN_SERVICE_URL}
+      JWKS_URL: ${JWKS_URL}
+      EVENT_BUS_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@${RABBITMQ_HOST}:${RABBITMQ_PORT}/%2f
+      SERVER_PORT: '8083'
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://${REDIS_HOST}:${REDIS_PORT}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      SERVICE_NAME: notification-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - superpowers
+  notification-outbox-publisher:
+    build:
+      context: ..
+      dockerfile: services/notification-service/Dockerfile
+      args:
+        SERVICE_FEATURES: postgres
+    command:
+      - ntf_outbox_publisher
+    restart: unless-stopped
+    labels:
+      - logging=loki
+      - service=notification-outbox-publisher
+      - env=staging
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      EVENT_BUS_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@${RABBITMQ_HOST}:${RABBITMQ_PORT}/%2f
+      EVENT_BUS_EXCHANGE: events
+      OUTBOX_POLL_INTERVAL_MS: '1000'
+      OUTBOX_BATCH_SIZE: '100'
+      METRICS_FILE_PATH: /var/run/prometheus/ntf_outbox.prom
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - f="$${METRICS_FILE_PATH:-/var/run/prometheus/ntf_outbox.prom}"; [ -f "$$f" ] && [ $$(( $$(date +%s) - $$(stat -c %Y "$$f") )) -le 60 ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - superpowers
+  audit-service:
+    build:
+      context: ..
+      dockerfile: services/audit-service/Dockerfile
+      args:
+        SERVICE_FEATURES: postgres
+    ports:
+      - 8084:8084
+    labels:
+      - SERVICE_NAME=audit-service
+      - SERVICE_ID=audit-service
+      - SERVICE_PORT=8084
+      - SERVICE_TAGS=backend,audit-service
+      - SERVICE_8084_CHECK_HTTP=/health
+      - SERVICE_8084_CHECK_INTERVAL=30s
+      - SERVICE_8084_CHECK_TIMEOUT=3s
+      - logging=loki
+      - service=audit-service
+      - env=staging
+    environment:
+      JWKS_URL: ${JWKS_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      EVENT_BUS_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@${RABBITMQ_HOST}:${RABBITMQ_PORT}/%2f
+      REDIS_URL: redis://${REDIS_HOST}:${REDIS_PORT}
+      RUST_LOG: info
+      SERVICE_NAME: audit-service
+      SERVER_PORT: '8084'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - superpowers
+volumes:
+  file-storage: null
+networks:
+  superpowers: null
