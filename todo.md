@@ -19,6 +19,7 @@
 - **2026-11-02 增量（八）**：**T-087 Codex Bootstrap 定稿完成（V1.3）**——按 §0.1 brainstorming 六项裁清点逐项裁决（用户确认）+ 16 条派生裁定（用户授权「后面按照推荐」）+ 独立 builder-check 审稿六问收编 + **第二轮外部专家评审 P0×5/P1×4/任务约束×3 收编**；全部裁决索引见设计稿 §〇-A 与 §〇-B。核心：V1 按**真实两机拓扑**（服务器栈 + Windows PC）、**不装 Runner 二进制**、MCP 凭据**沿用 lmms 真人 key**（授权码 / 设备令牌整块归 V2/T-055）、V1 两张新表 `devenv.device` + `device_project_binding`（迁移 **0027**）、`/install/{tool}` 与 Bootstrap **两条任务线收编为一条**、中立技能包 `pm-ai-skills`（源目录 = 仓库 `skills/`，与 M9 T-086 落点一致）+ 薄适配层。**第二轮评审修正**：Device ID 仅不可信声明（Principal 唯一授权依据）、审计三分（新增 `audit_log.claimed_device_id`）、Binding 不授予权限（授权流水线六步）、T-081 升级为七项身份链路门禁、生命周期与就绪拆两列、Ready 四层且为快照、Bootstrap 幂等三态、SHA-256 仅完整性验证。**联动**：T-051 关闭于 T-088；T-081 并入 M10 V1 前置；T-082 升级为 T-090 硬前置；T-059 审计三列与 `claimed_device_id` **同批迁移于 T-088**；BOOT→C138~C162 + 评审新增 C163~C172。
 - **2026-11-02 增量（九）**：**T-087 用户过稿 → 归档（todo.md §13）——T-088~T-091 解禁**。M10 实施基线 = 设计稿 V1.3（`78aa250`）。领取顺序按设计稿 §十三 依赖图：**T-088 关键路径**（薄转发层 + 0027 迁移 + 八端点 + 授权流水线六步）、**T-089 可并行**（中立技能包与同源分发）、**T-090 收口**（硬前置 T-082）、**T-091 随 T-088 后**；T-092 仍延后至 V1 闭环稳定。**T-088 三项连带交付**：T-051 关闭、T-059 rmcp 阻塞解除（审计三列 + `claimed_device_id` 同批迁移）、C163~C172 验收落地。
 - **2026-11-02 增量（十）**：**T-088 服务端实施完成并验收**——设计 V1.1 过稿（925a6af）后当日实施（d855987 / 96cb392 / 33fc743 / df83f01），91 套件 662 passed 0 FAILED。核心落地：rmcp 原生 RequestContext 上下文通道（T-059 阻塞证伪解除）、身份三层（HumanActor/DeviceClaim/CallerContext，生产唯一、消费只读）、17 工具真人成员门（T-051 关闭）、devenv 两表 + 四条跨租户组合 FK（迁移 0027）、13 处生产审计写入点统一四列（清单驱动闸门 C174/C180）、claim 落 executor_id 同源同值、confirmed_by/vetoed_by 认证调用人覆盖。**下一关键路径：T-089（技能包，可与 T-081 并行）→ T-082 → T-090 → T-091。**
+- **2026-11-03 增量（十一）**：**S01 启动，S01-0 统一实施基线完成**——新增 §10.8 M11。上位组织基线 `docs/ui/smark-pm-s01-overall-implementation-plan-v1.md`（V1.0）；产出五份冻结文件 `docs/s01-implementation-plan-v1.md` + 四份 Registry（task / migration / interface / acceptance）。实测结论：**migrations 0001–0028 全量盘点完成、97 个 REST 端点与 18 个 MCP 工具核验完毕、两个 Worker 职责与租约实现核验完毕**；登记缺陷台账 13 项（P0 五项）与总体计划勘误 6 处（I6-B-09 补入、Git 能力枚举改依 I3 §3.1、I5 最后实施、D3.1 补入、Migration 盘点标记完成、字段拆 `stage`/`work_package`）。**关键路径：迁移 0029（I6-B 批）为唯一多任务共享的数据库变更，硬串行。** 下一批：S01-W13（Project 成员授权，P0）、I6-B-01~09、I3-B~I3-E、三份代码事实核验。
 
 ---
 
@@ -400,6 +401,54 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 - [ ] **T-092 V2 无人值守 Runner（延后，V1 稳定前不要领取）**
   - **范围**：Runner 常驻运行、平台自主调度 Run、自动创建 Workspace、启动 Codex、收集 Commit 与 Delivery Manifest、回传证据、Worker 自动升级与故障恢复、安装包版本与服务端 API 版本分离 + MCP 能力协商。
   - **重启条件**：V1（T-087~T-091）闭环稳定后另立设计稿；稿中必须裁清与 T-030/T-031（平台侧 `CodexExecutor` 本地子进程）的边界与复用关系。
+
+---
+
+## 10.8 M11 · S01 项目初始化与代码发现闭环（2026-11-03 新增）
+
+> **组织基线**：`docs/ui/smark-pm-s01-overall-implementation-plan-v1.md`（总体实施计划 V1.0）。
+> **冻结基线**：`docs/s01-implementation-plan-v1.md` 及四份 Registry（`docs/s01-{task,migration,interface,acceptance}-*-v1.md`），2026-11-03 完成 S01-0。
+> **阶段**：S01-0 统一基线 → S01-1 身份权限 → S01-2 Project/Repository → S01-3 Discovery/Import → S01-4 执行闭环 → S01-5 Knowledge → S01-6 交付审计。
+> **关键路径**：Migration `0029`（I6-B 批）是唯一多任务共享的数据库变更，为硬串行点。
+> **实测事实**：执行引擎与知识域已建成（26 项已实施）；发现/接入域与授权域几乎全空——Git 能力授权**零实现**，Project 成员授权**零写入路径**，Evidence **无实体**。
+
+- [x] **S01-0 统一实施基线**（完成 2026-11-03）
+  - **目标**：把 I1–I6 与代码事实转成可领取的任务体系（总体计划 §16.3 退出条件）。
+  - **依据**：`docs/ui/smark-pm-s01-overall-implementation-plan-v1.md` §3、§10、§11、§13、§16.3。
+  - **做**：产出五份正式文件（实施计划 / TASK Registry / Migration Registry / Interface Matrix / Acceptance Matrix）+ 待决事项清单；全量盘点 migrations 0001–0028；核验 97 个 REST 端点 / 18 个 MCP 工具 / 两个 Worker 的真实实现；登记 13 项缺陷台账与 6 处总体计划勘误。
+  - **不做**：不改任何代码与迁移；不改动已冻结设计决策；不替用户裁待决项。
+  - **验收**：五份文件齐备且互相引用一致；每条代码事实带文件:行号；每个 TASK 有验收条件与门禁；无「无法解释的关键接口依赖」。
+  - **完成记录（2026-11-03）**：五份文件落于 `docs/s01-*.md`；总体计划勘误 6 处已回改（I6-B-09 补入、Git 能力枚举改依 I3 §3.1、I5 最后实施、D3.1 补入、Migration 盘点标记完成、字段拆 `stage`/`work_package`）；缺陷台账 13 项（P0 五项：D-1 单列 draft 覆盖写 / D-2 source 缺组合唯一键 / D-3 finding 无 project_id / D-4 跨项目仓库可挂 Finding / D-5 无 Evidence 实体；另 D-6 Project 成员零写入、D-7 Git 能力零基础等）；待决 8 项需用户裁（B-1 I1 V1.1 / B-2 I6-B-036~051 内容缺失 / B-3 I2 双重占号 / B-4 I4 Q1/Q2 / B-5 I3 §3.5 字段名 / B-6 policy_version 类型 / B-7 I3↔I6-B-03 语义重叠 / B-8 C 编号起号）。
+
+- [ ] **S01-W13 Project 成员授权（P0，缺口 D-6）**
+  - **目标**：让 `core.project_member` 有真实写入路径，Project 成为真正的授权边界。
+  - **依据**：总体计划 §4.1 W13；`docs/s01-implementation-plan-v1.md` §4-D6；`docs/s01-task-registry-v1.md` §2.2。
+  - **做**：Project 成员 CRUD + 角色变更 + 撤权（REST + 应用层服务 + 审计）；迁移 `0030` 加 Project 侧角色枚举与唯一约束；撤权即时生效（不得凭历史授权快照继续执行）。
+  - **不做**：不做全局权限码管理端点（`delivery.policy_scope` 管理延后）；不动 Tenant 成员既有实现。
+  - **验收**：`S01-A001~A010`（正向 / 负向跨租户跨项目 404 / 并发授权变更与执行领取 / 幂等 / 权限服务异常默认拒绝 / 审计可追溯）；空库初始化与 `0029→0030` 升级双路径一致。
+
+- [ ] **I6-B-01～I6-B-09 与 Migration 0029（Discovery/Import 收敛，硬串行）**
+  - **目标**：把代码发现过程变成可追溯、可恢复的业务流程；DB 级保证 Project 归属一致。
+  - **依据**：`docs/ui/smark-pm-s01-i6-b-v1-1-merge-spec.md`（V1.0，V1.1 唯一输入）；`docs/ui/smark-pm-s01-i6-b-boundary-review-346-v1.md`；`docs/s01-migration-registry-v1.md` §3.2（M-0029 详案 14 个对象）。
+  - **做**：① I6-B V1.1 正文改写（按 merge-spec §7 修订清单）；② 迁移 `0029`：`core.project_initialization_operation`、`repo_import_draft_version`、`repo_import_source_attempt`、`discovery_finding_evidence` 四张新表 + 四列组合唯一键 + 四处 FK 换轨 + RESTRICT 换轨 + `repo_import.draft` 删列；③ Source 的 facts/counts 迁 Attempt（R-4-1）；④ DB 级负向测试 1~5 + 追加 2 条直接打库断言。
+  - **不做**：不写历史数据回填与兼容分支（`AGENTS.md` 规则 1，新项目无存量数据）；不与 `ai.document_proposal` 合并状态机；不在 `core.project` 加列承载 generation（R-3-4）。
+  - **验收**：冻结门槛 9 条全绿；DB 级负向测试全以约束违例断言（`23503`/`23505`/`23514`）；空库初始化与 `0028→0029` 升级双路径 Schema 一致；`I6-B-036~051` 十六条内容先补齐（待决 B-2）。
+  - **门禁**：G-DDL（逐条对照 merge-spec §2/§3/§4）→ G-DATA → 代码合并。
+
+- [ ] **I3-B～I3-E Git 操作能力模型与仓库写入授权（P1，缺口 D-7）**
+  - **目标**：建立 `read / modify / commit / push / create_pr / merge` 六能力授权（以 I3 §3.1 为准）。
+  - **依据**：`docs/ui/smark-pm-s01-i3-git-permission-and-repo-write-authorization-v1.md` §12；`docs/s01-implementation-plan-v1.md` §9-B5/B6。
+  - **做**：能力枚举与依赖链（modify←read、commit←modify、push←commit、merge 独立授权）；授权存储（迁移 `0031`）；Task 仓库范围（`0032` 快照列）；执行期强校验与撤权即时生效；`git_access.rs` 写命令扩展与 Push 凭据隔离。
+  - **不做**：不自动合并、不自动发布（总体计划 §0.2）；不把 `project_repository.role`（main/docs/service/infra）当权限等级复用；不改 0016 的 `auto_*` 策略字段作 Git 授权。
+  - **验收**：`I3-001~024`；默认仅 `read` 可授予；越权执行被拒且零副作用；授权快照 SHA-256 内容寻址且不可变；审计覆盖授予/变更/撤权。
+  - **门禁**：G-USER（能力枚举与 `policy_version` 类型缺口待裁）。
+
+- [ ] **I2-A / I4-A / I5-A 三份代码事实核验（后续实施的硬前置）**
+  - **目标**：产出 `docs/s01-i2-code-facts.md`、`docs/s01-i4-knowledge-facts.md`、`docs/s01-i5-code-facts.md`。
+  - **依据**：I2 V1.1 §16 I2-A；I4 §13 I4-A；I5 V1.1 §9.1 I5-A（14 项）。
+  - **做**：逐项标注「已证实 / 待核验 / 需新增」，带文件:行号。
+  - **不做**：不写实现代码；不改动既有设计稿结论。
+  - **验收**：三份文件存在且每项有证据；三份是 I2-B/I2-C、I4-B/I4-C、I5-B/I5-C 的前置。
 
 ---
 
