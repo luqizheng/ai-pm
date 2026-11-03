@@ -1,34 +1,40 @@
 # S01 TASK Registry V1.0
 
-> 文档性质：S01-0 退出产物（总体计划 §3.1 W06）
-> 上位：`docs/s01-implementation-plan-v1.md`（S01 实施计划 V1.0）、`docs/ui/smark-pm-s01-overall-implementation-plan-v1.md`（总体计划 V1.0）
-> 代码基线：`master 2933db8`　版本：V1.0　日期：2026-11-03
-> 字段定义：总体计划 §2.2（已由本基线拆分为 `stage` 与 `work_package` 两字段，见实施计划 §8 E-6）
+> 文档性质：S01 正式交付体系（`docs/s01-implementation-baseline-v1.md` §9 第二份）
+> 上位：**`docs/s01-implementation-baseline-v1.md`（正式实施基线 V1.0，唯一总基线）**；`docs/s01-implementation-plan-v1.md`（阶段出口与门禁）、`docs/ui/smark-pm-s01-overall-implementation-plan-v1.md`（总体计划 V1.0）
+> 代码基线：`feat/s01-implementation`（master 2933db8 + S01 批次）　版本：V1.1　日期：2026-11-03
+> 字段定义：正式基线 §7（13 项必备字段）+ 总体计划 §2.2（拆分为 `stage` 与 `work_package` 两字段，见实施计划 §8 E-6）
 
 ---
 
 ## 1. 字段与状态口径
 
-| 字段 | 说明 |
-|---|---|
-| `task_key` | 原始 TASK 编号（不改名，总体计划 §2.1） |
-| `stage` | S01 阶段：`S01-0`~`S01-6` |
-| `work_package` | 总体计划 §3.1/§4/§5/§6/§8/§9 的 `S01-Wxx`（**非平台 TASK ID**） |
-| `title` | 任务名称 |
-| `objective` | 目标 |
-| `source_design` | 来源设计稿及版本 |
-| `dependencies` | 前置 TASK |
-| `migration_scope` | 涉及的 Migration |
-| `rest_scope` | REST 改动 |
-| `mcp_scope` | MCP 改动 |
-| `worker_scope` | Worker 改动 |
-| `code_scope` | 代码模块 |
-| `acceptance` | 验收标准（详见 `docs/s01-acceptance-matrix-v1.md`） |
-| `parallelism` | 串行 / 接口依赖 / 可并行 |
-| `freeze_gate` | 冻结门禁（见实施计划 §6） |
-| `status` | `已实施` / `仅设计` / `未开工` / `待裁` / `延后` |
+| 字段 | 说明 | 基线依据 |
+|---|---|---|
+| `task_key` | 原始 TASK 编号（不改名，总体计划 §2.1） | §7 TASK ID |
+| `stage` | S01 阶段：`S01-0`~`S01-6` | 总体计划 §1 |
+| `work_package` | 总体计划 §3.1/§4/§5/§6/§8/§9 的 `S01-Wxx`（**非平台 TASK ID**） | 总体计划 §2.1 |
+| `title` | 任务名称 | §7 |
+| `objective` | 目标 | §7 |
+| `source_design` | 来源设计稿及版本（**设计依据**） | §7 设计依据 |
+| `code_facts` | 现有实现与核验结论（引用 `docs/s01-code-facts-ledger-v1.md` 的条目号） | §7 代码事实 |
+| `dependencies` | 前置 TASK | §7 依赖 |
+| `migration_scope` | 涉及的 Migration | §7 Migration |
+| `rest_scope` | REST 改动 | §7 API |
+| `mcp_scope` | MCP 改动 | §7 API |
+| `worker_scope` | Worker 改动 | §7 Worker |
+| `code_scope` | 代码模块 | §7 实施范围 |
+| `ui_scope` | 关联页面与组件（无前端改动填「无」） | §7 UI |
+| `test_scope` | 单元 / 集成 / 并发测试 | §7 测试 |
+| `acceptance` | 验收标准 + **验收级别 L1～L5**（详见 `docs/s01-acceptance-matrix-v1.md`） | §7 验收、§8 |
+| `parallelism` | 串行 / 接口依赖 / 可并行 | 总体计划 §12 |
+| `freeze_gate` | 冻结门禁（见实施计划 §6） | 总体计划 §6.5 |
+| `evidence` | **证据**：提交号 + 测试报告 + 运行结果（完成状态必须有） | §7 证据 |
+| `status` | `已实施` / `仅设计` / `未开工` / `待裁` / `延后` | — |
 
 状态机（总体计划 §2.3）：TASK 状态、Run 状态、Delivery 状态**独立管理**；Agent 执行成功 ≠ TASK 完成；Commit 成功 ≠ 交付验收通过。
+
+**实施纪律（基线 §7）**：一个 TASK 有明确业务边界；不跳过前置依赖；不未经裁决改变已冻结设计；发现代码事实与基线冲突先提交差异；发现新的 P0/P1 先暂停受影响范围；所有完成状态必须有测试或运行证据。
 
 ---
 
