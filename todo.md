@@ -428,13 +428,14 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **验收**：`S01-A001~A016`；`apps/pm-api/tests/project_members.rs` **15 例全绿**。
   - **完成记录（2026-11-03）**：迁移 `0030_project_member_role.sql`（role CHECK 白名单 6 值 + `(tenant_id, principal_id)` 索引，**无新表无回填**）；`pm-domain::project_member`（`ProjectMemberRole` Owner/Member + `is_agent_role`）；`pm-application::project_member`（`apply_member_change` 单事务：锁 tenant→project→member，审计与写入同事务）；`pm-api::project_members` 4 端点（GET/POST members、DELETE member、POST owner-transfer，**不提供 PATCH role——两档角色无中间态**）；**修 X-2**：租户成员移除时级联撤销其真人项目成员行（逐项目写 `project_member.revoked` 审计），且若其为某项目 owner 则拒绝移除（409 `PROJECT_OWNER_DEPENDENCY`，不静默产生无主项目）。真人项目角色只两档（owner/member），Agent 职能值（ai_pm/architect/developer/tester）留在原列由 bootstrap 独占维护。
 
-- [ ] **I6-B-01～I6-B-09 与 Migration 0029（Discovery/Import 收敛，硬串行）**
+- [~] **I6-B-01～I6-B-09 与 Migration 0031（Discovery/Import 收敛，硬串行）**（进行中 2026-11-03）
   - **目标**：把代码发现过程变成可追溯、可恢复的业务流程；DB 级保证 Project 归属一致。
   - **依据**：`docs/ui/smark-pm-s01-i6-b-v1-1-merge-spec.md`（V1.0，V1.1 唯一输入）；`docs/ui/smark-pm-s01-i6-b-boundary-review-346-v1.md`；`docs/s01-migration-registry-v1.md` §3.2（M-0029 详案 14 个对象）。
   - **做**：① I6-B V1.1 正文改写（按 merge-spec §7 修订清单）；② 迁移 `0029`：`core.project_initialization_operation`、`repo_import_draft_version`、`repo_import_source_attempt`、`discovery_finding_evidence` 四张新表 + 四列组合唯一键 + 四处 FK 换轨 + RESTRICT 换轨 + `repo_import.draft` 删列；③ Source 的 facts/counts 迁 Attempt（R-4-1）；④ DB 级负向测试 1~5 + 追加 2 条直接打库断言。
   - **不做**：不写历史数据回填与兼容分支（`AGENTS.md` 规则 1，新项目无存量数据）；不与 `ai.document_proposal` 合并状态机；不在 `core.project` 加列承载 generation（R-3-4）。
   - **验收**：冻结门槛 9 条全绿；DB 级负向测试全以约束违例断言（`23503`/`23505`/`23514`）；空库初始化与 `0028→0029` 升级双路径 Schema 一致；`I6-B-036~051` 十六条内容先补齐（待决 B-2）。
   - **门禁**：G-DDL（逐条对照 merge-spec §2/§3/§4）→ G-DATA → 代码合并。
+  - **阶段记录（2026-11-03）**：**I6-B V1.1 正文已新写落盘**（`docs/ui/smark-pm-s01-i6-b-v1-1.md`——V1.0 正文不在本仓，按合并规格+边界评审+I6-A 代码事实重写，并自定 I6-B-036~051 十六条验收）；**迁移 0031 已实施**（14 个对象：4 张新表 + Source 整表重建 + 7 条 FK 换轨 + 仓库删除 RESTRICT + Import 名额索引重建）；领域层已适配（导入创建固化仓库集合并开首轮 Attempt、采集事实写 Attempt、草案版本化、Finding/Question/Proposal 携带 project_id、Evidence 落独立表、旧形状证据降级 system_observation 不伪造 Commit）；**DB 级负向测试 13 例全绿**（`crates/pm-application/tests/i6b_db_constraints.rs`，直接打库断言 23503/23505/23514）；全量 96 套件 / 712 passed / 0 failed。**未做**：I6-B-05（Discovery 权限与接口收敛：MCP 权限码表补全、`proposed` 显式终止端点、`repository_ids` 必填）、I6-B-06（审计与幂等：Attempt 层审计动作、幂等键透传）。
 
 - [ ] **I3-B～I3-E Git 操作能力模型与仓库写入授权（P1，缺口 D-7）**
   - **目标**：建立 `read / modify / commit / push / create_pr / merge` 六能力授权（以 I3 §3.1 为准）。
