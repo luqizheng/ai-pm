@@ -39,6 +39,67 @@ pub struct DiscoveryFindingView {
     pub actor_role: Option<String>,
     pub repository_ids: Vec<Uuid>,
     pub created_at: DateTime<Utc>,
+    /// I2-033 业务展示态（§8.1 四态）：由**最近一次有效人工决定审计**推导，
+    /// 不从 open question 推导。取值 `PENDING`（待确认）/ `REVISION_REQUESTED`
+    /// （待补充）/ `CONFIRMED`（已确认）/ `REJECTED`（已拒绝）/ `CONFLICT`。
+    #[serde(default)]
+    pub display_state: String,
+}
+
+/// 人工决定审计动作（I2-033 推导依据；`discovery_finding_revision_requested`
+/// 为 I2 V1.1 §8.2 指定名，其余为既有实现名）。
+pub const DECISION_AUDIT_ACTIONS: [&str; 2] =
+    ["finding.decided", "discovery_finding_revision_requested"];
+
+/// 「要求补充」决定（I2-C §7：不改变 `verification_status`，只落审计）。
+pub const DECISION_REVISION_REQUESTED: &str = "REVISION_REQUESTED";
+
+/// 批量取每个 Finding 最近一次有效人工决定审计的 action（I2-033 推导第一步）。
+///
+/// 按 `created_at DESC, id DESC` 取最近一条（§8.3「时间 + 稳定顺序」）；
+/// 无审计 → 不出现在结果里（历史数据保守展示，§8.4）。
+pub async fn latest_decision_actions(
+    pool: &PgPool,
+    project_id: Uuid,
+    finding_ids: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, String>, sqlx::Error> {
+    let mut map = std::collections::HashMap::new();
+    if finding_ids.is_empty() {
+        return Ok(map);
+    }
+    let rows: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT DISTINCT ON (target_id) target_id, action \
+         FROM governance.audit_log \
+         WHERE project_id = $1 AND target_type = 'discovery_finding' \
+           AND target_id = ANY($2) AND action = ANY($3) \
+         ORDER BY target_id, created_at DESC, id DESC",
+    )
+    .bind(project_id)
+    .bind(finding_ids)
+    .bind(&DECISION_AUDIT_ACTIONS)
+    .fetch_all(pool)
+    .await?;
+    for (finding_id, action) in rows {
+        map.insert(finding_id, action);
+    }
+    Ok(map)
+}
+
+/// §8.1 展示态映射（结合当前 `verification_status` 与最近一次有效决定）。
+pub fn derive_display_state(
+    verification_status: &str,
+    latest_decision_action: Option<&str>,
+) -> String {
+    match verification_status {
+        "CONFIRMED" => "CONFIRMED".to_string(),
+        "REJECTED" => "REJECTED".to_string(),
+        // PENDING + 要求补充 → 待补充；挂有 AI open question **不**参与推导。
+        "PENDING" if latest_decision_action == Some("discovery_finding_revision_requested") => {
+            "REVISION_REQUESTED".to_string()
+        }
+        // 其余（无有效决定 / 历史不完整 / CONFLICT）保守展示原状态。
+        other => other.to_string(),
+    }
 }
 
 /// Finding 的创建通道（I2-B / I2-D：**入口决定定态**，外部不可指定）。
@@ -110,7 +171,9 @@ fn to_finding(
     row: FindingRow,
     repository_ids: Vec<Uuid>,
     evidence: serde_json::Value,
+    latest_decision_action: Option<&str>,
 ) -> DiscoveryFindingView {
+    let display_state = derive_display_state(&row.5, latest_decision_action);
     DiscoveryFindingView {
         id: row.0,
         session_id: row.1,
@@ -122,6 +185,7 @@ fn to_finding(
         actor_role: row.7,
         repository_ids,
         created_at: row.8,
+        display_state,
     }
 }
 
@@ -409,7 +473,7 @@ pub(crate) async fn add_finding_in_tx(
     let ids = vec![row.0];
     let mut evidence_map = evidence_by_finding_tx(tx, tenant_id, &ids).await?;
     let evidence = evidence_map.remove(&row.0).unwrap_or_else(|| serde_json::json!([]));
-    Ok(to_finding(row, repository_ids, evidence))
+    Ok(to_finding(row, repository_ids, evidence, None))
 }
 
 /// 写入一条证据（I6-B-04）。
@@ -502,12 +566,19 @@ pub async fn list_findings(
     let links = repository_ids_by_session(pool, tenant_id, session_id).await?;
     let ids: Vec<Uuid> = rows.iter().map(|row| row.0).collect();
     let evidence_map = evidence_by_finding(pool, tenant_id, &ids).await?;
+    // I2-033：批量取最近一次有效人工决定审计（project_id 各行相同）。
+    let project_id = rows.first().map(|row| row.6);
+    let decisions = match project_id {
+        Some(project_id) => latest_decision_actions(pool, project_id, &ids).await?,
+        None => std::collections::HashMap::new(),
+    };
     Ok(rows
         .into_iter()
         .map(|row| {
             let ids = links.get(&row.0).cloned().unwrap_or_default();
             let evidence = evidence_map.get(&row.0).cloned().unwrap_or_else(|| serde_json::json!([]));
-            to_finding(row, ids, evidence)
+            let latest = decisions.get(&row.0).map(String::as_str);
+            to_finding(row, ids, evidence, latest)
         })
         .collect())
 }
@@ -537,7 +608,9 @@ pub async fn get_finding(
     .await?;
     let mut evidence_map = evidence_by_finding(pool, tenant_id, &[row.0]).await?;
     let evidence = evidence_map.remove(&row.0).unwrap_or_else(|| serde_json::json!([]));
-    Ok(to_finding(row, ids, evidence))
+    let decisions = latest_decision_actions(pool, row.6, &[row.0]).await?;
+    let latest = decisions.get(&row.0).map(String::as_str);
+    Ok(to_finding(row, ids, evidence, latest))
 }
 
 /// 人工决定入口的**唯一**状态写点（I2-035：不再作为可绕过审计/锁的公开原语

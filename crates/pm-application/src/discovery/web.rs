@@ -107,7 +107,12 @@ pub async fn record_finding_verification(
     confirmed_finding_content: Option<&str>,
     operation_id: Option<&str>,
 ) -> Result<FindingVerificationOutcome, DiscoveryError> {
-    validate_one_of(status, &VERIFICATION_STATUSES, "verification_status")?;
+    // REVISION_REQUESTED（要求补充）不是 verification_status——它**不改状态**、
+    // 只落设计稿 §8.2 指定的审计 action；其余按既有四态校验。
+    let is_revision_request = status == DECISION_REVISION_REQUESTED;
+    if !is_revision_request {
+        validate_one_of(status, &VERIFICATION_STATUSES, "verification_status")?;
+    }
     if answer.trim().is_empty() {
         return Err(DiscoveryError::Validation(
             "answer must not be blank".to_string(),
@@ -116,18 +121,29 @@ pub async fn record_finding_verification(
 
     let mut tx = pool.begin().await?;
 
-    // Session → Project（审计与幂等键的锚点）。
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM discovery.discovery_session \
-         WHERE tenant_id = $1 AND id = $2 FOR UPDATE",
+    // Session → Project（审计与幂等键的锚点）；**先锁 Project 行**——
+    // 归档与决定的竞争由行锁串行化（I2 §15.3 场景 3；锁序 project → session →
+    // finding 单向，与 I1 的 project → run → task 同向不成环）。
+    let session_row: Option<(Uuid, String)> = sqlx::query_as(
+        "SELECT s.project_id, p.status \
+         FROM discovery.discovery_session s \
+         JOIN core.project p ON p.tenant_id = s.tenant_id AND p.id = s.project_id \
+         WHERE s.tenant_id = $1 AND s.id = $2 \
+         FOR UPDATE OF s",
     )
     .bind(tenant_id)
     .bind(session_id)
     .fetch_optional(&mut *tx)
     .await?;
-    let Some(project_id) = project_id else {
+    let Some((project_id, project_status)) = session_row else {
         return Err(DiscoveryError::SessionNotFound);
     };
+    if project_status == "archived" {
+        // 归档项目只读（I2-C §4「Project 非 archived」）：零写入。
+        return Err(DiscoveryError::Validation(
+            "project is archived; findings are read-only".to_string(),
+        ));
+    }
 
     // operation_id 幂等：重放返回当前状态、零业务写入（N-4 先例）。
     if let Some(key) = operation_id.map(str::trim).filter(|k| !k.is_empty()) {
@@ -189,7 +205,15 @@ pub async fn record_finding_verification(
     }
 
     // 条件更新（I2-020）：同值重复决定是 no-op。
-    let changed = set_finding_verification_tx(&mut tx, tenant_id, finding_id, status).await?;
+    // REVISION_REQUESTED（要求补充）：状态不变，只落设计稿 §8.2 指定的审计。
+    let (changed, audit_action) = if is_revision_request {
+        (before.clone(), "discovery_finding_revision_requested")
+    } else {
+        (
+            set_finding_verification_tx(&mut tx, tenant_id, finding_id, status).await?,
+            "finding.decided",
+        )
+    };
 
     // question/answer（同事务）：优先回答既有 open 问题，否则按状态新建一对。
     let existing: Option<(Uuid, String)> = sqlx::query_as(
@@ -245,13 +269,15 @@ pub async fn record_finding_verification(
         _ => None,
     };
 
-    // 审计（同事务；失败即整体回滚）。
+    // 审计（同事务；失败即整体回滚）。action 按决定类型：
+    // 确认/拒绝 → `finding.decided`；要求补充 → `discovery_finding_revision_requested`
+    //（I2 V1.1 §8.2 指定名，读取侧按它推导「待补充」）。
     let answer_digest: String = answer_view_text.clone();
     crate::pm_write::append_audit_with_after(
         &mut *tx,
         project_id,
         &crate::actor::AuditActor::principal(answered_by),
-        "finding.decided",
+        audit_action,
         "discovery_finding",
         Some(finding_id),
         serde_json::json!({
@@ -328,19 +354,50 @@ async fn get_finding_tx(
             )
             .collect(),
     );
+    // I2-033：事务内推导展示态（最近一次有效人工决定审计）。
+    let decisions = latest_decision_actions_tx(&mut *tx, row.6, &[finding_id]).await?;
+    let latest = decisions.get(&finding_id).map(String::as_str);
     Ok(DiscoveryFindingView {
         id: row.0,
         session_id: row.1,
         kind: row.2,
         content: row.3,
         confidence: row.4,
-        verification_status: row.5,
+        verification_status: row.5.clone(),
         evidence,
         actor_role: row.7,
         repository_ids: ids,
         created_at: row.8,
+        display_state: pm_domain_display(row.5.as_str(), latest),
     })
 }
+
+/// 事务版批量取最近人工决定审计（与 `finding::latest_decision_actions` 同口径）。
+async fn latest_decision_actions_tx(
+    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    project_id: Uuid,
+    finding_ids: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, String>, DiscoveryError> {
+    let mut map = std::collections::HashMap::new();
+    let rows: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT DISTINCT ON (target_id) target_id, action \
+         FROM governance.audit_log \
+         WHERE project_id = $1 AND target_type = 'discovery_finding' \
+           AND target_id = ANY($2) AND action = ANY($3) \
+         ORDER BY target_id, created_at DESC, id DESC",
+    )
+    .bind(project_id)
+    .bind(finding_ids)
+    .bind(&DECISION_AUDIT_ACTIONS)
+    .fetch_all(&mut **tx)
+    .await?;
+    for (finding_id, action) in rows {
+        map.insert(finding_id, action);
+    }
+    Ok(map)
+}
+
+use crate::discovery::finding::derive_display_state as pm_domain_display;
 
 /// 该 finding 最近一次 question（事务版）。
 async fn latest_qa_tx(

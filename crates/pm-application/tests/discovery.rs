@@ -1033,3 +1033,342 @@ async fn i2_c_repeated_same_decision_is_a_noop(pool: PgPool) {
     .unwrap();
     assert_eq!(status, "CONFIRMED");
 }
+
+// ───────────────────────────── I2-E 并发全量验收 + I2-033 审计推导 ──────────
+
+/// §15.3 场景 1/2：同一 Finding 并发决定（两人同确认 / 确认对拒绝）——
+/// 行锁串行化 + 条件更新，终态唯一确定、每轮决定都有审计。
+#[sqlx::test(migrations = "../../migrations")]
+async fn i2_e_concurrent_decisions_serialize_with_unique_final_state(pool: PgPool) {
+    let fx = seed(&pool).await;
+    let session = discovery::create_session(
+        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+    )
+    .await
+    .unwrap();
+    let finding = discovery::add_finding(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        NewFinding {
+            kind: "observed".to_string(),
+            content: "并发目标".to_string(),
+            confidence: None,
+            evidence: json!([]),
+            repository_ids: vec![],
+            actor_role: None,
+        },
+        FindingCreator::HumanDirect,
+    )
+    .await
+    .unwrap();
+
+    // 第二个真人（租户成员）。
+    let other: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.principal (kind, display_name, is_active) \
+         VALUES ('human', 'i2e-peer', true) RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO core.tenant_member (tenant_id, principal_id, role) VALUES ($1, $2, 'member')",
+    )
+    .bind(fx.tenant_id)
+    .bind(other)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let (a, b) = tokio::join!(
+        discovery::record_finding_verification(
+            &pool, fx.tenant_id, session.id, finding.id, "CONFIRMED", "甲确认", fx.human_id,
+            None, None,
+        ),
+        discovery::record_finding_verification(
+            &pool, fx.tenant_id, session.id, finding.id, "CONFIRMED", "乙确认", other,
+            None, None,
+        ),
+    );
+    assert!(a.is_ok(), "a: {a:?}");
+    assert!(b.is_ok(), "b: {b:?}（条件更新使同值决定成为 no-op 而非冲突）");
+    let after = discovery::get_finding(&pool, fx.tenant_id, finding.id).await.unwrap();
+    assert_eq!(after.verification_status, "CONFIRMED");
+    let audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log \
+          WHERE project_id = $1 AND action = 'finding.decided' AND target_id = $2",
+    )
+    .bind(fx.project_id)
+    .bind(finding.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audits, 2, "both rounds are audited; only the first changes status");
+
+    // 确认对拒绝并发：行锁串行 → 后到者覆盖（状态机允许的重开路径），终态唯一。
+    let (c, d) = tokio::join!(
+        discovery::record_finding_verification(
+            &pool, fx.tenant_id, session.id, finding.id, "REJECTED", "甲拒绝", fx.human_id,
+            None, None,
+        ),
+        discovery::record_finding_verification(
+            &pool, fx.tenant_id, session.id, finding.id, "CONFIRMED", "乙再确认", other,
+            None, None,
+        ),
+    );
+    assert!(c.is_ok() && d.is_ok(), "c: {c:?} d: {d:?}");
+    let after = discovery::get_finding(&pool, fx.tenant_id, finding.id).await.unwrap();
+    assert!(
+        after.verification_status == "REJECTED" || after.verification_status == "CONFIRMED",
+        "final state must be one deterministic winner, got {}",
+        after.verification_status
+    );
+}
+
+/// §15.3 场景 3：归档项目上决定被拒（Project 行锁串行化归档与决定的竞争；
+/// 完整的归档写入路径归 I1-D，此处验证守卫侧）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn i2_e_archived_project_rejects_decisions(pool: PgPool) {
+    let fx = seed(&pool).await;
+    let session = discovery::create_session(
+        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+    )
+    .await
+    .unwrap();
+    let finding = discovery::add_finding(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        NewFinding {
+            kind: "observed".to_string(),
+            content: "归档前".to_string(),
+            confidence: None,
+            evidence: json!([]),
+            repository_ids: vec![],
+            actor_role: None,
+        },
+        FindingCreator::HumanDirect,
+    )
+    .await
+    .unwrap();
+
+    sqlx::query("UPDATE core.project SET status = 'archived' WHERE id = $1")
+        .bind(fx.project_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let err = discovery::record_finding_verification(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        finding.id,
+        "CONFIRMED",
+        "归档后决定",
+        fx.human_id,
+        None,
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, DiscoveryError::Validation(_)));
+
+    // 零副作用：状态未变、无审计。
+    let after = discovery::get_finding(&pool, fx.tenant_id, finding.id).await.unwrap();
+    assert_eq!(after.verification_status, "PENDING");
+    let audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log WHERE action IN ('finding.decided','discovery_finding_revision_requested')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audits, 0);
+}
+
+/// §15.3 场景 6：同 Project 下跨 Session 操作 Finding → 404（先校验后写）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn i2_e_cross_session_decision_is_rejected(pool: PgPool) {
+    let fx = seed(&pool).await;
+    let s1 = discovery::create_session(
+        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+    )
+    .await
+    .unwrap();
+    let s2 = discovery::create_session(
+        &pool, fx.tenant_id, fx.project_id, "CODEX", "UPDATE", fx.human_id,
+    )
+    .await
+    .unwrap();
+    let finding = discovery::add_finding(
+        &pool,
+        fx.tenant_id,
+        s1.id,
+        NewFinding {
+            kind: "observed".to_string(),
+            content: "s1 的发现".to_string(),
+            confidence: None,
+            evidence: json!([]),
+            repository_ids: vec![],
+            actor_role: None,
+        },
+        FindingCreator::HumanDirect,
+    )
+    .await
+    .unwrap();
+
+    let err = discovery::record_finding_verification(
+        &pool,
+        fx.tenant_id,
+        s2.id,
+        finding.id,
+        "CONFIRMED",
+        "跨 Session 决定",
+        fx.human_id,
+        None,
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, DiscoveryError::FindingNotFound));
+    let after = discovery::get_finding(&pool, fx.tenant_id, finding.id).await.unwrap();
+    assert_eq!(after.verification_status, "PENDING", "zero side effects");
+}
+
+/// I2-033：要求补充不改状态、落 `discovery_finding_revision_requested` 审计、
+/// 展示态推导为待补充；同时挂 AI open question（§15.3 场景 15）**不**影响推导。
+#[sqlx::test(migrations = "../../migrations")]
+async fn i2_033_revision_request_derives_display_state_from_audit(pool: PgPool) {
+    let fx = seed(&pool).await;
+    let session = discovery::create_session(
+        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+    )
+    .await
+    .unwrap();
+    let finding = discovery::add_finding(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        NewFinding {
+            kind: "observed".to_string(),
+            content: "需要补充信息".to_string(),
+            confidence: None,
+            evidence: json!([]),
+            repository_ids: vec![],
+            actor_role: None,
+        },
+        FindingCreator::HumanDirect,
+    )
+    .await
+    .unwrap();
+
+    // AI 侧挂一个 open question（不得参与推导）。
+    discovery::add_question(&pool, fx.tenant_id, session.id, "AI 澄清问题", None, Some(finding.id))
+        .await
+        .unwrap();
+
+    let outcome = discovery::record_finding_verification(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        finding.id,
+        "REVISION_REQUESTED",
+        "请补充数据来源",
+        fx.human_id,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+
+    // 状态不变；审计 action 为设计稿指定名。
+    assert_eq!(outcome.finding.verification_status, "PENDING");
+    assert_eq!(outcome.finding.display_state, "REVISION_REQUESTED");
+    let action: String = sqlx::query_scalar(
+        "SELECT action FROM governance.audit_log \
+          WHERE project_id = $1 AND target_id = $2 \
+          ORDER BY created_at DESC, id DESC LIMIT 1",
+    )
+    .bind(fx.project_id)
+    .bind(finding.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(action, "discovery_finding_revision_requested");
+
+    // 读取侧（list 路径）同样推导出待补充。
+    let listed = discovery::list_findings(&pool, fx.tenant_id, session.id).await.unwrap();
+    let target = listed.iter().find(|f| f.id == finding.id).unwrap();
+    assert_eq!(target.display_state, "REVISION_REQUESTED");
+}
+
+/// §8.4：历史 Finding 缺少人工决定审计 → 保守展示原状态（待确认），不崩。
+#[sqlx::test(migrations = "../../migrations")]
+async fn i2_033_missing_audit_falls_back_conservatively(pool: PgPool) {
+    let fx = seed(&pool).await;
+    let session = discovery::create_session(
+        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+    )
+    .await
+    .unwrap();
+    let finding = discovery::add_finding(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        NewFinding {
+            kind: "observed".to_string(),
+            content: "无审计历史".to_string(),
+            confidence: None,
+            evidence: json!([]),
+            repository_ids: vec![],
+            actor_role: None,
+        },
+        FindingCreator::HumanDirect,
+    )
+    .await
+    .unwrap();
+    let listed = discovery::list_findings(&pool, fx.tenant_id, session.id).await.unwrap();
+    assert_eq!(listed[0].display_state, "PENDING");
+}
+
+/// §15.3 场景 12：相同 operation_id 携带不同业务内容 → 幂等吸收，返回首次决定。
+#[sqlx::test(migrations = "../../migrations")]
+async fn i2_e_same_operation_id_with_different_payload_replays_first(pool: PgPool) {
+    let fx = seed(&pool).await;
+    let session = discovery::create_session(
+        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+    )
+    .await
+    .unwrap();
+    let finding = discovery::add_finding(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        NewFinding {
+            kind: "observed".to_string(),
+            content: "幂等目标".to_string(),
+            confidence: None,
+            evidence: json!([]),
+            repository_ids: vec![],
+            actor_role: None,
+        },
+        FindingCreator::HumanDirect,
+    )
+    .await
+    .unwrap();
+
+    let first = discovery::record_finding_verification(
+        &pool, fx.tenant_id, session.id, finding.id, "CONFIRMED", "首次", fx.human_id,
+        None, Some("op-x"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(first.finding.verification_status, "CONFIRMED");
+
+    let second = discovery::record_finding_verification(
+        &pool, fx.tenant_id, session.id, finding.id, "REJECTED", "不同内容", fx.human_id,
+        None, Some("op-x"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(second.finding.verification_status, "CONFIRMED", "replay must not apply the new payload");
+}
