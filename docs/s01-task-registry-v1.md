@@ -134,10 +134,10 @@
 
 | task_key | stage | W | title | source_design | dependencies | migration | rest | mcp | worker | code | acceptance | parallelism | gate | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I1-A | S01-2/S01-4 | W20+W15 | Project 活动门禁基础设施 | I1 §16 | — | — | — | — | — | 状态核验 + 行锁 | Acceptance Matrix §3-E | 串行 | G-USER(B-1) | 仅设计 |
+| I1-A | S01-2/S01-4 | W20+W15 | Project 活动门禁基础设施 | I1 §16 | — | — | 归档 + Run 取消端点 | — | — | `project_gate.rs` + `archive.rs` | Acceptance Matrix §3-E（三入口守卫） | 串行 | G-USER(B-1) | **已实施（2026-11-04，B-1 默认并入 P1~P4，正文回填 V1.1）** |
 | I1-B | S01-4 | — | Run 创建入口改造 | I1 §16 | I1-A、D5 | — | — | — | `outbox_handlers.rs` | `run_executor.rs` | I1-007~009、012~013、035~036 | 串行 | G-USER(B-1) | 仅设计 |
 | I1-C | S01-4 | — | Worker claim 改造（两阶段候选 + Project 锁定） | I1 §16 | I1-A、D1 | — | — | `pm_claim_task` | `claim_core` | `run_dispatch/claim.rs` | I1-010~014 | 串行 | G-USER(B-1) | 仅设计 |
-| I1-D | S01-6 | W62 | 归档事务与 Run 取消 | I1 §16 | I1-A、D3.1 | — | 需归档端点 | — | — | `run_dispatch/` | I1-015~024 | 串行 | G-USER(B-1) | 仅设计 |
+| I1-D | S01-6 | W62 | 归档事务与 Run 取消 | I1 §16 | I1-A、D3.1 | — | 已有（归档 + 外部取消） | — | — | `archive.rs` + `project_lifecycle.rs` | I1-015~024（部分） | 串行 | G-USER(B-1) | **已实施（2026-11-04）** |
 | I1-E | S01-6 | W62 | Executor 启动握手与持久化清理 | I1 §16 | D3.1 | — | — | — | `codex_executor.rs` | `codex_executor.rs` | I1-025~034、040 | 串行 | G-USER(B-1) | 仅设计 |
 | I1-F | S01-6 | W64 | 全链路回归 | I1 §16 | I1-A~I1-E | — | — | — | — | 集成测试 | I1-035~040 | 串行 | G-ACCEPT | 仅设计 |
 | I2-A | S01-0→S01-3 | W02+W33 | 现状核验与安全边界确认 | I2 V1.1 §16 | — | — | — | — | — | `discovery/finding.rs` | 交付 `docs/s01-i2-code-facts.md` | 可并行 | — | 未开工 |

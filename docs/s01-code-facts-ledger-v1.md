@@ -179,6 +179,8 @@
 
 | **G-27** | **Git 能力授权零实现**（缺陷 D-7：无枚举、无字段、无策略、`git_access.rs` 物理只读） | I3 §3.1~§3.3；B-6 默认（方案 A） | ✅ 迁移 `0032`：`task_run.policy_snapshot_hash TEXT`（I3-D 填充）+ `integration.git_capability_grant`（六能力 CHECK，(tenant,project,repo,principal) 粒度）；`pm-domain::git_capability` 判定层（依赖闭包 + 默认最小权限，8 例单测）；REST PUT/DELETE/GET capabilities（管理者守卫 + 审计 + 依赖链服务端校验）；4 例集成验收 | I3-B（已闭合；I3-C Task 范围 / I3-D Run 快照填充 / I3-E 执行期强校验 / I3-F 审计回归仍待） |
 
+| **G-28** | **归档生命周期零实现**（`core.project.status` 消费者为零；queued 无取消路径；`cancel_run` 无外部入口；残留进程无告警——I1 核验稿三入口事实） | I1 设计稿；B-1 默认（P1~P4 并入） | ✅ `project_gate.rs` 统一门禁（三入口接入：claim_core / TaskReadyHandler / enqueue_review）+ `archive.rs` 归档事务（P1 queued 条件取消、N-2 Import 终态化、P4 名额释放）+ REST 归档与 `POST /task-runs/{id}/cancel`（P2，reason 协议化）+ P3 残留进程告警（run.orphan_suspected，1h 去重）；I1 正文回填 V1.1 | I1-A/I1-D/P1~P4（已闭合；I1-B/C 两阶段候选、I1-E Executor 握手、I1-F 全链回归仍待） |
+
 ### 10.3 结构性观察（非缺陷，供后续裁决参考）
 
 | # | 观察 | 说明 |
