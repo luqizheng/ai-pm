@@ -115,8 +115,12 @@ pub async fn propose_import(
     req: ApplyRequest,
 ) -> Result<ProposedImport, ImportError> {
     let existing: Option<(String, Option<Uuid>, Option<serde_json::Value>, i64)> = sqlx::query_as(
-        "SELECT status, analysis_run_id, draft, draft_revision \
-         FROM integration.repo_import WHERE id = $1 AND project_id = $2",
+        "SELECT i.status, i.analysis_run_id, dv.draft, i.draft_revision \
+         FROM integration.repo_import i \
+         LEFT JOIN integration.repo_import_draft_version dv \
+                ON dv.tenant_id = i.tenant_id AND dv.import_id = i.id \
+               AND dv.revision = i.draft_revision \
+         WHERE i.id = $1 AND i.project_id = $2",
     )
     .bind(import_id)
     .bind(project_id)

@@ -47,16 +47,29 @@ async fn seed_project(pool: &PgPool) -> Uuid {
     Uuid::parse_str(body["id"].as_str().unwrap()).unwrap()
 }
 
-/// 种子一个 draft_ready 导入，draft 带 2 条 unknowns（Fake 模型产物形态）。
+/// 种子一个 draft_ready 导入，草案带 2 条 unknowns（Fake 模型产物形态）。
+///
+/// 草案落 `integration.repo_import_draft_version`（I6-B D-1a：版本化，不再是
+/// `repo_import` 上的单列），`repo_import.draft_revision` 指向该版本。
 async fn seed_import(pool: &PgPool, project_id: Uuid) -> Uuid {
     let import_id: Uuid = sqlx::query_scalar(
         "INSERT INTO integration.repo_import \
-         (tenant_id, project_id, requested_by, status, draft) \
-         VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $1, $2, 'draft_ready', $3) \
+         (tenant_id, project_id, requested_by, status, draft_revision) \
+         VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $1, $2, 'draft_ready', 1) \
          RETURNING id",
     )
     .bind(project_id)
     .bind(pm_api::auth::DEV_OFF_PRINCIPAL)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO integration.repo_import_draft_version \
+         (tenant_id, import_id, revision, draft, generation_status, generated_at) \
+         VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $2, 1, $3, 'succeeded', now())",
+    )
+    .bind(project_id)
+    .bind(import_id)
     .bind(json!({
         "schema_version": 1,
         "unknowns": [
@@ -64,7 +77,7 @@ async fn seed_import(pool: &PgPool, project_id: Uuid) -> Uuid {
             { "question": "部署形态是单机还是集群？", "why_blocking": "阻塞运维规划" }
         ]
     }))
-    .fetch_one(pool)
+    .execute(pool)
     .await
     .unwrap();
     import_id

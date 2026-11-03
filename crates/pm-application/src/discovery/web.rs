@@ -26,8 +26,11 @@ pub async fn start_session_from_import(
         });
     };
     let draft_value: Option<(serde_json::Value,)> = sqlx::query_as(
-        "SELECT draft FROM integration.repo_import \
-         WHERE tenant_id = $1 AND project_id = $2 AND id = $3",
+        "SELECT dv.draft FROM integration.repo_import i \
+         LEFT JOIN integration.repo_import_draft_version dv \
+                ON dv.tenant_id = i.tenant_id AND dv.import_id = i.id \
+               AND dv.revision = i.draft_revision \
+         WHERE i.tenant_id = $1 AND i.project_id = $2 AND i.id = $3",
     )
     .bind(tenant_id)
     .bind(project_id)
