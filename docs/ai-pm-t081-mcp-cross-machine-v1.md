@@ -111,3 +111,32 @@ rmcp 的 `allowed_hosts` 为空即等于放行任何 Host（其源码注释直�
   2. **默认零变更**——不设环境变量时行为与改造前逐字相同（回环默认），因此存量部署不需要改配置。
   3. **只增不减**——配置跨机 Host 不会反噬本机探针。
   4. **空名单 = 放行全部**——rmcp 的语义陷阱，本仓用「解析后为空即回落」+ 代码断言双重堵死。
+
+---
+
+## 七、C166 七项门禁跨机实测（2026-11-03，本条验收闭环）
+
+**发起侧**：本机 `192.168.2.4`（真实 Windows 开发机，用户裁定选型；`192.168.2.43` 无 MCP 组件）。
+**服务端**：`192.168.2.10:8090`（`~/ai-pm`，`COMPOSE_OVERLAY=docker-compose.test-server.yml`，12 容器）。
+**凭据链**：lmms `credential-login`（admin）→ JWT（`PM_MCP_READ` + `PM_MCP_DOCUMENT_WRITE`）。
+
+| # | 门禁 | 结果 | 证据 |
+|---|---|---|---|
+| ① | Windows 机可访问服务器 `/mcp` | ✅ | `tools/list` **200** / 18 工具（跨机 Host `192.168.2.10`） |
+| ② | 认证链路可用真人 Key | ✅ | 同上请求带 `Bearer <JWT>`；未带 → 401 |
+| ③ | MCP 工具拿到正确真人 Principal | ✅ | `pm_list_tasks` 返回成员项目 ready 任务；审计 `actor_id` = admin 的真人 principal（`dae9a90a`） |
+| ④ | 成员校验仍有效 | ✅ | 不存在项目 → `isError` "not found (or not visible)"（不泄露）；全矩阵 CI C173 |
+| ⑤ | 审计归因仍有效 | ✅ | REST `task.create/update` 四列齐（`actor_identity_id`/`credential-login-service`/`interactive`）；MCP 写 `pm_submit_document` 真实落知识仓 git commit `c5751c1f`；未知设备声明 → `device_attribution_ignored` 留痕（**C176 实证**） |
+| ⑥ | 长连接不被反代截断 | N/A | 当前拓扑直连 8090、stateless JSON 模式；上反代时再验 |
+| ⑦ | 未认证/越权被拒 | ✅ | 无 bearer → `IAM_AUTH_1005`；坏 token → `IAM_AUTH_1004`；未声明 Host → **403** |
+
+另验：`/health` 200；`/install/z-code?format=json` 以 `AI_PM_PUBLIC_BASE_URL` 推导出 `http://192.168.2.10:8090` 全套端点与技能包 URL（T-080 接入指引跨机可用）。
+
+### 部署实况与环境发现
+
+1. **服务器拉不到基础镜像**：`daemon.json` 的 ustc mirror DNS 不解析（服务器无外网）→ 镜像本机构建 `docker save | ssh docker load` 传入，tag 回 `aipm/pm-api:0.1.0`。
+2. **运行时镜像缺 git（已修，`59e2b3a`）**：MCP 知识写入路径容器内 shell 出 `git` 必挂——本机 e2e 跑宿主二进制从未暴露。修复 = runtime-pm-api 装 git + `AI_PM_KNOWLEDGE_ROOT=/data/knowledge` 挂 named volume（默认落容器内路径，重建即丢）。
+3. **服务器库零 `task_run`**：种子任务直接置 ready、无 TaskReady 事件；UI 直写 `update_task` 不产 run → `pm_claim_task` / `report_progress` 的 MCP 归因由 CI `caller_ctx.rs` 覆盖，未在两机跑（T-090 自带 run 链路时顺带补）。
+4. 探针残留：task `7b017243`（T-081 cross-machine audit attribution probe，ready）+ 知识文档 `t081-probe`。
+
+**结论：T-081 验收闭环。** 跨机阻塞清零，T-090 两机实测的前置全部就绪。
