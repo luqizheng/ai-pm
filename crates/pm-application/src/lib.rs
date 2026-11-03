@@ -27,6 +27,7 @@ pub mod outbox_ops;
 pub mod pm_write;
 pub mod policy_composition;
 pub mod policy_engine;
+pub mod project_goal;
 pub mod project_import;
 pub mod project_member;
 pub mod read;

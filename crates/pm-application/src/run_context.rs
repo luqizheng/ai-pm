@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
+use crate::project_goal::load_official_goal;
 
 use crate::command_executor::{apply_task_transition, system_context, TransitionFacts};
 use crate::run_dispatch::{
@@ -200,10 +201,23 @@ pub struct RunContract {
     pub contract_version: i32,
     pub run: RunInfo,
     pub task: TaskInfo,
+    /// 项目正式 Goal（I4-E）：最新 published 的 `project-goal` 修订；
+    /// 建立前为 `null`（Agent 必须把 Goal 缺失当作显式信号，不得臆测目标）。
+    #[serde(default)]
+    pub goal: Option<GoalSnapshot>,
     pub acceptance_criteria: Vec<AcceptanceCriterionView>,
     pub repositories: Vec<RepositoryView>,
     pub knowledge_refs: Vec<KnowledgeRefView>,
     pub policy: PolicyView,
+}
+
+/// 正式 Goal 快照（只给身份与版本锚点，正文经知识读取路径获取）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GoalSnapshot {
+    pub document_id: Uuid,
+    pub revision_id: Uuid,
+    pub revision_no: i32,
+    pub content_hash: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -389,8 +403,17 @@ pub async fn get_run_context(
         })
         .collect();
 
+    // I4-E：正式 Goal 快照（缺 Goal 是显式信号，不是错误）。
+    let goal = load_official_goal(pool, project_id).await?.map(|goal| GoalSnapshot {
+        document_id: goal.document_id,
+        revision_id: goal.revision_id,
+        revision_no: goal.revision_no,
+        content_hash: goal.content_hash,
+    });
+
     Ok(RunContract {
         contract_version: CONTRACT_VERSION,
+        goal,
         run: RunInfo {
             run_id,
             attempt_no: run.get("attempt_no"),

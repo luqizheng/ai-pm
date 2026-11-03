@@ -100,6 +100,15 @@ pub async fn submit_proposal(
         return Err(err);
     }
 
+    // Q2（I4，用户裁决 2026-11-03）：**Project Goal 的任何提案都强制红线**——
+    // Goal 的建立与修改必须经人类事前确认，Agent 提案永不自动发布
+    // （I4 §4.4/§4.5；普通文档维持既有门禁语义）。
+    let declared_redline = if req.doc_key == crate::project_goal::GOAL_DOC_KEY {
+        Some(req.redline_kind.as_deref().unwrap_or("rewrite_delivered"))
+    } else {
+        req.redline_kind.as_deref()
+    };
+
     let gate = knowledge_quality::evaluate(
         pool,
         &GateInput {
@@ -111,7 +120,7 @@ pub async fn submit_proposal(
             source_event_id: req.source_event_id,
             analysis_run_id: req.analysis_run_id,
             source_ref: req.source_ref.as_deref(),
-            declared_redline: req.redline_kind.as_deref(),
+            declared_redline,
             current_document_id,
             current_revision_id,
             base_revision_id: req.base_revision_id,

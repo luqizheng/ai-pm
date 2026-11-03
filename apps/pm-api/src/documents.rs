@@ -13,6 +13,7 @@ use axum::extract::{Extension, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use pm_application::knowledge::{self, KnowledgeError, KnowledgeRoot};
+use pm_application::project_goal;
 use pm_application::knowledge_indexer::{DbSectionIndexer, IndexOutcome, KnowledgeIndexer, SearchPage};
 use pm_application::knowledge_search::KnowledgeSearchService;
 use serde::Deserialize;
@@ -59,12 +60,50 @@ pub(crate) struct SearchQuery {
     pub(crate) offset: Option<i64>,
 }
 
+/// `GET /v1/pm/projects/{project_id}/goal`：项目正式 Goal（S01 · I4）。
+///
+/// Q1（随 Project 创建建立）：读取时惰性确保 Goal 文档存在——仅当
+/// `AI_PM_KNOWLEDGE_ROOT` 显式配置时才尝试引导（否则跳过，避免测试/无知识仓
+/// 环境产生 Git 副作用）；未建立 → `{"goal": null, "missing": true}`，
+/// 缺失是显式信号（I4 §4.4），Agent 不得臆测目标。
+pub(crate) async fn goal_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(project_id): Path<Uuid>,
+) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+        return resp;
+    }
+    // 惰性引导（幂等）：显式配置了知识仓根目录才尝试。
+    if std::env::var("AI_PM_KNOWLEDGE_ROOT").map(|v| !v.trim().is_empty()).unwrap_or(false) {
+        let root = KnowledgeRoot::from_env();
+        if let Err(err) = project_goal::ensure_goal_document(&state.pool, &root, project_id, principal.principal_id).await {
+            tracing::warn!(project_id = %project_id, error = %err, "goal bootstrap skipped");
+        }
+    }
+    match project_goal::load_official_goal(&state.pool, project_id).await {
+        Ok(Some(goal)) => Json(json!({
+            "project_id": project_id,
+            "missing": false,
+            "goal": goal,
+        }))
+        .into_response(),
+        Ok(None) => Json(json!({
+            "project_id": project_id,
+            "missing": true,
+            "goal": null,
+            "doc_key": project_goal::GOAL_DOC_KEY,
+        }))
+        .into_response(),
+        Err(err) => error_response(KnowledgeError::Db(err)),
+    }
+}
+
 pub(crate) async fn search_handler(
     State(state): State<AppState>,
     Extension(principal): Extension<AuthedPrincipal>,
     Query(query): Query<SearchQuery>,
-) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id, principal.principal_id).await {
+) -> Response {    if let Err(resp) = project_in_tenant(&state.pool, query.project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
     let root = KnowledgeRoot::from_env();

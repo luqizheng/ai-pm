@@ -207,6 +207,11 @@ fn build_router(
             "/v1/pm/documents/search",
             get(crate::documents::search_handler),
         )
+        // 项目正式 Goal（S01 · I4：Q1 随创建建立 / Q2 Agent 只能提案）。
+        .route(
+            "/v1/pm/projects/{project_id}/goal",
+            get(crate::documents::goal_handler),
+        )
         .route(
             "/v1/pm/documents/{document_id}",
             get(crate::documents::get_handler),

@@ -230,10 +230,22 @@ struct ContractMirror {
     contract_version: i32,
     run: RunMirror,
     task: TaskMirror,
+    /// I4-E：项目正式 Goal 快照（未建立 → null）。
+    goal: Option<GoalMirror>,
     acceptance_criteria: Vec<CriterionMirror>,
     repositories: Vec<RepositoryMirror>,
     knowledge_refs: Vec<KnowledgeRefMirror>,
     policy: PolicyMirror,
+}
+
+/// I4-E：Goal 快照镜像（身份与版本锚点，正文经知识读取路径获取）。
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GoalMirror {
+    document_id: Uuid,
+    revision_id: Uuid,
+    revision_no: i32,
+    content_hash: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -335,6 +347,8 @@ async fn c3_c4_c24_c25_contract_shape_and_values(pool: PgPool) {
     assert_eq!(mirror.contract_version, 1);
     assert_eq!(mirror.run.timeout_seconds, Some(1800));
     assert_eq!(mirror.task.goal.as_deref(), Some("确定 Bevy 2D 地形高度晕渲方案"));
+    // I4-E：本 fixture 未建立 Goal → 显式 null（缺失是信号，不是错误）。
+    assert!(mirror.goal.is_none(), "goal must be an explicit null when absent");
     assert_eq!(mirror.acceptance_criteria.len(), 2);
     assert_eq!(mirror.acceptance_criteria[0].ordinal, 10, "C25: ordinal ascending");
     assert_eq!(mirror.acceptance_criteria[1].ordinal, 20);
