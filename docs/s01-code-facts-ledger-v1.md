@@ -177,6 +177,8 @@
 
 | **G-26** | **Project Goal 无落地机制**（Q1/Q2 已裁但未实施；Goal 提案会被质量门自动提交，违反 Q2） | I4 §3/§4；用户裁决 Q1/Q2 | ✅ `project_goal.rs`（doc_key='project-goal'，唯一性由既有 UNIQUE 保证；ensure 幂等引导）；**submit_proposal 对 Goal 提案强制红线**（Q2 结构性保证：Agent 提案含初稿只挂起不发布）；RunContract 增 goal 快照（I4-E，缺失=null 显式信号）；REST GET /projects/{id}/goal | I4-B/C/E（已闭合；I4-F 归档联动待 I1-D） |
 
+| **G-27** | **Git 能力授权零实现**（缺陷 D-7：无枚举、无字段、无策略、`git_access.rs` 物理只读） | I3 §3.1~§3.3；B-6 默认（方案 A） | ✅ 迁移 `0032`：`task_run.policy_snapshot_hash TEXT`（I3-D 填充）+ `integration.git_capability_grant`（六能力 CHECK，(tenant,project,repo,principal) 粒度）；`pm-domain::git_capability` 判定层（依赖闭包 + 默认最小权限，8 例单测）；REST PUT/DELETE/GET capabilities（管理者守卫 + 审计 + 依赖链服务端校验）；4 例集成验收 | I3-B（已闭合；I3-C Task 范围 / I3-D Run 快照填充 / I3-E 执行期强校验 / I3-F 审计回归仍待） |
+
 ### 10.3 结构性观察（非缺陷，供后续裁决参考）
 
 | # | 观察 | 说明 |

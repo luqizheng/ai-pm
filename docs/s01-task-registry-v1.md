@@ -146,7 +146,7 @@
 | I2-D | S01-3 | W33 | Finding 创建入口与 **P0 安全修复** | I2 V1.1 §16 | I2-B、I2-C | 0031 | 已修（同项目仓库校验 + 定态收口） | 已修（AgentRelayed 通道） | — | `finding.rs` | I2-D 双入口同修 | 串行 | G-INTERFACE | **已实施（2026-11-04，双入口同批）** |
 | I2-E | S01-3 | W37+W64 | 并发、审计推导与全量验收 | I2 V1.1 §16 | I2-C、I2-D | — | — | — | — | 集成测试 | I2-001~033 + §15.3 十五场景 | 串行 | G-ACCEPT | **已实施（2026-11-04；6 例并发/推导新绿；场景 10 由同事务结构性保证；归档竞争完整路径待 I1-D）** |
 | I3-A | S01-0→S01-1 | W02+W05 | 现有权限链路核验 | I3 §12 | — | — | — | — | — | `git_access.rs` | 交付 Git 权限现状矩阵 | 可并行 | — | 已完成（本基线 §4-D7） |
-| I3-B | S01-1 | W12+W24 | Git 操作能力模型（枚举/字段/主体/策略） | I3 §12 | I3-A | 需新增 | — | — | — | 授权模型 | I3-001~006 | 串行 | G-USER(B-5/B-6) | 仅设计 |
+| I3-B | S01-1 | W12+W24 | Git 操作能力模型（枚举/字段/主体/策略） | I3 §12 | I3-A | **0032**（policy_snapshot_hash + git_capability_grant） | PUT/DELETE/GET capabilities | — | — | `pm-domain::git_capability` + `pm-application::git_capability` | I3-001~006 | 串行 | G-USER(B-5/B-6) | **已实施（2026-11-04，B-6 默认方案 A）** |
 | I3-C | S01-2 | W22+W24 | Task 仓库范围 | I3 §12 | I3-B、I6-B-03 | 0031 | 需新增 | — | — | `task_repository` | I3-007~012 | 串行 | G-DDL | 仅设计 |
 | I3-D | S01-4 | — | Run 授权快照（SHA-256 内容寻址） | I3 §12 | I3-B | 需新增列 | — | — | — | `task_run` | I3-013~017 | 串行 | G-USER(B-6) | 仅设计 |
 | I3-E | S01-4 | — | 执行期强校验 | I3 §12 | I3-D、I1-A | — | — | `pm_*` 入口 | `CodexExecutor` | `git_access.rs` | I3-018~021 | 串行 | — | 仅设计 |
