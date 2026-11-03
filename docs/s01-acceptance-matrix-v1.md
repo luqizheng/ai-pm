@@ -196,6 +196,7 @@
 | S01-W64（E2E） | S01-A051~A060 | 端到端：建 Project → 关联多仓 → 起 Discovery → Agent 领取 → MCP 取上下文 → Codex 执行 → 回传证据 → 生成 Delivery → 人工验收 → Knowledge 发布 |
 | I1-D（归档） | S01-A061~A065 | 归档后：入口关闭、并发安全、凭据撤销、进程可控、消息安全、审计完整、故障可恢复（**七项须分别证明**，I1 §17.3） |
 | I2-B/D（Finding 定态） | I2-023 / I2-024 / I2-026 | 创建初态由入口派生：human 直建 user_confirmed → CONFIRMED；Agent 转述 → PENDING；外部不可指定初态（字段已从契约删除）。**2026-11-04 落地 3 例全绿**（`crates/pm-application/tests/discovery.rs` i2_023/024/026），REST 与 MCP 同批改造防分叉 |
+| I2-C（统一决定服务） | I2-014 / I2-019 / I2-020 / I2-025 / I2-029 / I2-030 / I2-035 / I2-036 / I2-037 / I2-038 / I2-034 | 单事务决定（Finding+Q/A+审计）；审计 `finding.decided` 带 before/after；operation_id 重放零副作用；非真人被拒零审计；同值重复 no-op；跨 Session 404；裸导出删除；F3 原子性可观测（读取与 after_data 一致）；REST 契约兼容。**2026-11-04 落地 4 例新绿 + 既有 15 例回归全绿**（`crates/pm-application/tests/discovery.rs`） |
 | I6-B-05/06（导入契约） | S01-A066~A075 | 导入契约与审计：`repository_ids` 必填（缺省/空 → 422）、跨项目仓库拒绝（422）、导入集合在创建时固化（Source + 首轮 Attempt）、初始化操作被占有、同幂等键重放同一导入（`replayed=true` 且不新建）、`proposed` 态 terminate 后释放名额、`cancel` 带 reason 写入审计、导入启动/初始化占有/终止三类审计行可追溯。**2026-11-03 落地 7 例全绿**（`apps/pm-api/tests/import_contract.rs`） |
 
 ---

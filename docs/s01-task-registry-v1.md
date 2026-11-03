@@ -141,9 +141,9 @@
 | I1-E | S01-6 | W62 | Executor 启动握手与持久化清理 | I1 §16 | D3.1 | — | — | — | `codex_executor.rs` | `codex_executor.rs` | I1-025~034、040 | 串行 | G-USER(B-1) | 仅设计 |
 | I1-F | S01-6 | W64 | 全链路回归 | I1 §16 | I1-A~I1-E | — | — | — | — | 集成测试 | I1-035~040 | 串行 | G-ACCEPT | 仅设计 |
 | I2-A | S01-0→S01-3 | W02+W33 | 现状核验与安全边界确认 | I2 V1.1 §16 | — | — | — | — | — | `discovery/finding.rs` | 交付 `docs/s01-i2-code-facts.md` | 可并行 | — | 未开工 |
-| I2-B | S01-3 | W33 | Finding 领域规则（F3 原子更新、可信 human 路径） | I2 V1.1 §16 | I2-A | 0031 | — | — | — | `finding.rs` | I2-001~022 | 串行 | G-INTERFACE | 仅设计 |
-| I2-C | S01-3 | W33+W34 | 人工决定入口与审计 | I2 V1.1 §16 | I2-B、I1-A | 0031 | 需新增 | — | — | `audit.rs` | I2-023~033 | 串行 | G-INTERFACE | 仅设计 |
-| I2-D | S01-3 | W33 | Finding 创建入口与 **P0 安全修复** | I2 V1.1 §16 | I2-B、I2-C | 0031 | 已有端点需修 | `pm_discovery_submit_findings` 需修 | — | `finding.rs` | I2-D 双入口同修 | 串行 | G-INTERFACE | 仅设计 |
+| I2-B | S01-3 | W33 | Finding 领域规则（F3 原子更新、可信 human 路径） | I2 V1.1 §16 | I2-A | 0031 | 创建契约删 verification_status（I2-026） | MCP 通道 AgentRelayed | — | `finding.rs` | I2-001~022（I2-023/024/026 已落地） | 串行 | G-INTERFACE | **部分已实施（2026-11-04）** |
+| I2-C | S01-3 | W33+W34 | 人工决定入口与审计 | I2 V1.1 §16 | I2-B、I1-A | 0031 | 已有（verification 端点改统一决定服务，契约兼容） | 无 decide 工具（Agent 不可决定，符合 I2） | — | `discovery/web.rs` + `pm_write::audit` | I2-014/019/020/025/029/030/035/036/037/038 + I2-034~038 承接段 | 串行 | G-INTERFACE | **已实施（2026-11-04；I2-033 待补充推导验收）** |
+| I2-D | S01-3 | W33 | Finding 创建入口与 **P0 安全修复** | I2 V1.1 §16 | I2-B、I2-C | 0031 | 已修（同项目仓库校验 + 定态收口） | 已修（AgentRelayed 通道） | — | `finding.rs` | I2-D 双入口同修 | 串行 | G-INTERFACE | **已实施（2026-11-04，双入口同批）** |
 | I2-E | S01-3 | W37+W64 | 并发、审计推导与全量验收 | I2 V1.1 §16 | I2-C、I2-D、I1-D | — | — | — | — | 集成测试 | I2-001~033 + §15.3 十五场景 | 串行 | G-ACCEPT | 仅设计 |
 | I3-A | S01-0→S01-1 | W02+W05 | 现有权限链路核验 | I3 §12 | — | — | — | — | — | `git_access.rs` | 交付 Git 权限现状矩阵 | 可并行 | — | 已完成（本基线 §4-D7） |
 | I3-B | S01-1 | W12+W24 | Git 操作能力模型（枚举/字段/主体/策略） | I3 §12 | I3-A | 需新增 | — | — | — | 授权模型 | I3-001~006 | 串行 | G-USER(B-5/B-6) | 仅设计 |

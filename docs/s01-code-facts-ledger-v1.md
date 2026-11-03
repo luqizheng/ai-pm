@@ -171,6 +171,8 @@
 | **G-22** | **无项目级交付聚合**（缺陷 D-13） | 总体计划 §9.1 W60 / §15.E | ✅ `GET /v1/pm/projects/{id}/delivery`：只读投影 `v_task_delivery_manifest` + 任务清单 + pending 审批数；任务级卷起四态（delivered/partial/missing/no_contract）。注意视图逐仓 `delivery_state` 已是任务级口径，卷起是对状态组归类而非逐仓求交集 | S01-W60（已闭合） |
 | **G-23** | **Finding 创建初态可被外部指定**（违反 I2-026）且可信 human 直建 user_confirmed 落 PENDING（违反 I2-023） | I2 V1.1 §15.1；I2-D 双入口铁律 | ✅ `NewFinding` 创建契约删除 `verification_status`；新增 `FindingCreator` 通道（HumanDirect / AgentRelayed）：human 直建 user_confirmed → CONFIRMED（I2-023）、Agent 转述 → PENDING（I2-024）；REST 与 MCP 同批改造防分叉 | I2-B/D（已闭合） |
 
+| **G-24** | **旧决定路径先盲更新再校验 Session 归属（I2-029 违反）、无真人校验（I2-025）、无审计、无幂等；`set_finding_verification` 是可绕过审计/锁的公开原语（I2-035）** | I2 V1.1 §15.1/§15.4；I2-C | ✅ `record_finding_verification` 重写为单事务统一决定服务：先校验后写（I2-029/I2-030）、真人门（I2-025）、条件更新（I2-020）、审计 `finding.decided`（before/after）、operation_id 幂等（N-4 先例）；删除裸导出 `set_finding_verification`，状态写点收窄为 `pub(crate)` 仅决定服务可调。REST 契约保持兼容（I2-034），新增可选 `operation_id` | I2-C（已闭合） |
+
 ### 10.3 结构性观察（非缺陷，供后续裁决参考）
 
 | # | 观察 | 说明 |
