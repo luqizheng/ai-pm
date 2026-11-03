@@ -14,7 +14,7 @@ use axum::{
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, put},
+    routing::get,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 use pm_application::git_capability::{GitCapabilityError, list_grants, revoke_grant, set_grant};
 use pm_application::project_member::is_project_manager;
-use pm_domain::{GitCapability, parse_capabilities, prerequisite_violations};
+use pm_domain::{parse_capabilities, prerequisite_violations};
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;

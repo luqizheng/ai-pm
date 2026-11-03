@@ -10,7 +10,7 @@
 //!
 //! 管理权限：项目 owner 或租户 admin（与 S01-W13 同口径）。
 
-use sqlx::{PgConnection, PgPool, Postgres, Row};
+use sqlx::{PgConnection, PgPool, Row};
 use uuid::Uuid;
 
 use pm_domain::git_capability::GitCapability;
@@ -96,6 +96,81 @@ pub async fn effective_capabilities_for(
     let granted = pm_domain::parse_capabilities(&raw)
         .map_err(|unknown| GitCapabilityError::Validation(format!("unknown capability `{unknown}`")))?;
     Ok(pm_domain::effective_capabilities(&granted))
+}
+
+/// I3-C/D：单仓的能力范围快照（四层合流的产物）。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RepoCapSnapshot {
+    pub repository_id: Uuid,
+    /// 叠加顺序：仓库策略（全部主体授权的并集）∩ Task 仓库范围（write_access=
+    /// false → 仅 read）∩ 仓库状态（非 verified → 空）——最后过依赖闭包。
+    pub effective: Vec<String>,
+}
+
+/// 构建 Run 的每仓能力快照（I3-C 消费 `git_capability_grant` 交集 + Task 范围）。
+///
+/// 层叠规则（I3 §2 四层，本函数覆盖第二/三层，第四层锚点见 `policy_snapshot_hash`）：
+/// 1. 仓库策略 = 该仓**全部**授权行的能力并集（项目级策略，主体无关）；
+/// 2. Task 仓库范围：`task_repository.write_access = false` → 只保留 `read`；
+/// 3. 仓库状态：非 `verified` → 能力清空（§4.4）；
+/// 4. 依赖闭包收口（`pm_domain::effective_capabilities`）。
+pub async fn build_task_repo_caps_tx(
+    tx: &mut PgConnection,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    task_id: Uuid,
+) -> Result<Vec<RepoCapSnapshot>, GitCapabilityError> {
+    let rows: Vec<(Uuid, bool, String, Option<serde_json::Value>)> = sqlx::query_as(
+        "SELECT tr.repository_id, tr.write_access, r.status, \
+                (SELECT COALESCE(jsonb_agg(DISTINCT cap), '[]'::jsonb) \
+                   FROM integration.git_capability_grant g, \
+                        unnest(g.capabilities) AS cap \
+                  WHERE g.tenant_id = r.tenant_id \
+                    AND g.project_id = r.project_id \
+                    AND g.repository_id = r.id) \
+         FROM delivery.task_repository tr \
+         JOIN integration.project_repository r ON r.id = tr.repository_id \
+         WHERE tr.tenant_id = $1 AND tr.project_id = $2 AND tr.task_id = $3 \
+         ORDER BY tr.repository_id",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(task_id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(|e| GitCapabilityError::Db(e.to_string()))?;
+
+    let mut out = Vec::with_capacity(rows.len());
+    for (repository_id, write_access, repo_status, caps_json) in rows {
+        let mut caps: Vec<GitCapability> = Vec::new();
+        if repo_status == "verified" {
+            let raw: Vec<String> = serde_json::from_value(caps_json.unwrap_or_default())
+                .map_err(|e| GitCapabilityError::Validation(format!("grant caps: {e}")))?;
+            caps = pm_domain::parse_capabilities(&raw).map_err(|unknown| {
+                GitCapabilityError::Validation(format!("unknown capability `{unknown}`"))
+            })?;
+            if !write_access {
+                // Task 范围收缩：只读仓——丢弃除 read 外的一切。
+                caps.retain(|c| *c == GitCapability::Read);
+            }
+        }
+        let effective = pm_domain::effective_capabilities(&caps);
+        out.push(RepoCapSnapshot {
+            repository_id,
+            effective: effective.into_iter().map(|c| c.as_str().to_string()).collect(),
+        });
+    }
+    Ok(out)
+}
+
+/// 快照 JSON（规范化形态：`[{repository_id, effective}]`，即写库内容）。
+pub fn caps_snapshot_json(snaps: &[RepoCapSnapshot]) -> serde_json::Value {
+    serde_json::to_value(snaps).unwrap_or_else(|_| serde_json::json!([]))
+}
+
+/// 快照的 SHA-256 内容寻址哈希（hex；I3 §5.4，写 `task_run.policy_snapshot_hash`）。
+pub fn caps_snapshot_hash(snaps: &[RepoCapSnapshot]) -> String {
+    crate::knowledge::content_hash(&caps_snapshot_json(snaps).to_string())
 }
 
 /// 整体替换某主体在某仓的授权集（PUT 语义；幂等）。

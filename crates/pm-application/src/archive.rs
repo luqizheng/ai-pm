@@ -18,7 +18,6 @@
 //! **P4** 事实：`initializing` 卡死已由 `fail_import` 释放名额修复（差异 G-12）；
 //! 归档路径同样释放名额，双保险。
 
-use sqlx::Row;
 use uuid::Uuid;
 
 use crate::actor::AuditActor;

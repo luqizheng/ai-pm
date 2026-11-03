@@ -151,7 +151,8 @@ pub use discovery::{
     list_questions, list_sessions, set_proposal_status, submit_evidence,
     transition_session,
 };pub use git_capability::{
-    CapabilityGrant, GitCapabilityError, effective_capabilities_for, list_grants, revoke_grant,
+    CapabilityGrant, GitCapabilityError, RepoCapSnapshot, build_task_repo_caps_tx,
+    caps_snapshot_hash, caps_snapshot_json, effective_capabilities_for, list_grants, revoke_grant,
     set_grant,
 };
 
