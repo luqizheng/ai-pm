@@ -268,7 +268,12 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **不做**：不在 URL 或指引中传递凭据；不负责安装执行端软件本身（装 trae/codex 是用户自己的事）；不做无人值守 Runner（T-030 范围）；不改 11 个 MCP 工具的契约。
   - **验收**：用 ≥2 个不同执行端（建议 trae + codex，z-code / dsh 跟进）实测「粘贴 URL → 帮我安装 → 配置就位 → `/v1/pm/me` 200」全程无手工编辑配置文件；未激活路径给出明确指引而非报错。
 
-- [ ] **T-081 `/mcp` 跨机暴露（runbook G1；T-080 跨机场景的前置；**2026-11-02 T-087 定稿：并入 M10 V1 前置；同日第二轮评审：升级为真实部署验收门禁**）**
+- [~] **T-081 `/mcp` 跨机暴露（runbook G1；T-080 跨机场景的前置；**2026-11-02 T-087 定稿：并入 M10 V1 前置；同日第二轮评审：升级为真实部署验收门禁**）**〔2026-11-03 领用——**服务端 Host 白名单已落地**（`4e9af51`）；**C166 七项门禁实测待两机环境就绪**〕**
+  - **交付（本机部分）**：`AI_PM_MCP_ALLOWED_HOSTS`（逗号分隔）配置化放行跨机 Host——`crates/pm-mcp/src/server.rs`（`streamable_http_service(pool, extra_allowed_hosts)` + `default_allowed_hosts()`：**与回环默认取并集**（只增不减）、**名单永不为空**（rmcp 空名单 = 放行全部））+ `apps/pm-api/src/mcp_hosts.rs`（`McpHosts::from_env()` + 纯函数 `parse_allowed_hosts`）+ `apps/pm-api/src/routes.rs` 装配（生产读 env / 测试用 default，环境不污染用例）+ 部署侧 `docker-compose.test-server.yml`（`${VAR:?}` 强制 `AI_PM_MCP_ALLOWED_HOSTS` + `AI_PM_PUBLIC_BASE_URL`）+ `setup-test-server.sh` 提示 + `.env.prod.example` 说明 + onboarding 指引文案点名 env。设计/实施记录：`docs/ai-pm-t081-mcp-cross-machine-v1.md`。
+  - **验收（自动化部分）**：`crates/pm-mcp/tests/hosts.rs` 7 例（默认拒跨机 403 / 回环 200 / 声明放行 / 未声明仍拒 / `host:port` 精确匹配 / 名单非空 / 去空白去重）、`apps/pm-api/tests/mcp_hosts.rs` 3 例（API 层装配）、`mcp_hosts.rs` 纯函数 3 例；**全仓 `cargo test --workspace` 94 套件 / 684 passed / 0 failed；`cargo check --workspace --all-targets` 0 error**（另有 4 条既存 unused 警告，来自 `pm-mcp/tests/caller_ctx.rs` / `pm-api/tests/discovery.rs` / `pm-api/tests/pm_devices.rs`，非本条引入）。
+  - **关键口径**：Host 白名单只是 rmcp 的 DNS-rebinding 防护，**不是授权**——真正放行仍是真人 API Key + 成员校验（T-088）；**默认零变更**（不设 env 时行为与改造前逐字相同）；不提供「放行全部」开关。
+  - **待办（C166 七项身份链路门禁，**必须从真实 Windows 开发机发起**，禁止服务器内部自测充当）**：① Windows 机可访问服务器 `/mcp`；② 真人 API Key 认证链路可用；③ MCP 工具拿到正确真人 Principal；④ T-051 成员校验仍有效；⑤ T-059 审计归因仍有效；⑥ 长连接不被反代截断；⑦ 未认证/越权被拒。
+  - **执行端缺口（2026-11-03 用户反馈）**：Windows 测试机 `192.168.2.43` 已装 Z-Code，**但未装 MCP**（Z-Code 的 MCP 能力在本仓宿主上来自插件 `.mcp.json`，该机无 MCP 组件）→ 七项门禁需要先有一个 MCP 客户端。**候选**：① 用本机 `192.168.2.4` 的 Z-Code 作执行端（已具 MCP 能力、且无 ai-pm 的既有 MCP 配置 → 满足 C172「干净」口径；跨机成立）② 在 `192.168.2.43` 装 Trae（M-01 已验证配置形态）或 Codex CLI（M-02 曾被上游模型 500 打断）。选型待用户定。
   - **目标**：`/mcp` 从 loopback-only（`server.rs:10-14`，M1 本地单机设计）放开到受控跨机访问：host 白名单配置化 + TLS/反向代理 + 鉴权加固，支撑多 PC / 多人接入。
   - **依据**：`crates/pm-mcp/src/server.rs:10-14`；`docs/ai-pm-executor-onboarding-runbook-v1.md` §十 G1 / §十一 R2；`docs/ai-pm-codex-bootstrap-v1.md` §〇-A 裁清点 1 + §13.2（评审 P0-3）。
   - **做**：`allowed_hosts` 从代码默认改为可配置；部署侧 TLS / 反代方案；跨机安全评审（key 传输路径、Host 头校验语义变化、请求来源限制）。**范围限定部署层**（绑定地址 / 反代 / TLS / `Host` 校验语义，transport 无关）——rmcp `allowed_hosts` 放开是一行配置，T-088 薄转发层候选①/②皆存活（定稿派生 16）。
