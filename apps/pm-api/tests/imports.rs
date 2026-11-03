@@ -518,6 +518,194 @@ fn grounding_drops_fabricated_evidence() {
     assert_eq!(grounded.requirements[0].code, "REQ-001");
 }
 
+/// 造一个**克隆必然失败**的仓库（URL 指向不存在的本地路径）。
+async fn seed_broken_repo(pool: &PgPool, project_id: Uuid) -> Uuid {
+    let actor_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.principal (kind, display_name, is_active) \
+         VALUES ('human', 'broken-repo-owner', true) RETURNING id",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let created = pm_application::repository::create_repository(
+        pool,
+        project_id,
+        &pm_application::actor::AuditActor::principal(actor_id),
+        pm_application::repository::CreateRepositoryRequest {
+            name: "坏仓库".to_string(),
+            // 端口 1 → 连接被立即拒绝，克隆快速失败（不依赖 DNS 或超时）。
+            url: "ssh://git@127.0.0.1:1/team/missing.git".to_string(),
+            role: Some("main".to_string()),
+            default_branch: Some("main".to_string()),
+            description: None,
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE integration.project_repository SET status = 'verified' WHERE id = $1",
+    )
+    .bind(created.id)
+    .execute(pool)
+    .await
+    .unwrap();
+    created.id
+}
+
+/// 基线 §3.1 事实 #5 / 场景稿 §6：一个仓库失败**不中止**其余仓库。
+#[sqlx::test(migrations = "../../migrations")]
+async fn one_repository_failure_does_not_abort_the_others(pool: PgPool) {
+    let (project_id, good_repo, _repo) = seed_project_with_repo(&pool, "PARTIAL-OK").await;
+    let bad_repo = seed_broken_repo(&pool, project_id).await;
+
+    let started = start_import(
+        &pool,
+        project_id,
+        &pm_application::actor::AuditActor::dispatch(),
+        &StartImportRequest {
+            repository_ids: vec![good_repo, bad_repo],
+            idempotency_key: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    run_import_job(&pool, &FakeRepoAnalysisModel, started.import_id)
+        .await
+        .unwrap();
+
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM integration.repo_import WHERE id = $1")
+            .bind(started.import_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "draft_ready", "a failing repository must not abort the import");
+
+    // 失败仓留 failed Attempt；成功仓留 succeeded Attempt（R-4-1）。
+    let rows: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT repository_id, status FROM integration.repo_import_source_attempt \
+         WHERE import_id = $1 ORDER BY repository_id",
+    )
+    .bind(started.import_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let failed = rows
+        .iter()
+        .find(|(repo, _)| *repo == bad_repo)
+        .map(|(_, s)| s.clone());
+    let ok = rows
+        .iter()
+        .find(|(repo, _)| *repo == good_repo)
+        .map(|(_, s)| s.clone());
+    assert_eq!(
+        failed.as_deref(),
+        Some("failed"),
+        "the bad repository must be recorded as failed"
+    );
+    assert_eq!(
+        ok.as_deref(),
+        Some("succeeded"),
+        "the good repository must still be analyzed"
+    );
+}
+
+/// 基线 §3.1 事实 #7：取消后 Worker 的阶段写入不得覆盖 cancelled。
+#[sqlx::test(migrations = "../../migrations")]
+async fn cancelled_import_is_not_resurrected_by_the_worker(pool: PgPool) {
+    let (project_id, repository_id, _repo) = seed_project_with_repo(&pool, "CANCEL-OK").await;
+    let started = start_import(
+        &pool,
+        project_id,
+        &pm_application::actor::AuditActor::dispatch(),
+        &StartImportRequest {
+            repository_ids: vec![repository_id],
+            idempotency_key: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    pm_application::project_import::cancel_import(
+        &pool,
+        project_id,
+        started.import_id,
+        &pm_application::actor::AuditActor::dispatch(),
+        Some("user_abort"),
+    )
+    .await
+    .unwrap();
+
+    // Worker 继续跑：状态必须仍是 cancelled。
+    let _ = run_import_job(&pool, &FakeRepoAnalysisModel, started.import_id).await;
+
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM integration.repo_import WHERE id = $1")
+            .bind(started.import_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        status, "cancelled",
+        "the worker must not resurrect a cancelled import"
+    );
+}
+
+/// 导入失败必须释放初始化名额（否则该 Project 再也发不起导入）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn failed_import_releases_the_initialization_slot(pool: PgPool) {
+    let (project_id, _repo_id, _repo) = seed_project_with_repo(&pool, "FAILSLOT").await;
+    let bad_repo = seed_broken_repo(&pool, project_id).await;
+
+    let started = start_import(
+        &pool,
+        project_id,
+        &pm_application::actor::AuditActor::dispatch(),
+        &StartImportRequest {
+            repository_ids: vec![bad_repo],
+            idempotency_key: None,
+        },
+    )
+    .await
+    .unwrap();
+    run_import_job(&pool, &FakeRepoAnalysisModel, started.import_id)
+        .await
+        .unwrap();
+
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM integration.repo_import WHERE id = $1")
+            .bind(started.import_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "failed");
+
+    let active: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.project_initialization_operation \
+         WHERE import_id = $1 AND status = 'active'",
+    )
+    .bind(started.import_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(active, 0, "a failed import must release the initialization slot");
+
+    // 名额释放后可以再次发起导入。
+    let again = start_import(
+        &pool,
+        project_id,
+        &pm_application::actor::AuditActor::dispatch(),
+        &StartImportRequest {
+            repository_ids: vec![bad_repo],
+            idempotency_key: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert_ne!(again.import_id, started.import_id);
+}
+
 #[test]
 fn all_fabricated_draft_is_ungrounded() {
     let (grounded, dropped) = ground_draft(&ProjectDraft::default(), &[]);

@@ -496,9 +496,12 @@ pub(crate) async fn set_stage(
     detail: &str,
     progress: i32,
 ) -> Result<(), ImportError> {
+    // 状态守卫：已终态（取消 / 失败 / 驳回 / 已应用 / 已提案）的导入不再被 Worker
+    // 推进——否则取消状态会被随后的阶段写入覆盖（基线 §3.1 事实 #7）。
     sqlx::query(
         "UPDATE integration.repo_import SET status = $2, stage_detail = $3, progress = $4, \
-         updated_at = now() WHERE id = $1",
+         updated_at = now() \
+         WHERE id = $1 AND status NOT IN ('cancelled','failed','rejected','applied','proposed')",
     )
     .bind(import_id)
     .bind(status)
@@ -512,6 +515,16 @@ pub(crate) async fn set_stage(
 
 pub(crate) async fn fail_import(pool: &PgPool, import_id: Uuid, code: &str, detail: &str) {
     let detail: String = detail.chars().take(500).collect();
+    let Ok(mut tx) = pool.begin().await else {
+        return;
+    };
+    let project_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT project_id FROM integration.repo_import WHERE id = $1")
+            .bind(import_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .ok()
+            .flatten();
     let _ = sqlx::query(
         "UPDATE integration.repo_import SET status = 'failed', error_code = $2, error_detail = $3, \
          updated_at = now() WHERE id = $1",
@@ -519,8 +532,37 @@ pub(crate) async fn fail_import(pool: &PgPool, import_id: Uuid, code: &str, deta
     .bind(import_id)
     .bind(code)
     .bind(detail)
-    .execute(pool)
+    .execute(&mut *tx)
     .await;
+    // 失败必须**释放初始化名额**——否则 active 操作行长期占位，该 Project 后续
+    // `start_import` 会撞上 `uq_project_initialization_operation_active` 唯一违例，
+    // 整个 Project 卡死（基线 §5.1 并发控制 + §5.4 状态收口）。
+    let released = sqlx::query(
+        "UPDATE core.project_initialization_operation \
+         SET status = 'released', released_at = now() \
+         WHERE import_id = $1 AND status = 'active'",
+    )
+    .bind(import_id)
+    .execute(&mut *tx)
+    .await
+    .map(|r| r.rows_affected())
+    .unwrap_or(0);
+    if let Some(project_id) = project_id {
+        let _ = crate::pm_write::append_audit_with_after(
+            &mut *tx,
+            project_id,
+            &AuditActor::dispatch(),
+            "repo_import.failed",
+            "repo_import",
+            Some(import_id),
+            serde_json::json!({
+                "error_code": code,
+                "initialization_released": released > 0,
+            }),
+        )
+        .await;
+    }
+    let _ = tx.commit().await;
 }
 
 
@@ -602,10 +644,11 @@ pub async fn run_import_job(
         )
         .await
         {
+            // 逐仓失败隔离：一个仓库失败**不中止**其余仓库（场景稿 §6
+            // 「部分仓库失败保留已成功接入的仓库」；基线 §3.1 事实 #5）。
             let (code, detail) = git_error_code(&err);
             record_attempt_failure(pool, import_id, repository_id, attempt_no, code, &detail).await;
-            fail_import(pool, import_id, code, &detail).await;
-            return Ok(());
+            continue;
         }
 
         let branch = match default_branch {
@@ -625,10 +668,10 @@ pub async fn run_import_job(
         let facts = match repo_facts::collect(&dest, &branch, limits).await {
             Ok(facts) => facts,
             Err(err) => {
+                // 同上：逐仓失败隔离。
                 let (code, detail) = git_error_code(&err);
                 record_attempt_failure(pool, import_id, repository_id, attempt_no, code, &detail).await;
-                fail_import(pool, import_id, code, &detail).await;
-                return Ok(());
+                continue;
             }
         };
 
@@ -682,6 +725,18 @@ pub async fn run_import_job(
             repository_id: repository_id.to_string(),
             facts,
         });
+    }
+
+    // 全部仓库都失败才算导入失败（部分成功则继续出草案，失败仓在 sources[] 里带错误）。
+    if materials.is_empty() {
+        fail_import(
+            pool,
+            import_id,
+            "all_repositories_failed",
+            "every repository in this import failed",
+        )
+        .await;
+        return Ok(());
     }
 
     set_stage(pool, import_id, "reading", "读取 commit 与 docs", 45).await?;

@@ -182,6 +182,77 @@ async fn repository_crud_roundtrip(pool: PgPool) {
     assert_eq!(audits, 3, "created + updated + deleted");
 }
 
+/// 基线 §5.1 + C-4：被历史执行记录引用的仓库**不可物理删除** → 409。
+#[sqlx::test(migrations = "../../migrations")]
+async fn repository_with_history_cannot_be_deleted(pool: PgPool) {
+    let project_id = seed_project(&pool, "REPO-HISTORY").await;
+    let app = router(pool.clone());
+    let (status, created) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &format!("/v1/pm/projects/{project_id}/repositories"),
+                json!({
+                    "name": "主仓库",
+                    "url": "git@gitlab.local:team/hist.git",
+                    "role": "main",
+                    "default_branch": "main"
+                }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "body: {created}");
+    let repo_id = created["id"].as_str().unwrap().to_string();
+
+    // 制造一条历史引用：Import 的 Source 行指向该仓库（RESTRICT 生效条件）。
+    sqlx::query(
+        "INSERT INTO integration.repo_import \
+         (tenant_id, project_id, requested_by, status) \
+         VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $1, \
+                 (SELECT principal_id FROM core.project_member WHERE project_id = $1 LIMIT 1), \
+                 'analyzing')",
+    )
+    .bind(project_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let import_id: Uuid = sqlx::query_scalar(
+        "SELECT id FROM integration.repo_import WHERE project_id = $1 LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO integration.repo_import_source \
+         (tenant_id, project_id, import_id, repository_id) \
+         VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $1, $2, $3::uuid)",
+    )
+    .bind(project_id)
+    .bind(import_id)
+    .bind(&repo_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let (status, body) = body_json(
+        app.oneshot(delete(&format!("/v1/pm/repositories/{repo_id}")))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "body: {body}");
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("history"),
+        "the error must explain the history protection: {body}"
+    );
+}
+
 #[sqlx::test(migrations = "../../migrations")]
 async fn repository_rejects_bad_urls_and_duplicates(pool: PgPool) {
     with_secret();

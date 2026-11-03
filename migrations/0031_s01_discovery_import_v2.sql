@@ -68,6 +68,8 @@ CREATE TABLE integration.repo_import_source (
     head_commit_sha    TEXT,                  -- 基准：write-once（N-1）
     current_attempt_no INT,                  -- 当前轮指针
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Source 归属约束（基线 §4.2）：UNIQUE (tenant_id, import_id, repository_id)
+    -- 由主键等价满足；四列键供 Attempt / Evidence 的组合外键引用。
     PRIMARY KEY (tenant_id, import_id, repository_id),
     UNIQUE (tenant_id, project_id, import_id, repository_id),
     FOREIGN KEY (tenant_id, project_id, import_id)
@@ -142,6 +144,13 @@ CREATE TABLE discovery.discovery_finding_evidence (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     FOREIGN KEY (tenant_id, project_id, finding_id)
         REFERENCES discovery.discovery_finding (tenant_id, project_id, id) ON DELETE CASCADE,
+    -- Import 归属：基线 §4.2 要求「Evidence 的 Import 外键包含 tenant_id, project_id,
+    -- import_id」。实现为**链式**——Evidence → Source(t,p,import,repository) → Import(t,p,id)
+    -- 与 Evidence → Attempt(t,p,import,repository,attempt_no) → Source，两条链的父键都
+    -- 带 project_id，等价保证「Evidence 的 Import 与其 Project 同 Project」。
+    -- 不加直接的 Evidence → repo_import 外键：0025 的 Q1「唯一关联方向」不变量要求
+    -- discovery 域**不得**引用 integration.repo_import（单向关联），专项设计稿优先级
+    -- 高于正式基线措辞，且直接外键在此模型下是冗余的。
     FOREIGN KEY (tenant_id, project_id, import_id, repository_id)
         REFERENCES integration.repo_import_source
                (tenant_id, project_id, import_id, repository_id) ON DELETE CASCADE,
