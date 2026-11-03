@@ -1,11 +1,11 @@
-# I1 · 项目归档生命周期设计稿 V1.0（最终定稿）
+# I1 · 项目归档生命周期设计稿 V1.1（最终定稿）
 
 > 文档性质：实施前设计基线
 > 设计范围：Project 归档、项目活动门禁、Run 生命周期联动、Executor 清理
-> 状态：**最终设计定稿，待拆分实施任务**
+> 状态：**V1.1 已实施回填（2026-11-04）**——B-1 默认裁决：P1~P4 并入实施后回填正文
 > 设计原则：先关闭项目活动入口，再撤销已有执行凭据，最后完成进程资源清理
 > 上位约束：T-032 D3 Run 取消协议
-> 日期：2026-11-03
+> 日期：2026-11-03（V1.0）／2026-11-04（V1.1 回填）
 
 > **编者按**：本稿吸收了本轮代码核验反馈（`smark-pm-s01-v1-3-revision-and-i1-verification.md`）的全部结论——§1 的代码事实（含 initializing 卡死、queued 无取消路径、cancel_run 无外部入口、清理 1 小时窗口等）均与实际代码核验一致；并发方案采用「Project 行门闩 + 统一锁顺序 + 两阶段 claim」；新增 Executor 启动握手协议（§8）为本稿新设计。
 
@@ -1196,3 +1196,41 @@ I1 不能以「Project 状态已经变成 archived」作为全部完成标准。
 **最终结论：I1 的领域语义、并发控制原则、Run 取消协议、Executor 启动与清理要求、Outbox 处理规则和验收标准至此定稿。**
 
 具体数据库结构、事务 SQL 和进程登记实现属于实施设计细节，必须遵守本稿约束，并通过对应验收测试；不得以实现便利为由改变上述生命周期语义。
+
+---
+
+## 18. V1.1 实施回填（2026-11-04，B-1 默认裁决：P1~P4 并入实施）
+
+> 本节为 V1.0 → V1.1 的修订记录与落地对照；正文裁决（§17）全部保持有效。
+> P1~P4（核验稿 `smark-pm-s01-v1-3-revision-and-i1-verification` 提出的四项修订）已**并入实施**。
+
+### 18.1 P1~P4 落地对照
+
+| # | 修订项 | V1.0 缺口 | V1.1 落地 | 证据 |
+|---|---|---|---|---|
+| P1 | queued Run 无取消路径 | 归档无 Queued 处理 | 归档事务内条件取消（`WHERE status='queued'`，reason 落 `termination_reason`） | `pm-application/src/archive.rs` |
+| P2 | `cancel_run` 无外部入口 | 仅进程内调用 | REST `POST /v1/pm/task-runs/{run_id}/cancel`（reason 透传，queued/终态 → 409）；`cancel_run` 增加 `reason` 参数；`record_termination` 映射 `project_archived → cancelled` | `apps/pm-api/src/project_lifecycle.rs`、`run_executor.rs` |
+| P3 | 超窗残留进程 1 小时无清理路径、需告警 | 只有 reconcile，无告警 | `reconcile_orphans` 前置扫描：running + 租约过期超 1h → 审计 `run.orphan_suspected`（1h 去重）+ warn 日志；清理仍走既有 claim 路径 `isolate_started_run` / 兜底回收 | `run_executor.rs` reconcile 前置段 |
+| P4 | 缺 `initializing` 卡死事实 | 归档未考虑在飞 Import | 归档事务终态化在飞 Import（active 五态 → cancelled）+ 释放初始化名额（与差异修复 G-12 `fail_import` 释放双保险） | `archive.rs` |
+
+### 18.2 实施结构（对 §16 I1-A/D 的落地）
+
+| §16 任务 | 落地 |
+|---|---|
+| I1-A 统一门禁 | `pm-application/src/project_gate.rs`：`project_activity`（防御纵深读，无锁——与归档事务 project 行锁 + 条件 UPDATE 串行化，锁序同向不成环）；**三入口接入**：claim_core（archived → 放弃候选）、TaskReadyHandler（归档 → 消费事件不建 Run）、enqueue_review（归档 → 不建 review run）——Run 创建×2 / claim×2 / Outbox handler×2 全部收口 |
+| I1-D 归档事务 + Run 取消 | `pm-application/src/archive.rs` + `POST /v1/pm/projects/{id}/archive`（owner/租户 admin 管理面；重复归档 409 `ALREADY_ARCHIVED`）：单事务锁 project → archived → P1 条件取消 → N-2 Import 终态化 + 名额释放 + 在飞 Attempt 取消 → 审计 `project.archived`；事务外 P2 活跃 Run 走 `cancel_run(reason="project_archived")` 协议（`record_termination` 映射 cancelled + 撤凭据；Noop 执行器——进程终止归 Worker 兜底路径，pm-api 与 Codex 不同机） |
+
+### 18.3 与 V1.0 的语义偏差登记
+
+| # | 偏差 | 理由 |
+|---|---|---|
+| V-1 | 归档的活跃 Run 终态为 `cancelled`（`record_termination` 新映射 `project_archived → cancelled`），V1.0 未指定映射 | 与 `user_cancel` 同为「人为终止」语义；历史不覆盖 |
+| V-2 | REST 侧取消/归档的进程终止用 Noop 执行器（终态+撤凭据立即生效；进程由 Worker 兜底回收） | pm-api 与 Codex 执行机不同机（两机拓扑，Codex Bootstrap V1.3）；进程清理归 Worker 的 reconcile/兜底路径 |
+| V-3 | claim 归档守卫为**防御纵深读**（无 FOR UPDATE） | 完整两阶段 Project 锁定（§16 I1-C）待与 claim 重构同批；当前正确性由归档事务的 queued 条件取消 + 行锁串行化保证 |
+| V-4 | I1-B/I1-C/I1-E/F 中「两阶段候选发现、Executor 握手持久化、全链路回归」未在本批落地 | 本批为 B-1 默认并入的 P1~P4 最小收口；余项仍在 Registry 挂号 |
+
+### 18.4 验收证据
+
+- `apps/pm-api/tests/project_archive.rs` 5 例全绿：三入口守卫 + P1 条件取消（queued→cancelled，running 不动于事务内）、claim 防御纵深、N-2/P4 名额释放与 Import 终态化、重复归档 409、P2 外部取消（200/409）。
+- `cargo test --workspace` 101 套件 / 759 passed / 0 failed（2026-11-04）。
+
