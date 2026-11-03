@@ -200,6 +200,43 @@ async fn import_creates_four_proposals_without_delivery_writes(pool: PgPool) {
     assert_eq!(ids, originals);
 }
 
+/// 台账 G-20：导入草案就绪后 Worker 自动开 `source=SYSTEM` 认知会话，
+/// unknowns 映射为质询（Discovery Worker 分析作业）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn draft_ready_auto_starts_a_system_discovery_session(pool: PgPool) {
+    let (project_id, _repository_id, _repo) = seed_project_with_repo(&pool, "AUTODISC").await;
+    let (import_id, _draft) = prepare_draft(&pool, project_id).await;
+
+    let (session_id, source, question_count): (Uuid, String, i64) = sqlx::query_as(
+        "SELECT s.id, s.source, \
+                (SELECT count(*) FROM discovery.discovery_question q WHERE q.session_id = s.id) \
+         FROM integration.repo_import i \
+         JOIN discovery.discovery_session s ON s.id = i.discovery_session_id \
+         WHERE i.id = $1",
+    )
+    .bind(import_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(source, "SYSTEM", "the worker session must be SYSTEM-sourced");
+    // unknowns→质询的映射由 Web 向导测试覆盖（web_session_is_created_with_unknowns_as_questions）；
+    // Fake 模型仅在材料截断时产 unknowns，本 fixture 无截断 → 0 质询是合法输出。
+    assert_eq!(question_count, 0, "no unknowns in this fixture, no questions expected");
+    let _ = session_id;
+
+    // 幂等：重跑 job 不再另开会话。
+    run_import_job(&pool, &FakeRepoAnalysisModel, import_id).await.unwrap();
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM discovery.discovery_session s \
+         JOIN integration.repo_import i ON i.discovery_session_id = s.id WHERE i.id = $1",
+    )
+    .bind(import_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 1);
+}
+
 #[sqlx::test(migrations = "../../migrations")]
 async fn apply_requires_revision_and_selection(pool: PgPool) {
     let (project_id, _, _repo) = seed_project_with_repo(&pool, "IMP-2").await;

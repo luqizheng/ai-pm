@@ -829,7 +829,56 @@ pub async fn run_import_job(
     )
     .await?;
     tx.commit().await?;
+
+    // Discovery Worker 分析作业（台账 G-20）：草案就绪且尚未挂会话时，
+    // 自动开 `source=SYSTEM` 认知会话并把 unknowns 映射为质询。
+    // 失败只记日志不回滚草案——会话可由 Web 向导手动补开（N-5 job 级纪律）。
+    ensure_discovery_session_for_import(pool, tenant_id, project_id, import_id).await;
+
     Ok(())
+}
+
+/// 导入草案就绪后自动建立 `SYSTEM` 来源的 Discovery 会话（幂等：已有会话即跳过）。
+async fn ensure_discovery_session_for_import(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    import_id: Uuid,
+) {
+    let already: Option<Uuid> = sqlx::query_scalar(
+        "SELECT discovery_session_id FROM integration.repo_import \
+         WHERE tenant_id = $1 AND id = $2",
+    )
+    .bind(tenant_id)
+    .bind(import_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(None);
+    if already.is_some() {
+        return;
+    }
+    let outcome = crate::discovery::start_session_from_import_as(
+        pool,
+        tenant_id,
+        project_id,
+        crate::run_dispatch::DISPATCH_SERVICE_PRINCIPAL,
+        Some(import_id),
+        "SYSTEM",
+    )
+    .await;
+    match outcome {
+        Ok(started) => {
+            tracing::info!(
+                import_id = %import_id,
+                session_id = %started.session.id,
+                questions = started.questions_added,
+                "discovery session auto-started from import draft"
+            );
+        }
+        Err(err) => {
+            tracing::warn!(import_id = %import_id, error = %err, "auto discovery session failed");
+        }
+    }
 }
 
 

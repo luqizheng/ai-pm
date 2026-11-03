@@ -16,8 +16,29 @@ pub async fn start_session_from_import(
     created_by: Uuid,
     import_id: Option<Uuid>,
 ) -> Result<StartWebSession, DiscoveryError> {
+    start_session_from_import_as(
+        pool,
+        tenant_id,
+        project_id,
+        created_by,
+        import_id,
+        "WEB",
+    )
+    .await
+}
+
+/// 同上，但**来源可指定**：Worker 在导入草案就绪后自动开 `source=SYSTEM` 会话
+/// （Discovery Worker 分析作业，台账 G-20）；Web 向导仍用 `WEB`。
+pub async fn start_session_from_import_as(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    created_by: Uuid,
+    import_id: Option<Uuid>,
+    source: &str,
+) -> Result<StartWebSession, DiscoveryError> {
     let session =
-        create_session(pool, tenant_id, project_id, "WEB", "INITIAL_ONBOARDING", created_by).await?;
+        create_session(pool, tenant_id, project_id, source, "INITIAL_ONBOARDING", created_by).await?;
     let Some(import_id) = import_id else {
         return Ok(StartWebSession {
             session,
