@@ -28,6 +28,7 @@ pub mod pm_write;
 pub mod policy_composition;
 pub mod policy_engine;
 pub mod project_import;
+pub mod project_member;
 pub mod read;
 pub mod repo_facts;
 pub mod repository;
@@ -99,6 +100,10 @@ pub use onboarding::{
     NextSteps, Step, ToolInfo, VerifyStep, install_guide, tool_catalog,
 };
 pub use policy_engine::{PolicyContext, PolicyEngine, PolicyLoadError};
+pub use project_member::{
+    MemberChangeOutcome, MemberOp, MemberRow, ProjectMemberError, apply_member_change,
+    caller_can_see_members, list_members, owned_project_ids, revoke_principal_memberships,
+};
 pub use read::{ReadError, TaskContextRow, task_context};
 pub use run_context::{
     CONTRACT_VERSION, LeaseError, LeaseState, ProgressReport, RenewedLease, RunContract,

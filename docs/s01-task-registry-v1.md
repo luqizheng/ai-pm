@@ -53,7 +53,7 @@
 | S01-W10 | S01-1 | W10 | 身份上下文与调用人识别 | ADR-0001/0002；T-088 已实施 | — | 0027/0028 已有 | 已有 `/v1/pm/me` | caller 上下文已有 | — | `apps/pm-api/src/auth.rs`、`crates/pm-mcp/src/caller.rs` | 已有测试覆盖 | 可并行 | — | 已实施（需扩展：多 Project 身份） |
 | S01-W11 | S01-1 | W11 | Tenant 成员管理 | `tenant_members.rs` | W10 | 0019 已有 | 已有 6 端点 | — | — | `apps/pm-api/src/tenant_members.rs` | 已有 | 可并行 | — | 已实施 |
 | S01-W12 | S01-1 | W12 | 角色与权限管理 | 总体计划 §4；T-055/T-058 待裁 | W11 | — | **缺 Policy 管理端点（延后 C-1）** | 权限码表 | — | `delivery.policy_scope` | 待裁 | 可并行 | G-USER(B-4/T-058) | 部分实施 |
-| S01-W13 | S01-1 | W13 | **Project 成员授权** | 总体计划 §4.1 W13；缺陷 D-6 | W11 | 需新增列（Project 角色） | **新增 Project 成员 CRUD** | 成员门已复用 | — | `core.project_member`（现零写入） | Acceptance Matrix §3-A | 可并行 | — | **未开工（P0）** |
+| S01-W13 | S01-1 | W13 | **Project 成员授权** | 总体计划 §4.1 W13；缺陷 D-6 | W11 | **0030**（role CHECK + 索引，无新表无回填） | **新增 4 端点**（members 列表/授予/撤销 + owner-transfer） | 成员门已复用 | — | `core.project_member`（写侧已补） | Acceptance Matrix §3-A（S01-A001~A016） | 可并行 | — | **已实施（2026-11-03）** |
 | S01-W14 | S01-1 | W14 | Agent 执行授权（Agent Principal 校验） | ADR-0001 γ+δ；T-051/T-057 | W10、W13 | 0020/0027 已有 | — | `resolve_project_executor` 已有 | — | `crates/pm-application/src/authz.rs` | 已有 | 可并行 | G-USER(T-051/T-057) | 部分实施 |
 | S01-W15 | S01-1 | W15 | 权限撤销即时生效 | 总体计划 §4.2/§4.3 | W13、W14 | — | — | — | — | 撤权路径 | Acceptance Matrix §3-A 并发/幂等 | 串行（W13 后） | — | 未开工 |
 

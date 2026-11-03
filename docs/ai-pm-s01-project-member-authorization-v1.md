@@ -116,7 +116,7 @@ CREATE INDEX idx_project_member_tenant_principal
 | 方法 | 路径 | 权限 | 成功 | 失败 |
 |---|---|---|---|---|
 | GET | `/v1/pm/projects/{project_id}/members` | 项目可见（成员/owner/租户 admin） | 200 `{items:[{principal_id, display_name, role, kind, is_active, created_at}]}` | 404 项目不可见 |
-| POST | `/v1/pm/projects/{project_id}/members` | 项目 owner 或租户 admin | 201 `{principal_id, role:"member"}` | 403 非管理者 / 409 `ALREADY_MEMBER` / 409 `NOT_TENANT_MEMBER` / 409 `AGENT_PRINCIPAL` / 404 |
+| POST | `/v1/pm/projects/{project_id}/members` | 项目 owner 或租户 admin | 200 `{principal_id, role:"member"}` | 403 非管理者 / 409 `ALREADY_MEMBER` / 409 `NOT_TENANT_MEMBER` / 409 `AGENT_PRINCIPAL` / 404 |
 | DELETE | `/v1/pm/projects/{project_id}/members/{principal_id}` | 项目 owner 或租户 admin | 200 `{principal_id, revoked:true}` | 403 / 404 成员不存在 / 409 `OWNER_LAST` / 409 `AGENT_ROW` |
 | POST | `/v1/pm/projects/{project_id}/owner-transfer` | 项目 owner 或租户 admin | 200 `{previous_owner, new_owner}` | 403 / 404 / 409 `ALREADY_OWNER` / 409 `NOT_TENANT_MEMBER` |
 
@@ -172,7 +172,7 @@ core.tenant (FOR UPDATE)  →  core.project (FOR UPDATE)  →  core.project_memb
 
 | # | 场景 | 类型 | 期望 |
 |---|---|---|---|
-| A001 | owner 授予成员 → 成员可访问该项目 | 正向 | 201；成员随即可见该项目 |
+| A001 | owner 授予成员 → 成员可访问该项目 | 正向 | 200；成员随即可见该项目 |
 | A002 | 非成员访问该项目 | 负向 | 404 `project not found`；**零副作用** |
 | A003 | 跨租户 principal 被授予 | 负向 | 409 `NOT_TENANT_MEMBER`；零副作用 |
 | A004 | 非本租户成员调用管理端点 | 负向 | 404 |
@@ -187,7 +187,7 @@ core.tenant (FOR UPDATE)  →  core.project (FOR UPDATE)  →  core.project_memb
 
 | # | 场景 | 期望 |
 |---|---|---|
-| A011 | 两个请求并发授予同一 principal | 恰好一个 201、另一个 409 `ALREADY_MEMBER`；成员关系 1 行 |
+| A011 | 两个请求并发授予同一 principal | 恰好一个 200、另一个 409 `ALREADY_MEMBER`；成员关系 1 行 |
 | A012 | 授予与撤销并发 | 终态唯一确定（要么成员在、要么不在），无中间悬空态 |
 | A013 | 租户成员移除与项目授予并发 | 二者由 `core.tenant` 行锁串行化：要么授予失败（目标已非租户成员）、要么授予成功且随后被级联撤销 |
 
@@ -230,7 +230,7 @@ core.tenant (FOR UPDATE)  →  core.project (FOR UPDATE)  →  core.project_memb
 | 6 | `apps/pm-api/src/project_members.rs` | 新建：4 端点 + 错误映射 |
 | 7 | `apps/pm-api/src/routes.rs` | 挂载 router |
 | 8 | `apps/pm-api/src/tenant_members.rs` | 修改：`Remove` 分支加级联 + `PROJECT_OWNER_DEPENDENCY` 前置校验 |
-| 9 | `apps/pm-api/tests/project_members.rs` | 新建：A001~A016 |
+| 9 | `apps/pm-api/tests/project_members.rs` | 新建：A001~A016（15 例） |
 
 ---
 

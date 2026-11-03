@@ -420,12 +420,13 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **验收**：五份文件齐备且互相引用一致；每条代码事实带文件:行号；每个 TASK 有验收条件与门禁；无「无法解释的关键接口依赖」。
   - **完成记录（2026-11-03）**：五份文件落于 `docs/s01-*.md`；总体计划勘误 6 处已回改（I6-B-09 补入、Git 能力枚举改依 I3 §3.1、I5 最后实施、D3.1 补入、Migration 盘点标记完成、字段拆 `stage`/`work_package`）；缺陷台账 13 项（P0 五项：D-1 单列 draft 覆盖写 / D-2 source 缺组合唯一键 / D-3 finding 无 project_id / D-4 跨项目仓库可挂 Finding / D-5 无 Evidence 实体；另 D-6 Project 成员零写入、D-7 Git 能力零基础等）；待决 8 项需用户裁（B-1 I1 V1.1 / B-2 I6-B-036~051 内容缺失 / B-3 I2 双重占号 / B-4 I4 Q1/Q2 / B-5 I3 §3.5 字段名 / B-6 policy_version 类型 / B-7 I3↔I6-B-03 语义重叠 / B-8 C 编号起号）。
 
-- [ ] **S01-W13 Project 成员授权（P0，缺口 D-6）**
+- [x] **S01-W13 Project 成员授权（P0，缺口 D-6）**（完成 2026-11-03）
   - **目标**：让 `core.project_member` 有真实写入路径，Project 成为真正的授权边界。
-  - **依据**：总体计划 §4.1 W13；`docs/s01-implementation-plan-v1.md` §4-D6；`docs/s01-task-registry-v1.md` §2.2。
-  - **做**：Project 成员 CRUD + 角色变更 + 撤权（REST + 应用层服务 + 审计）；迁移 `0030` 加 Project 侧角色枚举与唯一约束；撤权即时生效（不得凭历史授权快照继续执行）。
-  - **不做**：不做全局权限码管理端点（`delivery.policy_scope` 管理延后）；不动 Tenant 成员既有实现。
-  - **验收**：`S01-A001~A010`（正向 / 负向跨租户跨项目 404 / 并发授权变更与执行领取 / 幂等 / 权限服务异常默认拒绝 / 审计可追溯）；空库初始化与 `0029→0030` 升级双路径一致。
+  - **依据**：总体计划 §4.1 W13；`docs/s01-implementation-plan-v1.md` §4-D6；设计稿 `docs/ai-pm-s01-project-member-authorization-v1.md`（V1.0）。
+  - **做**：Project 成员 CRUD + 所有权转移（REST + 应用层服务 + 审计）；迁移 `0030` 收敛 role 值域并加索引；撤权即时生效；**修租户撤权不级联的越权洞**。
+  - **不做**：不做全局权限码管理端点（`delivery.policy_scope` 管理延后）；不动 Tenant 成员既有实现；不做 Git 能力等级（I3-B）。
+  - **验收**：`S01-A001~A016`；`apps/pm-api/tests/project_members.rs` **15 例全绿**。
+  - **完成记录（2026-11-03）**：迁移 `0030_project_member_role.sql`（role CHECK 白名单 6 值 + `(tenant_id, principal_id)` 索引，**无新表无回填**）；`pm-domain::project_member`（`ProjectMemberRole` Owner/Member + `is_agent_role`）；`pm-application::project_member`（`apply_member_change` 单事务：锁 tenant→project→member，审计与写入同事务）；`pm-api::project_members` 4 端点（GET/POST members、DELETE member、POST owner-transfer，**不提供 PATCH role——两档角色无中间态**）；**修 X-2**：租户成员移除时级联撤销其真人项目成员行（逐项目写 `project_member.revoked` 审计），且若其为某项目 owner 则拒绝移除（409 `PROJECT_OWNER_DEPENDENCY`，不静默产生无主项目）。真人项目角色只两档（owner/member），Agent 职能值（ai_pm/architect/developer/tester）留在原列由 bootstrap 独占维护。
 
 - [ ] **I6-B-01～I6-B-09 与 Migration 0029（Discovery/Import 收敛，硬串行）**
   - **目标**：把代码发现过程变成可追溯、可恢复的业务流程；DB 级保证 Project 归属一致。
