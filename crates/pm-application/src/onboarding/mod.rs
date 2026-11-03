@@ -215,7 +215,7 @@ pub fn install_guide(slug: &str, base_url: &str, source: BaseUrlSource) -> Guide
             recommendation: "人工档建议租约 ≥ 7200s、心跳 ≤ 1800s（需运维调整 AI_PM_RUN_LEASE_SECS；服务端默认 300s）。".to_string(),
         },
         known_constraints: vec![
-            "/mcp 默认只接受回环 Host；跨机接入需先配置服务端允许的 Host（T-081）。".to_string(),
+            "/mcp 默认只接受回环 Host；跨机接入需服务端设置 AI_PM_MCP_ALLOWED_HOSTS 放行本平台地址（T-081）。".to_string(),
         ],
     }
 }

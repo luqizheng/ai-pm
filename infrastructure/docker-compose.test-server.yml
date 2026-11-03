@@ -23,6 +23,14 @@ services:
     # 宿主 8090 → 容器 8090：内网测试机直连 /mcp 与 /v1/pm/*
     ports:
       - "8090:8090"
+    environment:
+      # T-081：rmcp 的 DNS-rebinding 白名单——只接受回环 Host，跨机接入必须由
+      # 部署方显式放行本机地址。写 host（不限端口）或 host:port（端口须精确匹配）。
+      # 留空即退回「仅回环」，因此这里用 `:?` 强制声明，避免忘配导致跨机 403。
+      AI_PM_MCP_ALLOWED_HOSTS: "${AI_PM_MCP_ALLOWED_HOSTS:?AI_PM_MCP_ALLOWED_HOSTS must be set on the cross-machine test server}"
+      # 接入指引（/install/{tool}）里的平台地址与 Host 头来源——必须写测试机对外
+      # 地址，否则指引会把执行端指向回环地址。
+      AI_PM_PUBLIC_BASE_URL: "${AI_PM_PUBLIC_BASE_URL:?AI_PM_PUBLIC_BASE_URL must be set on the cross-machine test server}"
 
   # token-service 额外发布 JWKS 端点，便于测试机从外部核对 JWKS 与登录链路
   token-service:

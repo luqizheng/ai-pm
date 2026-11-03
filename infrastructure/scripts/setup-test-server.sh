@@ -48,6 +48,20 @@ LEFT="$(grep -cE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*=.*__SET_BY_OPS__' .env.pro
 echo "[setup] 残留占位符(赋值行): ${LEFT}"
 [[ "$LEFT" == "0" ]] || { echo "[setup] FATAL: 仍有占位符未填" >&2; exit 11; }
 
+# T-081 跨机接入的两个机器相关变量：不是密钥，不自动生成，必须由运维按本机
+# 对外地址填写——留空时 test-server overlay 的 `:?` 会让 compose 直接失败。
+for v in AI_PM_MCP_ALLOWED_HOSTS AI_PM_PUBLIC_BASE_URL; do
+  cur="$(grep -E "^${v}=" .env.prod | head -1 | cut -d= -f2- || true)"
+  if [[ -z "$cur" ]]; then
+    echo "[setup] 注意：${v} 仍为空——跨机接入(/mcp)会 403 或指引指向回环地址"
+    echo "[setup]      请按本机对外地址填写："
+    echo "[setup]        AI_PM_MCP_ALLOWED_HOSTS=192.168.2.10   # 只写 host 表示不限端口"
+    echo "[setup]        AI_PM_PUBLIC_BASE_URL=http://192.168.2.10:8090"
+  else
+    echo "[setup] ${v}: <已设置>"
+  fi
+done
+
 # 校验加载后能否正确展开 DATABASE_URL（依赖 POSTGRES_* 在前）
 set +u
 # shellcheck disable=SC1091

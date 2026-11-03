@@ -64,13 +64,29 @@ pub(crate) struct AppState {
 /// real routes. The audit feed is process-local here; `main.rs` uses
 /// [`router_with_feed`] so it can also spawn the PG listener.
 pub fn router(pool: PgPool) -> Router {
-    router_with_feed(pool, crate::audit_stream::AuditFeed::new())
+    router_with_feed_and_hosts(
+        pool,
+        crate::audit_stream::AuditFeed::new(),
+        crate::mcp_hosts::McpHosts::default(),
+    )
 }
 
 /// Same route table over an explicit audit feed. `main.rs` calls this with the
 /// feed whose PG listener it owns. The `off` mode (local development) keeps the
 /// MCP service unguarded — permissions only exist once bearer auth is on.
+///
+/// The `/mcp` Host allow-list comes from the environment (T-081): cross-machine
+/// access is a deployment decision, not a code change.
 pub fn router_with_feed(pool: PgPool, audit_feed: crate::audit_stream::AuditFeed) -> Router {
+    router_with_feed_and_hosts(pool, audit_feed, crate::mcp_hosts::McpHosts::from_env())
+}
+
+/// [`router_with_feed`] with an explicit `/mcp` Host allow-list (T-081).
+pub fn router_with_feed_and_hosts(
+    pool: PgPool,
+    audit_feed: crate::audit_stream::AuditFeed,
+    mcp_hosts: crate::mcp_hosts::McpHosts,
+) -> Router {
     // `off` 模式不再拆掉身份门：注入固定的 `dev-off` principal
     // （写请求时落库），handlers 与审计仍有 actor（v1 §6 / C42）。
     let auth = crate::auth::AuthState {
@@ -78,7 +94,7 @@ pub fn router_with_feed(pool: PgPool, audit_feed: crate::audit_stream::AuditFeed
         pool: pool.clone(),
         config: crate::auth::AuthConfig::default(),
     };
-    build_router(pool, audit_feed, false).layer(axum::middleware::from_fn_with_state(
+    build_router(pool, audit_feed, false, mcp_hosts).layer(axum::middleware::from_fn_with_state(
         auth,
         crate::auth::inject_dev_principal,
     ))
@@ -88,6 +104,7 @@ fn build_router(
     pool: PgPool,
     audit_feed: crate::audit_stream::AuditFeed,
     guard_mcp: bool,
+    mcp_hosts: crate::mcp_hosts::McpHosts,
 ) -> Router {
     let policy = Arc::new(
         PolicyEngine::from_yaml(include_str!("../../../policies/ai-pm-ai-lead-v2.yaml"))
@@ -102,7 +119,8 @@ fn build_router(
     // The MCP service clones the pool inside its own state factory; it cannot
     // share `state` (different service type), hence a separate handle.
     let mcp_pool = state.pool.clone();
-    let mcp_service = pm_mcp::PmMcpServer::streamable_http_service(mcp_pool);
+    let mcp_service =
+        pm_mcp::PmMcpServer::streamable_http_service(mcp_pool, mcp_hosts.extra_allowed);
     // `/mcp` is permission-gated when auth is on: the outer layer verifies
     // claims, this inner layer demands PM_MCP_READ plus the tool's write
     // permission. In `off` mode there are no claims, so the gate is skipped.
@@ -237,20 +255,30 @@ fn build_router(
 /// exercising the unauthenticated contract. The layer wraps everything routed
 /// above, including the nested `/mcp` service.
 pub fn router_with_auth(pool: PgPool, jwks: Arc<digua_common_jwt::JWKSCache>) -> Router {
-    router_with_auth_and_feed(pool, jwks, crate::audit_stream::AuditFeed::new())
+    router_with_auth_config_and_feed_and_hosts(
+        pool,
+        jwks,
+        crate::auth::AuthConfig::from_env(),
+        crate::audit_stream::AuditFeed::new(),
+        crate::mcp_hosts::McpHosts::default(),
+    )
 }
 
 /// [`router_with_auth`] over an explicit audit feed (see [`router_with_feed`]).
+///
+/// The `/mcp` Host allow-list comes from the environment (T-081), like the
+/// auth config.
 pub fn router_with_auth_and_feed(
     pool: PgPool,
     jwks: Arc<digua_common_jwt::JWKSCache>,
     audit_feed: crate::audit_stream::AuditFeed,
 ) -> Router {
-    router_with_auth_config_and_feed(
+    router_with_auth_config_and_feed_and_hosts(
         pool,
         jwks,
         crate::auth::AuthConfig::from_env(),
         audit_feed,
+        crate::mcp_hosts::McpHosts::from_env(),
     )
 }
 
@@ -275,12 +303,31 @@ pub fn router_with_auth_config_and_feed(
     config: crate::auth::AuthConfig,
     audit_feed: crate::audit_stream::AuditFeed,
 ) -> Router {
+    router_with_auth_config_and_feed_and_hosts(
+        pool,
+        jwks,
+        config,
+        audit_feed,
+        crate::mcp_hosts::McpHosts::default(),
+    )
+}
+
+/// [`router_with_auth_config_and_feed`] with an explicit `/mcp` Host
+/// allow-list (T-081). Tests pass the default (loopback only) so the ambient
+/// environment cannot change what the suite exercises.
+pub fn router_with_auth_config_and_feed_and_hosts(
+    pool: PgPool,
+    jwks: Arc<digua_common_jwt::JWKSCache>,
+    config: crate::auth::AuthConfig,
+    audit_feed: crate::audit_stream::AuditFeed,
+    mcp_hosts: crate::mcp_hosts::McpHosts,
+) -> Router {
     let auth = crate::auth::AuthState {
         jwks: Some(jwks),
         pool: pool.clone(),
         config,
     };
-    build_router(pool, audit_feed, true)
+    build_router(pool, audit_feed, true, mcp_hosts)
         .layer(axum::middleware::from_fn_with_state(
             auth.clone(),
             crate::auth::require_active,

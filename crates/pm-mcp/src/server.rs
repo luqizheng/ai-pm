@@ -9,9 +9,10 @@
 //!
 //! Transport (M1 decision): streamable HTTP in stateless JSON mode —
 //! `legacy_session_mode(false)` + `json_response(true)` — so each POST gets a
-//! plain JSON-RPC response and no session store is kept; `allowed_hosts`
-//! stays at the loopback default because this server is local-only by
-//! design. No MCP OAuth, no SSE notifications (M1 scope cut).
+//! plain JSON-RPC response and no session store is kept. `allowed_hosts`
+//! keeps rmcp's loopback default; cross-machine access (T-081) is opened by
+//! the deployment adding hosts, never by emptying the list. No MCP OAuth, no
+//! SSE notifications (M1 scope cut).
 
 use rmcp::{
     ErrorData, RoleServer, ServerHandler,
@@ -452,16 +453,52 @@ impl ServerHandler for PmMcpServer {}
 
 impl PmMcpServer {
     /// The streamable HTTP service for pm-api's `/mcp` route: stateless JSON
-    /// mode (no session store), loopback-only hosts — the M1 local server.
+    /// mode (no session store).
+    ///
+    /// Host allow-list (rmcp's DNS-rebinding guard): the defaults are
+    /// loopback-only — `localhost` / `127.0.0.1` / `::1`, port-agnostic. T-081
+    /// opens cross-machine access by letting the deployment add hosts: the
+    /// entries in `extra_allowed_hosts` are merged into the defaults (never
+    /// replacing them, so local probes keep working).
+    ///
+    /// Two rmcp specifics drive the shape of this API:
+    ///   * an **empty** allow-list means "allow every Host" — so the list is
+    ///     never emptied here; `None` keeps rmcp's own defaults.
+    ///   * an entry without a port matches any port; `host:port` requires an
+    ///     exact port match.
     pub fn streamable_http_service(
         pool: PgPool,
+        extra_allowed_hosts: Option<Vec<String>>,
     ) -> StreamableHttpService<PmMcpServer, LocalSessionManager> {
+        let allowed_hosts = default_allowed_hosts(extra_allowed_hosts.as_deref());
         StreamableHttpService::new(
             move || Ok(PmMcpServer::new(pool.clone())),
             Arc::new(LocalSessionManager::default()),
             StreamableHttpServerConfig::default()
                 .with_legacy_session_mode(false)
-                .with_json_response(true),
+                .with_json_response(true)
+                .with_allowed_hosts(allowed_hosts),
         )
     }
+}
+
+/// rmcp's default Host allow-list: loopback only, port-agnostic.
+pub const DEFAULT_ALLOWED_HOSTS: [&str; 3] = ["localhost", "127.0.0.1", "::1"];
+
+/// The effective allow-list: rmcp's loopback defaults plus the deployment's
+/// extra hosts. Blank entries are dropped and duplicates are collapsed; the
+/// result is never empty (an empty list would disable the check entirely).
+pub fn default_allowed_hosts(extra: Option<&[String]>) -> Vec<String> {
+    let mut allowed: Vec<String> = DEFAULT_ALLOWED_HOSTS
+        .iter()
+        .map(|host| (*host).to_string())
+        .collect();
+    for host in extra.unwrap_or_default() {
+        let host = host.trim();
+        if host.is_empty() || allowed.iter().any(|item| item == host) {
+            continue;
+        }
+        allowed.push(host.to_string());
+    }
+    allowed
 }

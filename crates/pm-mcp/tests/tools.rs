@@ -354,7 +354,7 @@ async fn unknown_project_and_event_are_tool_errors(pool: PgPool) {
 /// and answers a tool call with an MCP error result for an unknown task.
 #[sqlx::test(migrations = "../../migrations")]
 async fn streamable_http_smoke_lists_tools_and_serves_calls(pool: PgPool) {
-    let service = PmMcpServer::streamable_http_service(pool.clone());
+    let service = PmMcpServer::streamable_http_service(pool.clone(), None);
     // T-088（C175）：模拟 pm-api 鉴权层——往请求扩展注入 `HumanActor` 与
     // `DeviceClaim`，证明它们经 rmcp `RequestContext.extensions` 到达 tool handler。
     // 生产的注入点在 pm-api `resolve_principal` / `attach_device_claim`。

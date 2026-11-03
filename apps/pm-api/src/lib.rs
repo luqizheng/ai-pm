@@ -8,6 +8,7 @@ pub mod customers;
 pub mod device_claim;
 pub mod documents;
 pub mod llm_configs;
+pub mod mcp_hosts;
 pub mod outbox_ops;
 pub mod onboarding;
 pub mod pm_acceptance;
