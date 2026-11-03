@@ -460,6 +460,13 @@ services:
       # 鉴权（slice B）：默认 jwks fail-closed，JWKS 取自同网络（superpowers）的 lmms token-service
       AI_PM_AUTH_MODE: "jwks"
       AI_PM_JWKS_URL: http://token-service:8082/.well-known/jwks.json
+      # 首管理员对：命中 (tenant, subject) 的登录主体首次接入时被开为 active
+      # （其余新身份默认 inactive）。留空则不启用首管理员通道。
+      AI_PM_FIRST_ADMIN_TENANT: "${AI_PM_FIRST_ADMIN_TENANT:-}"
+      AI_PM_FIRST_ADMIN_SUBJECT: "${AI_PM_FIRST_ADMIN_SUBJECT:-}"
+      # T-081：/mcp 跨机暴露的 Host 白名单（rmcp DNS-rebinding 防护默认只放回环）。
+      # 部署方声明部署地址；只增不减，回环默认值恒在。留空 = 仅回环可访问。
+      AI_PM_MCP_ALLOWED_HOSTS: "${AI_PM_MCP_ALLOWED_HOSTS:-}"
     ports:
       - "8090:8090"
     depends_on:

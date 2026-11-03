@@ -75,6 +75,15 @@ SELECT '22222222-2222-2222-2222-222222222222', p.id, 'owner', pi.tenant_id
  WHERE p.kind = 'human' AND p.is_active
 ON CONFLICT (project_id, principal_id) DO NOTHING;
 
+-- 2d) 当前登录主体同时补为租户 owner（全平台管理员语义：租户级角色取库内
+--     core.tenant_member.role —— pm-api 不读 token 的 roles，见 auth.rs D5）
+INSERT INTO core.tenant_member (tenant_id, principal_id, role)
+SELECT pi.tenant_id, p.id, 'owner'
+  FROM core.principal p
+  JOIN core.principal_identity pi ON pi.principal_id = p.id
+ WHERE p.kind = 'human' AND p.is_active
+ON CONFLICT (tenant_id, principal_id) DO NOTHING;
+
 -- 3) 需求与修订（requirement 指针留空先插 → 修订 → 回填，绕开循环 FK）--------
 INSERT INTO delivery.requirement (id, tenant_id, project_id, code, title, status, current_revision_id, row_revision, created_at) VALUES
   ('66666666-6666-6666-6666-666666666661',
