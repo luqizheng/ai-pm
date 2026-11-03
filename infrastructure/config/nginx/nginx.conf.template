@@ -13,9 +13,11 @@ server {
         add_header Content-Type application/json;
     }
 
-    {{ $services := "audit-service config-service file-service iam-service notification-service prue_backend token-service" }}
-
-    {{ range $svc := split " " $services }}
+    # Canary/stable 上游按服务清单渲染。ai-pm 栈不含 lmms 业务服务
+    # （audit/iam/token/... 的 canary 分流属 lmms 侧编排），清单置空；
+    # 本栈也无 nginx 容器消费该模板（consul-template 只渲染不 reload，
+    # 见 consul-template.hcl）。置空时整段不渲染，结构保留供将来启用。
+    {{ $services := "" }}{{ if $services }}{{ range $svc := split " " $services }}
     {{ $var := $svc | replaceAll "-" "_" }}
     upstream {{ $svc }}-stable {
         {{ range service $svc }}{{ if not (.Tags | contains "canary") }}
@@ -40,11 +42,14 @@ server {
         *     {{ $svc }}-stable;
         {{- end }}
     }
-    {{ end }}
+    {{ end }}{{ end }}
 
+    # /api 前缀剥离后转 pm-api（与 frontend vite proxy 的 /api → PM_API_URL 同口径；
+    # prod 公共入口 aipm-web:8091 的 /api 反代走 aipm-bff，是另一镜像内的 nginx，
+    # 不用本模板）。
     location /api/ {
         rewrite ^/api/(.*)$ /$1 break;
-        proxy_pass http://api-gateway:3000;
+        proxy_pass http://pm-api:8090;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

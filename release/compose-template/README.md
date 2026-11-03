@@ -14,8 +14,10 @@
 ## 与本仓 `infrastructure/` 的关系
 
 `infrastructure/` 是**本仓已适配落地的版本**（从模板包复制后按 ai-pm 实际
-服务裁剪：保留本仓自有的 `docker-compose-aipm.yml`、`nginx/`、`README.md`，
-并把 compose 的 `build:` 块替换为已发布镜像引用）。模板包在此作为**可追溯的
+服务裁剪：`docker-compose-services.yml` 末尾并入本仓自有的 6 个服务
+（aipm-pg / pm-api / pm-worker / ai-pm-worker / aipm-bff / aipm-web）+ `aipm_pg_data` 卷，
+并把 lmms 段的 `build:` 块替换为已发布镜像引用；另保留本仓的 `nginx/`、`README.md`）。
+模板包在此作为**可追溯的
 上游快照**，用于：
 
 - 升级时比对上游变更（模板包 → 重新适配到 `infrastructure/`）；

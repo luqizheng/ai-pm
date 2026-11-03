@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # infrastructure/scripts/start-prod.sh
 # ─────────────────────────────────────────────────────────────────────────────
-# 单入口启动 superpowers prod。配套 stop-prod.sh。
+# 单入口启动 ai-pm prod（编排 = 模板基座 + ai-pm 自有服务）。配套 stop-prod.sh。
 #
 # 用法：
 #   ./infrastructure/scripts/start-prod.sh                    # 标准 prod
@@ -63,8 +63,9 @@ load_env() {
 load_env "$ENV_BASE"
 load_env "$ENV_PROD"
 
-# 4. 校验关键 vars（与 deploy-remote.sh 同步）
-for v in MYSQL_ROOT_PASSWORD MYSQL_USER MYSQL_PASSWORD DATABASE_URL RABBITMQ_DEFAULT_PASS \
+# 4. 校验关键 vars（PG 主库 + 中间件 + lmms 登录验证栈的 service-jwt bootstrap token）
+for v in POSTGRES_HOST POSTGRES_PORT POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB \
+         DATABASE_URL RABBITMQ_DEFAULT_PASS \
          IAM_DEV_BT TOKEN_DEV_BT NOTIFICATION_DEV_BT AUDIT_DEV_BT \
          PRUE_DEV_BT GATEWAY_DEV_BT CONFIG_DEV_BT FILE_DEV_BT; do
   if [[ -z "${!v:-}" ]]; then
@@ -94,5 +95,5 @@ docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_PROD" up -d "${COMPOSE_ARGS[@]}" 
   || die "docker compose up failed" 20
 
 log "running: $(docker compose -f "$COMPOSE_BASE" -f "$COMPOSE_PROD" ps --services 2>/dev/null | wc -l) services"
-log "public endpoint: http://<host>:8080 (frontend nginx → api-gateway:3000)"
-log "private: api-gateway:3000 is NOT published to host (container network only)"
+log "public endpoints: http://<host>:8091 (前端 aipm-web) / http://<host>:3000 (登录验证 api-gateway)"
+log "private: pm-api:8090 / aipm-bff:8080 / token-service:8082 / iam-service:8081 are container-network only"

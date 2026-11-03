@@ -18,10 +18,14 @@
 services:
 
   # ─────────────────────────────────────────────────────────────────────────
-  #  内部组件（mysql / redis / rabbitmq / consul）：
+  #  内部组件（postgres / mysql / redis / rabbitmq / consul）：
   #    - 清空 host port（仅容器网络可达）
   #    - 加 restart: unless-stopped
+  #  （mysql 是 profile 服务，默认不起；定义保留，--profile mysql 启用时同样收敛）
   # ─────────────────────────────────────────────────────────────────────────
+  postgres:
+    ports: !override []
+    restart: unless-stopped
   mysql:
     ports: !override []
     restart: unless-stopped
@@ -36,9 +40,9 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
-  #  业务后端 8 个服务：
-  #    - 除 api-gateway 外清空 host port（外部不再直连；唯一公共入口是
-  #      api-gateway:3000，客户端通过 sdk/* 或 packages/* 访问）
+  #  lmms 业务服务（登录验证栈 + 其余业务服务）：
+  #    - 除 api-gateway 外清空 host port（api-gateway 是登录验证入口，
+  #      外部浏览器走 /gw → api-gateway:3000）
   #    - 加 restart: unless-stopped（容器内部端口仍可互通）
   # ─────────────────────────────────────────────────────────────────────────
   api-gateway:
@@ -71,11 +75,29 @@ services:
   # ─────────────────────────────────────────────────────────────────────────
 
   # ─────────────────────────────────────────────────────────────────────────
-  #  observability（prometheus / grafana / jaeger / otel-collector / alertmanager
-  #  / consul-template）：按 spec 表格，host port 保留（ops 直连），restart 已在
-  #  base 文件里有，本 overlay 不动。
+  #  ai-pm 自有服务：
+  #    - pm-api / aipm-bff 清空 host port（外部走 aipm-web:8091 的 /api 反代）
+  #    - pm-worker / ai-pm-worker：无 host port，仅加 restart
+  #    - aipm-pg：保留 5435 宿主映射（ops 连库用），加 restart
+  #    - aipm-web：保留 8091（前端公共入口），加 restart
   # ─────────────────────────────────────────────────────────────────────────
-
-# PG 方言变体追加：postgres 生产态不发布端口（与上方 mysql 同款收敛）。
-  postgres:
+  pm-api:
     ports: !override []
+    restart: unless-stopped
+  aipm-bff:
+    ports: !override []
+    restart: unless-stopped
+  pm-worker:
+    restart: unless-stopped
+  ai-pm-worker:
+    restart: unless-stopped
+  aipm-pg:
+    restart: unless-stopped
+  aipm-web:
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  observability（prometheus / grafana / jaeger / otel-collector / alertmanager
+  #  / consul-template）：host port 保留（ops 直连），restart 已在 base 文件里有，
+  #  本 overlay 不动。
+  # ─────────────────────────────────────────────────────────────────────────

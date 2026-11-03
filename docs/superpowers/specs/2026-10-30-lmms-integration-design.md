@@ -68,5 +68,5 @@
 2. `AI_PM_AUTH_MODE=off` 时行为与现状一致（本地开发可用）。
 3. jwks 不可达时启动/请求 fail-closed，错误信息明确。
 4. 错误响应结构两边同构；OTLP 导出在 lmms 观测栈可见 ai-pm 的 traces。
-5. `docker compose -f infrastructure/docker-compose.yml up -d aipm-pg pm-api ...` 起通 ai-pm 服务（编排=模板复制 + docker-compose-aipm.yml，见 infrastructure/ADAPTATION.md），与 lmms 基础设施网络互通。
+5. `docker compose -f infrastructure/docker-compose.yml up -d aipm-pg pm-api ...` 起通 ai-pm 服务（编排=模板复制；2026-11-03 起 ai-pm 服务并入 `infrastructure/docker-compose-services.yml`，登录验证栈同文件，见 infrastructure/README.md），与 lmms 基础设施网络互通。
 6. ai-pm 现有测试全绿；新增鉴权/转换层测试覆盖每个验收点。

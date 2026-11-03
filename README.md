@@ -2,6 +2,34 @@
 
 每项目专属 AI-PM 平台（Rust + PostgreSQL）：Cargo Workspace，含 5 个核心库 crate（crates/）与 3 个服务（apps/）。
 
+## 本地演示环境（账号密码）
+
+**演示账号：`admin` / `Admin@123456`**
+
+| 项 | 值 |
+|---|---|
+| 账号 | `admin` |
+| 密码 | `Admin@123456` |
+| 角色 | `tenant_admin`（首用户自动获得，含全部启用权限） |
+| 前端入口 | http://localhost:8848 （`cd frontend && pnpm dev`） |
+| 登录验证栈 | api-gateway `3000` → iam-service `9081` → token-service `8082` |
+| 业务 API | pm-api `8090`（经前端 `/api` 代理；`/gw` 代理到 api-gateway） |
+| 数据库 | aipm-pg `5435`（`postgres://aipm:aipm@127.0.0.1:5435/aipm`） |
+
+> 账号由 `POST :3000/v1/iam/auth/register` 注册（首次部署，runbook 见
+> `docs/runbook-login-chain.md` §三）。**仅限本地/内网演示环境**，生产必须换强口令并
+> 走 secret manager。
+>
+> pm-api 侧该主体还需 `AI_PM_FIRST_ADMIN_TENANT=1` +
+> `AI_PM_FIRST_ADMIN_SUBJECT=<注册返回的 IAM 用户 id>` 两个 env 才会落库为
+> active + tenant owner（缺任一 → 403 `IAM_PERM_3002 principal is not activated`）。
+
+演示数据（1 客户 / 1 项目 / 3 需求 / 6 任务 / 1 待审批 / 审计行，幂等）：
+
+```bash
+docker exec -i infrastructure-aipm-pg-1 psql -U aipm -d aipm < scripts/seed-demo.sql
+```
+
 启动开发数据库：`docker compose -f docker-compose.dev.yml up -d`（postgres:16，`postgres://aipm:aipm@localhost:5433/aipm`）。
 
 > 该 compose 已为本地开发/测试关闭 WAL 同步（`fsync=off` / `synchronous_commit=off` /

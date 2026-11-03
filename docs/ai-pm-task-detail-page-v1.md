@@ -445,7 +445,7 @@ flowchart TD
 | ① | `POST /v1/pm/tasks`；`project_repository`（`0008_repositories.sql`）；`ProjectCommand::CreateTask` | 「**固化验收标准**」无实体（契约/验收标准未建表）；「关联多个仓库」到任务侧需 `task_repository`（`0009` 草案） |
 | ② | `/mcp` 服务 + `integration.job.lease_until` 到期重领（`e2e_scenarios.rs` 有死锁恢复用例） | 租约在 **job 层**，MCP 领取任务是否复用同一租约未定；MCP 工具命名未冻结 |
 | ③ | 无平台侧实现（执行端自建 Worktree） | 平台不登记 Worktree，`task_workspace` 为 `0009` 草案；「分仓库提交」无跨仓原子性 |
-| ④ | **无对应实现** | 编排（`infrastructure/docker-compose-aipm.yml`）仅 `pm-api` / `pm-worker` / `ai-pm-worker`；代码中只有零散 `validate_identifier` / `validate_key` 类校验，**不存在「验证 Commit · 测试证据 · 仓库基准 · 验收条件」的服务** |
+| ④ | **无对应实现** | 编排（`infrastructure/docker-compose-services.yml`）仅 `pm-api` / `pm-worker` / `ai-pm-worker`；代码中只有零散 `validate_identifier` / `validate_key` 类校验，**不存在「验证 Commit · 测试证据 · 仓库基准 · 验收条件」的服务** |
 | ⑤ | `TaskStatus` + `governance.approval_request`（决策返回 receipt）；`knowledge_index` 重建 | 「审批 ADR」与「更新索引」未串联；「解锁下游任务」依赖 `task_dependency`（`0009` 草案） |
 
 #### 6.6.4 四条结构信息〔整理〕

@@ -1,10 +1,21 @@
+# ai-pm 编排入口 —— 基础模板来自 lmms coder-compose-template 1.6.0-pg（PostgreSQL 方言）。
+# 与 lmms 同布局（目录名 infrastructure → compose 项目同名），
+# 因此网络/卷与 lmms 栈同命名空间：`superpowers` 网络即 infrastructure_superpowers，
+# ai-pm 服务与 lmms 服务可直接互访（服务名即 DNS）。
+#
+# include 了三块（与上游同构）：
+#   docker-compose-infra.yml        — 基础设施（consul/redis/rabbitmq/postgres/mysql[profile]）
+#   docker-compose-services.yml     — 业务服务：lmms 登录验证栈（api-gateway/iam-service/token-service
+#                                     及其余业务服务，镜像引用版）+ ai-pm 自有 6 服务
+#   docker-compose-observability.yml — 可观测性（prometheus/grafana/jaeger/otel/alertmanager/consul-template）
+
 include:
   - docker-compose-infra.yml
   - docker-compose-services.yml
   - docker-compose-observability.yml
+
 services: {}
-volumes:
-  mysql_replica_data: null
+
 networks:
   superpowers:
     driver: bridge

@@ -8,3 +8,6 @@ run-workspaces/
 # 本地运行时产物（dev 服务日志 / knowledge git 根 / repo clone 缓存）
 /logs/
 /data/
+# compose 的 bind mount 目录（../services/iam-service/config 为 rw 挂载，
+# iam-service 首次启动自播种 config.yaml —— 运行时产物，不入库）
+/services/iam-service/

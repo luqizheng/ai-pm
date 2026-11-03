@@ -13,34 +13,57 @@ vite 代理见 `frontend/vite.config.ts`（`/api`→`PM_API_URL ?? 8090`；`/gw`
 
 ## 二、起栈步骤
 
-1. **lmms 鉴权栈**（在 `low-memory-micro-services/infrastructure/`，项目名同为 `infrastructure` → 与 ai-pm 栈共享 `infrastructure_superpowers` 网络）：
+1. **登录验证栈 + 基础设施**（2026-11-03 起已并入 **ai-pm 栈**，在 `ai-pm/infrastructure/`
+   的 `docker-compose-services.yml` 里 —— `api-gateway` / `iam-service` / `token-service` 与
+   ai-pm 服务同文件、同 `superpowers` 网络）：
    ```bash
-   docker compose -f docker-compose-infra.yml -f docker-compose-services.yml \
-     up -d --no-deps consul redis mysql rabbitmq token-service iam-service api-gateway prue_backend
+   cd ai-pm
+   docker compose -f infrastructure/docker-compose.yml up -d \
+     consul registrator redis rabbitmq postgres token-service iam-service api-gateway
    ```
-   基础设施四件套与 lmms 服务镜像本机已有，`--no-deps` 防止触碰 ai-pm 的 aipm-* 容器。
+   ⚠️ **不要再在 `low-memory-micro-services/infrastructure/` 起第二份**：两边目录名同为
+   `infrastructure` → compose 项目同名、同名服务标签相同，会互抢容器。
+   旧命令（仅在「只跑 lmms 栈、不跑 ai-pm 栈」时用，务必带 `--no-deps` 防止触碰 aipm-* 容器）：
+   ```bash
+   cd low-memory-micro-services/infrastructure
+   docker compose -f docker-compose-infra.yml -f docker-compose-services.yml \
+     up -d --no-deps consul redis rabbitmq postgres token-service iam-service api-gateway prue_backend
+   ```
 
 2. **pm-api 原生**（dev 循环推荐；容器版需重建 aipm/pm-api 镜像）：
    ```bash
    cd ai-pm
-   DATABASE_URL="postgres://aipm:aipm@127.0.0.1:5433/aipm" \
+   DATABASE_URL="postgres://aipm:aipm@127.0.0.1:5435/aipm" \
    PM_API_PORT=8090 \
    AI_PM_AUTH_MODE=jwks \
    AI_PM_JWKS_URL=http://127.0.0.1:8082/.well-known/jwks.json \
+   AI_PM_FIRST_ADMIN_TENANT=1 \
+   AI_PM_FIRST_ADMIN_SUBJECT=<§三 注册返回的 IAM 用户 id> \
    cargo run -p pm-api
    ```
    `AI_PM_AUTH_MODE=off` 为本地免鉴权（行为与 slice B 之前一致）。
+   ⚠️ `AI_PM_FIRST_ADMIN_TENANT` + `AI_PM_FIRST_ADMIN_SUBJECT` **两者都要配**
+   （tenant=JWT `tid`，subject=JWT `sub`）；缺任一 → 首个登录主体落库为未激活 →
+   pm-api 返 `403 IAM_PERM_3002 principal is not activated`。已自动建过 identity
+   时不会改写激活态，需先清 `core.principal_identity` / `core.tenant_member` /
+   `core.principal` 三表对应行再以新 env 重启。
 
 3. **前端**：`cd frontend && pnpm dev`（`.env.development` 已 `VITE_USE_MOCK=0`）。
 
-## 三、首次初始化（新 mysql 卷时）
+## 三、首次初始化（新库卷时）
 
 - `GET :3000/v1/iam/auth/setup-status` → `{"setup_required":true,"user_count":0}` 时：
   ```bash
   curl -X POST :3000/v1/iam/auth/register -H "Content-Type: application/json" \
     -d '{"username":"admin","password":"Admin@123456","nickname":"Admin"}'
   ```
-  首用户自动获得 `tenant_admin` + 全部启用权限。
+  首用户自动获得 `tenant_admin` + 全部启用权限。**记下返回的 `id`**（= JWT `sub`，
+  pm-api 的 `AI_PM_FIRST_ADMIN_SUBJECT` 用它）。
+- **demo 数据**（tenant-aware，幂等；2026-11-03 起所有业务表带 `tenant_id`）：
+  ```bash
+  docker exec -i infrastructure-aipm-pg-1 psql -U aipm -d aipm < scripts/seed-demo.sql
+  ```
+  种子自动把当前登录主体（active human）补为 DEMO 项目 owner，审计/任务归属与登录用户一致。
 
 ## 四、验收矩阵（2026-10-31 全部通过）
 
