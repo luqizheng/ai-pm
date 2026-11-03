@@ -179,13 +179,7 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 
 ## 8. M5 · Review、失败恢复与知识回写（D5）
 
-- [~] **T-042 出设计稿 `docs/ai-pm-slice-d5-review-v1.md`**（2026-11-02 CodeArts：七题裁定 Q-D5-1…7 收编 v1 → 评审 P0×6/P1×4 收编 V1.1 → 评审补充场景 10 项收编 → 最终架构判断（有条件通过，暂缓 T-043，先修订再过稿）→ D1–D6 + 补充 4/5 → **V1.3：① Knowledge Proposal 改与 Task completed 同事务强一致（异步集废止；C117/C118/C128 改版 + 新增 C137）② 迁移号核实（0024 归 T-060，D5 取 0026）③ 验收矩阵四要素化 ④ §12.1 明确不做七项 → 用户最终建议确认「修订范围 7 项（4 必须 + 3 建议）全部落实」**；验收矩阵终态 **C98–C137（40 条）**；评审核对见 `docs/ai-pm-slice-d5-review-review.md`；**过稿就绪，待用户过稿**）
-  - **本条按 §0.1 执行**：完整 brainstorming。
-  - **目标**：形成可审计的闭环——失败判定（B4）、独立 Review Run、知识回写。
-  - **依据**：`target.md` §P7 五条边界（Reviewer 是独立 Run、默认只读、Review 失败 ≠ Run 失败、必须区分「需要审批」与「已经审批」、高层强制审批不可被任务级放宽——最后一条 D2.1 已实现）；`delivery.task_acceptance_criterion`（`0015`，逐条留痕已建表）；`0014` 知识提案/质量门（回写只能走提案，不得直写）。
-  - **要在稿里裁清的点**：失败判定的输入（退出码/测试证据/超时 vs 人工驳回）与终态映射；Reviewer Run 是否复用 `task_run` 还是独立表；四值结论（Approved/ChangesRequested/Inconclusive/Failed）如何落到 task 状态；逐条验收裁决的存储与「结论≠证据」的区分；知识回写的触发点与去重。
-  - **不做**：不做多 Agent 协作；不做自动修复（ChangesRequested 之后由人/新 run 处理）。
-  - **验收**：含状态图、裁决表、验收矩阵；用户过稿后才可进 T-043。
+- [x] **T-042 出设计稿 `docs/ai-pm-slice-d5-review-v1.md`**（V1.3 已过稿 → T-043 已实施完成）——条目已移入 §13 归档
 
 - [x] **T-043 实施 D5（前置：T-042 已确认 ✅）**（2026-11-02 领用，执行者：Trae）
   - **做**：失败判定服务；Reviewer Run 编排（只读，写 findings）；逐条 `task_acceptance_criterion` 裁决留痕；完成/失败后的知识回写（走 `knowledge_proposal`）；投递 `ReviewCompleted`/`KnowledgeBaseWriteRequested` 事件。
@@ -598,6 +592,13 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 - **六项裁定（用户逐项确认，Q-D4-1…6）**：① 不建 `task_workspace`（D3 派生规则 + 既有列已承担，只建 `task_repository_commit`）；② 基线防篡改双保险（声明比对快照 + 镜像仓 `merge-base --is-ancestor` 祖先校验 + 回读 author/时间）；③ 文件清单 = 计数落库 + git 现算（`diff --name-status`）；④ 测试证据 draft 原样落 `test_evidence` JSONB；⑤ 交付历史 = per-run 表 + 按 task 聚合视图 `v_task_delivery_manifest`；⑥ `integration_status` 契约补字段 + `task_run` 新列 + 视图算整单三态（裁决归 D5）。
 - **验收**：表/列/视图 DDL、七步提交管线、错误码表、C71–C84 验收矩阵齐备；**三节逐节过稿**（数据模型与校验管线 / 契约定稿与错误码 / 测试计划与实施顺序）。
 - **不做**：不做 Review 裁决（D5）；不建 task_workspace；不做全局仓库实体（C3 维持）；不做自动 merge/推远端。
+
+### T-042 D5 设计稿（Review / 失败恢复 / 知识回写）—— 2026-11-02 过稿并实施
+
+- **交付**：`docs/ai-pm-slice-d5-review-v1.md` V1.3（七题裁定 Q-D5-1…7 → 评审 P0×6/P1×4 → 评审补充场景 10 项 → 最终架构判断「有条件通过，先修订再过稿」→ D1–D6 + 补充 4/5 → **V1.3：① Knowledge Proposal 改与 Task completed 同事务强一致（异步集废止；C117/C118/C128 改版 + 新增 C137）② 迁移号核实（0024 归 T-060，D5 取 0026）③ 验收矩阵四要素化 ④ §12.1 明确不做七项** → 用户确认「修订范围 7 项（4 必须 + 3 建议）全部落实」）；评审核对 `docs/ai-pm-slice-d5-review-review.md`；验收矩阵终态 **C98–C137（40 条）**。
+- **状态更正（2026-11-03）**：本条原停在 `[~]「过稿就绪，待用户过稿」`——**V1.3 早已过稿，下游 T-043 已于 2026-11-02 实施完成并归档**（迁移 0026 + `pm-application::review` 八模块 + 14 条用例，实测 75 个 `test result: ok` / 516 passed / 0 failed），条目状态与 §13 归档不一致，本次销账。
+- **做**：形成可审计闭环——失败判定（B4）、独立 Reviewer Run、知识回写；稿内裁清失败判定输入与终态映射、Reviewer Run 复用 `task_run`、四值结论落状态、逐条裁决存储与「结论≠证据」区分、知识回写触发点与去重。
+- **不做**：不做多 Agent 协作；不做自动修复（ChangesRequested 之后由人/新 run 处理）。
 
 ### T-043 实施 D5（Review / 失败恢复 / 知识回写）—— 2026-11-02 完成
 
