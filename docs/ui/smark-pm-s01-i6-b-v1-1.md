@@ -553,13 +553,20 @@ core.project (FOR UPDATE)  →  integration.repo_import (FOR UPDATE)  →  integ
 
 ### 7.1 REST
 
-| 方法 | 路径 | 变更 |
-|---|---|---|
-| POST | `/v1/pm/projects/{project_id}/imports` | **请求体新增必填 `repository_ids: string[]`**（非空数组；N-3）；透传 `idempotency_key` |
+> **实施状态（2026-11-03）**：本节所列契约**已实施**，验收见
+> `apps/pm-api/tests/import_contract.rs`（7 例全绿）。
+
+| 方法 | 路径 | 变更 | 实施结果 |
+|---|---|---|---|
+| POST | `/v1/pm/projects/{project_id}/imports` | **请求体新增必填 `repository_ids: string[]`**（非空数组；N-3）；透传 `idempotency_key` | ✅ 空/缺省 → 422 `repository_ids_required`；跨项目仓库 → 422 `repository_not_in_project`；同幂等键 → 同一 `import_id` + `replayed=true` |
 | GET | `/v1/pm/projects/{project_id}/imports/{import_id}` | 响应新增 `draft_revision`（指针语义）、`sources[].attempts[]`（每轮摘要） |
-| POST | `/v1/pm/projects/{project_id}/imports/{import_id}/cancel` | 增加 `reason`（含 `proposed_terminated`），`proposed` 态也允许（显式终止，C-2） |
-| POST | `/v1/pm/projects/{project_id}/imports/{import_id}/apply` | 不变 |
-| — | `/v1/pm/projects/{project_id}/imports/{import_id}/terminate` | **新增**：`proposed` 态的显式终止 / 放弃（C-2） |
+| POST | `/v1/pm/projects/{project_id}/imports/{import_id}/cancel` | 增加 `reason`（可选，写入审计 `after_data`）；`proposed` 态也允许（显式终止，C-2） | ✅ 已实施 |
+| POST | `/v1/pm/projects/{project_id}/imports/{import_id}/apply` | 不变 | — |
+| POST | `/v1/pm/projects/{project_id}/imports/{import_id}/terminate` | **新增**：`proposed` 态的显式终止 / 放弃（C-2） | ✅ 已实施；终止后 active 名额释放，可再次发起导入 |
+
+> **导入集合固化**：导入创建时只为 `repository_ids` 里的仓库建 Source 行与首轮 Attempt，
+> Worker 只处理这批仓库（I6-B-03）。`GET .../imports/{id}` 的 `sources[]` 追加
+> `attempts[]`（每轮摘要：轮次号 / 状态 / Commit / 错误码 / 起止时间）。
 
 > **契约直接改**：`repository_ids` 从「可选」改为「必填且非空」，REST 与 MCP **同契约**；开发期无兼容包袱（N-3）。
 
@@ -568,8 +575,16 @@ core.project (FOR UPDATE)  →  integration.repo_import (FOR UPDATE)  →  integ
 | 工具 | 变更 |
 |---|---|
 | `pm_discovery_submit_findings` | `findings[].evidence[]` 的内嵌 JSONB 数组改为**结构化证据项**（`evidence_type` + 可选 `file_path`/`symbol`/`code_range`/`commit_sha`/`attempt_no`），服务端落 Evidence 表 |
-| 新增 `pm_submit_evidence` | 提交证据到既有 Finding（绑定 `finding_id` + `attempt_no`） |
+| 新增 `pm_submit_evidence` | 提交证据到既有 Finding（绑定 `finding_id` + `attempt_no`）——✅ 已实施（19 个 MCP 工具） |
 | 权限码 | `pm_discovery_submit_findings` / `pm_submit_evidence` / `pm_claim_task` / `pm_submit_result` / `pm_report_progress` 补独立权限码（现状只受 `PM_MCP_READ` 约束——缺陷 D-11） |
+
+> **权限码收紧是跨仓协同项，本轮未落地**（2026-11-03 裁决）：lmms 侧当前只签发
+> `PM_MCP_READ` / `PM_MCP_DOCUMENT_WRITE` / `PM_MCP_TASK_UPDATE` 三个码
+> （`libs/authz/src/perms.rs`），**没有**发现族专用码。单仓擅自收紧会让**现网执行端
+> 的 key 立刻 403**，直接打断 S01-4 的执行闭环。正确顺序是：
+> ① lmms 侧新增发现族权限码并签发 → ② ai-pm 侧按工具收紧权限表 → ③ 回归执行链路。
+> 本轮新增的 `pm_submit_evidence` 为**新工具**（无现网流量），暂挂 `PM_MCP_READ`
+> + 真人成员门，与现有发现族写工具同口径；待 ①② 完成后统一收紧。
 
 ---
 
@@ -583,6 +598,12 @@ core.project (FOR UPDATE)  →  integration.repo_import (FOR UPDATE)  →  integ
 | 草案生成成功 / 失败 | `governance.audit_log` | `repo_import.draft_succeeded` / `.draft_failed`（含 revision 与消费的 `source_attempts`） |
 | Import 终态化 | `governance.audit_log` | `repo_import.terminated` |
 | 仓库删除被拒 | `governance.audit_log` | `repository.delete_rejected`（reason=`repository_has_history`） |
+
+> **实施状态（2026-11-03）**：`repo_import.started`、`project_initialization.acquired`、
+> `repo_import.attempt_succeeded` / `.attempt_failed`、`repo_import.draft_succeeded` /
+> `.draft_failed`、`repo_import.terminated`（`after_data` 带 `previous_status` /
+> `reason` / `initialization_released`）**已实施**；`repository.delete_rejected`
+> 随 409 映射一并落地。
 
 审计四列（`actor_id` / `actor_identity_id` / `actor_client` / `actor_auth_mode`）+ `claimed_device_id` 与既有 13 处写入点同口径。
 
