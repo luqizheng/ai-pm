@@ -325,7 +325,7 @@
 |---|---|---|---|
 | ① | **Project 成员授权无写入路径** | `core.project_member` 全仓零 INSERT（仅测试与 `bootstrap.rs:414`）；`support.rs:135`/`pm_lists.rs:99`/`pm_runs.rs:87`/`pm_artifacts.rs:54` 只读 | S01-W13（+0030） |
 | ② | **Git 能力授权零基础** | 无权限枚举（`grep "enum .*Permission"` 无匹配）、`migrations/*.sql` 无权限字段（仅 `0010:51,156` 的失败分类 `'permission'`）、`git_access.rs:1-4` 明示只读白名单 | I3-B~I3-E（+0031/0032） |
-| ③ | **无 Evidence 实体与回传通道** | `discovery_finding.evidence` 为 JSONB 数组（0025:61）；MCP 侧 `pm_submit_result.repositories[].tests[]`（tools.rs:599-605）与 `pm_discovery_submit_findings.findings[].evidence`（868-883）内嵌 | I6-B-04（+0029） |
+| ③ | **无 Evidence 实体与回传通道** | `discovery_finding.evidence` 为 JSONB 数组（0025:61）；MCP 侧 `pm_submit_result.repositories[].tests[]`（tools.rs:599-605）与 `pm_discovery_submit_findings.findings[].evidence`（868-883）内嵌 | I6-B-04（+0031） |
 | ④ | **无项目级 Delivery 聚合** | `pm_delivery.rs:21-25` 仅任务级；`pm_acceptance.rs:43` 的 `acceptance-overview` 已是项目级聚合但只含汇总计数 | S01-W60（+0034 或视图） |
 | ⑤ | **MCP 权限码表覆盖不足** | `auth.rs:562-568` 仅 5 工具；写工具与读工具同码 | I6-B-05 |
 | ⑥ | **单对象 GET 缺失** | `GET /v1/pm/projects/{id}`、`/tasks/{id}`、`/repositories/{id}` 均不存在（列表端点存在） | S01-W20/W21/S01-W61 |
@@ -355,6 +355,6 @@
 | MCP 契约 → 执行端接入 | ✅ 真实且已遵守。18 工具已固定，`instruction.md` 三步即契约 |
 | Source/Attempt 模型 → Evidence 复合外键 | ✅ 真实且**硬阻塞**（缺陷 D-2：source 无组合唯一键，组合 FK 无法建立） |
 | Knowledge Proposal 规则 → 发布集成 | ✅ 真实且已遵守。`knowledge_write_coordinator` + `base_revision` 乐观并发已就位 |
-| Migration 审查 → 依赖它的代码合并 | ✅ 真实。0029 是唯一多任务共享变更（I6-B-02/04/07/08） |
+| Migration 审查 → 依赖它的代码合并 | ✅ 真实。0031 是唯一多任务共享变更（I6-B-02/04/07/08） |
 
 **无「无法解释的关键接口依赖」**（实施计划 §10 退出条件之一，成立）。

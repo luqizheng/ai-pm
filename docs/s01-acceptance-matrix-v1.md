@@ -174,7 +174,7 @@
 | 段 | 要求 | 判定依据 | 当前状态 |
 |---|---|---|---|
 | **A 设计基线** | I1–I6 无未解决关键接口冲突；权限边界统一；状态机边界统一；数据模型明确；未决事项有责任与门禁 | 实施计划 §1、§4、§9 | ⚠️ A 段未全绿：D-10（两套状态机）、D-7（Git 能力零基础）为**已知未解决项**，均已归属 TASK 且有门禁 |
-| **B 数据库** | Migration 顺序完整；旧环境升级通过；新环境初始化通过；关键 FK/UNIQUE/CHECK 有测试；I6-B 复合外键落地 | Migration Registry §3.2 冻结门槛 9 条 | ❌ 未开始（0029 未写） |
+| **B 数据库** | Migration 顺序完整；旧环境升级通过；新环境初始化通过；关键 FK/UNIQUE/CHECK 有测试；I6-B 复合外键落地 | Migration Registry §3.2 冻结门槛 9 条 | ❌ 未开始（0031 未写） |
 | **C 执行闭环** | REST 边界明确；MCP 上下文与回传完整；Worker 可恢复；Codex CLI 可执行；多仓库基准与交付可追溯 | Interface Matrix §3、§4 | ⚠️ 部分：Context/进度/结果 ✅、**回传证据 ❌**（D-5/D-12）、bootstrap 层 ❌ |
 | **D 知识闭环** | 多 Agent 并行生产；Coordinator 统一协调；冲突可识别；审核发布可追溯；失败可恢复 | `knowledge_write_coordinator.rs` + `knowledge_proposal/` | ✅ 基本达成（`base_revision` + advisory lock + 幂等账本） |
 | **E 交付闭环** | 项目级交付可查；逐仓库验收；失败 Run 可恢复；审计链完整；E2E 通过 | §3.7 的 S01-A026~A065 | ❌ 未开始（项目级聚合缺失 D-13） |

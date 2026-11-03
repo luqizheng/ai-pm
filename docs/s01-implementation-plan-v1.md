@@ -65,7 +65,7 @@ S01 的设计输入共 13 份，全部落在 `docs/ui/`（除标注者）：
 | 5 | 哪些设计已实施 / 哪些只有设计 | 已实施：T-083～T-091、D1～D5、D3.1。仅设计：I1～I6 全套、Git 能力授权、Project 成员授权 | Task Registry §3 |
 | 6 | 哪些缺陷必须在 S01 修复 | **P0 五项**（见 §4 缺陷台账） | §4 |
 | 7 | 哪些问题允许延后 | Policy 管理端点、Notification 写侧、T-052/T-053/T-071 等（§9-C） | §9 |
-| 8 | 哪些 TASK 依赖同一个数据库变更 | **Migration 0029（I6-B 批）为唯一多任务共享变更**：I6-B-02/04/07/08 共用 | Migration Registry §3 |
+| 8 | 哪些 TASK 依赖同一个数据库变更 | **Migration 0031（I6-B 批）为唯一多任务共享变更**：I6-B-02/04/07/08 共用 | Migration Registry §3 |
 
 ---
 
@@ -98,12 +98,12 @@ S01 的设计输入共 13 份，全部落在 `docs/ui/`（除标注者）：
 
 - 一个 Project 关联 ≥2 个 Repository 成功。
 - Repository 独立验证、独立归档，失效互不影响。
-- 删除被历史 Task/Run/Import 引用的 Repository → **409 `repository_has_history`**（依赖 I6-B 迁移的 RESTRICT 换轨，见 Migration Registry §3 M-0029）。
+- 删除被历史 Task/Run/Import 引用的 Repository → **409 `repository_has_history`**（依赖 I6-B 迁移的 RESTRICT 换轨，见 Migration Registry §3 M-0031）。
 - Project 级 Git 基准字段存在且可写。
 
 ### S01-3 Discovery / Import
 
-- I6-B V1.1 正文完成 + Migration 0029 DDL 审查冻结。
+- I6-B V1.1 正文完成 + Migration 0031 DDL 审查冻结。
 - Attempt / Evidence 复合外键落地，空库初始化与 0028 升级双路径一致。
 - DB 级负向测试 1～5 + 追加 2 条全部以约束违例断言（不经 REST/MCP）。
 - Discovery Session 与 Task 两套状态机的边界在 I6-B-05 内明确收敛。
@@ -148,7 +148,7 @@ S01 的设计输入共 13 份，全部落在 `docs/ui/`（除标注者）：
 | D-12 | 无独立「回传证据」工具与落库表，证据内嵌在载荷里 | `crates/pm-mcp/src/tools.rs:599-605`、`868-883` | P1 | I6-B-04 | 新增 Evidence 表 + 提交路径 |
 | D-13 | 无 Project 级 Delivery 聚合端点 | `apps/pm-api/src/pm_delivery.rs:21-25` 仅任务级 | P2 | S01-W60 | 新增项目级读模型 |
 
-> D-1～D-5 由 I6-B 一次性解决（同一批 Migration 0029）。**不得拆成多个迁移**——Attempt/Evidence 复合 FK 与 Source 唯一键互为前置。
+> D-1～D-5 由 I6-B 一次性解决（同一批 Migration 0031）。**不得拆成多个迁移**——Attempt/Evidence 复合 FK 与 Source 唯一键互为前置。
 
 ---
 
@@ -170,7 +170,7 @@ S01-0 基线冻结
 2. **Task/Run 状态机** → 调度器（I1-B/I1-C）。
 3. **MCP 契约** → 执行端正式接入。
 4. **Source/Attempt 模型** → Evidence 复合外键（D-2 → D-5）。
-5. **I6-B V1.1 正文** → Migration 0029 冻结 → 依赖该迁移的代码合并。
+5. **I6-B V1.1 正文** → Migration 0031 冻结 → 依赖该迁移的代码合并。
 6. **I5 总控台最后实施**（`smark-pm-s01-i5-project-command-center-v1-1.md` §11.2 明确顺序 `I1 → I2 → I3 → I4 → I6 → I5`）——总体计划阶段表未表达此点，**以 I5 V1.1 为准**。
 
 可并行项：§12.1 原列 5 条，本基线确认成立，其中「前端页面与已稳定的 REST Read Model」当前无阻塞（`acceptance-overview` 已可用）。
@@ -181,7 +181,7 @@ S01-0 基线冻结
 
 | 门禁 | 适用任务 | 门禁内容 | 判定人 |
 |---|---|---|---|
-| G-DDL | I6-B-01/02/03/04/08 | Migration 0029 逐条对照 merge-spec §2/§3/§4 审查通过 | 设计作者 + 实施者交叉 |
+| G-DDL | I6-B-01/02/03/04/08 | Migration 0031 逐条对照 merge-spec §2/§3/§4 审查通过 | 设计作者 + 实施者交叉 |
 | G-INTERFACE | I6-B-05 | REST/MCP 契约与 Interface Matrix 一致 | 同上 |
 | G-TEST | I6-B-06 | 审计四列 + 幂等键 + 负向测试全绿 | 同上 |
 | G-DATA | I6-B-07/09 | 空库初始化 + 0028 升级双路径 Schema 一致 | 实施者 |
@@ -222,8 +222,8 @@ S01-0 基线冻结
 
 | # | 事项 | 归属 | 状态 |
 |---|---|---|---|
-| A-1 | I6-B V1.1 正文**新写**（V1.0 正文不在本仓；输入=merge-spec + 边界评审 + I6-A 代码事实，含 0029 完整 DDL 与 I6-B-036~051 自定验收） | I6-B-01～I6-B-09 | 待开工（S01-3 前置，B-2 已裁） |
-| A-2 | Migration 0029 DDL 编写与冻结 | I6-B-08 | 待 A-1 |
+| A-1 | I6-B V1.1 正文**新写**（V1.0 正文不在本仓；输入=merge-spec + 边界评审 + I6-A 代码事实，含 0031 完整 DDL 与 I6-B-036~051 自定验收） | I6-B-01～I6-B-09 | 待开工（S01-3 前置，B-2 已裁） |
+| A-2 | Migration 0031 DDL 编写与冻结 | I6-B-08 | 待 A-1 |
 | A-3 | Project 成员授权服务与 REST（补 D-6） | S01-W13 | 可立即开工 |
 | A-4 | Git 能力授权从零建模（补 D-7） | I3-B | 依赖 A-3（主体模型） |
 | A-5 | Evidence 实体表与提交路径（补 D-5/D-12） | I6-B-04 | 依赖 A-2 |

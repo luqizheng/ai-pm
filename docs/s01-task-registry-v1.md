@@ -66,34 +66,34 @@
 | S01-W22 | S01-2 | W22 | Project–Repository 多仓关联 | 总体计划 §5.2 | W21 | `project_repository` 已有 | 已有列表/创建 | — | — | `0008_repositories.sql` | Acceptance Matrix §3-B | 可并行 | — | 已实施 |
 | S01-W23 | S01-2 | W23 | Repository 独立验证 | 总体计划 §5.1 | W21 | 0009 已有 | 已有 `/verify` | — | — | `verify_repository` | 已有 | 可并行 | — | 已实施 |
 | S01-W24 | S01-2 | W24 | 仓库级授权 | I3-C；缺陷 D-7 | W21、I3-B | 需新增 | 需新增 | — | — | 授权判定层 | Acceptance Matrix §3-B | 串行（I3-B 后） | G-USER(B-5/B-6) | 未开工 |
-| S01-W25 | S01-2 | W25 | Git 基准管理（Commit 基准） | I6-B-03（N-1 write-once SHA） | W22、I6-B-02 | 0029（source 唯一键） | — | — | — | `repo_import_source` | Acceptance Matrix §3-B 数据类 | 串行（I6-B-02 后） | G-DDL | 未开工 |
+| S01-W25 | S01-2 | W25 | Git 基准管理（Commit 基准） | I6-B-03（N-1 write-once SHA） | W22、I6-B-02 | 0031（source 唯一键） | — | — | — | `repo_import_source` | Acceptance Matrix §3-B 数据类 | 串行（I6-B-02 后） | G-DDL | 未开工 |
 
 ### 2.4 S01-3 Discovery / Import
 
 | task_key | stage | W | title | source_design | dependencies | migration | rest | mcp | worker | code | acceptance | parallelism | gate | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| S01-W30 | S01-3 | W30 | Discovery Session 生命周期 | 0025 已实现；I6-B-01 | — | 0029（operation 表） | 已有 8 端点 | `pm_discovery_*` 6 工具 | 无分析作业 | `discovery/session.rs` | Acceptance Matrix §3-C | 可并行 | G-DDL | 部分实施 |
-| S01-W31 | S01-3 | W31 | Import 生命周期 | I6-B-01（C-2 显式终止） | W30 | 0029 | 已有 6 端点 | — | `handle_repo_job` 已有 | `project_import/lifecycle.rs` | Acceptance Matrix §3-C | 串行（0029 冻结后） | G-DDL | 仅设计 |
-| S01-W32 | S01-3 | W32 | Source 与 Attempt（R-4-1 facts 迁 Attempt） | I6-B-02/03 | W31 | 0029（`repo_import_source_attempt`） | — | — | 需 Attempt 记录 | `repo_facts.rs`、`lifecycle.rs` | Acceptance Matrix §3-C 数据类 | 串行 | G-DDL | 仅设计 |
-| S01-W33 | S01-3 | W33 | Finding 领域规则与人工确认 | I2-B/I2-C/I2-D | W30 | 0029（finding 加 project_id） | 已有 findings 端点 | `pm_discovery_submit_findings` | — | `discovery/finding.rs` | I2-001~033 | 可并行 | G-INTERFACE | 仅设计 |
+| S01-W30 | S01-3 | W30 | Discovery Session 生命周期 | 0025 已实现；I6-B-01 | — | 0031（operation 表） | 已有 8 端点 | `pm_discovery_*` 6 工具 | 无分析作业 | `discovery/session.rs` | Acceptance Matrix §3-C | 可并行 | G-DDL | 部分实施 |
+| S01-W31 | S01-3 | W31 | Import 生命周期 | I6-B-01（C-2 显式终止） | W30 | 0031 | 已有 6 端点 | — | `handle_repo_job` 已有 | `project_import/lifecycle.rs` | Acceptance Matrix §3-C | 串行（0031 冻结后） | G-DDL | 仅设计 |
+| S01-W32 | S01-3 | W32 | Source 与 Attempt（R-4-1 facts 迁 Attempt） | I6-B-02/03 | W31 | 0031（`repo_import_source_attempt`） | — | — | 需 Attempt 记录 | `repo_facts.rs`、`lifecycle.rs` | Acceptance Matrix §3-C 数据类 | 串行 | G-DDL | 仅设计 |
+| S01-W33 | S01-3 | W33 | Finding 领域规则与人工确认 | I2-B/I2-C/I2-D | W30 | 0031（finding 加 project_id） | 已有 findings 端点 | `pm_discovery_submit_findings` | — | `discovery/finding.rs` | I2-001~033 | 可并行 | G-INTERFACE | 仅设计 |
 | S01-W34 | S01-3 | W34 | Question / Answer | 0025 已实现 | W30 | 0025 已有 | 已有 3 端点 | `pm_discovery_submit_answers` | — | `discovery/question.rs` | 已有 | 可并行 | — | 已实施 |
-| S01-W35 | S01-3 | W35 | **Evidence 实体**（缺陷 D-5/D-12） | I6-B-04（R-6-2 CHECK 判别器） | W32、W33 | 0029（`discovery_finding_evidence`） | 需新增 | 需新增回传路径 | — | 新模块 | Acceptance Matrix §3-C 数据类 | 串行 | G-DDL | 仅设计 |
-| S01-W36 | S01-3 | W36 | Proposal（Discovery 提案） | I6-B-05 | W35 | 0029（换轨 FK） | 已有 | `pm_discovery_submit_proposal` | — | `discovery/proposal.rs` | Acceptance Matrix §3-C | 串行 | G-INTERFACE | 部分实施 |
-| S01-W37 | S01-3 | W37 | Worker 恢复与幂等（N-5 / R-3-1） | I6-B-06/07 | W31、W32 | 0029 | — | — | `ai-pm-worker` | `run_dispatch/lease.rs` | Acceptance Matrix §3-C 恢复/幂等 | 串行 | G-TEST / G-DATA | 仅设计 |
+| S01-W35 | S01-3 | W35 | **Evidence 实体**（缺陷 D-5/D-12） | I6-B-04（R-6-2 CHECK 判别器） | W32、W33 | 0031（`discovery_finding_evidence`） | 需新增 | 需新增回传路径 | — | 新模块 | Acceptance Matrix §3-C 数据类 | 串行 | G-DDL | 仅设计 |
+| S01-W36 | S01-3 | W36 | Proposal（Discovery 提案） | I6-B-05 | W35 | 0031（换轨 FK） | 已有 | `pm_discovery_submit_proposal` | — | `discovery/proposal.rs` | Acceptance Matrix §3-C | 串行 | G-INTERFACE | 部分实施 |
+| S01-W37 | S01-3 | W37 | Worker 恢复与幂等（N-5 / R-3-1） | I6-B-06/07 | W31、W32 | 0031 | — | — | `ai-pm-worker` | `run_dispatch/lease.rs` | Acceptance Matrix §3-C 恢复/幂等 | 串行 | G-TEST / G-DATA | 仅设计 |
 
 #### I6-B 任务细分（合并规格 V1.0 §2 与总体计划 §6.4）
 
 | task_key | stage | W | title | source_design | dependencies | migration | rest | mcp | worker | code | acceptance | parallelism | gate | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I6-B-01 | S01-3 | W30 | Project 初始化操作、占有与释放、generation、active 唯一性、取消及终态恢复 | merge-spec §1/§5；R-3-1~R-3-4；C-2 | — | 0029（`core.project_initialization_operation` + 重建 `repo_import_one_active_per_project`） | 已有 imports 端点 | — | — | `project_import/` | I6-B-036~051（内容待 B-2 补齐） | 串行 | G-DDL | 仅设计 |
-| I6-B-02 | S01-3 | W32 | Source / Attempt 数据归属与重试语义 | boundary §2.2；R-4-1 | I6-B-01 | 0029（Attempt 表 + Source 删 facts 列） | — | — | Attempt 记录 | `project_import/` | 同上 | 串行 | G-DDL | 仅设计 |
-| I6-B-03 | S01-3 | W32 | Source 集合固化与 Commit 基准 | 总体计划 §6.4；N-1 | I6-B-02 | 0029（write-once SHA 列 + 唯一键） | — | — | — | `project_import/lifecycle.rs` | 同上 | 串行 | G-DDL | 仅设计 |
-| I6-B-04 | S01-3 | W35 | Finding / Evidence 模型与证据类型判别 | boundary §3.3；R-6-2 | I6-B-02 | 0029（`discovery_finding_evidence` + CHECK） | — | — | — | 新模块 | 同上 | 串行 | G-DDL | 仅设计 |
-| I6-B-05 | S01-3 | W36 | Discovery 权限、提案与接口收敛 | 总体计划 §6.4；缺陷 D-10/D-11 | I6-B-04、I2-C、I2-D | 0029（换轨 FK） | 收敛 | MCP 权限码表补全 | — | `auth.rs`、`discovery/` | 同上 | 串行 | G-INTERFACE | 仅设计 |
+| I6-B-01 | S01-3 | W30 | Project 初始化操作、占有与释放、generation、active 唯一性、取消及终态恢复 | merge-spec §1/§5；R-3-1~R-3-4；C-2 | — | 0031（`core.project_initialization_operation` + 重建 `repo_import_one_active_per_project`） | 已有 imports 端点 | — | — | `project_import/` | I6-B-036~051（内容待 B-2 补齐） | 串行 | G-DDL | 仅设计 |
+| I6-B-02 | S01-3 | W32 | Source / Attempt 数据归属与重试语义 | boundary §2.2；R-4-1 | I6-B-01 | 0031（Attempt 表 + Source 删 facts 列） | — | — | Attempt 记录 | `project_import/` | 同上 | 串行 | G-DDL | 仅设计 |
+| I6-B-03 | S01-3 | W32 | Source 集合固化与 Commit 基准 | 总体计划 §6.4；N-1 | I6-B-02 | 0031（write-once SHA 列 + 唯一键） | — | — | — | `project_import/lifecycle.rs` | 同上 | 串行 | G-DDL | 仅设计 |
+| I6-B-04 | S01-3 | W35 | Finding / Evidence 模型与证据类型判别 | boundary §3.3；R-6-2 | I6-B-02 | 0031（`discovery_finding_evidence` + CHECK） | — | — | — | 新模块 | 同上 | 串行 | G-DDL | 仅设计 |
+| I6-B-05 | S01-3 | W36 | Discovery 权限、提案与接口收敛 | 总体计划 §6.4；缺陷 D-10/D-11 | I6-B-04、I2-C、I2-D | 0031（换轨 FK） | 收敛 | MCP 权限码表补全 | — | `auth.rs`、`discovery/` | 同上 | 串行 | G-INTERFACE | 仅设计 |
 | I6-B-06 | S01-3 | W37 | 审计与幂等 | N-4；总体计划 §6.4 | I6-B-05 | — | — | 幂等键透传 | — | `audit.rs` | 同上 | 串行 | G-TEST | 仅设计 |
-| I6-B-07 | S01-3 | W37 | 历史数据与兼容性 | C-3；总体计划 §6.4 | I6-B-08 | 0029（回填脚本） | — | — | — | `migrations/` | 同上 | 串行 | G-DATA | 仅设计 |
-| I6-B-08 | S01-3 | W35/W37 | 复合外键、跨 Project 约束与 Migration 集成 | merge-spec §2/§3/§4；R-6-1（扩展版） | 阻塞 I6-B-02/04/07 | 0029（全部 FK 换轨 + RESTRICT） | — | — | — | `migrations/0029_*` | Acceptance Matrix §3-C 数据类 | 串行 | **G-DDL（最终）** | 仅设计 |
-| I6-B-09 | S01-3 | W37 | 空库初始化 + 0028 升级验证 + DB 级负向测试 1~5 | merge-spec §4/§6；C-3 | I6-B-08 | 0029 实测 | — | — | — | `migrations/` | Acceptance Matrix §3-C 数据类 | 串行 | G-DATA | 仅设计（**总体计划漏列，已勘误 E-1**） |
+| I6-B-07 | S01-3 | W37 | 历史数据与兼容性 | C-3；总体计划 §6.4 | I6-B-08 | 0031（回填脚本） | — | — | — | `migrations/` | 同上 | 串行 | G-DATA | 仅设计 |
+| I6-B-08 | S01-3 | W35/W37 | 复合外键、跨 Project 约束与 Migration 集成 | merge-spec §2/§3/§4；R-6-1（扩展版） | 阻塞 I6-B-02/04/07 | 0031（全部 FK 换轨 + RESTRICT） | — | — | — | `migrations/0031_*` | Acceptance Matrix §3-C 数据类 | 串行 | **G-DDL（最终）** | 仅设计 |
+| I6-B-09 | S01-3 | W37 | 空库初始化 + 0028 升级验证 + DB 级负向测试 1~5 | merge-spec §4/§6；C-3 | I6-B-08 | 0031 实测 | — | — | — | `migrations/` | Acceptance Matrix §3-C 数据类 | 串行 | G-DATA | 仅设计（**总体计划漏列，已勘误 E-1**） |
 
 ### 2.5 S01-4 Codex Bootstrap、执行引擎与 MCP
 
@@ -135,13 +135,13 @@
 | I1-E | S01-6 | W62 | Executor 启动握手与持久化清理 | I1 §16 | D3.1 | — | — | — | `codex_executor.rs` | `codex_executor.rs` | I1-025~034、040 | 串行 | G-USER(B-1) | 仅设计 |
 | I1-F | S01-6 | W64 | 全链路回归 | I1 §16 | I1-A~I1-E | — | — | — | — | 集成测试 | I1-035~040 | 串行 | G-ACCEPT | 仅设计 |
 | I2-A | S01-0→S01-3 | W02+W33 | 现状核验与安全边界确认 | I2 V1.1 §16 | — | — | — | — | — | `discovery/finding.rs` | 交付 `docs/s01-i2-code-facts.md` | 可并行 | — | 未开工 |
-| I2-B | S01-3 | W33 | Finding 领域规则（F3 原子更新、可信 human 路径） | I2 V1.1 §16 | I2-A | 0029 | — | — | — | `finding.rs` | I2-001~022 | 串行 | G-INTERFACE | 仅设计 |
-| I2-C | S01-3 | W33+W34 | 人工决定入口与审计 | I2 V1.1 §16 | I2-B、I1-A | 0029 | 需新增 | — | — | `audit.rs` | I2-023~033 | 串行 | G-INTERFACE | 仅设计 |
-| I2-D | S01-3 | W33 | Finding 创建入口与 **P0 安全修复** | I2 V1.1 §16 | I2-B、I2-C | 0029 | 已有端点需修 | `pm_discovery_submit_findings` 需修 | — | `finding.rs` | I2-D 双入口同修 | 串行 | G-INTERFACE | 仅设计 |
+| I2-B | S01-3 | W33 | Finding 领域规则（F3 原子更新、可信 human 路径） | I2 V1.1 §16 | I2-A | 0031 | — | — | — | `finding.rs` | I2-001~022 | 串行 | G-INTERFACE | 仅设计 |
+| I2-C | S01-3 | W33+W34 | 人工决定入口与审计 | I2 V1.1 §16 | I2-B、I1-A | 0031 | 需新增 | — | — | `audit.rs` | I2-023~033 | 串行 | G-INTERFACE | 仅设计 |
+| I2-D | S01-3 | W33 | Finding 创建入口与 **P0 安全修复** | I2 V1.1 §16 | I2-B、I2-C | 0031 | 已有端点需修 | `pm_discovery_submit_findings` 需修 | — | `finding.rs` | I2-D 双入口同修 | 串行 | G-INTERFACE | 仅设计 |
 | I2-E | S01-3 | W37+W64 | 并发、审计推导与全量验收 | I2 V1.1 §16 | I2-C、I2-D、I1-D | — | — | — | — | 集成测试 | I2-001~033 + §15.3 十五场景 | 串行 | G-ACCEPT | 仅设计 |
 | I3-A | S01-0→S01-1 | W02+W05 | 现有权限链路核验 | I3 §12 | — | — | — | — | — | `git_access.rs` | 交付 Git 权限现状矩阵 | 可并行 | — | 已完成（本基线 §4-D7） |
 | I3-B | S01-1 | W12+W24 | Git 操作能力模型（枚举/字段/主体/策略） | I3 §12 | I3-A | 需新增 | — | — | — | 授权模型 | I3-001~006 | 串行 | G-USER(B-5/B-6) | 仅设计 |
-| I3-C | S01-2 | W22+W24 | Task 仓库范围 | I3 §12 | I3-B、I6-B-03 | 0029 | 需新增 | — | — | `task_repository` | I3-007~012 | 串行 | G-DDL | 仅设计 |
+| I3-C | S01-2 | W22+W24 | Task 仓库范围 | I3 §12 | I3-B、I6-B-03 | 0031 | 需新增 | — | — | `task_repository` | I3-007~012 | 串行 | G-DDL | 仅设计 |
 | I3-D | S01-4 | — | Run 授权快照（SHA-256 内容寻址） | I3 §12 | I3-B | 需新增列 | — | — | — | `task_run` | I3-013~017 | 串行 | G-USER(B-6) | 仅设计 |
 | I3-E | S01-4 | — | 执行期强校验 | I3 §12 | I3-D、I1-A | — | — | `pm_*` 入口 | `CodexExecutor` | `git_access.rs` | I3-018~021 | 串行 | — | 仅设计 |
 | I3-F | S01-6 | W63 | 审计与回归 | I3 §12 | I3-B~I3-E、I1-D | — | — | — | — | 集成测试 | I3-022~024 | 串行 | G-ACCEPT | 仅设计 |
@@ -174,7 +174,7 @@
 | 未开工 | 10 | I2-A/I4-A/I5-A/S01-W13/S01-W51 等核验与新建项 |
 | 延后 | 1 | T-092 |
 
-**结论**：S01 的工作量分布是「**执行引擎与知识域已建成（≈26 项已实施）**，**发现/接入域与授权域几乎全空（I1~I6 + Git 授权零实现）**」。真正的 S01 主体工作是 **S01-1 授权 + S01-3 Discovery/Import（I6-B）+ S01-2/I3 仓库授权** 三块，其中 I6-B 因 Migration 0029 为单一硬串行点。
+**结论**：S01 的工作量分布是「**执行引擎与知识域已建成（≈26 项已实施）**，**发现/接入域与授权域几乎全空（I1~I6 + Git 授权零实现）**」。真正的 S01 主体工作是 **S01-1 授权 + S01-3 Discovery/Import（I6-B）+ S01-2/I3 仓库授权** 三块，其中 I6-B 因 Migration 0031 为单一硬串行点。
 
 ---
 

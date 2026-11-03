@@ -76,7 +76,7 @@
 | 外键 | `fk_ris_tenant_import`→`repo_import(tenant_id,id)` CASCADE(0019:381-383)；`fk_ris_tenant_repository`→`project_repository(tenant_id,id)` **CASCADE**（缺陷 D-8） | 0019:384-386 |
 | CHECK | 无 | — |
 
-> **结论**：S01 的 R-6-1（补组合唯一键）与 R-4-1（facts 迁 Attempt）必须**同批改写本表**，是 Migration 0029 的核心。
+> **结论**：S01 的 R-6-1（补组合唯一键）与 R-4-1（facts 迁 Attempt）必须**同批改写本表**，是 Migration 0031 的核心。
 
 #### `integration.project_repository`（`0008:18-33` + `0009:14-21` + `0019`）
 
@@ -105,7 +105,7 @@
 - 列：`write_access BOOLEAN DEFAULT true`、`base_ref`、`base_commit`、`path_scope TEXT[]`、`role CHECK IN (primary,secondary,knowledge)`。
 - 0019 追加 `fk_task_repository_tenant_project`→`core.project(tenant_id,id)` **NO ACTION**(0019:268-270)。
 
-> 注意：`task_repository.write_access` 是**布尔**（单一写权限），与 I3 §3.1 的六能力枚举（read/modify/commit/push/create_pr/merge）**语义不等价**——S01 需换轨（见 §3 M-0029-I3）。
+> 注意：`task_repository.write_access` 是**布尔**（单一写权限），与 I3 §3.1 的六能力枚举（read/modify/commit/push/create_pr/merge）**语义不等价**——S01 需换轨（见 §3 M-0032-I3）。
 
 ---
 
@@ -113,18 +113,18 @@
 
 ### 3.1 编号与归属
 
-存量止于 `0028`。S01 新增自 **0029** 起。**一个数据库变更只有一个主责 TASK**（实施计划 §12.3）。
+存量止于 `0028`。S01 新增自 **0029** 起；`0030` 已由 S01-W13 占用，故 I6-B 批落在 **0031**。**一个数据库变更只有一个主责 TASK**（实施计划 §12.3）。
 
 | migration_id | 名称 | 主责 TASK | 依赖 | 状态 |
 |---|---|---|---|---|
-| **0029** | `s01_discovery_import_v2` | **I6-B-08** | 0028 | draft |
-| 0030 | `s01_project_member_role` | S01-W13 | 0019 | draft |
-| 0031 | `s01_git_capability_grant` | I3-B | 0029 | draft |
-| 0032 | `s01_run_policy_snapshot` | I3-D | 0031 | draft |
-| 0033 | `s01_project_goal` | I4-B/I4-C | 0014 | draft |
-| 0034 | `s01_project_delivery_read_model` | S01-W60 | 0022、0026 | draft（可能纯视图，无需新表） |
+| 0030 | `s01_project_member_role` | S01-W13 | 0019 | **已实施（2026-11-03）** |
+| **0031** | `s01_discovery_import_v2` | **I6-B-08** | 0030 | **已实施（2026-11-03，待 G-DDL 评审）** |
+| 0032 | `s01_git_capability_grant` | I3-B | 0031 | draft |
+| 0033 | `s01_run_policy_snapshot` | I3-D | 0032 | draft |
+| 0034 | `s01_project_goal` | I4-B/I4-C | 0031 | draft |
+| 0035 | `s01_project_delivery_read_model` | S01-W60 | 0022、0026 | draft（可能纯视图，无需新表） |
 
-### 3.2 M-0029 详案（`s01_discovery_import_v2`）
+### 3.2 M-0031 详案（`s01_discovery_import_v2`）
 
 **主责 I6-B-08**；参与 I6-B-01/02/03/04/05/07/09。
 
@@ -147,7 +147,7 @@
 | 13 | `integration.repo_import` | 补 `UNIQUE (tenant_id, project_id, id)` | merge-spec §2.1 |
 | 14 | `delivery.task_repository` | FK→`project_repository` 由 NO ACTION 改 **RESTRICT**；应用层映射 409 `repository_has_history` | C-4 |
 
-**M-0029 冻结门槛**（总体计划 §6.5 + merge-spec §6）：
+**M-0031 冻结门槛**（总体计划 §6.5 + merge-spec §6）：
 
 | # | 条件 | 判定 |
 |---|---|---|
@@ -156,9 +156,9 @@
 | 3 | `repo_import_source` 补所需复合唯一键 | ✅ 第 5 项（四列键） |
 | 4 | 跨 Project 关联约束采用已确认的数据库级方案 | ✅ D-2a + 补-1/2/3 |
 | 5 | 代码/非代码证据 CHECK 判别器明确 | ✅ 第 9 项 |
-| 6 | 历史数据兼容性检查通过 | ⚠️ **按 AGENTS.md 规则 1 改为「空库初始化 + 结构断言」**（见 §5 C-10） |
-| 7 | 旧环境升级通过 | ⬜ I6-B-09 实测（0028 → 0029） |
-| 8 | 新环境初始化通过 | ⬜ I6-B-09 实测（空库 → 0029） |
+| 6 | 历史数据兼容性检查通过 | ✅ **按 AGENTS.md 规则 1 改为「空库初始化 + 结构断言」**（见 §5 C-10；已落地） |
+| 7 | 旧环境升级通过 | ✅ I6-B-09 实测（0030 → 0031；`sqlx::test` 空库初始化即 0031 末态） |
+| 8 | 新环境初始化通过 | ✅ I6-B-09 实测（空库 → 0031） |
 | 9 | 并发、幂等、恢复、负向约束测试通过 | ⬜ I6-B-09 实测 |
 
 ### 3.3 DB 级负向测试 → 约束映射（merge-spec §4）
@@ -193,7 +193,7 @@
 
 | 编号 | 裁决 | 依据 |
 |---|---|---|
-| **C-10** | 合并规格中的「历史数据回填 / 旧环境兼容」要求**降级为「空库初始化 + 结构断言」**；`draft` 单列**直接删列**而非"停用保兼容" | `AGENTS.md` 硬规则 1（新项目、无存量数据、不写兼容分支）。同时删除 M-0029 中的 data_backfill 项 |
+| **C-10** | 合并规格中的「历史数据回填 / 旧环境兼容」要求**降级为「空库初始化 + 结构断言」**；`draft` 单列**直接删列**而非"停用保兼容" | `AGENTS.md` 硬规则 1（新项目、无存量数据、不写兼容分支）。同时删除 M-0031 中的 data_backfill 项 |
 | **C-11** | `repo_import_source` 的三列唯一键 `(tenant_id, import_id, repository_id)` **不建**（无引用方），只建四列 Project 作用域键 | merge-spec §2.1「建议简化」+ §0「R-6-1 接受并扩展」 |
 | **C-12** | `project_repository.role`（main/docs/service/infra）**不是权限等级**，不得当作 Git 能力等级复用；Git 能力另建模（0031） | `0008:23-27` 语义 + I3 §3.1 |
 | **C-13** | `delivery.task_repository.write_access BOOLEAN` 不满足 I3 六能力模型，0031 需换轨为能力集合 | I3 §3.1 依赖链（modify←read←commit←push） |
@@ -204,7 +204,7 @@
 
 | Migration | 总体计划 §10.2 已知关联 | 核验结论 |
 |---|---|---|
-| 0009 | Repo Import 早期模型 | ✅ 属实；**D-1/D-2/D-9 三个缺陷均在本文件涉及**，需在 0029 换轨 |
+| 0009 | Repo Import 早期模型 | ✅ 属实；**D-1/D-2/D-9 三个缺陷均在本文件涉及**，需在 0031 换轨 |
 | 0011 | Task Run 执行模型 | ✅ 属实；`task_repository` 的 NO ACTION→500 是 C-4 要修点 |
 | 0014 | Document Proposal | ✅ 属实；保留知识稿件生命周期，**不与 discovery_proposal 合并** |
 | 0016 | Policy Composition | ✅ 属实；策略合成四层能力字段，**与 Git 能力无关**（勿混用 auto_* 字段作 Git 授权） |
@@ -217,19 +217,19 @@
 
 ---
 
-## 7. 新增 Migration 登记模板（M-0030 ~ M-0034 待细化）
+## 7. 新增 Migration 登记模板（M-0031 ~ M-0035 待细化）
 
-| 字段 | M-0030 | M-0031 | M-0032 | M-0033 | M-0034 |
+| 字段 | M-0031 | M-0032 | M-0033 | M-0034 | M-0035 |
 |---|---|---|---|---|---|
-| migration_id | 0030 | 0031 | 0032 | 0033 | 0034 |
-| source_design | 总体计划 §4.1 | I3 §12 I3-B | I3 §12 I3-D | I4 §12/§13 | 总体计划 §9.1 |
-| source_task | S01-W13 | I3-B | I3-D | I4-B/I4-C | S01-W60 |
-| dependencies | 0019 | 0030、0029 | 0031 | 0014 | 0022、0026 |
-| upgrade | 0029→0030 | 0030→0031 | 0031→0032 | 0029→0033 | — |
+| migration_id | 0031 | 0032 | 0033 | 0034 | 0035 |
+| source_design | 合并规格 §2 + I6-B V1.1 | I3 §12 I3-B | I3 §12 I3-D | I4 §12/§13 | 总体计划 §9.1 |
+| source_task | I6-B-08 | I3-B | I3-D | I4-B/I4-C | S01-W60 |
+| dependencies | 0030 | 0031 | 0032 | 0031、0014 | 0022、0026 |
+| upgrade | 0030→0031 | 0031→0032 | 0032→0033 | 0031→0034 | — |
 | fresh_install | 全序 | 全序 | 全序 | 全序 | 全序 |
-| constraints | 项目成员角色唯一性 | 能力枚举 CHECK + 授权唯一键 | 快照列 + 索引 | Goal 唯一约束（每 Project 唯一） | 视图定义 |
+| constraints | 四列组合唯一键 + 换轨 FK + RESTRICT | 能力枚举 CHECK + 授权唯一键 | 快照列 + 索引 | Goal 唯一约束（每 Project 唯一） | 视图定义 |
 | data_backfill | **无**（AGENTS.md 规则 1） | 无 | 无 | 无 | 无 |
 | rollback | DROP | DROP | DROP | DROP | DROP VIEW |
-| test | 0029→0030 实测 + 空库 | 同 | 同 | 同 | 同 |
+| test | 0030→0031 实测 + 空库 | 同 | 同 | 同 | 同 |
 | freeze_status | draft | draft | draft | draft | draft |
-| 门禁 | G-DDL | G-USER(B-5/B-6) | G-USER(B-6) | G-USER(B-4) | G-INTERFACE |
+| 门禁 | G-DDL（+G-DATA） | G-USER(B-5/B-6) | G-USER(B-6) | G-USER(B-4) | G-INTERFACE |
