@@ -344,7 +344,8 @@ MCP 侧权限机制可复用：`auth.rs:559-570` 的 `MCP_TOOL_PERMISSIONS` 映�
 ## 5.4 Requirement ↔ Discovery Finding `[不存在]` ❌
 
 - `discovery.discovery_finding`（`migrations/0025_discovery.sql:48-66`）列：`id, tenant_id, session_id, kind, content, confidence, verification_status, evidence, actor_role, created_at`
-- **无 `project_id` 列**（与 I6-A 报告的既有结论一致）→ finding 连"属于哪个项目"都不可知
+- ~~**无 `project_id` 列**（与 I6-A 报告的既有结论一致）→ finding 连"属于哪个项目"都不可知~~
+  **【2026-11-04 勘误】本条已过期**：核验基线 HEAD `807ddae` 已含迁移 `0031`（I6-B 批），其 `:112-121` 为 `discovery_finding` 补了 `project_id`（NOT NULL + `UNIQUE(tenant_id, project_id, id)`）并把 `evidence` 列迁入独立表 `discovery_finding_evidence`（含 `repository_id` + `commit_sha` + `evidence_type='commit'`，`:128-144`）——Commit 级证据通道**已存在**。原稿只查了 `0025` 的建表 DDL、漏了 `0031` 的 ALTER，责任在本稿。本勘误同时影响 §8.1 表「无 `project_id`」行与 S02-I7 设计稿 §7.3 继承的表述。
 - 无任何表把 finding 关联到 requirement
 
 **含义**：S02 场景里「AI 协助分析…澄清问题」与「需求」之间**没有数据通道**。要么 S02 引入关联，要么需求澄清完全绕开 discovery 域另建一套——这是 S02 必须裁决的边界问题（Q-4）。
