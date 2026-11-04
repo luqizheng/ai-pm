@@ -6,6 +6,7 @@
  *
  * 文案一律走 i18n（组件内 t(...)），此处只放专有名词（项目名 / 团队名等）。
  */
+import type { ProjectSwitcherProject } from "@/components/global/project-switcher";
 
 /** 当前组织（顶栏租户上下文指示；Shell V1.1 不做 Workspace Switcher） */
 export const demoOrganization = {
@@ -39,6 +40,23 @@ export const demoProject = {
   organization: demoOrganization.name,
   description: "Shared code and documentation for the platform team."
 };
+
+/** 新版切换器候选（Figma 33:82961 global/project-switcher 规格；当前项即 demoProject）。
+ *  与上方 demoProjects（旧壳 shell/ProjectSwitcher 消费）并存，顶栏切换新版后旧者待清理。 */
+export const demoSwitcherProjects: ProjectSwitcherProject[] = [
+  {
+    id: demoProject.id,
+    name: demoProject.name,
+    group: "favorites"
+  },
+  { id: "project-sdk-toolkit", name: "SDK Toolkit", group: "recent", meta: "2h ago" },
+  {
+    id: "project-developer-portal",
+    name: "Developer Portal",
+    group: "recent",
+    meta: "Yesterday"
+  }
+];
 
 /** 当前仓库元数据（右上下文栏） */
 export const demoRepository = {

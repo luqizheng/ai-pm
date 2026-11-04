@@ -1,3 +1,4 @@
+<!-- @figma-sync file=hNlGqLEMQpOVCZ0o5u3DkT set="DS/Navigation/Tab" node=13:33477 date=2026-11-04 -->
 <script setup lang="ts">
 import { computed } from "vue";
 import { TabsContent, TabsList, TabsRoot, TabsTrigger } from "reka-ui";
@@ -65,12 +66,14 @@ function onUpdate(value: string | number) {
 </template>
 
 <style scoped>
-/* 页签栏 — PRISM 语言推导：行高 36px / 项间距 24px / 底缘暖灰细线 */
+/* Figma DS/Navigation/Tab（13:33477）：
+ * 透明底行（无整条底线）/ 项 padding 0 12px / Hover=surface 底文字不变 /
+ * Active=透明底 + 主文字 + 仅底部 2px accent 下划线（strokeWeight 0 0 2px）/
+ * Focus=2px accent 四边 / Disabled=opacity 0.40。 */
 .ui-tabs__list {
   display: flex;
   align-items: center;
-  gap: var(--space-6);
-  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--space-1);
 }
 
 .ui-tabs__trigger {
@@ -78,8 +81,9 @@ function onUpdate(value: string | number) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-2);
   height: var(--size-control-md);
-  padding: 0;
+  padding: 0 var(--space-3);
   border: 0;
   background: transparent;
   font-family: var(--font-ui);
@@ -95,29 +99,29 @@ function onUpdate(value: string | number) {
     background-color var(--duration-fast) var(--ease-decelerate);
 }
 
+/* Hover：surface 底 + 文字保持次文字（Figma 口径） */
 .ui-tabs__trigger:hover:not(:disabled) {
-  color: var(--text-primary);
+  background-color: var(--surface-base);
+  color: var(--text-secondary);
 }
 
 .ui-tabs__trigger:focus-visible {
   outline: var(--size-focus-ring) solid var(--accent);
-  outline-offset: var(--size-focus-ring);
+  outline-offset: 0;
   border-radius: var(--radius-xs);
 }
 
-/* 当前项：accent-subtle 底 + accent-deep 字 + 底缘 2px accent 指示条
- * （设计文档 §5 功能清单：tabs 当前项口径，与 PRISM §6.7 选中行一致） */
+/* Active：透明底 + 主文字 + 底缘 2px accent 下划线（仅此一处强调） */
 .ui-tabs__trigger[data-state="active"] {
-  background: var(--accent-subtle);
-  color: var(--accent-deep);
-  font-weight: var(--weight-semibold);
+  background: transparent;
+  color: var(--text-primary);
 }
 
-/* 指示条 2px */
+/* 指示条 2px（Figma strokeWeight "0px 0px 2px"） */
 .ui-tabs__trigger[data-state="active"]::after {
   position: absolute;
   right: 0;
-  bottom: -1px;
+  bottom: 0;
   left: 0;
   height: var(--size-indicator);
   background: var(--accent);
@@ -125,7 +129,7 @@ function onUpdate(value: string | number) {
 }
 
 .ui-tabs__trigger:disabled {
-  color: var(--text-disabled);
+  opacity: var(--opacity-disabled-control);
   cursor: not-allowed;
 }
 

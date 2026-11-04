@@ -5,27 +5,25 @@ import { useRoute } from "vue-router";
 import { WorkspaceShell } from "@/components/shell";
 
 /**
- * 应用根 —— 按路由 meta 切换外壳。
+ * 应用根 —— 按路由 meta.layout 切换外壳。
  *
- *   meta.layout = "auth"  —— 认证页（自带无导航的认证页外壳 AuthLayout）
- *   meta.layout = "bare"  —— 整屏参照页（认证状态参照板）
- *   其余                   —— 应用壳（壳内含 RouterView，见 WorkspaceShell）
+ *   有 meta.layout（"auth" 认证页 / "bare" 参照板 / "design" 设计系统目录）
+ *     → 裸 RouterView（全屏页，无导航外壳）；
+ *       各全屏页骨架由页面自己承担（AuthLayout / DesignLayout 等）
+ *   无 meta.layout → 应用壳 WorkspaceShell（壳内含自己的 RouterView）
  *
- * 壳的五区域与折叠开关见 components/shell/WorkspaceShell.vue；
- * 路由表见 router/index.ts（由 router/navigation.ts 派生 + router/auth.ts 认证路由组）。
+ * 判据用「有 layout 即无壳」而非枚举值，保证新增全屏页类型不必改这里。
  */
 const route = useRoute();
 
-/** 认证页 / 参照页：不套应用壳，直接渲染页面组件 */
-const isStandalone = computed(
-  () => route.meta.layout === "auth" || route.meta.layout === "bare"
-);
+/** 是否为无导航外壳的全屏页 */
+const isBareLayout = computed(() => Boolean(route.meta.layout));
 </script>
 
 <template>
-  <!-- 认证页/参照页直接渲染（各自内部已含 AuthLayout 外壳）；
+  <!-- 认证页/参照页/设计目录页直接渲染（各自内部已含全屏外壳）；
        其余走应用壳（壳内含自己的 RouterView）。
        两支互斥渲染，避免根级 RouterView 套壳内 RouterView 造成 depth+1 空渲染。 -->
-  <RouterView v-if="isStandalone" />
+  <RouterView v-if="isBareLayout" />
   <WorkspaceShell v-else />
 </template>

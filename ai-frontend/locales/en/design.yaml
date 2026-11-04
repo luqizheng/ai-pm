@@ -1,0 +1,72 @@
+design:
+  index:
+    title: Design System Catalog
+    subtitle: AI R&D Workspace — browsable implementation of the Figma design (components / navigation / shell)
+    hint: Dark is the default theme; use the toggle to preview light theme.
+    sectionTokens: Tokens
+    sectionComponents: Component families (DS)
+    sectionNavigation: Navigation (Figma boards)
+    sectionShell: Application shell
+  theme:
+    toggle: Toggle light / dark preview
+  tokens:
+    title: Design tokens
+    subtitle: Single source of truth = src/styles/tokens.css; this page is read-only.
+    colors: Colors
+    typography: Type scale
+    controls: Control sizes
+    spacing: Spacing / radius
+  components:
+    buttons:
+      title: Buttons
+      subtitle: Button（13:32697）+ IconButton（13:32734）
+    forms:
+      title: Forms
+      subtitle: TextInput / Password / Search / Select / Checkbox / Radio / Switch / Textarea / DatePicker
+    navigation:
+      title: Navigation
+      subtitle: SidebarItem / NavigationGroup / TopBarItem / Breadcrumb / Tab
+    overlays:
+      title: Overlays
+      subtitle: ConfirmationDialog / Dialog / Popover / DropdownMenu / Command
+    feedback:
+      title: Feedback
+      subtitle: StatusIndicator / ProgressIndicator / EmptyState + Badge / Alert / Toast / Skeleton
+    data:
+      title: Data
+      subtitle: AvatarGroup / ListItem / NotificationItem / MenuItem + Avatar
+    ai:
+      title: AI
+      subtitle: EntryButton / CommandInput / Suggestion / AI Status / HumanApproval
+  navigation:
+    global:
+      title: Global navigation — expanded / collapsed
+      subtitle: Boards 01/02 — real shell rendering in a 1440×900 frame
+    contexts:
+      title: Three navigation contexts
+      subtitle: Boards 03/04/05 — personal / project / administration
+    switcher:
+      title: Project context switcher
+      subtitle: Board 06 — Project Context Switcher — TopBarSlice / Trigger states / Menu feedback states (dual theme)
+    states:
+      title: Navigation interaction states
+      subtitle: Boards 06/08 — Navigation Item / Group / Badge / Tooltip / Context Header
+    switching:
+      title: Project switching sequence
+      subtitle: Board 07 — before / switching / after diff (static)
+    library:
+      title: Navigation component library
+      subtitle: Board 08 — 9 families, 24 specimens
+  shell:
+    states:
+      title: Application shell states
+      subtitle: Board 03 Shell states — five-region size contract
+  specimen:
+    states: States
+    sizes: Sizes
+    variants: Variants
+    interactionHint: Hover / focus are live
+  notes:
+    board02: "Board 02 — Collapsed (7:15058): toggle via the collapse button; when collapsed the rail is 60px icon-only with group dividers and unread dots; tooltips on hover."
+    contexts: English labels are design reference text (specimen captions); production copy is sourced from src/router/navigation.ts + locales.
+    switching: "Breadcrumb / page title / AI command copy rewrite per context (Atlas → Research Sandbox); GLOBAL group persists; loading row reads Switching project… (board 07 spec)."

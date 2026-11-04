@@ -8,6 +8,7 @@ import {
 
 import { navGroups, type NavItem } from "./navigation";
 import { authRoutes } from "./auth";
+import { designRoutes } from "./design";
 import NotificationsView from "@/views/notifications/NotificationsView.vue";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 
@@ -74,6 +75,9 @@ export function buildRoutes(): RouteRecordRaw[] {
     component: NotificationsView,
     meta: { title: "global.notification.label" }
   });
+
+  // 设计系统目录页（无导航外壳的全屏页，meta.layout = "design"）
+  routes.push(...designRoutes);
 
   routes.push({
     path: "/:pathMatch(.*)*",

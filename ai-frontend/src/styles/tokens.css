@@ -203,8 +203,12 @@
   --size-help-menu-width: 360px;
   --size-shortcuts-dialog-width: 736px;
   --size-tenant-card-width: 485px;
-  /* 项目切换菜单宽 330px（Figma「07 — Project Switching」Project switcher menu） */
+  /* 项目切换菜单宽 330px（Figma「07 — Project Switching」旧板，存量 shell/ProjectSwitcher 消费） */
   --size-project-menu-width: 330px;
+  /* 项目切换菜单面板宽 480px（Figma「06 — Project Context Switcher」
+     33:82961 菜单列宽，2026-11-04；global/project-switcher 消费；
+     顶栏切换后旧 --size-project-menu-width 待清理） */
+  --size-project-menu: 480px;
   --size-icon-button: 36px;
   --size-icon-xs: 16px;
   --size-icon-sm: 18px;
@@ -233,6 +237,55 @@
   --size-textarea-sm: 72px;
   --size-textarea: 88px;
   --size-textarea-lg: 112px;
+
+  /* Radio 三档 —— Figma DS/Forms/Radio（控件直径 sm14 / md16 / lg20；选中点 6px） */
+  --size-radio-sm: 14px;
+  --size-radio: 16px;
+  --size-radio-lg: 20px;
+  --size-radio-dot: 6px;
+
+  /* 日历 —— Figma DS/Forms/DatePicker（日期格高 28px，radius 4） */
+  --size-calendar-day: 28px;
+
+  /* 导航族 —— Figma DS/Navigation（导航项 36px / 徽标 18px / 上下文头 40px / 缩进 8px） */
+  --size-nav-item: 36px;
+  --size-nav-badge: 18px;
+  --size-context-header: 40px;
+  --size-nav-indent: 8px;
+
+  /* 导航激活指示条 —— Figma：2×16，radius 1px，位于导航项左侧 */
+  --size-nav-indicator-width: 2px;
+  --size-nav-indicator-height: 16px;
+  --radius-nav-indicator: 1px;
+
+  /* AI 上下文图标 —— Figma：sparkles / paperclip 12px */
+  --size-icon-xxs: 12px;
+
+  /* 状态点 / 进度 / 空态 —— DS/Feedback 族（StatusIndicator 圆点 sm12/md16/lg20；
+     EmptyState 图标 24px；ProgressIndicator 轨道三档） */
+  --size-status-dot-sm: 12px;
+  --size-status-dot: 16px;
+  --size-status-dot-lg: 20px;
+  --size-progress-track-sm: 4px;
+  --size-progress-track: 6px;
+  --size-progress-track-lg: 8px;
+  --size-empty-icon: 24px;
+
+  /* AI 族 —— AI StatusIndicator 状态点三档 / 发送图标 14px（arrow-up）/
+     AI 建议卡片最小高 */
+  --size-ai-dot-sm: 8px;
+  --size-ai-dot: 10px;
+  --size-ai-dot-lg: 12px;
+  --size-send-icon: 14px;
+
+  /* 头像组重叠 —— Figma DS/Data/AvatarGroup：gap -8px */
+  --size-avatar-overlap: 8px;
+
+  /* 浮层面板 —— Figma DS/Overlays（Modal 三档 352/448/496；
+     ConfirmationDialog/CommandPalette 用 Medium 448） */
+  --size-overlay-panel-sm: 352px;
+  --size-overlay-panel: 448px;
+  --size-overlay-panel-lg: 496px;
 
   /* 边框宽度 / 骨架屏（Figma Skeleton 双色占位线：强线=border、弱线=elevated） */
   --border-1: 1px;
@@ -350,10 +403,14 @@
   color-scheme: light;
 
   --ws-canvas: #f7f8fa;
-  --ws-sidebar: #f0f2f6;
+  /* Figma 浅色组件库「13 — Component Library / Light」家族实测值（2026-11-04）：
+     surface-3 侧栏/顶栏 #EEF0F5 · surface-2 抬升面 #E8EBF2 · border #C7CDD9。
+     canvas 保留 #f7f8fa —— Figma 两块浅色板本身不一致（认证页 #F5F6F8 /
+     组件库 #F6F7FA），且该值被 tokens.test.ts 契约锁定，差异不可辨。 */
+  --ws-sidebar: #eef0f5;
   --ws-surface: #ffffff;
-  --ws-elevated: #e9ecf2;
-  --ws-border: #dde2ea;
+  --ws-elevated: #e8ebf2;
+  --ws-border: #c7cdd9;
 
   /* accent 着色面（浅色）—— 激活导航项 / Badge Accent 底。
      深色值 #242238 在浅色主题下过暗，改为带紫调的浅面；
@@ -382,12 +439,12 @@
   --ws-color-info-text: #1d4ed8;
   --ws-color-success-text: #15803d;
   --ws-color-warning-text: #92400e;
-  --ws-color-danger-text: #b42318;
+  --ws-color-danger-text: #a43445;
 
-  /* 语义色反馈面（浅色候选，随 Figma 后续浅色稿校准） */
-  --ws-color-danger-surface: #fbeaeb;
+  /* 语义色反馈面（Figma 浅色组件库实测：面 #FBECEE / 边 #EDB6BA / 标题 #A43445） */
+  --ws-color-danger-surface: #fbecee;
   --ws-color-danger-border: #edb6ba;
-  --ws-color-danger-title: #8f2430;
+  --ws-color-danger-title: #a43445;
 
   /* accent 着色面（浅色候选：Figma 浅色 accent wash #EEEBFF） */
   --ws-color-accent-surface: #eeebff;

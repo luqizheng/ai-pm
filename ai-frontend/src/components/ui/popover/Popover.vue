@@ -1,3 +1,4 @@
+<!-- @figma-sync file=hNlGqLEMQpOVCZ0o5u3DkT set="DS/Overlays/Popover" node=13:33652 date=2026-11-04 -->
 <script setup lang="ts">
 import {
   PopoverArrow,
@@ -113,30 +114,30 @@ const emit = defineEmits<{ "update:open": [value: boolean] }>();
   box-shadow: 0 0 0 var(--size-focus-halo) var(--focus-glow);
 }
 
-/* 浮层容器 — Phase 1R §6.4 / §5.1 E2（reka-ui 浮层被 Portal 传送，需用 :deep 命中） */
+/* 浮层容器 — Figma DS/Overlays/Popover（13:33652）：
+ * elevated 底 + border 描边 + radius 8 / Medium 档 320×149、padding 16、gap 12。
+ * （reka-ui 浮层被 Portal 传送，需用 :deep 命中） */
 :deep(.ui-popover__content) {
-  min-width: calc(var(--space-12) * 4 + var(--space-2));
-  padding: var(--size-menu-padding);
+  width: var(--ws-context-width);
+  max-width: calc(100vw - var(--space-8));
+  padding: var(--space-4);
   background: var(--surface-overlay);
   border: var(--border-1) solid var(--border-strong);
-  border-radius: var(--radius-md);
-  box-shadow:
-    inset 0 1px 0 0 var(--surface-highlight),
-    var(--shadow-md);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
   font-family: var(--font-ui);
   color: var(--text-primary);
   animation: ui-popover-enter var(--duration-fast) var(--ease-decelerate);
 }
 
+/* 标题行：13 SemiBold（Figma Heading，无边框线） */
 .ui-popover__title {
+  margin: 0 0 var(--space-3);
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
   font-weight: var(--weight-semibold);
   letter-spacing: var(--tracking-body);
   color: var(--text-primary);
-  padding: var(--space-1) var(--space-2) var(--space-2);
-  border-bottom: var(--hairline) solid var(--border-subtle);
-  margin-bottom: var(--space-2);
 }
 
 .ui-popover__body {
@@ -145,7 +146,6 @@ const emit = defineEmits<{ "update:open": [value: boolean] }>();
   font-weight: var(--weight-regular);
   letter-spacing: var(--tracking-body);
   color: var(--text-secondary);
-  padding: 0 var(--space-2);
 }
 
 /* 箭头 — 底色 --surface-raised / 描边 --border-strong */
