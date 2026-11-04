@@ -96,7 +96,10 @@ export function updateProjectProfile(
   body: Partial<
     Pick<
       ProjectProfile,
-      "project_type" | "business_domain" | "expected_outcome" | "initial_context"
+      | "project_type"
+      | "business_domain"
+      | "expected_outcome"
+      | "initial_context"
     >
   >
 ) {
@@ -127,7 +130,10 @@ export interface RepositoryV2Payload {
   description?: string | null;
 }
 
-export function createRepositoryV2(projectId: string, body: RepositoryV2Payload) {
+export function createRepositoryV2(
+  projectId: string,
+  body: RepositoryV2Payload
+) {
   return http.post<RepositoryV2>(
     `/v1/pm/projects/${projectId}/repositories`,
     body
@@ -138,10 +144,7 @@ export function updateRepositoryV2(
   repositoryId: string,
   body: RepositoryV2Payload & { revision: number }
 ) {
-  return http.patch<RepositoryV2>(
-    `/v1/pm/repositories/${repositoryId}`,
-    body
-  );
+  return http.patch<RepositoryV2>(`/v1/pm/repositories/${repositoryId}`, body);
 }
 
 /**
@@ -400,7 +403,10 @@ export function rejectBaselineProposal(
 }
 
 /** S01-01 §6：生成失败 / 基准过期后重新生成。 */
-export function regenerateBaselineProposal(projectId: string, proposalId: string) {
+export function regenerateBaselineProposal(
+  projectId: string,
+  proposalId: string
+) {
   return http.post<BaselineProposal>(
     `/v1/pm/projects/${projectId}/baseline/proposals/${proposalId}/regenerate`,
     {}
@@ -461,7 +467,10 @@ export function confirmBaseline(
       commit_sha: string | null;
     }>;
     confirmation_note: string | null;
-  }>(`/v1/pm/projects/${projectId}/baseline/proposals/${proposalId}/confirm`, body);
+  }>(
+    `/v1/pm/projects/${projectId}/baseline/proposals/${proposalId}/confirm`,
+    body
+  );
 }
 
 /** S01-01 §5：当前基线总览 + 历史。 */

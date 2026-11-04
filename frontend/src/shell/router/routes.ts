@@ -58,6 +58,35 @@ export const staticRoutes: RouteRecordRaw[] = [
         name: "customers",
         component: () => import("../views/pm/customers/index.vue"),
         meta: { title: "shell.routes.customers" }
+      },
+      {
+        // S01-02 项目创建：静态路由，不依赖 DB 菜单。
+        path: "projects/new",
+        name: "project-creation",
+        component: () => import("../views/s01/project-creation/ProjectCreationView.vue"),
+        meta: { title: "s01.initialization.projectCreation.pageTitle" }
+      },
+      {
+        // S01-01 基线确认：静态路由，不依赖 DB 菜单。
+        path: "projects/:projectId/baseline",
+        name: "project-baseline",
+        component: () => import("../views/s01/baseline/BaselineReviewView.vue"),
+        meta: { title: "s01.initialization.baseline.pageTitle" }
+      },
+      {
+        // S01-04 AI-PM 认知：静态路由，不依赖 DB 菜单。
+        path: "projects/:projectId/cognition",
+        name: "project-cognition",
+        component: () => import("../views/s01/cognition/CognitionView.vue"),
+        meta: { title: "s01.initialization.cognition.pageTitle" }
+      },
+      {
+        // S01-03 仓库管理（v2 语义）：静态路由，不依赖 DB 菜单。
+        path: "projects/:projectId/repositories-v2",
+        name: "project-repositories-v2",
+        component: () =>
+          import("../views/s01/repositories/RepositoryManagementView.vue"),
+        meta: { title: "s01.initialization.repositories.pageTitle" }
       }
     ]
   },
