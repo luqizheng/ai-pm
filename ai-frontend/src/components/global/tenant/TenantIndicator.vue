@@ -52,58 +52,65 @@ const { t } = useI18n();
 const cardOpen = ref(false);
 
 const tooltipLabel = props.identity
-  ? t("global.tenant.tooltipLabel", { tenant: props.tenant, identity: props.identity })
+  ? t("global.tenant.tooltipLabel", {
+      tenant: props.tenant,
+      identity: props.identity
+    })
   : props.tenant;
 </script>
 
 <template>
   <TooltipProvider :delay-duration="200">
     <TooltipRoot>
-    <PopoverRoot v-model:open="cardOpen">
-      <TooltipTrigger as-child>
-        <PopoverTrigger as-child>
-          <button
-            type="button"
-            class="tenant-indicator"
-            :aria-label="tooltipLabel"
-            :disabled="props.disabled"
+      <PopoverRoot v-model:open="cardOpen">
+        <TooltipTrigger as-child>
+          <PopoverTrigger as-child>
+            <button
+              type="button"
+              class="tenant-indicator"
+              :aria-label="tooltipLabel"
+              :disabled="props.disabled"
+            >
+              <Building2 :size="16" aria-hidden="true" />
+              <span
+                v-if="props.status === 'loading'"
+                class="tenant-indicator__loading"
+                >{{ t("global.tenant.loading") }}</span
+              >
+              <span v-else class="tenant-indicator__name">{{
+                props.tenant
+              }}</span>
+            </button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+
+        <TooltipPortal>
+          <TooltipContent
+            class="tenant-indicator__tooltip"
+            side="bottom"
+            align="start"
+            :side-offset="4"
           >
-            <Building2 :size="16" aria-hidden="true" />
-            <span v-if="props.status === 'loading'" class="tenant-indicator__loading">{{
-              t("global.tenant.loading")
-            }}</span>
-            <span v-else class="tenant-indicator__name">{{ props.tenant }}</span>
-          </button>
-        </PopoverTrigger>
-      </TooltipTrigger>
+            {{ tooltipLabel }}
+          </TooltipContent>
+        </TooltipPortal>
 
-      <TooltipPortal>
-        <TooltipContent
-          class="tenant-indicator__tooltip"
-          side="bottom"
-          align="start"
-          :side-offset="4"
-        >
-          {{ tooltipLabel }}
-        </TooltipContent>
-      </TooltipPortal>
-
-      <PopoverPortal>
-        <PopoverContent
-          class="tenant-indicator__card"
-          side="bottom"
-          align="start"
-          :side-offset="4"
-        >
-          <TenantIdentityCard
-            :tenant="props.tenant"
-            :email="props.email"
-            :read-only="props.readOnly"
-            :status="props.status"
-          />
-        </PopoverContent>
-      </PopoverPortal>
-    </PopoverRoot>
+        <PopoverPortal>
+          <PopoverContent
+            class="tenant-indicator__card"
+            side="bottom"
+            align="start"
+            :side-offset="4"
+          >
+            <TenantIdentityCard
+              :tenant="props.tenant"
+              :email="props.email"
+              :read-only="props.readOnly"
+              :status="props.status"
+            />
+          </PopoverContent>
+        </PopoverPortal>
+      </PopoverRoot>
     </TooltipRoot>
   </TooltipProvider>
 </template>

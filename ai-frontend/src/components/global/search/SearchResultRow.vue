@@ -57,7 +57,12 @@ const icon = computed(() => ICONS[props.item.objectType]);
       :aria-selected="props.state !== 'default'"
       @click="emit('select', props.item)"
     >
-      <component :is="icon" :size="16" class="global-search-result__icon" aria-hidden="true" />
+      <component
+        :is="icon"
+        :size="16"
+        class="global-search-result__icon"
+        aria-hidden="true"
+      />
       <span class="global-search-result__label">{{ props.item.label }}</span>
       <span v-if="props.item.description" class="global-search-result__desc">{{
         props.item.description

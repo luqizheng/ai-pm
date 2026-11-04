@@ -25,9 +25,9 @@ describe("UserMenuSignOutDialog", () => {
   }
 
   function confirmButton() {
-    return Array.from(dialog()?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(
-      b => b.textContent?.trim() === "退出登录"
-    )!;
+    return Array.from(
+      dialog()?.querySelectorAll<HTMLButtonElement>("button") ?? []
+    ).find(b => b.textContent?.trim() === "退出登录")!;
   }
 
   beforeEach(() => {

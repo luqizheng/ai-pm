@@ -49,7 +49,12 @@ export const demoSwitcherProjects: ProjectSwitcherProject[] = [
     name: demoProject.name,
     group: "favorites"
   },
-  { id: "project-sdk-toolkit", name: "SDK Toolkit", group: "recent", meta: "2h ago" },
+  {
+    id: "project-sdk-toolkit",
+    name: "SDK Toolkit",
+    group: "recent",
+    meta: "2h ago"
+  },
   {
     id: "project-developer-portal",
     name: "Developer Portal",

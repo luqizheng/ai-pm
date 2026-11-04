@@ -84,7 +84,10 @@ function onSelect(record: NotificationRecordType) {
 </script>
 
 <template>
-  <section class="notification-center" :aria-label="t('global.notification.label')">
+  <section
+    class="notification-center"
+    :aria-label="t('global.notification.label')"
+  >
     <div class="notification-center__heading">
       <h2 class="notification-center__title">
         {{ t("global.notification.label") }}
@@ -123,9 +126,11 @@ function onSelect(record: NotificationRecordType) {
     <template v-else>
       <div class="notification-center__filters">
         <div class="notification-center__filter">
-          <label class="notification-center__filter-label" for="notification-category">{{
-            t("global.notification.categoryLabel")
-          }}</label>
+          <label
+            class="notification-center__filter-label"
+            for="notification-category"
+            >{{ t("global.notification.categoryLabel") }}</label
+          >
           <Select
             id="notification-category"
             v-model="category"

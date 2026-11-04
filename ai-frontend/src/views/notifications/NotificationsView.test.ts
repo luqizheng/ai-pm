@@ -2,7 +2,11 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
-import { createMemoryHistory, createRouter, createRouter as _cr } from "vue-router";
+import {
+  createMemoryHistory,
+  createRouter,
+  createRouter as _cr
+} from "vue-router";
 import { createPinia, setActivePinia } from "pinia";
 
 import NotificationsView from "./NotificationsView.vue";
@@ -18,7 +22,9 @@ describe("NotificationsView", () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useNotificationsStore();
-    store.records = (await import("@/components/global/notification/demo")).demoNotificationRecords;
+    store.records = (
+      await import("@/components/global/notification/demo")
+    ).demoNotificationRecords;
     store.status = "ready";
 
     const router = createRouter({

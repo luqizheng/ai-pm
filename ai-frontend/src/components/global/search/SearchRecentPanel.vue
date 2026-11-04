@@ -24,7 +24,10 @@ const { t } = useI18n();
 </script>
 
 <template>
-  <section class="global-search-recent" :aria-label="t('global.search.recentLabel')">
+  <section
+    class="global-search-recent"
+    :aria-label="t('global.search.recentLabel')"
+  >
     <p class="global-search-recent__label">
       {{ t("global.search.recentLabel") }}
     </p>
@@ -35,7 +38,11 @@ const { t } = useI18n();
       class="global-search-recent__row"
       @click="emit('select', item)"
     >
-      <FileText :size="16" class="global-search-recent__icon" aria-hidden="true" />
+      <FileText
+        :size="16"
+        class="global-search-recent__icon"
+        aria-hidden="true"
+      />
       <span class="global-search-recent__text">{{ item.label }}</span>
       <span class="global-search-recent__hint">{{
         t("global.search.recentHint")

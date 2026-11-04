@@ -88,7 +88,9 @@ describe("SearchPalette", () => {
   it("idle：渲染命令分组（全局命令/创建）、附加命令面板、最近搜索与键盘提示条", () => {
     const wrapper = mountPalette();
 
-    const labels = wrapper.findAll(".global-search__group-label").map(el => el.text());
+    const labels = wrapper
+      .findAll(".global-search__group-label")
+      .map(el => el.text());
     expect(labels).toContain("全局命令");
     expect(labels).toContain("创建");
 
@@ -172,9 +174,7 @@ describe("SearchPalette", () => {
     expect(wrapper.find(".global-search__empty").exists()).toBe(true);
     expect(wrapper.find(".global-search__empty-title").text()).toBe("无结果");
 
-    const clear = wrapper
-      .findAll("button")
-      .find(b => b.text() === "清除查询")!;
+    const clear = wrapper.findAll("button").find(b => b.text() === "清除查询")!;
     await clear.trigger("click");
     await nextTick();
 
@@ -184,9 +184,7 @@ describe("SearchPalette", () => {
 
   it("error：搜索函数 rejected 时展示 danger 反馈框与重试，查询保留", async () => {
     const failing = vi.fn((q: string) =>
-      q === "atlas"
-        ? Promise.reject(new Error("boom"))
-        : Promise.resolve([])
+      q === "atlas" ? Promise.reject(new Error("boom")) : Promise.resolve([])
     );
     const wrapper = mountPalette({ searchFn: failing });
 

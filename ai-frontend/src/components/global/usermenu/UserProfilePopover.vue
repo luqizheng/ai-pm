@@ -40,7 +40,11 @@ const { t } = useI18n();
         ×
       </button>
     </div>
-    <p v-for="line in props.lines" :key="line" class="user-profile-popover__line">
+    <p
+      v-for="line in props.lines"
+      :key="line"
+      class="user-profile-popover__line"
+    >
       {{ line }}
     </p>
     <div>

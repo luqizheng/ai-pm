@@ -96,14 +96,18 @@ describe("UserMenuAccountMenu", () => {
     await wrapper.find(".user-menu-button").trigger("click");
     await nextTick();
 
-    panelButtons().find(b => b.textContent?.trim() === "外观")!.click();
+    panelButtons()
+      .find(b => b.textContent?.trim() === "外观")!
+      .click();
     await nextTick();
 
     expect(panel()?.textContent).toContain("返回");
     expect(panel()?.textContent).toContain("深色");
     expect(panel()?.textContent).toContain("浅色");
 
-    panelButtons().find(b => b.textContent?.trim() === "返回")!.click();
+    panelButtons()
+      .find(b => b.textContent?.trim() === "返回")!
+      .click();
     await nextTick();
     expect(panel()?.textContent).toContain("我的资料");
   });
@@ -114,13 +118,17 @@ describe("UserMenuAccountMenu", () => {
     await wrapper.find(".user-menu-button").trigger("click");
     await nextTick();
 
-    panelButtons().find(b => b.textContent?.trim() === "键盘快捷键")!.click();
+    panelButtons()
+      .find(b => b.textContent?.trim() === "键盘快捷键")!
+      .click();
     await nextTick();
     expect(wrapper.emitted("shortcuts")).toBeTruthy();
 
     await wrapper.find(".user-menu-button").trigger("click");
     await nextTick();
-    panelButtons().find(b => b.textContent?.trim() === "退出登录")!.click();
+    panelButtons()
+      .find(b => b.textContent?.trim() === "退出登录")!
+      .click();
     await nextTick();
     expect(wrapper.emitted("sign-out")).toBeTruthy();
   });

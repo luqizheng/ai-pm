@@ -49,9 +49,18 @@ const open = ref(false);
     </PopoverTrigger>
 
     <PopoverPortal>
-      <PopoverContent class="help-menu" side="bottom" align="end" :side-offset="4">
+      <PopoverContent
+        class="help-menu"
+        side="bottom"
+        align="end"
+        :side-offset="4"
+      >
         <p class="help-menu__title">{{ t("global.help.label") }}</p>
-        <nav class="help-menu__items" role="menu" :aria-label="t('global.help.label')">
+        <nav
+          class="help-menu__items"
+          role="menu"
+          :aria-label="t('global.help.label')"
+        >
           <UserMenuItem
             :label="t('global.help.documentation')"
             @click="

@@ -182,7 +182,10 @@ describe("ProjectSwitcher（Trigger + Popover）", () => {
 
 describe("样式契约（Figma 33:82961 数值必须来自 token）", () => {
   it("组件层不出现裸色值，尺寸走 token", () => {
-    const dir = resolve(process.cwd(), "src/components/global/project-switcher");
+    const dir = resolve(
+      process.cwd(),
+      "src/components/global/project-switcher"
+    );
     for (const file of ["ProjectSwitcher.vue", "ProjectSwitcherMenu.vue"]) {
       const s = readFileSync(resolve(dir, file), "utf8");
       expect(s).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);

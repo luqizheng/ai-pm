@@ -121,11 +121,7 @@ function onOpen(record: NotificationRecordType) {
           <span class="notification-dropdown__title">{{
             t("global.notification.label")
           }}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            @click="store.markAllRead()"
-          >
+          <Button variant="ghost" size="sm" @click="store.markAllRead()">
             {{ t("global.notification.markAllRead") }}
           </Button>
         </div>
@@ -138,8 +134,14 @@ function onOpen(record: NotificationRecordType) {
             class="notification-dropdown__skeleton-row"
             aria-hidden="true"
           >
-            <Skeleton class="notification-dropdown__skeleton-line" tone="strong" />
-            <Skeleton class="notification-dropdown__skeleton-line" tone="base" />
+            <Skeleton
+              class="notification-dropdown__skeleton-line"
+              tone="strong"
+            />
+            <Skeleton
+              class="notification-dropdown__skeleton-line"
+              tone="base"
+            />
           </div>
         </template>
 
@@ -176,7 +178,11 @@ function onOpen(record: NotificationRecordType) {
               :aria-selected="filter === 'unread'"
               @click="filter = 'unread'"
             >
-              {{ t("global.notification.filterUnread", { count: store.unreadCount }) }}
+              {{
+                t("global.notification.filterUnread", {
+                  count: store.unreadCount
+                })
+              }}
             </button>
           </div>
 

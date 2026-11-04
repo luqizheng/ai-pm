@@ -22,7 +22,12 @@ describe("NotificationCenter", () => {
     store.records = demoNotificationRecords;
     store.status = "ready";
 
-    return { wrapper: mount(NotificationCenter, { global: { plugins: [pinia, i18n] } }), store };
+    return {
+      wrapper: mount(NotificationCenter, {
+        global: { plugins: [pinia, i18n] }
+      }),
+      store
+    };
   }
 
   it("渲染过滤区 + 记录数行（6 条记录 · 3 条未读）", () => {

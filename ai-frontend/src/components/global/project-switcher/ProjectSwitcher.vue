@@ -106,10 +106,10 @@ function onClearQuery() {
         :side-offset="4"
       >
         <ProjectSwitcherMenu
+          v-model:query="query"
           :projects="props.projects"
           :current-id="props.currentId"
           :status="props.status"
-          v-model:query="query"
           :can-create="props.canCreate"
           :texts="props.texts"
           @select="onSelect"

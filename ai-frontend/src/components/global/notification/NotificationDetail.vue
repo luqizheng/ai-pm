@@ -5,10 +5,7 @@ import { useI18n } from "vue-i18n";
 
 import Button from "@/components/ui/button/Button.vue";
 import HumanApprovalIndicator from "./HumanApprovalIndicator.vue";
-import type {
-  ApprovalIndicatorState,
-  NotificationRecord
-} from "./types";
+import type { ApprovalIndicatorState, NotificationRecord } from "./types";
 
 /**
  * 通知详情（Figma Global/Notification/Detail 33:87791）。
@@ -47,7 +44,10 @@ const metaLine = computed(() =>
 </script>
 
 <template>
-  <section class="notification-detail" :aria-label="t('global.notification.detailLabel')">
+  <section
+    class="notification-detail"
+    :aria-label="t('global.notification.detailLabel')"
+  >
     <h2 class="notification-detail__heading">
       {{ t("global.notification.detailLabel") }}
     </h2>

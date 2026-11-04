@@ -28,9 +28,7 @@ describe("NotificationPreferences", () => {
     const switches = wrapper.findAll(".ui-switch");
     expect(switches.length).toBe(6);
 
-    const off = switches.find(el =>
-      el.text().includes("仓库事件")
-    )!;
+    const off = switches.find(el => el.text().includes("仓库事件"))!;
     expect(off.find("[data-state='checked']").exists()).toBe(false);
   });
 

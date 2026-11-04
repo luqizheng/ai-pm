@@ -30,7 +30,9 @@ describe("HumanApprovalIndicator", () => {
     });
 
     expect(wrapper.classes()).toContain("is-approved");
-    expect(wrapper.find(".approval-indicator__title").text()).toBe("人工已批准");
+    expect(wrapper.find(".approval-indicator__title").text()).toBe(
+      "人工已批准"
+    );
     expect(wrapper.find(".approval-indicator__desc").text()).toBe(
       "Maya 已批准该请求 · 非 AI 批准"
     );
@@ -43,7 +45,9 @@ describe("HumanApprovalIndicator", () => {
     });
 
     expect(wrapper.classes()).toContain("is-rejected");
-    expect(wrapper.find(".approval-indicator__title").text()).toBe("人工已驳回");
+    expect(wrapper.find(".approval-indicator__title").text()).toBe(
+      "人工已驳回"
+    );
     expect(wrapper.find(".approval-indicator__desc").text()).toBe(
       "Maya 已驳回该请求 · 未授权任何变更"
     );

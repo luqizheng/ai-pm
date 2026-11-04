@@ -37,9 +37,7 @@ describe("NotificationDetail", () => {
     expect(wrapper.find(".notification-detail__category").text()).toBe(
       "人工审批请求"
     );
-    expect(wrapper.find(".notification-detail__meta").text()).toContain(
-      "未读"
-    );
+    expect(wrapper.find(".notification-detail__meta").text()).toContain("未读");
     expect(wrapper.find(".notification-detail__subject").text()).toBe(
       "Decision requested on REQ-142"
     );
@@ -55,7 +53,9 @@ describe("NotificationDetail", () => {
       "is-pending"
     );
 
-    const review = wrapper.findAll("button").find(b => b.text() === "处理请求")!;
+    const review = wrapper
+      .findAll("button")
+      .find(b => b.text() === "处理请求")!;
     await review.trigger("click");
     expect(wrapper.emitted("review")).toBeTruthy();
 
@@ -70,9 +70,9 @@ describe("NotificationDetail", () => {
       approval: { state: "approved", actor: "Maya" }
     });
 
-    expect(
-      wrapper.findAll("button").some(b => b.text() === "处理请求")
-    ).toBe(false);
+    expect(wrapper.findAll("button").some(b => b.text() === "处理请求")).toBe(
+      false
+    );
     expect(wrapper.find(".approval-indicator__desc").text()).toContain(
       "非 AI 批准"
     );
@@ -83,9 +83,9 @@ describe("NotificationDetail", () => {
       record: { ...record, read: true }
     });
 
-    expect(
-      wrapper.findAll("button").some(b => b.text() === "标记已读")
-    ).toBe(false);
+    expect(wrapper.findAll("button").some(b => b.text() === "标记已读")).toBe(
+      false
+    );
   });
 
   it("打开对象发出 open 事件", async () => {

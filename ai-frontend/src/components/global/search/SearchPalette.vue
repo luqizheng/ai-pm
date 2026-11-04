@@ -145,7 +145,8 @@ function itemState(id: string): SearchResultState {
 
 /** 命令行态：键盘焦点行 = accent 着色面 + ↵ 芯片（Figma Menu option Active） */
 function commandState(id: string): "default" | "active" {
-  return actionableItems.value[activeIndex.value] === id && status.value === "idle"
+  return actionableItems.value[activeIndex.value] === id &&
+    status.value === "idle"
     ? "active"
     : "default";
 }
@@ -300,8 +301,14 @@ onBeforeUnmount(() => {
                 :size="16"
                 aria-hidden="true"
               />
-              <span class="global-search__option-label">{{ command.label }}</span>
-              <kbd v-if="commandState(command.id) === 'active'" class="global-search__kbd">↵</kbd>
+              <span class="global-search__option-label">{{
+                command.label
+              }}</span>
+              <kbd
+                v-if="commandState(command.id) === 'active'"
+                class="global-search__kbd"
+                >↵</kbd
+              >
               <Check
                 v-if="commandState(command.id) === 'active'"
                 :size="14"
@@ -326,8 +333,14 @@ onBeforeUnmount(() => {
                 :size="16"
                 aria-hidden="true"
               />
-              <span class="global-search__option-label">{{ command.label }}</span>
-              <kbd v-if="commandState(command.id) === 'active'" class="global-search__kbd">↵</kbd>
+              <span class="global-search__option-label">{{
+                command.label
+              }}</span>
+              <kbd
+                v-if="commandState(command.id) === 'active'"
+                class="global-search__kbd"
+                >↵</kbd
+              >
               <Check
                 v-if="commandState(command.id) === 'active'"
                 :size="14"
@@ -419,7 +432,10 @@ onBeforeUnmount(() => {
         :aria-label="t('global.search.label')"
       >
         <div class="global-search__query-row">
-          <SearchInput v-model="query" :placeholder="t('global.search.placeholder')" />
+          <SearchInput
+            v-model="query"
+            :placeholder="t('global.search.placeholder')"
+          />
           <Button variant="secondary" size="sm" @click="clearQuery">
             {{ t("global.search.clearQuery") }}
           </Button>
@@ -434,9 +450,7 @@ onBeforeUnmount(() => {
             class="global-search__category"
           >
             <p class="global-search__group-label">
-              {{
-                t(`global.search.category.${group.type}`)
-              }}
+              {{ t(`global.search.category.${group.type}`) }}
               · {{ group.items.length }}
             </p>
             <SearchResultRow

@@ -153,8 +153,8 @@ const projects: ProjectSwitcherProject[] = [
     </div>
 
     <p class="design-page__hint">
-      Selected is the current project. Hover and focus apply to the trigger or
-      a project row. Loading and error never silently switch project context.
+      Selected is the current project. Hover and focus apply to the trigger or a
+      project row. Loading and error never silently switch project context.
     </p>
   </DesignLayout>
 </template>

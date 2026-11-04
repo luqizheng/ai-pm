@@ -65,9 +65,9 @@ describe("NotificationRecord", () => {
   it("已读记录的操作为「标记未读」", () => {
     const wrapper = mountRecord({ record: { ...record, read: true } });
 
-    expect(
-      wrapper.findAll("button").some(b => b.text() === "标记未读")
-    ).toBe(true);
+    expect(wrapper.findAll("button").some(b => b.text() === "标记未读")).toBe(
+      true
+    );
   });
 
   it("selected：accent 着色面 + accent 描边", () => {

@@ -55,10 +55,7 @@ function onConfirm() {
   <DialogRoot v-model:open="open">
     <DialogPortal>
       <DialogOverlay class="user-signout__overlay" />
-      <DialogContent
-        class="user-signout"
-        aria-describedby="user-signout-desc"
-      >
+      <DialogContent class="user-signout" aria-describedby="user-signout-desc">
         <div class="user-signout__header">
           <CircleHelp :size="16" aria-hidden="true" />
           <span class="user-signout__title">{{
@@ -85,13 +82,11 @@ function onConfirm() {
 
         <div class="user-signout__footer">
           <DialogClose as-child>
-            <Button variant="secondary">{{ t("global.usermenu.cancel") }}</Button>
+            <Button variant="secondary">{{
+              t("global.usermenu.cancel")
+            }}</Button>
           </DialogClose>
-          <Button
-            variant="secondary"
-            :disabled="!confirmed"
-            @click="onConfirm"
-          >
+          <Button variant="secondary" :disabled="!confirmed" @click="onConfirm">
             {{ t("global.usermenu.signOut") }}
           </Button>
         </div>

@@ -34,7 +34,9 @@ const ICONS = {
 
 const icon = computed(() => ICONS[props.state]);
 
-const title = computed(() => t(`global.notification.approval.${props.state}.title`));
+const title = computed(() =>
+  t(`global.notification.approval.${props.state}.title`)
+);
 
 const desc = computed(() => {
   if (props.state === "pending") {
@@ -48,7 +50,12 @@ const desc = computed(() => {
 
 <template>
   <div class="approval-indicator" :class="`is-${props.state}`" role="status">
-    <component :is="icon" :size="16" class="approval-indicator__icon" aria-hidden="true" />
+    <component
+      :is="icon"
+      :size="16"
+      class="approval-indicator__icon"
+      aria-hidden="true"
+    />
     <div class="approval-indicator__body">
       <p class="approval-indicator__title">{{ title }}</p>
       <p class="approval-indicator__desc">{{ desc }}</p>

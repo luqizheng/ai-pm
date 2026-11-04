@@ -36,9 +36,9 @@ describe("UserMenuItem", () => {
       props: { label: "退出登录", disabled: true }
     });
 
-    expect(
-      (wrapper.find("button").element as HTMLButtonElement).disabled
-    ).toBe(true);
+    expect((wrapper.find("button").element as HTMLButtonElement).disabled).toBe(
+      true
+    );
     await wrapper.find("button").trigger("click");
     expect(wrapper.emitted("click")).toBeUndefined();
   });

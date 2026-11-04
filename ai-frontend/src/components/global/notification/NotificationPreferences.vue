@@ -3,10 +3,7 @@
 import { useI18n } from "vue-i18n";
 
 import Switch from "@/components/ui/switch/Switch.vue";
-import {
-  NOTIFICATION_CATEGORIES,
-  type NotificationCategory
-} from "./types";
+import { NOTIFICATION_CATEGORIES, type NotificationCategory } from "./types";
 
 /**
  * 通知偏好（Figma Global/Notification/Preferences 33:85983）。

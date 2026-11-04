@@ -2,7 +2,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from "reka-ui";
+import {
+  PopoverContent,
+  PopoverPortal,
+  PopoverRoot,
+  PopoverTrigger
+} from "reka-ui";
 
 import Avatar from "@/components/ui/avatar/Avatar.vue";
 import UserMenuButton from "./UserMenuButton.vue";
@@ -55,7 +60,10 @@ const menuItems = computed(() => [
   { id: "my-profile", label: t("global.usermenu.myProfile") },
   { id: "account-settings", label: t("global.usermenu.accountSettings") },
   { id: "security", label: t("global.usermenu.security") },
-  { id: "personal-preferences", label: t("global.usermenu.personalPreferences") }
+  {
+    id: "personal-preferences",
+    label: t("global.usermenu.personalPreferences")
+  }
 ]);
 
 function onItem(id: string) {
@@ -112,7 +120,11 @@ function onSignOut() {
 
           <div class="user-menu__divider" aria-hidden="true" />
 
-          <nav class="user-menu__items" role="menu" :aria-label="t('global.usermenu.label')">
+          <nav
+            class="user-menu__items"
+            role="menu"
+            :aria-label="t('global.usermenu.label')"
+          >
             <UserMenuItem
               v-for="item in menuItems"
               :key="item.id"
@@ -141,7 +153,10 @@ function onSignOut() {
 
         <!-- 外观子面板（返回项回主菜单；Figma 未画返回，实现补齐） -->
         <template v-else>
-          <UserMenuItem :label="t('global.usermenu.back')" @click="view = 'menu'" />
+          <UserMenuItem
+            :label="t('global.usermenu.back')"
+            @click="view = 'menu'"
+          />
           <UserMenuAppearance v-model="theme" />
         </template>
       </PopoverContent>

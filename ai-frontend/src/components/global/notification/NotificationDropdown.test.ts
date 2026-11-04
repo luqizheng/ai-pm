@@ -60,9 +60,9 @@ describe("NotificationDropdown", () => {
     expect(labels).toContain("人工任务指派");
     expect(labels).toContain("AI 执行动态");
 
-    const badges = Array.from(
-      panel()?.querySelectorAll(".ui-badge") ?? []
-    ).map(el => el.textContent?.trim());
+    const badges = Array.from(panel()?.querySelectorAll(".ui-badge") ?? []).map(
+      el => el.textContent?.trim()
+    );
     expect(badges).toContain("需人工处理");
   });
 
@@ -74,7 +74,9 @@ describe("NotificationDropdown", () => {
     await wrapper.find(".notification-bell__button").trigger("click");
     await nextTick();
 
-    const unreadTab = panelButtons().find(b => b.textContent?.includes("未读"))!;
+    const unreadTab = panelButtons().find(b =>
+      b.textContent?.includes("未读")
+    )!;
     expect(unreadTab.textContent?.trim()).toBe("未读 · 3");
     unreadTab.click();
     await nextTick();
@@ -93,7 +95,9 @@ describe("NotificationDropdown", () => {
     await wrapper.find(".notification-bell__button").trigger("click");
     await nextTick();
 
-    panelButtons().find(b => b.textContent?.trim() === "全部标记已读")!.click();
+    panelButtons()
+      .find(b => b.textContent?.trim() === "全部标记已读")!
+      .click();
     await nextTick();
 
     expect(store.unreadCount).toBe(0);
@@ -144,10 +148,7 @@ describe("NotificationDropdown", () => {
     const wrapper = mount(NotificationDropdown, {
       attachTo: document.body,
       global: {
-        plugins: [
-          pinia,
-          i18n
-        ]
+        plugins: [pinia, i18n]
       }
     });
     await nextTick();
@@ -169,7 +170,9 @@ describe("NotificationDropdown", () => {
     await wrapper.find(".notification-bell__button").trigger("click");
     await nextTick();
 
-    expect(panel()?.querySelector(".notification-dropdown__empty")).not.toBeNull();
+    expect(
+      panel()?.querySelector(".notification-dropdown__empty")
+    ).not.toBeNull();
     expect(panel()?.textContent).toContain("已全部处理");
   });
 

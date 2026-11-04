@@ -38,7 +38,11 @@ const metaLine = computed(() =>
     class="notification-item"
     :class="props.record.read ? 'is-read' : 'is-unread'"
   >
-    <MessageSquare :size="16" class="notification-item__icon" aria-hidden="true" />
+    <MessageSquare
+      :size="16"
+      class="notification-item__icon"
+      aria-hidden="true"
+    />
     <div class="notification-item__content">
       <p class="notification-item__title">{{ props.record.title }}</p>
       <p class="notification-item__desc">{{ props.record.description }}</p>

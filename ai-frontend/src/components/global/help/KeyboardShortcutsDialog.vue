@@ -2,7 +2,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { DialogContent, DialogOverlay, DialogPortal, DialogRoot } from "reka-ui";
+import {
+  DialogContent,
+  DialogOverlay,
+  DialogPortal,
+  DialogRoot
+} from "reka-ui";
 import { X } from "lucide-vue-next";
 
 import Button from "@/components/ui/button/Button.vue";
@@ -40,15 +45,33 @@ const groups = computed<ShortcutGroup[]>(() => [
   {
     titleKey: "global.help.groupSearch",
     rows: [
-      { labelKey: "global.help.shortcutOpenSearch", keys: "Cmd/Ctrl+K", state: "assigned" },
-      { labelKey: "global.help.shortcutSelect", keys: "↑ / ↓", state: "assigned" },
-      { labelKey: "global.help.shortcutOpenResult", keys: "Enter", state: "assigned" },
-      { labelKey: "global.help.shortcutCloseSearch", keys: "Esc", state: "assigned" }
+      {
+        labelKey: "global.help.shortcutOpenSearch",
+        keys: "Cmd/Ctrl+K",
+        state: "assigned"
+      },
+      {
+        labelKey: "global.help.shortcutSelect",
+        keys: "↑ / ↓",
+        state: "assigned"
+      },
+      {
+        labelKey: "global.help.shortcutOpenResult",
+        keys: "Enter",
+        state: "assigned"
+      },
+      {
+        labelKey: "global.help.shortcutCloseSearch",
+        keys: "Esc",
+        state: "assigned"
+      }
     ]
   },
   {
     titleKey: "global.help.groupProject",
-    rows: [{ labelKey: "global.help.shortcutProjectSwitcher", state: "proposed" }]
+    rows: [
+      { labelKey: "global.help.shortcutProjectSwitcher", state: "proposed" }
+    ]
   },
   {
     titleKey: "global.help.groupEditing",
@@ -99,26 +122,23 @@ function keysText(row: ShortcutRow): string {
               :key="row.labelKey"
               class="shortcuts-dialog__row"
             >
-              <span class="shortcuts-dialog__row-label">{{ t(row.labelKey) }}</span>
+              <span class="shortcuts-dialog__row-label">{{
+                t(row.labelKey)
+              }}</span>
               <span
                 class="shortcuts-dialog__row-keys"
                 :class="{ 'is-unassigned': row.state !== 'assigned' }"
-              >{{ keysText(row) }}</span>
+                >{{ keysText(row) }}</span
+              >
             </div>
           </div>
         </div>
 
         <div class="shortcuts-dialog__footer">
-          <Button
-            variant="secondary"
-            @click="emit('update:open', false)"
-          >
+          <Button variant="secondary" @click="emit('update:open', false)">
             {{ t("global.usermenu.close") }}
           </Button>
-          <Button
-            variant="primary"
-            @click="emit('update:open', false)"
-          >
+          <Button variant="primary" @click="emit('update:open', false)">
             {{ t("global.usermenu.done") }}
           </Button>
         </div>

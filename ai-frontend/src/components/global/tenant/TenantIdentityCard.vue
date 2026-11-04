@@ -62,8 +62,12 @@ const identityLine = computed(() =>
       <div class="tenant-card__row">
         <Building2 :size="16" aria-hidden="true" />
         <div class="tenant-card__labels">
-          <p class="tenant-card__hint-strong">{{ t("global.tenant.loading") }}</p>
-          <p class="tenant-card__hint">{{ t("global.tenant.unavailableDesc") }}</p>
+          <p class="tenant-card__hint-strong">
+            {{ t("global.tenant.loading") }}
+          </p>
+          <p class="tenant-card__hint">
+            {{ t("global.tenant.unavailableDesc") }}
+          </p>
         </div>
       </div>
     </template>

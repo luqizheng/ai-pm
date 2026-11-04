@@ -1,4 +1,8 @@
-import { demoOrganization, demoProject, demoUser } from "@/components/shell/demo";
+import {
+  demoOrganization,
+  demoProject,
+  demoUser
+} from "@/components/shell/demo";
 
 /**
  * 账户菜单演示身份（骨架阶段）。

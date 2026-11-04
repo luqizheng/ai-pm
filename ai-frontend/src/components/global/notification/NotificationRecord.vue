@@ -43,10 +43,7 @@ const openLabel = computed(() =>
 </script>
 
 <template>
-  <div
-    class="notification-record"
-    :class="{ 'is-selected': props.selected }"
-  >
+  <div class="notification-record" :class="{ 'is-selected': props.selected }">
     <div class="notification-record__category-row">
       <span class="notification-record__category">{{ categoryLabel }}</span>
       <Badge v-if="props.record.requiresAttention" variant="accent" size="sm">
@@ -54,13 +51,20 @@ const openLabel = computed(() =>
       </Badge>
     </div>
 
-    <NotificationItem :record="props.record" @click="emit('select', props.record)" />
+    <NotificationItem
+      :record="props.record"
+      @click="emit('select', props.record)"
+    />
 
     <div class="notification-record__actions">
       <Button variant="ghost" size="sm" @click="emit('open', props.record)">
         {{ openLabel }}
       </Button>
-      <Button variant="ghost" size="sm" @click="emit('toggle-read', props.record)">
+      <Button
+        variant="ghost"
+        size="sm"
+        @click="emit('toggle-read', props.record)"
+      >
         {{
           props.record.read
             ? t("global.notification.markUnread")

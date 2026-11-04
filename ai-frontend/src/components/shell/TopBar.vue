@@ -6,10 +6,7 @@ import { Search, Sparkles } from "lucide-vue-next";
 
 import NotificationDropdown from "@/components/global/notification/NotificationDropdown.vue";
 import { TenantIndicator } from "@/components/global/tenant";
-import {
-  HelpMenu,
-  KeyboardShortcutsDialog
-} from "@/components/global/help";
+import { HelpMenu, KeyboardShortcutsDialog } from "@/components/global/help";
 import {
   UserMenuAccountMenu,
   UserMenuSignOutDialog,

@@ -45,7 +45,11 @@ describe("TenantIndicator / TenantIdentityCard", () => {
 
   it("点击芯片打开身份卡浮层（Full 态：组织串 + 身份邮箱）", async () => {
     const wrapper = mount(TenantIndicator, {
-      props: { tenant: "Acme Research", identity: "Alex Morgan", email: "alex.morgan@acme.dev" },
+      props: {
+        tenant: "Acme Research",
+        identity: "Alex Morgan",
+        email: "alex.morgan@acme.dev"
+      },
       attachTo: document.body,
       global: { plugins: [i18n] }
     });

@@ -23,7 +23,7 @@ describe("KeyboardShortcutsDialog", () => {
   });
 
   it("打开：五组 + 搜索组四个已确认键位", async () => {
-    const wrapper = mountDialog();
+    mountDialog();
     await nextTick();
 
     const groups = document.querySelectorAll(".shortcuts-dialog__group");
@@ -58,7 +58,9 @@ describe("KeyboardShortcutsDialog", () => {
 
     Array.from(
       document.querySelectorAll<HTMLButtonElement>(".shortcuts-dialog button")
-    ).find(b => b.textContent?.trim() === "完成")!.click();
+    )
+      .find(b => b.textContent?.trim() === "完成")!
+      .click();
     await nextTick();
 
     expect(wrapper.emitted("update:open")?.at(-1)?.[0]).toBe(false);

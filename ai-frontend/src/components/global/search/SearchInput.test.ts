@@ -53,8 +53,8 @@ describe("SearchInput", () => {
     expect(wrapper.find(".global-search-field").classes()).toContain(
       "is-disabled"
     );
-    expect(
-      (wrapper.find("input").element as HTMLInputElement).disabled
-    ).toBe(true);
+    expect((wrapper.find("input").element as HTMLInputElement).disabled).toBe(
+      true
+    );
   });
 });

@@ -9,7 +9,10 @@ import { i18n } from "@/lib/i18n";
 /** 帮助菜单（Global/Help/Menu 360 面板）：三项入口事件。 */
 describe("HelpMenu", () => {
   function mountMenu() {
-    return mount(HelpMenu, { attachTo: document.body, global: { plugins: [i18n] } });
+    return mount(HelpMenu, {
+      attachTo: document.body,
+      global: { plugins: [i18n] }
+    });
   }
 
   function panelButtons() {
@@ -50,13 +53,17 @@ describe("HelpMenu", () => {
 
     await wrapper.find(".help-menu__trigger").trigger("click");
     await nextTick();
-    panelButtons().filter(b => b.className.includes("user-menu-item"))[1].click();
+    panelButtons()
+      .filter(b => b.className.includes("user-menu-item"))[1]
+      .click();
     await nextTick();
     expect(wrapper.emitted("shortcuts")).toBeTruthy();
 
     await wrapper.find(".help-menu__trigger").trigger("click");
     await nextTick();
-    panelButtons().filter(b => b.className.includes("user-menu-item"))[2].click();
+    panelButtons()
+      .filter(b => b.className.includes("user-menu-item"))[2]
+      .click();
     await nextTick();
     expect(wrapper.emitted("feedback")).toBeTruthy();
   });

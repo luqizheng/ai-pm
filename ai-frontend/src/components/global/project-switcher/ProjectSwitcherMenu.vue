@@ -196,7 +196,12 @@ const noResultsDescription = computed(
       <Alert variant="danger" size="md" :title="t.errorTitle">
         {{ t.errorDescription }}
       </Alert>
-      <Button class="ps-menu__retry" variant="secondary" size="sm" @click="emit('retry')">
+      <Button
+        class="ps-menu__retry"
+        variant="secondary"
+        size="sm"
+        @click="emit('retry')"
+      >
         {{ t.retryLabel }}
       </Button>
     </template>
