@@ -4,11 +4,33 @@
 
 | 编号 | 文档 | 状态 |
 | --- | --- | --- |
+| S01-00 | [全局主菜单与信息架构设计基线 V1.0](s01-00-global-navigation-information-architecture-v1.md) | **用户裁决完成，设计基线冻结**（Q1~Q3；全产品导航基础规范） |
+| S01-01 · 初始化总览 | [Project Initialization Overview UX 详细设计稿 V1.0](s01-01-project-initialization-overview-ux-v1.md) | 设计稿完成，待评审；编号冲突待裁决（见该稿 §0.3） |
 | S01-01 | [项目基线确认 UX 规范 V1.0](s01-01-project-baseline-confirmation-ux-v1.md) | 待评审 |
 | S01-02 | [Project Creation UX 设计稿 V1.1](s01-02-project-creation-ux-v1-1.md) | 设计稿完成，待整体冻结 |
 | S01-03 | [Repository Management UX 设计稿 V1.1](s01-03-repository-management-ux-v1-1.md) | 设计稿完成，待代码事实核验及整体冻结 |
 | S01-04 | [AI-PM Cognition UX 详细设计稿 V1.1](s01-04-ai-pm-cognition-ux-v1-1.md) | 用户裁决已收编，待设计冻结 |
 | S01-05 | [Personal Workspace UX 设计稿 V1.1](s01-05-personal-workspace-ux-v1-1.md) | 用户裁决已收编，待整体基线冻结 |
+| S01-05 · 高保真 | [Personal Home 高保真 UI 设计稿 V1.0](s01-05-personal-home-high-fidelity-ui-v1.md) | 设计稿完成，待用户评审；命名口径裁决中（见该稿 §11 Q1/Q2） |
+
+> **编号冲突（待裁决）**：`docs/ui/s01/` 下存在两个 S01-01 ——「项目初始化总览」（新增）与「项目基线确认」。
+> 建议统一为依赖顺序：S01-01 初始化总览 / S01-02 项目创建 / S01-03 Repository Management /
+> S01-04 AI-PM Cognition / **S01-05 项目基线确认** / S01-06 Codex·MCP Bootstrap / S01-07 初始化交接 /
+> **S01-08 Personal Workspace**。该动作涉及既有稿件改名与交叉引用，须裁决后统一执行，
+> 详见 `s01-01-project-initialization-overview-ux-v1.md` §0.3。
+
+> **S01-00 基线地位（2026-11-04）**：S01-00 是全产品导航基础规范（S01～S08 共用），其「冻结范围」章节明确
+> 不引入 Workspace 业务概念、不设全局 AI 协作中心。两处既有口径受其约束：
+> ① 根目录 `smark-pm-menu-roles-permission-model-v1.md` 的「7 个一级菜单」菜单结构部分被本基线的
+> 6 入口结构取代（差异=AI 协作中心移除，Q1=A；该稿其余权限模型内容不受影响，仍待评审）；
+> ② S01-05 挂账的 Personal Workspace vs Personal Home 命名裁决，现在不得选用 Workspace 作业务/入口命名。
+
+> **S01-05 现存两份文档，裁决前并存不合并**：
+> `s01-05-personal-workspace-ux-v1-1.md` 是正文 UX 基线；`s01-05-personal-home-high-fidelity-ui-v1.md` 是其高保真页面设计稿
+> （视觉原型 `assets/s01-05-personal-home-prototype.html`，含 7 种状态可切换）。
+> 二者在**命名口径**上冲突（`Personal Workspace` / `My Workspace` vs `Personal Home` / `My Home`），
+> 并在**概览指标**与**Watchlist 是否进首页**上口径不同；差异与倾向见高保真稿 §0.1 与 §11。
+> 裁决后需同步修订另一份，不得产生两份互相矛盾的正本。
 
 ## S01 后续推进顺序
 
