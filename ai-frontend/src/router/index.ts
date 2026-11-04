@@ -7,6 +7,7 @@ import {
 } from "vue-router";
 
 import { navGroups, type NavItem } from "./navigation";
+import { designRoutes } from "./design";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 
 /**
@@ -59,6 +60,9 @@ export function buildRoutes(): RouteRecordRaw[] {
       routes.push(...navItemRoutes(item));
     }
   }
+
+  // 设计系统目录页（无导航外壳的全屏页，meta.layout = "design"）
+  routes.push(...designRoutes);
 
   routes.push({
     path: "/:pathMatch(.*)*",

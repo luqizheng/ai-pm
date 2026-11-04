@@ -1,0 +1,69 @@
+design:
+  index:
+    title: 设计系统目录
+    subtitle: AI R&D Workspace — Figma 设计稿的可浏览实现（组件 / 导航 / 应用壳）
+    hint: 深色为默认主题；右上角可切换浅色预览。
+    sectionTokens: 令牌
+    sectionComponents: 组件族（DS）
+    sectionNavigation: 导航（Figma 板）
+    sectionShell: 应用壳
+  theme:
+    toggle: 切换浅色 / 深色预览
+  tokens:
+    title: 设计令牌
+    subtitle: 视觉数值唯一真源 = src/styles/tokens.css；本页只读展示。
+    colors: 颜色
+    typography: 字阶
+    controls: 控件尺寸
+    spacing: 间距 / 圆角
+  components:
+    buttons:
+      title: Buttons — 按钮族
+      subtitle: Button（13:32697）+ IconButton（13:32734）
+    forms:
+      title: Forms — 表单族
+      subtitle: TextInput / Password / Search / Select / Checkbox / Radio / Switch / Textarea / DatePicker
+    navigation:
+      title: Navigation — 导航族
+      subtitle: SidebarItem / NavigationGroup / TopBarItem / Breadcrumb / Tab
+    overlays:
+      title: Overlays — 浮层族
+      subtitle: ConfirmationDialog / Dialog / Popover / DropdownMenu / Command
+    feedback:
+      title: Feedback — 反馈族
+      subtitle: StatusIndicator / ProgressIndicator / EmptyState + Badge / Alert / Toast / Skeleton
+    data:
+      title: Data — 数据族
+      subtitle: AvatarGroup / ListItem / NotificationItem / MenuItem + Avatar
+    ai:
+      title: AI — AI 族
+      subtitle: EntryButton / CommandInput / Suggestion / AI Status / HumanApproval（AI 建议 accent、人工确认次文字）
+  navigation:
+    global:
+      title: 全局导航 — 展开 / 折叠
+      subtitle: Figma 板 01/02 — 真实应用壳渲染（1440×900 画框，可点击折叠按钮切换两态）
+    contexts:
+      title: 三种导航上下文
+      subtitle: Figma 板 03/04/05 — 个人 / 项目 / 管理（DS 组件组合，不混成扁平菜单）
+    states:
+      title: 导航交互状态
+      subtitle: Figma 板 06/08 — Navigation Item / Group / Badge / Tooltip / Context Header 全状态
+    switching:
+      title: 项目切换序列
+      subtitle: Figma 板 07 — Before / Switching / After 差异对照（静态）
+    library:
+      title: 导航组件库
+      subtitle: Figma 板 08 — 9 族 24 specimen
+  shell:
+    states:
+      title: 应用壳状态
+      subtitle: Figma 板 03 Shell states — 五区域尺寸契约与控制状态条
+  specimen:
+    states: 状态
+    sizes: 尺寸
+    variants: 变体
+    interactionHint: 悬停 / 聚焦可实际交互
+  notes:
+    board02: Board 02 — Collapsed（7:15058）：点击左下角折叠按钮切换；折叠后 60px 纯图标 + 分隔线 + 未读圆点，tooltip 悬停可见。
+    contexts: Boards 的英文标签为设计参考文本（specimen 标注）；业务落地的中文文案以 src/router/navigation.ts + locales 为单源，不在此复刻。
+    switching: 面包屑 / 页面标题 / AI 指令文案随上下文改写（Atlas → Research Sandbox）；GLOBAL 组常驻；Loading 行文案 Switching project…（板 07 规格原文）。

@@ -11,32 +11,47 @@
 
 ## 已同步（✅ 全量 / 🟡 部分）
 
-| 组件                             | Figma 组（node）                                          | 状态 | 日期       | 备注                                                                                                                                       |
-| -------------------------------- | --------------------------------------------------------- | ---- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Button                           | DS/Buttons/Button（13:32697）                             | ✅   | 2026-11-04 | 新增 tertiary/danger 变体；五态齐全；sm28/md36/lg44                                                                                        |
-| Input（TextInput/PasswordInput） | DS/Forms/TextInput（13:32788）+ PasswordInput（13:32847） | ✅   | 2026-11-04 | 外壳结构 + 内嵌 loading/error 图标 + 密码 mono；SearchInput（13:32905）待并入                                                              |
-| Checkbox                         | DS/Forms/Checkbox（13:33050）                             | ✅   | 2026-11-04 | 16/14/20 三档 + focus 2px accent + indeterminate；disabled 0.4 整体不透明度                                                                |
-| FormField / Label                | DS/Forms/TextInput 结构（13:32788）                       | ✅   | 2026-11-04 | Label 13 Medium；帮助/错误 11px（micro）                                                                                                   |
-| Alert                            | DS/Feedback/Alert（13:34149）                             | ✅   | 2026-11-04 | info/success/warning=中性面（Figma 口径）；error=danger 面+#E69A9F 描边；size 三档 + dismissible                                           |
-| Separator                        | —（登录页 Rule 1px）                                      | ✅   | 2026-11-04 | 无需改样式（hairline token 命中）                                                                                                          |
-| Switch                           | DS/Forms/Switch（13:33107）                               | ✅   | 2026-11-04 | sm/md 32×20（thumb14）/lg 40×24（thumb18）；Off thumb=次文字色；focus 2px accent；禁用整体 0.4                                             |
-| Badge                            | DS/Feedback/Badge（13:34167）                             | 🟡   | 2026-11-04 | neutral/accent/count 全量（accent 底 #242238 token）；success/warning/danger/info 为本地语义延伸未在 Figma 定义                            |
-| Toast                            | DS/Feedback/Toast（13:34097）                             | ✅   | 2026-11-04 | 图标式 + 中性面；error=danger 面；Action 态动作链接（11px accent）+ 新增 action 事件；sm/md/lg                                             |
-| Tooltip                          | DS/Overlays/Tooltip（13:33673）                           | ✅   | 2026-11-04 | 浮层 elevated 面/radius 8/h36/主文字 13；新增 shortcut 快捷键 chip（mono 10px=nano token）                                                 |
-| Skeleton                         | DS/Feedback/Skeleton（13:34281）                          | ✅   | 2026-11-04 | 双色占位线（strong=border 色/base=elevated 色，tone prop）；radius 4；shimmer 保留                                                         |
-| Avatar                           | DS/Data/Avatar（13:34344）                                | ✅   | 2026-11-04 | 三档 28/36/44（复用控件 token）；elevated 底+描边；首字母两位 10/12/14 Medium；Fallback 图标；新增 size/online                             |
-| Textarea                         | DS/Forms/Textarea（13:32944）                             | ✅   | 2026-11-04 | 外壳结构 + 内嵌 error 图标；三档高 72/88/112（--size-textarea\*）；交互态同 TextInput                                                      |
-| Select                           | DS/Forms/Select（13:33018）                               | ✅   | 2026-11-04 | 触发器同 Input 口径（canvas 底/三档/0.45 禁用）；面板 elevated+radius 8+内边 4；选项 h36/radius 8，选中与悬停底=accent 着色面；禁用项 0.35 |
+| 组件                             | Figma 组（node）                                          | 状态 | 日期       | 备注                                                                                                                                                     |
+| -------------------------------- | --------------------------------------------------------- | ---- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Button                           | DS/Buttons/Button（13:32697）                             | ✅   | 2026-11-04 | 新增 tertiary/danger 变体；五态齐全；sm28/md36/lg44                                                                                                      |
+| Input（TextInput/PasswordInput） | DS/Forms/TextInput（13:32788）+ PasswordInput（13:32847） | ✅   | 2026-11-04 | 外壳结构 + 内嵌 loading/error 图标 + 密码 mono；SearchInput（13:32905）待并入                                                                            |
+| Checkbox                         | DS/Forms/Checkbox（13:33050）                             | ✅   | 2026-11-04 | 16/14/20 三档 + focus 2px accent + indeterminate；disabled 0.4 整体不透明度                                                                              |
+| FormField / Label                | DS/Forms/TextInput 结构（13:32788）                       | ✅   | 2026-11-04 | Label 13 Medium；帮助/错误 11px（micro）                                                                                                                 |
+| Alert                            | DS/Feedback/Alert（13:34149）                             | ✅   | 2026-11-04 | info/success/warning=中性面（Figma 口径）；error=danger 面+#E69A9F 描边；size 三档 + dismissible                                                         |
+| Separator                        | —（登录页 Rule 1px）                                      | ✅   | 2026-11-04 | 无需改样式（hairline token 命中）                                                                                                                        |
+| Switch                           | DS/Forms/Switch（13:33107）                               | ✅   | 2026-11-04 | sm/md 32×20（thumb14）/lg 40×24（thumb18）；Off thumb=次文字色；focus 2px accent；禁用整体 0.4                                                           |
+| Badge                            | DS/Feedback/Badge（13:34167）                             | 🟡   | 2026-11-04 | neutral/accent/count 全量（accent 底 #242238 token）；success/warning/danger/info 为本地语义延伸未在 Figma 定义                                          |
+| Toast                            | DS/Feedback/Toast（13:34097）                             | ✅   | 2026-11-04 | 图标式 + 中性面；error=danger 面；Action 态动作链接（11px accent）+ 新增 action 事件；sm/md/lg                                                           |
+| Tooltip                          | DS/Overlays/Tooltip（13:33673）                           | ✅   | 2026-11-04 | 浮层 elevated 面/radius 8/h36/主文字 13；新增 shortcut 快捷键 chip（mono 10px=nano token）                                                               |
+| Skeleton                         | DS/Feedback/Skeleton（13:34281）                          | ✅   | 2026-11-04 | 双色占位线（strong=border 色/base=elevated 色，tone prop）；radius 4；shimmer 保留                                                                       |
+| Avatar                           | DS/Data/Avatar（13:34344）                                | ✅   | 2026-11-04 | 三档 28/36/44（复用控件 token）；elevated 底+描边；首字母两位 10/12/14 Medium；Fallback 图标；新增 size/online                                           |
+| Textarea                         | DS/Forms/Textarea（13:32944）                             | ✅   | 2026-11-04 | 外壳结构 + 内嵌 error 图标；三档高 72/88/112（--size-textarea\*）；交互态同 TextInput                                                                    |
+| Select                           | DS/Forms/Select（13:33018）                               | ✅   | 2026-11-04 | 触发器同 Input 口径（canvas 底/三档/0.45 禁用）；面板 elevated+radius 8+内边 4；选项 h36/radius 8，选中与悬停底=accent 着色面；禁用项 0.35               |
+| IconButton                       | DS/Buttons/IconButton（13:32734）                         | ✅   | 2026-11-04 | secondary/ghost/danger × 28/36/44；loading 图标；0.38 禁用。⚠ Figma 源异常 2 处（Medium Disabled 缺 0.38 / Ghost Large 误带 danger 描边）按正常口径实现 |
+| SearchInput                      | DS/Forms/SearchInput（13:32905）                          | ✅   | 2026-11-04 | search 图标 16 + 快捷键 chip（mono 10）+ Empty 帮助行；三档行高；focus 2px accent；0.45 禁用                                                             |
+| Radio                            | DS/Forms/Radio（13:33076）                                | ✅   | 2026-11-04 | 直径 14/16/20 + 6px canvas 圆点（accent 底）；focus 2px；0.4 禁用；hover 与 default Figma 无差异                                                         |
+| DatePicker                       | DS/Forms/DatePicker（13:33274）                           | ✅   | 2026-11-04 | label+输入行+帮助+Open 日历（6×7、选中日 accent 底、Today/Clear 页脚）；Error=danger 描边+警示图标；日历数据 props 注入（演示 2026-11）                  |
+| SidebarItem                      | DS/Navigation/SidebarItem（13:33329）                     | ✅   | 2026-11-04 | 36px 行+图标 16；Active=accent 着色面+2×16 指示条(radius 1)；restricted=次文字；loading=loader；collapsed 纯图标；badge count/status                     |
+| NavigationGroup                  | DS/Navigation/NavigationGroup（13:33391）                 | ✅   | 2026-11-04 | 组标题 mono 大写 + chevron + 计数徽标；子项缩进 8px；受控/非受控折叠双模                                                                                 |
+| TopBarItem                       | DS/Navigation/TopBarItem（13:33520）                      | ✅   | 2026-11-04 | 顶栏条目：图标+标签+徽标+快捷键 chip；Active accent 着色面                                                                                               |
+| ConfirmationDialog               | DS/Overlays/ConfirmationDialog（13:33877）                | ✅   | 2026-11-04 | 448px 面板三段（header/body/footer）；danger 变体；checkbox 确认行。⚠ Figma Danger 变体按钮文案仍写 Archive item（源异常）按语义 props 传入             |
+| StatusIndicator                  | DS/Feedback/StatusIndicator（13:34203）                   | ✅   | 2026-11-04 | 圆点 12/16/20 + 可选标签；⚠ 点色 Figma 未取到（SVG 无 fills），按语义色 token 映射                                                                      |
+| ProgressIndicator                | DS/Feedback/ProgressIndicator（13:34246）                 | ✅   | 2026-11-04 | 轨道三档 4/6/8；variant 语义色；indeterminate + reduced-motion 降级                                                                                      |
+| EmptyState                       | DS/Feedback/EmptyState（13:34322）                        | ✅   | 2026-11-04 | 圆形图标容器（24px 图标）+标题+描述+双动作。⚠ Figma 两个 Action 文案样式不一致（源矛盾）按一致按钮实现                                                  |
+| AvatarGroup                      | DS/Data/AvatarGroup（13:34379）                           | ✅   | 2026-11-04 | 重叠 -8px（Figma gap:-8）；超出 max 计数徽标；28/36/44                                                                                                   |
+| ListItem                         | DS/Data/ListItem（13:34428）                              | ✅   | 2026-11-04 | 标题 13 + 描述 11；selected=accent 着色面；trailing 插槽                                                                                                 |
+| NotificationItem                 | DS/Data/NotificationItem（13:34472）                      | ✅   | 2026-11-04 | 未读=accent 着色面+accent 状态点；时间戳 time 元素                                                                                                       |
+| MenuItem                         | DS/Data/MenuItem（13:34522）                              | ✅   | 2026-11-04 | 36px 行；selected=accent 着色面；danger 语义色；0.35 禁用；快捷键 chip                                                                                   |
+| EntryButton                      | DS/AI/EntryButton（13:34559）                             | ✅   | 2026-11-04 | sparkles 12px；default/accent/ghost 三变体（AI 建议 accent 可辨）                                                                                        |
+| CommandInput                     | DS/AI/CommandInput（13:34680）                            | ✅   | 2026-11-04 | sparkles 12 + 发送 arrow-up 14；Enter 发送/Shift+Enter 换行；context 插槽                                                                                |
+| Suggestion                       | DS/AI/Suggestion（13:34757）                              | ✅   | 2026-11-04 | AI 建议标题 accent 色（视觉可辨）；accepted/rejected=success/danger                                                                                      |
+| AiStatusIndicator                | DS/AI/StatusIndicator（13:34798）                         | ✅   | 2026-11-04 | 状态点 8/10/12；⚠ 点色未取到按语义映射（idle 次文字/thinking accent/waiting warning/done success/failed danger）                                        |
+| HumanApprovalIndicator           | DS/AI/HumanApprovalIndicator（13:34834）                  | ✅   | 2026-11-04 | 人工确认 chip=次文字色（非 accent，AGENTS.md AI/人工可辨铁律）；四态图标                                                                                 |
 
 ## 待同步（按族）
 
-- **Buttons**：IconButton（13:32734）——本地无独立组件（Button size="icon" 承接，需核对 28/36/44 方钮态色）
-- **Forms**：SearchInput（13:32905）、Radio（13:33076，本地无）、DatePicker（13:33274，本地无）
-- **Navigation**：SidebarItem（13:33329）、NavigationGroup（13:33391）、Breadcrumb（13:33452）、Tab（13:33477）、TopBarItem（13:33520）
-- **Overlays**：Dropdown（13:33607）、Popover（13:33652）、Modal（13:33764）、ConfirmationDialog（13:33877）、CommandPalette（13:34028）
-- **Feedback**：StatusIndicator（13:34203）、ProgressIndicator（13:34246）、EmptyState（13:34322）
-- **Data**：AvatarGroup（13:34379）、ListItem（13:34428）、NotificationItem（13:34472）、MenuItem（13:34522）
-- **AI**：EntryButton（13:34559）、CommandInput（13:34680）、Suggestion（13:34757）、AI StatusIndicator（13:34798）、HumanApprovalIndicator（13:34834）
+- **Navigation**：Breadcrumb（13:33452）/ Tab（13:33477）视觉重同步待做（目录页暂用现有实现渲染）
+- **Overlays**：Dropdown（13:33607）/ Popover（13:33652）/ Modal（13:33764）/ CommandPalette（13:34028）视觉重同步待做（同上）
 
 ## 已落 token 的 Figma 修正值（tokens.css）
 
@@ -46,6 +61,7 @@
 - 控件三档 28/36/44；spinner 16px；checkbox 16px；Switch 轨道 32/40 thumb 14/18；Badge 16/20/24；Textarea 72/88/112
 - danger 反馈面三色 `#2C2028 / #66424D / #E69A9F`（浅色候选 `#FBECEE / #EDB6BA / #8F2430`）
 - Input hover 描边 = 次文字色；字阶 body 13px、micro 11px（帮助/Toast 动作/Tooltip sm 等元文案）、nano 10px（快捷键 chip）
+- 本轮新增（DS 组件库 2026-11-04）：浅色表面族实测校正（sidebar #EEF0F5 / elevated #E8EBF2 / border #C7CDD9 / danger-text·title #A43445 / danger 面 #FBECEE）；Radio 直径 14/16/20+点 6；日历格 28px；导航族（nav-item 36 / badge 18 / context-header 40 / indent 8 / 指示条 2×16 r1）；AI 族（icon-xxs 12 / 状态点 8/10/12 / 发送 14）；状态点 12/16/20；进度轨道 4/6/8；空态图标 24；头像重叠 8；浮层面板 448
 
 ## 应用壳同步（Figma 页 03 — Application Shell）
 
