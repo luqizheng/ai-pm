@@ -1,0 +1,34 @@
+global:
+  search:
+    label: Global search
+    placeholder: Search or jump to…
+    groupCommands: GLOBAL COMMANDS
+    groupCreate: CREATE
+    recentLabel: RECENT SEARCHES
+    recentHint: Recent
+    countResults: "{count} results · Available objects only"
+    searching: Searching available objects…
+    clearQuery: Clear query
+    retry: Retry
+    errorTitle: Search is unavailable
+    errorDesc: "Your query “{query}” is preserved. Retry the search."
+    noResultsTitle: No results
+    noResultsDesc: No available objects match this query.
+    noRecentTitle: No recent searches
+    noRecentDesc: Start typing to search available R&D objects.
+    hintSelect: "↑ ↓  Select"
+    hintOpen: "Enter  Open"
+    hintClose: "Esc  Close"
+    commands:
+      openProject: Open project
+      navigateModule: Navigate module
+      createProject: Create project
+      openPersonalWorkspace: Open Personal Workspace
+      openInbox: Open Inbox
+    category:
+      project: Projects
+      repository: Repositories
+      requirement: Requirements
+      task: Tasks
+      aiRun: AI Execution Runs
+      document: Knowledge Documents

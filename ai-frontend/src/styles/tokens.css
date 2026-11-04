@@ -191,6 +191,8 @@
   --size-control-compact: 32px;
   /* 壳级搜索入口宽 360px（Figma 顶栏 Global search and command launcher） */
   --size-search-width: 360px;
+  /* 全局搜索面板宽 640px（Figma「01 — Global Search」Initial palette 构成宽） */
+  --size-search-palette-width: 640px;
   /* 项目切换菜单宽 330px（Figma「07 — Project Switching」Project switcher menu） */
   --size-project-menu-width: 330px;
   --size-icon-button: 36px;

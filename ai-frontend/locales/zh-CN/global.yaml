@@ -1,0 +1,34 @@
+global:
+  search:
+    label: 全局搜索
+    placeholder: 搜索或跳转到…
+    groupCommands: 全局命令
+    groupCreate: 创建
+    recentLabel: 最近搜索
+    recentHint: 最近
+    countResults: "{count} 条结果 · 仅可访问对象"
+    searching: 正在搜索可用对象…
+    clearQuery: 清除查询
+    retry: 重试
+    errorTitle: 搜索不可用
+    errorDesc: "查询「{query}」已保留，可重试搜索。"
+    noResultsTitle: 无结果
+    noResultsDesc: 没有可访问对象匹配此查询。
+    noRecentTitle: 暂无最近搜索
+    noRecentDesc: 开始输入以搜索可访问的 R&D 对象。
+    hintSelect: "↑ ↓  选择"
+    hintOpen: "Enter  打开"
+    hintClose: "Esc  关闭"
+    commands:
+      openProject: 打开项目
+      navigateModule: 导航到模块
+      createProject: 创建项目
+      openPersonalWorkspace: 打开个人工作区
+      openInbox: 打开收件箱
+    category:
+      project: 项目
+      repository: 仓库
+      requirement: 需求
+      task: 任务
+      aiRun: AI 执行
+      document: 知识文档

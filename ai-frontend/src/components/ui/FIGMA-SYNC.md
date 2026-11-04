@@ -32,9 +32,9 @@
 ## 待同步（按族）
 
 - **Buttons**：IconButton（13:32734）——本地无独立组件（Button size="icon" 承接，需核对 28/36/44 方钮态色）
-- **Forms**：SearchInput（13:32905）、Radio（13:33076，本地无）、DatePicker（13:33274，本地无）
+- **Forms**：Radio（13:33076，本地无）、DatePicker（13:33274，本地无）；~~SearchInput（13:32905）~~ 2026-11-04 已随 Global/Search/SearchInput.vue 落地（暂居 global/search/，归位 ui/ 待后续）
 - **Navigation**：SidebarItem（13:33329）、NavigationGroup（13:33391）、Breadcrumb（13:33452）、Tab（13:33477）、TopBarItem（13:33520）
-- **Overlays**：Dropdown（13:33607）、Popover（13:33652）、Modal（13:33764）、ConfirmationDialog（13:33877）、CommandPalette（13:34028）
+- **Overlays**：Dropdown（13:33607）、Popover（13:33652）、Modal（13:33764）、ConfirmationDialog（13:33877）；~~CommandPalette（13:34028）~~ 2026-11-04 已由 Global/Search/SearchPalette.vue 全量承接（含 Query/Results 状态机）
 - **Feedback**：StatusIndicator（13:34203）、ProgressIndicator（13:34246）、EmptyState（13:34322）
 - **Data**：AvatarGroup（13:34379）、ListItem（13:34428）、NotificationItem（13:34472）、MenuItem（13:34522）
 - **AI**：EntryButton（13:34559）、CommandInput（13:34680）、Suggestion（13:34757）、AI StatusIndicator（13:34798）、HumanApprovalIndicator（13:34834）
@@ -85,3 +85,31 @@ Project switcher menu（7:16466）+ 切换序列（7:16226，Before → Switchin
 
 - 项目切换菜单宽 330px（`--size-project-menu-width`，Figma Project switcher menu）
 - 就绪状态色 `--ws-color-status-ready`（深色 #8DC5AF = Figma Navigation Badge Type=Status 绿点；浅色 #3F8F70 保 UI ≥3:1）
+
+### 全局组件 Global/Search（Figma 帧编号 01 — Global Search / 02 — Search Results）
+
+**权威来源**：Figma `hNlGqLEMQpOVCZ0o5u3DkT`「01 — Global Search」
+（<https://www.figma.com/design/hNlGqLEMQpOVCZ0o5u3DkT?node-id=33-81343>）+
+「02 — Search Results」
+（<https://www.figma.com/design/hNlGqLEMQpOVCZ0o5u3DkT?node-id=33-81649>），
+组件族 `Global/Search/CommandPalette`（33:87787）/ `Query`（33:87788）/
+`Results`（33:87789）/ `ResultRow`（33:87782）/ `RecentSearches`（33:85727）/
+`Input`（33:87811），Dark/Light 双主题。
+
+| 组件                        | Figma 组（node）                                        | 状态 | 日期       | 备注                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------- | ---- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `global/search/SearchPalette.vue` | Global/Search/CommandPalette + Query + Results（33:87787/88/89） | ✅   | 2026-11-04 | ⌘K 唯一权限感知入口；五态状态机（idle/searching/results/no-results/error）；命令分 navigate·create（主面板）+ action（附加面板）；键盘 ↑↓/Enter/Esc；选中（accent 着色面）与键盘焦点（2px accent 描边）互相独立 |
+| `global/search/SearchResultRow.vue` | Global/Search/ResultRow（33:87782）                     | ✅   | 2026-11-04 | 六类对象（Project/Repository/Requirement/Task/AI Run/Document）× 三态；行下 11px meta（不参与分类）；图标按对象类型区分（Figma 样本统一 file-text，实现细分） |
+| `global/search/SearchRecentPanel.vue` | Global/Search/RecentSearches（33:85727）               | ✅   | 2026-11-04 | surface 面板 + mono 群组标签 + ListItem 行；点击行 = 回填查询重搜；空态由 Palette 内联 EmptyState（无动作按钮，DS/Feedback/EmptyState 待入库） |
+| `global/search/SearchInput.vue` | DS/Forms/SearchInput（13:32905）+ Global/Search/Input（33:87811） | ✅   | 2026-11-04 | 四态（Default canvas 底/Hover elevated/Focus 2px accent/Disabled 0.45）+ 内嵌 loading spinner + Esc 芯片 + 11px helper；落地在 global/search（ui/SearchInput 独立组件待后续归位） |
+| 组合级键盘提示条             | 两帧共有 Search keyboard guidance                        | ✅   | 2026-11-04 | sidebar 底 / mono 11（↑↓ 选择 · Enter 打开 · Esc 关闭）；DS 核心面板内嵌 footer 略去（避免重复提示，实现取舍已记录）                     |
+
+**替换记录**：原 `ui/command/Command.vue`（旧 ⌘K 命令面板，仅 WorkspaceShell 消费）已删除，
+`WorkspaceShell` 改接 `global/search/SearchPalette`（命令 + 最近搜索 + 演示搜索函数）；
+`shell.command.*` i18n 键随之移除，新增 `global.search.*` 命名空间
+（`locales/{zh-CN,en}/global.yaml`）。搜索进度条的 ProgressIndicator（13:34246）
+与骨架行复用现有 ui/skeleton（DS/Feedback/ProgressIndicator 仍待入库）。
+
+### 本批新增 token（tokens.css）
+
+- 全局搜索面板宽 640px（`--size-search-palette-width`，Figma「01」Initial palette 构成宽）

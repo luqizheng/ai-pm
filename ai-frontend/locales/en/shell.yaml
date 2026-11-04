@@ -2,10 +2,6 @@ shell:
   skipToContent: Skip to main content
   search:
     placeholder: Search…
-  command:
-    label: Command palette
-    placeholder: Search…
-    emptyText: No matching results
   pagination:
     ariaLabel: Pagination
     prev: Previous page

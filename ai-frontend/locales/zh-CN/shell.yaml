@@ -2,10 +2,6 @@ shell:
   skipToContent: 跳到主内容
   search:
     placeholder: 搜索…
-  command:
-    label: 命令面板
-    placeholder: 搜索…
-    emptyText: 未找到匹配结果
   pagination:
     ariaLabel: 分页
     prev: 上一页
