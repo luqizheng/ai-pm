@@ -3,52 +3,36 @@ import { describe, expect, it } from "vitest";
 import { nextTick } from "vue";
 
 import TopBar from "./TopBar.vue";
+import { demoProject, demoProjects } from "./demo";
+import { useShellStore } from "@/stores/shell";
 import { mountShell } from "./test-utils";
 
 /**
  * 顶栏行为（Application Shell §2A）。
  */
 describe("TopBar", () => {
-  it("渲染产品名与当前组织上下文（组织仍为静态指示）", async () => {
+  it("渲染产品名与租户上下文指示（Global/TenantIndicator，只读）", async () => {
     const { wrapper } = mountShell(TopBar);
     await nextTick();
 
     expect(wrapper.find(".shell-topbar__product").text()).toBe(
       "AI R&D Workspace"
     );
-    const contexts = wrapper.findAll(".shell-topbar__context-name");
-    expect(contexts.map(el => el.text())).toEqual(["Acme Research"]);
+    const tenant = wrapper.find(".tenant-indicator");
+    expect(tenant.exists()).toBe(true);
+    expect(tenant.text()).toContain("Acme Research");
   });
 
-  it("项目位为 ProjectSwitcher 锚点（Selected 态，含当前项目名）", async () => {
+  it("项目芯片显示当前项目名（取自 store 的项目上下文）", async () => {
     const { wrapper } = mountShell(TopBar);
+    const shell = useShellStore();
+    shell.setProjects(demoProjects);
+    shell.setCurrentProject(demoProject.id);
     await nextTick();
 
-    const trigger = wrapper.find(".ps-trigger");
-    expect(trigger.exists()).toBe(true);
-    expect(trigger.text()).toContain("Atlas Platform");
-    expect(trigger.classes()).toContain("is-selected");
-  });
-
-  it("展开切换菜单选择项目后透传 projectSelect", async () => {
-    const { wrapper } = mountShell(TopBar);
-    await nextTick();
-
-    await wrapper.find(".ps-trigger").trigger("click");
-    await nextTick();
-    await new Promise(resolve => setTimeout(resolve, 10));
-    await nextTick();
-
-    const rows = Array.from(
-      document.querySelectorAll<HTMLElement>(".ps-menu__row")
+    expect(wrapper.find(".shell-project-switcher__name").text()).toBe(
+      "Atlas Platform"
     );
-    const target = rows.find(r => r.textContent!.includes("SDK Toolkit"));
-    expect(target).toBeTruthy();
-    target!.click();
-    await new Promise(resolve => setTimeout(resolve, 10));
-    await nextTick();
-
-    expect(wrapper.emitted("projectSelect")).toEqual([["project-sdk-toolkit"]]);
   });
 
   it("搜索入口为按钮并带无障碍名称", async () => {
@@ -67,17 +51,24 @@ describe("TopBar", () => {
     expect(wrapper.emitted("search")).toBeTruthy();
   });
 
-  it("通知按钮在有未读时渲染未读标记", async () => {
+  it("通知入口渲染铃铛按钮（Global/Notification 下拉触发器）", async () => {
     const { wrapper } = mountShell(TopBar);
     await nextTick();
 
-    expect(wrapper.find(".shell-topbar__unread").exists()).toBe(true);
+    const bell = wrapper.find(".notification-bell__button");
+    expect(bell.exists()).toBe(true);
+    expect(bell.attributes("aria-label")).toBe("通知");
   });
 
-  it("账户菜单渲染头像与菜单项", async () => {
+  it("账户入口渲染头像触发按钮，帮助入口渲染触发按钮", async () => {
     const { wrapper } = mountShell(TopBar);
     await nextTick();
 
-    expect(wrapper.find(".shell-topbar__initials").text()).toBe("AM");
+    expect(wrapper.find(".user-menu-button").attributes("aria-label")).toBe(
+      "账户菜单"
+    );
+    expect(wrapper.find(".help-menu__trigger").attributes("aria-label")).toBe(
+      "帮助"
+    );
   });
 });

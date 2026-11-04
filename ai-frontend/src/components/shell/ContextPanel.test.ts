@@ -4,6 +4,7 @@ import { nextTick } from "vue";
 
 import ContextPanel from "./ContextPanel.vue";
 import { useShellStore } from "@/stores/shell";
+import { demoProject, demoProjects } from "./demo";
 import { mountShell } from "./test-utils";
 
 /**
@@ -12,6 +13,9 @@ import { mountShell } from "./test-utils";
 describe("ContextPanel", () => {
   it("渲染当前项目与仓库元数据", async () => {
     const { wrapper } = mountShell(ContextPanel);
+    const shell = useShellStore();
+    shell.setProjects(demoProjects);
+    shell.setCurrentProject(demoProject.id);
     await nextTick();
 
     expect(wrapper.find(".shell-context__project-name").text()).toBe(

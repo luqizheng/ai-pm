@@ -1,0 +1,164 @@
+auth:
+  chrome:
+    product: AI R&D Workspace
+    section: Authentication
+    secure: SECURE WORKSPACE ACCESS
+    version: "AI R&D Workspace · v1.0"
+    help: Help & support
+    privacy: Privacy
+    terms: Terms
+    supportLinks: Support links
+  requirement:
+    met: Requirement met
+    unmet: Requirement not met
+  login:
+    title: Sign in to your workspace
+    subtitle: Enter your account details to continue.
+    accountLabel: Email or username
+    accountPlaceholder: "you{'@'}company.com"
+    passwordLabel: Password
+    passwordPlaceholder: Enter your password
+    rememberMe: Remember me
+    forgotPassword: Forgot password?
+    submit: Sign in
+    submitting: Signing in…
+    divider: or continue with
+    sso: Single sign-on (SSO)
+    ssoHint: Use the identity provider configured by your organization.
+    ssoUnavailable: Single sign-on is not enabled for this workspace yet.
+    guidance: Need access? Ask your workspace administrator for an invitation.
+    errorTitle: Unable to sign in
+    errorDetail: Your email, username or password is incorrect. Check your details and try again.
+    validation:
+      accountRequired: Enter your email or username.
+      accountInvalid: Enter a valid email address.
+      passwordRequired: Enter your password.
+  forgot:
+    title: Forgot your password?
+    subtitle: Enter your account email. We'll send you a link to reset your password.
+    emailLabel: Email address
+    emailPlaceholder: "you{'@'}company.com"
+    submit: Send reset link
+    submitting: Sending…
+    hint: If an account exists, you'll receive an email shortly. The link expires in 30 minutes.
+    backToSignIn: Back to sign in
+    useAnotherEmail: Use a different email address
+    guidance: Using single sign-on? Reset your password through your organization's identity provider.
+    successTitle: Check your email
+    successDetail: If an account exists, a reset link is on its way. Check spam or try again in 60 seconds.
+    validation:
+      emailRequired: Enter your email address.
+      emailInvalid: Enter a valid email address.
+  reset:
+    title: Set a new password
+    subtitle: Choose a strong password you haven't used before.
+    account: "Account · {account}"
+    newPasswordLabel: New password
+    confirmLabel: Confirm new password
+    matchHint: Passwords match.
+    requirementLength: At least 12 characters
+    requirementMix: Uppercase, lowercase and a number
+    requirementSymbol: At least one special character
+    submit: Reset password
+    submitting: Resetting…
+    hint: You'll be asked to sign in again. Other active sessions will be signed out.
+    backToSignIn: Back to sign in
+    successTitle: Password updated
+    successDetail: Sign in with your new password.
+    expiredTitle: This reset link has expired
+    expiredDetail: Request a new link to reset your password.
+    validation:
+      passwordRequired: Enter a new password.
+      mismatch: Passwords do not match.
+  invitation:
+    title: Join your workspace
+    subtitle: "{inviter} invited you to collaborate in {workspace}."
+    invitedEmailLabel: Invited email
+    roleLabel: Workspace role
+    role: Member
+    expiresLabel: Invitation expires
+    expiresAt: November 11, 2026
+    submit: Accept invitation
+    submitting: Joining…
+    note: "Continue as {account}. By joining, you agree to the workspace's terms and access policies."
+    notYourAccount: Not your account?
+    useAnotherAccount: Use another account
+    errorTitle: This invitation is no longer valid
+    errorDetail: Ask your workspace administrator to send a new invitation.
+  loading:
+    title: Signing you in
+    subtitle: Verifying your account and establishing a secure session.
+    stepCredentials: Credentials verified
+    stepSession: Establishing secure session
+    stepWorkspace: Opening workspace
+    hint: This usually takes a few seconds. Keep this window open while we finish.
+    cancel: Cancel and return to sign in
+  sessionExpired:
+    title: Your session has expired
+    subtitle: For your security, you've been signed out. Sign in again to return to your workspace.
+    infoTitle: Your saved work is still available.
+    infoDetail: You'll return to your previous location after signing in.
+    signInAgain: Sign in again
+    differentAccount: Sign in with a different account
+  unauthorized:
+    title: You don't have access
+    subtitle: You're signed in, but this account doesn't have permission to open this workspace.
+    signedInAs: Signed in as
+    requestedWorkspace: Requested workspace
+    description: Ask your workspace administrator for an invitation or the required access. If you have another account, switch accounts below.
+    switchAccount: Switch account
+    backToWorkspaces: Back to your workspaces
+    reference: "403 · ACCESS_DENIED"
+    contactSupport: Contact support
+  patterns:
+    eyebrow: "02 — AUTHENTICATION / SYSTEM REFERENCE"
+    title: Authentication patterns & states
+    description: Shared controls, feedback and keyboard conventions. Static design references, not interactive prototypes.
+    version: "HIGH-FIDELITY DS · V1.0"
+    fields:
+      title: Fields & validation
+      description: Persistent labels. Inline feedback stays close to the field it describes.
+      defaultLabel: "Email or username · Default"
+      focusLabel: "Email or username · Focus"
+      focusHint: 2px accent focus indicator
+      invalidLabel: "Email address · Invalid"
+      invalidHint: Enter a valid email address.
+      visibleLabel: "Password · Visible"
+      visibleHint: "Eye control: hide password. Value stays unchanged."
+      hiddenLabel: "Password · Hidden"
+      disabledLabel: "Email address · Disabled"
+      placeholder: "you{'@'}company.com"
+      visibleValue: Orbit-Research!26
+    actions:
+      title: Actions & interaction states
+      description: 36px controls, 8px corners. One primary action per form.
+      default: Default
+      hover: "Hover · raised emphasis"
+      focus: "Keyboard focus · visible outline"
+      active: "Active · pressed"
+      disabled: "Disabled · submission unavailable"
+      loading: "Loading · prevent duplicate submission"
+      note: Loading retains the action's width and label context. Disabled controls do not receive keyboard focus.
+      label: Sign in
+      loadingLabel: Signing in…
+    feedback:
+      title: Feedback & keyboard access
+      description: Keep messages actionable. Never rely on color alone.
+      errorTitle: Unable to sign in
+      errorDetail: Your email, username or password is incorrect. Check your details and try again.
+      infoTitle: Check your email
+      infoDetail: If an account exists, a reset link is on its way. Check spam or try again in 60 seconds.
+      expiredTitle: This reset link has expired
+      expiredDetail: Request a new link to reset your password.
+      success: Password updated. Sign in with your new password.
+      keyboardTitle: Keyboard conventions
+      keyTab: "Tab / Shift + Tab"
+      keyTabDesc: Move forward / back through controls
+      keyEnter: Enter
+      keyEnterDesc: Submit the focused form
+      keySpace: Space
+      keySpaceDesc: Toggle checkbox or activate control
+      note: 'Focus the first invalid field after submit; announce feedback. Visibility toggles have "Show / Hide password" labels.'
+    summary:
+      metrics: "4px base · 13px body · 22px title · 36px rows · 8px radius"
+      accent: "AI accent #8B83F6 · Dark default / Light reference"

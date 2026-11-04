@@ -15,7 +15,13 @@ overview:
 projects:
   pageTitle: 项目
   subtitle: 客户项目清单与基础信息。
-  emptyHint: 项目由后端创建后展示在这里。
+  emptyHint: 还没有项目，点击右上角「新建项目」开始。
+  new: 新建项目
+  newTitle: 新建项目
+  openRepositories: 代码仓库
+  openCommandCenter: 项目总控台
+  openBaseline: 项目基线
+  openCognition: 项目认知
 customer:
   pageTitle: 客户
   subtitle: 客户主数据；一个客户可以包含多个项目。

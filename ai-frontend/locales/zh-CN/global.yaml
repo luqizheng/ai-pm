@@ -1,0 +1,127 @@
+global:
+  search:
+    label: 全局搜索
+    placeholder: 搜索或跳转到…
+    groupCommands: 全局命令
+    groupCreate: 创建
+    recentLabel: 最近搜索
+    recentHint: 最近
+    countResults: "{count} 条结果 · 仅可访问对象"
+    searching: 正在搜索可用对象…
+    clearQuery: 清除查询
+    retry: 重试
+    errorTitle: 搜索不可用
+    errorDesc: "查询「{query}」已保留，可重试搜索。"
+    noResultsTitle: 无结果
+    noResultsDesc: 没有可访问对象匹配此查询。
+    noRecentTitle: 暂无最近搜索
+    noRecentDesc: 开始输入以搜索可访问的 R&D 对象。
+    hintSelect: "↑ ↓  选择"
+    hintOpen: "Enter  打开"
+    hintClose: "Esc  关闭"
+    commands:
+      openProject: 打开项目
+      navigateModule: 导航到模块
+      createProject: 创建项目
+      openPersonalWorkspace: 打开个人工作区
+      openInbox: 打开收件箱
+    category:
+      project: 项目
+      repository: 仓库
+      requirement: 需求
+      task: 任务
+      aiRun: AI 执行
+      document: 知识文档
+  notification:
+    label: 通知
+    markAllRead: 全部标记已读
+    viewAll: 查看全部通知
+    filterAll: 全部
+    filterUnread: "未读 · {count}"
+    unreadOnly: 仅看未读
+    categoryLabel: 分类
+    categoryAll: 全部分类
+    categoryHint: 按分类显示可访问事件。
+    countLine: "{scope} · {records} 条记录 · {unread} 条未读"
+    attention: 需人工处理
+    markRead: 标记已读
+    markUnread: 标记未读
+    open: "打开 {object}"
+    statusUnread: 未读
+    statusRead: 已读
+    emptyTitle: 已全部处理
+    emptyDesc: 当前身份没有可用通知。
+    errorTitle: 通知不可用
+    errorDesc: 事件流加载失败，可重试刷新。
+    retry: 重试
+    detailLabel: 通知详情
+    reviewRequest: 处理请求
+    approval:
+      pending:
+        title: 需要人工确认
+        desc: 待决 · 未做任何变更
+      approved:
+        title: 人工已批准
+        desc: "{actor} 已批准该请求 · 非 AI 批准"
+      rejected:
+        title: 人工已驳回
+        desc: "{actor} 已驳回该请求 · 未授权任何变更"
+    preferencesTitle: 通知偏好
+    preferencesDesc: 按事件类别的送达开关，不含通道与路由配置。
+    category:
+      approvalRequests: 人工审批请求
+      taskAssignment: 人工任务指派
+      aiUpdates: AI 执行动态
+      projectEvents: 项目事件
+      repositoryEvents: 仓库事件
+      systemAlerts: 系统警报
+  usermenu:
+    label: 账户菜单
+    myProfile: 我的资料
+    accountSettings: 账户设置
+    security: 安全
+    personalPreferences: 个人偏好
+    appearance: 外观
+    keyboardShortcuts: 键盘快捷键
+    helpDocumentation: 帮助与文档
+    signOut: 退出登录
+    back: 返回
+    tenantLabel: "组织 · {tenant}"
+    themeNote: "主题 = {theme} · 跟随语义主题绑定"
+    themeDark: 深色
+    themeLight: 浅色
+    signOutTitle: 退出当前账户？
+    signOutDesc: "当前登录身份为 {email}。再次使用需重新登录。"
+    signOutConfirm: 我要退出当前会话。
+    cancel: 取消
+    close: 关闭
+    done: 完成
+  tenant:
+    label: 当前组织
+    tooltipLabel: "组织 · {tenant} · {identity}"
+    loading: 正在加载当前身份…
+    unavailableDesc: 当前身份信息不可用。
+    emailLabel: 当前身份 · {email}
+    readOnlyBadge: 只读身份
+  help:
+    label: 帮助
+    documentation: 帮助与文档
+    shortcuts: 键盘快捷键
+    feedback: 反馈
+    shortcutsTitle: 键盘快捷键
+    shortcutsNote: 仅搜索快捷键已确认；其余分组暂无映射，候选键位不会启用。
+    groupGlobal: 全局导航
+    groupSearch: 搜索
+    groupProject: 项目导航
+    groupEditing: 编辑
+    groupAssistant: AI 助手
+    shortcutNavigate: 全局模块导航
+    shortcutOpenSearch: 打开全局搜索
+    shortcutSelect: 选择结果
+    shortcutOpenResult: 打开选中结果
+    shortcutCloseSearch: 关闭搜索
+    shortcutProjectSwitcher: 打开项目切换器
+    shortcutEditing: 编辑快捷键
+    shortcutAssistant: 打开助手
+    notAssigned: 未分配
+    proposed: 拟议 · 未分配

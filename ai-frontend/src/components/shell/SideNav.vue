@@ -11,6 +11,7 @@ import {
 import { useRoute } from "vue-router";
 
 import IconTooltip from "./IconTooltip.vue";
+import ProjectSwitcher from "./ProjectSwitcher.vue";
 import {
   isNavChildActive,
   isNavItemActive,
@@ -19,17 +20,17 @@ import {
   type NavItem
 } from "@/router/navigation";
 import { useShellStore } from "@/stores/shell";
-import { demoProject } from "./demo";
+import { resolveProjectSwitch } from "./demo";
 
 /**
- * 左导航（AI R&D Workspace Application Shell §2B）。
+ * 左导航（AI R&D Workspace Application Shell §2B + Figma「04 — Global Navigation」）。
  *
  * 三种导航上下文分列四组，不混成一张扁平菜单：
  *   personal / workspace —— 全局与个人上下文
- *   modules —— 当前项目下的业务模块（带项目标记行）
+ *   modules —— 当前项目下的业务模块（带项目上下文头）
  *   admin —— 管理（默认收起）
  *
- * 两态（Figma 7-3454 展开 232px / 7-3724 折叠 60px）：
+ * 两态（Figma 7-3454 展开 232px / 7:3724 折叠 60px）：
  *   - 展开：分组可折叠、条目带文案、Repository 带二级上下文子菜单、底部键盘提示
  *   - 折叠：纯图标、组间加分隔线、未读项带圆点，悬停出 Tooltip
  */
@@ -70,6 +71,17 @@ function hasUnreadDot(item: NavItem) {
 /** 折叠态下 Tooltip 的文案（图标按钮的可访问名称） */
 function itemLabel(item: NavItem) {
   return t(item.labelKey);
+}
+
+/**
+ * 切换项目（Figma「07 — Project Switching」）。
+ *
+ * 两阶段：store 进入 switching 态（不显示旧项目数据），
+ * 新上下文就绪后才落地新项目；目标目的地保持不变
+ * （同一目的地在新项目下解析，不可达时回落到项目概览）。
+ */
+async function onSelectProject(id: string) {
+  await shell.switchProject(id, () => resolveProjectSwitch());
 }
 </script>
 
@@ -140,19 +152,19 @@ function itemLabel(item: NavItem) {
             v-if="shell.sidebarCollapsed || !isGroupCollapsed(group)"
             class="shell-sidenav__items"
           >
-            <!-- 项目标记行（仅展开态 + 项目上下文分组） -->
+            <!-- 项目上下文头（Figma Project Context Header / Selected|Open|Empty）
+                 仅展开态 + 项目上下文分组；承担「切换项目」入口。 -->
             <div
-              v-if="
-                !shell.sidebarCollapsed &&
-                group.projectScoped &&
-                demoProject.name
-              "
+              v-if="!shell.sidebarCollapsed && group.projectScoped"
               class="shell-sidenav__project"
             >
-              <span class="shell-sidenav__project-dot" aria-hidden="true" />
-              <span class="shell-sidenav__project-name">{{
-                demoProject.name
-              }}</span>
+              <ProjectSwitcher
+                variant="header"
+                :projects="shell.projects"
+                :current-id="shell.currentProjectId"
+                :switching-to-id="shell.switchingProjectId"
+                @select="onSelectProject"
+              />
             </div>
 
             <template v-for="item in group.items" :key="item.path">

@@ -1,6 +1,7 @@
 initialization:
   projectCreation:
     pageTitle: 新建项目
+    backToList: 返回项目列表
     subtitle: 建立项目主体。仓库接入、认知分析与正式基线在后续步骤独立完成。
     stepName: 项目信息
     stepOwner: 责任人

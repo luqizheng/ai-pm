@@ -35,11 +35,17 @@ import {
   verifyRepositoryV2,
   type RepositoryV2Payload
 } from "@/api/initialization";
+import {
+  deleteSshKey,
+  generateSshKey,
+  getSshKey
+} from "@/api/repositories";
 import type {
   GitProviderAuthorization,
   RepositoryV2,
   RepositoryVerificationOutcome
 } from "@/api/types/initialization";
+import type { SshKey } from "@/api/types";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -52,6 +58,11 @@ const rows = ref<RepositoryV2[]>([]);
 const providers = ref<GitProviderAuthorization[]>([]);
 const loading = ref(false);
 const busyId = ref<string | null>(null);
+
+/** 项目级 SSH 密钥（P0 能力）：老仓库页迁入，与仓库管理同处一屏。 */
+const sshKey = ref<SshKey | null>(null);
+const keyLoading = ref(false);
+const keyBusy = ref(false);
 
 const ROLES = ["primary", "supporting", "infrastructure", "test"] as const;
 const PROVIDERS = ["github", "gitlab", "other"] as const;
@@ -134,6 +145,81 @@ async function loadProviders() {
     providers.value = await listGitProviders(projectId.value);
   } catch {
     providers.value = [];
+  }
+}
+
+/** 未生成密钥时后端 404 —— 统一按「无密钥」渲染，不弹错误。 */
+async function loadKey() {
+  keyLoading.value = true;
+  try {
+    sshKey.value = await getSshKey(projectId.value);
+  } catch {
+    sshKey.value = null;
+  } finally {
+    keyLoading.value = false;
+  }
+}
+
+async function copyKey() {
+  if (!sshKey.value) return;
+  try {
+    await navigator.clipboard.writeText(sshKey.value.public_key);
+    toast.toast({
+      variant: "success",
+      title: t("pm.repositories.copied")
+    });
+  } catch {
+    toast.toast({
+      variant: "danger",
+      title: t("pm.repositories.copyFailed")
+    });
+  }
+}
+
+async function generateKey() {
+  if (sshKey.value) {
+    const ok = await confirm.confirm({
+      title: t("pm.repositories.regenerate"),
+      description: t("pm.repositories.regenerateConfirm"),
+      confirmLabel: t("pm.repositories.regenerate"),
+      danger: true
+    });
+    if (!ok) return;
+  }
+  keyBusy.value = true;
+  try {
+    sshKey.value = await generateSshKey(projectId.value);
+    toast.toast({
+      variant: "success",
+      title: t("pm.repositories.keyGenerated")
+    });
+  } catch (error) {
+    failure(error);
+  } finally {
+    keyBusy.value = false;
+  }
+}
+
+async function removeKey() {
+  const ok = await confirm.confirm({
+    title: t("pm.repositories.deleteKey"),
+    description: t("pm.repositories.deleteKeyConfirm"),
+    confirmLabel: t("pm.repositories.deleteKey"),
+    danger: true
+  });
+  if (!ok) return;
+  keyBusy.value = true;
+  try {
+    await deleteSshKey(projectId.value);
+    sshKey.value = null;
+    toast.toast({
+      variant: "success",
+      title: t("pm.repositories.keyDeleted")
+    });
+  } catch (error) {
+    failure(error);
+  } finally {
+    keyBusy.value = false;
   }
 }
 
@@ -268,7 +354,7 @@ async function restore(row: RepositoryV2) {
 }
 
 onMounted(async () => {
-  await Promise.all([load(), loadProviders()]);
+  await Promise.all([load(), loadProviders(), loadKey()]);
 });
 </script>
 

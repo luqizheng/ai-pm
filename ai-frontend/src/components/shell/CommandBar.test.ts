@@ -62,10 +62,38 @@ describe("CommandBar", () => {
 
   it("收起态的占位符带当前上下文", async () => {
     const { wrapper } = mountShell(CommandBar);
+    const shell = useShellStore();
+    shell.setProjects([
+      { id: "p1", name: "Atlas Platform" },
+      { id: "p2", name: "Research Sandbox" }
+    ]);
+    shell.setCurrentProject("p1");
     await nextTick();
 
     expect(
       wrapper.find(".shell-commandbar__field").attributes("placeholder")
     ).toBe("向 Atlas Platform / Repository / main 提问…");
+  });
+
+  it("切换中不显示旧项目名（无 stale project data）", async () => {
+    const { wrapper } = mountShell(CommandBar);
+    const shell = useShellStore();
+    shell.setProjects([
+      { id: "p1", name: "Atlas Platform" },
+      { id: "p2", name: "Research Sandbox" }
+    ]);
+    shell.setCurrentProject("p1");
+    await nextTick();
+
+    // 挂起解析过程 → 停留在切换中
+    void shell.switchProject("p2", () => new Promise<void>(() => {}));
+    await nextTick();
+
+    const placeholder = wrapper
+      .find(".shell-commandbar__field")
+      .attributes("placeholder")!;
+    expect(placeholder).not.toContain("Atlas Platform");
+    expect(placeholder).not.toContain("Research Sandbox");
+    expect(placeholder).toContain("正在切换项目…");
   });
 });

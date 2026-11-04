@@ -57,7 +57,10 @@ function customerLabel(customer: Customer): string {
 
 const customerOptions = computed(() => [
   { value: ALL_CUSTOMERS, label: t("pm.customer.all") },
-  ...customers.value.map(item => ({ value: item.id, label: customerLabel(item) }))
+  ...customers.value.map(item => ({
+    value: item.id,
+    label: customerLabel(item)
+  }))
 ]);
 
 function statusText(value: unknown): string {
@@ -80,7 +83,8 @@ async function load() {
     const result = await listProjects({
       page: page.value,
       size: pageSize,
-      customer_id: customerId.value === ALL_CUSTOMERS ? undefined : customerId.value
+      customer_id:
+        customerId.value === ALL_CUSTOMERS ? undefined : customerId.value
     });
     rows.value = result.items ?? [];
     total.value = result.total ?? 0;
@@ -105,6 +109,19 @@ function openRepositories(row: Record<string, unknown>) {
   router.push(`/projects/${String(row.id)}/repositories`);
 }
 
+/** S01 初始化四页入口：仓库管理（v2）/ 基线确认 / AI-PM 认知。 */
+function openRepositoryManagement(row: Record<string, unknown>) {
+  router.push(`/projects/${String(row.id)}/repositories-v2`);
+}
+
+function openBaseline(row: Record<string, unknown>) {
+  router.push(`/projects/${String(row.id)}/baseline`);
+}
+
+function openCognition(row: Record<string, unknown>) {
+  router.push(`/projects/${String(row.id)}/cognition`);
+}
+
 onMounted(() => {
   loadCustomers();
   load();
@@ -116,7 +133,14 @@ onMounted(() => {
     <PageHeader
       :title="t('pm.projects.pageTitle')"
       :subtitle="t('pm.projects.subtitle')"
-    />
+    >
+      <template #actions>
+        <!-- S01-02：项目创建入口。项目不依赖仓库即可建立。 -->
+        <Button size="sm" @click="router.push('/projects/new')">
+          {{ t("pm.projects.new") }}
+        </Button>
+      </template>
+    </PageHeader>
 
     <div class="filters">
       <Button variant="secondary" @click="router.push('/customers')">
@@ -169,9 +193,24 @@ onMounted(() => {
         formatDateTime(row.updated_at)
       }}</template>
       <template #actions="{ row }">
-        <Button size="sm" variant="ghost" @click="openRepositories(row)">
-          {{ t("pm.repositories.pageTitle") }}
-        </Button>
+        <div class="row-actions">
+          <Button
+            size="sm"
+            variant="ghost"
+            @click="openRepositoryManagement(row)"
+          >
+            {{ t("pm.projects.openRepositories") }}
+          </Button>
+          <Button size="sm" variant="ghost" @click="openBaseline(row)">
+            {{ t("pm.projects.openBaseline") }}
+          </Button>
+          <Button size="sm" variant="ghost" @click="openCognition(row)">
+            {{ t("pm.projects.openCognition") }}
+          </Button>
+          <Button size="sm" variant="ghost" @click="openRepositories(row)">
+            {{ t("pm.repositories.pageTitle") }}
+          </Button>
+        </div>
       </template>
     </DataTable>
   </section>
@@ -191,6 +230,12 @@ onMounted(() => {
   gap: var(--space-3);
   max-width: 420px;
   margin-left: auto;
+}
+
+.row-actions {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
 }
 
 .cell-stack {

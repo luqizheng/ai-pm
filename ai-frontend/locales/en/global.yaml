@@ -1,0 +1,127 @@
+global:
+  search:
+    label: Global search
+    placeholder: Search or jump to…
+    groupCommands: GLOBAL COMMANDS
+    groupCreate: CREATE
+    recentLabel: RECENT SEARCHES
+    recentHint: Recent
+    countResults: "{count} results · Available objects only"
+    searching: Searching available objects…
+    clearQuery: Clear query
+    retry: Retry
+    errorTitle: Search is unavailable
+    errorDesc: "Your query “{query}” is preserved. Retry the search."
+    noResultsTitle: No results
+    noResultsDesc: No available objects match this query.
+    noRecentTitle: No recent searches
+    noRecentDesc: Start typing to search available R&D objects.
+    hintSelect: "↑ ↓  Select"
+    hintOpen: "Enter  Open"
+    hintClose: "Esc  Close"
+    commands:
+      openProject: Open project
+      navigateModule: Navigate module
+      createProject: Create project
+      openPersonalWorkspace: Open Personal Workspace
+      openInbox: Open Inbox
+    category:
+      project: Projects
+      repository: Repositories
+      requirement: Requirements
+      task: Tasks
+      aiRun: AI Execution Runs
+      document: Knowledge Documents
+  notification:
+    label: Notifications
+    markAllRead: Mark all read
+    viewAll: View all notifications
+    filterAll: All
+    filterUnread: "Unread · {count}"
+    unreadOnly: Unread only
+    categoryLabel: Category
+    categoryAll: All categories
+    categoryHint: Show available events by category.
+    countLine: "{scope} · {records} records · {unread} unread"
+    attention: Human attention
+    markRead: Mark read
+    markUnread: Mark unread
+    open: "Open {object}"
+    statusUnread: Unread
+    statusRead: Read
+    emptyTitle: "You’re all caught up"
+    emptyDesc: No notifications available for your current identity.
+    errorTitle: Notifications unavailable
+    errorDesc: The feed could not be loaded. Retry to refresh.
+    retry: Retry
+    detailLabel: Notification Detail
+    reviewRequest: Review request
+    approval:
+      pending:
+        title: Human confirmation required
+        desc: "Pending · No changes made"
+      approved:
+        title: Human approved
+        desc: "{actor} approved the request · Not AI approval"
+      rejected:
+        title: Human rejected
+        desc: "{actor} rejected the request · No change authorized"
+    preferencesTitle: Notification Preferences
+    preferencesDesc: Delivery toggles by event category. No channel or routing configuration.
+    category:
+      approvalRequests: Human Approval Requests
+      taskAssignment: Human Task Assignment
+      aiUpdates: AI Execution Updates
+      projectEvents: Project Events
+      repositoryEvents: Repository Events
+      systemAlerts: System Alerts
+  usermenu:
+    label: Account menu
+    myProfile: My Profile
+    accountSettings: Account Settings
+    security: Security
+    personalPreferences: Personal Preferences
+    appearance: Appearance
+    keyboardShortcuts: Keyboard Shortcuts
+    helpDocumentation: Help & Documentation
+    signOut: Sign Out
+    back: Back
+    tenantLabel: "Tenant · {tenant}"
+    themeNote: "Theme={theme} · follows semantic theme bindings"
+    themeDark: Dark
+    themeLight: Light
+    signOutTitle: Sign out of your account?
+    signOutDesc: "You are signed in as {email}. You will need to sign in again to continue."
+    signOutConfirm: I want to sign out of this session.
+    cancel: Cancel
+    close: Close
+    done: Done
+  tenant:
+    label: Current organization
+    tooltipLabel: "Tenant · {tenant} · {identity}"
+    loading: Loading current identity…
+    unavailableDesc: Current identity could not be displayed.
+    emailLabel: Current identity · {email}
+    readOnlyBadge: Read-only identity
+  help:
+    label: Help
+    documentation: Help & Documentation
+    shortcuts: Keyboard Shortcuts
+    feedback: Feedback
+    shortcutsTitle: Keyboard Shortcuts
+    shortcutsNote: Search shortcuts are confirmed. Other groups have no assigned mappings; proposed keys stay inactive.
+    groupGlobal: Global Navigation
+    groupSearch: Search
+    groupProject: Project Navigation
+    groupEditing: Editing
+    groupAssistant: AI Assistant
+    shortcutNavigate: Navigate global modules
+    shortcutOpenSearch: Open Global Search
+    shortcutSelect: Select a result
+    shortcutOpenResult: Open selected result
+    shortcutCloseSearch: Close search
+    shortcutProjectSwitcher: Open Project Switcher
+    shortcutEditing: Editing shortcuts
+    shortcutAssistant: Open Assistant
+    notAssigned: Not assigned
+    proposed: Proposed / not assigned

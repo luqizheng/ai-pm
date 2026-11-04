@@ -56,6 +56,10 @@
   /* accent 着色面（Figma Badge Accent 变体底 #242238，2026-11-04） */
   --ws-color-accent-surface: #242238;
 
+  /* 就绪状态色（Figma「04 — Global Navigation」Navigation Badge / Type=Status
+     的绿点 #8DC5AF；用于「开发环境已就绪」这类环境状态指示） */
+  --ws-color-status-ready: #8dc5af;
+
   /* 形状 / 密度 —— V1.0 §1.2 */
   --ws-radius-card: 8px;
   --ws-radius-dialog: 12px;
@@ -187,8 +191,23 @@
   --size-control-compact: 32px;
   /* 壳级搜索入口宽 360px（Figma 顶栏 Global search and command launcher） */
   --size-search-width: 360px;
+  /* 全局搜索面板宽 640px（Figma「01 — Global Search」Initial palette 构成宽） */
+  --size-search-palette-width: 640px;
+  /* 通知下拉宽 380px + 中心分类过滤宽 368px
+    （Figma「03/04 — Notification」样本容器 520/744 内的面板口径；380 为锚定实现值，待设计侧确认） */
+  --size-notification-dropdown-width: 380px;
+  --size-notification-filter-width: 368px;
+  /* 账户菜单 / 资料卡 / 退出确认面板宽 448（Figma Global/UserMenu 族 designedWidth） */
+  --size-user-menu-width: 448px;
+  /* 帮助菜单 360 / 快捷键对话框 736 / 租户身份卡 485（Figma 各组件规格宽） */
+  --size-help-menu-width: 360px;
+  --size-shortcuts-dialog-width: 736px;
+  --size-tenant-card-width: 485px;
+  /* 项目切换菜单宽 330px（Figma「07 — Project Switching」旧板，存量 shell/ProjectSwitcher 消费） */
+  --size-project-menu-width: 330px;
   /* 项目切换菜单面板宽 480px（Figma「06 — Project Context Switcher」
-     33:82961 菜单列宽，2026-11-04） */
+     33:82961 菜单列宽，2026-11-04；global/project-switcher 消费；
+     顶栏切换后旧 --size-project-menu-width 待清理） */
   --size-project-menu: 480px;
   --size-icon-button: 36px;
   --size-icon-xs: 16px;
@@ -364,6 +383,20 @@
   --shadow-lg: none;
   --shadow-accent: none;
   --shadow-accent-lg: none;
+
+  /* ------------------------------------------------------------------
+   * 认证域（Figma「02 — Authentication」九帧，2026-11-04）
+   * 品牌标识与认证页几何尺寸：双主题恒定（浅色主题不覆盖）。
+   * ---------------------------------------------------------------- */
+
+  /* 品牌标识章 —— 深色章底 + accent 字形，浅色主题下仍保持品牌一致性 */
+  --ws-brand-mark-surface: #242238;
+  --ws-brand-mark-foreground: #8b83f6;
+
+  /* 认证页几何 —— 页头 64 / 面板宽 400 / 用途图标 32 */
+  --ws-auth-header-height: 64px;
+  --ws-auth-panel-width: 400px;
+  --ws-auth-indicator-size: 32px;
 }
 
 [data-theme="light"] {
@@ -383,6 +416,10 @@
      深色值 #242238 在浅色主题下过暗，改为带紫调的浅面；
      取值与 FIGMA-SYNC 台账登记的浅色候选 #EEEBFF 一致。 */
   --ws-color-accent-surface: #eebeff;
+
+  /* 就绪状态色（浅色）—— 深色 #8DC5AF 在浅面下仅 1.96:1，
+     改用同色系更深一档，保证 UI 用途 ≥3:1 */
+  --ws-color-status-ready: #3f8f70;
 
   /* 次文字 #586274 = Figma 浅色次文字（2026-11-04 组件库稿） */
   --ws-text-primary: #202532;

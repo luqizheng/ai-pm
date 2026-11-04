@@ -85,27 +85,27 @@ describe("WorkspaceShell", () => {
       "is-expanded"
     );
 
-    // 命令面板：⌘K 打开后再按关闭
+    // 全局搜索面板：⌘K 打开后再按关闭
     window.dispatchEvent(
       new KeyboardEvent("keydown", { key: "k", metaKey: true })
     );
     await nextTick();
-    expect(wrapper.find(".ui-command").exists()).toBe(true);
+    expect(wrapper.find(".global-search").exists()).toBe(true);
 
     window.dispatchEvent(
       new KeyboardEvent("keydown", { key: "k", metaKey: true })
     );
     await nextTick();
-    expect(wrapper.find(".ui-command").exists()).toBe(false);
+    expect(wrapper.find(".global-search").exists()).toBe(false);
   });
 
-  it("点击顶栏搜索入口打开命令面板", async () => {
+  it("点击顶栏搜索入口打开全局搜索面板", async () => {
     const { wrapper } = mountShell(WorkspaceShell);
     await nextTick();
 
     await wrapper.find(".shell-topbar__search").trigger("click");
     await nextTick();
 
-    expect(wrapper.find(".ui-command").exists()).toBe(true);
+    expect(wrapper.find(".global-search").exists()).toBe(true);
   });
 });

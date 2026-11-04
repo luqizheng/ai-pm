@@ -278,7 +278,13 @@ onMounted(async () => {
     <PageHeader
       :title="t('s01.initialization.projectCreation.pageTitle')"
       :subtitle="t('s01.initialization.projectCreation.subtitle')"
-    />
+    >
+      <template #actions>
+        <Button size="sm" variant="secondary" @click="router.push('/projects')">
+          {{ t("s01.initialization.projectCreation.backToList") }}
+        </Button>
+      </template>
+    </PageHeader>
 
     <ol class="steps">
       <li

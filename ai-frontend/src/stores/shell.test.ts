@@ -66,4 +66,70 @@ describe("shell store", () => {
     shell.setCommandbarExpanded(false);
     expect(shell.commandbarExpanded).toBe(false);
   });
+
+  it("项目上下文：设置清单与当前项目", () => {
+    const shell = useShellStore();
+
+    shell.setProjects([
+      { id: "p1", name: "Atlas Platform" },
+      { id: "p2", name: "Research Sandbox" }
+    ]);
+    shell.setCurrentProject("p1");
+
+    expect(shell.projects.length).toBe(2);
+    expect(shell.currentProjectId).toBe("p1");
+    expect(shell.currentProject?.name).toBe("Atlas Platform");
+  });
+
+  it("未选项目时 currentProject 为 null（Empty 态）", () => {
+    const shell = useShellStore();
+
+    shell.setProjects([{ id: "p1", name: "Atlas Platform" }]);
+    shell.setCurrentProject(null);
+
+    expect(shell.currentProject).toBeNull();
+    expect(shell.switching).toBe(false);
+  });
+
+  it("切换项目：先进入 switching 态，完成后落地新项目", async () => {
+    const shell = useShellStore();
+    shell.setProjects([
+      { id: "p1", name: "Atlas Platform" },
+      { id: "p2", name: "Research Sandbox" }
+    ]);
+    shell.setCurrentProject("p1");
+
+    let release: () => void = () => {};
+    const pending = shell.switchProject(
+      "p2",
+      () =>
+        new Promise<void>(resolve => {
+          release = resolve;
+        })
+    );
+
+    // 切换中：标记目标项目，且**不暴露旧项目数据**
+    expect(shell.switching).toBe(true);
+    expect(shell.switchingProjectId).toBe("p2");
+    expect(shell.switchingProject?.name).toBe("Research Sandbox");
+    expect(shell.currentProject).toBeNull();
+
+    release();
+    await pending;
+
+    expect(shell.switching).toBe(false);
+    expect(shell.currentProjectId).toBe("p2");
+    expect(shell.currentProject?.name).toBe("Research Sandbox");
+  });
+
+  it("切换到当前项目不进入切换态", async () => {
+    const shell = useShellStore();
+    shell.setProjects([{ id: "p1", name: "Atlas Platform" }]);
+    shell.setCurrentProject("p1");
+
+    await shell.switchProject("p1");
+
+    expect(shell.switching).toBe(false);
+    expect(shell.currentProjectId).toBe("p1");
+  });
 });

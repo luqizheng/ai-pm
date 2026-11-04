@@ -59,10 +59,22 @@
 | 组件            | Figma 板（node）                                | 状态 | 日期       | 备注                                                                                                                                           |
 | --------------- | ----------------------------------------------- | ---- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | ProjectSwitcher | 06 — Project Context Switcher（33:82961）       | ✅   | 2026-11-04 | `src/components/global/project-switcher/`：Trigger 五态（Default sidebar 底 / Hover raised / Focus 2px accent / Selected accent 着色面 / Disabled 0.4）+ Menu 五反馈态（Open Dark·Light / Loading 骨架 / Empty / Error danger Alert+Retry / 搜索 NoResults+Clear query）；行 h36 1px 边框为本板实例覆盖（DS/ListItem 母版无边框）；面板宽 token `--size-project-menu` 480px；复用 SearchInput / ListItem / EmptyState / Alert / Button / Skeleton；展示页 `/design/navigation/switcher`。行为注：Loading/Error 绝不静默切换上下文；无权限 Create 禁用不泄露隐藏项目 |
+| Button（认证页扩展）            | 02 — Authentication / Patterns and states（5:2810）       | ✅   | 2026-11-04 | secondary 增 `surface="elevated"` 表面档（面板内 SSO/返回按钮 = elevated 底 #252A35，hover/active 叠主题薄纱）；主按钮六态与 5:2810 状态板一致（主线认证域合入行）                                      |
 
 ## 待同步（按族）
 
 - （全部 41 组已同步；上述 6 组重同步的 Loading/Empty/Collapsed 等扩展变体留待业务需要时按 Figma node id 补 API）
+
+## 主线并行实现（feat/s01-frontend-design，2026-11-04 合并时点）
+
+部分 DS 原语已随 Global 复合组件族在 `src/components/global/` 落了**并行实现**（应用接线在先、ui/ 同步在后），合并后并存待归位收敛：
+
+- SearchInput → `global/search/SearchInput.vue`（ui/search-input 为 DS 口径）
+- UserMenuItem（DS/MenuItem）→ `global/usermenu/UserMenuItem.vue`
+- NotificationItem → `global/notification/NotificationItem.vue`
+- HumanApprovalIndicator → `global/notification/HumanApprovalIndicator.vue`
+- CommandPalette → `global/search/SearchPalette.vue`（ui/command 为 DS 口径；主线应用层曾删 ui/command，本合并按设计分支恢复）
+- 旧壳切换器 `shell/ProjectSwitcher.vue`（Figma 07 板 chip/header 口径，`--size-project-menu-width` 330px）与新版 `global/project-switcher`（06 板，480px）并存；顶栏切换到新版后旧件待清理
 
 ## 已落 token 的 Figma 修正值（tokens.css）
 

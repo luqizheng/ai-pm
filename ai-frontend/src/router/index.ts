@@ -7,7 +7,9 @@ import {
 } from "vue-router";
 
 import { navGroups, type NavItem } from "./navigation";
+import { authRoutes } from "./auth";
 import { designRoutes } from "./design";
+import NotificationsView from "@/views/notifications/NotificationsView.vue";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 
 /**
@@ -17,6 +19,8 @@ import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
  *   - 每个导航项一条路由，path 即导航项 path；
  *   - 带子菜单的导航项，其自身 path 重定向到第一个子项；
  *   - 每个子菜单项一条独立路由（平铺，不做嵌套，保证激活判定简单）；
+ *   - 认证路由（src/router/auth.ts）单独成组，meta.layout = "auth"，
+ *     由 App.vue 切换到认证页外壳（无导航）；
  *   - 兜底路由渲染 404 占位。
  *
  * 演示期所有业务页面都指向占位视图；业务模块落地时按需替换组件。
@@ -60,6 +64,17 @@ export function buildRoutes(): RouteRecordRaw[] {
       routes.push(...navItemRoutes(item));
     }
   }
+
+  // 认证路由在兜底之前注册，避免被 404 捕获
+  routes.push(...authRoutes);
+
+  // 通知中心（Global/Notification 族完整事件面；不在左导航树内，
+  // 入口 = 顶栏通知下拉的「查看全部通知」）
+  routes.push({
+    path: "/notifications",
+    component: NotificationsView,
+    meta: { title: "global.notification.label" }
+  });
 
   // 设计系统目录页（无导航外壳的全屏页，meta.layout = "design"）
   routes.push(...designRoutes);
