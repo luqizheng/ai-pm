@@ -162,6 +162,12 @@ shell:
       projectMarker: 当前项目
       shortcuts: 键盘快捷键
       shortcutsHint: 按 ? 查看全部快捷键
+    project:
+      empty: 选择项目
+      switching: 正在切换项目…
+      opening: 正在打开 {name}…
+      searchPlaceholder: 查找项目…
+      menuLabel: 项目切换
     context:
       title: 上下文
       close: 关闭上下文栏

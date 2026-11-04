@@ -13,7 +13,26 @@ export const demoOrganization = {
   name: "Acme Research"
 };
 
-/** 当前项目（顶栏项目上下文 + 左导航项目标记 + 右上下文栏） */
+/**
+ * 可选项目清单（项目切换器的条目）。
+ *
+ * Figma「04 — Global Navigation」Project Context Header / State=Open 的示例为
+ * 「Atlas Platform」与「Research Sandbox」两个项目。
+ */
+export const demoProjects = [
+  {
+    id: "project-atlas-platform",
+    name: "Atlas Platform",
+    description: "Shared code and documentation for the platform team."
+  },
+  {
+    id: "project-research-sandbox",
+    name: "Research Sandbox",
+    description: "Exploratory work for the research group."
+  }
+];
+
+/** 当前项目（顶栏项目上下文 + 左导航项目头 + 右上下文栏） */
 export const demoProject = {
   id: "project-atlas-platform",
   name: "Atlas Platform",
@@ -52,3 +71,16 @@ export const demoCommandScope = `${demoProject.name} / Repository / ${demoReposi
 
 /** AI 指令栏建议指令 */
 export const demoSuggestions = ["explain", "setup"] as const;
+
+/**
+ * 模拟「解析新项目上下文」过程。
+ *
+ * 真实实现里这里是拉取项目详情、成员权限与可用仓库；
+ * 骨架阶段用一段短延时把 Figma「07」的切换中状态跑出来，
+ * 接入真实数据源时整体替换为实际请求。
+ */
+export function resolveProjectSwitch(): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, 600);
+  });
+}

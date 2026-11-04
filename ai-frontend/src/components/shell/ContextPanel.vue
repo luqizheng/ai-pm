@@ -13,12 +13,7 @@ import {
 import Badge from "@/components/ui/badge/Badge.vue";
 import IconTooltip from "./IconTooltip.vue";
 import { useShellStore } from "@/stores/shell";
-import {
-  demoProject,
-  demoRelatedLinks,
-  demoRepository,
-  demoCommandScope
-} from "./demo";
+import { demoProject, demoRelatedLinks, demoRepository } from "./demo";
 
 /**
  * 右上下文栏（Application Shell §2D，320px）。
@@ -27,6 +22,9 @@ import {
  * 当前项目 → 仓库详情 → 相关文档 → 助手可用上下文。
  *
  * 底部「已固定到本页」提示对应 pin 动作（当前为静态态，不做真实固定）。
+ *
+ * 当前项目取自 store：切换项目时随之更新；切换过程中不显示旧项目数据
+ * （Figma「07」No stale project data is displayed）。
  */
 
 const { t } = useI18n();
@@ -38,6 +36,19 @@ const metadata = computed(() => [
   { key: "yourRole", value: demoRepository.role },
   { key: "owner", value: demoRepository.owner }
 ]);
+
+/** 当前项目（切换中为 null → 显示切换态而非旧项目） */
+const currentProject = computed(() => shell.currentProject);
+
+/**
+ * 助手可用上下文的作用域串。
+ * 切换中不回落旧项目名（Figma「07」No stale project data is displayed）。
+ */
+const commandScope = computed(() => {
+  const project = currentProject.value;
+  const name = project ? project.name : t("shell.app.project.switching");
+  return `${name} / Repository / ${demoRepository.defaultBranch}`;
+});
 </script>
 
 <template>
@@ -78,14 +89,16 @@ const metadata = computed(() => [
           </span>
           <span class="shell-context__identity-text">
             <span class="shell-context__project-name">{{
-              demoProject.name
+              currentProject?.name ?? t("shell.app.project.switching")
             }}</span>
             <span class="shell-context__project-org">{{
               demoProject.organization
             }}</span>
           </span>
         </div>
-        <p class="shell-context__description">{{ demoProject.description }}</p>
+        <p class="shell-context__description">
+          {{ currentProject?.description ?? t("shell.app.project.switching") }}
+        </p>
       </section>
 
       <hr class="shell-context__divider" />
@@ -136,7 +149,7 @@ const metadata = computed(() => [
           <span>{{ t("shell.app.context.aiNotice") }}</span>
         </div>
         <p class="shell-context__ai-text">
-          {{ demoCommandScope }} · {{ t("shell.app.context.noAttachment") }}
+          {{ commandScope }} · {{ t("shell.app.context.noAttachment") }}
         </p>
         <Badge variant="neutral">
           {{ t("shell.app.context.readOnly") }}

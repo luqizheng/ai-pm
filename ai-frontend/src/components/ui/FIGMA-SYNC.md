@@ -69,3 +69,18 @@
 - 搜索入口宽 360px（`--size-search-width`）
 - accent 着色面浅色 `#EEEBFF`（激活导航项底色；深色 `#242238` 与 Badge Accent 底同值）
 - 全局 `box-sizing: border-box` + body margin 归零（否则 100dvh 的壳溢出视口 16px）
+
+### 项目切换器（Figma 页 04 — Global Navigation / 07 — Project Switching）
+
+**权威来源**：Project Context Header 三态（7:16866 Selected / 7:16874 Open / 7:16892 Empty）+
+Project switcher menu（7:16466）+ 切换序列（7:16226，Before → Switching → After）。
+
+| 组件                         | Figma 节点                            | 状态 | 日期       | 备注                                                                                                                          |
+| ---------------------------- | ------------------------------------- | ---- | ---------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `shell/ProjectSwitcher.vue`  | 7:16866 / 7:16874 / 7:16892 + 7:16466 | ✅   | 2026-11-04 | 三态（Selected/Open/Empty）+ 双变体（header 40px 导航头 / chip 32px 顶栏芯片）+ 菜单（搜索行 / 当前项 Active / 切换中状态行） |
+| `stores/shell.ts` 项目上下文 | 7:16226 切换序列                      | ✅   | 2026-11-04 | 两阶段切换：switching 期间不暴露旧项目数据（No stale project data），消费方=左导航/顶栏/右栏/指令栏                           |
+
+### 壳相关的 token 修正（tokens.css）—— 本批新增
+
+- 项目切换菜单宽 330px（`--size-project-menu-width`，Figma Project switcher menu）
+- 就绪状态色 `--ws-color-status-ready`（深色 #8DC5AF = Figma Navigation Badge Type=Status 绿点；浅色 #3F8F70 保 UI ≥3:1）

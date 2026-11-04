@@ -162,6 +162,12 @@ shell:
       projectMarker: Current project
       shortcuts: Keyboard shortcuts
       shortcutsHint: Press ? for all shortcuts
+    project:
+      empty: Select a project
+      switching: Switching project…
+      opening: Opening {name}…
+      searchPlaceholder: Find a project…
+      menuLabel: Project switcher
     context:
       title: Context
       close: Close context panel

@@ -3,24 +3,36 @@ import { describe, expect, it } from "vitest";
 import { nextTick } from "vue";
 
 import TopBar from "./TopBar.vue";
+import { demoProject, demoProjects } from "./demo";
+import { useShellStore } from "@/stores/shell";
 import { mountShell } from "./test-utils";
 
 /**
  * 顶栏行为（Application Shell §2A）。
  */
 describe("TopBar", () => {
-  it("渲染产品名与当前组织/项目上下文", async () => {
+  it("渲染产品名与当前组织上下文", async () => {
     const { wrapper } = mountShell(TopBar);
     await nextTick();
 
     expect(wrapper.find(".shell-topbar__product").text()).toBe(
       "AI R&D Workspace"
     );
-    const contexts = wrapper.findAll(".shell-topbar__context-name");
-    expect(contexts.map(el => el.text())).toEqual([
-      "Acme Research",
+    expect(wrapper.find(".shell-topbar__context-name").text()).toBe(
+      "Acme Research"
+    );
+  });
+
+  it("项目芯片显示当前项目名（取自 store 的项目上下文）", async () => {
+    const { wrapper } = mountShell(TopBar);
+    const shell = useShellStore();
+    shell.setProjects(demoProjects);
+    shell.setCurrentProject(demoProject.id);
+    await nextTick();
+
+    expect(wrapper.find(".shell-project-switcher__name").text()).toBe(
       "Atlas Platform"
-    ]);
+    );
   });
 
   it("搜索入口为按钮并带无障碍名称", async () => {

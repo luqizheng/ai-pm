@@ -10,6 +10,7 @@ import CommandBar from "./CommandBar.vue";
 import ContextPanel from "./ContextPanel.vue";
 import SideNav from "./SideNav.vue";
 import TopBar from "./TopBar.vue";
+import { demoProject, demoProjects } from "./demo";
 
 /**
  * 应用壳根（AI R&D Workspace Application Shell）。
@@ -28,6 +29,15 @@ const shell = useShellStore();
 
 /** 命令面板开关 */
 const commandOpen = ref(false);
+
+/**
+ * 初始化项目上下文（骨架阶段注入演示数据）。
+ * 真实实现改为从项目列表接口装载 + 恢复上次选择。
+ */
+shell.setProjects(demoProjects);
+if (!shell.currentProjectId) {
+  shell.setCurrentProject(demoProject.id);
+}
 
 /** 命令面板条目 = 导航树扁平化 */
 const commandItems = computed(() =>

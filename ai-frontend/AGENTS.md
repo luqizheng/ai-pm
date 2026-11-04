@@ -8,9 +8,10 @@
 
 > **当前状态（2026-11-04）**：UI 冻结已解除；**应用壳骨架已落地**——
 > 规范源 = Figma 组件库 `hNlGqLEMQpOVCZ0o5u3DkT`（node 13:37296，7 族 41 组）
-> + Figma「03 — Application Shell」两帧（7:3454 展开侧栏 / 7:3724 折叠侧栏）。
-> 组件同步进度见 `src/components/ui/FIGMA-SYNC.md`；已同步组件带 `@figma-sync` 头标记。
-> 业务页面（登录页等）仍待组件同步完成后实施。
+>
+> - Figma「03 — Application Shell」两帧（7:3454 展开侧栏 / 7:3724 折叠侧栏）。
+>   组件同步进度见 `src/components/ui/FIGMA-SYNC.md`；已同步组件带 `@figma-sync` 头标记。
+>   业务页面（登录页等）仍待组件同步完成后实施。
 
 - [x] 入口：`index.html` → `src/entry.ts`（pinia + i18n + router）
 - [x] 视觉真源：`src/styles/tokens.css`（设计系统 V1.0 token，`--ws-*` 变量）
@@ -79,16 +80,16 @@ Visual direction:
 
 Core colors:
 
-| Token | Value |
-|---|---|
-| Canvas | `#111318` |
-| Navigation | `#171A21` |
-| Surface | `#1D212A` |
+| Token            | Value     |
+| ---------------- | --------- |
+| Canvas           | `#111318` |
+| Navigation       | `#171A21` |
+| Surface          | `#1D212A` |
 | Elevated Surface | `#252A35` |
-| Border | `#353B48` |
-| Primary Text | `#E9ECF3` |
-| Secondary Text | `#99A2B2` |
-| AI Accent | `#8B83F6` |
+| Border           | `#353B48` |
+| Primary Text     | `#E9ECF3` |
+| Secondary Text   | `#99A2B2` |
+| AI Accent        | `#8B83F6` |
 
 Layout specifications:
 
@@ -145,20 +146,20 @@ The objective is to create the visual and interaction foundation that every subs
 
 ## 二、工程现状（2026-11-04 重组后）
 
-| 路径 | 说明 |
-|---|---|
-| `src/entry.ts` + `src/App.vue` | 入口：装配 pinia + i18n + router，`App.vue` 只挂应用壳 |
-| `src/styles/tokens.css` | **视觉数值唯一真源**：`--ws-*` token + 组件消费的尺寸/字阶/动效原语 + PRISM 同名变量别名（全部落到 `--ws-*`） |
-| `src/styles/index.css` | 三栏布局基类（workspace-shell 等，设计系统 V1.0 §二）+ 全局 border-box / body margin 归零 |
-| `src/components/ui/` | 组件基座（reka-ui + scoped CSS + token）；**同步状态见 `FIGMA-SYNC.md`** |
-| `src/components/shell/` | **应用壳**（Figma「03 — Application Shell」两帧）：`WorkspaceShell` 壳根 / `TopBar` 顶栏 / `SideNav` 左导航（展开 232px、折叠 60px）/ `ContextPanel` 右上下文栏 / `CommandBar` AI 指令栏 / `PageHeader` 页面标题区 / `IconTooltip` 壳内 asChild 提示浮层 |
-| `src/router/navigation.ts` | **导航树 = 菜单与路由的单源**（`src/router/index.ts` 的路由表由它派生，杜绝漂移） |
-| `src/stores/shell.ts` | 壳状态：左导航折叠（持久化 `aipm.sidebar-collapsed`）/ 右栏开关 / 指令栏展开态 |
-| `src/views/placeholder/` | 占位视图（业务模块落地时按路由替换） |
-| `src/api/` | pm 业务 API 封装（保留复用；`mock/fixtures.ts` 是未实现写端点的活契约） |
-| `src/api/base/` | **基础接口层**（自旧 `shell/api/` 打捞：`client.ts` http 实例 + iam / prue / audit / config / file / notification / users 适配 + `token-storage.ts`；登录/菜单基础重建时直接复用） |
-| `src/lib/` | 通用工具（cn 等）+ `i18n.ts`（vue-i18n 组装，`../../locales` glob 加载）+ `test-utils.ts`（测试挂载辅助） |
-| `locales/` | i18n 资源（`shell.yaml` 承载 `shell.app.*` 壳文案） |
+| 路径                           | 说明                                                                                                                                                                                                                                                     |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/entry.ts` + `src/App.vue` | 入口：装配 pinia + i18n + router，`App.vue` 只挂应用壳                                                                                                                                                                                                   |
+| `src/styles/tokens.css`        | **视觉数值唯一真源**：`--ws-*` token + 组件消费的尺寸/字阶/动效原语 + PRISM 同名变量别名（全部落到 `--ws-*`）                                                                                                                                            |
+| `src/styles/index.css`         | 三栏布局基类（workspace-shell 等，设计系统 V1.0 §二）+ 全局 border-box / body margin 归零                                                                                                                                                                |
+| `src/components/ui/`           | 组件基座（reka-ui + scoped CSS + token）；**同步状态见 `FIGMA-SYNC.md`**                                                                                                                                                                                 |
+| `src/components/shell/`        | **应用壳**（Figma「03 — Application Shell」两帧）：`WorkspaceShell` 壳根 / `TopBar` 顶栏 / `SideNav` 左导航（展开 232px、折叠 60px）/ `ContextPanel` 右上下文栏 / `CommandBar` AI 指令栏 / `PageHeader` 页面标题区 / `IconTooltip` 壳内 asChild 提示浮层 |
+| `src/router/navigation.ts`     | **导航树 = 菜单与路由的单源**（`src/router/index.ts` 的路由表由它派生，杜绝漂移）                                                                                                                                                                        |
+| `src/stores/shell.ts`          | 壳状态：左导航折叠（持久化 `aipm.sidebar-collapsed`）/ 右栏开关 / 指令栏展开态                                                                                                                                                                           |
+| `src/views/placeholder/`       | 占位视图（业务模块落地时按路由替换）                                                                                                                                                                                                                     |
+| `src/api/`                     | pm 业务 API 封装（保留复用；`mock/fixtures.ts` 是未实现写端点的活契约）                                                                                                                                                                                  |
+| `src/api/base/`                | **基础接口层**（自旧 `shell/api/` 打捞：`client.ts` http 实例 + iam / prue / audit / config / file / notification / users 适配 + `token-storage.ts`；登录/菜单基础重建时直接复用）                                                                       |
+| `src/lib/`                     | 通用工具（cn 等）+ `i18n.ts`（vue-i18n 组装，`../../locales` glob 加载）+ `test-utils.ts`（测试挂载辅助）                                                                                                                                                |
+| `locales/`                     | i18n 资源（`shell.yaml` 承载 `shell.app.*` 壳文案）                                                                                                                                                                                                      |
 
 已删除：`src/shell/`（传统管理壳）、`src/workspace/`（AI 工作台页面）、`src/styles/prism/`
 （旧 PRISM 主题层，2026-11-04 用户裁决放弃，原语已并入 `styles/tokens.css`）——
@@ -168,7 +169,9 @@ The objective is to create the visual and interaction foundation that every subs
 
 - **三种导航上下文不得混成一张扁平菜单**：个人 / 工作区 / 项目模块（仅选中项目时出现）/ 管理。
   分组定义在 `src/router/navigation.ts`，路由由它派生。
-- **不引入 Workspace Switcher**：顶栏的组织 / 项目芯片只是上下文指示（静态展示，无切换实体）。
+- **不引入 Workspace Switcher**：顶栏的组织芯片只是上下文指示（静态展示，无切换实体）；
+  **项目可切换**——`components/shell/ProjectSwitcher.vue`（左导航项目头 + 顶栏芯片双变体），
+  切换状态机在 `stores/shell.ts`（两阶段：switching 期间不显示旧项目数据，Figma「07」）。
 - 折叠态经壳根元素 `data-sidebar` / `data-context` 属性切换，由 `index.css` 的 grid 模板消费。
 - 快捷键：⌘/Ctrl+K 命令面板，⌘/Ctrl+J 切换指令栏展开态。
 - **AI 建议与人工确认的动作必须视觉可辨**：建议用 accent 色，人工确认提示用次文字色。
@@ -195,9 +198,9 @@ The objective is to create the visual and interaction foundation that every subs
    （tiptap / milkdown / quill / bytemd / wangEditor …）。正文只存 Markdown 字符串，
    附件一律 `/v1/file/{id}`，禁止把预签名 URL 写进正文。
 10. **lmms 基础服务 SDK（必须用上游包，禁止自建）**：凡调用 iam / audit / config / file /
-   notification / prue 基础服务，一律 import 对应 `*-services` 包（私有 registry
-   `http://192.168.2.12:14873/`）；DTO、路径、错误归一以上游 SDK 为准；禁止手写 fetch/axios
-   客户端、手抄 DTO/路径、复制上游实现；SDK 缺能力到上游 lmms 仓提需求，不做 fork。
+    notification / prue 基础服务，一律 import 对应 `*-services` 包（私有 registry
+    `http://192.168.2.12:14873/`）；DTO、路径、错误归一以上游 SDK 为准；禁止手写 fetch/axios
+    客户端、手抄 DTO/路径、复制上游实现；SDK 缺能力到上游 lmms 仓提需求，不做 fork。
 
 ## 四、常用命令
 

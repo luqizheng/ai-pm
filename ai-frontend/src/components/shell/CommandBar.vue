@@ -11,7 +11,7 @@ import {
 
 import IconTooltip from "./IconTooltip.vue";
 import { useShellStore } from "@/stores/shell";
-import { demoCommandScope, demoSuggestions } from "./demo";
+import { demoProject, demoRepository, demoSuggestions } from "./demo";
 
 /**
  * 底部 AI 指令栏（Application Shell §2E，72–120px）。
@@ -21,7 +21,9 @@ import { demoCommandScope, demoSuggestions } from "./demo";
  *   - 展开 120px：作用域行 + 输入行 + 建议芯片 + 键盘提示
  *
  * **AI 建议与人工确认的动作必须视觉可辨**（Shell V1.1 §2E）——
- * 建议芯片走 accent 色（AI 语义），人工确认提示走次文字色。
+ * 建议芯片走 accent 色（AI 语义），人工确认提示用次文字色。
+ *
+ * 作用域串随当前项目变化（切换中不显示旧项目数据，Figma「07」）。
  */
 
 const { t } = useI18n();
@@ -31,11 +33,23 @@ const prompt = ref("");
 
 const expanded = computed(() => shell.commandbarExpanded);
 
+/**
+ * 助手作用域：当前项目 / 仓库 / 分支。
+ *
+ * 切换中不回落旧项目名（Figma「07」No stale project data is displayed），
+ * 而是用「正在切换项目…」占位，等新上下文就绪后再显示新项目。
+ */
+const commandScope = computed(() => {
+  const project = shell.currentProject;
+  const name = project ? project.name : t("shell.app.project.switching");
+  return `${name} / Repository / ${demoRepository.defaultBranch}`;
+});
+
 const placeholder = computed(() =>
   expanded.value
     ? t("shell.app.commandbar.placeholder")
     : t("shell.app.commandbar.collapsedPlaceholder", {
-        context: demoCommandScope
+        context: commandScope.value
       })
 );
 
@@ -56,9 +70,7 @@ const suggestionKeys = computed(() =>
       <span class="shell-commandbar__scope-title">{{
         t("shell.app.commandbar.title")
       }}</span>
-      <span class="shell-commandbar__scope-context">{{
-        demoCommandScope
-      }}</span>
+      <span class="shell-commandbar__scope-context">{{ commandScope }}</span>
       <!-- 人工确认提示：与 AI 建议视觉可辨（次文字色，非 accent） -->
       <span class="shell-commandbar__confirm">{{
         t("shell.app.commandbar.reviewFirst")

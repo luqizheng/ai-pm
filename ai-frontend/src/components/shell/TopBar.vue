@@ -3,7 +3,6 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   Bell,
-  Box,
   ChevronsUpDown,
   CircleQuestionMark,
   Search,
@@ -13,25 +12,29 @@ import {
 import Avatar from "@/components/ui/avatar/Avatar.vue";
 import DropdownMenu from "@/components/ui/dropdown-menu/DropdownMenu.vue";
 import IconTooltip from "./IconTooltip.vue";
+import ProjectSwitcher from "./ProjectSwitcher.vue";
+import { useShellStore } from "@/stores/shell";
 import {
   demoOrganization,
-  demoProject,
   demoUnreadNotifications,
-  demoUser
+  demoUser,
+  resolveProjectSwitch
 } from "./demo";
 
 /**
  * 全局顶栏（Application Shell §2A，52px）。
  *
- * 左：产品标识 + 产品名 + 当前组织/项目上下文指示
+ * 左：产品标识 + 产品名 + 当前组织指示 + 项目切换器
  * 中：全局搜索 / 命令面板入口（⌘ K）
  * 右：通知、全局 AI 助手入口、帮助、账户菜单
  *
  * 按 Shell V1.1 限制：**不引入 Workspace Switcher**——
- * 组织与项目在此仅作上下文指示（静态展示，无切换实体）。
+ * 组织在此仅作上下文指示（静态展示，无切换实体）；
+ * 项目则是可切换的（Figma「04 — Global Navigation」Project Context Header）。
  */
 
 const { t } = useI18n();
+const shell = useShellStore();
 
 const emit = defineEmits<{ search: [] }>();
 
@@ -40,6 +43,11 @@ const accountItems = computed(() => [
   { label: t("shell.app.topbar.accountMenu.settings"), value: "settings" },
   { label: t("shell.app.topbar.accountMenu.signOut"), value: "sign-out" }
 ]);
+
+/** 切换项目（与左导航项目头共用 store 的切换状态机） */
+async function onSelectProject(id: string) {
+  await shell.switchProject(id, () => resolveProjectSwitch());
+}
 </script>
 
 <template>
@@ -79,12 +87,15 @@ const accountItems = computed(() => [
 
       <span class="shell-topbar__slash" aria-hidden="true">/</span>
 
-      <!-- 当前项目（上下文指示，非切换器） -->
-      <span class="shell-topbar__context">
-        <Box :size="14" aria-hidden="true" />
-        <span class="shell-topbar__context-name">{{ demoProject.name }}</span>
-        <ChevronsUpDown :size="12" aria-hidden="true" />
-      </span>
+      <!-- 当前项目（Project switcher：可切换，含搜索与切换中提示） -->
+      <ProjectSwitcher
+        variant="chip"
+        searchable
+        :projects="shell.projects"
+        :current-id="shell.currentProjectId"
+        :switching-to-id="shell.switchingProjectId"
+        @select="onSelectProject"
+      />
     </div>
 
     <!-- 中：全局搜索 / 命令面板入口 -->

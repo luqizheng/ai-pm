@@ -56,6 +56,10 @@
   /* accent 着色面（Figma Badge Accent 变体底 #242238，2026-11-04） */
   --ws-color-accent-surface: #242238;
 
+  /* 就绪状态色（Figma「04 — Global Navigation」Navigation Badge / Type=Status
+     的绿点 #8DC5AF；用于「开发环境已就绪」这类环境状态指示） */
+  --ws-color-status-ready: #8dc5af;
+
   /* 形状 / 密度 —— V1.0 §1.2 */
   --ws-radius-card: 8px;
   --ws-radius-dialog: 12px;
@@ -187,6 +191,8 @@
   --size-control-compact: 32px;
   /* 壳级搜索入口宽 360px（Figma 顶栏 Global search and command launcher） */
   --size-search-width: 360px;
+  /* 项目切换菜单宽 330px（Figma「07 — Project Switching」Project switcher menu） */
+  --size-project-menu-width: 330px;
   --size-icon-button: 36px;
   --size-icon-xs: 16px;
   --size-icon-sm: 18px;
@@ -327,6 +333,10 @@
      深色值 #242238 在浅色主题下过暗，改为带紫调的浅面；
      取值与 FIGMA-SYNC 台账登记的浅色候选 #EEEBFF 一致。 */
   --ws-color-accent-surface: #eebeff;
+
+  /* 就绪状态色（浅色）—— 深色 #8DC5AF 在浅面下仅 1.96:1，
+     改用同色系更深一档，保证 UI 用途 ≥3:1 */
+  --ws-color-status-ready: #3f8f70;
 
   /* 次文字 #586274 = Figma 浅色次文字（2026-11-04 组件库稿） */
   --ws-text-primary: #202532;
