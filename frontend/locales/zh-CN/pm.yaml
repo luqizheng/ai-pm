@@ -320,3 +320,83 @@ discovery:
   sessionReviewRequired: 待审核
   sessionCompleted: 已完成
   sessionPaused: 已暂停
+commandCenter:
+  pageTitle: 项目总控台
+  subtitle: 项目工作入口
+  loadFailed: 总控台加载失败
+  unavailable: 该数据源暂时不可用，请稍后重试
+  none: 无
+  noAgent: 未指派执行主体
+  actorHuman: 人工
+  actorAgent: Agent
+  actorUnknown: 系统
+  prevPage: 上一页
+  nextPage: 下一页
+  section:
+    summary: 项目概况
+    actions: 待人工处理
+    work: 当前执行
+    risks: 风险与阻塞
+    init: 初始化进度
+    activity: 最近活动
+  field:
+    code: 项目标识
+    lifecycle: 生命周期
+    repositories: 关联仓库
+    verified: 已验证
+    members: 项目成员
+    goal: 项目目标
+    lastActivity: 最近活动
+    sourceState: 原始状态
+    attempt: 第
+    repositoriesShort: 个仓库
+  goal:
+    missing: 尚未建立目标
+    revision: "第 {no} 版"
+    pending: 有待确认修改
+  work:
+    tasks: 任务
+    activeRuns: 执行中
+  init:
+    notStarted: 未开始
+    inProgress: 进行中
+    completed: 已完成
+    blocked: 存在阻塞
+    notApplicable: 不适用
+    undetermined: 尚无法判断
+    unknown: 未知
+    required: 必需
+    notDeterminable: 尚无初始化要求配置，无法判定整体完成度
+  action:
+    findingPending: 待确认发现
+    findingRevision: 待补充信息
+    proposalPending: 待确认提案
+    deliveryPending: 待验收交付
+    other: 待处理
+  activity:
+    projectArchived: 项目归档
+    goalCommitted: 目标更新
+    findingDecided: 发现裁决
+    findingRevision: 要求补充
+    repositoryCreated: 关联仓库
+    repositoryVerified: 仓库校验
+    analysisSucceeded: 分析完成
+    analysisFailed: 分析失败
+    runStarted: 执行启动
+    runFinished: 执行结束
+    runFailed: 执行失败
+    runTerminated: 执行终止
+    deliverySubmitted: 交付提交
+    deliveryRejected: 交付驳回
+    reviewCompleted: 评审完成
+    reviewChangesRequested: 评审要求修改
+    memberChanged: 成员变更
+    deviceBound: 设备绑定
+    other: 项目活动
+  empty:
+    actions: 当前没有待人工处理的事项
+    runs: 当前没有执行中的 Run
+    risks: 当前没有风险与阻塞
+    activity: 暂无活动记录
+  archivedTitle: 项目已归档
+  archivedHint: 归档项目为只读状态，历史记录仍可查看，但不再接受新的业务活动。

@@ -39,6 +39,13 @@ export const staticRoutes: RouteRecordRaw[] = [
         meta: { title: "shell.routes.projectRepositories" }
       },
       {
+        // 项目总控台（S01 · I5-D）：六区块聚合视图，静态挂 shell。
+        path: "projects/:projectId/command-center",
+        name: "project-command-center",
+        component: () => import("../views/pm/command-center/index.vue"),
+        meta: { title: "shell.routes.projectCommandCenter" }
+      },
+      {
         // 冷启动导入向导：静态路由，不依赖 DB 菜单。
         path: "onboarding/import",
         name: "project-import",

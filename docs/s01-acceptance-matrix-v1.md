@@ -188,7 +188,14 @@ published 修订**；归档后正式 Goal / 提案 / 修订历史仍可读。
 - **I5-C**：`pm-application::command_center` + `GET /v1/pm/projects/{id}/command-center`
   + 迁移 `0034`（审计项目维度索引 + Finding 项目维度索引）；按块降级（`ok`/`unavailable`），
   全部 SQL 带 tenant 谓词（契约 C-2）；验收 `apps/pm-api/tests/command_center.rs` **6 例全绿**。
-- **未完成**：I5-D 前端总控台、I5-E 全量验收与性能（I5-026~036）。
+- **未完成**：I5-E 全量验收与性能（I5-032~036 的全量映射 + 权限/部分失败/并发/性能专项）。
+
+**I5-D 落地结果（2026-11-04）**：`frontend/src/api/command-center.ts`（类型 + 客户端）+
+`frontend/src/shell/views/pm/command-center/index.vue`（六区块）+ 路由
+`/projects/:projectId/command-center` + `pm.commandCenter` i18n 命名空间（zh-CN / en）；
+前端 `vitest` **5 例全绿**（首屏优先级顺序 / 区块不可用显示「暂不可用」而非 0 /
+归档只读提示 / 初始化无百分比且完成度不可判定 / 空集合空状态）；
+`vue-tsc --noEmit` 干净；前端全量 **94 文件 / 569 测试全绿**。
 
 ### 3.6 I6-B · Discovery / Import（16 + 7 条 DB 级负向）
 

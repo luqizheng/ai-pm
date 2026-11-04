@@ -322,3 +322,83 @@ discovery:
   sessionReviewRequired: Review required
   sessionCompleted: Completed
   sessionPaused: Paused
+commandCenter:
+  pageTitle: Command Center
+  subtitle: Project work entry
+  loadFailed: Failed to load the command center
+  unavailable: This data source is temporarily unavailable, please retry later
+  none: None
+  noAgent: No assignee
+  actorHuman: Human
+  actorAgent: Agent
+  actorUnknown: System
+  prevPage: Previous
+  nextPage: Next
+  section:
+    summary: Project summary
+    actions: Needs human action
+    work: Running now
+    risks: Risks and blockers
+    init: Initialization progress
+    activity: Recent activity
+  field:
+    code: Code
+    lifecycle: Lifecycle
+    repositories: Repositories
+    verified: verified
+    members: Members
+    goal: Project goal
+    lastActivity: Last activity
+    sourceState: Source state
+    attempt: Attempt
+    repositoriesShort: repositories
+  goal:
+    missing: No goal yet
+    revision: "Revision {no}"
+    pending: Pending confirmation
+  work:
+    tasks: Tasks
+    activeRuns: Running
+  init:
+    notStarted: Not started
+    inProgress: In progress
+    completed: Completed
+    blocked: Blocked
+    notApplicable: Not applicable
+    undetermined: Cannot be determined
+    unknown: Unknown
+    required: Required
+    notDeterminable: No initialization requirements configured, overall completion cannot be determined
+  action:
+    findingPending: Finding pending
+    findingRevision: Finding needs more info
+    proposalPending: Proposal pending
+    deliveryPending: Delivery pending
+    other: Action needed
+  activity:
+    projectArchived: Project archived
+    goalCommitted: Goal updated
+    findingDecided: Finding decided
+    findingRevision: More info requested
+    repositoryCreated: Repository linked
+    repositoryVerified: Repository verified
+    analysisSucceeded: Analysis finished
+    analysisFailed: Analysis failed
+    runStarted: Run started
+    runFinished: Run finished
+    runFailed: Run failed
+    runTerminated: Run terminated
+    deliverySubmitted: Delivery submitted
+    deliveryRejected: Delivery rejected
+    reviewCompleted: Review completed
+    reviewChangesRequested: Changes requested
+    memberChanged: Membership changed
+    deviceBound: Device bound
+    other: Project activity
+  empty:
+    actions: Nothing needs human action right now
+    runs: No running runs
+    risks: No risks or blockers
+    activity: No activity records yet
+  archivedTitle: Project archived
+  archivedHint: "An archived project is read-only: history stays visible, but no new business activity is accepted."
