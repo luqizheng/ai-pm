@@ -2,16 +2,17 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import Badge from "@/components/ui/badge/Badge.vue";
+import ListItem from "@/components/ui/list-item/ListItem.vue";
 
 import type { DueInfo, HumanActionKind } from "@/api/personal-home";
 
 /**
- * Human Actions 行（首页 Inbox 上分区）。
+ * Human Actions 行（首页 Inbox 上分区）—— 组合公共 ListItem。
  *
  * 设计约束（高保真稿 §4.2 / §5.1）：
- *   - 类型 chip 一律中性色；颜色只由左侧 2px 紧急度轨承载；
- *   - 每条必须能追溯到来源项目与原始业务对象；
- *   - 无截止时间显式写「无期限」，不虚构期限。
+ *   - 类型 chip 一律中性色；紧急度只由截止文案的颜色承载
+ *     （后端当前无 due 列 → 全部「无期限」，轨/档位自动生效是后端补字段后的事）；
+ *   - 每条必须能追溯到来源项目与原始业务对象（description 行）。
  */
 interface Props {
   kind: HumanActionKind;
@@ -31,6 +32,11 @@ const { t, locale } = useI18n();
 const kindLabel = computed(() =>
   t(`pm.personalHome.inbox.kinds.${props.kind}`)
 );
+
+const description = computed(() => {
+  const object = `${props.objectType} ${props.subject}`;
+  return props.projectName ? `${props.projectName} · ${object}` : object;
+});
 
 /** 右上角截止信息 */
 const dueLabel = computed(() => {
@@ -59,104 +65,20 @@ const dueTone = computed(() => {
 </script>
 
 <template>
-  <button type="button" class="pm-action" @click="emit('open')">
-    <span class="pm-action__rail" :data-tone="dueTone" aria-hidden="true" />
-    <span class="pm-action__body">
-      <span class="pm-action__title">
-        <Badge size="sm">{{ kindLabel }}</Badge>
-        <span class="pm-action__text">{{ title ?? kindLabel }}</span>
-      </span>
-      <span class="pm-action__meta">
-        <span class="pm-action__project">{{ projectName }}</span>
-        <span class="pm-action__sep" aria-hidden="true">·</span>
-        <span class="pm-action__object"> {{ objectType }} {{ subject }} </span>
-      </span>
-    </span>
-    <span class="pm-action__due" :data-tone="dueTone">{{ dueLabel }}</span>
-  </button>
+  <ListItem
+    class="pm-action"
+    :title="title ?? kindLabel"
+    :description="description"
+    @click="emit('open')"
+  >
+    <template #trailing>
+      <Badge size="sm">{{ kindLabel }}</Badge>
+      <span class="pm-action__due" :data-tone="dueTone">{{ dueLabel }}</span>
+    </template>
+  </ListItem>
 </template>
 
 <style scoped>
-.pm-action {
-  display: grid;
-  grid-template-columns: var(--size-indicator) minmax(0, 1fr) auto;
-  gap: var(--space-3);
-  align-items: center;
-  width: 100%;
-  text-align: left;
-  padding: var(--space-3) var(--space-4);
-  border-top: var(--border-1) solid var(--ws-border);
-  transition: background var(--duration-fast) var(--ease-standard);
-}
-
-.pm-action:hover {
-  background: var(--ws-hover-veil);
-}
-
-.pm-action:focus-visible {
-  outline: none;
-  box-shadow: var(--ws-focus-ring);
-}
-
-.pm-action__rail {
-  align-self: stretch;
-  border-radius: var(--radius-nav-indicator);
-  background: transparent;
-}
-
-.pm-action__rail[data-tone="danger"] {
-  background: var(--ws-color-danger);
-}
-
-.pm-action__rail[data-tone="warning"] {
-  background: var(--ws-color-warning);
-}
-
-.pm-action__body {
-  min-width: 0;
-}
-
-.pm-action__title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.pm-action__text {
-  font-size: var(--font-size-body);
-  font-weight: var(--weight-medium);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pm-action__meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 3px;
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-caption);
-  color: var(--ws-text-secondary);
-  min-width: 0;
-  flex-wrap: wrap;
-}
-
-.pm-action__project {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pm-action__sep {
-  color: var(--ws-text-disabled);
-}
-
-.pm-action__object {
-  white-space: nowrap;
-}
-
 .pm-action__due {
   font-size: var(--font-size-caption);
   white-space: nowrap;

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { DOMWrapper, flushPromises } from "@vue/test-utils";
@@ -88,6 +88,30 @@ describe("TopBar", () => {
 
     await wrapper.find(".shell-topbar__search").trigger("click");
     expect(wrapper.emitted("search")).toBeTruthy();
+  });
+
+  it("Switcher 的 Create New Project 发出 create 并进入 S01-02 创建页", async () => {
+    const { wrapper, router } = mountShell(TopBar, {
+      attachTo: document.body
+    });
+    const shell = useShellStore();
+    shell.setProjects(demoProjects);
+    await nextTick();
+    const push = vi.spyOn(router, "push").mockResolvedValue(undefined);
+
+    await wrapper.find(".ps-trigger").trigger("click");
+    await nextTick();
+
+    const create = document.body.querySelector<HTMLElement>(
+      ".ps-menu__create:not(:disabled)"
+    );
+    expect(create).toBeTruthy();
+    create!.click();
+    await flushPromises();
+
+    expect(push).toHaveBeenCalledWith("/project/create");
+    wrapper.unmount();
+    document.body.innerHTML = "";
   });
 
   it("通知入口渲染铃铛按钮（Global/Notification 下拉触发器）", async () => {

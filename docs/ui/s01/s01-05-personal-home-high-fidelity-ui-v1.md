@@ -115,7 +115,7 @@
 | --- | --- | --- |
 | 左导航 | 232px（折叠 60px） | `--ws-sidebar-width` |
 | 顶栏 | 52px | `--ws-topbar-height` |
-| 主区内边距 | 20px 上 / 24px 左右 | `--space-5` / `--space-6` |
+| 主区内边距 | 20px 上 / 32px 左右 | `--space-5` / `--space-8`（**V1.1 修订**：随 2026-11-05 用户裁决并入全产品统一页框 PageFrame，原 24px 口径作废） |
 | 区块间距 | 16px | `--space-4` |
 | Row2 栅格 | `minmax(0,1.6fr) minmax(0,1fr)`，gap 16px | ≈ 60 / 40 |
 | 卡片 | 8px 圆角、1px 边框、surface 面 | `--ws-radius-card` |
@@ -512,6 +512,7 @@ pm:
 | E-3 | Create Project 复用 S01-02 流程 | 暂落 `/projects` | S01-02 创建流程尚未实现（页面层占位）；就位后改指 |
 | E-4 | 右上下文栏关闭 | 保持壳默认（开） | 壳级默认行为，跨页影响，不在本页改 |
 | E-5 | 根路径 `/` 落到个人主页 | **未加** `/` 重定向 | 初始导航=`/` 的既有测试会与后续 push 竞态；登录落地由 AuthLoadingView 承担，直接访问 `/` 维持 404（既有行为） |
+| E-6 | §9.2 页内私有组件（InboxActionItem 带 2px 紧急度轨等自绘样式） | **重构为公共组件组合**（2026-11-05 用户裁决「优先公共组件与 /design，不自造」）：行=`ListItem`、卡=`Card`、计数=`Badge count`、次级链接=`Button ghost`、语义点/关注指示=`StatusIndicator`、折叠行=`ListItem`+`aria-expanded` 透传；页内只剩纯布局样式 | 自绘行组件是裸 `<button>` 吃到浏览器默认 buttonface 灰底（两主题全灰的违和根因）；公共组件自带正确底色/焦点/hover |
 
 ### 13.4 门禁与验证结果
 

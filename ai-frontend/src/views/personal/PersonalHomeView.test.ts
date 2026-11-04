@@ -209,4 +209,19 @@ describe("PersonalHomeView", () => {
     expect(wrapper.text()).toContain(t("pm.personalHome.inbox.empty.title"));
     expect(wrapper.text()).toContain(t("pm.personalHome.projects.title"));
   });
+
+  it("「新建项目」进入 S01-02 项目创建页", async () => {
+    const { wrapper, router } = await mountView();
+    const push = vi.spyOn(router, "push").mockResolvedValue(undefined);
+
+    const createButton = wrapper
+      .findAll("button")
+      .find(button =>
+        button.text().includes(t("pm.personalHome.action.createProject"))
+      );
+    expect(createButton).toBeTruthy();
+    await createButton!.trigger("click");
+
+    expect(push).toHaveBeenCalledWith("/project/create");
+  });
 });

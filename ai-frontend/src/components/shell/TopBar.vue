@@ -110,6 +110,14 @@ function onViewAllNotifications() {
 }
 
 /**
+ * 顶栏 Switcher 的「Create New Project」入口 → S01-02 项目创建页
+ * （Personal Home 的「新建项目」按钮与此同路）。
+ */
+function onCreateProject() {
+  router.push("/project/create");
+}
+
+/**
  * 账户菜单普通项 → 设置域路由（Settings Framework 个人域，
  * /settings/*，应用壳内渲染）。
  * 帮助文档暂无应用内落地页（HelpMenu 已覆盖文档入口）。
@@ -176,9 +184,10 @@ function onSignOutConfirm() {
         :current-id="shell.currentProjectId"
         :status="switcherStatus"
         :selected="!!shell.currentProject"
-        :can-create="false"
+        :can-create="true"
         :texts="switcherTexts"
         @select="onSelectProject"
+        @create="onCreateProject"
       />
     </div>
 

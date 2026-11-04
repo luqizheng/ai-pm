@@ -18,6 +18,7 @@ import SettingsNotificationsView from "@/views/settings/SettingsNotificationsVie
 import SettingsAiView from "@/views/settings/SettingsAiView.vue";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 import InitializationOverviewView from "@/views/project/initialization/InitializationOverviewView.vue";
+import ProjectCreateView from "@/views/project/create/ProjectCreateView.vue";
 
 /**
  * 应用壳路由表 —— **由导航树派生**（src/router/navigation.ts 是单源）。
@@ -83,6 +84,15 @@ export function buildRoutes(): RouteRecordRaw[] {
     path: "/project/initialization",
     component: InitializationOverviewView,
     meta: { title: "s01.initialization-overview.page.title" }
+  });
+
+  // 项目创建（S01-02）：动作页，不占主导航——入口 = Personal Home「新建项目」
+  // 与顶栏 Project Switcher 的 Create New Project（canCreate）。
+  // 创建成功后携带 project_id 进入初始化总览（S01-02 §7 裁决 Q3）。
+  routes.push({
+    path: "/project/create",
+    component: ProjectCreateView,
+    meta: { title: "s01.project-create.pageTitle" }
   });
 
   // 通知中心（Global/Notification 族完整事件面；不在左导航树内，

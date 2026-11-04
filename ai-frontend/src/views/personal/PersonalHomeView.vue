@@ -2,10 +2,13 @@
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
-import { CircleCheck, Plus, Search } from "lucide-vue-next";
-import { PageHeader } from "@/components/shell";
+import { ChevronRight, CircleCheck, Plus, Search } from "lucide-vue-next";
+import { PageFrame } from "@/components/shell";
+import Badge from "@/components/ui/badge/Badge.vue";
 import Button from "@/components/ui/button/Button.vue";
+import Card from "@/components/ui/card/Card.vue";
 import IconButton from "@/components/ui/icon-button/IconButton.vue";
+import ListItem from "@/components/ui/list-item/ListItem.vue";
 import Skeleton from "@/components/ui/skeleton/Skeleton.vue";
 
 import {
@@ -34,6 +37,11 @@ import SectionState from "./components/SectionState.vue";
  *   Row1  My Overview（三指标横条）
  *   Row2  My Inbox（60%） + My Projects（40%）
  *   Row3  Recent Activity（横向）
+ *
+ * 组件策略（AGENTS.md §三.11）：卡片/徽标/按钮/列表行全部组合公共 ui 组件
+ * （Card / Badge / Button / ListItem / StatusIndicator / EmptyState / Alert / Skeleton），
+ * 页内只保留纯布局样式；列表卡用 `pm-card--flush` 把 Card body 清零内边距，
+ * 让行交互面（ListItem hover）通到卡片边缘。
  *
  * 状态处理（高保真稿 §8）：三个区块**各自独立**加载，
  * 因此「Inbox 失败」不会拖垮「我的项目」，失败也绝不渲染成"没有数据"。
@@ -195,12 +203,11 @@ function focusGlobalSearch() {
 }
 
 /**
- * Create Project —— 复用既有项目创建流程。
- * ⚠ S01-02 的创建流程尚未实现（页面层仍是占位），此处先落到项目清单页，
- * 待创建页就位后改为直接打开创建视图。
+ * Create Project —— 进入 S01-02 项目创建页（/project/create）。
+ * 创建成功后由创建页自动带入项目初始化总览（S01-02 §7 裁决 Q3）。
  */
 function createProject() {
-  void router.push("/projects");
+  void router.push("/project/create");
 }
 
 function openObject(path: string) {
@@ -209,28 +216,23 @@ function openObject(path: string) {
 </script>
 
 <template>
-  <div class="pm-home">
-    <PageHeader :title="greeting" :description="subtitle">
-      <template #actions>
-        <IconButton
-          :label="t('pm.personalHome.action.search')"
-          variant="secondary"
-          @click="focusGlobalSearch"
-        >
-          <Search :size="16" aria-hidden="true" />
-        </IconButton>
-        <Button variant="primary" @click="createProject">
-          <Plus :size="14" aria-hidden="true" />
-          {{ t("pm.personalHome.action.createProject") }}
-        </Button>
-      </template>
-    </PageHeader>
+  <PageFrame :title="greeting" :description="subtitle">
+    <template #actions>
+      <IconButton
+        :label="t('pm.personalHome.action.search')"
+        variant="secondary"
+        @click="focusGlobalSearch"
+      >
+        <Search :size="16" aria-hidden="true" />
+      </IconButton>
+      <Button variant="primary" @click="createProject">
+        <Plus :size="14" aria-hidden="true" />
+        {{ t("pm.personalHome.action.createProject") }}
+      </Button>
+    </template>
 
     <!-- 首次登录：没有任何项目 -->
-    <section
-      v-if="pageStatus === 'ready' && isEmpty"
-      class="pm-card pm-home__welcome"
-    >
+    <Card v-if="pageStatus === 'ready' && isEmpty" class="pm-home__welcome">
       <SectionState
         variant="empty"
         :title="t('pm.personalHome.state.firstLogin.title')"
@@ -238,10 +240,10 @@ function openObject(path: string) {
         :action-label="t('pm.personalHome.action.createProject')"
         @action="createProject"
       />
-    </section>
+    </Card>
 
     <!-- 整页失败 -->
-    <section v-else-if="pageStatus === 'error'" class="pm-card">
+    <Card v-else-if="pageStatus === 'error'">
       <SectionState
         variant="error"
         :title="t('pm.personalHome.state.error.page.title')"
@@ -249,10 +251,10 @@ function openObject(path: string) {
         :note="pageNote"
         @action="load"
       />
-    </section>
+    </Card>
 
     <!-- 无访问权限 -->
-    <section v-else-if="pageStatus === 'forbidden'" class="pm-card">
+    <Card v-else-if="pageStatus === 'forbidden'">
       <SectionState
         variant="forbidden"
         :title="t('pm.personalHome.state.forbidden.title')"
@@ -260,102 +262,112 @@ function openObject(path: string) {
         :action-label="t('pm.personalHome.action.createProject')"
         @action="createProject"
       />
-    </section>
+    </Card>
 
     <!-- 加载中：骨架屏按真实布局形状占位 -->
     <template v-else-if="pageStatus === 'loading'">
-      <div class="pm-overview" aria-busy="true">
-        <div v-for="index in 3" :key="index" class="pm-overview__skeleton">
-          <Skeleton width="10px" height="10px" tone="base" />
-          <div class="pm-overview__skeleton-body">
-            <Skeleton width="38px" height="20px" tone="strong" />
-            <Skeleton width="96px" height="12px" tone="base" />
-            <Skeleton width="128px" height="10px" tone="base" />
+      <Card class="pm-card--flush">
+        <div class="pm-overview" aria-busy="true">
+          <div v-for="index in 3" :key="index" class="pm-overview__skeleton">
+            <Skeleton width="10px" height="10px" tone="base" />
+            <div class="pm-overview__skeleton-body">
+              <Skeleton width="38px" height="20px" tone="strong" />
+              <Skeleton width="96px" height="12px" tone="base" />
+              <Skeleton width="128px" height="10px" tone="base" />
+            </div>
           </div>
         </div>
-      </div>
+      </Card>
       <div class="pm-rows">
-        <section class="pm-card" aria-busy="true">
-          <div class="pm-card__head">
-            <h2 class="pm-card__title">
-              {{ t("pm.personalHome.inbox.title") }}
-            </h2>
+        <Card class="pm-card--flush">
+          <template #header>
+            <div class="pm-card-head">
+              <h2 class="pm-card-head__title">
+                {{ t("pm.personalHome.inbox.title") }}
+              </h2>
+            </div>
+          </template>
+          <div class="pm-skeleton-list" aria-busy="true">
+            <div v-for="index in 4" :key="index" class="pm-skeleton-row">
+              <Skeleton width="58%" height="13px" tone="base" />
+              <Skeleton width="40%" height="10px" tone="base" />
+            </div>
           </div>
-          <div v-for="index in 3" :key="index" class="pm-skeleton-row">
-            <Skeleton width="62%" height="13px" tone="base" />
-            <Skeleton width="44%" height="10px" tone="base" />
+        </Card>
+        <Card class="pm-card--flush">
+          <template #header>
+            <div class="pm-card-head">
+              <h2 class="pm-card-head__title">
+                {{ t("pm.personalHome.projects.title") }}
+              </h2>
+            </div>
+          </template>
+          <div class="pm-skeleton-list" aria-busy="true">
+            <div v-for="index in 3" :key="index" class="pm-skeleton-row">
+              <Skeleton width="58%" height="13px" tone="base" />
+              <Skeleton width="88%" height="12px" tone="base" />
+            </div>
           </div>
-        </section>
-        <section class="pm-card" aria-busy="true">
-          <div class="pm-card__head">
-            <h2 class="pm-card__title">
-              {{ t("pm.personalHome.projects.title") }}
-            </h2>
-          </div>
-          <div v-for="index in 3" :key="index" class="pm-skeleton-row">
-            <Skeleton width="58%" height="13px" tone="base" />
-            <Skeleton width="88%" height="12px" tone="base" />
-          </div>
-        </section>
+        </Card>
       </div>
     </template>
 
     <!-- 正常态 -->
     <template v-else>
       <!-- Row 1 · My Overview -->
-      <div
-        class="pm-overview"
-        role="group"
-        :aria-label="t('pm.personalHome.overview.title')"
-      >
-        <MetricTile
-          :label="t('pm.personalHome.overview.needsAttention')"
-          :value="inboxStatus === 'ready' ? humanActions.length : null"
-          :hint="
-            inboxStatus === 'ready'
-              ? t('pm.personalHome.overview.needsAttentionHint')
-              : t('pm.personalHome.overview.unavailable')
-          "
-          tone="warning"
-        />
-        <MetricTile
-          :label="t('pm.personalHome.overview.assignedToMe')"
-          :value="inboxStatus === 'ready' ? assignedTasks.length : null"
-          :hint="
-            inboxStatus === 'ready'
-              ? t('pm.personalHome.overview.assignedToMeHint')
-              : t('pm.personalHome.overview.unavailable')
-          "
-          tone="info"
-        />
-        <MetricTile
-          :label="t('pm.personalHome.overview.activeProjects')"
-          :value="projectsStatus === 'ready' ? projects.length : null"
-          :hint="
-            projectsStatus === 'ready'
-              ? t('pm.personalHome.overview.activeProjectsHint')
-              : t('pm.personalHome.overview.unavailable')
-          "
-          tone="accent"
-        />
-      </div>
+      <Card class="pm-card--flush">
+        <div
+          class="pm-overview"
+          role="group"
+          :aria-label="t('pm.personalHome.overview.title')"
+        >
+          <MetricTile
+            :label="t('pm.personalHome.overview.needsAttention')"
+            :value="inboxStatus === 'ready' ? humanActions.length : null"
+            :hint="
+              inboxStatus === 'ready'
+                ? t('pm.personalHome.overview.needsAttentionHint')
+                : t('pm.personalHome.overview.unavailable')
+            "
+            tone="warning"
+          />
+          <MetricTile
+            :label="t('pm.personalHome.overview.assignedToMe')"
+            :value="inboxStatus === 'ready' ? assignedTasks.length : null"
+            :hint="
+              inboxStatus === 'ready'
+                ? t('pm.personalHome.overview.assignedToMeHint')
+                : t('pm.personalHome.overview.unavailable')
+            "
+            tone="info"
+          />
+          <MetricTile
+            :label="t('pm.personalHome.overview.activeProjects')"
+            :value="projectsStatus === 'ready' ? projects.length : null"
+            :hint="
+              projectsStatus === 'ready'
+                ? t('pm.personalHome.overview.activeProjectsHint')
+                : t('pm.personalHome.overview.unavailable')
+            "
+            tone="accent"
+          />
+        </div>
+      </Card>
 
       <!-- Row 2 · My Inbox + My Projects -->
       <div class="pm-rows">
-        <section class="pm-card" :aria-label="t('pm.personalHome.inbox.title')">
-          <div class="pm-card__head">
-            <h2 class="pm-card__title">
-              {{ t("pm.personalHome.inbox.title") }}
-              <span class="pm-card__count">{{ inboxTotal }}</span>
-            </h2>
-            <button
-              type="button"
-              class="pm-link"
-              @click="router.push('/inbox')"
-            >
-              {{ t("pm.personalHome.action.viewAll") }}
-            </button>
-          </div>
+        <Card class="pm-card--flush">
+          <template #header>
+            <div class="pm-card-head">
+              <h2 class="pm-card-head__title">
+                {{ t("pm.personalHome.inbox.title") }}
+                <Badge variant="count" size="sm">{{ inboxTotal }}</Badge>
+              </h2>
+              <Button variant="ghost" size="sm" @click="router.push('/inbox')">
+                {{ t("pm.personalHome.action.viewAll") }}
+              </Button>
+            </div>
+          </template>
 
           <SectionState
             v-if="inboxStatus === 'error'"
@@ -390,7 +402,9 @@ function openObject(path: string) {
                 <span class="pm-section__title">
                   {{ t("pm.personalHome.inbox.humanActions") }}
                 </span>
-                <span class="pm-card__count">{{ humanActions.length }}</span>
+                <Badge variant="count" size="sm">
+                  {{ humanActions.length }}
+                </Badge>
                 <span class="pm-section__note">
                   {{ t("pm.personalHome.inbox.humanActionsNote") }}
                 </span>
@@ -418,7 +432,9 @@ function openObject(path: string) {
                 <span class="pm-section__title">
                   {{ t("pm.personalHome.inbox.assignedTasks") }}
                 </span>
-                <span class="pm-card__count">{{ assignedTasks.length }}</span>
+                <Badge variant="count" size="sm">
+                  {{ assignedTasks.length }}
+                </Badge>
                 <span class="pm-section__note">
                   {{ t("pm.personalHome.inbox.assignedTasksNote") }}
                 </span>
@@ -439,25 +455,24 @@ function openObject(path: string) {
               </p>
             </div>
           </template>
-        </section>
+        </Card>
 
-        <section
-          class="pm-card"
-          :aria-label="t('pm.personalHome.projects.title')"
-        >
-          <div class="pm-card__head">
-            <h2 class="pm-card__title">
-              {{ t("pm.personalHome.projects.title") }}
-              <span class="pm-card__count">{{ projects.length }}</span>
-            </h2>
-            <button
-              type="button"
-              class="pm-link"
-              @click="router.push('/projects')"
-            >
-              {{ t("pm.personalHome.action.viewAll") }}
-            </button>
-          </div>
+        <Card class="pm-card--flush">
+          <template #header>
+            <div class="pm-card-head">
+              <h2 class="pm-card-head__title">
+                {{ t("pm.personalHome.projects.title") }}
+                <Badge variant="count" size="sm">{{ projects.length }}</Badge>
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                @click="router.push('/projects')"
+              >
+                {{ t("pm.personalHome.action.viewAll") }}
+              </Button>
+            </div>
+          </template>
 
           <SectionState
             v-if="projectsStatus === 'error'"
@@ -496,21 +511,21 @@ function openObject(path: string) {
               {{ t("pm.personalHome.projects.empty") }}
             </p>
 
-            <button
-              type="button"
+            <ListItem
+              v-if="archivedProjects.length"
               class="pm-folder"
-              :aria-expanded="archivedOpen"
+              :class="{ 'is-open': archivedOpen }"
+              :title="t('pm.personalHome.projects.archived')"
+              :icon="ChevronRight"
+              :aria-expanded="archivedOpen ? 'true' : 'false'"
               @click="archivedOpen = !archivedOpen"
             >
-              <span
-                class="pm-folder__chevron"
-                :data-open="archivedOpen"
-                aria-hidden="true"
-                >›</span
-              >
-              <span>{{ t("pm.personalHome.projects.archived") }}</span>
-              <span class="pm-card__count">{{ archivedProjects.length }}</span>
-            </button>
+              <template #trailing>
+                <Badge variant="count" size="sm">
+                  {{ archivedProjects.length }}
+                </Badge>
+              </template>
+            </ListItem>
             <template v-if="archivedOpen">
               <ProjectCard
                 v-for="project in archivedProjects"
@@ -527,26 +542,21 @@ function openObject(path: string) {
               />
             </template>
           </template>
-        </section>
+        </Card>
       </div>
 
       <!-- Row 3 · Recent Activity -->
-      <section
-        class="pm-card pm-activity"
-        :aria-label="t('pm.personalHome.activity.title')"
-      >
-        <div class="pm-card__head">
-          <h2 class="pm-card__title">
-            {{ t("pm.personalHome.activity.title") }}
-          </h2>
-          <button
-            type="button"
-            class="pm-link"
-            @click="router.push('/projects')"
-          >
-            {{ t("pm.personalHome.action.viewAll") }}
-          </button>
-        </div>
+      <Card class="pm-card--flush">
+        <template #header>
+          <div class="pm-card-head">
+            <h2 class="pm-card-head__title">
+              {{ t("pm.personalHome.activity.title") }}
+            </h2>
+            <Button variant="ghost" size="sm" @click="router.push('/projects')">
+              {{ t("pm.personalHome.action.viewAll") }}
+            </Button>
+          </div>
+        </template>
 
         <SectionState
           v-if="activityStatus === 'error'"
@@ -593,22 +603,38 @@ function openObject(path: string) {
             "
           />
         </div>
-      </section>
+      </Card>
     </template>
-  </div>
+  </PageFrame>
 </template>
 
 <style scoped>
-.pm-home {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-5) var(--space-6) var(--space-6);
-}
-
 .pm-home__welcome {
   max-width: 560px;
   margin: var(--space-8) auto 0;
+}
+
+/* 列表卡：清掉 Card body 内边距，让 ListItem 交互面通到卡片边缘
+ *（SectionState / EmptyState 自带内边距，不受影响） */
+.pm-card--flush :deep(.ui-card__body) {
+  padding: 0;
+}
+
+/* ---------------------------- 卡片头 ---------------------------- */
+
+.pm-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.pm-card-head__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font: inherit;
 }
 
 /* ------------------------------- 概览 ------------------------------- */
@@ -616,10 +642,6 @@ function openObject(path: string) {
 .pm-overview {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  background: var(--ws-surface);
-  border: var(--border-1) solid var(--ws-border);
-  border-radius: var(--ws-radius-card);
-  overflow: hidden;
 }
 
 .pm-overview__skeleton {
@@ -647,54 +669,6 @@ function openObject(path: string) {
   grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
-}
-
-/* -------------------------------- 卡片 -------------------------------- */
-
-.pm-card {
-  background: var(--ws-surface);
-  border: var(--border-1) solid var(--ws-border);
-  border-radius: var(--ws-radius-card);
-}
-
-.pm-card__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: var(--border-1) solid var(--ws-border);
-}
-
-.pm-card__title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0;
-  font-size: var(--ws-font-size-section);
-  font-weight: var(--weight-semibold);
-  letter-spacing: -0.005em;
-}
-
-.pm-card__count {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-micro);
-  color: var(--ws-text-secondary);
-  background: var(--ws-elevated);
-  border-radius: var(--radius-full);
-  padding: 1px 6px;
-}
-
-.pm-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--font-size-caption);
-  color: var(--ws-text-secondary);
-}
-
-.pm-link:hover {
-  color: var(--ws-text-primary);
 }
 
 /* ------------------------------ 分区 ------------------------------ */
@@ -738,28 +712,11 @@ function openObject(path: string) {
 
 /* ---------------------------- 折叠分组 ---------------------------- */
 
-.pm-folder {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  text-align: left;
-  padding: 9px var(--space-4);
-  border-top: var(--border-1) solid var(--ws-border);
-  font-size: var(--font-size-caption);
-  color: var(--ws-text-secondary);
-}
-
-.pm-folder:hover {
-  background: var(--ws-hover-veil);
-}
-
-.pm-folder__chevron {
-  display: inline-flex;
+.pm-folder :deep(.ui-list-item__icon) {
   transition: transform var(--duration-fast) var(--ease-standard);
 }
 
-.pm-folder__chevron[data-open="true"] {
+.pm-folder.is-open :deep(.ui-list-item__icon) {
   transform: rotate(90deg);
 }
 

@@ -2,14 +2,15 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import Badge from "@/components/ui/badge/Badge.vue";
+import ListItem from "@/components/ui/list-item/ListItem.vue";
 
 import type { DueInfo } from "@/api/personal-home";
 
 /**
- * Assigned Tasks 行（首页 Inbox 下分区）。
+ * Assigned Tasks 行（首页 Inbox 下分区）—— 组合公共 ListItem。
  *
  * 设计约束（高保真稿 §4.2）：普通分配任务与 Human Actions 分区呈现，
- * 单行更紧凑、无紧急度轨，优先级用等宽大写标签表达。
+ * 优先级用等宽大写标签表达（high 才着色），状态走公共 Badge。
  */
 interface Props {
   title: string;
@@ -26,7 +27,10 @@ const emit = defineEmits<{ (e: "open"): void }>();
 
 const { t, locale } = useI18n();
 
-const isHigh = computed(() => props.priority === "high");
+const description = computed(() => {
+  const object = props.subject;
+  return props.projectName ? `${props.projectName} · ${object}` : object;
+});
 
 const dueLabel = computed(() => {
   const { state, daysUntilDue, dueAt } = props.due;
@@ -54,91 +58,29 @@ const dueTone = computed(() => {
 </script>
 
 <template>
-  <button type="button" class="pm-task" @click="emit('open')">
-    <span class="pm-task__priority" :class="{ 'is-high': isHigh }">
-      {{ priority }}
-    </span>
-    <span class="pm-task__body">
-      <span class="pm-task__title">{{ title }}</span>
-      <span class="pm-task__meta">
-        <span>{{ projectName }}</span>
-        <span class="pm-task__sep" aria-hidden="true">·</span>
-        <span>{{ subject }}</span>
-      </span>
-    </span>
-    <span class="pm-task__right">
+  <ListItem
+    class="pm-task"
+    :title="title"
+    :description="description"
+    @click="emit('open')"
+  >
+    <template #trailing>
+      <span v-if="priority === 'high'" class="pm-task__priority">{{
+        priority
+      }}</span>
       <Badge size="sm">{{ status }}</Badge>
       <span class="pm-task__due" :data-tone="dueTone">{{ dueLabel }}</span>
-    </span>
-  </button>
+    </template>
+  </ListItem>
 </template>
 
 <style scoped>
-.pm-task {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  width: 100%;
-  text-align: left;
-  padding: 9px var(--space-4);
-  border-top: var(--border-1) solid var(--ws-border);
-  transition: background var(--duration-fast) var(--ease-standard);
-}
-
-.pm-task:hover {
-  background: var(--ws-hover-veil);
-}
-
-.pm-task:focus-visible {
-  outline: none;
-  box-shadow: var(--ws-focus-ring);
-}
-
 .pm-task__priority {
-  width: 44px;
-  flex: none;
   font-family: var(--font-mono);
   font-size: var(--font-size-nano);
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--ws-text-secondary);
-}
-
-.pm-task__priority.is-high {
   color: var(--ws-color-warning-text);
-}
-
-.pm-task__body {
-  flex: 1;
-  min-width: 0;
-}
-
-.pm-task__title {
-  display: block;
-  font-size: var(--font-size-body);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pm-task__meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 1px;
-  font-size: var(--font-size-caption);
-  color: var(--ws-text-secondary);
-}
-
-.pm-task__sep {
-  color: var(--ws-text-disabled);
-}
-
-.pm-task__right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex: none;
 }
 
 .pm-task__due {

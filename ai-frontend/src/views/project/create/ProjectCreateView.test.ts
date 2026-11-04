@@ -1,0 +1,122 @@
+// @vitest-environment happy-dom
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { flushPromises } from "@vue/test-utils";
+
+import ProjectCreateView from "./ProjectCreateView.vue";
+import { mountShell } from "@/components/shell/test-utils";
+import { i18n } from "@/lib/i18n";
+
+const createProject = vi.fn();
+vi.mock("@/api/projects", () => ({
+  createProject: (...args: unknown[]) => createProject(...args)
+}));
+
+const t = (key: string) => i18n.global.t(key) as string;
+
+async function mountView() {
+  const mounted = mountShell(ProjectCreateView);
+  await flushPromises();
+  return mounted;
+}
+
+function findButtonByText(
+  wrapper: {
+    findAll: (
+      sel: string
+    ) => { text: () => string; trigger: (e: string) => Promise<void> }[];
+  },
+  text: string
+) {
+  const target = wrapper
+    .findAll("button")
+    .find(button => button.text().includes(text));
+  expect(target, `button "${text}" should exist`).toBeTruthy();
+  return target!;
+}
+
+describe("ProjectCreateView", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("名称自动建议 Key；人工编辑后停止跟随，可用「使用建议」还原", async () => {
+    const { wrapper } = await mountView();
+    const inputs = wrapper.findAll("input");
+    const nameInput = inputs[0];
+    const keyInput = inputs[1];
+
+    await nameInput.setValue("Smark PM");
+    expect((keyInput.element as HTMLInputElement).value).toBe("SMARK");
+
+    // 人工编辑后不再跟随名称
+    await keyInput.setValue("CUSTOM");
+    await nameInput.setValue("Smark PM Labs");
+    expect((keyInput.element as HTMLInputElement).value).toBe("CUSTOM");
+
+    // 还原建议
+    await findButtonByText(wrapper, t("s01.project-create.keyReset")).trigger(
+      "click"
+    );
+    expect((keyInput.element as HTMLInputElement).value).toBe("SMARK");
+  });
+
+  it("空表单提交触发必填校验且不调用 API", async () => {
+    const { wrapper } = await mountView();
+    await wrapper.find("form").trigger("submit");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain(t("s01.project-create.nameRequired"));
+    expect(wrapper.text()).toContain(t("s01.project-create.keyRequired"));
+    expect(createProject).not.toHaveBeenCalled();
+  });
+
+  it("提交成功调用 createProject 并展示成功反馈，可进入初始化总览", async () => {
+    createProject.mockResolvedValue({
+      id: "prj-1",
+      name: "Atlas Platform"
+    });
+    const { wrapper, router } = await mountView();
+
+    const inputs = wrapper.findAll("input");
+    await inputs[0].setValue("Atlas Platform");
+    await wrapper
+      .find("textarea")
+      .setValue("R&D delivery workbench for platform teams");
+    await wrapper.find("form").trigger("submit");
+    await flushPromises();
+
+    expect(createProject).toHaveBeenCalledWith({
+      code: "ATLAS",
+      name: "Atlas Platform",
+      description: "R&D delivery workbench for platform teams"
+    });
+    expect(wrapper.text()).toContain(t("s01.project-create.successTitle"));
+
+    // 「立即进入」携带 project_id 进入 S01-01 初始化总览
+    await findButtonByText(wrapper, t("s01.project-create.openNow")).trigger(
+      "click"
+    );
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe("/project/initialization");
+    expect(router.currentRoute.value.query.project_id).toBe("prj-1");
+    wrapper.unmount();
+  });
+
+  it("服务端 409 冲突落在 Key 字段，表单数据保留", async () => {
+    createProject.mockRejectedValue(
+      Object.assign(new Error("conflict"), { status: 409 })
+    );
+    const { wrapper } = await mountView();
+
+    const inputs = wrapper.findAll("input");
+    await inputs[0].setValue("Atlas Platform");
+    await wrapper.find("form").trigger("submit");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain(t("s01.project-create.keyConflict"));
+    expect((inputs[0].element as HTMLInputElement).value).toBe(
+      "Atlas Platform"
+    );
+    expect(wrapper.text()).not.toContain(t("s01.project-create.successTitle"));
+  });
+});

@@ -1,0 +1,40 @@
+s01:
+  project-create:
+    pageTitle: 新建项目
+    pageDescription: 设置你的项目，即刻开始 AI 协同构建。
+    breadcrumbProjects: 项目
+    breadcrumbCreate: 新建项目
+    sectionBasic: 基本信息
+    sectionOwnership: 项目归属
+    nameLabel: 项目名称
+    namePlaceholder: 例如 Atlas Platform
+    nameHelp: 项目的正式名称；之后可改名，项目标识保持不变。
+    keyLabel: 项目标识（Key）
+    keyPlaceholder: 例如 ATLAS
+    keyHelp: 依据名称自动建议 · 可编辑 · 组织内必须唯一。创建后固定；变更走受控审计操作。
+    keyReset: 使用建议
+    descriptionLabel: 项目描述
+    descriptionPlaceholder: 这个项目解决什么问题？可选——后续供 AI-PM 认知使用。
+    optionalLabel: 可选
+    ownerLabel: 负责人
+    ownerYou: 你 · 创建人即负责人
+    ownerHelp: 默认为你（创建人）。创建后如需改派负责人，走项目治理操作——AI 不能指定负责人。
+    ownerFallback: 当前用户
+    deferredTitle: 不属于本表单
+    deferredBody: 在创建之后逐步配置——它们都不会阻塞项目创建。
+    deferredRepository: 仓库 OAuth 与主仓库（S01-03）
+    deferredCognition: AI-PM 认知（S01-04）
+    deferredBootstrap: Codex / MCP 引导（S01-06）
+    afterTitle: 创建之后
+    afterBody: 你会自动进入项目初始化总览。创建成功不等于初始化完成——项目立即进入 Active，初始化有独立生命周期。
+    nameRequired: 请填写项目名称。
+    keyRequired: 请填写项目标识。
+    keyConflict: 该标识已被其他项目占用，请更换一个。
+    failedTitle: 项目创建失败
+    failedBody: "{message} 已填写内容均保留——修正后重试即可，重试是安全的。"
+    cancel: 取消
+    createLabel: 创建项目
+    creating: 正在创建项目…
+    successTitle: 项目创建成功
+    successBody: "{name} 已就绪，正在进入项目初始化总览……"
+    openNow: 立即进入

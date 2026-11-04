@@ -2,14 +2,18 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import Badge from "@/components/ui/badge/Badge.vue";
+import ListItem from "@/components/ui/list-item/ListItem.vue";
+import StatusIndicator from "@/components/ui/status-indicator/StatusIndicator.vue";
 
+import type { BadgeVariant } from "@/components/ui/badge/Badge.vue";
 import { useRelativeTime } from "../useRelativeTime";
 
 /**
- * 我的项目卡片。
+ * 我的项目行 —— 组合公共 ListItem。
  *
  * 设计约束（高保真稿 §4.3）：只给 6 个字段（名称/角色/状态/描述/我的待办/最近活跃），
  * 不复制项目总控台的统计（任务数、需求数、Agent 数一律不展示）。
+ * 角色与状态走公共 Badge，关注指示走公共 StatusIndicator。
  */
 interface Props {
   name: string;
@@ -20,7 +24,7 @@ interface Props {
   role: string | null;
   pendingCount: number;
   lastActivityAt: string | null;
-  /** 存在逾期货项 */
+  /** 存在逾期人工事项 */
   attention: boolean;
 }
 
@@ -31,125 +35,39 @@ const emit = defineEmits<{ (e: "open"): void }>();
 const { t } = useI18n();
 const { relative } = useRelativeTime();
 
-const statusVariant = computed(() => {
+const statusVariant = computed<BadgeVariant>(() => {
   if (props.status === "archived") return "neutral";
   if (props.status === "active") return "success";
   if (props.status === "planning") return "info";
   return "neutral";
 });
+
+const summary = computed(() => {
+  const parts = [
+    props.description || props.code,
+    `${props.pendingCount} ${t("pm.personalHome.projects.pending")}`,
+    relative(props.lastActivityAt)
+  ].filter(Boolean);
+  return parts.join(" · ");
+});
 </script>
 
 <template>
-  <button type="button" class="pm-project" @click="emit('open')">
-    <span class="pm-project__top">
-      <span class="pm-project__name">{{ name }}</span>
-      <span v-if="role" class="pm-project__role">{{ role }}</span>
-      <span class="pm-project__status">
-        <Badge size="sm" :variant="statusVariant">{{ status }}</Badge>
-      </span>
-    </span>
-    <span v-if="description" class="pm-project__desc">{{ description }}</span>
-    <span class="pm-project__meta">
-      <span
+  <ListItem
+    class="pm-project"
+    :title="name"
+    :description="summary"
+    @click="emit('open')"
+  >
+    <template #trailing>
+      <StatusIndicator
         v-if="attention"
-        class="pm-project__attention"
+        status="warning"
+        size="sm"
         :title="t('pm.personalHome.projects.attentionTitle')"
       />
-      <span>
-        <b>{{ pendingCount }}</b> {{ t("pm.personalHome.projects.pending") }}
-      </span>
-      <span class="pm-project__sep" aria-hidden="true">·</span>
-      <span>{{ relative(lastActivityAt) }}</span>
-    </span>
-  </button>
+      <Badge v-if="role" size="sm">{{ role }}</Badge>
+      <Badge size="sm" :variant="statusVariant">{{ status }}</Badge>
+    </template>
+  </ListItem>
 </template>
-
-<style scoped>
-.pm-project {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: var(--space-3) var(--space-4);
-  border-top: var(--border-1) solid var(--ws-border);
-  transition: background var(--duration-fast) var(--ease-standard);
-}
-
-.pm-project:hover {
-  background: var(--ws-hover-veil);
-}
-
-.pm-project:focus-visible {
-  outline: none;
-  box-shadow: var(--ws-focus-ring);
-}
-
-.pm-project__top {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.pm-project__name {
-  font-size: var(--font-size-body);
-  font-weight: var(--weight-medium);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pm-project__role {
-  flex: none;
-  height: var(--size-badge-sm);
-  display: inline-flex;
-  align-items: center;
-  padding: 0 5px;
-  font-size: var(--font-size-micro);
-  color: var(--ws-text-secondary);
-  border: var(--border-1) solid var(--ws-border);
-  border-radius: var(--radius-xs);
-}
-
-.pm-project__status {
-  margin-left: auto;
-  flex: none;
-}
-
-.pm-project__desc {
-  display: block;
-  margin-top: 4px;
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-caption);
-  color: var(--ws-text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pm-project__meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-  font-size: var(--font-size-micro);
-  color: var(--ws-text-secondary);
-  flex-wrap: wrap;
-}
-
-.pm-project__meta b {
-  font-weight: var(--weight-medium);
-  font-variant-numeric: tabular-nums;
-}
-
-.pm-project__attention {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--ws-color-warning);
-  flex: none;
-}
-
-.pm-project__sep {
-  color: var(--ws-text-disabled);
-}
-</style>

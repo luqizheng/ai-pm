@@ -169,13 +169,19 @@ const actorIcon = computed(() => {
   overflow: hidden;
 }
 
+/* 文本级链接钮：显式清掉浏览器默认 buttonface 底色（违和根因） */
 .pm-activity__object {
   display: inline-flex;
   align-items: center;
   margin-top: var(--space-2);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  font: inherit;
   font-size: var(--font-size-micro);
   color: var(--ws-text-secondary);
   text-align: left;
+  cursor: pointer;
 }
 
 .pm-activity__object:hover {

@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import StatusIndicator from "@/components/ui/status-indicator/StatusIndicator.vue";
+
 /**
- * My Overview 的单个指标块。
+ * My Overview 的单个指标块（页内私有布局件）。
  *
  * 设计约束（见 docs/ui/s01/s01-05-personal-home-high-fidelity-ui-v1.md §4.1）：
  *   - 数字只用于快速概览，不画图表 / 进度条 / 趋势线；
- *   - 颜色点只承载语义（warning=需要关注 / info=分配给我 / accent=活跃项目），
- *     数字本身用主文字色；
+ *   - 语义点用公共 StatusIndicator，不自造色点；
  *   - 数据不可用时显示「—」而不是 0（失败 ≠ 空）。
  */
 interface Props {
@@ -15,21 +17,32 @@ interface Props {
   value: number | null;
   /** 副标题（口径解释） */
   hint?: string;
-  /** 语义色点 */
+  /** 语义档（映射到 StatusIndicator 的 status） */
   tone?: "warning" | "info" | "accent" | "success" | "muted";
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   hint: "",
   tone: "muted"
 });
 
 const emit = defineEmits<{ (e: "select"): void }>();
+
+const status = computed(() => {
+  const byTone = {
+    warning: "warning",
+    info: "info",
+    accent: "accent",
+    success: "success",
+    muted: "neutral"
+  } as const;
+  return byTone[props.tone];
+});
 </script>
 
 <template>
   <button type="button" class="pm-metric" @click="emit('select')">
-    <span class="pm-metric__dot" :data-tone="tone" aria-hidden="true" />
+    <StatusIndicator :status="status" size="sm" />
     <span class="pm-metric__body">
       <span class="pm-metric__value" :class="{ 'is-na': value === null }">
         {{ value === null ? "—" : value }}
@@ -41,14 +54,20 @@ const emit = defineEmits<{ (e: "select"): void }>();
 </template>
 
 <style scoped>
+/* 裸 <button> 必须显式清掉浏览器默认 buttonface 底色（违和根因） */
 .pm-metric {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-4);
   text-align: left;
+  background: transparent;
+  border: 0;
   border-left: var(--border-1) solid var(--ws-border);
-  transition: background var(--duration-fast) var(--ease-standard);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard);
 }
 
 .pm-metric:first-child {
@@ -56,37 +75,12 @@ const emit = defineEmits<{ (e: "select"): void }>();
 }
 
 .pm-metric:hover {
-  background: var(--ws-hover-veil);
+  background-color: var(--ws-hover-veil);
 }
 
 .pm-metric:focus-visible {
   outline: none;
   box-shadow: var(--ws-focus-ring);
-}
-
-.pm-metric__dot {
-  width: var(--size-ai-dot);
-  height: var(--size-ai-dot);
-  margin-top: 7px;
-  border-radius: var(--radius-full);
-  flex: none;
-  background: var(--ws-text-disabled);
-}
-
-.pm-metric__dot[data-tone="warning"] {
-  background: var(--ws-color-warning);
-}
-
-.pm-metric__dot[data-tone="info"] {
-  background: var(--ws-color-info);
-}
-
-.pm-metric__dot[data-tone="accent"] {
-  background: var(--ws-accent);
-}
-
-.pm-metric__dot[data-tone="success"] {
-  background: var(--ws-color-success);
 }
 
 .pm-metric__body {
