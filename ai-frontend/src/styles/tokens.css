@@ -312,6 +312,20 @@
   --shadow-lg: none;
   --shadow-accent: none;
   --shadow-accent-lg: none;
+
+  /* ------------------------------------------------------------------
+   * 认证域（Figma「02 — Authentication」九帧，2026-11-04）
+   * 品牌标识与认证页几何尺寸：双主题恒定（浅色主题不覆盖）。
+   * ---------------------------------------------------------------- */
+
+  /* 品牌标识章 —— 深色章底 + accent 字形，浅色主题下仍保持品牌一致性 */
+  --ws-brand-mark-surface: #242238;
+  --ws-brand-mark-foreground: #8b83f6;
+
+  /* 认证页几何 —— 页头 64 / 面板宽 400 / 用途图标 32 */
+  --ws-auth-header-height: 64px;
+  --ws-auth-panel-width: 400px;
+  --ws-auth-indicator-size: 32px;
 }
 
 [data-theme="light"] {

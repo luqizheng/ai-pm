@@ -15,3 +15,6 @@ common:
   pageSize: 每页条数
   total: "共 {count} 条"
   empty: 还没有记录
+  password:
+    show: 显示口令
+    hide: 隐藏口令

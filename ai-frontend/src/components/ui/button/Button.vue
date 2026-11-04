@@ -6,6 +6,7 @@ import {
   BUTTON_SIZES,
   BUTTON_VARIANTS,
   type ButtonSize,
+  type ButtonSurface,
   type ButtonVariant
 } from "./button";
 
@@ -14,6 +15,13 @@ interface Props {
   variant?: ButtonVariant;
   /** 尺寸系 —— Figma：sm 28 / md 36 / lg 44 / 图标方钮 */
   size?: ButtonSize;
+  /**
+   * 表面档 —— 仅 secondary 变体生效。
+   * base = 组件库默认（surface #1D212A，用于画布底上的次级动作）；
+   * elevated = 抬起面（elevated #252A35，用于「表面色面板内」的次级动作，
+   * 如认证页的 SSO / 返回按钮 —— Figma「02 — Authentication」）。
+   */
+  surface?: ButtonSurface;
   /** 异步进行中：禁用按钮并标记 aria-busy（内嵌 loader 图标） */
   loading?: boolean;
   disabled?: boolean;
@@ -23,6 +31,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   variant: "primary",
   size: "md",
+  surface: "base",
   loading: false,
   disabled: false,
   type: "button"
@@ -38,6 +47,7 @@ const isDisabled = computed(() => props.disabled || props.loading);
     :aria-busy="loading ? 'true' : undefined"
     :class="
       cn('ui-button', `ui-button--${variant}`, `ui-button--${size}`, {
+        [`is-surface-${surface}`]: variant === 'secondary',
         'is-loading': loading
       })
     "
@@ -124,6 +134,25 @@ const isDisabled = computed(() => props.disabled || props.loading);
 
 .ui-button--secondary:disabled {
   opacity: var(--opacity-disabled-button);
+}
+
+/* Secondary · elevated 表面档 —— 面板内的次级动作（Figma 认证页 SSO / 返回按钮）：
+ * 底色为抬起面，悬浮 / 按压叠一层主题薄纱（--ws-hover-veil / --ws-active-veil）。 */
+.ui-button--secondary.is-surface-elevated {
+  background-color: var(--surface-raised);
+}
+
+.ui-button--secondary.is-surface-elevated:hover:not(:disabled) {
+  background-color: var(--surface-raised);
+  background-image: linear-gradient(var(--ws-hover-veil), var(--ws-hover-veil));
+}
+
+.ui-button--secondary.is-surface-elevated:active:not(:disabled) {
+  background-color: var(--surface-raised);
+  background-image: linear-gradient(
+    var(--ws-active-veil),
+    var(--ws-active-veil)
+  );
 }
 
 /* Tertiary：透明底 + accent 文字；hover elevated / pressed surface 底 */

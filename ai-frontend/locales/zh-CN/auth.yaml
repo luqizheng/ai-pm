@@ -1,0 +1,164 @@
+auth:
+  chrome:
+    product: AI R&D Workspace
+    section: 身份验证
+    secure: SECURE WORKSPACE ACCESS
+    version: "AI R&D Workspace · v1.0"
+    help: 帮助与支持
+    privacy: 隐私
+    terms: 条款
+    supportLinks: 支持链接
+  requirement:
+    met: 已满足
+    unmet: 未满足
+  login:
+    title: 登录你的工作区
+    subtitle: 输入账号信息以继续。
+    accountLabel: 邮箱或用户名
+    accountPlaceholder: "you{'@'}company.com"
+    passwordLabel: 口令
+    passwordPlaceholder: 请输入口令
+    rememberMe: 记住我
+    forgotPassword: 忘记口令？
+    submit: 登录
+    submitting: 正在登录…
+    divider: 或使用以下方式继续
+    sso: 单点登录（SSO）
+    ssoHint: 使用你的组织所配置的身份提供方。
+    ssoUnavailable: 该工作区尚未启用单点登录。
+    guidance: 需要访问权限？请向工作区管理员索取邀请。
+    errorTitle: 无法登录
+    errorDetail: 邮箱、用户名或口令不正确。请检查后重试。
+    validation:
+      accountRequired: 请输入邮箱或用户名。
+      accountInvalid: 请输入有效的邮箱地址。
+      passwordRequired: 请输入口令。
+  forgot:
+    title: 忘记口令？
+    subtitle: 输入账号邮箱，我们会发送重置链接。
+    emailLabel: 邮箱地址
+    emailPlaceholder: "you{'@'}company.com"
+    submit: 发送重置链接
+    submitting: 发送中…
+    hint: 若账号存在，你将很快收到邮件。链接 30 分钟后失效。
+    backToSignIn: 返回登录
+    useAnotherEmail: 换一个邮箱
+    guidance: 使用单点登录？请在组织的身份提供方处重置口令。
+    successTitle: 请查收邮件
+    successDetail: 若账号存在，重置链接已在路上。请检查垃圾邮件，或 60 秒后重试。
+    validation:
+      emailRequired: 请输入邮箱地址。
+      emailInvalid: 请输入有效的邮箱地址。
+  reset:
+    title: 设置新口令
+    subtitle: 选择一个你此前未使用过的强口令。
+    account: "账号 · {account}"
+    newPasswordLabel: 新口令
+    confirmLabel: 确认新口令
+    matchHint: 两次输入一致。
+    requirementLength: 至少 12 个字符
+    requirementMix: 含大写字母、小写字母与数字
+    requirementSymbol: 至少一个特殊字符
+    submit: 重置口令
+    submitting: 正在重置…
+    hint: 重置后需要重新登录，其他活跃会话将被登出。
+    backToSignIn: 返回登录
+    successTitle: 口令已更新
+    successDetail: 请用新口令登录。
+    expiredTitle: 该重置链接已过期
+    expiredDetail: 请重新申请重置链接。
+    validation:
+      passwordRequired: 请输入新口令。
+      mismatch: 两次输入的口令不一致。
+  invitation:
+    title: 加入工作区
+    subtitle: "{inviter} 邀请你协作于 {workspace}。"
+    invitedEmailLabel: 受邀邮箱
+    roleLabel: 工作区角色
+    role: 成员
+    expiresLabel: 邀请过期时间
+    expiresAt: 2026 年 11 月 11 日
+    submit: 接受邀请
+    submitting: 正在加入…
+    note: "将以 {account} 的身份继续。加入即表示你同意该工作区的条款与访问策略。"
+    notYourAccount: 不是你的账号？
+    useAnotherAccount: 换一个账号
+    errorTitle: 该邀请已失效
+    errorDetail: 请联系工作区管理员重新发送邀请。
+  loading:
+    title: 正在为你登录
+    subtitle: 正在核验账号并建立安全会话。
+    stepCredentials: 凭据已核验
+    stepSession: 正在建立安全会话
+    stepWorkspace: 正在打开工作区
+    hint: 通常只需几秒钟，请保持窗口打开。
+    cancel: 取消并返回登录
+  sessionExpired:
+    title: 会话已过期
+    subtitle: 出于安全考虑，你已被登出。重新登录即可返回工作区。
+    infoTitle: 你已保存的工作仍在。
+    infoDetail: 登录后将回到你之前的位置。
+    signInAgain: 重新登录
+    differentAccount: 使用其他账号登录
+  unauthorized:
+    title: 你没有访问权限
+    subtitle: 你已登录，但该账号无权打开此工作区。
+    signedInAs: 当前登录账号
+    requestedWorkspace: 目标工作区
+    description: 请向工作区管理员申请邀请或所需权限。若使用其他账号，可在下方切换。
+    switchAccount: 切换账号
+    backToWorkspaces: 返回你的工作区
+    reference: "403 · ACCESS_DENIED"
+    contactSupport: 联系支持
+  patterns:
+    eyebrow: "02 — AUTHENTICATION / SYSTEM REFERENCE"
+    title: 认证模式与状态
+    description: 共享控件、反馈与键盘约定。静态设计参照，非交互原型。
+    version: "HIGH-FIDELITY DS · V1.0"
+    fields:
+      title: 字段与校验
+      description: 标签常驻，行内反馈紧贴所描述的字段。
+      defaultLabel: "邮箱或用户名 · 默认"
+      focusLabel: "邮箱或用户名 · 聚焦"
+      focusHint: 2px accent 聚焦指示
+      invalidLabel: "邮箱地址 · 错误"
+      invalidHint: 请输入有效的邮箱地址。
+      visibleLabel: "口令 · 可见"
+      visibleHint: "眼睛控件：隐藏口令，取值不变。"
+      hiddenLabel: "口令 · 隐藏"
+      disabledLabel: "邮箱地址 · 禁用"
+      placeholder: "you{'@'}company.com"
+      visibleValue: Orbit-Research!26
+    actions:
+      title: 动作与交互状态
+      description: 36px 控件、8px 圆角。每个表单只有一个主动作。
+      default: 默认
+      hover: "悬浮 · 抬升强调"
+      focus: "键盘聚焦 · 可见描边"
+      active: "按压 · 已按下"
+      disabled: "禁用 · 暂不可提交"
+      loading: "载入中 · 防重复提交"
+      note: 载入中保持动作宽度与文案上下文；禁用控件不接收键盘焦点。
+      label: 登录
+      loadingLabel: 正在登录…
+    feedback:
+      title: 反馈与键盘可达
+      description: 消息必须可执行，不得仅靠颜色区分。
+      errorTitle: 无法登录
+      errorDetail: 邮箱、用户名或口令不正确。请检查后重试。
+      infoTitle: 请查收邮件
+      infoDetail: 若账号存在，重置链接已在路上。请检查垃圾邮件，或 60 秒后重试。
+      expiredTitle: 该重置链接已过期
+      expiredDetail: 请重新申请重置链接。
+      success: 口令已更新，请用新口令登录。
+      keyboardTitle: 键盘约定
+      keyTab: "Tab / Shift + Tab"
+      keyTabDesc: 在控件间向后 / 向前移动
+      keyEnter: Enter
+      keyEnterDesc: 提交当前聚焦的表单
+      keySpace: Space
+      keySpaceDesc: 切换复选框或激活控件
+      note: "提交后聚焦第一个无效字段并播报反馈；可见性切换带「显示 / 隐藏口令」标签。"
+    summary:
+      metrics: "4px 基数 · 13px 正文 · 22px 标题 · 36px 行高 · 8px 圆角"
+      accent: "AI 强调色 #8B83F6 · 默认深色 / 浅色参照"
