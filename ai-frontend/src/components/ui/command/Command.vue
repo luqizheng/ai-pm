@@ -1,6 +1,8 @@
+<!-- @figma-sync file=hNlGqLEMQpOVCZ0o5u3DkT set="DS/Overlays/CommandPalette" node=13:34028 date=2026-11-04 -->
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { Search } from "lucide-vue-next";
 
 export interface CommandItem {
   id: string;
@@ -111,18 +113,22 @@ function onKeydown(event: KeyboardEvent) {
     :aria-label="labelText"
   >
     <div class="ui-command__panel">
-      <input
-        ref="inputRef"
-        class="ui-command__input"
-        type="text"
-        role="combobox"
-        aria-expanded="true"
-        :aria-label="labelText"
-        :placeholder="placeholderText"
-        :value="query"
-        @input="onInput"
-        @keydown="onKeydown"
-      />
+      <div class="ui-command__search">
+        <Search class="ui-command__search-icon" aria-hidden="true" />
+        <input
+          ref="inputRef"
+          class="ui-command__input"
+          type="text"
+          role="combobox"
+          aria-expanded="true"
+          :aria-label="labelText"
+          :placeholder="placeholderText"
+          :value="query"
+          @input="onInput"
+          @keydown="onKeydown"
+        />
+        <kbd class="ui-command__esc" aria-hidden="true">Esc</kbd>
+      </div>
       <ul class="ui-command__list" role="listbox">
         <li
           v-for="(item, index) in filtered"
@@ -148,12 +154,19 @@ function onKeydown(event: KeyboardEvent) {
       <p v-if="filtered.length === 0" class="ui-command__empty">
         {{ emptyTextText }}
       </p>
+      <p class="ui-command__hint" aria-hidden="true">
+        ↑ ↓ Navigate · ↵ Open · Esc Close
+      </p>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 命令面板 — Phase 2 §3.2 / §5.2：E3 规格（白底 + shadow-lg） */
+/* Figma DS/Overlays/CommandPalette（13:34028）：
+ * elevated 面板 + radius 8 + 内边 8 + gap 8 / Medium 宽 448；
+ * 搜索框 canvas 底 + border 描边（高 36，search 图标 16 + Esc chip）；
+ * 菜单项 36px / radius 8 / 主文字；选中项 accent 着色面；
+ * 底部键盘指引行（11px 次文字 + 顶部分隔线）。 */
 .ui-command {
   position: fixed;
   inset: 0;
@@ -169,24 +182,50 @@ function onKeydown(event: KeyboardEvent) {
 
 .ui-command__panel {
   width: calc(100% - var(--space-8));
-  max-width: 640px;
+  max-width: var(--size-overlay-panel);
   max-height: 60vh;
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
   overflow: hidden;
+  padding: var(--space-2);
   background: var(--surface-raised);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
+  border: var(--border-1) solid var(--border-strong);
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);
 }
 
+/* 搜索框：canvas 底 + border 描边（区别于旧版仅底部分隔线） */
+.ui-command__search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  height: var(--size-control-md);
+  padding: 0 var(--space-3);
+  background: var(--ws-canvas);
+  border: var(--border-1) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.ui-command__search:focus-within {
+  border: var(--border-2) solid var(--accent);
+}
+
+.ui-command__search-icon {
+  width: var(--size-icon-xs);
+  height: var(--size-icon-xs);
+  flex: none;
+  color: var(--text-secondary);
+}
+
 .ui-command__input {
-  width: 100%;
-  height: var(--size-control-lg);
-  padding: 0 var(--space-4);
+  flex: 1;
+  min-width: 0;
+  height: 100%;
   border: 0;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-raised);
+  background: transparent;
+  padding: 0;
   font-family: var(--font-ui);
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
@@ -194,17 +233,27 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .ui-command__input::placeholder {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
-.ui-command__input:focus-visible {
-  outline: var(--size-focus-ring) solid var(--accent);
-  outline-offset: calc(var(--size-focus-ring) * -1);
+.ui-command__input:focus {
+  outline: none;
+}
+
+.ui-command__esc {
+  flex: none;
+  padding: 1px var(--space-1);
+  border: var(--border-1) solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: var(--surface-raised);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-nano);
+  color: var(--text-secondary);
 }
 
 .ui-command__list {
   margin: 0;
-  padding: var(--space-2);
+  padding: 0;
   list-style: none;
   overflow-y: auto;
 }
@@ -212,19 +261,19 @@ function onKeydown(event: KeyboardEvent) {
 .ui-command__item {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  height: 32px;
+  gap: var(--space-2);
+  height: var(--size-nav-item);
   padding: 0 var(--space-2);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   font-family: var(--font-ui);
   font-size: var(--font-size-body);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   cursor: pointer;
 }
 
 .ui-command__item.is-active {
-  background: var(--accent-subtle);
-  color: var(--accent-deep);
+  background: var(--accent-surface);
+  color: var(--text-primary);
 }
 
 .ui-command__item-label {
@@ -232,27 +281,38 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .ui-command__item-group {
-  font-size: var(--font-size-caption);
-  color: var(--text-tertiary);
+  font-size: var(--font-size-nano);
+  color: var(--text-secondary);
 }
 
 .ui-command__item-shortcut {
-  padding: 0 var(--space-1);
-  border: 1px solid var(--border-strong);
+  padding: 1px var(--space-1);
+  border: var(--border-1) solid var(--border-strong);
   border-radius: var(--radius-xs);
-  background: var(--surface-base);
-  box-shadow: inset 0 -1px 0 var(--border-strong);
+  background: var(--surface-raised);
   font-family: var(--font-mono);
-  font-size: var(--font-size-kbd);
+  font-size: var(--font-size-nano);
   color: var(--text-secondary);
 }
 
 .ui-command__empty {
   margin: 0;
-  padding: var(--space-4);
+  padding: var(--space-6);
   font-family: var(--font-ui);
-  font-size: var(--font-size-small);
-  line-height: var(--line-height-small);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  color: var(--text-primary);
+}
+
+/* 键盘指引行：11px 次文字 + 顶部 1px 分隔（Figma Keyboard guidance） */
+.ui-command__hint {
+  margin: 0;
+  flex: none;
+  padding: var(--space-2);
+  border-top: var(--border-1) solid var(--border-strong);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-micro);
   color: var(--text-secondary);
 }
 </style>

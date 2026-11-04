@@ -46,6 +46,9 @@ design:
     contexts:
       title: 三种导航上下文
       subtitle: Figma 板 03/04/05 — 个人 / 项目 / 管理（DS 组件组合，不混成扁平菜单）
+    switcher:
+      title: 项目上下文切换器
+      subtitle: Figma 板 06 — Project Context Switcher — TopBarSlice / Trigger 五态 / Menu 五反馈态（双主题）
     states:
       title: 导航交互状态
       subtitle: Figma 板 06/08 — Navigation Item / Group / Badge / Tooltip / Context Header 全状态

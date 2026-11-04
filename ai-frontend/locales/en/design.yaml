@@ -46,6 +46,9 @@ design:
     contexts:
       title: Three navigation contexts
       subtitle: Boards 03/04/05 — personal / project / administration
+    switcher:
+      title: Project context switcher
+      subtitle: Board 06 — Project Context Switcher — TopBarSlice / Trigger states / Menu feedback states (dual theme)
     states:
       title: Navigation interaction states
       subtitle: Boards 06/08 — Navigation Item / Group / Badge / Tooltip / Context Header

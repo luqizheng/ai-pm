@@ -7,7 +7,7 @@ import { buildRoutes } from "./index";
 
 /**
  * 设计系统目录路由契约：
- *   - 15 条 design 路由全部可达且为无壳全屏页（meta.layout = "design"）；
+ *   - 35 条 design 路由（16 目录 + 19 Settings 框架）全部可达且为无壳全屏页（meta.layout = "design"）；
  *   - 路由已挂进 buildRoutes()（App 双外壳判据依赖 meta.layout）；
  *   - 认证/业务路由不受影响（buildRoutes 仍由导航树派生）。
  */
@@ -20,8 +20,8 @@ function makeRouter() {
 }
 
 describe("design routes", () => {
-  it("designRoutes 覆盖 34 条路径（15 目录 + 19 Settings 框架）", () => {
-    expect(designRoutes).toHaveLength(34);
+  it("designRoutes 覆盖 35 条路径（16 目录 + 19 Settings 框架）", () => {
+    expect(designRoutes).toHaveLength(35);
   });
 
   it("全部路由带 meta.layout=design 且已挂进 buildRoutes", async () => {

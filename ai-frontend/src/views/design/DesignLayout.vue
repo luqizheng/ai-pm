@@ -65,6 +65,10 @@ const navSections = computed(() => [
         to: DESIGN_PATHS.navigation.contexts
       },
       {
+        label: t("design.navigation.switcher.title"),
+        to: DESIGN_PATHS.navigation.switcher
+      },
+      {
         label: t("design.navigation.states.title"),
         to: DESIGN_PATHS.navigation.states
       },

@@ -46,13 +46,13 @@ describe("Dialog", () => {
     expect(w.exists()).toBe(true);
   });
 
-  it("遮罩存在且内容为白卡 + shadow-lg", async () => {
+  it("遮罩存在且内容为 Figma Modal 口径：surface 底 + border 描边 + radius 8", async () => {
     mountDialog();
     await flush();
     expect(document.querySelector(".ui-dialog__overlay")).not.toBeNull();
     expect(document.querySelector(".ui-dialog__content")).not.toBeNull();
-    expect(source).toContain("var(--surface-raised)");
-    expect(source).toContain("var(--shadow-lg)");
+    expect(source).toContain("var(--surface-base)");
+    expect(source).toContain("var(--radius-sm)");
     expect(source).toContain("var(--border-strong)");
   });
 

@@ -3,19 +3,20 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   Bell,
-  Box,
   ChevronsUpDown,
   CircleQuestionMark,
   Search,
   Sparkles
 } from "lucide-vue-next";
 
+import { ProjectSwitcher } from "@/components/global/project-switcher";
 import Avatar from "@/components/ui/avatar/Avatar.vue";
 import DropdownMenu from "@/components/ui/dropdown-menu/DropdownMenu.vue";
 import IconTooltip from "./IconTooltip.vue";
 import {
   demoOrganization,
   demoProject,
+  demoProjects,
   demoUnreadNotifications,
   demoUser
 } from "./demo";
@@ -23,17 +24,17 @@ import {
 /**
  * 全局顶栏（Application Shell §2A，52px）。
  *
- * 左：产品标识 + 产品名 + 当前组织/项目上下文指示
+ * 左：产品标识 + 产品名 + 当前组织指示 + 项目切换器
+ *   （Figma 33:82961 Global/ProjectSwitcher：锚点 Selected 态 + 切换菜单；
+ *    2026-11-04 起**项目位升级为真切换器**，替代原静态上下文指示；
+ *    Shell V1.1「不引入 Workspace Switcher」对组织位仍然有效）
  * 中：全局搜索 / 命令面板入口（⌘ K）
  * 右：通知、全局 AI 助手入口、帮助、账户菜单
- *
- * 按 Shell V1.1 限制：**不引入 Workspace Switcher**——
- * 组织与项目在此仅作上下文指示（静态展示，无切换实体）。
  */
 
 const { t } = useI18n();
 
-const emit = defineEmits<{ search: [] }>();
+const emit = defineEmits<{ search: []; projectSelect: [id: string] }>();
 
 const accountItems = computed(() => [
   { label: t("shell.app.topbar.accountMenu.profile"), value: "profile" },
@@ -79,12 +80,14 @@ const accountItems = computed(() => [
 
       <span class="shell-topbar__slash" aria-hidden="true">/</span>
 
-      <!-- 当前项目（上下文指示，非切换器） -->
-      <span class="shell-topbar__context">
-        <Box :size="14" aria-hidden="true" />
-        <span class="shell-topbar__context-name">{{ demoProject.name }}</span>
-        <ChevronsUpDown :size="12" aria-hidden="true" />
-      </span>
+      <!-- 当前项目（Figma 33:82961 Global/ProjectSwitcher：Selected 锚点 + 切换菜单） -->
+      <ProjectSwitcher
+        :projects="demoProjects"
+        :label="demoProject.name"
+        :current-id="demoProject.id"
+        selected
+        @select="emit('projectSelect', $event)"
+      />
     </div>
 
     <!-- 中：全局搜索 / 命令面板入口 -->

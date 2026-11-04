@@ -9,7 +9,7 @@ import { mountShell } from "./test-utils";
  * 顶栏行为（Application Shell §2A）。
  */
 describe("TopBar", () => {
-  it("渲染产品名与当前组织/项目上下文", async () => {
+  it("渲染产品名与当前组织上下文（组织仍为静态指示）", async () => {
     const { wrapper } = mountShell(TopBar);
     await nextTick();
 
@@ -17,10 +17,38 @@ describe("TopBar", () => {
       "AI R&D Workspace"
     );
     const contexts = wrapper.findAll(".shell-topbar__context-name");
-    expect(contexts.map(el => el.text())).toEqual([
-      "Acme Research",
-      "Atlas Platform"
-    ]);
+    expect(contexts.map(el => el.text())).toEqual(["Acme Research"]);
+  });
+
+  it("项目位为 ProjectSwitcher 锚点（Selected 态，含当前项目名）", async () => {
+    const { wrapper } = mountShell(TopBar);
+    await nextTick();
+
+    const trigger = wrapper.find(".ps-trigger");
+    expect(trigger.exists()).toBe(true);
+    expect(trigger.text()).toContain("Atlas Platform");
+    expect(trigger.classes()).toContain("is-selected");
+  });
+
+  it("展开切换菜单选择项目后透传 projectSelect", async () => {
+    const { wrapper } = mountShell(TopBar);
+    await nextTick();
+
+    await wrapper.find(".ps-trigger").trigger("click");
+    await nextTick();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    await nextTick();
+
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>(".ps-menu__row")
+    );
+    const target = rows.find(r => r.textContent!.includes("SDK Toolkit"));
+    expect(target).toBeTruthy();
+    target!.click();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    await nextTick();
+
+    expect(wrapper.emitted("projectSelect")).toEqual([["project-sdk-toolkit"]]);
   });
 
   it("搜索入口为按钮并带无障碍名称", async () => {

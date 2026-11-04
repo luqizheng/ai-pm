@@ -1,3 +1,4 @@
+<!-- @figma-sync file=hNlGqLEMQpOVCZ0o5u3DkT set="DS/Overlays/Dropdown" node=13:33607 date=2026-11-04 -->
 <script setup lang="ts">
 import {
   DropdownMenuContent,
@@ -148,31 +149,32 @@ function onSelect(item: DropdownMenuItemOption) {
   color: var(--text-secondary);
 }
 
-/* 浮层容器 — Phase 1R §6.4 / §5.1 E2 */
+/* 浮层容器 — Figma DS/Overlays/Dropdown（13:33607）：
+ * elevated 底 + border 描边 + radius 8 / 内边 8px / 项间 gap 4px */
 :deep(.ui-dropdown-menu__content) {
-  min-width: calc(var(--space-12) * 4 + var(--space-2));
-  padding: calc((var(--space-1) + var(--space-2)) / 2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: var(--size-menu-min-width);
+  padding: var(--space-2);
   background: var(--surface-overlay);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  box-shadow:
-    inset 0 1px 0 0 var(--surface-highlight),
-    var(--shadow-md);
+  border: var(--border-1) solid var(--border-strong);
+  border-radius: var(--radius-sm);
   animation: ui-dropdown-menu-enter var(--duration-fast) var(--ease-decelerate);
 }
 
-/* 菜单项 — Phase 1R §6.4：高 32px / radius-xs / 文字 secondary */
+/* 菜单项 — Figma：高 36px / radius 8 / 文字主文字色 */
 :deep(.ui-dropdown-menu__item) {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  height: var(--size-control-sm);
+  height: var(--size-nav-item);
   padding: 0 var(--space-2);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   font-family: var(--font-ui);
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   cursor: pointer;
   user-select: none;
   outline: none;
@@ -181,25 +183,26 @@ function onSelect(item: DropdownMenuItemOption) {
     color var(--duration-fast) var(--ease-decelerate);
 }
 
-/* hover 加灰、字升 primary（§5.3 / §6.4） */
+/* 焦点项：accent 着色面底 + 2px accent 描边（Figma Default 首项口径） */
 :deep(.ui-dropdown-menu__item[data-highlighted]) {
-  background: var(--surface-hover-veil);
-  color: var(--text-primary);
+  background: var(--accent-surface);
+  outline: var(--size-focus-ring) solid var(--accent);
+  outline-offset: calc(var(--size-focus-ring) * -1);
 }
 
+/* 禁用项：整组 opacity 0.35（Figma 菜单禁用档） */
 :deep(.ui-dropdown-menu__item[data-disabled]) {
-  color: var(--text-disabled);
+  opacity: var(--opacity-disabled-option);
   cursor: not-allowed;
 }
 
-/* 危险项：danger 色（删除等不可逆操作） */
+/* 危险项：danger 标题色 #E69A9F（Figma Delete item） */
 :deep(.ui-dropdown-menu__item--danger) {
-  color: var(--danger);
+  color: var(--danger-title);
 }
 
 :deep(.ui-dropdown-menu__item--danger[data-highlighted]) {
-  background: var(--danger-subtle);
-  color: var(--danger-strong);
+  background: var(--danger-surface);
 }
 
 /* 读屏专用文本 —— 不依赖尚未引入的全局 base.css */
