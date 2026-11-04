@@ -155,8 +155,23 @@ async fn main() {
                     tracing::warn!(error = %e, "poll_active_runs failed; backing off");
                 }
             }
-            // T-032 D3：终态僵尸进程兜底（终止顺序反转引入的窗口——Run 已终态
-            // 但 terminate 失败，reconcile_orphans 不覆盖终态行）。
+            // I1-E 持久化清理账本（迁移 0035）：主路径——无时间窗、可重试、
+            // 阈值后转人工（needs_human 持续可查询）。
+            match pm_application::run_cleanup::run_cleanup_round(
+                &dispatch_pool,
+                run_executor.as_ref(),
+            )
+            .await
+            {
+                Ok((ok, failed)) => {
+                    if ok + failed > 0 {
+                        tracing::info!(cleared = ok, failed, "run cleanup round");
+                    }
+                }
+                Err(e) => tracing::warn!(error = %e, "run cleanup round failed"),
+            }
+            // T-032 D3 旧路径保留为兜底：撤凭据前已遗留的终态行（无账本行的
+            // 历史窗口——终止顺序反转引入的窗口，reconcile_orphans 不覆盖终态行）。
             if let Err(e) =
                 pm_application::run_executor::cleanup_finished_processes(&dispatch_pool, run_executor.as_ref())
                     .await

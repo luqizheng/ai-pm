@@ -116,7 +116,17 @@
 | I1-E | I1-025~034、040 | 正向 + **恢复** + 负向（Executor 启动握手、残留进程告警） |
 | I1-F | I1-035~040 及全量回归 | **恢复**（Worker 重启、Outbox 重放、多 Worker 并发）+ 历史只读 |
 
-**阻塞**：I1 正文需 V1.1 并入 P1~P4（待决 B-1）。P1~P4 涉及：queued Run 无取消路径、`cancel_run` 无外部入口（需扩 reason `project_archived`）、超窗残留进程 1 小时后无清理路径、缺 `initializing` 与 `cancel_import` 卡死事实。
+**阻塞**：~~I1 正文需 V1.1 并入 P1~P4（待决 B-1）~~ **已解除（2026-11-04，B-1 默认并入已实施 + I1-B/C/E/F 第二批落地，正文回填 V1.2 §19）**。
+
+**I1 全链落地结果（2026-11-04，两批）**：
+- **第一批（I1-A/D，正文 V1.1 §18）**：统一门禁三入口 + 归档事务（P1/P2/P4/N-2）+ 外部取消；5 例全绿。
+- **第二批（I1-B/C/E/F，正文 V1.2 §19）**：
+  - **I1-B**：TaskReady / enqueue_review 两入口改「先锁 Project 行」（I1-007/008/009/012/013/035/036）；
+  - **I1-C**：`claim_core` 两阶段协议——阶段 A 无锁发现候选 Project（LIMIT 32）→ 阶段 B 锁 `core.project` 行 → 查 archived → 重新查候选（SKIP LOCKED）→ 锁 Task（I1-010~014）；
+  - **I1-E**：启动确认先锁 Project 行（归档先落定 → 拒确认 + 终止子进程，I1-025/026/028）+ 持久化清理账本 `delivery.task_run_cleanup`（迁移 0035；无时间窗、退避重试 8 次、needs_human 可查询可恢复，I1-030/031/032/033/040）；
+  - **I1-F**：归档抑制 + 合法 ACK（I1-035/036）在 infrastructure 测试；重放死信幂等（I1-037）、清理登记幂等（I1-038）、重启继续（I1-039）由既有幂等/持久化覆盖。
+  - 验收：`run_claim_lifecycle.rs` 3 例 + `outbox_handlers.rs` 11 例（含 2 例新增）+ `run_executor_handshake.rs` 5 例 + `project_archive.rs` 5 例。
+  - 进程级实操（真实 PID/身份锚点）已由 T-032 CodexExecutor 落地；两机端到端实测归 **T-090**。
 
 ### 3.2 I2 · Finding 人工确认（33 + 15）
 
@@ -282,7 +292,8 @@ published 修订**；归档后正式 Goal / 提案 / 修订历史仍可读。
 | I2-E（并发全量验收） | §15.3 场景 1~6 / 12 / 14 / 15 | 并发决定行锁串行终态唯一；归档项目拒绝零写入；跨 Session 404；同 operation_id 不同内容幂等吸收；无审计保守展示；AI open question 不参与待补充推导。**2026-11-04 落地 6 例新绿**；场景 4/5/7/8/9 由 I2-B/D + DB 负向覆盖；场景 10（审计失败回滚）由同事务结构性保证 |
 | I4（Project Goal） | I4-001/002/007/012/019（部分） | 每项目唯一 Goal 文档（UNIQUE project_id+doc_key）；ensure 幂等；Agent 提案强制红线挂起不自动发布（Q2）；人工确认发布 rev2；过期 base 乐观并发拒绝；RunContract.goal 快照（缺失=null）。**2026-11-04 落地 3 例新绿**（`apps/pm-api/tests/project_goal.rs`） |
 | I3-B/C/D/E（**V1.1 简化模型**） | I3-001~021（按 §0.0.6 改写） | 可访问仓库 = Task 关联仓 ∩ verified；档位恒 `read_write`；claim 落快照 + SHA-256（`policy_snapshot_hash` + `repository_policy_snapshots`）；执行期 = 快照 ∩ 现状（仓库失验 / 项目归档 → 拒绝）；快照不可变；执行器物化仓库前按快照过滤。**2026-11-04 落地 4 例单测 + 12 例集成全绿**（`pm-domain::repo_access` + `apps/pm-api/tests/run_scope_snapshot.rs` + `repo_access_enforcement.rs`）。**同日按用户简化裁决撤下六能力/授权表/REST（迁移 0033）** |
-| I1-A/D（归档生命周期） | I1-001~006（守卫）+ I1-015~024（归档与 Run 取消，部分） | 统一门禁三入口接入；归档事务（P1 queued 条件取消 / N-2 Import 终态化 / P4 名额释放）；P2 外部取消入口（200/409）；重复归档 409；P3 残留进程告警。**2026-11-04 落地 5 例全绿**（`apps/pm-api/tests/project_archive.rs`）；I1-F 全链回归与 I1-E Executor 握手待 |
+| I1-A/D（归档生命周期） | I1-001~006（守卫）+ I1-015~024（归档与 Run 取消，部分） | 统一门禁三入口接入；归档事务（P1 queued 条件取消 / N-2 Import 终态化 / P4 名额释放）；P2 外部取消入口（200/409）；重复归档 409；P3 残留进程告警。**2026-11-04 落地 5 例全绿**（`apps/pm-api/tests/project_archive.rs`） |
+| I1-B/C/E/F（**第二批**） | I1-007~014、025~034、035~040 | **I1-B** 创建入口先锁 Project 行；**I1-C** claim 两阶段协议（候选发现 → 锁 Project → 重查 SKIP LOCKED）；**I1-E** 启动确认行锁守卫 + `delivery.task_run_cleanup` 持久化清理账本（无时间窗/退避/needs_human）；**I1-F** 归档抑制 ACK + 重放/重启/幂等覆盖。**2026-11-04 落地 3+2+5 例全绿**（`run_claim_lifecycle.rs` / `outbox_handlers.rs` 新增 2 例 / `run_executor_handshake.rs`）；正文回填 V1.2 §19，偏差 V-3/V-4 闭合 |
 | I6-B-05/06（导入契约） | S01-A066~A075 | 导入契约与审计：`repository_ids` 必填（缺省/空 → 422）、跨项目仓库拒绝（422）、导入集合在创建时固化（Source + 首轮 Attempt）、初始化操作被占有、同幂等键重放同一导入（`replayed=true` 且不新建）、`proposed` 态 terminate 后释放名额、`cancel` 带 reason 写入审计、导入启动/初始化占有/终止三类审计行可追溯。**2026-11-03 落地 7 例全绿**（`apps/pm-api/tests/import_contract.rs`） |
 
 ---

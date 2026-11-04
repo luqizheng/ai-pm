@@ -152,7 +152,24 @@ pub async fn enqueue_review(
 ) -> Result<EnqueueOutcome, ReviewError> {
     let mut tx = pool.begin().await?;
 
-    // 锁任务行（顺序 run → task 的反向：本路径先锁 task，因为 run 由本事务创建）。
+    // I1-A 归档守卫 + I1-B 锁序：**先锁 Project 行**，再锁 Task、最后建 Run——
+    // 与 TaskReady/Worker claim 同为 `project → run → task`（§17.1 裁决 3）。
+    // 创建与归档在同一把行锁上串行：归档先拿锁 → 这里看到 archived 合法跳过；
+    // 创建先拿锁 → 归档随后看到新建的 queued run 并条件取消（I1-012/I1-013）。
+    match crate::project_gate::lock_project_activity_tx(&mut tx, project_id).await {
+        Ok(crate::project_gate::ProjectActivity::Archived) => {
+            tx.commit().await?;
+            return Ok(EnqueueOutcome::NotFound);
+        }
+        Ok(crate::project_gate::ProjectActivity::Active) => {}
+        Err(crate::project_gate::GateError::NotFound) => {
+            tx.commit().await?;
+            return Ok(EnqueueOutcome::NotFound);
+        }
+        Err(err) => return Err(ReviewError::Db(sqlx::Error::Protocol(err.to_string()))),
+    }
+
+    // 锁任务行（本路径的 run 由本事务创建，故 task 在 run 之前）。
     let task = sqlx::query(
         "SELECT status FROM delivery.task WHERE id = $1 AND project_id = $2 FOR UPDATE",
     )
@@ -164,15 +181,6 @@ pub async fn enqueue_review(
         tx.commit().await?;
         return Ok(EnqueueOutcome::NotFound);
     };
-    // I1-A 归档守卫：项目已归档 → 消费但不创建 review run。
-    match crate::project_gate::project_activity_tx(&mut tx, project_id).await {
-        Ok(crate::project_gate::ProjectActivity::Archived) => {
-            tx.commit().await?;
-            return Ok(EnqueueOutcome::NotFound);
-        }
-        Ok(crate::project_gate::ProjectActivity::Active) => {}
-        Err(err) => return Err(ReviewError::Db(sqlx::Error::Protocol(err.to_string()))),
-    }
     let status: String = task.get("status");
 
     // 最新 delivery run（与 D4 视图「最新 Run」口径一致：attempt_no 最大）。

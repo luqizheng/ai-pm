@@ -469,6 +469,14 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **遗留**：性能项**未做压测基准**（无性能基线数据）——建议后续以真实项目数据量跑 p95 采样并 `EXPLAIN` 验证 0034 索引命中；不阻塞 S01。
   - **裁决登记**：ledger D-C-05（Goal 不下「已确认」结论）、D-C-06（初始化完成度 `not_determinable`）。
 
+- [x] **I1-B/C/E/F 归档生命周期第二批（P1，I1 §16）**（完成 2026-11-04；正文回填 V1.2 §19，偏差 V-3/V-4 闭合）
+  - **目标**：Run 创建入口锁序统一 + Worker claim 两阶段协议 + Executor 启动握手补强 + 持久化进程清理 + 全链回归。
+  - **依据**：`docs/ui/smark-pm-s01-i1-archive-lifecycle-v1.md` §5.2（两阶段）、§8（握手）、§9（清理）、§16/§17；迁移 `0035`。
+  - **做（B）**：`TaskReadyHandler` / `enqueue_review` 两入口第一步改 `lock_project_activity_tx`——创建与归档同锁串行（I1-007/008/012/013）。**做（C）**：`claim_core` 两阶段——阶段 A 无锁发现候选 Project（LIMIT 32）→ 阶段 B 锁 Project 行 → 查 archived → 该 Project 内重查候选（SKIP LOCKED）→ 锁 Task；归档跳过不失败、Run 保持 queued 原状（跳过≠取消）（I1-010/014）。**做（E）**：① 启动确认先锁 Project 行——归档先落定 → 拒确认 + 立即终止子进程（堵「spawn 后登记前归档仍推进 running」窗口）；② 迁移 `0035` `delivery.task_run_cleanup` 持久化清理账本（pending→cleaning→completed / 退避重试 8 次 → needs_human；无时间窗；SKIP LOCKED 批领；Worker 主循环接入，旧 1h 窗口路径降级兜底）（I1-025/026/028/030/031/032/033/040）。**做（F）**：归档抑制 ACK（I1-035/036，infrastructure 测试）+ 重放死信/清理登记/重启继续由既有幂等与持久化覆盖（I1-037/038/039）。
+  - **不做**：不改 T-032 已有的进程身份锚点（pid 文件 + identity_hint + 三重证据，I1-027/034 实操已覆盖）；进程级两机实测归 T-090。
+  - **验收**：`run_claim_lifecycle.rs` **3 例** + `outbox_handlers.rs` 新增 **2 例**（11 例全绿）+ `run_executor_handshake.rs` **5 例** + `project_archive.rs` 5 例；全量 **107 套件 / 791 passed / 0 failed**；升级演练 0028→0035 通过。
+  - **台账**：task registry I1-B/C/E/F 全部「已实施」；验收矩阵 I1 阻塞解除 + 第二批覆盖登记；ledger 增 G-30（PG uuid 排序坑不算缺陷，见 19.2 附注）。
+
 - [ ] **I2-A / I4-A / I5-A 三份代码事实核验（后续实施的硬前置）**
   - **目标**：产出 `docs/s01-i2-code-facts.md`、`docs/s01-i4-knowledge-facts.md`、`docs/s01-i5-code-facts.md`。
   - **依据**：I2 V1.1 §16 I2-A；I4 §13 I4-A；I5 V1.1 §9.1 I5-A（14 项）。

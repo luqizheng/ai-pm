@@ -1234,3 +1234,37 @@ I1 不能以「Project 状态已经变成 archived」作为全部完成标准。
 - `apps/pm-api/tests/project_archive.rs` 5 例全绿：三入口守卫 + P1 条件取消（queued→cancelled，running 不动于事务内）、claim 防御纵深、N-2/P4 名额释放与 Import 终态化、重复归档 409、P2 外部取消（200/409）。
 - `cargo test --workspace` 101 套件 / 759 passed / 0 failed（2026-11-04）。
 
+
+---
+
+## 19. V1.2 实施回填（2026-11-04，I1-B/C/E/F 补齐）
+
+> 本节记录第二批实施（I1-B/C/E/F），V-3/V-4 两项偏差**就此闭合**；§16/§17 裁决不变。
+
+## 19.1 各任务落地
+
+| 任务 | 落地 | 关键点 |
+|---|---|---|
+| **I1-B** | 两个 Run 创建入口改「先锁 Project 行」 | `TaskReadyHandler`（outbox_handlers.rs）与 `enqueue_review`（review/queue.rs）第一步改为 `project_gate::lock_project_activity_tx`——创建与归档在同一把行锁上串行：创建先拿锁 → 归档随后条件取消该 queued Run（I1-012）；归档先拿锁 → 创建读到 archived 合法跳过（I1-013）。锁序 `project → run → task` 全线统一 |
+| **I1-C** | `claim_core` 两阶段协议（§5.2） | **阶段 A**：无锁读候选 Project（`LIMIT 32`，不持跨事务锁）；**阶段 B**：逐 Project `锁 core.project → 查 archived → 该 Project 内重新查候选 Run（FOR UPDATE OF r SKIP LOCKED）→ 锁 Task → 重新验证 → claim`。候选被抢占 → 跳过该项目继续；归档 → 合法跳过（Run 保持 queued 原状——跳过≠取消，终态化归归档事务）；多 Project 排水无死锁无饥饿（I1-010/014）。原池外防御纵深读删除（锁内读已覆盖） |
+| **I1-E** | 启动确认行锁守卫 + 持久化清理账本（迁移 `0035`） | ① `claim_and_start` 的启动确认（claimed→running）**先锁 Project 行**：归档先落定 → 确认失败 + **立即终止刚 spawn 的子进程**（§8.3「登记失败必须 kill」，堵住「spawn 后、PID 登记前归档仍推进 running」窗口，I1-025/026/028）；② 新表 `delivery.task_run_cleanup`：`pending→cleaning→completed`，失败退避（60s）重试、8 次后 `needs_human`（持续可查询，I1-033/040）；**无时间窗**（3 小时前的残留同样被发现——旧 `cleanup_finished_processes` 的 1h 窗口作废为兜底，I1-031）、`FOR UPDATE SKIP LOCKED` 批领（多清理 Worker 安全，I1-032）；Worker 主循环接入（`run_cleanup_round`），终止失败不回滚 Run 终态（I1-030） |
+| **I1-F** | 全链回归 | I1-035/036（归档后 TaskReady/DeliverySubmitted 合法跳过并 ACK）在 `pm-infrastructure/tests/outbox_handlers.rs`；I1-037 重放死信由 TaskReady 三层幂等（L0/L1/L2）覆盖；I1-038 清理登记幂等（`ON CONFLICT (run_id) DO NOTHING`）；I1-039 归档持久化后重启继续（账本行持久）；I1-040 `needs_human` 队列可查询 + `requeue` 人工恢复。全链由 workspace 回归（105+ 套件）覆盖 |
+
+## 19.2 验收证据（2026-11-04）
+
+- `apps/pm-api/tests/run_claim_lifecycle.rs` **3 例全绿**（归档项目被跳过后领取下一项目 / 创建先拿锁的竞态收口 / 多项目排水无死锁）。
+- `crates/pm-infrastructure/tests/outbox_handlers.rs` **11 例全绿**（含新增 2 例：归档抑制 TaskReady / 创建先拿锁后条件取消）。
+- `apps/pm-api/tests/run_executor_handshake.rs` **5 例全绿**（spawn-登记窗口归档阻断 / 启动确认行锁拒绝+终止 / terminate 失败不回滚终态+退避 / 阈值转人工+requeue 恢复 / 无时间窗清理）。
+- `apps/pm-api/tests/project_archive.rs` 5 例 + 升级演练 0028→0035 Schema 一致。
+
+## 19.3 偏差闭合
+
+| # | 原偏差 | 现状 |
+|---|---|---|
+| V-3 | claim 归档守卫为防御纵深读 | **已闭合**：阶段 B 的守卫在 `core.project` 行锁内（与归档事务同锁序），池外读已删除 |
+| V-4 | I1-B/C/E/F 余项未落地 | **已闭合**：见 §19.1 |
+
+## 19.4 剩余（不属于 I1 范围）
+
+- **I1-027/034** 的进程级实操（真实 PID 定位/终止、身份锚点比对）已在 T-032 CodexExecutor 落地（pid 文件 + identity_hint + 三重证据）；两机端到端实测归 **T-090**。
+- I1-021/022（cancel 与 finish/recover 并发的唯一终态）由 T-032 的条件 UPDATE 单点覆盖，已有回归。

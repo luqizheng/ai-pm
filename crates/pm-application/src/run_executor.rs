@@ -125,9 +125,44 @@ pub async fn claim_and_start(
 
     match executor.start(&executable, &session_text).await {
         Ok(()) => {
-            // 启动确认：条件 UPDATE 带 session 匹配（防竞态），与任务推进同事务
-            // （D1 §九问题 4：claimed→running 由编排器经受守卫入口推进）。
+            // 启动确认（I1-E 阶段 C/D）：条件 UPDATE 带 session 匹配（防竞态）+
+            // **先锁 Project 行**——归档与启动确认在同一把行锁上串行：
+            //   归档先拿锁 → 本登记失败（updated=0，或 archived 显式拒绝）→
+            //   立即终止刚 spawn 的子进程（§8.3：登记失败必须 kill）；
+            //   登记先拿锁 → 归档随后看到 running Run 走 P2 取消协议。
+            // 这补上 I1-025/026/028 的窗口：「spawn 后、PID 登记前归档」不再能
+            // 把子进程推进为 running。
             let mut tx = pool.begin().await?;
+            match crate::project_gate::lock_project_activity_tx(&mut tx, project_id).await {
+                Ok(crate::project_gate::ProjectActivity::Archived) => {
+                    tx.rollback().await?;
+                    let session = ExecutorSession {
+                        session: session_text.clone(),
+                        run_id,
+                        workspace_root: workspace_root_from_env(),
+                    };
+                    if let Err(error) =
+                        executor.terminate(&session, TerminateReason::Cancelled).await
+                    {
+                        // 终止失败：Run 保持 claimed（未被确认），lease 到期后
+                        // reconcile/cleanup 兜底重试——终态不被伪造。
+                        tracing::warn!(
+                            run = %run_id,
+                            error = %error,
+                            "post-archive start rejected; terminate failed, cleanup will retry"
+                        );
+                    }
+                    return Ok(StartOutcome::StartFailed {
+                        run_id,
+                        error: "project archived before start confirmation".to_string(),
+                    });
+                }
+                Ok(crate::project_gate::ProjectActivity::Active) => {}
+                Err(err) => {
+                    tx.rollback().await?;
+                    return Err(RunDispatchError::Db(sqlx::Error::Protocol(err.to_string())));
+                }
+            }
             let updated = sqlx::query(
                 "UPDATE delivery.task_run \
                     SET status = 'running', stage = 'started', started_at = now() \
@@ -348,10 +383,17 @@ pub async fn cancel_run(
     if !matches!(status.as_str(), "claimed" | "running") {
         return Ok(false);
     }
-    // ① 先落终态 + 撤凭据（原子）。
+    // ① 先落终态 + 撤凭据（原子）+ **登记持久化清理账本**（I1-E，迁移 0035）——
+    //    终态与清理是两个生命周期（§9.1）：凭据已撤销，进程清理失败不影响终态，
+    //    但必须可重试、可追溯（1 小时窗口兜底之外不再丢失，I1-031）。
     let confirmed = record_termination(pool, run_id, project_id, reason).await?;
     if !confirmed {
         return Ok(false);
+    }
+    if let Some(session_text) = &session_text {
+        let mut tx = pool.begin().await?;
+        crate::run_cleanup::enqueue(&mut tx, run_id, session_text, None).await?;
+        tx.commit().await?;
     }
     // ② 后终止进程（资源清理；失败由兜底清理路径重试）。
     if let Some(session_text) = session_text {

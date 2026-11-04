@@ -39,6 +39,7 @@ pub mod repo_facts;
 pub mod repository;
 pub mod review;
 pub mod rows;
+pub mod run_cleanup;
 pub mod run_context;
 pub mod run_dispatch;
 pub mod run_executor;
