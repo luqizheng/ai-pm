@@ -2,8 +2,8 @@
 /**
  * i18n 命名空间门禁
  *
- * 文案按命名空间分文件：`frontend/locales/<locale>/<namespace>.yaml`。
- * 本脚本按 `src/shell/i18n.ts` 相同的展开规则（单键同名解包 + 命名空间点号前缀）
+ * 文案按命名空间分文件：`ai-frontend/locales/<locale>/<namespace>.yaml`。
+ * 本脚本按 `src/lib/i18n.ts` 相同的展开规则（单键同名解包 + 命名空间点号前缀）
  * 计算每种语言的完整 key 集合，并要求：
  *   1. 除基准语言外，每种语言都不得缺少任何 key；
  *   2. 除基准语言外，每种语言也不得存在基准语言没有的死 key。
@@ -19,13 +19,14 @@ const path = require("node:path");
 const { createRequire } = require("node:module");
 
 const ROOT = path.resolve(__dirname, "..");
-const LOCALES_DIR = path.join(ROOT, "frontend", "locales");
+/** 活跃前端工程 = ai-frontend（2026-11-04 重组后唯一工程；旧 frontend/ 冻结只读） */
+const LOCALES_DIR = path.join(ROOT, "ai-frontend", "locales");
 const BASE_LOCALE = "zh-CN";
 const REPORT_ONLY = process.argv.includes("--report");
 
 // `yaml` 装在前端工程里（pnpm workspace），脚本自身没有 node_modules。
 const requireFromFrontend = createRequire(
-  path.join(ROOT, "frontend", "package.json")
+  path.join(ROOT, "ai-frontend", "package.json")
 );
 const YAML = requireFromFrontend("yaml");
 

@@ -2,7 +2,7 @@
 /**
  * i18n 硬编码门禁
  *
- * 前端文案必须走 `locales/<locale>/*.yaml`。本脚本扫描 `frontend/src` 的
+ * 前端文案必须走 `locales/<locale>/*.yaml`。本脚本扫描 `ai-frontend/src` 的
  * 源码与模板文本，发现字符串/模板文本中的中文即报违规；注释不算文案，先剥离。
  *
  * 豁免范围：
@@ -26,7 +26,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const ROOT = path.resolve(__dirname, "..");
-const SRC = path.join(ROOT, "frontend", "src");
+const SRC = path.join(ROOT, "ai-frontend", "src");
 const REPORT_ONLY = process.argv.includes("--report");
 const STRICT = process.argv.includes("--strict");
 const UPDATE_BASELINE = process.argv.includes("--update-baseline");

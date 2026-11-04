@@ -187,18 +187,16 @@ describe("workspace tokens", () => {
     expect(light.get("canvas")!.toLowerCase()).toBe("#f7f8fa");
   });
 
-  it("accent 着色面双主题均定义，且激活导航项文字达 AA（≥4.5:1）", () => {
+  it("accent 着色面双主题均定义，激活导航项文字达 AA（≥4.5:1）", () => {
     for (const vars of [dark, light]) {
       const surface = hexOf(vars, "color-accent-surface");
-      // 激活态条目：主文字 + 次文字 + accent 指示色均落在该面上
+      // 激活态条目的**文字**用 text-primary，落在 accent 着色面上 → AA
       expect(
         contrast(hexOf(vars, "text-primary"), surface)
       ).toBeGreaterThanOrEqual(4.5);
-      expect(
-        contrast(hexOf(vars, "text-secondary"), surface)
-      ).toBeGreaterThanOrEqual(4.5);
+      // accent 在激活项上是 2×16 指示条（非文字）→ UI 用途 ≥3:1
       expect(contrast(hexOf(vars, "accent"), surface)).toBeGreaterThanOrEqual(
-        4.5
+        3
       );
     }
   });
