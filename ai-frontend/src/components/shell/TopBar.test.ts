@@ -30,9 +30,44 @@ describe("TopBar", () => {
     shell.setCurrentProject(demoProject.id);
     await nextTick();
 
-    expect(wrapper.find(".shell-project-switcher__name").text()).toBe(
-      "Atlas Platform"
-    );
+    // 06 板 ProjectSwitcher Trigger：选中态 accent 底 + 当前项目名
+    const trigger = wrapper.find(".ps-trigger");
+    expect(trigger.classes().join(" ")).toContain("is-selected");
+    expect(trigger.find(".ps-trigger__label").text()).toBe("Atlas Platform");
+  });
+
+  it("未选项目时触发器显示「选择项目」，无选中态", async () => {
+    const { wrapper } = mountShell(TopBar);
+    const shell = useShellStore();
+    shell.setProjects(demoProjects);
+    await nextTick();
+
+    const trigger = wrapper.find(".ps-trigger");
+    expect(trigger.classes().join(" ")).not.toContain("is-selected");
+    expect(trigger.find(".ps-trigger__label").text()).toBe("选择项目");
+  });
+
+  it("菜单经 Teleport 挂 body：搜索行 + 当前项徽标 + 分区头（06 板）", async () => {
+    const { wrapper } = mountShell(TopBar, { attachTo: document.body });
+    const shell = useShellStore();
+    shell.setProjects(demoProjects);
+    shell.setCurrentProject(demoProject.id);
+    await nextTick();
+
+    await wrapper.find(".ps-trigger").trigger("click");
+    await nextTick();
+
+    expect(document.body.querySelector(".ps-menu")).toBeTruthy();
+    // 面板标题（i18n）+ 搜索行占位（input 属性，非 textContent）+ 当前项徽标
+    expect(document.body.textContent).toContain("项目切换");
+    expect(
+      document.body.querySelector('.ps-menu input[placeholder="搜索可用项目…"]')
+    ).toBeTruthy();
+    expect(document.body.textContent).toContain("当前");
+    expect(document.body.textContent).toContain("Atlas Platform");
+
+    wrapper.unmount();
+    document.body.innerHTML = "";
   });
 
   it("搜索入口为按钮并带无障碍名称", async () => {

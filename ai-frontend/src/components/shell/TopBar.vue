@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { Search, Sparkles } from "lucide-vue-next";
@@ -12,7 +12,12 @@ import {
   UserMenuSignOutDialog,
   demoUserProfile
 } from "@/components/global/usermenu";
-import ProjectSwitcher from "./ProjectSwitcher.vue";
+import {
+  ProjectSwitcher,
+  PROJECT_SWITCHER_DEFAULT_TEXT,
+  type ProjectSwitcherProject,
+  type ProjectSwitcherText
+} from "@/components/global/project-switcher";
 import { AUTH_PATHS } from "@/router/auth";
 import { useAuthStore } from "@/stores/auth";
 import { useShellStore } from "@/stores/shell";
@@ -22,14 +27,16 @@ import { demoOrganization, resolveProjectSwitch } from "./demo";
  * 全局顶栏（Application Shell §2A，52px）。
  *
  * 左：产品标识 + 产品名 + 租户上下文指示（Global/TenantIndicator，只读）
- *     + 项目切换器
+ *     + 项目切换器（Figma「06 — Project Context Switcher」33:82961，
+ *     Global/ProjectSwitcher 五态 Trigger + Menu）
  * 中：全局搜索 / 命令面板入口（⌘ K）
  * 右：通知（下拉）、全局 AI 助手入口、帮助（菜单 + 快捷键对话框）、
  *     账户菜单（含退出登录确认）
  *
  * 按 Shell V1.1 限制：**不引入 Workspace Switcher**——
- * 组织在此仅作上下文指示（无切换实体）；
- * 项目则是可切换的（Figma「04 — Global Navigation」Project Context Header）。
+ * 组织在此仅作上下文指示（无切换实体）；项目可切换。
+ * 切换过渡（07 板）语义经 store 映射：switching 期间 label 显示
+ * 切换目标名、面板呈 loading（06 板 Loading 态），不显示旧项目数据。
  */
 
 const { t } = useI18n();
@@ -41,6 +48,51 @@ const emit = defineEmits<{ search: [] }>();
 
 const shortcutsOpen = ref(false);
 const signOutOpen = ref(false);
+
+/** store 项目 → 06 板面板行（分组概念未建，全归 RECENT；meta 空串隐藏） */
+const switcherProjects = computed<ProjectSwitcherProject[]>(() =>
+  shell.projects.map(project => ({
+    id: project.id,
+    name: project.name,
+    group: "recent",
+    meta: ""
+  }))
+);
+
+/** 触发器标签：切换中显示目标名（07 板过渡），否则当前项目，未选时「选择项目」 */
+const switcherLabel = computed(
+  () =>
+    shell.switchingProject?.name ??
+    shell.currentProject?.name ??
+    t("shell.app.project.empty")
+);
+
+/** 面板状态：切换过渡期间呈 06 板 Loading 态（骨架行） */
+const switcherStatus = computed(() =>
+  shell.switching ? ("loading" as const) : ("ready" as const)
+);
+
+/** 面板文案：默认 Figma 原文为设计参考文本，应用层注入 i18n */
+const switcherTexts = computed<ProjectSwitcherText>(() => ({
+  ...PROJECT_SWITCHER_DEFAULT_TEXT,
+  title: t("shell.app.project.menuLabel"),
+  searchPlaceholder: t("shell.app.projectSwitcher.searchPlaceholder"),
+  currentBadge: t("shell.app.projectSwitcher.currentBadge"),
+  createLabel: t("shell.app.projectSwitcher.createLabel"),
+  createUnavailableNote: t("shell.app.projectSwitcher.createUnavailableNote"),
+  footerNote: t("shell.app.projectSwitcher.footerNote"),
+  emptyTitle: t("shell.app.projectSwitcher.emptyTitle"),
+  emptyDescription: t("shell.app.projectSwitcher.emptyDescription"),
+  errorTitle: t("shell.app.projectSwitcher.errorTitle"),
+  errorDescription: t("shell.app.projectSwitcher.errorDescription"),
+  noResultsTitle: t("shell.app.projectSwitcher.noResultsTitle"),
+  retryLabel: t("shell.app.projectSwitcher.retryLabel"),
+  clearLabel: t("shell.app.projectSwitcher.clearLabel"),
+  groupLabels: {
+    favorites: t("shell.app.projectSwitcher.groupFavorites"),
+    recent: t("shell.app.projectSwitcher.groupRecent")
+  }
+}));
 
 /** 切换项目（与左导航项目头共用 store 的切换状态机） */
 async function onSelectProject(id: string) {
@@ -105,13 +157,15 @@ function onSignOutConfirm() {
 
       <span class="shell-topbar__slash" aria-hidden="true">/</span>
 
-      <!-- 当前项目（Project switcher：可切换，含搜索与切换中提示） -->
+      <!-- 当前项目（Figma 06 板 ProjectSwitcher：五态 Trigger + 搜索/分组/反馈态面板） -->
       <ProjectSwitcher
-        variant="chip"
-        searchable
-        :projects="shell.projects"
+        :projects="switcherProjects"
+        :label="switcherLabel"
         :current-id="shell.currentProjectId"
-        :switching-to-id="shell.switchingProjectId"
+        :status="switcherStatus"
+        :selected="!!shell.currentProject"
+        :can-create="false"
+        :texts="switcherTexts"
         @select="onSelectProject"
       />
     </div>

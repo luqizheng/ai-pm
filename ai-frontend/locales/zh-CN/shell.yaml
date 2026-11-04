@@ -168,6 +168,21 @@ shell:
       opening: 正在打开 {name}…
       searchPlaceholder: 查找项目…
       menuLabel: 项目切换
+    projectSwitcher:
+      searchPlaceholder: 搜索可用项目…
+      currentBadge: 当前
+      createLabel: 新建项目
+      createUnavailableNote: 当前身份不可创建项目；不会泄露未授权项目。
+      footerNote: 仅列出你可用的项目；允许创建时会显示入口。
+      emptyTitle: 无可用项目
+      emptyDescription: 当前身份没有可用项目。
+      errorTitle: 项目列表加载失败
+      errorDescription: 当前项目仍可用。重试以加载项目列表。
+      noResultsTitle: 没有匹配的项目
+      retryLabel: 重试
+      clearLabel: 清除搜索
+      groupFavorites: 收藏
+      groupRecent: 最近
     context:
       title: 上下文
       close: 关闭上下文栏
