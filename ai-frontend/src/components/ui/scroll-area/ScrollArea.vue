@@ -1,17 +1,5 @@
 <script setup lang="ts">
-import {
-  ScrollAreaRoot,
-  ScrollAreaScrollbar,
-  ScrollAreaThumb,
-  ScrollAreaViewport
-} from "reka-ui";
-
-interface Props {
-  /** 滚动方向 */
-  orientation?: "vertical" | "horizontal";
-}
-
-withDefaults(defineProps<Props>(), { orientation: "vertical" });
+import { ScrollAreaRoot, ScrollAreaViewport } from "reka-ui";
 </script>
 
 <template>
@@ -19,13 +7,6 @@ withDefaults(defineProps<Props>(), { orientation: "vertical" });
     <ScrollAreaViewport class="ui-scroll-area__viewport">
       <slot />
     </ScrollAreaViewport>
-    <ScrollAreaScrollbar
-      class="ui-scroll-area__scrollbar"
-      :orientation="orientation"
-      force-mount
-    >
-      <ScrollAreaThumb class="ui-scroll-area__thumb" force-mount />
-    </ScrollAreaScrollbar>
   </ScrollAreaRoot>
 </template>
 
@@ -35,39 +16,15 @@ withDefaults(defineProps<Props>(), { orientation: "vertical" });
   overflow: hidden;
 }
 
-/* reka-ui 的视口 / 滚动条 / 滑块在组件内部渲染，需 :deep() 命中 */
+/* reka-ui 的视口在组件内部渲染，需 :deep() 命中 */
 :deep(.ui-scroll-area__viewport) {
   width: 100%;
   height: 100%;
   overflow: auto;
 }
 
-:deep(.ui-scroll-area__scrollbar) {
-  display: flex;
-  user-select: none;
-  touch-action: none;
-  padding: var(--space-1);
-  background: transparent;
-  transition: opacity var(--duration-fast) var(--ease-decelerate);
-}
-
-:deep(.ui-scroll-area__scrollbar[data-orientation="vertical"]) {
-  width: var(--space-2);
-}
-
-:deep(.ui-scroll-area__scrollbar[data-orientation="horizontal"]) {
-  height: var(--space-2);
-  flex-direction: row;
-}
-
-:deep(.ui-scroll-area__thumb) {
-  flex: 1;
-  border-radius: var(--radius-full);
-  background: var(--border-strong);
-  transition: background-color var(--duration-fast) var(--ease-decelerate);
-}
-
-:deep(.ui-scroll-area__scrollbar:hover) :deep(.ui-scroll-area__thumb) {
-  background: var(--border-data);
-}
+/* 滚动条指示统一交给全局虚拟滚动条（src/lib/virtual-scrollbar.ts）：
+ * 视口是普通 overflow:auto 容器，会被自动跟踪并在 hover/滚动时浮出
+ * thumb（双轴自动），本组件不再渲染自带的 reka 滚动条，也不再有
+ * orientation 取向 API（2026-11-04 全局虚拟滚动条裁决）。 */
 </style>

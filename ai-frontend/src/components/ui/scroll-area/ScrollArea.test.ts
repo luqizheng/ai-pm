@@ -21,44 +21,16 @@ describe("ScrollArea", () => {
     expect(viewport.text()).toContain("内容");
   });
 
-  it("渲染滚动条与滑块，并标注方向", () => {
-    const w = mount(ScrollArea, { slots: { default: "<p>内容</p>" } });
-
-    const scrollbar = w.find(".ui-scroll-area__scrollbar");
-    expect(scrollbar.exists()).toBe(true);
-    expect(scrollbar.attributes("data-orientation")).toBe("vertical");
-    expect(w.find(".ui-scroll-area__thumb").exists()).toBe(true);
+  it("视口是普通 overflow:auto 容器（指示交给全局虚拟滚动条）", () => {
+    // 2026-11-04 全局虚拟滚动条裁决：组件不再渲染自带 reka 滚动条，
+    // 视口会被 src/lib/virtual-scrollbar.ts 自动跟踪并在 hover/滚动时浮出 thumb
+    expect(source).not.toContain("ScrollAreaScrollbar");
+    expect(source).not.toContain("ScrollAreaThumb");
+    expect(source).toContain("overflow: auto");
   });
 
-  it("horizontal 方向把滚动条标记为 horizontal", () => {
-    const w = mount(ScrollArea, {
-      props: { orientation: "horizontal" },
-      slots: { default: "<p>内容</p>" }
-    });
-    expect(
-      w.find(".ui-scroll-area__scrollbar").attributes("data-orientation")
-    ).toBe("horizontal");
-  });
-
-  it("滚动条未出现时处于 hidden 状态（浮层式浮出）", () => {
-    const w = mount(ScrollArea, { slots: { default: "<p>内容</p>" } });
-    expect(w.find(".ui-scroll-area__scrollbar").attributes("data-state")).toBe(
-      "hidden"
-    );
-  });
-
-  it("滚动条宽度 8px、滑块配色与淡入时长全部来自 token", () => {
-    // 8px = --space-2
-    expect(source).toContain("var(--space-2)");
-    expect(source).toContain("var(--border-strong)");
-    expect(source).toContain("var(--border-data)");
-    expect(source).toContain("var(--duration-fast)");
-    expect(source).not.toMatch(/8px/);
-  });
-
-  it("滚动条与滑块使用 :deep() 命中 reka-ui 内部元素", () => {
-    expect(source).toContain(":deep(.ui-scroll-area__viewport)");
-    expect(source).toContain(":deep(.ui-scroll-area__scrollbar)");
-    expect(source).toContain(":deep(.ui-scroll-area__thumb)");
+  it("不再有取向 prop 与 force-mount（全局体系双轴自动）", () => {
+    expect(source).not.toMatch(/orientation\?\s*:/);
+    expect(source).not.toContain("force-mount");
   });
 });

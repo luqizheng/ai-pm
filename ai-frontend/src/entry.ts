@@ -3,6 +3,7 @@ import { createPinia } from "pinia";
 
 import App from "./App.vue";
 import { i18n } from "./lib/i18n";
+import { installVirtualScrollbars } from "./lib/virtual-scrollbar";
 import { router } from "./router";
 
 /**
@@ -14,3 +15,6 @@ import { router } from "./router";
 import "./styles/index.css";
 
 createApp(App).use(createPinia()).use(i18n).use(router).mount("#app");
+
+// 全系统虚拟滚动条（Figma 式 overlay，原生条已在 index.css 全局隐藏）
+installVirtualScrollbars();

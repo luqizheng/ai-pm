@@ -86,6 +86,13 @@
   --ws-hover-veil: rgba(233, 236, 243, 0.06);
   --ws-active-veil: rgba(233, 236, 243, 0.1);
 
+  /* 虚拟滚动条（Figma 式 overlay：原生条全局隐藏，thumb 悬停/滚动时淡入）
+     thumb 取文字色低透明度薄纱随主题走；厚度/最小长度为主题无关尺寸 */
+  --ws-scrollbar-thumb: rgba(233, 236, 243, 0.22);
+  --ws-scrollbar-thumb-active: rgba(233, 236, 243, 0.38);
+  --ws-scrollbar-thickness: 8px;
+  --ws-scrollbar-min-thumb: 24px;
+
   /* ------------------------------------------------------------------
    * 基础原语（原 styles/prism/ 层并入；组件尺寸/字阶/动效唯一来源）
    * ---------------------------------------------------------------- */
@@ -229,9 +236,13 @@
   --size-menu-padding: 6px;
   /* Switch 三档 —— Figma DS/Forms/Switch（sm/md 32×20 thumb14；lg 40×24 thumb18） */
   --size-switch-track: 32px;
+  --size-switch-track-h: 20px;
   --size-switch-track-lg: 40px;
+  --size-switch-track-h-lg: 24px;
   --size-switch-thumb: 14px;
   --size-switch-thumb-lg: 18px;
+  /* 滑块距轨道外沿 3px（Figma padding 3）= 1px 描边 + 2px 内缩 */
+  --size-switch-inset: 2px;
   --size-checkbox: 16px;
   /* Textarea 三档 —— Figma DS/Forms/Textarea（sm72/md88/lg112，padding 8 12） */
   --size-textarea-sm: 72px;
@@ -454,6 +465,10 @@
   /* 浅色薄纱（对齐 PRISM 浅色 veil 口径） */
   --ws-hover-veil: rgba(23, 24, 28, 0.04);
   --ws-active-veil: rgba(23, 24, 28, 0.07);
+
+  /* 虚拟滚动条（浅色：墨色低透明度薄纱，同 --ws-hover-veil 墨基调） */
+  --ws-scrollbar-thumb: rgba(23, 24, 28, 0.22);
+  --ws-scrollbar-thumb-active: rgba(23, 24, 28, 0.38);
 
   /* 浅色下阴影恢复轻量投影（黑基透明阴影，两主题通用） */
   --shadow-xs: 0 1px 2px rgba(23, 24, 28, 0.04);

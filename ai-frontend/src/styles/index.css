@@ -125,3 +125,68 @@ body {
   outline: none;
   box-shadow: var(--ws-focus-ring);
 }
+
+/* 临时预览画布（S01-01 预览入口用；不进产品包） */
+.preview-canvas {
+  min-height: 100dvh;
+  background: var(--ws-canvas);
+  color: var(--ws-text-primary);
+}
+
+/* ----------------------------------------------------------------------------
+ * 虚拟滚动条（Figma 式 overlay scrollbar，全系统生效）
+ *
+ * 原生滚动条全部隐藏（宽度清零、不占布局），thumb 由
+ * src/lib/virtual-scrollbar.ts 渲染在 body 直挂的固定层里：
+ * 常态隐藏，悬停容器或滚动中淡入，静止后淡出；thumb 可拖拽。
+ * 单容器豁免：给滚动容器加 data-vsb-ignore。
+ * -------------------------------------------------------------------------- */
+* {
+  scrollbar-width: none;
+}
+
+/* 旧 Chromium 不认 scrollbar-width，走 webkit 伪元素清零（Firefox 忽略此块） */
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* thumb 固定层：盖过全部浮层（现役最高 z-index 是 ConfirmationDialog 的 100），
+ * 自身不吃指针事件，仅 thumb 可交互，滚轮/点击穿透到下面的滚动容器 */
+.vsb-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  pointer-events: none;
+}
+
+.vsb-thumb {
+  position: absolute;
+  border-radius: var(--radius-full);
+  background: var(--ws-scrollbar-thumb);
+  opacity: 0;
+  /* 隐藏态必须连指针事件一起关掉，否则透明 thumb 会挡住下层内容的点击 */
+  pointer-events: none;
+  cursor: default;
+  transition:
+    opacity var(--duration-fast) var(--ease-decelerate),
+    background-color var(--duration-fast) var(--ease-decelerate);
+}
+
+.vsb-thumb.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.vsb-thumb:hover,
+.vsb-thumb.is-dragging {
+  background: var(--ws-scrollbar-thumb-active);
+}
+
+.vsb-thumb--vertical {
+  width: var(--ws-scrollbar-thickness);
+}
+
+.vsb-thumb--horizontal {
+  height: var(--ws-scrollbar-thickness);
+}
