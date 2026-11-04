@@ -108,3 +108,28 @@
 - **豁免判据**：不需要在两个以上方案间选择的任务（T-001 提交、T-050 注释修复）可跳过流程，但不得跳过读依据。
 - **路径适配**：superpowers 默认落 `docs/plans/YYYY-MM-DD-<topic>-design.md`；本项目设计依据统一走 `docs/` 根，
   实施计划才走 `docs/superpowers/plans/`。已在该节注明，避免后续执行者按默认路径另建目录。
+
+---
+
+## S01 前端四切片（`docs/ui/s01/`）— 前端已落地，后端待同事实现（2026-11-04）
+
+- **分支 / worktree**：`feat/s01-frontend-design` @ `D:/kudi-project/templates/ai-pm-s01-frontend`（从 master `c645031` 起）。
+  ⚠️ 仓库有**并行会话**在动 master 与 worktree 注册，提交前须 `git worktree list` 复核。
+- **依据**：`docs/ui/s01/` 四份**已冻结** UX 规范（S01-01 基线确认 / S01-02 项目创建 /
+  S01-03 仓库管理 / S01-04 AI-PM 认知）。这四份是**上位设计依据**，实现不再重新设计。
+- **分工裁定（用户）**：初选「全覆盖 + 同步实现后端」，后改「**后端由同事加，我出清单**」→
+  转为契约分工，前端按契约并行。
+- **已落地（4 提交）**：
+  - `ff68bf2` `docs/s01-backend-api-requirements-v1.md` —— 后端需求清单（已有端点清单 + 代码事实 + 6 项待裁决）
+  - `1a3e281` 前端契约层 `api/types/initialization.ts` + `api/initialization.ts`
+  - `b748ac1` 四切片页面 + `s01` 命名空间 i18n（zh-CN/en）+ 19 条 vitest
+  - `4dffa41` `docs/s01-frontend-integration-guide-v1.md` —— 联调说明（端点映射/错误码/批次顺序）
+- **验收基线**：vue-tsc 0 error · eslint 0 warning · vitest 96 文件/561 例全绿 · PRISM token 门禁过 ·
+  i18n 双语 1431 key 对齐。
+- **后端待办（清单 §7 六项裁决）**：Q1 确认权判定（**推荐 A：复用 `project_member.role='owner'`**，
+  S02 Approver 表落地后替换）· Q2 Repository role 改造（**推荐新建 v2 表**，现 CHECK 是
+  `main/docs/service/infra` 与 UX 的 `Primary/Supporting/Infrastructure/Test` 不符）· Q3 迁移号
+  （**0036** 起，0029 空号）· Q4 `core.project.customer_id` NOT NULL 是否放开 · Q5 批量认知确认
+  **不提供**后端端点（前端逐条提交）· Q6 Cognition 启动**不走 MCP**（仅 REST）。
+- **前端刻意不做的**：初始化工作空间页、项目 profile 页、基线历史页、知识变更提案页（API 层已封装，
+  契约已定，后端就绪后补视图即可）。
