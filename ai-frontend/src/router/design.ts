@@ -27,6 +27,7 @@ export const DESIGN_PATHS = {
   navigation: {
     global: "/design/navigation/global",
     contexts: "/design/navigation/contexts",
+    switcher: "/design/navigation/switcher",
     states: "/design/navigation/states",
     switching: "/design/navigation/switching",
     library: "/design/navigation/library"
@@ -106,6 +107,13 @@ export const designRoutes: RouteRecordRaw[] = [
     component: () =>
       import("@/views/design/navigation/DesignNavContextsView.vue"),
     meta: { layout: "design", title: "design.navigation.contexts.title" }
+  },
+  {
+    path: DESIGN_PATHS.navigation.switcher,
+    name: "design-navigation-switcher",
+    component: () =>
+      import("@/views/design/navigation/DesignNavSwitcherView.vue"),
+    meta: { layout: "design", title: "design.navigation.switcher.title" }
   },
   {
     path: DESIGN_PATHS.navigation.states,

@@ -54,6 +54,12 @@
 | Dialog/Modal（重同步）           | DS/Overlays/Modal（13:33764）                             | ✅   | 2026-11-04 | surface 底+radius 8（旧 radius 12/elevated 底作废）；宽三档 352/448/496（token）；三段 padding 16+分隔线；标题 15 SemiBold。Loading/Error 态（按钮退化 0.45、错误行）待 API 扩展                       |
 | Command/CommandPalette（重同步） | DS/Overlays/CommandPalette（13:34028）                    | ✅   | 2026-11-04 | 面板 radius 8+内边 8+Medium 448 宽；搜索框 canvas 底+border 描边+search 图标+Esc chip（Focus 2px accent）；项 36px/radius 8/主文字/选中=accent 着色面；底部键盘指引行。Empty/Loading 消息区待 API 扩展 |
 
+## Global 复合组件（组件板，非 DS 原语族）
+
+| 组件            | Figma 板（node）                                | 状态 | 日期       | 备注                                                                                                                                           |
+| --------------- | ----------------------------------------------- | ---- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| ProjectSwitcher | 06 — Project Context Switcher（33:82961）       | ✅   | 2026-11-04 | `src/components/global/project-switcher/`：Trigger 五态（Default sidebar 底 / Hover raised / Focus 2px accent / Selected accent 着色面 / Disabled 0.4）+ Menu 五反馈态（Open Dark·Light / Loading 骨架 / Empty / Error danger Alert+Retry / 搜索 NoResults+Clear query）；行 h36 1px 边框为本板实例覆盖（DS/ListItem 母版无边框）；面板宽 token `--size-project-menu` 480px；复用 SearchInput / ListItem / EmptyState / Alert / Button / Skeleton；展示页 `/design/navigation/switcher`。行为注：Loading/Error 绝不静默切换上下文；无权限 Create 禁用不泄露隐藏项目 |
+
 ## 待同步（按族）
 
 - （全部 41 组已同步；上述 6 组重同步的 Loading/Empty/Collapsed 等扩展变体留待业务需要时按 Figma node id 补 API）
