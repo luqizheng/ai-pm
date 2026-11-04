@@ -1,0 +1,8 @@
+markdown:
+  field:
+    placeholder: "Type here — paste images or files copied from your machine"
+    empty: "No content"
+  upload:
+    tooLarge: "{name} exceeds the {limit} limit per file"
+    rejected: "{name} has a file type that is not allowed"
+    failed: "{name} failed to upload, please try again"

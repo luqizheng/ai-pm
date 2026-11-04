@@ -1,0 +1,365 @@
+/* ============================================================================
+ * AI Workspace — token 层（全应用视觉唯一真源）
+ *
+ * 权威来源：ai-pm/docs/ai-pm-ui-design-system-v1.md（§1.1/§1.2/§二/§六/§九）
+ *           + Figma「AI R&D Workspace」设计稿（2026-11 起：组件以 Figma 为准）
+ * 规则：
+ *   1. 全应用组件禁止裸色值：一切颜色引用本文件变量（--ws-* 为主；
+ *      组件历史消费的 PRISM 同名变量经「别名段」落到 --ws-*）。
+ *   2. 深色为默认主题：:root 即深色，浅色经 [data-theme="light"] 覆盖；
+ *      index.html 预挂载脚本在首帧前写入 data-theme，防闪烁。
+ *   3. 语义色带 -text 变体：基准值用于徽标/填充/描边（对表面 ≥3:1），
+ *      -text 用于彩色文字（对表面 ≥4.5:1）。契约见同目录 tokens.test.ts。
+ *   4. 本文件同时承载组件消费的尺寸/字阶/动效原语（原 styles/prism/ 层，
+ *      2026-11-04 用户裁决放弃 prism 目录后整体并入；其中五项按
+ *      V1.0/Figma 修正，逐项标注「Figma 修正」）。
+ * ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* ------------------------------------------------------------------
+   * --ws-* 基础 token
+   * ---------------------------------------------------------------- */
+
+  /* Surface —— 设计系统 V1.0 §1.1（深色列） */
+  --ws-canvas: #111318;
+  --ws-sidebar: #171a21;
+  --ws-surface: #1d212a;
+  --ws-elevated: #252a35;
+  --ws-border: #353b48;
+
+  /* Text / Accent —— hover/pressed 为 Figma 组件库 Button 态色（2026-11-04） */
+  --ws-text-primary: #e9ecf3;
+  --ws-text-secondary: #99a2b2;
+  --ws-text-disabled: #697384;
+  --ws-accent: #8b83f6;
+  --ws-accent-hover: #9b94ff;
+  --ws-accent-pressed: #7971de;
+
+  /* 语义色（深色：基准即达 4.5:1，-text 与基准一致） */
+  --ws-color-info: #6ea8fe;
+  --ws-color-success: #34c08b;
+  --ws-color-warning: #e0b15e;
+  --ws-color-danger: #f07e88;
+  --ws-color-info-text: #6ea8fe;
+  --ws-color-success-text: #34c08b;
+  --ws-color-warning-text: #e0b15e;
+  --ws-color-danger-text: #f07e88;
+
+  /* 语义色反馈面（Figma 登录页错误反馈框逐值，2026-11-04）
+     surface = 反馈框底 / border = 反馈框描边 / title = 反馈框标题文字 */
+  --ws-color-danger-surface: #2c2028;
+  --ws-color-danger-border: #66424d;
+  --ws-color-danger-title: #e69a9f;
+
+  /* accent 着色面（Figma Badge Accent 变体底 #242238，2026-11-04） */
+  --ws-color-accent-surface: #242238;
+
+  /* 形状 / 密度 —— V1.0 §1.2 */
+  --ws-radius-card: 8px;
+  --ws-radius-dialog: 12px;
+  --ws-space-unit: 4px;
+  --ws-font-size-page: 21px;
+  --ws-font-size-section: 15px;
+  --ws-font-size-body: 13px;
+  --ws-font-size-caption: 12px;
+  --ws-font-size-micro: 11px;
+  --ws-row-height: 36px;
+
+  /* 布局尺寸 —— V1.0 §二 Shell 图 */
+  --ws-sidebar-width: 232px;
+  --ws-sidebar-collapsed: 60px;
+  --ws-context-width: 320px;
+  --ws-topbar-height: 52px;
+  --ws-commandbar-height-min: 72px;
+  --ws-commandbar-height-max: 120px;
+
+  /* 焦点（键盘章：可见焦点样式） */
+  --ws-focus-ring: 0 0 0 2px var(--ws-canvas), 0 0 0 4px var(--ws-accent);
+
+  /* 悬浮/按压薄纱（随主题走） */
+  --ws-hover-veil: rgba(233, 236, 243, 0.06);
+  --ws-active-veil: rgba(233, 236, 243, 0.1);
+
+  /* ------------------------------------------------------------------
+   * 基础原语（原 styles/prism/ 层并入；组件尺寸/字阶/动效唯一来源）
+   * ---------------------------------------------------------------- */
+
+  /* Radius —— Figma 修正：sm 6→8px（V1.0 标准圆角；登录页 Button/Input/面板均 8px） */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+
+  /* Spacing —— 4px 基数 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+
+  /* Duration / Easing —— 全站仅两支曲线 */
+  --duration-instant: 80ms;
+  --duration-fast: 150ms;
+  --duration-medium: 240ms;
+  --duration-slow: 320ms;
+  --duration-shimmer: 1600ms;
+  --duration-spinner: 800ms;
+  --duration-switch: 180ms;
+  --ease-decelerate: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Font */
+  --font-ui:
+    "Inter", "MiSans", "PingFang SC", "HarmonyOS Sans SC", "Noto Sans SC",
+    "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  /* Figma 修正：密码输入等 mono 场景用 IBM Plex Mono */
+  --font-mono:
+    "IBM Plex Mono", "JetBrains Mono", "SF Mono", "Cascadia Code",
+    "Roboto Mono", "Consolas", "Noto Sans Mono CJK SC", monospace;
+
+  /* 字阶 —— Figma 修正：body 15→13px / 行高 26→19px（V1.0 正文 13px；
+     Figma Reading 行高 1.45em）；micro 11px = Figma 11/Regular（帮助文案） */
+  --font-size-display: 56px;
+  --font-size-h1: 40px;
+  --font-size-h2: 28px;
+  --font-size-h3: 20px;
+  --font-size-h4: 16px;
+  --font-size-body: 13px;
+  --font-size-body-strong: 15px;
+  --font-size-small: 13px;
+  --font-size-caption: 12px;
+  --font-size-micro: 11px;
+  --font-size-nano: 10px;
+  --font-size-mono-num: 15px;
+  --font-size-kbd: 11px;
+
+  --line-height-display: 68px;
+  --line-height-h1: 52px;
+  --line-height-h2: 38px;
+  --line-height-h3: 28px;
+  --line-height-h4: 24px;
+  --line-height-body: 19px;
+  --line-height-body-strong: 26px;
+  --line-height-small: 19px;
+  --line-height-caption: 17px;
+  --line-height-micro: 16px;
+  --line-height-mono-num: 22px;
+
+  /* 字重上限 650 */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-caption: 450;
+  --weight-body-strong: 550;
+  --weight-semibold: 600;
+  --weight-bold: 650;
+
+  --tracking-display: -0.015em;
+  --tracking-h1: -0.01em;
+  --tracking-h2: -0.005em;
+  --tracking-h3: 0;
+  --tracking-h4: 0;
+  --tracking-body: 0;
+  --tracking-body-strong: 0;
+  --tracking-small: 0;
+  --tracking-caption: 0.025em;
+  --tracking-mono-num: 0;
+
+  /* 控件 / 图标 / 焦点尺寸
+     Figma 修正（组件库 2026-11-04）：控件三档 32/40→28/44（sm28/md36/lg44）；
+     spinner 14→16px（Figma 内嵌图标 16）；checkbox 回归 16px（库 Medium 档；
+     登录页 14px 即 Small 档） */
+  --size-control-sm: 28px;
+  --size-control-md: 36px;
+  --size-control-lg: 44px;
+  --size-icon-button: 36px;
+  --size-icon-xs: 16px;
+  --size-icon-sm: 18px;
+  --size-icon-md: 20px;
+  --size-icon-lg: 18px;
+  --size-row: 44px;
+  --size-header-cell: 40px;
+  /* Badge 三档 —— Figma DS/Feedback/Badge（sm16/md20/lg24，radius 4） */
+  --size-badge-sm: 16px;
+  --size-badge: 20px;
+  --size-badge-lg: 24px;
+  --size-spinner: 16px;
+  --size-focus-ring: 2px;
+  --size-focus-halo: 4px;
+  --size-input-halo: 3px;
+  --size-indicator: 2px;
+  --size-menu-min-width: 200px;
+  --size-menu-padding: 6px;
+  /* Switch 三档 —— Figma DS/Forms/Switch（sm/md 32×20 thumb14；lg 40×24 thumb18） */
+  --size-switch-track: 32px;
+  --size-switch-track-lg: 40px;
+  --size-switch-thumb: 14px;
+  --size-switch-thumb-lg: 18px;
+  --size-checkbox: 16px;
+  /* Textarea 三档 —— Figma DS/Forms/Textarea（sm72/md88/lg112，padding 8 12） */
+  --size-textarea-sm: 72px;
+  --size-textarea: 88px;
+  --size-textarea-lg: 112px;
+
+  /* 边框宽度 / 骨架屏（Figma Skeleton 双色占位线：强线=border、弱线=elevated） */
+  --border-1: 1px;
+  --border-2: 2px;
+  --hairline: 1px;
+  --skeleton-base: var(--ws-elevated);
+  --skeleton-base-strong: var(--ws-border);
+  --skeleton-shimmer: var(--ws-hover-veil);
+
+  /* 按压缩放 / 深底悬浮薄纱 */
+  --scale-press: 0.98;
+  --scale-menu-enter: 0.96;
+  --ink-hover-veil: var(--ws-hover-veil);
+  --ink-active-veil: var(--ws-active-veil);
+
+  /* 禁用态不透明度 —— Figma 组件库逐组件口径（2026-11-04）：
+     Button 0.38 / Checkbox·Switch 0.4 / 输入类字段 0.45 / 菜单禁用项 0.35 */
+  --opacity-disabled-button: 0.38;
+  --opacity-disabled-control: 0.4;
+  --opacity-disabled-field: 0.45;
+  --opacity-disabled-option: 0.35;
+
+  /* 旧版布局尺寸（prism 遗留名，供未迁移组件引用） */
+  --size-sidebar: 240px;
+  --size-sidebar-collapsed: 64px;
+  --size-topbar: 56px;
+  --size-header: 64px;
+
+  /* ------------------------------------------------------------------
+   * PRISM 变量别名（组件换轨机制层）—— 组件消费这些同名变量，
+   * 取值全部指向 --ws-*（或按设计规则降级为 none）。
+   * ---------------------------------------------------------------- */
+
+  --surface-sunken: var(--ws-canvas);
+  --surface-base: var(--ws-surface);
+  --surface-raised: var(--ws-elevated);
+  --surface-overlay: var(--ws-elevated);
+  --surface-ink: var(--ws-canvas);
+  --surface-disabled: var(--ws-elevated);
+  --surface-highlight: var(--ws-elevated);
+  --surface-hover-veil: var(--ws-hover-veil);
+  --surface-active-veil: var(--ws-active-veil);
+
+  --text-primary: var(--ws-text-primary);
+  --text-secondary: var(--ws-text-secondary);
+  --text-tertiary: var(--ws-text-secondary);
+  --text-inverse: var(--ws-canvas);
+  --text-disabled: var(--ws-text-disabled);
+
+  --border-default: var(--ws-border);
+  --border-subtle: var(--ws-border);
+  --border-strong: var(--ws-border);
+  --border-data: var(--ws-border);
+  /* Figma：Input hover 描边 = 次文字色 #99A2B2 */
+  --border-hover-strong: var(--ws-text-secondary);
+
+  --accent: var(--ws-accent);
+  --accent-hover: var(--ws-accent-hover);
+  --accent-pressed: var(--ws-accent-pressed);
+  --accent-subtle: var(--ws-elevated);
+  --accent-contrast-text: var(--ws-canvas);
+  --accent-deep: var(--ws-accent);
+  --accent-wash: var(--ws-elevated);
+  --accent-surface: var(--ws-color-accent-surface);
+  --accent-disabled: var(--ws-border);
+  --accent-gradient: none;
+  --accent-gradient-hover: none;
+  --accent-gradient-pressed: none;
+  --border-accent-glow: none;
+  --danger-focus-glow: none;
+
+  --focus-glow: var(--ws-focus-ring);
+  --focus-glow-ink: var(--ws-canvas);
+  --input-focus-glow: var(--ws-focus-ring);
+
+  --info: var(--ws-color-info);
+  --success: var(--ws-color-success);
+  --warning: var(--ws-color-warning);
+  --danger: var(--ws-color-danger);
+  --info-strong: var(--ws-color-info-text);
+  --success-strong: var(--ws-color-success-text);
+  --warning-strong: var(--ws-color-warning-text);
+  --danger-strong: var(--ws-color-danger-text);
+  --info-subtle: var(--ws-elevated);
+  --success-subtle: var(--ws-elevated);
+  --warning-subtle: var(--ws-elevated);
+  --danger-subtle: var(--ws-elevated);
+  --danger-surface: var(--ws-color-danger-surface);
+  --danger-border: var(--ws-color-danger-border);
+  --danger-title: var(--ws-color-danger-title);
+
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-accent: none;
+  --shadow-accent-lg: none;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --ws-canvas: #f7f8fa;
+  --ws-sidebar: #f0f2f6;
+  --ws-surface: #ffffff;
+  --ws-elevated: #e9ecf2;
+  --ws-border: #dde2ea;
+
+  /* 次文字 #586274 = Figma 浅色次文字（2026-11-04 组件库稿） */
+  --ws-text-primary: #202532;
+  --ws-text-secondary: #586274;
+  --ws-text-disabled: #a0a8b8;
+  --ws-accent: #6257ce;
+  /* 浅色 hover/pressed 尚无 Figma 稿，候选值待校准 */
+  --ws-accent-hover: #7a72e2;
+  --ws-accent-pressed: #5348b8;
+
+  /* 语义色（分析稿候选起点；warning 候选 #D9A441 对白表面仅 2.25:1，
+     不达 3:1，改用 PRISM warning 族；-text 变体承载 4.5:1 文字用途） */
+  --ws-color-info: #3b82f6;
+  --ws-color-success: #22a06b;
+  --ws-color-warning: #b45309;
+  --ws-color-danger: #e16b73;
+  --ws-color-info-text: #1d4ed8;
+  --ws-color-success-text: #15803d;
+  --ws-color-warning-text: #92400e;
+  --ws-color-danger-text: #b42318;
+
+  /* 语义色反馈面（浅色候选，随 Figma 后续浅色稿校准） */
+  --ws-color-danger-surface: #fbeaeb;
+  --ws-color-danger-border: #edb6ba;
+  --ws-color-danger-title: #8f2430;
+
+  /* accent 着色面（浅色候选：Figma 浅色 accent wash #EEEBFF） */
+  --ws-color-accent-surface: #eeebff;
+
+  --ws-focus-ring: 0 0 0 2px var(--ws-canvas), 0 0 0 4px var(--ws-accent);
+
+  /* 浅色薄纱（对齐 PRISM 浅色 veil 口径） */
+  --ws-hover-veil: rgba(23, 24, 28, 0.04);
+  --ws-active-veil: rgba(23, 24, 28, 0.07);
+
+  /* 浅色下阴影恢复轻量投影（黑基透明阴影，两主题通用） */
+  --shadow-xs: 0 1px 2px rgba(23, 24, 28, 0.04);
+  --shadow-sm:
+    0 1px 2px rgba(23, 24, 28, 0.05), 0 2px 6px rgba(23, 24, 28, 0.05);
+  --shadow-md:
+    0 2px 6px rgba(23, 24, 28, 0.06), 0 12px 24px rgba(23, 24, 28, 0.09);
+  --shadow-lg:
+    0 4px 12px rgba(23, 24, 28, 0.08), 0 24px 48px rgba(23, 24, 28, 0.14);
+  --shadow-accent: none;
+  --shadow-accent-lg: none;
+}

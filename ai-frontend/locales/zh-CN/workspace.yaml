@@ -1,0 +1,461 @@
+workspace:
+  spec:
+    fallback: 无法渲染：{reason}
+    overflow: 更多组件
+  focus:
+    title: 聚焦视图
+    back: 返回原页
+    subject: 当前对象
+    timeline: 时间线
+    timelineEmpty: 暂无时间线数据
+    unknownType: 不支持的对象类型，已降级为文本
+  shell:
+    breadcrumb: 面包屑
+    theme: 切换主题
+    modeSwitch: 视图切换
+    modeAi: AI 模式
+    modeClassic: 传统模式
+    notifications: 通知
+    account: 账户
+    collapse: 折叠导航
+    expand: 展开导航
+  nav:
+    groupWorkspace: 工作空间
+    groupModules: 研发模块
+    groupClassic: 传统视图
+    console: 项目总控
+    execution: AI 执行中心
+    team: AI 团队
+    goals: 目标计划
+    goalsPlan: 目标与计划
+    activity: 项目动态
+    requirements: 需求管理
+    decisions: 决策中心
+    knowledge: 项目知识
+    projectCognition: 项目认知
+    artifacts: 产物验收
+    models: 模型配置
+    delivery: 交付验收
+    classicOverview: 概览
+  service:
+    iteration: 当前迭代
+    ok: 服务正常
+  briefing:
+    today: 今天
+  context:
+    title: 上下文
+    collapse: 折叠上下文栏
+    reopen: 重开上下文栏
+    show: 显示上下文
+    currentTodo: 当前待办事项
+    aiAdvice: AI 建议
+    tabs:
+      context: 上下文
+      evidence: 证据
+    fields:
+      workspace: 当前工作区
+      task: 当前任务
+      owner: 负责人
+      permission: 权限
+    owner:
+      devAgent: 开发 Agent
+      aiPm: AI-PM 助理
+    permission:
+      highRisk: 高风险操作需要人工审批
+      readOnly: 只读浏览
+    evidenceEmpty: 暂无证据引用
+    kind:
+      decision: 决策
+      acceptance: 验收
+      blocker: 阻塞
+  console:
+    title: 项目总控
+    runningBadge: 项目运行中
+    demoData: 演示数据
+    needAttention: 需要你处理
+    needAttentionCount: "{count} 项"
+    goals: 目标进展
+    dynamics: 项目动态
+    kind:
+      decision: 决策
+      acceptance: 验收
+      blocker: 阻塞
+  dynamics:
+    kind:
+      change: 变更
+      failure: 失败
+      decision: 决策
+  unavailable:
+    title: 页面不存在或无权访问
+    body: 当前项目没有工作空间数据，或链接有误。
+    back: 返回概览
+  commandbar:
+    chipRole: AI 研发负责人
+    chipContext: 当前页面上下文
+    placeholder: 例如：分析当前迭代的主要风险，并提出调整建议
+    needProject: 请先选择项目
+    send: 发送
+    phase: AI 正在分析…
+    cancel: 取消
+    reference: "/ 引用"
+    atAgent: "{'@'} Agent"
+    mockReply: 已收到指令「{prompt}」。当前为演示模式，正式 AI 会话将在下一里程碑接入。
+  entry:
+    preview: AI 工作空间（预览）
+  pages:
+    models:
+      title: 模型配置
+      subtitle: 配置 OpenAI 兼容的模型供应商，AI-PM 的分析与提案都使用这里的模型。
+      securityNote: API Key 以 AES-256-GCM 密文保存，保存后只显示末 4 位。
+      loading: 正在加载供应商配置…
+      empty: 暂无供应商配置。
+      loadFailed: 加载失败
+      saved: 配置已保存
+      saveFailed: 保存失败
+      keyCleared: Key 已清除
+      save: 保存
+      clearKey: 清除 Key
+      test: 测试连接
+      testOk: 连通正常（{ms} ms）
+      testFailed: 连接失败
+      testUsesSaved: 测试使用已保存的配置；改动后请先保存再测试。
+      enabled: 已启用
+      disabled: 未启用
+      enableLabel: 启用该供应商
+      timeoutInvalid: 超时须为 1–600 秒
+      keyConfigured: "已配置（{hint}）"
+      keyMissing: 未配置；Ollama 等本地模型可留空
+      keyPlaceholder: 填入新的 Key（留空表示不修改）
+      fields:
+        baseUrl: API 地址
+        model: 模型
+        apiKey: API Key
+        timeout: 超时（秒）
+      providers:
+        deepseek: DeepSeek
+        openai: OpenAI
+        glm: 智谱 GLM
+        minimax: MiniMax
+        ollama: Ollama（本地）
+    goals:
+      title: 目标计划
+      subtitle: 项目 → 目标 → 里程碑 → 任务
+      milestones: 里程碑
+      tasks: 任务
+      msDone: 已达成
+      msActive: 进行中
+      msPending: 未开始
+      taskDone: 已完成
+      taskDoing: 进行中
+      taskTodo: 未开始
+      project: 项目
+      pickProjectShort: 选择项目
+      pickProject: 请先在「项目范围」中选择一个项目
+      loadFailed: 加载失败，请稍后重试
+      empty: 暂无里程碑或任务
+    team:
+      title: AI 团队
+      subtitle: Agent 状态与当前工作
+      working: 执行中
+      waitingApproval: 等待审批
+      idle: 空闲
+      completed: 已完成任务
+      lastActive: 最近活跃
+      currentTask: 当前工作
+    activity:
+      title: 项目动态
+      subtitle: 重要变更、执行失败与近期决策
+      kindChange: 变更
+      kindFailure: 失败
+      kindDecision: 决策
+    requirements:
+      title: 需求管理
+      subtitle: 需求清单与验收标准
+      draft: 草稿
+      reviewing: 评审中
+      confirmed: 已确认
+      implementing: 实现中
+      accepted: 已验收
+      acceptance: 验收标准
+      source: 来源
+    decisions:
+      title: 决策中心
+      subtitle: 双方案对比与证据
+      pending: 待决策
+      decided: 已决策
+      pros: 优势
+      cons: 劣势
+      evidence: 证据
+      impact: 影响范围
+      conclusion: 结论
+    knowledge:
+      title: 项目知识
+      subtitle: 文档树与阅读器
+      version: 版本
+      updated: 更新
+      source: 来源
+      empty: 暂无知识文档
+      project: 项目
+      pickProjectShort: 选择项目
+      pickProject: 请先在「项目范围」中选择一个项目
+      loadFailed: 加载失败，请稍后重试
+      referencesPending: 引用关系待后续里程碑接入
+      types:
+        requirement: 需求
+        decision: 决策
+        architecture: 架构
+        knowledge: 知识
+      governance:
+        title: 质量门与提案
+        confirm: 确认红线
+        veto: 否决
+        vetoReason: 知识页发起否决
+    artifacts:
+      title: 产物验收
+      subtitle: 产品与交付物的测试、审批状态
+      testPassed: 测试通过
+      testFailed: 测试未过
+      testRunning: 测试中
+      approvalPending: 待审批
+      approvalApproved: 已通过
+      approvalRejected: 已驳回
+      project: 项目
+      pickProjectShort: 选择项目
+      pickProject: 请先在「项目范围」中选择一个项目
+      loadFailed: 加载失败，请稍后重试
+      empty: 暂无产物
+      stateDraft: 草稿
+      stateApproved: 已批准
+      stateSuperseded: 已取代
+      diffPending: 文件级 Diff、测试报告与评论待产物管线接入后展示
+      hashLabel: 内容指纹
+      approvedByLabel: 批准人
+      noApprover: 待批准
+    goalsExtra:
+      viewTree: 目标树
+      viewDeps: 依赖图
+      viewTimeline: 时间线
+      dependencies: 依赖关系
+      viewBlockedDecision: 查看阻塞的架构决策
+      proposed: AI 提议的计划（草案，未批准不执行）
+      approvedPlan: 已批准执行的计划
+      taskBlocked: 待决策
+      taskAwaiting: 待验收
+      taskCancelled: 已取消
+      noPlannedDate: 未设定计划日期
+      basisByTasks: 按已完成任务数（{done}/{total}）
+      unassigned: 未归入里程碑的任务
+      noDependencies: 暂无依赖关系数据
+    execution:
+      title: AI 执行中心
+      subtitle: 执行时间线、工具调用与日志（进度=可验证状态，非估算百分比）
+      thought: AI 思考摘要
+      tool: 工具执行
+      state: 业务状态变化
+      approval: 人工审批请求
+      phase: 阶段状态
+      checkpoints: 已完成检查点
+      remaining: 剩余工作
+      toolCall: 工具调用
+      logs: 日志
+      codeChange: 代码变化
+      noSelection: 选择左侧步骤查看工具调用、日志与代码变化
+      stepWaiting: 等待中
+      stepRunning: 执行中
+      stepDone: 已完成
+      project: 项目
+      pickProjectShort: 选择项目
+      pickProject: 请先在「项目范围」中选择一个项目
+      loadFailed: 加载失败，请稍后重试
+      empty: 暂无执行记录
+      attempt: 第 {n} 次尝试
+      failureReason: 失败原因
+      runQueued: 待执行
+      runRunning: 执行中
+      runSucceeded: 已完成
+      runFailed: 失败
+      runTimedOut: 超时
+      runCancelled: 已取消
+      runDetailLoadFailed: run 详情加载失败
+      lease: 租约
+      leaseUntil: 租约至 {time}
+      noLease: 无租约
+      heartbeat: 最近心跳 {time}
+      executor: 执行器
+      executorSession: 会话 {session}
+      baselines: 锁定基线
+      logLocator: 日志定位
+      stage: 阶段
+      runKindDelivery: 交付
+      runKindReview: 审查
+    delivery:
+      title: 交付验收
+      subtitle: 项目待验收总表与逐任务验收证据
+      metricPending: 待验收
+      metricEligible: 可验收
+      metricBlocked: 存在阻塞
+      project: 项目
+      pickProjectShort: 选择项目
+      pickProject: 请先在「项目范围」中选择一个项目
+      loadFailed: 加载失败，请稍后重试
+      empty: 当前没有等待验收的交付
+      listTitle: 待验收任务
+      badgeEligible: 可验收
+      badgeBlocked: 存在阻塞
+      badgeMissing: 待补充
+      blockers: 阻塞问题 {n}
+      expectedRepos: 交付 {delivered}/{expected} 仓
+      missingRepos: 缺：{repos}
+      integrationPassed: 集成通过
+      integrationFailed: 集成失败
+      integrationNotRun: 集成未运行
+      reviewNone: 尚未发起审查
+      reviewRunning: 审查进行中，等待审查结论
+      reviewAwaiting: 等待验收决定
+      reviewDecided: 已有验收结论
+      eligibleBanner: 交付证据齐备，可以验收
+      notEligibleBanner: 暂不可验收
+      sectionDelivery: 多仓交付清单
+      sectionVerdicts: 验收标准裁决
+      sectionFindings: 验收问题
+      sectionRuns: Agent 执行情况
+      sectionApprovals: 审批历史
+      sectionAction: 验收动作
+      deliveryStateDelivered: 已交付
+      deliveryStatePartial: 部分交付
+      deliveryStateNeverSubmitted: 未提交交付
+      repoNotDelivered: 未交付
+      testsSummary: 测试 {passed}/{total} 通过
+      noEvidence: 该任务尚无审查与交付记录
+      verdictPassed: 通过
+      verdictFailed: 失败
+      verdictNotEvaluable: 无法评估
+      verdictAwaitingManual: 待人工裁决
+      verdictNotEvaluated: 未被审查覆盖
+      severityBlocker: 阻塞
+      severityWarning: 警告
+      severityInfo: 信息
+      noFindings: 无验收问题
+      findingLocation: 位置
+      findingEvidence: 证据
+      approvalPending: 待决定
+      approvalApproved: 已通过
+      approvalRejected: 已退回
+      approvalReason: 理由
+      approve: 通过验收
+      reject: 退回修改
+      reasonPlaceholder: 理由（退回必填）
+      rejectReasonRequired: 退回必须填写理由
+      decisionCompleted: 任务已完成
+      decisionChangesRequested: 已退回修改
+      decisionAlreadyDecided: 该审批已被处理
+      decisionFailed: 提交失败
+      runsEmpty: 暂无执行记录
+
+    bootstrap:
+      title: 环境接入
+      pill: 支持自动初始化
+      desc: 将以下指令发送给 Codex，即可初始化当前开发环境（技能安装、MCP 配置、设备登记与自检全程无手工编辑配置文件）。
+      instruction:
+        title: PM-AI Bootstrap
+        body: |-
+          请初始化当前开发环境。
+          1. 阅读 PM-AI 安装说明（安装地址见下）。
+          2. 检查当前执行端与操作系统环境。
+          3. 安装 PM-AI 技能包，并按说明写入本工具的 MCP 配置（需要 API Key 时向我索取；Key 不得出现在安装指令或 URL 中）。
+          4. 按说明验证平台连通（/health 与 /v1/pm/me）。
+          5. 引导我确认要绑定的 Project，登记本设备并验证仓库访问。
+          6. 执行完整环境自检，并把结果提交给平台。
+          7. 确认开发环境达到 Ready 状态后结束。
+        urlLabel: 安装地址：
+      copy: 复制初始化指令
+      copied: 已复制
+      copyFailed: 复制失败，请手动选择文本复制
+      replaceHint: 示例地址，正式环境请替换为 PM-AI 的实际部署地址。
+    devices:
+      title: 开发环境
+      subtitle: 已登记的开发环境目录——就绪状态是最近一次自检的快照，不因曾经通过而长期有效。
+      addHint: 添加开发环境请使用「项目总控 → 环境接入」卡片的初始化指令。
+      add: 添加开发环境
+      metrics:
+        active: 已登记（有效）
+        ready: 已就绪
+        total: 全部
+      status:
+        active: 有效
+        revoked: 已撤销
+      readiness:
+        none: 未自检
+        installed: 已安装
+        connected: 已连接
+        authenticated: 已认证
+        ready: 就绪
+        degraded: 部分能力异常
+        failed: 失败
+      lastCheck: 最后自检
+      neverChecked: 从未自检
+      checkSummary: 仓库验证 {verified}/{declared}
+      snapshotNote: 就绪是快照——认证过期、绑定撤销或 MCP 不可用都会使其退化，以下一次自检为准。
+      bindings: 项目绑定
+      noBindings: 尚无项目绑定
+      selectOne: 选择左侧设备查看详情
+      accessible: 可进入
+      inaccessible: 不可进入
+      verifiedCount: 仓库验证 {verified}/{declared}
+      revoke: 撤销授权
+      unbind: 解绑
+      confirmRevoke: 确认撤销「{name}」的登记？撤销后该设备不再作为有效登记设备（不会影响你的账号与其他仓库权限）。
+      confirmUnbind: 确认解除该设备与此项目的绑定？（解绑不影响行历史）
+      fields:
+        executor: 执行端
+        platform: 平台
+        lifecycle: 生命周期
+        readiness: 就绪
+        lastCheck: 最后自检
+      boundAt: 绑定于
+      unboundAt: 解绑于
+
+    decisionsExtra:
+      background: 问题背景
+      dimensions: 比较维度
+      recommendation: AI 推荐理由
+      risks: 风险
+      decidedBy: 决策人
+      approvedAt: 批准时间
+      verification: 后续验证结果
+      reassessTitle: 建议重新评估
+      project: 项目
+      pickProjectShort: 选择项目
+      pickProject: 请先在「项目范围」中选择一个项目
+      loadFailed: 加载失败，请稍后重试
+      empty: 暂无审批或决策记录
+      approvalTitle: 审批请求
+      noRationale: 暂无变更理由
+      requiredRoleValue: 要求角色：{role}
+      risk:
+        low: 低
+        medium: 中
+        high: 高
+      reasonPlaceholder: 填写决策理由（必填）
+      reasonRequired: 决策理由不能为空
+      approve: 批准
+      reject: 驳回
+      submitDone: 决策已提交
+      submitFailed: 决策提交失败
+    knowledgeExtra:
+      approvedFacts: 人工批准的正式事实
+      aiSummary: AI 维护摘要（不覆盖正式事实）
+      references: 证据与引用关系
+      reviewApproved: 已批准
+      reviewAiDraft: AI 起草
+    artifactsExtra:
+      files: 变更文件
+      diffLabel: 统一 Diff
+      comments: 行级评论
+      testReport: 测试报告
+      acceptanceLabel: 需求验收标准
+      linkedTask: 关联任务
+      verdictPartial: 部分检查通过
+      verdictMeets: 符合验收标准
+      verdictNotMet: 未达验收标准
+      lineLabel: 行

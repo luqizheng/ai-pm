@@ -1,0 +1,461 @@
+workspace:
+  spec:
+    fallback: "Cannot render: {reason}"
+    overflow: More components
+  focus:
+    title: Focus view
+    back: Back to previous page
+    subject: Current object
+    timeline: Timeline
+    timelineEmpty: No timeline data yet
+    unknownType: Unsupported object type — degraded to text
+  shell:
+    breadcrumb: Breadcrumb
+    theme: Toggle theme
+    modeSwitch: View mode
+    modeAi: AI mode
+    modeClassic: Classic mode
+    notifications: Notifications
+    account: Account
+    collapse: Collapse navigation
+    expand: Expand navigation
+  nav:
+    groupWorkspace: Workspace
+    groupModules: R&D modules
+    groupClassic: Classic views
+    console: Project Console
+    execution: Execution Hub
+    team: AI Team
+    goals: Goals & Plans
+    goalsPlan: Goals & Plans
+    activity: Activity
+    requirements: Requirements
+    decisions: Decisions
+    knowledge: Knowledge
+    projectCognition: Project Cognition
+    artifacts: Artifacts
+    models: Models
+    delivery: Delivery Acceptance
+    classicOverview: Overview
+  service:
+    iteration: Current iteration
+    ok: All services normal
+  briefing:
+    today: Today
+  context:
+    title: Context
+    collapse: Collapse context panel
+    reopen: Reopen context panel
+    show: Show context
+    currentTodo: Current to-do
+    aiAdvice: AI advice
+    tabs:
+      context: Context
+      evidence: Evidence
+    fields:
+      workspace: Current workspace
+      task: Current task
+      owner: Owner
+      permission: Permission
+    owner:
+      devAgent: Dev agent
+      aiPm: AI-PM assistant
+    permission:
+      highRisk: High-risk actions need human approval
+      readOnly: Read-only
+    evidenceEmpty: No evidence yet
+    kind:
+      decision: Decision
+      acceptance: Acceptance
+      blocker: Blocker
+  console:
+    title: Project Console
+    runningBadge: Project running
+    demoData: Demo data
+    needAttention: Needs your attention
+    needAttentionCount: "{count} items"
+    goals: Goals progress
+    dynamics: Activity
+    kind:
+      decision: Decision
+      acceptance: Acceptance
+      blocker: Blocker
+  dynamics:
+    kind:
+      change: Change
+      failure: Failure
+      decision: Decision
+  unavailable:
+    title: Page not found or access denied
+    body: This project has no workspace data, or the link is wrong.
+    back: Back to overview
+  commandbar:
+    chipRole: AI Lead
+    chipContext: Current page context
+    placeholder: e.g. Analyze the main risks of this iteration and suggest adjustments
+    needProject: Select a project first
+    send: Send
+    phase: AI is analyzing…
+    cancel: Cancel
+    reference: "/ Reference"
+    atAgent: "{'@'} Agent"
+    mockReply: Received "{prompt}". Demo mode only; the real AI session arrives in the next milestone.
+  entry:
+    preview: AI Workspace (Preview)
+  pages:
+    models:
+      title: Models
+      subtitle: Configure OpenAI-compatible model providers. AI-PM analysis and proposals use these models.
+      securityNote: API keys are stored with AES-256-GCM; only the last 4 characters are shown after saving.
+      loading: Loading provider settings…
+      empty: No providers configured.
+      loadFailed: Failed to load
+      saved: Settings saved
+      saveFailed: Save failed
+      keyCleared: API key cleared
+      save: Save
+      clearKey: Clear key
+      test: Test connection
+      testOk: Connected ({ms} ms)
+      testFailed: Connection failed
+      testUsesSaved: The probe uses saved settings; save before testing changes.
+      enabled: Enabled
+      disabled: Disabled
+      enableLabel: Enable this provider
+      timeoutInvalid: Timeout must be between 1 and 600 seconds
+      keyConfigured: "Configured ({hint})"
+      keyMissing: Not configured; leave empty for local models such as Ollama
+      keyPlaceholder: Enter a new key (leave empty to keep the current one)
+      fields:
+        baseUrl: API base URL
+        model: Model
+        apiKey: API key
+        timeout: Timeout (s)
+      providers:
+        deepseek: DeepSeek
+        openai: OpenAI
+        glm: Zhipu GLM
+        minimax: MiniMax
+        ollama: Ollama (local)
+    goals:
+      title: Goals & Plans
+      subtitle: Project → Goals → Milestones → Tasks
+      milestones: Milestones
+      tasks: Tasks
+      msDone: Done
+      msActive: In progress
+      msPending: Not started
+      taskDone: Done
+      taskDoing: In progress
+      taskTodo: To do
+      project: Project
+      pickProjectShort: Select a project
+      pickProject: Pick a project in the project scope first
+      loadFailed: Failed to load, retry shortly
+      empty: No milestones or tasks yet
+    team:
+      title: AI Team
+      subtitle: Agent status and current work
+      working: Working
+      waitingApproval: Awaiting approval
+      idle: Idle
+      completed: Completed tasks
+      lastActive: Last active
+      currentTask: Current work
+    activity:
+      title: Activity
+      subtitle: Key changes, failures and recent decisions
+      kindChange: Change
+      kindFailure: Failure
+      kindDecision: Decision
+    requirements:
+      title: Requirements
+      subtitle: Requirement list and acceptance criteria
+      draft: Draft
+      reviewing: In review
+      confirmed: Confirmed
+      implementing: Implementing
+      accepted: Accepted
+      acceptance: Acceptance criteria
+      source: Source
+    decisions:
+      title: Decisions
+      subtitle: Side-by-side options with evidence
+      pending: Pending
+      decided: Decided
+      pros: Pros
+      cons: Cons
+      evidence: Evidence
+      impact: Impact
+      conclusion: Conclusion
+    knowledge:
+      title: Knowledge
+      subtitle: Document tree and reader
+      version: Version
+      updated: Updated
+      source: Source
+      empty: No knowledge documents
+      project: Project
+      pickProjectShort: Select a project
+      pickProject: Pick a project in the project scope first
+      loadFailed: Failed to load, retry shortly
+      referencesPending: References arrive in a later milestone
+      types:
+        requirement: Requirements
+        decision: Decisions
+        architecture: Architecture
+        knowledge: Knowledge
+      governance:
+        title: Quality gates & proposals
+        confirm: Confirm red-line
+        veto: Veto
+        vetoReason: Vetoed from the knowledge page
+    artifacts:
+      title: Artifacts
+      subtitle: Test and approval status of products and deliverables
+      testPassed: Tests passed
+      testFailed: Tests failed
+      testRunning: Tests running
+      approvalPending: Awaiting approval
+      approvalApproved: Approved
+      approvalRejected: Rejected
+      project: Project
+      pickProjectShort: Select project
+      pickProject: Select a project in Project Scope first
+      loadFailed: Load failed, please retry
+      empty: No artifacts
+      stateDraft: Draft
+      stateApproved: Approved
+      stateSuperseded: Superseded
+      diffPending: File diff, test report and comments appear once the artifact pipeline is wired
+      hashLabel: Content hash
+      approvedByLabel: Approved by
+      noApprover: Pending
+    goalsExtra:
+      viewTree: Goal tree
+      viewDeps: Dependency graph
+      viewTimeline: Timeline
+      dependencies: Dependencies
+      viewBlockedDecision: View blocking decision
+      proposed: AI-proposed plan (draft, not executed until approved)
+      approvedPlan: Approved plan
+      taskBlocked: Pending decision
+      taskAwaiting: Awaiting acceptance
+      taskCancelled: Cancelled
+      noPlannedDate: No planned date
+      basisByTasks: Based on completed tasks ({done}/{total})
+      unassigned: Tasks without a milestone
+      noDependencies: No dependency data
+    execution:
+      title: Execution Hub
+      subtitle: Timeline, tool calls and logs (progress = verifiable state, not estimates)
+      thought: AI reasoning
+      tool: Tool call
+      state: Business state change
+      approval: Approval request
+      phase: Phase
+      checkpoints: Completed checkpoints
+      remaining: Remaining work
+      toolCall: Tool call
+      logs: Logs
+      codeChange: Code change
+      noSelection: Select a step to see tool calls, logs and code changes
+      stepWaiting: Waiting
+      stepRunning: Running
+      stepDone: Done
+      project: Project
+      pickProjectShort: Select project
+      pickProject: Select a project in Project Scope first
+      loadFailed: Load failed, please retry
+      empty: No execution runs
+      attempt: Attempt {n}
+      failureReason: Failure reason
+      runQueued: Queued
+      runRunning: Running
+      runSucceeded: Succeeded
+      runFailed: Failed
+      runTimedOut: Timed out
+      runCancelled: Cancelled
+      runDetailLoadFailed: Failed to load run details
+      lease: Lease
+      leaseUntil: Lease until {time}
+      noLease: No lease
+      heartbeat: Last heartbeat {time}
+      executor: Executor
+      executorSession: Session {session}
+      baselines: Locked baselines
+      logLocator: Log locator
+      stage: Stage
+      runKindDelivery: Delivery
+      runKindReview: Review
+    delivery:
+      title: Delivery Acceptance
+      subtitle: Project-wide pending deliveries with per-task acceptance evidence
+      metricPending: Pending
+      metricEligible: Eligible
+      metricBlocked: Blocked
+      project: Project
+      pickProjectShort: Select project
+      pickProject: Select a project in "Project scope" first
+      loadFailed: Load failed, please retry later
+      empty: No deliveries awaiting acceptance
+      listTitle: Pending tasks
+      badgeEligible: Eligible
+      badgeBlocked: Blocked
+      badgeMissing: Missing
+      blockers: "{n} blockers"
+      expectedRepos: "{delivered}/{expected} repos delivered"
+      missingRepos: "Missing: {repos}"
+      integrationPassed: Integration passed
+      integrationFailed: Integration failed
+      integrationNotRun: Integration not run
+      reviewNone: Review not started
+      reviewRunning: Review in progress, awaiting its conclusion
+      reviewAwaiting: Awaiting acceptance decision
+      reviewDecided: Decision recorded
+      eligibleBanner: Delivery evidence complete — ready for acceptance
+      notEligibleBanner: Not ready for acceptance
+      sectionDelivery: Delivery manifest
+      sectionVerdicts: Acceptance criteria
+      sectionFindings: Review findings
+      sectionRuns: Agent runs
+      sectionApprovals: Approval history
+      sectionAction: Acceptance action
+      deliveryStateDelivered: Delivered
+      deliveryStatePartial: Partial
+      deliveryStateNeverSubmitted: Never submitted
+      repoNotDelivered: Not delivered
+      testsSummary: "Tests {passed}/{total} passed"
+      noEvidence: No review or delivery records yet
+      verdictPassed: Passed
+      verdictFailed: Failed
+      verdictNotEvaluable: Not evaluable
+      verdictAwaitingManual: Awaiting manual decision
+      verdictNotEvaluated: Not covered by review
+      severityBlocker: Blocker
+      severityWarning: Warning
+      severityInfo: Info
+      noFindings: No findings
+      findingLocation: Location
+      findingEvidence: Evidence
+      approvalPending: Pending
+      approvalApproved: Approved
+      approvalRejected: Rejected
+      approvalReason: Reason
+      approve: Approve
+      reject: Reject
+      reasonPlaceholder: Reason (required for rejection)
+      rejectReasonRequired: A reason is required to reject
+      decisionCompleted: Task completed
+      decisionChangesRequested: Changes requested
+      decisionAlreadyDecided: This approval was already decided
+      decisionFailed: Submission failed
+      runsEmpty: No run records
+
+    bootstrap:
+      title: Environment Setup
+      pill: Auto-setup supported
+      desc: Send the instruction below to Codex to initialize this dev environment (skill install, MCP config, device registration and checks — no manual config editing).
+      instruction:
+        title: PM-AI Bootstrap
+        body: |-
+          Please initialize the current dev environment.
+          1. Read the PM-AI install guide (address below).
+          2. Inspect the current executor and OS environment.
+          3. Install the PM-AI skill pack and write this tool's MCP config per the guide (ask me for the API key when needed; the key must never appear in the instruction or URL).
+          4. Verify platform connectivity per the guide (/health and /v1/pm/me).
+          5. Ask me which Project to bind, register this device and verify repository access.
+          6. Run the full environment self-check and submit the result to the platform.
+          7. Finish once the environment reaches Ready.
+        urlLabel: "Install URL:"
+      copy: Copy install instruction
+      copied: Copied
+      copyFailed: Copy failed — please select and copy the text manually
+      replaceHint: Example address; replace with the actual PM-AI deployment address in production.
+    devices:
+      title: Dev Environments
+      subtitle: Directory of registered dev environments — readiness is a snapshot of the latest check and does not stay valid forever.
+      addHint: To add an environment, use the install instruction on the Console "Environment Setup" card.
+      add: Add environment
+      metrics:
+        active: Active
+        ready: Ready
+        total: Total
+      status:
+        active: Active
+        revoked: Revoked
+      readiness:
+        none: Not checked
+        installed: Installed
+        connected: Connected
+        authenticated: Authenticated
+        ready: Ready
+        degraded: Degraded
+        failed: Failed
+      lastCheck: Last check
+      neverChecked: Never checked
+      checkSummary: repos verified {verified}/{declared}
+      snapshotNote: Readiness is a snapshot — expired auth, revoked bindings or MCP outage degrade it; the next check is authoritative.
+      bindings: Project bindings
+      noBindings: No project bindings yet
+      selectOne: Select a device on the left to see details
+      accessible: Accessible
+      inaccessible: Not accessible
+      verifiedCount: repos verified {verified}/{declared}
+      revoke: Revoke
+      unbind: Unbind
+      confirmRevoke: Revoke the registration of "{name}"? The device will no longer count as a valid registered device (your account and repository permissions are unaffected).
+      confirmUnbind: Unbind this device from the project? (history rows are kept)
+      fields:
+        executor: Executor
+        platform: Platform
+        lifecycle: Lifecycle
+        readiness: Readiness
+        lastCheck: Last check
+      boundAt: Bound at
+      unboundAt: Unbound at
+
+    decisionsExtra:
+      background: Background
+      dimensions: Comparison dimensions
+      recommendation: AI recommendation
+      risks: Risks
+      decidedBy: Decided by
+      approvedAt: Approved at
+      verification: Follow-up verification
+      reassessTitle: Re-evaluation suggested
+      project: Project
+      pickProjectShort: Select a project
+      pickProject: Pick a project in the project scope first
+      loadFailed: Failed to load, retry shortly
+      empty: No approvals or decisions yet
+      approvalTitle: Approval request
+      noRationale: No change rationale
+      requiredRoleValue: "Required role: {role}"
+      risk:
+        low: Low
+        medium: Medium
+        high: High
+      reasonPlaceholder: Enter a decision reason (required)
+      reasonRequired: A decision reason is required
+      approve: Approve
+      reject: Reject
+      submitDone: Decision submitted
+      submitFailed: Failed to submit decision
+    knowledgeExtra:
+      approvedFacts: Human-approved facts
+      aiSummary: AI-maintained summary (never overrides facts)
+      references: Evidence & references
+      reviewApproved: Approved
+      reviewAiDraft: AI draft
+    artifactsExtra:
+      files: Changed files
+      diffLabel: Unified diff
+      comments: Line comments
+      testReport: Test report
+      acceptanceLabel: Requirement acceptance criteria
+      linkedTask: Linked task
+      verdictPartial: Partial checks passed
+      verdictMeets: Meets acceptance criteria
+      verdictNotMet: Not met
+      lineLabel: Line

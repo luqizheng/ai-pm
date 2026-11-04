@@ -1,0 +1,163 @@
+system:
+  profile:
+    title: Profile settings
+    roles: Roles
+    changePassword: Change password
+    oldPassword: Current password
+    newPassword: New password
+    confirmPassword: Confirm new password
+    passwordMismatch: The two new passwords do not match
+    passwordSuccess: Password updated
+    passwordFailed: Failed to update password
+  permission:
+    title: Permissions
+    caption: Permission list
+    searchPlaceholder: Search permission code
+    code: Code
+    name: Name
+    description: Description
+    category: Category
+  session:
+    title: Sessions
+    caption: Session list
+    searchPlaceholder: Search user
+    user: User
+    ip: IP address
+    current: Current session
+    currentSession: Current
+    otherSession: Other
+    expiresAt: Expires at
+  file:
+    title: Files
+    caption: File list
+    searchPlaceholder: Search filename
+    filename: Filename
+    contentType: Type
+    size: Size
+  dept:
+    title: Organization
+    caption: Org unit list
+    name: Name
+    code: Code
+    level: Level
+  token:
+    title: Tokens and clients
+    caption: API key list
+    searchPlaceholder: Search name
+    name: Name
+    permissions: Permissions
+  dashboard:
+    title: Overview
+    activeUsers: Active users
+    requests: Total requests
+    latency: Average latency
+    errorRate: Error rate
+  common:
+    confirm: Confirm
+    cancel: Cancel
+    pageSize: Rows per page
+    search: Search
+    create: Create
+    edit: Edit
+    save: Save
+    delete: Delete
+    confirmDelete: Delete this record? This cannot be undone
+    total: "{count} in total"
+    empty: No records yet
+    username: Username
+    nickname: Display name
+    email: Email
+    phone: Phone
+    status: Status
+    createdAt: Created at
+    close: Close
+    caption: "{name} list"
+  user:
+    title: Users
+    create: Create user
+    edit: Edit user
+    caption: User list
+    searchPlaceholder: Search username
+    statusPlaceholder: All statuses
+    statusActive: Active
+    statusDisabled: Disabled
+    username: Username
+    nickname: Display name
+    password: Password
+    email: Email
+    phone: Phone
+    createdAt: Created at
+  role:
+    title: Roles
+    create: Create role
+    edit: Edit role
+    caption: Role list
+    searchPlaceholder: Search role name
+    name: Role name
+    code: Role code
+    description: Description
+  menu:
+    title: Menus
+    caption: Menu config version list
+    name: Menu name
+    version: Version
+    status: Status
+    active: Active
+    draft: Draft
+    publish: Activate
+    clone: Clone
+    create: New version
+    edit: Edit draft
+    description: Description
+    routesJson: Routes JSON
+    routesJsonInvalid: Routes JSON must be a valid array
+    createSuccess: Draft version created
+    updateSuccess: Draft updated
+  audit:
+    title: Audit logs
+    loginLog: Login logs
+    operationLog: Operation logs
+    caption: Audit log list
+    searchPlaceholder: Search
+    actor: Actor
+    action: Action
+    target: Target
+    ip: IP address
+    result: Result
+    succeeded: Succeeded
+    failed: Failed
+    createdAt: Time
+  config:
+    title: Configuration
+    namespace: Namespaces
+    item: Items
+    caption: Config item list
+    searchPlaceholder: Search key
+    key: Key
+    value: Value
+    namespaceName: Namespace
+  notification:
+    title: Announcements
+    create: Create announcement
+    edit: Edit announcement
+    caption: Announcement list
+    searchPlaceholder: Search title
+    announcementTitle: Title
+    announcementBody: Body
+    status: Status
+    draft: Draft
+    published: Published
+    revoked: Revoked
+    inbox:
+      title: Announcement center
+      caption: Announcements visible to me
+      markRead: Mark as read
+    publish: Publish
+    revoke: Revoke
+    pinned: Pinned
+    popover: Popover reminder
+    scopeType: Recipient scope
+    scopeId: Recipient ID
+    scopeTypeRole: Role
+    scopeTypeUser: User
+    scopeTypeDept: Dept

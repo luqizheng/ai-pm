@@ -1,0 +1,408 @@
+overview:
+  pageTitle: 概览
+  scopeAll: 全部项目汇总
+  statProjects: 项目
+  statRequirements: 需求
+  statTasks: 任务
+  statApprovals: 待审批
+  recentTasks: 最近更新的任务
+  pendingApprovals: 待审批（红线确认）
+  queueEmpty: 队列为空
+  queueEmptyHint: AI 发起红线操作时会在此等待人工确认。
+  liveTitle: 实时动态
+  liveWaiting: 等待变更事件…
+  empty: 暂无数据
+projects:
+  pageTitle: 项目
+  subtitle: 客户项目清单与基础信息。
+  emptyHint: 还没有项目，点击右上角「新建项目」开始。
+  new: 新建项目
+  newTitle: 新建项目
+  openRepositories: 代码仓库
+  openCommandCenter: 项目总控台
+  openBaseline: 项目基线
+  openCognition: 项目认知
+customer:
+  pageTitle: 客户
+  subtitle: 客户主数据；一个客户可以包含多个项目。
+  emptyHint: 暂无客户；新建项目时可直接选择或留空。
+  colName: 客户
+  colCode: 客户编码
+  colStatus: 状态
+  colProjects: 项目数
+  all: 全部客户
+  none: 不指定客户
+  unassigned: 未归类
+  select: 所属客户
+  selectHint: 一个客户可包含多个项目；留空则生成「未归类」客户，待后续合并。
+  required: 请选择所属客户
+  new: 新建客户
+  newTitle: 新建客户
+  editTitle: 编辑客户
+  code: 客户编码
+  codePlaceholder: 例如 BANK-SH
+  name: 客户全称
+  namePlaceholder: 例如 中国某某银行股份有限公司
+  shortName: 简称
+  shortNamePlaceholder: 例如 某某银行
+  industry: 行业
+  industryPlaceholder: 例如 金融
+  notes: 备注
+  statusActive: 正常
+  statusArchived: 已归档
+  statusPlaceholder: 未归类
+  created: 客户已创建
+  updated: 客户已更新
+  codeRequired: 请填写客户编码
+  nameRequired: 请填写客户全称
+  searchPlaceholder: 搜索客户
+  search: 查询
+  loadFailed: 客户加载失败
+requirements:
+  pageTitle: 需求
+  subtitle: 需求清单；正文以 Markdown + Git 管理，此处展示权威状态。
+  emptyHint: 暂无需求。
+tasks:
+  pageTitle: 任务
+  subtitle: 全部项目的任务清单。
+  emptyHint: 暂无任务。
+  new: 新建任务
+  edit: 编辑
+  newTitle: 新建任务
+  editTitle: 编辑任务
+  titlePlaceholder: 任务标题
+  titleRequired: 请填写任务标题
+  projectRequired: 请选择所属项目
+  descLabel: 描述（可选）
+  created: 任务已创建
+  updated: 任务已更新
+  failed: 操作失败
+approvals:
+  pageTitle: 审批确认
+  subtitle: AI 红线操作的事前确认队列；通过/驳回操作待后端命令通道就绪后开放。
+  emptyHint: 队列为空
+  emptyDetail: AI 发起红线操作（发布、验收签署等）时会在此等待人工确认。
+  approve: 通过
+  reject: 驳回
+  approveTitle: 通过红线确认
+  rejectTitle: 驳回红线确认
+  reasonPlaceholder: 填写决策理由（必填，将记入审计日志）
+  reasonRequired: 请填写决策理由
+  decided: 决策已提交
+  decideFailed: 决策失败
+revisions:
+  open: 修订
+  title: 修订历史
+  empty: 暂无修订
+  newLabel: 新建修订（Markdown）
+  newPlaceholder: 以 Markdown 撰写本修订的需求正文
+  newSubmit: 提交修订
+  approve: 定稿
+  created: 修订已创建
+  approved: 已定稿，旧定稿已转为已作废
+  failed: 操作失败
+importBatch:
+  title: "项目冷启动（{count} 项提案）"
+  approveAll: 整批批准
+  rejectAll: 整批驳回
+  terminate: 终止导入
+  terminateDone: 导入已终止，名额已释放
+  reason: 批量审批（冷启动导入）
+  partial: "有 {count} 项失败，可单独重试"
+  done: 批次审批完成
+
+repositories:
+  pageTitle: 代码仓库
+  subtitle: 管理项目关联的代码仓库与访问密钥。
+  new: 新增仓库
+  newTitle: 新增代码仓库
+  editTitle: 编辑代码仓库
+  name: 仓库名称
+  namePlaceholder: 例如：主仓库 / 文档仓库
+  url: 仓库地址
+  urlPlaceholder: git{'@'}gitlab.local:team/repo.git
+  urlHint: 仅支持 SSH 形式：git{'@'}host:path 或 ssh://user{'@'}host/path
+  roleLabel: 用途
+  status: 状态
+  verify: 校验
+  archive: 归档
+  archiveTitle: 归档仓库
+  archiveConfirm: 归档「{name}」后仍保留历史，但不再参与导入。
+  archivedHint: 仓库已归档
+  importAgain: 再导入
+  defaultBranch: 默认分支
+  defaultBranchPlaceholder: main
+  updatedAt: 更新时间
+  description: 备注（可选）
+  nameRequired: 请填写仓库名称
+  urlRequired: 请填写仓库地址
+  save: 保存
+  edit: 编辑
+  delete: 删除
+  deleteTitle: 删除仓库
+  deleteConfirm: 确定删除「{name}」吗？该操作不可撤销。
+  created: 仓库已添加
+  updated: 仓库已更新
+  deleted: 仓库已删除
+  failed: 操作失败
+  emptyHint: 还没有关联仓库，点击右上角「新增仓库」开始。
+  sshKeyTitle: 项目 SSH 密钥
+  sshKeyHint: 将该公钥添加到代码托管平台的 Deploy Key（只读权限即可），AI 项目经理才能访问上述仓库。
+  sshKeyEmpty: 还没有生成密钥。
+  generate: 生成密钥
+  regenerate: 重新生成
+  regenerateConfirm: 重新生成后，托管平台上的旧公钥立即失效，需要重新配置。
+  copy: 复制公钥
+  copied: 公钥已复制
+  copyFailed: 复制失败，请手动选择公钥复制
+  fingerprint: 指纹
+  createdAt: 创建时间
+  deleteKey: 删除密钥
+  deleteKeyConfirm: 删除后已绑定的仓库将无法被访问，确定删除？
+  keyGenerated: 密钥已生成
+  keyDeleted: 密钥已删除
+  role:
+    main: 主仓库
+    docs: 文档仓库
+    service: 服务仓库
+    infra: 基础设施仓库
+audit:
+  pageTitle: 审计日志
+  subtitle: 所有权威状态变更（含 AI 执行的命令与人工干预）的不可变记录。
+  emptyHint: 暂无审计记录。
+settings:
+  pageTitle: 设置
+  subtitle: 前端运行状态与环境说明。
+  mode: 数据模式
+  modeMock: MOCK 数据（VITE_USE_MOCK=1）
+  modeBackend: 后端 API
+  apiBase: API 地址
+  backendStatus: 后端状态
+  backendHint: >-
+    pm-api 已实现壳认证与 /v1/pm/* 读端点——当前模式（VITE_USE_MOCK=0）下数据来自 PostgreSQL。
+    写操作（审批决策、需求编辑等）待命令通道端点落地；接口契约以 src/api/mock/fixtures.ts 为准。
+columns:
+  code: 编码
+  name: 项目
+  customer: 客户
+  status: 状态
+  revision: 版本
+  actions: 操作
+  updatedAt: 更新时间
+  title: 标题
+  rowRevision: 行版本
+  createdAt: 创建日期
+  task: 任务
+  priority: 优先级
+  assignee: 负责人
+  project: 所属项目
+  proposal: 变更提案
+  requiredRole: 所需角色
+  decidedBy: 处理人
+  decisionReason: 决策理由
+  actor: 操作者
+  action: 动作
+  target: 对象
+status:
+  planning: 规划中
+  active: 进行中
+  paused: 已暂停
+  archived: 已归档
+  draft: 草稿
+  approved: 已通过
+  superseded: 已作废
+  backlog: 待办
+  in_progress: 进行中
+  in_review: 评审中
+  done: 已完成
+  blocked: 受阻
+  cancelled: 已取消
+  pending: 待处理
+  rejected: 已驳回
+  low: 低
+  normal: 普通
+  high: 高
+  urgent: 紧急
+  human: 人类
+  dev_agent: 开发 Agent
+  ai_pm: AI-PM
+  service: 服务
+
+scope:
+  label: 项目范围
+  all: 全部项目
+unassigned: 未分配
+loadFailed: 加载失败
+import:
+  pageTitle: 导入项目
+  subtitle: 绑定代码仓库，由 AI 项目经理读取 commit 与 docs 生成项目草案。
+  stepBasics: 项目信息
+  stepRepositories: 连接仓库
+  stepAnalysis: AI 分析
+  stepReview: 草案审阅
+  code: 项目编码
+  codePlaceholder: 例如 MAP-001
+  name: 项目名称
+  namePlaceholder: 例如 世界地图编辑器
+  description: 项目描述（可选）
+  required: 请填写项目编码与名称
+  next: 下一步
+  back: 上一步
+  createProject: 创建项目
+  projectCreated: 项目已创建，已自动建立五人编制
+  addRepository: 添加仓库
+  repositoryName: 仓库名称
+  repositoryUrl: 仓库地址
+  repositoryRole: 用途
+  verify: 校验
+  verified: 已连通
+  unreachable: 不可达
+  pending: 待校验
+  archived: 已归档
+  writeDocuments: 同时写入知识文档
+  noVerified: 至少需要一个已连通的仓库
+  startAnalysis: 开始分析
+  analyzing: 分析中…
+  cancel: 取消
+  cancelled: 已取消
+  failed: 分析失败
+  stageClone: 克隆仓库
+  stageRead: 读取 commit 与 docs
+  stageModel: AI 分析
+  stageDraft: 生成草案
+  demoModel: 演示模型
+  truncatedHint: 材料已截断，草案可能不完整
+  droppedHint: "有 {count} 条无证据条目已被丢弃"
+  selectAll: 全选
+  profile: 项目画像
+  milestones: 里程碑
+  requirements: 需求
+  tasks: 任务
+  risks: 风险
+  unknowns: 待确认问题
+  assignee: 承接 Agent
+  evidence: 证据
+  confidenceLow: 低置信
+  submitProposals: 生成提案
+  proposed: "已生成 {count} 项提案，等待审批"
+  goApprovals: 去审批
+  retry: 重试
+  loadFailed: 加载失败
+  applyFailed: 生成提案失败
+  repoFailed: 仓库操作失败
+discovery:
+  title: 项目认知访谈
+  subtitle: 逐条确认 AI 的发现与待澄清问题，沉淀可维护的项目认知。
+  start: 开始认知访谈
+  started: 认知访谈已创建
+  questions: 待澄清问题
+  findings: 项目认知发现
+  answerPlaceholder: 请输入回答
+  submitAnswer: 提交回答
+  defer: 暂缓
+  statusAnswered: 已回答
+  statusDeferred: 已暂缓
+  evidence: 分析证据
+  confidence: 置信度
+  choiceConfirmed: 确认属实
+  choiceResolved: 已通过其他方式解决
+  choiceRejected: 与实际不符
+  choiceUnsure: 暂时无法确认
+  resolvedDefault: 由用户确认：已通过其他方式解决
+  notePlaceholder: 补充说明（可选）
+  confirm: 确认
+  complete: 标记访谈完成
+  actionFailed: 认知访谈操作失败
+  kindObserved: 已观察到
+  kindUserConfirmed: 用户已确认
+  kindSpeculation: 待确认
+  kindContradicted: 存在冲突
+  verificationPending: 待确认
+  verificationConfirmed: 已确认
+  verificationRejected: 已确认不符
+  verificationConflict: 存在冲突
+  sessionInProgress: 进行中
+  sessionNeedsUserInput: 等待用户输入
+  sessionReviewRequired: 待审核
+  sessionCompleted: 已完成
+  sessionPaused: 已暂停
+commandCenter:
+  pageTitle: 项目总控台
+  subtitle: 项目工作入口
+  loadFailed: 总控台加载失败
+  unavailable: 该数据源暂时不可用，请稍后重试
+  none: 无
+  noAgent: 未指派执行主体
+  actorHuman: 人工
+  actorAgent: Agent
+  actorUnknown: 系统
+  prevPage: 上一页
+  nextPage: 下一页
+  section:
+    summary: 项目概况
+    actions: 待人工处理
+    work: 当前执行
+    risks: 风险与阻塞
+    init: 初始化进度
+    activity: 最近活动
+  field:
+    code: 项目标识
+    lifecycle: 生命周期
+    repositories: 关联仓库
+    verified: 已验证
+    members: 项目成员
+    goal: 项目目标
+    lastActivity: 最近活动
+    sourceState: 原始状态
+    attempt: 第
+    repositoriesShort: 个仓库
+  goal:
+    missing: 尚未建立目标
+    revision: "第 {no} 版"
+    pending: 有待确认修改
+  work:
+    tasks: 任务
+    activeRuns: 执行中
+  init:
+    notStarted: 未开始
+    inProgress: 进行中
+    completed: 已完成
+    blocked: 存在阻塞
+    notApplicable: 不适用
+    undetermined: 尚无法判断
+    unknown: 未知
+    required: 必需
+    notDeterminable: 尚无初始化要求配置，无法判定整体完成度
+  action:
+    findingPending: 待确认发现
+    findingRevision: 待补充信息
+    proposalPending: 待确认提案
+    deliveryPending: 待验收交付
+    other: 待处理
+  activity:
+    projectArchived: 项目归档
+    goalCommitted: 目标更新
+    findingDecided: 发现裁决
+    findingRevision: 要求补充
+    repositoryCreated: 关联仓库
+    repositoryVerified: 仓库校验
+    analysisSucceeded: 分析完成
+    analysisFailed: 分析失败
+    runStarted: 执行启动
+    runFinished: 执行结束
+    runFailed: 执行失败
+    runTerminated: 执行终止
+    deliverySubmitted: 交付提交
+    deliveryRejected: 交付驳回
+    reviewCompleted: 评审完成
+    reviewChangesRequested: 评审要求修改
+    memberChanged: 成员变更
+    deviceBound: 设备绑定
+    other: 项目活动
+  empty:
+    actions: 当前没有待人工处理的事项
+    runs: 当前没有执行中的 Run
+    risks: 当前没有风险与阻塞
+    activity: 暂无活动记录
+  archivedTitle: 项目已归档
+  archivedHint: 归档项目为只读状态，历史记录仍可查看，但不再接受新的业务活动。
