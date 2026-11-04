@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import { RouterLink } from "vue-router";
 import { ChevronRight } from "lucide-vue-next";
 
 export interface BreadcrumbItem {
@@ -35,13 +36,14 @@ const ariaLabelText = computed(
         class="ui-breadcrumb__item"
         :aria-current="index === items.length - 1 ? 'page' : undefined"
       >
-        <a
+        <!-- RouterLink 保证 SPA 内导航（原生 href 会整页刷新） -->
+        <RouterLink
           v-if="item.to && index !== items.length - 1"
           class="ui-breadcrumb__link"
-          :href="item.to"
+          :to="item.to"
         >
           {{ item.label }}
-        </a>
+        </RouterLink>
         <span v-else class="ui-breadcrumb__current">{{ item.label }}</span>
         <ChevronRight
           v-if="index < items.length - 1"

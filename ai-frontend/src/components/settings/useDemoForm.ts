@@ -2,11 +2,12 @@ import { computed, ref } from "vue";
 import type { ComputedRef, Ref } from "vue";
 
 /**
- * 设计目录演示表单（Settings Framework §6 保存/取消/错误态演示用）。
+ * 设置演示表单（Settings Framework §6 保存/取消/错误态演示用）。
  *
  * 模拟「保存 → 短暂请求 → 成功闪烁」闭环：draft/saved 双份快照 +
  * dirty 派生；save 为假异步（约 600ms），cancel 回滚到已保存快照。
- * 只服务 `/design/settings/*` 目录页，不是业务表单模型。
+ * 只服务设置演示面（设计目录 /design/settings/* 与应用设置页
+ * /settings/* 共用的节组件），不是业务表单模型。
  */
 export interface DemoForm<T> {
   /** 当前编辑值（可自由修改） */

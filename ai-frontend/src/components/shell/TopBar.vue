@@ -109,10 +109,21 @@ function onViewAllNotifications() {
 }
 
 /**
- * 账户菜单普通项（个人资料/账户设置/安全/个人偏好/帮助文档）。
- * 对应页面路由骨架期未建，落点待业务域接入。
+ * 账户菜单普通项 → 设置域路由（Settings Framework 个人域，
+ * /settings/*，应用壳内渲染）。
+ * 帮助文档暂无应用内落地页（HelpMenu 已覆盖文档入口）。
  */
-function onAccountSelect(_id: string) {}
+const ACCOUNT_SELECT_ROUTES: Record<string, string> = {
+  "my-profile": "/settings/personal/profile",
+  "account-settings": "/settings",
+  security: "/settings/personal/security",
+  "personal-preferences": "/settings/personal/preferences"
+};
+
+function onAccountSelect(id: string) {
+  const target = ACCOUNT_SELECT_ROUTES[id];
+  if (target) router.push(target);
+}
 
 /** 退出登录：清会话回登录页（确认对话框先决） */
 function onSignOutConfirm() {

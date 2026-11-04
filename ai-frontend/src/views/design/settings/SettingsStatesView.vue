@@ -11,11 +11,11 @@ import {
   SettingsReadOnlyField,
   SettingsSaveBar,
   SettingsUnsavedChangesDialog,
-  SettingsValidationMessage
+  SettingsValidationMessage,
+  useDemoForm
 } from "@/components/settings";
 
 import DesignLayout from "../DesignLayout.vue";
-import { useDemoForm } from "./useDemoForm";
 import Specimen from "../design-kit/Specimen.vue";
 
 import { Toast } from "@/components/ui/toast";

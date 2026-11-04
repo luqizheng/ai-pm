@@ -1,9 +1,12 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import { nextTick } from "vue";
+import { createMemoryHistory, createRouter } from "vue-router";
+import { DOMWrapper, flushPromises } from "@vue/test-utils";
 
 import TopBar from "./TopBar.vue";
 import { demoProject, demoProjects } from "./demo";
+import { buildRoutes } from "@/router";
 import { useShellStore } from "@/stores/shell";
 import { mountShell } from "./test-utils";
 
@@ -105,5 +108,35 @@ describe("TopBar", () => {
     expect(wrapper.find(".help-menu__trigger").attributes("aria-label")).toBe(
       "帮助"
     );
+  });
+
+  it("账户菜单「账户设置」跳转设置域落地页（UserMenu → /settings/*）", async () => {
+    // onAccountSelect 将菜单 id 映射到 /settings/*（Settings Framework 个人域）；
+    // /settings 经路由重定向落在个人域落地页。
+    // mountShell 第三参注入同一 router（options.plugins 会装第二个 → $route 冲突）
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: buildRoutes()
+    });
+    await router.push("/dashboard");
+    await router.isReady();
+
+    const { wrapper } = mountShell(TopBar, { attachTo: document.body }, router);
+    await nextTick();
+
+    // 浮层经 Portal 挂 body：打开账户菜单后点「账户设置」
+    await wrapper.find(".user-menu-button").trigger("click");
+    await nextTick();
+    const settings = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>(".user-menu-item")
+    ).find(b => b.textContent?.includes("账户设置"));
+    expect(settings).toBeTruthy();
+    await new DOMWrapper(settings!).trigger("click");
+    await flushPromises();
+
+    expect(router.currentRoute.value.path).toBe("/settings/personal");
+
+    wrapper.unmount();
+    document.body.innerHTML = "";
   });
 });

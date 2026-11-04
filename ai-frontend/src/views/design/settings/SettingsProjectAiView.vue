@@ -9,6 +9,7 @@ import {
   SettingsFormSection,
   SettingsPermissionNotice,
   SettingsSaveBar,
+  useDemoForm,
   useSettingsDemo
 } from "@/components/settings";
 import SettingsFrame from "./SettingsFrame.vue";
@@ -18,7 +19,6 @@ import Radio from "@/components/ui/radio/Radio.vue";
 import Switch from "@/components/ui/switch/Switch.vue";
 
 import { DESIGN_PATHS } from "@/router/design";
-import { useDemoForm } from "./useDemoForm";
 
 /**
  * 帧 17 — 项目 AI 配置（§4C AI Configuration）。

@@ -10,6 +10,12 @@ import { navGroups, type NavItem } from "./navigation";
 import { authRoutes } from "./auth";
 import { designRoutes } from "./design";
 import NotificationsView from "@/views/notifications/NotificationsView.vue";
+import SettingsLandingView from "@/views/settings/SettingsLandingView.vue";
+import SettingsProfileView from "@/views/settings/SettingsProfileView.vue";
+import SettingsSecurityView from "@/views/settings/SettingsSecurityView.vue";
+import SettingsPreferencesView from "@/views/settings/SettingsPreferencesView.vue";
+import SettingsNotificationsView from "@/views/settings/SettingsNotificationsView.vue";
+import SettingsAiView from "@/views/settings/SettingsAiView.vue";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 
 /**
@@ -75,6 +81,47 @@ export function buildRoutes(): RouteRecordRaw[] {
     component: NotificationsView,
     meta: { title: "global.notification.label" }
   });
+
+  // 设置域（Settings Framework 个人域；不在左导航树内，
+  // 入口 = 顶栏账户菜单 UserMenu。无 meta.layout → 应用壳内渲染。
+  // 租户/项目域仍在设计目录 /design/settings/*，应用侧暂不落地）
+  routes.push(
+    {
+      path: "/settings",
+      redirect: "/settings/personal",
+      meta: { title: "settings.personal.landing.title" }
+    },
+    {
+      path: "/settings/personal",
+      component: SettingsLandingView,
+      meta: { title: "settings.personal.landing.title" }
+    },
+    {
+      path: "/settings/personal/profile",
+      component: SettingsProfileView,
+      meta: { title: "settings.nav.profile" }
+    },
+    {
+      path: "/settings/personal/security",
+      component: SettingsSecurityView,
+      meta: { title: "settings.nav.security" }
+    },
+    {
+      path: "/settings/personal/preferences",
+      component: SettingsPreferencesView,
+      meta: { title: "settings.nav.preferences" }
+    },
+    {
+      path: "/settings/personal/notifications",
+      component: SettingsNotificationsView,
+      meta: { title: "settings.nav.notifications" }
+    },
+    {
+      path: "/settings/personal/ai",
+      component: SettingsAiView,
+      meta: { title: "settings.nav.ai" }
+    }
+  );
 
   // 设计系统目录页（无导航外壳的全屏页，meta.layout = "design"）
   routes.push(...designRoutes);

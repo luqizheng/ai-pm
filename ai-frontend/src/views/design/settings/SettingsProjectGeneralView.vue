@@ -11,6 +11,7 @@ import {
   SettingsPermissionNotice,
   SettingsReadOnlyField,
   SettingsSaveBar,
+  useDemoForm,
   useSettingsDemo
 } from "@/components/settings";
 import SettingsFrame from "./SettingsFrame.vue";
@@ -20,7 +21,6 @@ import Input from "@/components/ui/input/Input.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 
 import { DESIGN_PATHS } from "@/router/design";
-import { useDemoForm } from "./useDemoForm";
 
 /**
  * 帧 13 — 项目基本信息（§4C General）。
