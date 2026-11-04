@@ -161,7 +161,7 @@
 | I5-B | S01-3 | W04 | 读模型契约 | I5 V1.1 §9.2 | I5-A | — | — | — | — | — | 交付 `docs/s01-i5-read-model-contract.md` | 串行 | — | **已实施（2026-11-04）：六数据块字段/权威来源/判定规则/空状态/新鲜度/权限/去重/部分失败全部定稿** |
 | I5-C | S01-3 | W60 | 聚合查询实现 | I5 V1.1 §9.3 | I5-B、I6-B-05 | **0034**（两个索引） | `GET /v1/pm/projects/{id}/command-center` | — | — | `pm-application::command_center` | I5-001~025（**部分**：后端读模型 6 例验收） | 串行 | G-INTERFACE | **已实施（2026-11-04）：六块纯读模型 + 按块降级 + 全部 SQL 带 tenant 谓词** |
 | I5-D | S01-6 | W61 | 前端总控台 | I5 V1.1 §9.4 | I5-C、I4-E | — | — | — | — | `frontend/src/api/command-center.ts` + `shell/views/pm/command-center/` | I5-026~031 | 串行 | — | **已实施（2026-11-04）：六区块页面 + 路由 + i18n（zh/en）+ 5 例 vitest；不可用≠0、归档只读、无百分比** |
-| I5-E | S01-6 | W64 | 验收与性能 | I5 V1.1 §9.5 | I5-D | — | — | — | — | — | I5-032~036 | 串行 | G-ACCEPT | 未开工 |
+| I5-E | S01-6 | W64 | 验收与性能 | I5 V1.1 §9.5 | I5-D | — | — | — | — | `apps/pm-api/tests/command_center_acceptance.rs` | I5-032~036 | 串行 | G-ACCEPT | **已实施（2026-11-04）：6 例专项验收全绿 + I5-001~036 逐条覆盖映射落验收矩阵；性能项未做压测（登记为遗留）** |
 | S01-W60 | S01-6 | W60 | 项目级 Delivery 聚合（缺陷 D-13） | 总体计划 §9.1 | I5-C | — | **已有**（`GET /v1/pm/projects/{id}/delivery`） | — | — | `delivery::list_project_delivery` | S01-A066~A075 | 可并行 | — | **已实施（2026-11-04）** |
 | S01-W61 | S01-6 | W61 | 交付验收页面 | 总体计划 §9.2 | S01-W60 | — | — | — | — | `frontend/` | — | 串行 | — | 部分实施（任务级页面已有） |
 | S01-W62 | S01-6 | W62 | 失败恢复 | 总体计划 §9.1 | I1-D、I1-E | — | — | — | 已有 | `run_dispatch/lease.rs` | Acceptance Matrix §3-E 恢复类 | 可并行 | — | 部分实施 |

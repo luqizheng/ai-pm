@@ -218,6 +218,8 @@
 | `dedup_key` | `{activity_type}:{source_type}:{source_id}` |
 
 **去重**：同 `dedup_key` **保留最新一条**（`created_at DESC, id DESC` 取一）；不同 `activity_type` 不合并。
+**去重必须发生在分页之前**（SQL 内 `DISTINCT ON (activity_type, target_type, target_id)`）——
+否则一页可能少行、且同一条目会跨页重复（I5-E 发现的次序缺陷，见 ledger G-29）。
 
 **排序与分页**：`ORDER BY created_at DESC, id DESC`，`LIMIT ? OFFSET ?`（offset 分页，
 `activity_limit` 默认 20 / 上限 100）。稳定排序由 `id` 保证（I5-031）。

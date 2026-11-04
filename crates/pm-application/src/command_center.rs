@@ -19,33 +19,47 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// 活动白名单（设计稿 §5.3 → 契约 §4.7）：非白名单 action 一律不展示。
-pub const ACTIVITY_AUDIT_ACTIONS: [&str; 24] = [
-    "project.archived",
-    "commit_document_revision",
-    "finding.decided",
-    "discovery_finding_revision_requested",
-    "repository.created",
-    "repository.verified",
-    "repo_import.draft_succeeded",
-    "repo_import.attempt_succeeded",
-    "repo_import.failed",
-    "repo_import.attempt_failed",
-    "repo_import.draft_failed",
-    "run_started",
-    "claim_task_run",
-    "run_finished",
-    "run_start_failed",
-    "terminate_task_run",
-    "delivery.submitted",
-    "delivery.rejected",
-    "review.completed",
-    "review.changes_requested",
-    "project_member.granted",
-    "project_member.revoked",
-    "project_member.owner_transferred",
-    "device.project_bound",
+/// 活动白名单 + action → 归一化活动类型（设计稿 §5.3 → 契约 §4.7）。
+///
+/// **唯一真源**：SQL 的 `CASE` 映射与 Rust 侧 `activity_type_for` 都由本表生成，
+/// 避免两处漂移。非白名单 action 一律不展示。
+pub const ACTIVITY_TYPE_BY_ACTION: &[(&str, &str)] = &[
+    ("project.archived", "project_archived"),
+    ("commit_document_revision", "goal_committed"),
+    ("finding.decided", "finding_decided"),
+    (
+        "discovery_finding_revision_requested",
+        "finding_revision_requested",
+    ),
+    ("repository.created", "repository_created"),
+    ("repository.verified", "repository_verified"),
+    ("repo_import.draft_succeeded", "analysis_succeeded"),
+    ("repo_import.attempt_succeeded", "analysis_succeeded"),
+    ("repo_import.failed", "analysis_failed"),
+    ("repo_import.attempt_failed", "analysis_failed"),
+    ("repo_import.draft_failed", "analysis_failed"),
+    ("run_started", "run_started"),
+    ("claim_task_run", "run_started"),
+    ("run_finished", "run_finished"),
+    ("run_start_failed", "run_failed"),
+    ("terminate_task_run", "run_terminated"),
+    ("delivery.submitted", "delivery_submitted"),
+    ("delivery.rejected", "delivery_rejected"),
+    ("review.completed", "review_completed"),
+    ("review.changes_requested", "review_changes_requested"),
+    ("project_member.granted", "member_changed"),
+    ("project_member.revoked", "member_changed"),
+    ("project_member.owner_transferred", "member_changed"),
+    ("device.project_bound", "device_bound"),
 ];
+
+/// 白名单 action 列表（供 SQL `= ANY($n)` 过滤）。
+pub fn activity_audit_actions() -> Vec<String> {
+    ACTIVITY_TYPE_BY_ACTION
+        .iter()
+        .map(|(action, _)| (*action).to_string())
+        .collect()
+}
 
 /// 知识提案的「活跃」状态集（待人工处理口径；复用 `review::knowledge` 的同一常量）。
 pub const ACTIVE_PROPOSAL_STATUSES: [&str; 5] = [
@@ -472,7 +486,7 @@ async fn load_project_summary(
     )
     .bind(tenant_id)
     .bind(project_id)
-    .bind(&ACTIVITY_AUDIT_ACTIONS)
+    .bind(activity_audit_actions())
     .fetch_one(pool)
     .await?;
 
@@ -1299,15 +1313,33 @@ async fn load_recent_activity(
     limit: i64,
     offset: i64,
 ) -> Result<RecentActivity, sqlx::Error> {
-    let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM governance.audit_log \
-         WHERE tenant_id = $1 AND project_id = $2 AND action = ANY($3)",
-    )
-    .bind(tenant_id)
-    .bind(project_id)
-    .bind(&ACTIVITY_AUDIT_ACTIONS)
-    .fetch_one(pool)
-    .await?;
+    // 去重键 = `{activity_type}:{target_type}:{target_id}`——**必须在 LIMIT 之前**完成，
+    // 否则一页里可能出现重复项（少行），且同一条目会跨页重复出现（I5-030/I5-031）。
+    // 因此去重下推到 SQL（`DISTINCT ON`），再排序分页；排序键 `created_at DESC, id DESC`
+    // 保证并列时间下的稳定次序。
+    let case_sql = ACTIVITY_TYPE_BY_ACTION
+        .iter()
+        .map(|(action, activity_type)| format!("WHEN '{action}' THEN '{activity_type}'"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let deduped = format!(
+        "SELECT DISTINCT ON (activity_type, target_type, target_id) \
+                id, activity_type, target_type, target_id, actor_id, created_at \
+           FROM ( \
+                SELECT a.id, a.action, a.target_type, a.target_id, a.actor_id, a.created_at, \
+                       CASE a.action {case_sql} END AS activity_type \
+                  FROM governance.audit_log a \
+                 WHERE a.tenant_id = $1 AND a.project_id = $2 AND a.action = ANY($3) \
+           ) s \
+          ORDER BY activity_type, target_type, target_id, created_at DESC, id DESC"
+    );
+
+    let total: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM ({deduped}) d"))
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(activity_audit_actions())
+        .fetch_one(pool)
+        .await?;
 
     let rows: Vec<(
         Uuid,
@@ -1315,90 +1347,78 @@ async fn load_recent_activity(
         Option<String>,
         Option<Uuid>,
         Option<Uuid>,
-        Option<String>,
-        Option<String>,
         DateTime<Utc>,
-    )> = sqlx::query_as(
-        "SELECT a.id, a.action, a.target_type, a.target_id, a.actor_id, p.display_name, p.kind, a.created_at \
-         FROM governance.audit_log a \
-         LEFT JOIN core.principal p ON p.id = a.actor_id \
-         WHERE a.tenant_id = $1 AND a.project_id = $2 AND a.action = ANY($3) \
-         ORDER BY a.created_at DESC, a.id DESC \
-         LIMIT $4 OFFSET $5",
-    )
+    )> = sqlx::query_as(&format!(
+        "SELECT d.id, d.activity_type, d.target_type, d.target_id, d.actor_id, d.created_at \
+           FROM ({deduped}) d \
+          ORDER BY d.created_at DESC, d.id DESC \
+          LIMIT $4 OFFSET $5"
+    ))
     .bind(tenant_id)
     .bind(project_id)
-    .bind(&ACTIVITY_AUDIT_ACTIONS)
+    .bind(activity_audit_actions())
     .bind(limit)
     .bind(offset)
     .fetch_all(pool)
     .await?;
 
-    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut items: Vec<ActivityItem> = Vec::new();
-    for (id, action, target_type, target_id, actor_id, actor_name, actor_kind, created_at) in rows {
-        let Some(activity_type) = activity_type_for(&action) else {
-            continue;
-        };
-        let dedup_key = format!(
-            "{activity_type}:{}:{}",
-            target_type.clone().unwrap_or_default(),
-            target_id.map(|v| v.to_string()).unwrap_or_default()
-        );
-        // 去重：同一 dedup_key 保留最新一条（列表已按时间倒序）。
-        if !seen.insert(dedup_key.clone()) {
-            continue;
+    // 执行主体名称（actor）单独批量取，避免与去重子查询耦合。
+    let actor_ids: Vec<Uuid> = rows.iter().filter_map(|row| row.4).collect();
+    let mut actors: std::collections::HashMap<Uuid, (Option<String>, Option<String>)> =
+        std::collections::HashMap::new();
+    if !actor_ids.is_empty() {
+        let actor_rows: Vec<(Uuid, Option<String>, Option<String>)> = sqlx::query_as(
+            "SELECT id, display_name, kind FROM core.principal WHERE id = ANY($1)",
+        )
+        .bind(&actor_ids)
+        .fetch_all(pool)
+        .await?;
+        for (id, name, kind) in actor_rows {
+            actors.insert(id, (name, kind));
         }
-        items.push(ActivityItem {
-            id,
-            activity_type: activity_type.to_string(),
-            source_type: target_type,
-            source_id: target_id,
-            occurred_at: created_at,
-            actor: ActivityActor {
-                kind: match actor_kind.as_deref() {
-                    Some("human") => "human".to_string(),
-                    Some("dev_agent") | Some("ai_pm") | Some("service") => "agent".to_string(),
-                    _ => "system".to_string(),
-                },
-                id: actor_id,
-                name: actor_name,
-            },
-            summary: activity_summary(activity_type),
-            dedup_key,
-        });
     }
+
+    let items = rows
+        .into_iter()
+        .map(|(id, activity_type, target_type, target_id, actor_id, created_at)| {
+            let (actor_name, actor_kind) = actor_id
+                .and_then(|actor| actors.get(&actor).cloned())
+                .unwrap_or((None, None));
+            let dedup_key = format!(
+                "{activity_type}:{}:{}",
+                target_type.clone().unwrap_or_default(),
+                target_id.map(|v| v.to_string()).unwrap_or_default()
+            );
+            ActivityItem {
+                id,
+                summary: activity_summary(&activity_type),
+                activity_type,
+                source_type: target_type,
+                source_id: target_id,
+                occurred_at: created_at,
+                actor: ActivityActor {
+                    kind: match actor_kind.as_deref() {
+                        Some("human") => "human".to_string(),
+                        Some("dev_agent") | Some("ai_pm") | Some("service") => "agent".to_string(),
+                        _ => "system".to_string(),
+                    },
+                    id: actor_id,
+                    name: actor_name,
+                },
+                dedup_key,
+            }
+        })
+        .collect();
 
     Ok(RecentActivity { total, items })
 }
 
-/// 审计 action → 归一化活动类型（白名单映射，契约 §4.7）。
+/// 审计 action → 归一化活动类型（白名单映射，契约 §4.7；与 SQL `CASE` 同源）。
 pub fn activity_type_for(action: &str) -> Option<&'static str> {
-    Some(match action {
-        "project.archived" => "project_archived",
-        "commit_document_revision" => "goal_committed",
-        "finding.decided" => "finding_decided",
-        "discovery_finding_revision_requested" => "finding_revision_requested",
-        "repository.created" => "repository_created",
-        "repository.verified" => "repository_verified",
-        "repo_import.draft_succeeded" | "repo_import.attempt_succeeded" => "analysis_succeeded",
-        "repo_import.failed" | "repo_import.attempt_failed" | "repo_import.draft_failed" => {
-            "analysis_failed"
-        }
-        "run_started" | "claim_task_run" => "run_started",
-        "run_finished" => "run_finished",
-        "run_start_failed" => "run_failed",
-        "terminate_task_run" => "run_terminated",
-        "delivery.submitted" => "delivery_submitted",
-        "delivery.rejected" => "delivery_rejected",
-        "review.completed" => "review_completed",
-        "review.changes_requested" => "review_changes_requested",
-        "project_member.granted" | "project_member.revoked" | "project_member.owner_transferred" => {
-            "member_changed"
-        }
-        "device.project_bound" => "device_bound",
-        _ => return None,
-    })
+    ACTIVITY_TYPE_BY_ACTION
+        .iter()
+        .find(|(candidate, _)| *candidate == action)
+        .map(|(_, activity_type)| *activity_type)
 }
 
 fn activity_summary(activity_type: &str) -> String {

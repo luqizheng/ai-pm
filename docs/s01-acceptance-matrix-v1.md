@@ -190,6 +190,55 @@ published 修订**；归档后正式 Goal / 提案 / 修订历史仍可读。
   全部 SQL 带 tenant 谓词（契约 C-2）；验收 `apps/pm-api/tests/command_center.rs` **6 例全绿**。
 - **未完成**：I5-E 全量验收与性能（I5-032~036 的全量映射 + 权限/部分失败/并发/性能专项）。
 
+**I5-E 落地结果（2026-11-04）**：`apps/pm-api/tests/command_center_acceptance.rs` **6 例全绿**
+（初始化收缩/再展开、活动去重 + 稳定分页 + 可追溯、Outbox 不入活动、缺失数据四态区分、
+多领域原始状态不混淆、归档后历史可读且不再产生新活动）。
+
+**I5-001~036 逐条覆盖映射（2026-11-04）**
+
+| 编号 | 覆盖方式 | 证据 |
+|---|---|---|
+| I5-001 | 新建项目正常展示（六块全 ok） | `command_center.rs::new_project_renders_all_blocks_and_zero_repository_is_legal` |
+| I5-002 | 零仓库合法：仓库「未开始」+ 分析「不适用」，不判失败 | 同上 |
+| I5-003 | 多仓库区分（repository_count / verified_repository_count 逐仓口径） | `command_center.rs` + `command_center.rs::project_summary` |
+| I5-004 | 分析进行中 → 初始化事项「进行中」 | `repo_access`/`project_import` 事实 → 契约 §4.2 `code_analysis` |
+| I5-005 | 分析失败 → 「存在阻塞」+ 风险项 `analysis_failed` | 契约 §4.2/§4.5 |
+| I5-006 | 成功后再次失败 → 以**最新**作业判定（不看历史成功） | 契约 §4.2（最新作业口径） |
+| I5-007 | 无 Goal → `goal.present=false` + 空状态，不创建虚假 Goal | `command_center.rs`（goal.present=false） |
+| I5-008 | Goal 已确认 → 只展示 I4 权威数据（published 修订） | `repo_access`/`project_goal` 事实 → 契约 §4.1 |
+| I5-009 | Finding 待确认 → `display_state=PENDING` 入待人工处理 | `command_center.rs::pending_findings_appear_as_human_actions_without_cross_project_leak` |
+| I5-010 | Finding 待补充 → `display_state=REVISION_REQUESTED`（I2 审计推导） | 同上（revision 项断言） |
+| I5-011 | 已确认/拒绝 → 不再计入待办（查询只取 PENDING） | 同上 + 查询条件 |
+| I5-012 | 多 Agent 并行 → 活跃 Run 列表（多条） | `command_center.rs::active_runs_report_the_task_assignee_as_agent` |
+| I5-013 | Run 重跑 → 历史 Run 分列 `recent_runs`，不覆盖 | 契约 §4.3 |
+| I5-014 | Delivery 待验收 → `delivery_pending` 入待人工处理 | `command_center_acceptance.rs::multi_domain_backlog_keeps_each_domain_state` |
+| I5-015 | 无待办 → 空状态文案 | `command_center.rs`（前端 5 例）+ `command_center_acceptance.rs` |
+| I5-016 | 数据源部分失败 → 该块 `unavailable`，其余照常 | 契约 §2/§7 + 前端「不可用≠0」用例 |
+| I5-017 | 跨 Project 不泄露 | `command_center.rs::pending_findings_...`（他项目 Finding 不出现） |
+| I5-018 | 无权限 → 404 | `command_center.rs::non_member_cannot_read_command_center` |
+| I5-019 | 归档 → 只读态 | `command_center.rs::archived_project_is_reported_read_only` |
+| I5-020 | 归档后清理状态 → 风险项 `archive_cleanup` | 契约 §4.5（残留活跃 Run 计数） |
+| I5-021 | 并发变化 → 每块 `as_of` + 详情页重读权威数据 | 契约 §7.4 |
+| I5-022 | 无无依据百分比 | `command_center.rs`（断言无 percent 字段）+ 前端用例 |
+| I5-023 | 不适用事项不计入未完成 | `code_analysis=not_applicable` 且 `required=false` |
+| I5-024 | 状态来源可追溯 | 契约 C-5（每字段 source）+ `source_state` 保留 |
+| I5-025 | 最近活动只展示真实业务事件 | `command_center.rs::recent_activity_filters_whitelist_and_dedups`（白名单外不展示） |
+| I5-026 | 首屏优先级：待人工处理先于统计卡片 | 前端用例（顺序断言） |
+| I5-027 | 初始化完成 → 自动收缩 | `command_center_acceptance.rs::initialization_progress_collapses_and_expands_again` |
+| I5-028 | 新增事项 → 重新展开 | 同上 |
+| I5-029 | 必需项未定义 → 不伪造完成 | 同上（`completion=not_determinable`） |
+| I5-030 | 活动重复来源 → 去重 | `command_center_acceptance.rs::activity_is_deduped_stably_paged_and_traceable` |
+| I5-031 | 活动分页：稳定排序 + 连续分页 | 同上（id DESC tiebreaker + 两页不重叠） |
+| I5-032 | 活动来源可追溯至审计 | 同上（source_type / source_id / summary） |
+| I5-033 | 不依赖 Outbox 保存活动历史 | `command_center_acceptance.rs::outbox_events_never_appear_in_activity` |
+| I5-034 | 区分无数据 / 未接入 / 无权限 / 加载失败 | `command_center_acceptance.rs::missing_data_is_distinguished_from_not_applicable_and_forbidden` + 前端「不可用」用例 |
+| I5-035 | 多领域待办不混淆原始状态 | `command_center_acceptance.rs::multi_domain_backlog_keeps_each_domain_state` |
+| I5-036 | 归档项目历史可查、不可新建活动 | `command_center_acceptance.rs::archived_project_keeps_history_but_accepts_no_new_activity` |
+
+> **性能项说明**：I5-E 的「页面性能」以「单端点 + 分项查询 + 索引（迁移 0034）」为实现手段；
+> 未做压测基准（无性能基线数据）。**建议后续补**：以真实项目数据量跑一次 p95 采样，
+> 关注 `audit_log` 项目维度索引是否命中（`EXPLAIN` 可验证）。此项登记为遗留，不阻塞 S01。
+
 **I5-D 落地结果（2026-11-04）**：`frontend/src/api/command-center.ts`（类型 + 客户端）+
 `frontend/src/shell/views/pm/command-center/index.vue`（六区块）+ 路由
 `/projects/:projectId/command-center` + `pm.commandCenter` i18n 命名空间（zh-CN / en）；

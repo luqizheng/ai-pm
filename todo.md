@@ -458,14 +458,15 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **验收**：`I4-019`（归档只读）、`I4-020`（归档竞争）——`apps/pm-api/tests/project_goal_archive.rs` **5 例全绿**（归档拒提案 / 归档拒确认 / 历史可读 / **并发三轮：归档之后无新的 published 修订** / 被拒写入零发布审计）。
   - **落地记录**：设计稿回填 **§15 实施落地记录**（四入口表 + 线性化说明 + 语义偏差登记 V-1~V-3）。
 
-- [~] **I5 项目总控台（A~E，P1，I5 V1.1 36 条验收）**（A~D 已完成 2026-11-04；E 待办）
+- [x] **I5 项目总控台（A~E，P1，I5 V1.1 36 条验收）**（A~E 全部完成 2026-11-04）
   - **目标**：项目总控台 = 项目工作入口（首屏优先级：待人工处理 → 当前执行 → 风险与阻塞 → 目标与进展 → 初始化进度 → 最近活动）。
   - **依据**：`docs/ui/smark-pm-s01-i5-project-command-center-v1-1.md`（V1.1 定稿）§3/§4/§5/§6/§7/§8；交付物 `docs/s01-i5-code-facts.md`（I5-A）+ `docs/s01-i5-read-model-contract.md`（I5-B）。
   - **做（A）**：14 项代码事实核验（三域并行）→ 缺口清单 `I5-G-01~24`。**做（B）**：六数据块读模型契约（字段/权威来源/判定规则/空状态/新鲜度/权限/去重/部分失败）。**做（C）**：`pm-application::command_center` + `GET /v1/pm/projects/{id}/command-center` + 迁移 `0034`（审计与 Finding 的项目维度索引）。
   - **不做**：不建第二套事实存储；不新建活动事实表（第一版以审计为唯一权威源）；不产出无依据的初始化百分比；不臆造「Goal 已确认」状态；不改领域业务状态（聚合纯读）。
   - **做（D）**：`frontend/src/api/command-center.ts` + `shell/views/pm/command-center/index.vue`（六区块）+ 路由 `/projects/:projectId/command-center` + `pm.commandCenter` i18n（zh-CN/en）。
-  - **验收**：A/B/C 已过——`apps/pm-api/tests/command_center.rs` **6 例全绿**（六块可渲染/零仓库合法/无百分比/待人工处理聚合且跨项目不泄露/活跃 Run 取 task.assignee_id/活动白名单+去重/归档只读/非成员 404）；D 已过——前端 vitest **5 例全绿**（首屏优先级顺序/不可用显示「暂不可用」而非 0/归档只读提示/初始化无百分比且完成度不可判定/空集合空状态），`vue-tsc` 干净，前端全量 **94 文件 / 569 测试全绿**。
-  - **剩余**：**I5-E 验收与性能**（I5-026~036 全量映射 + 权限/部分失败/并发/性能专项）。
+  - **做（E）**：`apps/pm-api/tests/command_center_acceptance.rs` 6 例专项验收 + 验收矩阵补 **I5-001~036 逐条覆盖映射**（36 行表格：覆盖方式 + 证据文件/用例名）。
+  - **验收**：A/B/C 已过——`apps/pm-api/tests/command_center.rs` **6 例全绿**（六块可渲染/零仓库合法/无百分比/待人工处理聚合且跨项目不泄露/活跃 Run 取 task.assignee_id/活动白名单+去重/归档只读/非成员 404）；D 已过——前端 vitest **5 例全绿**（首屏优先级顺序/不可用显示「暂不可用」而非 0/归档只读提示/初始化无百分比且完成度不可判定/空集合空状态），`vue-tsc` 干净，前端全量 **94 文件 / 569 测试全绿**；E 已过——**6 例全绿**（初始化收缩/再展开、活动去重+稳定分页+可追溯、Outbox 不入活动、缺失数据四态区分、多领域原始状态不混淆、归档后历史可读且不产生新活动）。
+  - **遗留**：性能项**未做压测基准**（无性能基线数据）——建议后续以真实项目数据量跑 p95 采样并 `EXPLAIN` 验证 0034 索引命中；不阻塞 S01。
   - **裁决登记**：ledger D-C-05（Goal 不下「已确认」结论）、D-C-06（初始化完成度 `not_determinable`）。
 
 - [ ] **I2-A / I4-A / I5-A 三份代码事实核验（后续实施的硬前置）**
@@ -525,7 +526,9 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **启动基线核验（2026-11-04，5 处修正待带入设计）**：① **0029=空号**（S01-I6-B 实际落 0031，「预留」为陈旧表述；S02 迁移自 0032 起、0029 复用与否由迁移登记表裁决）；② I2 的 A 链须补 0014 既有 `rejected`/`rolled_back` 分支与红线分支末尾 `projection_synced`；③ 待裁表须补第 15 项「Run/Delivery 实际依据第一阶段范围」（归 I4/I5）；④ I1 依赖=I6-A **+I2 写入协议**（创建入口部分；身份/状态机可先行）；⑤ I6-A/I2 设计须携带两条未决意见——写入者分层调和（AI-PM=业务主维护者 / AI-Agent=文件执行层，回注知识空间稿）+ 人类起草路径（唯一写入规则下谁写文件）；小项：I3 待裁列表补 Q-21。
   - **待裁清单 14+1 项**（Q-8/11/12/13/14/15/16后半/18/19/20/21 + 来源继承 + 捕获权限红线 + 拒绝语义 + RD 范围），全量状态以 S02-04 V1.2 裁决台账为准。
   - **S02-I6-A 设计稿 V1.1 到达 + 代码核验完成（2026-11-04）**：专家稿收编四项用户裁决（Q-A1 确认权=Project Lead+显式 Approver / Q-A2 Tenant Owner 不自动获项目写权 / Q-A3 确认独立实体 / Q-A4 历史确认不可撤销）；我方交付 `docs/s02-i6a-permission-foundation-code-facts-v1.md`（C-01~C-13 全答）。**关键事实**：Project Lead 现表达=project_member.role='owner'（创建者自动 owner，bootstrap.rs:118）；成员授权/撤销四端点已在（含 X-2 级联）；**项目级显式授权机制不存在**（唯一先例 git_capability_grant 0032 建→0033 撤）→ Approver 授权表全新建；确认实体表零冲突。**评审 7 条**：R-I6A-1 **P0=MCP 真人 key 冒充面**（T-087 凭据模型下 Agent 持人 key 时 §9.3 actor-kind 防线失效，建议 (a) V1 确认仅 REST/UI、MCP 不出 ConfirmRevision 工具，待用户裁决）/ R-I6A-2 Lead=owner 复用（0033 简化先例）/ R-I6A-3 Approver 表最小化 / R-I6A-4 approved_by 去留 / R-I6A-5 人类起草写入路径挂 I2 / **R-I6A-6 迁移号更正：S02 自 0034 起（0032/0033 已被 S01 并行批占用，0032 Git 能力+0033 简化撤表）——启动基线 §6.3/R-17/todo 三处旧口径同改** / R-I6A-7 dev-off 是 human 主体+确认实体补 identity_id/claimed_device_id。
-  - **下一步**：用户裁 R-I6A-1（MCP 确认入口）与 R-I6A-2/3/4 取向 → I6-A 定稿 → I1 启动。
+  - **I6-A V1.2 到达 + A* 认证隔离核验完成（2026-11-04）**：专家稿收编 A* 裁决（MCP 不出确认工具 + REST 确认须独立可信交互上下文）与 R-I6A-2~7 全部处理。我方交付 `docs/s02-i6a-auth-isolation-verification-v1.md`（§20.1 七问全答）：**重大发现=auth_mode 三分类已存在**（`aud`=interactive / `client_id`=api_key / unknown，`auth.rs:121-131`）但**零准入消费**；**api_key 类可防、登录令牌复用不可防**——且 runbook 现行 MCP 部署正是登录令牌用法（runbook:220-239）→ **H-17 当前必败，A* fail-closed 生效：确认入口关闭直至补齐隔离能力**。推荐补齐=(c) pm-api 自建 step-up 确认票据（短时效+单对象绑定 revision+hash，不依赖 lmms 改造）；(b) 上游 purpose claim 为备选；仅 interactive+短 exp 不彻底只可叠加。**建议 V1.2 增补一处**：§6.5 注明登录令牌复用不可区分，防实施者误读「要求 interactive 即满足 A*」。§20.2~20.5 同批已答（approved_by 消费者清单齐：读=pm_artifacts/pm_lists/rows+前端契约，写=executor+pm_write 两处；0034 ✓）。**§21「A* 核验通过」保持未勾**（核验完成=结论未过，须 step-up 落地过 H-17/H-18）。
+  - **下一步**：用户裁 step-up 票据方向（或接受入口延迟至 lmms 改造）→ I6-A 实施范围定稿（确认服务+step-up 能力）→ I1 启动。
+  - **S02-I7 新切片到达 + 评审/核验完成（2026-11-04）**：专家《S02-I7 外部代码变更接管与需求归因 V1.0》（代码先变→Agent 接管→归因/澄清/治理→关闭，反向入口）。我方交付 `docs/ui/smark-pm-s02-i7-external-commit-adoption-review-v1.md`：**方向成立**；R-I7-1 P0=「方案 B 已确定」越权（Q-18/20/21+来源继承仍待 V1.2 裁，应列为前置）；R-I7-2 P1=webhook 零存在但 `project_repository.head_commit_sha`+同步验证环=现成差分基线，**V1 触发建议走同步巡检、webhook 为增强**；R-I7-3=§7.3 事实过期（finding 已有 project_id + `discovery_finding_evidence` 已含 commit_sha——**勘误源头在我方 S02-01 §5.4 漏查 0031，已就地勘误**）；R-I7-4=排除判据须精确到「Run HEAD sha」，Run 中间 commit 仍应进 intake；R-I7-5=I7 须并入切片表（todo+S02-04 V1.2 增量输入）；R-I7-6=GOVERNANCE_PENDING 长挂起→积压视图归 I6-B。核验即答 12 项中 10 项（default_branch/head_commit_sha/task_repository_commit UNIQUE(run,repo) 等）。**待专家修 R-I7-1/3 后 I7 为第七切片候选基线。**→ **已收编（2026-11-04 同日）：专家七项裁决全采纳 + 新增 P0 巡检基线可靠性约束（A→B→C→D 反例五规则：完整集合/逐个幂等登记/登记失败不推进基线/失败恢复重扫/祖先不明入异常核验）+ 定位图 mermaid 化；我方落盘 `docs/ui/smark-pm-s02-i7-external-commit-adoption-v1-1.md`（完整正文修订：§2.1 巡检首选分层触发/§2.5 P0 新增/§4.2 解除方案B依赖+Q-I7-11 前置裁决/§7.3 事实修正+evidence FK 前向收口/§1.2 Run HEAD 判据/§6.4 积压六类可观测/§9.8 基线跳跃验收/P9 原则/附录A 8项预答）。**S02-I7 V1.1 = 第七切片修订定稿，待 S02-04 V1.2 前置裁决（Q-18/20/21/来源继承）后可进实施设计。**
 - [ ] **S02-06 S02 总体实施计划**
 
 ---
