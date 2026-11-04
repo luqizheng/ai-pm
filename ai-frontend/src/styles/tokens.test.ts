@@ -187,6 +187,22 @@ describe("workspace tokens", () => {
     expect(light.get("canvas")!.toLowerCase()).toBe("#f7f8fa");
   });
 
+  it("accent 着色面双主题均定义，且激活导航项文字达 AA（≥4.5:1）", () => {
+    for (const vars of [dark, light]) {
+      const surface = hexOf(vars, "color-accent-surface");
+      // 激活态条目：主文字 + 次文字 + accent 指示色均落在该面上
+      expect(
+        contrast(hexOf(vars, "text-primary"), surface)
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(
+        contrast(hexOf(vars, "text-secondary"), surface)
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(hexOf(vars, "accent"), surface)).toBeGreaterThanOrEqual(
+        4.5
+      );
+    }
+  });
+
   it("color-scheme 跟随全应用主题（传统页与工作区同轨，用户裁决 2026-10-31）", () => {
     // 传统页已并入 V1.1 配色（PRISM 变量换轨），深浅与 UA 控件随主题走
     expect(block(":root")).toMatch(/color-scheme:\s*dark/);

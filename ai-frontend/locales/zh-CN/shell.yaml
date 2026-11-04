@@ -117,4 +117,84 @@ shell:
     settings: 设置
     inbox: 公告中心
 
+  # ── 应用壳（Figma「03 — Application Shell」+ Shell V1.1）────────────────
+  app:
+    topbar:
+      product: AI R&D Workspace
+      tenant: 当前组织
+      project: 当前项目
+      searchPlaceholder: 搜索或跳转到…
+      searchShortcut: ⌘ K
+      notifications: 通知
+      assistant: 助手
+      help: 帮助
+      account: 账户菜单
+      accountMenu:
+        profile: 个人设置
+        settings: 偏好设置
+        signOut: 退出登录
+      unread: 有未读通知
+    side:
+      label: 主导航
+      collapse: 收起导航
+      expand: 展开导航
+      group:
+        personal: 个人
+        workspace: 工作区
+        modules: 项目模块
+        admin: 管理
+      item:
+        personalWorkspace: 个人工作区
+        inbox: 收件箱
+        dashboard: 项目总览
+        projects: 项目
+        repository: 代码仓库
+        discovery: 代码检索
+        requirements: 需求
+        execution: AI 执行中心
+        knowledge: 知识审阅
+        devenv: 开发环境
+        adminSettings: 设置
+        adminMembers: 成员
+      sub:
+        overview: 概览
+        branches: 分支
+      projectMarker: 当前项目
+      shortcuts: 键盘快捷键
+      shortcutsHint: 按 ? 查看全部快捷键
+    context:
+      title: 上下文
+      close: 关闭上下文栏
+      pin: 固定到本页
+      pinned: 已固定到本页
+      currentProject: 当前项目
+      repositoryDetails: 仓库详情
+      fields:
+        visibility: 可见性
+        defaultBranch: 默认分支
+        yourRole: 我的角色
+        owner: 归属团队
+      related: 相关文档
+      aiNotice: 助手可用的上下文
+      readOnly: 只读上下文
+      noAttachment: 当前请求未附加文件
+    commandbar:
+      title: AI 助手
+      reviewFirst: 任何操作前请先确认
+      placeholder: 提问或描述任务…
+      collapsedPlaceholder: 向 {context} 提问…
+      suggestions: 建议
+      suggestion:
+        explain: 解释这个仓库
+        setup: 查找安装说明
+      notRun: 未运行
+      hint: ↵ 发送 · ⇧↵ 换行
+      expand: 展开指令栏
+      collapse: 收起指令栏
+      attach: 附加文件
+      send: 发送
+    page:
+      placeholderTitle: 该页面正在建设中
+      placeholderHint: 应用壳已就绪，业务模块内容待接入。
+
 # ── 框架系统页 ─────────────────────────────────────────────────────────

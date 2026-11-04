@@ -6,14 +6,17 @@
 **本文档是唯一权威规范：后续所有前端设计与实现工作，都必须以 §一「Frontend Foundation Design」为基准。**
 配套：高保真设计系统 V1.0 详见 `../docs/ui/ai-pm-ui-design-system-v1.md`。
 
-> **当前状态（2026-11-04）**：UI 冻结已解除，进入**组件与 Figma 同步阶段**——
-> 规范源 = Figma 组件库 `hNlGqLEMQpOVCZ0o5u3DkT`（node 13:37296，7 族 41 组）。
-> 同步进度与约定见 `src/components/ui/FIGMA-SYNC.md`；已同步组件带 `@figma-sync` 头标记。
+> **当前状态（2026-11-04）**：UI 冻结已解除；**应用壳骨架已落地**——
+> 规范源 = Figma 组件库 `hNlGqLEMQpOVCZ0o5u3DkT`（node 13:37296，7 族 41 组）
+> + Figma「03 — Application Shell」两帧（7:3454 展开侧栏 / 7:3724 折叠侧栏）。
+> 组件同步进度见 `src/components/ui/FIGMA-SYNC.md`；已同步组件带 `@figma-sync` 头标记。
 > 业务页面（登录页等）仍待组件同步完成后实施。
 
-- [x] 入口：`index.html` → `src/entry.ts`（占位页，基础重建时替换）
-- [x] 视觉真源：`src/styles/workspace/tokens.css`（设计系统 V1.0 token，`--ws-*` 变量）
+- [x] 入口：`index.html` → `src/entry.ts`（pinia + i18n + router）
+- [x] 视觉真源：`src/styles/tokens.css`（设计系统 V1.0 token，`--ws-*` 变量）
 - [x] 组件基座：`src/components/ui/`（reka-ui + scoped CSS + token）
+- [x] **应用壳**：`src/components/shell/`（顶栏 / 左导航 / 右上下文栏 / AI 指令栏 / 页面标题区）
+- [x] 导航与路由：`src/router/navigation.ts`（单源）+ `src/router/index.ts`（派生）
 - [x] Dockerfile / nginx.conf / `locales/` / `packages/`（`@digua/contracts`、`@digua/http`）
 
 ---
@@ -144,18 +147,34 @@ The objective is to create the visual and interaction foundation that every subs
 
 | 路径 | 说明 |
 |---|---|
-| `src/entry.ts` + `src/App.vue` | 占位入口（仅让 `pnpm dev` 可启动，基础重建时整体替换） |
+| `src/entry.ts` + `src/App.vue` | 入口：装配 pinia + i18n + router，`App.vue` 只挂应用壳 |
 | `src/styles/tokens.css` | **视觉数值唯一真源**：`--ws-*` token + 组件消费的尺寸/字阶/动效原语 + PRISM 同名变量别名（全部落到 `--ws-*`） |
-| `src/styles/index.css` | 三栏布局基类（workspace-shell 等，设计系统 V1.0 §二） |
+| `src/styles/index.css` | 三栏布局基类（workspace-shell 等，设计系统 V1.0 §二）+ 全局 border-box / body margin 归零 |
 | `src/components/ui/` | 组件基座（reka-ui + scoped CSS + token）；**同步状态见 `FIGMA-SYNC.md`** |
+| `src/components/shell/` | **应用壳**（Figma「03 — Application Shell」两帧）：`WorkspaceShell` 壳根 / `TopBar` 顶栏 / `SideNav` 左导航（展开 232px、折叠 60px）/ `ContextPanel` 右上下文栏 / `CommandBar` AI 指令栏 / `PageHeader` 页面标题区 / `IconTooltip` 壳内 asChild 提示浮层 |
+| `src/router/navigation.ts` | **导航树 = 菜单与路由的单源**（`src/router/index.ts` 的路由表由它派生，杜绝漂移） |
+| `src/stores/shell.ts` | 壳状态：左导航折叠（持久化 `aipm.sidebar-collapsed`）/ 右栏开关 / 指令栏展开态 |
+| `src/views/placeholder/` | 占位视图（业务模块落地时按路由替换） |
 | `src/api/` | pm 业务 API 封装（保留复用；`mock/fixtures.ts` 是未实现写端点的活契约） |
 | `src/api/base/` | **基础接口层**（自旧 `shell/api/` 打捞：`client.ts` http 实例 + iam / prue / audit / config / file / notification / users 适配 + `token-storage.ts`；登录/菜单基础重建时直接复用） |
 | `src/lib/` | 通用工具（cn 等）+ `i18n.ts`（vue-i18n 组装，`../../locales` glob 加载）+ `test-utils.ts`（测试挂载辅助） |
-| `locales/` | i18n 资源（重建时按新命名空间重组） |
+| `locales/` | i18n 资源（`shell.yaml` 承载 `shell.app.*` 壳文案） |
 
 已删除：`src/shell/`（传统管理壳）、`src/workspace/`（AI 工作台页面）、`src/styles/prism/`
 （旧 PRISM 主题层，2026-11-04 用户裁决放弃，原语已并入 `styles/tokens.css`）——
 **不要从旧目录恢复或参照旧页面实现**。
+
+### 壳的约定（Application Shell V1.1）
+
+- **三种导航上下文不得混成一张扁平菜单**：个人 / 工作区 / 项目模块（仅选中项目时出现）/ 管理。
+  分组定义在 `src/router/navigation.ts`，路由由它派生。
+- **不引入 Workspace Switcher**：顶栏的组织 / 项目芯片只是上下文指示（静态展示，无切换实体）。
+- 折叠态经壳根元素 `data-sidebar` / `data-context` 属性切换，由 `index.css` 的 grid 模板消费。
+- 快捷键：⌘/Ctrl+K 命令面板，⌘/Ctrl+J 切换指令栏展开态。
+- **AI 建议与人工确认的动作必须视觉可辨**：建议用 accent 色，人工确认提示用次文字色。
+- 共享 `ui/tooltip` 的触发器固定是 `<button>`；壳内图标按钮/链接用
+  `components/shell/IconTooltip.vue`（`asChild`，触发器即真实元素），避免嵌套交互元素。
+- 右上下文栏**可选且可独立关闭**，不是每页常驻。
 
 ## 三、硬性约束（沿用并适配新结构）
 

@@ -117,4 +117,84 @@ shell:
     settings: Settings
     inbox: Announcements
 
+  # ── Application shell (Figma "03 — Application Shell" + Shell V1.1) ─────────
+  app:
+    topbar:
+      product: AI R&D Workspace
+      tenant: Organization
+      project: Current project
+      searchPlaceholder: Search or jump to…
+      searchShortcut: ⌘ K
+      notifications: Notifications
+      assistant: Assistant
+      help: Help
+      account: Account menu
+      accountMenu:
+        profile: Profile
+        settings: Preferences
+        signOut: Sign out
+      unread: Unread notifications
+    side:
+      label: Main navigation
+      collapse: Collapse navigation
+      expand: Expand navigation
+      group:
+        personal: Personal
+        workspace: Workspace
+        modules: Project modules
+        admin: Administration
+      item:
+        personalWorkspace: Personal Workspace
+        inbox: Inbox
+        dashboard: Project Dashboard
+        projects: Projects
+        repository: Repository
+        discovery: Code Discovery
+        requirements: Requirements
+        execution: AI Execution Center
+        knowledge: Knowledge Review
+        devenv: Development Environment
+        adminSettings: Settings
+        adminMembers: Members
+      sub:
+        overview: Overview
+        branches: Branches
+      projectMarker: Current project
+      shortcuts: Keyboard shortcuts
+      shortcutsHint: Press ? for all shortcuts
+    context:
+      title: Context
+      close: Close context panel
+      pin: Pin to this page
+      pinned: Pinned for this page
+      currentProject: Current project
+      repositoryDetails: Repository details
+      fields:
+        visibility: Visibility
+        defaultBranch: Default branch
+        yourRole: Your role
+        owner: Owner
+      related: Related information
+      aiNotice: Available to assistant
+      readOnly: Read-only context
+      noAttachment: No files attached to the current request
+    commandbar:
+      title: AI assistant
+      reviewFirst: Review before any action
+      placeholder: Ask a question or describe a task…
+      collapsedPlaceholder: Ask AI about {context}…
+      suggestions: Suggestions
+      suggestion:
+        explain: Explain this repository
+        setup: Find setup instructions
+      notRun: Not run
+      hint: ↵ Send · ⇧↵ New line
+      expand: Expand command bar
+      collapse: Collapse command bar
+      attach: Attach file
+      send: Send
+    page:
+      placeholderTitle: This page is under construction
+      placeholderHint: The application shell is ready; business modules follow.
+
 # ── Framework system pages ─────────────────────────────────────────────

@@ -1,5 +1,26 @@
 @import "./tokens.css";
 
+/* 全局盒模型：border-box。
+ * 壳的尺寸契约以 token 为准（指令栏 min-height 120px 即含 padding 的总高），
+ * content-box 下 padding 会额外撑高，导致整页溢出视口。 */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* 页面级重置：壳占满视口，浏览器默认的 body margin 会把 100dvh 顶出视口。 */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
 /* Workspace Shell 三栏布局基类 —— 设计系统 V1.0 §二/§六
  * 列：左导航 232px（折叠 60px）| 主区自适应 | 右上下文 320px（可关）
  * 属性开关由 WorkspaceShell 根元素写入（data-sidebar / data-context）。 */
@@ -78,11 +99,14 @@
 }
 
 /* AI 指令栏：壳级独立组件，全部工作区页共用。
- * 浮动停靠面板——四周留边悬浮于主区底部，滚动区在其上方独立滚动，
- * 天然不遮挡页面内容（用户验收反馈：原 sticky/渗出会盖住卡片）。 */
+ * 停靠式通栏——Figma「03 — Application Shell」两帧均为：
+ * 位于主列底部、上边框分隔、与主列等宽（不压右上下文栏）。
+ * 展开 120px / 收起 72px（--ws-commandbar-height-max / -min）。
+ * 展开态与收起态由组件自身高度切换实现，此处只负责停靠与边框。 */
 .workspace-commandbar {
   flex: none;
-  margin: 0 24px 16px;
+  border-top: var(--border-1) solid var(--ws-border);
+  background: var(--ws-sidebar);
 }
 
 /* 通用交互面 */

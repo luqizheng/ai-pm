@@ -1,14 +1,16 @@
 import { createApp } from "vue";
+import { createPinia } from "pinia";
+
 import App from "./App.vue";
+import { i18n } from "./lib/i18n";
+import { router } from "./router";
 
 /**
  * ai-frontend 入口。
  *
- * 旧 PRISM 壳（src/shell）与 AI Workspace（src/workspace）已整体移除，页面按
- * AGENTS.md「AI R&D Workspace — Frontend Foundation」规范重建；本文件目前只
- * 装载设计系统 token 层（src/styles/workspace/，设计系统 V1.0 唯一视觉真源）
- * 并挂载占位页，让 `pnpm dev` 可启动。重建基础（认证 / 壳 / 导航 …）时替换。
+ * 装配顺序：token 层 → pinia → i18n → router → 应用根。
+ * 壳的五区域布局见 src/styles/index.css（.workspace-shell grid）。
  */
 import "./styles/index.css";
 
-createApp(App).mount("#app");
+createApp(App).use(createPinia()).use(i18n).use(router).mount("#app");

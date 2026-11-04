@@ -64,12 +64,30 @@ describe("workspace 布局契约", () => {
     expect(scroll).toMatch(/overflow-y:\s*auto/);
   });
 
-  it("指令栏为浮动停靠面板：四周留边悬浮于主区底部，不遮挡内容", () => {
+  it("指令栏为停靠式通栏：主列底部 + 上边框，不遮挡内容也不压右栏", () => {
     const body = ruleBody(".workspace-commandbar");
-    // 不再使用 sticky/覆盖式定位——停靠在滚动区下方，天然不遮内容
+    // 不使用 sticky/覆盖式定位——停靠在滚动区下方，天然不遮内容
     expect(body).not.toMatch(/position:\s*sticky/);
     expect(body).not.toMatch(/position:\s*absolute/);
-    expect(body).toMatch(/margin:\s*0\s+24px\s+16px/);
+    // Figma 两帧口径：停靠通栏（上边框分隔 + 与主列同背景），非浮动留边面板
+    expect(body).toMatch(
+      /border-top:\s*var\(--border-1\)\s+solid\s+var\(--ws-border\)/
+    );
+    expect(body).toMatch(/background:\s*var\(--ws-sidebar\)/);
     expect(body).toMatch(/flex:\s*none/);
+    // 停靠式不再使用四周留边（那会与通栏通宽语义冲突）
+    expect(body).not.toMatch(/margin:\s*0\s+24px\s+16px/);
+  });
+
+  it("全局盒模型为 border-box（指令栏 token 高度含 padding，否则整页溢出视口）", () => {
+    // content-box 下：min-height 120px + padding 32px = 152px，
+    // 叠加顶栏后超出 100dvh，页面出现外层滚动条、底栏被切。
+    expect(css).toMatch(
+      /\*,\s*\*::before,\s*\*::after\s*\{[^}]*box-sizing:\s*border-box/
+    );
+  });
+
+  it("页面级重置：body margin 归零（默认 8px 会把 100dvh 的壳顶出视口）", () => {
+    expect(css).toMatch(/html,\s*body\s*\{[^}]*margin:\s*0/);
   });
 });

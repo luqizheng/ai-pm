@@ -182,6 +182,11 @@
   --size-control-sm: 28px;
   --size-control-md: 36px;
   --size-control-lg: 44px;
+  /* 壳级紧凑控件 32px —— Figma「03 — Application Shell」两帧：
+     顶栏搜索框 / 上下文芯片 / 子菜单行 / 键盘提示行 */
+  --size-control-compact: 32px;
+  /* 壳级搜索入口宽 360px（Figma 顶栏 Global search and command launcher） */
+  --size-search-width: 360px;
   --size-icon-button: 36px;
   --size-icon-xs: 16px;
   --size-icon-sm: 18px;
@@ -317,6 +322,11 @@
   --ws-surface: #ffffff;
   --ws-elevated: #e9ecf2;
   --ws-border: #dde2ea;
+
+  /* accent 着色面（浅色）—— 激活导航项 / Badge Accent 底。
+     深色值 #242238 在浅色主题下过暗，改为带紫调的浅面；
+     浅色稿尚未定版，取与 --ws-accent (#6257ce) 同族的极浅紫。 */
+  --ws-color-accent-surface: #e8e6f9;
 
   /* 次文字 #586274 = Figma 浅色次文字（2026-11-04 组件库稿） */
   --ws-text-primary: #202532;
