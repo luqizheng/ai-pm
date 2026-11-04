@@ -16,8 +16,14 @@ const { cpSync, existsSync, mkdirSync, rmSync } = require("node:fs");
 const { join, dirname } = require("node:path");
 
 const ROOT = join(__dirname, "..");
-const SRC_DIST = join(ROOT, "frontend", "node_modules", "vditor", "dist");
-const DEST_ROOT = join(ROOT, "frontend", "public", "vditor", "dist");
+/** 活跃前端工程 = ai-frontend（2026-11-04 重组后唯一工程）；旧 frontend/ 冻结只读 */
+const SRC_CANDIDATES = [
+  join(ROOT, "ai-frontend", "node_modules", "vditor", "dist"),
+  join(ROOT, "frontend", "node_modules", "vditor", "dist")
+];
+const SRC_DIST =
+  SRC_CANDIDATES.find(existsSync) ?? SRC_CANDIDATES[0];
+const DEST_ROOT = join(ROOT, "ai-frontend", "public", "vditor", "dist");
 
 /**
  * 只同步实际用到的子集：

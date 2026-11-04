@@ -7,6 +7,7 @@ design:
     sectionComponents: Component families (DS)
     sectionNavigation: Navigation (Figma boards)
     sectionShell: Application shell
+    sectionSettings: Settings framework
   theme:
     toggle: Toggle light / dark preview
   tokens:

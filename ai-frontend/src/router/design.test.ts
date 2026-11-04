@@ -20,8 +20,8 @@ function makeRouter() {
 }
 
 describe("design routes", () => {
-  it("designRoutes 覆盖 15 条路径", () => {
-    expect(designRoutes).toHaveLength(15);
+  it("designRoutes 覆盖 34 条路径（15 目录 + 19 Settings 框架）", () => {
+    expect(designRoutes).toHaveLength(34);
   });
 
   it("全部路由带 meta.layout=design 且已挂进 buildRoutes", async () => {

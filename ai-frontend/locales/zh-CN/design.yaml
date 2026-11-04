@@ -7,6 +7,7 @@ design:
     sectionComponents: 组件族（DS）
     sectionNavigation: 导航（Figma 板）
     sectionShell: 应用壳
+    sectionSettings: Settings 框架
   theme:
     toggle: 切换浅色 / 深色预览
   tokens:

@@ -83,6 +83,35 @@ const navSections = computed(() => [
     items: [
       { label: t("design.shell.states.title"), to: DESIGN_PATHS.shell.states }
     ]
+  },
+  {
+    label: t("design.index.sectionSettings"),
+    items: [
+      {
+        label: t("settings.architecture.title"),
+        to: DESIGN_PATHS.settings.architecture
+      },
+      {
+        label: t("settings.personal.landing.title"),
+        to: DESIGN_PATHS.settings.personal
+      },
+      {
+        label: t("settings.tenant.landing.title"),
+        to: DESIGN_PATHS.settings.tenant
+      },
+      {
+        label: t("settings.project.landing.title"),
+        to: DESIGN_PATHS.settings.project
+      },
+      {
+        label: t("settings.states.title"),
+        to: DESIGN_PATHS.settings.states
+      },
+      {
+        label: t("settings.components.title"),
+        to: DESIGN_PATHS.settings.components
+      }
+    ]
   }
 ]);
 </script>

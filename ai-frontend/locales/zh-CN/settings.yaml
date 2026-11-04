@@ -1,0 +1,384 @@
+settings:
+  common:
+    save: 保存更改
+    saving: 保存中…
+    saved: 更改已保存
+    saveFailed: 保存失败，请重试
+    cancel: 取消
+    reset: 重置
+    discard: 放弃更改
+    keepEditing: 继续编辑
+    saveAndLeave: 保存并离开
+    unsavedTitle: 有未保存的更改
+    unsavedDesc: 离开此页将丢失未保存的修改。要先保存吗？
+    unsavedHint: 有未保存的更改
+    confirm: 确认
+    proposed: 规划中
+    readOnly: 只读
+    readOnlyMsg: 你对该区域只有查看权限（{role}），如需修改请联系管理员。
+    permissionDenied: 无权访问
+    permissionDeniedMsg: 当前角色（{role}）无权访问租户管理设置。
+    connected: 已连接
+    notConnected: 未连接
+    current: 当前
+    edit: 编辑
+    remove: 移除
+    viewAll: 查看全部
+  nav:
+    profile: 个人资料
+    security: 安全
+    preferences: 偏好设置
+    notifications: 通知
+    ai: AI 偏好
+    tenantGeneral: 基本信息
+    members: 成员与访问
+    integrations: 集成
+    governance: 治理
+    projectGeneral: 基本信息
+    projectMembers: 项目成员
+    repositories: 仓库
+    development: 开发配置
+    projectAi: AI 配置
+  demo:
+    personaLabel: 演示角色
+    persona:
+      self: 本人
+      tenantAdmin: 租户管理员
+      tenantMember: 普通成员（无租户管理权）
+      projectLead: 项目负责人
+      projectMember: 项目成员（只读）
+      projectViewer: 项目访问者（只读）
+  architecture:
+    title: Settings 架构总览
+    desc: 三域分离的统一设置框架 —— 个人账户 / 租户管理 / 项目。
+    scopesTitle: 三个配置域
+    scopesDesc: 每个设置项恰好属于一个主域；入口、权限与数据边界随域隔离。
+    scope:
+      personal:
+        title: 个人账户设置
+        entry: 入口：头像 → 账户设置
+        desc: 展示名称、安全、偏好、通知与个人 AI 交互偏好。
+      tenant:
+        title: 租户管理设置
+        entry: 入口：租户管理 → 设置
+        desc: 租户信息、成员与访问、集成与治理；仅限持有租户权限的用户。
+      project:
+        title: 项目设置
+        entry: 入口：当前项目 → 项目设置
+        desc: 项目信息、成员、仓库关联、开发配置与项目 AI 行为。
+    principlesTitle: 框架原则
+    principles:
+      p1: 一个设置项只属于一个主域，不跨域复用语义。
+      p2: 权限控制可见性与可编辑性；无授权的条目不出现。
+      p3: 能力未经产品确认的条目标记「规划中」，不冒充既有功能。
+      p4: 页面模板与表单控件全量复用 Settings 组件与 ui 基座。
+      p5: 高影响配置不自动保存；敏感操作显式确认。
+    legendProposed: 规划中 = 能力未确认的设计预案
+    framesTitle: 帧索引
+  personal:
+    landing:
+      title: 个人账户设置
+      desc: 管理你的个人资料、安全与偏好。此处不包含租户级策略。
+    categories:
+      profile: 展示名称、头像与个人信息。
+      security: 密码、活跃会话与登录安全。
+      preferences: 外观、主题、语言、时区与快捷键。
+      notifications: 通知类别与投递方式。
+      ai: 个人 AI 交互与显示偏好。
+    profile:
+      identityTitle: 身份信息
+      displayName: 展示名称
+      displayNameHelper: 在项目、评论与审批记录中展示的名称。
+      displayNamePlaceholder: 例如：韩林
+      avatar: 头像
+      avatarHelper: 支持 PNG / JPG，建议 256×256 以上。
+      avatarChange: 更换头像
+      infoTitle: 个人信息
+      email: 邮箱
+      emailHelper: 登录凭据，修改需通过安全验证。
+      tenant: 所属租户
+      tenantHelper: 由租户管理员管理，个人不可修改。
+      joinedAt: 加入时间
+    security:
+      passwordTitle: 密码
+      passwordDesc: 定期更换密码可降低凭据泄露风险。
+      currentPassword: 当前密码
+      newPassword: 新密码
+      confirmPassword: 确认新密码
+      passwordMismatch: 两次输入的新密码不一致
+      passwordTooShort: 密码长度至少 8 位
+      passwordRequired: 请填写密码
+      updatePassword: 更新密码
+      sessionsTitle: 活跃会话
+      sessionsDesc: 已登录的设备列表；发现陌生设备请立即吊销。
+      device: 设备
+      location: 位置
+      lastActive: 最近活跃
+      actions: 操作
+      revoke: 吊销
+      revokeTitle: 吊销此会话？
+      revokeDesc: 该设备将被登出，需重新登录才能访问。
+      signInTitle: 登录安全
+      twoFactor: 双因素认证
+      twoFactorHelper: 登录时要求第二重验证因子。
+      passkeys: 通行密钥
+      passkeysHelper: 使用设备生物识别替代密码登录。
+    preferences:
+      appearanceTitle: 外观
+      theme: 主题
+      themeHelper: 深色为默认主题；跟随系统时随系统外观自动切换。
+      themeDark: 深色
+      themeLight: 浅色
+      themeSystem: 跟随系统
+      language: 语言
+      languageHelper: 界面语言，切换立即生效。
+      languageNativeZh: 简体中文
+      languageNativeEn: English
+      timezone: 时区
+      timezoneHelper: 用于时间显示与通知投递时刻。
+      shortcutsTitle: 键盘快捷键
+      shortcutsDesc: 全局快捷键，当前为固定绑定。
+      shortcutAction: 操作
+      shortcutKeys: 按键
+      shortcutPalette: 命令面板
+      shortcutCommandBar: 切换 AI 指令栏
+      shortcutSearch: 全局搜索
+    notifications:
+      categoriesTitle: 通知类别
+      categoriesDesc: 选择你希望接收的通知类型。
+      categoryRequirement: 需求变更
+      categoryRequirementHelper: 与你相关的需求被提出或定稿时通知。
+      categoryTask: 任务分配
+      categoryTaskHelper: 有任务分配给你或由你负责的任务变更时通知。
+      categoryReview: 评审请求
+      categoryReviewHelper: 设计评审或审批流转到你时通知。
+      categoryAi: AI 任务完成
+      categoryAiHelper: AI 执行任务完成或需要人工确认时通知。
+      deliveryTitle: 投递方式
+      frequency: 接收频率
+      frequencyHelper: 站内通知始终实时；此设置控制聚合投递。
+      frequencyRealtime: 实时
+      frequencyDaily: 每日摘要
+      frequencyWeekly: 每周摘要
+      emailTitle: 邮件通知
+      emailProposed: 邮件投递通道为规划中能力，当前不可配置。
+      emailMentions: 提及我时发送邮件
+      emailSummary: 每日变更摘要邮件
+    ai:
+      behaviorTitle: 默认 AI 交互行为
+      behaviorDesc: 决定 AI 建议如何呈现与推进；人工确认始终不可跳过。
+      interactionStyle: 交互方式
+      interactionStyleHelper: 建议模式 = AI 只给建议；确认模式 = 执行前需你确认；自动模式 = 低风险操作自动执行。
+      styleSuggest: 仅建议
+      styleConfirm: 执行前确认
+      styleAuto: 自动执行低风险操作
+      displayTitle: AI 显示偏好
+      showReasoning: 展示 AI 推理过程
+      inlineSuggestions: 内联 AI 建议
+      proactiveTips: 主动提示
+      boundary: 个人 AI 偏好只影响你本人；租户级 AI 策略由租户管理员在「租户管理 → 设置」中配置。
+      boundaryLink: 前往租户治理（规划中）
+  tenant:
+    landing:
+      title: 租户管理设置
+      desc: 组织级信息、成员与访问、集成与治理。仅限持有租户权限的用户。
+      deniedTitle: 无权访问租户管理
+      deniedDesc: 租户管理设置仅对持有租户管理权限的用户可见。如需访问请联系租户管理员。
+      categoriesTitle: 设置类目
+      categoryGeneral: 租户名称、标识与组织信息。
+      categoryMembers: 租户成员、邀请、角色与权限。
+      categoryIntegrations: 外部服务集成、认证集成与提供方连接。
+      categoryGovernance: 租户级策略与安全配置（规划中）。
+    general:
+      identityTitle: 租户身份
+      tenantName: 租户名称
+      tenantNameHelper: 对组织内所有成员可见。
+      tenantId: 租户标识
+      tenantIdHelper: 系统生成，不可修改。
+      orgTitle: 组织信息
+      orgInfo: 组织描述
+      orgInfoHelper: 简要介绍组织职能与范围。
+      orgInfoPlaceholder: 例如：负责智能研发管理平台的研发与交付…
+    members:
+      membersTitle: 租户成员
+      membersDesc: 管理组织成员与其租户角色。
+      invite: 邀请成员
+      inviteTitle: 邀请成员
+      inviteDesc: 向新成员发送加入邀请（演示流程，不发送真实邮件）。
+      tableRole: 角色
+      tableJoined: 加入时间
+      tableStatus: 状态
+      statusActive: 已加入
+      statusInvited: 已邀请
+      removeTitle: 移除该成员？
+      removeDesc: 移除后该成员将失去对组织内全部项目的访问。
+      rolesTitle: 租户角色
+      rolesDesc: 角色决定成员在组织层面的权限边界。
+      roleDescOwner: 组织创建者，拥有全部租户权限。
+      roleDescAdmin: 管理成员、集成与租户配置。
+      roleDescMember: 参与项目协作，无租户管理权。
+    roles:
+      owner: 所有者
+      admin: 管理员
+      member: 成员
+    integrations:
+      title: 外部服务集成
+      desc: 连接外部服务；连接状态对租户内全部项目生效。
+      git:
+        desc: 代码仓库托管服务的租户级连接。
+      webhook:
+        desc: 将事件推送通知转发到外部接收端。
+      sso:
+        desc: 单点登录 / SAML 目录集成。
+      disconnectTitle: 断开该集成？
+      disconnectDesc: 断开后依赖此集成的项目功能将不可用。
+      connect: 连接
+      disconnect: 断开
+  project:
+    landing:
+      title: 项目设置
+      desc: 当前项目的信息、成员、仓库与执行配置。
+      personaHint: 切换演示角色查看权限对可见性与可编辑性的影响。
+      categoriesTitle: 设置类目
+      categoryGeneral: 项目名称、描述与标识。
+      categoryMembers: 项目成员、角色与访问。
+      categoryRepositories: 关联仓库与主仓库。
+      categoryDevelopment: 开发环境与项目级集成。
+      categoryAi: 项目 AI 行为与执行偏好。
+    general:
+      identityTitle: 项目身份
+      projectName: 项目名称
+      projectNameHelper: 在项目列表、导航与搜索中展示。
+      projectDesc: 项目描述
+      projectDescHelper: 一句话说明项目目标与范围。
+      projectDescPlaceholder: 例如：AI 研发管理平台的下游交付工程…
+      metaTitle: 系统信息
+      projectId: 项目标识
+      projectIdHelper: 系统生成，不可修改。
+      createdAt: 创建时间
+      tenant: 所属租户
+      dangerTitle: 危险区
+      dangerDesc: 以下操作影响整个项目，需要显式确认。
+      archive: 归档项目
+      archiveTitle: 归档该项目？
+      archiveDesc: 归档后项目转为只读，成员不再收到任务通知。
+    members:
+      membersTitle: 项目成员
+      membersDesc: 管理项目成员及其项目角色。
+      add: 添加成员
+      addTitle: 添加成员
+      addDesc: 从租户成员中加入项目（演示流程）。
+      tableRole: 项目角色
+      rolesTitle: 项目角色
+      rolesDesc: 项目角色独立于租户角色，决定项目内权限。
+      roleDescLead: 管理项目设置、成员与执行配置。
+      roleDescDeveloper: 参与任务执行，可读写项目内容。
+      roleDescViewer: 只读访问项目内容。
+      removeTitle: 移除该成员？
+      removeDesc: 移除后该成员将失去对本项目的访问。
+    roles:
+      lead: 负责人
+      developer: 开发者
+      viewer: 访问者
+    repositories:
+      title: 关联仓库
+      desc: 项目关联的代码仓库；主仓库用于默认执行环境。
+      primaryBadge: 主仓库
+      setPrimary: 设为主仓库
+      setPrimaryTitle: 设为主仓库？
+      setPrimaryDesc: 默认执行环境与代码发现将切换到该仓库。
+      path: 仓库路径
+      manageTitle: 仓库管理
+      manageDesc: 仓库的新建、导入与凭据在仓库管理中维护，此处不重复其管理界面。
+      manageLink: 前往仓库管理
+    development:
+      title: 开发环境
+      desc: 项目执行所依赖的环境模板与变量。
+      template: 环境模板
+      templateHelper: 决定执行机的基线镜像与工具链。
+      templateBasic: 基础（Node + Python）
+      templateFull: 完整（含容器运行时）
+      envVars: 环境变量
+      envVarsHelper: 敏感值已脱敏；修改走执行环境申请流程。
+      integrationsTitle: 项目级集成
+      ciWebhook: CI 事件推送
+      ciWebhookHelper: 将项目 CI 事件同步到执行记录（规划中）。
+      deployKey: 部署密钥
+      deployKeyHelper: 由仓库管理统一下发，此处只读展示指纹。
+      proposedBanner: 开发配置中的部分能力为规划中状态，以产品确认结果为准。
+    ai:
+      executionTitle: 项目 AI 行为
+      executionDesc: 项目的执行偏好；人工确认约束始终高于项目配置。
+      execMode: 执行方式
+      execModeHelper: 计划先行 = AI 先产出计划待批；直接执行 = 低风险任务自动推进。
+      modePlanFirst: 计划先行
+      modeDirect: 直接执行
+      notifyComplete: 任务完成通知
+      notifyCompleteHelper: AI 任务完成时通知项目负责人。
+      contextRepo: 仓库上下文注入
+      contextRepoHelper: 执行时将主仓库结构作为 AI 上下文。
+      policiesTitle: 项目级 AI 策略
+      policiesBanner: 项目专属 AI 策略为规划中能力；全局 AI 政策（如有）始终在租户治理层配置。
+  states:
+    title: 交互状态
+    desc: Settings Framework 的 12 项交互设计（§6）逐项演示。
+    navigation:
+      title: 1 · 类目间导航
+      desc: 侧栏当前项高亮；点击右侧条目切换类目。
+    editing:
+      title: 2 · 编辑设置
+      desc: 修改任意字段后保存条浮现。
+    saving:
+      title: 3 · 保存更改
+      desc: 保存请求进行中，按钮锁定。
+    cancel:
+      title: 4 · 取消更改
+      desc: 放弃未保存修改，回到上次保存值。
+    validation:
+      title: 5 · 校验错误
+      desc: 不合法输入就地报错，提交被阻止。
+    unsaved:
+      title: 6 · 未保存警告
+      desc: 携未保存更改离开时三选一确认。
+    destructive:
+      title: 7 · 破坏性操作确认
+      desc: 敏感操作弹出 danger 确认。
+    readonly:
+      title: 8 · 只读设置
+      desc: 无编辑权限时字段呈只读面。
+    denied:
+      title: 9 · 权限不足
+      desc: 无授权区域展示角色化说明。
+    loading:
+      title: 10 · 加载态
+      desc: 数据加载中以骨架占位。
+    empty:
+      title: 11 · 空状态
+      desc: 无数据时的引导动作。
+    success:
+      title: 12 · 保存成功反馈
+      desc: 保存成功给出即时反馈。
+    demoEdit: 模拟修改
+    demoReset: 模拟重置
+    demoSaving: 模拟保存中
+    demoError: 模拟保存失败
+    demoSuccess: 显示成功反馈
+    demoOpenDialog: 打开弹窗
+  components:
+    title: Settings 组件库
+    desc: Settings Framework 的 14 个复用组件（§7）；全部组合自 ui 基座。
+    specimens:
+      pageLayout: 设置页统一模板：页头 + 侧栏 + 主内容。
+      sidebar: 分组导航；条目由调用方按权限过滤。
+      navigationItem: 导航项：激活 / Proposed / 禁用三态。
+      sectionHeader: 分区标题 + 描述 + 操作插槽。
+      formSection: 分区容器 = SectionHeader + 表单行。
+      formRow: 双栏表单行：标签列 + 控件列。
+      fieldLabel: 字段标签；必填 / 只读徽标。
+      helperText: 字段辅助说明。
+      saveBar: 吸底保存条：dirty / saving / saved / error。
+      unsavedChangesDialog: 未保存更改三选一弹窗。
+      permissionNotice: 只读 / 无权访问提示横幅。
+      readOnlyField: 只读字段展示。
+      validationMessage: 校验错误文案。
+      confirmationDialog: 破坏性操作 danger 确认。

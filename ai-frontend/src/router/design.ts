@@ -33,6 +33,28 @@ export const DESIGN_PATHS = {
   },
   shell: {
     states: "/design/shell/states"
+  },
+  /** Settings Framework（19 帧，Settings Framework V1.0 §8） */
+  settings: {
+    architecture: "/design/settings/architecture",
+    personal: "/design/settings/personal",
+    personalProfile: "/design/settings/personal/profile",
+    personalSecurity: "/design/settings/personal/security",
+    personalPreferences: "/design/settings/personal/preferences",
+    personalNotifications: "/design/settings/personal/notifications",
+    personalAi: "/design/settings/personal/ai",
+    tenant: "/design/settings/tenant",
+    tenantGeneral: "/design/settings/tenant/general",
+    tenantMembers: "/design/settings/tenant/members",
+    tenantIntegrations: "/design/settings/tenant/integrations",
+    project: "/design/settings/project",
+    projectGeneral: "/design/settings/project/general",
+    projectMembers: "/design/settings/project/members",
+    projectRepositories: "/design/settings/project/repositories",
+    projectDevelopment: "/design/settings/project/development",
+    projectAi: "/design/settings/project/ai",
+    states: "/design/settings/states",
+    components: "/design/settings/components"
   }
 } as const;
 
@@ -133,5 +155,136 @@ export const designRoutes: RouteRecordRaw[] = [
     name: "design-shell-states",
     component: () => import("@/views/design/shell/DesignShellStatesView.vue"),
     meta: { layout: "design", title: "design.shell.states.title" }
+  },
+
+  // ===== Settings Framework（19 帧）=====
+  {
+    path: DESIGN_PATHS.settings.architecture,
+    name: "design-settings-architecture",
+    component: () =>
+      import("@/views/design/settings/SettingsArchitectureView.vue"),
+    meta: { layout: "design", title: "settings.architecture.title" }
+  },
+  {
+    path: DESIGN_PATHS.settings.personal,
+    name: "design-settings-personal",
+    component: () => import("@/views/design/settings/SettingsPersonalView.vue"),
+    meta: { layout: "design", title: "settings.personal.landing.title" }
+  },
+  {
+    path: DESIGN_PATHS.settings.personalProfile,
+    name: "design-settings-personal-profile",
+    component: () =>
+      import("@/views/design/settings/SettingsPersonalProfileView.vue"),
+    meta: { layout: "design", title: "settings.nav.profile" }
+  },
+  {
+    path: DESIGN_PATHS.settings.personalSecurity,
+    name: "design-settings-personal-security",
+    component: () =>
+      import("@/views/design/settings/SettingsPersonalSecurityView.vue"),
+    meta: { layout: "design", title: "settings.nav.security" }
+  },
+  {
+    path: DESIGN_PATHS.settings.personalPreferences,
+    name: "design-settings-personal-preferences",
+    component: () =>
+      import("@/views/design/settings/SettingsPersonalPreferencesView.vue"),
+    meta: { layout: "design", title: "settings.nav.preferences" }
+  },
+  {
+    path: DESIGN_PATHS.settings.personalNotifications,
+    name: "design-settings-personal-notifications",
+    component: () =>
+      import("@/views/design/settings/SettingsPersonalNotificationsView.vue"),
+    meta: { layout: "design", title: "settings.nav.notifications" }
+  },
+  {
+    path: DESIGN_PATHS.settings.personalAi,
+    name: "design-settings-personal-ai",
+    component: () =>
+      import("@/views/design/settings/SettingsPersonalAiView.vue"),
+    meta: { layout: "design", title: "settings.nav.ai" }
+  },
+  {
+    path: DESIGN_PATHS.settings.tenant,
+    name: "design-settings-tenant",
+    component: () => import("@/views/design/settings/SettingsTenantView.vue"),
+    meta: { layout: "design", title: "settings.tenant.landing.title" }
+  },
+  {
+    path: DESIGN_PATHS.settings.tenantGeneral,
+    name: "design-settings-tenant-general",
+    component: () =>
+      import("@/views/design/settings/SettingsTenantGeneralView.vue"),
+    meta: { layout: "design", title: "settings.nav.tenantGeneral" }
+  },
+  {
+    path: DESIGN_PATHS.settings.tenantMembers,
+    name: "design-settings-tenant-members",
+    component: () =>
+      import("@/views/design/settings/SettingsTenantMembersView.vue"),
+    meta: { layout: "design", title: "settings.nav.members" }
+  },
+  {
+    path: DESIGN_PATHS.settings.tenantIntegrations,
+    name: "design-settings-tenant-integrations",
+    component: () =>
+      import("@/views/design/settings/SettingsTenantIntegrationsView.vue"),
+    meta: { layout: "design", title: "settings.nav.integrations" }
+  },
+  {
+    path: DESIGN_PATHS.settings.project,
+    name: "design-settings-project",
+    component: () => import("@/views/design/settings/SettingsProjectView.vue"),
+    meta: { layout: "design", title: "settings.project.landing.title" }
+  },
+  {
+    path: DESIGN_PATHS.settings.projectGeneral,
+    name: "design-settings-project-general",
+    component: () =>
+      import("@/views/design/settings/SettingsProjectGeneralView.vue"),
+    meta: { layout: "design", title: "settings.nav.projectGeneral" }
+  },
+  {
+    path: DESIGN_PATHS.settings.projectMembers,
+    name: "design-settings-project-members",
+    component: () =>
+      import("@/views/design/settings/SettingsProjectMembersView.vue"),
+    meta: { layout: "design", title: "settings.nav.projectMembers" }
+  },
+  {
+    path: DESIGN_PATHS.settings.projectRepositories,
+    name: "design-settings-project-repositories",
+    component: () =>
+      import("@/views/design/settings/SettingsProjectRepositoriesView.vue"),
+    meta: { layout: "design", title: "settings.nav.repositories" }
+  },
+  {
+    path: DESIGN_PATHS.settings.projectDevelopment,
+    name: "design-settings-project-development",
+    component: () =>
+      import("@/views/design/settings/SettingsProjectDevelopmentView.vue"),
+    meta: { layout: "design", title: "settings.nav.development" }
+  },
+  {
+    path: DESIGN_PATHS.settings.projectAi,
+    name: "design-settings-project-ai",
+    component: () =>
+      import("@/views/design/settings/SettingsProjectAiView.vue"),
+    meta: { layout: "design", title: "settings.nav.projectAi" }
+  },
+  {
+    path: DESIGN_PATHS.settings.states,
+    name: "design-settings-states",
+    component: () => import("@/views/design/settings/SettingsStatesView.vue"),
+    meta: { layout: "design", title: "settings.states.title" }
+  },
+  {
+    path: DESIGN_PATHS.settings.components,
+    name: "design-settings-components",
+    component: () =>
+      import("@/views/design/settings/SettingsComponentsView.vue"),
+    meta: { layout: "design", title: "settings.components.title" }
   }
 ];

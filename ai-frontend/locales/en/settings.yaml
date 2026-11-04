@@ -1,0 +1,384 @@
+settings:
+  common:
+    save: Save changes
+    saving: Saving…
+    saved: Changes saved
+    saveFailed: Save failed, please retry
+    cancel: Cancel
+    reset: Reset
+    discard: Discard changes
+    keepEditing: Keep editing
+    saveAndLeave: Save and leave
+    unsavedTitle: Unsaved changes
+    unsavedDesc: Leaving this page will discard unsaved edits. Save first?
+    unsavedHint: Unsaved changes
+    confirm: Confirm
+    proposed: Proposed
+    readOnly: Read-only
+    readOnlyMsg: You have view-only access to this area ({role}). Contact an administrator to request edit rights.
+    permissionDenied: Access denied
+    permissionDeniedMsg: Your role ({role}) does not have access to tenant administration settings.
+    connected: Connected
+    notConnected: Not connected
+    current: Current
+    edit: Edit
+    remove: Remove
+    viewAll: View all
+  nav:
+    profile: Profile
+    security: Security
+    preferences: Preferences
+    notifications: Notifications
+    ai: AI Preferences
+    tenantGeneral: General
+    members: Members & Access
+    integrations: Integrations
+    governance: Governance
+    projectGeneral: General
+    projectMembers: Project Members
+    repositories: Repositories
+    development: Development
+    projectAi: AI Configuration
+  demo:
+    personaLabel: Demo role
+    persona:
+      self: Yourself
+      tenantAdmin: Tenant administrator
+      tenantMember: Tenant member (no admin rights)
+      projectLead: Project lead
+      projectMember: Project member (read-only)
+      projectViewer: Project viewer (read-only)
+  architecture:
+    title: Settings Architecture Overview
+    desc: A unified settings framework with three separated scopes — personal account, tenant administration, and project.
+    scopesTitle: Three configuration scopes
+    scopesDesc: Every setting belongs to exactly one primary scope; entry points, permissions, and data boundaries are isolated per scope.
+    scope:
+      personal:
+        title: Personal Account Settings
+        entry: Entry — Avatar → Account Settings
+        desc: Display name, security, preferences, notifications, and personal AI interaction preferences.
+      tenant:
+        title: Tenant Administration Settings
+        entry: Entry — Tenant Administration → Settings
+        desc: Tenant identity, members & access, integrations, and governance. Restricted to users holding tenant permissions.
+      project:
+        title: Project Settings
+        entry: Entry — Current Project → Project Settings
+        desc: Project identity, members, repositories, development configuration, and project AI behavior.
+    principlesTitle: Framework principles
+    principles:
+      p1: A setting belongs to exactly one primary scope; semantics are never reused across scopes.
+      p2: Permissions govern visibility and editability; unauthorized entries never appear.
+      p3: Items whose product capability is unconfirmed are marked "Proposed", never presented as existing features.
+      p4: Page templates and form controls fully reuse Settings components and the ui foundation.
+      p5: High-impact configuration never auto-saves; sensitive actions require explicit confirmation.
+    legendProposed: Proposed = design placeholder for an unconfirmed capability
+    framesTitle: Frame index
+  personal:
+    landing:
+      title: Personal Account Settings
+      desc: Manage your profile, security, and preferences. Tenant-wide policies are not configured here.
+    categories:
+      profile: Display name, avatar, and personal information.
+      security: Password, active sessions, and sign-in security.
+      preferences: Appearance, theme, language, time zone, and keyboard shortcuts.
+      notifications: Notification categories and delivery preferences.
+      ai: Personal AI interaction and display preferences.
+    profile:
+      identityTitle: Identity
+      displayName: Display name
+      displayNameHelper: Shown across projects, comments, and approval records.
+      displayNamePlaceholder: e.g. Han Lin
+      avatar: Avatar
+      avatarHelper: PNG or JPG recommended, 256×256 or larger.
+      avatarChange: Change avatar
+      infoTitle: Personal information
+      email: Email
+      emailHelper: Login credential; changes require security verification.
+      tenant: Tenant
+      tenantHelper: Managed by tenant administrators; not editable by individuals.
+      joinedAt: Joined
+    security:
+      passwordTitle: Password
+      passwordDesc: Regular password changes reduce credential-leak risk.
+      currentPassword: Current password
+      newPassword: New password
+      confirmPassword: Confirm new password
+      passwordMismatch: The two new passwords do not match
+      passwordTooShort: Password must be at least 8 characters
+      passwordRequired: Password is required
+      updatePassword: Update password
+      sessionsTitle: Active sessions
+      sessionsDesc: Signed-in devices; revoke unfamiliar sessions immediately.
+      device: Device
+      location: Location
+      lastActive: Last active
+      actions: Actions
+      revoke: Revoke
+      revokeTitle: Revoke this session?
+      revokeDesc: The device will be signed out and must sign in again for access.
+      signInTitle: Sign-in security
+      twoFactor: Two-factor authentication
+      twoFactorHelper: Require a second verification factor at sign-in.
+      passkeys: Passkeys
+      passkeysHelper: Use device biometrics instead of passwords to sign in.
+    preferences:
+      appearanceTitle: Appearance
+      theme: Theme
+      themeHelper: Dark is the default theme; System follows the OS appearance.
+      themeDark: Dark
+      themeLight: Light
+      themeSystem: System
+      language: Language
+      languageHelper: Interface language; takes effect immediately.
+      languageNativeZh: 简体中文
+      languageNativeEn: English
+      timezone: Time zone
+      timezoneHelper: Used for time display and notification delivery timing.
+      shortcutsTitle: Keyboard shortcuts
+      shortcutsDesc: Global shortcuts; currently fixed bindings.
+      shortcutAction: Action
+      shortcutKeys: Keys
+      shortcutPalette: Command palette
+      shortcutCommandBar: Toggle AI command bar
+      shortcutSearch: Global search
+    notifications:
+      categoriesTitle: Notification categories
+      categoriesDesc: Choose which notification types you want to receive.
+      categoryRequirement: Requirement changes
+      categoryRequirementHelper: Notify when related requirements are proposed or finalized.
+      categoryTask: Task assignments
+      categoryTaskHelper: Notify when tasks are assigned to you or change status.
+      categoryReview: Review requests
+      categoryReviewHelper: Notify when a review or approval reaches you.
+      categoryAi: AI task completion
+      categoryAiHelper: Notify when AI tasks finish or need human confirmation.
+      deliveryTitle: Delivery
+      frequency: Frequency
+      frequencyHelper: In-app notifications are always real-time; this controls digest delivery.
+      frequencyRealtime: Real-time
+      frequencyDaily: Daily digest
+      frequencyWeekly: Weekly digest
+      emailTitle: Email notifications
+      emailProposed: The email delivery channel is a proposed capability and cannot be configured yet.
+      emailMentions: Email me when mentioned
+      emailSummary: Daily change summary email
+    ai:
+      behaviorTitle: Default AI interaction behavior
+      behaviorDesc: Controls how AI suggestions are presented and advanced; human confirmation can never be skipped.
+      interactionStyle: Interaction style
+      interactionStyleHelper: Suggest = AI only suggests; Confirm = AI asks before acting; Auto = low-risk actions run automatically.
+      styleSuggest: Suggest only
+      styleConfirm: Confirm before acting
+      styleAuto: Auto-run low-risk actions
+      displayTitle: AI display preferences
+      showReasoning: Show AI reasoning process
+      inlineSuggestions: Inline AI suggestions
+      proactiveTips: Proactive tips
+      boundary: Personal AI preferences affect you only. Tenant-wide AI policies are configured by tenant administrators under Tenant Administration → Settings.
+      boundaryLink: Go to tenant governance (proposed)
+  tenant:
+    landing:
+      title: Tenant Administration Settings
+      desc: Organization-level identity, members & access, integrations, and governance. Restricted to users holding tenant permissions.
+      deniedTitle: No access to tenant administration
+      deniedDesc: Tenant administration settings are visible only to users with tenant admin permissions. Contact a tenant administrator for access.
+      categoriesTitle: Setting categories
+      categoryGeneral: Tenant name, identity, and organization information.
+      categoryMembers: Tenant members, invitations, roles, and permissions.
+      categoryIntegrations: External service integrations, authentication integrations, and provider connections.
+      categoryGovernance: Tenant-level policies and security configuration (proposed).
+    general:
+      identityTitle: Tenant identity
+      tenantName: Tenant name
+      tenantNameHelper: Visible to all members of the organization.
+      tenantId: Tenant ID
+      tenantIdHelper: System generated; read-only.
+      orgTitle: Organization information
+      orgInfo: Organization description
+      orgInfoHelper: A short summary of what the organization does.
+      orgInfoPlaceholder: e.g. Owns engineering and delivery of the AI R&D management platform…
+    members:
+      membersTitle: Tenant members
+      membersDesc: Manage organization members and their tenant roles.
+      invite: Invite member
+      inviteTitle: Invite member
+      inviteDesc: Send a join invitation to a new member (demo flow; no real email is sent).
+      tableRole: Role
+      tableJoined: Joined
+      tableStatus: Status
+      statusActive: Active
+      statusInvited: Invited
+      removeTitle: Remove this member?
+      removeDesc: Once removed, the member loses access to all projects in this organization.
+      rolesTitle: Tenant roles
+      rolesDesc: Roles define each member's organization-level permission boundary.
+      roleDescOwner: Organization creator with full tenant permissions.
+      roleDescAdmin: Manages members, integrations, and tenant configuration.
+      roleDescMember: Participates in projects; no tenant administration rights.
+    roles:
+      owner: Owner
+      admin: Admin
+      member: Member
+    integrations:
+      title: External service integrations
+      desc: Connect external services; connection status applies to all projects in the tenant.
+      git:
+        desc: Tenant-level connection to the code hosting service.
+      webhook:
+        desc: Forward event notifications to an external receiver.
+      sso:
+        desc: Single sign-on / SAML directory integration.
+      disconnectTitle: Disconnect this integration?
+      disconnectDesc: Project features relying on it will stop working.
+      connect: Connect
+      disconnect: Disconnect
+  project:
+    landing:
+      title: Project Settings
+      desc: Identity, members, repositories, and execution configuration for the current project.
+      personaHint: Switch the demo role to see how permissions affect visibility and editability.
+      categoriesTitle: Setting categories
+      categoryGeneral: Project name, description, and identity.
+      categoryMembers: Project members, roles, and access.
+      categoryRepositories: Associated repositories and the primary repository.
+      categoryDevelopment: Development environment and project-specific integrations.
+      categoryAi: Project AI behavior and execution preferences.
+    general:
+      identityTitle: Project identity
+      projectName: Project name
+      projectNameHelper: Shown in project lists, navigation, and search.
+      projectDesc: Description
+      projectDescHelper: One sentence on the project goal and scope.
+      projectDescPlaceholder: e.g. Downstream delivery engineering for the AI R&D management platform…
+      metaTitle: System information
+      projectId: Project ID
+      projectIdHelper: System generated; read-only.
+      createdAt: Created
+      tenant: Tenant
+      dangerTitle: Danger zone
+      dangerDesc: These actions affect the entire project and require explicit confirmation.
+      archive: Archive project
+      archiveTitle: Archive this project?
+      archiveDesc: Once archived, the project becomes read-only and members stop receiving task notifications.
+    members:
+      membersTitle: Project members
+      membersDesc: Manage project members and their project roles.
+      add: Add member
+      addTitle: Add member
+      addDesc: Join a tenant member into this project (demo flow).
+      tableRole: Project role
+      rolesTitle: Project roles
+      rolesDesc: Project roles are independent of tenant roles and govern in-project permissions.
+      roleDescLead: Manages project settings, members, and execution configuration.
+      roleDescDeveloper: Executes tasks; can read and write project content.
+      roleDescViewer: Read-only access to project content.
+      removeTitle: Remove this member?
+      removeDesc: Once removed, the member loses access to this project.
+    roles:
+      lead: Lead
+      developer: Developer
+      viewer: Viewer
+    repositories:
+      title: Associated repositories
+      desc: Repositories linked to this project; the primary repository drives the default execution environment.
+      primaryBadge: Primary
+      setPrimary: Set as primary
+      setPrimaryTitle: Set as primary repository?
+      setPrimaryDesc: The default execution environment and code discovery will switch to this repository.
+      path: Repository path
+      manageTitle: Repository management
+      manageDesc: Creating, importing, and credential management live in Repository Management; this page does not recreate that interface.
+      manageLink: Go to Repository Management
+    development:
+      title: Development environment
+      desc: Environment templates and variables the project execution depends on.
+      template: Environment template
+      templateHelper: Determines the executor baseline image and toolchain.
+      templateBasic: Basic (Node + Python)
+      templateFull: Full (with container runtime)
+      envVars: Environment variables
+      envVarsHelper: Sensitive values are masked; changes follow the execution-environment request flow.
+      integrationsTitle: Project integrations
+      ciWebhook: CI event push
+      ciWebhookHelper: Sync project CI events into execution records (proposed).
+      deployKey: Deploy key
+      deployKeyHelper: Issued by Repository Management; shown read-only as a fingerprint.
+      proposedBanner: Some development capabilities are in proposed status; the confirmed product scope prevails.
+    ai:
+      executionTitle: Project AI behavior
+      executionDesc: Project execution preferences; human-confirmation constraints always override project configuration.
+      execMode: Execution mode
+      execModeHelper: Plan-first = AI produces a plan for approval; Direct = low-risk tasks proceed automatically.
+      modePlanFirst: Plan-first
+      modeDirect: Direct execution
+      notifyComplete: Notify on task completion
+      notifyCompleteHelper: Notify the project lead when AI tasks finish.
+      contextRepo: Repository context injection
+      contextRepoHelper: Feed the primary repository structure to AI as context during execution.
+      policiesTitle: Project-specific AI policies
+      policiesBanner: Project-specific AI policies are a proposed capability. Global AI policies, when supported, always live at the tenant governance level.
+  states:
+    title: Interaction States
+    desc: Itemized demos of the framework's 12 interaction designs (§6).
+    navigation:
+      title: 1 · Navigate between categories
+      desc: The active sidebar item is highlighted; click entries to switch categories.
+    editing:
+      title: 2 · Edit settings
+      desc: Editing any field reveals the save bar.
+    saving:
+      title: 3 · Save changes
+      desc: While the save request is in flight, buttons are locked.
+    cancel:
+      title: 4 · Cancel changes
+      desc: Discard unsaved edits and restore the last saved values.
+    validation:
+      title: 5 · Validation errors
+      desc: Invalid input reports in place and blocks submission.
+    unsaved:
+      title: 6 · Unsaved changes warning
+      desc: Leaving with unsaved edits opens a three-way confirmation.
+    destructive:
+      title: 7 · Confirmation for destructive actions
+      desc: Sensitive actions open a danger-styled confirmation.
+    readonly:
+      title: 8 · Read-only settings
+      desc: Without edit permission, fields render as read-only surfaces.
+    denied:
+      title: 9 · Permission denied
+      desc: Unauthorized areas explain the missing permission per role.
+    loading:
+      title: 10 · Loading state
+      desc: Skeleton placeholders while data is loading.
+    empty:
+      title: 11 · Empty state
+      desc: Guiding action when there is no data.
+    success:
+      title: 12 · Successful save feedback
+      desc: Saving successfully gives immediate feedback.
+    demoEdit: Simulate edit
+    demoReset: Simulate reset
+    demoSaving: Simulate saving
+    demoError: Simulate failure
+    demoSuccess: Show success feedback
+    demoOpenDialog: Open dialog
+  components:
+    title: Settings Component Library
+    desc: The framework's 14 reusable components (§7); all composed from the ui foundation.
+    specimens:
+      pageLayout: Unified settings page template — header + sidebar + main.
+      sidebar: Categorized navigation; the caller filters entries by permission.
+      navigationItem: Navigation item — active / proposed / disabled states.
+      sectionHeader: Section title + description + actions slot.
+      formSection: Section container = SectionHeader + form rows.
+      formRow: Two-column form row — label column + control column.
+      fieldLabel: Field label; required / read-only flags.
+      helperText: Field helper text.
+      saveBar: Sticky save bar — dirty / saving / saved / error.
+      unsavedChangesDialog: Three-way unsaved-changes dialog.
+      permissionNotice: Read-only / access-denied notice banner.
+      readOnlyField: Read-only field display.
+      validationMessage: Validation error message.
+      confirmationDialog: Danger confirmation for destructive actions.
