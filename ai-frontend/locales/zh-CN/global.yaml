@@ -24,6 +24,7 @@ global:
       navigateModule: 导航到模块
       createProject: 创建项目
       openPersonalWorkspace: 打开个人工作区
+      openPersonalHome: 打开个人主页
       openInbox: 打开收件箱
     category:
       project: 项目

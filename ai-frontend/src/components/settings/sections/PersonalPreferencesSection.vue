@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onScopeDispose } from "vue";
 import { useI18n } from "vue-i18n";
 
 import SettingsFormRow from "../SettingsFormRow.vue";
@@ -9,23 +9,71 @@ import Radio from "@/components/ui/radio/Radio.vue";
 import Select from "@/components/ui/select/Select.vue";
 import { SUPPORTED_LOCALES, setLocale } from "@/lib/i18n";
 import type { SupportedLocale } from "@/lib/i18n";
+import { applyTheme, currentTheme } from "@/lib/theme";
 
 /**
- * 个人偏好节内容（共享）：主题三态（真实切换 data-theme 演示）+
- * 语言（真实 setLocale）+ 时区 + 键盘快捷键（只读表，§6.8）。
+ * 个人偏好节内容（共享）：主题三态 + 语言（真实 setLocale）+
+ * 时区 + 键盘快捷键（只读表，§6.8）。
  * 设计目录 /design/settings/personal/preferences 与应用页
  * /settings/personal/preferences 共用同一份表单体（§4A Preferences）。
+ *
+ * 主题语义由 applyToApp 决定：
+ * - true（应用页）：写 html data-theme + 持久化 aipm.theme
+ *   （经 lib/theme.ts，与 UserMenu 外观面板同链路）；跟随系统实时监听
+ *   prefers-color-scheme。持久化契约沿用 index.html 防闪烁脚本
+ *   （键 aipm.theme，取值仅 dark/light——system 只存储解析结果）。
+ * - false（默认，设计目录演示）：仅作用于本区块 data-theme，
+ *   不影响外层壳。
  */
+const props = withDefaults(
+  defineProps<{
+    /** true = 真实切换应用主题（应用页）；false = 本区块演示（设计目录） */
+    applyToApp?: boolean;
+  }>(),
+  { applyToApp: false }
+);
+
 const { t, locale } = useI18n();
 
-/** theme: dark 为默认；system 跟随系统（演示实时作用于本区块根元素） */
-const theme = ref<"dark" | "light" | "system">("dark");
+/** theme: 初始值取当前持久化主题；dark 为默认 */
+const theme = ref<"dark" | "light" | "system">(currentTheme());
 
 const themeOptions = [
   { value: "dark", labelKey: "settings.personal.preferences.themeDark" },
   { value: "light", labelKey: "settings.personal.preferences.themeLight" },
   { value: "system", labelKey: "settings.personal.preferences.themeSystem" }
 ] as const;
+
+/** 系统外观（跟随系统用）；happy-dom 无 matchMedia 时回退深色 */
+const systemMedia =
+  typeof window !== "undefined" && window.matchMedia
+    ? window.matchMedia("(prefers-color-scheme: dark)")
+    : undefined;
+
+function applyResolvedTheme(next: "dark" | "light" | "system") {
+  if (next === "system") {
+    applyTheme(systemMedia?.matches === false ? "light" : "dark");
+  } else {
+    applyTheme(next);
+  }
+}
+
+function onThemeChange(next: "dark" | "light" | "system") {
+  theme.value = next;
+  if (!props.applyToApp) return;
+  applyResolvedTheme(next);
+}
+
+/** 跟随系统：选中 system 期间实时跟随系统外观切换（帮助文案承诺的行为） */
+function onSystemPreferenceChange(event: MediaQueryListEvent) {
+  if (props.applyToApp && theme.value === "system") {
+    applyTheme(event.matches ? "dark" : "light");
+  }
+}
+systemMedia?.addEventListener?.("change", onSystemPreferenceChange);
+onScopeDispose(() => {
+  systemMedia?.removeEventListener?.("change", onSystemPreferenceChange);
+});
 
 const languageOptions = SUPPORTED_LOCALES.map(value => ({
   value,
@@ -71,7 +119,7 @@ function onLanguageChange(value: string) {
 <template>
   <div
     class="preferences-theme"
-    :data-theme="theme === 'light' ? 'light' : undefined"
+    :data-theme="!applyToApp && theme === 'light' ? 'light' : undefined"
   >
     <SettingsFormSection
       :title="t('settings.personal.preferences.appearanceTitle')"
@@ -88,10 +136,11 @@ function onLanguageChange(value: string) {
           <Radio
             v-for="option in themeOptions"
             :key="option.value"
-            v-model="theme"
+            :model-value="theme"
             :value="option.value"
             :label="t(option.labelKey)"
             name="settings-theme"
+            @update:model-value="onThemeChange"
           />
         </div>
       </SettingsFormRow>

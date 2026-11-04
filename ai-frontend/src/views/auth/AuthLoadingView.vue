@@ -58,7 +58,7 @@ function schedule() {
   if (stage.value >= steps.value.length - 1) {
     timers.push(
       setTimeout(() => {
-        void router.push("/dashboard");
+        void router.push("/personal");
       }, STAGE_INTERVAL)
     );
     return;

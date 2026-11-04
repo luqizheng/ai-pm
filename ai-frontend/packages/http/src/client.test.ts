@@ -1,6 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import axios, { type AxiosAdapter, type InternalAxiosRequestConfig } from "axios";
+import axios, {
+  type AxiosAdapter,
+  type InternalAxiosRequestConfig
+} from "axios";
 import { createHttp, HttpError } from "./index";
 
 interface Recorded {
@@ -11,9 +14,10 @@ interface Recorded {
   params?: unknown;
 }
 
-function adapterFactory(
-  responses: Array<{ status: number; data: unknown }>
-): { adapter: AxiosAdapter; calls: Recorded[] } {
+function adapterFactory(responses: Array<{ status: number; data: unknown }>): {
+  adapter: AxiosAdapter;
+  calls: Recorded[];
+} {
   const calls: Recorded[] = [];
   let index = 0;
   const adapter: AxiosAdapter = async config => {
@@ -102,13 +106,23 @@ describe("createHttp", () => {
     const { client } = makeClient([
       { status: 400, data: { code: "IAM_USER_CREATE", message: "user exists" } }
     ]);
-    await expect(client.post("/v1/iam/users", {})).rejects.toBeInstanceOf(HttpError);
+    await expect(client.post("/v1/iam/users", {})).rejects.toBeInstanceOf(
+      HttpError
+    );
   });
 
   it("错误文案可由消费方翻译", async () => {
     const { client } = makeClient(
-      [{ status: 400, data: { code: "IAM_USER_CREATE", message: "user exists" } }],
-      { translateError: code => (code === "IAM_USER_CREATE" ? "用户已存在" : undefined) }
+      [
+        {
+          status: 400,
+          data: { code: "IAM_USER_CREATE", message: "user exists" }
+        }
+      ],
+      {
+        translateError: code =>
+          code === "IAM_USER_CREATE" ? "用户已存在" : undefined
+      }
     );
     await expect(client.post("/v1/iam/users", {})).rejects.toMatchObject({
       code: "IAM_USER_CREATE",
@@ -172,7 +186,9 @@ describe("createHttp", () => {
     await Promise.all([first, second]);
 
     expect(refreshToken).toHaveBeenCalledTimes(1);
-    expect(calls.filter(call => call.authorization === "Bearer shared-token").length).toBe(2);
+    expect(
+      calls.filter(call => call.authorization === "Bearer shared-token").length
+    ).toBe(2);
   });
 
   it("skipAuth 的请求不参与刷新重放", async () => {
@@ -206,7 +222,11 @@ describe("createHttp", () => {
       calls.push("refresh");
       // 用同一个 client 发刷新请求，它会 401
       try {
-        await clientRef.post("/v1/iam/auth/refresh", { refresh_token: "r" }, { skipAuth: true });
+        await clientRef.post(
+          "/v1/iam/auth/refresh",
+          { refresh_token: "r" },
+          { skipAuth: true }
+        );
       } catch {
         return undefined;
       }
@@ -226,7 +246,7 @@ describe("createHttp", () => {
 
     await expect(
       Promise.race([
-        clientRef.get("/v1/iam/users").catch((e) => e),
+        clientRef.get("/v1/iam/users").catch(e => e),
         new Promise(resolve => setTimeout(() => resolve("TIMEOUT"), 2000))
       ])
     ).resolves.toBeInstanceOf(HttpError);

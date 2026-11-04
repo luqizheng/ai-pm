@@ -24,6 +24,7 @@ global:
       navigateModule: Navigate module
       createProject: Create project
       openPersonalWorkspace: Open Personal Workspace
+      openPersonalHome: Open My Home
       openInbox: Open Inbox
     category:
       project: Projects

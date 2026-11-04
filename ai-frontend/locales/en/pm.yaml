@@ -102,13 +102,13 @@ revisions:
   approved: Approved; the previous approved revision is now superseded
   failed: Operation failed
 importBatch:
-  title: 'Project cold start ({count} proposals)'
+  title: "Project cold start ({count} proposals)"
   approveAll: Approve all
   rejectAll: Reject all
   terminate: Terminate import
   terminateDone: Import terminated; the slot is released
   reason: Batch decision (cold-start import)
-  partial: '{count} items failed; retry them individually'
+  partial: "{count} items failed; retry them individually"
   done: Batch decision submitted
 
 repositories:
@@ -274,7 +274,7 @@ import:
   stageDraft: Drafting
   demoModel: Demo model
   truncatedHint: Material was truncated; the draft may be incomplete
-  droppedHint: '{count} items without evidence were dropped'
+  droppedHint: "{count} items without evidence were dropped"
   selectAll: Select all
   profile: Profile
   milestones: Milestones
@@ -286,7 +286,7 @@ import:
   evidence: Evidence
   confidenceLow: Low confidence
   submitProposals: Create proposals
-  proposed: '{count} proposals created; awaiting approval'
+  proposed: "{count} proposals created; awaiting approval"
   goApprovals: Go to approvals
   retry: Retry
   loadFailed: Failed to load
@@ -310,7 +310,7 @@ discovery:
   choiceResolved: Solved by other means
   choiceRejected: Does not match reality
   choiceUnsure: Cannot confirm yet
-  resolvedDefault: 'Confirmed by user: solved by other means'
+  resolvedDefault: "Confirmed by user: solved by other means"
   notePlaceholder: Additional note (optional)
   confirm: Confirm
   complete: Mark interview complete
@@ -368,6 +368,7 @@ commandCenter:
   init:
     notStarted: Not started
     inProgress: In progress
+    waitingForHuman: Waiting for you
     completed: Completed
     blocked: Blocked
     notApplicable: Not applicable
@@ -408,3 +409,140 @@ commandCenter:
     activity: No activity records yet
   archivedTitle: Project archived
   archivedHint: "An archived project is read-only: history stays visible, but no new business activity is accepted."
+
+personalHome:
+  greeting:
+    morning: "Good morning, {name}"
+    afternoon: "Good afternoon, {name}"
+    evening: "Good evening, {name}"
+  subtitle:
+    default: "Here's what needs your attention today."
+    firstLogin: "Your personal home is ready - create a project to get started."
+  overview:
+    title: My overview
+    needsAttention: Needs Attention
+    needsAttentionHint: Decisions, approvals and reviews waiting on you
+    assignedToMe: Assigned to Me
+    assignedToMeHint: Open tasks assigned to you
+    activeProjects: Active Projects
+    activeProjectsHint: Projects you are a member of
+    unavailable: Unavailable
+  inbox:
+    title: My Inbox
+    humanActions: Human Actions
+    humanActionsNote: Needs a human decision or intervention
+    humanActionsEmpty: No human actions right now
+    assignedTasks: Assigned Tasks
+    assignedTasksNote: Regular tasks assigned to you
+    assignedTasksEmpty: No tasks assigned to you
+    kinds:
+      decision: Decision
+      approval: Approval
+      review: Review
+      attention: Attention
+    empty:
+      title: All caught up
+      description: Nothing needs your attention right now. New human actions will show up here.
+  due:
+    overdue: "{n}d overdue"
+    dueToday: Due today
+    dueOn: "Due {date}"
+    noDueDate: No due date
+  projects:
+    title: My Projects
+    archived: Archived Projects
+    empty: No projects yet
+    pending: pending
+    attentionTitle: Has overdue human actions
+  activity:
+    title: Recent Activity
+    empty: No activity records yet
+    actors:
+      human: Human
+      ai: AI Agent
+      system: System
+    events:
+      confirmed: Confirmed
+      proposal: Proposal
+      aiCompleted: AI Completed
+      submitted: Submitted
+    actions:
+      requirement_propose_revision: "Proposed a requirement revision"
+      requirement_approve_revision: "Confirmed a requirement revision"
+      approval_decide: "Decided an approval"
+      command_execute: "Executed a command"
+      task_create: "Created a task"
+      task_reorder: "Reordered tasks"
+      task_update: "Updated a task"
+      task_failed: "Task execution failed"
+      task_dependency_add: "Added a task dependency"
+      task_dependency_remove: "Removed a task dependency"
+      task_retry_created: "Created a retry task"
+      task_update_contract: "Updated a task contract"
+      human_intervention_freeze: "Froze human intervention"
+      project_archived: "Archived the project"
+      project_member_granted: "Granted project membership"
+      project_member_revoked: "Revoked project membership"
+      project_member_owner_transferred: "Transferred project ownership"
+      finding_decided: "Confirmed a finding"
+      review_queued: "Queued for human review"
+      review_completed: "Review completed"
+      review_changes_requested: "Changes requested"
+      review_failed: "Review failed"
+      review_degraded: "Review degraded"
+      review_approval_decided: "Decided a review approval"
+      delivery_submitted: "Submitted a delivery"
+      delivery_rejected: "Delivery rejected"
+      repository_created: "Connected a repository"
+      repository_updated: "Updated repository details"
+      repository_verified: "Repository verified"
+      repository_archived: "Archived a repository"
+      repository_deleted: "Deleted a repository"
+      repo_import_started: "Started repository analysis"
+      repo_import_draft_succeeded: "Repository analysis draft ready"
+      repo_import_draft_failed: "Repository analysis draft failed"
+      repo_import_attempt_succeeded: "Repository analysis batch done"
+      repo_import_attempt_failed: "Repository analysis batch failed"
+      repo_import_failed: "Repository analysis failed"
+      repo_import_terminated: "Repository analysis terminated"
+      device_project_bound: "Bound a dev environment to the project"
+      device_project_unbound: "Unbound a dev environment"
+      ssh_key_generated: "Generated an SSH key"
+      ssh_key_revoked: "Revoked an SSH key"
+      ssh_key_rotated: "Rotated an SSH key"
+      ssh_key_deleted: "Deleted an SSH key"
+      run_orphan_suspected: "Suspected an orphaned run"
+      project_initialization_acquired: "Acquired the project initialization lock"
+      user_create: "Created a user"
+      role_assign: "Assigned a role"
+  action:
+    search: Search
+    createProject: Create Project
+    viewAll: View All
+  state:
+    retry: Retry
+    firstLogin:
+      title: You don't have any projects yet
+      description: Create your first project to start organizing your development work.
+    forbidden:
+      title: You don't have access to any projects
+      description: Your account isn't a member of any project yet. Ask a project owner to invite you, or create a project of your own.
+    error:
+      page:
+        title: Couldn't load your personal home
+        description: The service didn't respond. Please try again.
+      inbox:
+        title: Couldn't load your inbox
+        description: The inbox service didn't respond. Your projects and activity are unaffected.
+      projects:
+        title: Couldn't load projects
+        description: We couldn't reach the project service. Your inbox is still up to date.
+      activity:
+        title: Couldn't load recent activity
+        description: We couldn't read the activity feed.
+  time:
+    unknown: Unknown
+    justNow: just now
+    minutesAgo: "{n}m ago"
+    hoursAgo: "{n}h ago"
+    daysAgo: "{n}d ago"

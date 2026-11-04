@@ -76,7 +76,7 @@ const searchCommands = computed<SearchCommand[]>(() => {
     },
     {
       id: "cmd-open-personal-workspace",
-      label: t("global.search.commands.openPersonalWorkspace"),
+      label: t("global.search.commands.openPersonalHome"),
       group: "action",
       icon: "user",
       target: "/personal"

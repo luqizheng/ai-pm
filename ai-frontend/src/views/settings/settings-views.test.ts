@@ -144,19 +144,38 @@ describe("个人域五节（共享节组件）", () => {
     expect(wrapper.findAll("tbody tr").length).toBe(rowsBefore - 1);
   });
 
-  it("偏好页：主题 radio 切换本区块 data-theme", async () => {
+  it("偏好页：主题 radio 真实切换应用主题（html data-theme + aipm.theme 持久化）", async () => {
+    // 与 index.html 防闪烁脚本同键；先固定深色起点避免用例间污染
+    localStorage.setItem("aipm.theme", "dark");
+    document.documentElement.dataset.theme = "dark";
+
     const { wrapper } = await mountAt(
       SettingsPreferencesView,
       "/settings/personal/preferences"
     );
+    // 初始选中态反映当前持久化主题（此前硬编码 dark）
+    const darkInput = wrapper.find('input[type=radio][value="dark"]');
+    expect(darkInput.element.checked).toBe(true);
+
     const lightInput = wrapper.find('input[type=radio][value="light"]');
     expect(lightInput.exists()).toBe(true);
     await lightInput.setValue();
+    // 应用页（apply-to-app）：写 html data-theme + 持久化，与 UserMenu 外观同链路
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(localStorage.getItem("aipm.theme")).toBe("light");
+    // 应用模式下不再落本地演示作用域
     expect(wrapper.find(".preferences-theme[data-theme=light]").exists()).toBe(
-      true
+      false
     );
+
+    await wrapper.find('input[type=radio][value="dark"]').setValue();
+    expect(document.documentElement.dataset.theme).toBe("dark");
+
     // 快捷键表只读呈现
     expect(wrapper.find(".preferences-shortcuts").exists()).toBe(true);
+
+    localStorage.removeItem("aipm.theme");
+    document.documentElement.dataset.theme = "dark";
   });
 
   it("通知页：邮件通道禁用（Proposed），类别开关可切换", async () => {

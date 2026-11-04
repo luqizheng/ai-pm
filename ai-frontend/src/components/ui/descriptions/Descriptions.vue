@@ -15,13 +15,8 @@ const props = withDefaults(defineProps<Props>(), { columns: 2 });
 </script>
 
 <template>
-  <dl class="ui-descriptions">
-    <div
-      v-for="item in items"
-      :key="item.label"
-      class="ui-descriptions__item"
-      :style="{ gridColumn: `span ${Math.max(1, Math.min(props.columns, 2))}` }"
-    >
+  <dl class="ui-descriptions" :class="`ui-descriptions--cols-${props.columns}`">
+    <div v-for="item in items" :key="item.label" class="ui-descriptions__item">
       <dt class="ui-descriptions__label">{{ item.label }}</dt>
       <dd class="ui-descriptions__value">{{ item.value ?? "-" }}</dd>
     </div>
@@ -34,6 +29,15 @@ const props = withDefaults(defineProps<Props>(), { columns: 2 });
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4) var(--space-6);
   margin: 0;
+}
+
+/* columns 决定栅格列数；条目按列流排，不再整行占满 */
+.ui-descriptions--cols-1 {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ui-descriptions--cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .ui-descriptions__item {

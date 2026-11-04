@@ -17,15 +17,22 @@ interface Props {
   variant?: BadgeVariant;
   /** 尺寸档 —— Figma：sm 16 / md 20 / lg 24（lg 文字 13px） */
   size?: "sm" | "md" | "lg";
+  /** 描边变体（本地延伸）—— 透明底 + 同色描边。
+   *  用于在形状上区分「已成立的正式事实」（实心语义底）与
+   *  「AI 产出、尚待人工确认」（描边），与图标通道互为冗余。 */
+  outline?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   variant: "neutral",
-  size: "md"
+  size: "md",
+  outline: false
 });
 
 const classes = computed(() =>
-  cn("ui-badge", `ui-badge--${props.variant}`, `ui-badge--${props.size}`)
+  cn("ui-badge", `ui-badge--${props.variant}`, `ui-badge--${props.size}`, {
+    "ui-badge--outline": props.outline
+  })
 );
 </script>
 
@@ -101,5 +108,11 @@ const classes = computed(() =>
 
 .ui-badge--info {
   color: var(--info-strong);
+}
+
+/* 描边变体（本地延伸）：透明底 + 同色描边 */
+.ui-badge--outline {
+  background: transparent;
+  border-color: currentcolor;
 }
 </style>

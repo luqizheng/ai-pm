@@ -468,6 +468,69 @@ pm:
 
 ---
 
+## 13. 实施落地记录（2026-11-04）
+
+> §12 第 5 步已执行：页面已落地为真实前端页，登录后默认进入。命名裁决（§11 Q1/Q2）已由用户收编，导航项定名 My Home。
+
+### 13.1 落地文件
+
+| 文件 | 说明 |
+| --- | --- |
+| `ai-frontend/src/api/personal-home.ts` | 跨项目聚合适配层（读模型消费端，按区块拆分加载） |
+| `ai-frontend/src/views/personal/PersonalHomeView.vue` | 页面主体（Overview + Inbox/Projects + Activity） |
+| `ai-frontend/src/views/personal/components/` | `MetricTile` / `HumanActionItem` / `AssignedTaskItem` / `ProjectCard` / `ActivityEntry` / `SectionState` 六个页内私有组件 |
+| `ai-frontend/src/views/personal/useRelativeTime.ts` | 相对时间格式化 |
+| `ai-frontend/src/views/personal/PersonalHomeView.test.ts` | 6 条行为用例（分区呈现 / 区块失败隔离 / 403 / 首次登录 / 空待办） |
+| `ai-frontend/src/api/mock/personal.ts` | dev mock：`/v1/pm/me`、`/v1/pm/decisions`、`/v1/pm/projects/{id}/members` |
+| `ai-frontend/src/components/ui/badge/Badge.vue` | 新增本地延伸变体 `outline`（透明底 + 同色描边，承载「AI 产出待确认」） |
+| `ai-frontend/src/router/navigation.ts` + `index.ts` | 导航项改 `My Home`（Home 图标）+ `NavItem.component` 懒加载登记（保持导航树单源） |
+| `ai-frontend/src/views/auth/AuthLoadingView.vue`、`UnauthorizedView.vue` | 登录/403 落地改 `/personal` |
+| `ai-frontend/locales/*/pm.yaml` | `pm.personalHome.*` 全量文案 + 48 条审计动作中文映射 |
+| `ai-frontend/locales/*/shell.yaml`、`global.yaml` | `shell.app.side.item.personalHome`、`global.search.commands.openPersonalHome` |
+
+### 13.2 数据来源映射（区块 ← 端点）
+
+| 区块 | 数据源 | 口径 |
+| --- | --- | --- |
+| 当前主体 | `GET /v1/pm/me` | `principal_id` 即 `core.principal.id`，与 `task.assignee_id` 同一命名空间 |
+| 我的项目 | `GET /v1/pm/projects` + `GET /v1/pm/projects/{id}/members` | 后端已按 `core.project_member` 过滤；角色取成员行 `role`（0030 白名单 owner/member/ai_pm/architect/developer/tester） |
+| Human Actions | `GET /v1/pm/decisions`（pending）+ 我的 `awaiting_decision/submitted/reviewing/blocked` 任务 | 只有真正需要人决策的条目 |
+| Assigned Tasks | `GET /v1/pm/tasks` 中 `assignee_id = 当前主体` 且非终态、非人工事项 | 与人工事项不重复计数 |
+| Recent Activity | `GET /v1/pm/audit-logs` + `GET /v1/pm/principals`（解析 actor kind/显示名） | 事件分类按 §5.2；未知动作降级 generic 不伪造 |
+
+三个区块**各自独立加载**：Inbox 失败不拖垮 Projects；失败时对应指标显示 `—` + `Unavailable`（失败 ≠ 空）。
+
+### 13.3 与设计稿的偏差（实现时确认）
+
+| # | 设计稿 | 实现 | 原因 |
+| --- | --- | --- | --- |
+| D-1 | 左导航带标签 AI Assistant 入口 | **未改壳**：AI 入口仍在顶栏 | 并行会话正在改 `shell/TopBar.vue`，避免同文件冲突 |
+| D-2 | 页标题区搜索图标钮 | 已实现（→ 派发 ⌘K 开全局搜索面板） | — |
+| D-3 | 顶栏项目位显示 `All projects` | **未改壳** | 同 D-1 |
+| E-1 | 截止日期 / 逾期轨 | 一律「无期限」 | `delivery.task` / `governance.approval_request` **当前无 due 列**（F-3 证实）；适配层已预留 `DueInfo`，后端补字段自动生效 |
+| E-2 | 事实类=实心语义 chip | 退化为「语义色文字 + 图标」；AI 类=accent 描边 chip | token 层**无** success/info 语义填充面（仅 accent/danger 有 surface）；按「颜色只能来自 tokens.css」不得自造中间色 |
+| E-3 | Create Project 复用 S01-02 流程 | 暂落 `/projects` | S01-02 创建流程尚未实现（页面层占位）；就位后改指 |
+| E-4 | 右上下文栏关闭 | 保持壳默认（开） | 壳级默认行为，跨页影响，不在本页改 |
+| E-5 | 根路径 `/` 落到个人主页 | **未加** `/` 重定向 | 初始导航=`/` 的既有测试会与后续 push 竞态；登录落地由 AuthLoadingView 承担，直接访问 `/` 维持 404（既有行为） |
+
+### 13.4 门禁与验证结果
+
+| 项 | 结果 |
+| --- | --- |
+| `pnpm typecheck` / `pnpm lint` | 通过 |
+| `pnpm test:unit` | 107 文件 / 651 用例全绿（含本页 6 条） |
+| 三道门禁（tokens / i18n 硬编码 / i18n 命名空间） | 全部通过（中英 2399 key 对齐） |
+| 浏览器实测 | dev server（mock）`/personal` 渲染正确：三指标、Inbox 双分区、项目三卡 + 归档折叠、Activity 四类事件可辨 |
+
+### 13.5 后续
+
+1. 后端补**个人工作台读模型**（F-1）→ `personal-home.ts` 整体替换为一次 `GET /v1/pm/personal-home`。
+2. 后端补**截止/逾期字段**（F-3）→ 紧急度轨与排序档位自动生效。
+3. S01-02 创建流程落地 → Create Project 直连创建视图（E-3）。
+4. 壳级裁决：AI 入口归属、顶栏项目位、右栏默认态（D-1 / D-3 / E-4）随壳改动一并定。
+
+---
+
 ## 附录 A · 原型使用说明
 
 `assets/s01-05-personal-home-prototype.html` 为自包含文件，直接用浏览器打开即可：

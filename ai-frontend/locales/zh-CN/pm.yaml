@@ -366,6 +366,7 @@ commandCenter:
   init:
     notStarted: 未开始
     inProgress: 进行中
+    waitingForHuman: 等待你确认
     completed: 已完成
     blocked: 存在阻塞
     notApplicable: 不适用
@@ -406,3 +407,140 @@ commandCenter:
     activity: 暂无活动记录
   archivedTitle: 项目已归档
   archivedHint: 归档项目为只读状态，历史记录仍可查看，但不再接受新的业务活动。
+
+personalHome:
+  greeting:
+    morning: "早上好，{name}"
+    afternoon: "下午好，{name}"
+    evening: "晚上好，{name}"
+  subtitle:
+    default: 今天需要你关注的事项。
+    firstLogin: 你的个人主页已经就绪 —— 先建一个项目开始。
+  overview:
+    title: 我的概览
+    needsAttention: 需要关注
+    needsAttentionHint: 待决策、待审批、待验收
+    assignedToMe: 分配给我
+    assignedToMeHint: 分配给我的进行中任务
+    activeProjects: 参与的项目
+    activeProjectsHint: 我是成员的活跃项目
+    unavailable: 暂不可用
+  inbox:
+    title: 我的收件箱
+    humanActions: 人工介入
+    humanActionsNote: 需要人工决策或介入
+    humanActionsEmpty: 当前没有需要人工介入的事项
+    assignedTasks: 分配任务
+    assignedTasksNote: 分配给你的普通任务
+    assignedTasksEmpty: 当前没有分配给你的任务
+    kinds:
+      decision: 待决策
+      approval: 待审批
+      review: 待验收
+      attention: 需关注
+    empty:
+      title: 全部处理完了
+      description: 当前没有需要你处理的事项；有新的会出现在这里。
+  due:
+    overdue: "逾期 {n} 天"
+    dueToday: 今天到期
+    dueOn: "{date} 到期"
+    noDueDate: 无期限
+  projects:
+    title: 我的项目
+    archived: 已归档项目
+    empty: 还没有项目
+    pending: 项待办
+    attentionTitle: 存在逾期的人工事项
+  activity:
+    title: 最近活动
+    empty: 暂无活动记录
+    actors:
+      human: 人类
+      ai: AI Agent
+      system: 系统
+    events:
+      confirmed: 已确认
+      proposal: AI 提案
+      aiCompleted: AI 已完成
+      submitted: 系统已提交
+    actions:
+      requirement_propose_revision: "提交需求修订提案"
+      requirement_approve_revision: "确认需求修订"
+      approval_decide: "完成审批决策"
+      command_execute: "执行命令"
+      task_create: "创建任务"
+      task_reorder: "调整任务顺序"
+      task_update: "更新任务"
+      task_failed: "任务执行失败"
+      task_dependency_add: "新增任务依赖"
+      task_dependency_remove: "移除任务依赖"
+      task_retry_created: "创建重试任务"
+      task_update_contract: "更新任务契约"
+      human_intervention_freeze: "冻结人工介入"
+      project_archived: "归档项目"
+      project_member_granted: "授予项目成员"
+      project_member_revoked: "撤销项目成员"
+      project_member_owner_transferred: "转移项目负责人"
+      finding_decided: "确认发现项"
+      review_queued: "进入人工评审"
+      review_completed: "评审通过"
+      review_changes_requested: "评审要求修改"
+      review_failed: "评审失败"
+      review_degraded: "评审降级"
+      review_approval_decided: "完成评审审批"
+      delivery_submitted: "提交交付"
+      delivery_rejected: "交付被拒"
+      repository_created: "接入代码仓库"
+      repository_updated: "更新仓库信息"
+      repository_verified: "仓库校验通过"
+      repository_archived: "归档仓库"
+      repository_deleted: "删除仓库"
+      repo_import_started: "开始仓库分析"
+      repo_import_draft_succeeded: "仓库分析草案完成"
+      repo_import_draft_failed: "仓库分析草案失败"
+      repo_import_attempt_succeeded: "仓库分析批次完成"
+      repo_import_attempt_failed: "仓库分析批次失败"
+      repo_import_failed: "仓库分析失败"
+      repo_import_terminated: "仓库分析终止"
+      device_project_bound: "绑定开发环境到项目"
+      device_project_unbound: "解除项目开发环境绑定"
+      ssh_key_generated: "生成部署密钥"
+      ssh_key_revoked: "撤销部署密钥"
+      ssh_key_rotated: "轮换部署密钥"
+      ssh_key_deleted: "删除部署密钥"
+      run_orphan_suspected: "疑似孤儿执行"
+      project_initialization_acquired: "获取项目初始化锁"
+      user_create: "创建用户"
+      role_assign: "分配角色"
+  action:
+    search: 搜索
+    createProject: 新建项目
+    viewAll: 查看全部
+  state:
+    retry: 重试
+    firstLogin:
+      title: 你还没有任何项目
+      description: 新建第一个项目，开始组织你的研发工作。
+    forbidden:
+      title: 你还没有任何项目的访问权限
+      description: 当前账号还不是任何项目的成员。请让项目负责人邀请你，或自己新建一个项目。
+    error:
+      page:
+        title: 个人主页加载失败
+        description: 服务暂时没有响应，请稍后重试。
+      inbox:
+        title: 收件箱加载失败
+        description: 收件箱服务没有响应，项目与活动不受影响。
+      projects:
+        title: 项目加载失败
+        description: 无法连接项目服务，收件箱内容仍然可用。
+      activity:
+        title: 活动加载失败
+        description: 无法读取近期活动记录。
+  time:
+    unknown: 时间未知
+    justNow: 刚刚
+    minutesAgo: "{n} 分钟前"
+    hoursAgo: "{n} 小时前"
+    daysAgo: "{n} 天前"

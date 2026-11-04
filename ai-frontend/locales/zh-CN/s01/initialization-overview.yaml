@@ -1,0 +1,138 @@
+initialization-overview:
+  page:
+    title: 项目初始化
+    description: 初始化进行到哪一步、AI 正在做什么、哪些已成为正式事实、哪些还需要你确认。
+    breadcrumbProject: 项目
+    breadcrumbOverview: 初始化总览
+    reload: 重新加载
+    openConsole: 进入项目总控台
+    loading: 正在载入初始化状态…
+    noProjectTitle: 未选择项目
+    noProjectHint: 请先选择一个项目，再查看其初始化状态。
+    loadFailed: 初始化数据加载失败
+    loadFailedHint: 该区块的数据暂不可用，请稍后重试。失败不会被显示成「没有待办事项」。
+    retry: 重试
+  project:
+    code: 项目标识
+    lifecycle: 生命周期
+    customer: 所属客户
+    repositories: 关联仓库
+    repositoryCount: "共 {total} 个，其中 {verified} 个已验证"
+    members: 成员
+    goal: 项目目标
+    goalPresent: 已建立
+    goalMissing: 尚未建立
+    archivedTitle: 项目已归档
+    archivedHint: 归档项目只读。历史与确认记录仍可查看，写操作全部停用。
+  lifecycle:
+    planning: 规划中
+    initializing: 初始化中
+    archived: 已归档
+  stages:
+    title: 初始化进度
+    hint: 六个阶段彼此独立，可并行推进，也可以跳过不适用项。
+  status:
+    not_started: 未开始
+    in_progress: 进行中
+    waiting_for_human: 等待你确认
+    blocked: 存在阻塞
+    completed: 已完成
+    not_applicable: 不适用
+    undetermined: 尚无法判断
+  stage:
+    projectBasics:
+      title: 创建项目
+      hint: 项目身份已建立，创建表单由项目创建页负责。
+    repository:
+      title: 仓库接入与代码分析
+      hint: 尚未关联仓库。零仓库是合法状态，不阻塞其他阶段。
+      detail: "共 {total} 个仓库，其中 {verified} 个已验证"
+    cognition:
+      title: AI-PM 认知
+      hint: 尚未建立项目认知。分析结论需经人工确认才成为项目事实。
+    baseline:
+      title: 基线确认
+      hint: 尚未生成基线提案。基线必须由人类正式确认。
+      detailConflict: 存在需要人工裁决的冲突项。
+      detailAwaiting: 等待认知分析产出后生成提案。
+      detailPending: "有 {count} 项认知结果待人工确认。"
+    environment:
+      title: Codex / MCP 接入
+      hint: 开发环境尚未接入。设备就绪状态需设备自检后核验。
+    handover:
+      title: 初始化交接
+      hint: 初始化尚未收口，剩余事项将在项目总控台持续跟踪。
+    source: 来源
+    sourceEmpty: 暂无权威来源
+    derivedNote: 该阶段由已有事实合成，尚未有专属后端数据源。
+    dependsOn: "依赖：{stage}"
+    independent: 可独立推进
+    open: 进入阶段详情
+    noRoute: 暂无可下钻页面
+  current:
+    title: 当前动作
+    ownerHuman: 需要你处理
+    ownerAi: AI Agent 执行中
+    ownerSystem: 系统处理中
+    actionTitle:
+      human: "{stage}正在等待你确认"
+      ai: "AI 正在推进{stage}"
+      system: "系统正在处理{stage}"
+    needsUser: 需要你操作
+    noUserAction: 无需你操作，系统会自动推进
+    remaining: "另有 {count} 项同类事项"
+    open: 查看详情
+  handover:
+    ready: 可以进入项目总控台
+    partial: 可以进入，剩余事项将在总控台持续跟踪
+    blocked: 暂不建议交接
+    blockedHint: 存在阻塞事项，解除后才能完成交接。
+    undetermined: 项目接入概况
+    undeterminedHint: 完整就绪状态待项目类型配置补充后确定，此处不宣称初始化已完成。
+    open: 进入总控台
+  humanActions:
+    title: 待人工处理
+    empty: 当前没有需要你处理的事项。
+    open: 查看
+    kind:
+      finding_pending: 待确认发现
+      finding_revision_requested: 待补充信息
+      proposal_pending: 待审批提案
+      delivery_pending: 待验收交付
+      other: 其他事项
+    domain:
+      discovery: 项目认知
+      knowledge: 知识提案
+      delivery: 交付验收
+      repository: 代码仓库
+  aiContext:
+    title: AI 上下文
+    readOnly: 只读
+    empty: 当前没有 AI 执行记录。
+    sections:
+      running: AI 执行记录
+      recent: 最近完成的分析
+      proposals: 已形成的提案
+      issues: 当前发现的问题
+      next: 下一步计划
+    layerFact: 正式事实
+    layerProposal: 待确认
+    layerRunning: 执行中
+    activity:
+      analysis_succeeded: 分析完成
+      analysis_failed: 分析失败
+      repository_verified: 仓库已核验
+      repository_created: 仓库已接入
+      finding_decided: 发现已裁决
+      finding_revision_requested: 发现待补充信息
+      goal_committed: 项目目标已提交
+      run_started: 执行启动
+      run_finished: 执行结束
+      run_failed: 执行失败
+      run_terminated: 执行终止
+      delivery_submitted: 交付待验收
+      delivery_rejected: 交付被驳回
+      review_completed: 评审完成
+      review_changes_requested: 评审要求修改
+      member_changed: 成员变更
+      device_bound: 设备已绑定

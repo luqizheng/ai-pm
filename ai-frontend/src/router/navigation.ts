@@ -2,6 +2,7 @@ import {
   BookOpen,
   Folders,
   GitBranch,
+  Home,
   Inbox,
   LayoutDashboard,
   ListChecks,
@@ -9,7 +10,6 @@ import {
   Settings2,
   Sparkles,
   Terminal,
-  UserRound,
   UsersRound
 } from "lucide-vue-next";
 import type { Component } from "vue";
@@ -38,6 +38,14 @@ export interface NavItem {
   icon: Component;
   /** 右上角徽标数字（如收件箱未读数） */
   badge?: number;
+  /**
+   * 业务页组件（懒加载）。
+   *
+   * 缺省时路由落到占位页；已落地的业务页在此登记，保持「导航树 = 菜单与路由的单源」。
+   * 用懒加载而非静态 import：视图会 import @/components/shell 聚合导出，
+   * 而壳的 SideNav 又依赖本文件 —— 静态 import 会形成循环依赖。
+   */
+  component?: () => Promise<Component>;
   /** 二级子菜单（Figma 的 Repository 上下文子菜单） */
   children?: NavChild[];
   /** 是否需要展开才显示子菜单（无 chevron 的纯链接项为 false） */
@@ -76,8 +84,9 @@ export const navGroups: NavGroup[] = [
     items: [
       {
         path: "/personal",
-        labelKey: "shell.app.side.item.personalWorkspace",
-        icon: UserRound
+        labelKey: "shell.app.side.item.personalHome",
+        icon: Home,
+        component: () => import("@/views/personal/PersonalHomeView.vue")
       },
       {
         path: "/inbox",

@@ -43,7 +43,7 @@ function onSwitchAccount() {
 }
 
 function onBackToWorkspaces() {
-  void router.push("/dashboard");
+  void router.push("/personal");
 }
 </script>
 

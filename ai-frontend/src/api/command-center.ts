@@ -41,9 +41,19 @@ export interface ProjectSummary {
   last_activity_at?: string;
 }
 
+/**
+ * S01-01 · G-01 七态展示状态模型 V1.1（用户裁决）：与后端
+ * `crates/pm-application/src/command_center.rs` 的 `init_status` 常量同源，
+ * 两端必须同批修改。
+ *
+ * `waiting_for_human` = 系统已产生需要人类处理的事项（球在人手里）——
+ * 与 `in_progress`（系统在工作）、`blocked`（外部条件阻塞、当前无可执行的
+ * 人类确认动作）三者不得混为一谈。仅作展示层状态，不进入领域实体。
+ */
 export type InitItemStatus =
   | "not_started"
   | "in_progress"
+  | "waiting_for_human"
   | "completed"
   | "blocked"
   | "not_applicable"

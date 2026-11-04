@@ -11,7 +11,7 @@
 | S01-03 | [Repository Management UX 设计稿 V1.1](s01-03-repository-management-ux-v1-1.md) | 设计稿完成，待代码事实核验及整体冻结 |
 | S01-04 | [AI-PM Cognition UX 详细设计稿 V1.1](s01-04-ai-pm-cognition-ux-v1-1.md) | 用户裁决已收编，待设计冻结 |
 | S01-05 | [Personal Workspace UX 设计稿 V1.1](s01-05-personal-workspace-ux-v1-1.md) | 用户裁决已收编，待整体基线冻结；**命名已裁决=Personal Home**（Workspace 为旧称，全文修订待做） |
-| S01-05 · 高保真 | [Personal Home 高保真 UI 设计稿 V1.0](s01-05-personal-home-high-fidelity-ui-v1.md) | 设计稿完成，待用户评审；**命名裁决已定=Personal Home（2026-11-04）** |
+| S01-05 · 高保真 | [Personal Home 高保真 UI 设计稿 V1.0](s01-05-personal-home-high-fidelity-ui-v1.md) | **已实施（2026-11-04，见该稿 §13）**：页面落地 `ai-frontend/src/views/personal/`，登录默认落地 `/personal`；651 测试全绿 + 三门禁通过 |
 
 > **编号冲突（待裁决）**：`docs/ui/s01/` 下存在两个 S01-01 ——「项目初始化总览」（新增）与「项目基线确认」。
 > 建议统一为依赖顺序：S01-01 初始化总览 / S01-02 项目创建 / S01-03 Repository Management /

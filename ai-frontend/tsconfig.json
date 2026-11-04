@@ -17,22 +17,12 @@
     "sourceMap": true,
     "allowJs": false,
     "resolveJsonModule": true,
-    "lib": [
-      "ESNext",
-      "DOM"
-    ],
+    "lib": ["ESNext", "DOM"],
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@build/*": [
-        "./build/*"
-      ]
+      "@/*": ["./src/*"],
+      "@build/*": ["./build/*"]
     },
-    "types": [
-      "node",
-      "vite/client"
-    ]
+    "types": ["node", "vite/client"]
   },
   "include": [
     "build/*.ts",
@@ -53,10 +43,5 @@
     "types/shims-vue.d.ts",
     "vite.config.ts"
   ],
-  "exclude": [
-    "dist",
-    "**/*.js",
-    "node_modules",
-    "**/*.test.ts"
-  ]
+  "exclude": ["dist", "**/*.js", "node_modules", "**/*.test.ts"]
 }

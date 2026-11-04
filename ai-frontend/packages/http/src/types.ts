@@ -27,7 +27,10 @@ export class HttpError extends Error {
   readonly status?: number;
   readonly data?: unknown;
 
-  constructor(message: string, options: { code?: string; status?: number; data?: unknown } = {}) {
+  constructor(
+    message: string,
+    options: { code?: string; status?: number; data?: unknown } = {}
+  ) {
     super(message);
     this.name = "HttpError";
     this.code = options.code;
@@ -64,9 +67,29 @@ export interface HttpClient {
     params?: unknown,
     config?: RequestConfig
   ): Promise<T>;
-  get<T = unknown>(url: string, params?: unknown, config?: RequestConfig): Promise<T>;
-  post<T = unknown>(url: string, params?: unknown, config?: RequestConfig): Promise<T>;
-  put<T = unknown>(url: string, params?: unknown, config?: RequestConfig): Promise<T>;
-  patch<T = unknown>(url: string, params?: unknown, config?: RequestConfig): Promise<T>;
-  delete<T = unknown>(url: string, params?: unknown, config?: RequestConfig): Promise<T>;
+  get<T = unknown>(
+    url: string,
+    params?: unknown,
+    config?: RequestConfig
+  ): Promise<T>;
+  post<T = unknown>(
+    url: string,
+    params?: unknown,
+    config?: RequestConfig
+  ): Promise<T>;
+  put<T = unknown>(
+    url: string,
+    params?: unknown,
+    config?: RequestConfig
+  ): Promise<T>;
+  patch<T = unknown>(
+    url: string,
+    params?: unknown,
+    config?: RequestConfig
+  ): Promise<T>;
+  delete<T = unknown>(
+    url: string,
+    params?: unknown,
+    config?: RequestConfig
+  ): Promise<T>;
 }

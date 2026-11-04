@@ -17,6 +17,7 @@ import SettingsPreferencesView from "@/views/settings/SettingsPreferencesView.vu
 import SettingsNotificationsView from "@/views/settings/SettingsNotificationsView.vue";
 import SettingsAiView from "@/views/settings/SettingsAiView.vue";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
+import InitializationOverviewView from "@/views/project/initialization/InitializationOverviewView.vue";
 
 /**
  * 应用壳路由表 —— **由导航树派生**（src/router/navigation.ts 是单源）。
@@ -55,7 +56,8 @@ function navItemRoutes(item: NavItem): RouteRecordRaw[] {
 
   routes.push({
     path: item.path,
-    component: PlaceholderView,
+    // 导航项自带业务页组件时用它，否则落到占位页
+    component: item.component ?? PlaceholderView,
     meta: { title: item.labelKey }
   });
   return routes;
@@ -73,6 +75,15 @@ export function buildRoutes(): RouteRecordRaw[] {
 
   // 认证路由在兜底之前注册，避免被 404 捕获
   routes.push(...authRoutes);
+
+  // 项目初始化总览（S01-01）：项目创建完成后到正式交接前的**临时工作区**，
+  // 不占长期主导航位（设计稿 §2.1）——入口来自项目创建完成与总控台初始化区下钻。
+  // 项目作用域由路由参数 project_id 或项目列表解析（当前工程无 /project/:id 参数路由）。
+  routes.push({
+    path: "/project/initialization",
+    component: InitializationOverviewView,
+    meta: { title: "s01.initialization-overview.page.title" }
+  });
 
   // 通知中心（Global/Notification 族完整事件面；不在左导航树内，
   // 入口 = 顶栏通知下拉的「查看全部通知」）

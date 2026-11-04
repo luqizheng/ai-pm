@@ -1,0 +1,1477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>S01-05 · Personal Home — High-Fidelity UI (smark-pm)</title>
+<style>
+  html,body{margin:0;padding:0;background:light-dark(#f7f8fa,#0a0c11);}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><g id="pm-i-layers"><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></g><g id="pm-i-inbox"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/></g><g id="pm-i-folders"><path d="M3 8.268a2 2 0 0 0-1 1.738V19a2 2 0 0 0 2 2h11a2 2 0 0 0 1.732-1"/></g><g id="pm-i-sparkles"><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></g><g id="pm-i-search"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></g><g id="pm-i-bell"><path d="M10.268 21a2 2 0 0 0 3.464 0"/></g><g id="pm-i-sliders-horizontal"><path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/></g><g id="pm-i-chevron-down"><path d="m6 9 6 6 6-6"/><path d="m17 18-6-6 6-6"/><path d="M7 6v12"/></g><g id="pm-i-chevron-right"><path d="m9 18 6-6-6-6"/><path d="m18 15-6-6-6 6"/><path d="m7 6 5 5 5-5"/><path d="m7 13 5 5 5-5"/></g><g id="pm-i-arrow-right"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></g><g id="pm-i-plus"><path d="M5 12h14"/><path d="M12 5v14"/></g><g id="pm-i-circle-check"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></g><g id="pm-i-triangle-alert"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></g><g id="pm-i-clock"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></g><g id="pm-i-user"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></g><g id="pm-i-users"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/></g><g id="pm-i-bot"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></g><g id="pm-i-send"><path d="m21.854 2.147-10.94 10.939"/></g><g id="pm-i-package"><path d="M12 22V12"/><polyline points="3.29 7 12 12 20.71 7"/><path d="m7.5 4.27 9 5.15"/></g><g id="pm-i-refresh-cw"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></g><g id="pm-i-calendar"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></g><g id="pm-i-shield"></g><g id="pm-i-panel-left-close"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/></g><g id="pm-i-file-text"><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></g><g id="pm-i-activity"></g><g id="pm-i-paperclip"></g><g id="pm-i-arrow-up"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></g><g id="pm-i-circle-help"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></g><g id="pm-i-filter"><path d="M22 3H2l8 9.46V19l4 2v-8.54z"/></g></defs></svg>
+<div id="pm-personal-home">
+<style>
+/* =============================================================================
+ * S01-05 · Personal Home — 高保真界面原型
+ * 颜色/尺寸全部取自 smark-pm AI R&D Workspace Design System V1.0
+ *   （ai-frontend/src/styles/tokens.css 的 --ws-* 逐值搬运，仅重命名为 --pm-*）
+ * 主题：light-dark() 跟随宿主外观；片段内可手动切换 light / dark。
+ * ========================================================================== */
+#pm-personal-home{
+  color-scheme: light dark;
+  --pm-canvas:      light-dark(#f7f8fa, #111318);
+  --pm-sidebar:     light-dark(#eef0f5, #171a21);
+  --pm-surface:     light-dark(#ffffff, #1d212a);
+  --pm-elevated:    light-dark(#e8ebf2, #252a35);
+  --pm-border:      light-dark(#c7cdd9, #353b48);
+  --pm-text:        light-dark(#202532, #e9ecf3);
+  --pm-text-2:      light-dark(#586274, #99a2b2);
+  --pm-text-3:      light-dark(#a0a8b8, #697384);
+  --pm-accent:      light-dark(#6257ce, #8b83f6);
+  --pm-accent-hov:  light-dark(#7a72e2, #9b94ff);
+  --pm-accent-surf: light-dark(#eeebff, #242238);
+  --pm-info:        light-dark(#3b82f6, #6ea8fe);
+  --pm-info-text:   light-dark(#1d4ed8, #6ea8fe);
+  --pm-success:     light-dark(#22a06b, #34c08b);
+  --pm-success-text:light-dark(#15803d, #34c08b);
+  --pm-warning:     light-dark(#b45309, #e0b15e);
+  --pm-warning-text:light-dark(#92400e, #e0b15e);
+  --pm-danger:      light-dark(#e16b73, #f07e88);
+  --pm-danger-text: light-dark(#a43445, #f07e88);
+  --pm-danger-surf: light-dark(#fbecee, #2c2028);
+  --pm-danger-title:light-dark(#a43445, #e69a9f);
+  --pm-veil:        light-dark(rgba(23,24,28,.04), rgba(233,236,243,.06));
+  --pm-veil-2:      light-dark(rgba(23,24,28,.07), rgba(233,236,243,.1));
+  --pm-mark-surf:   #242238;
+  --pm-mark-fg:     #8b83f6;
+  --pm-strip:       light-dark(#eef0f5, #171a21);
+
+  --pm-font: "Inter","MiSans","PingFang SC","HarmonyOS Sans SC","Noto Sans SC","Microsoft YaHei UI","Segoe UI",system-ui,sans-serif;
+  --pm-mono: "IBM Plex Mono","JetBrains Mono","SF Mono","Cascadia Code","Consolas","Noto Sans Mono CJK SC",monospace;
+  --pm-r-xs:4px; --pm-r-sm:8px; --pm-r-md:8px; --pm-r-lg:12px; --pm-r-full:999px;
+  --pm-s1:4px; --pm-s2:8px; --pm-s3:12px; --pm-s4:16px; --pm-s5:20px; --pm-s6:24px; --pm-s8:32px; --pm-s10:40px; --pm-s12:48px;
+  --pm-nav-w:232px; --pm-top-h:52px; --pm-row-h:36px; --pm-ctrl-h:36px; --pm-ctrl-sm:28px;
+  --pm-fs-page:21px; --pm-fs-sec:15px; --pm-fs-body:13px; --pm-fs-cap:12px; --pm-fs-micro:11px;
+}
+#pm-personal-home *,#pm-personal-home *::before,#pm-personal-home *::after{box-sizing:border-box}
+#pm-personal-home{font-family:var(--pm-font);font-size:var(--pm-fs-body);color:var(--pm-text);
+  background:transparent;-webkit-font-smoothing:antialiased}
+/* 重置用 :where() 归零特异性，避免压过组件自身的 padding / background */
+:where(#pm-personal-home) :where(button),:where(#pm-personal-home) :where(a){
+  font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-decoration:none}
+#pm-personal-home .pm-ic{width:16px;height:16px;flex:none;stroke-width:1.7}
+#pm-personal-home .pm-ic-14{width:14px;height:14px}
+#pm-personal-home .pm-ic-12{width:12px;height:12px}
+#pm-personal-home .pm-ic-18{width:18px;height:18px}
+#pm-personal-home .pm-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* ------------------------- 状态切换条（产品之外） ------------------------- */
+.pm-strip{display:flex;align-items:center;justify-content:space-between;gap:var(--pm-s4);
+  flex-wrap:wrap;max-width:1440px;margin:0 auto var(--pm-s3)}
+.pm-strip__left{display:flex;align-items:baseline;gap:var(--pm-s2);flex-wrap:wrap}
+.pm-strip__tag{font-family:var(--pm-mono);font-size:var(--pm-fs-micro);letter-spacing:.06em;
+  color:var(--pm-accent);background:var(--pm-accent-surf);border-radius:var(--pm-r-xs);padding:3px 7px}
+.pm-strip__title{font-size:var(--pm-fs-sec);font-weight:600;letter-spacing:-.005em;margin:0}
+.pm-strip__meta{font-size:var(--pm-fs-cap);color:var(--pm-text-2)}
+.pm-strip__ctrls{display:flex;gap:var(--pm-s3);flex-wrap:wrap}
+.pm-seg{display:flex;gap:2px;padding:3px;background:var(--pm-strip);border:1px solid var(--pm-border);border-radius:var(--pm-r-md)}
+.pm-seg__btn{font-size:var(--pm-fs-cap);padding:5px 10px;border-radius:6px;color:var(--pm-text-2);white-space:nowrap}
+.pm-seg__btn:hover{background:var(--pm-veil);color:var(--pm-text)}
+.pm-seg__btn[aria-selected="true"]{background:var(--pm-accent-surf);color:var(--pm-text);font-weight:500}
+.pm-seg--theme .pm-seg__btn[aria-selected="true"]{background:var(--pm-elevated)}
+
+/* ------------------------------ 桌面应用窗 ------------------------------ */
+.pm-window{max-width:1440px;margin:0 auto;border:1px solid var(--pm-border);border-radius:var(--pm-r-lg);
+  overflow:hidden;background:var(--pm-canvas);color:var(--pm-text)}
+.pm-app{display:grid;grid-template-columns:var(--pm-nav-w) minmax(0,1fr);grid-template-rows:var(--pm-top-h) auto;
+  min-height:900px;background:var(--pm-canvas)}
+
+/* -------------------------------- 顶栏 -------------------------------- */
+.pm-topbar{grid-column:1/-1;grid-row:1;display:flex;align-items:center;justify-content:space-between;
+  gap:var(--pm-s4);padding:0 var(--pm-s3);background:var(--pm-sidebar);border-bottom:1px solid var(--pm-border)}
+.pm-topbar__left{display:flex;align-items:center;gap:var(--pm-s2);min-width:0}
+.pm-topbar__mark{width:26px;height:26px;border-radius:var(--pm-r-xs);background:var(--pm-mark-surf);color:var(--pm-mark-fg);
+  display:grid;place-items:center;flex:none}
+.pm-topbar__product{font-weight:600;letter-spacing:-.005em}
+.pm-topbar__div{width:1px;height:16px;background:var(--pm-border);flex:none}
+.pm-topbar__ctx{display:flex;align-items:center;gap:6px;font-size:var(--pm-fs-cap);color:var(--pm-text-2);white-space:nowrap}
+.pm-topbar__ctx .pm-ic{color:var(--pm-text-3)}
+.pm-topbar__slash{color:var(--pm-text-3);font-size:var(--pm-fs-cap)}
+.pm-topbar__ctx--all{color:var(--pm-text-3)}
+.pm-topbar__search{display:flex;align-items:center;gap:var(--pm-s2);width:360px;height:32px;padding:0 var(--pm-s2) 0 10px;
+  border:1px solid var(--pm-border);border-radius:var(--pm-r-sm);background:var(--pm-surface);color:var(--pm-text-2);
+  font-size:var(--pm-fs-cap);transition:border-color 150ms cubic-bezier(.4,0,.2,1)}
+.pm-topbar__search:hover{border-color:var(--pm-text-2)}
+.pm-topbar__search-text{flex:1;text-align:left}
+.pm-kbd{font-family:var(--pm-mono);font-size:var(--pm-fs-micro);color:var(--pm-text-2);background:var(--pm-elevated);
+  border:1px solid var(--pm-border);border-radius:var(--pm-r-xs);padding:1px 5px}
+.pm-topbar__right{display:flex;align-items:center;gap:var(--pm-s1)}
+.pm-iconbtn{width:var(--pm-ctrl-h);height:var(--pm-ctrl-h);display:grid;place-items:center;border-radius:var(--pm-r-sm);
+  color:var(--pm-text-2);position:relative;transition:background 150ms cubic-bezier(.4,0,.2,1),color 150ms}
+.pm-iconbtn:hover{background:var(--pm-veil);color:var(--pm-text)}
+.pm-iconbtn:focus-visible,#pm-personal-home button:focus-visible,#pm-personal-home a:focus-visible{
+  outline:2px solid var(--pm-accent);outline-offset:1px}
+.pm-iconbtn__dot{position:absolute;top:8px;right:8px;width:6px;height:6px;border-radius:var(--pm-r-full);
+  background:var(--pm-accent);box-shadow:0 0 0 2px var(--pm-sidebar)}
+.pm-usermenu{display:flex;align-items:center;gap:6px;padding:3px 6px 3px 3px;border-radius:var(--pm-r-full);color:var(--pm-text-2)}
+.pm-usermenu:hover{background:var(--pm-veil)}
+.pm-avatar{width:28px;height:28px;border-radius:var(--pm-r-full);background:var(--pm-elevated);color:var(--pm-text);
+  display:grid;place-items:center;font-size:var(--pm-fs-micro);font-weight:600;flex:none;letter-spacing:.02em}
+.pm-avatar--ai{background:var(--pm-accent-surf);color:var(--pm-accent)}
+.pm-avatar--sys{background:var(--pm-elevated);color:var(--pm-text-2)}
+.pm-usermenu__name{font-size:var(--pm-fs-cap)}
+
+/* ------------------------------- 左导航 ------------------------------- */
+.pm-nav{grid-column:1;grid-row:2;background:var(--pm-sidebar);border-right:1px solid var(--pm-border);
+  display:flex;flex-direction:column;padding:var(--pm-s3) 0}
+.pm-nav__control{display:flex;align-items:center;justify-content:space-between;height:28px;
+  padding:0 var(--pm-s3);margin-bottom:var(--pm-s2)}
+.pm-nav__control-label{font-size:var(--pm-fs-micro);font-weight:500;letter-spacing:.025em;color:var(--pm-text-2);text-transform:uppercase}
+.pm-nav__items{display:flex;flex-direction:column}
+.pm-navitem{position:relative;display:flex;align-items:center;gap:var(--pm-s2);height:var(--pm-row-h);
+  padding:0 var(--pm-s3);color:var(--pm-text-2);text-decoration:none;width:100%;text-align:left;
+  transition:background 150ms cubic-bezier(.4,0,.2,1),color 150ms}
+.pm-navitem:hover{background:var(--pm-veil);color:var(--pm-text)}
+.pm-navitem.is-active{background:var(--pm-accent-surf);color:var(--pm-text)}
+.pm-navitem__bar{position:absolute;top:50%;left:0;width:2px;height:var(--pm-s4);background:var(--pm-accent);
+  border-radius:1px;transform:translateY(-50%);opacity:0}
+.pm-navitem.is-active .pm-navitem__bar{opacity:1}
+.pm-navitem__label{flex:1;font-size:var(--pm-fs-body)}
+.pm-navitem__badge{min-width:18px;height:18px;padding:0 5px;border-radius:var(--pm-r-full);background:var(--pm-accent);
+  color:var(--pm-canvas);font-size:var(--pm-fs-micro);font-weight:600;display:grid;place-items:center;
+  font-variant-numeric:tabular-nums}
+.pm-navitem--ai{color:var(--pm-text)}
+.pm-navitem--ai .pm-ic{color:var(--pm-accent)}
+.pm-nav__divider{height:1px;background:var(--pm-border);margin:var(--pm-s3)}
+.pm-nav--denied .pm-navitem:not(.is-active){opacity:.4;pointer-events:none}
+.pm-nav__spacer{flex:1}
+.pm-nav__footer{border-top:1px solid var(--pm-border);margin-top:var(--pm-s3);padding:var(--pm-s3);
+  display:flex;align-items:center;gap:var(--pm-s2)}
+.pm-nav__footer-meta{flex:1;min-width:0}
+.pm-nav__footer-name{font-size:var(--pm-fs-cap);display:block;line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pm-nav__footer-role{font-size:var(--pm-fs-micro);color:var(--pm-text-2);display:block;line-height:14px}
+
+/* -------------------------------- 主区 -------------------------------- */
+.pm-main{grid-column:2;grid-row:2;display:flex;flex-direction:column;min-width:0;background:var(--pm-canvas)}
+.pm-main__scroll{padding:var(--pm-s5) var(--pm-s6) var(--pm-s6)}
+.pm-cmdbar{margin-top:auto;border-top:1px solid var(--pm-border);background:var(--pm-sidebar);
+  padding:var(--pm-s4) var(--pm-s6);display:flex;align-items:center;gap:var(--pm-s2)}
+.pm-cmdbar__spark{color:var(--pm-accent);display:flex}
+.pm-cmdbar__field{flex:1;font-size:var(--pm-fs-body);color:var(--pm-text-2);min-width:0}
+.pm-cmdbar__field::placeholder{color:var(--pm-text-3)}
+.pm-cmdbar__icon{width:var(--pm-ctrl-sm);height:var(--pm-ctrl-sm);display:grid;place-items:center;border-radius:var(--pm-r-xs);color:var(--pm-text-3)}
+.pm-cmdbar__icon:hover{background:var(--pm-veil);color:var(--pm-text-2)}
+.pm-cmdbar__send{width:var(--pm-ctrl-h);height:var(--pm-ctrl-h);display:grid;place-items:center;border-radius:var(--pm-r-sm);color:var(--pm-text-3)}
+
+/* ------------------------------ 页面标题区 ------------------------------ */
+.pm-phead{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--pm-s4);margin-bottom:var(--pm-s4)}
+.pm-phead__title{font-size:var(--pm-fs-page);font-weight:600;line-height:28px;letter-spacing:-.01em;margin:0}
+.pm-phead__sub{font-size:var(--pm-fs-body);color:var(--pm-text-2);margin:2px 0 0;line-height:19px}
+.pm-phead__actions{display:flex;align-items:center;gap:var(--pm-s2);flex:none}
+.pm-btn{display:inline-flex;align-items:center;gap:6px;height:var(--pm-ctrl-h);padding:0 var(--pm-s3);
+  border-radius:var(--pm-r-sm);font-size:var(--pm-fs-body);font-weight:500;white-space:nowrap;
+  transition:background 150ms cubic-bezier(.4,0,.2,1),border-color 150ms}
+.pm-btn--primary{background:var(--pm-accent);color:var(--pm-canvas)}
+.pm-btn--primary:hover{background:var(--pm-accent-hov)}
+.pm-btn--secondary{background:var(--pm-surface);border:1px solid var(--pm-border)}
+.pm-btn--secondary:hover{border-color:var(--pm-text-2)}
+.pm-btn[disabled]{opacity:.38;cursor:not-allowed}
+
+/* -------------------------------- 卡片 -------------------------------- */
+.pm-card{background:var(--pm-surface);border:1px solid var(--pm-border);border-radius:var(--pm-r-sm)}
+.pm-card__head{display:flex;align-items:center;justify-content:space-between;gap:var(--pm-s3);
+  padding:var(--pm-s3) var(--pm-s4);border-bottom:1px solid var(--pm-border)}
+.pm-card__title{font-size:var(--pm-fs-sec);font-weight:600;letter-spacing:-.005em;margin:0;
+  display:flex;align-items:center;gap:var(--pm-s2)}
+.pm-card__count{font-family:var(--pm-mono);font-size:var(--pm-fs-micro);color:var(--pm-text-2);
+  background:var(--pm-elevated);border-radius:var(--pm-r-full);padding:1px 6px}
+.pm-link{font-size:var(--pm-fs-cap);color:var(--pm-text-2);display:inline-flex;align-items:center;gap:4px}
+.pm-link:hover{color:var(--pm-text)}
+.pm-link .pm-ic{color:var(--pm-text-3)}
+
+/* ------------------------------- Overview ------------------------------- */
+.pm-overview{display:grid;grid-template-columns:repeat(3,1fr);margin-bottom:var(--pm-s4);
+  background:var(--pm-surface);border:1px solid var(--pm-border);border-radius:var(--pm-r-sm);overflow:hidden}
+.pm-metric{display:flex;align-items:flex-start;gap:var(--pm-s3);padding:var(--pm-s4);text-align:left;
+  border-left:1px solid var(--pm-border);transition:background 150ms cubic-bezier(.4,0,.2,1)}
+.pm-metric:first-child{border-left:0}
+.pm-metric:hover{background:var(--pm-veil)}
+.pm-metric__dot{width:10px;height:10px;border-radius:var(--pm-r-full);margin-top:7px;flex:none}
+.pm-metric__value{font-size:20px;line-height:28px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.pm-metric__value.is-na{color:var(--pm-text-3)}
+.pm-metric__label{font-size:var(--pm-fs-cap);color:var(--pm-text);font-weight:500;line-height:17px;display:block}
+.pm-metric__hint{font-size:var(--pm-fs-micro);color:var(--pm-text-2);line-height:16px;display:block}
+
+/* -------------------------------- 栅格 -------------------------------- */
+.pm-rows{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:var(--pm-s4);align-items:start}
+
+/* -------------------------------- Inbox -------------------------------- */
+.pm-inbox__section{padding:var(--pm-s3) 0 var(--pm-s1)}
+.pm-inbox__sechead{display:flex;align-items:center;gap:var(--pm-s2);padding:0 var(--pm-s4) var(--pm-s2)}
+.pm-inbox__sectitle{font-size:var(--pm-fs-micro);font-weight:500;letter-spacing:.025em;text-transform:uppercase;color:var(--pm-text-2)}
+.pm-inbox__secnote{font-size:var(--pm-fs-micro);color:var(--pm-text-2)}
+.pm-inbox__sep{height:1px;background:var(--pm-border);margin:var(--pm-s2) 0}
+.pm-hitem{display:grid;grid-template-columns:2px minmax(0,1fr) auto;gap:var(--pm-s3);align-items:center;
+  padding:var(--pm-s3) var(--pm-s4);border-top:1px solid var(--pm-border);width:100%;text-align:left;
+  transition:background 150ms cubic-bezier(.4,0,.2,1)}
+.pm-hitem:hover{background:var(--pm-veil)}
+.pm-hitem__rail{align-self:stretch;border-radius:1px;background:transparent}
+.pm-hitem__rail--danger{background:var(--pm-danger)}
+.pm-hitem__rail--warning{background:var(--pm-warning)}
+.pm-hitem__main{min-width:0}
+.pm-hitem__title{display:flex;align-items:center;gap:var(--pm-s2);min-width:0}
+.pm-hitem__text{font-size:var(--pm-fs-body);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pm-hitem__meta{display:flex;align-items:center;gap:6px;margin-top:3px;font-size:var(--pm-fs-cap);color:var(--pm-text-2);min-width:0;flex-wrap:wrap}
+.pm-hitem__sep{color:var(--pm-text-3)}
+.pm-hitem__obj{display:inline-flex;align-items:center;gap:4px;color:var(--pm-text-2);text-decoration:none;white-space:nowrap}
+.pm-hitem__obj:hover{color:var(--pm-text);text-decoration:underline;text-underline-offset:2px}
+.pm-hitem__due{display:flex;align-items:center;gap:5px;font-size:var(--pm-fs-cap);white-space:nowrap;color:var(--pm-text-2);
+  font-variant-numeric:tabular-nums}
+.pm-hitem__due--danger{color:var(--pm-danger-text)}
+.pm-hitem__due--warning{color:var(--pm-warning-text)}
+.pm-chip{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:var(--pm-r-xs);
+  background:var(--pm-elevated);color:var(--pm-text-2);font-size:var(--pm-fs-micro);font-weight:450;white-space:nowrap;flex:none}
+.pm-chip--outline{background:transparent;border:1px solid currentColor}
+.pm-chip--success{background:color-mix(in srgb,var(--pm-success) 16%,transparent);color:var(--pm-success-text)}
+.pm-chip--info{background:color-mix(in srgb,var(--pm-info) 16%,transparent);color:var(--pm-info-text)}
+.pm-chip--accent{background:var(--pm-accent-surf);color:var(--pm-accent)}
+
+/* Assigned Tasks —— 单行、低对比 */
+.pm-aitem{display:flex;align-items:center;gap:var(--pm-s3);padding:9px var(--pm-s4);border-top:1px solid var(--pm-border);
+  width:100%;text-align:left;transition:background 150ms cubic-bezier(.4,0,.2,1)}
+.pm-aitem:hover{background:var(--pm-veil)}
+.pm-aitem__prio{font-family:var(--pm-mono);font-size:10px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--pm-text-2);width:40px;flex:none}
+.pm-aitem__prio--high{color:var(--pm-warning-text)}
+.pm-aitem__body{flex:1;min-width:0}
+.pm-aitem__title{font-size:var(--pm-fs-body);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pm-aitem__meta{font-size:var(--pm-fs-cap);color:var(--pm-text-2);margin-top:1px;display:flex;gap:6px;align-items:center}
+.pm-aitem__right{display:flex;align-items:center;gap:var(--pm-s3);flex:none}
+
+/* ------------------------------- Projects ------------------------------- */
+.pm-proj{display:block;width:100%;text-align:left;padding:var(--pm-s3) var(--pm-s4);border-top:1px solid var(--pm-border);
+  transition:background 150ms cubic-bezier(.4,0,.2,1)}
+.pm-proj:hover{background:var(--pm-veil)}
+.pm-proj__top{display:flex;align-items:center;gap:var(--pm-s2);min-width:0}
+.pm-proj__name{font-size:var(--pm-fs-body);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pm-proj__role{font-size:var(--pm-fs-micro);color:var(--pm-text-2);border:1px solid var(--pm-border);border-radius:var(--pm-r-xs);
+  padding:0 5px;height:18px;display:inline-flex;align-items:center;flex:none}
+.pm-proj__status{margin-left:auto;flex:none}
+.pm-proj__desc{font-size:var(--pm-fs-cap);color:var(--pm-text-2);margin-top:4px;line-height:17px;display:block;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pm-proj__meta{display:flex;align-items:center;gap:var(--pm-s2);margin-top:var(--pm-s2);font-size:var(--pm-fs-micro);
+  color:var(--pm-text-2);flex-wrap:wrap}
+.pm-proj__meta b{font-weight:500;color:var(--pm-text-2);font-variant-numeric:tabular-nums}
+.pm-proj__attn{width:6px;height:6px;border-radius:var(--pm-r-full);background:var(--pm-warning);flex:none}
+.pm-proj__arrow{margin-left:auto;color:var(--pm-text-3);display:flex}
+.pm-folder-head{display:flex;align-items:center;gap:6px;width:100%;text-align:left;padding:9px var(--pm-s4);
+  border-top:1px solid var(--pm-border);color:var(--pm-text-2);font-size:var(--pm-fs-cap);
+  transition:background 150ms cubic-bezier(.4,0,.2,1)}
+.pm-folder-head:hover{background:var(--pm-veil)}
+.pm-folder-head__chev{display:flex;transition:transform 150ms cubic-bezier(.4,0,.2,1)}
+.pm-folder-head[aria-expanded="true"] .pm-folder-head__chev{transform:rotate(90deg)}
+.pm-folder-body[hidden]{display:none}
+
+/* ------------------------------ Activity ------------------------------ */
+.pm-activity{margin-top:var(--pm-s4)}
+.pm-act{display:grid;grid-template-columns:repeat(4,1fr)}
+.pm-act__item{padding:var(--pm-s3) var(--pm-s4);border-left:1px solid var(--pm-border);min-width:0}
+.pm-act__item:first-child{border-left:0}
+.pm-act__top{display:flex;align-items:center;gap:var(--pm-s2);min-width:0}
+.pm-act__actor{display:flex;align-items:center;gap:6px;min-width:0;flex:1}
+.pm-act__name{font-size:var(--pm-fs-cap);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pm-act__time{font-family:var(--pm-mono);font-size:var(--pm-fs-micro);color:var(--pm-text-2);flex:none}
+.pm-act__sum{font-size:var(--pm-fs-cap);color:var(--pm-text-2);margin:var(--pm-s2) 0 0;line-height:17px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pm-act__obj{display:inline-flex;align-items:center;gap:4px;margin-top:var(--pm-s2);font-size:var(--pm-fs-micro);
+  color:var(--pm-text-2);text-decoration:none}
+.pm-act__obj:hover{color:var(--pm-text);text-decoration:underline;text-underline-offset:2px}
+
+/* ------------------------- 空态 / 错误态 / 加载态 ------------------------- */
+.pm-state{display:none}
+.pm-state.is-active{display:block}
+.pm-state--full{background:var(--pm-canvas)}
+.pm-empty{background:var(--pm-surface);border:1px solid var(--pm-border);border-radius:var(--pm-r-sm)}
+.pm-empty--panel{display:flex;flex-direction:column;align-items:center;text-align:center;padding:var(--pm-s12) var(--pm-s6);
+  max-width:560px;margin:var(--pm-s10) auto 0}
+.pm-empty__icon{width:48px;height:48px;border-radius:var(--pm-r-full);background:var(--pm-elevated);color:var(--pm-text-2);
+  display:grid;place-items:center;margin-bottom:var(--pm-s4)}
+.pm-empty__icon .pm-ic{width:24px;height:24px}
+.pm-empty__title{font-size:16px;font-weight:600;margin:0;line-height:24px}
+.pm-empty__desc{font-size:var(--pm-fs-body);color:var(--pm-text-2);margin:var(--pm-s2) 0 var(--pm-s5);line-height:19px;max-width:420px}
+.pm-empty__actions{display:flex;gap:var(--pm-s2);flex-wrap:wrap;justify-content:center}
+.pm-empty--inline{align-items:flex-start;text-align:left;padding:var(--pm-s6);max-width:none;margin:0;border:0;background:transparent}
+.pm-empty--inline .pm-empty__icon{width:40px;height:40px;margin-bottom:var(--pm-s3)}
+.pm-empty--inline .pm-empty__desc{margin-bottom:0;max-width:none}
+.pm-err{display:flex;flex-direction:column;align-items:flex-start;padding:var(--pm-s6)}
+.pm-err__icon{width:40px;height:40px;border-radius:var(--pm-r-full);background:var(--pm-danger-surf);color:var(--pm-danger-title);
+  display:grid;place-items:center;margin-bottom:var(--pm-s3)}
+.pm-err__title{font-size:16px;font-weight:600;margin:0;line-height:24px}
+.pm-err__desc{font-size:var(--pm-fs-body);color:var(--pm-text-2);margin:var(--pm-s2) 0 var(--pm-s4);line-height:19px}
+.pm-err__note{font-size:var(--pm-fs-micro);color:var(--pm-text-2);margin:var(--pm-s3) 0 0}
+.pm-sk{background:var(--pm-elevated);border-radius:var(--pm-r-xs);height:12px;display:block;
+  background-image:linear-gradient(90deg,transparent 0%,var(--pm-veil) 50%,transparent 100%);
+  background-size:200% 100%;animation:pm-shimmer 1600ms linear infinite}
+.pm-sk--strong{background-color:var(--pm-border)}
+.pm-skel-metric{display:flex;gap:var(--pm-s3);padding:var(--pm-s4);border-left:1px solid var(--pm-border)}
+.pm-skel-metric:first-child{border-left:0}
+.pm-skel-row{display:grid;grid-template-columns:2px minmax(0,1fr) auto;gap:var(--pm-s3);align-items:center;
+  padding:var(--pm-s3) var(--pm-s4);border-top:1px solid var(--pm-border)}
+.pm-skel-row--task{grid-template-columns:minmax(0,1fr) auto}
+@keyframes pm-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){#pm-personal-home .pm-sk{animation:none}}
+
+/* ------------------------------- 自适应 ------------------------------- */
+@media (max-width:1120px){
+  .pm-rows{grid-template-columns:1fr}
+  .pm-act{grid-template-columns:repeat(2,1fr)}
+  .pm-act__item:nth-child(3),.pm-act__item:nth-child(4){border-top:1px solid var(--pm-border)}
+}
+@media (max-width:860px){
+  .pm-overview{grid-template-columns:1fr}
+  .pm-metric{border-left:0;border-top:1px solid var(--pm-border)}
+  .pm-metric:first-child{border-top:0}
+  .pm-topbar__search{width:auto;flex:1;max-width:360px}
+  .pm-act{grid-template-columns:1fr}
+  .pm-act__item{border-left:0;border-top:1px solid var(--pm-border)}
+  .pm-act__item:first-child{border-top:0}
+}
+@media (max-width:700px){
+  .pm-app{grid-template-columns:1fr}
+  .pm-nav{display:none}
+  .pm-main{grid-column:1}
+  .pm-main__scroll,.pm-cmdbar{padding-left:var(--pm-s4);padding-right:var(--pm-s4)}
+  .pm-phead{flex-direction:column;align-items:stretch}
+}
+</style>
+
+<!-- ========================= 状态切换条（产品之外） ========================= -->
+<div class="pm-strip">
+  <div class="pm-strip__left">
+    <span class="pm-strip__tag">S01-05</span>
+    <h2 class="pm-strip__title">Personal Home · High-Fidelity UI</h2>
+    <span class="pm-strip__meta">smark-pm · AI R&amp;D Workspace Design System V1.0</span>
+  </div>
+  <div class="pm-strip__ctrls">
+    <div class="pm-seg" id="pm-state-seg" role="tablist" aria-label="Page states">
+      <button class="pm-seg__btn" type="button" role="tab" data-state="normal" aria-selected="true">正常</button>
+      <button class="pm-seg__btn" type="button" role="tab" data-state="first" aria-selected="false">首次登录</button>
+      <button class="pm-seg__btn" type="button" role="tab" data-state="caught" aria-selected="false">无待办</button>
+      <button class="pm-seg__btn" type="button" role="tab" data-state="inboxerr" aria-selected="false">Inbox 失败</button>
+      <button class="pm-seg__btn" type="button" role="tab" data-state="projerr" aria-selected="false">项目失败</button>
+      <button class="pm-seg__btn" type="button" role="tab" data-state="noperm" aria-selected="false">无权限</button>
+      <button class="pm-seg__btn" type="button" role="tab" data-state="loading" aria-selected="false">加载中</button>
+    </div>
+    <div class="pm-seg pm-seg--theme" id="pm-theme-seg" role="group" aria-label="Theme">
+      <button class="pm-seg__btn" type="button" data-theme="auto" aria-selected="true">Auto</button>
+      <button class="pm-seg__btn" type="button" data-theme="light" aria-selected="false">Light</button>
+      <button class="pm-seg__btn" type="button" data-theme="dark" aria-selected="false">Dark</button>
+    </div>
+  </div>
+</div>
+
+<div class="pm-window">
+<div class="pm-app">
+
+  <!-- ================================ 顶栏 ================================ -->
+  <header class="pm-topbar">
+    <div class="pm-topbar__left">
+      <span class="pm-topbar__mark" aria-hidden="true"><i data-lucide="layers" class="pm-ic pm-ic-14"></i></span>
+      <span class="pm-topbar__product">smark-pm</span>
+      <span class="pm-topbar__div" aria-hidden="true"></span>
+      <span class="pm-topbar__ctx"><i data-lucide="users" class="pm-ic pm-ic-12" aria-hidden="true"></i>星河集团</span>
+      <span class="pm-topbar__slash" aria-hidden="true">/</span>
+      <span class="pm-topbar__ctx pm-topbar__ctx--all"><i data-lucide="folders" class="pm-ic pm-ic-12" aria-hidden="true"></i>All projects</span>
+    </div>
+
+    <button class="pm-topbar__search" type="button">
+      <i data-lucide="search" class="pm-ic pm-ic-14" aria-hidden="true"></i>
+      <span class="pm-topbar__search-text">Search or jump to…</span>
+      <span class="pm-kbd">⌘K</span>
+    </button>
+
+    <div class="pm-topbar__right">
+      <button class="pm-iconbtn" type="button" aria-label="Notifications">
+        <i data-lucide="bell" class="pm-ic" aria-hidden="true"></i><span class="pm-iconbtn__dot"></span>
+      </button>
+      <button class="pm-iconbtn" type="button" aria-label="AI Assistant">
+        <i data-lucide="sparkles" class="pm-ic" aria-hidden="true"></i>
+      </button>
+      <button class="pm-iconbtn" type="button" aria-label="Help and shortcuts">
+        <i data-lucide="circle-help" class="pm-ic" aria-hidden="true"></i>
+      </button>
+      <span class="pm-topbar__div" aria-hidden="true"></span>
+      <button class="pm-usermenu" type="button">
+        <span class="pm-avatar">ZW</span><span class="pm-usermenu__name">张伟</span>
+        <i data-lucide="chevron-down" class="pm-ic pm-ic-12" aria-hidden="true"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- ================================ 左导航 ================================ -->
+  <nav class="pm-nav" aria-label="Personal">
+    <div class="pm-nav__control">
+      <span class="pm-nav__control-label">Personal</span>
+      <button class="pm-iconbtn" type="button" aria-label="Collapse navigation" style="width:28px;height:28px">
+        <i data-lucide="panel-left-close" class="pm-ic pm-ic-18" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <div class="pm-nav__items">
+      <a class="pm-navitem is-active" href="#pm-personal-home" aria-current="page">
+        <span class="pm-navitem__bar"></span>
+        <i data-lucide="home" class="pm-ic" aria-hidden="true"></i>
+        <span class="pm-navitem__label">My Home</span>
+      </a>
+      <a class="pm-navitem" href="#pm-personal-home">
+        <i data-lucide="inbox" class="pm-ic" aria-hidden="true"></i>
+        <span class="pm-navitem__label">My Inbox</span>
+        <span class="pm-navitem__badge">4</span>
+      </a>
+      <a class="pm-navitem" href="#pm-personal-home">
+        <i data-lucide="folders" class="pm-ic" aria-hidden="true"></i>
+        <span class="pm-navitem__label">My Projects</span>
+      </a>
+    </div>
+
+    <div class="pm-nav__divider" aria-hidden="true"></div>
+
+    <div class="pm-nav__items">
+      <a class="pm-navitem pm-navitem--ai" href="#pm-personal-home">
+        <i data-lucide="sparkles" class="pm-ic" aria-hidden="true"></i>
+        <span class="pm-navitem__label">AI Assistant</span>
+      </a>
+    </div>
+
+    <div class="pm-nav__spacer"></div>
+
+    <div class="pm-nav__footer">
+      <span class="pm-avatar">ZW</span>
+      <span class="pm-nav__footer-meta">
+        <span class="pm-nav__footer-name">张伟 · 星河集团</span>
+        <span class="pm-nav__footer-role">Product Lead</span>
+      </span>
+      <button class="pm-iconbtn" type="button" aria-label="Personal settings" style="width:28px;height:28px">
+        <i data-lucide="sliders-horizontal" class="pm-ic pm-ic-18" aria-hidden="true"></i>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ================================ 主区 ================================ -->
+  <main class="pm-main">
+    <div class="pm-main__scroll" id="pm-main-scroll">
+      <p class="pm-sr" id="pm-live" aria-live="polite"></p>
+
+      <!-- ========================== 状态 1 · 正常 ========================== -->
+      <section class="pm-state is-active" data-state="normal" aria-label="Personal Home">
+        <div class="pm-phead">
+          <div>
+            <h1 class="pm-phead__title">Good morning, 张伟</h1>
+            <p class="pm-phead__sub">Here's what needs your attention today.</p>
+          </div>
+          <div class="pm-phead__actions">
+            <button class="pm-iconbtn" type="button" aria-label="Search (⌘K)"
+              style="border:1px solid var(--pm-border);background:var(--pm-surface)">
+              <i data-lucide="search" class="pm-ic" aria-hidden="true"></i>
+            </button>
+            <button class="pm-btn pm-btn--primary" type="button">
+              <i data-lucide="plus" class="pm-ic pm-ic-14" aria-hidden="true"></i>Create Project
+            </button>
+          </div>
+        </div>
+
+        <!-- Row 1 · My Overview -->
+        <div class="pm-overview" role="group" aria-label="My Overview">
+          <button class="pm-metric" type="button">
+            <span class="pm-metric__dot" style="background:var(--pm-warning)"></span>
+            <span>
+              <span class="pm-metric__value">4</span>
+              <span class="pm-metric__label">Needs Attention</span>
+              <span class="pm-metric__hint">2 overdue · 1 due today</span>
+            </span>
+          </button>
+          <button class="pm-metric" type="button">
+            <span class="pm-metric__dot" style="background:var(--pm-info)"></span>
+            <span>
+              <span class="pm-metric__value">12</span>
+              <span class="pm-metric__label">Assigned to Me</span>
+              <span class="pm-metric__hint">3 due this week</span>
+            </span>
+          </button>
+          <button class="pm-metric" type="button">
+            <span class="pm-metric__dot" style="background:var(--pm-accent)"></span>
+            <span>
+              <span class="pm-metric__value">4</span>
+              <span class="pm-metric__label">Active Projects</span>
+              <span class="pm-metric__hint">2 need your input</span>
+            </span>
+          </button>
+        </div>
+
+        <!-- Row 2 · My Inbox + My Projects -->
+        <div class="pm-rows">
+          <section class="pm-card" aria-label="My Inbox">
+            <div class="pm-card__head">
+              <h2 class="pm-card__title">My Inbox<span class="pm-card__count">16</span></h2>
+              <button class="pm-link" type="button">View All<i data-lucide="arrow-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></button>
+            </div>
+
+            <div class="pm-inbox__section">
+              <div class="pm-inbox__sechead">
+                <span class="pm-inbox__sectitle">Human Actions</span>
+                <span class="pm-card__count">4</span>
+                <span class="pm-inbox__secnote">需要人工决策或介入</span>
+              </div>
+
+              <button class="pm-hitem" type="button">
+                <span class="pm-hitem__rail pm-hitem__rail--danger"></span>
+                <span class="pm-hitem__main">
+                  <span class="pm-hitem__title">
+                    <span class="pm-chip">Decision</span>
+                    <span class="pm-hitem__text">确认 REQ-102 渠道接入标准化修订</span>
+                  </span>
+                  <span class="pm-hitem__meta">
+                    <span>星河客服中台</span><span class="pm-hitem__sep">·</span>
+                    <span class="pm-hitem__obj">Requirement REQ-102<i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+                    <span class="pm-hitem__sep">·</span><span>待决策</span>
+                  </span>
+                </span>
+                <span class="pm-hitem__due pm-hitem__due--danger"><i data-lucide="triangle-alert" class="pm-ic pm-ic-12" aria-hidden="true"></i>2d overdue</span>
+              </button>
+
+              <button class="pm-hitem" type="button">
+                <span class="pm-hitem__rail pm-hitem__rail--warning"></span>
+                <span class="pm-hitem__main">
+                  <span class="pm-hitem__title">
+                    <span class="pm-chip">Approval</span>
+                    <span class="pm-hitem__text">审批知识提案「SLA 倒计时告警」说明</span>
+                  </span>
+                  <span class="pm-hitem__meta">
+                    <span>云帆数据门户</span><span class="pm-hitem__sep">·</span>
+                    <span class="pm-hitem__obj">Knowledge KNOW-018<i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+                    <span class="pm-hitem__sep">·</span><span>待审批</span>
+                  </span>
+                </span>
+                <span class="pm-hitem__due pm-hitem__due--warning"><i data-lucide="clock" class="pm-ic pm-ic-12" aria-hidden="true"></i>Due today</span>
+              </button>
+
+              <button class="pm-hitem" type="button">
+                <span class="pm-hitem__rail"></span>
+                <span class="pm-hitem__main">
+                  <span class="pm-hitem__title">
+                    <span class="pm-chip">Review</span>
+                    <span class="pm-hitem__text">验收「工单聚合视图 API 设计」交付物</span>
+                  </span>
+                  <span class="pm-hitem__meta">
+                    <span>星河客服中台</span><span class="pm-hitem__sep">·</span>
+                    <span class="pm-hitem__obj">Task TASK-207<i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+                    <span class="pm-hitem__sep">·</span><span>待验收</span>
+                  </span>
+                </span>
+                <span class="pm-hitem__due"><i data-lucide="calendar" class="pm-ic pm-ic-12" aria-hidden="true"></i>Nov 7</span>
+              </button>
+
+              <button class="pm-hitem" type="button">
+                <span class="pm-hitem__rail"></span>
+                <span class="pm-hitem__main">
+                  <span class="pm-hitem__title">
+                    <span class="pm-chip">Needs Input</span>
+                    <span class="pm-hitem__text">补充「自助取数向导」验收标准</span>
+                  </span>
+                  <span class="pm-hitem__meta">
+                    <span>云帆数据门户</span><span class="pm-hitem__sep">·</span>
+                    <span class="pm-hitem__obj">Requirement REQ-201<i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+                    <span class="pm-hitem__sep">·</span><span>AI 请求补充</span>
+                  </span>
+                </span>
+                <span class="pm-hitem__due" style="color:var(--pm-text-2)">No due date</span>
+              </button>
+            </div>
+
+            <div class="pm-inbox__sep"></div>
+
+            <div class="pm-inbox__section">
+              <div class="pm-inbox__sechead">
+                <span class="pm-inbox__sectitle">Assigned Tasks</span>
+                <span class="pm-card__count">12</span>
+                <span class="pm-inbox__secnote">分配给你的普通任务</span>
+              </div>
+
+              <button class="pm-aitem" type="button">
+                <span class="pm-aitem__prio pm-aitem__prio--high">High</span>
+                <span class="pm-aitem__body">
+                  <span class="pm-aitem__title">微信渠道适配器实现</span>
+                  <span class="pm-aitem__meta"><span>星河客服中台</span><span class="pm-hitem__sep">·</span><span>TASK-211</span></span>
+                </span>
+                <span class="pm-aitem__right">
+                  <span class="pm-chip">In Progress</span>
+                  <span class="pm-hitem__due">Nov 9</span>
+                </span>
+              </button>
+
+              <button class="pm-aitem" type="button">
+                <span class="pm-aitem__prio">Normal</span>
+                <span class="pm-aitem__body">
+                  <span class="pm-aitem__title">SLA 倒计时前端组件</span>
+                  <span class="pm-aitem__meta"><span>星河客服中台</span><span class="pm-hitem__sep">·</span><span>TASK-233</span></span>
+                </span>
+                <span class="pm-aitem__right">
+                  <span class="pm-chip">Backlog</span>
+                  <span class="pm-hitem__due">Nov 12</span>
+                </span>
+              </button>
+
+              <button class="pm-aitem" type="button">
+                <span class="pm-aitem__prio pm-aitem__prio--high">High</span>
+                <span class="pm-aitem__body">
+                  <span class="pm-aitem__title">报表订阅与分发接口联调</span>
+                  <span class="pm-aitem__meta"><span>云帆数据门户</span><span class="pm-hitem__sep">·</span><span>TASK-405</span></span>
+                </span>
+                <span class="pm-aitem__right">
+                  <span class="pm-chip">In Progress</span>
+                  <span class="pm-hitem__due pm-hitem__due--warning"><i data-lucide="clock" class="pm-ic pm-ic-12" aria-hidden="true"></i>Nov 6</span>
+                </span>
+              </button>
+            </div>
+          </section>
+
+          <section class="pm-card" aria-label="My Projects">
+            <div class="pm-card__head">
+              <h2 class="pm-card__title">My Projects<span class="pm-card__count">4</span></h2>
+              <div style="display:flex;align-items:center;gap:10px">
+                <button class="pm-iconbtn" type="button" aria-label="Filter projects" style="width:28px;height:28px">
+                  <i data-lucide="filter" class="pm-ic pm-ic-18" aria-hidden="true"></i>
+                </button>
+                <button class="pm-link" type="button">View All<i data-lucide="arrow-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></button>
+              </div>
+            </div>
+
+            <button class="pm-proj" type="button">
+              <span class="pm-proj__top">
+                <span class="pm-proj__name">星河客服中台</span>
+                <span class="pm-proj__role">Lead</span>
+                <span class="pm-proj__status"><span class="pm-chip pm-chip--success">Active</span></span>
+              </span>
+              <span class="pm-proj__desc">统一工单接入、SLA 计时与客服绩效看板</span>
+              <span class="pm-proj__meta">
+                <span class="pm-proj__attn"></span>
+                <span><b>3</b> pending</span><span class="pm-hitem__sep">·</span><span>updated 2h ago</span>
+                <span class="pm-proj__arrow"><i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+              </span>
+            </button>
+
+            <button class="pm-proj" type="button">
+              <span class="pm-proj__top">
+                <span class="pm-proj__name">云帆数据门户</span>
+                <span class="pm-proj__role">Member</span>
+                <span class="pm-proj__status"><span class="pm-chip pm-chip--success">Active</span></span>
+              </span>
+              <span class="pm-proj__desc">自助取数、报表订阅与数据源健康巡检</span>
+              <span class="pm-proj__meta">
+                <span class="pm-proj__attn"></span>
+                <span><b>2</b> pending</span><span class="pm-hitem__sep">·</span><span>updated 1d ago</span>
+                <span class="pm-proj__arrow"><i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+              </span>
+            </button>
+
+            <button class="pm-proj" type="button">
+              <span class="pm-proj__top">
+                <span class="pm-proj__name">星河移动端</span>
+                <span class="pm-proj__role">Owner</span>
+                <span class="pm-proj__status"><span class="pm-chip pm-chip--info">Planning</span></span>
+              </span>
+              <span class="pm-proj__desc">客服 App 改版：离线工单与消息推送</span>
+              <span class="pm-proj__meta">
+                <span><b>1</b> pending</span><span class="pm-hitem__sep">·</span><span>updated 3d ago</span>
+                <span class="pm-proj__arrow"><i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+              </span>
+            </button>
+
+            <button class="pm-proj" type="button">
+              <span class="pm-proj__top">
+                <span class="pm-proj__name">星河智能质检</span>
+                <span class="pm-proj__role">Member</span>
+                <span class="pm-proj__status"><span class="pm-chip pm-chip--success">Active</span></span>
+              </span>
+              <span class="pm-proj__desc">质检规则配置与客服话术合规扫描</span>
+              <span class="pm-proj__meta">
+                <span><b>1</b> pending</span><span class="pm-hitem__sep">·</span><span>updated 5d ago</span>
+                <span class="pm-proj__arrow"><i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+              </span>
+            </button>
+
+            <button class="pm-folder-head" type="button" aria-expanded="false" data-pm-folder>
+              <i data-lucide="chevron-right" class="pm-ic pm-ic-12 pm-folder-head__chev" aria-hidden="true"></i>
+              <span>Archived Projects</span>
+              <span class="pm-card__count">2</span>
+            </button>
+            <div class="pm-folder-body" hidden data-pm-folder-body>
+              <button class="pm-proj" type="button">
+                <span class="pm-proj__top">
+                  <span class="pm-proj__name">星河结算中心</span>
+                  <span class="pm-proj__role">Member</span>
+                  <span class="pm-proj__status"><span class="pm-chip">Archived</span></span>
+                </span>
+                <span class="pm-proj__desc">历史结算对账系统（已交付上线）</span>
+                <span class="pm-proj__meta">
+                  <span>archived 2 months ago</span>
+                  <span class="pm-proj__arrow"><i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+                </span>
+              </button>
+              <button class="pm-proj" type="button">
+                <span class="pm-proj__top">
+                  <span class="pm-proj__name">数据迁移专项</span>
+                  <span class="pm-proj__role">Lead</span>
+                  <span class="pm-proj__status"><span class="pm-chip">Archived</span></span>
+                </span>
+                <span class="pm-proj__desc">旧 CRM 数据一次性迁移（已完成）</span>
+                <span class="pm-proj__meta">
+                  <span>archived 5 months ago</span>
+                  <span class="pm-proj__arrow"><i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+                </span>
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <!-- Row 3 · Recent Activity -->
+        <section class="pm-card pm-activity" aria-label="Recent Activity">
+          <div class="pm-card__head">
+            <h2 class="pm-card__title">Recent Activity</h2>
+            <button class="pm-link" type="button">View All<i data-lucide="arrow-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></button>
+          </div>
+          <div class="pm-act">
+            <article class="pm-act__item">
+              <div class="pm-act__top">
+                <span class="pm-act__actor">
+                  <span class="pm-avatar">ZW</span>
+                  <span class="pm-act__name">张伟</span>
+                  <span class="pm-chip pm-chip--success"><i data-lucide="circle-check" class="pm-ic pm-ic-12" aria-hidden="true"></i>Confirmed</span>
+                </span>
+                <span class="pm-act__time">12m</span>
+              </div>
+              <p class="pm-act__sum">已确认 REQ-102 的修订版本，需求基线随之更新。</p>
+              <a class="pm-act__obj" href="#pm-personal-home">星河客服中台 · REQ-102<i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></a>
+            </article>
+
+            <article class="pm-act__item">
+              <div class="pm-act__top">
+                <span class="pm-act__actor">
+                  <span class="pm-avatar pm-avatar--ai"><i data-lucide="bot" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+                  <span class="pm-act__name">dev-agent-01</span>
+                  <span class="pm-chip pm-chip--accent pm-chip--outline"><i data-lucide="sparkles" class="pm-ic pm-ic-12" aria-hidden="true"></i>Proposal</span>
+                </span>
+                <span class="pm-act__time">1h</span>
+              </div>
+              <p class="pm-act__sum">AI 提交需求拆分建议，等待人类确认，尚未成为正式需求。</p>
+              <a class="pm-act__obj" href="#pm-personal-home">云帆数据门户 · REQ-201<i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></a>
+            </article>
+
+            <article class="pm-act__item">
+              <div class="pm-act__top">
+                <span class="pm-act__actor">
+                  <span class="pm-avatar pm-avatar--ai"><i data-lucide="bot" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+                  <span class="pm-act__name">dev-agent-01</span>
+                  <span class="pm-chip pm-chip--accent pm-chip--outline"><i data-lucide="sparkles" class="pm-ic pm-ic-12" aria-hidden="true"></i>AI Completed</span>
+                </span>
+                <span class="pm-act__time">3h</span>
+              </div>
+              <p class="pm-act__sum">AI 执行完成 SLA 倒计时后端实现，结果尚未经人工验收。</p>
+              <a class="pm-act__obj" href="#pm-personal-home">星河客服中台 · RUN-128<i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></a>
+            </article>
+
+            <article class="pm-act__item">
+              <div class="pm-act__top">
+                <span class="pm-act__actor">
+                  <span class="pm-avatar pm-avatar--sys"><i data-lucide="send" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+                  <span class="pm-act__name">System</span>
+                  <span class="pm-chip pm-chip--info"><i data-lucide="send" class="pm-ic pm-ic-12" aria-hidden="true"></i>Submitted</span>
+                </span>
+                <span class="pm-act__time">5h</span>
+              </div>
+              <p class="pm-act__sum">系统正式提交分支 feature/sla-countdown 至主干。</p>
+              <a class="pm-act__obj" href="#pm-personal-home">星河客服中台 · COMMIT-9f2<i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></a>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <!-- ====================== 状态 2 · 首次登录无项目 ====================== -->
+      <section class="pm-state" data-state="first" aria-label="Personal Home">
+        <div class="pm-phead">
+          <div>
+            <h1 class="pm-phead__title">Good morning, 张伟</h1>
+            <p class="pm-phead__sub">Your personal home is ready — create a project to get started.</p>
+          </div>
+          <div class="pm-phead__actions">
+            <button class="pm-btn pm-btn--primary" type="button">
+              <i data-lucide="plus" class="pm-ic pm-ic-14" aria-hidden="true"></i>Create Project
+            </button>
+          </div>
+        </div>
+        <div class="pm-empty pm-empty--panel">
+          <span class="pm-empty__icon"><i data-lucide="package" class="pm-ic" aria-hidden="true"></i></span>
+          <h2 class="pm-empty__title">You don't have any projects yet</h2>
+          <p class="pm-empty__desc">Create your first project to start organizing your development work.
+            Your inbox, projects and activity will appear here once you do.</p>
+          <div class="pm-empty__actions">
+            <button class="pm-btn pm-btn--primary" type="button">
+              <i data-lucide="plus" class="pm-ic pm-ic-14" aria-hidden="true"></i>Create Project
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================== 状态 3 · 没有待处理事项 ====================== -->
+      <section class="pm-state" data-state="caught" aria-label="Personal Home">
+        <div class="pm-phead">
+          <div>
+            <h1 class="pm-phead__title">Good morning, 张伟</h1>
+            <p class="pm-phead__sub">Here's what needs your attention today.</p>
+          </div>
+          <div class="pm-phead__actions">
+            <button class="pm-iconbtn" type="button" aria-label="Search (⌘K)"
+              style="border:1px solid var(--pm-border);background:var(--pm-surface)">
+              <i data-lucide="search" class="pm-ic" aria-hidden="true"></i>
+            </button>
+            <button class="pm-btn pm-btn--primary" type="button">
+              <i data-lucide="plus" class="pm-ic pm-ic-14" aria-hidden="true"></i>Create Project
+            </button>
+          </div>
+        </div>
+
+        <div class="pm-overview">
+          <button class="pm-metric" type="button">
+            <span class="pm-metric__dot" style="background:var(--pm-success)"></span>
+            <span>
+              <span class="pm-metric__value">0</span>
+              <span class="pm-metric__label">Needs Attention</span>
+              <span class="pm-metric__hint">Nothing waiting on you</span>
+            </span>
+          </button>
+          <button class="pm-metric" type="button">
+            <span class="pm-metric__dot" style="background:var(--pm-text-3)"></span>
+            <span>
+              <span class="pm-metric__value">0</span>
+              <span class="pm-metric__label">Assigned to Me</span>
+              <span class="pm-metric__hint">No open tasks assigned</span>
+            </span>
+          </button>
+          <button class="pm-metric" type="button">
+            <span class="pm-metric__dot" style="background:var(--pm-accent)"></span>
+            <span>
+              <span class="pm-metric__value">4</span>
+              <span class="pm-metric__label">Active Projects</span>
+              <span class="pm-metric__hint">2 need your input</span>
+            </span>
+          </button>
+        </div>
+
+        <div class="pm-rows">
+          <section class="pm-card" aria-label="My Inbox">
+            <div class="pm-card__head">
+              <h2 class="pm-card__title">My Inbox<span class="pm-card__count">0</span></h2>
+              <button class="pm-link" type="button">View All<i data-lucide="arrow-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></button>
+            </div>
+            <div class="pm-empty pm-empty--inline">
+              <span class="pm-empty__icon" style="background:transparent;color:var(--pm-success)">
+                <i data-lucide="circle-check" class="pm-ic" aria-hidden="true"></i>
+              </span>
+              <div>
+                <h3 class="pm-empty__title" style="font-size:13px">All caught up</h3>
+                <p class="pm-empty__desc" style="font-size:12px">Nothing needs your attention right now.
+                  New human actions will show up here.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="pm-card" aria-label="My Projects">
+            <div class="pm-card__head">
+              <h2 class="pm-card__title">My Projects<span class="pm-card__count">4</span></h2>
+              <button class="pm-link" type="button">View All<i data-lucide="arrow-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></button>
+            </div>
+            <button class="pm-proj" type="button">
+              <span class="pm-proj__top">
+                <span class="pm-proj__name">星河客服中台</span>
+                <span class="pm-proj__role">Lead</span>
+                <span class="pm-proj__status"><span class="pm-chip pm-chip--success">Active</span></span>
+              </span>
+              <span class="pm-proj__desc">统一工单接入、SLA 计时与客服绩效看板</span>
+              <span class="pm-proj__meta">
+                <span><b>0</b> pending</span><span class="pm-hitem__sep">·</span><span>updated 2h ago</span>
+                <span class="pm-proj__arrow"><i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+              </span>
+            </button>
+            <button class="pm-proj" type="button">
+              <span class="pm-proj__top">
+                <span class="pm-proj__name">云帆数据门户</span>
+                <span class="pm-proj__role">Member</span>
+                <span class="pm-proj__status"><span class="pm-chip pm-chip--success">Active</span></span>
+              </span>
+              <span class="pm-proj__desc">自助取数、报表订阅与数据源健康巡检</span>
+              <span class="pm-proj__meta">
+                <span><b>0</b> pending</span><span class="pm-hitem__sep">·</span><span>updated 1d ago</span>
+                <span class="pm-proj__arrow"><i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+              </span>
+            </button>
+            <button class="pm-folder-head" type="button" aria-expanded="false" data-pm-folder>
+              <i data-lucide="chevron-right" class="pm-ic pm-ic-12 pm-folder-head__chev" aria-hidden="true"></i>
+              <span>Archived Projects</span><span class="pm-card__count">2</span>
+            </button>
+            <div class="pm-folder-body" hidden data-pm-folder-body></div>
+          </section>
+        </div>
+
+        <section class="pm-card pm-activity" aria-label="Recent Activity">
+          <div class="pm-card__head">
+            <h2 class="pm-card__title">Recent Activity</h2>
+            <button class="pm-link" type="button">View All<i data-lucide="arrow-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></button>
+          </div>
+          <div class="pm-act">
+            <article class="pm-act__item">
+              <div class="pm-act__top">
+                <span class="pm-act__actor">
+                  <span class="pm-avatar">ZW</span>
+                  <span class="pm-act__name">张伟</span>
+                  <span class="pm-chip pm-chip--success"><i data-lucide="circle-check" class="pm-ic pm-ic-12" aria-hidden="true"></i>Confirmed</span>
+                </span>
+                <span class="pm-act__time">12m</span>
+              </div>
+              <p class="pm-act__sum">已确认 REQ-102 的修订版本，需求基线随之更新。</p>
+              <a class="pm-act__obj" href="#pm-personal-home">星河客服中台 · REQ-102<i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></a>
+            </article>
+            <article class="pm-act__item">
+              <div class="pm-act__top">
+                <span class="pm-act__actor">
+                  <span class="pm-avatar pm-avatar--sys"><i data-lucide="send" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+                  <span class="pm-act__name">System</span>
+                  <span class="pm-chip pm-chip--info"><i data-lucide="send" class="pm-ic pm-ic-12" aria-hidden="true"></i>Submitted</span>
+                </span>
+                <span class="pm-act__time">5h</span>
+              </div>
+              <p class="pm-act__sum">系统正式提交分支 feature/sla-countdown 至主干。</p>
+              <a class="pm-act__obj" href="#pm-personal-home">星河客服中台 · COMMIT-9f2<i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></a>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <!-- ====================== 状态 4 · Inbox 加载失败 ====================== -->
+      <section class="pm-state" data-state="inboxerr" aria-label="Personal Home">
+        <div class="pm-phead">
+          <div>
+            <h1 class="pm-phead__title">Good morning, 张伟</h1>
+            <p class="pm-phead__sub">Here's what needs your attention today.</p>
+          </div>
+          <div class="pm-phead__actions">
+            <button class="pm-iconbtn" type="button" aria-label="Search (⌘K)"
+              style="border:1px solid var(--pm-border);background:var(--pm-surface)">
+              <i data-lucide="search" class="pm-ic" aria-hidden="true"></i>
+            </button>
+            <button class="pm-btn pm-btn--primary" type="button">
+              <i data-lucide="plus" class="pm-ic pm-ic-14" aria-hidden="true"></i>Create Project
+            </button>
+          </div>
+        </div>
+
+        <div class="pm-overview">
+          <button class="pm-metric" type="button">
+            <span class="pm-metric__dot" style="background:var(--pm-text-3)"></span>
+            <span>
+              <span class="pm-metric__value is-na">—</span>
+              <span class="pm-metric__label">Needs Attention</span>
+              <span class="pm-metric__hint">Unavailable</span>
+            </span>
+          </button>
+          <button class="pm-metric" type="button">
+            <span class="pm-metric__dot" style="background:var(--pm-text-3)"></span>
+            <span>
+              <span class="pm-metric__value is-na">—</span>
+              <span class="pm-metric__label">Assigned to Me</span>
+              <span class="pm-metric__hint">Unavailable</span>
+            </span>
+          </button>
+          <button class="pm-metric" type="button">
+            <span class="pm-metric__dot" style="background:var(--pm-accent)"></span>
+            <span>
+              <span class="pm-metric__value">4</span>
+              <span class="pm-metric__label">Active Projects</span>
+              <span class="pm-metric__hint">2 need your input</span>
+            </span>
+          </button>
+        </div>
+
+        <div class="pm-rows">
+          <section class="pm-card" aria-label="My Inbox">
+            <div class="pm-card__head">
+              <h2 class="pm-card__title">My Inbox</h2>
+              <button class="pm-link" type="button">View All<i data-lucide="arrow-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></button>
+            </div>
+            <div class="pm-err">
+              <span class="pm-err__icon"><i data-lucide="triangle-alert" class="pm-ic" aria-hidden="true"></i></span>
+              <h3 class="pm-err__title">Couldn't load your inbox</h3>
+              <p class="pm-err__desc">The inbox service didn't respond. Your projects and activity are unaffected.</p>
+              <button class="pm-btn pm-btn--secondary" type="button">
+                <i data-lucide="refresh-cw" class="pm-ic pm-ic-14" aria-hidden="true"></i>Retry
+              </button>
+              <p class="pm-err__note">Error code PM-503 · request id 7f3a…c91</p>
+            </div>
+          </section>
+
+          <section class="pm-card" aria-label="My Projects">
+            <div class="pm-card__head">
+              <h2 class="pm-card__title">My Projects<span class="pm-card__count">4</span></h2>
+              <button class="pm-link" type="button">View All<i data-lucide="arrow-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></button>
+            </div>
+            <button class="pm-proj" type="button">
+              <span class="pm-proj__top">
+                <span class="pm-proj__name">星河客服中台</span>
+                <span class="pm-proj__role">Lead</span>
+                <span class="pm-proj__status"><span class="pm-chip pm-chip--success">Active</span></span>
+              </span>
+              <span class="pm-proj__desc">统一工单接入、SLA 计时与客服绩效看板</span>
+              <span class="pm-proj__meta">
+                <span class="pm-proj__attn"></span>
+                <span><b>3</b> pending</span><span class="pm-hitem__sep">·</span><span>updated 2h ago</span>
+                <span class="pm-proj__arrow"><i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+              </span>
+            </button>
+            <button class="pm-proj" type="button">
+              <span class="pm-proj__top">
+                <span class="pm-proj__name">云帆数据门户</span>
+                <span class="pm-proj__role">Member</span>
+                <span class="pm-proj__status"><span class="pm-chip pm-chip--success">Active</span></span>
+              </span>
+              <span class="pm-proj__desc">自助取数、报表订阅与数据源健康巡检</span>
+              <span class="pm-proj__meta">
+                <span class="pm-proj__attn"></span>
+                <span><b>2</b> pending</span><span class="pm-hitem__sep">·</span><span>updated 1d ago</span>
+                <span class="pm-proj__arrow"><i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+              </span>
+            </button>
+            <button class="pm-proj" type="button">
+              <span class="pm-proj__top">
+                <span class="pm-proj__name">星河移动端</span>
+                <span class="pm-proj__role">Owner</span>
+                <span class="pm-proj__status"><span class="pm-chip pm-chip--info">Planning</span></span>
+              </span>
+              <span class="pm-proj__desc">客服 App 改版：离线工单与消息推送</span>
+              <span class="pm-proj__meta">
+                <span><b>1</b> pending</span><span class="pm-hitem__sep">·</span><span>updated 3d ago</span>
+                <span class="pm-proj__arrow"><i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+              </span>
+            </button>
+          </section>
+        </div>
+
+        <section class="pm-card pm-activity" aria-label="Recent Activity">
+          <div class="pm-card__head">
+            <h2 class="pm-card__title">Recent Activity</h2>
+            <button class="pm-link" type="button">View All<i data-lucide="arrow-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></button>
+          </div>
+          <div class="pm-act">
+            <article class="pm-act__item">
+              <div class="pm-act__top">
+                <span class="pm-act__actor">
+                  <span class="pm-avatar">ZW</span>
+                  <span class="pm-act__name">张伟</span>
+                  <span class="pm-chip pm-chip--success"><i data-lucide="circle-check" class="pm-ic pm-ic-12" aria-hidden="true"></i>Confirmed</span>
+                </span>
+                <span class="pm-act__time">12m</span>
+              </div>
+              <p class="pm-act__sum">已确认 REQ-102 的修订版本，需求基线随之更新。</p>
+              <a class="pm-act__obj" href="#pm-personal-home">星河客服中台 · REQ-102<i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></a>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <!-- ====================== 状态 5 · 项目加载失败 ====================== -->
+      <section class="pm-state" data-state="projerr" aria-label="Personal Home">
+        <div class="pm-phead">
+          <div>
+            <h1 class="pm-phead__title">Good morning, 张伟</h1>
+            <p class="pm-phead__sub">Here's what needs your attention today.</p>
+          </div>
+          <div class="pm-phead__actions">
+            <button class="pm-iconbtn" type="button" aria-label="Search (⌘K)"
+              style="border:1px solid var(--pm-border);background:var(--pm-surface)">
+              <i data-lucide="search" class="pm-ic" aria-hidden="true"></i>
+            </button>
+            <button class="pm-btn pm-btn--primary" type="button">
+              <i data-lucide="plus" class="pm-ic pm-ic-14" aria-hidden="true"></i>Create Project
+            </button>
+          </div>
+        </div>
+
+        <div class="pm-overview">
+          <button class="pm-metric" type="button">
+            <span class="pm-metric__dot" style="background:var(--pm-warning)"></span>
+            <span>
+              <span class="pm-metric__value">4</span>
+              <span class="pm-metric__label">Needs Attention</span>
+              <span class="pm-metric__hint">2 overdue · 1 due today</span>
+            </span>
+          </button>
+          <button class="pm-metric" type="button">
+            <span class="pm-metric__dot" style="background:var(--pm-info)"></span>
+            <span>
+              <span class="pm-metric__value">12</span>
+              <span class="pm-metric__label">Assigned to Me</span>
+              <span class="pm-metric__hint">3 due this week</span>
+            </span>
+          </button>
+          <button class="pm-metric" type="button">
+            <span class="pm-metric__dot" style="background:var(--pm-text-3)"></span>
+            <span>
+              <span class="pm-metric__value is-na">—</span>
+              <span class="pm-metric__label">Active Projects</span>
+              <span class="pm-metric__hint">Unavailable</span>
+            </span>
+          </button>
+        </div>
+
+        <div class="pm-rows">
+          <section class="pm-card" aria-label="My Inbox">
+            <div class="pm-card__head">
+              <h2 class="pm-card__title">My Inbox<span class="pm-card__count">16</span></h2>
+              <button class="pm-link" type="button">View All<i data-lucide="arrow-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></button>
+            </div>
+            <div class="pm-inbox__section">
+              <div class="pm-inbox__sechead">
+                <span class="pm-inbox__sectitle">Human Actions</span>
+                <span class="pm-card__count">4</span>
+              </div>
+              <button class="pm-hitem" type="button">
+                <span class="pm-hitem__rail pm-hitem__rail--danger"></span>
+                <span class="pm-hitem__main">
+                  <span class="pm-hitem__title">
+                    <span class="pm-chip">Decision</span>
+                    <span class="pm-hitem__text">确认 REQ-102 渠道接入标准化修订</span>
+                  </span>
+                  <span class="pm-hitem__meta">
+                    <span>星河客服中台</span><span class="pm-hitem__sep">·</span>
+                    <span class="pm-hitem__obj">Requirement REQ-102<i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+                  </span>
+                </span>
+                <span class="pm-hitem__due pm-hitem__due--danger"><i data-lucide="triangle-alert" class="pm-ic pm-ic-12" aria-hidden="true"></i>2d overdue</span>
+              </button>
+              <button class="pm-hitem" type="button">
+                <span class="pm-hitem__rail pm-hitem__rail--warning"></span>
+                <span class="pm-hitem__main">
+                  <span class="pm-hitem__title">
+                    <span class="pm-chip">Approval</span>
+                    <span class="pm-hitem__text">审批知识提案「SLA 倒计时告警」说明</span>
+                  </span>
+                  <span class="pm-hitem__meta">
+                    <span>云帆数据门户</span><span class="pm-hitem__sep">·</span>
+                    <span class="pm-hitem__obj">Knowledge KNOW-018<i data-lucide="chevron-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></span>
+                  </span>
+                </span>
+                <span class="pm-hitem__due pm-hitem__due--warning"><i data-lucide="clock" class="pm-ic pm-ic-12" aria-hidden="true"></i>Due today</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="pm-card" aria-label="My Projects">
+            <div class="pm-card__head">
+              <h2 class="pm-card__title">My Projects</h2>
+              <button class="pm-link" type="button">View All<i data-lucide="arrow-right" class="pm-ic pm-ic-12" aria-hidden="true"></i></button>
+            </div>
+            <div class="pm-err">
+              <span class="pm-err__icon"><i data-lucide="triangle-alert" class="pm-ic" aria-hidden="true"></i></span>
+              <h3 class="pm-err__title">Couldn't load projects</h3>
+              <p class="pm-err__desc">We couldn't reach the project service. Your inbox is still up to date.</p>
+              <button class="pm-btn pm-btn--secondary" type="button">
+                <i data-lucide="refresh-cw" class="pm-ic pm-ic-14" aria-hidden="true"></i>Retry
+              </button>
+              <p class="pm-err__note">Error code PM-503 · request id 2b81…04e</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ====================== 状态 6 · 没有访问权限 ====================== -->
+      <section class="pm-state pm-state--full" data-state="noperm" aria-label="Personal Home">
+        <div class="pm-phead">
+          <div>
+            <h1 class="pm-phead__title">Good morning, 张伟</h1>
+            <p class="pm-phead__sub">Your projects, inbox and activity will appear here once you have access.</p>
+          </div>
+          <div class="pm-phead__actions">
+            <button class="pm-btn pm-btn--primary" type="button">
+              <i data-lucide="plus" class="pm-ic pm-ic-14" aria-hidden="true"></i>Create Project
+            </button>
+          </div>
+        </div>
+        <div class="pm-empty pm-empty--panel">
+          <span class="pm-empty__icon" style="background:var(--pm-danger-surf);color:var(--pm-danger-title)">
+            <i data-lucide="shield" class="pm-ic" aria-hidden="true"></i>
+          </span>
+          <h2 class="pm-empty__title">You don't have access to any projects</h2>
+          <p class="pm-empty__desc">Your account isn't a member of any project in 星河集团.
+            Ask a project owner to invite you, or create a project of your own.</p>
+          <div class="pm-empty__actions">
+            <button class="pm-btn pm-btn--primary" type="button">
+              <i data-lucide="plus" class="pm-ic pm-ic-14" aria-hidden="true"></i>Create Project
+            </button>
+            <button class="pm-btn pm-btn--secondary" type="button">Ask for an invite</button>
+          </div>
+          <p class="pm-err__note" style="text-align:center">Error code PM-403 · global AI Assistant and settings remain available</p>
+        </div>
+      </section>
+
+      <!-- ====================== 状态 7 · 正在加载 ====================== -->
+      <section class="pm-state" data-state="loading" aria-label="Personal Home">
+        <div class="pm-phead">
+          <div>
+            <h1 class="pm-phead__title" style="color:var(--pm-text-3)">Good morning, 张伟</h1>
+            <p class="pm-phead__sub">Here's what needs your attention today.</p>
+          </div>
+          <div class="pm-phead__actions">
+            <button class="pm-iconbtn" type="button" aria-label="Search" disabled
+              style="border:1px solid var(--pm-border);background:var(--pm-surface);opacity:.45">
+              <i data-lucide="search" class="pm-ic" aria-hidden="true"></i>
+            </button>
+            <button class="pm-btn pm-btn--primary" type="button" disabled>
+              <i data-lucide="plus" class="pm-ic pm-ic-14" aria-hidden="true"></i>Create Project
+            </button>
+          </div>
+        </div>
+
+        <div class="pm-overview" aria-busy="true">
+          <div class="pm-skel-metric">
+            <span class="pm-sk" style="width:10px;height:10px;border-radius:999px"></span>
+            <span style="flex:1">
+              <span class="pm-sk pm-sk--strong" style="width:38px;height:20px"></span>
+              <span class="pm-sk" style="margin-top:8px;width:96px"></span>
+              <span class="pm-sk" style="margin-top:6px;width:132px;height:10px"></span>
+            </span>
+          </div>
+          <div class="pm-skel-metric">
+            <span class="pm-sk" style="width:10px;height:10px;border-radius:999px"></span>
+            <span style="flex:1">
+              <span class="pm-sk pm-sk--strong" style="width:38px;height:20px"></span>
+              <span class="pm-sk" style="margin-top:8px;width:104px"></span>
+              <span class="pm-sk" style="margin-top:6px;width:112px;height:10px"></span>
+            </span>
+          </div>
+          <div class="pm-skel-metric">
+            <span class="pm-sk" style="width:10px;height:10px;border-radius:999px"></span>
+            <span style="flex:1">
+              <span class="pm-sk pm-sk--strong" style="width:38px;height:20px"></span>
+              <span class="pm-sk" style="margin-top:8px;width:96px"></span>
+              <span class="pm-sk" style="margin-top:6px;width:120px;height:10px"></span>
+            </span>
+          </div>
+        </div>
+
+        <div class="pm-rows">
+          <section class="pm-card" aria-label="My Inbox" aria-busy="true">
+            <div class="pm-card__head">
+              <h2 class="pm-card__title">My Inbox</h2>
+              <span class="pm-sk" style="width:56px;height:12px"></span>
+            </div>
+            <div class="pm-skel-row"><span></span>
+              <span><span class="pm-sk" style="width:62%;height:13px"></span>
+                <span class="pm-sk" style="margin-top:8px;width:64%;height:10px"></span></span>
+              <span class="pm-sk" style="width:72px;height:12px"></span></div>
+            <div class="pm-skel-row"><span></span>
+              <span><span class="pm-sk" style="width:48%;height:13px"></span>
+                <span class="pm-sk" style="margin-top:8px;width:52%;height:10px"></span></span>
+              <span class="pm-sk" style="width:64px;height:12px"></span></div>
+            <div class="pm-skel-row"><span></span>
+              <span><span class="pm-sk" style="width:72%;height:13px"></span>
+                <span class="pm-sk" style="margin-top:8px;width:58%;height:10px"></span></span>
+              <span class="pm-sk" style="width:56px;height:12px"></span></div>
+            <div class="pm-inbox__sep"></div>
+            <div class="pm-skel-row pm-skel-row--task">
+              <span><span class="pm-sk" style="width:54%;height:13px"></span>
+                <span class="pm-sk" style="margin-top:8px;width:38%;height:10px"></span></span>
+              <span class="pm-sk" style="width:88px;height:16px"></span></div>
+            <div class="pm-skel-row pm-skel-row--task">
+              <span><span class="pm-sk" style="width:44%;height:13px"></span>
+                <span class="pm-sk" style="margin-top:8px;width:46%;height:10px"></span></span>
+              <span class="pm-sk" style="width:88px;height:16px"></span></div>
+          </section>
+
+          <section class="pm-card" aria-label="My Projects" aria-busy="true">
+            <div class="pm-card__head">
+              <h2 class="pm-card__title">My Projects</h2>
+              <span class="pm-sk" style="width:56px;height:12px"></span>
+            </div>
+            <div style="padding:var(--pm-s3) var(--pm-s4);border-top:1px solid var(--pm-border)">
+              <span class="pm-sk" style="width:58%;height:13px"></span>
+              <span class="pm-sk" style="margin-top:10px"></span>
+              <span class="pm-sk" style="margin-top:10px;width:44%;height:10px"></span>
+            </div>
+            <div style="padding:var(--pm-s3) var(--pm-s4);border-top:1px solid var(--pm-border)">
+              <span class="pm-sk" style="width:46%;height:13px"></span>
+              <span class="pm-sk" style="margin-top:10px;width:92%"></span>
+              <span class="pm-sk" style="margin-top:10px;width:52%;height:10px"></span>
+            </div>
+            <div style="padding:var(--pm-s3) var(--pm-s4);border-top:1px solid var(--pm-border)">
+              <span class="pm-sk" style="width:52%;height:13px"></span>
+              <span class="pm-sk" style="margin-top:10px;width:84%"></span>
+              <span class="pm-sk" style="margin-top:10px;width:38%;height:10px"></span>
+            </div>
+          </section>
+        </div>
+
+        <section class="pm-card pm-activity" aria-label="Recent Activity" aria-busy="true">
+          <div class="pm-card__head"><h2 class="pm-card__title">Recent Activity</h2></div>
+          <div class="pm-act">
+            <div class="pm-act__item"><span class="pm-sk" style="width:120px;height:20px"></span>
+              <span class="pm-sk" style="margin-top:12px;height:10px"></span>
+              <span class="pm-sk" style="margin-top:10px;width:70%;height:10px"></span></div>
+            <div class="pm-act__item"><span class="pm-sk" style="width:132px;height:20px"></span>
+              <span class="pm-sk" style="margin-top:12px;height:10px"></span>
+              <span class="pm-sk" style="margin-top:10px;width:62%;height:10px"></span></div>
+            <div class="pm-act__item"><span class="pm-sk" style="width:116px;height:20px"></span>
+              <span class="pm-sk" style="margin-top:12px;height:10px"></span>
+              <span class="pm-sk" style="margin-top:10px;width:76%;height:10px"></span></div>
+            <div class="pm-act__item"><span class="pm-sk" style="width:108px;height:20px"></span>
+              <span class="pm-sk" style="margin-top:12px;height:10px"></span>
+              <span class="pm-sk" style="margin-top:10px;width:58%;height:10px"></span></div>
+          </div>
+        </section>
+      </section>
+
+    </div>
+
+    <!-- 壳级全局 AI 指令栏（收起态 72px，壳级能力，不是首页内的 AI 面板） -->
+    <div class="pm-cmdbar">
+      <span class="pm-cmdbar__spark"><i data-lucide="sparkles" class="pm-ic" aria-hidden="true"></i></span>
+      <span class="pm-cmdbar__field">Ask AI about your work…</span>
+      <span class="pm-kbd">⌘ J</span>
+      <button class="pm-cmdbar__icon" type="button" aria-label="Attach file">
+        <i data-lucide="paperclip" class="pm-ic pm-ic-14" aria-hidden="true"></i>
+      </button>
+      <button class="pm-cmdbar__send" type="button" aria-label="Send">
+        <i data-lucide="arrow-up" class="pm-ic pm-ic-14" aria-hidden="true"></i>
+      </button>
+    </div>
+  </main>
+
+</div>
+</div>
+
+<script>
+(function () {
+  var root = document.getElementById('pm-personal-home');
+  if (!root) return;
+
+  var stateSeg = root.querySelector('#pm-state-seg');
+  var themeSeg = root.querySelector('#pm-theme-seg');
+  var live = root.querySelector('#pm-live');
+  var STATES = ['normal', 'first', 'caught', 'inboxerr', 'projerr', 'noperm', 'loading'];
+  var LABELS = {
+    normal: '正常态', first: '首次登录，无任何项目', caught: '没有待处理事项',
+    inboxerr: 'Inbox 加载失败', projerr: '项目加载失败', noperm: '没有访问权限', loading: '正在加载数据'
+  };
+  var current = 'normal';
+
+  function applyState(key, persist) {
+    if (STATES.indexOf(key) === -1) return;
+    current = key;
+    var panels = root.querySelectorAll('.pm-state');
+    for (var i = 0; i < panels.length; i++) {
+      panels[i].classList.toggle('is-active', panels[i].getAttribute('data-state') === key);
+    }
+    var btns = stateSeg.querySelectorAll('button[data-state]');
+    for (var j = 0; j < btns.length; j++) {
+      btns[j].setAttribute('aria-selected', btns[j].getAttribute('data-state') === key ? 'true' : 'false');
+    }
+    if (live) live.textContent = LABELS[key];
+    var nav = root.querySelector('.pm-nav');
+    if (nav) nav.classList.toggle('pm-nav--denied', key === 'noperm');
+    if (persist !== false) save();
+  }
+
+  function applyTheme(mode) {
+    root.style.colorScheme = mode === 'auto' ? 'light dark' : mode;
+    var btns = themeSeg.querySelectorAll('button[data-theme]');
+    for (var j = 0; j < btns.length; j++) {
+      btns[j].setAttribute('aria-selected', btns[j].getAttribute('data-theme') === mode ? 'true' : 'false');
+    }
+    save();
+  }
+
+  function save() {
+    try {
+      if (!window.zcode || !window.zcode.setWidgetState) return;
+      window.zcode.setWidgetState({
+        modelContent: JSON.stringify({ state: current, theme: currentTheme }),
+        privateContent: null
+      }).catch(function () {});
+    } catch (e) { /* host 未提供时静默降级 */ }
+  }
+
+  var currentTheme = 'auto';
+
+  stateSeg.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-state]');
+    if (b) applyState(b.getAttribute('data-state'));
+  });
+
+  themeSeg.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-theme]');
+    if (!b) return;
+    currentTheme = b.getAttribute('data-theme');
+    applyTheme(currentTheme);
+  });
+
+  root.addEventListener('click', function (e) {
+    var head = e.target.closest('[data-pm-folder]');
+    if (!head) return;
+    var body = head.nextElementSibling;
+    var open = head.getAttribute('aria-expanded') === 'true';
+    head.setAttribute('aria-expanded', open ? 'false' : 'true');
+    if (body) body.hidden = open;
+  });
+
+  // 恢复上次选择（宿主 widgetState）
+  try {
+    var saved = window.zcode && window.zcode.widgetState;
+    if (saved && saved.modelContent) {
+      var o = JSON.parse(saved.modelContent);
+      if (o && o.theme) { currentTheme = o.theme; applyTheme(currentTheme); }
+      if (o && o.state) applyState(o.state, false);
+    }
+  } catch (e) { /* 忽略损坏状态 */ }
+
+  applyState('normal', false);
+  applyTheme(currentTheme);
+})();
+</script>
+</div>
+
+
+<script>
+(function(){
+  var SVGNS='http://www.w3.org/2000/svg';
+  function hydrate(){
+    var nodes=document.querySelectorAll('#pm-personal-home i[data-lucide]');
+    for(var i=0;i<nodes.length;i++){
+      var el=nodes[i]; var name=el.getAttribute('data-lucide');
+      var g=document.getElementById('pm-i-'+name); if(!g) continue;
+      var svg=document.createElementNS(SVGNS,'svg');
+      svg.setAttribute('viewBox','0 0 24 24'); svg.setAttribute('fill','none');
+      svg.setAttribute('stroke','currentColor'); svg.setAttribute('stroke-width','2');
+      svg.setAttribute('stroke-linecap','round'); svg.setAttribute('stroke-linejoin','round');
+      var cls=el.getAttribute('class'); if(cls) svg.setAttribute('class',cls);
+      var aria=el.getAttribute('aria-hidden'); if(aria) svg.setAttribute('aria-hidden',aria);
+      Array.prototype.slice.call(g.childNodes).forEach(function(k){
+        svg.appendChild(k.cloneNode(true));
+      });
+      el.parentNode.replaceChild(svg,el);
+    }
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',hydrate);}else{hydrate();}
+})();
+</script>
+
+</body>
+</html>

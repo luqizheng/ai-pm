@@ -207,6 +207,84 @@ async fn pending_findings_appear_as_human_actions_without_cross_project_leak(poo
     }
 }
 
+/// S01-01 · G-01 七态：待确认发现使 project_cognition 判为 waiting_for_human
+/// （会话仍在进行也不得覆盖人工待办），human_actions 判为 waiting_for_human，
+/// 且 waiting 触发展开（自有分支）。钉死行为变化，防止回退成「会话开=进行中」。
+#[sqlx::test(migrations = "../../migrations")]
+async fn pending_finding_flips_cognition_and_human_actions_to_waiting(pool: PgPool) {
+    let (project_id, _owner) = seed_project(&pool, "G01-1").await;
+    let session = seed_session(&pool, project_id).await;
+    seed_finding(&pool, project_id, session, false).await;
+
+    let (status, body) = get_center(&pool, project_id).await;
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+
+    let init = block(&body, "initialization_progress")["data"].clone();
+    let items = init["items"].as_array().unwrap();
+    let by_key = |key: &str| {
+        items
+            .iter()
+            .find(|item| item["key"] == json!(key))
+            .unwrap_or_else(|| panic!("缺少事项 {key}"))
+            .clone()
+    };
+    // 认知：会话 IN_PROGRESS + 有 PENDING 发现 → waiting_for_human（不是 in_progress）。
+    assert_eq!(
+        by_key("project_cognition")["status"],
+        json!("waiting_for_human"),
+        "人工待办不得被普通进行中覆盖"
+    );
+    // 人工处理：有跨域待办 → waiting_for_human（原为 in_progress）。
+    assert_eq!(
+        by_key("human_actions")["status"],
+        json!("waiting_for_human")
+    );
+    // 展开规则：waiting 走自有分支，必须展开（收缩不得隐藏人工待办，I5 §4.6）。
+    assert_eq!(init["expanded"], json!(true));
+
+    // 词汇表：整个响应不出现旧词表之外的值；七态值都在后端常量集内。
+    let allowed = [
+        "not_started",
+        "in_progress",
+        "waiting_for_human",
+        "completed",
+        "blocked",
+        "not_applicable",
+        "undetermined",
+    ];
+    for item in items {
+        let status_value = item["status"].as_str().unwrap();
+        assert!(
+            allowed.contains(&status_value),
+            "非法展示状态 {status_value}"
+        );
+    }
+}
+
+/// S01-01 · G-01：无任何待办时项目认知保持六态语义（会话开=进行中，
+/// 全完成=完成），且 waiting 不虚发。
+#[sqlx::test(migrations = "../../migrations")]
+async fn cognition_without_pending_work_keeps_six_state_semantics(pool: PgPool) {
+    let (project_id, _owner) = seed_project(&pool, "G01-2").await;
+    let _session = seed_session(&pool, project_id).await;
+
+    let (_status, body) = get_center(&pool, project_id).await;
+    let init = block(&body, "initialization_progress")["data"].clone();
+    let items = init["items"].as_array().unwrap();
+    let cognition = items
+        .iter()
+        .find(|item| item["key"] == json!("project_cognition"))
+        .unwrap();
+    // 会话 IN_PROGRESS、无 PENDING 发现 → 系统进行中。
+    assert_eq!(cognition["status"], json!("in_progress"));
+    // human_actions 无待办 → completed。
+    let human = items
+        .iter()
+        .find(|item| item["key"] == json!("human_actions"))
+        .unwrap();
+    assert_eq!(human["status"], json!("completed"));
+}
+
 /// I5-012/013：当前执行——活跃 Run 计数 + 执行主体取 `task.assignee_id`
 /// （`task_run.agent_id` 恒 NULL，不得使用）。
 #[sqlx::test(migrations = "../../migrations")]

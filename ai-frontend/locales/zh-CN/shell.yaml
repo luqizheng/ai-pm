@@ -145,6 +145,7 @@ shell:
         admin: 管理
       item:
         personalWorkspace: 个人工作区
+        personalHome: 我的主页
         inbox: 收件箱
         dashboard: 项目总览
         projects: 项目
@@ -217,5 +218,4 @@ shell:
     page:
       placeholderTitle: 该页面正在建设中
       placeholderHint: 应用壳已就绪，业务模块内容待接入。
-
 # ── 框架系统页 ─────────────────────────────────────────────────────────

@@ -9,6 +9,8 @@ import SettingsAppFrame from "./SettingsAppFrame.vue";
 /**
  * 应用设置 — 偏好设置（§4A Preferences）。
  * 入口 = 顶栏账户菜单「个人偏好」；内容为共享节组件。
+ * apply-to-app：主题三态真实切换应用主题（html data-theme + aipm.theme 持久化），
+ * 设计目录演示页不传该 prop，保持本区块演示语义。
  */
 const { t } = useI18n();
 
@@ -29,6 +31,6 @@ const breadcrumb = [
     :entries="PERSONAL_APP_NAV"
     :icons="PERSONAL_ICONS"
   >
-    <PersonalPreferencesSection />
+    <PersonalPreferencesSection apply-to-app />
   </SettingsAppFrame>
 </template>

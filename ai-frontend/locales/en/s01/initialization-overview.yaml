@@ -1,0 +1,138 @@
+initialization-overview:
+  page:
+    title: Project Initialization
+    description: Where initialization stands, what the AI is doing, what is already a formal fact, and what still needs your confirmation.
+    breadcrumbProject: Project
+    breadcrumbOverview: Initialization Overview
+    reload: Reload
+    openConsole: Open Project Dashboard
+    loading: Loading initialization state…
+    noProjectTitle: No project selected
+    noProjectHint: Select a project first to review its initialization state.
+    loadFailed: Failed to load initialization data
+    loadFailedHint: This section is temporarily unavailable. Please retry later. A failure is never rendered as "nothing to do".
+    retry: Retry
+  project:
+    code: Project code
+    lifecycle: Lifecycle
+    customer: Customer
+    repositories: Repositories
+    repositoryCount: "{total} total, {verified} verified"
+    members: Members
+    goal: Project goal
+    goalPresent: Established
+    goalMissing: Not established
+    archivedTitle: Project archived
+    archivedHint: An archived project is read-only. History and confirmation records stay visible, and every write action is disabled.
+  lifecycle:
+    planning: Planning
+    initializing: Initializing
+    archived: Archived
+  stages:
+    title: Initialization progress
+    hint: "The six stages are independent — they can run in parallel, and inapplicable ones can be skipped."
+  status:
+    not_started: Not started
+    in_progress: In progress
+    waiting_for_human: Waiting for you
+    blocked: Blocked
+    completed: Completed
+    not_applicable: Not applicable
+    undetermined: Undetermined
+  stage:
+    projectBasics:
+      title: Create project
+      hint: Project identity established. The creation form lives on the project creation page.
+    repository:
+      title: Repository access and code analysis
+      hint: No repository linked yet. Zero repositories is a valid state and blocks nothing.
+      detail: "{total} repositories, {verified} verified"
+    cognition:
+      title: AI-PM cognition
+      hint: Project cognition not established yet. Analysis only becomes a project fact after human confirmation.
+    baseline:
+      title: Baseline confirmation
+      hint: No baseline proposal yet. A baseline can only be formally confirmed by a human.
+      detailConflict: Conflicting items need a human decision.
+      detailAwaiting: Waiting for cognition analysis to produce a proposal.
+      detailPending: "{count} cognition results await human confirmation."
+    environment:
+      title: Codex / MCP access
+      hint: Development environment not connected yet. Device readiness is verified after a self-check.
+    handover:
+      title: Initialization handover
+      hint: Initialization is not closed yet; remaining items keep being tracked on the project dashboard.
+    source: Source
+    sourceEmpty: No authoritative source yet
+    derivedNote: This stage is composed from existing facts and has no dedicated backend source yet.
+    dependsOn: "Depends on: {stage}"
+    independent: Can proceed independently
+    open: Open stage
+    noRoute: No page to open yet
+  current:
+    title: Current action
+    ownerHuman: Needs you
+    ownerAi: AI agent running
+    ownerSystem: System running
+    actionTitle:
+      human: "{stage} is waiting for your confirmation"
+      ai: "AI is working on {stage}"
+      system: "System is handling {stage}"
+    needsUser: Your action is required
+    noUserAction: No action needed, the system advances it automatically
+    remaining: "{count} more items of the same kind"
+    open: View details
+  handover:
+    ready: Ready to enter the project dashboard
+    partial: You can enter; remaining items keep being tracked on the dashboard
+    blocked: Not ready to hand over yet
+    blockedHint: Blocked items must be cleared before handover can complete.
+    undetermined: Project onboarding overview
+    undeterminedHint: Full readiness is undetermined until project type requirements are configured, so initialization is not claimed as complete here.
+    open: Open dashboard
+  humanActions:
+    title: Needs your action
+    empty: Nothing currently needs your action.
+    open: View
+    kind:
+      finding_pending: Finding to confirm
+      finding_revision_requested: Missing information
+      proposal_pending: Proposal to approve
+      delivery_pending: Delivery to accept
+      other: Other
+    domain:
+      discovery: Project cognition
+      knowledge: Knowledge proposal
+      delivery: Delivery acceptance
+      repository: Code repository
+  aiContext:
+    title: AI context
+    readOnly: Read-only
+    empty: No AI execution records yet.
+    sections:
+      running: AI execution
+      recent: Recently completed analysis
+      proposals: Proposals produced
+      issues: Current problems
+      next: Next steps
+    layerFact: Formal fact
+    layerProposal: Awaiting confirmation
+    layerRunning: Running
+    activity:
+      analysis_succeeded: Analysis completed
+      analysis_failed: Analysis failed
+      repository_verified: Repository verified
+      repository_created: Repository linked
+      finding_decided: Finding decided
+      finding_revision_requested: Finding needs information
+      goal_committed: Goal committed
+      run_started: Execution started
+      run_finished: Execution finished
+      run_failed: Execution failed
+      run_terminated: Execution terminated
+      delivery_submitted: Delivery awaiting review
+      delivery_rejected: Delivery rejected
+      review_completed: Review completed
+      review_changes_requested: Review requested changes
+      member_changed: Membership changed
+      device_bound: Device bound

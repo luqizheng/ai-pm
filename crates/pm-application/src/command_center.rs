@@ -74,10 +74,152 @@ pub const ACTIVE_PROPOSAL_STATUSES: [&str; 5] = [
 pub mod init_status {
     pub const NOT_STARTED: &str = "not_started";
     pub const IN_PROGRESS: &str = "in_progress";
+    /// 系统已产生需要人类处理的事项（系统交出球，等待人类行动）。
+    /// **展示层状态**：不进入任何领域实体的权威状态体系。
+    pub const WAITING_FOR_HUMAN: &str = "waiting_for_human";
     pub const COMPLETED: &str = "completed";
     pub const BLOCKED: &str = "blocked";
     pub const NOT_APPLICABLE: &str = "not_applicable";
     pub const UNDETERMINED: &str = "undetermined";
+}
+
+/// 初始化事项的展示状态判定（**纯函数**，便于单测覆盖七态与跨域组合）。
+///
+/// S01-01 · G-01 七态模型：
+///   - `in_progress` —— 系统正在工作；
+///   - `waiting_for_human` —— 系统已交出球，等待人类行动；
+///   - `blocked` —— 外部条件阻止继续推进，当前**没有**可执行的人类确认动作。
+///
+/// 三者不得混为一谈。
+///
+/// 判定纪律：**不得**用「存在 PENDING 记录」直接推出 `waiting_for_human`——
+/// 必须依据该事项与人的**实际操作责任**：只有当该事项的下一步动作确实由人
+/// 承担（人工确认 / 人工批准 / 人工提交）时才判为等待人类。
+pub mod init_judgement {
+    use super::init_status;
+
+    /// 项目目标：已发布 → 完成；存在待人工红线确认的提案 → 等人；其余活跃提案由系统推进。
+    ///
+    /// `human_pending` 只统计 `redline_pending`（唯一可达的「待人工确认」提案状态，
+    /// 见 knowledge_proposal/submit.rs 的状态派生）；`draft` / `commit_pending` 属系统处理中。
+    pub fn goal_status(present: bool, human_pending: bool, pending: bool) -> &'static str {
+        if present {
+            return init_status::COMPLETED;
+        }
+        if human_pending {
+            return init_status::WAITING_FOR_HUMAN;
+        }
+        if pending {
+            return init_status::IN_PROGRESS;
+        }
+        init_status::NOT_STARTED
+    }
+
+    /// 仓库接入：零仓库合法（不判失败）；不可达 → 受阻；待核验 → 系统进行中。
+    pub fn repository_access_status(
+        total: i64,
+        unreachable: i64,
+        pending: i64,
+    ) -> &'static str {
+        if total == 0 {
+            // 零仓库是合法状态：不判失败（设计稿 §4.7）。
+            return init_status::NOT_STARTED;
+        }
+        if unreachable > 0 {
+            return init_status::BLOCKED;
+        }
+        if pending > 0 {
+            return init_status::IN_PROGRESS;
+        }
+        init_status::COMPLETED
+    }
+
+    /// 代码分析：作业状态 → 展示状态。
+    ///
+    /// `draft_ready` / `proposed` 的下一步动作由人承担（草案正文自述「需人工确认」，
+    /// 提交/批准入口是人类触发的治理动作），故判为等待人类；
+    /// `applied` 才算完成——分析跑完不等于结论已成为正式事实。
+    pub fn code_analysis_status(repo_total: i64, import_status: Option<&str>) -> &'static str {
+        if repo_total == 0 {
+            return init_status::NOT_APPLICABLE;
+        }
+        match import_status {
+            Some("queued" | "cloning" | "reading" | "analyzing") => init_status::IN_PROGRESS,
+            Some("draft_ready" | "proposed") => init_status::WAITING_FOR_HUMAN,
+            Some("applied") => init_status::COMPLETED,
+            Some("failed" | "rejected" | "cancelled") => init_status::BLOCKED,
+            _ => init_status::NOT_STARTED,
+        }
+    }
+
+    /// 项目认知：**以领域会话状态为权威信号**。
+    ///
+    /// 优先级（G-01 验收：人工待办不得被普通进行中覆盖）：
+    ///   1. 会话自声明的人审态（`NEEDS_USER_INPUT` / `REVIEW_REQUIRED`）→ 等人；
+    ///   2. 待人工确认发现（核实决定者只能是人类）→ 等人——即使会话仍在分析，
+    ///      已产出的待确认事项也是当下真实的人类动作；
+    ///   3. 其余未完成会话 → 系统进行中；
+    ///   4. 会话全部完成且无待确认发现 → 完成（G-06：完成 ≠ 自动全确认，
+    ///      但无任何待办时才允许判完成）。
+    pub fn cognition_status(
+        sessions: &[(String, i64)],
+        pending_findings: i64,
+    ) -> &'static str {
+        let total: i64 = sessions.iter().map(|(_, n)| n).sum();
+        if total == 0 {
+            return init_status::NOT_STARTED;
+        }
+        let human_waiting: i64 = sessions
+            .iter()
+            .filter(|(status, _)| status == "NEEDS_USER_INPUT" || status == "REVIEW_REQUIRED")
+            .map(|(_, n)| n)
+            .sum();
+        if human_waiting > 0 {
+            return init_status::WAITING_FOR_HUMAN;
+        }
+        if pending_findings > 0 {
+            return init_status::WAITING_FOR_HUMAN;
+        }
+        let open: i64 = sessions
+            .iter()
+            .filter(|(status, _)| status != "COMPLETED")
+            .map(|(_, n)| n)
+            .sum();
+        if open > 0 {
+            return init_status::IN_PROGRESS;
+        }
+        init_status::COMPLETED
+    }
+
+    /// 开发环境：从未自检 → 证据不足（待判定），不臆断为等人类或完成。
+    pub fn environment_status(
+        total: i64,
+        ready: i64,
+        degraded: i64,
+        unchecked: i64,
+    ) -> &'static str {
+        if total == 0 {
+            return init_status::NOT_STARTED;
+        }
+        if degraded > 0 {
+            return init_status::BLOCKED;
+        }
+        if unchecked > 0 {
+            return init_status::UNDETERMINED;
+        }
+        if ready > 0 {
+            return init_status::COMPLETED;
+        }
+        init_status::IN_PROGRESS
+    }
+
+    /// 人工处理：存在待人工处理事项 → 系统已交出球（等待人类）。
+    pub fn human_actions_status(action_total: i64) -> &'static str {
+        if action_total == 0 {
+            return init_status::COMPLETED;
+        }
+        init_status::WAITING_FOR_HUMAN
+    }
 }
 
 /// 数据块状态位（契约 §2）。
@@ -567,11 +709,7 @@ async fn load_initialization_progress(
     .fetch_all(pool)
     .await?;
     let session_total: i64 = session_rows.iter().map(|(_, n)| n).sum();
-    let session_open: i64 = session_rows
-        .iter()
-        .filter(|(s, _)| s != "COMPLETED")
-        .map(|(_, n)| n)
-        .sum();
+    // 开/待人审会话的口径收敛在 init_judgement::cognition_status（G-01 七态）。
 
     // 开发环境（绑定设备的就绪快照）
     let device_rows: Vec<(Option<String>, i64)> = sqlx::query_as(
@@ -616,14 +754,34 @@ async fn load_initialization_progress(
     .bind(tenant_id)
     .fetch_one(pool)
     .await?;
-    let goal_pending: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.document_proposal \
+    // G-01 七态：goal 的活跃提案按 status 拆分——只有 `redline_pending`
+    // 是「待人工红线确认」（系统已交出球）；draft / commit_pending 等由系统推进。
+    // （`quality_gates_passed` / `confirmed` 现无写入路径，不计。）
+    let goal_proposal_rows: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT status, count(*) FROM ai.document_proposal \
          WHERE project_id = $1 AND tenant_id = $2 AND doc_key = 'project-goal' \
-           AND status = ANY($3)",
+           AND status = ANY($3) GROUP BY status",
     )
     .bind(project_id)
     .bind(tenant_id)
     .bind(&ACTIVE_PROPOSAL_STATUSES)
+    .fetch_all(pool)
+    .await?;
+    let goal_human_pending: i64 = goal_proposal_rows
+        .iter()
+        .filter(|(status, _)| status == "redline_pending")
+        .map(|(_, n)| n)
+        .sum();
+    let goal_pending: i64 = goal_proposal_rows.iter().map(|(_, n)| n).sum();
+
+    // 认知：待人工确认的发现数——finding 的核实决定者只能是人类
+    // （set_finding_verification 强制可信人类身份），故 PENDING 即人类待办。
+    let finding_pending: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM discovery.discovery_finding \
+         WHERE project_id = $1 AND tenant_id = $2 AND verification_status = 'PENDING'",
+    )
+    .bind(project_id)
+    .bind(tenant_id)
     .fetch_one(pool)
     .await?;
 
@@ -639,13 +797,12 @@ async fn load_initialization_progress(
     items.push(InitItem {
         key: "project_goal".to_string(),
         title: "项目目标".to_string(),
-        status: if goal_present > 0 {
-            init_status::COMPLETED.to_string()
-        } else if goal_pending > 0 {
-            init_status::IN_PROGRESS.to_string()
-        } else {
-            init_status::NOT_STARTED.to_string()
-        },
+        status: init_judgement::goal_status(
+            goal_present > 0,
+            goal_human_pending > 0,
+            goal_pending > 0,
+        )
+        .to_string(),
         required: true,
         source_state: None,
         detail: None,
@@ -653,16 +810,12 @@ async fn load_initialization_progress(
     items.push(InitItem {
         key: "repository_access".to_string(),
         title: "仓库接入".to_string(),
-        status: if repo_total == 0 {
-            // 零仓库是合法状态：不判失败（设计稿 §4.7）。
-            init_status::NOT_STARTED.to_string()
-        } else if repo_unreachable > 0 {
-            init_status::BLOCKED.to_string()
-        } else if repo_pending > 0 {
-            init_status::IN_PROGRESS.to_string()
-        } else {
-            init_status::COMPLETED.to_string()
-        },
+        status: init_judgement::repository_access_status(
+            repo_total,
+            repo_unreachable,
+            repo_pending,
+        )
+        .to_string(),
         required: false,
         source_state: None,
         detail: Some(format!(
@@ -672,21 +825,11 @@ async fn load_initialization_progress(
     items.push(InitItem {
         key: "code_analysis".to_string(),
         title: "代码分析".to_string(),
-        status: if repo_total == 0 {
-            init_status::NOT_APPLICABLE.to_string()
-        } else {
-            match latest_import.map(|(s, _, _)| s.as_str()) {
-                Some("queued") | Some("cloning") | Some("reading") | Some("analyzing") => {
-                    init_status::IN_PROGRESS.to_string()
-                }
-                Some("failed") => init_status::BLOCKED.to_string(),
-                Some("draft_ready") | Some("proposed") | Some("applied") => {
-                    init_status::COMPLETED.to_string()
-                }
-                Some("rejected") | Some("cancelled") => init_status::BLOCKED.to_string(),
-                _ => init_status::NOT_STARTED.to_string(),
-            }
-        },
+        status: init_judgement::code_analysis_status(
+            repo_total,
+            latest_import.map(|(s, _, _)| s.as_str()),
+        )
+        .to_string(),
         required: false,
         source_state: latest_import.map(|(s, _, _)| s.clone()),
         detail: latest_import.and_then(|(_, code, _)| code.clone()),
@@ -694,13 +837,7 @@ async fn load_initialization_progress(
     items.push(InitItem {
         key: "project_cognition".to_string(),
         title: "项目认知".to_string(),
-        status: if session_total == 0 {
-            init_status::NOT_STARTED.to_string()
-        } else if session_open > 0 {
-            init_status::IN_PROGRESS.to_string()
-        } else {
-            init_status::COMPLETED.to_string()
-        },
+        status: init_judgement::cognition_status(&session_rows, finding_pending).to_string(),
         required: false,
         source_state: None,
         detail: Some(format!("共 {session_total} 个发现会话")),
@@ -708,18 +845,13 @@ async fn load_initialization_progress(
     items.push(InitItem {
         key: "dev_environment".to_string(),
         title: "开发环境".to_string(),
-        status: if device_total == 0 {
-            init_status::NOT_STARTED.to_string()
-        } else if device_degraded > 0 {
-            init_status::BLOCKED.to_string()
-        } else if device_unchecked > 0 {
-            // 从未自检 → 真实就绪条件尚未核验（设计稿 §4.4）。
-            init_status::UNDETERMINED.to_string()
-        } else if device_ready > 0 {
-            init_status::COMPLETED.to_string()
-        } else {
-            init_status::IN_PROGRESS.to_string()
-        },
+        status: init_judgement::environment_status(
+            device_total,
+            device_ready,
+            device_degraded,
+            device_unchecked,
+        )
+        .to_string(),
         required: false,
         source_state: None,
         detail: Some(format!("已绑定 {device_total} 台设备")),
@@ -727,11 +859,7 @@ async fn load_initialization_progress(
     items.push(InitItem {
         key: "human_actions".to_string(),
         title: "人工处理".to_string(),
-        status: if action_total == 0 {
-            init_status::COMPLETED.to_string()
-        } else {
-            init_status::IN_PROGRESS.to_string()
-        },
+        status: init_judgement::human_actions_status(action_total).to_string(),
         required: true,
         source_state: None,
         detail: Some(format!("{action_total} 项待人工处理")),
@@ -743,8 +871,13 @@ async fn load_initialization_progress(
         .map(|item| item.key.clone())
         .collect::<Vec<_>>();
     // 收缩规则（设计稿 §4.6）：进行中/未开始的必需事项或任一阻塞 → 展开。
+    // G-01 七态：waiting_for_human 走**自有展开分支**（无条件展开）——
+    // 球在人手里，收缩不得隐藏人工待办（I5 §4.6「收缩不能隐藏新的阻塞或
+    // 人工处理事项」）；刻意不并入 in_progress 的 required 限定分支，
+    // 两态展示语义不同（系统在工作 vs 等人行动）。
     let expanded = items.iter().any(|item| {
         item.status == init_status::BLOCKED
+            || item.status == init_status::WAITING_FOR_HUMAN
             || (item.required
                 && matches!(
                     item.status.as_str(),

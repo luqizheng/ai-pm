@@ -60,8 +60,8 @@ describe("UnauthorizedView", () => {
     expect(button).toBeTruthy();
 
     await button!.trigger("click");
-    await waitForRoute(router, "/dashboard");
+    await waitForRoute(router, "/personal");
 
-    expect(router.currentRoute.value.path).toBe("/dashboard");
+    expect(router.currentRoute.value.path).toBe("/personal");
   });
 });

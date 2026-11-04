@@ -27,7 +27,6 @@ function readErrorBody(payload: unknown): ErrorBody {
   return {};
 }
 
-
 /**
  * 创建 HTTP 客户端。
  *
@@ -91,7 +90,9 @@ export function createHttp(options: HttpClientOptions = {}): HttpClient {
   }
 
   client.interceptors.request.use(config => {
-    const custom = config as InternalAxiosRequestConfig & { skipAuth?: boolean };
+    const custom = config as InternalAxiosRequestConfig & {
+      skipAuth?: boolean;
+    };
     if (custom.skipAuth || isWhiteListed(config.url ?? "")) return config;
 
     // 刷新后重放的请求已经带了新 token，不要用旧值覆盖
@@ -125,7 +126,10 @@ export function createHttp(options: HttpClientOptions = {}): HttpClient {
     response => response,
     async (error: AxiosError<ErrorBody>) => {
       const original = error.config as
-        | (InternalAxiosRequestConfig & { skipAuth?: boolean; _prismRetried?: boolean })
+        | (InternalAxiosRequestConfig & {
+            skipAuth?: boolean;
+            _prismRetried?: boolean;
+          })
         | undefined;
       const status = error.response?.status;
       const body = readErrorBody(error.response?.data);
@@ -169,9 +173,11 @@ export function createHttp(options: HttpClientOptions = {}): HttpClient {
         }
 
         // 已有刷新在进行：挂起，等刷新结果
-        const token = await new Promise<string | undefined | null>((resolve, reject) => {
-          pending.push({ resolve, reject });
-        });
+        const token = await new Promise<string | undefined | null>(
+          (resolve, reject) => {
+            pending.push({ resolve, reject });
+          }
+        );
         original.headers.set("Authorization", `Bearer ${token}`);
         return client.request(original);
       }

@@ -138,7 +138,10 @@ describe("帧 02~07 — 个人域", () => {
     expect(wrapper.findAll("tbody tr").length).toBe(rowsBefore - 1);
   });
 
-  it("偏好页：主题 radio 切换本区块 data-theme", async () => {
+  it("偏好页：主题 radio 切换本区块 data-theme（演示模式，不写全局）", async () => {
+    // 模拟 index.html 防闪烁脚本的运行时前提：html 已带主题 + 已持久化
+    localStorage.setItem("aipm.theme", "dark");
+    document.documentElement.dataset.theme = "dark";
     const wrapper = await mountAt(
       SettingsPersonalPreferencesView,
       DESIGN_PATHS.settings.personalPreferences
@@ -149,8 +152,12 @@ describe("帧 02~07 — 个人域", () => {
     expect(wrapper.find(".preferences-theme[data-theme=light]").exists()).toBe(
       true
     );
+    // 演示模式（未传 apply-to-app）：不得写 html data-theme / 持久化
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(localStorage.getItem("aipm.theme")).toBe("dark");
     // 快捷键表只读呈现
     expect(wrapper.find(".preferences-shortcuts").exists()).toBe(true);
+    localStorage.removeItem("aipm.theme");
   });
 
   it("通知页：邮件通道禁用（Proposed），类别开关可切换", async () => {

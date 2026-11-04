@@ -145,6 +145,7 @@ shell:
         admin: Administration
       item:
         personalWorkspace: Personal Workspace
+        personalHome: My Home
         inbox: Inbox
         dashboard: Project Dashboard
         projects: Projects
@@ -217,5 +218,4 @@ shell:
     page:
       placeholderTitle: This page is under construction
       placeholderHint: The application shell is ready; business modules follow.
-
 # ── Framework system pages ─────────────────────────────────────────────

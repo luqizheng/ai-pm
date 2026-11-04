@@ -44,7 +44,11 @@ describe("AuthLoadingView", () => {
     vi.advanceTimersByTime(3600);
     await flushPromises();
 
-    expect(router.currentRoute.value.path).toBe("/dashboard");
+    // /personal 是懒加载路由（导航树登记了业务页组件），首次导航需经
+    // Vite 真实 I/O 加载 —— 假定时器下无法等待，必须切回真实定时器再轮询。
+    vi.useRealTimers();
+    await waitForRoute(router, "/personal");
+    expect(router.currentRoute.value.path).toBe("/personal");
   });
 
   it("可取消并返回登录页", async () => {

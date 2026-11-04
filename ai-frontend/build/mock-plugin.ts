@@ -1,6 +1,8 @@
 import type { Connect, Plugin, ViteDevServer } from "vite";
 
+import { resolveCommandCenterMock } from "../src/api/mock/command-center.ts";
 import { resolveMock } from "../src/api/mock/fixtures.ts";
+import { resolvePersonalMock } from "../src/api/mock/personal.ts";
 import { resolveInitializationMock } from "../src/api/mock/initialization.ts";
 
 /**
@@ -36,8 +38,16 @@ export function mockPlugin(enabled: boolean): Plugin {
           }
           // S01 初始化域端点优先匹配（与 pm-api 契约一致，见
           // docs/s01-backend-api-requirements-v1.md）；未命中再走通用 fixtures。
+          // 总控台聚合读模型最具体，优先匹配（G-16）。
           const result =
+            resolveCommandCenterMock(req.method ?? "GET", pathname) ??
             resolveInitializationMock(
+              req.method ?? "GET",
+              pathname,
+              url.searchParams,
+              body
+            ) ??
+            resolvePersonalMock(
               req.method ?? "GET",
               pathname,
               url.searchParams,

@@ -12,7 +12,13 @@
 
 /* ───────────────────────── S01-02 项目创建 ───────────────────────── */
 
-/** S01-02 §8.2：初始化生命周期。与 `project.status` 分离，两者不得共用字段。 */
+/**
+ * S01-02 §8.2：初始化生命周期。与 `project.status` 分离，两者不得共用字段。
+ *
+ * @deprecated **已废弃（S01-01 · G-01 裁决）**：初始化展示状态统一使用
+ * `@/api/command-center` 的 `InitItemStatus`（七态）。本类型是早期契约草稿，
+ * 其配套端点（/initialization）从未在后端实现；禁止在新代码中使用。
+ */
 export type InitializationStatus =
   | "not_started"
   | "in_progress"
