@@ -1,6 +1,7 @@
 import type { Connect, Plugin, ViteDevServer } from "vite";
 
 import { resolveMock } from "../src/api/mock/fixtures.ts";
+import { resolveInitializationMock } from "../src/api/mock/initialization.ts";
 
 /**
  * pm-api 未就绪期间的 dev mock 层：在 vite 代理之前拦截 /v1/* 请求并返回 fixtures。
@@ -33,12 +34,16 @@ export function mockPlugin(enabled: boolean): Plugin {
           } catch {
             body = undefined;
           }
-          const result = resolveMock(
-            req.method ?? "GET",
-            pathname,
-            url.searchParams,
-            body
-          );
+          // S01 初始化域端点优先匹配（与 pm-api 契约一致，见
+          // docs/s01-backend-api-requirements-v1.md）；未命中再走通用 fixtures。
+          const result =
+            resolveInitializationMock(
+              req.method ?? "GET",
+              pathname,
+              url.searchParams,
+              body
+            ) ??
+            resolveMock(req.method ?? "GET", pathname, url.searchParams, body);
           if (!result) return next();
           res.statusCode = result.status;
           res.setHeader("Content-Type", "application/json; charset=utf-8");

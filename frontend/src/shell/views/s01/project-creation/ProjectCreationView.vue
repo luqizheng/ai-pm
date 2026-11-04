@@ -76,6 +76,12 @@ let suggestTimer: ReturnType<typeof setTimeout> | null = null;
 
 const nameMissing = computed(() => form.value.name.trim() === "");
 const codeMissing = computed(() => form.value.code.trim() === "");
+/**
+ * 校验提示仅在用户交互过后出现，避免首屏满屏红字。
+ * 与上面的 `codeTouched`（是否手动改过 Key）是两件事，勿混。
+ */
+const nameInvalidated = ref(false);
+const codeInvalidated = ref(false);
 const codeConflict = computed(
   () => codeSuggestion.value !== null && !codeSuggestion.value.available
 );
@@ -172,6 +178,7 @@ watch(
 function onCodeInput(value: string) {
   form.value.code = value;
   codeTouched.value = true;
+  codeInvalidated.value = true;
 }
 
 function regenerateCode() {
@@ -305,9 +312,10 @@ onMounted(async () => {
         <Input
           v-model="form.name"
           :placeholder="t('s01.initialization.projectCreation.namePlaceholder')"
-          :invalid="nameMissing && form.name.length > 0"
+          :invalid="nameInvalidated && nameMissing"
+          @update:model-value="nameInvalidated = true"
         />
-        <p v-if="nameMissing" class="field__hint">
+        <p v-if="nameInvalidated && nameMissing" class="field__hint">
           {{ t("s01.initialization.projectCreation.nameRequired") }}
         </p>
       </div>
@@ -334,7 +342,7 @@ onMounted(async () => {
             {{ t("s01.initialization.projectCreation.codeRegenerate") }}
           </Button>
         </div>
-        <p v-if="codeMissing" class="field__hint">
+        <p v-if="codeInvalidated && codeMissing" class="field__hint">
           {{ t("s01.initialization.projectCreation.codeRequired") }}
         </p>
         <p v-else-if="codeConflict" class="field__hint">
@@ -623,6 +631,17 @@ onMounted(async () => {
 .field-row {
   display: flex;
   gap: var(--space-3);
+}
+
+/* 输入框与操作按钮并排：按钮保持单行，输入框吃掉剩余宽度 */
+.field-row > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.field-row > :last-child {
+  flex: none;
+  white-space: nowrap;
 }
 
 .field__label {

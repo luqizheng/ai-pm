@@ -485,11 +485,22 @@ onMounted(async () => {
                 {{ t("s01.initialization.repositories.verificationChecks") }}
               </dt>
               <dd>
-                <span class="repo__muted">
-                  {{ t("s01.initialization.repositories.reVerifyHint") }}
+                <span v-if="row.last_verified_at">
+                  {{ formatDateTime(row.last_verified_at) }}
                 </span>
-                <span v-if="row.last_verified_at" class="repo__muted">
-                  · {{ formatDateTime(row.last_verified_at) }}
+                <span v-else class="repo__muted">
+                  {{ t("s01.initialization.repositories.verificationPending") }}
+                </span>
+              </dd>
+            </div>
+            <div class="repo__fact">
+              <dt>{{ t("s01.initialization.repositories.rescan") }}</dt>
+              <dd>
+                <span v-if="row.last_scanned_at">
+                  {{ formatDateTime(row.last_scanned_at) }}
+                </span>
+                <span v-else class="repo__muted">
+                  {{ t("s01.initialization.common.empty") }}
                 </span>
               </dd>
             </div>
