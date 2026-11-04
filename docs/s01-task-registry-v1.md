@@ -156,7 +156,7 @@
 | I4-C | S01-5 | W53 | Goal 修改流程（复用 DocumentProposal） | I4 §13 | I4-B、T-060 | — | 既有提案管线 | 既有 propose/confirm 工具 | — | `knowledge_proposal/submit.rs`（Goal 强制红线） | I4-007~012 | 串行 | G-USER(B-4) | **已实施（2026-11-04）** |
 | I4-D | S01-5 | W52+W54 | 多 Agent Knowledge 协调 | I4 §13 | I4-C | — | — | — | — | `knowledge_write_coordinator.rs`（已覆盖） | I4-013~018 | 串行 | — | **部分已被 T-060 覆盖** |
 | I4-E | S01-4/S01-5 | — | Agent 上下文读取（Goal 版本） | I4 §13 | I4-B、I4-C | — | — | `pm_get_run_context` 已带 goal 快照 | — | `run_context.rs` | I4-019~021 | 串行 | — | **已实施（2026-11-04）** |
-| I4-F | S01-6 | W62+W63 | 归档与审计集成 | I4 §13 | I4-C、I1-A | — | — | — | — | — | I4-022~024 | 串行 | — | 仅设计 |
+| I4-F | S01-6 | W62+W63 | 归档与审计集成 | I4 §13（**验收口径勘误见 ledger D-C-04**：实为 **I4-019/020**） | I4-C、I1-A | — | — | — | — | `knowledge.rs` + `knowledge_proposal/` + `project_gate.rs` | I4-019/020（归档只读 + 归档竞争） | 串行 | — | **已实施（2026-11-04）：四个知识写入口加归档门禁（create/submit/confirm/finalize），与归档事务共享 project 行锁 → 提交与归档线性化；归档后正式 Goal/提案/修订历史仍可读** |
 | I5-A | S01-0→S01-3 | W02+W04 | 代码事实核验（14 项） | I5 V1.1 §9.1 | I6 数据契约定稿 | — | — | — | — | — | 交付 `docs/s01-i5-code-facts.md` | 可并行 | — | 未开工 |
 | I5-B | S01-3 | W04 | 读模型契约 | I5 V1.1 §9.2 | I5-A | — | — | — | — | — | 交付 `docs/s01-i5-read-model-contract.md` | 串行 | — | 未开工 |
 | I5-C | S01-3 | W60 | 聚合查询实现 | I5 V1.1 §9.3 | I5-B、I6-B-05 | — | 需新增端点 | — | — | 新读模型 | I5-001~025 | 串行 | G-INTERFACE | 未开工 |

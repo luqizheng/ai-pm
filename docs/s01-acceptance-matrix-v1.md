@@ -158,9 +158,15 @@
 | I4-C | I4-007~012（复用 DocumentProposal、基础版本不得静默覆盖、归档只读） | 正向 + 负向 + 幂等 |
 | I4-D | I4-013~018（多 Agent 并发、版本冲突识别、Project 级并发控制） | **并发** + 幂等 |
 | I4-E | I4-019~021（Agent 上下文读取、区分正式与待确认、记录 Run 使用的 Goal 版本） | 正向 + 数据（一致性） |
-| I4-F | I4-022~024（归档后拒绝新版本提交、保留历史查询、归档与提交并发） | 负向 + **并发** + 审计 |
+| I4-F | **I4-019/020**（归档只读、归档竞争——**口径勘误见 ledger D-C-04**：本行原登记 I4-022~024，与设计稿 §12 验收表不符） | 负向 + **并发** + 审计 |
 
 **已有机制复用判定**：I4-D 的"确认现有写入协调 / 版本冲突处理 / 基础版本校验"三项**已被 T-060 覆盖**（`base_revision` + Project 级 advisory lock + `knowledge_write_operation` 幂等账本），实施时只做验证，不重建。
+
+**I4-F 落地结果（2026-11-04）**：知识写入门禁覆盖**四个入口**
+（`create_document` / `submit_proposal` / `confirm_redline_proposal` / `finalize_committed`）；
+守卫与归档事务共享 `core.project` 行锁 → 提交与归档线性化，**归档之后不出现新的
+published 修订**；归档后正式 Goal / 提案 / 修订历史仍可读。
+验收：`apps/pm-api/tests/project_goal_archive.rs` **5 例全绿**。
 
 ### 3.5 I5 · 项目总控台（36）
 

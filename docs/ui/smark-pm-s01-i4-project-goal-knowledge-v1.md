@@ -1135,3 +1135,71 @@ Agent 上下文读取实现及测试。
 **最终建议：** I4 不应该演变成一套新的文档系统。它应该是现有 Knowledge 体系之上的一组领域规则：明确哪个文档是项目目标、谁有权改变它、修改如何确认、多个 Agent 如何协作，以及所有 Agent 如何读取同一个权威版本。
 
 这套规则稳定后，Project Goal 就成为整个 AI 研发管理平台的方向性依据。
+---
+
+# §15. 实施落地记录（2026-11-04）
+
+> 本节记录 S01 实施期对 I4 的落地结果与**语义偏差登记**；正文 §0~§14 的设计
+> 裁决不变（Q1/Q2 已由用户 2026-11-03 拍板，与推荐一致）。
+
+## 15.1 各批次落地情况
+
+| 批次 | 范围 | 落地方式 | 状态 |
+|---|---|---|---|
+| I4-A | Knowledge 现状核验 | 复用 `ai.project_document` + `ai.document_revision` + `ai.document_proposal`；**零新表** | 已完成 |
+| I4-B | Goal 领域规则 | `project_goal.rs`：`doc_key='project-goal'`（唯一性 = 既有 `UNIQUE (project_id, doc_key)`）、`ensure_goal_document` 幂等引导、`load_official_goal` 读正式版本、`goal_head_revision` 作 base 锚点 | 已完成 |
+| I4-C | Goal 修改流程 | 复用 DocumentProposal；**Q2 结构性保证** = `submit_proposal` 对 Goal 强制红线（`rewrite_delivered`）→ Agent 提案只挂起不发布；人工确认走 `confirm_redline_proposal` | 已完成 |
+| I4-D | 多 Agent 协调 | 复用 T-060 的 KnowledgeWriteCoordinator（project 级 advisory lock + `base_revision` 乐观并发 + `knowledge_write_operation` 幂等账本） | 已完成（既有能力覆盖） |
+| I4-E | Agent 上下文读取 | `RunContract.goal` 快照（`GoalSnapshot`：document/revision/revision_no/content_hash）；**缺失 = `null`**（显式信号，不得臆测） | 已完成 |
+| **I4-F** | **归档与审计集成** | 见 §15.2 | **本批完成** |
+
+## 15.2 I4-F 落地细节（本批）
+
+### 15.2.1 归档守卫的四个入口
+
+「正式知识提交」在本仓有四个物理入口，全部加同一道归档门禁
+（`knowledge::ensure_project_active_for_write` → `project_gate::lock_project_activity_tx`）：
+
+| # | 入口 | 守卫位置 | 拦截语义 |
+|---|---|---|---|
+| 1 | `knowledge::create_document`（新建文档 = 发布 rev 1） | Git 写入**前**的无锁前置检查 + 事务内的行锁判定 | 归档项目不得新建文档（避免孤儿 Git 提交） |
+| 2 | `knowledge_proposal::submit_proposal`（新建提案） | 提案事务内（行锁） | 归档项目不得新建提案（§9.1/§9.2） |
+| 3 | `knowledge_proposal::confirm_redline_proposal`（人工确认） | 确认事务内（行锁），**在 Git 写入之前** | 归档时未完成的提案不能继续确认发布（§9.2） |
+| 4 | `knowledge_proposal::finalize_committed`（发布 published 修订） | 修订事务内（行锁） | **正式提交入口**的统一判定（§9.3） |
+
+### 15.2.2 与归档的线性化（§11.3）
+
+守卫与归档事务**共享 `core.project` 行锁**：
+
+- 归档事务：`lock project → status='archived' → 收口 queued Run / Import`；
+- 知识提交：`lock project → 判定 active → 写文档/修订`。
+
+因此结论确定，二者必居其一：
+
+1. **提交先拿到锁** → 该修订成为归档时的最终版本；
+2. **归档先拿到锁** → 提交被拒（`Conflict: project is archived`），
+   **归档之后不可能出现新的正式修订**。
+
+锁序 `core.project → 文档/提案行` 与 I1 的 `project → run → task` 同向，不成环。
+
+### 15.2.3 归档后仍然可读（§9.1 允许项）
+
+正式 Goal、提案列表、修订历史与审计记录**在归档后一律可读**——门禁只拦写入。
+
+### 15.2.4 语义偏差登记
+
+| # | 偏差 | 说明 |
+|---|---|---|
+| **V-1** | 验收编号口径 | 本稿 §12 的验收表中，归档相关条目是 **I4-019（归档只读）/ I4-020（归档竞争）**；而 `docs/s01-task-registry-v1.md` 的 I4-F 行登记为「I4-022~024」。以本稿 §12 表为准（I4-022 历史恢复 / I4-023 上下文追溯 / I4-024 不重复存储 与归档无关），台账已更正（ledger D-C-04） |
+| **V-2** | 归档时未完成提案的终态 | §9.2 要求「复用现有 Proposal 状态机，不得随意增加不兼容状态」。本实现**不新增终态**：归档时未完成提案保持 `redline_pending` 原状（原文与审计完整保留），只是**不能再被确认发布**（门禁 3/4） |
+| **V-3** | 门禁范围 | §9.3 的表述是「Knowledge 正式提交入口必须检查 Project 是否仍然 active」——本实现按**字面**执行：门禁覆盖全部知识文档（不只 Goal），归档项目一律只读 |
+
+## 15.3 验收结果
+
+`apps/pm-api/tests/project_goal_archive.rs` **5 例全绿**（2026-11-04）：
+
+1. `archived_project_rejects_new_goal_proposal` — I4-019：归档后新建 Goal 提案被拒，提案表零新增；
+2. `archived_project_rejects_confirming_a_pending_goal_proposal` — I4-019/§9.2：未完成提案不能确认发布，正式修订数不变、提案原文与状态保留；
+3. `archived_project_keeps_goal_history_readable` — 历史查询保留：正式 Goal / 提案列表 / 修订历史在归档后仍可读；
+4. `archive_racing_with_confirm_never_publishes_after_archive` — I4-020：确认发布与归档并发三轮，**归档之后不出现新的 published 修订**，结论二选一且自洽；
+5. `rejected_writes_leave_no_publish_audit` — 审计完整性：被拒的写入不产生发布审计；归档本身留 `project.archived` 审计。

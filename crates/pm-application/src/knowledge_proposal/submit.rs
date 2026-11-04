@@ -158,6 +158,8 @@ pub async fn submit_proposal(
     };
 
     let mut tx = pool.begin().await?;
+    // I4-F 归档守卫：归档项目不得新建提案（Goal 修改提案同样关闭，I4 §9.1/§9.2）。
+    crate::knowledge::ensure_project_active_for_write(&mut tx, req.project_id).await?;
     // 幂等预占在业务事务内。
     let claim = crate::knowledge_write_coordinator::claim_operation(
         &mut tx,
@@ -333,6 +335,9 @@ pub async fn confirm_redline_proposal(
     let created_by: Uuid = row.get("created_by");
 
     let mut tx = pool.begin().await?;
+    // I4-F 归档守卫：归档项目不得确认发布（未完成 Goal 提案归档后不能继续提交，
+    // I4 §9.2）。守卫放在 **Git 写入之前** → 不产生孤儿提交。
+    crate::knowledge::ensure_project_active_for_write(&mut tx, project_id).await?;
     let claim = crate::knowledge_write_coordinator::claim_operation(
         &mut tx,
         project_id,

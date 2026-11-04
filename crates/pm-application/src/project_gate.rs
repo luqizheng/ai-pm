@@ -61,11 +61,36 @@ pub async fn project_activity_tx(
     tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
     project_id: Uuid,
 ) -> Result<ProjectActivity, GateError> {
-    let status: Option<String> = sqlx::query_scalar("SELECT status FROM core.project WHERE id = $1")
-        .bind(project_id)
-        .fetch_optional(&mut **tx)
-        .await
-        .map_err(|e| GateError::Db(e.to_string()))?;
+    let status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM core.project WHERE id = $1")
+            .bind(project_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(|e| GateError::Db(e.to_string()))?;
+    Ok(match status.as_deref() {
+        None => return Err(GateError::NotFound),
+        Some("archived") => ProjectActivity::Archived,
+        Some(_) => ProjectActivity::Active,
+    })
+}
+
+/// 事务版 + **行锁**：与归档事务共享 `core.project` 行锁 → 写入与归档线性化。
+///
+/// I4-F 用它给「正式知识提交」与「Project 归档」一个确定结论：
+/// 两者都先取同一把行锁，谁先拿到锁谁先完成——归档先落定 → 提交被拒；
+/// 提交先落定 → 该修订成为归档时的最终版本（I4 §11.3）。
+///
+/// 锁序：`core.project` → 其余业务行（与 I1 的 `project → run → task` 同向）。
+pub async fn lock_project_activity_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    project_id: Uuid,
+) -> Result<ProjectActivity, GateError> {
+    let status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM core.project WHERE id = $1 FOR UPDATE")
+            .bind(project_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(|e| GateError::Db(e.to_string()))?;
     Ok(match status.as_deref() {
         None => return Err(GateError::NotFound),
         Some("archived") => ProjectActivity::Archived,

@@ -220,6 +220,11 @@ pub(crate) async fn finalize_committed(
 ) -> Result<ProposalOutcome, KnowledgeError> {
     let mut tx = pool.begin().await?;
 
+    // I4-F 归档守卫：**正式提交入口**（发布 published 修订）必须确认 Project 仍
+    // active——归档后不得出现新的正式版本（I4 §9.1/§9.3）。与归档事务共享
+    // `core.project` 行锁 → 提交与归档线性化（I4 §11.3）。
+    crate::knowledge::ensure_project_active_for_write(&mut tx, project_id).await?;
+
     let document_id: Uuid = match sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM ai.project_document WHERE project_id = $1 AND doc_key = $2",
     )

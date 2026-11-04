@@ -450,6 +450,14 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **验收**：`I3-001~021`（按 §0.0.6 改写）——范围内 verified 仓可访问、范围外拒绝、仓库失验拒绝、项目归档拒绝、快照缺失 deny-all、快照不可变、哈希 = SHA-256。
   - **完成记录（2026-11-04）**：`pm-domain::repo_access` 4 例单测；`apps/pm-api/tests/run_scope_snapshot.rs` 4 例 + `repo_access_enforcement.rs` 8 例；全量回归通过。**保留的边界**：租户/项目隔离、Task 仓库范围、仓库 `verified`、Run 快照可追溯、归档与取消门禁。**已知取舍**：失去单仓操作类型分级（见设计稿 §0.0.5）。
 
+- [x] **I4-F Project Goal 归档联动（P1，I4 §13）**（完成 2026-11-04）
+  - **目标**：归档后 Goal 只读、修改入口关闭、未完成提案不能继续发布；提交与归档有确定竞争结果（I4 §9/§11.3）。
+  - **依据**：`docs/ui/smark-pm-s01-i4-project-goal-knowledge-v1.md` §9、§11.3、§13 I4-F；台账 `docs/s01-code-facts-ledger-v1.md` **D-C-04**（验收编号口径勘误：I4-F 实为 **I4-019/020**，非台账原登记的 I4-022~024）。
+  - **做**：`project_gate::lock_project_activity_tx`（**行锁**版活动判定）；知识写入门禁 `knowledge::ensure_project_active_for_write`，接入**四个入口**——`create_document`（Git 写入前前置检查，防孤儿提交）/ `submit_proposal`（禁新建提案）/ `confirm_redline_proposal`（Git 写入前禁确认）/ `finalize_committed`（正式提交入口统一判定）。
+  - **不做**：不新增 Proposal 终态（归档时未完成提案保持 `redline_pending` 原状，只是不再能确认）；不动归档事务本身（I1-D 已冻结）；门禁只拦写入——归档后正式 Goal/提案/修订历史/审计一律可读。
+  - **验收**：`I4-019`（归档只读）、`I4-020`（归档竞争）——`apps/pm-api/tests/project_goal_archive.rs` **5 例全绿**（归档拒提案 / 归档拒确认 / 历史可读 / **并发三轮：归档之后无新的 published 修订** / 被拒写入零发布审计）。
+  - **落地记录**：设计稿回填 **§15 实施落地记录**（四入口表 + 线性化说明 + 语义偏差登记 V-1~V-3）。
+
 - [ ] **I2-A / I4-A / I5-A 三份代码事实核验（后续实施的硬前置）**
   - **目标**：产出 `docs/s01-i2-code-facts.md`、`docs/s01-i4-knowledge-facts.md`、`docs/s01-i5-code-facts.md`。
   - **依据**：I2 V1.1 §16 I2-A；I4 §13 I4-A；I5 V1.1 §9.1 I5-A（14 项）。
