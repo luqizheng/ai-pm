@@ -3,11 +3,12 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 
-import PageHeader from "@/components/shell/PageHeader.vue";
+import PageFrame from "@/components/shell/PageFrame.vue";
 
 /**
  * 占位视图 —— 应用壳骨架阶段的默认业务页。
  *
+ * = 统一页框 PageFrame（AGENTS.md §三.12）+ 「建设中」空态；
  * 渲染当前路由的面包屑 / 标题 / 描述与「建设中」空态；
  * 业务模块落地时按路由替换本组件。
  */
@@ -25,9 +26,7 @@ const description = computed(() => t("shell.app.page.placeholderHint"));
 </script>
 
 <template>
-  <div class="shell-placeholder">
-    <PageHeader :title="title" :description="description" />
-
+  <PageFrame :title="title" :description="description">
     <div class="shell-placeholder__empty" role="status">
       <p class="shell-placeholder__empty-title">
         {{ t("shell.app.page.placeholderTitle") }}
@@ -36,17 +35,10 @@ const description = computed(() => t("shell.app.page.placeholderHint"));
         {{ t("shell.app.page.placeholderHint") }}
       </p>
     </div>
-  </div>
+  </PageFrame>
 </template>
 
 <style scoped>
-.shell-placeholder {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  padding: var(--space-5) var(--space-8);
-}
-
 .shell-placeholder__empty {
   display: flex;
   flex-direction: column;

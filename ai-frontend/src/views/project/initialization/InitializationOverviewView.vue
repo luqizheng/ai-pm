@@ -9,7 +9,7 @@ import Badge from "@/components/ui/badge/Badge.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Descriptions from "@/components/ui/descriptions/Descriptions.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
-import PageHeader from "@/components/shell/PageHeader.vue";
+import PageFrame from "@/components/shell/PageFrame.vue";
 import { useShellStore } from "@/stores/shell";
 import { SCOPE_ALL, useScopeStore } from "@/api/scope";
 import {
@@ -204,29 +204,23 @@ watch(
 </script>
 
 <template>
-  <div class="init-page">
-    <PageHeader
-      :breadcrumbs="[
-        { label: t('s01.initialization-overview.page.breadcrumbProject') },
-        { label: t('s01.initialization-overview.page.breadcrumbOverview') }
-      ]"
-      :title="t('s01.initialization-overview.page.title')"
-      :description="t('s01.initialization-overview.page.description')"
-    >
-      <template #actions>
-        <Button variant="ghost" size="sm" :disabled="loading" @click="load">
-          <RefreshCw :size="14" aria-hidden="true" />
-          {{ t("s01.initialization-overview.page.reload") }}
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          @click="router.push('/dashboard')"
-        >
-          {{ t("s01.initialization-overview.page.openConsole") }}
-        </Button>
-      </template>
-    </PageHeader>
+  <PageFrame
+    :breadcrumbs="[
+      { label: t('s01.initialization-overview.page.breadcrumbProject') },
+      { label: t('s01.initialization-overview.page.breadcrumbOverview') }
+    ]"
+    :title="t('s01.initialization-overview.page.title')"
+    :description="t('s01.initialization-overview.page.description')"
+  >
+    <template #actions>
+      <Button variant="ghost" size="sm" :disabled="loading" @click="load">
+        <RefreshCw :size="14" aria-hidden="true" />
+        {{ t("s01.initialization-overview.page.reload") }}
+      </Button>
+      <Button variant="secondary" size="sm" @click="router.push('/dashboard')">
+        {{ t("s01.initialization-overview.page.openConsole") }}
+      </Button>
+    </template>
 
     <!-- 归档只读 -->
     <Alert
@@ -358,17 +352,10 @@ watch(
         :items="overview.aiContext"
       />
     </div>
-  </div>
+  </PageFrame>
 </template>
 
 <style scoped>
-.init-page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  padding: var(--space-6);
-}
-
 .init-page__grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

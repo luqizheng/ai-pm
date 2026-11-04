@@ -212,15 +212,16 @@ The objective is to create the visual and interaction foundation that every subs
       `empty-state` / `search-input` / `confirmation-dialog` / `human-approval-indicator` 等）
       在 `feat/ai-frontend-design-system` 分支，**合并前**本分支以 `FIGMA-SYNC.md` +
       `src/components/shell/` 既有实现为组合范式参照。
-12. **应用壳内页面强制使用统一页框 = PlaceholderView 口径（2026-11-05 用户裁决）**：
-    业务页一律以 `src/views/placeholder/PlaceholderView.vue` 为页框基准——
-    页根自带留白 `padding: var(--space-5) var(--space-8)`（`.workspace-main-scroll`
-    无 padding，页面不得依赖壳留白、不得另设页边距数值），标题区一律用
-    `components/shell/PageHeader.vue`；未落地的导航路由必须渲染 PlaceholderView
-    （路由表 `item.component ?? PlaceholderView`），禁止自造 coming-soon 页。
-    存量偏差不新增、随下次触碰收敛：`PersonalHomeView` 页根 20/24（沿 S01-05
-    设计稿「主区内边距」口径，与页框基准冲突待裁决）、`InitializationOverviewView` /
-    `NotificationsView` 页边距自定、`ProjectCreateView` 页根无留白。
+12. **应用壳内页面强制使用统一页框组件 `PageFrame`（2026-11-05 用户裁决）**：
+    业务页一律以 `src/components/shell/PageFrame.vue` 为页根——页框拥有
+    页根留白 `padding: var(--space-5) var(--space-8)`（`.workspace-main-scroll`
+    无 padding，页面不得依赖壳留白、不得另设页边距）、根纵列布局（gap `--space-6`）
+    与可选 `PageHeader` 标题区（面包屑 / 标题 / 描述 / `#actions`）。
+    纵列业务页内容直接进默认插槽；根布局非纵列的工作台（如通知中心双栏）
+    在插槽内自带容器并省略 `title`。页面不得自造页根容器或复刻页框能力；
+    `views/placeholder/PlaceholderView.vue` = PageFrame +「建设中」空态的特例，
+    未落地导航路由必须渲染它（路由表 `item.component ?? PlaceholderView`），
+    禁止自造 coming-soon 页。Settings 域已按同口径自带留白，择机接入 PageFrame。
 
 ## 四、常用命令
 

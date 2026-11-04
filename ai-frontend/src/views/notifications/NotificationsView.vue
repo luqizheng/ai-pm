@@ -7,12 +7,14 @@ import {
   NotificationDetail
 } from "@/components/global/notification";
 import type { NotificationRecord } from "@/components/global/notification/types";
+import PageFrame from "@/components/shell/PageFrame.vue";
 import { useNotificationsStore } from "@/stores/notifications";
 
 /**
  * 通知中心页（/notifications，顶栏下拉「查看全部通知」的落点）。
  *
- * 布局 = 完整通知中心（分类/未读过滤 + 记录列表）+ 选中记录的详情面板；
+ * 布局 = 统一页框（AGENTS.md §三.12，工作台型页面省略标题区）
+ *        内嵌完整通知中心（分类/未读过滤 + 记录列表）+ 选中记录的详情面板；
  * 演示阶段给 REQ-142 挂一条待决审批（Detail Pending 态），
  * 审批动作属业务域，骨架阶段仅占位。
  */
@@ -43,22 +45,24 @@ function onReview() {
 </script>
 
 <template>
-  <div class="notifications-view">
-    <NotificationCenter
-      v-model:selected-id="selectedId"
-      class="notifications-view__center"
-      @open="onOpen"
-    />
-    <NotificationDetail
-      v-if="selected"
-      class="notifications-view__detail"
-      :record="selected"
-      :approval="approval"
-      @open="onOpen"
-      @review="onReview"
-      @mark-read="store.markRead(selected.id)"
-    />
-  </div>
+  <PageFrame>
+    <div class="notifications-view">
+      <NotificationCenter
+        v-model:selected-id="selectedId"
+        class="notifications-view__center"
+        @open="onOpen"
+      />
+      <NotificationDetail
+        v-if="selected"
+        class="notifications-view__detail"
+        :record="selected"
+        :approval="approval"
+        @open="onOpen"
+        @review="onReview"
+        @mark-read="store.markRead(selected.id)"
+      />
+    </div>
+  </PageFrame>
 </template>
 
 <style scoped>
@@ -66,7 +70,6 @@ function onReview() {
   display: flex;
   align-items: flex-start;
   gap: var(--space-4);
-  padding: var(--space-4);
 }
 
 .notifications-view__center {
