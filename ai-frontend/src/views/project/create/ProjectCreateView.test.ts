@@ -4,14 +4,11 @@ import { flushPromises } from "@vue/test-utils";
 
 import ProjectCreateView from "./ProjectCreateView.vue";
 import { mountShell } from "@/components/shell/test-utils";
-import { i18n } from "@/lib/i18n";
 
 const createProject = vi.fn();
 vi.mock("@/api/projects", () => ({
   createProject: (...args: unknown[]) => createProject(...args)
 }));
-
-const t = (key: string) => i18n.global.t(key) as string;
 
 async function mountView() {
   const mounted = mountShell(ProjectCreateView);
@@ -45,6 +42,9 @@ describe("ProjectCreateView", () => {
     const nameInput = inputs[0];
     const keyInput = inputs[1];
 
+    // i18n 真实命中（键 MISS 时 t() 会原样吐键名，字面量断言防恒真）
+    expect(wrapper.text()).toContain("项目标识（Key）");
+
     await nameInput.setValue("Smark PM");
     expect((keyInput.element as HTMLInputElement).value).toBe("SMARK");
 
@@ -54,9 +54,7 @@ describe("ProjectCreateView", () => {
     expect((keyInput.element as HTMLInputElement).value).toBe("CUSTOM");
 
     // 还原建议
-    await findButtonByText(wrapper, t("s01.project-create.keyReset")).trigger(
-      "click"
-    );
+    await findButtonByText(wrapper, "使用建议").trigger("click");
     expect((keyInput.element as HTMLInputElement).value).toBe("SMARK");
   });
 
@@ -65,8 +63,8 @@ describe("ProjectCreateView", () => {
     await wrapper.find("form").trigger("submit");
     await flushPromises();
 
-    expect(wrapper.text()).toContain(t("s01.project-create.nameRequired"));
-    expect(wrapper.text()).toContain(t("s01.project-create.keyRequired"));
+    expect(wrapper.text()).toContain("请填写项目名称。");
+    expect(wrapper.text()).toContain("请填写项目标识。");
     expect(createProject).not.toHaveBeenCalled();
   });
 
@@ -90,12 +88,10 @@ describe("ProjectCreateView", () => {
       name: "Atlas Platform",
       description: "R&D delivery workbench for platform teams"
     });
-    expect(wrapper.text()).toContain(t("s01.project-create.successTitle"));
+    expect(wrapper.text()).toContain("项目创建成功");
 
     // 「立即进入」携带 project_id 进入 S01-01 初始化总览
-    await findButtonByText(wrapper, t("s01.project-create.openNow")).trigger(
-      "click"
-    );
+    await findButtonByText(wrapper, "立即进入").trigger("click");
     await flushPromises();
     expect(router.currentRoute.value.path).toBe("/project/initialization");
     expect(router.currentRoute.value.query.project_id).toBe("prj-1");
@@ -113,10 +109,10 @@ describe("ProjectCreateView", () => {
     await wrapper.find("form").trigger("submit");
     await flushPromises();
 
-    expect(wrapper.text()).toContain(t("s01.project-create.keyConflict"));
+    expect(wrapper.text()).toContain("该标识已被其他项目占用，请更换一个。");
     expect((inputs[0].element as HTMLInputElement).value).toBe(
       "Atlas Platform"
     );
-    expect(wrapper.text()).not.toContain(t("s01.project-create.successTitle"));
+    expect(wrapper.text()).not.toContain("项目创建成功");
   });
 });

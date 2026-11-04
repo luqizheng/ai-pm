@@ -1,40 +1,39 @@
-s01:
-  project-create:
-    pageTitle: Create New Project
-    pageDescription: Set up your project and start building with AI.
-    breadcrumbProjects: Projects
-    breadcrumbCreate: Create New Project
-    sectionBasic: Basic Information
-    sectionOwnership: Project Ownership
-    nameLabel: Project Name
-    namePlaceholder: e.g. Atlas Platform
-    nameHelp: The formal name of the project. You can rename it later; the key stays.
-    keyLabel: Project Key
-    keyPlaceholder: e.g. ATLAS
-    keyHelp: Auto-suggested from the name · editable · must be unique in this organization. Fixed after creation; changes go through a controlled, audited operation.
-    keyReset: Use suggestion
-    descriptionLabel: Project Description
-    descriptionPlaceholder: What problem does this project solve? Optional — used later by AI-PM Cognition.
-    optionalLabel: Optional
-    ownerLabel: Owner
-    ownerYou: You · creator becomes owner
-    ownerHelp: Defaults to you (creator). Reassigning the owner happens through project governance after creation — AI cannot set the owner.
-    ownerFallback: Current user
-    deferredTitle: Not part of this form
-    deferredBody: Configured after creation, step by step — none of them block creating a project.
-    deferredRepository: Repository OAuth & primary repository (S01-03)
-    deferredCognition: AI-PM Cognition (S01-04)
-    deferredBootstrap: Codex / MCP bootstrap (S01-06)
-    afterTitle: After you create
-    afterBody: You land on the Project Initialization Overview automatically. Creation success is not initialization done — the project becomes Active immediately, with its own initialization lifecycle.
-    nameRequired: Project name is required.
-    keyRequired: Project key is required.
-    keyConflict: This key is already taken by another project. Choose a different key.
-    failedTitle: Project creation failed
-    failedBody: "{message} Your entries are preserved — fix or retry. Retrying is safe."
-    cancel: Cancel
-    createLabel: Create Project
-    creating: Creating project…
-    successTitle: Project created
-    successBody: "{name} is ready. Taking you to the Project Initialization Overview…"
-    openNow: Continue now
+project-create:
+  pageTitle: Create New Project
+  pageDescription: Set up your project and start building with AI.
+  breadcrumbProjects: Projects
+  breadcrumbCreate: Create New Project
+  sectionBasic: Basic Information
+  sectionOwnership: Project Ownership
+  nameLabel: Project Name
+  namePlaceholder: e.g. Atlas Platform
+  nameHelp: The formal name of the project. You can rename it later; the key stays.
+  keyLabel: Project Key
+  keyPlaceholder: e.g. ATLAS
+  keyHelp: Auto-suggested from the name · editable · must be unique in this organization. Fixed after creation; changes go through a controlled, audited operation.
+  keyReset: Use suggestion
+  descriptionLabel: Project Description
+  descriptionPlaceholder: What problem does this project solve? Optional — used later by AI-PM Cognition.
+  optionalLabel: Optional
+  ownerLabel: Owner
+  ownerYou: You · creator becomes owner
+  ownerHelp: Defaults to you (creator). Reassigning the owner happens through project governance after creation — AI cannot set the owner.
+  ownerFallback: Current user
+  deferredTitle: Not part of this form
+  deferredBody: Configured after creation, step by step — none of them block creating a project.
+  deferredRepository: Repository OAuth & primary repository (S01-03)
+  deferredCognition: AI-PM Cognition (S01-04)
+  deferredBootstrap: Codex / MCP bootstrap (S01-06)
+  afterTitle: After you create
+  afterBody: You land on the Project Initialization Overview automatically. Creation success is not initialization done — the project becomes Active immediately, with its own initialization lifecycle.
+  nameRequired: Project name is required.
+  keyRequired: Project key is required.
+  keyConflict: This key is already taken by another project. Choose a different key.
+  failedTitle: Project creation failed
+  failedBody: "{message} Your entries are preserved — fix or retry. Retrying is safe."
+  cancel: Cancel
+  createLabel: Create Project
+  creating: Creating project…
+  successTitle: Project created
+  successBody: "{name} is ready. Taking you to the Project Initialization Overview…"
+  openNow: Continue now
