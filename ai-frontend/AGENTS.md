@@ -201,6 +201,17 @@ The objective is to create the visual and interaction foundation that every subs
     notification / prue 基础服务，一律 import 对应 `*-services` 包（私有 registry
     `http://192.168.2.12:14873/`）；DTO、路径、错误归一以上游 SDK 为准；禁止手写 fetch/axios
     客户端、手抄 DTO/路径、复制上游实现；SDK 缺能力到上游 lmms 仓提需求，不做 fork。
+11. **UI 组件与组合方式只从两处找（先查再写，禁止自造）**：
+    - **组件**：先查 `src/components/ui/`（公用组件基座，`@figma-sync` 标记，同步状态见
+      `FIGMA-SYNC.md`）；对应样式权威是 Figma 组件库 `13:37296`（§三.2）。
+    - **组合方式 / 用法范式**：参照 **/design 设计系统页**（`src/views/design/` 15 页 +
+      `design-kit`），以及已实现的 `src/components/shell/`、`src/views/` 业务页。
+    - **优先级**：复用已有组件 → 按 /design 范式组合 → 确实缺组件才走 Figma 同步流程补齐
+      （补到 `ui/`，不落在业务页内）；页内私有组件仅限纯布局/装饰，不得复刻已有组件能力。
+    - **现状（2026-11-04）**：/design 页与 21 个增量组件（`command` / `date-picker` /
+      `empty-state` / `search-input` / `confirmation-dialog` / `human-approval-indicator` 等）
+      在 `feat/ai-frontend-design-system` 分支，**合并前**本分支以 `FIGMA-SYNC.md` +
+      `src/components/shell/` 既有实现为组合范式参照。
 
 ## 四、常用命令
 
