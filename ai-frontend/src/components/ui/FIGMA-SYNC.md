@@ -36,7 +36,7 @@
 - **Navigation**：SidebarItem（13:33329）、NavigationGroup（13:33391）、Breadcrumb（13:33452）、Tab（13:33477）、TopBarItem（13:33520）
 - **Overlays**：Dropdown（13:33607）、Popover（13:33652）、Modal（13:33764）、ConfirmationDialog（13:33877）；~~CommandPalette（13:34028）~~ 2026-11-04 已由 Global/Search/SearchPalette.vue 全量承接（含 Query/Results 状态机）
 - **Feedback**：StatusIndicator（13:34203）、ProgressIndicator（13:34246）、EmptyState（13:34322）
-- **Data**：AvatarGroup（13:34379）、ListItem（13:34428）、MenuItem（13:34522）；~~NotificationItem（13:34472）~~ 2026-11-04 已随 Global/Notification/NotificationItem.vue 落地（暂居 global/notification/）
+- **Data**：AvatarGroup（13:34379）、ListItem（13:34428）；~~MenuItem（13:34522）~~ 2026-11-04 已随 Global/UserMenu/UserMenuItem.vue 落地（暂居 global/usermenu/）；~~NotificationItem（13:34472）~~ 2026-11-04 已随 Global/Notification/NotificationItem.vue 落地（暂居 global/notification/）
 - **AI**：EntryButton（13:34559）、CommandInput（13:34680）、Suggestion（13:34757）、AI StatusIndicator（13:34798）；~~HumanApprovalIndicator（13:34834）~~ 2026-11-04 已随 Global/Notification/HumanApprovalIndicator.vue 落地
 
 ## 已落 token 的 Figma 修正值（tokens.css）
@@ -91,6 +91,36 @@ Project switcher menu（7:16466）+ 切换序列（7:16226，Before → Switchin
 - 全局搜索面板宽 640px（`--size-search-palette-width`，Figma「01」Initial palette 构成宽）
 - 通知下拉宽 380px（`--size-notification-dropdown-width`，**实现推断值**：Figma 样本容器 520 内未给面板定宽，锚定右缘取 380，待设计侧确认）
 - 通知中心分类过滤宽 368px（`--size-notification-filter-width`，Figma Category Select 宽）
+
+### 全局组件 Global/UserMenu + TenantIndicator + Help（Figma 帧编号 05/07/10 + Library 页）
+
+**权威来源**：Figma `hNlGqLEMQpOVCZ0o5u3DkT`「Global Components — Library」画布
+（node 33:85278）中 `Global/UserMenu/*`、`Global/TenantIndicator/*`、`Global/Help/*`
+各族组件（Dark/Light 双主题）。帧编号对照：05 — User Account Menu、
+07 — Tenant Identity Indicator、10 — Help & Shortcuts。
+
+| 组件                                          | Figma 组（node）                          | 状态 | 日期       | 备注                                                                                                                                                    |
+| --------------------------------------------- | ----------------------------------------- | ---- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `global/usermenu/UserMenuItem.vue`            | DS/Data/MenuItem（13:34522）              | ✅   | 2026-11-04 | h36/px8/radius8；selected=accent 面+check；danger=退出登录（danger-title 文字色）；disabled 0.35                                                          |
+| `global/usermenu/UserMenuButton.vue`          | Global/UserMenu/AvatarButton（33:87785）  | ✅   | 2026-11-04 | 40×40 外框 + Avatar sm(28) 首字母；五态（Hover elevated/Focus 2px accent/Active accent 面=菜单展开中/Disabled 0.4）                                        |
+| `global/usermenu/UserMenuAccountMenu.vue`     | Global/UserMenu/AccountMenu（33:87793）   | ✅   | 2026-11-04 | 448 面板：身份块（Avatar36+15 SB 姓名+邮箱+组织/项目角色行）+分隔线+七项+退出登录(Danger)；「外观」=面板内子视图（返回项为实现补齐，Figma 未画）；组织仅展示**无租户管理入口** |
+| `global/usermenu/UserMenuAppearance.vue`      | Global/UserMenu/Appearance（33:87794）    | ✅   | 2026-11-04 | Dark/Light 选中项 + 13px 说明；切换写 html data-theme + 持久化 `aipm.theme`（与 index.html 防闪烁脚本同键同值，`src/lib/theme.ts`）                        |
+| `global/usermenu/UserMenuSignOutDialog.vue`   | Global/UserMenu/SignOutConfirmation（33:86201） | ✅ | 2026-11-04 | 448 确认对话框；**确认按钮初始禁用（0.45），人工勾选「我要退出当前会话」后才可用**；确认后 auth.signOut() + 回登录页                                       |
+| `global/usermenu/UserProfilePopover.vue`      | Global/UserMenu/ProfilePopover（33:86124）| ✅   | 2026-11-04 | elevated 资料卡（姓名+多行身份+「我的资料」link 动作）；交付为展示组件，悬停落点待定（账户点击走 AccountMenu）                                             |
+| `global/tenant/TenantIndicator.vue`           | Global/TenantIndicator/TopBarSlice（33:87752）+ Tooltip（33:87798） | ✅ | 2026-11-04 | 顶栏只读芯片（building-2+组织名，h32）；hover/focus→Tooltip「组织 · X · 身份」；点击→身份卡浮层；**非切换器，无任何切换/管理入口**（任务书 §4E 红线）      |
+| `global/tenant/TenantIdentityCard.vue`        | Global/TenantIndicator/Identity（33:87799） | ✅  | 2026-11-04 | 四态：Full（组织串+邮箱+可选只读徽标）/Compact/Loading（骨架行）/Unavailable；身份行=sidebar 底芯片                                                       |
+| `global/help/HelpMenu.vue`                    | Global/Help/Menu（33:87801）+ MenuItem（33:87802） | ✅ | 2026-11-04 | 360 面板三项：帮助与文档/键盘快捷键/反馈；**反馈仅为 specimen**（Figma 注记 No delivery guarantee），事件交调用方不实现送达                                |
+| `global/help/KeyboardShortcutsDialog.vue`     | Global/Help/KeyboardShortcutsDialog（33:87688） | ✅ | 2026-11-04 | 736 对话框五组；**未实现键位显式标「未分配 / 拟议 · 未分配」不谎报已确认**；已确认=搜索组 ⌘K/↑↓/Enter/Esc（WorkspaceShell 全局监听）                        |
+
+**接线记录**：TopBar 帮助 IconTooltip stub → HelpMenu + 快捷键对话框（账户菜单/帮助菜单
+共用）；账户 DropdownMenu 三项 stub → UserMenuAccountMenu + UserMenuSignOutDialog
+（`auth.signOut()` + `AUTH_PATHS.login`）；组织静态 span → TenantIndicator；
+`ChevronsUpDown`/`demoUnreadNotifications` 残留清理。`global.usermenu.*`/
+`global.tenant.*`/`global.help.*` i18n 命名空间；token 增
+`--size-user-menu-width:448px`、`--size-help-menu-width:360px`、
+`--size-shortcuts-dialog-width:736px`、`--size-tenant-card-width:485px`。
+**坑**：reka `TooltipRoot` 必须包 `TooltipProvider`（否则注入报错）；
+`DialogClose as-child` 穿自定义 Button 失效 → 对话框页脚用显式 @click。
 
 ### 全局组件 Global/Notification（Figma 帧编号 03 — Notification Dropdown / 04 — Notification Center）
 

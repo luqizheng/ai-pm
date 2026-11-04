@@ -75,3 +75,53 @@ global:
       projectEvents: 项目事件
       repositoryEvents: 仓库事件
       systemAlerts: 系统警报
+  usermenu:
+    label: 账户菜单
+    myProfile: 我的资料
+    accountSettings: 账户设置
+    security: 安全
+    personalPreferences: 个人偏好
+    appearance: 外观
+    keyboardShortcuts: 键盘快捷键
+    helpDocumentation: 帮助与文档
+    signOut: 退出登录
+    back: 返回
+    tenantLabel: "组织 · {tenant}"
+    themeNote: "主题 = {theme} · 跟随语义主题绑定"
+    themeDark: 深色
+    themeLight: 浅色
+    signOutTitle: 退出当前账户？
+    signOutDesc: "当前登录身份为 {email}。再次使用需重新登录。"
+    signOutConfirm: 我要退出当前会话。
+    cancel: 取消
+    close: 关闭
+    done: 完成
+  tenant:
+    label: 当前组织
+    tooltipLabel: "组织 · {tenant} · {identity}"
+    loading: 正在加载当前身份…
+    unavailableDesc: 当前身份信息不可用。
+    emailLabel: 当前身份 · {email}
+    readOnlyBadge: 只读身份
+  help:
+    label: 帮助
+    documentation: 帮助与文档
+    shortcuts: 键盘快捷键
+    feedback: 反馈
+    shortcutsTitle: 键盘快捷键
+    shortcutsNote: 仅搜索快捷键已确认；其余分组暂无映射，候选键位不会启用。
+    groupGlobal: 全局导航
+    groupSearch: 搜索
+    groupProject: 项目导航
+    groupEditing: 编辑
+    groupAssistant: AI 助手
+    shortcutNavigate: 全局模块导航
+    shortcutOpenSearch: 打开全局搜索
+    shortcutSelect: 选择结果
+    shortcutOpenResult: 打开选中结果
+    shortcutCloseSearch: 关闭搜索
+    shortcutProjectSwitcher: 打开项目切换器
+    shortcutEditing: 编辑快捷键
+    shortcutAssistant: 打开助手
+    notAssigned: 未分配
+    proposed: 拟议 · 未分配

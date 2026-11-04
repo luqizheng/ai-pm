@@ -11,16 +11,16 @@ import { mountShell } from "./test-utils";
  * 顶栏行为（Application Shell §2A）。
  */
 describe("TopBar", () => {
-  it("渲染产品名与当前组织上下文", async () => {
+  it("渲染产品名与租户上下文指示（Global/TenantIndicator，只读）", async () => {
     const { wrapper } = mountShell(TopBar);
     await nextTick();
 
     expect(wrapper.find(".shell-topbar__product").text()).toBe(
       "AI R&D Workspace"
     );
-    expect(wrapper.find(".shell-topbar__context-name").text()).toBe(
-      "Acme Research"
-    );
+    const tenant = wrapper.find(".tenant-indicator");
+    expect(tenant.exists()).toBe(true);
+    expect(tenant.text()).toContain("Acme Research");
   });
 
   it("项目芯片显示当前项目名（取自 store 的项目上下文）", async () => {
@@ -60,10 +60,15 @@ describe("TopBar", () => {
     expect(bell.attributes("aria-label")).toBe("通知");
   });
 
-  it("账户菜单渲染头像与菜单项", async () => {
+  it("账户入口渲染头像触发按钮，帮助入口渲染触发按钮", async () => {
     const { wrapper } = mountShell(TopBar);
     await nextTick();
 
-    expect(wrapper.find(".shell-topbar__initials").text()).toBe("AM");
+    expect(wrapper.find(".user-menu-button").attributes("aria-label")).toBe(
+      "账户菜单"
+    );
+    expect(wrapper.find(".help-menu__trigger").attributes("aria-label")).toBe(
+      "帮助"
+    );
   });
 });

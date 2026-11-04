@@ -197,6 +197,12 @@
     （Figma「03/04 — Notification」样本容器 520/744 内的面板口径；380 为锚定实现值，待设计侧确认） */
   --size-notification-dropdown-width: 380px;
   --size-notification-filter-width: 368px;
+  /* 账户菜单 / 资料卡 / 退出确认面板宽 448（Figma Global/UserMenu 族 designedWidth） */
+  --size-user-menu-width: 448px;
+  /* 帮助菜单 360 / 快捷键对话框 736 / 租户身份卡 485（Figma 各组件规格宽） */
+  --size-help-menu-width: 360px;
+  --size-shortcuts-dialog-width: 736px;
+  --size-tenant-card-width: 485px;
   /* 项目切换菜单宽 330px（Figma「07 — Project Switching」Project switcher menu） */
   --size-project-menu-width: 330px;
   --size-icon-button: 36px;

@@ -1,49 +1,49 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
-import {
-  ChevronsUpDown,
-  CircleQuestionMark,
-  Search,
-  Sparkles
-} from "lucide-vue-next";
+import { Search, Sparkles } from "lucide-vue-next";
 
 import NotificationDropdown from "@/components/global/notification/NotificationDropdown.vue";
-import Avatar from "@/components/ui/avatar/Avatar.vue";
-import DropdownMenu from "@/components/ui/dropdown-menu/DropdownMenu.vue";
-import IconTooltip from "./IconTooltip.vue";
-import ProjectSwitcher from "./ProjectSwitcher.vue";
-import { useShellStore } from "@/stores/shell";
+import { TenantIndicator } from "@/components/global/tenant";
 import {
-  demoOrganization,
-  demoUser,
-  resolveProjectSwitch
-} from "./demo";
+  HelpMenu,
+  KeyboardShortcutsDialog
+} from "@/components/global/help";
+import {
+  UserMenuAccountMenu,
+  UserMenuSignOutDialog,
+  demoUserProfile
+} from "@/components/global/usermenu";
+import ProjectSwitcher from "./ProjectSwitcher.vue";
+import { AUTH_PATHS } from "@/router/auth";
+import { useAuthStore } from "@/stores/auth";
+import { useShellStore } from "@/stores/shell";
+import { demoOrganization, resolveProjectSwitch } from "./demo";
 
 /**
  * 全局顶栏（Application Shell §2A，52px）。
  *
- * 左：产品标识 + 产品名 + 当前组织指示 + 项目切换器
+ * 左：产品标识 + 产品名 + 租户上下文指示（Global/TenantIndicator，只读）
+ *     + 项目切换器
  * 中：全局搜索 / 命令面板入口（⌘ K）
- * 右：通知（下拉）、全局 AI 助手入口、帮助、账户菜单
+ * 右：通知（下拉）、全局 AI 助手入口、帮助（菜单 + 快捷键对话框）、
+ *     账户菜单（含退出登录确认）
  *
  * 按 Shell V1.1 限制：**不引入 Workspace Switcher**——
- * 组织在此仅作上下文指示（静态展示，无切换实体）；
+ * 组织在此仅作上下文指示（无切换实体）；
  * 项目则是可切换的（Figma「04 — Global Navigation」Project Context Header）。
  */
 
 const { t } = useI18n();
 const router = useRouter();
 const shell = useShellStore();
+const auth = useAuthStore();
 
 const emit = defineEmits<{ search: [] }>();
 
-const accountItems = computed(() => [
-  { label: t("shell.app.topbar.accountMenu.profile"), value: "profile" },
-  { label: t("shell.app.topbar.accountMenu.settings"), value: "settings" },
-  { label: t("shell.app.topbar.accountMenu.signOut"), value: "sign-out" }
-]);
+const shortcutsOpen = ref(false);
+const signOutOpen = ref(false);
 
 /** 切换项目（与左导航项目头共用 store 的切换状态机） */
 async function onSelectProject(id: string) {
@@ -57,6 +57,18 @@ function onOpenNotification(target: string) {
 
 function onViewAllNotifications() {
   router.push("/notifications");
+}
+
+/**
+ * 账户菜单普通项（个人资料/账户设置/安全/个人偏好/帮助文档）。
+ * 对应页面路由骨架期未建，落点待业务域接入。
+ */
+function onAccountSelect(_id: string) {}
+
+/** 退出登录：清会话回登录页（确认对话框先决） */
+function onSignOutConfirm() {
+  auth.signOut();
+  router.push(AUTH_PATHS.login);
 }
 </script>
 
@@ -87,13 +99,12 @@ function onViewAllNotifications() {
 
       <span class="shell-topbar__divider" aria-hidden="true" />
 
-      <!-- 当前组织（上下文指示，非切换器） -->
-      <span class="shell-topbar__context">
-        <span class="shell-topbar__context-name">{{
-          demoOrganization.name
-        }}</span>
-        <ChevronsUpDown :size="12" aria-hidden="true" />
-      </span>
+      <!-- 租户上下文指示（只读：hover Tooltip + 点击身份卡；非切换器） -->
+      <TenantIndicator
+        :tenant="demoOrganization.name"
+        :identity="demoUserProfile.name"
+        :email="demoUserProfile.email"
+      />
 
       <span class="shell-topbar__slash" aria-hidden="true">/</span>
 
@@ -138,40 +149,33 @@ function onViewAllNotifications() {
         <span>{{ t("shell.app.topbar.assistant") }}</span>
       </button>
 
-      <IconTooltip :content="t('shell.app.topbar.help')" side="bottom">
-        <button
-          type="button"
-          class="shell-topbar__icon-button"
-          :aria-label="t('shell.app.topbar.help')"
-        >
-          <CircleQuestionMark :size="16" aria-hidden="true" />
-        </button>
-      </IconTooltip>
+      <!-- 帮助菜单（文档入口 / 键盘快捷键 / 反馈） -->
+      <HelpMenu @shortcuts="shortcutsOpen = true" />
 
       <span class="shell-topbar__divider" aria-hidden="true" />
 
-      <!-- 账户菜单
-           DropdownMenu 的触发器本身即 button（自带 chevron 与 aria-label），
-           slot 只放内容，不再嵌套 button。 -->
-      <DropdownMenu
-        :items="accountItems"
-        :aria-label="t('shell.app.topbar.account')"
-      >
-        <span class="shell-topbar__account">
-          <Avatar
-            class="shell-topbar__avatar"
-            :name="demoUser.name"
-            :label="demoUser.name"
-          >
-            <template #fallback>
-              <span class="shell-topbar__initials">{{
-                demoUser.initials
-              }}</span>
-            </template>
-          </Avatar>
-        </span>
-      </DropdownMenu>
+      <!-- 账户菜单（Figma Global/UserMenu 族） -->
+      <UserMenuAccountMenu
+        :name="demoUserProfile.name"
+        :email="demoUserProfile.email"
+        :initials="demoUserProfile.initials"
+        :tenant="demoUserProfile.tenant"
+        :project-role="demoUserProfile.projectRole"
+        @select="onAccountSelect"
+        @shortcuts="shortcutsOpen = true"
+        @sign-out="signOutOpen = true"
+      />
     </div>
+
+    <!-- 键盘快捷键对话框（账户菜单 / 帮助菜单共用） -->
+    <KeyboardShortcutsDialog v-model:open="shortcutsOpen" />
+
+    <!-- 退出登录确认（人工勾选后才可用；确认后清会话回登录页） -->
+    <UserMenuSignOutDialog
+      v-model:open="signOutOpen"
+      :email="demoUserProfile.email"
+      @confirm="onSignOutConfirm"
+    />
   </header>
 </template>
 
@@ -219,21 +223,6 @@ function onViewAllNotifications() {
   width: var(--border-1);
   height: var(--space-4);
   background: var(--ws-border);
-}
-
-.shell-topbar__context {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: var(--size-control-compact);
-  color: var(--ws-text-primary);
-  font-size: var(--font-size-body);
-  white-space: nowrap;
-}
-
-.shell-topbar__context-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .shell-topbar__slash {
@@ -295,31 +284,6 @@ function onViewAllNotifications() {
   flex: none;
 }
 
-.shell-topbar__icon-button {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--size-control-sm);
-  height: var(--size-control-sm);
-  padding: 0;
-  color: var(--ws-text-secondary);
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-}
-
-.shell-topbar__icon-button:hover {
-  color: var(--ws-text-primary);
-  background: var(--ws-hover-veil);
-}
-
-.shell-topbar__icon-button:focus-visible {
-  outline: none;
-  box-shadow: var(--ws-focus-ring);
-}
-
 .shell-topbar__assistant {
   display: inline-flex;
   align-items: center;
@@ -343,29 +307,8 @@ function onViewAllNotifications() {
   box-shadow: var(--ws-focus-ring);
 }
 
-/* 账户 */
-/* 账户（DropdownMenu 触发器已是 button，这里只是内容容器） */
-.shell-topbar__account {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  height: var(--size-control-sm);
-}
-
-.shell-topbar__avatar {
-  width: var(--size-control-sm);
-  height: var(--size-control-sm);
-}
-
-.shell-topbar__initials {
-  color: var(--ws-text-primary);
-  font-size: var(--font-size-micro);
-  font-weight: var(--weight-semibold);
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .shell-topbar__search,
-  .shell-topbar__icon-button {
+  .shell-topbar__search {
     transition: none;
   }
 }

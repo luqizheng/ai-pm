@@ -75,3 +75,53 @@ global:
       projectEvents: Project Events
       repositoryEvents: Repository Events
       systemAlerts: System Alerts
+  usermenu:
+    label: Account menu
+    myProfile: My Profile
+    accountSettings: Account Settings
+    security: Security
+    personalPreferences: Personal Preferences
+    appearance: Appearance
+    keyboardShortcuts: Keyboard Shortcuts
+    helpDocumentation: Help & Documentation
+    signOut: Sign Out
+    back: Back
+    tenantLabel: "Tenant · {tenant}"
+    themeNote: "Theme={theme} · follows semantic theme bindings"
+    themeDark: Dark
+    themeLight: Light
+    signOutTitle: Sign out of your account?
+    signOutDesc: "You are signed in as {email}. You will need to sign in again to continue."
+    signOutConfirm: I want to sign out of this session.
+    cancel: Cancel
+    close: Close
+    done: Done
+  tenant:
+    label: Current organization
+    tooltipLabel: "Tenant · {tenant} · {identity}"
+    loading: Loading current identity…
+    unavailableDesc: Current identity could not be displayed.
+    emailLabel: Current identity · {email}
+    readOnlyBadge: Read-only identity
+  help:
+    label: Help
+    documentation: Help & Documentation
+    shortcuts: Keyboard Shortcuts
+    feedback: Feedback
+    shortcutsTitle: Keyboard Shortcuts
+    shortcutsNote: Search shortcuts are confirmed. Other groups have no assigned mappings; proposed keys stay inactive.
+    groupGlobal: Global Navigation
+    groupSearch: Search
+    groupProject: Project Navigation
+    groupEditing: Editing
+    groupAssistant: AI Assistant
+    shortcutNavigate: Navigate global modules
+    shortcutOpenSearch: Open Global Search
+    shortcutSelect: Select a result
+    shortcutOpenResult: Open selected result
+    shortcutCloseSearch: Close search
+    shortcutProjectSwitcher: Open Project Switcher
+    shortcutEditing: Editing shortcuts
+    shortcutAssistant: Open Assistant
+    notAssigned: Not assigned
+    proposed: Proposed / not assigned
