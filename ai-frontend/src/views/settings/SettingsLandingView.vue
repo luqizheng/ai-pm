@@ -26,53 +26,60 @@ const breadcrumb = [{ label: t("settings.personal.landing.title") }];
 </script>
 
 <template>
-  <SettingsPageLayout
-    :breadcrumb="breadcrumb"
-    :title="t('settings.personal.landing.title')"
-    :description="t('settings.personal.landing.desc')"
-    :icons="PERSONAL_ICONS"
-  >
-    <template #sidebar>
-      <SettingsSidebar
-        :scope-label="t('settings.personal.landing.title')"
-        :entries="PERSONAL_APP_NAV"
-        :icons="PERSONAL_ICONS"
-      />
-    </template>
-
-    <section class="personal-landing__hint">
-      <p class="personal-landing__hint-text">
-        {{ t("settings.architecture.scope.personal.entry") }}
-      </p>
-    </section>
-
-    <section class="personal-landing__grid">
-      <RouterLink
-        v-for="entry in PERSONAL_APP_NAV"
-        :key="entry.id"
-        class="personal-landing__card"
-        :to="entry.to"
-      >
-        <component
-          :is="PERSONAL_ICONS[entry.id]"
-          class="personal-landing__icon"
-          aria-hidden="true"
+  <!-- 壳内页面自带留白（.workspace-main-scroll 无 padding，同 PlaceholderView 口径） -->
+  <div class="settings-shell-pad">
+    <SettingsPageLayout
+      :breadcrumb="breadcrumb"
+      :title="t('settings.personal.landing.title')"
+      :description="t('settings.personal.landing.desc')"
+      :icons="PERSONAL_ICONS"
+    >
+      <template #sidebar>
+        <SettingsSidebar
+          :scope-label="t('settings.personal.landing.title')"
+          :entries="PERSONAL_APP_NAV"
+          :icons="PERSONAL_ICONS"
         />
-        <h2 class="personal-landing__card-title">
-          {{ t(`settings.nav.${entry.id}`) }}
-        </h2>
-        <p class="personal-landing__card-desc">
-          {{ t(categoryDescKeys[entry.id]) }}
+      </template>
+
+      <section class="personal-landing__hint">
+        <p class="personal-landing__hint-text">
+          {{ t("settings.architecture.scope.personal.entry") }}
         </p>
-        <span v-if="entry.proposed" class="personal-landing__proposed">{{
-          t("settings.common.proposed")
-        }}</span>
-      </RouterLink>
-    </section>
-  </SettingsPageLayout>
+      </section>
+
+      <section class="personal-landing__grid">
+        <RouterLink
+          v-for="entry in PERSONAL_APP_NAV"
+          :key="entry.id"
+          class="personal-landing__card"
+          :to="entry.to"
+        >
+          <component
+            :is="PERSONAL_ICONS[entry.id]"
+            class="personal-landing__icon"
+            aria-hidden="true"
+          />
+          <h2 class="personal-landing__card-title">
+            {{ t(`settings.nav.${entry.id}`) }}
+          </h2>
+          <p class="personal-landing__card-desc">
+            {{ t(categoryDescKeys[entry.id]) }}
+          </p>
+          <span v-if="entry.proposed" class="personal-landing__proposed">{{
+            t("settings.common.proposed")
+          }}</span>
+        </RouterLink>
+      </section>
+    </SettingsPageLayout>
+  </div>
 </template>
 
 <style scoped>
+.settings-shell-pad {
+  padding: var(--space-5) var(--space-8);
+}
+
 .personal-landing__hint {
   margin: 0 0 var(--space-4);
 }

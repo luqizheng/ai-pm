@@ -29,19 +29,28 @@ defineProps<{
 </script>
 
 <template>
-  <SettingsPageLayout
-    :breadcrumb="breadcrumb"
-    :title="title"
-    :description="description"
-    :icons="icons"
-  >
-    <template #sidebar>
-      <SettingsSidebar
-        :scope-label="scopeLabel"
-        :entries="entries"
-        :icons="icons"
-      />
-    </template>
-    <slot />
-  </SettingsPageLayout>
+  <!-- 壳内页面自带留白（.workspace-main-scroll 无 padding，同 PlaceholderView 口径） -->
+  <div class="settings-shell-pad">
+    <SettingsPageLayout
+      :breadcrumb="breadcrumb"
+      :title="title"
+      :description="description"
+      :icons="icons"
+    >
+      <template #sidebar>
+        <SettingsSidebar
+          :scope-label="scopeLabel"
+          :entries="entries"
+          :icons="icons"
+        />
+      </template>
+      <slot />
+    </SettingsPageLayout>
+  </div>
 </template>
+
+<style scoped>
+.settings-shell-pad {
+  padding: var(--space-5) var(--space-8);
+}
+</style>
