@@ -187,6 +187,9 @@
   --size-control-compact: 32px;
   /* 壳级搜索入口宽 360px（Figma 顶栏 Global search and command launcher） */
   --size-search-width: 360px;
+  /* 项目切换菜单面板宽 480px（Figma「06 — Project Context Switcher」
+     33:82961 菜单列宽，2026-11-04） */
+  --size-project-menu: 480px;
   --size-icon-button: 36px;
   --size-icon-xs: 16px;
   --size-icon-sm: 18px;
@@ -259,8 +262,11 @@
   /* 头像组重叠 —— Figma DS/Data/AvatarGroup：gap -8px */
   --size-avatar-overlap: 8px;
 
-  /* 浮层面板 —— Figma DS/Overlays（ConfirmationDialog/Modal/CommandPalette 标准宽 448px） */
+  /* 浮层面板 —— Figma DS/Overlays（Modal 三档 352/448/496；
+     ConfirmationDialog/CommandPalette 用 Medium 448） */
+  --size-overlay-panel-sm: 352px;
   --size-overlay-panel: 448px;
+  --size-overlay-panel-lg: 496px;
 
   /* 边框宽度 / 骨架屏（Figma Skeleton 双色占位线：强线=border、弱线=elevated） */
   --border-1: 1px;

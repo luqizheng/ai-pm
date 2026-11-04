@@ -57,11 +57,12 @@ describe("Tabs", () => {
     expect(triggers[1].attributes("aria-selected")).toBe("false");
   });
 
-  it("当前项按设计文档口径：accent-subtle 底 + accent-deep 字 + 2px accent 指示条", () => {
+  it("当前项按 Figma DS/Navigation/Tab 口径：透明底 + 主文字 + 底部 2px accent 指示条", () => {
     const s = readFileSync(resolve(__dirname, "Tabs.vue"), "utf8");
-    expect(s).toContain("var(--accent-subtle)");
-    expect(s).toContain("var(--accent-deep)");
+    // Figma Active 态：背景透明（无 accent-subtle 底），强调仅来自底部 2px 下划线
     expect(s).toContain("var(--size-indicator)");
+    expect(s).toContain("var(--accent)");
+    expect(s).not.toContain("var(--accent-subtle)");
   });
 
   it("点击页签切换并回写 modelValue", async () => {

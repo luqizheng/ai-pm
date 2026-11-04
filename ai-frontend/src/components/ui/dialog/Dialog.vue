@@ -1,3 +1,4 @@
+<!-- @figma-sync file=hNlGqLEMQpOVCZ0o5u3DkT set="DS/Overlays/Modal" node=13:33764 date=2026-11-04 -->
 <script setup lang="ts">
 import { computed } from "vue";
 import {
@@ -82,7 +83,9 @@ const emit = defineEmits<{ "update:open": [value: boolean] }>();
   animation: ui-dialog-overlay-in var(--duration-medium) var(--ease-decelerate);
 }
 
-/* 浮层 E3 — Phase 1R §5.2 */
+/* 浮层 — Figma DS/Overlays/Modal（13:33764）：
+ * surface 底 + border 描边 + radius 8 / 宽三档 352/448/496 /
+ * header·body·footer 统一 padding 16，header/footer 各带 1px 分隔线。 */
 .ui-dialog__content {
   position: fixed;
   top: 50%;
@@ -93,58 +96,63 @@ const emit = defineEmits<{ "update:open": [value: boolean] }>();
   width: calc(100% - var(--space-8));
   max-height: calc(100vh - var(--space-16));
   transform: translate(-50%, -50%);
-  background: var(--surface-raised);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
+  background: var(--surface-base);
+  border: var(--border-1) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  /* 深色板 Figma 无投影（token=none）；浅色板恢复轻量投影 */
   box-shadow: var(--shadow-lg);
   animation: ui-dialog-in var(--duration-slow) var(--ease-decelerate);
 }
 
+/* Figma 宽度三档（Small 352 / Medium 448 / Large 496） */
 .ui-dialog--sm {
-  max-width: 420px;
+  max-width: var(--size-overlay-panel-sm);
 }
 
 .ui-dialog--md {
-  max-width: 640px;
+  max-width: var(--size-overlay-panel);
 }
 
 .ui-dialog--lg {
-  max-width: 960px;
+  max-width: var(--size-overlay-panel-lg);
 }
 
 .ui-dialog__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-5) var(--space-6);
-  border-bottom: 1px solid var(--border-subtle);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-bottom: var(--border-1) solid var(--border-strong);
 }
 
 .ui-dialog__title {
   margin: 0;
   font-family: var(--font-ui);
-  font-size: var(--font-size-h4);
-  line-height: var(--line-height-h4);
+  font-size: var(--font-size-body-strong);
+  line-height: var(--line-height-body-strong);
   font-weight: var(--weight-semibold);
-  letter-spacing: var(--tracking-h4);
+  letter-spacing: var(--tracking-body-strong);
   color: var(--text-primary);
 }
 
 .ui-dialog__description {
   margin: 0;
-  padding: var(--space-3) var(--space-6) 0;
+  padding: var(--space-4) var(--space-4) 0;
   font-family: var(--font-ui);
-  font-size: var(--font-size-small);
-  line-height: var(--line-height-small);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
   font-weight: var(--weight-regular);
-  letter-spacing: var(--tracking-small);
+  letter-spacing: var(--tracking-body);
   color: var(--text-secondary);
 }
 
 .ui-dialog__body {
   flex: 1;
-  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
   overflow: auto;
 }
 
@@ -152,15 +160,15 @@ const emit = defineEmits<{ "update:open": [value: boolean] }>();
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-6);
-  border-top: 1px solid var(--border-subtle);
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-top: var(--border-1) solid var(--border-strong);
 }
 
 .ui-dialog__close {
   flex: none;
-  width: var(--space-6);
-  height: var(--space-6);
+  width: var(--size-icon-xs);
+  height: var(--size-icon-xs);
   display: inline-flex;
   align-items: center;
   justify-content: center;
