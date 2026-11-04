@@ -15,7 +15,13 @@ overview:
 projects:
   pageTitle: Projects
   subtitle: Customer projects and their basic information.
-  emptyHint: Projects will appear here once created by the backend.
+  emptyHint: No projects yet — use "New Project" in the top right to start.
+  new: New Project
+  newTitle: New Project
+  openRepositories: Repositories
+  openCommandCenter: Command Center
+  openBaseline: Baseline
+  openCognition: Cognition
 customer:
   pageTitle: Customers
   subtitle: Customer master data; one customer can own several projects.

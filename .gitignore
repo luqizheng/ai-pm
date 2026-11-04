@@ -15,3 +15,5 @@ run-workspaces/
 # 本地预览产物（截图 / 临时目录）
 frontend/.preview/
 frontend/.testtmp/
+ai-frontend/.preview/
+ai-frontend/.testtmp/

@@ -1,6 +1,7 @@
 initialization:
   projectCreation:
     pageTitle: New Project
+    backToList: Back to Projects
     subtitle: Establish the project entity. Repository onboarding, cognition analysis and the formal baseline are separate later steps.
     stepName: Project Info
     stepOwner: Owner
