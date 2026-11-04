@@ -36,8 +36,8 @@
 - **Navigation**：SidebarItem（13:33329）、NavigationGroup（13:33391）、Breadcrumb（13:33452）、Tab（13:33477）、TopBarItem（13:33520）
 - **Overlays**：Dropdown（13:33607）、Popover（13:33652）、Modal（13:33764）、ConfirmationDialog（13:33877）；~~CommandPalette（13:34028）~~ 2026-11-04 已由 Global/Search/SearchPalette.vue 全量承接（含 Query/Results 状态机）
 - **Feedback**：StatusIndicator（13:34203）、ProgressIndicator（13:34246）、EmptyState（13:34322）
-- **Data**：AvatarGroup（13:34379）、ListItem（13:34428）、NotificationItem（13:34472）、MenuItem（13:34522）
-- **AI**：EntryButton（13:34559）、CommandInput（13:34680）、Suggestion（13:34757）、AI StatusIndicator（13:34798）、HumanApprovalIndicator（13:34834）
+- **Data**：AvatarGroup（13:34379）、ListItem（13:34428）、MenuItem（13:34522）；~~NotificationItem（13:34472）~~ 2026-11-04 已随 Global/Notification/NotificationItem.vue 落地（暂居 global/notification/）
+- **AI**：EntryButton（13:34559）、CommandInput（13:34680）、Suggestion（13:34757）、AI StatusIndicator（13:34798）；~~HumanApprovalIndicator（13:34834）~~ 2026-11-04 已随 Global/Notification/HumanApprovalIndicator.vue 落地
 
 ## 已落 token 的 Figma 修正值（tokens.css）
 
@@ -85,6 +85,40 @@ Project switcher menu（7:16466）+ 切换序列（7:16226，Before → Switchin
 
 - 项目切换菜单宽 330px（`--size-project-menu-width`，Figma Project switcher menu）
 - 就绪状态色 `--ws-color-status-ready`（深色 #8DC5AF = Figma Navigation Badge Type=Status 绿点；浅色 #3F8F70 保 UI ≥3:1）
+
+### 本批新增 token（tokens.css）
+
+- 全局搜索面板宽 640px（`--size-search-palette-width`，Figma「01」Initial palette 构成宽）
+- 通知下拉宽 380px（`--size-notification-dropdown-width`，**实现推断值**：Figma 样本容器 520 内未给面板定宽，锚定右缘取 380，待设计侧确认）
+- 通知中心分类过滤宽 368px（`--size-notification-filter-width`，Figma Category Select 宽）
+
+### 全局组件 Global/Notification（Figma 帧编号 03 — Notification Dropdown / 04 — Notification Center）
+
+**权威来源**：Figma `hNlGqLEMQpOVCZ0o5u3DkT`「03 — Notification Dropdown」
+（<https://www.figma.com/design/hNlGqLEMQpOVCZ0o5u3DkT?node-id=33-81887>）+
+「04 — Notification Center」
+（<https://www.figma.com/design/hNlGqLEMQpOVCZ0o5u3DkT?node-id=33-82196>），
+组件族 `Global/Notification/Bell`（33:87783）/ `Dropdown`（33:87790）/
+`Record`（33:87784）/ `Center`（33:87792）/ `Detail`（33:87791）/
+`Preferences`（33:85983）+ `TopBarSlice`（33:85795），Dark/Light 双主题。
+
+| 组件                               | Figma 组（node）                       | 状态 | 日期       | 备注                                                                                                                                                                                    |
+| ---------------------------------- | -------------------------------------- | ---- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `global/notification/NotificationBell.vue`    | Global/Notification/Bell（33:87783）   | ✅   | 2026-11-04 | 36×36 六态；**未读计数=文本徽标（Badge Count）非色点**（Figma 帧注记）；Active=accent 着色面（下拉展开中）；Disabled 0.4                                                                   |
+| `global/notification/NotificationItem.vue`    | DS/Data/NotificationItem（13:34472）   | ✅   | 2026-11-04 | Unread=accent 面+13 SB 标题+6px 未读点；Read=surface 面+Regular；图标 message-square；元数据行「状态 · 时间 · 对象」状态词走 i18n                                                          |
+| `global/notification/NotificationRecord.vue`  | Global/Notification/Record（33:87784） | ✅   | 2026-11-04 | 分类行（mono 11）+ Human attention 徽标（Badge Accent accent 描边）+ Item + 操作行（打开对象/标记已读·未读）；Selected=accent 面+accent 描边（中心）                                       |
+| `global/notification/NotificationDropdown.vue` | Global/Notification/Dropdown（33:87790） | ✅ | 2026-11-04 | 铃铛锚定浮层（reka-ui Popover）；头部全部已读（ghost sm）+ All/Unread·N 页签（底 2px accent）+ 分类分组记录 + 「查看全部通知」；五态（含 Loading 骨架/Error 反馈框/Empty 已全部处理）；状态机与中心同 store |
+| `global/notification/NotificationCenter.vue`   | Global/Notification/Center（33:87792） | ✅   | 2026-11-04 | 分类 Select + 仅看未读 Checkbox 双过滤 + 记录数行（mono 11）+ 记录列表（selected）；`/notifications` 路由落点（不在左导航树）                                                              |
+| `global/notification/NotificationDetail.vue`  | Global/Notification/Detail（33:87791） | ✅   | 2026-11-04 | 标题/分类/元数据/分隔线/主题/上下文 + 审批指示器（可选）+ 操作行（处理请求仅待决 primary、标记已读仅未读）；中心页选中记录的详情面板                                                       |
+| `global/notification/HumanApprovalIndicator.vue` | DS/AI/HumanApprovalIndicator（13:34834） | ✅ | 2026-11-04 | Pending accent 描边 shield-question / Approved shield-check / Rejected shield-x；**Approved 显式「非 AI 批准」、Rejected 显式「未授权任何变更」**（设计红线落地）                           |
+| `global/notification/NotificationPreferences.vue` | Global/Notification/Preferences（33:85983） | ✅ | 2026-11-04 | 六类送达 Switch（复用 ui/switch）；**不含通道与路由配置**（Figma 帧注记）；独立组件（挂账户设置域，暂未接线）                                                                              |
+
+**接线记录**：TopBar 旧铃铛 stub（IconTooltip+色点）替换为 NotificationDropdown
+（Tooltip 略去——TopBarSlice 帧无 tooltip，且避免与 PopoverTrigger 双层 asChild 嵌套）；
+`demoUnreadNotifications` 删除，未读数改由 `stores/notifications.ts`（三处同源）驱动；
+新增 `/notifications` 路由（NotificationsView = Center + Detail）；
+`global.notification.*` i18n 命名空间；Badge/Select/Checkbox/Switch/Skeleton/Alert/Button
+全部复用已同步 ui 组件。
 
 ### 全局组件 Global/Search（Figma 帧编号 01 — Global Search / 02 — Search Results）
 

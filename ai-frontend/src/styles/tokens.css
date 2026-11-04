@@ -193,6 +193,10 @@
   --size-search-width: 360px;
   /* 全局搜索面板宽 640px（Figma「01 — Global Search」Initial palette 构成宽） */
   --size-search-palette-width: 640px;
+  /* 通知下拉宽 380px + 中心分类过滤宽 368px
+    （Figma「03/04 — Notification」样本容器 520/744 内的面板口径；380 为锚定实现值，待设计侧确认） */
+  --size-notification-dropdown-width: 380px;
+  --size-notification-filter-width: 368px;
   /* 项目切换菜单宽 330px（Figma「07 — Project Switching」Project switcher menu） */
   --size-project-menu-width: 330px;
   --size-icon-button: 36px;

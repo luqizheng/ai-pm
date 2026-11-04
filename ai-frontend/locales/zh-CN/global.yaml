@@ -32,3 +32,46 @@ global:
       task: 任务
       aiRun: AI 执行
       document: 知识文档
+  notification:
+    label: 通知
+    markAllRead: 全部标记已读
+    viewAll: 查看全部通知
+    filterAll: 全部
+    filterUnread: "未读 · {count}"
+    unreadOnly: 仅看未读
+    categoryLabel: 分类
+    categoryAll: 全部分类
+    categoryHint: 按分类显示可访问事件。
+    countLine: "{scope} · {records} 条记录 · {unread} 条未读"
+    attention: 需人工处理
+    markRead: 标记已读
+    markUnread: 标记未读
+    open: "打开 {object}"
+    statusUnread: 未读
+    statusRead: 已读
+    emptyTitle: 已全部处理
+    emptyDesc: 当前身份没有可用通知。
+    errorTitle: 通知不可用
+    errorDesc: 事件流加载失败，可重试刷新。
+    retry: 重试
+    detailLabel: 通知详情
+    reviewRequest: 处理请求
+    approval:
+      pending:
+        title: 需要人工确认
+        desc: 待决 · 未做任何变更
+      approved:
+        title: 人工已批准
+        desc: "{actor} 已批准该请求 · 非 AI 批准"
+      rejected:
+        title: 人工已驳回
+        desc: "{actor} 已驳回该请求 · 未授权任何变更"
+    preferencesTitle: 通知偏好
+    preferencesDesc: 按事件类别的送达开关，不含通道与路由配置。
+    category:
+      approvalRequests: 人工审批请求
+      taskAssignment: 人工任务指派
+      aiUpdates: AI 执行动态
+      projectEvents: 项目事件
+      repositoryEvents: 仓库事件
+      systemAlerts: 系统警报

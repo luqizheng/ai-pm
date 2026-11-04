@@ -51,11 +51,13 @@ describe("TopBar", () => {
     expect(wrapper.emitted("search")).toBeTruthy();
   });
 
-  it("通知按钮在有未读时渲染未读标记", async () => {
+  it("通知入口渲染铃铛按钮（Global/Notification 下拉触发器）", async () => {
     const { wrapper } = mountShell(TopBar);
     await nextTick();
 
-    expect(wrapper.find(".shell-topbar__unread").exists()).toBe(true);
+    const bell = wrapper.find(".notification-bell__button");
+    expect(bell.exists()).toBe(true);
+    expect(bell.attributes("aria-label")).toBe("通知");
   });
 
   it("账户菜单渲染头像与菜单项", async () => {

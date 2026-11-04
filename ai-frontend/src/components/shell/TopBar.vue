@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 import {
-  Bell,
   ChevronsUpDown,
   CircleQuestionMark,
   Search,
   Sparkles
 } from "lucide-vue-next";
 
+import NotificationDropdown from "@/components/global/notification/NotificationDropdown.vue";
 import Avatar from "@/components/ui/avatar/Avatar.vue";
 import DropdownMenu from "@/components/ui/dropdown-menu/DropdownMenu.vue";
 import IconTooltip from "./IconTooltip.vue";
@@ -16,7 +17,6 @@ import ProjectSwitcher from "./ProjectSwitcher.vue";
 import { useShellStore } from "@/stores/shell";
 import {
   demoOrganization,
-  demoUnreadNotifications,
   demoUser,
   resolveProjectSwitch
 } from "./demo";
@@ -26,7 +26,7 @@ import {
  *
  * 左：产品标识 + 产品名 + 当前组织指示 + 项目切换器
  * 中：全局搜索 / 命令面板入口（⌘ K）
- * 右：通知、全局 AI 助手入口、帮助、账户菜单
+ * 右：通知（下拉）、全局 AI 助手入口、帮助、账户菜单
  *
  * 按 Shell V1.1 限制：**不引入 Workspace Switcher**——
  * 组织在此仅作上下文指示（静态展示，无切换实体）；
@@ -34,6 +34,7 @@ import {
  */
 
 const { t } = useI18n();
+const router = useRouter();
 const shell = useShellStore();
 
 const emit = defineEmits<{ search: [] }>();
@@ -47,6 +48,15 @@ const accountItems = computed(() => [
 /** 切换项目（与左导航项目头共用 store 的切换状态机） */
 async function onSelectProject(id: string) {
   await shell.switchProject(id, () => resolveProjectSwitch());
+}
+
+/** 通知：打开关联对象 / 前往完整通知中心 */
+function onOpenNotification(target: string) {
+  router.push(target);
+}
+
+function onViewAllNotifications() {
+  router.push("/notifications");
 }
 </script>
 
@@ -116,20 +126,11 @@ async function onSelectProject(id: string) {
 
     <!-- 右：全局工具区 -->
     <div class="shell-topbar__right">
-      <IconTooltip :content="t('shell.app.topbar.notifications')" side="bottom">
-        <button
-          type="button"
-          class="shell-topbar__icon-button"
-          :aria-label="t('shell.app.topbar.notifications')"
-        >
-          <Bell :size="16" aria-hidden="true" />
-          <span
-            v-if="demoUnreadNotifications > 0"
-            class="shell-topbar__unread"
-            aria-hidden="true"
-          />
-        </button>
-      </IconTooltip>
+      <!-- 通知下拉（铃铛触发，含文本未读徽标；Global/Notification 族） -->
+      <NotificationDropdown
+        @open="onOpenNotification"
+        @view-all="onViewAllNotifications"
+      />
 
       <!-- 全局 AI 助手入口 -->
       <button type="button" class="shell-topbar__assistant">
@@ -317,17 +318,6 @@ async function onSelectProject(id: string) {
 .shell-topbar__icon-button:focus-visible {
   outline: none;
   box-shadow: var(--ws-focus-ring);
-}
-
-/* 未读圆点 */
-.shell-topbar__unread {
-  position: absolute;
-  top: var(--space-1);
-  right: var(--space-1);
-  width: var(--space-1);
-  height: var(--space-1);
-  background: var(--ws-accent);
-  border-radius: var(--radius-full);
 }
 
 .shell-topbar__assistant {

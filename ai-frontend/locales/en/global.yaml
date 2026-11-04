@@ -32,3 +32,46 @@ global:
       task: Tasks
       aiRun: AI Execution Runs
       document: Knowledge Documents
+  notification:
+    label: Notifications
+    markAllRead: Mark all read
+    viewAll: View all notifications
+    filterAll: All
+    filterUnread: "Unread · {count}"
+    unreadOnly: Unread only
+    categoryLabel: Category
+    categoryAll: All categories
+    categoryHint: Show available events by category.
+    countLine: "{scope} · {records} records · {unread} unread"
+    attention: Human attention
+    markRead: Mark read
+    markUnread: Mark unread
+    open: "Open {object}"
+    statusUnread: Unread
+    statusRead: Read
+    emptyTitle: "You’re all caught up"
+    emptyDesc: No notifications available for your current identity.
+    errorTitle: Notifications unavailable
+    errorDesc: The feed could not be loaded. Retry to refresh.
+    retry: Retry
+    detailLabel: Notification Detail
+    reviewRequest: Review request
+    approval:
+      pending:
+        title: Human confirmation required
+        desc: "Pending · No changes made"
+      approved:
+        title: Human approved
+        desc: "{actor} approved the request · Not AI approval"
+      rejected:
+        title: Human rejected
+        desc: "{actor} rejected the request · No change authorized"
+    preferencesTitle: Notification Preferences
+    preferencesDesc: Delivery toggles by event category. No channel or routing configuration.
+    category:
+      approvalRequests: Human Approval Requests
+      taskAssignment: Human Task Assignment
+      aiUpdates: AI Execution Updates
+      projectEvents: Project Events
+      repositoryEvents: Repository Events
+      systemAlerts: System Alerts

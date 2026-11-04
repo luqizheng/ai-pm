@@ -63,9 +63,6 @@ export const demoUser = {
   initials: "AM"
 };
 
-/** 顶栏通知未读数 */
-export const demoUnreadNotifications = 2;
-
 /** AI 指令栏的作用域串（Figma：Atlas Platform / Repository / main） */
 export const demoCommandScope = `${demoProject.name} / Repository / ${demoRepository.defaultBranch}`;
 

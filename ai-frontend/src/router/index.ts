@@ -8,6 +8,7 @@ import {
 
 import { navGroups, type NavItem } from "./navigation";
 import { authRoutes } from "./auth";
+import NotificationsView from "@/views/notifications/NotificationsView.vue";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 
 /**
@@ -65,6 +66,14 @@ export function buildRoutes(): RouteRecordRaw[] {
 
   // 认证路由在兜底之前注册，避免被 404 捕获
   routes.push(...authRoutes);
+
+  // 通知中心（Global/Notification 族完整事件面；不在左导航树内，
+  // 入口 = 顶栏通知下拉的「查看全部通知」）
+  routes.push({
+    path: "/notifications",
+    component: NotificationsView,
+    meta: { title: "global.notification.label" }
+  });
 
   routes.push({
     path: "/:pathMatch(.*)*",
