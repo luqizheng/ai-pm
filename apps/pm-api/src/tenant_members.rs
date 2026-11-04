@@ -25,6 +25,9 @@ use uuid::Uuid;
 
 use pm_domain::TenantRole;
 
+use pm_application::actor::AuditActor;
+use pm_application::project_member::revoke_principal_memberships;
+
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 
@@ -318,18 +321,60 @@ async fn apply_member_change(
             .await
             .map_err(db_error)?;
 
-    let plan = authorize(actor_role, op, target_role, owner_count, caller.principal_id)?;
+    let Plan {
+        outcome: plan_outcome,
+        mut audits,
+    } = authorize(actor_role, op, target_role, owner_count, caller.principal_id)?;
     let seen = actor_record(caller);
 
-    apply_writes(&mut tx, tenant_id, op, caller.principal_id).await?;
+    // S01-W13：移除租户成员前，若该人是某项目的 owner，则**拒绝移除**——
+    // 否则级联撤权会静默产生「无主项目」（谁也管不了，也转移不了所有权）。
+    if let MemberOp::Remove { principal_id } = op {
+        let owned: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT project_id FROM core.project_member \
+              WHERE tenant_id = $1 AND principal_id = $2 AND role = 'owner' FOR UPDATE",
+        )
+        .bind(tenant_id)
+        .bind(principal_id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(db_error)?;
+        if !owned.is_empty() {
+            return Err(conflict(
+                "PROJECT_OWNER_DEPENDENCY",
+                "principal owns at least one project; transfer project ownership first",
+            ));
+        }
+    }
 
-    for audit in &plan.audits {
+    let writes = apply_writes(&mut tx, tenant_id, op, caller.principal_id, &seen).await?;
+
+    // 级联撤销的项目成员关系数写进租户审计行的 after_data。
+    if writes.project_memberships_revoked > 0 {
+        for line in audits.iter_mut() {
+            if line.action == "tenant_member.removed" {
+                line.after_extra = Some(json!({
+                    "project_memberships_revoked": writes.project_memberships_revoked,
+                    "revoked_project_ids": writes.revoked_project_ids,
+                }));
+            }
+        }
+    }
+
+    for audit in &audits {
         insert_audit(&mut tx, tenant_id, &seen, audit).await?;
     }
 
-    let outcome = plan.outcome;
+    let outcome = plan_outcome;
     tx.commit().await.map_err(db_error)?;
     Ok(outcome)
+}
+
+/// `apply_writes` 的副产物：级联撤销的项目成员关系。
+#[derive(Debug, Default)]
+struct WriteOutcome {
+    project_memberships_revoked: usize,
+    revoked_project_ids: Vec<Uuid>,
 }
 
 /// 落地 `tenant_member` 的 DML。规则校验已由 [`authorize`] 完成，这里只写库。
@@ -338,7 +383,8 @@ async fn apply_writes(
     tenant_id: Uuid,
     op: MemberOp,
     actor_id: Uuid,
-) -> Result<(), Response> {
+    seen: &ActorRecord,
+) -> Result<WriteOutcome, Response> {
     match op {
         MemberOp::Add { principal_id, role } => {
             sqlx::query(
@@ -374,6 +420,29 @@ async fn apply_writes(
             .execute(&mut **tx)
             .await
             .map_err(db_error)?;
+
+            // S01-W13：级联撤销该真人在本租户内的**全部真人项目成员关系**。
+            // 少了这一步，退出租户的人仍能访问其所有项目——`require_project_member`
+            // 只查 `core.project_member`，不查 `core.tenant_member`。
+            // Agent 职能行不在级联范围（租户级实例，bootstrap 维护）。
+            let actor = AuditActor {
+                principal_id: seen.id,
+                identity_id: seen.identity_id,
+                client: seen.client.clone(),
+                auth_mode: seen.auth_mode.clone(),
+                claimed_device_id: None,
+            };
+            let revoked_project_ids =
+                revoke_principal_memberships(&mut **tx, tenant_id, principal_id, &actor)
+                    .await
+                    .map_err(|err| {
+                        tracing::error!(error = %err, "tenant member cascade revoke failed");
+                        db_error(err)
+                    })?;
+            return Ok(WriteOutcome {
+                project_memberships_revoked: revoked_project_ids.len(),
+                revoked_project_ids,
+            });
         }
         MemberOp::TransferOwner { new_owner } => {
             sqlx::query(
@@ -396,7 +465,7 @@ async fn apply_writes(
             .map_err(db_error)?;
         }
     }
-    Ok(())
+    Ok(WriteOutcome::default())
 }
 
 /// 一次变更要写的审计行（owner 转让会产出两条）。
@@ -405,6 +474,8 @@ struct AuditLine {
     target: Uuid,
     before: Option<TenantRole>,
     after: Option<TenantRole>,
+    /// 附加到 `after_data` 的额外字段（如级联撤销的项目成员关系数）。
+    after_extra: Option<Value>,
 }
 
 struct Plan {
@@ -438,6 +509,7 @@ fn authorize(
                     target: principal_id,
                     before: None,
                     after: Some(role),
+                    after_extra: None,
                 }],
             })
         }
@@ -478,6 +550,7 @@ fn authorize(
                     target: principal_id,
                     before: Some(current),
                     after: Some(role),
+                    after_extra: None,
                 }],
             })
         }
@@ -499,6 +572,7 @@ fn authorize(
                     target: principal_id,
                     before: Some(current),
                     after: None,
+                    after_extra: None,
                 }],
             })
         }
@@ -525,12 +599,14 @@ fn authorize(
                         target: actor_id,
                         before: Some(TenantRole::Owner),
                         after: Some(TenantRole::Admin),
+                        after_extra: None,
                     },
                     AuditLine {
                         action: "tenant_member.owner_transferred",
                         target: new_owner,
                         before: Some(new_role),
                         after: Some(TenantRole::Owner),
+                        after_extra: None,
                     },
                 ],
             })
@@ -575,11 +651,29 @@ async fn insert_audit(
     .bind(line.action)
     .bind(line.target)
     .bind(line.before.map(|role| json!({ "role": role.as_str() })))
-    .bind(line.after.map(|role| json!({ "role": role.as_str() })))
+    .bind(after_data(line))
     .execute(&mut **tx)
     .await
     .map_err(db_error)?;
     Ok(())
+}
+
+/// `after_data` = 角色快照 + 可选附加字段（如级联撤销计数）。
+fn after_data(line: &AuditLine) -> Option<Value> {
+    let mut map = serde_json::Map::new();
+    if let Some(role) = line.after {
+        map.insert("role".to_string(), json!(role.as_str()));
+    }
+    if let Some(Value::Object(extra)) = &line.after_extra {
+        for (key, value) in extra {
+            map.insert(key.clone(), value.clone());
+        }
+    }
+    if map.is_empty() {
+        None
+    } else {
+        Some(Value::Object(map))
+    }
 }
 
 // ─────────────────────────────────────────────────────────── 错误构造

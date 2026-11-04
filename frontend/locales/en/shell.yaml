@@ -75,6 +75,7 @@ shell:
     dashboard: Overview
     profile: Profile
     projectRepositories: Repositories
+    projectCommandCenter: Command Center
     projectImport: Import project
     customers: Customers
     workspaceConsole: Console

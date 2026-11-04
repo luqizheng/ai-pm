@@ -55,6 +55,9 @@ pub enum RepositoryError {
     InvalidRole,
     #[error("ssh key is still referenced by a verified repository")]
     KeyInUse,
+    /// 仓库被历史执行记录引用，不可物理删除（C-4 / 基线 §5.1）。
+    #[error("repository has history and cannot be deleted")]
+    HasHistory,
     #[error("git access failed: {0}")]
     Git(String),
     #[error("{0}")]

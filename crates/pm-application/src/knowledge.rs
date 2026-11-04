@@ -104,6 +104,28 @@ pub enum KnowledgeError {
     Db(#[from] sqlx::Error),
 }
 
+/// I4-F 归档守卫：**正式知识提交**（发布修订）前，在 **project 行锁**下确认
+/// Project 仍然 active。
+///
+/// 归档事务（`archive.rs`）同样先锁 `core.project` 行 → 二者串行，结论确定：
+/// - 归档先落定 → 本次发布被拒（归档后不得出现新的正式版本，I4 §9.1/§9.3）；
+/// - 发布先落定 → 该修订成为归档时的最终版本（I4 §11.3）。
+///
+/// 锁序：`core.project` → 文档/提案行（与 I1 的 `project → run → task` 同向）。
+pub(crate) async fn ensure_project_active_for_write(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    project_id: Uuid,
+) -> Result<(), KnowledgeError> {
+    match crate::project_gate::lock_project_activity_tx(tx, project_id).await {
+        Ok(crate::project_gate::ProjectActivity::Active) => Ok(()),
+        Ok(crate::project_gate::ProjectActivity::Archived) => Err(KnowledgeError::Conflict(
+            "project is archived: knowledge writes are closed".to_string(),
+        )),
+        Err(crate::project_gate::GateError::NotFound) => Err(KnowledgeError::NotFound),
+        Err(err) => Err(KnowledgeError::Db(sqlx::Error::Protocol(err.to_string()))),
+    }
+}
+
 /// The Git repository that owns Markdown bodies. `AI_PM_KNOWLEDGE_ROOT`
 /// overrides the default (a sibling of the ai-pm checkout).
 #[derive(Debug, Clone)]
@@ -330,6 +352,26 @@ pub async fn create_document(
         return Err(KnowledgeError::Exists(req.doc_key));
     }
 
+    // I4-F 归档守卫（前置检查）：Git 写入**之前**确认 Project 仍 active——
+    // 避免归档项目留下孤儿 Git 提交（权威判定在下方事务内的行锁检查）。
+    match crate::project_gate::project_activity(pool, project_id).await {
+        Ok(crate::project_gate::ProjectActivity::Active) => {}
+        Ok(crate::project_gate::ProjectActivity::Archived) => {
+            guard.release().await;
+            return Err(KnowledgeError::Conflict(
+                "project is archived: knowledge writes are closed".to_string(),
+            ));
+        }
+        Err(crate::project_gate::GateError::NotFound) => {
+            guard.release().await;
+            return Err(KnowledgeError::NotFound);
+        }
+        Err(err) => {
+            guard.release().await;
+            return Err(KnowledgeError::Db(sqlx::Error::Protocol(err.to_string())));
+        }
+    }
+
     root.ensure_ready()?;
     let (commit_sha, hash) = write_and_commit(
         root,
@@ -343,6 +385,8 @@ pub async fn create_document(
     )?;
 
     let mut tx = pool.begin().await?;
+    // I4-F 归档守卫：新建文档同样是一次「正式提交」——归档项目不得再建文档。
+    crate::knowledge::ensure_project_active_for_write(&mut tx, project_id).await?;
     // 幂等预占在业务事务内：唯一键冲突即重放，事务回滚后不产生第二条修订。
     let claim = crate::knowledge_write_coordinator::claim_operation(
         &mut tx,

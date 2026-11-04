@@ -1,6 +1,7 @@
 //! T-083 Discovery schema 结构断言（information_schema / pg_constraint 机械断言）。
 
 use sqlx::{PgPool, Row};
+use uuid::Uuid;
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn discovery_schema_has_seven_tenant_tables(pool: PgPool) {
@@ -10,7 +11,8 @@ async fn discovery_schema_has_seven_tenant_tables(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(n, 7, "discovery schema must hold exactly the 7 design tables");
+    // 0025 的 7 张设计表 + 0031（S01 · I6-B）新增的 evidence 实体表。
+    assert_eq!(n, 8, "discovery schema must hold the 7 design tables + evidence");
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -138,19 +140,26 @@ async fn finding_check_constraints_are_enforced(pool: PgPool) {
     .await;
     assert!(bad_confidence.is_err(), "confidence CHECK must reject >1");
 
-    let row: (String, serde_json::Value) = sqlx::query_as(
+    // 0031 起 Finding 带 project_id，且证据落到独立的 evidence 表
+    // （`discovery_finding.evidence` JSONB 列已删除）。
+    let project: (Uuid,) = sqlx::query_as("SELECT project_id FROM discovery.discovery_session WHERE id = $1")
+        .bind(session)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let row: (String,) = sqlx::query_as(
         "INSERT INTO discovery.discovery_finding \
-         (tenant_id, session_id, kind, content, confidence) \
-         VALUES ($1, $2, 'speculation', 'x', 0.5) \
-         RETURNING verification_status, evidence",
+         (tenant_id, project_id, session_id, kind, content, confidence) \
+         VALUES ($1, $2, $3, 'speculation', 'x', 0.5) \
+         RETURNING verification_status",
     )
     .bind(tenant)
+    .bind(project.0)
     .bind(session)
     .fetch_one(&pool)
     .await
     .unwrap();
     assert_eq!(row.0, "PENDING", "verification_status defaults to PENDING");
-    assert_eq!(row.1, serde_json::json!([]), "evidence defaults to []");
 }
 
 /// 防止忘记同步租户表清单：TENANT_TABLES 的数量与 discovery schema 实况对账。
@@ -161,6 +170,7 @@ async fn every_discovery_table_appears_in_tenant_assertions(pool: PgPool) {
         "discovery_message",
         "discovery_finding",
         "discovery_finding_repository",
+        "discovery_finding_evidence",
         "discovery_question",
         "discovery_answer",
         "discovery_proposal",

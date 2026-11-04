@@ -1,10 +1,13 @@
 //! pm-application: use cases, ports and application services.
 
 pub mod acceptance_overview;
+pub mod archive;
+pub mod project_gate;
 pub mod actor;
 pub mod authz;
 pub mod bootstrap;
 pub mod caller;
+pub mod command_center;
 pub mod command_executor;
 pub mod delivery;
 pub mod devenv;
@@ -27,12 +30,16 @@ pub mod outbox_ops;
 pub mod pm_write;
 pub mod policy_composition;
 pub mod policy_engine;
+pub mod project_goal;
 pub mod project_import;
+pub mod project_member;
 pub mod read;
+pub mod repo_access;
 pub mod repo_facts;
 pub mod repository;
 pub mod review;
 pub mod rows;
+pub mod run_cleanup;
 pub mod run_context;
 pub mod run_dispatch;
 pub mod run_executor;
@@ -45,6 +52,8 @@ pub use acceptance_overview::{
     load_overview,
 };
 pub use actor::AuditActor;
+pub use archive::{ArchiveError, ArchiveOutcome, archive_project};
+pub use project_gate::{GateError, ProjectActivity, project_activity, project_activity_tx};
 pub use authz::{AuthzError, ExecutorKind, require_project_member, resolve_project_executor};
 pub use caller::{CallerContext, DeviceClaim, DeviceClaimIgnoredReason, HumanActor};
 pub use bootstrap::{
@@ -99,6 +108,11 @@ pub use onboarding::{
     NextSteps, Step, ToolInfo, VerifyStep, install_guide, tool_catalog,
 };
 pub use policy_engine::{PolicyContext, PolicyEngine, PolicyLoadError};
+pub use project_member::{
+    MemberChangeOutcome, MemberOp, MemberRow, ProjectMemberError, apply_member_change,
+    caller_can_see_members, is_project_manager, list_members, owned_project_ids,
+    revoke_principal_memberships,
+};
 pub use read::{ReadError, TaskContextRow, task_context};
 pub use run_context::{
     CONTRACT_VERSION, LeaseError, LeaseState, ProgressReport, RenewedLease, RunContract,
@@ -133,8 +147,13 @@ pub use task_dependency::{
 };
 pub use discovery::{
     DiscoveryError, DiscoveryFindingView, DiscoveryMessageView, DiscoveryProposalView,
-    DiscoveryQuestionView, DiscoverySessionDetail, DiscoverySessionView, NewFinding, NewProposal,
-    add_finding, add_proposal, add_question, answer_question, append_message, create_session,
-    defer_question, get_session, get_session_detail, list_findings, list_messages, list_questions,
-    list_sessions, set_finding_verification, set_proposal_status, transition_session,
+    DiscoveryQuestionView, DiscoverySessionDetail, DiscoverySessionView, EvidenceInput, NewFinding,
+    NewProposal, add_finding, add_proposal, add_question, answer_question, append_message,
+    create_session, defer_question, get_session, get_session_detail, list_findings, list_messages,
+    list_questions, list_sessions, set_proposal_status, submit_evidence,
+    transition_session,
+};pub use repo_access::{
+    RepoAccessError, RepoAccessSnapshot, access_snapshot_hash, access_snapshot_json,
+    build_task_repo_access_tx, execution_allows, snapshot_allows,
 };
+

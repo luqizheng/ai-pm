@@ -143,10 +143,22 @@ pub async fn delete_repository(
             .await?;
     let project_id = project_id.ok_or(RepositoryError::NotFound)?;
 
-    sqlx::query("DELETE FROM integration.project_repository WHERE id = $1")
+    let deleted = sqlx::query("DELETE FROM integration.project_repository WHERE id = $1")
         .bind(repository_id)
         .execute(&mut *tx)
-        .await?;
+        .await;
+    // 历史引用保护（基线 §5.1；迁移 0031 把仓库引用换轨为 ON DELETE RESTRICT）：
+    // 被 Import / Finding / Task 引用的仓库**不可物理删除**，映射为领域错误而不是 500。
+    if let Err(err) = deleted {
+        if err
+            .as_database_error()
+            .map(|db| db.is_foreign_key_violation())
+            .unwrap_or(false)
+        {
+            return Err(RepositoryError::HasHistory);
+        }
+        return Err(err.into());
+    }
     append_audit(
         &mut tx,
         project_id,

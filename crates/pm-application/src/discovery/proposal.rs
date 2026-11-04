@@ -78,7 +78,8 @@ pub async fn add_proposal(
             "proposed_content must not be blank".to_string(),
         ));
     }
-    get_session(pool, tenant_id, session_id).await?;
+    let session = get_session(pool, tenant_id, session_id).await?;
+    let project_id = session.project_id;
     let document_id = new_proposal.document_id;
     let base_revision_id = new_proposal.base_revision_id;
     match new_proposal.action.as_str() {
@@ -131,10 +132,11 @@ pub async fn add_proposal(
     let evidence = empty_array_if_null(new_proposal.evidence);
     let row: ProposalRow = sqlx::query_as(&format!(
         "INSERT INTO discovery.discovery_proposal \
-         (tenant_id, session_id, action, target_document, document_id, base_revision_id, proposed_content, evidence) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING {PROPOSAL_COLS}"
+         (tenant_id, project_id, session_id, action, target_document, document_id, base_revision_id, proposed_content, evidence) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING {PROPOSAL_COLS}"
     ))
     .bind(tenant_id)
+    .bind(project_id)
     .bind(session_id)
     .bind(&new_proposal.action)
     .bind(&new_proposal.target_document)

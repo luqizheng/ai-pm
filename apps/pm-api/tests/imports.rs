@@ -10,7 +10,8 @@ use pm_ai::repo_model::FakeRepoAnalysisModel;
 use pm_application::bootstrap::{BootstrapRequest, bootstrap_project_with_status};
 use pm_application::command_executor::PgCommandExecutor;
 use pm_application::project_import::{
-    ApplyProject, ApplyRequest, ground_draft, propose_import, run_import_job, start_import,
+    ApplyProject, ApplyRequest, StartImportRequest, ground_draft, propose_import, run_import_job,
+    start_import,
 };
 use pm_application::repo_facts::{CommitFact, DocContent, HotFile, LanguageStat, RepoFacts};
 use pm_application::supervision::{DecideRequest, Decision, decide_approval};
@@ -103,9 +104,25 @@ async fn seed_project_with_repo(pool: &PgPool, code: &str) -> (Uuid, Uuid, Repo)
 }
 
 async fn prepare_draft(pool: &PgPool, project_id: Uuid) -> (Uuid, ProjectDraft) {
-    let started = start_import(pool, project_id, &pm_application::actor::AuditActor::dispatch())
-        .await
-        .unwrap();
+    // N-3：`repository_ids` 必填——导入集合由调用方明确指定。
+    let repository_id: Uuid = sqlx::query_scalar(
+        "SELECT id FROM integration.project_repository WHERE project_id = $1 LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let started = start_import(
+        pool,
+        project_id,
+        &pm_application::actor::AuditActor::dispatch(),
+        &StartImportRequest {
+            repository_ids: vec![repository_id],
+            idempotency_key: None,
+        },
+    )
+    .await
+    .unwrap();
     let model = FakeRepoAnalysisModel;
     run_import_job(pool, &model, started.import_id).await.unwrap();
     let detail = pm_application::project_import::get_import(pool, project_id, started.import_id)
@@ -181,6 +198,43 @@ async fn import_creates_four_proposals_without_delivery_writes(pool: PgPool) {
     let ids: Vec<Uuid> = repeated.proposals.iter().map(|p| p.proposal_id).collect();
     let originals: Vec<Uuid> = proposed.proposals.iter().map(|p| p.proposal_id).collect();
     assert_eq!(ids, originals);
+}
+
+/// 台账 G-20：导入草案就绪后 Worker 自动开 `source=SYSTEM` 认知会话，
+/// unknowns 映射为质询（Discovery Worker 分析作业）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn draft_ready_auto_starts_a_system_discovery_session(pool: PgPool) {
+    let (project_id, _repository_id, _repo) = seed_project_with_repo(&pool, "AUTODISC").await;
+    let (import_id, _draft) = prepare_draft(&pool, project_id).await;
+
+    let (session_id, source, question_count): (Uuid, String, i64) = sqlx::query_as(
+        "SELECT s.id, s.source, \
+                (SELECT count(*) FROM discovery.discovery_question q WHERE q.session_id = s.id) \
+         FROM integration.repo_import i \
+         JOIN discovery.discovery_session s ON s.id = i.discovery_session_id \
+         WHERE i.id = $1",
+    )
+    .bind(import_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(source, "SYSTEM", "the worker session must be SYSTEM-sourced");
+    // unknowns→质询的映射由 Web 向导测试覆盖（web_session_is_created_with_unknowns_as_questions）；
+    // Fake 模型仅在材料截断时产 unknowns，本 fixture 无截断 → 0 质询是合法输出。
+    assert_eq!(question_count, 0, "no unknowns in this fixture, no questions expected");
+    let _ = session_id;
+
+    // 幂等：重跑 job 不再另开会话。
+    run_import_job(&pool, &FakeRepoAnalysisModel, import_id).await.unwrap();
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM discovery.discovery_session s \
+         JOIN integration.repo_import i ON i.discovery_session_id = s.id WHERE i.id = $1",
+    )
+    .bind(import_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 1);
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -499,6 +553,194 @@ fn grounding_drops_fabricated_evidence() {
     assert_eq!(grounded.requirements.len(), 1);
     assert!(grounded.tasks.is_empty());
     assert_eq!(grounded.requirements[0].code, "REQ-001");
+}
+
+/// 造一个**克隆必然失败**的仓库（URL 指向不存在的本地路径）。
+async fn seed_broken_repo(pool: &PgPool, project_id: Uuid) -> Uuid {
+    let actor_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.principal (kind, display_name, is_active) \
+         VALUES ('human', 'broken-repo-owner', true) RETURNING id",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let created = pm_application::repository::create_repository(
+        pool,
+        project_id,
+        &pm_application::actor::AuditActor::principal(actor_id),
+        pm_application::repository::CreateRepositoryRequest {
+            name: "坏仓库".to_string(),
+            // 端口 1 → 连接被立即拒绝，克隆快速失败（不依赖 DNS 或超时）。
+            url: "ssh://git@127.0.0.1:1/team/missing.git".to_string(),
+            role: Some("main".to_string()),
+            default_branch: Some("main".to_string()),
+            description: None,
+        },
+    )
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE integration.project_repository SET status = 'verified' WHERE id = $1",
+    )
+    .bind(created.id)
+    .execute(pool)
+    .await
+    .unwrap();
+    created.id
+}
+
+/// 基线 §3.1 事实 #5 / 场景稿 §6：一个仓库失败**不中止**其余仓库。
+#[sqlx::test(migrations = "../../migrations")]
+async fn one_repository_failure_does_not_abort_the_others(pool: PgPool) {
+    let (project_id, good_repo, _repo) = seed_project_with_repo(&pool, "PARTIAL-OK").await;
+    let bad_repo = seed_broken_repo(&pool, project_id).await;
+
+    let started = start_import(
+        &pool,
+        project_id,
+        &pm_application::actor::AuditActor::dispatch(),
+        &StartImportRequest {
+            repository_ids: vec![good_repo, bad_repo],
+            idempotency_key: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    run_import_job(&pool, &FakeRepoAnalysisModel, started.import_id)
+        .await
+        .unwrap();
+
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM integration.repo_import WHERE id = $1")
+            .bind(started.import_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "draft_ready", "a failing repository must not abort the import");
+
+    // 失败仓留 failed Attempt；成功仓留 succeeded Attempt（R-4-1）。
+    let rows: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT repository_id, status FROM integration.repo_import_source_attempt \
+         WHERE import_id = $1 ORDER BY repository_id",
+    )
+    .bind(started.import_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let failed = rows
+        .iter()
+        .find(|(repo, _)| *repo == bad_repo)
+        .map(|(_, s)| s.clone());
+    let ok = rows
+        .iter()
+        .find(|(repo, _)| *repo == good_repo)
+        .map(|(_, s)| s.clone());
+    assert_eq!(
+        failed.as_deref(),
+        Some("failed"),
+        "the bad repository must be recorded as failed"
+    );
+    assert_eq!(
+        ok.as_deref(),
+        Some("succeeded"),
+        "the good repository must still be analyzed"
+    );
+}
+
+/// 基线 §3.1 事实 #7：取消后 Worker 的阶段写入不得覆盖 cancelled。
+#[sqlx::test(migrations = "../../migrations")]
+async fn cancelled_import_is_not_resurrected_by_the_worker(pool: PgPool) {
+    let (project_id, repository_id, _repo) = seed_project_with_repo(&pool, "CANCEL-OK").await;
+    let started = start_import(
+        &pool,
+        project_id,
+        &pm_application::actor::AuditActor::dispatch(),
+        &StartImportRequest {
+            repository_ids: vec![repository_id],
+            idempotency_key: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    pm_application::project_import::cancel_import(
+        &pool,
+        project_id,
+        started.import_id,
+        &pm_application::actor::AuditActor::dispatch(),
+        Some("user_abort"),
+    )
+    .await
+    .unwrap();
+
+    // Worker 继续跑：状态必须仍是 cancelled。
+    let _ = run_import_job(&pool, &FakeRepoAnalysisModel, started.import_id).await;
+
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM integration.repo_import WHERE id = $1")
+            .bind(started.import_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        status, "cancelled",
+        "the worker must not resurrect a cancelled import"
+    );
+}
+
+/// 导入失败必须释放初始化名额（否则该 Project 再也发不起导入）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn failed_import_releases_the_initialization_slot(pool: PgPool) {
+    let (project_id, _repo_id, _repo) = seed_project_with_repo(&pool, "FAILSLOT").await;
+    let bad_repo = seed_broken_repo(&pool, project_id).await;
+
+    let started = start_import(
+        &pool,
+        project_id,
+        &pm_application::actor::AuditActor::dispatch(),
+        &StartImportRequest {
+            repository_ids: vec![bad_repo],
+            idempotency_key: None,
+        },
+    )
+    .await
+    .unwrap();
+    run_import_job(&pool, &FakeRepoAnalysisModel, started.import_id)
+        .await
+        .unwrap();
+
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM integration.repo_import WHERE id = $1")
+            .bind(started.import_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "failed");
+
+    let active: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.project_initialization_operation \
+         WHERE import_id = $1 AND status = 'active'",
+    )
+    .bind(started.import_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(active, 0, "a failed import must release the initialization slot");
+
+    // 名额释放后可以再次发起导入。
+    let again = start_import(
+        &pool,
+        project_id,
+        &pm_application::actor::AuditActor::dispatch(),
+        &StartImportRequest {
+            repository_ids: vec![bad_repo],
+            idempotency_key: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert_ne!(again.import_id, started.import_id);
 }
 
 #[test]

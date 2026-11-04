@@ -71,6 +71,10 @@ pub enum ImportError {
     NoVerifiedRepository,
     #[error("an import is already in progress")]
     ImportInProgress,
+    #[error("repository_ids is required and must not be empty")]
+    RepositoryIdsRequired,
+    #[error("repository_ids must all be verified repositories of this project")]
+    RepositoryNotInProject,
     #[error("import not found")]
     NotFound,
     #[error("import can no longer be cancelled")]
@@ -118,10 +122,33 @@ impl From<PmWriteError> for ImportError {
 pub const IN_PROGRESS: [&str; 4] = ["queued", "cloning", "reading", "analyzing"];
 
 
+/// 启动导入的请求体（N-3：`repository_ids` 必填且非空；幂等键透传 N-4）。
+#[derive(Debug, Clone)]
+pub struct StartImportRequest {
+    /// 本次导入要分析的仓库集合——**导入创建时固化**（I6-B-03）。
+    pub repository_ids: Vec<Uuid>,
+    /// 客户端幂等键：透传到 `integration.inbound_event.idempotency_key`。
+    pub idempotency_key: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct StartImport {
     pub import_id: Uuid,
     pub status: String,
+    /// 幂等重放：命中既有导入时为 true。
+    #[serde(default)]
+    pub replayed: bool,
+}
+
+/// 一次分析轮次的摘要（Evidence 可锚定到它）。
+#[derive(Debug, Clone, Serialize)]
+pub struct ImportAttemptView {
+    pub attempt_no: i32,
+    pub status: String,
+    pub commit_sha: Option<String>,
+    pub error_code: Option<String>,
+    pub started_at: DateTime<Utc>,
+    pub finished_at: Option<DateTime<Utc>>,
 }
 
 
@@ -135,6 +162,8 @@ pub struct ImportSourceView {
     pub size_bytes: i64,
     pub truncated: bool,
     pub error_code: Option<String>,
+    /// 该仓库的分析轮次历史（R-4-1：成功与失败都留档）。
+    pub attempts: Vec<ImportAttemptView>,
 }
 
 

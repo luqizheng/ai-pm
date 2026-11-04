@@ -10,14 +10,15 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use pm_application::project_import::{
-    ApplyRequest, ImportError, cancel_import, get_import, import_proposals, list_imports,
-    propose_import, start_import,
+    ApplyRequest, ImportError, StartImportRequest, cancel_import, get_import, import_proposals,
+    list_imports, propose_import, start_import, terminate_import,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -33,6 +34,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/pm/projects/{project_id}/imports/{import_id}/cancel",
             post(cancel_handler),
+        )
+        .route(
+            "/v1/pm/projects/{project_id}/imports/{import_id}/terminate",
+            post(terminate_handler),
         )
         .route(
             "/v1/pm/projects/{project_id}/imports/{import_id}/apply",
@@ -61,6 +66,14 @@ fn import_error(err: ImportError) -> Response {
         ImportError::ImportInProgress => (
             StatusCode::CONFLICT,
             json!({ "error": "import_in_progress" }),
+        ),
+        ImportError::RepositoryIdsRequired => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            json!({ "error": "repository_ids_required" }),
+        ),
+        ImportError::RepositoryNotInProject => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            json!({ "error": "repository_not_in_project" }),
         ),
         ImportError::AlreadyApplied => (
             StatusCode::CONFLICT,
@@ -133,16 +146,47 @@ async fn list_handler(
     }
 }
 
+/// 启动导入的请求体。
+///
+/// N-3：`repository_ids` **必填且非空**——服务端不再替调用方挑「全部 verified
+/// 仓库」，导入集合由调用方明确指定（导入创建时固化）。
+#[derive(Debug, Deserialize)]
+struct StartBody {
+    #[serde(default)]
+    repository_ids: Vec<Uuid>,
+    #[serde(default)]
+    idempotency_key: Option<String>,
+}
+
 async fn start_handler(
     State(state): State<AppState>,
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
+    body: Option<Json<StartBody>>,
 ) -> Response {
     if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
+    let Some(Json(body)) = body else {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({ "error": "repository_ids_required" })),
+        )
+            .into_response();
+    };
+    if body.repository_ids.is_empty() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({ "error": "repository_ids_required" })),
+        )
+            .into_response();
+    }
     let actor = principal.audit_actor();
-    match start_import(&state.pool, project_id, &actor).await {
+    let req = StartImportRequest {
+        repository_ids: body.repository_ids,
+        idempotency_key: body.idempotency_key,
+    };
+    match start_import(&state.pool, project_id, &actor, &req).await {
         Ok(outcome) => (StatusCode::ACCEPTED, Json(outcome)).into_response(),
         Err(err) => import_error(err),
     }
@@ -162,7 +206,36 @@ async fn get_handler(
     }
 }
 
+/// 取消导入的请求体（`reason` 可选，用于审计追溯）。
+#[derive(Debug, Deserialize)]
+struct CancelBody {
+    #[serde(default)]
+    reason: Option<String>,
+}
+
 async fn cancel_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path((project_id, import_id)): Path<(Uuid, Uuid)>,
+    body: Option<Json<CancelBody>>,
+) -> Response {
+    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+        return resp;
+    }
+    let reason = body.and_then(|Json(body)| body.reason);
+    let actor = principal.audit_actor();
+    match cancel_import(&state.pool, project_id, import_id, &actor, reason.as_deref()).await {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(json!({ "status": "cancelled" })),
+        )
+            .into_response(),
+        Err(err) => import_error(err),
+    }
+}
+
+/// 显式终止 `proposed` 态的导入（C-2）：提案挂起时也能释放名额。
+async fn terminate_handler(
     State(state): State<AppState>,
     Extension(principal): Extension<AuthedPrincipal>,
     Path((project_id, import_id)): Path<(Uuid, Uuid)>,
@@ -170,10 +243,11 @@ async fn cancel_handler(
     if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
         return resp;
     }
-    match cancel_import(&state.pool, project_id, import_id).await {
+    let actor = principal.audit_actor();
+    match terminate_import(&state.pool, project_id, import_id, &actor).await {
         Ok(()) => (
             StatusCode::OK,
-            Json(json!({ "status": "cancelled" })),
+            Json(json!({ "status": "cancelled", "terminated": true })),
         )
             .into_response(),
         Err(err) => import_error(err),

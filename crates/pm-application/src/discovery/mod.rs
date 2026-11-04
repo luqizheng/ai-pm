@@ -25,7 +25,7 @@ pub use question::*;
 pub use session::*;
 pub use web::{
     FindingVerificationOutcome, StartWebSession, record_finding_verification,
-    start_session_from_import,
+    start_session_from_import, start_session_from_import_as,
 };
 
 #[derive(Debug, thiserror::Error)]

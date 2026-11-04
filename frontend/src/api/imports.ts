@@ -6,10 +6,30 @@ import type {
   ProposedImport
 } from "./types";
 
-/** 启动导入：项目需为空且有至少一个 verified 仓库。 */
-export function startImport(projectId: string) {
-  return http.post<{ import_id: string; status: string }>(
+/**
+ * 启动导入：项目需为空，且 `repositoryIds` **必填且非空**（I6-B N-3）。
+ *
+ * 导入集合由调用方明确指定，服务端在**创建时固化**；重复提交同一
+ * `idempotencyKey` 会命中同一次导入（服务端幂等重放）。
+ */
+export function startImport(
+  projectId: string,
+  repositoryIds: string[],
+  idempotencyKey?: string
+) {
+  return http.post<{ import_id: string; status: string; replayed?: boolean }>(
     `/v1/pm/projects/${projectId}/imports`,
+    {
+      repository_ids: repositoryIds,
+      idempotency_key: idempotencyKey ?? null
+    }
+  );
+}
+
+/** 显式终止 `proposed` 态的导入（C-2：提案挂起时也能释放名额）。 */
+export function terminateImport(projectId: string, importId: string) {
+  return http.post<{ status: string; terminated: boolean }>(
+    `/v1/pm/projects/${projectId}/imports/${importId}/terminate`,
     {}
   );
 }

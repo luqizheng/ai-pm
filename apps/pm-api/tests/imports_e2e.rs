@@ -242,10 +242,13 @@ async fn cold_start_import_runs_end_to_end(pool: PgPool) {
     .await
     .unwrap();
 
-    // 5. HTTP 启动导入 → 202 + queued。
+    // 5. HTTP 启动导入 → 202 + queued（N-3：`repository_ids` 必填）。
     let (status, started) = body_json(
         app.clone()
-            .oneshot(post_empty(&format!("/v1/pm/projects/{project_id}/imports")))
+            .oneshot(json_request("POST", 
+                &format!("/v1/pm/projects/{project_id}/imports"),
+                json!({ "repository_ids": [repo_id] }),
+            ))
             .await
             .unwrap(),
     )

@@ -327,7 +327,7 @@ async fn c61_user_cancel_uses_the_same_pipeline(pool: PgPool) {
 
     claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap();
 
-    let cancelled = cancel_run(&pool, &executor, fx.run_id).await.unwrap();
+    let cancelled = cancel_run(&pool, &executor, fx.run_id, "user_cancel").await.unwrap();
     assert!(cancelled);
     assert_eq!(run_status(&pool, fx.run_id).await, "cancelled");
     assert_eq!(executor.terminated_count(), 1);

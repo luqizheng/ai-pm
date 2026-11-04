@@ -19,6 +19,9 @@
 - **2026-11-02 增量（八）**：**T-087 Codex Bootstrap 定稿完成（V1.3）**——按 §0.1 brainstorming 六项裁清点逐项裁决（用户确认）+ 16 条派生裁定（用户授权「后面按照推荐」）+ 独立 builder-check 审稿六问收编 + **第二轮外部专家评审 P0×5/P1×4/任务约束×3 收编**；全部裁决索引见设计稿 §〇-A 与 §〇-B。核心：V1 按**真实两机拓扑**（服务器栈 + Windows PC）、**不装 Runner 二进制**、MCP 凭据**沿用 lmms 真人 key**（授权码 / 设备令牌整块归 V2/T-055）、V1 两张新表 `devenv.device` + `device_project_binding`（迁移 **0027**）、`/install/{tool}` 与 Bootstrap **两条任务线收编为一条**、中立技能包 `pm-ai-skills`（源目录 = 仓库 `skills/`，与 M9 T-086 落点一致）+ 薄适配层。**第二轮评审修正**：Device ID 仅不可信声明（Principal 唯一授权依据）、审计三分（新增 `audit_log.claimed_device_id`）、Binding 不授予权限（授权流水线六步）、T-081 升级为七项身份链路门禁、生命周期与就绪拆两列、Ready 四层且为快照、Bootstrap 幂等三态、SHA-256 仅完整性验证。**联动**：T-051 关闭于 T-088；T-081 并入 M10 V1 前置；T-082 升级为 T-090 硬前置；T-059 审计三列与 `claimed_device_id` **同批迁移于 T-088**；BOOT→C138~C162 + 评审新增 C163~C172。
 - **2026-11-02 增量（九）**：**T-087 用户过稿 → 归档（todo.md §13）——T-088~T-091 解禁**。M10 实施基线 = 设计稿 V1.3（`78aa250`）。领取顺序按设计稿 §十三 依赖图：**T-088 关键路径**（薄转发层 + 0027 迁移 + 八端点 + 授权流水线六步）、**T-089 可并行**（中立技能包与同源分发）、**T-090 收口**（硬前置 T-082）、**T-091 随 T-088 后**；T-092 仍延后至 V1 闭环稳定。**T-088 三项连带交付**：T-051 关闭、T-059 rmcp 阻塞解除（审计三列 + `claimed_device_id` 同批迁移）、C163~C172 验收落地。
 - **2026-11-02 增量（十）**：**T-088 服务端实施完成并验收**——设计 V1.1 过稿（925a6af）后当日实施（d855987 / 96cb392 / 33fc743 / df83f01），91 套件 662 passed 0 FAILED。核心落地：rmcp 原生 RequestContext 上下文通道（T-059 阻塞证伪解除）、身份三层（HumanActor/DeviceClaim/CallerContext，生产唯一、消费只读）、17 工具真人成员门（T-051 关闭）、devenv 两表 + 四条跨租户组合 FK（迁移 0027）、13 处生产审计写入点统一四列（清单驱动闸门 C174/C180）、claim 落 executor_id 同源同值、confirmed_by/vetoed_by 认证调用人覆盖。**下一关键路径：T-089（技能包，可与 T-081 并行）→ T-082 → T-090 → T-091。**
+- **2026-11-03 增量（十一）**：**S01 启动，S01-0 统一实施基线完成**——新增 §10.8 M11。上位组织基线 `docs/ui/smark-pm-s01-overall-implementation-plan-v1.md`（V1.0）；产出五份冻结文件 `docs/s01-implementation-plan-v1.md` + 四份 Registry（task / migration / interface / acceptance）。实测结论：**migrations 0001–0028 全量盘点完成、97 个 REST 端点与 18 个 MCP 工具核验完毕、两个 Worker 职责与租约实现核验完毕**；登记缺陷台账 13 项（P0 五项）与总体计划勘误 6 处（I6-B-09 补入、Git 能力枚举改依 I3 §3.1、I5 最后实施、D3.1 补入、Migration 盘点标记完成、字段拆 `stage`/`work_package`）。**关键路径：迁移 0029（I6-B 批）为唯一多任务共享的数据库变更，硬串行。** 下一批：S01-W13（Project 成员授权，P0）、I6-B-01~09、I3-B~I3-E、三份代码事实核验。
+- **2026-11-04 增量（十三）**：**S02-02 运行时核验完成（PASS×1 / FAIL×3 / BLOCKED×2）**——交付 `docs/s02-02-requirement-runtime-verification-v1.md`（专家任务书 V-1~V-6 全判定 + 缺陷清单 + 七问结论）。**核验环境**：独立实例 pm-api-s02v（auth-off，宿主 8091）+ 独立库 aipm_s02v，与演示栈零污染。**三项 FAIL 全部实证**：① **DEF-01 P0 跨项目写越权**——非成员读受保护（404/空列表）但建稿 201 + 定稿 200，执行器侧夹具无成员行仍成功（双入口一致地无成员校验）；② **DEF-03 P1 并发静默丢失更新**——不同修订并行定稿双双 200、`row_revision` 双跳、无冲突错误（S02-01 §3.1 静态推断的运行时首证）；③ **DEF-04 P1 双入口语义分叉**——REST 审计 before/after=NULL·has_comp=false vs 执行器快照+补偿（并发保护与可回滚性=语义级分叉）。**DEF-02 P0 无人工确认**机制级实证：策略测试 test_8 运行时断言 AutoApply + 执行器测试以 AiPm 主体实跑通过；真模型端到端 BLOCKED（5 provider 全 enabled=false/key EMPTY）。V-5 前端 BLOCKED（登录链与 prue 菜单后端不在栈；mock 不采信；契约层旁证吻合）。M12 阶段编号按专家任务书对齐：S02-03 场景稿（专家 V1.0 已给评审意见）→ S02-04 总体设计与最终裁决（Q-1~Q-17 + DEF 修复）→ S02-05 I 切片 → S02-06 总体计划。
+- **2026-11-03 增量（十二）**：**S02 启动，S02-01 需求领域资产盘点完成**——新增 §10.9 M12。交付 `docs/ui/smark-pm-s02-01-requirement-domain-asset-inventory-v1.md`（S02 系列的现状依据位，静态代码核验）。**实测结论：需求领域实体已存在**——`delivery.requirement` / `requirement_revision` / `task_requirement` 自迁移 0002 起，修订状态机 draft→approved→superseded、`approved_by`、`content_hash` 齐备；REST 与命令执行器两条定稿路径均跑通；任务上下文可带出关联需求正文；全库仅 2 张表以外键引用需求（需求自身 + 任务关联）。**但更正第一轮盘点三处**：C-1「无独立 Requirement 实体」**证伪**；C-2 `knowledge_migrate` 是**单向正文搬运**（需求模型存在、正文有第二处表示）；C-3「Finding 确认≠需求批准」成立且**更严重**。**新登记 P0 缺陷**：`approve_requirement_revision` 不在策略红线名单（黑名单模型 `defaults.effect: auto_apply`）→ AI 提案可被 AutoApply 真实执行定稿，「人类确认的需求基线」当前无强制机制。**另四项缺口**：需求创建无运行时入口（仅冷启动导入）／需求写路径只校验租户不校验项目成员／MCP 侧零需求工具（触发 I2-D 双入口铁律）／需求↔决策·↔发现·需求间零关联。**用户裁决**：非功能需求纳入同一治理体系、用需求类型区分（生命周期共用，差异只落在验收条件结构与检查方式）。下一批：S02-01a 实跑复核（V-1~V-5）、S02-02 场景稿、S02-03 最终基线（Q1~Q10）。
 
 ---
 
@@ -400,6 +403,141 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
 - [ ] **T-092 V2 无人值守 Runner（延后，V1 稳定前不要领取）**
   - **范围**：Runner 常驻运行、平台自主调度 Run、自动创建 Workspace、启动 Codex、收集 Commit 与 Delivery Manifest、回传证据、Worker 自动升级与故障恢复、安装包版本与服务端 API 版本分离 + MCP 能力协商。
   - **重启条件**：V1（T-087~T-091）闭环稳定后另立设计稿；稿中必须裁清与 T-030/T-031（平台侧 `CodexExecutor` 本地子进程）的边界与复用关系。
+
+---
+
+## 10.8 M11 · S01 项目初始化与代码发现闭环（2026-11-03 新增）
+
+> **组织基线**：`docs/ui/smark-pm-s01-overall-implementation-plan-v1.md`（总体实施计划 V1.0）。
+> **冻结基线**：`docs/s01-implementation-plan-v1.md` 及四份 Registry（`docs/s01-{task,migration,interface,acceptance}-*-v1.md`），2026-11-03 完成 S01-0。
+> **阶段**：S01-0 统一基线 → S01-1 身份权限 → S01-2 Project/Repository → S01-3 Discovery/Import → S01-4 执行闭环 → S01-5 Knowledge → S01-6 交付审计。
+> **关键路径**：Migration `0029`（I6-B 批）是唯一多任务共享的数据库变更，为硬串行点。
+> **实测事实**：执行引擎与知识域已建成（26 项已实施）；发现/接入域与授权域几乎全空——Git 能力授权**零实现**，Project 成员授权**零写入路径**，Evidence **无实体**。
+
+- [x] **S01-0 统一实施基线**（完成 2026-11-03）
+  - **目标**：把 I1–I6 与代码事实转成可领取的任务体系（总体计划 §16.3 退出条件）。
+  - **依据**：`docs/ui/smark-pm-s01-overall-implementation-plan-v1.md` §3、§10、§11、§13、§16.3。
+  - **做**：产出五份正式文件（实施计划 / TASK Registry / Migration Registry / Interface Matrix / Acceptance Matrix）+ 待决事项清单；全量盘点 migrations 0001–0028；核验 97 个 REST 端点 / 18 个 MCP 工具 / 两个 Worker 的真实实现；登记 13 项缺陷台账与 6 处总体计划勘误。
+  - **不做**：不改任何代码与迁移；不改动已冻结设计决策；不替用户裁待决项。
+  - **验收**：五份文件齐备且互相引用一致；每条代码事实带文件:行号；每个 TASK 有验收条件与门禁；无「无法解释的关键接口依赖」。
+  - **完成记录（2026-11-03）**：五份文件落于 `docs/s01-*.md`；总体计划勘误 6 处已回改（I6-B-09 补入、Git 能力枚举改依 I3 §3.1、I5 最后实施、D3.1 补入、Migration 盘点标记完成、字段拆 `stage`/`work_package`）；缺陷台账 13 项（P0 五项：D-1 单列 draft 覆盖写 / D-2 source 缺组合唯一键 / D-3 finding 无 project_id / D-4 跨项目仓库可挂 Finding / D-5 无 Evidence 实体；另 D-6 Project 成员零写入、D-7 Git 能力零基础等）；待决 8 项需用户裁（B-1 I1 V1.1 / B-2 I6-B-036~051 内容缺失 / B-3 I2 双重占号 / B-4 I4 Q1/Q2 / B-5 I3 §3.5 字段名 / B-6 policy_version 类型 / B-7 I3↔I6-B-03 语义重叠 / B-8 C 编号起号）。
+
+- [x] **S01-W13 Project 成员授权（P0，缺口 D-6）**（完成 2026-11-03）
+  - **目标**：让 `core.project_member` 有真实写入路径，Project 成为真正的授权边界。
+  - **依据**：总体计划 §4.1 W13；`docs/s01-implementation-plan-v1.md` §4-D6；设计稿 `docs/ai-pm-s01-project-member-authorization-v1.md`（V1.0）。
+  - **做**：Project 成员 CRUD + 所有权转移（REST + 应用层服务 + 审计）；迁移 `0030` 收敛 role 值域并加索引；撤权即时生效；**修租户撤权不级联的越权洞**。
+  - **不做**：不做全局权限码管理端点（`delivery.policy_scope` 管理延后）；不动 Tenant 成员既有实现；不做 Git 能力等级（I3-B）。
+  - **验收**：`S01-A001~A016`；`apps/pm-api/tests/project_members.rs` **15 例全绿**。
+  - **完成记录（2026-11-03）**：迁移 `0030_project_member_role.sql`（role CHECK 白名单 6 值 + `(tenant_id, principal_id)` 索引，**无新表无回填**）；`pm-domain::project_member`（`ProjectMemberRole` Owner/Member + `is_agent_role`）；`pm-application::project_member`（`apply_member_change` 单事务：锁 tenant→project→member，审计与写入同事务）；`pm-api::project_members` 4 端点（GET/POST members、DELETE member、POST owner-transfer，**不提供 PATCH role——两档角色无中间态**）；**修 X-2**：租户成员移除时级联撤销其真人项目成员行（逐项目写 `project_member.revoked` 审计），且若其为某项目 owner 则拒绝移除（409 `PROJECT_OWNER_DEPENDENCY`，不静默产生无主项目）。真人项目角色只两档（owner/member），Agent 职能值（ai_pm/architect/developer/tester）留在原列由 bootstrap 独占维护。
+
+- [~] **I6-B-01～I6-B-09 与 Migration 0031（Discovery/Import 收敛，硬串行）**（进行中 2026-11-03）
+  - **目标**：把代码发现过程变成可追溯、可恢复的业务流程；DB 级保证 Project 归属一致。
+  - **依据**：`docs/ui/smark-pm-s01-i6-b-v1-1-merge-spec.md`（V1.0，V1.1 唯一输入）；`docs/ui/smark-pm-s01-i6-b-boundary-review-346-v1.md`；`docs/s01-migration-registry-v1.md` §3.2（M-0029 详案 14 个对象）。
+  - **做**：① I6-B V1.1 正文改写（按 merge-spec §7 修订清单）；② 迁移 `0029`：`core.project_initialization_operation`、`repo_import_draft_version`、`repo_import_source_attempt`、`discovery_finding_evidence` 四张新表 + 四列组合唯一键 + 四处 FK 换轨 + RESTRICT 换轨 + `repo_import.draft` 删列；③ Source 的 facts/counts 迁 Attempt（R-4-1）；④ DB 级负向测试 1~5 + 追加 2 条直接打库断言。
+  - **不做**：不写历史数据回填与兼容分支（`AGENTS.md` 规则 1，新项目无存量数据）；不与 `ai.document_proposal` 合并状态机；不在 `core.project` 加列承载 generation（R-3-4）。
+  - **验收**：冻结门槛 9 条全绿；DB 级负向测试全以约束违例断言（`23503`/`23505`/`23514`）；空库初始化与 `0028→0029` 升级双路径 Schema 一致；`I6-B-036~051` 十六条内容先补齐（待决 B-2）。
+  - **门禁**：G-DDL（逐条对照 merge-spec §2/§3/§4）→ G-DATA → 代码合并。
+  - **阶段记录（2026-11-03）**：**I6-B V1.1 正文已新写落盘**（`docs/ui/smark-pm-s01-i6-b-v1-1.md`——V1.0 正文不在本仓，按合并规格+边界评审+I6-A 代码事实重写，并自定 I6-B-036~051 十六条验收）；**迁移 0031 已实施**（14 个对象：4 张新表 + Source 整表重建 + 7 条 FK 换轨 + 仓库删除 RESTRICT + Import 名额索引重建）；领域层已适配（导入创建固化仓库集合并开首轮 Attempt、采集事实写 Attempt、草案版本化、Finding/Question/Proposal 携带 project_id、Evidence 落独立表、旧形状证据降级 system_observation 不伪造 Commit）；**DB 级负向测试 13 例全绿**（`crates/pm-application/tests/i6b_db_constraints.rs`，直接打库断言 23503/23505/23514）；全量 96 套件 / 712 passed / 0 failed。**未做**：I6-B-05（Discovery 权限与接口收敛：MCP 权限码表补全、`proposed` 显式终止端点、`repository_ids` 必填）、I6-B-06（审计与幂等：Attempt 层审计动作、幂等键透传）。
+  - **阶段记录（2026-11-03 续）**：**I6-B-05/06 已实施**——REST 导入契约收紧（`repository_ids` 必填非空 → 422 `repository_ids_required`；跨项目仓库 → 422 `repository_not_in_project`；导入集合创建时固化）、新增 `POST /imports/{id}/terminate`（`proposed` 态显式终止并释放名额）、`cancel` 带 `reason`、`sources[].attempts[]` 暴露轮次历史、幂等键透传（`replayed=true`）、导入域审计七类动作、新增 MCP 工具 `pm_submit_evidence`（19 个工具）、前端 `startImport` 传仓库 id；新增 `apps/pm-api/tests/import_contract.rs` 7 例全绿；全量 Rust 97 套件 / 719 passed / 0 failed，前端 vitest 93 文件 / 564 passed + vue-tsc 0 error。
+  - **阶段记录（2026-11-03 三）**：**正式实施基线 V1.0 落盘 + 基线差异修复**——`docs/s01-implementation-baseline-v1.md`（唯一实施总基线）+ 新增第六份文件 `docs/s01-code-facts-ledger-v1.md`（差异台账 G-01～G-20 + 裁决 D-C-01/D-C-02）；按基线 §7/§8 对齐 TASK Registry 字段与验收矩阵 L1～L5 映射。**修复四处基线差异**：G-13 逐仓失败隔离（一个仓失败不中止其余）、G-11 取消态不被 Worker 覆盖、G-12 失败路径释放初始化名额（此前失败后该 Project 再也发不起导入）、G-16 仓库删除 409 映射。新增 4 例；全量 **97 套件 / 723 passed / 0 failed**。
+  - **剩余**：① **MCP 权限码收紧是跨仓协同项**——lmms 只签发 `PM_MCP_READ` / `PM_MCP_DOCUMENT_WRITE` / `PM_MCP_TASK_UPDATE` 三个码，无发现族专用码；单仓擅自收紧会让现网执行端 key 立刻 403 打断 S01-4 执行链路，须按「lmms 发码 → ai-pm 收紧 → 回归」顺序做；② `proposed` terminate 的前端入口（审批页）未接；③ Discovery 侧 Worker 分析作业（自动产出 Finding）未做；④ `0031` 的 G-DDL 六项审查中「旧环境 0028→0031 真实升级」未演练（基线 §11 准入仅剩此项未满足）。
+
+- [x] **I3-B～I3-E Git 仓库访问与写入授权（P1，缺口 D-7）**（完成 2026-11-04，**同日按用户简化裁决重做**）
+  - **目标**：~~建立 `read / modify / commit / push / create_pr / merge` 六能力授权~~ → **简化裁决（2026-11-04 用户）**：「不区分，都可以读写。因为这部分太复杂。」模型收敛为 `可访问仓库 = Task 关联仓 ∩ 仓库状态 verified`，档位恒 `read_write`。
+  - **依据**：`docs/ui/smark-pm-s01-i3-git-permission-and-repo-write-authorization-v1.md` **§0.0 V1.1 简化裁决**（§0.0.3 删除项 / §0.0.4 保留项 / §0.0.6 验收映射）；台账 `docs/s01-code-facts-ledger-v1.md` **D-C-03**。
+  - **做**：迁移 `0032`（`task_run.policy_snapshot_hash` + 授权表）→ 迁移 `0033`（**撤下授权表**）；`pm-domain::repo_access`（单一档位）+ `pm-application::repo_access`（快照构建 + SHA-256 + 执行期强校验）；claim 落快照；执行器物化仓库前按快照过滤；**撤下** REST `capabilities` 三端点。
+  - **不做**：不自动合并、不自动发布（总体计划 §0.2）；不把 `project_repository.role` 当权限等级复用；不改 0016 的 `auto_*` 策略字段作 Git 授权；**不做** Push 凭据隔离与直接 Git 绕过拦截（属 T-090 两机实测项）。
+  - **验收**：`I3-001~021`（按 §0.0.6 改写）——范围内 verified 仓可访问、范围外拒绝、仓库失验拒绝、项目归档拒绝、快照缺失 deny-all、快照不可变、哈希 = SHA-256。
+  - **完成记录（2026-11-04）**：`pm-domain::repo_access` 4 例单测；`apps/pm-api/tests/run_scope_snapshot.rs` 4 例 + `repo_access_enforcement.rs` 8 例；全量回归通过。**保留的边界**：租户/项目隔离、Task 仓库范围、仓库 `verified`、Run 快照可追溯、归档与取消门禁。**已知取舍**：失去单仓操作类型分级（见设计稿 §0.0.5）。
+
+- [x] **I4-F Project Goal 归档联动（P1，I4 §13）**（完成 2026-11-04）
+  - **目标**：归档后 Goal 只读、修改入口关闭、未完成提案不能继续发布；提交与归档有确定竞争结果（I4 §9/§11.3）。
+  - **依据**：`docs/ui/smark-pm-s01-i4-project-goal-knowledge-v1.md` §9、§11.3、§13 I4-F；台账 `docs/s01-code-facts-ledger-v1.md` **D-C-04**（验收编号口径勘误：I4-F 实为 **I4-019/020**，非台账原登记的 I4-022~024）。
+  - **做**：`project_gate::lock_project_activity_tx`（**行锁**版活动判定）；知识写入门禁 `knowledge::ensure_project_active_for_write`，接入**四个入口**——`create_document`（Git 写入前前置检查，防孤儿提交）/ `submit_proposal`（禁新建提案）/ `confirm_redline_proposal`（Git 写入前禁确认）/ `finalize_committed`（正式提交入口统一判定）。
+  - **不做**：不新增 Proposal 终态（归档时未完成提案保持 `redline_pending` 原状，只是不再能确认）；不动归档事务本身（I1-D 已冻结）；门禁只拦写入——归档后正式 Goal/提案/修订历史/审计一律可读。
+  - **验收**：`I4-019`（归档只读）、`I4-020`（归档竞争）——`apps/pm-api/tests/project_goal_archive.rs` **5 例全绿**（归档拒提案 / 归档拒确认 / 历史可读 / **并发三轮：归档之后无新的 published 修订** / 被拒写入零发布审计）。
+  - **落地记录**：设计稿回填 **§15 实施落地记录**（四入口表 + 线性化说明 + 语义偏差登记 V-1~V-3）。
+
+- [x] **I5 项目总控台（A~E，P1，I5 V1.1 36 条验收）**（A~E 全部完成 2026-11-04）
+  - **目标**：项目总控台 = 项目工作入口（首屏优先级：待人工处理 → 当前执行 → 风险与阻塞 → 目标与进展 → 初始化进度 → 最近活动）。
+  - **依据**：`docs/ui/smark-pm-s01-i5-project-command-center-v1-1.md`（V1.1 定稿）§3/§4/§5/§6/§7/§8；交付物 `docs/s01-i5-code-facts.md`（I5-A）+ `docs/s01-i5-read-model-contract.md`（I5-B）。
+  - **做（A）**：14 项代码事实核验（三域并行）→ 缺口清单 `I5-G-01~24`。**做（B）**：六数据块读模型契约（字段/权威来源/判定规则/空状态/新鲜度/权限/去重/部分失败）。**做（C）**：`pm-application::command_center` + `GET /v1/pm/projects/{id}/command-center` + 迁移 `0034`（审计与 Finding 的项目维度索引）。
+  - **不做**：不建第二套事实存储；不新建活动事实表（第一版以审计为唯一权威源）；不产出无依据的初始化百分比；不臆造「Goal 已确认」状态；不改领域业务状态（聚合纯读）。
+  - **做（D）**：`frontend/src/api/command-center.ts` + `shell/views/pm/command-center/index.vue`（六区块）+ 路由 `/projects/:projectId/command-center` + `pm.commandCenter` i18n（zh-CN/en）。
+  - **做（E）**：`apps/pm-api/tests/command_center_acceptance.rs` 6 例专项验收 + 验收矩阵补 **I5-001~036 逐条覆盖映射**（36 行表格：覆盖方式 + 证据文件/用例名）。
+  - **验收**：A/B/C 已过——`apps/pm-api/tests/command_center.rs` **6 例全绿**（六块可渲染/零仓库合法/无百分比/待人工处理聚合且跨项目不泄露/活跃 Run 取 task.assignee_id/活动白名单+去重/归档只读/非成员 404）；D 已过——前端 vitest **5 例全绿**（首屏优先级顺序/不可用显示「暂不可用」而非 0/归档只读提示/初始化无百分比且完成度不可判定/空集合空状态），`vue-tsc` 干净，前端全量 **94 文件 / 569 测试全绿**；E 已过——**6 例全绿**（初始化收缩/再展开、活动去重+稳定分页+可追溯、Outbox 不入活动、缺失数据四态区分、多领域原始状态不混淆、归档后历史可读且不产生新活动）。
+  - **遗留**：性能项**未做压测基准**（无性能基线数据）——建议后续以真实项目数据量跑 p95 采样并 `EXPLAIN` 验证 0034 索引命中；不阻塞 S01。
+  - **裁决登记**：ledger D-C-05（Goal 不下「已确认」结论）、D-C-06（初始化完成度 `not_determinable`）。
+
+- [x] **I1-B/C/E/F 归档生命周期第二批（P1，I1 §16）**（完成 2026-11-04；正文回填 V1.2 §19，偏差 V-3/V-4 闭合）
+  - **目标**：Run 创建入口锁序统一 + Worker claim 两阶段协议 + Executor 启动握手补强 + 持久化进程清理 + 全链回归。
+  - **依据**：`docs/ui/smark-pm-s01-i1-archive-lifecycle-v1.md` §5.2（两阶段）、§8（握手）、§9（清理）、§16/§17；迁移 `0035`。
+  - **做（B）**：`TaskReadyHandler` / `enqueue_review` 两入口第一步改 `lock_project_activity_tx`——创建与归档同锁串行（I1-007/008/012/013）。**做（C）**：`claim_core` 两阶段——阶段 A 无锁发现候选 Project（LIMIT 32）→ 阶段 B 锁 Project 行 → 查 archived → 该 Project 内重查候选（SKIP LOCKED）→ 锁 Task；归档跳过不失败、Run 保持 queued 原状（跳过≠取消）（I1-010/014）。**做（E）**：① 启动确认先锁 Project 行——归档先落定 → 拒确认 + 立即终止子进程（堵「spawn 后登记前归档仍推进 running」窗口）；② 迁移 `0035` `delivery.task_run_cleanup` 持久化清理账本（pending→cleaning→completed / 退避重试 8 次 → needs_human；无时间窗；SKIP LOCKED 批领；Worker 主循环接入，旧 1h 窗口路径降级兜底）（I1-025/026/028/030/031/032/033/040）。**做（F）**：归档抑制 ACK（I1-035/036，infrastructure 测试）+ 重放死信/清理登记/重启继续由既有幂等与持久化覆盖（I1-037/038/039）。
+  - **不做**：不改 T-032 已有的进程身份锚点（pid 文件 + identity_hint + 三重证据，I1-027/034 实操已覆盖）；进程级两机实测归 T-090。
+  - **验收**：`run_claim_lifecycle.rs` **3 例** + `outbox_handlers.rs` 新增 **2 例**（11 例全绿）+ `run_executor_handshake.rs` **5 例** + `project_archive.rs` 5 例；全量 **107 套件 / 791 passed / 0 failed**；升级演练 0028→0035 通过。
+  - **台账**：task registry I1-B/C/E/F 全部「已实施」；验收矩阵 I1 阻塞解除 + 第二批覆盖登记；ledger 增 G-30（PG uuid 排序坑不算缺陷，见 19.2 附注）。
+
+- [ ] **I2-A / I4-A / I5-A 三份代码事实核验（后续实施的硬前置）**
+  - **目标**：产出 `docs/s01-i2-code-facts.md`、`docs/s01-i4-knowledge-facts.md`、`docs/s01-i5-code-facts.md`。
+  - **依据**：I2 V1.1 §16 I2-A；I4 §13 I4-A；I5 V1.1 §9.1 I5-A（14 项）。
+  - **做**：逐项标注「已证实 / 待核验 / 需新增」，带文件:行号。
+  - **不做**：不写实现代码；不改动既有设计稿结论。
+  - **验收**：三份文件存在且每项有证据；三份是 I2-B/I2-C、I4-B/I4-C、I5-B/I5-C 的前置。
+
+---
+
+## 10.9 M12 · S02 需求提出与需求管理（2026-11-03 新增）
+
+> **组织基线**：`docs/ui/smark-pm-s02-*.md` 系列，沿用 S01 成套模式（场景稿 → 现状依据 → 最终基线 → I 切片 → 总体实施计划）。
+> **场景定义**：`docs/ui/smark-pm-user-scenario-interaction-model-v1.md` §76——「用户提出新需求、补充需求、修改已有需求，AI 协助分析影响、澄清问题和整理需求文档。核心结果：形成经过人类确认的需求基线。」
+> **阶段**：S02-01 资产盘点 → S02-02 运行时核验 → S02-03 场景稿 → S02-04 总体设计与最终裁决 → S02-05 I 切片 → S02-06 总体实施计划。（2026-11-04 按专家任务书编号对齐；旧编号 S02-01a/S02-02 场景稿/S02-03 最终基线 作废）
+> **口径**：本里程碑是**设计与基线**里程碑，**不含实施任务**；实施任务待最终基线与 I 切片冻结后另立，并须登记迁移号（`0029` 仍空缺 / `0032`）。
+> **实测事实**（S02-01 静态核验）：需求领域实体**已存在**——`delivery.requirement` / `requirement_revision` / `task_requirement` 自迁移 `0002` 起，修订状态机（draft→approved→superseded）、`approved_by`、`content_hash` 齐备，REST 起草/定稿与命令执行器两条路径均跑通，任务上下文可带出关联需求正文。但：**需求创建无运行时入口**（仅冷启动导入）、**需求定稿不在策略红线名单 → AI 可自动定稿**、**需求写路径只校验租户不校验项目成员**、**MCP 侧零需求工具**、**需求↔决策 / ↔发现 / 需求间零关联**、需求无 type / priority / created_by 行级属性。
+
+- [x] **S02-01 需求领域资产盘点（Requirement Domain Asset Discovery）**（完成 2026-11-03）
+  - **目标**：查清现有系统已具备哪些需求管理能力、哪些可复用、哪些确实缺失；区分「已实现 / 部分实现 / 仅设计 / 完全不存在」。
+  - **依据**：`docs/ui/smark-pm-s02-01-requirement-domain-asset-inventory-v1.md`（本阶段唯一交付物）；代码基线 worktree `ai-pm-s01` 分支 `feat/s01-implementation` @ `807ddae`；迁移 `0001`–`0028` + `0030` + `0031` 全量；`apps/pm-api` 30 源文件；`pm-domain` / `pm-application` / `pm-ai` / `pm-mcp`；`policies/ai-pm-ai-lead-v2.yaml` 全文。
+  - **做**：① 需求领域数据库事实逐表逐列登记（`delivery.requirement` / `requirement_revision` / `task_requirement`）；② **全库外键扫描**确认引用需求的表只有 2 张；③ 枚举需求相关 REST 端点与 MCP 工具面；④ 核验两条定稿路径（REST `pm_write` vs 命令执行器）的并发、补偿、审计、授权差异；⑤ 核验策略红线名单与 AI 编排的 AutoApply 分支，判定人工确认缺失；⑥ 界定 Finding / Knowledge Proposal / Requirement 三者边界；⑦ 产出资产分类总表（复用 A-1~A-13 / 部分 B-1~B-8 / 仅设计 C-1~C-2 / 缺失 D-1~D-10）+ 新增对象候选 CAND-1~CAND-7；⑧ 登记 10 项未解决技术问题 Q-1~Q-10 与 5 项待实跑复核项 V-1~V-5。
+  - **不做**：不新增领域对象；不写 Migration；不冻结字段与状态机；不替用户裁 Q-1~Q-10；不改任何代码。
+  - **验收**：每条事实带文件:行号；四类状态标注明确；「缺失」结论均为全量静态扫描得出（并注明未做不存在性实证的部分）；可复用资产清单可逐条对应到后续实施任务。
+  - **完成记录（2026-11-03）**：交付物 `docs/ui/smark-pm-s02-01-requirement-domain-asset-inventory-v1.md`（§0~§13 + 附录 A）。**更正第一轮盘点三处**：C-1「无独立 Requirement 实体」**证伪**（`0002_delivery.sql:3-39`）；C-2 `knowledge_migrate` 是**单向正文搬运**（需求模型存在、正文有第二处表示），非「系统无需求模型」；C-3「Finding 确认≠需求批准」成立且**更严重**——需求定稿本身也无人类确认环节。**P0 缺陷 S02-01-032**：`approve_requirement_revision` 不在策略红线名单（黑名单模型 `defaults.effect: auto_apply`），AI 提案可被 AutoApply 真实执行定稿。**用户裁定（非功能需求，S02-01 阶段）**：非功能需求是**正式需求**而非附属备注/项目约束；统一用 Requirement 领域模型，靠 `requirement_type` 区分（`functional` / `non_functional`）；NFR 细分枚举（performance/security/…）**不在本阶段固化**；五条模型约束——共享统一身份·版本·生命周期·审计 / 两类需求均可关联多个 Task 与架构决策 / 两类需求必须有明确验收标准 / 验收标准按类型采用不同验证方式 / NFR 不得被降级为普通备注。**裁定核验结果**：约束 1 ✅ 已满足（并锁死「不新建需求主表」）；约束 2 ⚠️ Task 侧已满足、**架构决策侧零关联需新增**；约束 3 ❌ **需求级验收标准零载体**（唯一验收表 `delivery.task_acceptance_criterion` 硬锚 `task_id` + CASCADE，需求侧 `grep acceptance` 零命中）；约束 4 ❌ `verification_kind` 四取值全功能导向、**无指标/阈值字段**；约束 5 ❌ 当前实现下 NFR 确实只能是标题+备注。三处结构性冲击：验收标准不可由任务项上卷（无任务的需求将无验收项 + CASCADE 会随任务删除抹除）→ 必须平行新表（CAND-8）；**NFR 可合法关联零个 Task** → 验收裁决不能只挂 Task 评审链（CAND-10）；类型异构不得按类型分表（违约束 1）。新增待裁 **Q-11~Q-16**（验收载体形态 / 是否随修订版本化 / 异构承载层 / 零 Task NFR 裁决路径 / 架构决策关联形态 / `requirement_type` 取值域与导入默认），CAND 列表扩至 10 项（CAND-8 需求级验收标准 / CAND-9 需求↔架构决策 / CAND-10 零 Task NFR 验收裁决）。
+  - **V1.1 修订记录（2026-11-03）**：外部专家评审收编，交付 `docs/ui/smark-pm-s02-01-requirement-domain-asset-inventory-v1-1.md`（**事实权威稿，非 S02 设计基线**；V1.0 原稿复原留档）。六项修订全采纳并经代码复核：① **constraint 降为候选**（用户裁定表本就只有 functional / non_functional 两类）② 验收模型按类型适配、量化只是选项之一（安全/可维护性等可用测试证据/审查准则/通过规则；功能需求也允许多条验收）③ **`current_revision_id` = 单条需求当前修订指针，非项目级基线**（FK `(id, current_revision_id)` 为单需求粒度；项目级基线快照仍不存在）④ `task_requirement` 关联语义不预冻结，新增 **Q-17**（同任务关联同需求多修订 / 改绑 / 留痕待裁）⑤ **静态证据与运行时验证严格分离**（「已实现」全部改注静态判定，删「全链路跑通」措辞，§14.4 明确测试存在≠本轮通过）⑥ PG 正文权威降为建议、正式裁决留 Q-3。另修正 V1.0 并发表述错误：无锁并发时双方读到的是**目标仍为 draft** 后交错写入（原稿写反）。新增 §14「修订裁定与阅读优先级」（14.1 已确认裁决 / 14.2 待裁 / 14.3 误差修正 8 条 / 14.4 证据强度 / 14.5 并行工作合并说明——专家评审基线为 V1.0 原稿，未含裁定映射内容 D-11/12、CAND-8/9/10、Q-11~16、事实 035~040，V1.1 一并收编且两路无冲突）。**下一步顺序（专家建议一致）：S02-01a 运行时核验 V-1~V-5 先于 S02-02 场景稿**；待裁共 17 项（Q-1~Q-17）。
+
+- [x] **S02-02 需求领域运行时核验（V-1~V-6）**（完成 2026-11-04；任务书由专家提供，新增 V-6 双入口一致性与缺陷清单要求）
+  - **目标**：确认 S02-01 静态识别的关键风险是否在真实运行环境成立；只核验不修复。
+  - **依据**：《S02-02 需求领域运行时核验任务书 V1.0》（专家）；S02-01 V1.1 §13.1 V-1~V-5。
+  - **环境**：独立核验实例——容器 `pm-api-s02v`（aipm/pm-api:0.1.0，auth-off，宿主 8091）+ 共享 PG 上独立空库 `aipm_s02v`（迁移 0001–0028）；与演示栈零污染；证据目录 `D:\kudi-project\templates\.s02v-evidence\`。
+  - **判定**：**PASS ×1 / FAIL ×3 / BLOCKED ×2**。V-1 REST 生命周期 **PASS**（201→200→superseded→指针迁移→双审计全对）。V-3 并发 **FAIL**（不同修订并行定稿**双双 200**、静默丢失更新、`row_revision` 1→3、无冲突错误；同修订并行 200/409、终态重试 409 正确）。V-4 跨项目授权 **FAIL·P0**（非成员**读受保护**：列表 404/修订空列表；**写全开**：建稿 201 + 定稿 200；Executor 侧既有测试夹具无成员行仍成功→双入口一致地无成员校验）。V-2 **机制级实证成立 + 真模型 BLOCKED**（策略测试 10/10 ok 含 `test_8` 断言 AutoApply；执行器测试以 `ActorKind::AiPm` 实跑通过 444s；5 个 llm_provider 全部 enabled=false/key=EMPTY）。V-6 **FAIL**（并发保护与可回滚性=业务语义分叉；审计词汇/载荷=接口层分叉；REST 审计 before/after=NULL、has_comp=false 实查）。V-5 **BLOCKED**（登录链 gateway/token-service 与菜单后端 prue 均不在栈；mock 模式按核验原则不采信；契约层旁证=api/pm.ts 四方法与实测端点一一吻合）。
+  - **缺陷清单**：**DEF-01 P0** 跨项目写越权（→Q-9）/ **DEF-02 P0** 无人工确认强制（→Q-2）/ **DEF-03 P1** 并发静默丢失更新（→Q-1）/ **DEF-04 P1** 双入口语义分叉（→Q-1）。
+  - **不做**：零代码修改、零迁移、无设计裁决。
+  - **验收**：交付 `docs/s02-02-requirement-runtime-verification-v1.md`（V-1~V-6 十一字段表 + 缺陷清单 + 七问结论）；所有 FAIL 有可复现证据；BLOCKED 均注明原因。
+  - **遗留物**：容器/库/证据目录保留待评审后清理（`docker rm -f pm-api-s02v` + `DROP DATABASE aipm_s02v`）。
+  - **专家评审收编（2026-11-04，六项全部接受，报告就地精确化）**：① **V-2 判定分维**——策略机制 FAIL / 执行器机制 FAIL / 真模型端到端 BLOCKED / **DEF-02 整体 P0 FAIL 不因端到端 BLOCKED 降级**；② **V-4 身份证据边界三分**——运行时实证（租户 owner/admin 非目标项目成员可写入）/ 静态证据（写路径缺成员查询）/ 未验证（其他角色运行时表现，待后续权限测试）；③ **结论 7 关闭语义**——DEF-01/02=S02-04 必须强制修复裁决的 P0；DEF-03/04=必须纳入 S02-05/06 的 P1；**四项独立关闭，关闭=修复提交+针对性回归证据**；④ V-1 范围限定（dev-off 是 human 主体，不能证明 AI 定稿合理或人类确认已强制）；⑤ **DEF-02 修复方向精确化**——approve 必须具备**独立人类确认约束、不得仅依赖通用 redline 黑名单**（红线策略≠需求审批）；⑥ **V-6 上升 S02 架构约束**——所有正式 Requirement 写操作必须经同一业务应用服务与统一状态迁移规则，REST/MCP/Executor 只作适配入口；DEF-01 处理面扩六点（成员角色/创建/修改/审批权限/AI-Agent 项目授权/双入口一致）。
+
+- [ ] **S02-03 场景稿（业务场景与用户操作流程；专家 V1.0 待评审）**
+  - **目标**：枚举需求业务场景、角色责任、AI 边界、跨领域关系与端到端流程。
+  - **依据**：专家《S02-03 需求管理业务场景与用户操作流程 V1.0》（待评审，已按 V1.1 基线给出评审意见：C-1 补存量导入来源 / C-2 验收双链 / C-3 版本变化→Task 三步语义 / C-4 零 Task NFR 异常场景 / C-5 确认术语三分 / C-6~C-8 交叉引用与现状锚点；**2026-11-04 已落盘 `docs/ui/smark-pm-s02-03-scenario-review-v1.md`**，含 P-1 解除记录——S02-02 报告出稿后 §5.3 两条防绕过规则已被 V-2+DEF-02 运行时证据支持，可摘「预登记」帽）。
+  - **不做**：不写表结构与 API；不冻结状态机。
+  - **验收**：评审意见经专家修订收编后定稿；与 S01/S03 场景无重叠。
+
+- [ ] **S02-04 总体设计与最终裁决（Q-1~Q-17 + DEF-01~04 修复方案）**
+  - **目标**：收敛 17 项待裁问题与 4 项运行时缺陷的修复设计，形成 S02 最终基线。
+  - **依据**：S02-01 V1.1 §12/§14.2；S02-02 报告 §2/§3；S02-03 场景稿定稿；外部供稿《原始来源与需求治理模型 V1.0》（领域模型输入，不单独占号）。
+  - **进度（2026-11-04）**：① 专家稿 V1.0 曾截断于 §3.2，R-1~R-6 初评落盘 `docs/ui/smark-pm-s02-04-initial-review-v1.md`（K-1~K-10 清单 + 供稿 13 点索引）；② **V1.1 全文已重发到达（§0–§17，含六项用户已确认裁决：Q1 Markdown 唯一权威/Q2 AI 不得自动确认/Q3 暂不建 Baseline/Q4 默认单执行依据/Q5 Finding 关联纳入 S02/Q6 Decision 语义 S02+S03 协同）**；③ **全文评审 R-7~R-19 已交付并落盘 `docs/ui/smark-pm-s02-04-full-review-v1.md`**——K 核销：K-10 ✅ / K-5·7·8 部分 / K-1·2·4 ❌；**P0×4**：R-7 全文接 S02-02 报告（§15 V-01~06/12 已完成须改引报告结论、§4.5/§11.3 两处[待核验]已有运行时答案）/ R-8 DEF-01~04 绑定+通过条件条款 / R-9 裁决表补全（Q-8·11·12·13·14·15·16后半·18~21+三项登记待裁共 13 项缺席）/ R-10 编号三重冲突（Q1~6 vs Q-1~21、D-01~13 vs S01 缺陷台账、V-01~13 vs S02-02 V-1~6）；P1×5（运行时档标记/Q1 迁移成本四预填+冷启动导入改造/S02-03 C-1·2·3 承接/CAND-8 落点/三项待裁纳入）；P2×3（迁移 0032 起/I 切片依赖顺序 S02-I6 权限先于 I1 创建/命名对齐）。**待专家修订 R-7~R-10 后过评审。**④ 2026-11-04 专家回《S02-04-REV-01 V1.2 修订任务书》（R-7~R-19 全操作化 + 新增四类职责/AI-Agent 唯一文件写入/三套生命周期），我方核验=可执行，附三意见：**写入者表述与知识空间稿 V2「AI-PM 是主要写入者」存在文本冲突须 V1.2 分层调和（AI-PM=业务主维护者 / AI-Agent=文件执行层）**；A 链漏 0014 既有 rejected/rolled_back 分支；**人类起草路径（S02-03 §4.1）在唯一写入规则下谁写文件未覆盖**。等 V1.2+四附件（主稿/核销表/裁决台账/DEF 绑定+切片依赖），到达按 §十三 A-F 清单核验。
+  - **关键待裁**：Q-1 定稿权威路径｜Q-2 定稿红线｜Q-3 正文权威｜Q-4 Finding 通道｜Q-5 决策追溯时点｜Q-6 状态机扩展｜Q-7 优先级表达｜Q-8 创建入口形态｜Q-9 越权修复与权限码｜Q-10 项目级基线实体｜Q-11 验收载体形态｜Q-12 验收项版本化｜Q-13 类型适配承载层｜Q-14 零 Task NFR 裁决路径｜Q-15 架构决策关联形态｜Q-16 requirement_type 取值域与导入默认｜Q-17 任务↔需求关联语义（多修订/改绑/留痕）。
+  - **不做**：不写实施计划；不写迁移（迁移号另登记）。
+  - **验收**：Q-1~Q-17 全部有明确裁决；DEF-01~04 各有修复方案与归属任务；与 S01 I2/I4/I5 边界无冲突。
+
+- [~] **S02-05 Requirement I-Slice 详细设计**（已启动 2026-11-04；**启动门禁与 S02-04 V1.2 解耦——基线冻结仍以修订后 S02-04 为准**，启动依据=V1.1 + R-7~R-19 全文评审 + REV-01 任务书 + 启动基线稿）
+  - **专家约束（2026-11-04，四切片不得各自实现一套审批/授权/定稿规则）**：I1 Requirement Core 须含项目授权与状态迁移；I2 Markdown & Revision Governance 须处理 Git↔PG 一致性、人类确认与版本映射；I4 Task Integration 须保护 Task 已固定的 Requirement Revision；I6 Interfaces & Authorization 须保证 REST/MCP/Executor 统一授权与同一业务应用服务。
+  - **切片划分与执行序**（启动基线稿）：**S02-I6-A 权限与人类确认基座（首个工作项）** → I1 Requirement Core → I2 Markdown & Revision Governance → I3 Source & Traceability → I4 Task Integration → I5 Acceptance & Verification → S02-I6-B 接口与审计完整设计（I6-A/B 同切片两批次）；I2 与 S01-I4（Project Goal 复用 Knowledge）交叉设计防两套写入协议；交付格式 13 项 + 六类证据标记（用户裁决/静态事实/运行时已证/设计裁决/待裁决/实施待验证）。
+  - **启动基线核验（2026-11-04，5 处修正待带入设计）**：① **0029=空号**（S01-I6-B 实际落 0031，「预留」为陈旧表述；S02 迁移自 0032 起、0029 复用与否由迁移登记表裁决）；② I2 的 A 链须补 0014 既有 `rejected`/`rolled_back` 分支与红线分支末尾 `projection_synced`；③ 待裁表须补第 15 项「Run/Delivery 实际依据第一阶段范围」（归 I4/I5）；④ I1 依赖=I6-A **+I2 写入协议**（创建入口部分；身份/状态机可先行）；⑤ I6-A/I2 设计须携带两条未决意见——写入者分层调和（AI-PM=业务主维护者 / AI-Agent=文件执行层，回注知识空间稿）+ 人类起草路径（唯一写入规则下谁写文件）；小项：I3 待裁列表补 Q-21。
+  - **待裁清单 14+1 项**（Q-8/11/12/13/14/15/16后半/18/19/20/21 + 来源继承 + 捕获权限红线 + 拒绝语义 + RD 范围），全量状态以 S02-04 V1.2 裁决台账为准。
+  - **S02-I6-A 设计稿 V1.1 到达 + 代码核验完成（2026-11-04）**：专家稿收编四项用户裁决（Q-A1 确认权=Project Lead+显式 Approver / Q-A2 Tenant Owner 不自动获项目写权 / Q-A3 确认独立实体 / Q-A4 历史确认不可撤销）；我方交付 `docs/s02-i6a-permission-foundation-code-facts-v1.md`（C-01~C-13 全答）。**关键事实**：Project Lead 现表达=project_member.role='owner'（创建者自动 owner，bootstrap.rs:118）；成员授权/撤销四端点已在（含 X-2 级联）；**项目级显式授权机制不存在**（唯一先例 git_capability_grant 0032 建→0033 撤）→ Approver 授权表全新建；确认实体表零冲突。**评审 7 条**：R-I6A-1 **P0=MCP 真人 key 冒充面**（T-087 凭据模型下 Agent 持人 key 时 §9.3 actor-kind 防线失效，建议 (a) V1 确认仅 REST/UI、MCP 不出 ConfirmRevision 工具，待用户裁决）/ R-I6A-2 Lead=owner 复用（0033 简化先例）/ R-I6A-3 Approver 表最小化 / R-I6A-4 approved_by 去留 / R-I6A-5 人类起草写入路径挂 I2 / **R-I6A-6 迁移号更正：S02 自 0034 起（0032/0033 已被 S01 并行批占用，0032 Git 能力+0033 简化撤表）——启动基线 §6.3/R-17/todo 三处旧口径同改** / R-I6A-7 dev-off 是 human 主体+确认实体补 identity_id/claimed_device_id。
+  - **I6-A V1.2 到达 + A* 认证隔离核验完成（2026-11-04）**：专家稿收编 A* 裁决（MCP 不出确认工具 + REST 确认须独立可信交互上下文）与 R-I6A-2~7 全部处理。我方交付 `docs/s02-i6a-auth-isolation-verification-v1.md`（§20.1 七问全答）：**重大发现=auth_mode 三分类已存在**（`aud`=interactive / `client_id`=api_key / unknown，`auth.rs:121-131`）但**零准入消费**；**api_key 类可防、登录令牌复用不可防**——且 runbook 现行 MCP 部署正是登录令牌用法（runbook:220-239）→ **H-17 当前必败，A* fail-closed 生效：确认入口关闭直至补齐隔离能力**。推荐补齐=(c) pm-api 自建 step-up 确认票据（短时效+单对象绑定 revision+hash，不依赖 lmms 改造）；(b) 上游 purpose claim 为备选；仅 interactive+短 exp 不彻底只可叠加。**建议 V1.2 增补一处**：§6.5 注明登录令牌复用不可区分，防实施者误读「要求 interactive 即满足 A*」。§20.2~20.5 同批已答（approved_by 消费者清单齐：读=pm_artifacts/pm_lists/rows+前端契约，写=executor+pm_write 两处；0034 ✓）。**§21「A* 核验通过」保持未勾**（核验完成=结论未过，须 step-up 落地过 H-17/H-18）。
+  - **下一步**：用户裁 step-up 票据方向（或接受入口延迟至 lmms 改造）→ I6-A 实施范围定稿（确认服务+step-up 能力）→ I1 启动。
+  - **S02-I7 新切片到达 + 评审/核验完成（2026-11-04）**：专家《S02-I7 外部代码变更接管与需求归因 V1.0》（代码先变→Agent 接管→归因/澄清/治理→关闭，反向入口）。我方交付 `docs/ui/smark-pm-s02-i7-external-commit-adoption-review-v1.md`：**方向成立**；R-I7-1 P0=「方案 B 已确定」越权（Q-18/20/21+来源继承仍待 V1.2 裁，应列为前置）；R-I7-2 P1=webhook 零存在但 `project_repository.head_commit_sha`+同步验证环=现成差分基线，**V1 触发建议走同步巡检、webhook 为增强**；R-I7-3=§7.3 事实过期（finding 已有 project_id + `discovery_finding_evidence` 已含 commit_sha——**勘误源头在我方 S02-01 §5.4 漏查 0031，已就地勘误**）；R-I7-4=排除判据须精确到「Run HEAD sha」，Run 中间 commit 仍应进 intake；R-I7-5=I7 须并入切片表（todo+S02-04 V1.2 增量输入）；R-I7-6=GOVERNANCE_PENDING 长挂起→积压视图归 I6-B。核验即答 12 项中 10 项（default_branch/head_commit_sha/task_repository_commit UNIQUE(run,repo) 等）。**待专家修 R-I7-1/3 后 I7 为第七切片候选基线。**→ **已收编（2026-11-04 同日）：专家七项裁决全采纳 + 新增 P0 巡检基线可靠性约束（A→B→C→D 反例五规则：完整集合/逐个幂等登记/登记失败不推进基线/失败恢复重扫/祖先不明入异常核验）+ 定位图 mermaid 化；我方落盘 `docs/ui/smark-pm-s02-i7-external-commit-adoption-v1-1.md`（完整正文修订：§2.1 巡检首选分层触发/§2.5 P0 新增/§4.2 解除方案B依赖+Q-I7-11 前置裁决/§7.3 事实修正+evidence FK 前向收口/§1.2 Run HEAD 判据/§6.4 积压六类可观测/§9.8 基线跳跃验收/P9 原则/附录A 8项预答）。**S02-I7 V1.1 = 第七切片修订定稿，待 S02-04 V1.2 前置裁决（Q-18/20/21/来源继承）后可进实施设计。**
+- [ ] **S02-06 S02 总体实施计划**
 
 ---
 

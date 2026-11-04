@@ -255,19 +255,104 @@ pub async fn claim_task_run_with_policy(
 
 /// A/B 两入口的**唯一事务模板**（A-2）：候选筛选、租约签发、开关门控与审计
 /// payload 都由 [`ClaimOptions`] 表达，禁止复制事务体。
+///
+/// **I1-C 两阶段协议**（I1 §5.2，验收 I1-010~014）：
+///
+/// - **阶段 A（候选发现）**：无锁读出候选 Run 的 `project_id` 集合——不锁 Run，
+///   不代表获得 claim 权限；
+/// - **阶段 B（按统一锁序 claim）**：对候选 Project 依次
+///   `锁 core.project → 查 archived → 在该 Project 内重新查候选 Run
+///   （FOR UPDATE OF r SKIP LOCKED）→ 锁 Task → 重新验证 → claim`。
+///
+/// 规则（§5.2/§5.4）：
+/// 1. 阶段 B 的候选 Run **必须重新查询**，不得直接使用阶段 A 的结果完成 claim；
+/// 2. Project 已归档 → 跳过该 Project，继续找下一个候选（不失败、不报错）；
+/// 3. 所有 claim 分支**先锁 Project 再锁 Run 再锁 Task**，无「先锁 Run 后锁
+///    Project」的分支（锁序 `project → run → task`，无反向环）；
+/// 4. 阶段 A 不持有跨事务锁（纯读，连接释放后无残留）；
+/// 5. Model A（`task_filter` 指定任务）锁序不变：调用方已给出唯一 Project，
+///    阶段 A/B 合并为一次「锁 Project → 锁 Run → 锁 Task」。
 pub(crate) async fn claim_core(
     pool: &PgPool,
     cfg: &RunDispatchConfig,
     opts: &ClaimOptions<'_>,
     policy: &dyn ExecutionPolicy,
 ) -> Result<Option<ClaimOutcome>, RunDispatchError> {
-    let mut tx = pool.begin().await?;
-
-    // ① 选候选 Run（不阻塞其他 Worker）。顺序：先锁 run。
-    let candidate = if let Some(task_id) = opts.task_filter {
+    // Model A：范围已确定，单 Project 内直接走阶段 B。
+    if let Some(task_id) = opts.task_filter {
         let project_id = opts
             .project_filter
             .ok_or_else(|| RunDispatchError::InvalidOption("Model A requires a project scope".into()))?;
+        return claim_core_in_project(pool, cfg, opts, policy, project_id, Some(task_id)).await;
+    }
+
+    // ── 阶段 A：只读发现候选 Project（不锁 Run，不代表获得 claim 权限）──
+    let candidates: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT r.project_id FROM delivery.task_run r \
+          WHERE r.run_kind = 'delivery' \
+            AND ((r.status = 'queued'  AND r.next_dispatch_at <= now()) \
+              OR (r.status = 'claimed' AND r.lease_expires_at < now())) \
+          ORDER BY r.next_dispatch_at, r.created_at \
+          LIMIT $1",
+    )
+    .bind(CLAIM_PROJECT_CANDIDATE_LIMIT)
+    .fetch_all(pool)
+    .await?;
+
+    // ── 阶段 B：按候选顺序逐 Project 尝试（§5.4：候选被抢占 → 尝试下一个；
+    //    归档 → 跳过该 Project；候选遍历 LIMIT 界定单轮工作量，饥饿由
+    //    「下一轮 Worker 再扫」兜底）。
+    for project_id in candidates {
+        if let Some(outcome) =
+            claim_core_in_project(pool, cfg, opts, policy, project_id, None).await?
+        {
+            return Ok(Some(outcome));
+        }
+    }
+    Ok(None)
+}
+
+/// 单轮候选发现的 Project 数上限（阶段 A → B 的扫描窗口；
+/// 其余候选由 Worker 下一轮 claim 兜底，避免长事务）。
+const CLAIM_PROJECT_CANDIDATE_LIMIT: i64 = 32;
+
+/// 阶段 B：在**单个 Project** 内按统一锁序执行 claim。
+///
+/// 返回 `Ok(None)` 表示「本 Project 本轮无可领取的 Run」——包括：候选被其他
+/// Worker 抢占（SKIP LOCKED 跳过）、Project 已归档、Task 终态等合法跳过情形。
+async fn claim_core_in_project(
+    pool: &PgPool,
+    cfg: &RunDispatchConfig,
+    opts: &ClaimOptions<'_>,
+    policy: &dyn ExecutionPolicy,
+    project_id: Uuid,
+    task_filter: Option<Uuid>,
+) -> Result<Option<ClaimOutcome>, RunDispatchError> {
+    let mut tx = pool.begin().await?;
+
+    // ① 锁 Project 行（统一锁序第一把锁：project → run → task）。
+    //    归档事务同锁序 → 归档与 claim 线性化：归档先提交 → 这里读到 archived
+    //    合法跳过；claim 先提交 → 归档随后把 queued 条件取消（I1-010/012/013）。
+    let project_status: Option<String> = sqlx::query_scalar(
+        "SELECT status FROM core.project WHERE id = $1 FOR UPDATE",
+    )
+    .bind(project_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if project_status.as_deref() == Some("archived") {
+        tx.commit().await?;
+        return Ok(None);
+    }
+    let Some(_) = project_status else {
+        // Project 不存在（历史脏数据）：候选作废。
+        tx.rollback().await?;
+        return Ok(None);
+    };
+
+    // ② 在该 Project 范围内**重新查询**候选 Run（§5.2 规则 1：不得直接使用
+    //    阶段 A 的结果）。FOR UPDATE OF r SKIP LOCKED：候选被其他 Worker 抢占
+    //    → 该行被跳过，本 Project 本轮出局（§5.4）。
+    let candidate = if let Some(task_id) = task_filter {
         sqlx::query(
             "SELECT r.id, r.task_id, r.project_id, r.status, r.dispatch_attempts, \
                     r.executor_session, r.stage, r.lease_generation, r.attempt_no \
@@ -288,13 +373,14 @@ pub(crate) async fn claim_core(
             "SELECT r.id, r.task_id, r.project_id, r.status, r.dispatch_attempts, \
                     r.executor_session, r.stage, r.lease_generation, r.attempt_no \
                FROM delivery.task_run r \
-              WHERE r.run_kind = 'delivery' \
+              WHERE r.project_id = $1 AND r.run_kind = 'delivery' \
                 AND ((r.status = 'queued'  AND r.next_dispatch_at <= now()) \
                   OR (r.status = 'claimed' AND r.lease_expires_at < now())) \
               ORDER BY r.next_dispatch_at, r.created_at \
               FOR UPDATE OF r SKIP LOCKED \
               LIMIT 1",
         )
+        .bind(project_id)
         .fetch_optional(&mut *tx)
         .await?
     };
@@ -344,7 +430,10 @@ pub(crate) async fn claim_core(
     let candidate_stage: Option<String> = candidate.get("stage");
     let _lease_generation_prev: i32 = candidate.get("lease_generation");
 
-    // ② 锁任务行（顺序固定：run → task）。B2：新 Run 的 INSERT 必须在此之后。
+    // I1-C：归档守卫已在阶段 B 的 Project 行锁内完成（见 claim_core_in_project ①）——
+    // 不再需要池外防御纵深读；锁内读到的必然是归档后的已提交状态。
+
+// ③ 锁任务行（顺序固定：project → run → task）。B2：新 Run 的 INSERT 必须在此之后。
     let task = sqlx::query(
         "SELECT status, revision, retry_exhausted, task_type FROM delivery.task \
           WHERE id = $1 AND project_id = $2 FOR UPDATE",
@@ -666,6 +755,25 @@ pub(crate) async fn claim_core(
 
     // D2.1：完整策略快照（§15.5）。`policy_hash`/`policy_version` 为内容寻址，
     // `execution_enabled` 由策略门与审批证据推导，不再是字面量。
+    // I3-C/D（V1.1 简化裁决）：每仓**可访问**快照（Task 范围 ∩ 仓库状态 verified，
+    // 单一 `read_write` 档位）叠加进快照；其内容寻址哈希落 `policy_snapshot_hash`。
+    let run_tenant: Uuid = sqlx::query_scalar(
+        "SELECT tenant_id FROM delivery.task_run WHERE id = $1",
+    )
+    .bind(run_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    let repo_access = crate::repo_access::build_task_repo_access_tx(
+        &mut tx,
+        run_tenant,
+        project_id,
+        task_id,
+    )
+    .await
+    .map_err(|e| match e {
+        crate::repo_access::RepoAccessError::Db(db) => RunDispatchError::Db(sqlx::Error::Protocol(db)),
+        other => RunDispatchError::InvalidOption(other.to_string()),
+    })?;
     let policy_snapshot = serde_json::json!({
         "policy_schema": POLICY_SCHEMA,
         "policy_version": assessment.policy_version,
@@ -677,12 +785,21 @@ pub(crate) async fn claim_core(
         "repository_baselines": baselines.clone(),
         "snapshot_scope": POLICY_SCHEMA,
         "effective_policy": assessment.effective_policy.to_snapshot_json(),
+        "repo_access": crate::repo_access::access_snapshot_json(&repo_access),
     });
-    sqlx::query("UPDATE delivery.task_run SET policy_snapshot = $2 WHERE id = $1")
-        .bind(run_id)
-        .bind(&policy_snapshot)
-        .execute(&mut *tx)
-        .await?;
+    let policy_snapshot_hash = crate::repo_access::access_snapshot_hash(&repo_access);
+    sqlx::query(
+        "UPDATE delivery.task_run \
+         SET policy_snapshot = $2, policy_snapshot_hash = $3, \
+             repository_policy_snapshots = $4 \
+         WHERE id = $1",
+    )
+    .bind(run_id)
+    .bind(&policy_snapshot)
+    .bind(&policy_snapshot_hash)
+    .bind(&crate::repo_access::access_snapshot_json(&repo_access))
+    .execute(&mut *tx)
+    .await?;
 
     // Probe 模式：立即释放回 queued（不启动执行器）。
     if opts.mode == DispatchMode::Probe {

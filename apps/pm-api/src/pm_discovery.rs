@@ -17,9 +17,9 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use pm_application::discovery::{
-    DiscoveryError, NewFinding, add_finding, add_question, defer_question, answer_question,
-    get_session_detail, list_sessions, record_finding_verification, start_session_from_import,
-    transition_session,
+    DiscoveryError, FindingCreator, NewFinding, add_finding, add_question, defer_question,
+    answer_question, get_session_detail, list_sessions, record_finding_verification,
+    start_session_from_import, transition_session,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -269,9 +269,9 @@ async fn add_finding_handler(
             confidence: body.confidence,
             evidence: body.evidence,
             repository_ids: body.repository_ids,
-            verification_status: None,
             actor_role: body.actor_role,
         },
+        FindingCreator::HumanDirect,
     )
     .await
     {
@@ -286,6 +286,8 @@ struct VerificationBody {
     answer: String,
     #[serde(default)]
     confirmed_finding: Option<String>,
+    #[serde(default)]
+    operation_id: Option<String>,
 }
 
 async fn verification_handler(
@@ -308,6 +310,7 @@ async fn verification_handler(
         &body.answer,
         principal.principal_id,
         body.confirmed_finding.as_deref(),
+        body.operation_id.as_deref(),
     )
     .await
     {

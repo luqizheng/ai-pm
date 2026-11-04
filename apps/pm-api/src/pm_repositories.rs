@@ -72,6 +72,10 @@ fn repository_error(err: RepositoryError) -> Response {
         ),
         RepositoryError::RevisionConflict => (StatusCode::CONFLICT, "revision conflict"),
         RepositoryError::InvalidRole => (StatusCode::BAD_REQUEST, "invalid repository role"),
+        RepositoryError::HasHistory => (
+            StatusCode::CONFLICT,
+            "repository has history and cannot be deleted",
+        ),
         RepositoryError::KeyInUse => (
             StatusCode::CONFLICT,
             "ssh key is still referenced by a verified repository",

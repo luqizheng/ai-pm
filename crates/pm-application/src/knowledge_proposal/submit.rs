@@ -100,6 +100,15 @@ pub async fn submit_proposal(
         return Err(err);
     }
 
+    // Q2（I4，用户裁决 2026-11-03）：**Project Goal 的任何提案都强制红线**——
+    // Goal 的建立与修改必须经人类事前确认，Agent 提案永不自动发布
+    // （I4 §4.4/§4.5；普通文档维持既有门禁语义）。
+    let declared_redline = if req.doc_key == crate::project_goal::GOAL_DOC_KEY {
+        Some(req.redline_kind.as_deref().unwrap_or("rewrite_delivered"))
+    } else {
+        req.redline_kind.as_deref()
+    };
+
     let gate = knowledge_quality::evaluate(
         pool,
         &GateInput {
@@ -111,7 +120,7 @@ pub async fn submit_proposal(
             source_event_id: req.source_event_id,
             analysis_run_id: req.analysis_run_id,
             source_ref: req.source_ref.as_deref(),
-            declared_redline: req.redline_kind.as_deref(),
+            declared_redline,
             current_document_id,
             current_revision_id,
             base_revision_id: req.base_revision_id,
@@ -149,6 +158,8 @@ pub async fn submit_proposal(
     };
 
     let mut tx = pool.begin().await?;
+    // I4-F 归档守卫：归档项目不得新建提案（Goal 修改提案同样关闭，I4 §9.1/§9.2）。
+    crate::knowledge::ensure_project_active_for_write(&mut tx, req.project_id).await?;
     // 幂等预占在业务事务内。
     let claim = crate::knowledge_write_coordinator::claim_operation(
         &mut tx,
@@ -324,6 +335,9 @@ pub async fn confirm_redline_proposal(
     let created_by: Uuid = row.get("created_by");
 
     let mut tx = pool.begin().await?;
+    // I4-F 归档守卫：归档项目不得确认发布（未完成 Goal 提案归档后不能继续提交，
+    // I4 §9.2）。守卫放在 **Git 写入之前** → 不产生孤儿提交。
+    crate::knowledge::ensure_project_active_for_write(&mut tx, project_id).await?;
     let claim = crate::knowledge_write_coordinator::claim_operation(
         &mut tx,
         project_id,

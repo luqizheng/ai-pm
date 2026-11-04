@@ -125,9 +125,44 @@ pub async fn claim_and_start(
 
     match executor.start(&executable, &session_text).await {
         Ok(()) => {
-            // 启动确认：条件 UPDATE 带 session 匹配（防竞态），与任务推进同事务
-            // （D1 §九问题 4：claimed→running 由编排器经受守卫入口推进）。
+            // 启动确认（I1-E 阶段 C/D）：条件 UPDATE 带 session 匹配（防竞态）+
+            // **先锁 Project 行**——归档与启动确认在同一把行锁上串行：
+            //   归档先拿锁 → 本登记失败（updated=0，或 archived 显式拒绝）→
+            //   立即终止刚 spawn 的子进程（§8.3：登记失败必须 kill）；
+            //   登记先拿锁 → 归档随后看到 running Run 走 P2 取消协议。
+            // 这补上 I1-025/026/028 的窗口：「spawn 后、PID 登记前归档」不再能
+            // 把子进程推进为 running。
             let mut tx = pool.begin().await?;
+            match crate::project_gate::lock_project_activity_tx(&mut tx, project_id).await {
+                Ok(crate::project_gate::ProjectActivity::Archived) => {
+                    tx.rollback().await?;
+                    let session = ExecutorSession {
+                        session: session_text.clone(),
+                        run_id,
+                        workspace_root: workspace_root_from_env(),
+                    };
+                    if let Err(error) =
+                        executor.terminate(&session, TerminateReason::Cancelled).await
+                    {
+                        // 终止失败：Run 保持 claimed（未被确认），lease 到期后
+                        // reconcile/cleanup 兜底重试——终态不被伪造。
+                        tracing::warn!(
+                            run = %run_id,
+                            error = %error,
+                            "post-archive start rejected; terminate failed, cleanup will retry"
+                        );
+                    }
+                    return Ok(StartOutcome::StartFailed {
+                        run_id,
+                        error: "project archived before start confirmation".to_string(),
+                    });
+                }
+                Ok(crate::project_gate::ProjectActivity::Active) => {}
+                Err(err) => {
+                    tx.rollback().await?;
+                    return Err(RunDispatchError::Db(sqlx::Error::Protocol(err.to_string())));
+                }
+            }
             let updated = sqlx::query(
                 "UPDATE delivery.task_run \
                     SET status = 'running', stage = 'started', started_at = now() \
@@ -331,6 +366,7 @@ pub async fn cancel_run(
     pool: &PgPool,
     executor: &dyn RunExecutor,
     run_id: Uuid,
+    reason: &str,
 ) -> Result<bool, RunDispatchError> {
     let row = sqlx::query(
         "SELECT project_id, status, executor_session FROM delivery.task_run WHERE id = $1",
@@ -347,10 +383,17 @@ pub async fn cancel_run(
     if !matches!(status.as_str(), "claimed" | "running") {
         return Ok(false);
     }
-    // ① 先落终态 + 撤凭据（原子）。
-    let confirmed = record_termination(pool, run_id, project_id, "user_cancel").await?;
+    // ① 先落终态 + 撤凭据（原子）+ **登记持久化清理账本**（I1-E，迁移 0035）——
+    //    终态与清理是两个生命周期（§9.1）：凭据已撤销，进程清理失败不影响终态，
+    //    但必须可重试、可追溯（1 小时窗口兜底之外不再丢失，I1-031）。
+    let confirmed = record_termination(pool, run_id, project_id, reason).await?;
     if !confirmed {
         return Ok(false);
+    }
+    if let Some(session_text) = &session_text {
+        let mut tx = pool.begin().await?;
+        crate::run_cleanup::enqueue(&mut tx, run_id, session_text, None).await?;
+        tx.commit().await?;
     }
     // ② 后终止进程（资源清理；失败由兜底清理路径重试）。
     if let Some(session_text) = session_text {
@@ -397,6 +440,39 @@ pub async fn reconcile_orphans(
     executor: &dyn RunExecutor,
     cfg: &RunDispatchConfig,
 ) -> Result<usize, RunDispatchError> {
+    // P3（I1，B-1 默认并入）：超窗残留进程告警——running 且租约过期超过 1 小时
+    // 仍非终态的 Run，落 `run.orphan_suspected` 审计（1 小时去重）+ warn 日志。
+    // 清理仍走既有 claim 路径的 isolate_started_run / 兜底回收；此处只补「可见性」。
+    let orphans: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT r.id, r.project_id \
+           FROM delivery.task_run r \
+          WHERE r.status = 'running' AND r.executor_session IS NOT NULL \
+            AND r.lease_expires_at < now() - interval '1 hour' \
+            AND NOT EXISTS ( \
+                 SELECT 1 FROM governance.audit_log a \
+                  WHERE a.action = 'run.orphan_suspected' AND a.target_id = r.id \
+                    AND a.created_at > now() - interval '1 hour')",
+    )
+    .fetch_all(pool)
+    .await?;
+    for (run_id, project_id) in orphans {
+        let Ok(mut tx) = pool.begin().await else { continue };
+        if crate::pm_write::append_audit(
+            &mut tx,
+            project_id,
+            &crate::actor::AuditActor::dispatch(),
+            "run.orphan_suspected",
+            "task_run",
+            Some(run_id),
+        )
+        .await
+        .is_ok()
+        {
+            let _ = tx.commit().await;
+        }
+        tracing::warn!(%run_id, %project_id, "orphan run suspected: lease expired over an hour ago");
+    }
+
     let rows = sqlx::query(
         "SELECT r.id, r.task_id, r.project_id, r.executor_session, r.lease_owner \
            FROM delivery.task_run r \
@@ -562,8 +638,25 @@ async fn executable_run(
     .bind(run_id)
     .fetch_all(pool)
     .await?;
+    // I3-E 执行期强校验（V1.1 简化裁决）：仓库能否进入执行环境，以**本次 Run 的
+    // 定格访问快照**为准——不在快照内的仓（范围外 / 非 verified）不得暴露给执行端。
+    let policy_snapshot: Option<serde_json::Value> = sqlx::query_scalar(
+        "SELECT policy_snapshot FROM delivery.task_run WHERE id = $1",
+    )
+    .bind(run_id)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
     let repositories = baseline_rows
         .iter()
+        .filter(|row| {
+            let repository_id: Uuid = row.get("repository_id");
+            crate::repo_access::snapshot_allows(
+                policy_snapshot.as_ref(),
+                repository_id,
+                pm_domain::repo_access::RepoAccess::ReadWrite,
+            )
+        })
         .map(|row| RunRepositoryBaseline {
             repository_id: row.get("repository_id"),
             base_ref: row.get("base_ref"),
@@ -571,7 +664,13 @@ async fn executable_run(
             write_access: row.get("write_access"),
             workspace_path: row.get("workspace_path"),
         })
-        .collect();
+        .collect::<Vec<_>>();
+    if repositories.is_empty() {
+        // 快照缺失 / 无可访问仓库 = deny-all：不得把仓库交给执行端。
+        return Err(RunDispatchError::InvalidOption(
+            "no accessible repository in the run access snapshot".to_string(),
+        ));
+    }
     Ok(ExecutableRun {
         run_id,
         task_id,
@@ -698,7 +797,8 @@ async fn record_termination(
 ) -> Result<bool, RunDispatchError> {
     let terminal = match reason_code {
         "timeout" => "timed_out",
-        "user_cancel" => "cancelled",
+        // 用户取消与归档收口（I1-D/P2）：同一「人为终止」语义 → cancelled。
+        "user_cancel" | "project_archived" => "cancelled",
         // 心跳丢失 / 进展停滞：执行类失败（Agent 死锁 / 长期停滞），终态 failed。
         _ => "failed",
     };

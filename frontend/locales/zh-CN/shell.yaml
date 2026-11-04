@@ -75,6 +75,7 @@ shell:
     dashboard: 概览
     profile: 个人设置
     projectRepositories: 代码仓库
+    projectCommandCenter: 项目总控台
     projectImport: 导入项目
     customers: 客户
     workspaceConsole: 项目总控

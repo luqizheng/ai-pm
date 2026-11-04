@@ -47,7 +47,8 @@ pub async fn add_question(
             "question must not be blank".to_string(),
         ));
     }
-    get_session(pool, tenant_id, session_id).await?;
+    let session = get_session(pool, tenant_id, session_id).await?;
+    let project_id = session.project_id;
     if let Some(finding_id) = finding_id {
         let ok: Option<Uuid> = sqlx::query_scalar(
             "SELECT id FROM discovery.discovery_finding \
@@ -64,10 +65,11 @@ pub async fn add_question(
     }
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO discovery.discovery_question \
-         (tenant_id, session_id, finding_id, question, why_blocking) \
-         VALUES ($1, $2, $3, $4, $5) RETURNING id",
+         (tenant_id, project_id, session_id, finding_id, question, why_blocking) \
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
     )
     .bind(tenant_id)
+    .bind(project_id)
     .bind(session_id)
     .bind(finding_id)
     .bind(question)
