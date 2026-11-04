@@ -71,6 +71,8 @@ function onInput(event: Event) {
       class="ui-input__icon ui-input__icon--danger"
       aria-hidden="true"
     />
+    <!-- 尾部插槽：口令可见性切换等控件（Figma DS/Forms/PasswordInput 的 eye 图标位） -->
+    <slot name="trailing" />
   </div>
 </template>
 

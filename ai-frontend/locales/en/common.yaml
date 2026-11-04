@@ -15,3 +15,6 @@ common:
   pageSize: Rows per page
   total: "{count} in total"
   empty: No records yet
+  password:
+    show: Show password
+    hide: Hide password
