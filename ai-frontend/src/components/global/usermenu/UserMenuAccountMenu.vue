@@ -1,6 +1,6 @@
 <!-- @figma-sync file=hNlGqLEMQpOVCZ0o5u3DkT set="Global/UserMenu/AccountMenu" node=33:87793 date=2026-11-04 -->
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   PopoverContent,
@@ -11,17 +11,15 @@ import {
 
 import Avatar from "@/components/ui/avatar/Avatar.vue";
 import UserMenuButton from "./UserMenuButton.vue";
-import UserMenuAppearance from "./UserMenuAppearance.vue";
 import UserMenuItem from "./UserMenuItem.vue";
-import { currentTheme } from "@/lib/theme";
 
 /**
  * 账户菜单（Figma Global/UserMenu/AccountMenu 33:87793，448 面板）。
  *
  * 身份块（Avatar 36 + 姓名 15 SB + 邮箱 + 组织/项目角色行）+ 分隔线 +
- * 七项操作 + 退出登录（Danger）。
- * 「外观」项在面板内切换到 Appearance 子面板（返回项回主菜单）；
- * 其余项经 select(id) 交调用方路由；sign-out / shortcuts 专属事件。
+ * 六项操作 + 退出登录（Danger）。
+ * 项经 select(id) 交调用方路由；sign-out / shortcuts 专属事件。
+ * （原「外观」子面板已上移顶栏 ThemeToggle，铃铛旁深/浅单击往返。）
  * 组织行遵循 Shell V1.1：仅上下文展示，**不含租户管理入口**。
  */
 interface Props {
@@ -48,13 +46,6 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const open = ref(false);
-/** 面板视图：主菜单 / 外观子面板 */
-const view = ref<"menu" | "appearance">("menu");
-const theme = ref<"dark" | "light">(currentTheme());
-
-watch(open, value => {
-  if (!value) view.value = "menu";
-});
 
 const menuItems = computed(() => [
   { id: "my-profile", label: t("global.usermenu.myProfile") },
@@ -101,64 +92,49 @@ function onSignOut() {
         :side-offset="4"
       >
         <!-- 主菜单 -->
-        <template v-if="view === 'menu'">
-          <div class="user-menu__identity">
-            <Avatar :name="props.name" :label="props.name">
-              <template v-if="props.initials" #fallback>
-                <span class="user-menu__initials">{{ props.initials }}</span>
-              </template>
-            </Avatar>
-            <div class="user-menu__who">
-              <p class="user-menu__name">{{ props.name }}</p>
-              <p class="user-menu__email">{{ props.email }}</p>
-            </div>
+        <div class="user-menu__identity">
+          <Avatar :name="props.name" :label="props.name">
+            <template v-if="props.initials" #fallback>
+              <span class="user-menu__initials">{{ props.initials }}</span>
+            </template>
+          </Avatar>
+          <div class="user-menu__who">
+            <p class="user-menu__name">{{ props.name }}</p>
+            <p class="user-menu__email">{{ props.email }}</p>
           </div>
-          <p class="user-menu__context">
-            {{ t("global.usermenu.tenantLabel", { tenant: props.tenant }) }}
-          </p>
-          <p class="user-menu__context">{{ props.projectRole }}</p>
+        </div>
+        <p class="user-menu__context">
+          {{ t("global.usermenu.tenantLabel", { tenant: props.tenant }) }}
+        </p>
+        <p class="user-menu__context">{{ props.projectRole }}</p>
 
-          <div class="user-menu__divider" aria-hidden="true" />
+        <div class="user-menu__divider" aria-hidden="true" />
 
-          <nav
-            class="user-menu__items"
-            role="menu"
-            :aria-label="t('global.usermenu.label')"
-          >
-            <UserMenuItem
-              v-for="item in menuItems"
-              :key="item.id"
-              :label="item.label"
-              @click="onItem(item.id)"
-            />
-            <UserMenuItem
-              :label="t('global.usermenu.appearance')"
-              @click="view = 'appearance'"
-            />
-            <UserMenuItem
-              :label="t('global.usermenu.keyboardShortcuts')"
-              @click="onShortcuts"
-            />
-            <UserMenuItem
-              :label="t('global.usermenu.helpDocumentation')"
-              @click="onItem('help-documentation')"
-            />
-            <UserMenuItem
-              :label="t('global.usermenu.signOut')"
-              variant="danger"
-              @click="onSignOut"
-            />
-          </nav>
-        </template>
-
-        <!-- 外观子面板（返回项回主菜单；Figma 未画返回，实现补齐） -->
-        <template v-else>
+        <nav
+          class="user-menu__items"
+          role="menu"
+          :aria-label="t('global.usermenu.label')"
+        >
           <UserMenuItem
-            :label="t('global.usermenu.back')"
-            @click="view = 'menu'"
+            v-for="item in menuItems"
+            :key="item.id"
+            :label="item.label"
+            @click="onItem(item.id)"
           />
-          <UserMenuAppearance v-model="theme" />
-        </template>
+          <UserMenuItem
+            :label="t('global.usermenu.keyboardShortcuts')"
+            @click="onShortcuts"
+          />
+          <UserMenuItem
+            :label="t('global.usermenu.helpDocumentation')"
+            @click="onItem('help-documentation')"
+          />
+          <UserMenuItem
+            :label="t('global.usermenu.signOut')"
+            variant="danger"
+            @click="onSignOut"
+          />
+        </nav>
       </PopoverContent>
     </PopoverPortal>
   </PopoverRoot>

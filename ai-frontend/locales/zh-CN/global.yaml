@@ -82,21 +82,19 @@ global:
     accountSettings: 账户设置
     security: 安全
     personalPreferences: 个人偏好
-    appearance: 外观
     keyboardShortcuts: 键盘快捷键
     helpDocumentation: 帮助与文档
     signOut: 退出登录
-    back: 返回
     tenantLabel: "组织 · {tenant}"
-    themeNote: "主题 = {theme} · 跟随语义主题绑定"
-    themeDark: 深色
-    themeLight: 浅色
     signOutTitle: 退出当前账户？
     signOutDesc: "当前登录身份为 {email}。再次使用需重新登录。"
     signOutConfirm: 我要退出当前会话。
     cancel: 取消
     close: 关闭
     done: 完成
+  theme:
+    toLight: 切换到浅色模式
+    toDark: 切换到深色模式
   tenant:
     label: 当前组织
     tooltipLabel: "组织 · {tenant} · {identity}"

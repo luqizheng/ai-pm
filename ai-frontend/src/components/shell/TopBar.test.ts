@@ -7,6 +7,7 @@ import { DOMWrapper, flushPromises } from "@vue/test-utils";
 import TopBar from "./TopBar.vue";
 import { demoProject, demoProjects } from "./demo";
 import { buildRoutes } from "@/router";
+import { THEME_STORAGE_KEY } from "@/lib/theme";
 import { useShellStore } from "@/stores/shell";
 import { mountShell } from "./test-utils";
 
@@ -96,6 +97,32 @@ describe("TopBar", () => {
     const bell = wrapper.find(".notification-bell__button");
     expect(bell.exists()).toBe(true);
     expect(bell.attributes("aria-label")).toBe("通知");
+  });
+
+  it("主题开关紧随铃铛：单击写 html data-theme 并持久化（深/浅往返）", async () => {
+    localStorage.removeItem(THEME_STORAGE_KEY);
+    document.documentElement.removeAttribute("data-theme");
+    const { wrapper } = mountShell(TopBar);
+    await nextTick();
+
+    const toggle = wrapper.find(".theme-toggle");
+    expect(toggle.exists()).toBe(true);
+    // 位置承诺：铃铛（NotificationDropdown 渲染根）旁边
+    expect(
+      toggle.element.previousElementSibling?.classList.contains(
+        "notification-bell"
+      )
+    ).toBe(true);
+
+    // 默认深色 → 单击转浅色并持久化；再击回深色（往返）
+    expect(toggle.attributes("aria-label")).toBe("切换到浅色模式");
+    await toggle.trigger("click");
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("light");
+
+    await toggle.trigger("click");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
   });
 
   it("账户入口渲染头像触发按钮，帮助入口渲染触发按钮", async () => {

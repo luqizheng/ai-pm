@@ -7,7 +7,8 @@ import UserMenuAccountMenu from "./UserMenuAccountMenu.vue";
 import { i18n } from "@/lib/i18n";
 
 /**
- * 账户菜单（AccountMenu 448 面板）：身份块 + 八项操作 + 外观子面板。
+ * 账户菜单（AccountMenu 448 面板）：身份块 + 六项操作 + 退出登录。
+ * （原「外观」子面板已上移顶栏 ThemeToggle。）
  * 浮层经 Portal 挂到 body（仓库约定）。
  */
 describe("UserMenuAccountMenu", () => {
@@ -52,7 +53,7 @@ describe("UserMenuAccountMenu", () => {
     expect(panel()?.textContent).toContain("Atlas Platform · Contributor");
   });
 
-  it("八项操作齐备，退出登录为末项", async () => {
+  it("六项操作齐备，退出登录为末项", async () => {
     const wrapper = mountMenu();
     await nextTick();
     await wrapper.find(".user-menu-button").trigger("click");
@@ -64,7 +65,6 @@ describe("UserMenuAccountMenu", () => {
       "账户设置",
       "安全",
       "个人偏好",
-      "外观",
       "键盘快捷键",
       "帮助与文档",
       "退出登录"
@@ -88,28 +88,6 @@ describe("UserMenuAccountMenu", () => {
     );
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(panel()).toBeNull();
-  });
-
-  it("「外观」切换到子面板（返回项 + Dark/Light），返回回主菜单", async () => {
-    const wrapper = mountMenu();
-    await nextTick();
-    await wrapper.find(".user-menu-button").trigger("click");
-    await nextTick();
-
-    panelButtons()
-      .find(b => b.textContent?.trim() === "外观")!
-      .click();
-    await nextTick();
-
-    expect(panel()?.textContent).toContain("返回");
-    expect(panel()?.textContent).toContain("深色");
-    expect(panel()?.textContent).toContain("浅色");
-
-    panelButtons()
-      .find(b => b.textContent?.trim() === "返回")!
-      .click();
-    await nextTick();
-    expect(panel()?.textContent).toContain("我的资料");
   });
 
   it("键盘快捷键 / 退出登录走专属事件", async () => {

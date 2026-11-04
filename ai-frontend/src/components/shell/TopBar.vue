@@ -5,6 +5,7 @@ import { useRouter } from "vue-router";
 import { Search, Sparkles } from "lucide-vue-next";
 
 import NotificationDropdown from "@/components/global/notification/NotificationDropdown.vue";
+import { ThemeToggle } from "@/components/global/theme";
 import { TenantIndicator } from "@/components/global/tenant";
 import { HelpMenu, KeyboardShortcutsDialog } from "@/components/global/help";
 import {
@@ -30,8 +31,8 @@ import { demoOrganization, resolveProjectSwitch } from "./demo";
  *     + 项目切换器（Figma「06 — Project Context Switcher」33:82961，
  *     Global/ProjectSwitcher 五态 Trigger + Menu）
  * 中：全局搜索 / 命令面板入口（⌘ K）
- * 右：通知（下拉）、全局 AI 助手入口、帮助（菜单 + 快捷键对话框）、
- *     账户菜单（含退出登录确认）
+ * 右：通知（下拉）、主题快捷开关（深/浅往返）、全局 AI 助手入口、
+ *     帮助（菜单 + 快捷键对话框）、账户菜单（含退出登录确认）
  *
  * 按 Shell V1.1 限制：**不引入 Workspace Switcher**——
  * 组织在此仅作上下文指示（无切换实体）；项目可切换。
@@ -204,6 +205,9 @@ function onSignOutConfirm() {
         @open="onOpenNotification"
         @view-all="onViewAllNotifications"
       />
+
+      <!-- 主题快捷开关（铃铛旁：深/浅单击往返；与设置偏好页同源 lib/theme） -->
+      <ThemeToggle />
 
       <!-- 全局 AI 助手入口 -->
       <button type="button" class="shell-topbar__assistant">

@@ -82,21 +82,19 @@ global:
     accountSettings: Account Settings
     security: Security
     personalPreferences: Personal Preferences
-    appearance: Appearance
     keyboardShortcuts: Keyboard Shortcuts
     helpDocumentation: Help & Documentation
     signOut: Sign Out
-    back: Back
     tenantLabel: "Tenant · {tenant}"
-    themeNote: "Theme={theme} · follows semantic theme bindings"
-    themeDark: Dark
-    themeLight: Light
     signOutTitle: Sign out of your account?
     signOutDesc: "You are signed in as {email}. You will need to sign in again to continue."
     signOutConfirm: I want to sign out of this session.
     cancel: Cancel
     close: Close
     done: Done
+  theme:
+    toLight: Switch to light mode
+    toDark: Switch to dark mode
   tenant:
     label: Current organization
     tooltipLabel: "Tenant · {tenant} · {identity}"
