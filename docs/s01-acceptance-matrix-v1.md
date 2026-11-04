@@ -178,6 +178,18 @@ published 修订**；归档后正式 Goal / 提案 / 修订历史仍可读。
 
 **实施顺序约束**：I5 **最后实施**（I5 V1.1 §11.2 `I1→I2→I3→I4→I6→I5`）。且 I5-B/I5-C/I5-D 的前置（I5-A 代码事实核验、`docs/s01-i5-read-model-contract.md`）**当前不存在**，是 S01-3 的实际起点。
 
+**I5-A/B/C 落地结果（2026-11-04）**：
+- **I5-A**：`docs/s01-i5-code-facts.md`——14 项核验全答，缺口清单 `I5-G-01~24`（端点/查询/字段/索引/前端契约五类）。
+- **I5-B**：`docs/s01-i5-read-model-contract.md`——六数据块（`project_summary` / `initialization_progress` /
+  `work_summary` / `human_action_summary` / `risk_summary` / `recent_activity`）、每字段权威来源、
+  展示态规则、空状态、新鲜度、权限、去重、部分失败全部定稿；**裁定**：单一聚合端点 +
+  只对活动流分页；**无百分比**；初始化完成度 `not_determinable`（无项目类型/要求配置）；
+  Goal **不下「已确认」结论**（领域无该状态字段）。
+- **I5-C**：`pm-application::command_center` + `GET /v1/pm/projects/{id}/command-center`
+  + 迁移 `0034`（审计项目维度索引 + Finding 项目维度索引）；按块降级（`ok`/`unavailable`），
+  全部 SQL 带 tenant 谓词（契约 C-2）；验收 `apps/pm-api/tests/command_center.rs` **6 例全绿**。
+- **未完成**：I5-D 前端总控台、I5-E 全量验收与性能（I5-026~036）。
+
 ### 3.6 I6-B · Discovery / Import（16 + 7 条 DB 级负向）
 
 | 归属 TASK | 验收条目 | 覆盖的类型 |

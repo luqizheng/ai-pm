@@ -7,6 +7,7 @@ pub mod actor;
 pub mod authz;
 pub mod bootstrap;
 pub mod caller;
+pub mod command_center;
 pub mod command_executor;
 pub mod delivery;
 pub mod devenv;

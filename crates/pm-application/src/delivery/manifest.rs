@@ -173,6 +173,7 @@ pub struct TaskDeliveryRollup {
 /// - 其余 → `partial`。
 pub async fn list_project_delivery(
     pool: &sqlx::PgPool,
+    tenant_id: Uuid,
     project_id: Uuid,
 ) -> Result<Vec<TaskDeliveryRollup>, sqlx::Error> {
     // 任务清单 + pending 审批数。
@@ -181,25 +182,28 @@ pub async fn list_project_delivery(
                 (SELECT count(*) FROM governance.review_approval a \
                   WHERE a.task_id = t.id AND a.status = 'pending') \
            FROM delivery.task t \
-          WHERE t.project_id = $1 \
+          WHERE t.project_id = $1 AND t.tenant_id = $2 \
           ORDER BY t.created_at DESC, t.id",
     )
     .bind(project_id)
+    .bind(tenant_id)
     .fetch_all(pool)
     .await?;
 
-    // 全项目逐仓清单行。
+    // 全项目逐仓清单行（按任务逐仓；经 `delivery.task` 补租户谓词——视图本身不带 tenant）。
     let rows: Vec<ManifestRow> = sqlx::query_as(
-        "SELECT task_id, project_id, repository_id, repository_name, write_access, \
-                delivery_required, latest_run_id, latest_attempt_no, integration_status, \
-                latest_submitted_run_id, base_commit, commit_sha, changed_files, \
-                test_evidence, branch, commit_author, commit_authored_at, \
-                expected_delivery_count, actual_delivery_count, delivery_state \
-           FROM delivery.v_task_delivery_manifest \
-          WHERE project_id = $1 \
-          ORDER BY task_id, repository_id",
+        "SELECT m.task_id, m.project_id, m.repository_id, m.repository_name, m.write_access, \
+                m.delivery_required, m.latest_run_id, m.latest_attempt_no, m.integration_status, \
+                m.latest_submitted_run_id, m.base_commit, m.commit_sha, m.changed_files, \
+                m.test_evidence, m.branch, m.commit_author, m.commit_authored_at, \
+                m.expected_delivery_count, m.actual_delivery_count, m.delivery_state \
+           FROM delivery.v_task_delivery_manifest m \
+           JOIN delivery.task t ON t.id = m.task_id \
+          WHERE m.project_id = $1 AND t.tenant_id = $2 \
+          ORDER BY m.task_id, m.repository_id",
     )
     .bind(project_id)
+    .bind(tenant_id)
     .fetch_all(pool)
     .await?;
 

@@ -125,6 +125,7 @@
 | **0031** | `s01_discovery_import_v2` | **I6-B-08** | 0030 | **frozen（2026-11-04：§4.4 六项审查全过，含升级演练）** |
 | 0032 | `s01_git_capability` | I3-B | 0031 | **已实施（2026-11-04）；I3-D 的 `policy_snapshot_hash` 一并落此** |
 | **0033** | `s01_git_access_simplify` | **I3-B（V1.1 简化）** | 0032 | **已实施（2026-11-04）：DROP `integration.git_capability_grant`** |
+| **0034** | `s01_command_center_indexes` | **I5-C** | 0033 | **已实施（2026-11-04）：`audit_log (tenant,project,created_at DESC,id DESC)` + `discovery_finding (tenant,project,verification_status,created_at DESC)` 两个索引** |
 | 0034 | `s01_project_goal` | I4-B/I4-C | 0031 | draft（I4 复用 `ai.project_document`，实际未新增迁移） |
 | 0035 | `s01_project_delivery_read_model` | S01-W60 | 0022、0026 | draft（可能纯视图，无需新表） |
 

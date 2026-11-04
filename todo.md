@@ -458,6 +458,15 @@ cd frontend && npx vue-tsc --noEmit --skipLibCheck && npx vitest run
   - **验收**：`I4-019`（归档只读）、`I4-020`（归档竞争）——`apps/pm-api/tests/project_goal_archive.rs` **5 例全绿**（归档拒提案 / 归档拒确认 / 历史可读 / **并发三轮：归档之后无新的 published 修订** / 被拒写入零发布审计）。
   - **落地记录**：设计稿回填 **§15 实施落地记录**（四入口表 + 线性化说明 + 语义偏差登记 V-1~V-3）。
 
+- [~] **I5 项目总控台（A~E，P1，I5 V1.1 36 条验收）**（A/B/C 已完成 2026-11-04；D/E 待办）
+  - **目标**：项目总控台 = 项目工作入口（首屏优先级：待人工处理 → 当前执行 → 风险与阻塞 → 目标与进展 → 初始化进度 → 最近活动）。
+  - **依据**：`docs/ui/smark-pm-s01-i5-project-command-center-v1-1.md`（V1.1 定稿）§3/§4/§5/§6/§7/§8；交付物 `docs/s01-i5-code-facts.md`（I5-A）+ `docs/s01-i5-read-model-contract.md`（I5-B）。
+  - **做（A）**：14 项代码事实核验（三域并行）→ 缺口清单 `I5-G-01~24`。**做（B）**：六数据块读模型契约（字段/权威来源/判定规则/空状态/新鲜度/权限/去重/部分失败）。**做（C）**：`pm-application::command_center` + `GET /v1/pm/projects/{id}/command-center` + 迁移 `0034`（审计与 Finding 的项目维度索引）。
+  - **不做**：不建第二套事实存储；不新建活动事实表（第一版以审计为唯一权威源）；不产出无依据的初始化百分比；不臆造「Goal 已确认」状态；不改领域业务状态（聚合纯读）。
+  - **验收**：A/B/C 已过——`apps/pm-api/tests/command_center.rs` **6 例全绿**（六块可渲染/零仓库合法/无百分比/待人工处理聚合且跨项目不泄露/活跃 Run 取 task.assignee_id/活动白名单+去重/归档只读/非成员 404）。
+  - **剩余**：**I5-D 前端总控台页**（六区块 + 优先级 + 空状态 + 归档只读 + 下钻入口，`I5-G-23/24`）｜**I5-E 验收与性能**（I5-026~036 全量映射 + 权限/部分失败/并发/性能）。
+  - **裁决登记**：ledger D-C-05（Goal 不下「已确认」结论）、D-C-06（初始化完成度 `not_determinable`）。
+
 - [ ] **I2-A / I4-A / I5-A 三份代码事实核验（后续实施的硬前置）**
   - **目标**：产出 `docs/s01-i2-code-facts.md`、`docs/s01-i4-knowledge-facts.md`、`docs/s01-i5-code-facts.md`。
   - **依据**：I2 V1.1 §16 I2-A；I4 §13 I4-A；I5 V1.1 §9.1 I5-A（14 项）。

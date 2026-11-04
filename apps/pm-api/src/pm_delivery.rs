@@ -44,7 +44,9 @@ async fn project_handler(
         principal.principal_id,
     )
     .await?;
-    let items = pm_application::delivery::list_project_delivery(&state.pool, project_id).await?;
+    let items =
+        pm_application::delivery::list_project_delivery(&state.pool, principal.tenant_id, project_id)
+            .await?;
     let count = |state_name: &str| {
         items
             .iter()

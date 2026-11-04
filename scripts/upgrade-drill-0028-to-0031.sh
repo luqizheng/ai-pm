@@ -125,7 +125,12 @@ check "Git 能力授权表已撤下（0033）" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='integration' AND table_name='git_capability_grant'" 0
 check "授权表索引已随之撤下" \
   "SELECT count(*) FROM pg_indexes WHERE schemaname='integration' AND indexname='idx_git_capability_grant_principal'" 0
+# 0034（I5-C）：总控台读模型所需的两个项目维度索引。
+check "审计项目维度索引已建立（0034）" \
+  "SELECT count(*) FROM pg_indexes WHERE schemaname='governance' AND indexname='idx_audit_log_project_time'" 1
+check "Finding 项目维度索引已建立（0034）" \
+  "SELECT count(*) FROM pg_indexes WHERE schemaname='discovery' AND indexname='idx_discovery_finding_project'" 1
 
 rm -f .workbuddy/drill_upgrade.txt .workbuddy/drill_fresh.txt .workbuddy/drill_diff.txt
 echo ""
-echo "演练通过：0028 → 0033 升级路径与环境一致性 ✅"
+echo "演练通过：0028 → 最新迁移 升级路径与环境一致性 ✅"
