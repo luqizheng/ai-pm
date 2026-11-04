@@ -98,9 +98,10 @@ function onUpdate(value: unknown) {
 
 <style scoped>
 /* Figma DS/Forms/Switch（13:33107）：
- * Off 轨道 elevated + border 描边、thumb 次文字色；
+ * Off 轨道 elevated + 1px border 描边、thumb 次文字色；
  * On 轨道 accent、thumb canvas 色；focus = accent 2px 描边；
- * hover 无样式变化；禁用 = 整体（含标签）0.4 不透明度。 */
+ * hover 无样式变化；禁用 = 整体（含标签）0.4 不透明度。
+ * 尺寸：sm/md 轨道 32×20（thumb 14）；lg 轨道 40×24（thumb 18）。 */
 .ui-switch {
   display: inline-flex;
   align-items: center;
@@ -112,7 +113,9 @@ function onUpdate(value: unknown) {
   opacity: var(--opacity-disabled-control);
 }
 
-/* 轨道 —— sm/md 32×20 / lg 40×24，内边距 3px（Figma 逐值） */
+/* 轨道 —— sm/md 32×20 / lg 40×24；内边距 3px（Figma 逐值）。
+ * 滑块绝对定位，left 相对 padding box（描边内侧）量取，
+ * 故内缩 --size-switch-inset（2px）+ 1px 描边 = 距外沿 3px。 */
 .ui-switch__root {
   position: relative;
   display: inline-flex;
@@ -120,7 +123,7 @@ function onUpdate(value: unknown) {
   box-sizing: border-box;
   flex: none;
   width: var(--size-switch-track);
-  height: var(--size-switch-thumb);
+  height: var(--size-switch-track-h);
   padding: 3px;
   border: var(--border-1) solid var(--border-strong);
   border-radius: var(--radius-full);
@@ -134,10 +137,10 @@ function onUpdate(value: unknown) {
 
 .ui-switch__root--lg {
   width: var(--size-switch-track-lg);
-  height: var(--size-switch-thumb-lg);
+  height: var(--size-switch-track-h-lg);
 }
 
-/* 开启态：底 accent（描边保持 border 色） */
+/* 开启态：底 accent（描边保持 border 色，Figma On 变体 1px 描边） */
 .ui-switch__root[data-state="checked"] {
   background: var(--accent);
 }
@@ -149,15 +152,23 @@ function onUpdate(value: unknown) {
   outline: none;
 }
 
+/* 开启 + 焦点 —— Figma 未定义该组合：
+ * 描边沿用 On 的 border 色（转 accent 会与 accent 底同色、描边不可见），
+ * 焦点环改画在轨道外侧 2px（与 Radio 的 outline 口径一致）。 */
+.ui-switch__root[data-state="checked"]:focus-visible {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 var(--border-2) var(--accent);
+}
+
 .ui-switch__root[data-disabled] {
   cursor: not-allowed;
 }
 
-/* 滑块 —— sm/md 14 / lg 18，随轨道内边距 3px 定位 */
+/* 滑块 —— sm/md 14 / lg 18；距轨道外沿 3px（Figma padding 3） */
 .ui-switch__thumb {
   position: absolute;
   top: 50%;
-  left: 3px;
+  left: var(--size-switch-inset);
   width: var(--size-switch-thumb);
   height: var(--size-switch-thumb);
   border-radius: var(--radius-full);
@@ -171,13 +182,13 @@ function onUpdate(value: unknown) {
   height: var(--size-switch-thumb-lg);
 }
 
-/* 开启后右移至轨道右端（行程 = 轨道宽 - 2×3px - thumb） */
+/* 开启后右移至轨道右端（行程 = 轨道宽 - 描边 2px - 内缩 2×2px - thumb） */
 .ui-switch__root[data-state="checked"] .ui-switch__thumb {
   transform: translateY(-50%)
     translateX(
       calc(
-        var(--size-switch-track) - var(--size-switch-thumb) - 6px -
-          var(--border-1) * 2
+        var(--size-switch-track) - var(--size-switch-thumb) -
+          var(--size-switch-inset) * 2 - var(--border-1) * 2
       )
     );
 }
@@ -186,8 +197,8 @@ function onUpdate(value: unknown) {
   transform: translateY(-50%)
     translateX(
       calc(
-        var(--size-switch-track-lg) - var(--size-switch-thumb-lg) - 6px -
-          var(--border-1) * 2
+        var(--size-switch-track-lg) - var(--size-switch-thumb-lg) -
+          var(--size-switch-inset) * 2 - var(--border-1) * 2
       )
     );
 }
