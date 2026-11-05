@@ -109,7 +109,11 @@ export const navGroups: NavGroup[] = [
       {
         path: "/projects",
         labelKey: "shell.app.side.item.projects",
-        icon: Folders
+        icon: Folders,
+        component: () =>
+          import("@/views/project/list/ProjectListView.vue").then(
+            module => module.default
+          )
       }
     ]
   },

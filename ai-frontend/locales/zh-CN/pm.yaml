@@ -14,7 +14,7 @@ overview:
   empty: 暂无数据
 projects:
   pageTitle: 项目
-  subtitle: 客户项目清单与基础信息。
+  subtitle: 在一个地方管理与访问你的全部项目。
   emptyHint: 还没有项目，点击右上角「新建项目」开始。
   new: 新建项目
   newTitle: 新建项目
@@ -22,6 +22,54 @@ projects:
   openCommandCenter: 项目总控台
   openBaseline: 项目基线
   openCognition: 项目认知
+  metricsAria: 项目概览指标
+  metricTotal: 全部项目
+  metricRecent: 最近活跃
+  metricAttention: 需要关注
+  metricArchived: 已归档
+  searchPlaceholder: 搜索项目...
+  filterLabel: 生命周期过滤
+  filterAll: 全部项目
+  filterActive: 进行中
+  filterArchived: 已归档
+  sortLabel: 排序
+  sortUpdated: 最近更新
+  sortCreated: 最近创建
+  sortName: 名称（A–Z）
+  viewLabel: 视图切换
+  viewList: 列表视图
+  viewGrid: 网格视图
+  attentionChip: 存在不可达仓库
+  attentionChipRemove: 移除「需要关注」过滤
+  statusActive: 进行中
+  statusPlaceholder: 未归类
+  statusArchived: 已归档
+  repoCount: "{count} 个仓库"
+  repoNone: 暂无仓库
+  repoPrimary: "主仓库 {name}"
+  repoNoPrimary: 未指定主仓库
+  repoUnreachable: 有仓库不可达
+  updatedAgo: "更新于 {time}"
+  listAria: 项目列表
+  gridAria: 项目卡片列表
+  menuAria: "项目 {name} 的操作菜单"
+  menuOpen: 打开项目
+  menuArchive: 归档项目
+  menuRestore: 恢复项目
+  menuDelete: 删除项目
+  menuDeleteDanger: 危险操作
+  emptyTitle: 还没有项目
+  emptyDesc: 创建你的第一个项目，开始在 AI-PM 中组织研发工作。
+  emptyCta: 创建第一个项目
+  noResultsTitle: 未找到项目
+  noResultsDesc: 换个搜索词，或调整过滤条件后再试。
+  noResultsCta: 清除过滤
+  errorTitle: 项目列表加载失败
+  errorDesc: 网络或服务暂时不可用，请重试。
+  errorCta: 重试
+  loadingAria: 项目列表加载中
+  deleteTitle: 删除项目
+  deleteDesc: 即将删除项目「{name}」。该操作不可撤销。
 customer:
   pageTitle: 客户
   subtitle: 客户主数据；一个客户可以包含多个项目。

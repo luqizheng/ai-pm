@@ -14,7 +14,7 @@ overview:
   empty: No data
 projects:
   pageTitle: Projects
-  subtitle: Customer projects and their basic information.
+  subtitle: Manage and access all your projects in one place.
   emptyHint: No projects yet — use "New Project" in the top right to start.
   new: New Project
   newTitle: New Project
@@ -22,6 +22,54 @@ projects:
   openCommandCenter: Command Center
   openBaseline: Baseline
   openCognition: Cognition
+  metricsAria: Project overview metrics
+  metricTotal: Total Projects
+  metricRecent: Recently Active
+  metricAttention: Requires Attention
+  metricArchived: Archived
+  searchPlaceholder: Search projects...
+  filterLabel: Lifecycle filter
+  filterAll: All Projects
+  filterActive: Active
+  filterArchived: Archived
+  sortLabel: Sort
+  sortUpdated: Recently Updated
+  sortCreated: Recently Created
+  sortName: Name (A–Z)
+  viewLabel: View switch
+  viewList: List View
+  viewGrid: Grid View
+  attentionChip: Unreachable repository
+  attentionChipRemove: Remove "requires attention" filter
+  statusActive: Active
+  statusPlaceholder: Unclassified
+  statusArchived: Archived
+  repoCount: "{count} repositories"
+  repoNone: No repositories
+  repoPrimary: "Primary {name}"
+  repoNoPrimary: No primary repository
+  repoUnreachable: Repository unreachable
+  updatedAgo: "Updated {time}"
+  listAria: Project list
+  gridAria: Project card grid
+  menuAria: "Actions for project {name}"
+  menuOpen: Open Project
+  menuArchive: Archive Project
+  menuRestore: Restore Project
+  menuDelete: Delete Project
+  menuDeleteDanger: Dangerous action
+  emptyTitle: No projects yet
+  emptyDesc: Create your first project to start organizing your work with AI-PM.
+  emptyCta: Create Your First Project
+  noResultsTitle: No projects found
+  noResultsDesc: Try another search term or adjust your filters.
+  noResultsCta: Clear Filters
+  errorTitle: Failed to load projects
+  errorDesc: The network or service is temporarily unavailable. Please retry.
+  errorCta: Retry
+  loadingAria: Loading project list
+  deleteTitle: Delete project
+  deleteDesc: You are about to delete project "{name}". This action cannot be undone.
 customer:
   pageTitle: Customers
   subtitle: Customer master data; one customer can own several projects.
