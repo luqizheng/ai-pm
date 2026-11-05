@@ -60,8 +60,161 @@ customer:
   loadFailed: 客户加载失败
 requirements:
   pageTitle: 需求
-  subtitle: 需求清单；正文以 Markdown + Git 管理，此处展示权威状态。
+  subtitle: 管理、评审并确立项目需求。
   emptyHint: 暂无需求。
+  actionImport: 导入需求
+  actionAdd: 新增需求
+  actionMore: 更多操作
+  newRequirementTitle: 未命名需求
+  newRequirementSource: 手动创建
+  newRevisionSummary: 新建草稿修订。
+  editRevisionSummary: 编辑需求内容与验收标准。
+  proposeRevisionSummary: 提交当前内容等待人工确认。
+  summaryAria: 需求概览聚合
+  summaryTotal: 全部需求
+  summaryDraft: 草稿
+  summaryPending: 待确认
+  summaryConfirmed: 已确认
+  summaryConflicts: 冲突
+  listAria: 需求列表
+  searchPlaceholder: 搜索需求
+  filterStatus: 按状态过滤
+  filterType: 按类型过滤
+  filterPriority: 按优先级过滤
+  filterAllStatus: 全部状态
+  filterAllTypes: 全部类型
+  filterAllPriorities: 全部优先级
+  sortLabel: 排序方式
+  sortUpdatedDesc: 最近更新
+  sortUpdatedAsc: 最早更新
+  sortPriority: 按优先级
+  viewToggle: 视图切换
+  viewList: 列表视图
+  viewCompact: 紧凑视图
+  listEmptyTitle: 没有匹配的需求
+  listEmptyDesc: 调整搜索词或过滤条件，或新增一条需求。
+  typeFunctional: 功能需求
+  typeNonFunctional: 非功能需求
+  priorityHigh: 高
+  priorityMedium: 中
+  priorityLow: 低
+  statusDraft: 草稿
+  statusPending: 待确认
+  statusConfirmed: 已确认
+  statusConflict: 冲突
+  actionEdit: 编辑需求
+  actionPropose: 提交确认
+  actionConfirm: 确认需求
+  actionReject: 拒绝提案
+  actionResolve: 解决冲突
+  actionHistory: 查看历史
+  editTitleField: 需求标题
+  editDescription: 需求描述
+  editCriteria: 验收标准
+  editCriteriaHint: 每行一条可测陈述。
+  editSave: 保存修订
+  editCancel: 取消编辑
+  detailOverview: 概览
+  detailAcceptance: 验收标准
+  detailSources: 来源与追溯
+  detailRevisions: 修订历史
+  detailRelated: 关联项
+  detailType: 类型
+  detailPriority: 优先级
+  detailUpdated: 更新时间
+  detailSourceLabel: 来源
+  criteriaEmpty: 尚未定义验收标准。
+  sourcesEmpty: 暂无来源与证据。
+  relatedEmpty: 暂无关联项。
+  revisionVersion: "v{version}"
+  revisionViewHistory: 全部历史
+  revStateDraft: 草稿
+  revStatePending: 待确认
+  revStateApproved: 已定稿
+  revStateRejected: 已拒绝
+  revStateSuperseded: 已被替代
+  sourceUserRequest: 用户请求
+  sourceDiscovery: 代码发现
+  sourceKnowledge: 知识文档
+  sourceDiscussion: 讨论评审
+  sourceObjective: 项目目标
+  relatedRequirement: 需求
+  relatedObjective: 目标
+  relatedTask: 任务
+  contextAria: 需求上下文面板
+  tabSources: 来源
+  tabDiscussions: 讨论
+  tabAnalysis: 分析
+  tabAi: AI 建议
+  contextEmptyTitle: 未选择需求
+  contextEmptyDesc: 在列表中选择一条需求查看来源、讨论与分析。
+  contextAiNote: AI 输出一律为提案，需人工评审后才会生效。
+  discussEmpty: 暂无讨论记录。
+  analysisEmpty: 暂无分析发现。
+  aiEmpty: 暂无 AI 建议。
+  analysisCompleteness: 完备性
+  analysisAmbiguity: 歧义
+  analysisDuplication: 重复
+  analysisConflict: 冲突
+  severityHigh: 高
+  severityMedium: 中
+  severityLow: 低
+  analysisRelated: "关联：{target}"
+  aiProposalBadge: 提案
+  aiBarAria: AI 协作
+  aiBarTitle: AI 协作
+  aiBarNote: AI 输出为提案，需人工评审。
+  aiBarPlaceholder: 让 AI 分析、细化或整理需求…
+  aiBarSend: 发送
+  aiActionsAria: AI 建议动作
+  aiActionCompleteness: 分析需求完备性
+  aiActionMissing: 识别缺失需求
+  aiActionDuplication: 检测重复需求
+  aiActionConflict: 发现冲突需求
+  aiActionAcceptance: 改进验收标准
+  aiActionSummary: 总结需求变更
+  historyTitle: 修订历史
+  historyCompare: 修订比较
+  historyCompareOld: 旧版
+  historyCompareNew: 新版
+  historyCompareEmpty: 无法比较
+  historyCompareEmptyDesc: 该需求只有一个修订版本。
+  historyClose: 关闭
+  conflictTitle: 解决冲突
+  conflictChoose: 选择处理方式
+  conflictOptionScope: 限定适用范围
+  conflictOptionRevise: 修订需求草稿
+  conflictOptionDefer: 暂缓讨论
+  conflictHintScope: 保留需求，把适用范围收窄到不冲突的端点。
+  conflictHintRevise: 回到草稿，按裁决结论修改正文与验收标准。
+  conflictHintDefer: 保留冲突记录，提交评审会讨论。
+  conflictNote: 冲突解决后需求回到草稿状态，仍需人工确认才能成为正式需求。
+  conflictApply: 应用处理
+  conflictResolvedNote: "冲突已处理（{option}），需求回到草稿。"
+  baselineTitle: 需求基线
+  baselineDesc: 项目需求基线由各正式需求集合表达。
+  baselineCurrent: 当前基线
+  baselineVersion: "基线 v{version}"
+  baselineEstablished: "由 {by} 于 {time} 确立"
+  baselineCurrentHint: 仅已确认需求进入基线；未确认与冲突需求不纳入。
+  baselineIncluded: 已纳入
+  baselineExcludedReason: "未纳入（{status}）"
+  baselinePrepare: 准备新基线
+  baselinePrepareHint: 选择要纳入新基线的已确认需求；草稿、待确认与冲突需求不可纳入。
+  baselineLocked: "不可纳入（{status}）"
+  baselineEmptyPick: 请至少选择一条需求。
+  baselineEstablishAction: 确立基线
+  baselineConfirmTitle: 确立需求基线
+  baselineConfirmDesc: "基线 v{version} 将包含 {count} 条已确认需求。"
+  baselineConfirmCheckbox: 我已审阅基线含入清单。
+  baselineEntry: 需求基线
+  confirmDialogTitle: 确认正式需求
+  confirmDialogDesc: "{code} 当前修订（v{version}）将定稿为正式需求，其余已定稿修订转为已被替代。"
+  confirmCheckbox: 我已审阅该修订内容。
+  rejectDialogTitle: 拒绝提案
+  rejectDialogDesc: "{code} 将退回草稿状态，待确认修订标记为已拒绝。"
+  proposeDialogTitle: 提交确认
+  proposeDialogDesc: "{code} 当前内容将生成新修订并进入待确认状态。"
 tasks:
   pageTitle: 任务
   subtitle: 全部项目的任务清单。

@@ -143,7 +143,11 @@ export const navGroups: NavGroup[] = [
       {
         path: "/project/requirements",
         labelKey: "shell.app.side.item.requirements",
-        icon: ListChecks
+        icon: ListChecks,
+        component: () =>
+          import("@/views/project/requirements/RequirementsView.vue").then(
+            module => module.default
+          )
       },
       {
         path: "/project/execution",

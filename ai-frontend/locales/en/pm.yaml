@@ -60,8 +60,161 @@ customer:
   loadFailed: Failed to load customers
 requirements:
   pageTitle: Requirements
-  subtitle: Requirement list; authoritative status only — content lives in Markdown + Git.
+  subtitle: Manage, review and establish your project requirements.
   emptyHint: No requirements yet.
+  actionImport: Import Requirements
+  actionAdd: Add Requirement
+  actionMore: More Actions
+  newRequirementTitle: Untitled requirement
+  newRequirementSource: Manual entry
+  newRevisionSummary: Initial draft revision.
+  editRevisionSummary: Edited description and acceptance criteria.
+  proposeRevisionSummary: Submitted current content for human confirmation.
+  summaryAria: Requirements overview summary
+  summaryTotal: Total Requirements
+  summaryDraft: Draft
+  summaryPending: Pending Confirmation
+  summaryConfirmed: Confirmed
+  summaryConflicts: Conflicts
+  listAria: Requirements list
+  searchPlaceholder: Search requirements
+  filterStatus: Filter by status
+  filterType: Filter by type
+  filterPriority: Filter by priority
+  filterAllStatus: All statuses
+  filterAllTypes: All types
+  filterAllPriorities: All priorities
+  sortLabel: Sort
+  sortUpdatedDesc: Recently updated
+  sortUpdatedAsc: Earliest updated
+  sortPriority: By priority
+  viewToggle: View toggle
+  viewList: List view
+  viewCompact: Compact view
+  listEmptyTitle: No matching requirements
+  listEmptyDesc: Adjust your search or filters, or add a new requirement.
+  typeFunctional: Functional
+  typeNonFunctional: Non-functional
+  priorityHigh: High
+  priorityMedium: Medium
+  priorityLow: Low
+  statusDraft: Draft
+  statusPending: Pending Confirmation
+  statusConfirmed: Confirmed
+  statusConflict: Conflict
+  actionEdit: Edit Requirement
+  actionPropose: Propose Revision
+  actionConfirm: Confirm Requirement
+  actionReject: Reject Proposal
+  actionResolve: Resolve Conflict
+  actionHistory: View History
+  editTitleField: Requirement title
+  editDescription: Description
+  editCriteria: Acceptance criteria
+  editCriteriaHint: One testable statement per line.
+  editSave: Save revision
+  editCancel: Cancel editing
+  detailOverview: Overview
+  detailAcceptance: Acceptance Criteria
+  detailSources: Sources & Traceability
+  detailRevisions: Revision History
+  detailRelated: Related Items
+  detailType: Type
+  detailPriority: Priority
+  detailUpdated: Updated
+  detailSourceLabel: Source
+  criteriaEmpty: No acceptance criteria defined yet.
+  sourcesEmpty: No sources or evidence yet.
+  relatedEmpty: No related items.
+  revisionVersion: "v{version}"
+  revisionViewHistory: Full history
+  revStateDraft: Draft
+  revStatePending: Pending
+  revStateApproved: Approved
+  revStateRejected: Rejected
+  revStateSuperseded: Superseded
+  sourceUserRequest: User request
+  sourceDiscovery: Discovery
+  sourceKnowledge: Knowledge
+  sourceDiscussion: Discussion
+  sourceObjective: Objective
+  relatedRequirement: Requirement
+  relatedObjective: Objective
+  relatedTask: Task
+  contextAria: Requirement context panel
+  tabSources: Sources
+  tabDiscussions: Discussions
+  tabAnalysis: Analysis
+  tabAi: AI Assistance
+  contextEmptyTitle: No requirement selected
+  contextEmptyDesc: Select a requirement to view its sources, discussions and analysis.
+  contextAiNote: AI output is always a proposal; it takes effect only after human review.
+  discussEmpty: No discussions yet.
+  analysisEmpty: No analysis findings yet.
+  aiEmpty: No AI suggestions yet.
+  analysisCompleteness: Completeness
+  analysisAmbiguity: Ambiguity
+  analysisDuplication: Duplication
+  analysisConflict: Conflict
+  severityHigh: High
+  severityMedium: Medium
+  severityLow: Low
+  analysisRelated: "Related: {target}"
+  aiProposalBadge: Proposal
+  aiBarAria: AI collaboration
+  aiBarTitle: AI Collaboration
+  aiBarNote: AI output is a proposal pending human review.
+  aiBarPlaceholder: "Ask AI to analyze, refine or organize requirements..."
+  aiBarSend: Send
+  aiActionsAria: AI suggested actions
+  aiActionCompleteness: Analyze requirement completeness
+  aiActionMissing: Identify missing requirements
+  aiActionDuplication: Detect duplicate requirements
+  aiActionConflict: Find conflicting requirements
+  aiActionAcceptance: Improve acceptance criteria
+  aiActionSummary: Summarize requirement changes
+  historyTitle: Revision History
+  historyCompare: Compare revisions
+  historyCompareOld: Older
+  historyCompareNew: Newer
+  historyCompareEmpty: Nothing to compare
+  historyCompareEmptyDesc: This requirement has only one revision.
+  historyClose: Close
+  conflictTitle: Resolve Conflict
+  conflictChoose: Choose a resolution
+  conflictOptionScope: Limit the scope
+  conflictOptionRevise: Revise the draft
+  conflictOptionDefer: Defer to review
+  conflictHintScope: Keep the requirement and narrow its scope to non-conflicting endpoints.
+  conflictHintRevise: Return to draft and revise the content per the arbitration.
+  conflictHintDefer: Keep the conflict record and raise it in the review meeting.
+  conflictNote: After resolution the requirement returns to draft; human confirmation is still required.
+  conflictApply: Apply resolution
+  conflictResolvedNote: "Conflict resolved ({option}); requirement returned to draft."
+  baselineTitle: Requirement Baseline
+  baselineDesc: The project baseline is the set of confirmed requirement revisions.
+  baselineCurrent: Current baseline
+  baselineVersion: "Baseline v{version}"
+  baselineEstablished: "Established by {by} at {time}"
+  baselineCurrentHint: Only confirmed requirements enter the baseline; unconfirmed and conflicting ones are excluded.
+  baselineIncluded: Included
+  baselineExcludedReason: "Not included ({status})"
+  baselinePrepare: Prepare new baseline
+  baselinePrepareHint: Pick confirmed requirements for the new baseline; drafts, pending and conflicting ones cannot be included.
+  baselineLocked: "Cannot be included ({status})"
+  baselineEmptyPick: Select at least one requirement.
+  baselineEstablishAction: Establish baseline
+  baselineConfirmTitle: Establish requirement baseline
+  baselineConfirmDesc: "Baseline v{version} will include {count} confirmed requirements."
+  baselineConfirmCheckbox: I have reviewed the baseline inclusion list.
+  baselineEntry: Requirement Baseline
+  confirmDialogTitle: Confirm formal requirement
+  confirmDialogDesc: "{code} revision v{version} will be approved as the formal requirement; other approved revisions become superseded."
+  confirmCheckbox: I have reviewed this revision.
+  rejectDialogTitle: Reject proposal
+  rejectDialogDesc: "{code} will return to draft and its pending revision will be marked rejected."
+  proposeDialogTitle: Submit for confirmation
+  proposeDialogDesc: "{code} current content will become a new revision pending confirmation."
 tasks:
   pageTitle: Tasks
   subtitle: Task list across all projects.
