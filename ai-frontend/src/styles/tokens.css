@@ -411,6 +411,32 @@
   --ws-auth-header-height: 64px;
   --ws-auth-panel-width: 400px;
   --ws-auth-indicator-size: 32px;
+
+  /* ------------------------------------------------------------------
+   * AI 交互组件库（AI Interaction Component Library V1.0）
+   * 统一响应卡 / 会话 / 控件几何：仅尺寸，颜色走语义 token。
+   * ---------------------------------------------------------------- */
+
+  /* 卡片宽度：会话内自适应优先，目录页按画框宽度收敛 */
+  --size-ai-card-min-width: 320px;
+  --size-ai-card-max-width: 720px;
+  --size-ai-card-compact-width: 560px;
+  --size-ai-card-conversation-width: 760px;
+  /* 长内容折叠高度 / 证据区 / 产物预览 / 日志 */
+  --size-ai-content-collapsed: 220px;
+  --size-ai-evidence-max-height: 240px;
+  --size-ai-artifact-preview-height: 360px;
+  --size-ai-log-max-height: 160px;
+  /* diff 行高（Artifact 版本对比 / Execution 变更） */
+  --size-ai-diff-line: 20px;
+  /* AI 身份章 / 会话头像 */
+  --size-ai-avatar: 24px;
+  --size-ai-avatar-lg: 28px;
+  /* 问题卡选项最小行高（命中区域 ≥ 36） */
+  --size-ai-option-min-height: 36px;
+  /* 会话时间线最大宽度与消息间距 */
+  --size-ai-conversation-max-width: 860px;
+  --size-ai-message-gap: var(--space-4);
 }
 
 [data-theme="light"] {

@@ -1,0 +1,93 @@
+select:
+  placeholder: 请选择
+  groupLabel: 选项
+  required: 请选择一项
+
+multi:
+  invalid: 请至少选择一项
+  min: 至少选择 {count} 项
+  max: 最多选择 {count} 项
+
+checkboxGroup:
+  required: 请至少选择一项
+
+radioGroup:
+  required: 请选择一项
+
+text:
+  placeholder: 输入补充内容…
+  counter: "{count} / {max}"
+  shortcut: 按 Ctrl / Cmd + Enter 提交
+  invalid: 请检查输入内容
+
+reason:
+  label: 原因
+  placeholder: 请输入原因…
+  required: 请填写原因
+
+rating:
+  group: 评分
+  value: "{value} 分"
+
+helpful:
+  group: 这个回答有帮助吗
+  helpful: 有帮助
+  notHelpful: 没有帮助
+
+inlineEditor:
+  edit: 编辑
+  save: 保存
+  cancel: 取消
+  placeholder: 输入内容…
+
+richText:
+  placeholder: 输入正文…
+
+diff:
+  expand: 展开差异
+  collapse: 收起差异
+  added: 新增 {count} 行
+  removed: 删除 {count} 行
+
+editAccept:
+  accept: 接受修改
+  revert: 撤销
+  saving: 保存中…
+  saved: 已保存
+  editing: 编辑中
+  dirty: 有未保存修改
+
+acceptReject:
+  accept: 接收
+  reject: 拒绝
+  reasonLabel: 拒绝原因
+  reasonPlaceholder: 说明拒绝原因…
+  reasonRequired: 请填写拒绝原因
+  confirmReject: 确认拒绝
+  cancel: 取消
+
+decision:
+  group: 决策选项
+  recommended: AI 推荐
+  pros: 优点
+  cons: 缺点
+
+formalDecision:
+  selected: 已选方案
+  confirm: 我确认以本人身份提交
+  submit: 提交决策
+  commentLabel: 补充意见
+  commentPlaceholder: 选填
+
+defer:
+  label: 稍后处理
+
+saveDraft:
+  label: 保存草稿
+  saving: 保存中…
+  savedAt: "草稿已保存 · {time}"
+
+retry:
+  label: 重试
+  attempt: 第 {attempt} / {max} 次
+  attempts: 已尝试 {count} 次

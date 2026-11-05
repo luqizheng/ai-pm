@@ -1,0 +1,43 @@
+type:
+  requirementDoc: Requirement document
+  technicalDesign: Technical design
+  projectPlan: Project plan
+  testPlan: Test plan
+  knowledgeDoc: Knowledge document
+  codeChangeSummary: Code change summary
+
+version: Version
+author: Author
+preview: Preview
+diff: Version diff
+diffPath: Diff file
+diffEmpty: No diff recorded for this version
+edit: Edit
+editPlaceholder: Edit the body in Markdown
+save: Save
+cancel: Cancel
+edited: Edited
+locked: Read-only after submission
+
+actions:
+  preview: Preview
+  edit: Edit
+  accept: Accept draft
+  reject: Reject
+  createProposal: Create proposal
+  submitWorkflow: "Submit to {workflow}"
+
+accepted:
+  title: Draft accepted
+  note: This only records the draft; the formal change follows the workflow result.
+
+rejected:
+  title: Artifact rejected
+
+workflow:
+  dialogTitle: Submit to business workflow
+  dialogDescription: The existing workflow handles the submission; its record is authoritative.
+  confirm: Submit
+  cancel: Cancel
+  resultTitle: Business workflow status
+  submitted: Submitted to {workflow}

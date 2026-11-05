@@ -1,0 +1,93 @@
+select:
+  placeholder: Select an option
+  groupLabel: Options
+  required: Select an option
+
+multi:
+  invalid: Select at least one option
+  min: Select at least {count} options
+  max: Select at most {count} options
+
+checkboxGroup:
+  required: Select at least one option
+
+radioGroup:
+  required: Select an option
+
+text:
+  placeholder: Add a note…
+  counter: "{count} / {max}"
+  shortcut: Press Ctrl / Cmd + Enter to submit
+  invalid: Check your input
+
+reason:
+  label: Reason
+  placeholder: Enter a reason…
+  required: A reason is required
+
+rating:
+  group: Rating
+  value: "{value} out of 5"
+
+helpful:
+  group: Was this response helpful?
+  helpful: Helpful
+  notHelpful: Not helpful
+
+inlineEditor:
+  edit: Edit
+  save: Save
+  cancel: Cancel
+  placeholder: Enter content…
+
+richText:
+  placeholder: Enter content…
+
+diff:
+  expand: Expand diff
+  collapse: Collapse diff
+  added: "{count} lines added"
+  removed: "{count} lines removed"
+
+editAccept:
+  accept: Accept changes
+  revert: Revert
+  saving: Saving…
+  saved: Saved
+  editing: Editing
+  dirty: Unsaved changes
+
+acceptReject:
+  accept: Accept
+  reject: Reject
+  reasonLabel: Rejection reason
+  reasonPlaceholder: Explain the rejection…
+  reasonRequired: A rejection reason is required
+  confirmReject: Confirm rejection
+  cancel: Cancel
+
+decision:
+  group: Decision options
+  recommended: AI recommended
+  pros: Pros
+  cons: Cons
+
+formalDecision:
+  selected: Selected option
+  confirm: I confirm submitting as myself
+  submit: Submit decision
+  commentLabel: Comment
+  commentPlaceholder: Optional
+
+defer:
+  label: Defer
+
+saveDraft:
+  label: Save draft
+  saving: Saving…
+  savedAt: "Draft saved · {time}"
+
+retry:
+  label: Retry
+  attempt: Attempt {attempt} / {max}
+  attempts: Attempted {count} times

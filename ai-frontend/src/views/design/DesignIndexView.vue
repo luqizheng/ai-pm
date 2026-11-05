@@ -76,6 +76,59 @@ const cards = [
     ]
   },
   {
+    section: t("design.index.sectionAiInteraction"),
+    items: [
+      {
+        label: t("design.aiInteraction.index.title"),
+        to: DESIGN_PATHS.aiInteraction.index
+      },
+      {
+        label: t("design.aiInteraction.base.title"),
+        to: DESIGN_PATHS.aiInteraction.base
+      },
+      {
+        label: t("design.aiInteraction.informational.title"),
+        to: DESIGN_PATHS.aiInteraction.informational
+      },
+      {
+        label: t("design.aiInteraction.recommendation.title"),
+        to: DESIGN_PATHS.aiInteraction.recommendation
+      },
+      {
+        label: t("design.aiInteraction.proposal.title"),
+        to: DESIGN_PATHS.aiInteraction.proposal
+      },
+      {
+        label: t("design.aiInteraction.question.title"),
+        to: DESIGN_PATHS.aiInteraction.question
+      },
+      {
+        label: t("design.aiInteraction.decision.title"),
+        to: DESIGN_PATHS.aiInteraction.decision
+      },
+      {
+        label: t("design.aiInteraction.artifact.title"),
+        to: DESIGN_PATHS.aiInteraction.artifact
+      },
+      {
+        label: t("design.aiInteraction.action.title"),
+        to: DESIGN_PATHS.aiInteraction.action
+      },
+      {
+        label: t("design.aiInteraction.execution.title"),
+        to: DESIGN_PATHS.aiInteraction.execution
+      },
+      {
+        label: t("design.aiInteraction.controls.title"),
+        to: DESIGN_PATHS.aiInteraction.controls
+      },
+      {
+        label: t("design.aiInteraction.conversation.title"),
+        to: DESIGN_PATHS.aiInteraction.conversation
+      }
+    ]
+  },
+  {
     section: t("design.index.sectionSettings"),
     items: [
       {

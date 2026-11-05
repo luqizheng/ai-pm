@@ -1,0 +1,43 @@
+type:
+  requirementDoc: 需求文档
+  technicalDesign: 技术设计
+  projectPlan: 项目计划
+  testPlan: 测试计划
+  knowledgeDoc: 知识文档
+  codeChangeSummary: 代码变更摘要
+
+version: 版本
+author: 作者
+preview: 预览
+diff: 版本差异
+diffPath: 差异文件
+diffEmpty: 该版本没有差异记录
+edit: 编辑
+editPlaceholder: 使用 Markdown 编辑正文
+save: 保存
+cancel: 取消
+edited: 已编辑
+locked: 已提交，当前为只读
+
+actions:
+  preview: 预览
+  edit: 编辑
+  accept: 接收草稿
+  reject: 拒绝
+  createProposal: 创建提案
+  submitWorkflow: 提交至{workflow}
+
+accepted:
+  title: 已接收草稿
+  note: 仅为草稿接收记录，正式业务变更以流程结果为准。
+
+rejected:
+  title: 已拒绝该产物
+
+workflow:
+  dialogTitle: 提交至业务流程
+  dialogDescription: 提交后由既有业务流程处理，结果以流程记录为准。
+  confirm: 确认提交
+  cancel: 取消
+  resultTitle: 业务流程状态
+  submitted: 已提交至{workflow}

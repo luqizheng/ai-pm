@@ -1,0 +1,57 @@
+type:
+  informational: Info
+  recommendation: Recommendation
+  proposal: Proposal
+  question: Input required
+  decision: Decision required
+  artifact: Artifact
+  actionRequest: Action required
+  executionResult: Execution result
+
+status:
+  created: Created
+  presented: Awaiting you
+  inProgress: In progress
+  submitted: Submitted
+  validating: Validating
+  processing: Processing
+  accepted: Accepted
+  rejected: Rejected
+  deferred: Deferred
+  resolved: Recorded
+  failed: Submission failed
+
+conclusion: Conclusion
+expand: Expand
+collapse: Collapse
+more: More actions
+
+evidence:
+  title: Evidence & sources
+  analysis: Analysis
+  sourcesCount: "{count} sources"
+  relatedCount: "{count} related"
+
+submission:
+  submitting: Submitting…
+  recorded: Your choice has been recorded
+  reference: "· Ref {reference}"
+  notEffective: Formal changes follow approval results
+  failed: Submission failed, please retry
+  retry: Retry
+
+lifecycle:
+  title: Interaction lifecycle
+  note: Presentation states only — not a business entity state machine.
+
+  created: Created
+  presented: Presented
+  inProgress: In progress
+  submitted: Submitted
+  validating: Validating
+  processing: Processing
+  accepted: Accepted
+  rejected: Rejected
+  deferred: Deferred
+  resolved: Resolved
+  failed: Failed

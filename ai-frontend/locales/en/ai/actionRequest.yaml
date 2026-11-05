@@ -1,0 +1,40 @@
+card:
+  title: Action confirmation
+  description: Submitted for execution after confirmation; this card never claims the action is complete.
+
+target: Target
+permission: Required permission
+impact: Expected impact
+statement: Confirmation statement
+impactCount: "{count} expected impacts"
+
+risk:
+  label: Risk level
+  low: Low risk
+  medium: Medium risk
+  high: High risk
+
+riskHint:
+  high: This is a high-consequence action; a second confirmation is required before submitting.
+  default: Please make sure you understand the impact before confirming.
+
+actions:
+  confirm: Confirm
+  cancel: Cancel
+  review: Review details
+  hide: Hide details
+
+details:
+  title: Impact and permission details
+  action: Action
+  impact: Expected impact
+  permission: Required permission
+
+dialog:
+  title: Confirm high-consequence action
+  description: 'You are about to submit "{action}" to "{target}". Please confirm you understand the expected impact.'
+  confirm: Confirm submission
+  cancel: Cancel
+
+success: Action confirmed and submitted for execution
+successNote: The action has been submitted for execution; completion status is defined by the execution record.

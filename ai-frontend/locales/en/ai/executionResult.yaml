@@ -1,0 +1,66 @@
+card:
+  title: Execution result
+  description: Result returned by the executor, with change details.
+
+agent: Agent
+taskRef: Task reference
+state:
+  label: Execution status
+  succeeded: Succeeded
+  partial: Partially succeeded
+  failed: Failed
+  cancelled: Cancelled
+summary: Result summary
+
+changedFiles:
+  title: Changed files
+  path: File
+  fileStatus: Status
+  changes: Changes
+  empty: No file changes
+
+fileStatus:
+  modified: Modified
+  added: Added
+  deleted: Deleted
+
+log:
+  title: Execution log
+  show: Show log
+  hide: Hide log
+  empty: No log entries
+
+warnings:
+  title: Warnings
+
+failure:
+  title: Failure details
+  code: Error code
+  retryable: Retryable
+  notRetryable: Not retryable
+
+actions:
+  accept: Accept result
+  requestChanges: Request changes
+  askExplanation: Ask for explanation
+  retry: Retry
+  details: View execution details
+  hideDetails: Hide execution details
+
+details:
+  title: Execution details
+  diff: Changed lines
+
+requestChanges:
+  title: Request changes
+  placeholder: Describe what needs to change
+  submit: Submit change request
+  cancel: Cancel
+  required: Please describe what needs to change
+
+success:
+  accepted: Execution result accepted
+  changesRequested: Change request submitted
+  retrySubmitted: Retry requested
+
+retryNote: Retry requested; the card will refresh when the execution status updates.

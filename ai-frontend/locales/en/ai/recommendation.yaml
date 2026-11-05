@@ -1,0 +1,30 @@
+title: Recommendation
+recommendedAction: Recommended action
+explanation: Explanation
+benefits: Benefits
+risks: Risks
+
+severity:
+  low: Low
+  medium: Medium
+  high: High
+
+actions:
+  accept: Accept
+  reject: Reject
+  modify: Modify
+  discuss: Discuss further
+
+reject:
+  reasonLabel: Reason (optional)
+  reasonPlaceholder: Explain why this recommendation is rejected
+  confirm: Confirm reject
+  cancel: Cancel
+
+accepted:
+  title: Your choice is recorded
+  note: This only records your choice; the formal change follows the approval result.
+
+rejected:
+  title: Recommendation rejected
+  reason: Reason

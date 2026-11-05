@@ -1,0 +1,57 @@
+type:
+  informational: 信息
+  recommendation: 建议
+  proposal: 提案
+  question: 信息补充
+  decision: 待决策
+  artifact: 产物
+  actionRequest: 操作确认
+  executionResult: 执行结果
+
+status:
+  created: 已创建
+  presented: 待处理
+  inProgress: 处理中
+  submitted: 已提交
+  validating: 校验中
+  processing: 执行中
+  accepted: 已接收
+  rejected: 已拒绝
+  deferred: 稍后处理
+  resolved: 已记录
+  failed: 提交失败
+
+conclusion: 结论
+expand: 展开
+collapse: 收起
+more: 更多操作
+
+evidence:
+  title: 证据与来源
+  analysis: 分析
+  sourcesCount: "{count} 个来源"
+  relatedCount: "{count} 个关联对象"
+
+submission:
+  submitting: 正在提交…
+  recorded: 已记录你的选择
+  reference: "· 记录号 {reference}"
+  notEffective: 正式业务变更以审批结果为准
+  failed: 提交失败，请重试
+  retry: 重试
+
+lifecycle:
+  title: 交互生命周期
+  note: 仅表现层状态，不是业务实体状态机。
+
+  created: 已创建
+  presented: 已呈现
+  inProgress: 交互中
+  submitted: 已提交
+  validating: 校验中
+  processing: 处理中
+  accepted: 已接收
+  rejected: 已拒绝
+  deferred: 已延后
+  resolved: 已存档
+  failed: 失败

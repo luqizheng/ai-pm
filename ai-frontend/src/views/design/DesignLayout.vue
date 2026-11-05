@@ -106,6 +106,59 @@ const navSections = computed(() => [
     ]
   },
   {
+    label: t("design.index.sectionAiInteraction"),
+    items: [
+      {
+        label: t("design.aiInteraction.index.title").split(" — ")[0],
+        to: DESIGN_PATHS.aiInteraction.index
+      },
+      {
+        label: t("design.aiInteraction.base.title").split(" — ")[0],
+        to: DESIGN_PATHS.aiInteraction.base
+      },
+      {
+        label: t("design.aiInteraction.informational.title").split(" — ")[0],
+        to: DESIGN_PATHS.aiInteraction.informational
+      },
+      {
+        label: t("design.aiInteraction.recommendation.title").split(" — ")[0],
+        to: DESIGN_PATHS.aiInteraction.recommendation
+      },
+      {
+        label: t("design.aiInteraction.proposal.title").split(" — ")[0],
+        to: DESIGN_PATHS.aiInteraction.proposal
+      },
+      {
+        label: t("design.aiInteraction.question.title").split(" — ")[0],
+        to: DESIGN_PATHS.aiInteraction.question
+      },
+      {
+        label: t("design.aiInteraction.decision.title").split(" — ")[0],
+        to: DESIGN_PATHS.aiInteraction.decision
+      },
+      {
+        label: t("design.aiInteraction.artifact.title").split(" — ")[0],
+        to: DESIGN_PATHS.aiInteraction.artifact
+      },
+      {
+        label: t("design.aiInteraction.action.title").split(" — ")[0],
+        to: DESIGN_PATHS.aiInteraction.action
+      },
+      {
+        label: t("design.aiInteraction.execution.title").split(" — ")[0],
+        to: DESIGN_PATHS.aiInteraction.execution
+      },
+      {
+        label: t("design.aiInteraction.controls.title").split(" — ")[0],
+        to: DESIGN_PATHS.aiInteraction.controls
+      },
+      {
+        label: t("design.aiInteraction.conversation.title").split(" — ")[0],
+        to: DESIGN_PATHS.aiInteraction.conversation
+      }
+    ]
+  },
+  {
     label: t("design.index.sectionSettings"),
     items: [
       {

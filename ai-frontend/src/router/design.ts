@@ -35,6 +35,24 @@ export const DESIGN_PATHS = {
   shell: {
     states: "/design/shell/states"
   },
+  /**
+   * AI Interaction Component Library V1.0（交付清单 16 帧 → 12 页）：
+   * 16 帧为画框图，落到目录页时按「响应类型」聚合，每页用 DesignFrame 逐帧呈现。
+   */
+  aiInteraction: {
+    index: "/design/ai-interaction",
+    base: "/design/ai-interaction/base",
+    informational: "/design/ai-interaction/informational",
+    recommendation: "/design/ai-interaction/recommendation",
+    proposal: "/design/ai-interaction/proposal",
+    question: "/design/ai-interaction/question",
+    decision: "/design/ai-interaction/decision",
+    artifact: "/design/ai-interaction/artifact",
+    action: "/design/ai-interaction/action",
+    execution: "/design/ai-interaction/execution",
+    controls: "/design/ai-interaction/controls",
+    conversation: "/design/ai-interaction/conversation"
+  },
   /** Settings Framework（19 帧，Settings Framework V1.0 §8） */
   settings: {
     architecture: "/design/settings/architecture",
@@ -163,6 +181,126 @@ export const designRoutes: RouteRecordRaw[] = [
     name: "design-shell-states",
     component: () => import("@/views/design/shell/DesignShellStatesView.vue"),
     meta: { layout: "design", title: "design.shell.states.title" }
+  },
+
+  // ===== AI Interaction Component Library V1.0（16 帧 → 12 页）=====
+  {
+    path: DESIGN_PATHS.aiInteraction.index,
+    name: "design-ai-interaction-index",
+    component: () =>
+      import("@/views/design/ai-interaction/AiInteractionIndexView.vue"),
+    meta: { layout: "design", title: "design.aiInteraction.index.title" }
+  },
+  {
+    path: DESIGN_PATHS.aiInteraction.base,
+    name: "design-ai-interaction-base",
+    component: () =>
+      import("@/views/design/ai-interaction/AiInteractionBaseView.vue"),
+    meta: { layout: "design", title: "design.aiInteraction.base.title" }
+  },
+  {
+    path: DESIGN_PATHS.aiInteraction.informational,
+    name: "design-ai-interaction-informational",
+    component: () =>
+      import(
+        "@/views/design/ai-interaction/AiInteractionInformationalView.vue"
+      ),
+    meta: {
+      layout: "design",
+      title: "design.aiInteraction.informational.title"
+    }
+  },
+  {
+    path: DESIGN_PATHS.aiInteraction.recommendation,
+    name: "design-ai-interaction-recommendation",
+    component: () =>
+      import(
+        "@/views/design/ai-interaction/AiInteractionRecommendationView.vue"
+      ),
+    meta: {
+      layout: "design",
+      title: "design.aiInteraction.recommendation.title"
+    }
+  },
+  {
+    path: DESIGN_PATHS.aiInteraction.proposal,
+    name: "design-ai-interaction-proposal",
+    component: () =>
+      import("@/views/design/ai-interaction/AiInteractionProposalView.vue"),
+    meta: {
+      layout: "design",
+      title: "design.aiInteraction.proposal.title"
+    }
+  },
+  {
+    path: DESIGN_PATHS.aiInteraction.question,
+    name: "design-ai-interaction-question",
+    component: () =>
+      import("@/views/design/ai-interaction/AiInteractionQuestionView.vue"),
+    meta: {
+      layout: "design",
+      title: "design.aiInteraction.question.title"
+    }
+  },
+  {
+    path: DESIGN_PATHS.aiInteraction.decision,
+    name: "design-ai-interaction-decision",
+    component: () =>
+      import("@/views/design/ai-interaction/AiInteractionDecisionView.vue"),
+    meta: {
+      layout: "design",
+      title: "design.aiInteraction.decision.title"
+    }
+  },
+  {
+    path: DESIGN_PATHS.aiInteraction.artifact,
+    name: "design-ai-interaction-artifact",
+    component: () =>
+      import("@/views/design/ai-interaction/AiInteractionArtifactView.vue"),
+    meta: {
+      layout: "design",
+      title: "design.aiInteraction.artifact.title"
+    }
+  },
+  {
+    path: DESIGN_PATHS.aiInteraction.action,
+    name: "design-ai-interaction-action",
+    component: () =>
+      import("@/views/design/ai-interaction/AiInteractionActionView.vue"),
+    meta: {
+      layout: "design",
+      title: "design.aiInteraction.action.title"
+    }
+  },
+  {
+    path: DESIGN_PATHS.aiInteraction.execution,
+    name: "design-ai-interaction-execution",
+    component: () =>
+      import("@/views/design/ai-interaction/AiInteractionExecutionView.vue"),
+    meta: {
+      layout: "design",
+      title: "design.aiInteraction.execution.title"
+    }
+  },
+  {
+    path: DESIGN_PATHS.aiInteraction.controls,
+    name: "design-ai-interaction-controls",
+    component: () =>
+      import("@/views/design/ai-interaction/AiInteractionControlsView.vue"),
+    meta: {
+      layout: "design",
+      title: "design.aiInteraction.controls.title"
+    }
+  },
+  {
+    path: DESIGN_PATHS.aiInteraction.conversation,
+    name: "design-ai-interaction-conversation",
+    component: () =>
+      import("@/views/design/ai-interaction/AiInteractionConversationView.vue"),
+    meta: {
+      layout: "design",
+      title: "design.aiInteraction.conversation.title"
+    }
   },
 
   // ===== Settings Framework（19 帧）=====

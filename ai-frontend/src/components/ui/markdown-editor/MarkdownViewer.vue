@@ -183,23 +183,54 @@ onBeforeUnmount(() => {
   border-color: var(--danger);
 }
 
-.md-viewer :deep(table) {
+/*
+ * 表格样式必须压过 Vditor 全局 reset 的硬编码值：
+ * `.vditor-reset table tr` 写死浅色底 #fafbfc + 深边框，在深色主题下
+ * 会把正文变成「浅底浅字」；`.vditor-reset table` 还带 display:block /
+ * white-space:nowrap，导致列宽与换行异常。选择器叠两个类以提高优先级。
+ */
+.md-viewer.vditor-reset :deep(table) {
+  display: table;
   width: 100%;
   margin: 0 0 var(--space-4);
-  border-collapse: collapse;
   border: 1px solid var(--border-default);
+  border-collapse: collapse;
+  border-spacing: 0;
+  overflow: visible;
+  word-break: normal;
 }
 
-.md-viewer :deep(th),
-.md-viewer :deep(td) {
+.md-viewer.vditor-reset :deep(thead),
+.md-viewer.vditor-reset :deep(tbody) {
+  background: transparent;
+}
+
+.md-viewer.vditor-reset :deep(tr) {
+  background-color: transparent;
+  border-top: none;
+}
+
+.md-viewer.vditor-reset :deep(th),
+.md-viewer.vditor-reset :deep(td) {
   padding: var(--space-2) var(--space-3);
   text-align: left;
+  white-space: normal;
+  word-break: normal;
+  color: var(--text-primary);
   border: 1px solid var(--border-subtle);
 }
 
-.md-viewer :deep(th) {
+.md-viewer.vditor-reset :deep(th) {
   background: var(--surface-base);
+  color: var(--text-secondary);
   font-weight: var(--weight-medium);
+}
+
+/* Vditor 给首列注入的伪元素占位在卡片里没有意义，清掉 */
+.md-viewer.vditor-reset :deep(th:first-child::after),
+.md-viewer.vditor-reset :deep(td:first-child::after) {
+  display: none;
+  content: none;
 }
 
 .md-viewer :deep(hr) {

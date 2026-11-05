@@ -28,12 +28,14 @@ const DEST_ROOT = join(ROOT, "ai-frontend", "public", "vditor", "dist");
 /**
  * 只同步实际用到的子集：
  *   js/lute        —— Markdown 解析引擎，缺了编辑器起不来
+ *   js/i18n        —— 编辑器界面语言包（缺了控制台报 404，工具栏文案回落）
  *   css/content-theme —— 正文排版主题
  *   images/emoji   —— 正文 emoji 图标
  * 公式、图表、脑图等重型渲染器不在当前功能范围内，不同步。
  */
 const ENTRIES = [
   "js/lute/lute.min.js",
+  "js/i18n",
   "css/content-theme",
   "images/emoji"
 ];
