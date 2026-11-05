@@ -1,0 +1,28 @@
+card:
+  description: "共 {count} 题，可一次性提交；未提交前答案会保留为草稿。"
+
+required: 必填
+optional: 选填
+
+progress:
+  answered: "已答 {answered} / {total}"
+
+error:
+  required: "请填写「{label}」"
+
+draft:
+  saved: 草稿已保存到本地
+
+actions:
+  saveDraft: 保存草稿
+  defer: 稍后处理
+  submit: 提交全部答案
+
+summary:
+  title: 已提交答案
+  submittedAt: "提交时间：{time}"
+  reference: "记录号：{reference}"
+  notEditable: 答案已提交，卡片转为只读汇总。
+  empty: 未填写
+
+success: 答案已记录

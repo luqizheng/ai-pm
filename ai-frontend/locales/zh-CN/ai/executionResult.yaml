@@ -1,0 +1,66 @@
+card:
+  title: 执行结果
+  description: 执行器返回的结果与变更明细。
+
+agent: Agent
+taskRef: 任务引用
+state:
+  label: 执行状态
+  succeeded: 成功
+  partial: 部分成功
+  failed: 失败
+  cancelled: 已取消
+summary: 结果摘要
+
+changedFiles:
+  title: 变更文件
+  path: 文件
+  fileStatus: 状态
+  changes: 变更行数
+  empty: 没有文件变更
+
+fileStatus:
+  modified: 修改
+  added: 新增
+  deleted: 删除
+
+log:
+  title: 执行日志
+  show: 查看日志
+  hide: 收起日志
+  empty: 无日志
+
+warnings:
+  title: 警告
+
+failure:
+  title: 失败信息
+  code: 错误码
+  retryable: 可重试
+  notRetryable: 不可重试
+
+actions:
+  accept: 接收结果
+  requestChanges: 请求修改
+  askExplanation: 请解释
+  retry: 重试
+  details: 查看执行详情
+  hideDetails: 收起执行详情
+
+details:
+  title: 执行详情
+  diff: 变更差异
+
+requestChanges:
+  title: 请求修改
+  placeholder: 请说明需要修改的内容
+  submit: 提交修改请求
+  cancel: 取消
+  required: 请填写需要修改的原因
+
+success:
+  accepted: 执行结果已接收
+  changesRequested: 修改请求已提交
+  retrySubmitted: 重试请求已提交
+
+retryNote: 重试请求已提交，执行状态更新后卡片会刷新。

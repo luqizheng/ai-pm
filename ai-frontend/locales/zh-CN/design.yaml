@@ -7,9 +7,57 @@ design:
     sectionComponents: 组件族（DS）
     sectionNavigation: 导航（Figma 板）
     sectionShell: 应用壳
+    sectionAiInteraction: AI 交互组件库
     sectionSettings: Settings 框架
   theme:
     toggle: 切换浅色 / 深色预览
+  aiInteraction:
+    index:
+      title: 总览 — 架构 / 生命周期 / 帧索引
+      subtitle: 统一响应卡 + 8 类响应 + 交互控件 + 会话集成（交付清单 16 帧）
+      archTitle: 架构
+      archBaseTitle: 统一卡片基座
+      archBaseText: 所有交互共用同一响应卡；Header / Summary / Content / Evidence / Interaction / Footer 按需出现，不强迫每张卡都带全部段位。
+      archTypesTitle: 8 类响应
+      archTypesText: 信息、建议、提案、问题、决策、产物、操作确认、执行结果；类型只决定交互区与页脚动作，不改变卡片骨架。
+      archControlsTitle: 控件与会话
+      archControlsText: 21 个可复用控件承载选择、反馈、编辑、决策与流程；会话里普通信息保持轻量消息，只有结构化交互才升级为卡片。
+      lifecycleTitle: 交互生命周期（11 态）
+      framesTitle: 交付帧索引
+      framesHint: 每行对应交付清单中的画框；点击进入对应目录页（真实组件渲染，可交互）。
+    base:
+      title: 卡片基座 — 统一响应卡解剖
+      subtitle: Header / Summary / Content / Evidence / Interaction / Footer 六段，按需出现
+    informational:
+      title: 信息响应 — 分析与来源
+      subtitle: 只读信息卡，不带多余审批动作
+    recommendation:
+      title: 建议响应 — 待处理 / 已接收 / 已拒绝
+      subtitle: 接收只记录选择，不声称业务已生效
+    proposal:
+      title: 提案响应 — 评审 / 编辑与对比
+      subtitle: 提案接收与正式审批分离
+    question:
+      title: 问题卡 — 多题一卡 / 校验 / 已提交
+      subtitle: 多题同卡提交，未完成答案保留草稿
+    decision:
+      title: 决策卡 — 待决策 / 已记录
+      subtitle: AI 推荐、用户选择、正式决策三者可辨
+    artifact:
+      title: 产物响应 — 预览 / 版本 / 差异
+      subtitle: 需求文档、技术设计、项目计划、测试计划等
+    action:
+      title: 操作确认 — 高后果动作
+      subtitle: 后端确认成功前不显示成功
+    execution:
+      title: 执行结果 — 变更 / 失败与重试
+      subtitle: 外部 Agent 执行结果、变更文件、日志与告警
+    controls:
+      title: 控件库 — 交互控件全状态
+      subtitle: 选择 / 反馈 / 编辑 / 决策 / 流程五族，默认至已提交八态
+    conversation:
+      title: 会话集成 — 消息时间线
+      subtitle: 固定输入栏 + 右上下文栏 + 内联交互卡（原型 A–H）
   tokens:
     title: 设计令牌
     subtitle: 视觉数值唯一真源 = src/styles/tokens.css；本页只读展示。

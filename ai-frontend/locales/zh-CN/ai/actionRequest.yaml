@@ -1,0 +1,40 @@
+card:
+  title: 操作确认请求
+  description: 确认后提交执行；卡片不会声称操作已完成。
+
+target: 目标对象
+permission: 所需权限
+impact: 预期影响
+statement: 确认声明
+impactCount: "{count} 项预期影响"
+
+risk:
+  label: 风险等级
+  low: 低风险
+  medium: 中风险
+  high: 高风险
+
+riskHint:
+  high: 该操作属于高后果操作，提交前需要二次确认。
+  default: 请确认已了解该操作的影响范围。
+
+actions:
+  confirm: 确认
+  cancel: 取消
+  review: 查看详情
+  hide: 收起详情
+
+details:
+  title: 影响与权限详情
+  action: 动作描述
+  impact: 预期影响
+  permission: 所需权限
+
+dialog:
+  title: 确认提交高风险操作
+  description: "即将提交「{action}」到「{target}」。请确认你已了解预期影响。"
+  confirm: 确认提交
+  cancel: 取消
+
+success: 操作已确认并提交执行
+successNote: 该操作已提交执行，实际完成状态以执行记录为准。

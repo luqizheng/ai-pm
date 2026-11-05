@@ -1,0 +1,20 @@
+title: AI-PM conversation
+pinned: Pinned context
+contextLabel: World map render v2.0 · Forest generation
+intro: Conversation keeps lightweight information light; only structured interactions escalate into inline response cards. The composer stays fixed at the bottom and the pinned context remains visible.
+composer:
+  placeholder: Ask a follow-up, or answer AI-PM directly…
+  attach: Attach file
+  send: Send
+  hint: Enter to send · Shift + Enter for a new line
+prototype:
+  heading: Prototype A–H — in-conversation interactions
+  hint: Each frame is a real interaction; controls are clickable and states change for real.
+  a: After Accept the card stays as a read-only record with a reference and summary.
+  b: Reject expands a reason input; the reason is recorded with the result.
+  c: Multi-select takes several options at once and keeps the answer as a draft.
+  d: Edit switches to edit mode; saving marks the artifact as edited.
+  e: One card holds many questions; incomplete required fields block submission and highlight the first error.
+  f: Pick an option, confirm as yourself, then the formal decision is recorded after a second confirmation.
+  g: High-consequence actions require the confirmation dialog; no success is shown before the backend confirms.
+  h: Request changes requires a reason; the execution result stays unchanged after submission.

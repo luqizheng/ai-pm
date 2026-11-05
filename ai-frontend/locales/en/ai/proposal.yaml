@@ -1,0 +1,34 @@
+title: Change proposal
+version: Version
+changes: Proposed changes
+before: Before
+after: After
+impact: Impact
+related: Related objects
+review: Show details
+reviewCollapse: Hide details
+edit: Edit
+edited: Edited (local draft)
+save: Save draft
+cancel: Cancel
+impactPlaceholder: One impact per line
+
+actions:
+  accept: Accept proposal
+  reject: Reject proposal
+  submitForApproval: Submit for formal approval
+
+accepted:
+  title: Proposal accepted
+  note: This only records your choice; the proposal is not yet in formal approval.
+
+rejected:
+  title: Proposal rejected
+
+approval:
+  dialogTitle: Submit for formal approval
+  dialogDescription: The approval process handles the submission; the approval record is authoritative.
+  confirm: Submit
+  cancel: Cancel
+  submitted: Submitted to formal approval
+  resultTitle: Formal approval status

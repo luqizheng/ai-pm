@@ -7,9 +7,57 @@ design:
     sectionComponents: Component families (DS)
     sectionNavigation: Navigation (Figma boards)
     sectionShell: Application shell
+    sectionAiInteraction: AI interaction library
     sectionSettings: Settings framework
   theme:
     toggle: Toggle light / dark preview
+  aiInteraction:
+    index:
+      title: Overview — architecture / lifecycle / frame index
+      subtitle: One response card + 8 response types + controls + conversation integration (16 frames)
+      archTitle: Architecture
+      archBaseTitle: One shared card base
+      archBaseText: Every interaction uses the same response card; Header / Summary / Content / Evidence / Interaction / Footer render only when present.
+      archTypesTitle: 8 response types
+      archTypesText: Information, recommendation, proposal, question, decision, artifact, action request and execution result only change the interaction area and footer actions.
+      archControlsTitle: Controls & conversation
+      archControlsText: 21 reusable controls cover selection, feedback, editing, decision and workflow; ordinary messages stay lightweight and only structured interactions become cards.
+      lifecycleTitle: Interaction lifecycle (11 states)
+      framesTitle: Deliverable frame index
+      framesHint: Each row maps to a frame in the deliverable list; open it to see the real, interactive components.
+    base:
+      title: Card base — response card anatomy
+      subtitle: Header / Summary / Content / Evidence / Interaction / Footer, rendered only when present
+    informational:
+      title: Informational — analysis & sources
+      subtitle: Read-only card with no unnecessary approval actions
+    recommendation:
+      title: Recommendation — pending / accepted / rejected
+      subtitle: Accepting records a choice; it does not claim the business changed
+    proposal:
+      title: Proposal — review / edit & compare
+      subtitle: Accepting a proposal stays separate from formal approval
+    question:
+      title: Question card — multi-question / validation / submitted
+      subtitle: One card, one submission; incomplete answers keep a draft
+    decision:
+      title: Decision card — pending / recorded
+      subtitle: AI recommendation, user selection and formal decision stay distinct
+    artifact:
+      title: Artifact — preview / version / diff
+      subtitle: Requirement docs, technical designs, plans and test plans
+    action:
+      title: Action confirmation — consequential operations
+      subtitle: Never show success before the backend confirms
+    execution:
+      title: Execution result — changes / failure & retry
+      subtitle: External agent results with changed files, logs and warnings
+    controls:
+      title: Controls — every interaction control
+      subtitle: Selection / feedback / editing / decision / workflow, default through submitted
+    conversation:
+      title: Conversation integration — message timeline
+      subtitle: Fixed composer + context panel + inline cards (prototypes A–H)
   tokens:
     title: Design tokens
     subtitle: Single source of truth = src/styles/tokens.css; this page is read-only.

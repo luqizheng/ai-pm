@@ -1,0 +1,40 @@
+card:
+  title: Decision needed
+  description: AI offers options and a recommendation; you submit the formal decision as yourself.
+
+background: Background
+impact: Impact analysis
+options: Options
+pros: Pros
+cons: Cons
+recommended: AI recommended
+selected: Your choice
+note: The AI recommendation is for reference only; selection and submission are yours.
+comment: Additional comments
+commentPlaceholder: Optional rationale for your decision
+
+confirm:
+  label: I confirm I am submitting this decision as myself
+  requiredHint: Tick the confirmation statement before submitting
+
+actions:
+  submit: Submit formal decision
+
+dialog:
+  title: Confirm formal decision
+  description: 'You are submitting "{option}" as the formal decision. Your identity and submission time will be recorded.'
+  confirm: Submit decision
+  cancel: Cancel
+
+record:
+  title: Decision recorded
+  chosen: Decision option
+  comment: Additional comments
+  decidedBy: Decided by
+  decidedByHuman: You (human)
+  decidedAt: "Decided at: {time}"
+  reference: "Decision record: {reference}"
+  none: None
+  note: "Recorded under your identity; {name} only provided the options and recommendation."
+
+success: Formal decision recorded

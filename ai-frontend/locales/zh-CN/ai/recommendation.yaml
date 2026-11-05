@@ -1,0 +1,30 @@
+title: 处理建议
+recommendedAction: 建议动作
+explanation: 说明
+benefits: 收益
+risks: 风险
+
+severity:
+  low: 低
+  medium: 中
+  high: 高
+
+actions:
+  accept: 接收
+  reject: 拒绝
+  modify: 调整
+  discuss: 继续讨论
+
+reject:
+  reasonLabel: 拒绝原因（选填）
+  reasonPlaceholder: 说明拒绝原因，便于后续调整建议
+  confirm: 确认拒绝
+  cancel: 取消
+
+accepted:
+  title: 已记录你的选择
+  note: 仅为选择记录，正式业务变更以审批结果为准。
+
+rejected:
+  title: 已拒绝该建议
+  reason: 拒绝原因

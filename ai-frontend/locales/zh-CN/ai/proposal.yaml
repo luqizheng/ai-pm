@@ -1,0 +1,34 @@
+title: 变更提案
+version: 版本
+changes: 拟变更项
+before: 变更前
+after: 变更后
+impact: 影响
+related: 关联对象
+review: 展开详情
+reviewCollapse: 收起详情
+edit: 编辑
+edited: 已编辑（本地草稿）
+save: 保存草稿
+cancel: 取消
+impactPlaceholder: 每行一条影响
+
+actions:
+  accept: 接收提案
+  reject: 拒绝提案
+  submitForApproval: 提交正式审批
+
+accepted:
+  title: 已接收提案
+  note: 仅为选择记录，提案尚未进入正式审批。
+
+rejected:
+  title: 已拒绝提案
+
+approval:
+  dialogTitle: 提交正式审批
+  dialogDescription: 提交后由审批流程处理，结果以审批记录为准。
+  confirm: 提交审批
+  cancel: 取消
+  submitted: 已提交至正式审批流程
+  resultTitle: 正式审批状态

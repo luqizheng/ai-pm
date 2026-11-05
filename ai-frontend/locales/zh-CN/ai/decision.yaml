@@ -1,0 +1,40 @@
+card:
+  title: 需要你决策
+  description: AI 提供选项与推荐；正式决策由你以本人身份提交。
+
+background: 决策背景
+impact: 影响分析
+options: 选项
+pros: 支持理由
+cons: 反对理由
+recommended: AI 推荐
+selected: 你的选择
+note: AI 推荐仅作参考，最终选择与提交由你完成。
+comment: 补充意见
+commentPlaceholder: 可补充你的判断依据（选填）
+
+confirm:
+  label: 我确认以本人身份提交该决策
+  requiredHint: 提交前请先勾选确认声明
+
+actions:
+  submit: 提交正式决策
+
+dialog:
+  title: 确认提交正式决策
+  description: "你将提交「{option}」作为正式决策，系统会记录你的身份与提交时间。"
+  confirm: 确认提交
+  cancel: 取消
+
+record:
+  title: 决策已记录
+  chosen: 决策选项
+  comment: 补充意见
+  decidedBy: 决策人
+  decidedByHuman: 你（人类）
+  decidedAt: "决策时间：{time}"
+  reference: "决策记录号：{reference}"
+  none: 无
+  note: "记录由你以本人身份提交；{name} 仅提供选项与推荐。"
+
+success: 正式决策已记录

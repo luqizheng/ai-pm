@@ -1,0 +1,28 @@
+card:
+  description: "{count} questions, submitted all at once; answers stay as a draft until then."
+
+required: Required
+optional: Optional
+
+progress:
+  answered: "Answered {answered} / {total}"
+
+error:
+  required: 'Please fill in "{label}"'
+
+draft:
+  saved: Draft saved locally
+
+actions:
+  saveDraft: Save draft
+  defer: Defer
+  submit: Submit all answers
+
+summary:
+  title: Submitted answers
+  submittedAt: "Submitted at: {time}"
+  reference: "Reference: {reference}"
+  notEditable: Answers have been submitted; this card is now read-only.
+  empty: Not filled
+
+success: Answers recorded
