@@ -288,6 +288,9 @@ COMPOSE_OVERLAY=docker-compose.test-server.yml bash scripts/start-prod.sh \
 | 8 | MCP 403 `IAM_PERM_3001 permission denied: PM_MCP_READ` | JWT permissions 缺权限码 | 确认 `seed-iam-platform-admin.sql` 已跑；重新登录拿新 token（权限在签发时进 claims） |
 | 9 | MCP 401 `invalid token`（pm-api 侧） | pm-api JWKS 缓存未刷新（token-service 刚换过密钥） | pm-api JWKS 自动刷新（`digua_common_jwt::cache` 日志有 initial refresh）；稍候重试或重建 pm-api |
 | 10 | 裸跑 `docker compose …` 报 required variable | test-server overlay 用 `:?` 门禁两个变量，compose CLI 只读项目目录 `.env` | 用 start-prod.sh，或 `set -a && source .env && source .env.prod && set +a` 后再跑 |
+| 11 | 所有登录 401 `service-jwt mint failed: bootstrap rejected`（密码没错） | `.env.prod` 手写时漏抄/错序 `SERVICE_BOOTSTRAP_TOKENS`——它是 8 个 `*_DEV_BT` 的 `${...}` 派生链，`source` 按行序展开，空值 ⇒ token-service 拒绝全部自举 | 从 `.env.prod.example:65` 原样补回聚合行，且保持在 DEV_BT 块之后；env 变更整栈同批重建（上游坑位档 `docs-site/ai-context.md` §8-20） |
+| 12 | 首次启动报 `dependency token-service failed to start`，重跑就好 | 全新卷首启要生成 RSA 密钥+跑迁移，慢于镜像 `--start-period=20s` 健康窗，依赖方门禁超时 | **再跑一遍 start-prod.sh 即收敛**（up 幂等）；上游已把 start-period 提到 60s（lmms e0c83449），存量 1.7.0 镜像重建发布前仍需两遍式 |
+| 13 | `up` 半途逐张报缺镜像 | 旧镜像清单被清（prune/换机），aipm-bff·web 等本机构建件不在任何 registry | start-prod.sh 已带缺图预检（d8e409d）：可达的自动 pull，补不了的打印逐张 build/pull+retag 命令后 fail-fast（exit 15），照打印的命令补齐重跑 |
 
 ---
 
