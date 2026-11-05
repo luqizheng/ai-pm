@@ -10,6 +10,9 @@
 > **关联阶段**：S02 Requirement Governance、S03 Analysis & Design
 > **管理模式**：人类负责项目，AI Agent 协助执行
 
+> **⚠️ 2026-11-05 修订稿到达（已记录，未收编，待基线确认）**：专家《S01-04 AI-PM Cognition 详细设计稿 V1.2》见
+> [s01-04-ai-pm-cognition-design-revision-v1-2.md](s01-04-ai-pm-cognition-design-revision-v1-2.md)。与本稿相关：① Q1~Q5 裁决映射全一致（本稿 ：56/:241/:380/:438/:493 与 ：891-895 收编表为裁决正文；V1.2 中 Q1 未显式标注，其 §1.2 即 Q1=B 落点）；② V1.2 扩展为长期认知治理（六领域/变化治理/混合 Context/统一认知治理），范围大于本稿与已实施 CognitionPage V1（迁移 0036），演进路径待基线确认；③ V1.2 §15 十项技术核验勿复制 Discovery/Knowledge/Document 三套既有提案状态机（已并入[统一核验清单](s01-technical-verification-unified-checklist-v1.md)）。读本稿时须对照修订记录。
+
 ---
 
 ## 1. 产品定位

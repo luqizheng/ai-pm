@@ -8,6 +8,9 @@
 > **修订日期**：2026-11-04
 > **上一版本**：V1.0
 
+> **⚠️ 2026-11-05 修订稿到达（已记录，未收编，待基线确认）**：专家《S01-03 Repository Management 详细设计稿 V1.2》见
+> [s01-03-repository-management-design-revision-v1-2.md](s01-03-repository-management-design-revision-v1-2.md)。与本稿相关：① R-03-01~04 四裁决与本稿同源一致（本稿 :48 §3.1、:68-88 §3.2 为裁决正文）；② V1.2 新增长期管理定位（非一次性初始化向导）、Default Branch / Observed HEAD / Confirmed Commit 三概念治理、AC-01~15、17 项代码核验清单（已并入[统一核验清单](s01-technical-verification-unified-checklist-v1.md)）；③ Role 词表三方差（本稿 vs 后端 `main/docs/service/infra` vs V1.2 建议 Backend/Frontend/…）登记待收敛；④ V1.2 §15 对原型的五点纠正——原型原件未入仓、位置待确认。读本稿时须对照修订记录。
+
 ---
 
 ## 1. 设计目标

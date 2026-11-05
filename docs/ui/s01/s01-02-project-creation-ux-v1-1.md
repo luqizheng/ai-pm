@@ -8,6 +8,9 @@
 > **修订日期**：2026-11-04
 > **上一版本**：V1.0
 
+> **⚠️ 2026-11-05 修订稿到达（已记录，未收编，待基线确认）**：专家《S01-02 Project Creation 设计修订稿 V1.1》见
+> [s01-02-project-creation-design-revision-v1-1.md](s01-02-project-creation-design-revision-v1-1.md)。与本稿相关：① Q1~Q3 方案 A 保留——本稿 ：59/:88/:208 与 :412-414 即方案 A 原始正文（修订稿 §一 担忧已据此解除）；② 修订稿 §2.3 将 Q3 落地方式修订为「创建成功自动进入 Project Command Center、初始化进度内嵌呈现」，本稿 Q3「自动进入初始化工作空间」的落地表述将随之修订（待基线确认后执行）；③ 新增 Project/Initialization/Baseline/Integration 四状态独立约束。读本稿时须对照修订记录。
+
 ---
 
 ## 1. 设计目标

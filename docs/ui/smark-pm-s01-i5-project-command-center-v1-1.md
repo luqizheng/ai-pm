@@ -12,6 +12,8 @@
 
 # §0. 定稿说明
 
+> **2026-11-05 修订登记**：专家《Project Command Center 设计修订稿 V1.1》与裁决 **R-S01-01-01（方案 A）** 已到达并记录（索引见 `s01/README.md`）。本稿 §4.7 已按裁决扩为「零仓库、零设备 Project：独立工作模式」（含可用性矩阵）。**待基线确认收敛的口径差**：修订稿五区结构（Needs Attention / Project Overview / Project Execution / Project Initialization / Recent Activity）与本稿六区块的差异——「风险与阻塞」在修订稿中并入 Needs Attention、「项目目标与进展」的 Goal 统计归属待定；头部状态 chips（Project Active / AI-PM Available / Repository Not Connected）为修订稿新增要求。技术核验统一走 [s01-technical-verification-unified-checklist-v1.md](s01/s01-technical-verification-unified-checklist-v1.md)。
+
 ## 0.1 V1.1 修订内容
 
 V1.1 在 V1.0 基础上完成三项关键设计裁决：
@@ -391,20 +393,51 @@ I5 不复制 Goal 内容到专用存储，也不自行推导 Goal 是否已经�
 
 收缩不能隐藏新的阻塞或人工处理事项。
 
-## 4.7 零仓库 Project
+## 4.7 零仓库、零设备 Project：独立工作模式
 
-零仓库项目是合法项目状态。
+> **2026-11-05 增补**（引专家裁决 **R-S01-01-01 · Native AI-PM Independence**，裁决记录见
+> `s01/s01-01-native-ai-pm-independence-ruling-v1.md`）：
+> 本节由原「零仓库 Project」扩充为「零仓库 + 零外部接入」的独立工作模式裁决。
 
-不能因为 `project_repository` 数量为 0，就认定 Project 初始化失败或 Project 无效。
+**设计裁决（R-S01-01-01，方案 A）：即使项目没有接入任何外部 AI 工具，产品内置 AI-PM 仍然必须可以工作。
+零仓库项目是合法项目状态，不能因为 `project_repository` 数量为 0，就认定 Project 初始化失败或 Project 无效；
+同理，`devenv.device` 数量为 0（尚未注册/绑定任何执行设备）也不构成无效或失败。**
 
 页面应展示：
 
 - 当前尚未关联仓库；
 - 代码分析尚未开始；
 - 仓库接入是可选的下一步；
-- 不依赖仓库的项目工作仍然可以继续。
+- 尚未接入外部执行设备（Codex / MCP / 外部 Agent）；
+- 外部工具接入是可选的下一步；
+- 不依赖外部接入的项目工作仍然可以继续。
 
-如果项目不需要代码仓库，仓库接入事项可以标记为不适用。
+如果项目不需要代码仓库或外部执行设备，对应初始化事项可以标记为不适用。
+
+**独立工作模式——Command Center 功能可用性矩阵（R-S01-01-01 §三，刚创建项目 vs 已接入工程工具）**：
+
+| 功能 | 刚创建项目 | 已接入工程工具 |
+|---|---|---|
+| 项目需求管理 | 可用 | 可用 |
+| AI 需求分析（内置 AI-PM） | 可用 | 可用 |
+| AI 知识整理（内置 AI-PM） | 可用 | 可用 |
+| 人工决策 | 可用 | 可用 |
+| 代码仓库分析 | 尚未接入 | 可用 |
+| 外部 Agent 执行 | 尚未接入 | 可用 |
+
+**能力分层（R-S01-01-01 §二）**：Project Native Core（创建项目即可使用：Project / Requirements / Knowledge / Tasks / Decisions / Baseline）
+→ Built-in AI-PM（原生 AI 能力：Cognition / Analysis / Recommendations / Governance / Planning）
+→ External Engineering Integrations（可选增强：Repository / MCP / Codex / Claude Code / External Agents）。
+三层**不是项目初始化的先后门槛，而是不同的能力层**。
+
+**边界（R-S01-01-01）**：内置 AI-PM 负责认知、分析、建议和项目治理；外部工程工具负责扩展代码仓库访问、代码分析和工程执行能力。
+技术边界：产品自身需具备可用的 AI 模型服务，但**不要求用户先配置 MCP 或外部编码 Agent**。
+
+禁止：
+
+- 禁止把「未接入仓库/设备」渲染为「初始化失败」「项目不可用」；
+- 禁止以接入仓库、MCP、Codex/外部 Agent 为前置条件，拦截需求管理、AI 需求分析、AI 知识整理、人工决策等任何内置能力；
+- 禁止在零外部接入状态下用模态/遮罩阻断总控台或其他项目页面的使用。
 
 ## 4.8 不展示无依据的初始化百分比
 
