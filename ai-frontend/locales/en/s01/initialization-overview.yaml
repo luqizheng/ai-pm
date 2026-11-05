@@ -90,6 +90,8 @@ initialization-overview:
     undetermined: Project onboarding overview
     undeterminedHint: Full readiness is undetermined until project type requirements are configured, so initialization is not claimed as complete here.
     open: Open dashboard
+    enterConsole: Enter Project Control Center
+    historyNote: After handover, initialization stays accessible here as project history — stage results and confirmation records remain readable.
   humanActions:
     title: Needs your action
     empty: Nothing currently needs your action.

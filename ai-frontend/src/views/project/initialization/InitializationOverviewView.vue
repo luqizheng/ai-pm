@@ -48,6 +48,10 @@ const loading = ref(true);
 const errorMessage = ref("");
 const projectId = ref("");
 
+/** 会话内上一次交接结局（null=尚未观测）——驱动 →ready 的自动跳转 */
+const lastOutcome = ref<HandoverOutcome | null>(null);
+let handoverRedirectTimer: ReturnType<typeof setTimeout> | undefined;
+
 /**
  * 右上下文栏：页面自带 AI 上下文栏（只读），进入本页时收起壳级右栏，
  * 离开时恢复原状；用户在壳内重新打开右栏时本页让位（不并排两栏）。
@@ -153,6 +157,16 @@ async function load() {
       return;
     }
     overview.value = await loadInitializationOverview(projectId.value);
+    // S01-07 交接并入本页：会话内观测到 →ready 的跃迁（如确认完基线后刷新）
+    // 即自动进入项目总控台。首次加载不跳——初始化始终可作为历史回访（§9）。
+    const outcome = overview.value.handoverOutcome;
+    if (lastOutcome.value !== null && lastOutcome.value !== "ready" && outcome === "ready") {
+      if (handoverRedirectTimer) clearTimeout(handoverRedirectTimer);
+      handoverRedirectTimer = setTimeout(() => {
+        void router.push("/project/command-center");
+      }, 1200);
+    }
+    lastOutcome.value = outcome;
   } catch (error) {
     overview.value = null;
     errorMessage.value =
@@ -161,6 +175,13 @@ async function load() {
     loading.value = false;
   }
 }
+
+/** 交接出口是否提供「进入总控台」（S01-07：ready / partial 可进入） */
+const isHandoverOpen = computed(
+  () =>
+    overview.value?.handoverOutcome === "ready" ||
+    overview.value?.handoverOutcome === "partial"
+);
 
 function openStage(stage: InitStage) {
   if (!stage.route) return;
@@ -192,6 +213,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  if (handoverRedirectTimer) clearTimeout(handoverRedirectTimer);
   if (previousContextOpen !== null) shell.setContextOpen(previousContextOpen);
 });
 
@@ -319,21 +341,31 @@ watch(
             />
           </div>
 
-          <!-- ⑥ 交接出口 -->
-          <div class="init-handover" :data-outcome="overview.handoverOutcome">
+          <!-- ⑥ 交接出口（S01-07 并入：ready/partial 提供进入总控台；
+               blocked 说明阻塞；undetermined 保持接入概况。交接后本页
+               仍作为初始化历史可回访） -->
+          <div
+            class="init-handover"
+            :data-outcome="overview.handoverOutcome"
+            data-testid="init-handover"
+          >
             <div class="init-handover__body">
               <p class="init-handover__title">{{ handoverText }}</p>
               <p v-if="handoverHint" class="init-handover__hint">
                 {{ handoverHint }}
               </p>
+              <p v-if="isHandoverOpen" class="init-handover__note">
+                {{ t("s01.initialization-overview.handover.historyNote") }}
+              </p>
             </div>
             <Button
-              variant="secondary"
+              v-if="isHandoverOpen"
+              variant="primary"
               size="sm"
-              :disabled="overview.handoverOutcome === 'blocked'"
-              @click="router.push('/dashboard')"
+              data-testid="init-handover-enter"
+              @click="router.push('/project/command-center')"
             >
-              {{ t("s01.initialization-overview.handover.open") }}
+              {{ t("s01.initialization-overview.handover.enterConsole") }}
             </Button>
           </div>
         </section>
@@ -499,6 +531,18 @@ watch(
 
 .init-handover.is-blocked {
   box-shadow: inset var(--size-indicator) 0 0 var(--ws-color-danger);
+}
+
+/* ready：交接就绪面板（S01-07 并入）——accent 着色面 + 主 CTA 进入总控台 */
+.init-handover[data-outcome="ready"] {
+  background: var(--ws-color-accent-surface);
+  border-color: var(--ws-accent);
+}
+
+.init-handover__note {
+  margin: var(--space-1) 0 0;
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-micro);
 }
 
 /* 宽屏（≥1600px）才把 AI 上下文栏并排到主区右侧 */
