@@ -28,6 +28,9 @@ import { useAuthStore } from "@/stores/auth";
  * 面板外一行账号指引。错误分两层：
  *   - 字段级校验（行内，紧贴字段）；
  *   - 网关级失败（面板顶部反馈框，Figma 的「Unable to sign in」）。
+ *
+ * 凭据组用原生 <form>：输入框内按 Enter 隐式提交与按钮点击同走
+ * submit 通道（@submit.prevent 拦整页刷新），键盘提交与点击提交等价。
  */
 const { t } = useI18n();
 const router = useRouter();
@@ -119,7 +122,7 @@ function onSso() {
         :subtitle="t('auth.login.subtitle')"
       />
 
-      <div class="login__credentials">
+      <form class="login__credentials" novalidate @submit.prevent="onSubmit">
         <Alert
           v-if="signInFailed"
           variant="danger"
@@ -174,10 +177,10 @@ function onSso() {
           />
         </div>
 
-        <Button type="submit" :loading="submitting" @click="onSubmit">
+        <Button type="submit" :loading="submitting">
           {{ submitting ? t("auth.login.submitting") : t("auth.login.submit") }}
         </Button>
-      </div>
+      </form>
 
       <div class="login__providers">
         <AuthProviderDivider :label="t('auth.login.divider')" />

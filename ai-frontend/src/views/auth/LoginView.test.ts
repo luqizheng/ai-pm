@@ -42,6 +42,8 @@ const SESSION = {
 
 /**
  * 登录页行为：字段级校验、凭据错误反馈、成功后进入认证进度页。
+ * 凭据组是原生 <form>：按钮点击与输入框内按 Enter 都走 submit 通道，
+ * 测试在 form 上派发 submit 事件（与 ProjectCreateView 同范式）。
  */
 describe("LoginView", () => {
   beforeEach(() => {
@@ -61,7 +63,7 @@ describe("LoginView", () => {
     await router.isReady();
     await nextTick();
 
-    await wrapper.find("button[type=submit]").trigger("click");
+    await wrapper.find("form").trigger("submit");
     await nextTick();
 
     // 测试挂载不 attachTo document，document.activeElement 不可断言；
@@ -81,7 +83,7 @@ describe("LoginView", () => {
 
     await wrapper.find("#auth-login-account").setValue("alex@");
     await wrapper.find("#auth-login-password").setValue("Orbit-Research!26");
-    await wrapper.find("button[type=submit]").trigger("click");
+    await wrapper.find("form").trigger("submit");
     await nextTick();
 
     expect(wrapper.text()).toContain(
@@ -96,7 +98,7 @@ describe("LoginView", () => {
 
     await wrapper.find("#auth-login-account").setValue("locked@acme.dev");
     await wrapper.find("#auth-login-password").setValue("Orbit-Research!26");
-    await wrapper.find("button[type=submit]").trigger("click");
+    await wrapper.find("form").trigger("submit");
 
     await flushPromises();
     await nextTick();
@@ -112,11 +114,30 @@ describe("LoginView", () => {
 
     await wrapper.find("#auth-login-account").setValue("alex.morgan@acme.dev");
     await wrapper.find("#auth-login-password").setValue("Orbit-Research!26");
-    await wrapper.find("button[type=submit]").trigger("click");
+    await wrapper.find("form").trigger("submit");
 
     await waitForRoute(router, AUTH_PATHS.signingIn);
 
     expect(router.currentRoute.value.path).toBe(AUTH_PATHS.signingIn);
+  });
+
+  it("表单提交（含输入框内按 Enter 的隐式提交）调用登录网关", async () => {
+    const { wrapper, router } = mountShell(LoginView);
+    await router.isReady();
+    await nextTick();
+
+    await wrapper.find("#auth-login-account").setValue("alex.morgan@acme.dev");
+    await wrapper.find("#auth-login-password").setValue("Orbit-Research!26");
+    await wrapper.find("form").trigger("submit");
+
+    await flushPromises();
+
+    expect(authGateway.signIn).toHaveBeenCalledTimes(1);
+    expect(authGateway.signIn).toHaveBeenCalledWith({
+      account: "alex.morgan@acme.dev",
+      password: "Orbit-Research!26",
+      remember: false
+    });
   });
 
   it("提供单点登录入口（尚未开通时给出说明）", async () => {
