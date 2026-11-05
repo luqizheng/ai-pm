@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import type { Component } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
-import { ChevronRight, CircleCheck, Plus, Search } from "lucide-vue-next";
+import {
+  AlertTriangle,
+  ChevronRight,
+  CircleCheck,
+  ClipboardList,
+  GitBranch,
+  Plus,
+  Search
+} from "lucide-vue-next";
 import { PageFrame } from "@/components/shell";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Button from "@/components/ui/button/Button.vue";
@@ -10,6 +19,7 @@ import Card from "@/components/ui/card/Card.vue";
 import IconButton from "@/components/ui/icon-button/IconButton.vue";
 import ListItem from "@/components/ui/list-item/ListItem.vue";
 import Skeleton from "@/components/ui/skeleton/Skeleton.vue";
+import { StatCard, type StatCardTone } from "@/components/ui/stat-card";
 
 import {
   loadPersonalActivity,
@@ -26,7 +36,6 @@ import {
 import ActivityEntryView from "./components/ActivityEntry.vue";
 import AssignedTaskItem from "./components/AssignedTaskItem.vue";
 import HumanActionItem from "./components/HumanActionItem.vue";
-import MetricTile from "./components/MetricTile.vue";
 import ProjectCard from "./components/ProjectCard.vue";
 import SectionState from "./components/SectionState.vue";
 
@@ -34,19 +43,28 @@ import SectionState from "./components/SectionState.vue";
  * 个人主页（Personal Home）—— 登录后的默认落地页。
  *
  * 结构（高保真稿 §3）：
- *   Row1  My Overview（三指标横条）
+ *   Row1  My Overview（三张 StatCard）
  *   Row2  My Inbox（60%） + My Projects（40%）
  *   Row3  Recent Activity（横向）
  *
  * 组件策略（AGENTS.md §三.11）：卡片/徽标/按钮/列表行全部组合公共 ui 组件
- * （Card / Badge / Button / ListItem / StatusIndicator / EmptyState / Alert / Skeleton），
- * 页内只保留纯布局样式；列表卡用 `pm-card--flush` 把 Card body 清零内边距，
- * 让行交互面（ListItem hover）通到卡片边缘。
+ * （Card / StatCard / Badge / Button / ListItem / StatusIndicator / EmptyState /
+ * Alert / Skeleton），页内只保留纯布局样式；列表卡用 `pm-card--flush` 把
+ * Card body 清零内边距，让行交互面（ListItem hover）通到卡片边缘。
  *
  * 状态处理（高保真稿 §8）：三个区块**各自独立**加载，
  * 因此「Inbox 失败」不会拖垮「我的项目」，失败也绝不渲染成"没有数据"。
  */
 type Status = "loading" | "ready" | "error" | "forbidden";
+
+/** Row1 概览单张 StatCard 的数据形状（icon + tone 决定语义色） */
+type OverviewStat = {
+  label: string;
+  value: string;
+  description: string;
+  icon: Component;
+  tone: StatCardTone;
+};
 
 const router = useRouter();
 const { t } = useI18n();
@@ -160,6 +178,42 @@ const inboxTotal = computed(
   () => humanActions.value.length + assignedTasks.value.length
 );
 
+/** Row1 三张指标卡（需要关注 / 分配给我 / 参与的项目），加载态与正常态共用。
+ * 区块失败时数值给「—」、口径给「暂不可用」，绝不渲染成 0（失败 ≠ 空）。 */
+const overviewStats = computed<OverviewStat[]>(() => {
+  const inboxReady = inboxStatus.value === "ready";
+  const projectsReady = projectsStatus.value === "ready";
+  return [
+    {
+      label: t("pm.personalHome.overview.needsAttention"),
+      value: inboxReady ? String(humanActions.value.length) : "—",
+      description: inboxReady
+        ? t("pm.personalHome.overview.needsAttentionHint")
+        : t("pm.personalHome.overview.unavailable"),
+      icon: AlertTriangle,
+      tone: "warning"
+    },
+    {
+      label: t("pm.personalHome.overview.assignedToMe"),
+      value: inboxReady ? String(assignedTasks.value.length) : "—",
+      description: inboxReady
+        ? t("pm.personalHome.overview.assignedToMeHint")
+        : t("pm.personalHome.overview.unavailable"),
+      icon: ClipboardList,
+      tone: "info"
+    },
+    {
+      label: t("pm.personalHome.overview.activeProjects"),
+      value: projectsReady ? String(projects.value.length) : "—",
+      description: projectsReady
+        ? t("pm.personalHome.overview.activeProjectsHint")
+        : t("pm.personalHome.overview.unavailable"),
+      icon: GitBranch,
+      tone: "accent"
+    }
+  ];
+});
+
 /** 我的待办数：人工事项 + 分配任务 */
 const pendingByProject = computed(() => {
   const counts = new Map<string, number>();
@@ -264,20 +318,16 @@ function openObject(path: string) {
       />
     </Card>
 
-    <!-- 加载中：骨架屏按真实布局形状占位 -->
+    <!-- 加载中：骨架屏按真实布局形状占位（概览直接用 StatCard loading 态） -->
     <template v-else-if="pageStatus === 'loading'">
-      <Card class="pm-card--flush">
-        <div class="pm-overview" aria-busy="true">
-          <div v-for="index in 3" :key="index" class="pm-overview__skeleton">
-            <Skeleton width="10px" height="10px" tone="base" />
-            <div class="pm-overview__skeleton-body">
-              <Skeleton width="38px" height="20px" tone="strong" />
-              <Skeleton width="96px" height="12px" tone="base" />
-              <Skeleton width="128px" height="10px" tone="base" />
-            </div>
-          </div>
-        </div>
-      </Card>
+      <div class="pm-overview" aria-busy="true">
+        <StatCard
+          v-for="stat in overviewStats"
+          :key="stat.label"
+          v-bind="stat"
+          loading
+        />
+      </div>
       <div class="pm-rows">
         <Card class="pm-card--flush">
           <template #header>
@@ -314,45 +364,14 @@ function openObject(path: string) {
 
     <!-- 正常态 -->
     <template v-else>
-      <!-- Row 1 · My Overview -->
-      <Card class="pm-card--flush">
-        <div
-          class="pm-overview"
-          role="group"
-          :aria-label="t('pm.personalHome.overview.title')"
-        >
-          <MetricTile
-            :label="t('pm.personalHome.overview.needsAttention')"
-            :value="inboxStatus === 'ready' ? humanActions.length : null"
-            :hint="
-              inboxStatus === 'ready'
-                ? t('pm.personalHome.overview.needsAttentionHint')
-                : t('pm.personalHome.overview.unavailable')
-            "
-            tone="warning"
-          />
-          <MetricTile
-            :label="t('pm.personalHome.overview.assignedToMe')"
-            :value="inboxStatus === 'ready' ? assignedTasks.length : null"
-            :hint="
-              inboxStatus === 'ready'
-                ? t('pm.personalHome.overview.assignedToMeHint')
-                : t('pm.personalHome.overview.unavailable')
-            "
-            tone="info"
-          />
-          <MetricTile
-            :label="t('pm.personalHome.overview.activeProjects')"
-            :value="projectsStatus === 'ready' ? projects.length : null"
-            :hint="
-              projectsStatus === 'ready'
-                ? t('pm.personalHome.overview.activeProjectsHint')
-                : t('pm.personalHome.overview.unavailable')
-            "
-            tone="accent"
-          />
-        </div>
-      </Card>
+      <!-- Row 1 · My Overview：三张 StatCard 独立成卡 -->
+      <div
+        class="pm-overview"
+        role="group"
+        :aria-label="t('pm.personalHome.overview.title')"
+      >
+        <StatCard v-for="stat in overviewStats" :key="stat.label" v-bind="stat" />
+      </div>
 
       <!-- Row 2 · My Inbox + My Projects -->
       <div class="pm-rows">
@@ -639,27 +658,11 @@ function openObject(path: string) {
 
 /* ------------------------------- 概览 ------------------------------- */
 
+/* StatCard 自带 surface 底 + 边框，独立成卡，无需外层 Card 包裹 */
 .pm-overview {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-}
-
-.pm-overview__skeleton {
-  display: flex;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border-left: var(--border-1) solid var(--ws-border);
-}
-
-.pm-overview__skeleton:first-child {
-  border-left: 0;
-}
-
-.pm-overview__skeleton-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex: 1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
 }
 
 /* -------------------------------- 栅格 -------------------------------- */

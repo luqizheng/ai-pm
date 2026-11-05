@@ -131,6 +131,12 @@ describe("PersonalHomeView", () => {
     expect(wrapper.text()).toContain(
       t("pm.personalHome.overview.activeProjects")
     );
+    // 概览三卡为公共 StatCard（ui-stat-card），不再是页内私有布局件
+    const statCards = wrapper.findAll(".ui-stat-card");
+    expect(statCards).toHaveLength(3);
+    expect(statCards[0]!.text()).toContain(
+      t("pm.personalHome.overview.needsAttentionHint")
+    );
     expect(wrapper.text()).toContain(t("pm.personalHome.inbox.humanActions"));
     expect(wrapper.text()).toContain(t("pm.personalHome.inbox.assignedTasks"));
     expect(wrapper.text()).toContain("确认需求修订");

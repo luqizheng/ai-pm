@@ -8,7 +8,7 @@ import type { TaskStat } from "../task-overview";
  * 结构（Pixso「Project Command Center」3:7377 系）：
  *   标签行（标签 + 单位右对齐）→ 大数字 → 明细行 → 口径脚注。
  * 样式约束：颜色/圆角/间距全部走 token；语义点用公共 StatusIndicator，
- * 不自造色点（同 MetricTile 约束）；数据本身不负责翻译。
+ * 不自造色点；数据本身不负责翻译。
  */
 defineProps<TaskStat>();
 </script>

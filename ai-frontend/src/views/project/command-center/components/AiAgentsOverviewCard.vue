@@ -12,7 +12,7 @@ import type { AiAgentsColumnLabels, AgentMetric, AgentRow } from "../ai-agents";
  * 结构：头部（SectionHead）→ 三张紧凑指标 tile → 分隔线 → 列头带 → Agent 行
  * （bot 图标+名称+角色 ｜ 当前工作 ｜ 状态语义点 ｜ 进度条 ｜ 时长）。
  * 样式约束：进度条/语义点用公共 ProgressIndicator/StatusIndicator，不自造；
- * 行状态不做软底 chip（深色主题下点+文字更轻，与同页 MetricTile 口径一致）；
+ * 行状态不做软底 chip（深色主题下点+文字更轻）；
  * 已完成的行进度条走 success 变体，其余 accent。文案由调用方翻译后传入。
  */
 interface Props {
