@@ -178,6 +178,24 @@ describe("ProjectSwitcher（Trigger + Popover）", () => {
     expect(w.emitted("select")).toEqual([["sdk"]]);
     expect(w.find(".ps-trigger").attributes("aria-expanded")).toBe("false");
   });
+
+  it("点击 Create 发出 create 并收起浮层", async () => {
+    const w = mount(ProjectSwitcher, {
+      props: { projects, label: "Atlas Platform", currentId: "atlas" },
+      attachTo: document.body
+    });
+    wrappers.push(w);
+
+    await w.find(".ps-trigger").trigger("click");
+    await flush();
+    expect(document.querySelector(".ps-menu")).not.toBeNull();
+
+    document.querySelector<HTMLElement>(".ps-menu__create")!.click();
+    await flush();
+
+    expect(w.emitted("create")).toHaveLength(1);
+    expect(w.find(".ps-trigger").attributes("aria-expanded")).toBe("false");
+  });
 });
 
 describe("样式契约（Figma 33:82961 数值必须来自 token）", () => {

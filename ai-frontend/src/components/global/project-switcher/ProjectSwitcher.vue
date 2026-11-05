@@ -73,6 +73,12 @@ function onSelect(id: string) {
   emit("select", id);
 }
 
+function onCreate() {
+  open.value = false;
+  query.value = "";
+  emit("create");
+}
+
 function onClearQuery() {
   query.value = "";
 }
@@ -114,7 +120,7 @@ function onClearQuery() {
           :texts="props.texts"
           @select="onSelect"
           @retry="emit('retry')"
-          @create="emit('create')"
+          @create="onCreate"
           @clear-query="onClearQuery"
         />
       </PopoverContent>
