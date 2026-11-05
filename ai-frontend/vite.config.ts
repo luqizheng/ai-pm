@@ -13,6 +13,8 @@ import { root, alias, wrapperEnv, pathResolve } from "./build/utils.ts";
 export default async ({ mode }: ConfigEnv): Promise<UserConfigExport> => {
   const { VITE_PORT, VITE_PUBLIC_PATH } = wrapperEnv(loadEnv(mode, root));
   const env = loadEnv(mode, root);
+  // mock 开关由 .env.development 的 VITE_USE_MOCK 驱动（2026-11-06 起默认 0 = 真实模式，
+  // /api 与 /gw 都走网关；pm-api 未实现的端点在 build/mock-plugin.ts 保留兜底能力）
   const useMock = env.VITE_USE_MOCK === "1";
 
   return {
@@ -24,11 +26,13 @@ export default async ({ mode }: ConfigEnv): Promise<UserConfigExport> => {
     server: {
       port: VITE_PORT,
       host: "0.0.0.0",
-      // 本地跨域代理：/api 前缀转发到 pm-api（PM_API_URL 环境变量可覆盖目标）；
-      // /gw 前缀转发到 lmms api-gateway（iam-services SDK 的 IAM 调用走这里）
+      // 本地跨域代理：/api 与 /gw 都指向 lmms api-gateway（2026-11-05 架构口径：
+      // pm 业务与 iam 一致挂网关对外，pm-api:8090 不发布宿主；网关侧路由见
+      // ai-pm infrastructure/config/api-gateway/routes/pm.router.toml）。
+      // PM_API_URL 环境变量可覆盖（直连 pm-api 调试时用，如 http://127.0.0.1:8090）
       proxy: {
         "/api": {
-          target: process.env.PM_API_URL ?? "http://127.0.0.1:8090",
+          target: process.env.PM_API_URL ?? "http://127.0.0.1:3000",
           changeOrigin: true,
           rewrite: (p: string) => p.replace(/^\/api/, "")
         },

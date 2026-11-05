@@ -1,0 +1,12 @@
+# pm-api 业务路由 —— 2026-11-05 起 pm 与 iam 一致挂网关对外（vite /api → :3000）。
+# pm-api 内部路径同为 /v1/pm/*，无下游前缀改写（identity 映射）。
+# 非 public：网关边缘先验 JWT（GW_JWKS_URL / GW_ISSUER），pm-api 自身 jwks fail-closed 二次验证。
+[[route]]
+upstream   = "/v1/pm/{rest}"
+downstream = "/v1/pm/{rest}"
+service    = "pm-api"
+
+[[route]]
+upstream   = "/v1/pm"
+downstream = "/v1/pm"
+service    = "pm-api"

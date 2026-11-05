@@ -311,7 +311,7 @@ services:
   pm-api:
     image: ${AIPM_REGISTRY:-aipm}/pm-api:${AIPM_VERSION:-0.1.0}
     # 2026-11-05 起 pm 与 iam 一致挂网关对外（/v1/pm/* → pm-api，见 config/api-gateway/
-    # routes/pm.router.toml）；registrator 依这些标签把服务注册进 consul。
+    # routes/pm.router.toml）；consul 自注册经 *consul-env（13e7363，无 registrator）。
     labels:
       <<: *loki-labels
       service: pm-api
@@ -323,6 +323,9 @@ services:
       # 鉴权（slice B）：默认 jwks fail-closed，JWKS 取自同网络（superpowers）的 lmms token-service
       AI_PM_AUTH_MODE: "jwks"
       AI_PM_JWKS_URL: http://token-service:8082/.well-known/jwks.json
+      # SSH 部署密钥的封私钥主密钥（secret::seal_text，AAD=project_id）。
+      # 值必须稳定：换值 = 库内已封私钥全部不可解（公钥仍可读，私钥永不出 REST）。
+      AI_PM_SECRET_KEY: "${AI_PM_SECRET_KEY:-}"
       # 首管理员对：命中 (tenant, subject) 的登录主体首次接入时被开为 active
       # （其余新身份默认 inactive）。留空则不启用首管理员通道。
       AI_PM_FIRST_ADMIN_TENANT: "${AI_PM_FIRST_ADMIN_TENANT:-}"

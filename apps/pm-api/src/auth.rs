@@ -233,7 +233,12 @@ pub async fn require_bearer(
             None => unauthorized("IAM_AUTH_1004", "token missing subject claim (sub)"),
         },
         Ok(_) => unauthorized("IAM_AUTH_1004", "token missing tenant claim (tid)"),
-        Err(_) => unauthorized("IAM_AUTH_1004", "invalid token"),
+        Err(e) => {
+            // 2026-11-05 排障：Err 此前被吞成通用 "invalid token"，本地验签
+            // VALID 却 401 时无从定位；打出具体变体（签名/过期/未知 kid/格式）。
+            tracing::warn!(error = %e, "bearer token verification failed");
+            unauthorized("IAM_AUTH_1004", "invalid token")
+        }
     }
 }
 
