@@ -1,18 +1,61 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 
+const { authGateway } = vi.hoisted(() => ({
+  authGateway: {
+    signIn: vi.fn(),
+    signOut: vi.fn(async () => {}),
+    requestPasswordReset: vi.fn(async () => {}),
+    resetPassword: vi.fn(async () => {}),
+    acceptInvitation: vi.fn()
+  }
+}));
+
+vi.mock("@/api/auth", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/api/auth")>();
+  return { ...actual, authGateway };
+});
+
+import { AuthError } from "@/api/auth";
 import LoginView from "./LoginView.vue";
 import { mountShell } from "@/components/shell/test-utils";
 import { i18n } from "@/lib/i18n";
 import { AUTH_PATHS } from "@/router/auth";
 import { waitForRoute } from "@/lib/test-utils";
 
+const SESSION = {
+  account: "alex.morgan@acme.dev",
+  organization: "Acme Research",
+  user: {
+    id: "u-1",
+    username: "alex.morgan@acme.dev",
+    nickname: "Alex Morgan",
+    email: "alex.morgan@acme.dev",
+    phone: null,
+    avatar: null,
+    roles: ["member"],
+    permissions: []
+  }
+};
+
 /**
  * 登录页行为：字段级校验、凭据错误反馈、成功后进入认证进度页。
  */
 describe("LoginView", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.localStorage.clear();
+    authGateway.signIn.mockImplementation(
+      async (input: { account: string }) => {
+        if (input.account === "locked@acme.dev") {
+          throw new AuthError("invalid_credentials");
+        }
+        return SESSION;
+      }
+    );
+  });
   it("空提交时给出两个字段级错误", async () => {
     const { wrapper, router } = mountShell(LoginView);
     await router.isReady();
@@ -55,8 +98,6 @@ describe("LoginView", () => {
     await wrapper.find("#auth-login-password").setValue("Orbit-Research!26");
     await wrapper.find("button[type=submit]").trigger("click");
 
-    // mock 网关有 700ms 延迟，等它返回
-    await new Promise(resolve => setTimeout(resolve, 900));
     await flushPromises();
     await nextTick();
 

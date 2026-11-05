@@ -1,15 +1,15 @@
 <!-- @figma file=hNlGqLEMQpOVCZ0o5u3DkT node=5:2638 set="02 — Authentication / Invitation acceptance" date=2026-11-04 -->
 <script setup lang="ts">
-import { ref } from "vue";
-import { ArrowRight, MailOpen } from "lucide-vue-next";
+import { computed, ref } from "vue";
+import { MailOpen } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
 import Alert from "@/components/ui/alert/Alert.vue";
 import Button from "@/components/ui/button/Button.vue";
+import FormField from "@/components/ui/form-field/FormField.vue";
+import PasswordInput from "@/components/ui/input/PasswordInput.vue";
 import {
-  AuthDetailCard,
-  AuthDetailRow,
   AuthHeading,
   AuthLayout,
   AuthPanel,
@@ -21,32 +21,60 @@ import { useAuthStore } from "@/stores/auth";
 /**
  * 接受邀请 —— Figma「02 — Authentication / Invitation acceptance」（5:2638）。
  *
- * 邀请落地页：先回显「谁邀请了你 / 去哪个工作区 / 以什么角色 / 何时过期」，
- * 再由本人确认加入；不用静默建号。
+ * 邀请链接携带一次性 token（`?token=`）。用户在本页设置口令后，
+ * 由 iam-service 消费邀请票据并直接返回登录态。
  */
 const { t } = useI18n();
+const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 
-/** 演示邀请上下文（真实场景来自邀请票据） */
-const INVITATION = {
-  inviter: "Maya Chen",
-  workspace: "Acme Research",
-  workspaceSlug: "acme-research",
-  email: "alex.morgan@acme.dev",
-  initials: "AR"
-};
+/** 邀请票据 */
+const token = computed(() =>
+  typeof route.query.token === "string" ? route.query.token : ""
+);
 
+/** 新口令 */
+const password = ref("");
+/** 确认口令 */
+const confirm = ref("");
+/** 字段级错误 */
+const passwordError = ref<string | undefined>(undefined);
+const confirmError = ref<string | undefined>(undefined);
 /** 提交中 */
 const submitting = ref(false);
-/** 邀请失效 */
-const invalid = ref(false);
+/** 邀请失效（无 token 或服务端拒绝） */
+const invalid = ref(!token.value);
+
+function validate() {
+  passwordError.value = undefined;
+  confirmError.value = undefined;
+
+  if (!password.value) {
+    passwordError.value = t("auth.invitation.validation.passwordRequired");
+  } else if (password.value.length < 8) {
+    passwordError.value = t("auth.invitation.validation.passwordTooShort");
+  }
+
+  if (!confirm.value || confirm.value !== password.value) {
+    confirmError.value = t("auth.invitation.validation.mismatch");
+  }
+
+  return !passwordError.value && !confirmError.value;
+}
 
 async function onAccept() {
-  invalid.value = false;
+  invalid.value = !token.value;
+  if (!validate() || !token.value) {
+    return;
+  }
+
   submitting.value = true;
   try {
-    await auth.acceptInvitation();
+    await auth.acceptInvitation({
+      token: token.value,
+      password: password.value
+    });
     await router.push(AUTH_PATHS.signingIn);
   } catch {
     invalid.value = true;
@@ -62,12 +90,7 @@ async function onAccept() {
       <AuthHeading
         :icon="MailOpen"
         :title="t('auth.invitation.title')"
-        :subtitle="
-          t('auth.invitation.subtitle', {
-            inviter: INVITATION.inviter,
-            workspace: INVITATION.workspace
-          })
-        "
+        :subtitle="t('auth.invitation.subtitle')"
       />
 
       <Alert
@@ -78,35 +101,37 @@ async function onAccept() {
         {{ t("auth.invitation.errorDetail") }}
       </Alert>
 
-      <AuthDetailCard padding="md" gap="md">
-        <div class="invitation__workspace">
-          <span class="invitation__avatar" aria-hidden="true">
-            {{ INVITATION.initials }}
-          </span>
-          <span class="invitation__workspace-text">
-            <span class="invitation__workspace-name">
-              {{ INVITATION.workspace }}
-            </span>
-            <span class="invitation__workspace-slug">
-              {{ INVITATION.workspaceSlug }} ·
-              {{ t("auth.chrome.product") }}
-            </span>
-          </span>
-        </div>
+      <div class="invitation__form">
+        <FormField
+          :label="t('auth.invitation.passwordLabel')"
+          :error="passwordError"
+          html-for="auth-invitation-password"
+        >
+          <PasswordInput
+            id="auth-invitation-password"
+            v-model="password"
+            :placeholder="t('auth.invitation.passwordPlaceholder')"
+            :invalid="Boolean(passwordError)"
+            autocomplete="new-password"
+            @update:model-value="passwordError = undefined"
+          />
+        </FormField>
 
-        <AuthDetailRow
-          :label="t('auth.invitation.invitedEmailLabel')"
-          :value="INVITATION.email"
-        />
-        <AuthDetailRow
-          :label="t('auth.invitation.roleLabel')"
-          :value="t('auth.invitation.role')"
-        />
-        <AuthDetailRow
-          :label="t('auth.invitation.expiresLabel')"
-          :value="t('auth.invitation.expiresAt')"
-        />
-      </AuthDetailCard>
+        <FormField
+          :label="t('auth.invitation.confirmLabel')"
+          :error="confirmError"
+          html-for="auth-invitation-confirm"
+        >
+          <PasswordInput
+            id="auth-invitation-confirm"
+            v-model="confirm"
+            :placeholder="t('auth.invitation.passwordPlaceholder')"
+            :invalid="Boolean(confirmError)"
+            autocomplete="new-password"
+            @update:model-value="confirmError = undefined"
+          />
+        </FormField>
+      </div>
 
       <div class="invitation__actions">
         <Button type="submit" :loading="submitting" @click="onAccept">
@@ -115,11 +140,8 @@ async function onAccept() {
               ? t("auth.invitation.submitting")
               : t("auth.invitation.submit")
           }}
-          <ArrowRight class="invitation__action-icon" aria-hidden="true" />
         </Button>
-        <p class="invitation__note">
-          {{ t("auth.invitation.note", { account: INVITATION.email }) }}
-        </p>
+        <p class="invitation__note">{{ t("auth.invitation.note") }}</p>
       </div>
 
       <div class="invitation__switch">
@@ -136,47 +158,10 @@ async function onAccept() {
 </template>
 
 <style scoped>
-/* 工作区标识行 —— Figma：32×32 头像块 + 名称 / 标识两行 */
-.invitation__workspace {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.invitation__avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: var(--ws-auth-indicator-size);
-  height: var(--ws-auth-indicator-size);
-  border-radius: var(--radius-xs);
-  background: var(--ws-elevated);
-  font-family: var(--font-ui);
-  font-size: var(--ws-font-size-caption);
-  font-weight: var(--weight-semibold);
-  color: var(--ws-text-primary);
-}
-
-.invitation__workspace-text {
+.invitation__form {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-}
-
-.invitation__workspace-name {
-  font-family: var(--font-ui);
-  font-size: var(--font-size-body);
-  line-height: var(--line-height-body);
-  font-weight: var(--weight-medium);
-  color: var(--ws-text-primary);
-}
-
-.invitation__workspace-slug {
-  font-family: var(--font-ui);
-  font-size: var(--font-size-micro);
-  line-height: var(--line-height-micro);
-  color: var(--ws-text-secondary);
+  gap: var(--space-3);
 }
 
 /* 动作组 —— Figma：间距 12 */
@@ -184,11 +169,6 @@ async function onAccept() {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-}
-
-.invitation__action-icon {
-  width: var(--space-3);
-  height: var(--space-3);
 }
 
 .invitation__note {

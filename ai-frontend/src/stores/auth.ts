@@ -8,6 +8,7 @@ import {
   type AuthSession,
   type SignInInput
 } from "@/api/auth";
+import { getStoredUser } from "@/api/base/token-storage";
 
 /**
  * 认证状态 —— 认证域的唯一状态源。
@@ -43,13 +44,20 @@ function persistRememberedAccount(account: string | null) {
   }
 }
 
+/** 已持久化的用户（刷新页面后恢复会话展示） */
+const storedUser = getStoredUser();
+
 export const useAuthStore = defineStore("auth", () => {
   /** 登录态 */
-  const status = ref<"signed_out" | "signing_in" | "signed_in">("signed_out");
+  const status = ref<"signed_out" | "signing_in" | "signed_in">(
+    storedUser ? "signed_in" : "signed_out"
+  );
   /** 当前账号 */
-  const account = ref<string | null>(null);
+  const account = ref<string | null>(storedUser?.username ?? null);
   /** 当前组织 / 工作区 */
-  const organization = ref<string | null>(null);
+  const organization = ref<string | null>(
+    storedUser ? "AI R&D Workspace" : null
+  );
   /** 最近一次失败码 */
   const errorCode = ref<AuthErrorCode | null>(null);
   /** 「记住我」保存的账号 */
@@ -118,11 +126,17 @@ export const useAuthStore = defineStore("auth", () => {
   }
 
   /** 接受工作区邀请 */
-  async function acceptInvitation(token?: string): Promise<AuthSession> {
+  async function acceptInvitation(
+    input: {
+      token?: string;
+      password?: string;
+      nickname?: string;
+    } = {}
+  ): Promise<AuthSession> {
     status.value = "signing_in";
     errorCode.value = null;
     try {
-      const session = await authGateway.acceptInvitation({ token });
+      const session = await authGateway.acceptInvitation(input);
       applySession(session);
       return session;
     } catch (error) {
@@ -133,8 +147,9 @@ export const useAuthStore = defineStore("auth", () => {
     }
   }
 
-  /** 结束会话（会话过期页 / 切换账号） */
-  function signOut() {
+  /** 结束会话（调用服务端登出并清理本地凭据） */
+  async function signOut(): Promise<void> {
+    await authGateway.signOut();
     status.value = "signed_out";
     account.value = null;
     organization.value = null;

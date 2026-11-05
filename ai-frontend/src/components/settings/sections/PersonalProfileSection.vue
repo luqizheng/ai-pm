@@ -1,33 +1,115 @@
 <script setup lang="ts">
+import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 
 import SettingsFormRow from "../SettingsFormRow.vue";
 import SettingsFormSection from "../SettingsFormSection.vue";
 import SettingsReadOnlyField from "../SettingsReadOnlyField.vue";
 import SettingsSaveBar from "../SettingsSaveBar.vue";
-import { useDemoForm } from "../useDemoForm";
 
+import {
+  getMe,
+  resolveAvatarSrc,
+  updateMe,
+  uploadAvatar,
+  type SelfProfile
+} from "@/api/base/self-service";
 import Avatar from "@/components/ui/avatar/Avatar.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
 
 /**
- * 个人资料节内容（共享）：展示名称（可编辑）+ 头像 +
- * 个人信息（邮箱/租户/加入时间只读）。
+ * 个人资料节内容（共享）：展示名称可编辑、头像可上传；
+ * 邮箱/租户/加入时间只读（邮箱变更需要验证流程，本轮不做）。
  * 设计目录 /design/settings/personal/profile 与应用页
  * /settings/personal/profile 共用同一份表单体（§4A Profile）。
  */
 const { t } = useI18n();
 
-const {
-  draft,
-  dirty,
-  saving,
-  saved,
-  error,
-  save,
-  cancel: resetDraft
-} = useDemoForm(() => ({ displayName: "Han Lin" }));
+const profile = ref<SelfProfile | null>(null);
+const displayName = ref("");
+const avatarSrc = ref<string | undefined>(undefined);
+const loading = ref(true);
+const saving = ref(false);
+const saved = ref(false);
+const error = ref(false);
+const avatarInput = ref<HTMLInputElement | null>(null);
+
+const dirty = computed(
+  () => profile.value !== null && displayName.value !== profile.value.nickname
+);
+
+const email = computed(() => profile.value?.email ?? "");
+const joinedAt = computed(() => profile.value?.created_at?.slice(0, 10) ?? "");
+
+async function load() {
+  loading.value = true;
+  error.value = false;
+  try {
+    const me = await getMe();
+    profile.value = me;
+    displayName.value = me.nickname;
+    avatarSrc.value = await resolveAvatarSrc(me.avatar);
+  } catch {
+    error.value = true;
+  } finally {
+    loading.value = false;
+  }
+}
+
+function cancel() {
+  if (profile.value) {
+    displayName.value = profile.value.nickname;
+  }
+}
+
+async function save() {
+  saving.value = true;
+  error.value = false;
+  try {
+    const me = await updateMe({ nickname: displayName.value.trim() });
+    profile.value = me;
+    displayName.value = me.nickname;
+    saved.value = true;
+    window.setTimeout(() => {
+      saved.value = false;
+    }, 2000);
+  } catch {
+    error.value = true;
+  } finally {
+    saving.value = false;
+  }
+}
+
+function pickAvatar() {
+  avatarInput.value?.click();
+}
+
+async function onAvatarChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const picked = input.files?.[0];
+  input.value = "";
+  if (!picked) return;
+
+  saving.value = true;
+  error.value = false;
+  try {
+    const url = await uploadAvatar(picked);
+    const me = await updateMe({ avatar: url });
+    profile.value = me;
+    avatarSrc.value = await resolveAvatarSrc(me.avatar);
+    saved.value = true;
+    window.setTimeout(() => {
+      saved.value = false;
+    }, 2000);
+  } catch {
+    error.value = true;
+  } finally {
+    saving.value = false;
+  }
+}
+
+onMounted(load);
 </script>
 
 <template>
@@ -39,8 +121,9 @@ const {
     >
       <Input
         id="profile-display-name"
-        v-model="draft.displayName"
+        v-model="displayName"
         :placeholder="t('settings.personal.profile.displayNamePlaceholder')"
+        :disabled="loading"
       />
     </SettingsFormRow>
 
@@ -49,10 +132,26 @@ const {
       :helper="t('settings.personal.profile.avatarHelper')"
     >
       <div class="profile-avatar">
-        <Avatar name="Han Lin" size="lg" alt="Han Lin" />
-        <Button variant="secondary" size="sm">
+        <Avatar
+          :src="avatarSrc"
+          :name="displayName || profile?.username || ''"
+          size="lg"
+        />
+        <Button
+          variant="secondary"
+          size="sm"
+          :loading="saving"
+          @click="pickAvatar"
+        >
           {{ t("settings.personal.profile.avatarChange") }}
         </Button>
+        <input
+          ref="avatarInput"
+          type="file"
+          accept="image/*"
+          class="profile-avatar__input"
+          @change="onAvatarChange"
+        />
       </div>
     </SettingsFormRow>
   </SettingsFormSection>
@@ -63,7 +162,7 @@ const {
       :flag="t('settings.common.readOnly')"
       :helper="t('settings.personal.profile.emailHelper')"
     >
-      <SettingsReadOnlyField value="han.lin@example.com" />
+      <SettingsReadOnlyField :value="email" />
     </SettingsFormRow>
     <SettingsFormRow
       :label="t('settings.personal.profile.tenant')"
@@ -73,7 +172,7 @@ const {
       <SettingsReadOnlyField value="AI R&D Workspace" />
     </SettingsFormRow>
     <SettingsFormRow :label="t('settings.personal.profile.joinedAt')">
-      <SettingsReadOnlyField value="2026-08-11" />
+      <SettingsReadOnlyField :value="joinedAt" />
     </SettingsFormRow>
   </SettingsFormSection>
 
@@ -83,7 +182,7 @@ const {
     :saved="saved"
     :error="error ? t('settings.common.saveFailed') : ''"
     @save="save"
-    @cancel="resetDraft"
+    @cancel="cancel"
   />
 </template>
 
@@ -92,5 +191,9 @@ const {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+.profile-avatar__input {
+  display: none;
 }
 </style>

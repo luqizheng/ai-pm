@@ -1,0 +1,58 @@
+command-center:
+  pageTitle: Project Command Center
+  breadcrumbProjects: Projects
+  statusNormal: Healthy
+  visibilityOrgOnly: Org-visible only
+  ownerLabel: Owner
+  createdLabel: Created
+  settings: Project Settings
+  healthTitle: Project Health
+  healthMeta: Updated {time}
+  healthAction: Metric Definitions
+  attentionTitle: Needs Attention
+  attentionPending: "{count} pending"
+  attentionUrgent: Urgent
+  attentionNotify: Notice
+  attentionInbox: Handle all in Inbox
+  attentionColItem: Item
+  attentionColCategory: Category
+  attentionColObject: Object
+  attentionColStatus: Status
+  attentionColOwner: Owner
+  attentionColGoto: Go
+  taskTitle: Task Overview
+  taskTotal: "{count} tasks"
+  taskViewAll: All Tasks
+  agentsTitle: AI Agents Overview
+  agentsMeta: Independent of tasks
+  agentsAction: AI R&D
+  agentsColAgent: Agent / Role
+  agentsColWork: Current Work
+  agentsColStatus: Status
+  agentsColProgress: Progress
+  agentsColDuration: Duration
+  runsTitle: Recent Runs
+  runsMeta: Last 2 hours
+  runsAction: Run History
+  runsColRun: Run
+  runsColAgent: Agent
+  runsColTrigger: Trigger
+  runsColResult: Result
+  runsColDuration: Time
+  delivTitle: Requirements & Deliverables
+  delivMeta: Acceptance / AI execution split
+  delivAction: View All
+  delivColRequirement: Requirement
+  delivColAcceptance: Acceptance
+  delivColAi: AI
+  delivColDeliverable: Deliverable
+  delivFootnote: Acceptance and AI execution are tracked independently; AI completion does not imply acceptance.
+  activityTitle: Recent Activity
+  activityMeta: High-value events only
+  activityAction: All Activity
+  knowledgeTitle: Knowledge Snapshot
+  knowledgeMeta: Read-only summary
+  knowledgeAction: Open Knowledge
+  knowledgeFootnote: Last synced today 08:20, covering the payment and order domains.
+  membersTitle: Members
+  membersMeta: "{humans} humans · {agents} agents"

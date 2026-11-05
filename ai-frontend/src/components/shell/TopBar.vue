@@ -135,8 +135,8 @@ function onAccountSelect(id: string) {
 }
 
 /** 退出登录：清会话回登录页（确认对话框先决） */
-function onSignOutConfirm() {
-  auth.signOut();
+async function onSignOutConfirm() {
+  await auth.signOut();
   router.push(AUTH_PATHS.login);
 }
 </script>

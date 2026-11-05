@@ -64,6 +64,35 @@ shell:
     submit: Sign in
     failed: Incorrect username or password, please try again
     securityNote: Credentials stay in this browser and are cleared on sign-out
+  adminAnnouncements:
+    title: Announcements
+    description: Manage notifications delivered to workspace members.
+    createTitle: New announcement
+    fields:
+      title: Title
+      body: Body
+      recipients: Recipient user IDs
+      recipientsHelper: Separate multiple user ids with commas.
+      pinned: Pinned
+      popover: Popover
+    actions:
+      create: Create and publish
+      publish: Publish
+      revoke: Revoke
+      refresh: Refresh
+    columns:
+      title: Title
+      status: Status
+      publishAt: Publish at
+      actions: Actions
+    status:
+      draft: Draft
+      scheduled: Scheduled
+      published: Published
+      revoked: Revoked
+    empty: No announcements yet.
+    failed: Operation failed. Try again.
+    required: Title, body and recipients are required.
   status:
     notFoundTitle: Page not found
     notFoundHint: The address may have been moved or removed
@@ -157,6 +186,7 @@ shell:
         devenv: Development Environment
         adminSettings: Settings
         adminMembers: Members
+        adminAnnouncements: Announcements
       sub:
         overview: Overview
         branches: Branches

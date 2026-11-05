@@ -2,10 +2,14 @@ import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 
 import {
-  demoNotificationsLoader,
-  type NotificationsLoader
-} from "@/components/global/notification/demo";
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead
+} from "@/api/notifications";
 import type { NotificationRecord } from "@/components/global/notification/types";
+
+/** 通知加载器（测试/故事可注入；默认走真实公告接口） */
+export type NotificationsLoader = () => Promise<NotificationRecord[]>;
 
 /**
  * 通知中心状态（Global/Notification 族共享）。
@@ -23,7 +27,7 @@ export const useNotificationsStore = defineStore("notifications", () => {
   );
 
   /** 加载事件流；loader rejected → error（下拉/中心的 Retry 重新调用） */
-  async function load(loader: NotificationsLoader = demoNotificationsLoader) {
+  async function load(loader: NotificationsLoader = listNotifications) {
     status.value = "loading";
     try {
       records.value = await loader();
@@ -33,18 +37,35 @@ export const useNotificationsStore = defineStore("notifications", () => {
     }
   }
 
-  function markRead(id: string) {
+  /** 标记已读：先本地反馈，再持久化；失败回滚 */
+  async function markRead(id: string) {
     const record = records.value.find(item => item.id === id);
-    if (record) record.read = true;
+    if (!record || record.read) return;
+    record.read = true;
+    try {
+      await markNotificationRead(id);
+    } catch {
+      record.read = false;
+    }
   }
 
+  /** 标记未读：服务端未提供撤销端点，仅本地生效 */
   function markUnread(id: string) {
     const record = records.value.find(item => item.id === id);
     if (record) record.read = false;
   }
 
-  function markAllRead() {
+  /** 全部已读：持久化后刷新未读计数 */
+  async function markAllRead() {
+    const previous = records.value.map(record => record.read);
     for (const record of records.value) record.read = true;
+    try {
+      await markAllNotificationsRead();
+    } catch {
+      records.value.forEach((record, index) => {
+        record.read = previous[index] ?? false;
+      });
+    }
   }
 
   return {

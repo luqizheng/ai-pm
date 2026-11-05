@@ -1,13 +1,20 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { createPinia, setActivePinia } from "pinia";
+
+vi.mock("@/api/notifications", () => ({
+  listNotifications: vi.fn(async () => demoNotificationRecords),
+  markNotificationRead: vi.fn(async () => {}),
+  markAllNotificationsRead: vi.fn(async () => {})
+}));
 
 import NotificationDropdown from "./NotificationDropdown.vue";
 import { demoNotificationRecords } from "./demo";
 import { useNotificationsStore } from "@/stores/notifications";
 import { i18n } from "@/lib/i18n";
+import { listNotifications } from "@/api/notifications";
 
 /**
  * 通知下拉（Global/Notification/Dropdown 五态）。
@@ -140,6 +147,12 @@ describe("NotificationDropdown", () => {
   });
 
   it("空闲事件流：打开触发加载（Loading → Ready）", async () => {
+    // 首次加载注入延迟，保证 loading 态可被观测
+    vi.mocked(listNotifications).mockImplementationOnce(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return demoNotificationRecords;
+    });
+
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useNotificationsStore();

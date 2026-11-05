@@ -1,0 +1,58 @@
+command-center:
+  pageTitle: 项目总控台
+  breadcrumbProjects: 项目
+  statusNormal: 正常运行
+  visibilityOrgOnly: 仅组织内可见
+  ownerLabel: 负责人
+  createdLabel: 创建
+  settings: 项目设置
+  healthTitle: 项目健康度
+  healthMeta: 更新于 {time}
+  healthAction: 查看指标定义
+  attentionTitle: 需关注事项
+  attentionPending: "{count} 项待处理"
+  attentionUrgent: 紧急
+  attentionNotify: 告知
+  attentionInbox: 前往 Inbox 处理全部
+  attentionColItem: 事项
+  attentionColCategory: 类别
+  attentionColObject: 业务对象
+  attentionColStatus: 状态
+  attentionColOwner: 责任
+  attentionColGoto: 直达
+  taskTitle: 任务概览
+  taskTotal: "{count} 个任务"
+  taskViewAll: 全部任务
+  agentsTitle: AI Agents 概览
+  agentsMeta: 独立于任务状态
+  agentsAction: AI R&D
+  agentsColAgent: Agent / 角色
+  agentsColWork: 当前工作
+  agentsColStatus: 状态
+  agentsColProgress: 进度
+  agentsColDuration: 时长
+  runsTitle: 最近运行记录
+  runsMeta: 近 2 小时
+  runsAction: 运行历史
+  runsColRun: 运行
+  runsColAgent: Agent
+  runsColTrigger: 触发
+  runsColResult: 结果
+  runsColDuration: 耗时
+  delivTitle: 需求与交付物
+  delivMeta: 人工验收 / AI 执行分列
+  delivAction: 查看全部
+  delivColRequirement: 需求
+  delivColAcceptance: 验收
+  delivColAi: AI
+  delivColDeliverable: 交付物
+  delivFootnote: 人工验收与 AI 执行状态独立记录，AI 完成不代表验收通过。
+  activityTitle: 最近项目动态
+  activityMeta: 仅高价值事件
+  activityAction: 全部动态
+  knowledgeTitle: 知识快照
+  knowledgeMeta: 只读摘要
+  knowledgeAction: 打开 Knowledge
+  knowledgeFootnote: 知识库最近一次同步于今日 08:20，覆盖支付与订单两个域。
+  membersTitle: 项目成员
+  membersMeta: "{humans} 人 · {agents} Agent"

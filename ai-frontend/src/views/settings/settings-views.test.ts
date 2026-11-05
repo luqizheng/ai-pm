@@ -1,9 +1,76 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { VueWrapper } from "@vue/test-utils";
+import { flushPromises } from "@vue/test-utils";
 import type { Component } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { DOMWrapper } from "@vue/test-utils";
+
+const { selfServiceApi } = vi.hoisted(() => ({
+  selfServiceApi: {
+    profile: {
+      id: "u-1",
+      username: "han.lin",
+      email: "han.lin@example.com",
+      phone: null,
+      nickname: "Han Lin",
+      avatar: null,
+      status: "active",
+      email_verified: true,
+      phone_verified: false,
+      created_at: "2026-08-11T00:00:00Z",
+      updated_at: "2026-08-11T00:00:00Z"
+    },
+    sessions: [
+      {
+        id: "s-1",
+        user_id: "u-1",
+        client_ip: "Shanghai, CN",
+        user_agent: "MacBook Pro · Chrome",
+        created_at: "2026-11-04 15:42",
+        expires_at: "2026-11-05 15:42",
+        is_current: true
+      },
+      {
+        id: "s-2",
+        user_id: "u-1",
+        client_ip: "Shanghai, CN",
+        user_agent: "iPhone 15 · App",
+        created_at: "2026-11-03 22:10",
+        expires_at: "2026-11-04 22:10",
+        is_current: false
+      },
+      {
+        id: "s-3",
+        user_id: "u-1",
+        client_ip: "Berlin, DE",
+        user_agent: "Windows 11 · Edge",
+        created_at: "2026-10-30 09:18",
+        expires_at: "2026-10-31 09:18",
+        is_current: false
+      }
+    ]
+  }
+}));
+
+vi.mock("@/api/base/self-service", () => ({
+  getMe: vi.fn(async () => ({ ...selfServiceApi.profile })),
+  updateMe: vi.fn(async (input: { nickname?: string; avatar?: string }) => ({
+    ...selfServiceApi.profile,
+    ...input
+  })),
+  changePassword: vi.fn(async () => {}),
+  listSessions: vi.fn(async () =>
+    selfServiceApi.sessions.map(session => ({ ...session }))
+  ),
+  revokeSession: vi.fn(async (sessionId: string) => {
+    selfServiceApi.sessions = selfServiceApi.sessions.filter(
+      session => session.id !== sessionId
+    );
+  }),
+  uploadAvatar: vi.fn(),
+  resolveAvatarSrc: vi.fn(async () => undefined)
+}));
 
 import { mountShell } from "@/lib/test-utils";
 import { buildRoutes } from "@/router";
@@ -107,6 +174,7 @@ describe("个人域五节（共享节组件）", () => {
       SettingsProfileView,
       "/settings/personal/profile"
     );
+    await flushPromises();
     expect(wrapper.find(".settings-savebar").exists()).toBe(false);
 
     const input = wrapper.find("#profile-display-name");
@@ -128,6 +196,7 @@ describe("个人域五节（共享节组件）", () => {
       SettingsSecurityView,
       "/settings/personal/security"
     );
+    await flushPromises();
     const rowsBefore = wrapper.findAll("tbody tr").length;
     expect(rowsBefore).toBe(3);
 
@@ -141,6 +210,7 @@ describe("个人域五节（共享节组件）", () => {
       b.textContent?.includes("吊销")
     );
     await new DOMWrapper(confirmButtons.at(-1)!).trigger("click");
+    await flushPromises();
     expect(wrapper.findAll("tbody tr").length).toBe(rowsBefore - 1);
   });
 

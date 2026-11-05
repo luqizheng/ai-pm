@@ -426,6 +426,14 @@
   --ws-elevated: #e8ebf2;
   --ws-border: #c7cdd9;
 
+  /* 浅色明度反转（2026-11-05 用户裁决）：卡片/浮层（raised/overlay）改用
+   * 白色 surface —— 中心内容区以浅于 elevated 的白色为主，
+   * 层次归正为「页面底灰 < 卡片白 < 卡内嵌套灰」；
+   * elevated 灰只留给卡内嵌套面（badge / subtle / hover / 骨架 / 禁用）。
+   * 深色模式维持「越抬升越亮」，不受影响。 */
+  --surface-raised: var(--ws-surface);
+  --surface-overlay: var(--ws-surface);
+
   /* accent 着色面（浅色）—— 激活导航项 / Badge Accent 底。
      深色值 #242238 在浅色主题下过暗，改为带紫调的浅面；
      取值与 FIGMA-SYNC 台账登记的浅色候选 #EEEBFF 一致。 */

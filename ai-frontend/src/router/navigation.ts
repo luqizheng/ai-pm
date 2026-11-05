@@ -6,6 +6,7 @@ import {
   Inbox,
   LayoutDashboard,
   ListChecks,
+  Megaphone,
   ScanSearch,
   Settings2,
   Sparkles,
@@ -177,6 +178,15 @@ export const navGroups: NavGroup[] = [
         path: "/admin/members",
         labelKey: "shell.app.side.item.adminMembers",
         icon: UsersRound
+      },
+      {
+        path: "/admin/announcements",
+        labelKey: "shell.app.side.item.adminAnnouncements",
+        icon: Megaphone,
+        component: () =>
+          import("@/views/admin/AdminAnnouncementsView.vue").then(
+            module => module.default
+          )
       }
     ]
   }

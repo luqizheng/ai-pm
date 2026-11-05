@@ -7,8 +7,9 @@ import {
 } from "vue-router";
 
 import { navGroups, type NavItem } from "./navigation";
-import { authRoutes } from "./auth";
+import { AUTH_PATHS, authRoutes } from "./auth";
 import { designRoutes } from "./design";
+import { getAccessToken, getRefreshToken } from "@/api/base/token-storage";
 import NotificationsView from "@/views/notifications/NotificationsView.vue";
 import SettingsLandingView from "@/views/settings/SettingsLandingView.vue";
 import SettingsProfileView from "@/views/settings/SettingsProfileView.vue";
@@ -19,6 +20,7 @@ import SettingsAiView from "@/views/settings/SettingsAiView.vue";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 import InitializationOverviewView from "@/views/project/initialization/InitializationOverviewView.vue";
 import ProjectCreateView from "@/views/project/create/ProjectCreateView.vue";
+import CommandCenterView from "@/views/project/command-center/CommandCenterView.vue";
 
 /**
  * 应用壳路由表 —— **由导航树派生**（src/router/navigation.ts 是单源）。
@@ -93,6 +95,14 @@ export function buildRoutes(): RouteRecordRaw[] {
     path: "/project/create",
     component: ProjectCreateView,
     meta: { title: "s01.project-create.pageTitle" }
+  });
+
+  // 项目总控台（Project Command Center）：项目域工作入口（mock 数据先行），
+  // 不占主导航——入口 = 项目切换后的落地页（S01-00 §7.1，该分支合并前先注册直达路由）。
+  routes.push({
+    path: "/project/command-center",
+    component: CommandCenterView,
+    meta: { title: "s01.command-center.pageTitle" }
   });
 
   // 通知中心（Global/Notification 族完整事件面；不在左导航树内，
@@ -172,6 +182,36 @@ export const router = createRouter({
   history: createHistory(),
   routes: buildRoutes(),
   scrollBehavior: () => ({ top: 0 })
+});
+
+/**
+ * 认证守卫：无任何凭据时把业务页重定向到登录页。
+ *
+ * 只判断凭据是否存在，不判断 access token 是否过期 —— 过期由 HTTP 客户端的
+ * 单飞刷新处理；两者都缺失才视为未登录，避免刷新可用时被误踢。
+ */
+export const PUBLIC_LAYOUTS = new Set(["auth", "bare", "design"]);
+
+router.beforeEach(to => {
+  const layout = typeof to.meta.layout === "string" ? to.meta.layout : "";
+  if (PUBLIC_LAYOUTS.has(layout)) {
+    if (
+      to.path === AUTH_PATHS.login &&
+      (getAccessToken() || getRefreshToken())
+    ) {
+      return "/dashboard";
+    }
+    return true;
+  }
+
+  if (!getAccessToken() && !getRefreshToken()) {
+    return {
+      path: AUTH_PATHS.login,
+      query: to.fullPath === "/" ? undefined : { redirect: to.fullPath }
+    };
+  }
+
+  return true;
 });
 
 export default router;

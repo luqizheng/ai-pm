@@ -4,6 +4,7 @@ import {
   type AuthSession,
   type SignInInput
 } from "../auth";
+import type { StoredUser } from "../base/token-storage";
 
 /**
  * 认证 mock 网关 —— 页面状态与交互的可演示实现。
@@ -13,7 +14,7 @@ import {
  *     用于演示 Figma 登录页的错误反馈态；
  *   - 忘记密码：恒成功（页面走「查收邮件」信息态）；
  *   - 重置口令：票据 `expired` 返回「链接已过期」，其余成功；
- *   - 接受邀请：恒成功。
+ *   - 接受邀请：携带 token + 口令时成功，其余失败。
  *
  * 接真实认证时整体替换本实现（见 src/api/auth.ts 的说明）。
  */
@@ -34,6 +35,19 @@ function delay(ms: number) {
   });
 }
 
+function mockUser(username: string, email?: string): StoredUser {
+  return {
+    id: `mock-${username}`,
+    username,
+    nickname: username,
+    email: email ?? null,
+    phone: null,
+    avatar: null,
+    roles: ["member"],
+    permissions: []
+  };
+}
+
 export const mockAuthGateway: AuthGateway = {
   async signIn(input: SignInInput): Promise<AuthSession> {
     await delay(SIGN_IN_LATENCY);
@@ -45,8 +59,13 @@ export const mockAuthGateway: AuthGateway = {
     }
     return {
       account: input.account,
-      organization: DEFAULT_ORGANIZATION
+      organization: DEFAULT_ORGANIZATION,
+      user: mockUser(input.account)
     };
+  },
+
+  async signOut(): Promise<void> {
+    await delay(DEFAULT_LATENCY);
   },
 
   async requestPasswordReset(): Promise<void> {
@@ -63,11 +82,19 @@ export const mockAuthGateway: AuthGateway = {
     }
   },
 
-  async acceptInvitation(): Promise<AuthSession> {
+  async acceptInvitation(input: {
+    token?: string;
+    password?: string;
+  }): Promise<AuthSession> {
     await delay(DEFAULT_LATENCY);
+    if (!input.token || !input.password) {
+      throw new AuthError("unknown");
+    }
+    const account = "alex.morgan@acme.dev";
     return {
-      account: "alex.morgan@acme.dev",
-      organization: DEFAULT_ORGANIZATION
+      account,
+      organization: DEFAULT_ORGANIZATION,
+      user: mockUser(account, account)
     };
   }
 };

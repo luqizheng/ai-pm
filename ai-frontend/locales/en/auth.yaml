@@ -72,19 +72,21 @@ auth:
       mismatch: Passwords do not match.
   invitation:
     title: Join your workspace
-    subtitle: "{inviter} invited you to collaborate in {workspace}."
-    invitedEmailLabel: Invited email
-    roleLabel: Workspace role
-    role: Member
-    expiresLabel: Invitation expires
-    expiresAt: November 11, 2026
-    submit: Accept invitation
+    subtitle: Set a password to activate your account.
+    passwordLabel: Set password
+    passwordPlaceholder: Enter a password
+    confirmLabel: Confirm password
+    submit: Set password and join
     submitting: Joining…
-    note: "Continue as {account}. By joining, you agree to the workspace's terms and access policies."
+    note: By joining, you agree to the workspace's terms and access policies.
     notYourAccount: Not your account?
     useAnotherAccount: Use another account
     errorTitle: This invitation is no longer valid
     errorDetail: Ask your workspace administrator to send a new invitation.
+    validation:
+      passwordRequired: Enter a password.
+      passwordTooShort: Password must be at least 8 characters.
+      mismatch: Passwords do not match.
   loading:
     title: Signing you in
     subtitle: Verifying your account and establishing a secure session.

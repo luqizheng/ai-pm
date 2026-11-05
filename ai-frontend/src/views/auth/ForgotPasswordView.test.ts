@@ -1,7 +1,22 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
+
+const { authGateway } = vi.hoisted(() => ({
+  authGateway: {
+    signIn: vi.fn(),
+    signOut: vi.fn(async () => {}),
+    requestPasswordReset: vi.fn(async () => {}),
+    resetPassword: vi.fn(async () => {}),
+    acceptInvitation: vi.fn()
+  }
+}));
+
+vi.mock("@/api/auth", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/api/auth")>();
+  return { ...actual, authGateway };
+});
 
 import ForgotPasswordView from "./ForgotPasswordView.vue";
 import { mountShell } from "@/components/shell/test-utils";
@@ -11,6 +26,9 @@ import { i18n } from "@/lib/i18n";
  * 找回口令页行为：邮箱校验、提交后回到「查收邮件」信息态。
  */
 describe("ForgotPasswordView", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
   it("空邮箱提交时报出必填错误", async () => {
     const { wrapper, router } = mountShell(ForgotPasswordView);
     await router.isReady();
@@ -46,7 +64,6 @@ describe("ForgotPasswordView", () => {
     await wrapper.find("#auth-forgot-email").setValue("alex.morgan@acme.dev");
     await wrapper.find("button[type=submit]").trigger("click");
 
-    await new Promise(resolve => setTimeout(resolve, 600));
     await flushPromises();
     await nextTick();
 

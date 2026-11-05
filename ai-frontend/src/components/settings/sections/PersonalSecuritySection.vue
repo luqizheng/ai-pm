@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 
 import SettingsConfirmationDialog from "../SettingsConfirmationDialog.vue";
@@ -7,9 +7,14 @@ import SettingsFormRow from "../SettingsFormRow.vue";
 import SettingsFormSection from "../SettingsFormSection.vue";
 import SettingsSaveBar from "../SettingsSaveBar.vue";
 import SettingsValidationMessage from "../SettingsValidationMessage.vue";
-import { SESSIONS_FIXTURE, type DemoSession } from "../settings.model";
+import type { DemoSession } from "../settings.model";
 import { useDemoForm } from "../useDemoForm";
 
+import {
+  changePassword,
+  listSessions,
+  revokeSession
+} from "@/api/base/self-service";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
@@ -22,7 +27,7 @@ import TableHeader from "@/components/ui/table/TableHeader.vue";
 import TableRow from "@/components/ui/table/TableRow.vue";
 
 /**
- * 个人安全节内容（共享）：密码修改（校验错误演示 §6.5）+
+ * 个人安全节内容（共享）：密码修改（校验错误 §6.5）+
  * 活跃会话（吊销 = 破坏性确认 §6.7）+ 登录安全（2FA/通行密钥为
  * 规划中能力，§9 Proposed）。
  * 设计目录 /design/settings/personal/security 与应用页
@@ -33,12 +38,12 @@ const { t } = useI18n();
 const {
   draft,
   dirty,
-  saving,
-  saved,
-  error,
-  save,
   cancel: resetDraft
 } = useDemoForm(() => ({ current: "", next: "", confirm: "" }));
+
+const saving = ref(false);
+const saved = ref(false);
+const error = ref("");
 
 const validation = computed(() => {
   if (dirty.value) {
@@ -55,19 +60,60 @@ const validation = computed(() => {
   return "";
 });
 
+async function save() {
+  if (validation.value) return;
+  saving.value = true;
+  error.value = "";
+  try {
+    await changePassword(draft.value.current, draft.value.next);
+    draft.value.current = "";
+    draft.value.next = "";
+    draft.value.confirm = "";
+    resetDraft();
+    saved.value = true;
+    window.setTimeout(() => {
+      saved.value = false;
+    }, 2000);
+  } catch {
+    error.value = "failed";
+  } finally {
+    saving.value = false;
+  }
+}
+
 /** 会话吊销：候选 + 确认弹窗 + 已吊销结果集 */
-const sessions = ref<DemoSession[]>(SESSIONS_FIXTURE);
+const sessions = ref<DemoSession[]>([]);
 const revokeTarget = ref<DemoSession | null>(null);
 const revokeOpen = computed(() => revokeTarget.value !== null);
 
-function confirmRevoke() {
+async function loadSessions() {
+  try {
+    const list = await listSessions();
+    sessions.value = list.map(session => ({
+      id: session.id,
+      device: session.user_agent ?? session.client_ip,
+      location: session.client_ip,
+      lastActive: session.created_at,
+      current: session.is_current
+    }));
+  } catch {
+    sessions.value = [];
+  }
+}
+
+async function confirmRevoke() {
   if (revokeTarget.value) {
-    sessions.value = sessions.value.filter(
-      session => session.id !== revokeTarget.value?.id
-    );
+    try {
+      await revokeSession(revokeTarget.value.id);
+      await loadSessions();
+    } catch {
+      error.value = "failed";
+    }
   }
   revokeTarget.value = null;
 }
+
+onMounted(loadSessions);
 
 const twoFactor = ref(false);
 const passkeys = ref(false);

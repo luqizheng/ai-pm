@@ -45,7 +45,7 @@ describe("SideNav", () => {
     await toggles[3].trigger("click");
     await nextTick();
 
-    expect(adminItems().length).toBe(2);
+    expect(adminItems().length).toBe(3);
   });
 
   it("当前路由对应的导航项带激活标记", async () => {

@@ -72,19 +72,21 @@ auth:
       mismatch: 两次输入的口令不一致。
   invitation:
     title: 加入工作区
-    subtitle: "{inviter} 邀请你协作于 {workspace}。"
-    invitedEmailLabel: 受邀邮箱
-    roleLabel: 工作区角色
-    role: 成员
-    expiresLabel: 邀请过期时间
-    expiresAt: 2026 年 11 月 11 日
-    submit: 接受邀请
+    subtitle: 设置一个口令以激活你的账号。
+    passwordLabel: 设置口令
+    passwordPlaceholder: 请输入口令
+    confirmLabel: 确认口令
+    submit: 设置口令并加入
     submitting: 正在加入…
-    note: "将以 {account} 的身份继续。加入即表示你同意该工作区的条款与访问策略。"
+    note: 加入即表示你同意该工作区的条款与访问策略。
     notYourAccount: 不是你的账号？
     useAnotherAccount: 换一个账号
     errorTitle: 该邀请已失效
     errorDetail: 请联系工作区管理员重新发送邀请。
+    validation:
+      passwordRequired: 请输入口令。
+      passwordTooShort: 口令至少 8 个字符。
+      mismatch: 两次输入的口令不一致。
   loading:
     title: 正在为你登录
     subtitle: 正在核验账号并建立安全会话。

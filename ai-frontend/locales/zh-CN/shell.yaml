@@ -64,6 +64,35 @@ shell:
     submit: 登录
     failed: 用户名或密码不正确，请重新输入
     securityNote: 会话凭证仅保存在本机浏览器，退出登录后清除
+  adminAnnouncements:
+    title: 公告管理
+    description: 维护发送给工作区成员的通知公告。
+    createTitle: 新建公告
+    fields:
+      title: 标题
+      body: 正文
+      recipients: 收件人用户 ID
+      recipientsHelper: 多个 user id 用英文逗号分隔。
+      pinned: 置顶
+      popover: 弹出提醒
+    actions:
+      create: 创建并发布
+      publish: 发布
+      revoke: 撤销
+      refresh: 刷新
+    columns:
+      title: 标题
+      status: 状态
+      publishAt: 发布时间
+      actions: 操作
+    status:
+      draft: 草稿
+      scheduled: 定时
+      published: 已发布
+      revoked: 已撤销
+    empty: 暂无公告。
+    failed: 操作失败，请重试。
+    required: 标题、正文与收件人不能为空。
   status:
     notFoundTitle: 页面不存在
     notFoundHint: 你访问的地址可能已被移动或删除
@@ -157,6 +186,7 @@ shell:
         devenv: 开发环境
         adminSettings: 设置
         adminMembers: 成员
+        adminAnnouncements: 公告管理
       sub:
         overview: 概览
         branches: 分支
