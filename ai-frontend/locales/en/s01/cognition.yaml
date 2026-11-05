@@ -1,0 +1,66 @@
+cognition:
+  page:
+    title: Project Cognition
+    description: AI-PM analyzes project material and proposes cognition — every item becomes formal project knowledge only through your confirmation.
+  breadcrumb:
+    project: Project
+    cognition: Project Cognition
+  action:
+    start: Start Analysis
+    confirm: Confirm
+    confirmEdited: Confirm edited
+    editConfirm: Edit & Confirm
+    reject: Reject
+    cancelEdit: Cancel
+  stat:
+    knowledge: Active knowledge
+    proposed: Awaiting confirmation
+    runs: Cognition runs
+  runs:
+    title: Cognition Runs
+    empty: No cognition run yet — start the first analysis. Runs are kept as independent history.
+    meta: "{confirmed}/{total} items confirmed"
+    status:
+      completed: Completed
+      partially_completed: Partially completed
+      pending: Pending
+      failed: Failed
+      cancelled: Cancelled
+      collecting: Collecting
+      analyzing: Analyzing
+  review:
+    title: Cognition Review
+    hint: Each item is confirmed independently. AI proposals are not formal knowledge until you confirm them.
+    evidence: Evidence
+    editLabel: Edit the proposed content before confirming
+    empty:
+      title: No cognition items yet
+      description: Start an analysis run to produce cognition items from project records and repository metadata.
+  knowledge:
+    title: Project Knowledge
+    empty: Nothing confirmed yet — confirmed cognition items become project knowledge with your name and time on record.
+  domain:
+    identity: Identity
+    repository: Repository
+    domain: Domain
+    architecture: Architecture
+    convention: Convention
+    evolution: Evolution
+  confidence:
+    high: High confidence
+    medium: Medium confidence
+    low: Low confidence
+  itemState:
+    proposed: Proposed
+    confirmed: Confirmed
+    rejected: Rejected
+    investigation: Investigation required
+    deferred: Deferred
+    superseded: Superseded
+  state:
+    loading: Loading cognition…
+    loadFailed:
+      title: Failed to load cognition
+    noProject:
+      title: No project selected
+      description: Select a project to review its cognition.

@@ -20,6 +20,8 @@ import SettingsAiView from "@/views/settings/SettingsAiView.vue";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 import InitializationOverviewView from "@/views/project/initialization/InitializationOverviewView.vue";
 import ProjectCreateView from "@/views/project/create/ProjectCreateView.vue";
+import CognitionPage from "@/views/project/cognition/CognitionPage.vue";
+import BaselinePage from "@/views/project/baseline/BaselinePage.vue";
 import CommandCenterView from "@/views/project/command-center/CommandCenterView.vue";
 
 /**
@@ -91,6 +93,20 @@ export function buildRoutes(): RouteRecordRaw[] {
   // 项目创建（S01-02）：动作页，不占主导航——入口 = Personal Home「新建项目」
   // 与顶栏 Project Switcher 的 Create New Project（canCreate）。
   // 创建成功后携带 project_id 进入初始化总览（S01-02 §7 裁决 Q3）。
+  // 项目认知（S01-04）：六阶段之 cognition 的下钻页（人工启动 Run + 逐项确认）。
+  routes.push({
+    path: "/project/cognition",
+    component: CognitionPage,
+    meta: { title: "s01.cognition.page.title" }
+  });
+
+  // 项目基线（S01-05）：提案派生（知识+仓库快照）→ 逐项确认 → 版本不可变。
+  routes.push({
+    path: "/project/baseline",
+    component: BaselinePage,
+    meta: { title: "s01.baseline.page.title" }
+  });
+
   routes.push({
     path: "/project/create",
     component: ProjectCreateView,

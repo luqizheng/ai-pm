@@ -100,7 +100,7 @@ const STAGE_DEFS: StageDef[] = [
     titleKey: "stage.cognition",
     itemKeys: ["project_cognition"],
     dependsOn: ["repository"],
-    route: "/project/discovery"
+    route: "/project/cognition"
   },
   {
     id: "baseline",
@@ -108,7 +108,7 @@ const STAGE_DEFS: StageDef[] = [
     titleKey: "stage.baseline",
     itemKeys: [],
     dependsOn: ["repository", "cognition"],
-    route: "/project/discovery"
+    route: "/project/baseline"
   },
   {
     id: "environment",

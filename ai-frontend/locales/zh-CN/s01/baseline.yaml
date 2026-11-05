@@ -1,0 +1,41 @@
+baseline:
+  page:
+    title: 项目基线
+    description: 审阅并维护本项目的权威基线。AI 提案——逐项由你确认。
+  breadcrumb:
+    project: 项目
+    baseline: 项目基线
+  action:
+    propose: 生成提案
+    confirmBaseline: 确认基线
+    confirm: 确认
+    reject: 拒绝
+  status:
+    none: 尚无已确认基线
+    version: "Baseline v{version}"
+    confirmedAt: "确认于 {time}"
+  proposal:
+    title: AI 提案基线
+    notice: 本提案由已确认认知与仓库快照生成，尚未成为正式基线。
+    pending: "{count} 条待你决策——全部决策完成后才能确认基线。暂缓项将作为文档化不确定性随版本保留。"
+  history:
+    title: 基线历史
+    empty: 尚无已确认基线。
+  category:
+    identity: 项目身份
+    scope: 业务范围
+    technical: 技术基线
+    architecture: 架构基线
+    repository: 仓库基线
+    standards: 研发规范
+    constraints: 约束
+  itemState:
+    proposed: 已提案
+    confirmed: 已确认
+    rejected: 已拒绝
+    investigation: 需要调查
+    deferred: 暂缓
+  state:
+    loading: 正在加载基线…
+    loadFailed: 基线加载失败
+    noProject: 未选择项目

@@ -1,0 +1,41 @@
+baseline:
+  page:
+    title: Project Baseline
+    description: Review and maintain the authoritative baseline for this project. AI proposes — you confirm, per item.
+  breadcrumb:
+    project: Project
+    baseline: Project Baseline
+  action:
+    propose: Generate Proposal
+    confirmBaseline: Confirm Baseline
+    confirm: Confirm
+    reject: Reject
+  status:
+    none: No confirmed baseline yet
+    version: "Baseline v{version}"
+    confirmedAt: "Confirmed {time}"
+  proposal:
+    title: AI Proposed Baseline
+    notice: This proposal was generated from confirmed cognition and repository snapshots. It has not become the confirmed baseline yet.
+    pending: "{count} items awaiting your decision — confirmation is blocked until every item is decided. Deferred items stay as documented uncertainties."
+  history:
+    title: Baseline History
+    empty: No confirmed baseline yet.
+  category:
+    identity: Identity
+    scope: Scope
+    technical: Technical
+    architecture: Architecture
+    repository: Repository
+    standards: Standards
+    constraints: Constraints
+  itemState:
+    proposed: Proposed
+    confirmed: Confirmed
+    rejected: Rejected
+    investigation: Investigation required
+    deferred: Deferred
+  state:
+    loading: Loading baseline…
+    loadFailed: Failed to load baseline
+    noProject: No project selected
