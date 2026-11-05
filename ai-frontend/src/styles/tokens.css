@@ -154,6 +154,8 @@
   --font-size-nano: 10px;
   --font-size-mono-num: 15px;
   --font-size-kbd: 11px;
+  /* StatCard 大数字 —— 本地延伸（Figma 组件库无对应组件；数值展示字阶） */
+  --font-size-stat: 32px;
 
   --line-height-display: 68px;
   --line-height-h1: 52px;
@@ -166,6 +168,7 @@
   --line-height-caption: 17px;
   --line-height-micro: 16px;
   --line-height-mono-num: 22px;
+  --line-height-stat: 38px;
 
   /* 字重上限 650 */
   --weight-regular: 400;

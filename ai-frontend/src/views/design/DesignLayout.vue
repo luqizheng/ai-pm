@@ -173,7 +173,8 @@ const navSections = computed(() => [
 .design-layout {
   display: grid;
   grid-template-columns: var(--ws-sidebar-width) minmax(0, 1fr);
-  min-height: 100dvh;
+  /* 固定视口高：长页面滚动收敛在内容区（body overflow hidden，容器被撑高会截断） */
+  height: 100dvh;
   background-color: var(--ws-canvas);
   color: var(--ws-text-primary);
   font-family: var(--font-ui);
@@ -265,6 +266,7 @@ const navSections = computed(() => [
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 .design-layout__header {
@@ -301,8 +303,9 @@ const navSections = computed(() => [
 .design-layout__content {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   padding: var(--space-6);
-  overflow-x: auto;
+  overflow: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {

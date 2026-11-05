@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { GitBranch } from "lucide-vue-next";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  GitBranch,
+  ShieldAlert,
+  Timer
+} from "lucide-vue-next";
 
+import { StatCard } from "@/components/ui/stat-card";
 import { AvatarGroup } from "@/components/ui/avatar-group";
 import { ListItem } from "@/components/ui/list-item";
 import { NotificationItem } from "@/components/ui/notification-item";
@@ -132,6 +139,146 @@ const { t } = useI18n();
         </Specimen>
       </div>
     </section>
+
+    <section class="design-page__group">
+      <h2>
+        StatCard — local extension (no Figma counterpart; DS visual language)
+      </h2>
+      <div class="design-page__row">
+        <Specimen label="Stacked / Warning" width="280px">
+          <StatCard
+            label="Needs Attention"
+            value="12"
+            description="Across 3 projects"
+            :icon="AlertTriangle"
+            tone="warning"
+          />
+        </Specimen>
+        <Specimen label="Stacked / Info" width="280px">
+          <StatCard
+            label="Active projects"
+            value="8"
+            description="2 in progress"
+            :icon="GitBranch"
+            tone="info"
+          />
+        </Specimen>
+        <Specimen label="Stacked / Danger + trend" width="280px">
+          <StatCard
+            label="Blocked items"
+            value="3"
+            description="Needs your review"
+            :icon="ShieldAlert"
+            tone="danger"
+            :trend="{ direction: 'up', value: '2' }"
+          />
+        </Specimen>
+        <Specimen label="Stacked / Success + trend" width="280px">
+          <StatCard
+            label="Tasks completed"
+            value="95%"
+            description="Last 7 days"
+            :icon="CheckCircle2"
+            tone="success"
+            :trend="{ direction: 'up', value: '12%' }"
+          />
+        </Specimen>
+      </div>
+
+      <div class="design-page__row" style="margin-top: var(--space-4)">
+        <Specimen label="Trend down / Accent" width="280px">
+          <StatCard
+            label="Cycle time"
+            value="4.2d"
+            description="Rolling 30 days"
+            :icon="Timer"
+            tone="accent"
+            :trend="{ direction: 'down', value: '0.8d' }"
+          />
+        </Specimen>
+        <Specimen label="With action" width="280px">
+          <StatCard
+            label="Open reviews"
+            value="5"
+            description="Assigned to you"
+            tone="accent"
+            action-label="View details"
+            @action="() => {}"
+          />
+        </Specimen>
+        <Specimen label="Clickable + selected" width="280px">
+          <StatCard
+            label="My items"
+            value="14"
+            description="Click to filter"
+            clickable
+            selected
+            @select="() => {}"
+          />
+        </Specimen>
+        <Specimen label="Loading" width="280px">
+          <StatCard
+            label="Syncing stats"
+            value="0"
+            description="Fetching…"
+            loading
+          />
+        </Specimen>
+      </div>
+
+      <div class="design-page__row" style="margin-top: var(--space-4)">
+        <Specimen label="Compact row" width="520px">
+          <div class="statdemo__grid">
+            <StatCard label="Open" value="7" layout="compact" tone="info" />
+            <StatCard
+              label="Merged"
+              value="23"
+              layout="compact"
+              tone="success"
+            />
+            <StatCard
+              label="Blocked"
+              value="2"
+              layout="compact"
+              tone="danger"
+            />
+          </div>
+        </Specimen>
+        <Specimen label="Dashboard strip" width="720px">
+          <div class="statdemo__grid statdemo__grid--4">
+            <StatCard
+              label="Needs Attention"
+              value="12"
+              description="Across 3 projects"
+              :icon="AlertTriangle"
+              tone="warning"
+            />
+            <StatCard
+              label="Active projects"
+              value="8"
+              description="2 in progress"
+              :icon="GitBranch"
+              tone="info"
+            />
+            <StatCard
+              label="Tasks completed"
+              value="95%"
+              description="Last 7 days"
+              :icon="CheckCircle2"
+              tone="success"
+              :trend="{ direction: 'up', value: '12%' }"
+            />
+            <StatCard
+              label="Blocked items"
+              value="3"
+              description="Needs your review"
+              :icon="ShieldAlert"
+              tone="danger"
+            />
+          </div>
+        </Specimen>
+      </div>
+    </section>
   </DesignLayout>
 </template>
 
@@ -165,5 +312,15 @@ const { t } = useI18n();
   flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--space-4);
+}
+
+.statdemo__grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.statdemo__grid--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 </style>
