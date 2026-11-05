@@ -71,4 +71,16 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Dev dependencies
 wiremock = "0.6"
 # lmms 基座 crates（kellnr 私有 registry；token 在 ~/.cargo/credentials.toml [registries.kellnr]）
-digua_common_jwt = { version = "1.6.0", registry = "kellnr" }
+# ⚠️ digua_common_jwt 暂用源码快照（2026-11-05 用户裁决：调试期不采用发行版本）。
+# 来源 = low-memory-micro-services libs/common-jwt @5022fd76（与 iam/gateway 的
+# path 依赖同源同行为）。同步命令：
+#   rm -rf vendor/digua-common-jwt && cp -r ../low-memory-micro-services/libs/common-jwt vendor/digua-common-jwt
+# lmms 发布带行为变更的新版本后回退：
+#   digua_common_jwt = { version = "<新版本>", registry = "kellnr" }
+#   （并删除 vendor/digua-common-jwt 与 Dockerfile 的 COPY vendor 行）
+digua_common_jwt = { path = "vendor/digua-common-jwt" }
+
+# digua_common_consul 同走源码快照（与 common-jwt 同裁决：调试期不采用发行版本）。
+# 来源 = low-memory-micro-services libs/common-consul @<同步时 HEAD>。同步命令：
+#   rm -rf vendor/digua-common-consul && cp -r ../low-memory-micro-services/libs/common-consul vendor/digua-common-consul
+digua_common_consul = { path = "vendor/digua-common-consul" }

@@ -70,6 +70,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     tracing::info!(port, "pm-api listening");
 
+    // Consul 自注册（与 lmms 8 服务同一模型，libs 源码快照同 vendor/digua-common-consul）：
+    // SERVICE_NAME 未设（裸机 dev）⇒ no-op。compose 契约见
+    // infrastructure/docker-compose-services.yml pm-api 的 environment。
+    let consul_guard = digua_common_consul::consul_guard();
+    tokio::spawn(async move {
+        digua_common_consul::wait_for_shutdown_signal().await;
+        tracing::info!("received shutdown signal, deregistering from consul");
+        consul_guard.deregister().await;
+        std::process::exit(0);
+    });
+
     axum::serve(listener, app).await?;
     Ok(())
 }

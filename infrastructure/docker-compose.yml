@@ -16,6 +16,5 @@ include:
 
 services: {}
 
-networks:
-  superpowers:
-    driver: bridge
+# superpowers 网络由被 include 的组文件声明（external: true，start-prod.sh 幂等预建）；
+# 此处不再重复声明，避免合体合并时 external 与 driver:bridge 冲突。

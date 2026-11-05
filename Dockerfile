@@ -21,6 +21,9 @@ ENV http_proxy=${CARGO_PROXY} \
 COPY .cargo .cargo
 COPY Cargo.toml Cargo.lock ./
 COPY crates crates
+# vendor/digua-common-jwt：临时源码快照（Cargo.toml 的 digua_common_jwt path 依赖，
+# 调试期替代 kellnr 1.6.0；回退时同步删除本行）
+COPY vendor vendor
 COPY apps apps
 COPY migrations migrations
 COPY policies policies

@@ -1,4 +1,7 @@
 services:
+  # Consul 单节点 server 模式（2026-11-06 与 lmms 对齐：registrator 退役，
+  # 服务进程自注册——vendor/digua-common-consul）。持久卷随 raft 落盘，
+  # Consul 重启不丢注册；服务实例由 health check + deregister_critical_service_after 兜底。
   consul:
     image: ${consul:-hashicorp/consul:2.0.1}
     hostname: consul
@@ -7,7 +10,8 @@ services:
       - 8502:8502
     volumes:
       - ./config/consul/connect.hcl:/consul/config/connect.hcl:ro
-    command: agent -dev -node=consul-server -bind=0.0.0.0 -client=0.0.0.0
+      - consul_data:/consul/data
+    command: agent -server -bootstrap-expect=1 -node=consul-server -bind=0.0.0.0 -client=0.0.0.0
     healthcheck:
       test:
         - CMD-SHELL
@@ -15,21 +19,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - superpowers
-  registrator:
-    image: ${registrator:-gliderlabs/registrator:master}
-    depends_on:
-      consul:
-        condition: service_healthy
-    volumes:
-      - /var/run/docker.sock:/tmp/docker.sock
-    environment:
-      DOCKER_HOST: unix:///tmp/docker.sock
-      REGISTRATOR_RESYNC: 30s
-    command:
-      - consul://consul:8500
-    restart: unless-stopped
     networks:
       - superpowers
   redis:
@@ -116,6 +105,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-coder}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
+    ports:
+      - ${POSTGRES_PORT:-5434}:5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -128,11 +119,17 @@ services:
     networks:
       - superpowers
 volumes:
-  consul_data: null
-  redis_data: null
-  mysql_data: null
-  rabbitmq_data: null
-  postgres_data: null
+  consul_data:
+    name: infrastructure_consul_data
+  redis_data:
+    name: infrastructure_redis_data
+  mysql_data:
+    name: infrastructure_mysql_data
+  rabbitmq_data:
+    name: infrastructure_rabbitmq_data
+  postgres_data:
+    name: infrastructure_postgres_data
+# 与 lmms 同名共享网络语义保留：external 预建（宿主上由 start-prod.sh 幂等创建）。
 networks:
   superpowers:
-    driver: bridge
+    external: true

@@ -1,136 +1,28 @@
-x-svc-registrator-labels-config:
-  - SERVICE_NAME=config-service
-  - SERVICE_ID=config-service
-  - SERVICE_PORT=8081
-  - SERVICE_TAGS=backend,config-service
-  - SERVICE_8081_CHECK_HTTP=/health
-  - SERVICE_8081_CHECK_INTERVAL=15s
-  - SERVICE_8081_CHECK_TIMEOUT=3s
-  - logging=loki
-  - service=config-service
-  - env=staging
-x-svc-registrator-labels-file:
-  - SERVICE_NAME=file-service
-  - SERVICE_ID=file-service
-  - SERVICE_PORT=8082
-  - SERVICE_TAGS=backend,file-service
-  - SERVICE_8082_CHECK_HTTP=/health
-  - SERVICE_8082_CHECK_INTERVAL=15s
-  - SERVICE_8082_CHECK_TIMEOUT=3s
-  - logging=loki
-  - service=file-service
-  - env=staging
-x-svc-registrator-labels-gateway:
-  - SERVICE_NAME=api-gateway
-  - SERVICE_ID=api-gateway
-  - SERVICE_PORT=3000
-  - SERVICE_TAGS=backend,api-gateway
-  - SERVICE_3000_CHECK_HTTP=/health
-  - SERVICE_3000_CHECK_INTERVAL=15s
-  - SERVICE_3000_CHECK_TIMEOUT=3s
-  - logging=loki
-  - service=api-gateway
-  - env=staging
-x-svc-registrator-labels-token:
-  - SERVICE_NAME=token-service
-  - SERVICE_ID=token-service
-  - SERVICE_PORT=8082
-  - SERVICE_TAGS=backend,token-service
-  - SERVICE_8082_CHECK_HTTP=/health
-  - SERVICE_8082_CHECK_INTERVAL=15s
-  - SERVICE_8082_CHECK_TIMEOUT=3s
-  - logging=loki
-  - service=token-service
-  - env=staging
-x-svc-registrator-labels-iam:
-  - SERVICE_NAME=iam-service
-  - SERVICE_ID=iam-service
-  - SERVICE_PORT=8081
-  - SERVICE_TAGS=backend,iam-service
-  - SERVICE_8081_CHECK_HTTP=/health
-  - SERVICE_8081_CHECK_INTERVAL=15s
-  - SERVICE_8081_CHECK_TIMEOUT=3s
-  - logging=loki
-  - service=iam-service
-  - env=staging
-x-svc-registrator-labels-prue:
-  - SERVICE_NAME=prue_backend
-  - SERVICE_ID=prue_backend
-  - SERVICE_PORT=8087
-  - SERVICE_TAGS=backend,prue_backend
-  - SERVICE_8087_CHECK_HTTP=/health
-  - SERVICE_8087_CHECK_INTERVAL=15s
-  - SERVICE_8087_CHECK_TIMEOUT=3s
-  - logging=loki
-  - service=prue_backend
-  - env=staging
-x-svc-registrator-labels-notify:
-  - SERVICE_NAME=notification-service
-  - SERVICE_ID=notification-service
-  - SERVICE_PORT=8083
-  - SERVICE_TAGS=backend,notification-service
-  - SERVICE_8083_CHECK_HTTP=/health
-  - SERVICE_8083_CHECK_INTERVAL=30s
-  - SERVICE_8083_CHECK_TIMEOUT=3s
-  - logging=loki
-  - service=notification-service
-  - env=staging
-x-svc-registrator-labels-audit:
-  - SERVICE_NAME=audit-service
-  - SERVICE_ID=audit-service
-  - SERVICE_PORT=8084
-  - SERVICE_TAGS=backend,audit-service
-  - SERVICE_8084_CHECK_HTTP=/health
-  - SERVICE_8084_CHECK_INTERVAL=30s
-  - SERVICE_8084_CHECK_TIMEOUT=3s
-  - logging=loki
-  - service=audit-service
-  - env=staging
+# ── 服务自注册 + 日志采集公共契约（2026-11-06 与 lmms 对齐：registrator 退役） ──
+# 注册：pm-api 等服务进程经 vendor/digua-common-consul 读 CONSUL_ADDR/
+#       SERVICE_NAME/SERVICE_PORT/SERVICE_HEALTH_PATH → 启动注册、SIGTERM 注销、
+#       30s 对账重注册。不再使用 Docker labels（SERVICE_* labels 已删除）。
+# 日志：promtail（observability staging overlay）只发现 logging=loki 容器。
+x-consul-env: &consul-env
+  CONSUL_ADDR: "http://consul:8500"
+  SERVICE_HEALTH_PATH: "/health"
+
+x-loki-labels: &loki-labels
+  logging: "loki"
+  env: "staging"
+
+
 services:
-  config-service:
-    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/config-service:${IMAGE_TAG:-1.7.0-pg}
-    ports:
-      - 8085:8081
-    labels:
-      - SERVICE_NAME=config-service
-      - SERVICE_ID=config-service
-      - SERVICE_PORT=8081
-      - SERVICE_TAGS=backend,config-service
-      - SERVICE_8081_CHECK_HTTP=/health
-      - SERVICE_8081_CHECK_INTERVAL=15s
-      - SERVICE_8081_CHECK_TIMEOUT=3s
-      - logging=loki
-      - service=config-service
-      - env=staging
-    environment:
-      JWKS_URL: ${JWKS_URL}
-      DATABASE_URL: ${DATABASE_URL}
-      RUST_LOG: info
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
-      SERVICE_NAME: config-service
-    depends_on:
-      postgres:
-        condition: service_healthy
-      consul:
-        condition: service_healthy
-    networks:
-      - superpowers
   file-service:
     image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/file-service:${IMAGE_TAG:-1.7.0-pg}
     ports:
       - 8086:8082
     labels:
-      - SERVICE_NAME=file-service
-      - SERVICE_ID=file-service
-      - SERVICE_PORT=8082
-      - SERVICE_TAGS=backend,file-service
-      - SERVICE_8082_CHECK_HTTP=/health
-      - SERVICE_8082_CHECK_INTERVAL=15s
-      - SERVICE_8082_CHECK_TIMEOUT=3s
-      - logging=loki
-      - service=file-service
-      - env=staging
+      <<: *loki-labels
+      service: file-service
     environment:
+      <<: *consul-env
+      SERVICE_PORT: "8082"
       JWKS_URL: ${JWKS_URL}
       DATABASE_URL: ${DATABASE_URL}
       STORAGE_PATH: /var/lib/file-service/storage
@@ -151,17 +43,11 @@ services:
     ports:
       - 3000:3000
     labels:
-      - SERVICE_NAME=api-gateway
-      - SERVICE_ID=api-gateway
-      - SERVICE_PORT=3000
-      - SERVICE_TAGS=backend,api-gateway
-      - SERVICE_3000_CHECK_HTTP=/health
-      - SERVICE_3000_CHECK_INTERVAL=15s
-      - SERVICE_3000_CHECK_TIMEOUT=3s
-      - logging=loki
-      - service=api-gateway
-      - env=staging
+      <<: *loki-labels
+      service: api-gateway
     environment:
+      <<: *consul-env
+      SERVICE_PORT: "3000"
       GW_SERVER_HOST: 0.0.0.0
       GW_SERVER_PORT: '3000'
       GW_REDIS_URL: redis://redis:6379
@@ -194,19 +80,13 @@ services:
     ports:
       - 8082:8082
     labels:
-      - SERVICE_NAME=token-service
-      - SERVICE_ID=token-service
-      - SERVICE_PORT=8082
-      - SERVICE_TAGS=backend,token-service
-      - SERVICE_8082_CHECK_HTTP=/health
-      - SERVICE_8082_CHECK_INTERVAL=15s
-      - SERVICE_8082_CHECK_TIMEOUT=3s
-      - logging=loki
-      - service=token-service
-      - env=staging
+      <<: *loki-labels
+      service: token-service
     volumes:
       - ../services/token-service/config:/app/config:ro
     environment:
+      <<: *consul-env
+      SERVICE_PORT: "8082"
       SERVICE_BOOTSTRAP_TOKENS: ${SERVICE_BOOTSTRAP_TOKENS}
       TENANT_ID: ${TENANT_ID}
       SWAGGER_ENABLED: 'true'
@@ -226,19 +106,13 @@ services:
     ports:
       - 9081:8081
     labels:
-      - SERVICE_NAME=iam-service
-      - SERVICE_ID=iam-service
-      - SERVICE_PORT=8081
-      - SERVICE_TAGS=backend,iam-service
-      - SERVICE_8081_CHECK_HTTP=/health
-      - SERVICE_8081_CHECK_INTERVAL=15s
-      - SERVICE_8081_CHECK_TIMEOUT=3s
-      - logging=loki
-      - service=iam-service
-      - env=staging
+      <<: *loki-labels
+      service: iam-service
     volumes:
       - ../services/iam-service/config:/etc/iam-service
     environment:
+      <<: *consul-env
+      SERVICE_PORT: "8081"
       SERVICE_BOOTSTRAP_TOKEN: ${IAM_DEV_BT}
       TENANT_ID: ${TENANT_ID}
       TOKEN_SERVICE_URL: ${TOKEN_SERVICE_URL}
@@ -296,17 +170,11 @@ services:
     ports:
       - 8087:8087
     labels:
-      - SERVICE_NAME=prue_backend
-      - SERVICE_ID=prue_backend
-      - SERVICE_PORT=8087
-      - SERVICE_TAGS=backend,prue_backend
-      - SERVICE_8087_CHECK_HTTP=/health
-      - SERVICE_8087_CHECK_INTERVAL=15s
-      - SERVICE_8087_CHECK_TIMEOUT=3s
-      - logging=loki
-      - service=prue_backend
-      - env=staging
+      <<: *loki-labels
+      service: prue_backend
     environment:
+      <<: *consul-env
+      SERVICE_PORT: "8087"
       JWKS_URL: ${JWKS_URL}
       DATABASE_URL: ${DATABASE_URL}
       RUST_LOG: info
@@ -324,19 +192,13 @@ services:
     ports:
       - 8083:8083
     labels:
-      - SERVICE_NAME=notification-service
-      - SERVICE_ID=notification-service
-      - SERVICE_PORT=8083
-      - SERVICE_TAGS=backend,notification-service
-      - SERVICE_8083_CHECK_HTTP=/health
-      - SERVICE_8083_CHECK_INTERVAL=30s
-      - SERVICE_8083_CHECK_TIMEOUT=3s
-      - logging=loki
-      - service=notification-service
-      - env=staging
+      <<: *loki-labels
+      service: notification-service
     volumes:
       - ../services/notification-service/config:/etc/notification-service
     environment:
+      <<: *consul-env
+      SERVICE_PORT: "8083"
       CONFIG_PATH: /etc/notification-service/config.yaml
       SERVICE_BOOTSTRAP_TOKEN: ${NOTIFICATION_DEV_BT}
       TENANT_ID: ${TENANT_ID}
@@ -395,17 +257,11 @@ services:
     ports:
       - 8084:8084
     labels:
-      - SERVICE_NAME=audit-service
-      - SERVICE_ID=audit-service
-      - SERVICE_PORT=8084
-      - SERVICE_TAGS=backend,audit-service
-      - SERVICE_8084_CHECK_HTTP=/health
-      - SERVICE_8084_CHECK_INTERVAL=30s
-      - SERVICE_8084_CHECK_TIMEOUT=3s
-      - logging=loki
-      - service=audit-service
-      - env=staging
+      <<: *loki-labels
+      service: audit-service
     environment:
+      <<: *consul-env
+      SERVICE_PORT: "8084"
       JWKS_URL: ${JWKS_URL}
       DATABASE_URL: ${DATABASE_URL}
       EVENT_BUS_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@${RABBITMQ_HOST}:${RABBITMQ_PORT}/%2f
@@ -454,7 +310,14 @@ services:
 
   pm-api:
     image: ${AIPM_REGISTRY:-aipm}/pm-api:${AIPM_VERSION:-0.1.0}
+    # 2026-11-05 起 pm 与 iam 一致挂网关对外（/v1/pm/* → pm-api，见 config/api-gateway/
+    # routes/pm.router.toml）；registrator 依这些标签把服务注册进 consul。
+    labels:
+      <<: *loki-labels
+      service: pm-api
     environment:
+      <<: *consul-env
+      SERVICE_PORT: "8090"
       DATABASE_URL: postgres://aipm:aipm@aipm-pg:5432/aipm
       PM_API_PORT: "8090"
       # 鉴权（slice B）：默认 jwks fail-closed，JWKS 取自同网络（superpowers）的 lmms token-service
@@ -528,7 +391,10 @@ services:
       - superpowers
 
 volumes:
-  file-storage: null
-  aipm_pg_data: null
+  file-storage:
+    name: infrastructure_file-storage
+  aipm_pg_data:
+    name: infrastructure_aipm_pg_data
 networks:
-  superpowers: null
+  superpowers:
+    external: true
