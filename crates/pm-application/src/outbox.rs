@@ -128,6 +128,57 @@ pub const CATALOG: &[EventSpec] = &[
         enabled_by_default: true,
         producer: "run_executor.rs",
     },
+    // ── S02D-22 需求域事件族（S02-04 V1.2 §13.3）：目录登记先行，消费方
+    // （总控台/通知/I7 巡检差分）落地前不生产——「不假装消费」。生产点=
+    // pm-application::requirement（S02-I1 服务内留位，启用时随命令事务写入）。
+    EventSpec {
+        event_type: "RequirementCreated",
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "requirement.rs（留位）",
+    },
+    EventSpec {
+        event_type: "RequirementRevisionSubmitted",
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "requirement.rs（留位）",
+    },
+    EventSpec {
+        event_type: "RequirementConfirmed",
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "requirement.rs（留位）",
+    },
+    EventSpec {
+        event_type: "RequirementRevisionRejected",
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "requirement.rs（留位）",
+    },
+    EventSpec {
+        event_type: "RequirementSuperseded",
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "requirement.rs（留位）",
+    },
+    EventSpec {
+        event_type: "RequirementWithdrawn",
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "requirement.rs（留位）",
+    },
+    EventSpec {
+        event_type: "RequirementArchived",
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "requirement.rs（留位）",
+    },
+    EventSpec {
+        event_type: "RequirementBasisChanged",
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "requirement.rs（留位；I4 改绑命令启用）",
+    },
 ];
 
 /// 查目录条目。未登记的事件类型**一律视为不可生产**。

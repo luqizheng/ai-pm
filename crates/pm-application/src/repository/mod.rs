@@ -111,6 +111,8 @@ impl From<PmWriteError> for RepositoryError {
             PmWriteError::NotFound(m) => RepositoryError::Validation(m),
             PmWriteError::Conflict(m) => RepositoryError::Validation(m),
             PmWriteError::Validation(m) => RepositoryError::Validation(m),
+            // S02-I1：仓库链路不会触发 Forbidden；兜底转校验错误。
+            PmWriteError::Forbidden(m) => RepositoryError::Validation(m),
             PmWriteError::Db(err) => RepositoryError::Db(err),
         }
     }

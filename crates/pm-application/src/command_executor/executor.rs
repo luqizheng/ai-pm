@@ -432,8 +432,8 @@ impl PgCommandExecutor {
             let content_text = serde_json::to_string(&content).unwrap_or_default();
             let hash = knowledge::content_hash(&content_text);
             let requirement_id: Uuid = sqlx::query_scalar(
-                "INSERT INTO delivery.requirement (project_id, code, title, status, tenant_id) \
-                 VALUES ($1, $2, $3, 'draft', (SELECT tenant_id FROM core.project WHERE id = $1)) \
+                "INSERT INTO delivery.requirement (project_id, code, title, lifecycle_status, tenant_id) \
+                 VALUES ($1, $2, $3, 'active', (SELECT tenant_id FROM core.project WHERE id = $1)) \
                  RETURNING id",
             )
             .bind(ctx.project_id)
@@ -456,6 +456,10 @@ impl PgCommandExecutor {
             .fetch_one(&mut *tx)
             .await
             .map_err(db_err)?;
+            // ⚠️ S02 §6.6 债务标记（0039 批保持现行为）：导入在无 Confirmation 的
+            // 情况下直接设 current_revision_id——违反新模型「current 非空 ⇒ approved
+            // + Confirmation」不变量。改造（撤自动定稿 + 任务关联降级）归冷启动导入
+            // 专项切片（S02-05 必办③），届时 task_requirement 关联按 I1-D07 降级。
             sqlx::query("UPDATE delivery.requirement SET current_revision_id = $2 WHERE id = $1")
                 .bind(requirement_id)
                 .bind(revision_id)

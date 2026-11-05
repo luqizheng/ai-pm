@@ -55,7 +55,8 @@ pub struct RequirementRow {
     pub project_id: Uuid,
     pub code: String,
     pub title: String,
-    pub status: String,
+    /// 0039（S02D-04）：原 status 列改名；是否有正式版本由 current_revision_id 表达
+    pub lifecycle_status: String,
     pub current_revision_id: Option<Uuid>,
     pub row_revision: i64,
     pub created_at: DateTime<Utc>,

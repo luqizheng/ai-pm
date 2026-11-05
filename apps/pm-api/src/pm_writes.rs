@@ -17,9 +17,7 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::{ApiError, ApiResult};
-use pm_application::pm_write::{
-    self, CreateRevisionRequest, CreateTaskRequest, UpdateTaskRequest,
-};
+use pm_application::pm_write::{self, CreateTaskRequest, UpdateTaskRequest};
 use pm_application::supervision::{DecideRequest, Decision, SupervisionError};
 
 fn conflict(message: &'static str) -> Response {
@@ -45,20 +43,6 @@ async fn task_in_tenant(pool: &sqlx::PgPool, task_id: Uuid, tenant_id: Uuid) -> 
     let found: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM delivery.task WHERE id = $1 AND tenant_id = $2")
             .bind(task_id)
-            .bind(tenant_id)
-            .fetch_optional(pool)
-            .await?;
-    found.map(|_| ()).ok_or(ApiError::NotFound("not found"))
-}
-
-async fn requirement_in_tenant(
-    pool: &sqlx::PgPool,
-    requirement_id: Uuid,
-    tenant_id: Uuid,
-) -> ApiResult<()> {
-    let found: Option<Uuid> =
-        sqlx::query_scalar("SELECT id FROM delivery.requirement WHERE id = $1 AND tenant_id = $2")
-            .bind(requirement_id)
             .bind(tenant_id)
             .fetch_optional(pool)
             .await?;
@@ -216,30 +200,4 @@ pub(crate) async fn update_task_handler(
     let actor = principal.audit_actor();
     let task = pm_write::update_task(&state.pool, task_id, body, &actor).await?;
     Ok((StatusCode::OK, Json(task)).into_response())
-}
-
-// ------------------------------------------------- revisions create / approve
-
-pub(crate) async fn create_revision_handler(
-    State(state): State<AppState>,
-    Extension(principal): Extension<AuthedPrincipal>,
-    Path(requirement_id): Path<Uuid>,
-    Json(body): Json<CreateRevisionRequest>,
-) -> ApiResult<Response> {
-    requirement_in_tenant(&state.pool, requirement_id, principal.tenant_id).await?;
-    let actor = principal.audit_actor();
-    let revision = pm_write::create_revision(&state.pool, requirement_id, body, &actor).await?;
-    Ok((StatusCode::CREATED, Json(revision)).into_response())
-}
-
-pub(crate) async fn approve_revision_handler(
-    State(state): State<AppState>,
-    Extension(principal): Extension<AuthedPrincipal>,
-    Path((requirement_id, revision_id)): Path<(Uuid, Uuid)>,
-) -> ApiResult<Response> {
-    requirement_in_tenant(&state.pool, requirement_id, principal.tenant_id).await?;
-    let actor = principal.audit_actor();
-    let revision =
-        pm_write::approve_revision(&state.pool, requirement_id, revision_id, &actor).await?;
-    Ok((StatusCode::OK, Json(revision)).into_response())
 }

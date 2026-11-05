@@ -15,6 +15,9 @@ pub enum ApiError {
     BadRequest(&'static str),
     Conflict(&'static str),
     NotFound(&'static str),
+    /// 有身份但无权限（S02-I1：AI 主体确认 / 非 Lead 治理命令）。与 404（不泄露
+    /// 存在性）和 400（参数错）区分——S02D-02 #2 的拒绝必须可观测。
+    Forbidden(&'static str),
     Internal(sqlx::Error),
 }
 
@@ -24,6 +27,7 @@ impl IntoResponse for ApiError {
             ApiError::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
             ApiError::Conflict(m) => (StatusCode::CONFLICT, m),
             ApiError::NotFound(m) => (StatusCode::NOT_FOUND, m),
+            ApiError::Forbidden(m) => (StatusCode::FORBIDDEN, m),
             ApiError::Internal(e) => {
                 tracing::error!(error = %e, "pm-api internal error");
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal error")
@@ -45,6 +49,7 @@ impl From<pm_application::pm_write::PmWriteError> for ApiError {
             pm_application::pm_write::PmWriteError::NotFound(m) => ApiError::NotFound(m),
             pm_application::pm_write::PmWriteError::Conflict(m) => ApiError::Conflict(m),
             pm_application::pm_write::PmWriteError::Validation(m) => ApiError::BadRequest(m),
+            pm_application::pm_write::PmWriteError::Forbidden(m) => ApiError::Forbidden(m),
             pm_application::pm_write::PmWriteError::Db(err) => ApiError::Internal(err),
         }
     }

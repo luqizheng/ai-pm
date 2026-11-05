@@ -87,6 +87,9 @@ async fn seed_project_with_repo(pool: &PgPool, code: &str) -> (Uuid, Uuid, Repo)
             role: Some("main".to_string()),
             default_branch: Some("main".to_string()),
             description: None,
+            // 0038（G-05）新增的 Confirmed Commit 字段：测试种子不写确认列
+            selected_branch: None,
+            selected_commit: None,
         },
     )
     .await
@@ -325,15 +328,26 @@ async fn approvals_execute_import_and_project_becomes_planning(pool: PgPool) {
         .unwrap();
     assert_eq!(project_status, "planning");
 
+    // 0039/S02D-04 语义：requirement 级不再有 draft/approved 态——导入建行即
+    // active；「不自动批准」的新等价断言 = v1 修订仍是 draft 且无 Confirmation
+    // （执行器保留设 current 指针的现行为，改造归 §6.6 专项切片，见 executor.rs 债务标记）。
     let requirements: Vec<(String, String)> = sqlx::query_as(
-        "SELECT code, status FROM delivery.requirement WHERE project_id = $1 ORDER BY code",
+        "SELECT code, lifecycle_status FROM delivery.requirement WHERE project_id = $1 ORDER BY code",
     )
     .bind(project_id)
     .fetch_all(&pool)
     .await
     .unwrap();
     assert_eq!(requirements.len(), draft.requirements.len());
-    assert!(requirements.iter().all(|(_, status)| status == "draft"));
+    assert!(requirements.iter().all(|(_, lifecycle)| lifecycle == "active"));
+    let draft_v1: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM delivery.requirement r           JOIN delivery.requirement_revision v ON v.requirement_id = r.id AND v.version = 1           WHERE r.project_id = $1 AND v.state = 'draft'",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(draft_v1 as usize, requirements.len(), "import must not auto-approve v1");
 
     let unassigned: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM delivery.task WHERE project_id = $1 AND assignee_id IS NULL",
@@ -575,6 +589,9 @@ async fn seed_broken_repo(pool: &PgPool, project_id: Uuid) -> Uuid {
             role: Some("main".to_string()),
             default_branch: Some("main".to_string()),
             description: None,
+            // 0038（G-05）新增的 Confirmed Commit 字段：测试种子不写确认列
+            selected_branch: None,
+            selected_commit: None,
         },
     )
     .await

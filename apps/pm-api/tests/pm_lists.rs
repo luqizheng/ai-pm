@@ -316,8 +316,8 @@ async fn revisions_list_orders_by_version_desc(pool: PgPool) {
     common::join_dev(&pool, boot.project_id).await;
     let requirement_id = uuid::Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO delivery.requirement (id, project_id, code, title, status, tenant_id) \
-         VALUES ($1, $2, 'REQ-1', 'rev requirement', 'draft', \
+        "INSERT INTO delivery.requirement (id, project_id, code, title, lifecycle_status, tenant_id) \
+         VALUES ($1, $2, 'REQ-1', 'rev requirement', 'active', \
                  (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(requirement_id)

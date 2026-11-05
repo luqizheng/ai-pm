@@ -365,14 +365,18 @@ async fn cold_start_import_runs_end_to_end(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(requirement_count, expected_requirements);
+    // 0039/S02D-04：requirement 级 draft 态废除——「不自动批准」的新等价断言
+    // = 各需求 v1 修订仍为 draft（无伪造 approved）。
     let non_draft: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.requirement WHERE project_id = $1 AND status <> 'draft'",
+        "SELECT count(*) FROM delivery.requirement_revision v \
+         JOIN delivery.requirement r ON r.id = v.requirement_id \
+         WHERE r.project_id = $1 AND v.version = 1 AND v.state <> 'draft'",
     )
     .bind(project_id)
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(non_draft, 0, "imported requirements stay in draft");
+    assert_eq!(non_draft, 0, "imported requirements' v1 stays draft");
     let milestone_count: i64 =
         sqlx::query_scalar("SELECT count(*) FROM delivery.milestone WHERE project_id = $1")
             .bind(project_id)

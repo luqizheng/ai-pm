@@ -147,8 +147,8 @@ async fn seed_delivery_rows(pool: &sqlx::PgPool, seed: &Seed) -> (Uuid, Uuid, Uu
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO delivery.requirement (id, project_id, code, title, status, tenant_id) \
-         VALUES ($1, $2, $3, 'Cache overlap handling', 'approved', \
+        "INSERT INTO delivery.requirement (id, project_id, code, title, lifecycle_status, tenant_id) \
+         VALUES ($1, $2, $3, 'Cache overlap handling', 'active', \
                   (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
     .bind(requirement_id)

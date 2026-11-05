@@ -61,13 +61,13 @@ export interface Principal {
   created_at: string;
 }
 
-/** delivery.requirement */
+/** delivery.requirement（0039 起 status 列改名 lifecycle_status，S02D-04 三态） */
 export interface Requirement {
   id: string;
   project_id: string;
   code: string;
   title: string;
-  status: string;
+  lifecycle_status: string;
   current_revision_id: string | null;
   row_revision: number;
   created_at: string;

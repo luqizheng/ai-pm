@@ -95,6 +95,9 @@ pub enum PmWriteError {
     NotFound(&'static str),
     Conflict(&'static str),
     Validation(&'static str),
+    /// 有身份但无权限（S02-I1：AI 主体提交确认类命令 / 非 Lead 治理命令，
+    /// S02D-02 #2 + §7.4 职责表）。
+    Forbidden(&'static str),
     Db(sqlx::Error),
 }
 
@@ -102,20 +105,6 @@ impl From<sqlx::Error> for PmWriteError {
     fn from(e: sqlx::Error) -> Self {
         PmWriteError::Db(e)
     }
-}
-
-
-#[derive(Debug, Deserialize)]
-pub struct CreateRevisionRequest {
-    #[serde(default)]
-    pub content: Option<RevisionContent>,
-}
-
-
-#[derive(Debug, Deserialize)]
-pub struct RevisionContent {
-    #[serde(default)]
-    pub markdown: Option<String>,
 }
 
 

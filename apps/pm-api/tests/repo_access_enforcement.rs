@@ -57,6 +57,9 @@ async fn world(pool: &PgPool, code: &str) -> World {
             role: Some("main".to_string()),
             default_branch: Some("main".to_string()),
             description: None,
+            // 0038（G-05）新增的 Confirmed Commit 字段：测试种子不写确认列
+            selected_branch: None,
+            selected_commit: None,
         },
     )
     .await
@@ -71,6 +74,8 @@ async fn world(pool: &PgPool, code: &str) -> World {
             role: Some("service".to_string()),
             default_branch: Some("main".to_string()),
             description: None,
+            selected_branch: None,
+            selected_commit: None,
         },
     )
     .await

@@ -36,14 +36,7 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/v1/pm/approvals", get(approvals))
         .route("/v1/pm/decisions", get(decisions))
         .route("/v1/pm/audit-logs", get(audit_logs))
-        .route(
-            "/v1/pm/requirements/{requirement_id}/revisions",
-            get(revisions).post(crate::pm_writes::create_revision_handler),
-        )
-        .route(
-            "/v1/pm/requirements/{requirement_id}/revisions/{revision_id}/approve",
-            post(crate::pm_writes::approve_revision_handler),
-        )
+        .route("/v1/pm/requirements/{requirement_id}/revisions", get(revisions))
         .route("/v1/pm/tasks", post(crate::pm_writes::create_task_handler))
         .route("/v1/pm/tasks/{task_id}", axum::routing::patch(crate::pm_writes::update_task_handler))
         .route(
@@ -251,7 +244,7 @@ async fn requirements(
             .await?;
     }
     let items: Vec<RequirementRow> = sqlx::query_as(
-        "SELECT r.id, r.project_id, r.code, r.title, r.status, r.current_revision_id, \
+        "SELECT r.id, r.project_id, r.code, r.title, r.lifecycle_status, r.current_revision_id, \
                 r.row_revision, r.created_at \
          FROM delivery.requirement r \
          WHERE r.tenant_id = $5 \

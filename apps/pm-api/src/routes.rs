@@ -203,6 +203,7 @@ fn build_router(
         .merge(crate::pm_cognition::router())
         // S01-05 项目基线：提案派生（知识+仓库快照）→ 逐项确认 → 版本不可变。
         .merge(crate::pm_baseline::router())
+        .merge(crate::pm_requirements::router())
         // 审计实时流（SSE）。EventSource 无法带 Authorization，token 走
         // `?access_token=`；auth 层只对本路径放行 query token。
         .route(

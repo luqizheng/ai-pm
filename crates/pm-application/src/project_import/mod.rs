@@ -114,6 +114,8 @@ impl From<PmWriteError> for ImportError {
             PmWriteError::Conflict(message) | PmWriteError::Validation(message) => {
                 ImportError::Model(message.to_string())
             }
+            // S02-I1：导入链路不会触发 Forbidden（确认/治理命令专属）；兜底转模型错误。
+            PmWriteError::Forbidden(message) => ImportError::Model(message.to_string()),
             PmWriteError::Db(err) => ImportError::Db(err),
         }
     }

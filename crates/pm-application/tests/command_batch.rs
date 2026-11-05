@@ -137,7 +137,7 @@ async fn create_requirements_batch_writes_draft_revisions(pool: PgPool) {
         .unwrap();
 
     let rows: Vec<(String, String, Option<Uuid>)> = sqlx::query_as(
-        "SELECT code, status, current_revision_id FROM delivery.requirement \
+        "SELECT code, lifecycle_status, current_revision_id FROM delivery.requirement \
          WHERE project_id = $1 ORDER BY code",
     )
     .bind(fx.project_id)
@@ -145,8 +145,10 @@ async fn create_requirements_batch_writes_draft_revisions(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(rows.len(), 2);
-    for (code, status, revision_id) in rows {
-        assert_eq!(status, "draft", "{code}");
+    // 0039/S02D-04：requirement 级 draft 态废除——导入建行即 active；
+    // 「不自动批准」由 v1 修订仍为 draft 表达（current 指针为 §6.6 债务，见 executor.rs）。
+    for (code, lifecycle_status, revision_id) in rows {
+        assert_eq!(lifecycle_status, "active", "{code}");
         let revision_state: String =
             sqlx::query_scalar("SELECT state FROM delivery.requirement_revision WHERE id = $1")
                 .bind(revision_id.unwrap())

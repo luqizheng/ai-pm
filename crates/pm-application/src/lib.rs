@@ -34,6 +34,7 @@ pub mod project_goal;
 pub mod project_import;
 pub mod project_member;
 pub mod read;
+pub mod requirement;
 pub mod repo_access;
 pub mod repo_facts;
 pub mod repository;
