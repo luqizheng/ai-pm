@@ -18,6 +18,8 @@
 #   - 强制 .env.prod 存在且字段填好（fail-fast 在 compose 报错之前）
 #   - compose v2.20+ 版本检查（!override 需要）
 #   - env 分层加载：先 .env，再 .env.prod（后入覆盖前入）
+#   - 缺镜像预检（5c）：up 前对 compose 全量镜像做本地差集，能 pull 的自动
+#     补，补不了的打印逐张补救命令后 fail-fast（exit 15），不再半途炸
 # ─────────────────────────────────────────────────────────────────────────────
 set -uo pipefail
 
@@ -32,6 +34,7 @@ cd "$INFRA_DIR" || { echo "[start-prod] FATAL: cannot cd to $INFRA_DIR" >&2; exi
 
 die() { echo "[start-prod] FATAL: $1" >&2; exit "${2:-10}"; }
 log() { echo "[start-prod] $*"; }
+err() { echo "[start-prod] $*" >&2; }
 
 # 语义化比较 compose 版本：要求 v2.20+（更高主版本如 v5/v6 直接放行）。
 # 不再用正则匹配 —— 旧正则只认 v2.2x~v2.99，误杀 v5.x，还误放行 v2.10.3。
@@ -108,6 +111,53 @@ if [[ -n "${COMPOSE_OVERLAY:-}" ]]; then
   [[ -f "$_ov" ]] || die "COMPOSE_OVERLAY not found: $_ov" 10
   COMPOSE_FILES+=(-f "$_ov")
   log "extra overlay: $_ov"
+fi
+
+# 5c. 缺镜像预检：把整个缺口前置诊断，避免 up 半途一张一张地炸。
+#     能 pull 的（registry / Docker Hub 直连）自动补；补不了的（本机构建的
+#     aipm 镜像、以 official/<org>/<repo> 镜像名存放的 Hub 图）逐张打印
+#     确切补救命令并 fail-fast。
+mapfile -t EXPECTED_IMAGES < <(docker compose "${COMPOSE_FILES[@]}" config --images 2>/dev/null | sort -u)
+if [[ ${#EXPECTED_IMAGES[@]} -eq 0 ]]; then
+  die "compose config produced no images — check env interpolation" 10
+fi
+MISSING_IMAGES=()
+for img in "${EXPECTED_IMAGES[@]}"; do
+  docker image inspect --format ok "$img" >/dev/null 2>&1 || MISSING_IMAGES+=("$img")
+done
+if [[ ${#MISSING_IMAGES[@]} -gt 0 ]]; then
+  log "missing ${#MISSING_IMAGES[@]} image(s): ${MISSING_IMAGES[*]}"
+  log "auto-pulling reachable ones…"
+  UNRESOLVED=()
+  for img in "${MISSING_IMAGES[@]}"; do
+    if docker pull "$img" >/dev/null 2>&1; then
+      log "pulled: $img"
+    else
+      UNRESOLVED+=("$img")
+    fi
+  done
+  if [[ ${#UNRESOLVED[@]} -gt 0 ]]; then
+    err "unresolved image(s) — not on any reachable registry:"
+    for img in "${UNRESOLVED[@]}"; do
+      case "$img" in
+        *aipm-bff:*|*aipm-web:*)
+          _tgt=runtime-bff
+          [[ "$img" == *aipm-web:* ]] && _tgt=runtime-web
+          err "  $img"
+          err "    -> build from the ai-pm-web repo:"
+          err "       docker build --target $_tgt -t $img <ai-pm-web-repo>/." ;;
+        */official/*)
+          _upstream=${img#*/official/}
+          err "  $img"
+          err "    -> pull from Docker Hub under the upstream name, then retag:"
+          err "       docker pull ${_upstream} && docker tag ${_upstream} ${img}" ;;
+        *)
+          err "  $img"
+          err "    -> docker pull ${img} (check registry/network access)" ;;
+      esac
+    done
+    die "image preflight failed — resolve the image(s) above, then rerun" 15
+  fi
 fi
 
 # 6. up
