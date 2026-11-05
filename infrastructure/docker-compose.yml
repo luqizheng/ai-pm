@@ -1,4 +1,4 @@
-# ai-pm 编排入口 —— 基础模板来自 lmms coder-compose-template 1.6.0-pg（PostgreSQL 方言）。
+# ai-pm 编排入口 —— 基础模板来自 lmms coder-compose-template 1.7.0-pg（PostgreSQL 方言）。
 # 与 lmms 同布局（目录名 infrastructure → compose 项目同名），
 # 因此网络/卷与 lmms 栈同命名空间：`superpowers` 网络即 infrastructure_superpowers，
 # ai-pm 服务与 lmms 服务可直接互访（服务名即 DNS）。

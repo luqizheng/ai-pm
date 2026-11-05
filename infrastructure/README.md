@@ -1,8 +1,8 @@
 # ai-pm 编排（infrastructure/）
 
-基础模板来自 lmms **coder-compose-template 1.6.0-pg**（PostgreSQL 方言，2026-11-03 发布；
+基础模板来自 lmms **coder-compose-template 1.7.0-pg**（PostgreSQL 方言，2026-11-05 发布；
 `TEMPLATE_INFO.json` 溯源）。目录内容 = 模板 + ai-pm 适配；模板不带文档，本文档归 ai-pm 所有。
-上游模板包的可追溯快照见本仓 `release/compose-template/coder-compose-template-1.6.0-pg/`。
+上游模板包的可追溯快照见本仓 `release/compose-template/coder-compose-template-1.7.0-pg/`。
 
 ## 编排结构（与上游同构：infra + services + observability）
 
@@ -36,7 +36,7 @@ docker-compose.yml              入口 include 三块
 
 | # | 文件 | 差异 | 原因 |
 |---|------|------|------|
-| 1 | `docker-compose-services.yml` | lmms 段 `build:` 块 → 已发布镜像引用（`${kudi_repos:-…}/<svc>:${IMAGE_TAG:-1.6.0-pg}`；api-gateway 无 `-pg` 后缀） | ai-pm 不构建 lmms 服务，直接消费 registry 镜像（对齐 lmms `transform-compose.js --dialect pg`） |
+| 1 | `docker-compose-services.yml` | lmms 段 `build:` 块 → 已发布镜像引用（`${kudi_repos:-…}/<svc>:${IMAGE_TAG:-1.7.0-pg}`；api-gateway 无 `-pg` 后缀） | ai-pm 不构建 lmms 服务，直接消费 registry 镜像（对齐 lmms `transform-compose.js --dialect pg`） |
 | 2 | `docker-compose-services.yml` | 末尾追加 ai-pm 自有 6 服务 + `aipm_pg_data` 卷 | 本仓自有；**单文件服务定义**（原 `docker-compose-aipm.yml` 已并入并删除） |
 | 3 | `docker-compose.prod.yml` | lmms 业务段收口 + ai-pm 段（pm-api / aipm-bff 收口，aipm-web:8091 保留） | prod 入口：前端 aipm-web:8091 + 登录验证 api-gateway:3000 |
 | 4 | `config/nginx/nginx.conf.template` | `proxy_pass` 指向 `pm-api:8090`（原 api-gateway:3000）；canary 上游清单置空 | edge 后端是 pm-api；lmms 服务的 canary 分流属 lmms 侧 |
