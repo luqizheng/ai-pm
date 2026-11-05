@@ -11,6 +11,18 @@ repositories:
     cancel: Cancel
     verify: Verify Access
     archive: Remove from Project
+    archiveConfirm: Confirm remove?
+  filter:
+    searchPlaceholder: Search by name or URL…
+    allRoles: All roles
+    allStatuses: All statuses
+  list:
+    repository: Repository
+    branch: Branch
+    access: Status
+    lastVerified: Last Verified
+    noMatch: No repositories match the current filters.
+    footnote: Each repository has its own Branch and Commit context. Execution records preserve the actual Commit used.
   connect:
     title: Connect Repository
     submit: Connect
@@ -50,6 +62,7 @@ repositories:
     confirmedCommit: Confirmed Commit
     unconfirmed: Not confirmed yet
     lastVerified: Last Verified
+    close: Collapse details
   headChange:
     notice: The branch has advanced. Your confirmed baseline has not been changed.
     confirm: Confirm Update

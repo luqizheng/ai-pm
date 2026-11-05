@@ -8,6 +8,7 @@ import Alert from "@/components/ui/alert/Alert.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Button from "@/components/ui/button/Button.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
+import { StatCard } from "@/components/ui/stat-card";
 import PageFrame from "@/components/shell/PageFrame.vue";
 import { useScopeStore } from "@/api/scope";
 import {
@@ -77,7 +78,8 @@ async function load() {
       detail.value = await getDevice(detail.value.id);
     }
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error ?? "");
+    errorMessage.value =
+      error instanceof Error ? error.message : String(error ?? "");
   } finally {
     loading.value = false;
   }
@@ -90,7 +92,8 @@ async function run(action: string, fn: () => Promise<unknown>) {
     await fn();
     await load();
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error ?? "");
+    errorMessage.value =
+      error instanceof Error ? error.message : String(error ?? "");
   } finally {
     busy.value = "";
   }
@@ -130,7 +133,8 @@ async function openDetail(device: Device) {
   try {
     detail.value = await getDevice(device.id);
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error ?? "");
+    errorMessage.value =
+      error instanceof Error ? error.message : String(error ?? "");
   } finally {
     busy.value = "";
   }
@@ -164,7 +168,7 @@ onMounted(load);
   >
     <template #actions>
       <Button variant="ghost" size="sm" :disabled="loading" @click="load">
-        <RefreshCw class="w-4 h-4" />
+        <RefreshCw :size="14" aria-hidden="true" />
         {{ t("s01.devenv.action.refresh") }}
       </Button>
       <!-- 安装引导：pm-api onboarding 页（/install/{tool}，T-089） -->
@@ -172,71 +176,67 @@ onMounted(load);
         href="/api/install/codex"
         target="_blank"
         rel="noopener"
-        class="inline-flex items-center gap-1 text-sm"
+        class="dv-guide"
         data-testid="install-guide"
       >
-        <ExternalLink class="w-4 h-4" />
+        <ExternalLink :size="14" aria-hidden="true" />
         {{ t("s01.devenv.action.installGuide") }}
       </a>
       <Button variant="primary" size="sm" @click="showRegister = !showRegister">
-        <Plus class="w-4 h-4" />
+        <Plus :size="14" aria-hidden="true" />
         {{ t("s01.devenv.action.register") }}
       </Button>
     </template>
 
-    <Alert v-if="errorMessage" variant="danger" class="mb-4">
+    <Alert v-if="errorMessage" variant="danger">
       {{ errorMessage }}
     </Alert>
 
     <!-- 登记表单（首次登记：服务端生成 device id，客户端持久化属安装引导职责） -->
-    <section
-      v-if="showRegister"
-      class="rounded-lg border p-4 mb-4"
-      data-testid="register-form"
-    >
-      <h3 class="text-sm font-semibold mb-3">
+    <section v-if="showRegister" class="dv-panel" data-testid="register-form">
+      <h3 class="dv-panel__title">
         {{ t("s01.devenv.register.title") }}
       </h3>
-      <div class="grid gap-3 md:grid-cols-2">
-        <label class="grid gap-1 text-sm">
+      <div class="dv-panel__grid">
+        <label class="dv-field">
           {{ t("s01.devenv.field.name") }}
           <input
             v-model="registerForm.name"
             data-testid="register-name"
-            class="border rounded px-2 py-1"
+            class="dv-input"
             type="text"
           />
         </label>
-        <label class="grid gap-1 text-sm">
+        <label class="dv-field">
           {{ t("s01.devenv.field.platform") }}
           <select
             v-model="registerForm.platform"
             data-testid="register-platform"
-            class="border rounded px-2 py-1"
+            class="dv-input"
           >
             <option value="windows">windows</option>
             <option value="macos">macos</option>
             <option value="linux">linux</option>
           </select>
         </label>
-        <label class="grid gap-1 text-sm">
+        <label class="dv-field">
           {{ t("s01.devenv.field.osVersion") }}
           <input
             v-model="registerForm.os_version"
-            class="border rounded px-2 py-1"
+            class="dv-input"
             type="text"
           />
         </label>
-        <label class="grid gap-1 text-sm">
+        <label class="dv-field">
           {{ t("s01.devenv.field.executorKind") }}
           <input
             v-model="registerForm.executor_kind"
-            class="border rounded px-2 py-1"
+            class="dv-input"
             type="text"
           />
         </label>
       </div>
-      <div class="flex gap-2 mt-3">
+      <div class="dv-actions">
         <Button
           variant="primary"
           size="sm"
@@ -252,20 +252,23 @@ onMounted(load);
       </div>
     </section>
 
-    <!-- 概览 -->
-    <section class="grid grid-cols-3 gap-3 mb-4">
-      <div class="rounded-lg border p-3">
-        <div class="text-xs opacity-70">{{ t("s01.devenv.stats.devices") }}</div>
-        <div class="text-xl font-semibold">{{ stats.total }}</div>
-      </div>
-      <div class="rounded-lg border p-3">
-        <div class="text-xs opacity-70">{{ t("s01.devenv.stats.ready") }}</div>
-        <div class="text-xl font-semibold">{{ stats.ready }}</div>
-      </div>
-      <div class="rounded-lg border p-3">
-        <div class="text-xs opacity-70">{{ t("s01.devenv.stats.trouble") }}</div>
-        <div class="text-xl font-semibold">{{ stats.trouble }}</div>
-      </div>
+    <!-- 概览（管理摘要：活跃 / 就绪 / 异常） -->
+    <section class="dv-stats">
+      <StatCard
+        :label="t('s01.devenv.stats.devices')"
+        :value="String(stats.total)"
+        tone="neutral"
+      />
+      <StatCard
+        :label="t('s01.devenv.stats.ready')"
+        :value="String(stats.ready)"
+        tone="success"
+      />
+      <StatCard
+        :label="t('s01.devenv.stats.trouble')"
+        :value="String(stats.trouble)"
+        :tone="stats.trouble > 0 ? 'danger' : 'neutral'"
+      />
     </section>
 
     <!-- 空态（未接入 ≠ 不可用，R-S01-01-01） -->
@@ -278,32 +281,28 @@ onMounted(load);
       @action="showRegister = true"
     />
 
-    <section v-else class="grid gap-3" data-testid="device-list">
-      <div
-        v-for="device in devices"
-        :key="device.id"
-        class="rounded-lg border p-3"
-      >
-        <div class="flex items-center gap-2 flex-wrap">
-          <span class="font-medium">{{ device.name }}</span>
+    <section v-else class="dv-list" data-testid="device-list">
+      <article v-for="device in devices" :key="device.id" class="dv-card">
+        <header class="dv-card__head">
+          <span class="dv-card__name">{{ device.name }}</span>
           <Badge :variant="readinessVariant(device.readiness)" size="sm">
             {{ t(`s01.devenv.readiness.${device.readiness ?? "unchecked"}`) }}
           </Badge>
           <Badge variant="neutral" size="sm">
             {{ device.platform }} · {{ device.executor_kind }}
           </Badge>
-          <span v-if="device.status === 'revoked'" class="text-xs opacity-70">
+          <span v-if="device.status === 'revoked'" class="dv-card__revoked">
             {{ t("s01.devenv.badge.revoked") }}
           </span>
-        </div>
-        <div class="text-xs opacity-70 mt-1">
+        </header>
+        <p class="dv-card__meta">
           {{ t("s01.devenv.badge.lastCheck") }}:
           {{ device.last_check_at ?? t("s01.devenv.badge.never") }}
           <template v-if="device.last_check?.tool">
             · {{ t("s01.devenv.badge.toolReady") }}
           </template>
-        </div>
-        <div class="flex gap-2 mt-2 flex-wrap">
+        </p>
+        <div class="dv-actions">
           <Button
             variant="secondary"
             size="sm"
@@ -337,39 +336,39 @@ onMounted(load);
         <!-- 详情：readiness 分层 + 绑定列表 -->
         <div
           v-if="detail && detail.id === device.id"
-          class="mt-3 rounded border p-3 text-sm"
+          class="dv-detail"
           data-testid="device-detail"
         >
-          <div class="grid gap-1">
-            <div class="flex justify-between">
-              <span class="opacity-70">installed</span>
-              <span>{{ detail.last_check?.installed ? "✓" : "—" }}</span>
+          <dl class="dv-kv">
+            <div class="dv-kv__row">
+              <dt>installed</dt>
+              <dd>{{ detail.last_check?.installed ? "✓" : "—" }}</dd>
             </div>
-            <div class="flex justify-between">
-              <span class="opacity-70">connected</span>
-              <span>{{ detail.last_check?.connected ? "✓" : "—" }}</span>
+            <div class="dv-kv__row">
+              <dt>connected</dt>
+              <dd>{{ detail.last_check?.connected ? "✓" : "—" }}</dd>
             </div>
-            <div class="flex justify-between">
-              <span class="opacity-70">tool</span>
-              <span>{{ detail.last_check?.tool ? "✓" : "—" }}</span>
+            <div class="dv-kv__row">
+              <dt>tool</dt>
+              <dd>{{ detail.last_check?.tool ? "✓" : "—" }}</dd>
             </div>
-            <div class="flex justify-between">
-              <span class="opacity-70">{{ t("s01.devenv.detail.repoCoverage") }}</span>
-              <span>
+            <div class="dv-kv__row">
+              <dt>{{ t("s01.devenv.detail.repoCoverage") }}</dt>
+              <dd class="dv-mono">
                 {{ detail.last_check?.verified_repository_count ?? 0 }} /
                 {{ detail.last_check?.declared_repository_count ?? 0 }}
-              </span>
+              </dd>
             </div>
-          </div>
-          <h4 class="text-xs font-semibold mt-3 mb-1">
+          </dl>
+          <h4 class="dv-detail__subtitle">
             {{ t("s01.devenv.detail.bindings") }}
           </h4>
           <div
             v-for="binding in detail.bindings.filter(b => !b.unbound_at)"
             :key="binding.id"
-            class="flex items-center justify-between gap-2 py-1"
+            class="dv-binding"
           >
-            <span class="text-xs">{{ binding.project_id }}</span>
+            <span class="dv-mono">{{ binding.project_id }}</span>
             <Button
               variant="ghost"
               size="sm"
@@ -382,12 +381,211 @@ onMounted(load);
           </div>
           <p
             v-if="detail.bindings.filter(b => !b.unbound_at).length === 0"
-            class="text-xs opacity-70"
+            class="dv-card__meta"
           >
             {{ t("s01.devenv.detail.noBindings") }}
           </p>
         </div>
-      </div>
+      </article>
     </section>
   </PageFrame>
 </template>
+
+<style scoped>
+.dv-guide {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--size-control-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-sm);
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  text-decoration: none;
+}
+
+.dv-guide:hover {
+  background: var(--surface-sunken);
+  color: var(--ws-text-primary);
+}
+
+.dv-guide:focus-visible {
+  outline: var(--size-focus-ring, 2px) solid var(--ws-accent);
+  outline-offset: 1px;
+}
+
+.dv-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--ws-elevated);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-card);
+}
+
+.dv-panel__title {
+  margin: 0;
+  color: var(--ws-text-primary);
+  font-size: var(--ws-font-size-section);
+  font-weight: var(--weight-semibold);
+}
+
+.dv-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+@media (max-width: 880px) {
+  .dv-panel__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.dv-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+
+.dv-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+@media (max-width: 880px) {
+  .dv-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.dv-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.dv-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--ws-elevated);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-card);
+}
+
+.dv-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.dv-card__name {
+  color: var(--ws-text-primary);
+  font-weight: var(--weight-semibold);
+}
+
+.dv-card__revoked {
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+
+.dv-card__meta {
+  margin: 0;
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+
+.dv-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.dv-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-sm);
+}
+
+.dv-detail__subtitle {
+  margin: var(--space-2) 0 0;
+  color: var(--ws-text-primary);
+  font-size: var(--font-size-caption);
+  font-weight: var(--weight-semibold);
+}
+
+.dv-kv {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.dv-kv__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.dv-kv__row dt {
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+
+.dv-kv__row dd {
+  margin: 0;
+  color: var(--ws-text-primary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+
+.dv-binding {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+}
+
+.dv-mono {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-caption);
+}
+
+/* 页面级表单控件（登记表单；跟随 token，不引全局样式） */
+.dv-input {
+  height: var(--size-control-sm);
+  padding: 0 var(--space-2);
+  background: var(--ws-canvas);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-sm);
+  color: var(--ws-text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+
+.dv-input:focus-visible {
+  outline: var(--size-focus-ring, 2px) solid var(--ws-accent);
+  outline-offset: 0;
+}
+</style>

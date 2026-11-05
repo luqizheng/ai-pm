@@ -18,7 +18,8 @@ const verifyRepositoryV2 = vi.fn();
 vi.mock("@/api/initialization", () => ({
   listRepositoriesV2: (...args: unknown[]) => listRepositoriesV2(...args),
   createRepositoryV2: (...args: unknown[]) => createRepositoryV2(...args),
-  confirmRepositoryVersion: (...args: unknown[]) => confirmRepositoryVersion(...args),
+  confirmRepositoryVersion: (...args: unknown[]) =>
+    confirmRepositoryVersion(...args),
   disconnectRepository: (...args: unknown[]) => disconnectRepository(...args),
   updateRepositoryV2: (...args: unknown[]) => updateRepositoryV2(...args),
   verifyRepositoryV2: (...args: unknown[]) => verifyRepositoryV2(...args)
@@ -107,7 +108,9 @@ describe("RepositoriesView", () => {
       total: 2
     });
     const again = await mountView();
-    expect(again.wrapper.findAll('[data-testid="primary-badge"]')).toHaveLength(0);
+    expect(again.wrapper.findAll('[data-testid="primary-badge"]')).toHaveLength(
+      0
+    );
   });
 
   it("HEAD 与确认基准不一致时只提示 + 人工确认更新采用 Observed HEAD（R-03-04，不自动更新）", async () => {

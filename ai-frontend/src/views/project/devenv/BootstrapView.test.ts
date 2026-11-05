@@ -85,9 +85,7 @@ describe("BootstrapView", () => {
     const { wrapper } = await mountView();
     await findButtonByText(wrapper, "登记设备").trigger("click");
     await wrapper.find('[data-testid="register-name"]').setValue("Linux Box");
-    await wrapper
-      .find('[data-testid="register-platform"]')
-      .setValue("linux");
+    await wrapper.find('[data-testid="register-platform"]').setValue("linux");
     await wrapper.find('[data-testid="register-submit"]').trigger("click");
     await flushPromises();
 

@@ -11,6 +11,18 @@ repositories:
     cancel: 取消
     verify: 核验可达性
     archive: 移出项目
+    archiveConfirm: 确认移出？
+  filter:
+    searchPlaceholder: 搜索名称或地址…
+    allRoles: 全部用途
+    allStatuses: 全部状态
+  list:
+    repository: 仓库
+    branch: 分支
+    access: 状态
+    lastVerified: 最近验证
+    noMatch: 没有匹配的仓库，请调整筛选条件。
+    footnote: 每个仓库有独立的分支与 Commit 上下文；执行记录保留实际使用的 Commit。
   connect:
     title: 接入仓库
     submit: 接入
@@ -50,6 +62,7 @@ repositories:
     confirmedCommit: 确认基准 Commit
     unconfirmed: 尚未确认
     lastVerified: 最近验证
+    close: 收起详情
   headChange:
     notice: 分支已前移，你的确认基准未被改动。确认后采用新 HEAD 作为基准。
     confirm: 确认更新
