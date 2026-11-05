@@ -7,7 +7,7 @@ pub async fn list_repositories(
     project_code(pool, project_id).await?;
     let rows = sqlx::query_as::<_, RepositoryRow>(
         "SELECT id, project_id, name, url, role, default_branch, description, \
-                ssh_key_id, status, head_commit_sha, last_verified_at, \
+                ssh_key_id, status, head_commit_sha, selected_branch, selected_commit, selected_confirmed_at, selected_confirmed_by, last_verified_at, \
                 last_error_code, last_error_detail, revision, created_at, updated_at \
          FROM integration.project_repository \
          WHERE project_id = $1 \
@@ -32,15 +32,26 @@ pub async fn create_repository(
     let role = normalize_role(req.role.as_deref().unwrap_or("main"))?;
     let default_branch = optional_text(req.default_branch, MAX_BRANCH_LEN)?;
     let description = optional_text(req.description, MAX_DESCRIPTION_LEN)?;
+    let selected_branch = optional_text(req.selected_branch, MAX_BRANCH_LEN)?;
+    let selected_commit = optional_text(req.selected_commit, MAX_COMMIT_SHA_LEN)?;
+    if selected_commit.is_some() && selected_branch.is_none() {
+        return Err(RepositoryError::Validation(
+            "selected_branch is required when selected_commit is provided",
+        ));
+    }
 
     let mut tx = pool.begin().await?;
     let row = sqlx::query_as::<_, RepositoryRow>(
         "INSERT INTO integration.project_repository \
-         (project_id, name, url, role, default_branch, description, tenant_id) \
+         (project_id, name, url, role, default_branch, description, tenant_id, \
+          selected_branch, selected_commit, selected_confirmed_at, selected_confirmed_by) \
          VALUES ($1, $2, $3, $4, $5, $6, \
-                 (SELECT tenant_id FROM core.project WHERE id = $1)) \
+                 (SELECT tenant_id FROM core.project WHERE id = $1), $7, $8, \
+                 CASE WHEN $8 IS NOT NULL THEN now() END, \
+                 CASE WHEN $8 IS NOT NULL THEN $9 END) \
          RETURNING id, project_id, name, url, role, default_branch, description, \
-                   ssh_key_id, status, head_commit_sha, last_verified_at, \
+                   ssh_key_id, status, head_commit_sha, selected_branch, selected_commit, \
+                   selected_confirmed_at, selected_confirmed_by, last_verified_at, \
                    last_error_code, last_error_detail, revision, created_at, updated_at",
     )
     .bind(project_id)
@@ -49,12 +60,33 @@ pub async fn create_repository(
     .bind(&role)
     .bind(&default_branch)
     .bind(&description)
+    .bind(&selected_branch)
+    .bind(&selected_commit)
+    .bind(actor.principal_id)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| match &e {
         sqlx::Error::Database(db) if db.is_unique_violation() => RepositoryError::Duplicate,
         _ => RepositoryError::Db(e),
     })?;
+
+    // 接入时用户显式给出初始基准 = 首次人工确认（S01-03 §5.2），落 append-only 确认记录。
+    if let Some(commit) = selected_commit.clone() {
+        sqlx::query(
+            "INSERT INTO integration.repository_version_confirmation \
+             (tenant_id, repository_id, previous_branch, previous_commit, \
+              selected_branch, selected_commit, confirmed_by) \
+             VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $2, \
+                     NULL, NULL, $3, $4, $5)",
+        )
+        .bind(project_id)
+        .bind(row.id)
+        .bind(&selected_branch)
+        .bind(&commit)
+        .bind(actor.principal_id)
+        .execute(&mut *tx)
+        .await?;
+    }
 
     append_audit(
         &mut tx,
@@ -70,6 +102,8 @@ pub async fn create_repository(
 }
 
 
+/// 更新仓库身份/角色/分支/备注。**不触碰** selected_*（Confirmed 基准）——
+/// 那只能走 `confirm_repository_version`（S01-03 §5.1：不得绕过人工确认）。
 pub async fn update_repository(
     pool: &PgPool,
     repository_id: Uuid,
@@ -100,7 +134,7 @@ pub async fn update_repository(
              revision = revision + 1, updated_at = now() \
          WHERE id = $1 \
          RETURNING id, project_id, name, url, role, default_branch, description, \
-                   ssh_key_id, status, head_commit_sha, last_verified_at, \
+                   ssh_key_id, status, head_commit_sha, selected_branch, selected_commit, selected_confirmed_at, selected_confirmed_by, last_verified_at, \
                    last_error_code, last_error_detail, revision, created_at, updated_at",
     )
     .bind(repository_id)
@@ -206,7 +240,7 @@ pub async fn archive_repository(
          SET status = 'archived', revision = revision + 1, updated_at = now() \
          WHERE id = $1 \
          RETURNING id, project_id, name, url, role, default_branch, description, \
-                   ssh_key_id, status, head_commit_sha, last_verified_at, \
+                   ssh_key_id, status, head_commit_sha, selected_branch, selected_commit, selected_confirmed_at, selected_confirmed_by, last_verified_at, \
                    last_error_code, last_error_detail, revision, created_at, updated_at",
     )
     .bind(repository_id)
@@ -218,6 +252,102 @@ pub async fn archive_repository(
         project_id,
         actor,
         "repository.archived",
+        "project_repository",
+        Some(repository_id),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(row)
+}
+
+
+/// 人类确认更新项目采用基准（G-05 承载，POST /update-version）。
+///
+/// S01-03 §5.2：Observed HEAD（`head_commit_sha`）只属 verify 自动回写；
+/// 本函数只写 `selected_*`（Confirmed Commit）并追加 append-only 确认记录
+/// （谁/何时/从什么/到什么/原因），不触碰任何正式基线（S01-05 边界 §一）。
+/// 已归档仓库不得确认（软解绑后基准治理停止）。
+pub async fn confirm_repository_version(
+    pool: &PgPool,
+    repository_id: Uuid,
+    actor: &AuditActor,
+    req: ConfirmVersionRequest,
+) -> Result<RepositoryRow, RepositoryError> {
+    let branch = require_text(
+        Some(req.selected_branch),
+        "selected branch is required",
+        MAX_BRANCH_LEN,
+    )?;
+    let commit = require_text(
+        Some(req.selected_commit),
+        "selected commit is required",
+        MAX_COMMIT_SHA_LEN,
+    )?;
+    let reason = optional_text(req.reason, MAX_DESCRIPTION_LEN)?;
+
+    let mut tx = pool.begin().await?;
+    let existing: Option<(
+        Uuid,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<Uuid>,
+        String,
+    )> = sqlx::query_as(
+        "SELECT project_id, selected_branch, selected_commit, head_commit_sha, \
+                selected_confirmed_by, status \
+         FROM integration.project_repository WHERE id = $1",
+    )
+    .bind(repository_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let (project_id, prev_branch, prev_commit, _observed_head, _prev_by, status) =
+        existing.ok_or(RepositoryError::NotFound)?;
+    if status == "archived" {
+        return Err(RepositoryError::Archived);
+    }
+
+    sqlx::query(
+        "INSERT INTO integration.repository_version_confirmation \
+         (tenant_id, repository_id, previous_branch, previous_commit, \
+          selected_branch, selected_commit, reason, confirmed_by) \
+         VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $2, \
+                 $3, $4, $5, $6, $7, $8)",
+    )
+    .bind(&project_id)
+    .bind(repository_id)
+    .bind(&prev_branch)
+    .bind(&prev_commit)
+    .bind(&branch)
+    .bind(&commit)
+    .bind(&reason)
+    .bind(actor.principal_id)
+    .execute(&mut *tx)
+    .await?;
+
+    let row = sqlx::query_as::<_, RepositoryRow>(
+        "UPDATE integration.project_repository SET \
+             selected_branch = $2, selected_commit = $3, \
+             selected_confirmed_at = now(), selected_confirmed_by = $4, \
+             revision = revision + 1, updated_at = now() \
+         WHERE id = $1 \
+         RETURNING id, project_id, name, url, role, default_branch, description, \
+                   ssh_key_id, status, head_commit_sha, selected_branch, selected_commit, \
+                   selected_confirmed_at, selected_confirmed_by, last_verified_at, \
+                   last_error_code, last_error_detail, revision, created_at, updated_at",
+    )
+    .bind(repository_id)
+    .bind(&branch)
+    .bind(&commit)
+    .bind(actor.principal_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "repository.version_confirmed",
         "project_repository",
         Some(repository_id),
     )

@@ -25,6 +25,7 @@ pub const REPOSITORY_ROLES: [&str; 4] = ["main", "docs", "service", "infra"];
 const MAX_URL_LEN: usize = 512;
 const MAX_NAME_LEN: usize = 120;
 const MAX_BRANCH_LEN: usize = 200;
+const MAX_COMMIT_SHA_LEN: usize = 64;
 const MAX_DESCRIPTION_LEN: usize = 1000;
 
 mod repo;
@@ -58,6 +59,9 @@ pub enum RepositoryError {
     /// 仓库被历史执行记录引用，不可物理删除（C-4 / 基线 §5.1）。
     #[error("repository has history and cannot be deleted")]
     HasHistory,
+    /// 已归档（软解绑）的仓库不得再做版本确认（S01-03 §5：确认基准是活仓库的治理动作）。
+    #[error("repository is archived")]
+    Archived,
     #[error("git access failed: {0}")]
     Git(String),
     #[error("{0}")]
@@ -127,6 +131,12 @@ pub struct RepositoryRow {
     pub ssh_key_id: Option<Uuid>,
     pub status: String,
     pub head_commit_sha: Option<String>,
+    /// 项目采用分支（Confirmed 基准的一半；仅经 update-version 人工确认写入）。
+    pub selected_branch: Option<String>,
+    /// 项目确认采用的 Commit（S01-03 §5.1 Confirmed Commit；PATCH 不得触碰）。
+    pub selected_commit: Option<String>,
+    pub selected_confirmed_at: Option<DateTime<Utc>>,
+    pub selected_confirmed_by: Option<Uuid>,
     pub last_verified_at: Option<DateTime<Utc>>,
     pub last_error_code: Option<String>,
     pub last_error_detail: Option<String>,
@@ -168,6 +178,12 @@ pub struct CreateRepositoryRequest {
     pub default_branch: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
+    /// 接入时的初始采用分支/Commit（用户在接入流程中显式给出 = 人工确认）。
+    /// 提供即写入 Confirmed 基准并落首条确认记录；不提供则留空待确认。
+    #[serde(default)]
+    pub selected_branch: Option<String>,
+    #[serde(default)]
+    pub selected_commit: Option<String>,
 }
 
 
@@ -182,6 +198,19 @@ pub struct UpdateRepositoryRequest {
     pub default_branch: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
+    // 注意：本请求**不含** selected_branch/selected_commit —— 确认基准只能走
+    // confirm_repository_version（POST /update-version），防止绕过人工确认（S01-03 §5.1）。
+}
+
+
+/// POST /v1/pm/repositories/{id}/update-version：人类确认更新采用基准（G-05）。
+/// 不触碰 head_commit_sha（Observed HEAD 只属 verify），也不触碰任何正式基线。
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConfirmVersionRequest {
+    pub selected_branch: String,
+    pub selected_commit: String,
+    #[serde(default)]
+    pub reason: Option<String>,
 }
 
 // -------------------------------------------------------------------- ssh key

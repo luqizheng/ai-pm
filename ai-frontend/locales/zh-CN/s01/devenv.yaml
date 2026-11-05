@@ -1,0 +1,48 @@
+devenv:
+  page:
+    title: 开发环境接入
+    description: 登记 AI 研发执行设备并绑定到项目。未接入设备时项目照常可用——内置 AI-PM 不依赖外部执行设备。
+  breadcrumb:
+    project: 项目
+    devenv: 开发环境
+  action:
+    refresh: 刷新
+    register: 登记设备
+    cancel: 取消
+    installGuide: 安装引导
+    detail: 详情
+    bindCurrent: 绑定当前项目
+    unbind: 解绑
+    revoke: 吊销
+  register:
+    title: 登记执行设备
+    submit: 登记
+  field:
+    name: 设备名称
+    platform: 平台
+    osVersion: 系统版本
+    executorKind: 执行器
+  stats:
+    devices: 活跃设备
+    ready: 执行就绪
+    trouble: 异常
+  empty:
+    title: 尚未登记执行设备
+    description: 项目已可以开展工作。需要外部 Agent 执行工程任务时，按安装引导登记设备并绑定项目。
+  readiness:
+    installed: 已安装
+    connected: 已连接
+    authenticated: 已认证
+    ready: 执行就绪
+    degraded: 降级
+    failed: 失败
+    unchecked: 未自检
+  badge:
+    revoked: 已吊销
+    lastCheck: 最近自检
+    never: 从未
+    toolReady: 工具链就绪
+  detail:
+    repoCoverage: 仓库验证覆盖
+    bindings: 项目绑定
+    noBindings: 尚未绑定任何项目

@@ -19,10 +19,10 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use pm_application::repository::{
-    CreateRepositoryRequest, RepositoryError, UpdateRepositoryRequest, archive_repository,
-    create_repository, delete_repository, delete_ssh_key, ensure_ssh_key, generate_ssh_key,
-    get_ssh_key, list_repositories, list_ssh_keys, revoke_ssh_key, update_repository,
-    verify_repository,
+    ConfirmVersionRequest, CreateRepositoryRequest, RepositoryError, UpdateRepositoryRequest,
+    archive_repository, confirm_repository_version, create_repository, delete_repository,
+    delete_ssh_key, ensure_ssh_key, generate_ssh_key, get_ssh_key, list_repositories,
+    list_ssh_keys, revoke_ssh_key, update_repository, verify_repository,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -38,6 +38,11 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/pm/repositories/{repository_id}/verify",
             post(verify_handler),
+        )
+        // S01-03 §6.2（G-05）：人类确认更新采用基准——不自动更新，不触碰正式基线。
+        .route(
+            "/v1/pm/repositories/{repository_id}/update-version",
+            post(confirm_version_handler),
         )
         .route(
             "/v1/pm/repositories/{repository_id}/archive",
@@ -72,6 +77,7 @@ fn repository_error(err: RepositoryError) -> Response {
         ),
         RepositoryError::RevisionConflict => (StatusCode::CONFLICT, "revision conflict"),
         RepositoryError::InvalidRole => (StatusCode::BAD_REQUEST, "invalid repository role"),
+        RepositoryError::Archived => (StatusCode::CONFLICT, "repository is archived"),
         RepositoryError::HasHistory => (
             StatusCode::CONFLICT,
             "repository has history and cannot be deleted",
@@ -198,6 +204,24 @@ async fn delete_handler(
     let actor = principal.audit_actor();
     match delete_repository(&state.pool, repository_id, &actor).await {
         Ok(()) => (StatusCode::OK, Json(json!({ "id": repository_id }))).into_response(),
+        Err(err) => repository_error(err),
+    }
+}
+
+/// S01-03 §6.2：确认更新采用基准。前端在 `head_commit_sha != selected_commit`
+/// （New commits detected）时展示差异并调本端点；人类确认后 Confirmed 基准前移。
+async fn confirm_version_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(repository_id): Path<Uuid>,
+    Json(req): Json<ConfirmVersionRequest>,
+) -> Response {
+    if let Err(resp) = repository_in_tenant(&state.pool, repository_id, principal.tenant_id).await {
+        return resp;
+    }
+    let actor = principal.audit_actor();
+    match confirm_repository_version(&state.pool, repository_id, &actor, req).await {
+        Ok(row) => (StatusCode::OK, Json(row)).into_response(),
         Err(err) => repository_error(err),
     }
 }

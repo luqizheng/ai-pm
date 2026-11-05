@@ -23,6 +23,8 @@ import ProjectCreateView from "@/views/project/create/ProjectCreateView.vue";
 import CognitionPage from "@/views/project/cognition/CognitionPage.vue";
 import BaselinePage from "@/views/project/baseline/BaselinePage.vue";
 import CommandCenterView from "@/views/project/command-center/CommandCenterView.vue";
+import RequirementDetailView from "@/views/project/requirement-detail/RequirementDetailView.vue";
+import RequirementReviewView from "@/views/project/requirement-review/RequirementReviewView.vue";
 
 /**
  * 应用壳路由表 —— **由导航树派生**（src/router/navigation.ts 是单源）。
@@ -52,7 +54,7 @@ function navItemRoutes(item: NavItem): RouteRecordRaw[] {
     for (const child of item.children) {
       routes.push({
         path: child.path,
-        component: PlaceholderView,
+        component: child.component ?? PlaceholderView,
         meta: { title: child.labelKey }
       });
     }
@@ -119,6 +121,22 @@ export function buildRoutes(): RouteRecordRaw[] {
     path: "/project/command-center",
     component: CommandCenterView,
     meta: { title: "s01.command-center.pageTitle" }
+  });
+
+  // 需求评审与确认（S02-UI-03）：人工评审提案并作出正式决策，不占主导航——
+  // 入口 = Requirements Workspace 页头「需求评审」。静态段优先于下方动态段匹配。
+  routes.push({
+    path: "/project/requirements/review",
+    component: RequirementReviewView,
+    meta: { title: "pm.requirementReview.pageTitle" }
+  });
+
+  // 需求详情与追溯（S02-UI-02）：单条需求检查页，不占主导航——
+  // 入口 = Requirements Workspace 详情面板「打开详情页」与追溯链关联需求导航。
+  routes.push({
+    path: "/project/requirements/:requirementId",
+    component: RequirementDetailView,
+    meta: { title: "pm.requirementDetail.pageTitle" }
   });
 
   // 通知中心（Global/Notification 族完整事件面；不在左导航树内，

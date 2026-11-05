@@ -20,7 +20,6 @@ import type {
   CognitionItem,
   CognitionPreparation,
   CognitionRun,
-  GitProviderAuthorization,
   InitializationState,
   ProjectBaseline,
   ProjectCodeSuggestion,
@@ -29,6 +28,9 @@ import type {
   RepositoryV2,
   RepositoryVerificationOutcome
 } from "./types/initialization";
+
+// S01-03 页面消费方从这里取类型（types 文件保持纯类型模块）
+export type { RepositoryV2, RepositoryVerificationOutcome };
 
 /* ───────────────────────── S01-02 项目创建 ───────────────────────── */
 
@@ -121,8 +123,6 @@ export function listRepositoriesV2(projectId: string) {
 export interface RepositoryV2Payload {
   name: string;
   url: string;
-  provider?: string;
-  repo_owner?: string | null;
   role: string;
   default_branch?: string | null;
   selected_branch?: string | null;
@@ -148,37 +148,22 @@ export function updateRepositoryV2(
 }
 
 /**
- * S01-03 §8.3：逻辑断开。**不删行、不删历史**。
- * 后端若仍以 DELETE 表达断开，前端优先用 disconnect 端点。
+ * S01-03 §8.3 / V1.2 §4.4：软解绑（Disconnect / Remove from Project）。
+ * 后端动词 = `archive`：**不删行、不删历史**，状态置 `archived`（0009 CHECK）。
+ * 「是否支持解绑后的恢复」尚无用户裁决（S01-03 V1.2 §14 设计建议）——V1 不提供恢复入口。
  */
 export function disconnectRepository(repositoryId: string) {
   return http.post<RepositoryV2>(
-    `/v1/pm/repositories/${repositoryId}/disconnect`,
-    {}
-  );
-}
-
-/** S01-03 §8.1：恢复关联，需重新核验权限与版本。 */
-export function restoreRepository(repositoryId: string) {
-  return http.post<RepositoryV2>(
-    `/v1/pm/repositories/${repositoryId}/restore`,
-    {}
-  );
-}
-
-/** S01-03 §3.2：指定 Primary（原 Primary 自动降级）。 */
-export function setPrimaryRepository(repositoryId: string) {
-  return http.post<RepositoryV2>(
-    `/v1/pm/repositories/${repositoryId}/set-primary`,
+    `/v1/pm/repositories/${repositoryId}/archive`,
     {}
   );
 }
 
 /**
- * S01-03 §6.2：人类确认后更新项目采用版本。
- * **不自动更新**，也不触碰正式基线。
+ * S01-03 §6.2（G-05 已落地，迁移 0038）：人类确认更新项目采用基准。
+ * **不自动更新**，也不触碰正式基线（S01-05 边界）；Observed HEAD 只属 verify。
  */
-export function updateRepositoryVersion(
+export function confirmRepositoryVersion(
   repositoryId: string,
   body: { selected_branch: string; selected_commit: string; reason?: string }
 ) {
@@ -188,7 +173,7 @@ export function updateRepositoryVersion(
   );
 }
 
-/** S01-03 §7：核验。返回逐项检查结果与 `head_changed` 提示位。 */
+/** S01-03 §7：核验。回写 Observed HEAD / 状态；失败给稳定错误码（§10.3 可区分）。 */
 export function verifyRepositoryV2(repositoryId: string) {
   return http.post<RepositoryVerificationOutcome>(
     `/v1/pm/repositories/${repositoryId}/verify`,
@@ -196,31 +181,10 @@ export function verifyRepositoryV2(repositoryId: string) {
   );
 }
 
-/** S01-03 §5.2：Provider 授权（凭证不回显，只读 scopes/status）。 */
-export function listGitProviders(projectId: string) {
-  return http.get<GitProviderAuthorization[]>(
-    `/v1/pm/projects/${projectId}/git-providers`
-  );
-}
-
-export function startGitProviderAuthorization(
-  projectId: string,
-  body: { provider: string }
-) {
-  return http.post<{ authorization_url: string }>(
-    `/v1/pm/projects/${projectId}/git-providers`,
-    body
-  );
-}
-
-export function revokeGitProviderAuthorization(
-  projectId: string,
-  provider: string
-) {
-  return http.delete<{ revoked: boolean }>(
-    `/v1/pm/projects/${projectId}/git-providers/${provider}`
-  );
-}
+/* Provider OAuth 授权（G-04）**后端不存在**（无表无路由，统一核验清单 U-R04）——
+ * S01-01 总览稿 §3.2.2 裁决：不得渲染永远点不动的按钮。早期草稿的三个悬空调用
+ * 已移除；OAuth 路线落地（G-04）后按 S01-03 V1.2 §2.3 重新引入。
+ * set-primary 同理（G-03 挂账）：V1 由前端按 `role === "main"` 唯一性派生建议标记。 */
 
 /* ───────────────────────── S01-04 AI-PM 认知 ───────────────────────── */
 

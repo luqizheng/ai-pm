@@ -59,6 +59,8 @@ export interface NavChild {
   path: string;
   /** i18n key（shell.app.side.sub.*） */
   labelKey: string;
+  /** 业务页组件（懒加载）；缺省 = 占位页 */
+  component?: () => Promise<Component>;
 }
 
 /** 导航分组 */
@@ -130,7 +132,11 @@ export const navGroups: NavGroup[] = [
         children: [
           {
             path: "/project/repository/overview",
-            labelKey: "shell.app.side.sub.overview"
+            labelKey: "shell.app.side.sub.overview",
+            component: () =>
+              import("@/views/project/repository/RepositoriesView.vue").then(
+                module => module.default
+              )
           },
           {
             path: "/project/repository/branches",
@@ -167,7 +173,11 @@ export const navGroups: NavGroup[] = [
       {
         path: "/project/devenv",
         labelKey: "shell.app.side.item.devenv",
-        icon: Terminal
+        icon: Terminal,
+        component: () =>
+          import("@/views/project/devenv/BootstrapView.vue").then(
+            module => module.default
+          )
       }
     ]
   },

@@ -1,0 +1,55 @@
+repositories:
+  page:
+    title: 仓库管理
+    description: 管理本项目关联的代码仓库。项目未接入仓库时照常可用——内置 AI-PM 与需求管理不受影响。
+  breadcrumb:
+    project: 项目
+    repositories: 仓库管理
+  action:
+    refresh: 刷新
+    connect: 接入仓库
+    cancel: 取消
+    verify: 核验可达性
+    archive: 移出项目
+  connect:
+    title: 接入仓库
+    submit: 接入
+    hint: 优先建议项目级 SSH Key（右上钥匙入口）；OAuth 授权路线待后端能力就绪后提供。
+  field:
+    name: 仓库名称
+    url: 仓库地址
+    role: 用途
+    defaultBranch: 默认分支
+    selectedBranch: 采用分支
+    selectedCommit: 确认基准 Commit（可选）
+  role:
+    main: 主仓库
+    docs: 文档
+    service: 服务
+    infra: 基础设施
+  stats:
+    linked: 已关联仓库
+    verified: 可达性已验证
+    attention: 需要关注
+    confirmed: 已确认基准
+  empty:
+    title: 尚未关联仓库
+    description: 项目已可以开展工作。需要代码上下文或工程执行能力时，随时在这里接入仓库；需求管理与内置 AI-PM 不受影响。
+  badge:
+    primarySuggested: 主仓库（建议）
+    newHead: 检测到新提交
+  status:
+    pending: 待验证
+    verified: 已验证
+    unreachable: 不可达
+    archived: 已移出
+  detail:
+    role: 用途
+    defaultBranch: 默认分支
+    observedHead: 观测 HEAD
+    confirmedCommit: 确认基准 Commit
+    unconfirmed: 尚未确认
+    lastVerified: 最近验证
+  headChange:
+    notice: 分支已前移，你的确认基准未被改动。确认后采用新 HEAD 作为基准。
+    confirm: 确认更新

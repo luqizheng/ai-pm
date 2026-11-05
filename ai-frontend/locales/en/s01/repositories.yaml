@@ -1,0 +1,55 @@
+repositories:
+  page:
+    title: Repositories
+    description: Manage repositories connected to this project. The project works without any repository — Requirements and built-in AI-PM are unaffected.
+  breadcrumb:
+    project: Project
+    repositories: Repositories
+  action:
+    refresh: Refresh
+    connect: Connect Repository
+    cancel: Cancel
+    verify: Verify Access
+    archive: Remove from Project
+  connect:
+    title: Connect Repository
+    submit: Connect
+    hint: A project-level SSH key is recommended; provider OAuth will be offered once the backend capability lands.
+  field:
+    name: Repository Name
+    url: Repository URL
+    role: Role
+    defaultBranch: Default Branch
+    selectedBranch: Selected Branch
+    selectedCommit: Confirmed Commit (optional)
+  role:
+    main: Main
+    docs: Docs
+    service: Service
+    infra: Infra
+  stats:
+    linked: Linked Repositories
+    verified: Access Verified
+    attention: Needs Attention
+    confirmed: Confirmed Baseline
+  empty:
+    title: No repositories connected
+    description: Your project is ready to work. Connect a repository when you need code context or engineering execution capabilities.
+  badge:
+    primarySuggested: Main repository (suggested)
+    newHead: New commits detected
+  status:
+    pending: Pending
+    verified: Verified
+    unreachable: Unreachable
+    archived: Removed
+  detail:
+    role: Role
+    defaultBranch: Default Branch
+    observedHead: Observed HEAD
+    confirmedCommit: Confirmed Commit
+    unconfirmed: Not confirmed yet
+    lastVerified: Last Verified
+  headChange:
+    notice: The branch has advanced. Your confirmed baseline has not been changed.
+    confirm: Confirm Update

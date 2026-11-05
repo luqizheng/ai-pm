@@ -1,0 +1,48 @@
+devenv:
+  page:
+    title: Development Environment
+    description: Register AI execution devices and bind them to this project. The project works without any device — built-in AI-PM does not depend on external executors.
+  breadcrumb:
+    project: Project
+    devenv: Development Environment
+  action:
+    refresh: Refresh
+    register: Register Device
+    cancel: Cancel
+    installGuide: Install Guide
+    detail: Detail
+    bindCurrent: Bind Current Project
+    unbind: Unbind
+    revoke: Revoke
+  register:
+    title: Register Execution Device
+    submit: Register
+  field:
+    name: Device Name
+    platform: Platform
+    osVersion: OS Version
+    executorKind: Executor
+  stats:
+    devices: Active Devices
+    ready: Execution Ready
+    trouble: Trouble
+  empty:
+    title: No execution devices registered
+    description: Your project is ready to work. Register a device via the install guide when you need external agents to execute engineering tasks.
+  readiness:
+    installed: Installed
+    connected: Connected
+    authenticated: Authenticated
+    ready: Ready
+    degraded: Degraded
+    failed: Failed
+    unchecked: Not checked
+  badge:
+    revoked: Revoked
+    lastCheck: Last Check
+    never: never
+    toolReady: Toolchain ready
+  detail:
+    repoCoverage: Repository coverage
+    bindings: Project Bindings
+    noBindings: Not bound to any project yet

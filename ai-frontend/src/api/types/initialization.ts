@@ -81,94 +81,65 @@ export interface InitializationState {
 
 /* ───────────────────────── S01-03 仓库管理 ───────────────────────── */
 
-/** S01-03 §3.3：Repository Role。项目管理属性，不代表访问权限等级。 */
-export type RepositoryRoleV2 =
-  | "primary"
-  | "supporting"
-  | "infrastructure"
-  | "test";
+/**
+ * 仓库角色 —— 与后端 CHECK 约束同源（`0008_repositories.sql:24`，
+ * `main/docs/service/infra`）。
+ *
+ * **词表收口说明（统一核验清单 U-R09）**：早期草稿的
+ * `primary|supporting|infrastructure|test` 与后端词表冲突，已废弃。
+ * 「Primary」不设独立后端字段（G-03 挂账）——展示层由 `role === "main"`
+ * 的仓库唯一性**派生**（S01-03 V1.2 §2.2：Primary 可空、不自动提升）。
+ */
+export type RepositoryRoleV2 = "main" | "docs" | "service" | "infra";
 
-export type GitProvider = "github" | "gitlab" | "other";
-
-/** S01-03 §7：核验项与状态。 */
-export type VerificationStatus = "pending" | "passed" | "warning" | "failed";
-
+/** 仓库连接状态 —— 与后端 CHECK 同源（`0009_repo_import.sql:16-17`）。 */
 export type RepositoryConnectionStatus =
   | "pending"
-  | "connected"
-  | "failed"
-  | "disconnected";
-
-export type VerificationCheckCode =
-  | "repository_identity"
-  | "access_permission"
-  | "branch_availability"
-  | "commit_availability"
-  | "repository_metadata";
-
-export interface VerificationCheck {
-  code: VerificationCheckCode;
-  status: VerificationStatus;
-  detail: string | null;
-}
+  | "verified"
+  | "unreachable"
+  | "archived";
 
 /**
- * S01-03 §4 + §6。
+ * 仓库行 —— 契约 = `pm-api pm_repositories.rs` / `pm-application repository::RepositoryRow`。
  *
- * 严格区分四个概念：`default_branch`（仓库自身默认分支）、
- * `selected_branch`（项目采用分支）、`selected_commit`（项目确认采用的版本）、
- * `head_commit_sha`（分支当前 HEAD）。
+ * 严格区分四个概念（S01-03 V1.2 §5.1）：
+ *   `default_branch`   仓库配置的默认分支（PATCH 可改 / verify 回写）；
+ *   `selected_branch`  项目采用分支（Confirmed 基准一半）；
+ *   `selected_commit`  项目确认采用的 Commit（仅经 update-version 人工确认写入）；
+ *   `head_commit_sha`  Observed HEAD（verify 自动回写，可自动检测变化）。
+ * `head_commit_sha !== selected_commit` 即 New commits detected（只提示，人工确认）。
  */
 export interface RepositoryV2 {
   id: string;
   project_id: string;
   name: string;
   url: string;
-  provider: GitProvider;
-  repo_owner: string | null;
   role: RepositoryRoleV2;
   default_branch: string | null;
+  description: string | null;
+  ssh_key_id: string | null;
+  status: RepositoryConnectionStatus;
+  head_commit_sha: string | null;
   selected_branch: string | null;
   selected_commit: string | null;
-  connection_status: RepositoryConnectionStatus;
-  verification_status: VerificationStatus;
+  selected_confirmed_at: string | null;
+  selected_confirmed_by: string | null;
   last_verified_at: string | null;
-  last_scanned_at: string | null;
-  head_commit_sha: string | null;
-  description: string | null;
+  last_error_code: string | null;
+  last_error_detail: string | null;
   revision: number;
   created_at: string;
   updated_at: string;
 }
 
-/** S01-03 §6.2：Branch HEAD 变化提示。`head_changed=true` 时只提示，不自动更新。 */
+/** 一次可达性校验的结果（契约 = `pm-application repository::VerifyOutcome`）。 */
 export interface RepositoryVerificationOutcome {
   repository_id: string;
-  status: string;
-  verification_status: VerificationStatus;
+  status: RepositoryConnectionStatus;
   default_branch: string | null;
   head_commit_sha: string | null;
-  selected_branch: string | null;
-  selected_commit: string | null;
-  /** 当前 HEAD 与项目采用版本不一致 —— 前端据此提示用户确认更新。 */
-  head_changed: boolean;
-  checks: VerificationCheck[];
-  verified_at: string;
   error_code: string | null;
   error_detail: string | null;
-}
-
-/**
- * S01-03 §5.2：Provider 授权。
- *
- * **凭证不回显** —— 只有 provider / scopes / status / expires_at。
- */
-export interface GitProviderAuthorization {
-  provider: GitProvider;
-  scopes: string[];
-  status: "active" | "expired" | "revoked";
-  expires_at: string | null;
-  authorized_at: string | null;
 }
 
 /* ───────────────────────── S01-01 基线确认 ───────────────────────── */

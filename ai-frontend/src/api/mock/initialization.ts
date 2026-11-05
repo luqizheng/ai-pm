@@ -30,18 +30,19 @@ export const repositoriesV2 = [
     project_id: DEMO_PROJECT_ID,
     name: "前端主仓库",
     url: "git@gitlab.local:team/shield-web.git",
-    provider: "gitlab",
-    repo_owner: "team",
-    role: "primary",
+    role: "main",
     default_branch: "main",
+    description: "客服工作台前端",
+    ssh_key_id: null,
+    status: "verified",
+    head_commit_sha: "a1b2c3d4e5f6",
     selected_branch: "main",
     selected_commit: "a1b2c3d4e5f6",
-    connection_status: "connected",
-    verification_status: "passed",
+    selected_confirmed_at: iso(1, 9),
+    selected_confirmed_by: "principal-demo",
     last_verified_at: iso(1, 9),
-    last_scanned_at: iso(2, 15),
-    head_commit_sha: "a1b2c3d4e5f6",
-    description: "客服工作台前端",
+    last_error_code: null,
+    last_error_detail: null,
     revision: 7,
     created_at: iso(60),
     updated_at: iso(1, 9)
@@ -51,19 +52,20 @@ export const repositoriesV2 = [
     project_id: DEMO_PROJECT_ID,
     name: "后端服务仓库",
     url: "git@gitlab.local:team/shield-svc.git",
-    provider: "gitlab",
-    repo_owner: "team",
-    role: "supporting",
+    role: "service",
     default_branch: "main",
-    selected_branch: "main",
-    // HEAD 已前进 —— 前端据此提示「仓库已有新提交」，但不自动更新采用版本
-    selected_commit: "f6e5d4c3b2a1",
-    connection_status: "connected",
-    verification_status: "warning",
-    last_verified_at: iso(1, 9),
-    last_scanned_at: iso(3, 11),
-    head_commit_sha: "0a1b2c3d4e5f",
     description: "工单与路由服务",
+    ssh_key_id: null,
+    status: "verified",
+    // HEAD 已前进 —— 前端据此提示「检测到新提交」（R-03-04：只提示，人工确认）
+    selected_branch: "main",
+    selected_commit: "f6e5d4c3b2a1",
+    selected_confirmed_at: iso(3, 11),
+    selected_confirmed_by: "principal-demo",
+    last_verified_at: iso(1, 9),
+    last_error_code: null,
+    last_error_detail: null,
+    head_commit_sha: "0a1b2c3d4e5f",
     revision: 12,
     created_at: iso(58),
     updated_at: iso(1, 9)
@@ -73,18 +75,19 @@ export const repositoriesV2 = [
     project_id: DEMO_PROJECT_ID,
     name: "基础设施仓库",
     url: "git@gitlab.local:team/shield-infra.git",
-    provider: "gitlab",
-    repo_owner: "team",
-    role: "infrastructure",
+    role: "infra",
     default_branch: "master",
+    description: "部署与环境配置",
+    ssh_key_id: null,
+    status: "verified",
     selected_branch: "master",
     selected_commit: "9988776655",
-    connection_status: "connected",
-    verification_status: "passed",
+    selected_confirmed_at: iso(4, 16),
+    selected_confirmed_by: "principal-demo",
     last_verified_at: iso(4, 16),
-    last_scanned_at: null,
+    last_error_code: null,
+    last_error_detail: null,
     head_commit_sha: "9988776655",
-    description: "部署与环境配置",
     revision: 3,
     created_at: iso(40),
     updated_at: iso(4, 16)
@@ -94,38 +97,88 @@ export const repositoriesV2 = [
     project_id: DEMO_PROJECT_ID,
     name: "文档仓库",
     url: "git@gitlab.local:team/shield-docs.git",
-    provider: "gitlab",
-    repo_owner: "team",
-    role: "supporting",
+    role: "docs",
     default_branch: "main",
+    description: "已移出 —— 行与历史保留（软解绑 archive 语义）",
+    ssh_key_id: null,
+    status: "archived",
     selected_branch: null,
     selected_commit: null,
-    connection_status: "disconnected",
-    verification_status: "pending",
+    selected_confirmed_at: null,
+    selected_confirmed_by: null,
     last_verified_at: null,
-    last_scanned_at: null,
+    last_error_code: null,
+    last_error_detail: null,
     head_commit_sha: null,
-    description: "已断开 —— 历史记录仍保留",
     revision: 5,
     created_at: iso(35),
     updated_at: iso(9, 14)
   }
 ];
 
-export const gitProviders = [
+/* ── S01-06 设备夹具（后端契约 = pm-api pm_devices.rs；readiness 服务端计算快照） ── */
+
+export const devices = [
   {
-    provider: "gitlab",
-    scopes: ["repo:read"],
+    id: "dev-win",
+    tenant_id: "tenant-demo",
+    owner_principal_id: "principal-demo",
+    name: "Windows Dev PC",
+    platform: "windows",
+    os_version: "11",
+    executor_kind: "codex",
+    executor_version: "0.163",
     status: "active",
-    expires_at: iso(-30),
-    authorized_at: iso(45)
+    readiness: "ready",
+    last_check_at: iso(0, 9),
+    last_check: {
+      installed: true,
+      connected: true,
+      tool: true,
+      verified_repository_count: 2,
+      declared_repository_count: 2,
+      evidence: null
+    },
+    revoked_at: null,
+    created_at: iso(30),
+    updated_at: iso(0, 9)
   },
   {
-    provider: "github",
-    scopes: [],
-    status: "expired",
-    expires_at: iso(3),
-    authorized_at: iso(90)
+    id: "dev-linux",
+    tenant_id: "tenant-demo",
+    owner_principal_id: "principal-demo",
+    name: "Linux Build Box",
+    platform: "linux",
+    os_version: "Debian 12",
+    executor_kind: "codex",
+    executor_version: "0.160",
+    status: "active",
+    readiness: "degraded",
+    last_check_at: iso(2, 15),
+    last_check: {
+      installed: true,
+      connected: false,
+      tool: true,
+      verified_repository_count: 0,
+      declared_repository_count: 1,
+      evidence: "ssh key not configured"
+    },
+    revoked_at: null,
+    created_at: iso(20),
+    updated_at: iso(2, 15)
+  }
+];
+
+export const deviceBindings = [
+  {
+    id: "binding-1",
+    device_id: "dev-win",
+    project_id: DEMO_PROJECT_ID,
+    declared_repository_ids: ["repo-frontend", "repo-backend"],
+    verified_repositories: ["repo-frontend", "repo-backend"],
+    bound_by: "principal-demo",
+    bound_at: iso(10),
+    unbound_at: null
   }
 ];
 
@@ -692,7 +745,9 @@ const state = {
   items: structuredClone(cognitionItems),
   knowledge: structuredClone(projectKnowledge),
   repositories: structuredClone(repositoriesV2),
-  runs: structuredClone(cognitionRuns)
+  runs: structuredClone(cognitionRuns),
+  devices: structuredClone(devices),
+  bindings: structuredClone(deviceBindings)
 };
 
 function paginate<T>(items: T[], query: URLSearchParams) {
@@ -798,12 +853,28 @@ export function resolveInitializationMock(
       };
     }
 
-    // Provider 授权
-    const providers = pathname.match(
-      /^\/v1\/pm\/projects\/([^/]+)\/git-providers$/
-    );
-    if (providers) {
-      return { status: 200, body: gitProviders };
+    /* ── S01-06 设备（GET：列表 + 详情，详情带未解绑绑定） ── */
+
+    if (pathname === "/v1/pm/devices") {
+      return {
+        status: 200,
+        body: { items: state.devices, total: state.devices.length }
+      };
+    }
+
+    const deviceDetail = pathname.match(/^\/v1\/pm\/devices\/([^/]+)$/);
+    if (deviceDetail) {
+      const device = state.devices.find(d => d.id === deviceDetail[1]);
+      if (!device) return { status: 404, body: { error: "not_found" } };
+      return {
+        status: 200,
+        body: {
+          ...device,
+          bindings: state.bindings.filter(
+            b => b.device_id === device.id && !b.unbound_at
+          )
+        }
+      };
     }
 
     // S01-04 认知准备
@@ -817,7 +888,7 @@ export function resolveInitializationMock(
           project_info_complete: true,
           missing_project_fields: [],
           repositories: state.repositories
-            .filter(r => r.connection_status === "connected")
+            .filter(r => r.status === "verified" || r.status === "pending")
             .map(r => ({
               repository_id: r.id,
               name: r.name,
@@ -993,6 +1064,17 @@ export function resolveInitializationMock(
   }
 
   /* ---------- POST ---------- */
+  /* ---------- DELETE（S01-06 设备解绑） ---------- */
+
+  const unbind = pathname.match(
+    /^\/v1\/pm\/devices\/([^/]+)\/bindings\/([^/]+)$/
+  );
+  if (unbind && method === "DELETE") {
+    const binding = state.bindings.find(b => b.id === unbind[2]);
+    if (binding) binding.unbound_at = new Date().toISOString();
+    return { status: 200, body: { id: unbind[2] } };
+  }
+
   if (method === "POST") {
     // S01-02 创建项目
     if (pathname === "/v1/pm/projects") {
@@ -1048,59 +1130,30 @@ export function resolveInitializationMock(
       };
     }
 
-    // S01-03 仓库核验
+    // S01-03 仓库核验（契约 = pm-application VerifyOutcome：回写 Observed HEAD）
     const verify = pathname.match(/^\/v1\/pm\/repositories\/([^/]+)\/verify$/);
     if (verify) {
       const repo = state.repositories.find(r => r.id === verify[1]);
       if (!repo) return { status: 404, body: { error: "not_found" } };
-      const headChanged =
-        repo.selected_commit !== null && repo.head_commit_sha !== null
-          ? repo.selected_commit !== repo.head_commit_sha
-          : false;
+      repo.status = "verified";
+      repo.head_commit_sha =
+        repo.head_commit_sha ?? `mock${Date.now().toString(16)}`;
+      repo.last_verified_at = new Date().toISOString();
+      repo.updated_at = repo.last_verified_at;
       return {
         status: 200,
         body: {
           repository_id: repo.id,
-          status: "verified",
-          verification_status: repo.verification_status,
+          status: repo.status,
           default_branch: repo.default_branch,
           head_commit_sha: repo.head_commit_sha,
-          selected_branch: repo.selected_branch,
-          selected_commit: repo.selected_commit,
-          head_changed: headChanged,
-          checks: [
-            { code: "repository_identity", status: "passed", detail: null },
-            { code: "access_permission", status: "passed", detail: null },
-            { code: "branch_availability", status: "passed", detail: null },
-            {
-              code: "commit_availability",
-              status: headChanged ? "warning" : "passed",
-              detail: headChanged ? "分支 HEAD 已前进" : null
-            },
-            { code: "repository_metadata", status: "passed", detail: null }
-          ],
-          verified_at: new Date().toISOString(),
           error_code: null,
           error_detail: null
         }
       };
     }
 
-    // 设为主仓库
-    const setPrimary = pathname.match(
-      /^\/v1\/pm\/repositories\/([^/]+)\/set-primary$/
-    );
-    if (setPrimary) {
-      for (const repo of state.repositories) {
-        if (repo.role === "primary") repo.role = "supporting";
-      }
-      const target = state.repositories.find(r => r.id === setPrimary[1]);
-      if (!target) return { status: 404, body: { error: "not_found" } };
-      target.role = "primary";
-      return { status: 200, body: target };
-    }
-
-    // 更新采用版本
+    // 人工确认更新采用基准（G-05；Observed HEAD 不动，只前移 Confirmed 基准）
     const updateVersion = pathname.match(
       /^\/v1\/pm\/repositories\/([^/]+)\/update-version$/
     );
@@ -1109,46 +1162,88 @@ export function resolveInitializationMock(
       if (!target) return { status: 404, body: { error: "not_found" } };
       target.selected_branch = String(payload.selected_branch ?? "");
       target.selected_commit = String(payload.selected_commit ?? "");
-      target.updated_at = new Date().toISOString();
+      target.selected_confirmed_at = new Date().toISOString();
+      target.selected_confirmed_by = "principal-demo";
+      target.updated_at = target.selected_confirmed_at;
       return { status: 200, body: target };
     }
 
-    // 断开 / 恢复
-    const disconnect = pathname.match(
-      /^\/v1\/pm\/repositories\/([^/]+)\/disconnect$/
+    // 软解绑（Disconnect = archive 语义：不删行不删历史）
+    const archive = pathname.match(
+      /^\/v1\/pm\/repositories\/([^/]+)\/(archive|disconnect)$/
     );
-    if (disconnect) {
-      const target = state.repositories.find(r => r.id === disconnect[1]);
+    if (archive) {
+      const target = state.repositories.find(r => r.id === archive[1]);
       if (!target) return { status: 404, body: { error: "not_found" } };
-      target.connection_status = "disconnected";
-      target.verification_status = "pending";
+      target.status = "archived";
       target.updated_at = new Date().toISOString();
       return { status: 200, body: target };
     }
 
-    const restore = pathname.match(
-      /^\/v1\/pm\/repositories\/([^/]+)\/restore$/
-    );
-    if (restore) {
-      const target = state.repositories.find(r => r.id === restore[1]);
-      if (!target) return { status: 404, body: { error: "not_found" } };
-      target.connection_status = "connected";
-      target.verification_status = "pending";
-      target.updated_at = new Date().toISOString();
-      return { status: 200, body: target };
-    }
+    /* ── S01-06 设备（契约 = pm-api pm_devices.rs 六端点） ── */
 
-    // Provider 授权
-    const authStart = pathname.match(
-      /^\/v1\/pm\/projects\/([^/]+)\/git-providers$/
-    );
-    if (authStart) {
-      return {
-        status: 200,
-        body: {
-          authorization_url: "http://127.0.0.1:8848/mock-provider-authorize"
-        }
+    if (pathname === "/v1/pm/devices" && method === "POST") {
+      const body = (payload ?? {}) as Record<string, unknown>;
+      const now = new Date().toISOString();
+      const device = {
+        id: String(body.device_id ?? `dev-${Date.now()}`),
+        tenant_id: "tenant-demo",
+        owner_principal_id: "principal-demo",
+        name: String(body.name ?? "device"),
+        platform: String(body.platform ?? "linux"),
+        os_version: (body.os_version as string | null) ?? null,
+        executor_kind: String(body.executor_kind ?? "codex"),
+        executor_version: (body.executor_version as string | null) ?? null,
+        status: "active",
+        readiness: null,
+        last_check_at: null,
+        last_check: null,
+        revoked_at: null,
+        created_at: now,
+        updated_at: now
       };
+      state.devices.push(device);
+      return { status: 200, body: { ...device, reused: false } };
+    }
+
+    const bind = pathname.match(/^\/v1\/pm\/devices\/([^/]+)\/bindings$/);
+    if (bind && method === "POST") {
+      const body = (payload ?? {}) as Record<string, unknown>;
+      const binding = {
+        id: `binding-${Date.now()}`,
+        device_id: bind[1],
+        project_id: String(body.project_id ?? DEMO_PROJECT_ID),
+        declared_repository_ids: [],
+        verified_repositories: [],
+        bound_by: "principal-demo",
+        bound_at: new Date().toISOString(),
+        unbound_at: null
+      };
+      state.bindings.push(binding);
+      return { status: 200, body: binding };
+    }
+
+    const checks = pathname.match(/^\/v1\/pm\/devices\/([^/]+)\/checks$/);
+    if (checks && method === "POST") {
+      const device = state.devices.find(d => d.id === checks[1]);
+      if (!device) return { status: 404, body: { error: "not_found" } };
+      const body = (payload ?? {}) as Record<string, unknown>;
+      device.last_check = body as typeof device.last_check;
+      device.last_check_at = new Date().toISOString();
+      device.readiness =
+        body.installed && body.connected && body.tool ? "ready" : "degraded";
+      device.updated_at = device.last_check_at;
+      return { status: 200, body: device };
+    }
+
+    const revoke = pathname.match(/^\/v1\/pm\/devices\/([^/]+)\/revoke$/);
+    if (revoke && method === "POST") {
+      const device = state.devices.find(d => d.id === revoke[1]);
+      if (!device) return { status: 404, body: { error: "not_found" } };
+      device.status = "revoked";
+      device.revoked_at = new Date().toISOString();
+      device.updated_at = device.revoked_at;
+      return { status: 200, body: device };
     }
 
     // S01-04 启动认知 Run
