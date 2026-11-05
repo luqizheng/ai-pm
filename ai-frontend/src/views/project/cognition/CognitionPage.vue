@@ -202,11 +202,11 @@ onMounted(load);
               :variant="run.status === 'completed' ? 'info' : 'neutral'"
               size="sm"
             >
-              {{ t(`s01.cognition.run.status.${run.status}`) }}
+              {{ t(`s01.cognition.runs.status.${run.status}`) }}
             </Badge>
             <span class="cog-page__run-meta">
               {{
-                t("s01.cognition.run.meta", {
+                t("s01.cognition.runs.meta", {
                   confirmed: run.confirmed_count,
                   total: run.item_count
                 })

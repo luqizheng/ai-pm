@@ -25,7 +25,7 @@ project-create:
   deferredCognition: AI-PM 认知（S01-04）
   deferredBootstrap: Codex / MCP 引导（S01-06）
   afterTitle: 创建之后
-  afterBody: 你会自动进入项目初始化总览。创建成功不等于初始化完成——项目立即进入 Active，初始化有独立生命周期。
+  afterBody: 创建成功即自动进入项目总控台——项目立即进入 Active，随时可以开展工作。仓库、认知、基线等能力按需逐步配置，均不阻塞使用。
   nameRequired: 请填写项目名称。
   keyRequired: 请填写项目标识。
   keyConflict: 该标识已被其他项目占用，请更换一个。

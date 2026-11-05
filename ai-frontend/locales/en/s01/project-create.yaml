@@ -25,7 +25,7 @@ project-create:
   deferredCognition: AI-PM Cognition (S01-04)
   deferredBootstrap: Codex / MCP bootstrap (S01-06)
   afterTitle: After you create
-  afterBody: You land on the Project Initialization Overview automatically. Creation success is not initialization done — the project becomes Active immediately, with its own initialization lifecycle.
+  afterBody: You land on the Project Command Center automatically — the project becomes Active immediately, ready to work. Repositories, cognition and baseline are configured later, without blocking anything.
   nameRequired: Project name is required.
   keyRequired: Project key is required.
   keyConflict: This key is already taken by another project. Choose a different key.
