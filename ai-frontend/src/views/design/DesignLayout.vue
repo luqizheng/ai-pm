@@ -1,19 +1,36 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 
 import { DESIGN_PATHS } from "@/router/design";
+import { applyTheme, currentTheme, useTheme } from "@/lib/theme";
 
 /**
  * 设计系统目录外壳 —— 全屏页布局（无应用壳导航）。
  * 左侧目录导航 + 顶部标题条（含深浅主题预览切换）+ 右侧内容插槽。
- * 主题切换作用于本布局根元素 data-theme（token 变量级联，只影响本页）。
+ *
+ * 主题预览复用壳内 useTheme()（html 级 data-theme + aipm.theme 持久化，
+ * 唯一写入点），不能挂布局子树——tokens.css 别名层（--surface-* 等）
+ * 声明在 :root、var() 在声明处求值，子树覆盖只影响直接消费 --ws-* 的
+ * 样式，消费别名的组件不变色（2026-11-05 实测确认并修复）。
+ * 进入时记录当前主题，离开时恢复——预览态不外泄到应用壳。
  */
-import { ref } from "vue";
 
 const { t } = useI18n();
 
-const isLight = ref(false);
+const { theme, toggleTheme } = useTheme();
+const isLight = computed(() => theme.value === "light");
+
+/** 进入目录前的主题（卸载时恢复） */
+let previousTheme: "dark" | "light" | null = null;
+
+onMounted(() => {
+  previousTheme = currentTheme();
+});
+
+onBeforeUnmount(() => {
+  if (previousTheme) applyTheme(previousTheme);
+});
 
 const navSections = computed(() => [
   {
@@ -121,7 +138,7 @@ const navSections = computed(() => [
 </script>
 
 <template>
-  <div class="design-layout" :data-theme="isLight ? 'light' : undefined">
+  <div class="design-layout">
     <aside class="design-layout__rail">
       <RouterLink class="design-layout__home" :to="DESIGN_PATHS.index">
         <span class="design-layout__brand">AI R&D</span>
@@ -156,7 +173,7 @@ const navSections = computed(() => [
           type="button"
           class="design-layout__theme"
           :aria-pressed="isLight ? 'true' : 'false'"
-          @click="isLight = !isLight"
+          @click="toggleTheme"
         >
           {{ isLight ? "Dark" : "Light" }} · {{ t("design.theme.toggle") }}
         </button>
