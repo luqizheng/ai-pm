@@ -18,12 +18,14 @@ import SettingsPreferencesView from "@/views/settings/SettingsPreferencesView.vu
 import SettingsNotificationsView from "@/views/settings/SettingsNotificationsView.vue";
 import SettingsAiView from "@/views/settings/SettingsAiView.vue";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
-import InitializationOverviewView from "@/views/project/initialization/InitializationOverviewView.vue";
 import ProjectCreateView from "@/views/project/create/ProjectCreateView.vue";
 import CognitionPage from "@/views/project/cognition/CognitionPage.vue";
 import BaselinePage from "@/views/project/baseline/BaselinePage.vue";
 import CommandCenterView from "@/views/project/command-center/CommandCenterView.vue";
+import RequirementBaselineView from "@/views/project/requirement-baseline/RequirementBaselineView.vue";
 import RequirementDetailView from "@/views/project/requirement-detail/RequirementDetailView.vue";
+import RequirementHistoryView from "@/views/project/requirement-history/RequirementHistoryView.vue";
+import RequirementImpactView from "@/views/project/requirement-impact/RequirementImpactView.vue";
 import RequirementReviewView from "@/views/project/requirement-review/RequirementReviewView.vue";
 
 /**
@@ -83,18 +85,10 @@ export function buildRoutes(): RouteRecordRaw[] {
   // 认证路由在兜底之前注册，避免被 404 捕获
   routes.push(...authRoutes);
 
-  // 项目初始化总览（S01-01）：项目创建完成后到正式交接前的**临时工作区**，
-  // 不占长期主导航位（设计稿 §2.1）——入口来自项目创建完成与总控台初始化区下钻。
-  // 项目作用域由路由参数 project_id 或项目列表解析（当前工程无 /project/:id 参数路由）。
-  routes.push({
-    path: "/project/initialization",
-    component: InitializationOverviewView,
-    meta: { title: "s01.initialization-overview.page.title" }
-  });
-
   // 项目创建（S01-02）：动作页，不占主导航——入口 = Personal Home「新建项目」
   // 与顶栏 Project Switcher 的 Create New Project（canCreate）。
-  // 创建成功后携带 project_id 进入初始化总览（S01-02 §7 裁决 Q3）。
+  // 创建成功即工作：携带 project_id 直接进入项目总控台（2026-11-05 用户裁决，
+  // 原「跳初始化总览」页已删除）。
   // 项目认知（S01-04）：六阶段之 cognition 的下钻页（人工启动 Run + 逐项确认）。
   routes.push({
     path: "/project/cognition",
@@ -129,6 +123,30 @@ export function buildRoutes(): RouteRecordRaw[] {
     path: "/project/requirements/review",
     component: RequirementReviewView,
     meta: { title: "pm.requirementReview.pageTitle" }
+  });
+
+  // 需求基线管理（S02-UI-06）：正式基线快照的管理 / 准备向导 / 比较，
+  // 不占主导航——入口 = Requirements Workspace 页头「需求基线」。
+  routes.push({
+    path: "/project/requirements/baselines",
+    component: RequirementBaselineView,
+    meta: { title: "pm.requirementBaseline.pageTitle" }
+  });
+
+  // 修订与历史（S02-UI-05）：单条需求的修订时间线 / 详情 / 两版比较 / 审计，
+  // 不占主导航——入口 = 需求详情页的两处历史入口（页头与 History Tab）。
+  routes.push({
+    path: "/project/requirements/:requirementId/history",
+    component: RequirementHistoryView,
+    meta: { title: "pm.requirementHistory.pageTitle" }
+  });
+
+  // 变更影响分析（S02-UI-07）：拟议修订的依赖可视化 / 影响面板 / AI 分析 /
+  // 人类决策，不占主导航——入口 = 需求详情页页头「影响分析」。
+  routes.push({
+    path: "/project/requirements/:requirementId/impact",
+    component: RequirementImpactView,
+    meta: { title: "pm.requirementImpact.pageTitle" }
   });
 
   // 需求详情与追溯（S02-UI-02）：单条需求检查页，不占主导航——

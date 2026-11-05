@@ -16,7 +16,6 @@ import OverviewCard from "./components/OverviewCard.vue";
 import SourceSheet from "./components/SourceSheet.vue";
 import SpecificationCard from "./components/SpecificationCard.vue";
 import TraceabilityCard from "./components/TraceabilityCard.vue";
-import RevisionSheet from "../requirements/components/RevisionSheet.vue";
 
 import {
   currentAuthorFixture,
@@ -58,7 +57,6 @@ const contextTab = ref("sources");
 const sourceSheetOpen = ref(false);
 const activeSource = ref<SourceItem | null>(null);
 const editSheetOpen = ref(false);
-const revisionOpen = ref(false);
 const proposeDialogOpen = ref(false);
 
 watch(requirementId, () => {
@@ -66,7 +64,6 @@ watch(requirementId, () => {
   sourceSheetOpen.value = false;
   activeSource.value = null;
   editSheetOpen.value = false;
-  revisionOpen.value = false;
   proposeDialogOpen.value = false;
 });
 
@@ -164,7 +161,8 @@ function goBackToList() {
         :entry="entry"
         @edit="editSheetOpen = true"
         @propose="proposeDialogOpen = true"
-        @history="revisionOpen = true"
+        @history="router.push(`/project/requirements/${entry.id}/history`)"
+        @impact="router.push(`/project/requirements/${entry.id}/impact`)"
       />
 
       <div class="reqd-layout">
@@ -187,7 +185,7 @@ function goBackToList() {
           @update:active-tab="contextTab = $event"
           @inspect="onInspect"
           @navigate="onNavigate"
-          @history="revisionOpen = true"
+          @history="router.push(`/project/requirements/${entry.id}/history`)"
         />
       </div>
 
@@ -201,7 +199,6 @@ function goBackToList() {
         :entry="entry"
         @save="onEditSave"
       />
-      <RevisionSheet v-model:open="revisionOpen" :entry="entry" />
 
       <ConfirmationDialog
         :open="proposeDialogOpen"

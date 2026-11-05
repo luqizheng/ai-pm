@@ -68,7 +68,7 @@ describe("ProjectCreateView", () => {
     expect(createProject).not.toHaveBeenCalled();
   });
 
-  it("提交成功调用 createProject 并展示成功反馈，可进入初始化总览", async () => {
+  it("提交成功调用 createProject 并直接进入项目总控台（携带 project_id）", async () => {
     createProject.mockResolvedValue({
       id: "prj-1",
       name: "Atlas Platform"
@@ -88,12 +88,9 @@ describe("ProjectCreateView", () => {
       name: "Atlas Platform",
       description: "R&D delivery workbench for platform teams"
     });
-    expect(wrapper.text()).toContain("项目创建成功");
 
-    // 「立即进入」携带 project_id 进入 S01-01 初始化总览
-    await findButtonByText(wrapper, "立即进入").trigger("click");
-    await flushPromises();
-    expect(router.currentRoute.value.path).toBe("/project/initialization");
+    // 创建即可工作：无成功停留页，直接进入总控台（不再经过初始化总览）
+    expect(router.currentRoute.value.path).toBe("/project/command-center");
     expect(router.currentRoute.value.query.project_id).toBe("prj-1");
     wrapper.unmount();
   });
@@ -113,6 +110,6 @@ describe("ProjectCreateView", () => {
     expect((inputs[0].element as HTMLInputElement).value).toBe(
       "Atlas Platform"
     );
-    expect(wrapper.text()).not.toContain("项目创建成功");
+    expect(createProject).toHaveBeenCalledTimes(1);
   });
 });

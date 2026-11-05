@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { FileSearch, ScrollText, ShieldCheck, UserRound } from "lucide-vue-next";
-import type { RequirementEntry, RevisionRecord } from "../../requirements/requirement-entry";
+import {
+  FileSearch,
+  ScrollText,
+  ShieldCheck,
+  UserRound
+} from "lucide-vue-next";
+import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
+import type {
+  RequirementEntry,
+  RevisionRecord
+} from "../../requirements/requirement-entry";
 
 /**
  * 审计信息卡（S02-UI-05 §6 + Deliverable 4）。
@@ -63,12 +72,16 @@ const sourceRefs = computed(() =>
       <ul class="rha__facts">
         <li>
           <UserRound class="rha__icon" aria-hidden="true" />
-          <span class="rha__label">{{ t("pm.requirementHistory.auditInitiated") }}</span>
+          <span class="rha__label">{{
+            t("pm.requirementHistory.auditInitiated")
+          }}</span>
           <span class="rha__value">{{ initiatedBy }}</span>
         </li>
         <li v-if="reviewedBy">
           <FileSearch class="rha__icon" aria-hidden="true" />
-          <span class="rha__label">{{ t("pm.requirementHistory.auditReviewed") }}</span>
+          <span class="rha__label">{{
+            t("pm.requirementHistory.auditReviewed")
+          }}</span>
           <span class="rha__value">{{ reviewedBy }}</span>
         </li>
         <li v-if="confirmedBy || rejectedBy">
@@ -84,7 +97,9 @@ const sourceRefs = computed(() =>
         </li>
         <li>
           <ScrollText class="rha__icon" aria-hidden="true" />
-          <span class="rha__label">{{ t("pm.requirementHistory.auditReason") }}</span>
+          <span class="rha__label">{{
+            t("pm.requirementHistory.auditReason")
+          }}</span>
           <span class="rha__value">{{ reason }}</span>
         </li>
       </ul>

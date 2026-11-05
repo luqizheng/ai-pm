@@ -1,13 +1,22 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { Inbox, ShieldCheck, Sparkles, UserRound, XCircle } from "lucide-vue-next";
+import {
+  Inbox,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+  XCircle
+} from "lucide-vue-next";
 import type { Component } from "vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import StatusIndicator from "@/components/ui/status-indicator/StatusIndicator.vue";
 import type { StatusIndicatorTone } from "@/components/ui/status-indicator/status-indicator";
-import type { RevisionOrigin, RevisionRecord } from "../../requirements/requirement-entry";
+import type {
+  RevisionOrigin,
+  RevisionRecord
+} from "../../requirements/requirement-entry";
 
 /**
  * 垂直修订时间线（S02-UI-05 §3 + Deliverable 1）。
@@ -33,13 +42,15 @@ const originMeta: Record<RevisionOrigin, { icon: Component; key: string }> = {
 };
 
 const stateTone = (state: string): StatusIndicatorTone =>
-  ({
-    draft: "neutral",
-    pending_confirmation: "warning",
-    approved: "success",
-    rejected: "danger",
-    superseded: "neutral"
-  } as const)[state] ?? "neutral";
+  (
+    ({
+      draft: "neutral",
+      pending_confirmation: "warning",
+      approved: "success",
+      rejected: "danger",
+      superseded: "neutral"
+    }) as const
+  )[state] ?? "neutral";
 
 const stateLabel = (state: string) =>
   ({
@@ -59,8 +70,13 @@ const ordered = computed(() => props.revisions);
 </script>
 
 <template>
-  <section class="rh-timeline" :aria-label="t('pm.requirementHistory.timelineAria')">
-    <h3 class="rh-timeline__title">{{ t("pm.requirementHistory.timelineTitle") }}</h3>
+  <section
+    class="rh-timeline"
+    :aria-label="t('pm.requirementHistory.timelineAria')"
+  >
+    <h3 class="rh-timeline__title">
+      {{ t("pm.requirementHistory.timelineTitle") }}
+    </h3>
     <EmptyState
       v-if="ordered.length === 0"
       size="sm"
@@ -71,7 +87,9 @@ const ordered = computed(() => props.revisions);
         <button
           type="button"
           class="rh-timeline__item"
-          :class="{ 'rh-timeline__item--selected': revision.id === props.selectedId }"
+          :class="{
+            'rh-timeline__item--selected': revision.id === props.selectedId
+          }"
           :aria-current="revision.id === props.selectedId ? 'true' : undefined"
           @click="emit('select', revision.id)"
         >
@@ -81,7 +99,11 @@ const ordered = computed(() => props.revisions);
           <span class="rh-timeline__body">
             <span class="rh-timeline__head">
               <span class="rh-timeline__version">
-                {{ t("pm.requirements.revisionVersion", { version: revision.version }) }}
+                {{
+                  t("pm.requirements.revisionVersion", {
+                    version: revision.version
+                  })
+                }}
               </span>
               <Badge variant="neutral" size="sm">
                 {{ stateLabel(revision.state) }}
@@ -89,10 +111,17 @@ const ordered = computed(() => props.revisions);
               <span
                 v-if="revision.origin"
                 class="rh-timeline__origin"
-                :class="{ 'rh-timeline__origin--ai': revision.origin === 'ai_assisted' }"
+                :class="{
+                  'rh-timeline__origin--ai': revision.origin === 'ai_assisted'
+                }"
               >
-                <component :is="originMeta[revision.origin].icon" aria-hidden="true" />
-                <span>{{ t(`pm.requirementHistory.${originMeta[revision.origin].key}`) }}</span>
+                <component
+                  :is="originMeta[revision.origin].icon"
+                  aria-hidden="true"
+                />
+                <span>{{
+                  t(`pm.requirementHistory.${originMeta[revision.origin].key}`)
+                }}</span>
               </span>
             </span>
             <span class="rh-timeline__summary">{{ revision.summary }}</span>
@@ -105,12 +134,20 @@ const ordered = computed(() => props.revisions);
               class="rh-timeline__decision"
               :class="`rh-timeline__decision--${revision.decision.kind}`"
             >
-              <component :is="decisionMeta[revision.decision.kind].icon" aria-hidden="true" />
+              <component
+                :is="decisionMeta[revision.decision.kind].icon"
+                aria-hidden="true"
+              />
               <span>
-                {{ t(`pm.requirementHistory.${decisionMeta[revision.decision.kind].key}`, {
-                  actor: revision.decision.actor,
-                  time: revision.decision.acted_at
-                }) }}
+                {{
+                  t(
+                    `pm.requirementHistory.${decisionMeta[revision.decision.kind].key}`,
+                    {
+                      actor: revision.decision.actor,
+                      time: revision.decision.acted_at
+                    }
+                  )
+                }}
               </span>
             </span>
           </span>

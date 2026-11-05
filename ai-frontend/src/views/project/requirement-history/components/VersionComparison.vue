@@ -4,11 +4,7 @@ import { useI18n } from "vue-i18n";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import type { RevisionRecord } from "../../requirements/requirement-entry";
-import {
-  collapseContext,
-  diffCriteria,
-  diffLines
-} from "../revision-diff";
+import { collapseContext, diffCriteria, diffLines } from "../revision-diff";
 
 /**
  * 版本比较（S02-UI-05 §5 + Deliverable 3）。
@@ -28,7 +24,9 @@ const { t } = useI18n();
 
 const rows = computed(() => {
   if (!props.previous || !props.next) return [];
-  return collapseContext(diffLines(props.previous.markdown, props.next.markdown));
+  return collapseContext(
+    diffLines(props.previous.markdown, props.next.markdown)
+  );
 });
 
 const addedCount = computed(
@@ -78,18 +76,28 @@ const typeLabel = (type: "functional" | "non_functional") =>
   <section class="rhc" :aria-label="t('pm.requirementHistory.compareTitle')">
     <div class="rhc__head">
       <h3 class="rhc__title">{{ t("pm.requirementHistory.compareTitle") }}</h3>
-      <span
-        v-if="props.previous && props.next"
-        class="rhc__versions"
-      >
+      <span v-if="props.previous && props.next" class="rhc__versions">
         <Badge variant="neutral" size="sm">
-          {{ t("pm.requirementHistory.compareOld", { version: props.previous.version }) }}
+          {{
+            t("pm.requirementHistory.compareOld", {
+              version: props.previous.version
+            })
+          }}
         </Badge>
         <Badge variant="accent" size="sm">
-          {{ t("pm.requirementHistory.compareNew", { version: props.next.version }) }}
+          {{
+            t("pm.requirementHistory.compareNew", {
+              version: props.next.version
+            })
+          }}
         </Badge>
         <span v-if="addedCount + removedCount > 0" class="rhc__stat">
-          {{ t("pm.requirementHistory.compareStat", { added: addedCount, removed: removedCount }) }}
+          {{
+            t("pm.requirementHistory.compareStat", {
+              added: addedCount,
+              removed: removedCount
+            })
+          }}
         </span>
       </span>
     </div>
@@ -104,14 +112,24 @@ const typeLabel = (type: "functional" | "non_functional") =>
     <template v-else>
       <div class="rhc__diff">
         <template v-for="(row, index) in rows" :key="index">
-          <p v-if="!row.collapsed" class="rhc__row" :class="`rhc__row--${row.kind}`">
+          <p
+            v-if="!row.collapsed"
+            class="rhc__row"
+            :class="`rhc__row--${row.kind}`"
+          >
             <span class="rhc__marker" aria-hidden="true">
-              {{ row.kind === "added" ? "+" : row.kind === "removed" ? "−" : "" }}
+              {{
+                row.kind === "added" ? "+" : row.kind === "removed" ? "−" : ""
+              }}
             </span>
             <span v-if="row.text" class="rhc__row-text">{{ row.text }}</span>
-            <span v-else class="rhc__row-text rhc__row-text--blank">&nbsp;</span>
+            <span v-else class="rhc__row-text rhc__row-text--blank"
+              >&nbsp;</span
+            >
           </p>
-          <p v-else class="rhc__row rhc__row--collapsed" aria-hidden="true">⋯</p>
+          <p v-else class="rhc__row rhc__row--collapsed" aria-hidden="true">
+            ⋯
+          </p>
         </template>
       </div>
 
@@ -126,7 +144,9 @@ const typeLabel = (type: "functional" | "non_functional") =>
             :class="`rhc__criterion--${item.kind}`"
           >
             <span class="rhc__criterion-kind">
-              {{ item.kind === "added" ? "+" : item.kind === "removed" ? "−" : "" }}
+              {{
+                item.kind === "added" ? "+" : item.kind === "removed" ? "−" : ""
+              }}
             </span>
             <span>{{ item.statement }}</span>
           </li>
@@ -138,16 +158,20 @@ const typeLabel = (type: "functional" | "non_functional") =>
           {{ t("pm.requirementHistory.compareMetaLabel") }}
         </span>
         <p v-if="priorityChanged" class="rhc__meta-change">
-          {{ t("pm.requirementHistory.comparePriorityChange", {
-            from: priorityLabel(props.previous!.priority!),
-            to: priorityLabel(props.next!.priority!)
-          }) }}
+          {{
+            t("pm.requirementHistory.comparePriorityChange", {
+              from: priorityLabel(props.previous!.priority!),
+              to: priorityLabel(props.next!.priority!)
+            })
+          }}
         </p>
         <p v-if="typeChanged" class="rhc__meta-change">
-          {{ t("pm.requirementHistory.compareTypeChange", {
-            from: typeLabel(props.previous!.type!),
-            to: typeLabel(props.next!.type!)
-          }) }}
+          {{
+            t("pm.requirementHistory.compareTypeChange", {
+              from: typeLabel(props.previous!.type!),
+              to: typeLabel(props.next!.type!)
+            })
+          }}
         </p>
       </div>
     </template>
@@ -214,6 +238,7 @@ const typeLabel = (type: "functional" | "non_functional") =>
   line-height: var(--line-height-micro);
   min-height: var(--line-height-micro);
   padding: 0 var(--space-2);
+  border-left: var(--border-2) solid transparent;
 }
 
 .rhc__marker {
@@ -234,7 +259,8 @@ const typeLabel = (type: "functional" | "non_functional") =>
 }
 
 .rhc__row--added {
-  background: color-mix(in srgb, var(--ws-color-success) 14%, transparent);
+  border-left-color: var(--ws-color-success);
+  background: var(--surface-raised);
 }
 
 .rhc__row--added .rhc__marker {
@@ -242,7 +268,8 @@ const typeLabel = (type: "functional" | "non_functional") =>
 }
 
 .rhc__row--removed {
-  background: color-mix(in srgb, var(--ws-color-danger) 12%, transparent);
+  border-left-color: var(--ws-color-danger);
+  background: var(--surface-raised);
 }
 
 .rhc__row--removed .rhc__row-text {

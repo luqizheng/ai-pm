@@ -2,13 +2,19 @@
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { Ellipsis, ClipboardCheck, FolderInput, Plus, ShieldCheck } from "lucide-vue-next";
+import {
+  Ellipsis,
+  ClipboardCheck,
+  FolderInput,
+  Plus,
+  ShieldCheck
+} from "lucide-vue-next";
 import Button from "@/components/ui/button/Button.vue";
 import ConfirmationDialog from "@/components/ui/confirmation-dialog/ConfirmationDialog.vue";
 import { PageFrame } from "@/components/shell";
 
 import AiAssistBar from "./components/AiAssistBar.vue";
-import BaselineSheet from "./components/BaselineSheet.vue";
+
 import ConflictSheet from "./components/ConflictSheet.vue";
 import ContextSidePanel from "./components/ContextSidePanel.vue";
 import RequirementDetail from "./components/RequirementDetail.vue";
@@ -18,14 +24,12 @@ import SummaryStrip from "./components/SummaryStrip.vue";
 
 import {
   aiProposalPool,
-  baselineFixture,
   currentAuthorFixture,
   requirementsFixture
 } from "./fixtures";
 import type {
   AiActionKind,
   AiSuggestion,
-  BaselineSnapshot,
   RequirementEntry,
   RequirementPriority,
   RequirementType
@@ -40,7 +44,7 @@ import type { ConflictResolutionOption } from "./fixtures";
  * 数据 = fixtures（mock 先行）；状态迁移在页内本地完成，用于演示交互闭环：
  *   - Confirm / Reject / Propose Revision / 建立基线必须经 ConfirmationDialog 显式确认；
  *   - AI 动作只向「AI Assistance」追加提案，绝不直接改需求状态；
- *   - Baseline 只接受 confirmed 需求（红线由 BaselineSheet 承载）。
+ *   - 基线管理迁至独立页 /project/requirements/baselines（S02-UI-06）。
  */
 const router = useRouter();
 const { t } = useI18n();
@@ -48,7 +52,6 @@ const { t } = useI18n();
 const requirements = ref<RequirementEntry[]>(
   structuredClone(requirementsFixture) as RequirementEntry[]
 );
-const baseline = ref<BaselineSnapshot>({ ...baselineFixture });
 
 const selectedId = ref(requirements.value[0]?.id ?? "");
 const statusFilter = ref("all");
@@ -57,9 +60,8 @@ const contextTab = ref("sources");
 
 const revisionOpen = ref(false);
 const conflictOpen = ref(false);
-const baselineOpen = ref(false);
 
-type DialogKind = "confirm" | "reject" | "propose" | "baseline";
+type DialogKind = "confirm" | "reject" | "propose";
 const dialog = ref<{ kind: DialogKind; codes: string[] } | null>(null);
 
 const selectedEntry = computed(
@@ -113,16 +115,7 @@ const dialogProps = computed(() => {
         variant: "default" as const,
         checkbox: ""
       };
-    case "baseline":
-      return {
-        title: t("pm.requirements.baselineConfirmTitle"),
-        description: t("pm.requirements.baselineConfirmDesc", {
-          version: baseline.value.version + 1,
-          count: dialog.value?.codes.length ?? 0
-        }),
-        variant: "default" as const,
-        checkbox: t("pm.requirements.baselineConfirmCheckbox")
-      };
+
     default:
       return {
         title: "",
@@ -245,14 +238,6 @@ function onDialogConfirm() {
     });
     entry.status = "pending_confirmation";
     entry.updated_at = nowLabel();
-  } else if (kind === "baseline") {
-    baseline.value = {
-      version: baseline.value.version + 1,
-      established_at: nowLabel(),
-      established_by: currentAuthorFixture,
-      requirement_codes: [...(dialog.value?.codes ?? [])]
-    };
-    baselineOpen.value = false;
   }
   dialog.value = null;
 }
@@ -282,15 +267,6 @@ function onConflictApply(option: ConflictResolutionOption) {
   entry.updated_at = nowLabel();
   conflictOpen.value = false;
   contextTab.value = "discussions";
-}
-
-function onBaselineRequestEstablish(codes: string[]) {
-  dialog.value = { kind: "baseline", codes };
-}
-
-function onBaselineHistory() {
-  baselineOpen.value = false;
-  if (selectedEntry.value) revisionOpen.value = true;
 }
 
 function appendAiSuggestion(suggestion: AiSuggestion) {
@@ -366,11 +342,19 @@ function onAddRequirement() {
     :description="t('pm.requirements.subtitle')"
   >
     <template #actions>
-      <Button variant="secondary" size="sm" @click="router.push('/project/requirements/review')">
+      <Button
+        variant="secondary"
+        size="sm"
+        @click="router.push('/project/requirements/review')"
+      >
         <ClipboardCheck aria-hidden="true" />
         {{ t("pm.requirementReview.entryLabel") }}
       </Button>
-      <Button variant="secondary" size="sm" @click="baselineOpen = true">
+      <Button
+        variant="secondary"
+        size="sm"
+        @click="router.push('/project/requirements/baselines')"
+      >
         <ShieldCheck aria-hidden="true" />
         {{ t("pm.requirements.baselineEntry") }}
       </Button>
@@ -426,13 +410,6 @@ function onAddRequirement() {
       v-model:open="conflictOpen"
       :entry="selectedEntry"
       @apply="onConflictApply"
-    />
-    <BaselineSheet
-      v-model:open="baselineOpen"
-      :requirements="requirements"
-      :baseline="baseline"
-      @request-establish="onBaselineRequestEstablish"
-      @open-history="onBaselineHistory"
     />
 
     <ConfirmationDialog

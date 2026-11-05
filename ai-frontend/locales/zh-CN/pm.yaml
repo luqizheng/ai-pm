@@ -364,6 +364,186 @@ requirementReview:
   rejectReasonLabel: 拒绝理由
   rejectReasonPlaceholder: 说明拒绝理由，将留档供后续参考…
   rejectConsequence: 提案将被拒绝并留档；关联需求当前状态不受影响。
+requirementHistory:
+  pageTitle: 修订历史
+  breadcrumbAria: 修订历史面包屑
+  actionBack: 返回需求
+  actionCompare: 比较版本
+  actionPropose: 提议新修订
+  currentVersion: 当前版本
+  timelineAria: 修订时间线
+  timelineTitle: 修订时间线
+  timelineEmpty: 暂无修订记录
+  originHuman: 人工编辑
+  originAi: AI 辅助
+  originImport: 导入
+  decisionConfirmed: "{actor} 于 {time} 确认定稿"
+  decisionRejected: "{actor} 于 {time} 否决"
+  detailTitle: 修订详情
+  detailEmptyTitle: 未选择修订
+  detailEmptyDesc: 在左侧时间线选择一条修订查看其内容。
+  detailSnapshotUnavailable: 该修订未保留验收标准快照。
+  detailSourceRefs: 关联来源引用
+  compareTitle: 版本比较
+  compareOld: "旧版 v{version}"
+  compareNew: "新版 v{version}"
+  compareOldAria: 选择旧版本
+  compareNewAria: 选择新版本
+  compareStat: "+{added} −{removed}"
+  compareEmptyTitle: 无法比较
+  compareEmptyDesc: 请选择两个不同的修订版本。
+  compareCriteriaLabel: 变更的验收标准
+  compareMetaLabel: 变更的优先级或分类
+  comparePriorityChange: "优先级：{from} → {to}"
+  compareTypeChange: "分类：{from} → {to}"
+  auditTitle: 审计信息
+  auditEmpty: 未选择修订
+  auditInitiated: 发起人
+  auditReviewed: 评审人
+  auditConfirmed: 确认人
+  auditRejected: 否决人
+  auditReason: 变更原因
+  auditIncomplete: 该修订的审计信息不完整，部分字段以现有记录回填。
+  auditEvidence: 相关来源证据
+  proposeModalTitle: 提议新修订
+  proposeModalDesc: 将基于当前内容创建一条待确认修订；定稿仍需人工确认。
+  proposeSummary: 提议新修订，等待人工确认。
+  proposeReason: 从修订历史页发起的新修订提议。
+  noOverwriteNote: 历史不可覆盖：本页不提供恢复或覆盖旧版本的操作；变更一律通过新增修订完成。
+requirementBaseline:
+  pageTitle: 需求基线
+  pageSubtitle: 管理已确认的需求快照及其修订。
+  breadcrumbAria: 需求基线面包屑
+  actionViewCurrent: 查看当前基线
+  actionPrepare: 准备新基线
+  actionCompare: 比较基线
+  overviewTitle: 当前基线
+  overviewEmptyTitle: 尚无基线
+  overviewEmptyDesc: 通过「准备新基线」建立第一个正式基线。
+  overviewId: 基线标识
+  overviewVersion: 基线版本
+  overviewDate: 确立日期
+  overviewBy: 确立人
+  overviewCount: 含入需求数
+  baselineVersion: "v{version}"
+  statusActive: 生效中
+  statusSuperseded: 已被替代
+  listAria: 基线历史
+  listTitle: 基线历史
+  listEmpty: 暂无基线记录
+  listCount: "{count} 条需求"
+  detailTitle: 基线详情
+  detailEmptyTitle: 未选择基线
+  detailEmptyDesc: 在左侧列表选择一条基线查看详情。
+  detailMetaTitle: 基线元数据
+  detailIncludedTitle: 含入需求
+  detailIncludedEmpty: 该基线未含入任何需求。
+  detailSummaryTitle: 基线摘要
+  summaryTotal: 需求总数
+  summaryDistribution: "功能 {functional} 条 · 非功能 {nonFunctional} 条"
+  wizardTitle: 准备新基线
+  wizardStep: "第 {current} / {total} 步"
+  stepSelect: 选择含入需求
+  stepRevisions: 审查需求修订
+  stepIssues: 检查未解决问题
+  stepSummary: 审查基线摘要
+  stepConfirm: 人类确认
+  lockedTitle: 以下需求不可纳入基线
+  lockedNote: 未确认与冲突需求一律不得含入；验收标准不完整的需求需先补齐。
+  issueDraft: 草稿需求
+  issuePending: 待确认需求
+  issueConflict: 冲突需求
+  issueIncomplete: 验收标准不完整
+  issueNone: 无
+  issueCount: "{count} 项"
+  issueNote: 以上问题需求不会被含入基线；处理完成后可在后续基线中纳入。
+  wizardNoPick: 尚未选择任何需求。
+  wizardPrev: 上一步
+  wizardNext: 下一步
+  wizardEstablish: 建立基线
+  wizardConfirmText: "基线 v{version} 将含入 {count} 条已确认需求的正式修订。"
+  wizardConfirmNote: 建立基线必须经人工确认；确认后将生成不可覆盖的基线快照。
+  compareTitle: 基线比较
+  compareOldLabel: 旧基线
+  compareNewLabel: 新基线
+  compareOldAria: 选择旧基线
+  compareNewAria: 选择新基线
+  compareEmptyTitle: 无法比较
+  compareEmptyDesc: 请选择两个基线。
+  compareScope: "比较范围：{from} → {to}"
+  compareNoDiff: 两个基线之间无差异。
+  compareAdded: "新增需求（{count}）"
+  compareRemoved: "移除需求（{count}）"
+  compareModified: "修改需求（{count}）"
+  confirmModalTitle: 确立需求基线
+  confirmModalDesc: "基线 v{version} 将含入 {count} 条已确认需求的正式修订。"
+  confirmCheckbox: 我已审阅基线含入清单。
+  newBaselineDescription: "含入 {count} 条已确认需求的正式修订。"
+requirementImpact:
+  pageTitle: 变更影响分析
+  pageSubtitle: 理解需求变更的下游影响。
+  entryLabel: 影响分析
+  breadcrumbAria: 变更影响分析面包屑
+  currentBaseline: 当前基线版本
+  baselineNotIncluded: 未纳入当前基线
+  proposedRevision: 拟议修订
+  statusAnalyzed: 分析完成
+  statusPending: 等待分析
+  summaryTitle: 变更摘要
+  summarySourceLabel: 变更来源
+  sourceReviewMeeting: 评审会
+  summaryOriginal: 原始需求
+  summaryProposed: 拟议变更
+  summaryReason: 变更原因
+  summaryProposedBy: 提议人
+  summarySubmittedAt: 提交日期
+  graphTitle: 依赖影响图
+  graphSourceNode: 拟议变更
+  graphNoInventNote: 影响对象全部来自需求域真实关系（关联任务、来源引用、基线记录与验收标准快照），不虚构依赖。
+  levelDirect: 直接影响
+  levelIndirect: 间接影响
+  levelPotential: 潜在影响
+  levelUncertain: 不确定影响
+  kindCriteria: 验收标准
+  kindTask: 项目任务
+  kindKnowledge: 知识文档
+  kindBaseline: 需求基线
+  kindMilestone: 项目里程碑
+  panelTitle: 影响分析面板
+  panelEmpty: 暂无影响发现。
+  panelGroupCount: "{count} 项"
+  panelGroupNone: 本类别未发现受影响项。
+  panelRequirement: 需求影响
+  panelImplementation: 实现影响
+  panelDocumentation: 文档影响
+  panelBaseline: 基线影响
+  aiTitle: AI 影响分析
+  aiBadge: AI 产出
+  aiDisclaimer: 以下为 AI 生成分析，供决策参考，不构成已确认事实；决策责任由人类承担。
+  aiRisk: 风险评估
+  aiConfidence: 置信度
+  riskLow: 低
+  riskMedium: 中
+  riskHigh: 高
+  confidenceHigh: 高
+  confidenceMedium: 中
+  confidenceLow: 低
+  aiEvidence: 证据
+  aiRecommendations: 建议
+  decisionTitle: 人类决策
+  decisionNote: 决策仅能由人类作出
+  decisionAccept: 接受拟议变更
+  decisionMoreAnalysis: 要求更多分析
+  decisionReject: 拒绝变更
+  decisionAccepted: 已接受
+  decisionRejected: 已拒绝
+  decisionRecapFindings: 影响发现
+  decisionRecapText: "共 {findings} 项发现，其中直接影响 {direct} 项；接受前请审阅全部发现。"
+  acceptModalTitle: 接受拟议变更
+  acceptModalDesc: "{code} 的拟议修订将被确认为正式版本，相关状态按确认流程更新。"
+  acceptCheckbox: 我已审阅变更摘要与全部影响发现。
+  rejectModalTitle: 拒绝变更
+  rejectModalDesc: "{code} 的拟议修订将被拒绝，需求退回草稿状态。"
 tasks:
   pageTitle: 任务
   subtitle: 全部项目的任务清单。

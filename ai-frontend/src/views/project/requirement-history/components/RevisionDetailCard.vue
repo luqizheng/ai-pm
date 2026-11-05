@@ -35,9 +35,12 @@ function parseMarkdown(markdown: string): MarkdownLine[] {
     .split("\n")
     .filter(line => line.trim().length > 0)
     .map(line => {
-      if (line.startsWith("# ")) return { kind: "h1" as const, text: line.slice(2) };
-      if (line.startsWith("- ")) return { kind: "li" as const, text: line.slice(2) };
-      if (line.startsWith("> ")) return { kind: "quote" as const, text: line.slice(2) };
+      if (line.startsWith("# "))
+        return { kind: "h1" as const, text: line.slice(2) };
+      if (line.startsWith("- "))
+        return { kind: "li" as const, text: line.slice(2) };
+      if (line.startsWith("> "))
+        return { kind: "quote" as const, text: line.slice(2) };
       return { kind: "p" as const, text: line };
     });
 }
@@ -53,12 +56,15 @@ const typeLabel = computed(() => {
     : t("pm.requirements.typeNonFunctional");
 });
 
-const priorityLabel = computed(() =>
-  ({
-    high: t("pm.requirements.priorityHigh"),
-    medium: t("pm.requirements.priorityMedium"),
-    low: t("pm.requirements.priorityLow")
-  } as const)[props.revision?.priority ?? props.entry.priority]
+const priorityLabel = computed(
+  () =>
+    (
+      ({
+        high: t("pm.requirements.priorityHigh"),
+        medium: t("pm.requirements.priorityMedium"),
+        low: t("pm.requirements.priorityLow")
+      }) as const
+    )[props.revision?.priority ?? props.entry.priority]
 );
 
 const criteria = computed(() => props.revision?.criteria ?? []);
@@ -122,7 +128,9 @@ const sourceRefs = computed(() =>
         <ul v-if="sourceRefs.length > 0" class="rhd__refs">
           <li v-for="source in sourceRefs" :key="source.id">
             <Link2 class="rhd__ref-icon" aria-hidden="true" />
-            <span v-if="source.ref" class="rhd__ref-code">{{ source.ref }}</span>
+            <span v-if="source.ref" class="rhd__ref-code">{{
+              source.ref
+            }}</span>
             <span class="rhd__ref-title">{{ source.title }}</span>
           </li>
         </ul>

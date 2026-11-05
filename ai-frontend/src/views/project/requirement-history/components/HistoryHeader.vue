@@ -30,22 +30,28 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
-const statusLabel = computed(() =>
-  ({
-    draft: t("pm.requirements.statusDraft"),
-    pending_confirmation: t("pm.requirements.statusPending"),
-    confirmed: t("pm.requirements.statusConfirmed"),
-    conflict: t("pm.requirements.statusConflict")
-  } as const)[props.entry.status]
+const statusLabel = computed(
+  () =>
+    (
+      ({
+        draft: t("pm.requirements.statusDraft"),
+        pending_confirmation: t("pm.requirements.statusPending"),
+        confirmed: t("pm.requirements.statusConfirmed"),
+        conflict: t("pm.requirements.statusConflict")
+      }) as const
+    )[props.entry.status]
 );
 
-const statusTone = computed<StatusIndicatorTone>(() =>
-  ({
-    draft: "neutral",
-    pending_confirmation: "warning",
-    confirmed: "success",
-    conflict: "danger"
-  } as const)[props.entry.status]
+const statusTone = computed<StatusIndicatorTone>(
+  () =>
+    (
+      ({
+        draft: "neutral",
+        pending_confirmation: "warning",
+        confirmed: "success",
+        conflict: "danger"
+      }) as const
+    )[props.entry.status]
 );
 
 const currentVersion = computed(
@@ -55,7 +61,10 @@ const currentVersion = computed(
 
 <template>
   <header class="rh-header">
-    <nav class="rh-header__breadcrumb" :aria-label="t('pm.requirementHistory.breadcrumbAria')">
+    <nav
+      class="rh-header__breadcrumb"
+      :aria-label="t('pm.requirementHistory.breadcrumbAria')"
+    >
       <RouterLink class="rh-header__crumb" to="/projects">
         {{ t("pm.projects.pageTitle") }}
       </RouterLink>
@@ -71,13 +80,18 @@ const currentVersion = computed(
         {{ entry.code }}
       </RouterLink>
       <span class="rh-header__crumb-sep" aria-hidden="true">/</span>
-      <span class="rh-header__crumb rh-header__crumb--current" aria-current="page">
+      <span
+        class="rh-header__crumb rh-header__crumb--current"
+        aria-current="page"
+      >
         {{ t("pm.requirementHistory.pageTitle") }}
       </span>
     </nav>
 
     <div class="rh-header__row">
-      <h1 class="rh-header__title">{{ t("pm.requirementHistory.pageTitle") }}</h1>
+      <h1 class="rh-header__title">
+        {{ t("pm.requirementHistory.pageTitle") }}
+      </h1>
       <div class="rh-header__actions">
         <Button variant="secondary" size="sm" @click="emit('back')">
           <ArrowLeft aria-hidden="true" />
@@ -101,14 +115,24 @@ const currentVersion = computed(
 
     <div class="rh-header__meta">
       <span class="rh-header__meta-item">
-        <span class="rh-header__meta-label">{{ t("pm.requirementDetail.overviewId") }}</span>
+        <span class="rh-header__meta-label">{{
+          t("pm.requirementDetail.overviewId")
+        }}</span>
         <span class="rh-header__mono">{{ entry.code }}</span>
       </span>
-      <span class="rh-header__meta-item rh-header__meta-item--title">{{ entry.title }}</span>
+      <span class="rh-header__meta-item rh-header__meta-item--title">{{
+        entry.title
+      }}</span>
       <span class="rh-header__meta-item">
-        <span class="rh-header__meta-label">{{ t("pm.requirementHistory.currentVersion") }}</span>
+        <span class="rh-header__meta-label">{{
+          t("pm.requirementHistory.currentVersion")
+        }}</span>
         <span class="rh-header__mono">
-          {{ t("pm.requirementDetail.currentVersion", { version: currentVersion }) }}
+          {{
+            t("pm.requirementDetail.currentVersion", {
+              version: currentVersion
+            })
+          }}
         </span>
       </span>
       <span class="rh-header__meta-item">
@@ -116,7 +140,9 @@ const currentVersion = computed(
         <span>{{ statusLabel }}</span>
       </span>
       <span class="rh-header__meta-item">
-        <span class="rh-header__meta-label">{{ t("pm.requirements.detailUpdated") }}</span>
+        <span class="rh-header__meta-label">{{
+          t("pm.requirements.detailUpdated")
+        }}</span>
         <span>{{ entry.updated_at }}</span>
       </span>
     </div>

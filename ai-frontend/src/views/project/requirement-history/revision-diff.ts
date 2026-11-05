@@ -88,7 +88,11 @@ export function collapseContext(rows: DiffRow[]): DiffRowWithContext[] {
   const keep = new Array<boolean>(rows.length).fill(false);
   rows.forEach((row, index) => {
     if (row.kind !== "unchanged") {
-      for (let k = Math.max(0, index - CONTEXT_KEEP); k <= Math.min(rows.length - 1, index + CONTEXT_KEEP); k += 1) {
+      for (
+        let k = Math.max(0, index - CONTEXT_KEEP);
+        k <= Math.min(rows.length - 1, index + CONTEXT_KEEP);
+        k += 1
+      ) {
         keep[k] = true;
       }
     }
@@ -111,7 +115,7 @@ export function diffCriteria(
   next: AcceptanceCriterion[]
 ): CriterionDiff[] {
   const prevStatements = new Set(previous.map(item => item.statement));
-  const nextStatements = new Set(next.map(item => item.statement));
+
   const result: CriterionDiff[] = [];
   const seen = new Set<string>();
 
@@ -137,6 +141,9 @@ export function diffCriteria(
 }
 
 /** 简单字段 diff：值不同即视为变更 */
-export function fieldChanged<T>(previous: T | undefined, next: T | undefined): boolean {
+export function fieldChanged<T>(
+  previous: T | undefined,
+  next: T | undefined
+): boolean {
   return previous !== next;
 }

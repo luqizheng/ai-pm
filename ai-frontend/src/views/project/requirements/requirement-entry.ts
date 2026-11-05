@@ -185,15 +185,6 @@ export interface RequirementEntry {
   related: RelatedItem[];
 }
 
-/** 需求基线快照（R3：基线 = 各正式 Requirement 的集合，无独立 Baseline 实体） */
-export interface BaselineSnapshot {
-  version: number;
-  established_at: string;
-  established_by: string;
-  /** 含入基线的需求编码（仅 confirmed 需求） */
-  requirement_codes: string[];
-}
-
 /** AI 协作建议动作（§10 六个建议动作） */
 export type AiActionKind =
   | "completeness"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { RotateCcw } from "lucide-vue-next";
@@ -22,7 +22,9 @@ import { getStoredUser } from "@/api/base/token-storage";
  *   Q1 Key = 系统建议 + 人类确认（可编辑，服务端唯一性裁决）；
  *   Q2 Owner = 默认创建人（后端 `POST /v1/pm/projects` 自动落 5 人编制，
  *      owner=创建人），改派属创建后的项目治理动作——AI 不能指定；
- *   Q3 创建成功 → 自动进入项目初始化总览（/project/initialization）。
+ *   Q3（2026-11-05 用户裁决更新）创建成功 → 直接进入项目总控台
+ *      （/project/command-center）。项目创建即可工作，不存在「等待初始化」
+ *      阶段；原「跳初始化总览」路径随该页一并移除。
  *
  * 边界（延后配置原则）：仓库接入、AI-PM Cognition、Codex/MCP 引导
  * 都不属于本页；创建不因它们缺省而受阻。
@@ -44,10 +46,6 @@ const nameError = ref("");
 const keyError = ref("");
 const submitError = ref("");
 const submitting = ref(false);
-const createdProjectId = ref("");
-const createdProjectName = ref("");
-/** 成功后自动进入初始化总览的定时器（提供「立即进入」兜底） */
-let redirectTimer: ReturnType<typeof setTimeout> | undefined;
 
 const ownerName = computed(() => {
   const user = getStoredUser();
@@ -121,12 +119,11 @@ async function submit() {
       name: trimmedName,
       description: description.value.trim() || undefined
     });
-    createdProjectId.value = project.id;
-    createdProjectName.value = project.name ?? trimmedName;
-    // Q3：展示简短成功反馈后自动进入初始化总览（创建成功 ≠ 初始化完成）
-    redirectTimer = setTimeout(() => {
-      void enterOverview();
-    }, 1600);
+    // Q3：创建成功即工作——直接进入项目总控台，无成功停留页、无初始化等待
+    void router.push({
+      path: "/project/command-center",
+      query: { project_id: project.id }
+    });
   } catch (error) {
     if (isKeyConflict(error)) {
       keyError.value = t("s01.project-create.keyConflict");
@@ -140,21 +137,6 @@ async function submit() {
     submitting.value = false;
   }
 }
-
-function enterOverview() {
-  if (redirectTimer) {
-    clearTimeout(redirectTimer);
-    redirectTimer = undefined;
-  }
-  void router.push({
-    path: "/project/initialization",
-    query: { project_id: createdProjectId.value }
-  });
-}
-
-onBeforeUnmount(() => {
-  if (redirectTimer) clearTimeout(redirectTimer);
-});
 </script>
 
 <template>
@@ -167,25 +149,7 @@ onBeforeUnmount(() => {
     :description="t('s01.project-create.pageDescription')"
   >
     <div class="pc-page">
-      <!-- 创建成功：简短反馈 + 自动进入初始化总览（S01-02 §7） -->
-      <div v-if="createdProjectId" class="pc-page__success">
-        <Alert variant="success" :title="t('s01.project-create.successTitle')">
-          <p class="pc-page__success-body">
-            {{
-              t("s01.project-create.successBody", { name: createdProjectName })
-            }}
-          </p>
-          <Button
-            class="pc-page__success-action"
-            variant="primary"
-            @click="enterOverview"
-          >
-            {{ t("s01.project-create.openNow") }}
-          </Button>
-        </Alert>
-      </div>
-
-      <div v-else class="pc-page__columns">
+      <div class="pc-page__columns">
         <form class="pc-page__form" @submit.prevent="submit">
           <Alert
             v-if="submitError"
@@ -414,21 +378,6 @@ onBeforeUnmount(() => {
   color: var(--ws-text-secondary);
   font-size: var(--font-size-micro);
   line-height: var(--line-height-micro);
-}
-
-.pc-page__success {
-  max-width: 760px;
-}
-
-.pc-page__success-body {
-  margin: 2px 0 0;
-  color: var(--ws-text-secondary);
-  font-size: var(--font-size-body);
-  line-height: var(--line-height-body);
-}
-
-.pc-page__success-action {
-  margin-top: var(--space-3);
 }
 
 .pc-page__rail {

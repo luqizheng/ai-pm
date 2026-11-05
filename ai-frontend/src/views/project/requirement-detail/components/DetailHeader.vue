@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { History, Pencil, Upload } from "lucide-vue-next";
+import { History, Network, Pencil, Upload } from "lucide-vue-next";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Button from "@/components/ui/button/Button.vue";
 import StatusIndicator from "@/components/ui/status-indicator/StatusIndicator.vue";
@@ -12,7 +12,8 @@ import type { RequirementEntry } from "../../requirements/requirement-entry";
  * 需求详情页头（S02-UI-02 §2）。
  *
  * 面包屑 Project / Requirements / REQ-001 + 需求 ID 与标题 +
- * 状态/优先级/类型/创建与更新时间元信息行 + 页级操作（Edit/Propose/History）。
+ * 状态/优先级/类型/创建与更新时间元信息行 +
+ * 页级操作（Edit/Propose/History/Impact）。
  * 不带 title 走 PageFrame 页头——详情页头结构更丰富，由本组件承担
  * （同 CommandCenterHeader 先例）。
  */
@@ -26,6 +27,7 @@ const emit = defineEmits<{
   (e: "edit"): void;
   (e: "propose"): void;
   (e: "history"): void;
+  (e: "impact"): void;
 }>();
 
 const { t } = useI18n();
@@ -114,6 +116,10 @@ const entry = computed(() => props.entry);
         <Button variant="ghost" size="sm" @click="emit('history')">
           <History aria-hidden="true" />
           {{ t("pm.requirements.actionHistory") }}
+        </Button>
+        <Button variant="ghost" size="sm" @click="emit('impact')">
+          <Network aria-hidden="true" />
+          {{ t("pm.requirementImpact.entryLabel") }}
         </Button>
       </div>
     </div>

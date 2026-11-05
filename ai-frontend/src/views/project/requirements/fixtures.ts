@@ -10,7 +10,6 @@
 import type {
   AiSuggestion,
   AnalysisFinding,
-  BaselineSnapshot,
   DiscussionEntry,
   RequirementEntry,
   RevisionRecord,
@@ -212,14 +211,69 @@ export const requirementsFixture: RequirementEntry[] = [
     ],
     revisions: [
       {
+        id: "rev-002-2",
+        version: 2,
+        state: "approved",
+        summary: "并入 PRP-006：SLA 分位数口径标注（10 分钟采样窗口）。",
+        author: "AI 分析助手",
+        created_at: "2026-11-02 09:35",
+        markdown:
+          "# 系统响应时间\n\n- 列表类接口在 500 并发持续 10 分钟窗口下 P95 ≤ 300ms。\n- 首屏 LCP ≤ 2s。",
+        origin: "ai_assisted",
+        decision: {
+          kind: "confirmed",
+          actor: "沈舟",
+          acted_at: "2026-11-02 09:40"
+        },
+        audit: {
+          initiated_by: "AI 分析助手",
+          reviewed_by: "沈舟",
+          reason: "并入 PRP-006 评审确认的分位数口径，提升 SLA 可复现性。"
+        },
+        priority: "high",
+        type: "non_functional",
+        criteria: [
+          {
+            id: "ac-002-1",
+            statement: "列表类接口在 500 并发持续 10 分钟下 P95 ≤ 300ms。"
+          },
+          {
+            id: "ac-002-2",
+            statement: "核心页面首屏 LCP ≤ 2s（生产规格环境）。"
+          }
+        ]
+      },
+      {
         id: "rev-002-1",
         version: 1,
-        state: "approved",
+        state: "superseded",
         summary: "自项目性能目标拆解，含可测 SLA。",
         author: "林悦",
         created_at: "2026-10-30 15:30",
         markdown:
-          "# 系统响应时间\n\n- 列表类接口 500 并发 P95 ≤ 300ms。\n- 首屏 LCP ≤ 2s。"
+          "# 系统响应时间\n\n- 列表类接口 500 并发 P95 ≤ 300ms。\n- 首屏 LCP ≤ 2s。",
+        origin: "human_edit",
+        decision: {
+          kind: "confirmed",
+          actor: "林悦",
+          acted_at: "2026-10-30 16:00"
+        },
+        audit: {
+          initiated_by: "林悦",
+          reason: "自项目性能目标拆解，形成可测 SLA 初始版本。"
+        },
+        priority: "high",
+        type: "non_functional",
+        criteria: [
+          {
+            id: "ac-002-v1-1",
+            statement: "列表类接口在 500 并发下 P95 响应时间不超过 300ms。"
+          },
+          {
+            id: "ac-002-v1-2",
+            statement: "核心页面首屏 LCP ≤ 2s（生产规格环境）。"
+          }
+        ]
       }
     ],
     sources: [
@@ -481,14 +535,6 @@ export const requirementsFixture: RequirementEntry[] = [
     ]
   }
 ];
-
-/** 当前需求基线快照（基线 = 各正式 Requirement Revision 的集合） */
-export const baselineFixture: BaselineSnapshot = {
-  version: 2,
-  established_at: "2026-11-02 12:00",
-  established_by: "林悦",
-  requirement_codes: ["REQ-002"]
-};
 
 /** 页头演示项目信息 */
 export const requirementsHeaderFixture = {
