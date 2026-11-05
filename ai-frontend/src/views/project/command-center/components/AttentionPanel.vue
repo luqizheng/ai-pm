@@ -66,7 +66,10 @@ const countColor = (tone: "danger" | "warning") =>
             class="pm-attention__count"
           >
             <span class="pm-attention__count-label">{{ count.label }}</span>
-            <span class="pm-attention__count-num" :style="{ color: countColor(count.tone) }">
+            <span
+              class="pm-attention__count-num"
+              :style="{ color: countColor(count.tone) }"
+            >
               {{ count.count }}
             </span>
           </span>
@@ -95,7 +98,9 @@ const countColor = (tone: "danger" | "warning") =>
 
     <ul class="pm-attention__items">
       <li v-for="item in items" :key="item.id" class="pm-attention__row">
-        <span class="pm-attention__item" :title="item.title">{{ item.title }}</span>
+        <span class="pm-attention__item" :title="item.title">{{
+          item.title
+        }}</span>
         <span class="pm-attention__category">{{ item.category }}</span>
         <span class="pm-attention__object">{{ item.object }}</span>
         <StatusIndicator
@@ -214,8 +219,7 @@ const countColor = (tone: "danger" | "warning") =>
 /* 列头带与行共用六列网格：事项 ｜ 类别 ｜ 业务对象 ｜ 状态 ｜ 责任 ｜ 直达 */
 .pm-attention__row {
   display: grid;
-  grid-template-columns:
-    minmax(0, 1fr) auto auto auto auto 32px;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto 32px;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) 0;

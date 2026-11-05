@@ -42,7 +42,9 @@ describe("CommandCenterView", () => {
     await mounted.router.push("/project/command-center");
     await flushPromises();
 
-    const header = mounted.wrapper.findComponent({ name: "CommandCenterHeader" });
+    const header = mounted.wrapper.findComponent({
+      name: "CommandCenterHeader"
+    });
     expect(header.exists()).toBe(true);
   });
 });

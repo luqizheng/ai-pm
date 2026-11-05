@@ -81,7 +81,12 @@ const emit = defineEmits<{ (e: "settings"): void }>();
         </span>
       </div>
       <div class="pm-cc-header__actions">
-        <Button v-if="settingsLabel" variant="secondary" size="sm" @click="emit('settings')">
+        <Button
+          v-if="settingsLabel"
+          variant="secondary"
+          size="sm"
+          @click="emit('settings')"
+        >
           {{ settingsLabel }}
         </Button>
         <IconButton
@@ -95,11 +100,17 @@ const emit = defineEmits<{ (e: "settings"): void }>();
       </div>
     </div>
 
-    <p v-if="description" class="pm-cc-header__description">{{ description }}</p>
+    <p v-if="description" class="pm-cc-header__description">
+      {{ description }}
+    </p>
 
     <div v-if="metaEntries.length" class="pm-cc-header__meta">
       <template v-for="(entry, index) in metaEntries" :key="entry.label">
-        <span v-if="index > 0" class="pm-cc-header__meta-divider" aria-hidden="true" />
+        <span
+          v-if="index > 0"
+          class="pm-cc-header__meta-divider"
+          aria-hidden="true"
+        />
         <span class="pm-cc-header__meta-entry">
           <span class="pm-cc-header__meta-label">{{ entry.label }}</span>
           <span class="pm-cc-header__meta-value">{{ entry.value }}</span>

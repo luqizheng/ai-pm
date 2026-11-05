@@ -65,8 +65,14 @@ function openKnowledge() {
       :visibility-label="t('s01.command-center.visibilityOrgOnly')"
       :description="projectHeaderFixture.description"
       :meta-entries="[
-        { label: t('s01.command-center.ownerLabel'), value: projectHeaderFixture.ownerValue },
-        { label: t('s01.command-center.createdLabel'), value: projectHeaderFixture.createdValue }
+        {
+          label: t('s01.command-center.ownerLabel'),
+          value: projectHeaderFixture.ownerValue
+        },
+        {
+          label: t('s01.command-center.createdLabel'),
+          value: projectHeaderFixture.createdValue
+        }
       ]"
       :settings-label="t('s01.command-center.settings')"
       :settings-button-label="t('s01.command-center.settings')"
@@ -81,10 +87,22 @@ function openKnowledge() {
 
     <AttentionPanel
       :title="t('s01.command-center.attentionTitle')"
-      :pending-label="t('s01.command-center.attentionPending', { count: attentionFixture.pendingCount })"
+      :pending-label="
+        t('s01.command-center.attentionPending', {
+          count: attentionFixture.pendingCount
+        })
+      "
       :counts="[
-        { label: t('s01.command-center.attentionUrgent'), count: attentionFixture.urgentCount, tone: 'danger' },
-        { label: t('s01.command-center.attentionNotify'), count: attentionFixture.notifyCount, tone: 'warning' }
+        {
+          label: t('s01.command-center.attentionUrgent'),
+          count: attentionFixture.urgentCount,
+          tone: 'danger'
+        },
+        {
+          label: t('s01.command-center.attentionNotify'),
+          count: attentionFixture.notifyCount,
+          tone: 'warning'
+        }
       ]"
       :action-label="t('s01.command-center.attentionInbox')"
       :column-labels="{

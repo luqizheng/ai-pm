@@ -61,11 +61,9 @@
 | ProjectSwitcher      | 06 — Project Context Switcher（33:82961）           | ✅   | 2026-11-04 | `src/components/global/project-switcher/`：Trigger 五态（Default sidebar 底 / Hover raised / Focus 2px accent / Selected accent 着色面 / Disabled 0.4）+ Menu 五反馈态（Open Dark·Light / Loading 骨架 / Empty / Error danger Alert+Retry / 搜索 NoResults+Clear query）；行 h36 1px 边框为本板实例覆盖（DS/ListItem 母版无边框）；面板宽 token `--size-project-menu` 480px；复用 SearchInput / ListItem / EmptyState / Alert / Button / Skeleton；展示页 `/design/navigation/switcher`。行为注：Loading/Error 绝不静默切换上下文；无权限 Create 禁用不泄露隐藏项目 |
 | Button（认证页扩展） | 02 — Authentication / Patterns and states（5:2810） | ✅   | 2026-11-04 | secondary 增 `surface="elevated"` 表面档（面板内 SSO/返回按钮 = elevated 底 #252A35，hover/active 叠主题薄纱）；主按钮六态与 5:2810 状态板一致（主线认证域合入行）                                                                                                                                                                                                                                                                                                                                                                                                  |
 
-| StatCard                         | —（本地延伸，无 Figma 对应组件）                          | ✅   | 2026-11-05 | 统计小卡：surface 底+border+radius 8；图标 16 语义色；数字 32 SemiBold（新 token --font-size-stat/line-height-stat）；变体=tone 六色/compact 单行/trend 趋势/actionLink/clickable+selected/loading 骨架。同 Badge 语义色延伸先例 |
+| StatCard | —（本地延伸，无 Figma 对应组件） | ✅ | 2026-11-05 | 统计小卡：surface 底+border+radius 8；图标 16 语义色；数字 32 SemiBold（新 token --font-size-stat/line-height-stat）；变体=tone 六色/compact 单行/trend 趋势/actionLink/clickable+selected/loading 骨架。同 Badge 语义色延伸先例 |
 
 ## 待同步（按族）
-
-
 
 - （全部 41 组已同步；上述 6 组重同步的 Loading/Empty/Collapsed 等扩展变体留待业务需要时按 Figma node id 补 API）
 

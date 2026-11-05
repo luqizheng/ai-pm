@@ -3,10 +3,7 @@ import Card from "@/components/ui/card/Card.vue";
 import ProgressIndicator from "@/components/ui/progress-indicator/ProgressIndicator.vue";
 import StatusIndicator from "@/components/ui/status-indicator/StatusIndicator.vue";
 import SectionHead from "./SectionHead.vue";
-import type {
-  DeliverableColumnLabels,
-  DeliverableRow
-} from "../deliverables";
+import type { DeliverableColumnLabels, DeliverableRow } from "../deliverables";
 
 /**
  * 需求与交付物卡（Pixso「Project Command Center」3:7631）。
@@ -53,7 +50,9 @@ const emit = defineEmits<{ (e: "action"): void }>();
       <li v-for="row in rows" :key="row.id" class="pm-deliv__row">
         <span class="pm-deliv__req">
           <span class="pm-deliv__code">{{ row.code }}</span>
-          <span class="pm-deliv__title" :title="row.title">{{ row.title }}</span>
+          <span class="pm-deliv__title" :title="row.title">{{
+            row.title
+          }}</span>
         </span>
         <span class="pm-deliv__state">
           <template v-if="row.acceptance">

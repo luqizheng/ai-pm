@@ -50,7 +50,8 @@ function overviewFixture(): CognitionOverview {
       {
         id: "item-2",
         domain: "repository",
-        content: "Repository 'atlas-platform' (main): https://github.com/acme-labs/atlas-platform",
+        content:
+          "Repository 'atlas-platform' (main): https://github.com/acme-labs/atlas-platform",
         evidence: { type: "repository_metadata" },
         confidence: "high",
         has_conflict: false,
@@ -105,7 +106,9 @@ describe("CognitionPage", () => {
     expect(wrapper.findAll('[data-testid="cognition-item"]')).toHaveLength(2);
     expect(wrapper.text()).toContain("Atlas Platform");
     // 确认人视角的正式知识区块在场
-    expect(wrapper.findAll('[data-testid="cognition-knowledge"]')).toHaveLength(1);
+    expect(wrapper.findAll('[data-testid="cognition-knowledge"]')).toHaveLength(
+      1
+    );
   });
 
   it("确认单条后重载概览（逐项确认，不整批）", async () => {

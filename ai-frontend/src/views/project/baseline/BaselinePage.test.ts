@@ -13,7 +13,8 @@ const confirmBaseline = vi.fn();
 
 vi.mock("@/api/baseline", () => ({
   loadBaselineOverview: (...args: unknown[]) => loadBaselineOverview(...args),
-  createBaselineProposal: (...args: unknown[]) => createBaselineProposal(...args),
+  createBaselineProposal: (...args: unknown[]) =>
+    createBaselineProposal(...args),
   decideBaselineItem: (...args: unknown[]) => decideBaselineItem(...args),
   confirmBaseline: (...args: unknown[]) => confirmBaseline(...args)
 }));
@@ -61,7 +62,9 @@ describe("BaselinePage", () => {
   it("呈现待确认提案条目；有未决条目时确认基线禁用", async () => {
     const { wrapper } = await mountPage();
 
-    expect(wrapper.find('[data-testid="baseline-proposal"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="baseline-proposal"]').exists()).toBe(
+      true
+    );
     expect(wrapper.findAll('[data-testid="baseline-item"]')).toHaveLength(1);
     const confirm = wrapper.find('[data-testid="baseline-confirm"]');
     expect(confirm.exists()).toBe(true);
@@ -72,7 +75,9 @@ describe("BaselinePage", () => {
     decideBaselineItem.mockResolvedValue({ id: "bi-1", state: "confirmed" });
     const { wrapper } = await mountPage();
 
-    await wrapper.find('[data-testid="baseline-confirm-bi-1"]').trigger("click");
+    await wrapper
+      .find('[data-testid="baseline-confirm-bi-1"]')
+      .trigger("click");
     await flushPromises();
 
     expect(decideBaselineItem).toHaveBeenCalledWith("prj-shield", "bi-1", {

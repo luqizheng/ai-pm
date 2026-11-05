@@ -63,17 +63,11 @@ export interface ProjectKnowledge {
   confirmed_at: string;
 }
 
-export type CognitionDecision =
-  | "confirm"
-  | "reject"
-  | "defer"
-  | "investigate";
+export type CognitionDecision = "confirm" | "reject" | "defer" | "investigate";
 
 /** GET /v1/pm/projects/{id}/cognition —— 概览（runs + 最新 items + 统计） */
 export function loadCognitionOverview(projectId: string) {
-  return http.get<CognitionOverview>(
-    `/v1/pm/projects/${projectId}/cognition`
-  );
+  return http.get<CognitionOverview>(`/v1/pm/projects/${projectId}/cognition`);
 }
 
 /** POST …/cognition/runs —— 人工启动认知 Run（Q2-C；V1 = 结构化事实派生） */
@@ -90,10 +84,11 @@ export function decideCognitionItem(
   itemId: string,
   body: { action: CognitionDecision; content?: string; note?: string }
 ) {
-  return http.post<{ id: string; state: CognitionItemState; knowledge_id: string | null }>(
-    `/v1/pm/projects/${projectId}/cognition/items/${itemId}/decision`,
-    body
-  );
+  return http.post<{
+    id: string;
+    state: CognitionItemState;
+    knowledge_id: string | null;
+  }>(`/v1/pm/projects/${projectId}/cognition/items/${itemId}/decision`, body);
 }
 
 /** GET …/cognition/knowledge —— 已确认项目知识（Active） */

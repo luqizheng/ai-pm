@@ -52,7 +52,11 @@ const hasProgress = (progress: number | null | undefined) =>
     </template>
 
     <div class="pm-agents__metrics">
-      <div v-for="metric in metrics" :key="metric.label" class="pm-agents__metric">
+      <div
+        v-for="metric in metrics"
+        :key="metric.label"
+        class="pm-agents__metric"
+      >
         <span class="pm-agents__metric-label">{{ metric.label }}</span>
         <span class="pm-agents__metric-value">
           {{ metric.primary }}
@@ -164,8 +168,7 @@ const hasProgress = (progress: number | null | undefined) =>
 /* 列头带与行共用五列网格：Agent ｜ 当前工作 ｜ 状态 ｜ 进度 ｜ 时长 */
 .pm-agents__row {
   display: grid;
-  grid-template-columns:
-    minmax(0, 1.5fr) minmax(0, 1.2fr) auto 72px 48px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.2fr) auto 72px 48px;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);

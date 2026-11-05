@@ -35,7 +35,11 @@ const emit = defineEmits<{ (e: "action"): void }>();
       @action="emit('action')"
     />
     <div class="pm-health__grid">
-      <HealthMetricCard v-for="metric in metrics" :key="metric.label" v-bind="metric" />
+      <HealthMetricCard
+        v-for="metric in metrics"
+        :key="metric.label"
+        v-bind="metric"
+      />
     </div>
   </section>
 </template>

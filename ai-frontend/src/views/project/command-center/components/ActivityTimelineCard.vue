@@ -55,17 +55,10 @@ const emit = defineEmits<{
     </template>
 
     <ul class="pm-act__timeline">
-      <li
-        v-for="(item, index) in items"
-        :key="item.id"
-        class="pm-act__entry"
-      >
+      <li v-for="(item, index) in items" :key="item.id" class="pm-act__entry">
         <span class="pm-act__rail" aria-hidden="true">
           <span class="pm-act__dot" :class="`pm-act__dot--${item.tone}`" />
-          <span
-            v-if="index < items.length - 1"
-            class="pm-act__line"
-          />
+          <span v-if="index < items.length - 1" class="pm-act__line" />
         </span>
         <div class="pm-act__body">
           <div class="pm-act__main">

@@ -57,7 +57,8 @@ async function load() {
     overview.value = await loadBaselineOverview(projectId.value);
   } catch (error) {
     overview.value = null;
-    errorMessage.value = error instanceof Error ? error.message : String(error ?? "");
+    errorMessage.value =
+      error instanceof Error ? error.message : String(error ?? "");
   } finally {
     loading.value = false;
   }
@@ -70,15 +71,22 @@ async function withBusy(key: string, fn: () => Promise<unknown>) {
     await fn();
     await load();
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error ?? "");
+    errorMessage.value =
+      error instanceof Error ? error.message : String(error ?? "");
   } finally {
     busy.value = "";
   }
 }
 
-const createProposal = () => withBusy("propose", () => createBaselineProposal(projectId.value));
-const confirmAll = () => withBusy("confirm", () => confirmBaseline(projectId.value));
-const decide = (item: BaselineItem, action: "confirm" | "reject", content?: string) =>
+const createProposal = () =>
+  withBusy("propose", () => createBaselineProposal(projectId.value));
+const confirmAll = () =>
+  withBusy("confirm", () => confirmBaseline(projectId.value));
+const decide = (
+  item: BaselineItem,
+  action: "confirm" | "reject",
+  content?: string
+) =>
   withBusy(item.id, () =>
     decideBaselineItem(projectId.value, item.id, {
       action,
@@ -145,12 +153,18 @@ onMounted(load);
       <section class="bl-page__status" data-testid="baseline-status">
         <template v-if="overview.current_version">
           <Badge variant="info" size="sm">
-            {{ t("s01.baseline.status.version", { version: overview.current_version }) }}
+            {{
+              t("s01.baseline.status.version", {
+                version: overview.current_version
+              })
+            }}
           </Badge>
           <span class="bl-page__hint">
             {{
               t("s01.baseline.status.confirmedAt", {
-                time: new Date(overview.current_confirmed_at ?? "").toLocaleString()
+                time: new Date(
+                  overview.current_confirmed_at ?? ""
+                ).toLocaleString()
               })
             }}
           </span>
@@ -185,7 +199,13 @@ onMounted(load);
                 {{ t(`s01.baseline.category.${item.category}`) }}
               </Badge>
               <Badge
-                :variant="item.state === 'confirmed' ? 'info' : item.state === 'rejected' ? 'danger' : 'neutral'"
+                :variant="
+                  item.state === 'confirmed'
+                    ? 'info'
+                    : item.state === 'rejected'
+                      ? 'danger'
+                      : 'neutral'
+                "
                 size="sm"
               >
                 {{ t(`s01.baseline.itemState.${item.state}`) }}
@@ -242,30 +262,75 @@ onMounted(load);
 </template>
 
 <style scoped>
-.bl-page__loading { padding: var(--space-10); color: var(--ws-text-secondary); }
-.bl-page__status { display: flex; align-items: center; gap: var(--space-3); }
-.bl-page__hint { margin: 0; color: var(--ws-text-secondary); font-size: var(--font-size-caption); }
+.bl-page__loading {
+  padding: var(--space-10);
+  color: var(--ws-text-secondary);
+}
+.bl-page__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.bl-page__hint {
+  margin: 0;
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-caption);
+}
 .bl-page__card {
-  display: flex; flex-direction: column; gap: var(--space-3);
-  padding: var(--space-5); background: var(--ws-elevated);
-  border: 1px solid var(--ws-border); border-radius: var(--ws-radius-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--ws-elevated);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--ws-radius-card);
 }
-.bl-page__proposal { border-color: var(--ws-accent); }
+.bl-page__proposal {
+  border-color: var(--ws-accent);
+}
 .bl-page__card h2 {
-  margin: 0; color: var(--ws-text-primary);
-  font-size: var(--ws-font-size-section); font-weight: var(--weight-semibold);
+  margin: 0;
+  color: var(--ws-text-primary);
+  font-size: var(--ws-font-size-section);
+  font-weight: var(--weight-semibold);
 }
-.bl-page__items, .bl-page__history {
-  display: flex; flex-direction: column; gap: var(--space-3);
-  margin: 0; padding: 0; list-style: none;
+.bl-page__items,
+.bl-page__history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 .bl-page__item {
-  display: flex; flex-direction: column; gap: var(--space-2);
-  padding: var(--space-3); border: 1px solid var(--ws-border);
-  border-radius: var(--radius-sm); background: var(--ws-canvas);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-sm);
+  background: var(--ws-canvas);
 }
-.bl-page__item-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
-.bl-page__content { margin: 0; color: var(--ws-text-primary); font-size: var(--font-size-body); }
-.bl-page__actions { display: flex; align-items: center; gap: var(--space-2); }
-.bl-page__history li { display: flex; align-items: center; gap: var(--space-3); }
+.bl-page__item-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.bl-page__content {
+  margin: 0;
+  color: var(--ws-text-primary);
+  font-size: var(--font-size-body);
+}
+.bl-page__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.bl-page__history li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
 </style>

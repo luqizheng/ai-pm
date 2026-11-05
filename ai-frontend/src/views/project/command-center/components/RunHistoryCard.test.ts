@@ -57,13 +57,20 @@ describe("RunHistoryCard", () => {
 
   it("渲染运行行：Agent 走 accent、语义点与右对齐耗时", () => {
     const wrapper = mount(RunHistoryCard, {
-      props: { title: "最近运行记录", actionLabel: "运行历史", columnLabels, entries }
+      props: {
+        title: "最近运行记录",
+        actionLabel: "运行历史",
+        columnLabels,
+        entries
+      }
     });
 
     const rows = wrapper.findAll("ul.pm-runs__rows .pm-runs__row");
     expect(rows).toHaveLength(2);
     expect(wrapper.text()).toContain("RUN-8842");
-    expect(wrapper.find(".pm-runs__agent").classes()).toContain("pm-runs__agent");
+    expect(wrapper.find(".pm-runs__agent").classes()).toContain(
+      "pm-runs__agent"
+    );
     expect(wrapper.findAll('[role="status"]')).toHaveLength(2);
     expect(wrapper.find(".ui-status--info").exists()).toBe(true);
   });

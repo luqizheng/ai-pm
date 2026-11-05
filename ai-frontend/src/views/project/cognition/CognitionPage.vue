@@ -72,7 +72,8 @@ async function load() {
     knowledge.value = (await listProjectKnowledge(projectId.value)).items;
   } catch (error) {
     overview.value = null;
-    errorMessage.value = error instanceof Error ? error.message : String(error ?? "");
+    errorMessage.value =
+      error instanceof Error ? error.message : String(error ?? "");
   } finally {
     loading.value = false;
   }
@@ -86,7 +87,8 @@ async function startRun() {
     await startCognitionRun(projectId.value);
     await load();
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : String(error ?? "");
+    errorMessage.value =
+      error instanceof Error ? error.message : String(error ?? "");
   } finally {
     starting.value = false;
   }
@@ -191,8 +193,15 @@ onMounted(load);
           {{ t("s01.cognition.runs.empty") }}
         </p>
         <ul v-else class="cog-page__runs">
-          <li v-for="run in overview.runs" :key="run.id" data-testid="cognition-run">
-            <Badge :variant="run.status === 'completed' ? 'info' : 'neutral'" size="sm">
+          <li
+            v-for="run in overview.runs"
+            :key="run.id"
+            data-testid="cognition-run"
+          >
+            <Badge
+              :variant="run.status === 'completed' ? 'info' : 'neutral'"
+              size="sm"
+            >
               {{ t(`s01.cognition.run.status.${run.status}`) }}
             </Badge>
             <span class="cog-page__run-meta">
@@ -228,7 +237,9 @@ onMounted(load);
             data-testid="cognition-item"
           >
             <div class="cog-page__item-head">
-              <Badge variant="neutral" size="sm">{{ domainTag(item.domain) }}</Badge>
+              <Badge variant="neutral" size="sm">{{
+                domainTag(item.domain)
+              }}</Badge>
               <Badge variant="neutral" size="sm">
                 {{ t(`s01.cognition.confidence.${item.confidence}`) }}
               </Badge>
@@ -324,7 +335,9 @@ onMounted(load);
             data-testid="cognition-knowledge"
           >
             <div class="cog-page__item-head">
-              <Badge variant="neutral" size="sm">{{ domainTag(entry.domain) }}</Badge>
+              <Badge variant="neutral" size="sm">{{
+                domainTag(entry.domain)
+              }}</Badge>
               <Badge variant="info" size="sm">v{{ entry.version }}</Badge>
             </div>
             <p class="cog-page__item-content">{{ entry.content }}</p>

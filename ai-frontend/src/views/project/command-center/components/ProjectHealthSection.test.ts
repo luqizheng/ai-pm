@@ -47,7 +47,12 @@ const metrics: HealthMetric[] = [
 describe("ProjectHealthSection", () => {
   it("渲染标题、更新时间 chip 与「查看指标定义」入口，点击发出 action", async () => {
     const wrapper = mount(ProjectHealthSection, {
-      props: { title: "项目健康度", meta: "更新于 09:42", actionLabel: "查看指标定义", metrics }
+      props: {
+        title: "项目健康度",
+        meta: "更新于 09:42",
+        actionLabel: "查看指标定义",
+        metrics
+      }
     });
 
     expect(wrapper.find("h3").text()).toBe("项目健康度");

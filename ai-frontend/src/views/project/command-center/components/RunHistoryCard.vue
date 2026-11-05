@@ -49,7 +49,9 @@ const emit = defineEmits<{ (e: "action"): void }>();
       <li v-for="entry in entries" :key="entry.id" class="pm-runs__row">
         <span class="pm-runs__run-id">{{ entry.runId }}</span>
         <span class="pm-runs__agent">{{ entry.agent }}</span>
-        <span class="pm-runs__trigger" :title="entry.trigger">{{ entry.trigger }}</span>
+        <span class="pm-runs__trigger" :title="entry.trigger">{{
+          entry.trigger
+        }}</span>
         <StatusIndicator
           class="pm-runs__status"
           :status="entry.statusTone"

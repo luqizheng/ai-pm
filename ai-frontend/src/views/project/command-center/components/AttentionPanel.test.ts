@@ -59,9 +59,9 @@ describe("AttentionPanel", () => {
 
     expect(wrapper.find("h3").text()).toBe("需关注事项");
     expect(wrapper.find(".pm-attention__icon").exists()).toBe(true);
-    expect(wrapper.find(".pm-attention__title-group .ui-badge--warning").text()).toContain(
-      "3 项待处理"
-    );
+    expect(
+      wrapper.find(".pm-attention__title-group .ui-badge--warning").text()
+    ).toContain("3 项待处理");
     expect(wrapper.text()).toContain("紧急");
     expect(wrapper.text()).toContain("1");
     expect(wrapper.text()).toContain("2");
@@ -97,7 +97,9 @@ describe("AttentionPanel", () => {
   it("items 为空时面板只剩壳与列头（设计稿默认态）", () => {
     const wrapper = mountPanel({ items: [] });
 
-    expect(wrapper.findAll("ul.pm-attention__items .pm-attention__row")).toHaveLength(0);
+    expect(
+      wrapper.findAll("ul.pm-attention__items .pm-attention__row")
+    ).toHaveLength(0);
     expect(wrapper.findAll('[role="status"]')).toHaveLength(0);
   });
 });

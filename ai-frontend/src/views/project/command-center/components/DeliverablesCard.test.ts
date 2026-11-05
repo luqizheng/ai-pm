@@ -57,7 +57,12 @@ describe("DeliverablesCard", () => {
 
   it("需求行渲染编号/标题/双列状态/覆盖率，满覆盖走 success 进度条", () => {
     const wrapper = mount(DeliverablesCard, {
-      props: { title: "需求与交付物", actionLabel: "查看全部", columnLabels, rows }
+      props: {
+        title: "需求与交付物",
+        actionLabel: "查看全部",
+        columnLabels,
+        rows
+      }
     });
 
     const items = wrapper.findAll("ul.pm-deliv__rows .pm-deliv__row");

@@ -3,11 +3,7 @@ import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 
 import AiAgentsOverviewCard from "./AiAgentsOverviewCard.vue";
-import type {
-  AgentMetric,
-  AgentRow,
-  AiAgentsColumnLabels
-} from "./ai-agents";
+import type { AgentMetric, AgentRow, AiAgentsColumnLabels } from "./ai-agents";
 
 const metrics: AgentMetric[] = [
   { label: "运行中的 Agent", primary: "3 / 4", secondary: "在线" },

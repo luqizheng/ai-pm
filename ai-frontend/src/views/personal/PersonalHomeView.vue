@@ -370,7 +370,11 @@ function openObject(path: string) {
         role="group"
         :aria-label="t('pm.personalHome.overview.title')"
       >
-        <StatCard v-for="stat in overviewStats" :key="stat.label" v-bind="stat" />
+        <StatCard
+          v-for="stat in overviewStats"
+          :key="stat.label"
+          v-bind="stat"
+        />
       </div>
 
       <!-- Row 2 · My Inbox + My Projects -->
