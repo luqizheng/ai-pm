@@ -93,6 +93,11 @@ pub struct AuthenticatedIdentity {
     pub permissions: Vec<String>,
     pub aud: Option<String>,
     pub client_id: Option<String>,
+    /// lmms token-service v1.7.0 起签发的用途声明（签发通道权威值：`user_login` /
+    /// `api_key` / `auth_code` / `service` / `resource`）；客户端不可自报。存量旧令牌
+    /// 无该键，`auth_mode()` 回落旧推断。契约：ai-pm `docs/superpowers/specs` 转录自
+    /// lmms `2026-11-04-token-purpose-claim-design.md` §4.7。
+    pub purpose: Option<String>,
     pub ct: bool,
     pub username: Option<String>,
     pub nickname: Option<String>,
@@ -108,6 +113,7 @@ impl AuthenticatedIdentity {
             permissions: claim_list(claims.get("permissions")),
             aud: claim_text_opt(claims.get("aud")),
             client_id: claim_text_opt(claims.get("client_id")),
+            purpose: claim_text_opt(claims.get("purpose")),
             ct: claims.get("ct").and_then(Value::as_bool).unwrap_or(false),
             username: claim_text_opt(claims.get("username")),
             nickname: claim_text_opt(claims.get("nickname")),
@@ -118,15 +124,27 @@ impl AuthenticatedIdentity {
         self.roles.iter().any(|role| role == "service")
     }
 
+    /// 令牌类别判定。lmms v1.7.0 起 `purpose` 为签发方权威声明，存在即取代
+    /// `aud`/`client_id` 推断（词表映射：user_login→interactive，
+    /// api_key/auth_code→api_key，service/resource→service）；未知枚举值按
+    /// unknown（fail-closed，消费方不得放行）。缺失=存量旧令牌，沿用旧推断：
     /// `aud` 存在 = 浏览器登录；无 `aud` 但有 `client_id` = API Key；
     /// 两者都没有（服务间/异常 token）= unknown。
     fn auth_mode(&self) -> &'static str {
-        if self.aud.is_some() {
-            "interactive"
-        } else if self.client_id.is_some() {
-            "api_key"
-        } else {
-            "unknown"
+        match self.purpose.as_deref() {
+            Some("user_login") => "interactive",
+            Some("api_key") | Some("auth_code") => "api_key",
+            Some("service") | Some("resource") => "service",
+            Some(_) => "unknown",
+            None => {
+                if self.aud.is_some() {
+                    "interactive"
+                } else if self.client_id.is_some() {
+                    "api_key"
+                } else {
+                    "unknown"
+                }
+            }
         }
     }
 
@@ -692,4 +710,92 @@ fn unauthorized(code: &str, message: &str) -> Response {
 fn forbidden(code: &str, message: &str) -> Response {
     let body = json!({ "code": code, "message": message });
     (StatusCode::FORBIDDEN, Json(body)).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn identity(claims: Value) -> AuthenticatedIdentity {
+        AuthenticatedIdentity::parse(&claims).expect("test claims must parse")
+    }
+
+    fn base_claims() -> Value {
+        json!({
+            "tid": 1,
+            "sub": "usr-1",
+            "roles": ["member"],
+            "permissions": ["pm.requirement.read"],
+        })
+    }
+
+    #[test]
+    fn purpose_user_login_maps_to_interactive() {
+        let mut c = base_claims();
+        c["purpose"] = json!("user_login");
+        c["aud"] = json!("coder-micro-services");
+        assert_eq!(identity(c).auth_mode(), "interactive");
+    }
+
+    #[test]
+    fn purpose_api_key_and_auth_code_map_to_api_key() {
+        for p in ["api_key", "auth_code"] {
+            let mut c = base_claims();
+            c["purpose"] = json!(p);
+            c["client_id"] = json!("key-1");
+            assert_eq!(identity(c).auth_mode(), "api_key", "purpose={p}");
+        }
+    }
+
+    #[test]
+    fn purpose_is_authoritative_over_aud_inference() {
+        // OAuth/机器令牌不该带 aud；若带，purpose 仍赢——权威声明优先于推断。
+        let mut c = base_claims();
+        c["purpose"] = json!("api_key");
+        c["aud"] = json!("coder-micro-services");
+        assert_eq!(identity(c).auth_mode(), "api_key");
+    }
+
+    #[test]
+    fn purpose_service_and_resource_map_to_service() {
+        for p in ["service", "resource"] {
+            let mut c = base_claims();
+            c["purpose"] = json!(p);
+            assert_eq!(identity(c).auth_mode(), "service", "purpose={p}");
+        }
+    }
+
+    #[test]
+    fn unknown_purpose_fails_closed_to_unknown() {
+        let mut c = base_claims();
+        c["purpose"] = json!("interactive"); // 伪造的枚举外值
+        c["aud"] = json!("coder-micro-services");
+        assert_eq!(identity(c).auth_mode(), "unknown");
+    }
+
+    #[test]
+    fn legacy_token_without_purpose_keeps_old_inference() {
+        // 存量旧令牌：无 purpose，沿用 aud/client_id 推断（兼容语义，契约 §4.7-3）。
+        let mut c = base_claims();
+        c["aud"] = json!("coder-micro-services");
+        assert_eq!(identity(c).auth_mode(), "interactive");
+
+        let mut c = base_claims();
+        c["client_id"] = json!("key-1");
+        assert_eq!(identity(c).auth_mode(), "api_key");
+
+        assert_eq!(identity(base_claims()).auth_mode(), "unknown");
+    }
+
+    #[test]
+    fn purpose_non_string_is_coerced_then_fails_closed() {
+        // claim_text 对数字做串化（与 tid 同 helper）：42 → Some("42") →
+        // 枚举外值 → unknown（fail-closed），绝不落回 legacy 推断。
+        let mut c = base_claims();
+        c["purpose"] = json!(42);
+        c["aud"] = json!("coder-micro-services");
+        let id = identity(c);
+        assert_eq!(id.purpose.as_deref(), Some("42"));
+        assert_eq!(id.auth_mode(), "unknown");
+    }
 }
