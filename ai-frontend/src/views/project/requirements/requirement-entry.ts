@@ -43,6 +43,26 @@ export interface AcceptanceCriterion {
   statement: string;
 }
 
+/** 修订来源（S02-UI-05 §3 Change origin：人工编辑 / AI 辅助 / 导入） */
+export type RevisionOrigin = "human_edit" | "ai_assisted" | "import";
+
+/** 修订关联决策（独立于修订状态的人类决策记录；对齐 S02-I1 Confirmation 方向） */
+export interface RevisionDecision {
+  kind: "confirmed" | "rejected";
+  actor: string;
+  acted_at: string;
+}
+
+/** 修订审计信息（S02-UI-05 §6） */
+export interface RevisionAudit {
+  /** 谁发起该修订 */
+  initiated_by: string;
+  /** 谁评审过（可空） */
+  reviewed_by?: string;
+  /** 为什么改 */
+  reason: string;
+}
+
 /** 修订记录（RequirementRevision 读模型扩展） */
 export interface RevisionRecord {
   id: string;
@@ -54,6 +74,18 @@ export interface RevisionRecord {
   created_at: string;
   /** 该版正文（Knowledge Markdown 权威正文的快照展示） */
   markdown: string;
+  /** 变更来源；缺省视为未记录（历史数据渐进补齐） */
+  origin?: RevisionOrigin;
+  /** 关联决策（confirmed = 定稿凭据；rejected = 否决留档） */
+  decision?: RevisionDecision;
+  /** 审计信息（发起/评审/理由） */
+  audit?: RevisionAudit;
+  /** 该版优先级快照（版本比较用） */
+  priority?: RequirementPriority;
+  /** 该版类型快照（版本比较用） */
+  type?: RequirementType;
+  /** 该版验收标准快照（版本比较用） */
+  criteria?: AcceptanceCriterion[];
 }
 
 /** 来源与追溯条目类型 */
@@ -107,6 +139,14 @@ export interface AiSuggestion {
   created_at: string;
 }
 
+/** 需求规格（S02-UI-02 §3B：业务理由 / 预期结果 / 范围 / 明确排除） */
+export interface RequirementSpecification {
+  business_rationale: string;
+  expected_outcome: string;
+  scope: string;
+  explicit_exclusions: string;
+}
+
 /** 关联项类型 */
 export type RelatedKind = "requirement" | "objective" | "task";
 
@@ -115,6 +155,8 @@ export interface RelatedItem {
   kind: RelatedKind;
   code: string;
   title: string;
+  /** 关联需求可导航时给出的目标需求 id（S02-UI-02 §5 关联需求导航） */
+  target_id?: string;
 }
 
 /** 需求工作区行/详情读模型 */
@@ -129,7 +171,10 @@ export interface RequirementEntry {
   status: RequirementUiState;
   /** 来源指示（列表行短标签） */
   source_label: string;
+  created_at: string;
   updated_at: string;
+  /** 需求规格（S02-UI-02 §3B） */
+  specification: RequirementSpecification;
   acceptance_criteria: AcceptanceCriterion[];
   /** 修订记录，version 倒序 */
   revisions: RevisionRecord[];

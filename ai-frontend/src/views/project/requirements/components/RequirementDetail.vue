@@ -3,6 +3,7 @@ import { computed, reactive, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   BookOpen,
+  ExternalLink,
   History,
   MessageSquareText,
   MessagesSquare,
@@ -45,7 +46,14 @@ const props = defineProps<Props>();
 const emit = defineEmits<{
   (
     e: "action",
-    action: "edit" | "propose" | "confirm" | "reject" | "resolve" | "history"
+    action:
+      | "edit"
+      | "propose"
+      | "confirm"
+      | "reject"
+      | "resolve"
+      | "history"
+      | "open"
   ): void;
   (
     e: "save",
@@ -266,6 +274,10 @@ function onSave() {
       <Button variant="ghost" size="sm" @click="emit('action', 'history')">
         <History aria-hidden="true" />
         {{ t("pm.requirements.actionHistory") }}
+      </Button>
+      <Button variant="ghost" size="sm" @click="emit('action', 'open')">
+        <ExternalLink aria-hidden="true" />
+        {{ t("pm.requirementDetail.openFull") }}
       </Button>
     </div>
 

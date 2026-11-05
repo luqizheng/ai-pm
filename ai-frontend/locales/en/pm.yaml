@@ -169,6 +169,7 @@ requirements:
   detailRelated: Related Items
   detailType: Type
   detailPriority: Priority
+  detailStatus: Status
   detailUpdated: Updated
   detailSourceLabel: Source
   criteriaEmpty: No acceptance criteria defined yet.
@@ -263,6 +264,106 @@ requirements:
   rejectDialogDesc: "{code} will return to draft and its pending revision will be marked rejected."
   proposeDialogTitle: Submit for confirmation
   proposeDialogDesc: "{code} current content will become a new revision pending confirmation."
+requirementDetail:
+  pageTitle: Requirement Detail
+  openFull: Open full detail
+  overviewTitle: Overview
+  overviewId: Requirement ID
+  overviewCreated: Created
+  overviewUpdated: Last modified
+  specTitle: Requirement Specification
+  specRationale: Business rationale
+  specOutcome: Expected outcome
+  specScope: Scope
+  specExclusions: Explicit exclusions
+  acceptTitle: Acceptance Criteria
+  traceTitle: Traceability
+  traceExpand: Expand all
+  traceCollapse: Collapse
+  traceUpstream: Upstream sources
+  traceRequirement: Formal requirement
+  traceDownstream: Downstream links
+  traceHidden: "+{count}"
+  traceNote: Source material is evidence, not the formal requirement; the confirmed requirement is represented by its revisions.
+  currentVersion: "v{version}"
+  contextAria: Requirement detail context panel
+  tabSources: Sources
+  tabRelated: Related Requirements
+  tabDiscussions: Discussions
+  tabHistory: History
+  relatedReqsTitle: Navigable related requirements
+  relatedOthersTitle: Other related items
+  historyOpenFull: View full history
+  actionOpenSource: View
+  sourceSheetTitle: Source inspection
+  sourceSheetNote: Source material supports the requirement; it is not the formal requirement itself.
+  editSheetTitle: Edit Requirement
+  editBasicTitle: Basic information
+  editSheetNote: Saving only creates a new draft revision; formal approval still requires explicit human confirmation.
+  notFoundTitle: Requirement not found
+  notFoundDesc: This requirement does not exist or has been removed.
+  backToList: Back to requirements
+requirementReview:
+  pageTitle: Requirement Review
+  pageSubtitle: Review proposed requirements and make formal decisions.
+  entryLabel: Requirement Review
+  originHint: Proposals come from the requirement domain (AI / human / import)
+  queueTitle: Review Queue
+  queueAria: Review queue
+  filterAria: Filter by review status
+  filterAll: All
+  filterPending: Pending Review
+  filterChanges: Changes Requested
+  filterConfirmed: Confirmed
+  filterRejected: Rejected
+  pendingCount: "{count} pending review"
+  queueEmptyTitle: No proposals
+  queueEmptyDesc: No proposals under this filter; switch filters or wait for new ones.
+  conflictIndicator: Unresolved conflict
+  sourceAi: AI proposal
+  sourceHuman: Human proposal
+  sourceImport: Import
+  statusPending: Pending Review
+  statusChanges: Changes Requested
+  statusConfirmed: Confirmed
+  statusRejected: Rejected
+  detailTitle: Review Detail
+  detailEmptyTitle: No proposal selected
+  detailEmptyDesc: Select a proposal in the queue to review and decide.
+  proposalTitle: Proposed Requirement
+  proposalId: Proposal ID
+  proposalNew: New requirement proposal
+  proposalRevision: "Revision proposal → {code}"
+  submittedAt: Submitted
+  evidenceTitle: Source Evidence
+  analysisTitle: AI Analysis
+  analysisBadge: AI output
+  comparisonTitle: Existing Requirement Comparison
+  comparisonNone: No similar requirement found; treat as a new requirement.
+  comparisonProposalSide: Proposal
+  comparisonExistingSide: "Existing {code}"
+  blockAdded: Added
+  blockModified: Modified
+  blockRemoved: Removed
+  blockDuplication: Potential duplication
+  decisionPanelTitle: Human Decision
+  decisionPanelNote: Decisions are human-only; AI has no authority to confirm requirements.
+  actionConfirm: Confirm
+  actionChanges: Request Changes
+  actionReject: Reject
+  decisionRecordLabel: Decision record
+  confirmModalTitle: Confirm proposal
+  confirmCheckbox: I have reviewed the proposal and comparison.
+  confirmNewSummary: "{code} will be finalized as a formal requirement with {count} acceptance criteria."
+  confirmRevisionSummary: "{code} will create a new formal revision on {target}; the current approved revision becomes superseded."
+  changesModalTitle: Request Changes
+  changesCommentLabel: Required modifications
+  changesCommentPlaceholder: Describe what must change and why…
+  changesConsequence: The proposal returns to its submitter for revision; the linked requirement is unaffected.
+  rejectModalTitle: Reject proposal
+  rejectReasonLabel: Rejection reason
+  rejectReasonPlaceholder: State the rejection reason; it will be archived for future reference…
+  rejectConsequence: The proposal is rejected and archived; the linked requirement is unaffected.
 tasks:
   pageTitle: Tasks
   subtitle: Task list across all projects.

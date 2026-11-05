@@ -169,6 +169,7 @@ requirements:
   detailRelated: 关联项
   detailType: 类型
   detailPriority: 优先级
+  detailStatus: 状态
   detailUpdated: 更新时间
   detailSourceLabel: 来源
   criteriaEmpty: 尚未定义验收标准。
@@ -263,6 +264,106 @@ requirements:
   rejectDialogDesc: "{code} 将退回草稿状态，待确认修订标记为已拒绝。"
   proposeDialogTitle: 提交确认
   proposeDialogDesc: "{code} 当前内容将生成新修订并进入待确认状态。"
+requirementDetail:
+  pageTitle: 需求详情
+  openFull: 打开详情页
+  overviewTitle: 概览
+  overviewId: 需求 ID
+  overviewCreated: 创建时间
+  overviewUpdated: 更新时间
+  specTitle: 需求规格
+  specRationale: 业务理由
+  specOutcome: 预期结果
+  specScope: 范围
+  specExclusions: 明确排除
+  acceptTitle: 验收标准
+  traceTitle: 追溯链
+  traceExpand: 展开全部
+  traceCollapse: 收起
+  traceUpstream: 上游来源
+  traceRequirement: 正式需求
+  traceDownstream: 下游关联
+  traceHidden: "+{count}"
+  traceNote: 来源材料为证据摘录，不是正式需求；确认后的正式需求以修订版本为准。
+  currentVersion: "v{version}"
+  contextAria: 需求详情上下文面板
+  tabSources: 来源
+  tabRelated: 关联需求
+  tabDiscussions: 讨论
+  tabHistory: 历史
+  relatedReqsTitle: 可导航的关联需求
+  relatedOthersTitle: 其他关联项
+  historyOpenFull: 查看完整历史
+  actionOpenSource: 查看
+  sourceSheetTitle: 来源检查
+  sourceSheetNote: 来源材料是支撑证据，不是正式需求；正式需求以上述需求节点为准。
+  editSheetTitle: 编辑需求
+  editBasicTitle: 基本信息
+  editSheetNote: 保存仅生成新的草稿修订；提交确认后仍需人工确认才能定稿。
+  notFoundTitle: 未找到需求
+  notFoundDesc: 该需求不存在或已被移除。
+  backToList: 返回需求列表
+requirementReview:
+  pageTitle: 需求评审
+  pageSubtitle: 评审提案需求并作出正式决策。
+  entryLabel: 需求评审
+  originHint: 提案来自需求域（AI / 人工 / 导入）
+  queueTitle: 评审队列
+  queueAria: 评审队列
+  filterAria: 评审状态过滤
+  filterAll: 全部
+  filterPending: 待评审
+  filterChanges: 已要求修改
+  filterConfirmed: 已确认
+  filterRejected: 已拒绝
+  pendingCount: "{count} 条待评审"
+  queueEmptyTitle: 没有提案
+  queueEmptyDesc: 当前过滤条件下没有提案；切换过滤或等待新提案。
+  conflictIndicator: 存在未裁决冲突
+  sourceAi: AI 提案
+  sourceHuman: 人类提案
+  sourceImport: 导入
+  statusPending: 待评审
+  statusChanges: 已要求修改
+  statusConfirmed: 已确认
+  statusRejected: 已拒绝
+  detailTitle: 评审详情
+  detailEmptyTitle: 未选择提案
+  detailEmptyDesc: 在左侧队列选择一条提案查看详情与决策。
+  proposalTitle: 提案需求
+  proposalId: 提案编号
+  proposalNew: 新建需求提案
+  proposalRevision: "修订提案 → {code}"
+  submittedAt: 提交时间
+  evidenceTitle: 来源证据
+  analysisTitle: AI 分析
+  analysisBadge: AI 产出
+  comparisonTitle: 与既有需求比较
+  comparisonNone: 未发现相似需求，按新建需求处理。
+  comparisonProposalSide: 提案内容
+  comparisonExistingSide: "既有需求 {code}"
+  blockAdded: 新增
+  blockModified: 修改
+  blockRemoved: 删除
+  blockDuplication: 潜在重复
+  decisionPanelTitle: 人工决策
+  decisionPanelNote: 决策仅能由人类作出；AI 无权确认正式需求。
+  actionConfirm: 确认
+  actionChanges: 要求修改
+  actionReject: 拒绝
+  decisionRecordLabel: 决策记录
+  confirmModalTitle: 确认提案
+  confirmCheckbox: 我已审阅提案内容与比较结果。
+  confirmNewSummary: "{code} 将定稿为正式需求，验收标准 {count} 条一并生效。"
+  confirmRevisionSummary: "{code} 将在 {target} 上生成新的正式修订，现有定稿转为已被替代。"
+  changesModalTitle: 要求修改
+  changesCommentLabel: 修改要求说明
+  changesCommentPlaceholder: 说明需要修改的内容与原因…
+  changesConsequence: 提案将退回提交方修改；关联需求当前状态不受影响。
+  rejectModalTitle: 拒绝提案
+  rejectReasonLabel: 拒绝理由
+  rejectReasonPlaceholder: 说明拒绝理由，将留档供后续参考…
+  rejectConsequence: 提案将被拒绝并留档；关联需求当前状态不受影响。
 tasks:
   pageTitle: 任务
   subtitle: 全部项目的任务清单。

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { Ellipsis, FolderInput, Plus, ShieldCheck } from "lucide-vue-next";
+import { Ellipsis, ClipboardCheck, FolderInput, Plus, ShieldCheck } from "lucide-vue-next";
 import Button from "@/components/ui/button/Button.vue";
 import ConfirmationDialog from "@/components/ui/confirmation-dialog/ConfirmationDialog.vue";
 import { PageFrame } from "@/components/shell";
@@ -41,6 +42,7 @@ import type { ConflictResolutionOption } from "./fixtures";
  *   - AI 动作只向「AI Assistance」追加提案，绝不直接改需求状态；
  *   - Baseline 只接受 confirmed 需求（红线由 BaselineSheet 承载）。
  */
+const router = useRouter();
 const { t } = useI18n();
 
 const requirements = ref<RequirementEntry[]>(
@@ -153,10 +155,21 @@ function onStatusFilter(value: string) {
 }
 
 function onDetailAction(
-  action: "edit" | "propose" | "confirm" | "reject" | "resolve" | "history"
+  action:
+    | "edit"
+    | "propose"
+    | "confirm"
+    | "reject"
+    | "resolve"
+    | "history"
+    | "open"
 ) {
   if (action === "edit") {
     editing.value = true;
+    return;
+  }
+  if (action === "open") {
+    void router.push(`/project/requirements/${selectedId.value}`);
     return;
   }
   if (action === "resolve") {
@@ -315,7 +328,14 @@ function onAddRequirement() {
     priority: "medium",
     status: "draft",
     source_label: t("pm.requirements.newRequirementSource"),
+    created_at: nowLabel(),
     updated_at: nowLabel(),
+    specification: {
+      business_rationale: "",
+      expected_outcome: "",
+      scope: "",
+      explicit_exclusions: ""
+    },
     acceptance_criteria: [],
     revisions: [
       {
@@ -346,6 +366,10 @@ function onAddRequirement() {
     :description="t('pm.requirements.subtitle')"
   >
     <template #actions>
+      <Button variant="secondary" size="sm" @click="router.push('/project/requirements/review')">
+        <ClipboardCheck aria-hidden="true" />
+        {{ t("pm.requirementReview.entryLabel") }}
+      </Button>
       <Button variant="secondary" size="sm" @click="baselineOpen = true">
         <ShieldCheck aria-hidden="true" />
         {{ t("pm.requirements.baselineEntry") }}

@@ -29,7 +29,17 @@ export const requirementsFixture: RequirementEntry[] = [
     priority: "high",
     status: "pending_confirmation",
     source_label: "用户请求",
+    created_at: "2026-10-29 10:05",
     updated_at: "2026-11-04 16:20",
+    specification: {
+      business_rationale:
+        "平台是多人协作环境，没有可靠的账号认证就无法界定操作者与权限，也无法满足客户的安全审计要求。",
+      expected_outcome:
+        "用户能安全登录平台并保持会话，异常登录尝试被有效拦截。",
+      scope: "账号密码登录、会话管理、登录失败锁定；覆盖 Web 端。",
+      explicit_exclusions:
+        "不含第三方 OAuth 登录（另立需求）；不含组织级 SSO 对接。"
+    },
     acceptance_criteria: [
       {
         id: "ac-001-1",
@@ -53,7 +63,29 @@ export const requirementsFixture: RequirementEntry[] = [
         author: "AI 分析助手",
         created_at: "2026-11-04 16:20",
         markdown:
-          "# 用户认证\n\n- 用户使用邮箱与密码登录平台。\n- 连续 5 次登录失败后账户锁定 15 分钟。\n- 会话空闲 30 分钟后自动登出并要求重新认证。"
+          "# 用户认证\n\n- 用户使用邮箱与密码登录平台。\n- 连续 5 次登录失败后账户锁定 15 分钟。\n- 会话空闲 30 分钟后自动登出并要求重新认证。",
+        origin: "ai_assisted",
+        audit: {
+          initiated_by: "AI 分析助手",
+          reviewed_by: "林悦",
+          reason: "响应 2026-11-03 需求评审会结论：锁定与会话超时需可测。"
+        },
+        priority: "high",
+        type: "functional",
+        criteria: [
+          {
+            id: "ac-001-1",
+            statement: "用户使用邮箱与密码登录成功后进入项目工作区。"
+          },
+          {
+            id: "ac-001-2",
+            statement: "连续 5 次登录失败后账户锁定 15 分钟并给出提示。"
+          },
+          {
+            id: "ac-001-3",
+            statement: "会话空闲 30 分钟后自动登出并要求重新认证。"
+          }
+        ]
       },
       {
         id: "rev-001-1",
@@ -62,7 +94,25 @@ export const requirementsFixture: RequirementEntry[] = [
         summary: "初始拆解：账号密码登录基础能力。",
         author: "林悦",
         created_at: "2026-10-29 10:05",
-        markdown: "# 用户认证\n\n- 用户使用邮箱与密码登录平台。"
+        markdown: "# 用户认证\n\n- 用户使用邮箱与密码登录平台。",
+        origin: "human_edit",
+        decision: {
+          kind: "confirmed",
+          actor: "林悦",
+          acted_at: "2026-10-30 09:00"
+        },
+        audit: {
+          initiated_by: "林悦",
+          reason: "项目冷启动时从原始用户请求拆解基础登录能力。"
+        },
+        priority: "high",
+        type: "functional",
+        criteria: [
+          {
+            id: "ac-001-v1-1",
+            statement: "用户使用邮箱与密码登录成功后进入项目工作区。"
+          }
+        ]
       }
     ],
     sources: [
@@ -141,7 +191,15 @@ export const requirementsFixture: RequirementEntry[] = [
     priority: "high",
     status: "confirmed",
     source_label: "项目目标",
+    created_at: "2026-10-30 15:30",
     updated_at: "2026-11-02 11:40",
+    specification: {
+      business_rationale:
+        "500 人并发是企业客户明确的服务水平承诺，响应迟缓会直接导致验收失败。",
+      expected_outcome: "核心接口与页面在压测环境达到既定 SLA，可持续稳定。",
+      scope: "列表类接口与核心页面首屏；以压测环境口径为准。",
+      explicit_exclusions: "不含弱网优化与离线能力。"
+    },
     acceptance_criteria: [
       {
         id: "ac-002-1",
@@ -215,7 +273,16 @@ export const requirementsFixture: RequirementEntry[] = [
     priority: "medium",
     status: "draft",
     source_label: "干系人讨论",
+    created_at: "2026-11-03 14:05",
     updated_at: "2026-11-03 14:05",
+    specification: {
+      business_rationale:
+        "客户研发资产分散在多个仓库，单仓库绑定无法支撑完整的发现与执行链路。",
+      expected_outcome:
+        "项目可声明多个仓库及各自角色，发现与任务可按仓库范围执行。",
+      scope: "仓库绑定、角色标注（main / docs）、发现范围选择。",
+      explicit_exclusions: "不含仓库间依赖推断（归项目认知能力）。"
+    },
     acceptance_criteria: [
       {
         id: "ac-003-1",
@@ -281,7 +348,16 @@ export const requirementsFixture: RequirementEntry[] = [
     priority: "medium",
     status: "conflict",
     source_label: "代码发现",
+    created_at: "2026-10-31 09:50",
     updated_at: "2026-11-04 10:15",
+    specification: {
+      business_rationale:
+        "错误响应形态不一致导致前端与 SDK 重复适配，持续抬升联调成本。",
+      expected_outcome:
+        "适用范围内错误响应形态统一，错误码可被接口文档穷举核验。",
+      scope: "平台层与网关端点（适用范围待冲突裁决确认）；错误码引用文档枚举。",
+      explicit_exclusions: "业务端点裸 payload 约定暂不变更（冲突裁决中）。"
+    },
     acceptance_criteria: [
       {
         id: "ac-004-1",
@@ -301,7 +377,25 @@ export const requirementsFixture: RequirementEntry[] = [
         author: "AI 分析助手",
         created_at: "2026-11-04 10:15",
         markdown:
-          "# API 响应一致性\n\n- 错误响应统一 {code, message} 信封。\n- 错误码枚举与文档一致。\n\n> 冲突：pm-api 业务端点契约约定返回裸 payload（无信封）。"
+          "# API 响应一致性\n\n- 错误响应统一 {code, message} 信封。\n- 错误码枚举与文档一致。\n\n> 冲突：pm-api 业务端点契约约定返回裸 payload（无信封）。",
+        origin: "ai_assisted",
+        audit: {
+          initiated_by: "AI 分析助手",
+          reviewed_by: "沈舟",
+          reason: "代码发现检出信封形态不一致；修订暂缓，待冲突裁决后提交。"
+        },
+        priority: "medium",
+        type: "non_functional",
+        criteria: [
+          {
+            id: "ac-004-1",
+            statement: "错误响应统一为 {code, message} 信封结构。"
+          },
+          {
+            id: "ac-004-2",
+            statement: "错误码枚举与接口文档逐项一致。"
+          }
+        ]
       },
       {
         id: "rev-004-1",
@@ -310,7 +404,25 @@ export const requirementsFixture: RequirementEntry[] = [
         summary: "初始版本：统一错误信封。",
         author: "林悦",
         created_at: "2026-10-31 09:50",
-        markdown: "# API 响应一致性\n\n- 错误响应统一 {code, message} 信封。"
+        markdown: "# API 响应一致性\n\n- 错误响应统一 {code, message} 信封。",
+        origin: "human_edit",
+        decision: {
+          kind: "confirmed",
+          actor: "林悦",
+          acted_at: "2026-10-31 10:30"
+        },
+        audit: {
+          initiated_by: "林悦",
+          reason: "平台层错误信封规范的初始需求化。"
+        },
+        priority: "medium",
+        type: "non_functional",
+        criteria: [
+          {
+            id: "ac-004-v1-1",
+            statement: "错误响应统一为 {code, message} 信封结构。"
+          }
+        ]
       }
     ],
     sources: [
@@ -363,7 +475,8 @@ export const requirementsFixture: RequirementEntry[] = [
       {
         kind: "requirement",
         code: "REQ-002",
-        title: "System response time"
+        title: "System response time",
+        target_id: "req-002"
       }
     ]
   }
