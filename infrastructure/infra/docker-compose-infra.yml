@@ -99,7 +99,7 @@ services:
     networks:
       - superpowers
   postgres:
-    image: ${BASE_REGISTRY}postgres:16
+    image: ${BASE_REGISTRY:-}postgres:16
     hostname: ${POSTGRES_HOST:-postgres}
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
