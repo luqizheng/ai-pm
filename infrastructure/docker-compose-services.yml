@@ -2,9 +2,14 @@
 # 注册：pm-api 等服务进程经 vendor/digua-common-consul 读 CONSUL_ADDR/
 #       SERVICE_NAME/SERVICE_PORT/SERVICE_HEALTH_PATH → 启动注册、SIGTERM 注销、
 #       30s 对账重注册。不再使用 Docker labels（SERVICE_* labels 已删除）。
+# 跨主机：CONSUL_ADDR 指 infra 机 IP、SERVICE_ADDRESS 设本机 LAN IP（consul
+#       健康检查回拨地址；空值回退容器 hostname，合体单机部署留默认即可）。
 # 日志：promtail（observability staging overlay）只发现 logging=loki 容器。
+# ⚠️ 本文件与 docker-compose.ai-pm.yml 各有一份同名 anchor（YAML anchor 不能
+#    跨 include 文件），改动须两处同步。
 x-consul-env: &consul-env
-  CONSUL_ADDR: "http://consul:8500"
+  CONSUL_ADDR: "${CONSUL_ADDR:-http://consul:8500}"
+  SERVICE_ADDRESS: "${SERVICE_ADDRESS:-}"
   SERVICE_HEALTH_PATH: "/health"
 
 x-loki-labels: &loki-labels
@@ -14,7 +19,7 @@ x-loki-labels: &loki-labels
 
 services:
   file-service:
-    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/file-service:${IMAGE_TAG:-1.7.0-pg}
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/file-service:${IMAGE_TAG_PG:-1.7.0-pg}
     ports:
       - 8086:8082
     labels:
@@ -39,7 +44,7 @@ services:
     networks:
       - superpowers
   api-gateway:
-    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/api-gateway:${IMAGE_TAG:-1.7.0}
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/api-gateway:${IMAGE_TAG_GATEWAY:-1.7.0}
     ports:
       - 3000:3000
     labels:
@@ -76,7 +81,7 @@ services:
     networks:
       - superpowers
   token-service:
-    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/token-service:${IMAGE_TAG:-1.7.0-pg}
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/token-service:${IMAGE_TAG_PG:-1.7.0-pg}
     ports:
       - 8082:8082
     labels:
@@ -102,7 +107,7 @@ services:
     networks:
       - superpowers
   iam-service:
-    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/iam-service:${IMAGE_TAG:-1.7.0-pg}
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/iam-service:${IMAGE_TAG_PG:-1.7.0-pg}
     ports:
       - 9081:8081
     labels:
@@ -132,7 +137,7 @@ services:
     networks:
       - superpowers
   iam-outbox-publisher:
-    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/iam-service:${IMAGE_TAG:-1.7.0-pg}
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/iam-service:${IMAGE_TAG_PG:-1.7.0-pg}
     command:
       - iam_outbox_publisher
     restart: unless-stopped
@@ -166,7 +171,7 @@ services:
     networks:
       - superpowers
   prue_backend:
-    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/prue-admin-backend:${IMAGE_TAG:-1.7.0-pg}
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/prue-admin-backend:${IMAGE_TAG_PG:-1.7.0-pg}
     ports:
       - 8087:8087
     labels:
@@ -188,7 +193,7 @@ services:
     networks:
       - superpowers
   notification-service:
-    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/notification-service:${IMAGE_TAG:-1.7.0-pg}
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/notification-service:${IMAGE_TAG_PG:-1.7.0-pg}
     ports:
       - 8083:8083
     labels:
@@ -222,7 +227,7 @@ services:
     networks:
       - superpowers
   notification-outbox-publisher:
-    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/notification-service:${IMAGE_TAG:-1.7.0-pg}
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/notification-service:${IMAGE_TAG_PG:-1.7.0-pg}
     command:
       - ntf_outbox_publisher
     restart: unless-stopped
@@ -253,7 +258,7 @@ services:
     networks:
       - superpowers
   audit-service:
-    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/audit-service:${IMAGE_TAG:-1.7.0-pg}
+    image: ${kudi_repos:-zhcoder-docker-registry.com:8000/micro-server}/audit-service:${IMAGE_TAG_PG:-1.7.0-pg}
     ports:
       - 8084:8084
     labels:
@@ -281,123 +286,9 @@ services:
     networks:
       - superpowers
 
-  # ─────────── ai-pm 自有服务（本仓；原 docker-compose-aipm.yml，已并入本文件） ───────────
-  # 镜像来源：
-  #   ai-pm 仓（本仓）：    docker build --target runtime-pm-api ... -t aipm/pm-api:0.1.0 . 等
-  #   ai-pm-web 仓：        docker build --target runtime-bff -t aipm/aipm-bff:0.1.0 .
-  #                         docker build --target runtime-web -t aipm/aipm-web:0.1.0 .
-  # 全部挂 superpowers 网络（与 lmms 栈同网络，服务名互访）。
-
-  aipm-pg:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: aipm
-      POSTGRES_PASSWORD: aipm
-      POSTGRES_DB: aipm
-    volumes:
-      - aipm_pg_data:/var/lib/postgresql/data
-    ports:
-      # 宿主机工具连库：5433 = aipm-pg-dev（独立旧容器），5434 = coder-test-pg（共享测试容器），错开到 5435
-      - "5435:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aipm -d aipm"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-    networks:
-      - superpowers
-
-  pm-api:
-    image: ${AIPM_REGISTRY:-aipm}/pm-api:${AIPM_VERSION:-0.1.0}
-    # 2026-11-05 起 pm 与 iam 一致挂网关对外（/v1/pm/* → pm-api，见 config/api-gateway/
-    # routes/pm.router.toml）；consul 自注册经 *consul-env（13e7363，无 registrator）。
-    labels:
-      <<: *loki-labels
-      service: pm-api
-    environment:
-      <<: *consul-env
-      SERVICE_PORT: "8090"
-      DATABASE_URL: postgres://aipm:aipm@aipm-pg:5432/aipm
-      PM_API_PORT: "8090"
-      # 鉴权（slice B）：默认 jwks fail-closed，JWKS 取自同网络（superpowers）的 lmms token-service
-      AI_PM_AUTH_MODE: "jwks"
-      AI_PM_JWKS_URL: http://token-service:8082/.well-known/jwks.json
-      # SSH 部署密钥的封私钥主密钥（secret::seal_text，AAD=project_id）。
-      # 值必须稳定：换值 = 库内已封私钥全部不可解（公钥仍可读，私钥永不出 REST）。
-      AI_PM_SECRET_KEY: "${AI_PM_SECRET_KEY:-}"
-      # 首管理员对：命中 (tenant, subject) 的登录主体首次接入时被开为 active
-      # （其余新身份默认 inactive）。留空则不启用首管理员通道。
-      AI_PM_FIRST_ADMIN_TENANT: "${AI_PM_FIRST_ADMIN_TENANT:-}"
-      AI_PM_FIRST_ADMIN_SUBJECT: "${AI_PM_FIRST_ADMIN_SUBJECT:-}"
-      # T-081：/mcp 跨机暴露的 Host 白名单（rmcp DNS-rebinding 防护默认只放回环）。
-      # 部署方声明部署地址；只增不减，回环默认值恒在。留空 = 仅回环可访问。
-      AI_PM_MCP_ALLOWED_HOSTS: "${AI_PM_MCP_ALLOWED_HOSTS:-}"
-    ports:
-      - "8090:8090"
-    depends_on:
-      aipm-pg:
-        condition: service_healthy
-      token-service:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - superpowers
-
-  pm-worker:
-    image: ${AIPM_REGISTRY:-aipm}/pm-worker:${AIPM_VERSION:-0.1.0}
-    environment:
-      DATABASE_URL: postgres://aipm:aipm@aipm-pg:5432/aipm
-    depends_on:
-      aipm-pg:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - superpowers
-
-  ai-pm-worker:
-    image: ${AIPM_REGISTRY:-aipm}/ai-pm-worker:${AIPM_VERSION:-0.1.0}
-    environment:
-      DATABASE_URL: postgres://aipm:aipm@aipm-pg:5432/aipm
-      AI_PM_POLICY_FILE: /app/policies/ai-pm-ai-lead-v2.yaml
-    depends_on:
-      aipm-pg:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - superpowers
-
-  # ai-pm-web 前端仓：Rust BFF（与 ai-pm 共享 aipm 库，只做门面不做迁移）
-  aipm-bff:
-    image: ${AIPM_REGISTRY:-aipm}/aipm-bff:${AIPM_VERSION:-0.1.0}
-    environment:
-      DATABASE_URL: postgres://aipm:aipm@aipm-pg:5432/aipm
-      IAM_MODE: local
-    ports:
-      - "8080:8080"
-    depends_on:
-      aipm-pg:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - superpowers
-
-  # ai-pm-web 前端静态站（nginx 伺服 dist，/api 反代 aipm-bff）
-  aipm-web:
-    image: ${AIPM_REGISTRY:-aipm}/aipm-web:${AIPM_VERSION:-0.1.0}
-    ports:
-      - "8091:80"
-    depends_on:
-      - aipm-bff
-    restart: unless-stopped
-    networks:
-      - superpowers
-
 volumes:
   file-storage:
     name: infrastructure_file-storage
-  aipm_pg_data:
-    name: infrastructure_aipm_pg_data
 networks:
   superpowers:
     external: true

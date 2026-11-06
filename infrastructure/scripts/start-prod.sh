@@ -17,7 +17,7 @@
 # 设计要点：
 #   - 强制 .env.prod 存在且字段填好（fail-fast 在 compose 报错之前）
 #   - compose v2.20+ 版本检查（!override 需要）
-#   - env 分层加载：先 .env，再 .env.prod（后入覆盖前入）
+#   - env 分层加载：先 .env-infra（lmms 层固定配置），再 .env，再 .env.prod（后入覆盖前入）
 #   - 缺镜像预检（5c）：up 前对 compose 全量镜像做本地差集，能 pull 的自动
 #     补，补不了的打印逐张补救命令后 fail-fast（exit 15），不再半途炸
 # ─────────────────────────────────────────────────────────────────────────────
@@ -25,6 +25,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_INFRA="$INFRA_DIR/.env-infra"
 ENV_BASE="$INFRA_DIR/.env"
 ENV_PROD="$INFRA_DIR/.env.prod"
 COMPOSE_BASE="$INFRA_DIR/docker-compose.yml"
@@ -60,7 +61,7 @@ if ! compose_version_ok; then
 fi
 log "docker compose version: $(docker compose version | head -1)"
 
-# 3. env 分层加载（base → prod 覆盖）
+# 3. env 分层加载（.env-infra → base → prod 覆盖）
 # ⚠️ 必须 `set -a` 导出：compose 的变量插值只看「进程环境变量 + 项目目录 .env」，
 #    不会读 .env.prod。若不导出，${DATABASE_URL} 等插值会静默回落到基础 .env
 #    的值，prod 覆盖形同虚设（口令改了但容器没拿到）。
@@ -74,14 +75,16 @@ load_env() {
   set +a
   set -u
 }
+load_env "$ENV_INFRA"
 load_env "$ENV_BASE"
 load_env "$ENV_PROD"
 
 # 4. 校验关键 vars（PG 主库 + 中间件 + lmms 登录验证栈的 service-jwt bootstrap token）
+# （CONFIG_DEV_BT 随 config-service 移除一并退役，538c65ad/13e7363）
 for v in POSTGRES_HOST POSTGRES_PORT POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB \
          DATABASE_URL RABBITMQ_DEFAULT_PASS \
          IAM_DEV_BT TOKEN_DEV_BT NOTIFICATION_DEV_BT AUDIT_DEV_BT \
-         PRUE_DEV_BT GATEWAY_DEV_BT CONFIG_DEV_BT FILE_DEV_BT; do
+         PRUE_DEV_BT GATEWAY_DEV_BT FILE_DEV_BT; do
   if [[ -z "${!v:-}" ]]; then
     die "env var $v empty after .env.prod load" 10
   fi

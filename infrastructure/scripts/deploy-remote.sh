@@ -140,12 +140,13 @@ if [[ "$DEPLOY_MODE" == "prod" ]]; then
     die "docker compose v2.20+ required for !override tag (found: $COMPOSE_VER)" 10
   fi
 
-  # 0c. 关键 .env.prod 变量必须存在且非默认值
+  # 0c. 关键 .env.prod 变量必须存在且非默认值（PG 形态；CONFIG_DEV_BT 随
+  # config-service 移除退役）
   REQUIRED=(
-    MYSQL_ROOT_PASSWORD MYSQL_USER MYSQL_PASSWORD DATABASE_URL
+    POSTGRES_HOST POSTGRES_USER POSTGRES_PASSWORD DATABASE_URL
     RABBITMQ_DEFAULT_PASS
     IAM_DEV_BT TOKEN_DEV_BT NOTIFICATION_DEV_BT AUDIT_DEV_BT
-    PRUE_DEV_BT GATEWAY_DEV_BT CONFIG_DEV_BT FILE_DEV_BT
+    PRUE_DEV_BT GATEWAY_DEV_BT FILE_DEV_BT
   )
   for v in "${REQUIRED[@]}"; do
     if [[ -z "${!v:-}" ]]; then
