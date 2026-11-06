@@ -42,7 +42,9 @@ const providers = ref<LlmProvider[]>([]);
 const loading = ref(false);
 const saving = ref<string | null>(null);
 const testing = ref<string | null>(null);
-const testMessages = reactive<Record<string, { ok: boolean; text: string }>>({});
+const testMessages = reactive<Record<string, { ok: boolean; text: string }>>(
+  {}
+);
 
 const breadcrumb = [
   { label: t("settings.personal.landing.title"), to: "/settings/personal" },
@@ -62,20 +64,15 @@ const draft = reactive({
 });
 
 const providerTypeOptions = (
-  [
-    "openai",
-    "anthropic",
-    "gemini",
-    "deepseek",
-    "openai_compatible"
-  ] as const
+  ["openai", "anthropic", "gemini", "deepseek", "openai_compatible"] as const
 ).map(type => ({
   value: type,
   label: t(`settings.team.ai.providerTypes.${type}`)
 }));
 
 const draftInvalid = computed(
-  () => !draft.name.trim() || invalidTimeout({ ...draft, model: "", endpoint: "" })
+  () =>
+    !draft.name.trim() || invalidTimeout({ ...draft, model: "", endpoint: "" })
 );
 
 function statusLabel(status: LlmProvider["status"]): string {
@@ -275,7 +272,11 @@ onMounted(load);
       <p class="tp-note">{{ t("settings.team.ai.securityNote") }}</p>
 
       <div class="tp-toolbar">
-        <Button data-test="add-provider" size="sm" @click="showCreate = !showCreate">
+        <Button
+          data-test="add-provider"
+          size="sm"
+          @click="showCreate = !showCreate"
+        >
           {{ t("settings.team.ai.addProvider") }}
         </Button>
       </div>
@@ -293,7 +294,11 @@ onMounted(load);
             />
           </FormField>
           <FormField :label="t('settings.team.ai.fields.endpoint')">
-            <Input v-model="draft.endpoint" placeholder="https://" data-test="create-endpoint" />
+            <Input
+              v-model="draft.endpoint"
+              placeholder="https://"
+              data-test="create-endpoint"
+            />
           </FormField>
           <FormField :label="t('settings.team.ai.fields.model')">
             <Input v-model="draft.model" data-test="create-model" />
@@ -302,13 +307,21 @@ onMounted(load);
             :label="t('settings.team.ai.fields.apiKey')"
             :description="t('settings.team.ai.keyMissing')"
           >
-            <Input v-model="draft.api_key" type="password" data-test="create-key" />
+            <Input
+              v-model="draft.api_key"
+              type="password"
+              data-test="create-key"
+            />
           </FormField>
           <FormField
             :label="t('settings.team.ai.fields.timeout')"
             :description="t('settings.team.ai.fields.timeoutHint')"
           >
-            <Input v-model="draft.timeout" type="number" data-test="create-timeout" />
+            <Input
+              v-model="draft.timeout"
+              type="number"
+              data-test="create-timeout"
+            />
           </FormField>
         </div>
         <footer class="tp-create__actions">
@@ -413,7 +426,7 @@ onMounted(load);
   gap: var(--space-4);
 }
 
-@media (max-width: 960px) {
+@media (max-width: 880px) {
   .tp-create__grid,
   .tp-grid {
     grid-template-columns: 1fr;

@@ -6,7 +6,7 @@ import { Search, Sparkles } from "lucide-vue-next";
 
 import NotificationDropdown from "@/components/global/notification/NotificationDropdown.vue";
 import { ThemeToggle } from "@/components/global/theme";
-import { TenantIndicator } from "@/components/global/tenant";
+import TeamSwitcher from "@/components/global/team/TeamSwitcher.vue";
 import { HelpMenu, KeyboardShortcutsDialog } from "@/components/global/help";
 import {
   UserMenuAccountMenu,
@@ -27,7 +27,7 @@ import { demoOrganization, resolveProjectSwitch } from "./demo";
 /**
  * 全局顶栏（Application Shell §2A，52px）。
  *
- * 左：产品标识 + 产品名 + 租户上下文指示（Global/TenantIndicator，只读）
+ * 左：产品标识 + 产品名 + 团队上下文（TeamSwitcher，同账号团队切换；0044）
  *     + 项目切换器（Figma「06 — Project Context Switcher」33:82961，
  *     Global/ProjectSwitcher 五态 Trigger + Menu）
  * 中：全局搜索 / 命令面板入口（⌘ K）
@@ -168,12 +168,9 @@ async function onSignOutConfirm() {
 
       <span class="shell-topbar__divider" aria-hidden="true" />
 
-      <!-- 租户上下文指示（只读：hover Tooltip + 点击身份卡；非切换器） -->
-      <TenantIndicator
-        :tenant="demoOrganization.name"
-        :identity="demoUserProfile.name"
-        :email="demoUserProfile.email"
-      />
+      <!-- 团队上下文（TeamSwitcher）：同一账号的团队列表；切换团队而非账号
+           （UI 细则 #2）；V1 单团队时切换项置灰说明（上游 lmms 单租户用户）。 -->
+      <TeamSwitcher />
 
       <span class="shell-topbar__slash" aria-hidden="true">/</span>
 

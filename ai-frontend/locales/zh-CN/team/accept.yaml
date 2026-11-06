@@ -1,0 +1,48 @@
+accept:
+  title: 加入团队
+  loading: 正在读取邀请信息…
+  invitedYou: "{inviter} 邀请你加入"
+  factRole: 指派角色
+  factType: 邀请类型
+  factEmail: 受邀邮箱
+  factExpires: 有效期至
+  factUses: 剩余名额
+  typeLink: 邀请链接
+  typeInvite: 邮箱邀请
+  emailHint: 接受前会核对该邀请预留的邮箱与你当前账号邮箱是否一致。
+  decline: 婉拒
+  confirm: 接受邀请
+  joinedToast: 已加入「{team}」
+  continueDashboard: 进入团队主页
+  backHome: 返回首页
+  result:
+    success:
+      title: 已成功加入团队
+      desc: 你现在是「{team}」的 {role}。
+    alreadyMember:
+      title: 你已经是该团队成员
+      desc: 无需重复加入。「{team}」的当前角色为 {role}。
+    expired:
+      title: 邀请已过期
+      desc: 这份邀请已超过有效期。请联系团队管理员重新邀请。
+    revoked:
+      title: 邀请已撤销
+      desc: 这份邀请已被管理员撤销。请联系团队管理员重新邀请。
+    invalid:
+      title: 邀请无效
+      desc: 邀请码不存在或链接不完整，请核对后重试。
+    alreadyAccepted:
+      title: 邀请已被使用
+      desc: 这份邀请已被接受过一次，不能重复使用。
+    exhausted:
+      title: 链接名额已用完
+      desc: 该邀请链接的使用次数已达上限。请联系管理员生成新链接。
+    emailMismatch:
+      title: 邮箱不一致
+      desc: 当前账号邮箱与受邀邮箱不一致。请使用受邀邮箱对应的账号登录。
+    tenantMismatch:
+      title: 邀请与当前账号不符
+      desc: 这份邀请属于其他团队，请使用对应团队的账号登录后接受。
+    teamSuspended:
+      title: 团队暂不可用
+      desc: 目标团队当前处于不可用状态，请稍后再试或联系管理员。

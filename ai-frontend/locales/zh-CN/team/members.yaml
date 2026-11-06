@@ -1,0 +1,28 @@
+members:
+  title: 团队成员
+  description: 团队成员与角色管理。角色即权限：操作入口随你的团队角色变化，服务端同规则强制。
+  readonlyNote: 你是普通成员（只读）——角色与成员变更需要 Owner 或 Admin 权限。
+  colMember: 成员
+  colRole: 角色
+  colStatus: 状态
+  colJoined: 加入时间
+  colActions: 操作
+  colActionsLocked: 操作（无权限）
+  you: 我
+  statusActive: 已激活
+  statusInactive: 待激活
+  deny:
+    memberReadonly: 需要 Owner 或 Admin 权限
+    ownerRow: 需要 Owner 权限
+  remove: 移除
+  makeOwner: 设为 Owner
+  cancel: 取消
+  removeConfirmTitle: 移除成员「{name}」？
+  removeConfirmDesc: 移除后该成员立即失去本团队的所有访问权限；其在其他团队的关系不受影响。
+  transferTitle: 将所有权转移给「{name}」？
+  transferDesc: 转移后你将降为 ADMIN；每个团队必须始终保留至少一名 Owner。
+  transferConfirm: 确认转移
+  changeRole: 修改「{name}」的角色
+  roleChangedToast: 已更新「{name}」的角色
+  removedToast: 已移除「{name}」
+  transferredToast: 所有权已转移给「{name}」

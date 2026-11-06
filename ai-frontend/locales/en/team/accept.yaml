@@ -1,0 +1,48 @@
+accept:
+  title: Join a Team
+  loading: Loading invitation…
+  invitedYou: "{inviter} invited you to join"
+  factRole: Assigned role
+  factType: Invitation type
+  factEmail: Invited email
+  factExpires: Expires at
+  factUses: Remaining uses
+  typeLink: Invitation link
+  typeInvite: Email invitation
+  emailHint: The reserved email will be checked against your current account email before acceptance.
+  decline: Decline
+  confirm: Accept Invitation
+  joinedToast: Joined "{team}"
+  continueDashboard: Go to Team Dashboard
+  backHome: Back to Home
+  result:
+    success:
+      title: Successfully joined the team
+      desc: You are now {role} of "{team}".
+    alreadyMember:
+      title: You are already a member
+      desc: No need to join again. Your current role in "{team}" is {role}.
+    expired:
+      title: Invitation expired
+      desc: This invitation has passed its expiration. Ask a team admin to invite you again.
+    revoked:
+      title: Invitation revoked
+      desc: This invitation was revoked by an admin. Ask a team admin to invite you again.
+    invalid:
+      title: Invalid invitation
+      desc: The invitation code does not exist or the link is incomplete. Please double-check.
+    alreadyAccepted:
+      title: Invitation already used
+      desc: This invitation has already been accepted once and cannot be reused.
+    exhausted:
+      title: Link exhausted
+      desc: This invitation link reached its usage limit. Ask an admin to generate a new link.
+    emailMismatch:
+      title: Email mismatch
+      desc: Your account email does not match the invited email. Sign in with the invited account.
+    tenantMismatch:
+      title: Invitation does not match this account
+      desc: This invitation belongs to another team. Sign in with the matching team account.
+    teamSuspended:
+      title: Team unavailable
+      desc: The target team is currently unavailable. Try again later or contact an admin.

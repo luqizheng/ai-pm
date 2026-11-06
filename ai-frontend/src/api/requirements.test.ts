@@ -36,7 +36,9 @@ function entry(over: Partial<RequirementCoreEntry> = {}): RequirementCoreEntry {
   };
 }
 
-function revision(over: Partial<RequirementCoreRevision> = {}): RequirementCoreRevision {
+function revision(
+  over: Partial<RequirementCoreRevision> = {}
+): RequirementCoreRevision {
   return {
     id: "rev-1",
     requirement_id: "req-1",
@@ -86,20 +88,35 @@ function detail(
 
 describe("api/requirements 适配器", () => {
   it("状态映射：approved→confirmed / pending_confirmation→pending / 其余→draft（S02D-04 词表）", () => {
-    expect(toEntryFromListItem(entry({ latest_state: "approved" })).status).toBe("confirmed");
     expect(
-      toEntryFromListItem(entry({ latest_state: "pending_confirmation" })).status
+      toEntryFromListItem(entry({ latest_state: "approved" })).status
+    ).toBe("confirmed");
+    expect(
+      toEntryFromListItem(entry({ latest_state: "pending_confirmation" }))
+        .status
     ).toBe("pending_confirmation");
-    expect(toEntryFromListItem(entry({ latest_state: "draft" })).status).toBe("draft");
-    expect(toEntryFromListItem(entry({ latest_state: null })).status).toBe("draft");
+    expect(toEntryFromListItem(entry({ latest_state: "draft" })).status).toBe(
+      "draft"
+    );
+    expect(toEntryFromListItem(entry({ latest_state: null })).status).toBe(
+      "draft"
+    );
     // rejected/superseded 的最新修订不产生 UI 误报，回落 draft
-    expect(toEntryFromListItem(entry({ latest_state: "rejected" })).status).toBe("draft");
+    expect(
+      toEntryFromListItem(entry({ latest_state: "rejected" })).status
+    ).toBe("draft");
   });
 
   it("优先级映射：后端 normal → UI medium（S02D-05）", () => {
-    expect(toEntryFromListItem(entry({ priority: "normal" })).priority).toBe("medium");
-    expect(toEntryFromListItem(entry({ priority: "high" })).priority).toBe("high");
-    expect(toEntryFromListItem(entry({ priority: "low" })).priority).toBe("low");
+    expect(toEntryFromListItem(entry({ priority: "normal" })).priority).toBe(
+      "medium"
+    );
+    expect(toEntryFromListItem(entry({ priority: "high" })).priority).toBe(
+      "high"
+    );
+    expect(toEntryFromListItem(entry({ priority: "low" })).priority).toBe(
+      "low"
+    );
   });
 
   it("详情适配：修订按 version 倒序、决策映射显示名、描述取 v1 summary", () => {
@@ -113,7 +130,12 @@ describe("api/requirements 适配器", () => {
       }),
       [
         revision({ id: "rev-1", version: 1, state: "superseded" }),
-        revision({ id: "rev-2", version: 2, state: "approved", summary: "补充锁定策略" })
+        revision({
+          id: "rev-2",
+          version: 2,
+          state: "approved",
+          summary: "补充锁定策略"
+        })
       ],
       [
         confirmation({ revision_id: "rev-1", action: "confirm" }),
@@ -122,7 +144,7 @@ describe("api/requirements 适配器", () => {
     );
     const ui = toRequirementEntry(d);
 
-    expect(ui.revisions.map((r) => r.version)).toEqual([2, 1]);
+    expect(ui.revisions.map(r => r.version)).toEqual([2, 1]);
     expect(ui.status).toBe("confirmed");
     expect(ui.description).toBe("初始拆解"); // v1 summary（创建时 description 落投影）
     expect(ui.revisions[0].decision).toEqual({

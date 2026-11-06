@@ -5,10 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
-import {
-  invalidTimeout,
-  type LlmProviderStatus
-} from "./team-llm-types";
+import { invalidTimeout, type LlmProviderStatus } from "./team-llm-types";
 
 /**
  * Team LLM Provider 卡片（0041 Team-owned 实例）。
@@ -32,7 +29,9 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  save: [form: { name: string; endpoint: string; model: string; timeout: string }];
+  save: [
+    form: { name: string; endpoint: string; model: string; timeout: string }
+  ];
   replaceKey: [key: string];
   test: [];
   enable: [];
@@ -45,7 +44,6 @@ const { t } = useI18n();
 
 const draft = computed(() => ({ ...props.form }));
 const apiKey = ref("");
-
 
 function statusVariant(
   status: LlmProviderStatus
@@ -64,7 +62,11 @@ function lastTestedText(): string {
 </script>
 
 <template>
-  <section class="tp-card" data-test="provider-card" :data-provider="providerId">
+  <section
+    class="tp-card"
+    data-test="provider-card"
+    :data-provider="providerId"
+  >
     <header class="tp-card__head">
       <div class="tp-card__title">
         <h3 class="tp-card__name">{{ label }}</h3>
@@ -267,7 +269,7 @@ function lastTestedText(): string {
   color: var(--ws-text-secondary);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 640px) {
   .tp-card__grid {
     grid-template-columns: 1fr;
   }

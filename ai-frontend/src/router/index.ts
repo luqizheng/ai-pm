@@ -28,6 +28,14 @@ import RequirementDetailView from "@/views/project/requirement-detail/Requiremen
 import RequirementHistoryView from "@/views/project/requirement-history/RequirementHistoryView.vue";
 import RequirementImpactView from "@/views/project/requirement-impact/RequirementImpactView.vue";
 import RequirementReviewView from "@/views/project/requirement-review/RequirementReviewView.vue";
+import OnboardingWelcomeView from "@/views/onboarding/OnboardingWelcomeView.vue";
+import OnboardingCreateTeamView from "@/views/onboarding/OnboardingCreateTeamView.vue";
+import OnboardingInviteMembersView from "@/views/onboarding/OnboardingInviteMembersView.vue";
+import OnboardingInvitationLinkView from "@/views/onboarding/OnboardingInvitationLinkView.vue";
+import TeamInvitationAcceptView from "@/views/team/TeamInvitationAcceptView.vue";
+import SettingsTeamMembersView from "@/views/settings/team/SettingsTeamMembersView.vue";
+import SettingsTeamInvitationsView from "@/views/settings/team/SettingsTeamInvitationsView.vue";
+import SettingsTeamGeneralView from "@/views/settings/team/SettingsTeamGeneralView.vue";
 
 /**
  * 应用壳路由表 —— **由导航树派生**（src/router/navigation.ts 是单源）。
@@ -214,6 +222,58 @@ export function buildRoutes(): RouteRecordRaw[] {
     component: SettingsTeamAiView,
     meta: { title: "settings.nav.aiProviders" }
   });
+
+  // ─── Team Onboarding（0044，产品裁决 Q1：首登必须建团或入团）───
+  // 无 Skip/Later；layout="bare"（应用壳之外）但**不进 PUBLIC_LAYOUTS**——
+  // 接受邀请/认领建团都必须来自认证上下文，路由守卫仍强制登录。
+  routes.push(
+    {
+      path: "/onboarding",
+      component: OnboardingWelcomeView,
+      meta: { layout: "bare", title: "team.onboarding.welcome.title" }
+    },
+    {
+      path: "/onboarding/create",
+      component: OnboardingCreateTeamView,
+      meta: { layout: "bare", title: "team.onboarding.create.title" }
+    },
+    {
+      path: "/onboarding/invite",
+      component: OnboardingInviteMembersView,
+      meta: { layout: "bare", title: "team.onboarding.invite.title" }
+    },
+    {
+      path: "/onboarding/link",
+      component: OnboardingInvitationLinkView,
+      meta: { layout: "bare", title: "team.onboarding.link.title" }
+    }
+  );
+
+  // 邀请接受页（邮件邀请与邀请链接同一接受面；未登录带 redirect 回跳）。
+  routes.push({
+    path: "/invitation/accept",
+    component: TeamInvitationAcceptView,
+    meta: { layout: "auth", title: "team.accept.title" }
+  });
+
+  // 团队设置三页（P1：成员 / 邀请管理 / 基本信息与 Owner 转移）。
+  routes.push(
+    {
+      path: "/settings/team/members",
+      component: SettingsTeamMembersView,
+      meta: { title: "team.members.title" }
+    },
+    {
+      path: "/settings/team/invitations",
+      component: SettingsTeamInvitationsView,
+      meta: { title: "team.invitations.title" }
+    },
+    {
+      path: "/settings/team/general",
+      component: SettingsTeamGeneralView,
+      meta: { title: "team.settings.title" }
+    }
+  );
 
   // 设计系统目录页（无导航外壳的全屏页，meta.layout = "design"）
   routes.push(...designRoutes);

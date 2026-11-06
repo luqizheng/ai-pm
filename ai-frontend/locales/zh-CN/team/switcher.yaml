@@ -1,0 +1,7 @@
+switcher:
+  noTeam: 未加入团队
+  tooltip: "团队 {team} · 我的角色 {role}"
+  myTeams: 我加入的团队
+  pendingRow: 更多团队（待上游支持）
+  pendingHint: 同一账号加入多个团队需要上游身份服务支持，当前版本单团队
+  hint: 切换的是同一账号的团队上下文；账号操作请使用右上角账户菜单。

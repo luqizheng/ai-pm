@@ -986,6 +986,82 @@ export interface MockLlmProvider {
 
 const TENANT_ID = "00000000-0000-0000-0000-000000000010";
 
+// ─── Team Onboarding（0044）mock 状态：Acme 团队 + 成员/邀请/链接 ───
+export const teamProfileMock = {
+  id: TENANT_ID,
+  name: "Acme R&D",
+  slug: "acme-rd",
+  description: "Demo team for the PM-AI workspace"
+};
+
+export const teamMembersMock = [
+  {
+    principal_id: "11111111-1111-4111-8111-111111111111",
+    display_name: "admin",
+    role: "owner",
+    is_active: true,
+    created_at: "2026-11-01T08:00:00Z"
+  },
+  {
+    principal_id: "22222222-2222-4222-8222-222222222222",
+    display_name: "bob",
+    role: "admin",
+    is_active: true,
+    created_at: "2026-11-02T09:30:00Z"
+  },
+  {
+    principal_id: "33333333-3333-4333-8333-333333333333",
+    display_name: "carol",
+    role: "member",
+    is_active: true,
+    created_at: "2026-11-03T10:15:00Z"
+  }
+];
+
+export const teamInvitationsMock: Array<{
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  invited_by: string;
+  invited_by_name: string;
+  expires_at: string;
+  created_at: string;
+  accepted_at: string | null;
+}> = [
+  {
+    id: "aaaa1111-0000-4000-8000-000000000001",
+    email: "dave@example.com",
+    role: "member",
+    status: "PENDING",
+    invited_by: "11111111-1111-4111-8111-111111111111",
+    invited_by_name: "admin",
+    expires_at: "2026-11-13T08:00:00Z",
+    created_at: "2026-11-06T08:00:00Z",
+    accepted_at: null
+  }
+];
+
+export const teamInvitationLinksMock: Array<{
+  id: string;
+  default_role: "member";
+  status: "ACTIVE" | "EXHAUSTED" | "EXPIRED" | "REVOKED";
+  max_uses: number | null;
+  used_count: number;
+  expires_at: string;
+  created_at: string;
+}> = [
+  {
+    id: "bbbb2222-0000-4000-8000-000000000001",
+    default_role: "member",
+    status: "ACTIVE",
+    max_uses: 20,
+    used_count: 3,
+    expires_at: "2026-11-20T08:00:00Z",
+    created_at: "2026-11-06T08:05:00Z"
+  }
+];
+
 export const llmProviders: MockLlmProvider[] = [
   {
     id: "3f1a2b4c-0000-4000-8000-000000000001",
@@ -1400,7 +1476,9 @@ export function resolveMock(
       row.updated_at = new Date().toISOString();
       return { status: 200, body: row };
     }
-    const llmCreate = pathname.match(/^\/v1\/pm\/tenants\/([^/]+)\/llm-providers$/);
+    const llmCreate = pathname.match(
+      /^\/v1\/pm\/tenants\/([^/]+)\/llm-providers$/
+    );
     if (llmCreate) {
       const payload = (body ?? {}) as {
         name?: string;
@@ -1447,6 +1525,124 @@ export function resolveMock(
       return { status: 201, body: row };
     }
 
+    // Team Onboarding（0044）：邀请/链接/接受
+    if (/^\/v1\/pm\/tenants\/([^/]+)\/invitations$/.test(pathname)) {
+      const payload = (body ?? {}) as { email?: string; role?: string };
+      const email = (payload.email ?? "").trim();
+      if (!email.includes("@")) {
+        return { status: 400, body: { message: "invalid email" } };
+      }
+      if (
+        teamInvitationsMock.some(
+          item => item.email === email && item.status === "PENDING"
+        )
+      ) {
+        return { status: 409, body: { message: "pending_invitation_exists" } };
+      }
+      const now = new Date().toISOString();
+      const row = {
+        id: `aaaa1111-0000-4000-8000-${String(teamInvitationsMock.length + 1).padStart(12, "0")}`,
+        email,
+        role: payload.role === "admin" ? "admin" : "member",
+        status: "PENDING",
+        invited_by: "11111111-1111-4111-8111-111111111111",
+        invited_by_name: "admin",
+        expires_at: "2026-11-13T08:00:00Z",
+        created_at: now,
+        accepted_at: null
+      };
+      teamInvitationsMock.unshift(row);
+      return {
+        status: 201,
+        body: {
+          id: row.id,
+          token: "mock-invitation-token",
+          accept_path:
+            "/invitation/accept?token=mock-invitation-token&type=invite",
+          expires_at: row.expires_at
+        }
+      };
+    }
+    const invitationRevoke = pathname.match(
+      /^\/v1\/pm\/tenants\/([^/]+)\/invitations\/([^/]+)\/revoke$/
+    );
+    if (invitationRevoke) {
+      const row = teamInvitationsMock.find(
+        item => item.id === invitationRevoke[2]
+      );
+      if (!row)
+        return { status: 404, body: { message: "invitation_not_found" } };
+      if (row.status !== "PENDING") {
+        return { status: 409, body: { message: "invitation_not_pending" } };
+      }
+      row.status = "REVOKED";
+      return { status: 200, body: { id: row.id, status: "REVOKED" } };
+    }
+    if (/^\/v1\/pm\/tenants\/([^/]+)\/invitation-links$/.test(pathname)) {
+      const payload = (body ?? {}) as { max_uses?: number | null };
+      const now = new Date().toISOString();
+      const row = {
+        id: `bbbb2222-0000-4000-8000-${String(teamInvitationLinksMock.length + 1).padStart(12, "0")}`,
+        default_role: "member" as const,
+        status: "ACTIVE" as const,
+        max_uses: payload.max_uses ?? null,
+        used_count: 0,
+        expires_at: "2026-11-20T08:00:00Z",
+        created_at: now
+      };
+      teamInvitationLinksMock.unshift(row);
+      return {
+        status: 201,
+        body: {
+          id: row.id,
+          token: "mock-link-token",
+          accept_path: "/invitation/accept?token=mock-link-token&type=link",
+          expires_at: row.expires_at
+        }
+      };
+    }
+    const linkRevoke = pathname.match(
+      /^\/v1\/pm\/tenants\/([^/]+)\/invitation-links\/([^/]+)\/revoke$/
+    );
+    if (linkRevoke) {
+      const row = teamInvitationLinksMock.find(
+        item => item.id === linkRevoke[2]
+      );
+      if (!row) return { status: 404, body: { message: "link_not_found" } };
+      row.status = "REVOKED";
+      return { status: 200, body: { id: row.id, status: "REVOKED" } };
+    }
+    if (pathname === "/v1/pm/invitations/accept") {
+      const payload = (body ?? {}) as { token?: string };
+      if (!payload.token) {
+        return { status: 400, body: { message: "token is required" } };
+      }
+      return {
+        status: 200,
+        body: {
+          outcome: "joined",
+          team_id: TENANT_ID,
+          team_name: teamProfileMock.name,
+          role: "member"
+        }
+      };
+    }
+    if (pathname === "/v1/pm/invitation-links/accept") {
+      const payload = (body ?? {}) as { token?: string };
+      if (!payload.token) {
+        return { status: 400, body: { message: "token is required" } };
+      }
+      return {
+        status: 200,
+        body: {
+          outcome: "joined",
+          team_id: TENANT_ID,
+          team_name: teamProfileMock.name,
+          role: "member"
+        }
+      };
+    }
+
     switch (pathname) {
       case "/v1/iam/auth/login":
       case "/v1/iam/auth/refresh":
@@ -1458,6 +1654,27 @@ export function resolveMock(
   }
 
   if (method === "PATCH") {
+    // Team Onboarding（0044）：团队档案编辑（slug 唯一冲突演示 409）。
+    const updateTeam = pathname.match(/^\/v1\/pm\/tenants\/([^/]+)$/);
+    if (updateTeam) {
+      const payload = (body ?? {}) as {
+        name?: string;
+        slug?: string | null;
+        description?: string | null;
+      };
+      if (payload.slug === "taken") {
+        return { status: 409, body: { message: "slug_already_taken" } };
+      }
+      return {
+        status: 200,
+        body: {
+          id: teamProfileMock.id,
+          name: payload.name ?? teamProfileMock.name,
+          slug: payload.slug ?? teamProfileMock.slug,
+          description: payload.description ?? teamProfileMock.description
+        }
+      };
+    }
     // Team LLM Provider 编辑：expected_revision 乐观锁（409）
     const updateProvider = pathname.match(
       /^\/v1\/pm\/tenants\/([^/]+)\/llm-providers\/([^/]+)$/
@@ -1642,7 +1859,60 @@ export function resolveMock(
         tenant_id: TENANT_ID,
         is_active: true,
         tenant_role: "owner",
-        is_admin: true
+        is_admin: true,
+        team: teamProfileMock,
+        onboarding_required: false,
+        memberships: [
+          {
+            team_id: TENANT_ID,
+            team_name: teamProfileMock.name,
+            role: "owner",
+            status: "active"
+          }
+        ]
+      }
+    };
+  }
+
+  // Team Onboarding（0044）：团队档案 / 成员 / 邀请 / 链接 / 预览
+  if (/^\/v1\/pm\/tenants\/([^/]+)$/.test(pathname)) {
+    return { status: 200, body: teamProfileMock };
+  }
+  if (/^\/v1\/pm\/tenants\/([^/]+)\/members$/.test(pathname)) {
+    return {
+      status: 200,
+      body: { items: teamMembersMock, total: teamMembersMock.length }
+    };
+  }
+  if (/^\/v1\/pm\/tenants\/([^/]+)\/invitations$/.test(pathname)) {
+    return { status: 200, body: teamInvitationsMock };
+  }
+  if (/^\/v1\/pm\/tenants\/([^/]+)\/invitation-links$/.test(pathname)) {
+    return { status: 200, body: teamInvitationLinksMock };
+  }
+  if (pathname === "/v1/pm/invitations/preview") {
+    return {
+      status: 200,
+      body: {
+        team_name: teamProfileMock.name,
+        team_slug: teamProfileMock.slug,
+        inviter_name: "admin",
+        role: "member",
+        expires_at: "2026-11-13T08:00:00Z",
+        status: "PENDING",
+        email: "dave@example.com"
+      }
+    };
+  }
+  if (pathname === "/v1/pm/invitation-links/preview") {
+    return {
+      status: 200,
+      body: {
+        team_name: teamProfileMock.name,
+        default_role: "member",
+        expires_at: "2026-11-20T08:00:00Z",
+        status: "ACTIVE",
+        remaining_uses: 17
       }
     };
   }

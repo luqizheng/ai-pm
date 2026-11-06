@@ -313,7 +313,17 @@ pub fn is_public_path(path: &str) -> bool {
 }
 
 fn is_self_service_path(path: &str) -> bool {
-    path == "/health" || (path == "/v1/pm/me")
+    // `/v1/pm/me`：未激活主体唯一的自查入口（v1 §6 鉴权矩阵）。
+    // Team Onboarding（0044）：建团认领与邀请接受/预览也是未激活 principal 的
+    // 合法动作（产品裁决 Q1：首登必须建团或入团）；全部精确匹配，仍在
+    // bearer 层之内（拒绝匿名），不扩大公开面。
+    path == "/health"
+        || path == "/v1/pm/me"
+        || path == "/v1/pm/teams"
+        || path == "/v1/pm/invitations/preview"
+        || path == "/v1/pm/invitations/accept"
+        || path == "/v1/pm/invitation-links/preview"
+        || path == "/v1/pm/invitation-links/accept"
 }
 
 /// `AI_PM_AUTH_MODE=off`: inject the fixed `dev-off` principal instead of

@@ -1,0 +1,19 @@
+dashboard:
+  title: "{team}"
+  description: 团队工作入口——成员、项目与团队级配置。项目执行详情请进入具体项目的总控台。
+  createProject: 新建项目
+  loadFailed: 团队概览加载失败
+  manageMembers: 管理成员
+  roleLine: 我的角色 {role}
+  membersTitle: 成员概览
+  viewAll: 查看全部
+  statOwners: Owner
+  statAdmins: Admin
+  statMembers: Member
+  statInactive: 待激活
+  projectsTitle: 团队项目
+  projectsEmpty: 团队还没有项目
+  projectsEmptyHint: 创建第一个项目，或邀请成员一起开始。
+  invitationsTitle: 邀请管理
+  aiTitle: AI 模型配置
+  open: 前往配置

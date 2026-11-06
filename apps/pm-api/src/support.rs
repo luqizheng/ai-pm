@@ -127,7 +127,8 @@ pub fn customer_filter(params: &HashMap<String, String>) -> Option<Uuid> {
 }
 
 /// 项目可见性（T-022）：同一个租户内，只有 `core.project_member` 里有调用者的
-/// 项目才可见；跨租户与「同租户非成员」一律按不存在处理。
+/// 项目才可见；跨租户与「同租户非成员」一律按不存在处理。终态软删
+/// （team dissolve 置 `status='deleted'`）的项目双重保险排除。
 pub async fn project_visible(
     pool: &sqlx::PgPool,
     project_id: Uuid,
@@ -138,7 +139,8 @@ pub async fn project_visible(
         "SELECT EXISTS ( \
              SELECT 1 FROM core.project p \
              JOIN core.project_member m ON m.project_id = p.id \
-              WHERE p.id = $1 AND p.tenant_id = $2 AND m.principal_id = $3)",
+              WHERE p.id = $1 AND p.tenant_id = $2 AND m.principal_id = $3 \
+                AND p.status <> 'deleted')",
     )
     .bind(project_id)
     .bind(tenant_id)

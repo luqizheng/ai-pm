@@ -263,10 +263,11 @@ async fn rv1_rv2_admin_demoted_to_member_loses_access_on_the_same_jwt(pool: PgPo
     assert_eq!(after["role"], json!("member"));
 
     // RV-2：同一张 JWT（仍带 tenant_admin role）立刻被拒——撤权不等 token 过期。
+    // 探针用仍 admin 专用的成员详情端点（列表已对成员只读开放，0044）。
     let (status, _) = call(
         &w.app,
         "GET",
-        &format!("/v1/pm/tenants/{}/members", w.tenant_id),
+        &format!("/v1/pm/tenants/{}/members/{}", w.tenant_id, w.member_id),
         &admin_token,
         None,
     )
@@ -309,7 +310,7 @@ async fn rv3_removed_member_is_rejected_on_the_same_jwt(pool: PgPool) {
     let (status, _) = call(
         &w.app,
         "GET",
-        &format!("/v1/pm/tenants/{}/members", w.tenant_id),
+        &format!("/v1/pm/tenants/{}/members/{}", w.tenant_id, w.member_id),
         &member_token,
         None,
     )
@@ -336,8 +337,11 @@ async fn rv4_member_cannot_touch_member_management(pool: PgPool) {
     let member_token = token("usr-member", json!(["tenant_admin"])); // 即便 token 自称管理员
     let base = format!("/v1/pm/tenants/{}/members", w.tenant_id);
 
+    // 名册只读对所有成员开放（0044 口径：member 只读可见，管理零权限）。
+    let (status, _) = call(&w.app, "GET", &base, &member_token, None).await;
+    assert_eq!(status, StatusCode::OK);
+
     for (method, uri, body) in [
-        ("GET", base.clone(), None),
         ("GET", format!("{base}/{}", w.member_id), None),
         (
             "PATCH",

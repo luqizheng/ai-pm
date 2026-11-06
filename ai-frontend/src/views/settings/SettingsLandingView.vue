@@ -4,7 +4,12 @@ import { useI18n } from "vue-i18n";
 import SettingsPageLayout from "@/components/settings/SettingsPageLayout.vue";
 import SettingsSidebar from "@/components/settings/SettingsSidebar.vue";
 
-import { PERSONAL_APP_NAV, PERSONAL_ICONS, TEAM_APP_NAV, TEAM_ICONS } from "./nav";
+import {
+  PERSONAL_APP_NAV,
+  PERSONAL_ICONS,
+  TEAM_APP_NAV,
+  TEAM_ICONS
+} from "./nav";
 
 /**
  * 应用设置落地页（个人域，§4A）。

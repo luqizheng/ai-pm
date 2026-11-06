@@ -1,0 +1,72 @@
+onboarding:
+  step:
+    welcome: Welcome
+    create: Create team
+    invite: Invite members
+    link: Invitation link
+  footer: You must create or join a team before using PM-AI (no skip option)
+  action:
+    back: Back
+  role:
+    member: Member
+    admin: Admin
+  copied: Copied to clipboard
+  welcome:
+    title: Welcome to PM-AI
+    desc: Create your team or join an existing team to start managing your projects.
+    createTitle: Create a Team
+    createDesc: Set up a new team and invite your colleagues.
+    joinTitle: Join a Team
+    joinDesc: Join an existing team with the invitation link or code you received.
+    joinPlaceholder: Paste invitation link or code
+    joinRequired: Paste an invitation link or code first
+    joinAction: Open invitation
+  create:
+    title: Create a Team
+    desc: A Team is the organizational boundary of PM-AI. Projects belong to Teams. You will automatically become the Team Owner.
+    nameLabel: Team name
+    namePlaceholder: e.g. Acme R&D
+    nameRequired: Team name is required
+    slugLabel: Team slug (optional)
+    slugHint: Lowercase letters, digits and hyphens only, globally unique; leave empty to skip
+    slugPlaceholder: e.g. acme-rd
+    slugInvalid: Only lowercase letters, digits and hyphens; must start with a letter or digit
+    slugTaken: This team slug is already taken
+    descLabel: Description (optional)
+    descPlaceholder: What this team is for
+    ownerNotice: The creator automatically becomes Team Owner; members and projects will be managed under this Team.
+    submit: Create Team
+  invite:
+    createdTitle: Team created
+    createdDesc: You are the OWNER of "{team}". Next step is inviting members.
+    fallbackTeam: New team
+    title: Invite team members
+    desc: Enter email addresses and pick a role. OWNER cannot be assigned via invitation; each accepted invitation generates a personal accept link.
+    emailLabel: Email address
+    emailPlaceholder: name{'@'}example.com
+    roleLabel: Role
+    removeRow: Remove this row
+    addRow: Add another email
+    submit: Send invitations ({count})
+    skip: Skip for now
+    issuedTitle: Accept links issued
+    issuedDesc: Share each link with the invitee (copy and send via chat or email). Links only work for the invited account after sign-in.
+    finish: Go to Team Dashboard
+    sentToast: Invitations created
+  link:
+    title: Team invitation link
+    desc: Generate a shareable join link. The link only starts the acceptance flow and never adds anyone automatically.
+    roleLabel: Default role
+    expiryLabel: Expiration
+    expiryOption: "{days} days"
+    usesLabel: Maximum uses
+    unlimited: Unlimited
+    maxUses: Max uses
+    usesUnit: uses
+    create: Generate link
+    resultTitle: Link generated
+    roleBadge: MEMBER fixed
+    expiresAt: Expires {time}
+    unlimitedUses: Unlimited uses
+    limitedUses: Up to {count} uses
+    resultHint: You can revoke the link anytime in Settings · Invitations; usage and status are shown there.

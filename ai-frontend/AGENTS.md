@@ -171,9 +171,15 @@ The objective is to create the visual and interaction foundation that every subs
 
 - **三种导航上下文不得混成一张扁平菜单**：个人 / 工作区 / 项目模块（仅选中项目时出现）/ 管理。
   分组定义在 `src/router/navigation.ts`，路由由它派生。
-- **不引入 Workspace Switcher**：顶栏的组织芯片只是上下文指示（静态展示，无切换实体）；
-  **项目可切换**——`components/shell/ProjectSwitcher.vue`（左导航项目头 + 顶栏芯片双变体），
-  切换状态机在 `stores/shell.ts`（两阶段：switching 期间不显示旧项目数据，Figma「07」）。
+- **不引入 Workspace Switcher（组织/账号切换器）**：不做通用工作区切换，
+  **账号操作只存在于 UserMenu**。Team Onboarding（0044，2026-11-06）后该
+  条款演进为 **Team Switcher**：顶栏 `components/global/team/TeamSwitcher.vue`
+  展示同一账号**已加入的团队**（`stores/team.ts`，GET /v1/pm/me 团队扩展面），
+  切换的是团队上下文而非账号；V1 上游 lmms 单租户用户 → 单团队时切换项置灰
+  并说明（多团队待上游支持，契约已按 memberships[] 多团队 shape 设计）。
+  **项目可切换**——`components/shell/ProjectSwitcher.vue`（左导航项目头 +
+  顶栏芯片双变体），切换状态机在 `stores/shell.ts`（两阶段：switching 期间
+  不显示旧项目数据，Figma「07」）。
 - 折叠态经壳根元素 `data-sidebar` / `data-context` 属性切换，由 `index.css` 的 grid 模板消费。
 - 快捷键：⌘/Ctrl+K 命令面板，⌘/Ctrl+J 切换指令栏展开态。
 - **AI 建议与人工确认的动作必须视觉可辨**：建议用 accent 色，人工确认提示用次文字色。

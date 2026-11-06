@@ -204,6 +204,8 @@ fn build_router(
         .merge(crate::pm_artifacts::router())
         // Team LLM Provider 管理面（0041；owner/admin 守卫，取代旧全局 /v1/pm/llm/*）。
         .merge(crate::team_llm::router())
+        // Team Onboarding（0044）：建团认领 / 团队档案 / 邮箱邀请 / 邀请链接。
+        .merge(crate::team_onboarding::router())
         // 项目 ↔ 代码仓库关系 + 项目级 SSH 凭据（P0 CRUD）。
         .merge(crate::pm_repositories::router())
         // 冷启动导入：启动 / 轮询 / 取消 / apply（提案链）。
