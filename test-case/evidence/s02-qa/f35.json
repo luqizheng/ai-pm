@@ -1,0 +1,1 @@
+{"detail":"verification_status must be one of [\"PENDING\", \"CONFIRMED\", \"REJECTED\", \"CONFLICT\"], got \"BOGUS\"","error":"validation_error"}

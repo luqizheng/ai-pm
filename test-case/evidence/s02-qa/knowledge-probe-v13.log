@@ -1,0 +1,26 @@
+[08:22:30] === knowledge probe V1.3 start ===
+[08:22:31] [B06-01] proposal (source_ref + projects/ in markdown): 200
+[08:22:31]          body: {"outcome":"committed","proposal_id":"d63e92bd-b0f7-49ae-af5e-49e46f33ed6c","document_id":"c07b86fd-7e2a-41f6-b044-dbd1fc126175","revision_id":"fc8a2687-9ab8-412a-b375-85fbd805d778","revision_no":1,"git_commit_sha":"3f7e029f7ebaf01b802ff987d1a8b2429e44a635","content_hash":"f923ef000bab45dca050e0d24649550a3289acd34f45f3
+[08:22:31]          document=c07b86fd-7e2a-41f6-b044-dbd1fc126175 proposal=d63e92bd-b0f7-49ae-af5e-49e46f33ed6c
+[08:22:31] [B06-03] confirm redline: 409
+[08:22:31]          body: {"code":"KNOWLEDGE_CONFLICT","message":"knowledge conflict: proposal d63e92bd-b0f7-49ae-af5e-49e46f33ed6c is committed, not redline_pending"}
+[08:22:32]          revision=fc8a2687-9ab8-412a-b375-85fbd805d778 no=1 sha=3f7e029f7ebaf01b802ff987d1a8b2429e44a635
+[08:22:32] [B06-04] read: 200
+[08:22:33] [B06-07] index-state: 200 {"items":[{"document_revision_id":"fc8a2687-9ab8-412a-b375-85fbd805d778","indexed_at":"2026-11-06T08:22:30.980803Z","indexed_content_hash":"f923ef000bab45dca050e0d24649550a3289acd34f45f3fef46a2bbf3c340c15","last_error":n
+[08:22:33] [B06-08] reindex: 200 {"outcome":{"outcome":"indexed","sections":1}}
+[08:22:33] [B06-06] search: 200 hits=0
+[08:22:34] [B06-09] rev2: 200
+[08:22:34]          confirm rev2: 409
+[08:22:35]          states: 
+[08:22:35] [B06-10] veto rev2: 200
+[08:22:35]          {"new_commit_sha":"2a38ad4265a6d153d6287a3e8053342a3509b496","rolled_back_revision_id":"a5495b77-7cd9-4a50-8eb6-dcd9aa751759","restored_revision_id":"fc8a2687-9ab8-412a-b375-85fbd805d778"}
+[08:22:35]          states after veto: 
+[08:22:36] [B05-08] idempotency re-confirm settled: 409 {"code":"KNOWLEDGE_CONFLICT","message":"knowledge conflict: proposal d63e92bd-b0f7-49ae-af5e-49e46f33ed6c is committed, not redline_pending"}
+[08:22:36]          revision count: 2
+[08:22:36] git log: 2 commits for qa-kb4-082230
+[08:22:36] file: D:/kudi-project/templates/.s02qa-knowledge/projects/S02QA-A-080911/knowledge/qa-kb4-082230.md content_head=# QA knowledge
+
+Body one.
+
+source: projects/S02QA-A/requirement/req-q1
+[08:22:36] === probe V1.3 end ===

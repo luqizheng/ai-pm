@@ -1,0 +1,19 @@
+[08:20:19] === knowledge/finding probe V1.1 start ===
+[08:20:19] [B06-01] redline-compliant proposal (source_ref=doc path): 200
+[08:20:19]          body: {"outcome":"rejected","proposal_id":"ab05867f-cb6a-443d-ac18-e10cba37639b","failures":[{"gate":"reference","code":"reference_missing","detail":"proposal must reference source_events or a concrete document path"}]}
+[08:20:20]          document= db_state=n/a
+[08:20:20] [B06-03] confirm redline: 400
+[08:20:20]          body: Invalid URL: Cannot parse `proposal_id` with value ``: UUID parsing failed: invalid length: found 0
+[08:20:21]          revision= sha=
+[08:20:21]          proposal still rejected - inspect k21.json
+[08:20:21] === B07 finding lifecycle ===
+[08:20:21] [B07-01] session (from v1.0 probe): f2af413a-9c99-4119-81b3-cb42b7327510
+[08:20:21] [B07-02] add finding kind=observed: 422
+[08:20:22]          finding= verification_status= actor_role=
+[08:20:22] [B07-03] confirm finding: 400
+[08:20:22]          status now: 
+[08:20:23] [B07-03b] reject path (new finding): 422
+[08:20:23]          reject: 400 -> 
+[08:20:23] [B07-03c] illegal verification status probe (expect 4xx): 400
+[08:20:24] [B07-05] audit: 
+[08:20:24] === probe V1.1 end ===

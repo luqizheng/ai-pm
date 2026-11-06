@@ -1,0 +1,16 @@
+[08:21:42] === knowledge/finding probe V1.2 start ===
+[08:21:42] [B06-01] proposal (markdown embeds projects/ source line): 200
+[08:21:43]          body: {"outcome":"rejected","proposal_id":"f15ee0d3-f4f0-44f1-8572-1fe724b5503e","failures":[{"gate":"source","code":"source_missing","detail":"no source_event_id / analysis_run_id / source_ref"}]}
+[08:21:43]          document= proposal= proposal_outcome=
+[08:21:43] [B06-03] confirm redline: 400
+[08:21:44]          body: Invalid URL: Cannot parse `proposal_id` with value ``: UUID parsing failed: invalid length: found 0
+[08:21:44]          revision= no= sha=
+[08:21:44] === B07 finding lifecycle ===
+[08:21:45] [B07-02] add finding evidence=[]: 201
+[08:21:45]          finding=e0646fd9-49cb-4ab2-888a-bc03451e462a status=PENDING
+[08:21:45] [B07-03] confirm: 200 -> CONFIRMED
+[08:21:45] [B07-03b] speculation + reject: 201
+[08:21:46]          reject: 200 -> REJECTED
+[08:21:46] [B07-03c] illegal status: 422 {"detail":"verification_status must be one of [\"PENDING\", \"CONFIRMED\", \"REJECTED\", \"CONFLICT\"], got \"BOGUS\"","
+[08:21:46] [B07-05] audit: finding.decidedx1 
+[08:21:46] === probe V1.2 end ===

@@ -1,0 +1,1 @@
+{"outcome":"rejected","proposal_id":"f06a01a5-613e-46d7-83e0-9899889350fb","failures":[{"gate":"source","code":"source_missing","detail":"no source_event_id / analysis_run_id / source_ref"},{"gate":"reference","code":"reference_missing","detail":"proposal must reference source_events or a concrete document path"}]}
