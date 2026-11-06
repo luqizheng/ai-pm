@@ -7,7 +7,7 @@
  * 默认指向 `https://unpkg.com/vditor@<version>`。内网/离线环境下该地址不可达，
  * 编辑器会停在「解析引擎未加载」的状态，无法初始化。
  *
- * 因此构建与本地开发前把这几类资源落到 `frontend/public/vditor/dist/`，
+ * 因此构建与本地开发前把这几类资源落到 `ai-frontend/public/vditor/dist/`，
  * 组件侧把 `cdn` 指向同源路径即可。产物随依赖版本自动刷新，升级 vditor 后重跑本脚本。
  *
  * 用法：node scripts/sync-vditor-assets.js
@@ -16,13 +16,8 @@ const { cpSync, existsSync, mkdirSync, rmSync } = require("node:fs");
 const { join, dirname } = require("node:path");
 
 const ROOT = join(__dirname, "..");
-/** 活跃前端工程 = ai-frontend（2026-11-04 重组后唯一工程）；旧 frontend/ 冻结只读 */
-const SRC_CANDIDATES = [
-  join(ROOT, "ai-frontend", "node_modules", "vditor", "dist"),
-  join(ROOT, "frontend", "node_modules", "vditor", "dist")
-];
-const SRC_DIST =
-  SRC_CANDIDATES.find(existsSync) ?? SRC_CANDIDATES[0];
+/** 活跃前端工程 = ai-frontend（2026-11-06 旧 frontend/ 已删除，唯一工程） */
+const SRC_DIST = join(ROOT, "ai-frontend", "node_modules", "vditor", "dist");
 const DEST_ROOT = join(ROOT, "ai-frontend", "public", "vditor", "dist");
 
 /**
@@ -43,7 +38,7 @@ const ENTRIES = [
 function main() {
   if (!existsSync(SRC_DIST)) {
     console.error(
-      "[sync-vditor] 未找到 vditor 依赖，请先在 frontend 下执行 pnpm install"
+      "[sync-vditor] 未找到 vditor 依赖，请先在 ai-frontend 下执行 pnpm install"
     );
     process.exit(1);
   }

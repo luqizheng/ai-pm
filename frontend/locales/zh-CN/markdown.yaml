@@ -1,8 +1,0 @@
-markdown:
-  field:
-    placeholder: "输入正文，支持从本地复制后直接粘贴图片或附件"
-    empty: "暂无内容"
-  upload:
-    tooLarge: "{name} 超过单文件 {limit} 上限"
-    rejected: "{name} 的类型不在允许上传范围内"
-    failed: "{name} 上传失败，请重试"
