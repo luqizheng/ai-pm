@@ -149,7 +149,7 @@
 | S02-QA-B07-01 | 人工创建 | 2xx 归属正确 | 201；kind=observed（CHECK 约束四值）；confidence 0-1 约束 | PASS |
 | S02-QA-B07-02 | 来源可溯 | run/人工来源 | HumanDirect + session 复合 FK 归属 | PASS |
 | S02-QA-B07-03 | 确认/生命周期 | 状态机正确 | PENDING→CONFIRMED/REJECTED 200；非法 status BOGUS→422 显式枚举错误 | PASS |
-| S02-QA-B07-04 | requirement_finding 关联 | **预期未实施** | 表不存在（S02-I3 分期缺口）——**NOT IMPLEMENTED（非缺陷）** | NOT IMPL |
+| S02-QA-B07-04 | requirement_finding 关联 | ~~预期未实施~~ **S02-I3 已实施（2026-11-06 补齐，迁移 0044）** | 集成测试 `pm_traceability` 6/6：Finding 关联/解除全链+审计、跨项目 finding 404、AI 主体（ai_pm）403、重复关联 409、archived 需求拒绝；由 NOT IMPLEMENTED 转为 **PASS** | PASS（I3 补齐后复测） |
 | S02-QA-B07-05 | 异域同名区分 | 不混用 | review_finding 与 discovery_finding 两表独立 | PASS |
 
 ## B08 — S01 / S03 集成和端到端回归（S02-TEST-08）
@@ -211,7 +211,7 @@
 | OBS-2 | P3 | Requirement 列表 API 无过滤参数（未知 query 静默忽略） | 否 |
 | OBS-3 | P3 | Finding 创建无审计事件、决定（decide）有审计——口径待产品确认 | 否 |
 | OBS-4 | P3 | 搜索多词查询为 AND 语义，整短语不命中需单词/组合查询（定位器/anchor 正常返回） | 否 |
-| NI-1 | 范围 | S02-I3 requirement_finding 关联未实施（B07-04） | 否（分期） |
+| NI-1 | 范围 | ~~S02-I3 requirement_finding 关联未实施（B07-04）~~ **已闭合**：2026-11-06 S02-I3 补齐（迁移 0044，`pm_traceability` 6/6 + S02 核心回归 11/11），C2 的 I3 部分解除；source_input/requirement_source_input 同批交付 | 否（已解决） |
 | NI-2 | 范围 | S02-I4 Task 绑定 Revision 入口未实施（B08-05/06；表结构就绪） | 否（分期） |
 | NI-3 | 范围 | S03 Design 关联未实施（B08-07） | 否（分期） |
 
