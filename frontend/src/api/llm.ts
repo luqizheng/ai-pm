@@ -1,49 +1,125 @@
 import { http } from "@/shell/api";
 import type { ListResponse } from "./types";
 
-/** 支持的模型供应商（ai.llm_provider.provider 的 CHECK 枚举）。 */
-export type LlmProviderId =
-  | "deepseek"
-  | "openai"
-  | "glm"
-  | "minimax"
-  | "ollama";
-
 /**
- * ai.llm_provider —— 全局模型供应商配置。
- * API Key 明文不回传：只有 `has_api_key` 与末 4 位提示。
+ * Team LLM Provider（0041：`ai.team_llm_provider`，Team-owned Resource）。
+ * 与旧全局 `/v1/pm/llm/providers*` 不同：实例可多个同类型、带生命周期状态、
+ * 乐观锁 revision；API Key 明文不回传——只有 `has_credential` 与末 4 位提示。
  */
+export type LlmProviderType =
+  | "openai"
+  | "anthropic"
+  | "gemini"
+  | "deepseek"
+  | "openai_compatible";
+
+export type LlmProviderStatus =
+  | "not_configured"
+  | "configured"
+  | "connected"
+  | "failed"
+  | "enabled"
+  | "disabled"
+  | "archived";
+
 export interface LlmProvider {
-  provider: LlmProviderId;
-  base_url: string;
-  model: string;
-  has_api_key: boolean;
-  api_key_hint: string | null;
-  enabled: boolean;
+  id: string;
+  name: string;
+  provider_type: LlmProviderType;
+  endpoint: string;
+  /** 调用参数（Phase 3 模型目录前：model 等存这里）。 */
+  configuration: { model?: string } & Record<string, unknown>;
+  status: LlmProviderStatus;
   timeout_secs: number;
+  /** 乐观锁：写请求必须携带 expected_revision = 当前值。 */
+  revision: number;
+  has_credential: boolean;
+  credential_hint: string | null;
+  last_tested_at: string | null;
+  created_by: string;
+  created_at: string;
   updated_at: string;
 }
 
-export function listLlmProviders() {
-  return http.get<ListResponse<LlmProvider>>("/v1/pm/llm/providers");
+/** 当前主体所属租户（Team ≡ tenant）：Provider 管理面的作用域。 */
+export async function resolveTenantId(): Promise<string> {
+  const me = await http.get<{ tenant_id: string }>("/v1/pm/me");
+  return me.tenant_id;
+}
+
+export function listLlmProviders(tenantId: string) {
+  return http.get<ListResponse<LlmProvider>>(
+    `/v1/pm/tenants/${tenantId}/llm-providers`
+  );
+}
+
+export interface CreateLlmProviderBody {
+  name: string;
+  provider_type: LlmProviderType;
+  endpoint: string;
+  configuration?: { model?: string } & Record<string, unknown>;
+  /** 缺省/空 = 只建实例不配凭证（not_configured）。 */
+  api_key?: string;
+  timeout_secs?: number;
+}
+
+export function createLlmProvider(tenantId: string, body: CreateLlmProviderBody) {
+  return http.post<LlmProvider>(
+    `/v1/pm/tenants/${tenantId}/llm-providers`,
+    body
+  );
 }
 
 export interface UpdateLlmProviderBody {
-  base_url: string;
-  model: string;
-  /** 缺省或空串 = 保持原密钥 */
-  api_key?: string;
-  /** true = 删除已保存的密钥（本地 Ollama 等无需鉴权场景） */
-  clear_api_key?: boolean;
-  enabled: boolean;
-  timeout_secs: number;
+  expected_revision: number;
+  name?: string;
+  provider_type?: LlmProviderType;
+  endpoint?: string;
+  configuration?: { model?: string } & Record<string, unknown>;
+  timeout_secs?: number;
 }
 
 export function updateLlmProvider(
-  provider: LlmProviderId,
+  tenantId: string,
+  providerId: string,
   body: UpdateLlmProviderBody
 ) {
-  return http.put<LlmProvider>(`/v1/pm/llm/providers/${provider}`, body);
+  return http.patch<LlmProvider>(
+    `/v1/pm/tenants/${tenantId}/llm-providers/${providerId}`,
+    body
+  );
+}
+
+/** 替换凭证（替换制轮换：旧凭证留痕，新凭证需重新测试后启用）。 */
+export function replaceLlmCredential(
+  tenantId: string,
+  providerId: string,
+  body: { expected_revision: number; api_key: string }
+) {
+  return http.post<LlmProvider>(
+    `/v1/pm/tenants/${tenantId}/llm-providers/${providerId}/credential`,
+    body
+  );
+}
+
+/** 生命周期显式动作（§6.3）：enable 需已有凭证；测试成功≠自动启用。 */
+export function setLlmProviderStatus(
+  tenantId: string,
+  providerId: string,
+  action: "enable" | "disable" | "archive",
+  expectedRevision: number
+) {
+  return http.post<LlmProvider>(
+    `/v1/pm/tenants/${tenantId}/llm-providers/${providerId}/status`,
+    { action, expected_revision: expectedRevision }
+  );
+}
+
+/** 删除（仅 archived 且无调用记录的实例；执行记录永久保留）。 */
+export function deleteLlmProvider(tenantId: string, providerId: string) {
+  return http.delete<{ deleted: boolean }>(
+    `/v1/pm/tenants/${tenantId}/llm-providers/${providerId}`
+  );
 }
 
 export interface LlmTestResult {
@@ -52,7 +128,9 @@ export interface LlmTestResult {
   message: string;
 }
 
-/** 服务端发起连通性探测（使用已保存的 base_url / model / key）。 */
-export function testLlmProvider(provider: LlmProviderId) {
-  return http.post<LlmTestResult>(`/v1/pm/llm/providers/${provider}/test`);
+/** 服务端发起连通性探测（使用已保存的 endpoint/model/key）。 */
+export function testLlmProvider(tenantId: string, providerId: string) {
+  return http.post<LlmTestResult>(
+    `/v1/pm/tenants/${tenantId}/llm-providers/${providerId}/test`
+  );
 }

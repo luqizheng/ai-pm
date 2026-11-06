@@ -5,9 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import {
   invalidTimeout,
+  statusBadgeVariant,
   type ProviderAction,
   type ProviderForm,
   type ProviderItem
@@ -21,8 +21,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   save: [action: ProviderAction];
-  test: [provider: ProviderItem["data"]["provider"]];
-  "clear-key": [action: ProviderAction];
+  test: [providerId: string];
+  "replace-key": [action: ProviderAction];
+  enable: [providerId: string];
+  disable: [providerId: string];
+  archive: [providerId: string];
+  remove: [providerId: string];
 }>();
 
 const { t } = useI18n();
@@ -37,10 +41,15 @@ watch(
 
 function action(): ProviderAction {
   return {
-    provider: props.item.data.provider,
+    providerId: props.item.data.id,
     label: props.item.label,
+    revision: props.item.data.revision,
     form: { ...form }
   };
+}
+
+function statusLabel(status: typeof props.item.data.status): string {
+  return t(`workspace.pages.models.status.${status}`);
 }
 
 function testMessage(): string {
@@ -57,24 +66,24 @@ function testMessage(): string {
   <section
     class="ws-card ws-model-card"
     data-test="provider-card"
-    :data-provider="item.data.provider"
+    :data-provider="item.data.id"
   >
     <header class="ws-model-head">
       <div class="ws-model-title">
         <span class="ws-model-name">{{ item.label }}</span>
-        <span class="ws-model-slug">{{ item.data.provider }}</span>
+        <span class="ws-model-slug">{{ item.data.provider_type }}</span>
       </div>
-      <Badge :variant="item.data.enabled ? 'success' : 'neutral'">
-        {{
-          item.data.enabled
-            ? t("workspace.pages.models.enabled")
-            : t("workspace.pages.models.disabled")
-        }}
+      <Badge :variant="statusBadgeVariant(item.data.status)">
+        {{ statusLabel(item.data.status) }}
       </Badge>
     </header>
 
-    <FormField :label="t('workspace.pages.models.fields.baseUrl')">
-      <Input v-model="form.base_url" placeholder="https://" />
+    <FormField :label="t('workspace.pages.models.fields.name')">
+      <Input v-model="form.name" />
+    </FormField>
+
+    <FormField :label="t('workspace.pages.models.fields.endpoint')">
+      <Input v-model="form.endpoint" placeholder="https://" />
     </FormField>
 
     <FormField :label="t('workspace.pages.models.fields.model')">
@@ -84,9 +93,9 @@ function testMessage(): string {
     <FormField
       :label="t('workspace.pages.models.fields.apiKey')"
       :description="
-        item.data.has_api_key
+        item.data.has_credential
           ? t('workspace.pages.models.keyConfigured', {
-              hint: item.data.api_key_hint ?? ''
+              hint: item.data.credential_hint ?? ''
             })
           : t('workspace.pages.models.keyMissing')
       "
@@ -108,20 +117,13 @@ function testMessage(): string {
           />
         </FormField>
       </div>
-      <div class="ws-model-toggle">
-        <Switch
-          v-model="form.enabled"
-          hide-label
-          :aria-label="t('workspace.pages.models.enableLabel')"
-          :state-label="{
-            on: t('workspace.pages.models.enabled'),
-            off: t('workspace.pages.models.disabled')
-          }"
-        />
-        <span class="ws-model-label">
-          {{ t("workspace.pages.models.enableLabel") }}
-        </span>
-      </div>
+      <span class="ws-model-label">
+        {{ t("workspace.pages.models.lastTested", {
+          time: item.data.last_tested_at
+            ? new Date(item.data.last_tested_at).toLocaleString()
+            : t("workspace.pages.models.neverTested")
+        }) }}
+      </span>
     </div>
 
     <p v-if="invalidTimeout(form)" class="ws-model-test is-bad">
@@ -139,23 +141,64 @@ function testMessage(): string {
         {{ t("workspace.pages.models.save") }}
       </Button>
       <Button
+        v-if="form.api_key.trim()"
+        data-test="replace-key"
+        size="sm"
+        variant="secondary"
+        :loading="saving"
+        :disabled="invalidTimeout(form)"
+        @click="emit('replace-key', action())"
+      >
+        {{ t("workspace.pages.models.replaceKey") }}
+      </Button>
+      <Button
         data-test="test"
         size="sm"
         variant="secondary"
         :loading="testing"
-        @click="emit('test', item.data.provider)"
+        @click="emit('test', item.data.id)"
       >
         {{ t("workspace.pages.models.test") }}
       </Button>
       <Button
-        v-if="item.data.has_api_key"
-        data-test="clear-key"
+        v-if="item.data.status !== 'enabled' && item.data.status !== 'archived'"
+        data-test="enable"
+        size="sm"
+        variant="secondary"
+        :loading="saving"
+        @click="emit('enable', item.data.id)"
+      >
+        {{ t("workspace.pages.models.enable") }}
+      </Button>
+      <Button
+        v-if="item.data.status === 'enabled'"
+        data-test="disable"
+        size="sm"
+        variant="secondary"
+        :loading="saving"
+        @click="emit('disable', item.data.id)"
+      >
+        {{ t("workspace.pages.models.disable") }}
+      </Button>
+      <Button
+        v-if="item.data.status !== 'archived'"
+        data-test="archive"
         size="sm"
         variant="ghost"
         :loading="saving"
-        @click="emit('clear-key', action())"
+        @click="emit('archive', item.data.id)"
       >
-        {{ t("workspace.pages.models.clearKey") }}
+        {{ t("workspace.pages.models.archive") }}
+      </Button>
+      <Button
+        v-if="item.data.status === 'archived'"
+        data-test="delete"
+        size="sm"
+        variant="ghost"
+        :loading="saving"
+        @click="emit('remove', item.data.id)"
+      >
+        {{ t("workspace.pages.models.delete") }}
       </Button>
     </footer>
 
@@ -233,13 +276,6 @@ function testMessage(): string {
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-}
-
-.ws-model-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-bottom: 8px;
 }
 
 .ws-model-actions {

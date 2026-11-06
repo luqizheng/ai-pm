@@ -964,70 +964,60 @@ export const sessions = [
 ];
 
 /**
- * 全局 LLM 供应商配置（ai.llm_provider）。
- * API Key 明文不回传，只有 has_api_key 与末 4 位提示。
+ * Team LLM Provider（0041：ai.team_llm_provider，Team-owned 实例列表）。
+ * API Key 明文不回传，只有 has_credential 与末 4 位提示。
  */
 export interface MockLlmProvider {
-  provider: string;
-  base_url: string;
-  model: string;
-  has_api_key: boolean;
-  api_key_hint: string | null;
-  enabled: boolean;
+  id: string;
+  name: string;
+  provider_type: string;
+  endpoint: string;
+  configuration: { model?: string };
+  status: string;
   timeout_secs: number;
+  revision: number;
+  has_credential: boolean;
+  credential_hint: string | null;
+  last_tested_at: string | null;
+  created_by: string;
+  created_at: string;
   updated_at: string;
 }
 
+const TENANT_ID = "00000000-0000-0000-0000-000000000010";
+
 export const llmProviders: MockLlmProvider[] = [
   {
-    provider: "deepseek",
-    base_url: "https://api.deepseek.com/v1",
-    model: "deepseek-chat",
-    has_api_key: false,
-    api_key_hint: null,
-    enabled: false,
+    id: "3f1a2b4c-0000-4000-8000-000000000001",
+    name: "DeepSeek 主力",
+    provider_type: "deepseek",
+    endpoint: "https://api.deepseek.com/v1",
+    configuration: { model: "deepseek-chat" },
+    status: "configured",
     timeout_secs: 120,
+    revision: 2,
+    has_credential: true,
+    credential_hint: "****abcd",
+    last_tested_at: daysAgo(0, 9),
+    created_by: "11111111-1111-4111-8111-111111111111",
+    created_at: daysAgo(3, 10),
     updated_at: daysAgo(0, 9)
   },
   {
-    provider: "openai",
-    base_url: "https://api.openai.com/v1",
-    model: "gpt-4o-mini",
-    has_api_key: false,
-    api_key_hint: null,
-    enabled: false,
+    id: "3f1a2b4c-0000-4000-8000-000000000002",
+    name: "本地 Ollama",
+    provider_type: "openai_compatible",
+    endpoint: "http://127.0.0.1:11434/v1",
+    configuration: { model: "qwen2.5:7b" },
+    status: "not_configured",
     timeout_secs: 120,
-    updated_at: daysAgo(0, 9)
-  },
-  {
-    provider: "glm",
-    base_url: "https://open.bigmodel.cn/api/paas/v4",
-    model: "glm-4-plus",
-    has_api_key: false,
-    api_key_hint: null,
-    enabled: false,
-    timeout_secs: 120,
-    updated_at: daysAgo(0, 9)
-  },
-  {
-    provider: "minimax",
-    base_url: "https://api.minimax.chat/v1",
-    model: "MiniMax-Text-01",
-    has_api_key: false,
-    api_key_hint: null,
-    enabled: false,
-    timeout_secs: 120,
-    updated_at: daysAgo(0, 9)
-  },
-  {
-    provider: "ollama",
-    base_url: "http://127.0.0.1:11434/v1",
-    model: "qwen2.5:7b",
-    has_api_key: false,
-    api_key_hint: null,
-    enabled: false,
-    timeout_secs: 120,
-    updated_at: daysAgo(0, 9)
+    revision: 1,
+    has_credential: false,
+    credential_hint: null,
+    last_tested_at: null,
+    created_by: "11111111-1111-4111-8111-111111111111",
+    created_at: daysAgo(1, 12),
+    updated_at: daysAgo(1, 12)
   }
 ];
 
@@ -1327,15 +1317,133 @@ export function resolveMock(
       };
     }
 
-    // LLM 供应商连通性测试
-    const llmTest = pathname.match(/^\/v1\/pm\/llm\/providers\/([^/]+)\/test$/);
+    // Team LLM Provider：连通性测试 / 换凭证 / 生命周期 / 创建
+    const llmTest = pathname.match(
+      /^\/v1\/pm\/tenants\/([^/]+)\/llm-providers\/([^/]+)\/test$/
+    );
     if (llmTest) {
-      const row = llmProviders.find(item => item.provider === llmTest[1]);
-      if (!row) return { status: 404, body: { message: "unknown provider" } };
+      const row = llmProviders.find(item => item.id === llmTest[2]);
+      if (!row) return { status: 404, body: { message: "provider not found" } };
+      row.status = "connected";
+      row.last_tested_at = new Date().toISOString();
       return {
         status: 200,
         body: { ok: true, latency_ms: 42, message: "HTTP 200" }
       };
+    }
+    const llmCredential = pathname.match(
+      /^\/v1\/pm\/tenants\/([^/]+)\/llm-providers\/([^/]+)\/credential$/
+    );
+    if (llmCredential) {
+      const row = llmProviders.find(item => item.id === llmCredential[2]);
+      if (!row) return { status: 404, body: { message: "provider not found" } };
+      const payload = (body ?? {}) as {
+        expected_revision?: number;
+        api_key?: string;
+      };
+      if (!payload.api_key || payload.api_key.trim() === "") {
+        return { status: 400, body: { message: "api_key is required" } };
+      }
+      if (payload.expected_revision !== row.revision) {
+        return {
+          status: 409,
+          body: { code: "revision_conflict", message: "revision conflict" }
+        };
+      }
+      row.revision += 1;
+      row.has_credential = true;
+      row.credential_hint = `****${payload.api_key.slice(-4)}`;
+      row.status = "configured";
+      row.updated_at = new Date().toISOString();
+      return { status: 200, body: row };
+    }
+    const llmStatus = pathname.match(
+      /^\/v1\/pm\/tenants\/([^/]+)\/llm-providers\/([^/]+)\/status$/
+    );
+    if (llmStatus) {
+      const row = llmProviders.find(item => item.id === llmStatus[2]);
+      if (!row) return { status: 404, body: { message: "provider not found" } };
+      const payload = (body ?? {}) as {
+        action?: string;
+        expected_revision?: number;
+      };
+      if (
+        payload.action !== "enable" &&
+        payload.action !== "disable" &&
+        payload.action !== "archive"
+      ) {
+        return {
+          status: 400,
+          body: { message: "action must be enable|disable|archive" }
+        };
+      }
+      if (payload.expected_revision !== row.revision) {
+        return {
+          status: 409,
+          body: { code: "revision_conflict", message: "revision conflict" }
+        };
+      }
+      if (payload.action === "enable" && !row.has_credential) {
+        return {
+          status: 400,
+          body: { message: "credential is required before enabling" }
+        };
+      }
+      row.revision += 1;
+      row.status =
+        payload.action === "enable"
+          ? "enabled"
+          : payload.action === "disable"
+            ? "disabled"
+            : "archived";
+      row.updated_at = new Date().toISOString();
+      return { status: 200, body: row };
+    }
+    const llmCreate = pathname.match(/^\/v1\/pm\/tenants\/([^/]+)\/llm-providers$/);
+    if (llmCreate) {
+      const payload = (body ?? {}) as {
+        name?: string;
+        provider_type?: string;
+        endpoint?: string;
+        configuration?: { model?: string };
+        api_key?: string;
+        timeout_secs?: number;
+      };
+      const name = (payload.name ?? "").trim();
+      const endpoint = (payload.endpoint ?? "").trim();
+      if (!name) return { status: 400, body: { message: "name is required" } };
+      if (llmProviders.some(item => item.name === name)) {
+        return {
+          status: 500,
+          body: { message: "duplicate provider name" }
+        };
+      }
+      if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
+        return {
+          status: 400,
+          body: { message: "endpoint must start with http:// or https://" }
+        };
+      }
+      const key = (payload.api_key ?? "").trim();
+      const now = new Date().toISOString();
+      const row: MockLlmProvider = {
+        id: `3f1a2b4c-0000-4000-8000-${String(llmProviders.length + 1).padStart(12, "0")}`,
+        name,
+        provider_type: payload.provider_type ?? "openai_compatible",
+        endpoint,
+        configuration: payload.configuration ?? {},
+        status: key ? "configured" : "not_configured",
+        timeout_secs: payload.timeout_secs ?? 120,
+        revision: key ? 2 : 1,
+        has_credential: Boolean(key),
+        credential_hint: key ? `****${key.slice(-4)}` : null,
+        last_tested_at: null,
+        created_by: "11111111-1111-4111-8111-111111111111",
+        created_at: now,
+        updated_at: now
+      };
+      llmProviders.push(row);
+      return { status: 201, body: row };
     }
 
     switch (pathname) {
@@ -1348,56 +1456,54 @@ export function resolveMock(
     return undefined;
   }
 
-  if (method === "PUT") {
-    // LLM 供应商配置：api_key 缺省/空串 = 保持原值；clear_api_key = 删除
+  if (method === "PATCH") {
+    // Team LLM Provider 编辑：expected_revision 乐观锁（409）
     const updateProvider = pathname.match(
-      /^\/v1\/pm\/llm\/providers\/([^/]+)$/
+      /^\/v1\/pm\/tenants\/([^/]+)\/llm-providers\/([^/]+)$/
     );
     if (updateProvider) {
-      const row = llmProviders.find(
-        item => item.provider === updateProvider[1]
-      );
-      if (!row) return { status: 404, body: { message: "unknown provider" } };
+      const row = llmProviders.find(item => item.id === updateProvider[2]);
+      if (!row) return { status: 404, body: { message: "provider not found" } };
       const payload = (body ?? {}) as {
-        base_url?: string;
-        model?: string;
-        api_key?: string;
-        clear_api_key?: boolean;
-        enabled?: boolean;
+        expected_revision?: number;
+        name?: string;
+        provider_type?: string;
+        endpoint?: string;
+        configuration?: { model?: string };
         timeout_secs?: number;
       };
-      const baseUrl = (payload.base_url ?? "").trim().replace(/\/+$/, "");
-      if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+      if (payload.expected_revision !== row.revision) {
         return {
-          status: 400,
-          body: { message: "base_url must start with http:// or https://" }
+          status: 409,
+          body: {
+            code: "revision_conflict",
+            message: "revision conflict",
+            actual_revision: row.revision
+          }
         };
       }
-      if (!(payload.model ?? "").trim()) {
-        return { status: 400, body: { message: "model is required" } };
+      const endpoint = (payload.endpoint ?? "").trim().replace(/\/+$/, "");
+      if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
+        return {
+          status: 400,
+          body: { message: "endpoint must start with http:// or https://" }
+        };
       }
       if (
-        payload.timeout_secs === undefined ||
-        payload.timeout_secs < 1 ||
-        payload.timeout_secs > 600
+        payload.timeout_secs !== undefined &&
+        (payload.timeout_secs < 1 || payload.timeout_secs > 600)
       ) {
         return {
           status: 400,
           body: { message: "timeout_secs must be between 1 and 600" }
         };
       }
-      row.base_url = baseUrl;
-      row.model = (payload.model ?? "").trim();
-      row.enabled = Boolean(payload.enabled);
-      row.timeout_secs = payload.timeout_secs;
-      if (payload.clear_api_key) {
-        row.has_api_key = false;
-        row.api_key_hint = null;
-      } else if (payload.api_key && payload.api_key.trim() !== "") {
-        const key = payload.api_key.trim();
-        row.has_api_key = true;
-        row.api_key_hint = `****${key.slice(-4)}`;
-      }
+      row.name = (payload.name ?? row.name).trim();
+      row.provider_type = payload.provider_type ?? row.provider_type;
+      row.endpoint = endpoint;
+      row.configuration = payload.configuration ?? row.configuration;
+      row.timeout_secs = payload.timeout_secs ?? row.timeout_secs;
+      row.revision += 1;
       row.updated_at = new Date().toISOString();
       return { status: 200, body: row };
     }
@@ -1517,11 +1623,27 @@ export function resolveMock(
       return { status: 200, body: list(approvals) };
     case "/v1/pm/audit-logs":
       return { status: 200, body: list(auditLogs) };
-    case "/v1/pm/llm/providers":
-      return {
-        status: 200,
-        body: { items: llmProviders, total: llmProviders.length }
-      };
+  }
+  // Team LLM Providers（0041）：/v1/pm/tenants/{tenant_id}/llm-providers
+  const llmList = pathname.match(/^\/v1\/pm\/tenants\/([^/]+)\/llm-providers$/);
+  if (llmList) {
+    return {
+      status: 200,
+      body: { items: llmProviders, total: llmProviders.length }
+    };
+  }
+  if (pathname === "/v1/pm/me") {
+    return {
+      status: 200,
+      body: {
+        principal_id: "11111111-1111-4111-8111-111111111111",
+        display_name: "admin",
+        tenant_id: TENANT_ID,
+        is_active: true,
+        tenant_role: "owner",
+        is_admin: true
+      }
+    };
   }
 
   // 修订历史：GET /v1/pm/requirements/{id}/revisions
