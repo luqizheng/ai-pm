@@ -56,6 +56,11 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/pm/tenants/{tenant_id}/invitation-links/{link_id}/revoke",
             post(revoke_link_handler),
         )
+        // 解散团队（Owner 独占，产品裁决 2026-11-06）：projects 全部终态软删。
+        .route(
+            "/v1/pm/tenants/{tenant_id}/dissolve",
+            post(dissolve_handler),
+        )
         // 自助：预览 + 接受（未激活 principal 可调，仍需 bearer）。
         .route("/v1/pm/invitations/preview", get(preview_invitation_handler))
         .route("/v1/pm/invitations/accept", post(accept_invitation_handler))
@@ -266,6 +271,23 @@ async fn revoke_link_handler(
             Json(json!({ "id": link_id, "status": "REVOKED" })),
         )
             .into_response(),
+        Err(err) => api_err(err),
+    }
+}
+
+/// 解散团队（Owner 独占；权限在服务层实时查库判定，admin/member 403）。
+async fn dissolve_handler(
+    State(state): State<AppState>,
+    axum::Extension(caller): axum::Extension<AuthedPrincipal>,
+    Path(tenant_id): Path<Uuid>,
+) -> Response {
+    if guard_tenant(&caller, tenant_id).is_err() {
+        return err_not_found("tenant not found");
+    }
+    match svc::dissolve_team(&state.pool, &caller.audit_actor(), caller.principal_id, tenant_id)
+        .await
+    {
+        Ok(outcome) => (axum::http::StatusCode::OK, Json(outcome)).into_response(),
         Err(err) => api_err(err),
     }
 }

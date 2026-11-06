@@ -394,7 +394,7 @@ pub async fn create_team(
 
     sqlx::query(
         "UPDATE core.tenant \
-            SET display_name = $2, slug = $3, description = $4, updated_at = now() \
+            SET display_name = $2, slug = $3, description = $4, is_active = true, updated_at = now() \
           WHERE id = $1",
     )
     .bind(tenant_id)
@@ -1143,4 +1143,131 @@ pub async fn accept_invitation_link(
 
     tx.commit().await?;
     Ok(outcome)
+}
+
+// ─────────────────────────────────────────────────────────── 解散团队
+
+/// 解散结果（审计与回显用）。
+#[derive(Debug, Clone, Serialize)]
+pub struct DissolveOutcome {
+    pub projects_deleted: i64,
+    pub members_removed: i64,
+}
+
+/// 解散团队（产品裁决 2026-11-06：**Owner 独占**；admin/member 均不可）。
+///
+/// 级联语义——「projects 全部删除」在事务内落地为**终态软删**：
+/// `core.project.status → 'deleted'` + 项目成员行清空（两道闸都使项目从
+/// 列表与可见性检查中消失）。硬删不可行：`governance.audit_log.project_id`
+/// NOT NULL FK 锚定审计链，且数十张业务表无级联——审计优先口径下删除历史
+/// 不可接受。团队面同步清算：成员关系全撤（含 Owner 本人）、邀请/链接/
+/// 领用记录清空、租户休眠（is_active=false + 档案列清空，slug 释放）。
+///
+/// 后续语义：休眠租户在 `/me` 呈现 team=null → onboarding_required=true，
+/// 原 member（principal 仍 active）经认领路径可**重建**团队（create_team
+/// 会翻回 is_active）——解散后同 lmms 租户的人不会被永久锁死。不可逆性：
+/// 软删项目无恢复端点（V1），租户重建后旧项目不可见。
+pub async fn dissolve_team(
+    pool: &PgPool,
+    actor: &AuditActor,
+    principal_id: Uuid,
+    tenant_id: Uuid,
+) -> Result<DissolveOutcome, TeamOnboardingError> {
+    let mut tx = pool.begin().await?;
+
+    let locked: Option<(bool,)> =
+        sqlx::query_as("SELECT is_active FROM core.tenant WHERE id = $1 FOR UPDATE")
+            .bind(tenant_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let Some((is_active,)) = locked else {
+        return Err(TeamOnboardingError::NotFound);
+    };
+    if !is_active {
+        return Err(TeamOnboardingError::Conflict("team_already_dissolved"));
+    }
+
+    // Owner 独占：admin/member 一律拒绝（实时查库，token 不参与授权）。
+    let role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM core.tenant_member \
+          WHERE tenant_id = $1 AND principal_id = $2 AND principal_id IN \
+                (SELECT id FROM core.principal WHERE is_active)",
+    )
+    .bind(tenant_id)
+    .bind(principal_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if role.as_deref() != Some("owner") {
+        return Err(TeamOnboardingError::Forbidden("team owner required"));
+    }
+
+    // 终态软删项目 + 清项目成员行（两道可见性闸同时失效）。
+    let projects_deleted: i64 = sqlx::query_scalar(
+        "WITH moved AS ( \
+             UPDATE core.project SET status = 'deleted', updated_at = now() \
+              WHERE tenant_id = $1 AND status <> 'deleted' \
+              RETURNING 1) \
+         SELECT count(*) FROM moved",
+    )
+    .bind(tenant_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    sqlx::query(
+        "DELETE FROM core.project_member \
+          WHERE project_id IN (SELECT id FROM core.project WHERE tenant_id = $1)",
+    )
+    .bind(tenant_id)
+    .execute(&mut *tx)
+    .await?;
+
+    // 团队面清算：邀请/链接/领用清空，成员关系全撤（含 Owner 本人）。
+    sqlx::query("DELETE FROM core.tenant_invitation_link_redemption WHERE tenant_id = $1")
+        .bind(tenant_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM core.tenant_invitation WHERE tenant_id = $1")
+        .bind(tenant_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM core.tenant_invitation_link WHERE tenant_id = $1")
+        .bind(tenant_id)
+        .execute(&mut *tx)
+        .await?;
+    let members_removed: i64 = sqlx::query_scalar(
+        "WITH gone AS ( \
+             DELETE FROM core.tenant_member WHERE tenant_id = $1 RETURNING 1) \
+         SELECT count(*) FROM gone",
+    )
+    .bind(tenant_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    // 租户休眠 + 档案清空（slug 释放，重建团队可复用）。
+    sqlx::query(
+        "UPDATE core.tenant \
+            SET is_active = false, slug = NULL, description = NULL, updated_at = now() \
+          WHERE id = $1",
+    )
+    .bind(tenant_id)
+    .execute(&mut *tx)
+    .await?;
+
+    insert_tenant_audit(
+        &mut tx,
+        tenant_id,
+        actor,
+        "team.dissolved",
+        "tenant",
+        tenant_id,
+        None,
+        Some(json!({
+            "projects_deleted": projects_deleted,
+            "members_removed": members_removed,
+            "by": principal_id
+        })),
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok(DissolveOutcome { projects_deleted, members_removed })
 }

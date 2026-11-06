@@ -29,11 +29,14 @@ async fn me_handler(
     Extension(principal): Extension<AuthedPrincipal>,
 ) -> Json<serde_json::Value> {
     // Team Onboarding（0044）扩展面：团队档案 + onboarding 门 + memberships。
-    // onboarding_required = principal 未激活（provision 后未认领/未受邀）——
-    // 首登必须建团或入团（产品裁决 Q1）。memberships 按 principal 查全量
+    // onboarding_required = principal 未激活（provision 后未认领/未受邀）
+    // **或团队休眠**（dissolve 后 team=null）——两种态都进 onboarding 流
+    // （产品裁决 Q1：必须建团或入团）。memberships 按 principal 查全量
     // （V1 单团队现实下为 0/1 行；契约按多团队 shape 设计，上游支持后免改）。
     let team = sqlx::query_as::<_, (Uuid, String, Option<String>, Option<String>)>(
-        "SELECT id, display_name, slug, description FROM core.tenant WHERE id = $1",
+        // 休眠租户（dissolve）不呈现为团队。
+        "SELECT id, display_name, slug, description FROM core.tenant \
+          WHERE id = $1 AND is_active",
     )
     .bind(principal.tenant_id)
     .fetch_optional(&state.pool)
@@ -42,12 +45,13 @@ async fn me_handler(
     .flatten();
     let memberships = sqlx::query_as::<_, (Uuid, String, String)>(
         // 只统计 ACTIVE 成员关系：未激活 principal 的 provision member 行
-        // 不算「已加入」（onboarding_required 语义与之配套）。
+        // 不算「已加入」（onboarding_required 语义与之配套）；休眠租户
+        // 的成员关系已随 dissolve 清空，双重保险再滤 is_active。
         "SELECT t.id, t.display_name, tm.role \
            FROM core.tenant_member tm \
            JOIN core.tenant t ON t.id = tm.tenant_id \
            JOIN core.principal p ON p.id = tm.principal_id \
-          WHERE tm.principal_id = $1 AND p.is_active \
+          WHERE tm.principal_id = $1 AND p.is_active AND t.is_active \
           ORDER BY t.created_at",
     )
     .bind(principal.principal_id)
@@ -55,6 +59,7 @@ async fn me_handler(
     .await
     .unwrap_or_default();
 
+    let has_team = team.is_some();
     let team_json = team
         .map(|(id, name, slug, description)| {
             json!({ "id": id, "name": name, "slug": slug, "description": description })
@@ -79,7 +84,7 @@ async fn me_handler(
         "subject": principal.subject,
         "auth_mode": principal.auth_mode,
         "team": team_json,
-        "onboarding_required": !principal.is_active,
+        "onboarding_required": !principal.is_active || !has_team,
         "memberships": memberships_json,
     }))
 }

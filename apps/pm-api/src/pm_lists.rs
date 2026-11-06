@@ -89,6 +89,7 @@ async fn projects(
                 p.code, p.name, p.description, p.status, p.revision, p.created_at, p.updated_at \
          FROM core.project p JOIN core.customer c ON c.id = p.customer_id \
          WHERE p.tenant_id = $5 \
+           AND p.status <> 'deleted' \
            AND EXISTS (SELECT 1 FROM core.project_member m \
                         WHERE m.project_id = p.id AND m.principal_id = $4) \
            AND ($1::uuid IS NULL OR p.customer_id = $1) \
@@ -104,6 +105,7 @@ async fn projects(
     let total: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM core.project p \
           WHERE p.tenant_id = $3 \
+            AND p.status <> 'deleted' \
             AND EXISTS (SELECT 1 FROM core.project_member m \
                          WHERE m.project_id = p.id AND m.principal_id = $2) \
             AND ($1::uuid IS NULL OR p.customer_id = $1)",

@@ -653,3 +653,200 @@ async fn team_profile_update_and_audit_rows(pool: PgPool) {
         assert!(row.4.is_some(), "actor_auth_mode must be present");
     }
 }
+
+// ────────────────────────────────────────────────── 解散团队（Owner 独占）
+
+/// 已治理租户 + 一个 demo 项目，供解散级联断言。
+async fn world_with_project(
+    pool: PgPool,
+) -> (Router, PgPool, Uuid, Uuid, String, Uuid, String) {
+    let (app, db, tenant_id, owner_token) = governed_world(pool).await;
+    // 项目经 bootstrap 建成（T-022：调用者自动占 owner 槽）。
+    let owner = me(&app, &owner_token).await;
+    let owner_id = Uuid::parse_str(owner["principal_id"].as_str().unwrap()).unwrap();
+    let (status, project) = call(
+        &app,
+        "POST",
+        "/v1/pm/projects",
+        &owner_token,
+        Some(json!({ "code": "DOOMED", "name": "Doomed" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{project}");
+    let project_id = Uuid::parse_str(project["id"].as_str().unwrap()).unwrap();
+    (app, db, tenant_id, project_id, owner_token, owner_id, project["code"].as_str().unwrap().to_string())
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn dissolve_is_owner_exclusive(pool: PgPool) {
+    let (app, _db, tenant_id, _project, owner_token, owner_id, _code) =
+        world_with_project(pool).await;
+
+    // 激活一个 admin 与一个 member。
+    for sub in ["usr-admin", "usr-member"] {
+        let m = me(&app, &token_for(sub, 1)).await;
+        let id = Uuid::parse_str(m["principal_id"].as_str().unwrap()).unwrap();
+        let (status, _) = call(
+            &app,
+            "PATCH",
+            &format!("/v1/pm/principals/{id}"),
+            &owner_token,
+            Some(json!({ "is_active": true })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+    }
+    let admin = me(&app, &token_for("usr-admin", 1)).await;
+    let admin_id = Uuid::parse_str(admin["principal_id"].as_str().unwrap()).unwrap();
+    let (status, _) = call(
+        &app,
+        "PATCH",
+        &format!("/v1/pm/tenants/{tenant_id}/members/{admin_id}/role"),
+        &owner_token,
+        Some(json!({ "role": "admin" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    // admin 与 member 均不可解散（Owner 独占，实时查库）。
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/v1/pm/tenants/{tenant_id}/dissolve"),
+        &token_for("usr-admin", 1),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["message"], json!("team owner required"));
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/v1/pm/tenants/{tenant_id}/dissolve"),
+        &token_for("usr-member", 1),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // Owner 解散 → 200，返回级联计数。
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/v1/pm/tenants/{tenant_id}/dissolve"),
+        &owner_token,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["projects_deleted"], json!(1));
+    let _ = owner_id;
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn dissolve_cascades_and_revives_on_reclaim(pool: PgPool) {
+    let (app, db, tenant_id, project_id, owner_token, _owner_id, code) =
+        world_with_project(pool).await;
+
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/v1/pm/tenants/{tenant_id}/dissolve"),
+        &owner_token,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    // 项目终态软删 + 成员行清空。
+    let (pstatus, pmembers): (String, i64) = sqlx::query_as(
+        "SELECT status, (SELECT count(*) FROM core.project_member m WHERE m.project_id = p.id) \
+           FROM core.project p WHERE p.id = $1",
+    )
+    .bind(project_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(pstatus, "deleted");
+    assert_eq!(pmembers, 0);
+
+    // Owner 自己的项目列表与项目可见性均失。
+    let (status, list) = call(&app, "GET", "/v1/pm/projects", &owner_token, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list["items"].as_array().unwrap().len(), 0, "{list}");
+    let (status, _) = call(
+        &app,
+        "GET",
+        &format!("/v1/pm/projects/{project_id}/members"),
+        &owner_token,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "软删项目对任何人 404");
+
+    // 团队面清算 + 租户休眠；/me 回到 onboarding 门。
+    let invites: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM core.tenant_invitation WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(invites, 0);
+    let members_left: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM core.tenant_member WHERE tenant_id = $1")
+            .bind(tenant_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(members_left, 0);
+    let now = me(&app, &owner_token).await;
+    assert_eq!(now["team"], serde_json::Value::Null);
+    assert_eq!(now["onboarding_required"], json!(true));
+    assert_eq!(now["memberships"], json!([]));
+
+    // 重复解散 → 409 team_already_dissolved。
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/v1/pm/tenants/{tenant_id}/dissolve"),
+        &owner_token,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["message"], json!("team_already_dissolved"));
+
+    // 原 member（principal 仍 active）认领重建 → 新 Owner、租户复活、
+    // slug 已释放可复用；旧项目保持 deleted 不可见。
+    let (status, team) = call(
+        &app,
+        "POST",
+        "/v1/pm/teams",
+        &token_for("usr-reclaimer", 1),
+        Some(json!({ "name": "Phoenix Team", "slug": code.to_lowercase() + "-reborn" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{team}");
+    let reborn = me(&app, &token_for("usr-reclaimer", 1)).await;
+    assert_eq!(reborn["tenant_role"], json!("owner"));
+    assert_eq!(reborn["onboarding_required"], json!(false));
+    let (status, list) = call(
+        &app,
+        "GET",
+        "/v1/pm/projects",
+        &token_for("usr-reclaimer", 1),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list["items"].as_array().unwrap().len(), 0, "旧软删项目不可见");
+
+    // 审计：team.dissolved 落行。
+    let audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.tenant_audit_log WHERE action = 'team.dissolved'",
+    )
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(audits, 1);
+}
