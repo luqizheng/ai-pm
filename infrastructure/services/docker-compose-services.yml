@@ -4,7 +4,7 @@
 #       30s 对账重注册。不再使用 Docker labels（SERVICE_* labels 已删除）。
 # 跨主机：CONSUL_ADDR 指 infra 机 IP、SERVICE_ADDRESS 设本机 LAN IP（consul
 #       健康检查回拨地址；空值回退容器 hostname，合体单机部署留默认即可）。
-# 日志：promtail（observability staging overlay）只发现 logging=loki 容器。
+# 日志：promtail（observability logs 片，原 staging 片更名）只发现 logging=loki 容器。
 # ⚠️ 本文件与 docker-compose.ai-pm.yml 各有一份同名 anchor（YAML anchor 不能
 #    跨 include 文件），改动须两处同步。
 x-consul-env: &consul-env

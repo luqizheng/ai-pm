@@ -18,7 +18,7 @@ docker-compose.yml              入口 include 四块（根）
 │                                api-gateway:3000 / iam-service:8081→9081 / token-service:8082
 │                                file / notification / audit / prue + 2 outbox publisher
 │                                + config/api-gateway
-├─ observability/                docker-compose-observability.yml(+staging/prod 片)
+├─ observability/                docker-compose-observability.yml(+logs/prod 片)
 │                                prometheus / grafana / jaeger / otel-collector
 │                                / alertmanager / consul-template + config/{prometheus,...}
 ├─ docker-compose.ai-pm.yml      ai-pm 自有 6 服务（本仓所有，升级不被覆盖）：
