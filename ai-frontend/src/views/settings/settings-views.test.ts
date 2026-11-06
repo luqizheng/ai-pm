@@ -142,19 +142,21 @@ describe("应用设置路由", () => {
 });
 
 describe("落地页", () => {
-  it("五类目卡，且卡片与侧栏条目指向应用路径 /settings/*", async () => {
+  it("个人五类目卡 + 团队区入口卡，均指向应用路径 /settings/*", async () => {
     const { wrapper } = await mountAt(
       SettingsLandingView,
       "/settings/personal"
     );
     const cards = wrapper.findAll(".personal-landing__card");
-    expect(cards).toHaveLength(5);
+    // 0041 起：个人域五卡 + 团队设置区一卡（AI 配置）
+    expect(cards).toHaveLength(6);
     expect(cards.map(card => card.attributes("href"))).toEqual([
       "/settings/personal/profile",
       "/settings/personal/security",
       "/settings/personal/preferences",
       "/settings/personal/notifications",
-      "/settings/personal/ai"
+      "/settings/personal/ai",
+      "/settings/team/ai-providers"
     ]);
 
     // 侧栏导航项同样指向应用路径（设计目录路径不得泄漏进应用壳）

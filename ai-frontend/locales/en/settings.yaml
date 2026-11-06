@@ -39,6 +39,7 @@ settings:
     repositories: Repositories
     development: Development
     projectAi: AI Configuration
+    aiProviders: AI Configuration (Models)
   demo:
     personaLabel: Demo role
     persona:
@@ -382,3 +383,61 @@ settings:
       readOnlyField: Read-only field display.
       validationMessage: Validation error message.
       confirmationDialog: Danger confirmation for destructive actions.
+  team:
+    landing:
+      title: Team Settings
+      aiDesc: Manage the team's LLM providers, credentials and connections (team admins only)
+    ai:
+      desc: "Team-owned provider instances: multiple per type allowed; credentials encrypted; a passing test never auto-enables."
+      securityNote: API keys are stored with AES-256-GCM; only the last 4 characters are shown, and no role can read the full key back.
+      loading: Loading providers…
+      empty: No providers yet — click "Add provider" to start.
+      loadFailed: Failed to load
+      saved: Settings saved
+      saveFailed: Save failed
+      created: Provider created
+      keyReplaced: Key replaced
+      addProvider: Add provider
+      create: Create
+      cancel: Cancel
+      save: Save
+      replaceKey: Replace key
+      test: Test connection
+      testOk: Connected ({ms} ms)
+      testFailed: Connection failed
+      enable: Enable
+      enableDone: Enabled
+      disable: Disable
+      disableDone: Disabled
+      archive: Archive
+      archiveDone: Archived
+      delete: Delete
+      deleteDone: Deleted
+      deleteFailed: Delete failed (providers with call records cannot be deleted)
+      lastTested: "Last tested: {time}"
+      neverTested: Never tested
+      keyConfigured: "Configured ({hint})"
+      keyMissing: Not configured; leave empty for local models such as Ollama
+      keyPlaceholder: Enter a new key (unreadable after saving)
+      fields:
+        name: Name
+        type: Type
+        endpoint: API base URL
+        model: Model
+        apiKey: API key
+        timeout: Timeout (s)
+        timeoutHint: 1–600
+      providerTypes:
+        openai: OpenAI
+        anthropic: Anthropic
+        gemini: Google Gemini
+        deepseek: DeepSeek
+        openai_compatible: OpenAI-compatible (local/self-hosted)
+      status:
+        not_configured: Not configured
+        configured: Configured
+        connected: Connected
+        failed: Failed
+        enabled: Enabled
+        disabled: Disabled
+        archived: Archived

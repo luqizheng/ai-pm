@@ -4,7 +4,7 @@ import { useI18n } from "vue-i18n";
 import SettingsPageLayout from "@/components/settings/SettingsPageLayout.vue";
 import SettingsSidebar from "@/components/settings/SettingsSidebar.vue";
 
-import { PERSONAL_APP_NAV, PERSONAL_ICONS } from "./nav";
+import { PERSONAL_APP_NAV, PERSONAL_ICONS, TEAM_APP_NAV, TEAM_ICONS } from "./nav";
 
 /**
  * 应用设置落地页（个人域，§4A）。
@@ -71,6 +71,31 @@ const breadcrumb = [{ label: t("settings.personal.landing.title") }];
           }}</span>
         </RouterLink>
       </section>
+
+      <!-- 团队设置区（0041 起）：Team≡tenant 的团队级配置入口 -->
+      <h2 class="personal-landing__scope-title">
+        {{ t("settings.team.landing.title") }}
+      </h2>
+      <section class="personal-landing__grid">
+        <RouterLink
+          v-for="entry in TEAM_APP_NAV"
+          :key="entry.id"
+          class="personal-landing__card"
+          :to="entry.to"
+        >
+          <component
+            :is="TEAM_ICONS[entry.id]"
+            class="personal-landing__icon"
+            aria-hidden="true"
+          />
+          <h2 class="personal-landing__card-title">
+            {{ t(`settings.nav.${entry.id}`) }}
+          </h2>
+          <p class="personal-landing__card-desc">
+            {{ t("settings.team.landing.aiDesc") }}
+          </p>
+        </RouterLink>
+      </section>
     </SettingsPageLayout>
   </div>
 </template>
@@ -78,6 +103,13 @@ const breadcrumb = [{ label: t("settings.personal.landing.title") }];
 <style scoped>
 .settings-shell-pad {
   padding: var(--space-5) var(--space-8);
+}
+
+.personal-landing__scope-title {
+  margin: var(--space-6) 0 var(--space-3);
+  font-size: var(--ws-font-size-body);
+  font-weight: var(--weight-semibold);
+  color: var(--ws-text-primary);
 }
 
 .personal-landing__hint {

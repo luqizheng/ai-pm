@@ -17,6 +17,7 @@ import SettingsSecurityView from "@/views/settings/SettingsSecurityView.vue";
 import SettingsPreferencesView from "@/views/settings/SettingsPreferencesView.vue";
 import SettingsNotificationsView from "@/views/settings/SettingsNotificationsView.vue";
 import SettingsAiView from "@/views/settings/SettingsAiView.vue";
+import SettingsTeamAiView from "@/views/settings/SettingsTeamAiView.vue";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 import ProjectCreateView from "@/views/project/create/ProjectCreateView.vue";
 import CognitionPage from "@/views/project/cognition/CognitionPage.vue";
@@ -205,6 +206,14 @@ export function buildRoutes(): RouteRecordRaw[] {
       meta: { title: "settings.nav.ai" }
     }
   );
+
+  // 团队域设置（0041 Team LLM Provider）：Team≡tenant，AI 配置先落地；
+  // 入口 = 设置落地页「团队设置」卡片。
+  routes.push({
+    path: "/settings/team/ai-providers",
+    component: SettingsTeamAiView,
+    meta: { title: "settings.nav.aiProviders" }
+  });
 
   // 设计系统目录页（无导航外壳的全屏页，meta.layout = "design"）
   routes.push(...designRoutes);

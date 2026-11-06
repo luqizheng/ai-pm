@@ -1,6 +1,7 @@
 import type { Component } from "vue";
 import {
   Bell,
+  Cpu,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -32,4 +33,15 @@ export const PERSONAL_ICONS: Record<string, Component> = {
   preferences: SlidersHorizontal,
   notifications: Bell,
   ai: Sparkles
+};
+
+/** 团队域应用侧栏条目（/settings/team/*）。设计目录 tenant 四类中仅
+ *  AI 配置（Provider 管理，0041）先落地应用，其余条目随后端能力逐个迁入。 */
+export const TEAM_APP_NAV: SettingsNavEntry[] = [
+  { id: "aiProviders", to: "/settings/team/ai-providers" }
+];
+
+/** 团队域侧栏图标 */
+export const TEAM_ICONS: Record<string, Component> = {
+  aiProviders: Cpu
 };

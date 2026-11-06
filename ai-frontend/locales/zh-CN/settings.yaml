@@ -39,6 +39,7 @@ settings:
     repositories: 仓库
     development: 开发配置
     projectAi: AI 配置
+    aiProviders: AI 配置（模型服务）
   demo:
     personaLabel: 演示角色
     persona:
@@ -382,3 +383,61 @@ settings:
       readOnlyField: 只读字段展示。
       validationMessage: 校验错误文案。
       confirmationDialog: 破坏性操作 danger 确认。
+  team:
+    landing:
+      title: 团队设置
+      aiDesc: 管理团队的大模型 Provider、凭证与连接（仅团队管理员）
+    ai:
+      desc: Team-owned Provider 实例：同类型可多个，凭证加密保存，测试成功不自动启用。
+      securityNote: API Key 以 AES-256-GCM 密文保存，保存后只显示末 4 位；任何角色都不能回读完整密钥。
+      loading: 正在加载 Provider…
+      empty: 暂无 Provider，点右上角「新增 Provider」开始。
+      loadFailed: 加载失败
+      saved: 配置已保存
+      saveFailed: 保存失败
+      created: Provider 已创建
+      keyReplaced: Key 已替换
+      addProvider: 新增 Provider
+      create: 创建
+      cancel: 取消
+      save: 保存
+      replaceKey: 替换 Key
+      test: 测试连接
+      testOk: 连通正常（{ms} ms）
+      testFailed: 连接失败
+      enable: 启用
+      enableDone: 已启用
+      disable: 停用
+      disableDone: 已停用
+      archive: 归档
+      archiveDone: 已归档
+      delete: 删除
+      deleteDone: 已删除
+      deleteFailed: 删除失败（有调用记录的 Provider 不可删除）
+      lastTested: "上次测试：{time}"
+      neverTested: 从未测试
+      keyConfigured: "已配置（{hint}）"
+      keyMissing: 未配置；本地模型（Ollama 等）可留空
+      keyPlaceholder: 填入新的 Key（保存后不可回读）
+      fields:
+        name: 名称
+        type: 类型
+        endpoint: API 地址
+        model: 模型
+        apiKey: API Key
+        timeout: 超时（秒）
+        timeoutHint: 1–600
+      providerTypes:
+        openai: OpenAI
+        anthropic: Anthropic
+        gemini: Google Gemini
+        deepseek: DeepSeek
+        openai_compatible: OpenAI 兼容（本地/自建）
+      status:
+        not_configured: 未配置
+        configured: 已配置
+        connected: 连接正常
+        failed: 连接失败
+        enabled: 已启用
+        disabled: 已停用
+        archived: 已归档
