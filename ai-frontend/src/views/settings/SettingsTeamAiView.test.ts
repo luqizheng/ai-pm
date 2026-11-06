@@ -70,7 +70,9 @@ async function mountAt(path = "/settings/team/ai-providers") {
   });
   await router.push(path);
   await router.isReady();
-  const wrapper = mountShell(SettingsTeamAiView, { global: { plugins: [router] } });
+  const wrapper = mountShell(SettingsTeamAiView, {
+    global: { plugins: [router] }
+  });
   mountedWrappers.push(wrapper);
   return wrapper;
 }
@@ -104,7 +106,12 @@ beforeEach(() => {
   setLlmProviderStatus.mockImplementation(
     (_t: string, id: string, action: string) =>
       row({
-        status: action === "enable" ? "enabled" : action === "disable" ? "disabled" : "archived"
+        status:
+          action === "enable"
+            ? "enabled"
+            : action === "disable"
+              ? "disabled"
+              : "archived"
       })
   );
 });
@@ -161,9 +168,13 @@ describe("SettingsTeamAiView（团队 AI 配置）", () => {
     await flushPromises();
     await w.find("[data-test='add-provider']").trigger("click");
     await w.find("[data-test='create-name'] input").setValue("新实例");
-    await w.find("[data-test='create-endpoint'] input").setValue("https://api.example.com/v1");
+    await w
+      .find("[data-test='create-endpoint'] input")
+      .setValue("https://api.example.com/v1");
     await w.find("[data-test='create-model'] input").setValue("test-model");
-    await w.find("[data-test='create-key'] input").setValue("sk-secret-9999abcd");
+    await w
+      .find("[data-test='create-key'] input")
+      .setValue("sk-secret-9999abcd");
     await w.find("[data-test='create-submit']").trigger("click");
     await flushPromises();
     expect(createLlmProvider).toHaveBeenCalledWith(
@@ -180,7 +191,9 @@ describe("SettingsTeamAiView（团队 AI 配置）", () => {
   it("configured 卡片可启用（显式动作）", async () => {
     const w = await mountAt();
     await flushPromises();
-    await w.find("[data-provider='id-1'] [data-test='enable']").trigger("click");
+    await w
+      .find("[data-provider='id-1'] [data-test='enable']")
+      .trigger("click");
     await flushPromises();
     expect(setLlmProviderStatus).toHaveBeenCalledWith(
       TENANT_ID,

@@ -63,7 +63,10 @@ export interface CreateLlmProviderBody {
   timeout_secs?: number;
 }
 
-export function createLlmProvider(tenantId: string, body: CreateLlmProviderBody) {
+export function createLlmProvider(
+  tenantId: string,
+  body: CreateLlmProviderBody
+) {
   return http.post<LlmProvider>(
     `/v1/pm/tenants/${tenantId}/llm-providers`,
     body

@@ -617,7 +617,8 @@ onBeforeUnmount(() => {
   width: 30%;
   background: var(--ws-accent);
   border-radius: var(--radius-xs);
-  animation: global-search-progress var(--duration-progress) var(--ease-standard) infinite;
+  animation: global-search-progress var(--duration-progress)
+    var(--ease-standard) infinite;
 }
 
 @keyframes global-search-progress {

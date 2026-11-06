@@ -63,7 +63,12 @@ export interface RequirementCoreRevision {
   id: string;
   requirement_id: string;
   version: number;
-  state: "draft" | "pending_confirmation" | "approved" | "rejected" | "superseded";
+  state:
+    | "draft"
+    | "pending_confirmation"
+    | "approved"
+    | "rejected"
+    | "superseded";
   markdown: string | null;
   summary: string | null;
   content_hash: string;
@@ -128,7 +133,10 @@ export function listProjectRequirements(projectId: string) {
   );
 }
 
-export function createRequirement(projectId: string, body: CreateRequirementInput) {
+export function createRequirement(
+  projectId: string,
+  body: CreateRequirementInput
+) {
   return http.post<{ requirement: RequirementCoreEntry }>(
     `/v1/pm/projects/${projectId}/requirements`,
     body
@@ -136,10 +144,15 @@ export function createRequirement(projectId: string, body: CreateRequirementInpu
 }
 
 export function getRequirement(requirementId: string) {
-  return http.get<RequirementCoreDetail>(`/v1/pm/requirements/${requirementId}`);
+  return http.get<RequirementCoreDetail>(
+    `/v1/pm/requirements/${requirementId}`
+  );
 }
 
-export function createDraftRevision(requirementId: string, body: DraftRevisionInput) {
+export function createDraftRevision(
+  requirementId: string,
+  body: DraftRevisionInput
+) {
   return http.post<{ revision: RequirementCoreRevision }>(
     `/v1/pm/requirements/${requirementId}/revisions`,
     body
@@ -210,7 +223,9 @@ export function archiveRequirement(requirementId: string) {
 // ───────────────────────────────────────────────────── 后端 → UI 读模型适配
 
 /** S02D-05：后端行级优先级为 low/normal/high；UI 词表用 medium 表达 normal。 */
-function toUiPriority(priority: RequirementCoreEntry["priority"]): RequirementPriority {
+function toUiPriority(
+  priority: RequirementCoreEntry["priority"]
+): RequirementPriority {
   return priority === "normal" ? "medium" : priority;
 }
 
@@ -230,7 +245,7 @@ function toRevisionRecord(
   revision: RequirementCoreRevision,
   confirmations: RequirementCoreConfirmation[]
 ): RevisionRecord {
-  const decision = confirmations.find((c) => c.revision_id === revision.id);
+  const decision = confirmations.find(c => c.revision_id === revision.id);
   return {
     id: revision.id,
     version: revision.version,
@@ -263,12 +278,14 @@ const EMPTY_SUGGESTIONS: AiSuggestion[] = [];
 const EMPTY_RELATED: RelatedItem[] = [];
 
 /** 详情适配：完整修订链 + 确认记录映射。 */
-export function toRequirementEntry(detail: RequirementCoreDetail): UiRequirementEntry {
+export function toRequirementEntry(
+  detail: RequirementCoreDetail
+): UiRequirementEntry {
   const entry = detail.requirement;
   const revisions = detail.revisions
     .slice()
     .sort((a, b) => a.version - b.version)
-    .map((r) => toRevisionRecord(r, detail.confirmations));
+    .map(r => toRevisionRecord(r, detail.confirmations));
   // 描述 = 最早修订（v1）的 summary（创建时由 description 落入 content 投影）
   const description = revisions.length > 0 ? (revisions[0].summary ?? "") : "";
   return {
@@ -299,7 +316,9 @@ export function toRequirementEntry(detail: RequirementCoreDetail): UiRequirement
 }
 
 /** 列表行适配（修订链不在列表载荷内，打开详情时补齐）。 */
-export function toEntryFromListItem(entry: RequirementCoreEntry): UiRequirementEntry {
+export function toEntryFromListItem(
+  entry: RequirementCoreEntry
+): UiRequirementEntry {
   return {
     id: entry.id,
     code: entry.code,
