@@ -13,3 +13,12 @@ settings:
   transferConfirmTitle: Transfer ownership to "{name}"?
   transferConfirmDesc: The transfer takes effect immediately and is audited; you become ADMIN and it cannot be undone automatically.
   transferredToast: Ownership transferred to "{name}"
+  dangerTitle: Danger zone
+  dangerDesc: Dissolving the team is irreversible — every project is terminated immediately (soft-deleted) and all members lose access.
+  dangerConfirmLabel: Type the team name to confirm
+  dangerConfirmDesc: The dissolve button unlocks only when this matches the team name above
+  dangerAction: Dissolve team
+  dissolveConfirmTitle: Dissolve this team?
+  dissolveConfirmDesc: All projects will be terminated and cannot be recovered; memberships, invitations and links are all purged. This action is audited.
+  dissolvedToast: Team dissolved
+

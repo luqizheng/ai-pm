@@ -65,12 +65,12 @@ afterEach(() => {
 });
 
 beforeEach(async () => {
-    vi.clearAllMocks();
-    const tokens = await tokenStorage();
-    vi.mocked(tokens.getAccessToken).mockReturnValue("token");
-    vi.mocked(tokens.getStoredUser).mockReturnValue({
-      email: "dave@example.com"
-    } as never);
+  vi.clearAllMocks();
+  const tokens = await tokenStorage();
+  vi.mocked(tokens.getAccessToken).mockReturnValue("token");
+  vi.mocked(tokens.getStoredUser).mockReturnValue({
+    email: "dave@example.com"
+  } as never);
   previewInvitation.mockResolvedValue({
     team_name: "Acme R&D",
     team_slug: "acme-rd",

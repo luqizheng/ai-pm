@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import { SettingsFormSection } from "@/components/settings";
 import { useToast } from "@/components/ui/toast";
 import { translateError } from "@/api/base";
 import {
+  dissolveTeam,
   fetchTeamProfile,
   listTeamMembers,
   transferTeamOwnership,
@@ -19,6 +21,7 @@ import {
   type TeamMember,
   type TeamProfile
 } from "@/api/team";
+import { useAuthStore } from "@/stores/auth";
 import { useTeamStore } from "@/stores/team";
 import SettingsAppFrame from "../SettingsAppFrame.vue";
 import { TEAM_APP_NAV, TEAM_ICONS } from "../nav";
@@ -28,10 +31,14 @@ import { TEAM_APP_NAV, TEAM_ICONS } from "../nav";
  * 档案编辑（owner/admin；slug 冲突回显服务端稳定文案）；Owner 转移卡
  * （仅 owner 可见；目标必须已是 ACTIVE 成员；确认对话框明示原 Owner 降 ADMIN）。
  * slug 置空提交 = 清除。
+ * Danger Zone（产品裁决 2026-11-06，Owner 独占）：解散团队——projects 全部
+ * 终态软删、成员全撤、租户休眠；输入团队名二次确认；成功后登出回登录页。
  */
 const { t } = useI18n();
+const router = useRouter();
 const toast = useToast();
 const teamStore = useTeamStore();
+const authStore = useAuthStore();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -126,6 +133,35 @@ async function confirmTransfer(): Promise<void> {
     toast.toast({ title: translateError(err), variant: "danger" });
   } finally {
     transferring.value = false;
+  }
+}
+
+/* ── Danger Zone：解散团队（Owner 独占） ─────────────────────── */
+const dissolveOpen = ref(false);
+const dissolving = ref(false);
+const dissolveConfirmName = ref("");
+
+/** 输入团队名一致才能解锁解散按钮 */
+const dissolveArmed = computed(
+  () =>
+    dissolveConfirmName.value.trim().length > 0 &&
+    dissolveConfirmName.value.trim() === (profile.value?.name ?? "")
+);
+
+async function confirmDissolve(): Promise<void> {
+  if (!dissolveArmed.value || dissolving.value) return;
+  dissolving.value = true;
+  try {
+    await dissolveTeam(tenantId.value);
+    toast.toast({ title: t("team.settings.dissolvedToast") });
+    dissolveOpen.value = false;
+    // 会话随团队终结：登出回登录页（登入后将重新走 onboarding 门）。
+    teamStore.reset();
+    await authStore.signOut();
+    await router.push("/auth/login");
+  } catch (err) {
+    toast.toast({ title: translateError(err), variant: "danger" });
+    dissolving.value = false;
   }
 }
 
@@ -249,6 +285,35 @@ onMounted(async () => {
           </Button>
         </div>
       </SettingsFormSection>
+
+      <!-- Danger Zone：解散团队（产品裁决：Owner 独占；projects 全部删除） -->
+      <SettingsFormSection
+        v-if="isOwner"
+        :title="$t('team.settings.dangerTitle')"
+        :description="$t('team.settings.dangerDesc')"
+      >
+        <FormField
+          :label="$t('team.settings.dangerConfirmLabel')"
+          :description="$t('team.settings.dangerConfirmDesc')"
+          html-for="dissolve-confirm"
+        >
+          <Input
+            id="dissolve-confirm"
+            v-model="dissolveConfirmName"
+            :placeholder="profile?.name ?? ''"
+            data-test="team-dissolve-confirm"
+          />
+        </FormField>
+        <Button
+          variant="danger"
+          size="sm"
+          :disabled="!dissolveArmed"
+          data-test="team-dissolve-open"
+          @click="dissolveOpen = true"
+        >
+          {{ $t("team.settings.dangerAction") }}
+        </Button>
+      </SettingsFormSection>
     </SettingsAppFrame>
 
     <Dialog
@@ -276,6 +341,34 @@ onMounted(async () => {
           @click="confirmTransfer"
         >
           {{ $t("team.settings.transferAction") }}
+        </Button>
+      </template>
+    </Dialog>
+
+    <!-- 解散确认：明示不可逆级联后果 -->
+    <Dialog
+      :open="dissolveOpen"
+      :title="$t('team.settings.dissolveConfirmTitle')"
+      :description="$t('team.settings.dissolveConfirmDesc')"
+      size="sm"
+      @update:open="
+        value => {
+          dissolveOpen = value;
+        }
+      "
+    >
+      <template #footer>
+        <Button variant="secondary" size="sm" @click="dissolveOpen = false">
+          {{ $t("team.members.cancel") }}
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
+          :loading="dissolving"
+          data-test="team-dissolve-confirm-button"
+          @click="confirmDissolve"
+        >
+          {{ $t("team.settings.dangerAction") }}
         </Button>
       </template>
     </Dialog>

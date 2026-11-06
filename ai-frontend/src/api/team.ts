@@ -83,6 +83,16 @@ export async function updateTeamProfile(
   return http.patch<TeamProfile>(`/v1/pm/tenants/${tenantId}`, body);
 }
 
+export interface DissolveOutcome {
+  projects_deleted: number;
+  members_removed: number;
+}
+
+/** POST /v1/pm/tenants/{id}/dissolve —— 解散团队（Owner 独占；projects 终态软删） */
+export async function dissolveTeam(tenantId: string): Promise<DissolveOutcome> {
+  return http.post<DissolveOutcome>(`/v1/pm/tenants/${tenantId}/dissolve`, {});
+}
+
 /* ------------------------------------ 成员 -------------------------------- */
 
 /** GET /v1/pm/tenants/{id}/members 行（既有端点，Members 页数据源） */

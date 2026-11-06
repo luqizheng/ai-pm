@@ -13,3 +13,12 @@ settings:
   transferConfirmTitle: 将所有权转移给「{name}」？
   transferConfirmDesc: 转移立即生效并记录审计；你将降为 ADMIN，此操作不可自动撤销。
   transferredToast: 所有权已转移给「{name}」
+  dangerTitle: 危险区
+  dangerDesc: 解散团队为不可逆操作——团队下全部项目将立即终止（软删除），所有成员失去访问权。
+  dangerConfirmLabel: 输入团队名以确认
+  dangerConfirmDesc: 与上方团队名称完全一致时才能解锁解散按钮
+  dangerAction: 解散团队
+  dissolveConfirmTitle: 确定解散该团队？
+  dissolveConfirmDesc: 全部项目将被终止且不可恢复；成员关系、邀请与邀请链接全部清除。此操作会记录审计。
+  dissolvedToast: 团队已解散
+

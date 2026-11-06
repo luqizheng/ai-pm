@@ -21,7 +21,9 @@ const fetchTeamContext = vi.fn().mockResolvedValue({
   tenant_role: "owner",
   team: { id: "t-1", name: "Acme R&D", slug: "acme-rd", description: null },
   onboarding_required: false,
-  memberships: [{ team_id: "t-1", team_name: "Acme R&D", role: "owner", status: "active" }]
+  memberships: [
+    { team_id: "t-1", team_name: "Acme R&D", role: "owner", status: "active" }
+  ]
 });
 
 vi.mock("@/api/team", () => ({
