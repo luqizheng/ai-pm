@@ -1,0 +1,91 @@
+[08:09:11] === S02 QA REST suite V1.1 start (A=S02QA-A-080911 B=S02QA-B-080911) ===
+[08:09:11] [B01-00] health: 200
+[08:09:11] [B01-01] create project A: 201
+[08:09:11]          project_id=95466cf3-8abf-4e4c-bc15-c8f92abbe765
+[08:09:11] [B01-01] create requirement: 201
+[08:09:11]          requirement_id=4b5673e3-8070-4f6b-a87a-cf409bda7f77
+[08:09:12] [B01-02] GET detail: 200 rev1_state=draft
+[08:09:13] [B01-03] PATCH draft v1: 200 hash_now=d3900310bceb8849ead42f1824dfe42bad7c202eb5fd1313c02964de0b7ea359
+[08:09:13] [B01-04] GET list: 200 items=1
+[08:09:13] [B01-04] list unsupported-filter probe: 200 (record: filter ignored)
+[08:09:13] [B01-09] duplicate create same code: 409 db_count=1
+[08:09:13] [B01-12] GET unknown requirement: 404
+[08:09:14] [B01-12] POST unknown project: 404
+[08:09:16] [B02-03] submit v1: 200 state=pending_confirmation ref=0db4e61e3e4e5e6245f47ba5c056a84a8fcb3a28
+[08:09:16] [B05-07] re-submit v1 (idempotent/pending): 409
+[08:09:16] [B02-04] confirm v1: 200
+[08:09:17]          after: state=approved current=69244e51-cf43-4dc0-b7b7-4c856cd1fdb4 row=2
+[08:09:18] [B02-08] duplicate confirm v1: 409
+[08:09:18] [B02-07] PATCH approved v1: 409
+[08:09:18]          approved content unchanged: d3900310bceb8849ead42f1824dfe42bad7c202eb5fd1313c02964de0b7ea359 (expect d3900310bceb8849ead42f1824dfe42bad7c202eb5fd1313c02964de0b7ea359)
+[08:09:18] [B02-05] draft v2: 201
+[08:09:19]          v2=5abe0fb0-8a5f-40c7-8b50-472b4c3ccef9 hash=cc2614cc05adfbb2976cbeff856a5d3e8726fbbf36f7123e0941b29c492d10a5 state=draft
+[08:09:20]          submit v2: 200 state=pending_confirmation
+[08:09:20]          confirm v2: 200
+[08:09:21] [B02-06] after supersede: v1=superseded v2=approved current=5abe0fb0-8a5f-40c7-8b50-472b4c3ccef9
+[08:09:21]          confirm superseded v1 (expect 409): 409
+[08:09:21] [B02-16] draft v3: 201
+[08:09:22]          v3=ceae00a7-03bd-42dc-825c-d5432253732c
+[08:09:23]          submit v3: 200
+[08:09:23]          reject v3: 200 state=rejected
+[08:09:23]          confirm rejected v3 (expect 409): 409
+[08:09:23]          PATCH rejected v3 (expect 409): 409
+[08:09:23]          re-submit rejected v3 (expect 409): 409
+[08:09:24] [B02-13] draft v4: 201
+[08:09:25]          v4=b71defa2-57a6-4939-9051-abe754646f18 row_before=3
+[08:09:25]          submit v4: 200
+[08:09:25]          confirm v4 with stale row_revision (3, expect 409): 200
+[08:09:26]          row after 409: 4 (expect unchanged)
+[08:09:26]          confirm v4 correct: 409 current=b71defa2-57a6-4939-9051-abe754646f18
+[08:09:27] [B01-13] lifecycle withdraw: 200 status=withdrawn
+[08:09:27]          draft after withdraw (expect 409): 409
+[08:09:27]          restore: 200 status=active
+[08:09:28]          archive: 200 status=archived
+[08:09:28]          draft after archive (expect 409): 409
+[08:09:28]          restore archived (expect 409, I1-D05): 409
+[08:09:28] [B01-10/DF1] create project B: 201
+[08:09:28]          create requirement in B: 201
+[08:09:29]          removed dev-off membership (principal=00000000-0000-0000-0000-0000000000ff)
+[08:09:29]          [DF1-01] GET detail in B (expect 404): 404
+[08:09:29]          [DF1-02] list in B (expect 404): 404
+[08:09:29]          [DF1-03] create in B (expect 404): 404
+[08:09:30]          [DF1-04] draft in B (expect 404): 404
+[08:09:30]          [DF1-05] submit in B (expect 404): 404
+[08:09:30]          [DF1-06] confirm in B (expect 404): 404
+[08:09:30] [B05-01/DEF-03] drafts v5/v6 on same base v4:
+[08:09:32]          v5= v6=
+[08:09:32]          submit v5: 400
+[08:09:32]          submit v6: 400
+[08:09:33]          row before race: 4 current=b71defa2-57a6-4939-9051-abe754646f18
+[08:09:33]          RACE confirm v5 & v6 parallel:
+[08:09:33]          race result: v5=400 v6=400
+[08:09:34]          final: v5= v6= current=b71defa2-57a6-4939-9051-abe754646f18 superseded_count=2 approved_count=1
+[08:09:34] === audit trail ===
+requirement.archived|1
+requirement.confirmed|3
+requirement.created|1
+requirement.restored|1
+requirement.revision_drafted|4
+requirement.revision_rejected|1
+requirement.revision_submitted|4
+requirement.revision_superseded|2
+requirement.withdrawn|1
+[08:09:35] confirmation rows:
+confirm|69244e51-cf43-4dc0-b7b7-4c856cd1fdb4|00000000-0000-0000-0000-0000000000ff|2026-11-06 08:09:16.701109+00
+confirm|5abe0fb0-8a5f-40c7-8b50-472b4c3ccef9|00000000-0000-0000-0000-0000000000ff|2026-11-06 08:09:20.542644+00
+reject|ceae00a7-03bd-42dc-825c-d5432253732c|00000000-0000-0000-0000-0000000000ff|2026-11-06 08:09:23.162219+00
+confirm|b71defa2-57a6-4939-9051-abe754646f18|00000000-0000-0000-0000-0000000000ff|2026-11-06 08:09:25.714966+00
+[08:09:35] audit actor/auth: off
+[08:09:35] === Git authority ===
+[08:09:36] standalone git: true
+[08:09:36] commit: 14b5ae6 docs(requirement): req-4b5673e3-8070-4f6b-a87a-cf409bda7f77 r4
+[08:09:36] commit: 4989bdb docs(requirement): req-4b5673e3-8070-4f6b-a87a-cf409bda7f77 r3
+[08:09:36] commit: 02a2d3f docs(requirement): req-4b5673e3-8070-4f6b-a87a-cf409bda7f77 r2
+[08:09:36] commit: 0db4e61 docs(requirement): req-4b5673e3-8070-4f6b-a87a-cf409bda7f77 r1
+[08:09:36] commit: 0527e8f chore: bootstrap knowledge templates
+[08:09:36] file: D:/kudi-project/templates/.s02qa-knowledge/projects/S02QA-A-080911/requirement/req-4b5673e3-8070-4f6b-a87a-cf409bda7f77.md sha256=82a20456df7902dc91da70e6931c488a149a27f7479f99a14a29291e56a7f6c5
+[08:09:36] file: D:/kudi-project/templates/.s02qa-knowledge/templates/adr.md sha256=fd0f87553a2e509a981e1cb32cc75ef9e00843858143da84daa283f663dd1378
+[08:09:36] file: D:/kudi-project/templates/.s02qa-knowledge/templates/change-request.md sha256=8e45d570548fd71b7b6e429c65e5bfdd22412f59bfd1b29c6d61db8aa2363bc6
+[08:09:36] file: D:/kudi-project/templates/.s02qa-knowledge/templates/requirement.md sha256=d53651e12d778adea0c35a20952b189c042f5ae4730a9418390b092fd1441e87
+[08:09:36] sha256 of v4 approved markdown vs DB hash 82a20456df7902dc91da70e6931c488a149a27f7479f99a14a29291e56a7f6c5: see above (req-*.md)
+[08:09:37] === suite end ===

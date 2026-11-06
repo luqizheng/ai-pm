@@ -1,0 +1,19 @@
+[08:11:22] === race & CAS probe start (project 95466cf3-8abf-4e4c-bc15-c8f92abbe765) ===
+[08:11:22] create REQ-QA-2: 201
+[08:11:22] requirement=0b66ef84-6ddb-4da1-85b1-1a86fd9bf8af
+[08:11:24] v1=5ef8f3c1-63ae-4572-bbf6-eaff94635fde v2=af74d551-7aba-4091-8f5f-36f000a92197
+[08:11:24] submit v1: 200
+[08:11:25] submit v2: 200
+[08:11:25] row_before_race=1 current=null
+[08:11:25] RACE confirm v1 & v2 parallel (same tokens):
+[08:11:26] race result: v1=200 v2=409
+[08:11:26] v1 message: {"requirement":{"code":"REQ-QA-2","created_at":"2026-11-06T08:11:22.817022Z","current_content_hash":"297aec9f2dfd05256c47d184df27f8c85c5742d91847a3ac5acdae8215b4c93a","current_revision_id":"5ef8f3c1-6
+[08:11:26] v2 message: {"message":"requirement changed concurrently (row_revision mismatch)"}
+[08:11:27] final: v1=approved v2=pending_confirmation current=5ef8f3c1-63ae-4572-bbf6-eaff94635fde approved=1 superseded=0
+[08:11:29] submit v3: 200
+[08:11:29] [CAS-row] confirm v3 with row_revision=999 (expect 409 row mismatch): 409
+[08:11:29] message: {"message":"requirement changed concurrently (row_revision mismatch)"}
+[08:11:29] row unchanged: 2 -> 2
+[08:11:30] [CAS-cur] confirm v3 correct: 200
+[08:11:30] final states: v1=superseded v2=pending_confirmation v3=approved
+[08:11:31] === probe end ===

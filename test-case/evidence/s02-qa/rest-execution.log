@@ -1,0 +1,80 @@
+[08:06:00] === S02 QA REST suite start (project A=S02QA-A-080600 B=S02QA-B-080600) ===
+[08:06:00] [B01-00] health: 200
+[08:06:01] [B01-01] create project A: 201 -> project=da0cfead-80e4-4450-9402-bf72e5b92589
+[08:06:01] [B01-01] create requirement REQ-QA-1: 201
+[08:06:01]          requirement_id=c5dc74e0-19a1-4ae5-8100-3ff64e510cca
+[08:06:01] [B01-02] GET detail: 200
+[08:06:01]          states: "state":"draft" 
+[08:06:01]          v1_revision=0959cbc4-3023-480b-818d-568dc710ddd6 hash=afc171540976f9be8ce04fb29c79062fbaef8bb9a16a3dfd47b74c4d1b6cf2f8 row_revision=1
+[08:06:02] [B01-03] PATCH draft v1: 200
+[08:06:02]          hash v1 -> d3900310bceb8849ead42f1824dfe42bad7c202eb5fd1313c02964de0b7ea359
+[08:06:02] [B01-04] GET list: 200 items=1
+[08:06:02] [B01-04] GET list with unsupported filter probe: 200 (record actual)
+[08:06:02] [B01-09] duplicate create same code: 409 -> ids=
+[08:06:02] [B01-12] GET unknown requirement: 404
+[08:06:03] [B01-12] POST unknown project: 404
+[08:06:03] [B02-03] submit v1: 500 -> 
+[08:06:03] [B05-07] re-submit v1 (already bound): 500
+[08:06:03] [B02-04] confirm v1: 409
+[08:06:04]          after confirm: row_revision= 
+[08:06:04] [B02-08] duplicate confirm v1: 409
+[08:06:04] [B02-07] PATCH approved v1: 409
+[08:06:04] [B02-05] create draft v2: 201
+[08:06:04]          v2=00000000-0000-0000-0000-0000000000ff hash=cc2614cc05adfbb2976cbeff856a5d3e8726fbbf36f7123e0941b29c492d10a5
+[08:06:04]          submit v2: 404
+[08:06:05]          confirm v2: 400
+[08:06:05] [B02-06] detail after supersede: 200
+id:c5dc74e0-19a1-4ae5-8100-3ff64e510cca	id:9fdb4fb5-6346-49dc-be05-18b598d95abb
+state:draft	id:0959cbc4-3023-480b-818d-568dc710ddd6
+state:pending_confirmation	
+[08:06:05] [B02-16] create draft v3: 201
+[08:06:05]          v3=00000000-0000-0000-0000-0000000000ff hash=b6a3ee47cabf8131697615c5e46616b010d9c494ad4dde1bea881ef1b81af249 row=
+[08:06:06]          submit v3: 404
+[08:06:06]          reject v3: 404
+[08:06:06]          confirm rejected v3 (must fail): 404
+[08:06:06]          PATCH rejected v3 (must fail): 404
+[08:06:06] [B02-13] create draft v4: 201
+[08:06:06]          v4=00000000-0000-0000-0000-0000000000ff hash=82a20456df7902dc91da70e6931c488a149a27f7479f99a14a29291e56a7f6c5 row=
+[08:06:07]          submit v4: 404
+[08:06:07]          confirm v4 with STALE row_revision (, actual now 1 expect 409): 400
+[08:06:07]          row_revision after 409: 
+[08:06:07]          confirm v4 correct: 400
+[08:06:07] [B01-13] lifecycle withdraw: 404
+[08:06:07]          draft after withdraw (expect 409): 201
+[08:06:07]          restore: 404
+[08:06:08]          archive: 404
+[08:06:08]          draft after archive (expect 409): 201
+[08:06:08]          restore archived (expect 409, I1-D05): 404
+[08:06:08] [B01-10/DF1] create project B: 201 -> 85e32196-4397-403a-aaab-d876f5f3f4a7
+[08:06:08]          create requirement in B: 201
+[08:06:09]          remove dev-off membership in B (principal=00000000-0000-0000-0000-0000000000ff): done
+[08:06:09]          [DF1-01] GET detail in B (expect 404): 404
+[08:06:09]          [DF1-02] list in B (expect 404): 404
+[08:06:10]          [DF1-03] create in B (expect 404): 404
+[08:06:10]          [DF1-04] draft in B (expect 404): 404
+[08:06:10]          [DF1-05] cross-URL: GET project-A req via B context probe (B404 path): 200 (B-membership removed only for RIDB)
+[08:06:10] [B05-01/DEF-03] create draft v5 v6 (same base v4):
+[08:06:10]          v5=00000000-0000-0000-0000-0000000000ff (201) v6=00000000-0000-0000-0000-0000000000ff (201)
+[08:06:11]          submit v5: 404
+[08:06:11]          submit v6: 404
+[08:06:11]          row_revision before race: 
+[08:06:11]          RACE confirm v5 & v6 in parallel:
+[08:06:11]          race result: v5=400 v6=400
+[08:06:11]           / 
+[08:06:12] === DB final state ===
+1|pending_confirmation|0959cbc4-3023-480b-818d-568dc710ddd6
+2|draft|9fdb4fb5-6346-49dc-be05-18b598d95abb
+3|draft|7bdcb2a9-d4a2-4660-9091-a1e7b3f6a6f9
+4|draft|b0bba2c0-a717-4938-b67b-4d9dc558dd3c
+5|draft|e8ea08a4-0478-403b-b108-ce5c87c12cba
+6|draft|4a87ebaf-3774-4c84-9672-1f6dfb99ef94
+7|draft|9e11c974-e312-4860-aed4-d5c53f8d982c
+8|draft|11cddacc-32e1-44df-a947-5de12775f10f
+[08:06:12] current_revision_id: 
+[08:06:13] confirmations: 
+[08:06:13] audit events: 
+[08:06:13] dup probe: 1
+[08:06:13] === Git authority ===
+[08:06:13] git root: true
+[08:06:14] commits: 75dc14d docs(s03): 落盘 S03-00 V1.2 平台架构感知审计执行基线（用户裁决为 S03 正式审计基线）+ 平台边界图 e2665c7 feat(llm): Team LLM Provider 应用入口落地——团队设置落地页+AI 配置页（0041） b9f77aa docs(design): 标注设计系统 V1.0 两稿废弃——现行视觉基线切换至 docs/design V2（Slate & Muted Teal） 8fe2f33 docs(design): 落地 PM-AI UI 设计系统 V2（Slate & Muted Teal），移除 prism 旧视觉方向稿 f17f5fb feat(frontend): 样式审计修复与 V2 色系契约同步——裸 px/ms 清零、断点统一、token 门禁补强 99b6bd3 chore: 修改演示数据库种子数据的字段顺序与状态字段 a720a82 feat: 新增品牌、设计系统及幻灯片相关技能文档和脚本 3803474 docs: 添加 S03-ACP V1.3 及 V1.3.1 任务续动评审报告 4ef7760 feat(llm): Team LLM Provider Phase 1 纵切——统一服务+租户端点+前端双面（DEC-LLM-001~004） e3707d0 feat: 添加团队LLM提供者管理的数据库迁移脚本 2cdc4f6 chore(infra): 基础服务迁到 192.168.2.10，ai-pm 统一经 api-gateway 对外 054c5c5 chore!: 删除 frontend/ 旧 pure-admin 壳——ai-frontend 为唯一前端工程 7589f9c wip(frontend): 落袋并行会话 frontend/ 旧壳在途工作（保护性快照，删除前保全） 47bf69a fix(obs): loki auth_enabled: false（随上游） 1c13a5c fix(obs): promtail 管线 docker stage + labels map（随上游） 46ddc02 fix(obs): promtail batchtimeout→batchwait（随上游） cddbbe9 fix(obs): loki ring kvstore inmemory（随上游） e3a8453 fix(obs): loki 3.x retention 必须配 compactor.delete_request_store（随上游） 8dfe227 fix(obs): loki.yaml 兼容 loki 3.3.2（随上游） e863c4c fix(infrastructure): 组 start.sh 补 .env.prod 分层 + postgres 端口发布去重 
+[08:06:14] === suite end ===
