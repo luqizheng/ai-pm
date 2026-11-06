@@ -13,9 +13,9 @@
 # .env（环境值）升级时天然存活，见 infrastructure/README.md。
 
 include:
-  - infra/docker-compose-infra.yml
+  #- infra/docker-compose-infra.yml
   - services/docker-compose-services.yml
-  - observability/docker-compose-observability.yml
+  #- observability/docker-compose-observability.yml
   - docker-compose.ai-pm.yml
 
 services: {}

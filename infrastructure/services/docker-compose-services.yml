@@ -36,11 +36,6 @@ services:
       SERVICE_NAME: file-service
     volumes:
       - file-storage:/var/lib/file-service/storage
-    depends_on:
-      postgres:
-        condition: service_healthy
-      consul:
-        condition: service_healthy
     networks:
       - superpowers
   api-gateway:
@@ -70,12 +65,6 @@ services:
       - ./config/api-gateway/api-gateway.toml:/app/config/api-gateway.toml:ro
       - ./config/api-gateway/rate-limits.toml:/app/config/api-gateway/rate-limits.toml:ro
     depends_on:
-      consul:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
       token-service:
         condition: service_healthy
     networks:
@@ -99,11 +88,6 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4317}
       TOKEN_DATABASE_URL: ${DATABASE_URL}
       TOKEN_DATABASE_DB_TYPE: postgres
-    depends_on:
-      postgres:
-        condition: service_healthy
-      consul:
-        condition: service_healthy
     networks:
       - superpowers
   iam-service:
@@ -127,13 +111,6 @@ services:
       CONFIG_PATH: /etc/iam-service/config.yaml
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4317}
       SERVICE_NAME: iam-service
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      consul:
-        condition: service_healthy
     networks:
       - superpowers
   iam-outbox-publisher:
@@ -163,11 +140,6 @@ services:
       timeout: 3s
       retries: 5
       start_period: 20s
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
     networks:
       - superpowers
   prue_backend:
@@ -185,11 +157,6 @@ services:
       RUST_LOG: info
       SERVICE_NAME: prue_backend
       SERVER_PORT: '8087'
-    depends_on:
-      postgres:
-        condition: service_healthy
-      consul:
-        condition: service_healthy
     networks:
       - superpowers
   notification-service:
@@ -215,15 +182,6 @@ services:
       REDIS_URL: redis://${REDIS_HOST}:${REDIS_PORT}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4317}
       SERVICE_NAME: notification-service
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      consul:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
     networks:
       - superpowers
   notification-outbox-publisher:
@@ -250,11 +208,6 @@ services:
       timeout: 3s
       retries: 5
       start_period: 20s
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
     networks:
       - superpowers
   audit-service:
@@ -274,15 +227,6 @@ services:
       RUST_LOG: info
       SERVICE_NAME: audit-service
       SERVER_PORT: '8084'
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      consul:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
     networks:
       - superpowers
 

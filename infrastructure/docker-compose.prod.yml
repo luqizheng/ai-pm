@@ -19,25 +19,11 @@ services:
 
   # ─────────────────────────────────────────────────────────────────────────
   #  内部组件（postgres / mysql / redis / rabbitmq / consul）：
-  #    - 清空 host port（仅容器网络可达）
-  #    - 加 restart: unless-stopped
-  #  （mysql 是 profile 服务，默认不起；定义保留，--profile mysql 启用时同样收敛）
+  #  ⚠️ 2026-11-06 起 infra 组已迁至 192.168.2.10，docker-compose.yml 不再 include
+  #  infra/docker-compose-infra.yml，本 overlay 因此不再覆写这些服务
+  #  （覆写不存在的基础服务会让 compose 报 service 无 image/build 错误）。
+  #  本机部署只覆盖 services 组与 ai-pm 自有服务。
   # ─────────────────────────────────────────────────────────────────────────
-  postgres:
-    ports: !override []
-    restart: unless-stopped
-  mysql:
-    ports: !override []
-    restart: unless-stopped
-  redis:
-    ports: !override []
-    restart: unless-stopped
-  rabbitmq:
-    ports: !override []
-    restart: unless-stopped
-  consul:
-    ports: !override []
-    restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
   #  lmms 业务服务（登录验证栈 + 其余业务服务）：
