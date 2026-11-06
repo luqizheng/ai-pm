@@ -105,38 +105,60 @@ workspace:
   pages:
     models:
       title: 模型配置
-      subtitle: 配置 OpenAI 兼容的模型供应商，AI-PM 的分析与提案都使用这里的模型。
-      securityNote: API Key 以 AES-256-GCM 密文保存，保存后只显示末 4 位。
+      subtitle: 管理本团队的大模型 Provider；AI-PM 的分析与提案都使用这里的模型。
+      securityNote: API Key 以 AES-256-GCM 密文保存，保存后只显示末 4 位；任何角色都不能回读完整密钥。
       loading: 正在加载供应商配置…
       empty: 暂无供应商配置。
       loadFailed: 加载失败
       saved: 配置已保存
       saveFailed: 保存失败
-      keyCleared: Key 已清除
       save: 保存
-      clearKey: 清除 Key
       test: 测试连接
       testOk: 连通正常（{ms} ms）
       testFailed: 连接失败
       testUsesSaved: 测试使用已保存的配置；改动后请先保存再测试。
-      enabled: 已启用
-      disabled: 未启用
-      enableLabel: 启用该供应商
       timeoutInvalid: 超时须为 1–600 秒
       keyConfigured: "已配置（{hint}）"
-      keyMissing: 未配置；Ollama 等本地模型可留空
+      keyMissing: 未配置；本地模型（Ollama 等）可留空
       keyPlaceholder: 填入新的 Key（留空表示不修改）
+      replaceKey: 替换 Key
+      keyReplaced: Key 已替换
+      addProvider: 新增 Provider
+      create: 创建
+      cancel: 取消
+      created: Provider 已创建
+      enable: 启用
+      enableDone: 已启用
+      disable: 停用
+      disableDone: 已停用
+      archive: 归档
+      archiveDone: 已归档
+      delete: 删除
+      deleteDone: 已删除
+      deleteFailed: 删除失败（有调用记录的 Provider 不可删除）
+      lastTested: "上次测试：{time}"
+      neverTested: 从未测试
       fields:
-        baseUrl: API 地址
+        name: 名称
+        type: 类型
+        endpoint: API 地址
         model: 模型
         apiKey: API Key
         timeout: 超时（秒）
-      providers:
-        deepseek: DeepSeek
+      providerTypes:
         openai: OpenAI
-        glm: 智谱 GLM
-        minimax: MiniMax
-        ollama: Ollama（本地）
+        anthropic: Anthropic
+        gemini: Google Gemini
+        deepseek: DeepSeek
+        openai_compatible: OpenAI 兼容（本地/自建）
+      status:
+        not_configured: 未配置
+        configured: 已配置
+        connected: 连接正常
+        failed: 连接失败
+        enabled: 已启用
+        disabled: 已停用
+        archived: 已归档
     goals:
       title: 目标计划
       subtitle: 项目 → 目标 → 里程碑 → 任务

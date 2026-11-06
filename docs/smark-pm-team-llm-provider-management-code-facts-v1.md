@@ -138,3 +138,25 @@
 | Q-4 | KMS/Vault V1 口径：沿用 AI_PM_SECRET_KEY env 派生 + 挂账，还是本期引入外部 KMS | V1 沿用现状 + 密钥轮换支持（替换机制已在设计稿 §7），KMS/Vault 挂账独立裁决 |
 | Q-5 | DEC-LLM-003 七 Role 与现有 skill_router 技能集（requirement_analysis/risk_detection 等）及项目职能（ai_pm/architect/developer/tester）的映射 | Phase 3 设计稿时给出映射表 |
 | Q-6 | Usage & Budget（AC-14，P1）本期是否只建 llm_call_record 表 + 基础计数，预算管控后置 | 表随 Phase 1 建，管控后置 |
+
+
+---
+
+## 10. 实施批注（2026-11-06，Phase 1 纵切落地）
+
+**裁决执行**：Q-1~Q-6 全部按 §9 建议采纳（用户 2026-11-06「按建议执行」）。
+
+**已落地**（迁移 0041 + 服务/REST/前端纵切）：
+
+- 迁移 `0041_team_llm_provider.sql`：`ai.team_llm_provider`（Team-owned 实例，UNIQUE(tenant_id,name)/(tenant_id,id)，status 七态 CHECK，revision 乐观锁）+ `ai.team_llm_credential`（独立凭证表，替换制留痕，组合 FK 锁 Team 一致）+ `ai.llm_call_record`（purpose/status/error_kind 七类 = §11 分类）+ `governance.tenant_audit_log` 补 `target_type/target_id` 通用目标列 + **`ai.llm_provider` DROP**。
+- 统一服务 `pm-application/src/team_llm.rs`（CRUD/凭证替换/连接测试/生命周期/删除保护/租户作用域解析）；旧 `llm_config.rs` 删除，探活逻辑从 pm-api 收敛入服务层。
+- REST `apps/pm-api/src/team_llm.rs`：`/v1/pm/tenants/{tenant_id}/llm-providers*` 六端点，全量 `guard_tenant + is_admin` 守卫（**R-LLM-01 修复**）；守卫 helper 抽 `team_llm_guard.rs` 与 tenant_members 共用；旧 `/v1/pm/llm/providers*` 端点删除。
+- `repo_model::model_from_llm_provider` 改经 `resolve_repo_call_config` 租户作用域解析（「全局第一条 enabled」兜底语义废除）。
+- 审计：`llm_provider.created/updated/credential_rotated/tested/enabled/disabled/archived/deleted` 八事件，四列身份 + target 列，已登记 `audit_actor_coverage` 清单（C174/C180 绿）。
+- 前端（frontend + ai-frontend 镜像）：`api/llm.ts` 新契约（tenant 路径/revision/CAS）+ ModelsPage/ProviderCard 重写（新建表单/七态徽章/enable-disable-archive-delete/替换 Key）+ i18n（providerTypes/status 等新键）+ mock fixtures 全套；旧 `/v1/pm/llm/providers*` mock 拆除。
+
+**V1 例外（有意偏差，实现裁决）**：`openai_compatible`（Ollama 类本地端点）允许无凭证 enable/匿名探测/匿名调用——保持原「本地模型免 Key」用法；其余类型无凭证在 enable/test 处显式 Configuration Error。
+
+**验证**：`cargo check --workspace` 绿；`pm-api --test team_llm` 六用例（权限矩阵 403/跨租户 404/生命周期+凭证门禁/重名+未知类型+端点校验/CAS 409/删除保护/审计四列）；`audit_actor_coverage` C174/C180 绿；pm-application 单测 3/3；frontend 98 文件 588 测试 + vue-tsc 绿；ai-frontend 140 文件 823 测试 + vue-tsc 绿。
+
+**下一切片挂账**：Phase 2 Provider Registry/Adapter（anthropic 适配器）；Phase 3 Model Catalog + Authorization + Policy Resolver（七 AI Role 映射，Q-5）；Phase 5 project_ai_config 治理（strategy 解锁 + 项目策略端点）；Phase 6 统一 Gateway + Task 17（FakeModel 换接）+ Usage 聚合（AC-14）。

@@ -237,41 +237,28 @@ impl OpenAiRepoAnalysisModel {
     }
 }
 
-/// 选择项目可用的仓库分析模型：项目配置的 provider 优先，否则首个 enabled
-/// 供应商；取不到凭据时回退确定性 Fake（`model_name='fake'`）。
+/// 选择项目可用的仓库分析模型（0041：`ai.llm_provider` 退役，改租户作用域）：
+/// 项目 → 租户 → 首个 `enabled` 且 configuration.model 非空的 Provider 实例
+/// （创建序）；取不到回退确定性 Fake（`model_name='fake'`，既有 dev 行为——
+/// Phase 3 策略解析链接管后由统一 Gateway 给显式 Configuration Error）。
 pub async fn model_from_llm_provider(
     pool: &sqlx::PgPool,
     project_id: uuid::Uuid,
 ) -> (std::sync::Arc<dyn RepoAnalysisModel>, String) {
-    let preferred: Option<String> = sqlx::query_scalar(
-        "SELECT model_provider FROM ai.project_ai_config WHERE project_id = $1",
-    )
-    .bind(project_id)
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten();
-    let provider = match preferred.as_deref() {
-        Some(provider) if provider != "fake" => Some(provider.to_string()),
-        _ => sqlx::query_scalar(
-            "SELECT provider FROM ai.llm_provider WHERE enabled = true ORDER BY provider LIMIT 1",
-        )
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten(),
-    };
-    if let Some(provider) = provider {
-        if let Ok((row, Some(api_key))) =
-            pm_application::llm_config::load_provider_credentials(pool, &provider).await
-        {
+    match pm_application::team_llm::resolve_repo_call_config(pool, project_id).await {
+        Ok(Some(cfg)) => {
             let model = OpenAiRepoAnalysisModel::new(
-                &row.base_url,
-                &row.model,
-                &api_key,
-                chrono::Duration::seconds(i64::from(row.timeout_secs)),
+                &cfg.endpoint,
+                &cfg.model,
+                &cfg.api_key,
+                chrono::Duration::seconds(i64::from(cfg.timeout_secs)),
             );
-            return (std::sync::Arc::new(model), row.model);
+            return (std::sync::Arc::new(model), cfg.model);
+        }
+        Ok(None) => {}
+        Err(err) => {
+            // 凭证解密等基础设施失败：回退 Fake 并留痕，import 结果可解释。
+            tracing::warn!(error = %err, "repo model resolution failed; falling back to fake");
         }
     }
     (std::sync::Arc::new(FakeRepoAnalysisModel), "fake".to_string())

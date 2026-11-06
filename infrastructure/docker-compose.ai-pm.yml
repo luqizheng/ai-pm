@@ -33,8 +33,9 @@ services:
     volumes:
       - aipm_pg_data:/var/lib/postgresql/data
     ports:
-      # 宿主机工具连库：5433 = aipm-pg-dev（独立旧容器），5434 = coder-test-pg（共享测试容器），错开到 5435
-      - "5435:5432"
+      # 宿主机工具连库：5433 = aipm-pg-dev（独立旧容器），5434 = coder-test-pg（共享测试容器）。
+      # 16433 = 2026-11-06 从 5435 迁入——重启后 5435 落入 Hyper-V/WinNAT 排除区段导致端口转发假活（TCP 可连、PG 不应答），换到高位段规避
+      - "16433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U aipm -d aipm"]
       interval: 10s

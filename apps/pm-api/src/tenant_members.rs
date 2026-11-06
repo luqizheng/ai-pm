@@ -678,21 +678,7 @@ fn after_data(line: &AuditLine) -> Option<Value> {
 
 // ─────────────────────────────────────────────────────────── 错误构造
 
-fn guard_tenant(caller: &AuthedPrincipal, tenant_id: Uuid) -> Result<(), Response> {
-    // 跨租户一律 404：不泄露目标租户是否存在。
-    if caller.tenant_id != tenant_id {
-        return Err(err_not_found("tenant not found"));
-    }
-    Ok(())
-}
-
-fn err_not_found(message: &str) -> Response {
-    (StatusCode::NOT_FOUND, Json(json!({ "message": message }))).into_response()
-}
-
-fn err_forbidden(message: &str) -> Response {
-    (StatusCode::FORBIDDEN, Json(json!({ "message": message }))).into_response()
-}
+use crate::team_llm_guard::{err_forbidden, err_not_found, guard_tenant};
 
 fn conflict(code: &str, message: &str) -> Response {
     (

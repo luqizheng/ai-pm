@@ -40,6 +40,8 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     ("apps/pm-api/src/device_claim.rs", 1),                        // T-088：设备声明被忽略（tenant_audit_log）
     // T-088 新增：设备绑定审计（devenv 域）
     ("crates/pm-application/src/devenv/binding.rs", 1),
+    // Team LLM Provider 管理面（0041）：created/updated/rotated/tested/enabled/disabled/archived/deleted 共用本 helper
+    ("crates/pm-application/src/team_llm.rs", 1),
 ];
 
 fn workspace_root() -> PathBuf {

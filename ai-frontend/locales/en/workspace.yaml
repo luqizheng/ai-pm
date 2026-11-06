@@ -105,38 +105,60 @@ workspace:
   pages:
     models:
       title: Models
-      subtitle: Configure OpenAI-compatible model providers. AI-PM analysis and proposals use these models.
-      securityNote: API keys are stored with AES-256-GCM; only the last 4 characters are shown after saving.
+      subtitle: Manage this team's LLM providers. AI-PM analysis and proposals use these models.
+      securityNote: API keys are stored with AES-256-GCM; only the last 4 characters are shown, and no role can read the full key back.
       loading: Loading provider settings…
       empty: No providers configured.
       loadFailed: Failed to load
       saved: Settings saved
       saveFailed: Save failed
-      keyCleared: API key cleared
       save: Save
-      clearKey: Clear key
       test: Test connection
       testOk: Connected ({ms} ms)
       testFailed: Connection failed
       testUsesSaved: The probe uses saved settings; save before testing changes.
-      enabled: Enabled
-      disabled: Disabled
-      enableLabel: Enable this provider
       timeoutInvalid: Timeout must be between 1 and 600 seconds
       keyConfigured: "Configured ({hint})"
       keyMissing: Not configured; leave empty for local models such as Ollama
       keyPlaceholder: Enter a new key (leave empty to keep the current one)
+      replaceKey: Replace key
+      keyReplaced: Key replaced
+      addProvider: Add provider
+      create: Create
+      cancel: Cancel
+      created: Provider created
+      enable: Enable
+      enableDone: Enabled
+      disable: Disable
+      disableDone: Disabled
+      archive: Archive
+      archiveDone: Archived
+      delete: Delete
+      deleteDone: Deleted
+      deleteFailed: Delete failed (providers with call records cannot be deleted)
+      lastTested: "Last tested: {time}"
+      neverTested: Never tested
       fields:
-        baseUrl: API base URL
+        name: Name
+        type: Type
+        endpoint: API base URL
         model: Model
         apiKey: API key
         timeout: Timeout (s)
-      providers:
-        deepseek: DeepSeek
+      providerTypes:
         openai: OpenAI
-        glm: Zhipu GLM
-        minimax: MiniMax
-        ollama: Ollama (local)
+        anthropic: Anthropic
+        gemini: Google Gemini
+        deepseek: DeepSeek
+        openai_compatible: OpenAI-compatible (local/self-hosted)
+      status:
+        not_configured: Not configured
+        configured: Configured
+        connected: Connected
+        failed: Failed
+        enabled: Enabled
+        disabled: Disabled
+        archived: Archived
     goals:
       title: Goals & Plans
       subtitle: Project → Goals → Milestones → Tasks

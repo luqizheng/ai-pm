@@ -1604,6 +1604,7 @@ dependencies = [
  "pm-ai",
  "pm-domain",
  "pm-infrastructure",
+ "reqwest",
  "serde",
  "serde_json",
  "serde_yaml",
