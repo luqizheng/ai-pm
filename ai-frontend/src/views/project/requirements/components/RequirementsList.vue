@@ -289,7 +289,7 @@ watch(
 }
 
 .req-list__search {
-  width: 220px;
+  width: var(--size-list-search-width);
 }
 
 .req-list__view-toggle {

@@ -299,7 +299,7 @@ const hasAction = computed(() => props.actionLabel.length > 0);
 .ui-stat-card.is-loading .ui-stat-card__trend {
   display: inline-block;
   height: var(--line-height-stat);
-  width: 72px;
+  width: var(--size-skeleton-value);
   border-radius: var(--radius-xs);
   background: var(--skeleton-base-strong);
   color: transparent;
@@ -307,7 +307,7 @@ const hasAction = computed(() => props.actionLabel.length > 0);
 }
 
 .ui-stat-card.is-loading .ui-stat-card__description {
-  width: 96px;
+  width: var(--size-skeleton-description);
   height: var(--line-height-caption);
   background: var(--skeleton-base);
 }

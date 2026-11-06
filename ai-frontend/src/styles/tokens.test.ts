@@ -183,8 +183,9 @@ describe("workspace tokens", () => {
   });
 
   it("深色为默认（:root 即深色）", () => {
-    expect(dark.get("canvas")!.toLowerCase()).toBe("#111318");
-    expect(light.get("canvas")!.toLowerCase()).toBe("#f7f8fa");
+    // V2 Slate & Muted Teal 基线（docs/design/pm-ai-ui-design-system-v2.md §2）
+    expect(dark.get("canvas")!.toLowerCase()).toBe("#171c24");
+    expect(light.get("canvas")!.toLowerCase()).toBe("#f5f8fa");
   });
 
   it("accent 着色面双主题均定义，激活导航项文字达 AA（≥4.5:1）", () => {

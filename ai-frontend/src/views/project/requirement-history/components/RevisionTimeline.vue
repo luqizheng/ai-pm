@@ -193,7 +193,7 @@ const ordered = computed(() => props.revisions);
 .rh-timeline__list::before {
   content: "";
   position: absolute;
-  left: 7px;
+  left: var(--size-timeline-dot);
   top: var(--space-4);
   bottom: var(--space-4);
   width: var(--border-1);

@@ -604,7 +604,7 @@ onBeforeUnmount(() => {
 
 .global-search__progress-track {
   position: relative;
-  height: 6px;
+  height: var(--size-progress-track);
   overflow: hidden;
   background: var(--ws-elevated);
   border-radius: var(--radius-xs);
@@ -617,7 +617,7 @@ onBeforeUnmount(() => {
   width: 30%;
   background: var(--ws-accent);
   border-radius: var(--radius-xs);
-  animation: global-search-progress 1.2s var(--ease-standard) infinite;
+  animation: global-search-progress var(--duration-progress) var(--ease-standard) infinite;
 }
 
 @keyframes global-search-progress {

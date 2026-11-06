@@ -737,7 +737,7 @@ function openObject(path: string) {
 .pm-activity-skeleton {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   border-left: var(--border-1) solid var(--ws-border);
 }
@@ -755,14 +755,14 @@ function openObject(path: string) {
 .pm-skeleton-row {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   border-top: var(--border-1) solid var(--ws-border);
 }
 
 /* ---------------------------- 自适应 ---------------------------- */
 
-@media (max-width: 1120px) {
+@media (max-width: 1100px) {
   .pm-rows {
     grid-template-columns: 1fr;
   }
@@ -772,7 +772,7 @@ function openObject(path: string) {
   }
 }
 
-@media (max-width: 860px) {
+@media (max-width: 880px) {
   .pm-overview {
     grid-template-columns: 1fr;
   }

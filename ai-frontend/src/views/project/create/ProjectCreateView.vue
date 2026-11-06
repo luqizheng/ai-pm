@@ -384,7 +384,7 @@ async function submit() {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  width: 300px;
+  width: var(--size-form-rail-width);
   flex: none;
 }
 
@@ -418,6 +418,8 @@ async function submit() {
   line-height: var(--line-height-caption);
 }
 
+/* 壳三栏（侧栏 232 + 上下文栏 320）+ 页内双栏（表单 760 + rail 300）需 ~1700 视口，
+ * ≤1240 先收 rail 保表单宽度——本页专属断点，早于全站 1100 档 */
 @media (max-width: 1240px) {
   .pc-page__rail {
     display: none;

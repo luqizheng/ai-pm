@@ -124,7 +124,7 @@ function onUpdate(value: unknown) {
   flex: none;
   width: var(--size-switch-track);
   height: var(--size-switch-track-h);
-  padding: 3px;
+  padding: calc(var(--border-1) + var(--size-switch-inset));
   border: var(--border-1) solid var(--border-strong);
   border-radius: var(--radius-full);
   background: var(--surface-raised);

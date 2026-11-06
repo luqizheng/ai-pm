@@ -123,8 +123,8 @@ const emit = defineEmits<{
 
 .pm-act__dot {
   flex: none;
-  width: 7px;
-  height: 7px;
+  width: var(--size-timeline-dot);
+  height: var(--size-timeline-dot);
   border-radius: var(--radius-full);
 }
 

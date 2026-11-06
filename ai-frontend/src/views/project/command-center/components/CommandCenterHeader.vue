@@ -158,8 +158,8 @@ const emit = defineEmits<{ (e: "settings"): void }>();
 }
 
 .pm-cc-header__crumb-icon {
-  width: 10px;
-  height: 10px;
+  width: var(--size-icon-2xs);
+  height: var(--size-icon-2xs);
   color: var(--text-disabled);
 }
 
@@ -204,8 +204,8 @@ const emit = defineEmits<{ (e: "settings"): void }>();
 }
 
 .pm-cc-header__visibility-icon {
-  width: 10px;
-  height: 10px;
+  width: var(--size-icon-2xs);
+  height: var(--size-icon-2xs);
   flex: none;
 }
 
@@ -256,7 +256,7 @@ const emit = defineEmits<{ (e: "settings"): void }>();
 
 .pm-cc-header__meta-divider {
   width: var(--border-1);
-  height: 12px;
+  height: var(--size-meta-divider);
   background: var(--border-default);
 }
 </style>

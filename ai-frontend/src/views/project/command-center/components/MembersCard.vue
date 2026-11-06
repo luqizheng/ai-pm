@@ -62,7 +62,7 @@ withDefaults(defineProps<Props>(), { meta: "" });
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 2px var(--space-2) 2px 4px;
+  padding: 2px var(--space-2) 2px var(--space-1);
   border: var(--border-1) solid var(--border-default);
   border-radius: var(--radius-full);
 }

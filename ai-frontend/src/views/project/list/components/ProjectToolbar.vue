@@ -117,7 +117,7 @@ const sortOptions = computed<SelectOption[]>(() => [
 }
 
 .proj-toolbar__search {
-  width: 220px;
+  width: var(--size-list-search-width);
 }
 
 .proj-toolbar__chip {

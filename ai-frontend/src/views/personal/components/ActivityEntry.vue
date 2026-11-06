@@ -130,7 +130,7 @@ const actorIcon = computed(() => {
 .pm-activity__actor {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   min-width: 0;
   flex: 1;
 }

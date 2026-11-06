@@ -358,7 +358,7 @@ function onSelect(id: string) {
 }
 
 .shell-project-menu__spinner {
-  animation: shell-project-spin 800ms linear infinite;
+  animation: shell-project-spin var(--duration-spinner) linear infinite;
 }
 
 @keyframes shell-project-spin {

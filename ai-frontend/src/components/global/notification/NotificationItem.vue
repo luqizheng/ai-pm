@@ -114,8 +114,8 @@ const metaLine = computed(() =>
   position: absolute;
   top: var(--space-3);
   right: var(--space-3);
-  width: 6px;
-  height: 6px;
+  width: var(--size-dot-xs);
+  height: var(--size-dot-xs);
   background: var(--ws-accent);
   border-radius: var(--radius-full);
 }

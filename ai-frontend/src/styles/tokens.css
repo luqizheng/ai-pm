@@ -1,8 +1,9 @@
 /* ============================================================================
- * AI Workspace — token 层（全应用视觉唯一真源）
+ * AI Workspace — token 层 V2（Slate & Muted Teal；全应用视觉唯一真源）
  *
  * 权威来源：ai-pm/docs/ai-pm-ui-design-system-v1.md（§1.1/§1.2/§二/§六/§九）
  *           + Figma「AI R&D Workspace」设计稿（2026-11 起：组件以 Figma 为准）
+ * V2 品牌视觉：石墨蓝灰 + 雾蓝青；深色稳重，浅色明亮清爽；取消紫色品牌强调色。
  * 规则：
  *   1. 全应用组件禁止裸色值：一切颜色引用本文件变量（--ws-* 为主；
  *      组件历史消费的 PRISM 同名变量经「别名段」落到 --ws-*）。
@@ -23,19 +24,19 @@
    * ---------------------------------------------------------------- */
 
   /* Surface —— 设计系统 V1.0 §1.1（深色列） */
-  --ws-canvas: #111318;
-  --ws-sidebar: #171a21;
-  --ws-surface: #1d212a;
-  --ws-elevated: #252a35;
-  --ws-border: #353b48;
+  --ws-canvas: #171c24;
+  --ws-sidebar: #1d2631;
+  --ws-surface: #222a34;
+  --ws-elevated: #2b3541;
+  --ws-border: #374452;
 
-  /* Text / Accent —— hover/pressed 为 Figma 组件库 Button 态色（2026-11-04） */
-  --ws-text-primary: #e9ecf3;
-  --ws-text-secondary: #99a2b2;
-  --ws-text-disabled: #697384;
-  --ws-accent: #8b83f6;
-  --ws-accent-hover: #9b94ff;
-  --ws-accent-pressed: #7971de;
+  /* Text / Accent —— Slate & Muted Teal 品牌色；hover/pressed 为同色阶 */
+  --ws-text-primary: #e7edf2;
+  --ws-text-secondary: #a8bbc9;
+  --ws-text-disabled: #71818d;
+  --ws-accent: #75a9a4;
+  --ws-accent-hover: #8ab9b4;
+  --ws-accent-pressed: #63948f;
 
   /* 语义色（深色：基准即达 4.5:1，-text 与基准一致） */
   --ws-color-info: #6ea8fe;
@@ -53,8 +54,8 @@
   --ws-color-danger-border: #66424d;
   --ws-color-danger-title: #e69a9f;
 
-  /* accent 着色面（Figma Badge Accent 变体底 #242238，2026-11-04） */
-  --ws-color-accent-surface: #242238;
+  /* accent 着色面（Muted Teal 低饱和强调面） */
+  --ws-color-accent-surface: #253735;
 
   /* 就绪状态色（Figma「04 — Global Navigation」Navigation Badge / Type=Status
      的绿点 #8DC5AF；用于「开发环境已就绪」这类环境状态指示） */
@@ -127,6 +128,8 @@
   --duration-shimmer: 1600ms;
   --duration-spinner: 800ms;
   --duration-switch: 180ms;
+  /* 不确定进度循环（搜索进度条等，无 Figma 稿，锚定实现值，待设计侧确认） */
+  --duration-progress: 1200ms;
   --ease-decelerate: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -284,6 +287,14 @@
   --size-progress-track: 6px;
   --size-progress-track-lg: 8px;
   --size-empty-icon: 24px;
+  /* 微型状态点 6px（通知未读点，锚定实现值，待设计侧确认） */
+  --size-dot-xs: 6px;
+  /* 时间线节点 7px（活动流/修订时间线共用，锚定实现值，待设计侧确认） */
+  --size-timeline-dot: 7px;
+  /* 元信息迷你图标 10px（面包屑/可见性图标，锚定实现值，待设计侧确认） */
+  --size-icon-2xs: 10px;
+  /* 元信息分隔条高 12px（CommandCenterHeader，锚定实现值，待设计侧确认） */
+  --size-meta-divider: 12px;
 
   /* AI 族 —— AI StatusIndicator 状态点三档 / 发送图标 14px（arrow-up）/
      AI 建议卡片最小高 */
@@ -308,6 +319,9 @@
   --skeleton-base: var(--ws-elevated);
   --skeleton-base-strong: var(--ws-border);
   --skeleton-shimmer: var(--ws-hover-veil);
+  /* StatCard 骨架占位宽（本地延伸组件，无 Figma 稿，锚定实现值） */
+  --size-skeleton-value: 72px;
+  --size-skeleton-description: 96px;
 
   /* 按压缩放 / 深底悬浮薄纱 */
   --scale-press: 0.98;
@@ -321,6 +335,11 @@
   --opacity-disabled-control: 0.4;
   --opacity-disabled-field: 0.45;
   --opacity-disabled-option: 0.35;
+
+  /* 创建页表单辅助栏宽 300px（无 Figma 稿，锚定实现值，待设计侧确认） */
+  --size-form-rail-width: 300px;
+  /* 列表页搜索框宽 220px（ProjectToolbar/RequirementsList 共用，锚定实现值，待设计侧确认） */
+  --size-list-search-width: 220px;
 
   /* 旧版布局尺寸（prism 遗留名，供未迁移组件引用） */
   --size-sidebar: 240px;
@@ -403,9 +422,9 @@
    * 品牌标识与认证页几何尺寸：双主题恒定（浅色主题不覆盖）。
    * ---------------------------------------------------------------- */
 
-  /* 品牌标识章 —— 深色章底 + accent 字形，浅色主题下仍保持品牌一致性 */
-  --ws-brand-mark-surface: #242238;
-  --ws-brand-mark-foreground: #8b83f6;
+  /* 品牌标识章 —— 深色蓝灰底 + 雾蓝青字形，双主题保持品牌一致性 */
+  --ws-brand-mark-surface: #253735;
+  --ws-brand-mark-foreground: #75a9a4;
 
   /* 认证页几何 —— 页头 64 / 面板宽 400 / 用途图标 32 */
   --ws-auth-header-height: 64px;
@@ -442,15 +461,13 @@
 [data-theme="light"] {
   color-scheme: light;
 
-  --ws-canvas: #f7f8fa;
-  /* Figma 浅色组件库「13 — Component Library / Light」家族实测值（2026-11-04）：
-     surface-3 侧栏/顶栏 #EEF0F5 · surface-2 抬升面 #E8EBF2 · border #C7CDD9。
-     canvas 保留 #f7f8fa —— Figma 两块浅色板本身不一致（认证页 #F5F6F8 /
-     组件库 #F6F7FA），且该值被 tokens.test.ts 契约锁定，差异不可辨。 */
-  --ws-sidebar: #eef0f5;
+  --ws-canvas: #f5f8fa;
+  /* V2 浅色主题：冷白画布、浅蓝灰侧栏、纯白内容表面；
+     以更高亮度和更低视觉噪声体现日间清爽感。 */
+  --ws-sidebar: #edf2f5;
   --ws-surface: #ffffff;
-  --ws-elevated: #e8ebf2;
-  --ws-border: #c7cdd9;
+  --ws-elevated: #eaf0f3;
+  --ws-border: #dce4e9;
 
   /* 浅色明度反转（2026-11-05 用户裁决）：卡片/浮层（raised/overlay）改用
    * 白色 surface —— 中心内容区以浅于 elevated 的白色为主，
@@ -460,26 +477,26 @@
   --surface-raised: var(--ws-surface);
   --surface-overlay: var(--ws-surface);
 
-  /* accent 着色面（浅色）—— 激活导航项 / Badge Accent 底。
-     深色值 #242238 在浅色主题下过暗，改为带紫调的浅面；
-     取值与 FIGMA-SYNC 台账登记的浅色候选 #EEEBFF 一致。 */
-  --ws-color-accent-surface: #eebeff;
+  /* accent 着色面（浅色）—— 激活导航项 / Badge Accent 底；
+     使用低饱和浅青灰，保持清爽且不形成大面积彩色块。 */
+  --ws-color-accent-surface: #e5f1ef;
 
   /* 就绪状态色（浅色）—— 深色 #8DC5AF 在浅面下仅 1.96:1，
      改用同色系更深一档，保证 UI 用途 ≥3:1 */
   --ws-color-status-ready: #3f8f70;
 
-  /* 次文字 #586274 = Figma 浅色次文字（2026-11-04 组件库稿） */
-  --ws-text-primary: #202532;
-  --ws-text-secondary: #586274;
-  --ws-text-disabled: #a0a8b8;
-  --ws-accent: #6257ce;
-  /* 浅色 hover/pressed 尚无 Figma 稿，候选值待校准 */
-  --ws-accent-hover: #7a72e2;
-  --ws-accent-pressed: #5348b8;
+  /* 浅色文字：深蓝灰主文字 + 中性蓝灰次文字，保证阅读层级。
+     次文字 AA 修正：V2 稿 #71818D 对画布 #F5F8FA 仅 3.77:1（<4.5），
+     同色阶加深至 #5C6B76（canvas 5.16:1 / surface 5.50:1 / elevated 4.78:1）。 */
+  --ws-text-primary: #263a45;
+  --ws-text-secondary: #5c6b76;
+  --ws-text-disabled: #a5b2ba;
+  --ws-accent: #397c78;
+  /* 浅色 hover/pressed：品牌青色的同色阶变化，避免跳色。 */
+  --ws-accent-hover: #468b86;
+  --ws-accent-pressed: #306c68;
 
-  /* 语义色（分析稿候选起点；warning 候选 #D9A441 对白表面仅 2.25:1，
-     不达 3:1，改用 PRISM warning 族；-text 变体承载 4.5:1 文字用途） */
+  /* 语义色保持独立于品牌色；-text 变体用于需要更高文字对比度的场景。 */
   --ws-color-info: #3b82f6;
   --ws-color-success: #22a06b;
   --ws-color-warning: #b45309;
@@ -494,8 +511,8 @@
   --ws-color-danger-border: #edb6ba;
   --ws-color-danger-title: #a43445;
 
-  /* accent 着色面（浅色候选：Figma 浅色 accent wash #EEEBFF） */
-  --ws-color-accent-surface: #eeebff;
+  /* accent 着色面（浅青灰 #E5F1EF） */
+  --ws-color-accent-surface: #e5f1ef;
 
   --ws-focus-ring: 0 0 0 2px var(--ws-canvas), 0 0 0 4px var(--ws-accent);
 
