@@ -1,4 +1,10 @@
--- S02-I3 · Source & Traceability（docs/s02-i3-source-traceability-implementation-v1.md）
+-- 0045_s02_i3_source_traceability：S02-I3 · Source & Traceability
+-- （docs/s02-i3-source-traceability-implementation-v1.md）。
+-- 编号注（DEF-01 修复，2026-11-07）：本迁移曾以 0044_s02_i3_* 提交（5936105），
+-- 与 Team Onboarding 的 0044_team_onboarding.sql（台账登记方）撞 sqlx 版本号
+-- ——双 0044 并存时 migrate! 加载即 DuplicateVersion，干净库无法起栈。
+-- 按「后实施者顺移」纪律顺移至 0045；已按 0044 应用过 s02_i3 的库需对
+-- _sqlx_migrations 记账对齐（44→45）后再升级。
 -- 契约：S02-04 V1.2 §9（Q-4/R5）+ §5.4/S02D-15/19（Q-18 选项 A）+ §7.4 职责表。
 -- Q-20：旧列 source_artifact_id 已于 0039 DROP，无继承关系。
 -- 本切片裁决：repository_change_intake 候选延后 I7（无消费方不建空表，克制原则）；
