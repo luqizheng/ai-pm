@@ -26,7 +26,7 @@ vite 代理见 `frontend/vite.config.ts`（`/api`→`PM_API_URL ?? 8090`；`/gw`
    旧命令（仅在「只跑 lmms 栈、不跑 ai-pm 栈」时用，务必带 `--no-deps` 防止触碰 aipm-* 容器）：
    ```bash
    cd low-memory-micro-services/infrastructure
-   docker compose -f docker-compose-infra.yml -f docker-compose-services.yml \
+   docker compose -f infra/docker-compose-infra.yml -f services/docker-compose-services.yml \
      up -d --no-deps consul redis rabbitmq postgres token-service iam-service api-gateway prue_backend
    ```
 

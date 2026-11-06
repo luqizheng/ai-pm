@@ -120,7 +120,7 @@ AI_PM_PUBLIC_BASE_URL=http://192.168.2.10:8090   # /install 接入指引渲染�
    **副作用**：任何服务重建都必须整栈一起重建，否则新旧容器拿到不同的 bootstrap token → 服务间握手失败（表现为登录 401）。
 3. **compose 版本门禁**旧正则只认 `v2.2x~v2.99`，会误杀该机的 Compose v5.5.0 —— 已改为语义化比较（`compose_version_ok`）。
 4. **`aipm-pg` 的镜像名是硬编码 `postgres:16`**，而基础设施侧走 `${BASE_REGISTRY}postgres:16`。只传后者会在该机上触发去 Docker Hub 拉取（该机不通外网）→ 需额外 `docker tag` 一份 `postgres:16`。
-5. **rmcp 的 Host 白名单**（T-081）：默认只放回环，跨机访问需 `AI_PM_MCP_ALLOWED_HOSTS`；该 env 由 `apps/pm-api/src/mcp_hosts.rs` 读取，但**要进 compose 才生效**（已在 `docker-compose-services.yml` 透传）。
+5. **rmcp 的 Host 白名单**（T-081）：默认只放回环，跨机访问需 `AI_PM_MCP_ALLOWED_HOSTS`；该 env 由 `apps/pm-api/src/mcp_hosts.rs` 读取，但**要进 compose 才生效**（已在 `infrastructure/services/docker-compose-services.yml` 透传）。
 6. **token-service 重启会换签名密钥**（密钥存容器内文件，无卷）→ 旧 JWT 立即失效；pm-api 的 JWKS 缓存会自动刷新，但客户端要重新登录。
 7. **该机拉不了 Docker Hub**（USTC 镜像源已失效，直连超时）；但内网 zhcoder registry 可达（401=需鉴权）。
    本次采用「Windows 本地 build/save → scp → Linux `docker load`」绕开 registry 凭据问题。

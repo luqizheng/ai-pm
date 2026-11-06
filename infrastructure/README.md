@@ -6,17 +6,24 @@
 
 ## 编排结构（与上游同构：infra + services + observability，另加 ai-pm 文件）
 
+2026-11-06 起与上游一致：各组 compose/config 物理进自包含子目录（目录=部署单元），
+lmms 命名子目录升级可整体覆盖；ai-pm 命名文件留根不被覆盖。
+
 ```
-docker-compose.yml              入口 include 四块
-├─ docker-compose-infra.yml      基础设施：consul / redis / rabbitmq
-│                                + postgres（默认库）/ mysql（profiles:["mysql"]）
-├─ docker-compose-services.yml   lmms 业务服务（已发布镜像引用）——升级可整体覆盖：
+docker-compose.yml              入口 include 四块（根）
+├─ infra/                        基础设施：docker-compose-infra.yml(+dev/prod 片)
+│                                + config/{consul,rabbitmq}
+├─ services/                     lmms 业务服务（已发布镜像引用）——升级可整体覆盖：
+│                                docker-compose-services.yml(+prod 片)
 │                                api-gateway:3000 / iam-service:8081→9081 / token-service:8082
 │                                file / notification / audit / prue + 2 outbox publisher
-├─ docker-compose-observability.yml  prometheus / grafana / jaeger / otel-collector
-│                                    / alertmanager / consul-template
-└─ docker-compose.ai-pm.yml      ai-pm 自有 6 服务（本仓所有，升级不被覆盖）：
-                                 aipm-pg / pm-api / pm-worker / ai-pm-worker / aipm-bff / aipm-web
+│                                + config/api-gateway
+├─ observability/                docker-compose-observability.yml(+staging/prod 片)
+│                                prometheus / grafana / jaeger / otel-collector
+│                                / alertmanager / consul-template + config/{prometheus,...}
+├─ docker-compose.ai-pm.yml      ai-pm 自有 6 服务（本仓所有，升级不被覆盖）：
+│                                aipm-pg / pm-api / pm-worker / ai-pm-worker / aipm-bff / aipm-web
+└─ .env-infra / .env / .env.prod  环境三层（根）
 ```
 
 **文件所有权边界（2026-11-06 起）**：lmms 命名文件可随上游模板升级**整目录覆盖**；
@@ -47,7 +54,7 @@ docker-compose.yml              入口 include 四块
 | 4 | `config/nginx/nginx.conf.template` | `proxy_pass` 指向 `pm-api:8090`（原 api-gateway:3000）；canary 上游清单置空 | edge 后端是 pm-api；lmms 服务的 canary 分流属 lmms 侧 |
 | 5 | `scripts/start-prod.sh` | ① 语义化 compose 版本门禁（上游正则误杀 v5.x、误放行 v2.10.3）② 必需变量 MYSQL_* → POSTGRES_* ③ env 三层加载 `.env-infra → .env → .env.prod` | 本机/WSL compose 是 v5.6.0；PG 形态默认库是 postgres；镜像版本/仓库与 lmms 栈内常量随 `.env-infra` 发布固化 |
 | 6 | `.env.prod.example` | `POSTGRES_*` 块上移到 `DATABASE_URL` 之前（修 source 展开顺序：原文件会展开成 `postgres://://`）；删 MySQL 块 | PG 形态；`source` 是顺序求值 |
-| 7 | `services/token-service/config/config.yaml`（仓根新建） | 上游 lmms 仓的 token-service 配置副本 | compose 的 `../services/token-service/config:/app/config:ro` 是 bind mount——ai-pm 仓无该目录时 Docker 会建**空目录**遮住镜像内 baked config，服务启动即 fail（`token-service config missing required fields`）。上游无此问题（它在 lmms 仓内） |
+| 7 | `services/token-service/config/config.yaml`（仓根新建） | 上游 lmms 仓的 token-service 配置副本 | compose 的 `../../services/token-service/config:/app/config:ro` 是 bind mount——ai-pm 仓无该目录时 Docker 会建**空目录**遮住镜像内 baked config，服务启动即 fail（`token-service config missing required fields`）。上游无此问题（它在 lmms 仓内） |
 | 8 | `README.md` / `.env-infra`（本仓新建） | 本文档 + lmms 层固定配置（镜像仓库/版本、栈内常量） | 模板不带文档；`.env-infra` 为 ai-pm 侧消费约定（lmms 自身 `.env` 不拆） |
 
 另：`scripts/deploy-remote.sh` 保持上游滚动重启流程，REQUIRED 清单已改为 PG 形态并随
@@ -123,9 +130,9 @@ node packages/cli/bin/coder.js release compose-template --version <ver> --dialec
 
 # 2. 快照收录到本仓 release/compose-template/coder-compose-template-<ver>-pg/
 
-# 3. 复制覆盖本目录——lmms 命名文件直接覆盖即可，`docker-compose.ai-pm.yml`
-#    与 .env / .env.prod 天然不受影响；按上方「有意差异」清单重放 ai-pm 适配
-#    （含 .env-infra 的镜像版本行随新版本更新）
+# 3. 复制覆盖本目录——lmms 命名子目录（infra/ services/ observability/）与根上
+#    的入口/聚合片直接覆盖即可，`docker-compose.ai-pm.yml` 与 .env* 天然不受影响；
+#    按上方「有意差异」清单重放 ai-pm 适配（含 .env-infra 的镜像版本行随新版本更新）
 
 # 4. 校验编排合法：
 docker compose -f infrastructure/docker-compose.yml config > /dev/null
