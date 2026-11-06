@@ -61,9 +61,8 @@ async fn list_handler(
     if let Err(resp) = guard_tenant(&caller, tenant_id) {
         return resp;
     }
-    if !caller.is_admin {
-        return err_forbidden("tenant admin required");
-    }
+    // 名册只读对所有 ACTIVE 成员开放（0044 Team Onboarding 口径：查看团队
+    // 是三种角色的共同权限；管理动作仍走下方各写端点的 admin 闸）。
     let rows = sqlx::query_as::<_, (Uuid, String, String, bool, chrono::DateTime<chrono::Utc>)>(
         "SELECT m.principal_id, p.display_name, m.role, p.is_active, m.created_at \
            FROM core.tenant_member m \
