@@ -9,11 +9,11 @@
 //! 授权（§12.1 DEF-01 六点的服务面）：
 //! - 租户边界：所有入口按 `tenant_id` 过滤目标行，越权一律 404（不泄露存在性）；
 //! - 项目成员：由 pm-api 适配层 `require_project_visible` 把门（读侧同口径）；
-//! - 确认/拒绝：真人主体（`core.principal.kind='human'`，S02D-02 #2）+
-//!   可信交互上下文（REST 适配层拒 `api_key` 鉴权，§7.2 A*）；
-//! - 撤回/恢复/归档：V1 = 项目 Lead（`project_member.role='owner'`）。显式
-//!   Approver 授权载体随 I6-A 终稿接入（O-6 未决；0032/0033 先例：授权表
-//!   不在终稿前进库）。
+//! - 确认/拒绝/撤回/恢复/归档（I6-A 终态，O-6 裁决）：真人主体
+//!   （`core.principal.kind='human'`，S02D-02 #2）+ 可信交互上下文（REST
+//!   适配层拒 `api_key` 鉴权，§7.2 A*）+ 项目成员 +
+//!   （Lead OR `core.approver_grant` 生效行——`approver::ensure_governance_authorized`；
+//!   Q-A1「Lead+显式 Approver」宽读，§7.4 严格读法偏差已在迁移 0040 注记）。
 //!
 //! 并发（DEF-03 修复方向，I1 §7）：CAS 双令牌 `expected_row_revision` +
 //! `expected_current_revision_id`，后至者显式 409；确认请求必须携带
@@ -625,6 +625,8 @@ pub async fn confirm_revision(
     let (project_id, lifecycle, current_revision_id, row_revision) =
         lock_requirement(&mut tx, tenant_id, requirement_id).await?;
     ensure_active(&lifecycle)?;
+    // I6-A：确认 = Lead OR 显式 Approver（成员闸由 REST 层 require_project_visible 已过）。
+    crate::approver::ensure_governance_authorized(pool, project_id, actor.principal_id).await?;
 
     // CAS 双令牌（I1 §7）：任一令牌漂移 → 显式 409（DEF-03 修复方向）。
     if let Some(expected) = req.expected_row_revision {
@@ -743,6 +745,8 @@ pub async fn reject_revision(
     let (project_id, lifecycle, _, _) =
         lock_requirement(&mut tx, tenant_id, requirement_id).await?;
     ensure_active(&lifecycle)?;
+    // I6-A：拒绝与确认同权（Lead OR 显式 Approver）。
+    crate::approver::ensure_governance_authorized(pool, project_id, actor.principal_id).await?;
 
     let (_, state, content_hash, markdown_version_ref) =
         lock_revision(&mut tx, requirement_id, revision_id).await?;
@@ -813,19 +817,8 @@ pub async fn transition_lifecycle(
     let (project_id, lifecycle, _, _) =
         lock_requirement(&mut tx, tenant_id, requirement_id).await?;
 
-    let is_lead: Option<Uuid> = sqlx::query_scalar(
-        "SELECT principal_id FROM core.project_member \
-         WHERE project_id = $1 AND principal_id = $2 AND role = 'owner' LIMIT 1",
-    )
-    .bind(project_id)
-    .bind(actor.principal_id)
-    .fetch_optional(&mut *tx)
-    .await?;
-    if is_lead.is_none() {
-        return Err(PmWriteError::Forbidden(
-            "requirement lifecycle governance requires the project lead",
-        ));
-    }
+    // I6-A：生命周期治理 = Lead OR 显式 Approver。
+    crate::approver::ensure_governance_authorized(pool, project_id, actor.principal_id).await?;
 
     let next = match (action, lifecycle.as_str()) {
         (LifecycleAction::Withdraw, "active") => "withdrawn",

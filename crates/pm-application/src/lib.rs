@@ -5,6 +5,7 @@ pub mod archive;
 pub mod project_gate;
 pub mod actor;
 pub mod authz;
+pub mod approver;
 pub mod bootstrap;
 pub mod caller;
 pub mod command_center;
