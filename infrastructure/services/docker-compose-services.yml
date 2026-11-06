@@ -32,7 +32,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       STORAGE_PATH: /var/lib/file-service/storage
       RUST_LOG: info
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4317}
       SERVICE_NAME: file-service
     volumes:
       - file-storage:/var/lib/file-service/storage
@@ -55,15 +55,15 @@ services:
       SERVICE_PORT: "3000"
       GW_SERVER_HOST: 0.0.0.0
       GW_SERVER_PORT: '3000'
-      GW_REDIS_URL: redis://redis:6379
+      GW_REDIS_URL: redis://${REDIS_HOST:-redis}:${REDIS_PORT:-6379}
       GW_REDIS_PREFIX: 'superpowers:'
-      GW_CONSUL_ADDR: http://consul:8500
+      GW_CONSUL_ADDR: "${CONSUL_ADDR:-http://consul:8500}"
       GW_JWKS_URL: http://token-service:8082/.well-known/jwks.json
       GW_ISSUER: superpowers-token-service
       GW_ROUTES_DIR: /app/config/api-gateway/routes
-      GW_EVENT_BUS_URL: amqp://guest:guest@rabbitmq:5672/%2f
+      GW_EVENT_BUS_URL: amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@${RABBITMQ_HOST:-rabbitmq}:${RABBITMQ_PORT:-5672}/%2f
       RUST_LOG: api_gateway=trace,info
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4317}
       SERVICE_NAME: api-gateway
     volumes:
       - ./config/api-gateway/routes:/app/config/api-gateway/routes
@@ -96,7 +96,7 @@ services:
       TENANT_ID: ${TENANT_ID}
       SWAGGER_ENABLED: 'true'
       SERVICE_NAME: token-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4317}
       TOKEN_DATABASE_URL: ${DATABASE_URL}
       TOKEN_DATABASE_DB_TYPE: postgres
     depends_on:
@@ -125,7 +125,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: redis://${REDIS_HOST}:${REDIS_PORT}
       CONFIG_PATH: /etc/iam-service/config.yaml
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4317}
       SERVICE_NAME: iam-service
     depends_on:
       postgres:
@@ -213,7 +213,7 @@ services:
       SERVER_PORT: '8083'
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: redis://${REDIS_HOST}:${REDIS_PORT}
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4317}
       SERVICE_NAME: notification-service
     depends_on:
       postgres:
