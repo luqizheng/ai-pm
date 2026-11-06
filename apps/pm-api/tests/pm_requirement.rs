@@ -5,8 +5,10 @@
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
-use pm_api::routes::router;
+use pm_api::routes::router_with_feed_and_knowledge;
 use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::knowledge::KnowledgeRoot;
+
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -45,12 +47,21 @@ async fn send(
     pool: &PgPool,
     request: Request<Body>,
 ) -> (StatusCode, serde_json::Value) {
-    let response = router(pool.clone()).oneshot(request).await.unwrap();
+    // S02-I2：每请求注入独立临时知识库根——并行用例各自 git init，避免
+    // 共享仓库的 index 竞态（submit 是本套件唯一的 Git 写点）。
+    let app = router_with_feed_and_knowledge(
+        pool.clone(),
+        pm_api::audit_stream::AuditFeed::new(),
+        pm_api::mcp_hosts::McpHosts::default(),
+        common::knowledge_root(),
+    );
+    let response = app.oneshot(request).await.unwrap();
     body_json(response).await
 }
 
 /// 种子：项目 + dev-off 成员（owner）。
 async fn seed(pool: &PgPool, code: &str) -> Uuid {
+    common::ensure_knowledge_env();
     let outcome = bootstrap_project(
         pool,
         BootstrapRequest {

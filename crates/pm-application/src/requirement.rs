@@ -556,14 +556,20 @@ pub async fn update_draft(
     .map_err(PmWriteError::Db)
 }
 
-/// 提交确认（SubmitRequirementRevision）：draft → pending_confirmation，
-/// 冻结时刻落 submitted_at（正文与 hash 自起草起即由单点 helper 定值）。
+/// 提交确认（SubmitRequirementRevision，S02-I2 唯一绑定点）：draft →
+/// pending_confirmation + 投影绑定（Markdown 写 Git、markdown_version_ref/
+/// content_hash 刷新，§5.4 冻结 + §6.4 映射）。
+///
+/// 重入语义（§6.7 崩溃窗口）：`pending_confirmation` 且**未绑定**的修订可重复
+/// submit——只补投影绑定，不重复翻转状态/审计（首次 submit 已落审计）；
+/// 已绑定的重入一律 409。
 pub async fn submit_revision(
     pool: &PgPool,
     tenant_id: Uuid,
     requirement_id: Uuid,
     revision_id: Uuid,
     actor: &AuditActor,
+    root: &crate::knowledge::KnowledgeRoot,
 ) -> Result<RevisionView, PmWriteError> {
     let mut tx = pool.begin().await?;
     let (project_id, lifecycle, _, _) =
@@ -571,29 +577,66 @@ pub async fn submit_revision(
     ensure_active(&lifecycle)?;
 
     let (_, state, _, _) = lock_revision(&mut tx, requirement_id, revision_id).await?;
-    if state != "draft" {
-        return Err(PmWriteError::Conflict("only draft revisions can be submitted"));
-    }
-
-    sqlx::query(
-        "UPDATE delivery.requirement_revision \
-         SET state = 'pending_confirmation', submitted_at = now() \
-         WHERE id = $1",
+    let (markdown,): (Option<String>,) = sqlx::query_as(
+        "SELECT content->>'markdown' FROM delivery.requirement_revision WHERE id = $1",
     )
     .bind(revision_id)
-    .execute(&mut *tx)
+    .fetch_one(&mut *tx)
     .await?;
+    let markdown = markdown.unwrap_or_default();
 
-    append_audit(
-        &mut tx,
+    match state.as_str() {
+        "draft" => {
+            sqlx::query(
+                "UPDATE delivery.requirement_revision \
+                 SET state = 'pending_confirmation', submitted_at = now() \
+                 WHERE id = $1",
+            )
+            .bind(revision_id)
+            .execute(&mut *tx)
+            .await?;
+            append_audit(
+                &mut tx,
+                project_id,
+                actor,
+                "requirement.revision_submitted",
+                "requirement",
+                Some(requirement_id),
+            )
+            .await?;
+        }
+        "pending_confirmation" => {
+            let bound: Option<String> = sqlx::query_scalar(
+                "SELECT markdown_version_ref FROM delivery.requirement_revision WHERE id = $1",
+            )
+            .bind(revision_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .flatten();
+            if bound.is_some() {
+                return Err(PmWriteError::Conflict("revision is already submitted"));
+            }
+            // 未绑定的 pending = 上次 submit 在状态翻转后、绑定前中断 → 本次只补绑定。
+        }
+        _ => {
+            return Err(PmWriteError::Conflict("only draft revisions can be submitted"));
+        }
+    }
+    tx.commit().await?;
+
+    if markdown.trim().is_empty() {
+        return Err(PmWriteError::Validation("revision markdown is empty"));
+    }
+    crate::requirement_projection::bind_projection(
+        pool,
+        root,
         project_id,
-        actor,
-        "requirement.revision_submitted",
-        "requirement",
-        Some(requirement_id),
+        requirement_id,
+        revision_id,
+        &markdown,
+        actor.principal_id,
     )
     .await?;
-    tx.commit().await?;
 
     sqlx::query_as::<_, RevisionView>(&format!(
         "SELECT {REVISION_VIEW_COLS} {REVISION_VIEW_FROM} WHERE rv.id = $1"
@@ -648,6 +691,12 @@ pub async fn confirm_revision(
         lock_revision(&mut tx, requirement_id, revision_id).await?;
     if state != "pending_confirmation" {
         return Err(PmWriteError::Conflict("revision is not pending confirmation"));
+    }
+    // 六要素之一（I2 §6.4-2）：必须已绑定 Markdown 版本——submit 是唯一绑定点。
+    if markdown_version_ref.is_none() {
+        return Err(PmWriteError::Conflict(
+            "revision is not bound to a markdown version — submit again to bind",
+        ));
     }
     // 六要素之一：审批人核准的哈希必须与库存一致（跨版本重放防线，§7.1）。
     if content_hash != expected_hash {

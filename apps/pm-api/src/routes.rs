@@ -57,6 +57,10 @@ pub(crate) struct AppState {
     pub(crate) pool: PgPool,
     pub(crate) executor: Arc<PgCommandExecutor>,
     pub(crate) audit_feed: crate::audit_stream::AuditFeed,
+    /// S02-I2：需求投影的知识库根（submit 绑定点写 Git）。测试经
+    /// [`router_with_feed_and_knowledge`] 注入独立临时根，避免并行用例的
+    /// Git index 竞态；生产 = `KnowledgeRoot::from_env()`。
+    pub(crate) knowledge: pm_application::knowledge::KnowledgeRoot,
 }
 
 /// The pm-api route table, stateful over the shared connection pool and
@@ -87,6 +91,22 @@ pub fn router_with_feed_and_hosts(
     audit_feed: crate::audit_stream::AuditFeed,
     mcp_hosts: crate::mcp_hosts::McpHosts,
 ) -> Router {
+    router_with_feed_and_knowledge(
+        pool,
+        audit_feed,
+        mcp_hosts,
+        pm_application::knowledge::KnowledgeRoot::from_env(),
+    )
+}
+
+/// [`router_with_feed_and_hosts`] with an explicit knowledge root（S02-I2）：
+/// 测试注入每用例独立临时根。
+pub fn router_with_feed_and_knowledge(
+    pool: PgPool,
+    audit_feed: crate::audit_stream::AuditFeed,
+    mcp_hosts: crate::mcp_hosts::McpHosts,
+    knowledge: pm_application::knowledge::KnowledgeRoot,
+) -> Router {
     // `off` 模式不再拆掉身份门：注入固定的 `dev-off` principal
     // （写请求时落库），handlers 与审计仍有 actor（v1 §6 / C42）。
     let auth = crate::auth::AuthState {
@@ -94,10 +114,9 @@ pub fn router_with_feed_and_hosts(
         pool: pool.clone(),
         config: crate::auth::AuthConfig::default(),
     };
-    build_router(pool, audit_feed, false, mcp_hosts).layer(axum::middleware::from_fn_with_state(
-        auth,
-        crate::auth::inject_dev_principal,
-    ))
+    build_router(pool, audit_feed, false, mcp_hosts, knowledge).layer(
+        axum::middleware::from_fn_with_state(auth, crate::auth::inject_dev_principal),
+    )
 }
 
 fn build_router(
@@ -105,6 +124,7 @@ fn build_router(
     audit_feed: crate::audit_stream::AuditFeed,
     guard_mcp: bool,
     mcp_hosts: crate::mcp_hosts::McpHosts,
+    knowledge: pm_application::knowledge::KnowledgeRoot,
 ) -> Router {
     let policy = Arc::new(
         PolicyEngine::from_yaml(include_str!("../../../policies/ai-pm-ai-lead-v2.yaml"))
@@ -115,6 +135,7 @@ fn build_router(
         pool,
         executor,
         audit_feed,
+        knowledge,
     };
     // The MCP service clones the pool inside its own state factory; it cannot
     // share `state` (different service type), hence a separate handle.
@@ -181,8 +202,8 @@ fn build_router(
         .merge(crate::pm_acceptance::router())
         // 产物（需求修订）列表——AI 产物验收中心数据源。
         .merge(crate::pm_artifacts::router())
-        // 全局模型供应商配置（deepseek/openai/glm/minimax/ollama）。
-        .merge(crate::llm_configs::router())
+        // Team LLM Provider 管理面（0041；owner/admin 守卫，取代旧全局 /v1/pm/llm/*）。
+        .merge(crate::team_llm::router())
         // 项目 ↔ 代码仓库关系 + 项目级 SSH 凭据（P0 CRUD）。
         .merge(crate::pm_repositories::router())
         // 冷启动导入：启动 / 轮询 / 取消 / apply（提案链）。
@@ -344,7 +365,13 @@ pub fn router_with_auth_config_and_feed_and_hosts(
         pool: pool.clone(),
         config,
     };
-    build_router(pool, audit_feed, true, mcp_hosts)
+    build_router(
+        pool,
+        audit_feed,
+        true,
+        mcp_hosts,
+        pm_application::knowledge::KnowledgeRoot::from_env(),
+    )
         .layer(axum::middleware::from_fn_with_state(
             auth.clone(),
             crate::auth::require_active,

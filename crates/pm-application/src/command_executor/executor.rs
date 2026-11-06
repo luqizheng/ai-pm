@@ -451,16 +451,12 @@ impl PgCommandExecutor {
             .fetch_one(&mut *tx)
             .await
             .map_err(db_err)?;
-            // ⚠️ S02 §6.6 债务标记（0039 批保持现行为）：导入在无 Confirmation 的
-            // 情况下直接设 current_revision_id——违反新模型「current 非空 ⇒ approved
-            // + Confirmation」不变量。改造（撤自动定稿 + 任务关联降级）归冷启动导入
-            // 专项切片（S02-05 必办③），届时 task_requirement 关联按 I1-D07 降级。
-            sqlx::query("UPDATE delivery.requirement SET current_revision_id = $2 WHERE id = $1")
-                .bind(requirement_id)
-                .bind(revision_id)
-                .execute(&mut *tx)
-                .await
-                .map_err(db_err)?;
+            // S02 §6.6 债务清偿（S02-I2，2026-11-06）：不再自动设 current 指针——
+            // 「current 非空 ⇒ approved + Confirmation」不变量成立；v1 保持 draft，
+            // 投影绑定随人类 submit 发生（requirement_projection::bind_projection）。
+            // 后续 create_tasks 对未确认需求按 I1-D07 降级：无正式版本不建立执行
+            // 依据（现有查找对指针 NULL 产出 requirement_unresolved finding）。
+            let _ = revision_id;
             items.push(json!({
                 "key": draft.key,
                 "code": code,
@@ -546,6 +542,14 @@ impl PgCommandExecutor {
             if draft.requirement_key.is_some() && requirement.is_none() {
                 findings.push(json!({
                     "kind": "requirement_unresolved",
+                    "key": draft.key,
+                    "ref": draft.requirement_key,
+                }));
+            } else if let Some((_, None)) = &requirement {
+                // S02-I2/I1-D07：需求存在但无正式版本（未确认）——不建立执行
+                // 依据，可观测信号区分于「完全找不到」（确认 + I4 改绑后可链）。
+                findings.push(json!({
+                    "kind": "requirement_unconfirmed",
                     "key": draft.key,
                     "ref": draft.requirement_key,
                 }));

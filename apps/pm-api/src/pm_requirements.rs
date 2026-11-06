@@ -152,6 +152,7 @@ async fn submit_revision(
         requirement_id,
         revision_id,
         &caller.audit_actor(),
+        &state.knowledge,
     )
     .await?;
     Ok(Json(serde_json::json!({ "revision": revision })))

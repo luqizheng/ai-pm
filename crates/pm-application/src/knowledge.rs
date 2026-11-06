@@ -730,6 +730,14 @@ pub(crate) fn head_sha(root: &Path) -> Result<String, KnowledgeError> {
     git(root, &["rev-parse", "HEAD"])
 }
 
+/// S02-I2：按绑定 ref（git_commit_sha）读历史版本正文——§6.1「按 ref 读 Git」
+/// 读形态，rebuild_projection / 审计回放共用。`relative` 必须是仓库内相对路径
+/// （canonical_path 产物），path traversal 由 `git show` 的 `<sha>:<path>` 语法
+/// 天然约束（不存在逃逸路径）。
+pub(crate) fn git_read_at(root: &Path, relative: &str, sha: &str) -> Result<String, KnowledgeError> {
+    git(root, &["show", &format!("{sha}:{relative}")])
+}
+
 fn io_error(err: std::io::Error) -> KnowledgeError {
     KnowledgeError::Io(err.to_string())
 }

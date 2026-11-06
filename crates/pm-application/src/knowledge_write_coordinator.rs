@@ -123,6 +123,8 @@ pub enum WriteCommand {
     SubmitProposal,
     ConfirmRedline,
     VetoRevision,
+    /// S02-I2：需求修订 submit 时的投影绑定（bind_projection）。
+    BindRequirementProjection,
 }
 
 impl WriteCommand {
@@ -132,6 +134,7 @@ impl WriteCommand {
             WriteCommand::SubmitProposal => "submit_proposal",
             WriteCommand::ConfirmRedline => "confirm_redline",
             WriteCommand::VetoRevision => "veto_revision",
+            WriteCommand::BindRequirementProjection => "bind_requirement_projection",
         }
     }
 }

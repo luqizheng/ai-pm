@@ -104,7 +104,14 @@ async fn submitted(pool: &PgPool, project_id: Uuid, code: &str) -> (Uuid, Uuid, 
         .unwrap();
     let revision = &detail.revisions[0];
     let (revision_id, hash) = (revision.id, revision.content_hash.clone());
-    requirement::submit_revision(pool, pm_domain::SYSTEM_TENANT, entry.id, revision_id, &actor)
+    requirement::submit_revision(
+        pool,
+        pm_domain::SYSTEM_TENANT,
+        entry.id,
+        revision_id,
+        &actor,
+        &common::knowledge_root(),
+    )
         .await
         .unwrap();
     (entry.id, revision_id, hash)

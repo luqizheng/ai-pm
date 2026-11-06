@@ -24,7 +24,7 @@ pub mod knowledge_quality;
 pub mod knowledge_reference;
 pub mod knowledge_search;
 pub mod knowledge_write_coordinator;
-pub mod llm_config;
+pub mod team_llm;
 pub mod onboarding;
 pub mod outbox;
 pub mod outbox_ops;
@@ -36,6 +36,7 @@ pub mod project_import;
 pub mod project_member;
 pub mod read;
 pub mod requirement;
+pub mod requirement_projection;
 pub mod repo_access;
 pub mod repo_facts;
 pub mod repository;
@@ -101,9 +102,11 @@ pub use knowledge_quality::{GateFailure, GateInput, QualityGateResult};
 pub use knowledge_reference::{
     AddReferenceRequest, ReferenceRow, add_reference, list_references,
 };
-pub use llm_config::{
-    LlmConfigError, LlmProviderRow, PROVIDERS, UpdateLlmProviderRequest, list_providers,
-    load_provider_credentials, update_provider,
+pub use team_llm::{
+    CreateTeamProviderRequest, ReplaceCredentialRequest, ResolvedProvider, SetStatusRequest,
+    TeamLlmError, TeamLlmProviderRow, TestResult, UpdateTeamProviderRequest, PROVIDER_TYPES,
+    create_team_provider, delete_team_provider, list_team_providers, replace_team_credential,
+    resolve_repo_call_config, set_team_provider_status, test_team_provider, update_team_provider,
 };
 pub use onboarding::{
     API_KEY_PLACEHOLDER, Activation, BaseUrlSource, Catalog, CatalogItem, Guide, LeaseHint,
