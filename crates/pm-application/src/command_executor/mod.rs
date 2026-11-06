@@ -112,8 +112,6 @@ impl ExecutionContext {
 pub enum CompensableTable {
     Task,
     Milestone,
-    Requirement,
-    RequirementRevision,
 }
 
 
@@ -123,9 +121,6 @@ impl CompensableTable {
         match self {
             Self::Task => ("delivery.task", "id", "revision"),
             Self::Milestone => ("delivery.milestone", "id", "revision"),
-            Self::Requirement => ("delivery.requirement", "id", "row_revision"),
-            // Requirement revisions lock on their version counter.
-            Self::RequirementRevision => ("delivery.requirement_revision", "id", "version"),
         }
     }
 }

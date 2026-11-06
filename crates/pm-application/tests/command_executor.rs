@@ -450,7 +450,8 @@ async fn test_redline_rejected_for_ai_actor(pool: PgPool) {
 }
 
 // ---------------------------------------------------------------------------
-// Task 7: CreateTask / ApproveRequirementRevision / AdjustMilestonePlan and
+// Task 7: CreateTask / AdjustMilestonePlan / handler-registry invariant（approve
+// 已随 S02-I6-B 退役为无条件拒绝，见 approve_command_is_refused_via_executor）and
 // the handler-registry compensation invariant.
 // ---------------------------------------------------------------------------
 
@@ -674,16 +675,18 @@ async fn create_task_inserts_row_and_audits_delete_compensation(pool: PgPool) {
     assert_eq!(compensated, Some(rollback.audit_id));
 }
 
-/// 9) ApproveRequirementRevision points the requirement at the draft revision,
-///    supersedes the old one and stores a three-entry Restore compensation that
-///    undoes pointer, row_revision and both revision states.
+/// 9) ApproveRequirementRevision 在执行器面被双层拒绝（S02-I6-B，S02D-02
+///    #2/#3 + S02D-21）：AI 主体先被红线拦下（RedLineBlocked，V-2 回归）；
+///    Human + RedlineApproval 抵达 handler 后仍被无条件拒绝——正式确认唯一
+///    合法路径 = REST 统一服务。拒绝不改状态、不审计。
 #[sqlx::test(migrations = "../../migrations")]
-async fn approve_requirement_revision_supersedes_old_and_compensates(pool: PgPool) {
+async fn approve_command_is_refused_via_executor(pool: PgPool) {
     let f = seed(&pool).await;
     let r = seed_requirement_with_current(&pool, f.project_id, f.human_id, "REQ-1").await;
     let ex = executor(&pool);
 
-    let receipt = ex
+    // 层 1（纵深防御）：红线补录 → AI 永远 RedLineBlocked（V-2 场景重放）。
+    let err = ex
         .execute(
             ProjectCommand::ApproveRequirementRevision {
                 project_id: f.project_id,
@@ -693,261 +696,51 @@ async fn approve_requirement_revision_supersedes_old_and_compensates(pool: PgPoo
             ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
         )
         .await
-        .expect("approve must execute");
-    assert_eq!(receipt.command_kind, "approve_requirement_revision");
-    assert_eq!(receipt.target_id, r.requirement_id);
-    assert_eq!(receipt.resulting_revision, 2, "requirement.row_revision 1 -> 2");
-
-    let (pointer, row_revision) = requirement_pointer(&pool, r.requirement_id).await;
-    assert_eq!(pointer, Some(r.draft_revision_id), "pointer must move to the new revision");
-    assert_eq!(row_revision, 2);
-    assert_eq!(revision_state(&pool, r.draft_revision_id).await, "approved");
-    assert_eq!(revision_state(&pool, r.current_revision_id).await, "superseded");
-
-    let spec: CompensationSpec = serde_json::from_value(
-        compensation_of(&pool, receipt.audit_id).await.expect("compensation must be stored"),
-    )
-    .expect("compensation spec roundtrips");
-    match spec {
-        CompensationSpec::Restore(entries) => {
-            assert_eq!(entries.len(), 3);
-            assert_eq!(
-                (entries[0].table, entries[0].target_id),
-                (CompensableTable::Requirement, r.requirement_id)
-            );
-            assert_eq!(
-                entries[0].fields,
-                json!({ "current_revision_id": r.current_revision_id, "row_revision": 2 })
-            );
-            assert_eq!(
-                (entries[1].table, entries[1].target_id),
-                (CompensableTable::RequirementRevision, r.draft_revision_id)
-            );
-            assert_eq!(entries[1].fields, json!({ "state": "draft", "version": 2 }));
-            assert_eq!(
-                (entries[2].table, entries[2].target_id),
-                (CompensableTable::RequirementRevision, r.current_revision_id)
-            );
-            assert_eq!(entries[2].fields, json!({ "state": "approved", "version": 1 }));
+        .expect_err("AI must never execute a confirmation");
+    match err {
+        CommandError::RedLineBlocked { command } => {
+            assert_eq!(command, "approve_requirement_revision")
         }
-        other => panic!("expected Restore compensation, got {other:?}"),
+        other => panic!("expected RedLineBlocked, got {other:?}"),
     }
 
-    ex.compensate(
-        receipt.audit_id,
-        "undo approval",
-        ctx(&f, ActorKind::Human, CommandSource::HumanIntervention {
-            intervention_id: Uuid::new_v4(),
-        }),
-    )
-    .await
-    .expect("compensation must restore the previous approval state");
-
-    let (pointer, row_revision) = requirement_pointer(&pool, r.requirement_id).await;
-    assert_eq!(pointer, Some(r.current_revision_id), "pointer must fall back");
-    assert_eq!(row_revision, 3);
-    assert_eq!(revision_state(&pool, r.draft_revision_id).await, "draft");
-    assert_eq!(revision_state(&pool, r.current_revision_id).await, "approved");
-}
-
-/// 10) Approving a revision that belongs to another requirement → Validation;
-///     nothing changes and nothing is audited.
-#[sqlx::test(migrations = "../../migrations")]
-async fn approve_requirement_revision_rejects_foreign_revision(pool: PgPool) {
-    let f = seed(&pool).await;
-    let r1 = seed_requirement_with_current(&pool, f.project_id, f.human_id, "REQ-1").await;
-    let (r2_id, r2_draft) = seed_requirement_without_current(&pool, f.project_id, f.human_id, "REQ-2").await;
-    let ex = executor(&pool);
-
+    // 层 2（唯一路径裁决）：人工经 RedlineApproval 抵达执行器 → 仍拒绝。
     let err = ex
         .execute(
             ProjectCommand::ApproveRequirementRevision {
                 project_id: f.project_id,
-                requirement_id: r1.requirement_id,
-                revision_id: r2_draft,
+                requirement_id: r.requirement_id,
+                revision_id: r.draft_revision_id,
             },
-            ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
+            ctx(
+                &f,
+                ActorKind::Human,
+                CommandSource::RedlineApproval { approval_id: Uuid::new_v4() },
+            ),
         )
         .await
-        .expect_err("a foreign revision must be rejected");
+        .expect_err("executor must refuse confirmations — REST is the only path");
     match err {
         CommandError::Validation(message) => {
-            assert!(message.contains("does not belong to requirement"), "got: {message}");
+            assert!(message.contains("confirmation is refused"), "got: {message}");
         }
         other => panic!("expected Validation, got {other:?}"),
     }
 
-    let (pointer, row_revision) = requirement_pointer(&pool, r1.requirement_id).await;
-    assert_eq!(pointer, Some(r1.current_revision_id), "rejected command must not move the pointer");
-    assert_eq!(row_revision, 1);
-    assert_eq!(revision_state(&pool, r2_draft).await, "draft");
-    assert!(audit_rows_for(&pool, r1.requirement_id).await.is_empty(), "rejected command must not audit");
-    assert!(audit_rows_for(&pool, r2_id).await.is_empty());
+    // 状态与审计双不动（DEF-02 V-2 / DEF-04 V-6 回归面）。
+    let (pointer, _row_revision) = requirement_pointer(&pool, r.requirement_id).await;
+    assert_eq!(
+        pointer,
+        Some(r.current_revision_id),
+        "refusal must not move the pointer"
+    );
+    assert_eq!(revision_state(&pool, r.draft_revision_id).await, "draft");
+    assert!(
+        audit_rows_for(&pool, r.requirement_id).await.is_empty(),
+        "refusal must not audit"
+    );
 }
 
-/// 11) First approval (no current revision yet): the compensation snapshot
-///     carries a JSON-null pointer and compensating writes the pointer back to
-///     SQL NULL.
-#[sqlx::test(migrations = "../../migrations")]
-async fn approve_first_revision_compensates_null_pointer(pool: PgPool) {
-    let f = seed(&pool).await;
-    let (requirement_id, draft_id) =
-        seed_requirement_without_current(&pool, f.project_id, f.human_id, "REQ-1").await;
-    let ex = executor(&pool);
-
-    let receipt = ex
-        .execute(
-            ProjectCommand::ApproveRequirementRevision {
-                project_id: f.project_id,
-                requirement_id,
-                revision_id: draft_id,
-            },
-            ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
-        )
-        .await
-        .expect("first approval must execute");
-    let (pointer, row_revision) = requirement_pointer(&pool, requirement_id).await;
-    assert_eq!(pointer, Some(draft_id));
-    assert_eq!(row_revision, 2);
-    assert_eq!(revision_state(&pool, draft_id).await, "approved");
-
-    let spec: CompensationSpec = serde_json::from_value(
-        compensation_of(&pool, receipt.audit_id).await.expect("compensation must be stored"),
-    )
-    .expect("compensation spec roundtrips");
-    match spec {
-        CompensationSpec::Restore(entries) => {
-            assert_eq!(entries.len(), 2, "no old revision to supersede on first approval");
-            assert_eq!(
-                entries[0].fields,
-                json!({ "current_revision_id": Value::Null, "row_revision": 2 })
-            );
-        }
-        other => panic!("expected Restore compensation, got {other:?}"),
-    }
-
-    ex.compensate(
-        receipt.audit_id,
-        "undo first approval",
-        ctx(&f, ActorKind::Human, CommandSource::HumanIntervention {
-            intervention_id: Uuid::new_v4(),
-        }),
-    )
-    .await
-    .expect("compensation must restore the null pointer");
-    let (pointer, row_revision) = requirement_pointer(&pool, requirement_id).await;
-    assert_eq!(pointer, None, "pointer must return to SQL NULL");
-    assert_eq!(row_revision, 3);
-    assert_eq!(revision_state(&pool, draft_id).await, "draft");
-}
-
-/// 12) AdjustMilestonePlan moves planned_at under the revision guard, stores a
-///     Restore snapshot of the old plan and compensates back to it; stale
-///     revisions conflict, and `new_planned_at: None` clears the plan.
-#[sqlx::test(migrations = "../../migrations")]
-async fn adjust_milestone_plan_updates_planned_at_and_compensates(pool: PgPool) {
-    let f = seed(&pool).await;
-    let old_plan: DateTime<Utc> = "2026-06-01T08:30:00Z".parse().unwrap();
-    let new_plan: DateTime<Utc> = "2026-07-01T09:00:00Z".parse().unwrap();
-    let milestone_id = seed_milestone_with_plan(&pool, f.project_id, old_plan).await;
-    let ex = executor(&pool);
-
-    let err = ex
-        .execute(
-            ProjectCommand::AdjustMilestonePlan {
-                project_id: f.project_id,
-                milestone_id,
-                new_planned_at: Some(new_plan),
-                expected_revision: 5,
-            },
-            ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
-        )
-        .await
-        .expect_err("stale revision must conflict");
-    match err {
-        CommandError::RevisionConflict { expected, actual } => assert_eq!((expected, actual), (5, 1)),
-        other => panic!("expected RevisionConflict, got {other:?}"),
-    }
-
-    let receipt = ex
-        .execute(
-            ProjectCommand::AdjustMilestonePlan {
-                project_id: f.project_id,
-                milestone_id,
-                new_planned_at: Some(new_plan),
-                expected_revision: 1,
-            },
-            ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
-        )
-        .await
-        .expect("adjust must execute");
-    assert_eq!(receipt.command_kind, "adjust_milestone_plan");
-    assert_eq!(receipt.resulting_revision, 2);
-
-    let row = sqlx::query("SELECT planned_at, revision FROM delivery.milestone WHERE id = $1")
-        .bind(milestone_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(row.get::<Option<DateTime<Utc>>, _>("planned_at"), Some(new_plan));
-    assert_eq!(row.get::<i64, _>("revision"), 2);
-
-    let spec: CompensationSpec = serde_json::from_value(
-        compensation_of(&pool, receipt.audit_id).await.expect("compensation must be stored"),
-    )
-    .expect("compensation spec roundtrips");
-    match spec {
-        CompensationSpec::Restore(entries) => {
-            assert_eq!(entries.len(), 1);
-            assert_eq!(
-                (entries[0].table, entries[0].target_id),
-                (CompensableTable::Milestone, milestone_id)
-            );
-            assert_eq!(
-                entries[0].fields,
-                json!({ "planned_at": old_plan, "revision": 2 })
-            );
-        }
-        other => panic!("expected Restore compensation, got {other:?}"),
-    }
-
-    ex.compensate(
-        receipt.audit_id,
-        "undo replan",
-        ctx(&f, ActorKind::Human, CommandSource::HumanIntervention {
-            intervention_id: Uuid::new_v4(),
-        }),
-    )
-    .await
-    .expect("compensation must restore the old plan");
-    let row = sqlx::query("SELECT planned_at, revision FROM delivery.milestone WHERE id = $1")
-        .bind(milestone_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(row.get::<Option<DateTime<Utc>>, _>("planned_at"), Some(old_plan));
-    assert_eq!(row.get::<i64, _>("revision"), 3);
-
-    // Clearing the plan is legal too: None stores SQL NULL.
-    ex.execute(
-        ProjectCommand::AdjustMilestonePlan {
-            project_id: f.project_id,
-            milestone_id,
-            new_planned_at: None,
-            expected_revision: 3,
-        },
-        ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
-    )
-    .await
-    .expect("clearing the plan must execute");
-    let planned: Option<DateTime<Utc>> =
-        sqlx::query_scalar("SELECT planned_at FROM delivery.milestone WHERE id = $1")
-            .bind(milestone_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(planned, None, "new_planned_at: None must store SQL NULL");
-}
 
 /// 13) Registry invariant: every command that has a handler and is not a red
 ///     line must declare a compensation command in its audit row. Two kinds are
@@ -1018,23 +811,24 @@ async fn test_every_auto_command_declares_compensation(pool: PgPool) {
                 );
             }
             "approve_requirement_revision" => {
+                // S02-I6-B（S02D-02 #3）：approve 类入红线——AI 永远 RedLineBlocked，
+                // 正式确认唯一路径 = REST 统一服务；此处验证纵深防御层。
                 let cmd = ProjectCommand::ApproveRequirementRevision {
                     project_id: f.project_id,
                     requirement_id: r.requirement_id,
                     revision_id: r.draft_revision_id,
                 };
-                assert!(!policy.is_redline(&cmd));
-                let receipt = ex
+                assert!(policy.is_redline(&cmd), "approve must be red-lined (S02D-02 #3)");
+                let err = ex
                     .execute(cmd, ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap))
                     .await
-                    .expect("approve_requirement_revision executes");
-                let spec: CompensationSpec = serde_json::from_value(
-                    compensation_of(&pool, receipt.audit_id)
-                        .await
-                        .unwrap_or_else(|| panic!("{kind}: non-redline command must declare a compensation")),
-                )
-                .expect("compensation spec roundtrips");
-                assert!(matches!(spec, CompensationSpec::Restore(_)));
+                    .expect_err("approve must never execute via the executor");
+                match err {
+                    CommandError::RedLineBlocked { command } => {
+                        assert_eq!(command, "approve_requirement_revision")
+                    }
+                    other => panic!("expected RedLineBlocked, got {other:?}"),
+                }
             }
             "adjust_milestone_plan" => {
                 let planned: DateTime<Utc> = "2026-08-01T00:00:00Z".parse().unwrap();

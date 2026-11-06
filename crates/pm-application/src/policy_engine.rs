@@ -39,6 +39,11 @@ escalate:                    # pre-execution human review; never evaluated for r
     - anomaly_baseline: true # M1: parses but never fires (no behavioral-baseline detector yet)
 
 red_lines:                   # pre-confirmation required, per role
+  # S02D-02（DEF-02 纵深防御，S02-I6-B）：确认类命令永不 auto-apply——正式确认
+  # 唯一合法路径 = REST/UI 统一服务（S02D-21 §7.1）；AI 提案一律 Escalate 待人工，
+  # 人工裁决也不得经执行器定稿（executor 无条件拒绝）。
+  - command: approve_requirement_revision
+    required_role: project_owner
   - command: release_version
     required_role: release_manager
   - command: external_commitment

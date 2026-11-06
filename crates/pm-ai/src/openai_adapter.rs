@@ -28,7 +28,7 @@ pub const SYSTEM_PROMPT: &str = r#"你是 AI-PM（AI 项目负责人）的分析
 只输出一个 JSON 对象，不要输出 markdown 代码块或任何多余文本。结构如下：
 {"summary": "<本次分析的总体结论，一到两句>", "findings": [{"skill": "<产生该发现的技能名，必须是 skills 列表之一>", "severity": "info" | "warning" | "critical", "description": "<发现的具体内容>", "evidence_refs": ["<支撑该发现的证据引用，如 ADR-008 / TASK-102，没有则为空数组>"]}], "proposals": [{"command": {"kind": "<命令类型>", "data": {<命令参数对象>}}, "rationale": "<提出该命令的理由>", "risk_level": "low" | "medium" | "high", "confidence": "low" | "medium" | "high", "evidence": ["<支撑该提案的证据引用>"]}]}
 
-command.kind 的合法取值：create_task、update_task_status、approve_requirement_revision、adjust_milestone_plan、sign_acceptance、change_policy、rollback_command。没有需要变更的就返回空 proposals 数组；证据不足时降低 confidence 并在 findings 中说明缺口，不要为了凑数而提案。
+command.kind 的合法取值：create_task、update_task_status、adjust_milestone_plan、sign_acceptance、change_policy、rollback_command。没有需要变更的就返回空 proposals 数组；证据不足时降低 confidence 并在 findings 中说明缺口，不要为了凑数而提案。
 
 你的技能职责：
 - requirement_analysis：分析客户原始需求、正式需求版本与关联任务，识别歧义、缺失、冲突与变更，产出候选需求与验收条件草案。

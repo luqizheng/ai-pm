@@ -7,5 +7,6 @@ async fn core_schema_ready(pool: sqlx::PgPool) {
     // customer / project / principal / project_member + principal_identity（0018）
     // + tenant / tenant_member（0019）+ tenant_agent（0020）
     // + project_initialization_operation（0031，S01 · I6-B）
-    assert_eq!(n, 9);
+    // + approver_grant（0040，S02-I6-A · O-6 裁决）
+    assert_eq!(n, 10);
 }

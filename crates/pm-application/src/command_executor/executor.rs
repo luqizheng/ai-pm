@@ -73,13 +73,8 @@ impl PgCommandExecutor {
                 expected_revision,
                 new_status,
             } => self.update_task_status(task_id, expected_revision, new_status, &ctx).await,
-            ProjectCommand::ApproveRequirementRevision {
-                project_id,
-                requirement_id,
-                revision_id,
-            } => {
-                self.approve_requirement_revision(project_id, requirement_id, revision_id, &ctx)
-                    .await
+            ProjectCommand::ApproveRequirementRevision { .. } => {
+                self.refuse_requirement_confirmation(&ctx).await
             }
             ProjectCommand::AdjustMilestonePlan {
                 project_id,
@@ -803,173 +798,22 @@ impl PgCommandExecutor {
         })
     }
 
-    /// ApproveRequirementRevision: lock the requirement row → lock and
-    /// ownership-check the target revision → supersede the currently approved
-    /// revision (when there is one and it is not the target) → approve the
-    /// target → move `current_revision_id` and bump `row_revision`. The
-    /// compensation restores the pointer plus `row_revision` and both
-    /// revisions' states; the pointer may be SQL NULL (first approval), which
-    /// the snapshot carries as a JSON null field.
-    async fn approve_requirement_revision(
+    /// ApproveRequirementRevision：**无条件拒绝**（S02-I6-B；S02D-02 #2/S02D-21）。
+    ///
+    /// 正式确认的唯一合法路径 = REST/UI 统一服务（`requirement::confirm_revision`，
+    /// 六要素 + CAS + 真人主体 + Confirmation 落账）；approval_request 不得复用为
+    /// 需求确认（§7.1）。AI 提案由红线拦入 pending 人工审批（S02D-02 #3），
+    /// 人工裁决也不得经执行器定稿——本拒绝是双入口收敛后的最后防线（DEF-02/DEF-04）。
+    async fn refuse_requirement_confirmation(
         &self,
-        project_id: ProjectId,
-        requirement_id: RequirementId,
-        revision_id: RevisionId,
         ctx: &ExecutionContext,
     ) -> Result<ExecutionReceipt, CommandError> {
-        if project_id != ctx.project_id {
-            return Err(CommandError::Validation(format!(
-                "command targets project {project_id} but the execution context is project {}",
-                ctx.project_id
-            )));
-        }
-        let mut tx = self.pool.begin().await.map_err(db_err)?;
-        let row = sqlx::query(
-            "SELECT current_revision_id, row_revision FROM delivery.requirement \
-             WHERE id = $1 AND project_id = $2 FOR UPDATE",
-        )
-        .bind(requirement_id)
-        .bind(ctx.project_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(db_err)?;
-        let (current_revision_id, row_revision) = match row {
-            Some(row) => (
-                row.get::<Option<Uuid>, _>("current_revision_id"),
-                row.get::<i64, _>("row_revision"),
-            ),
-            None => {
-                return Err(CommandError::Validation(format!(
-                    "requirement {requirement_id} not found in project {}",
-                    ctx.project_id
-                )))
-            }
-        };
-
-        // The target revision must exist and belong to this requirement (its
-        // FK (project_id, requirement_id) then also pins the project).
-        let rev = sqlx::query(
-            "SELECT state, version FROM delivery.requirement_revision \
-             WHERE id = $1 AND requirement_id = $2 FOR UPDATE",
-        )
-        .bind(revision_id)
-        .bind(requirement_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(db_err)?;
-        let (target_state, target_version) = match rev {
-            Some(row) => (
-                row.get::<String, _>("state"),
-                i64::from(row.get::<i32, _>("version")),
-            ),
-            None => {
-                return Err(CommandError::Validation(format!(
-                    "revision {revision_id} does not belong to requirement {requirement_id}"
-                )))
-            }
-        };
-
-        // Supersede the currently approved revision — unless the target already
-        // is the current one (re-approval), where there is nothing to supersede.
-        let mut superseded = None;
-        if let Some(old_id) = current_revision_id.filter(|old| *old != revision_id) {
-            let old = sqlx::query(
-                "SELECT state, version FROM delivery.requirement_revision \
-                 WHERE id = $1 AND requirement_id = $2 FOR UPDATE",
-            )
-            .bind(old_id)
-            .bind(requirement_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(db_err)?;
-            let (old_state, old_version) = match old {
-                Some(row) => (
-                    row.get::<String, _>("state"),
-                    i64::from(row.get::<i32, _>("version")),
-                ),
-                None => {
-                    return Err(CommandError::Validation(format!(
-                        "current revision {old_id} of requirement {requirement_id} not found"
-                    )))
-                }
-            };
-            sqlx::query("UPDATE delivery.requirement_revision SET state = 'superseded' WHERE id = $1")
-                .bind(old_id)
-                .execute(&mut *tx)
-                .await
-                .map_err(db_err)?;
-            superseded = Some((old_id, old_state, old_version));
-        }
-
-        sqlx::query(
-            "UPDATE delivery.requirement_revision SET state = 'approved', approved_by = $2 WHERE id = $1",
-        )
-        .bind(revision_id)
-        .bind(ctx.actor_id())
-        .execute(&mut *tx)
-        .await
-        .map_err(db_err)?;
-        sqlx::query(
-            "UPDATE delivery.requirement SET current_revision_id = $2, row_revision = row_revision + 1 WHERE id = $1",
-        )
-        .bind(requirement_id)
-        .bind(revision_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(db_err)?;
-        let resulting_revision = row_revision + 1;
-
-        let mut entries = vec![
-            SnapshotEntry {
-                table: CompensableTable::Requirement,
-                target_id: requirement_id,
-                fields: json!({
-                    "current_revision_id": current_revision_id,
-                    "row_revision": resulting_revision,
-                }),
-            },
-            SnapshotEntry {
-                table: CompensableTable::RequirementRevision,
-                target_id: revision_id,
-                fields: json!({ "state": target_state, "version": target_version }),
-            },
-        ];
-        if let Some((old_id, old_state, old_version)) = superseded {
-            entries.push(SnapshotEntry {
-                table: CompensableTable::RequirementRevision,
-                target_id: old_id,
-                fields: json!({ "state": old_state, "version": old_version }),
-            });
-        }
-        let compensation = CompensationSpec::Restore(entries);
-
-        let before = json!({
-            "current_revision_id": current_revision_id,
-            "row_revision": row_revision,
-        });
-        let after = json!({
-            "current_revision_id": revision_id,
-            "row_revision": resulting_revision,
-        });
-        let audit_id = insert_audit(
-            &mut tx,
-            ctx,
-            "approve_requirement_revision",
-            "requirement",
-            Some(requirement_id),
-            &before,
-            &after,
-            Some(&compensation),
-            audit_source(ctx),
-        )
-        .await?;
-        tx.commit().await.map_err(db_err)?;
-        Ok(ExecutionReceipt {
-            audit_id,
-            command_kind: "approve_requirement_revision",
-            target_id: requirement_id,
-            resulting_revision,
-        })
+        let _ = ctx;
+        Err(CommandError::Validation(
+            "requirement confirmation is refused via the command executor — the only path is \
+             POST /v1/pm/requirements/{id}/revisions/{rev}/confirm (unified service, S02D-21)"
+                .to_string(),
+        ))
     }
 
     /// AdjustMilestonePlan: lock the milestone row → revision guard → swap
