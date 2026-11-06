@@ -23,3 +23,5 @@ tsconfig.tsbuildinfo
 # Vditor 运行时资源（由 ../scripts/sync-vditor-assets.js 生成，勿手工维护）
 public/vditor/
 .tmp-vitest/
+# Playwright 临时产物（证据 HTML 报告输出到 ../test-case/evidence/s02-ui/，入库）
+test-results/
