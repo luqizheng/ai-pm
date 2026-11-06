@@ -37,6 +37,7 @@ pub mod project_member;
 pub mod read;
 pub mod requirement;
 pub mod requirement_projection;
+pub mod requirement_traceability;
 pub mod repo_access;
 pub mod repo_facts;
 pub mod repository;
@@ -103,7 +104,7 @@ pub use knowledge_reference::{
     AddReferenceRequest, ReferenceRow, add_reference, list_references,
 };
 pub use team_llm::{
-    CreateTeamProviderRequest, ReplaceCredentialRequest, ResolvedProvider, SetStatusRequest,
+    CreateTeamProviderRequest, ProjectAiPolicyRow, get_project_ai_policy, set_project_ai_policy, ReplaceCredentialRequest, ResolvedProvider, SetStatusRequest,
     TeamLlmError, TeamLlmProviderRow, TestResult, UpdateTeamProviderRequest, PROVIDER_TYPES,
     create_team_provider, delete_team_provider, list_team_providers, replace_team_credential,
     resolve_repo_call_config, set_team_provider_status, test_team_provider, update_team_provider,

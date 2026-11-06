@@ -20,6 +20,9 @@ use pm_application::requirement::{
     self, ConfirmRevisionRequest, CreateRequirementRequest, DraftRevisionRequest,
     LifecycleAction, RejectRevisionRequest,
 };
+use pm_application::requirement_traceability::{
+    self, LinkFindingRequest, LinkSourceInputRequest, RegisterSourceInputRequest,
+};
 
 /// 需求级端点公共前置：租户边界（越权/不存在一律 404）+ 项目成员可见性。
 async fn require_requirement_visible(
@@ -243,6 +246,130 @@ async fn lifecycle(
     Ok(Json(serde_json::json!({ "requirement": entry })))
 }
 
+// ────────────────────────────────────────── Source & Traceability（S02-I3）
+
+async fn register_source_input(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(project_id): Path<Uuid>,
+    Json(body): Json<RegisterSourceInputRequest>,
+) -> ApiResult<(axum::http::StatusCode, Json<serde_json::Value>)> {
+    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
+        .await?;
+    let entry = requirement_traceability::register_source_input(
+        &state.pool,
+        caller.tenant_id,
+        project_id,
+        body,
+        &caller.audit_actor(),
+    )
+    .await?;
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!({ "source_input": entry })),
+    ))
+}
+
+async fn list_requirement_sources(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(requirement_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_requirement_visible(&state, requirement_id, &caller).await?;
+    let items = requirement_traceability::list_requirement_sources(
+        &state.pool,
+        caller.tenant_id,
+        requirement_id,
+    )
+    .await?;
+    Ok(Json(items))
+}
+
+async fn link_source_input(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(requirement_id): Path<Uuid>,
+    Json(body): Json<LinkSourceInputRequest>,
+) -> ApiResult<(axum::http::StatusCode, Json<serde_json::Value>)> {
+    require_requirement_visible(&state, requirement_id, &caller).await?;
+    let entry = requirement_traceability::link_source_input(
+        &state.pool,
+        caller.tenant_id,
+        requirement_id,
+        body.input_id,
+        &caller.audit_actor(),
+    )
+    .await?;
+    Ok((axum::http::StatusCode::CREATED, Json(serde_json::json!(entry))))
+}
+
+async fn unlink_source_input(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path((requirement_id, input_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<axum::http::StatusCode> {
+    require_requirement_visible(&state, requirement_id, &caller).await?;
+    requirement_traceability::unlink_source_input(
+        &state.pool,
+        caller.tenant_id,
+        requirement_id,
+        input_id,
+        &caller.audit_actor(),
+    )
+    .await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+async fn list_requirement_findings(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(requirement_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_requirement_visible(&state, requirement_id, &caller).await?;
+    let items = requirement_traceability::list_requirement_findings(
+        &state.pool,
+        caller.tenant_id,
+        requirement_id,
+    )
+    .await?;
+    Ok(Json(items))
+}
+
+async fn link_finding(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(requirement_id): Path<Uuid>,
+    Json(body): Json<LinkFindingRequest>,
+) -> ApiResult<(axum::http::StatusCode, Json<serde_json::Value>)> {
+    require_requirement_visible(&state, requirement_id, &caller).await?;
+    let entry = requirement_traceability::link_finding(
+        &state.pool,
+        caller.tenant_id,
+        requirement_id,
+        body.finding_id,
+        &caller.audit_actor(),
+    )
+    .await?;
+    Ok((axum::http::StatusCode::CREATED, Json(serde_json::json!(entry))))
+}
+
+async fn unlink_finding(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path((requirement_id, finding_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<axum::http::StatusCode> {
+    require_requirement_visible(&state, requirement_id, &caller).await?;
+    requirement_traceability::unlink_finding(
+        &state.pool,
+        caller.tenant_id,
+        requirement_id,
+        finding_id,
+        &caller.audit_actor(),
+    )
+    .await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
 // ─────────────────────────────────────────────────────────────── 路由
 
 pub(crate) fn router() -> Router<AppState> {
@@ -283,5 +410,25 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/pm/requirements/{requirement_id}/archive",
             post(archive_requirement),
+        )
+        .route(
+            "/v1/pm/projects/{project_id}/source-inputs",
+            post(register_source_input),
+        )
+        .route(
+            "/v1/pm/requirements/{requirement_id}/source-inputs",
+            get(list_requirement_sources).post(link_source_input),
+        )
+        .route(
+            "/v1/pm/requirements/{requirement_id}/source-inputs/{input_id}",
+            axum::routing::delete(unlink_source_input),
+        )
+        .route(
+            "/v1/pm/requirements/{requirement_id}/findings",
+            get(list_requirement_findings).post(link_finding),
+        )
+        .route(
+            "/v1/pm/requirements/{requirement_id}/findings/{finding_id}",
+            axum::routing::delete(unlink_finding),
         )
 }

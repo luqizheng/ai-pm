@@ -184,7 +184,8 @@ impl LifecycleAction {
 // ─────────────────────────────────────────────────────────── 内部助手
 
 /// 真人主体校验（S02D-02 #2：AI 主体提交确认/治理类命令 → 拒绝，403 可观测）。
-async fn require_human(pool: &PgPool, actor: &AuditActor) -> Result<(), PmWriteError> {
+/// S02-I3 起供 `requirement_traceability` 复用（登记/关联同为真人命令，§7.4）。
+pub async fn require_human(pool: &PgPool, actor: &AuditActor) -> Result<(), PmWriteError> {
     let kind: Option<String> = sqlx::query_scalar("SELECT kind FROM core.principal WHERE id = $1")
         .bind(actor.principal_id)
         .fetch_optional(pool)
