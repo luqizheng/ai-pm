@@ -21,6 +21,3 @@ issuer = "superpowers-token-service"
 "audit-service"         = { host = "audit-service",        port = 8084 }
 "prue_backend"          = { host = "prue_backend",         port = 8087 }
 "file-service"          = { host = "file-service",         port = 8082 }
-# 2026-11-06：pm 业务与 iam 一致挂网关对外（routes/pm.router.toml）；
-# config-service 已随 lmms 538c65ad 移除（无真实消费方），egress 一并撤。
-"pm-api"                = { host = "pm-api",               port = 8090 }

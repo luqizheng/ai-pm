@@ -56,11 +56,6 @@ services:
       - --default-authentication-plugin=mysql_native_password
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
-      - --server-id=1
-      - --log-bin=mysql-bin
-      - --binlog-format=ROW
-      - --gtid-mode=ON
-      - --enforce-gtid-consistency=ON
     healthcheck:
       test:
         - CMD
@@ -129,7 +124,6 @@ volumes:
     name: infrastructure_rabbitmq_data
   postgres_data:
     name: infrastructure_postgres_data
-# 与 lmms 同名共享网络语义保留：external 预建（宿主上由 start-prod.sh 幂等创建）。
 networks:
   superpowers:
     external: true

@@ -51,11 +51,14 @@ docker-compose.yml              入口 include 四块（根）
 | 1 | `docker-compose-services.yml` | lmms 段 `build:` 块 → 已发布镜像引用（`${IMAGE_TAG_PG:-1.7.0-pg}`；api-gateway 用 `${IMAGE_TAG_GATEWAY:-1.7.0}`，无 `-pg` 后缀） | ai-pm 不构建 lmms 服务，直接消费 registry 镜像；**双变量而非上游单 IMAGE_TAG**——api-gateway 方言无关，全局单变量会把全部服务指到同一 tag（上游 dist 包的 IMAGE_TAG 覆盖对 PG 形态有同样缺陷） |
 | 2 | `docker-compose.ai-pm.yml`（本仓新建） | ai-pm 自有 6 服务 + `aipm_pg_data` 卷，独立文件被入口 include | 本仓自有；拆出后升级 lmms 命名文件不再需要重拼 ai-pm 服务段（2026-11-06 自 services.yml 拆回独立文件；更早的 `docker-compose-aipm.yml` 曾并入又拆出） |
 | 3 | `docker-compose.prod.yml` | lmms 业务段收口 + ai-pm 段（pm-api / aipm-bff 收口，aipm-web:8091 保留） | prod 入口：前端 aipm-web:8091 + 登录验证 api-gateway:3000 |
-| 4 | `config/nginx/nginx.conf.template` | `proxy_pass` 指向 `pm-api:8090`（原 api-gateway:3000）；canary 上游清单置空 | edge 后端是 pm-api；lmms 服务的 canary 分流属 lmms 侧 |
+| 4 | `observability/config/nginx/nginx.conf.template` | `proxy_pass` 指向 `pm-api:8090`（原 api-gateway:3000）；canary 上游清单置空 | edge 后端是 pm-api；lmms 服务的 canary 分流属 lmms 侧 |
 | 5 | `scripts/start-prod.sh` | ① 语义化 compose 版本门禁（上游正则误杀 v5.x、误放行 v2.10.3）② 必需变量 MYSQL_* → POSTGRES_* ③ env 三层加载 `.env-infra → .env → .env.prod` | 本机/WSL compose 是 v5.6.0；PG 形态默认库是 postgres；镜像版本/仓库与 lmms 栈内常量随 `.env-infra` 发布固化 |
 | 6 | `.env.prod.example` | `POSTGRES_*` 块上移到 `DATABASE_URL` 之前（修 source 展开顺序：原文件会展开成 `postgres://://`）；删 MySQL 块 | PG 形态；`source` 是顺序求值 |
 | 7 | `services/token-service/config/config.yaml`（仓根新建） | 上游 lmms 仓的 token-service 配置副本 | compose 的 `../../services/token-service/config:/app/config:ro` 是 bind mount——ai-pm 仓无该目录时 Docker 会建**空目录**遮住镜像内 baked config，服务启动即 fail（`token-service config missing required fields`）。上游无此问题（它在 lmms 仓内） |
 | 8 | `README.md` / `.env-infra`（本仓新建） | 本文档 + lmms 层固定配置（镜像仓库/版本、栈内常量） | 模板不带文档；`.env-infra` 为 ai-pm 侧消费约定（lmms 自身 `.env` 不拆） |
+| 9 | `infra/docker-compose-infra.yml` | postgres 发布宿主端口 `- ${POSTGRES_PORT:-5434}:5432`（上游模板 postgres 不发端口） | 宿主机工具直连 lmms coder 库 |
+| 10 | `observability/docker-compose-observability.yml` | 删 consul-template 服务与 `nginx_rendered` 卷（`config/nginx/consul-template.hcl` 文件保留） | canary 渲染产物在本栈无消费者（13e7363 死重删裁决；nginx sidecar 落地后再启用） |
+| 11 | 各组 compose 的 `volumes:` 声明 | 卷钉 `infrastructure_*`（上游模板用 `superpowers_*`） | 保 .10 现有数据卷续用——换钉会让现有卷被孤儿化、新空卷顶替 = 数据丢失；此差异曾漏登，2026-11-06 同步时靠 diff 审查兜住 |
 
 另：`scripts/deploy-remote.sh` 保持上游滚动重启流程，REQUIRED 清单已改为 PG 形态并随
 config-service 移除清理 `CONFIG_DEV_BT`；`staging-*.sh` / `sync-staging-images.sh` 上游原样
