@@ -245,6 +245,12 @@ pub async fn poll_active_runs(
           WHERE r.status IN ('claimed', 'running') \
             AND r.executor_session IS NOT NULL \
             AND r.lease_owner = $1 \
+            -- N-1 调度屏蔽（S1，0046 scheduling_shield）：人工等待/回复待投递/
+            -- 超时未处置的 Run 对四信号（①deadline ④fallback ②心跳 ③进展）
+            -- 一律不可见——ACP-427：等待窗口内 deadline 到期不得触发回收/重领，
+            -- Interaction 生命周期不受 poll 信号干扰。设计稿
+            -- docs/ui/s03-acp/smark-pm-s03-acp-slice-design-acp01-02-08-v1.md §4.2。
+            AND r.scheduling_shield = 'none' \
           ORDER BY r.id",
     )
     .bind(worker_id)

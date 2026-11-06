@@ -155,6 +155,13 @@ async fn main() {
                     tracing::warn!(error = %e, "poll_active_runs failed; backing off");
                 }
             }
+            // ACP 通信面（0046 / 设计稿 V1.1 §5.3）：人工等待超时判定（§8.2，
+            // Platform 持久化 deadline 后不重算；超时 ≠ 同意，链保持开放）。
+            match pm_application::interaction::interaction_timeout_sweep(&dispatch_pool).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!(timed_out = n, "interaction timeout sweep"),
+                Err(e) => tracing::warn!(error = %e, "interaction timeout sweep failed"),
+            }
             // I1-E 持久化清理账本（迁移 0035）：主路径——无时间窗、可重试、
             // 阈值后转人工（needs_human 持续可查询）。
             match pm_application::run_cleanup::run_cleanup_round(

@@ -30,11 +30,12 @@ use sqlx::PgPool;
 use std::sync::Arc;
 
 use crate::tools::{
-    self, ClaimTaskArgs, ConfirmDocumentProposalArgs, DiscoveryCompleteArgs, DiscoveryGetArgs,
-    DiscoverySubmitAnswersArgs, DiscoverySubmitFindingsArgs, DiscoverySubmitProposalArgs,
-    ListTasksArgs, ProposeDocumentArgs, ReportProgressArgs, RunContextArgs, SubmissionStatusArgs,
-    SubmitDocumentArgs, SubmitEvidenceArgs, SubmitResultArgs, SubmitTechnicalDesignArgs,
-    TaskContextArgs, ToolError, VetoDocumentRevisionArgs,
+    self, AckCommandArgs, ClaimTaskArgs, ConfirmDocumentProposalArgs, DiscoveryCompleteArgs,
+    DiscoveryGetArgs, DiscoverySubmitAnswersArgs, DiscoverySubmitFindingsArgs,
+    DiscoverySubmitProposalArgs, ListTasksArgs, PollCommandsArgs, ProposeDocumentArgs,
+    ReportConsumptionArgs, ReportInteractionArgs, ReportProgressArgs, RunContextArgs,
+    SubmissionStatusArgs, SubmitDocumentArgs, SubmitEvidenceArgs, SubmitResultArgs,
+    SubmitTechnicalDesignArgs, TaskContextArgs, ToolError, VetoDocumentRevisionArgs,
 };
 
 /// The MCP server over the shared pool: owns the rmcp tool router generated
@@ -373,6 +374,78 @@ impl PmMcpServer {
             async {
                 let caller = crate::caller::caller_from_ctx(&ctx)?;
                 tools::discovery_complete(&self.pool, args, &caller).await
+            }
+            .await,
+        )
+    }
+
+    #[tool(
+        name = "pm_report_interaction",
+        description = "Report interaction.required on behalf of a local agent (ACP Model B).                        Persists the intervention, moves the task to awaiting_decision, shields                        the run from auto-scheduling, and issues a terminate command in one                        transaction. Requires the lease token from pm_claim_task. This is NOT a                        human approval entry."
+    )]
+    pub async fn report_interaction(
+        &self,
+        Parameters(args): Parameters<ReportInteractionArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::report_interaction(&self.pool, args, &caller).await
+            }
+            .await,
+        )
+    }
+
+    #[tool(
+        name = "pm_poll_commands",
+        description = "Claim platform commands routed to one worker identity for one run                        (terminate / continue). Delivery uses a bounded claim lease; the same                        command id is re-deliverable to the same worker after crash recovery.                        Command-face identity: no lease token required."
+    )]
+    pub async fn poll_commands(
+        &self,
+        Parameters(args): Parameters<PollCommandsArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::poll_commands(&self.pool, args, &caller).await
+            }
+            .await,
+        )
+    }
+
+    #[tool(
+        name = "pm_ack_command",
+        description = "Acknowledge or fail one claimed command with a receipt. Strict ack                        criteria: terminate requires exit_outcome; continue requires                        session_created AND input_injected. A failed terminate freezes new                        session startup (human reply submission stays open)."
+    )]
+    pub async fn ack_command(
+        &self,
+        Parameters(args): Parameters<AckCommandArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::ack_command(&self.pool, args, &caller).await
+            }
+            .await,
+        )
+    }
+
+    #[tool(
+        name = "pm_report_consumption",
+        description = "Submit the consumption receipt for a delivered human reply                        (interaction.consumed). Requires evidence kinds                        initial_input_injected AND process_alive; insufficient evidence is                        rejected (receipts are never fabricated)."
+    )]
+    pub async fn report_consumption(
+        &self,
+        Parameters(args): Parameters<ReportConsumptionArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::report_consumption(&self.pool, args, &caller).await
             }
             .await,
         )

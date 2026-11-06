@@ -1404,3 +1404,231 @@ pub async fn discovery_complete(
         "status": session.status,
     }))
 }
+
+// ---------------------------------------------------------------------------
+// ACP 通信面（0046 / 设计稿 docs/ui/s03-acp/smark-pm-s03-acp-slice-design-
+// acp01-02-08-v1.md V1.1）：interaction.required 上报 / 命令查询面 / 消费回执。
+// 四工具为**新增**，现有四工具契约不动（工程纪律红线）。权限码见 pm-api
+// auth.rs：PM_MCP_AGENT_REPORT / PM_MCP_COMMAND（P1-5，不再挂 PM_MCP_READ
+// 语义；人类正式确认永不入码，A*）。
+// ---------------------------------------------------------------------------
+
+fn map_interaction_error(err: pm_application::interaction::InteractionError) -> ToolError {
+    use pm_application::interaction::InteractionError as E;
+    match err {
+        E::NotFound => ToolError::NotFound("task or run not found in this project".to_string()),
+        E::Conflict(message) => ToolError::Conflict(message),
+        E::Validation(message) => ToolError::InvalidRequest(message),
+        E::Transition(message) => ToolError::Conflict(message),
+        E::Db(e) => ToolError::Db(e),
+    }
+}
+
+fn map_command_face_error(err: pm_application::worker_command::CommandFaceError) -> ToolError {
+    use pm_application::worker_command::CommandFaceError as E;
+    match err {
+        E::NotFound => ToolError::NotFound("command or run not found".to_string()),
+        E::Validation(message) => ToolError::InvalidRequest(message),
+        E::Db(e) => ToolError::Db(e),
+    }
+}
+
+/// Arguments of `pm_report_interaction`：Agent 请求人工介入（N-2 闭合 · §1.3）。
+/// 执行面身份：租约三要素（T-032 双校验）；平台同事务落 Interaction +
+/// awaiting_decision + 调度保护 human_wait + terminate 命令（D-03）。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ReportInteractionArgs {
+    pub project_id: Uuid,
+    pub task_id: Uuid,
+    pub run_id: Uuid,
+    pub lease_token: String,
+    /// T-032 T2：执行权世代（与 token 双验证）。
+    pub lease_generation: i32,
+    /// Agent 侧幂等键（标记文件 schema `aipm.interaction.v1` 的 event_id）。
+    pub event_id: String,
+    /// needs_info / needs_decision / needs_approval / external_dependency。
+    pub reason: String,
+    pub title: String,
+    pub question: String,
+    /// 可选结构化选项（V1.3.1 §5.1 options）。
+    #[serde(default)]
+    pub options: Option<Value>,
+    #[serde(default = "default_true")]
+    pub required_response: bool,
+    /// 请求自带 checkpoint 引用（文件在 Workspace，Platform 只登记）。
+    #[serde(default)]
+    pub checkpoint_path: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Agent → 执行端 → Platform 的 interaction.required 上报（R-ACP-1 已裁：
+/// 标记文件侦测 + MCP 上报；人类回复仅 REST/UI，A* 边界不变）。
+pub async fn report_interaction(
+    pool: &PgPool,
+    args: ReportInteractionArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    let actor = authorize(pool, caller, args.project_id, ExecutorKind::DevAgent).await?;
+    pm_application::run_context::verify_lease(
+        pool,
+        args.project_id,
+        args.run_id,
+        &args.lease_token,
+        args.lease_generation,
+    )
+    .await
+    .map_err(map_lease_error_v2)?;
+    let input = pm_application::interaction::ReportInteractionInput {
+        project_id: args.project_id,
+        task_id: args.task_id,
+        run_id: args.run_id,
+        event_id: args.event_id,
+        reason: args.reason,
+        title: args.title,
+        question: args.question,
+        options: args.options,
+        required_response: args.required_response,
+        checkpoint_path: args.checkpoint_path,
+    };
+    let reported = pm_application::interaction::report_interaction(pool, &input, &actor)
+        .await
+        .map_err(map_interaction_error)?;
+    serde_json::to_value(reported).map_err(|e| ToolError::InvalidRequest(e.to_string()))
+}
+
+/// Arguments of `pm_poll_commands`：命令面领取（V1.1 §3.2/§3.3）。
+///
+/// 身份双轨（R-ACP-3 已裁）：命令面不要求 lease token——`worker_id` 即调用方
+/// 的命令路由身份（= 领取时 run.lease_owner 快照）。V1 过渡形态：凭据校验由
+/// `/mcp` 中间件承担（PM_MCP_COMMAND + 成员校验），`worker_id` 显式携带并经
+/// worker_id 绑定 + lease_generation 只读比对 fencing；V-05-1 Client Registry
+/// 落地后升级为 Client 凭据身份（迁移时仅替换身份来源，本工具契约不变）。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct PollCommandsArgs {
+    pub project_id: Uuid,
+    pub run_id: Uuid,
+    /// 命令路由身份（= 该 Run 领取时的 lease_owner 值）。
+    pub worker_id: String,
+}
+
+/// 领取命令：原子 issued/delivered(过期) → delivered + claim 租约；同 worker
+/// 可重领自己的活跃 claim（崩溃恢复幂等，ACP-437）。存在未回执 terminate 时
+/// continue 不予下发（情形 6 / §9.4 检查 8 操作化）。
+pub async fn poll_commands(
+    pool: &PgPool,
+    args: PollCommandsArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    ensure_member(pool, caller, args.project_id).await?;
+    let commands = pm_application::worker_command::poll_commands(
+        pool,
+        args.project_id,
+        args.run_id,
+        &args.worker_id,
+    )
+    .await
+    .map_err(map_command_face_error)?;
+    Ok(json!({ "commands": commands }))
+}
+
+/// Arguments of `pm_ack_command`：命令回执（acked/failed + receipt）。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct AckCommandArgs {
+    pub project_id: Uuid,
+    pub command_id: Uuid,
+    /// 命令路由身份（必须等于领取时的 worker_id）。
+    pub worker_id: String,
+    /// "acked" | "failed"。
+    pub outcome: String,
+    /// 回执载荷：terminate 需 `exit_outcome`；continue 需
+    /// `session_created` + `input_injected`（P1-1 三阶段，ACP-441）。
+    #[serde(default)]
+    pub receipt: Option<Value>,
+    /// outcome=failed 时的最终错误（有界重试耗尽，§3.5）。
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+/// 命令回执。acked 从严判据（R-ACP-5）；continue acked 释放调度保护
+/// start_wait → none（屏蔽释放点，§4.1）；terminate failed 冻结新 Session
+/// 启动 + Task 转阻塞（R-ACP-7：不冻结回复提交）。
+pub async fn ack_command(
+    pool: &PgPool,
+    args: AckCommandArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    ensure_member(pool, caller, args.project_id).await?;
+    let outcome = match args.outcome.as_str() {
+        "acked" => pm_application::worker_command::AckOutcome::Acked,
+        "failed" => pm_application::worker_command::AckOutcome::Failed,
+        other => {
+            return Err(ToolError::InvalidRequest(format!(
+                "outcome must be `acked` or `failed` (got `{other}`)"
+            )));
+        }
+    };
+    let result = pm_application::worker_command::ack_command(
+        pool,
+        args.project_id,
+        args.command_id,
+        &args.worker_id,
+        outcome,
+        args.receipt,
+        args.error,
+    )
+    .await
+    .map_err(map_command_face_error)?;
+    serde_json::to_value(result).map_err(|e| ToolError::InvalidRequest(e.to_string()))
+}
+
+/// Arguments of `pm_report_consumption`：消费回执（V1.1 §1.5 / N-6）。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ReportConsumptionArgs {
+    pub project_id: Uuid,
+    pub interaction_id: Uuid,
+    pub run_id: Uuid,
+    pub lease_token: String,
+    pub lease_generation: i32,
+    /// 回复投递 id（ACP-04 落 `interaction_response_delivery` 后必填）。
+    #[serde(default)]
+    pub delivery_id: Option<Uuid>,
+    /// 证据：`{"kinds": ["initial_input_injected", "process_alive"], ...}`。
+    /// 证据不足 → 拒绝（禁止伪造 CONSUMED，§8.6；ACP-434）。
+    pub evidence: Value,
+}
+
+/// 消费回执：responded → consumed、链关闭、等待 resolve、Task 回 Running。
+/// N-6：无法提供可靠证据的 Adapter 保持 RESPONDED 未消费合法稳态（不伪造）。
+pub async fn report_consumption(
+    pool: &PgPool,
+    args: ReportConsumptionArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    let actor = authorize(pool, caller, args.project_id, ExecutorKind::DevAgent).await?;
+    pm_application::run_context::verify_lease(
+        pool,
+        args.project_id,
+        args.run_id,
+        &args.lease_token,
+        args.lease_generation,
+    )
+    .await
+    .map_err(map_lease_error_v2)?;
+    pm_application::interaction::mark_consumed(
+        pool,
+        args.project_id,
+        args.interaction_id,
+        args.delivery_id,
+        &args.evidence,
+        &actor,
+    )
+    .await
+    .map_err(map_interaction_error)?;
+    Ok(json!({
+        "interaction_id": args.interaction_id,
+        "interaction_status": "consumed",
+    }))
+}

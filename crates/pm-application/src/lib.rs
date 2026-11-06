@@ -15,6 +15,7 @@ pub mod devenv;
 pub mod discovery;
 pub mod git_access;
 pub mod ingestion;
+pub mod interaction;
 pub mod knowledge;
 pub mod knowledge_index;
 pub mod knowledge_indexer;
@@ -51,6 +52,7 @@ pub mod run_executor;
 pub mod secret;
 pub mod supervision;
 pub mod task_dependency;
+pub mod worker_command;
 
 pub use acceptance_overview::{
     AcceptanceBadge, AcceptanceCounts, AcceptanceOverview, AcceptanceTask, ReviewStatus,
