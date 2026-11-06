@@ -1,5 +1,10 @@
 # AI R&D Workspace — 高保真设计系统 V1.0（供稿记录）
 
+> **⚠️ 已废弃（2026-11-06）**
+> 本设计系统（V1.0）已被 [`docs/design/pm-ai-ui-design-system-v2.md`](design/pm-ai-ui-design-system-v2.md)（**Slate & Muted Teal**）取代。
+> 现行唯一视觉权威 = `ai-frontend/src/styles/tokens.css`（V2 色系已落地并过契约测试）。
+> 本文颜色定义（含紫色品牌强调色，V2 明令废止）**不再生效**，仅作历史供稿记录保留。
+
 > **记录说明**
 > - 记录日期：2026-10-31
 > - 性质：用户直接供稿的高保真设计规范，按原文记录，随供稿继续增补；分析须待用户明示「分析」后才进行

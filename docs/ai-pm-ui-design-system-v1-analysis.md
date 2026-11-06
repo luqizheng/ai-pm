@@ -1,5 +1,8 @@
 # AI-PM UI 设计系统 V1.0 — 分析
 
+> **⚠️ 已废弃（2026-11-06）**
+> 分析对象 [ai-pm-ui-design-system-v1.md](ai-pm-ui-design-system-v1.md) 已被 [`docs/design/pm-ai-ui-design-system-v2.md`](design/pm-ai-ui-design-system-v2.md)（Slate & Muted Teal）取代，本分析结论随之失效，仅作历史评审记录保留。
+
 > 分析对象：[ai-pm-ui-design-system-v1.md](ai-pm-ui-design-system-v1.md)（用户供稿记录，一~八章）
 > 触发：用户 2026-10-31 明示「分析」；供货阶段未做任何评审，本篇为首次评审输出
 > 事实核查基础：ai-pm-web/frontend 实仓（package.json、src 结构）+ ai-pm 既有设计稿

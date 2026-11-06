@@ -4,7 +4,9 @@
 旧 PRISM 壳 `src/shell/` 与 AI Workspace `src/workspace/` 已整体移除，页面按本文规范**全部重建**）。
 
 **本文档是唯一权威规范：后续所有前端设计与实现工作，都必须以 §一「Frontend Foundation Design」为基准。**
-配套：高保真设计系统 V1.0 详见 `../docs/ui/ai-pm-ui-design-system-v1.md`。
+配套：视觉基线 = PM-AI UI 设计系统 V2（Slate & Muted Teal），详见
+`../docs/design/pm-ai-ui-design-system-v2.md`；高保真设计系统 V1.0
+（`../docs/ai-pm-ui-design-system-v1.md`）**已废弃**，仅作历史记录，颜色定义不再生效。
 
 > **当前状态（2026-11-04）**：UI 冻结已解除；**应用壳骨架已落地**——
 > 规范源 = Figma 组件库 `hNlGqLEMQpOVCZ0o5u3DkT`（node 13:37296，7 族 41 组）
