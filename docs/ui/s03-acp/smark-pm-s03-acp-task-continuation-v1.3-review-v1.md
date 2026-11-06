@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 评审对象 | `docs/ui/smark-pm-s03-acp-task-continuation-v1.3.md`（S03-ACP V1.3 正式设计方案 — Task-Based Continuation，专家讨论稿整理转录稿） |
+| 评审对象 | `docs/ui/s03-acp/smark-pm-s03-acp-task-continuation-v1.3.md`（S03-ACP V1.3 正式设计方案 — Task-Based Continuation，专家讨论稿整理转录稿） |
 | 评审性质 | 静态架构评审 + 代码事实核验 |
 | 代码基线 | ai-pm master @ db466ab（2026-11-06） |
 | 评审方法 | 文档内部一致性核对 + 对照 migrations/crates 实际实现逐条核验 |
