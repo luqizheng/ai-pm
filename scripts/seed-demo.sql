@@ -85,16 +85,16 @@ SELECT pi.tenant_id, p.id, 'owner'
 ON CONFLICT (tenant_id, principal_id) DO NOTHING;
 
 -- 3) 需求与修订（requirement 指针留空先插 → 修订 → 回填，绕开循环 FK）--------
-INSERT INTO delivery.requirement (id, tenant_id, project_id, code, title, status, current_revision_id, row_revision, created_at) VALUES
+INSERT INTO delivery.requirement (id, tenant_id, project_id, code, title, current_revision_id, row_revision, created_at) VALUES
   ('66666666-6666-6666-6666-666666666661',
    (SELECT id FROM core.tenant WHERE provider = 'lmms' AND external_key = '1'),
-   '22222222-2222-2222-2222-222222222222', 'REQ-101', '登录会话与刷新',  'draft', NULL, 1, now() - interval '20 days'),
+   '22222222-2222-2222-2222-222222222222', 'REQ-101', '登录会话与刷新', NULL, 1, now() - interval '20 days'),
   ('66666666-6666-6666-6666-666666666662',
    (SELECT id FROM core.tenant WHERE provider = 'lmms' AND external_key = '1'),
-   '22222222-2222-2222-2222-222222222222', 'REQ-102', '任务看板与流转',  'draft', NULL, 1, now() - interval '15 days'),
+   '22222222-2222-2222-2222-222222222222', 'REQ-102', '任务看板与流转', NULL, 1, now() - interval '15 days'),
   ('66666666-6666-6666-6666-666666666663',
    (SELECT id FROM core.tenant WHERE provider = 'lmms' AND external_key = '1'),
-   '22222222-2222-2222-2222-222222222222', 'REQ-103', '审批红线确认',    'draft', NULL, 1, now() - interval '10 days')
+   '22222222-2222-2222-2222-222222222222', 'REQ-103', '审批红线确认', NULL, 1, now() - interval '10 days')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO delivery.requirement_revision (id, tenant_id, requirement_id, project_id, version, content, state, content_hash, created_by, approved_by, created_at) VALUES
@@ -189,7 +189,7 @@ INSERT INTO governance.audit_log (id, tenant_id, project_id, actor_id, action, t
 ON CONFLICT DO NOTHING;
 
 -- 回填 REQ-101 定稿指针（绕开 requirement↔revision 循环 FK）
-UPDATE delivery.requirement SET current_revision_id = '77777777-7777-7777-7777-777777777712', status = 'approved', row_revision = 2
+UPDATE delivery.requirement SET current_revision_id = '77777777-7777-7777-7777-777777777712', lifecycle_status = 'active', row_revision = 2
 WHERE id = '66666666-6666-6666-6666-666666666661' AND current_revision_id IS NULL;
 
 COMMIT;
