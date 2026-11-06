@@ -9,6 +9,7 @@
 |---|---|---|---|
 | 0001–0021 | `migrations/0001_core.sql` … `0021_task_dependency.sql` | 既有 | 已应用 |
 | 0041 | `0041_team_llm_provider.sql` | Team LLM Provider Management Phase 1（DEC-LLM-001~004；R-LLM-01/02 修复） | 已应用（2026-11-06） |
+| 0044 | `0044_team_onboarding.sql` | Team Onboarding（Team≡tenant 扩展：slug/description + 邀请三表；feat/team-onboarding worktree） | 已应用（2026-11-06；0043 由并行会话实施中，合并前须对账重编号） |
 | 0022 | `0022_delivery_manifest.sql` | T-041（D4） | 已应用（2026-11-02） |
 | 0023 | `0023_run_executor_hardening.sql` | T-032 | 已应用 |
 | 0024 | `0024_knowledge_section_index.sql` | T-060（知识索引 V2） | 已应用（2026-11-02） |
