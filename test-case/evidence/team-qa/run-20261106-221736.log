@@ -1,0 +1,119 @@
+[22:17:37] PRECHECK FAIL TEAM-QA-DEF-01: duplicate migration versions: 0044 
+[22:17:37] shim mode: export HEAD + working-tree test files to /d/kudi-project/templates/.team-qa-shim (repo untouched)
+[22:17:39] shim: 0044_s02_i3_source_traceability.sql -> 0045 (QA copy only)
+[22:17:39] L1 backend: cargo test (team_onboarding, team_onboarding_qa, tenant_members, project_members)
+test cannot_revoke_project_owner ... ok
+test cross_tenant_project_is_not_found ... ok
+test grant_rejects_agent_principal ... ok
+test plain_project_member_cannot_grant ... ok
+test tenant_removal_cascades_project_memberships ... ok
+test revoke_takes_effect_immediately ... ok
+test concurrent_grants_produce_single_row ... ok
+test data_level_constraints_hold ... ok
+test duplicate_grant_keeps_single_row ... ok
+test tenant_removal_racing_grant_has_single_final_state ... ok
+test tenant_removal_blocked_by_project_ownership ... ok
+test grant_makes_member_able_to_see_project ... ok
+test grant_requires_tenant_membership ... ok
+test outsider_cannot_see_project_members ... ok
+test owner_transfer_moves_ownership ... ok
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.28s
+test invitation_email_mismatch_rejected ... ok
+test invitation_full_lifecycle ... ok
+test dissolve_cascades_and_revives_on_reclaim ... ok
+test dissolve_is_owner_exclusive ... ok
+test create_team_rejects_invalid_slug_and_name ... ok
+test fresh_principal_is_onboarding_required ... ok
+test invitation_link_quota_and_idempotency ... ok
+test revoked_link_rejected ... ok
+test create_team_claims_tenant_and_creator_becomes_owner ... ok
+test revoked_invitation_rejected ... ok
+test member_is_readonly_on_team_admin_surface ... ok
+test create_team_rejects_duplicate_slug_across_tenants ... ok
+test invitation_expiry_is_lazy_and_rejected ... ok
+test cross_tenant_access_is_404_and_accept_is_403 ... ok
+test create_team_rejected_when_tenant_already_governed ... ok
+test team_profile_update_and_audit_rows ... ok
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.53s
+test qa_b02_14_already_member_response_role_reflects_actual_role ... ignored, 待裁决 OBS：already_member 响应 role 回显邀请单角色而非实际角色
+test qa_b02_18_admin_cannot_invite_admin ... ignored, 待裁决：admin 经邀请授予 admin 与直接授权口径不一致
+test qa_b02_19_expired_reaccept_still_reports_expired ... ignored, 待裁决：EXPIRED 二次接受返回 invitation_already_accepted
+test qa_b02_11_unknown_token_is_404 ... ok
+test qa_b03_12_owner_redeeming_link_keeps_owner ... ok
+test qa_b01_08_name_and_slug_boundaries ... ok
+test qa_b03_08_link_expiry_is_lazy ... ok
+test qa_b03_11_cross_tenant_link_redeem_is_403 ... ok
+test qa_b02_13_already_member_accept_does_not_change_role ... ok
+test qa_b04_01_admin_matrix ... ok
+test qa_b02_16_revoke_guards ... ok
+test qa_b03_06_concurrent_redeem_never_exceeds_quota ... ok
+test qa_b02_12_owner_invites_admin ... ok
+test qa_b02_15_suspended_team_rejects_accept ... ok
+test qa_b02_10_token_hashed_and_default_ttl ... ok
+test qa_b02_17_concurrent_accept_same_invitation ... ok
+test qa_b01_07_concurrent_claim_has_exactly_one_winner ... ok
+test qa_b04_02_member_matrix ... ok
+test qa_b03_07_link_validation ... ok
+test qa_b01_09_create_team_requires_bearer ... ok
+test qa_b03_09_unlimited_link_and_preview ... ok
+test qa_b03_10_link_revoke_guards ... ok
+test qa_b02_09_invalid_email_rejected ... ok
+test qa_b05_02_removed_member_loses_team_visibility ... FAILED
+test qa_b05_03_removed_member_me_is_consistent ... FAILED
+test qa_b04_03_inactive_principal_limited_to_self_service ... ok
+test qa_b06_03_dissolve_foreign_tenant_is_404 ... ok
+test qa_b05_01_sole_owner_cannot_remove_self ... ok
+test qa_b06_01_dissolve_kills_outstanding_tokens ... ok
+test qa_b07_01_cross_tenant_team_surface_is_404 ... ok
+test qa_b06_02_reclaim_reuses_same_slug ... ok
+test qa_b08_01_me_contract_after_joining_by_link ... ok
+test qa_b08_02_deactivated_member_returns_to_onboarding ... ok
+thread 'qa_b05_02_removed_member_loses_team_visibility' (17604) panicked at apps\pm-api\tests\team_onboarding_qa.rs:700:5:
+thread 'qa_b05_03_removed_member_me_is_consistent' (40728) panicked at apps\pm-api\tests\team_onboarding_qa.rs:714:5:
+test result: FAILED. 28 passed; 2 failed; 3 ignored; 0 measured; 0 filtered out; finished in 14.24s
+test rv4_member_cannot_touch_member_management ... ok
+test rv8_audit_failure_rolls_the_role_change_back ... ok
+test rv5_nobody_but_owner_transfer_creates_an_owner ... ok
+test rv1_rv2_admin_demoted_to_member_loses_access_on_the_same_jwt ... ok
+test rv3_removed_member_is_rejected_on_the_same_jwt ... ok
+test tn5_admin_cannot_transfer_ownership ... ok
+test rv10_token_roles_alone_never_grant_tenant_admin ... ok
+test rv1b_admin_can_demote_another_admin_but_cannot_promote_back ... ok
+test rv7_cross_tenant_member_calls_are_404 ... ok
+test tn4_owner_transfer_swaps_roles_atomically_and_audits_twice ... ok
+test rv6_the_last_owner_cannot_be_demoted_or_removed ... ok
+test rv9_concurrent_owner_demotion_never_reaches_zero_owners ... ok
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.89s
+[22:18:21] L1 backend: FAILED
+[22:18:21] L1 pending-decision probes (--ignored; failures here document current behaviour)
+test qa_b02_14_already_member_response_role_reflects_actual_role ... FAILED
+test qa_b02_18_admin_cannot_invite_admin ... FAILED
+test qa_b02_19_expired_reaccept_still_reports_expired ... FAILED
+  left: String("admin")
+ right: String("member")
+  left: 201
+ right: 403
+  left: String("invitation_already_accepted")
+ right: String("invitation_expired")
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 30 filtered out; finished in 4.51s
+[22:18:31] L2 e2e: build pm-api (shim)
+325 | fn knowledge_db(e: sqlx::Error) -> PmWriteError {
+    |    ^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+[22:18:36] L2 e2e: playwright (playwright.team.config.ts)
+  -  20 e2e\team-onboarding.spec.ts:319:3 › Team QA · 待裁决 › B09-18 未入团用户深链 /dashboard → 应被引导到 /onboarding
+    Error: expect(locator).toHaveValue(expected) failed
+    ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--9453f-B09-19-链接页「默认角色」字段显示-MEMBER\test-failed-1.png
+    Error: expect(locator).toContainText(expected) failed
+    ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--4d4fb-链进入邀请页-→-仍能发出邀请（团队上下文须自行加载）\test-failed-1.png
+    Error: expect(locator).toHaveAttribute(expected) failed
+    ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--e3b08-与邀请不符-→-emailMismatch，后端未激活\test-failed-1.png
+    Error: expect(locator).toHaveAttribute(expected) failed
+    ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·-接受邀请-B09-10-跨租户接受-→-tenantMismatch\test-failed-1.png
+  4 failed
+  1 skipped
+  15 passed (2.1m)
+[22:20:44] L2 e2e: FAILED
+[22:20:44] done: FAILURES (log: /d/kudi-project/templates/ai-pm/test-case/evidence/team-qa/run-20261106-221736.log)

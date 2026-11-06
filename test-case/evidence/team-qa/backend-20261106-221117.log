@@ -1,0 +1,129 @@
+   Compiling pm-api v0.1.0 (D:\kudi-project\templates\ai-pm\apps\pm-api)
+warning: function `knowledge_db` is never used
+   --> crates\pm-application\src\requirement_projection.rs:325:4
+    |
+325 | fn knowledge_db(e: sqlx::Error) -> PmWriteError {
+    |    ^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `pm-application` (lib) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 40.56s
+     Running tests\project_members.rs (target\debug\deps\project_members-85915f2f1b28c6ca.exe)
+
+running 15 tests
+test tenant_removal_cascades_project_memberships ... FAILED
+test outsider_cannot_see_project_members ... FAILED
+test duplicate_grant_keeps_single_row ... FAILED
+test concurrent_grants_produce_single_row ... FAILED
+test tenant_removal_blocked_by_project_ownership ... FAILED
+test grant_requires_tenant_membership ... FAILED
+test tenant_removal_racing_grant_has_single_final_state ... FAILED
+test cross_tenant_project_is_not_found ... FAILED
+test data_level_constraints_hold ... FAILED
+test grant_makes_member_able_to_see_project ... FAILED
+test grant_rejects_agent_principal ... FAILED
+test plain_project_member_cannot_grant ... FAILED
+test revoke_takes_effect_immediately ... FAILED
+test cannot_revoke_project_owner ... FAILED
+test owner_transfer_moves_ownership ... FAILED
+
+failures:
+
+---- tenant_removal_cascades_project_memberships stdout ----
+
+thread 'tenant_removal_cascades_project_memberships' (20444) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- outsider_cannot_see_project_members stdout ----
+
+thread 'outsider_cannot_see_project_members' (28612) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+
+---- duplicate_grant_keeps_single_row stdout ----
+
+thread 'duplicate_grant_keeps_single_row' (18704) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+
+---- concurrent_grants_produce_single_row stdout ----
+
+thread 'concurrent_grants_produce_single_row' (19264) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+
+---- tenant_removal_blocked_by_project_ownership stdout ----
+
+thread 'tenant_removal_blocked_by_project_ownership' (25664) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+
+---- grant_requires_tenant_membership stdout ----
+
+thread 'grant_requires_tenant_membership' (31572) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+
+---- tenant_removal_racing_grant_has_single_final_state stdout ----
+
+thread 'tenant_removal_racing_grant_has_single_final_state' (35956) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+
+---- cross_tenant_project_is_not_found stdout ----
+
+thread 'cross_tenant_project_is_not_found' (20236) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+
+---- data_level_constraints_hold stdout ----
+
+thread 'data_level_constraints_hold' (35616) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+
+---- grant_makes_member_able_to_see_project stdout ----
+
+thread 'grant_makes_member_able_to_see_project' (36340) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+
+---- grant_rejects_agent_principal stdout ----
+
+thread 'grant_rejects_agent_principal' (19392) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+
+---- plain_project_member_cannot_grant stdout ----
+
+thread 'plain_project_member_cannot_grant' (10772) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+
+---- revoke_takes_effect_immediately stdout ----
+
+thread 'revoke_takes_effect_immediately' (35632) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+
+---- cannot_revoke_project_owner stdout ----
+
+thread 'cannot_revoke_project_owner' (30216) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+
+---- owner_transfer_moves_ownership stdout ----
+
+thread 'owner_transfer_moves_ownership' (10912) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+failed to apply migrations: Execute(Database(PgDatabaseError { severity: Error, code: "23505", message: "duplicate key value violates unique constraint \"_sqlx_migrations_pkey\"", detail: Some("Key (version)=(44) already exists."), hint: None, position: None, where: None, schema: Some("public"), table: Some("_sqlx_migrations"), column: None, data_type: None, constraint: Some("_sqlx_migrations_pkey"), file: Some("nbtinsert.c"), line: Some(666), routine: Some("_bt_check_unique") }))
+
+
+failures:
+    cannot_revoke_project_owner
+    concurrent_grants_produce_single_row
+    cross_tenant_project_is_not_found
+    data_level_constraints_hold
+    duplicate_grant_keeps_single_row
+    grant_makes_member_able_to_see_project
+    grant_rejects_agent_principal
+    grant_requires_tenant_membership
+    outsider_cannot_see_project_members
+    owner_transfer_moves_ownership
+    plain_project_member_cannot_grant
+    revoke_takes_effect_immediately
+    tenant_removal_blocked_by_project_ownership
+    tenant_removal_cascades_project_memberships
+    tenant_removal_racing_grant_has_single_final_state
+
+test result: FAILED. 0 passed; 15 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.82s
+
+error: test failed, to rerun pass `-p pm-api --test project_members`

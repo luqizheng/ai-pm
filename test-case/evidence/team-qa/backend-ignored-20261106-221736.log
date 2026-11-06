@@ -1,0 +1,51 @@
+   Compiling pm-api v0.1.0 (D:\kudi-project\templates\.team-qa-shim\apps\pm-api)
+warning: function `knowledge_db` is never used
+   --> crates\pm-application\src\requirement_projection.rs:325:4
+    |
+325 | fn knowledge_db(e: sqlx::Error) -> PmWriteError {
+    |    ^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `pm-application` (lib) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.54s
+     Running tests\team_onboarding_qa.rs (D:/kudi-project/templates/ai-pm/target\debug\deps\team_onboarding_qa-7279f6f996cf2188.exe)
+
+running 3 tests
+test qa_b02_14_already_member_response_role_reflects_actual_role ... FAILED
+test qa_b02_18_admin_cannot_invite_admin ... FAILED
+test qa_b02_19_expired_reaccept_still_reports_expired ... FAILED
+
+failures:
+
+---- qa_b02_14_already_member_response_role_reflects_actual_role stdout ----
+
+thread 'qa_b02_14_already_member_response_role_reflects_actual_role' (26096) panicked at apps\pm-api\tests\team_onboarding_qa.rs:335:5:
+assertion `left == right` failed: {"outcome":"already_member","role":"admin","team_id":"f3469991-302b-4720-ba4e-18b186b631c4","team_name":"lmms:1"}
+  left: String("admin")
+ right: String("member")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- qa_b02_18_admin_cannot_invite_admin stdout ----
+
+thread 'qa_b02_18_admin_cannot_invite_admin' (37284) panicked at apps\pm-api\tests\team_onboarding_qa.rs:410:5:
+assertion `left == right` failed: {"accept_path":"/invitation/accept?token=ebf710afb21c104c2c46d83528736769df25cf57dcba5a62ad75e00c5dc3e724&type=invite","expires_at":"2026-11-13T14:18:31.592006400Z","id":"3060caae-110c-40a4-915e-ca831ce9a7aa","token":"ebf710afb21c104c2c46d83528736769df25cf57dcba5a62ad75e00c5dc3e724"}
+  left: 201
+ right: 403
+
+---- qa_b02_19_expired_reaccept_still_reports_expired stdout ----
+
+thread 'qa_b02_19_expired_reaccept_still_reports_expired' (2480) panicked at apps\pm-api\tests\team_onboarding_qa.rs:432:5:
+assertion `left == right` failed: {"message":"invitation_already_accepted"}
+  left: String("invitation_already_accepted")
+ right: String("invitation_expired")
+
+
+failures:
+    qa_b02_14_already_member_response_role_reflects_actual_role
+    qa_b02_18_admin_cannot_invite_admin
+    qa_b02_19_expired_reaccept_still_reports_expired
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 30 filtered out; finished in 4.51s
+
+error: test failed, to rerun pass `-p pm-api --test team_onboarding_qa`

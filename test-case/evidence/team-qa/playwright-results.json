@@ -1,0 +1,1030 @@
+{
+  "config": {
+    "argv": [
+      "C:\\nvm4w\\nodejs\\node.exe",
+      "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\node_modules\\@playwright\\test\\cli.js",
+      "test",
+      "-c",
+      "playwright.team.config.ts"
+    ],
+    "configFile": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\playwright.team.config.ts",
+    "rootDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team\\global-setup.ts",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "D:/kudi-project/templates/ai-pm/test-case/evidence/team-qa/playwright-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "team-onboarding.spec.ts"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\team-qa\\playwright-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "name": "",
+        "testDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
+        "snapshotDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
+        "testIgnore": [],
+        "testMatch": "team-onboarding.spec.ts",
+        "timeout": 60000,
+        "use": {
+          "baseURL": "http://localhost:8850",
+          "channel": "msedge",
+          "headless": true,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "locale": "zh-CN",
+          "screenshot": "only-on-failure",
+          "trace": "retain-on-failure"
+        },
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": ""
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "../test-case/evidence/team-qa/playwright-results.json"
+        }
+      ],
+      [
+        "html",
+        {
+          "outputFolder": "../test-case/evidence/team-qa/playwright-report",
+          "open": "never"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "default",
+    "updateSourceMethod": "patch",
+    "version": "1.65.0",
+    "workers": 1,
+    "webServer": {
+      "command": "pnpm exec vite --port 8850 --strictPort",
+      "url": "http://localhost:8850",
+      "reuseExistingServer": false,
+      "timeout": 180000,
+      "env": {
+        "PM_API_URL": "http://127.0.0.1:18490",
+        "VITE_USE_MOCK": "0",
+        "VITE_PORT": "8850"
+      }
+    }
+  },
+  "suites": [
+    {
+      "title": "team-onboarding.spec.ts",
+      "file": "team-onboarding.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Team QA · Onboarding 流程",
+          "file": "team-onboarding.spec.ts",
+          "line": 37,
+          "column": 6,
+          "specs": [
+            {
+              "title": "B09-01 首登无团队 → 登录中转页分流到 /onboarding",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4535,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:18:44.403Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-bda30e5b234feebd97a2",
+              "file": "team-onboarding.spec.ts",
+              "line": 38,
+              "column": 3
+            },
+            {
+              "title": "B09-02 建团 → 邀请页横幅；后端创建者=owner、团队档案落库",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2931,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:18:49.242Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-788078eb29c4fe27cee6",
+              "file": "team-onboarding.spec.ts",
+              "line": 46,
+              "column": 3
+            },
+            {
+              "title": "B09-03 slug 被占用 → 页面显示错误且不跳转",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2848,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:18:52.197Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-c2d9455d6d5628c4feeb",
+              "file": "team-onboarding.spec.ts",
+              "line": 66,
+              "column": 3
+            },
+            {
+              "title": "B09-04 建团后连续流程：邀请成员 → 生成一次性链接；后端 PENDING 邀请落库",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2937,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:18:55.080Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-7ec66dc7f4016f8e8971",
+              "file": "team-onboarding.spec.ts",
+              "line": 79,
+              "column": 3
+            },
+            {
+              "title": "B09-05 建团后连续流程：跳过邀请 → 链接页生成链接 → 完成进入团队首页",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3065,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:18:58.048Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-13daa696f8c97a947a64",
+              "file": "team-onboarding.spec.ts",
+              "line": 102,
+              "column": 3
+            },
+            {
+              "title": "B09-19 链接页「默认角色」字段显示 MEMBER",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 17530,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('onboarding-link-role').locator('xpath=descendant-or-self::*[self::input or self::textarea]').first()\nExpected: \u001b[32m\"MEMBER\"\u001b[39m\nReceived: \u001b[31m\"\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveValue\" getByTestId('onboarding-link-role').locator('xpath=descendant-or-self::*[self::input or self::textarea]').first() with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('onboarding-link-role').locator('xpath=descendant-or-self::*[self::input or self::textarea]').first()\u001b[22m\n\u001b[2m    33 × locator resolved to <input disabled value=\"\" type=\"text\" data-v-6dedff85=\"\" class=\"ui-input__native\"/>\u001b[22m\n\u001b[2m       - unexpected value \"\"\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('onboarding-link-role').locator('xpath=descendant-or-self::*[self::input or self::textarea]').first()\nExpected: \u001b[32m\"MEMBER\"\u001b[39m\nReceived: \u001b[31m\"\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveValue\" getByTestId('onboarding-link-role').locator('xpath=descendant-or-self::*[self::input or self::textarea]').first() with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('onboarding-link-role').locator('xpath=descendant-or-self::*[self::input or self::textarea]').first()\u001b[22m\n\u001b[2m    33 × locator resolved to <input disabled value=\"\" type=\"text\" data-v-6dedff85=\"\" class=\"ui-input__native\"/>\u001b[22m\n\u001b[2m       - unexpected value \"\"\u001b[22m\n\n    at D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts:127:67",
+                        "location": {
+                          "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts",
+                          "column": 67,
+                          "line": 127
+                        },
+                        "snippet": " \u001b[90m 125 |\u001b[39m     \u001b[36mawait\u001b[39m signIn(context\u001b[33m,\u001b[39m \u001b[32m\"ui-roleview\"\u001b[39m\u001b[33m,\u001b[39m \u001b[35m107\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 126 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m\"/onboarding/link\"\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 127 |\u001b[39m     \u001b[36mawait\u001b[39m expect(field(page\u001b[33m.\u001b[39mgetByTestId(\u001b[32m\"onboarding-link-role\"\u001b[39m)))\u001b[33m.\u001b[39mtoHaveValue(\u001b[32m\"MEMBER\"\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                                   \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 128 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 129 |\u001b[39m\n \u001b[90m 130 |\u001b[39m   test(\u001b[32m\"B09-20 刷新/深链进入邀请页 → 仍能发出邀请（团队上下文须自行加载）\"\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ context\u001b[33m,\u001b[39m page }) \u001b[33m=>\u001b[39m {"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts",
+                            "column": 67,
+                            "line": 127
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveValue\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('onboarding-link-role').locator('xpath=descendant-or-self::*[self::input or self::textarea]').first()\nExpected: \u001b[32m\"MEMBER\"\u001b[39m\nReceived: \u001b[31m\"\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveValue\" getByTestId('onboarding-link-role').locator('xpath=descendant-or-self::*[self::input or self::textarea]').first() with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('onboarding-link-role').locator('xpath=descendant-or-self::*[self::input or self::textarea]').first()\u001b[22m\n\u001b[2m    33 × locator resolved to <input disabled value=\"\" type=\"text\" data-v-6dedff85=\"\" class=\"ui-input__native\"/>\u001b[22m\n\u001b[2m       - unexpected value \"\"\u001b[22m\n\n\n  125 |     await signIn(context, \"ui-roleview\", 107);\n  126 |     await page.goto(\"/onboarding/link\");\n> 127 |     await expect(field(page.getByTestId(\"onboarding-link-role\"))).toHaveValue(\"MEMBER\");\n      |                                                                   ^\n  128 |   });\n  129 |\n  130 |   test(\"B09-20 刷新/深链进入邀请页 → 仍能发出邀请（团队上下文须自行加载）\", async ({ context, page }) => {\n    at D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts:127:67"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:19:01.135Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\team-qa\\playwright-artifacts\\team-onboarding-Team-QA-·--9453f-B09-19-链接页「默认角色」字段显示-MEMBER\\test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\team-qa\\playwright-artifacts\\team-onboarding-Team-QA-·--9453f-B09-19-链接页「默认角色」字段显示-MEMBER\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\team-qa\\playwright-artifacts\\team-onboarding-Team-QA-·--9453f-B09-19-链接页「默认角色」字段显示-MEMBER\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts",
+                        "column": 67,
+                        "line": 127
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-966a6e05e83ce504b491",
+              "file": "team-onboarding.spec.ts",
+              "line": 123,
+              "column": 3
+            },
+            {
+              "title": "B09-20 刷新/深链进入邀请页 → 仍能发出邀请（团队上下文须自行加载）",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 16493,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('onboarding-created-banner')\nExpected substring: \u001b[32m\"Reload Team\"\u001b[39m\nReceived string:    \u001b[31m\"团队创建成功你现在是「新团队」的 Owner。下一步邀请成员加入。\"\u001b[39m\nTimeout: 15000ms\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" getByTestId('onboarding-created-banner') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('onboarding-created-banner')\u001b[22m\n\u001b[2m    33 × locator resolved to <div class=\"success\" data-v-943c77ae=\"\" data-testid=\"onboarding-created-banner\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"团队创建成功你现在是「新团队」的 Owner。下一步邀请成员加入。\"\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('onboarding-created-banner')\nExpected substring: \u001b[32m\"Reload Team\"\u001b[39m\nReceived string:    \u001b[31m\"团队创建成功你现在是「新团队」的 Owner。下一步邀请成员加入。\"\u001b[39m\nTimeout: 15000ms\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" getByTestId('onboarding-created-banner') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('onboarding-created-banner')\u001b[22m\n\u001b[2m    33 × locator resolved to <div class=\"success\" data-v-943c77ae=\"\" data-testid=\"onboarding-created-banner\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"团队创建成功你现在是「新团队」的 Owner。下一步邀请成员加入。\"\u001b[22m\n\n    at D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts:134:65",
+                        "location": {
+                          "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts",
+                          "column": 65,
+                          "line": 134
+                        },
+                        "snippet": " \u001b[90m 132 |\u001b[39m     \u001b[36mawait\u001b[39m signIn(context\u001b[33m,\u001b[39m \u001b[32m\"ui-reload\"\u001b[39m\u001b[33m,\u001b[39m \u001b[35m108\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 133 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m\"/onboarding/invite\"\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 134 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mgetByTestId(\u001b[32m\"onboarding-created-banner\"\u001b[39m))\u001b[33m.\u001b[39mtoContainText(\u001b[32m\"Reload Team\"\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                                 \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 135 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByTestId(\u001b[32m\"onboarding-invite-row-0\"\u001b[39m)\u001b[33m.\u001b[39mlocator(\u001b[32m\"input\"\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m.\u001b[39mfill(\u001b[32m\"deep@team-qa.test\"\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 136 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByTestId(\u001b[32m\"onboarding-invite-submit\"\u001b[39m)\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n \u001b[90m 137 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mgetByTestId(\u001b[32m\"onboarding-issued\"\u001b[39m))\u001b[33m.\u001b[39mtoContainText(\u001b[32m\"deep@team-qa.test\"\u001b[39m)\u001b[33m;\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts",
+                            "column": 65,
+                            "line": 134
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('onboarding-created-banner')\nExpected substring: \u001b[32m\"Reload Team\"\u001b[39m\nReceived string:    \u001b[31m\"团队创建成功你现在是「新团队」的 Owner。下一步邀请成员加入。\"\u001b[39m\nTimeout: 15000ms\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" getByTestId('onboarding-created-banner') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('onboarding-created-banner')\u001b[22m\n\u001b[2m    33 × locator resolved to <div class=\"success\" data-v-943c77ae=\"\" data-testid=\"onboarding-created-banner\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"团队创建成功你现在是「新团队」的 Owner。下一步邀请成员加入。\"\u001b[22m\n\n\n  132 |     await signIn(context, \"ui-reload\", 108);\n  133 |     await page.goto(\"/onboarding/invite\");\n> 134 |     await expect(page.getByTestId(\"onboarding-created-banner\")).toContainText(\"Reload Team\");\n      |                                                                 ^\n  135 |     await page.getByTestId(\"onboarding-invite-row-0\").locator(\"input\").first().fill(\"deep@team-qa.test\");\n  136 |     await page.getByTestId(\"onboarding-invite-submit\").click();\n  137 |     await expect(page.getByTestId(\"onboarding-issued\")).toContainText(\"deep@team-qa.test\");\n    at D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts:134:65"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:19:19.764Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\team-qa\\playwright-artifacts\\team-onboarding-Team-QA-·--4d4fb-链进入邀请页-→-仍能发出邀请（团队上下文须自行加载）\\test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\team-qa\\playwright-artifacts\\team-onboarding-Team-QA-·--4d4fb-链进入邀请页-→-仍能发出邀请（团队上下文须自行加载）\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\team-qa\\playwright-artifacts\\team-onboarding-Team-QA-·--4d4fb-链进入邀请页-→-仍能发出邀请（团队上下文须自行加载）\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts",
+                        "column": 65,
+                        "line": 134
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-2761870be9f9024ed6cb",
+              "file": "team-onboarding.spec.ts",
+              "line": 130,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Team QA · 接受邀请",
+          "file": "team-onboarding.spec.ts",
+          "line": 145,
+          "column": 6,
+          "specs": [
+            {
+              "title": "B09-06 被邀者预览并接受 → success；后端激活为 member",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1504,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:19:37.419Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-4e18cb21f5d15ce2d1b1",
+              "file": "team-onboarding.spec.ts",
+              "line": 146,
+              "column": 3
+            },
+            {
+              "title": "B09-07 已撤销邀请 → 预览即阻断（revoked）",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1418,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:19:39.162Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-448a507c282002bf7c48",
+              "file": "team-onboarding.spec.ts",
+              "line": 166,
+              "column": 3
+            },
+            {
+              "title": "B09-08 登录邮箱与邀请不符 → emailMismatch，后端未激活",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 17667,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveAttribute\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('accept-result')\nExpected: \u001b[32m\"emailMismatch\"\u001b[39m\nReceived: \u001b[31m\"invalid\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveAttribute\" getByTestId('accept-result') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('accept-result')\u001b[22m\n\u001b[2m    33 × locator resolved to <div data-v-f1a23e19=\"\" data-state=\"invalid\" class=\"accept__result\" data-testid=\"accept-result\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"invalid\"\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveAttribute\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('accept-result')\nExpected: \u001b[32m\"emailMismatch\"\u001b[39m\nReceived: \u001b[31m\"invalid\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveAttribute\" getByTestId('accept-result') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('accept-result')\u001b[22m\n\u001b[2m    33 × locator resolved to <div data-v-f1a23e19=\"\" data-state=\"invalid\" class=\"accept__result\" data-testid=\"accept-result\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"invalid\"\u001b[22m\n\n    at D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts:188:53",
+                        "location": {
+                          "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts",
+                          "column": 53,
+                          "line": 188
+                        },
+                        "snippet": " \u001b[90m 186 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`/invitation/accept?token=${inv.body.token}&type=invite`\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 187 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByTestId(\u001b[32m\"accept-confirm\"\u001b[39m)\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 188 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mgetByTestId(\u001b[32m\"accept-result\"\u001b[39m))\u001b[33m.\u001b[39mtoHaveAttribute(\u001b[32m\"data-state\"\u001b[39m\u001b[33m,\u001b[39m \u001b[32m\"emailMismatch\"\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                     \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 189 |\u001b[39m     expect((\u001b[36mawait\u001b[39m me(\u001b[32m\"ui-wrong\"\u001b[39m\u001b[33m,\u001b[39m \u001b[35m112\u001b[39m))\u001b[33m.\u001b[39mis_active)\u001b[33m.\u001b[39mtoBe(\u001b[36mfalse\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 190 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 191 |\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts",
+                            "column": 53,
+                            "line": 188
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveAttribute\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('accept-result')\nExpected: \u001b[32m\"emailMismatch\"\u001b[39m\nReceived: \u001b[31m\"invalid\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveAttribute\" getByTestId('accept-result') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('accept-result')\u001b[22m\n\u001b[2m    33 × locator resolved to <div data-v-f1a23e19=\"\" data-state=\"invalid\" class=\"accept__result\" data-testid=\"accept-result\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"invalid\"\u001b[22m\n\n\n  186 |     await page.goto(`/invitation/accept?token=${inv.body.token}&type=invite`);\n  187 |     await page.getByTestId(\"accept-confirm\").click();\n> 188 |     await expect(page.getByTestId(\"accept-result\")).toHaveAttribute(\"data-state\", \"emailMismatch\");\n      |                                                     ^\n  189 |     expect((await me(\"ui-wrong\", 112)).is_active).toBe(false);\n  190 |   });\n  191 |\n    at D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts:188:53"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:19:40.599Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\team-qa\\playwright-artifacts\\team-onboarding-Team-QA-·--e3b08-与邀请不符-→-emailMismatch，后端未激活\\test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\team-qa\\playwright-artifacts\\team-onboarding-Team-QA-·--e3b08-与邀请不符-→-emailMismatch，后端未激活\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\team-qa\\playwright-artifacts\\team-onboarding-Team-QA-·--e3b08-与邀请不符-→-emailMismatch，后端未激活\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts",
+                        "column": 53,
+                        "line": 188
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-439eac83cd87cceb581e",
+              "file": "team-onboarding.spec.ts",
+              "line": 179,
+              "column": 3
+            },
+            {
+              "title": "B09-09 名额耗尽的链接 → 预览即阻断（exhausted）",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1475,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:19:59.184Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-a8202a9165f61a26441d",
+              "file": "team-onboarding.spec.ts",
+              "line": 192,
+              "column": 3
+            },
+            {
+              "title": "B09-10 跨租户接受 → tenantMismatch",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 16739,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveAttribute\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('accept-result')\nExpected: \u001b[32m\"tenantMismatch\"\u001b[39m\nReceived: \u001b[31m\"invalid\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveAttribute\" getByTestId('accept-result') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('accept-result')\u001b[22m\n\u001b[2m    33 × locator resolved to <div data-v-f1a23e19=\"\" data-state=\"invalid\" class=\"accept__result\" data-testid=\"accept-result\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"invalid\"\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveAttribute\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('accept-result')\nExpected: \u001b[32m\"tenantMismatch\"\u001b[39m\nReceived: \u001b[31m\"invalid\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveAttribute\" getByTestId('accept-result') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('accept-result')\u001b[22m\n\u001b[2m    33 × locator resolved to <div data-v-f1a23e19=\"\" data-state=\"invalid\" class=\"accept__result\" data-testid=\"accept-result\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"invalid\"\u001b[22m\n\n    at D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts:209:53",
+                        "location": {
+                          "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts",
+                          "column": 53,
+                          "line": 209
+                        },
+                        "snippet": " \u001b[90m 207 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgoto(\u001b[32m`/invitation/accept?token=${link.body.token}&type=link`\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 208 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mgetByTestId(\u001b[32m\"accept-confirm\"\u001b[39m)\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 209 |\u001b[39m     \u001b[36mawait\u001b[39m expect(page\u001b[33m.\u001b[39mgetByTestId(\u001b[32m\"accept-result\"\u001b[39m))\u001b[33m.\u001b[39mtoHaveAttribute(\u001b[32m\"data-state\"\u001b[39m\u001b[33m,\u001b[39m \u001b[32m\"tenantMismatch\"\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                     \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 210 |\u001b[39m   })\u001b[33m;\u001b[39m\n \u001b[90m 211 |\u001b[39m\n \u001b[90m 212 |\u001b[39m   test(\u001b[32m\"B09-11 无效 token → invalid\"\u001b[39m\u001b[33m,\u001b[39m \u001b[36masync\u001b[39m ({ context\u001b[33m,\u001b[39m page }) \u001b[33m=>\u001b[39m {"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts",
+                            "column": 53,
+                            "line": 209
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveAttribute\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByTestId('accept-result')\nExpected: \u001b[32m\"tenantMismatch\"\u001b[39m\nReceived: \u001b[31m\"invalid\"\u001b[39m\nTimeout:  15000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveAttribute\" getByTestId('accept-result') with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('accept-result')\u001b[22m\n\u001b[2m    33 × locator resolved to <div data-v-f1a23e19=\"\" data-state=\"invalid\" class=\"accept__result\" data-testid=\"accept-result\">…</div>\u001b[22m\n\u001b[2m       - unexpected value \"invalid\"\u001b[22m\n\n\n  207 |     await page.goto(`/invitation/accept?token=${link.body.token}&type=link`);\n  208 |     await page.getByTestId(\"accept-confirm\").click();\n> 209 |     await expect(page.getByTestId(\"accept-result\")).toHaveAttribute(\"data-state\", \"tenantMismatch\");\n      |                                                     ^\n  210 |   });\n  211 |\n  212 |   test(\"B09-11 无效 token → invalid\", async ({ context, page }) => {\n    at D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts:209:53"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:20:00.920Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\team-qa\\playwright-artifacts\\team-onboarding-Team-QA-·-接受邀请-B09-10-跨租户接受-→-tenantMismatch\\test-failed-1.png"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\team-qa\\playwright-artifacts\\team-onboarding-Team-QA-·-接受邀请-B09-10-跨租户接受-→-tenantMismatch\\error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\team-qa\\playwright-artifacts\\team-onboarding-Team-QA-·-接受邀请-B09-10-跨租户接受-→-tenantMismatch\\trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts",
+                        "column": 53,
+                        "line": 209
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-a8f401bb0d5ca1b74ccb",
+              "file": "team-onboarding.spec.ts",
+              "line": 203,
+              "column": 3
+            },
+            {
+              "title": "B09-11 无效 token → invalid",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2188,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:20:18.611Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-02d78a02c2d185fae50a",
+              "file": "team-onboarding.spec.ts",
+              "line": 212,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Team QA · 团队设置与角色",
+          "file": "team-onboarding.spec.ts",
+          "line": 221,
+          "column": 6,
+          "specs": [
+            {
+              "title": "B09-12 TeamSwitcher 显示当前团队名",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1599,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:20:21.050Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-25b9012231fedc98b4a7",
+              "file": "team-onboarding.spec.ts",
+              "line": 222,
+              "column": 3
+            },
+            {
+              "title": "B09-13 admin 改团队资料成功；看不到 Danger Zone",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2841,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:20:22.665Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-2f28ee11edad0fbd32db",
+              "file": "team-onboarding.spec.ts",
+              "line": 229,
+              "column": 3
+            },
+            {
+              "title": "B09-14 member 只读：通用设置无保存、名册只读、无管理按钮",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4147,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:20:25.530Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-7c80eb03104fdb5833e4",
+              "file": "team-onboarding.spec.ts",
+              "line": 242,
+              "column": 3
+            },
+            {
+              "title": "B09-15 owner 在邀请管理页创建并撤销邀请",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2901,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:20:29.701Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-1bd49204fe7d71e66367",
+              "file": "team-onboarding.spec.ts",
+              "line": 257,
+              "column": 3
+            },
+            {
+              "title": "B09-16 owner 在名册中移除成员 → 后端成员行消失",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3109,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:20:32.622Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-6b6315ecb103efae2bfa",
+              "file": "team-onboarding.spec.ts",
+              "line": 275,
+              "column": 3
+            },
+            {
+              "title": "B09-17 owner 解散：名称不符不解锁；确认后登出并回到 onboarding 门",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3247,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:20:35.752Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-c9b9503fdd9af51c25a0",
+              "file": "team-onboarding.spec.ts",
+              "line": 290,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Team QA · 待裁决",
+          "file": "team-onboarding.spec.ts",
+          "line": 314,
+          "column": 6,
+          "specs": [
+            {
+              "title": "B09-18 未入团用户深链 /dashboard → 应被引导到 /onboarding",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [
+                    {
+                      "type": "fixme",
+                      "description": "待裁决：onboarding 门只在登录中转页，无路由级守卫——未入团用户深链 /dashboard 不会被拦回 /onboarding",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts",
+                        "line": 315,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "skipped",
+                      "duration": 0,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-06T14:20:39.017Z",
+                      "annotations": [
+                        {
+                          "type": "fixme",
+                          "description": "待裁决：onboarding 门只在登录中转页，无路由级守卫——未入团用户深链 /dashboard 不会被拦回 /onboarding",
+                          "location": {
+                            "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team-onboarding.spec.ts",
+                            "line": 315,
+                            "column": 8
+                          }
+                        }
+                      ],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "skipped"
+                }
+              ],
+              "id": "804d42521a9b4947a7fe-4fd53604d6c5af614906",
+              "file": "team-onboarding.spec.ts",
+              "line": 319,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-11-06T14:18:38.010Z",
+    "duration": 125721.137,
+    "expected": 15,
+    "skipped": 1,
+    "unexpected": 4,
+    "flaky": 0
+  }
+}

@@ -1,0 +1,5 @@
+[2m2026-11-06T14:18:43.307761Z[0m [32m INFO[0m [2mdigua_common_jwt::cache[0m[2m:[0m JWKS initial refresh succeeded [3mattempts[0m[2m=[0m1 [3murl[0m[2m=[0mhttp://127.0.0.1:18491/.well-known/jwks.json
+[2m2026-11-06T14:18:43.308086Z[0m [32m INFO[0m [2mpm_api[0m[2m:[0m pm-api bearer auth enabled [3mmode[0m[2m=[0m"jwks"
+[2m2026-11-06T14:18:43.310509Z[0m [32m INFO[0m [2mpm_api::audit_stream[0m[2m:[0m pm_audit listener connected [3mchannel[0m[2m=[0m"pm_audit"
+[2m2026-11-06T14:18:43.313024Z[0m [32m INFO[0m [2mpm_api[0m[2m:[0m pm-api listening [3mport[0m[2m=[0m18490
+[2m2026-11-06T14:18:43.313178Z[0m [32m INFO[0m [2mdigua_common_consul[0m[2m:[0m consul registration disabled (SERVICE_NAME unset)

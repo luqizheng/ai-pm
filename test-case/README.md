@@ -5,6 +5,7 @@
 | 文件 | 任务 | 状态 |
 |---|---|---|
 | `t090-two-machine-test-cases-v1.md` | T-090 Bootstrap Skill + 自检闭环（两机实测） | 用例已写定；**逐条确认后执行**，每条回填「实际结果」 |
+| `team-qa-test-plan-v1.md` / `team-qa-test-cases-v1.md` / `team-qa-execution-report-v1.md` | 团队功能（Team Onboarding）QA：计划 / 88 条用例执行记录 / 报告 | 2026-11-06 执行完毕：73 PASS / 7 FAIL（DEF-01 P0 迁移撞号、DEF-02 P1 被移除成员残留访问）；一键复跑 `evidence/team-qa/run-team-qa.sh` |
 
 ## 约定
 

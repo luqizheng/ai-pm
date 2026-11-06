@@ -1,0 +1,35 @@
+[22:11:18] PRECHECK FAIL TEAM-QA-DEF-01: duplicate migration versions: 0044 
+[22:11:18] L1 backend: cargo test (team_onboarding, team_onboarding_qa, tenant_members, project_members)
+test tenant_removal_cascades_project_memberships ... FAILED
+test outsider_cannot_see_project_members ... FAILED
+test duplicate_grant_keeps_single_row ... FAILED
+test concurrent_grants_produce_single_row ... FAILED
+test tenant_removal_blocked_by_project_ownership ... FAILED
+test grant_requires_tenant_membership ... FAILED
+test tenant_removal_racing_grant_has_single_final_state ... FAILED
+test cross_tenant_project_is_not_found ... FAILED
+test data_level_constraints_hold ... FAILED
+test grant_makes_member_able_to_see_project ... FAILED
+test grant_rejects_agent_principal ... FAILED
+test plain_project_member_cannot_grant ... FAILED
+test revoke_takes_effect_immediately ... FAILED
+test cannot_revoke_project_owner ... FAILED
+test owner_transfer_moves_ownership ... FAILED
+thread 'tenant_removal_cascades_project_memberships' (20444) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+thread 'outsider_cannot_see_project_members' (28612) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+thread 'duplicate_grant_keeps_single_row' (18704) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+thread 'concurrent_grants_produce_single_row' (19264) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+thread 'tenant_removal_blocked_by_project_ownership' (25664) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+thread 'grant_requires_tenant_membership' (31572) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+thread 'tenant_removal_racing_grant_has_single_final_state' (35956) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+thread 'cross_tenant_project_is_not_found' (20236) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+thread 'data_level_constraints_hold' (35616) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+thread 'grant_makes_member_able_to_see_project' (36340) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+thread 'grant_rejects_agent_principal' (19392) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+thread 'plain_project_member_cannot_grant' (10772) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+thread 'revoke_takes_effect_immediately' (35632) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+thread 'cannot_revoke_project_owner' (30216) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+thread 'owner_transfer_moves_ownership' (10912) panicked at C:\Users\leo\.cargo\registry\src\rsproxy.cn-e3de039b2554c837\sqlx-core-0.8.6\src\testing\mod.rs:261:14:
+test result: FAILED. 0 passed; 15 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.82s
+[22:12:05] L1 backend: FAILED
+[22:12:05] done: FAILURES (log: /d/kudi-project/templates/ai-pm/test-case/evidence/team-qa/run-20261106-221117.log)

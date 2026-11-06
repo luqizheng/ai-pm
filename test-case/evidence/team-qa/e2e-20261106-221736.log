@@ -1,0 +1,194 @@
+[WebServer] (!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+[WebServer]   - import "../command-center" without a file extension (src/api/mock/command-center.ts:1:36). Add the file extension
+[WebServer] Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+Running 20 tests using 1 worker
+
+  ok  1 e2e\team-onboarding.spec.ts:38:3 › Team QA · Onboarding 流程 › B09-01 首登无团队 → 登录中转页分流到 /onboarding (4.5s)
+  ok  2 e2e\team-onboarding.spec.ts:46:3 › Team QA · Onboarding 流程 › B09-02 建团 → 邀请页横幅；后端创建者=owner、团队档案落库 (2.9s)
+  ok  3 e2e\team-onboarding.spec.ts:66:3 › Team QA · Onboarding 流程 › B09-03 slug 被占用 → 页面显示错误且不跳转 (2.8s)
+  ok  4 e2e\team-onboarding.spec.ts:79:3 › Team QA · Onboarding 流程 › B09-04 建团后连续流程：邀请成员 → 生成一次性链接；后端 PENDING 邀请落库 (2.9s)
+  ok  5 e2e\team-onboarding.spec.ts:102:3 › Team QA · Onboarding 流程 › B09-05 建团后连续流程：跳过邀请 → 链接页生成链接 → 完成进入团队首页 (3.1s)
+  x   6 e2e\team-onboarding.spec.ts:123:3 › Team QA · Onboarding 流程 › B09-19 链接页「默认角色」字段显示 MEMBER (17.5s)
+  x   7 e2e\team-onboarding.spec.ts:130:3 › Team QA · Onboarding 流程 › B09-20 刷新/深链进入邀请页 → 仍能发出邀请（团队上下文须自行加载） (16.5s)
+  ok  8 e2e\team-onboarding.spec.ts:146:3 › Team QA · 接受邀请 › B09-06 被邀者预览并接受 → success；后端激活为 member (1.5s)
+  ok  9 e2e\team-onboarding.spec.ts:166:3 › Team QA · 接受邀请 › B09-07 已撤销邀请 → 预览即阻断（revoked） (1.4s)
+  x  10 e2e\team-onboarding.spec.ts:179:3 › Team QA · 接受邀请 › B09-08 登录邮箱与邀请不符 → emailMismatch，后端未激活 (17.7s)
+  ok 11 e2e\team-onboarding.spec.ts:192:3 › Team QA · 接受邀请 › B09-09 名额耗尽的链接 → 预览即阻断（exhausted） (1.5s)
+  x  12 e2e\team-onboarding.spec.ts:203:3 › Team QA · 接受邀请 › B09-10 跨租户接受 → tenantMismatch (16.7s)
+  ok 13 e2e\team-onboarding.spec.ts:212:3 › Team QA · 接受邀请 › B09-11 无效 token → invalid (2.2s)
+  ok 14 e2e\team-onboarding.spec.ts:222:3 › Team QA · 团队设置与角色 › B09-12 TeamSwitcher 显示当前团队名 (1.6s)
+  ok 15 e2e\team-onboarding.spec.ts:229:3 › Team QA · 团队设置与角色 › B09-13 admin 改团队资料成功；看不到 Danger Zone (2.8s)
+  ok 16 e2e\team-onboarding.spec.ts:242:3 › Team QA · 团队设置与角色 › B09-14 member 只读：通用设置无保存、名册只读、无管理按钮 (4.1s)
+  ok 17 e2e\team-onboarding.spec.ts:257:3 › Team QA · 团队设置与角色 › B09-15 owner 在邀请管理页创建并撤销邀请 (2.9s)
+  ok 18 e2e\team-onboarding.spec.ts:275:3 › Team QA · 团队设置与角色 › B09-16 owner 在名册中移除成员 → 后端成员行消失 (3.1s)
+[WebServer] 22:20:38 [vite] http proxy error: /v1/iam/auth/logout
+[WebServer] Error: read ECONNRESET
+[WebServer]     at TCP.onStreamRead (node:internal/stream_base_commons:216:20)
+  ok 19 e2e\team-onboarding.spec.ts:290:3 › Team QA · 团队设置与角色 › B09-17 owner 解散：名称不符不解锁；确认后登出并回到 onboarding 门 (3.2s)
+  -  20 e2e\team-onboarding.spec.ts:319:3 › Team QA · 待裁决 › B09-18 未入团用户深链 /dashboard → 应被引导到 /onboarding
+
+
+  1) e2e\team-onboarding.spec.ts:123:3 › Team QA · Onboarding 流程 › B09-19 链接页「默认角色」字段显示 MEMBER ─────
+
+    Error: expect(locator).toHaveValue(expected) failed
+
+    Locator:  getByTestId('onboarding-link-role').locator('xpath=descendant-or-self::*[self::input or self::textarea]').first()
+    Expected: "MEMBER"
+    Received: ""
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveValue" getByTestId('onboarding-link-role').locator('xpath=descendant-or-self::*[self::input or self::textarea]').first() with timeout 15000ms
+      - waiting for getByTestId('onboarding-link-role').locator('xpath=descendant-or-self::*[self::input or self::textarea]').first()
+        33 × locator resolved to <input disabled value="" type="text" data-v-6dedff85="" class="ui-input__native"/>
+           - unexpected value ""
+
+
+      125 |     await signIn(context, "ui-roleview", 107);
+      126 |     await page.goto("/onboarding/link");
+    > 127 |     await expect(field(page.getByTestId("onboarding-link-role"))).toHaveValue("MEMBER");
+          |                                                                   ^
+      128 |   });
+      129 |
+      130 |   test("B09-20 刷新/深链进入邀请页 → 仍能发出邀请（团队上下文须自行加载）", async ({ context, page }) => {
+        at D:\kudi-project\templates\ai-pm\ai-frontend\e2e\team-onboarding.spec.ts:127:67
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--9453f-B09-19-链接页「默认角色」字段显示-MEMBER\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--9453f-B09-19-链接页「默认角色」字段显示-MEMBER\error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--9453f-B09-19-链接页「默认角色」字段显示-MEMBER\trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--9453f-B09-19-链接页「默认角色」字段显示-MEMBER\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) e2e\team-onboarding.spec.ts:130:3 › Team QA · Onboarding 流程 › B09-20 刷新/深链进入邀请页 → 仍能发出邀请（团队上下文须自行加载） 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: getByTestId('onboarding-created-banner')
+    Expected substring: "Reload Team"
+    Received string:    "团队创建成功你现在是「新团队」的 Owner。下一步邀请成员加入。"
+    Timeout: 15000ms
+
+    Call log:
+      - Expect "toContainText" getByTestId('onboarding-created-banner') with timeout 15000ms
+      - waiting for getByTestId('onboarding-created-banner')
+        33 × locator resolved to <div class="success" data-v-943c77ae="" data-testid="onboarding-created-banner">…</div>
+           - unexpected value "团队创建成功你现在是「新团队」的 Owner。下一步邀请成员加入。"
+
+
+      132 |     await signIn(context, "ui-reload", 108);
+      133 |     await page.goto("/onboarding/invite");
+    > 134 |     await expect(page.getByTestId("onboarding-created-banner")).toContainText("Reload Team");
+          |                                                                 ^
+      135 |     await page.getByTestId("onboarding-invite-row-0").locator("input").first().fill("deep@team-qa.test");
+      136 |     await page.getByTestId("onboarding-invite-submit").click();
+      137 |     await expect(page.getByTestId("onboarding-issued")).toContainText("deep@team-qa.test");
+        at D:\kudi-project\templates\ai-pm\ai-frontend\e2e\team-onboarding.spec.ts:134:65
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--4d4fb-链进入邀请页-→-仍能发出邀请（团队上下文须自行加载）\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--4d4fb-链进入邀请页-→-仍能发出邀请（团队上下文须自行加载）\error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--4d4fb-链进入邀请页-→-仍能发出邀请（团队上下文须自行加载）\trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--4d4fb-链进入邀请页-→-仍能发出邀请（团队上下文须自行加载）\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) e2e\team-onboarding.spec.ts:179:3 › Team QA · 接受邀请 › B09-08 登录邮箱与邀请不符 → emailMismatch，后端未激活 ───
+
+    Error: expect(locator).toHaveAttribute(expected) failed
+
+    Locator:  getByTestId('accept-result')
+    Expected: "emailMismatch"
+    Received: "invalid"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveAttribute" getByTestId('accept-result') with timeout 15000ms
+      - waiting for getByTestId('accept-result')
+        33 × locator resolved to <div data-v-f1a23e19="" data-state="invalid" class="accept__result" data-testid="accept-result">…</div>
+           - unexpected value "invalid"
+
+
+      186 |     await page.goto(`/invitation/accept?token=${inv.body.token}&type=invite`);
+      187 |     await page.getByTestId("accept-confirm").click();
+    > 188 |     await expect(page.getByTestId("accept-result")).toHaveAttribute("data-state", "emailMismatch");
+          |                                                     ^
+      189 |     expect((await me("ui-wrong", 112)).is_active).toBe(false);
+      190 |   });
+      191 |
+        at D:\kudi-project\templates\ai-pm\ai-frontend\e2e\team-onboarding.spec.ts:188:53
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--e3b08-与邀请不符-→-emailMismatch，后端未激活\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--e3b08-与邀请不符-→-emailMismatch，后端未激活\error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--e3b08-与邀请不符-→-emailMismatch，后端未激活\trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·--e3b08-与邀请不符-→-emailMismatch，后端未激活\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) e2e\team-onboarding.spec.ts:203:3 › Team QA · 接受邀请 › B09-10 跨租户接受 → tenantMismatch ────────────
+
+    Error: expect(locator).toHaveAttribute(expected) failed
+
+    Locator:  getByTestId('accept-result')
+    Expected: "tenantMismatch"
+    Received: "invalid"
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveAttribute" getByTestId('accept-result') with timeout 15000ms
+      - waiting for getByTestId('accept-result')
+        33 × locator resolved to <div data-v-f1a23e19="" data-state="invalid" class="accept__result" data-testid="accept-result">…</div>
+           - unexpected value "invalid"
+
+
+      207 |     await page.goto(`/invitation/accept?token=${link.body.token}&type=link`);
+      208 |     await page.getByTestId("accept-confirm").click();
+    > 209 |     await expect(page.getByTestId("accept-result")).toHaveAttribute("data-state", "tenantMismatch");
+          |                                                     ^
+      210 |   });
+      211 |
+      212 |   test("B09-11 无效 token → invalid", async ({ context, page }) => {
+        at D:\kudi-project\templates\ai-pm\ai-frontend\e2e\team-onboarding.spec.ts:209:53
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·-接受邀请-B09-10-跨租户接受-→-tenantMismatch\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·-接受邀请-B09-10-跨租户接受-→-tenantMismatch\error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·-接受邀请-B09-10-跨租户接受-→-tenantMismatch\trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace ..\test-case\evidence\team-qa\playwright-artifacts\team-onboarding-Team-QA-·-接受邀请-B09-10-跨租户接受-→-tenantMismatch\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4 failed
+    e2e\team-onboarding.spec.ts:123:3 › Team QA · Onboarding 流程 › B09-19 链接页「默认角色」字段显示 MEMBER ──────
+    e2e\team-onboarding.spec.ts:130:3 › Team QA · Onboarding 流程 › B09-20 刷新/深链进入邀请页 → 仍能发出邀请（团队上下文须自行加载） 
+    e2e\team-onboarding.spec.ts:179:3 › Team QA · 接受邀请 › B09-08 登录邮箱与邀请不符 → emailMismatch，后端未激活 ────
+    e2e\team-onboarding.spec.ts:203:3 › Team QA · 接受邀请 › B09-10 跨租户接受 → tenantMismatch ─────────────
+  1 skipped
+  15 passed (2.1m)
