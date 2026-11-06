@@ -1,0 +1,15 @@
+settings:
+  title: 团队设置
+  description: 团队档案与所有权管理。
+  profileTitle: 团队档案
+  profileDesc: 团队名称、标识与描述。标识全局唯一，留空即清除。
+  save: 保存
+  savedToast: 团队档案已更新
+  transferTitle: 转移所有权
+  transferDesc: 将 Owner 转移给一位已激活成员；转移后原 Owner 降为 ADMIN。团队必须始终保留至少一名 Owner。
+  transferTarget: 选择新 Owner
+  currentOwner: 当前 Owner
+  transferAction: 转移所有权
+  transferConfirmTitle: 将所有权转移给「{name}」？
+  transferConfirmDesc: 转移立即生效并记录审计；你将降为 ADMIN，此操作不可自动撤销。
+  transferredToast: 所有权已转移给「{name}」

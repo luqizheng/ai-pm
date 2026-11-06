@@ -148,14 +148,17 @@ describe("落地页", () => {
       "/settings/personal"
     );
     const cards = wrapper.findAll(".personal-landing__card");
-    // 0041 起：个人域五卡 + 团队设置区一卡（AI 配置）
-    expect(cards).toHaveLength(6);
+    // 0041 起团队设置区落应用；0044 起团队域四卡（成员/邀请/基本/AI 配置）
+    expect(cards).toHaveLength(9);
     expect(cards.map(card => card.attributes("href"))).toEqual([
       "/settings/personal/profile",
       "/settings/personal/security",
       "/settings/personal/preferences",
       "/settings/personal/notifications",
       "/settings/personal/ai",
+      "/settings/team/members",
+      "/settings/team/invitations",
+      "/settings/team/general",
       "/settings/team/ai-providers"
     ]);
 

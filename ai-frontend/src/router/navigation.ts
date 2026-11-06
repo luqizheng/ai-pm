@@ -106,7 +106,13 @@ export const navGroups: NavGroup[] = [
       {
         path: "/dashboard",
         labelKey: "shell.app.side.item.dashboard",
-        icon: LayoutDashboard
+        icon: LayoutDashboard,
+        // Team Dashboard（0044）：组织入口——团队档案/成员概览/项目入口，
+        // 项目执行指标仍在项目总控台（UI 细则 #1）。
+        component: () =>
+          import("@/views/dashboard/TeamDashboardView.vue").then(
+            module => module.default
+          )
       },
       {
         path: "/projects",

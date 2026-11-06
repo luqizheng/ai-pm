@@ -1,0 +1,7 @@
+switcher:
+  noTeam: No team
+  tooltip: "Team {team} · My role {role}"
+  myTeams: My teams
+  pendingRow: More teams (pending upstream)
+  pendingHint: Multi-team membership requires upstream identity support; this version is single-team
+  hint: This switches your team context, not your account; account actions live in the account menu.

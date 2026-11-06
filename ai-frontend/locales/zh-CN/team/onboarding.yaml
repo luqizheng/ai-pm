@@ -1,0 +1,72 @@
+onboarding:
+  step:
+    welcome: 欢迎
+    create: 创建团队
+    invite: 邀请成员
+    link: 邀请链接
+  footer: 首次登录必须创建或加入一个团队后才能使用 PM-AI（无跳过选项）
+  action:
+    back: 返回
+  role:
+    member: 普通成员
+    admin: 管理员
+  copied: 已复制到剪贴板
+  welcome:
+    title: 欢迎使用 PM-AI
+    desc: 创建你的团队，或通过邀请加入一个已有团队，即可开始管理项目。
+    createTitle: 创建团队
+    createDesc: 设立一个新团队并邀请你的同事加入。
+    joinTitle: 加入团队
+    joinDesc: 使用收到的邀请链接或邀请码加入已有团队。
+    joinPlaceholder: 粘贴邀请链接或邀请码
+    joinRequired: 请先粘贴邀请链接或邀请码
+    joinAction: 打开邀请
+  create:
+    title: 创建团队
+    desc: 团队是 PM-AI 的组织边界，项目归属于团队。创建后你自动成为团队所有者。
+    nameLabel: 团队名称
+    namePlaceholder: 例如 Acme 研发中心
+    nameRequired: 团队名称必填
+    slugLabel: 团队标识（可选）
+    slugHint: 仅小写字母、数字与连字符，全局唯一；留空则不设置
+    slugPlaceholder: 例如 acme-rd
+    slugInvalid: 仅允许小写字母、数字与连字符，且以字母或数字开头
+    slugTaken: 该团队标识已被占用
+    descLabel: 团队描述（可选）
+    descPlaceholder: 团队的用途与边界
+    ownerNotice: 创建者将自动成为团队 Owner；成员与项目将在该团队下管理。
+    submit: 创建团队
+  invite:
+    createdTitle: 团队创建成功
+    createdDesc: 你现在是「{team}」的 Owner。下一步邀请成员加入。
+    fallbackTeam: 新团队
+    title: 邀请团队成员
+    desc: 输入邮箱并选择角色。OWNER 不可通过邀请指派；提交后会生成每位受邀人的接受链接。
+    emailLabel: 邮箱地址
+    emailPlaceholder: name{'@'}example.com
+    roleLabel: 角色
+    removeRow: 移除该行
+    addRow: 再加一行
+    submit: 发送邀请（{count}）
+    skip: 暂不邀请
+    issuedTitle: 已生成的接受链接
+    issuedDesc: 请将链接发给对应成员（复制后在聊天工具或邮件中分发）。接受链接只在受邀请账号登录后生效。
+    finish: 进入团队主页
+    sentToast: 邀请已创建
+  link:
+    title: 团队邀请链接
+    desc: 生成一条可分发的加入链接。链接只是接受邀请的入口，不会自动把任何人加入团队。
+    roleLabel: 默认角色
+    expiryLabel: 有效期
+    expiryOption: "{days} 天"
+    usesLabel: 使用次数
+    unlimited: 不限次数
+    maxUses: 次数上限
+    usesUnit: 次
+    create: 生成链接
+    resultTitle: 链接已生成
+    roleBadge: 固定 MEMBER
+    expiresAt: "{time} 过期"
+    unlimitedUses: 不限次数
+    limitedUses: 最多 {count} 人使用
+    resultHint: 链接可随时在「设置 · 邀请管理」中撤销；用量与状态同页可见。

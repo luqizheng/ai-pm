@@ -1,0 +1,28 @@
+members:
+  title: Team Members
+  description: Team members and roles. Role is permission — actions adapt to your team role and the server enforces the same matrix.
+  readonlyNote: You are a MEMBER (read-only) — role and membership changes require Owner or Admin permission.
+  colMember: Member
+  colRole: Role
+  colStatus: Status
+  colJoined: Joined
+  colActions: Actions
+  colActionsLocked: Actions (no permission)
+  you: Me
+  statusActive: Active
+  statusInactive: Pending
+  deny:
+    memberReadonly: Requires Owner or Admin permission
+    ownerRow: Requires Owner permission
+  remove: Remove
+  makeOwner: Make Owner
+  cancel: Cancel
+  removeConfirmTitle: Remove member "{name}"?
+  removeConfirmDesc: The member immediately loses all access to this team; memberships in other teams are unaffected.
+  transferTitle: Transfer ownership to "{name}"?
+  transferDesc: You will become ADMIN after the transfer; every team must always keep at least one Owner.
+  transferConfirm: Confirm transfer
+  changeRole: Change role of "{name}"
+  roleChangedToast: Role of "{name}" updated
+  removedToast: "{name} removed"
+  transferredToast: Ownership transferred to "{name}"

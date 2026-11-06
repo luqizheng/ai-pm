@@ -9,22 +9,41 @@ import { demoProject, demoProjects } from "./demo";
 import { buildRoutes } from "@/router";
 import { THEME_STORAGE_KEY } from "@/lib/theme";
 import { useShellStore } from "@/stores/shell";
+import { useTeamStore } from "@/stores/team";
 import { mountShell } from "./test-utils";
+
+const fetchTeamContext = vi.fn().mockResolvedValue({
+  principal_id: "p-1",
+  display_name: "admin",
+  is_active: true,
+  is_admin: true,
+  tenant_id: "t-1",
+  tenant_role: "owner",
+  team: { id: "t-1", name: "Acme R&D", slug: "acme-rd", description: null },
+  onboarding_required: false,
+  memberships: [{ team_id: "t-1", team_name: "Acme R&D", role: "owner", status: "active" }]
+});
+
+vi.mock("@/api/team", () => ({
+  fetchTeamContext: (...args: unknown[]) => fetchTeamContext(...args)
+}));
 
 /**
  * 顶栏行为（Application Shell §2A）。
  */
 describe("TopBar", () => {
-  it("渲染产品名与租户上下文指示（Global/TenantIndicator，只读）", async () => {
+  it("渲染产品名与团队上下文（TeamSwitcher，同账号团队切换）", async () => {
     const { wrapper } = mountShell(TopBar);
+    const teamStore = useTeamStore();
+    await teamStore.load();
     await nextTick();
 
     expect(wrapper.find(".shell-topbar__product").text()).toBe(
       "AI R&D Workspace"
     );
-    const tenant = wrapper.find(".tenant-indicator");
-    expect(tenant.exists()).toBe(true);
-    expect(tenant.text()).toContain("Acme Research");
+    const team = wrapper.find(".team-switcher");
+    expect(team.exists()).toBe(true);
+    expect(team.text()).toContain("Acme R&D");
   });
 
   it("项目芯片显示当前项目名（取自 store 的项目上下文）", async () => {

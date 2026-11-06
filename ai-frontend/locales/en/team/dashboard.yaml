@@ -1,0 +1,19 @@
+dashboard:
+  title: "{team}"
+  description: Team entry point — members, projects and team-level configuration. Project execution lives in each project's Command Center.
+  createProject: New Project
+  loadFailed: Failed to load team overview
+  manageMembers: Manage members
+  roleLine: My role {role}
+  membersTitle: Members overview
+  viewAll: View all
+  statOwners: Owner
+  statAdmins: Admin
+  statMembers: Member
+  statInactive: Pending
+  projectsTitle: Team projects
+  projectsEmpty: No projects yet
+  projectsEmptyHint: Create the first project or invite members to get started.
+  invitationsTitle: Invitation management
+  aiTitle: AI model configuration
+  open: Open settings
