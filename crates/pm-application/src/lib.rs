@@ -25,6 +25,7 @@ pub mod knowledge_reference;
 pub mod knowledge_search;
 pub mod knowledge_write_coordinator;
 pub mod team_llm;
+pub mod team_onboarding;
 pub mod onboarding;
 pub mod outbox;
 pub mod outbox_ops;

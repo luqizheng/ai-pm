@@ -24,7 +24,49 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/v1/pm/principals/{principal_id}", patch(update_handler))
 }
 
-async fn me_handler(Extension(principal): Extension<AuthedPrincipal>) -> Json<serde_json::Value> {
+async fn me_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+) -> Json<serde_json::Value> {
+    // Team Onboarding（0044）扩展面：团队档案 + onboarding 门 + memberships。
+    // onboarding_required = principal 未激活（provision 后未认领/未受邀）——
+    // 首登必须建团或入团（产品裁决 Q1）。memberships 按 principal 查全量
+    // （V1 单团队现实下为 0/1 行；契约按多团队 shape 设计，上游支持后免改）。
+    let team = sqlx::query_as::<_, (Uuid, String, Option<String>, Option<String>)>(
+        "SELECT id, display_name, slug, description FROM core.tenant WHERE id = $1",
+    )
+    .bind(principal.tenant_id)
+    .fetch_optional(&state.pool)
+    .await
+    .ok()
+    .flatten();
+    let memberships = sqlx::query_as::<_, (Uuid, String, String)>(
+        // 只统计 ACTIVE 成员关系：未激活 principal 的 provision member 行
+        // 不算「已加入」（onboarding_required 语义与之配套）。
+        "SELECT t.id, t.display_name, tm.role \
+           FROM core.tenant_member tm \
+           JOIN core.tenant t ON t.id = tm.tenant_id \
+           JOIN core.principal p ON p.id = tm.principal_id \
+          WHERE tm.principal_id = $1 AND p.is_active \
+          ORDER BY t.created_at",
+    )
+    .bind(principal.principal_id)
+    .fetch_all(&state.pool)
+    .await
+    .unwrap_or_default();
+
+    let team_json = team
+        .map(|(id, name, slug, description)| {
+            json!({ "id": id, "name": name, "slug": slug, "description": description })
+        })
+        .unwrap_or(serde_json::Value::Null);
+    let memberships_json: Vec<serde_json::Value> = memberships
+        .into_iter()
+        .map(|(team_id, team_name, role)| {
+            json!({ "team_id": team_id, "team_name": team_name, "role": role, "status": "active" })
+        })
+        .collect();
+
     Json(json!({
         "principal_id": principal.principal_id,
         "display_name": principal.display_name,
@@ -36,6 +78,9 @@ async fn me_handler(Extension(principal): Extension<AuthedPrincipal>) -> Json<se
         "claims_tenant_key": principal.claims_tenant_key,
         "subject": principal.subject,
         "auth_mode": principal.auth_mode,
+        "team": team_json,
+        "onboarding_required": !principal.is_active,
+        "memberships": memberships_json,
     }))
 }
 

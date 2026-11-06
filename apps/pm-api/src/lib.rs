@@ -10,6 +10,7 @@ pub mod device_claim;
 pub mod documents;
 pub mod team_llm;
 pub mod team_llm_guard;
+pub mod team_onboarding;
 pub mod mcp_hosts;
 pub mod outbox_ops;
 pub mod onboarding;
