@@ -25,13 +25,14 @@ use uuid::Uuid;
 use pm_application::actor::AuditActor;
 use pm_application::team_llm::{
     CreateTeamProviderRequest, ReplaceCredentialRequest, SetStatusRequest, TeamLlmError,
-    UpdateTeamProviderRequest, create_team_provider, delete_team_provider, list_team_providers,
-    replace_team_credential, set_team_provider_status, test_team_provider, update_team_provider,
+    UpdateTeamProviderRequest, create_team_provider, delete_team_provider,
+    get_project_ai_policy, list_team_providers, replace_team_credential,
+    set_project_ai_policy, set_team_provider_status, test_team_provider, update_team_provider,
 };
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::team_llm_guard::{err_forbidden, guard_tenant};
+use crate::team_llm_guard::{err_forbidden, err_not_found, guard_tenant};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -55,6 +56,92 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/pm/tenants/{tenant_id}/llm-providers/{provider_id}/status",
             post(status_handler),
         )
+        // 项目 AI 模型策略（§10.2/§16）：项目在团队范围内指定 Provider。
+        .route(
+            "/v1/pm/projects/{project_id}/ai-model-policies",
+            get(project_policy_handler).put(project_policy_put_handler),
+        )
+}
+
+/// 项目域守卫：项目必须属于调用者租户，且调用者为
+/// manager（租户 owner/admin 或项目 owner，§12「Team Owner/Admin ✓、
+/// Project Admin ✓」口径）。
+async fn guard_project_manager(
+    state: &AppState,
+    caller: &AuthedPrincipal,
+    project_id: Uuid,
+) -> Result<(), Response> {
+    let project_tenant: Option<Uuid> =
+        sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+            .bind(project_id)
+            .fetch_one(&state.pool)
+            .await
+            .ok();
+    if project_tenant.is_none() {
+        return Err(err_not_found("project not found"));
+    }
+    let _ = project_tenant.filter(|t| t == &caller.tenant_id).ok_or_else(|| {
+        err_not_found("project not found")
+    })?;
+    match pm_application::project_member::is_project_manager(
+        &state.pool,
+        caller.tenant_id,
+        project_id,
+        caller.principal_id,
+    )
+    .await
+    {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(err_forbidden("project manager required")),
+        Err(_) => Err(err_not_found("project not found")),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct ProjectPolicyPutBody {
+    /// None = 恢复继承 Team Default（删除指定行）。
+    #[serde(default)]
+    provider_id: Option<Uuid>,
+    #[serde(default)]
+    expected_revision: i64,
+}
+
+async fn project_policy_handler(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(project_id): Path<Uuid>,
+) -> Response {
+    if let Err(resp) = guard_project_manager(&state, &caller, project_id).await {
+        return resp;
+    }
+    match get_project_ai_policy(&state.pool, caller.tenant_id, project_id).await {
+        Ok(row) => (StatusCode::OK, Json(row)).into_response(),
+        Err(err) => error_response(err),
+    }
+}
+
+async fn project_policy_put_handler(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(project_id): Path<Uuid>,
+    Json(body): Json<ProjectPolicyPutBody>,
+) -> Response {
+    if let Err(resp) = guard_project_manager(&state, &caller, project_id).await {
+        return resp;
+    }
+    match set_project_ai_policy(
+        &state.pool,
+        &audit_actor(&caller),
+        caller.tenant_id,
+        project_id,
+        body.provider_id,
+        body.expected_revision,
+    )
+    .await
+    {
+        Ok(row) => (StatusCode::OK, Json(row)).into_response(),
+        Err(err) => error_response(err),
+    }
 }
 
 fn audit_actor(caller: &AuthedPrincipal) -> AuditActor {

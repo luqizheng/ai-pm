@@ -951,6 +951,154 @@ pub async fn delete_team_provider(
 
 // ─────────────────────────────────────────────────────────── worker 消费
 
+// ─────────────────────────────────────────────────────────── 项目策略（§10.2）
+
+/// 项目 AI 模型策略行（V1：项目 → 指定一个 Team Provider 实例）。
+#[derive(Debug, Clone, Serialize)]
+pub struct ProjectAiPolicyRow {
+    pub project_id: Uuid,
+    pub provider_id: Option<Uuid>,
+    pub provider_name: Option<String>,
+    pub provider_status: Option<String>,
+    pub revision: i64,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+/// 读项目策略（无指定时 provider 字段为 NULL）。
+pub async fn get_project_ai_policy(
+    executor: impl sqlx::PgExecutor<'_>,
+    tenant_id: Uuid,
+    project_id: Uuid,
+) -> Result<ProjectAiPolicyRow, TeamLlmError> {
+    let row: Option<(Option<Uuid>, Option<String>, Option<String>, i64, Option<DateTime<Utc>>)> =
+        sqlx::query_as(
+            "SELECT pol.provider_id, p.name, p.status, pol.revision, pol.updated_at \
+             FROM (SELECT $1::uuid AS tenant_id, $2::uuid AS project_id) base \
+             LEFT JOIN ai.project_ai_model_policy pol \
+               ON pol.tenant_id = base.tenant_id AND pol.project_id = base.project_id \
+             LEFT JOIN ai.team_llm_provider p ON p.id = pol.provider_id",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .fetch_optional(executor)
+        .await?;
+    // base 恒一行，LEFT JOIN 保行；防御性 unwrap_or。
+    let (provider_id, provider_name, provider_status, revision, updated_at) =
+        row.unwrap_or((None, None, None, 1, None));
+    Ok(ProjectAiPolicyRow {
+        project_id,
+        provider_id,
+        provider_name,
+        provider_status,
+        revision,
+        updated_at,
+    })
+}
+
+/// 设置/更新项目策略（§12：Team Owner/Admin 或 Project Admin=project owner；
+/// 归属与权限校验在 REST 层）。校验：Provider 必须同租户且存在；允许保存
+/// 非 enabled 的指定——解析时严格不回退（§10.3）。
+pub async fn set_project_ai_policy(
+    pool: &PgPool,
+    actor: &AuditActor,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    provider_id: Option<Uuid>,
+    expected_revision: i64,
+) -> Result<ProjectAiPolicyRow, TeamLlmError> {
+    let mut tx = pool.begin().await?;
+
+    // 项目必须属于本租户（组合 FK 兜底，这里给可读错误）。
+    let project_tenant: Option<Uuid> =
+        sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+            .bind(project_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if project_tenant != Some(tenant_id) {
+        return Err(TeamLlmError::NotFound);
+    }
+
+    // CAS：当前 revision（无行 = 1）
+    let current: Option<(i64,)> = sqlx::query_as(
+        "SELECT revision FROM ai.project_ai_model_policy \
+         WHERE tenant_id = $1 AND project_id = $2",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let current_rev = current.map(|r| r.0).unwrap_or(1);
+    if current_rev != expected_revision {
+        return Err(TeamLlmError::RevisionConflict {
+            expected: expected_revision,
+            actual: current_rev,
+        });
+    }
+
+    if let Some(pid) = provider_id {
+        let ok: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM ai.team_llm_provider WHERE tenant_id = $1 AND id = $2",
+        )
+        .bind(tenant_id)
+        .bind(pid)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if ok.is_none() {
+            return Err(TeamLlmError::NotFound);
+        }
+    }
+
+    match provider_id {
+        Some(pid) => {
+            sqlx::query(
+                "INSERT INTO ai.project_ai_model_policy \
+                 (tenant_id, project_id, provider_id, revision, updated_by) \
+                 VALUES ($1, $2, $3, 2, $4) \
+                 ON CONFLICT (tenant_id, project_id) DO UPDATE SET \
+                   provider_id = EXCLUDED.provider_id, \
+                   revision = ai.project_ai_model_policy.revision + 1, \
+                   updated_by = EXCLUDED.updated_by, updated_at = now()",
+            )
+            .bind(tenant_id)
+            .bind(project_id)
+            .bind(pid)
+            .bind(actor.principal_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+        None => {
+            // 恢复继承 Team Default = 删除指定行
+            sqlx::query(
+                "DELETE FROM ai.project_ai_model_policy \
+                 WHERE tenant_id = $1 AND project_id = $2",
+            )
+            .bind(tenant_id)
+            .bind(project_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+
+    let row = get_project_ai_policy(&mut *tx, tenant_id, project_id).await?;
+
+    insert_tenant_audit(
+        &mut tx,
+        tenant_id,
+        actor,
+        "llm_provider.project_policy_changed",
+        provider_id.unwrap_or(Uuid::nil()),
+        None,
+        Some(json!({
+            "project_id": project_id,
+            "provider_id": provider_id,
+        })),
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok(row)
+}
+
 /// 解析后的调用配置（repo_import 等 worker 路径构造模型用；明文 Key 只在
 /// 后端内存流转，绝不回显）。
 #[derive(Debug, Clone)]
@@ -970,19 +1118,65 @@ pub async fn resolve_repo_call_config(
     pool: &PgPool,
     project_id: Uuid,
 ) -> Result<Option<ResolvedProvider>, TeamLlmError> {
-    let row: Option<(Uuid, String, String, Option<Vec<u8>>, String, i32)> = sqlx::query_as(
+    // 三级解析（§10.3，Phase 3 策略解析前的过渡口径）：
+    //   1) 项目指定（严格：指定的 Provider 非 enabled/缺模型 → None，不回退 Team 默认）
+    //   2) 未指定 → Team 首个 enabled（创建序）
+    //   3) 都没有 → None（上层回退 Fake，model_name='fake' 可见）
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or(TeamLlmError::NotFound)?;
+
+    let designated: Option<(Uuid, String, String, Option<Vec<u8>>, String, i32)> = sqlx::query_as(
         "SELECT p.id, p.endpoint, p.configuration->>'model', c.api_key_ciphertext, p.provider_type, p.timeout_secs \
-         FROM ai.team_llm_provider p \
+         FROM ai.project_ai_model_policy pol \
+         JOIN ai.team_llm_provider p ON p.id = pol.provider_id AND p.tenant_id = pol.tenant_id \
          LEFT JOIN ai.team_llm_credential c ON c.id = p.credential_id \
-         WHERE p.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
+         WHERE pol.tenant_id = $1 AND pol.project_id = $2 \
            AND p.status = 'enabled' \
-           AND COALESCE(p.configuration->>'model', '') <> '' \
-         ORDER BY p.created_at, p.id \
-         LIMIT 1",
+           AND COALESCE(p.configuration->>'model', '') <> ''",
     )
+    .bind(tenant_id)
     .bind(project_id)
     .fetch_optional(pool)
     .await?;
+    let designated = match designated {
+        Some(row) => Some(row),
+        None => {
+            // 项目有指定但当前不可用（停用/归档/缺模型）→ 严格失败，不回退。
+            let has_row: Option<Uuid> = sqlx::query_scalar(
+                "SELECT provider_id FROM ai.project_ai_model_policy \
+                 WHERE tenant_id = $1 AND project_id = $2",
+            )
+            .bind(tenant_id)
+            .bind(project_id)
+            .fetch_optional(pool)
+            .await?;
+            if has_row.is_some() {
+                return Ok(None);
+            }
+            None
+        }
+    };
+
+    let row = match designated {
+        Some(row) => Some(row),
+        None => sqlx::query_as(
+            "SELECT p.id, p.endpoint, p.configuration->>'model', c.api_key_ciphertext, p.provider_type, p.timeout_secs \
+             FROM ai.team_llm_provider p \
+             LEFT JOIN ai.team_llm_credential c ON c.id = p.credential_id \
+             WHERE p.tenant_id = $1 \
+               AND p.status = 'enabled' \
+               AND COALESCE(p.configuration->>'model', '') <> '' \
+             ORDER BY p.created_at, p.id \
+             LIMIT 1",
+        )
+        .bind(tenant_id)
+        .fetch_optional(pool)
+        .await?,
+    };
+
     let Some((provider_id, endpoint, model, ciphertext, provider_type, timeout_secs)) = row else {
         return Ok(None);
     };
@@ -999,8 +1193,6 @@ pub async fn resolve_repo_call_config(
         timeout_secs,
     }))
 }
-
-// ─────────────────────────────────────────────────────────── 测试
 
 #[cfg(test)]
 mod tests {

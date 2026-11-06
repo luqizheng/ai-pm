@@ -497,3 +497,240 @@ async fn configuration_changes_are_audited(pool: PgPool) {
         assert_eq!(*target, Some(id), "{action}: target_id must be the provider");
     }
 }
+
+// ────────────────────────────────────────────── 项目策略（§10.2 / 0043）
+
+use pm_application::team_llm::resolve_repo_call_config;
+
+async fn seed_project_with_owner(pool: &PgPool, tenant_id: Uuid, owner: Uuid, code: &str) -> Uuid {
+    let customer_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (tenant_id, name) VALUES ($1, 'c') RETURNING id",
+    )
+    .bind(tenant_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query_scalar(
+        "INSERT INTO core.project (tenant_id, customer_id, code, name, status) \
+         VALUES ($1, $2, $3, $3, 'planning') RETURNING id",
+    )
+    .bind(tenant_id)
+    .bind(customer_id)
+    .bind(code)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// §10.2：项目指定 Team enabled Provider；PUT 带守卫 + CAS；恢复继承 = provider_id 缺省。
+#[sqlx::test(migrations = "../../migrations")]
+async fn project_policy_set_get_and_inheritance(pool: PgPool) {
+    let w = world(pool).await;
+
+    // 造一个项目，owner = admin（is_admin 亦 manager）
+    let customer_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (tenant_id, name) VALUES ($1, 'c') RETURNING id",
+    )
+    .bind(w.tenant_id)
+    .fetch_one(&w.pool)
+    .await
+    .unwrap();
+    let project_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.project (tenant_id, customer_id, code, name, status) \
+         VALUES ($1, $2, 'P-LLM', 'P-LLM', 'planning') RETURNING id",
+    )
+    .bind(w.tenant_id)
+    .bind(customer_id)
+    .fetch_one(&w.pool)
+    .await
+    .unwrap();
+
+    // 两个 enabled Provider
+    let (_, p1) = create_provider(
+        &w,
+        json!({
+            "name": "ds-1", "provider_type": "deepseek",
+            "endpoint": "https://api.deepseek.com/v1",
+            "configuration": { "model": "deepseek-chat" }, "api_key": "sk-1"
+        }),
+    )
+    .await;
+    let (_, p2) = create_provider(
+        &w,
+        json!({
+            "name": "ds-2", "provider_type": "deepseek",
+            "endpoint": "https://api.deepseek.com/v1",
+            "configuration": { "model": "deepseek-chat" }, "api_key": "sk-2"
+        }),
+    )
+    .await;
+    let id1 = Uuid::parse_str(p1["id"].as_str().unwrap()).unwrap();
+    let id2 = Uuid::parse_str(p2["id"].as_str().unwrap()).unwrap();
+
+    // GET 初始：无指定
+    let (status, body) = call(
+        &w.app,
+        "GET",
+        &format!("/v1/pm/projects/{project_id}/ai-model-policies"),
+        &w.admin_token,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["provider_id"], Value::Null);
+
+    // PUT 指定 ds-2
+    let (status, body) = call(
+        &w.app,
+        "PUT",
+        &format!("/v1/pm/projects/{project_id}/ai-model-policies"),
+        &w.admin_token,
+        Some(json!({ "provider_id": id2, "expected_revision": 1 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["provider_id"], json!(id2));
+    assert_eq!(body["provider_name"], "ds-2");
+    let rev = body["revision"].as_i64().unwrap();
+
+    // CAS 409
+    let (status, body) = call(
+        &w.app,
+        "PUT",
+        &format!("/v1/pm/projects/{project_id}/ai-model-policies"),
+        &w.admin_token,
+        Some(json!({ "provider_id": id1, "expected_revision": 0 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+
+    // 恢复继承（provider_id 缺省）
+    let (status, body) = call(
+        &w.app,
+        "PUT",
+        &format!("/v1/pm/projects/{project_id}/ai-model-policies"),
+        &w.admin_token,
+        Some(json!({ "expected_revision": rev })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["provider_id"], Value::Null);
+}
+
+/// member 既非租户 admin 也非项目 owner → 403。
+#[sqlx::test(migrations = "../../migrations")]
+async fn project_policy_forbidden_for_plain_member(pool: PgPool) {
+    let w = world(pool).await;
+    let customer_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (tenant_id, name) VALUES ($1, 'c') RETURNING id",
+    )
+    .bind(w.tenant_id)
+    .fetch_one(&w.pool)
+    .await
+    .unwrap();
+    let project_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.project (tenant_id, customer_id, code, name, status) \
+         VALUES ($1, $2, 'P-X', 'P-X', 'planning') RETURNING id",
+    )
+    .bind(w.tenant_id)
+    .bind(customer_id)
+    .fetch_one(&w.pool)
+    .await
+    .unwrap();
+    let (status, _) = call(
+        &w.app,
+        "GET",
+        &format!("/v1/pm/projects/{project_id}/ai-model-policies"),
+        &w.member_token,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+/// 解析序（§10.3）：项目指定优先且严格——指定非 enabled 不回退 Team 默认。
+#[sqlx::test(migrations = "../../migrations")]
+async fn resolution_prefers_project_policy_and_does_not_fall_back(pool: PgPool) {
+    let w = world(pool).await;
+    std::env::set_var("AI_PM_SECRET_KEY", "team-llm-test-secret");
+
+    let customer_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (tenant_id, name) VALUES ($1, 'c') RETURNING id",
+    )
+    .bind(w.tenant_id)
+    .fetch_one(&w.pool)
+    .await
+    .unwrap();
+    let project_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.project (tenant_id, customer_id, code, name, status) \
+         VALUES ($1, $2, 'P-R', 'P-R', 'planning') RETURNING id",
+    )
+    .bind(w.tenant_id)
+    .bind(customer_id)
+    .fetch_one(&w.pool)
+    .await
+    .unwrap();
+
+    // Team 级两个 enabled：ds-1（创建序第一）与 ds-2
+    let (_, p1) = create_provider(
+        &w,
+        json!({
+            "name": "ds-1", "provider_type": "deepseek",
+            "endpoint": "https://api.example.com/v1",
+            "configuration": { "model": "m1" }, "api_key": "sk-1"
+        }),
+    )
+    .await;
+    let (_, p2) = create_provider(
+        &w,
+        json!({
+            "name": "ds-2", "provider_type": "deepseek",
+            "endpoint": "https://api.example.com/v1",
+            "configuration": { "model": "m2" }, "api_key": "sk-2"
+        }),
+    )
+    .await;
+    let id1 = Uuid::parse_str(p1["id"].as_str().unwrap()).unwrap();
+    let id2 = Uuid::parse_str(p2["id"].as_str().unwrap()).unwrap();
+    let rev1 = p1["revision"].as_i64().unwrap();
+    let rev2 = p2["revision"].as_i64().unwrap();
+
+    // ② 未指定 → Team 默认 = ds-1（创建序第一）
+    let cfg = resolve_repo_call_config(&w.pool, project_id).await.unwrap().unwrap();
+    assert_eq!(cfg.provider_id, id1);
+
+    // ① 项目指定 ds-2 → 覆盖 Team 默认
+    let (_, _) = call(
+        &w.app,
+        "PUT",
+        &format!("/v1/pm/projects/{project_id}/ai-model-policies"),
+        &w.admin_token,
+        Some(json!({ "provider_id": id2, "expected_revision": 1 })),
+    )
+    .await;
+    let cfg = resolve_repo_call_config(&w.pool, project_id).await.unwrap().unwrap();
+    assert_eq!(cfg.provider_id, id2);
+    assert_eq!(cfg.model, "m2");
+
+    // 严格不回退：指定的 ds-2 停用后 → None（Fake 可见），绝不落到 ds-1
+    let (_, _) = call(
+        &w.app,
+        "POST",
+        &format!("{}/{}/status", base_uri(w.tenant_id), id2),
+        &w.admin_token,
+        Some(json!({ "expected_revision": rev2 + 1, "action": "disable" })),
+    )
+    .await;
+    let cfg = resolve_repo_call_config(&w.pool, project_id).await.unwrap();
+    assert!(cfg.is_none(), "designated disabled must NOT fall back to ds-1");
+
+    // 清掉指定 → 回到 Team 默认 ds-1
+    sqlx::query("DELETE FROM ai.project_ai_model_policy WHERE project_id = $1")
+        .bind(project_id)
+        .execute(&w.pool)
+        .await
+        .unwrap();
+    let cfg = resolve_repo_call_config(&w.pool, project_id).await.unwrap().unwrap();
+    assert_eq!(cfg.provider_id, id1);
+    let _ = rev1;
+}
