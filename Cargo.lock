@@ -47,6 +47,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ai-pm-runner"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "pm-application",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
 name = "ai-pm-worker"
 version = "0.1.0"
 dependencies = [

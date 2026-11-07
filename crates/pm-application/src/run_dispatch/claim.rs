@@ -746,8 +746,14 @@ async fn claim_core_in_project(
         .map(crate::run_context::hash_lease_token);
 
     // T-059 / ADR-0002 L5：执行形态由领取通道显式表达（替代 lease_owner 前缀推导）。
-    let execution_mode = match opts.lease_owner {
+    let execution_mode = match &opts.lease_owner {
         LeaseOwner::Worker(_) => "spawn",
+        // ACP Runner（V0.5 WP-3 / V1.1 §0 载体双形态）：client_name 携保留前缀
+        // `runner:` 领取 = 客户端**进程载体**（Model B spawn 形态），interaction /
+        // 命令查询面 / Continuation 通道对其适用；四工具契约不动，前缀是 V-05-1
+        // Client Registry（Client 身份 + 能力三分验证）落地前的过渡形态标记。
+        // 其余 MCP 领取 = Agent 自执行（Model A human；ACP-425 退化路径不受影响）。
+        LeaseOwner::Mcp { client_name } if client_name.starts_with("runner:") => "spawn",
         LeaseOwner::Mcp { .. } => "human",
     };
 

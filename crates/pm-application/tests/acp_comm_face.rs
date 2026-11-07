@@ -584,3 +584,78 @@ async fn cancel_open_interaction_closes_chain_and_unshields(pool: PgPool) {
         .unwrap();
     assert!(!again.replayed);
 }
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn runner_prefix_claim_stamps_spawn_execution_mode(pool: PgPool) {
+    let fx = claimed_run(&pool, "ACP-RUN").await;
+    // 夹具是手工铸造的；这里走真实 MCP 领取通道验证前缀标记。
+    let (project_id, task_id, human_id) = seed(&pool, "ACP-RUN2").await;
+    let _ = fx;
+    // claimability：执行器指派前置（与 run_dispatch 种子一致）。
+    let agent: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.principal (kind, display_name) VALUES ('dev_agent', 'dev') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE delivery.task SET assignee_id = $1 WHERE id = $2")
+        .bind(agent)
+        .bind(task_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let actor = AuditActor::principal(human_id);
+    let claimed = pm_application::run_dispatch::claim_task_run_as(
+        &pool,
+        project_id,
+        task_id,
+        "runner:test-host",
+        None,
+        &cfg(),
+        &actor,
+    )
+    .await
+    .unwrap();
+    let mode: String = sqlx::query_scalar(
+        "SELECT execution_mode FROM delivery.task_run WHERE id = $1",
+    )
+    .bind(claimed.run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(mode, "spawn", "runner: prefixed MCP claim = client-side process carrier");
+
+    // 对照：普通 MCP 领取仍是 Model A human（ACP-425 退化路径不变）。
+    let (project_id2, task_id2, human_id2) = seed(&pool, "ACP-RUN3").await;
+    let agent2: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.principal (kind, display_name) VALUES ('dev_agent', 'dev2') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE delivery.task SET assignee_id = $1 WHERE id = $2")
+        .bind(agent2)
+        .bind(task_id2)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let claimed2 = pm_application::run_dispatch::claim_task_run_as(
+        &pool,
+        project_id2,
+        task_id2,
+        "codex-cli",
+        None,
+        &cfg(),
+        &AuditActor::principal(human_id2),
+    )
+    .await
+    .unwrap();
+    let mode2: String = sqlx::query_scalar(
+        "SELECT execution_mode FROM delivery.task_run WHERE id = $1",
+    )
+    .bind(claimed2.run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(mode2, "human");
+}
