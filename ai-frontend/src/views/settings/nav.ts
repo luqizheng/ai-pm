@@ -2,7 +2,9 @@ import type { Component } from "vue";
 import {
   Bell,
   Cpu,
+  GitBranch,
   Mail,
+  Monitor,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
@@ -53,4 +55,28 @@ export const TEAM_ICONS: Record<string, Component> = {
   invitations: Mail,
   general: Settings2,
   aiProviders: Cpu
+};
+
+/** 项目域应用侧栏条目（/project/settings/*，V1.0 稿五节，2026-11-07）。
+ *
+ * Git Repositories / Runners 两节由原独立页面迁入（真数据）；General、
+ * Members、AI Configuration 三节规划中（proposed 徽标 + 占位页），随后端
+ * 能力逐个迁入。条目 id 同样是 i18n key（settings.nav.<id>）。 */
+export const PROJECT_SETTINGS_ROOT = "/project/settings";
+
+export const PROJECT_APP_NAV: SettingsNavEntry[] = [
+  { id: "projectGeneral", to: "/project/settings/general", proposed: true },
+  { id: "projectMembers", to: "/project/settings/members", proposed: true },
+  { id: "repositories", to: "/project/settings/repositories" },
+  { id: "runners", to: "/project/settings/runners" },
+  { id: "projectAi", to: "/project/settings/ai", proposed: true }
+];
+
+/** 项目域侧栏图标 */
+export const PROJECT_ICONS: Record<string, Component> = {
+  projectGeneral: Settings2,
+  projectMembers: Users,
+  repositories: GitBranch,
+  runners: Monitor,
+  projectAi: Sparkles
 };

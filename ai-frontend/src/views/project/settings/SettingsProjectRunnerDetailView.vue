@@ -9,7 +9,7 @@ import Badge from "@/components/ui/badge/Badge.vue";
 import Button from "@/components/ui/button/Button.vue";
 import ConfirmationDialog from "@/components/ui/confirmation-dialog/ConfirmationDialog.vue";
 import { StatusIndicator } from "@/components/ui/status-indicator";
-import PageFrame from "@/components/shell/PageFrame.vue";
+import SettingsAppFrame from "@/views/settings/SettingsAppFrame.vue";
 import {
   bindDevice,
   getDevice,
@@ -28,12 +28,14 @@ import {
   readinessVariant,
   type EnvHealthRow,
   type HealthState
-} from "./domain";
+} from "../environments/domain";
+import { useProjectSettingsFrame } from "./shared";
 
 /**
- * Runner 详情页（线稿「页面 B」）：就绪横幅（为什么可/不可执行 + 恢复）→
- * 运行健康检查（自检证据 5 行）→ 项目绑定（真实绑定契约）→ 运行信息 →
- * 危险操作（吊销，需显式确认）。
+ * Project Setting · Runner 详情页（原执行环境「页面 B」迁入，
+ * /project/environments/:id → /project/settings/runners/:id，2026-11-07）：
+ * 就绪横幅（为什么可/不可执行 + 恢复）→ 运行健康检查（自检证据 5 行）→
+ * 项目绑定（真实绑定契约）→ 运行信息 → 危险操作（吊销，需显式确认）。
  *
  * 契约口径（devices.ts T-088）：
  * - 健康检查 = 最近自检证据的只读展示（installed/connected/tool/仓库覆盖 +
@@ -44,6 +46,7 @@ const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const scope = useScopeStore();
+const settingsFrame = useProjectSettingsFrame();
 
 const device = ref<DeviceDetail | null>(null);
 const loading = ref(true);
@@ -241,23 +244,23 @@ function confirmRevoke() {
 }
 
 function backToList() {
-  void router.push("/project/environments");
+  void router.push("/project/settings/runners");
 }
 
 onMounted(load);
 </script>
 
 <template>
-  <PageFrame
-    :breadcrumbs="[
-      { label: t('environments.breadcrumb.project') },
-      {
-        label: t('environments.breadcrumb.environments'),
-        to: '/project/environments'
-      },
-      { label: String(route.params.deviceId ?? '') }
+  <SettingsAppFrame
+    :breadcrumb="[
+      ...settingsFrame.baseCrumbs(),
+      { label: t('settings.nav.runners'), to: '/project/settings/runners' },
+      { label: device?.name ?? String(route.params.deviceId ?? '') }
     ]"
     :title="device?.name ?? t('environments.detail.title')"
+    :scope-label="settingsFrame.scopeLabel.value"
+    :entries="settingsFrame.navEntries"
+    :icons="settingsFrame.navIcons"
   >
     <template #actions>
       <Button variant="ghost" size="sm" :disabled="loading" @click="load">
@@ -475,7 +478,7 @@ onMounted(load);
     <template v-if="errorMessage && device">
       <Alert variant="danger">{{ errorMessage }}</Alert>
     </template>
-  </PageFrame>
+  </SettingsAppFrame>
 </template>
 
 <style scoped>

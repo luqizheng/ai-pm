@@ -23,7 +23,10 @@ import ProjectCreateView from "@/views/project/create/ProjectCreateView.vue";
 import CognitionPage from "@/views/project/cognition/CognitionPage.vue";
 import BaselinePage from "@/views/project/baseline/BaselinePage.vue";
 import CommandCenterView from "@/views/project/command-center/CommandCenterView.vue";
-import EnvironmentDetailView from "@/views/project/environments/EnvironmentDetailView.vue";
+import SettingsProjectPlaceholderView from "@/views/project/settings/SettingsProjectPlaceholderView.vue";
+import SettingsProjectRepositoriesView from "@/views/project/settings/SettingsProjectRepositoriesView.vue";
+import SettingsProjectRunnersView from "@/views/project/settings/SettingsProjectRunnersView.vue";
+import SettingsProjectRunnerDetailView from "@/views/project/settings/SettingsProjectRunnerDetailView.vue";
 import RequirementBaselineView from "@/views/project/requirement-baseline/RequirementBaselineView.vue";
 import RequirementDetailView from "@/views/project/requirement-detail/RequirementDetailView.vue";
 import RequirementHistoryView from "@/views/project/requirement-history/RequirementHistoryView.vue";
@@ -127,13 +130,73 @@ export function buildRoutes(): RouteRecordRaw[] {
     meta: { title: "s01.command-center.pageTitle" }
   });
 
-  // Runner 详情（执行环境「页面 B」）：就绪横幅 / 健康检查 / 绑定 / 吊销，
-  // 不占主导航——入口 = 执行环境列表页设备卡（导航项 /project/environments）。
-  routes.push({
-    path: "/project/environments/:deviceId",
-    component: EnvironmentDetailView,
-    meta: { title: "environments.detail.title" }
-  });
+  // Project Setting（V1.0 稿，2026-11-07）：项目配置中心，不占主导航——
+  // 入口 = 项目总控台页头「项目设置」（CommandCenterHeader settings 事件）。
+  // Git Repositories / Runners 两节由原独立页面迁入（真数据）；General /
+  // Members / AI Configuration 三节规划中（占位页 + 侧栏 proposed 徽标）。
+  routes.push(
+    {
+      path: "/project/settings",
+      redirect: "/project/settings/general",
+      meta: { title: "settings.project.scopeLabel" }
+    },
+    {
+      path: "/project/settings/general",
+      component: SettingsProjectPlaceholderView,
+      meta: { title: "settings.nav.projectGeneral" }
+    },
+    {
+      path: "/project/settings/members",
+      component: SettingsProjectPlaceholderView,
+      meta: { title: "settings.nav.projectMembers" }
+    },
+    {
+      path: "/project/settings/repositories",
+      component: SettingsProjectRepositoriesView,
+      meta: { title: "s01.repositories.page.title" }
+    },
+    {
+      path: "/project/settings/runners",
+      component: SettingsProjectRunnersView,
+      meta: { title: "environments.page.title" }
+    },
+    {
+      path: "/project/settings/runners/:deviceId",
+      component: SettingsProjectRunnerDetailView,
+      meta: { title: "environments.detail.title" }
+    },
+    {
+      path: "/project/settings/ai",
+      component: SettingsProjectPlaceholderView,
+      meta: { title: "settings.nav.projectAi" }
+    }
+  );
+
+  // 旧独立入口重定向（Git 仓库 / Runners 迁入 Project Setting 统一入口）。
+  routes.push(
+    {
+      path: "/project/repository",
+      redirect: "/project/settings/repositories"
+    },
+    {
+      path: "/project/repository/overview",
+      redirect: "/project/settings/repositories"
+    },
+    {
+      path: "/project/repository/branches",
+      redirect: "/project/settings/repositories"
+    },
+    {
+      path: "/project/environments",
+      redirect: "/project/settings/runners"
+    },
+    {
+      path: "/project/environments/:deviceId",
+      redirect: to => ({
+        path: `/project/settings/runners/${String(to.params.deviceId)}`
+      })
+    }
+  );
 
   // 需求评审与确认（S02-UI-03）：人工评审提案并作出正式决策，不占主导航——
   // 入口 = Requirements Workspace 页头「需求评审」。静态段优先于下方动态段匹配。

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 
-import RepositoriesView from "./RepositoriesView.vue";
+import SettingsProjectRepositoriesView from "./SettingsProjectRepositoriesView.vue";
 import { mountShell } from "@/components/shell/test-utils";
 import { buildRoutes } from "@/router";
 import type { RepositoryV2 } from "@/api/initialization";
@@ -58,9 +58,9 @@ async function mountView() {
     history: createMemoryHistory(),
     routes: buildRoutes()
   });
-  router.push("/project/repository/overview?project_id=prj-1");
+  router.push("/project/settings/repositories?project_id=prj-1");
   await router.isReady();
-  const mounted = mountShell(RepositoriesView, {}, router);
+  const mounted = mountShell(SettingsProjectRepositoriesView, {}, router);
   await flushPromises();
   return mounted;
 }
@@ -74,7 +74,7 @@ function findButtonByText(
   return target!;
 }
 
-describe("RepositoriesView", () => {
+describe("SettingsProjectRepositoriesView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listRepositoriesV2.mockResolvedValue({ items: [], total: 0 });

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DOMWrapper, flushPromises } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 
-import EnvironmentsView from "./EnvironmentsView.vue";
+import SettingsProjectRunnersView from "./SettingsProjectRunnersView.vue";
 import { mountShell } from "@/components/shell/test-utils";
 import { buildRoutes } from "@/router";
 import type { Device } from "@/api/devices";
@@ -47,9 +47,9 @@ async function mountView() {
     history: createMemoryHistory(),
     routes: buildRoutes()
   });
-  router.push("/project/environments");
+  router.push("/project/settings/runners");
   await router.isReady();
-  const mounted = mountShell(EnvironmentsView, {}, router);
+  const mounted = mountShell(SettingsProjectRunnersView, {}, router);
   await flushPromises();
   return mounted;
 }
@@ -74,7 +74,7 @@ function findBodyButton(text: string): DOMWrapper<Element> {
   return new DOMWrapper(el!);
 }
 
-describe("EnvironmentsView", () => {
+describe("SettingsProjectRunnersView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listDevices.mockResolvedValue({ items: [], total: 0 });
@@ -110,7 +110,9 @@ describe("EnvironmentsView", () => {
     const { wrapper, router } = await mountView();
     await wrapper.find('[data-testid="env-card-open-dev-9"]').trigger("click");
     await flushPromises();
-    expect(router.currentRoute.value.path).toBe("/project/environments/dev-9");
+    expect(router.currentRoute.value.path).toBe(
+      "/project/settings/runners/dev-9"
+    );
   });
 
   it("搜索关键字过滤设备卡（SearchInput 原生输入）", async () => {

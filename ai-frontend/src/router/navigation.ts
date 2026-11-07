@@ -1,13 +1,11 @@
 import {
   BookOpen,
   Folders,
-  GitBranch,
   Home,
   Inbox,
   LayoutDashboard,
   ListChecks,
   Megaphone,
-  Monitor,
   ScanSearch,
   Settings2,
   Sparkles,
@@ -131,26 +129,9 @@ export const navGroups: NavGroup[] = [
     labelKey: "shell.app.side.group.modules",
     projectScoped: true,
     items: [
-      {
-        path: "/project/repository",
-        labelKey: "shell.app.side.item.repository",
-        icon: GitBranch,
-        expandable: true,
-        children: [
-          {
-            path: "/project/repository/overview",
-            labelKey: "shell.app.side.sub.overview",
-            component: () =>
-              import("@/views/project/repository/RepositoriesView.vue").then(
-                module => module.default
-              )
-          },
-          {
-            path: "/project/repository/branches",
-            labelKey: "shell.app.side.sub.branches"
-          }
-        ]
-      },
+      // Git 仓库管理已迁入 Project Setting（/project/settings/repositories，
+      // V1.0 稿「统一入口」裁决，2026-11-07）：旧路径 /project/repository/*
+      // 在 router/index.ts 重定向。
       {
         path: "/project/discovery",
         labelKey: "shell.app.side.item.discovery",
@@ -185,19 +166,9 @@ export const navGroups: NavGroup[] = [
           import("@/views/project/devenv/BootstrapView.vue").then(
             module => module.default
           )
-      },
-      {
-        // 执行环境（Runner / 设备执行基础设施）：设备目录 + 就绪快照 + 绑定治理。
-        // Runner 详情页（/project/environments/:deviceId）在 router/index.ts
-        // 单独注册（线稿「页面 B」），不占主导航。
-        path: "/project/environments",
-        labelKey: "shell.app.side.item.environments",
-        icon: Monitor,
-        component: () =>
-          import("@/views/project/environments/EnvironmentsView.vue").then(
-            module => module.default
-          )
       }
+      // 执行环境（Runners）已迁入 Project Setting（/project/settings/runners，
+      // 与仓库同批统一入口）：旧路径 /project/environments* 重定向。
     ]
   },
   {
@@ -235,8 +206,8 @@ export const flatNavItems: NavItem[] = navGroups.flatMap(group => group.items);
 /**
  * 判定某路径是否为导航项的激活态。
  *
- * 父路径命中其全部子路径（/project/repository 命中 /project/repository/branches），
- * 但**不得**让 /project/repository 命中 /project/repository-xxx 这类同前缀兄弟路径。
+ * 父路径命中其全部子路径（如 /project/discovery 命中其子路径），
+ * 但**不得**让父路径命中 /project/discovery-xxx 这类同前缀兄弟路径。
  */
 export function isNavItemActive(item: NavItem, currentPath: string): boolean {
   if (currentPath === item.path) return true;

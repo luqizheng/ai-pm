@@ -18,23 +18,27 @@ import { SearchInput } from "@/components/ui/search-input";
 import { Select } from "@/components/ui/select";
 import type { SelectOption } from "@/components/ui/select/types";
 import { StatCard } from "@/components/ui/stat-card";
-import PageFrame from "@/components/shell/PageFrame.vue";
+import SettingsAppFrame from "@/views/settings/SettingsAppFrame.vue";
 import { listDevices, type Device } from "@/api/devices";
-import DeviceCard from "./components/DeviceCard.vue";
-import DeviceWizardDialog from "./components/DeviceWizardDialog.vue";
-import { envMetrics, filterDevices } from "./domain";
+import DeviceCard from "../environments/components/DeviceCard.vue";
+import DeviceWizardDialog from "../environments/components/DeviceWizardDialog.vue";
+import { envMetrics, filterDevices } from "../environments/domain";
+import { useProjectSettingsFrame } from "./shared";
 
 /**
- * 执行环境（Execution Environments）列表页 —— Runner / 设备执行基础设施管理。
+ * Project Setting · Runners 节（V1.0 稿）——原执行环境列表页迁入
+ * （/project/environments → /project/settings/runners，2026-11-07）。
  *
  * 数据面 = devices.ts 契约（pm-api `/v1/pm/devices*`，T-088）：
  * - 指标三件套（总数 / Execution Ready / 异常）由 listDevices 全量派生；
  * - 设备卡展示服务端就绪快照的阶段链（Installed → Connected → Authenticated → 终态），
  *   不渲染后端没有的状态源（心跳 / MCP 连接等挂账项不伪造）；
  * - 登记走添加向导（三步：选平台 → 安装引导 → 注册登记）。
+ * 列表为租户级设备目录（listDevices 不含项目绑定），项目绑定操作在详情页。
  */
 const { t } = useI18n();
 const router = useRouter();
+const settingsFrame = useProjectSettingsFrame();
 
 const devices = ref<Device[]>([]);
 const loading = ref(true);
@@ -102,7 +106,9 @@ function clearFilters() {
 }
 
 function openDevice(device: Device) {
-  void router.push(`/project/environments/${encodeURIComponent(device.id)}`);
+  void router.push(
+    `/project/settings/runners/${encodeURIComponent(device.id)}`
+  );
 }
 
 function openInstallGuide() {
@@ -117,13 +123,13 @@ onMounted(load);
 </script>
 
 <template>
-  <PageFrame
-    :breadcrumbs="[
-      { label: t('environments.breadcrumb.project') },
-      { label: t('environments.breadcrumb.environments') }
-    ]"
+  <SettingsAppFrame
+    :breadcrumb="settingsFrame.breadcrumb(t('environments.page.title'))"
     :title="t('environments.page.title')"
     :description="t('environments.page.description')"
+    :scope-label="settingsFrame.scopeLabel.value"
+    :entries="settingsFrame.navEntries"
+    :icons="settingsFrame.navIcons"
   >
     <template #actions>
       <Button variant="ghost" size="sm" :disabled="loading" @click="load">
@@ -248,7 +254,7 @@ onMounted(load);
       @registered="onRegistered"
       @go-detail="openDevice"
     />
-  </PageFrame>
+  </SettingsAppFrame>
 </template>
 
 <style scoped>

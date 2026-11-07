@@ -52,6 +52,11 @@ function openExecution() {
 function openKnowledge() {
   void router.push("/project/knowledge");
 }
+
+/** 项目设置（V1.0 稿统一入口）：Git 仓库 / Runners 等配置中心。 */
+function openSettings() {
+  void router.push("/project/settings");
+}
 </script>
 
 <template>
@@ -76,6 +81,7 @@ function openKnowledge() {
       ]"
       :settings-label="t('s01.command-center.settings')"
       :settings-button-label="t('s01.command-center.settings')"
+      @settings="openSettings"
     />
 
     <ProjectHealthSection

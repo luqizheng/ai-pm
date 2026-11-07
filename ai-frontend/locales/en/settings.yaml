@@ -37,6 +37,7 @@ settings:
     projectGeneral: General
     projectMembers: Project Members
     repositories: Repositories
+    runners: Runners
     development: Development
     projectAi: AI Configuration
     aiProviders: AI Configuration (Models)
@@ -236,6 +237,8 @@ settings:
       connect: Connect
       disconnect: Disconnect
   project:
+    proposedTitle: This section is planned
+    proposedHint: It will land here once the capability is confirmed; continue daily work from the Project Command Center.
     landing:
       title: Project Settings
       desc: Identity, members, repositories, and execution configuration for the current project.

@@ -54,7 +54,7 @@ export const demoNotificationRecords: NotificationRecord[] = [
     timestamp: "1h ago",
     object: "Atlas Platform · PRJ-008",
     openLabel: "PRJ-008",
-    target: "/project/repository",
+    target: "/project/settings/repositories",
     read: true
   },
   {
@@ -66,7 +66,7 @@ export const demoNotificationRecords: NotificationRecord[] = [
     timestamp: "2h ago",
     object: "SDK Toolkit · sdk-client",
     openLabel: "sdk-client",
-    target: "/project/repository",
+    target: "/project/settings/repositories",
     read: true
   },
   {
@@ -78,7 +78,7 @@ export const demoNotificationRecords: NotificationRecord[] = [
     timestamp: "3h ago",
     object: "Atlas Platform · atlas-api",
     openLabel: "atlas-api",
-    target: "/project/repository",
+    target: "/project/settings/repositories",
     read: true
   }
 ];

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 
-import EnvironmentDetailView from "./EnvironmentDetailView.vue";
+import SettingsProjectRunnerDetailView from "./SettingsProjectRunnerDetailView.vue";
 import { mountShell } from "@/components/shell/test-utils";
 import { buildRoutes } from "@/router";
 import type { DeviceBinding, DeviceDetail } from "@/api/devices";
@@ -76,9 +76,9 @@ async function mountView() {
     history: createMemoryHistory(),
     routes: buildRoutes()
   });
-  router.push("/project/environments/dev-1");
+  router.push("/project/settings/runners/dev-1");
   await router.isReady();
-  const mounted = mountShell(EnvironmentDetailView, {}, router);
+  const mounted = mountShell(SettingsProjectRunnerDetailView, {}, router);
   await flushPromises();
   return mounted;
 }
@@ -92,7 +92,7 @@ function findButtonByText(
   return target!;
 }
 
-describe("EnvironmentDetailView", () => {
+describe("SettingsProjectRunnerDetailView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getDevice.mockResolvedValue(detail());

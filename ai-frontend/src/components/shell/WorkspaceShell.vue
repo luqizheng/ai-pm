@@ -9,7 +9,6 @@ import {
   demoSearchFn
 } from "@/components/global/search/demo";
 import type { SearchCommand } from "@/components/global/search/types";
-import { flatNavItems } from "@/router/navigation";
 import { useShellStore } from "@/stores/shell";
 import CommandBar from "./CommandBar.vue";
 import ContextPanel from "./ContextPanel.vue";
@@ -49,23 +48,22 @@ if (!shell.currentProjectId) {
  * 附加命令）。文案走 i18n，专有名词（项目名 / 模块名）取自壳状态与导航表。
  */
 const searchCommands = computed<SearchCommand[]>(() => {
-  const repositories = flatNavItems.find(
-    item => item.path === "/project/repository"
-  );
   return [
     {
       id: "cmd-open-project",
       label: `${t("global.search.commands.openProject")} · ${shell.currentProject?.name ?? ""}`,
       group: "navigate",
       icon: "folder",
-      target: "/project/repository"
+      // 项目上下文入口 = 项目总控台（Git 仓库等模块已迁入 Project Setting）
+      target: "/project/command-center"
     },
     {
       id: "cmd-navigate-repositories",
-      label: `${t("global.search.commands.navigateModule")} · ${repositories ? t(repositories.labelKey) : ""}`,
+      label: `${t("global.search.commands.navigateModule")} · ${t("shell.app.side.item.repository")}`,
       group: "navigate",
       icon: "gitBranch",
-      target: "/project/repository"
+      // 仓库管理已迁入 Project Setting（/project/settings/repositories）
+      target: "/project/settings/repositories"
     },
     {
       id: "cmd-create-project",

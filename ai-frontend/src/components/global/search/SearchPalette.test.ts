@@ -19,14 +19,14 @@ describe("SearchPalette", () => {
       label: "Open project · Atlas Platform",
       group: "navigate",
       icon: "folder",
-      target: "/project/repository"
+      target: "/project/command-center"
     },
     {
       id: "cmd-navigate-repositories",
       label: "Navigate module · Repositories",
       group: "navigate",
       icon: "gitBranch",
-      target: "/project/repository"
+      target: "/project/settings/repositories"
     },
     {
       id: "cmd-create-project",
@@ -157,7 +157,8 @@ describe("SearchPalette", () => {
 
     await wrapper.trigger("keydown", { key: "Enter" });
     const selectEvents = wrapper.emitted<[string]>("select");
-    expect(selectEvents?.[0]?.[0]).toBe("/project/repository");
+    // ArrowDown 后焦点在第二条命令（仓库命令目标已迁至 Project Setting）
+    expect(selectEvents?.[0]?.[0]).toBe("/project/settings/repositories");
     expect(wrapper.emitted("update:open")?.[0]?.[0]).toBe(false);
 
     const wrapper2 = mountPalette();

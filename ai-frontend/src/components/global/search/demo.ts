@@ -25,7 +25,7 @@ export const demoSearchIndex: SearchResultItem[] = [
     label: "Atlas Platform",
     description: "PRJ-008",
     meta: "Acme Research · Contributor · Open object →",
-    target: "/project/repository"
+    target: "/project/settings/repositories"
   },
   {
     id: "search-repo-atlas-api",
@@ -33,7 +33,7 @@ export const demoSearchIndex: SearchResultItem[] = [
     label: "atlas-api",
     description: "PRJ-008",
     meta: "Atlas Platform · Private repository · Open object →",
-    target: "/project/repository"
+    target: "/project/settings/repositories"
   },
   {
     id: "search-req-142",

@@ -44,6 +44,9 @@ defineProps<{
           :icons="icons"
         />
       </template>
+      <template v-if="$slots.actions" #actions>
+        <slot name="actions" />
+      </template>
       <slot />
     </SettingsPageLayout>
   </div>

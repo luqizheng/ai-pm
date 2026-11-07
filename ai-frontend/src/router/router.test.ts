@@ -30,10 +30,48 @@ describe("router", () => {
     }
   });
 
-  it("带子菜单的父路由重定向到第一个子项", () => {
+  it("项目设置根路径重定向到 General", () => {
     const routes = buildRoutes();
-    const repo = routes.find(r => r.path === "/project/repository");
-    expect(repo?.redirect).toBe("/project/repository/overview");
+    const settings = routes.find(r => r.path === "/project/settings");
+    expect(settings?.redirect).toBe("/project/settings/general");
+  });
+
+  it("旧仓库 / 执行环境路径重定向到 Project Setting 对应节", () => {
+    const routes = buildRoutes();
+    const redirects = new Map(
+      routes
+        .filter(r => typeof r.redirect === "string")
+        .map(r => [r.path, r.redirect])
+    );
+    expect(redirects.get("/project/repository")).toBe(
+      "/project/settings/repositories"
+    );
+    expect(redirects.get("/project/repository/overview")).toBe(
+      "/project/settings/repositories"
+    );
+    expect(redirects.get("/project/environments")).toBe(
+      "/project/settings/runners"
+    );
+    // 详情路径函数式重定向保 deviceId 参数
+    const detail = routes.find(
+      r => r.path === "/project/environments/:deviceId"
+    );
+    expect(typeof detail?.redirect).toBe("function");
+  });
+
+  it("Project Setting 五节路由已注册", () => {
+    const routes = buildRoutes();
+    const paths = new Set(routes.map(r => r.path));
+    for (const path of [
+      "/project/settings/general",
+      "/project/settings/members",
+      "/project/settings/repositories",
+      "/project/settings/runners",
+      "/project/settings/runners/:deviceId",
+      "/project/settings/ai"
+    ]) {
+      expect(paths.has(path), `${path} 未注册`).toBe(true);
+    }
   });
 
   it("存在兜底路由（404）", () => {

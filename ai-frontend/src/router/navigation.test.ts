@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { ScanSearch } from "lucide-vue-next";
 
 import {
   flatNavItems,
   isNavChildActive,
   isNavItemActive,
-  navGroups
+  navGroups,
+  type NavChild,
+  type NavItem
 } from "./navigation";
 
 /**
@@ -48,24 +51,36 @@ describe("navigation", () => {
   });
 
   it("带子菜单的父项在子路径下激活", () => {
-    const repo = flatNavItems.find(i => i.path === "/project/repository")!;
-    expect(isNavItemActive(repo, "/project/repository/overview")).toBe(true);
-    expect(isNavItemActive(repo, "/project/repository/branches")).toBe(true);
+    // 当前导航树暂无带子菜单的项（仓库已迁入 Project Setting），
+    // 用合成项验证 isNavItemActive 的父子激活机制。
+    const item: NavItem = {
+      path: "/project/discovery",
+      labelKey: "shell.app.side.item.discovery",
+      icon: ScanSearch,
+      children: [
+        { path: "/project/discovery/overview", labelKey: "test" },
+        { path: "/project/discovery/branches", labelKey: "test" }
+      ]
+    };
+    expect(isNavItemActive(item, "/project/discovery/overview")).toBe(true);
+    expect(isNavItemActive(item, "/project/discovery/branches")).toBe(true);
   });
 
   it("同前缀的兄弟路径不误激活", () => {
-    const repo = flatNavItems.find(i => i.path === "/project/repository")!;
-    expect(isNavItemActive(repo, "/project/repository-other")).toBe(false);
+    const requirements = flatNavItems.find(
+      i => i.path === "/project/requirements"
+    )!;
+    expect(isNavItemActive(requirements, "/project/requirements-other")).toBe(
+      false
+    );
   });
 
   it("子菜单项按精确路径判定激活", () => {
-    const repo = flatNavItems.find(i => i.path === "/project/repository")!;
-    const overview = repo.children![0];
-    expect(isNavChildActive(overview, "/project/repository/overview")).toBe(
-      true
-    );
-    expect(isNavChildActive(overview, "/project/repository/branches")).toBe(
-      false
-    );
+    const child: NavChild = {
+      path: "/project/discovery/overview",
+      labelKey: "test"
+    };
+    expect(isNavChildActive(child, "/project/discovery/overview")).toBe(true);
+    expect(isNavChildActive(child, "/project/discovery/branches")).toBe(false);
   });
 });

@@ -34,6 +34,15 @@ const items = computed(() =>
     icon: props.icons?.[entry.id]
   }))
 );
+
+/**
+ * 激活判定 = 精确命中或前缀命中（如 Runner 详情页
+ * /project/settings/runners/:id 命中 runners 条目）。
+ * 同前缀兄弟路径不会误判：/project/settings/runners-xxx 不匹配 `runners/`。
+ */
+function isActive(to: string): boolean {
+  return route.path === to || route.path.startsWith(`${to}/`);
+}
 </script>
 
 <template>
@@ -46,7 +55,7 @@ const items = computed(() =>
         :label="item.label"
         :to="denied ? undefined : item.entry.to"
         :icon="item.icon"
-        :active="!denied && route.path === item.entry.to"
+        :active="!denied && isActive(item.entry.to)"
         :proposed="item.entry.proposed"
         :frame="item.entry.frame"
         :disabled="denied"

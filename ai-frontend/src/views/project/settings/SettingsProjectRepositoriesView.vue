@@ -9,7 +9,7 @@ import Badge from "@/components/ui/badge/Badge.vue";
 import Button from "@/components/ui/button/Button.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import { StatCard } from "@/components/ui/stat-card";
-import PageFrame from "@/components/shell/PageFrame.vue";
+import SettingsAppFrame from "@/views/settings/SettingsAppFrame.vue";
 import { useScopeStore } from "@/api/scope";
 import {
   confirmRepositoryVersion,
@@ -20,9 +20,12 @@ import {
   verifyRepositoryV2,
   type RepositoryV2
 } from "@/api/initialization";
+import { useProjectSettingsFrame } from "./shared";
 
 /**
- * S01-03 · Repository Management（长期管理页，V1.2 §6：非一次性向导）。
+ * Project Setting · Git Repositories 节（V1.0 稿）——原 S01-03 Repository
+ * Management 长期管理页迁入（/project/repository/overview →
+ * /project/settings/repositories，2026-11-07 统一入口裁决）。
  *
  * 对接真实后端（pm-api pm_repositories.rs）：
  * - 四概念治理（V1.2 §5.1）：default_branch / selected_commit（Confirmed，仅
@@ -40,6 +43,7 @@ import {
 const { t } = useI18n();
 const route = useRoute();
 const scope = useScopeStore();
+const settingsFrame = useProjectSettingsFrame();
 
 const repositories = ref<RepositoryV2[]>([]);
 const loading = ref(true);
@@ -255,13 +259,13 @@ onMounted(load);
 </script>
 
 <template>
-  <PageFrame
-    :breadcrumbs="[
-      { label: t('s01.repositories.breadcrumb.project') },
-      { label: t('s01.repositories.breadcrumb.repositories') }
-    ]"
+  <SettingsAppFrame
+    :breadcrumb="settingsFrame.breadcrumb(t('s01.repositories.page.title'))"
     :title="t('s01.repositories.page.title')"
     :description="t('s01.repositories.page.description')"
+    :scope-label="settingsFrame.scopeLabel.value"
+    :entries="settingsFrame.navEntries"
+    :icons="settingsFrame.navIcons"
   >
     <template #actions>
       <Button variant="ghost" size="sm" :disabled="loading" @click="load">
@@ -590,7 +594,7 @@ onMounted(load);
         </div>
       </aside>
     </section>
-  </PageFrame>
+  </SettingsAppFrame>
 </template>
 
 <style scoped>

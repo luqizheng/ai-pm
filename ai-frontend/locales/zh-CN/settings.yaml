@@ -37,6 +37,7 @@ settings:
     projectGeneral: 基本信息
     projectMembers: 项目成员
     repositories: 仓库
+    runners: Runners
     development: 开发配置
     projectAi: AI 配置
     aiProviders: AI 配置（模型服务）
@@ -236,6 +237,8 @@ settings:
       connect: 连接
       disconnect: 断开
   project:
+    proposedTitle: 该设置节规划中
+    proposedHint: 能力经产品确认后在此落地；当前请从项目总控台继续日常工作。
     landing:
       title: 项目设置
       desc: 当前项目的信息、成员、仓库与执行配置。

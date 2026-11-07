@@ -37,7 +37,7 @@ describe("CommandCenterView", () => {
     expect(text).toContain("林悦");
   });
 
-  it("页头「项目设置」发出 settings 事件（暂无设置路由，仅冒烟不跳转）", async () => {
+  it("页头「项目设置」跳转 Project Setting（V1.0 稿统一入口）", async () => {
     const mounted = mountShell(CommandCenterView);
     await mounted.router.push("/project/command-center");
     await flushPromises();
@@ -46,5 +46,10 @@ describe("CommandCenterView", () => {
       name: "CommandCenterHeader"
     });
     expect(header.exists()).toBe(true);
+    header.vm.$emit("settings");
+    await flushPromises();
+    expect(mounted.router.currentRoute.value.path).toBe(
+      "/project/settings/general"
+    );
   });
 });
