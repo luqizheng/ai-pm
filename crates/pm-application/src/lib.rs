@@ -27,6 +27,7 @@ pub mod knowledge_write_coordinator;
 pub mod team_llm;
 pub mod team_onboarding;
 pub mod onboarding;
+pub mod intake;
 pub mod outbox;
 pub mod outbox_ops;
 pub mod pm_write;
@@ -71,6 +72,7 @@ pub use command_executor::{
     PgCommandExecutor, SnapshotEntry,
 };
 pub use pm_domain::CommandError;
+pub use intake::{IntakeError, IntakeReceipt, IntakeState, RoutingPolicy, TaskSpec};
 pub use outbox::{OutboxAppend, OutboxEvent, PgOutboxAppend};
 pub use outbox_ops::{
     DeadLetterListing, DeadLetterRow, EventTypeCounts, OutboxStats, ReplayError, ReplayOutcome,
