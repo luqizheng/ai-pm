@@ -3,6 +3,8 @@ resolver = "2"
 members = [
     "crates/*",
     "apps/*",
+    "vendor/digua-http-client",
+    "vendor/digua-file-sdk",
 ]
 
 [workspace.package]
@@ -31,7 +33,7 @@ debug = 0
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 # HTTP layer
-axum = "0.8"
+axum = { version = "0.8", features = ["multipart", "macros"] }
 # SSE: broadcast receiver -> Stream adapter
 tokio-stream = { version = "0.1", features = ["sync"] }
 # Database (no TLS feature: local Postgres only; no offline mode, `query!` macros are banned)
@@ -84,3 +86,19 @@ digua_common_jwt = { path = "vendor/digua-common-jwt" }
 # 来源 = low-memory-micro-services libs/common-consul @<同步时 HEAD>。同步命令：
 #   rm -rf vendor/digua-common-consul && cp -r ../low-memory-micro-services/libs/common-consul vendor/digua-common-consul
 digua_common_consul = { path = "vendor/digua-common-consul" }
+
+# digua_file_sdk + digua_http_client 同走源码快照（2026-11-07 file-service
+# 收口配套：file-service 只认 service-jwt，pm-api 经本 SDK 代理文件调用）。
+# 来源 = low-memory-micro-services sdk/rust/{digua-http-client,file-service-sdk} @6deb40a3。
+# 同步命令：
+#   cp -r ../low-memory-micro-services/sdk/rust/digua-http-client vendor/digua-http-client
+#   cp -r ../low-memory-micro-services/sdk/rust/file-service-sdk vendor/digua-file-sdk
+# vendor/digua-http-client 有一处有意补丁：ensure_crypto_provider no-op
+# （上游为 rustls/aws_lc_rs，本仓 reqwest=native-tls 无 provider 可装，
+# 且避免 aws-lc-sys 的 C 编译依赖）。
+# file-sdk 的 reqwest 增量 feature=multipart（additive，与 workspace 定义兼容）。
+# common-jwt 新快照引入的 workspace 依赖（与 lmms 根定义同参）
+jsonwebtoken = { version = "9", default-features = false, features = ["pem", "use_pem"] }
+hex = "0.4"
+digua_http_client = { path = "vendor/digua-http-client" }
+digua_file_sdk = { path = "vendor/digua-file-sdk" }

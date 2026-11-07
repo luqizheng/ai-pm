@@ -61,6 +61,9 @@ pub(crate) struct AppState {
     /// [`router_with_feed_and_knowledge`] 注入独立临时根，避免并行用例的
     /// Git index 竞态；生产 = `KnowledgeRoot::from_env()`。
     pub(crate) knowledge: pm_application::knowledge::KnowledgeRoot,
+    /// 文件代理（2026-11-07 file-service 收口配套）。`None` = 未配置
+    /// bootstrap token（裸机 dev），/v1/file/* 返回 503。
+    pub(crate) file: crate::files::FileProxyHandle,
 }
 
 /// The pm-api route table, stateful over the shared connection pool and
@@ -136,6 +139,7 @@ fn build_router(
         executor,
         audit_feed,
         knowledge,
+        file: crate::files::FileProxy::from_env(),
     };
     // The MCP service clones the pool inside its own state factory; it cannot
     // share `state` (different service type), hence a separate handle.
@@ -227,6 +231,9 @@ fn build_router(
         // S01-05 项目基线：提案派生（知识+仓库快照）→ 逐项确认 → 版本不可变。
         .merge(crate::pm_baseline::router())
         .merge(crate::pm_requirements::router())
+        // 文件代理（2026-11-07）：file-service 收口 mesh-only 后的用户面
+        // 入口，同形状复刻其 REST 契约，出站走 per-tenant 服务 JWT。
+        .merge(crate::files::router())
         .merge(crate::pm_approvers::router())
         // 审计实时流（SSE）。EventSource 无法带 Authorization，token 走
         // `?access_token=`；auth 层只对本路径放行 query token。

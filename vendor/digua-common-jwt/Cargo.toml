@@ -1,20 +1,19 @@
-# ⚠️ 源码快照（勿手改）：同步自 low-memory-micro-services libs/common-jwt @5022fd76。
-# 原 Cargo.toml 使用 lmms workspace 继承字段，脱离工作区无效，这里已落地为具体值
-# （版本取自 lmms 根 Cargo.toml [workspace.dependencies]，与 iam/gateway 编译输入一致）。
-# 同步时注意保留本文件头部与具体化后的依赖段（同步 src/ 与 tests/ 即可）。
 [package]
 name = "digua_common_jwt"
 version = "1.6.0"
 license = "Apache-2.0"
 description = "JWT signing and verification utilities for KudiCoder services"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
-jsonwebtoken = { version = "9", default-features = false, features = ["pem", "use_pem"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "2"
-tokio = { version = "1", features = ["sync", "time", "rt", "macros"] }
-chrono = { version = "0.4", features = ["serde"] }
-tracing = "0.1"
+jsonwebtoken = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync", "time", "rt", "macros"] }
+chrono = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+wiremock = "0.6"

@@ -8,6 +8,7 @@ sha2.workspace = true
 axum.workspace = true
 chrono.workspace = true
 digua_common_jwt.workspace = true
+digua_file_sdk.workspace = true
 digua_common_consul.workspace = true
 pm-application = { path = "../../crates/pm-application" }
 pm-domain = { path = "../../crates/pm-domain" }
@@ -24,6 +25,7 @@ tracing-subscriber.workspace = true
 
 [dev-dependencies]
 tower.workspace = true
+wiremock.workspace = true
 async-trait.workspace = true
 pm-ai = { path = "../../crates/pm-ai" }
 pm-domain = { path = "../../crates/pm-domain" }

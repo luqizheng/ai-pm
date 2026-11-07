@@ -63,6 +63,13 @@ services:
       # 鉴权（slice B）：默认 jwks fail-closed，JWKS 取自同网络（superpowers）的 lmms token-service
       AI_PM_AUTH_MODE: "jwks"
       AI_PM_JWKS_URL: http://token-service:8082/.well-known/jwks.json
+      # 文件代理（2026-11-07 file-service 收口配套）：pm-api 进 lmms
+      # bootstrap 白名单（SERVICE_BOOTSTRAP_TOKENS 里的 PM_DEV_BT），
+      # 出站按请求租户铸 service-jwt 调 file-service。缺省（空）= 代理
+      # 禁用，/v1/file/* 返回 503。
+      SERVICE_BOOTSTRAP_TOKEN: "${PM_DEV_BT:-}"
+      AI_PM_TOKEN_SERVICE_URL: http://token-service:8082
+      FILE_SERVICE_URL: http://file-service:8082
       # SSH 部署密钥的封私钥主密钥（secret::seal_text，AAD=project_id）。
       # 值必须稳定：换值 = 库内已封私钥全部不可解（公钥仍可读，私钥永不出 REST）。
       AI_PM_SECRET_KEY: "${AI_PM_SECRET_KEY:-}"
