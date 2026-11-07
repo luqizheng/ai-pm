@@ -94,3 +94,13 @@ S7-final      interaction=consumed | shield=none | task=running | ledger=complet
 | 绑定治理 | POST /{id}/bindings → 绑定 E2E 工程（declared_repository_ids=[6666…]） |
 | UI 数据源验证 | vite dev（8851，PM_API_URL=.10:8090）代理同端点返回设备详情 ✓——页面渲染即此数据 |
 | 待办 | ready 终态需仓库 verified（真实 git_access 验证）；aipm-web 生产镜像不含新 UI（ai-frontend 生产管线另立） |
+
+## 8. 追加（同日）：ai-frontend 生产管线上栈 ✅（路径 2）
+
+- 根 Dockerfile 增 `runtime-web` 目标（alpine+nginx，装宿主构建的 ai-frontend/dist）；
+  nginx.conf：SPA 回退 + `/api`→pm-api（rewrite 剥前缀）+ `/gw`→api-gateway + Docker DNS 惰性解析
+- .10 部署：容器 `ai-frontend-web`（network=superpowers 与 pm-api 同网，对外 **8092**）
+- 实测：`http://192.168.2.10:8092` → index 200；`/api/v1/pm/devices(/:id)` 经代理返回
+  e2e-runner-59（readiness=authenticated，绑定 1111…+仓库声明）——**Runner UI 生产可见**
+- 踩坑：变量式 proxy_pass 不做前缀剥离（需 rewrite）；alpine nginx 用 http.d/ 非 conf.d/；
+  nginx 启动即解析 upstream → 独立容器须同网或用 resolver 惰性化
