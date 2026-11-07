@@ -5,7 +5,7 @@
 |---|---|
 | 文档性质 | ACP 切片实施设计稿（V1.2 修订稿，待复审） |
 | 版本 | **V1.2**（收编独立复审 V1.0 全部 R-1~R-11 + P2×6；取代 V1.1，逐项可核，对照清单见修订记录） |
-| 裁决状态 | R-ACP-1~9 已裁决（2026-11-07）；**R-ACP-14（情形5 取消重试）已裁=接受（2026-11-07 用户裁决）；R-ACP-15（偏离登记）与 R-ACP-16（离线恢复=方案 a）随本稿登记生效**。编号自复审建议的 10/11/12 顺移（10~13 已被 ACP-03 稿占用并裁决，INDEX 8；后实施者顺移纪律）。**专家复审（第 1 块：活风险三项，2026-11-07）：全部批准 + ACP-C1~C4 横向约束收编（§9）；第 2/3 块（设计取舍/排期依赖）待审** |
+| 裁决状态 | R-ACP-1~9 已裁决（2026-11-07）；**R-ACP-14（情形5 取消重试）已裁=接受（2026-11-07 用户裁决）；R-ACP-15（偏离登记）与 R-ACP-16（离线恢复=方案 a）随本稿登记生效**。编号自复审建议的 10/11/12 顺移（10~13 已被 ACP-03 稿占用并裁决，INDEX 8；后实施者顺移纪律）。**专家复审（第 1 块：活风险三项，2026-11-07）：全部批准 + ACP-C1~C4 横向约束收编（§9）；第 2 块（六项取舍，2026-11-07）：四维持两修正（V-05-1 身份硬前置升格、发现语义独立为 `pm_discover_runs`、链加 `previous_chain_id`）；第 3 块（排期依赖）待审** |
 | 设计基线 | **S03-ACP V1.3.1（已冻结，2026-11-07 用户决议）**：D-01～D-07 为已生效架构裁决 |
 | 覆盖切片 | ACP-01（Interaction 领域模型）· ACP-02（Process Termination）· ACP-08（Adapter 能力与集成） |
 | 本稿闭合项 | §23.3：Worker Command 持久化/轮询/幂等/失败升级 · N-1（等待窗口调度互斥）· N-2（interaction.required 与消费回执物理通道）· Interaction CANCELLED/TIMED_OUT/唯一活跃约束 · awaiting_decision 映射 · Process Termination 失败处理 · Adapter 能力验证 · **等待窗口执行端离线恢复（R-11，§3.6）** |
@@ -39,6 +39,14 @@
   - **R-4 补强**：迟到/缺失/重复 consumed 回执**不得改变已确认的 Continuation 恢复结果**；旧链关闭后新链与旧 Interaction 保持**独立关联**；迁移期历史 responded+running 数据**按 continue ACK 证据分类修复**，禁止仅凭 Task 状态推断。
   - **R-16 关键修正**：**terminate ACKED 不作续领前置，改作新 Session 启动前置（ACP-C4）**——续领后五步时序落 §3.6；改路由 ≠ 重建命令（command_id/idempotency_key/payload 不变、claim_count 不重置）；generation fencing 覆盖旧执行端迟到 ACK；续领本身不自动创建新 Session。
   - 新增**横向架构约束 ACP-C1~C4**（§9 末）；验收补 ACP-454/455（§8）；E2E 必测场景四项（§8 末）。
+- **专家复审第 2 块裁决收编（2026-11-07，六项取舍=四维持两修正；意见原文归档 `...-expert-review-2.md`）**：
+  - **2.1 R-7 维持选 b** + 补强：receipt 须有**稳定 Schema 与版本**、区分 `terminate_requested`/`terminate_confirmed`、记录 Run generation（防旧回执污染）、`executor-events.jsonl` 仅诊断证据非平台权威、多 Process 独立控制/迁移/查询需求出现时重新评估建表（§6.6）。
+  - **2.2 R-16 维持不持久化 token** + 补强：WP-3 增加**稳定 Client 身份持久化**（重启必须恢复原 Client 身份）；续领失败**指数退避 + jitter**；持续失败告警 + 人工处置入口（禁 panic 丢恢复上下文）；**身份失效/deadline 到期即停止自动恢复**（§3.6）。
+  - **2.3 T3 维持严格不顺延** + 产品面：UI 可提供**快捷入口直接进 ACP-07 重新授权流程**（不改原 deadline、不自动延长决策有效期、回复不丢弃、新授权独立审计+独立有效期、未授权前不自动启动 Session）（§3.6）。
+  - **2.4 V-05-1 修正（生产禁令）**：`lease_owner` 前缀匹配**仅限受控环境临时兼容，非生产安全身份**；client_name 必须**登记并绑定认证主体**；发现/续领最终必须验证稳定 Client 身份；**V-05-1 升格为 R-16 对外（生产）启用的硬前置**——身份安全能力未完成前禁止生产环境开放自报 client_name 续领；generation 被抢占**不得视为无害干扰**（§3.3/§3.6）。
+  - **2.5 推翻双态 Poll → 独立工具 `pm_discover_runs`**：Poll 保持单 Run 命令轮询原契约不动；Discover 为独立业务能力（Client 名下待恢复 Run 发现），返回字段十个（run_id/execution_mode/interaction_id/interaction_status/deadline_at/shield_state/lease_generation/lease_status/terminate_command_id/terminate_status），仅限当前认证 Client 有权恢复的 Run、**不返回人工回复正文与 Command payload**、支持分页、重复调用无状态副作用（§1.6/§3.6）。
+  - **2.6 Chain 维持多独立链 + 弱关联字段 `previous_chain_id`**：只引用同 Task 已关闭前驱链、禁自引用/循环、不改 retry_of 链内语义、不共享生命周期——只服务追溯/审计/UI；**不加冷却、不合并连续介入**（重复事件靠 event_id 幂等 + Session 标识 + Run generation 校验区分）（§5.1/§5.2；0048 迁移列）。
+  - 收敛后重点验证六项（§8 末清单更新）。
 
 ---
 
@@ -177,7 +185,7 @@ pm_report_consumption(project_id, task_id, run_id, lease_token, lease_generation
 
 ### 1.6 权限边界（P1-5，新增工具不挂 READ）
 
-现有四执行器工具沿用 `PM_MCP_READ` 历史语义**不动**（契约红线；随 V-05-1 迁移批再评估重命名）。本稿四个新工具设独立权限码：
+现有四执行器工具沿用 `PM_MCP_READ` 历史语义**不动**（契约红线；随 V-05-1 迁移批再评估重命名）。本稿六个新工具设独立权限码：
 
 | 工具 | 权限码 | 身份轨（§3.3） | 写语义 |
 | --- | --- | --- | --- |
@@ -186,6 +194,7 @@ pm_report_consumption(project_id, task_id, run_id, lease_token, lease_generation
 | `pm_poll_commands` | `PM_MCP_COMMAND` | Command Delivery | 命令领取（delivered + claim 租约） |
 | `pm_ack_command` | `PM_MCP_COMMAND` | Command Delivery | 命令回执（acked/failed + receipt） |
 | `pm_reacquire_lease`（§3.6 新增） | `PM_MCP_COMMAND` | Command Delivery | 同主体续领（generation+1 + 新 token + 命令改路由） |
+| `pm_discover_runs`（§3.6 新增，专家第 2 块裁决：推翻双态 Poll，独立工具） | `PM_MCP_COMMAND` | Command Delivery | Client 名下待恢复 Run 发现（只读、分页、无状态副作用） |
 
 权限码语义边界不变（A*：人类正式确认永不出现在以上任何码内）。**实现注记（F-7）**：权限码已落双态门——未授权=403 fail-closed（`IAM_PERM_3001`），授权后可用；真实栈 E2E 双态验证过。
 
@@ -222,7 +231,7 @@ pm_report_consumption(project_id, task_id, run_id, lease_token, lease_generation
 | 字段 | 实施定案 |
 | --- | --- |
 | `worker_id` | **= 下发时目标 Run 的 `lease_owner` 值**。不做广播命令（V1 无需求）。**R-11 修订**：§3.6 续领事务内可对该 Run 非终局命令**同事务改路由**（审计保留） |
-| `lease_generation` | 下发时自 Run 读取固化（语义 = **`issued_generation`**）。**R-2/R-11 增补列 `reacquired_generation`**（可空；经 §3.6 续领时写回，待下一迁移批 0048+） |
+| `lease_generation` | 下发时自 Run 读取固化（语义 = **`issued_generation`**）。**R-2/R-11 增补列 `reacquired_generation`**（可空；经 §3.6 续领时写回，待下一迁移批 0048+；同批含 `task_interaction.previous_chain_id`，专家 2.6） |
 | `command_type` | V0.5 集合 = `agent.process.terminate` · `agent.task.continue`（已实现，常量钉住） |
 | `payload` | JSONB：terminate = §5.2 报文（`session_id` 规则见 R-8，§6）；continue = §5.4 报文 + **guard 前置快照**（`continuation_start_frozen` + `agent_deadline_at`，F-1 已实现） |
 | `status` | `issued → delivered → acked \| failed`（四态 CHECK；已实现） |
@@ -262,7 +271,7 @@ pm_report_consumption(project_id, task_id, run_id, lease_token, lease_generation
 - 等待窗口内 Deadline 过期使租约不可续（D-02 + C4），命令通道若仍要求有效租约即自断——必须解耦。
 - 解耦后的安全性由 worker_id 绑定 + generation 集合比对提供等价 fencing；等待窗口内 B3-2 被 S2 拦截（§4.2），`lease_owner` 稳定（续领改路由除外，§3.6，同事务+审计）。
 - **R-ACP-15（对冻结基线的正式操作化修订）**：基线 §10.4"领取命令时校验 Lease Token、过期 Worker 不能执行命令"与 §16.3"Worker 受 Run Lease 约束"，由本表命令面规则**取代**；执行面写操作仍受七点约束无豁免。登记规格与 R-ACP-7 相同（§9）。
-- **过渡形态风险登记（R-3）**：V-05-1 落地前，`runner:` 前缀 client_name 为调用方自报文本，**不构成密码学身份**——过渡态仅限受控环境（E2E/内网）使用；V-05-1 Client Registry + 凭据签发为命令面**硬前置**（ACP-435/436 在过渡态不可测，V-05-1 后闭合）。实现已按 `runner:` 前缀标 `execution_mode='spawn'`（E1），过渡债务显式登记，勿视为已解决。
+- **过渡形态风险登记（R-3；专家第 2 块修正收紧）**：V-05-1 落地前，`runner:` 前缀 client_name 为调用方自报文本，**不构成密码学身份**——过渡态仅限受控环境（E2E/内网）临时兼容，**生产禁令见 §3.6 生产启用门**；**client_name 必须登记并绑定当前认证主体**（过渡期最低防线，登记制随收敛批落地）；V-05-1 Client Registry + 凭据签发为命令面**硬前置**，并**升格为 R-16 对外（生产）启用的硬前置**（ACP-435/436 在过渡态不可测，V-05-1 后闭合）。实现已按 `runner:` 前缀标 `execution_mode='spawn'`（E1），过渡债务显式登记，勿视为已解决。
 
 ### 3.4 执行端轮询节奏
 
@@ -285,10 +294,12 @@ pm_report_consumption(project_id, task_id, run_id, lease_token, lease_generation
 
 **裁决（R-ACP-16，已裁 = 方案 a）**：同主体续领扩展。方案 B（Runner 本地加密持久化租约凭据）**不采用为独立路径**（TTL 窗口仍在；作为未来增强可叠加）。
 
-**发现面（Runner 重启后认领在途 Run）**：
+**发现面（Runner 重启后认领在途 Run；专家第 2 块裁决：独立工具，推翻 V1.2 初稿的双态 Poll）**：
 
-- `pm_poll_commands` 增补**发现语义**：调用方未携带具体 run_id 轮询时，服务端按 **Client 身份**匹配返回该身份名下、存在可投递 continue 命令且 `scheduling_shield='start_wait'` 的 Run 摘要（run_id / interaction_id / command_id / deadline_at）。Client 身份匹配规则：V-05-1 后 = `run.lease_client_id == 经鉴权 Client 主体`（严格相等）；V1 过渡 = `run.lease_owner LIKE 'mcp:{client_name}:%'` 前缀匹配（过渡风险同 §3.3）。
-- Runner 循环接线：启动/重连时执行一轮发现；发现命中 → 逐 Run 走续领。
+- **`pm_discover_runs`（新工具，`PM_MCP_COMMAND`）**：发现 = Client 名下待恢复 Run 的**独立业务能力**，与 Poll（单 Run 命令轮询）分离——`pm_poll_commands` 保持原契约不动。返回字段（十个，专家指定）：`run_id` / `execution_mode` / `interaction_id` / `interaction_status` / `deadline_at` / `shield_state` / `lease_generation` / `lease_status` / `terminate_command_id`（适用时）/ `terminate_status`（适用时）。
+- **发现范围与安全**：只返回**当前认证 Client 有权恢复**的 Run（存在可投递 continue 命令且 `scheduling_shield='start_wait'`）；**不返回人工回复正文与 Command payload**；支持分页；**重复调用不产生状态副作用**（纯只读）。
+- Client 身份匹配规则：V-05-1 后 = `run.lease_client_id == 经鉴权 Client 主体`（严格相等）；**过渡形态（仅受控环境）** = client_name 登记制 + `run.lease_owner LIKE 'mcp:{client_name}:%'` 前缀匹配（见 §3.3 生产禁令）。
+- Runner 循环接线：启动/重连时执行一轮发现；发现命中 → 逐 Run 走续领（幂等，重复发现无副作用）。
 
 **续领操作**（应用服务操作；Runner 形态 = 新工具 `pm_reacquire_lease(project_id, run_id)`；Worker 形态 = 进程内直连同函数）：
 
@@ -308,7 +319,7 @@ pm_report_consumption(project_id, task_id, run_id, lease_token, lease_generation
   3) 审计 run.lease_reacquired（含原/新 generation、触发 command_id）。
 ```
 
-- `deadline_at` **不动**（T3 字面一致；离线恢复不构成 Deadline 顺延——过期仍走 ACP-07 授权；专家复审批准：deadline 到期后禁止自动恢复执行，已持久化人工回复保留，后续执行进 ACP-07 人工授权）。
+- `deadline_at` **不动**（T3 字面一致；离线恢复不构成 Deadline 顺延——过期仍走 ACP-07 授权；专家第 1 块批准：deadline 到期后禁止自动恢复执行，已持久化人工回复保留，后续执行进 ACP-07 人工授权）。**专家第 2 块补产品面**：UI 可提供**快捷入口直达 ACP-07 重新授权流程**——不直接修改原 deadline、不自动延长人工决策有效期、已持久化回复不丢弃；新授权必须形成**独立审计记录与独立有效期**；未取得新授权前不得自动启动 Session。
 - `attempt_no` 不变、Run 行不变（**不是 B3-2 新建 Run**；S2 屏蔽语义不受影响——续领是显式应用服务操作，不经回收路径）。
 - 续领后旧 token/旧 generation 立即失效（token 哈希比对失败，ACP-447）；旧 worker_id 路由值失效（poll 旧值=空集）。
 - **改路由 ≠ 重建命令（专家约束）**：`command_id` / `idempotency_key` / `payload` 保持不变；`claim_count` **不重置**（重新领取才计入实际投递次数）。
@@ -322,9 +333,11 @@ pm_report_consumption(project_id, task_id, run_id, lease_token, lease_generation
   5. **仅当 terminate 已确认（或具备等价的旧进程不存在证明）才允许执行 continue、启动新 Session**（= 决策表情形 6 / §9.4 检查 8 的判据，ACP-455）。
 - 与 R-2 的差异收编：R-2 原文"作为 continue 执行的第 0 步"收敛为本节"发现面 + 显式续领操作"，continue 执行前置的 guard 快照（F-1）校验新 generation 通过后照常执行。
 
-**凭据持久化裁决**：Runner **不本地持久化 lease_token**——一次性明文丢失即走本节续领路径；本地持久化方案 B 不采用为独立路径。
+**凭据持久化裁决（专家第 2 块维持 + 补强）**：Runner **不本地持久化 lease_token**——一次性明文丢失即走本节续领路径；本地持久化方案 B 不采用为独立路径。**WP-3 增加：稳定 Client 身份的本地持久化**（重启后必须恢复原 Client 身份，否则无法走发现面/续领）。**续领失败重试纪律**：指数退避 + jitter；持续失败 → 告警 + **人工处置入口**（不允许 panic 导致恢复上下文丢失）；**身份失效或 deadline 到期 → 停止自动恢复**（转 ACP-07 / 人工路径）。
 
-**Model A 适用性**：真人 MCP 客户端在等待窗口关闭后重连，同样经发现面（按其 client_name 前缀）+ 续领恢复投递；`execution_mode='human'` 的 Run **不可**经 `pm_report_interaction` 造新介入（ACP-448），但续领/消费回执不受此限。
+**Model A 适用性**：真人 MCP 客户端在等待窗口关闭后重连，同样经发现面（按其登记的 client 身份）+ 续领恢复投递；`execution_mode='human'` 的 Run **不可**经 `pm_report_interaction` 造新介入（ACP-448），但续领/消费回执不受此限。
+
+**生产启用门（专家第 2 块修正，对 §3.3 过渡形态的收紧）**：前缀匹配**仅限受控环境（E2E/内网）临时兼容，不构成生产安全身份**；**V-05-1 Client Registry 升格为 R-16 对外（生产）启用的硬前置**——身份安全能力（client_name 登记 + 绑定认证主体 + 稳定 Client 身份校验）未完成前，**禁止在生产环境开放基于自报 client_name 的发现与续领**；generation 被抢占**不得视为无害的执行干扰**（抢占即原执行端被踢出，属安全事件）。
 
 ---
 
@@ -392,7 +405,8 @@ none ──创建 Interaction──▶ human_wait ──回复持久化──▶
 | --- | --- |
 | 状态枚举 | `pending / responded / consumed / timed_out / cancelled`（RESPONDED 未消费合法稳态见 §1.5） |
 | `chain_open` | 持久化布尔列（部分唯一索引 `UNIQUE(task_id) WHERE chain_open` 钉住）。**V1.2 维护规则（R-4 修订）**：创建/重试时 true；**continue acked（INPUT_INJECTED）时 false（新 Session 已携带回复启动，链因执行恢复而关闭）**；`cancelled` 时 false；`consumed` 时 false（幂等兜底，正常链已在 acked 关闭）；`timed_out` 保持 true |
-| `retry_of` | 超时重试挂链字段 |
+| `retry_of` | 超时重试挂链字段（链内语义，专家第 2 块确认不变） |
+| `previous_chain_id`（专家第 2 块新增，0048 迁移列） | **链间弱关联**：指向同一 Task 的**已关闭前驱链**最新 Interaction——只服务历史追溯/审计/UI 展示；约束见 §5.2 规则 6 |
 | `continuation_start_frozen_at` | terminate 重试耗尽时落值（启动冻结，§6.5） |
 | 事务边界 | 创建 Interaction + Task 转 awaiting_decision + task_waiting upsert + guard=human_wait + terminate 命令创建 = **同一应用服务事务**（已实现） |
 | CANCELLED 触发 | Task 取消/归档联动取消未决 Interaction；Task 活跃时的显式取消走管理操作（guard → none，情形 5） |
@@ -414,6 +428,7 @@ none ──创建 Interaction──▶ human_wait ──回复持久化──▶
 3. `responded` 但新 Session 未启动 → 链开放 → 不允许新建。
 4. `cancelled` → 链关闭 → 允许新建。
 5. `task_waiting` 活跃行 ⟺ 链开放：链首开时 upsert、链关闭（acked/cancelled/consumed）时 resolve（同一事务，§5.3）。
+6. **链间弱关联（专家第 2 块裁决）**：新建链时可写 `previous_chain_id` → 同一 Task **已关闭**的前驱链最新 Interaction；**禁止自引用或成环**（应用服务层校验：目标链必须已关闭且早于本链）；**不改变 `retry_of` 的链内语义、不共享生命周期与状态**——只服务历史追溯、审计与 UI 展示。**不加冷却时间、不合并连续介入**：重复事件与真正新介入的区分靠 event_id 幂等 + Session 标识 + Run generation 校验（ACP-C3），不靠时间窗。
 
 ### 5.3 awaiting_decision 映射（§23.3 闭合项 4，R-4 修订）
 
@@ -439,7 +454,7 @@ none ──创建 Interaction──▶ human_wait ──回复持久化──▶
 3. **回执**：`pm_ack_command(acked, receipt={exit_outcome, pid, terminated_at})`（从严判据：acked 必须 exit_outcome，已实现）；回执失败 → §3.4 重投。
 4. **重试与超时**：`AI_PM_PROCESS_TERMINATION_TIMEOUT_SECS=10` + 有界重试。
 5. **重试耗尽**（R-ACP-7 已裁）：`ack(failed)` → Task 阻塞 + 告警 + `continuation_start_frozen_at` 落值；**回复提交入口不冻结**（§8.3 六项检查独立管辖）。
-6. **Platform 收到 acked 后（R-7 选 b 定稿）**：**Process 事实权威 = `worker_command.receipt` + 审计 + `executor-events.jsonl`**——不新建 process 记录表，不扩展 `task_run_cleanup` 作为 Process 记录载体（0035 形状不合：PK(run_id)/清理进度状态域，复核 §6-6 维持）。情形 6 / continue 前置检查 8 的唯一判据 = **terminate 命令 ack 状态**（存在未 acked/failed 的 terminate → 拒绝启动）。> 实现注记：F-10 在 terminate acked 时向 `task_run_cleanup` 写一行 `completed` 终态（清理闭环注记）——登记为**无害旁注**，非 Process 记录权威载体，不承担查询职责。Workspace 保留（§15 四不清理）。
+6. **Platform 收到 acked 后（R-7 选 b 定稿；专家第 2 块维持 + 五点补强）**：**Process 事实权威 = `worker_command.receipt` + 审计 + `executor-events.jsonl`**——不新建 process 记录表，不扩展 `task_run_cleanup` 作为 Process 记录载体（0035 形状不合：PK(run_id)/清理进度状态域，复核 §6-6 维持）。**receipt Schema 补强（专家约束，随收敛批）**：① receipt 必须有**稳定 Schema 与版本号**（结构化、版本化——当前为自由 JSONB，收敛批钉 schema_version）；② 必须区分 `terminate_requested` 与 `terminate_confirmed` 两个时刻；③ 必须记录 **Run generation**（防旧回执污染新 Session，ACP-C3）；④ `executor-events.jsonl` 仅作**执行端诊断证据，不作为平台权威事实**；⑤ 出现多 Process 独立控制/迁移/结构化查询需求时**重新评估建表**（本轮不建 `task_run_process`）。情形 6 / continue 前置检查 8 的唯一判据 = **terminate 命令 ack 状态**（存在未 acked/failed 的 terminate → 拒绝启动）。> 实现注记：F-10 在 terminate acked 时向 `task_run_cleanup` 写一行 `completed` 终态（清理闭环注记）——登记为**无害旁注**，非 Process 记录权威载体，不承担查询职责。Workspace 保留（§15 四不清理）。
 7. **报文身份定案（R-8）**：terminate payload `session_id := task_run.executor_session`（Platform Session ID）；`process_id` V1 允许为空，执行端按 Run（pid 文件）定位进程——对基线 §5.2"绑定 Process"的这一放宽登记为实施定案。Interaction 的 `session_id` 同源派生；`continuation_generation` ACP-05 落地前恒 1。
 8. **命令幂等**：重复 terminate（重投）→ 执行端发现进程已退出 → 直接 acked（已实现语义）。
 9. **Runner 本地进程账本**（服务器侧清理机制触及不到用户 PC 进程）：列入 WP-3 Runner 设计项，本稿只立指针。
@@ -488,7 +503,7 @@ Runner 的 spawn/收割/终止能力自 `codex_executor.rs` 演化：原子 pid 
 | **ACP-455**（专家约束，ACP-C4） | 续领成功但 terminate 未确认（无旧进程不存在证明）时执行 continue | **拒绝启动新 Session**（情形 6 / §9.4 检查 8 判据）；terminate 命令先行投递消费，确认后才放行 continue |
 | ACP-445 补注（P2-5） | Task 取消与 Interaction 上报并发 | 互斥机制 = **Task 行 `FOR UPDATE`**（interaction.rs 事务首语句，已实现） |
 
-**E2E 必测场景（专家终审意见指定，随收敛批真实栈验证）**：① 无 consumed 证据的 Adapter（DSH 形态，对应 ACP-450）；② Runner 离线超租约 TTL 后恢复（ACP-452/453）；③ 旧 Runner 迟到 ACK（ACP-454）；④ terminate 未确认时禁止启动新 Session（ACP-455）。
+**E2E 必测场景（专家两轮终审合并，随收敛批真实栈验证）**：第 1 块四项——① 无 consumed 证据的 Adapter（DSH 形态，对应 ACP-450）；② Runner 离线超租约 TTL 后恢复（ACP-452/453）；③ 旧 Runner 迟到 ACK（ACP-454）；④ terminate 未确认时禁止启动新 Session（ACP-455）。第 2 块六项——⑤ Runner 重启且 lease_token 已丢失时同主体恢复成功；⑥ 未授权 Client 无法发现或抢占其他 Client 的 Run；⑦ `pm_discover_runs` 不改变 `pm_poll_commands` 原契约（双工具并存回归）；⑧ deadline 到期不自动恢复执行、人工回复仍保留；⑨ 同一 Task 连续两次真实人工介入形成两条独立且可追溯的链（`previous_chain_id` 串联）；⑩ 旧 generation 的事件与回执不能污染新 Session。
 
 ---
 
@@ -527,15 +542,17 @@ Runner 的 spawn/收割/终止能力自 `codex_executor.rs` 演化：原子 pid 
 
 **专家复审状态（第 1 块：活风险三项）**：ACP-448 / ACP-450/451 / ACP-452/453 设计方向**全部批准**，补充约束已收编上文；意见原文归档 `smark-pm-s03-acp-slice-design-acp01-02-08-v1-2-expert-review-1.md`。
 
+**专家复审状态（第 2 块：六项设计取舍，2026-11-07）**：**四维持两修正**——2.1 R-7 选 b 维持（receipt Schema 五点补强，§6.6）；2.2 R-16 不持久化 token 维持（WP-3 Client 身份持久化 + 退避/告警/停止条件，§3.6）；2.3 T3 严格不顺延维持（UI 快捷入口直达 ACP-07，§3.6）；**2.4 V-05-1 修正**（前缀匹配仅受控环境、client_name 登记制、V-05-1 升格为 R-16 生产启用硬前置，§3.3/§3.6 生产启用门）；**2.5 推翻双态 Poll**（独立工具 `pm_discover_runs`，Poll 契约不动，§1.6/§3.6）；2.6 Chain 维持多独立链 + 新增 `previous_chain_id` 弱关联（不加冷却不合并，§5.1/§5.2）。总评=**以上属 V1.2 实施设计收敛，不改变 ACP 总体架构**；意见原文归档 `smark-pm-s03-acp-slice-design-acp01-02-08-v1-2-expert-review-2.md`。
+
 ---
 
 ## 10. 工程纪律引用
 
-1. **不修改 MCP 四工具契约**；新增五工具（report_interaction / report_consumption / poll_commands / ack_command / reacquire_lease）走独立权限码，`/mcp` 鉴权面仅扩权限表行。
+1. **不修改 MCP 四工具契约**；新增六工具（report_interaction / report_consumption / poll_commands / ack_command / reacquire_lease / **discover_runs**）走独立权限码，`/mcp` 鉴权面仅扩权限表行。
 2. 禁重建区继续有效：不建 task_execution/execution_result、不改 13 态状态机与 Run 7 态（scheduling_shield 为调度保护标志非状态机扩展）、WAITING_FOR_* 不做成状态、四工具契约不动、`recover_lost_run`/B3-2 回收语义不为本切片改写（续领 §3.6 是独立显式操作，不经回收路径）。
 3. 全部写入经 `pm-application` 统一应用服务（V-6）；MCP/Worker/Runner 仅适配层。
 4. 迁移：0046/0047 已应用（R-ACP-6 事实更新）；**后续批次自 0048 起**（`reacquired_generation` 列等），落地前重核 `docs/ai-pm-migration-ledger.md`；主 checkout 有并行会话在途物，禁 sweep、禁 `git add -A`。
-5. 本稿落 `docs/ui/s03-acp/`；**实现收敛项清单（复审通过后的收敛批）**：① acked 事务内 Task→running + 链关闭（R-4，ACP-450/451）；② `pm_report_interaction` execution_mode 准入（R-3，ACP-448）；③ 离线恢复发现面 + 续领 + 命令改路由（R-11，ACP-452/453 + 0048 `reacquired_generation` 列）；④ 标记文件名含 event_id（P2-1）；⑤ §3.3 过渡身份 → V-05-1 Client 主体（硬前置）。
+5. 本稿落 `docs/ui/s03-acp/`；**实现收敛项清单（专家两轮复审后定稿，随收敛批落地）**：① acked 事务内 Task→running + 链关闭（R-4，ACP-450/451）；② `pm_report_interaction` execution_mode 准入 + 孤儿 terminate 定向审计（R-3，ACP-448/C1）；③ 离线恢复 `pm_discover_runs` + 续领 + 命令改路由（R-11/专家 2.5，ACP-452/453 + 0048 `reacquired_generation` 列）；④ 标记文件名含 event_id（P2-1）；⑤ §3.3 过渡身份 → V-05-1 Client 主体（**R-16 生产启用硬前置**）+ 过渡期 client_name 登记制；⑥ `previous_chain_id` 列（0048，专家 2.6）；⑦ receipt Schema 版本化 + requested/confirmed 区分 + generation 记录（专家 2.1）；⑧ 续领退避/告警/人工处置入口 + 自动恢复停止条件（专家 2.2）；⑨ UI 快捷入口 → ACP-07 重授权（专家 2.3，随 ACP-07 稿）。
 
 ---
 
