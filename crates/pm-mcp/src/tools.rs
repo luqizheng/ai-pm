@@ -1615,7 +1615,8 @@ pub struct ReportConsumptionArgs {
     pub run_id: Uuid,
     pub lease_token: String,
     pub lease_generation: i32,
-    /// 回复投递 id（ACP-04 落 `interaction_response_delivery` 后必填）。
+    /// 回执投递 id——可缺省：服务端按 interaction 1:1 解析 delivery 账
+    /// （联合契约 ②：工具签名不变；0050 起消费必落账，解析是服务端职责）。
     #[serde(default)]
     pub delivery_id: Option<Uuid>,
     /// 证据：`{"kinds": ["initial_input_injected", "process_alive"], ...}`。

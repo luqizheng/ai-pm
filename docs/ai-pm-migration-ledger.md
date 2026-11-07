@@ -17,7 +17,7 @@
 | 0047 | `0047_interaction_response.sql` | S03-ACP ACP-03 Human Response（interaction_response 表 + REST 回复入口同事务 continue 下发） | 已应用（2026-11-07） |
 | 0048 | `0048_kb_pc_intake.sql` | KB-PC 服务化 Phase 1-3 Intake（intake_record + intake_task；**原 0046_kb_pc_intake，后实施者顺移——0046 已被 ACP 通信面占用，双 0046 撞号修复**；已建专用容器 aipm-kbpc-pg:16447 需重置后复测） | 已应用（2026-11-07，KB-PC 会话） |
 | 0049 | `0049_client_registry.sql` | V-05-1 Client Registry 纵切（device 四列+双唯一约束+task_run.lease_client_id 复合外键+回填三分类）——设计 `docs/project-ai-team-v2/ai-pm-v05-client-registry-design-v1.md`（联合裁决通过 + 约束 A/B/C） | 已应用（2026-11-08，WP-B 实施批；真实栈 E2E 待联调批） |
-| 0050 | （预留：ACP-04 Delivery） | `interaction_response_delivery`——契约 `docs/ui/s03-acp/smark-pm-s03-acp-slice-design-acp04-05-joint-v1.md`（裁决确认） | 预留 |
+| 0050 | `0050_response_delivery.sql` | ACP-04 Delivery 持久化（一回复一账 UNIQUE(response_id)；重投复用原行 attempt+1；generation 恒 1；continuation_id 前向可空）——契约同上（联合裁决五问通过） | 已应用（2026-11-08，批 2 实施；E2E 待联调批） |
 | 0051 | （暂定预留：ACP-05 Continuation） | `delivery.continuation`——同上契约（暂定确认；**Recovery Foundation 批先于本迁移**，联合裁决 2026-11-07） | 暂定预留 |
 | 0052 | （tentative：ACP 收敛列） | `worker_command.reacquired_generation` + `task_interaction.previous_chain_id`——随 Recovery Foundation 批（原 roadmap 记 0048 已被 kb_pc_intake 实占，顺延） | tentative |
 | 0022 | `0022_delivery_manifest.sql` | T-041（D4） | 已应用（2026-11-02） |

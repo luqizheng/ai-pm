@@ -232,6 +232,19 @@ pub async fn poll_commands(
     .fetch_all(pool)
     .await?;
 
+    // ACP-04（0050）：投递账推进——continue 命令领取 = 投递尝试
+    //（delivering + attempt_count+1；failed 重投复用原行，ACP-471）。
+    let continue_ids: Vec<Uuid> = rows
+        .iter()
+        .filter(|r| r.get::<String, _>("command_type") == "agent.task.continue")
+        .map(|r| r.get::<Uuid, _>("id"))
+        .collect();
+    if !continue_ids.is_empty() {
+        crate::response_delivery::mark_delivering_by_command(pool, &continue_ids)
+            .await
+            .map_err(|e| CommandFaceError::Validation(e.to_string()))?;
+    }
+
     // UPDATE..RETURNING 不支持 ORDER BY：领取顺序在内存里排（terminate 先于
     // continue 仅作展示约定，执行顺序由执行端按类型自行保证）。
     let mut polled: Vec<PolledCommand> = rows
@@ -368,6 +381,19 @@ pub async fn ack_command(
                 .bind(run_id)
                 .execute(&mut *tx)
                 .await?;
+                // ACP-04（0050）：投递账 delivered（F5 同事务）。
+                let delivery_id = if let Some(interaction_id) = interaction_id {
+                    crate::response_delivery::mark_delivered_tx(
+                        &mut tx,
+                        project_id,
+                        command_id,
+                        &AuditActor::dispatch(),
+                    )
+                    .await
+                    .map_err(|e| CommandFaceError::Validation(e.to_string()))?
+                } else {
+                    None
+                };
                 // R-4（V1.2 §5.3 / ACP-450/451）：INPUT_INJECTED 是执行恢复的
                 // 业务确认边界——同事务链关闭 + task_waiting resolve + Task
                 // awaiting_decision→running；consumed 降为 Interaction 级观测
@@ -378,6 +404,7 @@ pub async fn ack_command(
                         project_id,
                         task_id,
                         interaction_id,
+                        delivery_id,
                         &AuditActor::dispatch(),
                     )
                     .await
@@ -474,6 +501,19 @@ pub async fn ack_command(
                     }
                     _ => {}
                 }
+            }
+            // ACP-04（0050）：投递账 failed——continue 注入失败/重试耗尽
+            //（重投复用原行，ACP-471；兄弟分支，勿嵌回 TERMINATE 内）。
+            if command_type == COMMAND_CONTINUE {
+                crate::response_delivery::mark_failed_tx(
+                    &mut tx,
+                    project_id,
+                    command_id,
+                    last_error.as_deref(),
+                    &AuditActor::dispatch(),
+                )
+                .await
+                .map_err(|e| CommandFaceError::Validation(e.to_string()))?;
             }
         }
     }

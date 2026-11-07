@@ -435,6 +435,27 @@ pub async fn mark_consumed(
     }
 
     let mut tx = pool.begin().await?;
+    // ACP-04（0050）：消费必落投递账（ACP-C2 持久化收口）。delivery_id 缺省时
+    // 按 interaction 1:1 解析（uq_interaction_response_single ⇒ 一互动一账，
+    // 联合契约②：工具签名不变）；无账行（历史流）→ 跳过，Interaction 消费
+    // 语义不变。迟到/重复回执幂等（无 Task/guard/执行面副作用）。
+    let resolved_delivery: Option<Uuid> = match delivery_id {
+        Some(did) => Some(did),
+        None => sqlx::query_scalar(
+            "SELECT id FROM delivery.interaction_response_delivery \
+              WHERE interaction_id = $1 AND project_id = $2 \
+                AND status IN ('delivering', 'delivered') LIMIT 1",
+        )
+        .bind(interaction_id)
+        .bind(project_id)
+        .fetch_optional(&mut *tx)
+        .await?,
+    };
+    if let Some(did) = resolved_delivery {
+        crate::response_delivery::mark_consumed_tx(&mut tx, project_id, did, actor)
+            .await
+            .map_err(|e| InteractionError::Conflict(e.to_string()))?;
+    }
     let row = sqlx::query(
         "UPDATE delivery.task_interaction \
             SET status = 'consumed', consumed_at = now(), chain_open = FALSE \
@@ -520,6 +541,7 @@ pub(crate) async fn resume_execution_after_continue_tx(
     project_id: Uuid,
     task_id: Uuid,
     interaction_id: Uuid,
+    delivery_id: Option<Uuid>,
     actor: &AuditActor,
 ) -> Result<(), InteractionError> {
     // ① 链关闭（链因"新 Session 已携带回复启动"而关闭，V1.2 §5.2）。
@@ -533,12 +555,12 @@ pub(crate) async fn resume_execution_after_continue_tx(
     .await?;
 
     // ② 等待 resolve。
-    resolve_waiting(
-        tx,
-        task_id,
-        &format!("interaction {interaction_id} resumed (continue acked; consumption pending)"),
-    )
-    .await?;
+    // §5.3（联合契约）：resolution_note 引用 interaction_id + delivery_id。
+    let note = match delivery_id {
+        Some(d) => format!("interaction {interaction_id} resumed (continue acked; delivery {d})"),
+        None => format!("interaction {interaction_id} resumed (continue acked)"),
+    };
+    resolve_waiting(tx, task_id, &note).await?;
 
     // ③ Task 回 Running（仅当仍在 awaiting_decision；其他状态（如已取消）跳过）。
     let task_status: Option<String> = sqlx::query_scalar(
@@ -1079,6 +1101,19 @@ pub async fn submit_interaction_response(
     .bind(continue_command_id)
     .execute(&mut *tx)
     .await?;
+
+    // ACP-04（0050）：三写第三笔——投递账（一回复一账；重投复用原行）。
+    crate::response_delivery::create_on_response_tx(
+        &mut tx,
+        input.project_id,
+        input.interaction_id,
+        response_id,
+        run_id,
+        continue_command_id,
+        actor,
+    )
+    .await
+    .map_err(|e| InteractionError::Conflict(e.to_string()))?;
 
     tx.commit().await?;
     Ok(SubmittedResponse {

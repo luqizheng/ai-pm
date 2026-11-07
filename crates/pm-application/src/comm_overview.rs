@@ -32,7 +32,8 @@ pub async fn load_comm_overview(pool: &PgPool) -> Result<CommOverview, sqlx::Err
     ) = sqlx::query_as(
         "SELECT \
             (SELECT count(*) FROM delivery.task_run WHERE scheduling_shield <> 'none'), \
-            (SELECT count(*) FROM delivery.task_interaction WHERE status = 'responded'), \
+            (SELECT count(*) FROM delivery.interaction_response_delivery \
+              WHERE status IN ('delivering', 'delivered')), \
             (SELECT count(*) FROM delivery.task_interaction WHERE chain_open)",
     )
     .fetch_one(pool)
