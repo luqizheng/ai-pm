@@ -143,12 +143,10 @@ if [[ ${#MISSING_IMAGES[@]} -gt 0 ]]; then
     err "unresolved image(s) — not on any reachable registry:"
     for img in "${UNRESOLVED[@]}"; do
       case "$img" in
-        *aipm-bff:*|*aipm-web:*)
-          _tgt=runtime-bff
-          [[ "$img" == *aipm-web:* ]] && _tgt=runtime-web
+        *ai-frontend-web:*)
           err "  $img"
-          err "    -> build from the ai-pm-web repo:"
-          err "       docker build --target $_tgt -t $img <ai-pm-web-repo>/." ;;
+          err "    -> build from the ai-pm repo root (ai-frontend/ + runtime-web target):"
+          err "       docker build --target runtime-web -t $img <ai-pm-repo>/." ;;
         */official/*)
           _upstream=${img#*/official/}
           err "  $img"
@@ -169,5 +167,5 @@ docker compose "${COMPOSE_FILES[@]}" up -d "${COMPOSE_ARGS[@]}" \
   || die "docker compose up failed" 20
 
 log "running: $(docker compose "${COMPOSE_FILES[@]}" ps --services 2>/dev/null | wc -l) services"
-log "public endpoints: http://<host>:8091 (前端 aipm-web) / http://<host>:3000 (登录验证 api-gateway)"
-log "private: pm-api:8090 / aipm-bff:8080 / token-service:8082 / iam-service:8081 are container-network only"
+log "public endpoints: http://<host>:8092 (前端 ai-frontend-web) / http://<host>:3000 (登录验证 api-gateway)"
+log "private: pm-api:8090 / token-service:8082 / iam-service:8081 are container-network only"

@@ -4,8 +4,10 @@
 # lmms 命名文件、ai-pm 命名文件天然存活」能力，见 README「与上游模板包的有意差异」#2。
 # 镜像来源：
 #   ai-pm 仓（本仓）：    docker build --target runtime-pm-api ... -t aipm/pm-api:0.1.0 . 等
-#   ai-pm-web 仓：        docker build --target runtime-bff -t aipm/aipm-bff:0.1.0 .
-#                         docker build --target runtime-web -t aipm/aipm-web:0.1.0 .
+#   ai-frontend-web：     docker build --target runtime-web -t aipm/ai-frontend-web:0.1.0 .
+#                         （源=本仓 ai-frontend/，经根 Dockerfile runtime-web 目标；
+#                          2026-11-07 起 8092 为唯一前端公共入口，旧 ai-pm-web 仓的
+#                          aipm-web/aipm-bff 已退役删除）
 # 全部挂 superpowers 网络（与 lmms 栈同网络，服务名互访）。
 #
 # ⚠️ YAML anchor 不能跨 include 文件：下面两个 anchor 与 docker-compose-services.yml
@@ -117,31 +119,13 @@ services:
     networks:
       - superpowers
 
-  # ai-pm-web 前端仓：Rust BFF（与 ai-pm 共享 aipm 库，只做门面不做迁移）
-  aipm-bff:
-    image: ${AIPM_REGISTRY:-aipm}/aipm-bff:${AIPM_VERSION:-0.1.0}
-    environment:
-      DATABASE_URL: postgres://aipm:aipm@aipm-pg:5432/aipm
-      IAM_MODE: local
+  # ai-frontend（本仓 ai-frontend/）：生产静态站（nginx 伺服 vite 产物，
+  # /api 与 /gw 都反代 api-gateway:3000——见 ai-frontend/docker/nginx.conf；
+  # Docker 内嵌 DNS 惰性解析，启动不依赖 upstream 存活，无需 depends_on）
+  ai-frontend-web:
+    image: ${AIPM_REGISTRY:-aipm}/ai-frontend-web:${AIPM_VERSION:-0.1.0}
     ports:
-      - "8080:8080"
-    depends_on:
-      aipm-pg:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - superpowers
-
-  # ai-pm-web 前端静态站（nginx 伺服 dist，/api 反代 api-gateway）
-  aipm-web:
-    image: ${AIPM_REGISTRY:-aipm}/aipm-web:${AIPM_VERSION:-0.1.0}
-    ports:
-      - "8091:80"
-    volumes:
-      # /api 转发到 api-gateway:3000（覆盖镜像内默认的 → aipm-bff:8080）
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - aipm-bff
+      - "8092:80"
     restart: unless-stopped
     networks:
       - superpowers

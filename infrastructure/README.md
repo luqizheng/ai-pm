@@ -21,8 +21,9 @@ docker-compose.yml              入口 include 四块（根）
 ├─ observability/                docker-compose-observability.yml(+logs/prod 片)
 │                                prometheus / grafana / jaeger / otel-collector
 │                                / alertmanager / consul-template + config/{prometheus,...}
-├─ docker-compose.ai-pm.yml      ai-pm 自有 6 服务（本仓所有，升级不被覆盖）：
-│                                aipm-pg / pm-api / pm-worker / ai-pm-worker / aipm-bff / aipm-web
+├─ docker-compose.ai-pm.yml      ai-pm 自有 5 服务（本仓所有，升级不被覆盖）：
+│                                aipm-pg / pm-api / pm-worker / ai-pm-worker / ai-frontend-web
+│                                （2026-11-07 旧 ai-pm-web 仓的 aipm-bff/aipm-web 退役删除）
 └─ .env-infra / .env / .env.prod  环境三层（根）
 ```
 
@@ -49,8 +50,8 @@ docker-compose.yml              入口 include 四块（根）
 | # | 文件 | 差异 | 原因 |
 |---|------|------|------|
 | 1 | `docker-compose-services.yml` | lmms 段 `build:` 块 → 已发布镜像引用（`${IMAGE_TAG_PG:-1.7.0-pg}`；api-gateway 用 `${IMAGE_TAG_GATEWAY:-1.7.0}`，无 `-pg` 后缀） | ai-pm 不构建 lmms 服务，直接消费 registry 镜像；**双变量而非上游单 IMAGE_TAG**——api-gateway 方言无关，全局单变量会把全部服务指到同一 tag（上游 dist 包的 IMAGE_TAG 覆盖对 PG 形态有同样缺陷） |
-| 2 | `docker-compose.ai-pm.yml`（本仓新建） | ai-pm 自有 6 服务 + `aipm_pg_data` 卷，独立文件被入口 include | 本仓自有；拆出后升级 lmms 命名文件不再需要重拼 ai-pm 服务段（2026-11-06 自 services.yml 拆回独立文件；更早的 `docker-compose-aipm.yml` 曾并入又拆出） |
-| 3 | `docker-compose.prod.yml` | lmms 业务段收口 + ai-pm 段（pm-api / aipm-bff 收口，aipm-web:8091 保留） | prod 入口：前端 aipm-web:8091 + 登录验证 api-gateway:3000 |
+| 2 | `docker-compose.ai-pm.yml`（本仓新建） | ai-pm 自有 5 服务 + `aipm_pg_data` 卷，独立文件被入口 include | 本仓自有；拆出后升级 lmms 命名文件不再需要重拼 ai-pm 服务段（2026-11-06 自 services.yml 拆回独立文件；更早的 `docker-compose-aipm.yml` 曾并入又拆出） |
+| 3 | `docker-compose.prod.yml` | lmms 业务段收口 + ai-pm 段（pm-api 收口，ai-frontend-web:8092 保留） | prod 入口：前端 ai-frontend-web:8092 + 登录验证 api-gateway:3000 |
 | 4 | `observability/config/nginx/nginx.conf.template` | `proxy_pass` 指向 `pm-api:8090`（原 api-gateway:3000）；canary 上游清单置空 | edge 后端是 pm-api；lmms 服务的 canary 分流属 lmms 侧 |
 | 5 | `scripts/start-prod.sh` | ① 语义化 compose 版本门禁（上游正则误杀 v5.x、误放行 v2.10.3）② 必需变量 MYSQL_* → POSTGRES_* ③ env 三层加载 `.env-infra → .env → .env.prod` | 本机/WSL compose 是 v5.6.0；PG 形态默认库是 postgres；镜像版本/仓库与 lmms 栈内常量随 `.env-infra` 发布固化 |
 | 6 | `.env.prod.example` | `POSTGRES_*` 块上移到 `DATABASE_URL` 之前（修 source 展开顺序：原文件会展开成 `postgres://://`）；删 MySQL 块 | PG 形态；`source` 是顺序求值 |
@@ -117,9 +118,8 @@ cp infrastructure/.env.prod.example infrastructure/.env.prod  # 填 POSTGRES_* +
 | 8081→9081 | iam-service | 收口 |
 | 8082 | token-service | 收口 |
 | 8083 / 8084 / 8085 / 8086 / 8087 | notification / audit / config / file / prue_backend | 收口 |
-| 8080 | aipm-bff（ai-pm-web 仓的 Rust BFF，共享 aipm 库） | 收口 |
-| 8090 | pm-api | 收口（走 aipm-web:8091） |
-| **8091** | **aipm-web（静态站，/api 反代 aipm-bff）** | **保留（前端公共入口）** |
+| 8090 | pm-api | 收口（走 api-gateway:3000） |
+| **8092** | **ai-frontend-web（静态站，/api 与 /gw 反代 api-gateway）** | **保留（前端公共入口）** |
 | 8500 / 8502 | consul | 收口 |
 | 9090 / 9093 | prometheus / alertmanager | 保留（ops） |
 | 16686 / 14250 / 14268 | jaeger | 保留（ops） |

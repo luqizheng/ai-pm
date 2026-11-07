@@ -59,15 +59,13 @@ services:
 
   # ─────────────────────────────────────────────────────────────────────────
   #  ai-pm 自有服务：
-  #    - pm-api / aipm-bff 清空 host port（外部走 aipm-web:8091 的 /api 反代）
+  #    - pm-api 清空 host port（外部走 api-gateway:3000；ai-frontend-web:8092
+  #      的 /api 与 /gw 均反代网关——2026-11-07 旧 aipm-web/aipm-bff 已退役）
   #    - pm-worker / ai-pm-worker：无 host port，仅加 restart
   #    - aipm-pg：保留 16433 宿主映射（ops 连库用；5435 已弃用——落入 WinNAT 排除区段），加 restart
-  #    - aipm-web：保留 8091（前端公共入口），加 restart
+  #    - ai-frontend-web：保留 8092（前端公共入口），加 restart
   # ─────────────────────────────────────────────────────────────────────────
   pm-api:
-    ports: !override []
-    restart: unless-stopped
-  aipm-bff:
     ports: !override []
     restart: unless-stopped
   pm-worker:
@@ -76,7 +74,7 @@ services:
     restart: unless-stopped
   aipm-pg:
     restart: unless-stopped
-  aipm-web:
+  ai-frontend-web:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
