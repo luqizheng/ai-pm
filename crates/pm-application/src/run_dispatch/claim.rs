@@ -24,6 +24,9 @@ pub struct ClaimOutcome {
     pub lease_token: Option<String>,
     /// T-032 T2：本次执行权世代（首次领取=1，重领递增）；未领取分支为 0。
     pub lease_generation: i32,
+    /// V-05-1：lease_owner 快照（client:{device_id} / mcp:{name}:{token8} /
+    /// worker id）——ClaimedTaskRun 透传给执行端作命令路由身份。
+    pub lease_owner: String,
 }
 
 
@@ -35,6 +38,9 @@ pub struct ClaimOutcome {
 pub(crate) enum LeaseOwner<'a> {
     Worker(&'a str),
     Mcp { client_name: &'a str },
+    /// V-05-1 Client Registry 凭据通道（0049）：稳定身份 = device.id；
+    /// lease_owner = `client:{device_id}`（跨重启稳定，R-11 token8 债消除）。
+    Client { device_id: Uuid },
 }
 
 
@@ -72,6 +78,9 @@ pub struct ClaimedTaskRun {
     pub lease_expires_at: chrono::DateTime<chrono::Utc>,
     pub git_branch: String,
     pub stage: String,
+    /// V-05-1：lease_owner 快照（Client 通道 = `client:{device_id}`）——
+    /// 命令路由身份；执行端须原样用于 poll/ack（不得本地重建）。
+    pub lease_owner: String,
 }
 
 /// 执行策略读取端口（G5）：策略读取失败必须**拒绝领取**，不得默认放行。
@@ -170,6 +179,40 @@ pub async fn claim_task_run(
 
 /// 同 [`claim_task_run`]，但由调用方**显式**给出完整审计身份（T-088 MCP 路径）：
 /// 审计行写真人三列 + 设备归因，`task_run.executor_id` 落已校验的设备 id。
+/// V-05-1 凭据通道领取（0049）：`lease_owner = client:{device_id}` +
+/// `lease_client_id = device_id` + execution_mode='spawn'。稳定身份使命令
+/// 路由跨执行端重启可用（R-11 token8 债消除；ACP-462）。
+#[allow(clippy::too_many_arguments)]
+pub async fn claim_task_run_as_client(
+    pool: &PgPool,
+    project_id: Uuid,
+    task_id: Uuid,
+    device_id: Uuid,
+    client_name: &str,
+    client_version: Option<&str>,
+    cfg: &RunDispatchConfig,
+    actor: &crate::actor::AuditActor,
+) -> Result<ClaimedTaskRun, RunDispatchError> {
+    let outcome = claim_core(
+        pool,
+        cfg,
+        &ClaimOptions {
+            lease_owner: LeaseOwner::Client { device_id },
+            project_filter: Some(project_id),
+            task_filter: Some(task_id),
+            gate_by_dispatch_mode: false,
+            mode: crate::run_dispatch::DispatchMode::On,
+            client_name: Some(client_name),
+            client_version,
+            audit_actor: Some(actor),
+        },
+        &DefaultExecutionPolicy,
+    )
+    .await?;
+    let outcome = outcome.ok_or(RunDispatchError::NoRunnableRun)?;
+    finalize_claimed_run(pool, project_id, outcome).await
+}
+
 pub async fn claim_task_run_as(
     pool: &PgPool,
     project_id: Uuid,
@@ -222,6 +265,16 @@ pub async fn claim_task_run_with_policy(
     )
     .await?;
     let outcome = outcome.ok_or(RunDispatchError::NoRunnableRun)?;
+    finalize_claimed_run(pool, project_id, outcome).await
+}
+
+/// Model A 领取收尾（MCP / Client 双通道共用）：回读 Run/Task 事实 + 组装
+/// 执行端凭据包（含 V-05-1 lease_owner 快照）。
+async fn finalize_claimed_run(
+    pool: &PgPool,
+    project_id: Uuid,
+    outcome: ClaimOutcome,
+) -> Result<ClaimedTaskRun, RunDispatchError> {
     let lease_token = outcome.lease_token.ok_or(RunDispatchError::NoRunnableRun)?;
     let (attempt_no, lease_expires_at, stage, git_branch, lease_generation): (
         i32,
@@ -249,6 +302,8 @@ pub async fn claim_task_run_with_policy(
         git_branch: git_branch
             .ok_or_else(|| RunDispatchError::InvalidOption("git_branch missing".into()))?,
         stage: stage.unwrap_or_else(|| run_stage::DISPATCH.to_string()),
+        // V-05-1：lease_owner 快照随响应下发——执行端命令路由身份以此为准。
+        lease_owner: outcome.lease_owner,
     })
 }
 
@@ -458,6 +513,7 @@ async fn claim_core_in_project(
             kind: ClaimKind::Cancelled,
             lease_token: None,
             lease_generation: 0,
+            lease_owner: String::new(),
         }));
     };
     let mut task_state: String = task.get("status");
@@ -480,6 +536,7 @@ async fn claim_core_in_project(
             kind: ClaimKind::Cancelled,
             lease_token: None,
             lease_generation: 0,
+            lease_owner: String::new(),
         }));
     }
 
@@ -518,6 +575,7 @@ async fn claim_core_in_project(
                 kind: ClaimKind::Skipped,
                 lease_token: None,
                 lease_generation: 0,
+                lease_owner: String::new(),
             }));
         }
         // T-032 T1：starting 判定 = **启动意图未确认**。`executor_session` 是启动
@@ -552,6 +610,7 @@ async fn claim_core_in_project(
                     kind: ClaimKind::Claimed,
                     lease_token: None,
                     lease_generation: 0,
+                    lease_owner: String::new(),
                 }));
             }
         } else {
@@ -573,6 +632,7 @@ async fn claim_core_in_project(
                     kind: ClaimKind::Reclaimed,
                     lease_token: None,
                     lease_generation: 0,
+                    lease_owner: String::new(),
                 }));
             }
             run_id = created.run_id;
@@ -608,6 +668,7 @@ async fn claim_core_in_project(
             kind: ClaimKind::Skipped,
             lease_token: None,
             lease_generation: 0,
+            lease_owner: String::new(),
         }));
     }
 
@@ -639,6 +700,7 @@ async fn claim_core_in_project(
             kind: ClaimKind::Skipped,
             lease_token: None,
             lease_generation: 0,
+            lease_owner: String::new(),
         }));
     }
 
@@ -666,6 +728,7 @@ async fn claim_core_in_project(
                 kind: ClaimKind::Skipped,
                 lease_token: None,
                 lease_generation: 0,
+                lease_owner: String::new(),
             }));
         }
         Err(error) => {
@@ -690,6 +753,7 @@ async fn claim_core_in_project(
                 kind: ClaimKind::Skipped,
                 lease_token: None,
                 lease_generation: 0,
+                lease_owner: String::new(),
             }));
         }
     }
@@ -719,6 +783,7 @@ async fn claim_core_in_project(
             kind: ClaimKind::Skipped,
             lease_token: None,
             lease_generation: 0,
+            lease_owner: String::new(),
         }));
     }
 
@@ -740,6 +805,10 @@ async fn claim_core_in_project(
             let prefix = token[..8].to_string();
             (Some(token), format!("mcp:{client_name}:{prefix}"))
         }
+        LeaseOwner::Client { device_id } => {
+            let token = crate::run_context::generate_lease_token()?;
+            (Some(token), format!("client:{device_id}"))
+        }
     };
     let lease_token_hash = lease_token
         .as_deref()
@@ -755,6 +824,8 @@ async fn claim_core_in_project(
         // 其余 MCP 领取 = Agent 自执行（Model A human；ACP-425 退化路径不受影响）。
         LeaseOwner::Mcp { client_name } if client_name.starts_with("runner:") => "spawn",
         LeaseOwner::Mcp { .. } => "human",
+        // V-05-1 凭据通道 = Runner 进程载体（spawn 形态；不再依赖 runner: 前缀）。
+        LeaseOwner::Client { .. } => "spawn",
     };
 
     let lease_generation: i32 = sqlx::query_scalar(
@@ -768,7 +839,8 @@ async fn claim_core_in_project(
                 deadline_at = COALESCE(deadline_at, \
                     now() + make_interval(secs => COALESCE($7::int, $8::int)::float8)), \
                 executor_id = COALESCE($9, executor_id), \
-                execution_mode = $10 \
+                execution_mode = $10,\
+                lease_client_id = $11 \
           WHERE id = $1 \
          RETURNING lease_generation",
     )
@@ -783,6 +855,12 @@ async fn claim_core_in_project(
     // T-088：已校验的设备归因（ADR-0001 D6 无 FK 前向列；自报不作凭证）。
     .bind(opts.audit_actor.and_then(|a| a.claimed_device_id))
     .bind(execution_mode)
+    // V-05-1：凭据通道写稳定 Client 身份（约束 B：复合外键
+    // fk_task_run_client_tenant 在库层兜底租户一致）。
+    .bind(match opts.lease_owner {
+        LeaseOwner::Client { device_id } => Some(device_id),
+        _ => None,
+    })
     .fetch_one(&mut *tx)
     .await?;
 
@@ -876,6 +954,7 @@ async fn claim_core_in_project(
         kind: ClaimKind::Claimed,
         lease_token,
         lease_generation,
+        lease_owner,
     }))
 }
 

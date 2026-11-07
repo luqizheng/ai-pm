@@ -43,6 +43,12 @@ pub(crate) async fn attach_device_claim(
 ) -> Response {
     // 非工具请求：不查库、不审计，注入 Absent 占位（pm-mcp 侧归因自然为 NULL）。
     let (parts, body) = request.into_parts();
+    // V-05-1：cpk 凭据通道已在鉴权层注入 DeviceClaim::valid（凭据即声明，
+    // 约束 A）——跳过 X-header 校验路径，原样放行。
+    if parts.extensions.get::<pm_application::caller::ClientChannel>().is_some() {
+        let request = axum::http::Request::from_parts(parts, body);
+        return next.run(request).await;
+    }
     let bytes = match axum::body::to_bytes(body, 256 * 1024).await {
         Ok(b) => b,
         Err(_) => {

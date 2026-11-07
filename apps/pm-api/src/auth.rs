@@ -216,6 +216,63 @@ pub async fn require_bearer(
     if is_public_path(request.uri().path()) {
         return next.run(request).await;
     }
+    // V-05-1 Client Registry（0049）：`cpk_` 前缀 = Client 凭据通道。
+    // 约束 A：仅 /mcp 面开放；解析（四项验证链）失败一律 401，**绝不回退
+    // 真人 JWT 认证路径**；每请求直查库（约束 C：撤销即时，无缓存窗口）。
+    if let Some(token) = request_token(&headers, request.uri()) {
+        if token.starts_with(pm_application::device_credential::CREDENTIAL_PREFIX) {
+            if !request.uri().path().starts_with("/mcp") {
+                return unauthorized("IAM_AUTH_1007", "client credentials are only valid on /mcp");
+            }
+            return match pm_application::device_credential::resolve(&auth.pool, token).await {
+                Ok(Some(resolved)) => {
+                    let tenant_role = tenant_role_of(&auth.pool, resolved.owner_principal_id).await;
+                    // 权限门（require_mcp_permission）读 AuthenticatedIdentity——
+                    // cpk 通道的权限真源 = granted_permissions 列（Q-C 双轨）。
+                    let identity = AuthenticatedIdentity {
+                        provider: "client-registry",
+                        claims_tenant_key: "-".to_string(),
+                        subject: resolved.device_id.to_string(),
+                        roles: vec![],
+                        permissions: resolved.permissions,
+                        aud: None,
+                        client_id: Some("cpk".to_string()),
+                        purpose: None,
+                        ct: false,
+                        nickname: None,
+                        username: None,
+                    };
+                    let principal = AuthedPrincipal {
+                        principal_id: resolved.owner_principal_id,
+                        identity_id: None,
+                        display_name: format!("client:{}", resolved.device_id),
+                        is_active: true,
+                        tenant_id: resolved.tenant_id,
+                        tenant_role,
+                        is_admin: tenant_role.is_tenant_admin(),
+                        auth_mode: "client_credential".to_string(),
+                        provider: "client-registry".to_string(),
+                        claims_tenant_key: "-".to_string(),
+                        subject: resolved.device_id.to_string(),
+                        client: Some("cpk".to_string()),
+                    };
+                    let mut request = request;
+                    request.extensions_mut().insert(identity);
+                    request.extensions_mut().insert(principal.human_actor());
+                    request.extensions_mut().insert(principal);
+                    request.extensions_mut().insert(
+                        pm_application::caller::ClientChannel { device_id: resolved.device_id },
+                    );
+                    // 凭据即设备声明（免 X-header；attach_device_claim 识别此扩展）。
+                    request.extensions_mut().insert(
+                        pm_application::caller::DeviceClaim::valid(resolved.device_id),
+                    );
+                    next.run(request).await
+                }
+                _ => unauthorized("IAM_AUTH_1008", "invalid client credential"),
+            };
+        }
+    }
     let Some(jwks) = auth.jwks.as_ref() else {
         return unauthorized("IAM_AUTH_1004", "bearer layer is not configured");
     };
@@ -251,6 +308,10 @@ pub async fn resolve_principal(
     next: Next,
 ) -> Response {
     if is_public_path(request.uri().path()) {
+        return next.run(request).await;
+    }
+    // V-05-1：cpk_ 凭据通道在 require_bearer 已产出完整 principal——直接放行。
+    if request.extensions().get::<AuthedPrincipal>().is_some() {
         return next.run(request).await;
     }
     let identity = request.extensions().get::<AuthenticatedIdentity>().cloned();
@@ -726,6 +787,23 @@ fn bearer_token(headers: &HeaderMap) -> Option<&str> {
         .or_else(|| value.strip_prefix("bearer "))
         .filter(|token| !token.trim().is_empty())
         .map(str::trim)
+}
+
+/// cpk 通道：owner 的租户角色（无行 = Member，最小权限）。
+async fn tenant_role_of(pool: &sqlx::PgPool, principal_id: Uuid) -> TenantRole {
+    let role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM core.tenant_member WHERE principal_id = $1 LIMIT 1",
+    )
+    .bind(principal_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten();
+    match role.as_deref() {
+        Some("owner") => TenantRole::Owner,
+        Some("admin") => TenantRole::Admin,
+        _ => TenantRole::Member,
+    }
 }
 
 /// `tid` 在上游是数值，`sub` 是字符串；统一按文本读，数值型转字符串。

@@ -13,6 +13,7 @@ pub mod comm_overview;
 pub mod command_executor;
 pub mod delivery;
 pub mod devenv;
+pub mod device_credential;
 pub mod discovery;
 pub mod git_access;
 pub mod ingestion;

@@ -40,6 +40,15 @@ pub(crate) fn router() -> Router<AppState> {
         )
         .route("/v1/pm/devices/{device_id}/checks", post(checks_handler))
         .route("/v1/pm/devices/{device_id}/revoke", post(revoke_handler))
+        // V-05-1 Client Registry（0049）：凭据签发/撤销/权限裁剪。
+        .route(
+            "/v1/pm/devices/{device_id}/credential",
+            post(issue_credential_handler).delete(revoke_credential_handler),
+        )
+        .route(
+            "/v1/pm/devices/{device_id}/credential/permissions",
+            axum::routing::put(set_permissions_handler),
+        )
 }
 
 // ───────────────────────────── 请求体 ─────────────────────────────
@@ -177,6 +186,157 @@ async fn checks_handler(
     match report_checks(&state.pool, &principal.human_actor(), device_id, &checks).await {
         Ok(d) => Json(device_json(&d)).into_response(),
         Err(e) => map_err(e),
+    }
+}
+
+/// V-05-1 守卫：租户 admin 或 device owner（§5 管理面口径；其余一律 404
+/// 不泄露存在性——与 revoke_device 服务内守卫同规格）。
+async fn ensure_credential_manager(
+    state: &AppState,
+    principal: &AuthedPrincipal,
+    device_id: Uuid,
+) -> Result<(), Response> {
+    let row: Option<(Uuid,)> = sqlx::query_scalar(
+        "SELECT owner_principal_id FROM devenv.device WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(device_id)
+    .bind(principal.tenant_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "code": "internal", "message": e.to_string() })),
+        )
+            .into_response()
+    })?;
+    let Some((owner,)) = row else {
+        return Err(not_found_response());
+    };
+    if !principal.is_admin && owner != principal.principal_id {
+        return Err(not_found_response());
+    }
+    Ok(())
+}
+
+fn not_found_response() -> Response {
+    (
+        StatusCode::NOT_FOUND,
+        Json(json!({ "code": "device_not_found", "message": "device not found" })),
+    )
+        .into_response()
+}
+
+/// V-05-1（约束 A）：签发凭据——明文仅本响应返回一次；已有未撤销凭据 → 409。
+async fn issue_credential_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(device_id): Path<Uuid>,
+) -> Response {
+    if let Err(resp) = ensure_credential_manager(&state, &principal, device_id).await {
+        return resp;
+    }
+    let actor = principal.audit_actor();
+    match pm_application::device_credential::issue_device_credential(
+        &state.pool,
+        principal.tenant_id,
+        device_id,
+        &actor,
+    )
+    .await
+    {
+        Ok(issued) => (
+            StatusCode::CREATED,
+            Json(json!({
+                "device_id": issued.device_id,
+                "key": issued.plaintext,
+                "issued_at": issued.issued_at,
+                "warning": "store this key now; it is not retrievable later",
+            })),
+        )
+            .into_response(),
+        Err(pm_application::device_credential::DeviceCredentialError::ActiveCredentialExists) => (
+            StatusCode::CONFLICT,
+            Json(json!({ "code": "CREDENTIAL_ACTIVE", "message": "revoke the active credential first" })),
+        )
+            .into_response(),
+        Err(pm_application::device_credential::DeviceCredentialError::NotFound) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "code": "device_not_found", "message": "device not found" })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "code": "internal", "message": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// V-05-1（约束 C）：撤销——下一请求起全通道 401（每请求直查库）。幂等。
+async fn revoke_credential_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(device_id): Path<Uuid>,
+) -> Response {
+    if let Err(resp) = ensure_credential_manager(&state, &principal, device_id).await {
+        return resp;
+    }
+    let actor = principal.audit_actor();
+    match pm_application::device_credential::revoke_device_credential(
+        &state.pool,
+        principal.tenant_id,
+        device_id,
+        &actor,
+    )
+    .await
+    {
+        Ok(revoked) => Json(json!({ "device_id": device_id, "revoked": revoked })).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "code": "internal", "message": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+/// Q-C：granted_permissions 裁剪（签发后可收紧；值域=已知三码）。
+#[derive(serde::Deserialize)]
+struct SetPermissionsBody {
+    granted_permissions: Vec<String>,
+}
+
+async fn set_permissions_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(device_id): Path<Uuid>,
+    axum::Json(body): axum::Json<SetPermissionsBody>,
+) -> Response {
+    if let Err(resp) = ensure_credential_manager(&state, &principal, device_id).await {
+        return resp;
+    }
+    let actor = principal.audit_actor();
+    match pm_application::device_credential::set_granted_permissions(
+        &state.pool,
+        principal.tenant_id,
+        device_id,
+        &body.granted_permissions,
+        &actor,
+    )
+    .await
+    {
+        Ok(perms) => Json(json!({ "device_id": device_id, "granted_permissions": perms }))
+            .into_response(),
+        Err(pm_application::device_credential::DeviceCredentialError::NotFound) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "code": "device_not_found", "message": "device not found" })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "code": "invalid_permissions", "message": e.to_string() })),
+        )
+            .into_response(),
     }
 }
 

@@ -669,17 +669,37 @@ pub async fn claim_task(
     // T-051 关闭点：claim 必须先过真人成员校验（dev_agent 本身就是成员，不能用它校验）。
     let actor = authorize(pool, caller, args.project_id, ExecutorKind::DevAgent).await?;
     let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
-    let claimed = pm_application::run_dispatch::claim_task_run_as(
-        pool,
-        args.project_id,
-        args.task_id,
-        &args.client_name,
-        args.client_version.as_deref(),
-        &cfg,
-        &actor,
-    )
-    .await
-    .map_err(map_dispatch_error_v2)?;
+    // V-05-1：cpk_ 凭据通道 → 稳定 Client 身份（lease_client_id + client:{id}
+    // 路由）；真人 JWT 通道维持既有 mcp:{client_name}:{token8} 形态。
+    let claimed = match caller.client_channel {
+        Some(channel) => {
+            pm_application::run_dispatch::claim_task_run_as_client(
+                pool,
+                args.project_id,
+                args.task_id,
+                channel.device_id,
+                &args.client_name,
+                args.client_version.as_deref(),
+                &cfg,
+                &actor,
+            )
+            .await
+            .map_err(map_dispatch_error_v2)?
+        }
+        None => {
+            pm_application::run_dispatch::claim_task_run_as(
+                pool,
+                args.project_id,
+                args.task_id,
+                &args.client_name,
+                args.client_version.as_deref(),
+                &cfg,
+                &actor,
+            )
+            .await
+            .map_err(map_dispatch_error_v2)?
+        }
+    };
     Ok(json!({
         "run_id": claimed.run_id,
         "task_id": claimed.task_id,
@@ -689,6 +709,8 @@ pub async fn claim_task(
         "lease_expires_at": claimed.lease_expires_at,
         "git_branch": claimed.git_branch,
         "stage": claimed.stage,
+        // V-05-1：命令路由身份快照——执行端 poll/ack 必须原样回带。
+        "lease_owner": claimed.lease_owner,
     }))
 }
 

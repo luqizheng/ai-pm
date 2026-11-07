@@ -107,17 +107,37 @@ impl DeviceClaim {
     }
 }
 
+/// V-05-1 Client Registry：凭据通道声明（cpk_ 解析成功后由 pm-api 鉴权层注入）。
+/// `device_id` 即稳定 Client 身份（claim 写 `lease_client_id` / `lease_owner
+/// = client:{id}`；约束 A：凭据与 Device 唯一绑定，解析层已验四项）。
+#[derive(Debug, Clone, Copy)]
+pub struct ClientChannel {
+    pub device_id: Uuid,
+}
+
 /// MCP 请求级：真人 + 设备声明。由 pm-mcp 的 `caller_from_ctx` 组装——**只读
 /// extensions，不访问数据库**。
 #[derive(Debug, Clone)]
 pub struct CallerContext {
     pub human: HumanActor,
     pub device: DeviceClaim,
+    /// 凭据通道（V-05-1）；真人 JWT 通道恒 None。
+    pub client_channel: Option<ClientChannel>,
 }
 
 impl CallerContext {
     pub fn new(human: HumanActor, device: DeviceClaim) -> Self {
-        Self { human, device }
+        Self {
+            human,
+            device,
+            client_channel: None,
+        }
+    }
+
+    /// 凭据通道构造（`caller_from_ctx` 用；真人通道不受影响）。
+    pub fn with_client_channel(mut self, channel: ClientChannel) -> Self {
+        self.client_channel = Some(channel);
+        self
     }
 
     /// 已校验的设备 id（若有）。

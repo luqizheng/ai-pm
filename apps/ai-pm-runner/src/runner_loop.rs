@@ -166,12 +166,20 @@ pub async fn claim_and_start(
         .get("lease_generation")
         .and_then(|v| v.as_i64())
         .unwrap_or(1) as i32;
-    // 命令路由身份 = Platform 侧 lease_owner 快照（claim.rs ⑨：mcp:{client}:{token8}）。
-    let worker_id = format!(
-        "mcp:{}:{}",
-        cfg.client_name,
-        &lease_token[..8.min(lease_token.len())]
-    );
+    // 命令路由身份 = Platform 侧 lease_owner 快照（V-05-1 起随 claim 响应下发：
+    // cpk 通道 = `client:{device_id}`，真人通道 = `mcp:{client}:{token8}`）——
+    // **必须原样使用**（poll/ack 路由按此绑定）；旧平台无该字段时回退本地重建。
+    let worker_id = claimed
+        .get("lease_owner")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            format!(
+                "mcp:{}:{}",
+                cfg.client_name,
+                &lease_token[..8.min(lease_token.len())]
+            )
+        });
     let run_dir = cfg.workspace_root.join(run_id.to_string());
     std::fs::create_dir_all(&run_dir)?;
     let spawn = adapter::spawn_agent(

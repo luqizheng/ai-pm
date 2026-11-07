@@ -13,7 +13,7 @@
 
 use pm_application::actor::AuditActor;
 use pm_application::authz::{AuthzError, ExecutorKind, require_project_member, resolve_project_executor};
-use pm_application::caller::{CallerContext, DeviceClaim, HumanActor};
+use pm_application::caller::{CallerContext, ClientChannel, DeviceClaim, HumanActor};
 use rmcp::service::RequestContext;
 use rmcp::RoleServer;
 use sqlx::PgPool;
@@ -42,7 +42,14 @@ pub fn caller_from_ctx(ctx: &RequestContext<RoleServer>) -> Result<CallerContext
         .get::<DeviceClaim>()
         .cloned()
         .unwrap_or_else(DeviceClaim::absent);
-    Ok(CallerContext::new(human, device))
+    // V-05-1 凭据通道（cpk_）：鉴权层解析成功时注入——claim 据此写稳定
+    // Client 身份（lease_client_id / lease_owner=client:{id}）。
+    let client_channel = parts.extensions.get::<ClientChannel>().copied();
+    let ctx = CallerContext::new(human, device);
+    Ok(match client_channel {
+        Some(channel) => ctx.with_client_channel(channel),
+        None => ctx,
+    })
 }
 
 /// 仅做真人成员校验（不取执行主体）——供只读与 discovery 类工具使用。
