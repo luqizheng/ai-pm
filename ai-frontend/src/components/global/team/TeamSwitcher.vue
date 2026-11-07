@@ -196,6 +196,10 @@ const rows = computed<SwitcherRow[]>(() => {
   color: var(--ws-text-tertiary);
 }
 
+/* reka-ui 浮层（Tooltip/Popover 内容）被 Portal 传送到 body，class 落在不带
+   本组件 scope 属性的 popper 内层元素上——须用 :deep 命中，否则整条规则失效
+   （背景透明透字，同 ui/popover 与 UserMenu 定式）。 */
+:deep(.team-switcher__tooltip),
 .team-switcher__tooltip {
   z-index: 60;
   padding: var(--space-1) var(--space-2);
@@ -206,6 +210,7 @@ const rows = computed<SwitcherRow[]>(() => {
   color: var(--ws-text-primary);
 }
 
+:deep(.team-switcher__card),
 .team-switcher__card {
   z-index: 60;
   min-width: 264px;
