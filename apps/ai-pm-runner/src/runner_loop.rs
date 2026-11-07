@@ -83,6 +83,7 @@ pub struct ActiveRun {
 
 pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) {
     let mut active: Option<ActiveRun> = None;
+    let mut logged_awaiting = false;
     let mut last_claim_attempt = Instant::now() - Duration::from_secs(cfg.claim_interval_secs);
     loop {
         // ① 进程收割与退出判定。
@@ -92,10 +93,13 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) {
                     // 人工介入流：进程是 Runner 自己按 terminate 命令杀的
                     //（D-03）——预期退出，Run 保持存活等待 continue 命令。
                     // 误判为退出会丢弃 Run → continue 永远无人消费。
-                    tracing::info!(
-                        run = %run.run_id, exit = %outcome,
-                        "agent terminated for intervention; awaiting continue"
-                    );
+                    if !logged_awaiting {
+                        logged_awaiting = true;
+                        tracing::info!(
+                            run = %run.run_id, exit = %outcome,
+                            "agent terminated for intervention; awaiting continue"
+                        );
+                    }
                 } else {
                     tracing::info!(run = %run.run_id, exit = %outcome, "agent process exited");
                     // 交付提交由 Agent 经 MCP 自行完成（Model A 既有模式）；

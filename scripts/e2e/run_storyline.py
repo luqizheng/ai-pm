@@ -86,11 +86,11 @@ def main() -> None:
         f"AI_PM_RUNNER_TOKEN={token} "
         f"AI_PM_RUNNER_PROJECT_ID={PROJECT} "
         f"AI_PM_RUNNER_WORKSPACE_ROOT=/home/kudi/e2e/ws "
-        f"AI_PM_RUNNER_AGENT_CMD='python3 /home/kudi/e2e/fake_agent.py' "
+        f"AI_PM_RUNNER_AGENT_CMD='bash /home/kudi/e2e/agent_wrapper.sh' "
         f"AI_PM_RUNNER_CLAIM_INTERVAL_SECS=3 "
         f"AI_PM_INTERACTION_DETECT_INTERVAL_SECS=2 "
         f"AI_PM_COMMAND_POLL_INTERVAL_SECS=2 "
-        f"RUST_LOG=debug"
+        f"RUST_LOG=info"
     )
     ssh59_nowait(
         f"cd /home/kudi/e2e && nohup env {runner_env} ./ai-pm-runner > runner.log 2>&1 < /dev/null & echo started")
@@ -100,7 +100,7 @@ def main() -> None:
 
     # ── S2 等待自领 + 介入上报（Platform 侧断言）──
     interaction_id = ""
-    for i in range(30):
+    for i in range(120):
         time.sleep(2)
         interaction_id = psql(
             f"SELECT id FROM delivery.task_interaction WHERE task_id='{TASK}' AND status='pending' LIMIT 1")
@@ -108,7 +108,7 @@ def main() -> None:
         if interaction_id:
             ev("S2-interaction", f"interaction={interaction_id} reported by runner; run={run_state}")
             break
-        if i == 29:
+        if i == 119:
             raise SystemExit("TIMEOUT waiting for interaction")
     run_state = psql(f"SELECT status FROM delivery.task_run WHERE id='{RUN}'")
     task_state = psql(f"SELECT status FROM delivery.task WHERE id='{TASK}'")
@@ -140,7 +140,7 @@ def main() -> None:
 
     # ── S5 Runner 消费 continue → S2 spawn → 消费回执 ──
     consumed = ""
-    for i in range(30):
+    for i in range(120):
         time.sleep(2)
         consumed = psql(
             f"SELECT status FROM delivery.task_interaction WHERE id='{interaction_id}'")
@@ -149,7 +149,7 @@ def main() -> None:
         if consumed == "consumed":
             ev("S5-consumed", f"interaction consumed; continue acked={delivery}")
             break
-        if i == 29:
+        if i == 119:
             log_tail = ssh59("tail -25 /home/kudi/e2e/runner.log; pgrep -af '[a]i-pm-runner' || echo runner-gone")
             print("===== runner.log on S5 timeout =====")
             print(log_tail)

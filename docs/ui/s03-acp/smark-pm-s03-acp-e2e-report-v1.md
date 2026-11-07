@@ -63,7 +63,18 @@ S7-final      interaction=consumed | shield=none | task=running | ledger=complet
 - Docker Desktop 挂载 mtime/内容缓存 → cargo 增量编译漏检源码变更 → 重建前必须 `touch` 源文件 + `cargo clean -p <crate> --release`，并以 grep 验证二进制含新字符串。
 - paramiko 5.x SFTP put 相对路径在 Windows 失败 → 一律 os.path.abspath。
 
-## 5. E2E 范围声明
+## 5. 第二阶段：真实 CLI（opencode）故事线 PASS（2026-11-07 补）
+
+| 项 | 结果 |
+| --- | --- |
+| Agent | **真实 opencode v2.2.6**（.59 本机安装，免费模型 deepseek-v4.1-flash-free）；Adapter = `agent_wrapper.sh`（协议面确定性承载 + LLM 真实工作分离） |
+| 全链 | S0~S7 全绿（同第一阶段）；Interaction → terminate → REST 回复 → Continuation → **opencode 真实消费回复** → CONSUMED |
+| LLM 真实产出 | `analysis-s2.md`：DeepSeek 引用人类回复原文（"approve / E2E：允许删除旧字段，继续执行"）并产出收尾动作清单；`opencode-s2.log` 实录会话（"Wrote file successfully: analysis-s2.md"） |
+| D-03 实证 | Session-1 的阻塞期分析文件缺失 = **立即终止的正确结果**（opencode 被杀于写盘前） |
+| 协议面 | interaction.evt-*.reported（event_id 键控归档）· reply.json（注入证据）· process.json 全部落盘 |
+| 已知修正 | reap 生命周期日志 gate 至一次（原每 500ms 刷屏） |
+
+## 6. E2E 范围声明
 
 - **已覆盖**：通信面全故事线（claim/interaction/terminate/reply/continuation/consume/guard 生命周期/账本）+ F-7 开关双态 + 鉴权链（lmms 登录 → JWT → JWKS）。
 - **未覆盖（后续）**：真实 DSH/OpenCode CLI Adapter（假 Agent 已验证协议面；OpenCode 待其模型 key 配置后作第二阶段）· pm_submit_result 交付验证链（需真实仓库）· 多 Runner 竞争 · Worker（服务器 Model B）载体命令消费（V-05-2③ 维持现状）。
