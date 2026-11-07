@@ -5,7 +5,7 @@
 |---|---|
 | 文档性质 | ACP 切片实施设计稿（V1.2 修订稿，待复审） |
 | 版本 | **V1.2**（收编独立复审 V1.0 全部 R-1~R-11 + P2×6；取代 V1.1，逐项可核，对照清单见修订记录） |
-| 裁决状态 | R-ACP-1~9 已裁决（2026-11-07）；**R-ACP-14（情形5 取消重试）已裁=接受（2026-11-07 用户裁决）；R-ACP-15（偏离登记）与 R-ACP-16（离线恢复=方案 a）随本稿登记生效**。编号自复审建议的 10/11/12 顺移（10~13 已被 ACP-03 稿占用并裁决，INDEX 8；后实施者顺移纪律） |
+| 裁决状态 | R-ACP-1~9 已裁决（2026-11-07）；**R-ACP-14（情形5 取消重试）已裁=接受（2026-11-07 用户裁决）；R-ACP-15（偏离登记）与 R-ACP-16（离线恢复=方案 a）随本稿登记生效**。编号自复审建议的 10/11/12 顺移（10~13 已被 ACP-03 稿占用并裁决，INDEX 8；后实施者顺移纪律）。**专家复审（第 1 块：活风险三项，2026-11-07）：全部批准 + ACP-C1~C4 横向约束收编（§9）；第 2/3 块（设计取舍/排期依赖）待审** |
 | 设计基线 | **S03-ACP V1.3.1（已冻结，2026-11-07 用户决议）**：D-01～D-07 为已生效架构裁决 |
 | 覆盖切片 | ACP-01（Interaction 领域模型）· ACP-02（Process Termination）· ACP-08（Adapter 能力与集成） |
 | 本稿闭合项 | §23.3：Worker Command 持久化/轮询/幂等/失败升级 · N-1（等待窗口调度互斥）· N-2（interaction.required 与消费回执物理通道）· Interaction CANCELLED/TIMED_OUT/唯一活跃约束 · awaiting_decision 映射 · Process Termination 失败处理 · Adapter 能力验证 · **等待窗口执行端离线恢复（R-11，§3.6）** |
@@ -34,6 +34,11 @@
   - **P2-5**：ACP-445 互斥机制点名 = Task 行 `FOR UPDATE`（**已实现**，interaction.rs，§8）。
   - **P2-6**：§3.3 表头补"双持身份"说明（§3.3）。
   - 验收补 ACP-446~453（§8）；裁决记录增 R-ACP-14/11/12（§9）。
+- **专家复审第 1 块意见收编（2026-11-07，活风险三项全部批准 + 补充约束；意见原文归档 `smark-pm-s03-acp-slice-design-acp01-02-08-v1-2-expert-review-1.md`）**：
+  - **ACP-448 补强**：execution_mode 准入与 **ACP-C1 命令路由不变量**为两层独立判定（准入管"能不能报"，路由不变量管"命令有无有效投递目标"），不得混为一套；历史 human Run 孤儿 terminate 命令 = **定向审计 + 修复，禁止直接删除**；命令修复不得在无独立证据下改 Task 状态。
+  - **R-4 补强**：迟到/缺失/重复 consumed 回执**不得改变已确认的 Continuation 恢复结果**；旧链关闭后新链与旧 Interaction 保持**独立关联**；迁移期历史 responded+running 数据**按 continue ACK 证据分类修复**，禁止仅凭 Task 状态推断。
+  - **R-16 关键修正**：**terminate ACKED 不作续领前置，改作新 Session 启动前置（ACP-C4）**——续领后五步时序落 §3.6；改路由 ≠ 重建命令（command_id/idempotency_key/payload 不变、claim_count 不重置）；generation fencing 覆盖旧执行端迟到 ACK；续领本身不自动创建新 Session。
+  - 新增**横向架构约束 ACP-C1~C4**（§9 末）；验收补 ACP-454/455（§8）；E2E 必测场景四项（§8 末）。
 
 ---
 
@@ -122,7 +127,7 @@ pm_report_interaction(
 | 设计点 | 规则 |
 | --- | --- |
 | 身份与权限 | 权限码 `PM_MCP_AGENT_REPORT`（§1.6，**已落 F-7 双态门**）+ 租约三要素。**不新增人类确认语义，不违 A\***（人类回复仅 REST/UI，属 ACP-03） |
-| **execution_mode 准入（R-3）** | **仅 `execution_mode ∈ {'spawn'}` 的 Run 可调用**（Runner / Worker spawn 形态）；`'human'`（Model A 真人 MCP 客户端）→ 明确错误码拒绝且**不产生任何命令**——Model A 的等待走既有 `awaiting_decision`/`task_waiting` 入口（ACP-09 边界的操作化；基线 §1.2"Model A 不创建 terminate/Continuation"由此可判别）。**实现注记**：准入校验为待收敛项（ACP-448 钉住） |
+| **execution_mode 准入（R-3，专家复审批准 + 补强）** | **仅 `execution_mode ∈ {'spawn'}` 的 Run 可调用**（Runner / Worker spawn 形态）；`'human'`（Model A 真人 MCP 客户端）→ fail-closed 明确错误码拒绝且**不产生 Interaction、不产生任何命令副作用**——Model A 的等待走既有 `awaiting_decision`/`task_waiting` 入口（ACP-09 边界的操作化）。**两层判定分离（专家约束）**：execution_mode 负责**准入**；**ACP-C1 命令路由不变量**独立负责"命令存在有效可验证投递目标"——不得混为一套判定。**存量治理（专家约束）**：历史 human Run 下未终局的孤儿 terminate 命令 = 定向审计 + 修复（保留审计记录，禁止直接删除）；命令修复不得未经独立证据改变 Task 状态。**实现注记**：准入校验为待收敛项（ACP-448 钉住） |
 | 幂等 | `UNIQUE(run_id, event_id)`（已实现）；重复上报返回原 `interaction_id` 不新建 |
 | 介入链唯一 | 该 Task 存在**开放介入链**（§5.2）→ Conflict 拒绝 |
 | awaiting_decision 映射 | 同一事务：Task → `awaiting_decision`（经既有 task_transition 门槛）+ `task_waiting` upsert + 调度保护状态 `human_wait`（§4.1）（已实现，单事务，interaction.rs） |
@@ -303,9 +308,18 @@ pm_report_consumption(project_id, task_id, run_id, lease_token, lease_generation
   3) 审计 run.lease_reacquired（含原/新 generation、触发 command_id）。
 ```
 
-- `deadline_at` **不动**（T3 字面一致；离线恢复不构成 Deadline 顺延——过期仍走 ACP-07 授权）。
+- `deadline_at` **不动**（T3 字面一致；离线恢复不构成 Deadline 顺延——过期仍走 ACP-07 授权；专家复审批准：deadline 到期后禁止自动恢复执行，已持久化人工回复保留，后续执行进 ACP-07 人工授权）。
 - `attempt_no` 不变、Run 行不变（**不是 B3-2 新建 Run**；S2 屏蔽语义不受影响——续领是显式应用服务操作，不经回收路径）。
 - 续领后旧 token/旧 generation 立即失效（token 哈希比对失败，ACP-447）；旧 worker_id 路由值失效（poll 旧值=空集）。
+- **改路由 ≠ 重建命令（专家约束）**：`command_id` / `idempotency_key` / `payload` 保持不变；`claim_count` **不重置**（重新领取才计入实际投递次数）。
+- **generation fencing 覆盖迟到 ACK（专家约束，ACP-C3）**：续领后，旧执行端（旧 worker_id / 旧 generation）对重路由命令提交 ACK → 拒绝（worker_id 绑定失败 + generation 集合比对不含旧值），不污染命令/Run 状态（ACP-454）。
+- **续领本身不得自动创建新 Session（专家约束）**——续领只恢复租约与命令可达性；Session 启动仍由 continue 命令显式触发。
+- **terminate 确认的落位（专家关键修正，ACP-C4）**：terminate ACKED **不是续领的前置条件**，而是**新 Session 启动的前置条件**。续领后的完整时序：
+  1. 同 Client 身份发现名下 `start_wait` Run（发现面，上）；
+  2. 满足本节前置 → 同事务续领（generation+1）；
+  3. 同事务将未终局命令重路由至新 lease_owner；
+  4. 新执行端消费重路由的 terminate 命令，确认旧 Session 已终止；**旧进程已不存在 → 幂等终止确认**（§6.8 既有幂等语义：进程已退出则直接 acked；孤儿进程仍在 → 按 pid 文件强杀，C7）；
+  5. **仅当 terminate 已确认（或具备等价的旧进程不存在证明）才允许执行 continue、启动新 Session**（= 决策表情形 6 / §9.4 检查 8 的判据，ACP-455）。
 - 与 R-2 的差异收编：R-2 原文"作为 continue 执行的第 0 步"收敛为本节"发现面 + 显式续领操作"，continue 执行前置的 guard 快照（F-1）校验新 generation 通过后照常执行。
 
 **凭据持久化裁决**：Runner **不本地持久化 lease_token**——一次性明文丢失即走本节续领路径；本地持久化方案 B 不采用为独立路径。
@@ -414,6 +428,8 @@ none ──创建 Interaction──▶ human_wait ──回复持久化──▶
 
 > **实现注记（R-4 欠账）**：e1feb5f 现行为 = `mark_consumed`（consumed）时做 awaiting_decision→Running + resolve（waiting_resolved=true，已实现且比 V1.1 更正确）；**acked 事务内转 running + 链关闭为待收敛项**——收敛前 DSH 形态（永不 consumed）下"Task 停 awaiting_decision + 新 Session 提交被拒"的窗口仍然存在，正是 R-4 要闭合的问题。收敛批以 ACP-450/451 验收。
 
+**专家复审补强（2026-11-07，批准 R-4 对策 + 五点约束）**：① INPUT_INJECTED 是 Continuation 恢复的**业务确认边界**（前提：协议保证输入已被执行端接受且 Continuation 进入可执行状态——§1.4 R-6 语义已满足）；② acked 同事务四写 = Task→running + waiting_resolved=true + chain_open=false + task_waiting resolve + guard→none（即上表）；③ **迟到、缺失或重复的 consumed 回执不得改变已确认的 Continuation 恢复结果**（consumed 只落 consumed_at/指标，任何重复提交幂等返回原结果）；④ 旧链关闭后允许建新链，**旧 Interaction 与新链保持独立关联**（`retry_of` 只在链内使用，链间无关联字段——UI 按 task+链分组展示）；⑤ **迁移期历史 responded+running 数据按 continue ACK 证据分类修复**（有 acked continue → 补关链/resolve；无 → 维持现状待人工），禁止仅凭 Task 状态推断恢复成功。
+
 ---
 
 ## 6. ACP-02：Process Termination（落地定案）
@@ -468,7 +484,11 @@ Runner 的 spawn/收割/终止能力自 `codex_executor.rs` 演化：原子 pid 
 | **ACP-451**（R-4） | 新 Session 运行中再次上报介入 | 新链创建成功（旧链已因 acked 关闭） |
 | **ACP-452**（R-11a） | 执行端离线超 `AI_PM_RUN_LEASE_SECS` 后恢复（Runner 重启 / Model A 重连） | 发现面命中 → §3.6 续领 → continue 在**同 Run** 上执行成功；`deadline_at` 不变、`attempt_no` 不变、Run 行不变 |
 | **ACP-453**（R-11c） | 已回复但租约过期（离线窗口内） | 人工回复**不静默丢弃**：`interaction_response` 持久化在先；续领后投递成功；恢复前 REST 查询面可见（"等待执行端恢复"态）+ shield 指标 |
+| **ACP-454**（专家约束，ACP-C3） | 续领后，旧执行端（旧 worker_id/旧 generation）对重路由命令提交 ACK，或以旧凭据做任何状态写入 | **拒绝且不污染**：worker_id 绑定失败 + generation 集合比对不含旧值；命令/Run/Interaction 状态不变，计告警指标 |
+| **ACP-455**（专家约束，ACP-C4） | 续领成功但 terminate 未确认（无旧进程不存在证明）时执行 continue | **拒绝启动新 Session**（情形 6 / §9.4 检查 8 判据）；terminate 命令先行投递消费，确认后才放行 continue |
 | ACP-445 补注（P2-5） | Task 取消与 Interaction 上报并发 | 互斥机制 = **Task 行 `FOR UPDATE`**（interaction.rs 事务首语句，已实现） |
+
+**E2E 必测场景（专家终审意见指定，随收敛批真实栈验证）**：① 无 consumed 证据的 Adapter（DSH 形态，对应 ACP-450）；② Runner 离线超租约 TTL 后恢复（ACP-452/453）；③ 旧 Runner 迟到 ACK（ACP-454）；④ terminate 未确认时禁止启动新 Session（ACP-455）。
 
 ---
 
@@ -494,7 +514,18 @@ Runner 的 spawn/收割/终止能力自 `codex_executor.rs` 演化：原子 pid 
 | --- | --- | --- |
 | **R-ACP-14**（R-1 引出；复审建议编号 10 因 ACP-03 稿 R-ACP-10~13 已裁被占，按后实施者纪律顺移） | 介入取消（情形 5）后是否接受"以 B3-2 新 attempt Run 重试" | ✅ **接受（2026-11-07 用户裁决）**。理由：①原 Run 事实已放弃（进程已被 terminate 杀 + 介入已显式撤销，不存在"半途工作"可保护）；②新 Run 经 context 重建携带原始上下文，deadline COALESCE 重新固化在此语义下可接受（人工显式取消 ≠ 自动刷新 Deadline，不违基线 §1.3 意图）；③替代方案（取消=Run 永终、Task 停滞待人工重启）徒增人工负担而无安全增益。随裁决定 `release_reason='interaction_cancelled'` 新值 |
 | **R-ACP-15**（R-10，**登记生效**） | 命令面不依赖有效 Run Lease（worker_id 绑定 + generation 集合比对提供等价 fencing） | ✅ 登记为**对冻结基线 §10.4/§16.3 的正式操作化修订**（与 R-ACP-7 同规格）；执行面写操作仍受 ADR-0002 D2 七点约束，无豁免 |
-| **R-ACP-16**（R-11，**已裁**） | 等待窗口执行端离线（超租约 TTL）恢复路径 | ✅ **方案 a：同主体续领扩展**（§3.6：发现面 + `pm_reacquire_lease` + 同事务改路由 + `reacquired_generation` 写回；2026-11-07 用户批准按方案 a 起草 V1.2）。方案 B（本地持久化凭据）不采用为独立路径。离线恢复不是 Deadline 顺延理由（T3 不变）；已持久化人工回复永不因离线丢弃（ACP-453） |
+| **R-ACP-16**（R-11，**已裁**） | 等待窗口执行端离线（超租约 TTL）恢复路径 | ✅ **方案 a：同主体续领扩展**（§3.6：发现面 + `pm_reacquire_lease` + 同事务改路由 + `reacquired_generation` 写回；2026-11-07 用户批准按方案 a 起草 V1.2；**专家复审批准 + 关键修正：terminate ACKED 从续领前置改判为 New Session 启动前置（§3.6 时序 5 步，ACP-C4）**）。方案 B（本地持久化凭据）不采用为独立路径。离线恢复不是 Deadline 顺延理由（T3 不变，专家批准）；已持久化人工回复永不因离线丢弃（ACP-453） |
+
+### 横向架构约束（ACP-C1~C4，专家复审 2026-11-07 补充，全切片长期有效）
+
+| # | 约束 | 落位 |
+| --- | --- | --- |
+| **ACP-C1** | 执行端命令必须具有**有效、可验证的路由目标**（命令创建事务内保证可投递性；与 execution_mode 准入两层分离） | §1.3 准入行；`pm_report_interaction` 准入 + 命令创建同事务校验 |
+| **ACP-C2** | **INPUT_INJECTED 是业务恢复确认边界，consumed 仅为观测事实** | §1.4 / §5.3（R-4） |
+| **ACP-C3** | 执行端回执必须校验 **Run generation**——旧 generation 的迟到 ACK 与一切状态写入不得污染新状态 | §3.3 ③ / §3.6 fencing / ACP-454 |
+| **ACP-C4** | **租约续领与 Session 重启分离**——Session 重启必须经过旧 Session 终止确认（terminate ACKED 或等价的旧进程不存在证明） | §3.6 时序 / 情形 6 / ACP-455 |
+
+**专家复审状态（第 1 块：活风险三项）**：ACP-448 / ACP-450/451 / ACP-452/453 设计方向**全部批准**，补充约束已收编上文；意见原文归档 `smark-pm-s03-acp-slice-design-acp01-02-08-v1-2-expert-review-1.md`。
 
 ---
 
