@@ -809,6 +809,7 @@ async fn create_pc_analyze_task(
 }
 
 /// 路由留痕（审计；governance.audit_log，source_kind='kb_pc_routing'）。
+/// 系统面 dispatch principal：四身份列显式 NULL（C174 守卫；A5 同款）。
 async fn audit_route_decision(
     pool: &PgPool,
     project_id: Uuid,
@@ -818,8 +819,10 @@ async fn audit_route_decision(
 ) -> Result<(), IntakeError> {
     sqlx::query(
         "INSERT INTO governance.audit_log \
-         (project_id, actor_id, action, target_type, target_id, after_data, source_kind, tenant_id) \
-         VALUES ($1, $2, 'kb_pc_signal_routed', 'intake_record', $3, $4, 'kb_pc_routing', \
+         (project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
+          action, target_type, target_id, after_data, source_kind, tenant_id) \
+         VALUES ($1, $2, NULL, NULL, NULL, NULL, \
+                 'kb_pc_signal_routed', 'intake_record', $3, $4, 'kb_pc_routing', \
                  (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)

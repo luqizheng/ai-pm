@@ -44,6 +44,10 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     ("crates/pm-application/src/team_llm.rs", 1),
     // Team Onboarding（0044）：team.created/updated + 邀请/链接/激活全链共用本 helper
     ("crates/pm-application/src/team_onboarding.rs", 1),
+    // KB-PC 服务化（0048 Intake）：信号路由留痕（系统面 dispatch principal，四列显式 NULL）
+    ("crates/pm-application/src/intake.rs", 1),
+    // KB-PC 服务化：intake_task 人工重试（REST 面，写全四身份列）
+    ("apps/pm-api/src/intakes.rs", 1),
 ];
 
 fn workspace_root() -> PathBuf {
