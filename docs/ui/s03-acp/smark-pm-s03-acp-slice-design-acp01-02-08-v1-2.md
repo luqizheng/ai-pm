@@ -3,9 +3,9 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档性质 | ACP 切片实施设计稿（V1.2 修订稿，待复审） |
+| 文档性质 | ACP 切片实施设计稿（V1.2；专家三轮复审意见全部收编，进入收敛实施——收敛批两层交付见 §10.5） |
 | 版本 | **V1.2**（收编独立复审 V1.0 全部 R-1~R-11 + P2×6；取代 V1.1，逐项可核，对照清单见修订记录） |
-| 裁决状态 | R-ACP-1~9 已裁决（2026-11-07）；**R-ACP-14（情形5 取消重试）已裁=接受（2026-11-07 用户裁决）；R-ACP-15（偏离登记）与 R-ACP-16（离线恢复=方案 a）随本稿登记生效**。编号自复审建议的 10/11/12 顺移（10~13 已被 ACP-03 稿占用并裁决，INDEX 8；后实施者顺移纪律）。**专家复审（第 1 块：活风险三项，2026-11-07）：全部批准 + ACP-C1~C4 横向约束收编（§9）；第 2 块（六项取舍，2026-11-07）：四维持两修正（V-05-1 身份硬前置升格、发现语义独立为 `pm_discover_runs`、链加 `previous_chain_id`）；第 3 块（排期依赖）待审** |
+| 裁决状态 | R-ACP-1~9 已裁决（2026-11-07）；**R-ACP-14（情形5 取消重试）已裁=接受（2026-11-07 用户裁决）；R-ACP-15（偏离登记）与 R-ACP-16（离线恢复=方案 a）随本稿登记生效**。编号自复审建议的 10/11/12 顺移（10~13 已被 ACP-03 稿占用并裁决，INDEX 8；后实施者顺移纪律）。**专家复审（第 1 块：活风险三项，2026-11-07）：全部批准 + ACP-C1~C4 横向约束收编（§9）；第 2 块（六项取舍，2026-11-07）：四维持两修正（V-05-1 身份硬前置升格、发现语义独立为 `pm_discover_runs`、链加 `previous_chain_id`）；第 3 块（排期依赖，2026-11-07）：方向全赞同 + 三处调整（V-05-1 含撤销最小集 / ACP-09 两阶段 / ACP-04·05 联合设计）——**三轮复审全部收编，本稿进入收敛实施**（排期落 `docs/project-ai-team-v2/ai-pm-v05-execution-roadmap-v1.md`）** |
 | 设计基线 | **S03-ACP V1.3.1（已冻结，2026-11-07 用户决议）**：D-01～D-07 为已生效架构裁决 |
 | 覆盖切片 | ACP-01（Interaction 领域模型）· ACP-02（Process Termination）· ACP-08（Adapter 能力与集成） |
 | 本稿闭合项 | §23.3：Worker Command 持久化/轮询/幂等/失败升级 · N-1（等待窗口调度互斥）· N-2（interaction.required 与消费回执物理通道）· Interaction CANCELLED/TIMED_OUT/唯一活跃约束 · awaiting_decision 映射 · Process Termination 失败处理 · Adapter 能力验证 · **等待窗口执行端离线恢复（R-11，§3.6）** |
@@ -47,6 +47,14 @@
   - **2.5 推翻双态 Poll → 独立工具 `pm_discover_runs`**：Poll 保持单 Run 命令轮询原契约不动；Discover 为独立业务能力（Client 名下待恢复 Run 发现），返回字段十个（run_id/execution_mode/interaction_id/interaction_status/deadline_at/shield_state/lease_generation/lease_status/terminate_command_id/terminate_status），仅限当前认证 Client 有权恢复的 Run、**不返回人工回复正文与 Command payload**、支持分页、重复调用无状态副作用（§1.6/§3.6）。
   - **2.6 Chain 维持多独立链 + 弱关联字段 `previous_chain_id`**：只引用同 Task 已关闭前驱链、禁自引用/循环、不改 retry_of 链内语义、不共享生命周期——只服务追溯/审计/UI；**不加冷却、不合并连续介入**（重复事件靠 event_id 幂等 + Session 标识 + Run generation 校验区分）（§5.1/§5.2；0048 迁移列）。
   - 收敛后重点验证六项（§8 末清单更新）。
+- **专家复审第 3 块裁决收编（2026-11-07，排期依赖=方向全赞同 + 三处调整；意见原文归档 `...-expert-review-3.md`，排期全文落 `docs/project-ai-team-v2/ai-pm-v05-execution-roadmap-v1.md`）**：
+  - **V-05-1 升格为平台级 Client Identity Foundation（独立基础切片，非 ACP 子任务）**：立即插入关键路径（可与 ACP-04 设计并行）；**最小生产可用集必须含撤销/禁用**（Client 登记 + client_id/client_name 唯一归属 + 认证主体绑定 + 凭据签发/验证 + **撤销或 disabled_at** + lease_client_id 回填 + **正式权限码字典**；能力三分动态管理/多凭据轮换/生命周期 UI 后补）——推翻我方"撤销可后补"倾向（**签发而无撤销不符合生产身份基座**：泄露凭据仍可 discover/续领/轮询/上报）；**撤销立即影响全部四类命令面/上报工具**，不能只禁续领放行轮询。
+  - **迁移号拆分**：0048 = ACP 收敛（`reacquired_generation` + `previous_chain_id`）；0049 = Client Registry（登记表 + `lease_client_id` + 回填 + 权限字典）——独立审查/测试/回滚；**lease_client_id 历史回填三分类**（可靠对应→自动回填 / 仅自报 client_name→暂不认定 / 来源不明→legacy-unverified；历史兼容≠历史身份可信，保留 lease_owner 但不得据此获新续领权）；迁移号由单一实施负责人统一分配。
+  - **收敛批拆两层交付（不做不可拆大 PR）**：**Correctness Fix**（ACP-448 + ACP-450/451 + **Model A 定向回归**，P0 立即）/ **Recovery Foundation**（V-05-1 + ACP-452/453 + ACP-C1~C4 + discover + chain 关联，依赖 V-05-1 身份安全完成）——同批不同 PR、独立提交独立验收。
+  - **ACP-04 不推迟到最后**：与 ACP-05 **联合设计**先闭数据契约（Delivery 引用 Run 还是 Session / Consumption 是否需 continuation_generation / Delivery 是否参与 Task 完成判定 / 05 是否消费 04 持久化 / 04 是否依赖 05 未建的正式 Session 身份），按真实数据依赖定实施先后，默认 04 核心交付持久化先行；**不得临时另建一套 Session 身份**。
+  - **ACP-09 改贯穿式验证工作包（两阶段）**：阶段 A 定向回归随 Correctness Fix（human Run 调 report 被拒 / Model A 既有 awaiting_decision 流程 / 回复后继续 / 无证据 Adapter / 重复 ACK 幂等）；阶段 B 完整回归在 ACP-05~07 后（存活/离线超租约/重启/续领/迟到 ACK/terminate 未确认禁启/deadline 到期/ACP-07 重授权/多次介入/多 Repo Delivery/Model A 全量）。
+  - **ACP-05 边界**：先定义正式 Continuation 身份/状态/代次/生命周期，Checkpoint/Lock/Deadline 经明确接口接入——不顺带吸收 06/07 职责。
+  - **task_repository P0 独立启动**（不等 ACP 收口/V-05-1）：链路=创建关联→仓库授权→claim→execution_allows→scope→Delivery/Commit，六约束（项目内有效仓库/创建时校验授权/禁跨项目/幂等/claim 与 execution_allows 同一事实/禁 MCP 伪造归属），**沿用既有 Project Repository 领域对象**不另建权限体系；task_waiting 空洞已由本切片补上（移出 P0 清单，留真实栈回归证据）。
 
 ---
 
@@ -544,6 +552,8 @@ Runner 的 spawn/收割/终止能力自 `codex_executor.rs` 演化：原子 pid 
 
 **专家复审状态（第 2 块：六项设计取舍，2026-11-07）**：**四维持两修正**——2.1 R-7 选 b 维持（receipt Schema 五点补强，§6.6）；2.2 R-16 不持久化 token 维持（WP-3 Client 身份持久化 + 退避/告警/停止条件，§3.6）；2.3 T3 严格不顺延维持（UI 快捷入口直达 ACP-07，§3.6）；**2.4 V-05-1 修正**（前缀匹配仅受控环境、client_name 登记制、V-05-1 升格为 R-16 生产启用硬前置，§3.3/§3.6 生产启用门）；**2.5 推翻双态 Poll**（独立工具 `pm_discover_runs`，Poll 契约不动，§1.6/§3.6）；2.6 Chain 维持多独立链 + 新增 `previous_chain_id` 弱关联（不加冷却不合并，§5.1/§5.2）。总评=**以上属 V1.2 实施设计收敛，不改变 ACP 总体架构**；意见原文归档 `smark-pm-s03-acp-slice-design-acp01-02-08-v1-2-expert-review-2.md`。
 
+**专家复审状态（第 3 块：排期依赖，2026-11-07，三轮复审完成）**：方向全赞同 + 三处调整——① **V-05-1 升格平台级 Client Identity Foundation**（立即插关键路径；最小生产可用集**必须含撤销/禁用 + 权限码字典**，推翻我方"撤销后补"倾向；撤销立即影响 discover/续领/轮询/上报全部工具面）；② **ACP-09 改贯穿式两阶段**（定向回归随 Correctness Fix；完整回归在 05~07 后）；③ **ACP-04 与 05 联合设计**先闭数据契约、按数据依赖定先后（默认 04 核心持久化先行），不推迟到最后。另裁：迁移 0048（ACP 收敛）/0049（Client Registry）拆分 + lease_client_id 回填三分类（历史兼容≠历史身份可信）；收敛批拆 Correctness Fix / Recovery Foundation 两层独立交付；**task_repository P0 独立启动**（六约束、沿用既有 Project Repository 领域对象）；AI Team V2 与 ACP = **双主线共享基础设施**（V2 可提前开始但不得另造第二套 Client Identity）。意见原文归档 `...-expert-review-3.md`；排期全景落 `docs/project-ai-team-v2/ai-pm-v05-execution-roadmap-v1.md`。
+
 ---
 
 ## 10. 工程纪律引用
@@ -551,8 +561,8 @@ Runner 的 spawn/收割/终止能力自 `codex_executor.rs` 演化：原子 pid 
 1. **不修改 MCP 四工具契约**；新增六工具（report_interaction / report_consumption / poll_commands / ack_command / reacquire_lease / **discover_runs**）走独立权限码，`/mcp` 鉴权面仅扩权限表行。
 2. 禁重建区继续有效：不建 task_execution/execution_result、不改 13 态状态机与 Run 7 态（scheduling_shield 为调度保护标志非状态机扩展）、WAITING_FOR_* 不做成状态、四工具契约不动、`recover_lost_run`/B3-2 回收语义不为本切片改写（续领 §3.6 是独立显式操作，不经回收路径）。
 3. 全部写入经 `pm-application` 统一应用服务（V-6）；MCP/Worker/Runner 仅适配层。
-4. 迁移：0046/0047 已应用（R-ACP-6 事实更新）；**后续批次自 0048 起**（`reacquired_generation` 列等），落地前重核 `docs/ai-pm-migration-ledger.md`；主 checkout 有并行会话在途物，禁 sweep、禁 `git add -A`。
-5. 本稿落 `docs/ui/s03-acp/`；**实现收敛项清单（专家两轮复审后定稿，随收敛批落地）**：① acked 事务内 Task→running + 链关闭（R-4，ACP-450/451）；② `pm_report_interaction` execution_mode 准入 + 孤儿 terminate 定向审计（R-3，ACP-448/C1）；③ 离线恢复 `pm_discover_runs` + 续领 + 命令改路由（R-11/专家 2.5，ACP-452/453 + 0048 `reacquired_generation` 列）；④ 标记文件名含 event_id（P2-1）；⑤ §3.3 过渡身份 → V-05-1 Client 主体（**R-16 生产启用硬前置**）+ 过渡期 client_name 登记制；⑥ `previous_chain_id` 列（0048，专家 2.6）；⑦ receipt Schema 版本化 + requested/confirmed 区分 + generation 记录（专家 2.1）；⑧ 续领退避/告警/人工处置入口 + 自动恢复停止条件（专家 2.2）；⑨ UI 快捷入口 → ACP-07 重授权（专家 2.3，随 ACP-07 稿）。
+4. 迁移：0046/0047 已应用（R-ACP-6 事实更新）；**后续按专家第 3 块拆分：0048 = ACP 收敛迁移（`worker_command.reacquired_generation` + `task_interaction.previous_chain_id`），0049 = Client Registry（登记表 + `task_run.lease_client_id` + 历史回填三分类 + 权限码字典）**——两类内容独立审查/测试/回滚，不混批；迁移号由单一实施负责人统一分配，进入共享分支后并行会话不得自建同号；落地前重核 `docs/ai-pm-migration-ledger.md`；主 checkout 有并行会话在途物，禁 sweep、禁 `git add -A`。
+5. 本稿落 `docs/ui/s03-acp/`；**收敛批两层交付（专家第 3 块定稿，同批不同 PR、独立提交独立验收）**——**层 1 Correctness Fix（P0 立即）**：① acked 事务内 Task→running + 链关闭（R-4，ACP-450/451）；② `pm_report_interaction` execution_mode 准入 + 孤儿 terminate 定向审计（R-3，ACP-448/C1）；③ Model A 定向回归（human 拒报/既有流程/回复续行/无证据/重复 ACK 幂等）。**层 2 Recovery Foundation（依赖 V-05-1 身份安全完成）**：④ `pm_discover_runs` + 续领 + 命令改路由（R-11/2.5，ACP-452/453 + 0048 列）；⑤ 标记文件名含 event_id（P2-1）；⑥ `previous_chain_id`（0048，2.6）；⑦ receipt Schema 版本化 + requested/confirmed + generation（2.1）；⑧ 续领退避/告警/人工处置 + 自动恢复停止条件（2.2）；⑨ UI 快捷入口 → ACP-07（2.3，随 ACP-07 稿）；⑩ 过渡身份 → V-05-1 Client 主体（R-16 生产启用硬前置，0049）。**排期全景见 `docs/project-ai-team-v2/ai-pm-v05-execution-roadmap-v1.md`**。
 
 ---
 
