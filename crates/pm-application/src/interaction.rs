@@ -469,6 +469,11 @@ pub async fn mark_consumed(
         crate::response_delivery::mark_consumed_tx(&mut tx, project_id, did, actor)
             .await
             .map_err(|e| InteractionError::Conflict(e.to_string()))?;
+        // ACP-05：continuation started → consumed（经 delivery 行定位；迟到/
+        // 重复幂等 no-op——已确认的恢复结果不受影响，ACP-C2）。
+        crate::continuation::mark_consumed_by_delivery_tx(&mut tx, project_id, did, actor)
+            .await
+            .map_err(|e| InteractionError::Conflict(e.to_string()))?;
     }
     let row = sqlx::query(
         "UPDATE delivery.task_interaction \
@@ -695,6 +700,10 @@ pub(crate) async fn cancel_open_interaction_tx(
     .execute(&mut **tx)
     .await?;
     resolve_waiting(tx, task_id, &format!("interaction cancelled: {reason}")).await?;
+    // ACP-05 终态钩子：介入取消 → 该 Run 的非终态 continuation closed。
+    crate::continuation::close_open_by_run_tx(tx, project_id, run_id, "interaction_cancelled", actor)
+        .await
+        .map_err(|e| InteractionError::Conflict(e.to_string()))?;
     // §5.3 映射行：cancelled（Task 活）→ 回转前置状态（awaiting_decision →
     // Running，waiting_resolved 事实由本次取消提供）；其他状态跳过。
     let task_status: Option<String> = sqlx::query_scalar(
@@ -1117,13 +1126,26 @@ pub async fn submit_interaction_response(
     .await?;
 
     // ACP-04（0050）：三写第三笔——投递账（一回复一账；重投复用原行）。
-    crate::response_delivery::create_on_response_tx(
+    let delivery_id = crate::response_delivery::create_on_response_tx(
         &mut tx,
         input.project_id,
         input.interaction_id,
         response_id,
         run_id,
         continue_command_id,
+        actor,
+    )
+    .await
+    .map_err(|e| InteractionError::Conflict(e.to_string()))?;
+    // ACP-05（0051）：四写第四笔——Continuation 身份注册（generation=max+1），
+    // 同时回填 delivery 的 continuation_id/continuation_generation（⑤ 前向列）。
+    crate::continuation::open_continuation_tx(
+        &mut tx,
+        input.project_id,
+        task_id,
+        run_id,
+        input.interaction_id,
+        delivery_id,
         actor,
     )
     .await

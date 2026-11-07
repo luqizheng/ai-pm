@@ -924,6 +924,17 @@ async fn finish_run(
         serde_json::json!({ "outcome": format!("{outcome:?}"), "result": if succeeded { "succeeded" } else { "failed" } }),
     )
     .await?;
+    // ACP-05 终态钩子（0051）：Run 终态 → 非终态 continuation 全部 closed
+    //（closed 为终态不可迁移；Task 取消路径经 cancel_open_interaction_tx 同理）。
+    crate::continuation::close_open_by_run_tx(
+        &mut tx,
+        project_id,
+        run_id,
+        "run_finished",
+        &crate::actor::AuditActor::dispatch(),
+    )
+    .await
+    .map_err(|e| RunDispatchError::InvalidOption(e.to_string()))?;
     emit_run_completed(
         &mut tx,
         project_id,

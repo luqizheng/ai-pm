@@ -396,6 +396,19 @@ pub async fn ack_command(
                 } else {
                     None
                 };
+                // ACP-05（0051）：continuation open → started（同一恢复事务；
+                // frozen → started 为显式人工处置后的解冻路径，同守卫覆盖）。
+                if let Some(interaction_id) = interaction_id {
+                    crate::continuation::mark_started_tx(
+                        &mut tx,
+                        project_id,
+                        run_id,
+                        interaction_id,
+                        &AuditActor::dispatch(),
+                    )
+                    .await
+                    .map_err(|e| CommandFaceError::Validation(e.to_string()))?;
+                }
                 // R-4（V1.2 §5.3 / ACP-450/451）：INPUT_INJECTED 是执行恢复的
                 // 业务确认边界——同事务链关闭 + task_waiting resolve + Task
                 // awaiting_decision→running；consumed 降为 Interaction 级观测
@@ -455,6 +468,16 @@ pub async fn ack_command(
                     .bind(interaction_id)
                     .execute(&mut *tx)
                     .await?;
+                    // ACP-05：continuation → frozen（启动冻结镜像；显式人工
+                    // 处置后随 acked 回 started——守卫 status IN open,frozen）。
+                    crate::continuation::freeze_by_interaction_tx(
+                        &mut tx,
+                        project_id,
+                        interaction_id,
+                        &AuditActor::dispatch(),
+                    )
+                    .await
+                    .map_err(|e| CommandFaceError::Validation(e.to_string()))?;
                 }
                 // F-10：终止失败（旧进程退出未确认）→ 账本 needs_human
                 //（清理未闭环转人工；completed_at 保持 NULL 满足 CHECK）。
