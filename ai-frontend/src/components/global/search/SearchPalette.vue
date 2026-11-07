@@ -489,7 +489,8 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* 遮罩 28% 透明做进背景色（写在元素 opacity 上会连面板文字一起压透明） */
+/* 遮罩做进背景色（写在元素 opacity 上会连面板文字一起压透明）；
+   48% 压暗页面——背后内容不能干扰面板阅读（用户反馈，较 Figma 28% 加强） */
 .global-search {
   position: fixed;
   inset: 0;
@@ -498,9 +499,11 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   justify-content: center;
   padding-top: 15vh;
-  background: color-mix(in srgb, var(--ws-canvas) 28%, transparent);
+  background: color-mix(in srgb, var(--ws-canvas) 48%, transparent);
 }
 
+/* 面板整体托盘：不透明底 + 边框承住卡片间隙与滚动条槽，
+   否则卡片间 gap 与滚动条轨道透出背后页面内容（用户反馈） */
 .global-search__panel {
   display: flex;
   flex-direction: column;
@@ -508,7 +511,11 @@ onBeforeUnmount(() => {
   width: calc(100% - var(--space-8));
   max-width: var(--size-search-palette-width);
   max-height: 70vh;
+  padding: var(--space-2);
   overflow-y: auto;
+  background: var(--ws-canvas);
+  border: var(--border-1) solid var(--ws-border);
+  border-radius: var(--radius-sm);
 }
 
 /* 核心面板（Figma Core command palette：elevated 底 / radius 8 / padding 8） */
