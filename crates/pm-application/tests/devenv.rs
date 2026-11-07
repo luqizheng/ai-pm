@@ -9,14 +9,14 @@
 //! 指向 `tenant_member(tenant_id, principal_id)`，故测试先补成员行。
 
 use pm_application::authz::{
-    AuthzError, ExecutorKind, require_project_member, resolve_project_executor,
+    require_project_member, resolve_project_executor, AuthzError, ExecutorKind,
 };
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::caller::HumanActor;
 use pm_application::devenv::{
-    DeviceChecks, DeviceError, DeviceReadiness, DeviceStatus, RegisterDeviceRequest,
     bind_project, get_device, list_devices, register_device, report_checks, revoke_device,
-    unbind_binding,
+    unbind_binding, DeviceChecks, DeviceError, DeviceReadiness, DeviceStatus,
+    RegisterDeviceRequest,
 };
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
@@ -272,7 +272,9 @@ async fn register_first_time_without_id_then_reuse_with_id(pool: PgPool) {
     let fx = seed_project(&pool, "DV-REG1").await;
     let me = human(fx.human_id, SYSTEM_TENANT);
 
-    let first = register_device(&pool, &me, &register_req(None)).await.unwrap();
+    let first = register_device(&pool, &me, &register_req(None))
+        .await
+        .unwrap();
     assert!(!first.reused);
     assert_eq!(first.device.status, DeviceStatus::Active);
     assert_eq!(first.device.readiness, None);
@@ -323,7 +325,9 @@ async fn register_with_someone_elses_id_is_not_found(pool: PgPool) {
     let me = human(fx.human_id, SYSTEM_TENANT);
     let them = human(outsider, SYSTEM_TENANT);
 
-    let mine = register_device(&pool, &me, &register_req(None)).await.unwrap();
+    let mine = register_device(&pool, &me, &register_req(None))
+        .await
+        .unwrap();
     // 他人拿我的 id 登记 → 404，且不新建
     let r = register_device(&pool, &them, &register_req(Some(mine.device.id))).await;
     assert_eq!(r.unwrap_err(), DeviceError::NotFound);
@@ -339,7 +343,9 @@ async fn revoked_device_is_not_auto_restored_on_reregister(pool: PgPool) {
     let fx = seed_project(&pool, "DV-REG4").await;
     let me = human(fx.human_id, SYSTEM_TENANT);
 
-    let d = register_device(&pool, &me, &register_req(None)).await.unwrap();
+    let d = register_device(&pool, &me, &register_req(None))
+        .await
+        .unwrap();
     let revoked = revoke_device(&pool, &me, d.device.id).await.unwrap();
     assert_eq!(revoked.status, DeviceStatus::Revoked);
     assert!(revoked.revoked_at.is_some());
@@ -349,13 +355,15 @@ async fn revoked_device_is_not_auto_restored_on_reregister(pool: PgPool) {
         .await
         .unwrap();
     assert!(!fresh.reused);
-    assert_ne!(fresh.device.id, d.device.id, "已撤销设备不得通过相同 id 自动恢复");
-    let old_status: String =
-        sqlx::query_scalar("SELECT status FROM devenv.device WHERE id = $1")
-            .bind(d.device.id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    assert_ne!(
+        fresh.device.id, d.device.id,
+        "已撤销设备不得通过相同 id 自动恢复"
+    );
+    let old_status: String = sqlx::query_scalar("SELECT status FROM devenv.device WHERE id = $1")
+        .bind(d.device.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(old_status, "revoked");
 
     // 撤销幂等
@@ -369,8 +377,13 @@ async fn visibility_member_sees_own_admin_sees_tenant(pool: PgPool) {
     let me = human(fx.human_id, SYSTEM_TENANT);
     let them = human(outsider, SYSTEM_TENANT);
 
-    let mine = register_device(&pool, &me, &register_req(None)).await.unwrap();
-    let _theirs = register_device(&pool, &them, &register_req(None)).await.unwrap();
+    let mine = register_device(&pool, &me, &register_req(None))
+        .await
+        .unwrap();
+    // 0055：活跃名租户内唯一（Q-D）——他人设备用不同名注册。
+    let mut theirs_req = register_req(None);
+    theirs_req.name = "Linux Dev PC".into();
+    let _theirs = register_device(&pool, &them, &theirs_req).await.unwrap();
 
     // member 只见自己的
     assert_eq!(list_devices(&pool, &me).await.unwrap().len(), 1);
@@ -395,7 +408,9 @@ async fn bind_requires_membership_and_repo_ownership(pool: PgPool) {
     let fx = seed_project(&pool, "DV-BND1").await;
     let other = seed_project(&pool, "DV-BND1-B").await;
     let me = human(fx.human_id, SYSTEM_TENANT);
-    let d = register_device(&pool, &me, &register_req(None)).await.unwrap();
+    let d = register_device(&pool, &me, &register_req(None))
+        .await
+        .unwrap();
     let repo = seed_repo(&pool, fx.project_id, "git@x/a.git").await;
     let foreign_repo = seed_repo(&pool, other.project_id, "git@x/b.git").await;
 
@@ -425,7 +440,9 @@ async fn bind_requires_membership_and_repo_ownership(pool: PgPool) {
 async fn c183_unbind_keeps_row_rebind_revives_and_clears_verified(pool: PgPool) {
     let fx = seed_project(&pool, "DV-BND2").await;
     let me = human(fx.human_id, SYSTEM_TENANT);
-    let d = register_device(&pool, &me, &register_req(None)).await.unwrap();
+    let d = register_device(&pool, &me, &register_req(None))
+        .await
+        .unwrap();
     let repo = seed_repo(&pool, fx.project_id, "git@x/a.git").await;
 
     let b1 = bind_project(&pool, &me, d.device.id, fx.project_id, &[repo])
@@ -460,21 +477,28 @@ async fn c183_unbind_keeps_row_rebind_revives_and_clears_verified(pool: PgPool) 
         .await
         .unwrap();
     assert_eq!(b1_again.id, b1.id);
-    assert_eq!(b1_again.verified_repositories, vec![repo], "声明不变 → 不清验证结果");
+    assert_eq!(
+        b1_again.verified_repositories,
+        vec![repo],
+        "声明不变 → 不清验证结果"
+    );
 
     // 解绑：行保留 + unbound_at 置位
-    unbind_binding(&pool, &me, d.device.id, b1.id).await.unwrap();
-    let unbound: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
-        "SELECT unbound_at FROM devenv.device_project_binding WHERE id = $1",
-    )
-    .bind(b1.id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    unbind_binding(&pool, &me, d.device.id, b1.id)
+        .await
+        .unwrap();
+    let unbound: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT unbound_at FROM devenv.device_project_binding WHERE id = $1")
+            .bind(b1.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(unbound.is_some());
     // 二次解绑 → BindingNotFound
     assert_eq!(
-        unbind_binding(&pool, &me, d.device.id, b1.id).await.unwrap_err(),
+        unbind_binding(&pool, &me, d.device.id, b1.id)
+            .await
+            .unwrap_err(),
         DeviceError::BindingNotFound
     );
 
@@ -514,7 +538,9 @@ async fn c182_readiness_is_device_own_project_accessibility_is_derived(pool: PgP
     .await
     .unwrap();
     let me = human(fx_a.human_id, SYSTEM_TENANT);
-    let d = register_device(&pool, &me, &register_req(None)).await.unwrap();
+    let d = register_device(&pool, &me, &register_req(None))
+        .await
+        .unwrap();
     let repo_a = seed_repo(&pool, fx_a.project_id, "git@x/a.git").await;
     let repo_b = seed_repo(&pool, fx_b.project_id, "git@x/b.git").await;
     bind_project(&pool, &me, d.device.id, fx_a.project_id, &[repo_a])
@@ -549,7 +575,11 @@ async fn c182_readiness_is_device_own_project_accessibility_is_derived(pool: PgP
         .await
         .unwrap();
     let detail = get_device(&pool, &me, d.device.id).await.unwrap();
-    assert_eq!(detail.device.readiness, Some(DeviceReadiness::Ready), "Ready 不随调用人成员资格改变");
+    assert_eq!(
+        detail.device.readiness,
+        Some(DeviceReadiness::Ready),
+        "Ready 不随调用人成员资格改变"
+    );
     let a = detail
         .bindings
         .iter()
@@ -568,7 +598,9 @@ async fn c182_readiness_is_device_own_project_accessibility_is_derived(pool: PgP
 async fn readiness_layers_and_degradation(pool: PgPool) {
     let fx = seed_project(&pool, "DV-RDY2").await;
     let me = human(fx.human_id, SYSTEM_TENANT);
-    let d = register_device(&pool, &me, &register_req(None)).await.unwrap();
+    let d = register_device(&pool, &me, &register_req(None))
+        .await
+        .unwrap();
     let r1 = seed_repo(&pool, fx.project_id, "git@x/1.git").await;
     let r2 = seed_repo(&pool, fx.project_id, "git@x/2.git").await;
     bind_project(&pool, &me, d.device.id, fx.project_id, &[r1, r2])
@@ -630,14 +662,22 @@ async fn readiness_layers_and_degradation(pool: PgPool) {
     .unwrap();
     let verified: Vec<Uuid> = serde_json::from_value(verified).unwrap();
     assert_eq!(verified.len(), 2);
-    assert!(!verified.contains(&stray), "verified_repositories 只表服务端确认的仓库身份与项目归属");
+    assert!(
+        !verified.contains(&stray),
+        "verified_repositories 只表服务端确认的仓库身份与项目归属"
+    );
 
     // 撤销后不得上报
     revoke_device(&pool, &me, d.device.id).await.unwrap();
     assert!(matches!(
-        report_checks(&pool, &me, d.device.id, &check(true, true, true, vec![r1, r2]))
-            .await
-            .unwrap_err(),
+        report_checks(
+            &pool,
+            &me,
+            d.device.id,
+            &check(true, true, true, vec![r1, r2])
+        )
+        .await
+        .unwrap_err(),
         DeviceError::Validation(_)
     ));
 }
@@ -680,5 +720,8 @@ async fn migration_0027_shape(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert!(uq >= 2, "binding 至少有 (tenant_id,id) 与 (device_id,project_id) 两条唯一键");
+    assert!(
+        uq >= 2,
+        "binding 至少有 (tenant_id,id) 与 (device_id,project_id) 两条唯一键"
+    );
 }
