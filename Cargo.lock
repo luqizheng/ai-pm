@@ -1231,6 +1231,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "kb-pc-contracts"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1662,6 +1675,7 @@ dependencies = [
  "digua_common_consul",
  "digua_common_jwt",
  "digua_file_sdk",
+ "kb-pc-contracts",
  "pm-ai",
  "pm-application",
  "pm-domain",
@@ -1688,6 +1702,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "getrandom 0.3.4",
+ "kb-pc-contracts",
  "pm-ai",
  "pm-domain",
  "pm-infrastructure",
@@ -1721,10 +1736,12 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "kb-pc-contracts",
  "libc",
  "pm-application",
  "pm-domain",
  "serde_json",
+ "sha2",
  "sqlx",
  "thiserror 2.0.21",
  "tokio",

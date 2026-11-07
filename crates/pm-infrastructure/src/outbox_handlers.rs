@@ -296,11 +296,14 @@ impl OutboxHandler for RunCompletedHandler {
 /// 并发边界：「集合一致」不等于「并发安全」——原子领取（`SKIP LOCKED` + 租约）
 /// 与各 Handler 的幂等锚点另行保证（`RunCompletedHandler` 见其 advisory lock）。
 pub fn register_all_handlers(worker: OutboxWorker, pool: &PgPool) -> OutboxWorker {
-    worker
-        .with_handler("TaskReady", Arc::new(TaskReadyHandler::new(pool.clone())))
-        .with_handler(
-            "DeliverySubmitted",
-            Arc::new(DeliverySubmittedHandler::new(pool.clone())),
-        )
-        .with_handler("RunCompleted", Arc::new(RunCompletedHandler::new(pool.clone())))
+    super::kb_pc_handlers::register_kb_pc_handlers(
+        worker
+            .with_handler("TaskReady", Arc::new(TaskReadyHandler::new(pool.clone())))
+            .with_handler(
+                "DeliverySubmitted",
+                Arc::new(DeliverySubmittedHandler::new(pool.clone())),
+            )
+            .with_handler("RunCompleted", Arc::new(RunCompletedHandler::new(pool.clone()))),
+        pool,
+    )
 }

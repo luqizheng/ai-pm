@@ -221,6 +221,8 @@ fn build_router(
         .merge(crate::task_repositories::router())
         // Outbox 运维（T-061）：死信列表 / 死信重放 / 事件状态监控。
         .merge(crate::outbox_ops::router())
+        .merge(crate::intakes::router())
+        .merge(crate::knowledge_services::router())
         // 执行端接入引导（T-080）：公开的 `/install`、`/install/{tool}`。
         .merge(crate::onboarding::router())
         // 技能包同源分发（T-089）：manifest + zip 下载（公开，`/install*` 已放行）。

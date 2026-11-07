@@ -21,6 +21,8 @@ pub enum ApiError {
     /// 动态文本错误（ACP-03 交互面）：InteractionError 携带运行时消息，
     /// 静态串变体装不下；状态码由映射方给出。
     Text(StatusCode, String),
+    /// 契约路由已挂接、业务未接线（KB/PC 服务化 V1 占位端口；501 ≠ 404 误导）。
+    NotImplemented(&'static str),
     Internal(sqlx::Error),
 }
 
@@ -36,6 +38,7 @@ impl IntoResponse for ApiError {
             ApiError::Conflict(m) => (StatusCode::CONFLICT, m),
             ApiError::NotFound(m) => (StatusCode::NOT_FOUND, m),
             ApiError::Forbidden(m) => (StatusCode::FORBIDDEN, m),
+            ApiError::NotImplemented(m) => (StatusCode::NOT_IMPLEMENTED, m),
             ApiError::Internal(e) => {
                 tracing::error!(error = %e, "pm-api internal error");
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal error")

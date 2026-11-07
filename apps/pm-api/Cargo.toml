@@ -10,6 +10,7 @@ chrono.workspace = true
 digua_common_jwt.workspace = true
 digua_file_sdk.workspace = true
 digua_common_consul.workspace = true
+kb-pc-contracts = { path = "../../crates/kb-pc-contracts" }
 pm-application = { path = "../../crates/pm-application" }
 pm-domain = { path = "../../crates/pm-domain" }
 pm-mcp = { path = "../../crates/pm-mcp" }
