@@ -53,6 +53,7 @@ pub mod run_executor;
 pub mod secret;
 pub mod supervision;
 pub mod task_dependency;
+pub mod task_repository_binding;
 pub mod worker_command;
 
 pub use acceptance_overview::{

@@ -38,5 +38,6 @@ pub mod routes;
 pub mod skills_package;
 pub mod support;
 pub mod task_dependencies;
+pub mod task_repositories;
 pub mod tenant_members;
 
