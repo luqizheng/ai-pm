@@ -3,7 +3,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档性质 | 联合实施设计稿（WP-D 交付物；五契约问题裁决提案 + 数据模型 + 接口契约；待评审） |
+| 文档性质 | 联合实施设计稿（WP-D 交付物；**联合架构裁决 2026-11-07：五问①~⑤全部通过 + 身份三件冻结 + 0050/0051 模型裁决**——约束与基线见 `docs/project-ai-team-v2/ai-pm-v05-implementation-baseline-v1.md`） |
 | 上位裁决 | ACP V1.3.1（冻结）：§3.3 两种代次分开 · §12.2/§12.3 字段集 · §10.2/§10.3 命令/回执报文；专家复审第 1/3 块（ACP-C1~C4 · ACP-04 与 05 联合设计按数据依赖实施 · 不得临时另建 Session 身份 · ACP-05 边界=不顺带吸收 06/07 职责） |
 | 设计基线 | ACP 通信面 V1.2（R-4/R-7/R-8/§5.3 已定案）· ACP-03 已实施（0047） |
 | 排期位 | roadmap §3 第三阶段；实施顺序 = 本契约 → **ACP-04 核心持久化（0050）** → **ACP-05 Continuation 状态机（0051）** → ACP-06/07 |
@@ -19,7 +19,7 @@
 | ② | Consumption 需要 continuation_generation 吗？ | **表带列、工具不加参**：delivery 表 `continuation_generation INT NOT NULL DEFAULT 1`（基线 §3.3 两代次分开原则）；`pm_report_consumption` 签名不动（租约三要素 + delivery_id + evidence），generation 由服务端自 delivery 行读取比对 | 工具契约红线；R-8（ACP-05 前恒 1） |
 | ③ | Delivery 状态参与 Task 完成判定吗？ | **不参与**。Task 完成 = `pm_submit_result` 既有链（与交互域零耦合）；Delivery 状态只参与：重投幂等、`interaction_unconsumed_total` 告警、§5.3 resolution_note 取证。**ACP-C2 消费面收口**：consumed 仅为观测事实，本设计把它落为表行而非推导态 | V1.2 §1.5/§5.3；C2 |
 | ④ | ACP-05 消费 ACP-04 持久化结果吗？ | **是（只读消费 + 单列回填）**：Continuation 状态机的迁移证据 = delivery.status + worker_command ack 状态 + 消费回执；经接口查询不重写（唯一写动作 = `continuation_id` 回填，身份注册 + 审计） | 数据依赖方向：04 → 05 |
-| ⑤ | ACP-04 依赖 ACP-05 未建的 Session 身份吗？ | **不依赖**。`continuation_id` 列**先落可空**（与 0047 `continue_command_id` 前向兼容同法），ACP-05 落地后回填；**不临时另建 Session 身份**。Session 身份定案三件：Platform Session ID = `task_run.executor_session`（R-8 沿用）· 新 Session 会话标识 = `worker_command.receipt.session_id`（执行端回执）· Continuation 正式身份 = `delivery.continuation.id`（0051） | 专家红线原文 |
+| ⑤ | ACP-04 依赖 ACP-05 未建的 Session 身份吗？ | **不依赖**。`continuation_id` 列**先落可空**（与 0047 `continue_command_id` 前向兼容同法），ACP-05 落地后回填；**不临时另建 Session 身份**。Session 身份定案三件（**裁决冻结：不允许后续实施增加第四种 Session 身份**）：Platform Session ID = `task_run.executor_session`（R-8 沿用）· 新 Session 会话标识 = `worker_command.receipt.session_id`（执行端回执）· Continuation 正式身份 = `delivery.continuation.id`（0051） | 专家红线原文 |
 
 ---
 
@@ -160,9 +160,10 @@ get_open_by_run(run_id) -> Option<Continuation>               -- ④ 只读面�
 
 | 批 | 内容 | 迁移 | 前置 |
 |---|---|---|---|
-| 本契约 | 五问裁决 + 字段/接口冻结 | — | — |
-| **ACP-04** | 0050 表 + I-1 服务 + I-3 六点接线 | **0050**（ tentative；落地前重核台账——0049 为 Client Registry 预留） | 无（纯增量，双工具契约不动） |
-| **ACP-05** | 0051 表 + I-2 服务 + continuation_id 回填 + 0050 delivery 列填充 | **0051** | ACP-04 |
+| 本契约 | 五问裁决（✅ 2026-11-07 通过）+ 字段/接口冻结 | — | — |
+| **ACP-04** | 0050 表 + I-1 服务 + I-3 六点接线 | **0050**（裁决确认；落地前重核台账） | 无（纯增量，双工具契约不动） |
+| **Recovery Foundation**（裁决插入：先于 0051） | 续领/发现/命令改路由 + ACP 收敛列（tentative 0052） | 0052 tentative | 0049 身份安全 + 0050 |
+| **ACP-05** | 0051 表 + I-2 服务 + continuation_id 回填 + 0050 delivery 列填充 | **0051**（暂定确认） | ACP-04 ∪ **Recovery Foundation**（裁决理由：ack 推进与 R-4 恢复同事务，恢复设施未建则语义倒挂） |
 
 - 单批纵切纪律：每批独立审查/测试/回滚（专家第 3 块收敛批规格沿用）。
 - 0448/0049 之外的挂账清扫：`interaction_response.continue_command_id` 与 delivery 表 `continue_command_id` 并行双写一个过渡期，收口批删列或留只读（落地时定）。

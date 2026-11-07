@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档性质 | 实施设计稿（WP-B 交付物；待评审 + 用户裁决 Q-A~Q-D） |
+| 文档性质 | 实施设计稿（WP-B 交付物；**联合架构裁决 2026-11-07：Q-A~Q-D 全部通过，工程约束 A/B/C 已收编**——联合实施基线见 `ai-pm-v05-implementation-baseline-v1.md`） |
 | 上位裁决 | V0.5 WP-0①（device 升级 Client Registry）· 专家复审第 2/3 块（最小集必须含撤销 + V-05-1 = R-16 生产启用硬前置 + 撤销立即影响全部工具面）· V2 架构基线 Q1=A（Agent Client 个人级注册授权给 Project） |
 | 排期位 | roadmap §3 第二阶段（身份基座）；迁移号 **0049**（roadmap §7，0048 已被 ACP 收敛占用——0046 撞号修复后顺延） |
 | 覆盖 | Client 登记与稳定 client_id · client_name 唯一归属 · 认证主体绑定 · 凭据签发/验证/**撤销** · lease_client_id 绑定与历史回填 · 权限码校验面 |
@@ -58,8 +58,16 @@ CREATE INDEX idx_device_credential_hash
   ON devenv.device (credential_key_hash) WHERE credential_key_hash IS NOT NULL;
 
 -- 2) Run 的稳定 Client 身份（R-16/R-3 的链路终点）
+-- 约束 B（裁决 2026-11-07）：租户一致性由数据库约束保障——复合外键，
+-- 不只引用"存在的 Device"，还须同租户；陪伴唯一约束先行。
+ALTER TABLE devenv.device
+  ADD CONSTRAINT uq_device_tenant_id UNIQUE (tenant_id, id);
 ALTER TABLE delivery.task_run
-  ADD COLUMN lease_client_id UUID REFERENCES devenv.device(id);
+  ADD COLUMN lease_client_id UUID;
+ALTER TABLE delivery.task_run
+  ADD CONSTRAINT fk_task_run_client_tenant
+  FOREIGN KEY (tenant_id, lease_client_id)
+  REFERENCES devenv.device (tenant_id, id);
 CREATE INDEX idx_task_run_client ON delivery.task_run (lease_client_id) WHERE lease_client_id IS NOT NULL;
 ```
 
@@ -89,6 +97,7 @@ CREATE INDEX idx_task_run_client ON delivery.task_run (lease_client_id) WHERE le
 ```
 
 - **解析位置**：`auth.rs` 的 bearer 解析分支（`bearer_token` 处）——`cpk_` 前缀路由到新解析器；**每请求查库**（撤销即时性）。
+- **约束 A（裁决 2026-11-07，实施验收条件）**：凭据校验**不得退化为仅查 Hash 存在**——解析须同时验证 ① key_hash 命中 ② device.status='active' ③ tenant 一致（owner principal 同租户且 active）④ credential_revoked_at IS NULL；owner 的**项目级成员资格**由工具层 `ensure_member` 继续承担（V-6 边界不变）——四项 + 成员资格全链生效才算通过。**cpk 认证失败一律 401，绝不回退真人 JWT 认证路径**（fail-closed，无 fallback）。
 - **A\* 不受影响**：Client Key 通道仅开 `/mcp` 执行器/命令面；人类确认仍走 REST/UI + interactive JWT（A* 红线零触碰）。
 - **off 模式**：鉴权 off 时无凭据通道（现状口径不变）。
 
@@ -136,6 +145,9 @@ CREATE INDEX idx_task_run_client ON delivery.task_run (lease_client_id) WHERE le
 | 在途 Run 的租约 | **不主动吊销租约**（租约是 Run 状态非凭据）；该 Client 无法再续租/上报，Run 走既有离线恢复路径 |
 | 管理面 REST（devenv devices） | JWT 通道，与凭据无关 |
 | UI 设备页 | 显示凭据状态（issued/revoked 时间） |
+| **命令执行中的连接（约束 C）** | 每工具调用独立过解析层（无会话级凭据缓存）——已撤销 Client 不得经既有连接/缓存在下一调用继续轮询/续领/执行；流式连接的下一帧即 401 |
+
+**约束 C（裁决 2026-11-07）**：撤销检查覆盖**完整命令生命周期**——五工具 + 未来 `pm_discover_runs`/`pm_reacquire_lease` 全部入口；撤销后不得轮询、不得续领、不得执行命令、不得经既有连接或缓存绕过（上表末行 + "每请求查库"为实现口径的硬保证）。
 
 ## 8. 验收标准
 
@@ -148,17 +160,20 @@ CREATE INDEX idx_task_run_client ON delivery.task_run (lease_client_id) WHERE le
 | ACP-462 | 跨重启命令路由稳定 | 同凭据重启后 poll（`client:{id}` 路由）命中在途命令（token8 死锁形态不可再现） |
 | ACP-463 | 回填三分类 | 三类样例 Run 的 lease_client_id/审计行各如其分；NULL 行不得进入 Recovery Foundation 续领 |
 | ACP-464 | granted_permissions 最小化 | 仅 PM_MCP_READ 的凭据调 report/poll → 403 |
+| **ACP-465**（约束 A） | cpk 认证失败（错 key/已撤销/非 active） | 一律 401 且**不回退真人 JWT 路径**；无 fallback 分支 |
+| **ACP-466**（约束 B） | 跨租户 lease_client_id 绑定尝试 | 复合外键在库层拒绝（不只应用层校验）；干净库迁移含陪伴唯一约束 |
+| **ACP-467**（约束 C） | 撤销后经既有连接的下一帧调用 | 401（无会话级缓存绕过）；discover/续领入口同拒 |
 
 E2E 必测（roadmap 第二阶段收口）：真实栈 Client Key 全链（签发→claim→介入→回复→撤销→全工具 401）+ 未授权 Client 无法发现/抢占他人 Run（roadmap §8 验证⑥）。
 
 ## 9. 待用户/专家裁决项
 
-| # | 事项 | 推荐 |
+| # | 事项 | 裁决状态（2026-11-07 联合裁决：全部通过 + 工程约束 A/B/C） |
 |---|---|---|
-| Q-A | 凭据形式：ai-pm 自发 cpk_（B）vs 等 lmms client-credentials JWT（A） | **B**（撤销即时 + 无跨仓阻塞 + A* 零触碰；A 留 V2 Gateway 统一后演进） |
-| Q-B | owner 锚点语义（成员校验仍经 owner；凭据撤销=通道关闭） | **接受**；Client 独立 principal 化挂 V2 调度批 |
-| Q-C | 权限双轨（granted_permissions 列先行 vs 等 lmms 字典） | **列先行**；lmms 字典落地后合并并撤 F-7 开关 |
-| Q-D | 0049 列集（四列 + uq_device_tenant_name + lease_client_id） | **按 §3 落**；实施前重核台账（当前 max=0048） |
+| Q-A | 凭据形式 = **B：ai-pm 自发 cpk_** | ✅ 通过（三原则确认：cpk 不取代真人 JWT / 授权依赖 owner 成员资格+撤销即关 / 权限双轨为过渡，**F-7 开关不得永久保留**） |
+| Q-B | owner 锚点语义 | ✅ 接受；Client 独立 principal 化留 V2 |
+| Q-C | 权限双轨 = granted_permissions 列先行 | ✅ 通过；lmms IAM 字典落地后必须统一清理 |
+| Q-D | 0049 列集 | ✅ 通过（复合 FK 修订已收编 §3） |
 
 ## 10. 工程纪律
 
