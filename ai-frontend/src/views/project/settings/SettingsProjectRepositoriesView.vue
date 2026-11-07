@@ -279,331 +279,343 @@ onMounted(load);
       </Button>
     </template>
 
-    <Alert v-if="errorMessage" variant="danger">
-      {{ errorMessage }}
-    </Alert>
+    <!-- 查询容器：设置栏主列远窄于原整页（1440 视口下约 576px），布局按本列
+         宽度响应（@container），不再按视口 @media 判断。 -->
+    <div class="rm-root">
+      <Alert v-if="errorMessage" variant="danger">
+        {{ errorMessage }}
+      </Alert>
 
-    <!-- 接入表单（可折叠；V1 无 OAuth 步骤，G-04 落地后再引入） -->
-    <section v-if="showConnect" class="rm-panel" data-testid="connect-form">
-      <h3 class="rm-panel__title">
-        {{ t("s01.repositories.connect.title") }}
-      </h3>
-      <div class="rm-panel__grid">
-        <label class="rm-field">
-          {{ t("s01.repositories.field.name") }}
-          <input
-            v-model="form.name"
-            data-testid="connect-name"
-            class="rm-input"
-            type="text"
-          />
-        </label>
-        <label class="rm-field">
-          {{ t("s01.repositories.field.url") }}
-          <input
-            v-model="form.url"
-            data-testid="connect-url"
-            class="rm-input"
-            type="text"
-            placeholder="git@host:group/repo.git"
-          />
-        </label>
-        <label class="rm-field">
-          {{ t("s01.repositories.field.role") }}
-          <select
-            v-model="form.role"
-            data-testid="connect-role"
-            class="rm-input"
-          >
-            <option v-for="role in roleOptions" :key="role" :value="role">
-              {{ t(`s01.repositories.role.${role}`) }}
-            </option>
-          </select>
-        </label>
-        <label class="rm-field">
-          {{ t("s01.repositories.field.defaultBranch") }}
-          <input v-model="form.default_branch" class="rm-input" type="text" />
-        </label>
-        <label class="rm-field">
-          {{ t("s01.repositories.field.selectedBranch") }}
-          <input v-model="form.selected_branch" class="rm-input" type="text" />
-        </label>
-        <label class="rm-field">
-          {{ t("s01.repositories.field.selectedCommit") }}
-          <input v-model="form.selected_commit" class="rm-input" type="text" />
-        </label>
-      </div>
-      <p class="rm-hint">
-        {{ t("s01.repositories.connect.hint") }}
-      </p>
-      <div class="rm-actions">
-        <Button
-          variant="primary"
-          size="sm"
-          :disabled="busy === 'connect' || !form.name || !form.url"
-          data-testid="connect-submit"
-          @click="submitConnect"
-        >
-          {{ t("s01.repositories.connect.submit") }}
-        </Button>
-        <Button variant="ghost" size="sm" @click="toggleConnect">
-          {{ t("s01.repositories.action.cancel") }}
-        </Button>
-      </div>
-    </section>
-
-    <!-- 概览（管理摘要，非项目状态，V1.2 §6.3）。StatCard stacked 布局无 icon 时
-         不渲染 label（迁入前四卡只剩裸数字），统一 compact + icon（同 Runners 节）。 -->
-    <section class="rm-stats">
-      <StatCard
-        :label="t('s01.repositories.stats.linked')"
-        :value="String(stats.linked)"
-        :icon="GitBranch"
-        tone="neutral"
-        layout="compact"
-      />
-      <StatCard
-        :label="t('s01.repositories.stats.verified')"
-        :value="String(stats.verified)"
-        :icon="CircleCheck"
-        tone="success"
-        layout="compact"
-      />
-      <StatCard
-        :label="t('s01.repositories.stats.attention')"
-        :value="String(stats.attention)"
-        :icon="TriangleAlert"
-        :tone="stats.attention > 0 ? 'warning' : 'neutral'"
-        layout="compact"
-      />
-      <StatCard
-        :label="t('s01.repositories.stats.confirmed')"
-        :value="String(stats.confirmed)"
-        :icon="BadgeCheck"
-        tone="info"
-        layout="compact"
-      />
-    </section>
-
-    <!-- 空态（V1.2 §6.3：明确传达项目仍可工作） -->
-    <EmptyState
-      v-if="!loading && repositories.length === 0"
-      :title="t('s01.repositories.empty.title')"
-      :description="t('s01.repositories.empty.description')"
-      :action-label="t('s01.repositories.action.connect')"
-      data-testid="repo-empty"
-      @action="toggleConnect"
-    />
-
-    <!-- 列表 + 详情（V1.2 §6.1/§12：筛选行 + 仿表格式列表 + 右侧详情面板） -->
-    <section v-else class="rm-layout">
-      <div class="rm-main">
-        <div class="rm-filter">
-          <input
-            v-model="search"
-            class="rm-input rm-filter__search"
-            type="text"
-            :placeholder="t('s01.repositories.filter.searchPlaceholder')"
-          />
-          <select v-model="roleFilter" class="rm-input">
-            <option value="">
-              {{ t("s01.repositories.filter.allRoles") }}
-            </option>
-            <option v-for="role in roleOptions" :key="role" :value="role">
-              {{ t(`s01.repositories.role.${role}`) }}
-            </option>
-          </select>
-          <select v-model="statusFilter" class="rm-input">
-            <option value="">
-              {{ t("s01.repositories.filter.allStatuses") }}
-            </option>
-            <option
-              v-for="status in statusOptions"
-              :key="status"
-              :value="status"
+      <!-- 接入表单（可折叠；V1 无 OAuth 步骤，G-04 落地后再引入） -->
+      <section v-if="showConnect" class="rm-panel" data-testid="connect-form">
+        <h3 class="rm-panel__title">
+          {{ t("s01.repositories.connect.title") }}
+        </h3>
+        <div class="rm-panel__grid">
+          <label class="rm-field">
+            {{ t("s01.repositories.field.name") }}
+            <input
+              v-model="form.name"
+              data-testid="connect-name"
+              class="rm-input"
+              type="text"
+            />
+          </label>
+          <label class="rm-field">
+            {{ t("s01.repositories.field.url") }}
+            <input
+              v-model="form.url"
+              data-testid="connect-url"
+              class="rm-input"
+              type="text"
+              placeholder="git@host:group/repo.git"
+            />
+          </label>
+          <label class="rm-field">
+            {{ t("s01.repositories.field.role") }}
+            <select
+              v-model="form.role"
+              data-testid="connect-role"
+              class="rm-input"
             >
-              {{ t(`s01.repositories.status.${status}`) }}
-            </option>
-          </select>
+              <option v-for="role in roleOptions" :key="role" :value="role">
+                {{ t(`s01.repositories.role.${role}`) }}
+              </option>
+            </select>
+          </label>
+          <label class="rm-field">
+            {{ t("s01.repositories.field.defaultBranch") }}
+            <input v-model="form.default_branch" class="rm-input" type="text" />
+          </label>
+          <label class="rm-field">
+            {{ t("s01.repositories.field.selectedBranch") }}
+            <input
+              v-model="form.selected_branch"
+              class="rm-input"
+              type="text"
+            />
+          </label>
+          <label class="rm-field">
+            {{ t("s01.repositories.field.selectedCommit") }}
+            <input
+              v-model="form.selected_commit"
+              class="rm-input"
+              type="text"
+            />
+          </label>
         </div>
-
-        <div class="rm-table" data-testid="repo-list">
-          <!-- 表头用 span：保证「repo-list 的直接子 div = 数据行」契约（测试据此点首行） -->
-          <span class="rm-table__head" aria-hidden="true">
-            <span>{{ t("s01.repositories.list.repository") }}</span>
-            <span>{{ t("s01.repositories.detail.role") }}</span>
-            <span>{{ t("s01.repositories.list.branch") }}</span>
-            <span>{{ t("s01.repositories.list.access") }}</span>
-            <span>{{ t("s01.repositories.list.lastVerified") }}</span>
-            <span />
-          </span>
-          <p v-if="filteredRepositories.length === 0" class="rm-table__empty">
-            {{ t("s01.repositories.list.noMatch") }}
-          </p>
-          <div
-            v-for="row in filteredRepositories"
-            :key="row.id"
-            class="rm-table__row"
-            :class="{ 'is-selected': selectedId === row.id }"
-            role="button"
-            tabindex="0"
-            @click="selectedId = row.id"
-            @keydown.enter.prevent="selectedId = row.id"
-            @keydown.space.prevent="selectedId = row.id"
-          >
-            <span class="rm-table__repo">
-              <span class="rm-table__name-line">
-                <span class="rm-table__name">{{ row.name }}</span>
-                <Badge
-                  v-if="primaryRepositoryId === row.id"
-                  variant="accent"
-                  size="sm"
-                  data-testid="primary-badge"
-                >
-                  {{ t("s01.repositories.badge.primarySuggested") }}
-                </Badge>
-                <Badge v-if="hasNewHead(row)" variant="warning" size="sm">
-                  {{ t("s01.repositories.badge.newHead") }}
-                </Badge>
-              </span>
-              <span class="rm-table__url">{{ row.url }}</span>
-            </span>
-            <span class="rm-table__cell">{{
-              t(`s01.repositories.role.${row.role}`)
-            }}</span>
-            <span class="rm-table__cell">{{ rowBranch(row) }}</span>
-            <span class="rm-table__cell">
-              <Badge :variant="statusBadgeVariant(row.status)" size="sm">
-                {{ t(`s01.repositories.status.${row.status}`) }}
-              </Badge>
-            </span>
-            <span class="rm-table__cell">{{
-              formatTime(row.last_verified_at)
-            }}</span>
-            <span class="rm-table__go">
-              <ChevronRight :size="14" aria-hidden="true" />
-            </span>
-          </div>
-        </div>
-
-        <p class="rm-footnote">
-          {{ t("s01.repositories.list.footnote") }}
+        <p class="rm-hint">
+          {{ t("s01.repositories.connect.hint") }}
         </p>
-      </div>
-
-      <aside v-if="selected" class="rm-detail" data-testid="repo-detail">
-        <header class="rm-detail__head">
-          <div class="rm-detail__id">
-            <h3 class="rm-detail__name">{{ selected.name }}</h3>
-            <p class="rm-detail__url">{{ selected.url }}</p>
-          </div>
-          <button
-            type="button"
-            class="rm-detail__close"
-            :aria-label="t('s01.repositories.detail.close')"
-            data-testid="detail-close"
-            @click="selectedId = ''"
-          >
-            <X :size="14" aria-hidden="true" />
-          </button>
-        </header>
-
-        <dl class="rm-kv">
-          <div class="rm-kv__row">
-            <dt>{{ t("s01.repositories.detail.role") }}</dt>
-            <dd>
-              <select
-                :value="selected.role"
-                data-testid="role-select"
-                class="rm-input rm-input--compact"
-                @change="
-                  changeRole(
-                    selected!,
-                    ($event.target as HTMLSelectElement).value
-                  )
-                "
-              >
-                <option v-for="role in roleOptions" :key="role" :value="role">
-                  {{ t(`s01.repositories.role.${role}`) }}
-                </option>
-              </select>
-            </dd>
-          </div>
-          <div class="rm-kv__row">
-            <dt>{{ t("s01.repositories.detail.defaultBranch") }}</dt>
-            <dd>{{ selected.default_branch ?? "—" }}</dd>
-          </div>
-          <div class="rm-kv__row">
-            <dt>{{ t("s01.repositories.detail.observedHead") }}</dt>
-            <dd class="rm-mono">{{ selected.head_commit_sha ?? "—" }}</dd>
-          </div>
-          <div class="rm-kv__row">
-            <dt>{{ t("s01.repositories.detail.confirmedCommit") }}</dt>
-            <dd class="rm-mono">
-              {{
-                selected.selected_commit ??
-                t("s01.repositories.detail.unconfirmed")
-              }}
-            </dd>
-          </div>
-          <div class="rm-kv__row">
-            <dt>{{ t("s01.repositories.detail.lastVerified") }}</dt>
-            <dd>{{ formatTime(selected.last_verified_at) }}</dd>
-          </div>
-        </dl>
-
-        <!-- HEAD 变化：只提示 + 人工确认（R-03-04，V1.2 §5.2/§12） -->
-        <div
-          v-if="hasNewHead(selected)"
-          class="rm-headchange"
-          data-testid="head-change"
-        >
-          <p class="rm-headchange__notice">
-            {{ t("s01.repositories.headChange.notice") }}
-          </p>
+        <div class="rm-actions">
           <Button
             variant="primary"
             size="sm"
-            class="rm-headchange__confirm"
-            :disabled="busy === `confirm-${selected.id}`"
-            data-testid="confirm-update"
-            @click="confirmHead(selected)"
+            :disabled="busy === 'connect' || !form.name || !form.url"
+            data-testid="connect-submit"
+            @click="submitConnect"
           >
-            {{ t("s01.repositories.headChange.confirm") }}
+            {{ t("s01.repositories.connect.submit") }}
+          </Button>
+          <Button variant="ghost" size="sm" @click="toggleConnect">
+            {{ t("s01.repositories.action.cancel") }}
           </Button>
         </div>
+      </section>
 
-        <Alert v-if="selected.last_error_code" variant="danger" size="sm">
-          {{ selected.last_error_code }}: {{ selected.last_error_detail }}
-        </Alert>
+      <!-- 概览（管理摘要，非项目状态，V1.2 §6.3）。StatCard stacked 布局无 icon 时
+         不渲染 label（迁入前四卡只剩裸数字），统一 compact + icon（同 Runners 节）。 -->
+      <section class="rm-stats">
+        <StatCard
+          :label="t('s01.repositories.stats.linked')"
+          :value="String(stats.linked)"
+          :icon="GitBranch"
+          tone="neutral"
+          layout="compact"
+        />
+        <StatCard
+          :label="t('s01.repositories.stats.verified')"
+          :value="String(stats.verified)"
+          :icon="CircleCheck"
+          tone="success"
+          layout="compact"
+        />
+        <StatCard
+          :label="t('s01.repositories.stats.attention')"
+          :value="String(stats.attention)"
+          :icon="TriangleAlert"
+          :tone="stats.attention > 0 ? 'warning' : 'neutral'"
+          layout="compact"
+        />
+        <StatCard
+          :label="t('s01.repositories.stats.confirmed')"
+          :value="String(stats.confirmed)"
+          :icon="BadgeCheck"
+          tone="info"
+          layout="compact"
+        />
+      </section>
 
-        <div class="rm-actions">
-          <Button
-            variant="secondary"
-            size="sm"
-            :disabled="busy === `verify-${selected.id}`"
-            data-testid="verify-btn"
-            @click="verify(selected)"
-          >
-            {{ t("s01.repositories.action.verify") }}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            :class="{ 'is-confirming': confirmingArchiveId === selected.id }"
-            :disabled="busy === `archive-${selected.id}`"
-            data-testid="archive-btn"
-            @click="onArchive(selected)"
-          >
-            {{
-              confirmingArchiveId === selected.id
-                ? t("s01.repositories.action.archiveConfirm")
-                : t("s01.repositories.action.archive")
-            }}
-          </Button>
+      <!-- 空态（V1.2 §6.3：明确传达项目仍可工作） -->
+      <EmptyState
+        v-if="!loading && repositories.length === 0"
+        :title="t('s01.repositories.empty.title')"
+        :description="t('s01.repositories.empty.description')"
+        :action-label="t('s01.repositories.action.connect')"
+        data-testid="repo-empty"
+        @action="toggleConnect"
+      />
+
+      <!-- 列表 + 详情（V1.2 §6.1/§12：筛选行 + 仿表格式列表 + 右侧详情面板） -->
+      <section v-else class="rm-layout">
+        <div class="rm-main">
+          <div class="rm-filter">
+            <input
+              v-model="search"
+              class="rm-input rm-filter__search"
+              type="text"
+              :placeholder="t('s01.repositories.filter.searchPlaceholder')"
+            />
+            <select v-model="roleFilter" class="rm-input">
+              <option value="">
+                {{ t("s01.repositories.filter.allRoles") }}
+              </option>
+              <option v-for="role in roleOptions" :key="role" :value="role">
+                {{ t(`s01.repositories.role.${role}`) }}
+              </option>
+            </select>
+            <select v-model="statusFilter" class="rm-input">
+              <option value="">
+                {{ t("s01.repositories.filter.allStatuses") }}
+              </option>
+              <option
+                v-for="status in statusOptions"
+                :key="status"
+                :value="status"
+              >
+                {{ t(`s01.repositories.status.${status}`) }}
+              </option>
+            </select>
+          </div>
+
+          <div class="rm-table" data-testid="repo-list">
+            <!-- 表头用 span：保证「repo-list 的直接子 div = 数据行」契约（测试据此点首行） -->
+            <span class="rm-table__head" aria-hidden="true">
+              <span>{{ t("s01.repositories.list.repository") }}</span>
+              <span>{{ t("s01.repositories.detail.role") }}</span>
+              <span>{{ t("s01.repositories.list.branch") }}</span>
+              <span>{{ t("s01.repositories.list.access") }}</span>
+              <span>{{ t("s01.repositories.list.lastVerified") }}</span>
+              <span />
+            </span>
+            <p v-if="filteredRepositories.length === 0" class="rm-table__empty">
+              {{ t("s01.repositories.list.noMatch") }}
+            </p>
+            <div
+              v-for="row in filteredRepositories"
+              :key="row.id"
+              class="rm-table__row"
+              :class="{ 'is-selected': selectedId === row.id }"
+              role="button"
+              tabindex="0"
+              @click="selectedId = row.id"
+              @keydown.enter.prevent="selectedId = row.id"
+              @keydown.space.prevent="selectedId = row.id"
+            >
+              <span class="rm-table__repo">
+                <span class="rm-table__name-line">
+                  <span class="rm-table__name">{{ row.name }}</span>
+                  <Badge
+                    v-if="primaryRepositoryId === row.id"
+                    variant="accent"
+                    size="sm"
+                    data-testid="primary-badge"
+                  >
+                    {{ t("s01.repositories.badge.primarySuggested") }}
+                  </Badge>
+                  <Badge v-if="hasNewHead(row)" variant="warning" size="sm">
+                    {{ t("s01.repositories.badge.newHead") }}
+                  </Badge>
+                </span>
+                <span class="rm-table__url">{{ row.url }}</span>
+              </span>
+              <span class="rm-table__cell">{{
+                t(`s01.repositories.role.${row.role}`)
+              }}</span>
+              <span class="rm-table__cell">{{ rowBranch(row) }}</span>
+              <span class="rm-table__cell">
+                <Badge :variant="statusBadgeVariant(row.status)" size="sm">
+                  {{ t(`s01.repositories.status.${row.status}`) }}
+                </Badge>
+              </span>
+              <span class="rm-table__cell">{{
+                formatTime(row.last_verified_at)
+              }}</span>
+              <span class="rm-table__go">
+                <ChevronRight :size="14" aria-hidden="true" />
+              </span>
+            </div>
+          </div>
+
+          <p class="rm-footnote">
+            {{ t("s01.repositories.list.footnote") }}
+          </p>
         </div>
-      </aside>
-    </section>
+
+        <aside v-if="selected" class="rm-detail" data-testid="repo-detail">
+          <header class="rm-detail__head">
+            <div class="rm-detail__id">
+              <h3 class="rm-detail__name">{{ selected.name }}</h3>
+              <p class="rm-detail__url">{{ selected.url }}</p>
+            </div>
+            <button
+              type="button"
+              class="rm-detail__close"
+              :aria-label="t('s01.repositories.detail.close')"
+              data-testid="detail-close"
+              @click="selectedId = ''"
+            >
+              <X :size="14" aria-hidden="true" />
+            </button>
+          </header>
+
+          <dl class="rm-kv">
+            <div class="rm-kv__row">
+              <dt>{{ t("s01.repositories.detail.role") }}</dt>
+              <dd>
+                <select
+                  :value="selected.role"
+                  data-testid="role-select"
+                  class="rm-input rm-input--compact"
+                  @change="
+                    changeRole(
+                      selected!,
+                      ($event.target as HTMLSelectElement).value
+                    )
+                  "
+                >
+                  <option v-for="role in roleOptions" :key="role" :value="role">
+                    {{ t(`s01.repositories.role.${role}`) }}
+                  </option>
+                </select>
+              </dd>
+            </div>
+            <div class="rm-kv__row">
+              <dt>{{ t("s01.repositories.detail.defaultBranch") }}</dt>
+              <dd>{{ selected.default_branch ?? "—" }}</dd>
+            </div>
+            <div class="rm-kv__row">
+              <dt>{{ t("s01.repositories.detail.observedHead") }}</dt>
+              <dd class="rm-mono">{{ selected.head_commit_sha ?? "—" }}</dd>
+            </div>
+            <div class="rm-kv__row">
+              <dt>{{ t("s01.repositories.detail.confirmedCommit") }}</dt>
+              <dd class="rm-mono">
+                {{
+                  selected.selected_commit ??
+                  t("s01.repositories.detail.unconfirmed")
+                }}
+              </dd>
+            </div>
+            <div class="rm-kv__row">
+              <dt>{{ t("s01.repositories.detail.lastVerified") }}</dt>
+              <dd>{{ formatTime(selected.last_verified_at) }}</dd>
+            </div>
+          </dl>
+
+          <!-- HEAD 变化：只提示 + 人工确认（R-03-04，V1.2 §5.2/§12） -->
+          <div
+            v-if="hasNewHead(selected)"
+            class="rm-headchange"
+            data-testid="head-change"
+          >
+            <p class="rm-headchange__notice">
+              {{ t("s01.repositories.headChange.notice") }}
+            </p>
+            <Button
+              variant="primary"
+              size="sm"
+              class="rm-headchange__confirm"
+              :disabled="busy === `confirm-${selected.id}`"
+              data-testid="confirm-update"
+              @click="confirmHead(selected)"
+            >
+              {{ t("s01.repositories.headChange.confirm") }}
+            </Button>
+          </div>
+
+          <Alert v-if="selected.last_error_code" variant="danger" size="sm">
+            {{ selected.last_error_code }}: {{ selected.last_error_detail }}
+          </Alert>
+
+          <div class="rm-actions">
+            <Button
+              variant="secondary"
+              size="sm"
+              :disabled="busy === `verify-${selected.id}`"
+              data-testid="verify-btn"
+              @click="verify(selected)"
+            >
+              {{ t("s01.repositories.action.verify") }}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              :class="{ 'is-confirming': confirmingArchiveId === selected.id }"
+              :disabled="busy === `archive-${selected.id}`"
+              data-testid="archive-btn"
+              @click="onArchive(selected)"
+            >
+              {{
+                confirmingArchiveId === selected.id
+                  ? t("s01.repositories.action.archiveConfirm")
+                  : t("s01.repositories.action.archive")
+              }}
+            </Button>
+          </div>
+        </aside>
+      </section>
+    </div>
   </SettingsAppFrame>
 </template>
 
@@ -627,13 +639,13 @@ onMounted(load);
 
 .rm-panel__grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
 }
 
-@media (max-width: 880px) {
+@container rm-root (min-width: 640px) {
   .rm-panel__grid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -653,38 +665,38 @@ onMounted(load);
   line-height: var(--line-height-caption);
 }
 
+/* 查询容器（同时承担原设置主列的纵向节奏 gap） */
+.rm-root {
+  container: rm-root / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+/* 内在网格：本列窄时 2×2，宽时一行四卡（不再按视口断点） */
 .rm-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   gap: var(--space-3);
 }
 
-@media (max-width: 1100px) {
-  .rm-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
+/* 列表 + 详情：本列够宽才并排，否则详情落到列表下方 */
 .rm-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
 }
 
-@media (max-width: 1440px) {
+@container rm-root (min-width: 1000px) {
   .rm-layout {
     grid-template-columns: minmax(0, 1fr) 320px;
   }
 }
 
-@media (max-width: 1100px) {
-  .rm-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 .rm-main {
+  container: rm-list / inline-size;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -710,7 +722,10 @@ onMounted(load);
   overflow-x: auto;
 }
 
-/* 固定列宽合计 ~478px：主列过窄时不许把仓库名压成 0，横向滚动兜底 */
+/* 列宽按列表本身宽度响应（@container rm-list，不按视口）：够宽六列；窄时收起
+ * 分支/最近验证列（§3.2：列表优先身份与状态）。固定列宽不许把仓库名压成 0，
+ * 低于 min-width 时横向滚动兜底。
+ * 行内 span 序 = repo(1)/role(2)/branch(3)/access(4)/verified(5)/go(6) */
 .rm-table__head,
 .rm-table__row {
   display: grid;
@@ -721,14 +736,13 @@ onMounted(load);
   min-width: 700px;
 }
 
-@media (max-width: 880px) {
+@container rm-list (max-width: 719px) {
   .rm-table__head,
   .rm-table__row {
     grid-template-columns: minmax(0, 1fr) 96px 104px 32px;
+    min-width: 480px;
   }
 
-  /* 窄屏收起分支/最近验证列（§3.2：列表优先身份与状态）；
-   * 行内 span 序 = repo(1)/role(2)/branch(3)/access(4)/verified(5)/go(6) */
   .rm-table__head span:nth-child(3),
   .rm-table__head span:nth-child(5),
   .rm-table__row > span:nth-of-type(3),

@@ -279,12 +279,15 @@ onMounted(load);
   border-radius: var(--radius-xs);
 }
 
+/* 设置栏主列远窄于原整页：StatCard 根 width:100%，flex-wrap 下会一卡一行——
+   改内在网格，本列宽度下三卡同排（窄到放不下才自然换行）。 */
 .env-metrics {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
   gap: var(--space-3);
 }
 
+/* 工具行：搜索与两个筛选按比例伸缩（原固定 360/368px 在窄列里各占一行） */
 .env-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -293,12 +296,13 @@ onMounted(load);
 }
 
 .env-toolbar__search {
-  width: var(--size-list-search-width);
-  min-width: var(--size-search-width);
+  flex: 2 1 14rem;
+  min-width: 0;
 }
 
 .env-toolbar__filter {
-  width: var(--size-notification-filter-width);
+  flex: 1 1 9rem;
+  min-width: 0;
 }
 
 .env-grid {

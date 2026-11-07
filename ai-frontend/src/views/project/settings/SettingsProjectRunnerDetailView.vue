@@ -297,190 +297,195 @@ onMounted(load);
       </Button>
     </template>
 
-    <Alert v-if="errorMessage && !device" variant="danger">
-      {{ errorMessage }}
-    </Alert>
-
-    <template v-if="device">
-      <!-- 就绪横幅：为什么可/不可执行 + 恢复动作 -->
-      <Alert
-        v-if="banner"
-        :variant="banner.variant"
-        :title="banner.title"
-        data-testid="env-banner"
-      >
-        {{ banner.description }}
+    <!-- 查询容器：双栏按设置主列宽度响应（@container），不按视口 @media -->
+    <div class="env-detail-root">
+      <Alert v-if="errorMessage && !device" variant="danger">
+        {{ errorMessage }}
       </Alert>
 
-      <div class="env-detail__head" data-testid="env-detail-head">
-        <Badge :variant="readinessBadge?.variant ?? 'neutral'" size="md">
-          {{ readinessBadge?.label }}
-        </Badge>
-        <span class="env-detail__did">{{ device.id }}</span>
-        <Badge v-if="device.status === 'revoked'" variant="danger" size="md">
-          {{ t("environments.readiness.revoked") }}
-        </Badge>
-      </div>
+      <template v-if="device">
+        <!-- 就绪横幅：为什么可/不可执行 + 恢复动作 -->
+        <Alert
+          v-if="banner"
+          :variant="banner.variant"
+          :title="banner.title"
+          data-testid="env-banner"
+        >
+          {{ banner.description }}
+        </Alert>
 
-      <div class="env-detail__grid">
-        <!-- 左列：健康检查 + 项目绑定 -->
-        <div class="env-detail__col">
-          <section class="env-panel" data-testid="env-health">
-            <h2 class="env-panel__title">
-              {{ t("environments.health.title") }}
-            </h2>
-            <ul class="env-health">
-              <li
-                v-for="item in health"
-                :key="item.row.key"
-                class="env-health__row"
-              >
-                <StatusIndicator
-                  :status="item.tone"
-                  size="md"
-                  :label="item.label"
-                />
-                <span class="env-health__note">{{ item.note }}</span>
-              </li>
-            </ul>
-            <p class="env-panel__footnote">
-              {{ t("environments.health.evidenceNote") }}
-            </p>
-          </section>
+        <div class="env-detail__head" data-testid="env-detail-head">
+          <Badge :variant="readinessBadge?.variant ?? 'neutral'" size="md">
+            {{ readinessBadge?.label }}
+          </Badge>
+          <span class="env-detail__did">{{ device.id }}</span>
+          <Badge v-if="device.status === 'revoked'" variant="danger" size="md">
+            {{ t("environments.readiness.revoked") }}
+          </Badge>
+        </div>
 
-          <section class="env-panel" data-testid="env-bindings">
-            <div class="env-panel__head">
+        <div class="env-detail__grid">
+          <!-- 左列：健康检查 + 项目绑定 -->
+          <div class="env-detail__col">
+            <section class="env-panel" data-testid="env-health">
               <h2 class="env-panel__title">
-                {{ t("environments.bindings.title") }}
+                {{ t("environments.health.title") }}
               </h2>
-              <span class="env-panel__hint">{{
-                t("environments.bindings.permissionNote")
-              }}</span>
-            </div>
-            <p
-              v-if="!device.bindings.length"
-              class="env-panel__empty"
-              data-testid="env-bindings-empty"
-            >
-              {{ t("environments.bindings.empty") }}
-            </p>
-            <ul v-else class="env-bindings">
-              <li
-                v-for="binding in device.bindings"
-                :key="binding.id"
-                class="env-bindings__row"
-              >
-                <div class="env-bindings__main">
-                  <span class="env-bindings__project">{{
-                    bindingProjectName(binding)
-                  }}</span>
-                  <span class="env-bindings__meta">
-                    {{ bindingCoverage(binding) }} ·
-                    {{ t("environments.bindings.boundAt") }}
-                    {{ formatDate(binding.bound_at) }}
-                  </span>
-                </div>
-                <Badge
-                  v-if="binding.project_accessible !== undefined"
-                  :variant="binding.project_accessible ? 'success' : 'neutral'"
-                  size="sm"
+              <ul class="env-health">
+                <li
+                  v-for="item in health"
+                  :key="item.row.key"
+                  class="env-health__row"
                 >
-                  {{
-                    binding.project_accessible
-                      ? t("environments.bindings.accessible")
-                      : t("environments.bindings.notAccessible")
-                  }}
-                </Badge>
-                <Button
-                  v-if="device.status === 'active'"
-                  variant="ghost"
-                  size="sm"
-                  :disabled="busy === `unbind-${binding.id}`"
-                  :data-testid="`env-unbind-${binding.id}`"
-                  @click="unbind(binding)"
-                >
-                  {{ t("environments.bindings.unbind") }}
-                </Button>
-              </li>
-            </ul>
-          </section>
-        </div>
+                  <StatusIndicator
+                    :status="item.tone"
+                    size="md"
+                    :label="item.label"
+                  />
+                  <span class="env-health__note">{{ item.note }}</span>
+                </li>
+              </ul>
+              <p class="env-panel__footnote">
+                {{ t("environments.health.evidenceNote") }}
+              </p>
+            </section>
 
-        <!-- 右列：运行信息 + 危险操作 -->
-        <div class="env-detail__col">
-          <section class="env-panel" data-testid="env-runtime">
-            <h2 class="env-panel__title">
-              {{ t("environments.runtime.title") }}
-            </h2>
-            <dl class="env-runtime">
-              <div
-                v-for="row in runtimeRows"
-                :key="row.key"
-                class="env-runtime__row"
-              >
-                <dt>{{ t(`environments.runtime.${row.key}`) }}</dt>
-                <dd>{{ row.value }}</dd>
+            <section class="env-panel" data-testid="env-bindings">
+              <div class="env-panel__head">
+                <h2 class="env-panel__title">
+                  {{ t("environments.bindings.title") }}
+                </h2>
+                <span class="env-panel__hint">{{
+                  t("environments.bindings.permissionNote")
+                }}</span>
               </div>
-            </dl>
-          </section>
+              <p
+                v-if="!device.bindings.length"
+                class="env-panel__empty"
+                data-testid="env-bindings-empty"
+              >
+                {{ t("environments.bindings.empty") }}
+              </p>
+              <ul v-else class="env-bindings">
+                <li
+                  v-for="binding in device.bindings"
+                  :key="binding.id"
+                  class="env-bindings__row"
+                >
+                  <div class="env-bindings__main">
+                    <span class="env-bindings__project">{{
+                      bindingProjectName(binding)
+                    }}</span>
+                    <span class="env-bindings__meta">
+                      {{ bindingCoverage(binding) }} ·
+                      {{ t("environments.bindings.boundAt") }}
+                      {{ formatDate(binding.bound_at) }}
+                    </span>
+                  </div>
+                  <Badge
+                    v-if="binding.project_accessible !== undefined"
+                    :variant="
+                      binding.project_accessible ? 'success' : 'neutral'
+                    "
+                    size="sm"
+                  >
+                    {{
+                      binding.project_accessible
+                        ? t("environments.bindings.accessible")
+                        : t("environments.bindings.notAccessible")
+                    }}
+                  </Badge>
+                  <Button
+                    v-if="device.status === 'active'"
+                    variant="ghost"
+                    size="sm"
+                    :disabled="busy === `unbind-${binding.id}`"
+                    :data-testid="`env-unbind-${binding.id}`"
+                    @click="unbind(binding)"
+                  >
+                    {{ t("environments.bindings.unbind") }}
+                  </Button>
+                </li>
+              </ul>
+            </section>
+          </div>
 
-          <section
-            v-if="device.status === 'active'"
-            class="env-panel env-panel--danger"
-            data-testid="env-danger"
-          >
-            <h2 class="env-panel__title env-panel__title--danger">
-              <TriangleAlert aria-hidden="true" :size="15" />
-              {{ t("environments.danger.title") }}
-            </h2>
-            <p class="env-panel__footnote">
-              {{ t("environments.danger.description") }}
-            </p>
-            <Button
-              variant="danger"
-              size="sm"
-              data-testid="env-revoke-open"
-              @click="showRevoke = true"
+          <!-- 右列：运行信息 + 危险操作 -->
+          <div class="env-detail__col">
+            <section class="env-panel" data-testid="env-runtime">
+              <h2 class="env-panel__title">
+                {{ t("environments.runtime.title") }}
+              </h2>
+              <dl class="env-runtime">
+                <div
+                  v-for="row in runtimeRows"
+                  :key="row.key"
+                  class="env-runtime__row"
+                >
+                  <dt>{{ t(`environments.runtime.${row.key}`) }}</dt>
+                  <dd>{{ row.value }}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section
+              v-if="device.status === 'active'"
+              class="env-panel env-panel--danger"
+              data-testid="env-danger"
             >
-              {{ t("environments.danger.revoke") }}
-            </Button>
-          </section>
-          <section
-            v-else
-            class="env-panel env-panel--danger"
-            data-testid="env-danger"
-          >
-            <h2 class="env-panel__title env-panel__title--danger">
-              <TriangleAlert aria-hidden="true" :size="15" />
-              {{ t("environments.danger.revokedTitle") }}
-            </h2>
-            <p class="env-panel__footnote">
-              {{ t("environments.danger.revokedAt") }}
-              {{ formatDate(device.revoked_at) }}
-            </p>
-          </section>
+              <h2 class="env-panel__title env-panel__title--danger">
+                <TriangleAlert aria-hidden="true" :size="15" />
+                {{ t("environments.danger.title") }}
+              </h2>
+              <p class="env-panel__footnote">
+                {{ t("environments.danger.description") }}
+              </p>
+              <Button
+                variant="danger"
+                size="sm"
+                data-testid="env-revoke-open"
+                @click="showRevoke = true"
+              >
+                {{ t("environments.danger.revoke") }}
+              </Button>
+            </section>
+            <section
+              v-else
+              class="env-panel env-panel--danger"
+              data-testid="env-danger"
+            >
+              <h2 class="env-panel__title env-panel__title--danger">
+                <TriangleAlert aria-hidden="true" :size="15" />
+                {{ t("environments.danger.revokedTitle") }}
+              </h2>
+              <p class="env-panel__footnote">
+                {{ t("environments.danger.revokedAt") }}
+                {{ formatDate(device.revoked_at) }}
+              </p>
+            </section>
+          </div>
         </div>
-      </div>
 
-      <!-- 吊销确认（破坏性操作：显式确认 + 审计） -->
-      <ConfirmationDialog
-        :open="showRevoke"
-        variant="danger"
-        :title="t('environments.revoke.title', { id: device.id })"
-        :description="t('environments.revoke.description')"
-        :confirm-label="t('environments.revoke.confirm')"
-        :cancel-label="t('environments.revoke.cancel')"
-        :checkbox-label="t('environments.revoke.checkbox')"
-        :disabled="busy === 'revoke'"
-        data-testid="env-revoke-dialog"
-        @update:open="showRevoke = $event"
-        @confirm="confirmRevoke"
-      />
-    </template>
+        <!-- 吊销确认（破坏性操作：显式确认 + 审计） -->
+        <ConfirmationDialog
+          :open="showRevoke"
+          variant="danger"
+          :title="t('environments.revoke.title', { id: device.id })"
+          :description="t('environments.revoke.description')"
+          :confirm-label="t('environments.revoke.confirm')"
+          :cancel-label="t('environments.revoke.cancel')"
+          :checkbox-label="t('environments.revoke.checkbox')"
+          :disabled="busy === 'revoke'"
+          data-testid="env-revoke-dialog"
+          @update:open="showRevoke = $event"
+          @confirm="confirmRevoke"
+        />
+      </template>
 
-    <template v-if="errorMessage && device">
-      <Alert variant="danger">{{ errorMessage }}</Alert>
-    </template>
+      <template v-if="errorMessage && device">
+        <Alert variant="danger">{{ errorMessage }}</Alert>
+      </template>
+    </div>
   </SettingsAppFrame>
 </template>
 
@@ -516,16 +521,26 @@ onMounted(load);
   font-variant-numeric: tabular-nums;
 }
 
+/* 查询容器（同时承担原设置主列的纵向节奏 gap） */
+.env-detail-root {
+  container: env-detail / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+/* 双栏仅在本列够宽时启用（1440 视口下设置主列约 576px → 单栏） */
 .env-detail__grid {
   display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
 }
 
-@media (max-width: 1100px) {
+@container env-detail (min-width: 880px) {
   .env-detail__grid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
   }
 }
 
