@@ -63,3 +63,16 @@ FROM runtime-base AS runtime-ai-pm-worker
 COPY --from=build /build/target/release/ai-pm-worker /app/ai-pm-worker
 COPY --from=build /build/policies /app/policies
 ENTRYPOINT ["/app/ai-pm-worker"]
+
+# ── ai-frontend 生产镜像（PRISM 壳：含 /project/environments Runner UI 等）──
+#   两段式：dist 由宿主构建（pnpm install / build:packages / vite build，AI-前端
+#   构建链在容器内受网络与 pnpm 版本约束，见 e2e 报告 §5 注）→ 镜像只装 nginx。
+#   docker build --target runtime-web -t aipm/ai-frontend-web:0.1.0 .
+#   前置：ai-frontend/dist 已在宿主产出；vite 产物含 hash，重建即刷新。
+# API 面由 nginx 代理：/api → pm-api:8090，/gw → api-gateway:3000（同 compose 网络）。
+FROM alpine:3.21 AS runtime-web
+RUN apk add --no-cache nginx
+COPY ai-frontend/dist /usr/share/nginx/html
+COPY ai-frontend/docker/nginx.conf /etc/nginx/http.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
