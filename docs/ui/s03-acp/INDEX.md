@@ -13,6 +13,7 @@
 | 4 | `smark-pm-s03-acp-task-continuation-v1.3.1-review-v1.md` | V1.3.1 独立评审（**通过**；N-1/N-2 → §23.3，N-3~N-6 文本修订） |
 | 5 | `smark-pm-s03-acp-slice-design-acp01-02-08-v1.md` | **★ 通信面切片实施设计 V1.1**：闭合 N-1/N-2 + 命令查询面；R-ACP-1~9 已裁（2026-11-07） |
 | 6 | `smark-pm-s03-acp-slice-design-acp01-02-08-review-v1.md` | **★ V1.1 独立复审 V1.0（2026-11-07）：通过**——设计冻结为实施基线；实现对照（84c67e9/1234162）+ 新发现 F-1[P1]（Runner continue 启动前置，ACP-05 前闭合）+ P2×4 |
+| 7 | `smark-pm-s03-acp-implementation-audit-v1.md` | **实现对照审计 V1.0（2026-11-07）**：F-6~F-13 续编——F-7[P1] 权限码无签发面（真实栈 403）、F-8[P1] 取消联动缺失；处置顺序见 §3 |
 
 ## 二、状态一览
 
