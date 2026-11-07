@@ -1419,6 +1419,7 @@ fn map_interaction_error(err: pm_application::interaction::InteractionError) -> 
         E::NotFound => ToolError::NotFound("task or run not found in this project".to_string()),
         E::Conflict(message) => ToolError::Conflict(message),
         E::Validation(message) => ToolError::InvalidRequest(message),
+        E::Forbidden(message) => ToolError::Forbidden(message),
         E::Transition(message) => ToolError::Conflict(message),
         E::Db(e) => ToolError::Db(e),
     }

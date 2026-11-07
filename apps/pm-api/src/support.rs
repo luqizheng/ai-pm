@@ -18,12 +18,20 @@ pub enum ApiError {
     /// 有身份但无权限（S02-I1：AI 主体确认 / 非 Lead 治理命令）。与 404（不泄露
     /// 存在性）和 400（参数错）区分——S02D-02 #2 的拒绝必须可观测。
     Forbidden(&'static str),
+    /// 动态文本错误（ACP-03 交互面）：InteractionError 携带运行时消息，
+    /// 静态串变体装不下；状态码由映射方给出。
+    Text(StatusCode, String),
     Internal(sqlx::Error),
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        // 动态文本先走自有路径（借用不能混入 &'static 序列）。
+        if let ApiError::Text(status, m) = &self {
+            return (*status, Json(json!({ "message": m }))).into_response();
+        }
         let (status, message) = match self {
+            ApiError::Text(_, _) => unreachable!("handled above"),
             ApiError::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
             ApiError::Conflict(m) => (StatusCode::CONFLICT, m),
             ApiError::NotFound(m) => (StatusCode::NOT_FOUND, m),
@@ -53,6 +61,34 @@ impl From<pm_application::pm_write::PmWriteError> for ApiError {
             pm_application::pm_write::PmWriteError::Db(err) => ApiError::Internal(err),
         }
     }
+}
+
+/// ACP-03 交互面（设计稿 smark-pm-s03-acp-slice-design-acp03-v1.md §7）：
+/// NotFound 保留静态串（不泄露存在性），动态消息按语义给状态码。
+impl From<pm_application::interaction::InteractionError> for ApiError {
+    fn from(e: pm_application::interaction::InteractionError) -> Self {
+        use pm_application::interaction::InteractionError as E;
+        match e {
+            E::NotFound => ApiError::NotFound("interaction not found in this project"),
+            E::Validation(m) => ApiError::Text(StatusCode::BAD_REQUEST, m),
+            E::Conflict(m) => ApiError::Text(StatusCode::CONFLICT, m),
+            E::Forbidden(m) => ApiError::Text(StatusCode::FORBIDDEN, m),
+            E::Transition(m) => ApiError::Text(StatusCode::CONFLICT, m),
+            E::Db(err) => ApiError::Internal(err),
+        }
+    }
+}
+
+/// 确认类命令的可信交互上下文（§7.2 A*）：API Key 等机器凭据一律 403；
+/// MCP 无确认工具（保持零工具，H-15）。登录令牌复用不可区分属 A* 已档边界。
+/// （自 pm_requirements 上移共用——ACP-03 回复入口同一门。）
+pub(crate) fn ensure_trusted_context(principal: &crate::auth::AuthedPrincipal) -> ApiResult<()> {
+    if principal.auth_mode == "api_key" {
+        return Err(ApiError::Forbidden(
+            "confirmation requires a trusted interactive context",
+        ));
+    }
+    Ok(())
 }
 
 impl From<pm_application::outbox_ops::ReplayError> for ApiError {

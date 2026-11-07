@@ -49,6 +49,9 @@ pub enum InteractionError {
     Validation(String),
     #[error("{0}")]
     Conflict(String),
+    /// 身份/权限不满足（§8.3 检查②③；fail-closed）。
+    #[error("{0}")]
+    Forbidden(String),
     /// 不泄露跨项目存在性（对齐 RunDispatchError::TaskNotFound 口径）。
     #[error("task or run not found in this project")]
     NotFound,
@@ -360,6 +363,19 @@ pub async fn record_response_persisted(
     actor: &AuditActor,
 ) -> Result<(), InteractionError> {
     let mut tx = pool.begin().await?;
+    record_response_persisted_tx(&mut tx, project_id, interaction_id, response_ref, actor).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// 事务核（ACP-03 §6 步骤 6）：pending → responded + guard start_wait + 审计。
+pub(crate) async fn record_response_persisted_tx(
+    tx: &mut Transaction<'static, Postgres>,
+    project_id: Uuid,
+    interaction_id: Uuid,
+    response_ref: Value,
+    actor: &AuditActor,
+) -> Result<(), InteractionError> {
     let row = sqlx::query(
         "UPDATE delivery.task_interaction \
             SET status = 'responded', responded_at = now() \
@@ -368,22 +384,21 @@ pub async fn record_response_persisted(
     )
     .bind(interaction_id)
     .bind(project_id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(|| {
         InteractionError::Conflict("interaction is not in pending state".into())
     })?;
-    let task_id: Uuid = row.get("task_id");
     let run_id: Uuid = row.get("run_id");
     sqlx::query(
         "UPDATE delivery.task_run SET scheduling_shield = 'start_wait' \
           WHERE id = $1 AND scheduling_shield = 'human_wait'",
     )
     .bind(run_id)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await?;
     append_audit_with_payload(
-        &mut tx,
+        tx,
         project_id,
         actor,
         "interaction.responded",
@@ -391,8 +406,6 @@ pub async fn record_response_persisted(
         response_ref,
     )
     .await?;
-    let _ = task_id;
-    tx.commit().await?;
     Ok(())
 }
 
@@ -781,5 +794,275 @@ async fn append_audit_with_payload(
         after,
     )
     .await?;
+    Ok(())
+}
+
+// ───────────────────────── ACP-03：Human Response 提交（§4/§6） ─────────────────────────
+
+/// `submit_interaction_response` 入参（REST handler 已过可见性门/auth_mode 门；
+/// 服务层对 §8.3 全部六项 fail-closed 二次断言）。
+#[derive(Debug, Clone)]
+pub struct SubmitResponseInput {
+    pub project_id: Uuid,
+    pub interaction_id: Uuid,
+    /// 回复者主体（检查①③；REST = AuthedPrincipal.principal_id）。
+    pub responder_principal_id: Uuid,
+    pub idempotency_key: String,
+    pub response_payload: Value,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SubmittedResponse {
+    pub response_id: Uuid,
+    pub interaction_id: Uuid,
+    pub status: String,
+    /// 幂等重放标记（§8.4）。
+    pub replayed: bool,
+    /// 同事务下发的 continue 命令（V1 投递事实；delivery 细账随 ACP-04）。
+    pub continue_command_id: Option<Uuid>,
+}
+
+/// 人类回复提交（V1.3.1 §8.3 六项检查 + §12.2 持久化 + §8.5 持久化→投递，
+/// 全部同一事务——V-6）。R-ACP-7：`continuation_start_frozen_at` 不阻提交。
+pub async fn submit_interaction_response(
+    pool: &PgPool,
+    input: &SubmitResponseInput,
+    actor: &AuditActor,
+) -> Result<SubmittedResponse, InteractionError> {
+    if input.idempotency_key.trim().is_empty() {
+        return Err(InteractionError::Validation(
+            "idempotency_key is required".into(),
+        ));
+    }
+    // 检查②身份半边：回复者必须是真人主体（api_key 门在 REST handler 的
+    // auth_mode 层，此处 principal.kind 双保险）。
+    let is_human: Option<bool> = sqlx::query_scalar(
+        "SELECT kind = 'human' FROM core.principal WHERE id = $1",
+    )
+    .bind(input.responder_principal_id)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
+    if is_human != Some(true) {
+        return Err(InteractionError::Forbidden(
+            "responses must come from a human principal".into(),
+        ));
+    }
+
+    let mut tx = pool.begin().await?;
+
+    // 检查①：interaction 归属当前项目（跨项目 → NotFound 不泄露）。
+    let interaction = sqlx::query(
+        "SELECT id, task_id, run_id, status, reason, deadline_at, options, required_response \
+           FROM delivery.task_interaction \
+          WHERE id = $1 AND project_id = $2 \
+            FOR UPDATE",
+    )
+    .bind(input.interaction_id)
+    .bind(input.project_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(InteractionError::NotFound)?;
+    let status: String = interaction.get("status");
+    let reason: String = interaction.get("reason");
+    let deadline_at: chrono::DateTime<chrono::Utc> = interaction.get("deadline_at");
+    let options: Option<Value> = interaction.get("options");
+    let required_response: bool = interaction.get("required_response");
+    let task_id: Uuid = interaction.get("task_id");
+    let run_id: Uuid = interaction.get("run_id");
+
+    // 检查③（R-ACP-10 已裁 a 分级）：needs_approval → 治理级（Lead/Approver）。
+    if reason == "needs_approval" {
+        crate::approver::ensure_governance_authorized(
+            pool,
+            input.project_id,
+            input.responder_principal_id,
+        )
+        .await
+        .map_err(|_| {
+            InteractionError::Forbidden(
+                "this interaction requires Project Lead or an authorized Approver".into(),
+            )
+        })?;
+    }
+
+    // 幂等重放（§8.4）：同 (interaction, idempotency_key) 返回原行零副作用。
+    // 必须先于检查④⑤⑥——首次提交后 Interaction 即离开 pending，重放若被
+    // 状态门槛拦截则幂等语义失效（ACP-452 竞态后置：重放任何时刻可达）。
+    let replay: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
+        "SELECT id, continue_command_id \
+           FROM delivery.interaction_response \
+          WHERE interaction_id = $1 AND idempotency_key = $2",
+    )
+    .bind(input.interaction_id)
+    .bind(&input.idempotency_key)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some((response_id, continue_command_id)) = replay {
+        tx.commit().await?;
+        return Ok(SubmittedResponse {
+            response_id,
+            interaction_id: input.interaction_id,
+            status: "responded".into(),
+            replayed: true,
+            continue_command_id,
+        });
+    }
+
+    // 检查④：仅 pending 可回复（R-ACP-7：frozen 不阻提交）。
+    if status != "pending" {
+        return Err(InteractionError::Conflict(format!(
+            "interaction is not in pending state (status: {status})"
+        )));
+    }
+    // 检查⑤：deadline（belt-and-braces，§8.2 清扫间隙竞态兜底）。
+    if chrono::Utc::now() > deadline_at {
+        return Err(InteractionError::Conflict(
+            "human intervention deadline has passed".into(),
+        ));
+    }
+    // 检查⑥：响应结构（options 非空时 decision 必须命中枚举；content 自由文本兜底）。
+    validate_response_payload(&input.response_payload, options.as_ref(), required_response)?;
+
+    // 运行侧快照（continue 路由目标）：lease_owner/lease_generation。
+    let run = sqlx::query(
+        "SELECT lease_owner, lease_generation FROM delivery.task_run WHERE id = $1",
+    )
+    .bind(run_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(InteractionError::NotFound)?;
+    let lease_owner: Option<String> = run.get("lease_owner");
+    let Some(worker_id) = lease_owner else {
+        return Err(InteractionError::Conflict(
+            "run has no lease owner; cannot route continue command".into(),
+        ));
+    };
+    let lease_generation: i32 = run.get("lease_generation");
+
+    // §9.3 并发裁决：同 Interaction 单回复唯一索引，败者 409（无静默覆盖）。
+    let response_id = Uuid::new_v4();
+    let authority = if reason == "needs_approval" {
+        "lead_or_approver"
+    } else {
+        "project_member"
+    };
+    let authorization_context = json!({
+        "responder": input.responder_principal_id,
+        "reason": reason,
+        "authority": authority,
+        "checks": { "membership": true, "human": true, "authority": true,
+                    "status": true, "deadline": true, "payload": true },
+    });
+    let insert = sqlx::query(
+        "INSERT INTO delivery.interaction_response \
+           (id, tenant_id, project_id, interaction_id, task_id, run_id, responded_by, \
+            response_payload, idempotency_key, authorization_context) \
+         VALUES ($1, (SELECT tenant_id FROM core.project WHERE id = $2), $2, $3, $4, $5, $6, \
+                 $7, $8, $9)",
+    )
+    .bind(response_id)
+    .bind(input.project_id)
+    .bind(input.interaction_id)
+    .bind(task_id)
+    .bind(run_id)
+    .bind(input.responder_principal_id)
+    .bind(&input.response_payload)
+    .bind(&input.idempotency_key)
+    .bind(&authorization_context)
+    .execute(&mut *tx)
+    .await;
+    if let Err(sqlx::Error::Database(db)) = &insert {
+        if db
+            .constraint()
+            .is_some_and(|c| c.contains("uq_interaction_response_single"))
+        {
+            return Err(InteractionError::Conflict(
+                "another response has already been recorded for this interaction".into(),
+            ));
+        }
+    }
+    insert?;
+
+    // 步骤 6/7：pending → responded（guard start_wait）+ 同事务下发 continue。
+    record_response_persisted_tx(
+        &mut tx,
+        input.project_id,
+        input.interaction_id,
+        json!({ "response_id": response_id, "authorization_context": authorization_context }),
+        actor,
+    )
+    .await?;
+    let continue_command_id = crate::worker_command::issue_continue_command(
+        &mut tx,
+        input.project_id,
+        task_id,
+        run_id,
+        input.interaction_id,
+        None,
+        &worker_id,
+        lease_generation,
+        input.response_payload.clone(),
+    )
+    .await?;
+    sqlx::query(
+        "UPDATE delivery.interaction_response SET continue_command_id = $2 WHERE id = $1",
+    )
+    .bind(response_id)
+    .bind(continue_command_id)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(SubmittedResponse {
+        response_id,
+        interaction_id: input.interaction_id,
+        status: "responded".into(),
+        replayed: false,
+        continue_command_id: Some(continue_command_id),
+    })
+}
+
+/// 检查⑥：`required_response=true` 且 options 非空 → decision 必须命中枚举；
+/// 否则 content/decision 至少其一非空。
+fn validate_response_payload(
+    payload: &Value,
+    options: Option<&Value>,
+    required_response: bool,
+) -> Result<(), InteractionError> {
+    if !payload.is_object() {
+        return Err(InteractionError::Validation(
+            "response_payload must be a JSON object".into(),
+        ));
+    }
+    let decision = payload.get("decision").and_then(|v| v.as_str());
+    let content = payload.get("content").and_then(|v| v.as_str());
+    let option_values: Option<Vec<&str>> = options.and_then(|o| o.as_array()).map(|arr| {
+        arr.iter()
+            .filter_map(|o| o.get("value").and_then(|v| v.as_str()))
+            .collect()
+    });
+    if let Some(values) = option_values.filter(|v| !v.is_empty()) {
+        match decision {
+            Some(d) if values.contains(&d) => {}
+            Some(d) => {
+                return Err(InteractionError::Validation(format!(
+                    "decision `{d}` is not one of the offered options"
+                )))
+            }
+            None => {
+                return Err(InteractionError::Validation(
+                    "decision is required (offered options present)".into(),
+                ))
+            }
+        }
+    } else if required_response
+        && decision.is_none()
+        && content.is_none_or(|c| c.trim().is_empty())
+    {
+        return Err(InteractionError::Validation(
+            "response_payload requires a decision or non-empty content".into(),
+        ));
+    }
     Ok(())
 }

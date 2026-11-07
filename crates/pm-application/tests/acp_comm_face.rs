@@ -717,3 +717,263 @@ async fn acp445_task_cancel_cancels_open_chain_in_same_transaction(pool: PgPool)
         .unwrap();
     assert_eq!(count, 1, "no new interaction row may persist for a cancelled task");
 }
+
+// ───────────────────────── ACP-03：Human Response 提交（ACP-446~456） ─────────────────────────
+
+use serde_json::Value as JsonValue;
+use pm_application::interaction::{submit_interaction_response, SubmitResponseInput};
+
+fn submit_input(fx: &Fx, interaction_id: Uuid, key: &str, payload: JsonValue) -> SubmitResponseInput {
+    SubmitResponseInput {
+        project_id: fx.project_id,
+        interaction_id,
+        responder_principal_id: fx.human_id,
+        idempotency_key: key.into(),
+        response_payload: payload,
+    }
+}
+
+async fn f9_style_setup(pool: &PgPool) -> (Fx, Uuid) {
+    let fx = claimed_run(pool, "ACP-03").await;
+    let reported = report_interaction(pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
+        .await
+        .unwrap();
+    (fx, reported.interaction_id)
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn acp446_reply_full_transaction_issues_continue(pool: PgPool) {
+    let fx = claimed_run(&pool, "ACP-446").await;
+    let reported = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
+        .await
+        .unwrap();
+    let mut inp = submit_input(
+        &fx,
+        reported.interaction_id,
+        "idem-1",
+        json!({ "decision": "approve", "content": "允许删除" }),
+    );
+    inp.interaction_id = reported.interaction_id;
+    let out = submit_interaction_response(&pool, &inp, &AuditActor::principal(fx.human_id))
+        .await
+        .unwrap();
+    assert_eq!(out.status, "responded");
+    assert!(!out.replayed);
+
+    let row: (String, String) = sqlx::query_as(
+        "SELECT ti.status, r.scheduling_shield FROM delivery.task_interaction ti \
+         JOIN delivery.task_run r ON r.id = ti.run_id WHERE ti.id = $1",
+    )
+    .bind(reported.interaction_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row.0, "responded");
+    assert_eq!(row.1, "start_wait", "guard release point (V1.1 §4.1)");
+
+    // 同事务投递：continue 命令已下发且回写 response 行。
+    let cmd: (String, String) = sqlx::query_as(
+        "SELECT command_type, worker_id FROM delivery.worker_command \
+          WHERE run_id = $1 AND command_type = 'agent.task.continue'",
+    )
+    .bind(fx.run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(cmd.1, "w1", "routed to lease_owner snapshot");
+    assert_eq!(out.continue_command_id, Some(cmd_id(&pool, fx.run_id).await));
+
+    // 检查快照落库。
+    let authz: JsonValue = sqlx::query_scalar(
+        "SELECT authorization_context FROM delivery.interaction_response WHERE id = $1",
+    )
+    .bind(out.response_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(authz["authority"], "project_member");
+}
+
+async fn cmd_id(pool: &PgPool, run_id: Uuid) -> Uuid {
+    sqlx::query_scalar(
+        "SELECT id FROM delivery.worker_command \
+          WHERE run_id = $1 AND command_type = 'agent.task.continue'",
+    )
+    .bind(run_id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn acp448_needs_approval_requires_lead_or_approver(pool: PgPool) {
+    let fx = claimed_run(&pool, "ACP-448").await;
+    let mut inp = input(&fx, "evt-1");
+    inp.reason = "needs_approval".into();
+    let reported = report_interaction(&pool, &inp, &AuditActor::dispatch())
+        .await
+        .unwrap();
+    let mut sub = submit_input(
+        &fx,
+        reported.interaction_id,
+        "idem-1",
+        json!({ "decision": "approve" }),
+    );
+    sub.interaction_id = reported.interaction_id;
+
+    // Lead（owner）放行。
+    submit_interaction_response(&pool, &sub, &AuditActor::principal(fx.human_id))
+        .await
+        .unwrap();
+
+    // 第二条介入链（retry 语义此处直接用新 run 太重——改用另一项目验证非 Lead 拒绝）。
+    let fx2 = claimed_run(&pool, "ACP-448b").await;
+    let mut inp2 = input(&fx2, "evt-1");
+    inp2.reason = "needs_approval".into();
+    let reported2 = report_interaction(&pool, &inp2, &AuditActor::dispatch())
+        .await
+        .unwrap();
+    let outsider: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.principal (kind, display_name) VALUES ('human', 'outsider') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let mut sub2 = submit_input(
+        &fx2,
+        reported2.interaction_id,
+        "idem-1",
+        json!({ "decision": "approve" }),
+    );
+    sub2.interaction_id = reported2.interaction_id;
+    sub2.responder_principal_id = outsider;
+    let err = submit_interaction_response(&pool, &sub2, &AuditActor::principal(outsider))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, pm_application::interaction::InteractionError::Forbidden(_)));
+
+    // 显式 Approver 授权（0040 approver_grant）后放行。
+    sqlx::query(
+        "INSERT INTO core.approver_grant (project_id, principal_id, granted_by, tenant_id) \
+         VALUES ($1, $2, $2, (SELECT tenant_id FROM core.project WHERE id = $1))",
+    )
+    .bind(fx2.project_id)
+    .bind(outsider)
+    .execute(&pool)
+    .await
+    .unwrap();
+    submit_interaction_response(&pool, &sub2, &AuditActor::principal(outsider))
+        .await
+        .unwrap();
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn acp449_450_status_and_deadline_gates(pool: PgPool) {
+    let fx = claimed_run(&pool, "ACP-449").await;
+    let reported = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
+        .await
+        .unwrap();
+    let mut sub = submit_input(&fx, reported.interaction_id, "idem-1", json!({ "content": "ok" }));
+    sub.interaction_id = reported.interaction_id;
+    let actor = &AuditActor::principal(fx.human_id);
+
+    // ④ 非 pending：responded / consumed / cancelled 一律 409。
+    for forced in ["responded", "consumed", "cancelled"] {
+        sqlx::query("UPDATE delivery.task_interaction SET status = $2 WHERE id = $1")
+            .bind(reported.interaction_id)
+            .bind(forced)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let err = submit_interaction_response(&pool, &sub, actor).await.unwrap_err();
+        assert!(matches!(err, pm_application::interaction::InteractionError::Conflict(_)));
+    }
+    // ⑤ deadline（保持 pending，清扫间隙竞态兜底）。
+    sqlx::query(
+        "UPDATE delivery.task_interaction SET status = 'pending', deadline_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(reported.interaction_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let err = submit_interaction_response(&pool, &sub, actor).await.unwrap_err();
+    assert!(matches!(err, pm_application::interaction::InteractionError::Conflict(_)));
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn acp451_payload_conformance(pool: PgPool) {
+    let fx = claimed_run(&pool, "ACP-451").await;
+    let reported = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
+        .await
+        .unwrap();
+    let mut sub = submit_input(&fx, reported.interaction_id, "idem-1", json!({ "decision": "hack" }));
+    sub.interaction_id = reported.interaction_id;
+    let actor = &AuditActor::principal(fx.human_id);
+    let err = submit_interaction_response(&pool, &sub, actor).await.unwrap_err();
+    assert!(matches!(err, pm_application::interaction::InteractionError::Validation(_)));
+    // 合法 decision 放行。
+    sub.response_payload = json!({ "decision": "approve" });
+    submit_interaction_response(&pool, &sub, actor).await.unwrap();
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn acp452_453_idempotent_replay_and_single_response(pool: PgPool) {
+    let fx = claimed_run(&pool, "ACP-452").await;
+    let reported = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
+        .await
+        .unwrap();
+    let mut sub = submit_input(&fx, reported.interaction_id, "idem-1", json!({ "decision": "approve" }));
+    sub.interaction_id = reported.interaction_id;
+    let actor = &AuditActor::principal(fx.human_id);
+    let first = submit_interaction_response(&pool, &sub, actor).await.unwrap();
+    let replay = submit_interaction_response(&pool, &sub, actor).await.unwrap();
+    assert!(replay.replayed);
+    assert_eq!(replay.response_id, first.response_id);
+    // §9.3：不同 key 的第二次回复 → 409（无静默覆盖）。
+    let mut sub2 = submit_input(&fx, reported.interaction_id, "idem-2", json!({ "decision": "approve" }));
+    sub2.interaction_id = reported.interaction_id;
+    let err = submit_interaction_response(&pool, &sub2, actor).await.unwrap_err();
+    assert!(matches!(err, pm_application::interaction::InteractionError::Conflict(_)));
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.interaction_response")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn acp455_frozen_does_not_block_submission(pool: PgPool) {
+    let fx = claimed_run(&pool, "ACP-455").await;
+    let reported = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE delivery.task_interaction SET continuation_start_frozen_at = now() WHERE id = $1",
+    )
+    .bind(reported.interaction_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let mut sub = submit_input(&fx, reported.interaction_id, "idem-1", json!({ "decision": "approve" }));
+    sub.interaction_id = reported.interaction_id;
+    // R-ACP-7：冻结只挡启动，不挡提交。
+    submit_interaction_response(&pool, &sub, &AuditActor::principal(fx.human_id))
+        .await
+        .unwrap();
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn acp456_cross_project_reads_as_not_found(pool: PgPool) {
+    let fx = claimed_run(&pool, "ACP-456").await;
+    let reported = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
+        .await
+        .unwrap();
+    let other = claimed_run(&pool, "ACP-456b").await;
+    let mut sub = submit_input(&other, reported.interaction_id, "idem-1", json!({ "content": "ok" }));
+    sub.project_id = other.project_id;
+    sub.interaction_id = reported.interaction_id;
+    let err = submit_interaction_response(&pool, &sub, &AuditActor::principal(other.human_id))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, pm_application::interaction::InteractionError::NotFound));
+}

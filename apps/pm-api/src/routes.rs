@@ -228,6 +228,7 @@ fn build_router(
         .merge(crate::pm_baseline::router())
         .merge(crate::pm_requirements::router())
         .merge(crate::pm_approvers::router())
+        .merge(crate::pm_interactions::router())
         // 审计实时流（SSE）。EventSource 无法带 Authorization，token 走
         // `?access_token=`；auth 层只对本路径放行 query token。
         .route(

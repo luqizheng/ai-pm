@@ -14,7 +14,7 @@
 | 5 | `smark-pm-s03-acp-slice-design-acp01-02-08-v1.md` | **★ 通信面切片实施设计 V1.1**：闭合 N-1/N-2 + 命令查询面；R-ACP-1~9 已裁（2026-11-07） |
 | 6 | `smark-pm-s03-acp-slice-design-acp01-02-08-review-v1.md` | **★ V1.1 独立复审 V1.0（2026-11-07）：通过**——设计冻结为实施基线；实现对照（84c67e9/1234162）+ 新发现 F-1[P1]（Runner continue 启动前置，ACP-05 前闭合）+ P2×4 |
 | 7 | `smark-pm-s03-acp-implementation-audit-v1.md` | **实现对照审计 V1.0（2026-11-07）**：F-6~F-13 续编——F-7[P1] 权限码无签发面（真实栈 403）、F-8[P1] 取消联动缺失；处置顺序见 §3 |
-| 8 | `smark-pm-s03-acp-slice-design-acp03-v1.md` | **ACP-03 实施设计 V1.0（待裁决）**：REST 回复入口 + §8.3 六项检查操作化 + interaction_response（0047）+ 同事务 continue 下发；R-ACP-10~13 待裁 |
+| 8 | `smark-pm-s03-acp-slice-design-acp03-v1.md` | **ACP-03 实施设计 V1.0（已裁决+已实施）**：REST 回复入口 + §8.3 六项检查操作化 + interaction_response（0047）+ 同事务 continue 下发；R-ACP-10~13 已裁；实施 = 服务层 + REST 路由 + ACP-446~456 测试（17/17 绿，远程库 192.168.2.10/aipm_test） |
 
 ## 二、状态一览
 

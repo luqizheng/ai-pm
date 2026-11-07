@@ -151,14 +151,18 @@ CREATE UNIQUE INDEX uq_interaction_response_single
 
 ---
 
-## 9. 待裁决清单
+## 9. 裁决记录
 
-| # | 事项 | 选项 | 倾向 |
-| --- | --- | --- | --- |
-| R-ACP-10 | 检查③分级 | a) reason 分级：needs_approval→治理级（Lead/Approver），其余→项目成员（本稿） b) 全量治理级（§8.3 check3 字面） | **a**。needs_info/needs_decision 的问题本就面向执行协作角色；全量治理级会把普通澄清也压到 Lead，与 task_waiting 语义错位。若裁 b，检查③统一走 `ensure_governance_authorized` |
-| R-ACP-11 | 回复是否同事务下发 continue | a) 是（本稿，V1 投递事实 = 命令；delivery 细账随 ACP-04 补） b) 等 ACP-04 delivery 表再接 | **a**。否则回复后无人驱动投递（Runner 轮询等 continue）；ACP-04 落表时前向兼容（continue_command_id 已留） |
-| R-ACP-12 | REST 准许载体 | a) 六项检查（无权限码，本稿） b) 增 `PM_INTERACTION_RESPOND` 权限码（随 V-05-1 字典） | **a 先行 + b 预留**（V-05-1 落字典时补码不破契约） |
-| R-ACP-13 | 迁移号 | 0047（interaction_response 一表） | 落地前重核台账；与 F-7 撤除开关同批评估 |
+**2026-11-07 用户裁决：R-ACP-10~13 按本稿倾向执行**（同 R-ACP-1~9 模式）：
+
+| # | 事项 | 裁决 |
+| --- | --- | --- |
+| R-ACP-10 | 检查③分级 | ✅ **a) reason 分级**：needs_approval→`ensure_governance_authorized`（Lead/Approver，0040 基座）；needs_info/needs_decision/external_dependency→项目成员 |
+| R-ACP-11 | 回复同事务下发 continue | ✅ **a)**；`interaction_response.continue_command_id` 已留 ACP-04 前向兼容 |
+| R-ACP-12 | REST 准许载体 | ✅ **a 先行 + b 预留**（V-05-1 字典落 `PM_INTERACTION_RESPOND` 时不破契约） |
+| R-ACP-13 | 迁移号 | ✅ **0047**（台账已回填） |
+
+**实施修正记录（2026-11-07 测试驱动）**：§6 幂等重放查询必须**先于检查④⑤⑥**——首次提交后 Interaction 即离开 pending，重放被状态门槛拦截则幂等语义失效（ACP-452 抓到）；已按"重放任何时刻可达"修正落地。
 
 ---
 
