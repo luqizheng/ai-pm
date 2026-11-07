@@ -43,6 +43,8 @@ const TENANT_TABLES: &[(&str, &str)] = &[
     ("integration", "inbound_event"),
     ("integration", "job"),
     ("integration", "notification"),
+    ("integration", "intake_record"),
+    ("integration", "intake_task"),
     ("integration", "project_ssh_key"),
     ("integration", "project_repository"),
     ("integration", "repo_import"),
