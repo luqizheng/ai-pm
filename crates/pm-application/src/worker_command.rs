@@ -120,6 +120,23 @@ pub async fn issue_continue_command(
     .bind(interaction_id)
     .fetch_one(&mut **tx)
     .await?;
+    // ACP-06（0054）：最新 Checkpoint 引用（元数据；正文执行端自读 Workspace）。
+    // ACP-07（0054）：Deadline 过期场景的有效授权 id（F-1 preflight 消费）。
+    let checkpoint_ref: Option<(String, String)> = sqlx::query_as(
+        "SELECT file_path, content_hash FROM delivery.task_checkpoint \
+          WHERE run_id = $1 ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(run_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let execution_authorization_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM delivery.task_run_execution_authorization \
+          WHERE run_id = $1 AND revoked_at IS NULL AND expires_at > now() \
+          ORDER BY granted_at DESC LIMIT 1",
+    )
+    .bind(run_id)
+    .fetch_optional(&mut **tx)
+    .await?;
     issue_command(
         tx,
         project_id,
@@ -141,6 +158,9 @@ pub async fn issue_continue_command(
                 "continuation_start_frozen": frozen,
                 "agent_deadline_at": deadline_at.map(|d| d.to_rfc3339()),
             },
+            "checkpoint": checkpoint_ref
+                .map(|(path, hash)| json!({ "file_path": path, "content_hash": hash })),
+            "execution_authorization_id": execution_authorization_id,
             "issued_at": chrono::Utc::now().to_rfc3339(),
         }),
     )
@@ -335,7 +355,11 @@ pub async fn ack_command(
     let receipt = receipt.unwrap_or(Value::Null);
     match (outcome, command_type.as_str()) {
         (AckOutcome::Acked, COMMAND_TERMINATE) => {
-            if receipt.get("exit_outcome").and_then(|v| v.as_str()).is_none() {
+            if receipt
+                .get("exit_outcome")
+                .and_then(|v| v.as_str())
+                .is_none()
+            {
                 return Err(CommandFaceError::Validation(
                     "terminate ack requires receipt.exit_outcome (ExitOutcome five-value semantics)"
                         .into(),
@@ -576,10 +600,7 @@ pub async fn ack_command(
 /// 情形 6 自查（V1.3.1 §9.4 检查 8 操作化）：Run 存在未收到终止回执的
 /// terminate 命令（issued/delivered）→ 禁止启动新 Session。continue 的
 /// 执行端启动前检查与 Platform 侧防驭均消费本判定。
-pub async fn has_unconfirmed_termination(
-    pool: &PgPool,
-    run_id: Uuid,
-) -> Result<bool, sqlx::Error> {
+pub async fn has_unconfirmed_termination(pool: &PgPool, run_id: Uuid) -> Result<bool, sqlx::Error> {
     let exists: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM delivery.worker_command \
           WHERE run_id = $1 AND command_type = 'agent.process.terminate' \

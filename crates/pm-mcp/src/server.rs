@@ -434,6 +434,24 @@ impl PmMcpServer {
     }
 
     #[tool(
+        name = "pm_report_checkpoint",
+        description = "Register checkpoint metadata (ACP-06). The checkpoint body lives in                        the Workspace; the platform stores registration metadata only.                        Idempotent per (run, content_hash). Absence of a checkpoint never                        blocks intervention."
+    )]
+    pub async fn report_checkpoint(
+        &self,
+        Parameters(args): Parameters<tools::ReportCheckpointArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::report_checkpoint(&self.pool, args, &caller).await
+            }
+            .await,
+        )
+    }
+
+    #[tool(
         name = "pm_discover_runs",
         description = "Discover runs owned by THIS client credential that are awaiting recovery                        (shield=start_wait with a deliverable continue command). Read-only,                        paginated, no side effects; summaries only - never human reply                        content or command payloads. Requires the client credential channel."
     )]

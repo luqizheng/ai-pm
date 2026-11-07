@@ -1752,3 +1752,47 @@ pub async fn reacquire_lease(
         "note": "continue will surface via pm_poll_commands once terminate is confirmed (situation 6)",
     }))
 }
+
+/// Arguments of `pm_report_checkpoint`：Checkpoint 登记元数据上报（ACP-06；
+/// 正文永远在 Workspace，Platform 仅登记；重复 (run_id, content_hash) 幂等）。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ReportCheckpointArgs {
+    pub project_id: Uuid,
+    pub task_id: Uuid,
+    pub run_id: Uuid,
+    /// Workspace 相对路径（惯例 `.aipm/checkpoint.json`）。
+    pub file_path: String,
+    pub content_hash: String,
+    pub file_size: i64,
+    #[serde(default)]
+    pub session_id: Option<String>,
+}
+
+/// Checkpoint 登记（ACP-06 §1.3 executor_report 通道；Agent 侧事实，永无
+/// 确认语义；无 Checkpoint 不阻止介入——本工具缺席时零影响）。
+pub async fn report_checkpoint(
+    pool: &PgPool,
+    args: ReportCheckpointArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    let actor = authorize(pool, caller, args.project_id, ExecutorKind::DevAgent).await?;
+    let device = caller.claimed_device_id();
+    let id = pm_application::acp06_07::register_checkpoint(
+        pool,
+        caller.human.tenant_id,
+        args.project_id,
+        args.task_id,
+        args.run_id,
+        None,
+        &args.file_path,
+        &args.content_hash,
+        args.file_size,
+        args.session_id.as_deref(),
+        "executor_report",
+        &actor,
+    )
+    .await
+    .map_err(|e| ToolError::InvalidRequest(e.to_string()))?;
+    let _ = device;
+    Ok(json!({ "checkpoint_id": id, "replayed": false }))
+}

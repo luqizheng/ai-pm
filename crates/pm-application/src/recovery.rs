@@ -130,7 +130,8 @@ pub async fn discover_runs(
             },
             run_id: r.get("id"),
             task_id: r.get("task_id"),
-            execution_mode: r.get::<Option<String>, _>("execution_mode")
+            execution_mode: r
+                .get::<Option<String>, _>("execution_mode")
                 .unwrap_or_else(|| "unknown".into()),
             interaction_id: r.get("interaction_id"),
             interaction_status: r.get("interaction_status"),
@@ -223,10 +224,22 @@ pub async fn reacquire_lease(
         return Err(RecoveryError::Rejected("run has no deadline".into()));
     };
     if deadline <= chrono::Utc::now() {
-        // T3：离线恢复不是顺延理由——过期转 ACP-07 人工授权。
-        return Err(RecoveryError::Rejected(
-            "deadline has passed; requires ACP-07 authorization".into(),
-        ));
+        // T3：离线恢复不是顺延理由——过期转 ACP-07：有效授权 = 唯一放行凭证
+        //（§3.3 消费点 1；未授权前禁自动启动）。
+        let authorized: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM delivery.task_run_execution_authorization               WHERE tenant_id = $1 AND project_id = $2 AND run_id = $3                 AND revoked_at IS NULL AND expires_at > now())",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(run_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| RecoveryError::Db(e.to_string()))?;
+        if !authorized {
+            return Err(RecoveryError::Rejected(
+                "deadline has passed; requires ACP-07 authorization".into(),
+            ));
+        }
     }
     let has_responded: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM delivery.task_interaction \

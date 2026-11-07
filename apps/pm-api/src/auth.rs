@@ -660,7 +660,7 @@ const MCP_BODY_LIMIT: usize = 256 * 1024;
 /// 侧事实，永无人类确认语义）；`PM_MCP_COMMAND` = 命令通道收发。人类正式
 /// 确认永不入任何 MCP 权限码（A*：仅可信 REST/UI）。字典落地随 V-05-1
 /// 迁移批（Code Registry 面目前沿用 JWT permissions claim 直比）。
-const MCP_TOOL_PERMISSIONS: [(&str, &str); 11] = [
+const MCP_TOOL_PERMISSIONS: [(&str, &str); 12] = [
     ("pm_submit_technical_design", "PM_MCP_DOCUMENT_WRITE"),
     ("pm_submit_document", "PM_MCP_DOCUMENT_WRITE"),
     ("pm_propose_document", "PM_MCP_DOCUMENT_WRITE"),
@@ -672,6 +672,7 @@ const MCP_TOOL_PERMISSIONS: [(&str, &str); 11] = [
     ("pm_ack_command", "PM_MCP_COMMAND"),
     ("pm_discover_runs", "PM_MCP_COMMAND"),
     ("pm_reacquire_lease", "PM_MCP_COMMAND"),
+    ("pm_report_checkpoint", "PM_MCP_AGENT_REPORT"),
 ];
 
 /// Permission gate layered *inside* [`require_bearer`], so claims are already

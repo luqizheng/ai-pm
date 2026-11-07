@@ -17,7 +17,9 @@
 use axum::{
     Json, Router,
     extract::{Extension, Path, Query, State},
-    routing::get,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    routing::{delete, get, post},
 };
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -25,11 +27,155 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::{ApiError, ApiResult, paging, project_filter, require_project_visible};
+use serde_json::json;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/v1/pm/task-runs", get(task_runs))
         .route("/v1/pm/task-runs/{run_id}", get(task_run_detail))
+        // ACP-07（0054）：Deadline 过期重授权（UI 快捷入口；Lead/Approver 守卫
+        // = 租户 admin 或项目 owner；独立审计 + 独立有效期，不改原 deadline）。
+        .route(
+            "/v1/pm/task-runs/{run_id}/execution-authorization",
+            axum::routing::post(grant_authorization_handler)
+                .delete(revoke_authorization_handler),
+        )
+}
+
+/// ACP-07 守卫：run 存在于调用者租户 + 授权者为其租户 admin 或项目 owner。
+async fn ensure_authorization_manager(
+    state: &AppState,
+    principal: &AuthedPrincipal,
+    run_id: Uuid,
+) -> Result<(Uuid, Uuid, bool), Response> {
+    let row: Option<(Uuid, Uuid, Option<String>)> = sqlx::query_as(
+        "SELECT r.project_id, r.tenant_id, tm.role            FROM delivery.task_run r            LEFT JOIN core.tenant_member tm              ON tm.tenant_id = r.tenant_id AND tm.principal_id = $2           WHERE r.id = $1 AND r.tenant_id = $2",
+    )
+    .bind(run_id)
+    .bind(principal.tenant_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|e| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "code": "internal", "message": e.to_string() })),
+        )
+            .into_response()
+    })?;
+    let Some((project_id, _tenant, role)) = row else {
+        return Err(
+            (
+                axum::http::StatusCode::NOT_FOUND,
+                Json(json!({ "code": "run_not_found", "message": "run not found" })),
+            )
+                .into_response(),
+        );
+    };
+    // 项目 owner 判定：core.project_member owner 行。
+    let is_project_owner: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM core.project_member           WHERE project_id = $1 AND principal_id = $2 AND role = 'owner')",
+    )
+    .bind(project_id)
+    .bind(principal.principal_id)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(|e| {
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "code": "internal", "message": e.to_string() })),
+        )
+            .into_response()
+    })?;
+    let is_admin = role.as_deref() == Some("owner") || role.as_deref() == Some("admin");
+    if !(is_admin || is_project_owner) {
+        return Err(
+            (
+                axum::http::StatusCode::FORBIDDEN,
+                Json(json!({ "code": "FORBIDDEN", "message": "lead or approver required" })),
+            )
+                .into_response(),
+        );
+    }
+    Ok((project_id, run_id, is_admin))
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct GrantAuthorizationBody {
+    pub reason: String,
+    pub new_deadline_at: chrono::DateTime<chrono::Utc>,
+}
+
+async fn grant_authorization_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(run_id): Path<Uuid>,
+    Json(body): Json<GrantAuthorizationBody>,
+) -> Response {
+    let (project_id, _, _is_admin) = match ensure_authorization_manager(&state, &principal, run_id).await {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let actor = principal.audit_actor();
+    let id = pm_application::acp06_07::grant_execution_authorization(
+        &state.pool,
+        principal.tenant_id,
+        project_id,
+        run_id,
+        None,
+        principal.principal_id,
+        &body.reason,
+        body.new_deadline_at,
+        &actor,
+    )
+    .await;
+    match id {
+        Ok(id) => (
+            StatusCode::CREATED,
+            Json(json!({ "authorization_id": id, "run_id": run_id, "new_deadline_at": body.new_deadline_at })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "code": "internal", "message": e.to_string() })),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct RevokeAuthorizationPath {
+    pub authorization_id: Uuid,
+}
+
+async fn revoke_authorization_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(run_id): Path<Uuid>,
+    Json(body): Json<RevokeAuthorizationPath>,
+) -> Response {
+    let (project_id, _, _) = match ensure_authorization_manager(&state, &principal, run_id).await {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let actor = principal.audit_actor();
+    match pm_application::acp06_07::revoke_execution_authorization(
+        &state.pool,
+        principal.tenant_id,
+        project_id,
+        run_id,
+        body.authorization_id,
+        &actor,
+    )
+    .await
+    {
+        Ok(revoked) => Json(json!({ "authorization_id": body.authorization_id, "revoked": revoked }))
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "code": "internal", "message": e.to_string() })),
+        )
+            .into_response(),
+    }
 }
 
 #[derive(Debug, serde::Serialize, sqlx::FromRow)]
