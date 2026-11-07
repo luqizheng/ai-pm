@@ -362,19 +362,36 @@ pub async fn confirm_repository_version(
 /// SSH 地址必须有 active 项目密钥；本地 `file://`（测试夹具）走匿名。
 /// 失败不返回 Err（除数据库错误），而是把仓库标记为 `unreachable` 并给出
 /// 稳定错误码，供前端展示原因。
+///
+/// Checkpoint-1 触发链：verify 成功且 Observed HEAD 前进（首次或变化）→
+/// 自动受理「仓库快照」intake（engineering_artifact/system），后续由
+/// KB 分析 → 信号路由 → PC 派生的 outbox 消费链推进。幂等键锚
+/// `{repository}:{head}`，重复 verify / 同 HEAD 零副作用；intake 受理
+/// 失败只 warn 不阻断 verify 本身（重跑 verify 即可重触发）。
+/// verify 初始行投影（触发链需要 tenant/name/旧 HEAD）。
+type VerifyRepoRow = (
+    Uuid,             // project_id
+    Uuid,             // tenant_id
+    String,           // name
+    String,           // url
+    Option<String>,   // default_branch
+    Option<String>,   // head_commit_sha（Observed，verify 前值）
+);
+
 pub async fn verify_repository(
     pool: &PgPool,
     repository_id: Uuid,
     actor: &AuditActor,
 ) -> Result<VerifyOutcome, RepositoryError> {
-    let row: Option<(Uuid, String, Option<String>)> = sqlx::query_as(
-        "SELECT project_id, url, default_branch \
+    let row: Option<VerifyRepoRow> = sqlx::query_as(
+        "SELECT project_id, tenant_id, name, url, default_branch, head_commit_sha \
          FROM integration.project_repository WHERE id = $1",
     )
     .bind(repository_id)
     .fetch_optional(pool)
     .await?;
-    let (project_id, url, current_branch) = row.ok_or(RepositoryError::NotFound)?;
+    let (project_id, tenant_id, name, url, current_branch, previous_head) =
+        row.ok_or(RepositoryError::NotFound)?;
 
     let key_ciphertext: Option<Vec<u8>> = sqlx::query_scalar(
         "SELECT private_key_ciphertext FROM integration.project_ssh_key \
@@ -488,7 +505,85 @@ pub async fn verify_repository(
     .await?;
     tx.commit().await?;
 
+    // Checkpoint-1 触发链（见函数头注）：HEAD 前进 → 仓库快照 intake。
+    if outcome.status == "verified" {
+        if let Some(head) = outcome.head_commit_sha.as_deref() {
+            if previous_head.as_deref() != Some(head) {
+                let cmd = SnapshotIntakeCmd {
+                    tenant_id,
+                    project_id,
+                    repository_id,
+                    name: &name,
+                    url: &url,
+                    head_commit_sha: head,
+                };
+                match submit_repository_snapshot_intake(pool, cmd, actor).await {
+                    Ok(receipt) => tracing::info!(
+                        intake_id = %receipt.intake_id,
+                        replayed = receipt.replayed,
+                        repository_id = %repository_id,
+                        head,
+                        "verify: repository snapshot intake submitted"
+                    ),
+                    Err(err) => tracing::warn!(
+                        repository_id = %repository_id,
+                        head,
+                        error = %err,
+                        "verify: repository snapshot intake submit failed (verify result kept)"
+                    ),
+                }
+            }
+        }
+    }
+
     Ok(outcome)
+}
+
+/// 仓库快照 intake 受理入参（打包降参数；字段语义见 [`submit_repository_snapshot_intake`]）。
+struct SnapshotIntakeCmd<'a> {
+    tenant_id: Uuid,
+    project_id: Uuid,
+    repository_id: Uuid,
+    name: &'a str,
+    url: &'a str,
+    head_commit_sha: &'a str,
+}
+
+/// 仓库快照 intake 受理（checkpoint-1 触发链；intake.rs 管道由此接续：
+/// kb_analyze → 认知信号 → RT 路由 pc_analyze，全链经 outbox 消费端推进）。
+/// 幂等键 `{repository}:{head}`：同 commit 重复 verify 重放，新 commit 新 intake。
+async fn submit_repository_snapshot_intake(
+    pool: &PgPool,
+    cmd: SnapshotIntakeCmd<'_>,
+    actor: &AuditActor,
+) -> Result<crate::intake::IntakeReceipt, crate::intake::IntakeError> {
+    let short: String = cmd.head_commit_sha.chars().take(8).collect();
+    crate::intake::submit_intake(
+        pool,
+        crate::intake::SubmitIntake {
+            project_id: cmd.project_id,
+            tenant_id: cmd.tenant_id,
+            submitted_by: actor.principal_id,
+            intake_type: "engineering_artifact".to_string(),
+            channel: "system".to_string(),
+            source_ref: serde_json::json!({
+                "kind": "repository_snapshot",
+                "uri": cmd.url,
+                "repository_id": cmd.repository_id.to_string(),
+                "head_commit_sha": cmd.head_commit_sha,
+                "content_hash": cmd.head_commit_sha,
+            }),
+            // commit sha 本身即树内容哈希——直接作为 intake 对账锚。
+            content_hash: Some(cmd.head_commit_sha.to_string()),
+            title: Some(format!("仓库快照 {} @ {short}", cmd.name)),
+            idempotency_key: Some(format!(
+                "repo_verify:{}:{}",
+                cmd.repository_id, cmd.head_commit_sha
+            )),
+            tasks: None,
+        },
+    )
+    .await
 }
 
 // ------------------------------------------------------------------- internals

@@ -1,9 +1,12 @@
-//! KB-PC 服务化 Phase 3 的消费端 handler（V1.1 §13.3 13 事件接线；P3-3）。
+//! KB-PC 服务化的消费端 handler（V1.1 §13.3 13 事件接线；P3-3 + checkpoint-1）。
 //!
 //! 职责切分（§9.4.2 状态迁移责任表）：
-//! - **KB/PC 分析本体 = 最小桩**（任务书四、P3-3）：收到请求事件 → 状态流转
-//!   确认（经 `pm_application::intake` 的 Platform 写入面，桩不直写 intake 表）
-//!   → 回写结果事件（与业务同事务，§9.3-7 语义）。真实分析本体归 Phase 4/5。
+//! - **KB/PC 分析本体**（checkpoint-1 范围切割，`kb_pc_analysis` 模块头注同源）：
+//!   `repository_snapshot` 输入的 kb_analyze 与携带 KB 文档引用的 pc_analyze 走
+//!   **真实分析**（仓库快照 digest / 结构化派生，无 LLM；产 draft/unverified
+//!   待人工确认）；其余输入保持 Phase 3 **最小桩**语义（完成回写、占位 ref、
+//!   不产信号）——真实文档分析本体归 Phase 4。分析失败 → processing.failed
+//!   → Platform 置 FAILED + 运维待办（人工重试入口，ADR-12）。
 //! - **Platform 消费端**：消费结果/信号/失败事件，推进 intake_task 终态、
 //!   RT 路由决策、通知留痕——intake 表唯一写入方是 Platform。
 //!
@@ -22,6 +25,7 @@ use pm_application::intake::{
 };
 use pm_application::outbox::{OutboxAppend, OutboxEvent, PgOutboxAppend};
 
+use crate::kb_pc_analysis;
 use crate::outbox::ClaimedOutboxEvent;
 use crate::outbox_worker::{OutboxHandler, OutboxWorker};
 
@@ -57,115 +61,210 @@ fn task_ref_json(task_id: uuid::Uuid) -> serde_json::Value {
     domain_ref_json("requirement", "intake_task", &task_id.to_string())
 }
 
-// ── KB 桩（消费 kb.analysis.requested）─────────────────────────────────────
+// ── KB 分析本体（消费 kb.analysis.requested；checkpoint-1 仓库快照路径真实化）
 
-/// KB 分析桩：状态流转 → 同事务回写 kb.analysis.completed。
-///
-/// **不自动产出认知候选信号**（§10.2：信号是 KB 分析的**条件产出**——
-/// 「KB 分析完成」≠「必有信号」；`NO_PRODUCT_RELEVANCE`/不产信号都是合法
-/// 形态，禁止「每份资料必过 PC」）。流程 A 的信号时序由集成测试显式构造
-/// （真实信号产出口径归 Phase 4 KB 分析本体）。
-pub struct KbAnalyzeRequestedStub {
+/// KB 分析 handler：仓库快照输入走真实分析（`kb_pc_analysis`：kb.document/
+/// revision 落库 + 结果事件 + 认知信号，同一 PG 事务）；其余输入保持 Phase 3
+/// 桩语义（完成回写、占位 ref、不产信号——信号是 KB 条件产出，§10.2，禁止
+/// 「每份资料必过 PC」）。分析失败 → processing.failed（可人工重试）。
+pub struct KbAnalyzeRequestedHandler {
     pool: PgPool,
 }
 
-impl KbAnalyzeRequestedStub {
+impl KbAnalyzeRequestedHandler {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 }
 
 #[async_trait::async_trait]
-impl OutboxHandler for KbAnalyzeRequestedStub {
+impl OutboxHandler for KbAnalyzeRequestedHandler {
     async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
         let task_id = task_id_of(event)?;
         // 状态流转确认（Platform 写入面；重投递幂等）。
         mark_task_dispatched(&self.pool, task_id).await.map_err(|e| e.to_string())?;
         mark_task_processing(&self.pool, task_id).await.map_err(|e| e.to_string())?;
 
-        let intake_id: uuid::Uuid = sqlx::query_scalar(
-            "SELECT intake_id FROM integration.intake_task WHERE id = $1",
+        let (project_id, source_ref): (uuid::Uuid, serde_json::Value) = sqlx::query_as(
+            "SELECT t.project_id, i.source_ref \
+               FROM integration.intake_task t \
+               JOIN integration.intake_record i ON i.id = t.intake_id \
+              WHERE t.id = $1",
         )
         .bind(task_id)
         .fetch_one(&self.pool)
         .await
         .map_err(|e| e.to_string())?;
 
-        // 结果事件（与「分析落账」同一事务语义；桩无业务表，事务=outbox 单写）。
-        let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
-        let outbox = PgOutboxAppend;
-        let analysis_id = format!("kb-analysis-{task_id}");
-        outbox
-            .append(
-                &mut tx,
-                OutboxEvent {
-                    project_id: event.project_id,
-                    event_type: ev::KB_ANALYSIS_COMPLETED,
-                    aggregate_type: "intake_task",
-                    aggregate_id: &task_id.to_string(),
-                    payload: serde_json::json!({
-                        "kb_analysis_ref": domain_ref_json("knowledge_base", "kb_analysis", &analysis_id),
-                        "source_ref": event.payload.get("source_ref").cloned().unwrap_or(serde_json::Value::Null),
-                        "document_ref": domain_ref_json("knowledge_base", "document_revision", &format!("kb-stub-doc-{task_id}")),
-                        "memory_draft_refs": [],
-                        "conclusion": "COMPLETED",
-                        "task_ref": task_ref_json(task_id),
-                    }),
-                    idempotency_key: &format!("kb_analysis:{task_id}"),
-                },
-            )
-            .await
-            .map_err(|e| e.to_string())?;
-        tx.commit().await.map_err(|e| e.to_string())?;
-        tracing::info!(%task_id, %intake_id, "kb stub: analysis completed");
-        Ok(())
+        let Some(repository_id) = kb_pc_analysis::source_repository_id(&source_ref) else {
+            // 非仓库输入：桩语义回退（Phase 4 前真实文档分析未落）。
+            return complete_kb_as_stub(&self.pool, project_id, task_id, &source_ref).await;
+        };
+
+        match kb_pc_analysis::analyze_repository_snapshot(
+            &self.pool,
+            project_id,
+            task_id,
+            repository_id,
+            source_ref.clone(),
+        )
+        .await
+        {
+            Ok((_, _, _)) => Ok(()),
+            Err(err) => {
+                report_processing_failed(
+                    &self.pool,
+                    project_id,
+                    task_id,
+                    "kb_analysis_failed",
+                    &err.to_string(),
+                )
+                .await
+            }
+        }
     }
 }
 
-// ── PC 桩（消费 pc.analyze.requested / pc.decision.submitted）──────────────
+// ── PC 分析本体（消费 pc.analyze.requested；checkpoint-1 结构化派生真实化）──
 
-/// PC 分析桩：状态流转 → pc.analysis.completed（NO_CHANGE；Proposal/Conflict
-/// 实体与发布事务归 PC-01C，桩仅回写完成事件，M3 前禁开认知写入）。
-pub struct PcAnalyzeRequestedStub {
+/// PC 分析 handler：信号携带 KB 文档引用时走真实结构化派生
+/// （`kb_pc_analysis::derive_pc_cognition`：pc.\* draft + source/evidence，
+/// 确定性无 LLM；conclusion=PROPOSED，M3 前不产正式认知写入）；无文档引用
+/// 的信号保持桩语义（NO_CHANGE，占位 ref）。派生失败 → processing.failed。
+pub struct PcAnalyzeRequestedHandler {
     pool: PgPool,
 }
 
-impl PcAnalyzeRequestedStub {
+impl PcAnalyzeRequestedHandler {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 }
 
 #[async_trait::async_trait]
-impl OutboxHandler for PcAnalyzeRequestedStub {
+impl OutboxHandler for PcAnalyzeRequestedHandler {
     async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
         let task_id = task_id_of(event)?;
         mark_task_dispatched(&self.pool, task_id).await.map_err(|e| e.to_string())?;
         mark_task_processing(&self.pool, task_id).await.map_err(|e| e.to_string())?;
 
-        let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
-        PgOutboxAppend
-            .append(
-                &mut tx,
-                OutboxEvent {
-                    project_id: event.project_id,
-                    event_type: ev::PC_ANALYSIS_COMPLETED,
-                    aggregate_type: "intake_task",
-                    aggregate_id: &task_id.to_string(),
-                    payload: serde_json::json!({
-                        "pc_analysis_ref": domain_ref_json("pc", "analysis", &format!("pc-analysis-{task_id}")),
-                        "conclusion": "NO_CHANGE",
-                        "refs": [],
-                        "task_ref": task_ref_json(task_id),
-                    }),
-                    idempotency_key: &format!("pc_analysis:{task_id}"),
-                },
+        let (project_id, intake_id, signal_ref): (
+            uuid::Uuid,
+            uuid::Uuid,
+            Option<serde_json::Value>,
+        ) = sqlx::query_as(
+            "SELECT project_id, intake_id, signal_ref \
+               FROM integration.intake_task WHERE id = $1",
+        )
+        .bind(task_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        // 信号（多信号合并取末位；RT 保证创建时至少一条）。
+        let signal = signal_ref
+            .as_ref()
+            .and_then(|r| r.get("signals"))
+            .and_then(|v| v.as_array())
+            .and_then(|a| a.last().cloned());
+        let Some(signal) = signal else {
+            return complete_pc_as_stub(&self.pool, project_id, task_id).await;
+        };
+        let Some((_, kb_revision_id)) = kb_pc_analysis::kb_document_ref_of(&signal) else {
+            return complete_pc_as_stub(&self.pool, project_id, task_id).await;
+        };
+
+        // KB 修订行（document 归属 + 内容指纹以修订行为准）。
+        let (kb_revision_id, kb_document_id, kb_content_hash): (uuid::Uuid, uuid::Uuid, String) =
+            sqlx::query_as(
+                "SELECT id, document_id, content_hash FROM kb.document_revision WHERE id = $1",
             )
+            .bind(kb_revision_id)
+            .fetch_one(&self.pool)
             .await
             .map_err(|e| e.to_string())?;
-        tx.commit().await.map_err(|e| e.to_string())?;
-        tracing::info!(%task_id, "pc stub: analysis completed (NO_CHANGE)");
-        Ok(())
+
+        // 仓库事实（缓存复用优先；intake 非仓库输入 → 桩语义）。
+        let source_ref: serde_json::Value = sqlx::query_scalar(
+            "SELECT source_ref FROM integration.intake_record WHERE id = $1",
+        )
+        .bind(intake_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+        let Some(repository_id) = kb_pc_analysis::source_repository_id(&source_ref) else {
+            return complete_pc_as_stub(&self.pool, project_id, task_id).await;
+        };
+        let (facts, _) =
+            match kb_pc_analysis::collect_repository_facts(&self.pool, repository_id).await {
+                Ok(v) => v,
+                Err(err) => {
+                    return report_processing_failed(
+                        &self.pool,
+                        project_id,
+                        task_id,
+                        "pc_derive_failed",
+                        &err.to_string(),
+                    )
+                    .await
+                }
+            };
+
+        match kb_pc_analysis::derive_pc_cognition(
+            &self.pool,
+            project_id,
+            intake_id,
+            task_id,
+            repository_id,
+            kb_document_id,
+            kb_revision_id,
+            &kb_content_hash,
+            &facts,
+        )
+        .await
+        {
+            Ok((object_id, revision_id)) => {
+                let result_ref = serde_json::json!({
+                    "target_domain": "pc",
+                    "target_type": "cognition_object",
+                    "target_id": object_id.to_string(),
+                    "target_revision_id": revision_id.to_string(),
+                });
+                let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
+                PgOutboxAppend
+                    .append(
+                        &mut tx,
+                        OutboxEvent {
+                            project_id,
+                            event_type: ev::PC_ANALYSIS_COMPLETED,
+                            aggregate_type: "intake_task",
+                            aggregate_id: &task_id.to_string(),
+                            payload: serde_json::json!({
+                                "pc_analysis_ref": result_ref,
+                                "conclusion": "PROPOSED",
+                                "refs": [result_ref],
+                                "task_ref": task_ref_json(task_id),
+                            }),
+                            idempotency_key: &format!("pc_analysis:{task_id}"),
+                        },
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                tx.commit().await.map_err(|e| e.to_string())?;
+                tracing::info!(%task_id, %intake_id, "pc: analysis completed (PROPOSED)");
+                Ok(())
+            }
+            Err(err) => {
+                report_processing_failed(
+                    &self.pool,
+                    project_id,
+                    task_id,
+                    "pc_derive_failed",
+                    &err.to_string(),
+                )
+                .await
+            }
+        }
     }
 }
 
@@ -616,17 +715,126 @@ impl OutboxHandler for IntakeReceivedHandler {
     }
 }
 
+// ── 桩语义回退 + 失败上报（checkpoint-1 范围切割的边界出口）───────────────
+
+/// 非仓库输入的 KB 完成回写（Phase 3 桩语义原样保留：占位 ref、不产信号）。
+async fn complete_kb_as_stub(
+    pool: &PgPool,
+    project_id: uuid::Uuid,
+    task_id: uuid::Uuid,
+    source_ref: &serde_json::Value,
+) -> Result<(), String> {
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    let analysis_id = format!("kb-analysis-{task_id}");
+    PgOutboxAppend
+        .append(
+            &mut tx,
+            OutboxEvent {
+                project_id,
+                event_type: ev::KB_ANALYSIS_COMPLETED,
+                aggregate_type: "intake_task",
+                aggregate_id: &task_id.to_string(),
+                payload: serde_json::json!({
+                    "kb_analysis_ref": domain_ref_json("knowledge_base", "kb_analysis", &analysis_id),
+                    "source_ref": source_ref,
+                    "document_ref": domain_ref_json("knowledge_base", "document_revision", &format!("kb-stub-doc-{task_id}")),
+                    "memory_draft_refs": [],
+                    "conclusion": "COMPLETED",
+                    "task_ref": task_ref_json(task_id),
+                }),
+                idempotency_key: &format!("kb_analysis:{task_id}"),
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    tx.commit().await.map_err(|e| e.to_string())?;
+    tracing::info!(%task_id, "kb stub: analysis completed (non-repository input)");
+    Ok(())
+}
+
+/// 无 KB 文档引用的 PC 完成回写（Phase 3 桩语义原样保留：NO_CHANGE）。
+async fn complete_pc_as_stub(
+    pool: &PgPool,
+    project_id: uuid::Uuid,
+    task_id: uuid::Uuid,
+) -> Result<(), String> {
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    PgOutboxAppend
+        .append(
+            &mut tx,
+            OutboxEvent {
+                project_id,
+                event_type: ev::PC_ANALYSIS_COMPLETED,
+                aggregate_type: "intake_task",
+                aggregate_id: &task_id.to_string(),
+                payload: serde_json::json!({
+                    "pc_analysis_ref": domain_ref_json("pc", "analysis", &format!("pc-analysis-{task_id}")),
+                    "conclusion": "NO_CHANGE",
+                    "refs": [],
+                    "task_ref": task_ref_json(task_id),
+                }),
+                idempotency_key: &format!("pc_analysis:{task_id}"),
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    tx.commit().await.map_err(|e| e.to_string())?;
+    tracing::info!(%task_id, "pc stub: analysis completed (NO_CHANGE)");
+    Ok(())
+}
+
+/// 分析失败上报：processing.failed → Platform 置 FAILED + 运维待办
+/// （人工重试入口，ADR-12；幂等键锚 task+attempt，重投递坍缩）。
+async fn report_processing_failed(
+    pool: &PgPool,
+    project_id: uuid::Uuid,
+    task_id: uuid::Uuid,
+    error_code: &str,
+    detail: &str,
+) -> Result<(), String> {
+    let attempt: i32 =
+        sqlx::query_scalar("SELECT attempt FROM integration.intake_task WHERE id = $1")
+            .bind(task_id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    PgOutboxAppend
+        .append(
+            &mut tx,
+            OutboxEvent {
+                project_id,
+                event_type: ev::PROCESSING_FAILED,
+                aggregate_type: "intake_task",
+                aggregate_id: &task_id.to_string(),
+                payload: serde_json::json!({
+                    "failed_ref": domain_ref_json("requirement", "intake_task", &task_id.to_string()),
+                    "error_code": error_code,
+                    "error_detail": detail,
+                    "retry_count": attempt,
+                    "recoverable": true,
+                }),
+                idempotency_key: &format!("processing_failed:{task_id}:{attempt}"),
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    tx.commit().await.map_err(|e| e.to_string())?;
+    tracing::warn!(%task_id, %error_code, "analysis failed → processing.failed reported");
+    Ok(())
+}
+
 /// **唯一的生产 Handler 装配入口扩展**：把 KB-PC 13 事件的 12 个消费者
 /// 追加进既有装配（TaskReady/DeliverySubmitted/RunCompleted 之后）。
 /// 装配全集由 `OutboxWorker::assert_catalog_consistent` 启动校验兜底。
 pub fn register_kb_pc_handlers(worker: OutboxWorker, pool: &PgPool) -> OutboxWorker {
     worker
         .with_handler(ev::INTAKE_RECEIVED, Arc::new(IntakeReceivedHandler::new(pool.clone())))
-        .with_handler(ev::KB_ANALYSIS_REQUESTED, Arc::new(KbAnalyzeRequestedStub::new(pool.clone())))
+        .with_handler(ev::KB_ANALYSIS_REQUESTED, Arc::new(KbAnalyzeRequestedHandler::new(pool.clone())))
         .with_handler(ev::KB_ANALYSIS_COMPLETED, Arc::new(KbAnalysisCompletedHandler::new(pool.clone())))
         .with_handler(ev::KB_COGNITION_SIGNAL_EMITTED, Arc::new(CognitionSignalRouterHandler::new(pool.clone())))
         .with_handler(ev::KB_MEMORY_APPROVED, Arc::new(KbMemoryApprovedHandler::new(pool.clone())))
-        .with_handler(ev::PC_ANALYZE_REQUESTED, Arc::new(PcAnalyzeRequestedStub::new(pool.clone())))
+        .with_handler(ev::PC_ANALYZE_REQUESTED, Arc::new(PcAnalyzeRequestedHandler::new(pool.clone())))
         .with_handler(ev::PC_DECISION_SUBMITTED, Arc::new(PcDecisionSubmittedStub::new(pool.clone())))
         .with_handler(ev::PC_ANALYSIS_COMPLETED, Arc::new(PcAnalysisCompletedHandler::new(pool.clone())))
         .with_handler(ev::PC_CHANGE_PROPOSED, Arc::new(PcChangeProposedHandler::new(pool.clone())))

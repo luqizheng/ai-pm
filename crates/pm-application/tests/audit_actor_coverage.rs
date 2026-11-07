@@ -48,6 +48,8 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     ("crates/pm-application/src/intake.rs", 1),
     // KB-PC 服务化：intake_task 人工重试（REST 面，写全四身份列）
     ("apps/pm-api/src/intakes.rs", 1),
+    // Checkpoint-1：KB 仓库快照分析 + PC 认知派生（worker 系统面 dispatch principal，四列显式 NULL）
+    ("crates/pm-infrastructure/src/kb_pc_analysis.rs", 2),
 ];
 
 fn workspace_root() -> PathBuf {
