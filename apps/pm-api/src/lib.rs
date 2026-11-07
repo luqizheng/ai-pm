@@ -8,6 +8,8 @@ pub mod command_center;
 pub mod customers;
 pub mod device_claim;
 pub mod documents;
+pub mod intakes;
+pub mod knowledge_services;
 pub mod team_llm;
 pub mod team_llm_guard;
 pub mod team_onboarding;
