@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { PageFrame } from "@/components/shell";
 
@@ -39,6 +39,7 @@ import {
  * 动作路由：已有业务路由直接下钻；未落地入口暂不接线（组件事件保留）。
  */
 const router = useRouter();
+const route = useRoute();
 const { t } = useI18n();
 
 function openRequirements() {
@@ -53,9 +54,17 @@ function openKnowledge() {
   void router.push("/project/knowledge");
 }
 
-/** 项目设置（V1.0 稿统一入口）：Git 仓库 / Runners 等配置中心。 */
+/** 项目设置（V1.0 稿统一入口）：Git 仓库 / Runners 等配置中心。
+ *  携带当前项目上下文（?project_id=），设置各节自动继承、不再重复选择项目。 */
 function openSettings() {
-  void router.push("/project/settings");
+  const projectId = route.query.project_id;
+  void router.push({
+    path: "/project/settings",
+    query:
+      typeof projectId === "string" && projectId
+        ? { project_id: projectId }
+        : {}
+  });
 }
 </script>
 

@@ -39,9 +39,11 @@ const items = computed(() =>
  * 激活判定 = 精确命中或前缀命中（如 Runner 详情页
  * /project/settings/runners/:id 命中 runners 条目）。
  * 同前缀兄弟路径不会误判：/project/settings/runners-xxx 不匹配 `runners/`。
+ * 条目 to 可携带查询串（项目设置带 ?project_id=），只比路径部分。
  */
 function isActive(to: string): boolean {
-  return route.path === to || route.path.startsWith(`${to}/`);
+  const path = to.split(/[?#]/)[0];
+  return route.path === path || route.path.startsWith(`${path}/`);
 }
 </script>
 

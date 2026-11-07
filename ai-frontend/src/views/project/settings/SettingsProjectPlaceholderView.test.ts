@@ -40,4 +40,12 @@ describe("SettingsProjectPlaceholderView", () => {
     expect(wrapper.text()).toContain("AI 配置");
     expect(wrapper.text()).toContain("该设置节规划中");
   });
+
+  it("项目名未解析时面包屑省略项目层（不出现「项目 > 项目」）", async () => {
+    const { wrapper } = await mountView("/project/settings/general");
+    const crumbs = wrapper
+      .findAll(".ui-breadcrumb__link, .ui-breadcrumb__current")
+      .map(node => node.text());
+    expect(crumbs.filter(label => label === "项目")).toHaveLength(1);
+  });
 });

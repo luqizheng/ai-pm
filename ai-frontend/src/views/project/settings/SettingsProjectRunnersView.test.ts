@@ -42,12 +42,12 @@ function device(overrides: Partial<Device>): Device {
   };
 }
 
-async function mountView() {
+async function mountView(path = "/project/settings/runners") {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: buildRoutes()
   });
-  router.push("/project/settings/runners");
+  router.push(path);
   await router.isReady();
   const mounted = mountShell(SettingsProjectRunnersView, {}, router);
   await flushPromises();
@@ -113,6 +113,22 @@ describe("SettingsProjectRunnersView", () => {
     expect(router.currentRoute.value.path).toBe(
       "/project/settings/runners/dev-9"
     );
+  });
+
+  it("带项目上下文时进入详情保留 project_id（设置各节继承当前项目）", async () => {
+    listDevices.mockResolvedValue({
+      items: [device({ id: "dev-9", readiness: "ready" })],
+      total: 1
+    });
+    const { wrapper, router } = await mountView(
+      "/project/settings/runners?project_id=prj-1"
+    );
+    await wrapper.find('[data-testid="env-card-open-dev-9"]').trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe(
+      "/project/settings/runners/dev-9"
+    );
+    expect(router.currentRoute.value.query.project_id).toBe("prj-1");
   });
 
   it("搜索关键字过滤设备卡（SearchInput 原生输入）", async () => {

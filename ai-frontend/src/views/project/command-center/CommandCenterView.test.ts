@@ -52,4 +52,19 @@ describe("CommandCenterView", () => {
       "/project/settings/general"
     );
   });
+
+  it("「项目设置」携带当前项目上下文，经 /project/settings 重定向后保留", async () => {
+    const mounted = mountShell(CommandCenterView);
+    await mounted.router.push("/project/command-center?project_id=prj-1");
+    await flushPromises();
+
+    mounted.wrapper
+      .findComponent({ name: "CommandCenterHeader" })
+      .vm.$emit("settings");
+    await flushPromises();
+    expect(mounted.router.currentRoute.value.path).toBe(
+      "/project/settings/general"
+    );
+    expect(mounted.router.currentRoute.value.query.project_id).toBe("prj-1");
+  });
 });

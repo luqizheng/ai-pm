@@ -89,6 +89,45 @@ describe("SettingsProjectRepositoriesView", () => {
     expect(empty.text()).toContain("项目已可以开展工作");
   });
 
+  it("统计卡渲染标签（compact + icon；迁入前 stacked 无 icon 只剩裸数字）", async () => {
+    const { wrapper } = await mountView();
+    const text = wrapper.text();
+    for (const label of [
+      "已关联仓库",
+      "可达性已验证",
+      "需要关注",
+      "已确认基准"
+    ]) {
+      expect(text).toContain(label);
+    }
+  });
+
+  it("无项目上下文时不发请求（scope 哨兵 __all__ 不得当作项目 id）", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: buildRoutes()
+    });
+    router.push("/project/settings/repositories");
+    await router.isReady();
+    mountShell(SettingsProjectRepositoriesView, {}, router);
+    await flushPromises();
+    expect(listRepositoriesV2).not.toHaveBeenCalled();
+  });
+
+  it("侧栏条目携带项目上下文，且当前节保持激活", async () => {
+    const { wrapper } = await mountView();
+    const runners = wrapper
+      .findAll("a")
+      .find(a => a.attributes("href")?.startsWith("/project/settings/runners"));
+    expect(runners?.attributes("href")).toBe(
+      "/project/settings/runners?project_id=prj-1"
+    );
+    const active = wrapper.find(".settings-nav-item.is-active");
+    expect(active.attributes("href")).toBe(
+      "/project/settings/repositories?project_id=prj-1"
+    );
+  });
+
   it("Primary 由 role=main 唯一性派生：恰好一个显示建议标记，两个都不显示（G-03 前端派生）", async () => {
     listRepositoriesV2.mockResolvedValue({
       items: [

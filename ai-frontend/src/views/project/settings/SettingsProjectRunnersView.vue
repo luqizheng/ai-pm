@@ -107,7 +107,9 @@ function clearFilters() {
 
 function openDevice(device: Device) {
   void router.push(
-    `/project/settings/runners/${encodeURIComponent(device.id)}`
+    settingsFrame.withProject(
+      `/project/settings/runners/${encodeURIComponent(device.id)}`
+    )
   );
 }
 
@@ -128,7 +130,7 @@ onMounted(load);
     :title="t('environments.page.title')"
     :description="t('environments.page.description')"
     :scope-label="settingsFrame.scopeLabel.value"
-    :entries="settingsFrame.navEntries"
+    :entries="settingsFrame.navEntries.value"
     :icons="settingsFrame.navIcons"
   >
     <template #actions>

@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRoute } from "vue-router";
-import { ChevronRight, Plus, RefreshCw, X } from "lucide-vue-next";
+import {
+  BadgeCheck,
+  ChevronRight,
+  CircleCheck,
+  GitBranch,
+  Plus,
+  RefreshCw,
+  TriangleAlert,
+  X
+} from "lucide-vue-next";
 
 import Alert from "@/components/ui/alert/Alert.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
@@ -10,7 +18,6 @@ import Button from "@/components/ui/button/Button.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import { StatCard } from "@/components/ui/stat-card";
 import SettingsAppFrame from "@/views/settings/SettingsAppFrame.vue";
-import { useScopeStore } from "@/api/scope";
 import {
   confirmRepositoryVersion,
   createRepositoryV2,
@@ -41,8 +48,6 @@ import { useProjectSettingsFrame } from "./shared";
  *   挂账），列表以 Last Verified 代替 Discovery 列，不渲染假状态。
  */
 const { t } = useI18n();
-const route = useRoute();
-const scope = useScopeStore();
 const settingsFrame = useProjectSettingsFrame();
 
 const repositories = ref<RepositoryV2[]>([]);
@@ -57,13 +62,9 @@ const search = ref("");
 const roleFilter = ref("");
 const statusFilter = ref("");
 
-const projectId = computed(() => {
-  const q = route.query.project_id;
-  if (typeof q === "string" && q) return q;
-  return scope.currentProjectId && scope.currentProjectId !== "all"
-    ? scope.currentProjectId
-    : "";
-});
+/* 项目上下文 = 设置域单一来源（?project_id= 优先，回退 scope；SCOPE_ALL 视为无）。
+   迁入前此处把哨兵误比 "all"（实际 "__all__"），无项目时会以 __all__ 请求 → 400。 */
+const projectId = settingsFrame.projectId;
 
 /* ── 派生：Primary（G-03 前端派生）与基准前移提示（G-05） ── */
 
@@ -264,7 +265,7 @@ onMounted(load);
     :title="t('s01.repositories.page.title')"
     :description="t('s01.repositories.page.description')"
     :scope-label="settingsFrame.scopeLabel.value"
-    :entries="settingsFrame.navEntries"
+    :entries="settingsFrame.navEntries.value"
     :icons="settingsFrame.navIcons"
   >
     <template #actions>
@@ -351,27 +352,36 @@ onMounted(load);
       </div>
     </section>
 
-    <!-- 概览（管理摘要，非项目状态，V1.2 §6.3） -->
+    <!-- 概览（管理摘要，非项目状态，V1.2 §6.3）。StatCard stacked 布局无 icon 时
+         不渲染 label（迁入前四卡只剩裸数字），统一 compact + icon（同 Runners 节）。 -->
     <section class="rm-stats">
       <StatCard
         :label="t('s01.repositories.stats.linked')"
         :value="String(stats.linked)"
+        :icon="GitBranch"
         tone="neutral"
+        layout="compact"
       />
       <StatCard
         :label="t('s01.repositories.stats.verified')"
         :value="String(stats.verified)"
+        :icon="CircleCheck"
         tone="success"
+        layout="compact"
       />
       <StatCard
         :label="t('s01.repositories.stats.attention')"
         :value="String(stats.attention)"
+        :icon="TriangleAlert"
         :tone="stats.attention > 0 ? 'warning' : 'neutral'"
+        layout="compact"
       />
       <StatCard
         :label="t('s01.repositories.stats.confirmed')"
         :value="String(stats.confirmed)"
+        :icon="BadgeCheck"
         tone="info"
+        layout="compact"
       />
     </section>
 

@@ -244,7 +244,7 @@ function confirmRevoke() {
 }
 
 function backToList() {
-  void router.push("/project/settings/runners");
+  void router.push(settingsFrame.withProject("/project/settings/runners"));
 }
 
 onMounted(load);
@@ -254,12 +254,15 @@ onMounted(load);
   <SettingsAppFrame
     :breadcrumb="[
       ...settingsFrame.baseCrumbs(),
-      { label: t('settings.nav.runners'), to: '/project/settings/runners' },
+      {
+        label: t('settings.nav.runners'),
+        to: settingsFrame.withProject('/project/settings/runners')
+      },
       { label: device?.name ?? String(route.params.deviceId ?? '') }
     ]"
     :title="device?.name ?? t('environments.detail.title')"
     :scope-label="settingsFrame.scopeLabel.value"
-    :entries="settingsFrame.navEntries"
+    :entries="settingsFrame.navEntries.value"
     :icons="settingsFrame.navIcons"
   >
     <template #actions>

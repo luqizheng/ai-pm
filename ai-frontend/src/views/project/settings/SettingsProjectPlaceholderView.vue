@@ -29,7 +29,7 @@ const title = computed(() =>
     :breadcrumb="settingsFrame.breadcrumb(title)"
     :title="title"
     :scope-label="settingsFrame.scopeLabel.value"
-    :entries="settingsFrame.navEntries"
+    :entries="settingsFrame.navEntries.value"
     :icons="settingsFrame.navIcons"
   >
     <div class="ps-placeholder" role="status">
