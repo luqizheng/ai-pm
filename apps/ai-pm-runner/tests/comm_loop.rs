@@ -3,6 +3,7 @@
 
 use ai_pm_runner::adapter::{
     archive_marker, find_unreported_marker, quarantine_marker, spawn_agent, terminate,
+    terminate_with_retry,
 };
 use ai_pm_runner::mcp::McpClient;
 use serde_json::json;
@@ -156,6 +157,125 @@ async fn reply_injection_writes_atomic_reply_file() {
     assert_eq!(value["decision"], "approve");
     assert_eq!(spawn.session_id.starts_with("runner:"), true);
     terminate(&mut spawn.child).await.unwrap();
+}
+
+
+// ───────────────────────── F-1 / F-6（复审 2026-11-07 闭合项） ─────────────────────────
+
+use ai_pm_runner::runner_loop::{execute_command, preflight_continue, ActiveRun, Config};
+use std::time::Instant;
+
+fn guard_json(frozen: bool, deadline_offset_secs: i64) -> serde_json::Value {
+    json!({
+        "continuation_start_frozen": frozen,
+        "agent_deadline_at": (chrono::Utc::now() + chrono::Duration::seconds(deadline_offset_secs)).to_rfc3339(),
+    })
+}
+
+#[tokio::test]
+async fn f1_preflight_refuses_frozen_and_expired_deadline() {
+    // 冻结（terminate 失败）→ 拒绝（ACP-444）。
+    assert!(preflight_continue(&guard_json(true, 3600)).is_err());
+    // Deadline 已过（D-02 不顺延）→ 拒绝（V1.3.1 §9.2）。
+    assert!(preflight_continue(&guard_json(false, -60)).is_err());
+    // 健康快照 / 旧版本无 guard → 放行。
+    assert!(preflight_continue(&guard_json(false, 3600)).is_ok());
+    assert!(preflight_continue(&serde_json::Value::Null).is_ok());
+}
+
+#[tokio::test]
+async fn f6_terminate_with_retry_reports_killed() {
+    let dir = temp_dir("terminate-retry");
+    let mut spawn = spawn_agent(&sleeper_cmd(30), &dir, &[], None).unwrap();
+    let outcome =
+        terminate_with_retry(&mut spawn.child, 3, 10).await.unwrap();
+    assert_eq!(outcome, "Killed", "first-attempt kill yields Killed within budget");
+}
+
+#[tokio::test]
+async fn acp444_executor_side_refuses_frozen_continue() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call", "params": { "name": "pm_ack_command" }
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "jsonrpc": "2.0", "id": 9,
+            "result": { "structuredContent": { "command_id": "x", "status": "failed" } } })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call", "params": { "name": "pm_poll_commands" }
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "jsonrpc": "2.0", "id": 8, "result": { "structuredContent": { "commands": [] } } })))
+        .mount(&server)
+        .await;
+
+    let dir = temp_dir("acp444");
+    let mut spawn = spawn_agent(&sleeper_cmd(30), &dir, &[], None).unwrap();
+    let mut run = ActiveRun {
+        project_id: Uuid::nil(),
+        task_id: Uuid::nil(),
+        run_id: Uuid::nil(),
+        lease_token: "tok".into(),
+        lease_generation: 1,
+        worker_id: "mcp:runner:t:tok12345".into(),
+        run_dir: dir.clone(),
+        stage: "started".into(),
+        process: spawn,
+        last_heartbeat: Instant::now(),
+        last_detect: Instant::now(),
+        last_command_poll: Instant::now(),
+        pending_interaction: None,
+        awaiting_continue: true,
+    };
+    let cfg = Config {
+        platform_mcp_url: format!("{}/mcp", server.uri()),
+        project_id: Uuid::nil(),
+        client_name: "runner:test".into(),
+        workspace_root: dir.clone(),
+        agent_cmd: sleeper_cmd(30),
+        claim_interval_secs: 10,
+        heartbeat_secs: 60,
+        detect_interval_secs: 5,
+        command_poll_secs: 3,
+        terminate_attempts: 3,
+        terminate_timeout_secs: 10,
+    };
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    let continue_cmd = json!({
+        "command_id": "00000000-0000-0000-0000-00000000abcd",
+        "command_type": "agent.task.continue",
+        "payload": {
+            "command_type": "agent.task.continue",
+            "response": { "decision": "approve" },
+            "guard": { "continuation_start_frozen": true }
+        }
+    });
+    execute_command(&cfg, &client, &mut run, continue_cmd).await;
+    // 未 spawn 新进程（原进程仍在），回复注入文件未写。
+    assert!(run.child_id().is_some(), "frozen continue must not touch the running process");
+    assert!(!dir.join(".aipm").join("reply.json").is_file());
+    run_terminate_on_drop(&mut run).await;
+}
+
+// 测试收尾辅助：终止遗留进程，避免 test 残留 sleeper。
+async fn run_terminate_on_drop(run: &mut ActiveRun) {
+    let _ = terminate(&mut run.process.child).await;
+}
+
+trait ChildId {
+    fn child_id(&self) -> Option<u32>;
+}
+
+impl ChildId for ActiveRun {
+    fn child_id(&self) -> Option<u32> {
+        self.process.child.id()
+    }
 }
 
 #[cfg(windows)]

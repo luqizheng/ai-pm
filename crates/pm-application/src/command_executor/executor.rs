@@ -219,6 +219,24 @@ impl PgCommandExecutor {
             ctx,
         )
         .await?;
+        // F-8（实现对照审计 2026-11-07）：Task → Cancelled 时同一事务联动取消
+        // 未决介入链（V1.1 §5.1 CANCELLED 触发行 / §14：取消 → 取消尚未完成的
+        // Interaction，guard 归 none，审计保留）。事务核内 Task 已终态 → 自动
+        // 跳过 awaiting_decision 回转（§5.3"或随 Task 终态"）。
+        if new_status == TaskStatus::Cancelled {
+            crate::interaction::cancel_open_interaction_tx(
+                &mut tx,
+                ctx.project_id,
+                task_id,
+                "task cancelled",
+                &ctx.actor,
+            )
+            .await
+            .map_err(|e| match e {
+                crate::interaction::InteractionError::Db(e) => db_err(e),
+                other => CommandError::Validation(other.to_string()),
+            })?;
+        }
         // §20.6.1 / §20.7 L3：状态迁移成功的同时，在同一事务内登记需异步分发的
         // 事件；幂等键以迁移后的 revision 钉死，重复执行同一迁移不会重复写事件。
         if let Some(event_type) = outbox_event_for_task_target(new_status.as_str())

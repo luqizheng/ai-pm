@@ -82,16 +82,43 @@ pub fn spawn_agent(
 /// 终止 + 收割：返回 ExitOutcome 五值语义之一（对齐 `port.rs` ExitOutcome）。
 /// 对已退出进程调用 kill 为 Err（is_ok=FALSE），wait 仍返回真实 status。
 pub async fn terminate(child: &mut Child) -> Result<String, AdapterError> {
-    let killed = child.kill().await.is_ok();
-    let status = child.wait().await?;
-    if !killed && status.success() {
-        return Ok("Success".into());
+    terminate_with_retry(child, 1, 10).await
+}
+
+/// F-6（审计 2026-11-07）：有界重试终止（§6.4/§11.4）——kill 后限时等待，
+/// 超时/失败重试，预算耗尽返回 Err（调用方回执 failed → Platform 冻结启动）。
+pub async fn terminate_with_retry(
+    child: &mut Child,
+    attempts: u32,
+    per_attempt_secs: u64,
+) -> Result<String, AdapterError> {
+    let mut last_err: Option<AdapterError> = None;
+    for attempt in 1..attempts.max(1) + 1 {
+        // kill 已退出进程返回 Err：不影响 wait 取真实退出状态。
+        let _ = child.kill().await;
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(per_attempt_secs.max(1)),
+            child.wait(),
+        )
+        .await
+        {
+            Ok(Ok(status)) => {
+                return Ok(if status.success() {
+                    "Success".into()
+                } else {
+                    // V1 无信号级区分（进程组硬化随 ACP-08）：被 kill 的一律记 Killed。
+                    "Killed".into()
+                });
+            }
+            Ok(Err(e)) => last_err = Some(AdapterError::Io(e)),
+            Err(_elapsed) => {
+                last_err = Some(AdapterError::Invalid(format!(
+                    "termination attempt {attempt}/{attempts} timed out after {per_attempt_secs}s"
+                )));
+            }
+        }
     }
-    if status.success() {
-        return Ok("Success".into());
-    }
-    // V1 无信号级区分（进程组硬化随 ACP-08）：被 kill 的一律记 Killed。
-    Ok("Killed".into())
+    Err(last_err.unwrap_or_else(|| AdapterError::Invalid("termination failed".into())))
 }
 
 /// 退出收割（无终止请求时的自然退出判定）。

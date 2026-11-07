@@ -659,3 +659,61 @@ async fn runner_prefix_claim_stamps_spawn_execution_mode(pool: PgPool) {
     .unwrap();
     assert_eq!(mode2, "human");
 }
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn acp445_task_cancel_cancels_open_chain_in_same_transaction(pool: PgPool) {
+    use pm_application::command_executor::{ExecutionContext, PgCommandExecutor};
+    use pm_application::PolicyEngine;
+    use pm_domain::{ProjectCommand, TaskStatus};
+    use std::sync::Arc;
+
+    let fx = claimed_run(&pool, "ACP-445").await;
+    let reported = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
+        .await
+        .unwrap();
+    assert_eq!(task_status(&pool, fx.task_id).await, "awaiting_decision");
+
+    // Task -> Cancelled（经唯一命令通道）：同事务联动取消介入链（F-8 钩子）。
+    let ex = PgCommandExecutor::new(pool.clone(), Arc::new(PolicyEngine::for_tests()));
+    let ctx = ExecutionContext {
+        project_id: fx.project_id,
+        actor: AuditActor::principal(fx.human_id),
+        actor_kind: pm_application::command_executor::ActorKind::Human,
+        source: pm_application::command_executor::CommandSource::HumanIntervention { intervention_id: reported.interaction_id },
+    };
+    ex.execute(
+        ProjectCommand::UpdateTaskStatus {
+            task_id: fx.task_id,
+            expected_revision: 3, // seed=1, claimed->running=2, ->awaiting_decision=3
+            new_status: TaskStatus::Cancelled,
+        },
+        ctx,
+    )
+    .await
+    .expect("cancel must execute");
+
+    let (status, chain_open): (String, bool) = sqlx::query_as(
+        "SELECT status, chain_open FROM delivery.task_interaction WHERE id = $1",
+    )
+    .bind(reported.interaction_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "cancelled", "open interaction must be cancelled with the task");
+    assert!(!chain_open);
+    assert_eq!(run_field(&pool, fx.run_id, "scheduling_shield").await, "none",
+        "guard must not survive the task (V1.1 §4.1: terminal task -> none)");
+    assert_eq!(open_waiting(&pool, fx.task_id).await, 0, "waiting resolved in same tx");
+
+    // ACP-445 正向面：已取消 Task 上不得产生有效新 Interaction。
+    // （run 仍处 running：report 会走到 Task 迁移检查处被拒并整体回滚。）
+    let err = report_interaction(&pool, &input(&fx, "evt-2"), &AuditActor::dispatch())
+        .await
+        .unwrap_err();
+    assert!(matches!(err, pm_application::interaction::InteractionError::Conflict(_)));
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.task_interaction")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1, "no new interaction row may persist for a cancelled task");
+}

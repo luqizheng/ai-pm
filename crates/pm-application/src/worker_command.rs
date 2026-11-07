@@ -105,6 +105,21 @@ pub async fn issue_continue_command(
     lease_generation: i32,
     response: Value,
 ) -> Result<Uuid, sqlx::Error> {
+    // F-1（复审 2026-11-07）：continue payload 携带 §9.4 前置快照（guard），
+    // 执行端启动前校验——避免为前置检查新增只读工具。快照 = 下发时刻事实：
+    // continuation_start_frozen（terminate 失败冻结）+ agent_deadline_at
+    // （D-02 不冻结顺延，过期须显式上层授权 ACP-07）。执行端拒绝 = 命令
+    // failed，回复保留幂等重投/转授权路径（"拒绝得干净"）。
+    let (deadline_at, frozen): (Option<chrono::DateTime<chrono::Utc>>, bool) = sqlx::query_as(
+        "SELECT r.deadline_at, \
+                EXISTS (SELECT 1 FROM delivery.task_interaction i \
+                         WHERE i.id = $2 AND i.continuation_start_frozen_at IS NOT NULL) \
+           FROM delivery.task_run r WHERE r.id = $1",
+    )
+    .bind(run_id)
+    .bind(interaction_id)
+    .fetch_one(&mut **tx)
+    .await?;
     issue_command(
         tx,
         project_id,
@@ -122,6 +137,10 @@ pub async fn issue_continue_command(
             "interaction_id": interaction_id,
             "continuation_id": continuation_id,
             "response": response,
+            "guard": {
+                "continuation_start_frozen": frozen,
+                "agent_deadline_at": deadline_at.map(|d| d.to_rfc3339()),
+            },
             "issued_at": chrono::Utc::now().to_rfc3339(),
         }),
     )

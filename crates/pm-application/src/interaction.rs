@@ -540,6 +540,22 @@ pub async fn cancel_open_interaction(
     actor: &AuditActor,
 ) -> Result<bool, InteractionError> {
     let mut tx = pool.begin().await?;
+    let cancelled = cancel_open_interaction_tx(&mut tx, project_id, task_id, reason, actor).await?;
+    tx.commit().await?;
+    Ok(cancelled)
+}
+
+/// 介入取消（事务核，F-8）：供 [`cancel_open_interaction`] 与 Task 取消联动
+/// （`update_task_status` → Cancelled 钩子，V1.1 §5.1 CANCELLED 触发行 / §14）
+/// 共用——调用方负责事务边界。awaiting_decision → Running 的回转仅在 Task
+/// 仍处等待态时发生（Task 已终态时跳过：§5.3 cancelled 行"或随 Task 终态"）。
+pub(crate) async fn cancel_open_interaction_tx(
+    tx: &mut Transaction<'static, Postgres>,
+    project_id: Uuid,
+    task_id: Uuid,
+    reason: &str,
+    actor: &AuditActor,
+) -> Result<bool, InteractionError> {
     let row = sqlx::query(
         "UPDATE delivery.task_interaction \
             SET status = 'cancelled', cancelled_at = now(), chain_open = FALSE \
@@ -548,10 +564,9 @@ pub async fn cancel_open_interaction(
     )
     .bind(task_id)
     .bind(project_id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?;
     let Some(row) = row else {
-        tx.commit().await?;
         return Ok(false);
     };
     let interaction_id: Uuid = row.get("id");
@@ -561,9 +576,9 @@ pub async fn cancel_open_interaction(
           WHERE id = $1 AND scheduling_shield <> 'none'",
     )
     .bind(run_id)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await?;
-    resolve_waiting(&mut tx, task_id, &format!("interaction cancelled: {reason}")).await?;
+    resolve_waiting(tx, task_id, &format!("interaction cancelled: {reason}")).await?;
     // §5.3 映射行：cancelled（Task 活）→ 回转前置状态（awaiting_decision →
     // Running，waiting_resolved 事实由本次取消提供）；其他状态跳过。
     let task_status: Option<String> = sqlx::query_scalar(
@@ -571,20 +586,20 @@ pub async fn cancel_open_interaction(
     )
     .bind(task_id)
     .bind(project_id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await?;
     if task_status.as_deref() == Some("awaiting_decision") {
-        let ctx = system_context(&mut tx, project_id)
+        let ctx = system_context(tx, project_id)
             .await
             .map_err(|e| InteractionError::Transition(e.to_string()))?;
         let mut facts = TransitionFacts::for_dispatch();
         facts.waiting_resolved = true;
-        apply_task_transition(&mut tx, task_id, None, TaskStatus::Running, &facts, &ctx)
+        apply_task_transition(tx, task_id, None, TaskStatus::Running, &facts, &ctx)
             .await
             .map_err(|e| InteractionError::Transition(e.to_string()))?;
     }
     append_audit_with_payload(
-        &mut tx,
+        tx,
         project_id,
         actor,
         "interaction.cancelled",
@@ -592,7 +607,6 @@ pub async fn cancel_open_interaction(
         json!({ "reason": reason }),
     )
     .await?;
-    tx.commit().await?;
     Ok(true)
 }
 

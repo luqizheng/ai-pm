@@ -3,3 +3,4 @@
 
 pub mod adapter;
 pub mod mcp;
+pub mod runner_loop;
