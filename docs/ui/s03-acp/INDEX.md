@@ -21,6 +21,7 @@
 | 7 | `smark-pm-s03-acp-implementation-audit-v1.md` | **实现对照审计 V1.0（2026-11-07）**：F-6~F-13 续编——F-7[P1] 权限码无签发面（真实栈 403）、F-8[P1] 取消联动缺失；处置顺序见 §3 |
 | 8a | `smark-pm-s03-acp-e2e-report-v1.md` | **真实栈 E2E 报告 V1.1（PASS）**：.10 平台 + .59 Runner 全故事线（假 Agent + opencode 真 CLI 两阶段）+ F-7 双态 + E2E 修复三处 + F-14/F-15 |
 | 8 | `smark-pm-s03-acp-slice-design-acp03-v1.md` | **ACP-03 实施设计 V1.0（已裁决+已实施）**：REST 回复入口 + §8.3 六项检查操作化 + interaction_response（0047）+ 同事务 continue 下发；R-ACP-10~13 已裁；实施 = 服务层 + REST 路由 + ACP-446~456 测试（17/17 绿，远程库 192.168.2.10/aipm_test） |
+| 8b | `smark-pm-s03-acp-slice-design-acp04-05-joint-v1.md` | **★ ACP-04/05 联合数据契约 V1.0（2026-11-07，WP-D 交付物）**：专家五问逐题裁决提案（Delivery 引 Run+命令不含 Session 外键 / generation 表带列工具不加参 / Delivery 不参与 Task 完成 / ACP-05 只读消费 04 + 单列回填 / 不另建 Session 身份——Session 三件定案）；0050 delivery 表（基线 §12.3 字段集+UNIQUE(response_id) 一回复一账）+ 0051 continuation 表（UNIQUE(run_id,generation)；状态机 open→started→consumed/closed/frozen 与 R-4 acked 同事务推进）；I-1/I-2/I-3 接口契约 + 六点挂账清偿表；验收 ACP-470~477；实施顺序=本契约→0050→0051→06/07 |
 
 ## 二、状态一览
 
