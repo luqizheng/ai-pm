@@ -71,7 +71,9 @@ pub struct ActiveRun {
     pub worker_id: String,
     pub run_dir: PathBuf,
     pub stage: String,
-    pub process: SpawnedProcess,
+    /// 恢复认领（R-11/§3.6）的 Run 在本机无进程句柄 → None：tick 心跳/命令
+    /// 轮询照常，收割/terminate/标记侦测跳过；continue 到达时 spawn 新句柄。
+    pub process: Option<SpawnedProcess>,
     pub last_heartbeat: Instant,
     pub last_detect: Instant,
     pub last_command_poll: Instant,
@@ -82,13 +84,54 @@ pub struct ActiveRun {
 }
 
 pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) {
-    let mut active: Option<ActiveRun> = None;
+    let mut active: Option<ActiveRun> = recover_inflight_run(cfg, client).await;
     let mut logged_awaiting = false;
     let mut last_claim_attempt = Instant::now() - Duration::from_secs(cfg.claim_interval_secs);
+
+    // R-11/§3.6 启动恢复：发现名下 start_wait 且有可投递 continue 的在途
+    // Run → 续领（generation+1 + 命令改路由）→ 以 awaiting_continue 态返回
+    //（本机无进程句柄；continue 到达时按既有路径 spawn 新 Session）。
+    // ACP-C4：terminate 确认前置不变（continue 仍被情形 6 过滤直至确认）。
+    async fn recover_inflight_run(cfg: &Config, client: &mcp::McpClient) -> Option<ActiveRun> {
+        let discovered = client.discover_runs(cfg.project_id).await.ok()?;
+        let entry = discovered.get("runs")?.as_array()?.first()?.clone();
+        let run_id: Uuid = entry.get("run_id")?.as_str()?.parse().ok()?;
+        let reacquired = client.reacquire_lease(cfg.project_id, run_id).await.ok()?;
+        let task_id: Uuid = entry.get("task_id")?.as_str()?.parse().ok()?;
+        let run_dir = cfg.workspace_root.join(run_id.to_string());
+        let _ = std::fs::create_dir_all(&run_dir);
+        tracing::info!(
+            run = %run_id,
+            generation = %reacquired.get("lease_generation").and_then(|v| v.as_i64()).unwrap_or(0),
+            rerouted = %reacquired.get("rerouted_commands").and_then(|v| v.as_i64()).unwrap_or(0),
+            "recovered in-flight run after offline window (same-owner re-lease)"
+        );
+        Some(ActiveRun {
+            project_id: cfg.project_id,
+            task_id,
+            run_id,
+            lease_token: reacquired.get("lease_token").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            lease_generation: reacquired.get("lease_generation").and_then(|v| v.as_i64()).unwrap_or(1) as i32,
+            worker_id: reacquired.get("worker_id").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            run_dir,
+            stage: "started".into(),
+            process: None,
+            last_heartbeat: Instant::now(),
+            last_detect: Instant::now(),
+            last_command_poll: Instant::now() - Duration::from_secs(cfg.command_poll_secs),
+            pending_interaction: entry.get("interaction_id").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()),
+            awaiting_continue: true,
+        })
+    }
+
     loop {
         // ① 进程收割与退出判定。
         if let Some(run) = active.as_mut() {
-            if let Some(outcome) = adapter::reap(&mut run.process).await {
+            if let Some(outcome) = match run.process.as_mut() {
+                Some(spawned) => adapter::reap(spawned).await,
+                // 恢复认领的 Run（无本地进程句柄）：无收割语义。
+                None => None,
+            } {
                 if run.awaiting_continue {
                     // 人工介入流：进程是 Runner 自己按 terminate 命令杀的
                     //（D-03）——预期退出，Run 保持存活等待 continue 命令。
@@ -132,7 +175,11 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) {
             // 收割竞态兜底：进程句柄已失效。awaiting_continue 期间的
             // None 是 terminate 的预期结果（§4.1 修复：不得在此丢弃 Run，
             // 否则 continue 命令永远无人消费——E2E 实测踩中）。
-            if run.process.child.id().is_none() && !run.awaiting_continue {
+            let process_dead = match run.process.as_ref() {
+                None => true,
+                Some(spawned) => spawned.child.id().is_none(),
+            };
+            if process_dead && !run.awaiting_continue {
                 active = None;
             }
         }
@@ -206,7 +253,7 @@ pub async fn claim_and_start(
         worker_id,
         run_dir,
         stage: "started".into(),
-        process: spawn,
+        process: Some(spawn),
         last_heartbeat: Instant::now(),
         last_detect: Instant::now(),
         last_command_poll: Instant::now() - Duration::from_secs(cfg.command_poll_secs),
@@ -239,6 +286,7 @@ pub async fn tick(
     // ② 标记文件侦测（N-2 ①→②：`.aipm/interaction.json` → pm_report_interaction）。
     if run.pending_interaction.is_none()
         && !run.awaiting_continue
+        && run.process.is_some()
         && run.last_detect.elapsed() >= Duration::from_secs(cfg.detect_interval_secs)
     {
         run.last_detect = Instant::now();
@@ -370,19 +418,27 @@ pub async fn execute_command(
             // 回执 failed（Platform 侧冻结启动 + 阻塞路径接手）。
             // ACP-08：Windows 先 Job Object 整树终止，再走有界重试收割。
             #[cfg(windows)]
-            if let Some(job) = run.process.job.as_ref() {
+            if let Some(job) = run.process.as_ref().and_then(|p| p.job.as_ref()) {
                 job.terminate();
             }
-            let outcome = adapter::terminate_with_retry(
-                &mut run.process.child,
-                cfg.terminate_attempts,
-                cfg.terminate_timeout_secs,
-            )
-            .await;
+            let outcome = match run.process.as_mut() {
+                Some(spawned) => {
+                    adapter::terminate_with_retry(
+                        &mut spawned.child,
+                        cfg.terminate_attempts,
+                        cfg.terminate_timeout_secs,
+                    )
+                    .await
+                }
+                // R-11/ACP-C4：恢复认领的 Run 本机无进程句柄——旧进程已不存在，
+                // 幂等终止确认（专家第 1 块 3.4：支持幂等终止确认）。
+                None => Ok(String::from("Lost")),
+            };
+            let pid_receipt = run.process.as_ref().map(|p| json!(p.pid)).unwrap_or(json!(null));
             let (outcome_word, receipt, error) = match outcome {
                 Ok(exit_outcome) => {
                     tracing::info!(run = %run.run_id, exit = %exit_outcome, "agent terminated");
-                    ("acked", json!({ "exit_outcome": exit_outcome, "pid": run.process.pid }), None)
+                    ("acked", json!({ "exit_outcome": exit_outcome, "pid": pid_receipt }), None)
                 }
                 Err(e) => (
                     // 平台对 terminate acked 要求 exit_outcome（§3.2 从严判据）：
@@ -439,15 +495,24 @@ pub async fn execute_command(
                 Ok(process) => {
                     let session_created = true;
                     let input_injected = run.run_dir.join(".aipm").join("reply.json").is_file();
-                    run.process = process;
+                    run.process = Some(process);
                     run.awaiting_continue = false;
                     // 消费回执（N-6 证据组合）：注入文件在 + 进程存活。
                     let _ = tokio::time::sleep(Duration::from_millis(500)).await;
-                    let alive = run.process.child.id().is_some();
+                    let alive = run
+                        .process
+                        .as_ref()
+                        .map(|p| p.child.id().is_some())
+                        .unwrap_or(false);
+                    let session_id = run
+                        .process
+                        .as_ref()
+                        .map(|p| p.session_id.clone())
+                        .unwrap_or_default();
                     let ack_receipt = json!({
                         "session_created": session_created,
                         "input_injected": input_injected,
-                        "session_id": run.process.session_id,
+                        "session_id": session_id,
                     });
                     let interaction_id = run.pending_interaction;
                     ack(client, run, command_id, "acked", ack_receipt, None).await;

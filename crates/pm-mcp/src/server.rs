@@ -434,6 +434,42 @@ impl PmMcpServer {
     }
 
     #[tool(
+        name = "pm_discover_runs",
+        description = "Discover runs owned by THIS client credential that are awaiting recovery                        (shield=start_wait with a deliverable continue command). Read-only,                        paginated, no side effects; summaries only - never human reply                        content or command payloads. Requires the client credential channel."
+    )]
+    pub async fn discover_runs(
+        &self,
+        Parameters(args): Parameters<tools::DiscoverRunsArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::discover_runs(&self.pool, args, &caller).await
+            }
+            .await,
+        )
+    }
+
+    #[tool(
+        name = "pm_reacquire_lease",
+        description = "Same-owner lease reacquisition (R-16): re-signs the lease on the same                        run (generation+1, new token, deadline unchanged) and atomically                        reroutes non-terminal commands to the new owner identity. Does NOT                        create a session - continue still waits for terminate confirmation                        (situation 6). Requires the client credential channel."
+    )]
+    pub async fn reacquire_lease(
+        &self,
+        Parameters(args): Parameters<tools::ReacquireLeaseArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        Self::tool_result(
+            async {
+                let caller = crate::caller::caller_from_ctx(&ctx)?;
+                tools::reacquire_lease(&self.pool, args, &caller).await
+            }
+            .await,
+        )
+    }
+
+    #[tool(
         name = "pm_report_consumption",
         description = "Submit the consumption receipt for a delivered human reply                        (interaction.consumed). Requires evidence kinds                        initial_input_injected AND process_alive; insufficient evidence is                        rejected (receipts are never fabricated)."
     )]

@@ -226,7 +226,7 @@ async fn acp444_executor_side_refuses_frozen_continue() {
         worker_id: "mcp:runner:t:tok12345".into(),
         run_dir: dir.clone(),
         stage: "started".into(),
-        process: spawn,
+        process: Some(spawn),
         last_heartbeat: Instant::now(),
         last_detect: Instant::now(),
         last_command_poll: Instant::now(),
@@ -265,7 +265,7 @@ async fn acp444_executor_side_refuses_frozen_continue() {
 
 // 测试收尾辅助：终止遗留进程，避免 test 残留 sleeper。
 async fn run_terminate_on_drop(run: &mut ActiveRun) {
-    let _ = terminate(&mut run.process.child).await;
+    let _ = terminate(&mut run.process.as_mut().expect("process present").child).await;
 }
 
 trait ChildId {
@@ -274,7 +274,7 @@ trait ChildId {
 
 impl ChildId for ActiveRun {
     fn child_id(&self) -> Option<u32> {
-        self.process.child.id()
+        self.process.as_ref().map(|p| p.child.id()).unwrap_or(None)
     }
 }
 
@@ -335,7 +335,7 @@ async fn f9_tool_rejection_archives_marker_without_retry() {
         worker_id: "mcp:runner:t:tok12345".into(),
         run_dir: run_dir.clone(),
         stage: "started".into(),
-        process: spawn,
+        process: Some(spawn),
         last_heartbeat: Instant::now(),
         last_detect: Instant::now() - std::time::Duration::from_secs(6),
         last_command_poll: Instant::now(),
@@ -360,7 +360,7 @@ async fn f9_tool_rejection_archives_marker_without_retry() {
     // Tool 类拒绝 → .rejected 归档（§1.2 不重试；防队头阻塞）。
     assert!(run_dir.join(".aipm").join("interaction.evt-9.rejected").is_file());
     assert!(!run_dir.join(".aipm").join("interaction.json").is_file());
-    let _ = terminate(&mut run.process.child).await;
+    let _ = terminate(&mut run.process.as_mut().expect("process present").child).await;
 }
 
 #[tokio::test]

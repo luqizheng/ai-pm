@@ -1656,3 +1656,99 @@ pub async fn report_consumption(
         "interaction_status": "consumed",
     }))
 }
+
+/// Arguments of `pm_discover_runs`：发现名下待恢复 Run（R-16 方案 a 发现面）。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct DiscoverRunsArgs {
+    pub project_id: Uuid,
+    /// 分页（1~100，默认 20）。只读、重复调用无状态副作用。
+    #[serde(default = "default_discover_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+}
+
+fn default_discover_limit() -> i64 {
+    20
+}
+
+fn map_recovery_error(e: pm_application::recovery::RecoveryError) -> ToolError {
+    use pm_application::recovery::RecoveryError;
+    match e {
+        RecoveryError::NotFound => ToolError::NotFound(String::from("task or run not found in this project")),
+        RecoveryError::Rejected(msg) => ToolError::InvalidRequest(msg),
+        other => ToolError::InvalidRequest(other.to_string()),
+    }
+}
+
+/// 发现面（R-11/§3.6）：按稳定 Client 身份列出名下 `start_wait` 且有可投递
+/// continue 命令的 Run 摘要（十字段；不含人工回复正文与 Command payload）。
+/// 仅凭据通道可用（约束 A：发现绑定在 Client 身份上）；只读、分页、无副作用。
+pub async fn discover_runs(
+    pool: &PgPool,
+    args: DiscoverRunsArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    let Some(channel) = caller.client_channel else {
+        return Err(ToolError::Forbidden(
+            "pm_discover_runs requires a client credential channel".into(),
+        ));
+    };
+    ensure_member(pool, caller, args.project_id).await?;
+    let runs = pm_application::recovery::discover_runs(
+        pool,
+        caller.human.tenant_id,
+        args.project_id,
+        channel.device_id,
+        args.limit,
+        args.offset,
+    )
+    .await
+    .map_err(map_recovery_error)?;
+    Ok(json!({ "runs": runs }))
+}
+
+/// Arguments of `pm_reacquire_lease`：同主体续领（R-16 方案 a；§3.6）。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ReacquireLeaseArgs {
+    pub project_id: Uuid,
+    pub run_id: Uuid,
+}
+
+/// 同主体续领：同 Run 重签租约（generation+1 + 新 token + deadline 不动=T3）
+/// + 非终局命令同事务改路由（reacquired_generation 写回）。不创建新
+/// Session——continue 仍受情形 6 过滤（ACP-C4：terminate ACKED 是新
+/// Session 启动前置）。
+pub async fn reacquire_lease(
+    pool: &PgPool,
+    args: ReacquireLeaseArgs,
+    caller: &CallerContext,
+) -> Result<Value, ToolError> {
+    let Some(channel) = caller.client_channel else {
+        return Err(ToolError::Forbidden(
+            "pm_reacquire_lease requires a client credential channel".into(),
+        ));
+    };
+    let actor = authorize(pool, caller, args.project_id, ExecutorKind::DevAgent).await?;
+    let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
+    let lease = pm_application::recovery::reacquire_lease(
+        pool,
+        caller.human.tenant_id,
+        args.project_id,
+        args.run_id,
+        channel.device_id,
+        cfg.lease_secs,
+        &actor,
+    )
+    .await
+    .map_err(map_recovery_error)?;
+    Ok(json!({
+        "run_id": args.run_id,
+        "lease_token": lease.lease_token,
+        "lease_generation": lease.lease_generation,
+        "worker_id": lease.worker_id,
+        "deadline_at": lease.deadline_at,
+        "rerouted_commands": lease.rerouted_commands,
+        "note": "continue will surface via pm_poll_commands once terminate is confirmed (situation 6)",
+    }))
+}

@@ -15,6 +15,7 @@ pub mod delivery;
 pub mod devenv;
 pub mod device_credential;
 pub mod response_delivery;
+pub mod recovery;
 pub mod discovery;
 pub mod git_access;
 pub mod ingestion;

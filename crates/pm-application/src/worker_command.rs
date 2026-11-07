@@ -212,7 +212,9 @@ pub async fn poll_commands(
                 claim_count = claim_count + 1, \
                 delivered_at = COALESCE(delivered_at, now()) \
           WHERE c.run_id = $1 AND c.project_id = $2 AND c.worker_id = $3 \
-            AND c.lease_generation = $5 \
+            -- §3.3 ③（R-2/R-11）：generation 集合比对——run.lease_generation
+            --   ∈ {issued_generation, reacquired_generation（经续领写回）}。
+            AND ($5 = c.lease_generation OR $5 = c.reacquired_generation) \
             AND (c.status = 'issued' \
                  OR (c.status = 'delivered' \
                      AND (c.claim_expires_at < now() OR c.claimed_by = $3))) \
@@ -382,7 +384,7 @@ pub async fn ack_command(
                 .execute(&mut *tx)
                 .await?;
                 // ACP-04（0050）：投递账 delivered（F5 同事务）。
-                let delivery_id = if let Some(interaction_id) = interaction_id {
+                let delivery_id = if interaction_id.is_some() {
                     crate::response_delivery::mark_delivered_tx(
                         &mut tx,
                         project_id,

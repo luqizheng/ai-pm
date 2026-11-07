@@ -205,6 +205,18 @@ pub async fn report_interaction(
         ));
     }
 
+    // ③b 链间弱关联（0052 / 专家 2.6）：同 Task 已关闭前驱链的最新 Interaction。
+    //   结构性满足「已关闭 + 早于本链」——禁自引用/环由"新行引用旧行"保证；
+    //   只服务追溯/审计/UI，不参与唯一活跃约束与生命周期（retry_of 链内语义不变）。
+    let previous_chain_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM delivery.task_interaction \
+          WHERE task_id = $1 AND NOT chain_open \
+          ORDER BY created_at DESC, id DESC LIMIT 1",
+    )
+    .bind(input.task_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
     // ④ Interaction 行（V1.3.1 §12.1 全字段 + V1.1 chain_open/event_id 定案）。
     let interaction_id = Uuid::new_v4();
     let deadline_at =
@@ -213,9 +225,10 @@ pub async fn report_interaction(
         "INSERT INTO delivery.task_interaction \
            (id, tenant_id, project_id, task_id, run_id, session_id, \
             continuation_generation, event_id, reason, title, question, options, \
-            required_response, checkpoint_path, status, chain_open, deadline_at) \
+            required_response, checkpoint_path, status, chain_open, deadline_at, \
+            previous_chain_id) \
          VALUES ($1, (SELECT tenant_id FROM core.project WHERE id = $2), $2, $3, $4, $5, \
-                 $6, $7, $8, $9, $10, $11, $12, $13, 'pending', TRUE, $14)",
+                 $6, $7, $8, $9, $10, $11, $12, $13, 'pending', TRUE, $14, $15)",
     )
     .bind(interaction_id)
     .bind(input.project_id)
@@ -231,6 +244,7 @@ pub async fn report_interaction(
     .bind(input.required_response)
     .bind(&input.checkpoint_path)
     .bind(deadline_at)
+    .bind(previous_chain_id)
     .execute(&mut *tx)
     .await?;
 

@@ -19,7 +19,7 @@
 | 0049 | `0049_client_registry.sql` | V-05-1 Client Registry 纵切（device 四列+双唯一约束+task_run.lease_client_id 复合外键+回填三分类）——设计 `docs/project-ai-team-v2/ai-pm-v05-client-registry-design-v1.md`（联合裁决通过 + 约束 A/B/C） | 已应用（2026-11-08，WP-B 实施批；真实栈 E2E 待联调批） |
 | 0050 | `0050_response_delivery.sql` | ACP-04 Delivery 持久化（一回复一账 UNIQUE(response_id)；重投复用原行 attempt+1；generation 恒 1；continuation_id 前向可空）——契约同上（联合裁决五问通过） | 已应用（2026-11-08，批 2 实施；E2E 待联调批） |
 | 0051 | （暂定预留：ACP-05 Continuation） | `delivery.continuation`——同上契约（暂定确认；**Recovery Foundation 批先于本迁移**，联合裁决 2026-11-07） | 暂定预留 |
-| 0052 | （tentative：ACP 收敛列） | `worker_command.reacquired_generation` + `task_interaction.previous_chain_id`——随 Recovery Foundation 批（原 roadmap 记 0048 已被 kb_pc_intake 实占，顺延） | tentative |
+| 0052 | `0052_recovery_foundation.sql` | Recovery Foundation（`worker_command.reacquired_generation` + `task_interaction.previous_chain_id` 链间弱关联）——批 3 实施（联合基线 §4） | 已应用（2026-11-08） |
 | 0022 | `0022_delivery_manifest.sql` | T-041（D4） | 已应用（2026-11-02） |
 | 0023 | `0023_run_executor_hardening.sql` | T-032 | 已应用 |
 | 0024 | `0024_knowledge_section_index.sql` | T-060（知识索引 V2） | 已应用（2026-11-02） |

@@ -228,6 +228,29 @@ impl McpClient {
         .await
     }
 
+    /// `pm_discover_runs`（R-11/§3.6 发现面）：名下 start_wait 且有可投递
+    /// continue 的 Run 摘要。只读、无副作用。
+    pub async fn discover_runs(&self, project_id: Uuid) -> Result<Value, RunnerError> {
+        self.call_tool(
+            "pm_discover_runs",
+            json!({ "project_id": project_id, "limit": 20, "offset": 0 }),
+        )
+        .await
+    }
+
+    /// `pm_reacquire_lease`（R-16 方案 a 续领）：同 Run 重签租约 + 命令改路由。
+    pub async fn reacquire_lease(
+        &self,
+        project_id: Uuid,
+        run_id: Uuid,
+    ) -> Result<Value, RunnerError> {
+        self.call_tool(
+            "pm_reacquire_lease",
+            json!({ "project_id": project_id, "run_id": run_id }),
+        )
+        .await
+    }
+
     /// `pm_report_consumption`（N-2 ④段；证据不足 Platform 会拒绝，不伪造）。
     pub async fn report_consumption(
         &self,
