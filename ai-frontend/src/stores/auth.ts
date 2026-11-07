@@ -8,7 +8,12 @@ import {
   type AuthSession,
   type SignInInput
 } from "@/api/auth";
-import { getStoredUser } from "@/api/base/token-storage";
+import { getMe, type SelfProfile } from "@/api/base/self-service";
+import {
+  getStoredUser,
+  saveStoredUser,
+  type StoredUser
+} from "@/api/base/token-storage";
 
 /**
  * 认证状态 —— 认证域的唯一状态源。
@@ -16,7 +21,9 @@ import { getStoredUser } from "@/api/base/token-storage";
  * 覆盖认证页之间需要共享的四件事：
  *   - 当前会话（账号 + 组织）：会话过期页与 403 页据此回显上下文；
  *   - 登录态与错误码：页面据此渲染 Figma「Unable to sign in」反馈；
- *   - 「记住我」的账号：下次进登录页预填。
+ *   - 「记住我」的账号：下次进登录页预填；
+ *   - 当前用户资料（user）：应用壳账户菜单的身份块数据源，
+ *     登录快照 + /me 刷新（refreshProfile），资料编辑后 applyProfile 同步。
  *
  * 真正的凭据校验走网关（src/api/auth.ts），本 store 不自行判定口令。
  */
@@ -54,10 +61,14 @@ export const useAuthStore = defineStore("auth", () => {
   );
   /** 当前账号 */
   const account = ref<string | null>(storedUser?.username ?? null);
+  /** 当前用户资料（登录响应快照；顶栏账户菜单据此渲染） */
+  const user = ref<StoredUser | null>(storedUser);
   /** 当前组织 / 工作区 */
   const organization = ref<string | null>(
     storedUser ? "AI R&D Workspace" : null
   );
+  /** 本会话内是否已用 /me 刷新过资料（免重复拉取） */
+  const profileFresh = ref(false);
   /** 最近一次失败码 */
   const errorCode = ref<AuthErrorCode | null>(null);
   /** 「记住我」保存的账号 */
@@ -71,7 +82,40 @@ export const useAuthStore = defineStore("auth", () => {
   function applySession(session: AuthSession) {
     account.value = session.account;
     organization.value = session.organization;
+    user.value = session.user;
+    profileFresh.value = false;
     status.value = "signed_in";
+  }
+
+  /**
+   * 用 /me 资料合并进本地身份（roles/permissions 来自登录响应，
+   * /me 不含，须保留）；同步持久化，刷新页面后仍为最新。
+   */
+  function applyProfile(profile: SelfProfile) {
+    const merged: StoredUser = {
+      id: profile.id,
+      username: profile.username,
+      nickname: profile.nickname,
+      email: profile.email,
+      phone: profile.phone,
+      avatar: profile.avatar,
+      roles: user.value?.roles ?? [],
+      permissions: user.value?.permissions ?? []
+    };
+    user.value = merged;
+    saveStoredUser(merged);
+    profileFresh.value = true;
+  }
+
+  /** 拉取 /me 刷新本地身份；失败不阻断（菜单沿用登录快照） */
+  async function refreshProfile(force = false): Promise<void> {
+    if (profileFresh.value && !force) return;
+    try {
+      applyProfile(await getMe());
+    } catch {
+      // 资料不可达（离线/网关抖动）时保持快照，本会话不再重试
+      profileFresh.value = true;
+    }
   }
 
   function clearError() {
@@ -153,12 +197,15 @@ export const useAuthStore = defineStore("auth", () => {
     status.value = "signed_out";
     account.value = null;
     organization.value = null;
+    user.value = null;
+    profileFresh.value = false;
     errorCode.value = null;
   }
 
   return {
     status,
     account,
+    user,
     organization,
     errorCode,
     rememberedAccount,
@@ -166,6 +213,8 @@ export const useAuthStore = defineStore("auth", () => {
     signingIn,
     signIn,
     signOut,
+    applyProfile,
+    refreshProfile,
     requestPasswordReset,
     resetPassword,
     acceptInvitation,

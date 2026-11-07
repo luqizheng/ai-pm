@@ -68,6 +68,10 @@ export function getStoredUser(): StoredUser | null {
   }
 }
 
+export function saveStoredUser(user: StoredUser) {
+  safeSet(KEYS.user, JSON.stringify(user));
+}
+
 export function saveSession(params: {
   accessToken: string;
   refreshToken: string;
@@ -77,7 +81,7 @@ export function saveSession(params: {
   safeSet(KEYS.access, params.accessToken);
   safeSet(KEYS.refresh, params.refreshToken);
   safeSet(KEYS.expiresAt, String(Date.now() + params.expiresIn * 1000));
-  safeSet(KEYS.user, JSON.stringify(params.user));
+  saveStoredUser(params.user);
 }
 
 export function clearSession() {

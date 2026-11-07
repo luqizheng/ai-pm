@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { Search, Sparkles } from "lucide-vue-next";
 
+import { resolveAvatarSrc } from "@/api/base/self-service";
 import NotificationDropdown from "@/components/global/notification/NotificationDropdown.vue";
 import { ThemeToggle } from "@/components/global/theme";
 import TeamSwitcher from "@/components/global/team/TeamSwitcher.vue";
 import { HelpMenu, KeyboardShortcutsDialog } from "@/components/global/help";
 import {
   UserMenuAccountMenu,
-  UserMenuSignOutDialog,
-  demoUserProfile
+  UserMenuSignOutDialog
 } from "@/components/global/usermenu";
 import {
   ProjectSwitcher,
@@ -22,7 +22,8 @@ import {
 import { AUTH_PATHS } from "@/router/auth";
 import { useAuthStore } from "@/stores/auth";
 import { useShellStore } from "@/stores/shell";
-import { demoOrganization, resolveProjectSwitch } from "./demo";
+import { useTeamStore } from "@/stores/team";
+import { resolveProjectSwitch } from "./demo";
 
 /**
  * 全局顶栏（Application Shell §2A，52px）。
@@ -44,11 +45,42 @@ const { t } = useI18n();
 const router = useRouter();
 const shell = useShellStore();
 const auth = useAuthStore();
+const teamStore = useTeamStore();
 
 const emit = defineEmits<{ search: [] }>();
 
 const shortcutsOpen = ref(false);
 const signOutOpen = ref(false);
+
+/**
+ * 账户菜单身份块 = 当前登录用户（auth store：登录快照 + /me 刷新）。
+ * 展示名优先昵称、回退用户名；组织行 = 当前团队（与 TeamSwitcher 同源），
+ * 未加入团队由菜单如实呈现。项目角色暂无真实来源，不传（菜单不渲染该行）。
+ */
+const userName = computed(
+  () => auth.user?.nickname || auth.user?.username || auth.account || ""
+);
+const userEmail = computed(() => auth.user?.email || undefined);
+const teamName = computed(() => teamStore.currentTeam?.name);
+
+/** 头像：/v1/file/* 需鉴权下载转 object URL，故异步解析 */
+const avatarSrc = ref<string | undefined>(undefined);
+watch(
+  () => auth.user?.avatar ?? null,
+  async avatar => {
+    avatarSrc.value = await resolveAvatarSrc(avatar);
+  },
+  { immediate: true }
+);
+
+onMounted(() => {
+  if (!auth.signedIn) return;
+  // 刷新页面后菜单先用持久化快照即时渲染，再以 /me 校正（如资料已在别处改过）
+  void auth.refreshProfile();
+  // 团队上下文仅登录流程（AuthLoadingView）首拉、不持久化：刷新页面后须在此补拉，
+  // 否则 TeamSwitcher 与组织行误显「未加入团队」。已加载则复用缓存不重复请求。
+  void teamStore.load();
+});
 
 /** store 项目 → 06 板面板行（分组概念未建，全归 RECENT；meta 空串隐藏） */
 const switcherProjects = computed<ProjectSwitcherProject[]>(() =>
@@ -226,13 +258,12 @@ async function onSignOutConfirm() {
 
       <span class="shell-topbar__divider" aria-hidden="true" />
 
-      <!-- 账户菜单（Figma Global/UserMenu 族） -->
+      <!-- 账户菜单（Figma Global/UserMenu 族）：身份块 = 当前登录用户 -->
       <UserMenuAccountMenu
-        :name="demoUserProfile.name"
-        :email="demoUserProfile.email"
-        :initials="demoUserProfile.initials"
-        :tenant="demoUserProfile.tenant"
-        :project-role="demoUserProfile.projectRole"
+        :name="userName"
+        :email="userEmail"
+        :avatar="avatarSrc"
+        :tenant="teamName"
         @select="onAccountSelect"
         @shortcuts="shortcutsOpen = true"
         @sign-out="signOutOpen = true"
@@ -242,10 +273,11 @@ async function onSignOutConfirm() {
     <!-- 键盘快捷键对话框（账户菜单 / 帮助菜单共用） -->
     <KeyboardShortcutsDialog v-model:open="shortcutsOpen" />
 
-    <!-- 退出登录确认（人工勾选后才可用；确认后清会话回登录页） -->
+    <!-- 退出登录确认（人工勾选后才可用；确认后清会话回登录页）；
+         无邮箱的账号以用户名标识当前身份 -->
     <UserMenuSignOutDialog
       v-model:open="signOutOpen"
-      :email="demoUserProfile.email"
+      :email="userEmail ?? userName"
       @confirm="onSignOutConfirm"
     />
   </header>

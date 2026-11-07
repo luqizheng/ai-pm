@@ -17,14 +17,17 @@ import {
 import Avatar from "@/components/ui/avatar/Avatar.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
+import { useAuthStore } from "@/stores/auth";
 
 /**
  * 个人资料节内容（共享）：展示名称可编辑、头像可上传；
  * 邮箱/租户/加入时间只读（邮箱变更需要验证流程，本轮不做）。
  * 设计目录 /design/settings/personal/profile 与应用页
  * /settings/personal/profile 共用同一份表单体（§4A Profile）。
+ * 保存成功后把新资料同步进 auth store，顶栏账户菜单随即更新。
  */
 const { t } = useI18n();
+const auth = useAuthStore();
 
 const profile = ref<SelfProfile | null>(null);
 const displayName = ref("");
@@ -70,6 +73,7 @@ async function save() {
     const me = await updateMe({ nickname: displayName.value.trim() });
     profile.value = me;
     displayName.value = me.nickname;
+    auth.applyProfile(me);
     saved.value = true;
     window.setTimeout(() => {
       saved.value = false;
@@ -98,6 +102,7 @@ async function onAvatarChange(event: Event) {
     const me = await updateMe({ avatar: url });
     profile.value = me;
     avatarSrc.value = await resolveAvatarSrc(me.avatar);
+    auth.applyProfile(me);
     saved.value = true;
     window.setTimeout(() => {
       saved.value = false;

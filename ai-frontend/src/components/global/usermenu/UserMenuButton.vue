@@ -14,6 +14,8 @@ import Avatar from "@/components/ui/avatar/Avatar.vue";
 interface Props {
   name: string;
   initials?: string;
+  /** 头像图（/me avatar；为空走首字母回退） */
+  avatar?: string;
   /** 菜单展开中（Active 态） */
   active?: boolean;
   disabled?: boolean;
@@ -21,6 +23,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   initials: undefined,
+  avatar: undefined,
   active: false,
   disabled: false
 });
@@ -40,7 +43,12 @@ const { t } = useI18n();
     :disabled="props.disabled"
     @click="emit('click')"
   >
-    <Avatar :name="props.name" :label="props.name" size="sm">
+    <Avatar
+      :src="props.avatar"
+      :name="props.name"
+      :label="props.name"
+      size="sm"
+    >
       <template v-if="props.initials" #fallback>
         <span class="user-menu-button__initials">{{ props.initials }}</span>
       </template>

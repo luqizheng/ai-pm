@@ -20,19 +20,28 @@ import UserMenuItem from "./UserMenuItem.vue";
  * 六项操作 + 退出登录（Danger）。
  * 项经 select(id) 交调用方路由；sign-out / shortcuts 专属事件。
  * （原「外观」子面板已上移顶栏 ThemeToggle，铃铛旁深/浅单击往返。）
- * 组织行遵循 Shell V1.1：仅上下文展示，**不含租户管理入口**。
+ * 组织行遵循 Shell V1.1：仅上下文展示，**不含租户管理入口**；
+ * 未加入团队时如实显示「未加入团队」。邮箱 / 项目角色缺省即不渲染该行
+ * （项目角色暂无真实来源，应用壳不传）。
  */
 interface Props {
   name: string;
-  email: string;
+  email?: string;
   initials?: string;
-  tenant: string;
-  projectRole: string;
+  /** 头像图（/me avatar；为空走首字母回退） */
+  avatar?: string;
+  /** 当前团队名；缺省 = 未加入团队 */
+  tenant?: string;
+  projectRole?: string;
   disabled?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  email: undefined,
   initials: undefined,
+  avatar: undefined,
+  tenant: undefined,
+  projectRole: undefined,
   disabled: false
 });
 
@@ -79,6 +88,7 @@ function onSignOut() {
       <UserMenuButton
         :name="props.name"
         :initials="props.initials"
+        :avatar="props.avatar"
         :active="open"
         :disabled="props.disabled"
       />
@@ -93,20 +103,28 @@ function onSignOut() {
       >
         <!-- 主菜单 -->
         <div class="user-menu__identity">
-          <Avatar :name="props.name" :label="props.name">
+          <Avatar :src="props.avatar" :name="props.name" :label="props.name">
             <template v-if="props.initials" #fallback>
               <span class="user-menu__initials">{{ props.initials }}</span>
             </template>
           </Avatar>
           <div class="user-menu__who">
             <p class="user-menu__name">{{ props.name }}</p>
-            <p class="user-menu__email">{{ props.email }}</p>
+            <p v-if="props.email" class="user-menu__email">
+              {{ props.email }}
+            </p>
           </div>
         </div>
         <p class="user-menu__context">
-          {{ t("global.usermenu.tenantLabel", { tenant: props.tenant }) }}
+          {{
+            props.tenant
+              ? t("global.usermenu.tenantLabel", { tenant: props.tenant })
+              : t("team.switcher.noTeam")
+          }}
         </p>
-        <p class="user-menu__context">{{ props.projectRole }}</p>
+        <p v-if="props.projectRole" class="user-menu__context">
+          {{ props.projectRole }}
+        </p>
 
         <div class="user-menu__divider" aria-hidden="true" />
 

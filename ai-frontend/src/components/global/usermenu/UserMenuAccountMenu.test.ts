@@ -53,6 +53,26 @@ describe("UserMenuAccountMenu", () => {
     expect(panel()?.textContent).toContain("Atlas Platform · Contributor");
   });
 
+  it("未加入团队如实显示；无邮箱 / 无项目角色时不渲染对应行", async () => {
+    const wrapper = mount(UserMenuAccountMenu, {
+      attachTo: document.body,
+      props: { name: "admin" },
+      global: { plugins: [i18n] }
+    });
+    await nextTick();
+    await wrapper.find(".user-menu-button").trigger("click");
+    await nextTick();
+
+    expect(panel()?.querySelector(".user-menu__name")?.textContent).toBe(
+      "admin"
+    );
+    expect(panel()?.querySelector(".user-menu__email")).toBeNull();
+    const context = Array.from(
+      panel()?.querySelectorAll(".user-menu__context") ?? []
+    ).map(el => el.textContent?.trim());
+    expect(context).toEqual(["未加入团队"]);
+  });
+
   it("六项操作齐备，退出登录为末项", async () => {
     const wrapper = mountMenu();
     await nextTick();
