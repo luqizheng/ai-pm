@@ -51,7 +51,7 @@
 | 工作包 | 内容 | 依赖 | 启动 |
 |---|---|---|---|
 | **WP-A · ACP Correctness** | ACP-448、ACP-450/451、Model A 定向回归 | 已有 ACP 通信面 | 立即 |
-| **WP-B · Client Identity** | V-05-1 实施设计、0049 迁移设计、身份安全 | 身份架构裁决已完成（WP-0①） | 立即 |
+| **WP-B · Client Identity** | V-05-1 实施设计、0049 迁移设计、身份安全 | 身份架构裁决已完成（WP-0①） | 立即（**实施设计 V1.0 已出 2026-11-07**：`ai-pm-v05-client-registry-design-v1.md`——方案 B 自发 cpk_ 凭据 + 0049 列集 + 回填三分类 + 撤销矩阵 + Q-A~Q-D 待裁） |
 | **WP-C · Repository Integrity** | task_repository 生产写入口 P0 | 既有 Project Repository + 授权机制 | 立即（独立并行） |
 | **WP-D · ACP-04/05 Architecture** | Delivery 与 Continuation 正式数据契约联合设计 | — | 并行设计 |
 
