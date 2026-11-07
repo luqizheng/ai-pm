@@ -1,0 +1,110 @@
+[
+ [
+  "S2",
+  "介入创建（pending + human_wait + terminate 命令）",
+  "PASS",
+  ""
+ ],
+ [
+  "S3",
+  "REST 回复三写（response+continue+delivery）",
+  "PASS",
+  "{'continue_command_id': '9e95fcd8-53de-4e54-adbe-04d722faa275', 'interaction_id': '4953ebab-70cd-4e29-a076-199bba90f755', 'replayed': False, 'response_id': 'ff9"
+ ],
+ [
+  "S4a",
+  "continue 经情形 6 过滤后下发",
+  "PASS",
+  ""
+ ],
+ [
+  "S4b",
+  "payload 携 checkpoint/authorization 字段（0054 扩展）",
+  "PASS",
+  ""
+ ],
+ [
+  "S4c",
+  "R-4 恢复（task running）+ delivery delivered + generation=1",
+  "PASS",
+  "task=running delivery=delivered gen=1"
+ ],
+ [
+  "S5",
+  "消费回执通道（delivery/continuation 状态机由单测层覆盖；此处验证可达性）",
+  "PASS",
+  ""
+ ],
+ [
+  "S6-pre",
+  "二次介入（新链 generation=2 侧证）",
+  "PASS",
+  ""
+ ],
+ [
+  "S6-pre2",
+  "链 2 回复持久化 + continue 已下发（未领取）",
+  "PASS",
+  "{'continue_command_id': '3a509fb5-ed7b-431c-8598-a7554cc7834c', 'interaction_id': '7ddddb74-69b1-4b9b-9834-6432d475f888', 'replayed': False, 'response_id': '6ab"
+ ],
+ [
+  "S6a",
+  "过期+无授权 → 续领拒绝（ACP-07 门）",
+  "PASS",
+  "{'_raw': 'invalid request: deadline has passed; requires ACP-07 authorization'}"
+ ],
+ [
+  "S6b",
+  "ACP-07 授权授予（SQL 注入=服务同账；REST 端点已实现）",
+  "PASS",
+  ""
+ ],
+ [
+  "S6c",
+  "有效授权 → 续领放行（generation+1、deadline 不动）",
+  "PASS",
+  "{'deadline_at': '2026-11-07T22:10:19.716816Z', 'lease_generation': 2, 'lease_token': '7b7185fcd883d90bbffbf8e4871753e797"
+ ],
+ [
+  "S6d",
+  "T3：run.deadline_at 不动（保持过去态，未顺延）",
+  "PASS",
+  "t"
+ ],
+ [
+  "S7",
+  "旧 token 心跳拒绝（T2 fencing）",
+  "PASS",
+  "{'_raw': 'forbidden: lease credential rejected'}"
+ ],
+ [
+  "S8a",
+  "续领后 continue 改路由可达（reacquired 集合比对）",
+  "PASS",
+  ""
+ ],
+ [
+  "S8b",
+  "已持久化回复不丢（ACP-453）",
+  "PASS",
+  ""
+ ],
+ [
+  "S8c",
+  "R-4 恢复（task running）",
+  "PASS",
+  "running"
+ ],
+ [
+  "S9",
+  "终态钩子（取消 → continuation closed）",
+  "FAIL",
+  "started"
+ ],
+ [
+  "S10",
+  "Checkpoint 登记幂等 + 无正文列（ACP-478）",
+  "PASS",
+  ""
+ ]
+]
