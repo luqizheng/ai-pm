@@ -208,6 +208,15 @@ pub fn archive_marker(path: &Path, event_id: &str) -> std::io::Result<PathBuf> {
     Ok(target)
 }
 
+/// F-9（审计 2026-11-07）：Platform 业务拒绝（开放链冲突/运行态校验等
+/// Tool 类错误）的标记归档——设计 §1.2"不重试"；链关闭后重报旧事件反而
+/// 会产生重复介入（回复已被消费），故拒绝即终局。
+pub fn reject_marker(path: &Path, event_id: &str) -> std::io::Result<PathBuf> {
+    let target = path.with_file_name(format!("interaction.{event_id}.rejected"));
+    std::fs::rename(path, &target)?;
+    Ok(target)
+}
+
 /// 非法标记隔离（schema/枚举校验失败，§1.2：不产生 Interaction）。
 pub fn quarantine_marker(path: &Path) -> std::io::Result<PathBuf> {
     let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();

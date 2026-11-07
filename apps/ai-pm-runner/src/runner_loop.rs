@@ -255,9 +255,26 @@ pub async fn tick(
                     }
                 }
                 Err(e) => {
-                    // Platform 拒绝（链冲突/运行态校验等）：保留原文件待下轮；
-                    // 幂等键 event_id 保证重复上报不新建（ACP-430）。
-                    tracing::warn!(error = %e, "interaction report failed; will retry");
+                    // F-9 错误分类：Tool 类 = Platform 业务拒绝（链冲突/运行态
+                    // 校验/not found）→ 永久，按 §1.2 归档 `.rejected` 不重试
+                    //（链关闭后重报旧事件会产生重复介入）；传输/IO 类 → 保留
+                    // 原文件下轮重试（event_id 幂等，ACP-430）。
+                    match &e {
+                        mcp::RunnerError::Tool(_) => {
+                            match adapter::reject_marker(&path, &event.event_id) {
+                                Ok(_) => tracing::warn!(
+                                    error = %e, event = %event.event_id,
+                                    "interaction rejected by platform; marker archived as .rejected"
+                                ),
+                                Err(io_err) => tracing::warn!(
+                                    error = %io_err, "rejected marker archive failed; will re-report idempotently"
+                                ),
+                            }
+                        }
+                        _ => {
+                            tracing::warn!(error = %e, "interaction report failed; will retry");
+                        }
+                    }
                 }
             }
         }

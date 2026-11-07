@@ -162,7 +162,7 @@ async fn reply_injection_writes_atomic_reply_file() {
 
 // ───────────────────────── F-1 / F-6（复审 2026-11-07 闭合项） ─────────────────────────
 
-use ai_pm_runner::runner_loop::{execute_command, preflight_continue, ActiveRun, Config};
+use ai_pm_runner::runner_loop::{execute_command, preflight_continue, tick, ActiveRun, Config};
 use std::time::Instant;
 
 fn guard_json(frozen: bool, deadline_offset_secs: i64) -> serde_json::Value {
@@ -286,4 +286,79 @@ fn sleeper_cmd(seconds: u64) -> String {
 #[cfg(not(windows))]
 fn sleeper_cmd(seconds: u64) -> String {
     format!("sleep {seconds}")
+}
+
+#[tokio::test]
+async fn f9_tool_rejection_archives_marker_without_retry() {
+    let server = MockServer::start().await;
+    // Platform 业务拒绝（开放链冲突语义）→ isError 文本上抛。
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call", "params": { "name": "pm_report_interaction" }
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "jsonrpc": "2.0", "id": 7,
+            "result": { "isError": true,
+                        "content": [{ "text": "an open intervention chain exists for this task" }] } })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/mcp"))
+        .and(body_partial_json(json!({
+            "method": "tools/call", "params": { "name": "pm_poll_commands" }
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "jsonrpc": "2.0", "id": 6, "result": { "structuredContent": { "commands": [] } } })))
+        .mount(&server)
+        .await;
+
+    let dir = temp_dir("f9");
+    let run_dir = dir.join("run-f9");
+    std::fs::create_dir_all(run_dir.join(".aipm")).unwrap();
+    std::fs::write(
+        run_dir.join(".aipm").join("interaction.json"),
+        json!({
+            "schema_version": "aipm.interaction.v1",
+            "event_id": "evt-9", "reason": "needs_info", "question": "q"
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let mut spawn = spawn_agent(&sleeper_cmd(30), &run_dir, &[], None).unwrap();
+    let mut run = ActiveRun {
+        project_id: Uuid::nil(),
+        task_id: Uuid::nil(),
+        run_id: Uuid::nil(),
+        lease_token: "tok".into(),
+        lease_generation: 1,
+        worker_id: "mcp:runner:t:tok12345".into(),
+        run_dir: run_dir.clone(),
+        stage: "started".into(),
+        process: spawn,
+        last_heartbeat: Instant::now(),
+        last_detect: Instant::now() - std::time::Duration::from_secs(6),
+        last_command_poll: Instant::now(),
+        pending_interaction: None,
+        awaiting_continue: false,
+    };
+    let cfg = Config {
+        platform_mcp_url: format!("{}/mcp", server.uri()),
+        project_id: Uuid::nil(),
+        client_name: "runner:test".into(),
+        workspace_root: dir.clone(),
+        agent_cmd: sleeper_cmd(30),
+        claim_interval_secs: 10,
+        heartbeat_secs: 3600,
+        detect_interval_secs: 5,
+        command_poll_secs: 3600,
+        terminate_attempts: 3,
+        terminate_timeout_secs: 10,
+    };
+    let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
+    tick(&cfg, &client, &mut run).await.unwrap();
+    // Tool 类拒绝 → .rejected 归档（§1.2 不重试；防队头阻塞）。
+    assert!(run_dir.join(".aipm").join("interaction.evt-9.rejected").is_file());
+    assert!(!run_dir.join(".aipm").join("interaction.json").is_file());
+    let _ = terminate(&mut run.process.child).await;
 }
