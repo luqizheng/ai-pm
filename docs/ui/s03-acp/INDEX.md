@@ -11,7 +11,8 @@
 | 2 | `smark-pm-s03-acp-task-continuation-v1.3-review-v1.md` | V1.3 独立评审（有条件通过；R-1~R-14、Q-1~Q-7、事实清单 F1~F11） |
 | 3 | `smark-pm-s03-acp-task-continuation-v1.3.1.md` | **★ 冻结设计基线（2026-11-07 用户决议）**：D-01~D-07 生效裁决、§23.3 实施设计闭合清单 |
 | 4 | `smark-pm-s03-acp-task-continuation-v1.3.1-review-v1.md` | V1.3.1 独立评审（**通过**；N-1/N-2 → §23.3，N-3~N-6 文本修订） |
-| 5 | `smark-pm-s03-acp-slice-design-acp01-02-08-v1.md` | **★ 通信面切片实施设计 V1.1**：闭合 N-1/N-2 + 命令查询面；R-ACP-1~9 已裁（2026-11-07），**待独立复审，复审通过前不进代码** |
+| 5 | `smark-pm-s03-acp-slice-design-acp01-02-08-v1.md` | **★ 通信面切片实施设计 V1.1**：闭合 N-1/N-2 + 命令查询面；R-ACP-1~9 已裁（2026-11-07） |
+| 6 | `smark-pm-s03-acp-slice-design-acp01-02-08-review-v1.md` | **★ V1.1 独立复审 V1.0（2026-11-07）：通过**——设计冻结为实施基线；实现对照（84c67e9/1234162）+ 新发现 F-1[P1]（Runner continue 启动前置，ACP-05 前闭合）+ P2×4 |
 
 ## 二、状态一览
 
