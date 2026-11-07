@@ -81,9 +81,16 @@ impl OutboxAppend for PgOutboxAppend {
 /// 事件类型过去散落在 `event_is_enabled` 的 match、Worker 的 `.with_handler`
 /// 调用与各生产点的字符串字面量里，三处不同步就会出「产生了但没人消费」或
 /// 「消费了但没人产生」。本目录把三处收敛到一处。
+///
+/// V1.1 §13.3（KB-PC 服务化）起，跨服务事件的 wire 权威 =
+/// `kb-pc-contracts::events::CATALOG`（event_version / payload schema /
+/// producer 消费方契约）；本目录是**运行时登记面**（has_handler /
+/// enabled_by_default），`event_type` 字符串一律引用契约 crate 常量。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EventSpec {
     pub event_type: &'static str,
+    /// 事件契约版本（ADR-11 additive-only；与 kb-pc-contracts 声明一致）。
+    pub event_version: u32,
     /// 是否存在真实消费 handler。`false` 的类型**禁止生产**——生产了也没人
     /// 消费，只会变成死信污染运维面板（§20.6「不假装消费」）。
     pub has_handler: bool,
@@ -100,30 +107,35 @@ pub struct EventSpec {
 pub const CATALOG: &[EventSpec] = &[
     EventSpec {
         event_type: "TaskReady",
+        event_version: 1,
         has_handler: true,
         enabled_by_default: true,
         producer: "task_dependency.rs",
     },
     EventSpec {
         event_type: "DeliverySubmitted",
+        event_version: 1,
         has_handler: true,
         enabled_by_default: true,
         producer: "delivery/mod.rs",
     },
     EventSpec {
         event_type: "ReviewCompleted",
+        event_version: 1,
         has_handler: false,
         enabled_by_default: false,
         producer: "review/decide.rs",
     },
     EventSpec {
         event_type: "KnowledgeBaseWriteRequested",
+        event_version: 1,
         has_handler: false,
         enabled_by_default: false,
         producer: "review/decide.rs",
     },
     EventSpec {
         event_type: "RunCompleted",
+        event_version: 1,
         has_handler: true,
         enabled_by_default: true,
         producer: "run_executor.rs",
@@ -133,51 +145,156 @@ pub const CATALOG: &[EventSpec] = &[
     // pm-application::requirement（S02-I1 服务内留位，启用时随命令事务写入）。
     EventSpec {
         event_type: "RequirementCreated",
+        event_version: 1,
         has_handler: false,
         enabled_by_default: false,
         producer: "requirement.rs（留位）",
     },
     EventSpec {
         event_type: "RequirementRevisionSubmitted",
+        event_version: 1,
         has_handler: false,
         enabled_by_default: false,
         producer: "requirement.rs（留位）",
     },
     EventSpec {
         event_type: "RequirementConfirmed",
+        event_version: 1,
         has_handler: false,
         enabled_by_default: false,
         producer: "requirement.rs（留位）",
     },
     EventSpec {
         event_type: "RequirementRevisionRejected",
+        event_version: 1,
         has_handler: false,
         enabled_by_default: false,
         producer: "requirement.rs（留位）",
     },
     EventSpec {
         event_type: "RequirementSuperseded",
+        event_version: 1,
         has_handler: false,
         enabled_by_default: false,
         producer: "requirement.rs（留位）",
     },
     EventSpec {
         event_type: "RequirementWithdrawn",
+        event_version: 1,
         has_handler: false,
         enabled_by_default: false,
         producer: "requirement.rs（留位）",
     },
     EventSpec {
         event_type: "RequirementArchived",
+        event_version: 1,
         has_handler: false,
         enabled_by_default: false,
         producer: "requirement.rs（留位）",
     },
     EventSpec {
         event_type: "RequirementBasisChanged",
+        event_version: 1,
         has_handler: false,
         enabled_by_default: false,
         producer: "requirement.rs（留位；I4 改绑命令启用）",
+    },
+    // ── KB-PC 服务化 13 项跨服务事件（V1.1 §13.3；wire 权威=
+    // kb-pc-contracts::events::CATALOG，此处登记运行时面）。KB/PC 分析本体
+    // 为最小桩（P3-3），pc.cognition.version_published 仅登记——生产者归
+    // PC-01C（不假装消费）。
+    EventSpec {
+        event_type: kb_pc_contracts::events::INTAKE_RECEIVED,
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "intake.rs（intake 事务内）",
+    },
+    EventSpec {
+        event_type: kb_pc_contracts::events::KB_ANALYSIS_REQUESTED,
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "intake.rs（intake 路由）",
+    },
+    EventSpec {
+        event_type: kb_pc_contracts::events::KB_ANALYSIS_COMPLETED,
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "kb 桩（outbox_handlers.rs）",
+    },
+    EventSpec {
+        event_type: kb_pc_contracts::events::KB_COGNITION_SIGNAL_EMITTED,
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "kb 桩（outbox_handlers.rs）",
+    },
+    EventSpec {
+        event_type: kb_pc_contracts::events::KB_MEMORY_APPROVED,
+        event_version: 1,
+        // D-8：consumer 仅 platform（状态感知与待办）；不作为 PC 触发输入。
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "kb 记忆审核（Phase 4 留位）",
+    },
+    EventSpec {
+        event_type: kb_pc_contracts::events::PC_ANALYZE_REQUESTED,
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "intake.rs（RT 路由）",
+    },
+    EventSpec {
+        event_type: kb_pc_contracts::events::PC_DECISION_SUBMITTED,
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "intake.rs（product_decision 受理）",
+    },
+    EventSpec {
+        event_type: kb_pc_contracts::events::PC_ANALYSIS_COMPLETED,
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "pc 桩（outbox_handlers.rs）",
+    },
+    EventSpec {
+        event_type: kb_pc_contracts::events::PC_CHANGE_PROPOSED,
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "pc 桩（outbox_handlers.rs）",
+    },
+    EventSpec {
+        event_type: kb_pc_contracts::events::PC_CONFLICT_DETECTED,
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "pc 桩（outbox_handlers.rs）",
+    },
+    EventSpec {
+        event_type: kb_pc_contracts::events::PC_COGNITION_VERSION_PUBLISHED,
+        event_version: 1,
+        // 仅登记：发布事务归 PC-01C，生产者未落地——禁止生产（§20.6）。
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "pc 发布事务（PC-01C 留位）",
+    },
+    EventSpec {
+        event_type: kb_pc_contracts::events::PC_EVIDENCE_REQUESTED,
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "pc 桩（outbox_handlers.rs）",
+    },
+    EventSpec {
+        event_type: kb_pc_contracts::events::PROCESSING_FAILED,
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "任意服务失败上报",
     },
 ];
 

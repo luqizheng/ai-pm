@@ -7,6 +7,7 @@ edition.workspace = true
 aes-gcm.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
+kb-pc-contracts = { path = "../kb-pc-contracts" }
 getrandom.workspace = true
 pm-domain = { path = "../pm-domain" }
 reqwest.workspace = true
