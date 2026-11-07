@@ -1,0 +1,164 @@
+environments:
+  page:
+    title: 执行环境
+    description: 管理开发设备、Runner 运行健康、执行能力与项目绑定。执行就绪由服务端按最近自检快照计算。
+  breadcrumb:
+    project: 项目
+    environments: 执行环境
+  detail:
+    title: 设备详情
+    notFound: 设备不存在或不可见。
+  action:
+    refresh: 刷新
+    installGuide: 安装引导
+    add: 添加设备
+  metrics:
+    total: 设备总数
+    ready: Execution Ready
+    trouble: 异常设备
+  filter:
+    searchPlaceholder: 搜索设备名称、ID 或系统
+    status: 连接状态
+    statusAll: 状态：全部
+    platform: 操作系统
+    platformAll: 系统：全部
+  platform:
+    windows: Windows
+    macos: macOS
+    linux: Linux
+  readiness:
+    installed: 已安装
+    connected: 已连接
+    authenticated: 已认证
+    ready: Execution Ready
+    degraded: 降级
+    failed: 失败
+    unchecked: 未自检
+    revoked: 已吊销
+  card:
+    platform: 系统
+    runner: Runner
+    lastCheck: 最近自检
+    anomalyPrefix: 异常：
+  chain:
+    installed: Installed
+    notInstalled: Not Installed
+    connected: Connected
+    disconnected: Disconnected
+    authenticated: Authenticated
+    authPending: Auth Pending
+    ready: Ready
+    degraded: Degraded
+    failed: Failed
+    revoked: Revoked
+    unchecked: Unchecked
+    pending: Pending
+  anomaly:
+    degraded: Runner 运行降级，暂不派发新 Run
+    failed: 自检未通过，执行不可用
+    revoked: 设备已吊销，立即阻止新执行授权
+  time:
+    never: 从未
+    justNow: 刚刚
+    minutesAgo: "{n} 分钟前"
+    hoursAgo: "{n} 小时前"
+    daysAgo: "{n} 天前"
+  empty:
+    title: 尚未登记执行设备
+    description: 登记开发设备后，PM-AI 才能通过外部编码代理执行工程任务。设备完成 Runner 安装与注册后会出现在这里。
+    filteredTitle: 没有匹配的设备
+    filteredDescription: 当前筛选条件下没有设备。调整筛选或清除搜索后重试。
+    clearFilters: 清除筛选
+  wizard:
+    title: 添加执行环境
+    stepOf: 第 {step} / {total} 步
+    step1Title: 选择设备平台
+    step2Title: 下载并安装 Runner
+    step2Desc: 按设备平台打开安装引导，安装包与安装命令以引导页为准。
+    step2Hint: 安装引导页会完成系统自检（系统版本 / 依赖 / 网络连通）。
+    step3Title: 注册与连接验证
+    step3Desc: 登记设备后，由设备侧 Runner 完成连接、认证与仓库访问自检，服务端计算就绪快照。
+    notReadyNote: 安装成功 ≠ 注册完成 ≠ Execution Ready——注册与验证通过前，该设备不会被派发执行任务。
+    copy: 复制
+    copied: 已复制
+    back: 上一步
+    next: 下一步
+    submit: 登记设备
+    done: 完成
+    goDetail: 查看设备详情
+    successTitle: 设备已登记
+    successDesc: 设备 {id} 已进入执行环境目录。等待 Runner 连接与自检后即可绑定项目。
+    platformHint:
+      windows: Windows 10 及以上
+      macos: macOS 12 及以上
+      linux: Ubuntu 22.04 / Debian 12
+    field:
+      name: 设备名称
+      osVersion: 系统版本
+      executorKind: 执行器
+      executorVersion: 执行器版本
+  banner:
+    ready:
+      title: Execution Ready —— 执行就绪
+      description: 最近一次自检全部通过，设备可以接收绑定的项目执行任务。
+    degraded:
+      title: Degraded —— 运行降级
+      description: 最近自检存在异常，暂不向该设备派发新 Run；设备侧恢复后重新自检即可回到就绪。
+    failed:
+      title: Failed —— 自检未通过
+      description: 执行不可用。请按安装引导排查设备侧问题，修复后由 Runner 重新自检。
+    unchecked:
+      title: 未自检
+      description: 设备已登记但尚未上报自检结果，执行授权未生效；等待 Runner 完成连接与自检。
+    progress:
+      title: 接入进行中
+      description: 就绪快照尚未到达 Ready——继续完成安装、连接与认证后，设备侧自检会更新快照。
+    revoked:
+      title: Revoked —— 设备已吊销
+      description: 该设备已被吊销，立即阻止新的执行授权；如需恢复，请重新登记设备。
+  health:
+    title: 运行健康检查
+    installed: Runner Installed
+    connected: Runner Connected
+    tool: 执行工具链
+    repository: Repository Permission
+    authentication: Authentication
+    repoCoverage: 仓库验证覆盖 {verified}/{declared}
+    note:
+      pass: 最近自检通过
+      fail: 最近自检未通过，需排查后重新自检
+      warning: 部分通过，等待设备侧恢复
+      unknown: 暂无自检证据
+    evidenceNote: 以上为最近一次自检证据的只读展示；自检由设备侧 Runner 上报，页面不代检。
+  bindings:
+    title: 项目绑定
+    permissionNote: 绑定不授予额外项目或仓库权限
+    empty: 尚未绑定任何项目。绑定后该设备才能接收对应项目的执行任务。
+    bindCurrent: 绑定当前项目
+    bindDisabledHint: 绑定需要先在顶部选择具体项目
+    unbind: 解绑
+    coverage: 仓库验证覆盖 {verified}/{declared}
+    boundAt: 绑定于
+    accessible: 可访问
+    notAccessible: 不可访问
+  runtime:
+    title: 运行信息
+    platform: 平台
+    osVersion: 系统版本
+    executorKind: 执行器
+    executorVersion: 执行器版本
+    deviceId: 设备 ID
+    createdAt: 注册时间
+    lastCheckAt: 最近自检
+  danger:
+    title: 危险操作
+    description: 撤销设备授权后，该设备立即无法获得新的执行授权；正在运行的 Run 按平台既定终止与清理流程处理。
+    revoke: 撤销设备授权
+    revokedTitle: 设备已吊销
+    revokedAt: 吊销时间
+  revoke:
+    title: 撤销设备 {id} 的授权？
+    description: 撤销后该设备立即失去执行授权，项目绑定一并停用；恢复需重新登记设备。该操作会写入审计日志。
+    checkbox: 我已了解撤销影响（正在运行的 Run 将按平台流程终止与清理）。
+    confirm: 撤销授权
+    cancel: 取消

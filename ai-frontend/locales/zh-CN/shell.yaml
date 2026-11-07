@@ -184,6 +184,7 @@ shell:
         execution: AI 执行中心
         knowledge: 知识审阅
         devenv: 开发环境
+        environments: 执行环境
         adminSettings: 设置
         adminMembers: 成员
         adminAnnouncements: 公告管理

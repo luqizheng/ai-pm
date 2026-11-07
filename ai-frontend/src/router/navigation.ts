@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Megaphone,
+  Monitor,
   ScanSearch,
   Settings2,
   Sparkles,
@@ -182,6 +183,18 @@ export const navGroups: NavGroup[] = [
         icon: Terminal,
         component: () =>
           import("@/views/project/devenv/BootstrapView.vue").then(
+            module => module.default
+          )
+      },
+      {
+        // 执行环境（Runner / 设备执行基础设施）：设备目录 + 就绪快照 + 绑定治理。
+        // Runner 详情页（/project/environments/:deviceId）在 router/index.ts
+        // 单独注册（线稿「页面 B」），不占主导航。
+        path: "/project/environments",
+        labelKey: "shell.app.side.item.environments",
+        icon: Monitor,
+        component: () =>
+          import("@/views/project/environments/EnvironmentsView.vue").then(
             module => module.default
           )
       }

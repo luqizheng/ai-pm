@@ -1,0 +1,164 @@
+environments:
+  page:
+    title: Execution Environments
+    description: Manage developer devices, Runner runtime health, execution capabilities and project bindings. Execution readiness is computed server-side from the latest self-check snapshot.
+  breadcrumb:
+    project: Project
+    environments: Execution Environments
+  detail:
+    title: Device Detail
+    notFound: Device not found or not visible.
+  action:
+    refresh: Refresh
+    installGuide: Install Guide
+    add: Add Device
+  metrics:
+    total: Total Devices
+    ready: Execution Ready
+    trouble: Requiring Attention
+  filter:
+    searchPlaceholder: Search devices by name, ID or OS
+    status: Connection status
+    statusAll: "Status: All"
+    platform: Operating system
+    platformAll: "OS: All"
+  platform:
+    windows: Windows
+    macos: macOS
+    linux: Linux
+  readiness:
+    installed: Installed
+    connected: Connected
+    authenticated: Authenticated
+    ready: Execution Ready
+    degraded: Degraded
+    failed: Failed
+    unchecked: Unchecked
+    revoked: Revoked
+  card:
+    platform: OS
+    runner: Runner
+    lastCheck: Last check
+    anomalyPrefix: "Anomaly:"
+  chain:
+    installed: Installed
+    notInstalled: Not Installed
+    connected: Connected
+    disconnected: Disconnected
+    authenticated: Authenticated
+    authPending: Auth Pending
+    ready: Ready
+    degraded: Degraded
+    failed: Failed
+    revoked: Revoked
+    unchecked: Unchecked
+    pending: Pending
+  anomaly:
+    degraded: Runner degraded — new Runs are not dispatched
+    failed: Self-check failed — execution unavailable
+    revoked: Device revoked — new execution authorization is blocked
+  time:
+    never: Never
+    justNow: Just now
+    minutesAgo: "{n} min ago"
+    hoursAgo: "{n} h ago"
+    daysAgo: "{n} d ago"
+  empty:
+    title: No registered devices
+    description: Register a developer device so PM-AI can execute engineering tasks through external coding agents. Devices appear here after the Runner is installed and registered.
+    filteredTitle: No matching devices
+    filteredDescription: No devices match the current filters. Adjust the filters or clear the search.
+    clearFilters: Clear filters
+  wizard:
+    title: Add Execution Environment
+    stepOf: "Step {step} / {total}"
+    step1Title: Select device platform
+    step2Title: Download and install the Runner
+    step2Desc: Open the install guide for your platform; the package and commands follow the guide.
+    step2Hint: The install guide runs local prerequisite checks (OS version / dependencies / network).
+    step3Title: Register and verify
+    step3Desc: After registration the device-side Runner performs connection, authentication and repository checks; readiness is computed server-side.
+    notReadyNote: Installation ≠ registration ≠ Execution Ready — the device receives no tasks until registration and verification pass.
+    copy: Copy
+    copied: Copied
+    back: Back
+    next: Next
+    submit: Register device
+    done: Done
+    goDetail: View device detail
+    successTitle: Device registered
+    successDesc: Device {id} joined the execution environment directory. It becomes bindable once the Runner connects and reports checks.
+    platformHint:
+      windows: Windows 10 or later
+      macos: macOS 12 or later
+      linux: Ubuntu 22.04 / Debian 12
+    field:
+      name: Device name
+      osVersion: OS version
+      executorKind: Executor
+      executorVersion: Executor version
+  banner:
+    ready:
+      title: Execution Ready
+      description: The latest self-check passed end to end — the device can receive execution tasks for its bound projects.
+    degraded:
+      title: Degraded
+      description: The latest self-check reported issues; new Runs are held back. The device returns to ready after it recovers and re-reports checks.
+    failed:
+      title: Failed
+      description: Execution is unavailable. Troubleshoot the device with the install guide, then let the Runner re-report checks.
+    unchecked:
+      title: Unchecked
+      description: The device is registered but has not reported a self-check yet; execution authorization is not in effect.
+    progress:
+      title: Onboarding in progress
+      description: The readiness snapshot has not reached Ready — finish installation, connection and authentication, then the device-side check updates the snapshot.
+    revoked:
+      title: Revoked
+      description: This device has been revoked and is blocked from new execution authorization. Re-register the device to restore access.
+  health:
+    title: Runtime Health
+    installed: Runner Installed
+    connected: Runner Connected
+    tool: Execution Toolchain
+    repository: Repository Permission
+    authentication: Authentication
+    repoCoverage: "Repository coverage {verified}/{declared}"
+    note:
+      pass: Passed in the latest self-check
+      fail: Failed in the latest self-check — troubleshoot and re-check
+      warning: Partially passed — waiting for device-side recovery
+      unknown: No check evidence yet
+    evidenceNote: Read-only view of the latest self-check evidence; checks are reported by the device-side Runner.
+  bindings:
+    title: Project Bindings
+    permissionNote: Binding grants no additional project or repository permissions
+    empty: No project bindings yet. Bind a project so this device can receive its execution tasks.
+    bindCurrent: Bind current project
+    bindDisabledHint: Select a specific project first to bind
+    unbind: Unbind
+    coverage: "Repository coverage {verified}/{declared}"
+    boundAt: Bound at
+    accessible: Accessible
+    notAccessible: Not accessible
+  runtime:
+    title: Runtime Information
+    platform: Platform
+    osVersion: OS version
+    executorKind: Executor
+    executorVersion: Executor version
+    deviceId: Device ID
+    createdAt: Registered at
+    lastCheckAt: Last check
+  danger:
+    title: Danger Zone
+    description: Revoking the device immediately blocks new execution authorization; running Runs follow the platform termination and cleanup lifecycle.
+    revoke: Revoke device authorization
+    revokedTitle: Device revoked
+    revokedAt: Revoked at
+  revoke:
+    title: Revoke authorization for {id}?
+    description: Once revoked the device immediately loses execution authorization and its project bindings are deactivated. Recovery requires re-registration. This action is audited.
+    checkbox: I understand the impact (running Runs will be terminated and cleaned up per the platform lifecycle).
+    confirm: Revoke authorization
+    cancel: Cancel

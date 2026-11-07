@@ -184,6 +184,7 @@ shell:
         execution: AI Execution Center
         knowledge: Knowledge Review
         devenv: Development Environment
+        environments: Execution Environments
         adminSettings: Settings
         adminMembers: Members
         adminAnnouncements: Announcements

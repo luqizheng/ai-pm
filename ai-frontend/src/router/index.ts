@@ -23,6 +23,7 @@ import ProjectCreateView from "@/views/project/create/ProjectCreateView.vue";
 import CognitionPage from "@/views/project/cognition/CognitionPage.vue";
 import BaselinePage from "@/views/project/baseline/BaselinePage.vue";
 import CommandCenterView from "@/views/project/command-center/CommandCenterView.vue";
+import EnvironmentDetailView from "@/views/project/environments/EnvironmentDetailView.vue";
 import RequirementBaselineView from "@/views/project/requirement-baseline/RequirementBaselineView.vue";
 import RequirementDetailView from "@/views/project/requirement-detail/RequirementDetailView.vue";
 import RequirementHistoryView from "@/views/project/requirement-history/RequirementHistoryView.vue";
@@ -124,6 +125,14 @@ export function buildRoutes(): RouteRecordRaw[] {
     path: "/project/command-center",
     component: CommandCenterView,
     meta: { title: "s01.command-center.pageTitle" }
+  });
+
+  // Runner 详情（执行环境「页面 B」）：就绪横幅 / 健康检查 / 绑定 / 吊销，
+  // 不占主导航——入口 = 执行环境列表页设备卡（导航项 /project/environments）。
+  routes.push({
+    path: "/project/environments/:deviceId",
+    component: EnvironmentDetailView,
+    meta: { title: "environments.detail.title" }
   });
 
   // 需求评审与确认（S02-UI-03）：人工评审提案并作出正式决策，不占主导航——
