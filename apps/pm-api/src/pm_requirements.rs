@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{require_project_visible, ApiError, ApiResult};
+use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
 use pm_application::requirement::{
     self, ConfirmRevisionRequest, CreateRequirementRequest, DraftRevisionRequest,
     LifecycleAction, RejectRevisionRequest,
@@ -41,17 +41,6 @@ async fn require_requirement_visible(
     require_project_visible(&state.pool, project_id, principal.tenant_id, principal.principal_id)
         .await?;
     Ok(project_id)
-}
-
-/// 确认类命令的可信交互上下文（§7.2 A*）：API Key 等机器凭据一律 403；
-/// MCP 无确认工具（保持零工具，H-15）。登录令牌复用不可区分属 A* 已档边界。
-fn ensure_trusted_context(principal: &AuthedPrincipal) -> ApiResult<()> {
-    if principal.auth_mode == "api_key" {
-        return Err(ApiError::Forbidden(
-            "confirmation requires a trusted interactive context",
-        ));
-    }
-    Ok(())
 }
 
 // ────────────────────────────────────────────────── 项目作用域（列表/创建）

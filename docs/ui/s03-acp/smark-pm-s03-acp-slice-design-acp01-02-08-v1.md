@@ -40,6 +40,8 @@ V1.3.1 中 "Worker" 一词在 V0.5 语境下由 **ai-pm-runner（用户 PC 客�
 
 **统一纪律（V-6 架构约束）**：两条接入路径**必须**落在同一业务应用服务（`pm-application`）上；MCP 工具与 Worker 进程内调用都只是适配层。禁止为 Runner 另写一套写入逻辑。
 
+**V1 实现覆盖补注（2026-11-07 复审 F-3）**：本批实现（84c67e9/1234162）的命令消费与标记文件侦测**仅 Runner 载体接线**；服务器 ai-pm-worker 载体仅接了超时清扫（terminate/continue 消费与侦测未接）——按 V-05-2③「服务器 Model B 通道维持现状」属显式延后，非双形态已等价；Worker 载体的命令消费随服务器侧需求另行接线。
+
 本稿正文统一使用 "执行端" 指代 Runner / Worker 双形态。
 
 ---
@@ -108,7 +110,7 @@ pm_report_interaction(
 | 设计点 | 规则 |
 | --- | --- |
 | 身份与权限 | 权限码 `PM_MCP_AGENT_REPORT`（新，§1.6）+ 租约三要素（token/generation/run scope）。**不新增人类确认语义，不违 A\***（§18.4：MCP 可用于 Agent 提交；人类回复仅 REST/UI，属 ACP-03） |
-| 幂等 | `event_id` 唯一索引；重复上报返回原 `interaction_id` 不新建 |
+| 幂等 | `UNIQUE(run_id, event_id)`（F-13① 回写：作用域细化到 Run——实现更严更正确）；重复上报返回原 `interaction_id` 不新建 |
 | 介入链唯一 | 该 Task 存在**开放介入链**（§5.2）→ Conflict 拒绝 |
 | awaiting_decision 映射 | 同一事务：Task → `awaiting_decision`（经既有 task_transition 门槛）+ `task_waiting` upsert + 调度保护状态 `human_wait`（§4.1） |
 | deadline | `deadline_at = now() + AI_PM_HUMAN_INTERVENTION_TIMEOUT_SECS`（默认 120s，§8.1）；持久化于 Platform，重启不重算（ACP-419） |
@@ -292,6 +294,8 @@ none ──创建 Interaction──▶ human_wait ──回复持久化──▶
 | S1 | `poll_active_runs` 四信号（run_executor.rs:233-357） | guard ≠ `none` 的 Run **全部四信号跳过**——deadline 到期也不得 TimedOut（ACP-427）；跳过时记录 guard 值供审计 | ACP-427/439 |
 | S2 | 回收重领 B3-2（claim.rs:490-548） | 重领前置校验：guard ≠ `none` → **拒绝重领**，隔离原因 = `scheduling_shield`，不启动任何新进程。guard → `none` 后自然走既有回收路径（不新建专用路径） | ACP-428 前半 |
 | S3 | 崩溃恢复 + 无人值守领取（`AI_PM_RUN_DISPATCH`） | spawn 前校验 guard ≠ `none` → 不启动。**恢复后不得启动未携带人工回复的新进程**（ACP-428） | ACP-428 |
+
+> **F-11 回写（审计 2026-11-07）**：S1 的"跳过时记录 shield 原因供审计"实现为 **SQL 排除 + 节流可观测**（逐 poll 审计会以命令轮询节奏刷审计表，噪声大于价值）；S2 保留逐次审计（`skip_task_run, release_reason=scheduling_shield`，实现在 claim.rs）。shielded Run 的持续可见性由 `interaction_shielded_runs` 指标承载（F-5，随 ACP-08 可观测切片落地）。
 
 ### 4.3 等待窗口内的租约语义
 

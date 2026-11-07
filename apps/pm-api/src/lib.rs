@@ -23,6 +23,7 @@ pub mod pm_delivery;
 pub mod pm_devices;
 pub mod pm_discovery;
 pub mod pm_imports;
+pub mod pm_interactions;
 pub mod pm_cognition;
 pub mod pm_requirements;
 pub mod pm_lists;

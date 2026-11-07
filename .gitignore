@@ -13,4 +13,5 @@ run-workspaces/
 /services/iam-service/
 
 # 本地预览产物（截图 / 临时目录）
-ai-ai-frontend/.testtmp/
+ai-ai-frontend/.testtmp/__pycache__/
+__pycache__/

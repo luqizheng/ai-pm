@@ -355,7 +355,8 @@ async fn claim_core_in_project(
     let candidate = if let Some(task_id) = task_filter {
         sqlx::query(
             "SELECT r.id, r.task_id, r.project_id, r.status, r.dispatch_attempts, \
-                    r.executor_session, r.stage, r.lease_generation, r.attempt_no \
+                    r.executor_session, r.stage, r.lease_generation, r.attempt_no, \
+                    r.scheduling_shield \
                FROM delivery.task_run r \
               WHERE r.task_id = $1 AND r.project_id = $2 AND r.run_kind = 'delivery' \
                 AND ((r.status = 'queued'  AND r.next_dispatch_at <= now()) \
@@ -371,7 +372,8 @@ async fn claim_core_in_project(
     } else {
         sqlx::query(
             "SELECT r.id, r.task_id, r.project_id, r.status, r.dispatch_attempts, \
-                    r.executor_session, r.stage, r.lease_generation, r.attempt_no \
+                    r.executor_session, r.stage, r.lease_generation, r.attempt_no, \
+                    r.scheduling_shield \
                FROM delivery.task_run r \
               WHERE r.project_id = $1 AND r.run_kind = 'delivery' \
                 AND ((r.status = 'queued'  AND r.next_dispatch_at <= now()) \
@@ -429,6 +431,7 @@ async fn claim_core_in_project(
     let executor_session: Option<String> = candidate.get("executor_session");
     let candidate_stage: Option<String> = candidate.get("stage");
     let _lease_generation_prev: i32 = candidate.get("lease_generation");
+    let candidate_shield: String = candidate.get("scheduling_shield");
 
     // I1-C：归档守卫已在阶段 B 的 Project 行锁内完成（见 claim_core_in_project ①）——
     // 不再需要池外防御纵深读；锁内读到的必然是归档后的已提交状态。
@@ -488,6 +491,35 @@ async fn claim_core_in_project(
 
     // ④ 回收分支：候选原本是 `claimed` 且租约已过期。
     if run_state == run_status::CLAIMED {
+        // N-1 调度屏蔽（S2，0046 scheduling_shield）：人工等待/回复待投递/超时
+        // 未处置的 Run **拒绝重领**——不 requeue（下一轮还会看到它）、不改任何
+        // 状态，等待结束后自然恢复既有回收语义（ACP-428：不得启动未携带人工
+        // 回复的新进程）。设计稿 V1.1 §4.2；CANCELLED 介入的恢复走正常重领。
+        if candidate_shield != "none" {
+            if opts.task_filter.is_some() {
+                tx.rollback().await?;
+                return Err(RunDispatchError::TaskNotReady("awaiting_interaction".into()));
+            }
+            audit_run(
+                &mut tx,
+                project_id,
+                "skip_task_run",
+                run_id,
+                serde_json::json!({
+                    "release_reason": "scheduling_shield",
+                    "scheduling_shield": candidate_shield,
+                }),
+            )
+            .await?;
+            tx.commit().await?;
+            return Ok(Some(ClaimOutcome {
+                run_id,
+                task_id,
+                kind: ClaimKind::Skipped,
+                lease_token: None,
+                lease_generation: 0,
+            }));
+        }
         // T-032 T1：starting 判定 = **启动意图未确认**。`executor_session` 是启动
         // 意图（spawn 前写入）；`stage='dispatch'` 表示进程身份尚未确认（spawn
         // 失败残留 / spawn 后未落库的崩溃窗口）。二者任一成立 → B3-1 同 Run 重领
@@ -714,8 +746,14 @@ async fn claim_core_in_project(
         .map(crate::run_context::hash_lease_token);
 
     // T-059 / ADR-0002 L5：执行形态由领取通道显式表达（替代 lease_owner 前缀推导）。
-    let execution_mode = match opts.lease_owner {
+    let execution_mode = match &opts.lease_owner {
         LeaseOwner::Worker(_) => "spawn",
+        // ACP Runner（V0.5 WP-3 / V1.1 §0 载体双形态）：client_name 携保留前缀
+        // `runner:` 领取 = 客户端**进程载体**（Model B spawn 形态），interaction /
+        // 命令查询面 / Continuation 通道对其适用；四工具契约不动，前缀是 V-05-1
+        // Client Registry（Client 身份 + 能力三分验证）落地前的过渡形态标记。
+        // 其余 MCP 领取 = Agent 自执行（Model A human；ACP-425 退化路径不受影响）。
+        LeaseOwner::Mcp { client_name } if client_name.starts_with("runner:") => "spawn",
         LeaseOwner::Mcp { .. } => "human",
     };
 

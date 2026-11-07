@@ -11,13 +11,17 @@
 | 2 | `smark-pm-s03-acp-task-continuation-v1.3-review-v1.md` | V1.3 独立评审（有条件通过；R-1~R-14、Q-1~Q-7、事实清单 F1~F11） |
 | 3 | `smark-pm-s03-acp-task-continuation-v1.3.1.md` | **★ 冻结设计基线（2026-11-07 用户决议）**：D-01~D-07 生效裁决、§23.3 实施设计闭合清单 |
 | 4 | `smark-pm-s03-acp-task-continuation-v1.3.1-review-v1.md` | V1.3.1 独立评审（**通过**；N-1/N-2 → §23.3，N-3~N-6 文本修订） |
-| 5 | `smark-pm-s03-acp-slice-design-acp01-02-08-v1.md` | **★ 通信面切片实施设计 V1.1**：闭合 N-1/N-2 + 命令查询面；R-ACP-1~9 已裁（2026-11-07）；**独立复审未通过（见 6），待修订 V1.2** |
-| 6 | `smark-pm-s03-acp-slice-design-acp01-02-08-v1-review-v1.md` | 切片 V1.1 独立复审（2026-11-07，代码基线 e87efd5）：**不通过**——P0×4（B3-2 事实错位 / 同 Run 租约重取缺失 / lease_owner 非身份·Runner 与 Model A 不可区分 / awaiting_decision 出路挂在 CONSUMED）+ P1×6（含迁移号顺移 0046~0047）+ P2×6；R-ACP-1~9 不重开；V1.2 修订清单 R-1~R-10 + 新增验收 ACP-446~451 |
+| 5 | `smark-pm-s03-acp-slice-design-acp01-02-08-v1.md` | **★ 通信面切片实施设计 V1.1**：闭合 N-1/N-2 + 命令查询面；R-ACP-1~9 已裁（2026-11-07）。**独立复审判不通过 → V1.2 修订中（P0×4，见 6）**；实施已按用户授权先行（E2E PASS，见 8a），V1.2 须吸收 P0 修订 |
+| 6 | `smark-pm-s03-acp-slice-design-acp01-02-08-v1-review-v1.md` | **★ 独立复审 V1.0（2026-11-07，代码基线 e87efd5）：不通过**——P0×4（B3-2 事实错位 / 同 Run 租约重取缺失 / lease_owner 非身份·Runner 与 Model A 不可区分 / awaiting_decision 出路挂在 CONSUMED）+ P1×6（含迁移号顺移 0046~0047）+ P2×6；R-ACP-1~9 不重开；V1.2 修订清单 R-1~R-10 + 新增验收 ACP-446~451。**本结论为设计修订的治理依据** |
+| 6b | `smark-pm-s03-acp-slice-design-acp01-02-08-review-v1.md` | 实现方自查评审（同日）：判通过 + 实现对照（84c67e9/1234162）+ F-1[P1]——**与独立复审结论冲突，以独立复审（6）为准**；两份结论的分歧点全部入 V1.2 修订范围 |
+| 7 | `smark-pm-s03-acp-implementation-audit-v1.md` | **实现对照审计 V1.0（2026-11-07）**：F-6~F-13 续编——F-7[P1] 权限码无签发面（真实栈 403）、F-8[P1] 取消联动缺失；处置顺序见 §3 |
+| 8a | `smark-pm-s03-acp-e2e-report-v1.md` | **真实栈 E2E 报告 V1.1（PASS）**：.10 平台 + .59 Runner 全故事线（假 Agent + opencode 真 CLI 两阶段）+ F-7 双态 + E2E 修复三处 + F-14/F-15 |
+| 8 | `smark-pm-s03-acp-slice-design-acp03-v1.md` | **ACP-03 实施设计 V1.0（已裁决+已实施）**：REST 回复入口 + §8.3 六项检查操作化 + interaction_response（0047）+ 同事务 continue 下发；R-ACP-10~13 已裁；实施 = 服务层 + REST 路由 + ACP-446~456 测试（17/17 绿，远程库 192.168.2.10/aipm_test） |
 
 ## 二、状态一览
 
 - **基线**：V1.3.1 冻结 ✅（2026-11-07）
-- **实施设计**：ACP-01/02/08 通信面 V1.1 复审**不通过** ❌（2026-11-07）→ 待 V1.2 修订后再复审；**复审通过前不进代码**。ACP-03~07/09 未启动（见切片稿稿头"不覆盖"声明）
+- **实施设计**：ACP-01/02/08 通信面 V1.1 独立复审**不通过** ❌（2026-11-07）→ V1.2 修订清单 R-1~R-10（P0×4 见 6）。**治理注记**：实施已按用户 2026-11-07"开工"授权先行并真实栈 E2E PASS（见 8a）——代码在库；V1.2 须吸收 P0×4 修订并复评，复评通过前该设计不作为对外基线。ACP-03 已实施（见 8）；ACP-04~07/09 未启动
 - **迁移号**：R-ACP-6 的 0045 已被 DEF-01 顺移占用 → ACP 批次 0046~0047（落地前再核 `ls migrations/`）
 - **下一批切片**：ACP-03（REST/UI 回复入口权限模型）→ ACP-04/05/06/07 → ACP-09（Model A 回归）
 

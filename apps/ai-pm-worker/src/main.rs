@@ -108,6 +108,7 @@ async fn main() {
     let dispatch_pool = pool.clone();
     let dispatch_worker_id = worker_id.clone();
     tokio::spawn(async move {
+            let mut stats_ticks = 0u32;
         let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
         let mode = pm_application::run_dispatch::DispatchMode::from_env();
         let run_executor: Arc<dyn pm_application::run_dispatch::RunExecutor> =
@@ -155,6 +156,13 @@ async fn main() {
                     tracing::warn!(error = %e, "poll_active_runs failed; backing off");
                 }
             }
+            // ACP 通信面（0046 / 设计稿 V1.1 §5.3）：人工等待超时判定（§8.2，
+            // Platform 持久化 deadline 后不重算；超时 ≠ 同意，链保持开放）。
+            match pm_application::interaction::interaction_timeout_sweep(&dispatch_pool).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!(timed_out = n, "interaction timeout sweep"),
+                Err(e) => tracing::warn!(error = %e, "interaction timeout sweep failed"),
+            }
             // I1-E 持久化清理账本（迁移 0035）：主路径——无时间窗、可重试、
             // 阈值后转人工（needs_human 持续可查询）。
             match pm_application::run_cleanup::run_cleanup_round(
@@ -177,6 +185,32 @@ async fn main() {
                     .await
             {
                 tracing::warn!(error = %e, "finished-run cleanup failed");
+            }
+            // F-5（审计 2026-11-07）：通信面可观测——每 ~30s 一次聚合日志
+            //（字段名即未来 Prometheus 指标名；仓内零 metrics 基建，house
+            // style = 聚合函数 + 结构化日志）。
+            stats_ticks += 1;
+            if stats_ticks >= 500 {
+                stats_ticks = 0;
+                match pm_application::comm_overview::load_comm_overview(&dispatch_pool).await {
+                    Ok(o) => {
+                        tracing::info!(
+                            interaction_shielded_runs = o.interaction_shielded_runs,
+                            interaction_unconsumed_total = o.interaction_unconsumed_total,
+                            interaction_open_chains = o.interaction_open_chains,
+                            worker_command_pending_total = o.worker_command_pending_total,
+                            worker_command_pending_age_seconds = o.worker_command_pending_age_seconds,
+                            "comm_overview"
+                        );
+                        if o.worker_command_pending_age_seconds > 600 {
+                            tracing::warn!(
+                                age = o.worker_command_pending_age_seconds,
+                                "worker command pending age exceeded 600s"
+                            );
+                        }
+                    }
+                    Err(e) => tracing::warn!(error = %e, "comm_overview failed"),
+                }
             }
             tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await;
         }

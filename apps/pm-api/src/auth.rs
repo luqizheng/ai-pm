@@ -592,12 +592,23 @@ const MCP_BODY_LIMIT: usize = 256 * 1024;
 /// tool name → additionally required permission (read tools need only
 /// `PM_MCP_READ`). `PM_MCP_TASK_UPDATE` stays unassigned until a task-update
 /// tool exists.
-const MCP_TOOL_PERMISSIONS: [(&str, &str); 5] = [
+///
+/// ACP 通信面（设计稿 docs/ui/s03-acp/smark-pm-s03-acp-slice-design-
+/// acp01-02-08-v1.md V1.1 §1.6，R-ACP-8 已裁）：新增工具不再挂
+/// `PM_MCP_READ` 语义——`PM_MCP_AGENT_REPORT` = 执行端运行事件上报（Agent
+/// 侧事实，永无人类确认语义）；`PM_MCP_COMMAND` = 命令通道收发。人类正式
+/// 确认永不入任何 MCP 权限码（A*：仅可信 REST/UI）。字典落地随 V-05-1
+/// 迁移批（Code Registry 面目前沿用 JWT permissions claim 直比）。
+const MCP_TOOL_PERMISSIONS: [(&str, &str); 9] = [
     ("pm_submit_technical_design", "PM_MCP_DOCUMENT_WRITE"),
     ("pm_submit_document", "PM_MCP_DOCUMENT_WRITE"),
     ("pm_propose_document", "PM_MCP_DOCUMENT_WRITE"),
     ("pm_confirm_document_proposal", "PM_MCP_DOCUMENT_WRITE"),
     ("pm_veto_document_revision", "PM_MCP_DOCUMENT_WRITE"),
+    ("pm_report_interaction", "PM_MCP_AGENT_REPORT"),
+    ("pm_report_consumption", "PM_MCP_AGENT_REPORT"),
+    ("pm_poll_commands", "PM_MCP_COMMAND"),
+    ("pm_ack_command", "PM_MCP_COMMAND"),
 ];
 
 /// Permission gate layered *inside* [`require_bearer`], so claims are already
@@ -646,16 +657,44 @@ pub async fn require_mcp_permission(
 
 /// Maps a `tools/call` body to the write permission it needs; read tools and
 /// non-tool JSON-RPC frames need nothing beyond `PM_MCP_READ`.
+///
+/// F-7 过渡开关（实现对照审计 2026-11-07）：`PM_MCP_AGENT_REPORT` /
+/// `PM_MCP_COMMAND` 的签发面在 lmms 侧尚未落地（V-05-1 权限字典迁移批），
+/// 默认 fail-closed（四新工具对现有令牌 403）。真实栈联调期间可显式设
+/// `AI_PM_MCP_LEGACY_PERMISSION_GRANT=1`：四个 ACP 新工具降级为仅
+/// `PM_MCP_READ`（与既有执行器工具同门）。开关须在 V-05-1 签发面落地后
+/// 撤除；开启属运维显式决定，默认关闭不改变安全语义。
+fn legacy_permission_grant() -> bool {
+    // 每次读 env（不缓存）：测试可双态驱动；生产路径每次 tools/call 一次
+    // env 查找开销可忽略。
+    let on = std::env::var("AI_PM_MCP_LEGACY_PERMISSION_GRANT").ok().as_deref() == Some("1");
+    if on {
+        tracing::warn!(
+            "AI_PM_MCP_LEGACY_PERMISSION_GRANT=1: ACP tool permission codes \
+             (PM_MCP_AGENT_REPORT/PM_MCP_COMMAND) downgraded to PM_MCP_READ. \
+             Remove this flag once the V-05-1 permission dictionary lands."
+        );
+    }
+    on
+}
+
 fn required_tool_permission(body: &[u8]) -> Option<&'static str> {
     let value: Value = serde_json::from_slice(body).ok()?;
     if value.get("method")?.as_str()? != "tools/call" {
         return None;
     }
     let tool = value.get("params")?.get("name")?.as_str()?;
-    MCP_TOOL_PERMISSIONS
+    let required = MCP_TOOL_PERMISSIONS
         .iter()
         .find(|(name, _)| *name == tool)
-        .map(|(_, permission)| *permission)
+        .map(|(_, permission)| *permission);
+    match required {
+        // F-7 过渡降级（显式 env 开关）：ACP 新工具 → 仅 PM_MCP_READ。
+        Some("PM_MCP_AGENT_REPORT") | Some("PM_MCP_COMMAND") if legacy_permission_grant() => {
+            Some(MCP_READ_PERMISSION)
+        }
+        other => other,
+    }
 }
 
 /// Header first; the query fallback is scoped to the one SSE endpoint so the
@@ -742,6 +781,36 @@ mod tests {
             "roles": ["member"],
             "permissions": ["pm.requirement.read"],
         })
+    }
+
+    #[test]
+    fn f7_legacy_grant_downgrades_acp_tool_permissions() {
+        let body = |tool: &str| {
+            serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":tool}})
+                .to_string()
+                .into_bytes()
+        };
+        // 默认 fail-closed：ACP 新工具要求独立权限码。
+        std::env::remove_var("AI_PM_MCP_LEGACY_PERMISSION_GRANT");
+        assert_eq!(
+            super::required_tool_permission(&body("pm_report_interaction")).unwrap(),
+            "PM_MCP_AGENT_REPORT"
+        );
+        assert_eq!(
+            super::required_tool_permission(&body("pm_ack_command")).unwrap(),
+            "PM_MCP_COMMAND"
+        );
+        // 过渡开关（真实栈联调）：降级为仅 PM_MCP_READ；既有工具不受影响。
+        std::env::set_var("AI_PM_MCP_LEGACY_PERMISSION_GRANT", "1");
+        assert_eq!(
+            super::required_tool_permission(&body("pm_report_interaction")).unwrap(),
+            "PM_MCP_READ"
+        );
+        assert_eq!(
+            super::required_tool_permission(&body("pm_submit_document")).unwrap(),
+            "PM_MCP_DOCUMENT_WRITE"
+        );
+        std::env::remove_var("AI_PM_MCP_LEGACY_PERMISSION_GRANT");
     }
 
     #[test]
