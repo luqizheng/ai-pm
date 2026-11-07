@@ -1,4 +1,4 @@
-//! 0046_kb_pc_intake 迁移验证（P3-1：intake_record + intake_task 结构断言，
+//! 0048_kb_pc_intake 迁移验证（原 0046，后实施者顺移——0046 已被 ACP 通信面占用）（P3-1：intake_record + intake_task 结构断言，
 //! V1.1 §9.2 DDL 逐项；真实数据库，不 Mock）。
 //!
 //! 断言面：① 两表存在且列齐；② CHECK 枚举（intake_type 八类/channel 四值/

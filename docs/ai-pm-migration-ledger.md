@@ -14,6 +14,8 @@
 | 0044 | `0044_team_onboarding.sql` | Team Onboarding（Team≡tenant 扩展：slug/description + 邀请三表；feat/team-onboarding 已合入 master） | 已应用（2026-11-06） |
 | 0045 | `0045_s02_i3_source_traceability.sql` | S02-I3 来源与追溯（5936105 曾以 0044 提交，与 Team Onboarding 撞 sqlx 版本号 → DEF-01 P0，2026-11-07 顺移） | 已应用（2026-11-06） |
 | 0046 | `0046_acp_communication_face.sql` | S03-ACP 通信面切片（ACP-01/02/08，设计稿 docs/ui/s03-acp/smark-pm-s03-acp-slice-design-acp01-02-08-v1.md V1.1；R-ACP-6 原裁 0045 起，0045 已被 s02_i3 顺移占用 → 本迁移顺移 0046） | 已应用（2026-11-07） |
+| 0047 | `0047_interaction_response.sql` | S03-ACP ACP-03 Human Response（interaction_response 表 + REST 回复入口同事务 continue 下发） | 已应用（2026-11-07） |
+| 0048 | `0048_kb_pc_intake.sql` | KB-PC 服务化 Phase 1-3 Intake（intake_record + intake_task；**原 0046_kb_pc_intake，后实施者顺移——0046 已被 ACP 通信面占用，双 0046 撞号修复**；已建专用容器 aipm-kbpc-pg:16447 需重置后复测） | 已应用（2026-11-07，KB-PC 会话） |
 | 0022 | `0022_delivery_manifest.sql` | T-041（D4） | 已应用（2026-11-02） |
 | 0023 | `0023_run_executor_hardening.sql` | T-032 | 已应用 |
 | 0024 | `0024_knowledge_section_index.sql` | T-060（知识索引 V2） | 已应用（2026-11-02） |
