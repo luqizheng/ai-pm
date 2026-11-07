@@ -88,10 +88,20 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) {
         // ① 进程收割与退出判定。
         if let Some(run) = active.as_mut() {
             if let Some(outcome) = adapter::reap(&mut run.process).await {
-                tracing::info!(run = %run.run_id, exit = %outcome, "agent process exited");
-                // 交付提交由 Agent 经 MCP 自行完成（Model A 既有模式）；
-                // Runner 侧仅记录退出证据。
-                active = None;
+                if run.awaiting_continue {
+                    // 人工介入流：进程是 Runner 自己按 terminate 命令杀的
+                    //（D-03）——预期退出，Run 保持存活等待 continue 命令。
+                    // 误判为退出会丢弃 Run → continue 永远无人消费。
+                    tracing::info!(
+                        run = %run.run_id, exit = %outcome,
+                        "agent terminated for intervention; awaiting continue"
+                    );
+                } else {
+                    tracing::info!(run = %run.run_id, exit = %outcome, "agent process exited");
+                    // 交付提交由 Agent 经 MCP 自行完成（Model A 既有模式）；
+                    // Runner 侧仅记录退出证据。
+                    active = None;
+                }
             }
         }
 
@@ -115,8 +125,10 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) {
             if let Err(e) = tick(cfg, client, run).await {
                 tracing::warn!(error = %e, run = %run.run_id, "supervision tick failed");
             }
-            if run.process.child.id().is_none() {
-                // 收割竞态兜底：进程句柄已失效。
+            // 收割竞态兜底：进程句柄已失效。awaiting_continue 期间的
+            // None 是 terminate 的预期结果（§4.1 修复：不得在此丢弃 Run，
+            // 否则 continue 命令永远无人消费——E2E 实测踩中）。
+            if run.process.child.id().is_none() && !run.awaiting_continue {
                 active = None;
             }
         }

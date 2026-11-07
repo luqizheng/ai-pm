@@ -34,6 +34,12 @@ impl McpClient {
         let http = reqwest::Client::builder()
             // 环境代理残留不得劫持内网 Platform 流量（对齐 smoke 测试 .no_proxy 修复）。
             .no_proxy()
+            // Platform rmcp 每个 session 响应后即关闭连接：禁用空闲复用（陈旧
+            // 连接会 TCP 重传黑洞）+ 全局超时（无超时的挂起会卡死监督循环）。
+            .timeout(std::time::Duration::from_secs(30))
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .pool_idle_timeout(std::time::Duration::from_secs(0))
+            .pool_max_idle_per_host(0)
             .build()
             .expect("reqwest client builds without IO");
         Self {
@@ -57,6 +63,8 @@ impl McpClient {
             "method": "tools/call",
             "params": { "name": name, "arguments": args },
         });
+        let started = std::time::Instant::now();
+        tracing::debug!(tool = name, "mcp call start");
         let resp: Value = self
             .http
             .post(&self.url)
@@ -67,6 +75,7 @@ impl McpClient {
             .await?
             .json()
             .await?;
+        tracing::debug!(tool = name, elapsed_ms = started.elapsed().as_millis() as u64, "mcp call done");
         if let Some(err) = resp.get("error") {
             return Err(RunnerError::Tool(format!("json-rpc error: {err}")));
         }

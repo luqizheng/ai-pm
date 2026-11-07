@@ -73,6 +73,9 @@ services:
       # T-081：/mcp 跨机暴露的 Host 白名单（rmcp DNS-rebinding 防护默认只放回环）。
       # 部署方声明部署地址；只增不减，回环默认值恒在。留空 = 仅回环可访问。
       AI_PM_MCP_ALLOWED_HOSTS: "${AI_PM_MCP_ALLOWED_HOSTS:-}"
+      # F-7 过渡开关（ACP 审计）：lmms 权限字典落地前 ACP 四新工具降级仅
+      # PM_MCP_READ；默认空 = fail-closed；V-05-1 后移除。
+      AI_PM_MCP_LEGACY_PERMISSION_GRANT: "${AI_PM_MCP_LEGACY_PERMISSION_GRANT:-}"
     ports:
       - "8090:8090"
     depends_on:
