@@ -233,7 +233,8 @@ async fn retry_non_terminal_task_is_409(pool: PgPool) {
     assert_eq!(response.status(), StatusCode::CONFLICT, "PENDING task is not retryable");
 }
 
-/// kb/pc 契约骨架（P2-2）：鉴权后业务未接线 → 501（≠404/500）。
+/// kb/pc 契约面（P2-2）：未接线入口 501（≠404/500）；
+/// K2/P3（checkpoint-1 落真）对不存在任务 → 404（≠501，已越过骨架语义）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn kb_pc_contract_skeletons_are_501(pool: PgPool) {
     let project = seed_project(&pool, "ITK-F").await;
@@ -242,7 +243,6 @@ async fn kb_pc_contract_skeletons_are_501(pool: PgPool) {
     let app = router(pool.clone());
     for (method, uri, has_body) in [
         ("POST", &format!("/v1/kb/analyses?project_id={project}"), true),
-        ("GET", &format!("/v1/kb/analyses/{}?project_id={project}", Uuid::new_v4()), false),
         ("POST", &format!("/v1/pc/analyses?project_id={project}"), true),
         ("GET", &format!("/v1/pc/proposals/{}?project_id={project}", Uuid::new_v4()), false),
     ] {
@@ -256,6 +256,18 @@ async fn kb_pc_contract_skeletons_are_501(pool: PgPool) {
             response.status(),
             StatusCode::NOT_IMPLEMENTED,
             "{method} {uri} must be authed-then-501 (port not wired)"
+        );
+    }
+    // K2/P3 已落真（checkpoint-1 读 0053 最小表）：未知任务 ID → 404。
+    for uri in [
+        &format!("/v1/kb/analyses/{}?project_id={project}", Uuid::new_v4()),
+        &format!("/v1/pc/analyses/{}?project_id={project}", Uuid::new_v4()),
+    ] {
+        let response = app.clone().oneshot(get(uri)).await.unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::NOT_FOUND,
+            "GET {uri} must be 404 for unknown task (K2/P3 wired)"
         );
     }
 }

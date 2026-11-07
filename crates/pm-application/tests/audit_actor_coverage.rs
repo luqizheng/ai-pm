@@ -48,6 +48,11 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     ("crates/pm-application/src/intake.rs", 1),
     // KB-PC 服务化：intake_task 人工重试（REST 面，写全四身份列）
     ("apps/pm-api/src/intakes.rs", 1),
+    // Checkpoint-1：KB 仓库快照分析 + PC 认知派生（worker 系统面 dispatch principal，四列显式 NULL）
+    ("crates/pm-infrastructure/src/kb_pc_analysis.rs", 2),
+    // Client Registry（0049，跨批补登记）：设备凭据 issue/revoke/permissions 审计（tenant_audit_log，
+    // 设备无 project 归属；checkpoint-1 会话全量门禁发现漏登记——0049 批实施遗漏）
+    ("crates/pm-application/src/device_credential.rs", 1),
 ];
 
 fn workspace_root() -> PathBuf {

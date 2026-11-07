@@ -47,8 +47,10 @@ FROM runtime-base AS runtime-pm-api
 # 知识库是 Git-backed（Markdown 真源）：pm_submit_document / pm_discovery_submit_proposal
 # 走知识写入管线时在容器内 shell 出 `git`。2026-11-03 两机实测发现运行时镜像缺
 # git → 知识写入全部失败（本机 e2e 跑宿主二进制没暴露）。
+# openssh-client：deploy key 生成（ssh-keygen）与 git-over-ssh（ssh -i）必需——
+# `apt-get install --no-install-recommends git` 不会带 ssh-client 推荐（checkpoint-1 实测）。
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git \
+    && apt-get install -y --no-install-recommends git openssh-client \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /build/target/release/pm-api /app/pm-api
 ENV PM_API_PORT=8090
@@ -56,10 +58,19 @@ EXPOSE 8090
 ENTRYPOINT ["/app/pm-api"]
 
 FROM runtime-base AS runtime-pm-worker
+# checkpoint-1：KB 仓库快照分析本体在 worker 消费端 shell 出 `git`
+# （clone --bare / rev-parse / log / ls-tree / show）+ git-over-ssh 需 openssh-client。
+# 镜像缺 git 时全部仓库输入的 intake 分析失败（processing.failed）。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git openssh-client \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /build/target/release/pm-worker /app/pm-worker
 ENTRYPOINT ["/app/pm-worker"]
 
 FROM runtime-base AS runtime-ai-pm-worker
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git openssh-client \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /build/target/release/ai-pm-worker /app/ai-pm-worker
 COPY --from=build /build/policies /app/policies
 ENTRYPOINT ["/app/ai-pm-worker"]

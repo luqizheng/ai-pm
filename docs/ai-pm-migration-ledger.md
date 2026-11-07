@@ -20,6 +20,7 @@
 | 0050 | `0050_response_delivery.sql` | ACP-04 Delivery 持久化（一回复一账 UNIQUE(response_id)；重投复用原行 attempt+1；generation 恒 1；continuation_id 前向可空）——契约同上（联合裁决五问通过） | 已应用（2026-11-08，批 2 实施；E2E 待联调批） |
 | 0051 | （暂定预留：ACP-05 Continuation） | `delivery.continuation`——同上契约（暂定确认；**Recovery Foundation 批先于本迁移**，联合裁决 2026-11-07） | 暂定预留 |
 | 0052 | `0052_recovery_foundation.sql` | Recovery Foundation（`worker_command.reacquired_generation` + `task_interaction.previous_chain_id` 链间弱关联）——批 3 实施（联合基线 §4） | 已应用（2026-11-08） |
+| 0053 | `0053_checkpoint1_kb_pc_minimal.sql` | Checkpoint-1 最小纵切：KB/PC 目标表最小子集（kb.document/revision + pc.object_type/cognition_object/cognition_revision/source/evidence；正文暂存 PG、关系/版本/提案/冲突面不建——偏差登记在迁移头注）——取号时 0052 尚为 tentative 预留，按台账纪律 max+1 取号（Recovery 批后实施占 0052，双方无撞号） | 已应用（2026-11-08，checkpoint-1 会话） |
 | 0022 | `0022_delivery_manifest.sql` | T-041（D4） | 已应用（2026-11-02） |
 | 0023 | `0023_run_executor_hardening.sql` | T-032 | 已应用 |
 | 0024 | `0024_knowledge_section_index.sql` | T-060（知识索引 V2） | 已应用（2026-11-02） |

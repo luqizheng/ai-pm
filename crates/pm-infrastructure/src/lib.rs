@@ -2,6 +2,7 @@
 
 pub mod codex_executor;
 pub mod job_queue;
+pub mod kb_pc_analysis;
 pub mod kb_pc_handlers;
 pub mod outbox;
 pub mod outbox_handlers;
