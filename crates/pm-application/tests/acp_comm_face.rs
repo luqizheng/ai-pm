@@ -286,6 +286,15 @@ async fn lifecycle_response_delivery_consumption_and_guard_release(pool: PgPool)
     )
     .await
     .unwrap();
+    // F-10：acked 终止 → 账本 completed。
+    let ledger: String = sqlx::query_scalar(
+        "SELECT status FROM delivery.task_run_cleanup WHERE run_id = $1",
+    )
+    .bind(fx.run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(ledger, "completed");
 
     // 回复持久化（ACP-03 回执）：pending → responded + guard start_wait。
     record_response_persisted(
@@ -551,6 +560,18 @@ async fn situation6_continue_never_surfaces_while_terminate_unconfirmed(pool: Pg
     // Task 停在 awaiting_decision（人工等待即既有合法阻塞表达；
     // AwaitingDecision→Blocked 非合法边，不得绕开 13 态表达阻塞）。
     assert_eq!(task_status(&pool, fx.task_id).await, "awaiting_decision");
+    // F-10：终止失败（旧进程退出未确认）→ 账本 needs_human（转人工清理）。
+    let ledger: (String, Option<chrono::DateTime<chrono::Utc>>) = sqlx::query_as(
+        "SELECT status, completed_at FROM delivery.task_run_cleanup WHERE run_id = $1",
+    )
+    .bind(fx.run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(ledger.0, "needs_human");
+    assert!(ledger.1.is_none(), "not completed");
+    // acked 路径的 completed 账本由 acp446 之外的 terminate ack 流覆盖
+    //（lifecycle 测试 ack terminate 后同样可查）。
     // terminate 已终态（failed）→ 情形 6 的「未回执」窗口关闭，continue 恢复
     // 可下发；但执行端启动前检查（frozen + §9.4 检查 8）会拒绝真正启动——
     // 平台侧只保证"拒绝得干净"，启动拒绝由执行端 Runner 落实（WP-3）。
@@ -976,4 +997,18 @@ async fn acp456_cross_project_reads_as_not_found(pool: PgPool) {
         .await
         .unwrap_err();
     assert!(matches!(err, pm_application::interaction::InteractionError::NotFound));
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn f5_comm_overview_counts_shielded_pending_unconsumed(pool: PgPool) {
+    use pm_application::comm_overview::load_comm_overview;
+    let fx = claimed_run(&pool, "ACP-F5").await;
+    let reported = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
+        .await
+        .unwrap();
+    let o = load_comm_overview(&pool).await.unwrap();
+    assert_eq!(o.interaction_shielded_runs, 1);
+    assert_eq!(o.interaction_open_chains, 1);
+    assert_eq!(o.interaction_unconsumed_total, 0, "pending ≠ unconsumed");
+    assert!(o.worker_command_pending_total >= 1, "terminate command pending");
 }

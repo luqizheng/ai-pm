@@ -3,7 +3,7 @@
 
 use ai_pm_runner::adapter::{
     archive_marker, find_unreported_marker, quarantine_marker, spawn_agent, terminate,
-    terminate_with_retry,
+    terminate_spawned, terminate_with_retry,
 };
 use ai_pm_runner::mcp::McpClient;
 use serde_json::json;
@@ -361,4 +361,15 @@ async fn f9_tool_rejection_archives_marker_without_retry() {
     assert!(run_dir.join(".aipm").join("interaction.evt-9.rejected").is_file());
     assert!(!run_dir.join(".aipm").join("interaction.json").is_file());
     let _ = terminate(&mut run.process.child).await;
+}
+
+#[tokio::test]
+async fn acp08_job_object_assigned_and_tree_terminates() {
+    let dir = temp_dir("job-object");
+    let mut spawn = spawn_agent(&sleeper_cmd(30), &dir, &[], None).unwrap();
+    #[cfg(windows)]
+    assert!(spawn.job.is_some(), "windows spawn must carry a Job Object handle");
+    // 整树终止入口：Job Terminate + 收割。
+    let outcome = terminate_spawned(&mut spawn).await.unwrap();
+    assert_eq!(outcome, "Killed");
 }

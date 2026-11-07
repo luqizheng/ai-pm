@@ -369,6 +369,23 @@ pub async fn ack_command(
                 .execute(&mut *tx)
                 .await?;
             }
+            if command_type == COMMAND_TERMINATE {
+                // F-10（审计 2026-11-07）：终止回执落进程清理账本（§12.6 优先
+                // 扩展既有账本；Runner 载体 spawn 时无账本行，此处直接以
+                // completed 终态入账——终止生命周期已闭环，无需 cleanup 重试）。
+                sqlx::query(
+                    "INSERT INTO delivery.task_run_cleanup \
+                       (run_id, session, executor_kind, status, completed_at) \
+                     SELECT r.id, COALESCE(r.executor_session, 'unknown'), \
+                            COALESCE(r.executor_kind, 'runner'), 'completed', now() \
+                       FROM delivery.task_run r WHERE r.id = $1 \
+                     ON CONFLICT (run_id) DO UPDATE \
+                        SET status = 'completed', completed_at = now(), updated_at = now()",
+                )
+                .bind(run_id)
+                .execute(&mut *tx)
+                .await?;
+            }
         }
         AckOutcome::Failed => {
             sqlx::query(
@@ -395,6 +412,22 @@ pub async fn ack_command(
                     .execute(&mut *tx)
                     .await?;
                 }
+                // F-10：终止失败（旧进程退出未确认）→ 账本 needs_human
+                //（清理未闭环转人工；completed_at 保持 NULL 满足 CHECK）。
+                sqlx::query(
+                    "INSERT INTO delivery.task_run_cleanup \
+                       (run_id, session, executor_kind, status, last_error) \
+                     SELECT r.id, COALESCE(r.executor_session, 'unknown'), \
+                            COALESCE(r.executor_kind, 'runner'), 'needs_human', $2 \
+                       FROM delivery.task_run r WHERE r.id = $1 \
+                     ON CONFLICT (run_id) DO UPDATE \
+                        SET status = 'needs_human', completed_at = NULL, \
+                            updated_at = now(), last_error = $2",
+                )
+                .bind(run_id)
+                .bind(last_error.clone())
+                .execute(&mut *tx)
+                .await?;
                 let task_status: Option<String> = sqlx::query_scalar(
                     "SELECT status FROM delivery.task WHERE id = $1 AND project_id = $2 FOR UPDATE",
                 )

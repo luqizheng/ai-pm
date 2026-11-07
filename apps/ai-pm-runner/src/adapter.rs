@@ -38,6 +38,8 @@ pub struct SpawnedProcess {
     pub child: Child,
     pub pid: u32,
     pub session_id: String,
+    #[cfg(windows)]
+    pub job: Option<job_object::JobHandle>,
 }
 
 const MARKER_SCHEMA: &str = "aipm.interaction.v1";
@@ -68,14 +70,34 @@ pub fn spawn_agent(
         write_reply(run_dir, reply)?;
         cmd.env("AI_PM_HUMAN_REPLY", serde_json::to_string(reply).unwrap_or_default());
     }
+    #[cfg(unix)]
+    cmd.process_group(0);
     let child = cmd.spawn()?;
     let pid = child.id().unwrap_or_default();
     let session_id = format!("runner:{pid}");
+    // Windows：spawn 后立即入 Job——进程树随句柄关闭整树终止（含孙进程）。
+    #[cfg(windows)]
+    let job = match job_object::JobHandle::create() {
+        Ok(job) => {
+            if let Err(e) = job.assign(pid) {
+                tracing::warn!(pid, error = %e, "job assign failed; tree-kill degraded to direct child");
+                None
+            } else {
+                Some(job)
+            }
+        }
+        Err(e) => {
+            tracing::warn!(pid, error = %e, "job create failed; tree-kill degraded to direct child");
+            None
+        }
+    };
     write_process_record(run_dir, pid, &session_id)?;
     Ok(SpawnedProcess {
         child,
         pid,
         session_id,
+        #[cfg(windows)]
+        job,
     })
 }
 
@@ -83,6 +105,15 @@ pub fn spawn_agent(
 /// 对已退出进程调用 kill 为 Err（is_ok=FALSE），wait 仍返回真实 status。
 pub async fn terminate(child: &mut Child) -> Result<String, AdapterError> {
     terminate_with_retry(child, 1, 10).await
+}
+
+/// 带进程树硬化的终止入口（Windows Job Object 先整树 TerminateJobObject）。
+pub async fn terminate_spawned(spawned: &mut SpawnedProcess) -> Result<String, AdapterError> {
+    #[cfg(windows)]
+    if let Some(job) = spawned.job.as_ref() {
+        job.terminate();
+    }
+    terminate_with_retry(&mut spawned.child, 1, 10).await
 }
 
 /// F-6（审计 2026-11-07）：有界重试终止（§6.4/§11.4）——kill 后限时等待，
@@ -247,4 +278,79 @@ fn write_process_record(run_dir: &Path, pid: u32, session_id: &str) -> Result<()
         }))?,
     )?;
     Ok(())
+}
+
+// ───────────── Windows Job Object（ACP-08 硬化，移植自 codex_executor.rs） ─────────────
+
+#[cfg(windows)]
+pub mod job_object {
+    //! 进程树终止硬化：Job Object + `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`——
+    //! 句柄关闭即整树终止（含孙进程），覆盖 Runner 场景下 CLI 拉起的一切子进程。
+
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, TerminateJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE};
+
+    pub struct JobHandle {
+        handle: HANDLE,
+    }
+    unsafe impl Send for JobHandle {}
+    unsafe impl Sync for JobHandle {}
+
+    impl JobHandle {
+        pub fn create() -> Result<Self, String> {
+            unsafe {
+                let handle = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+                if handle.is_null() {
+                    return Err("CreateJobObjectW failed".into());
+                }
+                let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+                info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                let ok = SetInformationJobObject(
+                    handle,
+                    JobObjectExtendedLimitInformation,
+                    &info as *const _ as *const core::ffi::c_void,
+                    std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                );
+                if ok == 0 {
+                    CloseHandle(handle);
+                    return Err("SetInformationJobObject failed".into());
+                }
+                Ok(Self { handle })
+            }
+        }
+
+        pub fn assign(&self, pid: u32) -> Result<(), String> {
+            unsafe {
+                let process = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
+                if process.is_null() {
+                    return Err(format!("OpenProcess({pid}) failed"));
+                }
+                let ok = AssignProcessToJobObject(self.handle, process);
+                CloseHandle(process);
+                if ok == 0 {
+                    return Err(format!("AssignProcessToJobObject({pid}) failed"));
+                }
+                Ok(())
+            }
+        }
+
+        pub fn terminate(&self) {
+            unsafe {
+                TerminateJobObject(self.handle, 1);
+            }
+        }
+    }
+
+    impl Drop for JobHandle {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.handle);
+            }
+        }
+    }
 }

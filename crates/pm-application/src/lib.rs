@@ -9,6 +9,7 @@ pub mod approver;
 pub mod bootstrap;
 pub mod caller;
 pub mod command_center;
+pub mod comm_overview;
 pub mod command_executor;
 pub mod delivery;
 pub mod devenv;

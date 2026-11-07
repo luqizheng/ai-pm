@@ -344,6 +344,11 @@ pub async fn execute_command(
         "agent.process.terminate" => {
             // F-6：有界重试（§6.4/§11.4）——kill 后限时等待，超时重试，耗尽才
             // 回执 failed（Platform 侧冻结启动 + 阻塞路径接手）。
+            // ACP-08：Windows 先 Job Object 整树终止，再走有界重试收割。
+            #[cfg(windows)]
+            if let Some(job) = run.process.job.as_ref() {
+                job.terminate();
+            }
             let outcome = adapter::terminate_with_retry(
                 &mut run.process.child,
                 cfg.terminate_attempts,
