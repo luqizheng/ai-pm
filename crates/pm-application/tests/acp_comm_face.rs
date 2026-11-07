@@ -358,8 +358,25 @@ async fn lifecycle_response_delivery_consumption_and_guard_release(pool: PgPool)
     .await
     .unwrap();
     assert_eq!(run_field(&pool, fx.run_id, "scheduling_shield").await, "none");
-    assert_eq!(task_status(&pool, fx.task_id).await, "awaiting_decision",
-        "task leaves awaiting_decision only when the chain closes (consumed)");
+    // R-4（ACP-450）：INPUT_INJECTED = 执行恢复确认边界——Task 同事务回 Running，
+    // 等待 resolve，链关闭；Interaction 保持 responded（consumed 仅为观测事实）。
+    assert_eq!(task_status(&pool, fx.task_id).await, "running",
+        "continue acked resumes execution in the same transaction (R-4)");
+    assert_eq!(open_waiting(&pool, fx.task_id).await, 0);
+    let (status, chain_open): (String, bool) = sqlx::query_as(
+        "SELECT status, chain_open FROM delivery.task_interaction WHERE id = $1",
+    )
+    .bind(reported.interaction_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "responded", "interaction stays responded (N-6 legal steady state)");
+    assert!(!chain_open, "chain closed at acked (R-4)");
+    // ACP-451：链已关闭 → 新 Session 运行中可再次介入（新链）。
+    let second = report_interaction(&pool, &input(&fx, "evt-2"), &AuditActor::principal(fx.human_id))
+        .await
+        .unwrap();
+    assert!(!second.replayed, "new chain allowed after acked-closed chain");
 
     // ACP-434：证据不足禁止伪造 CONSUMED。
     let bad_evidence = mark_consumed(
@@ -373,7 +390,7 @@ async fn lifecycle_response_delivery_consumption_and_guard_release(pool: PgPool)
     .await;
     assert!(bad_evidence.is_err());
 
-    // 合法消费：consumed + 链关闭 + 等待 resolve + Task 回 Running。
+    // 合法消费：consumed（迟到回执不改变已确认的恢复结果——Task 保持 running）。
     mark_consumed(
         &pool,
         fx.project_id,
@@ -1011,4 +1028,136 @@ async fn f5_comm_overview_counts_shielded_pending_unconsumed(pool: PgPool) {
     assert_eq!(o.interaction_open_chains, 1);
     assert_eq!(o.interaction_unconsumed_total, 0, "pending ≠ unconsumed");
     assert!(o.worker_command_pending_total >= 1, "terminate command pending");
+}
+
+/// ACP-448（R-3/V1.2 §1.3）：execution_mode='human' 的 Run 调用
+/// pm_report_interaction → fail-closed 拒绝，且零副作用
+///（不产生 Interaction、不产生 terminate 命令）。
+/// Model A 的等待走既有 awaiting_decision/task_waiting 入口。
+#[sqlx::test(migrations = "../../migrations")]
+async fn acp448_human_mode_run_cannot_report_interaction(pool: PgPool) {
+    let fx = claimed_run(&pool, "ACP-448").await;
+    sqlx::query("UPDATE delivery.task_run SET execution_mode = 'human' WHERE id = $1")
+        .bind(fx.run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let err = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
+        .await
+        .unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("spawn-mode"),
+        "rejection must name the admission rule (got: {msg})"
+    );
+    // 零副作用：无 Interaction、无命令。
+    let interactions: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.task_interaction")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(interactions, 0, "no Interaction may be created on a human run");
+    let commands: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.worker_command")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(commands, 0, "no terminate command may be created on a human run");
+    // 调度保护未被触碰。
+    assert_eq!(run_field(&pool, fx.run_id, "scheduling_shield").await, "none");
+    // Task 仍为 claimed（未转 awaiting_decision）。
+    assert_eq!(task_status(&pool, fx.task_id).await, "claimed");
+}
+
+/// ACP-450/451 幂等面（R-4）：continue acked 的重复回执 = replayed 且状态稳定
+///（Task 保持 running、等待行保持 resolve、Interaction 保持 responded 未 consumed）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn acp450_repeated_continue_ack_is_idempotent(pool: PgPool) {
+    let fx = claimed_run(&pool, "ACP-450").await;
+    let actor = AuditActor::dispatch();
+    let reported = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
+        .await
+        .unwrap();
+
+    // terminate 先回执（关闭情形 6 窗口）。
+    let polled = cmd::poll_commands(&pool, fx.project_id, fx.run_id, "w1").await.unwrap();
+    assert_eq!(polled.len(), 1);
+    cmd::ack_command(
+        &pool,
+        fx.project_id,
+        polled[0].command_id,
+        "w1",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        None,
+    )
+    .await
+    .unwrap();
+
+    // 回复持久化 + 下发 continue。
+    record_response_persisted(
+        &pool,
+        fx.project_id,
+        reported.interaction_id,
+        json!({ "response_id": "resp-1" }),
+        &actor,
+    )
+    .await
+    .unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    let continue_id = cmd::issue_continue_command(
+        &mut tx,
+        fx.project_id,
+        fx.task_id,
+        fx.run_id,
+        reported.interaction_id,
+        None,
+        "w1",
+        fx.lease_generation,
+        json!({ "decision": "approve" }),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+
+    // 领取并回执（INPUT_INJECTED）→ R-4 执行恢复。
+    let polled2 = cmd::poll_commands(&pool, fx.project_id, fx.run_id, "w1").await.unwrap();
+    assert_eq!(polled2.len(), 1);
+    cmd::ack_command(
+        &pool,
+        fx.project_id,
+        continue_id,
+        "w1",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "session_created": true, "input_injected": true })),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(task_status(&pool, fx.task_id).await, "running");
+    assert_eq!(open_waiting(&pool, fx.task_id).await, 0);
+
+    // 重复回执（网络重试/重投后重复 ack）→ replayed，状态不变。
+    let replay = cmd::ack_command(
+        &pool,
+        fx.project_id,
+        continue_id,
+        "w1",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "session_created": true, "input_injected": true })),
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(replay.replayed);
+    assert_eq!(task_status(&pool, fx.task_id).await, "running");
+    assert_eq!(open_waiting(&pool, fx.task_id).await, 0);
+    let (status, chain_open): (String, bool) = sqlx::query_as(
+        "SELECT status, chain_open FROM delivery.task_interaction WHERE id = $1",
+    )
+    .bind(reported.interaction_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "responded", "interaction must stay responded after ack replay");
+    assert!(!chain_open);
 }

@@ -504,6 +504,73 @@ pub async fn mark_consumed(
     Ok(())
 }
 
+/// R-4（V1.2 §5.3 / ACP-450/451）：continue acked（INPUT_INJECTED）= 执行恢复
+/// 的**业务确认边界**（ACP-C2）。调用方（worker_command ack_command）已在同一
+/// 事务内完成命令回执与屏蔽释放；本函数补齐同事务的三个恢复写：
+///
+/// ① 链关闭（Interaction **保持 `responded`**——consumed 降为 Interaction 级
+///    观测事实，不再承担链关闭职责；迟到/缺失/重复的消费回执不得改变恢复结果）；
+/// ② task_waiting resolve（note 引用 interaction + 触发原因）；
+/// ③ Task `awaiting_decision → running`（waiting_resolved=true，经统一守卫；
+///    仅当仍处 awaiting_decision——已取消/已回 running 的跳过 = 幂等）。
+///
+/// 重复调用幂等：链关闭/resolve 天然幂等；同态迁移由调用方状态判定跳过。
+pub(crate) async fn resume_execution_after_continue_tx(
+    tx: &mut Transaction<'static, Postgres>,
+    project_id: Uuid,
+    task_id: Uuid,
+    interaction_id: Uuid,
+    actor: &AuditActor,
+) -> Result<(), InteractionError> {
+    // ① 链关闭（链因"新 Session 已携带回复启动"而关闭，V1.2 §5.2）。
+    sqlx::query(
+        "UPDATE delivery.task_interaction SET chain_open = FALSE \
+          WHERE id = $1 AND project_id = $2 AND chain_open",
+    )
+    .bind(interaction_id)
+    .bind(project_id)
+    .execute(&mut **tx)
+    .await?;
+
+    // ② 等待 resolve。
+    resolve_waiting(
+        tx,
+        task_id,
+        &format!("interaction {interaction_id} resumed (continue acked; consumption pending)"),
+    )
+    .await?;
+
+    // ③ Task 回 Running（仅当仍在 awaiting_decision；其他状态（如已取消）跳过）。
+    let task_status: Option<String> = sqlx::query_scalar(
+        "SELECT status FROM delivery.task WHERE id = $1 AND project_id = $2 FOR UPDATE",
+    )
+    .bind(task_id)
+    .bind(project_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    if task_status.as_deref() == Some("awaiting_decision") {
+        let ctx = system_context(&mut *tx, project_id)
+            .await
+            .map_err(|e| InteractionError::Transition(e.to_string()))?;
+        let mut facts = TransitionFacts::for_dispatch();
+        facts.waiting_resolved = true;
+        apply_task_transition(&mut *tx, task_id, None, TaskStatus::Running, &facts, &ctx)
+            .await
+            .map_err(|e| InteractionError::Transition(e.to_string()))?;
+    }
+
+    append_audit_with_payload(
+        tx,
+        project_id,
+        actor,
+        "interaction.execution_resumed",
+        interaction_id,
+        json!({ "trigger": "continue_acked", "task_id": task_id }),
+    )
+    .await?;
+    Ok(())
+}
+
 /// §8.2 超时清扫（Worker 循环调用）：过期 pending → timed_out（不解释为同意），
 /// 调度保护 human_wait → timed_out；链保持开放（未处置不关闭，ACP-439）。
 pub async fn interaction_timeout_sweep(pool: &PgPool) -> Result<usize, InteractionError> {

@@ -368,6 +368,21 @@ pub async fn ack_command(
                 .bind(run_id)
                 .execute(&mut *tx)
                 .await?;
+                // R-4（V1.2 §5.3 / ACP-450/451）：INPUT_INJECTED 是执行恢复的
+                // 业务确认边界——同事务链关闭 + task_waiting resolve + Task
+                // awaiting_decision→running；consumed 降为 Interaction 级观测
+                // 事实（ACP-C2）。迟到/重复 ack 在上方终态幂等分支已拦截。
+                if let Some(interaction_id) = interaction_id {
+                    crate::interaction::resume_execution_after_continue_tx(
+                        &mut tx,
+                        project_id,
+                        task_id,
+                        interaction_id,
+                        &AuditActor::dispatch(),
+                    )
+                    .await
+                    .map_err(|e| CommandFaceError::Validation(e.to_string()))?;
+                }
             }
             if command_type == COMMAND_TERMINATE {
                 // F-10（审计 2026-11-07）：终止回执落进程清理账本（§12.6 优先

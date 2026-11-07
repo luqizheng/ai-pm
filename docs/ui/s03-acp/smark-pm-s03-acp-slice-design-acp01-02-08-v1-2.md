@@ -71,7 +71,7 @@ V1.3.1 中 "Worker" 一词在 V0.5 语境下由 **ai-pm-runner（用户 PC 客�
 
 **V1 实现覆盖补注（2026-11-07 复审 F-3，e1feb5f 仍准确）**：命令消费与标记文件侦测**仅 Runner 载体接线**；服务器 ai-pm-worker 载体仅接了超时清扫（terminate/continue 消费与侦测未接）——按 V-05-2③ 属显式延后，非双形态已等价；Worker 载体的命令消费随服务器侧需求另行接线。
 
-**实现先行批注记（e1feb5f）**：Runner 应用已落地（`apps/ai-pm-runner`：runner_loop / adapter / mcp 三模块），真实栈 E2E 两阶段 PASS（假 Agent + opencode 真 CLI，报告 INDEX 8a）。本稿 V1.2 相对该实现存在**三处设计收敛项**（实现欠账，随复审通过后的收敛批落地）：① acked 事务内 Task→running（R-4）；② `pm_report_interaction` 按 execution_mode 准入（R-3，ACP-448）；③ 离线恢复的发现面+续领（R-11，§3.6）。
+**实现先行批注记（e1feb5f）**：Runner 应用已落地（`apps/ai-pm-runner`：runner_loop / adapter / mcp 三模块），真实栈 E2E 两阶段 PASS（假 Agent + opencode 真 CLI，报告 INDEX 8a）。本稿 V1.2 相对该实现存在**三处设计收敛项**（实现欠账，随复审通过后的收敛批落地）：① acked 事务内 Task→running（R-4）；② `pm_report_interaction` 按 execution_mode 准入（R-3，ACP-448）；③ 离线恢复的发现面+续领（R-11，§3.6）。**WP-A 收敛后更新（2026-11-07）**：①已落地（`interaction.rs resume_execution_after_continue_tx`，ack_command 同事务接线，20 例绿）；②经 WP-A 复核**本就已实现**（interaction.rs:138-145 准入+零副作用，上一轮对账遗漏）并补集成测试 `acp448_human_mode_run_cannot_report_interaction`——三处欠账仅剩 ③（Recovery Foundation，依赖 V-05-1）。
 
 本稿正文统一使用 "执行端" 指代 Runner / Worker 双形态。
 
@@ -143,7 +143,7 @@ pm_report_interaction(
 | 设计点 | 规则 |
 | --- | --- |
 | 身份与权限 | 权限码 `PM_MCP_AGENT_REPORT`（§1.6，**已落 F-7 双态门**）+ 租约三要素。**不新增人类确认语义，不违 A\***（人类回复仅 REST/UI，属 ACP-03） |
-| **execution_mode 准入（R-3，专家复审批准 + 补强）** | **仅 `execution_mode ∈ {'spawn'}` 的 Run 可调用**（Runner / Worker spawn 形态）；`'human'`（Model A 真人 MCP 客户端）→ fail-closed 明确错误码拒绝且**不产生 Interaction、不产生任何命令副作用**——Model A 的等待走既有 `awaiting_decision`/`task_waiting` 入口（ACP-09 边界的操作化）。**两层判定分离（专家约束）**：execution_mode 负责**准入**；**ACP-C1 命令路由不变量**独立负责"命令存在有效可验证投递目标"——不得混为一套判定。**存量治理（专家约束）**：历史 human Run 下未终局的孤儿 terminate 命令 = 定向审计 + 修复（保留审计记录，禁止直接删除）；命令修复不得未经独立证据改变 Task 状态。**实现注记**：准入校验为待收敛项（ACP-448 钉住） |
+| **execution_mode 准入（R-3，专家复审批准 + 补强）** | **仅 `execution_mode ∈ {'spawn'}` 的 Run 可调用**（Runner / Worker spawn 形态）；`'human'`（Model A 真人 MCP 客户端）→ fail-closed 明确错误码拒绝且**不产生 Interaction、不产生任何命令副作用**——Model A 的等待走既有 `awaiting_decision`/`task_waiting` 入口（ACP-09 边界的操作化）。**两层判定分离（专家约束）**：execution_mode 负责**准入**；**ACP-C1 命令路由不变量**独立负责"命令存在有效可验证投递目标"——不得混为一套判定。**存量治理（专家约束）**：历史 human Run 下未终局的孤儿 terminate 命令 = 定向审计 + 修复（保留审计记录，禁止直接删除）；命令修复不得未经独立证据改变 Task 状态。**实现注记（WP-A 复核更新）**：准入校验**已实现**（interaction.rs run 装载处，非 spawn 拒绝零副作用）+ 集成测试 `acp448_human_mode_run_cannot_report_interaction` 钉住 |
 | 幂等 | `UNIQUE(run_id, event_id)`（已实现）；重复上报返回原 `interaction_id` 不新建 |
 | 介入链唯一 | 该 Task 存在**开放介入链**（§5.2）→ Conflict 拒绝 |
 | awaiting_decision 映射 | 同一事务：Task → `awaiting_decision`（经既有 task_transition 门槛）+ `task_waiting` upsert + 调度保护状态 `human_wait`（§4.1）（已实现，单事务，interaction.rs） |
@@ -449,7 +449,7 @@ none ──创建 Interaction──▶ human_wait ──回复持久化──▶
 | Interaction → timed_out（无 retry） | 保持 awaiting_decision | 保留活跃行；不自动 resolve（§8.2） |
 | Interaction → cancelled（Task 活） | 链关闭 → 回转前置状态或随 Task 终态（既有映射：awaiting_decision→Running，waiting_resolved 由取消提供） | resolve（ended_by=system） |
 
-> **实现注记（R-4 欠账）**：e1feb5f 现行为 = `mark_consumed`（consumed）时做 awaiting_decision→Running + resolve（waiting_resolved=true，已实现且比 V1.1 更正确）；**acked 事务内转 running + 链关闭为待收敛项**——收敛前 DSH 形态（永不 consumed）下"Task 停 awaiting_decision + 新 Session 提交被拒"的窗口仍然存在，正是 R-4 要闭合的问题。收敛批以 ACP-450/451 验收。
+> **实现注记（WP-A 已收敛 2026-11-07）**：acked 事务内转 running + 链关闭 + waiting resolve 已落地（`interaction.rs resume_execution_after_continue_tx`，由 `worker_command::ack_command` continue-acked 分支同事务调用；审计 `interaction.execution_resumed`）；mark_consumed 保留为防御性兜底（同态幂等跳过）。测试：lifecycle 翻转至 R-4 语义 + `acp450_repeated_continue_ack_is_idempotent`（重复回执 replayed 且状态稳定）+ ACP-451 新链断言，acp_comm_face 20/20 绿。DSH 欠账窗口已闭合。
 
 **专家复审补强（2026-11-07，批准 R-4 对策 + 五点约束）**：① INPUT_INJECTED 是 Continuation 恢复的**业务确认边界**（前提：协议保证输入已被执行端接受且 Continuation 进入可执行状态——§1.4 R-6 语义已满足）；② acked 同事务四写 = Task→running + waiting_resolved=true + chain_open=false + task_waiting resolve + guard→none（即上表）；③ **迟到、缺失或重复的 consumed 回执不得改变已确认的 Continuation 恢复结果**（consumed 只落 consumed_at/指标，任何重复提交幂等返回原结果）；④ 旧链关闭后允许建新链，**旧 Interaction 与新链保持独立关联**（`retry_of` 只在链内使用，链间无关联字段——UI 按 task+链分组展示）；⑤ **迁移期历史 responded+running 数据按 continue ACK 证据分类修复**（有 acked continue → 补关链/resolve；无 → 维持现状待人工），禁止仅凭 Task 状态推断恢复成功。
 
@@ -562,7 +562,7 @@ Runner 的 spawn/收割/终止能力自 `codex_executor.rs` 演化：原子 pid 
 2. 禁重建区继续有效：不建 task_execution/execution_result、不改 13 态状态机与 Run 7 态（scheduling_shield 为调度保护标志非状态机扩展）、WAITING_FOR_* 不做成状态、四工具契约不动、`recover_lost_run`/B3-2 回收语义不为本切片改写（续领 §3.6 是独立显式操作，不经回收路径）。
 3. 全部写入经 `pm-application` 统一应用服务（V-6）；MCP/Worker/Runner 仅适配层。
 4. 迁移：0046/0047 已应用（R-ACP-6 事实更新）；**后续按专家第 3 块拆分：0048 = ACP 收敛迁移（`worker_command.reacquired_generation` + `task_interaction.previous_chain_id`），0049 = Client Registry（登记表 + `task_run.lease_client_id` + 历史回填三分类 + 权限码字典）**——两类内容独立审查/测试/回滚，不混批；迁移号由单一实施负责人统一分配，进入共享分支后并行会话不得自建同号；落地前重核 `docs/ai-pm-migration-ledger.md`；主 checkout 有并行会话在途物，禁 sweep、禁 `git add -A`。
-5. 本稿落 `docs/ui/s03-acp/`；**收敛批两层交付（专家第 3 块定稿，同批不同 PR、独立提交独立验收）**——**层 1 Correctness Fix（P0 立即）**：① acked 事务内 Task→running + 链关闭（R-4，ACP-450/451）；② `pm_report_interaction` execution_mode 准入 + 孤儿 terminate 定向审计（R-3，ACP-448/C1）；③ Model A 定向回归（human 拒报/既有流程/回复续行/无证据/重复 ACK 幂等）。**层 2 Recovery Foundation（依赖 V-05-1 身份安全完成）**：④ `pm_discover_runs` + 续领 + 命令改路由（R-11/2.5，ACP-452/453 + 0048 列）；⑤ 标记文件名含 event_id（P2-1）；⑥ `previous_chain_id`（0048，2.6）；⑦ receipt Schema 版本化 + requested/confirmed + generation（2.1）；⑧ 续领退避/告警/人工处置 + 自动恢复停止条件（2.2）；⑨ UI 快捷入口 → ACP-07（2.3，随 ACP-07 稿）；⑩ 过渡身份 → V-05-1 Client 主体（R-16 生产启用硬前置，0049）。**排期全景见 `docs/project-ai-team-v2/ai-pm-v05-execution-roadmap-v1.md`**。
+5. 本稿落 `docs/ui/s03-acp/`；**收敛批两层交付（专家第 3 块定稿，同批不同 PR、独立提交独立验收）**——**层 1 Correctness Fix（P0，WP-A 已落地 2026-11-07：①② 代码+测试完成，③ 定向回归部分=单测层完成（human 拒报/重复 ACK 幂等/链闭再介入），真实栈定向回归随下一台 Runner E2E 补；遗留=孤儿 terminate 存量定向审计（迁移期一次性脚本，随 Recovery Foundation 批））**：① acked 事务内 Task→running + 链关闭（R-4，ACP-450/451）✅；② `pm_report_interaction` execution_mode 准入（R-3，ACP-448）✅；③ Model A 定向回归（单测层 ✅ / 真实栈待补）。**层 2 Recovery Foundation（依赖 V-05-1 身份安全完成）**：④ `pm_discover_runs` + 续领 + 命令改路由（R-11/2.5，ACP-452/453 + 0048 列）；⑤ 标记文件名含 event_id（P2-1）；⑥ `previous_chain_id`（0048，2.6）；⑦ receipt Schema 版本化 + requested/confirmed + generation（2.1）；⑧ 续领退避/告警/人工处置 + 自动恢复停止条件（2.2）；⑨ UI 快捷入口 → ACP-07（2.3，随 ACP-07 稿）；⑩ 过渡身份 → V-05-1 Client 主体（R-16 生产启用硬前置，0049）。**排期全景见 `docs/project-ai-team-v2/ai-pm-v05-execution-roadmap-v1.md`**。
 
 ---
 
