@@ -239,12 +239,13 @@ async fn lifecycle_with_credential_gate_and_status_flow(pool: PgPool) {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
 
     // 替换凭证：hint 脱敏、无明文回显。
+    // CAS 语义 = expected == 当前 revision（服务端 replace_team_credential 校验）。
     let (status, row) = call(
         &w.app,
         "POST",
         &format!("{}/{}/credential", base_uri(w.tenant_id), id),
         &w.admin_token,
-        Some(json!({ "expected_revision": revision + 1, "api_key": "sk-secret-9999abcd" })),
+        Some(json!({ "expected_revision": revision, "api_key": "sk-secret-9999abcd" })),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{}", row);
@@ -693,7 +694,27 @@ async fn resolution_prefers_project_policy_and_does_not_fall_back(pool: PgPool) 
     let id1 = Uuid::parse_str(p1["id"].as_str().unwrap()).unwrap();
     let id2 = Uuid::parse_str(p2["id"].as_str().unwrap()).unwrap();
     let rev1 = p1["revision"].as_i64().unwrap();
-    let rev2 = p2["revision"].as_i64().unwrap();
+
+    // 创建态 = configured（带 key），显式 enable 才进入可解析集合（§12 生命周期）。
+    let (_, e1) = call(
+        &w.app,
+        "POST",
+        &format!("{}/{}/status", base_uri(w.tenant_id), id1),
+        &w.admin_token,
+        Some(json!({ "expected_revision": rev1, "action": "enable" })),
+    )
+    .await;
+    assert_eq!(e1["status"], "enabled", "{e1}");
+    let (_, e2) = call(
+        &w.app,
+        "POST",
+        &format!("{}/{}/status", base_uri(w.tenant_id), id2),
+        &w.admin_token,
+        Some(json!({ "expected_revision": p2["revision"].as_i64().unwrap(), "action": "enable" })),
+    )
+    .await;
+    assert_eq!(e2["status"], "enabled", "{e2}");
+    let rev2 = e2["revision"].as_i64().unwrap();
 
     // ② 未指定 → Team 默认 = ds-1（创建序第一）
     let cfg = resolve_repo_call_config(&w.pool, project_id).await.unwrap().unwrap();
@@ -713,14 +734,16 @@ async fn resolution_prefers_project_policy_and_does_not_fall_back(pool: PgPool) 
     assert_eq!(cfg.model, "m2");
 
     // 严格不回退：指定的 ds-2 停用后 → None（Fake 可见），绝不落到 ds-1
-    let (_, _) = call(
+    //（CAS：expected == 当前 revision，即 enable 后的 rev2）。
+    let (_, d2) = call(
         &w.app,
         "POST",
         &format!("{}/{}/status", base_uri(w.tenant_id), id2),
         &w.admin_token,
-        Some(json!({ "expected_revision": rev2 + 1, "action": "disable" })),
+        Some(json!({ "expected_revision": rev2, "action": "disable" })),
     )
     .await;
+    assert_eq!(d2["status"], "disabled", "{d2}");
     let cfg = resolve_repo_call_config(&w.pool, project_id).await.unwrap();
     assert!(cfg.is_none(), "designated disabled must NOT fall back to ds-1");
 

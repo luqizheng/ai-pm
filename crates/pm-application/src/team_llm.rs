@@ -972,7 +972,7 @@ pub async fn get_project_ai_policy(
 ) -> Result<ProjectAiPolicyRow, TeamLlmError> {
     let row: Option<(Option<Uuid>, Option<String>, Option<String>, i64, Option<DateTime<Utc>>)> =
         sqlx::query_as(
-            "SELECT pol.provider_id, p.name, p.status, pol.revision, pol.updated_at \
+            "SELECT pol.provider_id, p.name, p.status, COALESCE(pol.revision, 1) AS revision, pol.updated_at \
              FROM (SELECT $1::uuid AS tenant_id, $2::uuid AS project_id) base \
              LEFT JOIN ai.project_ai_model_policy pol \
                ON pol.tenant_id = base.tenant_id AND pol.project_id = base.project_id \
@@ -982,7 +982,8 @@ pub async fn get_project_ai_policy(
         .bind(project_id)
         .fetch_optional(executor)
         .await?;
-    // base 恒一行，LEFT JOIN 保行；防御性 unwrap_or。
+    // base 恒一行，LEFT JOIN 保行；无策略行时 revision 由 COALESCE 落到虚值 1
+    //（与 set_project_ai_policy 的 CAS「无行 = 1」同一口径）。
     let (provider_id, provider_name, provider_status, revision, updated_at) =
         row.unwrap_or((None, None, None, 1, None));
     Ok(ProjectAiPolicyRow {
