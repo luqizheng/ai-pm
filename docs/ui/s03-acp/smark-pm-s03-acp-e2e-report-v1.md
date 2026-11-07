@@ -83,3 +83,14 @@ S7-final      interaction=consumed | shield=none | task=running | ledger=complet
 
 **执行**：ZCode（E2E 驱动脚本 scripts/e2e/{ssh_run,run_storyline,fake_agent}.py 已入库）
 **日期**：2026-11-07
+
+## 7. 追加（同日）：Runner UI 与真实栈关联 ✅
+
+| 项 | 结果 |
+| --- | --- |
+| UI | `feat(frontend)` c0ba39e（master）：/project/environments 列表/详情/添加向导，数据面 = 真契约 /v1/pm/devices* |
+| 设备注册 | POST /v1/pm/devices → `e2e-runner-59`（linux，active，owner=admin） |
+| 就绪检查 | POST /{id}/checks（installed+connected+tool+仓库声明）→ readiness=**authenticated**（阶段链 Installed→Connected→Authenticated） |
+| 绑定治理 | POST /{id}/bindings → 绑定 E2E 工程（declared_repository_ids=[6666…]） |
+| UI 数据源验证 | vite dev（8851，PM_API_URL=.10:8090）代理同端点返回设备详情 ✓——页面渲染即此数据 |
+| 待办 | ready 终态需仓库 verified（真实 git_access 验证）；aipm-web 生产镜像不含新 UI（ai-frontend 生产管线另立） |
