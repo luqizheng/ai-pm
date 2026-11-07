@@ -198,6 +198,10 @@
 - [ ] **R-8（P1-4）** `session_id` / `continuation_generation` / terminate `process_id` 来源与 V1 放宽登记。
 - [ ] **R-9（P1-5）** 等待窗口续租语义声明 + guard→none 时 ②③ 起点重置 + `report_progress(started)` 幂等核对。
 - [ ] **R-10（P1-6）** §10.4/§16.3 偏离登记为正式操作化修订（R-ACP-3 补注或 R-ACP-11）。
+- [ ] **R-11（对账新增 2026-11-07，本报告 P0-2/P0-4 的统一残留）** 等待窗口**执行端离线恢复**。实现先行批（e1feb5f，已按用户授权落地并真实栈 E2E PASS）已闭合四条 P0 的主路径：S1~S3 调度屏蔽三层（run_executor.rs:248 / claim.rs:494-510 / spawn 前校验）、Runner 等待窗口无条件心跳续租（runner_loop.rs tick ①，存活即租约不过期）、`mark_consumed` 事务内 awaiting_decision→Running（waiting_resolved）+链关闭。**统一残留 = Runner 离线超 TTL（`AI_PM_RUN_LEASE_SECS=300`，PC 休眠/崩溃/断网）后的恢复死锁**：重启 Runner 只自领新任务（`active=None`→claim 循环），旧 continue 命令按 `worker_id`（含 per-claim token8 前缀）路由永无人消费，且 `scheduling_shield='start_wait'` 挡住 S1/S2 回收 → Run 永卡；Model A 等待窗口无人心跳、过 TTL 租约必过期，`pm_report_consumption` 的 `verify_lease`（run_context.rs lease_live）硬拒 → 同死锁。V1.2 必答（二选一裁决 + 配套）：
+  - **(a) 同主体续领扩展**（P0-2 方案 A 推广）：Runner 重连后凭 Command Delivery 身份（== `command.worker_id`）对 shield=`start_wait` 的 Run 重签租约（generation+1、`reacquired_generation` 命令写回，同 R-2 修订）；需新增续领工具/进程内操作 + Runner 重启后"认领在途 Run"的发现面（按 client_name 匹配，token8 前缀须从路由身份中解耦）。
+  - **(b) 或声明离线=终局**：等待窗口执行端离线超 TTL → Run 走 B3-2（timed_out + 新 attempt Run），须写明 shield 释放路径、人工回复向新 Run 的继承、与 R-ACP-10 取消重试裁决的联动，且 `pm_report_consumption` 对旧 Run 的拒绝不得阻塞新链。
+  - (c) 无论 (a)/(b)，`report_consumption`/`get_run_context` 对"已回复但租约过期"的 Run 不得静默丢弃人工回复（回复已持久化，幂等重投路径须覆盖此态）；新增验收 ACP-452~453。
 - [ ] **P2-1~6** 随 V1.2 收编（不阻塞复审通过）。
 - [ ] 代码基线更新为 e87efd5 或更新；§2 事实表按本稿 §2 修订。
 
