@@ -106,12 +106,18 @@ async function load() {
   }
 }
 
-watch(requirementId, () => {
-  selectedId.value = "";
-  compareMode.value = false;
-  proposeDialogOpen.value = false;
-  void load();
-});
+watch(
+  requirementId,
+  () => {
+    selectedId.value = "";
+    compareMode.value = false;
+    proposeDialogOpen.value = false;
+    void load();
+  },
+  // immediate 必须开：真实应用直达 URL 时参数已是现值，无变更不触发；
+  // 单测里 mount 后才 push 路由（undefined→值）会掩盖这一点。
+  { immediate: true }
+);
 
 function onSelect(id: string) {
   selectedId.value = id;
