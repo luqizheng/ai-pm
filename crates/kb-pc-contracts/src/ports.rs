@@ -30,6 +30,14 @@ pub enum PortError {
     Forbidden(String),
     #[error("invalid request: {0}")]
     Invalid(String),
+    /// CAS / 状态冲突（V1.0 §12.1 错误码表 409；K4 `base_memory_revision_id`、
+    /// P5 `expected_version_no` 失配均属此类）。KP-3 补齐（差异说明 D-KP3-1）。
+    #[error("state conflict: {0}")]
+    Conflict(String),
+    /// 服务内部错误（V1.0 §12.1 错误码表 500；详情只进日志，不进响应体）。
+    /// KP-3 补齐（差异说明 D-KP3-1）。
+    #[error("internal service error: {0}")]
+    Internal(String),
 }
 
 /// 纯受理响应（D-3：202 仅代表「请求已登记、任务已创建」）。

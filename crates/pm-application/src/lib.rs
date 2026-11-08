@@ -23,6 +23,7 @@ pub mod git_access;
 pub mod ingestion;
 pub mod intake;
 pub mod interaction;
+pub mod kb_service;
 pub mod knowledge;
 pub mod knowledge_index;
 pub mod knowledge_indexer;

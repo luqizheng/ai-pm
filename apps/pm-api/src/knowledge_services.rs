@@ -65,7 +65,14 @@ impl From<PortError> for ApiError {
             ),
             PortError::NotFound(_) => ApiError::NotFound("resource not found"),
             PortError::Forbidden(_) => ApiError::Forbidden("caller lacks permission"),
-            PortError::Invalid(_) => ApiError::BadRequest("invalid request"),
+            PortError::Invalid(m) => ApiError::Text(axum::http::StatusCode::BAD_REQUEST, m),
+            // KP-3 补齐（差异说明 D-KP3-1）：CAS/状态冲突 409 带 KB 侧可读原因（stale 基线 /
+            // 在途提案 / 项目已归档）；内部错误 500 不回显详情（KB 侧已记日志）。
+            PortError::Conflict(m) => ApiError::Text(axum::http::StatusCode::CONFLICT, m),
+            PortError::Internal(_) => ApiError::Text(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "internal error".to_string(),
+            ),
         }
     }
 }
