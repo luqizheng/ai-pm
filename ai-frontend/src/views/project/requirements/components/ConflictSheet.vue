@@ -5,8 +5,11 @@ import Badge from "@/components/ui/badge/Badge.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Sheet from "@/components/ui/sheet/Sheet.vue";
 import type { RequirementEntry } from "../requirement-entry";
-import { conflictResolutionOptions, sortAnalysis } from "../fixtures";
-import type { ConflictResolutionOption } from "../fixtures";
+import {
+  conflictResolutionOptions,
+  sortAnalysis,
+  type ConflictResolutionOption
+} from "../requirement-entry";
 
 /**
  * 冲突解决抽屉（S02-UI-01 §11 状态 6：冲突态）。

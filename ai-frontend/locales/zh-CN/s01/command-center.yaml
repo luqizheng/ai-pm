@@ -56,3 +56,51 @@ command-center:
   knowledgeFootnote: 知识库最近一次同步于今日 08:20，覆盖支付与订单两个域。
   membersTitle: 项目成员
   membersMeta: "{humans} 人 · {agents} Agent"
+  selectProject: 请先在顶栏选择一个项目
+  health:
+    overall: 总体进度
+    requirements: 需求进度
+    tasks: 任务进度
+    risks: 风险与阻塞
+    actions: 待人工决策
+    itemUnit: 项
+    tasksHint: "共 {total} 个任务，{done} 个已完成"
+    risksHint: 风险与阻塞事项合计
+    actionsHint: 需要人确认后才可继续推进的变更与取舍
+    unavailableHint: 当前接口未提供该指标
+    chipBlocked: "{count} 阻塞"
+    chipNeedsHandle: 需处理
+  tasks:
+    inProgress: 进行中
+    waitingHuman: 待人工确认
+    done: 已完成
+    unit: 个任务
+    inProgressHint: 已开始且未结束的任务
+    waitingHint: AI 完成但需人确认
+    doneHint: 评审通过并已完成
+  agents:
+    running: 运行中的 Agent
+    online: 运行中
+    recentRuns: 近期运行次数
+    times: 次
+    avgDuration: 平均单次执行时长
+    minutes: 分钟
+  runStatus:
+    queued: 排队中
+    claimed: 已领取
+    running: 运行中
+    succeeded: 成功
+    failed: 失败
+    timed_out: 超时
+    terminated: 已终止
+    cancelled: 已取消
+  attentionDomains:
+    project: 项目
+    repository: 仓库
+    import: 导入
+    task: 任务
+    run: 执行
+    delivery: 交付
+    knowledge: 知识
+    discovery: 发现
+    other: 其他

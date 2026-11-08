@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 
 import ContextPanel from "./ContextPanel.vue";
@@ -22,20 +22,25 @@ describe("ContextPanel", () => {
       "Atlas Platform"
     );
 
-    const labels = wrapper.findAll(".shell-context__meta-label");
-    expect(labels.map(el => el.text())).toEqual([
-      "可见性",
-      "默认分支",
-      "我的角色",
-      "归属团队"
-    ]);
+    // mock 样本按需动态加载（等待 onMounted 中的 import 完成）
+    await vi.waitFor(() => {
+      const labels = wrapper.findAll(".shell-context__meta-label");
+      expect(labels.map(el => el.text())).toEqual([
+        "可见性",
+        "默认分支",
+        "我的角色",
+        "归属团队"
+      ]);
+    });
   });
 
   it("渲染相关信息链接与助手上下文提示", async () => {
     const { wrapper } = mountShell(ContextPanel);
     await nextTick();
 
-    expect(wrapper.findAll(".shell-context__link").length).toBe(2);
+    await vi.waitFor(() => {
+      expect(wrapper.findAll(".shell-context__link").length).toBe(2);
+    });
     expect(wrapper.find(".shell-context__ai").exists()).toBe(true);
   });
 

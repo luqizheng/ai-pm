@@ -11,7 +11,9 @@ import {
 
 import IconTooltip from "./IconTooltip.vue";
 import { useShellStore } from "@/stores/shell";
-import { demoProject, demoRepository, demoSuggestions } from "./demo";
+
+/** AI 建议芯片（交互选项，不是数据）：explain / setup */
+const SUGGESTION_KEYS = ["explain", "setup"] as const;
 
 /**
  * 底部 AI 指令栏（Application Shell §2E，72–120px）。
@@ -42,7 +44,8 @@ const expanded = computed(() => shell.commandbarExpanded);
 const commandScope = computed(() => {
   const project = shell.currentProject;
   const name = project ? project.name : t("shell.app.project.switching");
-  return `${name} / Repository / ${demoRepository.defaultBranch}`;
+  const branch = shell.currentRepository?.defaultBranch;
+  return branch ? `${name} / Repository / ${branch}` : name;
 });
 
 const placeholder = computed(() =>
@@ -54,7 +57,7 @@ const placeholder = computed(() =>
 );
 
 const suggestionKeys = computed(() =>
-  demoSuggestions.map(key => `shell.app.commandbar.suggestion.${key}`)
+  SUGGESTION_KEYS.map(key => `shell.app.commandbar.suggestion.${key}`)
 );
 </script>
 

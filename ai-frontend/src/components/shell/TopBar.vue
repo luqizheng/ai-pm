@@ -23,7 +23,7 @@ import { AUTH_PATHS } from "@/router/auth";
 import { useAuthStore } from "@/stores/auth";
 import { useShellStore } from "@/stores/shell";
 import { useTeamStore } from "@/stores/team";
-import { resolveProjectSwitch } from "./demo";
+
 
 /**
  * 全局顶栏（Application Shell §2A，52px）。
@@ -129,7 +129,7 @@ const switcherTexts = computed<ProjectSwitcherText>(() => ({
 
 /** 切换项目（与左导航项目头共用 store 的切换状态机） */
 async function onSelectProject(id: string) {
-  await shell.switchProject(id, () => resolveProjectSwitch());
+  await shell.switchProject(id);
 }
 
 /** 通知：打开关联对象 / 前往完整通知中心 */

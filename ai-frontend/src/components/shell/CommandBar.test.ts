@@ -68,6 +68,12 @@ describe("CommandBar", () => {
       { id: "p2", name: "Research Sandbox" }
     ]);
     shell.setCurrentProject("p1");
+    shell.currentRepository = {
+      name: "atlas-platform",
+      defaultBranch: "main",
+      role: "main",
+      status: "verified"
+    };
     await nextTick();
 
     expect(

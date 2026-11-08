@@ -1,20 +1,19 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 
 import SearchPalette from "@/components/global/search/SearchPalette.vue";
-import {
-  demoRecentSearches,
-  demoSearchFn
-} from "@/components/global/search/demo";
-import type { SearchCommand } from "@/components/global/search/types";
+import type {
+  SearchCommand,
+  SearchFn
+} from "@/components/global/search/types";
+import { listProjects } from "@/api/projects";
 import { useShellStore } from "@/stores/shell";
 import CommandBar from "./CommandBar.vue";
 import ContextPanel from "./ContextPanel.vue";
 import SideNav from "./SideNav.vue";
 import TopBar from "./TopBar.vue";
-import { demoProject, demoProjects } from "./demo";
 
 /**
  * 应用壳根（AI R&D Workspace Application Shell）。
@@ -34,14 +33,61 @@ const shell = useShellStore();
 /** 全局搜索面板开关（⌘K / 顶栏搜索入口） */
 const searchOpen = ref(false);
 
-/**
- * 初始化项目上下文（骨架阶段注入演示数据）。
- * 真实实现改为从项目列表接口装载 + 恢复上次选择。
- */
-shell.setProjects(demoProjects);
-if (!shell.currentProjectId) {
-  shell.setCurrentProject(demoProject.id);
+/** 上次选中的项目（仅本地偏好，不承载业务数据） */
+const CURRENT_PROJECT_KEY = "aipm.current-project";
+/** mock 预览（本地 dev / 单测）：用设计稿样本；发布构建改为真实项目列表 */
+const mockPreview = import.meta.env.VITE_USE_MOCK === "1";
+
+async function bootstrapProjectContext() {
+  if (mockPreview) {
+    const { demoProject, demoProjects } = await import("./demo");
+    shell.setProjects(demoProjects);
+    if (!shell.currentProjectId) shell.setCurrentProject(demoProject.id);
+    return;
+  }
+
+  try {
+    const page = await listProjects({ size: 100 });
+    shell.setProjects(
+      page.items.map(project => ({
+        id: project.id,
+        name: project.name,
+        description: project.description ?? undefined
+      }))
+    );
+    let restored: string | null = null;
+    try {
+      restored = localStorage.getItem(CURRENT_PROJECT_KEY);
+    } catch {
+      restored = null;
+    }
+    const preferred =
+      page.items.find(project => project.id === restored) ?? page.items[0];
+    if (preferred) shell.setCurrentProject(preferred.id);
+  } catch {
+    // 项目列表不可用时保持空壳（各页自行展示空态），不注入演示数据
+    shell.setProjects([]);
+  }
 }
+
+/** 全局搜索：后端尚未提供跨域搜索接口，发布态返回空结果而不是演示记录 */
+const searchFn: SearchFn = async () => [];
+
+bootstrapProjectContext();
+watch(
+  () => shell.currentProjectId,
+  projectId => {
+    if (projectId) {
+      try {
+        localStorage.setItem(CURRENT_PROJECT_KEY, projectId);
+      } catch {
+        // 持久化失败不影响切换
+      }
+    }
+    void shell.loadRepositoryContext(projectId);
+  },
+  { immediate: true }
+);
 
 /**
  * 全局命令（Figma「01 — Global Search」Global commands：导航 / 创建 /
@@ -137,8 +183,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
     <SearchPalette
       v-model:open="searchOpen"
       :commands="searchCommands"
-      :recent-searches="demoRecentSearches"
-      :search-fn="demoSearchFn"
+      :recent-searches="[]"
+      :search-fn="searchFn"
       @select="onSearchSelect"
     />
   </div>

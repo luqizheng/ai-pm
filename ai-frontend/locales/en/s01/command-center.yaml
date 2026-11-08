@@ -56,3 +56,51 @@ command-center:
   knowledgeFootnote: Last synced today 08:20, covering the payment and order domains.
   membersTitle: Members
   membersMeta: "{humans} humans · {agents} agents"
+  selectProject: Select a project in the top bar first
+  health:
+    overall: Overall Progress
+    requirements: Requirement Progress
+    tasks: Task Progress
+    risks: Risks & Blockers
+    actions: Pending Decisions
+    itemUnit: items
+    tasksHint: "{done} of {total} tasks completed"
+    risksHint: Blocked tasks and unmet dependencies combined
+    actionsHint: Changes and trade-offs that need human confirmation
+    unavailableHint: This metric is not provided by the current API
+    chipBlocked: "{count} blocked"
+    chipNeedsHandle: Needs handling
+  tasks:
+    inProgress: In Progress
+    waitingHuman: Waiting for Human
+    done: Done
+    unit: tasks
+    inProgressHint: Started but not finished
+    waitingHint: AI finished, awaiting human confirmation
+    doneHint: Approved and completed
+  agents:
+    running: Running Agents
+    online: active
+    recentRuns: Recent Runs
+    times: runs
+    avgDuration: Avg. Run Duration
+    minutes: min
+  runStatus:
+    queued: Queued
+    claimed: Claimed
+    running: Running
+    succeeded: Succeeded
+    failed: Failed
+    timed_out: Timed out
+    terminated: Terminated
+    cancelled: Cancelled
+  attentionDomains:
+    project: Project
+    repository: Repository
+    import: Import
+    task: Task
+    run: Run
+    delivery: Delivery
+    knowledge: Knowledge
+    discovery: Discovery
+    other: Other

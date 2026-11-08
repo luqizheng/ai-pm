@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createMemoryHistory, createRouter } from "vue-router";
 
 import { DESIGN_PATHS, designRoutes } from "./design";
-import { buildRoutes } from "./index";
+import { buildRoutes, router } from "./index";
 
 /**
  * 设计系统目录路由契约：
@@ -25,16 +25,18 @@ describe("design routes", () => {
     expect(designRoutes).toHaveLength(47);
   });
 
-  it("全部路由带 meta.layout=design 且已挂进 buildRoutes", async () => {
-    const router = makeRouter();
-    for (const route of designRoutes) {
-      const resolved = router.resolve(route.path);
-      expect(
-        resolved.matched.length,
-        `unresolved: ${route.path}`
-      ).toBeGreaterThan(0);
-      expect(resolved.meta.layout).toBe("design");
-    }
+  it("全部路由带 meta.layout=design 且已挂进应用路由", async () => {
+    // 设计目录仅开发/单测期按需挂载（发布构建剔除，避免演示数据进 dist）
+    await vi.waitFor(() => {
+      for (const route of designRoutes) {
+        const resolved = router.resolve(route.path);
+        expect(
+          resolved.matched.length,
+          `unresolved: ${route.path}`
+        ).toBeGreaterThan(0);
+        expect(resolved.meta.layout).toBe("design");
+      }
+    });
   });
 
   it("路径常量与路由一一对应", () => {

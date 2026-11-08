@@ -8,7 +8,6 @@ import {
 
 import { navGroups, type NavItem } from "./navigation";
 import { AUTH_PATHS, authRoutes } from "./auth";
-import { designRoutes } from "./design";
 import { getAccessToken, getRefreshToken } from "@/api/base/token-storage";
 import NotificationsView from "@/views/notifications/NotificationsView.vue";
 import SettingsLandingView from "@/views/settings/SettingsLandingView.vue";
@@ -27,11 +26,8 @@ import SettingsProjectPlaceholderView from "@/views/project/settings/SettingsPro
 import SettingsProjectRepositoriesView from "@/views/project/settings/SettingsProjectRepositoriesView.vue";
 import SettingsProjectRunnersView from "@/views/project/settings/SettingsProjectRunnersView.vue";
 import SettingsProjectRunnerDetailView from "@/views/project/settings/SettingsProjectRunnerDetailView.vue";
-import RequirementBaselineView from "@/views/project/requirement-baseline/RequirementBaselineView.vue";
 import RequirementDetailView from "@/views/project/requirement-detail/RequirementDetailView.vue";
 import RequirementHistoryView from "@/views/project/requirement-history/RequirementHistoryView.vue";
-import RequirementImpactView from "@/views/project/requirement-impact/RequirementImpactView.vue";
-import RequirementReviewView from "@/views/project/requirement-review/RequirementReviewView.vue";
 import OnboardingWelcomeView from "@/views/onboarding/OnboardingWelcomeView.vue";
 import OnboardingCreateTeamView from "@/views/onboarding/OnboardingCreateTeamView.vue";
 import OnboardingInviteMembersView from "@/views/onboarding/OnboardingInviteMembersView.vue";
@@ -84,6 +80,12 @@ function navItemRoutes(item: NavItem): RouteRecordRaw[] {
   });
   return routes;
 }
+
+/**
+ * mock 预览开关：与 VITE_USE_MOCK 同源（.env.development / .env.test = 1）。
+ * 发布构建中该常量折叠为 false，仅 mock 分支的 fixtures 页面不会被加载/打包。
+ */
+const mockPreview = import.meta.env.VITE_USE_MOCK === "1";
 
 /** 全部路由记录（导航树 → 路由） */
 export function buildRoutes(): RouteRecordRaw[] {
@@ -200,19 +202,43 @@ export function buildRoutes(): RouteRecordRaw[] {
 
   // 需求评审与确认（S02-UI-03）：人工评审提案并作出正式决策，不占主导航——
   // 入口 = Requirements Workspace 页头「需求评审」。静态段优先于下方动态段匹配。
-  routes.push({
-    path: "/project/requirements/review",
-    component: RequirementReviewView,
-    meta: { title: "pm.requirementReview.pageTitle" }
-  });
+  // 后端评审提案接口未落地：仅 mock 预览（VITE_USE_MOCK=1）注册真实页，
+  // 发布构建走占位页，避免把 fixtures 演示数据打进 dist（见 build/release-guard.ts）。
+  routes.push(
+    mockPreview
+      ? {
+          path: "/project/requirements/review",
+          component: () =>
+            import(
+              "@/views/project/requirement-review/RequirementReviewView.vue"
+            ),
+          meta: { title: "pm.requirementReview.pageTitle" }
+        }
+      : {
+          path: "/project/requirements/review",
+          component: PlaceholderView,
+          meta: { title: "pm.requirementReview.pageTitle" }
+        }
+  );
 
   // 需求基线管理（S02-UI-06）：正式基线快照的管理 / 准备向导 / 比较，
   // 不占主导航——入口 = Requirements Workspace 页头「需求基线」。
-  routes.push({
-    path: "/project/requirements/baselines",
-    component: RequirementBaselineView,
-    meta: { title: "pm.requirementBaseline.pageTitle" }
-  });
+  routes.push(
+    mockPreview
+      ? {
+          path: "/project/requirements/baselines",
+          component: () =>
+            import(
+              "@/views/project/requirement-baseline/RequirementBaselineView.vue"
+            ),
+          meta: { title: "pm.requirementBaseline.pageTitle" }
+        }
+      : {
+          path: "/project/requirements/baselines",
+          component: PlaceholderView,
+          meta: { title: "pm.requirementBaseline.pageTitle" }
+        }
+  );
 
   // 修订与历史（S02-UI-05）：单条需求的修订时间线 / 详情 / 两版比较 / 审计，
   // 不占主导航——入口 = 需求详情页的两处历史入口（页头与 History Tab）。
@@ -224,11 +250,23 @@ export function buildRoutes(): RouteRecordRaw[] {
 
   // 变更影响分析（S02-UI-07）：拟议修订的依赖可视化 / 影响面板 / AI 分析 /
   // 人类决策，不占主导航——入口 = 需求详情页页头「影响分析」。
-  routes.push({
-    path: "/project/requirements/:requirementId/impact",
-    component: RequirementImpactView,
-    meta: { title: "pm.requirementImpact.pageTitle" }
-  });
+  // 同上：后端影响分析接口未落地，仅 mock 预览注册真实页。
+  routes.push(
+    mockPreview
+      ? {
+          path: "/project/requirements/:requirementId/impact",
+          component: () =>
+            import(
+              "@/views/project/requirement-impact/RequirementImpactView.vue"
+            ),
+          meta: { title: "pm.requirementImpact.pageTitle" }
+        }
+      : {
+          path: "/project/requirements/:requirementId/impact",
+          component: PlaceholderView,
+          meta: { title: "pm.requirementImpact.pageTitle" }
+        }
+  );
 
   // 需求详情与追溯（S02-UI-02）：单条需求检查页，不占主导航——
   // 入口 = Requirements Workspace 详情面板「打开详情页」与追溯链关联需求导航。
@@ -347,9 +385,6 @@ export function buildRoutes(): RouteRecordRaw[] {
     }
   );
 
-  // 设计系统目录页（无导航外壳的全屏页，meta.layout = "design"）
-  routes.push(...designRoutes);
-
   routes.push({
     path: "/:pathMatch(.*)*",
     name: "not-found",
@@ -376,6 +411,15 @@ export const router = createRouter({
   routes: buildRoutes(),
   scrollBehavior: () => ({ top: 0 })
 });
+
+// 设计系统目录页（无导航外壳的全屏页，meta.layout = "design"）：
+// 全部由设计稿样本数据驱动，仅开发期按需挂载；发布构建里该分支被静态剔除，
+// 目录页与其 fixtures 不会进入 dist（见 build/release-guard.ts）。
+if (import.meta.env.DEV) {
+  void import("./design").then(({ designRoutes }) => {
+    for (const route of designRoutes) router.addRoute(route);
+  });
+}
 
 /**
  * 认证守卫：无任何凭据时把业务页重定向到登录页。

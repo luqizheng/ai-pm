@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
-import { flushPromises } from "@vue/test-utils";
+import { describe, expect, it, vi } from "vitest";
+import { flushPromises, type VueWrapper } from "@vue/test-utils";
 
 import CommandCenterView from "./CommandCenterView.vue";
 import { mountShell } from "@/components/shell/test-utils";
@@ -9,11 +9,17 @@ import { i18n } from "@/lib/i18n";
 const t = (key: string, params?: Record<string, unknown>) =>
   i18n.global.t(key, params ?? {}) as string;
 
+/** mock 数据源按需动态 import（发布构建才能剔除 fixtures），等页头真正渲染出来 */
+const waitForHeader = (wrapper: VueWrapper) =>
+  vi.waitFor(() => {
+    expect(wrapper.text()).toContain("Atlas Platform");
+  });
+
 describe("CommandCenterView", () => {
   it("注册路由后渲染六大区块与设计稿样本数据", async () => {
     const mounted = mountShell(CommandCenterView);
     await mounted.router.push("/project/command-center");
-    await flushPromises();
+    await waitForHeader(mounted.wrapper);
 
     const text = mounted.wrapper.text();
 
@@ -40,7 +46,7 @@ describe("CommandCenterView", () => {
   it("页头「项目设置」跳转 Project Setting（V1.0 稿统一入口）", async () => {
     const mounted = mountShell(CommandCenterView);
     await mounted.router.push("/project/command-center");
-    await flushPromises();
+    await waitForHeader(mounted.wrapper);
 
     const header = mounted.wrapper.findComponent({
       name: "CommandCenterHeader"
@@ -56,7 +62,7 @@ describe("CommandCenterView", () => {
   it("「项目设置」携带当前项目上下文，经 /project/settings 重定向后保留", async () => {
     const mounted = mountShell(CommandCenterView);
     await mounted.router.push("/project/command-center?project_id=prj-1");
-    await flushPromises();
+    await waitForHeader(mounted.wrapper);
 
     mounted.wrapper
       .findComponent({ name: "CommandCenterHeader" })

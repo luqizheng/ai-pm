@@ -74,7 +74,12 @@ export const demoRepository = {
 };
 
 /** 右上下文栏「相关信息」链接 */
-export const demoRelatedLinks = [
+export interface RelatedLink {
+  id: string;
+  label: string;
+}
+
+export const demoRelatedLinks: RelatedLink[] = [
   { id: "guide", label: "Project guide" },
   { id: "contribution", label: "Contribution guidelines" }
 ];

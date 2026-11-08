@@ -9,7 +9,6 @@ import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import Skeleton from "@/components/ui/skeleton/Skeleton.vue";
 import { PageFrame } from "@/components/shell";
 
-import { loadProjectEntries } from "./fixtures";
 import {
   isRecentlyActive,
   parseTimestamp,
@@ -34,11 +33,24 @@ import ProjectGrid from "./components/ProjectGrid.vue";
  *   - 删除为不可逆操作，必须经 ConfirmationDialog 显式确认；归档可逆、直接执行。
  */
 interface Props {
-  /** 数据加载器（测试注入；缺省 = fixtures 演示数据） */
+  /** 数据加载器（测试注入；缺省按 VITE_USE_MOCK 选真实接口或 fixtures） */
   loader?: ProjectsLoader;
 }
 
 const props = defineProps<Props>();
+
+/**
+ * 缺省数据源：发布构建必须走真实项目 API；
+ * 仅 VITE_USE_MOCK=1（本地 dev / 单测）动态加载 fixtures，发布产物不含演示数据。
+ */
+async function defaultLoader(): Promise<ProjectEntry[]> {
+  if (import.meta.env.VITE_USE_MOCK === "1") {
+    const { loadProjectEntries } = await import("./fixtures");
+    return loadProjectEntries();
+  }
+  const { loadProjectEntriesFromApi } = await import("./project-loader");
+  return loadProjectEntriesFromApi();
+}
 
 const { t } = useI18n();
 const router = useRouter();
@@ -57,7 +69,7 @@ const pendingDeleteId = ref<string | null>(null);
 async function load() {
   phase.value = "loading";
   try {
-    projects.value = await (props.loader ?? loadProjectEntries)();
+    projects.value = await (props.loader ?? defaultLoader)();
     phase.value = "ready";
   } catch {
     phase.value = "error";

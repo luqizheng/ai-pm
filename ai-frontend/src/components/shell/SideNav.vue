@@ -20,7 +20,7 @@ import {
   type NavItem
 } from "@/router/navigation";
 import { useShellStore } from "@/stores/shell";
-import { resolveProjectSwitch } from "./demo";
+
 
 /**
  * 左导航（AI R&D Workspace Application Shell §2B + Figma「04 — Global Navigation」）。
@@ -81,7 +81,7 @@ function itemLabel(item: NavItem) {
  * （同一目的地在新项目下解析，不可达时回落到项目概览）。
  */
 async function onSelectProject(id: string) {
-  await shell.switchProject(id, () => resolveProjectSwitch());
+  await shell.switchProject(id);
 }
 </script>
 

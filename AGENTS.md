@@ -19,4 +19,10 @@
    127.0.0.1 同用例 1.28s）。写法：`DATABASE_URL='postgres://aipm:aipm@127.0.0.1:16433/aipm'`。
    走远程 IP（如 192.168.2.10）不受影响。测试进程被杀会泄漏 `_sqlx_test_%` 库，记得清理。
 
+4. **发布前端必须禁止 mock 数据。**
+   `production` / `staging` 构建不得设置 `VITE_USE_MOCK=1`；产物（dist）不得包含
+   `fixtures`、`demo` 或 `src/api/mock` 模块。无真实接口的页面在发布态给空态/占位，不得用演示数据填充。
+   门禁：`ai-frontend/build/release-guard.ts`（构建期硬失败）。fixtures / demo 只能在本地 dev
+   （`VITE_USE_MOCK=1`）与单测（`.env.test`）动态加载。
+
 <!-- 后续规则按序号追加到这里 -->

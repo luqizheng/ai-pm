@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   ArrowUpRight,
@@ -12,8 +12,9 @@ import {
 
 import Badge from "@/components/ui/badge/Badge.vue";
 import IconTooltip from "./IconTooltip.vue";
+import { useAuthStore } from "@/stores/auth";
 import { useShellStore } from "@/stores/shell";
-import { demoProject, demoRelatedLinks, demoRepository } from "./demo";
+import type { RelatedLink } from "./demo";
 
 /**
  * 右上下文栏（Application Shell §2D，320px）。
@@ -29,13 +30,64 @@ import { demoProject, demoRelatedLinks, demoRepository } from "./demo";
 
 const { t } = useI18n();
 const shell = useShellStore();
+const auth = useAuthStore();
 
-const metadata = computed(() => [
-  { key: "visibility", value: demoRepository.visibility },
-  { key: "defaultBranch", value: demoRepository.defaultBranch },
-  { key: "yourRole", value: demoRepository.role },
-  { key: "owner", value: demoRepository.owner }
-]);
+/** mock 预览（本地 dev / 单测）：展示设计稿样本；发布构建走真实仓库上下文 */
+const mockPreview = import.meta.env.VITE_USE_MOCK === "1";
+
+interface DemoContext {
+  organization: string;
+  repository: {
+    visibility: string;
+    defaultBranch: string;
+    role: string;
+    owner: string;
+  };
+  links: RelatedLink[];
+}
+
+const demo = ref<DemoContext | null>(null);
+
+onMounted(async () => {
+  if (!mockPreview) return;
+  const module = await import("./demo");
+  demo.value = {
+    organization: module.demoProject.organization,
+    repository: {
+      visibility: module.demoRepository.visibility,
+      defaultBranch: module.demoRepository.defaultBranch,
+      role: module.demoRepository.role,
+      owner: module.demoRepository.owner
+    },
+    links: module.demoRelatedLinks
+  };
+});
+
+const organization = computed(
+  () => demo.value?.organization ?? auth.organization ?? ""
+);
+
+const metadata = computed(() => {
+  if (demo.value) {
+    return [
+      { key: "visibility", value: demo.value.repository.visibility },
+      { key: "defaultBranch", value: demo.value.repository.defaultBranch },
+      { key: "yourRole", value: demo.value.repository.role },
+      { key: "owner", value: demo.value.repository.owner }
+    ];
+  }
+  const repository = shell.currentRepository;
+  const rows: Array<{ key: string; value: string }> = [];
+  if (repository?.defaultBranch) {
+    rows.push({ key: "defaultBranch", value: repository.defaultBranch });
+  }
+  if (repository?.role) {
+    rows.push({ key: "yourRole", value: repository.role });
+  }
+  return rows;
+});
+
+const relatedLinks = computed<RelatedLink[]>(() => demo.value?.links ?? []);
 
 /** 当前项目（切换中为 null → 显示切换态而非旧项目） */
 const currentProject = computed(() => shell.currentProject);
@@ -47,7 +99,10 @@ const currentProject = computed(() => shell.currentProject);
 const commandScope = computed(() => {
   const project = currentProject.value;
   const name = project ? project.name : t("shell.app.project.switching");
-  return `${name} / Repository / ${demoRepository.defaultBranch}`;
+  const branch =
+    demo.value?.repository.defaultBranch ||
+    shell.currentRepository?.defaultBranch;
+  return branch ? `${name} / Repository / ${branch}` : name;
 });
 </script>
 
@@ -91,9 +146,9 @@ const commandScope = computed(() => {
             <span class="shell-context__project-name">{{
               currentProject?.name ?? t("shell.app.project.switching")
             }}</span>
-            <span class="shell-context__project-org">{{
-              demoProject.organization
-            }}</span>
+            <span v-if="organization" class="shell-context__project-org">
+              {{ organization }}
+            </span>
           </span>
         </div>
         <p class="shell-context__description">
@@ -124,13 +179,13 @@ const commandScope = computed(() => {
 
       <hr class="shell-context__divider" />
 
-      <!-- 相关文档 -->
-      <section class="shell-context__section">
+      <!-- 相关文档（当前无真实文档源时整段不渲染） -->
+      <section v-if="relatedLinks.length" class="shell-context__section">
         <h3 class="shell-context__heading">
           {{ t("shell.app.context.related") }}
         </h3>
         <a
-          v-for="link in demoRelatedLinks"
+          v-for="link in relatedLinks"
           :key="link.id"
           class="shell-context__link"
           href="#"

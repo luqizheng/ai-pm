@@ -590,16 +590,6 @@ export const aiProposalPool: Record<string, AiSuggestion[]> = {
   ]
 };
 
-/** 冲突解决选项（演示用固定文案，走 i18n 注入展示标签） */
-export const conflictResolutionOptions = [
-  "scope_limit",
-  "revise_draft",
-  "defer"
-] as const;
-
-export type ConflictResolutionOption =
-  (typeof conflictResolutionOptions)[number];
-
 /** 类型收敛助手：RevisionRecord[] 的当前修订（version 最大） */
 export function currentRevision(
   entry: RequirementEntry

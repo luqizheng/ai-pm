@@ -1,5 +1,6 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
+import { listRepositories } from "@/api/repositories";
 
 /**
  * 应用壳状态（AI R&D Workspace Application Shell）。
@@ -31,6 +32,14 @@ export interface ProjectOption {
   description?: string;
 }
 
+/** 当前项目的仓库上下文（右栏 / 指令栏作用域用；不可用时为 null） */
+export interface RepositoryContext {
+  name: string;
+  defaultBranch: string;
+  role: string;
+  status: string;
+}
+
 function initialSidebarCollapsed(): boolean {
   try {
     return localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1";
@@ -59,6 +68,8 @@ export const useShellStore = defineStore("app-shell", () => {
   const currentProjectId = ref<string | null>(null);
   /** 正在切换到的项目 id（非空 = 切换中） */
   const switchingProjectId = ref<string | null>(null);
+  /** 当前项目的仓库上下文（无仓库 / 接口不可用时 null） */
+  const currentRepository = ref<RepositoryContext | null>(null);
 
   /** 壳根元素的 data-sidebar 取值 */
   const sidebarState = computed(() =>
@@ -122,6 +133,25 @@ export const useShellStore = defineStore("app-shell", () => {
     currentProjectId.value = id;
   }
 
+  /** 载入当前项目的仓库上下文（main 仓库优先；失败即空态，不伪造仓库） */
+  async function loadRepositoryContext(projectId: string | null) {
+    currentRepository.value = null;
+    if (!projectId) return;
+    try {
+      const { items } = await listRepositories(projectId);
+      const main = items.find(repo => repo.role === "main") ?? items[0];
+      if (!main) return;
+      currentRepository.value = {
+        name: main.name,
+        defaultBranch: main.default_branch ?? "",
+        role: main.role,
+        status: main.status
+      };
+    } catch {
+      currentRepository.value = null;
+    }
+  }
+
   /**
    * 切换项目。
    *
@@ -153,6 +183,7 @@ export const useShellStore = defineStore("app-shell", () => {
     projects,
     currentProjectId,
     switchingProjectId,
+    currentRepository,
     sidebarState,
     contextState,
     switching,
@@ -166,6 +197,7 @@ export const useShellStore = defineStore("app-shell", () => {
     setCommandbarExpanded,
     setProjects,
     setCurrentProject,
+    loadRepositoryContext,
     switchProject
   };
 });

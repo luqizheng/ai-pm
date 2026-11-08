@@ -255,3 +255,13 @@ export function sortAnalysis(entries: AnalysisFinding[]): AnalysisFinding[] {
       severityWeight[a.severity] - severityWeight[b.severity]
   );
 }
+
+/** 冲突解决选项（展示标签走 i18n；与 fixtures 解耦，发布页面可直接引用） */
+export const conflictResolutionOptions = [
+  "scope_limit",
+  "revise_draft",
+  "defer"
+] as const;
+
+export type ConflictResolutionOption =
+  (typeof conflictResolutionOptions)[number];

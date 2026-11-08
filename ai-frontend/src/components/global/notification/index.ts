@@ -7,4 +7,3 @@ export { default as NotificationDetail } from "./NotificationDetail.vue";
 export { default as NotificationPreferences } from "./NotificationPreferences.vue";
 export { default as HumanApprovalIndicator } from "./HumanApprovalIndicator.vue";
 export * from "./types";
-export * from "./demo";

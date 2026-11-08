@@ -1,5 +1,6 @@
 import { getPluginsList } from "./build/plugins.ts";
 import { mockPlugin } from "./build/mock-plugin.ts";
+import { releaseMockGuard } from "./build/release-guard.ts";
 import { include, exclude } from "./build/optimize.ts";
 import { type UserConfigExport, type ConfigEnv, loadEnv } from "vite";
 import { root, alias, wrapperEnv, pathResolve } from "./build/utils.ts";
@@ -16,6 +17,12 @@ export default async ({ mode }: ConfigEnv): Promise<UserConfigExport> => {
   // mock 开关由 .env.development 的 VITE_USE_MOCK 驱动（2026-11-06 起默认 0 = 真实模式，
   // /api 与 /gw 都走网关；pm-api 未实现的端点在 build/mock-plugin.ts 保留兜底能力）
   const useMock = env.VITE_USE_MOCK === "1";
+  const isReleaseMode = mode === "production" || mode === "staging";
+  if (isReleaseMode && useMock) {
+    throw new Error(
+      "[release-guard] 发布构建禁止 mock：production/staging 不得设置 VITE_USE_MOCK=1"
+    );
+  }
 
   return {
     base: VITE_PUBLIC_PATH,
@@ -47,7 +54,11 @@ export default async ({ mode }: ConfigEnv): Promise<UserConfigExport> => {
         clientFiles: ["./index.html", "./src/entry.ts", "./src/App.vue"]
       }
     },
-    plugins: [...getPluginsList(), mockPlugin(useMock)],
+    plugins: [
+      ...getPluginsList(),
+      mockPlugin(useMock),
+      releaseMockGuard()
+    ],
     // https://cn.vitejs.dev/config/dep-optimization-options.html#dep-optimization-options
     optimizeDeps: {
       include,

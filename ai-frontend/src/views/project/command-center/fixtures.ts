@@ -15,6 +15,7 @@ import type { DeliverableRow } from "./deliverables";
 import type { ActivityItem } from "./activity";
 import type { KnowledgeStat } from "./knowledge";
 import type { MemberChip } from "./members";
+import type { CommandCenterData, Translate } from "./command-center-data";
 
 /** 页头项目信息 */
 export const projectHeaderFixture = {
@@ -317,3 +318,40 @@ export const membersFixture: MemberChip[] = [
   { id: "m-gunan", name: "顾南" },
   { id: "m-hexiao", name: "何晓" }
 ];
+
+/** 汇总为页面视图数据（仅供 VITE_USE_MOCK=1 的 dev/单测动态加载） */
+export function commandCenterDataFixture(t: Translate): CommandCenterData {
+  return {
+    header: {
+      name: projectHeaderFixture.name,
+      description: projectHeaderFixture.description,
+      statusLabel: t("s01.command-center.statusNormal"),
+      statusTone: "success",
+      visibilityLabel: t("s01.command-center.visibilityOrgOnly"),
+      metaEntries: [
+        {
+          label: t("s01.command-center.ownerLabel"),
+          value: projectHeaderFixture.ownerValue
+        },
+        {
+          label: t("s01.command-center.createdLabel"),
+          value: projectHeaderFixture.createdValue
+        }
+      ]
+    },
+    health: healthFixture,
+    healthMetaTime: "09:42",
+    attention: attentionFixture,
+    taskTotal: 24,
+    taskStats: taskStatsFixture,
+    agentMetrics: agentMetricsFixture,
+    agentRows: agentRowsFixture,
+    runs: runEntriesFixture,
+    deliverables: deliverableRowsFixture,
+    activity: activityFixture,
+    knowledge: knowledgeStatsFixture,
+    members: membersFixture,
+    memberHumanCount: 8,
+    memberAgentCount: 4
+  };
+}
