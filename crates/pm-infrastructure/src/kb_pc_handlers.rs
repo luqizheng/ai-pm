@@ -16,7 +16,8 @@
 //! 幂等纪律（§14.1 至少一次投递 ≠ 恰好一次执行）：全部 handler 重入安全——
 //! 状态推进 CAS、结果事件 outbox 幂等键坍缩、通知 `WHERE NOT EXISTS` 锚。
 //! KP-1 起 pc.cognition.version_published 接真（生产者=pc/publish.rs ⑫b，
-//! Platform 侧状态感知留痕）。
+//! Platform 侧状态感知留痕）。KP-2 起 pc.change_proposed 接真（生产者=分析起草
+//! `pc::propose_from_analysis`，PC 分析 handler 在派生后调用）。
 
 use std::sync::Arc;
 
@@ -269,7 +270,49 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
             // KP-1 起 pc_analysis_ref 锚分析运行的 pc.source 行（一次分析一条
             // 来源），P3 经 source → evidence → revision → object 展开；
             // target_revision_id 携带 KB 修订（来源钉扎）。
+            // KP-2 起分析 → 提案：本次来源钉扎的未覆盖修订 → AI 起草并提交提案
+            // （pending 人工确认；同事务 pc.change_proposed → Platform 置任务
+            // COMPLETED + result_ref=proposal）；无未覆盖修订 → NO_CHANGE
+            // （pc.analysis.completed 锚来源）。两种结论共用幂等键——一任务一结论。
             Ok((source_id, _primary_revision)) => {
+                let outcome = pm_application::pc::propose_from_analysis(
+                    &self.pool,
+                    project_id,
+                    pm_application::pc::AnalysisProposalInput {
+                        source_id,
+                        task_id,
+                        title: format!(
+                            "仓库快照认知更新 @ {}",
+                            facts.head_commit_sha.chars().take(12).collect::<String>()
+                        ),
+                        rationale: format!(
+                            "仓库快照分析（intake {intake_id}）产出未确认的认知修订；\
+                             AI 起草，待 Lead 或授权审批人确认后发布正式版本。"
+                        ),
+                    },
+                )
+                .await;
+                match outcome {
+                    Ok(pm_application::pc::AnalysisProposalOutcome::Proposed(receipt)) => {
+                        tracing::info!(
+                            %task_id, %intake_id, proposal_id = %receipt.proposal_id,
+                            members = receipt.member_count,
+                            "pc: analysis drafted a proposal (pending human confirmation)"
+                        );
+                        return Ok(());
+                    }
+                    Ok(pm_application::pc::AnalysisProposalOutcome::NoChange) => {}
+                    Err(err) => {
+                        return report_processing_failed(
+                            &self.pool,
+                            project_id,
+                            task_id,
+                            "pc_proposal_failed",
+                            &err.to_string(),
+                        )
+                        .await;
+                    }
+                }
                 let result_ref = serde_json::json!({
                     "target_domain": "pc",
                     "target_type": "source",
@@ -287,17 +330,17 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
                             aggregate_id: &task_id.to_string(),
                             payload: serde_json::json!({
                                 "pc_analysis_ref": result_ref,
-                                "conclusion": "PROPOSED",
+                                "conclusion": "NO_CHANGE",
                                 "refs": [result_ref],
                                 "task_ref": task_ref_json(task_id),
                             }),
-                            idempotency_key: &format!("pc_analysis:{task_id}"),
+                            idempotency_key: &pm_application::pc::analysis_outcome_key(task_id),
                         },
                     )
                     .await
                     .map_err(|e| e.to_string())?;
                 tx.commit().await.map_err(|e| e.to_string())?;
-                tracing::info!(%task_id, %intake_id, "pc: analysis completed (PROPOSED)");
+                tracing::info!(%task_id, %intake_id, "pc: analysis completed (NO_CHANGE)");
                 Ok(())
             }
             Err(err) => {
@@ -315,7 +358,9 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
 }
 
 /// PC 决策桩（流程 E）：pc.decision.submitted → pc.change_proposed（桩替身
-/// 事件；proposal 实体审批在 PC，归 PC-01C）。
+/// 事件；proposal 实体审批在 PC，归 PC-01C）。KP-2 裁决（2026-11-09）：保留桩 +
+/// 登记——确认闭环经分析起草（`pc::propose_from_analysis`）落真，产品决策直达
+/// 通道的提案生成归后续批（验收记录偏差登记）。
 pub struct PcDecisionSubmittedStub {
     pool: PgPool,
 }
@@ -592,6 +637,9 @@ impl OutboxHandler for PcAnalysisCompletedHandler {
 
 /// pc.change_proposed → 任务 COMPLETED + result_ref=proposal 四元组
 /// （流程 D：L3 处理完成与 L4 提案治理分离——审批待办在 PC，不回灌任务状态）。
+/// KP-2 起生产者 = 分析起草（`pc::propose_from_analysis`，真提案 UUID）；流程 E 桩
+/// （PcDecisionSubmittedStub）保留占位 ref（用户裁决：留桩 + 登记）。待办去重键
+/// 锚任务（两类生产者同口径）。
 pub struct PcChangeProposedHandler {
     pool: PgPool,
 }

@@ -38,6 +38,7 @@ mod relationship;
 pub use evidence::{
     register_evidence, register_source, EvidenceInput, EvidenceSubject, SourceInput,
 };
+pub(crate) use object::ensure_product_singletons_in;
 pub use object::{
     create_object_identity, ensure_product_singletons, upsert_object_draft, ObjectUpsertReceipt,
     UpsertObjectDraft,

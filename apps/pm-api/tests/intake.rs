@@ -249,7 +249,8 @@ async fn retry_non_terminal_task_is_409(pool: PgPool) {
 }
 
 /// kb/pc 契约面（P2-2）：未接线入口 501（≠404/500）；
-/// K2/P3（checkpoint-1 落真）对不存在任务 → 404（≠501，已越过骨架语义）。
+/// K2/P3（checkpoint-1 落真）与 P4（KP-2 落真）对不存在资源 → 404（≠501，已越过
+/// 骨架语义）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn kb_pc_contract_skeletons_are_501(pool: PgPool) {
     let project = seed_project(&pool, "ITK-F").await;
@@ -269,7 +270,7 @@ async fn kb_pc_contract_skeletons_are_501(pool: PgPool) {
         ),
         (
             "GET",
-            &format!("/v1/pc/proposals/{}?project_id={project}", Uuid::new_v4()),
+            &format!("/v1/pc/conflicts/{}?project_id={project}", Uuid::new_v4()),
             false,
         ),
     ] {
@@ -285,16 +286,17 @@ async fn kb_pc_contract_skeletons_are_501(pool: PgPool) {
             "{method} {uri} must be authed-then-501 (port not wired)"
         );
     }
-    // K2/P3 已落真（checkpoint-1 读 0053 最小表）：未知任务 ID → 404。
+    // K2/P3 已落真（checkpoint-1 读 0053 最小表）、P4 已落真（KP-2）：未知 ID → 404。
     for uri in [
         &format!("/v1/kb/analyses/{}?project_id={project}", Uuid::new_v4()),
         &format!("/v1/pc/analyses/{}?project_id={project}", Uuid::new_v4()),
+        &format!("/v1/pc/proposals/{}?project_id={project}", Uuid::new_v4()),
     ] {
         let response = app.clone().oneshot(get(uri)).await.unwrap();
         assert_eq!(
             response.status(),
             StatusCode::NOT_FOUND,
-            "GET {uri} must be 404 for unknown task (K2/P3 wired)"
+            "GET {uri} must be 404 for unknown resource (wired endpoints)"
         );
     }
 }
