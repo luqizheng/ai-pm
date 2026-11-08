@@ -114,6 +114,8 @@ async fn main() {
             OutboxWorker::new(outbox_pool.clone(), outbox_worker_id),
             &outbox_pool,
             Some(snapshot_model),
+            // 与第八循环同一个开关：分析完成 → 自动开访谈（默认 off）。
+            pm_ai::discovery_orchestrator::DiscoveryOrchestratorMode::from_env().enabled(),
         );
         // 目录一致性校验：不一致即 panic（fail fast）。
         worker.assert_catalog_consistent();

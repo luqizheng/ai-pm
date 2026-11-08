@@ -391,13 +391,83 @@ fn result_ref_of(event: &ClaimedOutboxEvent, keys: &[&str]) -> Option<serde_json
 }
 
 /// kb.analysis.completed → 任务终态 COMPLETED（result_ref = KB 文档修订四元组）。
+///
+/// DK-E：同一消费点顺带做「快照分析完成 → 自动开 `INITIAL_ONBOARDING` 访谈」
+/// （设计稿 §8.2 首段）。开关与访谈编排器共用 `AI_PM_DISCOVERY_ORCHESTRATOR`，
+/// 由装配方传布尔（默认 off）；开访谈失败只记 WARN，**不影响**任务完成回写。
 pub struct KbAnalysisCompletedHandler {
     pool: PgPool,
+    auto_onboarding: bool,
 }
 
 impl KbAnalysisCompletedHandler {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            auto_onboarding: false,
+        }
+    }
+
+    /// 显式开关（装配方从 `AI_PM_DISCOVERY_ORCHESTRATOR` 解析后传入）。
+    pub fn with_auto_onboarding(pool: PgPool, enabled: bool) -> Self {
+        Self {
+            pool,
+            auto_onboarding: enabled,
+        }
+    }
+
+    /// 自动开访谈（幂等；失败不冒泡——任务完成回写已经落库）。
+    async fn start_onboarding(&self, event: &ClaimedOutboxEvent) {
+        let revision_id = event
+            .payload
+            .get("document_ref")
+            .and_then(|reference| reference.get("target_revision_id"))
+            .and_then(|value| value.as_str())
+            .and_then(|raw| uuid::Uuid::parse_str(raw).ok())
+            .or_else(|| {
+                event
+                    .payload
+                    .get("kb_analysis_ref")
+                    .and_then(|reference| reference.get("target_id"))
+                    .and_then(|value| value.as_str())
+                    .and_then(|raw| uuid::Uuid::parse_str(raw).ok())
+            });
+        let Some(revision_id) = revision_id else {
+            tracing::warn!(
+                event_id = %event.id,
+                "discovery onboarding: kb.analysis.completed has no document revision; skipped"
+            );
+            return;
+        };
+        match pm_application::discovery::ensure_onboarding_from_analysis(
+            &self.pool,
+            event.project_id,
+            revision_id,
+            self.auto_onboarding,
+        )
+        .await
+        {
+            Ok(outcome) => {
+                if outcome.skipped.is_none() {
+                    tracing::info!(
+                        project_id = %event.project_id,
+                        revision_id = %revision_id,
+                        session_id = ?outcome.session_id,
+                        created_session = outcome.created_session,
+                        questions_added = outcome.questions_added,
+                        "discovery onboarding: interview opened from snapshot analysis"
+                    );
+                }
+            }
+            Err(err) => {
+                tracing::warn!(
+                    project_id = %event.project_id,
+                    revision_id = %revision_id,
+                    error = %err,
+                    "discovery onboarding: auto-open interview failed; task completion stands"
+                );
+            }
+        }
     }
 }
 
@@ -411,6 +481,7 @@ impl OutboxHandler for KbAnalysisCompletedHandler {
             .await
             .map_err(|e| e.to_string())?;
         tracing::info!(%task_id, "platform: kb analysis completed → task COMPLETED");
+        self.start_onboarding(event).await;
         Ok(())
     }
 }
@@ -930,6 +1001,7 @@ pub fn register_kb_pc_handlers(
     worker: OutboxWorker,
     pool: &PgPool,
     snapshot_model: Option<Arc<dyn SnapshotAnalysisModel>>,
+    discovery_orchestrator_enabled: bool,
 ) -> OutboxWorker {
     worker
         .with_handler(
@@ -945,7 +1017,10 @@ pub fn register_kb_pc_handlers(
         )
         .with_handler(
             ev::KB_ANALYSIS_COMPLETED,
-            Arc::new(KbAnalysisCompletedHandler::new(pool.clone())),
+            Arc::new(KbAnalysisCompletedHandler::with_auto_onboarding(
+                pool.clone(),
+                discovery_orchestrator_enabled,
+            )),
         )
         .with_handler(
             ev::KB_COGNITION_SIGNAL_EMITTED,

@@ -758,11 +758,21 @@ D-DK-6=三条件，D-DK-7=36k，D-DK-8=整批，D-DK-9=第八循环，D-DK-10=�
 | R6 | **不重开 13 ADR / Q-PC 系 / ACP V1.3.1 / U-1=C / U-2=A** | §0.3 声明；本稿不引用它们为可变更项 |
 | R7 | **并行会话纪律** | 本稿只新增 1 个文件；提交用 pathspec，禁 `git add -A`，不触碰 KP-1/KP-3 任何文件 |
 
-### 12.2 本稿自身声明的三个已知缺口（不掩盖）
+### 12.2 本稿自身声明的已知缺口（不掩盖；DK-E 核实后增至四个）
 
 1. **正式溯源关联仍需人点一次**——这是 S02D-20 的要求，不是缺口；本稿用 `content.basis_finding_ids` 把这一下点击的成本压到最低。真正的缺口是：该子键**不在 S02 设计稿的字段清单里**，属本稿引入的数据约定（零迁移），需 D-DK-5 裁决后才可视为合法。
 2. **`discovery_message` 无逐条作者**（F3）——团队多人共用一次访谈时无法区分"谁说的"；V1 以 session 属主为准，V2 需加列（不在本稿范围）。
 3. **`append_message` 的 `seq` 无锁**（F3）——本稿以"会话级串行"绕开，但这是编排器自身纪律，不是数据库保证；若将来多来源（WEB + CODEX 同时写同一 session），必须补行锁或改用序列。
+4. **更正提案的 FK 断链（F8 ↔ F23，2026-11-09 DK-E 第 0 步核实）**——§8.2 要求
+   `add_proposal(action=modify, base_revision_id=当前)` 指向 KB revision，但
+   `discovery_proposal` 的三个对象引用全部指向 `ai.project_document` /
+   `ai.document_revision` / `ai.document_proposal`（F8），而 checkpoint-1 的 KB
+   digest 在 `kb.document_revision`（F23）、PC 对象在 `pc.*`；kb/pc 对
+   `ai.project_document` 既无 FK 也无镜像写入。**处置（不造影子行、不迁移）**：
+   更正止步于 findings 双行 + 会话 `REVIEW_REQUIRED` + `discovery_question`
+   （`status='deferred'`、正文前缀 `[更正待知识应用]`）结构化标记；KB 应用侧
+   挂账 KP-3、PC 侧挂账 KP-2；**F2 验收口径改为「零提案行 + 标记可见」**。
+   取证与影响面见 `docs/product/ai-pm-dk-e-step0-f8-f23-verification-v1.md`。
 
 ### 12.3 交付物
 

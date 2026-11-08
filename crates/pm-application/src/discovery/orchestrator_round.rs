@@ -64,6 +64,29 @@ pub struct RoundQuestion {
     pub slot: String,
 }
 
+/// 一条成立的知识更正（DK-E §8.2 场景 2）。
+///
+/// 落库形态（F8↔F23 断链走 (b) 路径，见设计稿 §12.2-4）：
+/// - 旧 finding **只读不写**（F1），另落一条 `contradicted` 指向它；
+/// - 更正事实落一条 `user_confirmed`，创建通道仍是 AgentRelayed →
+///   `verification_status=PENDING`（F7：人工裁决面不可绕）；
+/// - 落一条 `[更正待知识应用]` 的 `deferred` 问题作结构化标记（不阻塞跃迁，
+///   复核面必须可见）；KB 应用挂账 KP-3、PC 侧挂账 KP-2。
+///
+/// `target_document` 只是模型给出的定位提示（已对照注入白名单过滤），
+/// 不是 `discovery_proposal` 的 FK 目标——本批零提案行。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoundCorrection {
+    /// 被否定的既有 finding（调用方已定位到本 session）。
+    pub target_finding_id: Uuid,
+    /// 用户更正后的完整事实。
+    pub corrected_fact: String,
+    /// 用户更正原话（可选；作为 `user_statement` 证据）。
+    pub user_quote: Option<String>,
+    /// 更正指向的知识文档提示（可选；仅用于标记正文）。
+    pub target_document: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct RoundDraft {
     /// 本轮看到的最后一条消息 id（整轮幂等前置比较，§4.6）。
@@ -77,6 +100,8 @@ pub struct RoundDraft {
     pub answer_text: String,
     /// 本轮结束后的会话状态（AI 可达三态之一）。
     pub next_status: String,
+    /// 本轮成立的更正（DK-E；`None` = 普通问答）。
+    pub correction: Option<RoundCorrection>,
 }
 
 #[derive(Debug, Clone)]
@@ -88,6 +113,9 @@ pub struct RoundOutcome {
     pub questions_added: usize,
     pub questions_deduped: usize,
     pub answers_consumed: usize,
+    /// 本轮成立的更正数（0/1）与落下的 `[更正待知识应用]` 标记数（0/1）。
+    pub corrections_applied: usize,
+    pub correction_markers: usize,
     pub status: String,
     pub transitions: u8,
 }
@@ -223,6 +251,141 @@ pub async fn apply_orchestrator_round(
         .await?;
         finding_ids.push(view.id);
         findings_added += 1;
+    }
+
+    // 3b) 更正分支（DK-E §8.2 场景 2；F8↔F23 断链走 (b) 路径，设计稿 §12.2-4）。
+    //     旧行只读（F1）；更正事实的创建通道仍是 AgentRelayed → PENDING（F7）；
+    //     知识应用本批不做，落一条 deferred 标记把待办显式留在复核面。
+    let mut corrections_applied = 0usize;
+    let mut correction_markers = 0usize;
+    if let Some(correction) = &draft.correction {
+        if correction.corrected_fact.trim().is_empty() {
+            return Err(DiscoveryError::Validation(
+                "corrected_fact must not be blank".to_string(),
+            ));
+        }
+        let target: Option<(String,)> = sqlx::query_as(
+            "SELECT content FROM discovery.discovery_finding \
+             WHERE tenant_id = $1 AND session_id = $2 AND id = $3 FOR UPDATE",
+        )
+        .bind(tenant_id)
+        .bind(session_id)
+        .bind(correction.target_finding_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some((old_content,)) = target else {
+            return Err(DiscoveryError::FindingNotFound);
+        };
+        let old_short: String = old_content.chars().take(200).collect();
+        let new_short: String = correction.corrected_fact.chars().take(200).collect();
+        let quote = correction
+            .user_quote
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let mut contradicted_evidence = vec![serde_json::json!({
+            "evidence_type": "system_observation",
+            "description": format!("contradicts:{}", correction.target_finding_id),
+        })];
+        if let Some(quote) = quote {
+            contradicted_evidence.push(serde_json::json!({
+                "evidence_type": "user_statement",
+                "description": quote,
+            }));
+        }
+        let contradicted = add_finding_in_tx(
+            &mut tx,
+            tenant_id,
+            session_id,
+            NewFinding {
+                kind: "contradicted".to_string(),
+                content: format!("用户更正：此前记录的事实「{old_short}」不再成立"),
+                confidence: None,
+                evidence: serde_json::Value::Array(contradicted_evidence),
+                repository_ids: Vec::new(),
+                actor_role: None,
+            },
+            FindingCreator::AgentRelayed,
+        )
+        .await?;
+
+        // 新事实：正文与既有 finding 相同则不重复落（幂等），标记照落。
+        let duplicate: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM discovery.discovery_finding \
+             WHERE tenant_id = $1 AND session_id = $2 \
+               AND lower(btrim(content)) = lower(btrim($3)) LIMIT 1",
+        )
+        .bind(tenant_id)
+        .bind(session_id)
+        .bind(correction.corrected_fact.trim())
+        .fetch_optional(&mut *tx)
+        .await?;
+        if duplicate.is_some() {
+            findings_deduped += 1;
+        } else {
+            let mut confirmed_evidence = Vec::new();
+            if let Some(quote) = quote {
+                confirmed_evidence.push(serde_json::json!({
+                    "evidence_type": "user_statement",
+                    "description": quote,
+                }));
+            }
+            add_finding_in_tx(
+                &mut tx,
+                tenant_id,
+                session_id,
+                NewFinding {
+                    kind: "user_confirmed".to_string(),
+                    content: correction.corrected_fact.trim().to_string(),
+                    confidence: None,
+                    evidence: serde_json::Value::Array(confirmed_evidence),
+                    repository_ids: Vec::new(),
+                    actor_role: None,
+                },
+                FindingCreator::AgentRelayed,
+            )
+            .await?;
+            findings_added += 1;
+        }
+
+        // 结构化标记：`deferred` 不阻塞跃迁（§4.3 补充规则），但必须出现在
+        // 复核面；正文前缀是机器可判的待办锚（KP-3 / KP-2 承接）。
+        let marker = format!(
+            "[更正待知识应用] {target}：被否定事实「{old_short}」→ 更正后事实「{new_short}」；\
+             本会话不写 KB/PC——KB 侧由 KP-3 评审链接收、PC 侧由 KP-2 接收，人工决定后再应用。",
+            target = correction
+                .target_document
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or("项目知识（KB digest / PC 对象）"),
+        );
+        let marker_exists: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM discovery.discovery_question \
+             WHERE tenant_id = $1 AND session_id = $2 \
+               AND lower(btrim(question)) = lower(btrim($3)) LIMIT 1",
+        )
+        .bind(tenant_id)
+        .bind(session_id)
+        .bind(&marker)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if marker_exists.is_none() {
+            sqlx::query(
+                "INSERT INTO discovery.discovery_question \
+                 (tenant_id, project_id, session_id, finding_id, question, why_blocking, status) \
+                 VALUES ($1, $2, $3, $4, $5, NULL, 'deferred')",
+            )
+            .bind(tenant_id)
+            .bind(project_id)
+            .bind(session_id)
+            .bind(contradicted.id)
+            .bind(&marker)
+            .execute(&mut *tx)
+            .await?;
+            correction_markers += 1;
+        }
+        corrections_applied = 1;
     }
 
     // 4) questions（对既有 open 与本轮新增都去重）。
@@ -373,6 +536,8 @@ pub async fn apply_orchestrator_round(
         questions_added,
         questions_deduped,
         answers_consumed,
+        corrections_applied,
+        correction_markers,
         status,
         transitions,
     })
