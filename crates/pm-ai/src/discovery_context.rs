@@ -445,14 +445,26 @@ const SQL_KNOWLEDGE_DIGESTS: &str = "SELECT t.doc_key, t.source_commit_sha, t.co
         ORDER BY d.id, r.revision_no DESC \
      ) t ORDER BY t.created_at DESC LIMIT $3";
 
-const SQL_COGNITION_OBJECTS: &str = "SELECT o.object_type, o.object_key, o.name, \
-              rev.summary, rev.content \
+/// S2 投影（对齐 KP-1 0064 正式模型；72cb7d5 时代的 `name`/`summary`/`content`
+/// 列已被 `display_name` / `change_summary` + `pc.document_revision.content` 取代）。
+///
+/// 取「最新修订」用 `revision_no DESC` 的 LATERAL，而不是对象表的
+/// `current_revision_id` 指针——后者在 0064 才回填，存量/链路外草稿可能为空，
+/// 而修订号单调是结构性事实。`object_key` 在 0064 起可空（identity 占位行），
+/// 兜底用对象 id，保证引用始终可寻址。
+const SQL_COGNITION_OBJECTS: &str = "SELECT o.object_type, \
+              COALESCE(o.object_key, o.id::text) AS object_key, \
+              o.display_name, rev.change_summary, dr.content \
          FROM pc.cognition_object o \
          LEFT JOIN LATERAL ( \
-              SELECT summary, content FROM pc.cognition_revision cr \
-               WHERE cr.object_id = o.id \
+              SELECT change_summary, document_revision_id FROM pc.cognition_revision cr \
+               WHERE cr.tenant_id = o.tenant_id AND cr.project_id = o.project_id \
+                 AND cr.object_id = o.id \
                ORDER BY cr.revision_no DESC LIMIT 1 \
          ) rev ON TRUE \
+         LEFT JOIN pc.document_revision dr \
+                ON dr.tenant_id = o.tenant_id AND dr.project_id = o.project_id \
+               AND dr.id = rev.document_revision_id \
         WHERE o.tenant_id = $1 AND o.project_id = $2 \
           AND o.lifecycle_status <> 'deprecated' \
         ORDER BY o.created_at ASC, o.id";
@@ -1385,12 +1397,21 @@ mod tests {
         }
     }
 
-    async fn seed_cognition(pool: &sqlx::PgPool, seed: &Seed, object_type: &str, key: &str) {
+    /// 0064 正式模型下的最小 S2 夹具：对象 → 文档 → 文档修订 → 认知修订。
+    async fn seed_cognition(
+        pool: &sqlx::PgPool,
+        seed: &Seed,
+        object_type: &str,
+        key: &str,
+        summary: &str,
+        content: &str,
+    ) {
         let object_id = Uuid::new_v4();
         sqlx::query(
             "INSERT INTO pc.cognition_object \
-             (id, tenant_id, project_id, object_type, object_key, name, lifecycle_status) \
-             VALUES ($1, $2, $3, $4, $5, $6, 'draft')",
+             (id, tenant_id, project_id, object_type, object_key, display_name, \
+              lifecycle_status, created_by) \
+             VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7)",
         )
         .bind(object_id)
         .bind(seed.tenant_id)
@@ -1398,21 +1419,58 @@ mod tests {
         .bind(object_type)
         .bind(key)
         .bind(format!("name-{key}"))
+        .bind(seed.principal_id)
         .execute(pool)
         .await
         .unwrap();
-        sqlx::query(
-            "INSERT INTO pc.cognition_revision \
-             (tenant_id, object_id, revision_no, summary, content, status) \
-             VALUES ($1, $2, 1, $3, $4, 'draft')",
+
+        // 0064：每对象一 document，每修订一 document_revision；正文移居后者。
+        let document_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO pc.document (tenant_id, project_id, doc_key, canonical_path) \
+             VALUES ($1, $2, $3, $4) RETURNING id",
         )
         .bind(seed.tenant_id)
-        .bind(object_id)
-        .bind(format!("summary-{key}"))
-        .bind(format!("content-{key}"))
-        .execute(pool)
+        .bind(seed.project_id)
+        .bind(format!("pc-object-{object_id}"))
+        .bind(format!("pc/{object_type}/{object_id}.md"))
+        .fetch_one(pool)
         .await
         .unwrap();
+        let document_revision_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO pc.document_revision \
+             (tenant_id, project_id, document_id, revision_no, content_hash, content, created_by) \
+             VALUES ($1, $2, $3, 1, 'pchash-1', $4, $5) RETURNING id",
+        )
+        .bind(seed.tenant_id)
+        .bind(seed.project_id)
+        .bind(document_id)
+        .bind(content)
+        .bind(seed.principal_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        let revision_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO pc.cognition_revision \
+             (tenant_id, project_id, object_id, revision_no, change_summary, \
+              document_id, document_revision_id, content_hash, created_by) \
+             VALUES ($1, $2, $3, 1, $4, $5, $6, 'pchash-1', $7) RETURNING id",
+        )
+        .bind(seed.tenant_id)
+        .bind(seed.project_id)
+        .bind(object_id)
+        .bind(summary)
+        .bind(document_id)
+        .bind(document_revision_id)
+        .bind(seed.principal_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        sqlx::query("UPDATE pc.cognition_object SET current_revision_id = $1 WHERE id = $2")
+            .bind(revision_id)
+            .bind(object_id)
+            .execute(pool)
+            .await
+            .unwrap();
     }
 
     async fn seed_digest(pool: &sqlx::PgPool, seed: &Seed, doc_key: &str, body: &str) {
@@ -1558,8 +1616,24 @@ mod tests {
     #[sqlx::test(migrations = "../../migrations")]
     async fn build_projects_all_six_sections_read_only(pool: sqlx::PgPool) {
         let seed = seed_project(&pool).await;
-        seed_cognition(&pool, &seed, "tech_stack", "repo:1:tech_stack").await;
-        seed_cognition(&pool, &seed, "delivery_activity", "repo:1:activity").await;
+        seed_cognition(
+            &pool,
+            &seed,
+            "tech_stack",
+            "repo:1:tech_stack",
+            "技术栈：Rust",
+            "rs",
+        )
+        .await;
+        seed_cognition(
+            &pool,
+            &seed,
+            "delivery_activity",
+            "repo:1:activity",
+            "近期交付",
+            "commit 流",
+        )
+        .await;
         seed_digest(
             &pool,
             &seed,
@@ -1693,7 +1767,15 @@ mod tests {
         for i in 0..3 {
             seed_digest(&pool, &seed, &format!("repo-{i}"), &"k".repeat(20_000)).await;
         }
-        seed_cognition(&pool, &seed, "tech_stack", "repo:1:tech_stack").await;
+        seed_cognition(
+            &pool,
+            &seed,
+            "tech_stack",
+            "repo:1:tech_stack",
+            "技术栈：Rust",
+            "rs",
+        )
+        .await;
         seed_requirement(&pool, &seed, "REQ-001").await;
         seed_task(&pool, &seed, "任务一", "draft").await;
         seed_finding(&pool, &seed, "observed", "早期事实仍在").await;
