@@ -108,6 +108,22 @@ async fn correction_records_both_rows_and_keeps_kb_pc_untouched(pool: sqlx::PgPo
     seed_all_slots(&pool, session_id, "INITIAL_ONBOARDING").await;
     let old_id = seeded_old_finding(&pool, session_id).await;
     let before = finding_snapshot(&pool, old_id).await;
+    // F3 基线：项目创建（bootstrap）已建 Profile/Vision 单例骨架（KP-2，PC-D-06）——
+    // 断言口径是「更正轮对 PC/KB 零写入」（前后计数不变），而非全表为零。
+    let untouched = [
+        "pc.proposal",
+        "pc.cognition_object",
+        "pc.cognition_revision",
+        "kb.document_revision",
+    ];
+    let mut baseline = Vec::new();
+    for table in untouched {
+        let count: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM {table}"))
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        baseline.push(count);
+    }
     append_message(
         &pool,
         SYSTEM_TENANT,
@@ -216,18 +232,16 @@ async fn correction_records_both_rows_and_keeps_kb_pc_untouched(pool: sqlx::PgPo
     .unwrap();
     assert_eq!(proposals, 0);
 
-    // F3：pc.* 零写入；KB 行零变化（本用例全程不产生的两个域同样是 0）。
-    for table in [
-        "pc.proposal",
-        "pc.cognition_object",
-        "pc.cognition_revision",
-        "kb.document_revision",
-    ] {
+    // F3：pc.* 零写入；KB 行零变化（相对更正轮前基线）。
+    for (table, before) in untouched.iter().zip(baseline) {
         let count: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM {table}"))
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(count, 0, "{table} must stay untouched");
+        assert_eq!(
+            count, before,
+            "{table} must stay untouched by the correction round"
+        );
     }
 }
 
