@@ -130,6 +130,7 @@ fn cfg() -> RunDispatchConfig {
         deadline_default_secs: 3600,
         agent_heartbeat_stale_secs: 900,
         progress_stale_secs: 3600,
+        exclude_projects: vec![],
     }
 }
 
@@ -229,7 +230,9 @@ async fn c59_full_loop_exit_zero_succeeds_run(pool: PgPool) {
     let executor = FakeExecutor::new(Behavior::Exit(0));
     let cfg = cfg();
 
-    let outcome = claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap();
+    let outcome = claim_and_start(&pool, &executor, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap();
     let StartOutcome::Started { run_id, session } = outcome else {
         panic!("expected Started, got {outcome:?}");
     };
@@ -272,7 +275,9 @@ async fn c62_exit_nonzero_fails_run_without_task_verdict(pool: PgPool) {
     let cfg = cfg();
 
     assert!(matches!(
-        claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap(),
+        claim_and_start(&pool, &executor, "w1", &cfg, DispatchMode::On)
+            .await
+            .unwrap(),
         StartOutcome::Started { .. }
     ));
     poll_active_runs(&pool, &executor, "w1", &cfg)
@@ -299,7 +304,9 @@ async fn c60_timeout_terminates_and_marks_timed_out(pool: PgPool) {
     let executor = FakeExecutor::new(Behavior::Hang);
     let cfg = cfg();
 
-    claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap();
+    claim_and_start(&pool, &executor, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap();
     // T-032 T3 终裁：deadline_at 在首次 claim 时已固化（= now + timeout_seconds）
     // ——事后改 timeout_seconds 不影响在跑 Run；测试造超时改为直接压缩 deadline。
     sqlx::query(
@@ -334,7 +341,9 @@ async fn c61_user_cancel_uses_the_same_pipeline(pool: PgPool) {
     let executor = FakeExecutor::new(Behavior::Hang);
     let cfg = cfg();
 
-    claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap();
+    claim_and_start(&pool, &executor, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap();
 
     let cancelled = cancel_run(&pool, &executor, fx.run_id, "user_cancel")
         .await
@@ -359,7 +368,9 @@ async fn c63_start_failure_requeues_with_infrastructure_counting(pool: PgPool) {
     let executor = FakeExecutor::new(Behavior::StartFail("binary missing".into()));
     let cfg = cfg();
 
-    let outcome = claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap();
+    let outcome = claim_and_start(&pool, &executor, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap();
     let StartOutcome::StartFailed { run_id, error } = outcome else {
         panic!("expected StartFailed, got {outcome:?}");
     };
@@ -397,7 +408,9 @@ async fn c64_infrastructure_retry_exhaustion_fails_the_run(pool: PgPool) {
     };
 
     for _ in 0..2 {
-        claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap();
+        claim_and_start(&pool, &executor, "w1", &cfg, DispatchMode::On)
+            .await
+            .unwrap();
         set_behavior_ready_now(&pool, fx.run_id).await;
     }
 
@@ -425,7 +438,9 @@ async fn c64_infrastructure_retry_exhaustion_fails_the_run(pool: PgPool) {
     assert_eq!(failures, 1);
     assert_eq!(exhausted_audits, 1);
     // 第三轮没有可领取的候选（Run 已终态）。
-    let outcome = claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap();
+    let outcome = claim_and_start(&pool, &executor, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap();
     assert!(matches!(outcome, StartOutcome::Idle));
     assert_eq!(executor.started_count(), 0);
 }
@@ -438,7 +453,9 @@ async fn c65_running_run_with_unrenewable_lease_is_reclaimed_as_lost(pool: PgPoo
     let executor = FakeExecutor::new(Behavior::Hang);
     let cfg = cfg();
 
-    claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap();
+    claim_and_start(&pool, &executor, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap();
     assert_eq!(run_status(&pool, fx.run_id).await, "running");
     // 模拟长失联：租约过期且 worker 续不上（renew_lease 拒绝过期租约）。
     sqlx::query(
@@ -484,7 +501,9 @@ async fn c66_concurrent_finalization_wins_over_poll(pool: PgPool) {
     let executor = FakeExecutor::new(Behavior::Exit(0));
     let cfg = cfg();
 
-    claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap();
+    claim_and_start(&pool, &executor, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap();
     // 模拟并发收尾（如 submit_result 通道先落终态）。
     sqlx::query(
         "UPDATE delivery.task_run SET status = 'succeeded', outcome = 'succeeded', finished_at = now() \
@@ -522,7 +541,9 @@ async fn reconcile_finalizes_exited_orphan(pool: PgPool) {
     let executor = FakeExecutor::new(Behavior::Exit(0));
     let cfg = cfg();
 
-    claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap();
+    claim_and_start(&pool, &executor, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap();
     // 伪装成上一个 worker 的孤儿（新 worker 不认识 lease_owner）。
     sqlx::query("UPDATE delivery.task_run SET lease_owner = 'ai-pm-worker-old' WHERE id = $1")
         .bind(fx.run_id)
@@ -542,7 +563,9 @@ async fn reconcile_keeps_alive_orphans_untouched(pool: PgPool) {
     let executor = FakeExecutor::new(Behavior::Hang);
     let cfg = cfg();
 
-    claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap();
+    claim_and_start(&pool, &executor, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap();
     sqlx::query("UPDATE delivery.task_run SET lease_owner = 'ai-pm-worker-old' WHERE id = $1")
         .bind(fx.run_id)
         .execute(&pool)

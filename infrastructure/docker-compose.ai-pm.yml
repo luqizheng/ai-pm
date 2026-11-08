@@ -116,6 +116,11 @@ services:
     environment:
       DATABASE_URL: postgres://aipm:aipm@aipm-pg:5432/aipm
       AI_PM_POLICY_FILE: /app/policies/ai-pm-ai-lead-v2.yaml
+      # D-1=b：无人值守派发开关（缺省 off）与项目级排除列表（逗号分隔 project code，
+      # 缺省空）。透传后可由 .env.prod 开关而无需重建镜像；仅 ai-pm-worker 消费
+      # （pm-worker 是纯 outbox 分发，不参与 Run 调度）。
+      AI_PM_RUN_DISPATCH: ${AI_PM_RUN_DISPATCH:-off}
+      AI_PM_RUN_DISPATCH_EXCLUDE_PROJECTS: ${AI_PM_RUN_DISPATCH_EXCLUDE_PROJECTS:-}
     depends_on:
       aipm-pg:
         condition: service_healthy

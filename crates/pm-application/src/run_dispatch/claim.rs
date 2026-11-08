@@ -335,17 +335,38 @@ pub(crate) async fn claim_core(
     }
 
     // ── 阶段 A：只读发现候选 Project（不锁 Run，不代表获得 claim 权限）──
-    let candidates: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT r.project_id FROM delivery.task_run r \
-          WHERE r.run_kind = 'delivery' \
-            AND ((r.status = 'queued'  AND r.next_dispatch_at <= now()) \
-              OR (r.status = 'claimed' AND r.lease_expires_at < now())) \
-          ORDER BY r.next_dispatch_at, r.created_at \
-          LIMIT $1",
-    )
-    .bind(CLAIM_PROJECT_CANDIDATE_LIMIT)
-    .fetch_all(pool)
-    .await?;
+    // D-1=b：命中 `AI_PM_RUN_DISPATCH_EXCLUDE_PROJECTS` 的项目在候选发现阶段被
+    // 静默排除——不领、不审计、不推退避（Model A 显式领取不经此路径，不受限）。
+    // 排除列表为空时走原查询（零行为漂移）。
+    let candidates: Vec<Uuid> = if cfg.exclude_projects.is_empty() {
+        sqlx::query_scalar(
+            "SELECT r.project_id FROM delivery.task_run r \
+              WHERE r.run_kind = 'delivery' \
+                AND ((r.status = 'queued'  AND r.next_dispatch_at <= now()) \
+                  OR (r.status = 'claimed' AND r.lease_expires_at < now())) \
+              ORDER BY r.next_dispatch_at, r.created_at \
+              LIMIT $1",
+        )
+        .bind(CLAIM_PROJECT_CANDIDATE_LIMIT)
+        .fetch_all(pool)
+        .await?
+    } else {
+        sqlx::query_scalar(
+            "SELECT r.project_id FROM delivery.task_run r \
+              WHERE r.run_kind = 'delivery' \
+                AND ((r.status = 'queued'  AND r.next_dispatch_at <= now()) \
+                  OR (r.status = 'claimed' AND r.lease_expires_at < now())) \
+                AND NOT EXISTS ( \
+                  SELECT 1 FROM core.project p \
+                   WHERE p.id = r.project_id AND p.code = ANY($2::text[])) \
+              ORDER BY r.next_dispatch_at, r.created_at \
+              LIMIT $1",
+        )
+        .bind(CLAIM_PROJECT_CANDIDATE_LIMIT)
+        .bind(&cfg.exclude_projects)
+        .fetch_all(pool)
+        .await?
+    };
 
     // ── 阶段 B：按候选顺序逐 Project 尝试（§5.4：候选被抢占 → 尝试下一个；
     //    归档 → 跳过该 Project；候选遍历 LIMIT 界定单轮工作量，饥饿由

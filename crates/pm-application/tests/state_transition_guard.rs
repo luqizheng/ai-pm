@@ -166,6 +166,7 @@ async fn dispatch_path_uses_the_same_guard(pool: PgPool) {
         deadline_default_secs: 3600,
         agent_heartbeat_stale_secs: 900,
         progress_stale_secs: 3600,
+        exclude_projects: vec![],
     };
     let out = claim_once(&pool, "w1", &cfg, DispatchMode::On)
         .await

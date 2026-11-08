@@ -73,6 +73,15 @@ async fn main() {
         executor,
     };
 
+    // P2-13/D-1=A（2026-11-08）：outbox 侧仓库快照分析的 LLM 增强模型
+    // （KB/PC 两 handler 共享）。逐调用按项目解析 provider；无 provider 或
+    // 调用失败回退结构化派生并标 analysis_mode（D-3=A，绝不回退假数据）。
+    // `AI_PM_SNAPSHOT_ANALYSIS_MODEL=auto|derived`（默认 auto）。
+    let snapshot_model: Arc<dyn pm_application::snapshot_analysis::SnapshotAnalysisModel> =
+        Arc::new(pm_ai::snapshot_model::LlmSnapshotAnalysisModel::from_env(
+            pool.clone(),
+        ));
+
     let worker_id = format!("ai-pm-worker-{}", uuid::Uuid::new_v4());
     tracing::info!(service = "ai-pm-worker", %worker_id, "started");
 
@@ -102,6 +111,7 @@ async fn main() {
         let worker = register_all_handlers(
             OutboxWorker::new(outbox_pool.clone(), outbox_worker_id),
             &outbox_pool,
+            Some(snapshot_model),
         );
         // 目录一致性校验：不一致即 panic（fail fast）。
         worker.assert_catalog_consistent();
@@ -148,6 +158,7 @@ async fn main() {
                 run_executor.as_ref(),
                 &dispatch_worker_id,
                 &cfg,
+                mode,
             )
             .await
             {

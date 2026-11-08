@@ -119,7 +119,12 @@ pub enum DispatchMode {
 
 impl DispatchMode {
     pub fn from_env() -> Self {
-        match std::env::var("AI_PM_RUN_DISPATCH").ok().as_deref() {
+        Self::parse(std::env::var("AI_PM_RUN_DISPATCH").ok().as_deref())
+    }
+
+    /// 纯解析（测试注入）：`Some("on" | "probe")` 之外一律 Off（含缺省与未知值）。
+    pub fn parse(value: Option<&str>) -> Self {
+        match value {
             Some("on") => Self::On,
             Some("probe") => Self::Probe,
             _ => Self::Off,
@@ -133,7 +138,7 @@ impl DispatchMode {
 }
 
 /// 调度参数（读 `AI_PM_*` 环境变量，不硬编码）。
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct RunDispatchConfig {
     pub lease_secs: i64,
     pub backoff_cap_secs: i64,
@@ -148,6 +153,10 @@ pub struct RunDispatchConfig {
     pub agent_heartbeat_stale_secs: i64,
     /// T-032 T4：无进展阈值（秒）——`last_progress_at` 停滞超阈值即终止。
     pub progress_stale_secs: i64,
+    /// D-1=b：无人值守派发排除的项目 code 列表（`AI_PM_RUN_DISPATCH_EXCLUDE_PROJECTS`
+    /// 逗号分隔解析）。缺省空 = 行为不变；命中项在候选发现阶段被静默跳过，
+    /// 只约束 Model B（worker 无人值守领取），Model A（`pm_claim_task`）永不受限。
+    pub exclude_projects: Vec<String>,
 }
 
 impl RunDispatchConfig {
@@ -167,7 +176,32 @@ impl RunDispatchConfig {
             deadline_default_secs: num("AI_PM_RUN_DEADLINE_DEFAULT_SECS", 3600),
             agent_heartbeat_stale_secs: num("AI_PM_RUN_AGENT_HEARTBEAT_STALE_SECS", 900),
             progress_stale_secs: num("AI_PM_RUN_PROGRESS_STALE_SECS", 3600),
+            exclude_projects: Self::exclude_projects_from_env(),
         }
+    }
+
+    /// D-1=b：解析排除项目列表（逗号分隔、去空白、去空项），读 env 不硬编码。
+    fn exclude_projects_from_env() -> Vec<String> {
+        Self::parse_exclude_projects(
+            std::env::var("AI_PM_RUN_DISPATCH_EXCLUDE_PROJECTS")
+                .as_deref()
+                .unwrap_or(""),
+        )
+    }
+
+    /// 纯解析（测试注入）：逗号分隔、去首尾空白、丢弃空项。
+    pub fn parse_exclude_projects(input: &str) -> Vec<String> {
+        input
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// 该项目 code 是否被排除出无人值守派发（精确匹配，大小写敏感）。
+    pub fn excludes_project(&self, code: &str) -> bool {
+        self.exclude_projects.iter().any(|c| c == code)
     }
 
     /// 心跳间隔（契约 `run.lease.heartbeat_interval_secs` 的配置来源）。
@@ -184,4 +218,59 @@ impl RunDispatchConfig {
 pub struct CreatedRun {
     pub run_id: Uuid,
     pub attempt_no: i32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dispatch_mode_from_str_matrix() {
+        assert_eq!(DispatchMode::parse(None), DispatchMode::Off);
+        assert_eq!(DispatchMode::parse(Some("")), DispatchMode::Off);
+        assert_eq!(DispatchMode::parse(Some("off")), DispatchMode::Off);
+        assert_eq!(DispatchMode::parse(Some("bogus")), DispatchMode::Off);
+        assert_eq!(DispatchMode::parse(Some("probe")), DispatchMode::Probe);
+        assert_eq!(DispatchMode::parse(Some("on")), DispatchMode::On);
+    }
+
+    #[test]
+    fn dispatch_mode_claims_only_for_probe_and_on() {
+        assert!(!DispatchMode::Off.claims());
+        assert!(DispatchMode::Probe.claims());
+        assert!(DispatchMode::On.claims());
+    }
+
+    #[test]
+    fn parse_exclude_projects_trims_and_drops_empty() {
+        assert!(RunDispatchConfig::parse_exclude_projects("").is_empty());
+        assert!(RunDispatchConfig::parse_exclude_projects(" , , ").is_empty());
+        assert_eq!(
+            RunDispatchConfig::parse_exclude_projects("e2e-acp09"),
+            vec!["e2e-acp09".to_string()]
+        );
+        assert_eq!(
+            RunDispatchConfig::parse_exclude_projects(" a , b, ,c "),
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
+    }
+
+    #[test]
+    fn excludes_project_hit_miss_and_empty_regression() {
+        let cfg = RunDispatchConfig {
+            exclude_projects: vec!["e2e-acp09".to_string()],
+            ..RunDispatchConfig::from_env()
+        };
+        assert!(cfg.excludes_project("e2e-acp09"));
+        assert!(!cfg.excludes_project("other"));
+        assert!(!cfg.excludes_project("e2e-acp09-extra")); // 精确匹配，非前缀
+        assert!(!cfg.excludes_project("E2E-ACP09")); // 大小写敏感
+
+        // 空列表 = 全量行为不变。
+        let empty = RunDispatchConfig {
+            exclude_projects: vec![],
+            ..RunDispatchConfig::from_env()
+        };
+        assert!(!empty.excludes_project("e2e-acp09"));
+    }
 }

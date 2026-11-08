@@ -45,8 +45,9 @@ pub async fn claim_and_start(
     executor: &dyn RunExecutor,
     worker_id: &str,
     cfg: &RunDispatchConfig,
+    mode: DispatchMode,
 ) -> Result<StartOutcome, RunDispatchError> {
-    let outcome = claim_once(pool, worker_id, cfg, DispatchMode::On).await?;
+    let outcome = claim_once(pool, worker_id, cfg, mode).await?;
     let Some(outcome) = outcome else {
         return Ok(StartOutcome::Idle);
     };

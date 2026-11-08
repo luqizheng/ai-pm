@@ -154,6 +154,7 @@ fn cfg() -> RunDispatchConfig {
         deadline_default_secs: 3600,
         agent_heartbeat_stale_secs: 900,
         progress_stale_secs: 3600,
+        exclude_projects: vec![],
     }
 }
 

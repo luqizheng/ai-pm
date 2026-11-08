@@ -3,8 +3,8 @@
 
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::run_dispatch::{
-    accept_executor_result, claim_once, renew_lease, workspace_path_for, DispatchMode,
-    RunDispatchConfig,
+    accept_executor_result, claim_once, claim_task_run, renew_lease, workspace_path_for,
+    DispatchMode, RunDispatchConfig,
 };
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
@@ -28,6 +28,7 @@ fn cfg() -> RunDispatchConfig {
         deadline_default_secs: 3600,
         agent_heartbeat_stale_secs: 900,
         progress_stale_secs: 3600,
+        exclude_projects: vec![],
     }
 }
 
@@ -143,6 +144,74 @@ async fn concurrent_claims_yield_exactly_one_claimed_run(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(claimed_rows, 1);
+    assert_eq!(task_status(&pool, fx.task_id).await, "claimed");
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn excluded_project_run_is_not_claimed_by_worker(pool: PgPool) {
+    let fx = seed(&pool, "RD-EX1", true).await;
+    let cfg = RunDispatchConfig {
+        exclude_projects: vec!["RD-EX1".to_string()],
+        ..cfg()
+    };
+    // D-1=b：命中排除项 → 候选发现阶段静默跳过，不领、不审计、不推退避。
+    let outcome = claim_once(&pool, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap();
+    assert!(
+        outcome.is_none(),
+        "excluded project must not be claimed by worker"
+    );
+    assert_eq!(run_status(&pool, fx.run_id).await, "queued");
+    assert_eq!(task_status(&pool, fx.task_id).await, "ready");
+    // 零审计噪声（与「静默跳过」语义对齐）。
+    let audit_rows: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM governance.audit_log WHERE target_id = $1")
+            .bind(fx.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(audit_rows, 0);
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn exclude_list_miss_and_empty_claim_normally(pool: PgPool) {
+    // 未命中排除列表 → 正常领取。
+    let fx_miss = seed(&pool, "RD-EX2", true).await;
+    let cfg_miss = RunDispatchConfig {
+        exclude_projects: vec!["other".to_string()],
+        ..cfg()
+    };
+    let hit = claim_once(&pool, "w1", &cfg_miss, DispatchMode::On)
+        .await
+        .unwrap();
+    assert!(hit.is_some());
+    assert_eq!(run_status(&pool, fx_miss.run_id).await, "claimed");
+
+    // 空列表 → 行为与现状完全一致（全量行为不变回归）。
+    let fx_empty = seed(&pool, "RD-EX3", true).await;
+    let cfg_empty = cfg();
+    assert!(cfg_empty.exclude_projects.is_empty());
+    let hit = claim_once(&pool, "w1", &cfg_empty, DispatchMode::On)
+        .await
+        .unwrap();
+    assert!(hit.is_some());
+    assert_eq!(run_status(&pool, fx_empty.run_id).await, "claimed");
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn model_a_explicit_claim_ignores_exclude_list(pool: PgPool) {
+    // A-1 宪法先例：Model A（Runner/MCP 显式领取）永不受排除列表约束。
+    let fx = seed(&pool, "RD-EX4", true).await;
+    let cfg = RunDispatchConfig {
+        exclude_projects: vec!["RD-EX4".to_string()],
+        ..cfg()
+    };
+    let claimed = claim_task_run(&pool, fx.project_id, fx.task_id, "e2e-runner", None, &cfg)
+        .await
+        .unwrap();
+    assert_eq!(claimed.task_id, fx.task_id);
+    assert_eq!(run_status(&pool, fx.run_id).await, "claimed");
     assert_eq!(task_status(&pool, fx.task_id).await, "claimed");
 }
 
