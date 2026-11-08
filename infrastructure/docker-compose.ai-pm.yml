@@ -79,6 +79,10 @@ services:
       # （其余新身份默认 inactive）。留空则不启用首管理员通道。
       AI_PM_FIRST_ADMIN_TENANT: "${AI_PM_FIRST_ADMIN_TENANT:-}"
       AI_PM_FIRST_ADMIN_SUBJECT: "${AI_PM_FIRST_ADMIN_SUBJECT:-}"
+      # 首管理员初始化探测（空库强制注册）：启动后查网关 setup-status，
+      # 已有用户落记号文件下次启动跳过；空系统置 Pending（前端据此强制注册页）。
+      AI_PM_SETUP_STATUS_URL: http://api-gateway:3000/v1/iam/auth/setup-status
+      AI_PM_SETUP_MARKER_PATH: /app/data/setup-admin.marker
       # T-081：/mcp 跨机暴露的 Host 白名单（rmcp DNS-rebinding 防护默认只放回环）。
       # 部署方声明部署地址；只增不减，回环默认值恒在。留空 = 仅回环可访问。
       AI_PM_MCP_ALLOWED_HOSTS: "${AI_PM_MCP_ALLOWED_HOSTS:-}"

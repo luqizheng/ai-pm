@@ -3,19 +3,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 
-const { authGateway } = vi.hoisted(() => ({
+const { authGateway, fetchSetupStatus } = vi.hoisted(() => ({
   authGateway: {
     signIn: vi.fn(),
     signOut: vi.fn(async () => {}),
     requestPasswordReset: vi.fn(async () => {}),
     resetPassword: vi.fn(async () => {}),
     acceptInvitation: vi.fn()
-  }
+  },
+  fetchSetupStatus: vi.fn()
 }));
 
 vi.mock("@/api/auth", async importOriginal => {
   const actual = await importOriginal<typeof import("@/api/auth")>();
   return { ...actual, authGateway };
+});
+
+vi.mock("@/api/setup", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/api/setup")>();
+  return { ...actual, fetchSetupStatus };
 });
 
 import { AuthError } from "@/api/auth";
@@ -49,6 +55,8 @@ describe("LoginView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    // 默认无强制注册引导（探测失败 fail-open），强制引导用例单独覆写
+    fetchSetupStatus.mockResolvedValue(null);
     authGateway.signIn.mockImplementation(
       async (input: { account: string }) => {
         if (input.account === "locked@acme.dev") {
@@ -156,5 +164,14 @@ describe("LoginView", () => {
     expect(wrapper.text()).toContain(
       i18n.global.t("auth.login.ssoUnavailable")
     );
+  });
+
+  it("空系统（setup_required）挂载时强制引导到初始化注册页", async () => {
+    fetchSetupStatus.mockResolvedValue({ setup_required: true, user_count: 0 });
+    const { router } = mountShell(LoginView);
+    await router.isReady();
+    await flushPromises();
+
+    expect(router.currentRoute.value.path).toBe(AUTH_PATHS.setup);
   });
 });

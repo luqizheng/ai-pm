@@ -70,6 +70,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     tracing::info!(port, "pm-api listening");
 
+    // 首管理员初始化探测（空库强制注册）：启动完成后第一时间检查（短超时
+    // 不阻塞 serve）；检查失败（网关未起等）转后台每 15s 重试直到落定。
+    pm_api::setup::run_startup_check(mode == "off").await;
+
     // Consul 自注册（与 lmms 8 服务同一模型，libs 源码快照同 vendor/digua-common-consul）：
     // SERVICE_NAME 未设（裸机 dev）⇒ no-op。compose 契约见
     // infrastructure/docker-compose-services.yml pm-api 的 environment。

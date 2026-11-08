@@ -33,6 +33,36 @@ auth:
       accountRequired: Enter your email or username.
       accountInvalid: Enter a valid email address.
       passwordRequired: Enter your password.
+  setup:
+    title: Initialize the system administrator
+    subtitle: The system is not initialized yet. The first account you register becomes the system's highest administrator.
+    usernameLabel: Username
+    usernamePlaceholder: Enter a username (used to sign in)
+    nicknameLabel: Display name
+    nicknamePlaceholder: Enter a display name
+    passwordLabel: Set password
+    passwordPlaceholder: Enter a password
+    confirmLabel: Confirm password
+    emailLabel: Email (optional)
+    emailPlaceholder: "you{'@'}company.com"
+    submit: Register and continue
+    submitting: Registering…
+    closedTitle: System already initialized
+    closedDetail: An administrator account already exists. Please sign in instead.
+    autoSignInFailedTitle: Account created
+    autoSignInFailedDetail: Automatic sign-in didn't complete. Sign in with the account you just created.
+    errorTitle: Registration failed
+    errorDetail: A network error occurred or the service is unavailable. Please try again later.
+    guidance: This account holds full system administration rights. Keep the password safe.
+    backToSignIn: Back to sign in
+    validation:
+      usernameRequired: Enter a username.
+      nicknameRequired: Enter a display name.
+      passwordRequired: Enter a password.
+      passwordTooShort: Password must be at least 8 characters.
+      mismatch: Passwords do not match.
+      emailInvalid: Enter a valid email address.
+      duplicate: This username is already taken.
   forgot:
     title: Forgot your password?
     subtitle: Enter your account email. We'll send you a link to reset your password.

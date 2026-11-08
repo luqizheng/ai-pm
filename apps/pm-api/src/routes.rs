@@ -169,6 +169,8 @@ fn build_router(
     };
     Router::new()
         .route("/health", get(health_handler))
+        // 首管理员初始化探测（空库强制注册）：公开，状态来自启动检查 + 记号文件。
+        .route("/v1/pm/setup/status", get(crate::setup::status_handler))
         .route("/api/v1/events", post(submit_event_handler))
         .route("/api/v1/supervision/veto", post(veto_handler))
         .route(

@@ -1,6 +1,6 @@
 <!-- @figma file=hNlGqLEMQpOVCZ0o5u3DkT node=5:2488 set="02 — Authentication / Login" date=2026-11-04 -->
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import { Building2 } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
@@ -19,6 +19,7 @@ import {
   AuthTextAction
 } from "@/components/auth";
 import { AUTH_PATHS } from "@/router/auth";
+import { fetchSetupStatus } from "@/api/setup";
 import { useAuthStore } from "@/stores/auth";
 
 /**
@@ -57,6 +58,15 @@ const passwordField = ref<HTMLElement | null>(null);
 
 /** 邮箱形态校验：含 @ 时才按邮箱规则判定（也允许纯用户名登录） */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+onMounted(async () => {
+  // 空库强制注册：系统尚未初始化（无任何用户）时登录无从谈起，
+  // 直接引导到首个管理员注册页；探测失败（网关不可达）不引导。
+  const status = await fetchSetupStatus();
+  if (status?.setup_required) {
+    await router.replace(AUTH_PATHS.setup);
+  }
+});
 
 function validate() {
   accountError.value = undefined;

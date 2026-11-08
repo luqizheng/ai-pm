@@ -10,6 +10,7 @@ import type { RouteRecordRaw } from "vue-router";
 /** 认证页路径常量（视图内跳转用，避免散落字面量） */
 export const AUTH_PATHS = {
   login: "/auth/login",
+  setup: "/auth/setup",
   forgotPassword: "/auth/forgot-password",
   resetPassword: "/auth/reset-password",
   invitation: "/auth/invitation",
@@ -26,6 +27,14 @@ export const authRoutes: RouteRecordRaw[] = [
     name: "auth-login",
     component: () => import("@/views/auth/LoginView.vue"),
     meta: { layout: "auth", title: "auth.login.title" }
+  },
+  {
+    // 空库强制注册首个账号（全系统最大管理员）：登录页探测 setup_required
+    // 时强制重定向到本页；系统已初始化后直达会被送回登录页。
+    path: AUTH_PATHS.setup,
+    name: "auth-setup",
+    component: () => import("@/views/auth/SetupView.vue"),
+    meta: { layout: "auth", title: "auth.setup.title" }
   },
   {
     path: AUTH_PATHS.forgotPassword,

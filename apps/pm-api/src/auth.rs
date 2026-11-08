@@ -367,10 +367,15 @@ pub async fn require_active(request: Request, next: Next) -> Response {
 /// - `/health`：部署就绪探针（runbook §二 的部署校验）。
 /// - `/install`、`/install/{tool}`：执行端接入指引——agent 在拿到 API Key
 ///   **之前**就要拉取它，所以必须免鉴权。
+/// - `/v1/pm/setup/status`：首管理员初始化探测（空库强制注册），只暴露
+///   布尔状态，无凭据、无业务数据。
 ///
 /// 公开路径不返回任何凭据：指引里只有配置片段与 `<API_KEY>` 占位符。
 pub fn is_public_path(path: &str) -> bool {
-    path == "/health" || path == "/install" || path.starts_with("/install/")
+    path == "/health"
+        || path == "/install"
+        || path.starts_with("/install/")
+        || path == "/v1/pm/setup/status"
 }
 
 fn is_self_service_path(path: &str) -> bool {

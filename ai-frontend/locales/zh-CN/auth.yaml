@@ -33,6 +33,36 @@ auth:
       accountRequired: 请输入邮箱或用户名。
       accountInvalid: 请输入有效的邮箱地址。
       passwordRequired: 请输入口令。
+  setup:
+    title: 初始化系统管理员
+    subtitle: 系统尚未初始化。注册的第一个账号将成为全系统最高管理员。
+    usernameLabel: 用户名
+    usernamePlaceholder: 请输入用户名（登录用）
+    nicknameLabel: 显示名称
+    nicknamePlaceholder: 请输入显示名称
+    passwordLabel: 设置口令
+    passwordPlaceholder: 请输入口令
+    confirmLabel: 确认口令
+    emailLabel: 邮箱（可选）
+    emailPlaceholder: "you{'@'}company.com"
+    submit: 注册并进入系统
+    submitting: 正在注册…
+    closedTitle: 系统已初始化
+    closedDetail: 系统已存在管理员账号，请直接登录。
+    autoSignInFailedTitle: 账号已创建
+    autoSignInFailedDetail: 自动登录未完成，请用刚设置的账号口令登录。
+    errorTitle: 注册失败
+    errorDetail: 网络异常或服务暂不可用，请稍后重试。
+    guidance: 该账号将拥有系统全部管理权限，请妥善保管口令。
+    backToSignIn: 返回登录
+    validation:
+      usernameRequired: 请输入用户名。
+      nicknameRequired: 请输入显示名称。
+      passwordRequired: 请输入口令。
+      passwordTooShort: 口令至少 8 个字符。
+      mismatch: 两次输入的口令不一致。
+      emailInvalid: 请输入有效的邮箱地址。
+      duplicate: 该用户名已被占用。
   forgot:
     title: 忘记口令？
     subtitle: 输入账号邮箱，我们会发送重置链接。
