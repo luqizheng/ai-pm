@@ -667,6 +667,29 @@ pub async fn cancel_open_interaction(
     Ok(cancelled)
 }
 
+/// Task → Cancelled 终态联动（V1.1 §5.1 CANCELLED 触发行 / §14 / ACP-477，
+/// DEF-E2E-1 收口）：命令通道（`update_task_status`）与 REST 直写
+/// （`pm_write::update_task`）共用同一业务内核（V-6 入口仅适配）。
+/// ① 未决介入链取消（[`cancel_open_interaction_tx`]：铩链 + guard 归 none +
+///    等待 resolve + 该链 continuation 关闭 + awaiting_decision 回转）；
+/// ② 该 Task 全部 Run 的剩余非终态 continuation 终态关闭
+///    （[`crate::continuation::close_open_by_task_tx`]）——链已因 continue
+///    acked 关闭（responded，chain_open=FALSE）时 ① 短路，E2E S9 形态由
+///    ② 兜底；consumed 为持久化事实（ACP-C2）不回写。
+pub(crate) async fn task_cancelled_linkage_tx(
+    tx: &mut Transaction<'static, Postgres>,
+    project_id: Uuid,
+    task_id: Uuid,
+    reason: &str,
+    actor: &AuditActor,
+) -> Result<(), InteractionError> {
+    cancel_open_interaction_tx(tx, project_id, task_id, reason, actor).await?;
+    crate::continuation::close_open_by_task_tx(tx, project_id, task_id, "task_cancelled", actor)
+        .await
+        .map_err(|e| InteractionError::Conflict(e.to_string()))?;
+    Ok(())
+}
+
 /// 介入取消（事务核，F-8）：供 [`cancel_open_interaction`] 与 Task 取消联动
 /// （`update_task_status` → Cancelled 钩子，V1.1 §5.1 CANCELLED 触发行 / §14）
 /// 共用——调用方负责事务边界。awaiting_decision → Running 的回转仅在 Task

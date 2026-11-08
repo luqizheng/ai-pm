@@ -222,6 +222,28 @@ pub async fn update_task(
     if crate::task_dependency::unlocks_downstream(new_status) {
         crate::task_dependency::unlock_downstream(&mut tx, project_id, task_id).await?;
     }
+    // F-8 / ACP-477（DEF-E2E-1 修复，V-6 架构约束「入口仅适配」）：REST 直写
+    // Cancelled 与命令通道 update_task_status 共用同一终态联动内核
+    // （task_cancelled_linkage_tx：铩未决介入链 + 任务级 continuation 终态
+    // 关闭，V1.1 §5.1 CANCELLED 触发行 / §14）。钩子读到的 Task 已是本事务
+    // 写入的终态 → 自动跳过 awaiting_decision 回转（§5.3「或随 Task 终态」）。
+    if new_status == TaskStatus::Cancelled && new_status != from_status {
+        crate::interaction::task_cancelled_linkage_tx(
+            &mut tx,
+            project_id,
+            task_id,
+            "task cancelled",
+            actor,
+        )
+        .await
+        .map_err(|e| match e {
+            crate::interaction::InteractionError::Db(e) => PmWriteError::Db(e),
+            // NotFound（Task 行消失）与 Conflict（continuation 关闭异常，现实
+            // 仅包 Db 失败）静态降级——与命令通道降级同形（executor.rs）。
+            crate::interaction::InteractionError::NotFound => PmWriteError::NotFound("not found"),
+            _other => PmWriteError::Conflict("task cancellation linkage failed"),
+        })?;
+    }
     tx.commit().await?;
 
     task_row(pool, task_id).await

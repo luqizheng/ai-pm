@@ -243,9 +243,11 @@ impl PgCommandExecutor {
         // F-8（实现对照审计 2026-11-07）：Task → Cancelled 时同一事务联动取消
         // 未决介入链（V1.1 §5.1 CANCELLED 触发行 / §14：取消 → 取消尚未完成的
         // Interaction，guard 归 none，审计保留）。事务核内 Task 已终态 → 自动
-        // 跳过 awaiting_decision 回转（§5.3"或随 Task 终态"）。
+        // 跳过 awaiting_decision 回转（§5.3"或随 Task 终态"）。DEF-E2E-1：
+        // 链已因 continue acked 关闭时铩链短路，任务级 continuation 终态关闭
+        // 由共享联动内核兜底（与 REST 直写路径同一内核，V-6）。
         if new_status == TaskStatus::Cancelled {
-            crate::interaction::cancel_open_interaction_tx(
+            crate::interaction::task_cancelled_linkage_tx(
                 &mut tx,
                 ctx.project_id,
                 task_id,

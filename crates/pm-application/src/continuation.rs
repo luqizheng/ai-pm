@@ -249,6 +249,48 @@ pub async fn close_open_by_run_tx(
     Ok(updated.len() as u64)
 }
 
+/// 终态钩子（Task 维度，DEF-E2E-1）：Task → Cancelled 时该 Task 全部 Run 的
+/// 非终态 continuation 一律 `closed`——即使介入链已因 continue acked 关闭
+/// （responded，chain_open=FALSE，[`cancel_open_interaction_tx`] 短路不触链，
+/// E2E S9 形态）。闭集合按 ACP-477 契约取 `open/started/frozen`（设计稿
+/// acp04-05-joint §状态机「Run 终态 / Task 完成 / 取消 → closed」触发行）；
+/// `consumed` 是持久化事实（ACP-C2），终态钩子不回写。
+pub async fn close_open_by_task_tx(
+    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    project_id: Uuid,
+    task_id: Uuid,
+    reason: &str,
+    actor: &AuditActor,
+) -> Result<u64, ContinuationError> {
+    let updated: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "UPDATE delivery.continuation \
+            SET status = 'closed', closed_at = now() \
+          WHERE project_id = $1 AND status IN ('open', 'started', 'frozen') \
+            AND run_id IN (SELECT id FROM delivery.task_run \
+                           WHERE task_id = $2 AND project_id = $1) \
+         RETURNING id, run_id",
+    )
+    .bind(project_id)
+    .bind(task_id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|e| ContinuationError::Db(e.to_string()))?;
+    for (id, run_id) in &updated {
+        append_audit_with_after(
+            tx,
+            project_id,
+            actor,
+            "continuation.closed",
+            "continuation",
+            Some(*id),
+            serde_json::json!({ "run_id": run_id, "reason": reason }),
+        )
+        .await
+        .map_err(|e| ContinuationError::Db(e.to_string()))?;
+    }
+    Ok(updated.len() as u64)
+}
+
 /// ④ 只读面：Run 当前活跃（非终态）Continuation——06（Checkpoint/Lock）与
 /// 07（Deadline）经此接入。
 pub async fn get_open_by_run(

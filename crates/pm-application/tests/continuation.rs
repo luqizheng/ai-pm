@@ -438,3 +438,140 @@ async fn acp477_terminal_hooks_close_continuations(pool: PgPool) {
         "consumed persists as an irreversible fact"
     );
 }
+
+/// DEF-E2E-1：REST 任务编辑路径（`pm_write::update_task`，UI/PATCH 入口的业务
+/// 服务）直写 Cancelled 必须与命令通道同一联动——介入链取消 + ACP-477 终态
+/// 钩子关闭非终态 continuation（V-6：入口仅适配，业务钩子在应用服务层接线）。
+/// 前置镜像 E2E S9：回复已持久化 + continue acked → continuation started。
+#[sqlx::test(migrations = "../../migrations")]
+async fn def_e2e1_rest_update_task_cancel_closes_continuation(pool: PgPool) {
+    let fx = seed_claimed(&pool, "CT-E21").await;
+    let r1 = report_interaction(&pool, &input(&fx, fx.2, "evt-1"), &AuditActor::dispatch())
+        .await
+        .unwrap();
+    // terminate 命令先结清（介入挂起 = 停 Worker），回复才投 continue。
+    let pt = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
+    let t = pt
+        .iter()
+        .find(|c| c.command_type == "agent.process.terminate")
+        .unwrap();
+    cmd::ack_command(
+        &pool,
+        fx.0,
+        t.command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        None,
+    )
+    .await
+    .unwrap();
+    let sub = SubmitResponseInput {
+        project_id: fx.0,
+        interaction_id: r1.interaction_id,
+        responder_principal_id: fx.3,
+        idempotency_key: "idem-1".into(),
+        response_payload: json!({ "decision": "approve" }),
+    };
+    submit_interaction_response(&pool, &sub, &AuditActor::principal(fx.3))
+        .await
+        .unwrap();
+    // continue 下发 → acked → continuation started（E2E S9 前置同形）。
+    let p = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
+    let c = p
+        .iter()
+        .find(|c| c.command_type == "agent.task.continue")
+        .unwrap();
+    cmd::ack_command(
+        &pool,
+        fx.0,
+        c.command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "session_created": true, "input_injected": true })),
+        None,
+    )
+    .await
+    .unwrap();
+    let (_, _, status_started) = continuation_of(&pool, r1.interaction_id).await;
+    assert_eq!(status_started, "started");
+
+    let revision: i64 = sqlx::query_scalar("SELECT revision FROM delivery.task WHERE id = $1")
+        .bind(fx.1)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    // 全字段编辑契约（与 REST PATCH 同形）：title/priority/revision 齐备。
+    pm_application::pm_write::update_task(
+        &pool,
+        fx.1,
+        pm_application::pm_write::UpdateTaskRequest {
+            revision: Some(revision),
+            title: Some("t".into()),
+            description: None,
+            status: Some("cancelled".into()),
+            priority: Some("normal".into()),
+            assignee_id: None,
+            goal: None,
+            constraints: None,
+            deliverables: None,
+            acceptance_criteria: None,
+            knowledge_refs: None,
+        },
+        &AuditActor::principal(fx.3),
+    )
+    .await
+    .unwrap();
+
+    let intr: String =
+        sqlx::query_scalar("SELECT status FROM delivery.task_interaction WHERE id = $1")
+            .bind(r1.interaction_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    // 已回复链（responded，continue acked 已关链）不是「未决」：status 不被
+    // 取消回写——已持久化回复语义不受影响（ACP-C2）；终态关闭落在 continuation。
+    assert_eq!(
+        intr, "responded",
+        "persisted reply semantics preserved (ACP-C2)"
+    );
+    let (_, _, status) = continuation_of(&pool, r1.interaction_id).await;
+    assert_eq!(
+        status, "closed",
+        "terminal hook closes started continuation"
+    );
+
+    // 终态零出边：已取消 Task 的再次状态直写被状态机拒绝（不重入钩子）。
+    let revision: i64 = sqlx::query_scalar("SELECT revision FROM delivery.task WHERE id = $1")
+        .bind(fx.1)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let reopen = pm_application::pm_write::update_task(
+        &pool,
+        fx.1,
+        pm_application::pm_write::UpdateTaskRequest {
+            revision: Some(revision),
+            title: Some("t".into()),
+            description: None,
+            status: Some("running".into()),
+            priority: Some("normal".into()),
+            assignee_id: None,
+            goal: None,
+            constraints: None,
+            deliverables: None,
+            acceptance_criteria: None,
+            knowledge_refs: None,
+        },
+        &AuditActor::principal(fx.3),
+    )
+    .await;
+    assert!(
+        reopen.is_err(),
+        "terminal task must not accept status writes"
+    );
+}

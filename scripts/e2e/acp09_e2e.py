@@ -247,17 +247,32 @@ def main():
     check("S8c", "R-4 恢复（task running）", task_st2 == "running", task_st2)
 
     # 场景 9（ACP-477）：Task 取消联动 → continuation closed。
-    # 走 REST 任务状态机（update_task_status → Cancelled → 铩链钩子）。
+    # 走 REST 任务编辑路径（update_task：全字段契约 + Cancelled → 铩链/终态钩子）。
+    # DEF-E2E-1 修复对照：旧驱动发 {"status":"cancelled"} 裸体 → update_task
+    # 全字段校验先炸（priority 缺省 "" → 400 invalid priority），请求根本没到
+    # 状态写入；本驱动改为按契约补全 title/priority/revision 后重放。
+    t_title = q1(f"SELECT title FROM delivery.task WHERE id='{TASK}'")
+    t_prio = q1(f"SELECT priority FROM delivery.task WHERE id='{TASK}'")
+    t_rev = int(q1(f"SELECT revision FROM delivery.task WHERE id='{TASK}'"))
     req = ur.Request(BASE + f"/v1/pm/tasks/{TASK}",
-                     data=json.dumps({"status": "cancelled"}).encode(),
+                     data=json.dumps({"title": t_title, "priority": t_prio,
+                                      "revision": t_rev, "status": "cancelled"}).encode(),
                      headers={"Content-Type": "application/json",
                               "Authorization": "Bearer " + admin_jwt}, method="PATCH")
-
+    s9_http_ok = False
+    s9_task_ok = False
     try:
         with ur.urlopen(req, timeout=15) as resp:
-            _ = resp.read().decode()
+            s9_http_ok = resp.status == 200
+            body9 = json.loads(resp.read().decode())
+            s9_task_ok = s9_http_ok and body9.get("status") == "cancelled"
     except urllib.error.HTTPError as e:
-        _ = e.read().decode()[:200]
+        print(f"[S9 PATCH] HTTP {e.code}", e.read().decode()[:200])
+    check("S9-http", "REST 取消 PATCH 契约体 200 且 Task 终态 cancelled（全字段编辑契约）",
+          s9_http_ok and s9_task_ok)
+    intr_status = q1(f"SELECT status FROM delivery.task_interaction WHERE id='{iid2}'")
+    check("S9-c2", "已回复链不被取消回写（ACP-C2：持久化回复语义保持）",
+          intr_status == "responded", intr_status)
     cont_closed = q1(f"SELECT status FROM delivery.continuation WHERE origin_interaction_id='{iid2}'")
     check("S9", "终态钩子（取消 → continuation closed）", cont_closed == "closed", cont_closed)
 

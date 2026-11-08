@@ -9,7 +9,7 @@
   "S3",
   "REST 回复三写（response+continue+delivery）",
   "PASS",
-  "{'continue_command_id': '9e95fcd8-53de-4e54-adbe-04d722faa275', 'interaction_id': '4953ebab-70cd-4e29-a076-199bba90f755', 'replayed': False, 'response_id': 'ff9"
+  "{'continue_command_id': '192c6fa5-9543-418e-b3af-3e161db51827', 'interaction_id': '9d9bbcf4-c73c-44a6-bc1e-b12d4e7157b0', 'replayed': False, 'response_id': '2a1"
  ],
  [
   "S4a",
@@ -45,7 +45,7 @@
   "S6-pre2",
   "链 2 回复持久化 + continue 已下发（未领取）",
   "PASS",
-  "{'continue_command_id': '3a509fb5-ed7b-431c-8598-a7554cc7834c', 'interaction_id': '7ddddb74-69b1-4b9b-9834-6432d475f888', 'replayed': False, 'response_id': '6ab"
+  "{'continue_command_id': '08e338fb-85e9-4d2c-9fac-90fb9fe15b7d', 'interaction_id': '1d6a05f7-2d97-4f50-9dff-6581706951f1', 'replayed': False, 'response_id': '8de"
  ],
  [
   "S6a",
@@ -63,7 +63,7 @@
   "S6c",
   "有效授权 → 续领放行（generation+1、deadline 不动）",
   "PASS",
-  "{'deadline_at': '2026-11-07T22:10:19.716816Z', 'lease_generation': 2, 'lease_token': '7b7185fcd883d90bbffbf8e4871753e797"
+  "{'deadline_at': '2026-11-08T00:27:54.312412Z', 'lease_generation': 2, 'lease_token': '9051702a2c82c3d345aec212a4302338dd"
  ],
  [
   "S6d",
@@ -96,10 +96,22 @@
   "running"
  ],
  [
+  "S9-http",
+  "REST 取消 PATCH 契约体 200 且 Task 终态 cancelled（全字段编辑契约）",
+  "PASS",
+  ""
+ ],
+ [
+  "S9-c2",
+  "已回复链不被取消回写（ACP-C2：持久化回复语义保持）",
+  "PASS",
+  "responded"
+ ],
+ [
   "S9",
   "终态钩子（取消 → continuation closed）",
-  "FAIL",
-  "started"
+  "PASS",
+  "closed"
  ],
  [
   "S10",
