@@ -1329,3 +1329,133 @@ impl WriteBackHook for DiscoveryWriteBack {
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn raw(key: &str, deps: &[&str], acceptance: &[&str]) -> RawTask {
+        RawTask {
+            key: key.to_string(),
+            title: format!("任务 {key}"),
+            description: None,
+            acceptance_criteria: acceptance.iter().map(|s| s.to_string()).collect(),
+            depends_on: deps.iter().map(|s| s.to_string()).collect(),
+            role_ref: None,
+        }
+    }
+
+    fn role(key: &str) -> RoleCandidate {
+        RoleCandidate {
+            version_id: Uuid::nil(),
+            role_id: Uuid::nil(),
+            role_key: key.to_string(),
+            version: "1.0".to_string(),
+        }
+    }
+
+    /// 依赖只允许指向"更早出现的键"：前向引用与自引用都在这里被挡下（E3 的
+    /// 结构化保证——不靠标题字符串，也就不存在"改标题即断边"）。
+    #[test]
+    fn dependency_must_point_at_an_earlier_key() {
+        let forward = RawTaskBatch {
+            prerequisite: vec![],
+            main: vec![raw("a", &["b"], &["验收"]), raw("b", &[], &["验收"])],
+        };
+        let error = validate_task_batch(forward, &[]).unwrap_err();
+        assert!(matches!(error, WriteBackError::BatchRejected(_)), "{error:?}");
+
+        let self_ref = RawTaskBatch {
+            prerequisite: vec![],
+            main: vec![raw("a", &["a"], &["验收"])],
+        };
+        let error = validate_task_batch(self_ref, &[]).unwrap_err();
+        assert!(matches!(error, WriteBackError::BatchRejected(_)), "{error:?}");
+
+        let ok = RawTaskBatch {
+            prerequisite: vec![raw("p", &[], &["验收"])],
+            main: vec![raw("m", &["p"], &["验收"])],
+        };
+        let batch = validate_task_batch(ok, &[]).unwrap();
+        assert_eq!(batch.tasks[1].prerequisites, vec![0]);
+    }
+
+    /// 重复键会让依赖边指向错误的任务——整批拒绝。
+    #[test]
+    fn duplicate_keys_reject_the_batch() {
+        let batch = RawTaskBatch {
+            prerequisite: vec![raw("dup", &[], &["验收"])],
+            main: vec![raw("dup", &[], &["验收"])],
+        };
+        let error = validate_task_batch(batch, &[]).unwrap_err();
+        assert!(matches!(error, WriteBackError::BatchRejected(_)), "{error:?}");
+    }
+
+    /// 空键 = 依赖无法表达，拒绝（不接受"标题即键"的退化写法）。
+    #[test]
+    fn missing_key_rejects_the_batch() {
+        let batch = RawTaskBatch {
+            prerequisite: vec![],
+            main: vec![raw("", &[], &["验收"])],
+        };
+        let error = validate_task_batch(batch, &[]).unwrap_err();
+        assert!(matches!(error, WriteBackError::BatchRejected(_)), "{error:?}");
+    }
+
+    /// 角色建议命中候选才采纳；越界丢弃并计数（不报错、不编造）。
+    #[test]
+    fn role_suggestion_is_bounded_by_candidates() {
+        let batch = RawTaskBatch {
+            prerequisite: vec![],
+            main: vec![
+                raw("m1", &[], &["验收"]),
+                RawTask {
+                    role_ref: Some("developer".to_string()),
+                    ..raw("m2", &[], &["验收"])
+                },
+            ],
+        };
+        let validated = validate_task_batch(batch, &[role("developer")]).unwrap();
+        assert!(validated.tasks[0].role_version_id.is_none());
+        assert_eq!(validated.tasks[1].role_version_id, Some(Uuid::nil()));
+        assert_eq!(validated.dropped_role_suggestions, 0);
+
+        let batch = RawTaskBatch {
+            prerequisite: vec![],
+            main: vec![RawTask {
+                role_ref: Some("cto".to_string()),
+                ..raw("m", &[], &["验收"])
+            }],
+        };
+        let validated = validate_task_batch(batch, &[role("developer")]).unwrap();
+        assert!(validated.tasks[0].role_version_id.is_none());
+        assert_eq!(validated.dropped_role_suggestions, 1);
+    }
+
+    /// 验收口径只有空白 = 没有验收口径（E4）；前置任务同样必填（§7.2）。
+    #[test]
+    fn blank_acceptance_rejects_even_prerequisites() {
+        let batch = RawTaskBatch {
+            prerequisite: vec![raw("p", &[], &["   "])],
+            main: vec![],
+        };
+        let error = validate_task_batch(batch, &[]).unwrap_err();
+        assert!(matches!(error, WriteBackError::BatchRejected(_)), "{error:?}");
+    }
+
+    /// 需求编号归一化：大写、只留 [A-Z0-9-]、折叠、空则退化为 session 派生值。
+    #[test]
+    fn requirement_code_is_normalized() {
+        let session = Uuid::nil();
+        assert_eq!(
+            sanitize_requirement_code(Some("fr phone-login"), session),
+            "FR-PHONE-LOGIN"
+        );
+        assert_eq!(sanitize_requirement_code(Some("  --  "), session), "DISC-00000000");
+        assert_eq!(sanitize_requirement_code(None, session), "DISC-00000000");
+        assert_eq!(
+            sanitize_requirement_code(Some("A".repeat(50).as_str()), session).len(),
+            32
+        );
+    }
+}
