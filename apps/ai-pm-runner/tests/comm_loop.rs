@@ -2,8 +2,8 @@
 //! 生命周期（侦测→解析→归档/隔离）、进程终止与回复注入。不依赖真实 Platform。
 
 use ai_pm_runner::adapter::{
-    archive_marker, find_unreported_marker, quarantine_marker, spawn_agent, terminate,
-    terminate_spawned, terminate_with_retry,
+    archive_marker, find_unreported_markers, quarantine_marker, spawn_agent, terminate,
+    terminate_spawned, terminate_with_retry, ExitOutcome,
 };
 use ai_pm_runner::mcp::McpClient;
 use serde_json::json;
@@ -36,8 +36,7 @@ async fn mcp_client_parses_structured_content_and_tool_errors() {
                 { "task_id": "00000000-0000-0000-0000-000000000001",
                   "queued_run_id": "00000000-0000-0000-0000-000000000002" },
                 { "task_id": "00000000-0000-0000-0000-000000000003", "queued_run_id": null }
-            ] } } }))
-        )
+            ] } } })))
         .mount(&server)
         .await;
     Mock::given(method("POST"))
@@ -49,21 +48,30 @@ async fn mcp_client_parses_structured_content_and_tool_errors() {
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "jsonrpc": "2.0", "id": 2,
             "result": { "isError": true,
-                        "content": [{ "text": "task is not ready (current status: draft)" }] } }))
-        )
+                        "content": [{ "text": "task is not ready (current status: draft)" }] } })))
         .mount(&server)
         .await;
 
     let client = mcp_client(server.uri());
     let tasks = client.list_ready_tasks(Uuid::nil()).await.unwrap();
-    assert_eq!(tasks.len(), 1, "tasks without a queued run must be filtered out");
-    assert_eq!(tasks[0].1.to_string(), "00000000-0000-0000-0000-000000000002");
+    assert_eq!(
+        tasks.len(),
+        1,
+        "tasks without a queued run must be filtered out"
+    );
+    assert_eq!(
+        tasks[0].1.to_string(),
+        "00000000-0000-0000-0000-000000000002"
+    );
 
     let err = client
         .claim_task(Uuid::nil(), Uuid::new_v4(), "runner:test")
         .await
         .unwrap_err();
-    assert!(err.to_string().contains("not ready"), "tool error text surfaces: {err}");
+    assert!(
+        err.to_string().contains("not ready"),
+        "tool error text surfaces: {err}"
+    );
 }
 
 #[tokio::test]
@@ -74,10 +82,10 @@ async fn marker_file_lifecycle_detect_parse_archive_quarantine() {
     std::fs::create_dir_all(&aipm).unwrap();
 
     // 未上报前：侦测不到。
-    assert!(find_unreported_marker(&run_dir).is_none());
+    assert!(find_unreported_markers(&run_dir).is_empty());
 
     // 合法标记：解析 + 归档后不再侦测到（ACP-443：event_id 键控归档）。
-    let marker = aipm.join("interaction.json");
+    let marker = aipm.join("interaction.evt-1.json");
     std::fs::write(
         &marker,
         json!({
@@ -93,29 +101,42 @@ async fn marker_file_lifecycle_detect_parse_archive_quarantine() {
         .to_string(),
     )
     .unwrap();
-    let (path, event) = find_unreported_marker(&run_dir).expect("marker detected");
+    let (path, event) = find_unreported_markers(&run_dir)
+        .into_iter()
+        .next()
+        .expect("marker detected");
     let event = event.expect("valid marker parses");
     assert_eq!(event.event_id, "evt-1");
     assert_eq!(event.reason, "needs_decision");
     assert!(event.required_response);
-    assert_eq!(event.checkpoint_path.as_deref(), Some(".aipm/checkpoint.json"));
+    assert_eq!(
+        event.checkpoint_path.as_deref(),
+        Some(".aipm/checkpoint.json")
+    );
     archive_marker(&path, &event.event_id).unwrap();
-    assert!(find_unreported_marker(&run_dir).is_none());
+    assert!(find_unreported_markers(&run_dir).is_empty());
     assert!(aipm.join("interaction.evt-1.reported").is_file());
 
     // 非法 schema → 侦测返回 Err → 隔离（不产生 Interaction，§1.2）。
-    std::fs::write(&marker, json!({ "schema_version": "unknown.v9" }).to_string()).unwrap();
-    let (path, parsed) = find_unreported_marker(&run_dir).expect("malformed marker must be surfaced");
+    std::fs::write(
+        &marker,
+        json!({ "schema_version": "unknown.v9" }).to_string(),
+    )
+    .unwrap();
+    let (path, parsed) = find_unreported_markers(&run_dir)
+        .into_iter()
+        .next()
+        .expect("malformed marker must be surfaced");
     assert!(parsed.is_err(), "malformed schema must not parse");
     quarantine_marker(&path).unwrap();
-    assert!(aipm.join("interaction.json.invalid").is_file());
-    assert!(find_unreported_marker(&run_dir).is_none());
+    assert!(aipm.join("interaction.evt-1.json.invalid").is_file());
+    assert!(find_unreported_markers(&run_dir).is_empty());
 
     // 子目录层（workspace_path 段）同样可侦测。
     let nested = run_dir.join("repo-checkout").join(".aipm");
     std::fs::create_dir_all(&nested).unwrap();
     std::fs::write(
-        nested.join("interaction.json"),
+        nested.join("interaction.evt-2.json"),
         json!({
             "schema_version": "aipm.interaction.v1",
             "event_id": "evt-2", "reason": "needs_info",
@@ -124,7 +145,10 @@ async fn marker_file_lifecycle_detect_parse_archive_quarantine() {
         .to_string(),
     )
     .unwrap();
-    let (_, event2) = find_unreported_marker(&run_dir).expect("nested marker detected");
+    let (_, event2) = find_unreported_markers(&run_dir)
+        .into_iter()
+        .next()
+        .expect("nested marker detected");
     let event2 = event2.expect("nested marker parses");
     assert_eq!(event2.event_id, "evt-2");
 }
@@ -135,7 +159,7 @@ async fn terminate_kills_spawned_child() {
     let mut spawn = spawn_agent(&sleeper_cmd(30), &dir, &[], None).unwrap();
     assert!(spawn.child.id().is_some(), "sleeper process is running");
     let outcome = terminate(&mut spawn.child).await.unwrap();
-    assert_eq!(outcome, "Killed");
+    assert_eq!(outcome, ExitOutcome::Killed);
     assert!(spawn.child.id().is_none(), "child reaped after terminate");
 }
 
@@ -158,7 +182,6 @@ async fn reply_injection_writes_atomic_reply_file() {
     assert_eq!(spawn.session_id.starts_with("runner:"), true);
     terminate(&mut spawn.child).await.unwrap();
 }
-
 
 // ───────────────────────── F-1 / F-6（复审 2026-11-07 闭合项） ─────────────────────────
 
@@ -187,9 +210,12 @@ async fn f1_preflight_refuses_frozen_and_expired_deadline() {
 async fn f6_terminate_with_retry_reports_killed() {
     let dir = temp_dir("terminate-retry");
     let mut spawn = spawn_agent(&sleeper_cmd(30), &dir, &[], None).unwrap();
-    let outcome =
-        terminate_with_retry(&mut spawn.child, 3, 10).await.unwrap();
-    assert_eq!(outcome, "Killed", "first-attempt kill yields Killed within budget");
+    let outcome = terminate_with_retry(&mut spawn.child, 3, 10).await.unwrap();
+    assert_eq!(
+        outcome,
+        ExitOutcome::Killed,
+        "first-attempt kill yields Killed within budget"
+    );
 }
 
 #[tokio::test]
@@ -216,7 +242,7 @@ async fn acp444_executor_side_refuses_frozen_continue() {
         .await;
 
     let dir = temp_dir("acp444");
-    let mut spawn = spawn_agent(&sleeper_cmd(30), &dir, &[], None).unwrap();
+    let spawn = spawn_agent(&sleeper_cmd(30), &dir, &[], None).unwrap();
     let mut run = ActiveRun {
         project_id: Uuid::nil(),
         task_id: Uuid::nil(),
@@ -232,6 +258,8 @@ async fn acp444_executor_side_refuses_frozen_continue() {
         last_command_poll: Instant::now(),
         pending_interaction: None,
         awaiting_continue: true,
+        lease_failures: 0,
+        last_lease_attempt: None,
     };
     let cfg = Config {
         platform_mcp_url: format!("{}/mcp", server.uri()),
@@ -245,6 +273,11 @@ async fn acp444_executor_side_refuses_frozen_continue() {
         command_poll_secs: 3,
         terminate_attempts: 3,
         terminate_timeout_secs: 10,
+        adapter: "custom".to_string(),
+        lease_secs: 300,
+        git_map: None,
+        backoff_base_ms: 2000,
+        backoff_cap_ms: 60_000,
     };
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
     let continue_cmd = json!({
@@ -258,7 +291,10 @@ async fn acp444_executor_side_refuses_frozen_continue() {
     });
     execute_command(&cfg, &client, &mut run, continue_cmd).await;
     // 未 spawn 新进程（原进程仍在），回复注入文件未写。
-    assert!(run.child_id().is_some(), "frozen continue must not touch the running process");
+    assert!(
+        run.child_id().is_some(),
+        "frozen continue must not touch the running process"
+    );
     assert!(!dir.join(".aipm").join("reply.json").is_file());
     run_terminate_on_drop(&mut run).await;
 }
@@ -317,7 +353,7 @@ async fn f9_tool_rejection_archives_marker_without_retry() {
     let run_dir = dir.join("run-f9");
     std::fs::create_dir_all(run_dir.join(".aipm")).unwrap();
     std::fs::write(
-        run_dir.join(".aipm").join("interaction.json"),
+        run_dir.join(".aipm").join("interaction.evt-9.json"),
         json!({
             "schema_version": "aipm.interaction.v1",
             "event_id": "evt-9", "reason": "needs_info", "question": "q"
@@ -341,6 +377,8 @@ async fn f9_tool_rejection_archives_marker_without_retry() {
         last_command_poll: Instant::now(),
         pending_interaction: None,
         awaiting_continue: false,
+        lease_failures: 0,
+        last_lease_attempt: None,
     };
     let cfg = Config {
         platform_mcp_url: format!("{}/mcp", server.uri()),
@@ -354,12 +392,23 @@ async fn f9_tool_rejection_archives_marker_without_retry() {
         command_poll_secs: 3600,
         terminate_attempts: 3,
         terminate_timeout_secs: 10,
+        adapter: "custom".to_string(),
+        lease_secs: 300,
+        git_map: None,
+        backoff_base_ms: 2000,
+        backoff_cap_ms: 60_000,
     };
     let client = McpClient::new(cfg.platform_mcp_url.clone(), "test-token");
     tick(&cfg, &client, &mut run).await.unwrap();
     // Tool 类拒绝 → .rejected 归档（§1.2 不重试；防队头阻塞）。
-    assert!(run_dir.join(".aipm").join("interaction.evt-9.rejected").is_file());
-    assert!(!run_dir.join(".aipm").join("interaction.json").is_file());
+    assert!(run_dir
+        .join(".aipm")
+        .join("interaction.evt-9.rejected")
+        .is_file());
+    assert!(!run_dir
+        .join(".aipm")
+        .join("interaction.evt-9.json")
+        .is_file());
     let _ = terminate(&mut run.process.as_mut().expect("process present").child).await;
 }
 
@@ -368,8 +417,11 @@ async fn acp08_job_object_assigned_and_tree_terminates() {
     let dir = temp_dir("job-object");
     let mut spawn = spawn_agent(&sleeper_cmd(30), &dir, &[], None).unwrap();
     #[cfg(windows)]
-    assert!(spawn.job.is_some(), "windows spawn must carry a Job Object handle");
+    assert!(
+        spawn.job.is_some(),
+        "windows spawn must carry a Job Object handle"
+    );
     // 整树终止入口：Job Terminate + 收割。
     let outcome = terminate_spawned(&mut spawn).await.unwrap();
-    assert_eq!(outcome, "Killed");
+    assert_eq!(outcome, ExitOutcome::Killed);
 }

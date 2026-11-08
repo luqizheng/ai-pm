@@ -1,29 +1,36 @@
 //! Runner 自领循环主体（lib 面，F-12：供 bin 与集成测试共用）。
 //!
-//! 自领循环（客户端化 worker run_executor 的通信面）：
+//! 自领循环（客户端化 worker run_executor 的通信面，检查点 2 §3 定稿）：
 //! 1. 发现：`pm_list_tasks`（项目内 ready 且有 queued Run 的任务）；
-//! 2. 领取：`pm_claim_task`（client_name 携 `runner:` 前缀 → Platform stamp
-//!    execution_mode='spawn'）；命令路由身份 worker_id = lease_owner 快照
-//!    （`mcp:{client_name}:{token8}`，§3.3）；
-//! 3. 监督：spawn Agent 进程（`AI_PM_RUNNER_AGENT_CMD` 模板，env 注入租约），
-//!    心跳 `pm_report_progress` 续租，标记文件侦测 → `pm_report_interaction`，
-//!    命令轮询 `pm_poll_commands` / `pm_ack_command`（terminate 杀进程、
-//!    continue 写回复重启新 Session → 消费回执 `pm_report_consumption`）；
-//! 4. 交付：Agent 自行经 MCP `pm_submit_result`（Model A 既有模式，Runner 不
-//!    代交交付物）。
+//! 2. 领取：`pm_claim_task`（cpk 凭据通道 → `lease_owner=client:{device_id}`
+//!    稳定身份 + execution_mode='spawn'；命令路由 worker_id = 响应
+//!    `lease_owner` 快照**原样回带**）；
+//! 3. 工作区准备（V-05-2）：`pm_get_run_context` 仓库子集 → git map →
+//!    fetch + detach 于 base_commit（用户会话凭据，Runner 不碰凭据）；
+//! 4. 监督：spawn Agent（模板库），心跳 `pm_report_progress` 续租，
+//!    标记侦测 → `pm_report_interaction`，命令轮询 `pm_poll_commands` /
+//!    `pm_ack_command`（terminate 杀进程、continue 写回复重启新 Session →
+//!    消费回执 `pm_report_consumption`）；
+//! 5. 交付：Agent 自行经 MCP `pm_submit_result`（Model A 既有模式，Runner
+//!    不代交交付物）。
 //!
-//! F-1（复审 2026-11-07）：continue 执行前执行 §9.4 前置校验——前置事实由
-//! Platform 随命令 payload 下发（`guard` 快照，见 worker_command.rs
-//! issue_continue_command）：`continuation_start_frozen`（terminate 失败冻结，
-//! ACP-444）与 `agent_deadline_at`（D-02 不顺延，过期须显式授权）。拒绝 =
-//! 命令 failed，回复保留幂等重投/转授权路径。
+//! 检查点 2 补齐（设计稿 §3.4）：I1 凭据 fail-fast（401 即退出，supervisor
+//! 重启后保持响亮失败）· I2 租约类错误 → 同主体续领（退避）· I3 心跳节拍
+//! 守卫 · I4 指数退避+jitter · I5 多发现项告警 · I7 回执信封 schema v1。
 
-use crate::adapter::{self, SpawnedProcess};
+use crate::adapter::{self, ExitOutcome, ResolvedLaunch, SpawnedProcess};
 use crate::mcp;
+use crate::profiles;
+use crate::workspace::{self, ContractRepo, RepoMapping};
 use serde_json::{json, Value};
-use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
+
+/// 回执信封 Schema（与平台 `worker_command::RECEIPT_SCHEMA` 对齐；客户端
+/// 独立定义——不依赖服务端应用栈）。
+pub const RECEIPT_SCHEMA: &str = "aipm.receipt.v1";
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -31,7 +38,13 @@ pub struct Config {
     pub project_id: Uuid,
     pub client_name: String,
     pub workspace_root: PathBuf,
+    /// Adapter 选择（zcode|codex|dsh|custom）。
+    pub adapter: String,
+    /// raw 命令模板（adapter=custom 必填；其余作 diagnostics）。
     pub agent_cmd: String,
+    pub git_map: Option<PathBuf>,
+    /// 平台 `AI_PM_RUN_LEASE_SECS` 镜像值（心跳节拍守卫用；须与平台一致）。
+    pub lease_secs: u64,
     pub claim_interval_secs: u64,
     pub heartbeat_secs: u64,
     pub detect_interval_secs: u64,
@@ -39,6 +52,9 @@ pub struct Config {
     /// F-6：终止重试预算（次数 × 单次等待超时）。
     pub terminate_attempts: u32,
     pub terminate_timeout_secs: u64,
+    /// I4：续领退避（指数基数/上限，jitter ±20% 内置）。
+    pub backoff_base_ms: u64,
+    pub backoff_cap_ms: u64,
 }
 
 impl Config {
@@ -49,16 +65,48 @@ impl Config {
     pub fn terminate_timeout_secs_default() -> u64 {
         env_num("AI_PM_PROCESS_TERMINATION_TIMEOUT_SECS", 10)
     }
+
+    /// I3：心跳节拍守卫——两拍未及一续租即拒绝启动（防配置踩 INV-1）。
+    pub fn validate(&self) -> Result<(), String> {
+        if self.heartbeat_secs == 0 || self.heartbeat_secs * 2 >= self.lease_secs {
+            return Err(format!(
+                "AI_PM_RUNNER_HEARTBEAT_SECS={} must satisfy heartbeat*2 < lease_secs={} \
+                 (heartbeat is the lease renewal signal; a beat must always land inside the TTL)",
+                self.heartbeat_secs, self.lease_secs
+            ));
+        }
+        Ok(())
+    }
 }
 
 pub fn env_num(key: &str, default: u64) -> u64 {
-    std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
 }
 
 pub fn hostname() -> String {
     std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))
         .unwrap_or_else(|_| "runner".into())
+}
+
+/// I4：指数退避 + ±20% jitter（无随机依赖：以纳秒熵取抖动）。
+pub fn backoff_delay_ms(failure_count: u32, base_ms: u64, cap_ms: u64) -> u64 {
+    let factor = 1u64 << failure_count.min(5); // base → 32x 上限内封顶
+    let raw = base_ms.saturating_mul(factor);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as u64)
+        .unwrap_or(0);
+    let jitter = (nanos % 41) as i64 - 20; // [-20, +20] 百分比
+    let shifted = if jitter >= 0 {
+        raw.saturating_add(raw.saturating_mul(jitter as u64) / 100)
+    } else {
+        raw.saturating_sub(raw.saturating_mul(jitter.unsigned_abs()) / 100)
+    };
+    shifted.clamp(base_ms, cap_ms)
 }
 
 /// 一个受监督 Run 的运行时状态（字段 pub 供测试构造）。
@@ -81,9 +129,32 @@ pub struct ActiveRun {
     pub pending_interaction: Option<Uuid>,
     /// terminate 已 acked、等待 continue 命令的窗口。
     pub awaiting_continue: bool,
+    /// I2：租约类失败计数与上次续领尝试时刻（退避门）。
+    pub lease_failures: u32,
+    pub last_lease_attempt: Option<Instant>,
 }
 
-pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) {
+pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) -> Result<(), mcp::RunnerError> {
+    cfg.validate().map_err(mcp::RunnerError::Adapter)?;
+    // Q-RC-5：孤儿扫描只报告不强杀。
+    for orphan in adapter::scan_orphans(&cfg.workspace_root) {
+        tracing::warn!(
+            run_dir = %orphan.run_dir.display(),
+            pid = orphan.record.pid,
+            session = %orphan.record.session_id,
+            alive = orphan.alive,
+            "orphan agent process from previous instance reported (no action taken)"
+        );
+    }
+    // I1：启动自检——轻量调用验证凭据；401/403 即退出（不进入 401 循环）。
+    if let Err(e) = client.list_ready_tasks(cfg.project_id).await {
+        if e.is_unauthorized() {
+            tracing::error!(error = %e, "credential self-check failed; exiting (supervisor will restart after human action)");
+            return Err(e);
+        }
+        tracing::warn!(error = %e, "startup probe failed (non-credential); continuing");
+    }
+
     let mut active: Option<ActiveRun> = recover_inflight_run(cfg, client).await;
     let mut logged_awaiting = false;
     let mut last_claim_attempt = Instant::now() - Duration::from_secs(cfg.claim_interval_secs);
@@ -93,11 +164,56 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) {
     //（本机无进程句柄；continue 到达时按既有路径 spawn 新 Session）。
     // ACP-C4：terminate 确认前置不变（continue 仍被情形 6 过滤直至确认）。
     async fn recover_inflight_run(cfg: &Config, client: &mcp::McpClient) -> Option<ActiveRun> {
-        let discovered = client.discover_runs(cfg.project_id).await.ok()?;
-        let entry = discovered.get("runs")?.as_array()?.first()?.clone();
+        let discovered = match client.discover_runs(cfg.project_id).await {
+            Ok(value) => value,
+            Err(e) => {
+                tracing::warn!(error = %e, "startup discovery failed; starting without recovery");
+                return None;
+            }
+        };
+        let runs = discovered
+            .get("runs")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        if runs.len() > 1 {
+            // I5：多发现项显式告警——V1 单 Run 串行，余项待当前 Run 终局后
+            // 下轮 discover 再领（幂等、无副作用）。
+            tracing::warn!(
+                count = runs.len(),
+                "multiple recoverable runs discovered; single-run runner takes the first, rest re-discovered later"
+            );
+        }
+        let entry = runs.first()?.clone();
         let run_id: Uuid = entry.get("run_id")?.as_str()?.parse().ok()?;
-        let reacquired = client.reacquire_lease(cfg.project_id, run_id).await.ok()?;
         let task_id: Uuid = entry.get("task_id")?.as_str()?.parse().ok()?;
+        // I4：续领失败退避重试（有界），耗尽后转入正常循环（平台侧恢复路径接管）。
+        let mut attempt: u32 = 0;
+        let reacquired = loop {
+            match client.reacquire_lease(cfg.project_id, run_id).await {
+                Ok(value) => break Some(value),
+                Err(e) => {
+                    if e.is_unauthorized() {
+                        tracing::error!(error = %e, "credential rejected during recovery reacquire");
+                        return None;
+                    }
+                    attempt += 1;
+                    let delay = backoff_delay_ms(attempt, cfg.backoff_base_ms, cfg.backoff_cap_ms);
+                    tracing::warn!(
+                        error = %e, attempt, retry_in_ms = delay,
+                        "recovery reacquire failed; backing off"
+                    );
+                    if attempt >= 5 {
+                        break None;
+                    }
+                    tokio::time::sleep(Duration::from_millis(delay)).await;
+                }
+            }
+        };
+        let Some(reacquired) = reacquired else {
+            tracing::error!(run = %run_id, "recovery reacquire exhausted bounded retries; run left to platform recovery paths");
+            return None;
+        };
         let run_dir = cfg.workspace_root.join(run_id.to_string());
         let _ = std::fs::create_dir_all(&run_dir);
         tracing::info!(
@@ -110,28 +226,45 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) {
             project_id: cfg.project_id,
             task_id,
             run_id,
-            lease_token: reacquired.get("lease_token").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
-            lease_generation: reacquired.get("lease_generation").and_then(|v| v.as_i64()).unwrap_or(1) as i32,
-            worker_id: reacquired.get("worker_id").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            lease_token: reacquired
+                .get("lease_token")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            lease_generation: reacquired
+                .get("lease_generation")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(1) as i32,
+            worker_id: reacquired
+                .get("worker_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string(),
             run_dir,
             stage: "started".into(),
             process: None,
             last_heartbeat: Instant::now(),
             last_detect: Instant::now(),
             last_command_poll: Instant::now() - Duration::from_secs(cfg.command_poll_secs),
-            pending_interaction: entry.get("interaction_id").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()),
+            pending_interaction: entry
+                .get("interaction_id")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse().ok()),
             awaiting_continue: true,
+            lease_failures: 0,
+            last_lease_attempt: None,
         })
     }
 
     loop {
         // ① 进程收割与退出判定。
         if let Some(run) = active.as_mut() {
-            if let Some(outcome) = match run.process.as_mut() {
+            let outcome = match run.process.as_mut() {
                 Some(spawned) => adapter::reap(spawned).await,
                 // 恢复认领的 Run（无本地进程句柄）：无收割语义。
                 None => None,
-            } {
+            };
+            if let Some(outcome) = outcome {
                 if run.awaiting_continue {
                     // 人工介入流：进程是 Runner 自己按 terminate 命令杀的
                     //（D-03）——预期退出，Run 保持存活等待 continue 命令。
@@ -139,12 +272,12 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) {
                     if !logged_awaiting {
                         logged_awaiting = true;
                         tracing::info!(
-                            run = %run.run_id, exit = %outcome,
+                            run = %run.run_id, exit = outcome.as_str(),
                             "agent terminated for intervention; awaiting continue"
                         );
                     }
                 } else {
-                    tracing::info!(run = %run.run_id, exit = %outcome, "agent process exited");
+                    tracing::info!(run = %run.run_id, exit = outcome.as_str(), "agent process exited");
                     // 交付提交由 Agent 经 MCP 自行完成（Model A 既有模式）；
                     // Runner 侧仅记录退出证据。
                     active = None;
@@ -163,6 +296,11 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) {
                     active = Some(run);
                 }
                 Ok(None) => {}
+                // I1：凭据拒绝即终止（fail-fast；supervisor 重启后仍响亮失败）。
+                Err(e) if e.is_unauthorized() => {
+                    tracing::error!(error = %e, "credential rejected during claim; exiting");
+                    return Err(e);
+                }
                 Err(e) => tracing::warn!(error = %e, "claim attempt failed"),
             }
         }
@@ -170,7 +308,30 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) {
         // ③ 活跃 Run 的通信拍：心跳 / 标记侦测 / 命令轮询。
         if let Some(run) = active.as_mut() {
             if let Err(e) = tick(cfg, client, run).await {
-                tracing::warn!(error = %e, run = %run.run_id, "supervision tick failed");
+                // I2：租约类拒绝 → 同主体续领（退避；R-16 方案 a 真进程落位）。
+                if e.is_lease_error() {
+                    match reacquire_active_run(cfg, client, run).await {
+                        Ok(()) => tracing::info!(
+                            run = %run.run_id,
+                            generation = run.lease_generation,
+                            "lease reacquired mid-run (lease-class rejection recovered)"
+                        ),
+                        Err(reacquire_error) => {
+                            tracing::warn!(
+                                error = %reacquire_error,
+                                run = %run.run_id,
+                                "lease reacquire failed; run released to platform recovery paths"
+                            );
+                            active = None;
+                            continue;
+                        }
+                    }
+                } else if e.is_unauthorized() {
+                    tracing::error!(error = %e, "credential rejected during supervision; exiting");
+                    return Err(e);
+                } else {
+                    tracing::warn!(error = %e, run = %run.run_id, "supervision tick failed");
+                }
             }
             // 收割竞态兜底：进程句柄已失效。awaiting_continue 期间的
             // None 是 terminate 的预期结果（§4.1 修复：不得在此丢弃 Run，
@@ -186,6 +347,40 @@ pub async fn run_loop(cfg: &Config, client: &mcp::McpClient) {
 
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
+}
+
+/// I2：租约类失败后的同主体续领（带退避门；成功刷新 ActiveRun 三要素）。
+async fn reacquire_active_run(
+    cfg: &Config,
+    client: &mcp::McpClient,
+    run: &mut ActiveRun,
+) -> Result<(), mcp::RunnerError> {
+    if let Some(last) = run.last_lease_attempt {
+        let delay = backoff_delay_ms(run.lease_failures, cfg.backoff_base_ms, cfg.backoff_cap_ms);
+        if last.elapsed() < Duration::from_millis(delay) {
+            return Err(mcp::RunnerError::Adapter(format!(
+                "reacquire backing off for {}ms",
+                delay
+            )));
+        }
+    }
+    run.last_lease_attempt = Some(Instant::now());
+    run.lease_failures += 1;
+    let reacquired = client.reacquire_lease(run.project_id, run.run_id).await?;
+    run.lease_token = reacquired
+        .get("lease_token")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    run.lease_generation = reacquired
+        .get("lease_generation")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(run.lease_generation as i64) as i32;
+    if let Some(worker_id) = reacquired.get("worker_id").and_then(|v| v.as_str()) {
+        run.worker_id = worker_id.to_string();
+    }
+    run.lease_failures = 0;
+    Ok(())
 }
 
 pub async fn claim_and_start(
@@ -213,9 +408,9 @@ pub async fn claim_and_start(
         .get("lease_generation")
         .and_then(|v| v.as_i64())
         .unwrap_or(1) as i32;
-    // 命令路由身份 = Platform 侧 lease_owner 快照（V-05-1 起随 claim 响应下发：
-    // cpk 通道 = `client:{device_id}`，真人通道 = `mcp:{client}:{token8}`）——
-    // **必须原样使用**（poll/ack 路由按此绑定）；旧平台无该字段时回退本地重建。
+    // 命令路由身份 = Platform 侧 lease_owner 快照（cpk 通道 = `client:{device_id}`，
+    // 真人通道 = `mcp:{client}:{token8}`）——**必须原样使用**（poll/ack 路由按此绑定）；
+    // 旧平台无该字段时回退本地重建。
     let worker_id = claimed
         .get("lease_owner")
         .and_then(|v| v.as_str())
@@ -229,21 +424,73 @@ pub async fn claim_and_start(
         });
     let run_dir = cfg.workspace_root.join(run_id.to_string());
     std::fs::create_dir_all(&run_dir)?;
-    let spawn = adapter::spawn_agent(
-        &cfg.agent_cmd,
+
+    // 工作区准备（V-05-2）：契约仓库子集 → git map → fetch + detach。
+    // 失败 = Run 走 blocked 上报（平台可见），本槽位释放。
+    let contract = client
+        .get_run_context(cfg.project_id, run_id, &lease_token, lease_generation)
+        .await?;
+    let repos = workspace::contract_repos(&contract);
+    let git_map: HashMap<String, RepoMapping> =
+        workspace::load_git_map(cfg.git_map.as_deref()).unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "git map unusable; workspace prep will fail for mapped repos");
+            HashMap::new()
+        });
+    let mut prepared: Vec<(ContractRepo, PathBuf)> = Vec::new();
+    for repo in &repos {
+        let mapping = git_map
+            .get(&repo.repository_id)
+            .or_else(|| git_map.get(&repo.name));
+        let fallback = run_dir.join(&repo.workspace_path);
+        match workspace::prepare_repo(
+            mapping,
+            &fallback,
+            &repo.base_commit,
+            Duration::from_secs(120),
+        )
+        .await
+        {
+            Ok(path) => prepared.push((repo.clone(), path)),
+            Err(e) => {
+                // 工作区准备失败：blocked 上报（best-effort；平台可见）+ 释放槽位。
+                tracing::error!(run = %run_id, repo = %repo.name, error = %e, "workspace prep failed; run reported blocked");
+                let _ = client
+                    .report_progress(
+                        cfg.project_id,
+                        run_id,
+                        &lease_token,
+                        lease_generation,
+                        "started",
+                        &format!("workspace prep failed (blocked): {e}"),
+                    )
+                    .await;
+                return Ok(None);
+            }
+        }
+    }
+    let note = workspace::workspace_note(&prepared);
+    let _ = std::fs::create_dir_all(run_dir.join(".aipm"));
+    let _ = std::fs::write(
+        run_dir.join(".aipm").join("workspace.json"),
+        serde_json::to_vec_pretty(
+            &workspace::workspace_env(&prepared)
+                .map(|(_, value)| value)
+                .unwrap_or_else(|| "[]".into()),
+        )
+        .unwrap_or_default(),
+    );
+
+    let process = spawn_agent_session(
+        cfg,
         &run_dir,
-        &[
-            ("AI_PM_RUN_ID", run_id.to_string()),
-            ("AI_PM_TASK_ID", task_id.to_string()),
-            ("AI_PM_PROJECT_ID", cfg.project_id.to_string()),
-            ("AI_PM_MCP_URL", cfg.platform_mcp_url.clone()),
-            ("AI_PM_LEASE_TOKEN", lease_token.clone()),
-            ("AI_PM_LEASE_GENERATION", lease_generation.to_string()),
-            ("AI_PM_WORKER_ID", worker_id.clone()),
-        ],
+        task_id,
+        run_id,
+        &lease_token,
+        lease_generation,
         None,
+        Some(note),
     )
-    .map_err(|e| mcp::RunnerError::Adapter(e.to_string()))?;
+    .await?;
     Ok(Some(ActiveRun {
         project_id: cfg.project_id,
         task_id,
@@ -253,13 +500,57 @@ pub async fn claim_and_start(
         worker_id,
         run_dir,
         stage: "started".into(),
-        process: Some(spawn),
+        process: Some(process),
         last_heartbeat: Instant::now(),
         last_detect: Instant::now(),
         last_command_poll: Instant::now() - Duration::from_secs(cfg.command_poll_secs),
         pending_interaction: None,
         awaiting_continue: false,
+        lease_failures: 0,
+        last_lease_attempt: None,
     }))
+}
+
+/// 统一 spawn 入口（claim 与 continue 共用）：模板解析 → 提示文件 → spawn
+/// （密钥脱敏表 = lease_token；工作区地图经 env 注入）。
+#[allow(clippy::too_many_arguments)]
+async fn spawn_agent_session(
+    cfg: &Config,
+    run_dir: &Path,
+    task_id: Uuid,
+    run_id: Uuid,
+    lease_token: &str,
+    lease_generation: i32,
+    reply: Option<&Value>,
+    workspace_note: Option<String>,
+) -> Result<SpawnedProcess, mcp::RunnerError> {
+    let prompt = profiles::build_prompt(
+        &cfg.project_id.to_string(),
+        &task_id.to_string(),
+        &run_id.to_string(),
+        lease_generation,
+        reply,
+        workspace_note.as_deref(),
+    );
+    let prompt_path = profiles::write_prompt_file(run_dir, &prompt)
+        .map_err(|e| mcp::RunnerError::Adapter(format!("prompt file write failed: {e}")))?;
+    let launch: ResolvedLaunch =
+        profiles::resolve(&cfg.adapter, Some(&cfg.agent_cmd), &prompt, &prompt_path)
+            .map_err(|e| mcp::RunnerError::Adapter(e.to_string()))?;
+    let workspace_env = workspace_note.map(|note| ("AI_PM_WORKSPACE_NOTE", note));
+    let mut envs: Vec<(&str, String)> = vec![
+        ("AI_PM_RUN_ID", run_id.to_string()),
+        ("AI_PM_TASK_ID", task_id.to_string()),
+        ("AI_PM_PROJECT_ID", cfg.project_id.to_string()),
+        ("AI_PM_MCP_URL", cfg.platform_mcp_url.clone()),
+        ("AI_PM_LEASE_TOKEN", lease_token.to_string()),
+        ("AI_PM_LEASE_GENERATION", lease_generation.to_string()),
+    ];
+    if let Some((key, value)) = workspace_env {
+        envs.push((key, value));
+    }
+    adapter::spawn_resolved(&launch, run_dir, &envs, reply, &[lease_token.to_string()])
+        .map_err(|e| mcp::RunnerError::Adapter(e.to_string()))
 }
 
 /// 活跃 Run 的一个通信拍（心跳 / 标记侦测 / 命令执行）。
@@ -283,14 +574,14 @@ pub async fn tick(
             .await?;
     }
 
-    // ② 标记文件侦测（N-2 ①→②：`.aipm/interaction.json` → pm_report_interaction）。
+    // ② 标记文件侦测（N-2 ①→②：`interaction.{event_id}.json` → pm_report_interaction）。
     if run.pending_interaction.is_none()
         && !run.awaiting_continue
         && run.process.is_some()
         && run.last_detect.elapsed() >= Duration::from_secs(cfg.detect_interval_secs)
     {
         run.last_detect = Instant::now();
-        if let Some((path, parsed)) = adapter::find_unreported_marker(&run.run_dir) {
+        for (path, parsed) in adapter::find_unreported_markers(&run.run_dir) {
             let event = match parsed {
                 Ok(event) => event,
                 // 非法标记：隔离不重试、不产生 Interaction（§1.2 / 评审 P1-4）。
@@ -299,7 +590,7 @@ pub async fn tick(
                         tracing::warn!(error = %io_err, "marker quarantine failed");
                     }
                     tracing::warn!(error = %e, "invalid interaction marker quarantined");
-                    return Ok(());
+                    continue;
                 }
             };
             match client
@@ -345,6 +636,7 @@ pub async fn tick(
                         }
                         _ => {
                             tracing::warn!(error = %e, "interaction report failed; will retry");
+                            return Err(e);
                         }
                     }
                 }
@@ -372,22 +664,39 @@ pub fn preflight_continue(guard: &Value) -> Result<(), String> {
     let Some(obj) = guard.as_object() else {
         return Ok(());
     };
-    if obj.get("continuation_start_frozen").and_then(|v| v.as_bool()) == Some(true) {
-        return Err(
-            "continuation start frozen (previous termination unconfirmed; ACP-444)".into(),
-        );
+    if obj
+        .get("continuation_start_frozen")
+        .and_then(|v| v.as_bool())
+        == Some(true)
+    {
+        return Err("continuation start frozen (previous termination unconfirmed; ACP-444)".into());
     }
     if let Some(deadline) = obj.get("agent_deadline_at").and_then(|v| v.as_str()) {
         let deadline = chrono::DateTime::parse_from_rfc3339(deadline)
             .map_err(|e| format!("malformed guard.agent_deadline_at: {e}"))?;
-        if chrono::Utc::now() > deadline.with_timezone(&chrono::Utc) + chrono::Duration::seconds(5) {
+        if chrono::Utc::now() > deadline.with_timezone(&chrono::Utc) + chrono::Duration::seconds(5)
+        {
             return Err(
-                "agent deadline expired; requires explicit re-authorization (V1.3.1 §9.2)"
-                    .into(),
+                "agent deadline expired; requires explicit re-authorization (V1.3.1 §9.2)".into(),
             );
         }
     }
     Ok(())
+}
+
+/// I7：回执信封（schema v1 + 当前代次；与平台 `RECEIPT_SCHEMA` 对齐）。
+pub fn receipt_v1(lease_generation: i32, extra: Value) -> Value {
+    let mut receipt = json!({
+        "schema_version": RECEIPT_SCHEMA,
+        "run_generation": lease_generation,
+    });
+    let obj = receipt.as_object_mut().expect("receipt object");
+    if let Value::Object(fields) = extra {
+        for (key, value) in fields {
+            obj.insert(key, value);
+        }
+    }
+    receipt
 }
 
 pub async fn execute_command(
@@ -432,13 +741,36 @@ pub async fn execute_command(
                 }
                 // R-11/ACP-C4：恢复认领的 Run 本机无进程句柄——旧进程已不存在，
                 // 幂等终止确认（专家第 1 块 3.4：支持幂等终止确认）。
-                None => Ok(String::from("Lost")),
+                None => Ok(ExitOutcome::Lost),
             };
-            let pid_receipt = run.process.as_ref().map(|p| json!(p.pid)).unwrap_or(json!(null));
+            let pid_receipt = run
+                .process
+                .as_ref()
+                .map(|p| json!(p.pid))
+                .unwrap_or(json!(null));
+            // I7：请求/确认两时刻（请求 = 平台 payload.issued_at 事实；确认 = 本地现刻）。
+            let requested_at = command
+                .get("payload")
+                .and_then(|p| p.get("issued_at"))
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
             let (outcome_word, receipt, error) = match outcome {
                 Ok(exit_outcome) => {
-                    tracing::info!(run = %run.run_id, exit = %exit_outcome, "agent terminated");
-                    ("acked", json!({ "exit_outcome": exit_outcome, "pid": pid_receipt }), None)
+                    tracing::info!(run = %run.run_id, exit = exit_outcome.as_str(), "agent terminated");
+                    (
+                        "acked",
+                        receipt_v1(
+                            run.lease_generation,
+                            json!({
+                                "exit_outcome": exit_outcome.as_str(),
+                                "pid": pid_receipt,
+                                "terminate_requested_at": requested_at,
+                                "terminate_confirmed_at": chrono::Utc::now().to_rfc3339(),
+                            }),
+                        ),
+                        None,
+                    )
                 }
                 Err(e) => (
                     // 平台对 terminate acked 要求 exit_outcome（§3.2 从严判据）：
@@ -477,21 +809,18 @@ pub async fn execute_command(
                 .and_then(|p| p.get("response"))
                 .cloned()
                 .unwrap_or_else(|| json!({}));
-            let spawn = adapter::spawn_agent(
-                &cfg.agent_cmd,
+            match spawn_agent_session(
+                cfg,
                 &run.run_dir,
-                &[
-                    ("AI_PM_RUN_ID", run.run_id.to_string()),
-                    ("AI_PM_TASK_ID", run.task_id.to_string()),
-                    ("AI_PM_PROJECT_ID", run.project_id.to_string()),
-                    ("AI_PM_MCP_URL", cfg.platform_mcp_url.clone()),
-                    ("AI_PM_LEASE_TOKEN", run.lease_token.clone()),
-                    ("AI_PM_LEASE_GENERATION", run.lease_generation.to_string()),
-                    ("AI_PM_WORKER_ID", run.worker_id.clone()),
-                ],
+                run.task_id,
+                run.run_id,
+                &run.lease_token,
+                run.lease_generation,
                 Some(&response),
-            );
-            match spawn {
+                None,
+            )
+            .await
+            {
                 Ok(process) => {
                     let session_created = true;
                     let input_injected = run.run_dir.join(".aipm").join("reply.json").is_file();
@@ -509,11 +838,14 @@ pub async fn execute_command(
                         .as_ref()
                         .map(|p| p.session_id.clone())
                         .unwrap_or_default();
-                    let ack_receipt = json!({
-                        "session_created": session_created,
-                        "input_injected": input_injected,
-                        "session_id": session_id,
-                    });
+                    let ack_receipt = receipt_v1(
+                        run.lease_generation,
+                        json!({
+                            "session_created": session_created,
+                            "input_injected": input_injected,
+                            "session_id": session_id,
+                        }),
+                    );
                     let interaction_id = run.pending_interaction;
                     ack(client, run, command_id, "acked", ack_receipt, None).await;
                     if input_injected && alive {
@@ -561,10 +893,79 @@ async fn ack(
     error: Option<String>,
 ) {
     if let Err(e) = client
-        .ack_command(run.project_id, command_id, &run.worker_id, outcome, receipt, error)
+        .ack_command(
+            run.project_id,
+            command_id,
+            &run.worker_id,
+            outcome,
+            receipt,
+            error,
+        )
         .await
     {
         // 回执失败：下一轮 poll 重领（claim 过期或 claimed_by=自方）后重新回执（幂等）。
         tracing::warn!(error = %e, command = %command_id, "ack failed; will re-ack after redelivery");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn heartbeat_guard_rejects_bad_ratios() {
+        let mut cfg = test_config();
+        cfg.heartbeat_secs = 200; // 2*200 >= 300
+        assert!(cfg.validate().is_err());
+        cfg.heartbeat_secs = 0;
+        assert!(cfg.validate().is_err());
+        cfg.heartbeat_secs = 60; // 120 < 300
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn backoff_grows_and_clamps() {
+        let base = 2000;
+        let cap = 60_000;
+        let d0 = backoff_delay_ms(0, base, cap); // factor 1，±20% jitter
+        assert!((1600..=2400).contains(&d0), "{d0}");
+        let d3 = backoff_delay_ms(3, base, cap);
+        assert!(d3 >= base, "{d3}");
+        assert!(
+            backoff_delay_ms(9, base, cap) >= 51_200,
+            "32x jittered must reach the cap zone"
+        );
+    }
+
+    #[test]
+    fn receipt_envelope_carries_schema_and_generation() {
+        let receipt = receipt_v1(
+            2,
+            json!({ "exit_outcome": "Killed", "terminate_confirmed_at": "t" }),
+        );
+        assert_eq!(receipt["schema_version"], RECEIPT_SCHEMA);
+        assert_eq!(receipt["run_generation"], 2);
+        assert_eq!(receipt["exit_outcome"], "Killed");
+    }
+
+    fn test_config() -> Config {
+        Config {
+            platform_mcp_url: "http://127.0.0.1:8090/mcp".into(),
+            project_id: Uuid::nil(),
+            client_name: "runner-59".into(),
+            workspace_root: std::env::temp_dir(),
+            adapter: "custom".into(),
+            agent_cmd: "cmd".into(),
+            git_map: None,
+            lease_secs: 300,
+            claim_interval_secs: 10,
+            heartbeat_secs: 60,
+            detect_interval_secs: 5,
+            command_poll_secs: 3,
+            terminate_attempts: 3,
+            terminate_timeout_secs: 10,
+            backoff_base_ms: 2000,
+            backoff_cap_ms: 60_000,
+        }
     }
 }

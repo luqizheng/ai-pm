@@ -16,10 +16,37 @@ pub enum RunnerError {
     Io(#[from] std::io::Error),
     #[error("adapter: {0}")]
     Adapter(String),
+    /// 凭据被拒（401/403）：cpk 无效/已撤销/设备停用/权限不足。fail-closed
+    /// 分类（约束 A 客户端延伸）——调用方停止自动恢复并退出，绝不降级重试。
+    #[error("credential rejected ({status}): {detail}")]
+    Unauthorized { status: u16, detail: String },
+    #[error("platform http {status}: {detail}")]
+    HttpStatus { status: u16, detail: String },
     #[error("platform tool error: {0}")]
     Tool(String),
     #[error("malformed platform response: {0}")]
     Malformed(String),
+}
+
+impl RunnerError {
+    /// 凭据面拒绝判定（检查点 2 I1/I2）。
+    pub fn is_unauthorized(&self) -> bool {
+        matches!(self, RunnerError::Unauthorized { .. })
+    }
+
+    /// 执行面租约类业务拒绝（续领触发的判定依据，I2）。
+    pub fn is_lease_error(&self) -> bool {
+        match self {
+            RunnerError::Tool(text) => {
+                let lower = text.to_ascii_lowercase();
+                lower.contains("lease_expired")
+                    || lower.contains("lease_invalid")
+                    || lower.contains("lease has expired")
+                    || lower.contains("generation")
+            }
+            _ => false,
+        }
+    }
 }
 
 pub struct McpClient {
@@ -65,17 +92,36 @@ impl McpClient {
         });
         let started = std::time::Instant::now();
         tracing::debug!(tool = name, "mcp call start");
-        let resp: Value = self
+        let response = self
             .http
             .post(&self.url)
             .header("Accept", "application/json, text/event-stream")
             .bearer_auth(&self.bearer_token)
             .json(&body)
             .send()
-            .await?
-            .json()
             .await?;
-        tracing::debug!(tool = name, elapsed_ms = started.elapsed().as_millis() as u64, "mcp call done");
+        let status = response.status();
+        if !status.is_success() {
+            let detail = response.text().await.unwrap_or_default();
+            tracing::debug!(tool = name, status = status.as_u16(), "mcp call http error");
+            return if status.as_u16() == 401 || status.as_u16() == 403 {
+                Err(RunnerError::Unauthorized {
+                    status: status.as_u16(),
+                    detail,
+                })
+            } else {
+                Err(RunnerError::HttpStatus {
+                    status: status.as_u16(),
+                    detail,
+                })
+            };
+        }
+        let resp: Value = response.json().await?;
+        tracing::debug!(
+            tool = name,
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            "mcp call done"
+        );
         if let Some(err) = resp.get("error") {
             return Err(RunnerError::Tool(format!("json-rpc error: {err}")));
         }
@@ -110,7 +156,10 @@ impl McpClient {
         project_id: Uuid,
     ) -> Result<Vec<(Uuid, Uuid)>, RunnerError> {
         let value = self
-            .call_tool("pm_list_tasks", json!({ "project_id": project_id, "limit": 20 }))
+            .call_tool(
+                "pm_list_tasks",
+                json!({ "project_id": project_id, "limit": 20 }),
+            )
             .await?;
         let mut out = Vec::new();
         if let Some(tasks) = value.get("tasks").and_then(|t| t.as_array()) {
@@ -138,6 +187,25 @@ impl McpClient {
         self.call_tool(
             "pm_claim_task",
             json!({ "project_id": project_id, "task_id": task_id, "client_name": client_name }),
+        )
+        .await
+    }
+
+    /// `pm_get_run_context`（只读；Runner 用于工作区准备——仓库子集/基线；
+    /// Agent 侧自行调用获取完整契约）。
+    pub async fn get_run_context(
+        &self,
+        project_id: Uuid,
+        run_id: Uuid,
+        lease_token: &str,
+        lease_generation: i32,
+    ) -> Result<Value, RunnerError> {
+        self.call_tool(
+            "pm_get_run_context",
+            json!({
+                "project_id": project_id, "run_id": run_id,
+                "lease_token": lease_token, "lease_generation": lease_generation,
+            }),
         )
         .await
     }
