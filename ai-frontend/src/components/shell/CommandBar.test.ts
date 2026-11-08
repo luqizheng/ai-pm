@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 
 import CommandBar from "./CommandBar.vue";
@@ -101,5 +101,54 @@ describe("CommandBar", () => {
     expect(placeholder).not.toContain("Atlas Platform");
     expect(placeholder).not.toContain("Research Sandbox");
     expect(placeholder).toContain("正在切换项目…");
+  });
+  it("发送键提交：入队待发提问、清空输入并进入会话页", async () => {
+    const { wrapper, router } = mountShell(CommandBar);
+    const shell = useShellStore();
+    await router.push("/projects");
+    await router.isReady();
+
+    await wrapper.find(".shell-commandbar__field").setValue("  分析风险  ");
+    await wrapper.find(".shell-commandbar__send").trigger("click");
+    // /project/assistant 是懒加载路由：导航等动态 import 完成，需轮询等待
+    await vi.waitFor(() =>
+      expect(router.currentRoute.value.path).toBe("/project/assistant")
+    );
+
+    expect(shell.pendingAssistantPrompt?.text).toBe("分析风险");
+    expect(
+      (wrapper.find(".shell-commandbar__field").element as HTMLInputElement)
+        .value
+    ).toBe("");
+  });
+
+  it("Enter 提交；Shift+Enter 与输入法组字不提交", async () => {
+    const { wrapper } = mountShell(CommandBar);
+    const shell = useShellStore();
+    const field = wrapper.find(".shell-commandbar__field");
+
+    await field.setValue("梳理需求");
+    await field.trigger("keydown", { key: "Enter", shiftKey: true });
+    await field.trigger("keydown", { key: "Enter", isComposing: true });
+    expect(shell.pendingAssistantPrompt).toBeNull();
+
+    await field.trigger("keydown", { key: "Enter" });
+    expect(shell.pendingAssistantPrompt?.text).toBe("梳理需求");
+  });
+
+  it("建议芯片只填入输入框，不自动发送", async () => {
+    const { wrapper } = mountShell(CommandBar);
+    const shell = useShellStore();
+    shell.setCommandbarExpanded(true);
+    await nextTick();
+
+    const chip = wrapper.findAll(".shell-commandbar__suggestion")[0];
+    await chip.trigger("click");
+
+    expect(
+      (wrapper.find(".shell-commandbar__field").element as HTMLInputElement)
+        .value
+    ).toBe(chip.text());
+    expect(shell.pendingAssistantPrompt).toBeNull();
   });
 });

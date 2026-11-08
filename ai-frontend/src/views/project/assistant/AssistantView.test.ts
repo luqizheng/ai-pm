@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, type VueWrapper } from "@vue/test-utils";
 
 import { mountShell } from "@/components/shell/test-utils";
+import { useShellStore } from "@/stores/shell";
 import { i18n } from "@/lib/i18n";
 import Select from "@/components/ui/select/Select.vue";
 import type {
@@ -11,6 +12,19 @@ import type {
 } from "@/api/conversations";
 
 import AssistantView from "./AssistantView.vue";
+
+// AI 文本消息走 MarkdownViewer（Vditor md2html）：happy-dom 禁脚本加载会抛
+// 未处理 rejection 并污染并行 worker 的其他套件——按 responses-a/pages-b 的
+// 做法整体替换 vditor。
+const md2html = vi.hoisted(() => vi.fn());
+
+vi.mock("vditor", () => ({
+  default: {
+    md2html,
+    preview: vi.fn(),
+    version: "test"
+  }
+}));
 
 // 会话接线批（2026-11-08）+ Batch G 轮询批 + Batch H 首屏最新窗口：
 // 页面数据一律来自 @/api/conversations（D-4 REST），这里只 mock IO 函数；
@@ -94,6 +108,9 @@ afterEach(() => {
 describe("AssistantView（会话接线）", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // AI 文本 Markdown 渲染：给确定性产物（原文仍在 md2html 入参里断言）
+    md2html.mockReset();
+    md2html.mockResolvedValue("<p>md-rendered</p>");
     listConversations.mockResolvedValue([
       conversation({}),
       conversation({ id: "c2", title: "", updated_at: "2026-11-08T09:00:00Z" })
@@ -216,7 +233,12 @@ describe("AssistantView（会话接线）", () => {
       await flushPromises();
 
       expect(wrapper.findAll('[data-role="ai"]')).toHaveLength(1);
-      expect(wrapper.text()).toContain("AI 平台模型的回复");
+      // AI 文本经 MarkdownViewer 渲染：原文送 md2html，渲染产物上屏
+      expect(md2html).toHaveBeenCalledWith(
+        "AI 平台模型的回复",
+        expect.anything()
+      );
+      expect(wrapper.text()).toContain("md-rendered");
     } finally {
       vi.useRealTimers();
     }
@@ -247,7 +269,8 @@ describe("AssistantView（会话接线）", () => {
       ]);
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
       await flushPromises();
-      expect(wrapper.text()).toContain("迟到的回复");
+      expect(md2html).toHaveBeenCalledWith("迟到的回复", expect.anything());
+      expect(wrapper.text()).toContain("md-rendered");
     } finally {
       vi.useRealTimers();
     }
@@ -370,5 +393,68 @@ describe("AssistantView（会话接线）", () => {
     expect(mounted.wrapper.text()).toContain(t("assistant.noProjectTitle"));
     expect(listConversations).not.toHaveBeenCalled();
     expect(mounted.wrapper.findComponent(Select).exists()).toBe(false);
+  });
+  it("指令栏交接：待发提问发到当前会话；消费即清空，同文案可重复触发", async () => {
+    const { wrapper } = await mountPage();
+    const shell = useShellStore();
+
+    shell.queueAssistantPrompt("梳理当前迭代风险");
+    await flushPromises();
+
+    // 已有会话（自动选中 c1）：直接追加，不新建
+    expect(createConversation).not.toHaveBeenCalled();
+    expect(appendMessage).toHaveBeenCalledWith("p1", "c1", {
+      content: "梳理当前迭代风险"
+    });
+    expect(wrapper.text()).toContain("梳理当前迭代风险");
+    // 消费即清空，不重复发送
+    expect(shell.pendingAssistantPrompt).toBeNull();
+    expect(appendMessage).toHaveBeenCalledTimes(1);
+
+    // 槽为对象：相同文案的第二次提交仍会触发发送
+    shell.queueAssistantPrompt("梳理当前迭代风险");
+    await flushPromises();
+    expect(appendMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it("新建会话按钮：进入草稿态不落库，首条消息经自动建会话落新会话", async () => {
+    const { wrapper } = await mountPage();
+
+    // 新建按钮带专属 class：Select 触发器也是 <button> 且占位文案同为
+    // 「新建会话」，按文案匹配会串（故不能按文案定位）。
+    const newButton = wrapper.find("button.assistant-new");
+    expect(newButton.exists()).toBe(true);
+    await newButton.trigger("click");
+
+    // 草稿态：时间线清空、选择器归空（placeholder=新建会话）、按钮隐没
+    expect(wrapper.findAll(".ai-conversation-message")).toHaveLength(0);
+    const select = wrapper.findComponent(Select);
+    expect(select.props("modelValue")).toBe("");
+    expect(select.props("placeholder")).toBe(t("assistant.newPlaceholder"));
+    expect(wrapper.find("button.assistant-new").exists()).toBe(false);
+
+    // 首条消息：自动建会话（title 取首条截断）再落库，草稿态解除
+    const textarea = wrapper.find("textarea");
+    await textarea.setValue("brand new thread");
+    const sendButton = wrapper
+      .findAll("button")
+      .find(
+        node =>
+          node.attributes("aria-label") === t("ai.conversation.composer.send")
+      );
+    await sendButton?.trigger("click");
+    await flushPromises();
+
+    expect(createConversation).toHaveBeenCalledTimes(1);
+    expect(createConversation).toHaveBeenCalledWith("p1", {
+      title: "brand new thread"
+    });
+    expect(appendMessage).toHaveBeenCalledWith("p1", "nc1", {
+      content: "brand new thread"
+    });
+    expect(
+      (wrapper.findComponent(Select).props("options") as { value: string }[])[0]
+        .value
+    ).toBe("nc1");
   });
 });
