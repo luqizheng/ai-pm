@@ -26,6 +26,9 @@ import SettingsProjectPlaceholderView from "@/views/project/settings/SettingsPro
 import SettingsProjectRepositoriesView from "@/views/project/settings/SettingsProjectRepositoriesView.vue";
 import SettingsProjectRunnersView from "@/views/project/settings/SettingsProjectRunnersView.vue";
 import SettingsProjectRunnerDetailView from "@/views/project/settings/SettingsProjectRunnerDetailView.vue";
+import AiTeamComingSoonView from "@/views/project/settings/ai/AiTeamComingSoonView.vue";
+import SettingsProjectAiRolesView from "@/views/project/settings/ai/SettingsProjectAiRolesView.vue";
+import SettingsProjectAiModelPoliciesView from "@/views/project/settings/ai/SettingsProjectAiModelPoliciesView.vue";
 import RequirementDetailView from "@/views/project/requirement-detail/RequirementDetailView.vue";
 import RequirementHistoryView from "@/views/project/requirement-history/RequirementHistoryView.vue";
 import OnboardingWelcomeView from "@/views/onboarding/OnboardingWelcomeView.vue";
@@ -167,10 +170,44 @@ export function buildRoutes(): RouteRecordRaw[] {
       component: SettingsProjectRunnerDetailView,
       meta: { title: "environments.detail.title" }
     },
+    // AI Team（UI-1，U-2=A 五子页落地序 Roles→Overview→ModelPolicies→Monitor→
+    // ExecutionPolicies）：外层仍是侧栏单条「AI 配置」入口，五子页走子路由 +
+    // 页内页签条（AiTeamFrame）。本批落地 Roles 与 Model Policies 两个内容区；
+    // 其余三子页路由先行注册，内容区为「即将提供」空态（AiTeamComingSoonView）。
+    // 各子页 meta.title 保持 settings.nav.projectAi（页头标题同源），
+    // 未落地子页另挂 meta.aiDesc 供占位页取描述。
     {
       path: "/project/settings/ai",
-      component: SettingsProjectPlaceholderView,
+      redirect: "/project/settings/ai/roles",
       meta: { title: "settings.nav.projectAi" }
+    },
+    {
+      path: "/project/settings/ai/roles",
+      component: SettingsProjectAiRolesView,
+      meta: { title: "settings.nav.projectAi" }
+    },
+    {
+      path: "/project/settings/ai/overview",
+      component: AiTeamComingSoonView,
+      meta: { title: "settings.nav.projectAi", aiDesc: "aiTeam.tabs.overview" }
+    },
+    {
+      path: "/project/settings/ai/model-policies",
+      component: SettingsProjectAiModelPoliciesView,
+      meta: { title: "settings.nav.projectAi" }
+    },
+    {
+      path: "/project/settings/ai/monitor",
+      component: AiTeamComingSoonView,
+      meta: { title: "settings.nav.projectAi", aiDesc: "aiTeam.tabs.monitor" }
+    },
+    {
+      path: "/project/settings/ai/execution-policies",
+      component: AiTeamComingSoonView,
+      meta: {
+        title: "settings.nav.projectAi",
+        aiDesc: "aiTeam.tabs.executionPolicies"
+      }
     }
   );
 

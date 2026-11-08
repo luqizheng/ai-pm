@@ -1,0 +1,72 @@
+aiTeam:
+  tabs:
+    roles: 角色
+    overview: 总览
+    modelPolicies: 模型策略
+    monitor: 执行监控
+    executionPolicies: 执行策略
+  comingSoon:
+    title: 即将提供
+    hint: 该子页随后续批次落地；当前不做任何演示数据。
+  noProject:
+    title: 未选择项目
+    hint: 请从项目总控台进入项目设置，或先在顶栏切换到具体项目。
+  roles:
+    title: AI Team 角色
+    description: 项目 AI 角色目录与启停。默认全部关闭；启用某个角色后该项目的 AI 团队即按目录懒生效。
+    loadFailed: 角色目录加载失败
+    empty: 角色目录为空
+    refresh: 刷新
+    column:
+      role: 角色
+      category: 类目
+      status: 启用
+      statusOn: 已启用
+      statusOff: 已停用
+      version: 当前版本
+      updatedAt: 更新时间
+      history: 版本历史
+    action:
+      expandHistory: 查看版本历史
+      collapseHistory: 收起历史
+    historyEmpty: 该角色尚无版本记录（启用后自动生成版本 1.0）。
+    historyLoadFailed: 版本历史加载失败
+    category:
+      management: 管理
+      product: 产品
+      knowledge: 知识
+      architecture: 架构
+      design: 设计
+      engineering: 工程
+      quality: 质量
+      governance: 治理
+    enabledSaved: 角色已更新
+    enableFailed: 角色启停失败
+    forbidden: 无权限：只有租户管理员或项目 Owner 可以启停 AI 角色。已为你禁用全部开关。
+    undisableable: AI Project Manager 不可禁用：它是管理协调角色，项目无权关闭。
+  policies:
+    title: 模型策略
+    description: 为本项目指定 AI 模型 Provider。未指定时继承 Team 默认（团队内首个已启用的 Provider）；指定后严格使用所绑 Provider，不回退 Team 默认。
+    loadFailed: 模型策略加载失败
+    providersLoadFailed: Team Provider 列表加载失败
+    currentHeading: 当前生效 Provider
+    inheritLabel: 继承 Team 默认
+    inheritDetail: 未指定 Provider，调用时使用团队内首个已启用的 Provider（创建序）。
+    boundDetail: "已指定：{name}"
+    boundDisabledWarning: 所绑 Provider 当前状态为「{status}」——指定后严格不回退，调用仍会使用该 Provider。
+    field:
+      provider: Provider
+      providerHint: 仅列出团队内已启用的 Provider；选择「继承 Team 默认」即清除项目级指定。
+    option:
+      inherit: 继承 Team 默认
+    noEnabledProviders: 团队内暂无已启用的 Provider。可先到团队设置 · AI 配置中启用，或保持继承默认。
+    gotoTeamAi: 打开团队 AI 配置
+    meta:
+      updatedAt: 最近更新
+      never: 未指定过（继承中）
+    save: 保存策略
+    saving: 保存中…
+    saved: 模型策略已保存
+    saveFailed: 保存失败
+    conflict: 策略已被其他人更新（版本冲突）。已为你刷新最新策略，请确认后再保存。
+    emptyPolicyLoaded: 策略读取成功

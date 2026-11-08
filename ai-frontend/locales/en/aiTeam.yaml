@@ -1,0 +1,72 @@
+aiTeam:
+  tabs:
+    roles: Roles
+    overview: Overview
+    modelPolicies: Model Policies
+    monitor: Execution Monitor
+    executionPolicies: Execution Policies
+  comingSoon:
+    title: Coming soon
+    hint: This sub-page lands in a later batch; no demo data is shown.
+  noProject:
+    title: No project selected
+    hint: Enter Project Settings from a Project Command Center, or switch to a specific project first.
+  roles:
+    title: AI Team Roles
+    description: Project AI role catalog with enable toggles. All roles start off; enabling one lazily activates it for this project.
+    loadFailed: Failed to load the role catalog
+    empty: The role catalog is empty
+    refresh: Refresh
+    column:
+      role: Role
+      category: Category
+      status: Enabled
+      statusOn: Enabled
+      statusOff: Disabled
+      version: Current Version
+      updatedAt: Updated At
+      history: Version History
+    action:
+      expandHistory: View version history
+      collapseHistory: Hide history
+    historyEmpty: No versions yet for this role (version 1.0 is created when enabled).
+    historyLoadFailed: Failed to load version history
+    category:
+      management: Management
+      product: Product
+      knowledge: Knowledge
+      architecture: Architecture
+      design: Design
+      engineering: Engineering
+      quality: Quality
+      governance: Governance
+    enabledSaved: Role updated
+    enableFailed: Failed to toggle the role
+    forbidden: "Not allowed: only tenant admins or the project owner can toggle AI roles. All toggles have been disabled for you."
+    undisableable: "The AI Project Manager cannot be disabled: it is the coordinating role and projects have no authority to turn it off."
+  policies:
+    title: Model Policies
+    description: Choose the AI model provider for this project. When unset it inherits the team default (first enabled provider in the team); once set, the bound provider is used strictly with no fallback to the team default.
+    loadFailed: Failed to load the model policy
+    providersLoadFailed: Failed to load team providers
+    currentHeading: Effective provider
+    inheritLabel: Inherit team default
+    inheritDetail: No provider is set for this project; calls use the first enabled provider in the team (creation order).
+    boundDetail: "Bound: {name}"
+    boundDisabledWarning: The bound provider is currently "{status}" — the binding is strict, so calls still use this provider.
+    field:
+      provider: Provider
+      providerHint: Only enabled team providers are listed; pick "Inherit team default" to clear the project-level binding.
+    option:
+      inherit: Inherit team default
+    noEnabledProviders: No enabled provider exists in the team yet. Enable one in Team Settings · AI Configuration, or keep inheriting the default.
+    gotoTeamAi: Open team AI configuration
+    meta:
+      updatedAt: Last updated
+      never: Never set (inheriting)
+    save: Save policy
+    saving: Saving…
+    saved: Model policy saved
+    saveFailed: Failed to save
+    conflict: The policy was updated by someone else (revision conflict). The latest policy has been reloaded; review it and save again.
+    emptyPolicyLoaded: Policy loaded

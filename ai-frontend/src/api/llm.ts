@@ -125,6 +125,50 @@ export function deleteLlmProvider(tenantId: string, providerId: string) {
   );
 }
 
+/**
+ * 项目 AI 模型策略（0043）：项目在团队范围内指定 Provider。
+ *
+ * 解析语义（§10.2/§16）：`provider_id = null` = 未指定 → 继承 Team 首个
+ * `enabled` 实例（创建序）；指定后**严格不回退**——绑定的 Provider 即使后续
+ * 停用也照用（§10.3），保存允许非 enabled 实例。写走 CAS：
+ * `expected_revision` 不一致 → 409 `revision_conflict`（响应含
+ * `actual_revision`）。
+ */
+export interface ProjectAiPolicy {
+  project_id: string;
+  /** null = 未指定（继承 Team Default；策略行不存在时也是 null） */
+  provider_id: string | null;
+  /** 绑定实例的当前名称（未指定时 null） */
+  provider_name: string | null;
+  /** 绑定实例的当前状态（未指定时 null；可≠enabled，严格不回退） */
+  provider_status: string | null;
+  /** 乐观锁：PUT 必须携带 expected_revision = 当前值（无策略行 = 1） */
+  revision: number;
+  updated_at: string | null;
+}
+
+export function getProjectAiPolicy(projectId: string) {
+  return http.get<ProjectAiPolicy>(
+    `/v1/pm/projects/${projectId}/ai-model-policies`
+  );
+}
+
+export interface SetProjectAiPolicyBody {
+  /** null = 恢复继承 Team Default（后端删除策略行） */
+  provider_id: string | null;
+  expected_revision: number;
+}
+
+export function setProjectAiPolicy(
+  projectId: string,
+  body: SetProjectAiPolicyBody
+) {
+  return http.put<ProjectAiPolicy>(
+    `/v1/pm/projects/${projectId}/ai-model-policies`,
+    body
+  );
+}
+
 export interface LlmTestResult {
   ok: boolean;
   latency_ms: number;
