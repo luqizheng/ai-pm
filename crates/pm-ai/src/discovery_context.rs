@@ -10,7 +10,7 @@
 //!
 //! ```text
 //! role_boundary, security_boundary,      ← 常量脚手架（不裁）
-//! project_profile      (S1),             ← core.project + ai.project_document
+//! project_profile      (S1),             ← core.project（名称/描述）
 //! product_cognition    (S2),             ← pc.cognition_object + pc.cognition_revision
 //! knowledge_digest     (S3),             ← kb.document + kb.document_revision
 //! requirements         (S4),             ← delivery.requirement(active) + approved revision
@@ -433,10 +433,6 @@ const SQL_SESSION_KIND: &str = "SELECT s.kind FROM discovery.discovery_session s
 const SQL_PROJECT_PROFILE: &str = "SELECT p.name, COALESCE(p.description, '') FROM core.project p \
      WHERE p.tenant_id = $1 AND p.id = $2";
 
-const SQL_PROJECT_DOCUMENTS: &str =
-    "SELECT d.doc_key, d.doc_type, d.canonical_path FROM ai.project_document d \
-     WHERE d.tenant_id = $1 AND d.project_id = $2 ORDER BY d.doc_key LIMIT 20";
-
 const SQL_KNOWLEDGE_DIGESTS: &str = "SELECT t.doc_key, t.source_commit_sha, t.content FROM ( \
        SELECT DISTINCT ON (d.id) d.id AS document_id, d.doc_key, \
               r.source_commit_sha, r.content, r.created_at \
@@ -550,7 +546,12 @@ impl PgInterviewContextBuilder {
             .ok_or(InterviewContextError::SessionNotFound(session_id))
     }
 
-    /// S1：项目画像（名称/描述 + 既有知识文档清单）。
+    /// S1：项目画像（名称/描述）。
+    ///
+    /// **不含知识文档清单**：设计 §5.1 原稿还要求列 ai 域的跨域文档容器，但
+    /// ADR-06a（V1.1 §7.1/§8.1）过渡期红线是「禁止新增使用方」，且设计 §12.1 R6
+    /// 明确不重开既有 ADR——故本批不接该容器，缺口登记在验收记录（须先由架构侧
+    /// 回填 §4.7 白名单，属独立裁决）。项目知识由 S3（KB digest）与 S4（需求）承载。
     async fn project_profile(
         &self,
         tenant_id: Uuid,
@@ -564,23 +565,10 @@ impl PgInterviewContextBuilder {
         let Some((name, description)) = profile else {
             return Err(InterviewContextError::ProjectNotFound(project_id));
         };
-        let documents: Vec<(String, String, String)> = sqlx::query_as(SQL_PROJECT_DOCUMENTS)
-            .bind(tenant_id)
-            .bind(project_id)
-            .fetch_all(&self.pool)
-            .await?;
 
         let mut body = format!("- 项目：`{name}`\n");
         if !description.trim().is_empty() {
             body.push_str(&format!("- 描述：{}\n", description.trim()));
-        }
-        if documents.is_empty() {
-            body.push_str("- 既有知识文档：无\n");
-        } else {
-            body.push_str("- 既有知识文档（`doc_key`／类型／路径）：\n");
-            for (doc_key, doc_type, path) in documents {
-                body.push_str(&format!("  - `{doc_key}`／{doc_type}／`{path}`\n"));
-            }
         }
         Ok(body)
     }
@@ -1267,7 +1255,6 @@ mod tests {
         let sources = [
             SQL_SESSION_KIND,
             SQL_PROJECT_PROFILE,
-            SQL_PROJECT_DOCUMENTS,
             SQL_KNOWLEDGE_DIGESTS,
             SQL_REQUIREMENTS,
             SQL_COGNITION_OBJECTS,
@@ -1301,7 +1288,6 @@ mod tests {
         let sources = [
             SQL_SESSION_KIND,
             SQL_PROJECT_PROFILE,
-            SQL_PROJECT_DOCUMENTS,
             SQL_KNOWLEDGE_DIGESTS,
             SQL_REQUIREMENTS,
             SQL_COGNITION_OBJECTS,
