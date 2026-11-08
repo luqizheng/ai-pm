@@ -1,4 +1,4 @@
-//! 0063_pc_formal_model 迁移验证（KP-1 / PC-01B 正式模型 DDL 断言，照
+//! 0064_pc_formal_model 迁移验证（KP-1 / PC-01B 正式模型 DDL 断言，照
 //! migration_0048/0061 样式；真实数据库，不 Mock）。
 //!
 //! 两个用例：
@@ -7,7 +7,7 @@
 //!    单例部分唯一、生命周期终态、append-only、T-03/04 互斥 CHECK、
 //!    T-26 闭合触发器、T-13/14/15 审批锚定、T-28 提案锚定、T-27 RR 端点
 //!    一致性、写账本状态机、T-06 跨项目拒绝。
-//! 2. **收敛路径**（手工建库：0001..0062 → 灌 0053 形态存量 → 应用 0063）：
+//! 2. **收敛路径**（手工建库：0001..0063 → 灌 0053 形态存量 → 应用 0064）：
 //!    用户裁决「原地收敛保留草稿」的行为断言——正文迁 pc.document_revision、
 //!    修订回填 document 引用与 content_hash、证据按时间钉修订并转
 //!    document_section 四元组、来源 source_kind/指纹回填、对象 display_name /
@@ -602,7 +602,7 @@ async fn formal_model_ddl_negatives_and_seeds(pool: PgPool) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// 用例 2：收敛路径——0001..0062 + 0053 形态存量 → 应用 0063
+// 用例 2：收敛路径——0001..0063 + 0053 形态存量 → 应用 0064
 // ══════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
@@ -618,7 +618,7 @@ async fn convergence_from_0053_legacy_rows_preserves_drafts() {
 
     let admin = sqlx::PgPool::connect(&admin_url).await.unwrap();
     // TEMPLATE template0：绕开 template1 预建机制（其已含全部迁移，会破坏
-    // 「先 0001..0062 再 0063」的两段式迁移序列）。
+    // 「先 0001..0063 再 0064」的两段式迁移序列）。
     sqlx::query(&format!("CREATE DATABASE \"{dbname}\" TEMPLATE template0"))
         .execute(&admin)
         .await
@@ -649,14 +649,14 @@ fn sha256_hex(input: &str) -> String {
 }
 
 async fn run_convergence(db_url: &str) -> Result<(), String> {
-    // ① 迁移 0001..0062（截断 Migrator：迁移清单按版本升序，取前 62 个）
+    // ① 迁移 0001..0063（截断 Migrator：迁移清单按版本升序，掐掉尾部 0064）
     let mut pre = Migrator::new(Path::new("../../migrations"))
         .await
         .map_err(|e| e.to_string())?;
     {
         let list = pre.migrations.to_mut();
         let last = list.last().expect("migrations non-empty");
-        assert_eq!(last.version, 63, "head migration must be 0063");
+        assert_eq!(last.version, 64, "head migration must be 0064");
         list.truncate(list.len() - 1);
     }
     let pool = sqlx::PgPool::connect(db_url)
@@ -778,7 +778,7 @@ async fn run_convergence(db_url: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     }
 
-    // ③ 应用 0063（全新 Migrator；记账 1..62 已在，只差 0063）
+    // ③ 应用 0064（全新 Migrator；记账 1..63 已在，只差 0064）
     let post = Migrator::new(Path::new("../../migrations"))
         .await
         .map_err(|e| e.to_string())?;

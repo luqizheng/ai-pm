@@ -19,10 +19,10 @@
 
 | 层 | 内容 | 位置 |
 |---|---|---|
-| 迁移 | `0063_pc_formal_model.sql`：pc 正式 18 表（01B §15.2 全清单）+ 0053 五表原地收敛 + 触发器/种子/闭合约束 + `pc.v_revision_versioned` 视图；台账取号 0063（取号时目录 max=0062），台账已回填 | `migrations/0063_pc_formal_model.sql` |
+| 迁移 | `0064_pc_formal_model.sql`：pc 正式 18 表（01B §15.2 全清单）+ 0053 五表原地收敛 + 触发器/种子/闭合约束 + `pc.v_revision_versioned` 视图；台账取号 0064（原取 0063 与 D-2=c runner_availability 撞号，对方先落地，按纪律②顺移；台账已回填双占记录） | `migrations/0064_pc_formal_model.sql` |
 | 服务层 | `pm-application::pc/` 四文件（mod/object/relationship/evidence/publish；mod.rs 再导出公共 API）：对象草稿 upsert（object_key 幂等 + 内容寻址 + 行锁推号 + CAS）、identity 占位、关系端点解析/类型合法性/跨域通道、来源/证据登记、发布事务 §18.1 + 规范哈希 | `crates/pm-application/src/pc/` |
 | 链路 | `kb_pc_analysis::derive_pc_cognition` 走服务层（V-6）；pc_analysis_ref 改锚 pc.source；`pc.cognition.version_published` 生产者（⑫b）+ 消费者（Platform 留痕）接真，事件目录 has_handler 翻真；P3 新形状 + legacy result_ref 兼容 | `crates/pm-infrastructure/src/kb_pc_analysis.rs`、`kb_pc_handlers.rs`、`apps/pm-api/src/knowledge_services.rs` |
-| 测试 | `migration_0063.rs`（fresh 负向 + 收敛回填两用例）、`pc_model.rs`（五用例）、kb_pc_repo_flows/intake_flows/audit_actor_coverage/outbox 套件适配 | 各 tests |
+| 测试 | `migration_0064.rs`（fresh 负向 + 收敛回填两用例）、`pc_model.rs`（五用例）、kb_pc_repo_flows/intake_flows/audit_actor_coverage/outbox 套件适配 | 各 tests |
 
 ## 三、PC-I1/I2 验收条目对照（09 稿 §17）
 
@@ -60,14 +60,14 @@
 | d | `uq_pc_evidence_identity` 增 `coalesce(commit_sha,'')`：01B §9.3 原式在同 subject 多 commit 证据下撞键 | commit 类证据身份必须含锚 |
 | e | doc_key 兜底形态 `pc-object-{object_id}`、canonical_path `pc/{object_type}/{object_id}.md`（0053 存量 object_key 含 `:`/`/` 非 §11.2 slug） | §11.2-3 兜底条款 |
 | f | P3 响应形状变化（显式登记）：`objects[].name`=display_name（键名不变）、`latest_revision.status` 移除（`versioned` 布尔派生，§5.3 不冗余 revision_status）、`summary` 改由 change_summary 承载、新增 `analysis_mode`；pc_analysis_ref 改锚 pc.source；旧任务 legacy result_ref 走兼容分支 | K2/P3 契约变化须显式登记（任务书要求） |
-| g | ADR-06b 时序闸落实：PC 正文自 0063 起域内闭环（pc.document\*），PC 对 `ai.document*` 零新增引用（`guard_ai_container_users.rs` 守卫持续断言）；KB 域 kb.\* 本批零触碰 | 六问的 PC 侧引用点结论先行于 Migration |
-| h | 视图 `pc.v_revision_versioned` 实现勘误：01B §15.3 片段 LATERAL 仅 SELECT 1 致外层引用解析失败，迁移内改为 LATERAL 显式投影该列（语义不变） | 迁移 0063 内注记 |
+| g | ADR-06b 时序闸落实：PC 正文自 0064 起域内闭环（pc.document\*），PC 对 `ai.document*` 零新增引用（`guard_ai_container_users.rs` 守卫持续断言）；KB 域 kb.\* 本批零触碰 | 六问的 PC 侧引用点结论先行于 Migration |
+| h | 视图 `pc.v_revision_versioned` 实现勘误：01B §15.3 片段 LATERAL 仅 SELECT 1 致外层引用解析失败，迁移内改为 LATERAL 显式投影该列（语义不变） | 迁移 0064 内注记 |
 | i | CAS 失配补偿归并主事务（§18.1 ② 伪码「proposal → failed; COMMIT」）：独立事务补偿与 proposal FOR UPDATE 行锁自死锁，实施期发现并修复 | 锁序纪律 §17.3 |
 | j | project_goal 端点存在性探测不落地：01B §13.1 原文的「ai.project_document 探测」与 ADR-06a 守卫冲突（C-1：PC 禁止接入共享容器，过渡期规约 §7.1-1）——守卫为准（用户裁决），本批仅通道校验；探测归后续 goal 域只读接口（K3/PK1 同款模式）。守卫测试在实施期真实拦截一次（含注释字面量），已按其口径修正 | guard_ai_container_users（ADR-06a 立法） |
 
 ## 五、测试与门禁证据
 
-- **迁移**：`migration_0063` 两用例——fresh 路径（01B §20 负向子集：T-03/04/06/08/13/14/15/26/27/28 + 种子清单 + 终态/append-only/账本状态机）与收敛路径（0053 形态存量 → 正文迁移/hash/证据钉修订/来源收窄/对象指针全链断言）。
+- **迁移**：`migration_0064` 两用例——fresh 路径（01B §20 负向子集：T-03/04/06/08/13/14/15/26/27/28 + 种子清单 + 终态/append-only/账本状态机）与收敛路径（0053 形态存量 → 正文迁移/hash/证据钉修订/来源收窄/对象指针全链断言）。
 - **服务层**：`pc_model` 五用例（对象幂等/去重/推号/终态、关系端点规则全集、来源证据、发布 happy path【成员集+端点自动并入+snapshot_hash 一致性+生命周期+审计+outbox+账本+幂等重放】、门禁矩阵【AI 403 / 非授权 403 / L3 冻结 403 / CAS 409+提案 failed+账本 failed】）。
 - **链路回归**：kb_pc_repo_flows 5/5（全链 verify→intake→KB→PC、同 HEAD 幂等、新 commit 新 intake、LLM 增强/降级）、intake_flows 全量、outbox 三套件、pm-ai 79、pm-api intake REST 7。
 - **审计门禁**：C174/C180 清单驱动测试补登记 `pc/publish.rs`（2 处：pc_version.publish 四列发布者身份；publish_failed 系统面四列显式 NULL）。
