@@ -390,3 +390,181 @@ pub async fn list_requirement_findings(
         .collect();
     Ok(serde_json::json!({ "items": items }))
 }
+
+// ─────────────────────────────────────── 按 basis 清单一键物化（DK-0 §3.3）
+
+#[derive(Debug, Deserialize)]
+pub struct MaterializeBasisRequest {
+    /// 显式子集（UI 上被取消勾选的条目）；缺省 = 修订 `content.basis_finding_ids`
+    /// 的全量清单。**不允许**超出清单——点击是"物化 AI 的建议"，不是"新增关联"。
+    #[serde(default)]
+    pub finding_ids: Option<Vec<Uuid>>,
+    /// 是否同时登记并关联访谈来源材料（`source_input(kind='discovery')`）。
+    /// 缺省 `true`——设计稿 §3.3 的物化面包含"从哪来"的来源材料。
+    #[serde(default)]
+    pub register_source: Option<bool>,
+    /// 来源材料标题（缺省 `访谈会话 {session_id}`）。
+    #[serde(default)]
+    pub source_title: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MaterializeBasisOutcome {
+    pub requirement_id: Uuid,
+    /// 读取 basis 的修订（最新修订：人类正在复核的那一条）。
+    pub revision_id: Uuid,
+    /// 修订里登记的提案级标记（AI 写的，非权威）。
+    pub basis_finding_ids: Vec<Uuid>,
+    pub linked_findings: Vec<Uuid>,
+    pub already_linked_findings: Vec<Uuid>,
+    pub source_input_id: Option<Uuid>,
+    pub source_linked: bool,
+}
+
+/// 「按 basis 清单一键物化」（D-DK-5 的**人类**半步）。
+///
+/// 语义：把 AI 写在 `content.basis_finding_ids` 里的提案级标记，一次点击物化成
+/// 正式溯源关联——`requirement_finding`（逐条 `link_finding`）+
+/// `source.source_input(kind='discovery')` + `requirement_source_input`
+/// （`register_source_input` / `link_source_input`）。
+///
+/// **不绕过 S02D-20**：本函数第一行就是 `require_human`，下面调用的每个既有
+/// 服务各自也有真人闸；AI 永远走不到这里（走即 403）。这里只是把"人点 N 次"
+/// 压成"人点 1 次"，判定与写入全部复用既有单点服务。
+///
+/// 幂等：已关联的 finding / 已关联的来源材料分别进 `already_*`，重放 no-op。
+pub async fn materialize_basis(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    requirement_id: Uuid,
+    req: MaterializeBasisRequest,
+    actor: &AuditActor,
+) -> Result<MaterializeBasisOutcome, PmWriteError> {
+    require_human(pool, actor).await?;
+
+    let row: Option<(Uuid, Option<serde_json::Value>)> = sqlx::query_as(
+        "SELECT rv.id, rv.content->'basis_finding_ids' \
+           FROM delivery.requirement r \
+           JOIN LATERAL ( \
+               SELECT id, content FROM delivery.requirement_revision v \
+                WHERE v.requirement_id = r.id ORDER BY v.version DESC LIMIT 1 \
+           ) rv ON TRUE \
+          WHERE r.id = $1 AND r.tenant_id = $2",
+    )
+    .bind(requirement_id)
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(PmWriteError::Db)?;
+    let (revision_id, basis_json) = row.ok_or(PmWriteError::NotFound("requirement not found"))?;
+    let basis: Vec<Uuid> = basis_json
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default();
+    if basis.is_empty() {
+        return Err(PmWriteError::Validation(
+            "requirement revision has no basis_finding_ids to materialize",
+        ));
+    }
+
+    let requested = match req.finding_ids {
+        Some(ids) if !ids.is_empty() => {
+            // 超出清单 → 拒绝（fail-closed：UI 与数据不同步时不猜意图）。
+            if let Some(unknown) = ids.iter().find(|id| !basis.contains(id)) {
+                let _ = unknown;
+                return Err(PmWriteError::Validation(
+                    "finding_ids contains an id outside the revision basis",
+                ));
+            }
+            ids
+        }
+        _ => basis.clone(),
+    };
+
+    let mut linked_findings = Vec::new();
+    let mut already_linked_findings = Vec::new();
+    for finding_id in &requested {
+        match link_finding(pool, tenant_id, requirement_id, *finding_id, actor).await {
+            Ok(_) => linked_findings.push(*finding_id),
+            Err(PmWriteError::Conflict(_)) => already_linked_findings.push(*finding_id),
+            Err(other) => return Err(other),
+        }
+    }
+
+    // 来源材料：一个访谈会话一条 `source_input`（按 project + source_ref 复用）。
+    let mut source_input_id = None;
+    let mut source_linked = false;
+    if req.register_source.unwrap_or(true) {
+        let session_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT f.session_id FROM discovery.discovery_finding f \
+               JOIN delivery.requirement r ON r.id = $2 \
+              WHERE f.id = $1 AND f.tenant_id = $3 AND f.project_id = r.project_id",
+        )
+        .bind(requested[0])
+        .bind(requirement_id)
+        .bind(tenant_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(PmWriteError::Db)?;
+        if let Some(session_id) = session_id {
+            let source_ref = session_id.to_string();
+            let project_id: Uuid =
+                sqlx::query_scalar("SELECT project_id FROM delivery.requirement WHERE id = $1")
+                    .bind(requirement_id)
+                    .fetch_one(pool)
+                    .await
+                    .map_err(PmWriteError::Db)?;
+            let existing: Option<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM source.source_input \
+                  WHERE tenant_id = $1 AND project_id = $2 AND input_kind = 'discovery' \
+                    AND source_ref = $3 ORDER BY created_at LIMIT 1",
+            )
+            .bind(tenant_id)
+            .bind(project_id)
+            .bind(&source_ref)
+            .fetch_optional(pool)
+            .await
+            .map_err(PmWriteError::Db)?;
+            let input_id = match existing {
+                Some(id) => id,
+                None => {
+                    let entry = register_source_input(
+                        pool,
+                        tenant_id,
+                        project_id,
+                        RegisterSourceInputRequest {
+                            input_kind: "discovery".to_string(),
+                            title: req
+                                .source_title
+                                .as_deref()
+                                .map(str::trim)
+                                .filter(|t| !t.is_empty())
+                                .map(str::to_string)
+                                .unwrap_or_else(|| format!("访谈会话 {source_ref}")),
+                            content: None,
+                            source_ref: Some(source_ref.clone()),
+                        },
+                        actor,
+                    )
+                    .await?;
+                    entry.id
+                }
+            };
+            match link_source_input(pool, tenant_id, requirement_id, input_id, actor).await {
+                Ok(_) => source_linked = true,
+                Err(PmWriteError::Conflict(_)) => source_linked = true,
+                Err(other) => return Err(other),
+            }
+            source_input_id = Some(input_id);
+        }
+    }
+
+    Ok(MaterializeBasisOutcome {
+        requirement_id,
+        revision_id,
+        basis_finding_ids: basis,
+        linked_findings,
+        already_linked_findings,
+        source_input_id,
+        source_linked,
+    })
+}

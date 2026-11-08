@@ -48,6 +48,12 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/pm/tasks/{task_id}",
             axum::routing::patch(crate::pm_writes::update_task_handler),
         )
+        // DK-0 §7.4 / D-DK-8：整批 draft→ready 的人类确认入口（E5：每条任务
+        // 恰一个 TaskReady 事件，走命令通道而非直写）。
+        .route(
+            "/v1/pm/projects/{project_id}/tasks/mark-ready",
+            post(crate::pm_writes::mark_tasks_ready_handler),
+        )
         .route(
             "/v1/pm/approvals/{approval_id}/decide",
             post(crate::pm_writes::decide_handler),

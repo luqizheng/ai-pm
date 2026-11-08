@@ -147,6 +147,13 @@ pub async fn update_task(
     // 「边合法但缺证据」的迁移同样在此被拒（走命令通道带证据执行）。
     let from_status = TaskStatus::from_str(&current_status)
         .ok_or(PmWriteError::Validation("invalid current status"))?;
+    // DK-0 §7.4 / E2（2026-11-08）：**AI 永不置 ready**。「任务进入就绪队列」是
+    // 人类动作（整批预览一次确认），所以 `draft → ready` 这条边在服务层就要真人
+    // ——闸门落在唯一的状态直写入口上（§6.2 四道闸的服务层这道），而不是只写在
+    // 编排器白名单里。同状态 no-op（ready → ready）不算迁移，不取闸。
+    if new_status == TaskStatus::Ready && new_status != from_status {
+        crate::requirement::require_human_conn(&mut tx, actor).await?;
+    }
     if new_status != from_status {
         let input = pm_domain::task_transition::TransitionInput {
             task_id: None,
@@ -412,6 +419,89 @@ pub(crate) async fn replace_knowledge_refs(
         .await?;
     }
     Ok(input.len())
+}
+
+/// 整批 `draft → ready`（DK-0 §7.4 / D-DK-8 / E5）：**人类动作**。
+///
+/// 为什么必须存在：`update_task` 的直写**不生产 outbox 事件**，而 `TaskReady`
+/// 是入调度的唯一触发（handler 建 Run）。AI 生成的任务全是 draft，人类整批确认
+/// 后若走直写，任务永远不进调度——本函数把整批确认接上既有命令通道：
+/// 每条任务经 [`crate::command_executor::PgCommandExecutor::execute`]
+/// （`UpdateTaskStatus` → `apply_task_transition` + 同事务 `TaskReady`），
+/// 因此 E5 的「TaskReady 事件数 = 确认任务数」由结构保证，而不是靠调用方纪律。
+///
+/// 闸门：`require_human`（E2：AI 调本函数 → `Forbidden`，且调用方无旁路——
+/// 直写路径同样有 `draft → ready` 真人闸）。
+///
+/// 幂等：已是 `ready` 的任务进 `already_ready`（不重复发事件）；非 draft/ready
+/// 状态进 `skipped`（执行中的任务不能被"批准确认"回退）。
+pub async fn mark_task_batch_ready(
+    pool: &PgPool,
+    executor: &crate::command_executor::PgCommandExecutor,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    task_ids: &[Uuid],
+    actor: &AuditActor,
+) -> Result<MarkTasksReadyOutcome, PmWriteError> {
+    if task_ids.is_empty() {
+        return Err(PmWriteError::Validation("task_ids is required"));
+    }
+    crate::requirement::require_human(pool, actor).await?;
+
+    // 全部 id 必须属于本项目本租户（越权/未知一律 NotFound，不泄露存在性）。
+    let rows: Vec<(Uuid, String, i64)> = sqlx::query_as(
+        "SELECT id, status, revision FROM delivery.task \
+          WHERE tenant_id = $1 AND project_id = $2 AND id = ANY($3) \
+          ORDER BY created_at, id",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(task_ids)
+    .fetch_all(pool)
+    .await?;
+    if rows.len() != task_ids.len() {
+        return Err(PmWriteError::NotFound("task not found in this project"));
+    }
+
+    let mut outcome = MarkTasksReadyOutcome::default();
+    for (task_id, status, revision) in rows {
+        match status.as_str() {
+            "ready" => outcome.already_ready.push(task_id),
+            "draft" => {
+                executor
+                    .execute(
+                        pm_domain::ProjectCommand::UpdateTaskStatus {
+                            task_id,
+                            expected_revision: revision,
+                            new_status: pm_domain::TaskStatus::Ready,
+                        },
+                        crate::command_executor::ExecutionContext {
+                            project_id,
+                            actor: actor.clone(),
+                            actor_kind: crate::command_executor::ActorKind::Human,
+                            source: crate::command_executor::CommandSource::HumanAction,
+                        },
+                    )
+                    .await
+                    .map_err(|error| match error {
+                        pm_domain::CommandError::RevisionConflict { .. } => {
+                            PmWriteError::Conflict("revision conflict")
+                        }
+                        pm_domain::CommandError::Validation(message) => {
+                            PmWriteError::Validation(Box::leak(message.into_boxed_str()))
+                        }
+                        pm_domain::CommandError::Db(error) => PmWriteError::Db(error),
+                        other => PmWriteError::Validation(Box::leak(
+                            other.to_string().into_boxed_str(),
+                        )),
+                    })?;
+                outcome.ready.push(task_id);
+            }
+            // 其余 11 态（claimed/running/终态…）不接受整批确认。
+            _ => outcome.skipped.push(task_id),
+        }
+    }
+    Ok(outcome)
 }
 
 pub(crate) async fn task_row(pool: &PgPool, task_id: Uuid) -> Result<TaskRow, PmWriteError> {

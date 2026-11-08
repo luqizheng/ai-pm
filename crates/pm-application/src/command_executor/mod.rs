@@ -79,6 +79,13 @@ pub enum CommandSource {
     Bootstrap,
     /// 平台内部动作（如 Run 调度领取、租约回收）——无人类/提案身份。
     System,
+    /// 人类在 UI 上直接触发的命令执行（DK-D：整批 `draft → ready` 入调度门）。
+    ///
+    /// 与 [`CommandSource::RedlineApproval`] 的区别：后者是红线审批流产生的
+    /// 命令（带 approval id），这里是普通人类动作走命令通道执行。存在的理由：
+    /// 「Task 状态推进只能经 `apply_task_transition` 单一入口」与「人类动作不得
+    /// 伪装成系统动作」两条必须同时成立（审计 `source_kind='human_action'`）。
+    HumanAction,
 }
 
 /// Execution identity: which project, which principal, on whose behalf, from

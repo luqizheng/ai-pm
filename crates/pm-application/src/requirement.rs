@@ -198,11 +198,22 @@ impl LifecycleAction {
 // ─────────────────────────────────────────────────────────── 内部助手
 
 /// 真人主体校验（S02D-02 #2：AI 主体提交确认/治理类命令 → 拒绝，403 可观测）。
-/// S02-I3 起供 `requirement_traceability` 复用（登记/关联同为真人命令，§7.4）。
+/// S02-I3 起供 `requirement_traceability` 复用（登记/关联同为真人命令，§7.4）；
+/// DK-D 起供任务 `draft → ready` 复用（§7.4「AI 永不置 ready」，E2）。
 pub async fn require_human(pool: &PgPool, actor: &AuditActor) -> Result<(), PmWriteError> {
+    let mut conn = pool.acquire().await.map_err(PmWriteError::Db)?;
+    require_human_conn(&mut conn, actor).await
+}
+
+/// [`require_human`] 的连接版：调用方已在事务内时用它，避免事务中再取第二条
+/// 连接（单连接池下会自锁）。判定逻辑只有这一处。
+pub async fn require_human_conn(
+    conn: &mut sqlx::PgConnection,
+    actor: &AuditActor,
+) -> Result<(), PmWriteError> {
     let kind: Option<String> = sqlx::query_scalar("SELECT kind FROM core.principal WHERE id = $1")
         .bind(actor.principal_id)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *conn)
         .await
         .map_err(PmWriteError::Db)?;
     match kind.as_deref() {
