@@ -81,6 +81,26 @@ def check(cid, name, cond, detail=""):
     RESULTS.append((cid, name, "PASS" if cond else "FAIL", detail))
     print(f"[{cid}] {'PASS' if cond else 'FAIL'} {name} {detail if not cond else ''}")
 
+# 检查点 2 收敛批：acked 回执信封（schema v1 + 当前代次 fencing；terminate 另须
+# 请求/确认两时刻）。代次一律现查 Run 当前值——续领场景后旧代次会被拒。
+TS0 = "2026-11-08T00:00:00Z"
+TS1 = "2026-11-08T00:00:01Z"
+
+def run_gen(rid):
+    return int(q1(f"SELECT lease_generation FROM delivery.task_run WHERE id='{rid}'") or 1)
+
+def term_receipt(rid, pid):
+    return {"schema_version": "aipm.receipt.v1", "run_generation": run_gen(rid),
+            "exit_outcome": "Killed", "pid": pid,
+            "terminate_requested_at": TS0, "terminate_confirmed_at": TS1}
+
+def cont_receipt(rid, session_id=None):
+    receipt = {"schema_version": "aipm.receipt.v1", "run_generation": run_gen(rid),
+               "session_created": True, "input_injected": True}
+    if session_id:
+        receipt["session_id"] = session_id
+    return receipt
+
 def main():
     import hashlib, subprocess
     # 确定性起点：acp09_reset.sql（cpk 凭据 + 已领取 Run，稳定身份 client:{device}）
@@ -127,7 +147,7 @@ def main():
     # terminate 先领取（claim 租约）再回执——§3.2 从严判据。
     r, out = tool("pm_poll_commands", {"project_id": PROJECT, "run_id": run_id, "worker_id": lo})
     r, out = tool("pm_ack_command", {"project_id": PROJECT, "command_id": tcmd, "worker_id": lo,
-                                     "outcome": "acked", "receipt": {"exit_outcome": "Killed", "pid": 7}})
+                                     "outcome": "acked", "receipt": term_receipt(run_id, 7)})
     import urllib.request as ur
     admin_jwt = os.environ.get("E2E_ADMIN_JWT", "")
     req = ur.Request(BASE + f"/v1/pm/interactions/{iid}/responses",
@@ -154,7 +174,7 @@ def main():
           "checkpoint" in pay and "execution_authorization_id" in pay)
     r, _ = tool("pm_ack_command", {"project_id": PROJECT, "command_id": cont["command_id"],
                 "worker_id": lo, "outcome": "acked",
-                "receipt": {"session_created": True, "input_injected": True, "session_id": "e2e-sess"}})
+                "receipt": cont_receipt(run_id, session_id="e2e-sess")})
     task_st = q1(f"SELECT status FROM delivery.task WHERE id='{TASK}'")
     cont_st = q1(f"SELECT status FROM delivery.interaction_response_delivery WHERE response_id='{json.loads(urllib.request.urlopen(urllib.request.Request(BASE + f'/v1/pm/task-runs/{run_id}', headers={})).read().decode())}'") if False else q1(
         f"SELECT d.status FROM delivery.interaction_response_delivery d WHERE d.response_id=(SELECT id FROM delivery.interaction_response WHERE interaction_id='{iid}')")
@@ -190,7 +210,7 @@ def main():
     if t2:
         r, _ = tool("pm_ack_command", {"project_id": PROJECT, "command_id": t2["command_id"],
                     "worker_id": lo, "outcome": "acked",
-                    "receipt": {"exit_outcome": "Killed", "pid": 2}})
+                    "receipt": term_receipt(run_id, 2)})
     # REST 回复（独立账；continue 下发但不领取）
     req = ur.Request(BASE + f"/v1/pm/interactions/{iid2}/responses",
                      data=json.dumps({"responder_principal_id": LEAD, "idempotency_key": "idem-2",
@@ -242,7 +262,7 @@ def main():
     if cont2:
         r, _ = tool("pm_ack_command", {"project_id": PROJECT, "command_id": cont2["command_id"],
                     "worker_id": lo, "outcome": "acked",
-                    "receipt": {"session_created": True, "input_injected": True}})
+                    "receipt": cont_receipt(run_id)})
     task_st2 = q1(f"SELECT status FROM delivery.task WHERE id='{TASK}'")
     check("S8c", "R-4 恢复（task running）", task_st2 == "running", task_st2)
 

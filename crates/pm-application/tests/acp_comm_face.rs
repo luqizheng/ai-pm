@@ -18,6 +18,44 @@ use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// 检查点 2 收敛批：acked 回执信封（schema v1 + 当前代次 fencing）。
+fn receipt_v1(run_generation: i64, extra: serde_json::Value) -> serde_json::Value {
+    let mut receipt = json!({
+        "schema_version": cmd::RECEIPT_SCHEMA,
+        "run_generation": run_generation,
+    });
+    let obj = receipt.as_object_mut().expect("receipt object");
+    if let serde_json::Value::Object(fields) = extra {
+        for (key, value) in fields {
+            obj.insert(key, value);
+        }
+    }
+    receipt
+}
+
+fn terminate_receipt(
+    run_generation: i64,
+    outcome: &str,
+    pid: serde_json::Value,
+) -> serde_json::Value {
+    receipt_v1(
+        run_generation,
+        json!({
+            "exit_outcome": outcome,
+            "pid": pid,
+            "terminate_requested_at": "2026-11-08T00:00:00Z",
+            "terminate_confirmed_at": "2026-11-08T00:00:01Z",
+        }),
+    )
+}
+
+fn continue_receipt(run_generation: i64) -> serde_json::Value {
+    receipt_v1(
+        run_generation,
+        json!({ "session_created": true, "input_injected": true }),
+    )
+}
+
 struct Fx {
     project_id: Uuid,
     task_id: Uuid,
@@ -318,7 +356,7 @@ async fn lifecycle_response_delivery_consumption_and_guard_release(pool: PgPool)
         terminate_id,
         "w1",
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 4321 })),
+        Some(terminate_receipt(1, "Killed", json!(4321))),
         None,
     )
     .await
@@ -379,7 +417,7 @@ async fn lifecycle_response_delivery_consumption_and_guard_release(pool: PgPool)
         continue_id,
         "w1",
         cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true })),
+        Some(receipt_v1(1, json!({ "session_created": true }))),
         None,
     )
     .await;
@@ -399,7 +437,10 @@ async fn lifecycle_response_delivery_consumption_and_guard_release(pool: PgPool)
         continue_id,
         "w1",
         cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true, "session_id": "sess-2" })),
+        Some(receipt_v1(
+            1,
+            json!({ "session_created": true, "input_injected": true, "session_id": "sess-2" }),
+        )),
         None,
     )
     .await
@@ -527,7 +568,7 @@ async fn acp437_claim_lease_expiry_redelivers_same_command(pool: PgPool) {
         first[0].command_id,
         "w1",
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed" })),
+        Some(terminate_receipt(1, "Killed", json!(null))),
         None,
     )
     .await
@@ -1296,7 +1337,7 @@ async fn acp450_repeated_continue_ack_is_idempotent(pool: PgPool) {
         polled[0].command_id,
         "w1",
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        Some(terminate_receipt(1, "Killed", json!(1))),
         None,
     )
     .await
@@ -1339,7 +1380,7 @@ async fn acp450_repeated_continue_ack_is_idempotent(pool: PgPool) {
         continue_id,
         "w1",
         cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })),
+        Some(continue_receipt(1)),
         None,
     )
     .await
@@ -1354,7 +1395,7 @@ async fn acp450_repeated_continue_ack_is_idempotent(pool: PgPool) {
         continue_id,
         "w1",
         cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })),
+        Some(continue_receipt(1)),
         None,
     )
     .await

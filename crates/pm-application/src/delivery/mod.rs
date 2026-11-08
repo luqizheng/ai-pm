@@ -37,7 +37,8 @@ use pm_domain::TaskStatus;
 use crate::command_executor::{apply_task_transition, system_context, TransitionFacts};
 
 pub use git_verify::{
-    verify_repository_head, workspace_root_for_run, GitVerification, GitVerificationError,
+    is_remote_carrier, verify_repository_head, verify_repository_head_remote,
+    workspace_root_for_run, GitVerification, GitVerificationError,
 };
 pub use manifest::{
     list_manifest, list_project_delivery, read_manifest, DeliveryManifest, ManifestEntry,
@@ -444,6 +445,16 @@ pub async fn submit_delivery_with(
     .await?
     .ok_or_else(|| DeliveryError::LeaseInvalid("task not found in this project".into()))?;
 
+    // 验证模式判定（V-05-2 / 检查点 2 Q-RC-1）：cpk 通道（`client:{device_id}`）
+    // 的工作区在用户 PC 上，平台改走远端只读验证；Worker / Model A 维持工作区模式。
+    let lease_owner: Option<String> =
+        sqlx::query_scalar("SELECT lease_owner FROM delivery.task_run WHERE id = $1")
+            .bind(request.run_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .flatten();
+    let remote_mode = is_remote_carrier(lease_owner.as_deref());
+
     // ② 契约仓全集展开（校验范围 = 契约全集，不是上报集合）。
     let contract = load_contract_repositories(&mut tx, task_id, request.project_id).await?;
     let baselines = load_run_baselines(&mut tx, request.run_id).await?;
@@ -514,24 +525,73 @@ pub async fn submit_delivery_with(
             None
         };
 
-        let verification = match verify_repository_head(
-            &workspace_root,
-            &baseline.workspace_path,
-            &baseline.base_commit,
-            submitted,
-            options.git_timeout,
-        )
-        .await
-        {
-            Ok(verification) => verification,
-            Err(error) => {
-                // git 异常与超时统一走 Rejected 路径（§3.4）。
-                return finish_rejected(
-                    tx,
-                    request,
-                    DeliveryError::CommitNotDescendant(error.to_string()),
-                )
-                .await;
+        let verification = if remote_mode {
+            // ── 远端模式（V-05-2 / 检查点 2 Q-RC-1）──────────────────
+            // cpk 通道的工作区在用户 PC，平台只读验证申报 SHA：
+            // 只读仓的工作区事实远端不可见 → 诚实跳过移动性检查（第三方推进
+            // 不可归因于申报链路，不由平台伪造检查）；可写仓走远端两步验证。
+            if !repo.write_access {
+                tracing::info!(
+                    run = %request.run_id,
+                    repository = %repo.repository_id,
+                    "remote mode: read-only repository movement check skipped (workspace on executor)"
+                );
+                continue;
+            }
+            let submitted = submitted.expect("writable repository reported above");
+            let row: Option<(String, Option<Vec<u8>>)> = sqlx::query_as(
+                "SELECT pr.url, k.private_key_ciphertext \
+                   FROM integration.project_repository pr \
+                   LEFT JOIN integration.project_ssh_key k \
+                     ON k.project_id = pr.project_id AND k.revoked_at IS NULL \
+                  WHERE pr.id = $1 AND pr.project_id = $2 \
+                  ORDER BY k.created_at DESC NULLS LAST \
+                  LIMIT 1",
+            )
+            .bind(repo.repository_id)
+            .bind(request.project_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+            let remote = verify_remote_submission(
+                &row,
+                request.project_id,
+                &baseline.base_commit,
+                submitted,
+                options.git_timeout,
+            )
+            .await;
+            match remote {
+                Ok(verification) => verification,
+                Err(message) => {
+                    // git 异常/认证失败/申报不可达统一走 Rejected 路径（§3.4 同款）。
+                    return finish_rejected(
+                        tx,
+                        request,
+                        DeliveryError::CommitNotDescendant(message),
+                    )
+                    .await;
+                }
+            }
+        } else {
+            match verify_repository_head(
+                &workspace_root,
+                &baseline.workspace_path,
+                &baseline.base_commit,
+                submitted,
+                options.git_timeout,
+            )
+            .await
+            {
+                Ok(verification) => verification,
+                Err(error) => {
+                    // git 异常与超时统一走 Rejected 路径（§3.4）。
+                    return finish_rejected(
+                        tx,
+                        request,
+                        DeliveryError::CommitNotDescendant(error.to_string()),
+                    )
+                    .await;
+                }
             }
         };
 
@@ -588,6 +648,48 @@ pub async fn submit_delivery_with(
 
     tx.commit().await?;
     Ok(SubmitOutcome::Accepted { manifest })
+}
+
+/// 远端模式的单仓验证（Q-RC-1）：解析仓库 URL 与平台只读部署密钥（SSH 形态
+/// 才注入；HTTP(S) 远端以匿名可读性如实尝试），临时密钥 RAII 用完即删，
+/// 核心校验委托 [`verify_repository_head_remote`]。任何失败都归并为字符串
+/// 由调用方走 Rejected 路径——错误文案保持机器可读错误码前缀。
+async fn verify_remote_submission(
+    row: &Option<(String, Option<Vec<u8>>)>,
+    project_id: Uuid,
+    base_commit: &str,
+    submitted: &SubmittedRepository,
+    timeout: Duration,
+) -> Result<GitVerification, String> {
+    let (url, key_ciphertext) = row.as_ref().ok_or_else(|| {
+        format!(
+            "workspace_unavailable: repository {} not found for project {project_id}",
+            submitted.repository_id
+        )
+    })?;
+    let is_ssh = url.starts_with("git@") || url.starts_with("ssh://");
+    let key_material =
+        match (is_ssh, key_ciphertext) {
+            (true, Some(cipher)) => {
+                let plain = crate::repository::open_ssh_private_key(project_id, cipher)
+                    .map_err(|e| format!("git_verification_failed: deploy key unavailable: {e}"))?;
+                Some(crate::git_access::write_temp_key(&plain).map_err(|e| {
+                    format!("git_verification_failed: temp key material failed: {e}")
+                })?)
+            }
+            _ => None,
+        };
+    let key_path = key_material.as_ref().map(|material| material.key_path());
+    git_verify::verify_repository_head_remote(
+        url,
+        key_path.as_deref(),
+        base_commit,
+        &submitted.commit_sha,
+        submitted.changed_files,
+        timeout,
+    )
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// 步骤⓪的幂等识别：查既有提交。

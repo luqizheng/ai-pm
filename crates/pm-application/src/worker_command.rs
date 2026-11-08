@@ -33,6 +33,10 @@ pub fn command_claim_lease_secs() -> i64 {
         .unwrap_or(300)
 }
 
+/// 回执 Schema 版本（层 2 收敛批 ⑦，专家复审 2.1：receipt 必须结构化且版本化，
+/// 不再是自由 JSONB）。检查点 2 起执行端回执一律携带；版本演进时在此扩展。
+pub const RECEIPT_SCHEMA: &str = "aipm.receipt.v1";
+
 #[derive(Debug, thiserror::Error)]
 pub enum CommandFaceError {
     #[error("database error: {0}")]
@@ -301,7 +305,9 @@ pub struct CommandAckResult {
 
 /// 命令回执（V1.1 §3.2/§3.5）。
 ///
-/// acked 从严判据（R-ACP-5/P1-1）：terminate 必须携带 `exit_outcome`；
+/// acked 从严判据（R-ACP-5/P1-1）：回执信封必须携带 `schema_version`
+/// （[`RECEIPT_SCHEMA`]）与 `run_generation`（= Run 当前代次，ACP-454/ACP-C3）；
+/// terminate 另须 `exit_outcome` + `terminate_requested_at`/`terminate_confirmed_at`；
 /// continue 必须同时携带 `session_created` 与 `input_injected`（注入失败时
 /// 不得因为 Session 已创建就把人工回复当成交付成功，ACP-441）。
 ///
@@ -353,6 +359,38 @@ pub async fn ack_command(
     }
 
     let receipt = receipt.unwrap_or(Value::Null);
+    // 收敛批 ⑦（专家复审 2.1）+ ACP-454/ACP-C3 ack 时点 fencing：acked 回执
+    // 必须携带 schema_version（钉 [`RECEIPT_SCHEMA`]）与 run_generation，且
+    // run_generation 必须等于 Run **当前**代次。poll 时点的 fencing 是命令两列
+    // 集合比对（§3.3 ③）；ack 时点收紧为与 Run 当前代次相等——cpk 通道续领
+    // 前后 worker_id 同值（`client:{device_id}`），代次是旧执行端迟到回执的
+    // 唯一栅栏，不得落入集合语义放行旧值。failed 回执不设结构门槛（preflight
+    // 拒绝/终止失败在 Platform 侧各自有终态路径）。
+    if outcome == AckOutcome::Acked {
+        if receipt.get("schema_version").and_then(|v| v.as_str()) != Some(RECEIPT_SCHEMA) {
+            return Err(CommandFaceError::Validation(format!(
+                "acked receipt requires schema_version = \"{RECEIPT_SCHEMA}\" (stable receipt schema)"
+            )));
+        }
+        let receipt_generation = receipt.get("run_generation").and_then(|v| v.as_i64());
+        let run_generation: Option<i32> =
+            sqlx::query_scalar("SELECT lease_generation FROM delivery.task_run WHERE id = $1")
+                .bind(run_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        let generation_ok = matches!(
+            (receipt_generation, run_generation),
+            (Some(receipt), Some(run)) if receipt == run as i64
+        );
+        if !generation_ok {
+            return Err(CommandFaceError::Validation(format!(
+                "acked receipt.run_generation must equal the run's current lease generation ({})",
+                run_generation
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "unknown".to_string())
+            )));
+        }
+    }
     match (outcome, command_type.as_str()) {
         (AckOutcome::Acked, COMMAND_TERMINATE) => {
             if receipt
@@ -364,6 +402,18 @@ pub async fn ack_command(
                     "terminate ack requires receipt.exit_outcome (ExitOutcome five-value semantics)"
                         .into(),
                 ));
+            }
+            // 专家复审 2.1-②：receipt 必须区分请求终止与确认终止两个时刻。
+            for field in ["terminate_requested_at", "terminate_confirmed_at"] {
+                let parsed = receipt
+                    .get(field)
+                    .and_then(|v| v.as_str())
+                    .map(|s| chrono::DateTime::parse_from_rfc3339(s).is_ok());
+                if parsed != Some(true) {
+                    return Err(CommandFaceError::Validation(format!(
+                        "terminate ack requires receipt.{field} (RFC3339 timestamp)"
+                    )));
+                }
             }
         }
         (AckOutcome::Acked, COMMAND_CONTINUE) => {

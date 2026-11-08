@@ -19,6 +19,45 @@ use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// 检查点 2 收敛批（层 2 残余 ⑦ / 专家复审 2.1）：acked 回执信封——
+/// schema v1 + 当前代次 fencing；terminate 另须请求/确认两时刻。
+fn receipt_v1(run_generation: i64, extra: serde_json::Value) -> serde_json::Value {
+    let mut receipt = json!({
+        "schema_version": cmd::RECEIPT_SCHEMA,
+        "run_generation": run_generation,
+    });
+    let obj = receipt.as_object_mut().expect("receipt object");
+    if let serde_json::Value::Object(fields) = extra {
+        for (key, value) in fields {
+            obj.insert(key, value);
+        }
+    }
+    receipt
+}
+
+fn terminate_receipt(
+    run_generation: i64,
+    outcome: &str,
+    pid: serde_json::Value,
+) -> serde_json::Value {
+    receipt_v1(
+        run_generation,
+        json!({
+            "exit_outcome": outcome,
+            "pid": pid,
+            "terminate_requested_at": "2026-11-08T00:00:00Z",
+            "terminate_confirmed_at": "2026-11-08T00:00:01Z",
+        }),
+    )
+}
+
+fn continue_receipt(run_generation: i64) -> serde_json::Value {
+    receipt_v1(
+        run_generation,
+        json!({ "session_created": true, "input_injected": true }),
+    )
+}
+
 async fn seed(pool: &PgPool, code: &str) -> (Uuid, Uuid, Uuid, Uuid) {
     let outcome = bootstrap_project(
         pool,
@@ -188,7 +227,7 @@ async fn acp452_offline_recovery_via_discover_and_reacquire(pool: PgPool) {
         polled[0].command_id,
         &worker_id,
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        Some(terminate_receipt(1, "Killed", json!(1))),
         None,
     )
     .await
@@ -271,7 +310,7 @@ async fn acp452_offline_recovery_via_discover_and_reacquire(pool: PgPool) {
         polled2[0].command_id,
         &lease.worker_id,
         cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })),
+        Some(continue_receipt(2)),
         None,
     )
     .await
@@ -476,7 +515,7 @@ async fn acp455_continue_waits_for_terminate_confirmation(pool: PgPool) {
         t.command_id,
         &lease.worker_id,
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Lost", "pid": null })),
+        Some(terminate_receipt(2, "Lost", json!(null))),
         None,
     )
     .await
@@ -517,7 +556,7 @@ async fn previous_chain_id_links_closed_predecessor(pool: PgPool) {
         p1[0].command_id,
         &worker_id,
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        Some(terminate_receipt(1, "Killed", json!(1))),
         None,
     )
     .await
@@ -556,7 +595,7 @@ async fn previous_chain_id_links_closed_predecessor(pool: PgPool) {
         c1,
         &worker_id,
         cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })),
+        Some(continue_receipt(1)),
         None,
     )
     .await
@@ -590,4 +629,92 @@ async fn previous_chain_id_links_closed_predecessor(pool: PgPool) {
             .await
             .unwrap();
     assert!(first_prev.is_none());
+}
+
+/// 检查点 2 收敛批（ACP-454 ack 时点 / ACP-C3）：回执代次 fencing——cpk 通道
+/// 续领前后 worker_id 同值（`client:{device_id}`），Run 当前代次是旧执行端
+/// 迟到回执的唯一栅栏；旧代次回执拒绝且不污染命令/链状态。
+#[sqlx::test(migrations = "../../migrations")]
+async fn acp454_ack_receipt_generation_fencing(pool: PgPool) {
+    let fx = seed(&pool, "RC-454G").await;
+    let (device_id, _) = seed_device_with_credential(&pool, SYSTEM_TENANT, fx.2, "runner-g").await;
+    let (run_id, worker_id, _) = claim_as_client(&pool, fx.0, fx.1, device_id, fx.2).await;
+
+    let reported = report_interaction(
+        &pool,
+        &interaction_input(&fx, run_id, "evt-1"),
+        &AuditActor::dispatch(),
+    )
+    .await
+    .unwrap();
+    record_response_persisted(
+        &pool,
+        fx.0,
+        reported.interaction_id,
+        json!({ "response_id": "r1" }),
+        &AuditActor::dispatch(),
+    )
+    .await
+    .unwrap();
+    let polled = cmd::poll_commands(&pool, fx.0, run_id, &worker_id)
+        .await
+        .unwrap();
+    assert_eq!(polled[0].command_type, "agent.process.terminate");
+
+    // 续领（generation+1）后，旧代次（1）回执 → 拒绝。
+    let lease = recovery::reacquire_lease(
+        &pool,
+        SYSTEM_TENANT,
+        fx.0,
+        run_id,
+        device_id,
+        RunDispatchConfig::from_env().lease_secs,
+        &AuditActor::principal(fx.2),
+    )
+    .await
+    .unwrap();
+    assert_eq!(lease.lease_generation, 2);
+    let stale = cmd::ack_command(
+        &pool,
+        fx.0,
+        polled[0].command_id,
+        &lease.worker_id,
+        cmd::AckOutcome::Acked,
+        Some(terminate_receipt(1, "Killed", json!(1))),
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        stale.to_string().contains("current lease generation"),
+        "{stale}"
+    );
+
+    // 命令未被污染（停留 delivered、链开放）→ 新代次回执放行。
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM delivery.worker_command WHERE id = $1")
+            .bind(polled[0].command_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "delivered");
+    let _ = reported;
+    cmd::ack_command(
+        &pool,
+        fx.0,
+        polled[0].command_id,
+        &lease.worker_id,
+        cmd::AckOutcome::Acked,
+        Some(terminate_receipt(2, "Lost", json!(null))),
+        None,
+    )
+    .await
+    .unwrap();
+    let acked: String =
+        sqlx::query_scalar("SELECT status FROM delivery.worker_command WHERE id = $1")
+            .bind(polled[0].command_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(acked, "acked");
 }

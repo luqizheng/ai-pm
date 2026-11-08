@@ -16,6 +16,44 @@ use serde_json::json;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
+/// 检查点 2 收敛批：acked 回执信封（schema v1 + 当前代次 fencing）。
+fn receipt_v1(run_generation: i64, extra: serde_json::Value) -> serde_json::Value {
+    let mut receipt = json!({
+        "schema_version": cmd::RECEIPT_SCHEMA,
+        "run_generation": run_generation,
+    });
+    let obj = receipt.as_object_mut().expect("receipt object");
+    if let serde_json::Value::Object(fields) = extra {
+        for (key, value) in fields {
+            obj.insert(key, value);
+        }
+    }
+    receipt
+}
+
+fn terminate_receipt(
+    run_generation: i64,
+    outcome: &str,
+    pid: serde_json::Value,
+) -> serde_json::Value {
+    receipt_v1(
+        run_generation,
+        json!({
+            "exit_outcome": outcome,
+            "pid": pid,
+            "terminate_requested_at": "2026-11-08T00:00:00Z",
+            "terminate_confirmed_at": "2026-11-08T00:00:01Z",
+        }),
+    )
+}
+
+fn continue_receipt(run_generation: i64) -> serde_json::Value {
+    receipt_v1(
+        run_generation,
+        json!({ "session_created": true, "input_injected": true }),
+    )
+}
+
 async fn seed_claimed(pool: &PgPool, code: &str) -> (Uuid, Uuid, Uuid, Uuid) {
     let outcome = bootstrap_project(
         pool,
@@ -99,7 +137,7 @@ async fn acp470_submit_creates_single_delivery_row(pool: PgPool) {
         polled[0].command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        Some(terminate_receipt(1, "Killed", json!(1))),
         None,
     )
     .await
@@ -160,7 +198,7 @@ async fn acp471_failed_redelivery_reuses_row(pool: PgPool) {
         polled[0].command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        Some(terminate_receipt(1, "Killed", json!(1))),
         None,
     )
     .await
@@ -209,7 +247,7 @@ async fn acp471_failed_redelivery_reuses_row(pool: PgPool) {
         continue_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })),
+        Some(continue_receipt(1)),
         None,
     )
     .await
@@ -243,7 +281,7 @@ async fn acp471_failed_redelivery_reuses_row(pool: PgPool) {
         t2.command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 2 })),
+        Some(terminate_receipt(1, "Killed", json!(2))),
         None,
     )
     .await
@@ -307,7 +345,7 @@ async fn acp472_consumption_persists_delivery_fact(pool: PgPool) {
         polled[0].command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        Some(terminate_receipt(1, "Killed", json!(1))),
         None,
     )
     .await
@@ -331,7 +369,7 @@ async fn acp472_consumption_persists_delivery_fact(pool: PgPool) {
         polled2[0].command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })),
+        Some(continue_receipt(1)),
         None,
     )
     .await
@@ -408,7 +446,7 @@ async fn acp473_unconsumed_metric_reads_delivery_table(pool: PgPool) {
         polled[0].command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        Some(terminate_receipt(1, "Killed", json!(1))),
         None,
     )
     .await
@@ -443,7 +481,7 @@ async fn acp473_unconsumed_metric_reads_delivery_table(pool: PgPool) {
         polled2[0].command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })),
+        Some(continue_receipt(1)),
         None,
     )
     .await

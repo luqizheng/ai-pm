@@ -16,6 +16,44 @@ use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// 检查点 2 收敛批：acked 回执信封（schema v1 + 当前代次 fencing）。
+fn receipt_v1(run_generation: i64, extra: serde_json::Value) -> serde_json::Value {
+    let mut receipt = json!({
+        "schema_version": cmd::RECEIPT_SCHEMA,
+        "run_generation": run_generation,
+    });
+    let obj = receipt.as_object_mut().expect("receipt object");
+    if let serde_json::Value::Object(fields) = extra {
+        for (key, value) in fields {
+            obj.insert(key, value);
+        }
+    }
+    receipt
+}
+
+fn terminate_receipt(
+    run_generation: i64,
+    outcome: &str,
+    pid: serde_json::Value,
+) -> serde_json::Value {
+    receipt_v1(
+        run_generation,
+        json!({
+            "exit_outcome": outcome,
+            "pid": pid,
+            "terminate_requested_at": "2026-11-08T00:00:00Z",
+            "terminate_confirmed_at": "2026-11-08T00:00:01Z",
+        }),
+    )
+}
+
+fn continue_receipt(run_generation: i64) -> serde_json::Value {
+    receipt_v1(
+        run_generation,
+        json!({ "session_created": true, "input_injected": true }),
+    )
+}
+
 async fn seed_claimed(pool: &PgPool, code: &str) -> (Uuid, Uuid, Uuid, Uuid) {
     let outcome = bootstrap_project(
         pool,
@@ -98,7 +136,7 @@ async fn acp474_two_chains_two_continuations_with_backfill(pool: PgPool) {
         p1[0].command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        Some(terminate_receipt(1, "Killed", json!(1))),
         None,
     )
     .await
@@ -128,7 +166,7 @@ async fn acp474_two_chains_two_continuations_with_backfill(pool: PgPool) {
         p2[0].command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })),
+        Some(continue_receipt(1)),
         None,
     )
     .await
@@ -161,7 +199,7 @@ async fn acp474_two_chains_two_continuations_with_backfill(pool: PgPool) {
         t2.command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 2 })),
+        Some(terminate_receipt(1, "Killed", json!(2))),
         None,
     )
     .await
@@ -277,7 +315,7 @@ async fn acp476_terminate_failure_freezes_continuation(pool: PgPool) {
         c.command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })),
+        Some(continue_receipt(1)),
         None,
     )
     .await
@@ -356,7 +394,7 @@ async fn acp477_terminal_hooks_close_continuations(pool: PgPool) {
         t.command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 3 })),
+        Some(terminate_receipt(1, "Killed", json!(3))),
         None,
     )
     .await
@@ -384,7 +422,7 @@ async fn acp477_terminal_hooks_close_continuations(pool: PgPool) {
         t2.command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 4 })),
+        Some(terminate_receipt(1, "Killed", json!(4))),
         None,
     )
     .await
@@ -401,7 +439,7 @@ async fn acp477_terminal_hooks_close_continuations(pool: PgPool) {
             c.command_id,
             "client:dbg",
             cmd::AckOutcome::Acked,
-            Some(json!({ "session_created": true, "input_injected": true })),
+            Some(continue_receipt(1)),
             None,
         )
         .await
@@ -463,7 +501,7 @@ async fn def_e2e1_rest_update_task_cancel_closes_continuation(pool: PgPool) {
         t.command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        Some(terminate_receipt(1, "Killed", json!(1))),
         None,
     )
     .await
@@ -492,7 +530,7 @@ async fn def_e2e1_rest_update_task_cancel_closes_continuation(pool: PgPool) {
         c.command_id,
         "client:dbg",
         cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })),
+        Some(continue_receipt(1)),
         None,
     )
     .await
