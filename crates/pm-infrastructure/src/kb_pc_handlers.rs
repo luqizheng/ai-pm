@@ -15,8 +15,8 @@
 //!
 //! 幂等纪律（§14.1 至少一次投递 ≠ 恰好一次执行）：全部 handler 重入安全——
 //! 状态推进 CAS、结果事件 outbox 幂等键坍缩、通知 `WHERE NOT EXISTS` 锚。
-//! pc.cognition.version_published 不注册（has_handler=false：生产者归 PC-01C，
-//! 「不假装消费」§20.6）。
+//! KP-1 起 pc.cognition.version_published 接真（生产者=pc/publish.rs ⑫b，
+//! Platform 侧状态感知留痕）。
 
 use std::sync::Arc;
 
@@ -258,12 +258,15 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
         )
         .await
         {
-            Ok((object_id, revision_id)) => {
+            // KP-1 起 pc_analysis_ref 锚分析运行的 pc.source 行（一次分析一条
+            // 来源），P3 经 source → evidence → revision → object 展开；
+            // target_revision_id 携带 KB 修订（来源钉扎）。
+            Ok((source_id, _primary_revision)) => {
                 let result_ref = serde_json::json!({
                     "target_domain": "pc",
-                    "target_type": "cognition_object",
-                    "target_id": object_id.to_string(),
-                    "target_revision_id": revision_id.to_string(),
+                    "target_type": "source",
+                    "target_id": source_id.to_string(),
+                    "target_revision_id": kb_revision_id.to_string(),
                 });
                 let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
                 PgOutboxAppend
@@ -519,6 +522,39 @@ impl OutboxHandler for KbMemoryApprovedHandler {
         )
         .await?;
         Ok(())
+    }
+}
+
+/// pc.cognition.version_published → 状态感知留痕（Platform 消费面；KP-1 起
+/// 发布事务真实生产，目录 has_handler 翻真——「不假装消费」要求必须有 handler）。
+pub struct PcVersionPublishedHandler {
+    pool: PgPool,
+}
+
+impl PcVersionPublishedHandler {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait::async_trait]
+impl OutboxHandler for PcVersionPublishedHandler {
+    async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
+        let version_id = event
+            .payload
+            .get("version_ref")
+            .and_then(|r| r.get("target_id"))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "version_published missing version_ref.target_id".to_string())?
+            .to_string();
+        notify_once(
+            &self.pool,
+            event.project_id,
+            "pc_version_published",
+            &version_id,
+            serde_json::json!({ "dedup_key": version_id, "payload": event.payload }),
+        )
+        .await
     }
 }
 
@@ -936,6 +972,10 @@ pub fn register_kb_pc_handlers(
         .with_handler(
             ev::PC_EVIDENCE_REQUESTED,
             Arc::new(PcEvidenceRequestedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::PC_COGNITION_VERSION_PUBLISHED,
+            Arc::new(PcVersionPublishedHandler::new(pool.clone())),
         )
         .with_handler(
             ev::PROCESSING_FAILED,

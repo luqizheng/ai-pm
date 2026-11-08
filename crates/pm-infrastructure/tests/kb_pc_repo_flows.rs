@@ -293,9 +293,9 @@ async fn verify_triggers_full_kb_pc_chain(pool: PgPool) {
     // PC：RT 路由建任务 → 结构化派生 → PROPOSED 完成。
     let (_, pc_status, pc_result) = task_of_type(&pool, intake_id, "pc_analyze").await;
     assert_eq!(pc_status, "COMPLETED");
-    let pc_result = pc_result.expect("real derivation pins cognition object");
+    let pc_result = pc_result.expect("real derivation pins analysis source");
     assert_eq!(pc_result["target_domain"], "pc");
-    assert_eq!(pc_result["target_type"], "cognition_object");
+    assert_eq!(pc_result["target_type"], "source", "KP-1: pc_analysis_ref anchors pc.source");
     assert_eq!(derived_status(&pool, intake_id).await, "Completed");
 
     // 信号面：pc_analyze.signal_ref 记录真实信号（四元组引用，无 service 字段）。
@@ -339,10 +339,11 @@ async fn verify_triggers_full_kb_pc_chain(pool: PgPool) {
         "README.md + docs/design.md hot files"
     );
 
-    // evidence：unverified/medium，locator 锚定 intake/task/HEAD。
-    let evidence: Vec<(String, String, serde_json::Value)> = sqlx::query_as(
-        "SELECT verification_status, confidence, locator FROM pc.evidence \
-          WHERE project_id = $1",
+    // evidence：unverified/medium，document_section 判别器（槽位 = section_anchor，
+    // 归因 JSON 归档 description——01B §9.3 C-4 形态）。
+    let evidence: Vec<(String, String, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT verification_status, confidence, section_anchor, description \
+           FROM pc.evidence WHERE project_id = $1",
     )
     .bind(project)
     .fetch_all(&pool)
@@ -351,13 +352,16 @@ async fn verify_triggers_full_kb_pc_chain(pool: PgPool) {
     assert_eq!(evidence.len(), 5);
     assert!(evidence
         .iter()
-        .all(|(v, c, _)| v == "unverified" && c == "medium"));
+        .all(|(v, c, _, _)| v == "unverified" && c == "medium"));
     assert!(evidence
         .iter()
-        .all(|(_, _, l)| l.get("intake_id").and_then(|v| v.as_str())
-            == Some(intake_id.to_string().as_str())));
+        .all(|(_, _, anchor, desc)| anchor.is_some()
+            && desc
+                .as_deref()
+                .unwrap_or_default()
+                .contains(&intake_id.to_string())));
 
-    // source：四元组结构化列指向 KB 文档修订。
+    // source：kb_document 通道（C-4 收窄 CHECK）+ 四元组钉 KB 文档修订。
     let source: (String, String, String, Option<String>) = sqlx::query_as(
         "SELECT target_domain, target_type, target_id, target_revision_id \
           FROM pc.source WHERE project_id = $1 LIMIT 1",
@@ -371,6 +375,13 @@ async fn verify_triggers_full_kb_pc_chain(pool: PgPool) {
         ("knowledge_base", "document")
     );
     assert_eq!(source.3.as_deref(), Some(revision_id.to_string().as_str()));
+    let source_kind: String =
+        sqlx::query_scalar("SELECT source_kind FROM pc.source WHERE project_id = $1 LIMIT 1")
+            .bind(project)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(source_kind, "kb_document");
 
     // 审计：kb_pc_analysis 两处（KB 完成 + PC 派生）。
     let audits: i64 = sqlx::query_scalar(
@@ -633,13 +644,15 @@ async fn llm_enrichment_marks_llm_mode_across_kb_and_pc(pool: PgPool) {
     assert!(!content.contains("无 LLM 参与"));
     assert!(change_summary.contains("LLM 增强"));
 
-    // PC：五对象全部 LLM 三区正文（骨架形态不变），analysis_mode=llm。
+    // PC：五对象全部 LLM 三区正文（骨架形态不变），analysis_mode=llm；
+    // 正文权威 = pc.document_revision（KP-1 收敛，偏差 a 暂存 PG）。
     let (_, pc_status, pc_result) = task_of_type(&pool, intake_id, "pc_analyze").await;
     assert_eq!(pc_status, "COMPLETED");
     assert_eq!(pc_result.expect("real derivation")["target_domain"], "pc");
     let revisions: Vec<(String, String)> = sqlx::query_as(
-        "SELECT cr.analysis_mode, cr.content FROM pc.cognition_revision cr \
+        "SELECT cr.analysis_mode, dr.content FROM pc.cognition_revision cr \
            JOIN pc.cognition_object o ON o.id = cr.object_id \
+           JOIN pc.document_revision dr ON dr.id = cr.document_revision_id \
           WHERE o.project_id = $1",
     )
     .bind(project)
@@ -652,15 +665,18 @@ async fn llm_enrichment_marks_llm_mode_across_kb_and_pc(pool: PgPool) {
         c.contains("### 事实") && c.contains("### 推断") && c.contains("### 不确定")
     }));
 
-    // evidence：locator 记 mode 与白名单过滤后的 llm_evidence_refs
-    // （made-up-ref 必须被实现侧丢弃）。
-    let locator: serde_json::Value = sqlx::query_scalar(
-        "SELECT locator FROM pc.evidence WHERE project_id = $1 AND locator->>'slot' = 'snapshot'",
+    // evidence：description 归档 JSON 记 mode 与白名单过滤后的 llm_evidence_refs
+    // （made-up-ref 必须被实现侧丢弃；01B §9.3：无 JSONB locator，TEXT 归档）。
+    let description: String = sqlx::query_scalar(
+        "SELECT description FROM pc.evidence \
+          WHERE project_id = $1 AND section_anchor = 'snapshot'",
     )
     .bind(project)
     .fetch_one(&pool)
     .await
     .unwrap();
+    let locator: serde_json::Value = serde_json::from_str(&description)
+        .expect("legacy attribution JSON archived in description");
     assert_eq!(locator["analysis_mode"], "llm");
     let refs = locator["llm_evidence_refs"].as_array().unwrap();
     assert!(refs.iter().all(|r| r.as_str() != Some("made-up-ref")));
