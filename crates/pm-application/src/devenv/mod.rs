@@ -17,9 +17,13 @@ use uuid::Uuid;
 
 use crate::caller::HumanActor;
 
+mod availability;
 mod binding;
 mod checks;
 
+pub use availability::{
+    is_runner_available, refresh_runner_heartbeat, runner_availability_stale_secs,
+};
 pub use binding::{bind_project, unbind_binding};
 pub use checks::{report_checks, DeviceChecks};
 
@@ -99,6 +103,11 @@ pub struct DeviceRow {
     pub revoked_at: Option<chrono::DateTime<chrono::Utc>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    /// D-2=c Q-D2C-1：领取型 Runner 载体（其绑定项目由 Runner 显式领取，
+    /// worker 无人值守派发静默排除）。
+    pub is_runner: bool,
+    /// D-2=c Q-D2C-2：设备级心跳（可用性真源），已认证设备活动服务端归因刷新。
+    pub last_heartbeat_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// 绑定行。
@@ -157,6 +166,8 @@ pub struct RegisterDeviceRequest {
     pub os_version: Option<String>,
     pub executor_kind: Option<String>,
     pub executor_version: Option<String>,
+    /// D-2=c：领取型 Runner 载体声明（缺省 false）。复用登记时可更新。
+    pub is_runner: Option<bool>,
 }
 
 /// 登记结果。
@@ -212,8 +223,8 @@ async fn register_once(
     let inserted = sqlx::query(
         "INSERT INTO devenv.device \
          (id, tenant_id, owner_principal_id, name, platform, os_version, \
-          executor_kind, executor_version, status, readiness) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', NULL) \
+          executor_kind, executor_version, status, readiness, is_runner) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', NULL, $9) \
          ON CONFLICT (id) DO NOTHING",
     )
     .bind(requested_id)
@@ -224,6 +235,7 @@ async fn register_once(
     .bind(req.os_version.as_deref().map(str::trim))
     .bind(req.executor_kind.as_deref().unwrap_or("codex"))
     .bind(req.executor_version.as_deref().map(str::trim))
+    .bind(req.is_runner.unwrap_or(false))
     .execute(&mut *tx)
     .await
     .map_err(|e| DeviceError::Db(e.to_string()))?
@@ -247,7 +259,8 @@ async fn register_once(
     let existing = sqlx::query(
         "SELECT id, tenant_id, owner_principal_id, name, platform, os_version, \
                 executor_kind, executor_version, status, readiness, last_check_at, \
-                last_check, revoked_at, created_at, updated_at \
+                last_check, revoked_at, created_at, updated_at, is_runner, \
+                last_heartbeat_at \
          FROM devenv.device WHERE id = $1 FOR UPDATE",
     )
     .bind(requested_id)
@@ -279,8 +292,8 @@ async fn register_once(
         sqlx::query(
             "INSERT INTO devenv.device \
              (id, tenant_id, owner_principal_id, name, platform, os_version, \
-              executor_kind, executor_version, status, readiness) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', NULL)",
+              executor_kind, executor_version, status, readiness, is_runner) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', NULL, $9)",
         )
         .bind(fresh_id)
         .bind(caller.tenant_id)
@@ -290,6 +303,7 @@ async fn register_once(
         .bind(req.os_version.as_deref().map(str::trim))
         .bind(req.executor_kind.as_deref().unwrap_or("codex"))
         .bind(req.executor_version.as_deref().map(str::trim))
+        .bind(req.is_runner.unwrap_or(false))
         .execute(&mut *tx)
         .await
         .map_err(|e| DeviceError::Db(e.to_string()))?;
@@ -309,7 +323,7 @@ async fn register_once(
     sqlx::query(
         "UPDATE devenv.device \
          SET name = $2, platform = $3, os_version = $4, executor_kind = $5, \
-             executor_version = $6, updated_at = now() \
+             executor_version = $6, is_runner = $7, updated_at = now() \
          WHERE id = $1",
     )
     .bind(requested_id)
@@ -318,6 +332,7 @@ async fn register_once(
     .bind(req.os_version.as_deref().map(str::trim))
     .bind(req.executor_kind.as_deref().unwrap_or("codex"))
     .bind(req.executor_version.as_deref().map(str::trim))
+    .bind(req.is_runner.unwrap_or(false))
     .execute(&mut *tx)
     .await
     .map_err(|e| DeviceError::Db(e.to_string()))?;
@@ -342,7 +357,8 @@ pub async fn list_devices(
     let rows = sqlx::query(
         "SELECT id, tenant_id, owner_principal_id, name, platform, os_version, \
                 executor_kind, executor_version, status, readiness, last_check_at, \
-                last_check, revoked_at, created_at, updated_at \
+                last_check, revoked_at, created_at, updated_at, is_runner, \
+                last_heartbeat_at \
          FROM devenv.device \
          WHERE tenant_id = $1 AND ($2 OR owner_principal_id = $3) \
          ORDER BY created_at DESC",
@@ -430,7 +446,8 @@ pub(crate) async fn fetch_device(
     let row = sqlx::query(
         "SELECT id, tenant_id, owner_principal_id, name, platform, os_version, \
                 executor_kind, executor_version, status, readiness, last_check_at, \
-                last_check, revoked_at, created_at, updated_at \
+                last_check, revoked_at, created_at, updated_at, is_runner, \
+                last_heartbeat_at \
          FROM devenv.device WHERE id = $1",
     )
     .bind(device_id)
@@ -448,7 +465,8 @@ pub(crate) async fn fetch_device_in(
     let row = sqlx::query(
         "SELECT id, tenant_id, owner_principal_id, name, platform, os_version, \
                 executor_kind, executor_version, status, readiness, last_check_at, \
-                last_check, revoked_at, created_at, updated_at \
+                last_check, revoked_at, created_at, updated_at, is_runner, \
+                last_heartbeat_at \
          FROM devenv.device WHERE id = $1",
     )
     .bind(device_id)
@@ -544,6 +562,8 @@ fn device_from_row(row: sqlx::postgres::PgRow) -> DeviceRow {
         revoked_at: row.get("revoked_at"),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
+        is_runner: row.get("is_runner"),
+        last_heartbeat_at: row.get("last_heartbeat_at"),
     }
 }
 

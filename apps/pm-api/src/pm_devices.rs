@@ -62,6 +62,9 @@ struct RegisterBody {
     os_version: Option<String>,
     executor_kind: Option<String>,
     executor_version: Option<String>,
+    /// D-2=c：领取型 Runner 载体声明（缺省 false）。
+    #[serde(default)]
+    is_runner: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -98,6 +101,7 @@ async fn register_handler(
         os_version: body.os_version,
         executor_kind: body.executor_kind,
         executor_version: body.executor_version,
+        is_runner: Some(body.is_runner),
     };
     match register_device(&state.pool, &principal.human_actor(), &req).await {
         Ok(outcome) => {
@@ -371,6 +375,8 @@ fn device_json(d: &DeviceRow) -> serde_json::Value {
         "revoked_at": d.revoked_at,
         "created_at": d.created_at,
         "updated_at": d.updated_at,
+        "is_runner": d.is_runner,
+        "last_heartbeat_at": d.last_heartbeat_at,
     })
 }
 

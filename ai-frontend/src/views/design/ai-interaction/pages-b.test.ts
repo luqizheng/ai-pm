@@ -83,8 +83,11 @@ describe("AiConversationPanel", () => {
 
     const userMessage = conversationFixture[0];
     const aiMessage = conversationFixture[1];
+    // 用户消息原文直出；AI 文本经 MarkdownViewer 渲染（md2html mock 返回
+    // "<p>body</p>"），原文送渲染、渲染结果上屏。
     expect(wrapper.text()).toContain(userMessage.text);
-    expect(wrapper.text()).toContain(aiMessage.text);
+    expect(md2html).toHaveBeenCalledWith(aiMessage.text, expect.anything());
+    expect(wrapper.text()).toContain("body");
 
     // 轻量 AI 消息带头像章；结构化交互内联为响应卡
     expect(

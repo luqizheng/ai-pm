@@ -291,6 +291,25 @@ requirements:
   loadingTitle: Loading requirements
   loadingDesc: Fetching the requirement list and details.
   proposeNoBody: This requirement has no body to submit; edit the body first.
+  # ── S02-I5 acceptance wiring batch (2026-11-08) ──
+  critKindManual: Manual
+  critKindAutomatedTest: Automated test
+  critKindArtifactExists: Artifact exists
+  critKindReview: Review
+  critKindPerformance: Performance
+  critKindSecurity: Security
+  critVerdictPending: Pending
+  critVerdictPassed: Passed
+  critVerdictFailed: Failed
+  critVerdictPass: Mark passed
+  critVerdictFail: Mark failed
+  critRemove: Remove criterion
+  critAddPlaceholder: Enter a testable acceptance statement…
+  critAdd: Add
+  critAddToggle: Add criterion
+  critGovernanceNote: "Acceptance criteria are governed content: add/remove/verdict require project Lead or explicit Approver."
+  driftHintTitle: Acceptance criteria drifted
+  driftHintBody: Acceptance criteria changed after this revision was submitted — re-check they still match your confirmation.
 requirementDetail:
   pageTitle: Requirement Detail
   openFull: Open full detail

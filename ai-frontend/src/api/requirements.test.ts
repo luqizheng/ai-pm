@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  toCriteria,
   toEntryFromListItem,
   toRequirementEntry,
   toSourceItems,
@@ -279,5 +280,62 @@ describe("api/requirements 来源适配（S02-I3，2026-11-08 接线）", () => 
 
     const empty = toEntryFromListItem(entry());
     expect(empty.body_markdown).toBeUndefined();
+  });
+});
+
+describe("api/requirements 验收标准适配（S02-I5，2026-11-08 接线）", () => {
+  it("字段直传不吞语义；verdict_note/at 缺省 undefined；verdict 透传", () => {
+    const items = toCriteria([
+      {
+        id: "ac-1",
+        requirement_id: "r1",
+        position: 1,
+        statement: "P95 ≤ 300ms",
+        verification_kind: "performance",
+        params: { threshold: 300 },
+        established_in_revision_id: null,
+        verdict: "passed",
+        verdict_note: "压测报告 PR-9",
+        verdict_by: "p2",
+        verdict_at: "2026-11-08T10:00:00Z",
+        created_at: "2026-11-08T09:00:00Z",
+        updated_at: "2026-11-08T10:00:00Z"
+      },
+      {
+        id: "ac-2",
+        requirement_id: "r1",
+        position: 2,
+        statement: "越权访问零容忍",
+        verification_kind: "security",
+        params: {},
+        established_in_revision_id: null,
+        verdict: "pending",
+        verdict_note: null,
+        verdict_by: null,
+        verdict_at: null,
+        created_at: "2026-11-08T09:00:00Z",
+        updated_at: "2026-11-08T09:00:00Z"
+      }
+    ]);
+    expect(items[0]).toEqual({
+      id: "ac-1",
+      statement: "P95 ≤ 300ms",
+      verification_kind: "performance",
+      params: { threshold: 300 },
+      verdict: "passed",
+      verdict_note: "压测报告 PR-9",
+      verdict_at: "2026-11-08T10:00:00Z",
+      position: 1
+    });
+    expect(items[1]).toEqual({
+      id: "ac-2",
+      statement: "越权访问零容忍",
+      verification_kind: "security",
+      params: {},
+      verdict: "pending",
+      verdict_note: undefined,
+      verdict_at: undefined,
+      position: 2
+    });
   });
 });

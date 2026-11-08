@@ -287,17 +287,30 @@ pub async fn confirm_repository_version(
         Option<String>,
         Option<Uuid>,
         String,
+        String,
+        String,
+        Uuid,
     )>;
     let existing: Row = sqlx::query_as(
-        "SELECT project_id, selected_branch, selected_commit, head_commit_sha, \
-                selected_confirmed_by, status \
-         FROM integration.project_repository WHERE id = $1",
+        "SELECT r.project_id, r.selected_branch, r.selected_commit, r.head_commit_sha, \
+                r.selected_confirmed_by, r.status, r.name, r.url, \
+                (SELECT tenant_id FROM core.project WHERE id = r.project_id) \
+         FROM integration.project_repository r WHERE r.id = $1",
     )
     .bind(repository_id)
     .fetch_optional(&mut *tx)
     .await?;
-    let (project_id, prev_branch, prev_commit, _observed_head, _prev_by, status) =
-        existing.ok_or(RepositoryError::NotFound)?;
+    let (
+        project_id,
+        prev_branch,
+        prev_commit,
+        _observed_head,
+        _prev_by,
+        status,
+        name,
+        url,
+        tenant_id,
+    ) = existing.ok_or(RepositoryError::NotFound)?;
     if status == "archived" {
         return Err(RepositoryError::Archived);
     }
@@ -348,6 +361,36 @@ pub async fn confirm_repository_version(
     )
     .await?;
     tx.commit().await?;
+
+    // A-1（裁决 2026-11-08）：确认新采用基准 → 认知分析联动。分析锚点已改为
+    // `selected_commit ?? Observed HEAD ?? 分支 tip`（见 kb_pc_analysis），
+    // 确认动作本身意味着「认知应锚到新版本」，故这里直接受理快照 intake。
+    // 幂等键与 verify 同族（repo_snapshot:{repo}:{commit}）：一 commit 一次
+    // 受理，确认已在 verify 链分析过的版本时自然重放零副作用。
+    let cmd = SnapshotIntakeCmd {
+        tenant_id,
+        project_id,
+        repository_id,
+        name: &name,
+        url: &url,
+        head_commit_sha: &commit,
+        key_prefix: "repo_confirm",
+    };
+    match submit_repository_snapshot_intake(pool, cmd, actor).await {
+        Ok(receipt) => tracing::info!(
+            intake_id = %receipt.intake_id,
+            replayed = receipt.replayed,
+            repository_id = %repository_id,
+            commit,
+            "confirm: repository snapshot intake submitted"
+        ),
+        Err(err) => tracing::warn!(
+            repository_id = %repository_id,
+            commit,
+            error = %err,
+            "confirm: repository snapshot intake submit failed (confirm result kept)"
+        ),
+    }
     Ok(row)
 }
 
@@ -513,6 +556,7 @@ pub async fn verify_repository(
                     name: &name,
                     url: &url,
                     head_commit_sha: head,
+                    key_prefix: "repo_verify",
                 };
                 match submit_repository_snapshot_intake(pool, cmd, actor).await {
                     Ok(receipt) => tracing::info!(
@@ -544,11 +588,15 @@ struct SnapshotIntakeCmd<'a> {
     name: &'a str,
     url: &'a str,
     head_commit_sha: &'a str,
+    /// 幂等键族（`{prefix}:{repository}:{commit}`）：verify=repo_verify、
+    /// 确认联动=repo_confirm。族内同 commit 跨触发仍可能各一条——键锚
+    /// commit，KB/PC 内容寻址去重保证同 commit 二次分析零新增修订。
+    key_prefix: &'a str,
 }
 
 /// 仓库快照 intake 受理（checkpoint-1 触发链；intake.rs 管道由此接续：
 /// kb_analyze → 认知信号 → RT 路由 pc_analyze，全链经 outbox 消费端推进）。
-/// 幂等键 `{repository}:{head}`：同 commit 重复 verify 重放，新 commit 新 intake。
+/// 幂等键 `{repository}:{commit}`：同 commit 重复受理重放，新 commit 新 intake。
 async fn submit_repository_snapshot_intake(
     pool: &PgPool,
     cmd: SnapshotIntakeCmd<'_>,
@@ -574,8 +622,8 @@ async fn submit_repository_snapshot_intake(
             content_hash: Some(cmd.head_commit_sha.to_string()),
             title: Some(format!("仓库快照 {} @ {short}", cmd.name)),
             idempotency_key: Some(format!(
-                "repo_verify:{}:{}",
-                cmd.repository_id, cmd.head_commit_sha
+                "{}:{}:{}",
+                cmd.key_prefix, cmd.repository_id, cmd.head_commit_sha
             )),
             tasks: None,
         },

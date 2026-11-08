@@ -33,6 +33,20 @@ pub const MCP_SOURCE: &str = "mcp";
 /// Event type pinned for technical-design submissions.
 pub const SUBMIT_EVENT_TYPE: &str = "technical_design_submitted";
 
+/// D-2=c：已认证设备活动归因 → 刷新设备级心跳（派发可用性真源）。
+///
+/// 领取型 Runner 的空闲期轮询（`pm_list_tasks` 等）与活跃期上报都经本归因点刷
+/// `devenv.device.last_heartbeat_at`；best-effort（可观测性信号，失败仅日志、
+/// 不阻断业务主流程）。Runner 端零改动。
+async fn refresh_runner_heartbeat(pool: &PgPool, caller: &CallerContext) {
+    let Some(device_id) = caller.claimed_device_id() else {
+        return;
+    };
+    if let Err(e) = pm_application::devenv::refresh_runner_heartbeat(pool, device_id).await {
+        tracing::debug!(error = %e, device = %device_id, "runner heartbeat refresh failed");
+    }
+}
+
 /// Arguments of `pm_submit_technical_design`. The JSON shape is pinned by
 /// `tests/tools.rs` (and thus by the generated tool JSON Schema).
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -339,6 +353,7 @@ pub async fn list_tasks(
     args: ListTasksArgs,
     caller: &CallerContext,
 ) -> Result<Value, ToolError> {
+    refresh_runner_heartbeat(pool, caller).await;
     ensure_member(pool, caller, args.project_id).await?;
     let limit = args.limit.unwrap_or(20).clamp(1, 100) as i64;
     type Row = (
@@ -673,6 +688,7 @@ pub async fn claim_task(
     args: ClaimTaskArgs,
     caller: &CallerContext,
 ) -> Result<Value, ToolError> {
+    refresh_runner_heartbeat(pool, caller).await;
     // T-051 关闭点：claim 必须先过真人成员校验（dev_agent 本身就是成员，不能用它校验）。
     let actor = authorize(pool, caller, args.project_id, ExecutorKind::DevAgent).await?;
     let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
@@ -742,6 +758,7 @@ pub async fn report_progress(
     args: ReportProgressArgs,
     caller: &CallerContext,
 ) -> Result<Value, ToolError> {
+    refresh_runner_heartbeat(pool, caller).await;
     let actor = authorize(pool, caller, args.project_id, ExecutorKind::DevAgent).await?;
     let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
     let renewed = pm_application::run_context::report_progress_as(
@@ -1556,6 +1573,7 @@ pub async fn poll_commands(
     args: PollCommandsArgs,
     caller: &CallerContext,
 ) -> Result<Value, ToolError> {
+    refresh_runner_heartbeat(pool, caller).await;
     ensure_member(pool, caller, args.project_id).await?;
     let commands = pm_application::worker_command::poll_commands(
         pool,
@@ -1702,6 +1720,7 @@ pub async fn discover_runs(
     args: DiscoverRunsArgs,
     caller: &CallerContext,
 ) -> Result<Value, ToolError> {
+    refresh_runner_heartbeat(pool, caller).await;
     let Some(channel) = caller.client_channel else {
         return Err(ToolError::Forbidden(
             "pm_discover_runs requires a client credential channel".into(),
@@ -1737,6 +1756,7 @@ pub async fn reacquire_lease(
     args: ReacquireLeaseArgs,
     caller: &CallerContext,
 ) -> Result<Value, ToolError> {
+    refresh_runner_heartbeat(pool, caller).await;
     let Some(channel) = caller.client_channel else {
         return Err(ToolError::Forbidden(
             "pm_reacquire_lease requires a client credential channel".into(),

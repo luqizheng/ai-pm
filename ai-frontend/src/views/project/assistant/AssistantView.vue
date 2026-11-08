@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { RefreshCw } from "lucide-vue-next";
+import { Plus, RefreshCw } from "lucide-vue-next";
 import Alert from "@/components/ui/alert/Alert.vue";
 import Button from "@/components/ui/button/Button.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
@@ -19,6 +19,7 @@ import {
   type ConversationMessage as ConversationMessageRecord
 } from "@/api/conversations";
 import { SCOPE_ALL, useScopeStore } from "@/api/scope";
+import { useShellStore } from "@/stores/shell";
 
 /**
  * Project AI conversation page（V2 D-4 会话 REST + Batch G assistant 回复）。
@@ -36,11 +37,18 @@ import { SCOPE_ALL, useScopeStore } from "@/api/scope";
  *     清理定时器；轮询失败（429/网络抖动）静默保留旧态；
  *   - 发送链路：等待 201 后按返回记录插入本地时间线（不乐观插入），
  *     失败保留原文提供一键重发，不静默丢弃；
- *   - assistant 消息按返回 role 渲染到 AI 侧，内容一律来自服务端，不伪造。
+ *   - assistant 消息按返回 role 渲染到 AI 侧，内容一律来自服务端，不伪造；
+ *   - 指令栏交接（B-1 混合工作区）：底部 AI 指令栏提交的提问入队到
+ *     shell store，本页挂载时取出走既有发送链（自动建会话同样适用），
+ *     消费即清空，不重复发送。
  */
 const route = useRoute();
 const { t } = useI18n();
 const scope = useScopeStore();
+const shell = useShellStore();
+
+/** 新会话草稿态：点了「新建会话」但尚未发出首条消息（不落库）。 */
+const drafting = ref(false);
 
 const projectId = computed(() => {
   const fromQuery = route.query.project_id;
@@ -181,6 +189,7 @@ async function loadMessages(conversationId: string) {
 }
 
 function onSelect(id: string) {
+  drafting.value = false;
   if (!id || id === selectedId.value) return;
   // 切会话：先停旧轮询链，加载完成后续排新链（游标随时间线重置）。
   stopPolling();
@@ -243,6 +252,7 @@ async function handleSend(text: string) {
         title: deriveTitle(text)
       });
       conversations.value = [created, ...conversations.value];
+      drafting.value = false;
       selectedId.value = created.id;
       timeline.value = [];
       conversationId = created.id;
@@ -285,6 +295,34 @@ function resend() {
 onMounted(() => {
   void load();
 });
+
+// 指令栏转来的提问（B-1：指令栏是会话的收起入口）。槽为对象（同文案
+// 连续提交也能触发）；immediate 覆盖「先入队再进页」的导航时序。
+watch(
+  () => shell.pendingAssistantPrompt,
+  pending => {
+    if (pending) void sendAfterLoad(shell.takeAssistantPrompt()!.text);
+  },
+  { immediate: true }
+);
+
+/** 等待首屏数据就绪后再发送（避免与 load 的会话选择竞态） */
+async function sendAfterLoad(text: string) {
+  while (loading.value) {
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  void handleSend(text);
+}
+
+/** 新建会话：立即可见（空时间线），首条消息发出时才落库。 */
+function startConversation() {
+  stopPolling();
+  drafting.value = true;
+  selectedId.value = "";
+  timeline.value = [];
+  sendError.value = "";
+  pendingText.value = "";
+}
 
 onUnmounted(() => {
   disposed = true;
@@ -340,7 +378,10 @@ watch(projectId, next => {
           :title="t('assistant.emptyGuide')"
         />
 
-        <div v-if="conversations.length > 0" class="assistant-switcher">
+        <div
+          v-if="conversations.length > 0 || drafting"
+          class="assistant-switcher"
+        >
           <label class="assistant-switcher__label" for="assistant-conversation">
             {{ t("assistant.switcherLabel") }}
           </label>
@@ -349,10 +390,20 @@ watch(projectId, next => {
             class="assistant-switcher__select"
             :model-value="selectedId"
             :options="conversationOptions"
-            :placeholder="t('assistant.switcherPlaceholder')"
+            :placeholder="t('assistant.newPlaceholder')"
             :aria-label="t('assistant.switcherLabel')"
             @update:model-value="onSelect"
           />
+          <Button
+            v-if="conversations.length > 0 && !drafting"
+            variant="secondary"
+            size="sm"
+            class="assistant-new"
+            @click="startConversation"
+          >
+            <Plus aria-hidden="true" />
+            {{ t("assistant.newConversation") }}
+          </Button>
           <span
             v-if="messagesLoading"
             class="assistant-switcher__status"

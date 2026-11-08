@@ -200,9 +200,9 @@ pub const CATALOG: &[EventSpec] = &[
         producer: "requirement.rs（留位；I4 改绑命令启用）",
     },
     // ── KB-PC 服务化 13 项跨服务事件（V1.1 §13.3；wire 权威=
-    // kb-pc-contracts::events::CATALOG，此处登记运行时面）。KB/PC 分析本体
-    // 为最小桩（P3-3），pc.cognition.version_published 仅登记——生产者归
-    // PC-01C（不假装消费）。
+    // kb-pc-contracts::events::CATALOG，此处登记运行时面）。KP-1 起发布事务
+    // 真实生产 pc.cognition.version_published（pc/publish.rs ⑫b），Platform
+    // 消费面=状态感知留痕（kb_pc_handlers::PcVersionPublishedHandler）。
     EventSpec {
         event_type: kb_pc_contracts::events::INTAKE_RECEIVED,
         event_version: 1,
@@ -277,10 +277,10 @@ pub const CATALOG: &[EventSpec] = &[
     EventSpec {
         event_type: kb_pc_contracts::events::PC_COGNITION_VERSION_PUBLISHED,
         event_version: 1,
-        // 仅登记：发布事务归 PC-01C，生产者未落地——禁止生产（§20.6）。
-        has_handler: false,
-        enabled_by_default: false,
-        producer: "pc 发布事务（PC-01C 留位）",
+        // KP-1：发布事务（pc/publish.rs ⑫b）生产 + Platform 留痕消费。
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "pc 发布事务（pc/publish.rs）",
     },
     EventSpec {
         event_type: kb_pc_contracts::events::PC_EVIDENCE_REQUESTED,

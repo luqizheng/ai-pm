@@ -9,6 +9,7 @@ import { listRepositories } from "@/api/repositories";
  *   - sidebarCollapsed：左导航折叠（展开 232px / 折叠 60px）
  *   - contextOpen：右上下文栏（320px，可关）
  *   - commandbarExpanded：AI 指令栏（收起 72px / 展开 120px）
+ *   - pendingAssistantPrompt：指令栏提交、待会话页（/project/assistant）消费的提问
  *
  * 项目上下文（Figma「04 — Global Navigation」Project Context Header /
  * 「07 — Project Switching」）：
@@ -61,6 +62,11 @@ export const useShellStore = defineStore("app-shell", () => {
   const sidebarCollapsed = ref(initialSidebarCollapsed());
   const contextOpen = ref(true);
   const commandbarExpanded = ref(false);
+  /**
+   * 指令栏 → 会话页的单槽交接：指令栏只入队并导航，真正发送由会话页走
+   * 其既有发送链（自动建会话 / 失败重发）；消费即清空，避免重复发送。
+   */
+  const pendingAssistantPrompt = ref<{ text: string } | null>(null);
 
   /** 可选项目清单（骨架阶段由调用方注入，接真实数据源时替换） */
   const projects = ref<ProjectOption[]>([]);
@@ -123,6 +129,21 @@ export const useShellStore = defineStore("app-shell", () => {
     commandbarExpanded.value = expanded;
   }
 
+  /** 指令栏提交提问（空白忽略）；会话页经 takeAssistantPrompt 消费。
+   *  槽用新对象承载（而非裸字符串）：相同文案连续提交也能再次触发
+   *  会话页对 pendingAssistantPrompt 的 watch。 */
+  function queueAssistantPrompt(text: string) {
+    const value = text.trim();
+    if (value) pendingAssistantPrompt.value = { text: value };
+  }
+
+  /** 取出并清空待发提问（无则 null） */
+  function takeAssistantPrompt(): { text: string } | null {
+    const value = pendingAssistantPrompt.value;
+    pendingAssistantPrompt.value = null;
+    return value;
+  }
+
   /** 设置可选项目清单（骨架阶段由演示数据注入） */
   function setProjects(list: ProjectOption[]) {
     projects.value = list;
@@ -180,6 +201,7 @@ export const useShellStore = defineStore("app-shell", () => {
     sidebarCollapsed,
     contextOpen,
     commandbarExpanded,
+    pendingAssistantPrompt,
     projects,
     currentProjectId,
     switchingProjectId,
@@ -195,6 +217,8 @@ export const useShellStore = defineStore("app-shell", () => {
     setContextOpen,
     toggleCommandbar,
     setCommandbarExpanded,
+    queueAssistantPrompt,
+    takeAssistantPrompt,
     setProjects,
     setCurrentProject,
     loadRepositoryContext,

@@ -3,6 +3,8 @@ assistant:
   subtitle: 与 AI-PM 就当前项目展开会话；AI 回复由平台模型生成，通常需要数秒。
   switcherLabel: 会话
   switcherPlaceholder: 选择会话
+  newPlaceholder: 新建会话
+  newConversation: 新建会话
   untitled: 未命名会话
   messagesLoading: 消息加载中…
   emptyGuide: 还没有会话。在下方输入第一条消息，发送时将自动创建会话。
