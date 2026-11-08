@@ -6,8 +6,10 @@
 > D-DK-11（独立 purpose）+ **C7 双入口并发硬验收**（§13 附注）。
 >
 > 实施 commit（分支 `feat/dk0-dialog-orchestration-dkb`，基点 `72cb7d5`）：
-> `91024f1`（C7 锁修复）→ `2f2f44e`（服务层 + 编排器逻辑体）→
-> `3f286b1`（worker 第八循环）→ `6954b98`（测试面）→ 本记录。
+> 实施期五笔 = C7 锁修复 → 服务层 + 编排器逻辑体 → worker 第八循环 →
+> 测试面 → 门禁回归修复（原文哈希 `91024f1`/`2f2f44e`/`3f286b1`/`6954b98`/`0cbdffc`，
+> 已随分支清理不可达）；**durable 引用 = 合入提交**
+> `86b5f66`（merge(dk-b)，集成树）+ `f16c0c9`（接 DK-A 底座）+ `ba370d5`（本记录）。
 > **零迁移、零新表、MCP 四工具未动。**
 
 ## 一、最终形态
@@ -116,12 +118,13 @@ ORDER BY last.created_at ASC, last.id ASC LIMIT $1;
 | `cargo test -p pm-application --no-fail-fast`（全部集成二进制） | **0 failed** |
 | `cargo test -p pm-ai`（lib 78 + 三套件 9/6/6；含新增 20 例） | **99 passed / 0 failed / 1 ignored**（`real_deepseek_*` 由 `DEEPSEEK_API_KEY` 门控，属 DK-F） |
 | `cargo test -p ai-pm-worker`（`main_loop_switch`） | 4/4 ✓ |
-| `cargo test -p pm-api --no-fail-fast` | **0 failed** |
+| `cargo test -p pm-api`（REST 层，含 discovery 八端点回归） | 未单列：分 crate 单跑在本机多会话并发下会出**资源型 flake**（`routes` / `run_claim_lifecycle` 批量红、随后单跑 4/4 与 3/3 全绿）；以集成树全量 nextest 为准（见下行，pm-api 全部二进制含在内） |
 | discovery 既有套件（22 例，含新增 C7 例） | 22/22 ✓ |
 | `cargo clippy -p pm-application -p pm-ai -p ai-pm-worker --all-targets -- -D warnings` | 干净 |
 | 本批触及文件 `rustfmt --check` | 干净（另有 3 个**基线期既有**漂移文件未动：`analysis_model.rs` / `conversation_reply.rs` / `discovery/web.rs`） |
 | 迁移 | **零**（本批零新增；记录撰写时迁移上限 0062——此后 0063/0064/0065 被并行批取走、0066 被本系列预留后又逢 2026-11-09 迁移基线合并，现行链 = `0001_baseline.sql` + DK-A `0002`，台账 §〇·二） |
 | **集成树全量回归**（merge master 接 DK-A 底座后，2026-11-09，`bash scripts/cargo-test.sh`，专用库 16483） | **1251/1251 PASS**，4 skipped（= master 1226 + 本批 25；nextest 快档 114s）；`clippy.sh pm-application pm-ai pm-api ai-pm-worker` PASS |
+| **master 复验**（2026-11-09，master `1ea396c`，已含 DK-A/C/D；`bash scripts/cargo-test.sh`，共享库 16433，template1 重建 2 迁移 3.79s） | **1301/1301 passed，4 skipped**（nextest 122.9s + doctest）；`bash scripts/clippy.sh --all` **PASS**（0 warning） |
 
 ## 三、设计勘误与实施偏差（必须登记，否则后续批次会按设计原文误判）
 
@@ -167,9 +170,9 @@ ORDER BY last.created_at ASC, last.id ASC LIMIT $1;
 
 | # | 事项 | 归属 |
 |---|---|---|
-| 1 | S1~S5 六节投影 + 预算裁剪落库记账（D-B-4）+ D1~D4 | **DK-C**（接入点已留：`with_supplemental_sections` + `PromptSection`/`SectionId`） |
-| 2 | 需求草案落点 / 建议关联清单 / 任务分解 draft（B1~B5、E1~E5） | **DK-D**（本批到 `REVIEW_REQUIRED` 为止，编排器永不调 `COMPLETED`） |
-| 3 | UI → `append_message` 的入口接线（`landed` 语义、撤销升级） | **DK-A / DK-D** |
+| 1 | S1~S5 六节投影 + 预算裁剪落库记账（D-B-4）+ D1~D4 | ~~DK-C~~ **已闭合**（DK-C 经 `with_context_builder` 接入，见 §七 G-4；其 D1~D4 由 DK-C 验收记录承担；`sections_dropped` 落库仍挂 DK-C 裁决） |
+| 2 | 需求草案落点 / 建议关联清单 / 任务分解 draft（B1~B5、E1~E5） | ~~DK-D~~ **已闭合**（DK-D 经 `with_write_back` 接入，见 §七 G-4） |
+| 3 | UI → `append_message` 的入口接线（`landed` 语义、撤销升级） | **DK-A 已交付 REST 单入口 + `handoff/undo`**（G-1/G-3）；前端组件实现仍挂账 |
 | 4 | 真 provider 端到端（token 列、真实延迟、成本） | **DK-F** |
 | 5 | ~~设计稿勘误回填（D-B-1 §4.1 谓词 / D-B-2 F2 边 / D-B-4 metadata 列 / D-B-6 回答归属）~~ | **已闭合**（2026-11-09 DK-B 集成批：设计稿已随 DK-A 进 master、无抢文件冲突，四处勘误注记就地回填） |
 | 6 | `.10` / 本地栈开 `AI_PM_DISCOVERY_ORCHESTRATOR=on` 的部署冒烟 | DK-F 前置 |
@@ -185,3 +188,22 @@ ORDER BY last.created_at ASC, last.id ASC LIMIT $1;
 | V-6 单写入 | 编排器零直写；全部经 `pm-application` 单点服务（一次事务） |
 | 审计点 C174/C180 | 未新增生产审计 INSERT 点（复用既有服务路径） |
 | 不重开已裁项 | D-DK-1~11、13 ADR、Q-PC 系、ACP V1.3.1、U-1=C/U-2=A 未动 |
+
+## 七、集成差异登记（与 DK-A / DK-C / DK-D 的接缝）
+
+> DK-B 分支基点 `72cb7d5`（DK-0 设计）；实施期 master 先后接入 DK-A（`7df4460`）、
+> DK-C（`c951bf2`）、DK-D（`722ebd7`）。DK-B 先 `git merge master` 接 DK-A 底座
+> （`f16c0c9`），再 `--no-ff` 合入 master（`86b5f66`）。合并**无文本冲突需要人工
+> 裁决**，但四处语义接缝按「DK-A 是底座、编排器消费它」定案，逐条登记：
+
+| # | 接缝 | 其它批侧 | DK-B 侧 | 定案 |
+|---|---|---|---|---|
+| **G-1** | 访谈消息追加 | DK-A `conversation_router` 的升级交接要在**同事务**里写 SYSTEM 边界消息（自带 `lock_session_in` + 事务内追加） | DK-B 自带 `append_message_in_tx`（C7 会话行锁） | **去重合一**为一个 `pub(crate) append_message_in_tx`；三个入口共用同一把会话行锁 = DK-A 升级交接（持 `lock_session_in`）、池版 `append_message`（先加锁）、`apply_orchestrator_round`（一轮事务）。C7 覆盖面从「DK-B 两入口」扩大为「三入口」，属加强 |
+| **G-2** | 记账 purpose | DK-A `conversation_router`（意图分类调用） | DK-B `discovery_orchestration`（编排轮次） | **双常量并存**：`purpose` 是自由 TEXT（0041 无 CHECK），两类成本必须分开归因；零迁移 |
+| **G-3** | 会话状态与扫描集 | DK-A rule1「会话非 `COMPLETED`/`PAUSED` 才落 discovery」+ 撤销升级只置 `PAUSED`；A6=完成后同线程回落 chat | DK-B 扫描只认 `IN_PROGRESS`/`NEEDS_USER_INPUT`，`COMPLETED` 永不由编排器写 | **互补**：DK-A 保证不产生脏落点，DK-B 不抢已完结/暂停会话。A6 由 DK-A 验收（`apps/pm-api/tests/conversation_router.rs`），DK-B 不重复验收 |
+| **G-4** | 注入与写回扩展点 | DK-C `InterviewContextBuilder`（S1~S5 投影，fail-open）；DK-D `WriteBackHook`（`REVIEW_REQUIRED` 起草 + 每轮分解，fail-soft） | DK-B 预留 `with_supplemental_sections`，本批只到 `REVIEW_REQUIRED` | DK-C/D 经 `with_context_builder` / `with_write_back` 接入，**未改本批逻辑体与三条件判定**；`with_supplemental_sections` 保留为无 DB 测试注入点。D1~D4 / B1~B5 / E1~E5 由各自验收记录承担，本记录不重复验收 |
+
+**合并后仍然成立的硬约束**：`apply_orchestrator_round` 仍是编排器唯一写入口；
+`next_status` 白名单（`IN_PROGRESS`/`NEEDS_USER_INPUT`/`REVIEW_REQUIRED`）仍在
+服务层硬拒 `COMPLETED`/`PAUSED`；编排器仍不调 `confirm_revision` / `link_finding`
+/ `register_source_input`；C7 行锁仍是 `append_message` 的唯一追加路径。
