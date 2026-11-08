@@ -98,7 +98,7 @@ PRD 没有引用下列任何一项，但它们与 PRD 概念直接重叠：
 
 #### R-PC-01【阻断】与 S01-04 Project Cognition 的层级关系未定
 
-- **事实**：S01-04 V1.2 把 Product Cognition 定义为 Project Cognition 六域之一（`docs/ui/s01/s01-04-ai-pm-cognition-design-revision-v1-2.md:115`），其中 Business Domain 一域（`:111`）就含业务角色、业务对象、关键流程、业务规则。代码已落地 `ai.cognition_item` + `ai.project_knowledge`（0036），后者是确认后的正式认知。V0.5 范围基线把这一层级冲突登记为 V-05-7，状态仍是待裁（`ai-pm-v05-mvp-scope-baseline-v1.md:79,162`）。PRD 全文没有提到 S01-04。
+- **事实**：S01-04 V1.2 把 Product Cognition 定义为 Project Cognition 六域之一（`docs/s01-全局主菜单与信息架构设计基线/ui/s01-04-ai-pm-cognition-design-revision-v1-2.md:115`），其中 Business Domain 一域（`:111`）就含业务角色、业务对象、关键流程、业务规则。代码已落地 `ai.cognition_item` + `ai.project_knowledge`（0036），后者是确认后的正式认知。V0.5 范围基线把这一层级冲突登记为 V-05-7，状态仍是待裁（`ai-pm-v05-mvp-scope-baseline-v1.md:79,162`）。PRD 全文没有提到 S01-04。
 - **附带事实**：代码六域为 identity / repository / domain / architecture / convention / evolution，与 V1.2 文档六域（有 Product Cognition、无 Repository）也不一致。
 - **风险**：同一条「产品定位」或「业务规则」可能同时存在于 project_knowledge 和 PC 正式对象中，两边各自确认、各自版本。
 - **建议**：PRD §2.4 增加 S01-04 边界一行，并在两种方案中裁决：
@@ -342,6 +342,6 @@ P0 共 16 项 FR，覆盖模型、关系、来源、确认、提议、版本、�
 | 需求确认记录 | `migrations/0039_s02_requirement_core.sql` |
 | 显式审批人授权 | `migrations/0040_s02_i6a_approver_grant.sql` |
 | 原始来源输入 | `migrations/0044_s02_i3_source_traceability.sql` |
-| S01-04 六域定义 | `docs/ui/s01/s01-04-ai-pm-cognition-design-revision-v1-2.md:107-131` |
+| S01-04 六域定义 | `docs/s01-全局主菜单与信息架构设计基线/ui/s01-04-ai-pm-cognition-design-revision-v1-2.md:107-131` |
 | V-05-6 / V-05-7、零新机制、非目标、故事线 | `docs/project-ai-team-v2/ai-pm-v05-mvp-scope-baseline-v1.md:79,84,161-162,170,188` |
 | 四张审批实体、R6 边界、设计 / ADR 审批不存在 | `docs/s03/S03-00-permission-and-approval-inventory.md` §3 |
