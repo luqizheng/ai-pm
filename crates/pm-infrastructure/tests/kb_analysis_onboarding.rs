@@ -89,9 +89,7 @@ async fn onboarding_sessions(pool: &PgPool, project_id: Uuid) -> i64 {
 
 /// 开关 on：事件消费后自动开访谈；开关 off：同一事件零会话。
 #[sqlx::test(migrations = "../../migrations")]
-async fn the_analysis_completed_event_opens_the_interview_only_when_switched_on(
-    pool: PgPool,
-) {
+async fn the_analysis_completed_event_opens_the_interview_only_when_switched_on(pool: PgPool) {
     let (project_id, revision_id) = seed(&pool).await;
 
     let off = KbAnalysisCompletedHandler::with_auto_onboarding(pool.clone(), false);
@@ -111,5 +109,8 @@ async fn the_analysis_completed_event_opens_the_interview_only_when_switched_on(
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(questions, 1, "derived_fallback → one low-confidence question");
+    assert_eq!(
+        questions, 1,
+        "derived_fallback → one low-confidence question"
+    );
 }

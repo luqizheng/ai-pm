@@ -176,6 +176,18 @@ async fn correction_records_both_rows_and_keeps_kb_pc_untouched(pool: sqlx::PgPo
     .unwrap();
     assert_eq!(link, format!("contradicts:{old_id}"));
 
+    // 本轮回复原样落库（同轮回答已按用户原话更正；系统性「后续问答引用新事实」
+    // 由 follow_up_round_is_answered_from_the_corrected_facts 钉住）。
+    let ai_message: String = sqlx::query_scalar(
+        "SELECT content FROM discovery.discovery_message \
+         WHERE session_id = $1 AND speaker = 'ai' ORDER BY seq DESC LIMIT 1",
+    )
+    .bind(session_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(ai_message.contains("JWT"), "{ai_message}");
+
     // 结构化标记：deferred + 指向 contradicted 行 + 两侧挂账可见。
     let (marker, marker_status, marker_finding): (String, String, Option<Uuid>) = sqlx::query_as(
         "SELECT question, status, finding_id FROM discovery.discovery_question \
