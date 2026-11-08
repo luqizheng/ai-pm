@@ -117,7 +117,9 @@
 
 > **注记（2026-11-08）**：本表「调度入口」设计闭合的既定输入新增一条——派发器 ↔
 > Runner 竞争缓解裁决 D-2=c（Runner 心跳注册为派发可用性来源，可用性真源统一）。
-> 详见 `ai-pm-v05-dispatch-competition-adjudication-record-v1.md` §四。
+> 裁决见 `ai-pm-v05-dispatch-competition-adjudication-record-v1.md` §四；
+> 设计包（代码事实 + 缺口 + 方案 + 待裁 Q-D2C-1~6 + 实施切片）见
+> `ai-pm-v05-d2c-runner-availability-design-v1.md`。
 
 ## 10. ACP-04 / 05 联合设计检查单（WP-D 入题）
 
