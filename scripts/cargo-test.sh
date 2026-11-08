@@ -20,8 +20,9 @@
 #
 # 数据库：集成测试默认连本机开发库，可用 DATABASE_URL 覆盖。
 #
-# 模板库：`#[sqlx::test]` 每个用例都会从头跑 20 个迁移（约 1.9s/用例，全仓
-#   298 个 DB 用例）。因此跑测试前先把迁移预跑进 template1，每个用例的建库
+# 模板库：`#[sqlx::test]` 每个用例都会从头跑全部迁移（2026-11-09 基线合并后
+#   为单文件 0001_baseline.sql，整链约 3.6s；旧链 64 文件时代约 4.06s）。因此
+#   跑测试前先把迁移预跑进 template1，每个用例的建库
 #   就退化成文件拷贝（sqlx 建库是裸 `create database "<name>"`，默认模板即
 #   template1），迁移段被 sqlx 的 `_sqlx_migrations` 记账直接跳过。
 #   见 crates/pm-infrastructure/examples/seed_test_template.rs。
