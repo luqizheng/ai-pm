@@ -908,3 +908,120 @@ impl InterviewContextBuilder for PgInterviewContextBuilder {
     }
 }
 
+// ── 事实引用白名单（§5.5-2；D3 用；纯函数）────────────────────────────────
+
+/// 注入内容里**字面可引用**的值集合。
+///
+/// 索引来源：注入正文中的行内代码（`` `x` ``）——这是设计稿 §5.2「引用事实须标来源」
+/// 与 F21（`evidence_refs` 白名单）的共同约定；投影层负责把 object_key /
+/// requirement code / doc_key / commit sha 等标识写成行内代码。
+#[derive(Debug, Default, Clone)]
+pub struct FactIndex {
+    refs: std::collections::HashSet<String>,
+}
+
+impl FactIndex {
+    pub fn from_context(context: &InterviewContext) -> Self {
+        let mut index = Self::default();
+        for section in &context.sections {
+            for span in inline_code_spans(&section.body) {
+                index.refs.insert(span);
+            }
+        }
+        index
+    }
+
+    /// 显式登记（调用方另有权威 id 时使用）。
+    pub fn register(&mut self, value: impl Into<String>) {
+        let value = value.into();
+        if !value.is_empty() {
+            self.refs.insert(value);
+        }
+    }
+
+    pub fn contains(&self, candidate: &str) -> bool {
+        self.refs.contains(candidate.trim())
+    }
+
+    pub fn len(&self) -> usize {
+        self.refs.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.refs.is_empty()
+    }
+}
+
+/// LLM 引用过滤结果。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FilteredRefs {
+    pub accepted: Vec<String>,
+    /// 注入内容里找不到的引用（编造/幻觉），服务端丢弃。
+    pub rejected: Vec<String>,
+    /// 因超上限被丢弃的合规引用条数。
+    pub overflowed: usize,
+}
+
+/// 合规引用上限（与 F21 `evidence_refs` 同口径）。
+pub const MAX_EVIDENCE_REFS: usize = 8;
+
+/// 纯过滤：保序去重 + 白名单 + 上限。
+pub fn filter_evidence_refs(index: &FactIndex, refs: &[String]) -> FilteredRefs {
+    let mut outcome = FilteredRefs::default();
+    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    for raw in refs {
+        let candidate = raw.trim();
+        if candidate.is_empty() || !seen.insert(candidate) {
+            continue;
+        }
+        if !index.contains(candidate) {
+            outcome.rejected.push(candidate.to_string());
+            continue;
+        }
+        if outcome.accepted.len() >= MAX_EVIDENCE_REFS {
+            outcome.overflowed += 1;
+            continue;
+        }
+        outcome.accepted.push(candidate.to_string());
+    }
+    outcome
+}
+
+/// 过滤并记 WARN（编造条目必须可见，不能静默吞掉）。
+pub fn filter_evidence_refs_and_warn(index: &FactIndex, refs: &[String]) -> FilteredRefs {
+    let outcome = filter_evidence_refs(index, refs);
+    if !outcome.rejected.is_empty() {
+        tracing::warn!(
+            rejected_count = outcome.rejected.len(),
+            rejected = ?outcome.rejected,
+            accepted_count = outcome.accepted.len(),
+            "interview context: dropped fabricated evidence refs not present in injected facts"
+        );
+    }
+    if outcome.overflowed > 0 {
+        tracing::warn!(
+            overflowed = outcome.overflowed,
+            max = MAX_EVIDENCE_REFS,
+            "interview context: evidence refs beyond cap dropped"
+        );
+    }
+    outcome
+}
+
+fn inline_code_spans(text: &str) -> Vec<String> {
+    let mut spans = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find('`') {
+        let after = &rest[start + 1..];
+        let Some(end) = after.find('`') else {
+            break;
+        };
+        let span = after[..end].trim();
+        if !span.is_empty() && span.chars().count() <= 200 {
+            spans.push(span.to_string());
+        }
+        rest = &after[end + 1..];
+    }
+    spans
+}
+
