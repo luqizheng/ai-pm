@@ -28,7 +28,9 @@ import SettingsProjectRunnersView from "@/views/project/settings/SettingsProject
 import SettingsProjectRunnerDetailView from "@/views/project/settings/SettingsProjectRunnerDetailView.vue";
 import AiTeamComingSoonView from "@/views/project/settings/ai/AiTeamComingSoonView.vue";
 import SettingsProjectAiRolesView from "@/views/project/settings/ai/SettingsProjectAiRolesView.vue";
+import SettingsProjectAiOverviewView from "@/views/project/settings/ai/SettingsProjectAiOverviewView.vue";
 import SettingsProjectAiModelPoliciesView from "@/views/project/settings/ai/SettingsProjectAiModelPoliciesView.vue";
+import SettingsProjectAiMonitorView from "@/views/project/settings/ai/SettingsProjectAiMonitorView.vue";
 import RequirementDetailView from "@/views/project/requirement-detail/RequirementDetailView.vue";
 import RequirementHistoryView from "@/views/project/requirement-history/RequirementHistoryView.vue";
 import OnboardingWelcomeView from "@/views/onboarding/OnboardingWelcomeView.vue";
@@ -172,8 +174,9 @@ export function buildRoutes(): RouteRecordRaw[] {
     },
     // AI Team（UI-1，U-2=A 五子页落地序 Roles→Overview→ModelPolicies→Monitor→
     // ExecutionPolicies）：外层仍是侧栏单条「AI 配置」入口，五子页走子路由 +
-    // 页内页签条（AiTeamFrame）。本批落地 Roles 与 Model Policies 两个内容区；
-    // 其余三子页路由先行注册，内容区为「即将提供」空态（AiTeamComingSoonView）。
+    // 页内页签条（AiTeamFrame）。UI-1 落地 Roles 与 Model Policies；UI-2 落地
+    // Overview 与 Execution Monitor（U-1=C 聚合端点）；Execution Policies 仍为
+    // 「即将提供」空态（AiTeamComingSoonView）。
     // 各子页 meta.title 保持 settings.nav.projectAi（页头标题同源），
     // 未落地子页另挂 meta.aiDesc 供占位页取描述。
     {
@@ -188,8 +191,8 @@ export function buildRoutes(): RouteRecordRaw[] {
     },
     {
       path: "/project/settings/ai/overview",
-      component: AiTeamComingSoonView,
-      meta: { title: "settings.nav.projectAi", aiDesc: "aiTeam.tabs.overview" }
+      component: SettingsProjectAiOverviewView,
+      meta: { title: "settings.nav.projectAi" }
     },
     {
       path: "/project/settings/ai/model-policies",
@@ -198,8 +201,8 @@ export function buildRoutes(): RouteRecordRaw[] {
     },
     {
       path: "/project/settings/ai/monitor",
-      component: AiTeamComingSoonView,
-      meta: { title: "settings.nav.projectAi", aiDesc: "aiTeam.tabs.monitor" }
+      component: SettingsProjectAiMonitorView,
+      meta: { title: "settings.nav.projectAi" }
     },
     {
       path: "/project/settings/ai/execution-policies",

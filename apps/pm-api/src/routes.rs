@@ -225,6 +225,8 @@ fn build_router(
         .merge(crate::task_repositories::router())
         // 项目 AI Role 目录与启停（V2 D-1=A）：模板合并视图 / 启停 / 版本历史。
         .merge(crate::ai_roles::router())
+        // AI Team 总览与执行监控（UI-2，U-1=C）：现有表只读聚合（零迁移）。
+        .merge(crate::ai_team_monitor::router())
         // 最小对话存储（V2 D-4=A）：AI PM 对话记忆（会话 + 消息，属主隔离；
         // REST 恒 role=user，assistant 生产者是后续 AI 链批次）。
         .merge(crate::ai_conversations::router())

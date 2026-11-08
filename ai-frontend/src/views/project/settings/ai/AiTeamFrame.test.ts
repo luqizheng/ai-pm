@@ -79,14 +79,15 @@ describe("Project Setting · AI Team 骨架", () => {
   });
 
   it("未落地子页渲染「即将提供」空态（无假数据），并保留页签条", async () => {
+    // UI-2 后 Overview / Monitor 已落地；占位页只剩 Execution Policies
     const { wrapper } = await navigate(
-      "/project/settings/ai/overview?project_id=prj-1"
+      "/project/settings/ai/execution-policies?project_id=prj-1"
     );
     const coming = wrapper.find('[data-testid="ai-coming-soon"]');
     expect(coming.exists()).toBe(true);
     expect(coming.text()).toContain("即将提供");
     // 页头描述 = 子页名 + 规划中徽标词
-    expect(wrapper.text()).toContain("总览 · 规划中");
+    expect(wrapper.text()).toContain("执行策略 · 规划中");
     expect(wrapper.find('[data-testid="ai-tabs"]').exists()).toBe(true);
   });
 

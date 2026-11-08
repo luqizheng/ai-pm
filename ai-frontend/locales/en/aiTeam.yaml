@@ -70,3 +70,52 @@ aiTeam:
     saveFailed: Failed to save
     conflict: The policy was updated by someone else (revision conflict). The latest policy has been reloaded; review it and save again.
     emptyPolicyLoaded: Policy loaded
+
+  overview:
+    title: AI Team Overview
+    description: "Aggregate view of the project AI team: enabled roles, active runs, waiting or blocked tasks, and the bound model provider."
+    loadFailed: Failed to load the overview
+    refresh: Refresh
+    stat:
+      rolesEnabled: Enabled Roles
+      rolesDetail: "{enabled} of {templates} role templates"
+      activeRuns: Active Runs
+      activeRunsDetail: "queued / claimed / running"
+      succeededDetail: "24h succeeded {succeeded} / failed {failed}"
+      pendingTasks: Waiting or Blocked
+      pendingTasksDetail: "awaiting decision {awaiting} / blocked {blocked}"
+      provider: Model Provider
+      providerBound: Bound
+      providerBoundDetail: "Bound: {name}"
+      providerUnbound: Unbound
+      providerUnboundDetail: Inheriting the team default or unset
+    recentRuns: Recent runs
+    recentRunsDetail: Latest {count} run records
+    viewMonitor: View execution monitor
+    runsEmpty: No runs yet
+  monitor:
+    title: Execution Monitor
+    description: Recent task runs and dispatch events, aggregated read-only from existing run records and the dispatch audit trail.
+    loadFailed: Failed to load execution monitor
+    refresh: Refresh
+    runsHeading: Runs
+    runsDetail: Latest {count} run records
+    eventsHeading: Dispatch events
+    eventsDetail: Latest {count} audit events
+    runsEmpty: No runs yet
+    eventsEmpty: No dispatch events yet
+    column:
+      task: Task
+      status: Status
+      stage: Stage
+      attempt: Attempt
+      executor: Executor
+      releaseReason: Release reason
+      shield: Scheduling shield
+      time: Time
+    eventColumn:
+      action: Action
+      actor: Actor
+      reason: Reason
+      time: Time
+    systemActor: system
