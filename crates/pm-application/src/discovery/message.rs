@@ -64,9 +64,14 @@ pub async fn append_message(
     Ok(message)
 }
 
-/// 事务内追加（调用方**必须**已持有该 session 的行锁——见 [`append_message`]
-/// 与 `apply_orchestrator_round`：后者在一次事务里同时写 finding/question/
-/// 状态/消息，行锁即该轮的会话互斥点）。
+/// 事务内追加（DK-A 与 DK-B 合并后同一把锁的唯一写点）。
+///
+/// 调用方**必须**已在同事务内持有该 session 的行锁——[`lock_session_in`]
+/// （DK-A：升级交接摘要与 interview 落点用户消息同线程链接同事务）、
+/// [`append_message`] 池版（先加锁后调本函数）、`apply_orchestrator_round`
+/// （DK-B：一轮事务里同时写 finding/question/状态/消息）三个入口共用，
+/// 行锁即跨进程的会话级追加互斥点（C7）；`seq` 由 `MAX(seq)+1` 生成，
+/// `UNIQUE(tenant_id, session_id, seq)` 不可能被撞。
 pub(crate) async fn append_message_in_tx(
     tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
     tenant_id: Uuid,

@@ -687,6 +687,7 @@ sequenceDiagram
 - 当前上限 0062（F26）；下个空号 **0063**。
 - 若并行批次先取走 0063，按 `max+1` 顺移并在台账回填，**不得复用/重解释既有号**。
 - 本稿**不创建任何迁移文件**（裁决前不进代码）。
+- **实施回填（DK-A，2026-11-09）**：0063 已被并行批取走（`0063_runner_availability`）、0064 被 `0064_pc_formal_model` 取走、0065 被 `0065_kb_three_layer_minimal` 取走（三者均已进 master）→ 顺移 0066；**同日迁移基线合并（0001~0065 squash 为 `0001_baseline.sql`，新链自 0002 起）后终取 `0002_conversation_discovery_link.sql`**；外键收紧为三元组 `(tenant_id, project_id, discovery_session_id)`（钉同项目）。台账已回填，验收见 `ai-pm-dk-a-acceptance-record-v1.md`。
 
 ---
 
