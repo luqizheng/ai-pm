@@ -6,13 +6,13 @@
 //! 成功≠自动启用、archive 终态）、凭证替换轮换（hint 脱敏、无明文回显）、CAS
 //! 乐观锁 409、删除保护（未归档 409 / 有调用记录 409）、审计四列落地。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
-use digua_common_jwt::{JWKSCache, sign_token};
+use digua_common_jwt::{sign_token, JWKSCache};
 use pm_api::auth::AuthConfig;
 use pm_api::routes::router_with_auth_config;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -96,7 +96,12 @@ async fn world(pool: PgPool) -> World {
     let app = router_with_auth_config(pool.clone(), test_jwks(), first_admin("usr-owner"));
     let owner = json_of(
         app.clone()
-            .oneshot(request("GET", "/v1/pm/me", &token("usr-owner", json!([])), None))
+            .oneshot(request(
+                "GET",
+                "/v1/pm/me",
+                &token("usr-owner", json!([])),
+                None,
+            ))
             .await
             .unwrap(),
     )
@@ -105,7 +110,12 @@ async fn world(pool: PgPool) -> World {
 
     let admin = json_of(
         app.clone()
-            .oneshot(request("GET", "/v1/pm/me", &token("usr-admin", json!([])), None))
+            .oneshot(request(
+                "GET",
+                "/v1/pm/me",
+                &token("usr-admin", json!([])),
+                None,
+            ))
             .await
             .unwrap(),
     )
@@ -113,7 +123,12 @@ async fn world(pool: PgPool) -> World {
     let admin_id = Uuid::parse_str(admin["principal_id"].as_str().unwrap()).unwrap();
     let member = json_of(
         app.clone()
-            .oneshot(request("GET", "/v1/pm/me", &token("usr-member", json!([])), None))
+            .oneshot(request(
+                "GET",
+                "/v1/pm/me",
+                &token("usr-member", json!([])),
+                None,
+            ))
             .await
             .unwrap(),
     )
@@ -193,14 +208,7 @@ async fn member_is_forbidden_on_list_and_write(pool: PgPool) {
 async fn cross_tenant_is_not_found(pool: PgPool) {
     let w = world(pool).await;
     let other = Uuid::new_v4();
-    let (status, _) = call(
-        &w.app,
-        "GET",
-        &base_uri(other),
-        &w.admin_token,
-        None,
-    )
-    .await;
+    let (status, _) = call(&w.app, "GET", &base_uri(other), &w.admin_token, None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
@@ -335,7 +343,11 @@ async fn create_rejects_duplicate_name_and_unknown_type(pool: PgPool) {
     assert_eq!(status, StatusCode::CREATED);
 
     let (status, err) = create_provider(&w, body).await;
-    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "unique violation -> 500 {err}");
+    assert_eq!(
+        status,
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "unique violation -> 500 {err}"
+    );
 
     let (status, err) = create_provider(
         &w,
@@ -477,25 +489,38 @@ async fn configuration_changes_are_audited(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::OK);
 
-    let lines: Vec<(String, Option<Uuid>, Option<String>, Option<String>, Option<Uuid>)> =
-        sqlx::query_as(
-            "SELECT action, actor_identity_id, actor_client, actor_auth_mode, target_id \
+    let lines: Vec<(
+        String,
+        Option<Uuid>,
+        Option<String>,
+        Option<String>,
+        Option<Uuid>,
+    )> = sqlx::query_as(
+        "SELECT action, actor_identity_id, actor_client, actor_auth_mode, target_id \
              FROM governance.tenant_audit_log \
              WHERE tenant_id = $1 AND target_type = 'llm_provider' ORDER BY created_at",
-        )
-        .bind(w.tenant_id)
-        .fetch_all(&w.pool)
-        .await
-        .unwrap();
+    )
+    .bind(w.tenant_id)
+    .fetch_all(&w.pool)
+    .await
+    .unwrap();
     let actions: Vec<&str> = lines.iter().map(|(a, ..)| a.as_str()).collect();
     assert!(
-        actions.contains(&"llm_provider.created") && actions.contains(&"llm_provider.credential_rotated"),
+        actions.contains(&"llm_provider.created")
+            && actions.contains(&"llm_provider.credential_rotated"),
         "audit actions: {actions:?}"
     );
     for (action, identity, _client, auth_mode, target) in &lines {
-        assert!(identity.is_some(), "{action}: actor_identity_id must be set");
+        assert!(
+            identity.is_some(),
+            "{action}: actor_identity_id must be set"
+        );
         assert_eq!(auth_mode.as_deref(), Some("interactive"), "{action}");
-        assert_eq!(*target, Some(id), "{action}: target_id must be the provider");
+        assert_eq!(
+            *target,
+            Some(id),
+            "{action}: target_id must be the provider"
+        );
     }
 }
 
@@ -717,7 +742,10 @@ async fn resolution_prefers_project_policy_and_does_not_fall_back(pool: PgPool) 
     let rev2 = e2["revision"].as_i64().unwrap();
 
     // ② 未指定 → Team 默认 = ds-1（创建序第一）
-    let cfg = resolve_repo_call_config(&w.pool, project_id).await.unwrap().unwrap();
+    let cfg = resolve_repo_call_config(&w.pool, project_id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(cfg.provider_id, id1);
 
     // ① 项目指定 ds-2 → 覆盖 Team 默认
@@ -729,7 +757,10 @@ async fn resolution_prefers_project_policy_and_does_not_fall_back(pool: PgPool) 
         Some(json!({ "provider_id": id2, "expected_revision": 1 })),
     )
     .await;
-    let cfg = resolve_repo_call_config(&w.pool, project_id).await.unwrap().unwrap();
+    let cfg = resolve_repo_call_config(&w.pool, project_id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(cfg.provider_id, id2);
     assert_eq!(cfg.model, "m2");
 
@@ -745,7 +776,10 @@ async fn resolution_prefers_project_policy_and_does_not_fall_back(pool: PgPool) 
     .await;
     assert_eq!(d2["status"], "disabled", "{d2}");
     let cfg = resolve_repo_call_config(&w.pool, project_id).await.unwrap();
-    assert!(cfg.is_none(), "designated disabled must NOT fall back to ds-1");
+    assert!(
+        cfg.is_none(),
+        "designated disabled must NOT fall back to ds-1"
+    );
 
     // 清掉指定 → 回到 Team 默认 ds-1
     sqlx::query("DELETE FROM ai.project_ai_model_policy WHERE project_id = $1")
@@ -753,7 +787,79 @@ async fn resolution_prefers_project_policy_and_does_not_fall_back(pool: PgPool) 
         .execute(&w.pool)
         .await
         .unwrap();
-    let cfg = resolve_repo_call_config(&w.pool, project_id).await.unwrap().unwrap();
+    let cfg = resolve_repo_call_config(&w.pool, project_id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(cfg.provider_id, id1);
     let _ = rev1;
+}
+
+/// D-3=A（adjudication pack §〇/§四）：同一 Provider 可被多个项目各自指定
+/// （0057 放开 UNIQUE(tenant_id, provider_id)；此前第二个项目 PUT 命中 23505）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn two_projects_may_share_one_provider(pool: PgPool) {
+    let w = world(pool).await;
+
+    let mut project_ids = Vec::new();
+    for code in ["P-A", "P-B"] {
+        let customer_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO core.customer (tenant_id, name) VALUES ($1, 'c') RETURNING id",
+        )
+        .bind(w.tenant_id)
+        .fetch_one(&w.pool)
+        .await
+        .unwrap();
+        let project_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO core.project (tenant_id, customer_id, code, name, status) \
+             VALUES ($1, $2, $3, $3, 'planning') RETURNING id",
+        )
+        .bind(w.tenant_id)
+        .bind(customer_id)
+        .bind(code)
+        .fetch_one(&w.pool)
+        .await
+        .unwrap();
+        project_ids.push(project_id);
+    }
+
+    let (_, p) = create_provider(
+        &w,
+        json!({
+            "name": "ds-shared", "provider_type": "deepseek",
+            "endpoint": "https://api.deepseek.com/v1",
+            "configuration": { "model": "deepseek-chat" }, "api_key": "sk-shared"
+        }),
+    )
+    .await;
+    let provider_id = Uuid::parse_str(p["id"].as_str().unwrap()).unwrap();
+
+    // 两个项目先后指定同一 Provider，均 200（共享语义回归）。
+    for project_id in &project_ids {
+        let (status, body) = call(
+            &w.app,
+            "PUT",
+            &format!("/v1/pm/projects/{project_id}/ai-model-policies"),
+            &w.admin_token,
+            Some(json!({ "provider_id": provider_id, "expected_revision": 1 })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["provider_id"], json!(provider_id));
+    }
+
+    // 两个项目 GET 均回读同一 Provider。
+    for project_id in &project_ids {
+        let (status, body) = call(
+            &w.app,
+            "GET",
+            &format!("/v1/pm/projects/{project_id}/ai-model-policies"),
+            &w.admin_token,
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["provider_id"], json!(provider_id));
+        assert_eq!(body["provider_name"], "ds-shared");
+    }
 }

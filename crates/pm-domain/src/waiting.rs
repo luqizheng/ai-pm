@@ -10,6 +10,12 @@ use crate::task_transition::TransitionError;
 /// Four reasons share one task state (§12.2 底注：「同一任务状态下的等待原因示例，
 /// 不是四个新的任务状态」). `needs_info` was retired as a task status and lives on
 /// only as [`WaitingReason::NeedsInfo`] (§12.1 最终结论).
+///
+/// 第五值 `NoExecutorAvailable` 来自 V2 D-2=A 裁决（§三，迁移 0059）：调度自动
+/// 解析 Role 承接人失败（role 未启用 / 项目无合格 dev_agent 成员）时落等待——
+/// 「无合格执行者」≠ 失败，是可恢复的等待（恢复 = enable 角色 / 新增成员后重新
+/// 触发 TaskReady，或人工介入；V1 无自动重试器）。仍然只是一个等待原因，不是
+/// 新的任务状态。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum WaitingReason {
@@ -21,6 +27,8 @@ pub enum WaitingReason {
     NeedsApproval,
     /// 等待外部系统、团队或资源（external_dependency）。
     ExternalDependency,
+    /// 项目内当前没有合格的执行者（no_executor_available，V2 D-2=A）。
+    NoExecutorAvailable,
 }
 
 impl WaitingReason {
@@ -30,6 +38,7 @@ impl WaitingReason {
             WaitingReason::NeedsDecision => "needs_decision",
             WaitingReason::NeedsApproval => "needs_approval",
             WaitingReason::ExternalDependency => "external_dependency",
+            WaitingReason::NoExecutorAvailable => "no_executor_available",
         }
     }
 
@@ -40,6 +49,7 @@ impl WaitingReason {
             "needs_decision" => Some(WaitingReason::NeedsDecision),
             "needs_approval" => Some(WaitingReason::NeedsApproval),
             "external_dependency" => Some(WaitingReason::ExternalDependency),
+            "no_executor_available" => Some(WaitingReason::NoExecutorAvailable),
             _ => None,
         }
     }
@@ -65,10 +75,7 @@ pub struct WaitingContext {
 
 impl WaitingContext {
     /// §12.3: 进入等待必须列出具体问题；空问题集的等待不是等待。
-    pub fn new(
-        reason: WaitingReason,
-        questions: Vec<String>,
-    ) -> Result<Self, TransitionError> {
+    pub fn new(reason: WaitingReason, questions: Vec<String>) -> Result<Self, TransitionError> {
         if questions.is_empty() {
             return Err(TransitionError::EmptyQuestions);
         }
@@ -95,12 +102,22 @@ mod tests {
             (WaitingReason::NeedsDecision, "needs_decision"),
             (WaitingReason::NeedsApproval, "needs_approval"),
             (WaitingReason::ExternalDependency, "external_dependency"),
+            (WaitingReason::NoExecutorAvailable, "no_executor_available"),
         ];
         for (reason, text) in all {
             assert_eq!(reason.as_str(), text);
             assert_eq!(WaitingReason::from_str(text), Some(reason));
         }
         assert_eq!(WaitingReason::from_str("waiting"), None);
+    }
+
+    #[test]
+    fn no_executor_available_serializes_snake_case() {
+        // serde 契约与迁移 0059 的 DB 字面量一致（snake_case rename_all）。
+        let json = serde_json::to_value(WaitingReason::NoExecutorAvailable).unwrap();
+        assert_eq!(json, serde_json::json!("no_executor_available"));
+        let back: WaitingReason = serde_json::from_value(json).unwrap();
+        assert_eq!(back, WaitingReason::NoExecutorAvailable);
     }
 
     #[test]

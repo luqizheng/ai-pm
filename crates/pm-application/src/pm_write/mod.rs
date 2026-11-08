@@ -116,6 +116,11 @@ pub struct CreateTaskRequest {
     pub priority: Option<String>,
     #[serde(default)]
     pub assignee_id: Option<Uuid>,
+    /// D-1 遗留①（V2 D-2=A 前置）：Task 创建时的 AI Role 版本锚（稿 §17.2
+    /// 「Task 保留创建时版本引用」）。可空 = 历史 Task 允许无 Role 锚；非空时
+    /// 校验该版本所属项目行必须指向本任务的目标 project（跨项目 → Validation）。
+    #[serde(default)]
+    pub ai_role_version_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]

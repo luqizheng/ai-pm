@@ -33,15 +33,15 @@
 use std::sync::Arc;
 
 use axum::{
-    Json, Router,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
+    Json, Router,
 };
 use pm_application::supervision::{
-    DecideRequest, DecisionOutcome, SupervisionError, VetoOutcome, VetoRequest, decide_approval,
-    freeze, notifications_feed, unfreeze, veto,
+    decide_approval, freeze, notifications_feed, unfreeze, veto, DecideRequest, DecisionOutcome,
+    SupervisionError, VetoOutcome, VetoRequest,
 };
 use pm_application::{CommandError, PgCommandExecutor, PolicyEngine};
 use serde::Deserialize;
@@ -165,7 +165,9 @@ fn build_router(
                 crate::auth::require_mcp_permission,
             ))
     } else {
-        Router::new().fallback_service(mcp_service).layer(device_layer)
+        Router::new()
+            .fallback_service(mcp_service)
+            .layer(device_layer)
     };
     Router::new()
         .route("/health", get(health_handler))
@@ -221,6 +223,11 @@ fn build_router(
         // Task 前置依赖（T-024）：建边 / 删边 / 上下游查询。
         .merge(crate::task_dependencies::router())
         .merge(crate::task_repositories::router())
+        // 项目 AI Role 目录与启停（V2 D-1=A）：模板合并视图 / 启停 / 版本历史。
+        .merge(crate::ai_roles::router())
+        // 最小对话存储（V2 D-4=A）：AI PM 对话记忆（会话 + 消息，属主隔离；
+        // REST 恒 role=user，assistant 生产者是后续 AI 链批次）。
+        .merge(crate::ai_conversations::router())
         // Outbox 运维（T-061）：死信列表 / 死信重放 / 事件状态监控。
         .merge(crate::outbox_ops::router())
         .merge(crate::intakes::router())
@@ -387,23 +394,23 @@ pub fn router_with_auth_config_and_feed_and_hosts(
         mcp_hosts,
         pm_application::knowledge::KnowledgeRoot::from_env(),
     )
-        .layer(axum::middleware::from_fn_with_state(
-            auth.clone(),
-            crate::auth::require_active,
-        ))
-        .layer(axum::middleware::from_fn_with_state(
-            auth.clone(),
-            crate::auth::resolve_principal,
-        ))
-        .layer(axum::middleware::from_fn_with_state(
-            auth,
-            crate::auth::require_bearer,
-        ))
+    .layer(axum::middleware::from_fn_with_state(
+        auth.clone(),
+        crate::auth::require_active,
+    ))
+    .layer(axum::middleware::from_fn_with_state(
+        auth.clone(),
+        crate::auth::resolve_principal,
+    ))
+    .layer(axum::middleware::from_fn_with_state(
+        auth,
+        crate::auth::require_bearer,
+    ))
 }
 
 // ---------------------------------------------------------------- ingestion
 
-use pm_application::ingestion::{IngestionError, SubmitEventRequest, SubmitOutcome, submit_event};
+use pm_application::ingestion::{submit_event, IngestionError, SubmitEventRequest, SubmitOutcome};
 
 /// `GET /health`：就绪探针（公开路径，见 `auth::is_public_path`）。
 ///

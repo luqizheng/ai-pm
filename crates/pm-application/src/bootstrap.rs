@@ -308,6 +308,12 @@ async fn bootstrap_inner(
         .map_err(BootstrapError::Db)?;
     }
 
+    // AI Role 目录首批 5 角色（V2 D-1=A，0058）：缺哪行补哪行，版本 1.0 从
+    // 模板 default_definition 派生；幂等，与既有 ai.project_ai_role 行共存。
+    crate::ai_roles::ensure_project_ai_roles(&mut tx, tenant_id, project_id)
+        .await
+        .map_err(BootstrapError::Db)?;
+
     tx.commit().await.map_err(BootstrapError::Db)?;
 
     Ok(BootstrapOutcome {

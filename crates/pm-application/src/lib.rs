@@ -3,6 +3,8 @@
 pub mod acceptance_overview;
 pub mod acp06_07;
 pub mod actor;
+pub mod ai_conversations;
+pub mod ai_roles;
 pub mod approver;
 pub mod archive;
 pub mod authz;
@@ -68,6 +70,17 @@ pub use acceptance_overview::{
     ReviewStatus,
 };
 pub use actor::AuditActor;
+// 注意：append_message / list_messages 已被 discovery 占用（lib 级非限定名），
+// 对话域的同名函数走 `ai_conversations::` 限定路径（REST 侧即如此引用）。
+pub use ai_conversations::{
+    create_conversation, list_conversations, ConversationError, ConversationView, MessageView,
+    CONVERSATION_LIST_LIMIT, DEFAULT_MESSAGE_LIMIT, MAX_CONTENT_CHARS, MAX_MESSAGE_LIMIT,
+    MAX_TITLE_CHARS, MESSAGE_ROLES,
+};
+pub use ai_roles::{
+    list_project_roles, list_role_versions, set_project_role_enabled, AiRoleError,
+    AiRoleVersionSummary, AiRoleVersionView, ProjectAiRoleView,
+};
 pub use archive::{archive_project, ArchiveError, ArchiveOutcome};
 pub use authz::{require_project_member, resolve_project_executor, AuthzError, ExecutorKind};
 pub use bootstrap::{

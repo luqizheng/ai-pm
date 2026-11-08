@@ -35,7 +35,7 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     ("crates/pm-application/src/project_import/advance.rs", 1), // A8
     ("crates/pm-application/src/review/queue.rs", 1),   // A9
     ("crates/pm-application/src/run_dispatch/lease.rs", 1), // A10
-    ("crates/pm-infrastructure/src/outbox_handlers.rs", 1), // A11
+    ("crates/pm-infrastructure/src/outbox_handlers.rs", 3), // A11 + D-2=A：TaskReady 自动写 assignee / no_executor_available skip（系统面 dispatch principal，四列显式 NULL）
     ("apps/pm-api/src/outbox_ops.rs", 1),               // A12
     ("apps/pm-api/src/device_claim.rs", 1),             // T-088：设备声明被忽略（tenant_audit_log）
     // T-088 新增：设备绑定审计（devenv 域）

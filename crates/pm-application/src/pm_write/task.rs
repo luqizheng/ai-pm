@@ -25,14 +25,32 @@ pub async fn create_task(
     if !TASK_PRIORITIES.contains(&priority) {
         return Err(PmWriteError::Validation("invalid priority"));
     }
+    // D-1 遗留①（V2 D-2=A）：Role 版本锚必须指向本任务的目标 project
+    // （版本不存在或挂在别的项目 → Validation，不泄露跨项目存在性）。
+    if let Some(version_id) = req.ai_role_version_id {
+        let owner_project: Option<Uuid> = sqlx::query_scalar(
+            "SELECT pr.project_id \
+               FROM ai.ai_role_version v \
+               JOIN ai.project_ai_role pr ON pr.id = v.project_role_id \
+              WHERE v.id = $1",
+        )
+        .bind(version_id)
+        .fetch_optional(pool)
+        .await?;
+        if owner_project != Some(project_id) {
+            return Err(PmWriteError::Validation(
+                "ai_role_version_id does not belong to this project",
+            ));
+        }
+    }
 
     let mut tx = pool.begin().await?;
     let task_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO delivery.task \
-         (id, project_id, milestone_id, title, description, status, priority, assignee_id, revision, tenant_id) \
+         (id, project_id, milestone_id, title, description, status, priority, assignee_id, revision, tenant_id, ai_role_version_id) \
          VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, 1, \
-                 (SELECT tenant_id FROM core.project WHERE id = $2))",
+                 (SELECT tenant_id FROM core.project WHERE id = $2), $8)",
     )
     .bind(task_id)
     .bind(project_id)
@@ -41,6 +59,7 @@ pub async fn create_task(
     .bind(req.description)
     .bind(priority)
     .bind(req.assignee_id)
+    .bind(req.ai_role_version_id)
     .execute(&mut *tx)
     .await?;
     append_audit(

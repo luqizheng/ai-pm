@@ -1,18 +1,18 @@
-﻿//! `/v1/pm/*` 写端点契约测试（Slice A）：decide / tasks create+update。
+//! `/v1/pm/*` 写端点契约测试（Slice A）：decide / tasks create+update。
 //! 契约源：`frontend/src/api/pm.ts` 注释与 `frontend/src/api/mock/fixtures.ts`
 //! （校验顺序 404 → 409 → 400 decision → 400 reason；错误体 `{message}`）。
 //! 需求修订起草/定稿的契约测试已随旧 approve 直跳面退役（S02D-04，0039 批），
 //! 新协议（submit/confirm/reject + CAS + 六要素）由 `pm_requirement.rs` 全量覆盖。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use serde_json::{Value, json};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_domain::SYSTEM_TENANT;
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 fn request(method: &str, uri: String, body: Option<Value>) -> Request<Body> {
     let mut builder = Request::builder().method(method).uri(uri);
@@ -146,7 +146,16 @@ async fn decide_unknown_approval_is_404_even_with_invalid_body(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn decide_rejects_invalid_decision_and_empty_reason_with_400(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-1".into(), project_name: "d".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "DEC-1".into(),
+            project_name: "d".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
     let approval_id = seed_pending_approval(&pool, boot.project_id, boot.human_id).await;
     let app = router(pool.clone());
 
@@ -178,7 +187,16 @@ async fn decide_rejects_invalid_decision_and_empty_reason_with_400(pool: PgPool)
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn decide_approve_executes_proposal_and_answers_contract_body(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-2".into(), project_name: "d".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "DEC-2".into(),
+            project_name: "d".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
     let approval_id = seed_pending_approval(&pool, boot.project_id, boot.human_id).await;
     let app = router(pool.clone());
 
@@ -194,7 +212,10 @@ async fn decide_approve_executes_proposal_and_answers_contract_body(pool: PgPool
     let body = body_json(response).await;
     assert_eq!(body["id"], json!(approval_id.to_string()));
     assert_eq!(body["status"], json!("approved"));
-    assert!(body["decided_at"].is_string(), "decided_at must be an ISO timestamp");
+    assert!(
+        body["decided_at"].is_string(),
+        "decided_at must be an ISO timestamp"
+    );
 
     let proposal_id = approval_proposal_id(&pool, approval_id).await;
     assert_eq!(proposal_status(&pool, proposal_id).await, "executed");
@@ -213,7 +234,16 @@ async fn decide_approve_executes_proposal_and_answers_contract_body(pool: PgPool
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn decide_reject_vetoes_proposal_and_answers_contract_body(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-3".into(), project_name: "d".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "DEC-3".into(),
+            project_name: "d".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
     let approval_id = seed_pending_approval(&pool, boot.project_id, boot.human_id).await;
     let app = router(pool.clone());
 
@@ -236,20 +266,37 @@ async fn decide_reject_vetoes_proposal_and_answers_contract_body(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn decide_twice_conflicts_with_409(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "DEC-4".into(), project_name: "d".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "DEC-4".into(),
+            project_name: "d".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
     let approval_id = seed_pending_approval(&pool, boot.project_id, boot.human_id).await;
     let app = router(pool.clone());
     let body = json!({ "decision": "rejected", "reason": "first" });
 
     let first = app
         .clone()
-        .oneshot(request("POST", format!("/v1/pm/approvals/{approval_id}/decide"), Some(body.clone())))
+        .oneshot(request(
+            "POST",
+            format!("/v1/pm/approvals/{approval_id}/decide"),
+            Some(body.clone()),
+        ))
         .await
         .unwrap();
     assert_eq!(first.status(), StatusCode::OK);
 
     let second = app
-        .oneshot(request("POST", format!("/v1/pm/approvals/{approval_id}/decide"), Some(body)))
+        .oneshot(request(
+            "POST",
+            format!("/v1/pm/approvals/{approval_id}/decide"),
+            Some(body),
+        ))
         .await
         .unwrap();
     assert_eq!(second.status(), StatusCode::CONFLICT);
@@ -261,7 +308,16 @@ async fn decide_twice_conflicts_with_409(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn create_task_defaults_and_contract_shape(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "TSK-1".into(), project_name: "t".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "TSK-1".into(),
+            project_name: "t".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
     let app = router(pool.clone());
 
     let response = app
@@ -295,7 +351,16 @@ async fn create_task_defaults_and_contract_shape(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn create_task_falls_back_to_global_human_when_project_has_no_members(pool: PgPool) {
     // 兼容无 project_member 行的种子/导入数据：actor 回退到全局第一个 human。
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "TSK-0".into(), project_name: "t".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "TSK-0".into(),
+            project_name: "t".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
     let bare_project = uuid::Uuid::new_v4();
     sqlx::query(
         "INSERT INTO core.project (id, customer_id, code, name, tenant_id) \
@@ -317,14 +382,27 @@ async fn create_task_falls_back_to_global_human_when_project_has_no_members(pool
         ))
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::CREATED, "memberless project must still accept creates");
+    assert_eq!(
+        response.status(),
+        StatusCode::CREATED,
+        "memberless project must still accept creates"
+    );
     let task = body_json(response).await;
     assert_eq!(task["status"], json!("draft"));
 }
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn create_task_validation_errors(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "TSK-2".into(), project_name: "t".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "TSK-2".into(),
+            project_name: "t".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
     let app = router(pool.clone());
 
     let response = app
@@ -355,7 +433,16 @@ async fn create_task_validation_errors(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn update_task_full_fields_with_optimistic_lock(pool: PgPool) {
-    let boot = bootstrap_project(&pool, BootstrapRequest { project_code: "TSK-3".into(), project_name: "t".into(), tenant_id: SYSTEM_TENANT }).await.unwrap();
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "TSK-3".into(),
+            project_name: "t".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
     let app = router(pool.clone());
 
     let created = app
@@ -393,7 +480,10 @@ async fn update_task_full_fields_with_optimistic_lock(pool: PgPool) {
     assert_eq!(updated["priority"], json!("high"));
     assert_eq!(updated["assignee_id"], json!(boot.dev_agent_id.to_string()));
     assert_eq!(updated["revision"], json!(2), "revision must bump");
-    assert_ne!(updated["updated_at"], task["updated_at"], "updated_at must move");
+    assert_ne!(
+        updated["updated_at"], task["updated_at"],
+        "updated_at must move"
+    );
 
     // 错 revision → 409。
     let response = app
@@ -417,17 +507,159 @@ async fn update_task_full_fields_with_optimistic_lock(pool: PgPool) {
     ] {
         let response = app
             .clone()
-            .oneshot(request("PATCH", format!("/v1/pm/tasks/{task_id}"), Some(bad)))
+            .oneshot(request(
+                "PATCH",
+                format!("/v1/pm/tasks/{task_id}"),
+                Some(bad),
+            ))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     let response = app
-        .oneshot(request("PATCH", format!("/v1/pm/tasks/{}", Uuid::new_v4()), Some(json!({
-            "revision": 1, "title": "ghost", "status": "completed", "priority": "low"
-        }))))
+        .oneshot(request(
+            "PATCH",
+            format!("/v1/pm/tasks/{}", Uuid::new_v4()),
+            Some(json!({
+                "revision": 1, "title": "ghost", "status": "completed", "priority": "low"
+            })),
+        ))
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+// ---------------------------------------------------- D-2=A：ai_role_version_id 锚
+
+/// bootstrap 项目里某 role 的当前版本 id（种子 v1.0）。
+async fn ai_role_version_of(pool: &PgPool, project_id: Uuid, role_key: &str) -> Uuid {
+    sqlx::query_scalar(
+        "SELECT v.id \
+           FROM ai.ai_role_version v \
+           JOIN ai.project_ai_role pr ON pr.id = v.project_role_id \
+           JOIN ai.ai_role_template t ON t.id = pr.role_id \
+          WHERE pr.project_id = $1 AND t.role_key = $2 AND v.version = '1.0'",
+    )
+    .bind(project_id)
+    .bind(role_key)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// POST /v1/pm/tasks 带可选 `ai_role_version_id` → 201 且锚落库
+/// （D-1 遗留①：Task 创建时的 Role 版本引用，稿 §17.2）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn create_task_with_ai_role_version_persists_anchor(pool: PgPool) {
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "TSK-R1".into(),
+            project_name: "t".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
+    let version = ai_role_version_of(&pool, boot.project_id, "developer").await;
+    let app = router(pool.clone());
+
+    let response = app
+        .oneshot(request(
+            "POST",
+            "/v1/pm/tasks".into(),
+            Some(json!({
+                "project_id": boot.project_id,
+                "title": "role-anchored",
+                "ai_role_version_id": version,
+            })),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let task = body_json(response).await;
+    let stored: Option<Uuid> = sqlx::query_scalar(
+        "SELECT ai_role_version_id FROM delivery.task WHERE id = $1",
+    )
+    .bind(task["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored, Some(version), "the role anchor must be persisted");
+
+    // 不带锚 = 历史 Task 兼容形态，仍 201 且列 NULL。
+    let response = router(pool.clone())
+        .oneshot(request(
+            "POST",
+            "/v1/pm/tasks".into(),
+            Some(json!({ "project_id": boot.project_id, "title": "unanchored" })),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let task = body_json(response).await;
+    let stored: Option<Uuid> = sqlx::query_scalar(
+        "SELECT ai_role_version_id FROM delivery.task WHERE id = $1",
+    )
+    .bind(task["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored, None);
+}
+
+/// 跨项目的 Role 版本锚 → 400（版本必须属于目标 project）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn create_task_rejects_cross_project_ai_role_version(pool: PgPool) {
+    let boot_a = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "TSK-R2A".into(),
+            project_name: "t".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
+    let boot_b = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "TSK-R2B".into(),
+            project_name: "t".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
+    let version_a = ai_role_version_of(&pool, boot_a.project_id, "developer").await;
+    let app = router(pool.clone());
+
+    let response = app
+        .oneshot(request(
+            "POST",
+            "/v1/pm/tasks".into(),
+            Some(json!({
+                "project_id": boot_b.project_id,
+                "title": "stolen anchor",
+                "ai_role_version_id": version_a,
+            })),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    // 未知版本 id 同样 400（不泄露存在性）。
+    let response = router(pool.clone())
+        .oneshot(request(
+            "POST",
+            "/v1/pm/tasks".into(),
+            Some(json!({
+                "project_id": boot_b.project_id,
+                "title": "ghost anchor",
+                "ai_role_version_id": Uuid::new_v4(),
+            })),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }

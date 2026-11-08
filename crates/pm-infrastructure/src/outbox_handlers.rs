@@ -4,6 +4,15 @@
 //! `delivery.task_run(status='queued')`，即「等待调度」的最小真实形态。
 //! `queued` 只表示待执行，**不**把任务标记为 Running——执行器在 Slice D 领取。
 //!
+//! D-2=A 调度决策（V2.0-E ③，迁移 0059）：ready 且未指派的任务先按其
+//! `ai_role_version_id` 自动解析承接人（`ai_roles::resolve_role_assignee`）——
+//! 命中则同事务写 `task.assignee_id` 并照常建 Run；落空（role 未启用 / 项目无
+//! 合格 dev_agent / 角色无执行体）则同事务写 `delivery.task_waiting
+//! (reason='no_executor_available')` 活跃等待行并跳过建 Run。**等待恢复语义：
+//! 无合格执行者 ≠ 失败**——活跃等待行让 claimability 门③（task_waiting）持续
+//! deny；恢复 = 后续 enable 角色 / 新增合格成员后重新触发 TaskReady，或人工介入；
+//! **V1 不做自动重试器**（审计 payload `auto_retry: "none_v1"` 同步留痕）。
+//!
 //! 幂等与并发：在**同一事务**里先对 `delivery.task` 行加锁（`FOR UPDATE`），再
 //! 依次校验状态、执行资格与是否已有有效 Run，最后建 Run 并递增计数。行锁把同一
 //! 任务的并发消费串行化；「已有 queued/running Run 则跳过」让至少一次投递下的重复
@@ -48,7 +57,8 @@ impl OutboxHandler for TaskReadyHandler {
         // 创建与归档在同一把行锁上串行（I1-012/I1-013）：
         //   创建先拿锁 → 归档随后看到该 Run 并按 queued 条件取消；
         //   归档先拿锁 → 创建随后看到 archived 并合法跳过（不建 Run）。
-        match pm_application::project_gate::lock_project_activity_tx(&mut tx, event.project_id).await
+        match pm_application::project_gate::lock_project_activity_tx(&mut tx, event.project_id)
+            .await
         {
             Ok(pm_application::project_gate::ProjectActivity::Archived) => {
                 tx.commit().await.map_err(|e| e.to_string())?;
@@ -60,7 +70,7 @@ impl OutboxHandler for TaskReadyHandler {
         }
 
         let row = sqlx::query(
-            "SELECT status, assignee_id FROM delivery.task \
+            "SELECT status, assignee_id, ai_role_version_id, tenant_id FROM delivery.task \
              WHERE id = $1 AND project_id = $2 FOR UPDATE",
         )
         .bind(task_id)
@@ -68,10 +78,12 @@ impl OutboxHandler for TaskReadyHandler {
         .fetch_optional(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
-        let (status, assignee_id) = match row {
+        let (status, assignee_id, ai_role_version_id, tenant_id) = match row {
             Some(row) => (
                 row.get::<String, _>("status"),
                 row.get::<Option<Uuid>, _>("assignee_id"),
+                row.get::<Option<Uuid>, _>("ai_role_version_id"),
+                row.get::<Uuid, _>("tenant_id"),
             ),
             // 任务已不存在：过期事件，确认消费。
             None => {
@@ -80,18 +92,131 @@ impl OutboxHandler for TaskReadyHandler {
             }
         };
 
-        // 执行资格：只有仍处于可调度态（ready）且已指派 Agent 的任务才建 Run。
-        // 状态已变化（过期事件）或未指派，则确认消费但不产生副作用（留痕，不静默）。
-        if status != "ready" || assignee_id.is_none() {
-            let reason = if status != "ready" {
-                "task_not_ready"
-            } else {
-                "no_assignee"
-            };
-            tracing::info!(%task_id, reason, "TaskReady consumed without scheduling");
+        // 执行资格：只有仍处于可调度态（ready）的任务才建 Run。状态已变化
+        // （过期事件）则确认消费但不产生副作用（留痕，不静默）。
+        if status != "ready" {
+            tracing::info!(%task_id, reason = "task_not_ready", "TaskReady consumed without scheduling");
             tx.commit().await.map_err(|e| e.to_string())?;
             return Ok(());
         }
+
+        // D-2=A 调度决策：未指派任务先按 Role 版本自动解析承接人（此处已持
+        // task 行锁，UPDATE assignee 安全）。两种落空都不产生 Run、不进死信：
+        //   · 无 Role 锚（ai_role_version_id 为空）→ 维持现状跳过（no_assignee）；
+        //   · 解析落空 → 写 no_executor_available 活跃等待行 + skip 审计。
+        // （解析结果只落 task.assignee_id；建 Run 流程本身不消费 assignee。）
+        let _resolved_assignee = match (assignee_id, ai_role_version_id) {
+            (Some(id), _) => Some(id),
+            (None, Some(version_id)) => {
+                let resolved = pm_application::ai_roles::resolve_role_assignee(
+                    &mut *tx,
+                    tenant_id,
+                    event.project_id,
+                    version_id,
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+                match resolved {
+                    Some(principal_id) => {
+                        sqlx::query(
+                            "UPDATE delivery.task \
+                                SET assignee_id = $1, updated_at = now() \
+                              WHERE id = $2",
+                        )
+                        .bind(principal_id)
+                        .bind(task_id)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                        // 留痕（与写 assignee 同事务；任何回滚随之消失）。
+                        sqlx::query(
+                            "INSERT INTO governance.audit_log \
+                             (project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
+                              action, target_type, target_id, after_data, source_kind, tenant_id) \
+                             SELECT $1, $2, NULL, NULL, NULL, NULL, \
+                                    'task_ready_assignee_resolved', 'task', $3, $4, 'run_dispatch', $5 \
+                             WHERE NOT EXISTS ( \
+                                 SELECT 1 FROM governance.audit_log \
+                                  WHERE target_id = $3 AND action = 'task_ready_assignee_resolved' \
+                                    AND project_id = $1)",
+                        )
+                        .bind(event.project_id)
+                        .bind(pm_application::run_dispatch::DISPATCH_SERVICE_PRINCIPAL)
+                        .bind(task_id)
+                        .bind(serde_json::json!({
+                            "ai_role_version_id": version_id,
+                            "resolved_assignee": principal_id,
+                        }))
+                        .bind(tenant_id)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                        tracing::info!(%task_id, %principal_id, "TaskReady auto-resolved assignee from ai role");
+                        Some(principal_id)
+                    }
+                    None => {
+                        // 无合格执行者 ≠ 失败：写活跃等待行（uq_task_waiting_active
+                        // 冲突 = 已有等待行，ON CONFLICT DO NOTHING 幂等收敛），
+                        // 跳过建 Run。恢复由后续 enable 角色 / 新增成员后重新触发
+                        // TaskReady 或人工介入——V1 无自动重试器。
+                        sqlx::query(
+                            "INSERT INTO delivery.task_waiting \
+                               (project_id, task_id, reason, questions, tenant_id) \
+                             VALUES ($1, $2, 'no_executor_available', $3, $4) \
+                             ON CONFLICT DO NOTHING",
+                        )
+                        .bind(event.project_id)
+                        .bind(task_id)
+                        .bind(serde_json::json!([{
+                            "reason": "no_executor_available",
+                            "note": "等待恢复条件：enable 对应 AI Role 或为项目新增合格 dev_agent 成员后重新触发 TaskReady；或人工指派。V1 无自动重试器。",
+                        }]))
+                        .bind(tenant_id)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                        // skip 留痕（幂等锚点：project_id + action + target_id）。
+                        sqlx::query(
+                            "INSERT INTO governance.audit_log \
+                             (project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
+                              action, target_type, target_id, after_data, source_kind, tenant_id) \
+                             SELECT $1, $2, NULL, NULL, NULL, NULL, \
+                                    'task_ready_skipped', 'task', $3, $4, 'run_dispatch', $5 \
+                             WHERE NOT EXISTS ( \
+                                 SELECT 1 FROM governance.audit_log \
+                                  WHERE target_id = $3 AND action = 'task_ready_skipped' \
+                                    AND project_id = $1)",
+                        )
+                        .bind(event.project_id)
+                        .bind(pm_application::run_dispatch::DISPATCH_SERVICE_PRINCIPAL)
+                        .bind(task_id)
+                        .bind(serde_json::json!({
+                            "reason": "no_executor_available",
+                            "ai_role_version_id": version_id,
+                            "recovery": "enable role / add qualified dev_agent member, then re-emit TaskReady (or assign manually)",
+                            "auto_retry": "none_v1",
+                        }))
+                        .bind(tenant_id)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                        tracing::info!(
+                            %task_id,
+                            reason = "no_executor_available",
+                            "TaskReady consumed without scheduling: no qualified executor, waiting recorded"
+                        );
+                        tx.commit().await.map_err(|e| e.to_string())?;
+                        return Ok(());
+                    }
+                }
+            }
+            // 无 Role 锚的未指派任务：维持 D-2 前现状（no_assignee 跳过）。
+            (None, None) => {
+                tracing::info!(%task_id, reason = "no_assignee", "TaskReady consumed without scheduling");
+                tx.commit().await.map_err(|e| e.to_string())?;
+                return Ok(());
+            }
+        };
 
         // 任务级幂等（L0）：已有活跃 Run 则不再新建。三处口径必须一致：
         // 状态集合复用 run_dispatch 的单一真源（ACTIVE_RUN_STATUSES_SQL），
@@ -303,7 +428,10 @@ pub fn register_all_handlers(worker: OutboxWorker, pool: &PgPool) -> OutboxWorke
                 "DeliverySubmitted",
                 Arc::new(DeliverySubmittedHandler::new(pool.clone())),
             )
-            .with_handler("RunCompleted", Arc::new(RunCompletedHandler::new(pool.clone()))),
+            .with_handler(
+                "RunCompleted",
+                Arc::new(RunCompletedHandler::new(pool.clone())),
+            ),
         pool,
     )
 }

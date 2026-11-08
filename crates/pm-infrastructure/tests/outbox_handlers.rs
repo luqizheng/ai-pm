@@ -21,9 +21,9 @@ async fn seed_task(pool: &PgPool, code: &str, status: &str, assigned: bool) -> S
         "INSERT INTO core.customer (name, tenant_id) VALUES ('oh', $1) RETURNING id",
     )
     .bind(SYSTEM_TENANT)
-            .fetch_one(pool)
-            .await
-            .unwrap();
+    .fetch_one(pool)
+    .await
+    .unwrap();
     let agent_id: Uuid = sqlx::query_scalar(
         "INSERT INTO core.principal (kind, display_name) VALUES ('ai_pm', 'agent') RETURNING id",
     )
@@ -103,11 +103,12 @@ async fn creates_one_queued_run_and_bumps_attempt_count(pool: PgPool) {
         task_status, "ready",
         "creating a queued run must not move the task to running"
     );
-    let attempt_count: i32 = sqlx::query_scalar("SELECT attempt_count FROM delivery.task WHERE id = $1")
-        .bind(s.task_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let attempt_count: i32 =
+        sqlx::query_scalar("SELECT attempt_count FROM delivery.task WHERE id = $1")
+            .bind(s.task_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(attempt_count, 1);
 }
 
@@ -338,5 +339,168 @@ async fn run_created_before_archive_gets_cancelled_by_archive(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(cancelled, 1, "I1-012: a run created before archive must be cancellable");
+    assert_eq!(
+        cancelled, 1,
+        "I1-012: a run created before archive must be cancellable"
+    );
+}
+
+// ── D-2=A：调度自动写 assignee + 无执行者落 no_executor_available 等待 ──────
+
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+
+/// bootstrap 项目里某 role 的当前版本 id（种子 v1.0）。
+async fn role_version_id(pool: &PgPool, project_id: Uuid, role_key: &str) -> Uuid {
+    sqlx::query_scalar(
+        "SELECT v.id \
+           FROM ai.ai_role_version v \
+           JOIN ai.project_ai_role pr ON pr.id = v.project_role_id \
+           JOIN ai.ai_role_template t ON t.id = pr.role_id \
+          WHERE pr.project_id = $1 AND t.role_key = $2 AND v.version = '1.0'",
+    )
+    .bind(project_id)
+    .bind(role_key)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// ready 且未指派、带 Role 版本锚的任务（D-2=A 的调度决策输入面）。
+async fn seed_ready_task_with_role(pool: &PgPool, project_id: Uuid, version_id: Uuid) -> Seeded {
+    let task_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.task \
+           (project_id, title, status, revision, assignee_id, ai_role_version_id, tenant_id) \
+         VALUES ($1, 'd2a', 'ready', 1, NULL, $2, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
+    )
+    .bind(project_id)
+    .bind(version_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    Seeded { project_id, task_id }
+}
+
+/// D-2=A 正分支：ready 无 assignee + enabled developer 角色 + 项目里有合格
+/// dev_agent 成员 → 同事务写 task.assignee_id 并创建 Run。
+#[sqlx::test(migrations = "../../migrations")]
+async fn auto_resolves_assignee_and_creates_run_for_role_anchored_task(pool: PgPool) {
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "OH-D2A".into(),
+            project_name: "d2a".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
+    let version = role_version_id(&pool, boot.project_id, "developer").await;
+    let s = seed_ready_task_with_role(&pool, boot.project_id, version).await;
+
+    let handler = TaskReadyHandler::new(pool.clone());
+    handler.handle(&event(&s, "d2a-1")).await.unwrap();
+
+    assert_eq!(
+        run_count(&pool, s.task_id).await,
+        1,
+        "a resolved executor must proceed to run creation"
+    );
+    let (assignee, status): (Option<Uuid>, String) = sqlx::query_as(
+        "SELECT assignee_id, status FROM delivery.task WHERE id = $1",
+    )
+    .bind(s.task_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(assignee, Some(boot.developer_id), "assignee must be auto-written");
+    assert_eq!(status, "ready", "auto-assign must not move the task out of ready");
+
+    let audit: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log \
+          WHERE action = 'task_ready_assignee_resolved' AND target_id = $1",
+    )
+    .bind(s.task_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audit, 1, "the auto-assign decision must be audited");
+}
+
+/// D-2=A 负分支：角色行 disabled（无合格执行者）→ 不建 Run，落
+/// `no_executor_available` 活跃等待行 + skip 审计；至少一次投递的重复消费
+/// 幂等收敛（等待行与审计各仍一行）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn no_qualified_executor_records_waiting_and_skips_run(pool: PgPool) {
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "OH-D2B".into(),
+            project_name: "d2b".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
+    let version = role_version_id(&pool, boot.project_id, "developer").await;
+    sqlx::query(
+        "UPDATE ai.project_ai_role SET enabled = FALSE \
+          WHERE project_id = $1 \
+            AND role_id = (SELECT id FROM ai.ai_role_template WHERE role_key = 'developer')",
+    )
+    .bind(boot.project_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let s = seed_ready_task_with_role(&pool, boot.project_id, version).await;
+
+    let handler = TaskReadyHandler::new(pool.clone());
+    handler.handle(&event(&s, "d2b-1")).await.unwrap();
+
+    assert_eq!(
+        run_count(&pool, s.task_id).await,
+        0,
+        "no qualified executor must not create a run"
+    );
+    let waiting: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM delivery.task_waiting \
+          WHERE task_id = $1 AND reason = 'no_executor_available' AND ended_at IS NULL",
+    )
+    .bind(s.task_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(waiting, 1, "an active waiting row must record the pause");
+
+    let skip_audit: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log \
+          WHERE action = 'task_ready_skipped' AND target_id = $1 \
+            AND after_data->>'reason' = 'no_executor_available'",
+    )
+    .bind(s.task_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(skip_audit, 1, "the skip must be audited with the reason");
+
+    // 至少一次投递：同事件重复消费不产生第二行等待/审计（幂等）。
+    handler.handle(&event(&s, "d2b-2")).await.unwrap();
+    let waiting: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM delivery.task_waiting \
+          WHERE task_id = $1 AND reason = 'no_executor_available' AND ended_at IS NULL",
+    )
+    .bind(s.task_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(waiting, 1, "redelivery must collapse to the same waiting row");
+    let skip_audit: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log \
+          WHERE action = 'task_ready_skipped' AND target_id = $1",
+    )
+    .bind(s.task_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(skip_audit, 1, "redelivery must not duplicate the skip audit");
 }

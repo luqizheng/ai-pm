@@ -1,5 +1,6 @@
 //! pm-domain: entities, value objects and domain invariants.
 
+pub mod ai_role;
 pub mod command;
 pub mod error;
 pub mod ids;
@@ -14,19 +15,22 @@ pub mod task_transition;
 pub mod tenant;
 pub mod waiting;
 
+pub use ai_role::{AiRoleCategory, AI_ROLE_TEMPLATE_SEED_KEYS, AI_ROLE_UNDISABLEABLE_KEYS};
 pub use command::{ProjectCommand, Reversibility};
 pub use error::CommandError;
 pub use ids::*;
-pub use repo_access::{RepoAccess, parse_access_levels};
 pub use policy::PolicyDecision;
 pub use project_member::{
-    PROJECT_MEMBER_AGENT_ROLES, PROJECT_MEMBER_ROLES, ProjectMemberRole, is_agent_role,
+    is_agent_role, ProjectMemberRole, PROJECT_MEMBER_AGENT_ROLES, PROJECT_MEMBER_ROLES,
 };
 pub use proposal::{AnalysisResult, Confidence, Finding, Proposal, RiskLevel};
+pub use repo_access::{parse_access_levels, RepoAccess};
 pub use task::{LegacyMapping, TaskStatus};
-pub use tenant::{TenantRole, SYSTEM_TENANT};
-pub use task_run::{FailureCategory, FailureRecord, OutcomeVerdict, RetryCounters, RetryPolicy, RunOutcome};
+pub use task_run::{
+    FailureCategory, FailureRecord, OutcomeVerdict, RetryCounters, RetryPolicy, RunOutcome,
+};
 pub use task_transition::{
     allowed_edges, validate_transition, SupersedeIntent, TransitionError, TransitionInput,
 };
+pub use tenant::{TenantRole, SYSTEM_TENANT};
 pub use waiting::{WaitingContext, WaitingReason};
