@@ -19,6 +19,7 @@ pub mod delivery;
 pub mod devenv;
 pub mod device_credential;
 pub mod discovery;
+pub mod discussion_memory;
 pub mod git_access;
 pub mod ingestion;
 pub mod intake;
@@ -171,8 +172,8 @@ pub use review::{
     ReviewVerdict, ReviewedDelivery, Severity, TestEvidence,
 };
 pub use run_context::{
-    get_run_context, hash_lease_token, renew_lease_by_token, report_progress, LeaseError,
-    LeaseState, ProgressReport, RenewedLease, RunContract, CONTRACT_VERSION,
+    get_run_context, get_run_context_with, hash_lease_token, renew_lease_by_token, report_progress,
+    LeaseError, LeaseState, ProgressReport, RenewedLease, RunContract, CONTRACT_VERSION,
 };
 pub use run_executor::{
     cancel_run, claim_and_start, poll_active_runs, reconcile_orphans, StartOutcome,
