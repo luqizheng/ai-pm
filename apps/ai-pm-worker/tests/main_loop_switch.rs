@@ -20,7 +20,10 @@ use pm_ai::conversation_reply::ConversationReplyMode;
 
 #[test]
 fn default_is_off_a_new_billable_loop_must_not_start_silently() {
-    assert_eq!(ConversationReplyMode::parse(None), ConversationReplyMode::Off);
+    assert_eq!(
+        ConversationReplyMode::parse(None),
+        ConversationReplyMode::Off
+    );
     assert!(!ConversationReplyMode::parse(None).enabled());
 }
 
@@ -44,7 +47,39 @@ fn typos_stay_off_never_silently_enable() {
     // 常见 typo 与大小写变体都不开启循环。
     for typo in ["ture", "true", "ON", "On", "enable", "1", ""] {
         let mode = ConversationReplyMode::parse(Some(typo));
-        assert_eq!(mode, ConversationReplyMode::Off, "typo {typo:?} must stay off");
+        assert_eq!(
+            mode,
+            ConversationReplyMode::Off,
+            "typo {typo:?} must stay off"
+        );
+        assert!(!mode.enabled(), "typo {typo:?} must not enable the loop");
+    }
+}
+
+// ── 第八条循环（DK-B 访谈编排）追加：同一套开关契约 ──────────────────────
+
+#[test]
+fn discovery_orchestrator_defaults_off_and_typos_stay_off() {
+    use pm_ai::discovery_orchestrator::DiscoveryOrchestratorMode;
+    assert_eq!(
+        DiscoveryOrchestratorMode::parse(None),
+        DiscoveryOrchestratorMode::Off
+    );
+    assert_eq!(
+        DiscoveryOrchestratorMode::parse(Some("on")),
+        DiscoveryOrchestratorMode::On
+    );
+    assert_eq!(
+        DiscoveryOrchestratorMode::parse(Some("off")),
+        DiscoveryOrchestratorMode::Off
+    );
+    for typo in ["ture", "true", "ON", "On", "enable", "1", ""] {
+        let mode = DiscoveryOrchestratorMode::parse(Some(typo));
+        assert_eq!(
+            mode,
+            DiscoveryOrchestratorMode::Off,
+            "typo {typo:?} must stay off"
+        );
         assert!(!mode.enabled(), "typo {typo:?} must not enable the loop");
     }
 }

@@ -6,6 +6,7 @@ pub mod context;
 pub mod conversation_model;
 pub mod conversation_reply;
 pub mod conversation_router_model;
+pub mod discovery_orchestrator;
 pub mod fake_model;
 pub mod model;
 pub mod openai_adapter;

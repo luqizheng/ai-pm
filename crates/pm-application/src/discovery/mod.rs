@@ -13,16 +13,20 @@ pub(crate) use uuid::Uuid;
 
 mod finding;
 mod message;
+mod orchestrator_round;
 mod proposal;
 mod question;
 mod session;
+mod slots;
 mod web;
 
 pub use finding::*;
 pub use message::*;
+pub use orchestrator_round::*;
 pub use proposal::*;
 pub use question::*;
 pub use session::*;
+pub use slots::*;
 pub use web::{
     record_finding_verification, start_session_from_import, start_session_from_import_as,
     FindingVerificationOutcome, StartWebSession,
@@ -44,6 +48,13 @@ pub enum DiscoveryError {
     ProjectNotFound,
     #[error("invalid session status transition from {from} to {to}")]
     InvalidTransition { from: String, to: String },
+    /// 编排轮次的前置假设已失效：本轮看到的最新消息不再是会话的最新消息
+    /// （用户又说了话）。整轮丢弃、零写入，下一轮重新扫描（§4.6 整轮幂等）。
+    #[error("stale orchestration round: expected last message {expected}, actual {actual:?}")]
+    StaleRound {
+        expected: Uuid,
+        actual: Option<Uuid>,
+    },
     #[error("{0}")]
     Validation(String),
     #[error("database error: {0}")]
