@@ -502,6 +502,21 @@ impl SessionRequirement {
     }
 }
 
+/// [`session_requirements`] 的原始行（列多，独立结构体避免超长元组——
+/// 也避免 clippy `type_complexity`）。
+#[derive(Debug, sqlx::FromRow)]
+struct SessionRequirementRow {
+    id: Uuid,
+    code: String,
+    title: String,
+    latest_revision_id: Uuid,
+    latest_revision_version: i32,
+    latest_state: String,
+    approved_revision_id: Option<Uuid>,
+    approved_revision_version: Option<i32>,
+    approved_markdown: Option<String>,
+}
+
 /// 真实写回通道（DK-B 合并时用它替换 [`NoWriteBack`]）。
 ///
 /// 依赖全部是既有单点服务与端口：`pg` = 既有服务的事务入口，`model` = 模型
@@ -543,11 +558,12 @@ impl DiscoveryWriteBack {
     /// 写命令的 actor 必须是 **ai_pm** principal：真人闸（`require_human`）正是
     /// 靠它区分主体，用 human 冒充 AI 会让 B1/B2 的负向断言失去意义。
     async fn ai_principal(&self, project_id: Uuid) -> Result<Uuid, WriteBackError> {
-        let principal: Option<Uuid> =
-            sqlx::query_scalar("SELECT ai_principal_id FROM ai.project_ai_config WHERE project_id = $1")
-                .bind(project_id)
-                .fetch_optional(&self.pool)
-                .await?;
+        let principal: Option<Uuid> = sqlx::query_scalar(
+            "SELECT ai_principal_id FROM ai.project_ai_config WHERE project_id = $1",
+        )
+        .bind(project_id)
+        .fetch_optional(&self.pool)
+        .await?;
         principal.ok_or_else(|| {
             WriteBackError::Discovery("project has no ai_principal_id configured".to_string())
         })
@@ -567,19 +583,11 @@ impl DiscoveryWriteBack {
         if basis_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let rows: Vec<(
-            Uuid,
-            String,
-            String,
-            Uuid,
-            i32,
-            String,
-            Option<Uuid>,
-            Option<i32>,
-            Option<String>,
-        )> = sqlx::query_as(
-            "SELECT r.id, r.code, r.title, lat.id, lat.version, lat.state, \
-                    cur.id, cur.version, cur.content->>'markdown' \
+        let rows: Vec<SessionRequirementRow> = sqlx::query_as(
+            "SELECT r.id, r.code, r.title, lat.id AS latest_revision_id, \
+                    lat.version AS latest_revision_version, lat.state AS latest_state, \
+                    cur.id AS approved_revision_id, cur.version AS approved_revision_version, \
+                    cur.content->>'markdown' AS approved_markdown \
                FROM delivery.requirement r \
                JOIN LATERAL ( \
                    SELECT id, version, state \
@@ -606,29 +614,17 @@ impl DiscoveryWriteBack {
         .await?;
         Ok(rows
             .into_iter()
-            .map(
-                |(
-                    requirement_id,
-                    code,
-                    title,
-                    latest_revision_id,
-                    latest_revision_version,
-                    latest_state,
-                    approved_revision_id,
-                    approved_revision_version,
-                    approved_markdown,
-                )| SessionRequirement {
-                    requirement_id,
-                    requirement_code: code,
-                    requirement_title: title,
-                    latest_revision_id,
-                    latest_revision_version,
-                    latest_state,
-                    approved_revision_id,
-                    approved_revision_version,
-                    approved_markdown: approved_markdown.unwrap_or_default(),
-                },
-            )
+            .map(|row| SessionRequirement {
+                requirement_id: row.id,
+                requirement_code: row.code,
+                requirement_title: row.title,
+                latest_revision_id: row.latest_revision_id,
+                latest_revision_version: row.latest_revision_version,
+                latest_state: row.latest_state,
+                approved_revision_id: row.approved_revision_id,
+                approved_revision_version: row.approved_revision_version,
+                approved_markdown: row.approved_markdown.unwrap_or_default(),
+            })
             .collect())
     }
 
@@ -1363,14 +1359,20 @@ mod tests {
             main: vec![raw("a", &["b"], &["验收"]), raw("b", &[], &["验收"])],
         };
         let error = validate_task_batch(forward, &[]).unwrap_err();
-        assert!(matches!(error, WriteBackError::BatchRejected(_)), "{error:?}");
+        assert!(
+            matches!(error, WriteBackError::BatchRejected(_)),
+            "{error:?}"
+        );
 
         let self_ref = RawTaskBatch {
             prerequisite: vec![],
             main: vec![raw("a", &["a"], &["验收"])],
         };
         let error = validate_task_batch(self_ref, &[]).unwrap_err();
-        assert!(matches!(error, WriteBackError::BatchRejected(_)), "{error:?}");
+        assert!(
+            matches!(error, WriteBackError::BatchRejected(_)),
+            "{error:?}"
+        );
 
         let ok = RawTaskBatch {
             prerequisite: vec![raw("p", &[], &["验收"])],
@@ -1388,7 +1390,10 @@ mod tests {
             main: vec![raw("dup", &[], &["验收"])],
         };
         let error = validate_task_batch(batch, &[]).unwrap_err();
-        assert!(matches!(error, WriteBackError::BatchRejected(_)), "{error:?}");
+        assert!(
+            matches!(error, WriteBackError::BatchRejected(_)),
+            "{error:?}"
+        );
     }
 
     /// 空键 = 依赖无法表达，拒绝（不接受"标题即键"的退化写法）。
@@ -1399,7 +1404,10 @@ mod tests {
             main: vec![raw("", &[], &["验收"])],
         };
         let error = validate_task_batch(batch, &[]).unwrap_err();
-        assert!(matches!(error, WriteBackError::BatchRejected(_)), "{error:?}");
+        assert!(
+            matches!(error, WriteBackError::BatchRejected(_)),
+            "{error:?}"
+        );
     }
 
     /// 角色建议命中候选才采纳；越界丢弃并计数（不报错、不编造）。
@@ -1440,7 +1448,10 @@ mod tests {
             main: vec![],
         };
         let error = validate_task_batch(batch, &[]).unwrap_err();
-        assert!(matches!(error, WriteBackError::BatchRejected(_)), "{error:?}");
+        assert!(
+            matches!(error, WriteBackError::BatchRejected(_)),
+            "{error:?}"
+        );
     }
 
     /// 需求编号归一化：大写、只留 [A-Z0-9-]、折叠、空则退化为 session 派生值。
@@ -1451,7 +1462,10 @@ mod tests {
             sanitize_requirement_code(Some("fr phone-login"), session),
             "FR-PHONE-LOGIN"
         );
-        assert_eq!(sanitize_requirement_code(Some("  --  "), session), "DISC-00000000");
+        assert_eq!(
+            sanitize_requirement_code(Some("  --  "), session),
+            "DISC-00000000"
+        );
         assert_eq!(sanitize_requirement_code(None, session), "DISC-00000000");
         assert_eq!(
             sanitize_requirement_code(Some("A".repeat(50).as_str()), session).len(),

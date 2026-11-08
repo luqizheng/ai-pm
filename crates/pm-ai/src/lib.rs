@@ -23,9 +23,9 @@ pub use conversation_model::{
 };
 pub use conversation_reply::{ConversationReplyMode, ConversationReplyWorker, ReplyReport};
 pub use discovery_writeback::{
-    AI_FORBIDDEN_COMMANDS, AI_WRITABLE_COMMANDS, CapabilityFacts, CapabilityProjection,
-    DecomposeOutcome, DiscoveryWriteBack, DraftOutcome, DraftOutcomeKind, EmptyCapabilityProjection,
-    NoWriteBack, RequirementDraft, TaskBatchOutcome, WriteBackHook, WriteBackMode, WriteBackModel,
+    CapabilityFacts, CapabilityProjection, DecomposeOutcome, DiscoveryWriteBack, DraftOutcome,
+    DraftOutcomeKind, EmptyCapabilityProjection, NoWriteBack, RequirementDraft, TaskBatchOutcome,
+    WriteBackHook, WriteBackMode, WriteBackModel, AI_FORBIDDEN_COMMANDS, AI_WRITABLE_COMMANDS,
 };
 pub use fake_model::FakeModel;
 pub use model::{AnalysisContext, AnalysisModel, ModelError};

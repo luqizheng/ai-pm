@@ -491,9 +491,9 @@ pub async fn mark_task_batch_ready(
                             PmWriteError::Validation(Box::leak(message.into_boxed_str()))
                         }
                         pm_domain::CommandError::Db(error) => PmWriteError::Db(error),
-                        other => PmWriteError::Validation(Box::leak(
-                            other.to_string().into_boxed_str(),
-                        )),
+                        other => {
+                            PmWriteError::Validation(Box::leak(other.to_string().into_boxed_str()))
+                        }
                     })?;
                 outcome.ready.push(task_id);
             }

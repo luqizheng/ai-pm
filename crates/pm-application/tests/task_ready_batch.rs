@@ -9,9 +9,7 @@ use std::sync::Arc;
 use pm_application::actor::AuditActor;
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::command_executor::PgCommandExecutor;
-use pm_application::pm_write::{
-    self, CreateTaskRequest, PmWriteError, UpdateTaskRequest,
-};
+use pm_application::pm_write::{self, CreateTaskRequest, PmWriteError, UpdateTaskRequest};
 use pm_application::PolicyEngine;
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;

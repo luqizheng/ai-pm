@@ -6,6 +6,7 @@
 //! 物化面（人类半步）：`requirement_finding` 逐条 + `source_input(kind='discovery')`
 //! 一条，幂等；超出清单的 id 直接拒绝（不猜意图）。
 
+use pm_application::actor::AuditActor;
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::discovery;
 use pm_application::pm_write::PmWriteError;
@@ -13,7 +14,6 @@ use pm_application::requirement::{
     self, CreateRequirementRequest, DraftRevisionRequest, RequirementEntry, RevisionView,
 };
 use pm_application::requirement_traceability::{self, MaterializeBasisRequest};
-use pm_application::actor::AuditActor;
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -120,12 +120,13 @@ async fn counts(pool: &PgPool, project_id: Uuid) -> (i64, i64) {
             .fetch_one(pool)
             .await
             .unwrap();
-    let revisions: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM delivery.requirement_revision WHERE project_id = $1")
-            .bind(project_id)
-            .fetch_one(pool)
-            .await
-            .unwrap();
+    let revisions: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM delivery.requirement_revision WHERE project_id = $1",
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
     (requirements, revisions)
 }
 
@@ -137,7 +138,9 @@ async fn basis_rides_inside_content_and_is_exposed(pool: PgPool) {
     let first = seed_finding(&pool, &fx, fx.session_id, "需要手机号登录", "CONFIRMED").await;
     let second = seed_finding(&pool, &fx, fx.session_id, "验证码 60s 有效", "CONFIRMED").await;
 
-    let entry = create(&pool, &fx, Some(vec![first, second, first])).await.unwrap();
+    let entry = create(&pool, &fx, Some(vec![first, second, first]))
+        .await
+        .unwrap();
     let detail = requirement::requirement_detail(&pool, SYSTEM_TENANT, entry.id)
         .await
         .unwrap();
@@ -148,7 +151,8 @@ async fn basis_rides_inside_content_and_is_exposed(pool: PgPool) {
         "去重保序后写进 content 子键"
     );
     assert_eq!(
-        revision.content["markdown"], revision.markdown.clone().unwrap(),
+        revision.content["markdown"],
+        revision.markdown.clone().unwrap(),
         "basis 与 markdown/summary 并列，不替换正文"
     );
 
@@ -166,10 +170,7 @@ async fn basis_rides_inside_content_and_is_exposed(pool: PgPool) {
     )
     .await
     .unwrap();
-    assert_eq!(
-        drafted.basis_finding_ids,
-        Some(serde_json::json!([first]))
-    );
+    assert_eq!(drafted.basis_finding_ids, Some(serde_json::json!([first])));
 }
 
 // ─────────────────────────────────────────────────── 硬边界：整条拒绝
@@ -183,7 +184,10 @@ async fn unconfirmed_basis_finding_rejects_the_whole_draft(pool: PgPool) {
     let error = create(&pool, &fx, Some(vec![confirmed, pending]))
         .await
         .unwrap_err();
-    assert!(matches!(error, PmWriteError::Validation(_)), "got {error:?}");
+    assert!(
+        matches!(error, PmWriteError::Validation(_)),
+        "got {error:?}"
+    );
     assert_eq!(
         counts(&pool, fx.project_id).await,
         (0, 0),
@@ -199,7 +203,10 @@ async fn unknown_basis_finding_rejects_the_whole_draft(pool: PgPool) {
     let error = create(&pool, &fx, Some(vec![confirmed, Uuid::new_v4()]))
         .await
         .unwrap_err();
-    assert!(matches!(error, PmWriteError::Validation(_)), "got {error:?}");
+    assert!(
+        matches!(error, PmWriteError::Validation(_)),
+        "got {error:?}"
+    );
     assert_eq!(counts(&pool, fx.project_id).await, (0, 0));
 }
 
@@ -209,7 +216,9 @@ async fn basis_spanning_two_sessions_is_rejected(pool: PgPool) {
     let first = seed_finding(&pool, &fx, fx.session_id, "需要手机号登录", "CONFIRMED").await;
     let second = seed_finding(&pool, &fx, fx.other_session_id, "验证码 60s", "CONFIRMED").await;
 
-    let error = create(&pool, &fx, Some(vec![first, second])).await.unwrap_err();
+    let error = create(&pool, &fx, Some(vec![first, second]))
+        .await
+        .unwrap_err();
     let message = format!("{error:?}");
     assert!(
         message.contains("multiple discovery sessions"),
@@ -260,7 +269,10 @@ async fn update_draft_preserves_basis_unless_explicitly_cleared(pool: PgPool) {
     )
     .await
     .unwrap();
-    assert!(cleared.basis_finding_ids.is_none(), "explicit empty clears it");
+    assert!(
+        cleared.basis_finding_ids.is_none(),
+        "explicit empty clears it"
+    );
 }
 
 // ─────────────────────────────────────────────────── 一键物化（人类半步）
@@ -290,7 +302,9 @@ async fn materialize_basis_links_findings_and_discovery_source(pool: PgPool) {
     assert_eq!(outcome.linked_findings, vec![first, second]);
     assert!(outcome.already_linked_findings.is_empty());
     assert!(outcome.source_linked);
-    let source_input_id = outcome.source_input_id.expect("discovery source registered");
+    let source_input_id = outcome
+        .source_input_id
+        .expect("discovery source registered");
 
     // 正式溯源关联真的落了两行。
     let linked: Vec<Uuid> = sqlx::query_scalar(
@@ -304,15 +318,17 @@ async fn materialize_basis_links_findings_and_discovery_source(pool: PgPool) {
     assert_eq!(linked.len(), 2);
 
     // 来源材料 = 一个访谈会话一条，kind='discovery'，source_ref=session。
-    let (kind, source_ref): (String, Option<String>) = sqlx::query_as(
-        "SELECT input_kind, source_ref FROM source.source_input WHERE id = $1",
-    )
-    .bind(source_input_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (kind, source_ref): (String, Option<String>) =
+        sqlx::query_as("SELECT input_kind, source_ref FROM source.source_input WHERE id = $1")
+            .bind(source_input_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(kind, "discovery");
-    assert_eq!(source_ref.as_deref(), Some(fx.session_id.to_string().as_str()));
+    assert_eq!(
+        source_ref.as_deref(),
+        Some(fx.session_id.to_string().as_str())
+    );
     let linked_sources: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM delivery.requirement_source_input \
           WHERE requirement_id = $1 AND input_id = $2",
@@ -373,7 +389,10 @@ async fn materialize_basis_rejects_ids_outside_the_basis(pool: PgPool) {
     )
     .await
     .unwrap_err();
-    assert!(matches!(error, PmWriteError::Validation(_)), "got {error:?}");
+    assert!(
+        matches!(error, PmWriteError::Validation(_)),
+        "got {error:?}"
+    );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
             "SELECT count(*) FROM delivery.requirement_finding WHERE requirement_id = $1"
@@ -401,7 +420,10 @@ async fn materialize_basis_requires_a_basis_list(pool: PgPool) {
     )
     .await
     .unwrap_err();
-    assert!(matches!(error, PmWriteError::Validation(_)), "got {error:?}");
+    assert!(
+        matches!(error, PmWriteError::Validation(_)),
+        "got {error:?}"
+    );
 }
 
 /// 便于构造"全缺省"请求（`MaterializeBasisRequest` 没有 `Default`：请求体

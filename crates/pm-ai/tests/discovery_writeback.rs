@@ -20,11 +20,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use pm_ai::discovery_writeback::{
-    AI_FORBIDDEN_COMMANDS, AI_WRITABLE_COMMANDS, BatchTaskKind, DecomposeOutcome,
-    DiscoveryWriteBack, DraftOutcomeKind, EmptyCapabilityProjection, ModelCallFailure, ModelReply,
-    ProviderStamp, RawTask, RawTaskBatch, RequirementDraft, RequirementDraftContext,
-    TaskDecomposeContext, WriteBackError, WriteBackHook, WriteBackMode, WriteBackModel,
-    MAX_MAIN_TASKS, MAX_PREREQUISITE_TASKS,
+    BatchTaskKind, DecomposeOutcome, DiscoveryWriteBack, DraftOutcomeKind,
+    EmptyCapabilityProjection, ModelCallFailure, ModelReply, ProviderStamp, RawTask, RawTaskBatch,
+    RequirementDraft, RequirementDraftContext, TaskDecomposeContext, WriteBackError, WriteBackHook,
+    WriteBackMode, WriteBackModel, AI_FORBIDDEN_COMMANDS, AI_WRITABLE_COMMANDS, MAX_MAIN_TASKS,
+    MAX_PREREQUISITE_TASKS,
 };
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::discovery;
@@ -136,7 +136,9 @@ fn draft_reply() -> RequirementDraft {
         code: Some("fr phone-login".to_string()),
         title: "手机号登录".to_string(),
         summary: Some("支持手机号+验证码登录".to_string()),
-        markdown: "# 手机号登录\n\n用户可用手机号+短信验证码登录。\n\n## 验收\n\n- 正确验证码可登录\n".to_string(),
+        markdown:
+            "# 手机号登录\n\n用户可用手机号+短信验证码登录。\n\n## 验收\n\n- 正确验证码可登录\n"
+                .to_string(),
     }
 }
 
@@ -202,7 +204,12 @@ impl WriteBackModel for FakeModel {
     }
 }
 
-fn hook(pool: &PgPool, fx: &Fx, draft: RequirementDraft, batch: RawTaskBatch) -> DiscoveryWriteBack {
+fn hook(
+    pool: &PgPool,
+    fx: &Fx,
+    draft: RequirementDraft,
+    batch: RawTaskBatch,
+) -> DiscoveryWriteBack {
     DiscoveryWriteBack {
         pool: pool.clone(),
         model: Arc::new(FakeModel {
@@ -252,7 +259,10 @@ async fn draft_stops_at_pending_then_decompose_pins_approved_revision(pool: PgPo
     assert_eq!(draft.kind, DraftOutcomeKind::Submitted);
     let requirement_id = draft.requirement_id.unwrap();
     let revision_id = draft.revision_id.unwrap();
-    assert_eq!(draft.revision_state.as_deref(), Some("pending_confirmation"));
+    assert_eq!(
+        draft.revision_state.as_deref(),
+        Some("pending_confirmation")
+    );
     assert_eq!(draft.basis_finding_ids, vec![confirmed]);
 
     // basis 落库 + 视图透出 + 修订正文来自模型（§3.3 提案级标记）。
@@ -270,11 +280,7 @@ async fn draft_stops_at_pending_then_decompose_pins_approved_revision(pool: PgPo
         Some(serde_json::json!([confirmed])),
         "basis_finding_ids must ride inside content"
     );
-    assert!(revision
-        .markdown
-        .as_deref()
-        .unwrap()
-        .contains("手机号登录"));
+    assert!(revision.markdown.as_deref().unwrap().contains("手机号登录"));
 
     // ② 记账（D-DK-11）：purpose 独立，不复用 conversation_reply。
     let (purpose, status): (Option<String>, String) = sqlx::query_as(
@@ -313,13 +319,11 @@ async fn draft_stops_at_pending_then_decompose_pins_approved_revision(pool: PgPo
         "B5 message must point at the requirement page: {blocked}"
     );
     assert_eq!(
-        sqlx::query_scalar::<_, i64>(
-            "SELECT count(*) FROM delivery.task WHERE project_id = $1"
-        )
-        .bind(fx.project_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap(),
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM delivery.task WHERE project_id = $1")
+            .bind(fx.project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
         0,
         "a rejected decomposition must not create tasks"
     );
@@ -354,10 +358,19 @@ async fn draft_stops_at_pending_then_decompose_pins_approved_revision(pool: PgPo
     assert_eq!(batch.prerequisite_count, 1);
     assert_eq!(batch.main_count, 2);
     assert_eq!(batch.truncated, 0);
-    assert_eq!(batch.dropped_role_suggestions, 1, "unknown role_ref dropped");
+    assert_eq!(
+        batch.dropped_role_suggestions, 1,
+        "unknown role_ref dropped"
+    );
     assert_eq!(batch.tasks[0].kind, BatchTaskKind::Prerequisite);
-    assert!(batch.tasks[0].ai_role_version_id.is_some(), "developer role matched");
-    assert!(batch.tasks[1].ai_role_version_id.is_none(), "越界角色置空而非编造");
+    assert!(
+        batch.tasks[0].ai_role_version_id.is_some(),
+        "developer role matched"
+    );
+    assert!(
+        batch.tasks[1].ai_role_version_id.is_none(),
+        "越界角色置空而非编造"
+    );
 
     // E1：task_requirement 指向 approved 修订（DB 断言，不看回包）。
     let pins: Vec<(Uuid, String)> = sqlx::query_as(
@@ -371,7 +384,9 @@ async fn draft_stops_at_pending_then_decompose_pins_approved_revision(pool: PgPo
     .await
     .unwrap();
     assert_eq!(pins.len(), 3);
-    assert!(pins.iter().all(|(id, state)| *id == revision_id && state == "approved"));
+    assert!(pins
+        .iter()
+        .all(|(id, state)| *id == revision_id && state == "approved"));
 
     // E2：AI 生成的任务全部 draft。
     let statuses: Vec<String> =
@@ -434,13 +449,12 @@ async fn ai_principal_cannot_confirm_link_or_materialize(pool: PgPool) {
     let ai_actor = pm_application::actor::AuditActor::principal(fx.ai_principal);
 
     // B1：AI 确认 → Forbidden，且 requirement_confirmation 零新增。
-    let hash: String = sqlx::query_scalar(
-        "SELECT content_hash FROM delivery.requirement_revision WHERE id = $1",
-    )
-    .bind(revision_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let hash: String =
+        sqlx::query_scalar("SELECT content_hash FROM delivery.requirement_revision WHERE id = $1")
+            .bind(revision_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     let error = requirement::confirm_revision(
         &pool,
         SYSTEM_TENANT,
@@ -577,7 +591,10 @@ async fn task_without_acceptance_rejects_the_whole_batch(pool: PgPool) {
         .decompose_if_approved(SYSTEM_TENANT, &session)
         .await
         .unwrap_err();
-    assert!(matches!(error, WriteBackError::BatchRejected(_)), "got {error:?}");
+    assert!(
+        matches!(error, WriteBackError::BatchRejected(_)),
+        "got {error:?}"
+    );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM delivery.task WHERE project_id = $1")
             .bind(fx.project_id)
@@ -652,7 +669,10 @@ async fn dependency_on_unknown_key_rejects_the_batch(pool: PgPool) {
         .decompose_if_approved(SYSTEM_TENANT, &session)
         .await
         .unwrap_err();
-    assert!(matches!(error, WriteBackError::BatchRejected(_)), "got {error:?}");
+    assert!(
+        matches!(error, WriteBackError::BatchRejected(_)),
+        "got {error:?}"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────── 开关 / 白名单
@@ -730,13 +750,12 @@ async fn approve_draft(
         .unwrap();
     let requirement_id = draft.requirement_id.expect("draft created");
     let revision_id = draft.revision_id.expect("revision created");
-    let hash: String = sqlx::query_scalar(
-        "SELECT content_hash FROM delivery.requirement_revision WHERE id = $1",
-    )
-    .bind(revision_id)
-    .fetch_one(pool)
-    .await
-    .unwrap();
+    let hash: String =
+        sqlx::query_scalar("SELECT content_hash FROM delivery.requirement_revision WHERE id = $1")
+            .bind(revision_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
     requirement::confirm_revision(
         pool,
         SYSTEM_TENANT,
