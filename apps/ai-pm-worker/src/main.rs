@@ -25,6 +25,9 @@ const JOB_BACKOFF_BASE_SECS: i64 = 5;
 const LEASE_SECS: i64 = 3600;
 /// Idle poll interval.
 const POLL_INTERVAL_MS: u64 = 60;
+/// 第七条循环（Batch G 会话回复）的轮询间隔。LLM 回复以秒计，1s 足够
+/// （与主循环 60ms 的「事件驱动」节奏不同：这里慢轮询是对的）。
+const CONVERSATION_REPLY_POLL_MS: u64 = 1000;
 /// Default on-disk policy — the red-line single source of truth
 /// (global constraint: `policies/ai-pm-ai-lead-v2.yaml`). Relative to the
 /// working directory the worker is started from (repo root in dev).
@@ -253,6 +256,40 @@ async fn main() {
                 );
             }
             tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await;
+        }
+    });
+
+    // 第七条循环：assistant 会话回复（Batch G，D-4 会话存储的生产者侧）。
+    // `AI_PM_CONVERSATION_REPLY=off|on`（默认 off，与 AI_PM_RUN_DISPATCH 的
+    // 谨慎传统对齐：新的计费型生产者不得在升级后静默启动）。扫描/防重入/
+    // 三级 provider 解析/落账细节都在 `pm_ai::conversation_reply`。
+    let conversation_pool = pool.clone();
+    tokio::spawn(async move {
+        let mode = pm_ai::conversation_reply::ConversationReplyMode::from_env();
+        tracing::info!(
+            ?mode,
+            "conversation reply loop (AI_PM_CONVERSATION_REPLY=off|on, default off)"
+        );
+        if !mode.enabled() {
+            return;
+        }
+        let mut worker = pm_ai::conversation_reply::ConversationReplyWorker::new(conversation_pool);
+        loop {
+            match worker.reply_round().await {
+                Ok(report) if report.has_activity() => {
+                    tracing::info!(
+                        replied = report.replied,
+                        failed = report.failed,
+                        skipped_no_provider = report.skipped_no_provider,
+                        "conversation reply round"
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!(error = %e, "conversation reply round failed; backing off")
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(CONVERSATION_REPLY_POLL_MS)).await;
         }
     });
 

@@ -5,8 +5,11 @@
 //! - `POST   /conversations/{id}/messages`          body `{content, content_type?}`
 //!   → 201 消息视图；**role 恒 `user`**（body 不收 role——assistant / system 的
 //!   生产者是后续 AI 链批次，不走 REST）；
-//! - `GET    /conversations/{id}/messages?before=&limit=`
-//!   created_at ASC，`before` 为 RFC3339 keyset 游标（`created_at < before`）。
+//! - `GET    /conversations/{id}/messages?before=&after=&after_id=&limit=`
+//!   `created_at, id` ASC；`before` 为向后 keyset 游标（`created_at < before`），
+//!   `after`(+`after_id`) 为向前增量游标（Batch G 前端轮询：
+//!   `created_at > after OR (created_at = after AND id > after_id)`）；
+//!   before/after 同给 400。
 //!
 //! 边界：项目不可见（非成员 / 跨租户 / 软删）→ 404；会话不存在或**跨属主**
 //! 一律 404（防探测）。消息只存储，不接任何模型调用。
@@ -55,6 +58,10 @@ pub(crate) struct AppendMessageBody {
 pub(crate) struct ListMessagesQuery {
     /// RFC3339 时间戳：只取 `created_at < before`（keyset 游标）。
     pub before: Option<String>,
+    /// RFC3339 时间戳：增量游标——取 `created_at > after`（Batch G 前向）。
+    pub after: Option<String>,
+    /// 同微秒决胜键：`created_at = after AND id > after_id`（须与 after 成对）。
+    pub after_id: Option<Uuid>,
     pub limit: Option<i64>,
 }
 
@@ -137,10 +144,12 @@ async fn append_message_handler(
         project_id,
         principal.principal_id,
         conversation_id,
-        // REST 恒 user：assistant / system 属内部 AI 链（后续批次）。
+        // REST 恒 user：assistant / system 属内部 AI 链（Batch G worker）。
         "user",
         &body.content,
         &content_type,
+        // REST 不外收 metadata：user 消息恒空对象（观测面归内部 AI 链）。
+        serde_json::json!({}),
     )
     .await?;
     Ok((StatusCode::CREATED, Json(message)).into_response())
@@ -168,6 +177,15 @@ async fn list_messages_handler(
         },
         None => None,
     };
+    let after = match query.after.as_deref() {
+        Some(text) => match chrono::DateTime::parse_from_rfc3339(text) {
+            Ok(t) => Some(t.with_timezone(&chrono::Utc)),
+            Err(_) => {
+                return Err(ApiError::BadRequest("after must be RFC3339"));
+            }
+        },
+        None => None,
+    };
     let items = list_messages(
         &state.pool,
         principal.tenant_id,
@@ -175,6 +193,8 @@ async fn list_messages_handler(
         principal.principal_id,
         conversation_id,
         before,
+        after,
+        query.after_id,
         query.limit,
     )
     .await?;

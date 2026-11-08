@@ -82,4 +82,16 @@ describe("conversations api（D-4 会话 REST）", () => {
       {}
     );
   });
+
+  it("listMessages: after/after_id 增量游标透传为 query（Batch G 轮询契约）", async () => {
+    await listMessages("p1", "c1", {
+      after: "2026-11-08T10:00:00Z",
+      after_id: "m1",
+      limit: 500
+    });
+    expect(httpGet).toHaveBeenCalledWith(
+      "/v1/pm/projects/p1/conversations/c1/messages",
+      { after: "2026-11-08T10:00:00Z", after_id: "m1", limit: 500 }
+    );
+  });
 });

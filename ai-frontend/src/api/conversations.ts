@@ -7,8 +7,10 @@ import { http } from "@/api/base";
  * - 会话属主 = 创建时的 principal；他人会话与不存在会话同形 404（防探测）；
  * - `POST /conversations/{id}/messages` role 恒 `user`（body 不收 role）：
  *   assistant / system 的生产者是内部 AI 链（后续批次），REST 只存储；
- * - 消息列表 `created_at` ASC，`before` 为 RFC3339 keyset 游标
- *   （`created_at < before`），limit 默认 200、clamp [1, 500]；
+ * - 消息列表 `(created_at, id)` ASC；`before` 为向后 keyset 游标
+ *   （`created_at < before`），`after`(+`after_id`) 为向前增量游标
+ *   （`created_at > after OR (created_at = after AND id > after_id)`，
+ *   Batch G 前端轮询契约面），limit 默认 200、clamp [1, 500]；
  * - 边界：title ≤ 500 字符、content ≤ 100k 字符（超限 400）。
  * 错误体 `{message}`（@digua/http 原样透传）。
  */
@@ -35,7 +37,7 @@ export interface ConversationMessage {
   conversation_id: string;
   role: ConversationMessageRole;
   content: string;
-  /** 服务端缺省 `markdown`；当前 REST 只写 user 消息。 */
+  /** 服务端缺省 `markdown`；REST 写 user 消息，assistant 由 worker 链写入。 */
   content_type: string;
   metadata: unknown;
   created_at: string;
@@ -54,6 +56,13 @@ export interface AppendMessagePayload {
 export interface ListMessagesQuery {
   /** RFC3339 keyset 游标：只取 `created_at < before` 的更早消息。 */
   before?: string;
+  /** RFC3339 增量游标：只取 `created_at > after` 的更新消息（Batch G 轮询）。 */
+  after?: string;
+  /**
+   * 同微秒决胜键：`created_at = after AND id > after_id`（须与 `after`
+   * 成对给出，单独给会 400）。
+   */
+  after_id?: string;
   /** 服务端 clamp [1, 500]，缺省 200。 */
   limit?: number;
 }

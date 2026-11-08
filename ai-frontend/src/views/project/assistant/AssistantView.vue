@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { RefreshCw } from "lucide-vue-next";
@@ -21,18 +21,19 @@ import {
 import { SCOPE_ALL, useScopeStore } from "@/api/scope";
 
 /**
- * Project AI conversation page（V2 D-4 会话 REST 接线批，2026-11-08）。
+ * Project AI conversation page（V2 D-4 会话 REST + Batch G assistant 回复）。
  *
  * 数据 = pm-api `/v1/pm/projects/{id}/conversations*`（`@/api/conversations`）：
  *   - 进入页面拉本人会话列表（updated_at DESC）；空列表不阻塞输入——
  *     首次发送自动建会话（title 取首条消息截断）再落消息；
- *   - 选中会话 → 拉消息（created_at ASC，limit 500 = 服务端 clamp 上限；
- *     keyset `before` 仅能向前翻页，而首屏无「从最新往前」游标，故
- *     >500 条的历史尾巴暂不可达——后端分页形状限制，不伪造完整假象）；
+ *   - 选中会话 → 拉消息（(created_at, id) ASC，limit 500 = 服务端 clamp 上限）；
+ *   - **增量轮询**（Batch G）：选中会话后每 POLL_INTERVAL_MS 用
+ *     `after/after_id`（最后一条消息）拉新消息并追加（任何 role——assistant
+ *     回复由 ai-pm-worker 的会话回复链落库）；发送成功后立即触发一次；
+ *     切会话/项目切换/卸载清理定时器；轮询失败（429/网络抖动）静默保留旧态；
  *   - 发送链路：等待 201 后按返回记录插入本地时间线（不乐观插入），
  *     失败保留原文提供一键重发，不静默丢弃；
- *   - 诚实缺位：assistant 消息尚无生产者（内部 AI 链后续批次），发送成功
- *     后仅展示明确的系统提示行，绝不伪造任何 AI 回复内容。
+ *   - assistant 消息按返回 role 渲染到 AI 侧，内容一律来自服务端，不伪造。
  */
 const route = useRoute();
 const { t } = useI18n();
@@ -50,6 +51,8 @@ const projectId = computed(() => {
 
 /** 单次拉取条数 = 服务端 clamp 上限（MAX_MESSAGE_LIMIT）。 */
 const MESSAGE_PAGE_LIMIT = 500;
+/** 增量轮询间隔：assistant 回复生成以秒计，4s 是延迟与请求量的折中。 */
+const POLL_INTERVAL_MS = 4000;
 /** 自动建会话时从首条消息截取的 title 长度。 */
 const TITLE_MAX_CHARS = 40;
 
@@ -63,6 +66,61 @@ const messagesLoading = ref(false);
 const sending = ref(false);
 const sendError = ref("");
 const pendingText = ref("");
+
+// ───────────────────────────────────────────────────────── 增量轮询
+
+let pollTimer: number | null = null;
+let pollInFlight = false;
+/** 卸载后置位：残留定时器回调直接短路，避免跨用例/跨页面脏请求。 */
+let disposed = false;
+
+function stopPolling() {
+  if (pollTimer !== null) {
+    window.clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function schedulePolling() {
+  if (disposed) return;
+  stopPolling();
+  pollTimer = window.setTimeout(() => {
+    pollTimer = null;
+    void pollMessages();
+  }, POLL_INTERVAL_MS);
+}
+
+/**
+ * 一次增量拉取：游标 = 时间线最后一条（任何 role）；空时间线退化为
+ * 全量首屏。返回记录按 id 去重后追加（任何 role，assistant → AI 侧气泡）。
+ * 任何失败静默吞掉（保留旧态，不打扰用户），成功且仍停在同一会话时续排
+ * 下一轮；会话已切换则不自续（切会话路径自己负责新定时器）。
+ */
+async function pollMessages() {
+  const conversationId = selectedId.value;
+  if (disposed || !projectId.value || !conversationId || pollInFlight) return;
+  pollInFlight = true;
+  try {
+    const last = timeline.value.at(-1) ?? null;
+    const query = last
+      ? { after: last.createdAt, after_id: last.id, limit: MESSAGE_PAGE_LIMIT }
+      : { limit: MESSAGE_PAGE_LIMIT };
+    const records = await listMessages(projectId.value, conversationId, query);
+    if (selectedId.value !== conversationId) return;
+    const known = new Set(timeline.value.map(message => message.id));
+    const fresh = records
+      .filter(record => !known.has(record.id))
+      .map(toTimelineMessage);
+    if (fresh.length > 0) {
+      timeline.value = [...timeline.value, ...fresh];
+    }
+  } catch {
+    // 静默：轮询失败保留旧态（429 限流/网络抖动均不打扰用户）。
+  } finally {
+    pollInFlight = false;
+  }
+  if (selectedId.value === conversationId) schedulePolling();
+}
 
 const selectedConversation = computed(
   () => conversations.value.find(item => item.id === selectedId.value) ?? null
@@ -112,17 +170,25 @@ async function loadMessages(conversationId: string) {
 
 function onSelect(id: string) {
   if (!id || id === selectedId.value) return;
+  // 切会话：先停旧轮询链，加载完成后续排新链（游标随时间线重置）。
+  stopPolling();
   selectedId.value = id;
   sendError.value = "";
   pendingText.value = "";
-  void loadMessages(id);
+  void loadMessages(id)
+    .catch(() => {})
+    .finally(() => {
+      if (selectedId.value === id) schedulePolling();
+    });
 }
 
 async function load() {
   if (!projectId.value) {
+    stopPolling();
     loading.value = false;
     return;
   }
+  stopPolling();
   loading.value = true;
   loadError.value = "";
   try {
@@ -135,6 +201,7 @@ async function load() {
       error instanceof Error ? error.message : String(error ?? "");
   } finally {
     loading.value = false;
+    if (selectedId.value) schedulePolling();
   }
 }
 
@@ -173,6 +240,9 @@ async function handleSend(text: string) {
     });
     timeline.value = [...timeline.value, toTimelineMessage(record)];
     pendingText.value = "";
+    // 发送成功立即触发一次增量轮询：assistant 回复可能已落库
+    //（去重保证与本地追加的 user 消息不冲突）。
+    void pollMessages();
     // 会话行本地同步（列表按 updated_at DESC，发送后提前到首位）。
     const index = conversations.value.findIndex(
       item => item.id === conversationId
@@ -204,9 +274,15 @@ onMounted(() => {
   void load();
 });
 
+onUnmounted(() => {
+  disposed = true;
+  stopPolling();
+});
+
 // 项目上下文变化（顶栏切项目 / 测试环境路由晚于挂载落定）→ 重拉会话列表。
 watch(projectId, next => {
   if (!next) {
+    stopPolling();
     conversations.value = [];
     selectedId.value = "";
     timeline.value = [];

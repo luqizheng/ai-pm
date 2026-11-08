@@ -128,7 +128,9 @@ pub async fn list_conversations(
 /// 追加一条消息（同事务刷新会话 `updated_at` / `last_message_at`）。
 ///
 /// role 词表见 [`MESSAGE_ROLES`]；REST 侧只允许 `user`（assistant / system
-/// 留给内部 AI 链）。会话不存在 / 跨属主 / 跨项目 → [`ConversationError::NotFound`]。
+/// 留给内部 AI 链）。`metadata` 为观测面（assistant 回复写 model/latency），
+/// REST 侧传 `{}`。会话不存在 / 跨属主 / 跨项目 → [`ConversationError::NotFound`]。
+#[allow(clippy::too_many_arguments)]
 pub async fn append_message(
     pool: &PgPool,
     tenant_id: Uuid,
@@ -138,6 +140,7 @@ pub async fn append_message(
     role: &str,
     content: &str,
     content_type: &str,
+    metadata: serde_json::Value,
 ) -> Result<MessageView, ConversationError> {
     if !MESSAGE_ROLES.contains(&role) {
         return Err(ConversationError::Validation(format!(
@@ -183,14 +186,15 @@ pub async fn append_message(
     // now() 在 Postgres 里是事务时间戳：消息 created_at 与会话刷新值同源。
     let row = sqlx::query(
         "INSERT INTO ai.conversation_message \
-             (conversation_id, role, content, content_type) \
-         VALUES ($1, $2, $3, $4) \
+             (conversation_id, role, content, content_type, metadata) \
+         VALUES ($1, $2, $3, $4, $5) \
          RETURNING id, conversation_id, role, content, content_type, metadata, created_at",
     )
     .bind(conversation_id)
     .bind(role)
     .bind(content)
     .bind(content_type)
+    .bind(metadata)
     .fetch_one(&mut *tx)
     .await
     .map_err(db)?;
@@ -207,9 +211,20 @@ pub async fn append_message(
     Ok(message_from_row(&row))
 }
 
-/// 列出会话内消息（created_at ASC；`before` 为 keyset 游标——只取
-/// `created_at < before`；`limit` 缺省 [`DEFAULT_MESSAGE_LIMIT`]，
-/// 截到 [`MAX_MESSAGE_LIMIT`]）。
+/// 列出会话内消息（`created_at, id` ASC；`limit` 缺省
+/// [`DEFAULT_MESSAGE_LIMIT`]，截到 [`MAX_MESSAGE_LIMIT`]）。
+///
+/// 双向 keyset 游标：
+/// - `before`：向后翻页，只取 `created_at < before`；
+/// - `after`（+ 可选 `after_id`）：向前取增量，取
+///   `created_at > after OR (created_at = after AND id > after_id)`；
+///   不给 `after_id` 时退化为严格 `created_at > after`。
+///   `after_id` 是同微秒消息的稳定决胜键（id 随机，但排序确定性由本函数
+///   的 `created_at, id` 双键保证），只给 `after_id` 不给 `after` 是无效
+///   组合；`before` 与 `after` 同时给出互斥 400（Validation）。
+///
+/// Batch G：`after` 组合是前端增量轮询的游标（清偿「>500 条新尾部不可达」）。
+#[allow(clippy::too_many_arguments)]
 pub async fn list_messages(
     pool: &PgPool,
     tenant_id: Uuid,
@@ -217,8 +232,20 @@ pub async fn list_messages(
     principal_id: Uuid,
     conversation_id: Uuid,
     before: Option<DateTime<Utc>>,
+    after: Option<DateTime<Utc>>,
+    after_id: Option<Uuid>,
     limit: Option<i64>,
 ) -> Result<Vec<MessageView>, ConversationError> {
+    if before.is_some() && after.is_some() {
+        return Err(ConversationError::Validation(
+            "before and after cursors are mutually exclusive".into(),
+        ));
+    }
+    if after_id.is_some() && after.is_none() {
+        return Err(ConversationError::Validation(
+            "after_id requires the after cursor".into(),
+        ));
+    }
     let limit = limit
         .unwrap_or(DEFAULT_MESSAGE_LIMIT)
         .clamp(1, MAX_MESSAGE_LIMIT);
@@ -241,12 +268,17 @@ pub async fn list_messages(
     let rows = sqlx::query(
         "SELECT id, conversation_id, role, content, content_type, metadata, created_at \
          FROM ai.conversation_message \
-         WHERE conversation_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2) \
-         ORDER BY created_at ASC \
-         LIMIT $3",
+         WHERE conversation_id = $1 \
+           AND ($2::timestamptz IS NULL OR created_at < $2) \
+           AND ($3::timestamptz IS NULL OR created_at > $3 \
+                OR (created_at = $3 AND $4::uuid IS NOT NULL AND id > $4)) \
+         ORDER BY created_at ASC, id ASC \
+         LIMIT $5",
     )
     .bind(conversation_id)
     .bind(before)
+    .bind(after)
+    .bind(after_id)
     .bind(limit)
     .fetch_all(pool)
     .await

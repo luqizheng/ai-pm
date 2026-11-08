@@ -1,12 +1,12 @@
 assistant:
   pageTitle: AI 助手
-  subtitle: 与 AI-PM 就当前项目展开会话；消息持久保存，AI 回复通道开通后可继续追问。
+  subtitle: 与 AI-PM 就当前项目展开会话；AI 回复由平台模型生成，通常需要数秒。
   switcherLabel: 会话
   switcherPlaceholder: 选择会话
   untitled: 未命名会话
   messagesLoading: 消息加载中…
   emptyGuide: 还没有会话。在下方输入第一条消息，发送时将自动创建会话。
-  recordedNotice: 已记录到会话；AI 回复通道尚未开通，AI 暂不会回复。
+  recordedNotice: AI 回复由平台模型生成，通常需要数秒；生成后会自动追加到当前会话。
   sendError: 消息发送失败
   resend: 重发
   noProjectTitle: 未选择项目

@@ -14,6 +14,10 @@
 /// `connection_test` (pm-application::team_llm).
 pub const PURPOSE_AI_ANALYSIS: &str = "ai_analysis";
 pub const PURPOSE_REPO_IMPORT: &str = "repo_import";
+/// Batch G: assistant conversation replies. `analysis_run_id` is always NULL
+/// for this purpose (no analysis run backs a chat turn — the subquery in
+/// [`record_call`] yields NULL for a NULL event, which the column allows).
+pub const PURPOSE_CONVERSATION_REPLY: &str = "conversation_reply";
 
 /// Maps an analysis-chain [`ModelError`] onto the §11 error taxonomy
 /// (migration 0041 comment: authentication / connection / timeout /
@@ -99,7 +103,10 @@ mod tests {
 
     #[test]
     fn analysis_error_kind_uses_the_seven_kind_taxonomy() {
-        assert_eq!(analysis_error_kind(&crate::model::ModelError::Timeout), "timeout");
+        assert_eq!(
+            analysis_error_kind(&crate::model::ModelError::Timeout),
+            "timeout"
+        );
         assert_eq!(
             analysis_error_kind(&crate::model::ModelError::Unavailable("boom".to_string())),
             "model_unavailable"

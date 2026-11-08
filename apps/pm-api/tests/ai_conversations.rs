@@ -473,3 +473,141 @@ async fn empty_content_is_validation_error(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+// ── Batch G：前向游标（after/after_id 增量轮询）──────────────────────────
+
+async fn list_messages_query(
+    app: axum::Router,
+    token: &str,
+    project_id: Uuid,
+    conversation_id: Uuid,
+    query: &str,
+) -> (StatusCode, Value) {
+    body_json(
+        app.oneshot(request(
+            "GET",
+            &format!(
+                "/v1/pm/projects/{project_id}/conversations/{conversation_id}/messages{query}"
+            ),
+            token,
+            None,
+        ))
+        .await
+        .unwrap(),
+    )
+    .await
+}
+
+/// 用例 6：`after(+after_id)` 前向增量——以首条消息为游标，只取其后消息；
+/// 无游标时全量 ASC。这是前端 4s 轮询的契约面。
+#[sqlx::test(migrations = "../../migrations")]
+async fn after_cursor_returns_only_newer_messages(pool: PgPool) {
+    let tenant = seed_tenant(&pool, "1").await;
+    let alice = seed_member(&pool, tenant, "alice").await;
+    let customer = seed_customer(&pool, tenant, "c1").await;
+    let project = seed_project(&pool, tenant, customer, "p1", alice).await;
+    let app = app(pool);
+    let token = token_for("alice", 1);
+
+    let (_, v) = create_conversation(app.clone(), &token, project).await;
+    let conversation_id: Uuid = v["id"].as_str().unwrap().parse().unwrap();
+    let (_, first) = post_message(
+        app.clone(),
+        &token,
+        project,
+        conversation_id,
+        json!({"content": "first"}),
+    )
+    .await;
+    let (_, second) = post_message(
+        app.clone(),
+        &token,
+        project,
+        conversation_id,
+        json!({"content": "second"}),
+    )
+    .await;
+
+    let query = format!(
+        "?after={}&after_id={}",
+        first["created_at"].as_str().unwrap(),
+        first["id"].as_str().unwrap()
+    );
+    let (status, v) =
+        list_messages_query(app.clone(), &token, project, conversation_id, &query).await;
+    assert_eq!(status, StatusCode::OK, "{v}");
+    let items = v.as_array().unwrap();
+    assert_eq!(items.len(), 1, "{v}");
+    assert_eq!(items[0]["content"], json!("second"));
+    assert_eq!(items[0]["id"], second["id"]);
+
+    // 以最后一条为游标 → 无增量（幂等轮询面）。
+    let query = format!(
+        "?after={}&after_id={}",
+        second["created_at"].as_str().unwrap(),
+        second["id"].as_str().unwrap()
+    );
+    let (status, v) = list_messages_query(app, &token, project, conversation_id, &query).await;
+    assert_eq!(status, StatusCode::OK, "{v}");
+    assert_eq!(v.as_array().map(Vec::len), Some(0), "{v}");
+}
+
+/// 用例 7：游标组合校验——before/after 同给 400；after_id 缺 after 400；
+/// 非法 after（非 RFC3339）400；非法 after_id（非 UUID）400。
+#[sqlx::test(migrations = "../../migrations")]
+async fn cursor_combinations_are_validated(pool: PgPool) {
+    let tenant = seed_tenant(&pool, "1").await;
+    let alice = seed_member(&pool, tenant, "alice").await;
+    let customer = seed_customer(&pool, tenant, "c1").await;
+    let project = seed_project(&pool, tenant, customer, "p1", alice).await;
+    let app = app(pool);
+    let token = token_for("alice", 1);
+
+    let (_, v) = create_conversation(app.clone(), &token, project).await;
+    let conversation_id: Uuid = v["id"].as_str().unwrap().parse().unwrap();
+    let base = format!("/v1/pm/projects/{project}/conversations/{conversation_id}/messages");
+
+    // before + after 同给 → 400。
+    let (status, _) = list_messages_query(
+        app.clone(),
+        &token,
+        project,
+        conversation_id,
+        "?before=2026-11-08T10:00:00Z&after=2026-11-08T10:00:00Z",
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // after_id 缺 after → 400。
+    let (status, _) = list_messages_query(
+        app.clone(),
+        &token,
+        project,
+        conversation_id,
+        "?after_id=0f0e0d0c-0b0a-4938-8111-111111111111",
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // 非法 after（非 RFC3339）→ 400。
+    let (status, _) = list_messages_query(
+        app.clone(),
+        &token,
+        project,
+        conversation_id,
+        "?after=not-a-time",
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // 非法 after_id（非 UUID）→ 400。
+    let (status, _) = list_messages_query(
+        app,
+        &token,
+        project,
+        conversation_id,
+        "?after=2026-11-08T10:00:00Z&after_id=not-a-uuid",
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
