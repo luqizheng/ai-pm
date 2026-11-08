@@ -1116,6 +1116,148 @@ async fn publish_happy_path_idempotent_and_lifecycle(pool: PgPool) {
     assert_eq!(version_n, 1, "no duplicate version on replay");
 }
 
+/// 第二轮发布（KP-2 修复回归）：提案目标替换前版本携带的同身份旧 Revision——
+/// 完整快照每身份恰一个 Revision（T-11 语义）；历史版本成员不受影响。
+#[sqlx::test(migrations = "../../migrations")]
+async fn publish_next_version_replaces_carried_revision(pool: PgPool) {
+    seed_principals(&pool).await;
+    let project = seed_project_with_lead(&pool, "pc-p2").await;
+    let lead = AuditActor::principal(LEAD);
+
+    let a1 = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("feature", Some("ra"), "A", "# A1", None),
+    )
+    .await
+    .unwrap();
+    let c1 = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("scenario", Some("rc"), "C", "# C1", None),
+    )
+    .await
+    .unwrap();
+    let p1 = seed_approved_proposal(
+        &pool,
+        project,
+        0,
+        &[
+            (
+                "update_object".to_string(),
+                Some(a1.object_id),
+                Some(a1.revision_id),
+                None,
+                None,
+            ),
+            (
+                "update_object".to_string(),
+                Some(c1.object_id),
+                Some(c1.revision_id),
+                None,
+                None,
+            ),
+        ],
+        "v1",
+    )
+    .await;
+    let v1 = publish_version(
+        &pool,
+        project,
+        &lead,
+        PublishVersionInput {
+            proposal_id: p1,
+            operation_id: "op-round-1".into(),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(v1.version_no, 1);
+
+    let a2 = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("feature", Some("ra"), "A", "# A2", None),
+    )
+    .await
+    .unwrap();
+    assert_eq!(a2.object_id, a1.object_id);
+    assert_eq!(a2.revision_no, 2);
+    let p2 = seed_approved_proposal(
+        &pool,
+        project,
+        1,
+        &[(
+            "update_object".to_string(),
+            Some(a2.object_id),
+            Some(a2.revision_id),
+            None,
+            None,
+        )],
+        "v2",
+    )
+    .await;
+    let v2 = publish_version(
+        &pool,
+        project,
+        &lead,
+        PublishVersionInput {
+            proposal_id: p2,
+            operation_id: "op-round-2".into(),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(v2.version_no, 2);
+
+    let members_of = |version_id: Uuid| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query_as::<_, (Uuid, Uuid)>(
+                "SELECT object_id, object_revision_id FROM pc.version_member \
+                  WHERE version_id = $1 AND object_id IS NOT NULL",
+            )
+            .bind(version_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap()
+        }
+    };
+    let v2_members = members_of(v2.version_id).await;
+    assert_eq!(
+        v2_members.len(),
+        2,
+        "one revision per identity: {v2_members:?}"
+    );
+    assert!(v2_members.contains(&(a2.object_id, a2.revision_id)));
+    assert!(v2_members.contains(&(c1.object_id, c1.revision_id)));
+    assert!(
+        !v2_members.contains(&(a1.object_id, a1.revision_id)),
+        "carried A@1 must be replaced by the proposal target A@2"
+    );
+    let expected_hash = canonical_members_hash(&[
+        VersionMemberPin {
+            kind: MemberKind::Object,
+            identity_id: a2.object_id,
+            revision_id: a2.revision_id,
+        },
+        VersionMemberPin {
+            kind: MemberKind::Object,
+            identity_id: c1.object_id,
+            revision_id: c1.revision_id,
+        },
+    ]);
+    assert_eq!(v2.snapshot_hash, expected_hash);
+
+    // 历史版本不受影响：v1 仍为 {A@1, C@1}
+    let v1_members = members_of(v1.version_id).await;
+    assert_eq!(v1_members.len(), 2);
+    assert!(v1_members.contains(&(a1.object_id, a1.revision_id)));
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // 5. 发布门禁（fail-closed）
 // ══════════════════════════════════════════════════════════════════════════

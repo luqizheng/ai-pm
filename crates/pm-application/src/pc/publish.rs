@@ -332,7 +332,51 @@ pub async fn publish_version(
         ));
     }
 
-    // ⑦ 成员集构建：前版本携带 − 废弃目标 + 提案目标 + 端点自动并入（F-05）
+    // ⑦ 成员集构建：前版本携带 − 废弃目标 − 被替换身份 + 提案目标 + 端点自动并入
+    // （F-05）。完整快照 = 每个身份在版本内恰一个 Revision（T-11：端点修订不一致
+    // 只能表现为端点缺失，不允许同身份多修订并存）——提案目标与端点钉扎替换前
+    // 版本携带的同身份旧钉扎。
+    let mut incoming: BTreeSet<VersionMemberPin> = BTreeSet::new();
+    for m in &member_rows {
+        if m.change_kind.starts_with("deprecate_") {
+            continue;
+        }
+        if let Some(p) = m.pin() {
+            incoming.insert(p);
+        }
+    }
+    // 端点自动并入（§10.1 成员时序契约 3）：留存关系成员的 PC 内端点必须可还原
+    // （废弃关系离开版本，其端点无需并入）
+    for m in &member_rows {
+        if m.change_kind.starts_with("deprecate_") {
+            continue;
+        }
+        let Some(rr) = m.relationship_revision_id else {
+            continue;
+        };
+        let endpoints: Vec<CarriedRow> = sqlx::query_as(
+            "SELECT source_object_id, source_object_revision_id, \
+                    target_object_id, target_object_revision_id \
+               FROM pc.relationship_revision \
+              WHERE tenant_id = $1 AND project_id = $2 AND id = $3",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(rr)
+        .fetch_all(&mut *tx)
+        .await?;
+        for (so, sr, to, tr) in endpoints {
+            for (o, r) in [(so, sr), (to, tr)] {
+                if let (Some(o), Some(r)) = (o, r) {
+                    incoming.insert(VersionMemberPin {
+                        kind: MemberKind::Object,
+                        identity_id: o,
+                        revision_id: r,
+                    });
+                }
+            }
+        }
+    }
     let mut set: BTreeSet<VersionMemberPin> = BTreeSet::new();
     if let Some((_, pred_id)) = current_version {
         let carried: Vec<CarriedRow> = sqlx::query_as(
@@ -368,50 +412,27 @@ pub async fn publish_version(
             }
         }
     }
+    let same_identity = |a: &VersionMemberPin, b: &VersionMemberPin| {
+        a.kind == b.kind && a.identity_id == b.identity_id
+    };
     set.retain(|p| {
-        !deprecating
-            .iter()
-            .any(|d| d.kind == p.kind && d.identity_id == p.identity_id)
+        !deprecating.iter().any(|d| same_identity(d, p))
+            && !incoming.iter().any(|i| same_identity(i, p))
     });
-    for m in &member_rows {
-        if let Some(p) = m.pin() {
-            if m.change_kind.starts_with("deprecate_") {
-                continue;
-            }
-            set.insert(p);
-        }
-    }
-    // 端点自动并入（§10.1 成员时序契约 3）：关系成员的 PC 内端点必须可还原
-    for m in &member_rows {
-        let Some(rr) = m.relationship_revision_id else {
-            continue;
-        };
-        let endpoints: Vec<CarriedRow> = sqlx::query_as(
-            "SELECT source_object_id, source_object_revision_id, \
-                    target_object_id, target_object_revision_id \
-               FROM pc.relationship_revision \
-              WHERE tenant_id = $1 AND project_id = $2 AND id = $3",
-        )
-        .bind(tenant_id)
-        .bind(project_id)
-        .bind(rr)
-        .fetch_all(&mut *tx)
-        .await?;
-        for (so, sr, to, tr) in endpoints {
-            for (o, r) in [(so, sr), (to, tr)] {
-                if let (Some(o), Some(r)) = (o, r) {
-                    set.insert(VersionMemberPin {
-                        kind: MemberKind::Object,
-                        identity_id: o,
-                        revision_id: r,
-                    });
-                }
-            }
-        }
-    }
+    set.extend(incoming);
     let members: Vec<VersionMemberPin> = set.into_iter().collect();
     if members.is_empty() {
         return Err(PcError::Invalid("version member set is empty".into()));
+    }
+    // 每身份恰一个 Revision（BTreeSet 有序：同身份相邻）
+    if let Some(pair) = members.windows(2).find(|w| same_identity(&w[0], &w[1])) {
+        return Err(PcError::Conflict(format!(
+            "version member set pins {} {} at multiple revisions ({} / {})",
+            pair[0].kind.as_str(),
+            pair[0].identity_id,
+            pair[0].revision_id,
+            pair[1].revision_id
+        )));
     }
 
     // ⑦ snapshot_hash 先算后插（V1.1 R2：消除占位回填矛盾）
