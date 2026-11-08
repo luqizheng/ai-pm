@@ -235,23 +235,6 @@ fn content(title: &str, summary: &str) -> MemoryContent {
     }
 }
 
-/// 契约 JSON（注入字段断言用：off 时不出现 `discussion_memory` 键）。
-/// `task_id` 由调用方创建（记忆锚与契约同 Task），本函数领取该 Task 的 Run 后读取。
-async fn contract_json(
-    pool: &PgPool,
-    project_id: Uuid,
-    task_id: Uuid,
-    mode: DiscussionMemoryInjectionMode,
-) -> (Value, String) {
-    let (run_id, token, generation) = claim(pool, project_id, task_id).await;
-    let contract = get_run_context_with(pool, project_id, run_id, &token, generation, mode)
-        .await
-        .unwrap();
-    let json = serde_json::to_value(&contract).unwrap();
-    let raw = serde_json::to_string(&contract).unwrap();
-    (json, raw)
-}
-
 #[sqlx::test(migrations = "../../migrations")]
 async fn flag_off_output_is_byte_identical_and_no_query_happens(pool: PgPool) {
     let project_id = seed(&pool, "DM-OFF").await;
@@ -497,10 +480,8 @@ async fn on_injects_current_versions_by_task_and_requirement_subjects(pool: PgPo
         .map(|m| m["memory_id"].as_str().unwrap().parse().unwrap())
         .collect();
     assert!(ids.contains(&a.memory_id) && ids.contains(&b.memory_id));
-    let a_view = injected
-        .iter()
-        .find(|m| m["memory_id"] == Value::from(a.memory_id.to_string()))
-        .unwrap();
+    let a_id = a.memory_id.to_string();
+    let a_view = injected.iter().find(|m| m["memory_id"] == *a_id).unwrap();
     assert_eq!(a_view["summary"], "因延迟不可控");
     assert_eq!(a_view["version_no"], 1);
     assert_eq!(a_view["version_id"], Value::from(a.revision_id.to_string()));
