@@ -198,9 +198,9 @@ requirements:
   contextEmptyTitle: 未选择需求
   contextEmptyDesc: 在列表中选择一条需求查看来源、讨论与分析。
   contextAiNote: AI 输出一律为提案，需人工评审后才会生效。
-  discussEmpty: 暂无讨论记录。
-  analysisEmpty: 暂无分析发现。
-  aiEmpty: 暂无 AI 建议。
+  discussEmpty: 暂无讨论记录（讨论切片未接入）。
+  analysisEmpty: 暂无分析发现（分析切片未接入）。
+  aiEmpty: 暂无 AI 建议（AI 编排切片未接入）。
   analysisCompleteness: 完备性
   analysisAmbiguity: 歧义
   analysisDuplication: 重复
@@ -264,6 +264,33 @@ requirements:
   rejectDialogDesc: "{code} 将退回草稿状态，待确认修订标记为已拒绝。"
   proposeDialogTitle: 提交确认
   proposeDialogDesc: "{code} 当前内容将生成新修订并进入待确认状态。"
+  # ── 接真批（2026-11-08）：创建/编辑/加载/来源词表 ──
+  createTitle: 新建需求
+  createDesc: 标题、类型与优先级在创建后不可修改。
+  createCode: 编码
+  createTitleField: 标题
+  createType: 类型
+  createPriority: 优先级
+  createBody: 首版正文（Markdown，可选）
+  createBodyPlaceholder: 用 Markdown 写下需求正文…
+  createSubmit: 创建
+  priorityNormal: 中
+  editImmutableHint: 创建后不可修改
+  editSummary: 变更描述（可选）
+  editSummaryPlaceholder: 一句话描述这次改动
+  editBody: 正文（Markdown）
+  editBodyHint: 保存将创建或更新草稿修订；提交确认后才成为正式版本。
+  sourceExternalFeedback: 外部反馈
+  sourceIntake: 外部接管
+  sourceImport: 导入
+  loadError: 需求加载失败
+  loadRetry: 重试
+  actionError: 操作失败
+  noProjectTitle: 未选择项目
+  noProjectDesc: 在顶部选择一个项目后查看需求。
+  loadingTitle: 正在加载需求
+  loadingDesc: 正在从服务获取需求列表与详情。
+  proposeNoBody: 当前需求没有正文，无法提交确认；请先编辑正文。
 requirementDetail:
   pageTitle: 需求详情
   openFull: 打开详情页

@@ -18,16 +18,10 @@ import Badge from "@/components/ui/badge/Badge.vue";
 import type { BadgeVariant } from "@/components/ui/badge/Badge.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
-import Select from "@/components/ui/select/Select.vue";
 import StatusIndicator from "@/components/ui/status-indicator/StatusIndicator.vue";
 import type { StatusIndicatorTone } from "@/components/ui/status-indicator/status-indicator";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
-import type {
-  RequirementEntry,
-  RequirementPriority,
-  RequirementType
-} from "../requirement-entry";
-import { currentRevision } from "../fixtures";
+import type { RequirementEntry } from "../requirement-entry";
 
 /**
  * 需求详情面板（S02-UI-01 §6.2 + §8）。
@@ -55,16 +49,11 @@ const emit = defineEmits<{
       | "history"
       | "open"
   ): void;
-  (
-    e: "save",
-    payload: {
-      title: string;
-      description: string;
-      type: RequirementType;
-      priority: RequirementPriority;
-      criteria: string[];
-    }
-  ): void;
+  /**
+   * 保存编辑 = 起草/更新一份正文修订（S02-I1 语义：后端仅支持正文修订，
+   * title/type/priority 创建后不可改）。payload 为修订正文 + 一句话变更描述。
+   */
+  (e: "save", payload: { markdown: string; summary: string }): void;
   (e: "cancel"): void;
 }>();
 
@@ -79,41 +68,19 @@ const sourceIcons: Record<string, Component> = {
 };
 
 const form = reactive({
-  title: "",
-  description: "",
-  type: "functional" as RequirementType,
-  priority: "medium" as RequirementPriority,
-  criteriaText: ""
+  summary: "",
+  markdown: ""
 });
 
 watch(
   () => [props.entry.id, props.editing] as const,
   ([, editing]) => {
     if (!editing) return;
-    form.title = props.entry.title;
-    form.description = props.entry.description;
-    form.type = props.entry.type;
-    form.priority = props.entry.priority;
-    form.criteriaText = props.entry.acceptance_criteria
-      .map(item => item.statement)
-      .join("\n");
+    form.summary = "";
+    form.markdown = props.entry.body_markdown ?? props.entry.description;
   },
   { immediate: true }
 );
-
-const typeOptions = computed(() => [
-  { value: "functional", label: t("pm.requirements.typeFunctional") },
-  {
-    value: "non_functional",
-    label: t("pm.requirements.typeNonFunctional")
-  }
-]);
-
-const priorityOptions = computed(() => [
-  { value: "high", label: t("pm.requirements.priorityHigh") },
-  { value: "medium", label: t("pm.requirements.priorityMedium") },
-  { value: "low", label: t("pm.requirements.priorityLow") }
-]);
 
 const typeLabel = computed(() =>
   props.entry.type === "functional"
@@ -189,7 +156,10 @@ const sourceKindLabel = (kind: string) =>
     discovery: t("pm.requirements.sourceDiscovery"),
     knowledge: t("pm.requirements.sourceKnowledge"),
     discussion: t("pm.requirements.sourceDiscussion"),
-    objective: t("pm.requirements.sourceObjective")
+    objective: t("pm.requirements.sourceObjective"),
+    external_feedback: t("pm.requirements.sourceExternalFeedback"),
+    intake: t("pm.requirements.sourceIntake"),
+    import: t("pm.requirements.sourceImport")
   })[kind] ?? kind;
 
 const relatedKindLabel = (kind: string) =>
@@ -200,16 +170,9 @@ const relatedKindLabel = (kind: string) =>
   })[kind] ?? kind;
 
 function onSave() {
-  const criteria = form.criteriaText
-    .split("\n")
-    .map(line => line.trim())
-    .filter(Boolean);
   emit("save", {
-    title: form.title.trim() || props.entry.title,
-    description: form.description.trim(),
-    type: form.type,
-    priority: form.priority,
-    criteria
+    markdown: form.markdown.trim(),
+    summary: form.summary.trim()
   });
 }
 </script>
@@ -282,47 +245,58 @@ function onSave() {
     </div>
 
     <form v-if="editing" class="req-detail__form" @submit.prevent="onSave">
-      <label class="req-detail__field">
-        <span class="req-detail__field-label">{{
-          t("pm.requirements.editTitleField")
-        }}</span>
-        <Input v-model="form.title" size="sm" required />
-      </label>
+      <div class="req-detail__field-row">
+        <label class="req-detail__field">
+          <span class="req-detail__field-label">{{
+            t("pm.requirements.editTitleField")
+          }}</span>
+          <Input :model-value="entry.title" size="sm" disabled />
+          <span class="req-detail__field-hint">{{
+            t("pm.requirements.editImmutableHint")
+          }}</span>
+        </label>
+      </div>
       <div class="req-detail__field-row">
         <label class="req-detail__field">
           <span class="req-detail__field-label">{{
             t("pm.requirements.detailType")
           }}</span>
-          <Select v-model="form.type" :options="typeOptions" size="sm" />
+          <Input :model-value="typeLabel" size="sm" disabled />
         </label>
         <label class="req-detail__field">
           <span class="req-detail__field-label">{{
             t("pm.requirements.detailPriority")
           }}</span>
-          <Select
-            v-model="form.priority"
-            :options="priorityOptions"
-            size="sm"
-          />
+          <Input :model-value="priorityLabel" size="sm" disabled />
         </label>
       </div>
       <label class="req-detail__field">
         <span class="req-detail__field-label">{{
-          t("pm.requirements.editDescription")
+          t("pm.requirements.editSummary")
         }}</span>
-        <Textarea v-model="form.description" size="sm" :rows="3" />
+        <Input
+          v-model="form.summary"
+          size="sm"
+          :placeholder="t('pm.requirements.editSummaryPlaceholder')"
+        />
       </label>
       <label class="req-detail__field">
         <span class="req-detail__field-label">{{
-          t("pm.requirements.editCriteria")
+          t("pm.requirements.editBody")
         }}</span>
-        <Textarea v-model="form.criteriaText" size="sm" :rows="5" />
+        <Textarea v-model="form.markdown" size="sm" :rows="12" required />
         <span class="req-detail__field-hint">{{
-          t("pm.requirements.editCriteriaHint")
+          t("pm.requirements.editBodyHint")
         }}</span>
       </label>
       <div class="req-detail__form-actions">
-        <Button variant="primary" size="sm" type="submit">
+        <Button
+          variant="primary"
+          size="sm"
+          type="button"
+          :disabled="form.markdown.trim().length === 0"
+          @click="onSave"
+        >
           {{ t("pm.requirements.editSave") }}
         </Button>
         <Button variant="ghost" size="sm" type="button" @click="emit('cancel')">
@@ -357,7 +331,12 @@ function onSave() {
             <dd>{{ entry.source_label }}</dd>
           </div>
         </dl>
-        <p class="req-detail__desc">{{ entry.description }}</p>
+        <p v-if="entry.description" class="req-detail__desc">
+          {{ entry.description }}
+        </p>
+        <pre v-if="entry.body_markdown" class="req-detail__body">{{
+          entry.body_markdown
+        }}</pre>
       </section>
 
       <section
@@ -397,7 +376,7 @@ function onSave() {
             class="req-detail__source"
           >
             <component
-              :is="sourceIcons[source.kind]"
+              :is="sourceIcons[source.kind] ?? BookOpen"
               class="req-detail__source-icon"
               aria-hidden="true"
             />
@@ -664,6 +643,22 @@ function onSave() {
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
   color: var(--text-primary);
+}
+
+.req-detail__body {
+  margin: 0;
+  padding: var(--space-3);
+  border: var(--border-1) solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-base);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 18rem;
+  overflow: auto;
 }
 
 .req-detail__criteria {

@@ -198,9 +198,9 @@ requirements:
   contextEmptyTitle: No requirement selected
   contextEmptyDesc: Select a requirement to view its sources, discussions and analysis.
   contextAiNote: AI output is always a proposal; it takes effect only after human review.
-  discussEmpty: No discussions yet.
-  analysisEmpty: No analysis findings yet.
-  aiEmpty: No AI suggestions yet.
+  discussEmpty: No discussions yet (discussions slice not wired).
+  analysisEmpty: No analysis findings yet (analysis slice not wired).
+  aiEmpty: No AI suggestions yet (AI orchestration slice not wired).
   analysisCompleteness: Completeness
   analysisAmbiguity: Ambiguity
   analysisDuplication: Duplication
@@ -264,6 +264,33 @@ requirements:
   rejectDialogDesc: "{code} will return to draft and its pending revision will be marked rejected."
   proposeDialogTitle: Submit for confirmation
   proposeDialogDesc: "{code} current content will become a new revision pending confirmation."
+  # ── Live wiring batch (2026-11-08): create/edit/load/source vocabulary ──
+  createTitle: New requirement
+  createDesc: Title, type and priority cannot be changed after creation.
+  createCode: Code
+  createTitleField: Title
+  createType: Type
+  createPriority: Priority
+  createBody: Initial body (Markdown, optional)
+  createBodyPlaceholder: Write the requirement body in Markdown…
+  createSubmit: Create
+  priorityNormal: Medium
+  editImmutableHint: Immutable after creation
+  editSummary: Change summary (optional)
+  editSummaryPlaceholder: One line describing this change
+  editBody: Body (Markdown)
+  editBodyHint: Saving creates or updates a draft revision; it becomes official only after submit and confirm.
+  sourceExternalFeedback: External feedback
+  sourceIntake: External intake
+  sourceImport: Import
+  loadError: Failed to load requirements
+  loadRetry: Retry
+  actionError: Action failed
+  noProjectTitle: No project selected
+  noProjectDesc: Pick a project in the top bar to see requirements.
+  loadingTitle: Loading requirements
+  loadingDesc: Fetching the requirement list and details.
+  proposeNoBody: This requirement has no body to submit; edit the body first.
 requirementDetail:
   pageTitle: Requirement Detail
   openFull: Open full detail

@@ -3,6 +3,12 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * S02 QA · UI 验收测试 V1.1（fixtures 演示态交互闭环）
  *
+ * ⛔ 已退役（2026-11-08 S02 接真批）：本 spec 的前提是页面内置 fixtures
+ * 演示数据（REQ-001~004、conflict/AI 协作栏等）。需求工作区已切到
+ * pm-api REST（`@/api/requirements`，S02-I1/I3 契约），fixtures 演示态
+ * 不复存在，本 spec 全量断言失效。后继 = 真栈 E2E（pm-api + 专用库，
+ * 复用 ACP-09 全栈配方），另行立批；在此之前整体 skip 以免红灯误导。
+ *
  * V1.1 修正（首轮 7 失败的根因）：
  * - 筛选器为自定义 Select 组件（reka-ui），非原生 select → 点击触发器+点选项
  * - ConfirmationDialog 无 dialog role（role="presentation"）→ 用 .ui-confirm__panel
@@ -10,6 +16,11 @@ import { expect, test, type Page } from "@playwright/test";
  * - 按钮文案 i18n 实值：actionPropose=提交确认、actionHistory=查看历史、actionConfirm=确认需求
  * - main/body 歧义 → getByRole("main")
  */
+
+test.beforeEach(() => {
+  test.skip(true, "fixtures 演示态已随接真批退役；后继=真栈 E2E 另行立批");
+});
+
 
 const STORAGE = {
   prism_access_token: "qa-ui-e2e-access-token",

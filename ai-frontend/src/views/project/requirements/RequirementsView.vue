@@ -1,68 +1,82 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
+import { computed, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import {
-  Ellipsis,
-  ClipboardCheck,
-  FolderInput,
-  Plus,
-  ShieldCheck
-} from "lucide-vue-next";
+import { ClipboardCheck, Plus, RefreshCw, ShieldCheck } from "lucide-vue-next";
+import Alert from "@/components/ui/alert/Alert.vue";
 import Button from "@/components/ui/button/Button.vue";
 import ConfirmationDialog from "@/components/ui/confirmation-dialog/ConfirmationDialog.vue";
+import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import { PageFrame } from "@/components/shell";
+import { useScopeStore } from "@/api/scope";
+import {
+  confirmRevision,
+  createDraftRevision,
+  createRequirement,
+  getRequirement,
+  listProjectRequirements,
+  listRequirementSources,
+  rejectRevision,
+  submitRevision,
+  toEntryFromListItem,
+  toRequirementEntry,
+  toSourceItems,
+  updateDraftRevision,
+  type DraftRevisionInput,
+  type RequirementCoreDetail
+} from "@/api/requirements";
+import type {
+  RequirementCreatePayload,
+  RequirementEntry
+} from "./requirement-entry";
 
-import AiAssistBar from "./components/AiAssistBar.vue";
-
-import ConflictSheet from "./components/ConflictSheet.vue";
 import ContextSidePanel from "./components/ContextSidePanel.vue";
+import RequirementCreateDialog from "./components/RequirementCreateDialog.vue";
 import RequirementDetail from "./components/RequirementDetail.vue";
 import RequirementsList from "./components/RequirementsList.vue";
 import RevisionSheet from "./components/RevisionSheet.vue";
 import SummaryStrip from "./components/SummaryStrip.vue";
 
-import {
-  aiProposalPool,
-  currentAuthorFixture,
-  requirementsFixture
-} from "./fixtures";
-import type {
-  AiActionKind,
-  AiSuggestion,
-  RequirementEntry,
-  RequirementPriority,
-  RequirementType
-} from "./requirement-entry";
-import type { ConflictResolutionOption } from "./fixtures";
-
 /**
- * Requirements Workspace 页根（S02-UI-01）。
+ * Requirements Workspace 页根（S02-UI-01，2026-11-08 接真）。
  *
- * 结构 = 页头（Import/Add/Baseline/More）→ 概览摘要条 → 两栏主区
- * （列表 + 详情 ｜ 上下文面板）→ AI 协作栏 → 修订/冲突/基线抽屉 + 显式确认弹窗。
- * 数据 = fixtures（mock 先行）；状态迁移在页内本地完成，用于演示交互闭环：
- *   - Confirm / Reject / Propose Revision / 建立基线必须经 ConfirmationDialog 显式确认；
- *   - AI 动作只向「AI Assistance」追加提案，绝不直接改需求状态；
- *   - 基线管理迁至独立页 /project/requirements/baselines（S02-UI-06）。
+ * 数据 = pm-api REST（S02-I1/I3 契约层 `@/api/requirements`）：
+ *   - 列表/详情/来源为真实读模型；状态迁移全部走后端命令，成功后回刷；
+ *   - 确认带 `expected_content_hash`（审批人核准哈希）+ `expected_row_revision`
+ *     CAS 令牌（I1 §7），漂移由后端 409 拒绝；
+ *   - 人类确认/拒绝是显式操作（ConfirmationDialog），AI 无任何状态入口；
+ *   - 编辑 = 起草/更新一份正文修订（title/type/priority 创建后不可改）；
+ *   - 诚实缺位：discussions / analysis / ai_suggestions（AI 编排切片）、
+ *     acceptance_criteria（S02-I5）、导入（未接线）不展示伪功能。
  */
 const router = useRouter();
+const route = useRoute();
 const { t } = useI18n();
+const scope = useScopeStore();
 
-const requirements = ref<RequirementEntry[]>(
-  structuredClone(requirementsFixture) as RequirementEntry[]
-);
+const projectId = computed(() => {
+  const fromQuery = route.query.project_id;
+  if (typeof fromQuery === "string" && fromQuery) return fromQuery;
+  if (scope.currentProjectId && scope.currentProjectId !== "all") {
+    return scope.currentProjectId;
+  }
+  return "";
+});
 
-const selectedId = ref(requirements.value[0]?.id ?? "");
+const requirements = ref<RequirementEntry[]>([]);
+const detailRaw = ref<RequirementCoreDetail | null>(null);
+const selectedId = ref("");
 const statusFilter = ref("all");
 const editing = ref(false);
 const contextTab = ref("sources");
-
 const revisionOpen = ref(false);
-const conflictOpen = ref(false);
+const createOpen = ref(false);
 
-type DialogKind = "confirm" | "reject" | "propose";
-const dialog = ref<{ kind: DialogKind; codes: string[] } | null>(null);
+const loading = ref(true);
+const loadError = ref("");
+const detailLoading = ref(false);
+const acting = ref(false);
+const actionError = ref("");
 
 const selectedEntry = computed(
   () => requirements.value.find(entry => entry.id === selectedId.value) ?? null
@@ -82,9 +96,21 @@ const counts = computed(() => {
   return result;
 });
 
+/** 下一需求编码：按现有 REQ-NNN 序列递推（项目内唯一由后端 UNIQUE 兜底）。 */
+const nextCode = computed(() => {
+  let max = 0;
+  for (const entry of requirements.value) {
+    const matched = /^REQ-(\d+)$/.exec(entry.code);
+    if (matched) max = Math.max(max, Number(matched[1]));
+  }
+  return `REQ-${String(max + 1).padStart(3, "0")}`;
+});
+
+const dialog = ref<"confirm" | "reject" | null>(null);
+
 const dialogProps = computed(() => {
   const current = selectedEntry.value;
-  switch (dialog.value?.kind) {
+  switch (dialog.value) {
     case "confirm":
       return {
         title: t("pm.requirements.confirmDialogTitle"),
@@ -106,16 +132,6 @@ const dialogProps = computed(() => {
         variant: "danger" as const,
         checkbox: ""
       };
-    case "propose":
-      return {
-        title: t("pm.requirements.proposeDialogTitle"),
-        description: current
-          ? t("pm.requirements.proposeDialogDesc", { code: current.code })
-          : "",
-        variant: "default" as const,
-        checkbox: ""
-      };
-
     default:
       return {
         title: "",
@@ -133,14 +149,69 @@ function currentRevisionVersion(entry: RequirementEntry): number {
   );
 }
 
-function nowLabel(): string {
-  return new Date().toISOString().slice(0, 16).replace("T", " ");
+function latestRevisionOf(detail: RequirementCoreDetail) {
+  return detail.revisions.length > 0
+    ? detail.revisions.reduce((a, b) => (a.version > b.version ? a : b))
+    : undefined;
 }
+
+// ───────────────────────────────────────────────────────── 数据加载
+
+async function loadDetail(id: string) {
+  detailLoading.value = true;
+  try {
+    const [detail, sources] = await Promise.all([
+      getRequirement(id),
+      listRequirementSources(id)
+    ]);
+    const entry = toRequirementEntry(detail);
+    entry.sources = toSourceItems(sources.items);
+    detailRaw.value = detail;
+    const index = requirements.value.findIndex(item => item.id === id);
+    if (index >= 0) requirements.value.splice(index, 1, entry);
+    else requirements.value.unshift(entry);
+  } finally {
+    detailLoading.value = false;
+  }
+}
+
+async function load() {
+  if (!projectId.value) {
+    requirements.value = [];
+    loading.value = false;
+    return;
+  }
+  loading.value = true;
+  loadError.value = "";
+  try {
+    const { items } = await listProjectRequirements(projectId.value);
+    requirements.value = items.map(toEntryFromListItem);
+    if (
+      !selectedId.value ||
+      !items.some(item => item.id === selectedId.value)
+    ) {
+      selectedId.value = items[0]?.id ?? "";
+    }
+    if (selectedId.value) await loadDetail(selectedId.value);
+  } catch (error) {
+    loadError.value =
+      error instanceof Error ? error.message : String(error ?? "");
+  } finally {
+    loading.value = false;
+  }
+}
+
+function reload() {
+  void load();
+}
+
+// ───────────────────────────────────────────────────────── 交互
 
 function onSelect(id: string) {
   selectedId.value = id;
   editing.value = false;
   contextTab.value = "sources";
+  void loadDetail(id);
 }
 
 function onStatusFilter(value: string) {
@@ -165,174 +236,129 @@ function onDetailAction(
     void router.push(`/project/requirements/${selectedId.value}`);
     return;
   }
-  if (action === "resolve") {
-    conflictOpen.value = true;
-    return;
-  }
   if (action === "history") {
     revisionOpen.value = true;
     return;
   }
-  dialog.value = { kind: action, codes: [] };
+  if (action === "propose") {
+    void runCommand(runPropose);
+    return;
+  }
+  dialog.value = action === "confirm" ? "confirm" : "reject";
 }
 
-function onDetailSave(payload: {
-  title: string;
-  description: string;
-  type: RequirementType;
-  priority: RequirementPriority;
-  criteria: string[];
-}) {
-  const entry = selectedEntry.value;
-  if (!entry) return;
-  entry.title = payload.title;
-  entry.description = payload.description;
-  entry.type = payload.type;
-  entry.priority = payload.priority;
-  entry.acceptance_criteria = payload.criteria.map((statement, index) => ({
-    id: `${entry.id}-ac-${index + 1}`,
-    statement
-  }));
-  const version = currentRevisionVersion(entry) + 1;
-  entry.revisions.unshift({
-    id: `${entry.id}-rev-${version}`,
-    version,
-    state: "draft",
-    summary: t("pm.requirements.editRevisionSummary"),
-    author: currentAuthorFixture,
-    created_at: nowLabel(),
-    markdown: entry.description
+/** 命令统一编排：在途闸 + 错误呈现 + 成功回刷列表与详情。 */
+async function runCommand(command: () => Promise<void>) {
+  if (acting.value) return;
+  acting.value = true;
+  actionError.value = "";
+  try {
+    await command();
+    await load();
+  } catch (error) {
+    actionError.value =
+      error instanceof Error ? error.message : String(error ?? "");
+  } finally {
+    acting.value = false;
+  }
+}
+
+/** 编辑保存：最新修订为 draft 则更新之，否则起草新修订（S02-I1 语义）。 */
+function saveEdit(payload: { markdown: string; summary: string }) {
+  return runCommand(async () => {
+    const detail = detailRaw.value;
+    const entry = selectedEntry.value;
+    if (!detail || !entry) return;
+    const body: DraftRevisionInput = {
+      markdown: payload.markdown,
+      summary: payload.summary || undefined
+    };
+    const latest = latestRevisionOf(detail);
+    if (latest && latest.state === "draft") {
+      await updateDraftRevision(entry.id, latest.id, body);
+    } else {
+      await createDraftRevision(entry.id, body);
+    }
+    editing.value = false;
   });
-  entry.updated_at = nowLabel();
-  editing.value = false;
+}
+
+/** 提交确认：有 draft 修订直接 submit；否则以当前正文起草并 submit。 */
+async function runPropose() {
+  const detail = detailRaw.value;
+  const entry = selectedEntry.value;
+  if (!detail || !entry) return;
+  const latest = latestRevisionOf(detail);
+  if (latest && latest.state === "draft") {
+    await submitRevision(entry.id, latest.id);
+    return;
+  }
+  const markdown = entry.body_markdown ?? entry.description;
+  if (!markdown.trim()) {
+    actionError.value = t("pm.requirements.proposeNoBody");
+    return;
+  }
+  const { revision } = await createDraftRevision(entry.id, {
+    markdown,
+    summary: t("pm.requirements.proposeRevisionSummary")
+  });
+  await submitRevision(entry.id, revision.id);
+}
+
+/** 正式确认：携带审批人核准哈希 + 行级 CAS 令牌（I1 §7，漂移 409）。 */
+async function runConfirm() {
+  const detail = detailRaw.value;
+  const entry = selectedEntry.value;
+  if (!detail || !entry || dialog.value !== "confirm") return;
+  const pending = latestRevisionOf(detail);
+  if (!pending || pending.state !== "pending_confirmation") return;
+  await confirmRevision(entry.id, pending.id, {
+    expected_content_hash: pending.content_hash,
+    expected_row_revision: detail.requirement.row_revision
+  });
+  dialog.value = null;
+}
+
+async function runReject() {
+  const detail = detailRaw.value;
+  const entry = selectedEntry.value;
+  if (!detail || !entry || dialog.value !== "reject") return;
+  const pending = latestRevisionOf(detail);
+  if (!pending || pending.state !== "pending_confirmation") return;
+  await rejectRevision(entry.id, pending.id);
+  dialog.value = null;
 }
 
 function onDialogConfirm() {
-  const kind = dialog.value?.kind;
-  const entry = selectedEntry.value;
-  if (kind === "confirm" && entry) {
-    entry.status = "confirmed";
-    for (const revision of entry.revisions) {
-      if (revision.state === "pending_confirmation")
-        revision.state = "approved";
-      else if (revision.state === "approved") revision.state = "superseded";
-    }
-    entry.updated_at = nowLabel();
-  } else if (kind === "reject" && entry) {
-    entry.status = "draft";
-    for (const revision of entry.revisions) {
-      if (revision.state === "pending_confirmation")
-        revision.state = "rejected";
-    }
-    entry.updated_at = nowLabel();
-  } else if (kind === "propose" && entry) {
-    const version = currentRevisionVersion(entry) + 1;
-    entry.revisions.unshift({
-      id: `${entry.id}-rev-${version}`,
-      version,
-      state: "pending_confirmation",
-      summary: t("pm.requirements.proposeRevisionSummary"),
-      author: currentAuthorFixture,
-      created_at: nowLabel(),
-      markdown: entry.description
-    });
-    entry.status = "pending_confirmation";
-    entry.updated_at = nowLabel();
-  }
-  dialog.value = null;
+  if (dialog.value === "confirm") void runCommand(runConfirm);
+  else if (dialog.value === "reject") void runCommand(runReject);
 }
 
 function onDialogCancel() {
   dialog.value = null;
 }
 
-const conflictOptionKeys: Record<ConflictResolutionOption, string> = {
-  scope_limit: "conflictOptionScope",
-  revise_draft: "conflictOptionRevise",
-  defer: "conflictOptionDefer"
-};
-
-function onConflictApply(option: ConflictResolutionOption) {
-  const entry = selectedEntry.value;
-  if (!entry) return;
-  entry.status = "draft";
-  entry.discussions.unshift({
-    id: `${entry.id}-dsc-${entry.discussions.length + 1}`,
-    author: currentAuthorFixture,
-    body: t("pm.requirements.conflictResolvedNote", {
-      option: t(`pm.requirements.${conflictOptionKeys[option]}`)
-    }),
-    created_at: nowLabel()
-  });
-  entry.updated_at = nowLabel();
-  conflictOpen.value = false;
-  contextTab.value = "discussions";
+function onDetailSave(payload: { markdown: string; summary: string }) {
+  void saveEdit(payload);
 }
 
-function appendAiSuggestion(suggestion: AiSuggestion) {
-  const entry = selectedEntry.value ?? requirements.value[0];
-  if (!entry) return;
-  if (entry.ai_suggestions.some(item => item.id === suggestion.id)) return;
-  entry.ai_suggestions.push({ ...suggestion });
-  if (selectedId.value !== entry.id) selectedId.value = entry.id;
-  contextTab.value = "ai";
-}
-
-function onAiAction(kind: AiActionKind) {
-  const proposal = aiProposalPool[kind]?.[0];
-  if (proposal) appendAiSuggestion(proposal);
-}
-
-function onAiAsk(text: string) {
-  appendAiSuggestion({
-    id: `ais-ask-${Date.now()}`,
-    body: text,
-    created_at: nowLabel()
+function onCreate(payload: RequirementCreatePayload) {
+  void runCommand(async () => {
+    const { requirement } = await createRequirement(projectId.value, payload);
+    createOpen.value = false;
+    await load();
+    selectedId.value = requirement.id;
+    await loadDetail(requirement.id);
   });
 }
 
-function onAddRequirement() {
-  const seq = requirements.value.length + 1;
-  const code = `REQ-${String(seq).padStart(3, "0")}`;
-  const id = `req-${seq}`;
-  requirements.value.unshift({
-    id,
-    code,
-    title: t("pm.requirements.newRequirementTitle"),
-    description: "",
-    type: "functional",
-    priority: "medium",
-    status: "draft",
-    source_label: t("pm.requirements.newRequirementSource"),
-    created_at: nowLabel(),
-    updated_at: nowLabel(),
-    specification: {
-      business_rationale: "",
-      expected_outcome: "",
-      scope: "",
-      explicit_exclusions: ""
-    },
-    acceptance_criteria: [],
-    revisions: [
-      {
-        id: `${id}-rev-1`,
-        version: 1,
-        state: "draft",
-        summary: t("pm.requirements.newRevisionSummary"),
-        author: currentAuthorFixture,
-        created_at: nowLabel(),
-        markdown: ""
-      }
-    ],
-    sources: [],
-    discussions: [],
-    analysis: [],
-    ai_suggestions: [],
-    related: []
-  });
-  selectedId.value = id;
-  editing.value = true;
+function openCreateDialog() {
+  createOpen.value = true;
 }
+
+onMounted(() => {
+  void load();
+});
 </script>
 
 <template>
@@ -358,72 +384,106 @@ function onAddRequirement() {
         <ShieldCheck aria-hidden="true" />
         {{ t("pm.requirements.baselineEntry") }}
       </Button>
-      <Button variant="secondary" size="sm">
-        <FolderInput aria-hidden="true" />
-        {{ t("pm.requirements.actionImport") }}
-      </Button>
-      <Button variant="primary" size="sm" @click="onAddRequirement">
+      <Button
+        variant="primary"
+        size="sm"
+        :disabled="!projectId"
+        @click="openCreateDialog"
+      >
         <Plus aria-hidden="true" />
         {{ t("pm.requirements.actionAdd") }}
       </Button>
-      <Button variant="ghost" size="sm">
-        <Ellipsis aria-hidden="true" />
-        {{ t("pm.requirements.actionMore") }}
-      </Button>
     </template>
 
-    <SummaryStrip
-      :counts="counts"
-      :active="statusFilter"
-      @select="onStatusFilter"
+    <Alert
+      v-if="loadError"
+      variant="danger"
+      :title="t('pm.requirements.loadError')"
+    >
+      <span>{{ loadError }}</span>
+      <Button variant="secondary" size="sm" @click="reload">
+        <RefreshCw aria-hidden="true" />
+        {{ t("pm.requirements.loadRetry") }}
+      </Button>
+    </Alert>
+
+    <Alert
+      v-if="actionError"
+      variant="danger"
+      :title="t('pm.requirements.actionError')"
+      dismissible
+      @close="actionError = ''"
+    >
+      <span>{{ actionError }}</span>
+    </Alert>
+
+    <EmptyState
+      v-if="!projectId"
+      :title="t('pm.requirements.noProjectTitle')"
+      :description="t('pm.requirements.noProjectDesc')"
     />
 
-    <div class="req-workspace">
-      <div class="req-workspace__main">
-        <RequirementsList
-          :entries="requirements"
-          :selected-id="selectedId"
-          :status-filter="statusFilter"
-          @select="onSelect"
-          @update:status-filter="onStatusFilter"
-        />
-        <RequirementDetail
-          v-if="selectedEntry"
-          :entry="selectedEntry"
-          :editing="editing"
-          @action="onDetailAction"
-          @save="onDetailSave"
-          @cancel="editing = false"
-        />
-      </div>
-      <ContextSidePanel
-        :entry="selectedEntry"
-        :active-tab="contextTab"
-        @update:active-tab="contextTab = $event"
+    <template v-else>
+      <EmptyState
+        v-if="loading && requirements.length === 0"
+        :title="t('pm.requirements.loadingTitle')"
+        :description="t('pm.requirements.loadingDesc')"
       />
-    </div>
 
-    <AiAssistBar @ask="onAiAsk" @action="onAiAction" />
+      <template v-else>
+        <SummaryStrip
+          :counts="counts"
+          :active="statusFilter"
+          @select="onStatusFilter"
+        />
 
-    <RevisionSheet v-model:open="revisionOpen" :entry="selectedEntry" />
-    <ConflictSheet
-      v-model:open="conflictOpen"
-      :entry="selectedEntry"
-      @apply="onConflictApply"
-    />
+        <div class="req-workspace">
+          <div class="req-workspace__main">
+            <RequirementsList
+              :entries="requirements"
+              :selected-id="selectedId"
+              :status-filter="statusFilter"
+              @select="onSelect"
+              @update:status-filter="onStatusFilter"
+            />
+            <RequirementDetail
+              v-if="selectedEntry"
+              :entry="selectedEntry"
+              :editing="editing"
+              @action="onDetailAction"
+              @save="onDetailSave"
+              @cancel="editing = false"
+            />
+          </div>
+          <ContextSidePanel
+            :entry="selectedEntry"
+            :active-tab="contextTab"
+            @update:active-tab="contextTab = $event"
+          />
+        </div>
 
-    <ConfirmationDialog
-      :open="dialog !== null"
-      :title="dialogProps.title"
-      :description="dialogProps.description"
-      :confirm-label="t('common.confirm')"
-      :cancel-label="t('common.cancel')"
-      :variant="dialogProps.variant"
-      :checkbox-label="dialogProps.checkbox"
-      @update:open="value => !value && onDialogCancel()"
-      @confirm="onDialogConfirm"
-      @cancel="onDialogCancel"
-    />
+        <RevisionSheet v-model:open="revisionOpen" :entry="selectedEntry" />
+
+        <RequirementCreateDialog
+          v-model:open="createOpen"
+          :next-code="nextCode"
+          @create="onCreate"
+        />
+
+        <ConfirmationDialog
+          :open="dialog !== null"
+          :title="dialogProps.title"
+          :description="dialogProps.description"
+          :confirm-label="t('common.confirm')"
+          :cancel-label="t('common.cancel')"
+          :variant="dialogProps.variant"
+          :checkbox-label="dialogProps.checkbox"
+          @update:open="value => !value && onDialogCancel()"
+          @confirm="onDialogConfirm"
+          @cancel="onDialogCancel"
+        />
+      </template>
+    </template>
   </PageFrame>
 </template>
 

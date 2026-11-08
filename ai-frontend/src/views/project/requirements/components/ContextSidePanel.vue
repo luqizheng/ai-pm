@@ -13,14 +13,15 @@ import type { Component } from "vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import Tabs from "@/components/ui/tabs/Tabs.vue";
-import type {
-  AiSuggestion,
-  AnalysisFinding,
-  DiscussionEntry,
-  RequirementEntry,
-  SourceItem
+import {
+  sortAnalysis,
+  sortDiscussions,
+  type AiSuggestion,
+  type AnalysisFinding,
+  type DiscussionEntry,
+  type RequirementEntry,
+  type SourceItem
 } from "../requirement-entry";
-import { sortAnalysis, sortDiscussions } from "../fixtures";
 
 /**
  * 右侧上下文面板（S02-UI-01 §7）。
@@ -28,6 +29,8 @@ import { sortAnalysis, sortDiscussions } from "../fixtures";
  * 四 Tab：Sources / Discussions / Analysis / AI Assistance。
  * AI 建议一律呈现为提案（outline 徽标），绝不自动呈现为已确认决策。
  * activeTab 受控（AI 协作栏动作可切换到 AI Assistance 页签）。
+ * 接真后（2026-11-08）：Sources=真实数据；Discussions/Analysis/AI 编排
+ * 切片未落地，恒空态诚实呈现（不伪造数据）。
  */
 interface Props {
   entry: RequirementEntry | null;
@@ -87,7 +90,10 @@ const sourceKindLabel = (kind: string) =>
     discovery: t("pm.requirements.sourceDiscovery"),
     knowledge: t("pm.requirements.sourceKnowledge"),
     discussion: t("pm.requirements.sourceDiscussion"),
-    objective: t("pm.requirements.sourceObjective")
+    objective: t("pm.requirements.sourceObjective"),
+    external_feedback: t("pm.requirements.sourceExternalFeedback"),
+    intake: t("pm.requirements.sourceIntake"),
+    import: t("pm.requirements.sourceImport")
   })[kind] ?? kind;
 </script>
 
@@ -116,7 +122,7 @@ const sourceKindLabel = (kind: string) =>
             class="req-context__source"
           >
             <component
-              :is="sourceIcons[source.kind]"
+              :is="sourceIcons[source.kind] ?? BookOpen"
               class="req-context__source-icon"
               aria-hidden="true"
             />

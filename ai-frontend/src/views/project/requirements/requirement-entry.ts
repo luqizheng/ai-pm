@@ -88,13 +88,22 @@ export interface RevisionRecord {
   criteria?: AcceptanceCriterion[];
 }
 
-/** 来源与追溯条目类型 */
+/**
+ * 来源与追溯条目类型。
+ *
+ * 前四个为 UI 设计词表（S02-UI-01）；后三个与 S02-I3 后端
+ * `source.source_input.input_kind` 词表对齐（human_input 由适配层映射为
+ * user_request），透传保真、不吞语义。
+ */
 export type SourceKind =
   | "user_request"
   | "discovery"
   | "knowledge"
   | "discussion"
-  | "objective";
+  | "objective"
+  | "external_feedback"
+  | "intake"
+  | "import";
 
 /** 来源与追溯条目（原始材料，与结构化需求视觉区分） */
 export interface SourceItem {
@@ -176,6 +185,11 @@ export interface RequirementEntry {
   /** 需求规格（S02-UI-02 §3B） */
   specification: RequirementSpecification;
   acceptance_criteria: AcceptanceCriterion[];
+  /**
+   * 正文 Markdown（真实数据 = 当前正式版本正文，缺正式版本取最新修订）；
+   * mock/未加载详情时缺省。
+   */
+  body_markdown?: string;
   /** 修订记录，version 倒序 */
   revisions: RevisionRecord[];
   sources: SourceItem[];
@@ -193,3 +207,44 @@ export type AiActionKind =
   | "conflict"
   | "acceptance"
   | "summary";
+
+/**
+ * 新建需求 payload（对齐后端 CreateRequirementRequest，S02-I1）。
+ * priority 用后端词表（normal，非 UI 的 medium）。
+ */
+export interface RequirementCreatePayload {
+  code: string;
+  title: string;
+  requirement_type: RequirementType;
+  priority: "high" | "normal" | "low";
+  /** 首版草稿正文（缺省 = 后端落 `# {title}`） */
+  markdown?: string;
+}
+
+// ───────────────────────────────────────── 展示排序（原 fixtures 助手迁入）
+
+/** 讨论排序：新 → 旧 */
+export function sortDiscussions(entries: DiscussionEntry[]): DiscussionEntry[] {
+  return [...entries].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+}
+
+/** 分析发现排序：冲突 > 重复 > 歧义 > 完备性，同级按严重度 */
+const analysisWeight: Record<AnalysisFinding["kind"], number> = {
+  conflict: 0,
+  duplication: 1,
+  ambiguity: 2,
+  completeness: 3
+};
+const severityWeight: Record<AnalysisFinding["severity"], number> = {
+  high: 0,
+  medium: 1,
+  low: 2
+};
+
+export function sortAnalysis(entries: AnalysisFinding[]): AnalysisFinding[] {
+  return [...entries].sort(
+    (a, b) =>
+      analysisWeight[a.kind] - analysisWeight[b.kind] ||
+      severityWeight[a.severity] - severityWeight[b.severity]
+  );
+}

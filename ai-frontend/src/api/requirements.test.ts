@@ -7,10 +7,12 @@ import { describe, expect, it } from "vitest";
 import {
   toEntryFromListItem,
   toRequirementEntry,
+  toSourceItems,
   type RequirementCoreConfirmation,
   type RequirementCoreDetail,
   type RequirementCoreEntry,
-  type RequirementCoreRevision
+  type RequirementCoreRevision,
+  type RequirementCoreSourceInput
 } from "./requirements";
 
 function entry(over: Partial<RequirementCoreEntry> = {}): RequirementCoreEntry {
@@ -186,6 +188,7 @@ describe("api/requirements 适配器", () => {
       explicit_exclusions: ""
     });
     expect(ui.acceptance_criteria).toEqual([]);
+    // sources 由页根单独调 listRequirementSources + toSourceItems 补齐（S02-I3）
     expect(ui.sources).toEqual([]);
     expect(ui.related).toEqual([]);
     expect(ui.analysis).toEqual([]);
@@ -200,5 +203,81 @@ describe("api/requirements 适配器", () => {
     expect(ui.revisions).toEqual([]);
     expect(ui.status).toBe("pending_confirmation");
     expect(ui.priority).toBe("high");
+  });
+});
+
+function sourceInput(
+  over: Partial<RequirementCoreSourceInput>
+): RequirementCoreSourceInput {
+  return {
+    id: "src-1",
+    project_id: "p1",
+    input_kind: "human_input",
+    title: "用户访谈纪要",
+    content: "用户希望支持邮箱登录",
+    source_ref: "MIN-004",
+    created_by: "principal-1",
+    created_at: "2026-11-07T09:00:00Z",
+    ...over
+  };
+}
+
+describe("api/requirements 来源适配（S02-I3，2026-11-08 接线）", () => {
+  it("human_input 映射为 UI user_request；content/ref 诚实映射（空串/缺省）", () => {
+    const items = toSourceItems([sourceInput({})]);
+    expect(items[0]).toEqual({
+      id: "src-1",
+      kind: "user_request",
+      title: "用户访谈纪要",
+      detail: "用户希望支持邮箱登录",
+      ref: "MIN-004"
+    });
+  });
+
+  it("I3 后端词表透传不吞语义；content 缺省落空串、ref 缺省 undefined", () => {
+    const items = toSourceItems([
+      sourceInput({
+        id: "s2",
+        input_kind: "intake",
+        content: null,
+        source_ref: null
+      }),
+      sourceInput({ id: "s3", input_kind: "external_feedback" }),
+      sourceInput({ id: "s4", input_kind: "import" }),
+      sourceInput({ id: "s5", input_kind: "discovery" })
+    ]);
+    expect(items.map(item => item.kind)).toEqual([
+      "intake",
+      "external_feedback",
+      "import",
+      "discovery"
+    ]);
+    expect(items[0].detail).toBe("");
+    expect(items[0].ref).toBeUndefined();
+  });
+
+  it("正文映射：正文取当前正式版本，无正式版本回落最新修订", () => {
+    const approved = toRequirementEntry(
+      detail(
+        entry({
+          current_revision_id: "rev-2",
+          current_version: 2,
+          latest_revision_id: "rev-2",
+          latest_version: 2,
+          latest_state: "approved"
+        }),
+        [
+          revision({ id: "rev-1", version: 1, state: "superseded" }),
+          revision({ id: "rev-2", version: 2, state: "approved" })
+        ]
+      )
+    );
+    expect(approved.body_markdown).toBe("# body");
+
+    const draftOnly = toRequirementEntry(detail(entry(), [revision()]));
+    expect(draftOnly.body_markdown).toBe("# body");
+
+    const empty = toEntryFromListItem(entry());
+    expect(empty.body_markdown).toBeUndefined();
   });
 });

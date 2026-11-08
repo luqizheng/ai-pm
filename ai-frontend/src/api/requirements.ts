@@ -11,9 +11,10 @@
  *  - `content_hash` = sha256(markdown)（S02D-16 单点 helper）。
  *
  * `toRequirementEntry` / `toEntryFromListItem` 把后端读模型映射为
- * `views/project/requirements/requirement-entry.ts` 的 UI 读模型。
+ * `views/project/requirements/requirement-entry.ts` 的 UI 读模型；
+ * 来源材料走 `toSourceItems`（S02-I3，2026-11-08 接线）。
  * 诚实缺位（对应切片未实施，不伪造数据）：
- *  - specification / acceptance_criteria（S02-I5）、sources / related（S02-I3）、
+ *  - specification / acceptance_criteria（S02-I5）、related（I4）、
  *    discussions / analysis / ai_suggestions（AI 编排切片）→ 空数组占位；
  *  - `origin` 后端无列 → undefined（UI 契约允许缺省=未记录）；
  *  - 需求级 lifecycle（withdrawn/archived，S02D-04 三态）UI 读模型暂无该轴，
@@ -101,6 +102,23 @@ export interface RequirementCoreDetail {
   requirement: RequirementCoreEntry;
   revisions: RequirementCoreRevision[];
   confirmations: RequirementCoreConfirmation[];
+}
+
+/** 来源材料（S02-I3 source.source_input；kind 词表见 requirement_traceability） */
+export interface RequirementCoreSourceInput {
+  id: string;
+  project_id: string;
+  input_kind:
+    | "human_input"
+    | "discovery"
+    | "external_feedback"
+    | "intake"
+    | "import";
+  title: string;
+  content: string | null;
+  source_ref: string | null;
+  created_by: string;
+  created_at: string;
 }
 
 // ────────────────────────────────────────────────────────── 请求构造
@@ -220,6 +238,13 @@ export function archiveRequirement(requirementId: string) {
   );
 }
 
+/** 需求关联的来源材料（S02-I3，`GET .../source-inputs`） */
+export function listRequirementSources(requirementId: string) {
+  return http.get<{ items: RequirementCoreSourceInput[] }>(
+    `/v1/pm/requirements/${requirementId}/source-inputs`
+  );
+}
+
 // ───────────────────────────────────────────────────── 后端 → UI 读模型适配
 
 /** S02D-05：后端行级优先级为 low/normal/high；UI 词表用 medium 表达 normal。 */
@@ -271,11 +296,28 @@ function toRevisionRecord(
 }
 
 const EMPTY_CRITERIA: AcceptanceCriterion[] = [];
-const EMPTY_SOURCES: SourceItem[] = [];
 const EMPTY_DISCUSSIONS: DiscussionEntry[] = [];
 const EMPTY_ANALYSIS: AnalysisFinding[] = [];
 const EMPTY_SUGGESTIONS: AiSuggestion[] = [];
 const EMPTY_RELATED: RelatedItem[] = [];
+
+/**
+ * 来源材料适配（S02-I3 → UI SourceItem）。
+ * `human_input` 映射为 UI 的 `user_request`；其余 I3 词表
+ * （external_feedback/intake/import）透传，UI `SourceKind` 为超集。
+ */
+export function toSourceItems(
+  inputs: RequirementCoreSourceInput[]
+): SourceItem[] {
+  return inputs.map(input => ({
+    id: input.id,
+    kind:
+      input.input_kind === "human_input" ? "user_request" : input.input_kind,
+    title: input.title,
+    detail: input.content ?? "",
+    ref: input.source_ref ?? undefined
+  }));
+}
 
 /** 详情适配：完整修订链 + 确认记录映射。 */
 export function toRequirementEntry(
@@ -288,6 +330,15 @@ export function toRequirementEntry(
     .map(r => toRevisionRecord(r, detail.confirmations));
   // 描述 = 最早修订（v1）的 summary（创建时由 description 落入 content 投影）
   const description = revisions.length > 0 ? (revisions[0].summary ?? "") : "";
+  // 正文 = 当前正式版本优先，无正式版本取最新修订（Markdown 权威正文的快照展示）
+  const currentRevision = detail.revisions.find(
+    r => r.id === entry.current_revision_id
+  );
+  const latestRevision =
+    detail.revisions.length > 0
+      ? detail.revisions.reduce((a, b) => (a.version > b.version ? a : b))
+      : undefined;
+  const body = currentRevision ?? latestRevision;
   return {
     id: entry.id,
     code: entry.code,
@@ -306,8 +357,9 @@ export function toRequirementEntry(
       explicit_exclusions: ""
     },
     acceptance_criteria: EMPTY_CRITERIA,
+    body_markdown: body?.markdown ?? undefined,
     revisions: revisions.slice().reverse(), // UI 契约：version 倒序
-    sources: EMPTY_SOURCES,
+    sources: [],
     discussions: EMPTY_DISCUSSIONS,
     analysis: EMPTY_ANALYSIS,
     ai_suggestions: EMPTY_SUGGESTIONS,
@@ -338,7 +390,7 @@ export function toEntryFromListItem(
     },
     acceptance_criteria: EMPTY_CRITERIA,
     revisions: [],
-    sources: EMPTY_SOURCES,
+    sources: [],
     discussions: EMPTY_DISCUSSIONS,
     analysis: EMPTY_ANALYSIS,
     ai_suggestions: EMPTY_SUGGESTIONS,
