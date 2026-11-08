@@ -1025,3 +1025,816 @@ fn inline_code_spans(text: &str) -> Vec<String> {
     spans
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn draft(key: &str, body: &str) -> SectionDraft {
+        SectionDraft::new(key, section_title(key).unwrap_or(key), body)
+    }
+
+    fn all_drafts(
+        project: &str,
+        cognition: &str,
+        digest: &str,
+        requirements: &str,
+        tasks: &str,
+        interview: &str,
+    ) -> Vec<SectionDraft> {
+        vec![
+            draft(KEY_ROLE, ROLE_BODY),
+            draft(KEY_SECURITY, SECURITY_BODY),
+            draft(KEY_PROJECT_PROFILE, project),
+            draft(KEY_PRODUCT_COGNITION, cognition),
+            draft(KEY_KNOWLEDGE_DIGEST, digest),
+            draft(KEY_REQUIREMENTS, requirements),
+            draft(KEY_TASKS, tasks),
+            draft(KEY_INTERVIEW_STATE, interview),
+            draft(KEY_SLOT_STATE, SLOT_STATE_BODY),
+            draft(KEY_TURN_TASK, TURN_TASK_BODY),
+            draft(KEY_OUTPUT_CONTRACT, OUTPUT_CONTRACT_BODY),
+        ]
+    }
+
+    #[test]
+    fn caps_sum_to_total_budget() {
+        assert_eq!(
+            CAP_SCAFFOLD
+                + CAP_PROJECT_PROFILE
+                + CAP_PRODUCT_COGNITION
+                + CAP_KNOWLEDGE_DIGEST
+                + CAP_REQUIREMENTS
+                + CAP_TASKS
+                + CAP_INTERVIEW_STATE,
+            TOTAL_BUDGET_CHARS,
+            "§5.3 逐节上限之和必须等于总预算，否则整节裁剪与逐节截断会互相矛盾"
+        );
+    }
+
+    #[test]
+    fn section_order_is_fixed_regardless_of_input_order() {
+        let mut drafts = all_drafts("p", "c", "k", "r", "t", "i");
+        drafts.reverse();
+        let ctx = assemble(drafts);
+        let keys: Vec<&str> = ctx.sections.iter().map(|s| s.key.as_str()).collect();
+        assert_eq!(keys, SECTION_ORDER.to_vec());
+        assert!(ctx.sections_dropped.is_empty());
+    }
+
+    #[test]
+    fn oversize_section_is_truncated_to_its_cap() {
+        let long_kb = "x".repeat(CAP_KNOWLEDGE_DIGEST + 500);
+        let ctx = assemble(all_drafts("p", "c", &long_kb, "r", "t", "i"));
+        let kb = ctx.section(KEY_KNOWLEDGE_DIGEST).expect("kb section kept");
+        assert_eq!(kb.chars, CAP_KNOWLEDGE_DIGEST);
+        assert!(kb.truncated);
+        assert!(ctx.chars_total <= TOTAL_BUDGET_CHARS);
+        // 单节超限不触发整节删除（只有总量超限才删）。
+        assert!(ctx.sections_dropped.is_empty());
+    }
+
+    #[test]
+    fn over_budget_drops_whole_sections_in_ruling_order() {
+        // 原始装配量超预算 → 整节删除优先于逐节压缩：先 S5 tasks，再 S4 requirements。
+        let tasks = "t".repeat(CAP_TASKS);
+        let requirements = "r".repeat(CAP_REQUIREMENTS);
+        // 33k digest + 脚手架 ≈ 36.9k：删 tasks 后仍超，再删 requirements 才够，
+        // 且 S2 不该被牵连（删两节后 33.9k ≤ 36k）。
+        let digest = "k".repeat(33_000);
+        let ctx = assemble(all_drafts("p", "c", &digest, &requirements, &tasks, "i"));
+        assert_eq!(
+            ctx.sections_dropped,
+            vec![KEY_TASKS.to_string(), KEY_REQUIREMENTS.to_string()],
+            "必须按 S5 → S4 → S2 → S3 顺序整节删"
+        );
+        assert!(ctx.section(KEY_TASKS).is_none());
+        assert!(ctx.section(KEY_REQUIREMENTS).is_none());
+        // 被删节在提示里显式标注。
+        let prompt = ctx.render_prompt();
+        assert!(
+            prompt.contains("# 任务现状\n（本节因预算被省略）"),
+            "{prompt}"
+        );
+        assert!(
+            prompt.contains("# 需求现状\n（本节因预算被省略）"),
+            "{prompt}"
+        );
+        // 保留的节按上限截断。
+        let kb = ctx.section(KEY_KNOWLEDGE_DIGEST).expect("kb kept");
+        assert_eq!(kb.chars, CAP_KNOWLEDGE_DIGEST);
+        assert!(ctx.chars_total <= TOTAL_BUDGET_CHARS);
+    }
+
+    #[test]
+    fn over_budget_cascade_can_reach_all_four_droppable_sections() {
+        let digest = "k".repeat(80_000);
+        let ctx = assemble(all_drafts(
+            "p",
+            &"c".repeat(CAP_PRODUCT_COGNITION),
+            &digest,
+            &"r".repeat(CAP_REQUIREMENTS),
+            &"t".repeat(CAP_TASKS),
+            "i",
+        ));
+        assert_eq!(
+            ctx.sections_dropped,
+            DROP_ORDER.map(str::to_string).to_vec(),
+            "极端超长 KB 时四级全删，顺序不变"
+        );
+        // 不可删的节（脚手架 + S1 + S6）必须全部还在。
+        for key in [
+            KEY_ROLE,
+            KEY_SECURITY,
+            KEY_PROJECT_PROFILE,
+            KEY_INTERVIEW_STATE,
+            KEY_SLOT_STATE,
+            KEY_TURN_TASK,
+            KEY_OUTPUT_CONTRACT,
+        ] {
+            assert!(ctx.section(key).is_some(), "{key} must survive");
+        }
+    }
+
+    #[test]
+    fn metadata_records_included_dropped_and_chars() {
+        let digest = "k".repeat(80_000);
+        let ctx = assemble(all_drafts("p", "c", &digest, "r", "t", "i"));
+        let meta = ctx.metadata();
+        assert_eq!(meta["chars_total"], ctx.chars_total);
+        let dropped: Vec<String> =
+            serde_json::from_value(meta["sections_dropped"].clone()).unwrap();
+        assert_eq!(dropped, ctx.sections_dropped);
+        let included: Vec<String> =
+            serde_json::from_value(meta["sections_included"].clone()).unwrap();
+        assert!(included.contains(&KEY_ROLE.to_string()));
+        assert!(!included.contains(&KEY_KNOWLEDGE_DIGEST.to_string()));
+        // D2：记账三个键必须齐。
+        assert!(meta.get("sections_included").is_some());
+        assert!(meta.get("sections_dropped").is_some());
+        assert!(meta.get("chars_total").is_some());
+    }
+
+    #[test]
+    fn scaffold_never_dropped_and_shared_cap_is_sequential() {
+        // 脚手架共用 2000 上限：超长时按顺序吃掉额度，但整节不会被删。
+        let long_role = "r".repeat(CAP_SCAFFOLD + 100);
+        let mut drafts = all_drafts("p", "c", "k", "r", "t", "i");
+        drafts[0] = draft(KEY_ROLE, &long_role);
+        let ctx = assemble(drafts);
+        assert!(ctx.sections_dropped.is_empty());
+        let role = ctx.section(KEY_ROLE).unwrap();
+        assert_eq!(role.chars, CAP_SCAFFOLD);
+        assert!(role.truncated);
+        // 额度耗尽后，后续脚手架节只剩 0 额度。
+        assert_eq!(ctx.section(KEY_SECURITY).unwrap().chars, 0);
+    }
+
+    // ── 事实引用白名单（D3）───────────────────────────────────────────────
+
+    #[test]
+    fn fact_index_extracts_inline_code_and_filters_fabrications() {
+        let ctx = assemble(all_drafts(
+            "- 项目：`demo-project`",
+            "- `repo:1:tech_stack`（tech_stack／技术栈）：Rust\n",
+            "## `repo-42`（锚 `deadbeef`）\n摘要",
+            "- `REQ-001` 登录（functional／normal／v1（approved））：支持登录",
+            "- 任务总数：3",
+            "- [observed]\n  - 早期事实（CONFIRMED）",
+        ));
+        let index = FactIndex::from_context(&ctx);
+        assert!(index.contains("demo-project"));
+        assert!(index.contains("repo:1:tech_stack"));
+        assert!(index.contains("repo-42"));
+        assert!(index.contains("deadbeef"));
+        assert!(index.contains("REQ-001"));
+        // 脚手架小节自己的行内代码（`project_profile`、`answer_markdown` 等）
+        // 也在索引里——它们是合法可引用值，不参与本断言的精确计数。
+        assert!(index.contains("project_profile"));
+
+        let outcome = filter_evidence_refs_and_warn(
+            &index,
+            &[
+                "deadbeef".to_string(),
+                "made-up-sha".to_string(),
+                "deadbeef".to_string(),
+                "REQ-001".to_string(),
+                "  ".to_string(),
+            ],
+        );
+        assert_eq!(outcome.accepted, vec!["deadbeef", "REQ-001"]);
+        assert_eq!(outcome.rejected, vec!["made-up-sha"]);
+        assert_eq!(outcome.overflowed, 0);
+    }
+
+    #[test]
+    fn fact_index_caps_refs_and_reports_overflow() {
+        let body: String = (0..12).map(|i| format!("`ref-{i}` ")).collect();
+        let ctx = assemble(all_drafts(&body, "c", "k", "r", "t", "i"));
+        let index = FactIndex::from_context(&ctx);
+        let refs: Vec<String> = (0..12).map(|i| format!("ref-{i}")).collect();
+        let outcome = filter_evidence_refs(&index, &refs);
+        assert_eq!(outcome.accepted.len(), MAX_EVIDENCE_REFS);
+        assert_eq!(outcome.overflowed, 12 - MAX_EVIDENCE_REFS);
+        assert!(outcome.rejected.is_empty());
+    }
+
+    // ── D1：凭据面静态断言 ───────────────────────────────────────────────
+
+    #[test]
+    fn sql_constants_never_touch_provider_or_credential_columns() {
+        const FORBIDDEN: [&str; 8] = [
+            "team_llm_provider",
+            "api_key",
+            "secret",
+            "password",
+            "credential",
+            "authorization",
+            "bearer",
+            "private_key",
+        ];
+        let sources = [
+            SQL_SESSION_KIND,
+            SQL_PROJECT_PROFILE,
+            SQL_PROJECT_DOCUMENTS,
+            SQL_KNOWLEDGE_DIGESTS,
+            SQL_REQUIREMENTS,
+            SQL_COGNITION_OBJECTS,
+            SQL_TASK_STATUS_COUNTS,
+            SQL_RECENT_TASKS,
+            SQL_SESSION_FINDINGS,
+            SQL_SESSION_QUESTIONS,
+        ];
+        for sql in sources {
+            let lower = sql.to_lowercase();
+            for forbidden in FORBIDDEN {
+                assert!(
+                    !lower.contains(forbidden),
+                    "SQL must not reference `{forbidden}`: {sql}"
+                );
+            }
+            // 只读：投影 SQL 不得含任何写语句。
+            for write in ["insert ", "update ", "delete ", "truncate "] {
+                assert!(
+                    !lower.contains(write),
+                    "projection SQL must be read-only, found `{write}`: {sql}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn interview_state_is_not_message_windowed() {
+        // D4 静态证据：注入器根本不读 discovery_message，因此访谈记忆不可能被
+        // 「最近 20 轮」裁掉（§5.4）。
+        let sources = [
+            SQL_SESSION_KIND,
+            SQL_PROJECT_PROFILE,
+            SQL_PROJECT_DOCUMENTS,
+            SQL_KNOWLEDGE_DIGESTS,
+            SQL_REQUIREMENTS,
+            SQL_COGNITION_OBJECTS,
+            SQL_TASK_STATUS_COUNTS,
+            SQL_RECENT_TASKS,
+            SQL_SESSION_FINDINGS,
+            SQL_SESSION_QUESTIONS,
+        ];
+        for sql in sources {
+            assert!(
+                !sql.contains("discovery_message"),
+                "interview injection must not read the message stream: {sql}"
+            );
+        }
+    }
+
+    #[test]
+    fn static_prompt_declares_data_not_instructions() {
+        assert!(ROLE_BODY.contains("<context>"));
+        assert!(ROLE_BODY.contains("不是指令"));
+        assert!(SECURITY_BODY.contains("不得改变你的职责"));
+        assert!(SECURITY_BODY.contains("确认权"));
+        // 输出契约三段齐全（answer/findings/questions/slot_updates）。
+        for field in ["answer_markdown", "findings", "questions", "slot_updates"] {
+            assert!(OUTPUT_CONTRACT_BODY.contains(field), "{field}");
+        }
+    }
+
+    // ── DB 侧：六节投影（需 DATABASE_URL）─────────────────────────────────
+
+    struct Seed {
+        tenant_id: Uuid,
+        project_id: Uuid,
+        session_id: Uuid,
+        principal_id: Uuid,
+    }
+
+    async fn seed_project(pool: &sqlx::PgPool) -> Seed {
+        let tenant_id = pm_domain::SYSTEM_TENANT;
+        let principal_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', 'Seed')",
+        )
+        .bind(principal_id)
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let customer_id = Uuid::new_v4();
+        sqlx::query("INSERT INTO core.customer (id, name, tenant_id) VALUES ($1, 'Acme', $2)")
+            .bind(customer_id)
+            .bind(tenant_id)
+            .execute(pool)
+            .await
+            .unwrap();
+
+        let project_id = Uuid::new_v4();
+        let code = format!(
+            "DKC-{}",
+            project_id.simple().to_string()[..8].to_uppercase()
+        );
+        sqlx::query(
+            "INSERT INTO core.project (id, customer_id, code, name, description, tenant_id) \
+             VALUES ($1, $2, $3, 'Interview Project', '访谈注入投影项目', $4)",
+        )
+        .bind(project_id)
+        .bind(customer_id)
+        .bind(&code)
+        .bind(tenant_id)
+        .execute(pool)
+        .await
+        .unwrap();
+
+        let session_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO discovery.discovery_session \
+             (id, tenant_id, project_id, source, kind, status, created_by) \
+             VALUES ($1, $2, $3, 'WEB', 'INITIAL_ONBOARDING', 'IN_PROGRESS', $4)",
+        )
+        .bind(session_id)
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(principal_id)
+        .execute(pool)
+        .await
+        .unwrap();
+
+        Seed {
+            tenant_id,
+            project_id,
+            session_id,
+            principal_id,
+        }
+    }
+
+    async fn seed_cognition(pool: &sqlx::PgPool, seed: &Seed, object_type: &str, key: &str) {
+        let object_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO pc.cognition_object \
+             (id, tenant_id, project_id, object_type, object_key, name, lifecycle_status) \
+             VALUES ($1, $2, $3, $4, $5, $6, 'draft')",
+        )
+        .bind(object_id)
+        .bind(seed.tenant_id)
+        .bind(seed.project_id)
+        .bind(object_type)
+        .bind(key)
+        .bind(format!("name-{key}"))
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO pc.cognition_revision \
+             (tenant_id, object_id, revision_no, summary, content, status) \
+             VALUES ($1, $2, 1, $3, $4, 'draft')",
+        )
+        .bind(seed.tenant_id)
+        .bind(object_id)
+        .bind(format!("summary-{key}"))
+        .bind(format!("content-{key}"))
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn seed_digest(pool: &sqlx::PgPool, seed: &Seed, doc_key: &str, body: &str) {
+        let document_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO kb.document (tenant_id, project_id, doc_key, doc_type, canonical_path) \
+             VALUES ($1, $2, $3, 'knowledge', $4) RETURNING id",
+        )
+        .bind(seed.tenant_id)
+        .bind(seed.project_id)
+        .bind(doc_key)
+        .bind(format!("repos/{doc_key}/repository-snapshot.md"))
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO kb.document_revision \
+             (tenant_id, document_id, revision_no, source_commit_sha, content_hash, status, content) \
+             VALUES ($1, $2, 1, $3, $4, 'draft', $5)",
+        )
+        .bind(seed.tenant_id)
+        .bind(document_id)
+        .bind("abcdef12deadbeef")
+        .bind("hash-1")
+        .bind(body)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn seed_requirement(pool: &sqlx::PgPool, seed: &Seed, code: &str) {
+        let requirement_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO delivery.requirement \
+             (id, tenant_id, project_id, code, title, lifecycle_status, created_by) \
+             VALUES ($1, $2, $3, $4, $5, 'active', $6)",
+        )
+        .bind(requirement_id)
+        .bind(seed.tenant_id)
+        .bind(seed.project_id)
+        .bind(code)
+        .bind(format!("需求 {code}"))
+        .bind(seed.principal_id)
+        .execute(pool)
+        .await
+        .unwrap();
+        let revision_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO delivery.requirement_revision \
+             (id, tenant_id, requirement_id, project_id, version, content, state, content_hash, \
+              created_by) \
+             VALUES ($1, $2, $3, $4, 1, $5, 'approved', 'rhash', $6)",
+        )
+        .bind(revision_id)
+        .bind(seed.tenant_id)
+        .bind(requirement_id)
+        .bind(seed.project_id)
+        .bind(serde_json::json!({
+            "summary": "已确认的登录需求",
+            "markdown": "# 登录\n\n支持口令登录。\n\n## 验收\n略"
+        }))
+        .bind(seed.principal_id)
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query("UPDATE delivery.requirement SET current_revision_id = $1 WHERE id = $2")
+            .bind(revision_id)
+            .bind(requirement_id)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
+    async fn seed_task(pool: &sqlx::PgPool, seed: &Seed, title: &str, status: &str) {
+        sqlx::query(
+            "INSERT INTO delivery.task (tenant_id, project_id, title, status) \
+             VALUES ($1, $2, $3, $4)",
+        )
+        .bind(seed.tenant_id)
+        .bind(seed.project_id)
+        .bind(title)
+        .bind(status)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn seed_finding(pool: &sqlx::PgPool, seed: &Seed, kind: &str, content: &str) {
+        sqlx::query(
+            "INSERT INTO discovery.discovery_finding \
+             (tenant_id, project_id, session_id, kind, content, verification_status) \
+             VALUES ($1, $2, $3, $4, $5, 'CONFIRMED')",
+        )
+        .bind(seed.tenant_id)
+        .bind(seed.project_id)
+        .bind(seed.session_id)
+        .bind(kind)
+        .bind(content)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn seed_question(
+        pool: &sqlx::PgPool,
+        seed: &Seed,
+        question: &str,
+        status: &str,
+        answer: Option<&str>,
+    ) {
+        let question_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO discovery.discovery_question \
+             (tenant_id, project_id, session_id, question, why_blocking, status) \
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+        )
+        .bind(seed.tenant_id)
+        .bind(seed.project_id)
+        .bind(seed.session_id)
+        .bind(question)
+        .bind(if status == "deferred" {
+            Some("外部依赖未就绪")
+        } else {
+            Some("阻塞槽位")
+        })
+        .bind(status)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        if let Some(answer) = answer {
+            sqlx::query(
+                "INSERT INTO discovery.discovery_answer \
+                 (tenant_id, question_id, answer, answered_by) VALUES ($1, $2, $3, $4)",
+            )
+            .bind(seed.tenant_id)
+            .bind(question_id)
+            .bind(answer)
+            .bind(seed.principal_id)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+    }
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn build_projects_all_six_sections_read_only(pool: sqlx::PgPool) {
+        let seed = seed_project(&pool).await;
+        seed_cognition(&pool, &seed, "tech_stack", "repo:1:tech_stack").await;
+        seed_cognition(&pool, &seed, "delivery_activity", "repo:1:activity").await;
+        seed_digest(
+            &pool,
+            &seed,
+            "repo-1",
+            "# 仓库快照\n\nRust 服务，近期交付任务调度。",
+        )
+        .await;
+        seed_requirement(&pool, &seed, "REQ-001").await;
+        seed_task(&pool, &seed, "接通登录", "completed").await;
+        seed_task(&pool, &seed, "补测试", "draft").await;
+        seed_finding(&pool, &seed, "observed", "仓库使用 Rust").await;
+        seed_question(
+            &pool,
+            &seed,
+            "登录是否支持 SSO？",
+            "answered",
+            Some("暂不支持"),
+        )
+        .await;
+        seed_question(&pool, &seed, "是否需要多语言？", "deferred", None).await;
+
+        let builder = PgInterviewContextBuilder::new(pool.clone());
+        let ctx = builder
+            .build(
+                seed.tenant_id,
+                seed.project_id,
+                seed.session_id,
+                InterviewKind::InitialOnboarding,
+            )
+            .await
+            .unwrap();
+
+        // 六节都有内容（无空节，无丢弃）。
+        assert!(ctx.sections_dropped.is_empty());
+        assert_eq!(
+            ctx.sections
+                .iter()
+                .map(|s| s.key.as_str())
+                .collect::<Vec<_>>(),
+            SECTION_ORDER.to_vec()
+        );
+        let prompt = ctx.render_prompt();
+        assert!(prompt.contains("Interview Project"));
+        assert!(prompt.contains("repo:1:tech_stack"));
+        assert!(prompt.contains("repo-1"));
+        assert!(prompt.contains("abcdef12"));
+        assert!(prompt.contains("REQ-001"));
+        assert!(prompt.contains("已确认的登录需求"));
+        assert!(prompt.contains("任务总数：2"));
+        assert!(prompt.contains("completed=1"));
+        // S2 优先级：tech_stack 必须排在 delivery_activity 前。
+        let tech = prompt.find("repo:1:tech_stack").unwrap();
+        let activity = prompt.find("repo:1:activity").unwrap();
+        assert!(tech < activity, "tech_stack must precede delivery_activity");
+        // S6 三块齐备。
+        assert!(prompt.contains("仓库使用 Rust"));
+        assert!(prompt.contains("暂不支持"));
+        assert!(prompt.contains("是否需要多语言？"));
+
+        // 只读：投影不产生任何新行。
+        let audit_rows: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM governance.audit_log WHERE project_id = $1")
+                .bind(seed.project_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(audit_rows, 0, "DK-C must not create audit rows");
+        let call_rows: i64 = sqlx::query_scalar("SELECT count(*) FROM ai.llm_call_record")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(call_rows, 0, "DK-C must not record model calls");
+    }
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn d1_injection_excludes_provider_credentials(pool: sqlx::PgPool) {
+        let seed = seed_project(&pool).await;
+        // 项目内挂一个 enabled provider，凭据值必须是注入面绝对不可见的。
+        let secret = "sk-dkc-super-secret-value";
+        sqlx::query(
+            "INSERT INTO ai.team_llm_provider \
+             (id, tenant_id, name, provider_type, endpoint, configuration, status, created_by) \
+             VALUES ($1, $2, 'leaky', 'openai_compatible', 'https://example.invalid', $3, \
+                     'enabled', $4)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(seed.tenant_id)
+        .bind(serde_json::json!({"model": "m", "api_key": secret}))
+        .bind(seed.principal_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        seed_digest(&pool, &seed, "repo-1", "# 快照\n\n仅技术事实。").await;
+
+        let builder = PgInterviewContextBuilder::new(pool.clone());
+        let ctx = builder
+            .build(
+                seed.tenant_id,
+                seed.project_id,
+                seed.session_id,
+                InterviewKind::Update,
+            )
+            .await
+            .unwrap();
+        let prompt = ctx.render_prompt().to_lowercase();
+        assert!(
+            !prompt.contains(secret.to_lowercase().as_str()),
+            "secret leaked"
+        );
+        for forbidden in [
+            "api_key",
+            "secret",
+            "password",
+            "bearer",
+            "authorization",
+            "credential",
+            "team_llm_provider",
+            "leaky",
+        ] {
+            assert!(
+                !prompt.contains(forbidden),
+                "injection must not contain `{forbidden}`"
+            );
+        }
+    }
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn d2_long_kb_drops_sections_and_records_metadata(pool: sqlx::PgPool) {
+        let seed = seed_project(&pool).await;
+        // 超长 KB：3 篇 × 20k = 60k 原始量 → 逼出整节裁剪。
+        for i in 0..3 {
+            seed_digest(&pool, &seed, &format!("repo-{i}"), &"k".repeat(20_000)).await;
+        }
+        seed_cognition(&pool, &seed, "tech_stack", "repo:1:tech_stack").await;
+        seed_requirement(&pool, &seed, "REQ-001").await;
+        seed_task(&pool, &seed, "任务一", "draft").await;
+        seed_finding(&pool, &seed, "observed", "早期事实仍在").await;
+
+        let builder = PgInterviewContextBuilder::new(pool.clone());
+        let ctx = builder
+            .build(
+                seed.tenant_id,
+                seed.project_id,
+                seed.session_id,
+                InterviewKind::Update,
+            )
+            .await
+            .unwrap();
+
+        assert!(
+            ctx.chars_total <= TOTAL_BUDGET_CHARS,
+            "chars_total {} must stay within budget",
+            ctx.chars_total
+        );
+        // S3 是最后被删的：60k 原始量会一路删到 S3。
+        assert_eq!(
+            ctx.sections_dropped,
+            DROP_ORDER.map(str::to_string).to_vec()
+        );
+        let meta = ctx.metadata();
+        assert_eq!(meta["chars_total"], ctx.chars_total);
+        let prompt = ctx.render_prompt();
+        for dropped in DROP_ORDER {
+            assert!(
+                prompt.contains(DROPPED_MARKER),
+                "dropped sections must be annotated"
+            );
+            assert!(!meta["sections_included"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v.as_str() == Some(dropped)));
+        }
+        // 未删的节保住内容（S6 早期 finding 不受影响）。
+        assert!(prompt.contains("早期事实仍在"));
+    }
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn d4_long_session_keeps_early_findings(pool: sqlx::PgPool) {
+        let seed = seed_project(&pool).await;
+        // 早期 finding（第 1 条）+ 之后大量后续 finding/问答，模拟长会话。
+        seed_finding(
+            &pool,
+            &seed,
+            "observed",
+            "第一轮就确认的核心事实：支付走第三方",
+        )
+        .await;
+        for i in 0..30 {
+            seed_finding(&pool, &seed, "observed", &format!("后续事实 {i}")).await;
+        }
+        for i in 0..10 {
+            seed_question(
+                &pool,
+                &seed,
+                &format!("问题 {i}"),
+                "answered",
+                Some(&format!("回答 {i}")),
+            )
+            .await;
+        }
+        // 长消息流：注入器根本不读消息表，它们不得影响 S6。
+        for i in 0..40 {
+            sqlx::query(
+                "INSERT INTO discovery.discovery_message \
+                 (tenant_id, session_id, speaker, source, content, seq) \
+                 VALUES ($1, $2, 'user', 'WEB', $3, $4)",
+            )
+            .bind(seed.tenant_id)
+            .bind(seed.session_id)
+            .bind(format!("长会话消息 {i}"))
+            .bind(i as i64 + 1)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        let builder = PgInterviewContextBuilder::new(pool.clone());
+        let ctx = builder
+            .build(
+                seed.tenant_id,
+                seed.project_id,
+                seed.session_id,
+                InterviewKind::InitialOnboarding,
+            )
+            .await
+            .unwrap();
+        let prompt = ctx.render_prompt();
+        assert!(
+            prompt.contains("第一轮就确认的核心事实：支付走第三方"),
+            "early finding must survive a long session (no 20-turn window in interview mode)"
+        );
+        // 早期问答对也在（deferred/answered 不走轮次窗口）。
+        assert!(prompt.contains("问题 0"));
+        // S6 未被裁（finding 总量在 6000 字符内）。
+        assert!(ctx
+            .section(KEY_INTERVIEW_STATE)
+            .is_some_and(|s| !s.truncated));
+    }
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn unknown_session_is_not_found(pool: sqlx::PgPool) {
+        let seed = seed_project(&pool).await;
+        let builder = PgInterviewContextBuilder::new(pool.clone());
+        let err = builder
+            .build(
+                seed.tenant_id,
+                seed.project_id,
+                Uuid::new_v4(),
+                InterviewKind::Update,
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, InterviewContextError::SessionNotFound(_)),
+            "{err}"
+        );
+    }
+
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn cross_tenant_project_is_not_found(pool: sqlx::PgPool) {
+        let seed = seed_project(&pool).await;
+        let builder = PgInterviewContextBuilder::new(pool.clone());
+        let err = builder
+            .build(
+                Uuid::new_v4(), // 伪造租户
+                seed.project_id,
+                seed.session_id,
+                InterviewKind::Update,
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, InterviewContextError::SessionNotFound(_)),
+            "{err}"
+        );
+    }
+}
