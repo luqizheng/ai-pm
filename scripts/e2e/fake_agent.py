@@ -44,10 +44,12 @@ def main() -> None:
     reply = os.environ.get("AI_PM_HUMAN_REPLY")
     if not reply:
         # Session-1：请求人工介入后等待终止（D-03）。
+        # P2-1 收敛（检查点 2 I6）：标记文件名含 event_id（双键一致）。
+        event_id = f"evt-{RUN_ID[:8]}"
         atomic_write(
-            os.path.join(AIPM, "interaction.json"),
+            os.path.join(AIPM, f"interaction.{event_id}.json"),
             marker(
-                f"evt-{RUN_ID[:8]}",
+                event_id,
                 "needs_decision",
                 "E2E：是否允许删除旧字段？",
                 [{"value": "approve", "label": "允许"},

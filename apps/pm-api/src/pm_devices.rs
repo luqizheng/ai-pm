@@ -196,7 +196,7 @@ async fn ensure_credential_manager(
     principal: &AuthedPrincipal,
     device_id: Uuid,
 ) -> Result<(), Response> {
-    let row: Option<(Uuid,)> = sqlx::query_scalar(
+    let owner: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
         "SELECT owner_principal_id FROM devenv.device WHERE id = $1 AND tenant_id = $2",
     )
     .bind(device_id)
@@ -210,7 +210,7 @@ async fn ensure_credential_manager(
         )
             .into_response()
     })?;
-    let Some((owner,)) = row else {
+    let Some(owner) = owner else {
         return Err(not_found_response());
     };
     if !principal.is_admin && owner != principal.principal_id {
