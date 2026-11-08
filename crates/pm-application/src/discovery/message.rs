@@ -26,6 +26,17 @@ pub struct DiscoveryMessageView {
     pub created_at: DateTime<Utc>,
 }
 
+/// 追加一条访谈消息。
+///
+/// **C7 双入口串行（DK-B / D-DK-9 附注）**：`seq` 由 `MAX(seq)+1` 生成，
+/// 而 REST（pm-api 进程）与访谈编排器（ai-pm-worker 进程）会并发追加同一
+/// session 的消息——进程内锁覆盖不了跨进程竞争。因此本函数在**同一事务内**
+/// 先对 `discovery_session` 行取 `FOR UPDATE`，再计算 `seq`：两个入口都走
+/// 这一个函数，行锁即成为跨进程的会话级互斥，`UNIQUE(tenant_id,
+/// session_id, seq)` 不可能被撞（单点服务内的加锁收紧，不属绕过 V-6）。
+///
+/// 锁序：session → message（本函数只取 session 锁；`record_finding_verification`
+/// 的 project → session → finding 锁序与之同向，不成环）。
 pub async fn append_message(
     pool: &PgPool,
     tenant_id: Uuid,
@@ -41,7 +52,19 @@ pub async fn append_message(
             "content must not be blank".to_string(),
         ));
     }
-    get_session(pool, tenant_id, session_id).await?;
+    let mut tx = pool.begin().await?;
+    // 会话行锁 = 本 session 的追加互斥点（跨进程有效）。顺带完成存在性校验。
+    let locked: Option<(Uuid,)> = sqlx::query_as(
+        "SELECT id FROM discovery.discovery_session \
+         WHERE tenant_id = $1 AND id = $2 FOR UPDATE",
+    )
+    .bind(tenant_id)
+    .bind(session_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if locked.is_none() {
+        return Err(DiscoveryError::SessionNotFound);
+    }
     let row: MessageRow = sqlx::query_as(&format!(
         "INSERT INTO discovery.discovery_message \
          (tenant_id, session_id, speaker, source, content, seq) \
@@ -55,8 +78,9 @@ pub async fn append_message(
     .bind(speaker)
     .bind(source)
     .bind(content)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok(to_message(row))
 }
 
