@@ -1,10 +1,19 @@
 # AI Team UI 批前置裁决包 V1.0（U-1 Monitor 数据面 + U-2 管理界面范围）
 
-> 状态：待用户裁决（U-1 / U-2）
+> 状态：**已裁决 · 2026-11-08（U-1=C，U-2=A，见 §〇 裁决记录）**
 > 日期：2026-11-08
 > 目的：AI Team 管理界面（Execution Monitor / Overview）动工前的最后一组产品决策。代码侧其余工作（Batch H 清偿批）不依赖本包，已并行推进。
 > 依据：开工批实施记录（`ai-pm-ai-team-kickoff-batch-record-v1.md`）挂账 #4、比对报告 §五.3、对齐核验 §七.6。
 > 裁决方式：回复如「U-1=C，U-2=A」或逐项修改。
+
+## 〇、裁决记录（2026-11-08）
+
+| 编号 | 裁决项 | 用户裁决 |
+| --- | --- | --- |
+| U-1 | Execution Monitor 数据面 | **C** 先聚合现有 audit/outbox 落 UI，B（run 事件表）挂 Phase 4 |
+| U-2 | 管理界面范围（=稿 Q4） | **A** 完整管理页面，分步：Roles → Overview → Model Policies → Execution Monitor → Execution Policies |
+
+附带：V1.0 稿 Q4 就此关闭（=A）；稿 Q2 维持挂账（代码事实近 A，随时可顺手裁）。自本记录起 UI 批按 §三 A 落地序排期。
 
 ---
 
