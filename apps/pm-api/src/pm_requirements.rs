@@ -7,18 +7,21 @@
 //! 模块退役——draft→approved 直跳废除（S02D-04），必须经 submit → confirm。
 
 use axum::{
+    Json, Router,
     extract::{Extension, Path, State},
     routing::{get, patch, post},
-    Json, Router,
 };
 use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
+use crate::support::{ApiError, ApiResult, ensure_trusted_context, require_project_visible};
 use pm_application::requirement::{
-    self, ConfirmRevisionRequest, CreateRequirementRequest, DraftRevisionRequest,
-    LifecycleAction, RejectRevisionRequest,
+    self, ConfirmRevisionRequest, CreateRequirementRequest, DraftRevisionRequest, LifecycleAction,
+    RejectRevisionRequest,
+};
+use pm_application::requirement_acceptance::{
+    self, AddCriterionRequest, CriterionVerdictRequest, UpdateCriterionRequest,
 };
 use pm_application::requirement_traceability::{
     self, LinkFindingRequest, LinkSourceInputRequest, RegisterSourceInputRequest,
@@ -38,8 +41,13 @@ async fn require_requirement_visible(
     .fetch_optional(&state.pool)
     .await?;
     let project_id = project_id.ok_or(ApiError::NotFound("requirement not found"))?;
-    require_project_visible(&state.pool, project_id, principal.tenant_id, principal.principal_id)
-        .await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await?;
     Ok(project_id)
 }
 
@@ -50,8 +58,13 @@ async fn list_requirements(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-        .await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
     let items = requirement::list_requirements(&state.pool, caller.tenant_id, project_id).await?;
     Ok(Json(serde_json::json!({ "items": items })))
 }
@@ -62,8 +75,13 @@ async fn create_requirement(
     Path(project_id): Path<Uuid>,
     Json(body): Json<CreateRequirementRequest>,
 ) -> ApiResult<(axum::http::StatusCode, Json<serde_json::Value>)> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-        .await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
     let entry = requirement::create_requirement(
         &state.pool,
         caller.tenant_id,
@@ -104,9 +122,14 @@ async fn create_draft(
     Json(body): Json<DraftRevisionRequest>,
 ) -> ApiResult<(axum::http::StatusCode, Json<serde_json::Value>)> {
     require_requirement_visible(&state, requirement_id, &caller).await?;
-    let revision =
-        requirement::create_draft(&state.pool, caller.tenant_id, requirement_id, body, &caller.audit_actor())
-            .await?;
+    let revision = requirement::create_draft(
+        &state.pool,
+        caller.tenant_id,
+        requirement_id,
+        body,
+        &caller.audit_actor(),
+    )
+    .await?;
     Ok((
         axum::http::StatusCode::CREATED,
         Json(serde_json::json!({ "revision": revision })),
@@ -167,7 +190,18 @@ async fn confirm_revision(
         &caller.audit_actor(),
     )
     .await?;
-    Ok(Json(serde_json::json!({ "requirement": entry })))
+    // Q-12 一致性提示：待确认修订提交后验收项又被修改 = 漂移，审批人应复核
+    // （业务查询在统一服务 criteria_drift_since，此处仅编排透出）。
+    let criteria_drift = requirement_acceptance::criteria_drift_since(
+        &state.pool,
+        caller.tenant_id,
+        requirement_id,
+        entry.latest_submitted_at,
+    )
+    .await?;
+    Ok(Json(
+        serde_json::json!({ "requirement": entry, "criteria_drift": criteria_drift }),
+    ))
 }
 
 async fn reject_revision(
@@ -243,8 +277,13 @@ async fn register_source_input(
     Path(project_id): Path<Uuid>,
     Json(body): Json<RegisterSourceInputRequest>,
 ) -> ApiResult<(axum::http::StatusCode, Json<serde_json::Value>)> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-        .await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
     let entry = requirement_traceability::register_source_input(
         &state.pool,
         caller.tenant_id,
@@ -289,7 +328,10 @@ async fn link_source_input(
         &caller.audit_actor(),
     )
     .await?;
-    Ok((axum::http::StatusCode::CREATED, Json(serde_json::json!(entry))))
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!(entry)),
+    ))
 }
 
 async fn unlink_source_input(
@@ -339,7 +381,10 @@ async fn link_finding(
         &caller.audit_actor(),
     )
     .await?;
-    Ok((axum::http::StatusCode::CREATED, Json(serde_json::json!(entry))))
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!(entry)),
+    ))
 }
 
 async fn unlink_finding(
@@ -357,6 +402,101 @@ async fn unlink_finding(
     )
     .await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+// ────────────────────────────────── Acceptance Criteria（S02-I5，§11）
+
+async fn list_criteria(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(requirement_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_requirement_visible(&state, requirement_id, &caller).await?;
+    let items =
+        requirement_acceptance::list_criteria(&state.pool, caller.tenant_id, requirement_id)
+            .await?;
+    Ok(Json(items))
+}
+
+async fn add_criterion(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(requirement_id): Path<Uuid>,
+    Json(body): Json<AddCriterionRequest>,
+) -> ApiResult<(axum::http::StatusCode, Json<serde_json::Value>)> {
+    require_requirement_visible(&state, requirement_id, &caller).await?;
+    ensure_trusted_context(&caller)?;
+    let view = requirement_acceptance::add_criterion(
+        &state.pool,
+        caller.tenant_id,
+        requirement_id,
+        body,
+        &caller.audit_actor(),
+    )
+    .await?;
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!({ "criterion": view })),
+    ))
+}
+
+async fn update_criterion(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path((requirement_id, criterion_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<UpdateCriterionRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_requirement_visible(&state, requirement_id, &caller).await?;
+    ensure_trusted_context(&caller)?;
+    let view = requirement_acceptance::update_criterion(
+        &state.pool,
+        caller.tenant_id,
+        requirement_id,
+        criterion_id,
+        body,
+        &caller.audit_actor(),
+    )
+    .await?;
+    Ok(Json(serde_json::json!({ "criterion": view })))
+}
+
+async fn remove_criterion(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path((requirement_id, criterion_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<axum::http::StatusCode> {
+    require_requirement_visible(&state, requirement_id, &caller).await?;
+    ensure_trusted_context(&caller)?;
+    requirement_acceptance::remove_criterion(
+        &state.pool,
+        caller.tenant_id,
+        requirement_id,
+        criterion_id,
+        &caller.audit_actor(),
+    )
+    .await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// 需求级验收裁决入口（Q-14：S04/S05 声明接口的 REST 面）。
+async fn record_criterion_verdict(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path((requirement_id, criterion_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<CriterionVerdictRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_requirement_visible(&state, requirement_id, &caller).await?;
+    ensure_trusted_context(&caller)?;
+    let view = requirement_acceptance::record_criterion_verdict(
+        &state.pool,
+        caller.tenant_id,
+        requirement_id,
+        criterion_id,
+        body,
+        &caller.audit_actor(),
+    )
+    .await?;
+    Ok(Json(serde_json::json!({ "criterion": view })))
 }
 
 // ─────────────────────────────────────────────────────────────── 路由
@@ -419,5 +559,17 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/pm/requirements/{requirement_id}/findings/{finding_id}",
             axum::routing::delete(unlink_finding),
+        )
+        .route(
+            "/v1/pm/requirements/{requirement_id}/acceptance-criteria",
+            get(list_criteria).post(add_criterion),
+        )
+        .route(
+            "/v1/pm/requirements/{requirement_id}/acceptance-criteria/{criterion_id}",
+            axum::routing::patch(update_criterion).delete(remove_criterion),
+        )
+        .route(
+            "/v1/pm/requirements/{requirement_id}/acceptance-criteria/{criterion_id}/verdict",
+            axum::routing::post(record_criterion_verdict),
         )
 }

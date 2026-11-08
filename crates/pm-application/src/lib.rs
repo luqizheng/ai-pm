@@ -1,6 +1,7 @@
 //! pm-application: use cases, ports and application services.
 
 pub mod acceptance_overview;
+pub mod acp06_07;
 pub mod actor;
 pub mod approver;
 pub mod archive;
@@ -10,7 +11,6 @@ pub mod caller;
 pub mod comm_overview;
 pub mod command_center;
 pub mod command_executor;
-pub mod acp06_07;
 pub mod continuation;
 pub mod delivery;
 pub mod devenv;
@@ -45,6 +45,7 @@ pub mod repo_access;
 pub mod repo_facts;
 pub mod repository;
 pub mod requirement;
+pub mod requirement_acceptance;
 pub mod requirement_projection;
 pub mod requirement_traceability;
 pub mod response_delivery;
