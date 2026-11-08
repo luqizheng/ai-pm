@@ -41,6 +41,8 @@ pub struct ConversationView {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub last_message_at: Option<DateTime<Utc>>,
+    /// DK-A（0065）：线程最近一次升级指向的访谈会话；NULL = 纯 chat 线程。
+    pub discovery_session_id: Option<Uuid>,
 }
 
 /// 消息视图（REST 直接序列化）。
@@ -109,7 +111,7 @@ pub async fn list_conversations(
 ) -> Result<Vec<ConversationView>, ConversationError> {
     let rows = sqlx::query(
         "SELECT id, tenant_id, project_id, principal_id, title, status, \
-                created_at, updated_at, last_message_at \
+                created_at, updated_at, last_message_at, discovery_session_id \
          FROM ai.conversation \
          WHERE tenant_id = $1 AND project_id = $2 AND principal_id = $3 \
          ORDER BY updated_at DESC \
@@ -149,21 +151,7 @@ pub async fn append_message(
         )));
     }
     let content_type = content_type.trim();
-    if content_type.is_empty() {
-        return Err(ConversationError::Validation(
-            "content_type must not be empty".into(),
-        ));
-    }
-    if content.trim().is_empty() {
-        return Err(ConversationError::Validation(
-            "content must not be empty".into(),
-        ));
-    }
-    if content.chars().count() > MAX_CONTENT_CHARS {
-        return Err(ConversationError::Validation(format!(
-            "content must be at most {MAX_CONTENT_CHARS} characters"
-        )));
-    }
+    validate_content(content, content_type)?;
 
     let mut tx = pool.begin().await.map_err(db)?;
     // 属主锁：同一行串行化，跨属主 / 跨项目 / 不存在统一 NotFound（防探测）。
@@ -183,6 +171,51 @@ pub async fn append_message(
         return Err(ConversationError::NotFound);
     }
 
+    let message = insert_message_in(
+        &mut tx,
+        conversation_id,
+        role,
+        content,
+        content_type,
+        metadata,
+    )
+    .await?;
+    tx.commit().await.map_err(db)?;
+    Ok(message)
+}
+
+/// 内容校验（[`append_message`] 与 DK-A 载体判定 `conversation_router` 同一口径）。
+pub(crate) fn validate_content(content: &str, content_type: &str) -> Result<(), ConversationError> {
+    if content_type.is_empty() {
+        return Err(ConversationError::Validation(
+            "content_type must not be empty".into(),
+        ));
+    }
+    if content.trim().is_empty() {
+        return Err(ConversationError::Validation(
+            "content must not be empty".into(),
+        ));
+    }
+    if content.chars().count() > MAX_CONTENT_CHARS {
+        return Err(ConversationError::Validation(format!(
+            "content must be at most {MAX_CONTENT_CHARS} characters"
+        )));
+    }
+    Ok(())
+}
+
+/// 事务内落一条消息并刷新会话 `updated_at` / `last_message_at`（单点 INSERT）。
+///
+/// 前置：调用方已在同事务内对会话行 `FOR UPDATE` 并完成属主校验、内容校验
+/// （[`append_message`] 与 DK-A `conversation_router` 共用）。
+pub(crate) async fn insert_message_in(
+    conn: &mut sqlx::PgConnection,
+    conversation_id: Uuid,
+    role: &str,
+    content: &str,
+    content_type: &str,
+    metadata: serde_json::Value,
+) -> Result<MessageView, ConversationError> {
     // now() 在 Postgres 里是事务时间戳：消息 created_at 与会话刷新值同源。
     let row = sqlx::query(
         "INSERT INTO ai.conversation_message \
@@ -195,7 +228,7 @@ pub async fn append_message(
     .bind(content)
     .bind(content_type)
     .bind(metadata)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut *conn)
     .await
     .map_err(db)?;
     sqlx::query(
@@ -204,10 +237,9 @@ pub async fn append_message(
          WHERE id = $1",
     )
     .bind(conversation_id)
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await
     .map_err(db)?;
-    tx.commit().await.map_err(db)?;
     Ok(message_from_row(&row))
 }
 
@@ -330,7 +362,7 @@ async fn fetch_conversation(
 ) -> Result<Option<ConversationView>, ConversationError> {
     let rows = sqlx::query(
         "SELECT id, tenant_id, project_id, principal_id, title, status, \
-                created_at, updated_at, last_message_at \
+                created_at, updated_at, last_message_at, discovery_session_id \
          FROM ai.conversation \
          WHERE id = $1 AND tenant_id = $2 AND project_id = $3 AND principal_id = $4",
     )
@@ -355,10 +387,11 @@ fn conversation_from_row(row: sqlx::postgres::PgRow) -> ConversationView {
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
         last_message_at: row.get("last_message_at"),
+        discovery_session_id: row.get("discovery_session_id"),
     }
 }
 
-fn message_from_row(row: &sqlx::postgres::PgRow) -> MessageView {
+pub(crate) fn message_from_row(row: &sqlx::postgres::PgRow) -> MessageView {
     MessageView {
         id: row.get("id"),
         conversation_id: row.get("conversation_id"),
@@ -370,6 +403,6 @@ fn message_from_row(row: &sqlx::postgres::PgRow) -> MessageView {
     }
 }
 
-fn db(e: sqlx::Error) -> ConversationError {
+pub(crate) fn db(e: sqlx::Error) -> ConversationError {
     ConversationError::Db(e.to_string())
 }

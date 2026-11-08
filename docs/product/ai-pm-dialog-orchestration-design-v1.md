@@ -291,6 +291,10 @@ ORDER BY last.created_at ASC, last.id ASC
 LIMIT $1;
 ```
 
+> **实施勘误（D-B-1，DK-B）**：只扫 `IN_PROGRESS` 会让已产出阻塞问题的会话
+> （状态已是 `NEEDS_USER_INPUT`）在用户回话后**永久卡死**——实施谓词为
+> `status IN ('IN_PROGRESS','NEEDS_USER_INPUT')`。详见验收记录 §三。
+
 这条谓词天然幂等：编排器回复后最新消息变 `ai`，会话自动离开扫描集；崩溃重启最多重跑一轮（重复问题由 §4.6 的去重兜住）。
 
 **开关**：`AI_PM_DISCOVERY_ORCHESTRATOR=off|on`，**默认 off**（F22 传统）。拼错值 WARN + off，绝不静默启动计费循环。
@@ -349,6 +353,11 @@ stateDiagram-v2
 
 **注意**：`NEEDS_USER_INPUT → REVIEW_REQUIRED` 与 `IN_PROGRESS → REVIEW_REQUIRED` 都在既有转移函数内（F2），**零迁移**。`REVIEW_REQUIRED → IN_PROGRESS` 也在（回退补充），所以"复核不过打回"不需要新边。
 
+> **实施勘误（D-B-2，DK-B）**：F2 声称的 `NEEDS_USER_INPUT → REVIEW_REQUIRED` 边
+> **代码里不存在**（边表只有 `NEEDS_USER_INPUT → IN_PROGRESS/COMPLETED`）。实施走
+> `NEEDS_USER_INPUT → IN_PROGRESS → REVIEW_REQUIRED` 两跳（`session_transition_path`，
+> 边表已抽成 `SESSION_EDGES` 单一来源），终态一致、仍零迁移。详见验收记录 §三。
+
 ### 4.5 失败与降级纪律
 
 | 情形 | 行为 |
@@ -357,6 +366,8 @@ stateDiagram-v2
 | LLM 输出不合规（JSON 坏/槽位越界） | 丢弃本轮产出，记 WARN，会话留在 `IN_PROGRESS`；连续 3 次 → 置 `NEEDS_USER_INPUT` + 提示人工介入 |
 | 数据库写失败 | 整轮回滚，会话状态不变 |
 | 用户消息与问题并发（用户跳答） | 编排器以"最新未答问题"为准做匹配；匹配不上则记为自由补充 finding（`observed`），不强行绑到某个 question |
+
+> **实施勘误（D-B-6，DK-B）**：「谁把 question 置 answered」本稿未定义。实施=编排器在轮次内以「最新 open 问题且创建时间早于本轮消息」为匹配对象，`answered_by = session.created_by`（用户自己说的话）；REST 侧已答过则静默跳过（良性竞争）。详见验收记录 §三。
 
 ### 4.6 幂等与去重
 
@@ -418,6 +429,8 @@ stateDiagram-v2
 | **合计** | **36,000** | 约 25k~36k tokens；超出时**从低优先级整节删**（顺序：S5 → S4 → S2 → S3），删掉的节在提示里显式标注「本节因预算被省略」 |
 
 裁剪必须**可观测**：每轮在 `llm_call_record` 的 `metadata` 里记 `sections_included` / `sections_dropped` / `chars_total`，这样"AI 答错了"能立刻区分是模型问题还是预算把证据裁掉了。
+
+> **实施勘误（D-B-4，DK-B）**：0041 的 `llm_call_record` **没有 `metadata` 列**（只有 prompt/completion_tokens）。DK-B 先把三值放轮次报告 + 结构化日志；`sections_dropped` 落库方式（加列 = 迁移，或只留日志）留 DK-C/DK-F 裁决。详见验收记录 §三。
 
 ### 5.4 与 20 轮窗口的关系
 
@@ -687,6 +700,7 @@ sequenceDiagram
 - 当前上限 0062（F26）；下个空号 **0063**。
 - 若并行批次先取走 0063，按 `max+1` 顺移并在台账回填，**不得复用/重解释既有号**。
 - 本稿**不创建任何迁移文件**（裁决前不进代码）。
+- **实施回填（DK-A，2026-11-09）**：0063 已被并行批取走（`0063_runner_availability`）、0064 被 `0064_pc_formal_model` 取走、0065 被 `0065_kb_three_layer_minimal` 取走（三者均已进 master）→ 顺移 0066；**同日迁移基线合并（0001~0065 squash 为 `0001_baseline.sql`，新链自 0002 起）后终取 `0002_conversation_discovery_link.sql`**；外键收紧为三元组 `(tenant_id, project_id, discovery_session_id)`（钉同项目）。台账已回填，验收见 `ai-pm-dk-a-acceptance-record-v1.md`。
 
 ---
 

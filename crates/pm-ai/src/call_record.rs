@@ -21,10 +21,17 @@ pub const PURPOSE_REPO_IMPORT: &str = "repo_import";
 /// for this purpose (no analysis run backs a chat turn — the subquery in
 /// [`record_call`] yields NULL for a NULL event, which the column allows).
 pub const PURPOSE_CONVERSATION_REPLY: &str = "conversation_reply";
+/// DK-A（D-DK-3）：对话载体判定的意图分类调用（规则 4）；与闲聊回复
+/// `conversation_reply`、编排 `discovery_orchestration`（DK-B）分账。
+pub const PURPOSE_CONVERSATION_ROUTER: &str = "conversation_router";
 /// P2-13/D-1=A（2026-11-08）：仓库快照分析的 LLM 增强调用（PC-I6 起笔切片）。
 /// KB digest 与 PC 对象各记一条，purpose 区分面（0062 analysis_mode 对账）。
 pub const PURPOSE_KB_SNAPSHOT_ANALYSIS: &str = "kb_snapshot_analysis";
 pub const PURPOSE_PC_SNAPSHOT_ANALYSIS: &str = "pc_snapshot_analysis";
+/// D-DK-11（2026-11-08）：访谈编排轮次。与 `conversation_reply`（闲聊）分开
+/// 记账，"闲聊成本 vs 编排成本"才可分；`purpose` 是自由 TEXT（0041 无 CHECK），
+/// 加常量不需迁移。
+pub const PURPOSE_DISCOVERY_ORCHESTRATION: &str = "discovery_orchestration";
 
 /// Maps an analysis-chain [`ModelError`] onto the §11 error taxonomy
 /// (migration 0041 comment: authentication / connection / timeout /
