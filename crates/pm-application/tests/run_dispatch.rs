@@ -215,6 +215,102 @@ async fn model_a_explicit_claim_ignores_exclude_list(pool: PgPool) {
     assert_eq!(task_status(&pool, fx.task_id).await, "claimed");
 }
 
+/// D-2=c：建设备 + 项目绑定（`unbound=true` 时绑定已解绑）。
+async fn bind_device(pool: &PgPool, project_id: Uuid, owner: Uuid, is_runner: bool, unbound: bool) {
+    // devenv.device 组合 FK 要求 owner 是 tenant member（bootstrap 只建 project_member）。
+    sqlx::query(
+        "INSERT INTO core.tenant_member (tenant_id, principal_id, role) \
+         VALUES ($1, $2, 'member') ON CONFLICT (tenant_id, principal_id) DO NOTHING",
+    )
+    .bind(SYSTEM_TENANT)
+    .bind(owner)
+    .execute(pool)
+    .await
+    .unwrap();
+    let device_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO devenv.device \
+         (id, tenant_id, owner_principal_id, name, platform, is_runner) \
+         VALUES ($1, $2, $3, 'runner-dev', 'linux', $4)",
+    )
+    .bind(device_id)
+    .bind(SYSTEM_TENANT)
+    .bind(owner)
+    .bind(is_runner)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO devenv.device_project_binding \
+         (tenant_id, device_id, project_id, bound_by, unbound_at) \
+         VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(SYSTEM_TENANT)
+    .bind(device_id)
+    .bind(project_id)
+    .bind(owner)
+    .bind(unbound.then(chrono::Utc::now))
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn runner_bound_project_run_is_not_claimed_by_worker(pool: PgPool) {
+    // D-2=c：领取型项目（active binding → is_runner 设备）被 worker 静默排除——
+    // 不领、不审计、不推退避；Model A 仍可领（A-1）。
+    let fx = seed(&pool, "RD-RB1", true).await;
+    bind_device(&pool, fx.project_id, fx.human_id, true, false).await;
+
+    let outcome = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap();
+    assert!(
+        outcome.is_none(),
+        "runner-bound project must not be claimed by worker"
+    );
+    assert_eq!(run_status(&pool, fx.run_id).await, "queued");
+    assert_eq!(task_status(&pool, fx.task_id).await, "ready");
+    let audit_rows: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM governance.audit_log WHERE target_id = $1")
+            .bind(fx.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(audit_rows, 0, "静默排除零审计噪声");
+
+    // A-1：Runner 显式领取不受排除影响。
+    let claimed = claim_task_run(&pool, fx.project_id, fx.task_id, "e2e-runner", None, &cfg())
+        .await
+        .unwrap();
+    assert_eq!(claimed.task_id, fx.task_id);
+    assert_eq!(run_status(&pool, fx.run_id).await, "claimed");
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn non_runner_binding_does_not_exclude(pool: PgPool) {
+    let fx = seed(&pool, "RD-RB2", true).await;
+    bind_device(&pool, fx.project_id, fx.human_id, false, false).await;
+
+    let outcome = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap();
+    assert!(outcome.is_some(), "非 runner 绑定不影响 worker 领取");
+    assert_eq!(run_status(&pool, fx.run_id).await, "claimed");
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn unbound_runner_binding_does_not_exclude(pool: PgPool) {
+    let fx = seed(&pool, "RD-RB3", true).await;
+    bind_device(&pool, fx.project_id, fx.human_id, true, true).await;
+
+    let outcome = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap();
+    assert!(outcome.is_some(), "已解绑的 runner 绑定不影响 worker 领取");
+    assert_eq!(run_status(&pool, fx.run_id).await, "claimed");
+}
+
 #[sqlx::test(migrations = "../../migrations")]
 async fn second_claim_of_same_run_returns_none(pool: PgPool) {
     let _fx = seed(&pool, "RD-C2", true).await;

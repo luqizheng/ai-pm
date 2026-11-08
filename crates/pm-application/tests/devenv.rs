@@ -121,6 +121,7 @@ fn register_req(id: Option<Uuid>) -> RegisterDeviceRequest {
         os_version: Some("11".into()),
         executor_kind: Some("codex".into()),
         executor_version: Some("0.163".into()),
+        is_runner: None,
     }
 }
 
@@ -336,6 +337,48 @@ async fn register_with_someone_elses_id_is_not_found(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(count, 1);
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn d2c_runner_flag_persists_and_heartbeat_refreshes(pool: PgPool) {
+    let fx = seed_project(&pool, "DV-D2C1").await;
+    let me = human(fx.human_id, SYSTEM_TENANT);
+
+    // is_runner=true 登记 → 回读真 + 初始无心跳。
+    let mut req = register_req(None);
+    req.is_runner = Some(true);
+    let registered = register_device(&pool, &me, &req).await.unwrap();
+    assert!(registered.device.is_runner);
+    assert!(registered.device.last_heartbeat_at.is_none());
+
+    // 心跳刷新：runner 设备 → 写 last_heartbeat_at。
+    pm_application::devenv::refresh_runner_heartbeat(&pool, registered.device.id)
+        .await
+        .unwrap();
+    let beat: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT last_heartbeat_at FROM devenv.device WHERE id = $1")
+            .bind(registered.device.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(beat.is_some());
+
+    // 非 runner 设备 → 刷新 no-op（WHERE is_runner 限定）。
+    // （设备名有租户级唯一约束 uq_device_tenant_active_name，须换名。）
+    let mut plain_req = register_req(None);
+    plain_req.name = "Plain Dev PC".into();
+    let plain = register_device(&pool, &me, &plain_req).await.unwrap();
+    assert!(!plain.device.is_runner);
+    pm_application::devenv::refresh_runner_heartbeat(&pool, plain.device.id)
+        .await
+        .unwrap();
+    let beat: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT last_heartbeat_at FROM devenv.device WHERE id = $1")
+            .bind(plain.device.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(beat.is_none(), "非 runner 设备不写心跳");
 }
 
 #[sqlx::test(migrations = "../../migrations")]

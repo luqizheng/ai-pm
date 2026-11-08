@@ -311,6 +311,7 @@ async fn c176_device_claim_valid_lands_executor_id_and_audit(pool: PgPool) {
             os_version: None,
             executor_kind: Some("codex".into()),
             executor_version: None,
+            is_runner: None,
         },
     )
     .await
