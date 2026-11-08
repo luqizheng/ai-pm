@@ -17,6 +17,10 @@ import DetailContextPanel from "./components/DetailContextPanel.vue";
 // 接真批（2026-11-08）：只 mock IO，适配器/命令助手走真实实现。
 const getRequirement = vi.fn();
 const listRequirementSources = vi.fn();
+const listRequirementCriteria = vi.fn();
+const addRequirementCriterion = vi.fn();
+const removeRequirementCriterion = vi.fn();
+const recordCriterionVerdict = vi.fn();
 const createDraftRevision = vi.fn();
 const updateDraftRevision = vi.fn();
 const submitRevision = vi.fn();
@@ -28,6 +32,14 @@ vi.mock("@/api/requirements", async importOriginal => {
     getRequirement: (...args: unknown[]) => getRequirement(...args),
     listRequirementSources: (...args: unknown[]) =>
       listRequirementSources(...args),
+    listRequirementCriteria: (...args: unknown[]) =>
+      listRequirementCriteria(...args),
+    addRequirementCriterion: (...args: unknown[]) =>
+      addRequirementCriterion(...args),
+    removeRequirementCriterion: (...args: unknown[]) =>
+      removeRequirementCriterion(...args),
+    recordCriterionVerdict: (...args: unknown[]) =>
+      recordCriterionVerdict(...args),
     createDraftRevision: (...args: unknown[]) => createDraftRevision(...args),
     updateDraftRevision: (...args: unknown[]) => updateDraftRevision(...args),
     submitRevision: (...args: unknown[]) => submitRevision(...args)
@@ -140,6 +152,28 @@ describe("RequirementDetailView（接真）", () => {
     vi.clearAllMocks();
     getRequirement.mockResolvedValue(detailApproved);
     listRequirementSources.mockResolvedValue({ items: [sourceItem({})] });
+    listRequirementCriteria.mockResolvedValue({
+      items: [
+        {
+          id: "ac-1",
+          requirement_id: "req-1",
+          position: 1,
+          statement: "P95 接口响应 ≤ 300ms",
+          verification_kind: "performance",
+          params: { threshold: 300 },
+          established_in_revision_id: null,
+          verdict: "failed",
+          verdict_note: "回归复测未过",
+          verdict_by: "prc-2",
+          verdict_at: "2026-11-08T10:00:00Z",
+          created_at: "2026-11-08T09:00:00Z",
+          updated_at: "2026-11-08T10:00:00Z"
+        }
+      ]
+    });
+    addRequirementCriterion.mockResolvedValue({ criterion: {} });
+    removeRequirementCriterion.mockResolvedValue(undefined);
+    recordCriterionVerdict.mockResolvedValue({ criterion: {} });
     createDraftRevision.mockResolvedValue({
       revision: revision("rev-3", 3, "draft")
     });

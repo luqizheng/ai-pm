@@ -18,10 +18,16 @@ import SpecificationCard from "./components/SpecificationCard.vue";
 import TraceabilityCard from "./components/TraceabilityCard.vue";
 
 import {
+  addRequirementCriterion,
   getRequirement,
+  listRequirementCriteria,
   listRequirementSources,
+  recordCriterionVerdict,
+  removeRequirementCriterion,
+  toCriteria,
   toRequirementEntry,
   toSourceItems,
+  type CriterionVerdictInput,
   type RequirementCoreDetail
 } from "@/api/requirements";
 import {
@@ -31,9 +37,11 @@ import {
   upsertDraft
 } from "../requirements/requirement-commands";
 import type {
+  CriterionVerdict,
   RelatedItem,
   RequirementEntry,
-  SourceItem
+  SourceItem,
+  VerificationKind
 } from "../requirements/requirement-entry";
 
 /**
@@ -43,9 +51,10 @@ import type {
  * 右栏上下文（Sources / Related / Discussions / History）。
  * 路由 = /project/requirements/:requirementId（不占导航，入口来自
  * Requirements Workspace 详情面板「打开详情页」与追溯链关联需求导航）。
- * 数据 = pm-api REST（S02-I1 详情 + I3 来源）；编辑/提交走共享命令助手
- * （requirement-commands），确认红线与 Workspace 一致；规格/验收标准/关联
- * （S02-I5/I4/AI 编排）诚实空缺。
+ * 数据 = pm-api REST（S02-I1 详情 + I3 来源 + I5 验收标准）；编辑/提交走
+ * 共享命令助手（requirement-commands），确认红线与 Workspace 一致；验收卡
+ * 治理动作（增/删/裁决）直接落 REST（后端闸 = Lead OR 显式 Approver，
+ * 非授权 403 走错误态）；规格/关联（S02-I5 规格面/I4/AI 编排）诚实空缺。
  */
 const route = useRoute();
 const router = useRouter();
@@ -73,12 +82,14 @@ async function load() {
   loadError.value = "";
   notFound.value = false;
   try {
-    const [detail, sources] = await Promise.all([
+    const [detail, sources, criteria] = await Promise.all([
       getRequirement(requirementId.value),
-      listRequirementSources(requirementId.value)
+      listRequirementSources(requirementId.value),
+      listRequirementCriteria(requirementId.value)
     ]);
     const mapped = toRequirementEntry(detail);
     mapped.sources = toSourceItems(sources.items);
+    mapped.acceptance_criteria = toCriteria(criteria.items);
     entry.value = mapped;
     detailRaw.value = detail;
   } catch (error) {
@@ -130,6 +141,37 @@ function onInspect(source: SourceItem) {
 function onNavigate(item: RelatedItem) {
   if (!item.target_id) return;
   void router.push(`/project/requirements/${item.target_id}`);
+}
+
+// ── 验收标准治理命令（S02-I5：后端闸 = 真人 + Lead OR 显式 Approver）
+
+function onCriterionAdd(payload: {
+  statement: string;
+  verification_kind: VerificationKind;
+}) {
+  return runCommand(async () => {
+    await addRequirementCriterion(requirementId.value, payload);
+  });
+}
+
+function onCriterionRemove(criterionId: string) {
+  return runCommand(async () => {
+    await removeRequirementCriterion(requirementId.value, criterionId);
+  });
+}
+
+function onCriterionVerdict(payload: {
+  criterionId: string;
+  verdict: Extract<CriterionVerdict, "passed" | "failed">;
+}) {
+  const body: CriterionVerdictInput = { verdict: payload.verdict };
+  return runCommand(async () => {
+    await recordCriterionVerdict(
+      requirementId.value,
+      payload.criterionId,
+      body
+    );
+  });
 }
 
 function onEditSave(payload: { markdown: string; summary: string }) {
@@ -223,7 +265,13 @@ function goBackToList() {
             :description="entry.description"
             :body-markdown="entry.body_markdown"
           />
-          <AcceptanceCard :criteria="entry.acceptance_criteria" />
+          <AcceptanceCard
+            :criteria="entry.acceptance_criteria"
+            :acting="acting"
+            @add="onCriterionAdd"
+            @remove="onCriterionRemove"
+            @verdict="onCriterionVerdict"
+          />
           <TraceabilityCard
             :entry="entry"
             @inspect="onInspect"

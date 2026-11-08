@@ -37,10 +37,32 @@ export type RevisionState =
   | "rejected"
   | "superseded";
 
-/** 验收标准条目（清晰、可测的陈述） */
+/**
+ * 验收标准条目（清晰、可测的陈述）。
+ * S02-I5 扩展字段（verification_kind/params/verdict…）来自真实后端（0056），
+ * mock fixtures 缺省——扩展全部可选，不破坏既有消费方。
+ */
+export type VerificationKind =
+  | "manual"
+  | "automated_test"
+  | "artifact_exists"
+  | "review"
+  | "performance"
+  | "security";
+
+export type CriterionVerdict = "pending" | "passed" | "failed";
+
 export interface AcceptanceCriterion {
   id: string;
   statement: string;
+  /** 承载层词表（Q-13/S02D-11：禁分表，params 按族承载） */
+  verification_kind?: VerificationKind;
+  params?: Record<string, unknown>;
+  /** 需求级验收裁决（Q-14；不挂 Task 链） */
+  verdict?: CriterionVerdict;
+  verdict_note?: string;
+  verdict_at?: string;
+  position?: number;
 }
 
 /** 修订来源（S02-UI-05 §3 Change origin：人工编辑 / AI 辅助 / 导入） */
