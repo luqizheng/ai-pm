@@ -256,6 +256,25 @@ pub struct ModelReply<T> {
     pub latency_ms: i64,
 }
 
+/// 模型调用失败 + 记账信息（DEC-LLM-004.7：失败调用同样入账，不只记成功）。
+/// `provider` 为 `None` = 失败发生在 provider 解析之前（无 FK 可锚）。
+#[derive(Debug, Clone)]
+pub struct ModelCallFailure {
+    pub error: ModelError,
+    pub provider: Option<ProviderStamp>,
+    pub latency_ms: i64,
+}
+
+impl From<ModelError> for ModelCallFailure {
+    fn from(error: ModelError) -> Self {
+        Self {
+            error,
+            provider: None,
+            latency_ms: 0,
+        }
+    }
+}
+
 /// 注入给模型的一条访谈事实（只读投影；S6 的裁剪版）。
 #[derive(Debug, Clone, Serialize)]
 pub struct FindingFact {
@@ -392,12 +411,12 @@ pub trait WriteBackModel: Send + Sync {
     async fn draft_requirement(
         &self,
         ctx: &RequirementDraftContext,
-    ) -> Result<ModelReply<RequirementDraft>, ModelError>;
+    ) -> Result<ModelReply<RequirementDraft>, ModelCallFailure>;
 
     async fn decompose_tasks(
         &self,
         ctx: &TaskDecomposeContext,
-    ) -> Result<ModelReply<RawTaskBatch>, ModelError>;
+    ) -> Result<ModelReply<RawTaskBatch>, ModelCallFailure>;
 }
 
 // ─────────────────────────────────────────────────────────────── Hook
@@ -449,6 +468,400 @@ impl WriteBackHook for NoWriteBack {
     ) -> Result<DecomposeOutcome, WriteBackError> {
         Ok(DecomposeOutcome::NothingToDo {
             reason: "no_write_back_hook",
+        })
+    }
+}
+
+// ─────────────────────────────────────────────────────────── 实现
+
+/// 本 session 起草出的需求（按 `content.basis_finding_ids` 与 session 的
+/// CONFIRMED finding 求交认定——D-DK-4 不建信封，这个交集就是"归属"事实）。
+#[derive(Debug, Clone)]
+struct SessionRequirement {
+    requirement_id: Uuid,
+    requirement_code: String,
+    requirement_title: String,
+    revision_id: Uuid,
+    revision_version: i32,
+    revision_state: String,
+    markdown: String,
+}
+
+impl SessionRequirement {
+    fn approved(&self) -> bool {
+        self.revision_state == "approved"
+    }
+}
+
+/// 真实写回通道（DK-B 合并时用它替换 [`NoWriteBack`]）。
+///
+/// 依赖全部是既有单点服务与端口：`pg` = 既有服务的事务入口，`model` = 模型
+/// 回填，`capability` = DK-C 只读投影，`knowledge` = `submit_revision` 的
+/// Markdown 绑定点（S02-I2）。
+pub struct DiscoveryWriteBack {
+    pub pool: sqlx::PgPool,
+    pub model: std::sync::Arc<dyn WriteBackModel>,
+    pub capability: std::sync::Arc<dyn CapabilityProjection>,
+    pub knowledge: pm_application::knowledge::KnowledgeRoot,
+    pub mode: WriteBackMode,
+}
+
+impl DiscoveryWriteBack {
+    /// 本 session 内已 CONFIRMED 的 finding（S6 的裁剪投影：只给模型看事实，
+    /// 不给 verification 决策面）。
+    async fn confirmed_findings(
+        &self,
+        tenant_id: Uuid,
+        session_id: Uuid,
+    ) -> Result<Vec<FindingFact>, WriteBackError> {
+        let rows: Vec<(Uuid, String, String)> = sqlx::query_as(
+            "SELECT id, kind::text, content FROM discovery.discovery_finding \
+              WHERE tenant_id = $1 AND session_id = $2 AND verification_status = 'CONFIRMED' \
+              ORDER BY created_at, id",
+        )
+        .bind(tenant_id)
+        .bind(session_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(id, kind, content)| FindingFact { id, kind, content })
+            .collect())
+    }
+
+    /// AI 主体（与主链同一个 `ai.project_ai_config.ai_principal_id`）。
+    ///
+    /// 写命令的 actor 必须是 **ai_pm** principal：真人闸（`require_human`）正是
+    /// 靠它区分主体，用 human 冒充 AI 会让 B1/B2 的负向断言失去意义。
+    async fn ai_principal(&self, project_id: Uuid) -> Result<Uuid, WriteBackError> {
+        let principal: Option<Uuid> =
+            sqlx::query_scalar("SELECT ai_principal_id FROM ai.project_ai_config WHERE project_id = $1")
+                .bind(project_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        principal.ok_or_else(|| {
+            WriteBackError::Discovery("project has no ai_principal_id configured".to_string())
+        })
+    }
+
+    /// 由 basis 交集认定的「本 session 的需求」，取最新修订。
+    async fn session_requirements(
+        &self,
+        tenant_id: Uuid,
+        project_id: Uuid,
+        basis_ids: &[Uuid],
+    ) -> Result<Vec<SessionRequirement>, WriteBackError> {
+        if basis_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let rows: Vec<(Uuid, String, String, Uuid, i32, String, Option<String>)> = sqlx::query_as(
+            "SELECT r.id, r.code, r.title, rv.id, rv.version, rv.state, rv.content->>'markdown' \
+               FROM delivery.requirement r \
+               JOIN LATERAL ( \
+                   SELECT id, version, state, content \
+                     FROM delivery.requirement_revision v \
+                    WHERE v.requirement_id = r.id \
+                    ORDER BY v.version DESC LIMIT 1 \
+               ) rv ON TRUE \
+              WHERE r.tenant_id = $1 AND r.project_id = $2 \
+                AND EXISTS ( \
+                    SELECT 1 \
+                      FROM jsonb_array_elements_text( \
+                               coalesce(rv.content->'basis_finding_ids', '[]'::jsonb)) e \
+                     WHERE e.value::uuid = ANY($3)) \
+              ORDER BY r.created_at, r.id",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(basis_ids)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(
+                |(requirement_id, code, title, revision_id, version, state, markdown)| {
+                    SessionRequirement {
+                        requirement_id,
+                        requirement_code: code,
+                        requirement_title: title,
+                        revision_id,
+                        revision_version: version,
+                        revision_state: state,
+                        markdown: markdown.unwrap_or_default(),
+                    }
+                },
+            )
+            .collect())
+    }
+
+    /// 需求编号：模型建议 → 归一化 → 同项目重号顺延（`-2`/`-3`…）。
+    async fn unique_code(
+        &self,
+        project_id: Uuid,
+        suggestion: Option<&str>,
+        session_id: Uuid,
+    ) -> Result<String, WriteBackError> {
+        let base = sanitize_requirement_code(suggestion, session_id);
+        for attempt in 1..=30 {
+            let candidate = if attempt == 1 {
+                base.clone()
+            } else {
+                format!("{base}-{attempt}")
+            };
+            let taken: bool = sqlx::query_scalar(
+                "SELECT EXISTS (SELECT 1 FROM delivery.requirement \
+                                 WHERE project_id = $1 AND code = $2)",
+            )
+            .bind(project_id)
+            .bind(&candidate)
+            .fetch_one(&self.pool)
+            .await?;
+            if !taken {
+                return Ok(candidate);
+            }
+        }
+        // 30 个候选都被占：退化为 session 派生的确定值（几乎不可能撞）。
+        Ok(format!(
+            "DISC-{}",
+            session_id.simple().to_string()[..8].to_ascii_uppercase()
+        ))
+    }
+
+    /// 一次模型调用入账（成功与失败都记，DEC-LLM-004.7）。
+    async fn record_model_call(
+        &self,
+        project_id: Uuid,
+        status: &str,
+        error_kind: Option<&str>,
+        latency_ms: i64,
+        provider: Option<&ProviderStamp>,
+    ) {
+        let Some(provider) = provider else {
+            // provider 解析前就失败：没有 FK 可锚，只能结构化 WARN。
+            tracing::warn!(
+                project_id = %project_id,
+                error_kind = error_kind.unwrap_or("none"),
+                "discovery_orchestration model call failed before provider resolution"
+            );
+            return;
+        };
+        crate::call_record::record_call(
+            &self.pool,
+            project_id,
+            provider.provider_id,
+            &provider.model,
+            crate::call_record::PURPOSE_DISCOVERY_ORCHESTRATION,
+            status,
+            error_kind,
+            None,
+            latency_ms,
+            None,
+            None,
+        )
+        .await;
+    }
+}
+
+/// 需求编号归一化（大写 + 只留 `[A-Z0-9-]` + 折叠连字符 + 截断 32）。
+/// 模型给空/全是标点时退化为 `DISC-<session 前 8 位>`——编号永远有确定值，
+/// 不因模型偷懒而卡住起草。
+fn sanitize_requirement_code(suggestion: Option<&str>, session_id: Uuid) -> String {
+    let mut out = String::new();
+    for ch in suggestion.unwrap_or_default().chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_uppercase());
+        } else if (ch == '-' || ch == '_' || ch.is_whitespace()) && !out.ends_with('-') {
+            out.push('-');
+        }
+    }
+    while out.ends_with('-') {
+        out.pop();
+    }
+    if out.len() > 32 {
+        out.truncate(32);
+        while out.ends_with('-') {
+            out.pop();
+        }
+    }
+    if out.is_empty() {
+        out = format!(
+            "DISC-{}",
+            session_id.simple().to_string()[..8].to_ascii_uppercase()
+        );
+    }
+    out
+}
+
+#[async_trait]
+impl WriteBackHook for DiscoveryWriteBack {
+    /// §8.1 前半：`REVIEW_REQUIRED` 之后，AI 主体经既有九命令
+    /// `create_requirement → update_draft（含 basis）→ submit_revision`，
+    /// **到此止步**（停在 `pending_confirmation`，等人类 Approver 确认）。
+    async fn on_review_required(
+        &self,
+        tenant_id: Uuid,
+        session: &DiscoverySessionView,
+    ) -> Result<DraftOutcome, WriteBackError> {
+        if !self.mode.enabled() {
+            return Ok(DraftOutcome::skipped("orchestrator_off"));
+        }
+        if session.status != pm_application::discovery::SESSION_STATUS_REVIEW_REQUIRED {
+            return Ok(DraftOutcome::skipped("session_not_review_required"));
+        }
+
+        let findings = self.confirmed_findings(tenant_id, session.id).await?;
+        if findings.is_empty() {
+            // 没有已确认事实 → 没有可立的草案依据（不写"带病提案"）。
+            return Ok(DraftOutcome::skipped("no_confirmed_finding"));
+        }
+        let basis_ids: Vec<Uuid> = findings.iter().map(|f| f.id).collect();
+
+        // 幂等：本 session 已起草过（含人类已确认的终态）→ 不重复建需求。
+        let existing = self
+            .session_requirements(tenant_id, session.project_id, &basis_ids)
+            .await?;
+        if let Some(current) = existing.first() {
+            return Ok(DraftOutcome {
+                kind: DraftOutcomeKind::AlreadyDrafted,
+                requirement_id: Some(current.requirement_id),
+                revision_id: Some(current.revision_id),
+                revision_state: Some(current.revision_state.clone()),
+                basis_finding_ids: basis_ids,
+                reason: Some("session_already_drafted"),
+            });
+        }
+
+        let capability = self.capability.project(session.project_id).await?;
+        let ctx = RequirementDraftContext {
+            project_id: session.project_id,
+            session_id: session.id,
+            session_kind: session.kind.clone(),
+            findings,
+            capability,
+        };
+        let reply = match self.model.draft_requirement(&ctx).await {
+            Ok(reply) => {
+                self.record_model_call(
+                    session.project_id,
+                    "ok",
+                    None,
+                    reply.latency_ms,
+                    Some(&reply.provider),
+                )
+                .await;
+                reply
+            }
+            Err(failure) => {
+                self.record_model_call(
+                    session.project_id,
+                    "failed",
+                    Some(crate::call_record::analysis_error_kind(&failure.error)),
+                    failure.latency_ms,
+                    failure.provider.as_ref(),
+                )
+                .await;
+                return Err(WriteBackError::Model(failure.error));
+            }
+        };
+        let draft = reply.value;
+
+        let actor = pm_application::actor::AuditActor::principal(
+            self.ai_principal(session.project_id).await?,
+        );
+        let code = self
+            .unique_code(session.project_id, draft.code.as_deref(), session.id)
+            .await?;
+        let title = draft.title.trim().to_string();
+        if title.is_empty() || draft.markdown.trim().is_empty() {
+            return Err(WriteBackError::BatchRejected(
+                "LLM returned an empty requirement title/markdown".to_string(),
+            ));
+        }
+        let markdown = draft.markdown.trim().to_string();
+        let summary = draft
+            .summary
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+
+        // ① create_requirement（AI 主体；无真人闸 —— §3.3 ✅）
+        let entry = pm_application::requirement::create_requirement(
+            &self.pool,
+            tenant_id,
+            session.project_id,
+            pm_application::requirement::CreateRequirementRequest {
+                code,
+                title: title.clone(),
+                description: summary.clone(),
+                requirement_type: None,
+                priority: None,
+                markdown: Some(markdown.clone()),
+                basis_finding_ids: Some(basis_ids.clone()),
+            },
+            &actor,
+        )
+        .await?;
+        let revision_id = entry.latest_revision_id.ok_or_else(|| {
+            WriteBackError::Discovery("created requirement has no draft revision".to_string())
+        })?;
+
+        // ② update_draft（含 basis）：与 ① 内容等价的重写，保留是为对齐 §8.1 时序
+        //    并让「basis 随草稿更新」这条路本身有覆盖（不是空转：它是唯一能改
+        //    draft 正文的合法面，人类/AI 后续修订都走它）。
+        pm_application::requirement::update_draft(
+            &self.pool,
+            tenant_id,
+            entry.id,
+            revision_id,
+            pm_application::requirement::DraftRevisionRequest {
+                markdown,
+                summary,
+                basis_finding_ids: Some(basis_ids.clone()),
+            },
+            &actor,
+        )
+        .await?;
+
+        // ③ submit_revision：draft → pending_confirmation（等价"提交待确认项"）。
+        //    AI 到此为止：confirm/reject/lifecycle 均不在白名单，且服务层真人闸兜底。
+        let view = pm_application::requirement::submit_revision(
+            &self.pool,
+            tenant_id,
+            entry.id,
+            revision_id,
+            &actor,
+            &self.knowledge,
+        )
+        .await?;
+
+        tracing::info!(
+            project_id = %session.project_id,
+            session_id = %session.id,
+            requirement_id = %entry.id,
+            revision_id = %view.id,
+            basis = basis_ids.len(),
+            "discovery write-back: requirement draft submitted for human confirmation"
+        );
+
+        Ok(DraftOutcome {
+            kind: DraftOutcomeKind::Submitted,
+            requirement_id: Some(entry.id),
+            revision_id: Some(view.id),
+            revision_state: Some(view.state),
+            basis_finding_ids: basis_ids,
+            reason: None,
+        })
+    }
+
+    /// 任务分解（§7）：实现见本文件后半。
+    async fn decompose_if_approved(
+        &self,
+        _tenant_id: Uuid,
+        _session: &DiscoverySessionView,
+    ) -> Result<DecomposeOutcome, WriteBackError> {
+        Ok(DecomposeOutcome::NothingToDo {
+            reason: "decompose_not_implemented",
         })
     }
 }
