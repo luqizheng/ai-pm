@@ -55,6 +55,7 @@
 //! 计费型生产者不得在升级后静默启动）；拼错值 WARN + off。
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
@@ -69,6 +70,10 @@ use pm_application::discovery::{
 use crate::analysis_model::select_analysis_model_config;
 use crate::call_record::{self, elapsed_ms, PURPOSE_DISCOVERY_ORCHESTRATION};
 use crate::conversation_model::{self, ConversationTurn};
+use crate::discovery_context::{
+    InterviewContextBuilder, InterviewKind, KEY_KNOWLEDGE_DIGEST, KEY_PRODUCT_COGNITION,
+    KEY_PROJECT_PROFILE, KEY_REQUIREMENTS, KEY_TASKS,
+};
 use crate::model::ModelError;
 
 /// 每轮处理的会话数（FIFO 头）。
@@ -828,6 +833,8 @@ pub struct DiscoveryOrchestratorWorker {
     pool: sqlx::PgPool,
     /// DK-C 接入点：S1~S5 投影（本批为空 → S6-only 也能工作）。
     supplemental: Vec<PromptSection>,
+    /// DK-C 正式接入（逐会话 S1~S5 只读投影）；`None` = 未接（单测/降级）。
+    context_builder: Option<Arc<dyn InterviewContextBuilder>>,
     cooldowns: HashMap<Uuid, Instant>,
     /// session → (上一轮的缺口槽位集合, 连续轮数)。
     slot_streaks: HashMap<Uuid, (Vec<String>, u8)>,
@@ -845,6 +852,7 @@ impl DiscoveryOrchestratorWorker {
         Self {
             pool,
             supplemental: Vec::new(),
+            context_builder: None,
             cooldowns: HashMap::new(),
             slot_streaks: HashMap::new(),
             invalid_streaks: HashMap::new(),
@@ -863,6 +871,63 @@ impl DiscoveryOrchestratorWorker {
     pub fn with_supplemental_sections(mut self, sections: Vec<PromptSection>) -> Self {
         self.supplemental = sections;
         self
+    }
+
+    /// DK-C 正式接入：注入逐会话投影器（`PgInterviewContextBuilder`）。投影失败
+    /// 按只读侧 fail-open 降级（WARN + S6-only 继续，§2.4），绝不阻塞访谈轮次。
+    pub fn with_context_builder(mut self, builder: Arc<dyn InterviewContextBuilder>) -> Self {
+        self.context_builder = Some(builder);
+        self
+    }
+
+    /// DK-C：为本会话投影 S1~S5。未接投影器 / kind 未知 / 投影失败 → 空
+    /// （S6-only）。产出已过 DK-C 预算（各节上限与本模块 [`SectionId::cap`]
+    /// 一致），再进 [`assemble_prompt`] 的统一裁剪是幂等的。
+    async fn project_sections(&self, session: &PendingSession) -> Vec<PromptSection> {
+        let Some(builder) = self.context_builder.as_ref() else {
+            return Vec::new();
+        };
+        let Some(kind) = InterviewKind::parse(&session.kind) else {
+            return Vec::new();
+        };
+        match builder
+            .build(session.tenant_id, session.project_id, session.id, kind)
+            .await
+        {
+            Ok(context) => {
+                if !context.sections_dropped.is_empty() {
+                    tracing::warn!(
+                        session_id = %session.id,
+                        dropped = ?context.sections_dropped,
+                        "interview context over budget (DK-C): sections dropped"
+                    );
+                }
+                const S1_TO_S5: [(&str, SectionId); 5] = [
+                    (KEY_PROJECT_PROFILE, SectionId::S1Project),
+                    (KEY_PRODUCT_COGNITION, SectionId::S2Cognition),
+                    (KEY_KNOWLEDGE_DIGEST, SectionId::S3Digest),
+                    (KEY_REQUIREMENTS, SectionId::S4Requirements),
+                    (KEY_TASKS, SectionId::S5Tasks),
+                ];
+                S1_TO_S5
+                    .iter()
+                    .filter_map(|(key, id)| {
+                        context.section(key).map(|section| PromptSection {
+                            id: *id,
+                            text: section.body.clone(),
+                        })
+                    })
+                    .collect()
+            }
+            Err(error) => {
+                tracing::warn!(
+                    session_id = %session.id,
+                    %error,
+                    "interview context build failed (DK-C): falling back to S6-only (read-side fail-open)"
+                );
+                Vec::new()
+            }
+        }
     }
 
     /// 一轮扫描 + 编排。
@@ -1087,7 +1152,8 @@ impl DiscoveryOrchestratorWorker {
             return Err(RoundFailure::Stale);
         }
 
-        let prompt = self.build_prompt(session, &findings, &questions, &messages);
+        let projected = self.project_sections(session).await;
+        let prompt = self.build_prompt(session, &findings, &questions, &messages, projected);
         let conversation = {
             let mut turns = Vec::with_capacity(prompt.turns.len() + 1);
             turns.push(ConversationTurn::new("system", prompt.system.clone()));
@@ -1311,11 +1377,15 @@ impl DiscoveryOrchestratorWorker {
         findings: &[DiscoveryFindingView],
         questions: &[DiscoveryQuestionView],
         messages: &[RecentMessage],
+        project_sections: Vec<PromptSection>,
     ) -> AssembledPrompt {
         let slot_findings: Vec<SlotFinding> = findings.iter().map(slot_finding_of).collect();
         let slot_report = evaluate_slots(&session.kind, &slot_findings);
         let s6 = render_interview_section(&session.kind, findings, questions, &slot_report);
-        let mut sections = self.supplemental.clone();
+        // DK-C 逐会话投影在前、静态 supplemental（测试 seam）次之、S6 收尾——
+        // 同 id 多条由 assemble_prompt 以空行拼接。
+        let mut sections = project_sections;
+        sections.extend(self.supplemental.clone());
         sections.push(PromptSection {
             id: SectionId::S6Interview,
             text: s6,

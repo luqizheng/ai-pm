@@ -6,6 +6,7 @@ pub mod context;
 pub mod conversation_model;
 pub mod conversation_reply;
 pub mod conversation_router_model;
+pub mod discovery_context;
 pub mod discovery_orchestrator;
 pub mod fake_model;
 pub mod model;
@@ -24,6 +25,12 @@ pub use conversation_model::{
 };
 pub use conversation_reply::{ConversationReplyMode, ConversationReplyWorker, ReplyReport};
 pub use conversation_router_model::LlmIntentClassifier;
+pub use discovery_context::{
+    assemble as assemble_interview_context, filter_evidence_refs, filter_evidence_refs_and_warn,
+    ContextSection, FactIndex, FilteredRefs, InterviewContext, InterviewContextBuilder,
+    InterviewContextError, InterviewKind, PgInterviewContextBuilder, SectionDraft, DROPPED_MARKER,
+    MAX_EVIDENCE_REFS, SECTION_ORDER, TOTAL_BUDGET_CHARS,
+};
 pub use fake_model::FakeModel;
 pub use model::{AnalysisContext, AnalysisModel, ModelError};
 pub use openai_adapter::{OpenAiCompatibleModel, SYSTEM_PROMPT};

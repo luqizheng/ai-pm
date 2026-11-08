@@ -1000,3 +1000,109 @@ async fn three_unusable_rounds_escalate_and_stop_rescanning(pool: sqlx::PgPool) 
     let report = worker.orchestrate_round().await.unwrap();
     assert_eq!(report.processed, 1, "a new user message resumes the loop");
 }
+
+// ── DK-C 集成：逐会话投影进入提示词；投影失败 fail-open 降级 S6-only ────────
+
+use std::sync::Arc as StdArc;
+
+use wiremock::matchers::body_string_contains;
+
+use crate::discovery_context::{
+    assemble as assemble_context, InterviewContext, InterviewContextBuilder, InterviewContextError,
+    InterviewKind, SectionDraft, KEY_PROJECT_PROFILE,
+};
+
+/// 可注入的投影器桩：`fail=true` 恒败（验证读侧 fail-open），否则回带 marker 的 S1。
+struct StubContextBuilder {
+    fail: bool,
+}
+
+#[async_trait::async_trait]
+impl InterviewContextBuilder for StubContextBuilder {
+    async fn build(
+        &self,
+        _tenant_id: Uuid,
+        _project_id: Uuid,
+        _session_id: Uuid,
+        _kind: InterviewKind,
+    ) -> Result<InterviewContext, InterviewContextError> {
+        if self.fail {
+            return Err(InterviewContextError::ProjectNotFound(_project_id));
+        }
+        Ok(assemble_context(vec![SectionDraft::new(
+            KEY_PROJECT_PROFILE,
+            "项目概览",
+            "MARKER-S1-PROFILE：来自投影器桩的项目画像。",
+        )]))
+    }
+}
+
+/// DK-C 接线（正）：注入的投影器 S1 逐会话进入提示词——LLM 请求体里必须
+/// 出现投影 marker，否则本 mock 不匹配（404）→ 本轮失败 → applied=0。
+#[sqlx::test(migrations = "../../migrations")]
+async fn context_builder_sections_flow_into_the_prompt(pool: sqlx::PgPool) {
+    let project_id = seed_project(&pool).await;
+    let (session_id, _) = seed_session(&pool, project_id, "TASK_DISCOVERY").await;
+    seed_slot_finding(&pool, session_id, "core_behavior", "observed").await;
+    append_message(
+        &pool,
+        SYSTEM_TENANT,
+        session_id,
+        "user",
+        "WEB",
+        "手机号登录，先这些",
+    )
+    .await
+    .unwrap();
+
+    let server = MockServer::start().await;
+    seed_provider(&pool, &server.uri(), "test-model").await;
+    Mock::given(method("POST"))
+        .and(path("/chat/completions"))
+        .and(body_string_contains("MARKER-S1-PROFILE"))
+        .respond_with(json_reply(
+            &json!({"answer_markdown": "收到。", "findings": [], "questions": []}).to_string(),
+        ))
+        .mount(&server)
+        .await;
+
+    let mut worker = DiscoveryOrchestratorWorker::new(pool.clone())
+        .with_context_builder(StdArc::new(StubContextBuilder { fail: false }));
+    let report = worker.orchestrate_round().await.unwrap();
+    assert_eq!(report.applied, 1, "{report:?}");
+}
+
+/// DK-C 接线（负）：投影器失败 → WARN 后按 S6-only 继续（读侧 fail-open，
+/// §2.4），访谈轮次不被投影故障阻塞。
+#[sqlx::test(migrations = "../../migrations")]
+async fn context_builder_failure_degrades_to_s6_only(pool: sqlx::PgPool) {
+    let project_id = seed_project(&pool).await;
+    let (session_id, _) = seed_session(&pool, project_id, "TASK_DISCOVERY").await;
+    seed_slot_finding(&pool, session_id, "core_behavior", "observed").await;
+    append_message(
+        &pool,
+        SYSTEM_TENANT,
+        session_id,
+        "user",
+        "WEB",
+        "手机号登录，先这些",
+    )
+    .await
+    .unwrap();
+
+    let server = MockServer::start().await;
+    seed_provider(&pool, &server.uri(), "test-model").await;
+    mount_reply(
+        &server,
+        &json!({"answer_markdown": "收到。", "findings": [], "questions": []}).to_string(),
+    )
+    .await;
+
+    let mut worker = DiscoveryOrchestratorWorker::new(pool.clone())
+        .with_context_builder(StdArc::new(StubContextBuilder { fail: true }));
+    let report = worker.orchestrate_round().await.unwrap();
+    assert_eq!(
+        report.applied, 1,
+        "read-side fail-open: round still applies without S1~S5"
+    );
+}

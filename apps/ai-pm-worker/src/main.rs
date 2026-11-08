@@ -333,7 +333,13 @@ fn spawn_discovery_orchestrator(pool: PgPool) {
         if !mode.enabled() {
             return;
         }
-        let mut worker = pm_ai::discovery_orchestrator::DiscoveryOrchestratorWorker::new(pool);
+        // DK-C 注入：S1~S5 逐会话只读投影（读侧 fail-open，投影故障 WARN 后
+        // S6-only 继续，不阻塞轮次）。
+        let mut worker =
+            pm_ai::discovery_orchestrator::DiscoveryOrchestratorWorker::new(pool.clone())
+                .with_context_builder(std::sync::Arc::new(pm_ai::PgInterviewContextBuilder::new(
+                    pool,
+                )));
         loop {
             match worker.orchestrate_round().await {
                 Ok(report) if report.has_activity() => {
