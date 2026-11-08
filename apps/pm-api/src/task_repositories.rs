@@ -11,21 +11,19 @@
 //! （应用服务 `task_repository_binding`），执行期对未绑定仓库 deny。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get},
+    Json, Router,
 };
-use pm_application::task_repository_binding::{
-    self, BindRepositoryEntry, TaskRepoBindingError,
-};
+use pm_application::task_repository_binding::{self, BindRepositoryEntry, TaskRepoBindingError};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiError, ApiResult, require_project_visible};
+use crate::support::{require_project_visible, ApiError, ApiResult};
 
 impl From<TaskRepoBindingError> for ApiError {
     fn from(e: TaskRepoBindingError) -> Self {
@@ -39,9 +37,7 @@ impl From<TaskRepoBindingError> for ApiError {
                 StatusCode::CONFLICT,
                 format!("REPOSITORY_NOT_VERIFIED:{status}"),
             ),
-            TaskRepoBindingError::InvalidRole(msg) => {
-                ApiError::Text(StatusCode::BAD_REQUEST, msg)
-            }
+            TaskRepoBindingError::InvalidRole(msg) => ApiError::Text(StatusCode::BAD_REQUEST, msg),
             TaskRepoBindingError::Validation(msg) => ApiError::Text(StatusCode::BAD_REQUEST, msg),
             TaskRepoBindingError::Db(err) => ApiError::Internal(err),
         }
@@ -80,13 +76,12 @@ async fn require_task_project(
     task_id: Uuid,
     principal: &AuthedPrincipal,
 ) -> ApiResult<Uuid> {
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(task_id)
-    .bind(principal.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?;
+    let project_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2")
+            .bind(task_id)
+            .bind(principal.tenant_id)
+            .fetch_optional(&state.pool)
+            .await?;
     let project_id = project_id.ok_or(ApiError::NotFound("task_not_found"))?;
     require_project_visible(
         &state.pool,

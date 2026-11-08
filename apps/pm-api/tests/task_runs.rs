@@ -1,13 +1,13 @@
 //! `GET /v1/pm/task-runs` 集成测试：真实数据库 + 真 HTTP router（无 socket）。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 mod common;
 
@@ -22,7 +22,10 @@ fn get(uri: &str) -> Request<Body> {
 async fn body_json(response: axum::response::Response) -> (StatusCode, serde_json::Value) {
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
@@ -147,31 +150,52 @@ async fn list_exposes_run_kind_and_filters(pool: PgPool) {
             if run_kind == "review" { "'v1'" } else { "NULL" },
         )
     };
-    sqlx::query(&insert(task_a, 1, "delivery")).execute(&pool).await.unwrap();
-    sqlx::query(&insert(task_b, 1, "delivery")).execute(&pool).await.unwrap();
-    sqlx::query(&insert(task_b, 1, "review")).execute(&pool).await.unwrap();
+    sqlx::query(&insert(task_a, 1, "delivery"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(&insert(task_b, 1, "delivery"))
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(&insert(task_b, 1, "review"))
+        .execute(&pool)
+        .await
+        .unwrap();
 
     // 列表补列：run_kind / executor / lease 直接可见。
-    let (status, body) = body_json(
-        router(pool.clone()).oneshot(get(&base)).await.unwrap()).await;
+    let (status, body) = body_json(router(pool.clone()).oneshot(get(&base)).await.unwrap()).await;
     assert_eq!(status, StatusCode::OK, "body: {body}");
     assert_eq!(body["total"], 3);
     let items = body["items"].as_array().unwrap();
     assert!(items.iter().all(|r| r.get("run_kind").is_some()));
-    let delivery = items.iter().find(|r| r["executor_session"] == "sess-1").unwrap();
+    let delivery = items
+        .iter()
+        .find(|r| r["executor_session"] == "sess-1")
+        .unwrap();
     assert_eq!(delivery["run_kind"], "delivery");
     assert!(delivery["lease_expires_at"].is_string());
 
     // run_kind=review 只出审查轨。
     let (status, body) = body_json(
-        router(pool.clone()).oneshot(get(&format!("{base}&run_kind=review"))).await.unwrap()).await;
+        router(pool.clone())
+            .oneshot(get(&format!("{base}&run_kind=review")))
+            .await
+            .unwrap(),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "body: {body}");
     assert_eq!(body["total"], 1);
     assert_eq!(body["items"][0]["run_kind"], "review");
 
     // task_id 过滤 + 非法 run_kind 视为未传。
     let (status, body) = body_json(
-        router(pool.clone()).oneshot(get(&format!("{base}&task_id={task_a}&run_kind=bogus"))).await.unwrap()).await;
+        router(pool.clone())
+            .oneshot(get(&format!("{base}&task_id={task_a}&run_kind=bogus")))
+            .await
+            .unwrap(),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "body: {body}");
     assert_eq!(body["total"], 1);
     assert_eq!(body["items"][0]["task_title"], "task a");

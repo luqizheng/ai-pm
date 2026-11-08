@@ -1,4 +1,4 @@
-﻿//! MCP endpoint permission gate (integration spec Phase 1 §3): every `/mcp`
+//! MCP endpoint permission gate (integration spec Phase 1 §3): every `/mcp`
 //! call requires `PM_MCP_READ`, and write tools additionally require their
 //! per-tool permission (`PM_MCP_DOCUMENT_WRITE`). The rest of the API is
 //! unaffected by the permission claim.
@@ -8,15 +8,15 @@ use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use digua_common_jwt::{JWKSCache, sign_token};
+use digua_common_jwt::{sign_token, JWKSCache};
 use pm_api::auth::AuthConfig;
 use pm_api::routes::router_with_auth_config;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use serde_json::{Value, json};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_domain::SYSTEM_TENANT;
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 const PRIVATE_PEM: &str = include_str!("keys/private.pem");
 const PUBLIC_PEM: &str = include_str!("keys/public.pem");
@@ -94,20 +94,14 @@ async fn body_json(response: axum::response::Response) -> Value {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn mcp_without_token_is_unauthorized(pool: PgPool) {
-    let response = app(pool)
-        .oneshot(mcp_request(None))
-        .await
-        .unwrap();
+    let response = app(pool).oneshot(mcp_request(None)).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn mcp_without_mcp_read_is_forbidden(pool: PgPool) {
     let token = sign(&["IAM_SYSTEM_READ"]);
-    let response = app(pool)
-        .oneshot(mcp_request(Some(&token)))
-        .await
-        .unwrap();
+    let response = app(pool).oneshot(mcp_request(Some(&token))).await.unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
     let body = body_json(response).await;
     assert_eq!(body["code"], json!("IAM_PERM_3001"), "forbidden code");
@@ -117,10 +111,7 @@ async fn mcp_without_mcp_read_is_forbidden(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn mcp_with_mcp_read_passes_the_gate(pool: PgPool) {
     let token = sign(&["PM_MCP_READ"]);
-    let response = app(pool)
-        .oneshot(mcp_request(Some(&token)))
-        .await
-        .unwrap();
+    let response = app(pool).oneshot(mcp_request(Some(&token))).await.unwrap();
     assert_eq!(
         response.status(),
         StatusCode::OK,
@@ -146,7 +137,10 @@ async fn non_mcp_routes_ignore_the_permission_claim(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(format!("/api/v1/projects/{}/notifications", boot.project_id))
+                .uri(format!(
+                    "/api/v1/projects/{}/notifications",
+                    boot.project_id
+                ))
                 .header("authorization", format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -224,10 +218,7 @@ async fn read_tool_needs_only_mcp_read(pool: PgPool) {
 async fn write_permission_does_not_replace_mcp_read(pool: PgPool) {
     // Endpoint gate still applies first: no PM_MCP_READ → 403 even for initialize.
     let token = sign(&["PM_MCP_DOCUMENT_WRITE"]);
-    let response = app(pool)
-        .oneshot(mcp_request(Some(&token)))
-        .await
-        .unwrap();
+    let response = app(pool).oneshot(mcp_request(Some(&token))).await.unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
     let body = body_json(response).await;
     assert!(body["message"].as_str().unwrap().contains("PM_MCP_READ"));

@@ -9,13 +9,13 @@
 //! - 数据：role CHECK 与 PK 违例（A015、A016）
 //! - 审计：授权/撤销/级联撤销均可追溯（A011、A014）
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
-use digua_common_jwt::{JWKSCache, sign_token};
+use digua_common_jwt::{sign_token, JWKSCache};
 use pm_api::auth::AuthConfig;
 use pm_api::routes::router_with_auth_config;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -103,7 +103,11 @@ async fn world(pool: &PgPool) -> World {
     let (_, owner) = call(&app, "GET", "/v1/pm/me", &token("usr-owner"), None).await;
     let tenant_id = Uuid::parse_str(owner["tenant_id"].as_str().unwrap()).unwrap();
     let owner_id = Uuid::parse_str(owner["principal_id"].as_str().unwrap()).unwrap();
-    assert_eq!(owner["is_admin"], json!(true), "first admin must be tenant owner");
+    assert_eq!(
+        owner["is_admin"],
+        json!(true),
+        "first admin must be tenant owner"
+    );
 
     // 两个普通成员：首次访问会被 provision 成未激活的租户成员，需 owner 激活。
     let mut ids = Vec::new();
@@ -118,7 +122,11 @@ async fn world(pool: &PgPool) -> World {
             Some(json!({ "is_active": true })),
         )
         .await;
-        assert_eq!(status, StatusCode::OK, "owner must be able to activate {sub}");
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "owner must be able to activate {sub}"
+        );
         ids.push(id);
     }
     let member_id = ids[0];
@@ -246,7 +254,11 @@ async fn grant_makes_member_able_to_see_project(pool: PgPool) {
         None,
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "member must see the project: {body}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "member must see the project: {body}"
+    );
     let items = body["items"].as_array().cloned().unwrap_or_default();
     assert!(
         items
@@ -277,7 +289,11 @@ async fn outsider_cannot_see_project_members(pool: PgPool) {
         None,
     )
     .await;
-    assert_eq!(status, StatusCode::NOT_FOUND, "outsider must get 404: {body}");
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "outsider must get 404: {body}"
+    );
 }
 
 /// A004：跨租户项目 → 404。
@@ -301,7 +317,11 @@ async fn cross_tenant_project_is_not_found(pool: PgPool) {
         None,
     )
     .await;
-    assert_eq!(status, StatusCode::NOT_FOUND, "cross tenant must get 404: {body}");
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "cross tenant must get 404: {body}"
+    );
 }
 
 // ───────────────────────────────────────────────────────── A003 授权前提
@@ -403,7 +423,11 @@ async fn duplicate_grant_keeps_single_row(pool: PgPool) {
         Some(json!({ "principal_id": w.member_id })),
     )
     .await;
-    assert_eq!(status, StatusCode::CONFLICT, "second grant must conflict: {body}");
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "second grant must conflict: {body}"
+    );
     assert_eq!(body["code"], json!("ALREADY_MEMBER"));
     assert_eq!(member_row_count(&pool, w.project_id, w.member_id).await, 1);
 }
@@ -508,13 +532,12 @@ async fn owner_transfer_moves_ownership(pool: PgPool) {
     assert_eq!(body["previous_owner"], json!(w.owner_id.to_string()));
     assert_eq!(body["role"], json!("owner"));
 
-    let roles: Vec<(Uuid, String)> = sqlx::query_as(
-        "SELECT principal_id, role FROM core.project_member WHERE project_id = $1",
-    )
-    .bind(w.project_id)
-    .fetch_all(&pool)
-    .await
-    .unwrap();
+    let roles: Vec<(Uuid, String)> =
+        sqlx::query_as("SELECT principal_id, role FROM core.project_member WHERE project_id = $1")
+            .bind(w.project_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
     let role_of = |id: Uuid| {
         roles
             .iter()
@@ -566,7 +589,11 @@ async fn tenant_removal_cascades_project_memberships(pool: PgPool) {
         None,
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "tenant removal must succeed: {body}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "tenant removal must succeed: {body}"
+    );
 
     assert!(
         !project_visible(&w.app, &token("usr-member"), w.project_id).await,
@@ -657,7 +684,14 @@ async fn concurrent_grants_produce_single_row(pool: PgPool) {
             .await
         },
         async {
-            call(&w.app, "POST", &uri, &token("usr-owner"), Some(body.clone())).await
+            call(
+                &w.app,
+                "POST",
+                &uri,
+                &token("usr-owner"),
+                Some(body.clone()),
+            )
+            .await
         }
     );
 
@@ -720,8 +754,14 @@ async fn tenant_removal_racing_grant_has_single_final_state(pool: PgPool) {
     //   a) 授予先提交 → 级联撤销把它抹掉 → 授予返回 200，但最终无成员关系；
     //   b) 移除先提交 → 授予发现目标已非租户成员 → 409 NOT_TENANT_MEMBER。
     // 唯一不可接受的是「悬空」：人已不是租户成员，却还留着项目成员行。
-    assert_eq!(tenant_rows, 0, "tenant removal must always win the tenant row");
-    assert_eq!(rows, 0, "no dangling project membership may survive the race");
+    assert_eq!(
+        tenant_rows, 0,
+        "tenant removal must always win the tenant row"
+    );
+    assert_eq!(
+        rows, 0,
+        "no dangling project membership may survive the race"
+    );
     assert!(
         matches!(grant.0, StatusCode::OK | StatusCode::CONFLICT),
         "grant outcome must be deterministic, got {}",

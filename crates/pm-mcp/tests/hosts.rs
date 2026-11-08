@@ -7,8 +7,8 @@
 //! 名单永不为空：rmcp 里空名单 = 放行全部，本仓不给这条路。
 
 use pm_mcp::PmMcpServer;
-use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
+use sqlx::PgPool;
 
 const TOOLS_LIST: &str = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#;
 

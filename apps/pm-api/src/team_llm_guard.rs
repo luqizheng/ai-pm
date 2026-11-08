@@ -4,9 +4,9 @@
 //! 两个管理面复用同一口径。
 
 use axum::{
-    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
+    Json,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -22,17 +22,9 @@ pub(crate) fn guard_tenant(caller: &AuthedPrincipal, tenant_id: Uuid) -> Result<
 }
 
 pub(crate) fn err_not_found(message: &str) -> Response {
-    (
-        StatusCode::NOT_FOUND,
-        Json(json!({ "message": message })),
-    )
-        .into_response()
+    (StatusCode::NOT_FOUND, Json(json!({ "message": message }))).into_response()
 }
 
 pub(crate) fn err_forbidden(message: &str) -> Response {
-    (
-        StatusCode::FORBIDDEN,
-        Json(json!({ "message": message })),
-    )
-        .into_response()
+    (StatusCode::FORBIDDEN, Json(json!({ "message": message }))).into_response()
 }

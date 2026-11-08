@@ -7,26 +7,33 @@
 //! - 可见性：非成员 / 跨租户 404（T-022）
 //! - 空项目：total=0、summary 全 0
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_domain::SYSTEM_TENANT;
 use serde_json::Value;
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 mod common;
 
 fn get(uri: &str) -> Request<Body> {
-    Request::builder().method("GET").uri(uri).body(Body::empty()).unwrap()
+    Request::builder()
+        .method("GET")
+        .uri(uri)
+        .body(Body::empty())
+        .unwrap()
 }
 
 async fn body_json(response: axum::response::Response) -> (StatusCode, Value) {
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
@@ -243,7 +250,10 @@ async fn project_delivery_aggregates_task_rollups(pool: PgPool) {
     assert_eq!(status, StatusCode::OK, "body: {body}");
     assert_eq!(body["total"], 4);
     let summary = &body["summary"];
-    println!("DEBUG body = {}", serde_json::to_string_pretty(&body).unwrap());
+    println!(
+        "DEBUG body = {}",
+        serde_json::to_string_pretty(&body).unwrap()
+    );
     assert_eq!(summary["delivered"], 1, "body: {body}");
     assert_eq!(summary["partial"], 1);
     assert_eq!(summary["missing"], 1);
@@ -300,13 +310,12 @@ async fn project_delivery_exposes_pending_review_count(pool: PgPool) {
     seed_task_repo(&pool, project_id, task, web).await;
     seed_delivered_run(&pool, project_id, task, 1, &[(web, "base", "result")]).await;
 
-    let run_id: Uuid = sqlx::query_scalar(
-        "SELECT id FROM delivery.task_run WHERE task_id = $1 LIMIT 1",
-    )
-    .bind(task)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let run_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM delivery.task_run WHERE task_id = $1 LIMIT 1")
+            .bind(task)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     seed_pending_approval(&pool, project_id, task, run_id).await;
 
     let (status, body) = body_json(

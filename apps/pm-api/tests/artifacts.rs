@@ -1,13 +1,13 @@
 //! `GET /v1/pm/artifacts` 集成测试：真实数据库 + 真 HTTP router（无 socket）。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 mod common;
 
@@ -22,7 +22,10 @@ fn get(uri: &str) -> Request<Body> {
 async fn body_json(response: axum::response::Response) -> (StatusCode, serde_json::Value) {
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 async fn seed(pool: &PgPool, code: &str) -> Uuid {

@@ -1,4 +1,4 @@
-﻿//! Auth middleware tests (Slice B 登录链路): drive `router_with_auth` with
+//! Auth middleware tests (Slice B 登录链路): drive `router_with_auth` with
 //! `tower::ServiceExt::oneshot` — no socket — and assert the bearer contract:
 //! missing token → 401 `IAM_AUTH_1005`; forged/undecodable token → 401
 //! `IAM_AUTH_1004`; a validly signed token carrying `tid` passes through to
@@ -11,17 +11,17 @@
 //! `JWKSCache::from_pem`, which pins the same `kid="default"` convention as
 //! token-service.
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use digua_common_jwt::{JWKSCache, sign_token};
+use digua_common_jwt::{sign_token, JWKSCache};
 use pm_api::routes::{router, router_with_auth};
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use serde_json::{Value, json};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_domain::SYSTEM_TENANT;
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 use tower::ServiceExt;
-use pm_domain::SYSTEM_TENANT;
 
 const PRIVATE_PEM: &str = include_str!("keys/private.pem");
 const PUBLIC_PEM: &str = include_str!("keys/public.pem");
@@ -70,10 +70,7 @@ async fn forged_token_is_unauthorized(pool: PgPool) {
     let app = router_with_auth(pool, test_jwks());
     // Not signed by the trusted key — the JWKS has one key (kid="default"),
     // so an arbitrary string must fail verification.
-    let response = app
-        .oneshot(bearer(Some("not-a-jwt")))
-        .await
-        .unwrap();
+    let response = app.oneshot(bearer(Some("not-a-jwt"))).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     let body = body_json(response).await;
     assert_eq!(body["code"], json!("IAM_AUTH_1004"), "invalid token code");
@@ -84,7 +81,10 @@ async fn token_without_tenant_claim_is_unauthorized(pool: PgPool) {
     let app = router_with_auth(pool, test_jwks());
     // Correctly signed by the trusted key but no `tid` — the gateway treats
     // `tid` as mandatory for downstream calls, pm-api mirrors that.
-    let token = sign(json!({ "sub": "usr-1", "username": "alice" }), Duration::from_secs(300));
+    let token = sign(
+        json!({ "sub": "usr-1", "username": "alice" }),
+        Duration::from_secs(300),
+    );
     let response = app.oneshot(bearer(Some(&token))).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     let body = body_json(response).await;
@@ -131,7 +131,10 @@ async fn valid_token_reaches_the_real_route(pool: PgPool) {
     );
     let request = Request::builder()
         .method("GET")
-        .uri(format!("/api/v1/projects/{}/notifications", boot.project_id))
+        .uri(format!(
+            "/api/v1/projects/{}/notifications",
+            boot.project_id
+        ))
         .header("authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();

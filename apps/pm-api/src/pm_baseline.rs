@@ -26,8 +26,13 @@ async fn overview(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-        .await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
 
     let current: Option<(i32, Uuid, Uuid, DateTime<Utc>)> = sqlx::query_as(
         "SELECT version, proposal_id, confirmed_by, confirmed_at FROM ai.project_baseline \
@@ -107,8 +112,13 @@ async fn create_proposal(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-        .await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
 
     let mut tx = state.pool.begin().await.map_err(ApiError::Internal)?;
 
@@ -237,8 +247,13 @@ async fn decide_item(
     Path((project_id, item_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<DecisionBody>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-        .await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
 
     let next_state = match body.action.as_str() {
         "confirm" => "confirmed",
@@ -297,8 +312,13 @@ async fn confirm_baseline(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-        .await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
 
     let mut tx = state.pool.begin().await.map_err(ApiError::Internal)?;
 
@@ -356,7 +376,9 @@ async fn confirm_baseline(
 
     tx.commit().await.map_err(ApiError::Internal)?;
 
-    Ok(Json(json!({ "version": proposal.1, "status": "confirmed" })))
+    Ok(Json(
+        json!({ "version": proposal.1, "status": "confirmed" }),
+    ))
 }
 
 pub(crate) fn router() -> Router<AppState> {

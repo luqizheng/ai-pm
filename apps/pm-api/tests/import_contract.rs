@@ -3,10 +3,10 @@
 //!
 //! 全程真实 PostgreSQL（`#[sqlx::test]`）与真实 HTTP 路由。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -62,21 +62,15 @@ async fn seed_project_with_repo(pool: &PgPool) -> (Uuid, Uuid) {
     .await;
     assert_eq!(status, StatusCode::CREATED, "body: {body}");
     let repository_id = Uuid::parse_str(body["id"].as_str().unwrap()).unwrap();
-    sqlx::query(
-        "UPDATE integration.project_repository SET status = 'verified' WHERE id = $1",
-    )
-    .bind(repository_id)
-    .execute(pool)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE integration.project_repository SET status = 'verified' WHERE id = $1")
+        .bind(repository_id)
+        .execute(pool)
+        .await
+        .unwrap();
     (project_id, repository_id)
 }
 
-async fn start_import(
-    pool: &PgPool,
-    project_id: Uuid,
-    body: Value,
-) -> (StatusCode, Value) {
+async fn start_import(pool: &PgPool, project_id: Uuid, body: Value) -> (StatusCode, Value) {
     let app = router(pool.clone());
     body_json(
         app.oneshot(json_request(
@@ -124,8 +118,7 @@ async fn repository_ids_must_belong_to_project(pool: PgPool) {
 async fn import_accepts_repository_ids_and_freezes_the_set(pool: PgPool) {
     let (project_id, repo) = seed_project_with_repo(&pool).await;
 
-    let (status, body) =
-        start_import(&pool, project_id, json!({ "repository_ids": [repo] })).await;
+    let (status, body) = start_import(&pool, project_id, json!({ "repository_ids": [repo] })).await;
     assert_eq!(status, StatusCode::ACCEPTED, "body: {body}");
     let import_id = Uuid::parse_str(body["import_id"].as_str().unwrap()).unwrap();
 
@@ -136,7 +129,10 @@ async fn import_accepts_repository_ids_and_freezes_the_set(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(sources, 1, "the source set must be frozen at import creation");
+    assert_eq!(
+        sources, 1,
+        "the source set must be frozen at import creation"
+    );
 
     // 首轮 Attempt 已开（R-4-1：每轮都留档）。
     let attempts: i64 = sqlx::query_scalar(
@@ -168,23 +164,37 @@ async fn idempotency_key_replays_the_same_import(pool: PgPool) {
     let (project_id, repo) = seed_project_with_repo(&pool).await;
     let key = format!("import-{}", Uuid::new_v4().simple());
 
-    let (status, first) =
-        start_import(&pool, project_id, json!({ "repository_ids": [repo], "idempotency_key": key })).await;
+    let (status, first) = start_import(
+        &pool,
+        project_id,
+        json!({ "repository_ids": [repo], "idempotency_key": key }),
+    )
+    .await;
     assert_eq!(status, StatusCode::ACCEPTED, "body: {first}");
     let first_id = Uuid::parse_str(first["import_id"].as_str().unwrap()).unwrap();
 
-    let (status, second) =
-        start_import(&pool, project_id, json!({ "repository_ids": [repo], "idempotency_key": key })).await;
+    let (status, second) = start_import(
+        &pool,
+        project_id,
+        json!({ "repository_ids": [repo], "idempotency_key": key }),
+    )
+    .await;
     assert_eq!(status, StatusCode::ACCEPTED, "body: {second}");
     let second_id = Uuid::parse_str(second["import_id"].as_str().unwrap()).unwrap();
-    assert_eq!(first_id, second_id, "the same key must replay the same import");
+    assert_eq!(
+        first_id, second_id,
+        "the same key must replay the same import"
+    );
     assert_eq!(second["replayed"], json!(true));
 
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM integration.repo_import")
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(count, 1, "an idempotent replay must not create a second import");
+    assert_eq!(
+        count, 1,
+        "an idempotent replay must not create a second import"
+    );
 }
 
 // ── C-2：proposed 态显式终止 ───────────────────────────────────────────
@@ -192,8 +202,7 @@ async fn idempotency_key_replays_the_same_import(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn proposed_import_can_be_terminated_and_releases_the_slot(pool: PgPool) {
     let (project_id, repo) = seed_project_with_repo(&pool).await;
-    let (status, body) =
-        start_import(&pool, project_id, json!({ "repository_ids": [repo] })).await;
+    let (status, body) = start_import(&pool, project_id, json!({ "repository_ids": [repo] })).await;
     assert_eq!(status, StatusCode::ACCEPTED, "body: {body}");
     let import_id = Uuid::parse_str(body["import_id"].as_str().unwrap()).unwrap();
 
@@ -228,7 +237,11 @@ async fn proposed_import_can_be_terminated_and_releases_the_slot(pool: PgPool) {
 
     // 名额释放：可以再次发起导入。
     let (status, _) = start_import(&pool, project_id, json!({ "repository_ids": [repo] })).await;
-    assert_eq!(status, StatusCode::ACCEPTED, "the active slot must be released");
+    assert_eq!(
+        status,
+        StatusCode::ACCEPTED,
+        "the active slot must be released"
+    );
 }
 
 // ── I6-B-06：审计动作 ───────────────────────────────────────────────────
@@ -236,8 +249,7 @@ async fn proposed_import_can_be_terminated_and_releases_the_slot(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn import_start_is_audited(pool: PgPool) {
     let (project_id, repo) = seed_project_with_repo(&pool).await;
-    let (status, body) =
-        start_import(&pool, project_id, json!({ "repository_ids": [repo] })).await;
+    let (status, body) = start_import(&pool, project_id, json!({ "repository_ids": [repo] })).await;
     assert_eq!(status, StatusCode::ACCEPTED, "body: {body}");
     let import_id = Uuid::parse_str(body["import_id"].as_str().unwrap()).unwrap();
 
@@ -260,15 +272,17 @@ async fn import_start_is_audited(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(acquired, 1, "acquiring the initialization slot must be audited");
+    assert_eq!(
+        acquired, 1,
+        "acquiring the initialization slot must be audited"
+    );
 }
 
 /// 终止动作的审计行带 reason 与 previous_status。
 #[sqlx::test(migrations = "../../migrations")]
 async fn termination_is_audited_with_reason(pool: PgPool) {
     let (project_id, repo) = seed_project_with_repo(&pool).await;
-    let (status, body) =
-        start_import(&pool, project_id, json!({ "repository_ids": [repo] })).await;
+    let (status, body) = start_import(&pool, project_id, json!({ "repository_ids": [repo] })).await;
     assert_eq!(status, StatusCode::ACCEPTED, "body: {body}");
     let import_id = Uuid::parse_str(body["import_id"].as_str().unwrap()).unwrap();
 

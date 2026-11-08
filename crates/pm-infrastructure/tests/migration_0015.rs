@@ -10,11 +10,11 @@ async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
     let customer: Uuid = sqlx::query_scalar(
         "INSERT INTO core.customer (name, tenant_id) VALUES ($1, $2) RETURNING id",
     )
-        .bind(format!("c-{code}"))
-        .bind(SYSTEM_TENANT)
-        .fetch_one(pool)
-        .await
-        .unwrap();
+    .bind(format!("c-{code}"))
+    .bind(SYSTEM_TENANT)
+    .fetch_one(pool)
+    .await
+    .unwrap();
     sqlx::query_scalar(
         "INSERT INTO core.project (customer_id, code, name, tenant_id) \
          VALUES ($1, $2, $2, $3) RETURNING id",
@@ -46,10 +46,12 @@ async fn contract_columns_and_tables_exist(pool: PgPool) {
         .await
         .expect("delivery.task must gain the four contract columns");
 
-    sqlx::query("SELECT lease_token_hash, client_name, client_version FROM delivery.task_run LIMIT 0")
-        .fetch_all(&pool)
-        .await
-        .expect("delivery.task_run must gain lease/client identity columns");
+    sqlx::query(
+        "SELECT lease_token_hash, client_name, client_version FROM delivery.task_run LIMIT 0",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("delivery.task_run must gain lease/client identity columns");
 
     sqlx::query(
         "SELECT id, project_id, task_id, ordinal, text, verification_kind, created_at, updated_at \
@@ -95,7 +97,10 @@ async fn migration_is_rerunnable_and_backfills_defaults(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(service_principals, 1, "the dispatch service principal is seeded once");
+    assert_eq!(
+        service_principals, 1,
+        "the dispatch service principal is seeded once"
+    );
 
     let service_kind: String = sqlx::query_scalar(
         "SELECT kind FROM core.principal WHERE id = '00000000-0000-0000-0000-000000000001'",
@@ -243,14 +248,19 @@ async fn knowledge_ref_rejects_cross_project_document(pool: PgPool) {
     .bind(foreign_doc)
     .execute(&pool)
     .await;
-    assert!(err.is_err(), "a document of another project must not be referenced");
+    assert!(
+        err.is_err(),
+        "a document of another project must not be referenced"
+    );
 }
 
 #[test]
 fn migration_file_is_forward_only() {
     let sql = include_str!("../../../migrations/0015_task_contract.sql");
     assert!(sql.contains("ADD COLUMN IF NOT EXISTS goal"));
-    assert!(sql.contains("ADD COLUMN IF NOT EXISTS deliverables JSONB NOT NULL DEFAULT '[]'::jsonb"));
+    assert!(
+        sql.contains("ADD COLUMN IF NOT EXISTS deliverables JSONB NOT NULL DEFAULT '[]'::jsonb")
+    );
     assert!(sql.contains("CREATE TABLE IF NOT EXISTS delivery.task_acceptance_criterion"));
     assert!(sql.contains("CREATE TABLE IF NOT EXISTS delivery.task_knowledge_ref"));
     assert!(sql.contains("ADD COLUMN IF NOT EXISTS lease_token_hash"));

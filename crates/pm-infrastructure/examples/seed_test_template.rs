@@ -52,14 +52,15 @@ const SEED_LOCK_KEY: i64 = 0x4150_4d5f_5445_5354;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let url = std::env::var("DATABASE_URL").map_err(|_| {
-        "DATABASE_URL 未设置：本工具需要它来定位测试库（默认 127.0.0.1:5433/aipm）"
-    })?;
+    let url = std::env::var("DATABASE_URL")
+        .map_err(|_| "DATABASE_URL 未设置：本工具需要它来定位测试库（默认 127.0.0.1:5433/aipm）")?;
     let template_db =
         std::env::var(TEMPLATE_DB_ENV).unwrap_or_else(|_| DEFAULT_TEMPLATE_DB.to_string());
 
     let base = PgConnectOptions::from_str(&url)?;
-    let forced = std::env::var(FORCE_ENV).map(|v| !v.is_empty()).unwrap_or(false);
+    let forced = std::env::var(FORCE_ENV)
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
     if !forced && !is_local(&base) {
         return Err(format!(
             "拒绝预建模板库：DATABASE_URL 的主机 {:?} 不是本机。\
@@ -75,7 +76,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let total = migrator.iter().count();
 
     let opts = base.database(&template_db);
-    let pool = PgPoolOptions::new().max_connections(1).connect_with(opts).await?;
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(opts)
+        .await?;
     let mut conn = pool.acquire().await?;
 
     sqlx::query("SELECT pg_advisory_lock($1)")

@@ -11,7 +11,7 @@
 //! - §9.2：清理状态落库 `delivery.task_run_cleanup`（迁移 0035）——
 //!   pending → cleaning → completed；失败退避重试；阈值后 needs_human。
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::run_cleanup;
 use pm_application::run_dispatch::{
     ExecutorError, ExecutorProgress, NoopExecutor, RunExecutor, TerminateReason,
@@ -67,7 +67,10 @@ impl RunExecutor for ScriptedExecutor {
     ) -> Result<(), ExecutorError> {
         self.terminated
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        if self.terminate_fails.load(std::sync::atomic::Ordering::SeqCst) {
+        if self
+            .terminate_fails
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
             Err(ExecutorError::Other("terminate scripted failure".into()))
         } else {
             Ok(())
@@ -193,15 +196,17 @@ async fn archive_between_spawn_and_confirmation_blocks_start(pool: PgPool) {
     .await
     .unwrap()
     .rows_affected();
-    assert_eq!(promoted, 0, "I1-026：已撤销凭据的 Run 不得被迟到 spawn 推进 running");
+    assert_eq!(
+        promoted, 0,
+        "I1-026：已撤销凭据的 Run 不得被迟到 spawn 推进 running"
+    );
 
     // 任务保持非 running（启动授权未发生）。
-    let task_status: String =
-        sqlx::query_scalar("SELECT status FROM delivery.task WHERE id = $1")
-            .bind(task_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let task_status: String = sqlx::query_scalar("SELECT status FROM delivery.task WHERE id = $1")
+        .bind(task_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_ne!(task_status, "running");
     let _ = owner;
 
@@ -231,26 +236,21 @@ async fn start_confirmation_rejects_archived_project_and_terminates(pool: PgPool
 
     // 归档后 claim/启动不可能再发生（两阶段 claim 阶段 B 跳过）；此处的直接证据：
     // Run 已 cancelled、凭据撤销、且清理账本已登记该 session（cancel_run 路径）。
-    let (status, session): (String, Option<String>) = sqlx::query_as(
-        "SELECT status, executor_session FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (status, session): (String, Option<String>) =
+        sqlx::query_as("SELECT status, executor_session FROM delivery.task_run WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(status, "cancelled");
     assert!(session.is_some(), "启动意图保留（审计/清理可追溯）");
-    let ledger: Option<(Uuid, String)> = sqlx::query_as(
-        "SELECT run_id, status FROM delivery.task_run_cleanup WHERE run_id = $1",
-    )
-    .bind(run_id)
-    .fetch_optional(&pool)
-    .await
-    .unwrap();
-    assert!(
-        ledger.is_some(),
-        "I1-031：撤凭据时必须登记持久化清理账本"
-    );
+    let ledger: Option<(Uuid, String)> =
+        sqlx::query_as("SELECT run_id, status FROM delivery.task_run_cleanup WHERE run_id = $1")
+            .bind(run_id)
+            .fetch_optional(&pool)
+            .await
+            .unwrap();
+    assert!(ledger.is_some(), "I1-031：撤凭据时必须登记持久化清理账本");
 }
 
 /// I1-030：terminate 失败 → 账本行退避重试，Run 终态不回滚。
@@ -283,7 +283,9 @@ async fn failed_terminate_keeps_terminal_state_and_retries(pool: PgPool) {
     assert_eq!(status, run_cleanup::STATUS_PENDING, "失败进入待重试");
 
     // 清理轮：terminate 仍失败 → attempts+1。
-    let (ok, failed) = run_cleanup::run_cleanup_round(&pool, executor.as_ref()).await.unwrap();
+    let (ok, failed) = run_cleanup::run_cleanup_round(&pool, executor.as_ref())
+        .await
+        .unwrap();
     assert_eq!((ok, failed), (0, 1));
     let attempts: i32 =
         sqlx::query_scalar("SELECT attempts FROM delivery.task_run_cleanup WHERE run_id = $1")
@@ -317,7 +319,9 @@ async fn cleanup_exhaustion_lands_in_needs_human_and_recovers(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-        let (_ok, failed) = run_cleanup::run_cleanup_round(&pool, executor.as_ref()).await.unwrap();
+        let (_ok, failed) = run_cleanup::run_cleanup_round(&pool, executor.as_ref())
+            .await
+            .unwrap();
         assert_eq!(failed, 1, "第 {round} 轮仍失败");
     }
     let status: String =
@@ -328,14 +332,19 @@ async fn cleanup_exhaustion_lands_in_needs_human_and_recovers(pool: PgPool) {
             .unwrap();
     assert_eq!(status, run_cleanup::STATUS_NEEDS_HUMAN, "达到阈值转人工");
     let queue = run_cleanup::list_needs_human(&pool).await.unwrap();
-    assert!(queue.iter().any(|entry| entry.run_id == run_id), "I1-040：人工队列可查询");
+    assert!(
+        queue.iter().any(|entry| entry.run_id == run_id),
+        "I1-040：人工队列可查询"
+    );
 
     // 人工修复（解除 terminate 故障）→ requeue → 本轮清理成功。
     executor
         .terminate_fails
         .store(false, std::sync::atomic::Ordering::SeqCst);
     run_cleanup::requeue(&pool, run_id).await.unwrap();
-    let (ok, _failed) = run_cleanup::run_cleanup_round(&pool, executor.as_ref()).await.unwrap();
+    let (ok, _failed) = run_cleanup::run_cleanup_round(&pool, executor.as_ref())
+        .await
+        .unwrap();
     assert_eq!(ok, 1);
     let status: String =
         sqlx::query_scalar("SELECT status FROM delivery.task_run_cleanup WHERE run_id = $1")
@@ -383,7 +392,9 @@ async fn cleanup_has_no_time_window_and_batches(pool: PgPool) {
 
     // 单轮全部被领取并完成（5 < LIMIT 64；Noop 的 terminate 成功）：**3 小时前
     // 的残留同样被发现并清理**（I1-031——旧实现 1 小时窗口下这些行永远丢失）。
-    let (ok, _failed) = run_cleanup::run_cleanup_round(&pool, &executor).await.unwrap();
+    let (ok, _failed) = run_cleanup::run_cleanup_round(&pool, &executor)
+        .await
+        .unwrap();
     assert_eq!(ok, 5, "I1-031：超过 1 小时的残留必须仍能被清理");
     let completed: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM delivery.task_run_cleanup \

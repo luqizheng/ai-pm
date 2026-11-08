@@ -94,8 +94,16 @@ async fn xt3_every_tenant_table_has_a_not_null_tenant_id(pool: PgPool) {
         .await
         .unwrap();
         let row = row.unwrap_or_else(|| panic!("{schema}.{table} has no tenant_id column"));
-        assert_eq!(row.get::<String, _>("is_nullable"), "NO", "{schema}.{table}");
-        assert_eq!(row.get::<String, _>("data_type"), "uuid", "{schema}.{table}");
+        assert_eq!(
+            row.get::<String, _>("is_nullable"),
+            "NO",
+            "{schema}.{table}"
+        );
+        assert_eq!(
+            row.get::<String, _>("data_type"),
+            "uuid",
+            "{schema}.{table}"
+        );
     }
 }
 

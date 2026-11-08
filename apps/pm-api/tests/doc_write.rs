@@ -1,16 +1,16 @@
-﻿//! Knowledge write path: the MCP `pm_submit_document` tool creates a
+//! Knowledge write path: the MCP `pm_submit_document` tool creates a
 //! Git-backed document (file + commit + identity/revision rows) and refuses
 //! duplicates or invalid types. Uses a temporary Git root per test.
 
 use std::path::Path;
 use std::process::Command;
 
-use pm_application::bootstrap::{BootstrapOutcome, BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapOutcome, BootstrapRequest};
 use pm_application::knowledge::KnowledgeRoot;
+use pm_domain::SYSTEM_TENANT;
 use pm_mcp::tools::{submit_document, SubmitDocumentArgs, ToolError};
 use sqlx::PgPool;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 fn temp_root() -> KnowledgeRoot {
     KnowledgeRoot::new(std::env::temp_dir().join(format!("ai-pm-doc-write-{}", Uuid::new_v4())))
@@ -52,7 +52,10 @@ fn commit_count(root: &Path) -> usize {
         .args(["rev-list", "--count", "HEAD"])
         .output()
         .unwrap();
-    String::from_utf8_lossy(&output.stdout).trim().parse().unwrap()
+    String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse()
+        .unwrap()
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -69,9 +72,14 @@ async fn submit_document_writes_file_commit_and_rows(pool: PgPool) {
     .unwrap();
     let root = temp_root();
 
-    let result = submit_document(&pool, &root, args(boot.project_id, "ARCH-900", "architecture"), &test_caller(&boot))
-        .await
-        .unwrap();
+    let result = submit_document(
+        &pool,
+        &root,
+        args(boot.project_id, "ARCH-900", "architecture"),
+        &test_caller(&boot),
+    )
+    .await
+    .unwrap();
 
     let canonical = result["canonical_path"].as_str().unwrap();
     assert_eq!(canonical, "projects/DOC-1/architecture/ARCH-900.md");
@@ -79,13 +87,12 @@ async fn submit_document_writes_file_commit_and_rows(pool: PgPool) {
     assert_eq!(result["git_commit_sha"].as_str().unwrap().len(), 40);
     assert!(root.path().join(canonical).exists(), "markdown must exist");
 
-    let docs: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.project_document WHERE project_id = $1",
-    )
-    .bind(boot.project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let docs: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ai.project_document WHERE project_id = $1")
+            .bind(boot.project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(docs, 1);
 
     let revisions: (i64, String) = sqlx::query_as(
@@ -108,9 +115,19 @@ async fn submit_document_writes_file_commit_and_rows(pool: PgPool) {
     assert_eq!(revisions.1, ai_pm);
 
     let before = commit_count(root.path());
-    let duplicate = submit_document(&pool, &root, args(boot.project_id, "ARCH-900", "architecture"), &test_caller(&boot)).await;
+    let duplicate = submit_document(
+        &pool,
+        &root,
+        args(boot.project_id, "ARCH-900", "architecture"),
+        &test_caller(&boot),
+    )
+    .await;
     assert!(matches!(duplicate, Err(ToolError::Conflict(_))));
-    assert_eq!(commit_count(root.path()), before, "duplicate must not commit");
+    assert_eq!(
+        commit_count(root.path()),
+        before,
+        "duplicate must not commit"
+    );
 
     cleanup(&root);
 }
@@ -129,7 +146,13 @@ async fn invalid_doc_type_is_rejected_before_writing(pool: PgPool) {
     .unwrap();
     let root = temp_root();
 
-    let result = submit_document(&pool, &root, args(boot.project_id, "X-1", "spreadsheet"), &test_caller(&boot)).await;
+    let result = submit_document(
+        &pool,
+        &root,
+        args(boot.project_id, "X-1", "spreadsheet"),
+        &test_caller(&boot),
+    )
+    .await;
     assert!(matches!(result, Err(ToolError::InvalidRequest(_))));
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM ai.project_document")
@@ -145,7 +168,7 @@ async fn invalid_doc_type_is_rejected_before_writing(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn unknown_project_is_not_found(pool: PgPool) {
     let root = temp_root();
-        let synthetic = pm_application::caller::CallerContext::new(
+    let synthetic = pm_application::caller::CallerContext::new(
         pm_application::caller::HumanActor {
             principal_id: Uuid::new_v4(),
             tenant_id: SYSTEM_TENANT,
@@ -155,7 +178,13 @@ async fn unknown_project_is_not_found(pool: PgPool) {
         },
         pm_application::caller::DeviceClaim::absent(),
     );
-    let result = submit_document(&pool, &root, args(Uuid::new_v4(), "ARCH-1", "architecture"), &synthetic).await;
+    let result = submit_document(
+        &pool,
+        &root,
+        args(Uuid::new_v4(), "ARCH-1", "architecture"),
+        &synthetic,
+    )
+    .await;
     assert!(matches!(result, Err(ToolError::NotFound(_))));
     cleanup(&root);
 }

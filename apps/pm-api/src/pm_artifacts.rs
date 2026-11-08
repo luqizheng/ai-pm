@@ -5,16 +5,16 @@
 //! 不虚构。裸 payload + `{items,total,page,size}`，`created_at DESC`。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Query, State},
     routing::get,
+    Json, Router,
 };
 use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiResult, paging, project_filter, require_project_visible};
+use crate::support::{paging, project_filter, require_project_visible, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new().route("/v1/pm/artifacts", get(artifacts))
@@ -41,8 +41,13 @@ async fn artifacts(
     let page = paging(&params);
     let project_id = project_filter(&params);
     if let Some(project_id) = project_id {
-        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-            .await?;
+        require_project_visible(
+            &state.pool,
+            project_id,
+            caller.tenant_id,
+            caller.principal_id,
+        )
+        .await?;
     }
     let items: Vec<ArtifactRow> = sqlx::query_as(
         "SELECT rv.id, rv.requirement_id, r.code AS requirement_code, \

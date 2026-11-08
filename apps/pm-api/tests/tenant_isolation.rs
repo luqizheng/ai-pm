@@ -3,13 +3,13 @@
 //! 断言两件事：租户 A 的 token **读不到**租户 B 的项目（列表与详情），
 //! 也**写不进去**（404，不泄露存在性，且库内无新增行）。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
-use digua_common_jwt::{JWKSCache, sign_token};
+use digua_common_jwt::{sign_token, JWKSCache};
 use pm_api::auth::AuthConfig;
 use pm_api::routes::router_with_auth_config;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -172,11 +172,11 @@ async fn xt1_xt2_cross_tenant_project_is_invisible_and_unwritable(pool: PgPool) 
                 .collect()
         })
         .unwrap_or_default();
-    assert!(ids.contains(&project_a.to_string()), "A 必须看得见自己的项目");
     assert!(
-        !ids.contains(&project_b.to_string()),
-        "A 不得看见 B 的项目"
+        ids.contains(&project_a.to_string()),
+        "A 必须看得见自己的项目"
     );
+    assert!(!ids.contains(&project_b.to_string()), "A 不得看见 B 的项目");
 
     // XT-2：A 的 token 往 B 的项目里建任务 → 404，且库内无新增行。
     let response = app
@@ -192,12 +192,10 @@ async fn xt1_xt2_cross_tenant_project_is_invisible_and_unwritable(pool: PgPool) 
     let status = response.status();
     assert_eq!(status, StatusCode::NOT_FOUND, "跨租户写必须 404");
 
-    let tasks: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.task WHERE project_id = $1",
-    )
-    .bind(project_b)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let tasks: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.task WHERE project_id = $1")
+        .bind(project_b)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(tasks, 0, "跨租户写不得留下任何行");
 }

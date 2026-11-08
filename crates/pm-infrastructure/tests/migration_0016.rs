@@ -5,7 +5,6 @@ use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-
 #[sqlx::test(migrations = "../../migrations")]
 async fn policy_scope_gains_the_composition_columns(pool: PgPool) {
     sqlx::query(
@@ -50,7 +49,10 @@ async fn defaults_are_null_capabilities_and_empty_checks(pool: PgPool) {
     .await
     .unwrap();
 
-    assert_eq!(auto_accept, None, "absent capability column means the layer abstains");
+    assert_eq!(
+        auto_accept, None,
+        "absent capability column means the layer abstains"
+    );
     assert_eq!(auto_merge, None);
     assert_eq!(auto_publish_knowledge, None);
     assert_eq!(additional_checks, serde_json::json!([]));
@@ -90,10 +92,12 @@ async fn additional_checks_rejects_non_array_values(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn migration_is_reentrant(pool: PgPool) {
-    sqlx::raw_sql(include_str!("../../../migrations/0016_policy_composition.sql"))
-        .execute(&pool)
-        .await
-        .expect("re-running 0016 must be idempotent");
+    sqlx::raw_sql(include_str!(
+        "../../../migrations/0016_policy_composition.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("re-running 0016 must be idempotent");
 }
 
 #[test]

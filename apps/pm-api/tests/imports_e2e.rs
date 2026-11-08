@@ -15,19 +15,19 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_ai::repo_model::FakeRepoAnalysisModel;
 use pm_api::routes::router;
-use pm_application::PolicyEngine;
 use pm_application::command_executor::{
     ActorKind, CommandSource, ExecutionContext, PgCommandExecutor,
 };
 use pm_application::project_import::run_import_job;
-use pm_domain::ProjectCommand;
+use pm_application::PolicyEngine;
 use pm_domain::import::{DocumentDraft, MilestoneDraft, RequirementDraft};
 use pm_domain::proposal::Confidence;
-use serde_json::{Value, json};
+use pm_domain::ProjectCommand;
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -79,10 +79,24 @@ fn init_repo() -> LocalRepo {
     std::fs::create_dir_all(path.join("docs")).unwrap();
     std::fs::write(path.join("docs/design.md"), "# 地形设计\n").unwrap();
     run(&["add", "-A"]);
-    run(&["-c", "commit.gpgsign=false", "commit", "-q", "-m", "feat(core): terrain"]);
+    run(&[
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-q",
+        "-m",
+        "feat(core): terrain",
+    ]);
     std::fs::write(path.join("docs/design.md"), "# 地形设计 v2\n").unwrap();
     run(&["add", "-A"]);
-    run(&["-c", "commit.gpgsign=false", "commit", "-q", "-m", "fix: docs"]);
+    run(&[
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-q",
+        "-m",
+        "fix: docs",
+    ]);
     let head = String::from_utf8(
         Command::new("git")
             .args(["rev-parse", "HEAD"])
@@ -163,13 +177,18 @@ async fn cold_start_import_runs_end_to_end(pool: PgPool) {
     leaked.push(project.to_string());
     assert_eq!(status, StatusCode::CREATED, "body: {project}");
     let project_id = Uuid::parse_str(project["id"].as_str().unwrap()).unwrap();
-    let roles: Vec<String> =
-        sqlx::query_scalar("SELECT role FROM core.project_member WHERE project_id = $1 ORDER BY role")
-            .bind(project_id)
-            .fetch_all(&pool)
-            .await
-            .unwrap();
-    assert_eq!(roles.len(), 5, "new project must start with a five-role org chart");
+    let roles: Vec<String> = sqlx::query_scalar(
+        "SELECT role FROM core.project_member WHERE project_id = $1 ORDER BY role",
+    )
+    .bind(project_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        roles.len(),
+        5,
+        "new project must start with a five-role org chart"
+    );
     for role in ["owner", "ai_pm", "architect", "developer", "tester"] {
         assert!(roles.iter().any(|r| r == role), "missing role: {role}");
     }
@@ -199,7 +218,10 @@ async fn cold_start_import_runs_end_to_end(pool: PgPool) {
         key["fingerprint"].as_str().unwrap().starts_with("SHA256:"),
         "fingerprint must be SHA256"
     );
-    assert!(key.get("private_key").is_none(), "the response must not carry a private key");
+    assert!(
+        key.get("private_key").is_none(),
+        "the response must not carry a private key"
+    );
 
     // 3. HTTP 绑仓库（合法 URL）→ 201，初始未 verified。
     let repo = init_repo();
@@ -245,7 +267,8 @@ async fn cold_start_import_runs_end_to_end(pool: PgPool) {
     // 5. HTTP 启动导入 → 202 + queued（N-3：`repository_ids` 必填）。
     let (status, started) = body_json(
         app.clone()
-            .oneshot(json_request("POST", 
+            .oneshot(json_request(
+                "POST",
                 &format!("/v1/pm/projects/{project_id}/imports"),
                 json!({ "repository_ids": [repo_id] }),
             ))
@@ -274,7 +297,10 @@ async fn cold_start_import_runs_end_to_end(pool: PgPool) {
     leaked.push(detail.to_string());
     assert_eq!(status, StatusCode::OK, "body: {detail}");
     assert_eq!(detail["status"], json!("draft_ready"), "body: {detail}");
-    assert!(!detail["draft"].is_null(), "draft must be present once ready");
+    assert!(
+        !detail["draft"].is_null(),
+        "draft must be present once ready"
+    );
     assert!(detail["progress"].as_i64().unwrap() > 0);
     let revision = detail["draft_revision"].as_i64().unwrap();
     let draft = detail["draft"].clone();
@@ -302,7 +328,11 @@ async fn cold_start_import_runs_end_to_end(pool: PgPool) {
     assert_eq!(status, StatusCode::OK, "body: {proposed}");
     assert_eq!(proposed["outcome"], json!("proposed"));
     let proposals = proposed["proposals"].as_array().unwrap();
-    assert_eq!(proposals.len(), 4, "one import yields four proposals: {proposed}");
+    assert_eq!(
+        proposals.len(),
+        4,
+        "one import yields four proposals: {proposed}"
+    );
 
     for table in ["requirement", "milestone", "task"] {
         let count: i64 = sqlx::query_scalar(&format!(
@@ -320,7 +350,10 @@ async fn cold_start_import_runs_end_to_end(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(docs_before, 0, "documents must not be written before approval");
+    assert_eq!(
+        docs_before, 0,
+        "documents must not be written before approval"
+    );
 
     // 8. HTTP 整批审批：4 次 decide(approved)。
     for proposal in proposals {
@@ -349,11 +382,12 @@ async fn cold_start_import_runs_end_to_end(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(import_status, "applied");
-    let project_status: String = sqlx::query_scalar("SELECT status FROM core.project WHERE id = $1")
-        .bind(project_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let project_status: String =
+        sqlx::query_scalar("SELECT status FROM core.project WHERE id = $1")
+            .bind(project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(project_status, "planning");
 
     let expected_requirements = draft["requirements"].as_array().unwrap().len() as i64;
@@ -391,7 +425,10 @@ async fn cold_start_import_runs_end_to_end(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(unassigned, 0, "every imported task must resolve an agent principal");
+    assert_eq!(
+        unassigned, 0,
+        "every imported task must resolve an agent principal"
+    );
 
     // 知识文档：每需求一篇 + 项目总览一篇，且知识根确有 git 提交。
     let docs: i64 =
@@ -406,7 +443,10 @@ async fn cold_start_import_runs_end_to_end(pool: PgPool) {
         .current_dir(knowledge_root())
         .output()
         .unwrap();
-    assert!(git_log.status.success(), "knowledge root must be a git repository");
+    assert!(
+        git_log.status.success(),
+        "knowledge root must be a git repository"
+    );
     assert!(
         String::from_utf8_lossy(&git_log.stdout).lines().count() >= docs as usize,
         "each document must land a git commit"

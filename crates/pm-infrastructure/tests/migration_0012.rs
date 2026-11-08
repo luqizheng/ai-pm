@@ -10,10 +10,10 @@ async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
     let customer_id: Uuid = sqlx::query_scalar(
         "INSERT INTO core.customer (name, tenant_id) VALUES ('m', $1) RETURNING id",
     )
-            .bind(SYSTEM_TENANT)
-            .fetch_one(pool)
-            .await
-            .unwrap();
+    .bind(SYSTEM_TENANT)
+    .fetch_one(pool)
+    .await
+    .unwrap();
     sqlx::query_scalar(
         "INSERT INTO core.project (customer_id, code, name, tenant_id) \
          VALUES ($1, $2, 'm', $3) RETURNING id",

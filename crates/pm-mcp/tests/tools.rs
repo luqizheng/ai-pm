@@ -1,4 +1,4 @@
-﻿//! MCP tool layer tests (Task 16, Step 1).
+//! MCP tool layer tests (Task 16, Step 1).
 //!
 //! Contract under test: the three tool functions in `pm_mcp::tools` are thin,
 //! DB-testable wrappers — `pm_submit_technical_design` reuses the idempotent
@@ -13,16 +13,16 @@
 //! The transport smoke test at the bottom drives the real rmcp streamable
 //! HTTP service in-process (axum on an ephemeral port) with raw JSON-RPC.
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_domain::SYSTEM_TENANT;
 use pm_mcp::server::PmMcpServer;
 use pm_mcp::tools::{
-    SubmissionStatusArgs, SubmitTechnicalDesignArgs, TaskContextArgs, ToolError,
-    get_submission_status, get_task_context, submit_technical_design,
+    get_submission_status, get_task_context, submit_technical_design, SubmissionStatusArgs,
+    SubmitTechnicalDesignArgs, TaskContextArgs, ToolError,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 /// T-088：直调工具函数用的测试调用人（SYSTEM_TENANT 成员；设备声明缺席）。
 fn test_caller(human_id: Uuid) -> pm_application::caller::CallerContext {
@@ -38,7 +38,6 @@ fn test_caller(human_id: Uuid) -> pm_application::caller::CallerContext {
     )
 }
 
-
 fn seed(code: &str) -> BootstrapRequest {
     BootstrapRequest {
         project_code: code.to_string(),
@@ -53,11 +52,11 @@ async fn insert_task(pool: &PgPool, project_id: Uuid, title: &str) -> Uuid {
         "INSERT INTO delivery.task (project_id, title, tenant_id) \
          VALUES ($1, $2, (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
-        .bind(project_id)
-        .bind(title)
-        .fetch_one(pool)
-        .await
-        .unwrap()
+    .bind(project_id)
+    .bind(title)
+    .fetch_one(pool)
+    .await
+    .unwrap()
 }
 
 /// One inbound event row (status `received`) plus its `ai_analysis` job, the
@@ -81,11 +80,11 @@ async fn insert_event(pool: &PgPool, project_id: Uuid, actor_id: Uuid) -> Uuid {
         "INSERT INTO integration.job (project_id, event_id, job_type, tenant_id) \
          VALUES ($1, $2, 'ai_analysis', (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
-        .bind(project_id)
-        .bind(event_id)
-        .execute(pool)
-        .await
-        .unwrap();
+    .bind(project_id)
+    .bind(event_id)
+    .execute(pool)
+    .await
+    .unwrap();
     event_id
 }
 
@@ -139,7 +138,11 @@ async fn insert_proposal(
     .unwrap()
 }
 
-fn submit_args(project_id: Uuid, task_id: Uuid, idempotency_key: &str) -> SubmitTechnicalDesignArgs {
+fn submit_args(
+    project_id: Uuid,
+    task_id: Uuid,
+    idempotency_key: &str,
+) -> SubmitTechnicalDesignArgs {
     SubmitTechnicalDesignArgs {
         project_id,
         task_ref: task_id.to_string(),
@@ -157,9 +160,13 @@ async fn submit_technical_design_persists_and_replays_idempotently(pool: PgPool)
     let boot = bootstrap_project(&pool, seed("MCP-1")).await.unwrap();
     let task_id = insert_task(&pool, boot.project_id, "login latency").await;
 
-    let first = submit_technical_design(&pool, submit_args(boot.project_id, task_id, "mcp-1"), &test_caller(boot.human_id))
-        .await
-        .unwrap();
+    let first = submit_technical_design(
+        &pool,
+        submit_args(boot.project_id, task_id, "mcp-1"),
+        &test_caller(boot.human_id),
+    )
+    .await
+    .unwrap();
     assert_eq!(first["processing_status"], "queued");
     let event_id = first["event_id"].as_str().unwrap();
 
@@ -172,7 +179,10 @@ async fn submit_technical_design_persists_and_replays_idempotently(pool: PgPool)
     .await
     .unwrap();
     assert_eq!(event.get::<String, _>("source"), "mcp");
-    assert_eq!(event.get::<String, _>("event_type"), "technical_design_submitted");
+    assert_eq!(
+        event.get::<String, _>("event_type"),
+        "technical_design_submitted"
+    );
     assert_eq!(event.get::<String, _>("idempotency_key"), "mcp-1");
     assert_eq!(event.get::<String, _>("status"), "received");
     assert_eq!(
@@ -194,9 +204,13 @@ async fn submit_technical_design_persists_and_replays_idempotently(pool: PgPool)
     assert_eq!(job_status, "queued");
 
     // Same key + same payload: idempotent replay of the same event.
-    let second = submit_technical_design(&pool, submit_args(boot.project_id, task_id, "mcp-1"), &test_caller(boot.human_id))
-        .await
-        .unwrap();
+    let second = submit_technical_design(
+        &pool,
+        submit_args(boot.project_id, task_id, "mcp-1"),
+        &test_caller(boot.human_id),
+    )
+    .await
+    .unwrap();
     assert_eq!(second["event_id"], first["event_id"]);
     assert_eq!(second["processing_status"], "duplicate");
 }
@@ -213,7 +227,8 @@ async fn submission_status_aggregates_event_proposals_and_latest_run(pool: PgPoo
     let empty = get_submission_status(
         &pool,
         SubmissionStatusArgs { event_id },
-     &test_caller(boot.human_id))
+        &test_caller(boot.human_id),
+    )
     .await
     .unwrap();
     assert_eq!(empty["event_id"], json!(event_id));
@@ -224,8 +239,7 @@ async fn submission_status_aggregates_event_proposals_and_latest_run(pool: PgPoo
     // The pipeline's output: one run with two proposals out of order, then a
     // newer run (status only) — the tool must show the proposals of all runs
     // of the event ordered by seq and the newest run's status.
-    let run_old = insert_analysis_run(&pool, boot.project_id, event_id, "succeeded", "now()")
-        .await;
+    let run_old = insert_analysis_run(&pool, boot.project_id, event_id, "succeeded", "now()").await;
     let run_new = insert_analysis_run(
         &pool,
         boot.project_id,
@@ -234,15 +248,41 @@ async fn submission_status_aggregates_event_proposals_and_latest_run(pool: PgPoo
         "now() + interval '1 hour'",
     )
     .await;
-    let p1 = insert_proposal(&pool, boot.project_id, run_old, 1, "update_task_status", "executed")
-        .await;
-    let p0 = insert_proposal(&pool, boot.project_id, run_old, 0, "create_task", "proposed").await;
-    let _ = insert_proposal(&pool, boot.project_id, run_new, 0, "update_task_status", "proposed")
-        .await;
+    let p1 = insert_proposal(
+        &pool,
+        boot.project_id,
+        run_old,
+        1,
+        "update_task_status",
+        "executed",
+    )
+    .await;
+    let p0 = insert_proposal(
+        &pool,
+        boot.project_id,
+        run_old,
+        0,
+        "create_task",
+        "proposed",
+    )
+    .await;
+    let _ = insert_proposal(
+        &pool,
+        boot.project_id,
+        run_new,
+        0,
+        "update_task_status",
+        "proposed",
+    )
+    .await;
 
-    let full = get_submission_status(&pool, SubmissionStatusArgs { event_id }, &test_caller(boot.human_id))
-        .await
-        .unwrap();
+    let full = get_submission_status(
+        &pool,
+        SubmissionStatusArgs { event_id },
+        &test_caller(boot.human_id),
+    )
+    .await
+    .unwrap();
     assert_eq!(full["status"], "received");
     assert_eq!(
         full["analysis_run"],
@@ -263,14 +303,14 @@ async fn submission_status_aggregates_event_proposals_and_latest_run(pool: PgPoo
     assert_eq!(seq0.len(), 2);
     assert!(
         seq0.iter().any(|p| p["id"] == json!(p0))
-            && seq0.iter().all(|p| p["command_type"] == "update_task_status"
-                || p["command_type"] == "create_task")
+            && seq0
+                .iter()
+                .all(|p| p["command_type"] == "update_task_status"
+                    || p["command_type"] == "create_task")
     );
-    assert!(
-        proposals
-            .windows(2)
-            .all(|w| w[0]["proposal_seq"].as_i64() <= w[1]["proposal_seq"].as_i64())
-    );
+    assert!(proposals
+        .windows(2)
+        .all(|w| w[0]["proposal_seq"].as_i64() <= w[1]["proposal_seq"].as_i64()));
 }
 
 /// Step 1 test 3a: `pm_get_task_context` returns the task snapshot for a task
@@ -286,7 +326,8 @@ async fn task_context_returns_task_of_own_project(pool: PgPool) {
             project_id: boot.project_id,
             task_ref: task_id.to_string(),
         },
-     &test_caller(boot.human_id))
+        &test_caller(boot.human_id),
+    )
     .await
     .unwrap();
     assert_eq!(context["task_id"], json!(task_id));
@@ -311,7 +352,8 @@ async fn task_context_of_another_project_is_a_tool_error(pool: PgPool) {
             project_id: boot_b.project_id,
             task_ref: task_id.to_string(),
         },
-     &test_caller(boot_a.human_id))
+        &test_caller(boot_a.human_id),
+    )
     .await
     .unwrap_err();
     assert!(matches!(err, ToolError::NotFound(_)), "got {err:?}");
@@ -335,15 +377,19 @@ async fn unknown_project_and_event_are_tool_errors(pool: PgPool) {
             fixture: "cache_overlap".to_string(),
             summary: "s".to_string(),
         },
-     &test_caller(boot.human_id))
+        &test_caller(boot.human_id),
+    )
     .await
     .unwrap_err();
     assert!(matches!(err, ToolError::NotFound(_)), "got {err:?}");
 
     let err = get_submission_status(
         &pool,
-        SubmissionStatusArgs { event_id: Uuid::new_v4() },
-     &test_caller(boot.human_id))
+        SubmissionStatusArgs {
+            event_id: Uuid::new_v4(),
+        },
+        &test_caller(boot.human_id),
+    )
     .await
     .unwrap_err();
     assert!(matches!(err, ToolError::NotFound(_)), "got {err:?}");
@@ -362,18 +408,21 @@ async fn streamable_http_smoke_lists_tools_and_serves_calls(pool: PgPool) {
     let caller_human = boot_pre.human_id;
     let app = axum::Router::new()
         .nest_service("/mcp", service)
-        .layer(axum::middleware::from_fn(move |mut req: axum::extract::Request, next: axum::middleware::Next| {
-            let human = pm_application::caller::HumanActor {
-                principal_id: caller_human,
-                tenant_id: SYSTEM_TENANT,
-                identity_id: None,
-                client: Some("smoke".into()),
-                auth_mode: "api_key".into(),
-            };
-            req.extensions_mut().insert(human);
-            req.extensions_mut().insert(pm_application::caller::DeviceClaim::absent());
-            next.run(req)
-        }));
+        .layer(axum::middleware::from_fn(
+            move |mut req: axum::extract::Request, next: axum::middleware::Next| {
+                let human = pm_application::caller::HumanActor {
+                    principal_id: caller_human,
+                    tenant_id: SYSTEM_TENANT,
+                    identity_id: None,
+                    client: Some("smoke".into()),
+                    auth_mode: "api_key".into(),
+                };
+                req.extensions_mut().insert(human);
+                req.extensions_mut()
+                    .insert(pm_application::caller::DeviceClaim::absent());
+                next.run(req)
+            },
+        ));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {

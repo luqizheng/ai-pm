@@ -28,8 +28,13 @@ async fn list_approvers(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-        .await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
     let items = approver::list_approvers(&state.pool, project_id).await?;
     Ok(Json(serde_json::json!({ "items": items })))
 }
@@ -40,8 +45,13 @@ async fn grant_approver(
     Path(project_id): Path<Uuid>,
     Json(body): Json<GrantApproverBody>,
 ) -> ApiResult<(axum::http::StatusCode, Json<serde_json::Value>)> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-        .await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
     let view = approver::grant_approver(
         &state.pool,
         caller.tenant_id,
@@ -61,15 +71,14 @@ async fn revoke_approver(
     Extension(caller): Extension<AuthedPrincipal>,
     Path((project_id, principal_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-        .await?;
-    approver::revoke_approver(
+    require_project_visible(
         &state.pool,
         project_id,
-        principal_id,
-        &caller.audit_actor(),
+        caller.tenant_id,
+        caller.principal_id,
     )
     .await?;
+    approver::revoke_approver(&state.pool, project_id, principal_id, &caller.audit_actor()).await?;
     Ok(Json(serde_json::json!({
         "principal_id": principal_id,
         "revoked": true

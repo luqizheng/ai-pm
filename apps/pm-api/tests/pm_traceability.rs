@@ -2,11 +2,11 @@
 //! 来源登记/关联/解除全链 + Finding 支撑关联 + 跨项目 finding 404（negative_4 同语义）+
 //! 重复关联 409 + AI 主体 403（§7.4 职责表）+ 非成员 404 + archived 需求拒绝关联 + 审计断言。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
 use pm_application::actor::AuditActor;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::pm_write::PmWriteError;
 use pm_application::requirement::{self, CreateRequirementRequest};
 use pm_application::requirement_traceability::{self, RegisterSourceInputRequest};
@@ -31,7 +31,10 @@ async fn send(pool: &PgPool, req: Request<Body>) -> (StatusCode, serde_json::Val
     let response = router(pool.clone()).oneshot(req).await.unwrap();
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 async fn seed(pool: &PgPool, code: &str) -> Uuid {
@@ -113,9 +116,7 @@ async fn create_finding_via_rest(pool: &PgPool, project_id: Uuid) -> Uuid {
         &pool,
         request(
             "POST",
-            &format!(
-                "/v1/pm/projects/{project_id}/discovery/sessions/{session_id}/findings"
-            ),
+            &format!("/v1/pm/projects/{project_id}/discovery/sessions/{session_id}/findings"),
             Some(serde_json::json!({
                 "kind": "observed",
                 "content": "qa traceability finding",
@@ -174,7 +175,10 @@ async fn t_source_flow_registers_links_and_lists(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::CREATED, "body: {body}");
     assert_eq!(body["relation"], "source");
-    assert_eq!(audit_count(&pool, "requirement.source_linked", rid).await, 1);
+    assert_eq!(
+        audit_count(&pool, "requirement.source_linked", rid).await,
+        1
+    );
 
     // 重复关联 → 409
     let (status, _) = send(
@@ -190,7 +194,11 @@ async fn t_source_flow_registers_links_and_lists(pool: PgPool) {
 
     let (status, body) = send(
         &pool,
-        request("GET", &format!("/v1/pm/requirements/{rid}/source-inputs"), None),
+        request(
+            "GET",
+            &format!("/v1/pm/requirements/{rid}/source-inputs"),
+            None,
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -208,10 +216,17 @@ async fn t_source_flow_registers_links_and_lists(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    assert_eq!(audit_count(&pool, "requirement.source_unlinked", rid).await, 1);
+    assert_eq!(
+        audit_count(&pool, "requirement.source_unlinked", rid).await,
+        1
+    );
     let (status, body) = send(
         &pool,
-        request("GET", &format!("/v1/pm/requirements/{rid}/source-inputs"), None),
+        request(
+            "GET",
+            &format!("/v1/pm/requirements/{rid}/source-inputs"),
+            None,
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -235,7 +250,10 @@ async fn t_finding_link_flow_and_audit(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::CREATED, "body: {body}");
     assert_eq!(body["relation"], "supports");
-    assert_eq!(audit_count(&pool, "requirement.finding_linked", rid).await, 1);
+    assert_eq!(
+        audit_count(&pool, "requirement.finding_linked", rid).await,
+        1
+    );
 
     let (status, body) = send(
         &pool,
@@ -258,7 +276,10 @@ async fn t_finding_link_flow_and_audit(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    assert_eq!(audit_count(&pool, "requirement.finding_unlinked", rid).await, 1);
+    assert_eq!(
+        audit_count(&pool, "requirement.finding_unlinked", rid).await,
+        1
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -331,7 +352,11 @@ async fn t_non_member_source_inputs_404(pool: PgPool) {
     // dev-off 是 outsider 项目成员、不是 project_id 项目成员 → 需求端点 404。
     let (status, _) = send(
         &pool,
-        request("GET", &format!("/v1/pm/requirements/{rid}/source-inputs"), None),
+        request(
+            "GET",
+            &format!("/v1/pm/requirements/{rid}/source-inputs"),
+            None,
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);

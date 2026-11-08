@@ -16,11 +16,11 @@
 //! | 其他 | 500 | `internal` |
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
+    Json, Router,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -28,14 +28,11 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiResult, require_project_visible};
+use crate::support::{require_project_visible, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
-        .route(
-            "/v1/pm/review-approvals",
-            get(list_handler),
-        )
+        .route("/v1/pm/review-approvals", get(list_handler))
         .route(
             "/v1/pm/review-approvals/{approval_id}/decision",
             post(decision_handler),
@@ -59,7 +56,9 @@ async fn list_handler(
     let project_id = params
         .get("project_id")
         .and_then(|value| Uuid::parse_str(value).ok())
-        .ok_or(crate::support::ApiError::BadRequest("project_id is required"))?;
+        .ok_or(crate::support::ApiError::BadRequest(
+            "project_id is required",
+        ))?;
     require_project_visible(
         &state.pool,
         project_id,

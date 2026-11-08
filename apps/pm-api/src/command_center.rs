@@ -9,9 +9,9 @@
 //! - **不返回 0 冒充「没有事项」**：不可用与空集合严格区分（契约 §2/§7.5）。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, Query, State},
     routing::get,
+    Json, Router,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiResult, require_project_visible};
+use crate::support::{require_project_visible, ApiResult};
 
 /// 活动流分页参数（契约 §1：只有「最近活动」块开放分页）。
 #[derive(Debug, Deserialize)]

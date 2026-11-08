@@ -1,4 +1,4 @@
-﻿//! Slice D2 MCP 层契约测试
+//! Slice D2 MCP 层契约测试
 //! （`docs/ai-pm-slice-d2-mcp-context-v1.md` §七：C3/C4/C5/C6/C11/C18/C24/C25）。
 //!
 //! 这一层只验证**工具形状与错误契约**：字段值来自真实库，`ToolError` 映射到
@@ -10,17 +10,17 @@ use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::pm_write::{
     update_task, AcceptanceCriterionInput, DeliverableInput, KnowledgeRefInput, UpdateTaskRequest,
 };
+use pm_domain::SYSTEM_TENANT;
 use pm_mcp::tools::{
     claim_task, get_run_context, report_progress, submit_result, submit_result_with, ClaimTaskArgs,
-    KnowledgeProposalInput, ReportProgressArgs, RunContextArgs, SubmitResultArgs, SubmittedRepository,
-    ToolError,
+    KnowledgeProposalInput, ReportProgressArgs, RunContextArgs, SubmitResultArgs,
+    SubmittedRepository, ToolError,
 };
 use serde::Deserialize;
 use serde_json::Value;
 use sqlx::PgPool;
 use std::path::Path;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 /// T-088：直调工具函数用的测试调用人（SYSTEM_TENANT 成员；设备声明缺席）。
 fn test_caller(human_id: Uuid) -> pm_application::caller::CallerContext {
@@ -218,7 +218,8 @@ async fn claim(pool: &PgPool, fx: &Fx) -> Value {
             client_name: "codex".to_string(),
             client_version: Some("1.2.0".to_string()),
         },
-     &test_caller(fx.human_id))
+        &test_caller(fx.human_id),
+    )
     .await
     .unwrap()
 }
@@ -337,28 +338,36 @@ async fn c3_c4_c24_c25_contract_shape_and_values(pool: PgPool) {
         project_id: fx.project_id,
         run_id: claimed["run_id"].as_str().unwrap().parse().unwrap(),
         lease_token: claimed["lease_token"].as_str().unwrap().to_string(),
-            lease_generation: claimed["lease_generation"].as_i64().unwrap() as i32,
+        lease_generation: claimed["lease_generation"].as_i64().unwrap() as i32,
     };
-    let value = get_run_context(&pool, args, &test_caller(fx.human_id)).await.unwrap();
+    let value = get_run_context(&pool, args, &test_caller(fx.human_id))
+        .await
+        .unwrap();
 
     // C4：schema 校验（deny_unknown_fields 同时保证未知字段为 0）。
     let mirror: ContractMirror = serde_json::from_value(value.clone())
         .unwrap_or_else(|err| panic!("contract shape drifted: {err}: {value}"));
     assert_eq!(mirror.contract_version, 1);
     assert_eq!(mirror.run.timeout_seconds, Some(1800));
-    assert_eq!(mirror.task.goal.as_deref(), Some("确定 Bevy 2D 地形高度晕渲方案"));
+    assert_eq!(
+        mirror.task.goal.as_deref(),
+        Some("确定 Bevy 2D 地形高度晕渲方案")
+    );
     // I4-E：本 fixture 未建立 Goal → 显式 null（缺失是信号，不是错误）。
-    assert!(mirror.goal.is_none(), "goal must be an explicit null when absent");
+    assert!(
+        mirror.goal.is_none(),
+        "goal must be an explicit null when absent"
+    );
     assert_eq!(mirror.acceptance_criteria.len(), 2);
-    assert_eq!(mirror.acceptance_criteria[0].ordinal, 10, "C25: ordinal ascending");
+    assert_eq!(
+        mirror.acceptance_criteria[0].ordinal, 10,
+        "C25: ordinal ascending"
+    );
     assert_eq!(mirror.acceptance_criteria[1].ordinal, 20);
     assert_eq!(mirror.repositories.len(), 1);
     assert_eq!(mirror.repositories[0].name, "world-view");
     assert_eq!(mirror.knowledge_refs.len(), 1);
-    assert_eq!(
-        mirror.knowledge_refs[0].document_id,
-        fx.document_id
-    );
+    assert_eq!(mirror.knowledge_refs[0].document_id, fx.document_id);
     assert_eq!(
         mirror.knowledge_refs[0].revision_no,
         Some(2),
@@ -379,7 +388,8 @@ async fn c18_empty_contract_is_still_schema_valid(pool: PgPool) {
             lease_token: claimed["lease_token"].as_str().unwrap().to_string(),
             lease_generation: claimed["lease_generation"].as_i64().unwrap() as i32,
         },
-     &test_caller(fx.human_id))
+        &test_caller(fx.human_id),
+    )
     .await
     .unwrap();
     assert_eq!(value["acceptance_criteria"], serde_json::json!([]));
@@ -404,7 +414,8 @@ async fn c5_c6_errors_are_tool_errors_without_leaking_credentials(pool: PgPool) 
             lease_token: lease_token.clone(),
             lease_generation: 1,
         },
-     &test_caller(fx.human_id))
+        &test_caller(fx.human_id),
+    )
     .await
     .unwrap_err();
     assert!(matches!(err, ToolError::NotFound(_)));
@@ -418,7 +429,8 @@ async fn c5_c6_errors_are_tool_errors_without_leaking_credentials(pool: PgPool) 
             lease_token: "wrong-token".to_string(),
             lease_generation: 1,
         },
-     &test_caller(fx.human_id))
+        &test_caller(fx.human_id),
+    )
     .await
     .unwrap_err();
     assert!(matches!(err, ToolError::Forbidden(_)));
@@ -428,11 +440,13 @@ async fn c5_c6_errors_are_tool_errors_without_leaking_credentials(pool: PgPool) 
     assert!(!text.contains("mcp:codex"));
 
     // 租约过期 → LeaseExpired。
-    sqlx::query("UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1")
-        .bind(run_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     let err = get_run_context(
         &pool,
         RunContextArgs {
@@ -441,7 +455,8 @@ async fn c5_c6_errors_are_tool_errors_without_leaking_credentials(pool: PgPool) 
             lease_token,
             lease_generation: 1,
         },
-     &test_caller(fx.human_id))
+        &test_caller(fx.human_id),
+    )
     .await
     .unwrap_err();
     assert!(matches!(err, ToolError::LeaseExpired(_)));
@@ -456,13 +471,12 @@ async fn c11_submit_result_rejects_a_repository_outside_the_contract(pool: PgPoo
     let claimed = claim(&pool, &fx).await;
     let run_id: Uuid = claimed["run_id"].as_str().unwrap().parse().unwrap();
 
-    let before_task: (String, i64) = sqlx::query_as(
-        "SELECT t.status, t.revision FROM delivery.task t WHERE t.id = $1",
-    )
-    .bind(fx.task_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let before_task: (String, i64) =
+        sqlx::query_as("SELECT t.status, t.revision FROM delivery.task t WHERE t.id = $1")
+            .bind(fx.task_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     let value = submit_result(
         &pool,
@@ -485,7 +499,8 @@ async fn c11_submit_result_rejects_a_repository_outside_the_contract(pool: PgPoo
                 change_summary: "update terrain ADR".to_string(),
             }],
         },
-     &test_caller(fx.human_id))
+        &test_caller(fx.human_id),
+    )
     .await
     .unwrap();
 
@@ -497,15 +512,17 @@ async fn c11_submit_result_rejects_a_repository_outside_the_contract(pool: PgPoo
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(commits, 0, "a rejected submission must not land any commit row");
+    assert_eq!(
+        commits, 0,
+        "a rejected submission must not land any commit row"
+    );
 
-    let after_task: (String, i64) = sqlx::query_as(
-        "SELECT t.status, t.revision FROM delivery.task t WHERE t.id = $1",
-    )
-    .bind(fx.task_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let after_task: (String, i64) =
+        sqlx::query_as("SELECT t.status, t.revision FROM delivery.task t WHERE t.id = $1")
+            .bind(fx.task_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(
         after_task, before_task,
         "a rejected submission must not move the task"
@@ -531,13 +548,12 @@ async fn c84_c85_submit_result_lands_the_delivery_and_replays(pool: PgPool) {
 
     // 交付校验跑在**实际 Git 工作区**上：先造出工作区与基线 commit，再领取
     // Run（领取时的基线快照必须等于工作区的初始 HEAD）。
-    let repository_id: Uuid = sqlx::query_scalar(
-        "SELECT repository_id FROM delivery.task_repository WHERE task_id = $1",
-    )
-    .bind(fx.task_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let repository_id: Uuid =
+        sqlx::query_scalar("SELECT repository_id FROM delivery.task_repository WHERE task_id = $1")
+            .bind(fx.task_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     let workspace_path: String =
         pm_application::run_dispatch::workspace_path_for(repository_id, "world-view");
     let workspace_root = std::env::temp_dir().join(format!("ai-pm-d4-mcp-{}", Uuid::new_v4()));
@@ -548,37 +564,41 @@ async fn c84_c85_submit_result_lands_the_delivery_and_replays(pool: PgPool) {
     let lease_token = claimed["lease_token"].as_str().unwrap().to_string();
     let lease_generation = claimed["lease_generation"].as_i64().unwrap() as i32;
 
-    let worktree = workspace_root.join(run_id.to_string()).join(&workspace_path);
+    let worktree = workspace_root
+        .join(run_id.to_string())
+        .join(&workspace_path);
     std::fs::create_dir_all(&worktree).unwrap();
     git(&worktree, &["init", "-q", "-b", "main"]);
     std::fs::write(worktree.join("README.md"), "# base\n").unwrap();
     git(&worktree, &["add", "."]);
-    git(&worktree, &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "base"]);
+    git(
+        &worktree,
+        &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "base"],
+    );
     let base_commit = head_sha(&worktree);
 
     // 领取快照的基线是 `task_repository.base_commit`——把它对齐到工作区 HEAD，
     // 否则库层防篡改（基线比对）会先于 git 校验驳回。
-    sqlx::query(
-        "UPDATE delivery.task_repository SET base_commit = $2 WHERE task_id = $1",
-    )
-    .bind(fx.task_id)
-    .bind(&base_commit)
-    .execute(&pool)
-    .await
-    .unwrap();
-    sqlx::query(
-        "UPDATE delivery.task_run_repository SET base_commit = $2 WHERE run_id = $1",
-    )
-    .bind(run_id)
-    .bind(&base_commit)
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE delivery.task_repository SET base_commit = $2 WHERE task_id = $1")
+        .bind(fx.task_id)
+        .bind(&base_commit)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE delivery.task_run_repository SET base_commit = $2 WHERE run_id = $1")
+        .bind(run_id)
+        .bind(&base_commit)
+        .execute(&pool)
+        .await
+        .unwrap();
 
     // 落一个新 commit 作为交付结果。
     std::fs::write(worktree.join("change.md"), "changed\n").unwrap();
     git(&worktree, &["add", "."]);
-    git(&worktree, &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "change"]);
+    git(
+        &worktree,
+        &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "change"],
+    );
     let commit_sha = head_sha(&worktree);
 
     // 执行器首报 `started` → 任务 `claimed → running`。交付迁移的合法边是
@@ -594,7 +614,8 @@ async fn c84_c85_submit_result_lands_the_delivery_and_replays(pool: PgPool) {
             note: None,
             blocked: false,
         },
-     &test_caller(fx.human_id))
+        &test_caller(fx.human_id),
+    )
     .await
     .unwrap();
 
@@ -620,7 +641,9 @@ async fn c84_c85_submit_result_lands_the_delivery_and_replays(pool: PgPool) {
     };
 
     // C84：成功提交 → 真实落库。
-    let value = submit_result_with(&pool, args.clone(), &options, &test_caller(fx.human_id)).await.unwrap();
+    let value = submit_result_with(&pool, args.clone(), &options, &test_caller(fx.human_id))
+        .await
+        .unwrap();
     assert_eq!(value["outcome"], "accepted");
     assert_eq!(value["integration_status"], "passed");
     assert_eq!(value["commit_count"], 1);
@@ -639,13 +662,15 @@ async fn c84_c85_submit_result_lands_the_delivery_and_replays(pool: PgPool) {
             .unwrap();
     assert_eq!(stored_integration, "passed");
 
-    let task_status: String =
-        sqlx::query_scalar("SELECT status FROM delivery.task WHERE id = $1")
-            .bind(fx.task_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(task_status, "submitted", "the task must advance to submitted");
+    let task_status: String = sqlx::query_scalar("SELECT status FROM delivery.task WHERE id = $1")
+        .bind(fx.task_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        task_status, "submitted",
+        "the task must advance to submitted"
+    );
 
     let submitted_audits: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM governance.audit_log WHERE action = 'delivery.submitted'",
@@ -656,7 +681,9 @@ async fn c84_c85_submit_result_lands_the_delivery_and_replays(pool: PgPool) {
     assert_eq!(submitted_audits, 1);
 
     // C85：重复请求 → 幂等返回原结果，不产生第二份审计。
-    let replay = submit_result_with(&pool, args, &options, &test_caller(fx.human_id)).await.unwrap();
+    let replay = submit_result_with(&pool, args, &options, &test_caller(fx.human_id))
+        .await
+        .unwrap();
     assert_eq!(replay["outcome"], "accepted");
     assert_eq!(replay["commit_count"], 1);
     let commits_after: i64 =
@@ -664,14 +691,20 @@ async fn c84_c85_submit_result_lands_the_delivery_and_replays(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(commits_after, 1, "the replay must not land a second commit row");
+    assert_eq!(
+        commits_after, 1,
+        "the replay must not land a second commit row"
+    );
     let audits_after: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM governance.audit_log WHERE action = 'delivery.submitted'",
     )
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(audits_after, 1, "the replay must not produce a second audit");
+    assert_eq!(
+        audits_after, 1,
+        "the replay must not produce a second audit"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -691,7 +724,8 @@ async fn report_progress_tool_renews_and_reports(pool: PgPool) {
             note: Some("located the renderer".to_string()),
             blocked: false,
         },
-     &test_caller(fx.human_id))
+        &test_caller(fx.human_id),
+    )
     .await
     .unwrap();
     assert_eq!(value["task_status"], "running");

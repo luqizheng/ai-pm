@@ -12,14 +12,14 @@
 //! `governance.tenant_audit_log`。审计失败即整体回滚。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, patch, post},
+    Json, Router,
 };
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -233,10 +233,20 @@ async fn owner_transfer_handler(
 
 #[derive(Debug, Clone, Copy)]
 enum MemberOp {
-    Add { principal_id: Uuid, role: TenantRole },
-    SetRole { principal_id: Uuid, role: TenantRole },
-    Remove { principal_id: Uuid },
-    TransferOwner { new_owner: Uuid },
+    Add {
+        principal_id: Uuid,
+        role: TenantRole,
+    },
+    SetRole {
+        principal_id: Uuid,
+        role: TenantRole,
+    },
+    Remove {
+        principal_id: Uuid,
+    },
+    TransferOwner {
+        new_owner: Uuid,
+    },
 }
 
 impl MemberOp {
@@ -274,11 +284,12 @@ async fn apply_member_change(
     // 1) 锁租户行：同一租户的所有成员变更串行化。只锁 owner 行不够——两个
     //    事务可以各锁不同的 owner 行，在 READ COMMITTED 下同时读到
     //    「owner 数 = 2」而互相降级，最终剩 0 个 owner。
-    let locked: Option<Uuid> = sqlx::query_scalar("SELECT id FROM core.tenant WHERE id = $1 FOR UPDATE")
-        .bind(tenant_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(db_error)?;
+    let locked: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM core.tenant WHERE id = $1 FOR UPDATE")
+            .bind(tenant_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db_error)?;
     if locked.is_none() {
         return Err(err_not_found("tenant not found"));
     }
@@ -313,17 +324,24 @@ async fn apply_member_change(
     .map_err(db_error)?;
     let target_role = target_role.as_deref().and_then(TenantRole::parse);
 
-    let owner_count: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM core.tenant_member WHERE tenant_id = $1 AND role = 'owner'")
-            .bind(tenant_id)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(db_error)?;
+    let owner_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.tenant_member WHERE tenant_id = $1 AND role = 'owner'",
+    )
+    .bind(tenant_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(db_error)?;
 
     let Plan {
         outcome: plan_outcome,
         mut audits,
-    } = authorize(actor_role, op, target_role, owner_count, caller.principal_id)?;
+    } = authorize(
+        actor_role,
+        op,
+        target_role,
+        owner_count,
+        caller.principal_id,
+    )?;
     let seen = actor_record(caller);
 
     // S01-W13：移除租户成员前，若该人是某项目的 owner，则**拒绝移除**——
@@ -493,7 +511,10 @@ fn authorize(
     match op {
         MemberOp::Add { principal_id, role } => {
             if role == TenantRole::Owner {
-                return Err(conflict("USE_OWNER_TRANSFER", "use POST .../owner-transfer"));
+                return Err(conflict(
+                    "USE_OWNER_TRANSFER",
+                    "use POST .../owner-transfer",
+                ));
             }
             if role == TenantRole::Admin && actor_role != TenantRole::Owner {
                 return Err(err_forbidden("admin cannot grant admin"));
@@ -515,7 +536,10 @@ fn authorize(
 
         MemberOp::SetRole { principal_id, role } => {
             if role == TenantRole::Owner {
-                return Err(conflict("USE_OWNER_TRANSFER", "use POST .../owner-transfer"));
+                return Err(conflict(
+                    "USE_OWNER_TRANSFER",
+                    "use POST .../owner-transfer",
+                ));
             }
             let current = target_role.ok_or_else(|| err_not_found("member not found"))?;
 

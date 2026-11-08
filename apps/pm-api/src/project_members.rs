@@ -13,18 +13,18 @@
 //! - 跨租户与不可见项目一律 404（不可见即不存在）。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
+    Json, Router,
 };
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
 use pm_application::project_member::{
-    MemberOp, ProjectMemberError, apply_member_change, caller_can_see_members, list_members,
+    apply_member_change, caller_can_see_members, list_members, MemberOp, ProjectMemberError,
 };
 
 use crate::auth::AuthedPrincipal;
@@ -204,9 +204,11 @@ fn map_error(err: ProjectMemberError) -> Response {
     match err {
         ProjectMemberError::NotFound(_) => not_found("project not found"),
         ProjectMemberError::Forbidden(_) => forbidden("project owner required"),
-        ProjectMemberError::Conflict { code, message } => {
-            (StatusCode::CONFLICT, Json(json!({ "code": code, "message": message }))).into_response()
-        }
+        ProjectMemberError::Conflict { code, message } => (
+            StatusCode::CONFLICT,
+            Json(json!({ "code": code, "message": message })),
+        )
+            .into_response(),
         ProjectMemberError::Db(_) => {
             tracing::error!(error = %err, "project member operation failed");
             db_error()

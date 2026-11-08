@@ -1,20 +1,20 @@
-﻿//! 主体身份验收（T-021a / `docs/ai-pm-principal-identity-v1.md` §11 C29–C42）。
+//! 主体身份验收（T-021a / `docs/ai-pm-principal-identity-v1.md` §11 C29–C42）。
 //!
 //! 驱动 `router_with_auth_config`（显式首管理员配置，避免改进程环境变量）；
 //! 签名沿用 `tests/keys/` 的测试密钥对。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use digua_common_jwt::{JWKSCache, sign_token};
+use digua_common_jwt::{sign_token, JWKSCache};
 use pm_api::auth::AuthConfig;
 use pm_api::routes::{router, router_with_auth_config};
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use serde_json::{Value, json};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_domain::SYSTEM_TENANT;
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 use tower::ServiceExt;
-use pm_domain::SYSTEM_TENANT;
 use uuid::Uuid;
 
 const PRIVATE_PEM: &str = include_str!("keys/private.pem");
@@ -134,7 +134,11 @@ async fn c31_cross_tenant_token_is_rejected_without_provisioning(pool: PgPool) {
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
     assert_eq!(body_json(response).await["code"], json!("IAM_PERM_3004"));
-    assert_eq!(human_principals(&pool).await, 0, "cross-tenant tokens must not provision");
+    assert_eq!(
+        human_principals(&pool).await,
+        0,
+        "cross-tenant tokens must not provision"
+    );
 }
 
 // ----------------------------------------------------------- C32 / C33 / C34
@@ -149,7 +153,11 @@ async fn c32_first_sight_provisions_an_inactive_principal(pool: PgPool) {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let body = body_json(response).await;
-    assert_eq!(body["is_active"], json!(false), "unknown identities start inactive");
+    assert_eq!(
+        body["is_active"],
+        json!(false),
+        "unknown identities start inactive"
+    );
     assert_eq!(body["is_admin"], json!(false));
     assert_eq!(body["claims_tenant_key"], json!("1"));
     assert_eq!(body["auth_mode"], json!("interactive"));
@@ -314,7 +322,11 @@ async fn c38_actor_is_the_caller_not_the_project_owner(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_ne!(actor_id, begin.human_id.to_string(), "must not fall back to owner");
+    assert_ne!(
+        actor_id,
+        begin.human_id.to_string(),
+        "must not fall back to owner"
+    );
 }
 
 // ------------------------------------------------------------- C36 / C37
@@ -323,8 +335,12 @@ async fn c38_actor_is_the_caller_not_the_project_owner(pool: PgPool) {
 async fn c36_concurrent_first_login_creates_one_principal(pool: PgPool) {
     let app = router_with_auth_config(pool.clone(), test_jwks(), AuthConfig::default());
     let token = browser_token("usr-race", json!([]));
-    let first = app.clone().oneshot(request("GET", "/v1/pm/me", &token, None));
-    let second = app.clone().oneshot(request("GET", "/v1/pm/me", &token, None));
+    let first = app
+        .clone()
+        .oneshot(request("GET", "/v1/pm/me", &token, None));
+    let second = app
+        .clone()
+        .oneshot(request("GET", "/v1/pm/me", &token, None));
     let (a, b) = tokio::join!(first, second);
     assert_eq!(a.unwrap().status(), StatusCode::OK);
     assert_eq!(b.unwrap().status(), StatusCode::OK);
@@ -410,12 +426,10 @@ async fn c40_last_seen_is_throttled_to_five_minutes(pool: PgPool) {
         .oneshot(request("GET", "/v1/pm/me", &token, None))
         .await
         .unwrap();
-    sqlx::query(
-        "UPDATE core.principal_identity SET last_seen_at = now() - interval '6 minutes'",
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE core.principal_identity SET last_seen_at = now() - interval '6 minutes'")
+        .execute(&pool)
+        .await
+        .unwrap();
     app.clone()
         .oneshot(request("GET", "/v1/pm/me", &token, None))
         .await
@@ -426,7 +440,10 @@ async fn c40_last_seen_is_throttled_to_five_minutes(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert!(advanced, "a request older than the throttle window must refresh last_seen_at");
+    assert!(
+        advanced,
+        "a request older than the throttle window must refresh last_seen_at"
+    );
 
     let before: chrono::DateTime<chrono::Utc> =
         sqlx::query_scalar("SELECT last_seen_at FROM core.principal_identity")
@@ -441,7 +458,10 @@ async fn c40_last_seen_is_throttled_to_five_minutes(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(before, after, "requests inside the throttle window must not write");
+    assert_eq!(
+        before, after,
+        "requests inside the throttle window must not write"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]

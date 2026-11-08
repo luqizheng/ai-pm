@@ -13,8 +13,8 @@ use std::path::PathBuf;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use pm_application::knowledge::{CreateDocumentRequest, KnowledgeRoot, create_document};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_application::knowledge::{create_document, CreateDocumentRequest, KnowledgeRoot};
 use serde_json::Value;
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -96,7 +96,10 @@ async fn k12_and_k20_search_response_contract_and_failure_grading(pool: PgPool) 
     let items = body["items"].as_array().expect("items must be an array");
     assert_eq!(items.len(), 1);
     let hit = &items[0];
-    assert!(hit.get("section").is_some(), "section must stay in the payload");
+    assert!(
+        hit.get("section").is_some(),
+        "section must stay in the payload"
+    );
     assert!(hit.get("score").is_some(), "score must stay in the payload");
     assert!(
         hit.get("revision_id").is_none(),

@@ -12,8 +12,8 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::auth::AuthedPrincipal;
-use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
 use crate::routes::AppState;
+use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new().route(
@@ -55,7 +55,13 @@ async fn submit_response(
     // 检查①（可见性）+ 检查②（auth_mode）：ensure_trusted_context 先例
     // （pm_requirements confirm 同门；A*：机器凭据无人类确认语义）。
     let project_id = interaction_project(&state.pool, interaction_id, &caller).await?;
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
     ensure_trusted_context(&caller)?;
 
     let input = pm_application::interaction::SubmitResponseInput {

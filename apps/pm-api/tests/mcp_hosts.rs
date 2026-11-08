@@ -45,7 +45,11 @@ async fn a_declared_cross_machine_host_is_served(pool: PgPool) {
         },
     );
     let response = app.oneshot(mcp_request("192.168.2.10:8090")).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK, "声明过的跨机 Host 必须可达");
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "声明过的跨机 Host 必须可达"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]

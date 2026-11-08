@@ -14,11 +14,11 @@
 
 mod common;
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use serde_json::{Value, json};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -109,7 +109,8 @@ async fn dead_letter_listing_is_project_scoped(pool: PgPool) {
         "only this project's dead letters may be listed"
     );
     assert_eq!(
-        body["total"], json!(2),
+        body["total"],
+        json!(2),
         "total is this project's dead letter count"
     );
     let ids: Vec<String> = body["items"]
@@ -143,7 +144,11 @@ async fn dead_letter_total_is_independent_of_the_page_size(pool: PgPool) {
         .await
         .unwrap();
     let body = body_json(response).await;
-    assert_eq!(body["items"].as_array().unwrap().len(), 1, "the page is truncated");
+    assert_eq!(
+        body["items"].as_array().unwrap().len(),
+        1,
+        "the page is truncated"
+    );
     assert_eq!(body["total"], json!(3), "total is the project-wide count");
 }
 

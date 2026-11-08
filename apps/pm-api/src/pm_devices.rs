@@ -11,11 +11,11 @@
 //! 错误体沿用 `support` 的 `{message}` 约定。身份沿用 `AuthedPrincipal`（T-021a）。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
+    Json, Router,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -24,9 +24,9 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use pm_application::devenv::{
-    BindingRow, DeviceChecks, DeviceDetail, DeviceError, DeviceRow, RegisterDeviceRequest,
     bind_project, get_device, list_devices, register_device, report_checks, revoke_device,
-    unbind_binding,
+    unbind_binding, BindingRow, DeviceChecks, DeviceDetail, DeviceError, DeviceRow,
+    RegisterDeviceRequest,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -325,8 +325,9 @@ async fn set_permissions_handler(
     )
     .await
     {
-        Ok(perms) => Json(json!({ "device_id": device_id, "granted_permissions": perms }))
-            .into_response(),
+        Ok(perms) => {
+            Json(json!({ "device_id": device_id, "granted_permissions": perms })).into_response()
+        }
         Err(pm_application::device_credential::DeviceCredentialError::NotFound) => (
             StatusCode::NOT_FOUND,
             Json(json!({ "code": "device_not_found", "message": "device not found" })),
@@ -392,13 +393,11 @@ fn binding_json(b: &BindingRow, project_accessible: Option<bool>) -> serde_json:
 
 fn detail_json(detail: &DeviceDetail) -> serde_json::Value {
     let mut v = device_json(&detail.device);
-    v["bindings"] = json!(
-        detail
-            .bindings
-            .iter()
-            .map(|bv| binding_json(&bv.binding, Some(bv.project_accessible)))
-            .collect::<Vec<_>>()
-    );
+    v["bindings"] = json!(detail
+        .bindings
+        .iter()
+        .map(|bv| binding_json(&bv.binding, Some(bv.project_accessible)))
+        .collect::<Vec<_>>());
     v
 }
 
@@ -409,7 +408,10 @@ fn map_err(e: DeviceError) -> Response {
         DeviceError::Validation(m) => (StatusCode::BAD_REQUEST, m),
         DeviceError::Db(m) => {
             tracing::error!(error = %m, "devenv internal error");
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal error".to_string())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal error".to_string(),
+            )
         }
     };
     (status, Json(json!({ "message": message }))).into_response()

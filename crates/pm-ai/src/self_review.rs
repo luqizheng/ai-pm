@@ -155,11 +155,8 @@ mod tests {
     #[test]
     fn sign_acceptance_red_line_requires_pre_confirmation_with_authorized_acceptor() {
         let policy = PolicyEngine::for_tests();
-        let outcomes = review_proposals(
-            &policy,
-            &[proposal(sign_acceptance(), Confidence::High)],
-            1,
-        );
+        let outcomes =
+            review_proposals(&policy, &[proposal(sign_acceptance(), Confidence::High)], 1);
         assert_eq!(
             outcomes,
             vec![ProposalOutcome::RequirePreConfirmation {
@@ -188,8 +185,7 @@ mod tests {
     fn blast_radius_strictly_above_threshold_escalates_at_threshold_does_not() {
         let policy = PolicyEngine::for_tests();
         // 11 > 10: escalates with the dynamic reason string.
-        let above =
-            review_proposals(&policy, &[proposal(create_task(), Confidence::High)], 11);
+        let above = review_proposals(&policy, &[proposal(create_task(), Confidence::High)], 11);
         assert_eq!(
             above,
             vec![ProposalOutcome::Escalate {
@@ -204,11 +200,8 @@ mod tests {
     #[test]
     fn red_line_wins_over_low_confidence_and_large_blast_radius() {
         let policy = PolicyEngine::for_tests();
-        let outcomes = review_proposals(
-            &policy,
-            &[proposal(sign_acceptance(), Confidence::Low)],
-            11,
-        );
+        let outcomes =
+            review_proposals(&policy, &[proposal(sign_acceptance(), Confidence::Low)], 11);
         assert_eq!(
             outcomes,
             vec![ProposalOutcome::RequirePreConfirmation {

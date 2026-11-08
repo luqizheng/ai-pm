@@ -4,10 +4,10 @@
 //! `supervision::decide_approval`（approve 执行提案命令、reject veto）。
 
 use axum::{
-    Json,
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
+    Json,
 };
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -29,14 +29,20 @@ fn conflict(message: &'static str) -> Response {
 // 写路径的租户边界在**对外入口**校验：目标行不属于调用者租户时一律 404
 // （不泄露存在性）。内部应用层函数继续只看 `project_id`（组合外键已保证同租户）。
 
-async fn project_in_tenant(pool: &sqlx::PgPool, project_id: Uuid, tenant_id: Uuid) -> ApiResult<()> {
+async fn project_in_tenant(
+    pool: &sqlx::PgPool,
+    project_id: Uuid,
+    tenant_id: Uuid,
+) -> ApiResult<()> {
     let found: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM core.project WHERE id = $1 AND tenant_id = $2")
             .bind(project_id)
             .bind(tenant_id)
             .fetch_optional(pool)
             .await?;
-    found.map(|_| ()).ok_or(ApiError::NotFound("unknown project"))
+    found
+        .map(|_| ())
+        .ok_or(ApiError::NotFound("unknown project"))
 }
 
 async fn task_in_tenant(pool: &sqlx::PgPool, task_id: Uuid, tenant_id: Uuid) -> ApiResult<()> {
@@ -151,9 +157,9 @@ pub(crate) async fn decide_handler(
             }
         }
         // decide_approval 内部的原子 UPDATE 兜并发（预检与执行之间被决策）。
-        Err(SupervisionError::Command(
-            pm_application::CommandError::AlreadyDecided { .. },
-        )) => conflict("already decided"),
+        Err(SupervisionError::Command(pm_application::CommandError::AlreadyDecided { .. })) => {
+            conflict("already decided")
+        }
         Err(SupervisionError::NotFound(_)) => (
             StatusCode::NOT_FOUND,
             Json(json!({ "message": "not found" })),

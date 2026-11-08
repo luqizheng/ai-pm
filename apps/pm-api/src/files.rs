@@ -25,12 +25,12 @@
 
 use crate::auth::AuthedPrincipal;
 use axum::{
-    Extension, Json, Router,
     body::Bytes,
     extract::{DefaultBodyLimit, Multipart, Path, Query, State},
-    http::{HeaderMap, StatusCode, header},
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
+    Extension, Json, Router,
 };
 use digua_common_jwt::{ServiceJwtCache, ServiceJwtConfig, ServiceJwtError};
 use digua_file_sdk::{CreatePresignUrl, FileClient, ListFilesQuery, SdkError, UploadFileMeta};
@@ -58,14 +58,16 @@ impl FileProxy {
         let bootstrap_token = match std::env::var("SERVICE_BOOTSTRAP_TOKEN") {
             Ok(t) if !t.trim().is_empty() => t,
             _ => {
-                tracing::info!("SERVICE_BOOTSTRAP_TOKEN unset — file proxy disabled (/v1/file/* → 503)");
+                tracing::info!(
+                    "SERVICE_BOOTSTRAP_TOKEN unset — file proxy disabled (/v1/file/* → 503)"
+                );
                 return None;
             }
         };
         let token_service_url = std::env::var("AI_PM_TOKEN_SERVICE_URL")
             .unwrap_or_else(|_| "http://token-service:8082".into());
-        let file_service_url = std::env::var("FILE_SERVICE_URL")
-            .unwrap_or_else(|_| "http://file-service:8082".into());
+        let file_service_url =
+            std::env::var("FILE_SERVICE_URL").unwrap_or_else(|_| "http://file-service:8082".into());
         // 内网地址：禁系统代理（与 main.rs JWKS client 同理由）。
         let shared_http = reqwest::Client::builder()
             .no_proxy()
@@ -133,9 +135,12 @@ fn svc_jwt_err(e: ServiceJwtError) -> Response {
 /// 服务 JWT 被拒是部署配置问题，不应把 401 泄漏给前端引发重新登录循环）。
 fn sdk_err(e: SdkError) -> Response {
     let (status, message) = match &e {
-        SdkError::Validation { status, message, .. } => {
-            (StatusCode::from_u16(*status).unwrap_or(StatusCode::BAD_REQUEST), message.clone())
-        }
+        SdkError::Validation {
+            status, message, ..
+        } => (
+            StatusCode::from_u16(*status).unwrap_or(StatusCode::BAD_REQUEST),
+            message.clone(),
+        ),
         SdkError::RateLimit { message, .. } => (StatusCode::TOO_MANY_REQUESTS, message.clone()),
         SdkError::Auth { message, .. } | SdkError::Server { message, .. } => {
             tracing::warn!(error = %e, "file proxy: upstream rejected service call");
@@ -151,7 +156,10 @@ pub(crate) fn router() -> Router<crate::routes::AppState> {
         .route("/v1/file/upload", post(upload_handler))
         .route("/v1/file/list", get(list_handler))
         .route("/v1/file/presign", post(presign_handler))
-        .route("/v1/file/{id}", get(download_handler).delete(delete_handler))
+        .route(
+            "/v1/file/{id}",
+            get(download_handler).delete(delete_handler),
+        )
         .route("/v1/file/{id}/info", get(info_handler))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
 }
@@ -218,7 +226,8 @@ async fn upload_handler(
             _ => {}
         }
     }
-    let meta = meta.ok_or_else(|| status_resp(StatusCode::BAD_REQUEST, "missing metadata field"))?;
+    let meta =
+        meta.ok_or_else(|| status_resp(StatusCode::BAD_REQUEST, "missing metadata field"))?;
     let data = data.ok_or_else(|| status_resp(StatusCode::BAD_REQUEST, "missing file field"))?;
 
     let token = px.token(&caller).await?;
@@ -316,8 +325,7 @@ async fn delete_handler(
         .send()
         .await
         .map_err(|e| status_resp(StatusCode::BAD_GATEWAY, format!("file delete: {e}")))?;
-    let status = StatusCode::from_u16(resp.status().as_u16())
-        .unwrap_or(StatusCode::BAD_GATEWAY);
+    let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
         return Err(map_upstream_status(status, &body, "file delete"));
@@ -345,7 +353,11 @@ fn map_upstream_status(status: StatusCode, body: &str, op: &str) -> Response {
     match status {
         StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
             tracing::warn!(op, %body, "file proxy: upstream rejected service call");
-            (StatusCode::BAD_GATEWAY, format!("{op}: upstream auth failure")).into_response()
+            (
+                StatusCode::BAD_GATEWAY,
+                format!("{op}: upstream auth failure"),
+            )
+                .into_response()
         }
         s if s.is_client_error() => (s, body.to_string()).into_response(),
         _ => (StatusCode::BAD_GATEWAY, format!("{op}: upstream failure")).into_response(),
@@ -464,7 +476,10 @@ mod tests {
         // token-service 收到的铸造请求必须带 tid=7
         let minted = &token_svc.received_requests().await.unwrap();
         let mint_body = String::from_utf8_lossy(&minted[0].body);
-        assert!(mint_body.contains("\"tid\":7"), "mint must be per-tenant: {mint_body}");
+        assert!(
+            mint_body.contains("\"tid\":7"),
+            "mint must be per-tenant: {mint_body}"
+        );
     }
 
     /// 非数字租户镜像 → 500（不外呼 file-service）。
@@ -487,7 +502,9 @@ mod tests {
             },
             &caller("7"),
         );
-        assert_eq!(out.user_id.as_deref(), Some(uuid::Uuid::nil().to_string().as_str()));
+        assert_eq!(
+            out.user_id.as_deref(),
+            Some(uuid::Uuid::nil().to_string().as_str())
+        );
     }
-
 }

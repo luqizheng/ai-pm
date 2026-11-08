@@ -111,9 +111,7 @@ pub enum LegacyMapping {
     /// is `AwaitingDecision` (`needs_info` → `NeedsInfo`, V3 L1).
     Mapped(TaskStatus, Option<WaitingReason>),
     /// Cannot be resolved without external facts; callers must resolve explicitly.
-    Ambiguous {
-        candidates: &'static [TaskStatus],
-    },
+    Ambiguous { candidates: &'static [TaskStatus] },
 }
 
 #[cfg(test)]

@@ -6,11 +6,11 @@
 //!   才产生新 published 修订；不得静默覆盖
 //! - I4-E：Run 契约带正式 Goal 快照（建立前 null）
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::caller::{CallerContext, DeviceClaim, HumanActor};
 use pm_application::knowledge::KnowledgeRoot;
 use pm_application::project_goal::{
-    self, GOAL_DOC_KEY, ensure_goal_document, goal_head_revision, load_official_goal,
+    self, ensure_goal_document, goal_head_revision, load_official_goal, GOAL_DOC_KEY,
 };
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
@@ -54,13 +54,19 @@ async fn goal_is_created_with_project_and_is_unique(pool: PgPool) {
     .unwrap();
 
     // 建立前：缺失是显式信号。
-    assert!(load_official_goal(&pool, boot.project_id).await.unwrap().is_none());
+    assert!(load_official_goal(&pool, boot.project_id)
+        .await
+        .unwrap()
+        .is_none());
 
     ensure_goal_document(&pool, &root, boot.project_id, boot.human_id)
         .await
         .unwrap();
 
-    let goal = load_official_goal(&pool, boot.project_id).await.unwrap().expect("goal exists");
+    let goal = load_official_goal(&pool, boot.project_id)
+        .await
+        .unwrap()
+        .expect("goal exists");
     assert_eq!(goal.revision_no, 1);
     assert!(!goal.content_hash.is_empty());
 
@@ -68,14 +74,16 @@ async fn goal_is_created_with_project_and_is_unique(pool: PgPool) {
     ensure_goal_document(&pool, &root, boot.project_id, boot.human_id)
         .await
         .unwrap();
-    let revisions: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.document_revision WHERE project_id = $1",
-    )
-    .bind(boot.project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(revisions, 1, "duplicate bootstrap must not create a revision");
+    let revisions: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ai.document_revision WHERE project_id = $1")
+            .bind(boot.project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        revisions, 1,
+        "duplicate bootstrap must not create a revision"
+    );
 
     let docs: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM ai.project_document WHERE project_id = $1 AND doc_key = $2",
@@ -129,9 +137,15 @@ async fn goal_modification_requires_proposal_and_human_confirmation(pool: PgPool
     )
     .await
     .unwrap();
-    assert_eq!(early["outcome"], "redline_pending", "agent goal proposal must pend: {early}");
+    assert_eq!(
+        early["outcome"], "redline_pending",
+        "agent goal proposal must pend: {early}"
+    );
     assert!(
-        load_official_goal(&pool, boot.project_id).await.unwrap().is_none(),
+        load_official_goal(&pool, boot.project_id)
+            .await
+            .unwrap()
+            .is_none(),
         "an unconfirmed agent proposal must not publish the goal"
     );
 
@@ -139,7 +153,10 @@ async fn goal_modification_requires_proposal_and_human_confirmation(pool: PgPool
     ensure_goal_document(&pool, &root, boot.project_id, boot.human_id)
         .await
         .unwrap();
-    let base = goal_head_revision(&pool, boot.project_id).await.unwrap().unwrap();
+    let base = goal_head_revision(&pool, boot.project_id)
+        .await
+        .unwrap()
+        .unwrap();
 
     let proposal = pm_mcp::tools::propose_document(
         &pool,
@@ -163,7 +180,10 @@ async fn goal_modification_requires_proposal_and_human_confirmation(pool: PgPool
     .unwrap();
 
     // 提案后 head 未变（未自动发布）。
-    let head_after_propose = goal_head_revision(&pool, boot.project_id).await.unwrap().unwrap();
+    let head_after_propose = goal_head_revision(&pool, boot.project_id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(head_after_propose, base, "agent proposal must not publish");
 
     // 人类确认红线 → 新 published 修订（revision 2）。
@@ -181,8 +201,14 @@ async fn goal_modification_requires_proposal_and_human_confirmation(pool: PgPool
     .await
     .unwrap();
 
-    let goal = load_official_goal(&pool, boot.project_id).await.unwrap().unwrap();
-    assert_eq!(goal.revision_no, 2, "human confirmation publishes revision 2");
+    let goal = load_official_goal(&pool, boot.project_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        goal.revision_no, 2,
+        "human confirmation publishes revision 2"
+    );
 
     cleanup(&root);
 }
@@ -205,7 +231,10 @@ async fn goal_proposal_with_stale_base_is_rejected(pool: PgPool) {
     ensure_goal_document(&pool, &root, boot.project_id, boot.human_id)
         .await
         .unwrap();
-    let base = goal_head_revision(&pool, boot.project_id).await.unwrap().unwrap();
+    let base = goal_head_revision(&pool, boot.project_id)
+        .await
+        .unwrap()
+        .unwrap();
 
     // 第一次提案 + 人类确认 → head 前进到 rev 2。
     let p1 = pm_mcp::tools::propose_document(

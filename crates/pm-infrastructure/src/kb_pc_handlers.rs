@@ -82,8 +82,12 @@ impl OutboxHandler for KbAnalyzeRequestedHandler {
     async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
         let task_id = task_id_of(event)?;
         // 状态流转确认（Platform 写入面；重投递幂等）。
-        mark_task_dispatched(&self.pool, task_id).await.map_err(|e| e.to_string())?;
-        mark_task_processing(&self.pool, task_id).await.map_err(|e| e.to_string())?;
+        mark_task_dispatched(&self.pool, task_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        mark_task_processing(&self.pool, task_id)
+            .await
+            .map_err(|e| e.to_string())?;
 
         let (project_id, source_ref): (uuid::Uuid, serde_json::Value) = sqlx::query_as(
             "SELECT t.project_id, i.source_ref \
@@ -145,8 +149,12 @@ impl PcAnalyzeRequestedHandler {
 impl OutboxHandler for PcAnalyzeRequestedHandler {
     async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
         let task_id = task_id_of(event)?;
-        mark_task_dispatched(&self.pool, task_id).await.map_err(|e| e.to_string())?;
-        mark_task_processing(&self.pool, task_id).await.map_err(|e| e.to_string())?;
+        mark_task_dispatched(&self.pool, task_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        mark_task_processing(&self.pool, task_id)
+            .await
+            .map_err(|e| e.to_string())?;
 
         let (project_id, intake_id, signal_ref): (
             uuid::Uuid,
@@ -185,13 +193,12 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
             .map_err(|e| e.to_string())?;
 
         // 仓库事实（缓存复用优先；intake 非仓库输入 → 桩语义）。
-        let source_ref: serde_json::Value = sqlx::query_scalar(
-            "SELECT source_ref FROM integration.intake_record WHERE id = $1",
-        )
-        .bind(intake_id)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        let source_ref: serde_json::Value =
+            sqlx::query_scalar("SELECT source_ref FROM integration.intake_record WHERE id = $1")
+                .bind(intake_id)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| e.to_string())?;
         let Some(repository_id) = kb_pc_analysis::source_repository_id(&source_ref) else {
             return complete_pc_as_stub(&self.pool, project_id, task_id).await;
         };
@@ -284,17 +291,28 @@ impl PcDecisionSubmittedStub {
 impl OutboxHandler for PcDecisionSubmittedStub {
     async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
         let task_id = task_id_of(event)?;
-        mark_task_dispatched(&self.pool, task_id).await.map_err(|e| e.to_string())?;
-        mark_task_processing(&self.pool, task_id).await.map_err(|e| e.to_string())?;
+        mark_task_dispatched(&self.pool, task_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        mark_task_processing(&self.pool, task_id)
+            .await
+            .map_err(|e| e.to_string())?;
 
         use sha2::{Digest, Sha256};
         let content_hash = {
             let canonical = serde_json::to_string(
-                event.payload.get("decision").unwrap_or(&serde_json::Value::Null),
+                event
+                    .payload
+                    .get("decision")
+                    .unwrap_or(&serde_json::Value::Null),
             )
             .unwrap_or_default();
             let digest = Sha256::digest(canonical.as_bytes());
-            digest.iter().take(16).map(|b| format!("{b:02x}")).collect::<String>()
+            digest
+                .iter()
+                .take(16)
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
         };
 
         let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
@@ -392,15 +410,16 @@ impl OutboxHandler for CognitionSignalRouterHandler {
             .ok_or_else(|| "cognition signal cannot resolve intake id".to_string())?;
         // route_cognition_signal 的 intake 归属校验：intake_task 反查 intake
         // （signal 由 KB 分析产出，其任务行必已存在）。
-        let (project_id, tenant_id, real_intake_id): (uuid::Uuid, uuid::Uuid, uuid::Uuid) = sqlx::query_as(
-            "SELECT t.project_id, t.tenant_id, t.intake_id \
+        let (project_id, tenant_id, real_intake_id): (uuid::Uuid, uuid::Uuid, uuid::Uuid) =
+            sqlx::query_as(
+                "SELECT t.project_id, t.tenant_id, t.intake_id \
                FROM integration.intake_task t \
               WHERE t.id = $1",
-        )
-        .bind(intake_id)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| e.to_string())?;
+            )
+            .bind(intake_id)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| e.to_string())?;
         let outcome = route_cognition_signal(
             &self.pool,
             project_id,
@@ -679,7 +698,14 @@ impl OutboxHandler for ProcessingFailedHandler {
             &self.pool,
             event.project_id,
             "processing_failed",
-            &format!("{failed_id}:{}", event.payload.get("retry_count").and_then(|v| v.as_i64()).unwrap_or(0)),
+            &format!(
+                "{failed_id}:{}",
+                event
+                    .payload
+                    .get("retry_count")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0)
+            ),
             serde_json::json!({ "dedup_key": format!("{failed_id}"), "payload": event.payload }),
         )
         .await?;
@@ -829,16 +855,52 @@ async fn report_processing_failed(
 /// 装配全集由 `OutboxWorker::assert_catalog_consistent` 启动校验兜底。
 pub fn register_kb_pc_handlers(worker: OutboxWorker, pool: &PgPool) -> OutboxWorker {
     worker
-        .with_handler(ev::INTAKE_RECEIVED, Arc::new(IntakeReceivedHandler::new(pool.clone())))
-        .with_handler(ev::KB_ANALYSIS_REQUESTED, Arc::new(KbAnalyzeRequestedHandler::new(pool.clone())))
-        .with_handler(ev::KB_ANALYSIS_COMPLETED, Arc::new(KbAnalysisCompletedHandler::new(pool.clone())))
-        .with_handler(ev::KB_COGNITION_SIGNAL_EMITTED, Arc::new(CognitionSignalRouterHandler::new(pool.clone())))
-        .with_handler(ev::KB_MEMORY_APPROVED, Arc::new(KbMemoryApprovedHandler::new(pool.clone())))
-        .with_handler(ev::PC_ANALYZE_REQUESTED, Arc::new(PcAnalyzeRequestedHandler::new(pool.clone())))
-        .with_handler(ev::PC_DECISION_SUBMITTED, Arc::new(PcDecisionSubmittedStub::new(pool.clone())))
-        .with_handler(ev::PC_ANALYSIS_COMPLETED, Arc::new(PcAnalysisCompletedHandler::new(pool.clone())))
-        .with_handler(ev::PC_CHANGE_PROPOSED, Arc::new(PcChangeProposedHandler::new(pool.clone())))
-        .with_handler(ev::PC_CONFLICT_DETECTED, Arc::new(PcConflictDetectedHandler::new(pool.clone())))
-        .with_handler(ev::PC_EVIDENCE_REQUESTED, Arc::new(PcEvidenceRequestedHandler::new(pool.clone())))
-        .with_handler(ev::PROCESSING_FAILED, Arc::new(ProcessingFailedHandler::new(pool.clone())))
+        .with_handler(
+            ev::INTAKE_RECEIVED,
+            Arc::new(IntakeReceivedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::KB_ANALYSIS_REQUESTED,
+            Arc::new(KbAnalyzeRequestedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::KB_ANALYSIS_COMPLETED,
+            Arc::new(KbAnalysisCompletedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::KB_COGNITION_SIGNAL_EMITTED,
+            Arc::new(CognitionSignalRouterHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::KB_MEMORY_APPROVED,
+            Arc::new(KbMemoryApprovedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::PC_ANALYZE_REQUESTED,
+            Arc::new(PcAnalyzeRequestedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::PC_DECISION_SUBMITTED,
+            Arc::new(PcDecisionSubmittedStub::new(pool.clone())),
+        )
+        .with_handler(
+            ev::PC_ANALYSIS_COMPLETED,
+            Arc::new(PcAnalysisCompletedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::PC_CHANGE_PROPOSED,
+            Arc::new(PcChangeProposedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::PC_CONFLICT_DETECTED,
+            Arc::new(PcConflictDetectedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::PC_EVIDENCE_REQUESTED,
+            Arc::new(PcEvidenceRequestedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::PROCESSING_FAILED,
+            Arc::new(ProcessingFailedHandler::new(pool.clone())),
+        )
 }

@@ -1,4 +1,4 @@
-﻿//! Audit SSE contract: auth surface, `text/event-stream` framing and the
+//! Audit SSE contract: auth surface, `text/event-stream` framing and the
 //! `pm_audit` trigger payload. Split into two stable halves — the transport is
 //! driven by `AuditFeed::publish` (no PG timing), while the trigger is proven
 //! with a direct `LISTEN` in the test process.
@@ -8,17 +8,17 @@ use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use digua_common_jwt::{JWKSCache, sign_token};
-use pm_api::audit_stream::{AuditFeed, AuditLog, parse_notification, run_listener};
+use digua_common_jwt::{sign_token, JWKSCache};
+use pm_api::audit_stream::{parse_notification, run_listener, AuditFeed, AuditLog};
 use pm_api::routes::router_with_auth_and_feed;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_domain::SYSTEM_TENANT;
 use serde_json::json;
-use sqlx::PgPool;
 use sqlx::postgres::PgListener;
+use sqlx::PgPool;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tower::ServiceExt;
-use pm_domain::SYSTEM_TENANT;
 
 const PRIVATE_PEM: &str = include_str!("keys/private.pem");
 const PUBLIC_PEM: &str = include_str!("keys/public.pem");
@@ -149,9 +149,13 @@ async fn query_token_streams_published_audit_events(pool: PgPool) {
     let mut stream = open_stream(&addr, &format!("?access_token={}", valid_token())).await;
 
     let head = wait_for(&mut stream, "\r\n\r\n", Duration::from_secs(5)).await;
-    assert!(head.starts_with("HTTP/1.1 200"), "expected 200, got: {head}");
     assert!(
-        head.to_ascii_lowercase().contains("content-type: text/event-stream"),
+        head.starts_with("HTTP/1.1 200"),
+        "expected 200, got: {head}"
+    );
+    assert!(
+        head.to_ascii_lowercase()
+            .contains("content-type: text/event-stream"),
         "expected SSE content type, got: {head}"
     );
 
@@ -175,7 +179,10 @@ async fn query_token_streams_published_audit_events(pool: PgPool) {
         serde_json::from_str(data_line.trim_start_matches("data: ")).expect("json payload");
     assert_eq!(payload["action"], json!("task.create"));
     assert_eq!(payload["target_type"], json!("task"));
-    assert_eq!(payload["target_id"], json!("44444444-4444-4444-4444-444444444444"));
+    assert_eq!(
+        payload["target_id"],
+        json!("44444444-4444-4444-4444-444444444444")
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -219,5 +226,8 @@ async fn audit_insert_fires_pm_audit_notification(pool: PgPool) {
     assert_eq!(log.target_id.as_deref(), Some(target.to_string().as_str()));
     assert_eq!(log.project_id, boot.project_id.to_string());
     assert_eq!(log.actor_id, boot.human_id.to_string());
-    assert!(log.created_at.ends_with('Z'), "created_at must be UTC ISO8601");
+    assert!(
+        log.created_at.ends_with('Z'),
+        "created_at must be UTC ISO8601"
+    );
 }

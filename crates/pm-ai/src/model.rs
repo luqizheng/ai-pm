@@ -37,7 +37,9 @@ impl std::fmt::Display for ModelError {
         match self {
             ModelError::Timeout => write!(f, "analysis model timed out"),
             ModelError::Unavailable(reason) => write!(f, "analysis model unavailable: {reason}"),
-            ModelError::BadOutput(reason) => write!(f, "analysis model returned bad output: {reason}"),
+            ModelError::BadOutput(reason) => {
+                write!(f, "analysis model returned bad output: {reason}")
+            }
         }
     }
 }

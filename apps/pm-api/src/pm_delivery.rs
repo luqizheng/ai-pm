@@ -12,15 +12,15 @@
 //! 可见性沿用 T-022：任务 / 项目不存在、跨租户或调用者非项目成员一律 404。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, State},
     routing::get,
+    Json, Router,
 };
 use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiResult, require_project_visible, require_task_project};
+use crate::support::{require_project_visible, require_task_project, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -44,9 +44,12 @@ async fn project_handler(
         principal.principal_id,
     )
     .await?;
-    let items =
-        pm_application::delivery::list_project_delivery(&state.pool, principal.tenant_id, project_id)
-            .await?;
+    let items = pm_application::delivery::list_project_delivery(
+        &state.pool,
+        principal.tenant_id,
+        project_id,
+    )
+    .await?;
     let count = |state_name: &str| {
         items
             .iter()

@@ -10,13 +10,13 @@
 //! 「首登无团队」= 无 first-admin 配置下未知 subject 首次请求被 provision 成
 //! inactive member（auth.rs resolve_or_provision）。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
-use digua_common_jwt::{JWKSCache, sign_token};
+use digua_common_jwt::{sign_token, JWKSCache};
 use pm_api::auth::AuthConfig;
 use pm_api::routes::router_with_auth_config;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -69,7 +69,11 @@ async fn call(
     token: &str,
     body: Option<Value>,
 ) -> (StatusCode, Value) {
-    let response = app.clone().oneshot(request(method, uri, token, body)).await.unwrap();
+    let response = app
+        .clone()
+        .oneshot(request(method, uri, token, body))
+        .await
+        .unwrap();
     let status = response.status();
     (status, json_of(response).await)
 }
@@ -131,7 +135,11 @@ async fn create_team_claims_tenant_and_creator_becomes_owner(pool: PgPool) {
     let me_body = me(&app, &t).await;
     assert_eq!(me_body["onboarding_required"], json!(false));
     assert_eq!(me_body["is_active"], json!(true));
-    assert_eq!(me_body["tenant_role"], json!("owner"), "Q2：创建者自动 Owner");
+    assert_eq!(
+        me_body["tenant_role"],
+        json!("owner"),
+        "Q2：创建者自动 Owner"
+    );
     assert_eq!(me_body["team"]["name"], json!("Acme R&D"));
     assert_eq!(me_body["memberships"][0]["role"], json!("owner"));
 
@@ -201,7 +209,14 @@ async fn create_team_rejects_invalid_slug_and_name(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-    let (status, _) = call(&app, "POST", "/v1/pm/teams", &t, Some(json!({ "name": "  " }))).await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/v1/pm/teams",
+        &t,
+        Some(json!({ "name": "  " })),
+    )
+    .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
@@ -247,9 +262,14 @@ async fn invitation_full_lifecycle(pool: PgPool) {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
 
     // 预览：任何持 token 者可见团队名/角色（无密钥回显）。
-    let (status, preview) =
-        call(&app, "GET", &format!("/v1/pm/invitations/preview?token={token}"), &token_for("usr-bob", 1), None)
-            .await;
+    let (status, preview) = call(
+        &app,
+        "GET",
+        &format!("/v1/pm/invitations/preview?token={token}"),
+        &token_for("usr-bob", 1),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{preview}");
     assert_eq!(preview["role"], json!("member"));
     assert_eq!(preview["email"], json!("bob@example.com"));
@@ -379,11 +399,12 @@ async fn invitation_expiry_is_lazy_and_rejected(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["message"], json!("invitation_expired"));
-    let flipped: (String,) =
-        sqlx::query_as("SELECT status FROM core.tenant_invitation WHERE email = 'dave@example.com'")
-            .fetch_one(&db)
-            .await
-            .unwrap();
+    let flipped: (String,) = sqlx::query_as(
+        "SELECT status FROM core.tenant_invitation WHERE email = 'dave@example.com'",
+    )
+    .fetch_one(&db)
+    .await
+    .unwrap();
     assert_eq!(flipped.0, "EXPIRED");
 }
 
@@ -401,11 +422,24 @@ async fn revoked_invitation_rejected(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::CREATED);
     let inv_id = inv["id"].as_str().unwrap();
-    let (status, _) = call(&app, "POST", &format!("{base}/{inv_id}/revoke"), &owner_token, None).await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("{base}/{inv_id}/revoke"),
+        &owner_token,
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     // 撤销后再撤销 → 409 not_pending。
-    let (status, body) =
-        call(&app, "POST", &format!("{base}/{inv_id}/revoke"), &owner_token, None).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("{base}/{inv_id}/revoke"),
+        &owner_token,
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     // 接受已撤销邀请 → 409 invitation_revoked。
     let (status, body) = call(
@@ -502,7 +536,14 @@ async fn revoked_link_rejected(pool: PgPool) {
     let (status, link) = call(&app, "POST", &base, &owner_token, Some(json!({}))).await;
     assert_eq!(status, StatusCode::CREATED, "{link}");
     let link_id = link["id"].as_str().unwrap();
-    let (status, _) = call(&app, "POST", &format!("{base}/{link_id}/revoke"), &owner_token, None).await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("{base}/{link_id}/revoke"),
+        &owner_token,
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     let (status, body) = call(
         &app,
@@ -525,7 +566,7 @@ async fn member_is_readonly_on_team_admin_surface(pool: PgPool) {
     // member（激活）读档案 OK，写 403。
     let member_token = token_for("usr-m", 1);
     let _ = call(&app, "GET", "/v1/pm/me", &member_token, None).await; // provision
-    // 激活 member：owner 直接授权（既有端点）。
+                                                                       // 激活 member：owner 直接授权（既有端点）。
     let m = me(&app, &member_token).await;
     let member_id = Uuid::parse_str(m["principal_id"].as_str().unwrap()).unwrap();
     let (status, _) = call(
@@ -538,7 +579,14 @@ async fn member_is_readonly_on_team_admin_surface(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::OK);
 
-    let (status, _) = call(&app, "GET", &format!("/v1/pm/tenants/{tenant_id}"), &member_token, None).await;
+    let (status, _) = call(
+        &app,
+        "GET",
+        &format!("/v1/pm/tenants/{tenant_id}"),
+        &member_token,
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     let (status, _) = call(
         &app,
@@ -558,8 +606,14 @@ async fn member_is_readonly_on_team_admin_surface(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    let (status, _) =
-        call(&app, "GET", &format!("/v1/pm/tenants/{tenant_id}/invitations"), &member_token, None).await;
+    let (status, _) = call(
+        &app,
+        "GET",
+        &format!("/v1/pm/tenants/{tenant_id}/invitations"),
+        &member_token,
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
@@ -627,12 +681,11 @@ async fn team_profile_update_and_audit_rows(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::OK);
 
-    let (name,): (String,) =
-        sqlx::query_as("SELECT display_name FROM core.tenant WHERE id = $1")
-            .bind(tenant_id)
-            .fetch_one(&db)
-            .await
-            .unwrap();
+    let (name,): (String,) = sqlx::query_as("SELECT display_name FROM core.tenant WHERE id = $1")
+        .bind(tenant_id)
+        .fetch_one(&db)
+        .await
+        .unwrap();
     assert_eq!(name, "Acme Renamed");
 
     // 审计四列口径：team.updated（first-admin 路径的租户是镜像而来，无
@@ -657,9 +710,7 @@ async fn team_profile_update_and_audit_rows(pool: PgPool) {
 // ────────────────────────────────────────────────── 解散团队（Owner 独占）
 
 /// 已治理租户 + 一个 demo 项目，供解散级联断言。
-async fn world_with_project(
-    pool: PgPool,
-) -> (Router, PgPool, Uuid, Uuid, String, Uuid, String) {
+async fn world_with_project(pool: PgPool) -> (Router, PgPool, Uuid, Uuid, String, Uuid, String) {
     let (app, db, tenant_id, owner_token) = governed_world(pool).await;
     // 项目经 bootstrap 建成（T-022：调用者自动占 owner 槽）。
     let owner = me(&app, &owner_token).await;
@@ -674,7 +725,15 @@ async fn world_with_project(
     .await;
     assert_eq!(status, StatusCode::CREATED, "{project}");
     let project_id = Uuid::parse_str(project["id"].as_str().unwrap()).unwrap();
-    (app, db, tenant_id, project_id, owner_token, owner_id, project["code"].as_str().unwrap().to_string())
+    (
+        app,
+        db,
+        tenant_id,
+        project_id,
+        owner_token,
+        owner_id,
+        project["code"].as_str().unwrap().to_string(),
+    )
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -839,7 +898,11 @@ async fn dissolve_cascades_and_revives_on_reclaim(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(list["items"].as_array().unwrap().len(), 0, "旧软删项目不可见");
+    assert_eq!(
+        list["items"].as_array().unwrap().len(),
+        0,
+        "旧软删项目不可见"
+    );
 
     // 审计：team.dissolved 落行。
     let audits: i64 = sqlx::query_scalar(

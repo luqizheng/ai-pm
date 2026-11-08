@@ -114,7 +114,11 @@ mod tests {
     fn embedded_package_is_a_valid_zip_with_expected_entries() {
         // 最小 ZIP 魔数 + End-of-Central-Directory 可寻（build.rs 打包正确性由
         // 集成测试逐一断言内容；此处防 include_bytes 指向空文件回归）。
-        assert!(SKILLS_ZIP.len() > 500, "package too small: {}", SKILLS_ZIP.len());
+        assert!(
+            SKILLS_ZIP.len() > 500,
+            "package too small: {}",
+            SKILLS_ZIP.len()
+        );
         assert_eq!(&SKILLS_ZIP[0..2], b"PK", "not a zip");
         assert!(release_manifest()["sha256"].as_str().unwrap().len() == 64);
     }

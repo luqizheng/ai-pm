@@ -3,10 +3,10 @@
 //! 覆盖：人工启动 Run（结构化事实派生）→ 概览 → 逐项确认落知识 →
 //! 重复确认 409 → 拒绝保留历史。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -115,13 +115,12 @@ async fn start_run_derives_items_and_confirm_produces_knowledge(pool: PgPool) {
     assert_eq!(body["state"], "confirmed");
     let knowledge_id = body["knowledge_id"].as_str().unwrap();
 
-    let knowledge: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.project_knowledge WHERE id = $1",
-    )
-    .bind(Uuid::parse_str(knowledge_id).unwrap())
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let knowledge: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ai.project_knowledge WHERE id = $1")
+            .bind(Uuid::parse_str(knowledge_id).unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(knowledge, 1);
 
     // 重复确认 409（每条只产出一份知识）。
@@ -197,13 +196,12 @@ async fn reject_keeps_history_and_edit_confirm_updates_content(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::OK, "body: {body}");
     assert_eq!(body["state"], "rejected");
-    let rejected: (Option<Uuid>, Option<String>) = sqlx::query_as(
-        "SELECT decided_by, decision_note FROM ai.cognition_item WHERE id = $1",
-    )
-    .bind(Uuid::parse_str(&second).unwrap())
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let rejected: (Option<Uuid>, Option<String>) =
+        sqlx::query_as("SELECT decided_by, decision_note FROM ai.cognition_item WHERE id = $1")
+            .bind(Uuid::parse_str(&second).unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(rejected.0.is_some());
     assert_eq!(rejected.1.as_deref(), Some("stale repo"));
 }

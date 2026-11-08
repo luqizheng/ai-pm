@@ -17,12 +17,12 @@
 //! - claim 后快照含仓清单 + SHA-256 哈希落库；
 //! - 快照不可变（事后改 Task 范围不改写已定格快照）。
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::repo_access::{
     access_snapshot_hash, access_snapshot_json, execution_allows, snapshot_allows,
 };
-use pm_application::repository::{CreateRepositoryRequest, create_repository};
-use pm_application::run_dispatch::{DispatchMode, RunDispatchConfig, claim_once};
+use pm_application::repository::{create_repository, CreateRepositoryRequest};
+use pm_application::run_dispatch::{claim_once, DispatchMode, RunDispatchConfig};
 use pm_domain::repo_access::RepoAccess;
 use pm_domain::SYSTEM_TENANT;
 use serde_json::json;
@@ -156,26 +156,31 @@ async fn claim_and_snapshot(pool: &PgPool) -> (Uuid, serde_json::Value) {
             .fetch_one(pool)
             .await
             .unwrap();
-    (claimed.run_id, snapshot.expect("policy_snapshot must be present"))
+    (
+        claimed.run_id,
+        snapshot.expect("policy_snapshot must be present"),
+    )
 }
 
 /// 快照缺失 → 保守拒绝（deny-all）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn missing_snapshot_denies_everything(pool: PgPool) {
     let w = world(&pool, "I3S-1").await;
-    assert!(!snapshot_allows(None, w.repository_id, RepoAccess::ReadWrite));
-    assert!(
-        !execution_allows(
-            &pool,
-            SYSTEM_TENANT,
-            w.project_id,
-            w.repository_id,
-            None,
-            RepoAccess::ReadWrite,
-        )
-        .await
-        .unwrap()
-    );
+    assert!(!snapshot_allows(
+        None,
+        w.repository_id,
+        RepoAccess::ReadWrite
+    ));
+    assert!(!execution_allows(
+        &pool,
+        SYSTEM_TENANT,
+        w.project_id,
+        w.repository_id,
+        None,
+        RepoAccess::ReadWrite,
+    )
+    .await
+    .unwrap());
 }
 
 /// 快照不含该仓 → 拒绝（不得跨仓借用）。
@@ -188,8 +193,16 @@ async fn snapshot_of_another_repository_is_rejected(pool: PgPool) {
             "access": "read_write",
         }]
     });
-    assert!(!snapshot_allows(Some(&snapshot), w.repository_id, RepoAccess::ReadWrite));
-    assert!(snapshot_allows(Some(&snapshot), w.other_repository_id, RepoAccess::ReadWrite));
+    assert!(!snapshot_allows(
+        Some(&snapshot),
+        w.repository_id,
+        RepoAccess::ReadWrite
+    ));
+    assert!(snapshot_allows(
+        Some(&snapshot),
+        w.other_repository_id,
+        RepoAccess::ReadWrite
+    ));
 }
 
 /// 主链：Task 范围内的 verified 仓库 → 快照允许 + 现状允许。
@@ -199,19 +212,21 @@ async fn in_scope_verified_repository_is_allowed(pool: PgPool) {
     seed_task_and_run(&pool, &w, "acc").await;
     let (_run_id, snapshot) = claim_and_snapshot(&pool).await;
 
-    assert!(snapshot_allows(Some(&snapshot), w.repository_id, RepoAccess::ReadWrite));
-    assert!(
-        execution_allows(
-            &pool,
-            SYSTEM_TENANT,
-            w.project_id,
-            w.repository_id,
-            Some(&snapshot),
-            RepoAccess::ReadWrite,
-        )
-        .await
-        .unwrap()
-    );
+    assert!(snapshot_allows(
+        Some(&snapshot),
+        w.repository_id,
+        RepoAccess::ReadWrite
+    ));
+    assert!(execution_allows(
+        &pool,
+        SYSTEM_TENANT,
+        w.project_id,
+        w.repository_id,
+        Some(&snapshot),
+        RepoAccess::ReadWrite,
+    )
+    .await
+    .unwrap());
 }
 
 /// Task 范围外的仓库不在快照里 → 拒绝。
@@ -220,7 +235,11 @@ async fn out_of_scope_repository_is_denied(pool: PgPool) {
     let w = world(&pool, "I3S-4").await;
     seed_task_and_run(&pool, &w, "acc").await;
     let (_run_id, snapshot) = claim_and_snapshot(&pool).await;
-    assert!(!snapshot_allows(Some(&snapshot), w.other_repository_id, RepoAccess::ReadWrite));
+    assert!(!snapshot_allows(
+        Some(&snapshot),
+        w.other_repository_id,
+        RepoAccess::ReadWrite
+    ));
 }
 
 /// 现状收窄：仓库状态不再 verified → 执行期拒绝（快照不动）。
@@ -229,7 +248,11 @@ async fn repository_no_longer_verified_blocks_execution(pool: PgPool) {
     let w = world(&pool, "I3S-5").await;
     seed_task_and_run(&pool, &w, "acc").await;
     let (_run_id, snapshot) = claim_and_snapshot(&pool).await;
-    assert!(snapshot_allows(Some(&snapshot), w.repository_id, RepoAccess::ReadWrite));
+    assert!(snapshot_allows(
+        Some(&snapshot),
+        w.repository_id,
+        RepoAccess::ReadWrite
+    ));
 
     sqlx::query("UPDATE integration.project_repository SET status = 'archived' WHERE id = $1")
         .bind(w.repository_id)
@@ -287,9 +310,14 @@ async fn claim_writes_access_snapshot_and_hash(pool: PgPool) {
     seed_task_and_run(&pool, &w, "acc").await;
     let (run_id, snapshot) = claim_and_snapshot(&pool).await;
 
-    let entries = snapshot["repo_access"].as_array().expect("repo_access present");
+    let entries = snapshot["repo_access"]
+        .as_array()
+        .expect("repo_access present");
     assert_eq!(entries.len(), 1);
-    assert_eq!(entries[0]["repository_id"], json!(w.repository_id.to_string()));
+    assert_eq!(
+        entries[0]["repository_id"],
+        json!(w.repository_id.to_string())
+    );
     assert_eq!(entries[0]["access"], json!("read_write"));
 
     let (hash, stored): (Option<String>, Option<serde_json::Value>) = sqlx::query_as(
@@ -343,8 +371,7 @@ async fn snapshot_is_immutable_after_claim(pool: PgPool) {
     .unwrap();
     let still = still.expect("snapshot persists");
     assert_eq!(
-        still["repo_access"],
-        snapshot["repo_access"],
+        still["repo_access"], snapshot["repo_access"],
         "an already-captured snapshot must not be rewritten"
     );
 }

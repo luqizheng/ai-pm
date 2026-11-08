@@ -11,9 +11,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use digua_common_jwt::{JWKSCache, sign_token};
+use digua_common_jwt::{sign_token, JWKSCache};
 use pm_api::auth::AuthConfig;
 use pm_api::routes::router_with_auth_config;
 use serde_json::Value;
@@ -100,10 +100,7 @@ async fn health_is_public_and_me_is_not(pool: PgPool) {
     assert_eq!(body["status"], serde_json::json!("ok"));
 
     // O-05：`/v1/pm/me` 不在公开路径里——缺 token 必须 401。
-    let response = app
-        .oneshot(get("/v1/pm/me", None, None))
-        .await
-        .unwrap();
+    let response = app.oneshot(get("/v1/pm/me", None, None)).await.unwrap();
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
@@ -126,14 +123,17 @@ async fn catalog_and_guide_are_public_and_carry_the_tool_list(pool: PgPool) {
     }
 
     // O-03：`/install/trae` 给出 trae 的配置片段与 key 占位符。
-    let response = app
-        .oneshot(get("/install/trae", None, None))
-        .await
-        .unwrap();
+    let response = app.oneshot(get("/install/trae", None, None)).await.unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let markdown = body_text(response).await;
-    assert!(markdown.contains("<API_KEY>"), "guide must carry the placeholder");
-    assert!(markdown.contains("/mcp"), "guide must carry the MCP endpoint");
+    assert!(
+        markdown.contains("<API_KEY>"),
+        "guide must carry the placeholder"
+    );
+    assert!(
+        markdown.contains("/mcp"),
+        "guide must carry the MCP endpoint"
+    );
 }
 
 // ---------------------------------------------------------------- O-04 / O-10
@@ -237,11 +237,7 @@ async fn no_response_carries_a_real_credential(pool: PgPool) {
         "/install/unknown-tool",
         "/install/trae?format=json",
     ] {
-        let response = app
-            .clone()
-            .oneshot(get(uri, None, None))
-            .await
-            .unwrap();
+        let response = app.clone().oneshot(get(uri, None, None)).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK, "{uri} must be 200");
         let text = body_text(response).await;
 
@@ -261,11 +257,14 @@ async fn no_response_carries_a_real_credential(pool: PgPool) {
         // 单词，不是 key 形态；只拦「引号/空白/行首后的 sk-<alnum>」。
         let leak = text
             .split(|c: char| c == '"' || c.is_whitespace())
-            .any(|token| token.starts_with("sk-") && token[3..].chars().next().map_or(false, |c| c.is_ascii_alphanumeric()));
-        assert!(
-            !leak,
-            "{uri} leaked an api-key-shaped string"
-        );
+            .any(|token| {
+                token.starts_with("sk-")
+                    && token[3..]
+                        .chars()
+                        .next()
+                        .map_or(false, |c| c.is_ascii_alphanumeric())
+            });
+        assert!(!leak, "{uri} leaked an api-key-shaped string");
     }
 }
 
@@ -294,7 +293,10 @@ async fn public_base_url_env_drives_the_endpoint_and_host_header(pool: PgPool) {
 
     // 模板里的 Host 头必须来自部署地址的 host，不是写死的回环地址。
     let template = body["config_template"].to_string();
-    assert!(template.contains("/mcp"), "template must carry the endpoint");
+    assert!(
+        template.contains("/mcp"),
+        "template must carry the endpoint"
+    );
 }
 
 // ---------------------------------------------------------------- O-13

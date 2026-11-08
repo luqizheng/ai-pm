@@ -156,8 +156,10 @@ impl Orchestrator {
         // (Task 12 ruling 1).
         let ctx = match context::build(&self.pool, job.event_id).await {
             Ok(ctx) => ctx,
-            Err(err @ (context::ContextError::NotFound { .. }
-            | context::ContextError::EventNotFound(_))) => {
+            Err(
+                err @ (context::ContextError::NotFound { .. }
+                | context::ContextError::EventNotFound(_)),
+            ) => {
                 tracing::warn!(event_id = %job.event_id, error = %err, "context build failed");
                 context::fail_run(&self.pool, run_id, "context_not_found").await?;
                 job_queue::fail(
@@ -195,8 +197,13 @@ impl Orchestrator {
         if skills.is_empty() {
             tracing::info!(event_id = %job.event_id, event_type = %ctx.event_type, "no skills routed");
             let result = serde_json::json!({ "summary": "no skills routed" });
-            context::finish_run(&self.pool, run_id, &result, &self_review::self_review_json(&[]))
-                .await?;
+            context::finish_run(
+                &self.pool,
+                run_id,
+                &result,
+                &self_review::self_review_json(&[]),
+            )
+            .await?;
             sqlx::query(
                 "UPDATE integration.inbound_event SET status = 'completed_no_change' WHERE id = $1",
             )
@@ -237,7 +244,9 @@ impl Orchestrator {
             let executable = self.executor.has_handler(proposal.command.kind())
                 && proposal.command.kind() != "rollback_command";
             let passes = executable
-                && self.target_exists(ctx.project_id, &proposal.command).await?;
+                && self
+                    .target_exists(ctx.project_id, &proposal.command)
+                    .await?;
             let proposal_id = self
                 .insert_proposal(ctx.project_id, run_id, seq, proposal, passes)
                 .await?;
@@ -246,8 +255,7 @@ impl Orchestrator {
         }
 
         // Step 7: self-review gate, then per-proposal routing.
-        let outcomes =
-            self_review::review_proposals(&self.policy, &result.proposals, blast_radius);
+        let outcomes = self_review::review_proposals(&self.policy, &result.proposals, blast_radius);
         let mut executed_count = 0usize;
         for (seq, (proposal, outcome)) in result.proposals.iter().zip(&outcomes).enumerate() {
             if !routable[seq] {
@@ -422,7 +430,9 @@ impl Orchestrator {
                 .fetch_one(&self.pool)
                 .await?
             }
-            ProjectCommand::RollbackCommand { target_audit_id, .. } => {
+            ProjectCommand::RollbackCommand {
+                target_audit_id, ..
+            } => {
                 sqlx::query_scalar::<_, bool>(
                     "SELECT EXISTS(SELECT 1 FROM governance.audit_log \
                      WHERE id = $1 AND project_id = $2)",
@@ -509,7 +519,10 @@ impl Orchestrator {
                     project_id,
                     actor: pm_application::actor::AuditActor::principal(actor_id),
                     actor_kind: ActorKind::AiPm,
-                    source: CommandSource::AiProposal { run_id, proposal_id },
+                    source: CommandSource::AiProposal {
+                        run_id,
+                        proposal_id,
+                    },
                 },
             )
             .await;
@@ -615,7 +628,11 @@ impl Orchestrator {
             None,
         )
         .await?;
-        tracing::info!(command_type = command.kind(), required_role = role, "red line awaiting pre-confirmation");
+        tracing::info!(
+            command_type = command.kind(),
+            required_role = role,
+            "red line awaiting pre-confirmation"
+        );
         Ok(())
     }
 
@@ -704,9 +721,9 @@ fn command_target(command: &ProjectCommand) -> (&'static str, Option<uuid::Uuid>
             expected_revision,
             ..
         } => ("task", Some(*task_id), Some(*expected_revision)),
-        ProjectCommand::ApproveRequirementRevision {
-            requirement_id, ..
-        } => ("requirement", Some(*requirement_id), None),
+        ProjectCommand::ApproveRequirementRevision { requirement_id, .. } => {
+            ("requirement", Some(*requirement_id), None)
+        }
         ProjectCommand::AdjustMilestonePlan {
             milestone_id,
             expected_revision,

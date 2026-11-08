@@ -16,17 +16,15 @@
 //!   layer maps to [`ToolError::NotFound`] — the brief's "MCP 工具错误，非
 //!   panic" contract.
 
-use pm_application::ingestion::{IngestionError, SubmitEventRequest, submit_event};
-use pm_application::knowledge::{
-    self, CreateDocumentRequest, KnowledgeError, KnowledgeRoot,
-};
 use pm_application::authz::ExecutorKind;
 use pm_application::caller::CallerContext;
-use pm_application::read::{ReadError, task_context};
+use pm_application::ingestion::{submit_event, IngestionError, SubmitEventRequest};
+use pm_application::knowledge::{self, CreateDocumentRequest, KnowledgeError, KnowledgeRoot};
+use pm_application::read::{task_context, ReadError};
 
 use crate::caller::{authorize, ensure_member};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -161,8 +159,9 @@ pub enum ToolError {
 }
 
 fn parse_task_ref(task_ref: &str) -> Result<Uuid, ToolError> {
-    Uuid::parse_str(task_ref)
-        .map_err(|_| ToolError::InvalidRequest(format!("task_ref `{task_ref}` is not a UUID string")))
+    Uuid::parse_str(task_ref).map_err(|_| {
+        ToolError::InvalidRequest(format!("task_ref `{task_ref}` is not a UUID string"))
+    })
 }
 
 /// Submits one technical design: resolves the acting `dev_agent` principal,
@@ -245,14 +244,13 @@ pub async fn get_submission_status(
 ) -> Result<Value, ToolError> {
     // 该工具的 wire 契约只有 event_id（冻结：不改 JSON Schema）→ 由 inbound_event
     // 反查所属项目（id 是 PK，命中唯一），再走与其余工具一致的真人成员校验。
-    let (event_status, project_id): (String, Uuid) = sqlx::query_as(
-        "SELECT status, project_id FROM integration.inbound_event WHERE id = $1",
-    )
-    .bind(args.event_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(ToolError::Db)?
-    .ok_or_else(|| ToolError::NotFound(format!("event {} not found", args.event_id)))?;
+    let (event_status, project_id): (String, Uuid) =
+        sqlx::query_as("SELECT status, project_id FROM integration.inbound_event WHERE id = $1")
+            .bind(args.event_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(ToolError::Db)?
+            .ok_or_else(|| ToolError::NotFound(format!("event {} not found", args.event_id)))?;
     ensure_member(pool, caller, project_id).await?;
 
     let proposals: Vec<(Uuid, i32, String, String)> = sqlx::query_as(
@@ -302,13 +300,15 @@ pub async fn get_task_context(
 ) -> Result<Value, ToolError> {
     ensure_member(pool, caller, args.project_id).await?;
     let task_id = parse_task_ref(&args.task_ref)?;
-    let row = task_context(pool, args.project_id, task_id).await.map_err(|err| match err {
-        ReadError::NotFound => ToolError::NotFound(format!(
-            "task {} not found in project {} (or not visible)",
-            args.task_ref, args.project_id
-        )),
-        ReadError::Db(e) => ToolError::Db(e),
-    })?;
+    let row = task_context(pool, args.project_id, task_id)
+        .await
+        .map_err(|err| match err {
+            ReadError::NotFound => ToolError::NotFound(format!(
+                "task {} not found in project {} (or not visible)",
+                args.task_ref, args.project_id
+            )),
+            ReadError::Db(e) => ToolError::Db(e),
+        })?;
     Ok(json!({
         "task_id": row.task_id,
         "title": row.title,
@@ -341,7 +341,15 @@ pub async fn list_tasks(
 ) -> Result<Value, ToolError> {
     ensure_member(pool, caller, args.project_id).await?;
     let limit = args.limit.unwrap_or(20).clamp(1, 100) as i64;
-    let rows: Vec<(Uuid, String, String, String, Option<Uuid>, Option<Uuid>, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+    let rows: Vec<(
+        Uuid,
+        String,
+        String,
+        String,
+        Option<Uuid>,
+        Option<Uuid>,
+        chrono::DateTime<chrono::Utc>,
+    )> = sqlx::query_as(
         "SELECT t.id, t.title, t.priority, t.status, t.assignee_id, \
                 q.run_id, t.created_at \
          FROM delivery.task t \
@@ -373,17 +381,19 @@ pub async fn list_tasks(
 
     let tasks: Vec<Value> = rows
         .into_iter()
-        .map(|(id, title, priority, status, assignee_id, queued_run_id, created_at)| {
-            json!({
-                "task_id": id,
-                "title": title,
-                "priority": priority,
-                "status": status,
-                "assignee_id": assignee_id,
-                "queued_run_id": queued_run_id,
-                "created_at": created_at,
-            })
-        })
+        .map(
+            |(id, title, priority, status, assignee_id, queued_run_id, created_at)| {
+                json!({
+                    "task_id": id,
+                    "title": title,
+                    "priority": priority,
+                    "status": status,
+                    "assignee_id": assignee_id,
+                    "queued_run_id": queued_run_id,
+                    "created_at": created_at,
+                })
+            },
+        )
         .collect();
     Ok(json!({ "tasks": tasks, "total": total }))
 }
@@ -639,9 +649,7 @@ fn map_dispatch_error_v2(err: pm_application::run_dispatch::RunDispatchError) ->
             ToolError::Conflict("the task already has an active run".to_string())
         }
         E::Transition(message) => ToolError::Conflict(message),
-        E::NoActor | E::InvalidOption(_) | E::Random => {
-            ToolError::InvalidRequest(err.to_string())
-        }
+        E::NoActor | E::InvalidOption(_) | E::Random => ToolError::InvalidRequest(err.to_string()),
         E::Db(e) => ToolError::Db(e),
     }
 }
@@ -651,9 +659,7 @@ fn map_lease_error_v2(err: pm_application::run_context::LeaseError) -> ToolError
     match err {
         E::NotFound => ToolError::NotFound("run not found in this project".to_string()),
         E::Forbidden => ToolError::Forbidden("lease credential rejected".to_string()),
-        E::Expired => {
-            ToolError::LeaseExpired("lease expired; claim the task again".to_string())
-        }
+        E::Expired => ToolError::LeaseExpired("lease expired; claim the task again".to_string()),
         E::Conflict(message) => ToolError::Conflict(message),
         E::Db(e) => ToolError::Db(e),
         E::Random => ToolError::InvalidRequest("lease token generation failed".to_string()),
@@ -672,33 +678,29 @@ pub async fn claim_task(
     // V-05-1：cpk_ 凭据通道 → 稳定 Client 身份（lease_client_id + client:{id}
     // 路由）；真人 JWT 通道维持既有 mcp:{client_name}:{token8} 形态。
     let claimed = match caller.client_channel {
-        Some(channel) => {
-            pm_application::run_dispatch::claim_task_run_as_client(
-                pool,
-                args.project_id,
-                args.task_id,
-                channel.device_id,
-                &args.client_name,
-                args.client_version.as_deref(),
-                &cfg,
-                &actor,
-            )
-            .await
-            .map_err(map_dispatch_error_v2)?
-        }
-        None => {
-            pm_application::run_dispatch::claim_task_run_as(
-                pool,
-                args.project_id,
-                args.task_id,
-                &args.client_name,
-                args.client_version.as_deref(),
-                &cfg,
-                &actor,
-            )
-            .await
-            .map_err(map_dispatch_error_v2)?
-        }
+        Some(channel) => pm_application::run_dispatch::claim_task_run_as_client(
+            pool,
+            args.project_id,
+            args.task_id,
+            channel.device_id,
+            &args.client_name,
+            args.client_version.as_deref(),
+            &cfg,
+            &actor,
+        )
+        .await
+        .map_err(map_dispatch_error_v2)?,
+        None => pm_application::run_dispatch::claim_task_run_as(
+            pool,
+            args.project_id,
+            args.task_id,
+            &args.client_name,
+            args.client_version.as_deref(),
+            &cfg,
+            &actor,
+        )
+        .await
+        .map_err(map_dispatch_error_v2)?,
     };
     Ok(json!({
         "run_id": claimed.run_id,
@@ -831,10 +833,12 @@ pub async fn submit_result_with(
         knowledge_proposals: args
             .knowledge_proposals
             .into_iter()
-            .map(|proposal| pm_application::delivery::KnowledgeProposalInput {
-                document_id: proposal.document_id,
-                change_summary: proposal.change_summary,
-            })
+            .map(
+                |proposal| pm_application::delivery::KnowledgeProposalInput {
+                    document_id: proposal.document_id,
+                    change_summary: proposal.change_summary,
+                },
+            )
             .collect(),
     };
 
@@ -1069,8 +1073,7 @@ async fn resolve_session(
     .map_err(ToolError::Db)?;
     rows.into_iter().next().ok_or_else(|| {
         ToolError::NotFound(
-            "project has no discovery session; ask the user to start one in the Web console"
-                .into(),
+            "project has no discovery session; ask the user to start one in the Web console".into(),
         )
     })
 }
@@ -1083,12 +1086,10 @@ pub async fn discovery_get(
 ) -> Result<Value, ToolError> {
     ensure_member(pool, caller, args.project_id).await?;
     let tenant_id = project_tenant(pool, args.project_id).await?;
-    let session_id =
-        resolve_session(pool, tenant_id, args.project_id, args.session_id).await?;
-    let detail =
-        pm_application::discovery::get_session_detail(pool, tenant_id, session_id)
-            .await
-            .map_err(map_discovery_error)?;
+    let session_id = resolve_session(pool, tenant_id, args.project_id, args.session_id).await?;
+    let detail = pm_application::discovery::get_session_detail(pool, tenant_id, session_id)
+        .await
+        .map_err(map_discovery_error)?;
     serde_json::to_value(detail).map_err(|err| ToolError::InvalidRequest(err.to_string()))
 }
 
@@ -1100,12 +1101,10 @@ pub async fn discovery_get_context(
 ) -> Result<Value, ToolError> {
     ensure_member(pool, caller, args.project_id).await?;
     let tenant_id = project_tenant(pool, args.project_id).await?;
-    let session_id =
-        resolve_session(pool, tenant_id, args.project_id, args.session_id).await?;
-    let detail =
-        pm_application::discovery::get_session_detail(pool, tenant_id, session_id)
-            .await
-            .map_err(map_discovery_error)?;
+    let session_id = resolve_session(pool, tenant_id, args.project_id, args.session_id).await?;
+    let detail = pm_application::discovery::get_session_detail(pool, tenant_id, session_id)
+        .await
+        .map_err(map_discovery_error)?;
     let documents = pm_application::knowledge::list_documents(pool, args.project_id)
         .await
         .map_err(map_knowledge_error)?;
@@ -1311,8 +1310,7 @@ pub async fn discovery_submit_proposal(
 
     let outcome = match outcome {
         Ok(outcome) => outcome,
-        Err(KnowledgeError::Conflict(message))
-        | Err(KnowledgeError::RevisionConflict(message)) => {
+        Err(KnowledgeError::Conflict(message)) | Err(KnowledgeError::RevisionConflict(message)) => {
             let proposal = pm_application::discovery::add_proposal(
                 pool,
                 tenant_id,
@@ -1361,7 +1359,10 @@ pub async fn discovery_submit_proposal(
     .map_err(map_discovery_error)?;
 
     Ok(match &outcome {
-        pm_application::knowledge_proposal::ProposalOutcome::Rejected { proposal_id, failures } => {
+        pm_application::knowledge_proposal::ProposalOutcome::Rejected {
+            proposal_id,
+            failures,
+        } => {
             pm_application::discovery::set_proposal_status(
                 pool,
                 tenant_id,
@@ -1378,10 +1379,19 @@ pub async fn discovery_submit_proposal(
         }
         other => {
             let document_proposal_id = match other {
-                pm_application::knowledge_proposal::ProposalOutcome::RedlinePending { proposal_id } => *proposal_id,
-                pm_application::knowledge_proposal::ProposalOutcome::Committed { proposal_id, .. } => *proposal_id,
-                pm_application::knowledge_proposal::ProposalOutcome::Duplicate { .. } => discovery_proposal.id,
-                pm_application::knowledge_proposal::ProposalOutcome::Rejected { .. } => unreachable!(),
+                pm_application::knowledge_proposal::ProposalOutcome::RedlinePending {
+                    proposal_id,
+                } => *proposal_id,
+                pm_application::knowledge_proposal::ProposalOutcome::Committed {
+                    proposal_id,
+                    ..
+                } => *proposal_id,
+                pm_application::knowledge_proposal::ProposalOutcome::Duplicate { .. } => {
+                    discovery_proposal.id
+                }
+                pm_application::knowledge_proposal::ProposalOutcome::Rejected { .. } => {
+                    unreachable!()
+                }
             };
             let linked = pm_application::discovery::link_proposal_document(
                 pool,
@@ -1675,7 +1685,9 @@ fn default_discover_limit() -> i64 {
 fn map_recovery_error(e: pm_application::recovery::RecoveryError) -> ToolError {
     use pm_application::recovery::RecoveryError;
     match e {
-        RecoveryError::NotFound => ToolError::NotFound(String::from("task or run not found in this project")),
+        RecoveryError::NotFound => {
+            ToolError::NotFound(String::from("task or run not found in this project"))
+        }
         RecoveryError::Rejected(msg) => ToolError::InvalidRequest(msg),
         other => ToolError::InvalidRequest(other.to_string()),
     }

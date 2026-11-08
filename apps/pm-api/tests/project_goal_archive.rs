@@ -12,12 +12,10 @@
 
 use pm_application::actor::AuditActor;
 use pm_application::archive::archive_project;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::caller::{CallerContext, DeviceClaim, HumanActor};
 use pm_application::knowledge::KnowledgeRoot;
-use pm_application::project_goal::{
-    GOAL_DOC_KEY, ensure_goal_document, load_official_goal,
-};
+use pm_application::project_goal::{ensure_goal_document, load_official_goal, GOAL_DOC_KEY};
 use pm_application::run_dispatch::NoopExecutor;
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
@@ -128,15 +126,17 @@ async fn archived_project_rejects_new_goal_proposal(pool: PgPool) {
         &test_caller(&boot),
     )
     .await;
-    assert!(is_archived_conflict(&err.unwrap_err()), "archived project must reject proposals");
+    assert!(
+        is_archived_conflict(&err.unwrap_err()),
+        "archived project must reject proposals"
+    );
 
-    let proposals: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.document_proposal WHERE project_id = $1",
-    )
-    .bind(boot.project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let proposals: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ai.document_proposal WHERE project_id = $1")
+            .bind(boot.project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(proposals, 0, "a rejected proposal must leave no row");
 
     cleanup(&root);
@@ -191,21 +191,19 @@ async fn archived_project_rejects_confirming_a_pending_goal_proposal(pool: PgPoo
     );
 
     // 正式修订数不变（仍为引导建立的 rev 1）；提案保留原文与状态。
-    let revisions: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.document_revision WHERE project_id = $1",
-    )
-    .bind(boot.project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let revisions: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ai.document_revision WHERE project_id = $1")
+            .bind(boot.project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(revisions, 1, "archive must not publish a new revision");
-    let status: String = sqlx::query_scalar(
-        "SELECT status FROM ai.document_proposal WHERE id = $1",
-    )
-    .bind(proposal_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM ai.document_proposal WHERE id = $1")
+            .bind(proposal_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(status, "redline_pending", "proposal history is preserved");
 
     cleanup(&root);
@@ -239,7 +237,10 @@ async fn archived_project_keeps_goal_history_readable(pool: PgPool) {
     archive(&boot, &pool).await;
 
     // 正式 Goal 仍可读。
-    let goal = load_official_goal(&pool, boot.project_id).await.unwrap().expect("goal readable");
+    let goal = load_official_goal(&pool, boot.project_id)
+        .await
+        .unwrap()
+        .expect("goal readable");
     assert_eq!(goal.revision_no, 1);
     // 提案历史仍可读。
     let proposals =
@@ -306,12 +307,11 @@ async fn archive_racing_with_confirm_never_publishes_after_archive(pool: PgPool)
         let (confirm_result, _) = tokio::join!(confirm, archive_fut);
 
         // 归档一定落定。
-        let status: String =
-            sqlx::query_scalar("SELECT status FROM core.project WHERE id = $1")
-                .bind(boot.project_id)
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let status: String = sqlx::query_scalar("SELECT status FROM core.project WHERE id = $1")
+            .bind(boot.project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(status, "archived");
 
         // 不变式：归档审计时刻之后不得出现新的 published 修订。
@@ -348,7 +348,10 @@ async fn archive_racing_with_confirm_never_publishes_after_archive(pool: PgPool)
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-                assert_eq!(revisions, 2, "a successful confirm publishes exactly one revision");
+                assert_eq!(
+                    revisions, 2,
+                    "a successful confirm publishes exactly one revision"
+                );
             }
             Err(err) => {
                 assert!(
@@ -417,7 +420,10 @@ async fn rejected_writes_leave_no_publish_audit(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(publish_audits, 0, "a rejected write must not emit a publish audit");
+    assert_eq!(
+        publish_audits, 0,
+        "a rejected write must not emit a publish audit"
+    );
 
     let archive_audits: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM governance.audit_log \

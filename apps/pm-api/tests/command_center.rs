@@ -10,12 +10,12 @@
 //! - I5-025/030/031 最近活动只展示白名单事件且去重
 //! - I5-019/036 归档只读
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_domain::SYSTEM_TENANT;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -33,7 +33,10 @@ fn request(uri: &str) -> Request<Body> {
 async fn body_json(response: axum::response::Response) -> (StatusCode, Value) {
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
 async fn seed_project(pool: &PgPool, code: &str) -> (Uuid, Uuid) {
@@ -132,8 +135,15 @@ async fn new_project_renders_all_blocks_and_zero_repository_is_legal(pool: PgPoo
         "risk_summary",
         "recent_activity",
     ] {
-        assert_eq!(block(&body, name)["status"], json!("ok"), "block {name}: {body}");
-        assert!(block(&body, name)["as_of"].is_string(), "block {name} 缺新鲜度");
+        assert_eq!(
+            block(&body, name)["status"],
+            json!("ok"),
+            "block {name}: {body}"
+        );
+        assert!(
+            block(&body, name)["as_of"].is_string(),
+            "block {name} 缺新鲜度"
+        );
     }
 
     let summary = block(&body, "project_summary")["data"].clone();
@@ -143,7 +153,11 @@ async fn new_project_renders_all_blocks_and_zero_repository_is_legal(pool: PgPoo
     assert_eq!(summary["goal"]["present"], json!(false));
 
     let init = block(&body, "initialization_progress")["data"].clone();
-    assert_eq!(init["completion"], json!("not_determinable"), "不得宣称初始化已完成");
+    assert_eq!(
+        init["completion"],
+        json!("not_determinable"),
+        "不得宣称初始化已完成"
+    );
     let items = init["items"].as_array().unwrap();
     let by_key = |key: &str| {
         items
@@ -182,8 +196,14 @@ async fn pending_findings_appear_as_human_actions_without_cross_project_leak(poo
         .iter()
         .map(|item| item["id"].as_str().unwrap().to_string())
         .collect();
-    assert!(ids.contains(&pending.to_string()), "待确认 Finding 必须在列表中");
-    assert!(ids.contains(&revision.to_string()), "待补充 Finding 必须在列表中");
+    assert!(
+        ids.contains(&pending.to_string()),
+        "待确认 Finding 必须在列表中"
+    );
+    assert!(
+        ids.contains(&revision.to_string()),
+        "待补充 Finding 必须在列表中"
+    );
     assert!(
         !ids.contains(&other_finding.to_string()),
         "不得泄露其它 Project 的 Finding"
@@ -384,10 +404,15 @@ async fn recent_activity_filters_whitelist_and_dedups(pool: PgPool) {
     assert_eq!(items.len(), 1, "同 dedup_key 只保留最新一条：{items:?}");
     assert_eq!(items[0]["activity_type"], json!("finding_decided"));
     assert_eq!(items[0]["source_id"], json!(target.to_string()));
-    assert!(!items[0]["summary"].as_str().unwrap().is_empty(), "活动必须有可读摘要");
+    assert!(
+        !items[0]["summary"].as_str().unwrap().is_empty(),
+        "活动必须有可读摘要"
+    );
     // 白名单外的事件不进入展示流。
     assert!(
-        !items.iter().any(|item| item["activity_type"] == json!("run_started")),
+        !items
+            .iter()
+            .any(|item| item["activity_type"] == json!("run_started")),
         "白名单外事件不得展示"
     );
 }

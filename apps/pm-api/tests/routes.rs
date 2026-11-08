@@ -1,4 +1,4 @@
-﻿//! REST route smoke test (Task 9, Step 1): drive the real pm-api router with
+//! REST route smoke test (Task 9, Step 1): drive the real pm-api router with
 //! `tower::ServiceExt::oneshot` — no socket — and assert the HTTP contract of
 //! `POST /api/v1/events`: 202 + `{event_id, processing_status: "queued"}` on
 //! first submission, 200 + `processing_status: "duplicate"` with the same
@@ -8,15 +8,15 @@
 //! tests; the pool the router serves from is the test pool `#[sqlx::test]`
 //! hands us.
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use serde_json::{Value, json};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_domain::SYSTEM_TENANT;
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 fn post_events(body: Value) -> Request<Body> {
     Request::builder()
@@ -55,10 +55,16 @@ async fn post_events_accepts_then_replays_as_duplicate(pool: PgPool) {
     });
 
     // First submission: 202 Accepted with the queued marker.
-    let response = app.clone().oneshot(post_events(body.clone())).await.unwrap();
+    let response = app
+        .clone()
+        .oneshot(post_events(body.clone()))
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::ACCEPTED);
     let first = body_json(response).await;
-    let event_id = first["event_id"].as_str().expect("event_id must be a UUID string");
+    let event_id = first["event_id"]
+        .as_str()
+        .expect("event_id must be a UUID string");
     assert_eq!(first["processing_status"], json!("queued"));
 
     // The event and its ai_analysis job really exist (1 event, 1 job).
@@ -87,7 +93,11 @@ async fn post_events_accepts_then_replays_as_duplicate(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(counts, (1, 1), "replay must not add an event row or a job row");
+    assert_eq!(
+        counts,
+        (1, 1),
+        "replay must not add an event row or a job row"
+    );
 }
 
 // ------------------------------------------------------- Task 15 supervision
@@ -228,7 +238,10 @@ async fn veto_rolls_back_executed_proposal_over_http(pool: PgPool) {
     assert_eq!(response.status(), StatusCode::OK);
     let body = body_json(response).await;
     assert_eq!(body["outcome"], json!("rolled_back"));
-    assert!(body["new_audit_id"].is_string(), "the rollback audit id must be returned");
+    assert!(
+        body["new_audit_id"].is_string(),
+        "the rollback audit id must be returned"
+    );
 
     // The compensation really restored the task (4 -> 5, status back).
     let (status, revision): (String, i64) = sqlx::query_as(
@@ -369,4 +382,3 @@ async fn notifications_feed_over_http(pool: PgPool) {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["kind"], json!("newer_second"));
 }
-            

@@ -1,9 +1,9 @@
 //! S01-05 基线端点集成测试：提案派生 → 逐项决策 → 确认落版本 → 不可变。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -11,7 +11,11 @@ use uuid::Uuid;
 mod common;
 
 fn get(uri: &str) -> Request<Body> {
-    Request::builder().method("GET").uri(uri).body(Body::empty()).unwrap()
+    Request::builder()
+        .method("GET")
+        .uri(uri)
+        .body(Body::empty())
+        .unwrap()
 }
 
 fn post_json(uri: &str, body: serde_json::Value) -> Request<Body> {
@@ -26,7 +30,10 @@ fn post_json(uri: &str, body: serde_json::Value) -> Request<Body> {
 async fn body_json(response: axum::response::Response) -> (StatusCode, serde_json::Value) {
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 /// 种子：项目 + 一条 S01-04 已确认知识（提案派生源）。

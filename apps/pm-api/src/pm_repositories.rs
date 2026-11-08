@@ -6,11 +6,11 @@
 //! 身份沿用调用方传入的 `AuthedPrincipal`（T-021a）。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
+    Json, Router,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -19,10 +19,10 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use pm_application::repository::{
-    ConfirmVersionRequest, CreateRepositoryRequest, RepositoryError, UpdateRepositoryRequest,
     archive_repository, confirm_repository_version, create_repository, delete_repository,
     delete_ssh_key, ensure_ssh_key, generate_ssh_key, get_ssh_key, list_repositories,
-    list_ssh_keys, revoke_ssh_key, update_repository, verify_repository,
+    list_ssh_keys, revoke_ssh_key, update_repository, verify_repository, ConfirmVersionRequest,
+    CreateRepositoryRequest, RepositoryError, UpdateRepositoryRequest,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -149,13 +149,24 @@ async fn list_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     match list_repositories(&state.pool, project_id).await {
         Ok(items) => {
             let total = items.len();
-            (StatusCode::OK, Json(json!({ "items": items, "total": total }))).into_response()
+            (
+                StatusCode::OK,
+                Json(json!({ "items": items, "total": total })),
+            )
+                .into_response()
         }
         Err(err) => repository_error(err),
     }
@@ -167,7 +178,14 @@ async fn create_handler(
     Path(project_id): Path<Uuid>,
     Json(req): Json<CreateRepositoryRequest>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     let actor = principal.audit_actor();
@@ -261,7 +279,14 @@ async fn get_key_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     match get_ssh_key(&state.pool, project_id).await {
@@ -276,7 +301,14 @@ async fn generate_key_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     let actor = principal.audit_actor();
@@ -291,7 +323,14 @@ async fn delete_key_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     let actor = principal.audit_actor();
@@ -306,13 +345,24 @@ async fn list_keys_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     match list_ssh_keys(&state.pool, project_id).await {
         Ok(items) => {
             let total = items.len();
-            (StatusCode::OK, Json(json!({ "items": items, "total": total }))).into_response()
+            (
+                StatusCode::OK,
+                Json(json!({ "items": items, "total": total })),
+            )
+                .into_response()
         }
         Err(err) => repository_error(err),
     }
@@ -330,7 +380,14 @@ async fn create_key_handler(
     Path(project_id): Path<Uuid>,
     body: Option<Json<CreateKeyRequest>>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     let rotate = body.map(|Json(req)| req.rotate).unwrap_or(false);
@@ -346,7 +403,14 @@ async fn revoke_key_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     let actor = principal.audit_actor();

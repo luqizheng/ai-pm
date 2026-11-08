@@ -144,7 +144,10 @@ async fn intake_record_columns_and_checks(pool: PgPool) {
     .bind(project2)
     .fetch_one(&pool)
     .await;
-    assert!(second.is_err(), "duplicate (tenant, project, idempotency_key) must fail");
+    assert!(
+        second.is_err(),
+        "duplicate (tenant, project, idempotency_key) must fail"
+    );
     let _ = first;
     let _ = project_id;
 }
@@ -166,7 +169,10 @@ async fn intake_task_structure_and_active_unique(pool: PgPool) {
     .bind(intake_id)
     .execute(&pool)
     .await;
-    assert!(bad.is_err(), "lowercase status must violate CHECK (§9.2 N-8)");
+    assert!(
+        bad.is_err(),
+        "lowercase status must violate CHECK (§9.2 N-8)"
+    );
 
     // 组合 FK：intake_id 属**别的租户**时拒绝（tenant_id+intake_id 锚；
     // 同租户跨项目引用属合法形态，不在此 FK 拦截面）。
@@ -181,7 +187,10 @@ async fn intake_task_structure_and_active_unique(pool: PgPool) {
     .bind(other_intake)
     .execute(&pool)
     .await;
-    assert!(cross.is_err(), "composite FK (tenant_id, intake_id) must reject cross-intake row");
+    assert!(
+        cross.is_err(),
+        "composite FK (tenant_id, intake_id) must reject cross-intake row"
+    );
 
     // uq_intake_task_active：同 (intake_id, task_type) 第二个活跃任务拒绝。
     let t1: Uuid = sqlx::query_scalar(
@@ -205,7 +214,10 @@ async fn intake_task_structure_and_active_unique(pool: PgPool) {
     .bind(intake_id)
     .execute(&pool)
     .await;
-    assert!(t2.is_err(), "second ACTIVE pc_analyze must violate uq_intake_task_active");
+    assert!(
+        t2.is_err(),
+        "second ACTIVE pc_analyze must violate uq_intake_task_active"
+    );
 
     // 终态不受限：t1 转 COMPLETED 后新建同类型活跃任务合法（补充信号路径）。
     sqlx::query("UPDATE integration.intake_task SET task_status = 'COMPLETED' WHERE id = $1")
@@ -223,7 +235,10 @@ async fn intake_task_structure_and_active_unique(pool: PgPool) {
     .bind(intake_id)
     .execute(&pool)
     .await;
-    assert!(after_terminal.is_ok(), "terminal task must not block new active row (§9.4.3-3)");
+    assert!(
+        after_terminal.is_ok(),
+        "terminal task must not block new active row (§9.4.3-3)"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -262,5 +277,8 @@ async fn tenant_composite_keys_present(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert!(n2 > 0, "intake_task must carry UNIQUE (tenant_id, project_id, idempotency_key)");
+    assert!(
+        n2 > 0,
+        "intake_task must carry UNIQUE (tenant_id, project_id, idempotency_key)"
+    );
 }

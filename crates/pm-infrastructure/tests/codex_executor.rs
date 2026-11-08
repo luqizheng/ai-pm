@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use pm_application::run_dispatch::{
-ExecutableRun, ExitOutcome, ExecutorProgress, ExecutorSession,
-    RunExecutor, RunRepositoryBaseline, TerminateReason,
+    ExecutableRun, ExecutorProgress, ExecutorSession, ExitOutcome, RunExecutor,
+    RunRepositoryBaseline, TerminateReason,
 };
 use pm_domain::SYSTEM_TENANT;
 use pm_infrastructure::codex_executor::CodexExecutor;
@@ -54,13 +54,19 @@ fn seed_bare_repo(tag: &str) -> (TempDir, String) {
     let dir = TempDir::create(tag);
     let bare = dir.0.join("origin.git");
     let work = dir.0.join("seed");
-    git(&["init", "--bare", "-b", "main", &bare.to_string_lossy()], None);
+    git(
+        &["init", "--bare", "-b", "main", &bare.to_string_lossy()],
+        None,
+    );
     std::fs::create_dir_all(&work).unwrap();
     git(&["init", "-b", "main", "."], Some(&work));
     std::fs::write(work.join("README.md"), "seed\n").unwrap();
     git(&["add", "."], Some(&work));
     git(&["commit", "-m", "seed"], Some(&work));
-    git(&["remote", "add", "origin", &bare.to_string_lossy()], Some(&work));
+    git(
+        &["remote", "add", "origin", &bare.to_string_lossy()],
+        Some(&work),
+    );
     git(&["push", "origin", "main"], Some(&work));
     let head = Command::new("git")
         .args(["-C", &work.to_string_lossy(), "rev-parse", "HEAD"])
@@ -145,7 +151,12 @@ async fn seed_repo_row(pool: &PgPool, project_id: Uuid, repository_id: Uuid, url
     .unwrap();
 }
 
-fn executable_run(run_id: Uuid, project_id: Uuid, repo_id: Uuid, base_commit: &str) -> ExecutableRun {
+fn executable_run(
+    run_id: Uuid,
+    project_id: Uuid,
+    repo_id: Uuid,
+    base_commit: &str,
+) -> ExecutableRun {
     ExecutableRun {
         run_id,
         task_id: Uuid::new_v4(),
@@ -241,8 +252,14 @@ async fn c68_terminate_kills_a_hung_process(pool: PgPool) {
     let executor = executor(pool, &hang, &workspace.0);
     let run = executable_run(Uuid::new_v4(), project_id, repo_id, &base_commit);
     let (session_text, session) = make_session(&run, &workspace.0);
-    executor.start(&run, &session_text).await.expect("start must succeed");
-    assert_eq!(executor.poll(&session).await.unwrap(), ExecutorProgress::Running);
+    executor
+        .start(&run, &session_text)
+        .await
+        .expect("start must succeed");
+    assert_eq!(
+        executor.poll(&session).await.unwrap(),
+        ExecutorProgress::Running
+    );
 
     executor
         .terminate(&session, TerminateReason::TimedOut)
@@ -273,12 +290,18 @@ async fn c69_workspace_layout_matches_the_ruled_derivation(pool: PgPool) {
     let executor = executor(pool, &exit0, &workspace.0);
     let run = executable_run(Uuid::new_v4(), project_id, repo_id, &base_commit);
     let (session_text, session) = make_session(&run, &workspace.0);
-    executor.start(&run, &session_text).await.expect("start must succeed");
+    executor
+        .start(&run, &session_text)
+        .await
+        .expect("start must succeed");
 
     let run_root = workspace.0.join(run.run_id.to_string());
     let worktree = run_root.join(&run.repositories[0].workspace_path);
     assert!(worktree.exists(), "workspace_path dir must exist");
-    assert!(worktree.join(".git").exists(), "worktree must be a git worktree");
+    assert!(
+        worktree.join(".git").exists(),
+        "worktree must be a git worktree"
+    );
     assert_eq!(
         session.workspace_root,
         workspace.0.to_string_lossy().to_string()
@@ -299,7 +322,10 @@ async fn c70_worktree_is_checked_out_at_the_locked_base_commit(pool: PgPool) {
     let executor = executor(pool, &exit0, &workspace.0);
     let run = executable_run(Uuid::new_v4(), project_id, repo_id, &base_commit);
     let (session_text, _session) = make_session(&run, &workspace.0);
-    executor.start(&run, &session_text).await.expect("start must succeed");
+    executor
+        .start(&run, &session_text)
+        .await
+        .expect("start must succeed");
 
     let worktree = workspace
         .0
@@ -310,7 +336,10 @@ async fn c70_worktree_is_checked_out_at_the_locked_base_commit(pool: PgPool) {
         .output()
         .unwrap();
     assert_eq!(String::from_utf8_lossy(&head.stdout).trim(), base_commit);
-    assert!(worktree.join("README.md").exists(), "seed file must be checked out");
+    assert!(
+        worktree.join("README.md").exists(),
+        "seed file must be checked out"
+    );
 }
 
 /// T-032 §6.3（C71）：一次性 token 明文经日志管道脱敏——stdout 上报的 token
@@ -347,7 +376,10 @@ async fn c71_lease_token_is_redacted_in_logs_and_never_persisted(pool: PgPool) {
         ..executable_run(Uuid::new_v4(), project_id, repo_id, &base_commit)
     };
     let (session_text, _session) = make_session(&run, &workspace.0);
-    executor.start(&run, &session_text).await.expect("start must succeed");
+    executor
+        .start(&run, &session_text)
+        .await
+        .expect("start must succeed");
 
     let run_root = workspace.0.join(run.run_id.to_string());
     let stdout_log = run_root.join("logs").join("stdout.log");
@@ -361,8 +393,14 @@ async fn c71_lease_token_is_redacted_in_logs_and_never_persisted(pool: PgPool) {
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    assert!(body.contains("[REDACTED]"), "token must be redacted in logs");
-    assert!(!body.contains(token), "raw token must never hit the log file");
+    assert!(
+        body.contains("[REDACTED]"),
+        "token must be redacted in logs"
+    );
+    assert!(
+        !body.contains(token),
+        "raw token must never hit the log file"
+    );
 
     // 禁止面：pid 文件、mcp.json、events 均不含明文。
     for probe in [
@@ -371,7 +409,11 @@ async fn c71_lease_token_is_redacted_in_logs_and_never_persisted(pool: PgPool) {
         run_root.join("logs").join("executor-events.jsonl"),
     ] {
         if let Ok(text) = std::fs::read_to_string(&probe) {
-            assert!(!text.contains(token), "token leaked into {}", probe.display());
+            assert!(
+                !text.contains(token),
+                "token leaked into {}",
+                probe.display()
+            );
         }
     }
 }
@@ -392,10 +434,16 @@ async fn c72_orphan_pid_reuse_is_detected_via_identity_anchor(pool: PgPool) {
     let first = executor(pool.clone(), &hang, &workspace.0);
     let run = executable_run(Uuid::new_v4(), project_id, repo_id, &base_commit);
     let (session_text, session) = make_session(&run, &workspace.0);
-    first.start(&run, &session_text).await.expect("start must succeed");
+    first
+        .start(&run, &session_text)
+        .await
+        .expect("start must succeed");
 
     // 篡改 pid 文件的身份锚点 → 模拟「该 PID 已被另一个进程占用」。
-    let pid_path = workspace.0.join(run.run_id.to_string()).join("process.json");
+    let pid_path = workspace
+        .0
+        .join(run.run_id.to_string())
+        .join("process.json");
     let mut payload: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&pid_path).unwrap()).unwrap();
     payload["identity_hint"] = serde_json::json!("999999999999");
@@ -429,12 +477,21 @@ async fn c73_missing_pid_file_with_initialized_run_dir_is_uncertain(pool: PgPool
     let first = executor(pool.clone(), &exit0, &workspace.0);
     let run = executable_run(Uuid::new_v4(), project_id, repo_id, &base_commit);
     let (session_text, session) = make_session(&run, &workspace.0);
-    first.start(&run, &session_text).await.expect("start must succeed");
+    first
+        .start(&run, &session_text)
+        .await
+        .expect("start must succeed");
 
     // 删除 pid 文件（保留 run 目录与 logs）→ 证据不足。先收割自然退出（内存
     // 句柄移除），再模拟「平台重启」：用全新 executor 实例走孤儿判定路径。
     let _ = wait_done(&first, &session).await;
-    std::fs::remove_file(workspace.0.join(run.run_id.to_string()).join("process.json")).unwrap();
+    std::fs::remove_file(
+        workspace
+            .0
+            .join(run.run_id.to_string())
+            .join("process.json"),
+    )
+    .unwrap();
 
     let rebooted = executor(pool, &exit0, &workspace.0);
     let progress = rebooted.poll(&session).await.unwrap();

@@ -25,8 +25,8 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use pm_application::run_dispatch::{
-    append_executor_event, validate_workspace_path, ExecutableRun, ExitOutcome, ExecutorError,
-    ExecutorProgress, ExecutorSession, RunExecutor, TerminateReason,
+    append_executor_event, validate_workspace_path, ExecutableRun, ExecutorError, ExecutorProgress,
+    ExecutorSession, ExitOutcome, RunExecutor, TerminateReason,
 };
 use sqlx::PgPool;
 
@@ -112,7 +112,8 @@ impl CodexExecutor {
         if !(url.starts_with("git@") || url.starts_with("ssh://")) {
             return None;
         }
-        let plain = pm_application::repository::open_ssh_private_key(project_id, ciphertext).ok()?;
+        let plain =
+            pm_application::repository::open_ssh_private_key(project_id, ciphertext).ok()?;
         let key_path = self.root.join("keys").join(format!("{project_id}.pem"));
         std::fs::create_dir_all(key_path.parent()?).ok()?;
         std::fs::write(&key_path, plain).ok()?;
@@ -235,16 +236,21 @@ impl CodexExecutor {
             // §6.1：首 clone 用临时目录，成功后原子发布——并发竞争者只会看到
             // 「不存在（继续持锁等待）」或「完整可用」两种状态。
             let staging = mirror_dir.join(format!(".staging-{repository_id}-{}", Uuid::new_v4()));
-            git(&["clone", "--mirror", &url, staging.to_string_lossy().as_ref()])
-                .output()
-                .await
-                .and_then(|out| {
-                    out.status
-                        .success()
-                        .then_some(out)
-                        .ok_or_else(|| std::io::Error::other("git clone --mirror failed"))
-                })
-                .map_err(|e| ExecutorError::Other(format!("git clone --mirror failed: {e}")))?;
+            git(&[
+                "clone",
+                "--mirror",
+                &url,
+                staging.to_string_lossy().as_ref(),
+            ])
+            .output()
+            .await
+            .and_then(|out| {
+                out.status
+                    .success()
+                    .then_some(out)
+                    .ok_or_else(|| std::io::Error::other("git clone --mirror failed"))
+            })
+            .map_err(|e| ExecutorError::Other(format!("git clone --mirror failed: {e}")))?;
             std::fs::rename(&staging, &mirror).map_err(|e| {
                 let _ = std::fs::remove_dir_all(&staging);
                 ExecutorError::Other(format!("publish mirror failed: {e}"))
@@ -483,9 +489,9 @@ impl RunExecutor for CodexExecutor {
         #[cfg(unix)]
         cmd.process_group(0);
 
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| ExecutorError::Other(format!("spawn {} failed: {e}", profile.executable)))?;
+        let mut child = cmd.spawn().map_err(|e| {
+            ExecutorError::Other(format!("spawn {} failed: {e}", profile.executable))
+        })?;
         let pid = child.id().ok_or_else(|| {
             ExecutorError::Other("spawned child has no pid (already reaped)".into())
         })?;
@@ -505,8 +511,8 @@ impl RunExecutor for CodexExecutor {
         // identity_hint：进程身份锚点——Unix = /proc/<pid>/stat starttime（精确）；
         // Windows = StartTime.Ticks（PowerShell，写文件前的近似创建时刻）。
         // PID 重用后锚点必不一致 → reconcile 判原进程已死，绝不误认无辜进程。
-        let identity_hint = process_identity_hint(pid)
-            .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+        let identity_hint =
+            process_identity_hint(pid).unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
         let pid_payload = serde_json::json!({
             "pid": pid,
             "session": session,
@@ -535,18 +541,15 @@ impl RunExecutor for CodexExecutor {
             ));
         }
 
-        self.children
-            .lock()
-            .expect("children mutex")
-            .insert(
-                session.to_string(),
-                ChildHandle {
-                    child,
-                    pid,
-                    #[cfg(windows)]
-                    job,
-                },
-            );
+        self.children.lock().expect("children mutex").insert(
+            session.to_string(),
+            ChildHandle {
+                child,
+                pid,
+                #[cfg(windows)]
+                job,
+            },
+        );
 
         append_executor_event(
             &self.root.to_string_lossy(),
@@ -573,7 +576,9 @@ impl RunExecutor for CodexExecutor {
             let mut guard = self.children.lock().expect("children mutex");
             // 先在内层借用里 try_wait，再按结果 remove（NLL：handle 借用在读取
             // ExitStatus 后即结束）。
-            let reaped: Option<Option<std::process::ExitStatus>> = match guard.get_mut(&session.session) {
+            let reaped: Option<Option<std::process::ExitStatus>> = match guard
+                .get_mut(&session.session)
+            {
                 Some(handle) => match handle.child.try_wait() {
                     Ok(Some(status)) => Some(Some(status)),
                     Ok(None) => Some(None),
@@ -710,7 +715,6 @@ fn wrap_io(e: std::io::Error) -> ExecutorError {
     ExecutorError::Other(e.to_string())
 }
 
-
 // ---------------------------------------------------------------------------
 // pid 文件（原子写 + 身份锚点）与跨平台进程证据
 // ---------------------------------------------------------------------------
@@ -729,7 +733,10 @@ struct PidRecord {
 
 fn write_pid_file_atomic(path: &Path, payload: &serde_json::Value) -> Result<(), std::io::Error> {
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec(payload).expect("pid payload serializes"))?;
+    std::fs::write(
+        &tmp,
+        serde_json::to_vec(payload).expect("pid payload serializes"),
+    )?;
     // Windows rename 覆盖已有文件的语义由 MoveFileEx(REPLACE_EXISTING) 提供；
     // std::fs::rename 在同卷目标存在时 Windows 会失败——先删再 rename 的窗口由
     // 「tmp 已就绪」缩小（半写文件永远不会被读到）。
@@ -803,7 +810,10 @@ fn process_identity_hint(pid: u32) -> Option<String> {
 /// 身份比对：锚点可取且一致 → 同一进程；Windows（无锚点）→ 放行为可能同一
 /// 进程（PID 重用残余风险由 Job Object 兜底：句柄挂接的是原进程树）。
 fn process_identity_matches(record: &PidRecord) -> bool {
-    match (process_identity_hint(record.pid), record.identity_hint.is_empty()) {
+    match (
+        process_identity_hint(record.pid),
+        record.identity_hint.is_empty(),
+    ) {
         (Some(current), false) => current == record.identity_hint,
         _ => true,
     }
@@ -834,7 +844,8 @@ fn kill_by_pid(pid: u32) -> Result<(), std::io::Error> {
     {
         unsafe {
             // setsid 后 pgid == pid：负值 kill 全组（Cargo/Git/Shell 全量回收）。
-            if libc::kill(-(pid as i32), libc::SIGKILL) != 0 && libc::kill(pid as i32, libc::SIGKILL) != 0
+            if libc::kill(-(pid as i32), libc::SIGKILL) != 0
+                && libc::kill(pid as i32, libc::SIGKILL) != 0
             {
                 return Err(std::io::Error::last_os_error());
             }
@@ -924,7 +935,10 @@ async fn pump_log<R: tokio::io::AsyncRead + Unpin>(
                 if truncated {
                     continue; // 已超限：读而不写（防背压）
                 }
-                let len = tokio::fs::metadata(&path).await.map(|m| m.len()).unwrap_or(0);
+                let len = tokio::fs::metadata(&path)
+                    .await
+                    .map(|m| m.len())
+                    .unwrap_or(0);
                 if len >= max_bytes {
                     let _ = file
                         .write_all(b"\n[TRUNCATED: log size limit reached]\n")

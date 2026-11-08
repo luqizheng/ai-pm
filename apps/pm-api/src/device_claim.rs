@@ -45,7 +45,11 @@ pub(crate) async fn attach_device_claim(
     let (parts, body) = request.into_parts();
     // V-05-1：cpk 凭据通道已在鉴权层注入 DeviceClaim::valid（凭据即声明，
     // 约束 A）——跳过 X-header 校验路径，原样放行。
-    if parts.extensions.get::<pm_application::caller::ClientChannel>().is_some() {
+    if parts
+        .extensions
+        .get::<pm_application::caller::ClientChannel>()
+        .is_some()
+    {
         let request = axum::http::Request::from_parts(parts, body);
         return next.run(request).await;
     }
@@ -89,7 +93,9 @@ pub(crate) async fn attach_device_claim(
                     Err(_) => Some(DeviceClaimIgnoredReason::Malformed),
                     Ok(device_id) => match device_status(&state, device_id).await {
                         None => Some(DeviceClaimIgnoredReason::NotFound),
-                        Some((tenant_id, owner, _)) if tenant_id != caller.tenant_id || owner != caller.principal_id => {
+                        Some((tenant_id, owner, _))
+                            if tenant_id != caller.tenant_id || owner != caller.principal_id =>
+                        {
                             Some(DeviceClaimIgnoredReason::NotOwner)
                         }
                         Some((_, _, status)) if status == "revoked" => {
@@ -122,17 +128,12 @@ pub(crate) async fn attach_device_claim(
 }
 
 /// 一次设备查询：返回 `(tenant_id, owner, status)`；不存在 → None。
-async fn device_status(
-    state: &AppState,
-    device_id: Uuid,
-) -> Option<(Uuid, Uuid, String)> {
-    sqlx::query_as(
-        "SELECT tenant_id, owner_principal_id, status FROM devenv.device WHERE id = $1",
-    )
-    .bind(device_id)
-    .fetch_optional(&state.pool)
-    .await
-    .ok()?
+async fn device_status(state: &AppState, device_id: Uuid) -> Option<(Uuid, Uuid, String)> {
+    sqlx::query_as("SELECT tenant_id, owner_principal_id, status FROM devenv.device WHERE id = $1")
+        .bind(device_id)
+        .fetch_optional(&state.pool)
+        .await
+        .ok()?
 }
 
 /// 「设备声明被忽略」事件（租户级审计；`claimed_device_id` 为 NULL）。

@@ -11,11 +11,11 @@
 //! **任何凭据都不出现在响应里**：key 只以 `<API_KEY>` 占位符出现。
 
 use axum::{
-    Json, Router,
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode, header},
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
+    Json, Router,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -93,9 +93,7 @@ fn negotiate(headers: &HeaderMap, query: &FormatQuery) -> Result<Format, Negotia
     let accepts_json = headers
         .get(header::ACCEPT)
         .and_then(|value| value.to_str().ok())
-        .map(|value| {
-            value.contains("application/json") && !value.contains("text/markdown")
-        })
+        .map(|value| value.contains("application/json") && !value.contains("text/markdown"))
         .unwrap_or(false);
     Ok(if accepts_json {
         Format::Json

@@ -14,13 +14,13 @@
 //! - I5-035 多领域待办 → 不混淆不同领域的原始状态
 //! - I5-036 归档 Project → 历史活动可查看，但不可创建新业务活动
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::run_dispatch::NoopExecutor;
 use pm_domain::SYSTEM_TENANT;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -38,7 +38,10 @@ fn request(uri: &str) -> Request<Body> {
 async fn body_json(response: axum::response::Response) -> (StatusCode, Value) {
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
 async fn seed_project(pool: &PgPool, code: &str) -> (Uuid, Uuid) {
@@ -112,7 +115,11 @@ async fn initialization_progress_collapses_and_expands_again(pool: PgPool) {
     let (status, body) = get_center(&pool, project_id, "").await;
     assert_eq!(status, StatusCode::OK, "body: {body}");
     let init = block(&body, "initialization_progress")["data"].clone();
-    assert_eq!(init["completion"], json!("not_determinable"), "I5-029 不得伪造完成状态");
+    assert_eq!(
+        init["completion"],
+        json!("not_determinable"),
+        "I5-029 不得伪造完成状态"
+    );
     // 必需项「项目目标」尚未建立 → 面板保持展开（不得隐藏未完成项）。
     assert_eq!(init["expanded"], json!(true), "必需项未完成时必须展开");
 
@@ -141,7 +148,11 @@ async fn initialization_progress_collapses_and_expands_again(pool: PgPool) {
 
     let (_status, body) = get_center(&pool, project_id, "").await;
     let init = block(&body, "initialization_progress")["data"].clone();
-    assert_eq!(init["expanded"], json!(false), "全部必需项完成后应收缩为简要状态");
+    assert_eq!(
+        init["expanded"],
+        json!(false),
+        "全部必需项完成后应收缩为简要状态"
+    );
 
     // 出现新的必需待办（人工处理有待办）→ 重新展开。
     sqlx::query(
@@ -155,7 +166,11 @@ async fn initialization_progress_collapses_and_expands_again(pool: PgPool) {
 
     let (_status, body) = get_center(&pool, project_id, "").await;
     let init = block(&body, "initialization_progress")["data"].clone();
-    assert_eq!(init["expanded"], json!(true), "出现新的必需待办必须重新展开");
+    assert_eq!(
+        init["expanded"],
+        json!(true),
+        "出现新的必需待办必须重新展开"
+    );
 }
 
 /// I5-030/031/032：活动去重 + 稳定排序 + 连续分页 + 可追溯到审计。
@@ -183,17 +198,35 @@ async fn activity_is_deduped_stably_paged_and_traceable(pool: PgPool) {
     }
     // 同 target 同 action 的重复事件 → 去重后只留一条（保留最新）。
     let dup_target = Uuid::new_v4();
-    let dup_old = seed_audit(&pool, project_id, owner, "finding.decided", dup_target, Some(stamp)).await;
-    let dup_new = seed_audit(&pool, project_id, owner, "finding.decided", dup_target, Some(stamp)).await;
+    let dup_old = seed_audit(
+        &pool,
+        project_id,
+        owner,
+        "finding.decided",
+        dup_target,
+        Some(stamp),
+    )
+    .await;
+    let dup_new = seed_audit(
+        &pool,
+        project_id,
+        owner,
+        "finding.decided",
+        dup_target,
+        Some(stamp),
+    )
+    .await;
     ids.push(dup_old);
     ids.push(dup_new);
 
     // 第 1 页（limit 3）
-    let (_status, page1) = get_center(&pool, project_id, "?activity_limit=3&activity_offset=0").await;
+    let (_status, page1) =
+        get_center(&pool, project_id, "?activity_limit=3&activity_offset=0").await;
     let items1 = items(&page1, "recent_activity");
     assert_eq!(items1.len(), 3, "分页必须受限（去重不得造成少行）");
     // 第 2 页
-    let (_status, page2) = get_center(&pool, project_id, "?activity_limit=3&activity_offset=3").await;
+    let (_status, page2) =
+        get_center(&pool, project_id, "?activity_limit=3&activity_offset=3").await;
     let items2 = items(&page2, "recent_activity");
 
     let ids1: Vec<Uuid> = items1
@@ -295,7 +328,9 @@ async fn outbox_events_never_appear_in_activity(pool: PgPool) {
         activity_items.is_empty(),
         "活动流只认审计；Outbox 不是活动历史（I5-033）：{activity_items:?}"
     );
-    let total = block(&body, "recent_activity")["data"]["total"].as_i64().unwrap();
+    let total = block(&body, "recent_activity")["data"]["total"]
+        .as_i64()
+        .unwrap();
     assert_eq!(total, 0);
 }
 
@@ -326,14 +361,12 @@ async fn missing_data_is_distinguished_from_not_applicable_and_forbidden(pool: P
 
     // 无权限：非成员 → 404（不泄露存在性），且**不是**「加载失败」语义。
     let (other_project, _other) = seed_project(&pool, "I5E-4-OTHER").await;
-    sqlx::query(
-        "DELETE FROM core.project_member WHERE project_id = $1 AND principal_id = $2",
-    )
-    .bind(other_project)
-    .bind(pm_api::auth::DEV_OFF_PRINCIPAL)
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query("DELETE FROM core.project_member WHERE project_id = $1 AND principal_id = $2")
+        .bind(other_project)
+        .bind(pm_api::auth::DEV_OFF_PRINCIPAL)
+        .execute(&pool)
+        .await
+        .unwrap();
     let (status, _body) = get_center(&pool, other_project, "").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -437,7 +470,10 @@ async fn archived_project_keeps_history_but_accepts_no_new_activity(pool: PgPool
 
     // 历史活动仍可读（且归档本身也是一条白名单活动）。
     let (_status, body) = get_center(&pool, project_id, "").await;
-    assert_eq!(block(&body, "project_summary")["data"]["archived"], json!(true));
+    assert_eq!(
+        block(&body, "project_summary")["data"]["archived"],
+        json!(true)
+    );
     let activity_items = items(&body, "recent_activity");
     assert!(
         activity_items

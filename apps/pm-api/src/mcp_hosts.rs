@@ -54,7 +54,10 @@ mod tests {
     #[test]
     fn parses_comma_separated_hosts_and_trims() {
         let hosts = parse_allowed_hosts(" 192.168.2.10 , ai-pm.internal ,192.168.2.10 ").unwrap();
-        assert_eq!(hosts, vec!["192.168.2.10", "ai-pm.internal", "192.168.2.10"]);
+        assert_eq!(
+            hosts,
+            vec!["192.168.2.10", "ai-pm.internal", "192.168.2.10"]
+        );
     }
 
     #[test]

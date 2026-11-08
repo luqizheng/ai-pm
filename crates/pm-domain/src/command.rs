@@ -51,21 +51,13 @@ pub enum ProjectCommand {
         reason: String,
     },
     /// 冷启动批量建里程碑；项目取自执行上下文。
-    CreateMilestones {
-        milestones: Vec<MilestoneDraft>,
-    },
+    CreateMilestones { milestones: Vec<MilestoneDraft> },
     /// 冷启动批量建需求（落 `draft`，不自动定稿）。
-    CreateRequirements {
-        requirements: Vec<RequirementDraft>,
-    },
+    CreateRequirements { requirements: Vec<RequirementDraft> },
     /// 冷启动批量建任务；`assignee_role` 解析成对应 Agent principal。
-    CreateTasks {
-        tasks: Vec<TaskDraft>,
-    },
+    CreateTasks { tasks: Vec<TaskDraft> },
     /// 冷启动批量写知识文档（文件 + git commit + 两表）。
-    WriteDocuments {
-        documents: Vec<DocumentDraft>,
-    },
+    WriteDocuments { documents: Vec<DocumentDraft> },
 }
 
 impl ProjectCommand {
@@ -108,7 +100,9 @@ pub enum Reversibility {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::{AuditId, MilestoneId, PrincipalId, ProjectId, RequirementId, RevisionId, TaskId};
+    use crate::ids::{
+        AuditId, MilestoneId, PrincipalId, ProjectId, RequirementId, RevisionId, TaskId,
+    };
 
     fn sample_commands() -> Vec<ProjectCommand> {
         let planned_at: chrono::DateTime<chrono::Utc> =

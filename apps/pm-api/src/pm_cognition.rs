@@ -31,8 +31,13 @@ async fn overview(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-        .await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
 
     let runs: Vec<RunRow> = sqlx::query_as(
         "SELECT id, scope, item_count, confirmed_count, status, created_at \
@@ -67,16 +72,18 @@ async fn overview(
     // 最新 run 的全部条目（逐项审核区数据源）。
     let latest_run_id = runs.first().map(|r| r.id);
     let items: Vec<CognitionItemRow> = match latest_run_id {
-        Some(run_id) => sqlx::query_as(
-            "SELECT id, domain, content, evidence, confidence, has_conflict, \
+        Some(run_id) => {
+            sqlx::query_as(
+                "SELECT id, domain, content, evidence, confidence, has_conflict, \
                     state, decided_by, decided_at, decision_note \
              FROM ai.cognition_item WHERE tenant_id = $1 AND run_id = $2 \
              ORDER BY created_at",
-        )
-        .bind(caller.tenant_id)
-        .bind(run_id)
-        .fetch_all(&state.pool)
-        .await?,
+            )
+            .bind(caller.tenant_id)
+            .bind(run_id)
+            .fetch_all(&state.pool)
+            .await?
+        }
         None => Vec::new(),
     };
 
@@ -119,8 +126,13 @@ async fn start_run(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-        .await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
 
     let mut tx = state.pool.begin().await.map_err(ApiError::Internal)?;
 
@@ -291,8 +303,13 @@ async fn decide_item(
     Path((project_id, item_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<DecisionBody>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-        .await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
 
     let next_state = match body.action.as_str() {
         "confirm" => "confirmed",
@@ -398,8 +415,13 @@ async fn knowledge(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-        .await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
 
     let rows: Vec<KnowledgeRow> = sqlx::query_as(
         "SELECT id, domain, content, version, source_item_id, confirmed_by, confirmed_at \

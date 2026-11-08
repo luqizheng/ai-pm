@@ -4,11 +4,11 @@
 //! 审批链的 `decide` 执行。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
+    Json, Router,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -17,8 +17,8 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use pm_application::project_import::{
-    ApplyRequest, ImportError, StartImportRequest, cancel_import, get_import, import_proposals,
-    list_imports, propose_import, start_import, terminate_import,
+    cancel_import, get_import, import_proposals, list_imports, propose_import, start_import,
+    terminate_import, ApplyRequest, ImportError, StartImportRequest,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -75,17 +75,21 @@ fn import_error(err: ImportError) -> Response {
             StatusCode::UNPROCESSABLE_ENTITY,
             json!({ "error": "repository_not_in_project" }),
         ),
-        ImportError::AlreadyApplied => (
-            StatusCode::CONFLICT,
-            json!({ "error": "already_applied" }),
+        ImportError::AlreadyApplied => {
+            (StatusCode::CONFLICT, json!({ "error": "already_applied" }))
+        }
+        ImportError::NotFound => (
+            StatusCode::NOT_FOUND,
+            json!({ "error": "import_not_found" }),
         ),
-        ImportError::NotFound => (StatusCode::NOT_FOUND, json!({ "error": "import_not_found" })),
-        ImportError::NotCancellable => (
-            StatusCode::CONFLICT,
-            json!({ "error": "not_cancellable" }),
-        ),
+        ImportError::NotCancellable => {
+            (StatusCode::CONFLICT, json!({ "error": "not_cancellable" }))
+        }
         ImportError::StaleDraft => (StatusCode::CONFLICT, json!({ "error": "stale_draft" })),
-        ImportError::NoSelection => (StatusCode::UNPROCESSABLE_ENTITY, json!({ "error": "no_selection" })),
+        ImportError::NoSelection => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            json!({ "error": "no_selection" }),
+        ),
         ImportError::ProjectCodeTaken => (
             StatusCode::CONFLICT,
             json!({ "error": "project_code_taken" }),
@@ -100,7 +104,10 @@ fn import_error(err: ImportError) -> Response {
         ),
         ImportError::Model(detail) => {
             tracing::error!(detail = %detail, "import model error");
-            (StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": "model_failed" }))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                json!({ "error": "model_failed" }),
+            )
         }
         ImportError::Git(detail) => {
             tracing::error!(detail = %detail, "import git error");
@@ -108,7 +115,10 @@ fn import_error(err: ImportError) -> Response {
         }
         ImportError::Db(err) => {
             tracing::error!(error = %err, "import endpoint database error");
-            (StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": "internal" }))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                json!({ "error": "internal" }),
+            )
         }
     };
     (status, Json(body)).into_response()
@@ -134,13 +144,24 @@ async fn list_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     match list_imports(&state.pool, project_id).await {
         Ok(items) => {
             let total = items.len();
-            (StatusCode::OK, Json(json!({ "items": items, "total": total }))).into_response()
+            (
+                StatusCode::OK,
+                Json(json!({ "items": items, "total": total })),
+            )
+                .into_response()
         }
         Err(err) => import_error(err),
     }
@@ -164,7 +185,14 @@ async fn start_handler(
     Path(project_id): Path<Uuid>,
     body: Option<Json<StartBody>>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     let Some(Json(body)) = body else {
@@ -197,7 +225,14 @@ async fn get_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path((project_id, import_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     match get_import(&state.pool, project_id, import_id).await {
@@ -219,17 +254,28 @@ async fn cancel_handler(
     Path((project_id, import_id)): Path<(Uuid, Uuid)>,
     body: Option<Json<CancelBody>>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     let reason = body.and_then(|Json(body)| body.reason);
     let actor = principal.audit_actor();
-    match cancel_import(&state.pool, project_id, import_id, &actor, reason.as_deref()).await {
-        Ok(()) => (
-            StatusCode::OK,
-            Json(json!({ "status": "cancelled" })),
-        )
-            .into_response(),
+    match cancel_import(
+        &state.pool,
+        project_id,
+        import_id,
+        &actor,
+        reason.as_deref(),
+    )
+    .await
+    {
+        Ok(()) => (StatusCode::OK, Json(json!({ "status": "cancelled" }))).into_response(),
         Err(err) => import_error(err),
     }
 }
@@ -240,7 +286,14 @@ async fn terminate_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path((project_id, import_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     let actor = principal.audit_actor();
@@ -259,7 +312,14 @@ async fn proposals_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path((project_id, import_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     match import_proposals(&state.pool, project_id, import_id).await {
@@ -274,7 +334,14 @@ async fn apply_handler(
     Path((project_id, import_id)): Path<(Uuid, Uuid)>,
     Json(req): Json<ApplyRequest>,
 ) -> Response {
-    if let Err(resp) = project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
         return resp;
     }
     match propose_import(&state.pool, project_id, import_id, req).await {

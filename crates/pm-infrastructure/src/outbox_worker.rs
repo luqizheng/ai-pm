@@ -111,8 +111,7 @@ impl OutboxWorker {
 
     /// Claim and settle at most one event.
     pub async fn dispatch_once(&self) -> Result<DispatchOutcome, sqlx::Error> {
-        let Some(event) = outbox::claim(&self.pool, &self.worker_id, self.lease_secs).await
-        else {
+        let Some(event) = outbox::claim(&self.pool, &self.worker_id, self.lease_secs).await else {
             return Ok(DispatchOutcome::Idle);
         };
         match self.handlers.get(event.event_type.as_str()) {

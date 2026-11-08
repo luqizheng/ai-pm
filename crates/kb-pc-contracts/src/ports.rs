@@ -141,8 +141,7 @@ pub trait KbServicePort: Send + Sync {
         idempotency_key: &str,
     ) -> Result<Accepted, PortError>;
     /// K2 查询分析状态。
-    async fn analysis_status(&self, kb_analysis_id: Uuid)
-        -> Result<KbAnalysisStatus, PortError>;
+    async fn analysis_status(&self, kb_analysis_id: Uuid) -> Result<KbAnalysisStatus, PortError>;
     /// K3 查询文档修订元数据（PC→KB 只读 PK1 共用）。
     async fn document_revision(
         &self,
@@ -285,10 +284,7 @@ pub trait PcServicePort: Send + Sync {
         idempotency_key: &str,
     ) -> Result<Accepted, PortError>;
     /// P3 分析状态/结论。
-    async fn analysis_status(
-        &self,
-        pc_analysis_id: Uuid,
-    ) -> Result<PcAnalysisStatus, PortError>;
+    async fn analysis_status(&self, pc_analysis_id: Uuid) -> Result<PcAnalysisStatus, PortError>;
     /// P4 Proposal 详情。
     async fn proposal(&self, proposal_id: &str) -> Result<PcProposal, PortError>;
     /// P5 审批转达（CAS）。
@@ -320,10 +316,7 @@ impl KbServicePort for PortNotWired {
     ) -> Result<Accepted, PortError> {
         Err(PortError::NotWired("KbServicePort::submit_analysis"))
     }
-    async fn analysis_status(
-        &self,
-        _kb_analysis_id: Uuid,
-    ) -> Result<KbAnalysisStatus, PortError> {
+    async fn analysis_status(&self, _kb_analysis_id: Uuid) -> Result<KbAnalysisStatus, PortError> {
         Err(PortError::NotWired("KbServicePort::analysis_status"))
     }
     async fn document_revision(
@@ -372,10 +365,7 @@ impl PcServicePort for PortNotWired {
     ) -> Result<Accepted, PortError> {
         Err(PortError::NotWired("PcServicePort::submit_decision"))
     }
-    async fn analysis_status(
-        &self,
-        _pc_analysis_id: Uuid,
-    ) -> Result<PcAnalysisStatus, PortError> {
+    async fn analysis_status(&self, _pc_analysis_id: Uuid) -> Result<PcAnalysisStatus, PortError> {
         Err(PortError::NotWired("PcServicePort::analysis_status"))
     }
     async fn proposal(&self, _proposal_id: &str) -> Result<PcProposal, PortError> {
@@ -403,10 +393,7 @@ mod tests {
     #[tokio::test]
     async fn placeholder_ports_are_fail_closed() {
         let port = PortNotWired;
-        let err = port
-            .proposal("p1")
-            .await
-            .unwrap_err();
+        let err = port.proposal("p1").await.unwrap_err();
         assert!(matches!(err, PortError::NotWired(_)));
         assert!(err.to_string().contains("Phase 4/5"));
     }

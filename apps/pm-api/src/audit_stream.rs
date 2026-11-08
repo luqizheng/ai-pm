@@ -14,12 +14,12 @@ use std::time::Duration;
 use axum::extract::State;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use sqlx::postgres::PgListener;
+use sqlx::PgPool;
 use tokio::sync::broadcast;
+use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
-use tokio_stream::wrappers::BroadcastStream;
 
 use crate::routes::AppState;
 
@@ -154,7 +154,8 @@ mod tests {
 
     #[test]
     fn parses_full_payload() {
-        let log = parse_notification(&sample(Some("44444444-4444-4444-4444-444444444444"))).unwrap();
+        let log =
+            parse_notification(&sample(Some("44444444-4444-4444-4444-444444444444"))).unwrap();
         assert_eq!(log.action, "task.create");
         assert_eq!(log.target_type, "task");
         assert_eq!(

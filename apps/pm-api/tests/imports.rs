@@ -1,4 +1,4 @@
-﻿//! 冷启动导入的集成测试：启动 → Fake 模型分析 → 草案 → 4 条提案 → 审批执行。
+//! 冷启动导入的集成测试：启动 → Fake 模型分析 → 草案 → 4 条提案 → 审批执行。
 //!
 //! 全程真实 PostgreSQL（`#[sqlx::test]`）与真实 Git 仓库；不访问网络。
 
@@ -7,22 +7,22 @@ use std::process::Command;
 use std::sync::Arc;
 
 use pm_ai::repo_model::FakeRepoAnalysisModel;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project_with_status};
+use pm_application::bootstrap::{bootstrap_project_with_status, BootstrapRequest};
 use pm_application::command_executor::PgCommandExecutor;
 use pm_application::project_import::{
-    ApplyProject, ApplyRequest, StartImportRequest, ground_draft, propose_import, run_import_job,
-    start_import,
+    ground_draft, propose_import, run_import_job, start_import, ApplyProject, ApplyRequest,
+    StartImportRequest,
 };
 use pm_application::repo_facts::{CommitFact, DocContent, HotFile, LanguageStat, RepoFacts};
-use pm_application::supervision::{DecideRequest, Decision, decide_approval};
+use pm_application::supervision::{decide_approval, DecideRequest, Decision};
 use pm_application::PolicyEngine;
 use pm_domain::import::{
     AssigneeRole, Evidence, EvidenceKind, OrgChart, ProjectDraft, RequirementDraft, TaskDraft,
 };
 use pm_domain::proposal::Confidence;
+use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 struct Repo {
     root: PathBuf,
@@ -56,10 +56,24 @@ fn init_repo() -> Repo {
     std::fs::create_dir_all(path.join("docs")).unwrap();
     std::fs::write(path.join("docs/design.md"), "# 地形设计\n").unwrap();
     run(&["add", "-A"]);
-    run(&["-c", "commit.gpgsign=false", "commit", "-q", "-m", "feat(core): terrain"]);
+    run(&[
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-q",
+        "-m",
+        "feat(core): terrain",
+    ]);
     std::fs::write(path.join("docs/design.md"), "# 地形设计 v2\n").unwrap();
     run(&["add", "-A"]);
-    run(&["-c", "commit.gpgsign=false", "commit", "-q", "-m", "fix: docs"]);
+    run(&[
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-q",
+        "-m",
+        "fix: docs",
+    ]);
     let url = format!("file://{}", path.to_string_lossy().replace('\\', "/"));
     Repo { root, url }
 }
@@ -127,7 +141,9 @@ async fn prepare_draft(pool: &PgPool, project_id: Uuid) -> (Uuid, ProjectDraft) 
     .await
     .unwrap();
     let model = FakeRepoAnalysisModel;
-    run_import_job(pool, &model, started.import_id).await.unwrap();
+    run_import_job(pool, &model, started.import_id)
+        .await
+        .unwrap();
     let detail = pm_application::project_import::get_import(pool, project_id, started.import_id)
         .await
         .unwrap();
@@ -221,14 +237,22 @@ async fn draft_ready_auto_starts_a_system_discovery_session(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(source, "SYSTEM", "the worker session must be SYSTEM-sourced");
+    assert_eq!(
+        source, "SYSTEM",
+        "the worker session must be SYSTEM-sourced"
+    );
     // unknowns→质询的映射由 Web 向导测试覆盖（web_session_is_created_with_unknowns_as_questions）；
     // Fake 模型仅在材料截断时产 unknowns，本 fixture 无截断 → 0 质询是合法输出。
-    assert_eq!(question_count, 0, "no unknowns in this fixture, no questions expected");
+    assert_eq!(
+        question_count, 0,
+        "no unknowns in this fixture, no questions expected"
+    );
     let _ = session_id;
 
     // 幂等：重跑 job 不再另开会话。
-    run_import_job(&pool, &FakeRepoAnalysisModel, import_id).await.unwrap();
+    run_import_job(&pool, &FakeRepoAnalysisModel, import_id)
+        .await
+        .unwrap();
     let count: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM discovery.discovery_session s \
          JOIN integration.repo_import i ON i.discovery_session_id = s.id WHERE i.id = $1",
@@ -321,11 +345,12 @@ async fn approvals_execute_import_and_project_becomes_planning(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(status, "applied");
-    let project_status: String = sqlx::query_scalar("SELECT status FROM core.project WHERE id = $1")
-        .bind(project_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let project_status: String =
+        sqlx::query_scalar("SELECT status FROM core.project WHERE id = $1")
+            .bind(project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(project_status, "planning");
 
     // 0039/S02D-04 语义：requirement 级不再有 draft/approved 态——导入建行即
@@ -339,7 +364,9 @@ async fn approvals_execute_import_and_project_becomes_planning(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(requirements.len(), draft.requirements.len());
-    assert!(requirements.iter().all(|(_, lifecycle)| lifecycle == "active"));
+    assert!(requirements
+        .iter()
+        .all(|(_, lifecycle)| lifecycle == "active"));
     let draft_v1: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM delivery.requirement r           JOIN delivery.requirement_revision v ON v.requirement_id = r.id AND v.version = 1           WHERE r.project_id = $1 AND v.state = 'draft'",
     )
@@ -347,7 +374,11 @@ async fn approvals_execute_import_and_project_becomes_planning(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(draft_v1 as usize, requirements.len(), "import must not auto-approve v1");
+    assert_eq!(
+        draft_v1 as usize,
+        requirements.len(),
+        "import must not auto-approve v1"
+    );
 
     let unassigned: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM delivery.task WHERE project_id = $1 AND assignee_id IS NULL",
@@ -358,13 +389,12 @@ async fn approvals_execute_import_and_project_becomes_planning(pool: PgPool) {
     .unwrap();
     assert_eq!(unassigned, 0, "all imported tasks must resolve an agent");
 
-    let docs: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.project_document WHERE project_id = $1",
-    )
-    .bind(project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let docs: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ai.project_document WHERE project_id = $1")
+            .bind(project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(docs as usize, draft.requirements.len() + 1);
 
     let audit: i64 = sqlx::query_scalar(
@@ -402,13 +432,12 @@ async fn approvals_execute_import_and_project_becomes_planning(pool: PgPool) {
         )
         .await
         .unwrap();
-    let after: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.requirement WHERE project_id = $1",
-    )
-    .bind(project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let after: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.requirement WHERE project_id = $1")
+            .bind(project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(after as usize, draft.requirements.len() + 1);
 
     let _ = std::fs::remove_dir_all(knowledge);
@@ -479,13 +508,12 @@ async fn rejecting_one_approval_marks_import_rejected(pool: PgPool) {
             .unwrap();
     assert_eq!(project_status, "initializing");
     // 已批准的里程碑不回滚。
-    let milestones: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.milestone WHERE project_id = $1",
-    )
-    .bind(project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let milestones: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.milestone WHERE project_id = $1")
+            .bind(project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(milestones as usize, draft.milestones.len());
 }
 
@@ -501,8 +529,14 @@ fn grounding_drops_fabricated_evidence() {
             authored_at: "2026-10-31T00:00:00Z".to_string(),
             subject: "feat: x".to_string(),
         }],
-        hot_files: vec![HotFile { path: "a.rs".to_string(), touches: 1 }],
-        languages: vec![LanguageStat { extension: "rs".to_string(), files: 1 }],
+        hot_files: vec![HotFile {
+            path: "a.rs".to_string(),
+            touches: 1,
+        }],
+        languages: vec![LanguageStat {
+            extension: "rs".to_string(),
+            files: 1,
+        }],
         file_count: 1,
         docs: vec![DocContent {
             path: "README.md".to_string(),
@@ -596,13 +630,11 @@ async fn seed_broken_repo(pool: &PgPool, project_id: Uuid) -> Uuid {
     )
     .await
     .unwrap();
-    sqlx::query(
-        "UPDATE integration.project_repository SET status = 'verified' WHERE id = $1",
-    )
-    .bind(created.id)
-    .execute(pool)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE integration.project_repository SET status = 'verified' WHERE id = $1")
+        .bind(created.id)
+        .execute(pool)
+        .await
+        .unwrap();
     created.id
 }
 
@@ -634,7 +666,10 @@ async fn one_repository_failure_does_not_abort_the_others(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(status, "draft_ready", "a failing repository must not abort the import");
+    assert_eq!(
+        status, "draft_ready",
+        "a failing repository must not abort the import"
+    );
 
     // 失败仓留 failed Attempt；成功仓留 succeeded Attempt（R-4-1）。
     let rows: Vec<(Uuid, String)> = sqlx::query_as(
@@ -743,7 +778,10 @@ async fn failed_import_releases_the_initialization_slot(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(active, 0, "a failed import must release the initialization slot");
+    assert_eq!(
+        active, 0,
+        "a failed import must release the initialization slot"
+    );
 
     // 名额释放后可以再次发起导入。
     let again = start_import(

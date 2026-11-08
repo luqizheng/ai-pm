@@ -3,16 +3,20 @@
 //! 状态机推进、发现卡片确认（answer + verification + user_confirmed）、
 //! question 回答/暂缓、T-022 可见性与跨租户隔离。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
 
 fn get(uri: &str) -> Request<Body> {
-    Request::builder().method("GET").uri(uri).body(Body::empty()).unwrap()
+    Request::builder()
+        .method("GET")
+        .uri(uri)
+        .body(Body::empty())
+        .unwrap()
 }
 
 fn json_request(method: &str, uri: &str, body: Value) -> Request<Body> {
@@ -83,7 +87,11 @@ async fn seed_import(pool: &PgPool, project_id: Uuid) -> Uuid {
     import_id
 }
 
-async fn start_session(app: &axum::Router, project_id: Uuid, import_id: Option<Uuid>) -> (StatusCode, Value) {
+async fn start_session(
+    app: &axum::Router,
+    project_id: Uuid,
+    import_id: Option<Uuid>,
+) -> (StatusCode, Value) {
     let payload = match import_id {
         Some(id) => json!({ "import_id": id }),
         None => json!({}),
@@ -117,13 +125,18 @@ async fn web_session_is_created_with_unknowns_as_questions(pool: PgPool) {
     assert_eq!(body["linked_import_id"], json!(import_id));
 
     let session_id = Uuid::parse_str(session["id"].as_str().unwrap()).unwrap();
-    let linked: Option<Uuid> =
-        sqlx::query_scalar("SELECT discovery_session_id FROM integration.repo_import WHERE id = $1")
-            .bind(import_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(linked, Some(session_id), "repo_import must link forward (Q1)");
+    let linked: Option<Uuid> = sqlx::query_scalar(
+        "SELECT discovery_session_id FROM integration.repo_import WHERE id = $1",
+    )
+    .bind(import_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        linked,
+        Some(session_id),
+        "repo_import must link forward (Q1)"
+    );
 
     let (status, detail) = body_json(
         app.oneshot(get(&format!(
@@ -150,7 +163,11 @@ async fn session_status_machine_is_enforced_over_http(pool: PgPool) {
 
     let (status, moved) = body_json(
         app.clone()
-            .oneshot(json_request("POST", &format!("{base}/status"), json!({ "status": "PAUSED" })))
+            .oneshot(json_request(
+                "POST",
+                &format!("{base}/status"),
+                json!({ "status": "PAUSED" }),
+            ))
             .await
             .unwrap(),
     )
@@ -169,7 +186,11 @@ async fn session_status_machine_is_enforced_over_http(pool: PgPool) {
             .unwrap(),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "PAUSED → COMPLETED must be allowed: {err}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "PAUSED → COMPLETED must be allowed: {err}"
+    );
     assert_eq!(err["status"], "COMPLETED");
 
     let (status, err) = body_json(
@@ -236,15 +257,17 @@ async fn discovery_card_verification_writes_answer_and_confirmed_finding(pool: P
     assert_eq!(outcome["question"]["finding_id"], json!(finding_id));
     assert_eq!(outcome["answer"]["answer"], "确实尚未完成");
     assert_eq!(
-        outcome["confirmed_finding"]["kind"],
-        "user_confirmed",
+        outcome["confirmed_finding"]["kind"], "user_confirmed",
         "选项对应外部实现时必须产生 user_confirmed finding"
     );
 
     let (_, detail) = body_json(app.clone().oneshot(get(&base)).await.unwrap()).await;
     assert_eq!(detail["findings"].as_array().unwrap().len(), 2);
     assert_eq!(detail["questions"].as_array().unwrap().len(), 1);
-    assert_eq!(detail["questions"][0]["answers"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        detail["questions"][0]["answers"].as_array().unwrap().len(),
+        1
+    );
 
     let (status, err) = body_json(
         app.clone()
@@ -298,13 +321,7 @@ async fn questions_can_be_answered_and_deferred(pool: PgPool) {
     assert_eq!(status, StatusCode::CREATED, "body: {answer}");
     assert_eq!(answer["answer"], "内部运营团队");
 
-    let (_, detail) = body_json(
-        app.clone()
-            .oneshot(get(&base))
-            .await
-            .unwrap(),
-    )
-    .await;
+    let (_, detail) = body_json(app.clone().oneshot(get(&base)).await.unwrap()).await;
     assert_eq!(detail["questions"][0]["status"], "answered");
 
     let (status, err) = body_json(
@@ -318,7 +335,11 @@ async fn questions_can_be_answered_and_deferred(pool: PgPool) {
             .unwrap(),
     )
     .await;
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "answered 不可再答");
+    assert_eq!(
+        status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "answered 不可再答"
+    );
 
     let (status, question2) = body_json(
         app.clone()
@@ -394,7 +415,11 @@ async fn non_member_and_cross_tenant_projects_return_404(pool: PgPool) {
             .unwrap(),
     )
     .await;
-    assert_eq!(status, StatusCode::NOT_FOUND, "跨租户项目必须按不存在处理: {err}");
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "跨租户项目必须按不存在处理: {err}"
+    );
 
     let member_only: Uuid = sqlx::query_scalar(
         "INSERT INTO core.project (tenant_id, customer_id, code, name) \
@@ -427,9 +452,11 @@ async fn session_listing_returns_created_sessions(pool: PgPool) {
         assert_eq!(status, StatusCode::CREATED);
     }
     let (status, list) = body_json(
-        app.oneshot(get(&format!("/v1/pm/projects/{project_id}/discovery/sessions")))
-            .await
-            .unwrap(),
+        app.oneshot(get(&format!(
+            "/v1/pm/projects/{project_id}/discovery/sessions"
+        )))
+        .await
+        .unwrap(),
     )
     .await;
     assert_eq!(status, StatusCode::OK);

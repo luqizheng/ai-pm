@@ -12,11 +12,11 @@ async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
     let customer_id: Uuid = sqlx::query_scalar(
         "INSERT INTO core.customer (name, tenant_id) VALUES ($1, $2) RETURNING id",
     )
-            .bind(format!("customer {code}"))
-            .bind(SYSTEM_TENANT)
-            .fetch_one(pool)
-            .await
-            .unwrap();
+    .bind(format!("customer {code}"))
+    .bind(SYSTEM_TENANT)
+    .fetch_one(pool)
+    .await
+    .unwrap();
     sqlx::query_scalar(
         "INSERT INTO core.project (customer_id, code, name, tenant_id) \
          VALUES ($1, $2, $3, $4) RETURNING id",
@@ -35,18 +35,20 @@ async fn seed_task(pool: &PgPool, project_id: Uuid) -> Uuid {
         "INSERT INTO delivery.task (project_id, title, tenant_id) \
          VALUES ($1, 'task', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
-        .bind(project_id)
-        .fetch_one(pool)
-        .await
-        .unwrap()
+    .bind(project_id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
 }
 
 async fn seed_principal(pool: &PgPool, name: &str) -> Uuid {
-    sqlx::query_scalar("INSERT INTO core.principal (kind, display_name) VALUES ('human', $1) RETURNING id")
-        .bind(name)
-        .fetch_one(pool)
-        .await
-        .unwrap()
+    sqlx::query_scalar(
+        "INSERT INTO core.principal (kind, display_name) VALUES ('human', $1) RETURNING id",
+    )
+    .bind(name)
+    .fetch_one(pool)
+    .await
+    .unwrap()
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -81,11 +83,11 @@ async fn task_run_attempt_numbers_are_unique_per_task(pool: PgPool) {
         "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, tenant_id) \
          VALUES ($1, $2, 1, (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
-        .bind(project_id)
-        .bind(task_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    .bind(project_id)
+    .bind(task_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     let dup = sqlx::query(
         "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, tenant_id) \
          VALUES ($1, $2, 1, (SELECT tenant_id FROM core.project WHERE id = $1))",
@@ -117,7 +119,10 @@ async fn task_supersession_rejects_self_and_duplicate_edges(pool: PgPool) {
     .bind(actor)
     .execute(&pool)
     .await;
-    assert!(self_edge.is_err(), "old_task_id = new_task_id must be rejected");
+    assert!(
+        self_edge.is_err(),
+        "old_task_id = new_task_id must be rejected"
+    );
 
     let insert = "INSERT INTO delivery.task_supersession \
                   (project_id, old_task_id, new_task_id, reason, created_by, tenant_id) \
@@ -143,12 +148,13 @@ async fn task_supersession_rejects_self_and_duplicate_edges(pool: PgPool) {
         "a duplicate (old, new) edge must be rejected"
     );
 
-    let count: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM delivery.task_supersession WHERE old_task_id = $1")
-            .bind(old_task)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM delivery.task_supersession WHERE old_task_id = $1",
+    )
+    .bind(old_task)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(count, 1);
 }
 
@@ -157,7 +163,8 @@ async fn task_waiting_allows_one_active_row_per_task(pool: PgPool) {
     let project_id = seed_project(&pool, "M9-4").await;
     let task_id = seed_task(&pool, project_id).await;
 
-    let insert = "INSERT INTO delivery.task_waiting (project_id, task_id, reason, questions, tenant_id) \
+    let insert =
+        "INSERT INTO delivery.task_waiting (project_id, task_id, reason, questions, tenant_id) \
                   VALUES ($1, $2, 'needs_info', '[\"which cache?\"]', \
                           (SELECT tenant_id FROM core.project WHERE id = $1))";
     sqlx::query(insert)
@@ -176,11 +183,13 @@ async fn task_waiting_allows_one_active_row_per_task(pool: PgPool) {
         "a task may have only one active waiting row"
     );
 
-    sqlx::query("UPDATE delivery.task_waiting SET ended_at = now() WHERE task_id = $1 AND ended_at IS NULL")
-        .bind(task_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE delivery.task_waiting SET ended_at = now() WHERE task_id = $1 AND ended_at IS NULL",
+    )
+    .bind(task_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     assert!(
         sqlx::query(insert)
             .bind(project_id)
@@ -217,10 +226,11 @@ async fn task_run_failure_is_append_only(pool: PgPool) {
     .await
     .unwrap();
 
-    let update = sqlx::query("UPDATE delivery.task_run_failure SET retryable = false WHERE run_id = $1")
-        .bind(run_id)
-        .execute(&pool)
-        .await;
+    let update =
+        sqlx::query("UPDATE delivery.task_run_failure SET retryable = false WHERE run_id = $1")
+            .bind(run_id)
+            .execute(&pool)
+            .await;
     assert!(update.is_err(), "failure records must be immutable");
 
     let delete = sqlx::query("DELETE FROM delivery.task_run_failure WHERE run_id = $1")
@@ -286,12 +296,12 @@ async fn constraint_accepts_all_thirteen_values_and_rejects_legacy_ones(pool: Pg
             "INSERT INTO delivery.task (project_id, title, status, tenant_id) \
              VALUES ($1, $2, $3, (SELECT tenant_id FROM core.project WHERE id = $1))",
         )
-            .bind(project_id)
-            .bind(format!("ok {status}"))
-            .bind(status)
-            .execute(&pool)
-            .await
-            .unwrap_or_else(|e| panic!("{status} must be accepted: {e}"));
+        .bind(project_id)
+        .bind(format!("ok {status}"))
+        .bind(status)
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("{status} must be accepted: {e}"));
     }
 
     for legacy in ["backlog", "in_progress", "in_review", "done", "needs_info"] {
@@ -304,7 +314,10 @@ async fn constraint_accepts_all_thirteen_values_and_rejects_legacy_ones(pool: Pg
         .bind(legacy)
         .execute(&pool)
         .await;
-        assert!(err.is_err(), "{legacy} must be rejected by the 13-state CHECK");
+        assert!(
+            err.is_err(),
+            "{legacy} must be rejected by the 13-state CHECK"
+        );
     }
 
     let default_status: String = sqlx::query_scalar(

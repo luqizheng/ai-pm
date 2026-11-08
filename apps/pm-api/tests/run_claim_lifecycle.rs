@@ -5,8 +5,8 @@
 //! TaskReady 归档抑制用例在 `crates/pm-infrastructure/tests/outbox_handlers.rs`
 //!（依赖方向：infrastructure → application 正确）。
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use pm_application::run_dispatch::{DispatchMode, RunDispatchConfig, claim_once};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_application::run_dispatch::{claim_once, DispatchMode, RunDispatchConfig};
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -154,7 +154,10 @@ async fn claim_skips_archived_project_and_claims_the_next_one(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(p1_status, "queued", "跳过不是取消：归档 Run 的终态化归归档事务");
+    assert_eq!(
+        p1_status, "queued",
+        "跳过不是取消：归档 Run 的终态化归归档事务"
+    );
 }
 
 /// I1-012/013 归档竞态：创建先拿锁 → 建出的 queued Run 随后被归档事务条件取消；
@@ -211,11 +214,16 @@ async fn claim_drains_multiple_projects_without_deadlock(pool: PgPool) {
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        assert!(!claimed_projects.contains(&pid), "一个项目只应被领一次：{pid}");
+        assert!(
+            !claimed_projects.contains(&pid),
+            "一个项目只应被领一次：{pid}"
+        );
         claimed_projects.push(pid);
     }
     assert_eq!(claimed_projects.len(), 3);
     // 第四次：全部领完 → None。
-    let drained = claim_once(&pool, "i1c-worker", &cfg, DispatchMode::On).await.unwrap();
+    let drained = claim_once(&pool, "i1c-worker", &cfg, DispatchMode::On)
+        .await
+        .unwrap();
     assert!(drained.is_none());
 }

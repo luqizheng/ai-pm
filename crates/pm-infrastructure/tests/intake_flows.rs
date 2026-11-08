@@ -15,13 +15,11 @@
 
 use std::time::Duration;
 
-use pm_application::intake::{
-    self, RoutingPolicy, SignalEnvelope, SubmitIntake, TaskSpec,
-};
+use pm_application::intake::{self, RoutingPolicy, SignalEnvelope, SubmitIntake, TaskSpec};
 use pm_application::outbox::{OutboxAppend, OutboxEvent};
+use pm_domain::SYSTEM_TENANT;
 use pm_infrastructure::outbox_handlers::register_all_handlers;
 use pm_infrastructure::outbox_worker::{OutboxWorker, OUTBOX_IDLE_POLL_MS};
-use pm_domain::SYSTEM_TENANT;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
@@ -98,7 +96,10 @@ fn worker(pool: &PgPool) -> OutboxWorker {
     )
 }
 
-async fn tasks_of(pool: &PgPool, intake_id: Uuid) -> Vec<(String, String, String, i32, Option<serde_json::Value>)> {
+async fn tasks_of(
+    pool: &PgPool,
+    intake_id: Uuid,
+) -> Vec<(String, String, String, i32, Option<serde_json::Value>)> {
     sqlx::query(
         "SELECT task_type, task_status, phase, attempt, result_ref \
            FROM integration.intake_task WHERE intake_id = $1 ORDER BY created_at",
@@ -144,16 +145,20 @@ async fn task_id_of_type(pool: &PgPool, intake_id: Uuid, task_type: &str) -> Uui
 }
 
 async fn derived(pool: &PgPool, intake_id: Uuid) -> String {
-    let tasks: Vec<(String, String)> = sqlx::query(
-        "SELECT phase, task_status FROM integration.intake_task WHERE intake_id = $1",
-    )
-    .bind(intake_id)
-    .fetch_all(pool)
-    .await
-    .unwrap()
-    .into_iter()
-    .map(|r| (r.get::<String, _>("phase"), r.get::<String, _>("task_status")))
-    .collect();
+    let tasks: Vec<(String, String)> =
+        sqlx::query("SELECT phase, task_status FROM integration.intake_task WHERE intake_id = $1")
+            .bind(intake_id)
+            .fetch_all(pool)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|r| {
+                (
+                    r.get::<String, _>("phase"),
+                    r.get::<String, _>("task_status"),
+                )
+            })
+            .collect();
     format!("{:?}", intake::aggregate_task_status(&tasks))
 }
 
@@ -164,13 +169,21 @@ async fn flow_a_document_upload_full_chain(pool: PgPool) {
     seed_principal(&pool).await;
     let project = seed_project(&pool, "FLOW-A").await;
     let receipt = submit(&pool, project, "document_upload").await;
-    assert_eq!(receipt.tasks.len(), 1, "document_upload routes kb_analyze (required)");
+    assert_eq!(
+        receipt.tasks.len(),
+        1,
+        "document_upload routes kb_analyze (required)"
+    );
 
     // KB 桩消费请求并回写完成（不发信号——信号是 KB 条件产出，§10.2）。
     let w = worker(&pool);
     drain(&w).await;
     let tasks = tasks_of(&pool, receipt.intake_id).await;
-    assert_eq!(status_of(&tasks, "kb_analyze"), "COMPLETED", "KB stub completes analysis");
+    assert_eq!(
+        status_of(&tasks, "kb_analyze"),
+        "COMPLETED",
+        "KB stub completes analysis"
+    );
 
     // 流程 A 信号段：KB 产出 PRODUCT_CANDIDATE/medium 信号（测试显式构造）。
     let kb_task = task_id_of_type(&pool, receipt.intake_id, "kb_analyze").await;
@@ -200,7 +213,11 @@ async fn flow_a_document_upload_full_chain(pool: PgPool) {
 
     let tasks = tasks_of(&pool, receipt.intake_id).await;
     // 信号过阈值 → RT 创建 pc_analyze → PC 桩 NO_CHANGE → COMPLETED。
-    assert_eq!(status_of(&tasks, "pc_analyze"), "COMPLETED", "RT routes signal to pc_analyze; PC stub completes (NO_CHANGE)");
+    assert_eq!(
+        status_of(&tasks, "pc_analyze"),
+        "COMPLETED",
+        "RT routes signal to pc_analyze; PC stub completes (NO_CHANGE)"
+    );
     assert_eq!(derived(&pool, receipt.intake_id).await, "Completed");
 
     // pc_analyze 的 signal_ref 记录了信号摘要（四元组引用，无 service 字段）。
@@ -212,11 +229,17 @@ async fn flow_a_document_upload_full_chain(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    let signals = signal_ref.get("signals").and_then(|v| v.as_array()).unwrap();
+    let signals = signal_ref
+        .get("signals")
+        .and_then(|v| v.as_array())
+        .unwrap();
     assert_eq!(signals.len(), 1);
     assert_eq!(signals[0]["relevance"], "PRODUCT_CANDIDATE");
     assert_eq!(signals[0]["confidence"], "medium");
-    assert!(signal_ref.to_string().find("service").is_none(), "no service field in signal_ref (ADR-07)");
+    assert!(
+        signal_ref.to_string().find("service").is_none(),
+        "no service field in signal_ref (ADR-07)"
+    );
 
     // result_ref 是四元组（无 service 字段）。
     let (_, _, _, _, result_ref) = tasks
@@ -272,7 +295,11 @@ async fn flow_b_no_relevance_signal_does_not_create_task(pool: PgPool) {
         "ABSENT",
         "RT must not create pc_analyze for NO_PRODUCT_RELEVANCE (§10.2-1)"
     );
-    assert_eq!(derived(&pool, receipt.intake_id).await, "Completed", "flow B legal terminal state");
+    assert_eq!(
+        derived(&pool, receipt.intake_id).await,
+        "Completed",
+        "flow B legal terminal state"
+    );
 }
 
 // ── 流程 C：失败上报 → FAILED → 人工重试（复用原行）→ COMPLETED ────────────
@@ -323,8 +350,13 @@ async fn flow_c_failure_then_manual_retry_reuses_row(pool: PgPool) {
     assert_eq!(derived(&pool, receipt.intake_id).await, "Failed");
 
     // 人工重试：复用原行（同 id），attempt+1 → PENDING，事件重投。
-    let retried = intake::retry_task(&pool, receipt.intake_id, decide_task).await.unwrap();
-    assert_eq!(retried.task_id, decide_task, "retry must reuse the original row (ADR-12)");
+    let retried = intake::retry_task(&pool, receipt.intake_id, decide_task)
+        .await
+        .unwrap();
+    assert_eq!(
+        retried.task_id, decide_task,
+        "retry must reuse the original row (ADR-12)"
+    );
     assert_eq!(retried.attempt, 1);
 
     // 非终态任务重试 → 409 语义（IntakeError::NotRetryable）。
@@ -335,7 +367,11 @@ async fn flow_c_failure_then_manual_retry_reuses_row(pool: PgPool) {
 
     drain(&w).await; // 重试派发事件 → PC 桩消费 → completed 事件回写
     let tasks = tasks_of(&pool, receipt.intake_id).await;
-    assert_eq!(status_of(&tasks, "pc_decide"), "COMPLETED", "retry completes via stub");
+    assert_eq!(
+        status_of(&tasks, "pc_decide"),
+        "COMPLETED",
+        "retry completes via stub"
+    );
     assert_eq!(derived(&pool, receipt.intake_id).await, "Completed");
 }
 
@@ -359,7 +395,10 @@ async fn flow_d_decision_produces_proposal_l4_separated(pool: PgPool) {
         .4
         .clone()
         .unwrap();
-    assert_eq!(result_ref["target_type"], "proposal", "result_ref pins proposal DomainRef");
+    assert_eq!(
+        result_ref["target_type"], "proposal",
+        "result_ref pins proposal DomainRef"
+    );
 
     // L4 待办留痕（提案审批在 PC，Platform 展示）。
     let n: i64 = sqlx::query_scalar(
@@ -371,7 +410,11 @@ async fn flow_d_decision_produces_proposal_l4_separated(pool: PgPool) {
     .unwrap();
     assert!(n > 0, "proposal pending todo must be recorded for display");
 
-    assert_eq!(derived(&pool, receipt.intake_id).await, "Completed", "L4 does not feed back into L3 (§11.4)");
+    assert_eq!(
+        derived(&pool, receipt.intake_id).await,
+        "Completed",
+        "L4 does not feed back into L3 (§11.4)"
+    );
 }
 
 // ── 流程 E：pc.evidence_requested → kb_supply(optional) → 不阻塞父 ─────────
@@ -410,11 +453,16 @@ async fn flow_e_evidence_request_creates_optional_kb_supply(pool: PgPool) {
     drain(&w).await;
 
     let tasks = tasks_of(&pool, receipt.intake_id).await;
-    assert_eq!(status_of(&tasks, "kb_supply"), "COMPLETED", "kb_supply routed to KB stub and completed");
+    assert_eq!(
+        status_of(&tasks, "kb_supply"),
+        "COMPLETED",
+        "kb_supply routed to KB stub and completed"
+    );
     // kb_supply 为 optional：即使失败也不阻塞父（此处已完成）。
     assert_eq!(derived(&pool, receipt.intake_id).await, "Completed");
     assert_eq!(
-        status_of(&tasks, "pc_decide"), "COMPLETED",
+        status_of(&tasks, "pc_decide"),
+        "COMPLETED",
         "evidence request must not touch the originating task"
     );
 
@@ -458,21 +506,39 @@ async fn flow_f_aggregation_priority_rules(pool: PgPool) {
         .execute(&pool).await.unwrap();
     sqlx::query("UPDATE integration.intake_task SET task_status = 'FAILED' WHERE id = $1")
         .bind(kb_task)
-        .execute(&pool).await.unwrap();
-    assert_eq!(derived(&pool, receipt.intake_id).await, "Failed", "required FAILED outranks");
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        derived(&pool, receipt.intake_id).await,
+        "Failed",
+        "required FAILED outranks"
+    );
     sqlx::query("UPDATE integration.intake_task SET task_status = 'PENDING' WHERE id = $1")
         .bind(kb_task)
-        .execute(&pool).await.unwrap();
-    assert_eq!(derived(&pool, receipt.intake_id).await, "Processing", "required active → PROCESSING");
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        derived(&pool, receipt.intake_id).await,
+        "Processing",
+        "required active → PROCESSING"
+    );
     sqlx::query("UPDATE integration.intake_task SET task_status = 'COMPLETED' WHERE id = $1")
         .bind(kb_task)
-        .execute(&pool).await.unwrap();
+        .execute(&pool)
+        .await
+        .unwrap();
     // pc_analyze（required）仍非终态 → 不允许 COMPLETED。
     assert_eq!(derived(&pool, receipt.intake_id).await, "Processing");
-    sqlx::query("UPDATE integration.intake_task SET task_status = 'COMPLETED' \
-                 WHERE intake_id = $1 AND task_type = 'pc_analyze'")
-        .bind(receipt.intake_id)
-        .execute(&pool).await.unwrap();
+    sqlx::query(
+        "UPDATE integration.intake_task SET task_status = 'COMPLETED' \
+                 WHERE intake_id = $1 AND task_type = 'pc_analyze'",
+    )
+    .bind(receipt.intake_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     assert_eq!(derived(&pool, receipt.intake_id).await, "Completed");
 }
 
@@ -507,17 +573,19 @@ async fn idempotent_resubmission_has_zero_side_effects(pool: PgPool) {
     let first = submit_with_key(&key).await;
     assert!(!first.replayed);
     let second = submit_with_key(&key).await;
-    assert!(second.replayed, "duplicate submission replays existing intake");
+    assert!(
+        second.replayed,
+        "duplicate submission replays existing intake"
+    );
     assert_eq!(first.intake_id, second.intake_id);
     assert_eq!(first.tasks.len(), second.tasks.len());
 
-    let task_n: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM integration.intake_task WHERE intake_id = $1",
-    )
-    .bind(first.intake_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let task_n: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM integration.intake_task WHERE intake_id = $1")
+            .bind(first.intake_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(task_n, 1, "no extra task rows on replay");
     let outbox_n: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM integration.outbox_event \
@@ -528,7 +596,10 @@ async fn idempotent_resubmission_has_zero_side_effects(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert!(outbox_n <= 2, "outbox events collapsed by idempotency key (got {outbox_n})");
+    assert!(
+        outbox_n <= 2,
+        "outbox events collapsed by idempotency key (got {outbox_n})"
+    );
 }
 
 /// 多信号合并：两个信号同 intake → 单活跃任务 + signal_ref 数组两条（§9.4.3-1）。
@@ -547,11 +618,23 @@ async fn multi_signal_merge_appends_to_active_task(pool: PgPool) {
         subject_refs: vec![],
         evidence_refs: vec![],
     };
-    intake::route_cognition_signal(&pool, project, SYSTEM_TENANT, receipt.intake_id, signal("first"), &policy)
-        .await
-        .unwrap();
+    intake::route_cognition_signal(
+        &pool,
+        project,
+        SYSTEM_TENANT,
+        receipt.intake_id,
+        signal("first"),
+        &policy,
+    )
+    .await
+    .unwrap();
     let outcome = intake::route_cognition_signal(
-        &pool, project, SYSTEM_TENANT, receipt.intake_id, signal("second"), &policy,
+        &pool,
+        project,
+        SYSTEM_TENANT,
+        receipt.intake_id,
+        signal("second"),
+        &policy,
     )
     .await
     .unwrap();
@@ -565,10 +648,18 @@ async fn multi_signal_merge_appends_to_active_task(pool: PgPool) {
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert_eq!(rows.len(), 1, "only one active pc_analyze (uq_intake_task_active)");
+    assert_eq!(
+        rows.len(),
+        1,
+        "only one active pc_analyze (uq_intake_task_active)"
+    );
     assert_eq!(rows[0].0, "PENDING");
     let signals = rows[0].1.get("signals").and_then(|v| v.as_array()).unwrap();
-    assert_eq!(signals.len(), 2, "second signal merged into signal_ref (array append)");
+    assert_eq!(
+        signals.len(),
+        2,
+        "second signal merged into signal_ref (array append)"
+    );
 
     // 消费链继续跑通：合并任务被桩完成 → completed 回写。
     let w = worker(&pool);
@@ -650,8 +741,11 @@ async fn signal_after_terminal_defaults_to_todo(pool: PgPool) {
 /// 目录一致性：装配 handler 覆盖 CATALOG has_handler=true 全集（启动校验等价）。
 #[test]
 fn handler_assembly_covers_catalog() {
-    let mut expected: Vec<&str> =
-        pm_application::outbox::CATALOG.iter().filter(|s| s.has_handler).map(|s| s.event_type).collect();
+    let mut expected: Vec<&str> = pm_application::outbox::CATALOG
+        .iter()
+        .filter(|s| s.has_handler)
+        .map(|s| s.event_type)
+        .collect();
     expected.sort_unstable();
     // 装配出的 worker（需要 pool 才能构造；此处直接对齐常量清单）。
     let wired: Vec<&str> = {
@@ -675,5 +769,8 @@ fn handler_assembly_covers_catalog() {
         v.sort_unstable();
         v
     };
-    assert_eq!(wired, expected, "register_all_handlers must cover catalog has_handler=true");
+    assert_eq!(
+        wired, expected,
+        "register_all_handlers must cover catalog has_handler=true"
+    );
 }

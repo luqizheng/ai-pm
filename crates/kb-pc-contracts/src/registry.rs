@@ -89,9 +89,9 @@ impl TargetDomain {
     /// 通道开放状态（PC-01B §13.1「设计状态」列）。
     pub fn channel_state(self) -> DomainChannelState {
         match self {
-            TargetDomain::Requirement
-            | TargetDomain::ProjectGoal
-            | TargetDomain::KnowledgeBase => DomainChannelState::Open,
+            TargetDomain::Requirement | TargetDomain::ProjectGoal | TargetDomain::KnowledgeBase => {
+                DomainChannelState::Open
+            }
             TargetDomain::ProjectCognition => DomainChannelState::ReadOnly,
             TargetDomain::ProductCognition => DomainChannelState::Open,
             TargetDomain::Design | TargetDomain::Adr | TargetDomain::ProductReality => {
@@ -171,9 +171,18 @@ mod tests {
 
     #[test]
     fn channel_states_match_pc01b() {
-        assert_eq!(resolve_reference(TargetDomain::KnowledgeBase), Ok(OwningService::Kb));
-        assert_eq!(resolve_reference(TargetDomain::Requirement), Ok(OwningService::Platform));
-        assert_eq!(resolve_reference(TargetDomain::ProductCognition), Ok(OwningService::Pc));
+        assert_eq!(
+            resolve_reference(TargetDomain::KnowledgeBase),
+            Ok(OwningService::Kb)
+        );
+        assert_eq!(
+            resolve_reference(TargetDomain::Requirement),
+            Ok(OwningService::Platform)
+        );
+        assert_eq!(
+            resolve_reference(TargetDomain::ProductCognition),
+            Ok(OwningService::Pc)
+        );
         // design/adr 通道未开放；product_plan 永久排除。
         assert!(resolve_reference(TargetDomain::Design).is_err());
         assert!(resolve_reference(TargetDomain::Adr).is_err());

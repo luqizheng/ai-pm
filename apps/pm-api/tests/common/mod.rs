@@ -14,17 +14,14 @@ static KNOWLEDGE_ENV: Once = Once::new();
 /// 内会被 ensure_ready 拒绝）。服务层直调测试用 [`knowledge_root`] 每用例独立根。
 pub fn ensure_knowledge_env() {
     KNOWLEDGE_ENV.call_once(|| {
-        let dir = std::env::temp_dir()
-            .join(format!("ai-pm-knowledge-env-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("ai-pm-knowledge-env-{}", Uuid::new_v4()));
         std::env::set_var("AI_PM_KNOWLEDGE_ROOT", &dir);
     });
 }
 
 /// S02-I2：服务层直调用例的独立临时知识库根（ensure_ready 自动 git init）。
 pub fn knowledge_root() -> KnowledgeRoot {
-    KnowledgeRoot::new(
-        std::env::temp_dir().join(format!("ai-pm-knowledge-{}", Uuid::new_v4())),
-    )
+    KnowledgeRoot::new(std::env::temp_dir().join(format!("ai-pm-knowledge-{}", Uuid::new_v4())))
 }
 
 /// T-022：`router()` 的 off 模式注入 `dev-off` principal；`/v1/pm/*` 读端点

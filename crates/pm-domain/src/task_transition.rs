@@ -89,7 +89,8 @@ pub fn validate_transition(input: &TransitionInput) -> Result<(), TransitionErro
         ));
     }
     // §三 E1：Running → Submitted 不能只依据 Codex 的文字声明。
-    if input.from == TaskStatus::Running && input.to == TaskStatus::Submitted
+    if input.from == TaskStatus::Running
+        && input.to == TaskStatus::Submitted
         && !input.delivery_submitted
     {
         return Err(TransitionError::MissingEvidence(
@@ -109,17 +110,14 @@ pub fn validate_transition(input: &TransitionInput) -> Result<(), TransitionErro
     // Execution/Infrastructure/Validation/Unknown 失败是临时故障证据，单独不构成
     // 任务级失败；B4-C（重试耗尽）与 B4-B（总期限耗尽）独立放行。
     if input.from == TaskStatus::Running && input.to == TaskStatus::Failed {
-        let terminating_failure = input
-            .failure
-            .as_ref()
-            .is_some_and(|f| {
-                matches!(
-                    f.category,
-                    crate::task_run::FailureCategory::Permission
-                        | crate::task_run::FailureCategory::PolicyViolation
-                        | crate::task_run::FailureCategory::MissingDependency
-                )
-            });
+        let terminating_failure = input.failure.as_ref().is_some_and(|f| {
+            matches!(
+                f.category,
+                crate::task_run::FailureCategory::Permission
+                    | crate::task_run::FailureCategory::PolicyViolation
+                    | crate::task_run::FailureCategory::MissingDependency
+            )
+        });
         if !(input.retry_exhausted || input.deadline_exhausted || terminating_failure) {
             return Err(TransitionError::MissingEvidence(
                 "no terminating failure condition (B4-A..B4-D)",
@@ -230,11 +228,7 @@ impl TransitionInput {
     }
 
     /// Carries the task identity (required for supersession checks).
-    pub fn for_task(
-        task_id: crate::ids::TaskId,
-        from: TaskStatus,
-        to: TaskStatus,
-    ) -> Self {
+    pub fn for_task(task_id: crate::ids::TaskId, from: TaskStatus, to: TaskStatus) -> Self {
         Self {
             task_id: Some(task_id),
             ..Self::minimal(from, to)
@@ -292,8 +286,19 @@ mod tests {
     fn terminal_states_have_no_outgoing_edges() {
         for terminal in TaskStatus::TERMINAL {
             for to in [
-                Draft, Ready, Claimed, Running, AwaitingDecision, Blocked, Submitted,
-                Reviewing, Completed, ChangesRequested, Failed, Cancelled, Superseded,
+                Draft,
+                Ready,
+                Claimed,
+                Running,
+                AwaitingDecision,
+                Blocked,
+                Submitted,
+                Reviewing,
+                Completed,
+                ChangesRequested,
+                Failed,
+                Cancelled,
+                Superseded,
             ] {
                 let input = TransitionInput::minimal(terminal, to);
                 assert!(
@@ -310,8 +315,19 @@ mod tests {
     #[test]
     fn identity_transition_is_illegal() {
         for status in [
-            Draft, Ready, Claimed, Running, AwaitingDecision, Blocked, Submitted,
-            Reviewing, Completed, ChangesRequested, Failed, Cancelled, Superseded,
+            Draft,
+            Ready,
+            Claimed,
+            Running,
+            AwaitingDecision,
+            Blocked,
+            Submitted,
+            Reviewing,
+            Completed,
+            ChangesRequested,
+            Failed,
+            Cancelled,
+            Superseded,
         ] {
             let input = TransitionInput::minimal(status, status);
             assert!(validate_transition(&input).is_err(), "{status:?} -> itself");
@@ -321,8 +337,15 @@ mod tests {
     #[test]
     fn cancel_allowed_from_every_non_terminal() {
         for from in [
-            Draft, Ready, Claimed, Running, AwaitingDecision, Blocked, Submitted,
-            Reviewing, ChangesRequested,
+            Draft,
+            Ready,
+            Claimed,
+            Running,
+            AwaitingDecision,
+            Blocked,
+            Submitted,
+            Reviewing,
+            ChangesRequested,
         ] {
             let input = TransitionInput::minimal(from, Cancelled);
             assert!(
@@ -388,7 +411,14 @@ mod tests {
         // Running → Superseded 额外受取代守卫约束（§11.2/§11.6）。
         assert!(validate_transition(&valid_supersede(Running)).is_ok());
         // Running 没有直达 Ready/Completed/ChangesRequested 的边。
-        for to in [Ready, Completed, ChangesRequested, Reviewing, Draft, Claimed] {
+        for to in [
+            Ready,
+            Completed,
+            ChangesRequested,
+            Reviewing,
+            Draft,
+            Claimed,
+        ] {
             let input = TransitionInput::minimal(Running, to);
             assert!(validate_transition(&input).is_err(), "Running -> {to:?}");
         }

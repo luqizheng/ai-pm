@@ -9,21 +9,19 @@
 //! 口径）；人工重试写审计（成功与失败均记，同 outbox_ops 纪律）。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, Query, State},
     http::HeaderMap,
     routing::{get, post},
+    Json, Router,
 };
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use pm_application::intake::{
-    self, SubmitIntake, TaskSpec,
-};
+use pm_application::intake::{self, SubmitIntake, TaskSpec};
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiError, ApiResult, require_project_visible};
+use crate::support::{require_project_visible, ApiError, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -86,9 +84,17 @@ async fn submit_handler(
                 .and_then(|v| Uuid::parse_str(v).ok())
         })
         .ok_or_else(|| {
-            ApiError::BadRequest("project context required (?project_id= or X-Project-Id or source_ref.project_id)")
+            ApiError::BadRequest(
+                "project context required (?project_id= or X-Project-Id or source_ref.project_id)",
+            )
         })?;
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
 
     // 幂等键：HTTP `Idempotency-Key` header（D-12）。
     let idempotency_key = headers
@@ -139,7 +145,9 @@ async fn state_handler(
     Path(intake_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let view = intake_view(&state, intake_id, &caller).await?;
-    Ok(Json(serde_json::to_value(view).unwrap_or_else(|_| serde_json::json!({}))))
+    Ok(Json(
+        serde_json::to_value(view).unwrap_or_else(|_| serde_json::json!({})),
+    ))
 }
 
 /// 人工重试（P3-5，ADR-12）：FAILED / NEEDS_HUMAN_REVIEW 任务复用原行
@@ -153,7 +161,9 @@ async fn retry_handler(
     let retry = intake::retry_task(&state.pool, intake_id, task_id).await?;
     // 重试审计：留痕（操作者/任务/结果）。
     audit_retry(&state, &caller, view.intake_id, task_id).await;
-    Ok(Json(serde_json::to_value(retry).unwrap_or_else(|_| serde_json::json!({}))))
+    Ok(Json(
+        serde_json::to_value(retry).unwrap_or_else(|_| serde_json::json!({})),
+    ))
 }
 
 /// 归属校验 + Intake 视图（跨项目 intake 统一 404，不泄露存在性）。
@@ -172,7 +182,13 @@ async fn intake_view(
     .fetch_optional(&state.pool)
     .await?;
     let project_id = project_id.ok_or(ApiError::NotFound("intake not found"))?;
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
     intake::intake_state(&state.pool, intake_id)
         .await
         .map_err(|e| match e {

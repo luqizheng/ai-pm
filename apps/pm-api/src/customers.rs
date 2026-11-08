@@ -12,11 +12,11 @@
 //! `{message}`（避免 @digua/http 覆盖成错误码）。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::get,
+    Json, Router,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -24,7 +24,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiResult, paging};
+use crate::support::{paging, ApiResult};
 use pm_application::rows::CustomerRow;
 
 /// 可写状态集合。`placeholder` 只能由迁移产生，不接受手工写入。
@@ -84,7 +84,9 @@ pub(crate) async fn customer_visible_to(
     customer_id: Uuid,
     principal_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    let sql = format!("SELECT EXISTS (SELECT 1 FROM core.customer c WHERE c.id = $1 AND {CUSTOMER_VISIBLE})");
+    let sql = format!(
+        "SELECT EXISTS (SELECT 1 FROM core.customer c WHERE c.id = $1 AND {CUSTOMER_VISIBLE})"
+    );
     sqlx::query_scalar(&sql)
         .bind(customer_id)
         .bind(tenant_id)
@@ -158,7 +160,14 @@ async fn get_customer(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(customer_id): Path<Uuid>,
 ) -> ApiResult<Response> {
-    match fetch_customer(&state.pool, caller.tenant_id, customer_id, caller.principal_id).await? {
+    match fetch_customer(
+        &state.pool,
+        caller.tenant_id,
+        customer_id,
+        caller.principal_id,
+    )
+    .await?
+    {
         Some(row) => Ok(Json(row).into_response()),
         None => Err(crate::support::ApiError::NotFound("customer not found")),
     }
@@ -216,8 +225,13 @@ async fn create_customer(
     };
 
     if let Some(parent_id) = body.parent_id {
-        match customer_visible_to(&state.pool, caller.tenant_id, parent_id, caller.principal_id)
-            .await
+        match customer_visible_to(
+            &state.pool,
+            caller.tenant_id,
+            parent_id,
+            caller.principal_id,
+        )
+        .await
         {
             Ok(true) => {}
             Ok(false) => return bad_request("parent customer not found".into()),
@@ -248,7 +262,14 @@ async fn create_customer(
         Err(err) => return internal(err),
     };
 
-    match fetch_customer(&state.pool, caller.tenant_id, customer_id, caller.principal_id).await {
+    match fetch_customer(
+        &state.pool,
+        caller.tenant_id,
+        customer_id,
+        caller.principal_id,
+    )
+    .await
+    {
         Ok(Some(row)) => (StatusCode::CREATED, Json(row)).into_response(),
         Ok(None) => internal(sqlx::Error::RowNotFound),
         Err(err) => internal(err),
@@ -280,14 +301,20 @@ async fn update_customer(
     Path(customer_id): Path<Uuid>,
     Json(body): Json<UpdateCustomerBody>,
 ) -> Response {
-    let current =
-        match fetch_customer(&state.pool, caller.tenant_id, customer_id, caller.principal_id).await {
-            Ok(Some(row)) => row,
-            Ok(None) => {
-                return crate::support::ApiError::NotFound("customer not found").into_response()
-            }
-            Err(err) => return internal(err),
-        };
+    let current = match fetch_customer(
+        &state.pool,
+        caller.tenant_id,
+        customer_id,
+        caller.principal_id,
+    )
+    .await
+    {
+        Ok(Some(row)) => row,
+        Ok(None) => {
+            return crate::support::ApiError::NotFound("customer not found").into_response()
+        }
+        Err(err) => return internal(err),
+    };
 
     let code = match body.code {
         None => current.code,
@@ -323,13 +350,14 @@ async fn update_customer(
         Some(pid) if pid == customer_id => {
             return bad_request("customer cannot be its own parent".into());
         }
-        Some(pid) => match customer_visible_to(&state.pool, caller.tenant_id, pid, caller.principal_id)
-            .await
-        {
-            Ok(true) => Some(pid),
-            Ok(false) => return bad_request("parent customer not found".into()),
-            Err(err) => return internal(err),
-        },
+        Some(pid) => {
+            match customer_visible_to(&state.pool, caller.tenant_id, pid, caller.principal_id).await
+            {
+                Ok(true) => Some(pid),
+                Ok(false) => return bad_request("parent customer not found".into()),
+                Err(err) => return internal(err),
+            }
+        }
     };
 
     let updated = sqlx::query(
@@ -340,7 +368,10 @@ async fn update_customer(
     .bind(customer_id)
     .bind(&code)
     .bind(&name)
-    .bind(trimmed_opt_or(body.short_name.as_deref(), current.short_name))
+    .bind(trimmed_opt_or(
+        body.short_name.as_deref(),
+        current.short_name,
+    ))
     .bind(trimmed_opt_or(body.industry.as_deref(), current.industry))
     .bind(trimmed_opt_or(body.notes.as_deref(), current.notes))
     .bind(&status)
@@ -358,7 +389,14 @@ async fn update_customer(
         };
     }
 
-    match fetch_customer(&state.pool, caller.tenant_id, customer_id, caller.principal_id).await {
+    match fetch_customer(
+        &state.pool,
+        caller.tenant_id,
+        customer_id,
+        caller.principal_id,
+    )
+    .await
+    {
         Ok(Some(row)) => Json(row).into_response(),
         Ok(None) => crate::support::ApiError::NotFound("customer not found").into_response(),
         Err(err) => internal(err),

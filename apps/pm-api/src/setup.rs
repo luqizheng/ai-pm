@@ -16,12 +16,12 @@
 //! 前端强制注册的判定走网关 setup-status（同源真相），不依赖本端点。
 
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use axum::Json;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 /// 进程内探测句柄：`main.rs` 启动时 [`run_startup_check`]，处理器经 [`shared`]
 /// 读取。全局单例与 `/install`、MCP hosts 同款模式（部署级配置，测试各自构造

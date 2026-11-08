@@ -4,13 +4,13 @@
 //! 关键不变量：`core.tenant_member.role` 是唯一事实源——每次请求都查库，
 //! 所以降级/删除后**旧 JWT 的下一次请求即被拒**，不等 token 过期。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use axum::Router;
-use digua_common_jwt::{JWKSCache, sign_token};
+use digua_common_jwt::{sign_token, JWKSCache};
 use pm_api::auth::AuthConfig;
 use pm_api::routes::router_with_auth_config;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -187,13 +187,14 @@ async fn rv1b_admin_can_demote_another_admin_but_cannot_promote_back(pool: PgPoo
     )
     .await;
     assert_eq!(status, StatusCode::OK, "admin 可以降级另一个 admin");
-    let role: String =
-        sqlx::query_scalar("SELECT role FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2")
-            .bind(w.tenant_id)
-            .bind(second_admin)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let role: String = sqlx::query_scalar(
+        "SELECT role FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2",
+    )
+    .bind(w.tenant_id)
+    .bind(second_admin)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(role, "member");
 
     // admin 想把他提回 admin → 403（不得提升超过自身权限）。
@@ -238,13 +239,14 @@ async fn rv1_rv2_admin_demoted_to_member_loses_access_on_the_same_jwt(pool: PgPo
     .await;
     assert_eq!(status, StatusCode::OK);
 
-    let role: String =
-        sqlx::query_scalar("SELECT role FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2")
-            .bind(w.tenant_id)
-            .bind(w.admin_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let role: String = sqlx::query_scalar(
+        "SELECT role FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2",
+    )
+    .bind(w.tenant_id)
+    .bind(w.admin_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(role, "member");
 
     // 审计：before/after 正确。
@@ -366,7 +368,10 @@ async fn rv5_nobody_but_owner_transfer_creates_an_owner(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "PATCH",
-        &format!("/v1/pm/tenants/{}/members/{}/role", w.tenant_id, w.member_id),
+        &format!(
+            "/v1/pm/tenants/{}/members/{}/role",
+            w.tenant_id, w.member_id
+        ),
         &admin_token,
         Some(json!({ "role": "owner" })),
     )
@@ -425,12 +430,13 @@ async fn rv6_the_last_owner_cannot_be_demoted_or_removed(pool: PgPool) {
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["code"], json!("OWNER_LAST"));
 
-    let owners: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM core.tenant_member WHERE tenant_id = $1 AND role = 'owner'")
-            .bind(w.tenant_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let owners: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.tenant_member WHERE tenant_id = $1 AND role = 'owner'",
+    )
+    .bind(w.tenant_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(owners, 1, "库内必须仍有 owner");
 }
 
@@ -453,12 +459,14 @@ async fn rv7_cross_tenant_member_calls_are_404(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO core.tenant_member (tenant_id, principal_id, role) VALUES ($1, $2, 'owner')")
-        .bind(other)
-        .bind(other_owner)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO core.tenant_member (tenant_id, principal_id, role) VALUES ($1, $2, 'owner')",
+    )
+    .bind(other)
+    .bind(other_owner)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     // 直接调用 service 层不可能绕过；这里用 owner 的 token 打别的租户路径。
     let (status, _) = call(
@@ -480,13 +488,14 @@ async fn rv7_cross_tenant_member_calls_are_404(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-    let role: String =
-        sqlx::query_scalar("SELECT role FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2")
-            .bind(other)
-            .bind(other_owner)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let role: String = sqlx::query_scalar(
+        "SELECT role FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2",
+    )
+    .bind(other)
+    .bind(other_owner)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(role, "owner", "跨租户写不得生效");
 }
 
@@ -509,20 +518,24 @@ async fn rv8_audit_failure_rolls_the_role_change_back(pool: PgPool) {
     let (status, _) = call(
         &w.app,
         "PATCH",
-        &format!("/v1/pm/tenants/{}/members/{}/role", w.tenant_id, w.member_id),
+        &format!(
+            "/v1/pm/tenants/{}/members/{}/role",
+            w.tenant_id, w.member_id
+        ),
         &token("usr-owner", json!([])),
         Some(json!({ "role": "admin" })),
     )
     .await;
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
 
-    let role: String =
-        sqlx::query_scalar("SELECT role FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2")
-            .bind(w.tenant_id)
-            .bind(w.member_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let role: String = sqlx::query_scalar(
+        "SELECT role FROM core.tenant_member WHERE tenant_id = $1 AND principal_id = $2",
+    )
+    .bind(w.tenant_id)
+    .bind(w.member_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(role, "member", "审计失败必须让角色变更一起回滚");
 }
 
@@ -532,12 +545,14 @@ async fn rv8_audit_failure_rolls_the_role_change_back(pool: PgPool) {
 async fn rv9_concurrent_owner_demotion_never_reaches_zero_owners(pool: PgPool) {
     let w = world(&pool).await;
     // 造两个 owner，然后并发降级。
-    sqlx::query("UPDATE core.tenant_member SET role = 'owner' WHERE tenant_id = $1 AND principal_id = $2")
-        .bind(w.tenant_id)
-        .bind(w.admin_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE core.tenant_member SET role = 'owner' WHERE tenant_id = $1 AND principal_id = $2",
+    )
+    .bind(w.tenant_id)
+    .bind(w.admin_id)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     // 两个 owner 各自降级对方：并发下必须有一个被 OWNER_LAST 拦住。
     let owner_token = token("usr-owner", json!([]));
@@ -578,12 +593,13 @@ async fn rv9_concurrent_owner_demotion_never_reaches_zero_owners(pool: PgPool) {
         "并发降级不得全部生效，实际 {codes:?}"
     );
 
-    let owners: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM core.tenant_member WHERE tenant_id = $1 AND role = 'owner'")
-            .bind(w.tenant_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let owners: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.tenant_member WHERE tenant_id = $1 AND role = 'owner'",
+    )
+    .bind(w.tenant_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(owners, 1, "并发降级不得让 owner 归零");
 }
 
@@ -625,7 +641,10 @@ async fn tn4_owner_transfer_swaps_roles_atomically_and_audits_twice(pool: PgPool
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["previous_owner"].as_str().unwrap(), w.owner_id.to_string());
+    assert_eq!(
+        body["previous_owner"].as_str().unwrap(),
+        w.owner_id.to_string()
+    );
     assert_eq!(body["new_owner"].as_str().unwrap(), w.admin_id.to_string());
 
     let roles: Vec<(Uuid, String)> =
@@ -662,11 +681,12 @@ async fn tn5_admin_cannot_transfer_ownership(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 
-    let owners: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM core.tenant_member WHERE tenant_id = $1 AND role = 'owner'")
-            .bind(w.tenant_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let owners: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.tenant_member WHERE tenant_id = $1 AND role = 'owner'",
+    )
+    .bind(w.tenant_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(owners, 1);
 }

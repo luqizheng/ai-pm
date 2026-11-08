@@ -15,10 +15,10 @@
 //! `team_already_exists`），前端据其渲染结果态（设计稿 Screen 07）。
 
 use axum::{
-    Json, Router,
     extract::{Path, Query, State},
     response::{IntoResponse, Response},
     routing::{get, post},
+    Json, Router,
 };
 use pm_application::team_onboarding as svc;
 use pm_application::team_onboarding::TeamOnboardingError;
@@ -62,7 +62,10 @@ pub(crate) fn router() -> Router<AppState> {
             post(dissolve_handler),
         )
         // 自助：预览 + 接受（未激活 principal 可调，仍需 bearer）。
-        .route("/v1/pm/invitations/preview", get(preview_invitation_handler))
+        .route(
+            "/v1/pm/invitations/preview",
+            get(preview_invitation_handler),
+        )
         .route("/v1/pm/invitations/accept", post(accept_invitation_handler))
         .route("/v1/pm/invitation-links/preview", get(preview_link_handler))
         .route("/v1/pm/invitation-links/accept", post(accept_link_handler))
@@ -204,8 +207,7 @@ async fn revoke_invitation_handler(
     if !caller.is_admin {
         return crate::team_llm_guard::err_forbidden("tenant admin required");
     }
-    match svc::revoke_invitation(&state.pool, &caller.audit_actor(), tenant_id, invitation_id)
-        .await
+    match svc::revoke_invitation(&state.pool, &caller.audit_actor(), tenant_id, invitation_id).await
     {
         Ok(()) => (
             axum::http::StatusCode::OK,
@@ -284,8 +286,13 @@ async fn dissolve_handler(
     if guard_tenant(&caller, tenant_id).is_err() {
         return err_not_found("tenant not found");
     }
-    match svc::dissolve_team(&state.pool, &caller.audit_actor(), caller.principal_id, tenant_id)
-        .await
+    match svc::dissolve_team(
+        &state.pool,
+        &caller.audit_actor(),
+        caller.principal_id,
+        tenant_id,
+    )
+    .await
     {
         Ok(outcome) => (axum::http::StatusCode::OK, Json(outcome)).into_response(),
         Err(err) => api_err(err),
@@ -329,7 +336,10 @@ async fn accept_invitation_handler(
     }
 }
 
-async fn preview_link_handler(State(state): State<AppState>, Query(q): Query<TokenQuery>) -> Response {
+async fn preview_link_handler(
+    State(state): State<AppState>,
+    Query(q): Query<TokenQuery>,
+) -> Response {
     match svc::preview_invitation_link(&state.pool, &q.token).await {
         Ok(Some(preview)) => (axum::http::StatusCode::OK, Json(preview)).into_response(),
         Ok(None) => err_not_found("invitation_not_found"),

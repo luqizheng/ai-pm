@@ -13,15 +13,15 @@
 //! `project_id` 条件（调用方可构造别项目的 `event_id`）。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, Query, State},
     routing::{get, post},
+    Json, Router,
 };
 use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiResult, require_project_visible};
+use crate::support::{require_project_visible, ApiResult};
 use pm_application::outbox_ops::{self, ReplayOutcome};
 
 pub(crate) fn router() -> Router<AppState> {
@@ -62,7 +62,13 @@ async fn dead_letters_handler(
     let project_id = query
         .project_id
         .ok_or_else(|| crate::support::ApiError::BadRequest("project_id is required"))?;
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
     let listing = outbox_ops::dead_letters(&state.pool, project_id, limit).await?;
     Ok(Json(serde_json::json!({
@@ -80,7 +86,13 @@ async fn replay_handler(
     let project_id = query
         .project_id
         .ok_or_else(|| crate::support::ApiError::BadRequest("project_id is required"))?;
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
 
     let outcome = outbox_ops::replay(&state.pool, project_id, event_id).await?;
     // 重放审计：成功与失败均记（失败尝试也是排障信息）。
@@ -105,9 +117,7 @@ async fn replay_handler(
         // 跨项目事件与不存在事件**统一 404**——不让调用方区分「存在但无权」
         // 与「不存在」，避免事件 ID 探测。
         ReplayOutcome::NotFound => {
-            return Err(crate::support::ApiError::NotFound(
-                "outbox event not found",
-            ));
+            return Err(crate::support::ApiError::NotFound("outbox event not found"));
         }
         ReplayOutcome::NotDeadLetter => {
             return Err(crate::support::ApiError::Conflict(
@@ -125,9 +135,17 @@ async fn stats_handler(
     let project_id = query
         .project_id
         .ok_or_else(|| crate::support::ApiError::BadRequest("project_id is required"))?;
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
     let stats = outbox_ops::stats(&state.pool, project_id).await?;
-    Ok(Json(serde_json::to_value(stats).unwrap_or_else(|_| serde_json::json!({}))))
+    Ok(Json(
+        serde_json::to_value(stats).unwrap_or_else(|_| serde_json::json!({})),
+    ))
 }
 
 /// 写一条重放审计（`action = 'outbox_dead_letter_replay'`）。

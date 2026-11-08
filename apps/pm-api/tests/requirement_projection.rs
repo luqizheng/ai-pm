@@ -3,12 +3,12 @@
 //! → 按 ref 读 Git 一致 → rebuild_projection 重建投影 → 漂移显式拒绝 →
 //! 绑定幂等（不产生重复 Git 提交）→ 未绑定 confirm 拒绝（六要素）。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::StatusCode;
 use pm_api::audit_stream::AuditFeed;
 use pm_api::mcp_hosts::McpHosts;
 use pm_api::routes::router_with_feed_and_knowledge;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::knowledge::KnowledgeRoot;
 use pm_application::requirement::{
     self, ConfirmRevisionRequest, CreateRequirementRequest, DraftRevisionRequest,
@@ -44,7 +44,10 @@ async fn send(
     let response = app.oneshot(req).await.unwrap();
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 fn actor_of(principal_id: Uuid) -> pm_application::actor::AuditActor {
@@ -101,7 +104,10 @@ async fn submitted(
         pool,
         pm_domain::SYSTEM_TENANT,
         entry.id,
-        DraftRevisionRequest { markdown: markdown.to_string(), summary: Some("投影验证".to_string()) },
+        DraftRevisionRequest {
+            markdown: markdown.to_string(),
+            summary: Some("投影验证".to_string()),
+        },
         &actor,
     )
     .await
@@ -119,7 +125,11 @@ async fn submitted(
     let detail = requirement::requirement_detail(pool, pm_domain::SYSTEM_TENANT, entry.id)
         .await
         .unwrap();
-    let rev = detail.revisions.iter().find(|r| r.id == revision.id).unwrap();
+    let rev = detail
+        .revisions
+        .iter()
+        .find(|r| r.id == revision.id)
+        .unwrap();
     let sha = rev.markdown_version_ref.clone().expect("submit must bind");
     (entry.id, revision.id, sha, markdown.to_string())
 }
@@ -158,7 +168,10 @@ async fn submit_binds_projection_and_read_at_ref_matches(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(bound_ref, sha);
-    assert_eq!(bound_hash, pm_application::knowledge::content_hash(markdown));
+    assert_eq!(
+        bound_hash,
+        pm_application::knowledge::content_hash(markdown)
+    );
 
     // 按 ref 读 Git = 起草正文（§6.1 A=B）。
     let body = requirement_projection_read(&pool, &root, project_id, requirement_id, &sha).await;
@@ -172,11 +185,9 @@ async fn requirement_projection_read(
     requirement_id: Uuid,
     sha: &str,
 ) -> String {
-    pm_application::requirement_projection::read_at_ref(
-        pool, root, project_id, requirement_id, sha,
-    )
-    .await
-    .unwrap()
+    pm_application::requirement_projection::read_at_ref(pool, root, project_id, requirement_id, sha)
+        .await
+        .unwrap()
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -194,7 +205,10 @@ async fn rebuild_projection_restores_content_and_detects_drift(pool: PgPool) {
         .await
         .unwrap();
     let content = pm_application::requirement_projection::rebuild_projection(
-        &pool, &root, requirement_id, revision_id,
+        &pool,
+        &root,
+        requirement_id,
+        revision_id,
     )
     .await
     .unwrap();
@@ -216,11 +230,17 @@ async fn rebuild_projection_restores_content_and_detects_drift(pool: PgPool) {
         .await
         .unwrap();
     let err = pm_application::requirement_projection::rebuild_projection(
-        &pool, &root, requirement_id, revision_id,
+        &pool,
+        &root,
+        requirement_id,
+        revision_id,
     )
     .await
     .expect_err("hash drift must be observable");
-    assert!(matches!(err, pm_application::pm_write::PmWriteError::Conflict(_)));
+    assert!(matches!(
+        err,
+        pm_application::pm_write::PmWriteError::Conflict(_)
+    ));
     let _ = sha;
 }
 
@@ -251,7 +271,10 @@ async fn bind_is_idempotent_and_unbound_confirm_is_refused(pool: PgPool) {
         &pool,
         pm_domain::SYSTEM_TENANT,
         entry.id,
-        DraftRevisionRequest { markdown: "# raw".to_string(), summary: None },
+        DraftRevisionRequest {
+            markdown: "# raw".to_string(),
+            summary: None,
+        },
         &actor,
     )
     .await
@@ -272,12 +295,19 @@ async fn bind_is_idempotent_and_unbound_confirm_is_refused(pool: PgPool) {
         pm_domain::SYSTEM_TENANT,
         entry.id,
         draft.id,
-        ConfirmRevisionRequest { expected_content_hash: hash, expected_current_revision_id: None, expected_row_revision: None },
+        ConfirmRevisionRequest {
+            expected_content_hash: hash,
+            expected_current_revision_id: None,
+            expected_row_revision: None,
+        },
         &actor,
     )
     .await
     .expect_err("unbound revision must not confirm");
-    assert!(matches!(err, pm_application::pm_write::PmWriteError::Conflict(_)));
+    assert!(matches!(
+        err,
+        pm_application::pm_write::PmWriteError::Conflict(_)
+    ));
 
     // 绑定幂等：同一修订重复 bind → 同一 sha、Git 提交数不增长。
     let (requirement_id, revision_id, sha, markdown) =
@@ -295,7 +325,11 @@ async fn bind_is_idempotent_and_unbound_confirm_is_refused(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(sha, sha2);
-    assert_eq!(commit_count(&root), commits_before, "rebind must not create a commit");
+    assert_eq!(
+        commit_count(&root),
+        commits_before,
+        "rebind must not create a commit"
+    );
 
     // 已绑定 + pending 重入 submit → 409（不可重复提交）。
     let e2 = requirement::create_requirement(
@@ -318,7 +352,10 @@ async fn bind_is_idempotent_and_unbound_confirm_is_refused(pool: PgPool) {
         &pool,
         pm_domain::SYSTEM_TENANT,
         e2.id,
-        DraftRevisionRequest { markdown: "# reentry".to_string(), summary: None },
+        DraftRevisionRequest {
+            markdown: "# reentry".to_string(),
+            summary: None,
+        },
         &actor,
     )
     .await
@@ -326,17 +363,14 @@ async fn bind_is_idempotent_and_unbound_confirm_is_refused(pool: PgPool) {
     requirement::submit_revision(&pool, pm_domain::SYSTEM_TENANT, e2.id, r2.id, &actor, &root)
         .await
         .unwrap();
-    let err = requirement::submit_revision(
-        &pool,
-        pm_domain::SYSTEM_TENANT,
-        e2.id,
-        r2.id,
-        &actor,
-        &root,
-    )
-    .await
-    .expect_err("bound pending revision must not re-submit");
-    assert!(matches!(err, pm_application::pm_write::PmWriteError::Conflict(_)));
+    let err =
+        requirement::submit_revision(&pool, pm_domain::SYSTEM_TENANT, e2.id, r2.id, &actor, &root)
+            .await
+            .expect_err("bound pending revision must not re-submit");
+    assert!(matches!(
+        err,
+        pm_application::pm_write::PmWriteError::Conflict(_)
+    ));
 }
 
 fn commit_count(root: &KnowledgeRoot) -> usize {
@@ -346,6 +380,8 @@ fn commit_count(root: &KnowledgeRoot) -> usize {
         .args(["rev-list", "--count", "HEAD"])
         .output()
         .unwrap();
-    String::from_utf8_lossy(&output.stdout).trim().parse().unwrap()
+    String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse()
+        .unwrap()
 }
-

@@ -45,10 +45,10 @@ async fn proposal_status_check_rejects_unknown_value(pool: PgPool) {
     let customer: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO core.customer (name, tenant_id) VALUES ('v2', $1) RETURNING id",
     )
-            .bind(SYSTEM_TENANT)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    .bind(SYSTEM_TENANT)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     let project: uuid::Uuid = sqlx::query_scalar(
         "INSERT INTO core.project (customer_id, code, name, tenant_id) \
          VALUES ($1, 'V2-MIG', 'v2', $2) RETURNING id",

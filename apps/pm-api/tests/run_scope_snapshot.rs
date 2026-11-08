@@ -10,12 +10,12 @@
 //! - Task 未关联任何仓库 → 空快照（哈希仍在：「无可访问仓库」是显式事实）；
 //! - `write_access` 不再是访问判据（简化裁决 §0.0.5）。
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::repo_access::{
-    RepoAccessSnapshot, access_snapshot_hash, access_snapshot_json, build_task_repo_access_tx,
+    access_snapshot_hash, access_snapshot_json, build_task_repo_access_tx, RepoAccessSnapshot,
 };
-use pm_application::repository::{CreateRepositoryRequest, create_repository};
-use pm_application::run_dispatch::{DispatchMode, RunDispatchConfig, claim_once};
+use pm_application::repository::{create_repository, CreateRepositoryRequest};
+use pm_application::run_dispatch::{claim_once, DispatchMode, RunDispatchConfig};
 use pm_domain::SYSTEM_TENANT;
 use serde_json::json;
 use sqlx::PgPool;
@@ -120,7 +120,11 @@ async fn claim_writes_access_snapshot_and_hash(pool: PgPool) {
         .await
         .unwrap()
         .expect("queued run must be claimable");
-    assert_eq!(claimed.kind, pm_application::run_dispatch::ClaimKind::Claimed, "must truly claim");
+    assert_eq!(
+        claimed.kind,
+        pm_application::run_dispatch::ClaimKind::Claimed,
+        "must truly claim"
+    );
 
     let (hash, snaps): (Option<String>, Option<serde_json::Value>) = sqlx::query_as(
         "SELECT policy_snapshot_hash, repository_policy_snapshots \
@@ -150,7 +154,10 @@ async fn claim_writes_access_snapshot_and_hash(pool: PgPool) {
             access: m.access,
         })
         .collect();
-    assert_eq!(hash.as_deref(), Some(access_snapshot_hash(&mirror).as_str()));
+    assert_eq!(
+        hash.as_deref(),
+        Some(access_snapshot_hash(&mirror).as_str())
+    );
     assert_eq!(access_snapshot_json(&mirror), snaps);
     assert_eq!(hash.as_ref().map(|h| h.len()), Some(64), "sha256 hex");
     let _ = project_id;

@@ -26,13 +26,13 @@
 
 use std::sync::Arc;
 
-use axum::Json;
 use axum::extract::{Extension, Request, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use digua_common_jwt::{JWKSCache, verify_token};
-use serde_json::{Value, json};
+use axum::Json;
+use digua_common_jwt::{verify_token, JWKSCache};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -260,13 +260,17 @@ pub async fn require_bearer(
                     request.extensions_mut().insert(identity);
                     request.extensions_mut().insert(principal.human_actor());
                     request.extensions_mut().insert(principal);
-                    request.extensions_mut().insert(
-                        pm_application::caller::ClientChannel { device_id: resolved.device_id },
-                    );
+                    request
+                        .extensions_mut()
+                        .insert(pm_application::caller::ClientChannel {
+                            device_id: resolved.device_id,
+                        });
                     // 凭据即设备声明（免 X-header；attach_device_claim 识别此扩展）。
-                    request.extensions_mut().insert(
-                        pm_application::caller::DeviceClaim::valid(resolved.device_id),
-                    );
+                    request
+                        .extensions_mut()
+                        .insert(pm_application::caller::DeviceClaim::valid(
+                            resolved.device_id,
+                        ));
                     next.run(request).await
                 }
                 _ => unauthorized("IAM_AUTH_1008", "invalid client credential"),
@@ -320,7 +324,10 @@ pub async fn resolve_principal(
         return unauthorized("IAM_AUTH_1005", "missing bearer token");
     };
     if identity.is_service() {
-        return forbidden("IAM_PERM_3003", "service tokens are not accepted on business endpoints");
+        return forbidden(
+            "IAM_PERM_3003",
+            "service tokens are not accepted on business endpoints",
+        );
     }
     if identity.ct {
         return forbidden("IAM_PERM_3004", "cross-tenant tokens are not accepted");
@@ -351,7 +358,10 @@ pub async fn resolve_principal(
 /// caller can learn its own activation state (`v1` §6 鉴权矩阵).
 pub async fn require_active(request: Request, next: Next) -> Response {
     let path = request.uri().path().to_string();
-    if is_public_path(&path) || is_self_service_path(&path) || request.method() == axum::http::Method::OPTIONS {
+    if is_public_path(&path)
+        || is_self_service_path(&path)
+        || request.method() == axum::http::Method::OPTIONS
+    {
         return next.run(request).await;
     }
     match request.extensions().get::<AuthedPrincipal>() {
@@ -402,9 +412,7 @@ pub async fn inject_dev_principal(
 ) -> Response {
     let writes = !matches!(
         request.method(),
-        &axum::http::Method::GET
-            | &axum::http::Method::HEAD
-            | &axum::http::Method::OPTIONS
+        &axum::http::Method::GET | &axum::http::Method::HEAD | &axum::http::Method::OPTIONS
     );
     if writes {
         // principal 与 tenant_member 一起物化到系统租户（Q6）；只随写请求落库，
@@ -527,13 +535,12 @@ async fn ensure_tenant(
     auth: &AuthState,
     identity: &AuthenticatedIdentity,
 ) -> Result<Uuid, sqlx::Error> {
-    let existing: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM core.tenant WHERE provider = $1 AND external_key = $2",
-    )
-    .bind(identity.provider)
-    .bind(&identity.claims_tenant_key)
-    .fetch_optional(&auth.pool)
-    .await?;
+    let existing: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM core.tenant WHERE provider = $1 AND external_key = $2")
+            .bind(identity.provider)
+            .bind(&identity.claims_tenant_key)
+            .fetch_optional(&auth.pool)
+            .await?;
     if let Some(id) = existing {
         return Ok(id);
     }
@@ -736,7 +743,10 @@ pub async fn require_mcp_permission(
 fn legacy_permission_grant() -> bool {
     // 每次读 env（不缓存）：测试可双态驱动；生产路径每次 tools/call 一次
     // env 查找开销可忽略。
-    let on = std::env::var("AI_PM_MCP_LEGACY_PERMISSION_GRANT").ok().as_deref() == Some("1");
+    let on = std::env::var("AI_PM_MCP_LEGACY_PERMISSION_GRANT")
+        .ok()
+        .as_deref()
+        == Some("1");
     if on {
         tracing::warn!(
             "AI_PM_MCP_LEGACY_PERMISSION_GRANT=1: ACP tool permission codes \
@@ -789,7 +799,10 @@ fn query_access_token(uri: &axum::http::Uri) -> Option<&str> {
 
 /// Extracts the raw JWT from an `Authorization: Bearer <jwt>` header.
 fn bearer_token(headers: &HeaderMap) -> Option<&str> {
-    let value = headers.get(axum::http::header::AUTHORIZATION)?.to_str().ok()?;
+    let value = headers
+        .get(axum::http::header::AUTHORIZATION)?
+        .to_str()
+        .ok()?;
     value
         .strip_prefix("Bearer ")
         .or_else(|| value.strip_prefix("bearer "))
@@ -799,14 +812,13 @@ fn bearer_token(headers: &HeaderMap) -> Option<&str> {
 
 /// cpk 通道：owner 的租户角色（无行 = Member，最小权限）。
 async fn tenant_role_of(pool: &sqlx::PgPool, principal_id: Uuid) -> TenantRole {
-    let role: Option<String> = sqlx::query_scalar(
-        "SELECT role FROM core.tenant_member WHERE principal_id = $1 LIMIT 1",
-    )
-    .bind(principal_id)
-    .fetch_optional(pool)
-    .await
-    .ok()
-    .flatten();
+    let role: Option<String> =
+        sqlx::query_scalar("SELECT role FROM core.tenant_member WHERE principal_id = $1 LIMIT 1")
+            .bind(principal_id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
     match role.as_deref() {
         Some("owner") => TenantRole::Owner,
         Some("admin") => TenantRole::Admin,

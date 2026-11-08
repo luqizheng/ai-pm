@@ -4,10 +4,10 @@
 //! 判定规则、Q1「待补充不被过滤」、徽标互斥、动作区状态与 404 边界全部钉在
 //! 真实数据库上；判定逻辑本身在后端（前端无资格推导）。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -26,7 +26,10 @@ fn get(uri: &str) -> Request<Body> {
 async fn body_json(response: axum::response::Response) -> (StatusCode, serde_json::Value) {
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
@@ -170,13 +173,7 @@ async fn seed_run_repo(
     .unwrap();
 }
 
-async fn seed_commit(
-    pool: &PgPool,
-    project_id: Uuid,
-    run_id: Uuid,
-    repo_id: Uuid,
-    sha: &str,
-) {
+async fn seed_commit(pool: &PgPool, project_id: Uuid, run_id: Uuid, repo_id: Uuid, sha: &str) {
     sqlx::query(
         "INSERT INTO delivery.task_repository_commit \
              (tenant_id, project_id, task_run_id, repository_id, commit_sha, branch) \
@@ -296,17 +293,52 @@ async fn seed_workspace(pool: &PgPool) -> (Uuid, Uuid, Uuid, Uuid, Uuid, Uuid, U
     let blocked_task = seed_task(pool, project_id, "blocked task", "reviewing", 9).await;
     seed_task_repo(pool, project_id, blocked_task, repo_a, true).await;
     seed_task_repo(pool, project_id, blocked_task, repo_b, true).await;
-    let blocked_delivery =
-        seed_delivery_run(pool, project_id, blocked_task, 1, "passed").await;
+    let blocked_delivery = seed_delivery_run(pool, project_id, blocked_task, 1, "passed").await;
     seed_run_repo(pool, project_id, blocked_delivery, repo_a, "aaaaaaaaaa").await;
     seed_run_repo(pool, project_id, blocked_delivery, repo_b, "bbbbbbbbbb").await;
     seed_commit(pool, project_id, blocked_delivery, repo_a, "ca1").await;
     seed_commit(pool, project_id, blocked_delivery, repo_b, "cb1").await;
-    let blocked_review = seed_review_run(pool, project_id, blocked_task, 1, "changes_requested").await;
-    seed_finding(pool, project_id, blocked_review, "blocker", "contract_violation", "缺少变更清单", Some("repo-a/src/lib.rs:1-10")).await;
-    seed_finding(pool, project_id, blocked_review, "warning", "style", "命名不一致", None).await;
-    seed_finding(pool, project_id, blocked_review, "info", "note", "仅供参考", None).await;
-    seed_approval(pool, project_id, blocked_task, blocked_review, blocked_delivery, "rejected").await;
+    let blocked_review =
+        seed_review_run(pool, project_id, blocked_task, 1, "changes_requested").await;
+    seed_finding(
+        pool,
+        project_id,
+        blocked_review,
+        "blocker",
+        "contract_violation",
+        "缺少变更清单",
+        Some("repo-a/src/lib.rs:1-10"),
+    )
+    .await;
+    seed_finding(
+        pool,
+        project_id,
+        blocked_review,
+        "warning",
+        "style",
+        "命名不一致",
+        None,
+    )
+    .await;
+    seed_finding(
+        pool,
+        project_id,
+        blocked_review,
+        "info",
+        "note",
+        "仅供参考",
+        None,
+    )
+    .await;
+    seed_approval(
+        pool,
+        project_id,
+        blocked_task,
+        blocked_review,
+        blocked_delivery,
+        "rejected",
+    )
+    .await;
 
     // blocked（集成失败，无审查记录 → none）。
     let int_failed_task = seed_task(pool, project_id, "integration failed", "submitted", 8).await;
@@ -332,19 +364,43 @@ async fn seed_workspace(pool: &PgPool) -> (Uuid, Uuid, Uuid, Uuid, Uuid, Uuid, U
     let eligible_task = seed_task(pool, project_id, "eligible task", "submitted", 10).await;
     seed_task_repo(pool, project_id, eligible_task, repo_a, true).await;
     seed_task_repo(pool, project_id, eligible_task, repo_b, true).await;
-    let eligible_delivery =
-        seed_delivery_run(pool, project_id, eligible_task, 1, "passed").await;
+    let eligible_delivery = seed_delivery_run(pool, project_id, eligible_task, 1, "passed").await;
     seed_run_repo(pool, project_id, eligible_delivery, repo_a, "ffffffffff").await;
     seed_run_repo(pool, project_id, eligible_delivery, repo_b, "1111111111").await;
     seed_commit(pool, project_id, eligible_delivery, repo_a, "ea1").await;
     seed_commit(pool, project_id, eligible_delivery, repo_b, "eb1").await;
     let eligible_review = seed_review_run(pool, project_id, eligible_task, 1, "approved").await;
-    seed_finding(pool, project_id, eligible_review, "info", "note", "一切正常", None).await;
-    let criterion_1 = seed_criterion(pool, project_id, eligible_task, 1, "接口测试通过", "automated_test").await;
-    let _criterion_2 = seed_criterion(pool, project_id, eligible_task, 2, "人工确认文档", "manual").await;
+    seed_finding(
+        pool,
+        project_id,
+        eligible_review,
+        "info",
+        "note",
+        "一切正常",
+        None,
+    )
+    .await;
+    let criterion_1 = seed_criterion(
+        pool,
+        project_id,
+        eligible_task,
+        1,
+        "接口测试通过",
+        "automated_test",
+    )
+    .await;
+    let _criterion_2 =
+        seed_criterion(pool, project_id, eligible_task, 2, "人工确认文档", "manual").await;
     seed_verdict(pool, project_id, criterion_1, eligible_review, "passed").await;
-    let pending_approval =
-        seed_approval(pool, project_id, eligible_task, eligible_review, eligible_delivery, "pending").await;
+    let pending_approval = seed_approval(
+        pool,
+        project_id,
+        eligible_task,
+        eligible_review,
+        eligible_delivery,
+        "pending",
+    )
+    .await;
 
     // 排除态：completed 不属于待验收集合。
     seed_task(pool, project_id, "done task", "completed", 5).await;
@@ -403,22 +459,25 @@ async fn overview_counts_badges_and_review_status(pool: PgPool) {
     assert_eq!(body["total"], 5);
 
     // 排序：blocked 优先（组内 created_at DESC），其次 missing，eligible 靠后。
-    let titles: Vec<&str> = items
-        .iter()
-        .map(|t| t["title"].as_str().unwrap())
-        .collect();
+    let titles: Vec<&str> = items.iter().map(|t| t["title"].as_str().unwrap()).collect();
     assert_eq!(
         titles,
-        vec!["integration failed", "blocked task", "bare task", "partial delivery", "eligible task"],
+        vec![
+            "integration failed",
+            "blocked task",
+            "bare task",
+            "partial delivery",
+            "eligible task"
+        ],
         "body: {body}"
     );
 
     // 徽标互斥 + 后端判定（前端不推导）。
-    let badges: Vec<&str> = items
-        .iter()
-        .map(|t| t["badge"].as_str().unwrap())
-        .collect();
-    assert_eq!(badges, vec!["blocked", "blocked", "missing", "missing", "eligible"]);
+    let badges: Vec<&str> = items.iter().map(|t| t["badge"].as_str().unwrap()).collect();
+    assert_eq!(
+        badges,
+        vec!["blocked", "blocked", "missing", "missing", "eligible"]
+    );
 
     // blocked #1：集成失败即阻塞，无需审查记录（组内 created_at DESC，新者在前）。
     assert_eq!(items[0]["task_id"], serde_json::json!(int_failed));
@@ -460,7 +519,10 @@ async fn overview_counts_badges_and_review_status(pool: PgPool) {
     // eligible：动作区状态 + pending 审批 id 直接可点。
     assert_eq!(items[4]["task_id"], serde_json::json!(eligible));
     assert_eq!(items[4]["review_status"], "awaiting_decision");
-    assert_eq!(items[4]["pending_approval_id"], serde_json::json!(pending_approval));
+    assert_eq!(
+        items[4]["pending_approval_id"],
+        serde_json::json!(pending_approval)
+    );
     assert_eq!(items[4]["blocker_count"], 0);
 }
 
@@ -472,9 +534,7 @@ async fn evidence_endpoints_findings_verdicts_and_approvals(pool: PgPool) {
     // findings：blocker 置顶，携带所属 review run。
     let (status, body) = body_json(
         router(pool.clone())
-            .oneshot(get(&format!(
-                "/v1/pm/tasks/{blocked}/review-findings"
-            )))
+            .oneshot(get(&format!("/v1/pm/tasks/{blocked}/review-findings")))
             .await
             .unwrap(),
     )
@@ -485,7 +545,11 @@ async fn evidence_endpoints_findings_verdicts_and_approvals(pool: PgPool) {
         .iter()
         .map(|f| f["severity"].as_str().unwrap())
         .collect();
-    assert_eq!(severities, vec!["blocker", "warning", "info"], "body: {body}");
+    assert_eq!(
+        severities,
+        vec!["blocker", "warning", "info"],
+        "body: {body}"
+    );
     assert_eq!(items[0]["kind"], "contract_violation");
     assert_eq!(items[0]["code_location"], "repo-a/src/lib.rs:1-10");
     assert_eq!(items[0]["review_attempt_no"], 1);
@@ -494,9 +558,7 @@ async fn evidence_endpoints_findings_verdicts_and_approvals(pool: PgPool) {
     // criterion-verdicts：逐标准最新一次成功 review run 的裁决；未覆盖的 evaluated=false。
     let (status, body) = body_json(
         router(pool.clone())
-            .oneshot(get(&format!(
-                "/v1/pm/tasks/{eligible}/criterion-verdicts"
-            )))
+            .oneshot(get(&format!("/v1/pm/tasks/{eligible}/criterion-verdicts")))
             .await
             .unwrap(),
     )
@@ -515,9 +577,7 @@ async fn evidence_endpoints_findings_verdicts_and_approvals(pool: PgPool) {
     // review-approvals（task 级投影，含 pending 与已决）。
     let (status, body) = body_json(
         router(pool.clone())
-            .oneshot(get(&format!(
-                "/v1/pm/tasks/{eligible}/review-approvals"
-            )))
+            .oneshot(get(&format!("/v1/pm/tasks/{eligible}/review-approvals")))
             .await
             .unwrap(),
     )
@@ -530,9 +590,7 @@ async fn evidence_endpoints_findings_verdicts_and_approvals(pool: PgPool) {
 
     let (status, body) = body_json(
         router(pool.clone())
-            .oneshot(get(&format!(
-                "/v1/pm/tasks/{blocked}/review-approvals"
-            )))
+            .oneshot(get(&format!("/v1/pm/tasks/{blocked}/review-approvals")))
             .await
             .unwrap(),
     )
@@ -576,13 +634,8 @@ async fn overview_and_evidence_enforce_visibility_boundary(pool: PgPool) {
             format!("/v1/pm/tasks/{task_id}/criterion-verdicts"),
             format!("/v1/pm/tasks/{task_id}/review-approvals"),
         ] {
-            let (status, _) = body_json(
-                router(pool.clone())
-                    .oneshot(get(&path))
-                    .await
-                    .unwrap(),
-            )
-            .await;
+            let (status, _) =
+                body_json(router(pool.clone()).oneshot(get(&path)).await.unwrap()).await;
             assert_eq!(status, StatusCode::NOT_FOUND, "path: {path}");
         }
     }
@@ -590,9 +643,7 @@ async fn overview_and_evidence_enforce_visibility_boundary(pool: PgPool) {
     // 端点连通性再确认（可见任务 → 200）。
     let (status, _) = body_json(
         router(pool.clone())
-            .oneshot(get(&format!(
-                "/v1/pm/tasks/{blocked}/review-findings"
-            )))
+            .oneshot(get(&format!("/v1/pm/tasks/{blocked}/review-findings")))
             .await
             .unwrap(),
     )

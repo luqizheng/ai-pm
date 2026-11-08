@@ -11,13 +11,13 @@
 //!
 //! harness 与 `team_onboarding.rs` 同款（自签 JWT + `router_with_auth_config`）。
 
-use axum::Router;
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
-use digua_common_jwt::{JWKSCache, sign_token};
+use axum::Router;
+use digua_common_jwt::{sign_token, JWKSCache};
 use pm_api::auth::AuthConfig;
 use pm_api::routes::router_with_auth_config;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::sync::Arc;

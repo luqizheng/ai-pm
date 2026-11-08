@@ -14,7 +14,7 @@
 use std::sync::Arc;
 
 use pm_infrastructure::outbox::{self, ClaimedOutboxEvent};
-use pm_infrastructure::outbox_handlers::{RunCompletedHandler, register_all_handlers};
+use pm_infrastructure::outbox_handlers::{register_all_handlers, RunCompletedHandler};
 use pm_infrastructure::outbox_worker::{OutboxHandler, OutboxWorker};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -139,9 +139,7 @@ async fn concurrent_duplicate_consumption_writes_one_audit_and_one_notification(
             schema_version: event.schema_version,
             idempotency_key: event.idempotency_key.clone(),
         };
-        tasks.push(tokio::spawn(async move {
-            handler.handle(&event).await
-        }));
+        tasks.push(tokio::spawn(async move { handler.handle(&event).await }));
     }
     for task in tasks {
         task.await.expect("join").expect("concurrent consumption");
@@ -246,7 +244,9 @@ async fn registering_a_type_outside_the_catalog_is_refused() {
     let pool = sqlx::PgPool::connect_lazy("postgres://localhost/none").unwrap();
     let worker = OutboxWorker::new(pool.clone(), "w-2".to_string()).with_handler(
         "TotallyUnknownEvent",
-        Arc::new(pm_infrastructure::outbox_handlers::TaskReadyHandler::new(pool)),
+        Arc::new(pm_infrastructure::outbox_handlers::TaskReadyHandler::new(
+            pool,
+        )),
     );
     worker.assert_catalog_consistent();
 }

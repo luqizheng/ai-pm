@@ -10,12 +10,12 @@
 //! - **C178**：真人成员校验先行；执行主体缺失 → 报错**不回退真人**；
 //!   非成员带有效 lease 也过不了成员门。
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::caller::{CallerContext, DeviceClaim, DeviceClaimIgnoredReason, HumanActor};
 use pm_domain::SYSTEM_TENANT;
 use pm_mcp::tools::{
-    ToolError, claim_task, get_run_context, get_submission_status, get_task_context, list_tasks,
-    report_progress, submit_technical_design,
+    claim_task, get_run_context, get_submission_status, get_task_context, list_tasks,
+    report_progress, submit_technical_design, ToolError,
 };
 use pm_mcp::tools::{
     ClaimTaskArgs, ListTasksArgs, ReportProgressArgs, RunContextArgs, SubmissionStatusArgs,
@@ -151,7 +151,7 @@ async fn seed_identity(pool: &PgPool, tenant_id: Uuid, subject: &str, principal_
         "INSERT INTO core.principal_identity (provider, tenant_id, subject, principal_id) \
          VALUES ('lmms', $1, $2, $3) \
          ON CONFLICT (provider, tenant_id, subject) DO UPDATE SET principal_id = $3 \
-         RETURNING id"
+         RETURNING id",
     )
     .bind(tenant_id)
     .bind(subject)
@@ -214,13 +214,12 @@ async fn c173_non_member_is_not_found_across_tool_families(pool: PgPool) {
     .await
     .unwrap_err();
     assert!(matches!(err, ToolError::NotFound(_)), "got {err:?}");
-    let events: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM integration.inbound_event WHERE project_id = $1",
-    )
-    .bind(fx.project_a)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let events: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM integration.inbound_event WHERE project_id = $1")
+            .bind(fx.project_a)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(events, 0, "越权请求不产生业务副作用");
 
     // 领取（T-051 关闭点）
@@ -348,16 +347,24 @@ async fn c176_device_claim_valid_lands_executor_id_and_audit(pool: PgPool) {
     );
 
     // claim 审计行的 claimed_device_id 同值；真人三列齐备
-    let (audit_device, identity_id, client, auth_mode): (Option<Uuid>, Option<Uuid>, Option<String>, Option<String>) =
-        sqlx::query_as(
-            "SELECT claimed_device_id, actor_identity_id, actor_client, actor_auth_mode \
+    let (audit_device, identity_id, client, auth_mode): (
+        Option<Uuid>,
+        Option<Uuid>,
+        Option<String>,
+        Option<String>,
+    ) = sqlx::query_as(
+        "SELECT claimed_device_id, actor_identity_id, actor_client, actor_auth_mode \
              FROM governance.audit_log WHERE action = 'claim_task_run' AND target_id = $1",
-        )
-        .bind(run_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(audit_device, Some(device_id), "审计 claimed_device_id 同源同值");
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        audit_device,
+        Some(device_id),
+        "审计 claimed_device_id 同源同值"
+    );
     assert_eq!(identity_id, member_identity_of(&valid), "真人 identity 列");
     assert_eq!(client.as_deref(), Some("codex"));
     assert_eq!(auth_mode.as_deref(), Some("api_key"));
@@ -378,7 +385,10 @@ async fn c176_device_claim_valid_lands_executor_id_and_audit(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(audit_actor, dev_agent, "执行主体 = 当前 Project 的 dev_agent");
+    assert_eq!(
+        audit_actor, dev_agent,
+        "执行主体 = 当前 Project 的 dev_agent"
+    );
 }
 
 fn member_identity_of(caller: &CallerContext) -> Option<Uuid> {
@@ -399,7 +409,11 @@ fn fx_member_human(fx: &Fx) -> HumanActor {
 async fn c176_ignored_claim_still_executes_without_attribution(pool: PgPool) {
     let fx = seed_fixture(&pool).await;
     // not_found 声明（pm-api 校验后的结果形态）
-    let ignored = caller(fx.member, fx.member_identity, DeviceClaim::ignored(DeviceClaimIgnoredReason::NotFound));
+    let ignored = caller(
+        fx.member,
+        fx.member_identity,
+        DeviceClaim::ignored(DeviceClaimIgnoredReason::NotFound),
+    );
     let _run = seed_run(&pool, fx.project_a, fx.task_a).await;
 
     let claimed = claim_task(
@@ -440,13 +454,11 @@ async fn c176_ignored_claim_still_executes_without_attribution(pool: PgPool) {
 async fn c178_missing_executor_errors_instead_of_falling_back(pool: PgPool) {
     // 建一个没有任何成员/执行主体的空项目
     let fx = seed_fixture(&pool).await;
-    let customer: Uuid = sqlx::query_scalar(
-        "SELECT customer_id FROM core.project WHERE id = $1",
-    )
-    .bind(fx.project_a)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let customer: Uuid = sqlx::query_scalar("SELECT customer_id FROM core.project WHERE id = $1")
+        .bind(fx.project_a)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     let empty_project: Uuid = sqlx::query_scalar(
         "INSERT INTO core.project (tenant_id, customer_id, code, name, status) \
          SELECT tenant_id, customer_id, 'CC-EMPTY', 'empty', 'planning' \
@@ -590,9 +602,16 @@ async fn t082_list_tasks_three_states_and_limit(pool: PgPool) {
     let intruder = caller(fx.outsider, fx.outsider_identity, DeviceClaim::absent());
 
     // 空项目 → tasks: [] / total: 0（注意 project_b 无 ready 任务）
-    let empty = list_tasks(&pool, ListTasksArgs { project_id: fx.project_b, limit: None }, &member)
-        .await
-        .unwrap();
+    let empty = list_tasks(
+        &pool,
+        ListTasksArgs {
+            project_id: fx.project_b,
+            limit: None,
+        },
+        &member,
+    )
+    .await
+    .unwrap();
     assert_eq!(empty["tasks"].as_array().unwrap().len(), 0);
     assert_eq!(empty["total"], serde_json::json!(0));
 
@@ -606,27 +625,58 @@ async fn t082_list_tasks_three_states_and_limit(pool: PgPool) {
     .unwrap();
 
     // 非成员 → 404
-    let err = list_tasks(&pool, ListTasksArgs { project_id: fx.project_a, limit: None }, &intruder)
-        .await
-        .unwrap_err();
+    let err = list_tasks(
+        &pool,
+        ListTasksArgs {
+            project_id: fx.project_a,
+            limit: None,
+        },
+        &intruder,
+    )
+    .await
+    .unwrap_err();
     assert!(matches!(err, ToolError::NotFound(_)), "got {err:?}");
 
     // 成员 → 两条按 priority 排序（high 的 claimable 在前），queued_run_id 有值
-    let listed = list_tasks(&pool, ListTasksArgs { project_id: fx.project_a, limit: None }, &member)
-        .await
-        .unwrap();
+    let listed = list_tasks(
+        &pool,
+        ListTasksArgs {
+            project_id: fx.project_a,
+            limit: None,
+        },
+        &member,
+    )
+    .await
+    .unwrap();
     let arr = listed["tasks"].as_array().unwrap();
     assert_eq!(arr.len(), 2, "{listed}");
     assert_eq!(listed["total"], serde_json::json!(2));
-    assert_eq!(arr[0]["task_id"], serde_json::Value::String(fx.task_a.to_string()));
-    assert_eq!(arr[0]["priority"], serde_json::json!("normal"), "claimable 任务默认 normal 优先级");
-    assert_eq!(arr[1]["task_id"], serde_json::Value::String(low.to_string()));
+    assert_eq!(
+        arr[0]["task_id"],
+        serde_json::Value::String(fx.task_a.to_string())
+    );
+    assert_eq!(
+        arr[0]["priority"],
+        serde_json::json!("normal"),
+        "claimable 任务默认 normal 优先级"
+    );
+    assert_eq!(
+        arr[1]["task_id"],
+        serde_json::Value::String(low.to_string())
+    );
     assert_eq!(arr[1]["priority"], serde_json::json!("low"));
     // seed_run 造了 queued run → 第一行有 queued_run_id
     let _ = seed_run(&pool, fx.project_a, fx.task_a).await;
-    let listed2 = list_tasks(&pool, ListTasksArgs { project_id: fx.project_a, limit: None }, &member)
-        .await
-        .unwrap();
+    let listed2 = list_tasks(
+        &pool,
+        ListTasksArgs {
+            project_id: fx.project_a,
+            limit: None,
+        },
+        &member,
+    )
+    .await
+    .unwrap();
     let arr2 = listed2["tasks"].as_array().unwrap();
     assert!(
         arr2[0]["queued_run_id"].is_string(),
@@ -638,15 +688,29 @@ async fn t082_list_tasks_three_states_and_limit(pool: PgPool) {
     );
 
     // limit=1 → 只回一条，total 仍为全量
-    let limited = list_tasks(&pool, ListTasksArgs { project_id: fx.project_a, limit: Some(1) }, &member)
-        .await
-        .unwrap();
+    let limited = list_tasks(
+        &pool,
+        ListTasksArgs {
+            project_id: fx.project_a,
+            limit: Some(1),
+        },
+        &member,
+    )
+    .await
+    .unwrap();
     assert_eq!(limited["tasks"].as_array().unwrap().len(), 1);
     assert_eq!(limited["total"], serde_json::json!(2));
 
     // limit 越界被裁剪到 100（不报错）
-    let big = list_tasks(&pool, ListTasksArgs { project_id: fx.project_a, limit: Some(500) }, &member)
-        .await
-        .unwrap();
+    let big = list_tasks(
+        &pool,
+        ListTasksArgs {
+            project_id: fx.project_a,
+            limit: Some(500),
+        },
+        &member,
+    )
+    .await
+    .unwrap();
     assert_eq!(big["total"], serde_json::json!(2));
 }

@@ -7,11 +7,11 @@
 //! Run 取消：项目成员可见即可取消自己的项目 Run；reason 透传审计。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::post,
+    Json, Router,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -30,10 +30,7 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/pm/projects/{project_id}/archive",
             post(archive_handler),
         )
-        .route(
-            "/v1/pm/task-runs/{run_id}/cancel",
-            post(cancel_run_handler),
-        )
+        .route("/v1/pm/task-runs/{run_id}/cancel", post(cancel_run_handler))
 }
 
 #[derive(Debug, Deserialize)]
@@ -128,8 +125,13 @@ async fn cancel_run_handler(
     let Some(project_id) = project_id else {
         return not_found();
     };
-    if let Err(resp) =
-        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await
+    if let Err(resp) = require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await
     {
         return resp.into_response();
     }

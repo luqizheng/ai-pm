@@ -12,7 +12,9 @@
 //! - 非成员 → `ToolError::NotFound`（与 T-022「不可见即不存在」一致，防 ID 探测）。
 
 use pm_application::actor::AuditActor;
-use pm_application::authz::{AuthzError, ExecutorKind, require_project_member, resolve_project_executor};
+use pm_application::authz::{
+    require_project_member, resolve_project_executor, AuthzError, ExecutorKind,
+};
 use pm_application::caller::{CallerContext, ClientChannel, DeviceClaim, HumanActor};
 use rmcp::service::RequestContext;
 use rmcp::RoleServer;
@@ -66,9 +68,9 @@ pub async fn ensure_member(
     )
     .await
     .map_err(|e| match e {
-        AuthzError::NotMember => ToolError::NotFound(format!(
-            "project {project_id} not found (or not visible)"
-        )),
+        AuthzError::NotMember => {
+            ToolError::NotFound(format!("project {project_id} not found (or not visible)"))
+        }
         AuthzError::ExecutorMissing => unreachable!("member check never yields ExecutorMissing"),
         AuthzError::Db(m) => ToolError::InvalidRequest(format!("authorization failed: {m}")),
     })
@@ -91,9 +93,9 @@ pub async fn authorize(
     )
     .await
     .map_err(|e| match e {
-        AuthzError::NotMember => ToolError::NotFound(format!(
-            "project {project_id} not found (or not visible)"
-        )),
+        AuthzError::NotMember => {
+            ToolError::NotFound(format!("project {project_id} not found (or not visible)"))
+        }
         AuthzError::ExecutorMissing => unreachable!("member check never yields ExecutorMissing"),
         AuthzError::Db(m) => ToolError::InvalidRequest(format!("authorization failed: {m}")),
     })?;

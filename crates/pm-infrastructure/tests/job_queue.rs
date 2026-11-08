@@ -40,11 +40,13 @@ async fn seed_project(pool: &sqlx::PgPool) -> Seed {
     .execute(pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'AI PM')")
-        .bind(principal_id)
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'AI PM')",
+    )
+    .bind(principal_id)
+    .execute(pool)
+    .await
+    .unwrap();
     sqlx::query(
         "INSERT INTO ai.project_ai_config \
          (project_id, ai_principal_id, model_provider, model_name, automation_mode, enabled, tenant_id) \
@@ -144,7 +146,11 @@ async fn claim_hands_out_distinct_jobs(pool: sqlx::PgPool) {
     assert_ne!(first.job_id, second.job_id);
     for claimed in [&first, &second] {
         assert!(claimed.job_id == job_a || claimed.job_id == job_b);
-        let event_id = if claimed.job_id == job_a { event_a } else { event_b };
+        let event_id = if claimed.job_id == job_a {
+            event_a
+        } else {
+            event_b
+        };
         assert_eq!(claimed.event_id, event_id);
         assert_eq!(claimed.project_id, seed.project_id);
     }
@@ -170,7 +176,10 @@ async fn leased_job_is_not_reclaimable_within_lease(pool: sqlx::PgPool) {
     let (status, attempts, lease_future, _, owner, _) = job_state(&pool, job_id).await;
     assert_eq!(status, "running");
     assert_eq!(attempts, 0);
-    assert!(lease_future, "lease_until must lie in the future after claim");
+    assert!(
+        lease_future,
+        "lease_until must lie in the future after claim"
+    );
     assert_eq!(owner.as_deref(), Some("worker-1"));
 
     assert!(
@@ -195,11 +204,13 @@ async fn test_expired_lease_reclaimable(pool: sqlx::PgPool) {
         .expect("claim");
     assert_eq!(claimed.job_id, job_id);
 
-    sqlx::query("UPDATE integration.job SET lease_until = now() - interval '5 seconds' WHERE id = $1")
-        .bind(job_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE integration.job SET lease_until = now() - interval '5 seconds' WHERE id = $1",
+    )
+    .bind(job_id)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     let reclaimed = job_queue::claim(&pool, JOB_TYPE, "worker-2", 3600)
         .await
@@ -208,7 +219,11 @@ async fn test_expired_lease_reclaimable(pool: sqlx::PgPool) {
     let (status, _, lease_future, _, owner, _) = job_state(&pool, job_id).await;
     assert_eq!(status, "running");
     assert!(lease_future);
-    assert_eq!(owner.as_deref(), Some("worker-2"), "lease must change hands");
+    assert_eq!(
+        owner.as_deref(),
+        Some("worker-2"),
+        "lease must change hands"
+    );
 
     // Reaper fallback shape: a queued row with a stale lease in the past
     // is equally claimable.
@@ -296,7 +311,10 @@ async fn fail_backs_off_then_marks_failed(pool: sqlx::PgPool) {
         .await
         .unwrap();
     let (status, attempts, _, _, owner, last_error) = job_state(&pool, job_id).await;
-    assert_eq!(status, "failed", "third failure is terminal at max_attempts");
+    assert_eq!(
+        status, "failed",
+        "third failure is terminal at max_attempts"
+    );
     assert_eq!(attempts, 3);
     assert_eq!(last_error.as_deref(), Some("boom-3"));
     assert_eq!(owner, None, "terminal job holds no lease");

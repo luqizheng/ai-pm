@@ -9,9 +9,9 @@
 //! 可见性沿用 T-022：项目 / 任务不存在、跨租户或调用者非项目成员一律 404。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, Query, State},
     routing::get,
+    Json, Router,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -20,7 +20,7 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::pm_reviews::ApprovalRow;
 use crate::routes::AppState;
-use crate::support::{ApiError, ApiResult, require_project_visible, require_task_project};
+use crate::support::{require_project_visible, require_task_project, ApiError, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()

@@ -6,17 +6,17 @@
 //! - P4/N-2：归档释放初始化名额、终态化在飞 Import
 //! - 归档管理面：owner 可归档；重复归档 409 ALREADY_ARCHIVED
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::run_dispatch::NoopExecutor;
 use pm_application::run_executor;
-use serde_json::{Value, json};
+use pm_domain::SYSTEM_TENANT;
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 mod common;
 
@@ -35,7 +35,10 @@ fn request(method: &str, uri: &str, body: Option<Value>) -> Request<Body> {
 async fn body_json(response: axum::response::Response) -> (StatusCode, Value) {
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
 async fn seed_world(pool: &PgPool, code: &str) -> (Uuid, Uuid) {
@@ -113,30 +116,29 @@ async fn archive_guards_all_entries_and_cancels_queued(pool: PgPool) {
     assert_eq!(body["imports_finalized"], json!(0));
 
     // P1：queued → cancelled（条件取消，reason 落 termination_reason）。
-    let (run_status, reason): (String, Option<String>) = sqlx::query_as(
-        "SELECT status, termination_reason FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(queued)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (run_status, reason): (String, Option<String>) =
+        sqlx::query_as("SELECT status, termination_reason FROM delivery.task_run WHERE id = $1")
+            .bind(queued)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(run_status, "cancelled");
     assert_eq!(reason.as_deref(), Some("I1 验收归档"));
 
     // 事务内不动 running（P2 走取消协议）——Noop 终态落库。
-    let run_status: String = sqlx::query_scalar("SELECT status FROM delivery.task_run WHERE id = $1")
-        .bind(running)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let run_status: String =
+        sqlx::query_scalar("SELECT status FROM delivery.task_run WHERE id = $1")
+            .bind(running)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(run_status, "cancelled", "P2 must cancel the active run");
-    let reason: Option<String> = sqlx::query_scalar(
-        "SELECT termination_reason FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(running)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let reason: Option<String> =
+        sqlx::query_scalar("SELECT termination_reason FROM delivery.task_run WHERE id = $1")
+            .bind(running)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(reason.as_deref(), Some("project_archived"));
 
     // 项目状态。
@@ -161,7 +163,9 @@ async fn archive_guards_all_entries_and_cancels_queued(pool: PgPool) {
     // 入口守卫：TaskReady 对归档项目不建 Run（手工投一个事件走 handler 语义——
     // 直接断言门禁读：project_activity → Archived）。
     assert_eq!(
-        pm_application::project_activity(&pool, project_id).await.unwrap(),
+        pm_application::project_activity(&pool, project_id)
+            .await
+            .unwrap(),
         pm_application::ProjectActivity::Archived
     );
 }
@@ -184,7 +188,10 @@ async fn claim_skips_archived_project(pool: PgPool) {
     )
     .await
     .unwrap();
-    assert!(before.is_some(), "queued run must be claimable before archive");
+    assert!(
+        before.is_some(),
+        "queued run must be claimable before archive"
+    );
 
     sqlx::query("UPDATE core.project SET status = 'archived' WHERE id = $1")
         .bind(project_id)
@@ -316,13 +323,12 @@ async fn external_run_cancel_entry(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::OK, "body: {body}");
     assert_eq!(body["status"], json!("cancelled"));
-    let reason: Option<String> = sqlx::query_scalar(
-        "SELECT termination_reason FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(running)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let reason: Option<String> =
+        sqlx::query_scalar("SELECT termination_reason FROM delivery.task_run WHERE id = $1")
+            .bind(running)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(reason.as_deref(), Some("project_archived"));
 
     // queued → 409（归档路径才管 queued）。

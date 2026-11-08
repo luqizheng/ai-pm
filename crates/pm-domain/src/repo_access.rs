@@ -68,8 +68,20 @@ mod tests {
     /// V1.0 的六能力字符串已废止——不得再被当作合法档位（防止旧数据复活）。
     #[test]
     fn v1_capability_strings_are_rejected() {
-        for legacy in ["read", "modify", "commit", "push", "create_pr", "merge", "write"] {
-            assert_eq!(RepoAccess::parse(legacy), None, "`{legacy}` must not be accepted");
+        for legacy in [
+            "read",
+            "modify",
+            "commit",
+            "push",
+            "create_pr",
+            "merge",
+            "write",
+        ] {
+            assert_eq!(
+                RepoAccess::parse(legacy),
+                None,
+                "`{legacy}` must not be accepted"
+            );
         }
     }
 

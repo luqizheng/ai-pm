@@ -4,9 +4,9 @@
 //! contracts 的错误码翻译，未知码会把 message 覆盖成码本身；只给 message 才能
 //! 原样透传（沿用 prism-shell-wip 分支的结论）。
 
-use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use axum::Json;
 use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -157,12 +157,16 @@ pub fn paging(params: &HashMap<String, String>) -> Paging {
 
 /// 可选的 project_id 过滤参数（非法值视为未传）。
 pub fn project_filter(params: &HashMap<String, String>) -> Option<Uuid> {
-    params.get("project_id").and_then(|v| Uuid::parse_str(v).ok())
+    params
+        .get("project_id")
+        .and_then(|v| Uuid::parse_str(v).ok())
 }
 
 /// 可选的 customer_id 过滤参数（非法值视为未传）。项目列表按客户聚合时使用。
 pub fn customer_filter(params: &HashMap<String, String>) -> Option<Uuid> {
-    params.get("customer_id").and_then(|v| Uuid::parse_str(v).ok())
+    params
+        .get("customer_id")
+        .and_then(|v| Uuid::parse_str(v).ok())
 }
 
 /// 项目可见性（T-022）：同一个租户内，只有 `core.project_member` 里有调用者的
@@ -209,14 +213,19 @@ pub async fn require_task_project(
     task_id: Uuid,
     principal: &crate::auth::AuthedPrincipal,
 ) -> ApiResult<Uuid> {
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(task_id)
-    .bind(principal.tenant_id)
-    .fetch_optional(pool)
-    .await?;
+    let project_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2")
+            .bind(task_id)
+            .bind(principal.tenant_id)
+            .fetch_optional(pool)
+            .await?;
     let project_id = project_id.ok_or(ApiError::NotFound("task_not_found"))?;
-    require_project_visible(pool, project_id, principal.tenant_id, principal.principal_id).await?;
+    require_project_visible(
+        pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await?;
     Ok(project_id)
 }

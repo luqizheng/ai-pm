@@ -50,11 +50,13 @@ async fn seed_project(pool: &sqlx::PgPool) -> Seed {
     .execute(pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'AI PM')")
-        .bind(principal_id)
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'AI PM')",
+    )
+    .bind(principal_id)
+    .execute(pool)
+    .await
+    .unwrap();
     sqlx::query(
         "INSERT INTO ai.project_ai_config \
          (project_id, ai_principal_id, model_provider, model_name, model_config, \
@@ -105,11 +107,11 @@ async fn seed_task(pool: &sqlx::PgPool, project_id: Uuid) -> Uuid {
         "INSERT INTO delivery.task (id, project_id, title, tenant_id) \
          VALUES ($1, $2, 'Foreign task', (SELECT tenant_id FROM core.project WHERE id = $2))",
     )
-        .bind(task_id)
-        .bind(project_id)
-        .execute(pool)
-        .await
-        .unwrap();
+    .bind(task_id)
+    .bind(project_id)
+    .execute(pool)
+    .await
+    .unwrap();
     task_id
 }
 
@@ -192,21 +194,36 @@ async fn start_run_creates_analyzing_row_from_config(pool: sqlx::PgPool) {
 
     let run_id = start_run(&pool, event_id).await.expect("start_run");
 
-    let (status, project_id, model_name, policy_version, config_snapshot, attempt_count, started, finished) =
-        sqlx::query_as::<_, (String, Uuid, String, i32, Value, i32, bool, bool)>(
-            "SELECT status, project_id, model_name, policy_version, config_snapshot, \
+    let (
+        status,
+        project_id,
+        model_name,
+        policy_version,
+        config_snapshot,
+        attempt_count,
+        started,
+        finished,
+    ) = sqlx::query_as::<_, (String, Uuid, String, i32, Value, i32, bool, bool)>(
+        "SELECT status, project_id, model_name, policy_version, config_snapshot, \
                     attempt_count, started_at IS NOT NULL, finished_at IS NOT NULL \
              FROM ai.analysis_run WHERE id = $1",
-        )
-        .bind(run_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(status, "analyzing");
-    assert_eq!(project_id, seed.project_id, "project_id comes from the event");
+    assert_eq!(
+        project_id, seed.project_id,
+        "project_id comes from the event"
+    );
     assert_eq!(model_name, MODEL_NAME);
     assert_eq!(policy_version, POLICY_VERSION);
-    assert_eq!(config_snapshot, model_config(), "config_snapshot copies model_config");
+    assert_eq!(
+        config_snapshot,
+        model_config(),
+        "config_snapshot copies model_config"
+    );
     assert_eq!(attempt_count, 0, "first run starts at attempt_count 0");
     assert!(started, "started_at is set on insert");
     assert!(!finished);
@@ -261,7 +278,11 @@ async fn completed_run_blocks_restart_with_already_done(pool: sqlx::PgPool) {
         .await
         .expect_err("a completed event must refuse a restart");
     assert!(matches!(err, ContextError::AlreadyDone(id) if id == event_id));
-    assert_eq!(run_count(&pool, event_id).await, 1, "AlreadyDone inserts nothing");
+    assert_eq!(
+        run_count(&pool, event_id).await,
+        1,
+        "AlreadyDone inserts nothing"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]

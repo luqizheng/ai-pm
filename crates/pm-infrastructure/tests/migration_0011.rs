@@ -9,10 +9,10 @@ async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
     let customer_id: Uuid = sqlx::query_scalar(
         "INSERT INTO core.customer (name, tenant_id) VALUES ('m', $1) RETURNING id",
     )
-            .bind(SYSTEM_TENANT)
-            .fetch_one(pool)
-            .await
-            .unwrap();
+    .bind(SYSTEM_TENANT)
+    .fetch_one(pool)
+    .await
+    .unwrap();
     sqlx::query_scalar(
         "INSERT INTO core.project (customer_id, code, name, tenant_id) \
          VALUES ($1, $2, 'm', $3) RETURNING id",
@@ -36,7 +36,13 @@ async fn seed_task(pool: &PgPool, project_id: Uuid) -> Uuid {
     .unwrap()
 }
 
-async fn insert_run(pool: &PgPool, project_id: Uuid, task_id: Uuid, attempt: i32, status: &str) -> Result<Uuid, sqlx::Error> {
+async fn insert_run(
+    pool: &PgPool,
+    project_id: Uuid,
+    task_id: Uuid,
+    attempt: i32,
+    status: &str,
+) -> Result<Uuid, sqlx::Error> {
     sqlx::query_scalar(
         "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
          VALUES ($1, $2, $3, $4, (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
@@ -85,7 +91,10 @@ async fn old_status_constraint_is_replaced_not_stacked(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(defs.len(), 1, "exactly one status CHECK must remain");
-    assert!(defs[0].contains("claimed"), "the surviving CHECK must allow claimed");
+    assert!(
+        defs[0].contains("claimed"),
+        "the surviving CHECK must allow claimed"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -94,7 +103,10 @@ async fn uq_task_run_active_rejects_second_active_run(pool: PgPool) {
     let t = seed_task(&pool, p).await;
     insert_run(&pool, p, t, 1, "queued").await.unwrap();
     let err = insert_run(&pool, p, t, 2, "queued").await;
-    assert!(err.is_err(), "I1: a second active run must be refused by the unique index");
+    assert!(
+        err.is_err(),
+        "I1: a second active run must be refused by the unique index"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -105,14 +117,20 @@ async fn obsolete_index_removed_and_new_index_present(pool: PgPool) {
     .fetch_optional(&pool)
     .await
     .unwrap();
-    assert!(old.is_none(), "R3: the queued/running-only index must be dropped");
+    assert!(
+        old.is_none(),
+        "R3: the queued/running-only index must be dropped"
+    );
     let new: Option<String> = sqlx::query_scalar(
         "SELECT indexname FROM pg_indexes WHERE schemaname = 'delivery' AND indexname = 'uq_task_run_active'",
     )
     .fetch_optional(&pool)
     .await
     .unwrap();
-    assert!(new.is_some(), "the unified unique active-run index must exist");
+    assert!(
+        new.is_some(),
+        "the unified unique active-run index must exist"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -127,14 +145,18 @@ async fn new_columns_and_tables_exist(pool: PgPool) {
     .fetch_all(&pool)
     .await
     .expect("new run columns must exist");
-    sqlx::query("SELECT task_id, repository_id, write_access FROM delivery.task_repository LIMIT 0")
-        .fetch_all(&pool)
-        .await
-        .expect("task_repository must exist");
-    sqlx::query("SELECT run_id, repository_id, workspace_path FROM delivery.task_run_repository LIMIT 0")
-        .fetch_all(&pool)
-        .await
-        .expect("task_run_repository must exist");
+    sqlx::query(
+        "SELECT task_id, repository_id, write_access FROM delivery.task_repository LIMIT 0",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("task_repository must exist");
+    sqlx::query(
+        "SELECT run_id, repository_id, workspace_path FROM delivery.task_run_repository LIMIT 0",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("task_run_repository must exist");
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -160,7 +182,10 @@ async fn task_repository_cross_project_fk_is_enforced(pool: PgPool) {
     .bind(other_repo)
     .execute(&pool)
     .await;
-    assert!(err.is_err(), "a repository must belong to the same project as the task");
+    assert!(
+        err.is_err(),
+        "a repository must belong to the same project as the task"
+    );
 }
 
 #[test]
@@ -169,5 +194,4 @@ fn migration_file_is_present_and_forward() {
     let sql = include_str!("../../../migrations/0011_run_dispatch.sql");
     assert!(sql.contains("ADD COLUMN IF NOT EXISTS"));
     assert!(!sql.contains("DROP COLUMN"));
-
 }

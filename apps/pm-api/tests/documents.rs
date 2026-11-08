@@ -8,17 +8,17 @@ use std::process::Command;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::knowledge::{
-    CreateDocumentRequest, KnowledgeError, KnowledgeRoot, content_hash, create_document,
-    list_documents, read_document,
+    content_hash, create_document, list_documents, read_document, CreateDocumentRequest,
+    KnowledgeError, KnowledgeRoot,
 };
 use pm_application::knowledge_index::scan_documents_direct;
-use serde_json::{Value, json};
+use pm_domain::SYSTEM_TENANT;
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 mod common;
 
@@ -62,12 +62,24 @@ async fn create_list_and_read_round_trip(pool: PgPool) {
     let boot = project(&pool, "KN-1").await;
     let root = temp_root();
 
-    let created = create_document(&pool, &root, boot.project_id, boot.human_id, request("REQ-032"))
-        .await
-        .unwrap();
+    let created = create_document(
+        &pool,
+        &root,
+        boot.project_id,
+        boot.human_id,
+        request("REQ-032"),
+    )
+    .await
+    .unwrap();
     assert_eq!(created.revision_no, 1);
-    assert_eq!(created.canonical_path, "projects/KN-1/requirement/REQ-032.md");
-    assert_eq!(created.content_hash, content_hash(&request("REQ-032").markdown));
+    assert_eq!(
+        created.canonical_path,
+        "projects/KN-1/requirement/REQ-032.md"
+    );
+    assert_eq!(
+        created.content_hash,
+        content_hash(&request("REQ-032").markdown)
+    );
     assert_eq!(created.git_commit_sha.len(), 40);
 
     assert!(
@@ -107,7 +119,11 @@ async fn duplicate_creation_does_not_add_a_second_commit(pool: PgPool) {
         create_document(&pool, &root, boot.project_id, boot.human_id, second).await,
         Err(KnowledgeError::Exists(_))
     ));
-    assert_eq!(commit_count(&root), before, "duplicate must not commit again");
+    assert_eq!(
+        commit_count(&root),
+        before,
+        "duplicate must not commit again"
+    );
 
     cleanup(&root);
 }
@@ -134,9 +150,15 @@ async fn documents_are_project_scoped(pool: PgPool) {
 async fn drifted_file_is_reported_as_stale(pool: PgPool) {
     let boot = project(&pool, "KN-3").await;
     let root = temp_root();
-    let created = create_document(&pool, &root, boot.project_id, boot.human_id, request("REQ-7"))
-        .await
-        .unwrap();
+    let created = create_document(
+        &pool,
+        &root,
+        boot.project_id,
+        boot.human_id,
+        request("REQ-7"),
+    )
+    .await
+    .unwrap();
 
     std::fs::write(
         root.path().join(&created.canonical_path),
@@ -205,9 +227,8 @@ async fn search_hits_sections_with_locators(pool: PgPool) {
         CreateDocumentRequest {
             doc_key: "ARCH-S".to_string(),
             doc_type: "architecture".to_string(),
-            markdown:
-                "# 架构约束\n\n## 背景\n\n地图太大。\n\n## 决策\n\n采用 LOD 分块加载。\n"
-                    .to_string(),
+            markdown: "# 架构约束\n\n## 背景\n\n地图太大。\n\n## 决策\n\n采用 LOD 分块加载。\n"
+                .to_string(),
             change_summary: None,
             operation_id: format!("api-doc-ARCH-S-{}", Uuid::new_v4()),
             base_revision_id: None,
@@ -265,5 +286,8 @@ fn commit_count(root: &KnowledgeRoot) -> usize {
         .args(["rev-list", "--count", "HEAD"])
         .output()
         .unwrap();
-    String::from_utf8_lossy(&output.stdout).trim().parse().unwrap()
+    String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse()
+        .unwrap()
 }

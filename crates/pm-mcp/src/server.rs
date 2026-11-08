@@ -15,15 +15,15 @@
 //! SSE notifications (M1 scope cut).
 
 use rmcp::{
-    ErrorData, RoleServer, ServerHandler,
     handler::server::router::tool::ToolRouter,
     handler::server::wrapper::Parameters,
     model::{CallToolResult, ContentBlock},
     service::RequestContext,
     tool, tool_handler, tool_router,
     transport::streamable_http_server::{
-        StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
+        session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
     },
+    ErrorData, RoleServer, ServerHandler,
 };
 use serde_json::Value;
 use sqlx::PgPool;

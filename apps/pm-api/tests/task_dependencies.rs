@@ -1,4 +1,4 @@
-﻿//! T-024 Task 依赖端点：写边校验与可见性（验收矩阵 C43–C48 / C57）。
+//! T-024 Task 依赖端点：写边校验与可见性（验收矩阵 C43–C48 / C57）。
 //!
 //! 覆盖：建边成功并可双向查询、自依赖/两跳成环/跨项目/重复边/非待办状态一律
 //! 409、非项目成员一律 404、DELETE 幂等。领取与级联解锁见
@@ -224,7 +224,10 @@ async fn c43_add_edge_lists_both_directions_and_audits(pool: PgPool) {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["downstream"][0]["id"], downstream.to_string());
 
-    assert_eq!(audit_count(&pool, "task.dependency.add", downstream).await, 1);
+    assert_eq!(
+        audit_count(&pool, "task.dependency.add", downstream).await,
+        1
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -252,13 +255,12 @@ async fn c44_self_dependency_is_rejected(pool: PgPool) {
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["message"], "SELF_DEPENDENCY");
 
-    let edges: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.task_dependency WHERE project_id = $1",
-    )
-    .bind(project)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let edges: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.task_dependency WHERE project_id = $1")
+            .bind(project)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(edges, 0);
 }
 
@@ -302,13 +304,12 @@ async fn c45_two_hop_cycle_is_rejected(pool: PgPool) {
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["message"], "DEPENDENCY_CYCLE");
 
-    let edges: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.task_dependency WHERE project_id = $1",
-    )
-    .bind(project)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let edges: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.task_dependency WHERE project_id = $1")
+            .bind(project)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(edges, 1, "the cycle-closing edge must not be persisted");
 }
 
@@ -339,13 +340,12 @@ async fn c46_cross_project_dependency_is_rejected(pool: PgPool) {
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["message"], "CROSS_PROJECT_DEPENDENCY");
 
-    let edges: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.task_dependency WHERE task_id = $1",
-    )
-    .bind(local)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let edges: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.task_dependency WHERE task_id = $1")
+            .bind(local)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(edges, 0);
 }
 
@@ -446,9 +446,14 @@ async fn c57_non_member_gets_404(pool: PgPool) {
     assert_eq!(status, StatusCode::NOT_FOUND);
 
     let (status, _) = body_json(
-        app.oneshot(request("DELETE", &edge_uri(task, upstream), &bob_token, None))
-            .await
-            .unwrap(),
+        app.oneshot(request(
+            "DELETE",
+            &edge_uri(task, upstream),
+            &bob_token,
+            None,
+        ))
+        .await
+        .unwrap(),
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
@@ -576,7 +581,11 @@ async fn c66_cross_tenant_dependency_access_is_invisible(pool: PgPool) {
             .unwrap(),
     )
     .await;
-    assert_eq!(status, StatusCode::NOT_FOUND, "A must not write edges on B's task");
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "A must not write edges on B's task"
+    );
 
     // 跨租户上游：与「不存在」同一个 404（不是 409 的存在性 oracle）。
     let (status, body) = body_json(
@@ -617,20 +626,21 @@ async fn c66_cross_tenant_dependency_access_is_invisible(pool: PgPool) {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["upstream"].as_array().unwrap().len(), 1);
 
-    let a_edges: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.task_dependency WHERE project_id = $1",
-    )
-    .bind(project_a)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(a_edges, 1, "the rejected cross-tenant edge must not be persisted");
-    let b_edges: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.task_dependency WHERE project_id = $1",
-    )
-    .bind(project_b)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let a_edges: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.task_dependency WHERE project_id = $1")
+            .bind(project_a)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        a_edges, 1,
+        "the rejected cross-tenant edge must not be persisted"
+    );
+    let b_edges: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.task_dependency WHERE project_id = $1")
+            .bind(project_b)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(b_edges, 1, "tenant B's edge must be untouched");
 }

@@ -195,7 +195,10 @@ async fn slow_response_exceeds_client_timeout_maps_to_timeout() {
         .mount(&server)
         .await;
 
-    let err = model(&server.uri(), 1).analyze(&context(), &[]).await.unwrap_err();
+    let err = model(&server.uri(), 1)
+        .analyze(&context(), &[])
+        .await
+        .unwrap_err();
 
     assert_eq!(err, ModelError::Timeout);
 }

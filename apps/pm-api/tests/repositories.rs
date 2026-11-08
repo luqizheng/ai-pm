@@ -2,15 +2,15 @@
 //! 的 HTTP 契约（P0 CRUD）。全程用真实 router + `#[sqlx::test]` 临时库，
 //! 断言两件关键事：CRUD 语义正确，且私钥永不回显。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use serde_json::{Value, json};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_domain::SYSTEM_TENANT;
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 mod common;
 
@@ -97,16 +97,17 @@ async fn repository_crud_roundtrip(pool: PgPool) {
 
     let (status, listed) = body_json(
         app.clone()
-            .oneshot(get(&format!(
-                "/v1/pm/projects/{project_id}/repositories"
-            )))
+            .oneshot(get(&format!("/v1/pm/projects/{project_id}/repositories")))
             .await
             .unwrap(),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(listed["total"], 1);
-    assert_eq!(listed["items"][0]["url"], "git@gitlab.local:team/world-map.git");
+    assert_eq!(
+        listed["items"][0]["url"],
+        "git@gitlab.local:team/world-map.git"
+    );
 
     let (status, updated) = body_json(
         app.clone()
@@ -162,9 +163,7 @@ async fn repository_crud_roundtrip(pool: PgPool) {
 
     let (_, listed) = body_json(
         app.clone()
-            .oneshot(get(&format!(
-                "/v1/pm/projects/{project_id}/repositories"
-            )))
+            .oneshot(get(&format!("/v1/pm/projects/{project_id}/repositories")))
             .await
             .unwrap(),
     )
@@ -218,13 +217,12 @@ async fn repository_with_history_cannot_be_deleted(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-    let import_id: Uuid = sqlx::query_scalar(
-        "SELECT id FROM integration.repo_import WHERE project_id = $1 LIMIT 1",
-    )
-    .bind(project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let import_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM integration.repo_import WHERE project_id = $1 LIMIT 1")
+            .bind(project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     sqlx::query(
         "INSERT INTO integration.repo_import_source \
          (tenant_id, project_id, import_id, repository_id) \
@@ -274,7 +272,7 @@ async fn repository_rejects_bad_urls_and_duplicates(pool: PgPool) {
                     json!({ "name": "bad", "url": bad }),
                 ))
                 .await
-            .unwrap(),
+                .unwrap(),
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "url {bad} body {body}");
@@ -366,13 +364,7 @@ async fn ssh_key_never_leaks_private_material(pool: PgPool) {
     assert_eq!(fetched["public_key"], public_key);
     assert!(!fetched.to_string().contains("private"));
 
-    let (status, _) = body_json(
-        app.clone()
-            .oneshot(delete(&uri))
-            .await
-            .unwrap(),
-    )
-    .await;
+    let (status, _) = body_json(app.clone().oneshot(delete(&uri)).await.unwrap()).await;
     assert_eq!(status, StatusCode::OK);
     let (status, _) = body_json(app.clone().oneshot(get(&uri)).await.unwrap()).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
@@ -454,7 +446,10 @@ async fn ssh_key_create_is_idempotent_and_revoke_blocks_verified_reference(pool:
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(first["fingerprint"], second["fingerprint"], "幂等复用同一把 key");
+    assert_eq!(
+        first["fingerprint"], second["fingerprint"],
+        "幂等复用同一把 key"
+    );
 
     let (root, local_url) = init_local_repo();
     let (status, repo) = body_json(
@@ -494,13 +489,7 @@ async fn ssh_key_create_is_idempotent_and_revoke_blocks_verified_reference(pool:
     assert_eq!(verified["default_branch"], "main");
     assert_eq!(verified["head_commit_sha"].as_str().unwrap().len(), 40);
 
-    let (status, body) = body_json(
-        app.clone()
-            .oneshot(delete(&keys_uri))
-            .await
-            .unwrap(),
-    )
-    .await;
+    let (status, body) = body_json(app.clone().oneshot(delete(&keys_uri)).await.unwrap()).await;
     assert_eq!(status, StatusCode::CONFLICT, "body: {body}");
     assert_eq!(
         body["message"],

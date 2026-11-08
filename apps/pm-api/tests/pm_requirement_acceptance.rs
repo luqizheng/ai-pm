@@ -3,10 +3,10 @@
 //! params 形状校验、需求级裁决入口（Q-14）、确认漂移提示（Q-12）、
 //! 非成员 404 / AI 主体 403（§7.2 A*）。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router_with_feed_and_knowledge;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::knowledge::KnowledgeRoot;
 
 use sqlx::PgPool;

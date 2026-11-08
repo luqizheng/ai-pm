@@ -18,7 +18,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::actor::AuditActor;
-use crate::pm_write::{PmWriteError, append_audit};
+use crate::pm_write::{append_audit, PmWriteError};
 use crate::requirement::require_human;
 
 /// verification_kind 词表（Q-13 扩枚举：前四值对齐 0015 任务级既有枚举，

@@ -4,11 +4,11 @@
 //! 只暴露访谈需要的读写与发现卡片确认，不做自由聊天、不做 AI tool-loop。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
+    Json, Router,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -17,9 +17,9 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use pm_application::discovery::{
-    DiscoveryError, FindingCreator, NewFinding, add_finding, add_question, defer_question,
-    answer_question, get_session_detail, list_sessions, record_finding_verification,
-    start_session_from_import, transition_session,
+    add_finding, add_question, answer_question, defer_question, get_session_detail, list_sessions,
+    record_finding_verification, start_session_from_import, transition_session, DiscoveryError,
+    FindingCreator, NewFinding,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -94,7 +94,10 @@ fn discovery_error(err: DiscoveryError) -> Response {
         ),
         DiscoveryError::Db(err) => {
             tracing::error!(error = %err, "discovery endpoint database error");
-            (StatusCode::INTERNAL_SERVER_ERROR, json!({ "error": "internal" }))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                json!({ "error": "internal" }),
+            )
         }
     };
     (status, Json(body)).into_response()
@@ -150,15 +153,24 @@ async fn list_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) =
-        project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         return resp;
     }
     match list_sessions(&state.pool, principal.tenant_id, project_id).await {
         Ok(items) => {
             let total = items.len();
-            (StatusCode::OK, Json(json!({ "items": items, "total": total }))).into_response()
+            (
+                StatusCode::OK,
+                Json(json!({ "items": items, "total": total })),
+            )
+                .into_response()
         }
         Err(err) => discovery_error(err),
     }
@@ -170,8 +182,13 @@ async fn start_handler(
     Path(project_id): Path<Uuid>,
     body: Option<Json<StartSessionBody>>,
 ) -> Response {
-    if let Err(resp) =
-        project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         return resp;
     }
@@ -203,8 +220,13 @@ async fn get_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path((project_id, session_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
-    if let Err(resp) =
-        project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         return resp;
     }
@@ -225,8 +247,13 @@ async fn status_handler(
     Path((project_id, session_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<StatusBody>,
 ) -> Response {
-    if let Err(resp) =
-        project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         return resp;
     }
@@ -254,8 +281,13 @@ async fn add_finding_handler(
     Path((project_id, session_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<AddFindingBody>,
 ) -> Response {
-    if let Err(resp) =
-        project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         return resp;
     }
@@ -296,8 +328,13 @@ async fn verification_handler(
     Path((project_id, session_id, finding_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<VerificationBody>,
 ) -> Response {
-    if let Err(resp) =
-        project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         return resp;
     }
@@ -334,8 +371,13 @@ async fn add_question_handler(
     Path((project_id, session_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<AddQuestionBody>,
 ) -> Response {
-    if let Err(resp) =
-        project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         return resp;
     }
@@ -365,12 +407,19 @@ async fn answer_handler(
     Path((project_id, session_id, question_id)): Path<(Uuid, Uuid, Uuid)>,
     Json(body): Json<AnswerBody>,
 ) -> Response {
-    if let Err(resp) =
-        project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         return resp;
     }
-    if let Err(resp) = question_in_session(&state.pool, principal.tenant_id, session_id, question_id).await {
+    if let Err(resp) =
+        question_in_session(&state.pool, principal.tenant_id, session_id, question_id).await
+    {
         return resp;
     }
     match answer_question(
@@ -392,12 +441,19 @@ async fn defer_handler(
     Extension(principal): Extension<AuthedPrincipal>,
     Path((project_id, session_id, question_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Response {
-    if let Err(resp) =
-        project_in_tenant(&state.pool, project_id, principal.tenant_id, principal.principal_id).await
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
     {
         return resp;
     }
-    if let Err(resp) = question_in_session(&state.pool, principal.tenant_id, session_id, question_id).await {
+    if let Err(resp) =
+        question_in_session(&state.pool, principal.tenant_id, session_id, question_id).await
+    {
         return resp;
     }
     match defer_question(&state.pool, principal.tenant_id, question_id).await {

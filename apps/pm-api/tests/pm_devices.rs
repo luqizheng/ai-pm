@@ -56,7 +56,10 @@ fn request(method: &str, uri: &str, token: &str, body: Option<Value>) -> Request
 async fn body_json(response: axum::response::Response) -> (StatusCode, Value) {
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
 fn app(pool: PgPool) -> axum::Router {
@@ -179,7 +182,10 @@ async fn mcp_post(app: axum::Router, token: &str, body: Value, device: Option<&s
     if let Some(d) = device {
         builder = builder.header("x-ai-pm-device-id", d);
     }
-    let response = app.oneshot(builder.body(Body::from(body.to_string())).unwrap()).await.unwrap();
+    let response = app
+        .oneshot(builder.body(Body::from(body.to_string())).unwrap())
+        .await
+        .unwrap();
     let status = response.status();
     if status != StatusCode::OK {
         let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -309,7 +315,12 @@ async fn detail_visibility_and_404(pool: PgPool) {
     // alice 自己看 → 200，含 bindings 数组
     let (status, v) = body_json(
         app.clone()
-            .oneshot(request("GET", &format!("/v1/pm/devices/{device_id}"), &alice, None))
+            .oneshot(request(
+                "GET",
+                &format!("/v1/pm/devices/{device_id}"),
+                &alice,
+                None,
+            ))
             .await
             .unwrap(),
     )
@@ -319,9 +330,14 @@ async fn detail_visibility_and_404(pool: PgPool) {
 
     // 未知设备 → 404
     let (status, _) = body_json(
-        app.oneshot(request("GET", &format!("/v1/pm/devices/{}", Uuid::new_v4()), &alice, None))
-            .await
-            .unwrap(),
+        app.oneshot(request(
+            "GET",
+            &format!("/v1/pm/devices/{}", Uuid::new_v4()),
+            &alice,
+            None,
+        ))
+        .await
+        .unwrap(),
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
@@ -422,7 +438,12 @@ async fn bind_checks_revoke_flow(pool: PgPool) {
     // detail 含派生的 project_accessible
     let (_, v) = body_json(
         app.clone()
-            .oneshot(request("GET", &format!("/v1/pm/devices/{device_id}"), &token, None))
+            .oneshot(request(
+                "GET",
+                &format!("/v1/pm/devices/{device_id}"),
+                &token,
+                None,
+            ))
             .await
             .unwrap(),
     )
@@ -468,7 +489,12 @@ async fn bind_checks_revoke_flow(pool: PgPool) {
     let binding_id: Uuid = {
         let (_, v) = body_json(
             app.clone()
-                .oneshot(request("GET", &format!("/v1/pm/devices/{device_id}"), &token, None))
+                .oneshot(request(
+                    "GET",
+                    &format!("/v1/pm/devices/{device_id}"),
+                    &token,
+                    None,
+                ))
                 .await
                 .unwrap(),
         )
@@ -531,7 +557,11 @@ async fn c184_only_tools_call_triggers_device_layer(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "initialize 应到达 rmcp");
-    assert_eq!(ignored_audit_count(&pool).await, 0, "非 tools/call 不写忽略审计");
+    assert_eq!(
+        ignored_audit_count(&pool).await,
+        0,
+        "非 tools/call 不写忽略审计"
+    );
 
     // tools/call（非法设备头）→ 写一条忽略审计（工具本身报 not found，但 HTTP 200）
     let status = mcp_post(
@@ -545,7 +575,11 @@ async fn c184_only_tools_call_triggers_device_layer(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "设备声明非法不影响请求");
-    assert_eq!(ignored_audit_count(&pool).await, 1, "tools/call 写一条忽略审计");
+    assert_eq!(
+        ignored_audit_count(&pool).await,
+        1,
+        "tools/call 写一条忽略审计"
+    );
 
     // 再来一次 tools/call（头缺席）→ 不写（缺席不算忽略事件）
     let _ = mcp_post(

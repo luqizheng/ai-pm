@@ -148,18 +148,16 @@ async fn job_unique_per_type_and_skill_seed(pool: sqlx::PgPool) {
     assert_ne!(other_type, job_id);
 
     // The platform migration seeds exactly the five V2 skills.
-    let skill_count: i64 =
-        sqlx::query_scalar("SELECT count(*)::int8 FROM ai.skill_definition")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let skill_count: i64 = sqlx::query_scalar("SELECT count(*)::int8 FROM ai.skill_definition")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(skill_count, 5);
 
-    let mut skill_ids: Vec<String> =
-        sqlx::query_scalar("SELECT id FROM ai.skill_definition")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
+    let mut skill_ids: Vec<String> = sqlx::query_scalar("SELECT id FROM ai.skill_definition")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
     skill_ids.sort();
     assert_eq!(
         skill_ids,

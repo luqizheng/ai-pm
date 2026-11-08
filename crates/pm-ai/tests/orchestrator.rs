@@ -56,7 +56,9 @@ const JOB_BACKOFF_BASE_SECS: i64 = 5;
 
 /// The fixed date compared as an instant, not a string format.
 fn moved_planned_at() -> DateTime<Utc> {
-    MOVED_PLANNED_AT.parse().expect("fixed fixture date must parse")
+    MOVED_PLANNED_AT
+        .parse()
+        .expect("fixed fixture date must parse")
 }
 
 struct Seed {
@@ -93,11 +95,13 @@ async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     .execute(pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'AI PM')")
-        .bind(principal_id)
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'AI PM')",
+    )
+    .bind(principal_id)
+    .execute(pool)
+    .await
+    .unwrap();
     sqlx::query(
         "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'dev_agent', 'Dev Agent')",
     )
@@ -325,10 +329,17 @@ async fn happy_cache_overlap_applies_all_three_proposals_end_to_end(pool: sqlx::
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert_eq!(notifications.len(), 3, "one notification per executed proposal");
+    assert_eq!(
+        notifications.len(),
+        3,
+        "one notification per executed proposal"
+    );
     for (command_type, kind, window) in &notifications {
         assert_eq!(kind, "change_applied");
-        assert_veto_window(window.expect("change_applied carries a veto window"), command_type);
+        assert_veto_window(
+            window.expect("change_applied carries a veto window"),
+            command_type,
+        );
     }
     let kinds: Vec<&str> = notifications.iter().map(|(k, ..)| k.as_str()).collect();
     assert!(kinds.contains(&"update_task_status"));
@@ -375,13 +386,12 @@ async fn happy_cache_overlap_applies_all_three_proposals_end_to_end(pool: sqlx::
     assert_eq!(run_status, "completed");
     assert!(finished);
 
-    let self_review: Value = sqlx::query_scalar(
-        "SELECT self_review FROM ai.analysis_run WHERE event_id = $1",
-    )
-    .bind(job.event_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let self_review: Value =
+        sqlx::query_scalar("SELECT self_review FROM ai.analysis_run WHERE event_id = $1")
+            .bind(job.event_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(self_review["outcomes"].as_array().map(Vec::len), Some(3));
     assert_eq!(self_review["outcomes"][0]["outcome"], json!("auto"));
 }
@@ -443,7 +453,10 @@ async fn redline_acceptance_waits_for_human_pre_confirmation(pool: sqlx::PgPool)
     .unwrap();
     assert_eq!(status, "redline_pending");
     assert_eq!(command_type, "sign_acceptance");
-    assert_eq!(approvals[0].2, proposal_id, "approval points at the proposal");
+    assert_eq!(
+        approvals[0].2, proposal_id,
+        "approval points at the proposal"
+    );
     let (notification_kind, source_proposal): (String, Uuid) = sqlx::query_as(
         "SELECT kind, source_proposal_id FROM integration.notification WHERE project_id = $1",
     )
@@ -565,7 +578,10 @@ async fn handle_ai_job_is_idempotent_on_redelivery(pool: sqlx::PgPool) {
         job.event_id,
     )
     .await;
-    assert_eq!((proposals, audits, notifications, approvals, runs), (3, 3, 3, 0, 1));
+    assert_eq!(
+        (proposals, audits, notifications, approvals, runs),
+        (3, 3, 3, 0, 1)
+    );
 
     // Redelivery of the same (completed) job returns Ok(Completed)
     // without writing — the caller may complete it again, harmlessly.
@@ -682,7 +698,10 @@ async fn model_timeout_fails_run_and_leaves_event_untouched(pool: sqlx::PgPool) 
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(job_status, "queued", "below max attempts the job returns to queued");
+    assert_eq!(
+        job_status, "queued",
+        "below max attempts the job returns to queued"
+    );
     assert_eq!(attempts, 1);
 }
 
@@ -731,7 +750,10 @@ async fn context_not_found_schedules_retry_and_leaves_the_job_queued(pool: sqlx:
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(job_status, "queued", "a complete() after the internal fail would have made this 'completed'");
+    assert_eq!(
+        job_status, "queued",
+        "a complete() after the internal fail would have made this 'completed'"
+    );
     assert_eq!(attempts, 1);
     assert!(
         available_at > before + Duration::seconds(JOB_BACKOFF_BASE_SECS),

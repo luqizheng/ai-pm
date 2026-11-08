@@ -172,10 +172,7 @@ pub const CATALOG: &[EventContract] = &[
         producer: PRODUCER_PC,
         consumers: &["platform"],
         idempotency_key_hint: "conflict_id",
-        payload_fields: &[
-            ("conflict_ref", "DomainRef"),
-            ("frozen", "jsonb(摘要)"),
-        ],
+        payload_fields: &[("conflict_ref", "DomainRef"), ("frozen", "jsonb(摘要)")],
     },
     EventContract {
         event_type: PC_COGNITION_VERSION_PUBLISHED,
@@ -264,9 +261,7 @@ fn walk_at(value: &serde_json::Value, path: &str) -> Result<(), PayloadViolation
             if map.contains_key("target_domain") {
                 for key in SERVICE_FORBIDDEN_KEYS {
                     if map.contains_key(*key) {
-                        return Err(PayloadViolation::EmbeddedServiceField(path_join(
-                            path, key,
-                        )));
+                        return Err(PayloadViolation::EmbeddedServiceField(path_join(path, key)));
                     }
                 }
                 for key in ["target_domain", "target_type", "target_id"] {
@@ -278,7 +273,10 @@ fn walk_at(value: &serde_json::Value, path: &str) -> Result<(), PayloadViolation
                         return Err(PayloadViolation::IncompleteRef(path_join(path, key)));
                     }
                 }
-                let domain = map.get("target_domain").and_then(|v| v.as_str()).unwrap_or("");
+                let domain = map
+                    .get("target_domain")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 crate::registry::parse_domain(domain).map_err(|_| {
                     PayloadViolation::UnknownDomain(path.to_string(), domain.to_string())
                 })?;
@@ -324,7 +322,10 @@ mod tests {
 
     #[test]
     fn contract_lookup() {
-        assert_eq!(contract(KB_COGNITION_SIGNAL_EMITTED).unwrap().producer, PRODUCER_KB);
+        assert_eq!(
+            contract(KB_COGNITION_SIGNAL_EMITTED).unwrap().producer,
+            PRODUCER_KB
+        );
         assert!(contract("nope.event").is_none());
     }
 

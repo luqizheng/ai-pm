@@ -15,18 +15,18 @@
 //! 无数据源，前端对这些区域显示空态而非虚构数据。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
+    Json, Router,
 };
 use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiError, ApiResult, paging, project_filter, require_project_visible};
+use crate::support::{paging, project_filter, require_project_visible, ApiError, ApiResult};
 use serde_json::json;
 
 pub(crate) fn router() -> Router<AppState> {
@@ -37,8 +37,7 @@ pub(crate) fn router() -> Router<AppState> {
         // = 租户 admin 或项目 owner；独立审计 + 独立有效期，不改原 deadline）。
         .route(
             "/v1/pm/task-runs/{run_id}/execution-authorization",
-            axum::routing::post(grant_authorization_handler)
-                .delete(revoke_authorization_handler),
+            axum::routing::post(grant_authorization_handler).delete(revoke_authorization_handler),
         )
 }
 
@@ -63,13 +62,11 @@ async fn ensure_authorization_manager(
             .into_response()
     })?;
     let Some((project_id, _tenant, role)) = row else {
-        return Err(
-            (
-                axum::http::StatusCode::NOT_FOUND,
-                Json(json!({ "code": "run_not_found", "message": "run not found" })),
-            )
-                .into_response(),
-        );
+        return Err((
+            axum::http::StatusCode::NOT_FOUND,
+            Json(json!({ "code": "run_not_found", "message": "run not found" })),
+        )
+            .into_response());
     };
     // 项目 owner 判定：core.project_member owner 行。
     let is_project_owner: bool = sqlx::query_scalar(
@@ -88,13 +85,11 @@ async fn ensure_authorization_manager(
     })?;
     let is_admin = role.as_deref() == Some("owner") || role.as_deref() == Some("admin");
     if !(is_admin || is_project_owner) {
-        return Err(
-            (
-                axum::http::StatusCode::FORBIDDEN,
-                Json(json!({ "code": "FORBIDDEN", "message": "lead or approver required" })),
-            )
-                .into_response(),
-        );
+        return Err((
+            axum::http::StatusCode::FORBIDDEN,
+            Json(json!({ "code": "FORBIDDEN", "message": "lead or approver required" })),
+        )
+            .into_response());
     }
     Ok((project_id, run_id, is_admin))
 }
@@ -111,10 +106,11 @@ async fn grant_authorization_handler(
     Path(run_id): Path<Uuid>,
     Json(body): Json<GrantAuthorizationBody>,
 ) -> Response {
-    let (project_id, _, _is_admin) = match ensure_authorization_manager(&state, &principal, run_id).await {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
+    let (project_id, _, _is_admin) =
+        match ensure_authorization_manager(&state, &principal, run_id).await {
+            Ok(v) => v,
+            Err(resp) => return resp,
+        };
     let actor = principal.audit_actor();
     let id = pm_application::acp06_07::grant_execution_authorization(
         &state.pool,
@@ -168,8 +164,10 @@ async fn revoke_authorization_handler(
     )
     .await
     {
-        Ok(revoked) => Json(json!({ "authorization_id": body.authorization_id, "revoked": revoked }))
-            .into_response(),
+        Ok(revoked) => {
+            Json(json!({ "authorization_id": body.authorization_id, "revoked": revoked }))
+                .into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "code": "internal", "message": e.to_string() })),
@@ -213,13 +211,16 @@ async fn task_runs(
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
     let project_id = project_filter(&params);
-    let task_id = params
-        .get("task_id")
-        .and_then(|v| Uuid::parse_str(v).ok());
+    let task_id = params.get("task_id").and_then(|v| Uuid::parse_str(v).ok());
     let run_kind = run_kind_filter(&params);
     if let Some(project_id) = project_id {
-        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-            .await?;
+        require_project_visible(
+            &state.pool,
+            project_id,
+            caller.tenant_id,
+            caller.principal_id,
+        )
+        .await?;
     }
     let items: Vec<TaskRunRow> = sqlx::query_as(
         "SELECT r.id, r.task_id, t.title AS task_title, r.attempt_no, r.run_kind, r.status, \

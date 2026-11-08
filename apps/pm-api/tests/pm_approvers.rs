@@ -2,11 +2,11 @@
 //! Lead 授予 → 非 Lead 成员获得确认权 → 撤销回落 403；授予面守卫
 //! （非 Lead 403 / 非成员 400 / 自授与授 Lead 400）；AI 主体恒拒。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
 use pm_application::actor::AuditActor;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::requirement::{self, ConfirmRevisionRequest, CreateRequirementRequest};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -29,7 +29,10 @@ async fn send(pool: &PgPool, req: Request<Body>) -> (StatusCode, serde_json::Val
     let response = router(pool.clone()).oneshot(req).await.unwrap();
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
 }
 
 async fn seed(pool: &PgPool, code: &str) -> Uuid {
@@ -112,8 +115,8 @@ async fn submitted(pool: &PgPool, project_id: Uuid, code: &str) -> (Uuid, Uuid, 
         &actor,
         &common::knowledge_root(),
     )
-        .await
-        .unwrap();
+    .await
+    .unwrap();
     (entry.id, revision_id, hash)
 }
 
@@ -129,24 +132,42 @@ async fn grant_confirms_and_revoke_revokes(pool: PgPool) {
         pm_domain::SYSTEM_TENANT,
         requirement_id,
         revision_id,
-        ConfirmRevisionRequest { expected_content_hash: hash.clone(), expected_current_revision_id: None, expected_row_revision: None },
+        ConfirmRevisionRequest {
+            expected_content_hash: hash.clone(),
+            expected_current_revision_id: None,
+            expected_row_revision: None,
+        },
         &actor_of(member),
     )
     .await
     .expect_err("non-lead member without grant must not confirm");
-    assert!(matches!(err, pm_application::pm_write::PmWriteError::Forbidden(_)));
+    assert!(matches!(
+        err,
+        pm_application::pm_write::PmWriteError::Forbidden(_)
+    ));
 
     // Lead 经 REST 授予 → 201；列表可见。
     let (status, body) = send(
         &pool,
-        request("POST", &format!("/v1/pm/projects/{project_id}/approvers"),
-            Some(serde_json::json!({ "principal_id": member }))),
+        request(
+            "POST",
+            &format!("/v1/pm/projects/{project_id}/approvers"),
+            Some(serde_json::json!({ "principal_id": member })),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "body: {body}");
     assert_eq!(body["grant"]["display_name"], "member-wang");
 
-    let (status, body) = send(&pool, request("GET", &format!("/v1/pm/projects/{project_id}/approvers"), None)).await;
+    let (status, body) = send(
+        &pool,
+        request(
+            "GET",
+            &format!("/v1/pm/projects/{project_id}/approvers"),
+            None,
+        ),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["items"].as_array().unwrap().len(), 1);
 
@@ -156,7 +177,11 @@ async fn grant_confirms_and_revoke_revokes(pool: PgPool) {
         pm_domain::SYSTEM_TENANT,
         requirement_id,
         revision_id,
-        ConfirmRevisionRequest { expected_content_hash: hash, expected_current_revision_id: None, expected_row_revision: None },
+        ConfirmRevisionRequest {
+            expected_content_hash: hash,
+            expected_current_revision_id: None,
+            expected_row_revision: None,
+        },
         &actor_of(member),
     )
     .await
@@ -166,7 +191,11 @@ async fn grant_confirms_and_revoke_revokes(pool: PgPool) {
     // Lead 撤销（REST）→ 成员治理权回落 403；重复撤销 404。
     let (status, _) = send(
         &pool,
-        request("DELETE", &format!("/v1/pm/projects/{project_id}/approvers/{member}"), None),
+        request(
+            "DELETE",
+            &format!("/v1/pm/projects/{project_id}/approvers/{member}"),
+            None,
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -177,16 +206,27 @@ async fn grant_confirms_and_revoke_revokes(pool: PgPool) {
         pm_domain::SYSTEM_TENANT,
         requirement_id2,
         revision_id2,
-        ConfirmRevisionRequest { expected_content_hash: hash2, expected_current_revision_id: None, expected_row_revision: None },
+        ConfirmRevisionRequest {
+            expected_content_hash: hash2,
+            expected_current_revision_id: None,
+            expected_row_revision: None,
+        },
         &actor_of(member),
     )
     .await
     .expect_err("revoked approver must not confirm");
-    assert!(matches!(err, pm_application::pm_write::PmWriteError::Forbidden(_)));
+    assert!(matches!(
+        err,
+        pm_application::pm_write::PmWriteError::Forbidden(_)
+    ));
 
     let (status, _) = send(
         &pool,
-        request("DELETE", &format!("/v1/pm/projects/{project_id}/approvers/{member}"), None),
+        request(
+            "DELETE",
+            &format!("/v1/pm/projects/{project_id}/approvers/{member}"),
+            None,
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "double revoke → 404");
@@ -209,8 +249,11 @@ async fn grant_guards(pool: PgPool) {
     .unwrap();
     let (status, _) = send(
         &pool,
-        request("POST", &format!("/v1/pm/projects/{project_id}/approvers"),
-            Some(serde_json::json!({ "principal_id": member }))),
+        request(
+            "POST",
+            &format!("/v1/pm/projects/{project_id}/approvers"),
+            Some(serde_json::json!({ "principal_id": member })),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
@@ -234,8 +277,11 @@ async fn grant_guards(pool: PgPool) {
     .unwrap();
     let (status, body) = send(
         &pool,
-        request("POST", &format!("/v1/pm/projects/{project_id}/approvers"),
-            Some(serde_json::json!({ "principal_id": outsider }))),
+        request(
+            "POST",
+            &format!("/v1/pm/projects/{project_id}/approvers"),
+            Some(serde_json::json!({ "principal_id": outsider })),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
@@ -243,8 +289,11 @@ async fn grant_guards(pool: PgPool) {
     // Lead 自授 → 400（Lead 已持权）。
     let (status, _) = send(
         &pool,
-        request("POST", &format!("/v1/pm/projects/{project_id}/approvers"),
-            Some(serde_json::json!({ "principal_id": pm_api::auth::DEV_OFF_PRINCIPAL }))),
+        request(
+            "POST",
+            &format!("/v1/pm/projects/{project_id}/approvers"),
+            Some(serde_json::json!({ "principal_id": pm_api::auth::DEV_OFF_PRINCIPAL })),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -260,14 +309,20 @@ async fn grant_guards(pool: PgPool) {
     let err = pm_application::approver::ensure_governance_authorized(&pool, project_id, ai)
         .await
         .expect_err("AI subject must not pass the governance gate");
-    assert!(matches!(err, pm_application::pm_write::PmWriteError::Forbidden(_)));
+    assert!(matches!(
+        err,
+        pm_application::pm_write::PmWriteError::Forbidden(_)
+    ));
 
     // 审计词表：grant/revoke 各一条（本用例只有 grant 失败路径——用 APV-1 的语义在
     // 这里补一条成功授予以验证审计；先授后撤由上一用例覆盖，此处只验 grant 行）。
     let (status, _) = send(
         &pool,
-        request("POST", &format!("/v1/pm/projects/{project_id}/approvers"),
-            Some(serde_json::json!({ "principal_id": member }))),
+        request(
+            "POST",
+            &format!("/v1/pm/projects/{project_id}/approvers"),
+            Some(serde_json::json!({ "principal_id": member })),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
@@ -278,5 +333,8 @@ async fn grant_guards(pool: PgPool) {
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert!(actions.iter().any(|a| a == "approver.granted"), "{actions:?}");
+    assert!(
+        actions.iter().any(|a| a == "approver.granted"),
+        "{actions:?}"
+    );
 }

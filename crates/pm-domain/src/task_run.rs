@@ -125,7 +125,6 @@ impl RetryCounters {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

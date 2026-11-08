@@ -3,14 +3,13 @@
 //!
 //! 越权矩阵（§16.3-10 本批次可 CI 化部分）：非成员项目 404（不泄露存在性）、
 /// 无项目上下文 400；无凭据/错租户由 auth 中间件层既有测试覆盖（auth.rs）。
-
 mod common;
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use serde_json::{Value, json};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -43,7 +42,11 @@ fn post_json(uri: &str, body: Value, headers: &[(&str, &str)]) -> Request<Body> 
 }
 
 fn get(uri: &str) -> Request<Body> {
-    Request::builder().method("GET").uri(uri).body(Body::empty()).unwrap()
+    Request::builder()
+        .method("GET")
+        .uri(uri)
+        .body(Body::empty())
+        .unwrap()
 }
 
 async fn body_json(response: axum::response::Response) -> Value {
@@ -121,13 +124,12 @@ async fn idempotency_key_replays_without_side_effects(pool: PgPool) {
     assert_eq!(b1["tasks"][0]["task_id"], b2["tasks"][0]["task_id"]);
 
     let intake_uuid = Uuid::parse_str(b1["intake_id"].as_str().unwrap()).unwrap();
-    let task_n: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM integration.intake_task WHERE intake_id = $1",
-    )
-    .bind(intake_uuid)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let task_n: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM integration.intake_task WHERE intake_id = $1")
+            .bind(intake_uuid)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(task_n <= 1, "no duplicate task rows on replay");
 }
 
@@ -147,7 +149,11 @@ async fn submit_to_non_member_project_is_404(pool: PgPool) {
         ))
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::NOT_FOUND, "stranger project must be invisible");
+    assert_eq!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "stranger project must be invisible"
+    );
 }
 
 /// 无项目上下文 → 400。
@@ -188,12 +194,17 @@ async fn intake_state_is_derived_and_project_scoped(pool: PgPool) {
         .unwrap();
     assert_eq!(view.status(), StatusCode::OK);
     let state = body_json(view).await;
-    assert_eq!(state["derived_status"], "PROCESSING", "kb_analyze PENDING → derived PROCESSING");
+    assert_eq!(
+        state["derived_status"], "PROCESSING",
+        "kb_analyze PENDING → derived PROCESSING"
+    );
     assert_eq!(state["tasks"].as_array().unwrap().len(), 1);
 
     // dev-off 不是 stranger 项目成员 → 404（不泄露存在性）。
     let cross = app
-        .oneshot(get(&format!("/v1/pm/intakes/{intake_id}?project_id={stranger}")))
+        .oneshot(get(&format!(
+            "/v1/pm/intakes/{intake_id}?project_id={stranger}"
+        )))
         .await
         .unwrap();
     // 该端点不读 project_id query（intake 归属反查）；stranger 用户视角下同 404。
@@ -230,7 +241,11 @@ async fn retry_non_terminal_task_is_409(pool: PgPool) {
         ))
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::CONFLICT, "PENDING task is not retryable");
+    assert_eq!(
+        response.status(),
+        StatusCode::CONFLICT,
+        "PENDING task is not retryable"
+    );
 }
 
 /// kb/pc 契约面（P2-2）：未接线入口 501（≠404/500）；
@@ -242,9 +257,21 @@ async fn kb_pc_contract_skeletons_are_501(pool: PgPool) {
 
     let app = router(pool.clone());
     for (method, uri, has_body) in [
-        ("POST", &format!("/v1/kb/analyses?project_id={project}"), true),
-        ("POST", &format!("/v1/pc/analyses?project_id={project}"), true),
-        ("GET", &format!("/v1/pc/proposals/{}?project_id={project}", Uuid::new_v4()), false),
+        (
+            "POST",
+            &format!("/v1/kb/analyses?project_id={project}"),
+            true,
+        ),
+        (
+            "POST",
+            &format!("/v1/pc/analyses?project_id={project}"),
+            true,
+        ),
+        (
+            "GET",
+            &format!("/v1/pc/proposals/{}?project_id={project}", Uuid::new_v4()),
+            false,
+        ),
     ] {
         let request = if has_body {
             post_json(&uri, json!({}), &[])

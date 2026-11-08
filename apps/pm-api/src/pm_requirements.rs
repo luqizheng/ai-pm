@@ -7,15 +7,15 @@
 //! 模块退役——draft→approved 直跳废除（S02D-04），必须经 submit → confirm。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, State},
     routing::{get, patch, post},
+    Json, Router,
 };
 use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiError, ApiResult, ensure_trusted_context, require_project_visible};
+use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
 use pm_application::requirement::{
     self, ConfirmRevisionRequest, CreateRequirementRequest, DraftRevisionRequest, LifecycleAction,
     RejectRevisionRequest,

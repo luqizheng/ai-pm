@@ -3,10 +3,10 @@
 //! 非成员 404（DEF-01 V-4 回归）、AI 主体确认 403（DEF-02 S02D-02 #2 服务面）、
 //! 治理命令 Lead 闸与 archived 不可恢复（I1-D05）。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router_with_feed_and_knowledge;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::knowledge::KnowledgeRoot;
 
 use sqlx::PgPool;
@@ -16,7 +16,11 @@ use uuid::Uuid;
 mod common;
 
 fn get(uri: &str) -> Request<Body> {
-    Request::builder().method("GET").uri(uri).body(Body::empty()).unwrap()
+    Request::builder()
+        .method("GET")
+        .uri(uri)
+        .body(Body::empty())
+        .unwrap()
 }
 
 fn post_json(uri: &str, body: serde_json::Value) -> Request<Body> {
@@ -40,13 +44,13 @@ fn patch_json(uri: &str, body: serde_json::Value) -> Request<Body> {
 async fn body_json(response: axum::response::Response) -> (StatusCode, serde_json::Value) {
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
 }
 
-async fn send(
-    pool: &PgPool,
-    request: Request<Body>,
-) -> (StatusCode, serde_json::Value) {
+async fn send(pool: &PgPool, request: Request<Body>) -> (StatusCode, serde_json::Value) {
     // S02-I2：每请求注入独立临时知识库根——并行用例各自 git init，避免
     // 共享仓库的 index 竞态（submit 是本套件唯一的 Git 写点）。
     let app = router_with_feed_and_knowledge(
@@ -95,16 +99,19 @@ async fn create_requirement(pool: &PgPool, project_id: Uuid, code: &str) -> serd
 }
 
 /// 走完 创建→起草→提交 到 pending_confirmation，返回 (requirement_id, revision_id, content_hash)。
-async fn submitted_revision(
-    pool: &PgPool,
-    project_id: Uuid,
-    code: &str,
-) -> (Uuid, Uuid, String) {
+async fn submitted_revision(pool: &PgPool, project_id: Uuid, code: &str) -> (Uuid, Uuid, String) {
     let requirement = create_requirement(pool, project_id, code).await;
     let requirement_id: Uuid = requirement["id"].as_str().unwrap().parse().unwrap();
-    let revision_id: Uuid = requirement["latest_revision_id"].as_str().unwrap().parse().unwrap();
+    let revision_id: Uuid = requirement["latest_revision_id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
     let (_, detail) = send(pool, get(&format!("/v1/pm/requirements/{requirement_id}"))).await;
-    let hash = detail["revisions"][0]["content_hash"].as_str().unwrap().to_string();
+    let hash = detail["revisions"][0]["content_hash"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let (status, _) = send(
         pool,
         post_json(
@@ -144,7 +151,11 @@ async fn confirm_flow_supersedes_and_records_cas(pool: PgPool) {
     assert_eq!(detail["revisions"].as_array().unwrap().len(), 1);
     assert_eq!(detail["revisions"][0]["markdown"], "# User authentication");
     assert_eq!(detail["revisions"][0]["summary"], "账号密码登录与会话管理");
-    let revision_id: Uuid = detail["revisions"][0]["id"].as_str().unwrap().parse().unwrap();
+    let revision_id: Uuid = detail["revisions"][0]["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
 
     // ── 改草稿：hash 随正文更新（S02D-16 sha256(markdown)）。
     let (status, body) = send(
@@ -156,8 +167,14 @@ async fn confirm_flow_supersedes_and_records_cas(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "body: {body}");
-    let hash = body["revision"]["content_hash"].as_str().unwrap().to_string();
-    assert_ne!(hash, detail["revisions"][0]["content_hash"].as_str().unwrap());
+    let hash = body["revision"]["content_hash"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_ne!(
+        hash,
+        detail["revisions"][0]["content_hash"].as_str().unwrap()
+    );
 
     // ── 提交 → pending_confirmation；确认携带错误哈希 → 409（跨版本重放防线）。
     let (status, _) = send(
@@ -225,8 +242,18 @@ async fn confirm_flow_supersedes_and_records_cas(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::CREATED, "body: {body}");
     let revision_v2: Uuid = body["revision"]["id"].as_str().unwrap().parse().unwrap();
-    let hash_v2 = body["revision"]["content_hash"].as_str().unwrap().to_string();
-    send(&pool, post_json(&format!("/v1/pm/requirements/{requirement_id}/revisions/{revision_v2}/submit"), serde_json::json!({}))).await;
+    let hash_v2 = body["revision"]["content_hash"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    send(
+        &pool,
+        post_json(
+            &format!("/v1/pm/requirements/{requirement_id}/revisions/{revision_v2}/submit"),
+            serde_json::json!({}),
+        ),
+    )
+    .await;
 
     let (status, _) = send(
         &pool,
@@ -239,7 +266,11 @@ async fn confirm_flow_supersedes_and_records_cas(pool: PgPool) {
         ),
     )
     .await;
-    assert_eq!(status, StatusCode::CONFLICT, "stale CAS token must 409 (DEF-03 方向)");
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "stale CAS token must 409 (DEF-03 方向)"
+    );
 
     let (status, body) = send(
         &pool,
@@ -257,12 +288,20 @@ async fn confirm_flow_supersedes_and_records_cas(pool: PgPool) {
     assert_eq!(body["requirement"]["row_revision"], 3);
 
     let (_, detail) = send(&pool, get(&format!("/v1/pm/requirements/{requirement_id}"))).await;
-    let states: Vec<&str> = detail["revisions"].as_array().unwrap()
-        .iter().map(|r| r["state"].as_str().unwrap()).collect();
+    let states: Vec<&str> = detail["revisions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["state"].as_str().unwrap())
+        .collect();
     assert_eq!(states, vec!["approved", "superseded"]); // version DESC
 
     // ── 列表 + 审计词表（S02D-23 点号式）。
-    let (_, list) = send(&pool, get(&format!("/v1/pm/projects/{project_id}/requirements"))).await;
+    let (_, list) = send(
+        &pool,
+        get(&format!("/v1/pm/projects/{project_id}/requirements")),
+    )
+    .await;
     assert_eq!(list["items"].as_array().unwrap().len(), 1);
     assert_eq!(list["items"][0]["latest_state"], "approved");
     assert_eq!(list["items"][0]["current_version"], 2);
@@ -281,7 +320,10 @@ async fn confirm_flow_supersedes_and_records_cas(pool: PgPool) {
         "requirement.confirmed",
         "requirement.revision_superseded",
     ] {
-        assert!(actions.iter().any(|a| a == expected), "missing audit {expected}: {actions:?}");
+        assert!(
+            actions.iter().any(|a| a == expected),
+            "missing audit {expected}: {actions:?}"
+        );
     }
 }
 
@@ -338,8 +380,18 @@ async fn reject_is_terminal_and_reason_recorded(pool: PgPool) {
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(body["revision"]["version"], 2);
     let revision_v2: Uuid = body["revision"]["id"].as_str().unwrap().parse().unwrap();
-    let hash_v2 = body["revision"]["content_hash"].as_str().unwrap().to_string();
-    send(&pool, post_json(&format!("/v1/pm/requirements/{requirement_id}/revisions/{revision_v2}/submit"), serde_json::json!({}))).await;
+    let hash_v2 = body["revision"]["content_hash"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    send(
+        &pool,
+        post_json(
+            &format!("/v1/pm/requirements/{requirement_id}/revisions/{revision_v2}/submit"),
+            serde_json::json!({}),
+        ),
+    )
+    .await;
     let (status, body) = send(
         &pool,
         post_json(
@@ -375,7 +427,11 @@ async fn non_member_and_cross_project_writes_are_404(pool: PgPool) {
         ),
     )
     .await;
-    assert_eq!(status, StatusCode::NOT_FOUND, "DEF-01 V-4 回归：非成员写必须 404");
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "DEF-01 V-4 回归：非成员写必须 404"
+    );
 
     // 成员项目的需求，对非成员项目上下文的读取同样 404（requirement 级边界）。
     let project_id = seed(&pool, "REQ-IN").await;
@@ -419,7 +475,10 @@ async fn ai_principal_cannot_confirm_or_govern(pool: PgPool) {
     )
     .await
     .expect_err("AI principal must not confirm");
-    assert!(matches!(err, pm_application::pm_write::PmWriteError::Forbidden(_)));
+    assert!(matches!(
+        err,
+        pm_application::pm_write::PmWriteError::Forbidden(_)
+    ));
 
     let err = pm_application::requirement::transition_lifecycle(
         &pool,
@@ -430,7 +489,10 @@ async fn ai_principal_cannot_confirm_or_govern(pool: PgPool) {
     )
     .await
     .expect_err("AI principal must not govern lifecycle");
-    assert!(matches!(err, pm_application::pm_write::PmWriteError::Forbidden(_)));
+    assert!(matches!(
+        err,
+        pm_application::pm_write::PmWriteError::Forbidden(_)
+    ));
 
     // 真人主体仍可确认（同一 revision 未被污染）。
     let (status, _) = send(
@@ -461,10 +523,17 @@ async fn lifecycle_governance_requires_lead_and_archive_is_terminal(pool: PgPool
     .unwrap();
     let (status, _) = send(
         &pool,
-        post_json(&format!("/v1/pm/requirements/{requirement_id}/withdraw"), serde_json::json!({})),
+        post_json(
+            &format!("/v1/pm/requirements/{requirement_id}/withdraw"),
+            serde_json::json!({}),
+        ),
     )
     .await;
-    assert_eq!(status, StatusCode::FORBIDDEN, "withdraw requires project lead");
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "withdraw requires project lead"
+    );
     sqlx::query(
         "UPDATE core.project_member SET role = 'owner' \
          WHERE project_id = $1 AND principal_id = $2",
@@ -478,7 +547,10 @@ async fn lifecycle_governance_requires_lead_and_archive_is_terminal(pool: PgPool
     // withdrawn 期间不接受确认/拒绝（ensure_active）。
     let (status, _) = send(
         &pool,
-        post_json(&format!("/v1/pm/requirements/{requirement_id}/withdraw"), serde_json::json!({})),
+        post_json(
+            &format!("/v1/pm/requirements/{requirement_id}/withdraw"),
+            serde_json::json!({}),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -490,12 +562,19 @@ async fn lifecycle_governance_requires_lead_and_archive_is_terminal(pool: PgPool
         ),
     )
     .await;
-    assert_eq!(status, StatusCode::CONFLICT, "withdrawn requirement is not active");
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "withdrawn requirement is not active"
+    );
 
     // restore → active；archive → archived 终态；restore 409（I1-D05）。
     let (status, body) = send(
         &pool,
-        post_json(&format!("/v1/pm/requirements/{requirement_id}/restore"), serde_json::json!({})),
+        post_json(
+            &format!("/v1/pm/requirements/{requirement_id}/restore"),
+            serde_json::json!({}),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -503,7 +582,10 @@ async fn lifecycle_governance_requires_lead_and_archive_is_terminal(pool: PgPool
 
     let (status, body) = send(
         &pool,
-        post_json(&format!("/v1/pm/requirements/{requirement_id}/archive"), serde_json::json!({})),
+        post_json(
+            &format!("/v1/pm/requirements/{requirement_id}/archive"),
+            serde_json::json!({}),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -511,13 +593,23 @@ async fn lifecycle_governance_requires_lead_and_archive_is_terminal(pool: PgPool
 
     let (status, _) = send(
         &pool,
-        post_json(&format!("/v1/pm/requirements/{requirement_id}/restore"), serde_json::json!({})),
+        post_json(
+            &format!("/v1/pm/requirements/{requirement_id}/restore"),
+            serde_json::json!({}),
+        ),
     )
     .await;
-    assert_eq!(status, StatusCode::CONFLICT, "archived must not restore (I1-D05)");
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "archived must not restore (I1-D05)"
+    );
     let (status, _) = send(
         &pool,
-        post_json(&format!("/v1/pm/requirements/{requirement_id}/archive"), serde_json::json!({})),
+        post_json(
+            &format!("/v1/pm/requirements/{requirement_id}/archive"),
+            serde_json::json!({}),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT);

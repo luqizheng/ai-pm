@@ -13,21 +13,21 @@
 //! `{code, message}`（`conflict()`，与 tenant_members 同款）。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
+    Json, Router,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use uuid::Uuid;
 
 use pm_application::actor::AuditActor;
 use pm_application::team_llm::{
-    CreateTeamProviderRequest, ReplaceCredentialRequest, SetStatusRequest, TeamLlmError,
-    UpdateTeamProviderRequest, create_team_provider, delete_team_provider,
-    get_project_ai_policy, list_team_providers, replace_team_credential,
-    set_project_ai_policy, set_team_provider_status, test_team_provider, update_team_provider,
+    create_team_provider, delete_team_provider, get_project_ai_policy, list_team_providers,
+    replace_team_credential, set_project_ai_policy, set_team_provider_status, test_team_provider,
+    update_team_provider, CreateTeamProviderRequest, ReplaceCredentialRequest, SetStatusRequest,
+    TeamLlmError, UpdateTeamProviderRequest,
 };
 
 use crate::auth::AuthedPrincipal;
@@ -80,9 +80,9 @@ async fn guard_project_manager(
     if project_tenant.is_none() {
         return Err(err_not_found("project not found"));
     }
-    let _ = project_tenant.filter(|t| t == &caller.tenant_id).ok_or_else(|| {
-        err_not_found("project not found")
-    })?;
+    let _ = project_tenant
+        .filter(|t| t == &caller.tenant_id)
+        .ok_or_else(|| err_not_found("project not found"))?;
     match pm_application::project_member::is_project_manager(
         &state.pool,
         caller.tenant_id,
@@ -150,8 +150,13 @@ fn audit_actor(caller: &AuthedPrincipal) -> AuditActor {
 
 fn error_response(err: TeamLlmError) -> Response {
     let (status, body) = match &err {
-        TeamLlmError::NotFound => (StatusCode::NOT_FOUND, json!({ "message": "provider not found" })),
-        TeamLlmError::Validation(message) => (StatusCode::BAD_REQUEST, json!({ "message": message })),
+        TeamLlmError::NotFound => (
+            StatusCode::NOT_FOUND,
+            json!({ "message": "provider not found" }),
+        ),
+        TeamLlmError::Validation(message) => {
+            (StatusCode::BAD_REQUEST, json!({ "message": message }))
+        }
         TeamLlmError::AdapterUnavailable(message) => (
             StatusCode::BAD_REQUEST,
             json!({ "message": message, "code": "adapter_unavailable" }),
@@ -174,11 +179,17 @@ fn error_response(err: TeamLlmError) -> Response {
         ),
         TeamLlmError::Crypto => {
             tracing::error!(error = %err, "team llm api key crypto failure");
-            (StatusCode::INTERNAL_SERVER_ERROR, json!({ "message": "internal error" }))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                json!({ "message": "internal error" }),
+            )
         }
         TeamLlmError::Db(_) => {
             tracing::error!(error = %err, "team llm provider db failure");
-            (StatusCode::INTERNAL_SERVER_ERROR, json!({ "message": "internal error" }))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                json!({ "message": "internal error" }),
+            )
         }
     };
     (status, Json(body)).into_response()
@@ -198,7 +209,11 @@ async fn list_handler(
     match list_team_providers(&state.pool, tenant_id).await {
         Ok(items) => {
             let total = items.len();
-            (StatusCode::OK, Json(json!({ "items": items, "total": total }))).into_response()
+            (
+                StatusCode::OK,
+                Json(json!({ "items": items, "total": total })),
+            )
+                .into_response()
         }
         Err(err) => error_response(TeamLlmError::Db(err)),
     }
@@ -234,8 +249,14 @@ async fn update_handler(
     if !caller.is_admin {
         return err_forbidden("tenant admin required");
     }
-    match update_team_provider(&state.pool, &audit_actor(&caller), tenant_id, provider_id, body)
-        .await
+    match update_team_provider(
+        &state.pool,
+        &audit_actor(&caller),
+        tenant_id,
+        provider_id,
+        body,
+    )
+    .await
     {
         Ok(row) => (StatusCode::OK, Json(row)).into_response(),
         Err(err) => error_response(err),
@@ -288,8 +309,14 @@ async fn credential_handler(
     if !caller.is_admin {
         return err_forbidden("tenant admin required");
     }
-    match replace_team_credential(&state.pool, &audit_actor(&caller), tenant_id, provider_id, body)
-        .await
+    match replace_team_credential(
+        &state.pool,
+        &audit_actor(&caller),
+        tenant_id,
+        provider_id,
+        body,
+    )
+    .await
     {
         Ok(row) => (StatusCode::OK, Json(row)).into_response(),
         Err(err) => error_response(err),
@@ -319,8 +346,14 @@ async fn status_handler(
                 .into_response();
         }
     };
-    match set_team_provider_status(&state.pool, &audit_actor(&caller), tenant_id, provider_id, request)
-        .await
+    match set_team_provider_status(
+        &state.pool,
+        &audit_actor(&caller),
+        tenant_id,
+        provider_id,
+        request,
+    )
+    .await
     {
         Ok(row) => (StatusCode::OK, Json(row)).into_response(),
         Err(err) => error_response(err),

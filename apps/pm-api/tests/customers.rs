@@ -3,14 +3,14 @@
 //! 覆盖：建档 / code 冲突 / 搜索过滤 / 建项携带 customer_id / 未知客户 400 /
 //! 归档客户拒绝建项 / 兼容路径落 placeholder / 项目列表返回 customer_name。
 
-use axum::body::{Body, to_bytes};
+use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use serde_json::{Value, json};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_domain::SYSTEM_TENANT;
+use serde_json::{json, Value};
 use sqlx::PgPool;
 use tower::ServiceExt;
-use pm_domain::SYSTEM_TENANT;
 
 mod common;
 
@@ -205,11 +205,7 @@ async fn legacy_bootstrap_marks_placeholder_customer(pool: PgPool) {
     .unwrap();
     common::join_dev(&pool, legacy.project_id).await;
 
-    let response = app
-        .clone()
-        .oneshot(get("/v1/pm/projects"))
-        .await
-        .unwrap();
+    let response = app.clone().oneshot(get("/v1/pm/projects")).await.unwrap();
     let body = body_json(response).await;
     assert_eq!(body["items"][0]["customer_status"], json!("placeholder"));
     assert_eq!(body["items"][0]["customer_name"], json!("LEGACY-1"));

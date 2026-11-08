@@ -16,9 +16,9 @@
 //! （§12.5 移除，附录 B.2）。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, Query, State},
     routing::{get, post},
+    Json, Router,
 };
 use kb_pc_contracts::ports::{KbServicePort, PortError, PortNotWired};
 use serde_json::json;
@@ -27,7 +27,7 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiError, ApiResult, require_project_visible};
+use crate::support::{require_project_visible, ApiError, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -80,7 +80,13 @@ fn require_project_param(query: &HashMap<String, String>) -> ApiResult<Uuid> {
 }
 
 async fn guard(state: &AppState, caller: &AuthedPrincipal, project_id: Uuid) -> ApiResult<()> {
-    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await
 }
 
 /// 受理骨架统一落点：项目可见性校验通过后，占位端口答 501。
@@ -164,7 +170,16 @@ async fn k2_analysis_status(
     .bind(project_id)
     .fetch_optional(&state.pool)
     .await?;
-    let Some((task_status, result_ref, last_error, created_at, updated_at, intake_id, intake_type, title)) = task
+    let Some((
+        task_status,
+        result_ref,
+        last_error,
+        created_at,
+        updated_at,
+        intake_id,
+        intake_type,
+        title,
+    )) = task
     else {
         return Err(ApiError::NotFound("kb analysis task not found"));
     };
@@ -217,12 +232,11 @@ async fn k2_analysis_status(
             rev_created_at,
         )) = revision
         {
-            let content: Option<String> = sqlx::query_scalar(
-                "SELECT content FROM kb.document_revision WHERE id = $1",
-            )
-            .bind(rev_id)
-            .fetch_optional(&state.pool)
-            .await?;
+            let content: Option<String> =
+                sqlx::query_scalar("SELECT content FROM kb.document_revision WHERE id = $1")
+                    .bind(rev_id)
+                    .fetch_optional(&state.pool)
+                    .await?;
             body["document"] = json!({
                 "document_id": doc_id,
                 "doc_key": doc_key,
@@ -354,7 +368,16 @@ async fn p3_analysis_status(
     .bind(project_id)
     .fetch_optional(&state.pool)
     .await?;
-    let Some((task_status, result_ref, last_error, created_at, updated_at, intake_id, intake_type, title)) = task
+    let Some((
+        task_status,
+        result_ref,
+        last_error,
+        created_at,
+        updated_at,
+        intake_id,
+        intake_type,
+        title,
+    )) = task
     else {
         return Err(ApiError::NotFound("pc analysis task not found"));
     };
@@ -390,21 +413,33 @@ async fn p3_analysis_status(
     if !rows.is_empty() {
         body["objects"] = json!(rows
             .into_iter()
-            .map(|(id, object_type, object_key, name, lifecycle, revision_no, summary, content, revision_status)| {
-                json!({
-                    "object_id": id,
-                    "object_type": object_type,
-                    "object_key": object_key,
-                    "name": name,
-                    "lifecycle_status": lifecycle,
-                    "latest_revision": revision_no.map(|no| json!({
-                        "revision_no": no,
-                        "summary": summary,
-                        "content": content,
-                        "status": revision_status,
-                    })),
-                })
-            })
+            .map(
+                |(
+                    id,
+                    object_type,
+                    object_key,
+                    name,
+                    lifecycle,
+                    revision_no,
+                    summary,
+                    content,
+                    revision_status,
+                )| {
+                    json!({
+                        "object_id": id,
+                        "object_type": object_type,
+                        "object_key": object_key,
+                        "name": name,
+                        "lifecycle_status": lifecycle,
+                        "latest_revision": revision_no.map(|no| json!({
+                            "revision_no": no,
+                            "summary": summary,
+                            "content": content,
+                            "status": revision_status,
+                        })),
+                    })
+                }
+            )
             .collect::<Vec<_>>());
     }
     Ok(Json(body))

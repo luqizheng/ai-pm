@@ -12,7 +12,10 @@ async fn discovery_schema_has_seven_tenant_tables(pool: PgPool) {
     .await
     .unwrap();
     // 0025 的 7 张设计表 + 0031（S01 · I6-B）新增的 evidence 实体表。
-    assert_eq!(n, 8, "discovery schema must hold the 7 design tables + evidence");
+    assert_eq!(
+        n, 8,
+        "discovery schema must hold the 7 design tables + evidence"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -142,11 +145,12 @@ async fn finding_check_constraints_are_enforced(pool: PgPool) {
 
     // 0031 起 Finding 带 project_id，且证据落到独立的 evidence 表
     // （`discovery_finding.evidence` JSONB 列已删除）。
-    let project: (Uuid,) = sqlx::query_as("SELECT project_id FROM discovery.discovery_session WHERE id = $1")
-        .bind(session)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let project: (Uuid,) =
+        sqlx::query_as("SELECT project_id FROM discovery.discovery_session WHERE id = $1")
+            .bind(session)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     let row: (String,) = sqlx::query_as(
         "INSERT INTO discovery.discovery_finding \
          (tenant_id, project_id, session_id, kind, content, confidence) \
@@ -184,6 +188,10 @@ async fn every_discovery_table_appears_in_tenant_assertions(pool: PgPool) {
         .await
         .unwrap();
         let row = row.unwrap_or_else(|| panic!("discovery.{table} has no tenant_id column"));
-        assert_eq!(row.get::<String, _>("is_nullable"), "NO", "discovery.{table}");
+        assert_eq!(
+            row.get::<String, _>("is_nullable"),
+            "NO",
+            "discovery.{table}"
+        );
     }
 }

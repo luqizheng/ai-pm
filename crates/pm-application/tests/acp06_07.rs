@@ -4,9 +4,9 @@
 //! ACP-482 过期无授权拒绝+REST 授权语义（服务层）+撤销 · ACP-483 Workspace
 //! 互斥操作化（情形 6 语义既有，此处登记策略验证）。
 
-use pm_application::actor::AuditActor;
 use pm_application::acp06_07;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::actor::AuditActor;
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::interaction::{
     record_response_persisted, report_interaction, ReportInteractionInput,
 };
@@ -57,7 +57,12 @@ async fn seed(pool: &PgPool, code: &str) -> (Uuid, Uuid, Uuid, Uuid) {
     .execute(pool)
     .await
     .unwrap();
-    (outcome.project_id, task_id, outcome.human_id, outcome.dev_agent_id)
+    (
+        outcome.project_id,
+        task_id,
+        outcome.human_id,
+        outcome.dev_agent_id,
+    )
 }
 
 async fn seed_device(pool: &PgPool, tenant_id: Uuid, owner: Uuid, name: &str) -> Uuid {
@@ -100,16 +105,34 @@ async fn acp478_checkpoint_registration_idempotent(pool: PgPool) {
     let a = AuditActor::dispatch();
 
     let id1 = acp06_07::register_checkpoint(
-        &pool, SYSTEM_TENANT, project_id, task_id, run_id, None,
-        ".aipm/checkpoint.json", "abc123hash", 1024, Some("sess-1"),
-        "executor_report", &a,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        task_id,
+        run_id,
+        None,
+        ".aipm/checkpoint.json",
+        "abc123hash",
+        1024,
+        Some("sess-1"),
+        "executor_report",
+        &a,
     )
     .await
     .unwrap();
     let id2 = acp06_07::register_checkpoint(
-        &pool, SYSTEM_TENANT, project_id, task_id, run_id, None,
-        ".aipm/checkpoint.json", "abc123hash", 1024, None,
-        "executor_report", &a,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        task_id,
+        run_id,
+        None,
+        ".aipm/checkpoint.json",
+        "abc123hash",
+        1024,
+        None,
+        "executor_report",
+        &a,
     )
     .await
     .unwrap();
@@ -172,14 +195,24 @@ async fn acp479_no_checkpoint_never_blocks(pool: PgPool) {
     assert!(!reported.replayed);
     // continue 下发的 payload checkpoint=null（无登记时）。
     record_response_persisted(
-        &pool, project_id, reported.interaction_id, json!({ "response_id": "r" }),
+        &pool,
+        project_id,
+        reported.interaction_id,
+        json!({ "response_id": "r" }),
         &AuditActor::dispatch(),
     )
     .await
     .unwrap();
     let mut tx = pool.begin().await.unwrap();
     let c = pm_application::worker_command::issue_continue_command(
-        &mut tx, project_id, task_id, run_id, reported.interaction_id, None, "client:dbg", 1,
+        &mut tx,
+        project_id,
+        task_id,
+        run_id,
+        reported.interaction_id,
+        None,
+        "client:dbg",
+        1,
         json!({ "decision": "approve" }),
     )
     .await
@@ -191,11 +224,24 @@ async fn acp479_no_checkpoint_never_blocks(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert!(payload["checkpoint"].is_null(), "no registered checkpoint => null");
+    assert!(
+        payload["checkpoint"].is_null(),
+        "no registered checkpoint => null"
+    );
     // 有登记 → payload 携元数据引用。
     acp06_07::register_checkpoint(
-        &pool, SYSTEM_TENANT, project_id, task_id, run_id, None,
-        ".aipm/checkpoint.json", "hash-x", 10, None, "executor_report", &AuditActor::dispatch(),
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        task_id,
+        run_id,
+        None,
+        ".aipm/checkpoint.json",
+        "hash-x",
+        10,
+        None,
+        "executor_report",
+        &AuditActor::dispatch(),
     )
     .await
     .unwrap();
@@ -223,9 +269,18 @@ async fn acp480_worker_receipt_channel_registers(pool: PgPool) {
     .await
     .unwrap();
     let id = acp06_07::register_checkpoint(
-        &pool, SYSTEM_TENANT, project_id, task_id, run_id, None,
-        ".aipm/checkpoint.json", "receipt-hash", 5, None,
-        "worker_receipt", &AuditActor::dispatch(),
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        task_id,
+        run_id,
+        None,
+        ".aipm/checkpoint.json",
+        "receipt-hash",
+        5,
+        None,
+        "worker_receipt",
+        &AuditActor::dispatch(),
     )
     .await
     .unwrap();
@@ -281,8 +336,13 @@ async fn acp481_482_authorization_gates_reacquire(pool: PgPool) {
 
     // 过期 + 无授权 → 拒绝（ACP-482 前半）。
     let err = recovery::reacquire_lease(
-        &pool, SYSTEM_TENANT, project_id, run_id, device_id,
-        RunDispatchConfig::from_env().lease_secs, &a,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        run_id,
+        device_id,
+        RunDispatchConfig::from_env().lease_secs,
+        &a,
     )
     .await
     .unwrap_err();
@@ -291,14 +351,26 @@ async fn acp481_482_authorization_gates_reacquire(pool: PgPool) {
     // 授予（Lead 语义；独立有效期）→ 放行（ACP-481）。
     let new_dl = chrono::Utc::now() + chrono::Duration::hours(1);
     let auth_id = acp06_07::grant_execution_authorization(
-        &pool, SYSTEM_TENANT, project_id, run_id, None, human_id,
-        "expired_deadline", new_dl, &a,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        run_id,
+        None,
+        human_id,
+        "expired_deadline",
+        new_dl,
+        &a,
     )
     .await
     .unwrap();
     let lease = recovery::reacquire_lease(
-        &pool, SYSTEM_TENANT, project_id, run_id, device_id,
-        RunDispatchConfig::from_env().lease_secs, &a,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        run_id,
+        device_id,
+        RunDispatchConfig::from_env().lease_secs,
+        &a,
     )
     .await
     .unwrap();
@@ -317,7 +389,12 @@ async fn acp481_482_authorization_gates_reacquire(pool: PgPool) {
 
     // 撤销 → 再次续领（需第二次过期模拟）拒绝（ACP-482 撤销面）。
     assert!(acp06_07::revoke_execution_authorization(
-        &pool, SYSTEM_TENANT, project_id, run_id, auth_id, &a,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        run_id,
+        auth_id,
+        &a,
     )
     .await
     .unwrap());
@@ -327,8 +404,13 @@ async fn acp481_482_authorization_gates_reacquire(pool: PgPool) {
         .await
         .unwrap();
     let err = recovery::reacquire_lease(
-        &pool, SYSTEM_TENANT, project_id, run_id, device_id,
-        RunDispatchConfig::from_env().lease_secs, &a,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        run_id,
+        device_id,
+        RunDispatchConfig::from_env().lease_secs,
+        &a,
     )
     .await
     .unwrap_err();
@@ -369,25 +451,31 @@ async fn acp483_workspace_mutual_exclusion_operationalization(pool: PgPool) {
     .await
     .unwrap();
     // 续领（恢复）不改 shield、不新建 Run（attempt 1 保持）——run 隔离目录单写者。
-    let before: (String, i32) = sqlx::query_as(
-        "SELECT scheduling_shield, attempt_no FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let before: (String, i32) =
+        sqlx::query_as("SELECT scheduling_shield, attempt_no FROM delivery.task_run WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     recovery::reacquire_lease(
-        &pool, SYSTEM_TENANT, project_id, run_id, device_id,
-        RunDispatchConfig::from_env().lease_secs, &AuditActor::principal(human_id),
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        run_id,
+        device_id,
+        RunDispatchConfig::from_env().lease_secs,
+        &AuditActor::principal(human_id),
     )
     .await
     .unwrap();
-    let after: (String, i32) = sqlx::query_as(
-        "SELECT scheduling_shield, attempt_no FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(before, after, "reacquire must not create a run or change the shield");
+    let after: (String, i32) =
+        sqlx::query_as("SELECT scheduling_shield, attempt_no FROM delivery.task_run WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        before, after,
+        "reacquire must not create a run or change the shield"
+    );
 }

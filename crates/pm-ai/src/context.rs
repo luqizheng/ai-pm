@@ -139,20 +139,28 @@ pub async fn start_run(pool: &sqlx::PgPool, event_id: EventId) -> Result<RunId, 
 /// Assemble the [`AnalysisContext`] for `event_id`: the event's own
 /// fields, the project-scoped delivery rows its payload references, and
 /// the project's current model config / policy version.
-pub async fn build(pool: &sqlx::PgPool, event_id: EventId) -> Result<AnalysisContext, ContextError> {
-    let (project_id, event_type, payload): (ProjectId, String, serde_json::Value) =
-        sqlx::query_as(
-            "SELECT project_id, event_type, payload \
+pub async fn build(
+    pool: &sqlx::PgPool,
+    event_id: EventId,
+) -> Result<AnalysisContext, ContextError> {
+    let (project_id, event_type, payload): (ProjectId, String, serde_json::Value) = sqlx::query_as(
+        "SELECT project_id, event_type, payload \
              FROM integration.inbound_event WHERE id = $1",
-        )
-        .bind(event_id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or(ContextError::EventNotFound(event_id))?;
+    )
+    .bind(event_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or(ContextError::EventNotFound(event_id))?;
 
     let task = load_ref(pool, &payload, project_id, "task_ref", "delivery.task").await?;
-    let milestone =
-        load_ref(pool, &payload, project_id, "milestone_ref", "delivery.milestone").await?;
+    let milestone = load_ref(
+        pool,
+        &payload,
+        project_id,
+        "milestone_ref",
+        "delivery.milestone",
+    )
+    .await?;
     let requirement_revision = load_ref(
         pool,
         &payload,
@@ -207,8 +215,9 @@ async fn load_ref(
         .as_str()
         .map(str::to_owned)
         .unwrap_or_else(|| raw.to_string());
-    let id = uuid::Uuid::parse_str(&r#ref)
-        .map_err(|_| ContextError::NotFound { r#ref: r#ref.clone() })?;
+    let id = uuid::Uuid::parse_str(&r#ref).map_err(|_| ContextError::NotFound {
+        r#ref: r#ref.clone(),
+    })?;
 
     let sql = format!("SELECT to_jsonb(t.*) FROM {table} t WHERE t.id = $1 AND t.project_id = $2");
     sqlx::query_scalar::<_, serde_json::Value>(&sql)
@@ -275,5 +284,5 @@ pub async fn fail_run(
     .bind(failure_code)
     .execute(pool)
     .await
-        .map(|_| ())
+    .map(|_| ())
 }

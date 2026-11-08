@@ -8,21 +8,19 @@
 //! 写路径的租户前置校验在这里完成；应用层只看 `project_id`（组合外键已保证同租户）。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get},
+    Json, Router,
 };
-use pm_application::task_dependency::{
-    self, DependencyError, DependencyGraph,
-};
+use pm_application::task_dependency::{self, DependencyError, DependencyGraph};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiError, ApiResult, require_project_visible};
+use crate::support::{require_project_visible, ApiError, ApiResult};
 
 impl From<DependencyError> for ApiError {
     fn from(e: DependencyError) -> Self {
@@ -61,13 +59,12 @@ async fn require_task_project(
     task_id: Uuid,
     principal: &AuthedPrincipal,
 ) -> ApiResult<Uuid> {
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(task_id)
-    .bind(principal.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?;
+    let project_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2")
+            .bind(task_id)
+            .bind(principal.tenant_id)
+            .fetch_optional(&state.pool)
+            .await?;
     let project_id = project_id.ok_or(ApiError::NotFound("task_not_found"))?;
     require_project_visible(
         &state.pool,
@@ -98,13 +95,9 @@ async fn add_handler(
 ) -> ApiResult<Response> {
     require_task_project(&state, task_id, &principal).await?;
     let actor = principal.audit_actor();
-    let graph = task_dependency::add_dependency(
-        &state.pool,
-        task_id,
-        body.depends_on_task_id,
-        &actor,
-    )
-    .await?;
+    let graph =
+        task_dependency::add_dependency(&state.pool, task_id, body.depends_on_task_id, &actor)
+            .await?;
     Ok((StatusCode::CREATED, Json(graph)).into_response())
 }
 

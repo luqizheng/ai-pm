@@ -8,10 +8,10 @@ async fn seed_project_actor(pool: &PgPool, code: &str) -> (Uuid, Uuid) {
     let customer: Uuid = sqlx::query_scalar(
         "INSERT INTO core.customer (name, tenant_id) VALUES ('m', $1) RETURNING id",
     )
-            .bind(SYSTEM_TENANT)
-            .fetch_one(pool)
-            .await
-            .unwrap();
+    .bind(SYSTEM_TENANT)
+    .fetch_one(pool)
+    .await
+    .unwrap();
     let project: Uuid = sqlx::query_scalar(
         "INSERT INTO core.project (customer_id, code, name, tenant_id) \
          VALUES ($1, $2, 'm', $3) RETURNING id",
@@ -57,7 +57,10 @@ async fn policy_scope_accepts_all_levels_and_rejects_unknown(pool: PgPool) {
     .bind(SYSTEM_TENANT)
     .execute(&pool)
     .await;
-    assert!(bad.is_err(), "an unknown scope must be refused by the CHECK");
+    assert!(
+        bad.is_err(),
+        "an unknown scope must be refused by the CHECK"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -72,10 +75,11 @@ async fn task_type_column_exists_and_is_nullable(pool: PgPool) {
     .execute(&pool)
     .await
     .expect("task_type column must exist");
-    let kind: Option<String> = sqlx::query_scalar("SELECT task_type FROM delivery.task WHERE project_id = $1")
-        .bind(p)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let kind: Option<String> =
+        sqlx::query_scalar("SELECT task_type FROM delivery.task WHERE project_id = $1")
+            .bind(p)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(kind.as_deref(), Some("refactor"));
 }
