@@ -137,22 +137,47 @@ struct RepoAccess {
     name: String,
     url: String,
     branch: String,
+    /// 人类确认的采用基准（0038 G-05；分析锚裁决 D-A=2026-11-08）。
+    selected_commit: Option<String>,
+}
+
+/// 分析锚解析（裁决 D-A/A-2）：`selected_commit ?? observed_head ?? 分支 tip`。
+/// `selected_commit` 是人类确认的采用基准；`observed_head` 来自 verify 的
+/// ls-remote（intake source_ref 携带），消除 verify 与分析两时点的 HEAD 漂移；
+/// 都没有才落到分支 tip。锚是一个 commit ref——`repo_facts::collect` 的全部
+/// git 命令（rev-parse/log/ls-tree/show）对 commit SHA 与分支名同构。
+fn analysis_anchor(access: &RepoAccess, observed_head: Option<&str>) -> Option<String> {
+    access
+        .selected_commit
+        .clone()
+        .or_else(|| observed_head.map(str::to_string))
 }
 
 async fn load_repo_access(pool: &PgPool, repository_id: Uuid) -> Result<RepoAccess, AnalysisError> {
-    let row: Option<(String, String, Option<String>)> = sqlx::query_as(
-        "SELECT name, url, default_branch \
-         FROM integration.project_repository WHERE id = $1",
+    type Row = Option<(
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    )>;
+    let row: Row = sqlx::query_as(
+        "SELECT name, url, default_branch, selected_branch, selected_commit \
+             FROM integration.project_repository WHERE id = $1",
     )
     .bind(repository_id)
     .fetch_optional(pool)
     .await?;
-    let (name, url, default_branch) =
+    let (name, url, default_branch, selected_branch, selected_commit) =
         row.ok_or(AnalysisError::RepositoryNotFound(repository_id))?;
     Ok(RepoAccess {
         name,
         url,
-        branch: default_branch.unwrap_or_else(|| "main".to_string()),
+        // 读取分支随锚走：确认基准自带分支；否则 default_branch。
+        branch: selected_branch
+            .or(default_branch)
+            .unwrap_or_else(|| "main".to_string()),
+        selected_commit,
     })
 }
 
@@ -183,9 +208,11 @@ async fn project_ssh_key_path(
 }
 
 /// bare clone（每次Fresh——`clone_bare` 失败自清理，与冷启动导入同款）并采集事实。
+/// `observed_head` = verify 的 Observed HEAD（intake source_ref），作锚链次选。
 async fn collect_fresh(
     pool: &PgPool,
     repository_id: Uuid,
+    observed_head: Option<&str>,
 ) -> Result<(RepoAccess, RepoFacts), AnalysisError> {
     let access = load_repo_access(pool, repository_id).await?;
     let key = project_ssh_key_path(pool, repository_id).await?;
@@ -201,28 +228,38 @@ async fn collect_fresh(
             GitError::Timeout => AnalysisError::Git("clone timed out".into()),
             other => AnalysisError::Git(other.to_string()),
         })?;
-    let facts = repo_facts::collect(&dest, &access.branch, repo_facts::Limits::from_env())
-        .await
-        .map_err(|e| AnalysisError::Git(e.to_string()))?;
+    let anchor = analysis_anchor(&access, observed_head);
+    let facts = match &anchor {
+        Some(commit) => repo_facts::collect(&dest, commit, repo_facts::Limits::from_env())
+            .await
+            .map_err(|e| AnalysisError::Git(e.to_string()))?,
+        None => repo_facts::collect(&dest, &access.branch, repo_facts::Limits::from_env())
+            .await
+            .map_err(|e| AnalysisError::Git(e.to_string()))?,
+    };
     Ok((access, facts))
 }
 
 /// PC 派生入口：优先复用 KB 分析留下的缓存 clone（collect 便宜且确定性）；
-/// 缓存缺失/损坏时退回 fresh clone。返回 (facts, repo_name)。
+/// 缓存缺失/损坏时退回 fresh clone。锚链同 KB 侧（`analysis_anchor`）。
+/// 返回 (facts, repo_name)。
 pub async fn collect_repository_facts(
     pool: &PgPool,
     repository_id: Uuid,
+    observed_head: Option<&str>,
 ) -> Result<(RepoFacts, String), AnalysisError> {
     let access = load_repo_access(pool, repository_id).await?;
+    let anchor = analysis_anchor(&access, observed_head);
     let dest = repo_facts::repo_cache_dir(repository_id);
     if dest.is_dir() {
+        let anchor_ref = anchor.as_deref().unwrap_or(access.branch.as_str());
         if let Ok(facts) =
-            repo_facts::collect(&dest, &access.branch, repo_facts::Limits::from_env()).await
+            repo_facts::collect(&dest, anchor_ref, repo_facts::Limits::from_env()).await
         {
             return Ok((facts, access.name));
         }
     }
-    let (_, facts) = collect_fresh(pool, repository_id).await?;
+    let (_, facts) = collect_fresh(pool, repository_id, observed_head).await?;
     Ok((facts, access.name))
 }
 
@@ -331,7 +368,10 @@ pub async fn analyze_repository_snapshot(
         .bind(project_id)
         .fetch_one(pool)
         .await?;
-    let (access, facts) = collect_fresh(pool, repository_id).await?;
+    // 锚链次选：verify 的 Observed HEAD（source_ref 携带）——verify 与分析
+    // 两时点之间 HEAD 若前进，产物仍锚定受理时的版本（D-A/A-2 裁决）。
+    let observed_head = source_ref.get("head_commit_sha").and_then(|v| v.as_str());
+    let (access, facts) = collect_fresh(pool, repository_id, observed_head).await?;
     // D-3=A 降级：Ok(None)=无 provider → derived；Err=解析/调用失败 →
     // derived_fallback。产物永远是真实派生事实，绝不回退 fixtures 假数据。
     let (digest, analysis_mode) = match snapshot_model {
