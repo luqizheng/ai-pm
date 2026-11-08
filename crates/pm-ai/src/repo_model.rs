@@ -279,7 +279,8 @@ pub async fn model_from_llm_provider(
     )
 }
 
-fn extract_json(text: &str) -> Option<&str> {
+/// 取首个 `{` 到末个 `}`（剥离 markdown fence）；快照分析链共用。
+pub(crate) fn extract_json(text: &str) -> Option<&str> {
     let start = text.find('{')?;
     let end = text.rfind('}')?;
     if end <= start {

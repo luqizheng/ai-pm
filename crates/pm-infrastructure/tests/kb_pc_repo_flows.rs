@@ -11,6 +11,8 @@
 //! | 1 | verify（HEAD 前进）自动受理 intake → kb 修订落库 → 信号 → pc 5 对象 draft → 父 COMPLETED |
 //! | 2 | 同 HEAD 重复 verify：intake 重放零增量（repo_verify 幂等键） |
 //! | 3 | 新 commit 再 verify：kb revision_no=2；pc 对象身份稳定、内容寻址去重（tech_stack 不追加修订）；evidence 追加 |
+//! | 4 | LLM 增强（P2-13/D-1=A，wiremock provider）：digest 尾注翻转为 LLM、pc 三区正文、analysis_mode=llm、白名单证据、ok 记账×2 |
+//! | 5 | LLM 失败（D-3=A，wiremock 500）：全链仍 COMPLETED，产物回退纯派生，analysis_mode=derived_fallback，failed 记账×2 |
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -150,9 +152,19 @@ async fn verify(pool: &PgPool, repository_id: Uuid) -> pm_application::repositor
 }
 
 fn worker(pool: &PgPool) -> OutboxWorker {
+    worker_with_model(pool, None)
+}
+
+fn worker_with_model(
+    pool: &PgPool,
+    snapshot_model: Option<
+        std::sync::Arc<dyn pm_application::snapshot_analysis::SnapshotAnalysisModel>,
+    >,
+) -> OutboxWorker {
     register_all_handlers(
         OutboxWorker::new(pool.clone(), "kbpc-test-worker".to_string()),
         pool,
+        snapshot_model,
     )
 }
 
@@ -490,4 +502,245 @@ async fn new_commit_advances_revision_with_content_dedup(pool: PgPool) {
             .unwrap();
     assert_eq!(evidence_n, 10, "5 objects × 2 analysis runs");
     assert_eq!(derived_status(&pool, intake2).await, "Completed");
+}
+
+// ── LLM 增强用例（P2-13/D-1=A 起笔切片；wiremock provider + 0062 mode）──────
+
+/// 与 pm-ai 测试同款的 enabled provider 行（`openai_compatible` 免凭证行，
+/// endpoint 直指 wiremock；timeout 30s 容纳测试节奏）。
+async fn seed_enabled_provider(pool: &PgPool, project_id: Uuid, endpoint: &str) -> Uuid {
+    let principal_id = Uuid::new_v4();
+    sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'Seed')")
+        .bind(principal_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query_scalar(
+        "INSERT INTO ai.team_llm_provider \
+         (id, tenant_id, name, provider_type, endpoint, configuration, status, timeout_secs, created_by) \
+         VALUES ($1, (SELECT tenant_id FROM core.project WHERE id = $2), 'fixture-provider', \
+                 'openai_compatible', $3, '{\"model\": \"test-model\"}', 'enabled', 30, $4) \
+         RETURNING id",
+    )
+    .bind(Uuid::new_v4())
+    .bind(project_id)
+    .bind(endpoint)
+    .bind(principal_id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// 五骨架的 LLM 响应体（object_key 与 `plan_cognition_objects` 的派生键一致；
+/// 含一个编造引用 made-up-ref，断言实现侧白名单过滤）。
+fn llm_objects_body(repository_id: Uuid) -> serde_json::Value {
+    let zone = |slot: &str| {
+        format!("### 事实\nfixture 事实（{slot}）\n### 推断\nfixture 推断\n### 不确定\n无")
+    };
+    serde_json::json!({
+        "objects": [
+            {"object_key": format!("repo:{repository_id}:snapshot"), "summary": "LLM 摘要：演示仓库",
+             "content": zone("snapshot"), "evidence_refs": ["README.md", "made-up-ref"]},
+            {"object_key": format!("repo:{repository_id}:tech_stack"), "summary": "LLM 摘要：Markdown",
+             "content": zone("tech_stack")},
+            {"object_key": format!("repo:{repository_id}:activity"), "summary": "LLM 摘要：交付",
+             "content": zone("activity")},
+            {"object_key": format!("repo:{repository_id}:module:README.md"), "summary": "LLM 摘要：入口",
+             "content": zone("module")},
+            {"object_key": format!("repo:{repository_id}:module:docs/design.md"), "summary": "LLM 摘要：设计",
+             "content": zone("module-docs")},
+        ]
+    })
+}
+
+async fn llm_call_records(pool: &PgPool, project_id: Uuid) -> Vec<(String, String)> {
+    sqlx::query_as(
+        "SELECT purpose, status FROM ai.llm_call_record WHERE project_id = $1 ORDER BY created_at",
+    )
+    .bind(project_id)
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+fn auto_model(
+    pool: &PgPool,
+) -> std::sync::Arc<dyn pm_application::snapshot_analysis::SnapshotAnalysisModel> {
+    std::sync::Arc::new(pm_ai::snapshot_model::LlmSnapshotAnalysisModel::new(
+        pool.clone(),
+        pm_ai::snapshot_model::SnapshotModelMode::Auto,
+    ))
+}
+
+// ── 用例 4：LLM 增强成功路径（digest 尾注翻转 + 三区正文 + 白名单证据 + 记账）──
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn llm_enrichment_marks_llm_mode_across_kb_and_pc(pool: PgPool) {
+    seed_principal(&pool).await;
+    let project = seed_project(&pool, "CP1-D").await;
+    let repo = init_repo("feat: initial");
+    let repository_id = seed_repository(&pool, project, &repo.url).await;
+
+    let server = wiremock::MockServer::start().await;
+    seed_enabled_provider(&pool, project, &server.uri()).await;
+    // PC 请求带 <skeletons> 标记（挂载顺序即匹配顺序：先 PC 后 KB 兜底）。
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/chat/completions"))
+        .and(wiremock::matchers::body_string_contains("<skeletons>"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "choices": [{"message": {"content": llm_objects_body(repository_id).to_string()}}]
+            })),
+        )
+        .mount(&server)
+        .await;
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/chat/completions"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "choices": [{"message": {"content":
+                    "{\"digest_markdown\": \"这是 fixture 仓库的 LLM 叙述摘要。\"}"}}]
+            })),
+        )
+        .mount(&server)
+        .await;
+
+    verify(&pool, repository_id).await;
+    let intake_id = latest_snapshot_intake(&pool, repository_id).await;
+    drain(&worker_with_model(&pool, Some(auto_model(&pool)))).await;
+
+    // KB：digest 为 LLM 拼装版（尾注翻转），analysis_mode=llm。
+    let (_, kb_status, kb_result) = task_of_type(&pool, intake_id, "kb_analyze").await;
+    assert_eq!(kb_status, "COMPLETED");
+    let revision_id: Uuid = Uuid::parse_str(
+        kb_result.expect("real analysis")["target_revision_id"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    let (content, change_summary, mode): (String, String, String) = sqlx::query_as(
+        "SELECT content, change_summary, analysis_mode FROM kb.document_revision WHERE id = $1",
+    )
+    .bind(revision_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(mode, "llm");
+    assert!(content.contains("## 摘要（LLM 分析）"));
+    assert!(content.contains("这是 fixture 仓库的 LLM 叙述摘要。"));
+    assert!(content.contains("model=test-model"));
+    assert!(content.contains("技术栈构成"), "structured sections kept");
+    assert!(!content.contains("无 LLM 参与"));
+    assert!(change_summary.contains("LLM 增强"));
+
+    // PC：五对象全部 LLM 三区正文（骨架形态不变），analysis_mode=llm。
+    let (_, pc_status, pc_result) = task_of_type(&pool, intake_id, "pc_analyze").await;
+    assert_eq!(pc_status, "COMPLETED");
+    assert_eq!(pc_result.expect("real derivation")["target_domain"], "pc");
+    let revisions: Vec<(String, String)> = sqlx::query_as(
+        "SELECT cr.analysis_mode, cr.content FROM pc.cognition_revision cr \
+           JOIN pc.cognition_object o ON o.id = cr.object_id \
+          WHERE o.project_id = $1",
+    )
+    .bind(project)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(revisions.len(), 5);
+    assert!(revisions.iter().all(|(m, _)| m == "llm"));
+    assert!(revisions.iter().all(|(_, c)| {
+        c.contains("### 事实") && c.contains("### 推断") && c.contains("### 不确定")
+    }));
+
+    // evidence：locator 记 mode 与白名单过滤后的 llm_evidence_refs
+    // （made-up-ref 必须被实现侧丢弃）。
+    let locator: serde_json::Value = sqlx::query_scalar(
+        "SELECT locator FROM pc.evidence WHERE project_id = $1 AND locator->>'slot' = 'snapshot'",
+    )
+    .bind(project)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(locator["analysis_mode"], "llm");
+    let refs = locator["llm_evidence_refs"].as_array().unwrap();
+    assert!(refs.iter().all(|r| r.as_str() != Some("made-up-ref")));
+    assert!(
+        refs.iter().any(|r| r.as_str() == Some("README.md")),
+        "allowlisted refs survive"
+    );
+
+    // 记账：kb/pc 各一条 ok。
+    assert_eq!(
+        llm_call_records(&pool, project).await,
+        vec![
+            ("kb_snapshot_analysis".to_string(), "ok".to_string()),
+            ("pc_snapshot_analysis".to_string(), "ok".to_string()),
+        ]
+    );
+    assert_eq!(derived_status(&pool, intake_id).await, "Completed");
+}
+
+// ── 用例 5：LLM 失败回退（D-3=A：全链不碎，产物=纯派生，mode=fallback）──────
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn llm_failure_falls_back_to_derived_and_records_failed(pool: PgPool) {
+    seed_principal(&pool).await;
+    let project = seed_project(&pool, "CP1-E").await;
+    let repo = init_repo("feat: initial");
+    let repository_id = seed_repository(&pool, project, &repo.url).await;
+
+    let server = wiremock::MockServer::start().await;
+    seed_enabled_provider(&pool, project, &server.uri()).await;
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/chat/completions"))
+        .respond_with(wiremock::ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+
+    verify(&pool, repository_id).await;
+    let intake_id = latest_snapshot_intake(&pool, repository_id).await;
+    drain(&worker_with_model(&pool, Some(auto_model(&pool)))).await;
+
+    // 全链收口不因 LLM 抖动而碎（D-3=A 核心断言）。
+    let (_, kb_status, _) = task_of_type(&pool, intake_id, "kb_analyze").await;
+    assert_eq!(kb_status, "COMPLETED");
+    let (_, pc_status, _) = task_of_type(&pool, intake_id, "pc_analyze").await;
+    assert_eq!(pc_status, "COMPLETED");
+    assert_eq!(derived_status(&pool, intake_id).await, "Completed");
+
+    // KB：回退产物即纯派生（尾注「无 LLM 参与」），mode=derived_fallback。
+    let (content, mode): (String, String) = sqlx::query_as(
+        "SELECT content, analysis_mode FROM kb.document_revision \
+           WHERE document_id = (SELECT id FROM kb.document WHERE project_id = $1) \
+         ORDER BY revision_no DESC LIMIT 1",
+    )
+    .bind(project)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(mode, "derived_fallback");
+    assert!(content.contains("无 LLM 参与"));
+    assert!(!content.contains("## 摘要（LLM 分析）"));
+
+    // PC：五对象回退派生正文，mode=derived_fallback。
+    let modes: Vec<(String,)> = sqlx::query_as(
+        "SELECT cr.analysis_mode FROM pc.cognition_revision cr \
+           JOIN pc.cognition_object o ON o.id = cr.object_id \
+          WHERE o.project_id = $1",
+    )
+    .bind(project)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(modes.len(), 5);
+    assert!(modes.iter().all(|(m,)| m == "derived_fallback"));
+
+    // 记账：kb/pc 各一条 failed（DEC-LLM-004.7：失败也记账）。
+    assert_eq!(
+        llm_call_records(&pool, project).await,
+        vec![
+            ("kb_snapshot_analysis".to_string(), "failed".to_string()),
+            ("pc_snapshot_analysis".to_string(), "failed".to_string()),
+        ]
+    );
 }

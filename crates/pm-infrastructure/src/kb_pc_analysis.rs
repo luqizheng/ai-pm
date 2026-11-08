@@ -1,16 +1,23 @@
 //! Checkpoint-1 · KB/PC 分析本体——**仓库快照路径**（verify 触发链的执行端）。
 //!
-//! 范围切割（checkpoint-1 显式登记，迁移 0053 头注同源）：
+//! 范围切割（checkpoint-1 显式登记，迁移 0053 头注同源；0062 起 LLM 增强）：
 //! * `source_ref.kind == "repository_snapshot"` 的 kb_analyze → 真实分析：
 //!   bare clone（缓存目录复用 `repo_facts` 约定）→ 结构化事实采集
-//!   （`pm_application::repo_facts`，无 LLM）→ kb.document/revision 草稿
+//!   （`pm_application::repo_facts`）→ kb.document/revision 草稿
 //!   → 回写 kb.analysis.completed + **生产认知信号**（Phase 3 缺口闭合：
 //!   `kb.cognition_signal.emitted` 首个真实生产者）。
 //! * 其余输入（inline_text 等）与无 KB 文档引用的信号 → 保持 Phase 3 桩语义
 //!   （完成回写、占位 ref、NO_CHANGE、不产信号）——真实文档分析本体归 Phase 4。
-//! * PC 侧：信号携带 knowledge_base 文档引用 → 结构化派生（确定性，无 LLM，
-//!   借鉴 S01-04 pm_cognition 派生骨架）→ pc.\* draft（0053）+ source/evidence
-//!   → pc.analysis.completed（conclusion=PROPOSED）。
+//! * PC 侧：信号携带 knowledge_base 文档引用 → 结构化派生骨架
+//!   （确定性，借鉴 S01-04 pm_cognition 派生骨架）→ pc.\* draft（0053）
+//!   + source/evidence → pc.analysis.completed（conclusion=PROPOSED）。
+//!
+//! LLM 增强（P2-13 裁决 D-1=A，2026-11-08）：两分析步可注入
+//! `SnapshotAnalysisModel`（端口在 pm-application，实现在 pm-ai）——LLM 只做
+//! **受约束增强**（对象骨架归派生；digest 叙述摘要与对象 summary/content 归
+//! LLM，PC content 强制三区小节）。降级语义 D-3=A：无 provider（`Ok(None)`）
+//! → derived；解析/调用失败 → derived_fallback——产物永远是真实派生事实，
+//! 绝不回退 fixtures 假数据。模式持久化见迁移 0062（analysis_mode 列）。
 //!
 //! M3 门不破：全部产出 status='draft' / verification_status='unverified'，
 //! AI 禁自动确认；confidence 只表达证据强度，不产生确认语义（PC-01B-04 纪律）。
@@ -18,6 +25,8 @@
 //! 审计：本文件两处生产审计 INSERT（KB/PC 各一），已登记
 //! `pm-application/tests/audit_actor_coverage.rs` PRODUCTION_SITES——
 //! 系统面 dispatch principal，四身份列显式 NULL（C174 口径，A5/intake 同款）。
+
+use std::collections::HashMap;
 
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -29,6 +38,9 @@ use pm_application::outbox::{OutboxAppend, OutboxEvent, PgOutboxAppend};
 use pm_application::repo_facts::{self, RepoFacts};
 use pm_application::repository::open_ssh_private_key;
 use pm_application::run_dispatch::DISPATCH_SERVICE_PRINCIPAL;
+use pm_application::snapshot_analysis::{
+    SnapshotAnalysisModel, SnapshotObjectEnrichment, SnapshotObjectSkeleton,
+};
 
 const CLONE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(600);
 
@@ -219,6 +231,20 @@ pub async fn collect_repository_facts(
 /// 仓库快照 Markdown digest（纯函数，可单测）——结构化事实摘要，正文有界
 /// （commits 最多列 30、hot files 10、docs 只列清单），总量由 commit 截断保底。
 pub fn build_repo_digest(name: &str, url: &str, facts: &RepoFacts) -> String {
+    compose_repo_digest(name, url, facts, None, None)
+}
+
+/// digest 拼装：结构化统计小节（恒有）+ 可选 LLM 叙述摘要（D-1=A 增强，
+/// 有界 48K 字符）+ 模式尾注。`llm_markdown=None` 即纯派生（含「无 LLM 参与」
+/// 尾注）；派生回退（derived_fallback）产物与纯派生同文——回退产物就是
+/// 派生产物，模式差异只落在 0062 列与审计。
+pub fn compose_repo_digest(
+    name: &str,
+    url: &str,
+    facts: &RepoFacts,
+    llm_markdown: Option<&str>,
+    model_name: Option<&str>,
+) -> String {
     let mut out = String::with_capacity(16 * 1024);
     out.push_str(&format!("# 仓库快照：{name}\n\n"));
     out.push_str(&format!("- 仓库：`{url}`\n"));
@@ -232,6 +258,13 @@ pub fn build_repo_digest(name: &str, url: &str, facts: &RepoFacts) -> String {
         facts.size_bytes / 1024,
         if facts.truncated { "是" } else { "否" }
     ));
+
+    if let Some(markdown) = llm_markdown {
+        let bounded: String = markdown.trim().chars().take(48_000).collect();
+        out.push_str("## 摘要（LLM 分析）\n\n");
+        out.push_str(&bounded);
+        out.push_str("\n\n");
+    }
 
     out.push_str("## 技术栈构成（按扩展名 Top 8）\n\n");
     for lang in &facts.languages {
@@ -269,27 +302,73 @@ pub fn build_repo_digest(name: &str, url: &str, facts: &RepoFacts) -> String {
     }
     out.push('\n');
 
-    out.push_str("> 本快照由仓库 verify 触发的结构化事实派生生成（无 LLM 参与），\n");
-    out.push_str("> 以 kb.document_revision 草稿落库，等待人工确认；确认语义不在 AI 侧。\n");
+    if let Some(model) = model_name {
+        out.push_str(&format!(
+            "> 本快照由仓库 verify 触发，LLM 增强分析（model={model}）；统计清单来自\n\
+             > 结构化事实采集，叙述摘要由 LLM 生成，均以 kb.document_revision 草稿落库，\n\
+             > 等待人工确认；确认语义不在 AI 侧。\n"
+        ));
+    } else {
+        out.push_str("> 本快照由仓库 verify 触发的结构化事实派生生成（无 LLM 参与），\n");
+        out.push_str("> 以 kb.document_revision 草稿落库，等待人工确认；确认语义不在 AI 侧。\n");
+    }
     out
 }
 
-/// KB 仓库快照分析：采集 → digest → kb.document/revision（0053）落库
-/// → 同事务回写 kb.analysis.completed + 认知信号（真实生产者）。
-/// 返回 (document_id, revision_id, content_hash)。
+/// KB 仓库快照分析：采集 → digest（可选 LLM 增强，D-1=A）→ kb.document/
+/// revision（0053/0062）落库 → 同事务回写 kb.analysis.completed + 认知信号
+/// （真实生产者）。返回 (document_id, revision_id, content_hash)。
+#[allow(clippy::too_many_arguments)]
 pub async fn analyze_repository_snapshot(
     pool: &PgPool,
     project_id: Uuid,
     task_id: Uuid,
     repository_id: Uuid,
     source_ref: serde_json::Value,
+    snapshot_model: Option<&dyn SnapshotAnalysisModel>,
 ) -> Result<(Uuid, Uuid, String), AnalysisError> {
     let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
         .bind(project_id)
         .fetch_one(pool)
         .await?;
     let (access, facts) = collect_fresh(pool, repository_id).await?;
-    let digest = build_repo_digest(&access.name, &access.url, &facts);
+    // D-3=A 降级：Ok(None)=无 provider → derived；Err=解析/调用失败 →
+    // derived_fallback。产物永远是真实派生事实，绝不回退 fixtures 假数据。
+    let (digest, analysis_mode) = match snapshot_model {
+        Some(model) => match model
+            .enrich_digest(project_id, &access.name, &access.url, &facts)
+            .await
+        {
+            Ok(Some(enriched)) => (
+                compose_repo_digest(
+                    &access.name,
+                    &access.url,
+                    &facts,
+                    Some(&enriched.markdown),
+                    Some(&enriched.model_name),
+                ),
+                "llm",
+            ),
+            Ok(None) => (
+                build_repo_digest(&access.name, &access.url, &facts),
+                "derived",
+            ),
+            Err(err) => {
+                tracing::warn!(
+                    %task_id, %repository_id, error = %err,
+                    "kb: snapshot digest LLM enrichment failed; falling back to derived facts"
+                );
+                (
+                    build_repo_digest(&access.name, &access.url, &facts),
+                    "derived_fallback",
+                )
+            }
+        },
+        None => (
+            build_repo_digest(&access.name, &access.url, &facts),
+            "derived",
+        ),
+    };
     let content_hash = sha256_hex(&digest);
 
     let mut tx = pool.begin().await?;
@@ -336,6 +415,7 @@ pub async fn analyze_repository_snapshot(
                 &facts,
                 &digest,
                 &content_hash,
+                analysis_mode,
             )
             .await?
         }
@@ -348,6 +428,7 @@ pub async fn analyze_repository_snapshot(
                 &facts,
                 &digest,
                 &content_hash,
+                analysis_mode,
             )
             .await?
         }
@@ -375,6 +456,7 @@ pub async fn analyze_repository_snapshot(
         "head_commit_sha": facts.head_commit_sha,
         "content_hash": content_hash,
         "truncated": facts.truncated,
+        "analysis_mode": analysis_mode,
     }))
     .bind(tenant_id)
     .execute(&mut *tx)
@@ -471,12 +553,18 @@ async fn insert_kb_revision(
     facts: &RepoFacts,
     digest: &str,
     content_hash: &str,
+    analysis_mode: &str,
 ) -> Result<Uuid, AnalysisError> {
+    let mode_suffix = match analysis_mode {
+        "llm" => "，LLM 增强",
+        "derived_fallback" => "，LLM 失败回退派生",
+        _ => "",
+    };
     let revision_id: Uuid = sqlx::query_scalar(
         "INSERT INTO kb.document_revision \
          (tenant_id, document_id, revision_no, source_commit_sha, content_hash, \
-          status, content, change_summary, created_by) \
-         VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, $8) RETURNING id",
+          status, content, change_summary, analysis_mode, created_by) \
+         VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, $8, $9) RETURNING id",
     )
     .bind(tenant_id)
     .bind(document_id)
@@ -485,11 +573,12 @@ async fn insert_kb_revision(
     .bind(content_hash)
     .bind(digest)
     .bind(format!(
-        "仓库快照分析 @ {}（{} commits / {} files）",
+        "仓库快照分析 @ {}（{} commits / {} files{mode_suffix}）",
         facts.head_commit_sha,
         facts.commits.len(),
         facts.file_count
     ))
+    .bind(analysis_mode)
     .bind(DISPATCH_SERVICE_PRINCIPAL)
     .fetch_one(&mut **tx)
     .await?;
@@ -598,6 +687,9 @@ pub fn plan_cognition_objects(
 
 /// PC 认知派生落库：对象 upsert（object_key 幂等锚）与修订（内容同则跳过），
 /// 加 source 四元组与 evidence（unverified/medium），同事务审计。
+/// 可选注入 `SnapshotAnalysisModel`（D-1=A）：骨架形态归结构化派生，LLM 只
+/// 回填 summary/content（三区小节）与白名单证据（D-2=A 受约束增强）；
+/// 失败/无 provider 回退派生并标 derived_fallback/derived（D-3=A）。
 /// 返回主对象（snapshot slot）的 (object_id, revision_id)。
 #[allow(clippy::too_many_arguments)]
 pub async fn derive_pc_cognition(
@@ -610,12 +702,45 @@ pub async fn derive_pc_cognition(
     kb_revision_id: Uuid,
     kb_content_hash: &str,
     facts: &RepoFacts,
+    snapshot_model: Option<&dyn SnapshotAnalysisModel>,
 ) -> Result<(Uuid, Uuid), AnalysisError> {
     let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
         .bind(project_id)
         .fetch_one(pool)
         .await?;
     let drafts = plan_cognition_objects(facts, repository_id, 5);
+    let mut enrichments: HashMap<String, SnapshotObjectEnrichment> = HashMap::new();
+    let analysis_mode = match snapshot_model {
+        Some(model) => {
+            let skeletons: Vec<SnapshotObjectSkeleton> = drafts
+                .iter()
+                .map(|d| SnapshotObjectSkeleton {
+                    object_key: d.object_key.clone(),
+                    object_type: d.object_type.to_string(),
+                    name: d.name.clone(),
+                    summary: d.summary.clone(),
+                    content: d.content.clone(),
+                })
+                .collect();
+            match model.enrich_objects(project_id, facts, &skeletons).await {
+                Ok(Some(enriched)) => {
+                    for object in enriched.objects {
+                        enrichments.insert(object.object_key.clone(), object);
+                    }
+                    "llm"
+                }
+                Ok(None) => "derived",
+                Err(err) => {
+                    tracing::warn!(
+                        %task_id, %intake_id, error = %err,
+                        "pc: LLM enrichment failed; falling back to derived facts"
+                    );
+                    "derived_fallback"
+                }
+            }
+        }
+        None => "derived",
+    };
     let mut tx = pool.begin().await?;
 
     // 来源：本次分析的 KB 文档修订（四元组结构化列）。
@@ -638,6 +763,14 @@ pub async fn derive_pc_cognition(
 
     let mut primary: Option<(Uuid, Uuid)> = None;
     for draft in &drafts {
+        let (summary, content, llm_evidence_refs) = match enrichments.get(&draft.object_key) {
+            Some(enriched) => (
+                enriched.summary.as_str(),
+                enriched.content.as_str(),
+                Some(enriched.evidence_refs.as_slice()),
+            ),
+            None => (draft.summary.as_str(), draft.content.as_str(), None),
+        };
         let object_id: Uuid = sqlx::query_scalar(
             "INSERT INTO pc.cognition_object \
              (tenant_id, project_id, object_type, object_key, name, lifecycle_status) \
@@ -663,7 +796,7 @@ pub async fn derive_pc_cognition(
         .fetch_optional(&mut *tx)
         .await?;
         let revision_id = match latest {
-            Some((_, content)) if content == draft.content => {
+            Some((_, existing)) if existing == content => {
                 sqlx::query_scalar(
                     "SELECT id FROM pc.cognition_revision \
                       WHERE object_id = $1 ORDER BY revision_no DESC LIMIT 1",
@@ -673,12 +806,34 @@ pub async fn derive_pc_cognition(
                 .await?
             }
             Some((last_no, _)) => {
-                insert_pc_revision(&mut tx, tenant_id, object_id, last_no + 1, draft).await?
+                insert_pc_revision(
+                    &mut tx,
+                    tenant_id,
+                    object_id,
+                    last_no + 1,
+                    summary,
+                    content,
+                    analysis_mode,
+                )
+                .await?
             }
-            None => insert_pc_revision(&mut tx, tenant_id, object_id, 1, draft).await?,
+            None => {
+                insert_pc_revision(
+                    &mut tx,
+                    tenant_id,
+                    object_id,
+                    1,
+                    summary,
+                    content,
+                    analysis_mode,
+                )
+                .await?
+            }
         };
 
-        // 证据：一次分析一条（evidence_hash = KB 修订内容指纹，可对账）。
+        // 证据：一次分析一条（evidence_hash = KB 修订内容指纹，可对账）；
+        // LLM 增强时附加白名单过滤后的 llm_evidence_refs（实现侧已对照
+        // RepoFacts 过滤，此处原样登记）。
         sqlx::query(
             "INSERT INTO pc.evidence \
              (tenant_id, project_id, source_id, cognition_object_id, evidence_type, \
@@ -698,6 +853,8 @@ pub async fn derive_pc_cognition(
             "commit_count": facts.commits.len(),
             "file_count": facts.file_count,
             "truncated": facts.truncated,
+            "analysis_mode": analysis_mode,
+            "llm_evidence_refs": llm_evidence_refs.unwrap_or_default(),
         }))
         .bind(kb_content_hash)
         .execute(&mut *tx)
@@ -727,6 +884,8 @@ pub async fn derive_pc_cognition(
         "kb_revision_id": kb_revision_id,
         "objects": drafts.len(),
         "head_commit_sha": facts.head_commit_sha,
+        "analysis_mode": analysis_mode,
+        "llm_enriched_objects": enrichments.len(),
     }))
     .bind(tenant_id)
     .execute(&mut *tx)
@@ -746,18 +905,21 @@ async fn insert_pc_revision(
     tenant_id: Uuid,
     object_id: Uuid,
     revision_no: i32,
-    draft: &CognitionDraft,
+    summary: &str,
+    content: &str,
+    analysis_mode: &str,
 ) -> Result<Uuid, AnalysisError> {
     let revision_id: Uuid = sqlx::query_scalar(
         "INSERT INTO pc.cognition_revision \
-         (tenant_id, object_id, revision_no, summary, content, status, created_by) \
-         VALUES ($1, $2, $3, $4, $5, 'draft', $6) RETURNING id",
+         (tenant_id, object_id, revision_no, summary, content, status, analysis_mode, created_by) \
+         VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7) RETURNING id",
     )
     .bind(tenant_id)
     .bind(object_id)
     .bind(revision_no)
-    .bind(&draft.summary)
-    .bind(&draft.content)
+    .bind(summary)
+    .bind(content)
+    .bind(analysis_mode)
     .bind(DISPATCH_SERVICE_PRINCIPAL)
     .fetch_one(&mut **tx)
     .await?;
@@ -827,6 +989,26 @@ mod tests {
         assert!(d1.contains("热点文件"));
         assert!(d1.contains("无 LLM 参与"));
         assert!(d1.len() < 64 * 1024, "digest must stay bounded");
+    }
+
+    #[test]
+    fn composed_digest_marks_llm_mode_and_keeps_structured_sections() {
+        let f = facts();
+        let composed = compose_repo_digest(
+            "ai-pm",
+            "git@example.com:tooling/ai-pm.git",
+            &f,
+            Some("这是一个 Rust 仓库的叙述摘要。"),
+            Some("test-model"),
+        );
+        assert!(composed.contains("# 仓库快照：ai-pm"));
+        assert!(composed.contains("## 摘要（LLM 分析）"));
+        assert!(composed.contains("这是一个 Rust 仓库的叙述摘要。"));
+        assert!(composed.contains("model=test-model"));
+        assert!(composed.contains("技术栈构成"), "structured sections kept");
+        assert!(composed.contains("近期交付"));
+        assert!(!composed.contains("无 LLM 参与"), "mode footer must flip");
+        assert!(composed.len() < 64 * 1024);
     }
 
     #[test]

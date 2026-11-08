@@ -58,6 +58,7 @@ pub mod run_context;
 pub mod run_dispatch;
 pub mod run_executor;
 pub mod secret;
+pub mod snapshot_analysis;
 pub mod supervision;
 pub mod task_dependency;
 pub mod task_repository_binding;

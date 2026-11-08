@@ -93,6 +93,7 @@ fn worker(pool: &PgPool) -> OutboxWorker {
     register_all_handlers(
         OutboxWorker::new(pool.clone(), "test-worker".to_string()),
         pool,
+        None,
     )
 }
 

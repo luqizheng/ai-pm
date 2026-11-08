@@ -21,6 +21,10 @@ pub const PURPOSE_REPO_IMPORT: &str = "repo_import";
 /// for this purpose (no analysis run backs a chat turn — the subquery in
 /// [`record_call`] yields NULL for a NULL event, which the column allows).
 pub const PURPOSE_CONVERSATION_REPLY: &str = "conversation_reply";
+/// P2-13/D-1=A（2026-11-08）：仓库快照分析的 LLM 增强调用（PC-I6 起笔切片）。
+/// KB digest 与 PC 对象各记一条，purpose 区分面（0062 analysis_mode 对账）。
+pub const PURPOSE_KB_SNAPSHOT_ANALYSIS: &str = "kb_snapshot_analysis";
+pub const PURPOSE_PC_SNAPSHOT_ANALYSIS: &str = "pc_snapshot_analysis";
 
 /// Maps an analysis-chain [`ModelError`] onto the §11 error taxonomy
 /// (migration 0041 comment: authentication / connection / timeout /

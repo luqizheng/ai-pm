@@ -420,7 +420,13 @@ impl OutboxHandler for RunCompletedHandler {
 ///
 /// 并发边界：「集合一致」不等于「并发安全」——原子领取（`SKIP LOCKED` + 租约）
 /// 与各 Handler 的幂等锚点另行保证（`RunCompletedHandler` 见其 advisory lock）。
-pub fn register_all_handlers(worker: OutboxWorker, pool: &PgPool) -> OutboxWorker {
+pub fn register_all_handlers(
+    worker: OutboxWorker,
+    pool: &PgPool,
+    snapshot_model: Option<
+        std::sync::Arc<dyn pm_application::snapshot_analysis::SnapshotAnalysisModel>,
+    >,
+) -> OutboxWorker {
     super::kb_pc_handlers::register_kb_pc_handlers(
         worker
             .with_handler("TaskReady", Arc::new(TaskReadyHandler::new(pool.clone())))
@@ -433,5 +439,6 @@ pub fn register_all_handlers(worker: OutboxWorker, pool: &PgPool) -> OutboxWorke
                 Arc::new(RunCompletedHandler::new(pool.clone())),
             ),
         pool,
+        snapshot_model,
     )
 }

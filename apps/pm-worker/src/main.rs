@@ -28,7 +28,19 @@ async fn main() {
         .expect("database pool");
 
     let worker_id = format!("pm-worker-{}", uuid::Uuid::new_v4());
-    let worker = register_all_handlers(OutboxWorker::new(pool.clone(), worker_id.clone()), &pool);
+    // P2-13/D-1=A（2026-11-08）：仓库快照分析的 LLM 增强模型（与 ai-pm-worker
+    // 同构装配——共享 outbox 表，两 worker 的 handler 语义必须一致）。
+    // `AI_PM_SNAPSHOT_ANALYSIS_MODEL=auto|derived`（默认 auto）。
+    let snapshot_model: std::sync::Arc<
+        dyn pm_application::snapshot_analysis::SnapshotAnalysisModel,
+    > = std::sync::Arc::new(pm_ai::snapshot_model::LlmSnapshotAnalysisModel::from_env(
+        pool.clone(),
+    ));
+    let worker = register_all_handlers(
+        OutboxWorker::new(pool.clone(), worker_id.clone()),
+        &pool,
+        Some(snapshot_model),
+    );
     // 目录一致性校验：不一致即 panic（fail fast），不带着假死信配置进入消费循环。
     worker.assert_catalog_consistent();
     tracing::info!(

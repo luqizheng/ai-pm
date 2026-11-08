@@ -12,6 +12,7 @@ pub mod orchestrator;
 pub mod repo_model;
 pub mod self_review;
 pub mod skill_router;
+pub mod snapshot_model;
 
 pub use analysis_model::{select_analysis_model_config, ModelSelection, RoutedAnalysisModel};
 pub use call_record::PURPOSE_CONVERSATION_REPLY;
@@ -30,3 +31,7 @@ pub use repo_model::{
 };
 pub use self_review::{review_proposals, self_review_json, ProposalOutcome};
 pub use skill_router::{route, SkillId};
+pub use snapshot_model::{
+    LlmSnapshotAnalysisModel, SnapshotModelMode, SNAPSHOT_DIGEST_SYSTEM_PROMPT,
+    SNAPSHOT_OBJECTS_SYSTEM_PROMPT,
+};

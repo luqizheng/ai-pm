@@ -3,10 +3,13 @@
 //! 职责切分（§9.4.2 状态迁移责任表）：
 //! - **KB/PC 分析本体**（checkpoint-1 范围切割，`kb_pc_analysis` 模块头注同源）：
 //!   `repository_snapshot` 输入的 kb_analyze 与携带 KB 文档引用的 pc_analyze 走
-//!   **真实分析**（仓库快照 digest / 结构化派生，无 LLM；产 draft/unverified
-//!   待人工确认）；其余输入保持 Phase 3 **最小桩**语义（完成回写、占位 ref、
-//!   不产信号）——真实文档分析本体归 Phase 4。分析失败 → processing.failed
-//!   → Platform 置 FAILED + 运维待办（人工重试入口，ADR-12）。
+//!   **真实分析**（仓库快照 digest / 结构化派生骨架；可注入
+//!   `SnapshotAnalysisModel` 做 LLM 受约束增强——P2-13 裁决 D-1=A，失败/无
+//!   provider 回退派生并标 derived_fallback/derived，迁移 0062 analysis_mode；
+//!   产物 draft/unverified 待人工确认）；其余输入保持 Phase 3 **最小桩**语义
+//!   （完成回写、占位 ref、不产信号）——真实文档分析本体归 Phase 4。
+//!   分析失败 → processing.failed → Platform 置 FAILED + 运维待办（人工重试
+//!   入口，ADR-12）。
 //! - **Platform 消费端**：消费结果/信号/失败事件，推进 intake_task 终态、
 //!   RT 路由决策、通知留痕——intake 表唯一写入方是 Platform。
 //!
@@ -24,6 +27,7 @@ use pm_application::intake::{
     SignalEnvelope,
 };
 use pm_application::outbox::{OutboxAppend, OutboxEvent, PgOutboxAppend};
+use pm_application::snapshot_analysis::SnapshotAnalysisModel;
 
 use crate::kb_pc_analysis;
 use crate::outbox::ClaimedOutboxEvent;
@@ -64,16 +68,27 @@ fn task_ref_json(task_id: uuid::Uuid) -> serde_json::Value {
 // ── KB 分析本体（消费 kb.analysis.requested；checkpoint-1 仓库快照路径真实化）
 
 /// KB 分析 handler：仓库快照输入走真实分析（`kb_pc_analysis`：kb.document/
-/// revision 落库 + 结果事件 + 认知信号，同一 PG 事务）；其余输入保持 Phase 3
+/// revision 落库 + 结果事件 + 认知信号，同一 PG 事务；可注入
+/// `SnapshotAnalysisModel` 做 LLM 受约束增强）；其余输入保持 Phase 3
 /// 桩语义（完成回写、占位 ref、不产信号——信号是 KB 条件产出，§10.2，禁止
 /// 「每份资料必过 PC」）。分析失败 → processing.failed（可人工重试）。
 pub struct KbAnalyzeRequestedHandler {
     pool: PgPool,
+    snapshot_model: Option<Arc<dyn SnapshotAnalysisModel>>,
 }
 
 impl KbAnalyzeRequestedHandler {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            snapshot_model: None,
+        }
+    }
+
+    /// 注入快照分析模型（P2-13/D-1=A）；None = 纯结构化派生（既有行为）。
+    pub fn with_snapshot_model(mut self, model: Option<Arc<dyn SnapshotAnalysisModel>>) -> Self {
+        self.snapshot_model = model;
+        self
     }
 }
 
@@ -111,6 +126,7 @@ impl OutboxHandler for KbAnalyzeRequestedHandler {
             task_id,
             repository_id,
             source_ref.clone(),
+            self.snapshot_model.as_deref(),
         )
         .await
         {
@@ -133,15 +149,26 @@ impl OutboxHandler for KbAnalyzeRequestedHandler {
 
 /// PC 分析 handler：信号携带 KB 文档引用时走真实结构化派生
 /// （`kb_pc_analysis::derive_pc_cognition`：pc.\* draft + source/evidence，
-/// 确定性无 LLM；conclusion=PROPOSED，M3 前不产正式认知写入）；无文档引用
+/// conclusion=PROPOSED，M3 前不产正式认知写入；可注入
+/// `SnapshotAnalysisModel` 做受约束增强，失败回退派生）；无文档引用
 /// 的信号保持桩语义（NO_CHANGE，占位 ref）。派生失败 → processing.failed。
 pub struct PcAnalyzeRequestedHandler {
     pool: PgPool,
+    snapshot_model: Option<Arc<dyn SnapshotAnalysisModel>>,
 }
 
 impl PcAnalyzeRequestedHandler {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            snapshot_model: None,
+        }
+    }
+
+    /// 注入快照分析模型（P2-13/D-1=A）；None = 纯结构化派生（既有行为）。
+    pub fn with_snapshot_model(mut self, model: Option<Arc<dyn SnapshotAnalysisModel>>) -> Self {
+        self.snapshot_model = model;
+        self
     }
 }
 
@@ -227,6 +254,7 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
             kb_revision_id,
             &kb_content_hash,
             &facts,
+            self.snapshot_model.as_deref(),
         )
         .await
         {
@@ -852,8 +880,13 @@ async fn report_processing_failed(
 
 /// **唯一的生产 Handler 装配入口扩展**：把 KB-PC 13 事件的 12 个消费者
 /// 追加进既有装配（TaskReady/DeliverySubmitted/RunCompleted 之后）。
+/// `snapshot_model` 注入两个分析 handler（P2-13/D-1=A；None = 纯派生）。
 /// 装配全集由 `OutboxWorker::assert_catalog_consistent` 启动校验兜底。
-pub fn register_kb_pc_handlers(worker: OutboxWorker, pool: &PgPool) -> OutboxWorker {
+pub fn register_kb_pc_handlers(
+    worker: OutboxWorker,
+    pool: &PgPool,
+    snapshot_model: Option<Arc<dyn SnapshotAnalysisModel>>,
+) -> OutboxWorker {
     worker
         .with_handler(
             ev::INTAKE_RECEIVED,
@@ -861,7 +894,10 @@ pub fn register_kb_pc_handlers(worker: OutboxWorker, pool: &PgPool) -> OutboxWor
         )
         .with_handler(
             ev::KB_ANALYSIS_REQUESTED,
-            Arc::new(KbAnalyzeRequestedHandler::new(pool.clone())),
+            Arc::new(
+                KbAnalyzeRequestedHandler::new(pool.clone())
+                    .with_snapshot_model(snapshot_model.clone()),
+            ),
         )
         .with_handler(
             ev::KB_ANALYSIS_COMPLETED,
@@ -877,7 +913,9 @@ pub fn register_kb_pc_handlers(worker: OutboxWorker, pool: &PgPool) -> OutboxWor
         )
         .with_handler(
             ev::PC_ANALYZE_REQUESTED,
-            Arc::new(PcAnalyzeRequestedHandler::new(pool.clone())),
+            Arc::new(
+                PcAnalyzeRequestedHandler::new(pool.clone()).with_snapshot_model(snapshot_model),
+            ),
         )
         .with_handler(
             ev::PC_DECISION_SUBMITTED,

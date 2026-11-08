@@ -1747,6 +1747,7 @@ dependencies = [
  "chrono",
  "kb-pc-contracts",
  "libc",
+ "pm-ai",
  "pm-application",
  "pm-domain",
  "serde_json",
@@ -1757,6 +1758,7 @@ dependencies = [
  "tracing",
  "uuid",
  "windows-sys 0.59.0",
+ "wiremock",
 ]
 
 [[package]]
@@ -1784,6 +1786,8 @@ dependencies = [
 name = "pm-worker"
 version = "0.1.0"
 dependencies = [
+ "pm-ai",
+ "pm-application",
  "pm-infrastructure",
  "sqlx",
  "tokio",
