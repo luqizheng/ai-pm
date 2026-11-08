@@ -12,6 +12,8 @@ digua_file_sdk.workspace = true
 digua_common_consul.workspace = true
 kb-pc-contracts = { path = "../../crates/kb-pc-contracts" }
 pm-application = { path = "../../crates/pm-application" }
+# DK-A：对话载体判定的意图分类 LLM 实现（conversation_router_model）。
+pm-ai = { path = "../../crates/pm-ai" }
 pm-domain = { path = "../../crates/pm-domain" }
 pm-mcp = { path = "../../crates/pm-mcp" }
 serde.workspace = true
@@ -28,5 +30,4 @@ tracing-subscriber.workspace = true
 tower.workspace = true
 wiremock.workspace = true
 async-trait.workspace = true
-pm-ai = { path = "../../crates/pm-ai" }
 pm-domain = { path = "../../crates/pm-domain" }

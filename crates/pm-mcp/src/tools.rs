@@ -1042,6 +1042,11 @@ fn map_discovery_error(err: pm_application::discovery::DiscoveryError) -> ToolEr
         E::InvalidTransition { from, to } => ToolError::Conflict(format!(
             "invalid session status transition from {from} to {to}"
         )),
+        // DK-B：编排器一轮的「前置假设已失效」。MCP 工具不发起编排轮，此分支
+        // 只为错误枚举穷尽；语义上属并发冲突（工具契约未变）。
+        E::StaleRound { .. } => ToolError::Conflict(
+            "stale discovery round: the session moved on; retry against the latest message".into(),
+        ),
         E::Validation(message) => ToolError::InvalidRequest(message),
         E::Db(err) => ToolError::Db(err),
     }

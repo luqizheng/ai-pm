@@ -201,6 +201,12 @@ LLM 只回填：title / 描述 / 验收口径文本 / 依赖建议 / 角色建�
 > - 命令：`DATABASE_URL=postgres://aipm:aipm@127.0.0.1:16503/aipm bash scripts/cargo-test.sh`
 > - 结果：**待回填**
 
+### 7.2 集成树全量回归（2026-11-09，merge master 接 DK-A/B/C 后）
+
+**1301/1301 PASS**，4 skipped（= DK-C 集成树 1271 + 本批 27 + 接线 3；nextest 快档 116s）；
+`clippy.sh pm-ai ai-pm-worker pm-application pm-api pm-mcp` PASS；接线文件单文件 rustfmt 干净。
+运行于专用库 16483，`scripts/cargo-test.sh`。
+
 ---
 
 ## 八、已知偏差与登记（不掩盖）
@@ -220,8 +226,8 @@ LLM 只回填：title / 描述 / 验收口径文本 / 依赖建议 / 角色建�
 
 | 对端 | 约定 |
 |---|---|
-| **DK-B** | 把 `NoWriteBack` 换成 `DiscoveryWriteBack::new(pool, model, capability, knowledge, mode)`；`on_review_required` 在 `REVIEW_REQUIRED` 跃迁后调、`decompose_if_approved` 在扫描轮里调；开关复用 `WriteBackMode::from_env()`。`DecomposeOutcome::NothingToDo{reason}` 是正常空转，不应记 WARN 级错误 |
-| **DK-C** | 实现 `CapabilityProjection::project(project_id) -> CapabilityFacts { objects, digests }`（只读；不含 provider/凭据字段——D1 的过滤责任在注入侧，本端口只负责传结构） |
+| **DK-B** | ~~把 `NoWriteBack` 换成 `DiscoveryWriteBack`；两个 hook 的调用时机~~ → **已由 2026-11-09 集成批完成**（见 §十一）：编排器 `with_write_back(Arc<dyn WriteBackHook>)` 槽位 + 两调用点已接线，worker 默认仍 `NoWriteBack`（生产注入需真 `WriteBackModel`，属 DK-F） |
+| **DK-C** | 实现 `CapabilityProjection::project(project_id) -> CapabilityFacts { objects, digests }`（只读；不含 provider/凭据字段——D1 的过滤责任在注入侧，本端口只负责传结构）。**现状**：`EmptyCapabilityProjection` 占位，真投影（S2 对象 + KB digest）待 DK-F 联调批接 |
 | **DK-E** | 更正类 finding 同样进 basis 校验（`CONFIRMED` 才可引用）；知识提案走 `discovery_proposal`，与本品无交叉 |
 
 ---
@@ -229,3 +235,15 @@ LLM 只回填：title / 描述 / 验收口径文本 / 依赖建议 / 角色建�
 ## 十、一句话结论
 
 DK-D 的六个范围项全部落地且零迁移：**basis 两层溯源**（AI 提案级标记 + 人类一步物化）、**需求起草止步 pending_confirmation**、**任务分解三源 + 四道系统校验 + draft 落库**、**整批 ready 补上入调度断链**、**AI 越权四例全 Forbidden**；B1~B5 + E1~E5 全绿，全量回归见 §7.1。
+
+## 十一、集成批（2026-11-09，merge master 接 DK-A/B/C + 编排器接写回钩子）
+
+| 项 | 落地 |
+|---|---|
+| 接线形状 | `DiscoveryOrchestratorWorker::with_write_back(Arc<dyn WriteBackHook>)`，默认 `NoWriteBack`；`run_write_back()` 在每轮 applied 后依 §九 约定调用——状态为 `REVIEW_REQUIRED` 时先 `on_review_required`（重读会话视图供 hook 判向），随后恒调 `decompose_if_approved`（`NothingToDo` 正常空转不告警） |
+| fail-soft | 钩子失败只 WARN 不回滚不重试：主链七步已在单事务提交，写回是衍生动作；B5 拒绝文案本身指向人类下一步。报表增 `drafts_submitted` / `task_batches_generated` 两计数 |
+| 生产注入 | worker 入口暂不注入 `DiscoveryWriteBack`：其 `model: Arc<dyn WriteBackModel>` **尚无生产实现**（仅测试 FakeModel），真 provider 适配 + `KnowledgeRoot` 配置 + `CapabilityProjection` 真投影统一归 DK-F 联调批 |
+| 测试 | 3 例新增（RecordingHook 桩记录调用序）：REVIEW_REQUIRED 轮序=on_review_required→decompose / 非 review 轮只 decompose / 钩子恒败轮次仍 applied=1 且状态照常 REVIEW_REQUIRED；`DraftOutcome::skipped` 升 pub（桩构造需要） |
+| 其他 | WIP 清偿（9 元组改 `SessionRequirementRow` FromRow + fmt 归位）先落 commit 再合并；`call_record.rs` 同常量双注释合一；`lib.rs` 四模块并留 |
+| 集成树门禁 | 编排器套件 25/25（22+3）；全量与 clippy 见 §7.1 集成行 |
+

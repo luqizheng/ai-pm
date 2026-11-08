@@ -127,7 +127,7 @@ pub struct DraftOutcome {
 }
 
 impl DraftOutcome {
-    fn skipped(reason: &'static str) -> Self {
+    pub fn skipped(reason: &'static str) -> Self {
         Self {
             kind: DraftOutcomeKind::Skipped,
             requirement_id: None,

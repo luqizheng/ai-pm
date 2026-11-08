@@ -6,6 +6,7 @@ use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::discovery::{self, DiscoveryError, FindingCreator, NewFinding, NewProposal};
 use pm_domain::SYSTEM_TENANT;
 use serde_json::json;
+use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -1503,4 +1504,87 @@ async fn i2_e_same_operation_id_with_different_payload_replays_first(pool: PgPoo
         second.finding.verification_status, "CONFIRMED",
         "replay must not apply the new payload"
     );
+}
+
+/// C7（DK-B / D-DK-9 附注）：REST（pm-api 进程）与访谈编排器（ai-pm-worker
+/// 进程）是两个进程——进程内锁覆盖不了，`seq = MAX(seq)+1` 必须靠**数据库**
+/// 串行化。用两个独立连接池模拟双入口，20 轮交错并发追加同一 session：
+/// 零 `UNIQUE(tenant_id, session_id, seq)` 冲突、零丢消息（seq 恰为 1..=40）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn concurrent_appends_from_two_pools_never_collide_on_seq(pool: PgPool) {
+    const ROUNDS: usize = 20;
+    let fx = seed(&pool).await;
+    let session = discovery::create_session(
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        "WEB",
+        "TASK_DISCOVERY",
+        fx.human_id,
+    )
+    .await
+    .unwrap();
+
+    // 第二个池 = 第二个"进程"（同一 DATABASE_URL，独立连接集）。
+    let other_pool = PgPoolOptions::new()
+        .max_connections(4)
+        .connect_with((*pool.connect_options()).clone())
+        .await
+        .expect("second pool must connect to the same test database");
+
+    let (tenant_id, session_id) = (fx.tenant_id, session.id);
+    let rest_writer = {
+        let pool = pool.clone();
+        tokio::spawn(async move {
+            let mut seqs = Vec::with_capacity(ROUNDS);
+            for i in 0..ROUNDS {
+                let message = discovery::append_message(
+                    &pool,
+                    tenant_id,
+                    session_id,
+                    "user",
+                    "WEB",
+                    &format!("rest-{i}"),
+                )
+                .await?;
+                seqs.push(message.seq);
+            }
+            Ok::<Vec<i64>, DiscoveryError>(seqs)
+        })
+    };
+    let orchestrator_writer = {
+        let pool = other_pool.clone();
+        tokio::spawn(async move {
+            let mut seqs = Vec::with_capacity(ROUNDS);
+            for i in 0..ROUNDS {
+                let message = discovery::append_message(
+                    &pool,
+                    tenant_id,
+                    session_id,
+                    "ai",
+                    "SYSTEM",
+                    &format!("orchestrator-{i}"),
+                )
+                .await?;
+                seqs.push(message.seq);
+            }
+            Ok::<Vec<i64>, DiscoveryError>(seqs)
+        })
+    };
+    let mut seqs = rest_writer.await.unwrap().unwrap();
+    seqs.extend(orchestrator_writer.await.unwrap().unwrap());
+    seqs.sort_unstable();
+    assert_eq!(
+        seqs,
+        (1..=(ROUNDS as i64 * 2)).collect::<Vec<i64>>(),
+        "seq must be 1..=40 with no duplicate and no gap"
+    );
+
+    let messages = discovery::list_messages(&pool, fx.tenant_id, session.id)
+        .await
+        .unwrap();
+    assert_eq!(messages.len(), ROUNDS * 2, "no message may be lost");
+    let contents: std::collections::HashSet<&str> =
+        messages.iter().map(|m| m.content.as_str()).collect();
+    assert_eq!(contents.len(), ROUNDS * 2, "no duplicated payload");
 }
