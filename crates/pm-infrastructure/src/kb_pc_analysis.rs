@@ -32,6 +32,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use kb_pc_contracts::events as ev;
+use pm_application::actor::AuditActor;
 use pm_application::git_access::{self, GitError};
 use pm_application::intake::SignalEnvelope;
 use pm_application::outbox::{OutboxAppend, OutboxEvent, PgOutboxAppend};
@@ -137,22 +138,47 @@ struct RepoAccess {
     name: String,
     url: String,
     branch: String,
+    /// 人类确认的采用基准（0038 G-05；分析锚裁决 D-A=2026-11-08）。
+    selected_commit: Option<String>,
+}
+
+/// 分析锚解析（裁决 D-A/A-2）：`selected_commit ?? observed_head ?? 分支 tip`。
+/// `selected_commit` 是人类确认的采用基准；`observed_head` 来自 verify 的
+/// ls-remote（intake source_ref 携带），消除 verify 与分析两时点的 HEAD 漂移；
+/// 都没有才落到分支 tip。锚是一个 commit ref——`repo_facts::collect` 的全部
+/// git 命令（rev-parse/log/ls-tree/show）对 commit SHA 与分支名同构。
+fn analysis_anchor(access: &RepoAccess, observed_head: Option<&str>) -> Option<String> {
+    access
+        .selected_commit
+        .clone()
+        .or_else(|| observed_head.map(str::to_string))
 }
 
 async fn load_repo_access(pool: &PgPool, repository_id: Uuid) -> Result<RepoAccess, AnalysisError> {
-    let row: Option<(String, String, Option<String>)> = sqlx::query_as(
-        "SELECT name, url, default_branch \
-         FROM integration.project_repository WHERE id = $1",
+    type Row = Option<(
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    )>;
+    let row: Row = sqlx::query_as(
+        "SELECT name, url, default_branch, selected_branch, selected_commit \
+             FROM integration.project_repository WHERE id = $1",
     )
     .bind(repository_id)
     .fetch_optional(pool)
     .await?;
-    let (name, url, default_branch) =
+    let (name, url, default_branch, selected_branch, selected_commit) =
         row.ok_or(AnalysisError::RepositoryNotFound(repository_id))?;
     Ok(RepoAccess {
         name,
         url,
-        branch: default_branch.unwrap_or_else(|| "main".to_string()),
+        // 读取分支随锚走：确认基准自带分支；否则 default_branch。
+        branch: selected_branch
+            .or(default_branch)
+            .unwrap_or_else(|| "main".to_string()),
+        selected_commit,
     })
 }
 
@@ -183,9 +209,11 @@ async fn project_ssh_key_path(
 }
 
 /// bare clone（每次Fresh——`clone_bare` 失败自清理，与冷启动导入同款）并采集事实。
+/// `observed_head` = verify 的 Observed HEAD（intake source_ref），作锚链次选。
 async fn collect_fresh(
     pool: &PgPool,
     repository_id: Uuid,
+    observed_head: Option<&str>,
 ) -> Result<(RepoAccess, RepoFacts), AnalysisError> {
     let access = load_repo_access(pool, repository_id).await?;
     let key = project_ssh_key_path(pool, repository_id).await?;
@@ -201,28 +229,38 @@ async fn collect_fresh(
             GitError::Timeout => AnalysisError::Git("clone timed out".into()),
             other => AnalysisError::Git(other.to_string()),
         })?;
-    let facts = repo_facts::collect(&dest, &access.branch, repo_facts::Limits::from_env())
-        .await
-        .map_err(|e| AnalysisError::Git(e.to_string()))?;
+    let anchor = analysis_anchor(&access, observed_head);
+    let facts = match &anchor {
+        Some(commit) => repo_facts::collect(&dest, commit, repo_facts::Limits::from_env())
+            .await
+            .map_err(|e| AnalysisError::Git(e.to_string()))?,
+        None => repo_facts::collect(&dest, &access.branch, repo_facts::Limits::from_env())
+            .await
+            .map_err(|e| AnalysisError::Git(e.to_string()))?,
+    };
     Ok((access, facts))
 }
 
 /// PC 派生入口：优先复用 KB 分析留下的缓存 clone（collect 便宜且确定性）；
-/// 缓存缺失/损坏时退回 fresh clone。返回 (facts, repo_name)。
+/// 缓存缺失/损坏时退回 fresh clone。锚链同 KB 侧（`analysis_anchor`）。
+/// 返回 (facts, repo_name)。
 pub async fn collect_repository_facts(
     pool: &PgPool,
     repository_id: Uuid,
+    observed_head: Option<&str>,
 ) -> Result<(RepoFacts, String), AnalysisError> {
     let access = load_repo_access(pool, repository_id).await?;
+    let anchor = analysis_anchor(&access, observed_head);
     let dest = repo_facts::repo_cache_dir(repository_id);
     if dest.is_dir() {
+        let anchor_ref = anchor.as_deref().unwrap_or(access.branch.as_str());
         if let Ok(facts) =
-            repo_facts::collect(&dest, &access.branch, repo_facts::Limits::from_env()).await
+            repo_facts::collect(&dest, anchor_ref, repo_facts::Limits::from_env()).await
         {
             return Ok((facts, access.name));
         }
     }
-    let (_, facts) = collect_fresh(pool, repository_id).await?;
+    let (_, facts) = collect_fresh(pool, repository_id, observed_head).await?;
     Ok((facts, access.name))
 }
 
@@ -331,7 +369,10 @@ pub async fn analyze_repository_snapshot(
         .bind(project_id)
         .fetch_one(pool)
         .await?;
-    let (access, facts) = collect_fresh(pool, repository_id).await?;
+    // 锚链次选：verify 的 Observed HEAD（source_ref 携带）——verify 与分析
+    // 两时点之间 HEAD 若前进，产物仍锚定受理时的版本（D-A/A-2 裁决）。
+    let observed_head = source_ref.get("head_commit_sha").and_then(|v| v.as_str());
+    let (access, facts) = collect_fresh(pool, repository_id, observed_head).await?;
     // D-3=A 降级：Ok(None)=无 provider → derived；Err=解析/调用失败 →
     // derived_fallback。产物永远是真实派生事实，绝不回退 fixtures 假数据。
     let (digest, analysis_mode) = match snapshot_model {
@@ -686,12 +727,13 @@ pub fn plan_cognition_objects(
     drafts
 }
 
-/// PC 认知派生落库：对象 upsert（object_key 幂等锚）与修订（内容同则跳过），
-/// 加 source 四元组与 evidence（unverified/medium），同事务审计。
-/// 可选注入 `SnapshotAnalysisModel`（D-1=A）：骨架形态归结构化派生，LLM 只
-/// 回填 summary/content（三区小节）与白名单证据（D-2=A 受约束增强）；
-/// 失败/无 provider 回退派生并标 derived_fallback/derived（D-3=A）。
-/// 返回主对象（snapshot slot）的 (object_id, revision_id)。
+/// PC 认知派生落库（KP-1 起**一律经 pm-application::pc 服务层**，V-6 唯一写入面）：
+/// 来源（kb_document 四元组）→ 对象草稿 upsert（object_key 幂等 + 内容寻址去重）
+/// → 证据（document_section 钉 KB 修订，槽位 = section_anchor，旧 locator JSON
+/// 摘要归档进 description）。可选注入 `SnapshotAnalysisModel`（D-1=A）：骨架
+/// 形态归结构化派生，LLM 只回填 summary/content（三区小节）与白名单证据
+/// （D-2=A 受约束增强）；失败/无 provider 回退派生并标 derived_fallback/derived
+/// （D-3=A）。返回 (analysis_source_id, 主对象 revision_id)。
 #[allow(clippy::too_many_arguments)]
 pub async fn derive_pc_cognition(
     pool: &PgPool,
@@ -705,10 +747,6 @@ pub async fn derive_pc_cognition(
     facts: &RepoFacts,
     snapshot_model: Option<&dyn SnapshotAnalysisModel>,
 ) -> Result<(Uuid, Uuid), AnalysisError> {
-    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
-        .bind(project_id)
-        .fetch_one(pool)
-        .await?;
     let drafts = plan_cognition_objects(facts, repository_id, 5);
     let mut enrichments: HashMap<String, SnapshotObjectEnrichment> = HashMap::new();
     let analysis_mode = match snapshot_model {
@@ -742,27 +780,33 @@ pub async fn derive_pc_cognition(
         }
         None => "derived",
     };
-    let mut tx = pool.begin().await?;
 
-    // 来源：本次分析的 KB 文档修订（四元组结构化列）。
-    let source_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO pc.source \
-         (tenant_id, project_id, target_domain, target_type, target_id, target_revision_id, locator) \
-         VALUES ($1, $2, 'knowledge_base', 'document', $3, $4, $5) RETURNING id",
+    let actor = AuditActor::dispatch();
+
+    // 来源：本次分析的 KB 文档修订（kb_document 通道，四元组钉 Revision）。
+    let source_id = pm_application::pc::register_source(
+        pool,
+        project_id,
+        &actor,
+        pm_application::pc::SourceInput {
+            source_kind: "kb_document".into(),
+            target_domain: "knowledge_base".into(),
+            target_type: "document".into(),
+            target_id: kb_document_id.to_string(),
+            target_revision_id: Some(kb_revision_id.to_string()),
+            revision_missing_reason: None,
+            section_anchor: None,
+            start_line: None,
+            locator: None,
+            description: Some(format!("repository snapshot analysis intake {intake_id}")),
+            source_content_hash: Some(kb_content_hash.to_string()),
+        },
     )
-    .bind(tenant_id)
-    .bind(project_id)
-    .bind(kb_document_id.to_string())
-    .bind(kb_revision_id.to_string())
-    .bind(serde_json::json!({
-        "kind": "kb_document_revision",
-        "revision_id": kb_revision_id,
-        "content_hash": kb_content_hash,
-    }))
-    .fetch_one(&mut *tx)
-    .await?;
+    .await
+    .map_err(|e| AnalysisError::Db(sqlx_error_of(e)))?;
 
-    let mut primary: Option<(Uuid, Uuid)> = None;
+    let mut primary_object: Option<Uuid> = None;
+    let mut primary_revision: Option<Uuid> = None;
     for draft in &drafts {
         let (summary, content, llm_evidence_refs) = match enrichments.get(&draft.object_key) {
             Some(enriched) => (
@@ -772,101 +816,82 @@ pub async fn derive_pc_cognition(
             ),
             None => (draft.summary.as_str(), draft.content.as_str(), None),
         };
-        let object_id: Uuid = sqlx::query_scalar(
-            "INSERT INTO pc.cognition_object \
-             (tenant_id, project_id, object_type, object_key, name, lifecycle_status) \
-             VALUES ($1, $2, $3, $4, $5, 'draft') \
-             ON CONFLICT (tenant_id, project_id, object_key) \
-             DO UPDATE SET name = EXCLUDED.name, updated_at = now() \
-             RETURNING id",
+        // 对象草稿（object_key 幂等 + 内容寻址去重在服务层内）。
+        let receipt = pm_application::pc::upsert_object_draft(
+            pool,
+            project_id,
+            &actor,
+            pm_application::pc::UpsertObjectDraft {
+                object_type: draft.object_type.to_string(),
+                object_key: Some(draft.object_key.clone()),
+                display_name: draft.name.clone(),
+                content_markdown: content.to_string(),
+                change_summary: Some(summary.to_string()),
+                source_context: Some(format!(
+                    "repository snapshot {} @ {}",
+                    repository_id, facts.head_commit_sha
+                )),
+                analysis_mode: Some(analysis_mode.to_string()),
+            },
         )
-        .bind(tenant_id)
-        .bind(project_id)
-        .bind(draft.object_type)
-        .bind(&draft.object_key)
-        .bind(&draft.name)
-        .fetch_one(&mut *tx)
-        .await?;
-
-        // 内容寻址去重：最新修订内容相同则不追加修订行。
-        let latest: Option<(i32, String)> = sqlx::query_as(
-            "SELECT revision_no, content FROM pc.cognition_revision \
-              WHERE object_id = $1 ORDER BY revision_no DESC LIMIT 1",
-        )
-        .bind(object_id)
-        .fetch_optional(&mut *tx)
-        .await?;
-        let revision_id = match latest {
-            Some((_, existing)) if existing == content => {
-                sqlx::query_scalar(
-                    "SELECT id FROM pc.cognition_revision \
-                      WHERE object_id = $1 ORDER BY revision_no DESC LIMIT 1",
-                )
-                .bind(object_id)
-                .fetch_one(&mut *tx)
-                .await?
-            }
-            Some((last_no, _)) => {
-                insert_pc_revision(
-                    &mut tx,
-                    tenant_id,
-                    object_id,
-                    last_no + 1,
-                    summary,
-                    content,
-                    analysis_mode,
-                )
-                .await?
-            }
-            None => {
-                insert_pc_revision(
-                    &mut tx,
-                    tenant_id,
-                    object_id,
-                    1,
-                    summary,
-                    content,
-                    analysis_mode,
-                )
-                .await?
-            }
-        };
+        .await
+        .map_err(|e| AnalysisError::Db(sqlx_error_of(e)))?;
 
         // 证据：一次分析一条（evidence_hash = KB 修订内容指纹，可对账）；
-        // LLM 增强时附加白名单过滤后的 llm_evidence_refs（实现侧已对照
-        // RepoFacts 过滤，此处原样登记）。
-        sqlx::query(
-            "INSERT INTO pc.evidence \
-             (tenant_id, project_id, source_id, cognition_object_id, evidence_type, \
-              locator, evidence_hash, verification_status, confidence) \
-             VALUES ($1, $2, $3, $4, 'repo_facts', $5, $6, 'unverified', 'medium')",
+        // document_section 判别器：四元组钉 KB 修订 + 槽位锚。LLM 增强的白名单
+        // 证据引用与归因 JSON 归档进 description（TEXT，不违 JSONB 纪律）。
+        let _ = pm_application::pc::register_evidence(
+            pool,
+            project_id,
+            &actor,
+            pm_application::pc::EvidenceInput {
+                source_id,
+                subject: pm_application::pc::EvidenceSubject::ObjectRevision(receipt.revision_id),
+                evidence_type: "document_section".into(),
+                target_domain: Some("knowledge_base".into()),
+                target_type: Some("document".into()),
+                target_id: Some(kb_document_id.to_string()),
+                target_revision_id: Some(kb_revision_id.to_string()),
+                file_path: None,
+                symbol: None,
+                code_range: None,
+                commit_sha: None,
+                section_anchor: Some(
+                    draft.object_key.rsplit(':').next().unwrap_or("snapshot").to_string(),
+                ),
+                start_line: None,
+                end_line: None,
+                excerpt: None,
+                description: Some(
+                    serde_json::json!({
+                        "intake_id": intake_id,
+                        "task_id": task_id,
+                        "repository_id": repository_id,
+                        "head_commit_sha": facts.head_commit_sha,
+                        "commit_count": facts.commits.len(),
+                        "file_count": facts.file_count,
+                        "truncated": facts.truncated,
+                        "analysis_mode": analysis_mode,
+                        "llm_evidence_refs": llm_evidence_refs.unwrap_or_default(),
+                    })
+                    .to_string(),
+                ),
+                evidence_hash: kb_content_hash.to_string(),
+                confidence: Some("medium".into()),
+            },
         )
-        .bind(tenant_id)
-        .bind(project_id)
-        .bind(source_id)
-        .bind(object_id)
-        .bind(serde_json::json!({
-            "intake_id": intake_id,
-            "task_id": task_id,
-            "repository_id": repository_id,
-            "head_commit_sha": facts.head_commit_sha,
-            "slot": draft.object_key.rsplit(':').next().unwrap_or("snapshot"),
-            "commit_count": facts.commits.len(),
-            "file_count": facts.file_count,
-            "truncated": facts.truncated,
-            "analysis_mode": analysis_mode,
-            "llm_evidence_refs": llm_evidence_refs.unwrap_or_default(),
-        }))
-        .bind(kb_content_hash)
-        .execute(&mut *tx)
-        .await?;
+        .await
+        .map_err(|e| AnalysisError::Db(sqlx_error_of(e)))?;
 
-        if primary.is_none() {
-            primary = Some((object_id, revision_id));
+        if primary_revision.is_none() {
+            primary_object = Some(receipt.object_id);
+            primary_revision = Some(receipt.revision_id);
         }
     }
-    let (primary_object, primary_revision) =
-        primary.ok_or_else(|| AnalysisError::Git("no cognition drafts derived".into()))?;
+    let primary_revision =
+        primary_revision.ok_or_else(|| AnalysisError::Git("no cognition drafts derived".into()))?;
+    let primary_object =
+        primary_object.ok_or_else(|| AnalysisError::Git("no cognition drafts derived".into()))?;
 
     // 审计（系统面；PRODUCTION_SITES 登记 #2）。
     sqlx::query(
@@ -874,7 +899,8 @@ pub async fn derive_pc_cognition(
          (project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
           action, target_type, target_id, after_data, source_kind, tenant_id) \
          VALUES ($1, $2, NULL, NULL, NULL, NULL, \
-                 'pc_cognition_drafted', 'pc_cognition_object', $3, $4, 'kb_pc_analysis', $5)",
+                 'pc_cognition_drafted', 'pc_cognition_object', $3, $4, 'kb_pc_analysis', \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(DISPATCH_SERVICE_PRINCIPAL)
@@ -883,48 +909,30 @@ pub async fn derive_pc_cognition(
         "intake_id": intake_id,
         "kb_document_id": kb_document_id,
         "kb_revision_id": kb_revision_id,
+        "analysis_source_id": source_id,
         "objects": drafts.len(),
         "head_commit_sha": facts.head_commit_sha,
         "analysis_mode": analysis_mode,
         "llm_enriched_objects": enrichments.len(),
     }))
-    .bind(tenant_id)
-    .execute(&mut *tx)
+    .execute(pool)
     .await?;
 
-    tx.commit().await?;
     tracing::info!(
         %task_id, %intake_id, %repository_id,
         objects = drafts.len(),
         "pc: cognition drafted from repository snapshot"
     );
-    Ok((primary_object, primary_revision))
+    Ok((source_id, primary_revision))
 }
 
-async fn insert_pc_revision(
-    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    tenant_id: Uuid,
-    object_id: Uuid,
-    revision_no: i32,
-    summary: &str,
-    content: &str,
-    analysis_mode: &str,
-) -> Result<Uuid, AnalysisError> {
-    let revision_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO pc.cognition_revision \
-         (tenant_id, object_id, revision_no, summary, content, status, analysis_mode, created_by) \
-         VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7) RETURNING id",
-    )
-    .bind(tenant_id)
-    .bind(object_id)
-    .bind(revision_no)
-    .bind(summary)
-    .bind(content)
-    .bind(analysis_mode)
-    .bind(DISPATCH_SERVICE_PRINCIPAL)
-    .fetch_one(&mut **tx)
-    .await?;
-    Ok(revision_id)
+/// 服务层 PcError → 基础设施侧 AnalysisError（所有服务层拒绝都按分析失败上报，
+/// 走 processing.failed → 人工重试链）。
+fn sqlx_error_of(e: pm_application::pc::PcError) -> sqlx::Error {
+    match e {
+        pm_application::pc::PcError::Db(err) => err,
+        other => sqlx::Error::Configuration(other.to_string().into()),
+    }
 }
 
 #[cfg(test)]

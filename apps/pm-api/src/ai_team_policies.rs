@@ -133,8 +133,7 @@ async fn list_handler(
     Path(project_id): Path<Uuid>,
 ) -> ApiResult<Json<ExecutionPoliciesView>> {
     require_read_access(&state, project_id, &principal).await?;
-    let view =
-        get_project_execution_policies(&state.pool, principal.tenant_id, project_id).await?;
+    let view = get_project_execution_policies(&state.pool, principal.tenant_id, project_id).await?;
     Ok(Json(view))
 }
 
@@ -194,7 +193,7 @@ async fn guard_task_policy_manager(
     task_id: Uuid,
 ) -> ApiResult<()> {
     let project_id = require_task_project(&state.pool, task_id, principal).await?;
-    guard_policy_manager(&state, principal, project_id).await
+    guard_policy_manager(state, principal, project_id).await
 }
 
 async fn set_task_override_handler(

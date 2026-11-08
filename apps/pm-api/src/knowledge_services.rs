@@ -14,13 +14,20 @@
 //!
 //! PC → KB 只读（PK1，§12.4）复用 K3/K5 同一路由；KB → PC 无任何路由
 //! （§12.5 移除，附录 B.2）。
+//!
+//! **KP-3 落真**：K4（记忆审核转达，CAS）与 K5（来源只读查询）经
+//! `pm_application::kb_service::KbServiceLive`（`KbServicePort` 进程内实现，调用方
+//! 身份/项目作用域按请求绑定——差异说明 D-KP3-3）；K5 同路径追加 `POST` 来源登记
+//! （§12.2 未列的 V0.5 管理面，见 `kb_memory_api.rs`，D-KP3-5）。K1/K3/K6 与 P 系
+//! 受理/治理面维持 501。
 
 use axum::{
     extract::{Extension, Path, Query, State},
     routing::{get, post},
     Json, Router,
 };
-use kb_pc_contracts::ports::{KbServicePort, PortError, PortNotWired};
+use kb_pc_contracts::ports::{KbMemoryReviewRequest, KbServicePort, PortError, PortNotWired};
+use pm_application::kb_service::{KbCaller, KbServiceLive};
 use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -39,7 +46,10 @@ pub(crate) fn router() -> Router<AppState> {
             get(k3_document_revision),
         )
         .route("/v1/kb/memories/{memory_id}/review", post(k4_review_memory))
-        .route("/v1/kb/sources", get(k5_list_sources))
+        .route(
+            "/v1/kb/sources",
+            get(k5_list_sources).post(crate::kb_memory_api::register_source),
+        )
         .route(
             "/v1/kb/supply-requests/{request_id}/fulfil",
             post(k6_fulfil_supply),
@@ -65,7 +75,14 @@ impl From<PortError> for ApiError {
             ),
             PortError::NotFound(_) => ApiError::NotFound("resource not found"),
             PortError::Forbidden(_) => ApiError::Forbidden("caller lacks permission"),
-            PortError::Invalid(_) => ApiError::BadRequest("invalid request"),
+            PortError::Invalid(m) => ApiError::Text(axum::http::StatusCode::BAD_REQUEST, m),
+            // KP-3 补齐（差异说明 D-KP3-1）：CAS/状态冲突 409 带 KB 侧可读原因（stale 基线 /
+            // 在途提案 / 项目已归档）；内部错误 500 不回显详情（KB 侧已记日志）。
+            PortError::Conflict(m) => ApiError::Text(axum::http::StatusCode::CONFLICT, m),
+            PortError::Internal(_) => ApiError::Text(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "internal error".to_string(),
+            ),
         }
     }
 }
@@ -93,6 +110,18 @@ async fn guard(state: &AppState, caller: &AuthedPrincipal, project_id: Uuid) -> 
 /// `body`/`path` 参数在此仅为签名占位（Phase 4/5 的真实实现按契约解析）。
 async fn skeleton_501<T>(_opaque: T) -> ApiResult<Json<serde_json::Value>> {
     Err(ApiError::from(PortError::NotWired("skeleton")))
+}
+
+/// KP-3：请求级 KB 端口（调用方身份 + 租户 + 项目作用域绑定在实例上，D-KP3-3）。
+fn kb_port(state: &AppState, caller: &AuthedPrincipal, project_id: Uuid) -> KbServiceLive {
+    KbServiceLive::for_caller(
+        state.pool.clone(),
+        KbCaller {
+            tenant_id: caller.tenant_id,
+            project_id,
+            actor: caller.audit_actor(),
+        },
+    )
 }
 
 // ── Platform → KB（K1~K6）───────────────────────────────────────────────────
@@ -132,19 +161,6 @@ type KbRevisionRow = (
     String,
     Option<String>,
     chrono::DateTime<chrono::Utc>,
-);
-
-/// P3：pc.cognition_object × 最新 cognition_revision 行投影。
-type PcObjectRow = (
-    Uuid,
-    String,
-    String,
-    String,
-    String,
-    Option<i32>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
 );
 
 /// K2（checkpoint-1 落真）：`{id}` = kb_analyze 任务 ID（intake_task）。
@@ -272,6 +288,9 @@ async fn k3_document_revision(
     }
 }
 
+/// K4（KP-3 落真）：记忆审核转达（CAS：`base_memory_revision_id` = 当前待审提案）。
+/// 响应按 §12.2 形状 `{ memory_id, review_status }`，附被审修订四元组 `revision_ref`
+/// （端口返回 `KbAnalysisStatus` 的映射，差异说明 D-KP3-2）。
 async fn k4_review_memory(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
@@ -281,10 +300,39 @@ async fn k4_review_memory(
 ) -> ApiResult<Json<serde_json::Value>> {
     let project_id = require_project_param(&query)?;
     guard(&state, &caller, project_id).await?;
-    let _ = memory_id;
-    skeleton_501(body).await
+    let request: KbMemoryReviewRequest = serde_json::from_value(body).map_err(|e| {
+        ApiError::Text(
+            axum::http::StatusCode::BAD_REQUEST,
+            format!("invalid review body: {e}"),
+        )
+    })?;
+    let port = kb_port(&state, &caller, project_id);
+    let status = KbServicePort::review_memory(&port, &memory_id, request).await?;
+    Ok(Json(json!({
+        "memory_id": memory_id,
+        "review_status": status.status,
+        "revision_ref": status.memory_draft_refs.first(),
+    })))
 }
 
+/// K5 `evidence_of` wire 形态：`<memory|memory_revision>:<uuid>`（knowledge_base 域隐含，
+/// 差异说明 D-KP3-4）；类型合法性由端口裁决。
+fn parse_evidence_of(raw: &str) -> ApiResult<kb_pc_contracts::DomainRef> {
+    let (target_type, target_id) = raw
+        .split_once(':')
+        .filter(|(t, i)| !t.trim().is_empty() && !i.trim().is_empty())
+        .ok_or(ApiError::BadRequest(
+            "evidence_of must be <memory|memory_revision>:<uuid>",
+        ))?;
+    Ok(kb_pc_contracts::DomainRef::for_domain(
+        kb_pc_contracts::registry::TargetDomain::KnowledgeBase,
+        target_type.trim(),
+        target_id.trim(),
+        None,
+    ))
+}
+
+/// K5（KP-3 落真）：项目关联的 Original Sources（`?evidence_of=` 过滤被某记忆引用的来源）。
 async fn k5_list_sources(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
@@ -292,20 +340,13 @@ async fn k5_list_sources(
 ) -> ApiResult<Json<serde_json::Value>> {
     let project_id = require_project_param(&query)?;
     guard(&state, &caller, project_id).await?;
-    let port = PortNotWired;
-    let evidence_of = query.get("evidence_of").map(|raw| {
-        // 只读查询骨架：evidence_of 以 knowledge_base 文档四元组表达（PK1 通道）。
-        kb_pc_contracts::DomainRef::for_domain(
-            kb_pc_contracts::registry::TargetDomain::KnowledgeBase,
-            "document",
-            raw.clone(),
-            None,
-        )
-    });
-    match KbServicePort::list_sources(&port, project_id, evidence_of.as_ref()).await {
-        Ok(items) => Ok(Json(json!({ "items": items }))),
-        Err(e) => Err(ApiError::from(e)),
-    }
+    let evidence_of = query
+        .get("evidence_of")
+        .map(|raw| parse_evidence_of(raw))
+        .transpose()?;
+    let port = kb_port(&state, &caller, project_id);
+    let items = KbServicePort::list_sources(&port, project_id, evidence_of.as_ref()).await?;
+    Ok(Json(json!({ "items": items })))
 }
 
 async fn k6_fulfil_supply(
@@ -345,9 +386,16 @@ async fn p2_submit_decision(
     skeleton_501(body).await
 }
 
-/// P3（checkpoint-1 落真）：`{id}` = pc_analyze 任务 ID（intake_task）。
-/// 返回任务状态 + result_ref；真实派生按 evidence.locator->>'task_id' 展开
-/// 本次分析产出的 cognition objects（含最新修订内容）；桩产物只回任务面。
+/// P3（KP-1 起）：`{id}` = pc_analyze 任务 ID（intake_task）。
+/// 返回任务状态 + result_ref；真实派生按 `pc_analysis_ref`（锚 pc.source 行）
+/// 展开 source → evidence → revision → object（含 pc.document_revision 正文）；
+/// checkpoint-1 旧任务的 legacy result_ref（target_type=cognition_object）走
+/// 直查对象分支（收敛后对象行仍在，读面兼容）。桩产物只回任务面。
+///
+/// 形状变化登记（KP-1 验收记录）：objects[].name→display_name 语义（键名不变）、
+/// latest_revision.status 移除（版本化由 `versioned` 布尔派生——01B §5.3 不冗余
+/// revision_status）、latest_revision.summary 改由 change_summary 承载、
+/// 新增 analysis_mode（0062 列）。
 async fn p3_analysis_status(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
@@ -392,57 +440,135 @@ async fn p3_analysis_status(
         "created_at": created_at,
         "updated_at": updated_at,
     });
-    let rows: Vec<PcObjectRow> = sqlx::query_as(
-        "SELECT o.id, o.object_type, o.object_key, o.name, o.lifecycle_status, \
-                rev.revision_no, rev.summary, rev.content, rev.status \
-           FROM pc.evidence e \
-           JOIN pc.cognition_object o ON o.id = e.cognition_object_id \
-           LEFT JOIN LATERAL ( \
-                SELECT revision_no, summary, content, status \
-                  FROM pc.cognition_revision cr \
-                 WHERE cr.object_id = o.id \
-                 ORDER BY revision_no DESC LIMIT 1 \
-           ) rev ON true \
-          WHERE e.project_id = $1 AND e.locator->>'task_id' = $2 \
-          ORDER BY o.created_at ASC, o.id ASC",
-    )
-    .bind(project_id)
-    .bind(pc_analysis_id.to_string())
-    .fetch_all(&state.pool)
-    .await?;
-    if !rows.is_empty() {
-        body["objects"] = json!(rows
-            .into_iter()
-            .map(
-                |(
-                    id,
-                    object_type,
-                    object_key,
-                    name,
-                    lifecycle,
-                    revision_no,
-                    summary,
-                    content,
-                    revision_status,
-                )| {
-                    json!({
-                        "object_id": id,
-                        "object_type": object_type,
-                        "object_key": object_key,
-                        "name": name,
-                        "lifecycle_status": lifecycle,
-                        "latest_revision": revision_no.map(|no| json!({
-                            "revision_no": no,
-                            "summary": summary,
-                            "content": content,
-                            "status": revision_status,
-                        })),
-                    })
-                }
+
+    let ref_type = result_ref
+        .as_ref()
+        .and_then(|r| r.get("target_type"))
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let ref_id = result_ref
+        .as_ref()
+        .and_then(|r| r.get("target_id"))
+        .and_then(|v| v.as_str())
+        .and_then(|raw| Uuid::parse_str(raw).ok());
+
+    // 新形状：pc_analysis_ref 锚 pc.source（KP-1 链路）——按来源展开本次分析
+    // 产出的对象集（evidence.subject → revision → object + 最新正文）。
+    if ref_type == "source" {
+        if let Some(source_id) = ref_id {
+            let rows: Vec<PcObjectRow> = sqlx::query_as(
+                "SELECT o.id, o.object_type, o.object_key, o.display_name, o.lifecycle_status, \
+                        rev.revision_no, rev.change_summary, dr.content, rev.analysis_mode, \
+                        (vm.object_revision_id IS NOT NULL) AS versioned \
+                   FROM pc.evidence e \
+                   JOIN pc.cognition_revision rev ON rev.id = e.object_revision_id \
+                   JOIN pc.cognition_object o ON o.id = rev.object_id \
+                   LEFT JOIN LATERAL ( \
+                        SELECT r2.revision_no, r2.change_summary, r2.analysis_mode \
+                          FROM pc.cognition_revision r2 \
+                         WHERE r2.tenant_id = o.tenant_id AND r2.project_id = o.project_id \
+                           AND r2.object_id = o.id \
+                         ORDER BY r2.revision_no DESC LIMIT 1 \
+                   ) rev ON true \
+                   LEFT JOIN pc.document_revision dr ON dr.id = rev.document_revision_id \
+                   LEFT JOIN pc.v_revision_versioned vm ON vm.object_revision_id = rev.id \
+                  WHERE e.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
+                    AND e.project_id = $1 AND e.source_id = $2 \
+                  ORDER BY o.created_at ASC, o.id ASC",
             )
-            .collect::<Vec<_>>());
+            .bind(project_id)
+            .bind(source_id)
+            .fetch_all(&state.pool)
+            .await?;
+            body["objects"] = json!(rows
+                .into_iter()
+                .map(pc_object_json)
+                .collect::<Vec<_>>());
+            return Ok(Json(body));
+        }
+    }
+
+    // legacy：checkpoint-1 旧任务的 result_ref 锚主对象——收敛后对象行仍在，
+    // 直查对象 + 当前修订（读面兼容，新分析不再产生此形状）。
+    if ref_type == "cognition_object" {
+        if let Some(object_id) = ref_id {
+            let rows: Vec<PcObjectRow> = sqlx::query_as(
+                "SELECT o.id, o.object_type, o.object_key, o.display_name, o.lifecycle_status, \
+                        rev.revision_no, rev.change_summary, dr.content, rev.analysis_mode, \
+                        (vm.object_revision_id IS NOT NULL) AS versioned \
+                   FROM pc.cognition_object o \
+                   LEFT JOIN LATERAL ( \
+                        SELECT r2.revision_no, r2.change_summary, r2.analysis_mode, \
+                               r2.document_revision_id, r2.id AS rid \
+                          FROM pc.cognition_revision r2 \
+                         WHERE r2.tenant_id = o.tenant_id AND r2.project_id = o.project_id \
+                           AND r2.object_id = o.id \
+                         ORDER BY r2.revision_no DESC LIMIT 1 \
+                   ) rev ON true \
+                   LEFT JOIN pc.document_revision dr ON dr.id = rev.document_revision_id \
+                   LEFT JOIN pc.v_revision_versioned vm ON vm.object_revision_id = rev.rid \
+                  WHERE o.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
+                    AND o.project_id = $1 AND o.id = $2 \
+                  ORDER BY o.created_at ASC, o.id ASC",
+            )
+            .bind(project_id)
+            .bind(object_id)
+            .fetch_all(&state.pool)
+            .await?;
+            if !rows.is_empty() {
+                body["objects"] = json!(rows
+                    .into_iter()
+                    .map(pc_object_json)
+                    .collect::<Vec<_>>());
+            }
+        }
     }
     Ok(Json(body))
+}
+
+/// P3 对象行投影（新/旧形状共用）：列序见两处查询。
+type PcObjectRow = (
+    Uuid,
+    String,
+    String,
+    String,
+    String,
+    Option<i32>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<bool>,
+);
+
+fn pc_object_json(
+    (
+        id,
+        object_type,
+        object_key,
+        display_name,
+        lifecycle,
+        revision_no,
+        change_summary,
+        content,
+        analysis_mode,
+        versioned,
+    ): PcObjectRow,
+) -> serde_json::Value {
+    json!({
+        "object_id": id,
+        "object_type": object_type,
+        "object_key": object_key,
+        "name": display_name,
+        "lifecycle_status": lifecycle,
+        "latest_revision": revision_no.map(|no| json!({
+            "revision_no": no,
+            "summary": change_summary,
+            "content": content,
+            "analysis_mode": analysis_mode,
+            "versioned": versioned.unwrap_or(false),
+        })),
+    })
 }
 
 async fn p4_proposal(

@@ -153,3 +153,21 @@ D-1=b 的 `AI_PM_RUN_DISPATCH_EXCLUDE_PROJECTS` 是**负向静态白名单**；D
 2. 设备级心跳引入「device 与 run 两级心跳并存」，需明确二者职责边界（device=可用性、
    run=执行健康），防止未来再次分裂。
 3. MCP 四工具契约冻结：若 Q-D2C-5 选 (b) 新增工具，须走契约评审而非本包擅自增面。
+
+## 八、裁决回写（用户 2026-11-08「按照你的推荐」全采纳）
+
+| 编号 | 裁决 | 实施落点 |
+|---|---|---|
+| Q-D2C-1 | **(a)** 领取型项目 = `device_project_binding`（active）→ `devenv.device.is_runner=true` | 迁移 0063 `is_runner` 列 + 注册面扩展 |
+| Q-D2C-2 | **(a)** 新增设备级 `last_heartbeat_at` | 迁移 0063 |
+| Q-D2C-3 | 独立 `AI_PM_RUNNER_AVAILABILITY_STALE_SECS`（不复用 T4 的 900s） | availability 助手（env 读取） |
+| Q-D2C-4 | **(a)** 静默退避（零审计噪声，同 D-1=b 质） | worker 对领取型项目恒不领（claim 候选发现排除） |
+| Q-D2C-5 | **修正**：原推荐 (a)「复用 pm_report_progress」实施不可行——`pm_report_progress` 是 run 级（需 run_id/lease_token），Runner 空闲期无 run；改为**已认证设备活动的服务端归因刷新**（pm_claim_task/pm_list_tasks/pm_report_progress/pm_reacquire_lease/pm_discover_runs 任一调用即刷 `last_heartbeat_at`）——零新工具、零契约变化、Runner 端零改动（其空闲期轮询 pm_list_tasks 即心跳） | MCP tools 归因点 |
+| Q-D2C-6 | **(a)** D-1=b env 排除列表保留为强制兜底（belt-and-suspenders） | 不动 |
+
+**语义定版（基线 §三）**：心跳新鲜度本期**只落库与定义语义**（真源建立），**不门控
+worker 领取**——worker 对领取型项目恒不领（静态 `is_runner` 判定，与新鲜度无关），
+避免「Runner 离线 → worker 抢活」与 Runner A3 离线恢复的竞态；「离线兜底接管」策略
+是 V2 调度入口闭合的裁决范围，本批不越界。
+
+实施基线见 `ai-pm-v05-d2c-implementation-baseline-v1.md`。

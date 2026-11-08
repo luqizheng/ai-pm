@@ -1,5 +1,6 @@
 //! 0016_policy_composition 迁移验证：能力类三列与 `additional_checks` 存在、
-//! 缺省语义正确、CHECK 拒绝非数组、迁移可重入。真实数据库，不 Mock。
+//! 缺省语义正确、CHECK 拒绝非数组。真实数据库，不 Mock。
+//! （迁移重入断言已随 2026-11-09 基线合并退役，见 docs/ai-pm-migration-ledger.md。）
 
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
@@ -88,26 +89,4 @@ async fn additional_checks_rejects_non_array_values(pool: PgPool) {
         error.is_err(),
         "additional_checks must stay a JSON array (constraint, not convention)"
     );
-}
-
-#[sqlx::test(migrations = "../../migrations")]
-async fn migration_is_reentrant(pool: PgPool) {
-    sqlx::raw_sql(include_str!(
-        "../../../migrations/0016_policy_composition.sql"
-    ))
-    .execute(&pool)
-    .await
-    .expect("re-running 0016 must be idempotent");
-}
-
-#[test]
-fn migration_file_is_present_and_forward_only() {
-    let sql = include_str!("../../../migrations/0016_policy_composition.sql");
-    assert!(sql.contains("ADD COLUMN IF NOT EXISTS auto_accept"));
-    assert!(sql.contains("ADD COLUMN IF NOT EXISTS auto_merge"));
-    assert!(sql.contains("ADD COLUMN IF NOT EXISTS auto_publish_knowledge"));
-    assert!(sql.contains("ADD COLUMN IF NOT EXISTS additional_checks"));
-    assert!(sql.contains("policy_scope_additional_checks_array"));
-    assert!(!sql.contains("DROP COLUMN"));
-    assert!(!sql.contains("DROP TABLE"));
 }

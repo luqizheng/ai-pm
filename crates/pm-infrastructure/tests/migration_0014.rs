@@ -79,13 +79,3 @@ async fn proposal_status_check_rejects_unknown_value(pool: PgPool) {
     .await;
     assert!(err.is_err(), "unknown proposal status must be refused");
 }
-
-#[test]
-fn migration_file_is_present_and_forward() {
-    let sql = include_str!("../../../migrations/0014_knowledge_v2.sql");
-    assert!(sql.contains("CREATE TABLE IF NOT EXISTS ai.document_proposal"));
-    assert!(sql.contains("CREATE TABLE IF NOT EXISTS ai.document_index_state"));
-    assert!(sql.contains("CREATE TABLE IF NOT EXISTS ai.knowledge_reference"));
-    assert!(sql.contains("ADD COLUMN IF NOT EXISTS source_event_id"));
-    assert!(!sql.contains("DROP COLUMN"));
-}

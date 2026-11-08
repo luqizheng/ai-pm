@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
   ArrowUp,
@@ -15,6 +16,9 @@ import { useShellStore } from "@/stores/shell";
 /** AI 建议芯片（交互选项，不是数据）：explain / setup */
 const SUGGESTION_KEYS = ["explain", "setup"] as const;
 
+/** 指令栏提问的落点：项目 AI 会话页（复用其发送链与时间线） */
+const ASSISTANT_PATH = "/project/assistant";
+
 /**
  * 底部 AI 指令栏（Application Shell §2E，72–120px）。
  *
@@ -26,9 +30,14 @@ const SUGGESTION_KEYS = ["explain", "setup"] as const;
  * 建议芯片走 accent 色（AI 语义），人工确认提示用次文字色。
  *
  * 作用域串随当前项目变化（切换中不显示旧项目数据，Figma「07」）。
+ *
+ * 提交（发送键 / Enter）= 入队到 shell store 并进入会话页，由会话页真正
+ * 发送（混合工作区 B-1：指令栏是会话的收起态入口）。建议芯片只把文案
+ * 填进输入框，不自动发送——发送前由人确认（「建议未执行」提示）。
  */
 
 const { t } = useI18n();
+const router = useRouter();
 const shell = useShellStore();
 
 const prompt = ref("");
@@ -59,6 +68,30 @@ const placeholder = computed(() =>
 const suggestionKeys = computed(() =>
   SUGGESTION_KEYS.map(key => `shell.app.commandbar.suggestion.${key}`)
 );
+
+const fieldRef = ref<HTMLInputElement | null>(null);
+
+function submit() {
+  const text = prompt.value.trim();
+  if (!text) return;
+  shell.queueAssistantPrompt(text);
+  prompt.value = "";
+  if (router.currentRoute.value.path !== ASSISTANT_PATH) {
+    void router.push(ASSISTANT_PATH);
+  }
+}
+
+/** 输入法组字期间的 Enter 只确认候选词，不提交 */
+function onKeydown(event: KeyboardEvent) {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+  event.preventDefault();
+  submit();
+}
+
+function applySuggestion(key: string) {
+  prompt.value = t(key);
+  fieldRef.value?.focus();
+}
 </script>
 
 <template>
@@ -94,11 +127,13 @@ const suggestionKeys = computed(() =>
     <div class="shell-commandbar__input">
       <Sparkles :size="16" aria-hidden="true" />
       <input
+        ref="fieldRef"
         v-model="prompt"
         class="shell-commandbar__field"
         type="text"
         :placeholder="placeholder"
         :aria-label="t('shell.app.commandbar.title')"
+        @keydown="onKeydown"
       />
       <kbd class="shell-commandbar__kbd">⌘ J</kbd>
       <IconTooltip :content="t('shell.app.commandbar.attach')" side="top">
@@ -115,6 +150,7 @@ const suggestionKeys = computed(() =>
         class="shell-commandbar__send"
         :aria-label="t('shell.app.commandbar.send')"
         :disabled="!prompt.trim()"
+        @click="submit"
       >
         <ArrowUp :size="14" aria-hidden="true" />
       </button>
@@ -145,6 +181,7 @@ const suggestionKeys = computed(() =>
         :key="key"
         type="button"
         class="shell-commandbar__suggestion"
+        @click="applySuggestion(key)"
       >
         {{ t(key) }}
       </button>

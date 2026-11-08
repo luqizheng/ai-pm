@@ -14,8 +14,10 @@ import {
   createRequirement,
   getRequirement,
   listProjectRequirements,
+  listRequirementCriteria,
   listRequirementSources,
   rejectRevision,
+  toCriteria,
   toEntryFromListItem,
   toRequirementEntry,
   toSourceItems,
@@ -49,8 +51,10 @@ import SummaryStrip from "./components/SummaryStrip.vue";
  *     CAS 令牌（I1 §7），漂移由后端 409 拒绝；
  *   - 人类确认/拒绝是显式操作（ConfirmationDialog），AI 无任何状态入口；
  *   - 编辑 = 起草/更新一份正文修订（title/type/priority 创建后不可改）；
+ *   - 验收标准（S02-I5，2026-11-08 二批接线）只读呈现 + 确认漂移提示；
+ *     治理动作（增删改/裁决）归详情页验收卡；
  *   - 诚实缺位：discussions / analysis / ai_suggestions（AI 编排切片）、
- *     acceptance_criteria（S02-I5）、导入（未接线）不展示伪功能。
+ *     规格面（S02-I5 specification）、导入（未接线）不展示伪功能。
  */
 const router = useRouter();
 const route = useRoute();
@@ -80,6 +84,7 @@ const loadError = ref("");
 const detailLoading = ref(false);
 const acting = ref(false);
 const actionError = ref("");
+const driftHint = ref(false);
 
 const selectedEntry = computed(
   () => requirements.value.find(entry => entry.id === selectedId.value) ?? null
@@ -157,12 +162,14 @@ function currentRevisionVersion(entry: RequirementEntry): number {
 async function loadDetail(id: string) {
   detailLoading.value = true;
   try {
-    const [detail, sources] = await Promise.all([
+    const [detail, sources, criteria] = await Promise.all([
       getRequirement(id),
-      listRequirementSources(id)
+      listRequirementSources(id),
+      listRequirementCriteria(id)
     ]);
     const entry = toRequirementEntry(detail);
     entry.sources = toSourceItems(sources.items);
+    entry.acceptance_criteria = toCriteria(criteria.items);
     detailRaw.value = detail;
     const index = requirements.value.findIndex(item => item.id === id);
     if (index >= 0) requirements.value.splice(index, 1, entry);
@@ -208,6 +215,7 @@ function onSelect(id: string) {
   selectedId.value = id;
   editing.value = false;
   contextTab.value = "sources";
+  driftHint.value = false;
   void loadDetail(id);
 }
 
@@ -301,10 +309,12 @@ async function runConfirm() {
   if (!detail || !entry || dialog.value !== "confirm") return;
   const pending = latestRevision(detail);
   if (!pending || pending.state !== "pending_confirmation") return;
-  await confirmRevision(entry.id, pending.id, {
+  const result = await confirmRevision(entry.id, pending.id, {
     expected_content_hash: pending.content_hash,
     expected_row_revision: detail.requirement.row_revision
   });
+  // Q-12 一致性提示：验收标准在该修订提交后又被修改 = 漂移
+  driftHint.value = result.criteria_drift === true;
   dialog.value = null;
 }
 
@@ -404,6 +414,16 @@ onMounted(() => {
       @close="actionError = ''"
     >
       <span>{{ actionError }}</span>
+    </Alert>
+
+    <Alert
+      v-if="driftHint"
+      variant="warning"
+      :title="t('pm.requirements.driftHintTitle')"
+      dismissible
+      @close="driftHint = false"
+    >
+      <span>{{ t("pm.requirements.driftHintBody") }}</span>
     </Alert>
 
     <EmptyState

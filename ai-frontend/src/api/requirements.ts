@@ -12,9 +12,10 @@
  *
  * `toRequirementEntry` / `toEntryFromListItem` 把后端读模型映射为
  * `views/project/requirements/requirement-entry.ts` 的 UI 读模型；
- * 来源材料走 `toSourceItems`（S02-I3，2026-11-08 接线）。
+ * 来源材料走 `toSourceItems`（S02-I3，2026-11-08 接线）；验收标准走
+ * `toCriteria`（S02-I5，由页根单独调 listRequirementCriteria 补齐）。
  * 诚实缺位（对应切片未实施，不伪造数据）：
- *  - specification / acceptance_criteria（S02-I5）、related（I4）、
+ *  - specification（S02-I5 规格面）、related（I4）、
  *    discussions / analysis / ai_suggestions（AI 编排切片）→ 空数组占位；
  *  - `origin` 后端无列 → undefined（UI 契约允许缺省=未记录）；
  *  - 需求级 lifecycle（withdrawn/archived，S02D-04 三态）UI 读模型暂无该轴，
@@ -121,6 +122,33 @@ export interface RequirementCoreSourceInput {
   created_at: string;
 }
 
+/**
+ * 需求级验收标准（S02-I5 delivery.requirement_acceptance_criterion，0056）。
+ * Q-11 锚 requirement_id 不绑修订；Q-13 verification_kind 扩枚举 + params JSONB；
+ * Q-14 verdict = 需求级裁决（不挂 Task 链）。
+ */
+export interface RequirementCoreCriterion {
+  id: string;
+  requirement_id: string;
+  position: number;
+  statement: string;
+  verification_kind:
+    | "manual"
+    | "automated_test"
+    | "artifact_exists"
+    | "review"
+    | "performance"
+    | "security";
+  params: Record<string, unknown>;
+  established_in_revision_id: string | null;
+  verdict: "pending" | "passed" | "failed";
+  verdict_note: string | null;
+  verdict_by: string | null;
+  verdict_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ────────────────────────────────────────────────────────── 请求构造
 
 export interface CreateRequirementInput {
@@ -141,6 +169,28 @@ export interface ConfirmRevisionInput {
   expected_content_hash: string;
   expected_current_revision_id?: string;
   expected_row_revision?: number;
+}
+
+/** 新增验收标准（S02-I5 受控命令；治理授权在后端闸） */
+export interface AddCriterionInput {
+  statement: string;
+  verification_kind?: RequirementCoreCriterion["verification_kind"];
+  params?: Record<string, unknown>;
+  position?: number;
+}
+
+/** 修改验收标准（Q-12：独立受控命令，不产生新修订） */
+export interface UpdateCriterionInput {
+  statement?: string;
+  verification_kind?: RequirementCoreCriterion["verification_kind"];
+  params?: Record<string, unknown>;
+  position?: number;
+}
+
+/** 需求级验收裁决（Q-14；S04/S05 声明接口） */
+export interface CriterionVerdictInput {
+  verdict: "passed" | "failed";
+  note?: string;
 }
 
 // ─────────────────────────────────────────────────────────── 端点方法
@@ -200,7 +250,12 @@ export function confirmRevision(
   revisionId: string,
   body: ConfirmRevisionInput
 ) {
-  return http.post<{ requirement: RequirementCoreEntry }>(
+  // Q-12 一致性提示：criteria_drift=true = 验收项在待确认修订提交后被改过，
+  // 审批人应复核验收标准是否仍与本次确认一致。
+  return http.post<{
+    requirement: RequirementCoreEntry;
+    criteria_drift: boolean;
+  }>(
     `/v1/pm/requirements/${requirementId}/revisions/${revisionId}/confirm`,
     body
   );
@@ -242,6 +297,58 @@ export function archiveRequirement(requirementId: string) {
 export function listRequirementSources(requirementId: string) {
   return http.get<{ items: RequirementCoreSourceInput[] }>(
     `/v1/pm/requirements/${requirementId}/source-inputs`
+  );
+}
+
+/** 验收标准列表（S02-I5） */
+export function listRequirementCriteria(requirementId: string) {
+  return http.get<{ items: RequirementCoreCriterion[] }>(
+    `/v1/pm/requirements/${requirementId}/acceptance-criteria`
+  );
+}
+
+/** 新增验收标准（治理命令：真人 + Lead OR 显式 Approver，非授权 403） */
+export function addRequirementCriterion(
+  requirementId: string,
+  body: AddCriterionInput
+) {
+  return http.post<{ criterion: RequirementCoreCriterion }>(
+    `/v1/pm/requirements/${requirementId}/acceptance-criteria`,
+    body
+  );
+}
+
+/** 修改验收标准（治理命令，Q-12 独立受控命令） */
+export function updateRequirementCriterion(
+  requirementId: string,
+  criterionId: string,
+  body: UpdateCriterionInput
+) {
+  return http.patch<{ criterion: RequirementCoreCriterion }>(
+    `/v1/pm/requirements/${requirementId}/acceptance-criteria/${criterionId}`,
+    body
+  );
+}
+
+/** 移除验收标准（治理命令；审计留痕） */
+export function removeRequirementCriterion(
+  requirementId: string,
+  criterionId: string
+) {
+  return http.delete<void>(
+    `/v1/pm/requirements/${requirementId}/acceptance-criteria/${criterionId}`
+  );
+}
+
+/** 需求级验收裁决（Q-14 入口） */
+export function recordCriterionVerdict(
+  requirementId: string,
+  criterionId: string,
+  body: CriterionVerdictInput
+) {
+  return http.post<{ criterion: RequirementCoreCriterion }>(
+    `/v1/pm/requirements/${requirementId}/acceptance-criteria/${criterionId}/verdict`,
+    body
   );
 }
 
@@ -295,7 +402,6 @@ function toRevisionRecord(
   };
 }
 
-const EMPTY_CRITERIA: AcceptanceCriterion[] = [];
 const EMPTY_DISCUSSIONS: DiscussionEntry[] = [];
 const EMPTY_ANALYSIS: AnalysisFinding[] = [];
 const EMPTY_SUGGESTIONS: AiSuggestion[] = [];
@@ -316,6 +422,22 @@ export function toSourceItems(
     title: input.title,
     detail: input.content ?? "",
     ref: input.source_ref ?? undefined
+  }));
+}
+
+/** 验收标准适配（S02-I5 → UI AcceptanceCriterion；字段直传不吞语义）。 */
+export function toCriteria(
+  items: RequirementCoreCriterion[]
+): AcceptanceCriterion[] {
+  return items.map(item => ({
+    id: item.id,
+    statement: item.statement,
+    verification_kind: item.verification_kind,
+    params: item.params,
+    verdict: item.verdict,
+    verdict_note: item.verdict_note ?? undefined,
+    verdict_at: item.verdict_at ?? undefined,
+    position: item.position
   }));
 }
 
@@ -356,7 +478,7 @@ export function toRequirementEntry(
       scope: "",
       explicit_exclusions: ""
     },
-    acceptance_criteria: EMPTY_CRITERIA,
+    acceptance_criteria: [],
     body_markdown: body?.markdown ?? undefined,
     revisions: revisions.slice().reverse(), // UI 契约：version 倒序
     sources: [],
@@ -388,7 +510,7 @@ export function toEntryFromListItem(
       scope: "",
       explicit_exclusions: ""
     },
-    acceptance_criteria: EMPTY_CRITERIA,
+    acceptance_criteria: [],
     revisions: [],
     sources: [],
     discussions: EMPTY_DISCUSSIONS,

@@ -337,13 +337,20 @@ pub(crate) async fn claim_core(
     // ── 阶段 A：只读发现候选 Project（不锁 Run，不代表获得 claim 权限）──
     // D-1=b：命中 `AI_PM_RUN_DISPATCH_EXCLUDE_PROJECTS` 的项目在候选发现阶段被
     // 静默排除——不领、不审计、不推退避（Model A 显式领取不经此路径，不受限）。
-    // 排除列表为空时走原查询（零行为漂移）。
+    // D-2=c：领取型项目（active device_project_binding → device.is_runner）恒被
+    // worker 静默排除（静态事实判定，与心跳新鲜度无关——语义定版见实施基线 §三）；
+    // 与 env 排除列表并集生效（belt-and-suspenders）。排除列表为空时仍带 runner
+    // 排除，非领取型项目零行为漂移。
     let candidates: Vec<Uuid> = if cfg.exclude_projects.is_empty() {
         sqlx::query_scalar(
             "SELECT r.project_id FROM delivery.task_run r \
               WHERE r.run_kind = 'delivery' \
                 AND ((r.status = 'queued'  AND r.next_dispatch_at <= now()) \
                   OR (r.status = 'claimed' AND r.lease_expires_at < now())) \
+                AND NOT EXISTS ( \
+                  SELECT 1 FROM devenv.device_project_binding b \
+                   JOIN devenv.device d ON d.id = b.device_id AND d.is_runner \
+                  WHERE b.project_id = r.project_id AND b.unbound_at IS NULL) \
               ORDER BY r.next_dispatch_at, r.created_at \
               LIMIT $1",
         )
@@ -359,6 +366,10 @@ pub(crate) async fn claim_core(
                 AND NOT EXISTS ( \
                   SELECT 1 FROM core.project p \
                    WHERE p.id = r.project_id AND p.code = ANY($2::text[])) \
+                AND NOT EXISTS ( \
+                  SELECT 1 FROM devenv.device_project_binding b \
+                   JOIN devenv.device d ON d.id = b.device_id AND d.is_runner \
+                  WHERE b.project_id = r.project_id AND b.unbound_at IS NULL) \
               ORDER BY r.next_dispatch_at, r.created_at \
               LIMIT $1",
         )

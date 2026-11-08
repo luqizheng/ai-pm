@@ -20,6 +20,7 @@ import RequirementsView from "./RequirementsView.vue";
 const listProjectRequirements = vi.fn();
 const getRequirement = vi.fn();
 const listRequirementSources = vi.fn();
+const listRequirementCriteria = vi.fn();
 const createRequirement = vi.fn();
 const createDraftRevision = vi.fn();
 const updateDraftRevision = vi.fn();
@@ -36,6 +37,8 @@ vi.mock("@/api/requirements", async importOriginal => {
     getRequirement: (...args: unknown[]) => getRequirement(...args),
     listRequirementSources: (...args: unknown[]) =>
       listRequirementSources(...args),
+    listRequirementCriteria: (...args: unknown[]) =>
+      listRequirementCriteria(...args),
     createRequirement: (...args: unknown[]) => createRequirement(...args),
     createDraftRevision: (...args: unknown[]) => createDraftRevision(...args),
     updateDraftRevision: (...args: unknown[]) => updateDraftRevision(...args),
@@ -168,6 +171,25 @@ describe("RequirementsView（接真）", () => {
     listRequirementSources.mockResolvedValue({
       items: [sourceItem({})]
     });
+    listRequirementCriteria.mockResolvedValue({
+      items: [
+        {
+          id: "ac-1",
+          requirement_id: "req-1",
+          position: 1,
+          statement: "P95 接口响应 ≤ 300ms",
+          verification_kind: "performance",
+          params: { threshold: 300 },
+          established_in_revision_id: null,
+          verdict: "passed",
+          verdict_note: "压测报告 PR-9",
+          verdict_by: "prc-2",
+          verdict_at: "2026-11-08T10:00:00Z",
+          created_at: "2026-11-08T09:00:00Z",
+          updated_at: "2026-11-08T10:00:00Z"
+        }
+      ]
+    });
     createRequirement.mockResolvedValue({
       requirement: row({ id: "req-3", code: "REQ-003", latest_state: "draft" })
     });
@@ -181,7 +203,8 @@ describe("RequirementsView（接真）", () => {
       revision: revision("rev-d1", 1, "pending_confirmation")
     });
     confirmRevision.mockResolvedValue({
-      requirement: detailPending.requirement
+      requirement: detailPending.requirement,
+      criteria_drift: true
     });
     rejectRevision.mockResolvedValue({
       revision: revision("rev-2", 2, "rejected")
@@ -204,6 +227,10 @@ describe("RequirementsView（接真）", () => {
     // 待确认态动作显隐（§8）
     expect(text).toContain(t("pm.requirements.actionConfirm"));
     expect(text).toContain(t("pm.requirements.actionReject"));
+    // 验收标准（S02-I5 真数据）：陈述 + 承载词表徽标 + 裁决徽标
+    expect(text).toContain("P95 接口响应 ≤ 300ms");
+    expect(text).toContain(t("pm.requirements.critKindPerformance"));
+    expect(text).toContain(t("pm.requirements.critVerdictPassed"));
     // mock 专供件不再渲染（AI 协作栏已随接真移除）
     expect(text).not.toContain(t("pm.requirements.aiBarNote"));
   });
@@ -232,6 +259,8 @@ describe("RequirementsView（接真）", () => {
       expected_content_hash: "hash-rev-2",
       expected_row_revision: 7
     });
+    // Q-12 一致性提示：验收项在提交后被改 → 确认后漂移提示在场
+    expect(wrapper.text()).toContain(t("pm.requirements.driftHintTitle"));
   });
 
   it("拒绝提案：弹窗确认后调 REST，待确认修订标记拒绝", async () => {

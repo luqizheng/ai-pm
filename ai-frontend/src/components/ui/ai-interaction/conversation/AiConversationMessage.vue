@@ -10,6 +10,7 @@ import InformationalResponse from "../responses/InformationalResponse.vue";
 import ProposalResponse from "../responses/ProposalResponse.vue";
 import QuestionResponse from "../responses/QuestionResponse.vue";
 import RecommendationResponse from "../responses/RecommendationResponse.vue";
+import MarkdownViewer from "@/components/ui/markdown-editor/MarkdownViewer.vue";
 import { defaultAiIdentity } from "../identity";
 import type { AiResponseType, ConversationMessage } from "../types";
 
@@ -98,9 +99,17 @@ function formatTime(iso: string): string {
         >
       </header>
 
-      <p v-if="message.text" class="ai-conversation-message__text">
-        {{ message.text }}
-      </p>
+      <!-- AI 文本按 Markdown 渲染（LLM 回复 content_type=markdown）；
+           渲染完成前 / 渲染失败时以原文兜底，不留空白 -->
+      <MarkdownViewer
+        v-if="message.text"
+        class="ai-conversation-message__text"
+        :model-value="message.text"
+      >
+        <template #empty>
+          <p class="ai-conversation-message__plain">{{ message.text }}</p>
+        </template>
+      </MarkdownViewer>
 
       <component
         :is="cardComponent"
@@ -187,14 +196,23 @@ function formatTime(iso: string): string {
   white-space: nowrap;
 }
 
-/* 轻量信息消息：普通文本，不走富文本编辑器 */
+/* AI 文本消息：只读 Markdown 预览（MarkdownViewer），不走编辑器 */
 .ai-conversation-message__text {
-  margin: 0;
+  max-width: 100%;
+  min-width: 0;
   color: var(--ws-text-primary);
+  word-break: break-word;
+}
+
+.ai-conversation-message__text :deep(.md-viewer__body > :last-child) {
+  margin-bottom: 0;
+}
+
+.ai-conversation-message__plain {
+  margin: 0;
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
   white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .ai-conversation-message__card {
