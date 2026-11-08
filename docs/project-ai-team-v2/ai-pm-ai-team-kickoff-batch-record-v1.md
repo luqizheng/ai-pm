@@ -14,6 +14,8 @@
 | `3a7a4b3` | docs(ai-team)：V1.0 评审稿 6 分篇 + 代码综合比对报告 v1 + 开工前置裁决包 | 8 文件 |
 | `0153ca5` | feat(ai-team)：Task 17 主分析链接真模型（`AI_PM_ANALYSIS_MODEL=auto\|fake` + llm_call_record 全量落账） | 5 文件 |
 | `5393e70` | feat(ai-team)：D-1~D-4 合并批（0057~0060 四迁移 + Role/调度/会话三层全链） | 25 文件 3334 行 |
+| `c8f508a` | docs(ai-team)：本记录 V1.0 | 1 文件 |
+| `b71946b` | feat(ai-team)：Batch E——V2.0-D Capability Registry V1 渐进（0061 能力表+派生播种+registry-first/legacy 回退+成员角色解耦）+ task 读面补 `ai_role_version_id` | 9 文件 758 行 |
 
 **未 push**：本批 3 commits + 并行会话 Checkpoint-2 未 push 池（其 R4 真机未完，有意压池）；push 时机由用户定。
 
@@ -59,7 +61,7 @@
 
 | # | 事项 | 归宿 |
 | --- | --- | --- |
-| 1 | `ROLE_EXECUTOR_MAP` 过渡映射 + busy 口径（task.assignee_id 归因） | **Batch E（V2.0-D Capability Registry V1）替换** |
+| 1 | `ROLE_EXECUTOR_MAP` 过渡映射 + busy 口径（task.assignee_id 归因） | **已由 Batch E registry-first 接管**（0061）；legacy CTE 保留至 Phase 3 删除（revoked×legacy 交互语义见 Batch E 报告 §2） |
 | 2 | requirement_analyst 无执行体（P2-13） | Registry 手工/派生授权后解锁 |
 | 3 | 前端 ai-interaction 三件套接线 + AI Team UI | ai-frontend 并行占用结束后独立批次 |
 | 4 | Execution Monitor 数据面（事件表 vs audit/outbox） | UI 批次前用户裁决 |
