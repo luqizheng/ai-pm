@@ -5,6 +5,7 @@ pub mod call_record;
 pub mod context;
 pub mod conversation_model;
 pub mod conversation_reply;
+pub mod discovery_context;
 pub mod fake_model;
 pub mod model;
 pub mod openai_adapter;
@@ -21,7 +22,11 @@ pub use conversation_model::{
     complete as complete_conversation, ConversationTurn, CONVERSATION_SYSTEM_PROMPT,
 };
 pub use conversation_reply::{ConversationReplyMode, ConversationReplyWorker, ReplyReport};
-pub use fake_model::FakeModel;
+pub use discovery_context::{
+    assemble as assemble_interview_context, ContextSection, InterviewContext,
+    InterviewContextBuilder, InterviewContextError, InterviewKind, SectionDraft, DROPPED_MARKER,
+    SECTION_ORDER, TOTAL_BUDGET_CHARS,
+};pub use fake_model::FakeModel;
 pub use model::{AnalysisContext, AnalysisModel, ModelError};
 pub use openai_adapter::{OpenAiCompatibleModel, SYSTEM_PROMPT};
 pub use orchestrator::{HandleOutcome, Orchestrator, OrchestratorError};
