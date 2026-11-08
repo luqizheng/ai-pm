@@ -412,7 +412,7 @@ pub(crate) async fn replace_knowledge_refs(
 pub(crate) async fn task_row(pool: &PgPool, task_id: Uuid) -> Result<TaskRow, PmWriteError> {
     sqlx::query_as::<_, TaskRow>(
         "SELECT id, project_id, milestone_id, title, description, status, priority, \
-                assignee_id, revision, created_at, updated_at \
+                assignee_id, revision, ai_role_version_id, created_at, updated_at \
          FROM delivery.task WHERE id = $1",
     )
     .bind(task_id)

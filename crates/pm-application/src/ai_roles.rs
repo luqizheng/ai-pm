@@ -11,6 +11,12 @@
 //!   版本 `1.0`（created_by = 操作者）+ `current_version_id` 指向它；
 //! - `project_manager` 不允许项目禁用（AT-D12/稿 §3.3，上层映射 409）；
 //! - 启停落 `governance.audit_log` 审计行；低频管理动作，不进 outbox（仓库惯例）。
+//!
+//! V2.0-D Capability Registry V1（迁移 0061，Batch E）：承接解析
+//! （[`resolve_role_assignee`]）registry-first——候选取
+//! `ai.ai_executor_capability`（capability 词表 = `ai_role_template.role_key`），
+//! registry 空时回退 legacy 成员角色映射（Phase 3 删）；bootstrap 播种见
+//! `bootstrap::ensure_executor_capabilities`。
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -343,37 +349,47 @@ where
 // ai-pm-ai-team-kickoff-adjudication-pack-v1.md` §〇/§三，迁移 0059）
 // ---------------------------------------------------------------------------
 
-/// **过渡映射**：`ai.ai_role_template.role_key` → 既有承接定位
-/// （`core.project_member.role` 值；`ai_pm` 为 ai_pm principal 的成员角色）。
+/// **Legacy 过渡映射（V2.0-D 起=回退路径）**：`ai.ai_role_template.role_key`
+/// → 既有承接定位（`core.project_member.role` 值；`ai_pm` 为 ai_pm principal
+/// 的成员角色）。
 ///
-/// 这是 V1 的**过渡形态**（比对报告 P2-13 挂账 / 裁决 §八）：真正的按能力匹配
-/// 等 V2.0-D Capability Registry 落地后取代本表——`requirement_analyst` V1 无
-/// 执行体（无映射 → 返回 None，即「无合格执行者」等待），不是被遗忘，是被挂账。
+/// Batch E（0061 Capability Registry V1）起 [`resolve_role_assignee`] 改为
+/// **registry-first**：先查 `ai.ai_executor_capability`；registry 命中 0 候选
+/// 时才回退到本映射 SQL（保留原查询语义，作为 `legacy` CTE 内嵌）。
+/// **Phase 3 归宿**：registry 全量接管后本表与 legacy CTE 一并删除
+/// （batch record 五.1：过渡映射由本批替换，渐进期仅作回退兜底）。
 const ROLE_EXECUTOR_MAP: &[(&str, Option<&str>)] = &[
     ("developer", Some("developer")),
     ("architect", Some("architect")),
     ("tester", Some("tester")),
     ("project_manager", Some("ai_pm")),
-    ("requirement_analyst", None), // V1 无执行体（P2-13）
+    ("requirement_analyst", None), // V1 无执行体（P2-13；registry 期由 manual 行承接）
 ];
 
 /// 按 Role 版本解析任务的承接 principal（TaskReadyHandler 调度决策的解析步）。
 ///
-/// 链路：`ai.ai_role_version.project_role_id` → `ai.project_ai_role`（必须
-/// enabled）→ `ai.ai_role_template.role_key` → [`ROLE_EXECUTOR_MAP`] → 候选 =
-/// `core.project_member`（同项目、映射的成员角色）JOIN `core.principal`
-/// （`kind='dev_agent'` 且 active）。
+/// **Registry-first（V2.0-D V1，0061）**：候选 = `ai.ai_executor_capability`
+/// （tenant_id + capability = role_key + `revoked_at IS NULL`）JOIN
+/// `core.principal`（`kind='dev_agent'` 且 active）JOIN `core.project_member`
+/// （该项目**存在成员行即可，不要求其 role 值匹配**——这正是能力注册表对
+/// 成员角色映射的解耦点）。`requirement_analyst` 因此可解析：有 manual 能力
+/// 行即生效（V1 不解锁播种，播种词表仍限三 dev_agent role_kind）。
 ///
-/// 选取规则：优先「空闲」（无以其为 `delivery.task.assignee_id` 的活跃
-/// delivery run，status IN ('claimed','running')；`task_run.agent_id` 预留列
-/// V1 无生产写入，活跃归因以 task.assignee_id 为准），都忙时取 principal_id
-/// 最小者（确定性）。无候选 / 版本不存在 / 跨项目 / role 未启用 / 无映射 →
+/// **Legacy 回退**：registry 命中 0 候选时，回退 [`ROLE_EXECUTOR_MAP`] 映射
+/// SQL（原查询，`legacy` CTE；Phase 3 删）。版本链闸门（版本存在 / 本项目 /
+/// enabled）对两条路径统一前置。
+///
+/// 选取规则（两条路径一致）：优先「空闲」（无以其为 `delivery.task.assignee_id`
+/// 的活跃 delivery run，status IN ('claimed','running')；`task_run.agent_id`
+/// 预留列 V1 无生产写入，活跃归因以 task.assignee_id 为准），都忙时取
+/// principal_id 最小者（确定性）。无候选 / 版本不存在 / 跨项目 / role 未启用 →
 /// `None`（调用方落 `no_executor_available` 等待）。
 ///
 /// 单查询实现（executor 泛型 + 事务内复用，sqlx 的 Executor 是消费式的，两次
-/// fetch 会 move）——[`ROLE_EXECUTOR_MAP`] 在 SQL 文本里展开成 `CASE` WHEN 列表
-/// （全部编译期常量，无注入面）；无映射 role_key 落 `ELSE NULL`，`pm.role = NULL`
-/// 恒不成立，即天然无候选。
+/// fetch 会 move）：registry 与 legacy 两个 CTE + `picked`（registry 空则并
+/// 入 legacy）在**一条语句**内完成判定；[`ROLE_EXECUTOR_MAP`] 在 SQL 文本里
+/// 展开成 `CASE` WHEN 列表（全部编译期常量，无注入面）；无映射 role_key 落
+/// `ELSE NULL`，`pm.role = NULL` 恒不成立，即 legacy 天然无候选。
 pub async fn resolve_role_assignee<'e, E>(
     executor: E,
     tenant_id: Uuid,
@@ -391,29 +407,52 @@ where
         .collect::<Vec<_>>()
         .join(" ");
 
-    // 版本不存在、挂到了别的项目、项目行 enabled=false、无映射角色、或没有
-    // 合格 dev_agent 成员，全部收敛为同一结果 None——调度语义里统一是
+    // 版本不存在、挂到了别的项目、项目行 enabled=false、registry 与 legacy
+    // 均无合格 dev_agent，全部收敛为同一结果 None——调度语义里统一是
     // 「无合格执行者」，不区分细分原因（审计 payload 里给恢复 hint）。
     let candidate: Option<Uuid> = sqlx::query_scalar(&format!(
-        "SELECT pm.principal_id \
-           FROM ai.ai_role_version v \
-           JOIN ai.project_ai_role pr ON pr.id = v.project_role_id \
-           JOIN ai.ai_role_template t ON t.id = pr.role_id \
-           JOIN core.project_member pm \
-             ON pm.project_id = pr.project_id \
-            AND pm.role = CASE t.role_key {case_whens} ELSE NULL END \
-           JOIN core.principal p ON p.id = pm.principal_id \
-          WHERE v.id = $1 AND pr.tenant_id = $2 AND pr.project_id = $3 \
-            AND pr.enabled AND p.kind = 'dev_agent' AND p.is_active \
+        "WITH role AS ( \
+             SELECT pr.project_id, t.role_key \
+               FROM ai.ai_role_version v \
+               JOIN ai.project_ai_role pr ON pr.id = v.project_role_id \
+               JOIN ai.ai_role_template t ON t.id = pr.role_id \
+              WHERE v.id = $1 AND pr.tenant_id = $2 AND pr.project_id = $3 \
+                AND pr.enabled \
+         ), registry AS ( \
+             SELECT cap.principal_id \
+               FROM role r \
+               JOIN ai.ai_executor_capability cap \
+                 ON cap.tenant_id = $2 AND cap.capability = r.role_key \
+                AND cap.revoked_at IS NULL \
+               JOIN core.principal p \
+                 ON p.id = cap.principal_id AND p.kind = 'dev_agent' AND p.is_active \
+               JOIN core.project_member pm \
+                 ON pm.project_id = r.project_id AND pm.principal_id = cap.principal_id \
+         ), legacy AS ( \
+             SELECT pm.principal_id \
+               FROM role r \
+               JOIN core.project_member pm \
+                 ON pm.project_id = r.project_id \
+                AND pm.role = CASE r.role_key {case_whens} ELSE NULL END \
+               JOIN core.principal p \
+                 ON p.id = pm.principal_id AND p.kind = 'dev_agent' AND p.is_active \
+         ), picked AS ( \
+             SELECT principal_id FROM registry \
+             UNION ALL \
+             SELECT principal_id FROM legacy \
+              WHERE NOT EXISTS (SELECT 1 FROM registry) \
+         ) \
+         SELECT picked.principal_id \
+           FROM picked \
           ORDER BY EXISTS ( \
                SELECT 1 FROM delivery.task_run tr \
                  JOIN delivery.task tt ON tt.id = tr.task_id \
-                WHERE tt.assignee_id = pm.principal_id \
+                WHERE tt.assignee_id = picked.principal_id \
                   AND tr.project_id = $3 \
                   AND tr.run_kind = 'delivery' \
                   AND tr.status IN ('claimed', 'running') \
            ) ASC, \
-           pm.principal_id ASC \
+           picked.principal_id ASC \
           LIMIT 1"
     ))
     .bind(role_version_id)

@@ -663,3 +663,96 @@ async fn create_task_rejects_cross_project_ai_role_version(pool: PgPool) {
         .unwrap();
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+/// D-2 遗留补读面（Batch E）：带锚创建的任务在 GET /v1/pm/tasks 列表行里
+/// 携带 `ai_role_version_id`；无锚任务该列为 null。
+#[sqlx::test(migrations = "../../migrations")]
+async fn task_list_rows_carry_ai_role_version_id(pool: PgPool) {
+    let boot = bootstrap_project(
+        &pool,
+        BootstrapRequest {
+            project_code: "TSK-R3".into(),
+            project_name: "t".into(),
+            tenant_id: SYSTEM_TENANT,
+        },
+    )
+    .await
+    .unwrap();
+    let version = ai_role_version_of(&pool, boot.project_id, "developer").await;
+    // off 模式注入 dev-off principal；/v1/pm 读端点按 project_member 过滤，
+    // 先把它加为项目成员（同 tests/common::join_dev；本文件未引 common 故内联）。
+    sqlx::query(
+        "INSERT INTO core.principal (id, kind, display_name, is_active) \
+         VALUES ($1, 'human', 'dev-off', true) ON CONFLICT (id) DO NOTHING",
+    )
+    .bind(pm_api::auth::DEV_OFF_PRINCIPAL)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO core.project_member (tenant_id, project_id, principal_id, role) \
+         VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $1, $2, 'owner')",
+    )
+    .bind(boot.project_id)
+    .bind(pm_api::auth::DEV_OFF_PRINCIPAL)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let app = router(pool.clone());
+    let response = app
+        .oneshot(request(
+            "POST",
+            "/v1/pm/tasks".into(),
+            Some(json!({
+                "project_id": boot.project_id,
+                "title": "anchored-list",
+                "ai_role_version_id": version,
+            })),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let response = router(pool.clone())
+        .oneshot(request(
+            "POST",
+            "/v1/pm/tasks".into(),
+            Some(json!({ "project_id": boot.project_id, "title": "plain-list" })),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let response = router(pool.clone())
+        .oneshot(request(
+            "GET",
+            format!("/v1/pm/tasks?project_id={}", boot.project_id),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = body_json(response).await;
+    let items = body["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2, "both created tasks must appear in the list");
+    let anchored = items
+        .iter()
+        .find(|item| item["title"] == "anchored-list")
+        .expect("anchored task row");
+    assert_eq!(
+        anchored["ai_role_version_id"]
+            .as_str()
+            .unwrap()
+            .parse::<Uuid>()
+            .unwrap(),
+        version,
+        "the list row must carry the anchored ai_role_version_id"
+    );
+    let plain = items
+        .iter()
+        .find(|item| item["title"] == "plain-list")
+        .expect("unanchored task row");
+    assert!(
+        plain["ai_role_version_id"].is_null(),
+        "an unanchored task row must expose ai_role_version_id as null"
+    );
+}

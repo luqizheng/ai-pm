@@ -4,11 +4,11 @@
 //! 路由外层的 `auth::require_bearer` 层承担（handlers 不做会话提取）。
 
 use axum::{
-    Json, Router,
     extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
+    Json, Router,
 };
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -16,10 +16,10 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::{
-    ApiResult, Paging, customer_filter, paging, project_filter, require_project_visible,
+    customer_filter, paging, project_filter, require_project_visible, ApiResult, Paging,
 };
 use pm_application::bootstrap::{
-    BootstrapError, BootstrapRequest, bootstrap_project_for_customer_owned, bootstrap_project_owned,
+    bootstrap_project_for_customer_owned, bootstrap_project_owned, BootstrapError, BootstrapRequest,
 };
 use pm_application::rows::{
     ApprovalRow, AuditLogRow, DecisionRow, MilestoneRow, PrincipalRow, ProjectRow,
@@ -29,16 +29,25 @@ use pm_application::rows::{
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/v1/pm/principals", get(principals))
-        .route("/v1/pm/projects", get(projects).post(create_project_handler))
+        .route(
+            "/v1/pm/projects",
+            get(projects).post(create_project_handler),
+        )
         .route("/v1/pm/requirements", get(requirements))
         .route("/v1/pm/tasks", get(tasks))
         .route("/v1/pm/milestones", get(milestones))
         .route("/v1/pm/approvals", get(approvals))
         .route("/v1/pm/decisions", get(decisions))
         .route("/v1/pm/audit-logs", get(audit_logs))
-        .route("/v1/pm/requirements/{requirement_id}/revisions", get(revisions))
+        .route(
+            "/v1/pm/requirements/{requirement_id}/revisions",
+            get(revisions),
+        )
         .route("/v1/pm/tasks", post(crate::pm_writes::create_task_handler))
-        .route("/v1/pm/tasks/{task_id}", axum::routing::patch(crate::pm_writes::update_task_handler))
+        .route(
+            "/v1/pm/tasks/{task_id}",
+            axum::routing::patch(crate::pm_writes::update_task_handler),
+        )
         .route(
             "/v1/pm/approvals/{approval_id}/decide",
             post(crate::pm_writes::decide_handler),
@@ -50,7 +59,9 @@ async fn principals(
     Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let page: Paging = paging(&params);
-    let is_active = params.get("is_active").and_then(|value| value.parse::<bool>().ok());
+    let is_active = params
+        .get("is_active")
+        .and_then(|value| value.parse::<bool>().ok());
     // 平台专用 service principal（`ai-pm-dispatch`，0015 幂等种子）是审计兜底
     // 身份，不属于可指派的人员/代理列表，故不对外暴露。
     let items: Vec<PrincipalRow> = sqlx::query_as(
@@ -242,8 +253,13 @@ async fn requirements(
     let page = paging(&params);
     let project_id = project_filter(&params);
     if let Some(project_id) = project_id {
-        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-            .await?;
+        require_project_visible(
+            &state.pool,
+            project_id,
+            caller.tenant_id,
+            caller.principal_id,
+        )
+        .await?;
     }
     let items: Vec<RequirementRow> = sqlx::query_as(
         "SELECT r.id, r.project_id, r.code, r.title, r.lifecycle_status, r.current_revision_id, \
@@ -285,12 +301,18 @@ async fn tasks(
     let page = paging(&params);
     let project_id = project_filter(&params);
     if let Some(project_id) = project_id {
-        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-            .await?;
+        require_project_visible(
+            &state.pool,
+            project_id,
+            caller.tenant_id,
+            caller.principal_id,
+        )
+        .await?;
     }
     let items: Vec<TaskRow> = sqlx::query_as(
         "SELECT t.id, t.project_id, t.milestone_id, t.title, t.description, t.status, \
-                t.priority, t.assignee_id, t.revision, t.created_at, t.updated_at \
+                t.priority, t.assignee_id, t.revision, t.ai_role_version_id, \
+                t.created_at, t.updated_at \
          FROM delivery.task t \
          WHERE t.tenant_id = $5 \
            AND EXISTS (SELECT 1 FROM core.project_member m \
@@ -328,8 +350,13 @@ async fn milestones(
     let page = paging(&params);
     let project_id = project_filter(&params);
     if let Some(project_id) = project_id {
-        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-            .await?;
+        require_project_visible(
+            &state.pool,
+            project_id,
+            caller.tenant_id,
+            caller.principal_id,
+        )
+        .await?;
     }
     let items: Vec<MilestoneRow> = sqlx::query_as(
         "SELECT m.id, m.project_id, m.name, m.planned_at, m.status, m.revision \
@@ -370,8 +397,13 @@ async fn approvals(
     let page = paging(&params);
     let project_id = project_filter(&params);
     if let Some(project_id) = project_id {
-        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-            .await?;
+        require_project_visible(
+            &state.pool,
+            project_id,
+            caller.tenant_id,
+            caller.principal_id,
+        )
+        .await?;
     }
     let items: Vec<ApprovalRow> = sqlx::query_as(
         "SELECT a.id, a.project_id, a.proposal_id, a.status, a.required_role, a.decided_by, \
@@ -414,8 +446,13 @@ async fn decisions(
     let page = paging(&params);
     let project_id = project_filter(&params);
     if let Some(project_id) = project_id {
-        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-            .await?;
+        require_project_visible(
+            &state.pool,
+            project_id,
+            caller.tenant_id,
+            caller.principal_id,
+        )
+        .await?;
     }
     let items: Vec<DecisionRow> = sqlx::query_as(
         "SELECT a.id, a.project_id, a.status, a.required_role, a.decided_by, \
@@ -461,8 +498,13 @@ async fn audit_logs(
     let page = paging(&params);
     let project_id = project_filter(&params);
     if let Some(project_id) = project_id {
-        require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id)
-            .await?;
+        require_project_visible(
+            &state.pool,
+            project_id,
+            caller.tenant_id,
+            caller.principal_id,
+        )
+        .await?;
     }
     let items: Vec<AuditLogRow> = sqlx::query_as(
         "SELECT g.id, g.project_id, g.actor_id, g.action, g.target_type, g.target_id, g.created_at \

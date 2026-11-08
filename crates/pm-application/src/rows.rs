@@ -104,6 +104,8 @@ pub struct TaskRow {
     pub priority: String,
     pub assignee_id: Option<Uuid>,
     pub revision: i64,
+    /// 创建时锚定的 AI Role 版本（D-2 遗留补读面：0058 可空 FK，历史任务为 NULL）。
+    pub ai_role_version_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

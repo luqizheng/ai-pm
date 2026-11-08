@@ -250,6 +250,10 @@ async fn bootstrap_inner(
     // `dev_agent` 是**租户级**实例（ADR-0001 D3）：同一租户的多个项目复用同一组
     // Agent，项目授权仍写 `project_member`，不另造 grant 表。
     let (architect_id, developer_id, tester_id) = ensure_tenant_agents(&mut tx, tenant_id).await?;
+    // V2.0-D Capability Registry V1（0061）：租户级能力播种，紧随
+    // `ensure_tenant_agents` 同事务执行。对本批 resolve 只是**补充不是前置**
+    // ——`resolve_role_assignee` 有 legacy 映射回退，播种缺席不致解析断链。
+    ensure_executor_capabilities(&mut tx, tenant_id).await?;
 
     let status = match initial_status {
         None | Some("planning") => "planning",
@@ -405,6 +409,39 @@ async fn ensure_tenant_agents(
     }
 
     Ok((ids["architect"], ids["developer"], ids["tester"]))
+}
+
+/// V2.0-D Capability Registry V1（0061）：把租户启用的 dev_agent 实例播种成
+/// `ai.ai_executor_capability` 能力行（幂等，模板照 [`ensure_tenant_agents`]
+/// 的「缺哪行补哪行」风格，但走单条 `INSERT ... SELECT ... ON CONFLICT DO
+/// NOTHING`）。
+///
+/// 数据链：`core.tenant_agent`（is_enabled=TRUE）JOIN `ai.agent_definition`
+/// → `role_kind ∈ {architect, developer, tester}`（0020:14-24 词表）→
+/// `capability = 同名 role_key`（三种子现与 role_key 同名，0058 目录）。
+///
+/// 幂等语义（0061 头注）：只 INSERT **全新**行，`source` 恒
+/// `'agent_definition'`（派生、可重播）；已存在但 revoked 的行**不复活**
+/// ——复活须显式动作；`manual` 人工授予行不被本播种覆写。
+async fn ensure_executor_capabilities(
+    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tenant_id: Uuid,
+) -> Result<(), BootstrapError> {
+    sqlx::query(
+        "INSERT INTO ai.ai_executor_capability (tenant_id, principal_id, capability, source) \
+         SELECT ta.tenant_id, ta.principal_id, d.role_kind, 'agent_definition' \
+           FROM core.tenant_agent ta \
+           JOIN ai.agent_definition d ON d.id = ta.agent_definition_id \
+          WHERE ta.tenant_id = $1 \
+            AND ta.is_enabled \
+            AND d.role_kind IN ('architect', 'developer', 'tester') \
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(tenant_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(BootstrapError::Db)?;
+    Ok(())
 }
 
 async fn insert_member(
