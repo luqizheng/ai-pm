@@ -313,6 +313,72 @@ pub async fn create_object_identity(
     Ok(object_id)
 }
 
+/// Profile / Vision 两单例骨架（PC-D-06 初始化规则：identity 态、无修订、无版本成员——
+/// 「未确认」与「确认为空」由生命周期区分）。可重入：`uq_pc_object_singleton` 与
+/// object_key 唯一键冲突即跳过。返回本次新建数。
+///
+/// 偏差（KP-2 登记）：规则中的模板骨架文档与 manual_input 来源登记随 PCGIT 后置
+/// （identity 态无修订即无正文承载，偏差 a 同源）。
+pub(crate) async fn ensure_product_singletons_in(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    created_by: Uuid,
+    project_name: &str,
+) -> Result<u64, sqlx::Error> {
+    let mut created = 0;
+    for (object_type, object_key, display_name) in [
+        (
+            "product_profile",
+            "product-profile",
+            project_name.to_string(),
+        ),
+        (
+            "product_vision",
+            "product-vision",
+            format!("{project_name} 产品愿景"),
+        ),
+    ] {
+        created += sqlx::query(
+            "INSERT INTO pc.cognition_object \
+             (tenant_id, project_id, object_type, object_key, display_name, lifecycle_status, \
+              created_by, updated_by) \
+             VALUES ($1, $2, $3, $4, $5, 'identity', $6, $6) \
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(object_type)
+        .bind(object_key)
+        .bind(&display_name)
+        .bind(created_by)
+        .execute(&mut **tx)
+        .await?
+        .rows_affected();
+    }
+    Ok(created)
+}
+
+/// [`ensure_product_singletons_in`] 的独立事务入口（存量项目补骨架；可重入）。
+pub async fn ensure_product_singletons(
+    pool: &PgPool,
+    project_id: Uuid,
+    actor: &AuditActor,
+) -> Result<u64, PcError> {
+    let (tenant_id, name): (Uuid, String) =
+        sqlx::query_as("SELECT tenant_id, name FROM core.project WHERE id = $1")
+            .bind(project_id)
+            .fetch_optional(pool)
+            .await?
+            .ok_or_else(|| PcError::NotFound("project not found".into()))?;
+    let mut tx = pool.begin().await?;
+    let created =
+        ensure_product_singletons_in(&mut tx, tenant_id, project_id, actor.principal_id, &name)
+            .await?;
+    tx.commit().await?;
+    Ok(created)
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn append_revision(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,

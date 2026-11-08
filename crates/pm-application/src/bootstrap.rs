@@ -20,7 +20,9 @@
 //! - the `ai.project_ai_config` row (fake model, `ai_lead`, policy version 1)
 //!   bound to the AI PM principal, and
 //! - five `ai.project_skill_binding` rows pinning every 0003-seeded skill at
-//!   `v1`.
+//!   `v1`, and
+//! - the PC `product_profile` / `product_vision` singleton skeletons
+//!   (`lifecycle_status = 'identity'`, no revision; KP-2 / PC-D-06).
 //!
 //! A second call with the same project code fails with
 //! [`BootstrapError::Duplicate`] — `core.project.code` is UNIQUE; bootstrap
@@ -317,6 +319,18 @@ async fn bootstrap_inner(
     crate::ai_roles::ensure_project_ai_roles(&mut tx, tenant_id, project_id)
         .await
         .map_err(BootstrapError::Db)?;
+
+    // PC Profile / Vision 单例骨架（KP-2，PC-D-06 初始化规则：identity 态、无修订、
+    // 无版本成员）；可重入，与项目同事务。
+    crate::pc::ensure_product_singletons_in(
+        &mut tx,
+        tenant_id,
+        project_id,
+        human_id,
+        &req.project_name,
+    )
+    .await
+    .map_err(BootstrapError::Db)?;
 
     tx.commit().await.map_err(BootstrapError::Db)?;
 

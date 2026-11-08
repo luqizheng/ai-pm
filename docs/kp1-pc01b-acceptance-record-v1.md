@@ -79,8 +79,8 @@
 
 ## 六、遗留与移交（KP-2 输入清单）
 
-1. 提案 create/submit/approve/reject 命令服务（复用 `ProposalMemberPin`/`canonical_proposal_hash`/端点自动并入构建器——已在 pc::publish 公开形状内）；p4/p5 REST + ensure_trusted_context；UI 确认入口。
-2. Profile/Vision 项目初始化接线（`create_object_identity` 已备，未挂 project creation hook——挂接点在 project 域共享文件，归 KP-2 一并处理）。
+1. 提案 create/submit/approve/reject 命令服务（复用 `ProposalMemberPin`/`canonical_proposal_hash`/端点自动并入构建器——已在 pc::publish 公开形状内）；p4/p5 REST + ensure_trusted_context；UI 确认入口。**→ KP-2 已兑现（UI 除外，归 PC-I4/V0.6），见 `docs/kp2-pc01c-acceptance-record-v1.md`。**
+2. Profile/Vision 项目初始化接线（`create_object_identity` 已备，未挂 project creation hook——挂接点在 project 域共享文件，归 KP-2 一并处理）。**→ KP-2 已兑现（identity 骨架随 bootstrap 同事务）。**
 3. PCGIT 正文权威与 write_operation Git 两态（V0.6，随 ADR-06b 框架）。
 4. 真栈 E2E 复跑（pm-api 镜像重建后 checkpoint1-e2e.sh；provider 步已备）。
 5. 跨域引用周期对账（R-13；数据源=K3/PK1 只读 API）与 reconcile 后台任务（01B §12.5）——V1 范围外。

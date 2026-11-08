@@ -20,21 +20,31 @@
 //! 身份/项目作用域按请求绑定——差异说明 D-KP3-3）；K5 同路径追加 `POST` 来源登记
 //! （§12.2 未列的 V0.5 管理面，见 `kb_memory_api.rs`，D-KP3-5）。K1/K3/K6 与 P 系
 //! 受理/治理面维持 501。
+//!
+//! **KP-2 落真**：P4（提案详情）与 P5（审批转达：approve = 审批事实 + 同请求发布，
+//! reject = 驳回）经 `pm_application::pc` 提案命令服务（V-6 唯一写入面）；P5 为治理
+//! 动作，另挂可信交互上下文（A*：API Key 403），真人 + A3 门在服务层（AI/服务主体
+//! 恒 403）；MCP 不暴露任何确认工具。P3 增提案分支（分析起草提案后 result_ref 锚
+//! proposal）。P1/P2/P6/P7 维持 501。
 
 use axum::{
     extract::{Extension, Path, Query, State},
+    http::StatusCode,
     routing::{get, post},
     Json, Router,
 };
 use kb_pc_contracts::ports::{KbMemoryReviewRequest, KbServicePort, PortError, PortNotWired};
+use kb_pc_contracts::registry::TargetDomain;
+use kb_pc_contracts::DomainRef;
 use pm_application::kb_service::{KbCaller, KbServiceLive};
+use pm_application::pc::{self, DecisionAction, PcError, ProposalDecisionInput};
 use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{require_project_visible, ApiError, ApiResult};
+use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -85,6 +95,30 @@ impl From<PortError> for ApiError {
             ),
         }
     }
+}
+
+/// KP-2：PC 服务层错误 → HTTP（动态原因透传；服务层查询全部项目作用域，404 不泄露
+/// 跨项目存在性）。库层错误 500 不回显。
+impl From<PcError> for ApiError {
+    fn from(e: PcError) -> Self {
+        match e {
+            PcError::NotFound(m) => ApiError::Text(StatusCode::NOT_FOUND, m),
+            PcError::Forbidden(m) => ApiError::Text(StatusCode::FORBIDDEN, m),
+            PcError::Invalid(m) => ApiError::Text(StatusCode::BAD_REQUEST, m),
+            PcError::Conflict(m) => ApiError::Text(StatusCode::CONFLICT, m),
+            PcError::Db(err) => ApiError::Internal(err),
+        }
+    }
+}
+
+/// PC 域四元组引用（`pc/<type>/<id>`）。
+fn pc_ref(target_type: &str, id: Uuid) -> DomainRef {
+    DomainRef::for_domain(
+        TargetDomain::ProductCognition,
+        target_type,
+        id.to_string(),
+        None,
+    )
 }
 
 /// 项目上下文：`?project_id=` 必填（同 outbox_ops 惯例——跨项目调用没有意义
@@ -387,10 +421,11 @@ async fn p2_submit_decision(
 }
 
 /// P3（KP-1 起）：`{id}` = pc_analyze 任务 ID（intake_task）。
-/// 返回任务状态 + result_ref；真实派生按 `pc_analysis_ref`（锚 pc.source 行）
-/// 展开 source → evidence → revision → object（含 pc.document_revision 正文）；
-/// checkpoint-1 旧任务的 legacy result_ref（target_type=cognition_object）走
-/// 直查对象分支（收敛后对象行仍在，读面兼容）。桩产物只回任务面。
+/// 返回任务状态 + result_ref；KP-2 起分析起草提案时 result_ref 锚 proposal（附
+/// `conclusion=PROPOSED` + 提案摘要，经提案来源展开对象集）；NO_CHANGE 结论与 KP-1
+/// 任务的 result_ref 锚 pc.source（展开 source → evidence → revision → object，含
+/// pc.document_revision 正文）；checkpoint-1 旧任务的 legacy result_ref
+/// （target_type=cognition_object）走直查对象分支。桩产物只回任务面。
 ///
 /// 形状变化登记（KP-1 验收记录）：objects[].name→display_name 语义（键名不变）、
 /// latest_revision.status 移除（版本化由 `versioned` 布尔派生——01B §5.3 不冗余
@@ -453,38 +488,41 @@ async fn p3_analysis_status(
         .and_then(|v| v.as_str())
         .and_then(|raw| Uuid::parse_str(raw).ok());
 
-    // 新形状：pc_analysis_ref 锚 pc.source（KP-1 链路）——按来源展开本次分析
-    // 产出的对象集（evidence.subject → revision → object + 最新正文）。
-    if ref_type == "source" {
-        if let Some(source_id) = ref_id {
-            let rows: Vec<PcObjectRow> = sqlx::query_as(
-                "SELECT o.id, o.object_type, o.object_key, o.display_name, o.lifecycle_status, \
-                        rev.revision_no, rev.change_summary, dr.content, rev.analysis_mode, \
-                        (vm.object_revision_id IS NOT NULL) AS versioned \
-                   FROM pc.evidence e \
-                   JOIN pc.cognition_revision rev ON rev.id = e.object_revision_id \
-                   JOIN pc.cognition_object o ON o.id = rev.object_id \
-                   LEFT JOIN LATERAL ( \
-                        SELECT r2.revision_no, r2.change_summary, r2.analysis_mode \
-                          FROM pc.cognition_revision r2 \
-                         WHERE r2.tenant_id = o.tenant_id AND r2.project_id = o.project_id \
-                           AND r2.object_id = o.id \
-                         ORDER BY r2.revision_no DESC LIMIT 1 \
-                   ) rev ON true \
-                   LEFT JOIN pc.document_revision dr ON dr.id = rev.document_revision_id \
-                   LEFT JOIN pc.v_revision_versioned vm ON vm.object_revision_id = rev.id \
-                  WHERE e.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
-                    AND e.project_id = $1 AND e.source_id = $2 \
-                  ORDER BY o.created_at ASC, o.id ASC",
+    // KP-2：分析产出未覆盖修订 → AI 起草提案（pc.change_proposed 回写 result_ref=
+    // proposal 四元组）——结论 PROPOSED + 提案摘要，经提案来源展开本次分析对象集。
+    if ref_type == "proposal" {
+        if let Some(proposal_id) = ref_id {
+            let proposal: Option<(Option<Uuid>, String, String)> = sqlx::query_as(
+                "SELECT source_id, status, governance_level FROM pc.proposal \
+                  WHERE tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
+                    AND project_id = $1 AND id = $2",
             )
             .bind(project_id)
-            .bind(source_id)
-            .fetch_all(&state.pool)
+            .bind(proposal_id)
+            .fetch_optional(&state.pool)
             .await?;
-            body["objects"] = json!(rows
-                .into_iter()
-                .map(pc_object_json)
-                .collect::<Vec<_>>());
+            if let Some((source_id, status, governance_level)) = proposal {
+                body["conclusion"] = json!("PROPOSED");
+                body["proposal_ref"] = json!(pc_ref("proposal", proposal_id));
+                body["proposal"] = json!({
+                    "proposal_id": proposal_id,
+                    "status": status,
+                    "governance_level": governance_level,
+                });
+                if let Some(source_id) = source_id {
+                    body["objects"] =
+                        json!(objects_of_source(&state, project_id, source_id).await?);
+                }
+            }
+            return Ok(Json(body));
+        }
+    }
+
+    // pc_analysis_ref 锚 pc.source（KP-1 链路；KP-2 起为 NO_CHANGE 结论的锚）——按来源
+    // 展开本次分析产出的对象集（evidence.subject → revision → object + 最新正文）。
+    if ref_type == "source" {
+        if let Some(source_id) = ref_id {
+            body["objects"] = json!(objects_of_source(&state, project_id, source_id).await?);
             return Ok(Json(body));
         }
     }
@@ -496,7 +534,7 @@ async fn p3_analysis_status(
             let rows: Vec<PcObjectRow> = sqlx::query_as(
                 "SELECT o.id, o.object_type, o.object_key, o.display_name, o.lifecycle_status, \
                         rev.revision_no, rev.change_summary, dr.content, rev.analysis_mode, \
-                        (vm.object_revision_id IS NOT NULL) AS versioned \
+                        vm.in_published_version AS versioned \
                    FROM pc.cognition_object o \
                    LEFT JOIN LATERAL ( \
                         SELECT r2.revision_no, r2.change_summary, r2.analysis_mode, \
@@ -517,14 +555,51 @@ async fn p3_analysis_status(
             .fetch_all(&state.pool)
             .await?;
             if !rows.is_empty() {
-                body["objects"] = json!(rows
-                    .into_iter()
-                    .map(pc_object_json)
-                    .collect::<Vec<_>>());
+                body["objects"] = json!(rows.into_iter().map(pc_object_json).collect::<Vec<_>>());
             }
         }
     }
     Ok(Json(body))
+}
+
+/// P3 来源展开：本次分析证据钉扎的对象集 + 各对象最新修订（正文、归因、是否已入正式
+/// 版本）。KP-2 勘误：KP-1 原查询 `rev` 别名重复（PG 42712，真实分析任务 P3 恒 500）
+/// 且 `versioned` 误读视图恒非空的 object_revision_id——改为子查询去重 + 视图
+/// `in_published_version`。
+async fn objects_of_source(
+    state: &AppState,
+    project_id: Uuid,
+    source_id: Uuid,
+) -> ApiResult<Vec<serde_json::Value>> {
+    let rows: Vec<PcObjectRow> = sqlx::query_as(
+        "SELECT o.id, o.object_type, o.object_key, o.display_name, o.lifecycle_status, \
+                latest.revision_no, latest.change_summary, dr.content, latest.analysis_mode, \
+                vm.in_published_version AS versioned \
+           FROM (SELECT DISTINCT cr.object_id \
+                   FROM pc.evidence e \
+                   JOIN pc.cognition_revision cr \
+                     ON cr.tenant_id = e.tenant_id AND cr.project_id = e.project_id \
+                    AND cr.id = e.object_revision_id \
+                  WHERE e.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
+                    AND e.project_id = $1 AND e.source_id = $2) hit \
+           JOIN pc.cognition_object o ON o.id = hit.object_id \
+           LEFT JOIN LATERAL ( \
+                SELECT r2.id, r2.revision_no, r2.change_summary, r2.analysis_mode, \
+                       r2.document_revision_id \
+                  FROM pc.cognition_revision r2 \
+                 WHERE r2.tenant_id = o.tenant_id AND r2.project_id = o.project_id \
+                   AND r2.object_id = o.id \
+                 ORDER BY r2.revision_no DESC LIMIT 1 \
+           ) latest ON true \
+           LEFT JOIN pc.document_revision dr ON dr.id = latest.document_revision_id \
+           LEFT JOIN pc.v_revision_versioned vm ON vm.object_revision_id = latest.id \
+          ORDER BY o.created_at ASC, o.id ASC",
+    )
+    .bind(project_id)
+    .bind(source_id)
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(rows.into_iter().map(pc_object_json).collect())
 }
 
 /// P3 对象行投影（新/旧形状共用）：列序见两处查询。
@@ -571,6 +646,10 @@ fn pc_object_json(
     })
 }
 
+/// P4（KP-2 落真）：提案详情——契约形状 `{proposal_id, status, governance_level,
+/// members[], content_hash, approval_ref?}`，additive 携带提案头（title/rationale/
+/// origin_kind/source_ref/expected_version_no…）、审批历史与 `published_version_ref`。
+/// 项目成员可读（含 AI——读不改变正式认知）。
 async fn p4_proposal(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
@@ -579,10 +658,51 @@ async fn p4_proposal(
 ) -> ApiResult<Json<serde_json::Value>> {
     let project_id = require_project_param(&query)?;
     guard(&state, &caller, project_id).await?;
-    let _ = proposal_id;
-    skeleton_501(()).await
+    let proposal_id =
+        Uuid::parse_str(&proposal_id).map_err(|_| ApiError::NotFound("proposal not found"))?;
+    let view = pc::load_proposal(&state.pool, project_id, proposal_id).await?;
+    let head = &view.head;
+    Ok(Json(json!({
+        "proposal_id": head.proposal_id,
+        "status": head.status,
+        "governance_level": head.governance_level,
+        "members": view.members,
+        "content_hash": head.proposal_content_hash,
+        "approval_ref": view.approvals.last().map(|a| pc_ref("approval", a.approval_id)),
+        "title": head.title,
+        "rationale": head.rationale,
+        "origin_kind": head.origin_kind,
+        "source_ref": head.source_id.map(|id| pc_ref("source", id)),
+        "risk_level": head.risk_level,
+        "confidence": head.confidence,
+        "expected_version_no": head.expected_version_no,
+        "submitted_at": head.submitted_at,
+        "created_by": head.created_by,
+        "created_at": head.created_at,
+        "updated_at": head.updated_at,
+        "approvals": view.approvals,
+        "published_version_ref": view
+            .published_version
+            .as_ref()
+            .map(|v| pc_ref("cognition_version", v.version_id)),
+        "published_version_no": view.published_version.as_ref().map(|v| v.version_no),
+    })))
 }
 
+/// P5 请求体（契约 `{action, note?, expected_version_no}`；`reason` 为 note 别名）。
+#[derive(serde::Deserialize)]
+struct DecisionBody {
+    action: String,
+    #[serde(default, alias = "reason")]
+    note: Option<String>,
+    #[serde(default)]
+    expected_version_no: Option<i64>,
+}
+
+/// P5（KP-2 落真）：审批转达（CAS：`expected_version_no` = 调用方确认的提案基线）。
+/// approve = 审批事实落定后同请求发布（`published_version_ref`；发布 CAS 失配时提案转
+/// failed 并 409）；reject = 驳回。治理动作：可信交互上下文（A*：API Key 403）+ 服务层
+/// 真人 + A3（AI/服务主体恒 403）；MCP 不暴露此入口。
 async fn p5_decide_proposal(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
@@ -592,8 +712,41 @@ async fn p5_decide_proposal(
 ) -> ApiResult<Json<serde_json::Value>> {
     let project_id = require_project_param(&query)?;
     guard(&state, &caller, project_id).await?;
-    let _ = proposal_id;
-    skeleton_501(body).await
+    ensure_trusted_context(&caller)?;
+    let proposal_id =
+        Uuid::parse_str(&proposal_id).map_err(|_| ApiError::NotFound("proposal not found"))?;
+    let body: DecisionBody = serde_json::from_value(body).map_err(|e| {
+        ApiError::Text(
+            StatusCode::BAD_REQUEST,
+            format!("invalid decision body: {e}"),
+        )
+    })?;
+    let action = DecisionAction::parse(body.action.trim())
+        .ok_or(ApiError::BadRequest("action must be `approve` or `reject`"))?;
+    let expected_version_no = body.expected_version_no.ok_or(ApiError::BadRequest(
+        "expected_version_no is required (CAS)",
+    ))?;
+    let outcome = pc::decide_proposal(
+        &state.pool,
+        project_id,
+        &caller.audit_actor(),
+        proposal_id,
+        ProposalDecisionInput {
+            action,
+            reason: body.note,
+            expected_version_no,
+        },
+    )
+    .await?;
+    let version = outcome.published_version.as_ref();
+    Ok(Json(json!({
+        "proposal_id": outcome.proposal_id,
+        "status": outcome.status,
+        "approval_ref": outcome.approval_id.map(|id| pc_ref("approval", id)),
+        "published_version_ref": version.map(|v| pc_ref("cognition_version", v.version_id)),
+        "published_version_no": version.map(|v| v.version_no),
+        "snapshot_hash": version.map(|v| v.snapshot_hash.clone()),
+    })))
 }
 
 async fn p6_conflict(

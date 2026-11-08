@@ -36,8 +36,8 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     ("crates/pm-application/src/review/queue.rs", 1),   // A9
     ("crates/pm-application/src/run_dispatch/lease.rs", 1), // A10
     ("crates/pm-infrastructure/src/outbox_handlers.rs", 3), // A11 + D-2=A：TaskReady 自动写 assignee / no_executor_available skip（系统面 dispatch principal，四列显式 NULL）
-    ("apps/pm-api/src/outbox_ops.rs", 1),               // A12
-    ("apps/pm-api/src/device_claim.rs", 1),             // T-088：设备声明被忽略（tenant_audit_log）
+    ("apps/pm-api/src/outbox_ops.rs", 1),                   // A12
+    ("apps/pm-api/src/device_claim.rs", 1), // T-088：设备声明被忽略（tenant_audit_log）
     // T-088 新增：设备绑定审计（devenv 域）
     ("crates/pm-application/src/devenv/binding.rs", 1),
     // Team LLM Provider 管理面（0041）：created/updated/rotated/tested/enabled/disabled/archived/deleted 共用本 helper
@@ -59,6 +59,9 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     // KP-3 KB 三层最小面（0065）：来源登记/关联、记忆提案、K4 审核（批准/驳回/退回）共用本
     // helper（REST 面真人或 Key 调用方，四身份列全写；source_kind='kb_service'）
     ("crates/pm-application/src/kb_service/mod.rs", 1),
+    // KP-2 / PC-01C 确认闭环（pc/proposal.rs）：pc_proposal.create/submit/withdraw/approve/reject
+    // 共用本 helper（审批=真人四列；分析起草=系统面 dispatch principal，三身份列 NULL 显式写）
+    ("crates/pm-application/src/pc/proposal.rs", 1),
 ];
 
 fn workspace_root() -> PathBuf {
