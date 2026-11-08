@@ -28,6 +28,8 @@ const POLL_INTERVAL_MS: u64 = 60;
 /// 第七条循环（Batch G 会话回复）的轮询间隔。LLM 回复以秒计，1s 足够
 /// （与主循环 60ms 的「事件驱动」节奏不同：这里慢轮询是对的）。
 const CONVERSATION_REPLY_POLL_MS: u64 = 1000;
+/// 第八条循环（DK-B 访谈编排）的轮询间隔，同上：LLM 调用以秒计。
+const DISCOVERY_ORCHESTRATOR_POLL_MS: u64 = 1000;
 /// Default on-disk policy — the red-line single source of truth
 /// (global constraint: `policies/ai-pm-ai-lead-v2.yaml`). Relative to the
 /// working directory the worker is started from (repo root in dev).
@@ -304,12 +306,64 @@ async fn main() {
         }
     });
 
+    // 第八条循环：访谈编排（DK-B）。开关 off 时 spawn 立即返回。
+    spawn_discovery_orchestrator(pool.clone());
+
     loop {
         match job_queue::claim(&pool, "ai_analysis", &worker_id, LEASE_SECS).await {
             Some(job) => handle_job(&orchestrator, &job).await,
             None => tokio::time::sleep(std::time::Duration::from_millis(POLL_INTERVAL_MS)).await,
         }
     }
+}
+
+/// 第八条循环：访谈编排（DK-B / D-DK-9）。
+///
+/// 与第七循环同款形态：本函数只管 spawn + 节奏，扫描谓词/提示词预算/
+/// 输出校验/三条件/降级纪律都在 `pm_ai::discovery_orchestrator`。
+/// 开关 `AI_PM_DISCOVERY_ORCHESTRATOR=off|on`，**默认 off**——新的计费型
+/// 生产者不得在升级后静默启动。
+fn spawn_discovery_orchestrator(pool: PgPool) {
+    tokio::spawn(async move {
+        let mode = pm_ai::discovery_orchestrator::DiscoveryOrchestratorMode::from_env();
+        tracing::info!(
+            ?mode,
+            "discovery orchestrator loop (AI_PM_DISCOVERY_ORCHESTRATOR=off|on, default off)"
+        );
+        if !mode.enabled() {
+            return;
+        }
+        let mut worker = pm_ai::discovery_orchestrator::DiscoveryOrchestratorWorker::new(pool);
+        loop {
+            match worker.orchestrate_round().await {
+                Ok(report) if report.has_activity() => {
+                    tracing::info!(
+                        processed = report.processed,
+                        applied = report.applied,
+                        findings_added = report.findings_added,
+                        questions_added = report.questions_added,
+                        answers_consumed = report.answers_consumed,
+                        to_review_required = report.to_review_required,
+                        to_needs_user_input = report.to_needs_user_input,
+                        skipped_no_provider = report.skipped_no_provider,
+                        invalid_rounds = report.invalid_rounds,
+                        stale_rounds = report.stale_rounds,
+                        failed = report.failed,
+                        overreach_total = report.overreach_total,
+                        "discovery orchestration round"
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!(error = %e, "discovery orchestration round failed; backing off")
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(
+                DISCOVERY_ORCHESTRATOR_POLL_MS,
+            ))
+            .await;
+        }
+    });
 }
 
 async fn handle_repo_job(pool: &PgPool, job: &ClaimedJob) {
