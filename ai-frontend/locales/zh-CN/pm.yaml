@@ -303,6 +303,7 @@ requirementDetail:
   specOutcome: 预期结果
   specScope: 范围
   specExclusions: 明确排除
+  specEmptyNote: 结构化规格暂无承载（S02-I5 未实施）；需求正文见上方 Markdown 块。
   acceptTitle: 验收标准
   traceTitle: 追溯链
   traceExpand: 展开全部

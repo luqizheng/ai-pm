@@ -19,7 +19,7 @@ import type {
   RelatedItem,
   SourceItem
 } from "../../requirements/requirement-entry";
-import { currentRevision } from "../../requirements/fixtures";
+import { currentRevision } from "../../requirements/requirement-entry";
 
 /**
  * 追溯链卡（S02-UI-02 §3D + Deliverable 2 展开追溯视图）。

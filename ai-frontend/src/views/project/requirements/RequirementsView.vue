@@ -11,20 +11,23 @@ import { PageFrame } from "@/components/shell";
 import { useScopeStore } from "@/api/scope";
 import {
   confirmRevision,
-  createDraftRevision,
   createRequirement,
   getRequirement,
   listProjectRequirements,
   listRequirementSources,
   rejectRevision,
-  submitRevision,
   toEntryFromListItem,
   toRequirementEntry,
   toSourceItems,
-  updateDraftRevision,
-  type DraftRevisionInput,
   type RequirementCoreDetail
 } from "@/api/requirements";
+import {
+  draftAndSubmit,
+  latestRevision,
+  latestDraftRevision,
+  submitDraft,
+  upsertDraft
+} from "./requirement-commands";
 import type {
   RequirementCreatePayload,
   RequirementEntry
@@ -149,12 +152,6 @@ function currentRevisionVersion(entry: RequirementEntry): number {
   );
 }
 
-function latestRevisionOf(detail: RequirementCoreDetail) {
-  return detail.revisions.length > 0
-    ? detail.revisions.reduce((a, b) => (a.version > b.version ? a : b))
-    : undefined;
-}
-
 // ───────────────────────────────────────────────────────── 数据加载
 
 async function loadDetail(id: string) {
@@ -269,16 +266,10 @@ function saveEdit(payload: { markdown: string; summary: string }) {
     const detail = detailRaw.value;
     const entry = selectedEntry.value;
     if (!detail || !entry) return;
-    const body: DraftRevisionInput = {
+    await upsertDraft(entry.id, detail, {
       markdown: payload.markdown,
       summary: payload.summary || undefined
-    };
-    const latest = latestRevisionOf(detail);
-    if (latest && latest.state === "draft") {
-      await updateDraftRevision(entry.id, latest.id, body);
-    } else {
-      await createDraftRevision(entry.id, body);
-    }
+    });
     editing.value = false;
   });
 }
@@ -288,9 +279,8 @@ async function runPropose() {
   const detail = detailRaw.value;
   const entry = selectedEntry.value;
   if (!detail || !entry) return;
-  const latest = latestRevisionOf(detail);
-  if (latest && latest.state === "draft") {
-    await submitRevision(entry.id, latest.id);
+  if (latestDraftRevision(detail)) {
+    await submitDraft(entry.id, detail);
     return;
   }
   const markdown = entry.body_markdown ?? entry.description;
@@ -298,11 +288,10 @@ async function runPropose() {
     actionError.value = t("pm.requirements.proposeNoBody");
     return;
   }
-  const { revision } = await createDraftRevision(entry.id, {
+  await draftAndSubmit(entry.id, {
     markdown,
     summary: t("pm.requirements.proposeRevisionSummary")
   });
-  await submitRevision(entry.id, revision.id);
 }
 
 /** 正式确认：携带审批人核准哈希 + 行级 CAS 令牌（I1 §7，漂移 409）。 */
@@ -310,7 +299,7 @@ async function runConfirm() {
   const detail = detailRaw.value;
   const entry = selectedEntry.value;
   if (!detail || !entry || dialog.value !== "confirm") return;
-  const pending = latestRevisionOf(detail);
+  const pending = latestRevision(detail);
   if (!pending || pending.state !== "pending_confirmation") return;
   await confirmRevision(entry.id, pending.id, {
     expected_content_hash: pending.content_hash,
@@ -323,7 +312,7 @@ async function runReject() {
   const detail = detailRaw.value;
   const entry = selectedEntry.value;
   if (!detail || !entry || dialog.value !== "reject") return;
-  const pending = latestRevisionOf(detail);
+  const pending = latestRevision(detail);
   if (!pending || pending.state !== "pending_confirmation") return;
   await rejectRevision(entry.id, pending.id);
   dialog.value = null;

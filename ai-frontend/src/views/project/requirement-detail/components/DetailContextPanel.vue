@@ -19,7 +19,7 @@ import type {
   RelatedItem,
   SourceItem
 } from "../../requirements/requirement-entry";
-import { sortDiscussions } from "../../requirements/fixtures";
+import { sortDiscussions } from "../../requirements/requirement-entry";
 
 /**
  * 需求详情右栏上下文面板（S02-UI-02 §4）。
@@ -243,6 +243,22 @@ const revisionStateVariant = (state: string) =>
           <span class="reqd-context__revision-summary">{{
             revision.summary
           }}</span>
+          <span
+            v-if="revision.decision"
+            class="reqd-context__revision-decision"
+          >
+            {{
+              revision.decision.kind === "confirmed"
+                ? t("pm.requirementHistory.decisionConfirmed", {
+                    actor: revision.decision.actor,
+                    time: revision.decision.acted_at
+                  })
+                : t("pm.requirementHistory.decisionRejected", {
+                    actor: revision.decision.actor,
+                    time: revision.decision.acted_at
+                  })
+            }}
+          </span>
           <span class="reqd-context__revision-meta">
             {{ revision.author }} · {{ revision.created_at }}
           </span>
@@ -503,6 +519,12 @@ button.reqd-context__related:focus-visible {
   font-size: var(--font-size-micro);
   line-height: var(--line-height-micro);
   color: var(--text-secondary);
+}
+
+.reqd-context__revision-decision {
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-micro);
+  color: var(--text-primary);
 }
 
 .reqd-context__none {

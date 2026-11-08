@@ -1,81 +1,191 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 
 import ConfirmationDialog from "@/components/ui/confirmation-dialog/ConfirmationDialog.vue";
 import { mountShell } from "@/components/shell/test-utils";
 import { i18n } from "@/lib/i18n";
+import type {
+  RequirementCoreDetail,
+  RequirementCoreEntry,
+  RequirementCoreSourceInput
+} from "@/api/requirements";
 
 import RequirementDetailView from "./RequirementDetailView.vue";
+import DetailContextPanel from "./components/DetailContextPanel.vue";
+
+// 接真批（2026-11-08）：只 mock IO，适配器/命令助手走真实实现。
+const getRequirement = vi.fn();
+const listRequirementSources = vi.fn();
+const createDraftRevision = vi.fn();
+const updateDraftRevision = vi.fn();
+const submitRevision = vi.fn();
+
+vi.mock("@/api/requirements", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/api/requirements")>();
+  return {
+    ...actual,
+    getRequirement: (...args: unknown[]) => getRequirement(...args),
+    listRequirementSources: (...args: unknown[]) =>
+      listRequirementSources(...args),
+    createDraftRevision: (...args: unknown[]) => createDraftRevision(...args),
+    updateDraftRevision: (...args: unknown[]) => updateDraftRevision(...args),
+    submitRevision: (...args: unknown[]) => submitRevision(...args)
+  };
+});
 
 const t = (key: string, params?: Record<string, unknown>) =>
   i18n.global.t(key, params ?? {}) as string;
 
-describe("RequirementDetailView", () => {
-  it("渲染需求详情：概览、规格、验收标准、追溯链与右栏四 Tab", async () => {
-    const mounted = mountShell(RequirementDetailView);
-    await mounted.router.push("/project/requirements/req-001");
-    await flushPromises();
+// 弹窗/抽屉经 Teleport 渲染进 document.body，用例间清场防 DOM 残留互染。
+afterEach(() => {
+  document.body.innerHTML = "";
+});
 
-    const text = mounted.wrapper.text();
+function row(over: Partial<RequirementCoreEntry>): RequirementCoreEntry {
+  return {
+    id: "req-1",
+    project_id: "prj-shield",
+    code: "REQ-001",
+    title: "User authentication",
+    requirement_type: "functional",
+    priority: "high",
+    lifecycle_status: "active",
+    created_at: "2026-11-07T10:00:00Z",
+    updated_at: "2026-11-08T09:00:00Z",
+    row_revision: 7,
+    current_revision_id: "rev-2",
+    current_version: 2,
+    current_content_hash: "hash-v2",
+    latest_revision_id: "rev-2",
+    latest_version: 2,
+    latest_state: "approved",
+    latest_submitted_at: "2026-11-08T08:00:00Z",
+    ...over
+  };
+}
 
-    // 面包屑与页头（S02-UI-02 §2）
-    expect(text).toContain(t("pm.projects.pageTitle"));
-    expect(text).toContain("REQ-001");
-    expect(text).toContain("User authentication");
-    // §3A 概览
-    expect(text).toContain(t("pm.requirementDetail.overviewTitle"));
-    expect(text).toContain(t("pm.requirementDetail.overviewCreated"));
-    // §3B 规格
-    expect(text).toContain(t("pm.requirementDetail.specRationale"));
-    expect(text).toContain(t("pm.requirementDetail.specExclusions"));
-    // §3C 验收标准
-    expect(text).toContain(t("pm.requirementDetail.acceptTitle"));
-    // §3D 追溯链三段
-    expect(text).toContain(t("pm.requirementDetail.traceUpstream"));
-    expect(text).toContain(t("pm.requirementDetail.traceRequirement"));
-    expect(text).toContain(t("pm.requirementDetail.traceDownstream"));
-    // §4 右栏四 Tab
-    expect(text).toContain(t("pm.requirementDetail.tabRelated"));
-    expect(text).toContain(t("pm.requirementDetail.tabHistory"));
+function revision(
+  id: string,
+  version: number,
+  state: RequirementCoreDetail["revisions"][number]["state"]
+): RequirementCoreDetail["revisions"][number] {
+  return {
+    id,
+    requirement_id: "req-1",
+    version,
+    state,
+    markdown: `# 登录\n正文 v${version}`,
+    summary: version === 1 ? "初始版本" : "补充锁定策略",
+    content_hash: `hash-${id}`,
+    markdown_version_ref: null,
+    base_current_revision_id: null,
+    base_row_revision: null,
+    submitted_at: null,
+    created_by: "prc-1",
+    created_by_name: "林悦",
+    approved_by: null,
+    approved_by_name: null,
+    created_at: "2026-11-07T10:00:00Z"
+  };
+}
+
+const detailApproved: RequirementCoreDetail = {
+  requirement: row({}),
+  revisions: [
+    revision("rev-1", 1, "superseded"),
+    revision("rev-2", 2, "approved")
+  ],
+  confirmations: [
+    {
+      id: "conf-1",
+      revision_id: "rev-2",
+      action: "confirm",
+      reason: null,
+      human_principal_id: "prc-2",
+      human_display_name: "审批人甲",
+      source: "rest",
+      content_hash: "hash-rev-2",
+      markdown_version_ref: null,
+      confirmed_at: "2026-11-08T09:00:00Z"
+    }
+  ]
+};
+
+function sourceItem(
+  over: Partial<RequirementCoreSourceInput>
+): RequirementCoreSourceInput {
+  return {
+    id: "src-1",
+    project_id: "prj-shield",
+    input_kind: "human_input",
+    title: "用户访谈纪要",
+    content: "用户希望支持邮箱登录",
+    source_ref: "MIN-004",
+    created_by: "prc-1",
+    created_at: "2026-11-07T09:00:00Z",
+    ...over
+  };
+}
+
+async function mountPage(id = "req-1") {
+  const mounted = mountShell(RequirementDetailView);
+  await mounted.router.push(`/project/requirements/${id}`);
+  await flushPromises();
+  return mounted;
+}
+
+describe("RequirementDetailView（接真）", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getRequirement.mockResolvedValue(detailApproved);
+    listRequirementSources.mockResolvedValue({ items: [sourceItem({})] });
+    createDraftRevision.mockResolvedValue({
+      revision: revision("rev-3", 3, "draft")
+    });
+    updateDraftRevision.mockResolvedValue({
+      revision: revision("rev-2", 2, "draft")
+    });
+    submitRevision.mockResolvedValue({
+      revision: revision("rev-3", 3, "pending_confirmation")
+    });
   });
 
-  it("追溯链默认收起（+N 计数），展开后显示全部来源", async () => {
-    const mounted = mountShell(RequirementDetailView);
-    await mounted.router.push("/project/requirements/req-001");
-    await flushPromises();
+  it("渲染真实详情：四卡 + 右栏 Tab + 来源（human_input→用户请求）+ 确认决策", async () => {
+    const { wrapper } = await mountPage();
 
-    // 收起态：追溯链内 REQ-001 三条来源只显示前两条（右栏 Sources Tab 始终全量）
-    const chainBefore = mounted.wrapper.find(".reqd-trace__chain").text();
-    expect(chainBefore).not.toContain("MIN-1103-02");
-    expect(chainBefore).toContain("+1");
-    const expandButton = mounted.wrapper
-      .findAll("button")
-      .find(node =>
-        node.text().includes(t("pm.requirementDetail.traceExpand"))
-      );
-    await expandButton?.trigger("click");
-    await flushPromises();
+    const text = wrapper.text();
+    expect(text).toContain("REQ-001");
+    expect(text).toContain("User authentication");
+    // 正文块 = 当前正式版本 Markdown
+    expect(text).toContain("正文 v2");
+    // 追溯链来源（真实 REST，S02-I3）
+    expect(text).toContain("用户访谈纪要");
+    // 右栏四 Tab 在场
+    expect(text).toContain(t("pm.requirementDetail.tabRelated"));
+    expect(text).toContain(t("pm.requirementDetail.tabHistory"));
 
-    // 展开态（Deliverable 2）：追溯链内全部来源可见
-    expect(mounted.wrapper.find(".reqd-trace__chain").text()).toContain(
-      "MIN-1103-02"
-    );
-    expect(mounted.wrapper.text()).toContain(
-      t("pm.requirementDetail.traceCollapse")
-    );
+    // 切到 History Tab（reka Tabs 在 happy-dom 不响应原生 click，走组件事件）
+    // 修订链确认决策已映射 → 关联决策「审批人甲」
+    const panel = wrapper.findComponent(DetailContextPanel);
+    expect(panel.exists()).toBe(true);
+    panel.vm.$emit("update:activeTab", "history");
+    await flushPromises();
+    expect(wrapper.text()).toContain("审批人甲");
   });
 
   it("点击来源打开来源检查抽屉，标注来源不是正式需求", async () => {
-    const mounted = mountShell(RequirementDetailView);
-    await mounted.router.push("/project/requirements/req-001");
+    const { wrapper } = await mountPage();
+
+    // 追溯链（或右栏面板）的来源条目点击 → 来源检查抽屉
+    const chainSource = wrapper.find(".reqd-trace__item--source");
+    const target = chainSource.exists()
+      ? chainSource
+      : wrapper.findAll(".reqd-trace__item").at(0);
+    if (target && target.exists()) await target.trigger("click");
     await flushPromises();
 
-    const sourceItem = mounted.wrapper.find(".reqd-trace__item--source");
-    await sourceItem.trigger("click");
-    await flushPromises();
-
-    // Sheet 走 Teleport，从 document 断言（Deliverable 3 来源检查态）
+    // Sheet 走 Teleport，从 document 断言（来源检查态）
     expect(document.body.textContent).toContain(
       t("pm.requirementDetail.sourceSheetTitle")
     );
@@ -84,45 +194,91 @@ describe("RequirementDetailView", () => {
     );
   });
 
-  it("关联需求可导航：REQ-004 追溯链点击 REQ-002 跳转其详情页", async () => {
-    const mounted = mountShell(RequirementDetailView);
-    await mounted.router.push("/project/requirements/req-004");
-    await flushPromises();
-    expect(mounted.wrapper.text()).toContain("API response consistency");
+  it("编辑保存：已定稿（无 draft）时起草新修订而非覆盖", async () => {
+    const { wrapper } = await mountPage();
 
-    const navigable = mounted.wrapper.find(".reqd-trace__item--navigable");
-    await navigable.trigger("click");
+    const editButton = wrapper
+      .findAll("button")
+      .find(node => node.text().includes(t("pm.requirements.actionEdit")));
+    await editButton?.trigger("click");
     await flushPromises();
 
-    expect(mounted.router.currentRoute.value.path).toBe(
-      "/project/requirements/req-002"
+    // EditSheet 抽屉渲染进 body：标题只读 + 正文预填当前正式版
+    expect(document.body.textContent).toContain(
+      t("pm.requirementDetail.editSheetTitle")
     );
-    expect(mounted.wrapper.text()).toContain("System response time");
+    const textarea = [...document.body.querySelectorAll("textarea")].find(
+      node => (node as HTMLTextAreaElement).value.includes("正文 v2")
+    );
+    expect(textarea).toBeDefined();
+    textarea.value = "# 登录\n改后的正文";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    await flushPromises();
+
+    const saveButton = [...document.body.querySelectorAll("button")].find(
+      node => node.textContent?.includes(t("pm.requirements.editSave"))
+    );
+    saveButton?.click();
+    await flushPromises();
+
+    expect(createDraftRevision).toHaveBeenCalledTimes(1);
+    expect(createDraftRevision).toHaveBeenCalledWith(
+      "req-1",
+      expect.objectContaining({ markdown: "# 登录\n改后的正文" })
+    );
+    expect(updateDraftRevision).not.toHaveBeenCalled();
   });
 
-  it("提案经显式确认弹窗后进入待确认状态，修订新增", async () => {
-    const mounted = mountShell(RequirementDetailView);
-    await mounted.router.push("/project/requirements/req-003");
-    await flushPromises();
-    expect(mounted.wrapper.text()).toContain(t("pm.requirements.statusDraft"));
+  it("提交确认：存在 draft 修订时经弹窗直接 submit 该修订", async () => {
+    getRequirement.mockResolvedValue({
+      requirement: row({
+        current_revision_id: null,
+        current_version: null,
+        current_content_hash: null,
+        latest_revision_id: "rev-1",
+        latest_version: 1,
+        latest_state: "draft"
+      }),
+      revisions: [revision("rev-1", 1, "draft")],
+      confirmations: []
+    });
+    const { wrapper } = await mountPage();
 
-    const proposeButton = mounted.wrapper
+    const proposeButton = wrapper
       .findAll("button")
       .find(node => node.text().includes(t("pm.requirements.actionPropose")));
     await proposeButton?.trigger("click");
     await flushPromises();
 
-    // 弹窗描述（Teleport 内容），未确认前状态不变
     expect(document.body.textContent).toContain(
-      t("pm.requirements.proposeDialogDesc", { code: "REQ-003" })
+      t("pm.requirements.proposeDialogTitle")
     );
-    expect(mounted.wrapper.text()).toContain(t("pm.requirements.statusDraft"));
+    // 未确认前不提交
+    expect(submitRevision).not.toHaveBeenCalled();
 
-    mounted.wrapper.findComponent(ConfirmationDialog).vm.$emit("confirm");
+    const dialog = wrapper.findComponent(ConfirmationDialog);
+    expect(dialog.exists()).toBe(true);
+    dialog.vm.$emit("confirm");
     await flushPromises();
 
-    expect(mounted.wrapper.text()).toContain(
-      t("pm.requirements.statusPending")
-    );
+    expect(submitRevision).toHaveBeenCalledTimes(1);
+    expect(submitRevision).toHaveBeenCalledWith("req-1", "rev-1");
+  });
+
+  it("404 渲染未找到态并可返回列表", async () => {
+    getRequirement.mockRejectedValue(new Error("404: requirement not found"));
+    const { wrapper } = await mountPage("req-missing");
+
+    expect(wrapper.text()).toContain(t("pm.requirementDetail.notFoundTitle"));
+    expect(wrapper.text()).toContain(t("pm.requirementDetail.backToList"));
+  });
+
+  it("加载失败显示错误态与重试入口", async () => {
+    getRequirement.mockRejectedValue(new Error("network down"));
+    const { wrapper } = await mountPage();
+
+    expect(wrapper.text()).toContain(t("pm.requirements.loadError"));
+    expect(wrapper.text()).toContain("network down");
+    expect(wrapper.text()).toContain(t("pm.requirements.loadRetry"));
   });
 });

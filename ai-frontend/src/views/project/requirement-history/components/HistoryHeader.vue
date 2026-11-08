@@ -7,7 +7,7 @@ import Button from "@/components/ui/button/Button.vue";
 import StatusIndicator from "@/components/ui/status-indicator/StatusIndicator.vue";
 import type { StatusIndicatorTone } from "@/components/ui/status-indicator/status-indicator";
 import type { RequirementEntry } from "../../requirements/requirement-entry";
-import { currentRevision } from "../../requirements/fixtures";
+import { currentRevision } from "../../requirements/requirement-entry";
 
 /**
  * 修订历史页头（S02-UI-05 §2）。

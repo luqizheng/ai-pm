@@ -1,23 +1,19 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from "vue";
+import { reactive, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Button from "@/components/ui/button/Button.vue";
 import Input from "@/components/ui/input/Input.vue";
-import Select from "@/components/ui/select/Select.vue";
 import Sheet from "@/components/ui/sheet/Sheet.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
-import type {
-  RequirementEntry,
-  RequirementPriority,
-  RequirementType
-} from "../../requirements/requirement-entry";
+import type { RequirementEntry } from "../../requirements/requirement-entry";
 
 /**
- * 需求编辑抽屉（S02-UI-02 §5 Edit requirement）。
+ * 需求编辑抽屉（S02-UI-02 §5 Edit requirement，2026-11-08 接真语义）。
  *
- * 覆盖基本信息（标题/描述/类型/优先级/验收标准）与需求规格四节
- * （业务理由 / 预期结果 / 范围 / 明确排除）。保存由页根落地：
- * 仅生成新的 draft 修订，不改需求状态——确认仍走显式确认流程。
+ * 后端契约（S02-I1）：仅支持正文修订——title/type/priority 创建后不可改，
+ * 规格/验收标准（S02-I5/AI 编排）无后端承载 → 相关字段不展示伪输入。
+ * 保存由页根落地：最新 draft 则更新之，否则起草新修订——确认仍走显式
+ * 提交+确认流程，本抽屉绝不改需求状态。
  */
 interface Props {
   open: boolean;
@@ -27,85 +23,31 @@ interface Props {
 const props = defineProps<Props>();
 const emit = defineEmits<{
   (e: "update:open", value: boolean): void;
-  (
-    e: "save",
-    payload: {
-      title: string;
-      description: string;
-      type: RequirementType;
-      priority: RequirementPriority;
-      criteria: string[];
-      specification: {
-        business_rationale: string;
-        expected_outcome: string;
-        scope: string;
-        explicit_exclusions: string;
-      };
-    }
-  ): void;
+  (e: "save", payload: { markdown: string; summary: string }): void;
 }>();
 
 const { t } = useI18n();
 
 const form = reactive({
-  title: "",
-  description: "",
-  type: "functional" as RequirementType,
-  priority: "medium" as RequirementPriority,
-  criteriaText: "",
-  rationale: "",
-  outcome: "",
-  scope: "",
-  exclusions: ""
+  summary: "",
+  markdown: ""
 });
 
 watch(
   () => [props.open, props.entry?.id] as const,
   ([open]) => {
     if (!open || !props.entry) return;
-    form.title = props.entry.title;
-    form.description = props.entry.description;
-    form.type = props.entry.type;
-    form.priority = props.entry.priority;
-    form.criteriaText = props.entry.acceptance_criteria
-      .map(item => item.statement)
-      .join("\n");
-    form.rationale = props.entry.specification.business_rationale;
-    form.outcome = props.entry.specification.expected_outcome;
-    form.scope = props.entry.specification.scope;
-    form.exclusions = props.entry.specification.explicit_exclusions;
+    form.summary = "";
+    form.markdown = props.entry.body_markdown ?? props.entry.description;
   },
   { immediate: true }
 );
 
-const typeOptions = computed(() => [
-  { value: "functional", label: t("pm.requirements.typeFunctional") },
-  { value: "non_functional", label: t("pm.requirements.typeNonFunctional") }
-]);
-
-const priorityOptions = computed(() => [
-  { value: "high", label: t("pm.requirements.priorityHigh") },
-  { value: "medium", label: t("pm.requirements.priorityMedium") },
-  { value: "low", label: t("pm.requirements.priorityLow") }
-]);
-
 function onSave() {
   if (!props.entry) return;
   emit("save", {
-    title: form.title.trim() || props.entry.title,
-    description: form.description.trim(),
-    type: form.type,
-    priority: form.priority,
-    criteria: form.criteriaText
-      .split("\n")
-      .map(line => line.trim())
-      .filter(Boolean),
-    specification: {
-      business_rationale: form.rationale.trim(),
-      expected_outcome: form.outcome.trim(),
-      scope: form.scope.trim(),
-      explicit_exclusions: form.exclusions.trim()
-    }
+    markdown: form.markdown.trim(),
+    summary: form.summary.trim()
   });
 }
 </script>
@@ -127,70 +69,32 @@ function onSave() {
           <span class="reqd-edit__label">{{
             t("pm.requirements.editTitleField")
           }}</span>
-          <Input v-model="form.title" size="sm" required />
-        </label>
-        <div class="reqd-edit__row">
-          <label class="reqd-edit__field">
-            <span class="reqd-edit__label">{{
-              t("pm.requirements.detailType")
-            }}</span>
-            <Select v-model="form.type" :options="typeOptions" size="sm" />
-          </label>
-          <label class="reqd-edit__field">
-            <span class="reqd-edit__label">{{
-              t("pm.requirements.detailPriority")
-            }}</span>
-            <Select
-              v-model="form.priority"
-              :options="priorityOptions"
-              size="sm"
-            />
-          </label>
-        </div>
-        <label class="reqd-edit__field">
-          <span class="reqd-edit__label">{{
-            t("pm.requirements.editDescription")
-          }}</span>
-          <Textarea v-model="form.description" size="sm" :rows="3" />
-        </label>
-        <label class="reqd-edit__field">
-          <span class="reqd-edit__label">{{
-            t("pm.requirements.editCriteria")
-          }}</span>
-          <Textarea v-model="form.criteriaText" size="sm" :rows="4" />
+          <Input :model-value="props.entry.title" size="sm" disabled />
           <span class="reqd-edit__hint">{{
-            t("pm.requirements.editCriteriaHint")
+            t("pm.requirements.editImmutableHint")
           }}</span>
         </label>
       </fieldset>
 
       <fieldset class="reqd-edit__group">
         <legend class="reqd-edit__group-title">
-          {{ t("pm.requirementDetail.specTitle") }}
+          {{ t("pm.requirements.editBody") }}
         </legend>
         <label class="reqd-edit__field">
           <span class="reqd-edit__label">{{
-            t("pm.requirementDetail.specRationale")
+            t("pm.requirements.editSummary")
           }}</span>
-          <Textarea v-model="form.rationale" size="sm" :rows="2" />
+          <Input
+            v-model="form.summary"
+            size="sm"
+            :placeholder="t('pm.requirements.editSummaryPlaceholder')"
+          />
         </label>
         <label class="reqd-edit__field">
-          <span class="reqd-edit__label">{{
-            t("pm.requirementDetail.specOutcome")
+          <Textarea v-model="form.markdown" size="sm" :rows="14" required />
+          <span class="reqd-edit__hint">{{
+            t("pm.requirements.editBodyHint")
           }}</span>
-          <Textarea v-model="form.outcome" size="sm" :rows="2" />
-        </label>
-        <label class="reqd-edit__field">
-          <span class="reqd-edit__label">{{
-            t("pm.requirementDetail.specScope")
-          }}</span>
-          <Textarea v-model="form.scope" size="sm" :rows="2" />
-        </label>
-        <label class="reqd-edit__field">
-          <span class="reqd-edit__label">{{
-            t("pm.requirementDetail.specExclusions")
-          }}</span>
-          <Textarea v-model="form.exclusions" size="sm" :rows="2" />
         </label>
       </fieldset>
 
@@ -199,7 +103,13 @@ function onSave() {
       </p>
 
       <div class="reqd-edit__footer">
-        <Button variant="primary" size="sm" type="submit">
+        <Button
+          variant="primary"
+          size="sm"
+          type="button"
+          :disabled="form.markdown.trim().length === 0"
+          @click="onSave"
+        >
           {{ t("pm.requirements.editSave") }}
         </Button>
         <Button
@@ -244,12 +154,6 @@ function onSave() {
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
-}
-
-.reqd-edit__row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
 }
 
 .reqd-edit__label {

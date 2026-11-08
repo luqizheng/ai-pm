@@ -303,6 +303,7 @@ requirementDetail:
   specOutcome: Expected outcome
   specScope: Scope
   specExclusions: Explicit exclusions
+  specEmptyNote: No structured specification yet (S02-I5 not implemented); see the Markdown body above.
   acceptTitle: Acceptance Criteria
   traceTitle: Traceability
   traceExpand: Expand all

@@ -6,18 +6,25 @@ import type { Component } from "vue";
 import type { RequirementSpecification } from "../../requirements/requirement-entry";
 
 /**
- * 需求规格卡（S02-UI-02 §3B）。
+ * 需求规格卡（S02-UI-02 §3B，2026-11-08 接真语义）。
  *
- * 详细描述之外的结构化规格：业务理由 / 预期结果 / 范围 / 明确排除。
- * 明确排除用独立图标与虚线边框呈现，避免与范围混淆。
+ * 正文（Markdown 权威正文的快照展示）+ 结构化规格：业务理由 / 预期结果 /
+ * 范围 / 明确排除。真实数据无规格承载（S02-I5 未实施）→ 四节整体空缺时
+ * 诚实呈现占位说明，不渲染空壳。
  */
 interface Props {
   specification: RequirementSpecification;
   description: string;
+  /** 正文 Markdown（真实数据 = 当前正式版本正文；mock/未加载缺省） */
+  bodyMarkdown?: string;
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 const { t } = useI18n();
+
+const hasSpecification = computed(() =>
+  Object.values(props.specification).some(value => value.trim().length > 0)
+);
 
 const sections = computed<
   Array<{ key: keyof RequirementSpecification; title: string; icon: Component }>
@@ -44,8 +51,9 @@ const sections = computed<
 <template>
   <section class="reqd-card" :aria-label="t('pm.requirementDetail.specTitle')">
     <h3 class="reqd-card__title">{{ t("pm.requirementDetail.specTitle") }}</h3>
-    <p class="reqd-spec__desc">{{ description }}</p>
-    <div class="reqd-spec__grid">
+    <p v-if="description" class="reqd-spec__desc">{{ description }}</p>
+    <pre v-if="bodyMarkdown" class="reqd-spec__body">{{ bodyMarkdown }}</pre>
+    <div v-if="hasSpecification" class="reqd-spec__grid">
       <div
         v-for="section in sections"
         :key="section.key"
@@ -65,6 +73,9 @@ const sections = computed<
         <p class="reqd-spec__section-body">{{ specification[section.key] }}</p>
       </div>
     </div>
+    <p v-else class="reqd-spec__empty">
+      {{ t("pm.requirementDetail.specEmptyNote") }}
+    </p>
   </section>
 </template>
 
@@ -95,6 +106,29 @@ const sections = computed<
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
   color: var(--text-primary);
+}
+
+.reqd-spec__body {
+  margin: 0;
+  padding: var(--space-3);
+  border: var(--border-1) solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-base);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 24rem;
+  overflow: auto;
+}
+
+.reqd-spec__empty {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  color: var(--text-disabled);
 }
 
 .reqd-spec__grid {

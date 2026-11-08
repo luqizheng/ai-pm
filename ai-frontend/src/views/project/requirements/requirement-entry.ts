@@ -223,6 +223,13 @@ export interface RequirementCreatePayload {
 
 // ───────────────────────────────────────── 展示排序（原 fixtures 助手迁入）
 
+/** 最新修订（version 最高；mock/真实数据通用）。 */
+export function currentRevision(
+  entry: RequirementEntry
+): RevisionRecord | undefined {
+  return [...entry.revisions].sort((a, b) => b.version - a.version)[0];
+}
+
 /** 讨论排序：新 → 旧 */
 export function sortDiscussions(entries: DiscussionEntry[]): DiscussionEntry[] {
   return [...entries].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
