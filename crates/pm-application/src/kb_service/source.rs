@@ -1,6 +1,6 @@
 //! Original Sources（KB 第一层）：团队级来源池登记、项目关联与只读查询（K5）。
 //!
-//! 规则（定义稿 §5.1 / §6；迁移 0064）：
+//! 规则（定义稿 §5.1 / §6；迁移 0065）：
 //! - 原始资料**不可改写**：`kb.source` 行由触发器拒绝 UPDATE/DELETE；
 //! - **统一身份**：同团队同 `content_hash` 只有一个来源（二次登记 = 追加项目关联，
 //!   `deduplicated=true`）；
@@ -17,7 +17,7 @@ use uuid::Uuid;
 use super::{audit, check_len, ensure_project_writable, KbServiceError, TYPE_SOURCE};
 use crate::actor::AuditActor;
 
-/// 来源类别（与 0064 `kb.source.source_kind` CHECK 同集）。
+/// 来源类别（与 0065 `kb.source.source_kind` CHECK 同集）。
 pub const SOURCE_KINDS: &[&str] = &[
     "markdown",
     "docx",

@@ -202,7 +202,7 @@ pub async fn resolve_refs(
                 (id.to_string(), None, Some(NO_REVISION_MECHANISM))
             }
             (RefRole::Evidence, "knowledge_base", TYPE_SOURCE) => {
-                // 原始资料不可改写（0064 触发器）：content_hash 已钉内容，无 Revision 机制。
+                // 原始资料不可改写（0065 触发器）：content_hash 已钉内容，无 Revision 机制。
                 let id = parse_uuid(&input.target_id, "source")?;
                 (id.to_string(), None, Some(NO_REVISION_MECHANISM))
             }

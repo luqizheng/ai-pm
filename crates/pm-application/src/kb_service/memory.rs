@@ -1,6 +1,6 @@
 //! Structured Memory / L1 Shallow Memory：提案（待审核区）→ 真人审核（K4）→ 不可变版本。
 //!
-//! 定义稿 §9.1/§9.2 的操作化（迁移 0064 库层兜底）：
+//! 定义稿 §9.1/§9.2 的操作化（迁移 0065 库层兜底）：
 //! - **任何内容变化**（新增 / 修改 / 撤回）都以 `PENDING_REVIEW` 修订进入待审核区；
 //!   提案人可以是真人或 AI（AI 提议），**审核人必须是真人**（AI 无确认权，403）；
 //! - 审核通过才产生版本：`version_no` 递增，新版本 `CURRENT`（撤回提案 → `WITHDRAWN`），
@@ -25,7 +25,7 @@ use super::{
 use crate::actor::AuditActor;
 use crate::outbox::{OutboxAppend, OutboxEvent, PgOutboxAppend};
 
-/// L1 记忆六类（定义稿 §5.3；与 0064 CHECK 同集）。
+/// L1 记忆六类（定义稿 §5.3；与 0065 CHECK 同集）。
 pub const MEMORY_TYPES: &[&str] = &[
     "discussion",
     "decision_background",

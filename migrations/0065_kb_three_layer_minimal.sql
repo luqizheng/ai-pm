@@ -1,4 +1,4 @@
--- 0064_kb_three_layer_minimal：KP-3 KB 三层最小面（V0.5 范围基线 V1.3 §3.3/§五 目标 4）。
+-- 0065_kb_three_layer_minimal：KP-3 KB 三层最小面（V0.5 范围基线 V1.3 §3.3/§五 目标 4）。
 -- 设计依据：
 --   * docs/product-cognition-knowledge-base/product-cognition-knowledge-base-definition-architecture-v1.md
 --     §5（三层资料模型 + Discussion Memory L1/L2）/ §6（Team Source Pool，一源多项目）/
@@ -7,9 +7,8 @@
 --     §7.1（kb.source / kb.memory / kb.memory_revision 目标表，KB 唯一写入方）/ §7.3（四元组
 --     引用本体）/ §12.2 K4（CAS 审核转达）K5（来源只读查询）/ §13.3 kb.memory.approved。
 --
--- 编号注：台账纪律①——docs/ai-pm-migration-ledger.md 已登记最大号 0054、migrations/ 实况
--- 最大号 0062；0063 已由 D-2=c Runner 可用性批在 master 实施基线公开记账（91fe74e，
--- `0063_runner_availability.sql` 实施中）→ 本批顺移取 0064（同日 KP-1 并行，后落地者顺移）。
+-- 编号注：台账纪律①——0063 已由 D-2=c 批公开记账（91fe74e）、0064 已由 KP-1 PC-01B 正式
+-- 模型批占用（5ecb0e3 合入 master，`0064_pc_formal_model.sql`）→ 本批再顺移取 0065。
 --
 -- 三层落点：
 --   * Original Sources   = kb.source（团队级统一身份，内容不可改写）+ kb.source_project

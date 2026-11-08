@@ -56,7 +56,7 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     // Client Registry（0049，跨批补登记）：设备凭据 issue/revoke/permissions 审计（tenant_audit_log，
     // 设备无 project 归属；checkpoint-1 会话全量门禁发现漏登记——0049 批实施遗漏）
     ("crates/pm-application/src/device_credential.rs", 1),
-    // KP-3 KB 三层最小面（0064）：来源登记/关联、记忆提案、K4 审核（批准/驳回/退回）共用本
+    // KP-3 KB 三层最小面（0065）：来源登记/关联、记忆提案、K4 审核（批准/驳回/退回）共用本
     // helper（REST 面真人或 Key 调用方，四身份列全写；source_kind='kb_service'）
     ("crates/pm-application/src/kb_service/mod.rs", 1),
 ];

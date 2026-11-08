@@ -1,6 +1,6 @@
 //! KB-Service 领域本体（KP-3：KB 三层最小面）。
 //!
-//! 三层落点（迁移 0064；定义稿 §5 / 架构稿 V1.1 §7.1）：
+//! 三层落点（迁移 0065；定义稿 §5 / 架构稿 V1.1 §7.1）：
 //! - **Original Sources**（[`source`]）：团队级来源池 `kb.source`（内容不可改写，同内容
 //!   同身份）+ 项目关联 `kb.source_project`（一源多项目，访问权继承自关联项目成员关系）。
 //! - **Extracted Content**：既有 `kb.document*`（0053 digest 半层，本模块不碰）。

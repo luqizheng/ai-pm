@@ -5,14 +5,14 @@
 | 日期 | 2026-11-08 |
 | 批次 | V0.5 第四批收纳 · KP-3（范围基线 V1.3 §3.3/§五，WP-7 目标 4 主交付物） |
 | 分支 | `feat/kp3-kb-minimal-surface`（基 master `be21542`；迁移→契约差异→端口→REST+注入→测试 五段提交） |
-| 专用测试库 | Docker `aipm-kp3-pg`(16463) 干净库全量迁移 0001~0064；并行会话（KP-1 / D-2=c / S02-I5-UI / ai-frontend）零干扰（全程 pathspec commit，未触碰 pc.* 与 `kb_pc_analysis.rs`） |
+| 专用测试库 | Docker `aipm-kp3-pg`(16463) 干净库全量迁移 0001~0065（0065=本批，0064 归 KP-1）；并行会话（KP-1 / D-2=c / S02-I5-UI / ai-frontend）零干扰（全程 pathspec commit，未触碰 pc.* 与 `kb_pc_analysis.rs`） |
 | 范围红线 | 未动 PC 17 表模型与分析写入面（KP-1 并行）；K1/K3/K6 与 P 系端点仍 501；知识检索全量面、S01-08 同步后置 V0.6 |
 
 ## 一、交付物与提交清单
 
 | Commit | 内容 |
 | --- | --- |
-| `9e67a0e` | 迁移 **0064**：kb.source / kb.source_project（Original Sources，团队池统一身份 + 一源多项目）+ kb.memory / kb.memory_revision / kb.memory_ref（L1 Structured Memory 审核门 + 四元组引用）；编号注：0063 已由 D-2=c 批在 master 公开记账（91fe74e）→ 本批顺移 |
+| `9e67a0e` | 迁移 **0065**（初号 0064，合入前因 KP-1 占 0064 顺移）：kb.source / kb.source_project（Original Sources，团队池统一身份 + 一源多项目）+ kb.memory / kb.memory_revision / kb.memory_ref（L1 Structured Memory 审核门 + 四元组引用）；编号注：0063 已由 D-2=c 批在 master 公开记账（91fe74e）→ 本批顺移 |
 | `8271cda` | 契约差异说明 V1.0（D-KP3-1~8，先于端口改动落库；**端口方法签名零变更**） |
 | `fca4f2f` | `pm_application::kb_service`（source/memory/retrieval/port）+ `PortError::Conflict/Internal` 补齐（D-KP3-1，对齐 V1.0 §12.1 错误码表）+ `KbServiceLive` 落真 K4/K5 |
 | `d5de5a7` | REST：K4/K5 替换 `skeleton_501`（保持 require_project_visible 与「未接线≠404」先例）+ `kb_memory_api.rs` 管理面（D-KP3-5）+ `RunContract.discussion_memory` 注入（用户裁决 B，`AI_PM_DISCUSSION_MEMORY_INJECTION` 默认 off） |
@@ -20,7 +20,7 @@
 | `eda2780` | clippy 清偿：kb_service::audit 8→7 参 + 类型别名 ×2 + master 存量 needless_borrow（ai_team_policies.rs:197） |
 | `4f9d946` | 注入测试 clippy 清偿（失用助手移除 + 借引用比较） |
 | `48fc816` | vendored digua-common-consul 钉 no_proxy（环境缺陷修复，D-KP3-9 / §九.2） |
-| （本批） | 文档：迁移台账回填 0055~0064（含历史漏登补记）+ D2 §4.2 `discussion_memory[]` 映射行 + 本记录 |
+| （本批） | 文档：迁移台账回填 0055~0065（含历史漏登补记；0064 行归 KP-1 PC-01B）+ D2 §4.2 `discussion_memory[]` 映射行 + 本记录 |
 
 ## 二、三层落点与目标 4 四职责对照（如实）
 
@@ -51,7 +51,7 @@
 
 | 门 | 结果 |
 | --- | --- |
-| 迁移 | 干净库 0001~0064 全量应用成功（aipm-kp3-pg 实跑；0064 中途两次结构性修订均重放验证） |
+| 迁移 | 干净库 0001~0064 全量应用成功 + 顺移 0065 后复放验证（aipm-kp3-pg 实跑；本迁移中途两次结构性修订均重放验证） |
 | 端口/应用 | `pm-application` kb_service 集成 11/11、注入 2/2、`audit_actor_coverage` 2/2、contracts 16/16 |
 | REST | `pm-api` kb_memory 契约 3/3（登记/审核生命周期/提案负向与撤回闭环） |
 | 全量回归 | 最终基线见 §五.1（无白名单外新增红） |
@@ -94,7 +94,7 @@
 2. 端口与所有权：`docs/architecture/knowledge-services/kb-pc-independent-services-architecture-v1.1.md` §7/§12/§13；`crates/kb-pc-contracts`。
 3. 本批差异：`docs/architecture/knowledge-services/kp3-kb-minimal-surface-contract-deviations-v1.md`（D-KP3-1~8，含注入裁决记录）。
 4. 范围：`docs/project-ai-team-v2/ai-pm-v05-mvp-scope-baseline-v1.md` §3.3/§五/§九。
-5. 表结构：迁移 0048 / 0053 / 0060 / **0064**。
+5. 表结构：迁移 0048 / 0053 / 0060 / 0064（KP-1）/ **0065**（本批）。
 
 ---
 
@@ -102,7 +102,7 @@
 
 两起与代码无关的环境事故在门禁轮被捕获，均按既有配方恢复：
 
-1. **Docker Desktop 重启杀容器**（KP-1 记忆「容器自灭假红」同类）：专用测试库 `aipm-kp3-pg`(16463) 随宿主 Docker 重启消失（匿名卷+无重启策略）→ 回归中途挂死/假红。处置：重建容器（命名卷 `kp3-pgdata` + `--restart unless-stopped`）→ 干净库重放 0001~0064（63 文件，0029 历史空号）→ 门禁重跑。
+1. **Docker Desktop 重启杀容器**（KP-1 记忆「容器自灭假红」同类）：专用测试库 `aipm-kp3-pg`(16463) 随宿主 Docker 重启消失（匿名卷+无重启策略）→ 回归中途挂死/假红。处置：重建容器（命名卷 `kp3-pgdata` + `--restart unless-stopped`）→ 干净库重放 0001~0065（64 文件，0029 历史空号）→ 门禁重跑。
 2. **v2rayN 进程退出暴露系统代理劫持**：reqwest 0.12.28 Windows 系统代理探测读取注册表残留 `ProxyServer=127.0.0.1:10808`（`ProxyEnable=0` 仍生效）→ `vendor/digua-common-consul` 全部 wiremock 用例 10061 拒连（v2rayN 活着时放行故基线绿）。处置：vendored crate `make_client()` 与全部测试 client 钉 `no_proxy()`（`openai_adapter.rs:58` 同款先例；用户现场裁决「全链 127.0.0.1 直连，不用 localhost」——wiremock 0.6.5 本就绑 `127.0.0.1:0`，无 ::1 分歧）。10/10 三连绿，套件 6.3s→0.12s（commit `48fc816`，差异说明 D-KP3-9，**挂账反哺 lmms 上游**）。
 3. 顺带清偿 master 存量 clippy 漂移一处：`apps/pm-api/src/ai_team_policies.rs:197` needless_borrow（cfaa9c6 引入、clippy 1.99 新拦），随 `eda2780` 清偿。
 
