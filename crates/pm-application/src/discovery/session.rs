@@ -55,13 +55,26 @@ pub async fn create_session(
     kind: &str,
     created_by: Uuid,
 ) -> Result<DiscoverySessionView, DiscoveryError> {
+    let mut conn = pool.acquire().await?;
+    create_session_in(&mut conn, tenant_id, project_id, source, kind, created_by).await
+}
+
+/// [`create_session`] 的连接/事务内变体（DK-A 单向升级：建会话与线程链接同事务）。
+pub async fn create_session_in(
+    conn: &mut sqlx::PgConnection,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    source: &str,
+    kind: &str,
+    created_by: Uuid,
+) -> Result<DiscoverySessionView, DiscoveryError> {
     validate_one_of(source, &SESSION_SOURCES, "source")?;
     validate_one_of(kind, &SESSION_KINDS, "kind")?;
     let exists: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM core.project WHERE tenant_id = $1 AND id = $2")
             .bind(tenant_id)
             .bind(project_id)
-            .fetch_optional(pool)
+            .fetch_optional(&mut *conn)
             .await?;
     if exists.is_none() {
         return Err(DiscoveryError::ProjectNotFound);
@@ -76,7 +89,7 @@ pub async fn create_session(
     .bind(source)
     .bind(kind)
     .bind(created_by)
-    .fetch_one(pool)
+    .fetch_one(&mut *conn)
     .await?;
     Ok(to_session(row))
 }
@@ -86,13 +99,42 @@ pub async fn get_session(
     tenant_id: Uuid,
     session_id: Uuid,
 ) -> Result<DiscoverySessionView, DiscoveryError> {
+    let mut conn = pool.acquire().await?;
+    get_session_in(&mut conn, tenant_id, session_id).await
+}
+
+/// [`get_session`] 的连接/事务内变体。
+pub async fn get_session_in(
+    conn: &mut sqlx::PgConnection,
+    tenant_id: Uuid,
+    session_id: Uuid,
+) -> Result<DiscoverySessionView, DiscoveryError> {
     let row: Option<SessionRow> = sqlx::query_as(&format!(
         "SELECT {SESSION_COLS} FROM discovery.discovery_session \
          WHERE tenant_id = $1 AND id = $2"
     ))
     .bind(tenant_id)
     .bind(session_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *conn)
+    .await?;
+    row.map(to_session).ok_or(DiscoveryError::SessionNotFound)
+}
+
+/// 事务内对会话行取 `FOR UPDATE` 并返回当前视图——会话级追加互斥点（C7，与 DK-B
+/// `91024f1` 池版 `append_message` 同一把锁），调用 [`append_message_in_tx`] 之前取。
+/// 锁序：调用方若另持 `ai.conversation` 行锁，须先 conversation 后 session。
+pub async fn lock_session_in(
+    conn: &mut sqlx::PgConnection,
+    tenant_id: Uuid,
+    session_id: Uuid,
+) -> Result<DiscoverySessionView, DiscoveryError> {
+    let row: Option<SessionRow> = sqlx::query_as(&format!(
+        "SELECT {SESSION_COLS} FROM discovery.discovery_session \
+         WHERE tenant_id = $1 AND id = $2 FOR UPDATE"
+    ))
+    .bind(tenant_id)
+    .bind(session_id)
+    .fetch_optional(&mut *conn)
     .await?;
     row.map(to_session).ok_or(DiscoveryError::SessionNotFound)
 }
@@ -138,15 +180,28 @@ pub async fn transition_session(
     session_id: Uuid,
     target: &str,
 ) -> Result<DiscoverySessionView, DiscoveryError> {
-    validate_one_of(target, &SESSION_STATUSES, "status")?;
     let mut tx = pool.begin().await?;
+    let view = transition_session_in(&mut tx, tenant_id, session_id, target).await?;
+    tx.commit().await?;
+    Ok(view)
+}
+
+/// [`transition_session`] 的事务内变体（DK-A 撤销升级：置 PAUSED 与回退线程
+/// 链接同事务）。对会话行加 `FOR UPDATE`；提交由调用方负责。
+pub async fn transition_session_in(
+    conn: &mut sqlx::PgConnection,
+    tenant_id: Uuid,
+    session_id: Uuid,
+    target: &str,
+) -> Result<DiscoverySessionView, DiscoveryError> {
+    validate_one_of(target, &SESSION_STATUSES, "status")?;
     let current: Option<String> = sqlx::query_scalar(
         "SELECT status FROM discovery.discovery_session \
          WHERE tenant_id = $1 AND id = $2 FOR UPDATE",
     )
     .bind(tenant_id)
     .bind(session_id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut *conn)
     .await?;
     let Some(from) = current else {
         return Err(DiscoveryError::SessionNotFound);
@@ -164,9 +219,8 @@ pub async fn transition_session(
     .bind(tenant_id)
     .bind(session_id)
     .bind(target)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut *conn)
     .await?;
-    tx.commit().await?;
     Ok(to_session(row))
 }
 

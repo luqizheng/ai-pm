@@ -5,6 +5,7 @@ pub mod call_record;
 pub mod context;
 pub mod conversation_model;
 pub mod conversation_reply;
+pub mod conversation_router_model;
 pub mod fake_model;
 pub mod model;
 pub mod openai_adapter;
@@ -21,6 +22,7 @@ pub use conversation_model::{
     complete as complete_conversation, ConversationTurn, CONVERSATION_SYSTEM_PROMPT,
 };
 pub use conversation_reply::{ConversationReplyMode, ConversationReplyWorker, ReplyReport};
+pub use conversation_router_model::LlmIntentClassifier;
 pub use fake_model::FakeModel;
 pub use model::{AnalysisContext, AnalysisModel, ModelError};
 pub use openai_adapter::{OpenAiCompatibleModel, SYSTEM_PROMPT};

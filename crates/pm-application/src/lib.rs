@@ -15,6 +15,7 @@ pub mod comm_overview;
 pub mod command_center;
 pub mod command_executor;
 pub mod continuation;
+pub mod conversation_router;
 pub mod delivery;
 pub mod devenv;
 pub mod device_credential;
