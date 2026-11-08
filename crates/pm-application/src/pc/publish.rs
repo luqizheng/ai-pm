@@ -65,6 +65,15 @@ impl ProposalMemberPin {
 /// 前版本成员携带行（object/revision × 双维度的四元组投影）。
 type CarriedRow = (Option<Uuid>, Option<Uuid>, Option<Uuid>, Option<Uuid>);
 
+/// P5 原子确认（KP-2）：待决审批在发布事务内裁决——审批事实与正式版本同事务提交，
+/// 失败时不留下「已确认但未产生正式版本」（需求 §19.3）。L3 冻结与锚点校验在审批
+/// 落定前完成（§18.1 ⑥ 确认入口落点）。
+pub(super) struct InlineApproval {
+    pub reason: Option<String>,
+    /// 请求侧 CAS（调用方确认的提案基线）。
+    pub expected_version_no: i64,
+}
+
 /// 发布事务（01B §18.1 十四步语义；偏差：PCGIT 后置——write_operation 仅发布
 /// 幂等，无 Git 侧动作；⑫b 同事务 outbox，事件目录 has_handler 已翻真）。
 ///
@@ -78,6 +87,18 @@ pub async fn publish_version(
     project_id: Uuid,
     actor: &AuditActor,
     input: PublishVersionInput,
+) -> Result<PublishReceipt, PcError> {
+    publish_inner(pool, project_id, actor, input, None).await
+}
+
+/// 发布主体：`inline = None` 只消费 approved 提案（§18.1）；`Some` = P5 原子确认
+/// （submitted 提案 + pending 审批，校验通过后同事务落审批事实再发布）。
+pub(super) async fn publish_inner(
+    pool: &PgPool,
+    project_id: Uuid,
+    actor: &AuditActor,
+    input: PublishVersionInput,
+    inline: Option<InlineApproval>,
 ) -> Result<PublishReceipt, PcError> {
     let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
         .bind(project_id)
@@ -180,27 +201,40 @@ pub async fn publish_version(
     .await?
     .ok_or_else(|| PcError::NotFound("proposal not found".into()))?;
     let (proposal_status, expected_version_no, _gov_level, proposal_hash) = proposal;
-    if proposal_status != "approved" {
+    // 常规发布消费 approved 提案 + approved 审批；P5 原子确认消费 submitted + pending
+    let (required_status, approval_status) = match &inline {
+        None => ("approved", "approved"),
+        Some(_) => ("submitted", "pending"),
+    };
+    if proposal_status != required_status {
         return Err(PcError::Conflict(format!(
-            "proposal is `{proposal_status}`; publish requires `approved`"
+            "proposal is `{proposal_status}`; this step requires `{required_status}`"
         )));
+    }
+    if let Some(decision) = &inline {
+        if decision.expected_version_no != expected_version_no {
+            return Err(PcError::Conflict(format!(
+                "expected_version_no {} does not match the proposal baseline {expected_version_no}",
+                decision.expected_version_no
+            )));
+        }
     }
     let approval: Option<(Uuid, String, i64)> = sqlx::query_as(
         "SELECT id, proposal_content_hash, expected_version_no FROM pc.approval \
-          WHERE tenant_id = $1 AND project_id = $2 AND proposal_id = $3 AND status = 'approved' \
+          WHERE tenant_id = $1 AND project_id = $2 AND proposal_id = $3 AND status = $4 \
           FOR UPDATE",
     )
     .bind(tenant_id)
     .bind(project_id)
     .bind(input.proposal_id)
+    .bind(approval_status)
     .fetch_optional(&mut *tx)
     .await?;
     let Some((approval_id, approval_hash, approval_expected)) = approval else {
-        return Err(PcError::Conflict(
-            "no approved approval for proposal".into(),
-        ));
+        return Err(PcError::Conflict(format!(
+            "no {approval_status} approval for proposal"
+        )));
     };
-    let _ = approval_id;
 
     // 成员集装载（proposal_member 全量；②b 完整性断言）
     let member_rows: Vec<ProposalMemberPin> = sqlx::query_as(
@@ -330,6 +364,59 @@ pub async fn publish_version(
         return Err(PcError::Forbidden(
             "proposal targets are frozen by an unresolved conflict (L3)".into(),
         ));
+    }
+
+    // P5 原子确认：全部前置校验（锚点三方比对 / 请求与版本双 CAS / A3 / L3 冻结）
+    // 通过后落审批事实；此后任何失败整事务回滚——审批与版本同生共死（§19.3）。
+    if let Some(decision) = inline {
+        let reason = decision
+            .reason
+            .as_deref()
+            .map(str::trim)
+            .filter(|r| !r.is_empty())
+            .map(str::to_string);
+        let decided = sqlx::query(
+            "UPDATE pc.approval \
+                SET status = 'approved', decided_by = $2, decided_at = now(), decision_reason = $3 \
+              WHERE id = $1 AND status = 'pending'",
+        )
+        .bind(approval_id)
+        .bind(actor.principal_id)
+        .bind(&reason)
+        .execute(&mut *tx)
+        .await?;
+        let moved = sqlx::query(
+            "UPDATE pc.proposal SET status = 'approved', updated_at = now() \
+              WHERE tenant_id = $1 AND project_id = $2 AND id = $3 AND status = 'submitted'",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(input.proposal_id)
+        .execute(&mut *tx)
+        .await?;
+        if decided.rows_affected() != 1 || moved.rows_affected() != 1 {
+            return Err(PcError::Conflict(
+                "proposal was decided concurrently".into(),
+            ));
+        }
+        super::proposal::audit(
+            &mut tx,
+            tenant_id,
+            project_id,
+            actor,
+            "pc_proposal.approve",
+            input.proposal_id,
+            Some(json!({ "status": "submitted" })),
+            json!({
+                "status": "approved",
+                "approval_id": approval_id,
+                "proposal_content_hash": proposal_hash,
+                "expected_version_no": expected_version_no,
+                "reason": reason,
+                "published_in_same_transaction": true,
+            }),
+        )
+        .await?;
     }
 
     // ⑦ 成员集构建：前版本携带 − 废弃目标 − 被替换身份 + 提案目标 + 端点自动并入
