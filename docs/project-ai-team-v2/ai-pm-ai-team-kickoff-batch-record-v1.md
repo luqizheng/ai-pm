@@ -18,6 +18,10 @@
 | `b71946b` | feat(ai-team)：Batch E——V2.0-D Capability Registry V1 渐进（0061 能力表+派生播种+registry-first/legacy 回退+成员角色解耦）+ task 读面补 `ai_role_version_id` | 9 文件 758 行 |
 | `2329bba` | feat(ai-frontend)：会话三件套接真实后端——`/project/assistant` 会话页（首发自动建会话、诚实空态、失败重发）+ api 契约层 + TopBar 按钮点亮 + fixtures 解耦过 release-guard | 21 文件 897 行 |
 | `3af8b4f` | feat(ai-team)：Batch G——assistant 回复生产者链（worker 第七循环 + after/after_id 前向游标 + 前端增量轮询 + 真实 DeepSeek 集成测试 #[ignore] + 修复 Task17 lib.rs 声明缺失）**已 push** | 15 文件 2141 行 |
+| `5b212c6` | feat(ai-team)：Batch H 挂账清偿——usage/token 计量落列 + list_messages latest 最新窗口 + worker 开关冒烟 + runbook §7.1 启用清单 | 14 文件 688 行 |
+| `ee55329` | feat(ai-frontend)：UI-1——AI Team 设置五子路由骨架 + Roles 子页 + Model Policies 项目级页（U-2=A 第一步） | 12 文件 1897 行 |
+| `6bcf1bd` | feat(ai-team)：UI-2——Overview + Execution Monitor（U-1=A 零迁移聚合端点 ×2 + 前端两子页，U-2=A 第二步） | 13 文件 2400 行 |
+| `cfaa9c6` | feat(ai-team)：UI-3——Execution Policies 全栈（策略四层读面 + project/task 两层写面全落审计 + 前端分层子页；org/task_type 写入口待显式裁决）——**AI Team 五子页全落地，U-2=A 交付完毕** | 14 文件 2377 行 |
 
 **未 push**：本批 3 commits + 并行会话 Checkpoint-2 未 push 池（其 R4 真机未完，有意压池）；push 时机由用户定。
 
@@ -65,7 +69,7 @@
 | --- | --- | --- |
 | 1 | `ROLE_EXECUTOR_MAP` 过渡映射 + busy 口径（task.assignee_id 归因） | **已由 Batch E registry-first 接管**（0061）；legacy CTE 保留至 Phase 3 删除（revoked×legacy 交互语义见 Batch E 报告 §2） |
 | 2 | requirement_analyst 无执行体（P2-13） | Registry 手工/派生授权后解锁 |
-| 3 | 前端 ai-interaction 三件套接线 + AI Team UI | **三件套接线已完成（`2329bba`，/project/assistant）+ 回复通道已开通（`3af8b4f`，真实 DeepSeek 集成测试 PASS）**；遗留：前端首屏仍从最旧 500 条起；无 provider 时用户侧无显式提示；AI Team 管理 UI 待 Q4/Monitor 裁决 |
+| 3 | 前端 ai-interaction 三件套接线 + AI Team UI | **全部完成**：三件套接线（`2329bba`）+ 回复通道（`3af8b4f`，真实 DeepSeek PASS）+ 五子页全落地（UI-1 `ee55329` / UI-2 `6bcf1bd` / UI-3 `cfaa9c6`）。遗留：organization/task_type 写入口待显式裁决；新增任务覆盖入口留任务详情页；monitor/overrides V1 无分页 |
 | 4 | Execution Monitor 数据面（事件表 vs audit/outbox） | UI 批次前用户裁决 |
 | 5 | llm_call_record token 计量（usage 未解析） | 需要时改适配器 |
 | 6 | `update_task` 不提供版本改锚 | 如需改锚须显式裁决 |
