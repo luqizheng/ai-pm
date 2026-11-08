@@ -7,7 +7,6 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use pm_api::routes::router_with_feed_and_knowledge;
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
-use pm_application::knowledge::KnowledgeRoot;
 
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -215,7 +214,7 @@ async fn criteria_crud_and_validation(pool: PgPool) {
 
     let (status, _) = send(&pool, delete(&format!("{base}/{second_id}"))).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    let (status, body) = send(&pool, get(&base)).await;
+    let (_status, body) = send(&pool, get(&base)).await;
     assert_eq!(body["items"].as_array().unwrap().len(), 1);
 
     // ── 不存在的 criterion → 404。

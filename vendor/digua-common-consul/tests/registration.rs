@@ -159,7 +159,14 @@ async fn is_registered_reads_agent_state() {
         .mount(&server)
         .await;
 
-    let client = reqwest::Client::new();
+    // 禁用连接池复用：wiremock 在期望耗尽后可能关闭 keep-alive 连接，
+    // 复用旧连接会以 "error sending request" 输（probe 2 稳定复现）——
+    // is_registered 的 Err 语义是「下个 tick 重试」，测试要测的是分支，
+    // 不是传输层竞态。每次探测走全新连接。
+    let client = reqwest::Client::builder()
+        .pool_max_idle_per_host(0)
+        .build()
+        .expect("client builds");
     assert!(!is_registered(&client, &cfg).await.expect("probe 1"));
     assert!(is_registered(&client, &cfg).await.expect("probe 2"));
 }

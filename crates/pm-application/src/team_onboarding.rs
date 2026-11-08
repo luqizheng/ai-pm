@@ -267,6 +267,7 @@ fn tenant_display_name(name: &str) -> String {
     name.trim().to_string()
 }
 
+#[allow(clippy::too_many_arguments)] // 审计插入行，列清单与 governance.audit_log 对应
 async fn insert_tenant_audit(
     tx: &mut Transaction<'static, Postgres>,
     tenant_id: Uuid,
@@ -672,7 +673,7 @@ pub async fn preview_invitation(
     pool: &PgPool,
     token: &str,
 ) -> Result<Option<InvitationPreview>, sqlx::Error> {
-    let row: Option<(
+    type Row = Option<(
         String,
         Option<String>,
         String,
@@ -681,7 +682,8 @@ pub async fn preview_invitation(
         DateTime<Utc>,
         String,
         String,
-    )> = sqlx::query_as(
+    )>;
+    let row: Row = sqlx::query_as(
         "SELECT t.display_name, t.slug, i.role, p.display_name, \
                     CASE WHEN i.status = 'PENDING' AND i.expires_at < now() \
                          THEN 'EXPIRED' ELSE i.status END AS status, \
@@ -722,7 +724,8 @@ pub async fn accept_invitation(
 ) -> Result<AcceptOutcome, TeamOnboardingError> {
     let mut tx = pool.begin().await?;
     // 锁定即取全决策所需列：id/租户/角色/状态/有效期/规范化邮箱/邀请人。
-    let locked: Option<(Uuid, Uuid, String, String, DateTime<Utc>, String, Uuid)> = sqlx::query_as(
+    type Row = Option<(Uuid, Uuid, String, String, DateTime<Utc>, String, Uuid)>;
+    let locked: Row = sqlx::query_as(
         "SELECT id, tenant_id, role, status, expires_at, email_normalized, invited_by \
                FROM core.tenant_invitation WHERE token_hash = $1 FOR UPDATE",
     )
@@ -1005,7 +1008,8 @@ pub async fn preview_invitation_link(
     pool: &PgPool,
     token: &str,
 ) -> Result<Option<LinkPreview>, sqlx::Error> {
-    let row: Option<(String, String, Option<i32>, i32, DateTime<Utc>, String)> = sqlx::query_as(
+    type Row = Option<(String, String, Option<i32>, i32, DateTime<Utc>, String)>;
+    let row: Row = sqlx::query_as(
         "SELECT t.display_name, l.default_role, l.max_uses, l.used_count, l.expires_at, l.status \
            FROM core.tenant_invitation_link l \
            JOIN core.tenant t ON t.id = l.tenant_id \
@@ -1045,7 +1049,8 @@ pub async fn accept_invitation_link(
     token: &str,
 ) -> Result<AcceptOutcome, TeamOnboardingError> {
     let mut tx = pool.begin().await?;
-    let locked: Option<(Uuid, Uuid, String, String, Option<i32>, i32, DateTime<Utc>)> =
+    type Row = Option<(Uuid, Uuid, String, String, Option<i32>, i32, DateTime<Utc>)>;
+    let locked: Row =
         sqlx::query_as(
             "SELECT id, tenant_id, default_role, status, max_uses, used_count, expires_at \
                FROM core.tenant_invitation_link WHERE token_hash = $1 FOR UPDATE",
@@ -1061,10 +1066,7 @@ pub async fn accept_invitation_link(
     // 状态闸（死 token 先拒）：REVOKED / 过期（惰性翻转）。EXHAUSTED 的判定
     // 延后到成员检查之后——已是成员的重复提交是幂等 already_member，不因
     // 名额耗尽而变 error（UNIQUE(link_id, principal_id) 已有领用记录）。
-    match status.as_str() {
-        "REVOKED" => return Err(TeamOnboardingError::Revoked),
-        _ => {}
-    }
+    if status.as_str() == "REVOKED" { return Err(TeamOnboardingError::Revoked) }
     if expires_at <= now() {
         sqlx::query(
             "UPDATE core.tenant_invitation_link SET status = 'EXPIRED' \

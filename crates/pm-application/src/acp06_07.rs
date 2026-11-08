@@ -150,6 +150,7 @@ pub struct ExecutionAuthorizationRow {
 }
 
 /// 授予（REST Lead/Approver；不改 run.deadline_at——T3；审计独立行）。
+#[allow(clippy::too_many_arguments)] // 授权授予七参为领域命令签名（pool+身份+对象+审计面），打包结构反增映射层
 pub async fn grant_execution_authorization(
     pool: &PgPool,
     tenant_id: Uuid,

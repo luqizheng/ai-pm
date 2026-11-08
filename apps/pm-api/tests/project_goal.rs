@@ -10,7 +10,7 @@ use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::caller::{CallerContext, DeviceClaim, HumanActor};
 use pm_application::knowledge::KnowledgeRoot;
 use pm_application::project_goal::{
-    self, ensure_goal_document, goal_head_revision, load_official_goal, GOAL_DOC_KEY,
+    ensure_goal_document, goal_head_revision, load_official_goal, GOAL_DOC_KEY,
 };
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;

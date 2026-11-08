@@ -588,7 +588,7 @@ async fn load_project_summary(
     )
     .bind(project_id)
     .bind(tenant_id)
-    .bind(&ACTIVE_PROPOSAL_STATUSES)
+    .bind(ACTIVE_PROPOSAL_STATUSES)
     .fetch_one(pool)
     .await?;
 
@@ -752,7 +752,7 @@ async fn load_initialization_progress(
     )
     .bind(project_id)
     .bind(tenant_id)
-    .bind(&ACTIVE_PROPOSAL_STATUSES)
+    .bind(ACTIVE_PROPOSAL_STATUSES)
     .fetch_all(pool)
     .await?;
     let goal_human_pending: i64 = goal_proposal_rows
@@ -947,7 +947,7 @@ async fn load_runs(
     only_active: bool,
     limit: i64,
 ) -> Result<Vec<ActiveRun>, sqlx::Error> {
-    let rows: Vec<(
+    type Row = (
         Uuid,
         Uuid,
         String,
@@ -962,7 +962,8 @@ async fn load_runs(
         Option<Uuid>,
         Option<String>,
         Option<String>,
-    )> = sqlx::query_as(
+    );
+    let rows: Vec<Row> = sqlx::query_as(
         "SELECT r.id, r.task_id, t.title, r.run_kind, r.attempt_no, r.status, r.stage, \
                 r.claimed_at, r.started_at, r.heartbeat_at, r.lease_expires_at, \
                 t.assignee_id, p.display_name, p.kind \
@@ -1049,7 +1050,7 @@ async fn load_recent_run_briefs(
     project_id: Uuid,
     limit: i64,
 ) -> Result<Vec<RunBrief>, sqlx::Error> {
-    let rows: Vec<(
+    type Row = (
         Uuid,
         Uuid,
         String,
@@ -1058,7 +1059,8 @@ async fn load_recent_run_briefs(
         String,
         DateTime<Utc>,
         Option<DateTime<Utc>>,
-    )> = sqlx::query_as(
+    );
+    let rows: Vec<Row> = sqlx::query_as(
         "SELECT r.id, r.task_id, t.title, r.run_kind, r.attempt_no, r.status, r.created_at, r.finished_at \
          FROM delivery.task_run r \
          JOIN delivery.task t ON t.id = r.task_id \
@@ -1121,7 +1123,7 @@ async fn pending_action_total(
     )
     .bind(project_id)
     .bind(tenant_id)
-    .bind(&ACTIVE_PROPOSAL_STATUSES)
+    .bind(ACTIVE_PROPOSAL_STATUSES)
     .fetch_one(pool)
     .await?;
     let deliveries: i64 = sqlx::query_scalar(
@@ -1182,7 +1184,8 @@ async fn load_human_action_summary(
     }
 
     // 待审批知识提案
-    let proposal_rows: Vec<(Uuid, String, Option<String>, String, DateTime<Utc>)> = sqlx::query_as(
+    type Row = (Uuid, String, Option<String>, String, DateTime<Utc>);
+    let proposal_rows: Vec<Row> = sqlx::query_as(
         "SELECT id, doc_key, change_summary, status, created_at \
          FROM ai.document_proposal \
          WHERE project_id = $1 AND tenant_id = $2 AND status = ANY($3) \
@@ -1190,7 +1193,7 @@ async fn load_human_action_summary(
     )
     .bind(project_id)
     .bind(tenant_id)
-    .bind(&ACTIVE_PROPOSAL_STATUSES)
+    .bind(ACTIVE_PROPOSAL_STATUSES)
     .fetch_all(pool)
     .await?;
     for (id, doc_key, change_summary, status, created_at) in proposal_rows {
@@ -1272,7 +1275,8 @@ async fn load_risk_summary(
     let mut items: Vec<RiskItem> = Vec::new();
 
     // 失败 / 超时的 Run
-    let failed_runs: Vec<(Uuid, Uuid, String, String, Option<DateTime<Utc>>)> = sqlx::query_as(
+    type Row = (Uuid, Uuid, String, String, Option<DateTime<Utc>>);
+    let failed_runs: Vec<Row> = sqlx::query_as(
         "SELECT r.id, r.task_id, t.title, r.status, r.finished_at \
          FROM delivery.task_run r JOIN delivery.task t ON t.id = r.task_id \
          WHERE r.project_id = $1 AND r.tenant_id = $2 AND r.status IN ('failed','timed_out') \
@@ -1329,7 +1333,8 @@ async fn load_risk_summary(
     }
 
     // 不可达仓库
-    let repos: Vec<(Uuid, String, Option<String>, Option<DateTime<Utc>>)> = sqlx::query_as(
+    type Row2 = (Uuid, String, Option<String>, Option<DateTime<Utc>>);
+    let repos: Vec<Row2> = sqlx::query_as(
         "SELECT id, name, last_error_code, last_verified_at \
          FROM integration.project_repository \
          WHERE project_id = $1 AND tenant_id = $2 AND status = 'unreachable' \
@@ -1470,14 +1475,15 @@ async fn load_recent_activity(
         .fetch_one(pool)
         .await?;
 
-    let rows: Vec<(
+    type Row = (
         Uuid,
         String,
         Option<String>,
         Option<Uuid>,
         Option<Uuid>,
         DateTime<Utc>,
-    )> = sqlx::query_as(&format!(
+    );
+    let rows: Vec<Row> = sqlx::query_as(&format!(
         "SELECT d.id, d.activity_type, d.target_type, d.target_id, d.actor_id, d.created_at \
            FROM ({deduped}) d \
           ORDER BY d.created_at DESC, d.id DESC \

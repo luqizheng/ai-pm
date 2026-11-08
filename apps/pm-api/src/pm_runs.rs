@@ -18,7 +18,7 @@ use axum::{
     extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{delete, get, post},
+    routing::get,
     Json, Router,
 };
 use std::collections::HashMap;

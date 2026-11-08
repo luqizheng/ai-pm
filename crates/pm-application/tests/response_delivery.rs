@@ -6,14 +6,13 @@
 use pm_application::actor::AuditActor;
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::interaction::{
-    mark_consumed, record_response_persisted, report_interaction, submit_interaction_response,
+    mark_consumed, report_interaction, submit_interaction_response,
     ReportInteractionInput, SubmitResponseInput,
 };
-use pm_application::run_dispatch::RunDispatchConfig;
 use pm_application::worker_command as cmd;
 use pm_domain::SYSTEM_TENANT;
 use serde_json::json;
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 use uuid::Uuid;
 
 /// 检查点 2 收敛批：acked 回执信封（schema v1 + 当前代次 fencing）。
@@ -268,7 +267,7 @@ async fn acp471_failed_redelivery_reuses_row(pool: PgPool) {
     let reported2 = report_interaction(&pool, &input(&fx, "evt-2"), &AuditActor::dispatch())
         .await
         .unwrap();
-    let polled4 = cmd::poll_commands(&pool, fx.0, fx.2, &"client:dbg")
+    let polled4 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
         .await
         .unwrap();
     let t2 = polled4
@@ -296,7 +295,7 @@ async fn acp471_failed_redelivery_reuses_row(pool: PgPool) {
     let submitted2 = submit_interaction_response(&pool, &sub2, &AuditActor::principal(fx.3))
         .await
         .unwrap();
-    let polled5 = cmd::poll_commands(&pool, fx.0, fx.2, &"client:dbg")
+    let polled5 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
         .await
         .unwrap();
     let c2 = polled5

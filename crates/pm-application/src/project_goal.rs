@@ -89,7 +89,7 @@ pub async fn load_official_goal(
     pool: &PgPool,
     project_id: Uuid,
 ) -> Result<Option<OfficialGoal>, sqlx::Error> {
-    let row: Option<(
+    type Row = Option<(
         Uuid,
         Uuid,
         i32,
@@ -97,7 +97,8 @@ pub async fn load_official_goal(
         String,
         Option<String>,
         chrono::DateTime<chrono::Utc>,
-    )> = sqlx::query_as(
+    )>;
+    let row: Row = sqlx::query_as(
         "SELECT d.id, r.id, r.revision_no, r.content_hash, r.git_commit_sha, \
                     r.change_summary, r.created_at \
              FROM ai.project_document d \

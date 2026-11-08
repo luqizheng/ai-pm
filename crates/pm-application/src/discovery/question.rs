@@ -84,7 +84,7 @@ pub async fn get_question(
     tenant_id: Uuid,
     question_id: Uuid,
 ) -> Result<DiscoveryQuestionView, DiscoveryError> {
-    let row: Option<(
+    type Row = Option<(
         Uuid,
         Uuid,
         Option<Uuid>,
@@ -92,7 +92,8 @@ pub async fn get_question(
         Option<String>,
         String,
         DateTime<Utc>,
-    )> = sqlx::query_as(
+    )>;
+    let row: Row = sqlx::query_as(
         "SELECT id, session_id, finding_id, question, why_blocking, status, created_at \
              FROM discovery.discovery_question WHERE tenant_id = $1 AND id = $2",
     )
@@ -128,7 +129,7 @@ pub async fn list_questions(
     tenant_id: Uuid,
     session_id: Uuid,
 ) -> Result<Vec<DiscoveryQuestionView>, DiscoveryError> {
-    let rows: Vec<(
+    type Row = (
         Uuid,
         Uuid,
         Option<Uuid>,
@@ -136,7 +137,8 @@ pub async fn list_questions(
         Option<String>,
         String,
         DateTime<Utc>,
-    )> = sqlx::query_as(
+    );
+    let rows: Vec<Row> = sqlx::query_as(
         "SELECT id, session_id, finding_id, question, why_blocking, status, created_at \
              FROM discovery.discovery_question \
              WHERE tenant_id = $1 AND session_id = $2 ORDER BY created_at, id",

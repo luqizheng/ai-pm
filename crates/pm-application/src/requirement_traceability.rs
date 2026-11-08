@@ -156,7 +156,7 @@ pub async fn register_source_input(
     .await
     .map_err(PmWriteError::Db)?;
     append_audit(
-        &mut *tx,
+        &mut tx,
         project_id,
         actor,
         "source.registered",
@@ -177,7 +177,7 @@ pub async fn link_source_input(
 ) -> Result<LinkEntry, PmWriteError> {
     require_human(pool, actor).await?;
     let mut tx = pool.begin().await?;
-    let project_id = require_active_requirement(&mut *tx, tenant_id, requirement_id).await?;
+    let project_id = require_active_requirement(&mut tx, tenant_id, requirement_id).await?;
     let source_project: Option<Uuid> = sqlx::query_scalar(
         "SELECT project_id FROM source.source_input WHERE id = $1 AND tenant_id = $2",
     )
@@ -207,7 +207,7 @@ pub async fn link_source_input(
     .map_err(PmWriteError::Db)?;
     let entry = entry.ok_or(PmWriteError::Conflict("source input already linked"))?;
     append_audit(
-        &mut *tx,
+        &mut tx,
         project_id,
         actor,
         "requirement.source_linked",
@@ -228,7 +228,7 @@ pub async fn unlink_source_input(
 ) -> Result<(), PmWriteError> {
     require_human(pool, actor).await?;
     let mut tx = pool.begin().await?;
-    let project_id = require_active_requirement(&mut *tx, tenant_id, requirement_id).await?;
+    let project_id = require_active_requirement(&mut tx, tenant_id, requirement_id).await?;
     let deleted = sqlx::query(
         "DELETE FROM delivery.requirement_source_input \
          WHERE requirement_id = $1 AND input_id = $2",
@@ -242,7 +242,7 @@ pub async fn unlink_source_input(
         return Err(PmWriteError::NotFound("source input link not found"));
     }
     append_audit(
-        &mut *tx,
+        &mut tx,
         project_id,
         actor,
         "requirement.source_unlinked",
@@ -287,7 +287,7 @@ pub async fn link_finding(
 ) -> Result<LinkEntry, PmWriteError> {
     require_human(pool, actor).await?;
     let mut tx = pool.begin().await?;
-    let project_id = require_active_requirement(&mut *tx, tenant_id, requirement_id).await?;
+    let project_id = require_active_requirement(&mut tx, tenant_id, requirement_id).await?;
     // Finding 必须同项目（discovery 复合键 tenant+project+id；跨项目按不存在处理）。
     let finding: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM discovery.discovery_finding \
@@ -319,7 +319,7 @@ pub async fn link_finding(
     .map_err(PmWriteError::Db)?;
     let entry = entry.ok_or(PmWriteError::Conflict("finding already linked"))?;
     append_audit(
-        &mut *tx,
+        &mut tx,
         project_id,
         actor,
         "requirement.finding_linked",
@@ -340,7 +340,7 @@ pub async fn unlink_finding(
 ) -> Result<(), PmWriteError> {
     require_human(pool, actor).await?;
     let mut tx = pool.begin().await?;
-    let project_id = require_active_requirement(&mut *tx, tenant_id, requirement_id).await?;
+    let project_id = require_active_requirement(&mut tx, tenant_id, requirement_id).await?;
     let deleted = sqlx::query(
         "DELETE FROM delivery.requirement_finding WHERE requirement_id = $1 AND finding_id = $2",
     )
@@ -353,7 +353,7 @@ pub async fn unlink_finding(
         return Err(PmWriteError::NotFound("finding link not found"));
     }
     append_audit(
-        &mut *tx,
+        &mut tx,
         project_id,
         actor,
         "requirement.finding_unlinked",

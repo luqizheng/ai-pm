@@ -132,7 +132,7 @@ async fn world(pool: &PgPool) -> World {
     let member_id = ids[0];
     let other_id = ids[1];
 
-    let project_id = seed_project(&pool, tenant_id, "PM-W13").await;
+    let project_id = seed_project(pool, tenant_id, "PM-W13").await;
     sqlx::query(
         "INSERT INTO core.project_member (tenant_id, project_id, principal_id, role) \
          VALUES ($1, $2, $3, 'owner')",

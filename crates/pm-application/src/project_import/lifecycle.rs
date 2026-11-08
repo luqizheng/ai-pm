@@ -242,7 +242,7 @@ pub async fn start_import(
     }
     // 审计（I6-B-06）：导入启动与初始化操作占有各一行。
     crate::pm_write::append_audit(
-        &mut *tx,
+        &mut tx,
         project_id,
         actor,
         "repo_import.started",
@@ -251,7 +251,7 @@ pub async fn start_import(
     )
     .await?;
     crate::pm_write::append_audit(
-        &mut *tx,
+        &mut tx,
         project_id,
         actor,
         "project_initialization.acquired",
@@ -334,7 +334,8 @@ pub async fn get_import(
     .await?;
 
     // 轮次历史（R-4-1：成功与失败都留档）。
-    let attempt_rows: Vec<(Uuid, i32, String, Option<String>, Option<String>, DateTime<Utc>, Option<DateTime<Utc>>)> =
+    type Row = (Uuid, i32, String, Option<String>, Option<String>, DateTime<Utc>, Option<DateTime<Utc>>);
+    let attempt_rows: Vec<Row> =
         sqlx::query_as(
             "SELECT repository_id, attempt_no, status, commit_sha, error_code, started_at, finished_at \
              FROM integration.repo_import_source_attempt \
@@ -457,7 +458,7 @@ pub async fn cancel_import(
     .rows_affected();
     // 审计（I6-B-06）：终止动作可追溯。
     crate::pm_write::append_audit_with_after(
-        &mut *tx,
+        &mut tx,
         project_id,
         actor,
         "repo_import.terminated",
@@ -571,7 +572,7 @@ pub(crate) async fn fail_import(pool: &PgPool, import_id: Uuid, code: &str, deta
     .unwrap_or(0);
     if let Some(project_id) = project_id {
         let _ = crate::pm_write::append_audit_with_after(
-            &mut *tx,
+            &mut tx,
             project_id,
             &AuditActor::dispatch(),
             "repo_import.failed",
@@ -850,7 +851,7 @@ pub async fn run_import_job(
     .execute(&mut *tx)
     .await?;
     crate::pm_write::append_audit_with_after(
-        &mut *tx,
+        &mut tx,
         project_id,
         &AuditActor::dispatch(),
         "repo_import.draft_succeeded",
@@ -930,7 +931,7 @@ async fn audit_import_event(
         return;
     };
     if crate::pm_write::append_audit_with_after(
-        &mut *tx,
+        &mut tx,
         project_id,
         &AuditActor::dispatch(),
         action,

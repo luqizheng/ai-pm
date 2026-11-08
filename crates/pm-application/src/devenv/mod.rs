@@ -190,7 +190,8 @@ pub async fn register_device(
     ))
 }
 
-/// 登记的一次尝试。
+/// 登记的一次尝试（逐 attempt 瞬时信封，264B 拷贝无谓 boxing）。
+#[allow(clippy::large_enum_variant)]
 enum RegisterAttempt {
     Done(RegisterDeviceOutcome),
     /// 冲突行在锁定前被删除——需要重试。

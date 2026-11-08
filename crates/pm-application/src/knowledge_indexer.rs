@@ -331,6 +331,7 @@ impl DbSectionIndexer {
 ///
 /// 单事务内：取 `(revision, provider)` 级 advisory 锁 → 锁内**重算**前置条件
 /// → 按最终 transition 删旧写新（章节与状态原子一致）→ 提交。
+#[allow(clippy::too_many_arguments)] // 唯一状态转换原语（设计稿 §5.3），签名即事务输入清单
 pub async fn apply_transition(
     pool: &PgPool,
     root: &KnowledgeRoot,
@@ -527,6 +528,7 @@ pub async fn apply_transition(
 }
 
 /// 写状态行（`ON CONFLICT (document_revision_id, provider)` 与既有唯一键一致）。
+#[allow(clippy::too_many_arguments)] // upsert 行写入面，列清单与表结构一一对应
 async fn upsert_state(
     tx: &mut Transaction<'_, Postgres>,
     project_id: Uuid,

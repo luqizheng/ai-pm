@@ -291,7 +291,7 @@ pub async fn record_finding_verification(
     //（I2 V1.1 §8.2 指定名，读取侧按它推导「待补充」）。
     let answer_digest: String = answer_view_text.clone();
     crate::pm_write::append_audit_with_after(
-        &mut *tx,
+        &mut tx,
         project_id,
         &crate::actor::AuditActor::principal(answered_by),
         audit_action,
@@ -322,7 +322,7 @@ async fn get_finding_tx(
     tenant_id: Uuid,
     finding_id: Uuid,
 ) -> Result<DiscoveryFindingView, DiscoveryError> {
-    let row: Option<(
+    type Row = Option<(
         Uuid,
         Uuid,
         String,
@@ -332,11 +332,10 @@ async fn get_finding_tx(
         Uuid,
         Option<String>,
         chrono::DateTime<chrono::Utc>,
-    )> = sqlx::query_as(&format!(
-        "SELECT id, session_id, kind, content, confidence, verification_status, \
+    )>;
+    let row: Row = sqlx::query_as("SELECT id, session_id, kind, content, confidence, verification_status, \
                     project_id, actor_role, created_at \
-             FROM discovery.discovery_finding WHERE tenant_id = $1 AND id = $2"
-    ))
+             FROM discovery.discovery_finding WHERE tenant_id = $1 AND id = $2")
     .bind(tenant_id)
     .bind(finding_id)
     .fetch_optional(&mut **tx)
@@ -352,14 +351,15 @@ async fn get_finding_tx(
     .bind(finding_id)
     .fetch_all(&mut **tx)
     .await?;
-    let rows: Vec<(
+    type EvidenceRow = (
         String,
         Option<String>,
         Option<String>,
         Option<Uuid>,
         Option<String>,
         Option<i32>,
-    )> = sqlx::query_as(
+    );
+    let rows: Vec<EvidenceRow> = sqlx::query_as(
         "SELECT evidence_type, description, file_path, repository_id, commit_sha, attempt_no \
              FROM discovery.discovery_finding_evidence \
              WHERE tenant_id = $1 AND finding_id = $2 ORDER BY created_at, id",
@@ -420,7 +420,7 @@ async fn latest_decision_actions_tx(
     )
     .bind(project_id)
     .bind(finding_ids)
-    .bind(&DECISION_AUDIT_ACTIONS)
+    .bind(DECISION_AUDIT_ACTIONS)
     .fetch_all(&mut **tx)
     .await?;
     for (finding_id, action) in rows {
@@ -536,7 +536,7 @@ async fn get_question_tx(
     tenant_id: Uuid,
     question_id: Uuid,
 ) -> Result<DiscoveryQuestionView, DiscoveryError> {
-    let row: Option<(
+    type Row = Option<(
         Uuid,
         Uuid,
         Option<Uuid>,
@@ -544,7 +544,8 @@ async fn get_question_tx(
         Option<String>,
         String,
         chrono::DateTime<chrono::Utc>,
-    )> = sqlx::query_as(
+    )>;
+    let row: Row = sqlx::query_as(
         "SELECT id, session_id, finding_id, question, why_blocking, status, created_at \
              FROM discovery.discovery_question WHERE tenant_id = $1 AND id = $2",
     )

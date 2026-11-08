@@ -104,8 +104,8 @@ fn scan_code_hits(root: &Path) -> BTreeSet<String> {
             text.contains(TABLE_A) || text.contains(TABLE_B)
         })
         .map(|path| {
-            path.strip_prefix(&root)
-                .unwrap_or_else(|_| path.as_path())
+            path.strip_prefix(root)
+                .unwrap_or(path.as_path())
                 .to_string_lossy()
                 .replace('\\', "/")
         })

@@ -60,6 +60,8 @@ struct Fx {
     project_id: Uuid,
     task_id: Uuid,
     run_id: Uuid,
+    /// 令牌随构造断言留痕（当前用例直接读 DB 行校验，不回读本字段）。
+    #[allow(dead_code)]
     lease_token: String,
     lease_generation: i32,
     human_id: Uuid,
@@ -118,7 +120,7 @@ async fn seed(pool: &PgPool, code: &str) -> (Uuid, Uuid, Uuid) {
     .execute(pool)
     .await
     .unwrap();
-    let run_id: Uuid = sqlx::query_scalar(
+    let _run_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) \
          VALUES ($1, $2, 1, 'queued', (SELECT tenant_id FROM core.project WHERE id = $1)) \
          RETURNING id",
@@ -943,14 +945,6 @@ fn submit_input(
     }
 }
 
-async fn f9_style_setup(pool: &PgPool) -> (Fx, Uuid) {
-    let fx = claimed_run(pool, "ACP-03").await;
-    let reported = report_interaction(pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
-        .await
-        .unwrap();
-    (fx, reported.interaction_id)
-}
-
 #[sqlx::test(migrations = "../../migrations")]
 async fn acp446_reply_full_transaction_issues_continue(pool: PgPool) {
     let fx = claimed_run(&pool, "ACP-446").await;
@@ -1257,7 +1251,7 @@ async fn acp456_cross_project_reads_as_not_found(pool: PgPool) {
 async fn f5_comm_overview_counts_shielded_pending_unconsumed(pool: PgPool) {
     use pm_application::comm_overview::load_comm_overview;
     let fx = claimed_run(&pool, "ACP-F5").await;
-    let reported = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
+    let _reported = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
         .await
         .unwrap();
     let o = load_comm_overview(&pool).await.unwrap();

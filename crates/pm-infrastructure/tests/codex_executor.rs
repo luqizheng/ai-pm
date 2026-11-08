@@ -1,5 +1,5 @@
 //! T-031/T-032 进程管理层测试（`docs/ai-pm-slice-d3-executor-adapter-v1.md` §5 第二层
-//! + `docs/ai-pm-slice-d3-executor-hardening-v1.md` §5/§6/§8）：
+//! 与 `docs/ai-pm-slice-d3-executor-hardening-v1.md` §5/§6/§8）：
 //! `AI_PM_CODEX_BIN` 指向假脚本、`file://` 裸仓作 origin，验收 C67–C73。
 //! 编排语义（FakeExecutor）见 `pm-application/tests/run_executor.rs`。
 

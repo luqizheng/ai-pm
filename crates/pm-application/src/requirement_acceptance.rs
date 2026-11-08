@@ -201,12 +201,12 @@ pub async fn add_criterion(
     let position = validate_position(req.position)?;
 
     let mut tx = pool.begin().await?;
-    let project_id = lock_active_requirement(&mut *tx, tenant_id, requirement_id).await?;
+    let project_id = lock_active_requirement(&mut tx, tenant_id, requirement_id).await?;
     crate::approver::ensure_governance_authorized(pool, project_id, actor.principal_id).await?;
 
     let position = match position {
         Some(p) => p,
-        None => next_position(&mut *tx, requirement_id).await?,
+        None => next_position(&mut tx, requirement_id).await?,
     };
     // established_in_revision_id 留痕：确立时需求所在正式版本（Q-11，可为 NULL）
     let established: Option<Uuid> =
@@ -278,7 +278,7 @@ pub async fn update_criterion(
     let position = validate_position(req.position)?;
 
     let mut tx = pool.begin().await?;
-    let project_id = lock_active_requirement(&mut *tx, tenant_id, requirement_id).await?;
+    let project_id = lock_active_requirement(&mut tx, tenant_id, requirement_id).await?;
     crate::approver::ensure_governance_authorized(pool, project_id, actor.principal_id).await?;
 
     let updated = sqlx::query_scalar::<_, i64>(
@@ -306,7 +306,7 @@ pub async fn update_criterion(
         return Err(PmWriteError::NotFound("criterion not found"));
     }
 
-    let view = fetch_criterion(&mut *tx, requirement_id, criterion_id).await?;
+    let view = fetch_criterion(&mut tx, requirement_id, criterion_id).await?;
     append_audit(
         &mut tx,
         project_id,
@@ -330,7 +330,7 @@ pub async fn remove_criterion(
 ) -> Result<(), PmWriteError> {
     require_human(pool, actor).await?;
     let mut tx = pool.begin().await?;
-    let project_id = lock_active_requirement(&mut *tx, tenant_id, requirement_id).await?;
+    let project_id = lock_active_requirement(&mut tx, tenant_id, requirement_id).await?;
     crate::approver::ensure_governance_authorized(pool, project_id, actor.principal_id).await?;
 
     let removed = sqlx::query(
@@ -378,7 +378,7 @@ pub async fn record_criterion_verdict(
     }
 
     let mut tx = pool.begin().await?;
-    let project_id = lock_active_requirement(&mut *tx, tenant_id, requirement_id).await?;
+    let project_id = lock_active_requirement(&mut tx, tenant_id, requirement_id).await?;
     crate::approver::ensure_governance_authorized(pool, project_id, actor.principal_id).await?;
 
     let updated = sqlx::query(
@@ -399,7 +399,7 @@ pub async fn record_criterion_verdict(
         return Err(PmWriteError::NotFound("criterion not found"));
     }
 
-    let view = fetch_criterion(&mut *tx, requirement_id, criterion_id).await?;
+    let view = fetch_criterion(&mut tx, requirement_id, criterion_id).await?;
     append_audit(
         &mut tx,
         project_id,

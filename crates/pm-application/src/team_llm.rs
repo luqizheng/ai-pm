@@ -992,7 +992,8 @@ pub async fn get_project_ai_policy(
     tenant_id: Uuid,
     project_id: Uuid,
 ) -> Result<ProjectAiPolicyRow, TeamLlmError> {
-    let row: Option<(Option<Uuid>, Option<String>, Option<String>, i64, Option<DateTime<Utc>>)> =
+    type Row = Option<(Option<Uuid>, Option<String>, Option<String>, i64, Option<DateTime<Utc>>)>;
+    let row: Row =
         sqlx::query_as(
             "SELECT pol.provider_id, p.name, p.status, COALESCE(pol.revision, 1) AS revision, pol.updated_at \
              FROM (SELECT $1::uuid AS tenant_id, $2::uuid AS project_id) base \
@@ -1151,7 +1152,8 @@ pub async fn resolve_repo_call_config(
         .await?
         .ok_or(TeamLlmError::NotFound)?;
 
-    let designated: Option<(Uuid, String, String, Option<Vec<u8>>, String, i32)> = sqlx::query_as(
+    type Row = Option<(Uuid, String, String, Option<Vec<u8>>, String, i32)>;
+    let designated: Row = sqlx::query_as(
         "SELECT p.id, p.endpoint, p.configuration->>'model', c.api_key_ciphertext, p.provider_type, p.timeout_secs \
          FROM ai.project_ai_model_policy pol \
          JOIN ai.team_llm_provider p ON p.id = pol.provider_id AND p.tenant_id = pol.tenant_id \

@@ -30,14 +30,13 @@ pub async fn veto_revision(
     .await?;
 
     // 幂等重放：veto 作用于显式指定的修订，不按 head 比较。
-    if let Some((_, existing)) =
+    // （(_, None) = 幂等位空 → 落到下方新建操作，语义不变）
+    if let Some((_, Some(revision_id))) =
         crate::knowledge_write_coordinator::find_operation(pool, project_id, &operation_id).await?
     {
-        if let Some(revision_id) = existing {
-            let outcome = load_veto_outcome(pool, project_id, revision_id).await?;
-            guard.release().await;
-            return Ok(outcome);
-        }
+        let outcome = load_veto_outcome(pool, project_id, revision_id).await?;
+        guard.release().await;
+        return Ok(outcome);
     }
 
     let row = sqlx::query(

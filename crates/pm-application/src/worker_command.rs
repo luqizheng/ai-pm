@@ -62,6 +62,7 @@ pub struct PolledCommand {
 /// 下发 terminate 命令（V1.3.1 §5.2 报文 = payload）。由
 /// [`crate::interaction::report_interaction`] 在 Interaction 持久化事务内调用
 /// （D-03：立即终止）。worker_id = run.lease_owner 快照（R-ACP-3）。
+#[allow(clippy::too_many_arguments)] // terminate 命令下发（V1.3.1 §5.2 报文），参数=报文字段
 pub(crate) async fn issue_terminate_command(
     tx: &mut Transaction<'static, Postgres>,
     project_id: Uuid,
@@ -576,14 +577,15 @@ pub async fn ack_command(
                 .bind(project_id)
                 .fetch_optional(&mut *tx)
                 .await?;
-                match task_status.as_deref() {
-                    // 阻塞处理路径（§11.4「现有合法的阻塞处理路径」）：
+                // 阻塞处理路径（§11.4「现有合法的阻塞处理路径」）只此一臂：
+                if let Some("running") = task_status.as_deref() {
                     // Task 在 Running → 合法边转 Blocked；
                     // Task 在 awaiting_decision（人工等待本就是 Task 级等待态，
                     // 且 AwaitingDecision→Blocked 非合法边）→ 保持不动——
                     // 启动冻结（continuation_start_frozen_at）+ 命令 failed
                     // + 告警已承载失败语义，不得为表达阻塞而绕开 13 态。
-                    Some("running") => {
+                    // 其余状态不构成阻塞处理路径（原 match 的 `_ => {}`）。
+                    
                         let ctx = system_context(&mut tx, project_id)
                             .await
                             .map_err(|e| CommandFaceError::Validation(e.to_string()))?;
@@ -597,8 +599,6 @@ pub async fn ack_command(
                         )
                         .await
                         .map_err(|e| CommandFaceError::Validation(e.to_string()))?;
-                    }
-                    _ => {}
                 }
             }
             // ACP-04（0050）：投递账 failed——continue 注入失败/重试耗尽

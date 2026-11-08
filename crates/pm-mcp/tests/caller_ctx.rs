@@ -480,7 +480,7 @@ async fn c178_missing_executor_errors_instead_of_falling_back(pool: PgPool) {
     .unwrap();
 
     let member = member_caller(fx.member, fx.member_identity);
-    let err = get_task_context(
+    let _err = get_task_context(
         &pool,
         TaskContextArgs {
             project_id: empty_project,

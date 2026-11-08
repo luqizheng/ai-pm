@@ -179,7 +179,7 @@ async fn reply_injection_writes_atomic_reply_file() {
     let value: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(reply).unwrap()).unwrap();
     assert_eq!(value["decision"], "approve");
-    assert_eq!(spawn.session_id.starts_with("runner:"), true);
+    assert!(spawn.session_id.starts_with("runner:"));
     terminate(&mut spawn.child).await.unwrap();
 }
 
@@ -361,7 +361,7 @@ async fn f9_tool_rejection_archives_marker_without_retry() {
         .to_string(),
     )
     .unwrap();
-    let mut spawn = spawn_agent(&sleeper_cmd(30), &run_dir, &[], None).unwrap();
+    let spawn = spawn_agent(&sleeper_cmd(30), &run_dir, &[], None).unwrap();
     let mut run = ActiveRun {
         project_id: Uuid::nil(),
         task_id: Uuid::nil(),

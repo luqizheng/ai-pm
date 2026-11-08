@@ -280,14 +280,15 @@ pub async fn confirm_repository_version(
     let reason = optional_text(req.reason, MAX_DESCRIPTION_LEN)?;
 
     let mut tx = pool.begin().await?;
-    let existing: Option<(
+    type Row = Option<(
         Uuid,
         Option<String>,
         Option<String>,
         Option<String>,
         Option<Uuid>,
         String,
-    )> = sqlx::query_as(
+    )>;
+    let existing: Row = sqlx::query_as(
         "SELECT project_id, selected_branch, selected_commit, head_commit_sha, \
                 selected_confirmed_by, status \
          FROM integration.project_repository WHERE id = $1",
@@ -308,7 +309,7 @@ pub async fn confirm_repository_version(
          VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $2, \
                  $3, $4, $5, $6, $7, $8)",
     )
-    .bind(&project_id)
+    .bind(project_id)
     .bind(repository_id)
     .bind(&prev_branch)
     .bind(&prev_commit)

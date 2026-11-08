@@ -324,7 +324,7 @@ async fn questions_can_be_answered_and_deferred(pool: PgPool) {
     let (_, detail) = body_json(app.clone().oneshot(get(&base)).await.unwrap()).await;
     assert_eq!(detail["questions"][0]["status"], "answered");
 
-    let (status, err) = body_json(
+    let (status, _err) = body_json(
         app.clone()
             .oneshot(json_request(
                 "POST",

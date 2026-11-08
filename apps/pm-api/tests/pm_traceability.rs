@@ -39,7 +39,7 @@ async fn send(pool: &PgPool, req: Request<Body>) -> (StatusCode, serde_json::Val
 
 async fn seed(pool: &PgPool, code: &str) -> Uuid {
     let outcome = bootstrap_project(
-        &pool,
+        pool,
         BootstrapRequest {
             project_code: code.to_string(),
             project_name: format!("Project {code}"),
@@ -55,7 +55,7 @@ async fn seed(pool: &PgPool, code: &str) -> Uuid {
 /// 不把 dev-off 加入成员（模拟非成员上下文）。
 async fn seed_without_member(pool: &PgPool, code: &str) -> Uuid {
     bootstrap_project(
-        &pool,
+        pool,
         BootstrapRequest {
             project_code: code.to_string(),
             project_name: format!("Project {code}"),
@@ -80,7 +80,7 @@ fn actor_of(principal_id: Uuid) -> AuditActor {
 async fn create_requirement(pool: &PgPool, project_id: Uuid, code: &str) -> Uuid {
     let actor = actor_of(pm_api::auth::DEV_OFF_PRINCIPAL);
     requirement::create_requirement(
-        &pool,
+        pool,
         pm_domain::SYSTEM_TENANT,
         project_id,
         CreateRequirementRequest {
@@ -101,7 +101,7 @@ async fn create_requirement(pool: &PgPool, project_id: Uuid, code: &str) -> Uuid
 /// 经 REST 建 discovery finding（session → finding），返回 finding_id。
 async fn create_finding_via_rest(pool: &PgPool, project_id: Uuid) -> Uuid {
     let (status, body) = send(
-        &pool,
+        pool,
         request(
             "POST",
             &format!("/v1/pm/projects/{project_id}/discovery/sessions"),
@@ -113,7 +113,7 @@ async fn create_finding_via_rest(pool: &PgPool, project_id: Uuid) -> Uuid {
     let session_id = Uuid::parse_str(body["session"]["id"].as_str().unwrap()).unwrap();
 
     let (status, body) = send(
-        &pool,
+        pool,
         request(
             "POST",
             &format!("/v1/pm/projects/{project_id}/discovery/sessions/{session_id}/findings"),

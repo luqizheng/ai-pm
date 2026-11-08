@@ -294,7 +294,7 @@ fn valid_or_default<'a>(
 ) -> Result<&'a str, PmWriteError> {
     match value.as_deref().map(str::trim) {
         None => Ok(default),
-        Some(v) if v.is_empty() => Ok(default),
+        Some("") => Ok(default),
         Some(v) if allowed.contains(&v) => Ok(v),
         Some(_) => Err(PmWriteError::Validation(label)),
     }

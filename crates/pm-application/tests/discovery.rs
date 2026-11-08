@@ -1418,7 +1418,7 @@ async fn i2_033_missing_audit_falls_back_conservatively(pool: PgPool) {
     )
     .await
     .unwrap();
-    let finding = discovery::add_finding(
+    let _finding = discovery::add_finding(
         &pool,
         fx.tenant_id,
         session.id,

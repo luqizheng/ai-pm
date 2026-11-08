@@ -192,7 +192,7 @@ fn artifacts_for_criterion<'a>(
     let scoped: Vec<&ArtifactProbe> = input
         .artifacts
         .iter()
-        .filter(|probe| mentioned.is_empty() || mentioned.iter().any(|path| *path == &probe.path))
+        .filter(|probe| mentioned.is_empty() || mentioned.contains(&&probe.path))
         .collect();
     scoped
 }
@@ -218,20 +218,17 @@ pub fn evaluate(input: &ReviewInput) -> ReviewOutcome {
     }
 
     // ── L2 集成事实判定 ────────────────────────────────────────────────
-    match input.integration_status.as_str() {
-        "failed" => {
-            findings.push(ReviewFinding {
-                finding_kind: "integration_failed".to_string(),
-                severity: Severity::Blocker,
-                criterion_id: None,
-                code_location: None,
-                message:
-                    "integration_status is `failed`; no reviewer or human may complete this task"
-                        .to_string(),
-                evidence_ref: None,
-            });
-        }
-        _ => {}
+    if input.integration_status.as_str() == "failed" {
+        findings.push(ReviewFinding {
+            finding_kind: "integration_failed".to_string(),
+            severity: Severity::Blocker,
+            criterion_id: None,
+            code_location: None,
+            message:
+                "integration_status is `failed`; no reviewer or human may complete this task"
+                    .to_string(),
+            evidence_ref: None,
+        });
     }
 
     let failed_tests: Vec<&TestEvidence> = input.tests.iter().filter(|test| !test.passed).collect();
@@ -392,8 +389,8 @@ pub fn evaluate(input: &ReviewInput) -> ReviewOutcome {
     }
 
     // ── L4 证据一致性 ─────────────────────────────────────────────────
-    if input.integration_status == "not_run" {
-        if !automated_criteria.is_empty() {
+    if input.integration_status == "not_run"
+        && !automated_criteria.is_empty() {
             for criterion in &automated_criteria {
                 findings.push(ReviewFinding {
                     finding_kind: "evidence_missing".to_string(),
@@ -408,7 +405,6 @@ pub fn evaluate(input: &ReviewInput) -> ReviewOutcome {
                 });
             }
         }
-    }
     if input.integration_status == "passed" && !failed_tests.is_empty() {
         findings.push(ReviewFinding {
             finding_kind: "evidence_conflict".to_string(),

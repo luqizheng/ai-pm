@@ -87,9 +87,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .execute(&mut *conn)
         .await?;
 
-    let current = read_fingerprint(&mut *conn).await;
+    let current = read_fingerprint(&mut conn).await;
     if current.as_deref() == Some(want.as_str()) {
-        unlock(&mut *conn).await?;
+        unlock(&mut conn).await?;
         drop(conn);
         pool.close().await;
         println!("[test-template] {template_db} 已是最新（{total} 个迁移），跳过重建");
@@ -97,7 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let started = Instant::now();
-    reset(&mut *conn).await?;
+    reset(&mut conn).await?;
     migrator.run_direct(&mut *conn).await?;
 
     let applied: i64 =
@@ -110,8 +110,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    write_fingerprint(&mut *conn, &want, applied).await?;
-    unlock(&mut *conn).await?;
+    write_fingerprint(&mut conn, &want, applied).await?;
+    unlock(&mut conn).await?;
     drop(conn);
     pool.close().await;
 

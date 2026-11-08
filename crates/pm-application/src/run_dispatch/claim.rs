@@ -951,7 +951,7 @@ async fn claim_core_in_project(
     .bind(run_id)
     .bind(&policy_snapshot)
     .bind(&policy_snapshot_hash)
-    .bind(&crate::repo_access::access_snapshot_json(&repo_access))
+    .bind(crate::repo_access::access_snapshot_json(&repo_access))
     .execute(&mut *tx)
     .await?;
 

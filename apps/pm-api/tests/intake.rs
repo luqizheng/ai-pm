@@ -274,9 +274,9 @@ async fn kb_pc_contract_skeletons_are_501(pool: PgPool) {
         ),
     ] {
         let request = if has_body {
-            post_json(&uri, json!({}), &[])
+            post_json(uri, json!({}), &[])
         } else {
-            get(&uri)
+            get(uri)
         };
         let response = app.clone().oneshot(request).await.unwrap();
         assert_eq!(

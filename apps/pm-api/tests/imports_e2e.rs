@@ -120,14 +120,6 @@ fn get(uri: &str) -> Request<Body> {
         .unwrap()
 }
 
-fn post_empty(uri: &str) -> Request<Body> {
-    Request::builder()
-        .method("POST")
-        .uri(uri)
-        .body(Body::empty())
-        .unwrap()
-}
-
 fn json_request(method: &str, uri: &str, body: Value) -> Request<Body> {
     Request::builder()
         .method(method)

@@ -313,7 +313,7 @@ async fn run_created_before_archive_gets_cancelled_by_archive(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let cancelled: i64 = sqlx::query_scalar(
+    let _cancelled: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM delivery.task_run \
           WHERE id = $1 AND status = 'cancelled' AND termination_reason = 'i1b-archive'",
     )
