@@ -15,8 +15,8 @@ pub use model::{AnalysisContext, AnalysisModel, ModelError};
 pub use openai_adapter::{OpenAiCompatibleModel, SYSTEM_PROMPT};
 pub use orchestrator::{HandleOutcome, Orchestrator, OrchestratorError};
 pub use repo_model::{
-    FakeRepoAnalysisModel, OpenAiRepoAnalysisModel, REPO_SYSTEM_PROMPT, RepoAnalysisModel,
-    RepoMaterial,
+    FakeRepoAnalysisModel, OpenAiRepoAnalysisModel, RepoAnalysisModel, RepoMaterial,
+    REPO_SYSTEM_PROMPT,
 };
-pub use self_review::{self_review_json, review_proposals, ProposalOutcome};
+pub use self_review::{review_proposals, self_review_json, ProposalOutcome};
 pub use skill_router::{route, SkillId};

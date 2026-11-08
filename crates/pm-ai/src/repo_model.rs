@@ -5,11 +5,11 @@
 //! 保证演示环境四步向导能走通。
 
 use async_trait::async_trait;
-pub use pm_application::repo_facts::{RepoAnalysisModel, RepoMaterial};
 use pm_application::repo_facts::pm_ai_port::ModelError as RepoModelError;
+pub use pm_application::repo_facts::{RepoAnalysisModel, RepoMaterial};
 use pm_domain::import::{
-    AssigneeRole, Evidence, EvidenceKind, MilestoneDraft, OrgChart, ProjectDraft,
-    RequirementDraft, RiskDraft, TaskDraft, UnknownDraft,
+    AssigneeRole, Evidence, EvidenceKind, MilestoneDraft, OrgChart, ProjectDraft, RequirementDraft,
+    RiskDraft, TaskDraft, UnknownDraft,
 };
 use pm_domain::proposal::Confidence;
 
@@ -72,7 +72,8 @@ impl RepoAnalysisModel for FakeRepoAnalysisModel {
             let repo_id = material.repository_id.clone();
             for doc in &material.facts.docs {
                 let title = heading(&doc.markdown, &doc.path);
-                if draft.profile.suggested_name.is_empty() && doc.path.to_ascii_lowercase().contains("readme")
+                if draft.profile.suggested_name.is_empty()
+                    && doc.path.to_ascii_lowercase().contains("readme")
                 {
                     draft.profile.suggested_name = title.clone();
                     draft.profile.summary = doc.markdown.chars().take(200).collect();
@@ -84,7 +85,12 @@ impl RepoAnalysisModel for FakeRepoAnalysisModel {
                     code: format!("REQ-{requirement_no:03}"),
                     title,
                     markdown: doc.markdown.chars().take(4000).collect(),
-                    priority: if requirement_no == 1 { "high" } else { "normal" }.to_string(),
+                    priority: if requirement_no == 1 {
+                        "high"
+                    } else {
+                        "normal"
+                    }
+                    .to_string(),
                     confidence: Confidence::High,
                     evidence: vec![Evidence {
                         kind: EvidenceKind::Doc,
@@ -187,12 +193,17 @@ impl OpenAiRepoAnalysisModel {
         }
     }
 
-    async fn ask(&self, materials: &[RepoMaterial], org: &OrgChart) -> Result<String, RepoModelError> {
+    async fn ask(
+        &self,
+        materials: &[RepoMaterial],
+        org: &OrgChart,
+    ) -> Result<String, RepoModelError> {
         let material_json = serde_json::to_string(materials).map_err(|e| {
             RepoModelError::Unavailable(format!("repo material could not serialize: {e}"))
         })?;
-        let org_json = serde_json::to_string(org)
-            .map_err(|e| RepoModelError::Unavailable(format!("org chart could not serialize: {e}")))?;
+        let org_json = serde_json::to_string(org).map_err(|e| {
+            RepoModelError::Unavailable(format!("org chart could not serialize: {e}"))
+        })?;
         let user = format!(
             "<repo_material>\n{material_json}\n</repo_material>\n\n<org_chart>\n{org_json}\n</org_chart>"
         );
@@ -226,14 +237,15 @@ impl OpenAiRepoAnalysisModel {
                 response.status()
             )));
         }
-        let value: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| RepoModelError::BadOutput(format!("repo model response is not json: {e}")))?;
+        let value: serde_json::Value = response.json().await.map_err(|e| {
+            RepoModelError::BadOutput(format!("repo model response is not json: {e}"))
+        })?;
         value["choices"][0]["message"]["content"]
             .as_str()
             .map(str::to_string)
-            .ok_or_else(|| RepoModelError::BadOutput("missing choices[0].message.content".to_string()))
+            .ok_or_else(|| {
+                RepoModelError::BadOutput("missing choices[0].message.content".to_string())
+            })
     }
 }
 
@@ -261,7 +273,10 @@ pub async fn model_from_llm_provider(
             tracing::warn!(error = %err, "repo model resolution failed; falling back to fake");
         }
     }
-    (std::sync::Arc::new(FakeRepoAnalysisModel), "fake".to_string())
+    (
+        std::sync::Arc::new(FakeRepoAnalysisModel),
+        "fake".to_string(),
+    )
 }
 
 fn extract_json(text: &str) -> Option<&str> {
@@ -298,16 +313,15 @@ impl RepoAnalysisModel for OpenAiRepoAnalysisModel {
                 }
             }
         }
-        Err(last_error.unwrap_or_else(|| RepoModelError::BadOutput("empty model output".to_string())))
+        Err(last_error
+            .unwrap_or_else(|| RepoModelError::BadOutput("empty model output".to_string())))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pm_application::repo_facts::{
-        CommitFact, DocContent, HotFile, LanguageStat, RepoFacts,
-    };
+    use pm_application::repo_facts::{CommitFact, DocContent, HotFile, LanguageStat, RepoFacts};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -445,19 +459,13 @@ mod tests {
             "key",
             chrono::Duration::seconds(30),
         );
-        let parsed = model
-            .draft(&[material()], &OrgChart::p0())
-            .await
-            .unwrap();
+        let parsed = model.draft(&[material()], &OrgChart::p0()).await.unwrap();
         assert_eq!(parsed.profile.suggested_code, "MAP-001");
     }
 
     #[test]
     fn extract_json_strips_markdown_fences() {
-        assert_eq!(
-            extract_json("```json\n{\"a\":1}\n```"),
-            Some("{\"a\":1}")
-        );
+        assert_eq!(extract_json("```json\n{\"a\":1}\n```"), Some("{\"a\":1}"));
         assert_eq!(extract_json("no json"), None);
     }
 

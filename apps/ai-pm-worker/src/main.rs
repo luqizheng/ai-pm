@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use pm_ai::model::AnalysisModel;
 use pm_ai::orchestrator::{HandleOutcome, Orchestrator};
-use pm_ai::FakeModel;
 use pm_application::project_import::{import_id_for_event, run_import_job};
 use pm_application::{PgCommandExecutor, PolicyEngine};
 use pm_infrastructure::job_queue::{self, ClaimedJob};
@@ -56,9 +55,14 @@ async fn main() {
             .expect("policy yaml must parse (it is the same file the tests pin)"),
     );
     let executor = Arc::new(PgCommandExecutor::new(pool.clone(), policy.clone()));
-    // TODO(Task 17): replace the FakeModel with the OpenAI-compatible
-    // adapter behind the same `Arc<dyn AnalysisModel>` port.
-    let model: Arc<dyn AnalysisModel> = Arc::new(FakeModel::from_fixtures());
+    // Task 17: the analysis model is chosen per job behind the same
+    // `Arc<dyn AnalysisModel>` port. `AI_PM_ANALYSIS_MODEL=auto` (default)
+    // resolves the project/tenant LLM provider and — when nothing resolves
+    // or resolution fails — falls back to the deterministic fake with a
+    // loud structured warning; `fake` pins the fixtures for development.
+    let model: Arc<dyn AnalysisModel> = Arc::new(
+        pm_ai::analysis_model::RoutedAnalysisModel::from_env(pool.clone()),
+    );
     let orchestrator = Orchestrator {
         pool: pool.clone(),
         model,
@@ -108,7 +112,7 @@ async fn main() {
     let dispatch_pool = pool.clone();
     let dispatch_worker_id = worker_id.clone();
     tokio::spawn(async move {
-            let mut stats_ticks = 0u32;
+        let mut stats_ticks = 0u32;
         let cfg = pm_application::run_dispatch::RunDispatchConfig::from_env();
         let mode = pm_application::run_dispatch::DispatchMode::from_env();
         let run_executor: Arc<dyn pm_application::run_dispatch::RunExecutor> =
@@ -121,12 +125,18 @@ async fn main() {
                 _ => Arc::new(pm_application::run_dispatch::NoopExecutor),
             };
         // 启动时一次孤儿 reconcile（T-030 §3 异常路径②）；失败只告警。
-        match pm_application::run_executor::reconcile_orphans(&dispatch_pool, run_executor.as_ref(), &cfg)
-            .await
+        match pm_application::run_executor::reconcile_orphans(
+            &dispatch_pool,
+            run_executor.as_ref(),
+            &cfg,
+        )
+        .await
         {
             Ok(n) if n > 0 => tracing::info!(reconciled = n, "orphan runs reconciled at startup"),
             Ok(_) => {}
-            Err(e) => tracing::warn!(error = %e, "orphan reconcile failed; relying on lease recovery"),
+            Err(e) => {
+                tracing::warn!(error = %e, "orphan reconcile failed; relying on lease recovery")
+            }
         }
         tracing::info!(mode = ?mode, lease_secs = cfg.lease_secs, executor = run_executor.kind(), "run dispatch loop started");
         loop {
@@ -180,9 +190,11 @@ async fn main() {
             }
             // T-032 D3 旧路径保留为兜底：撤凭据前已遗留的终态行（无账本行的
             // 历史窗口——终止顺序反转引入的窗口，reconcile_orphans 不覆盖终态行）。
-            if let Err(e) =
-                pm_application::run_executor::cleanup_finished_processes(&dispatch_pool, run_executor.as_ref())
-                    .await
+            if let Err(e) = pm_application::run_executor::cleanup_finished_processes(
+                &dispatch_pool,
+                run_executor.as_ref(),
+            )
+            .await
             {
                 tracing::warn!(error = %e, "finished-run cleanup failed");
             }
@@ -199,7 +211,8 @@ async fn main() {
                             interaction_unconsumed_total = o.interaction_unconsumed_total,
                             interaction_open_chains = o.interaction_open_chains,
                             worker_command_pending_total = o.worker_command_pending_total,
-                            worker_command_pending_age_seconds = o.worker_command_pending_age_seconds,
+                            worker_command_pending_age_seconds =
+                                o.worker_command_pending_age_seconds,
                             "comm_overview"
                         );
                         if o.worker_command_pending_age_seconds > 600 {
@@ -267,7 +280,8 @@ async fn handle_repo_job(pool: &PgPool, job: &ClaimedJob) {
             return;
         }
     };
-    let (model, model_name) = pm_ai::repo_model::model_from_llm_provider(pool, job.project_id).await;
+    let (model, model_name) =
+        pm_ai::repo_model::model_from_llm_provider(pool, job.project_id).await;
     if let Err(e) = sqlx::query("UPDATE integration.repo_import SET model_name = $2 WHERE id = $1")
         .bind(import_id)
         .bind(&model_name)
