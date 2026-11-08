@@ -258,6 +258,7 @@ async fn non_member_governance_and_ai_gates(pool: PgPool) {
             requirement_type: None,
             priority: None,
             markdown: None,
+            basis_finding_ids: None,
         },
         &actor,
     )

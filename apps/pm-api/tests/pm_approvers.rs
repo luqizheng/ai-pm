@@ -96,6 +96,7 @@ async fn submitted(pool: &PgPool, project_id: Uuid, code: &str) -> (Uuid, Uuid, 
             requirement_type: None,
             priority: None,
             markdown: None,
+            basis_finding_ids: None,
         },
         &actor,
     )
