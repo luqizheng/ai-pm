@@ -1,5 +1,9 @@
 use super::*;
-use serde::Serialize;use sqlx::{PgPool, Postgres, Row, Transaction};use uuid::Uuid;use crate::knowledge::{self, KnowledgeError, KnowledgeRoot};use crate::knowledge_quality::{self, GateFailure, GateInput, QualityGateResult};
+use crate::knowledge::{self, KnowledgeError, KnowledgeRoot};
+use crate::knowledge_quality::{self, GateFailure, GateInput, QualityGateResult};
+use serde::Serialize;
+use sqlx::{PgPool, Postgres, Row, Transaction};
+use uuid::Uuid;
 
 /// 列出项目（或某文档）的提案，最新在前。
 pub async fn list_proposals(
@@ -33,5 +37,3 @@ pub async fn list_proposals(
         })
         .collect())
 }
-
-

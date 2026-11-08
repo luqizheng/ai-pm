@@ -11,10 +11,10 @@ pub(crate) use serde::{Deserialize, Serialize};
 pub(crate) use sqlx::PgPool;
 pub(crate) use uuid::Uuid;
 
-pub(crate) use crate::git_access;
 pub(crate) use crate::actor::AuditActor;
+pub(crate) use crate::git_access;
 pub(crate) use crate::pm_write::PmWriteError;
-pub(crate) use crate::repo_facts::{self, RepoAnalysisModel, RepoMaterial, pm_ai_port::ModelError};
+pub(crate) use crate::repo_facts::{self, pm_ai_port::ModelError, RepoAnalysisModel, RepoMaterial};
 pub(crate) use pm_domain::import::{Evidence, EvidenceKind, ProjectDraft};
 
 /// `list_imports` 的结果行（14 列）。
@@ -47,7 +47,16 @@ pub(crate) type ImportDetailRow = (
     Option<DateTime<Utc>>,
 );
 /// `get_import` 的来源快照行（8 列）。
-pub(crate) type ImportSourceRow = (Uuid, String, Option<String>, i32, i32, i64, bool, Option<String>);
+pub(crate) type ImportSourceRow = (
+    Uuid,
+    String,
+    Option<String>,
+    i32,
+    i32,
+    i64,
+    bool,
+    Option<String>,
+);
 
 mod advance;
 mod grounding;
@@ -99,13 +108,11 @@ pub enum ImportError {
     Db(sqlx::Error),
 }
 
-
 impl From<sqlx::Error> for ImportError {
     fn from(e: sqlx::Error) -> Self {
         ImportError::Db(e)
     }
 }
-
 
 impl From<PmWriteError> for ImportError {
     fn from(e: PmWriteError) -> Self {
@@ -122,7 +129,6 @@ impl From<PmWriteError> for ImportError {
 }
 
 pub const IN_PROGRESS: [&str; 4] = ["queued", "cloning", "reading", "analyzing"];
-
 
 /// 启动导入的请求体（N-3：`repository_ids` 必填且非空；幂等键透传 N-4）。
 #[derive(Debug, Clone)]
@@ -153,7 +159,6 @@ pub struct ImportAttemptView {
     pub finished_at: Option<DateTime<Utc>>,
 }
 
-
 #[derive(Debug, Clone, Serialize)]
 pub struct ImportSourceView {
     pub repository_id: Uuid,
@@ -167,7 +172,6 @@ pub struct ImportSourceView {
     /// 该仓库的分析轮次历史（R-4-1：成功与失败都留档）。
     pub attempts: Vec<ImportAttemptView>,
 }
-
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ImportDetail {
@@ -189,7 +193,6 @@ pub struct ImportDetail {
     pub sources: Vec<ImportSourceView>,
 }
 
-
 /// 项目下的导入批次（审批页分组用）。
 #[derive(Debug, Clone, Serialize)]
 pub struct ImportListItem {
@@ -203,4 +206,3 @@ pub struct ImportListItem {
     pub proposed_at: Option<DateTime<Utc>>,
     pub applied_at: Option<DateTime<Utc>>,
 }
-

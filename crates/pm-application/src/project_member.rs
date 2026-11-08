@@ -16,7 +16,7 @@
 use sqlx::{PgConnection, PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
-use pm_domain::{ProjectMemberRole, TenantRole, is_agent_role};
+use pm_domain::{is_agent_role, ProjectMemberRole, TenantRole};
 
 use crate::actor::AuditActor;
 use crate::pm_write::append_audit;
@@ -56,8 +56,7 @@ impl MemberOp {
     /// 操作对象 principal（授予 / 撤销的目标，或所有权转移的新 owner）。
     pub fn target(self) -> Uuid {
         match self {
-            Self::Grant { principal_id }
-            | Self::Revoke { principal_id } => principal_id,
+            Self::Grant { principal_id } | Self::Revoke { principal_id } => principal_id,
             Self::TransferOwner { new_owner } => new_owner,
         }
     }
@@ -160,8 +159,12 @@ pub async fn apply_member_change(
     }
 
     let outcome = match op {
-        MemberOp::Grant { principal_id } => grant(&mut tx, tenant_id, project_id, actor, principal_id).await?,
-        MemberOp::Revoke { principal_id } => revoke(&mut tx, project_id, actor, principal_id).await?,
+        MemberOp::Grant { principal_id } => {
+            grant(&mut tx, tenant_id, project_id, actor, principal_id).await?
+        }
+        MemberOp::Revoke { principal_id } => {
+            revoke(&mut tx, project_id, actor, principal_id).await?
+        }
         MemberOp::TransferOwner { new_owner } => {
             transfer_owner(&mut tx, tenant_id, project_id, actor, new_owner).await?
         }
@@ -444,20 +447,24 @@ async fn transfer_owner(
         });
     }
 
-    sqlx::query("UPDATE core.project_member SET role = 'member' \
-                  WHERE project_id = $1 AND principal_id = $2")
-        .bind(project_id)
-        .bind(previous_owner)
-        .execute(&mut **tx)
-        .await
-        .map_err(db_err)?;
-    sqlx::query("UPDATE core.project_member SET role = 'owner' \
-                  WHERE project_id = $1 AND principal_id = $2")
-        .bind(project_id)
-        .bind(new_owner)
-        .execute(&mut **tx)
-        .await
-        .map_err(db_err)?;
+    sqlx::query(
+        "UPDATE core.project_member SET role = 'member' \
+                  WHERE project_id = $1 AND principal_id = $2",
+    )
+    .bind(project_id)
+    .bind(previous_owner)
+    .execute(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    sqlx::query(
+        "UPDATE core.project_member SET role = 'owner' \
+                  WHERE project_id = $1 AND principal_id = $2",
+    )
+    .bind(project_id)
+    .bind(new_owner)
+    .execute(&mut **tx)
+    .await
+    .map_err(db_err)?;
 
     for target in [previous_owner, new_owner] {
         append_audit(
@@ -565,13 +572,14 @@ pub async fn caller_can_see_members(
     is_tenant_admin: bool,
 ) -> Result<bool, ProjectMemberError> {
     if is_tenant_admin {
-        let exists: Option<bool> =
-            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM core.project WHERE id = $1 AND tenant_id = $2)")
-                .bind(project_id)
-                .bind(tenant_id)
-                .fetch_one(pool)
-                .await
-                .map_err(db_err)?;
+        let exists: Option<bool> = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM core.project WHERE id = $1 AND tenant_id = $2)",
+        )
+        .bind(project_id)
+        .bind(tenant_id)
+        .fetch_one(pool)
+        .await
+        .map_err(db_err)?;
         return Ok(exists.unwrap_or(false));
     }
 

@@ -10,9 +10,9 @@
 //! （L3）= **查询时派生**（§9.4.2 聚合规则表），不落列——双写漂移不可表示。
 
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 use serde_json::json;
 use sqlx::PgPool;
+use sqlx::Row;
 use uuid::Uuid;
 
 use kb_pc_contracts::events;
@@ -51,7 +51,13 @@ pub const INTAKE_STATUSES: &[&str] = &[
 ];
 
 /// 任务类型（V1.1 §9.2 CHECK；intake_task.task_type 枚举）。
-pub const TASK_TYPES: &[&str] = &["kb_analyze", "pc_analyze", "pc_decide", "kb_archive", "kb_supply"];
+pub const TASK_TYPES: &[&str] = &[
+    "kb_analyze",
+    "pc_analyze",
+    "pc_decide",
+    "kb_archive",
+    "kb_supply",
+];
 
 // ── P2-3 Routing Table（§10.2 配置化，非硬编码） ────────────────────────────
 
@@ -251,8 +257,12 @@ fn default_tasks(intake_type: &str) -> Result<Vec<TaskSpec>, IntakeError> {
         phase: "required".to_string(),
     };
     match intake_type {
-        "document_upload" | "meeting_notes" | "product_fact" | "engineering_artifact"
-        | "engineering_result" | "external_change" => Ok(vec![kb]),
+        "document_upload"
+        | "meeting_notes"
+        | "product_fact"
+        | "engineering_artifact"
+        | "engineering_result"
+        | "external_change" => Ok(vec![kb]),
         "product_decision" => Ok(vec![TaskSpec {
             target_service: "pc".to_string(),
             task_type: "pc_decide".to_string(),
@@ -281,10 +291,7 @@ fn dispatch_event_type(task_type: &str) -> &'static str {
 /// 受理 Intake：**同一 PG 事务三写**（intake_record + intake_task(s) +
 /// outbox_event(s)，§9.3-7）；幂等键冲突 = 重复提交，返回既有 Intake
 /// （重放标记，零副作用，D-12）。返回 202 纯受理语义。
-pub async fn submit_intake(
-    pool: &PgPool,
-    cmd: SubmitIntake,
-) -> Result<IntakeReceipt, IntakeError> {
+pub async fn submit_intake(pool: &PgPool, cmd: SubmitIntake) -> Result<IntakeReceipt, IntakeError> {
     if !INTAKE_TYPES.contains(&cmd.intake_type.as_str()) {
         return Err(IntakeError::Validation(format!(
             "unknown intake_type `{}`",
@@ -298,7 +305,9 @@ pub async fn submit_intake(
         )));
     }
     if cmd.source_ref.as_object().is_none() {
-        return Err(IntakeError::Validation("source_ref must be a JSON object".into()));
+        return Err(IntakeError::Validation(
+            "source_ref must be a JSON object".into(),
+        ));
     }
     let tasks = match &cmd.tasks {
         Some(list) if !list.is_empty() => list.clone(),
@@ -316,7 +325,9 @@ pub async fn submit_intake(
         format!(
             "intake:{}:{}",
             cmd.intake_type,
-            cmd.content_hash.clone().unwrap_or_else(|| Uuid::new_v4().to_string())
+            cmd.content_hash
+                .clone()
+                .unwrap_or_else(|| Uuid::new_v4().to_string())
         )
     });
 
@@ -530,11 +541,7 @@ pub async fn complete_task(
 }
 
 /// 失败上报（服务失败事件 / 投递超限）：活跃态 → FAILED，last_error 留痕。
-pub async fn fail_task(
-    pool: &PgPool,
-    task_id: Uuid,
-    error: &str,
-) -> Result<(), IntakeError> {
+pub async fn fail_task(pool: &PgPool, task_id: Uuid, error: &str) -> Result<(), IntakeError> {
     sqlx::query(
         "UPDATE integration.intake_task \
             SET task_status = 'FAILED', last_error = $2, updated_at = now() \
@@ -562,7 +569,9 @@ async fn ensure_task_exists(pool: &PgPool, task_id: Uuid) -> Result<(), IntakeEr
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RouteOutcome {
     /// 创建了 pc_analyze 任务（required 或 optional）。
-    TaskCreated { phase: &'static str },
+    TaskCreated {
+        phase: &'static str,
+    },
     /// 合并进既有活跃任务（signal_ref 数组追加）。
     MergedIntoActive,
     /// relevance 过滤忽略（留痕不建任务）。
@@ -629,7 +638,10 @@ pub async fn route_cognition_signal(
     signal: SignalEnvelope,
     policy: &RoutingPolicy,
 ) -> Result<RouteOutcome, IntakeError> {
-    let phase = policy.decide_phase(&signal.relevance, signal.confidence.as_deref().and_then(Confidence::parse));
+    let phase = policy.decide_phase(
+        &signal.relevance,
+        signal.confidence.as_deref().and_then(Confidence::parse),
+    );
     let Some(phase) = phase else {
         // 规则 1：NO_PRODUCT_RELEVANCE / 低置信 Ignore → 不创建任务，登记留痕。
         audit_route_decision(pool, project_id, intake_id, "filtered", &signal).await?;
@@ -891,10 +903,7 @@ pub fn aggregate_task_status(tasks: &[(String, String)]) -> DerivedIntakeStatus 
 }
 
 /// 单个 Intake 的任务列表（状态校正查询与聚合共用）。
-pub async fn list_tasks(
-    pool: &PgPool,
-    intake_id: Uuid,
-) -> Result<Vec<TaskRow>, IntakeError> {
+pub async fn list_tasks(pool: &PgPool, intake_id: Uuid) -> Result<Vec<TaskRow>, IntakeError> {
     let rows = sqlx::query(
         "SELECT id, target_service, task_type, phase, task_status, attempt, \
                 idempotency_key, signal_ref, result_ref, last_error, created_at, updated_at \
@@ -949,12 +958,11 @@ pub struct IntakeState {
 }
 
 pub async fn intake_state(pool: &PgPool, intake_id: Uuid) -> Result<IntakeState, IntakeError> {
-    let record: Option<(Uuid, String)> = sqlx::query_as(
-        "SELECT id, intake_status FROM integration.intake_record WHERE id = $1",
-    )
-    .bind(intake_id)
-    .fetch_optional(pool)
-    .await?;
+    let record: Option<(Uuid, String)> =
+        sqlx::query_as("SELECT id, intake_status FROM integration.intake_record WHERE id = $1")
+            .bind(intake_id)
+            .fetch_optional(pool)
+            .await?;
     let (found_id, intake_status) = record.ok_or(IntakeError::NotFound)?;
     let tasks = list_tasks(pool, found_id).await?;
     let derived = aggregate_task_status(
@@ -1078,7 +1086,10 @@ mod tests {
     #[test]
     fn routing_policy_relevance_filter() {
         let policy = RoutingPolicy::default();
-        assert_eq!(policy.decide_phase("NO_PRODUCT_RELEVANCE", Some(Confidence::High)), None);
+        assert_eq!(
+            policy.decide_phase("NO_PRODUCT_RELEVANCE", Some(Confidence::High)),
+            None
+        );
         assert_eq!(
             policy.decide_phase("PRODUCT_CANDIDATE", Some(Confidence::Medium)),
             Some("required")
@@ -1088,14 +1099,23 @@ mod tests {
     #[test]
     fn routing_policy_threshold_medium_default() {
         let policy = RoutingPolicy::default();
-        assert_eq!(policy.decide_phase("PRODUCT_CANDIDATE", Some(Confidence::Low)), Some("optional"));
+        assert_eq!(
+            policy.decide_phase("PRODUCT_CANDIDATE", Some(Confidence::Low)),
+            Some("optional")
+        );
         let strict = RoutingPolicy {
             low_confidence_action: LowConfidenceAction::Ignore,
             ..Default::default()
         };
-        assert_eq!(strict.decide_phase("PRODUCT_CANDIDATE", Some(Confidence::Low)), None);
+        assert_eq!(
+            strict.decide_phase("PRODUCT_CANDIDATE", Some(Confidence::Low)),
+            None
+        );
         // 缺 confidence → fail-closed 按低置信处理。
-        assert_eq!(policy.decide_phase("PRODUCT_CANDIDATE", None), Some("optional"));
+        assert_eq!(
+            policy.decide_phase("PRODUCT_CANDIDATE", None),
+            Some("optional")
+        );
     }
 
     #[test]

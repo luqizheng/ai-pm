@@ -12,12 +12,11 @@ pub async fn create_task(
     let project_id = req
         .project_id
         .ok_or(PmWriteError::NotFound("unknown project"))?;
-    let (project_id,): (Uuid,) =
-        sqlx::query_as("SELECT id FROM core.project WHERE id = $1")
-            .bind(project_id)
-            .fetch_optional(pool)
-            .await?
-            .ok_or(PmWriteError::NotFound("unknown project"))?;
+    let (project_id,): (Uuid,) = sqlx::query_as("SELECT id FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or(PmWriteError::NotFound("unknown project"))?;
     let title = req.title.as_deref().map(str::trim).unwrap_or_default();
     if title.is_empty() {
         return Err(PmWriteError::Validation("title is required"));
@@ -44,12 +43,19 @@ pub async fn create_task(
     .bind(req.assignee_id)
     .execute(&mut *tx)
     .await?;
-    append_audit(&mut tx, project_id, actor, "task.create", "task", Some(task_id)).await?;
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "task.create",
+        "task",
+        Some(task_id),
+    )
+    .await?;
     tx.commit().await?;
 
     task_row(pool, task_id).await
 }
-
 
 /// 全字段编辑 + revision 乐观锁（不匹配 409），成功后 revision+1。
 ///
@@ -78,7 +84,9 @@ pub async fn update_task(
     }
     if let Some(constraints) = &req.constraints {
         if !constraints.is_object() {
-            return Err(PmWriteError::Validation("constraints must be a JSON object"));
+            return Err(PmWriteError::Validation(
+                "constraints must be a JSON object",
+            ));
         }
     }
     let mut tx = pool.begin().await?;
@@ -188,7 +196,15 @@ pub async fn update_task(
         contract_audit.insert("knowledge_refs".into(), json!(count));
     }
 
-    append_audit(&mut tx, project_id, actor, "task.update", "task", Some(task_id)).await?;
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "task.update",
+        "task",
+        Some(task_id),
+    )
+    .await?;
     if !contract_audit.is_empty() {
         append_audit_with_after(
             &mut tx,
@@ -210,7 +226,6 @@ pub async fn update_task(
 
     task_row(pool, task_id).await
 }
-
 
 pub(crate) fn normalize_deliverables(
     input: Vec<DeliverableInput>,
@@ -235,7 +250,6 @@ pub(crate) fn normalize_deliverables(
     Ok(out)
 }
 
-
 /// 全量替换验收项；`ordinal` 缺省按 `max+10` 追加（允许间隙，不重排既有条目）。
 pub(crate) async fn replace_acceptance_criteria(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -253,7 +267,9 @@ pub(crate) async fn replace_acceptance_criteria(
     for item in input {
         let text = item.text.trim().to_string();
         if text.is_empty() {
-            return Err(PmWriteError::Validation("acceptance criterion text is required"));
+            return Err(PmWriteError::Validation(
+                "acceptance criterion text is required",
+            ));
         }
         let kind = item
             .verification_kind
@@ -277,11 +293,13 @@ pub(crate) async fn replace_acceptance_criteria(
         });
     }
 
-    sqlx::query("DELETE FROM delivery.task_acceptance_criterion WHERE task_id = $1 AND project_id = $2")
-        .bind(task_id)
-        .bind(project_id)
-        .execute(&mut **tx)
-        .await?;
+    sqlx::query(
+        "DELETE FROM delivery.task_acceptance_criterion WHERE task_id = $1 AND project_id = $2",
+    )
+    .bind(task_id)
+    .bind(project_id)
+    .execute(&mut **tx)
+    .await?;
     for entry in &normalized {
         sqlx::query(
             "INSERT INTO delivery.task_acceptance_criterion \
@@ -299,7 +317,6 @@ pub(crate) async fn replace_acceptance_criteria(
     }
     Ok(normalized.len())
 }
-
 
 /// 全量替换知识引用；文档必须属于同一项目（跨项目一律拒绝）。
 pub(crate) async fn replace_knowledge_refs(
@@ -351,7 +368,6 @@ pub(crate) async fn replace_knowledge_refs(
     Ok(input.len())
 }
 
-
 pub(crate) async fn task_row(pool: &PgPool, task_id: Uuid) -> Result<TaskRow, PmWriteError> {
     sqlx::query_as::<_, TaskRow>(
         "SELECT id, project_id, milestone_id, title, description, status, priority, \
@@ -363,5 +379,3 @@ pub(crate) async fn task_row(pool: &PgPool, task_id: Uuid) -> Result<TaskRow, Pm
     .await
     .map_err(PmWriteError::from)
 }
-
-

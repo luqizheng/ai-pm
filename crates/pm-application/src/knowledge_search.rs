@@ -20,7 +20,7 @@ use uuid::Uuid;
 use crate::knowledge::{KnowledgeError, KnowledgeRoot};
 use crate::knowledge_index::{self, SearchHit};
 use crate::knowledge_indexer::{
-    DB_SECTION_INDEX_VERSION, DB_SECTION_PROVIDER, DbSectionIndexer, KnowledgeIndexer, SearchPage,
+    DbSectionIndexer, KnowledgeIndexer, SearchPage, DB_SECTION_INDEX_VERSION, DB_SECTION_PROVIDER,
 };
 
 /// 检索结果（handler 只序列化 `hits`；其余字段是内部可观测信息）。
@@ -76,7 +76,11 @@ pub struct KnowledgeSearchService {
 impl KnowledgeSearchService {
     pub fn new(pool: PgPool, root: KnowledgeRoot) -> Self {
         let indexer = Arc::new(DbSectionIndexer::new(pool.clone(), root.clone()));
-        Self { pool, root, indexer }
+        Self {
+            pool,
+            root,
+            indexer,
+        }
     }
 
     /// 注入自定义 provider 实现——端口可替换性的显式入口（测试用故障注入）。
@@ -85,7 +89,11 @@ impl KnowledgeSearchService {
         root: KnowledgeRoot,
         indexer: Arc<dyn KnowledgeIndexer>,
     ) -> Self {
-        Self { pool, root, indexer }
+        Self {
+            pool,
+            root,
+            indexer,
+        }
     }
 
     /// 检索入口。
@@ -122,7 +130,11 @@ impl KnowledgeSearchService {
         // 3) DB 路径。索引层整体不可用（查询失败）→ 整项目回退直读，
         //    但**不返回部分成功结果**冒充完整结果（评审 P1-2 原则 1）。
         let fetch = page.limit + page.offset;
-        let db_hits = match self.indexer.search(project_id, tenant_id, query, page).await {
+        let db_hits = match self
+            .indexer
+            .search(project_id, tenant_id, query, page)
+            .await
+        {
             Ok(hits) => hits,
             Err(err) => {
                 tracing::warn!(
@@ -132,18 +144,12 @@ impl KnowledgeSearchService {
                     "knowledge_search_fallback"
                 );
                 let hits = knowledge_index::scan_documents_direct(
-                    &self.pool,
-                    &self.root,
-                    project_id,
-                    query,
-                    fetch,
+                    &self.pool, &self.root, project_id, query, fetch,
                 )
                 .await
                 .map_err(|err| {
                     // 回退直读也读不到权威正文 → 明确报错（503），不返回空结果。
-                    KnowledgeError::IndexUnavailable(format!(
-                        "direct read fallback failed: {err}"
-                    ))
+                    KnowledgeError::IndexUnavailable(format!("direct read fallback failed: {err}"))
                 })?;
                 return Ok(FallbackSearchResult {
                     used_fallback: true,
@@ -374,11 +380,7 @@ impl KnowledgeSearchService {
     }
 
     /// 取某文档当前生效修订的 `(tenant_id, revision_id)`。
-    async fn stale_state_of(
-        &self,
-        project_id: Uuid,
-        document_id: Uuid,
-    ) -> Option<(Uuid, Uuid)> {
+    async fn stale_state_of(&self, project_id: Uuid, document_id: Uuid) -> Option<(Uuid, Uuid)> {
         sqlx::query_as::<_, (Uuid, Uuid)>(
             "SELECT r.tenant_id, r.id FROM ai.document_revision r \
               WHERE r.document_id = $1 AND r.project_id = $2 AND r.status = 'published' \

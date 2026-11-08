@@ -4,7 +4,7 @@
 //! 与工具契约零变化 · unconsumed 指标切表。
 
 use pm_application::actor::AuditActor;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::interaction::{
     mark_consumed, record_response_persisted, report_interaction, submit_interaction_response,
     ReportInteractionInput, SubmitResponseInput,
@@ -89,11 +89,18 @@ async fn acp470_submit_creates_single_delivery_row(pool: PgPool) {
         .unwrap();
 
     // 关闭情形 6 窗口（terminate acked）。
-    let polled = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
+    let polled = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
     assert_eq!(polled.len(), 1);
     cmd::ack_command(
-        &pool, fx.0, polled[0].command_id, "client:dbg", cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })), None,
+        &pool,
+        fx.0,
+        polled[0].command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        None,
     )
     .await
     .unwrap();
@@ -144,10 +151,17 @@ async fn acp471_failed_redelivery_reuses_row(pool: PgPool) {
     let reported = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
         .await
         .unwrap();
-    let polled = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
+    let polled = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
     cmd::ack_command(
-        &pool, fx.0, polled[0].command_id, "client:dbg", cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })), None,
+        &pool,
+        fx.0,
+        polled[0].command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        None,
     )
     .await
     .unwrap();
@@ -169,7 +183,9 @@ async fn acp471_failed_redelivery_reuses_row(pool: PgPool) {
     };
 
     // 领取（claim）→ delivering + attempt 1。
-    let polled2 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
+    let polled2 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
     assert_eq!(polled2.len(), 1);
     let continue_id = polled2[0].command_id;
     let (_, status, attempt) = delivery_of(&pool, submitted.response_id).await;
@@ -177,7 +193,9 @@ async fn acp471_failed_redelivery_reuses_row(pool: PgPool) {
     assert_eq!(attempt, 1);
 
     // 同 worker 幂等重领（模拟执行端重启后的重投路径）→ attempt 2、同 command_id。
-    let polled3 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
+    let polled3 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
     assert_eq!(polled3.len(), 1);
     assert_eq!(polled3[0].command_id, continue_id, "same command_id reused");
     let (_, status, attempt) = delivery_of(&pool, submitted.response_id).await;
@@ -186,8 +204,13 @@ async fn acp471_failed_redelivery_reuses_row(pool: PgPool) {
 
     // 本次成功 → delivered（同 delivery_id，任务恢复 R-4 同事务）。
     cmd::ack_command(
-        &pool, fx.0, continue_id, "client:dbg", cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })), None,
+        &pool,
+        fx.0,
+        continue_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "session_created": true, "input_injected": true })),
+        None,
     )
     .await
     .unwrap();
@@ -207,14 +230,21 @@ async fn acp471_failed_redelivery_reuses_row(pool: PgPool) {
     let reported2 = report_interaction(&pool, &input(&fx, "evt-2"), &AuditActor::dispatch())
         .await
         .unwrap();
-    let polled4 = cmd::poll_commands(&pool, fx.0, fx.2, &"client:dbg").await.unwrap();
+    let polled4 = cmd::poll_commands(&pool, fx.0, fx.2, &"client:dbg")
+        .await
+        .unwrap();
     let t2 = polled4
         .iter()
         .find(|c| c.command_type == "agent.process.terminate")
         .expect("new terminate for the second chain");
     cmd::ack_command(
-        &pool, fx.0, t2.command_id, "client:dbg", cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 2 })), None,
+        &pool,
+        fx.0,
+        t2.command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "exit_outcome": "Killed", "pid": 2 })),
+        None,
     )
     .await
     .unwrap();
@@ -228,14 +258,21 @@ async fn acp471_failed_redelivery_reuses_row(pool: PgPool) {
     let submitted2 = submit_interaction_response(&pool, &sub2, &AuditActor::principal(fx.3))
         .await
         .unwrap();
-    let polled5 = cmd::poll_commands(&pool, fx.0, fx.2, &"client:dbg").await.unwrap();
+    let polled5 = cmd::poll_commands(&pool, fx.0, fx.2, &"client:dbg")
+        .await
+        .unwrap();
     let c2 = polled5
         .iter()
         .find(|c| c.command_type == "agent.task.continue")
         .expect("continue for the second chain");
     cmd::ack_command(
-        &pool, fx.0, c2.command_id, "client:dbg", cmd::AckOutcome::Failed,
-        Some(json!({ "session_created": true })), Some("injection_failed".into()),
+        &pool,
+        fx.0,
+        c2.command_id,
+        "client:dbg",
+        cmd::AckOutcome::Failed,
+        Some(json!({ "session_created": true })),
+        Some("injection_failed".into()),
     )
     .await
     .unwrap();
@@ -247,7 +284,10 @@ async fn acp471_failed_redelivery_reuses_row(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(shield, "start_wait", "failed injection must not release the shield");
+    assert_eq!(
+        shield, "start_wait",
+        "failed injection must not release the shield"
+    );
 }
 
 /// ACP-472：消费事实持久化——mark_consumed 落 delivery.consumed；迟到/重复
@@ -258,10 +298,17 @@ async fn acp472_consumption_persists_delivery_fact(pool: PgPool) {
     let reported = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
         .await
         .unwrap();
-    let polled = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
+    let polled = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
     cmd::ack_command(
-        &pool, fx.0, polled[0].command_id, "client:dbg", cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })), None,
+        &pool,
+        fx.0,
+        polled[0].command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        None,
     )
     .await
     .unwrap();
@@ -275,10 +322,17 @@ async fn acp472_consumption_persists_delivery_fact(pool: PgPool) {
     let submitted = submit_interaction_response(&pool, &sub, &AuditActor::principal(fx.3))
         .await
         .unwrap();
-    let polled2 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
+    let polled2 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
     cmd::ack_command(
-        &pool, fx.0, polled2[0].command_id, "client:dbg", cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })), None,
+        &pool,
+        fx.0,
+        polled2[0].command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "session_created": true, "input_injected": true })),
+        None,
     )
     .await
     .unwrap();
@@ -330,7 +384,10 @@ async fn acp472_consumption_persists_delivery_fact(pool: PgPool) {
     .unwrap_err();
     let _ = again; // Interaction 已 consumed → 服务层 Conflict（幂等面在上游）。
     let (_, status_now, _) = delivery_of(&pool, submitted.response_id).await;
-    assert_eq!(status_now, "consumed", "repeated receipt must not change the fact");
+    assert_eq!(
+        status_now, "consumed",
+        "repeated receipt must not change the fact"
+    );
 }
 
 /// ACP-473 + unconsumed 指标切表：pending 不计数 / delivering·delivered 计数 /
@@ -342,10 +399,17 @@ async fn acp473_unconsumed_metric_reads_delivery_table(pool: PgPool) {
     let reported = report_interaction(&pool, &input(&fx, "evt-1"), &AuditActor::dispatch())
         .await
         .unwrap();
-    let polled = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
+    let polled = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
     cmd::ack_command(
-        &pool, fx.0, polled[0].command_id, "client:dbg", cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })), None,
+        &pool,
+        fx.0,
+        polled[0].command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        None,
     )
     .await
     .unwrap();
@@ -365,15 +429,22 @@ async fn acp473_unconsumed_metric_reads_delivery_table(pool: PgPool) {
     assert_eq!(o1.interaction_unconsumed_total, 0);
 
     // 领取 → delivering → 计数 1。
-    let polled2 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
+    let polled2 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
     assert_eq!(polled2.len(), 1);
     let o2 = load_comm_overview(&pool).await.unwrap();
     assert_eq!(o2.interaction_unconsumed_total, 1);
 
     // acked → delivered → 计数仍 1（N-6 稳态告警面）。
     cmd::ack_command(
-        &pool, fx.0, polled2[0].command_id, "client:dbg", cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })), None,
+        &pool,
+        fx.0,
+        polled2[0].command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "session_created": true, "input_injected": true })),
+        None,
     )
     .await
     .unwrap();

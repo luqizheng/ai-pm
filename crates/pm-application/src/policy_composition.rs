@@ -160,7 +160,6 @@ fn hex(bytes: &[u8]) -> String {
     out
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,8 +238,14 @@ mod tests {
         };
         let effective = EffectivePolicy::compose(&layers);
         assert!(effective.require_human_approval);
-        assert!(!effective.auto_accept, "approval requirement cancels auto accept");
-        assert!(effective.auto_merge, "merge keeps its own capability decision");
+        assert!(
+            !effective.auto_accept,
+            "approval requirement cancels auto accept"
+        );
+        assert!(
+            effective.auto_merge,
+            "merge keeps its own capability decision"
+        );
         assert!(effective.auto_publish_knowledge);
     }
 
@@ -248,7 +253,13 @@ mod tests {
     fn additional_checks_are_unioned_deduplicated_and_sorted() {
         let layers = PolicyLayers {
             organization: Some(layer(None, None, None, None, &["security_review"])),
-            project: Some(layer(None, None, None, None, &["architecture_review", "security_review"])),
+            project: Some(layer(
+                None,
+                None,
+                None,
+                None,
+                &["architecture_review", "security_review"],
+            )),
             task_type: None,
             task: Some(layer(None, None, None, None, &["release_review"])),
         };

@@ -89,26 +89,24 @@ pub async fn bind_projection(
             .await
             .map_err(knowledge_err)?
     {
-        let sha: Option<String> = sqlx::query_scalar(
-            "SELECT git_commit_sha FROM ai.document_revision WHERE id = $1",
-        )
-        .bind(doc_rev_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(PmWriteError::Db)?;
+        let sha: Option<String> =
+            sqlx::query_scalar("SELECT git_commit_sha FROM ai.document_revision WHERE id = $1")
+                .bind(doc_rev_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(PmWriteError::Db)?;
         guard.release().await;
         return sha.ok_or(PmWriteError::Conflict(
             "bound ledger operation has no document revision",
         ));
     }
 
-    let project_code: String =
-        sqlx::query_scalar("SELECT code FROM core.project WHERE id = $1")
-            .bind(project_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(PmWriteError::Db)?
-            .ok_or(PmWriteError::NotFound("unknown project"))?;
+    let project_code: String = sqlx::query_scalar("SELECT code FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(PmWriteError::Db)?
+        .ok_or(PmWriteError::NotFound("unknown project"))?;
 
     // 文档现状：既有 → 沿用存储路径 + head 序号；新建 → 计算路径，head=0。
     let existing: Option<(Uuid, String, Option<i32>)> = sqlx::query_as(
@@ -125,8 +123,9 @@ pub async fn bind_projection(
 
     let path = match &existing {
         Some((_, path, _)) => path.clone(),
-        None => knowledge::canonical_path(&project_code, DOC_TYPE, &doc_key)
-            .map_err(knowledge_err)?,
+        None => {
+            knowledge::canonical_path(&project_code, DOC_TYPE, &doc_key).map_err(knowledge_err)?
+        }
     };
     let next_no = existing
         .as_ref()
@@ -162,13 +161,12 @@ pub async fn bind_projection(
     } = &claim
     {
         // 上一 attempt 完整提交（账本带绑定）→ 取既有 sha 返回。
-        let sha: Option<String> = sqlx::query_scalar(
-            "SELECT git_commit_sha FROM ai.document_revision WHERE id = $1",
-        )
-        .bind(doc_rev_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(PmWriteError::Db)?;
+        let sha: Option<String> =
+            sqlx::query_scalar("SELECT git_commit_sha FROM ai.document_revision WHERE id = $1")
+                .bind(doc_rev_id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(PmWriteError::Db)?;
         tx.rollback().await.map_err(PmWriteError::Db)?;
         guard.release().await;
         return sha.ok_or(PmWriteError::Conflict(
@@ -180,21 +178,19 @@ pub async fn bind_projection(
 
     let document_id = match &existing {
         Some((id, _, _)) => *id,
-        None => {
-            sqlx::query_scalar(
-                "INSERT INTO ai.project_document \
+        None => sqlx::query_scalar(
+            "INSERT INTO ai.project_document \
                  (project_id, doc_key, doc_type, canonical_path, tenant_id) \
                  VALUES ($1, $2, $3, $4, (SELECT tenant_id FROM core.project WHERE id = $1)) \
                  RETURNING id",
-            )
-            .bind(project_id)
-            .bind(&doc_key)
-            .bind(DOC_TYPE)
-            .bind(&path)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(PmWriteError::Db)?
-        }
+        )
+        .bind(project_id)
+        .bind(&doc_key)
+        .bind(DOC_TYPE)
+        .bind(&path)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(PmWriteError::Db)?,
     };
 
     let doc_revision_id: Uuid = sqlx::query_scalar(
@@ -250,16 +246,14 @@ pub async fn read_at_ref(
     requirement_id: Uuid,
     sha: &str,
 ) -> Result<String, PmWriteError> {
-    let project_code: String =
-        sqlx::query_scalar("SELECT code FROM core.project WHERE id = $1")
-            .bind(project_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(PmWriteError::Db)?
-            .ok_or(PmWriteError::NotFound("unknown project"))?;
-    let path =
-        knowledge::canonical_path(&project_code, DOC_TYPE, &doc_key(requirement_id))
-            .map_err(knowledge_err)?;
+    let project_code: String = sqlx::query_scalar("SELECT code FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(PmWriteError::Db)?
+        .ok_or(PmWriteError::NotFound("unknown project"))?;
+    let path = knowledge::canonical_path(&project_code, DOC_TYPE, &doc_key(requirement_id))
+        .map_err(knowledge_err)?;
     knowledge::git_read_at(root.path(), &path, sha).map_err(knowledge_err)
 }
 
@@ -309,15 +303,13 @@ pub async fn rebuild_projection(
 fn knowledge_err(e: KnowledgeError) -> PmWriteError {
     match e {
         KnowledgeError::NotFound => PmWriteError::NotFound("knowledge document not found"),
-        KnowledgeError::Stale => {
-            PmWriteError::Conflict("knowledge projection is stale")
+        KnowledgeError::Stale => PmWriteError::Conflict("knowledge projection is stale"),
+        KnowledgeError::ProjectWriteBusy(_) => {
+            PmWriteError::Conflict("knowledge write lock is busy — retry shortly")
         }
-        KnowledgeError::ProjectWriteBusy(_) => PmWriteError::Conflict(
-            "knowledge write lock is busy — retry shortly",
-        ),
-        KnowledgeError::RevisionConflict(msg) => PmWriteError::Conflict(
-            Box::leak(msg.into_boxed_str()),
-        ),
+        KnowledgeError::RevisionConflict(msg) => {
+            PmWriteError::Conflict(Box::leak(msg.into_boxed_str()))
+        }
         other => PmWriteError::Db(sqlx::Error::Protocol(other.to_string())),
     }
 }

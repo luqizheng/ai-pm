@@ -10,12 +10,12 @@
 //! | E-03 | 幂等键是 `run_completed:<run_id>` |
 //! | E-19 | 环境变量**不能**开启无 handler 事件；未登记类型一律禁产 |
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use pm_application::run_dispatch::NoopExecutor;
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::outbox::{
-    CATALOG, OutboxAppend, OutboxEvent, PgOutboxAppend, event_is_enabled, event_spec,
-    handled_event_types,
+    event_is_enabled, event_spec, handled_event_types, OutboxAppend, OutboxEvent, PgOutboxAppend,
+    CATALOG,
 };
+use pm_application::run_dispatch::NoopExecutor;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -94,7 +94,11 @@ async fn run_completed_is_produced_in_the_terminal_transaction(pool: PgPool) {
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert_eq!(rows.len(), 1, "the terminal transition must produce exactly one event");
+    assert_eq!(
+        rows.len(),
+        1,
+        "the terminal transition must produce exactly one event"
+    );
     assert_eq!(rows[0].1, format!("run_completed:{run_id}"));
     assert_eq!(rows[0].2["run_id"], serde_json::json!(run_id));
     assert_eq!(rows[0].2["task_id"], serde_json::json!(task_id));
@@ -127,7 +131,10 @@ async fn a_run_produces_only_one_run_completed_event(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(count, 1, "a run must not produce a second RunCompleted event");
+    assert_eq!(
+        count, 1,
+        "a run must not produce a second RunCompleted event"
+    );
 }
 
 /// E-03：幂等键以 run_id 钉死（重复写入坍缩为同一行）。
@@ -166,7 +173,10 @@ async fn run_completed_idempotency_key_is_pinned_to_run_id(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(count, 1, "the same idempotency key must collapse to one row");
+    assert_eq!(
+        count, 1,
+        "the same idempotency key must collapse to one row"
+    );
 }
 
 // ---------------------------------------------------------------------------

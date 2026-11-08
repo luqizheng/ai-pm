@@ -26,16 +26,16 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::delivery::{
-    DeliveryOptions, SubmittedRepository, SubmittedTest, SubmitResultRequest, submit_delivery_with,
+    submit_delivery_with, DeliveryOptions, SubmitResultRequest, SubmittedRepository, SubmittedTest,
 };
 use pm_application::review::{
     decide_review_approval, enqueue_review, judge_delivery_failures, review_step, AdvanceOutcome,
     ApprovalOutcome, EnqueueOutcome, ReviewConfig, ReviewDecisionRequest, ReviewStep,
 };
-use pm_application::run_context::{ProgressReport, report_progress};
-use pm_application::run_dispatch::{RunDispatchConfig, claim_task_run, workspace_path_for};
+use pm_application::run_context::{report_progress, ProgressReport};
+use pm_application::run_dispatch::{claim_task_run, workspace_path_for, RunDispatchConfig};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -73,7 +73,10 @@ fn init_workspace(base: &Path, run_id: Uuid, workspace_path: &str) -> (PathBuf, 
     git(&root, &["init", "-q", "-b", "main"]);
     std::fs::write(root.join("README.md"), "# base\n").expect("write base file");
     git(&root, &["add", "."]);
-    git(&root, &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "base"]);
+    git(
+        &root,
+        &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "base"],
+    );
     let sha = head_sha(&root);
     (root, sha)
 }
@@ -83,7 +86,10 @@ fn commit_change(root: &Path, files: &[&str]) -> String {
         std::fs::write(root.join(file), "changed\n").expect("write changed file");
     }
     git(root, &["add", "."]);
-    git(root, &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "change"]);
+    git(
+        root,
+        &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "change"],
+    );
     head_sha(root)
 }
 
@@ -238,7 +244,9 @@ async fn seed_delivered(
         workspace_base: base.clone(),
         git_timeout: Duration::from_secs(30),
     };
-    submit_delivery_with(pool, &request, &options).await.unwrap();
+    submit_delivery_with(pool, &request, &options)
+        .await
+        .unwrap();
 
     Fx {
         project_id: outcome.project_id,
@@ -370,7 +378,10 @@ async fn c99_c131_active_review_does_not_block_delivery_and_is_unique_per_task(p
     .execute(&pool)
     .await
     .expect_err("a second active review run must be refused");
-    assert_eq!(error.as_database_error().unwrap().code().as_deref(), Some("23505"));
+    assert_eq!(
+        error.as_database_error().unwrap().code().as_deref(),
+        Some("23505")
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -383,7 +394,9 @@ async fn c100_delivered_auto_accept_completes_with_proposal_and_events(pool: PgP
     let fx = seed_delivered(&pool, "D5-C100", true, "passed").await;
     insert_criterion(&pool, fx.project_id, fx.task_id, 10, "automated_test").await;
 
-    let queued = enqueue_review(&pool, fx.project_id, fx.task_id).await.unwrap();
+    let queued = enqueue_review(&pool, fx.project_id, fx.task_id)
+        .await
+        .unwrap();
     let EnqueueOutcome::Queued {
         review_run_id,
         already_queued,
@@ -395,35 +408,39 @@ async fn c100_delivered_auto_accept_completes_with_proposal_and_events(pool: PgP
     assert!(!already_queued);
     assert_eq!(task_status(&pool, fx.task_id).await, "reviewing");
 
-    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env()).await.unwrap();
-    let ReviewStep::Reviewed { verdict, advance, .. } = step else {
+    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env())
+        .await
+        .unwrap();
+    let ReviewStep::Reviewed {
+        verdict, advance, ..
+    } = step
+    else {
         panic!("the queued review run must be executed, got {step:?}");
     };
     assert_eq!(verdict, "approved");
     let AdvanceOutcome::Completed { proposal_id } = advance else {
         panic!("auto_accept must complete the task, got {advance:?}");
     };
-    let proposal_id = proposal_id.expect("a draft proposal must be created in the same transaction");
+    let proposal_id =
+        proposal_id.expect("a draft proposal must be created in the same transaction");
 
     assert_eq!(task_status(&pool, fx.task_id).await, "completed");
-    let (verdict_col, run_status): (Option<String>, String) = sqlx::query_as(
-        "SELECT review_verdict, status FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(review_run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (verdict_col, run_status): (Option<String>, String) =
+        sqlx::query_as("SELECT review_verdict, status FROM delivery.task_run WHERE id = $1")
+            .bind(review_run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(verdict_col.as_deref(), Some("approved"));
     assert_eq!(run_status, "succeeded");
 
     // 提案：`draft` 初始态，与 completed 同事务落定。
-    let (doc_type, status, doc_key): (String, String, String) = sqlx::query_as(
-        "SELECT doc_type, status, doc_key FROM ai.document_proposal WHERE id = $1",
-    )
-    .bind(proposal_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (doc_type, status, doc_key): (String, String, String) =
+        sqlx::query_as("SELECT doc_type, status, doc_key FROM ai.document_proposal WHERE id = $1")
+            .bind(proposal_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(doc_type, "knowledge");
     assert_eq!(status, "draft");
     assert_eq!(doc_key, format!("task-{}", fx.task_id));
@@ -474,9 +491,16 @@ async fn c101_require_human_approval_stops_at_a_pending_approval(pool: PgPool) {
     .await
     .unwrap();
 
-    enqueue_review(&pool, fx.project_id, fx.task_id).await.unwrap();
-    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env()).await.unwrap();
-    let ReviewStep::Reviewed { verdict, advance, .. } = step else {
+    enqueue_review(&pool, fx.project_id, fx.task_id)
+        .await
+        .unwrap();
+    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env())
+        .await
+        .unwrap();
+    let ReviewStep::Reviewed {
+        verdict, advance, ..
+    } = step
+    else {
         panic!("expected a reviewed step, got {step:?}");
     };
     assert_eq!(verdict, "approved");
@@ -524,8 +548,12 @@ async fn c102_approve_completes_and_reject_requests_changes(pool: PgPool) {
     // ── approve ──────────────────────────────────────────────────────
     let fx = seed_delivered(&pool, "D5-C102A", true, "passed").await;
     insert_criterion(&pool, fx.project_id, fx.task_id, 10, "manual").await;
-    enqueue_review(&pool, fx.project_id, fx.task_id).await.unwrap();
-    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env()).await.unwrap();
+    enqueue_review(&pool, fx.project_id, fx.task_id)
+        .await
+        .unwrap();
+    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env())
+        .await
+        .unwrap();
     let ReviewStep::Reviewed {
         advance: AdvanceOutcome::AwaitingApproval { approval_id, .. },
         ..
@@ -586,8 +614,12 @@ async fn c102_approve_completes_and_reject_requests_changes(pool: PgPool) {
     // ── reject ───────────────────────────────────────────────────────
     let fx2 = seed_delivered(&pool, "D5-C102B", true, "passed").await;
     insert_criterion(&pool, fx2.project_id, fx2.task_id, 10, "manual").await;
-    enqueue_review(&pool, fx2.project_id, fx2.task_id).await.unwrap();
-    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env()).await.unwrap();
+    enqueue_review(&pool, fx2.project_id, fx2.task_id)
+        .await
+        .unwrap();
+    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env())
+        .await
+        .unwrap();
     let ReviewStep::Reviewed {
         advance: AdvanceOutcome::AwaitingApproval { approval_id, .. },
         ..
@@ -627,9 +659,16 @@ async fn c102_approve_completes_and_reject_requests_changes(pool: PgPool) {
 async fn c103_failed_integration_is_changes_requested_and_human_approve_is_refused(pool: PgPool) {
     let fx = seed_delivered(&pool, "D5-C103", true, "failed").await;
     insert_criterion(&pool, fx.project_id, fx.task_id, 10, "automated_test").await;
-    enqueue_review(&pool, fx.project_id, fx.task_id).await.unwrap();
-    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env()).await.unwrap();
-    let ReviewStep::Reviewed { verdict, advance, .. } = step else {
+    enqueue_review(&pool, fx.project_id, fx.task_id)
+        .await
+        .unwrap();
+    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env())
+        .await
+        .unwrap();
+    let ReviewStep::Reviewed {
+        verdict, advance, ..
+    } = step
+    else {
         panic!("expected reviewed, got {step:?}");
     };
     assert_eq!(verdict, "changes_requested");
@@ -678,8 +717,12 @@ async fn c103_failed_integration_is_changes_requested_and_human_approve_is_refus
 async fn c104_not_run_with_automated_criterion_requests_changes(pool: PgPool) {
     let fx = seed_delivered(&pool, "D5-C104", true, "not_run").await;
     insert_criterion(&pool, fx.project_id, fx.task_id, 10, "automated_test").await;
-    enqueue_review(&pool, fx.project_id, fx.task_id).await.unwrap();
-    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env()).await.unwrap();
+    enqueue_review(&pool, fx.project_id, fx.task_id)
+        .await
+        .unwrap();
+    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env())
+        .await
+        .unwrap();
     let ReviewStep::Reviewed { verdict, .. } = step else {
         panic!("expected reviewed, got {step:?}");
     };
@@ -698,9 +741,16 @@ async fn c104_not_run_with_automated_criterion_requests_changes(pool: PgPool) {
 async fn c105_not_run_without_automated_criterion_is_inconclusive_and_waits(pool: PgPool) {
     let fx = seed_delivered(&pool, "D5-C105", true, "not_run").await;
     insert_criterion(&pool, fx.project_id, fx.task_id, 10, "manual").await;
-    enqueue_review(&pool, fx.project_id, fx.task_id).await.unwrap();
-    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env()).await.unwrap();
-    let ReviewStep::Reviewed { verdict, advance, .. } = step else {
+    enqueue_review(&pool, fx.project_id, fx.task_id)
+        .await
+        .unwrap();
+    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env())
+        .await
+        .unwrap();
+    let ReviewStep::Reviewed {
+        verdict, advance, ..
+    } = step
+    else {
         panic!("expected reviewed, got {step:?}");
     };
     assert_eq!(verdict, "inconclusive");
@@ -729,8 +779,12 @@ async fn c107_manual_criteria_get_no_pipeline_verdict_row(pool: PgPool) {
     let fx = seed_delivered(&pool, "D5-C107", true, "passed").await;
     let automated = insert_criterion(&pool, fx.project_id, fx.task_id, 10, "automated_test").await;
     let manual = insert_criterion(&pool, fx.project_id, fx.task_id, 20, "manual").await;
-    enqueue_review(&pool, fx.project_id, fx.task_id).await.unwrap();
-    review_step(&pool, &outbox(), &ReviewConfig::from_env()).await.unwrap();
+    enqueue_review(&pool, fx.project_id, fx.task_id)
+        .await
+        .unwrap();
+    review_step(&pool, &outbox(), &ReviewConfig::from_env())
+        .await
+        .unwrap();
 
     let rows: Vec<Uuid> = sqlx::query_scalar(
         "SELECT criterion_id FROM delivery.acceptance_criterion_verdict WHERE review_run_id IN \
@@ -740,8 +794,14 @@ async fn c107_manual_criteria_get_no_pipeline_verdict_row(pool: PgPool) {
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert!(rows.contains(&automated), "deterministic criteria land a row");
-    assert!(!rows.contains(&manual), "manual criteria must not pre-insert verdicts");
+    assert!(
+        rows.contains(&automated),
+        "deterministic criteria land a row"
+    );
+    assert!(
+        !rows.contains(&manual),
+        "manual criteria must not pre-insert verdicts"
+    );
     // finding 仍然锚定 manual 条目（待人工可见）。
     let anchored: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM delivery.review_finding WHERE criterion_id = $1 AND finding_kind = 'awaiting_manual'",
@@ -761,31 +821,44 @@ async fn c107_manual_criteria_get_no_pipeline_verdict_row(pool: PgPool) {
 async fn c111_c136_review_failure_touches_neither_delivery_run_nor_creates_one(pool: PgPool) {
     let fx = seed_delivered(&pool, "D5-C111", true, "passed").await;
     insert_criterion(&pool, fx.project_id, fx.task_id, 10, "automated_test").await;
-    enqueue_review(&pool, fx.project_id, fx.task_id).await.unwrap();
+    enqueue_review(&pool, fx.project_id, fx.task_id)
+        .await
+        .unwrap();
 
     // 构造锚定漂移（§3.3 / T-052 场景）：拍①之后新增一条验收条目 → 输入锚定
     // 与 run 行记录的哈希不再一致 → verdict 落库前复核失败。
     insert_criterion(&pool, fx.project_id, fx.task_id, 20, "manual").await;
 
-    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env()).await.unwrap();
-    let ReviewStep::Failed { run_id, retry_run_id } = step else {
-        panic!("anchor drift must fail the review run, got {step:?}");
-    };
-    assert!(retry_run_id.is_some(), "a retry review run must be scheduled");
-
-    let failed_status: String = sqlx::query_scalar("SELECT status FROM delivery.task_run WHERE id = $1")
-        .bind(run_id)
-        .fetch_one(&pool)
+    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env())
         .await
         .unwrap();
+    let ReviewStep::Failed {
+        run_id,
+        retry_run_id,
+    } = step
+    else {
+        panic!("anchor drift must fail the review run, got {step:?}");
+    };
+    assert!(
+        retry_run_id.is_some(),
+        "a retry review run must be scheduled"
+    );
+
+    let failed_status: String =
+        sqlx::query_scalar("SELECT status FROM delivery.task_run WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(failed_status, "failed");
 
     // 重试 run 的 run_kind 恒为 review；delivery 行数不增加（C136）。
-    let retry_kind: String = sqlx::query_scalar("SELECT run_kind FROM delivery.task_run WHERE id = $1")
-        .bind(retry_run_id.unwrap())
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let retry_kind: String =
+        sqlx::query_scalar("SELECT run_kind FROM delivery.task_run WHERE id = $1")
+            .bind(retry_run_id.unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(retry_kind, "review");
     let delivery_runs: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM delivery.task_run WHERE task_id = $1 AND run_kind = 'delivery'",
@@ -794,19 +867,27 @@ async fn c111_c136_review_failure_touches_neither_delivery_run_nor_creates_one(p
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(delivery_runs, 1, "review recovery must never create a delivery run");
+    assert_eq!(
+        delivery_runs, 1,
+        "review recovery must never create a delivery run"
+    );
 
     // delivery run status/outcome 与任务状态全程不变（C111）。
     let (status, outcome) = delivery_run_status(&pool, fx.delivery_run_id).await;
-    assert_eq!(status, "running", "the delivery run is untouched by the review failure");
+    assert_eq!(
+        status, "running",
+        "the delivery run is untouched by the review failure"
+    );
     assert_eq!(outcome, None);
     assert_eq!(task_status(&pool, fx.task_id).await, "reviewing");
     assert_eq!(
-        sqlx::query_scalar::<_, i32>("SELECT consecutive_failure_count FROM delivery.task WHERE id = $1")
-            .bind(fx.task_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap(),
+        sqlx::query_scalar::<_, i32>(
+            "SELECT consecutive_failure_count FROM delivery.task WHERE id = $1"
+        )
+        .bind(fx.task_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
         0,
         "review failure must not count as an execution failure (R7)"
     );
@@ -839,8 +920,13 @@ async fn c114_failure_judge_never_touches_review_runs(pool: PgPool) {
     .await
     .unwrap();
 
-    let report = judge_delivery_failures(&pool, &dispatch_cfg()).await.unwrap();
-    assert_eq!(report.judged, 0, "the scan must not hit review runs (structural predicate)");
+    let report = judge_delivery_failures(&pool, &dispatch_cfg())
+        .await
+        .unwrap();
+    assert_eq!(
+        report.judged, 0,
+        "the scan must not hit review runs (structural predicate)"
+    );
     assert_eq!(report.retries, 0);
     assert_eq!(report.task_failures, 0);
     let delivery_runs: i64 = sqlx::query_scalar(
@@ -850,12 +936,16 @@ async fn c114_failure_judge_never_touches_review_runs(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(delivery_runs, 1, "no delivery run may be created from a review failure");
-    let untouched: String = sqlx::query_scalar("SELECT status FROM delivery.task_run WHERE id = $1")
-        .bind(review_run)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    assert_eq!(
+        delivery_runs, 1,
+        "no delivery run may be created from a review failure"
+    );
+    let untouched: String =
+        sqlx::query_scalar("SELECT status FROM delivery.task_run WHERE id = $1")
+            .bind(review_run)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(untouched, "failed");
 }
 
@@ -868,11 +958,15 @@ async fn c119_c124_audit_chain_and_idempotent_enqueue(pool: PgPool) {
     let fx = seed_delivered(&pool, "D5-C119", true, "passed").await;
     insert_criterion(&pool, fx.project_id, fx.task_id, 10, "automated_test").await;
 
-    let first = enqueue_review(&pool, fx.project_id, fx.task_id).await.unwrap();
+    let first = enqueue_review(&pool, fx.project_id, fx.task_id)
+        .await
+        .unwrap();
     let EnqueueOutcome::Queued { review_run_id, .. } = first else {
         panic!("expected queued, got {first:?}");
     };
-    let second = enqueue_review(&pool, fx.project_id, fx.task_id).await.unwrap();
+    let second = enqueue_review(&pool, fx.project_id, fx.task_id)
+        .await
+        .unwrap();
     let EnqueueOutcome::Queued {
         review_run_id: again,
         already_queued,
@@ -895,7 +989,9 @@ async fn c119_c124_audit_chain_and_idempotent_enqueue(pool: PgPool) {
     );
     assert_eq!(audit_count(&pool, "review.queued").await, 1);
 
-    review_step(&pool, &outbox(), &ReviewConfig::from_env()).await.unwrap();
+    review_step(&pool, &outbox(), &ReviewConfig::from_env())
+        .await
+        .unwrap();
     assert_eq!(audit_count(&pool, "review.queued").await, 1);
     assert_eq!(audit_count(&pool, "review.completed").await, 1);
 }
@@ -906,8 +1002,12 @@ async fn c119_changes_requested_audit_is_distinct(pool: PgPool) {
     // 「passed 但 tests 有失败」属 L4 矛盾 → inconclusive（C106），不是本用例。
     let fx = seed_delivered(&pool, "D5-C119B", true, "failed").await;
     insert_criterion(&pool, fx.project_id, fx.task_id, 10, "automated_test").await;
-    enqueue_review(&pool, fx.project_id, fx.task_id).await.unwrap();
-    review_step(&pool, &outbox(), &ReviewConfig::from_env()).await.unwrap();
+    enqueue_review(&pool, fx.project_id, fx.task_id)
+        .await
+        .unwrap();
+    review_step(&pool, &outbox(), &ReviewConfig::from_env())
+        .await
+        .unwrap();
     assert_eq!(audit_count(&pool, "review.changes_requested").await, 1);
     assert_eq!(audit_count(&pool, "review.completed").await, 0);
     assert_eq!(task_status(&pool, fx.task_id).await, "changes_requested");
@@ -921,8 +1021,12 @@ async fn c119_changes_requested_audit_is_distinct(pool: PgPool) {
 async fn c106_passed_with_a_failed_test_is_inconclusive(pool: PgPool) {
     let fx = seed_delivered(&pool, "D5-C106", false, "passed").await;
     insert_criterion(&pool, fx.project_id, fx.task_id, 10, "automated_test").await;
-    enqueue_review(&pool, fx.project_id, fx.task_id).await.unwrap();
-    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env()).await.unwrap();
+    enqueue_review(&pool, fx.project_id, fx.task_id)
+        .await
+        .unwrap();
+    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env())
+        .await
+        .unwrap();
     let ReviewStep::Reviewed { verdict, .. } = step else {
         panic!("expected reviewed, got {step:?}");
     };
@@ -947,8 +1051,12 @@ async fn c123_immutability_triggers_reject_updates(pool: PgPool) {
     // （否则「UPDATE 0 行也返回 Ok」会让 append-only 断言假通过）。
     let fx = seed_delivered(&pool, "D5-C123", true, "failed").await;
     insert_criterion(&pool, fx.project_id, fx.task_id, 10, "automated_test").await;
-    enqueue_review(&pool, fx.project_id, fx.task_id).await.unwrap();
-    review_step(&pool, &outbox(), &ReviewConfig::from_env()).await.unwrap();
+    enqueue_review(&pool, fx.project_id, fx.task_id)
+        .await
+        .unwrap();
+    review_step(&pool, &outbox(), &ReviewConfig::from_env())
+        .await
+        .unwrap();
 
     let review_run: Uuid = sqlx::query_scalar(
         "SELECT id FROM delivery.task_run WHERE task_id = $1 AND run_kind = 'review'",
@@ -959,26 +1067,32 @@ async fn c123_immutability_triggers_reject_updates(pool: PgPool) {
     .unwrap();
 
     // review 报告列 once-written（verdict 非 NULL 后禁改）。
-    let verdict_update = sqlx::query(
-        "UPDATE delivery.task_run SET review_verdict = 'inconclusive' WHERE id = $1",
-    )
-    .bind(review_run)
-    .execute(&pool)
-    .await;
-    assert!(verdict_update.is_err(), "a decided verdict must be immutable");
+    let verdict_update =
+        sqlx::query("UPDATE delivery.task_run SET review_verdict = 'inconclusive' WHERE id = $1")
+            .bind(review_run)
+            .execute(&pool)
+            .await;
+    assert!(
+        verdict_update.is_err(),
+        "a decided verdict must be immutable"
+    );
 
     let role_update = sqlx::query("UPDATE delivery.task_run SET role_id = 'other' WHERE id = $1")
         .bind(review_run)
         .execute(&pool)
         .await;
-    assert!(role_update.is_err(), "role_id is once-written on review runs");
+    assert!(
+        role_update.is_err(),
+        "role_id is once-written on review runs"
+    );
 
     // finding / verdict 全表禁 UPDATE。
-    let finding_update =
-        sqlx::query("UPDATE delivery.review_finding SET message = 'rewritten' WHERE review_run_id = $1")
-            .bind(review_run)
-            .execute(&pool)
-            .await;
+    let finding_update = sqlx::query(
+        "UPDATE delivery.review_finding SET message = 'rewritten' WHERE review_run_id = $1",
+    )
+    .bind(review_run)
+    .execute(&pool)
+    .await;
     assert!(finding_update.is_err(), "review findings are append-only");
     let verdict_row = sqlx::query(
         "UPDATE delivery.acceptance_criterion_verdict SET verdict = 'failed' WHERE review_run_id = $1",
@@ -989,12 +1103,14 @@ async fn c123_immutability_triggers_reject_updates(pool: PgPool) {
     assert!(verdict_row.is_err(), "criterion verdicts are append-only");
 
     // delivery 行的常规更新不受影响（触发器按 OLD.run_kind 判定）。
-    let delivery_update = sqlx::query(
-        "UPDATE delivery.task_run SET integration_status = 'passed' WHERE id = $1",
-    )
-    .bind(fx.delivery_run_id)
-    .execute(&pool)
-    .await;
-    assert!(delivery_update.is_ok(), "delivery rows keep their D3/D4 update paths");
+    let delivery_update =
+        sqlx::query("UPDATE delivery.task_run SET integration_status = 'passed' WHERE id = $1")
+            .bind(fx.delivery_run_id)
+            .execute(&pool)
+            .await;
+    assert!(
+        delivery_update.is_ok(),
+        "delivery rows keep their D3/D4 update paths"
+    );
     let _ = (&fx.repository_id, &fx.base_sha, &fx.base, &fx.workspace);
 }

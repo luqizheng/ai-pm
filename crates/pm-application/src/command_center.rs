@@ -116,11 +116,7 @@ pub mod init_judgement {
     }
 
     /// 仓库接入：零仓库合法（不判失败）；不可达 → 受阻；待核验 → 系统进行中。
-    pub fn repository_access_status(
-        total: i64,
-        unreachable: i64,
-        pending: i64,
-    ) -> &'static str {
+    pub fn repository_access_status(total: i64, unreachable: i64, pending: i64) -> &'static str {
         if total == 0 {
             // 零仓库是合法状态：不判失败（设计稿 §4.7）。
             return init_status::NOT_STARTED;
@@ -161,10 +157,7 @@ pub mod init_judgement {
     ///   3. 其余未完成会话 → 系统进行中；
     ///   4. 会话全部完成且无待确认发现 → 完成（G-06：完成 ≠ 自动全确认，
     ///      但无任何待办时才允许判完成）。
-    pub fn cognition_status(
-        sessions: &[(String, i64)],
-        pending_findings: i64,
-    ) -> &'static str {
+    pub fn cognition_status(sessions: &[(String, i64)], pending_findings: i64) -> &'static str {
         let total: i64 = sessions.iter().map(|(_, n)| n).sum();
         if total == 0 {
             return init_status::NOT_STARTED;
@@ -515,11 +508,11 @@ pub async fn load_command_center(
         Ok(data) => ok_block(data),
         Err(err) => unavailable_block("project_summary", err),
     };
-    let initialization_progress = match load_initialization_progress(pool, tenant_id, project_id).await
-    {
-        Ok(data) => ok_block(data),
-        Err(err) => unavailable_block("initialization_progress", err),
-    };
+    let initialization_progress =
+        match load_initialization_progress(pool, tenant_id, project_id).await {
+            Ok(data) => ok_block(data),
+            Err(err) => unavailable_block("initialization_progress", err),
+        };
     let work_summary = match load_work_summary(pool, tenant_id, project_id).await {
         Ok(data) => ok_block(data),
         Err(err) => unavailable_block("work_summary", err),
@@ -532,18 +525,13 @@ pub async fn load_command_center(
         Ok(data) => ok_block(data),
         Err(err) => unavailable_block("risk_summary", err),
     };
-    let recent_activity = match load_recent_activity(
-        pool,
-        tenant_id,
-        project_id,
-        activity_limit,
-        activity_offset,
-    )
-    .await
-    {
-        Ok(data) => ok_block(data),
-        Err(err) => unavailable_block("recent_activity", err),
-    };
+    let recent_activity =
+        match load_recent_activity(pool, tenant_id, project_id, activity_limit, activity_offset)
+            .await
+        {
+            Ok(data) => ok_block(data),
+            Err(err) => unavailable_block("recent_activity", err),
+        };
 
     CommandCenter {
         project_id,
@@ -1085,7 +1073,16 @@ async fn load_recent_run_briefs(
     Ok(rows
         .into_iter()
         .map(
-            |(run_id, task_id, task_title, run_kind, attempt_no, status, created_at, finished_at)| {
+            |(
+                run_id,
+                task_id,
+                task_title,
+                run_kind,
+                attempt_no,
+                status,
+                created_at,
+                finished_at,
+            )| {
                 RunBrief {
                     run_id,
                     task_id,
@@ -1385,8 +1382,7 @@ async fn load_risk_summary(
                 source_state: status,
                 severity: "high".to_string(),
                 occurred_at: Some(created_at),
-                suggestion: error_code
-                    .unwrap_or_else(|| "查看导入作业详情".to_string()),
+                suggestion: error_code.unwrap_or_else(|| "查看导入作业详情".to_string()),
                 link: ActionLink {
                     kind: "repo_import".to_string(),
                     params: BTreeMap::from([("import_id".to_string(), import_id.to_string())]),
@@ -1500,12 +1496,11 @@ async fn load_recent_activity(
     let mut actors: std::collections::HashMap<Uuid, (Option<String>, Option<String>)> =
         std::collections::HashMap::new();
     if !actor_ids.is_empty() {
-        let actor_rows: Vec<(Uuid, Option<String>, Option<String>)> = sqlx::query_as(
-            "SELECT id, display_name, kind FROM core.principal WHERE id = ANY($1)",
-        )
-        .bind(&actor_ids)
-        .fetch_all(pool)
-        .await?;
+        let actor_rows: Vec<(Uuid, Option<String>, Option<String>)> =
+            sqlx::query_as("SELECT id, display_name, kind FROM core.principal WHERE id = ANY($1)")
+                .bind(&actor_ids)
+                .fetch_all(pool)
+                .await?;
         for (id, name, kind) in actor_rows {
             actors.insert(id, (name, kind));
         }
@@ -1513,34 +1508,38 @@ async fn load_recent_activity(
 
     let items = rows
         .into_iter()
-        .map(|(id, activity_type, target_type, target_id, actor_id, created_at)| {
-            let (actor_name, actor_kind) = actor_id
-                .and_then(|actor| actors.get(&actor).cloned())
-                .unwrap_or((None, None));
-            let dedup_key = format!(
-                "{activity_type}:{}:{}",
-                target_type.clone().unwrap_or_default(),
-                target_id.map(|v| v.to_string()).unwrap_or_default()
-            );
-            ActivityItem {
-                id,
-                summary: activity_summary(&activity_type),
-                activity_type,
-                source_type: target_type,
-                source_id: target_id,
-                occurred_at: created_at,
-                actor: ActivityActor {
-                    kind: match actor_kind.as_deref() {
-                        Some("human") => "human".to_string(),
-                        Some("dev_agent") | Some("ai_pm") | Some("service") => "agent".to_string(),
-                        _ => "system".to_string(),
+        .map(
+            |(id, activity_type, target_type, target_id, actor_id, created_at)| {
+                let (actor_name, actor_kind) = actor_id
+                    .and_then(|actor| actors.get(&actor).cloned())
+                    .unwrap_or((None, None));
+                let dedup_key = format!(
+                    "{activity_type}:{}:{}",
+                    target_type.clone().unwrap_or_default(),
+                    target_id.map(|v| v.to_string()).unwrap_or_default()
+                );
+                ActivityItem {
+                    id,
+                    summary: activity_summary(&activity_type),
+                    activity_type,
+                    source_type: target_type,
+                    source_id: target_id,
+                    occurred_at: created_at,
+                    actor: ActivityActor {
+                        kind: match actor_kind.as_deref() {
+                            Some("human") => "human".to_string(),
+                            Some("dev_agent") | Some("ai_pm") | Some("service") => {
+                                "agent".to_string()
+                            }
+                            _ => "system".to_string(),
+                        },
+                        id: actor_id,
+                        name: actor_name,
                     },
-                    id: actor_id,
-                    name: actor_name,
-                },
-                dedup_key,
-            }
-        })
+                    dedup_key,
+                }
+            },
+        )
         .collect();
 
     Ok(RecentActivity { total, items })

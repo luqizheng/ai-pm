@@ -5,12 +5,12 @@
 //! 交付清单（D4）、不裁决任务状态（D5）。契约里的每个字段都能回到一张库表
 //! （§4.2 映射表），不拼装、不带工具/prompt/model 字段。
 
+use crate::project_goal::load_official_goal;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
-use crate::project_goal::load_official_goal;
 
 use crate::command_executor::{apply_task_transition, system_context, TransitionFacts};
 use crate::run_dispatch::{
@@ -48,7 +48,9 @@ impl From<RunDispatchError> for LeaseError {
     fn from(err: RunDispatchError) -> Self {
         match err {
             RunDispatchError::Db(e) => LeaseError::Db(e),
-            RunDispatchError::TaskNotFound | RunDispatchError::NoRunnableRun => LeaseError::NotFound,
+            RunDispatchError::TaskNotFound | RunDispatchError::NoRunnableRun => {
+                LeaseError::NotFound
+            }
             RunDispatchError::RunAlreadyClaimed | RunDispatchError::TaskNotReady(_) => {
                 LeaseError::Conflict(err.to_string())
             }
@@ -421,12 +423,14 @@ pub async fn get_run_context(
         .collect();
 
     // I4-E：正式 Goal 快照（缺 Goal 是显式信号，不是错误）。
-    let goal = load_official_goal(pool, project_id).await?.map(|goal| GoalSnapshot {
-        document_id: goal.document_id,
-        revision_id: goal.revision_id,
-        revision_no: goal.revision_no,
-        content_hash: goal.content_hash,
-    });
+    let goal = load_official_goal(pool, project_id)
+        .await?
+        .map(|goal| GoalSnapshot {
+            document_id: goal.document_id,
+            revision_id: goal.revision_id,
+            revision_no: goal.revision_no,
+            content_hash: goal.content_hash,
+        });
 
     Ok(RunContract {
         contract_version: CONTRACT_VERSION,
@@ -516,7 +520,8 @@ pub async fn renew_lease_by_token(
     generation: i32,
 ) -> Result<RenewedLease, LeaseError> {
     let mut tx = pool.begin().await?;
-    let renewed = renew_lease_in_tx(&mut tx, project_id, run_id, lease_token, cfg, generation).await?;
+    let renewed =
+        renew_lease_in_tx(&mut tx, project_id, run_id, lease_token, cfg, generation).await?;
     tx.commit().await?;
     Ok(renewed)
 }
@@ -589,7 +594,17 @@ pub async fn report_progress(
     cfg: &RunDispatchConfig,
     generation: i32,
 ) -> Result<RenewedLease, LeaseError> {
-    report_progress_impl(pool, project_id, run_id, lease_token, report, cfg, generation, None).await
+    report_progress_impl(
+        pool,
+        project_id,
+        run_id,
+        lease_token,
+        report,
+        cfg,
+        generation,
+        None,
+    )
+    .await
 }
 
 /// 同 [`report_progress`]，但由调用方**显式**给出完整审计身份（T-088 MCP 路径）。
@@ -658,10 +673,11 @@ async fn report_progress_impl(
 
     let mut run_status_after = lease.status.clone();
     let mut stage_after = lease.stage.clone();
-    let mut task_status: String = sqlx::query_scalar("SELECT status FROM delivery.task WHERE id = $1")
-        .bind(lease.task_id)
-        .fetch_one(&mut *tx)
-        .await?;
+    let mut task_status: String =
+        sqlx::query_scalar("SELECT status FROM delivery.task WHERE id = $1")
+            .bind(lease.task_id)
+            .fetch_one(&mut *tx)
+            .await?;
 
     // T-032：平台已写入启动意图（executor_session 非空 = Model B spawn）→
     // 首报不写 mcp session、claimed→running 由编排器推进（T-031 实施裁定 2 +

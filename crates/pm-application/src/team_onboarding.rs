@@ -32,7 +32,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use getrandom::fill as fill_random;
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -255,7 +255,9 @@ fn hash_token(token: &str) -> String {
 fn validate_team_name(name: &str) -> Result<(), TeamOnboardingError> {
     let trimmed = name.trim();
     if trimmed.is_empty() || trimmed.chars().count() > 120 {
-        return Err(TeamOnboardingError::Validation("team name must be 1..=120 chars"));
+        return Err(TeamOnboardingError::Validation(
+            "team name must be 1..=120 chars",
+        ));
     }
     Ok(())
 }
@@ -300,7 +302,10 @@ async fn insert_tenant_audit(
 /// slug 唯一冲突（23505 on `uq_tenant_slug`）映射为稳定 409。
 fn map_slug_conflict(err: sqlx::Error) -> TeamOnboardingError {
     if let sqlx::Error::Database(db) = &err {
-        if db.constraint().is_some_and(|c| c.contains("uq_tenant_slug")) {
+        if db
+            .constraint()
+            .is_some_and(|c| c.contains("uq_tenant_slug"))
+        {
             return TeamOnboardingError::Conflict("slug_already_taken");
         }
     }
@@ -523,7 +528,12 @@ pub async fn update_team_profile(
     .await?;
 
     tx.commit().await?;
-    Ok(TeamProfile { id: tenant_id, name, slug, description })
+    Ok(TeamProfile {
+        id: tenant_id,
+        name,
+        slug,
+        description,
+    })
 }
 
 // ─────────────────────────────────────────────────────────── 邮箱邀请
@@ -542,7 +552,9 @@ pub async fn create_invitation(
     let role = req.role.trim().to_lowercase();
     if role != "admin" && role != "member" {
         // OWNER 不可经邀请产生（spec §5.1 / 权限矩阵）。
-        return Err(TeamOnboardingError::Validation("invitation role must be admin or member"));
+        return Err(TeamOnboardingError::Validation(
+            "invitation role must be admin or member",
+        ));
     }
     let email_normalized = normalize_email(&email);
     let expires_at = now() + chrono::Duration::from_std(DEFAULT_TTL).expect("static ttl");
@@ -580,7 +592,12 @@ pub async fn create_invitation(
     tx.commit().await?;
 
     let accept_path = format!("{INVITATION_ACCEPT_PATH}?token={token}&type=invite");
-    Ok(InvitationCreated { id, token, accept_path, expires_at })
+    Ok(InvitationCreated {
+        id,
+        token,
+        accept_path,
+        expires_at,
+    })
 }
 
 /// 邀请列表（owner/admin）。PENDING 过期显示 EXPIRED（计算态，惰性翻转
@@ -655,9 +672,17 @@ pub async fn preview_invitation(
     pool: &PgPool,
     token: &str,
 ) -> Result<Option<InvitationPreview>, sqlx::Error> {
-    let row: Option<(String, Option<String>, String, Option<String>, String, DateTime<Utc>, String, String)> =
-        sqlx::query_as(
-            "SELECT t.display_name, t.slug, i.role, p.display_name, \
+    let row: Option<(
+        String,
+        Option<String>,
+        String,
+        Option<String>,
+        String,
+        DateTime<Utc>,
+        String,
+        String,
+    )> = sqlx::query_as(
+        "SELECT t.display_name, t.slug, i.role, p.display_name, \
                     CASE WHEN i.status = 'PENDING' AND i.expires_at < now() \
                          THEN 'EXPIRED' ELSE i.status END AS status, \
                     i.expires_at, i.email_normalized, i.status \
@@ -665,10 +690,10 @@ pub async fn preview_invitation(
                JOIN core.tenant t ON t.id = i.tenant_id \
                LEFT JOIN core.principal p ON p.id = i.invited_by \
               WHERE i.token_hash = $1",
-        )
-        .bind(hash_token(token))
-        .fetch_optional(pool)
-        .await?;
+    )
+    .bind(hash_token(token))
+    .fetch_optional(pool)
+    .await?;
     let Some((team_name, team_slug, role, inviter_name, status, expires_at, email, raw_status)) =
         row
     else {
@@ -697,14 +722,13 @@ pub async fn accept_invitation(
 ) -> Result<AcceptOutcome, TeamOnboardingError> {
     let mut tx = pool.begin().await?;
     // 锁定即取全决策所需列：id/租户/角色/状态/有效期/规范化邮箱/邀请人。
-    let locked: Option<(Uuid, Uuid, String, String, DateTime<Utc>, String, Uuid)> =
-        sqlx::query_as(
-            "SELECT id, tenant_id, role, status, expires_at, email_normalized, invited_by \
+    let locked: Option<(Uuid, Uuid, String, String, DateTime<Utc>, String, Uuid)> = sqlx::query_as(
+        "SELECT id, tenant_id, role, status, expires_at, email_normalized, invited_by \
                FROM core.tenant_invitation WHERE token_hash = $1 FOR UPDATE",
-        )
-        .bind(hash_token(&req.token))
-        .fetch_optional(&mut *tx)
-        .await?;
+    )
+    .bind(hash_token(&req.token))
+    .fetch_optional(&mut *tx)
+    .await?;
     let Some((invitation_id, tenant_id, role, status, expires_at, email_normalized, invited_by)) =
         locked
     else {
@@ -768,7 +792,12 @@ pub async fn accept_invitation(
             .await?;
 
     let outcome = if membership.is_some() {
-        AcceptOutcome { outcome: "already_member", team_id: tenant_id, team_name, role }
+        AcceptOutcome {
+            outcome: "already_member",
+            team_id: tenant_id,
+            team_name,
+            role,
+        }
     } else {
         sqlx::query(
             "INSERT INTO core.tenant_member (tenant_id, principal_id, role, granted_by) \
@@ -798,7 +827,12 @@ pub async fn accept_invitation(
             Some(json!({ "role": role, "via": "invitation" })),
         )
         .await?;
-        AcceptOutcome { outcome: "joined", team_id: tenant_id, team_name, role }
+        AcceptOutcome {
+            outcome: "joined",
+            team_id: tenant_id,
+            team_name,
+            role,
+        }
     };
 
     // 邀请单终结（含 already_member 分支——设计稿 §7.2「明确的终结处理」）。
@@ -828,7 +862,6 @@ pub async fn accept_invitation(
     Ok(outcome)
 }
 
-
 // ─────────────────────────────────────────────────────────── 邀请链接
 
 /// 创建邀请链接（owner/admin）。V1 链接只发 MEMBER（default_role 仅 'member'，
@@ -839,18 +872,29 @@ pub async fn create_invitation_link(
     tenant_id: Uuid,
     req: CreateLinkRequest,
 ) -> Result<LinkCreated, TeamOnboardingError> {
-    let role = req.default_role.as_deref().unwrap_or("member").trim().to_lowercase();
+    let role = req
+        .default_role
+        .as_deref()
+        .unwrap_or("member")
+        .trim()
+        .to_lowercase();
     if role != "member" {
-        return Err(TeamOnboardingError::Validation("link default role must be member"));
+        return Err(TeamOnboardingError::Validation(
+            "link default role must be member",
+        ));
     }
     if let Some(max_uses) = req.max_uses {
         if max_uses <= 0 {
             return Err(TeamOnboardingError::Validation("max_uses must be positive"));
         }
     }
-    let expires_at = req.expires_at.unwrap_or_else(|| now() + chrono::Duration::from_std(DEFAULT_TTL).expect("static ttl"));
+    let expires_at = req
+        .expires_at
+        .unwrap_or_else(|| now() + chrono::Duration::from_std(DEFAULT_TTL).expect("static ttl"));
     if expires_at <= now() {
-        return Err(TeamOnboardingError::Validation("expires_at must be in the future"));
+        return Err(TeamOnboardingError::Validation(
+            "expires_at must be in the future",
+        ));
     }
     let token = generate_token()?;
 
@@ -883,7 +927,12 @@ pub async fn create_invitation_link(
     tx.commit().await?;
 
     let accept_path = format!("{LINK_ACCEPT_PATH}?token={token}&type=link");
-    Ok(LinkCreated { id, token, accept_path, expires_at })
+    Ok(LinkCreated {
+        id,
+        token,
+        accept_path,
+        expires_at,
+    })
 }
 
 /// 链接列表（owner/admin）；ACTIVE 行按过期/余量给计算态。
@@ -976,7 +1025,13 @@ pub async fn preview_invitation_link(
         status
     };
     let remaining_uses = max_uses.map(|m| (m - used_count).max(0) as i64);
-    Ok(Some(LinkPreview { team_name, default_role, expires_at, status, remaining_uses }))
+    Ok(Some(LinkPreview {
+        team_name,
+        default_role,
+        expires_at,
+        status,
+        remaining_uses,
+    }))
 }
 
 /// 接受邀请链接（设计稿 §7.3）。幂等：同用户重复提交不重复计数
@@ -998,8 +1053,7 @@ pub async fn accept_invitation_link(
         .bind(hash_token(token))
         .fetch_optional(&mut *tx)
         .await?;
-    let Some((link_id, tenant_id, default_role, status, max_uses, used_count, expires_at)) =
-        locked
+    let Some((link_id, tenant_id, default_role, status, max_uses, used_count, expires_at)) = locked
     else {
         return Err(TeamOnboardingError::InvitationNotFound);
     };
@@ -1064,7 +1118,12 @@ pub async fn accept_invitation_link(
         .bind(principal_id)
         .execute(&mut *tx)
         .await?;
-        AcceptOutcome { outcome: "already_member", team_id: tenant_id, team_name, role: default_role }
+        AcceptOutcome {
+            outcome: "already_member",
+            team_id: tenant_id,
+            team_name,
+            role: default_role,
+        }
     } else {
         // 名额闸：仅对尚未加入的用户生效（行锁内判定 + 触顶翻 EXHAUSTED）。
         if status == "EXHAUSTED" || max_uses.is_some_and(|m| used_count >= m) {
@@ -1105,8 +1164,11 @@ pub async fn accept_invitation_link(
         .await?;
         // 余量消耗：行锁内 +1，触顶翻 EXHAUSTED。
         let new_count = used_count + 1;
-        let new_status =
-            if max_uses.is_some_and(|m| new_count >= m) { "EXHAUSTED" } else { "ACTIVE" };
+        let new_status = if max_uses.is_some_and(|m| new_count >= m) {
+            "EXHAUSTED"
+        } else {
+            "ACTIVE"
+        };
         sqlx::query(
             "UPDATE core.tenant_invitation_link SET used_count = $2, status = $3 WHERE id = $1",
         )
@@ -1126,7 +1188,12 @@ pub async fn accept_invitation_link(
             Some(json!({ "role": default_role, "via": "invitation_link" })),
         )
         .await?;
-        AcceptOutcome { outcome: "joined", team_id: tenant_id, team_name, role: default_role }
+        AcceptOutcome {
+            outcome: "joined",
+            team_id: tenant_id,
+            team_name,
+            role: default_role,
+        }
     };
 
     insert_tenant_audit(
@@ -1269,5 +1336,8 @@ pub async fn dissolve_team(
     .await?;
 
     tx.commit().await?;
-    Ok(DissolveOutcome { projects_deleted, members_removed })
+    Ok(DissolveOutcome {
+        projects_deleted,
+        members_removed,
+    })
 }

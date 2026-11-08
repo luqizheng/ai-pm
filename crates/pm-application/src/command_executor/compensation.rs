@@ -16,8 +16,10 @@ pub(crate) async fn apply_compensation(
             for entry in entries {
                 let (table, _, revcol) = entry.table.mapping();
                 let (before, after, revision) = restore_entry(tx, entry).await?;
-                before_rows.push(json!({ "table": table, "target_id": entry.target_id, "row": before }));
-                after_rows.push(json!({ "table": table, "target_id": entry.target_id, "row": after }));
+                before_rows
+                    .push(json!({ "table": table, "target_id": entry.target_id, "row": before }));
+                after_rows
+                    .push(json!({ "table": table, "target_id": entry.target_id, "row": after }));
                 // Undo-the-undo: restore the observed pre-rollback state,
                 // guarded at the revision the rollback leaves behind.
                 let mut inverse_fields = before
@@ -58,7 +60,6 @@ pub(crate) async fn apply_compensation(
         }
     }
 }
-
 
 /// Restores one snapshot entry under a fresh revision guard. Returns the
 /// pre-restore row JSON, the post-restore row JSON and the new revision.
@@ -107,13 +108,12 @@ pub(crate) async fn restore_entry(
         ))
     })?;
     let actual = before.get(revcol).and_then(Value::as_i64).ok_or_else(|| {
-        CommandError::Validation(format!("row in {table} is missing revision column `{revcol}`"))
+        CommandError::Validation(format!(
+            "row in {table} is missing revision column `{revcol}`"
+        ))
     })?;
     if actual != expected {
-        return Err(CommandError::RevisionConflict {
-            expected,
-            actual,
-        });
+        return Err(CommandError::RevisionConflict { expected, actual });
     }
     // String snapshots may target non-text columns (uuid ids, timestamptz
     // plans): a TEXT-typed parameter does not assignment-cast into them, so
@@ -154,7 +154,6 @@ pub(crate) async fn restore_entry(
     Ok((before, after, resulting_revision))
 }
 
-
 /// Column data types for a schema-qualified table, read from the catalog.
 /// Used by [`restore_entry`] to decide which SET assignments need an explicit
 /// cast when replaying a stored snapshot.
@@ -184,5 +183,3 @@ pub(crate) async fn column_types(
         })
         .collect())
 }
-
-

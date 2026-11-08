@@ -23,7 +23,11 @@ pub fn validate_git_url(raw: &str) -> Result<GitUrl, RepositoryError> {
             .map_or(("git", authority), |(u, h)| (u, h));
         let host = match host_port.rsplit_once(':') {
             Some((h, port)) => {
-                if h.is_empty() || port.is_empty() || port.len() > 5 || !port.chars().all(|c| c.is_ascii_digit()) {
+                if h.is_empty()
+                    || port.is_empty()
+                    || port.len() > 5
+                    || !port.chars().all(|c| c.is_ascii_digit())
+                {
                     return Err(RepositoryError::InvalidUrl);
                 }
                 h
@@ -60,7 +64,6 @@ pub fn validate_git_url(raw: &str) -> Result<GitUrl, RepositoryError> {
     })
 }
 
-
 /// `AI_PM_REPO_ALLOWED_HOSTS`（逗号分隔）存在时只允许这些 host。
 pub(crate) fn allowed_hosts() -> Option<Vec<String>> {
     let raw = std::env::var("AI_PM_REPO_ALLOWED_HOSTS").ok()?;
@@ -76,23 +79,19 @@ pub(crate) fn allowed_hosts() -> Option<Vec<String>> {
     }
 }
 
-
 pub(crate) fn normalize_url(raw: &str) -> Result<String, RepositoryError> {
     validate_git_url(raw).map(|url| url.normalized)
 }
 
-
 pub(crate) fn host_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')
 }
-
 
 pub(crate) fn path_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '~' | '/')
 }
 
 // ---------------------------------------------------------------- key + crypto
-
 
 #[cfg(test)]
 mod tests {
@@ -128,4 +127,3 @@ mod tests {
         assert!(normalize_role("unknown").is_err());
     }
 }
-

@@ -22,7 +22,7 @@ use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -313,14 +313,15 @@ async fn not_found_or_conflict(
     provider_id: Uuid,
     expected_revision: i64,
 ) -> TeamLlmError {
-    let actual: Option<i64> =
-        sqlx::query_scalar("SELECT revision FROM ai.team_llm_provider WHERE tenant_id = $1 AND id = $2")
-            .bind(tenant_id)
-            .bind(provider_id)
-            .fetch_optional(executor)
-            .await
-            .ok()
-            .flatten();
+    let actual: Option<i64> = sqlx::query_scalar(
+        "SELECT revision FROM ai.team_llm_provider WHERE tenant_id = $1 AND id = $2",
+    )
+    .bind(tenant_id)
+    .bind(provider_id)
+    .fetch_optional(executor)
+    .await
+    .ok()
+    .flatten();
     match actual {
         None => TeamLlmError::NotFound,
         Some(actual) => TeamLlmError::RevisionConflict {
@@ -521,7 +522,9 @@ pub async fn update_team_provider(
     .execute(&mut *tx)
     .await?;
     if updated.rows_affected() == 0 {
-        return Err(not_found_or_conflict(&mut *tx, tenant_id, provider_id, req.expected_revision).await);
+        return Err(
+            not_found_or_conflict(&mut *tx, tenant_id, provider_id, req.expected_revision).await,
+        );
     }
 
     let row = get_team_provider(&mut *tx, tenant_id, provider_id)
@@ -576,7 +579,15 @@ pub async fn replace_team_credential(
         ));
     }
 
-    attach_credential(&mut tx, tenant_id, provider_id, actor, &api_key, Some(req.expected_revision)).await?;
+    attach_credential(
+        &mut tx,
+        tenant_id,
+        provider_id,
+        actor,
+        &api_key,
+        Some(req.expected_revision),
+    )
+    .await?;
 
     let row = get_team_provider(&mut *tx, tenant_id, provider_id)
         .await?
@@ -616,7 +627,9 @@ pub async fn test_team_provider(
         .await?
         .ok_or(TeamLlmError::NotFound)?;
     if row.status == "archived" {
-        return Err(TeamLlmError::StatusTransition("archived provider cannot be tested"));
+        return Err(TeamLlmError::StatusTransition(
+            "archived provider cannot be tested",
+        ));
     }
     if !adapter_available(&row.provider_type) {
         return Err(TeamLlmError::AdapterUnavailable(row.provider_type.clone()));
@@ -670,7 +683,11 @@ pub async fn test_team_provider(
     .bind(PURPOSE_CONNECTION_TEST)
     .bind(status)
     .bind(error_kind)
-    .bind(if result.ok { None } else { Some(result.message.clone()) })
+    .bind(if result.ok {
+        None
+    } else {
+        Some(result.message.clone())
+    })
     .bind(i64::try_from(result.latency_ms).unwrap_or(i64::MAX))
     .execute(&mut *tx)
     .await?;
@@ -794,7 +811,11 @@ fn classify_probe_message(message: &str) -> &'static str {
         return "timeout";
     }
     if let Some(rest) = message.strip_prefix("HTTP ") {
-        let code: u16 = rest.split(':').next().and_then(|c| c.parse().ok()).unwrap_or(0);
+        let code: u16 = rest
+            .split(':')
+            .next()
+            .and_then(|c| c.parse().ok())
+            .unwrap_or(0);
         return match code {
             401 | 403 => "authentication",
             429 => "rate_limit",
@@ -817,7 +838,9 @@ pub async fn set_team_provider_status(
 ) -> Result<TeamLlmProviderRow, TeamLlmError> {
     let action = req.action.as_str();
     if !matches!(action, "enable" | "disable" | "archive") {
-        return Err(TeamLlmError::Validation("action must be enable|disable|archive"));
+        return Err(TeamLlmError::Validation(
+            "action must be enable|disable|archive",
+        ));
     }
 
     let mut tx = pool.begin().await?;
@@ -918,12 +941,11 @@ pub async fn delete_team_provider(
             "provider must be archived before deletion",
         ));
     }
-    let references: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.llm_call_record WHERE provider_id = $1",
-    )
-    .bind(provider_id)
-    .fetch_one(&mut *tx)
-    .await?;
+    let references: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ai.llm_call_record WHERE provider_id = $1")
+            .bind(provider_id)
+            .fetch_one(&mut *tx)
+            .await?;
     if references > 0 {
         return Err(TeamLlmError::ReferencedBy("llm_call_record"));
     }
@@ -1209,7 +1231,13 @@ mod tests {
     fn known_provider_types_match_design_doc() {
         assert_eq!(
             PROVIDER_TYPES,
-            ["openai", "anthropic", "gemini", "deepseek", "openai_compatible"]
+            [
+                "openai",
+                "anthropic",
+                "gemini",
+                "deepseek",
+                "openai_compatible"
+            ]
         );
         // anthropic 适配器未实现必须显式暴露（DEC-LLM-004）。
         assert!(!adapter_available("anthropic"));
@@ -1222,10 +1250,19 @@ mod tests {
     #[test]
     fn probe_error_classification() {
         assert_eq!(classify_probe_message("request timed out"), "timeout");
-        assert_eq!(classify_probe_message("HTTP 401: unauthorized"), "authentication");
+        assert_eq!(
+            classify_probe_message("HTTP 401: unauthorized"),
+            "authentication"
+        );
         assert_eq!(classify_probe_message("HTTP 429: slow down"), "rate_limit");
-        assert_eq!(classify_probe_message("HTTP 404: no model"), "model_unavailable");
+        assert_eq!(
+            classify_probe_message("HTTP 404: no model"),
+            "model_unavailable"
+        );
         assert_eq!(classify_probe_message("HTTP 500: boom"), "provider_error");
-        assert_eq!(classify_probe_message("error sending request"), "connection");
+        assert_eq!(
+            classify_probe_message("error sending request"),
+            "connection"
+        );
     }
 }

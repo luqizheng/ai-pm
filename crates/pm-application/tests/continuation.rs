@@ -5,10 +5,10 @@
 //!（Task 取消）+ consumed 不可逆 · C2 回归钉。
 
 use pm_application::actor::AuditActor;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::interaction::{
-    cancel_open_interaction, mark_consumed, report_interaction,
-    ReportInteractionInput, SubmitResponseInput, submit_interaction_response,
+    cancel_open_interaction, mark_consumed, report_interaction, submit_interaction_response,
+    ReportInteractionInput, SubmitResponseInput,
 };
 use pm_application::worker_command as cmd;
 use pm_domain::SYSTEM_TENANT;
@@ -68,10 +68,7 @@ fn input(fx: &(Uuid, Uuid, Uuid, Uuid), run_id: Uuid, event_id: &str) -> ReportI
     }
 }
 
-async fn continuation_of(
-    pool: &PgPool,
-    origin_interaction_id: Uuid,
-) -> (Uuid, i32, String) {
+async fn continuation_of(pool: &PgPool, origin_interaction_id: Uuid) -> (Uuid, i32, String) {
     let row: (Uuid, i32, String) = sqlx::query_as(
         "SELECT id, generation, status FROM delivery.continuation \
           WHERE origin_interaction_id = $1 ORDER BY generation",
@@ -92,10 +89,17 @@ async fn acp474_two_chains_two_continuations_with_backfill(pool: PgPool) {
     let r1 = report_interaction(&pool, &input(&fx, fx.2, "evt-1"), &AuditActor::dispatch())
         .await
         .unwrap();
-    let p1 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
+    let p1 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
     cmd::ack_command(
-        &pool, fx.0, p1[0].command_id, "client:dbg", cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })), None,
+        &pool,
+        fx.0,
+        p1[0].command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        None,
     )
     .await
     .unwrap();
@@ -114,11 +118,18 @@ async fn acp474_two_chains_two_continuations_with_backfill(pool: PgPool) {
     assert_eq!(status1, "open");
 
     // acked → started（ACP-475 同事务推进）。
-    let p2 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
+    let p2 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
     assert_eq!(p2.len(), 1);
     cmd::ack_command(
-        &pool, fx.0, p2[0].command_id, "client:dbg", cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })), None,
+        &pool,
+        fx.0,
+        p2[0].command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "session_created": true, "input_injected": true })),
+        None,
     )
     .await
     .unwrap();
@@ -137,11 +148,21 @@ async fn acp474_two_chains_two_continuations_with_backfill(pool: PgPool) {
     let r2 = report_interaction(&pool, &input(&fx, fx.2, "evt-2"), &AuditActor::dispatch())
         .await
         .unwrap();
-    let p3 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
-    let t2 = p3.iter().find(|c| c.command_type == "agent.process.terminate").unwrap();
+    let p3 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
+    let t2 = p3
+        .iter()
+        .find(|c| c.command_type == "agent.process.terminate")
+        .unwrap();
     cmd::ack_command(
-        &pool, fx.0, t2.command_id, "client:dbg", cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 2 })), None,
+        &pool,
+        fx.0,
+        t2.command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "exit_outcome": "Killed", "pid": 2 })),
+        None,
     )
     .await
     .unwrap();
@@ -205,16 +226,29 @@ async fn acp476_terminate_failure_freezes_continuation(pool: PgPool) {
     assert_eq!(status_open, "open");
 
     // 再 ack failed terminate（模拟有界重试耗尽回执）→ frozen + 原列双写。
-    let p1 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
-    let t = p1.iter().find(|c| c.command_type == "agent.process.terminate").unwrap();
+    let p1 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
+    let t = p1
+        .iter()
+        .find(|c| c.command_type == "agent.process.terminate")
+        .unwrap();
     cmd::ack_command(
-        &pool, fx.0, t.command_id, "client:dbg", cmd::AckOutcome::Failed,
-        Some(json!({})), Some("termination failed after retries".into()),
+        &pool,
+        fx.0,
+        t.command_id,
+        "client:dbg",
+        cmd::AckOutcome::Failed,
+        Some(json!({})),
+        Some("termination failed after retries".into()),
     )
     .await
     .unwrap();
     let (_, _, status) = continuation_of(&pool, r1.interaction_id).await;
-    assert_eq!(status, "frozen", "terminate failure freezes the continuation");
+    assert_eq!(
+        status, "frozen",
+        "terminate failure freezes the continuation"
+    );
     assert_eq!(c1, c1);
     let frozen_col: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
         "SELECT continuation_start_frozen_at FROM delivery.task_interaction WHERE id = $1",
@@ -223,20 +257,36 @@ async fn acp476_terminate_failure_freezes_continuation(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert!(frozen_col.is_some(), "original column double-write retained");
+    assert!(
+        frozen_col.is_some(),
+        "original column double-write retained"
+    );
 
     // 显式处置：重试成功（terminate 幂等 acked）→ continue acked → started
     //（解冻路径：守卫 status IN open,frozen）。
-    let p2 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
-    let c = p2.iter().find(|c| c.command_type == "agent.task.continue").unwrap();
+    let p2 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
+    let c = p2
+        .iter()
+        .find(|c| c.command_type == "agent.task.continue")
+        .unwrap();
     cmd::ack_command(
-        &pool, fx.0, c.command_id, "client:dbg", cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })), None,
+        &pool,
+        fx.0,
+        c.command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "session_created": true, "input_injected": true })),
+        None,
     )
     .await
     .unwrap();
     let (_, _, status_after) = continuation_of(&pool, r1.interaction_id).await;
-    assert_eq!(status_after, "started", "manual disposition unfreezes via acked");
+    assert_eq!(
+        status_after, "started",
+        "manual disposition unfreezes via acked"
+    );
 }
 
 /// ACP-477：终态钩子——Task 取消 → 非终态 continuation closed；closed 终态
@@ -261,9 +311,10 @@ async fn acp477_terminal_hooks_close_continuations(pool: PgPool) {
         .unwrap();
     let (_, _, status_open) = continuation_of(&pool, r1.interaction_id).await;
     assert_eq!(status_open, "open");
-    let cancelled = cancel_open_interaction(&pool, fx.0, fx.1, "task cancelled", &AuditActor::dispatch())
-        .await
-        .unwrap();
+    let cancelled =
+        cancel_open_interaction(&pool, fx.0, fx.1, "task cancelled", &AuditActor::dispatch())
+            .await
+            .unwrap();
     assert!(cancelled);
     let (_, _, status) = continuation_of(&pool, r1.interaction_id).await;
     assert_eq!(status, "closed");
@@ -292,11 +343,21 @@ async fn acp477_terminal_hooks_close_continuations(pool: PgPool) {
     let r2 = report_interaction(&pool, &input(&fx, fx.2, "evt-2"), &AuditActor::dispatch())
         .await
         .unwrap();
-    let p = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
-    let t = p.iter().find(|c| c.command_type == "agent.process.terminate").unwrap();
+    let p = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
+    let t = p
+        .iter()
+        .find(|c| c.command_type == "agent.process.terminate")
+        .unwrap();
     cmd::ack_command(
-        &pool, fx.0, t.command_id, "client:dbg", cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 3 })), None,
+        &pool,
+        fx.0,
+        t.command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "exit_outcome": "Killed", "pid": 3 })),
+        None,
     )
     .await
     .unwrap();
@@ -310,21 +371,38 @@ async fn acp477_terminal_hooks_close_continuations(pool: PgPool) {
     let s2 = submit_interaction_response(&pool, &sub, &AuditActor::principal(fx.3))
         .await
         .unwrap();
-    let p2 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
-    let t2 = p2.iter().find(|c| c.command_type == "agent.process.terminate").unwrap();
+    let p2 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
+    let t2 = p2
+        .iter()
+        .find(|c| c.command_type == "agent.process.terminate")
+        .unwrap();
     cmd::ack_command(
-        &pool, fx.0, t2.command_id, "client:dbg", cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 4 })), None,
+        &pool,
+        fx.0,
+        t2.command_id,
+        "client:dbg",
+        cmd::AckOutcome::Acked,
+        Some(json!({ "exit_outcome": "Killed", "pid": 4 })),
+        None,
     )
     .await
     .unwrap();
-    let p3 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg").await.unwrap();
+    let p3 = cmd::poll_commands(&pool, fx.0, fx.2, "client:dbg")
+        .await
+        .unwrap();
     // p3 同时含旧链 continue1（取消未撤命令，重领复投）与新链 continue2——
     // 两条都按 INPUT_INJECTED 回执（resume/mark_started 对 closed 链幂等 no-op）。
     for c in &p3 {
         cmd::ack_command(
-            &pool, fx.0, c.command_id, "client:dbg", cmd::AckOutcome::Acked,
-            Some(json!({ "session_created": true, "input_injected": true })), None,
+            &pool,
+            fx.0,
+            c.command_id,
+            "client:dbg",
+            cmd::AckOutcome::Acked,
+            Some(json!({ "session_created": true, "input_injected": true })),
+            None,
         )
         .await
         .unwrap();
@@ -337,7 +415,10 @@ async fn acp477_terminal_hooks_close_continuations(pool: PgPool) {
     .await
     .unwrap();
     mark_consumed(
-        &pool, fx.0, r2.interaction_id, Some(delivery_id),
+        &pool,
+        fx.0,
+        r2.interaction_id,
+        Some(delivery_id),
         &json!({ "kinds": ["initial_input_injected", "process_alive"] }),
         &AuditActor::dispatch(),
     )
@@ -352,5 +433,8 @@ async fn acp477_terminal_hooks_close_continuations(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(c_status, "consumed", "consumed persists as an irreversible fact");
+    assert_eq!(
+        c_status, "consumed",
+        "consumed persists as an irreversible fact"
+    );
 }

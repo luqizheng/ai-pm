@@ -3,15 +3,14 @@
 //! reconcile_orphans 的编排语义，验收 C59–C66。真实进程管理见
 //! `pm-infrastructure/tests/codex_executor.rs`。
 
-
 use std::sync::Mutex;
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::run_dispatch::{
-    ClaimKind, DispatchMode, RunDispatchConfig, RunExecutor, claim_once,
+    claim_once, ClaimKind, DispatchMode, RunDispatchConfig, RunExecutor,
 };
 use pm_application::run_executor::{
-    StartOutcome, cancel_run, claim_and_start, poll_active_runs, reconcile_orphans,
+    cancel_run, claim_and_start, poll_active_runs, reconcile_orphans, StartOutcome,
 };
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
@@ -62,8 +61,7 @@ impl RunExecutor for FakeExecutor {
         &self,
         _run: &pm_application::run_dispatch::ExecutableRun,
         session: &str,
-    ) -> Result<(), pm_application::run_dispatch::ExecutorError>
-    {
+    ) -> Result<(), pm_application::run_dispatch::ExecutorError> {
         let behavior = self.behavior.lock().unwrap().clone();
         match behavior {
             Behavior::StartFail(detail) => {
@@ -81,8 +79,10 @@ impl RunExecutor for FakeExecutor {
     async fn poll(
         &self,
         _session: &pm_application::run_dispatch::ExecutorSession,
-    ) -> Result<pm_application::run_dispatch::ExecutorProgress, pm_application::run_dispatch::ExecutorError>
-    {
+    ) -> Result<
+        pm_application::run_dispatch::ExecutorProgress,
+        pm_application::run_dispatch::ExecutorError,
+    > {
         use pm_application::run_dispatch::ExitOutcome;
         let behavior = self.behavior.lock().unwrap().clone();
         Ok(match behavior {
@@ -105,7 +105,10 @@ impl RunExecutor for FakeExecutor {
         session: &pm_application::run_dispatch::ExecutorSession,
         _reason: pm_application::run_dispatch::TerminateReason,
     ) -> Result<(), pm_application::run_dispatch::ExecutorError> {
-        self.terminated.lock().unwrap().push(session.session.clone());
+        self.terminated
+            .lock()
+            .unwrap()
+            .push(session.session.clone());
         Ok(())
     }
 }
@@ -113,7 +116,6 @@ impl RunExecutor for FakeExecutor {
 // ------------------------------------------------------------------ fixtures
 
 struct Fx {
-
     task_id: Uuid,
     run_id: Uuid,
 }
@@ -125,9 +127,9 @@ fn cfg() -> RunDispatchConfig {
         max_run_attempts: 3,
         max_infrastructure_attempts: 5,
         timeout_secs: 1800,
-            deadline_default_secs: 3600,
-            agent_heartbeat_stale_secs: 900,
-            progress_stale_secs: 3600,
+        deadline_default_secs: 3600,
+        agent_heartbeat_stale_secs: 900,
+        progress_stale_secs: 3600,
     }
 }
 
@@ -190,11 +192,7 @@ async fn seed(pool: &PgPool, code: &str) -> Fx {
     .fetch_one(pool)
     .await
     .unwrap();
-    Fx {
-
-        task_id,
-        run_id,
-    }
+    Fx { task_id, run_id }
 }
 
 async fn run_status(pool: &PgPool, run_id: Uuid) -> String {
@@ -214,11 +212,13 @@ async fn task_status(pool: &PgPool, task_id: Uuid) -> String {
 }
 
 async fn set_behavior_ready_now(pool: &PgPool, run_id: Uuid) {
-    sqlx::query("UPDATE delivery.task_run SET next_dispatch_at = now() - interval '1 second' WHERE id = $1")
-        .bind(run_id)
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE delivery.task_run SET next_dispatch_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(run_id)
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 // ---------------------------------------------------------------- C59 / C62
@@ -239,16 +239,19 @@ async fn c59_full_loop_exit_zero_succeeds_run(pool: PgPool) {
     // 编排器推进：Run running + stage=started；任务经受守卫入口 claimed→running。
     assert_eq!(run_status(&pool, fx.run_id).await, "running");
     assert_eq!(task_status(&pool, fx.task_id).await, "running");
-    let (kind, session_db): (String, String) =
-        sqlx::query_as("SELECT executor_kind, executor_session FROM delivery.task_run WHERE id = $1")
-            .bind(fx.run_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let (kind, session_db): (String, String) = sqlx::query_as(
+        "SELECT executor_kind, executor_session FROM delivery.task_run WHERE id = $1",
+    )
+    .bind(fx.run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(kind, "fake");
     assert_eq!(session_db, session);
 
-    let handled = poll_active_runs(&pool, &executor, "w1", &cfg).await.unwrap();
+    let handled = poll_active_runs(&pool, &executor, "w1", &cfg)
+        .await
+        .unwrap();
     assert_eq!(handled, 1);
     assert_eq!(run_status(&pool, fx.run_id).await, "succeeded");
     // 任务级裁决归 D5：D3 收尾后任务停在 running。
@@ -272,7 +275,9 @@ async fn c62_exit_nonzero_fails_run_without_task_verdict(pool: PgPool) {
         claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap(),
         StartOutcome::Started { .. }
     ));
-    poll_active_runs(&pool, &executor, "w1", &cfg).await.unwrap();
+    poll_active_runs(&pool, &executor, "w1", &cfg)
+        .await
+        .unwrap();
 
     assert_eq!(run_status(&pool, fx.run_id).await, "failed");
     assert_eq!(task_status(&pool, fx.task_id).await, "running");
@@ -297,13 +302,17 @@ async fn c60_timeout_terminates_and_marks_timed_out(pool: PgPool) {
     claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap();
     // T-032 T3 终裁：deadline_at 在首次 claim 时已固化（= now + timeout_seconds）
     // ——事后改 timeout_seconds 不影响在跑 Run；测试造超时改为直接压缩 deadline。
-    sqlx::query("UPDATE delivery.task_run SET deadline_at = now() - interval '1 second' WHERE id = $1")
-        .bind(fx.run_id)
-        .execute(&pool)
+    sqlx::query(
+        "UPDATE delivery.task_run SET deadline_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(fx.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    poll_active_runs(&pool, &executor, "w1", &cfg)
         .await
         .unwrap();
-
-    poll_active_runs(&pool, &executor, "w1", &cfg).await.unwrap();
 
     assert_eq!(run_status(&pool, fx.run_id).await, "timed_out");
     assert_eq!(executor.terminated_count(), 1);
@@ -327,7 +336,9 @@ async fn c61_user_cancel_uses_the_same_pipeline(pool: PgPool) {
 
     claim_and_start(&pool, &executor, "w1", &cfg).await.unwrap();
 
-    let cancelled = cancel_run(&pool, &executor, fx.run_id, "user_cancel").await.unwrap();
+    let cancelled = cancel_run(&pool, &executor, fx.run_id, "user_cancel")
+        .await
+        .unwrap();
     assert!(cancelled);
     assert_eq!(run_status(&pool, fx.run_id).await, "cancelled");
     assert_eq!(executor.terminated_count(), 1);
@@ -438,9 +449,15 @@ async fn c65_running_run_with_unrenewable_lease_is_reclaimed_as_lost(pool: PgPoo
     .await
     .unwrap();
 
-    let handled = poll_active_runs(&pool, &executor, "w1", &cfg).await.unwrap();
+    let handled = poll_active_runs(&pool, &executor, "w1", &cfg)
+        .await
+        .unwrap();
     assert_eq!(handled, 1);
-    assert_eq!(executor.terminated_count(), 1, "lost run must be terminated");
+    assert_eq!(
+        executor.terminated_count(),
+        1,
+        "lost run must be terminated"
+    );
 
     // B3-2：旧 Run 落 timed_out(termination_reason='lease_expired'，
     // failure reason_code='lease_lost')，新 Run supersedes 旧 Run。
@@ -452,13 +469,12 @@ async fn c65_running_run_with_unrenewable_lease_is_reclaimed_as_lost(pool: PgPoo
             .await
             .unwrap();
     assert_eq!(reason.as_deref(), Some("lease_expired"));
-    let superseded: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.task_run WHERE supersedes_run_id = $1",
-    )
-    .bind(fx.run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let superseded: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.task_run WHERE supersedes_run_id = $1")
+            .bind(fx.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(superseded, 1);
 }
 
@@ -480,7 +496,9 @@ async fn c66_concurrent_finalization_wins_over_poll(pool: PgPool) {
     .unwrap();
 
     // 并发收尾后 Run 已不在活跃集合：poll 查不到候选，绝不二次收尾。
-    let handled = poll_active_runs(&pool, &executor, "w1", &cfg).await.unwrap();
+    let handled = poll_active_runs(&pool, &executor, "w1", &cfg)
+        .await
+        .unwrap();
     assert_eq!(handled, 0, "finalized run leaves the active set");
     let finished_audits: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM governance.audit_log \
@@ -490,7 +508,10 @@ async fn c66_concurrent_finalization_wins_over_poll(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(finished_audits, 0, "conditional UPDATE must not double-finalize");
+    assert_eq!(
+        finished_audits, 0,
+        "conditional UPDATE must not double-finalize"
+    );
     assert_eq!(run_status(&pool, fx.run_id).await, "succeeded");
 }
 

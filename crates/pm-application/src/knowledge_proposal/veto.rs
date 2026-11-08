@@ -1,5 +1,9 @@
 use super::*;
-use serde::Serialize;use sqlx::{PgPool, Postgres, Row, Transaction};use uuid::Uuid;use crate::knowledge::{self, KnowledgeError, KnowledgeRoot};use crate::knowledge_quality::{self, GateFailure, GateInput, QualityGateResult};
+use crate::knowledge::{self, KnowledgeError, KnowledgeRoot};
+use crate::knowledge_quality::{self, GateFailure, GateInput, QualityGateResult};
+use serde::Serialize;
+use sqlx::{PgPool, Postgres, Row, Transaction};
+use uuid::Uuid;
 
 /// 否决窗口：对已发布修订做 Git revert + 状态回退 + 索引重跟进 + 审计。
 ///
@@ -86,7 +90,8 @@ pub async fn veto_revision(
         crate::knowledge_write_coordinator::WriteCommand::VetoRevision,
     )
     .await?;
-    if let crate::knowledge_write_coordinator::OperationClaim::Replayed { revision_id, .. } = claim {
+    if let crate::knowledge_write_coordinator::OperationClaim::Replayed { revision_id, .. } = claim
+    {
         tx.rollback().await?;
         if let Some(revision_id) = revision_id {
             let outcome = load_veto_outcome(pool, project_id, revision_id).await?;
@@ -199,7 +204,6 @@ async fn load_veto_outcome(
         restored_revision_id,
     })
 }
-
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn finalize_committed(
@@ -320,4 +324,3 @@ pub(crate) async fn finalize_committed(
         canonical_path: canonical_path.to_string(),
     })
 }
-

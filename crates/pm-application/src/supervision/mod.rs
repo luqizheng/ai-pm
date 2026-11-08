@@ -41,7 +41,9 @@
 
 #![allow(unused_imports)]
 
-pub(crate) use pm_domain::{AuditId, CommandError, PrincipalId, ProjectCommand, ProjectId, ProposalId};
+pub(crate) use pm_domain::{
+    AuditId, CommandError, PrincipalId, ProjectCommand, ProjectId, ProposalId,
+};
 pub(crate) use serde::{Deserialize, Serialize};
 pub(crate) use serde_json::json;
 pub(crate) use sqlx::PgPool;
@@ -75,7 +77,6 @@ pub struct VetoRequest {
     pub actor: Option<crate::actor::AuditActor>,
 }
 
-
 /// What one veto did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VetoOutcome {
@@ -90,7 +91,6 @@ pub enum VetoOutcome {
     AlreadyCompensated,
 }
 
-
 /// The human ruling on a red-line approval request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -98,7 +98,6 @@ pub enum Decision {
     Approve,
     Reject,
 }
-
 
 /// Everything the decision endpoint needs. `approval_id` is normally taken
 /// from the path, not the body.
@@ -113,7 +112,6 @@ pub struct DecideRequest {
     pub actor: Option<crate::actor::AuditActor>,
 }
 
-
 /// What one decision did.
 #[derive(Debug, Clone)]
 pub enum DecisionOutcome {
@@ -124,7 +122,6 @@ pub enum DecisionOutcome {
     Rejected,
 }
 
-
 /// One row of the supervision desk's notification feed.
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct NotificationRow {
@@ -134,7 +131,6 @@ pub struct NotificationRow {
     pub veto_window_until: Option<chrono::DateTime<chrono::Utc>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
-
 
 /// Errors surfaced by the supervision service.
 ///
@@ -153,4 +149,3 @@ pub enum SupervisionError {
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
-

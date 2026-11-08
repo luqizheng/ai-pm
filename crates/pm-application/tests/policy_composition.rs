@@ -1,13 +1,13 @@
-﻿//! D2.1 真实 PostgreSQL 集成测试：四层策略合成落 Run 快照、内容寻址版本可复现。
+//! D2.1 真实 PostgreSQL 集成测试：四层策略合成落 Run 快照、内容寻址版本可复现。
 //!
 //! 纯合成规则的单测在 `pm-application/src/policy_composition.rs`；本文件只验证
 //! 「读库 → 合成 → 写入 `policy_snapshot`」这条真实链路。
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use pm_application::run_dispatch::{ClaimKind, DispatchMode, RunDispatchConfig, claim_once};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_application::run_dispatch::{claim_once, ClaimKind, DispatchMode, RunDispatchConfig};
+use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 struct Project {
     project_id: Uuid,
@@ -23,9 +23,9 @@ fn cfg() -> RunDispatchConfig {
         max_run_attempts: 3,
         max_infrastructure_attempts: 5,
         timeout_secs: 1800,
-            deadline_default_secs: 3600,
-            agent_heartbeat_stale_secs: 900,
-            progress_stale_secs: 3600,
+        deadline_default_secs: 3600,
+        agent_heartbeat_stale_secs: 900,
+        progress_stale_secs: 3600,
     }
 }
 

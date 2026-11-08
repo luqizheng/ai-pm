@@ -13,14 +13,14 @@
 use std::sync::Arc;
 
 use pm_application::actor::AuditActor;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::command_executor::{
     ActorKind, CommandSource, ExecutionContext, PgCommandExecutor,
 };
-use pm_application::pm_write::{UpdateTaskRequest, update_task};
-use pm_application::task_dependency::{DependencyError, add_dependency, remove_dependency};
+use pm_application::pm_write::{update_task, UpdateTaskRequest};
+use pm_application::task_dependency::{add_dependency, remove_dependency, DependencyError};
 use pm_application::PolicyEngine;
-use pm_domain::{ProjectCommand, SYSTEM_TENANT, TaskStatus};
+use pm_domain::{ProjectCommand, TaskStatus, SYSTEM_TENANT};
 use sqlx::{Connection, PgPool, Postgres};
 use uuid::Uuid;
 
@@ -191,7 +191,10 @@ async fn graph_lock_serializes_writers_and_exposes_committed_edges(pool: PgPool)
                 .fetch_one(&mut *tx3)
                 .await
                 .unwrap();
-        assert!(held, "graph lock must be free after the first writer commits");
+        assert!(
+            held,
+            "graph lock must be free after the first writer commits"
+        );
         assert!(
             cycle_exists(&mut *tx3, fx.project_id, b, a).await,
             "committed edge must be visible to the next graph writer"
@@ -237,14 +240,10 @@ async fn c59_concurrent_reverse_edges_cannot_form_a_cycle(pool: PgPool) {
 
         let p1 = pool.clone();
         let (aid1, a1, b1) = (fx.actor_id, a, b);
-        let e1 = async move {
-            add_dependency(&p1, a1, b1, &AuditActor::principal(aid1)).await
-        };
+        let e1 = async move { add_dependency(&p1, a1, b1, &AuditActor::principal(aid1)).await };
         let p2 = pool.clone();
         let (aid2, a2, b2) = (fx.actor_id, a, b);
-        let e2 = async move {
-            add_dependency(&p2, b2, a2, &AuditActor::principal(aid2)).await
-        };
+        let e2 = async move { add_dependency(&p2, b2, a2, &AuditActor::principal(aid2)).await };
         let (r1, r2) = tokio::join!(e1, e2);
 
         let ok_count = usize::from(r1.is_ok()) + usize::from(r2.is_ok());
@@ -281,9 +280,8 @@ async fn c60_edge_insertion_racing_with_upstream_completion_still_unlocks(pool: 
 
             let p1 = pool.clone();
             let (down1, up1, aid1) = (downstream, upstream, fx.actor_id);
-            let edge = async move {
-                add_dependency(&p1, down1, up1, &AuditActor::principal(aid1)).await
-            };
+            let edge =
+                async move { add_dependency(&p1, down1, up1, &AuditActor::principal(aid1)).await };
             let p2 = pool.clone();
             let (up2, proj2, aid2) = (upstream, fx.project_id, fx.actor_id);
             let done = async move {
@@ -368,9 +366,14 @@ async fn c65_edge_removal_racing_with_upstream_completion_still_unlocks(pool: Pg
             let upstream = seed_task(&pool, fx.project_id, "reviewing").await;
             let done = seed_task(&pool, fx.project_id, "completed").await;
             let downstream = seed_task(&pool, fx.project_id, "blocked").await;
-            add_dependency(&pool, downstream, upstream, &AuditActor::principal(fx.actor_id))
-                .await
-                .unwrap();
+            add_dependency(
+                &pool,
+                downstream,
+                upstream,
+                &AuditActor::principal(fx.actor_id),
+            )
+            .await
+            .unwrap();
             add_dependency(&pool, downstream, done, &AuditActor::principal(fx.actor_id))
                 .await
                 .unwrap();
@@ -449,9 +452,14 @@ async fn c68_ui_direct_write_to_terminal_unlocks_downstream(pool: PgPool) {
     let fx = seed_project(&pool, "TDC68").await;
     let upstream = seed_task(&pool, fx.project_id, "ready").await;
     let downstream = seed_task(&pool, fx.project_id, "blocked").await;
-    add_dependency(&pool, downstream, upstream, &AuditActor::principal(fx.actor_id))
-        .await
-        .unwrap();
+    add_dependency(
+        &pool,
+        downstream,
+        upstream,
+        &AuditActor::principal(fx.actor_id),
+    )
+    .await
+    .unwrap();
 
     ui_complete(&pool, upstream, fx.actor_id, 1).await;
 
@@ -472,9 +480,14 @@ async fn ui_terminal_write_waits_for_the_project_graph_lock(pool: PgPool) {
     let fx = seed_project(&pool, "TDC68LK").await;
     let upstream = seed_task(&pool, fx.project_id, "ready").await;
     let downstream = seed_task(&pool, fx.project_id, "blocked").await;
-    add_dependency(&pool, downstream, upstream, &AuditActor::principal(fx.actor_id))
-        .await
-        .unwrap();
+    add_dependency(
+        &pool,
+        downstream,
+        upstream,
+        &AuditActor::principal(fx.actor_id),
+    )
+    .await
+    .unwrap();
 
     // 连接 1：像并发图写者一样持锁不放。
     let mut conn1 = pool.acquire().await.unwrap();

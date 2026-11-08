@@ -18,7 +18,6 @@ pub(crate) fn commit_matches(materials: &[RepoMaterial], repo_id: &str, referenc
     })
 }
 
-
 pub(crate) fn doc_matches(materials: &[RepoMaterial], repo_id: &str, reference: &str) -> bool {
     materials.iter().any(|material| {
         material.repository_id == repo_id
@@ -26,14 +25,12 @@ pub(crate) fn doc_matches(materials: &[RepoMaterial], repo_id: &str, reference: 
     })
 }
 
-
 pub(crate) fn evidence_grounded(evidence: &Evidence, materials: &[RepoMaterial]) -> bool {
     match evidence.kind {
         EvidenceKind::Doc => doc_matches(materials, &evidence.repo_id, &evidence.r#ref),
         EvidenceKind::Commit => commit_matches(materials, &evidence.repo_id, &evidence.r#ref),
     }
 }
-
 
 /// 证据接地：无真实 doc 路径或 commit sha 支撑的需求/任务被丢弃并计数。
 pub fn ground_draft(draft: &ProjectDraft, materials: &[RepoMaterial]) -> (ProjectDraft, usize) {
@@ -60,5 +57,3 @@ pub fn ground_draft(draft: &ProjectDraft, materials: &[RepoMaterial]) -> (Projec
     (grounded, before - after)
 }
 // ------------------------------------------------------------------ apply
-
-

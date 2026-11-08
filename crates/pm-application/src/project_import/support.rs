@@ -8,7 +8,6 @@ pub(crate) fn model_error_code(err: &ModelError) -> (&'static str, String) {
     }
 }
 
-
 pub(crate) fn git_error_code(err: &git_access::GitError) -> (&'static str, String) {
     use git_access::GitError;
     match err {
@@ -20,5 +19,3 @@ pub(crate) fn git_error_code(err: &git_access::GitError) -> (&'static str, Strin
         GitError::Io(message) => ("git_failed", message.clone()),
     }
 }
-
-

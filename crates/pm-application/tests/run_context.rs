@@ -1,4 +1,4 @@
-﻿//! Slice D2 契约与租约的真实 PostgreSQL 集成测试
+//! Slice D2 契约与租约的真实 PostgreSQL 集成测试
 //! （`docs/ai-pm-slice-d2-mcp-context-v1.md` §七：C1–C28 中属 pm-application 层的部分）。
 //!
 //! 断言的是 **pm-application 层 `LeaseError` / `RunDispatchError` 变体**，不是
@@ -6,19 +6,19 @@
 
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::pm_write::{
-    AcceptanceCriterionInput, DeliverableInput, KnowledgeRefInput, UpdateTaskRequest, update_task,
+    update_task, AcceptanceCriterionInput, DeliverableInput, KnowledgeRefInput, UpdateTaskRequest,
 };
 use pm_application::run_context::{
-    get_run_context, hash_lease_token, report_progress, renew_lease_by_token, LeaseError,
+    get_run_context, hash_lease_token, renew_lease_by_token, report_progress, LeaseError,
     ProgressReport,
 };
 use pm_application::run_dispatch::{
     claim_once, claim_once_with_policy, claim_task_run, DispatchMode, ExecutionPolicy,
     RunDispatchConfig, RunDispatchError,
 };
+use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 struct Fx {
     project_id: Uuid,
@@ -34,9 +34,9 @@ fn cfg() -> RunDispatchConfig {
         max_run_attempts: 3,
         max_infrastructure_attempts: 5,
         timeout_secs: 1800,
-            deadline_default_secs: 3600,
-            agent_heartbeat_stale_secs: 900,
-            progress_stale_secs: 3600,
+        deadline_default_secs: 3600,
+        agent_heartbeat_stale_secs: 900,
+        progress_stale_secs: 3600,
     }
 }
 
@@ -202,9 +202,16 @@ async fn c1_c27_claim_signs_a_one_time_token_and_records_the_client(pool: PgPool
     .await
     .unwrap();
 
-    assert_eq!(claimed.lease_token.len(), 64, "32 random bytes as lowercase hex");
+    assert_eq!(
+        claimed.lease_token.len(),
+        64,
+        "32 random bytes as lowercase hex"
+    );
     assert!(
-        claimed.lease_token.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+        claimed
+            .lease_token
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
         "the plaintext token is lowercase hex"
     );
 
@@ -222,7 +229,10 @@ async fn c1_c27_claim_signs_a_one_time_token_and_records_the_client(pool: PgPool
     .await
     .unwrap();
     let stored_hash = stored_hash.expect("a Model A claim stores the hash");
-    assert_ne!(stored_hash, claimed.lease_token, "the plaintext token is never stored");
+    assert_ne!(
+        stored_hash, claimed.lease_token,
+        "the plaintext token is never stored"
+    );
     assert_eq!(stored_hash, hash_lease_token(&claimed.lease_token));
     assert_eq!(client_name.as_deref(), Some("codex"));
     assert_eq!(client_version.as_deref(), Some("1.2.0"));
@@ -270,7 +280,10 @@ async fn c2_c26_claim_preconditions(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(active, 1, "the unique active-run index keeps a single active run");
+    assert_eq!(
+        active, 1,
+        "the unique active-run index keeps a single active run"
+    );
 
     // 无 Run：TaskReadyHandler 尚未创建。
     let no_run_task: Uuid = sqlx::query_scalar(
@@ -334,9 +347,15 @@ async fn c3_c24_c25_run_context_maps_every_contract_field(pool: PgPool) {
         .await
         .unwrap();
 
-    let contract = get_run_context(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, claimed.lease_generation)
-        .await
-        .unwrap();
+    let contract = get_run_context(
+        &pool,
+        fx.project_id,
+        claimed.run_id,
+        &claimed.lease_token,
+        claimed.lease_generation,
+    )
+    .await
+    .unwrap();
     assert_eq!(contract.contract_version, 1);
     assert_eq!(contract.run.run_id, claimed.run_id);
     assert_eq!(contract.run.attempt_no, 1);
@@ -388,7 +407,10 @@ async fn c3_c24_c25_run_context_maps_every_contract_field(pool: PgPool) {
             "world-view"
         )
     );
-    assert_eq!(contract.repositories[0].path_scope.as_deref(), Some(&["crates/terrain/**".to_string()][..]));
+    assert_eq!(
+        contract.repositories[0].path_scope.as_deref(),
+        Some(&["crates/terrain/**".to_string()][..])
+    );
 
     // C24：live 解析取最新 revision。
     assert_eq!(contract.knowledge_refs.len(), 1);
@@ -408,19 +430,40 @@ async fn c5_c6_c7_c17_c28_lease_rejections(pool: PgPool) {
         .unwrap();
     let other = seed(&pool, "D2-C6-OTHER").await;
 
-    let err = get_run_context(&pool, other.project_id, claimed.run_id, &claimed.lease_token, claimed.lease_generation)
-        .await
-        .unwrap_err();
-    assert!(matches!(err, LeaseError::NotFound), "cross-project reads as not found");
+    let err = get_run_context(
+        &pool,
+        other.project_id,
+        claimed.run_id,
+        &claimed.lease_token,
+        claimed.lease_generation,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, LeaseError::NotFound),
+        "cross-project reads as not found"
+    );
 
-    let err = get_run_context(&pool, fx.project_id, claimed.run_id, "deadbeef", claimed.lease_generation)
-        .await
-        .unwrap_err();
+    let err = get_run_context(
+        &pool,
+        fx.project_id,
+        claimed.run_id,
+        "deadbeef",
+        claimed.lease_generation,
+    )
+    .await
+    .unwrap_err();
     assert!(matches!(err, LeaseError::Forbidden));
 
-    let err = get_run_context(&pool, fx.project_id, claimed.run_id, "", claimed.lease_generation)
-        .await
-        .unwrap_err();
+    let err = get_run_context(
+        &pool,
+        fx.project_id,
+        claimed.run_id,
+        "",
+        claimed.lease_generation,
+    )
+    .await
+    .unwrap_err();
     assert!(matches!(err, LeaseError::Forbidden));
 
     // C28：大写 hex 变体必须拒绝（严格匹配小写 hex 的 sha256）。
@@ -431,9 +474,15 @@ async fn c5_c6_c7_c17_c28_lease_rejections(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let err = get_run_context(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, claimed.lease_generation)
-        .await
-        .unwrap_err();
+    let err = get_run_context(
+        &pool,
+        fx.project_id,
+        claimed.run_id,
+        &claimed.lease_token,
+        claimed.lease_generation,
+    )
+    .await
+    .unwrap_err();
     assert!(matches!(err, LeaseError::Forbidden));
 
     sqlx::query("UPDATE delivery.task_run SET lease_token_hash = $2 WHERE id = $1")
@@ -444,14 +493,22 @@ async fn c5_c6_c7_c17_c28_lease_rejections(pool: PgPool) {
         .unwrap();
 
     // C7：过期后正确 token 也拒绝。
-    sqlx::query("UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1")
-        .bind(claimed.run_id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    let err = get_run_context(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, claimed.lease_generation)
-        .await
-        .unwrap_err();
+    sqlx::query(
+        "UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(claimed.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let err = get_run_context(
+        &pool,
+        fx.project_id,
+        claimed.run_id,
+        &claimed.lease_token,
+        claimed.lease_generation,
+    )
+    .await
+    .unwrap_err();
     assert!(matches!(err, LeaseError::Expired));
 
     // C17：Model B 领取的 Run 没有 hash → 任意 token 都被拒绝，不 panic。
@@ -466,15 +523,24 @@ async fn c5_c6_c7_c17_c28_lease_rejections(pool: PgPool) {
         .unwrap()
         .unwrap();
     // T-032（ADR-0002 L1）：Model B 也统一签发 lease_token（执行端 MCP 凭据）。
-    assert!(worker_claim.lease_token.is_some(), "Model B also issues a lease token");
-    assert_eq!(worker_claim.lease_generation, 1, "first valid claim is generation 1");
+    assert!(
+        worker_claim.lease_token.is_some(),
+        "Model B also issues a lease token"
+    );
+    assert_eq!(
+        worker_claim.lease_generation, 1,
+        "first valid claim is generation 1"
+    );
     let hash: Option<String> =
         sqlx::query_scalar("SELECT lease_token_hash FROM delivery.task_run WHERE id = $1")
             .bind(worker_claim.run_id)
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert!(hash.is_some(), "T-032: Model B stores a lease token hash too");
+    assert!(
+        hash.is_some(),
+        "T-032: Model B stores a lease token hash too"
+    );
     // claim_once 取最早的候选 Run，可能来自本测试先前任一项目；按 Run 自身的
     // project 校验，再用另一个项目验证「跨项目不可见」。
     let worker_project: Uuid =
@@ -483,27 +549,49 @@ async fn c5_c6_c7_c17_c28_lease_rejections(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    let err = get_run_context(&pool, worker_project, worker_claim.run_id, "anything", worker_claim.lease_generation)
-        .await
-        .unwrap_err();
+    let err = get_run_context(
+        &pool,
+        worker_project,
+        worker_claim.run_id,
+        "anything",
+        worker_claim.lease_generation,
+    )
+    .await
+    .unwrap_err();
     assert!(matches!(err, LeaseError::Forbidden));
     let foreign_project = if worker_project == fx.project_id {
         fx_b.project_id
     } else {
         fx.project_id
     };
-    let err = get_run_context(&pool, foreign_project, worker_claim.run_id, "anything", worker_claim.lease_generation)
-        .await
-        .unwrap_err();
-    assert!(matches!(err, LeaseError::NotFound), "a run of another project is invisible");
+    let err = get_run_context(
+        &pool,
+        foreign_project,
+        worker_claim.run_id,
+        "anything",
+        worker_claim.lease_generation,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, LeaseError::NotFound),
+        "a run of another project is invisible"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn c8_c9_c22_report_progress_renews_and_advances_once(pool: PgPool) {
     let fx = seed(&pool, "D2-C8").await;
-    let claimed = claim_task_run(&pool, fx.project_id, fx.task_id, "codex", Some("1.2.0"), &cfg())
-        .await
-        .unwrap();
+    let claimed = claim_task_run(
+        &pool,
+        fx.project_id,
+        fx.task_id,
+        "codex",
+        Some("1.2.0"),
+        &cfg(),
+    )
+    .await
+    .unwrap();
     let before: chrono::DateTime<chrono::Utc> =
         sqlx::query_scalar("SELECT lease_expires_at FROM delivery.task_run WHERE id = $1")
             .bind(claimed.run_id)
@@ -526,7 +614,10 @@ async fn c8_c9_c22_report_progress_renews_and_advances_once(pool: PgPool) {
     )
     .await
     .unwrap();
-    assert!(reported.lease_expires_at > before, "the lease moves strictly forward");
+    assert!(
+        reported.lease_expires_at > before,
+        "the lease moves strictly forward"
+    );
     assert_eq!(reported.task_status, "running");
     assert_eq!(reported.status, "running");
     assert_eq!(reported.stage.as_deref(), Some("started"));
@@ -593,26 +684,35 @@ async fn c10_c15_renewal_rejects_wrong_and_expired_tokens(pool: PgPool) {
     let claimed = claim_task_run(&pool, fx.project_id, fx.task_id, "codex", None, &cfg())
         .await
         .unwrap();
-    let (owner_before, hash_before): (Option<String>, Option<String>) = sqlx::query_as(
-        "SELECT lease_owner, lease_token_hash FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(claimed.run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (owner_before, hash_before): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT lease_owner, lease_token_hash FROM delivery.task_run WHERE id = $1")
+            .bind(claimed.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
-    let err = renew_lease_by_token(&pool, fx.project_id, claimed.run_id, "wrong", &cfg(), claimed.lease_generation)
-        .await
-        .unwrap_err();
-    assert!(matches!(err, LeaseError::Forbidden));
-    let (owner_after, hash_after): (Option<String>, Option<String>) = sqlx::query_as(
-        "SELECT lease_owner, lease_token_hash FROM delivery.task_run WHERE id = $1",
+    let err = renew_lease_by_token(
+        &pool,
+        fx.project_id,
+        claimed.run_id,
+        "wrong",
+        &cfg(),
+        claimed.lease_generation,
     )
-    .bind(claimed.run_id)
-    .fetch_one(&pool)
     .await
-    .unwrap();
-    assert_eq!((owner_before, hash_before), (owner_after, hash_after), "a rejected renewal has no side effects");
+    .unwrap_err();
+    assert!(matches!(err, LeaseError::Forbidden));
+    let (owner_after, hash_after): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT lease_owner, lease_token_hash FROM delivery.task_run WHERE id = $1")
+            .bind(claimed.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        (owner_before, hash_before),
+        (owner_after, hash_after),
+        "a rejected renewal has no side effects"
+    );
 
     let expiry_before: chrono::DateTime<chrono::Utc> =
         sqlx::query_scalar("SELECT lease_expires_at FROM delivery.task_run WHERE id = $1")
@@ -620,14 +720,23 @@ async fn c10_c15_renewal_rejects_wrong_and_expired_tokens(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    sqlx::query("UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1")
-        .bind(claimed.run_id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    let err = renew_lease_by_token(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, &cfg(), claimed.lease_generation)
-        .await
-        .unwrap_err();
+    sqlx::query(
+        "UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(claimed.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let err = renew_lease_by_token(
+        &pool,
+        fx.project_id,
+        claimed.run_id,
+        &claimed.lease_token,
+        &cfg(),
+        claimed.lease_generation,
+    )
+    .await
+    .unwrap_err();
     assert!(
         matches!(err, LeaseError::Expired),
         "an expired lease must not be revived even with the right token"
@@ -638,7 +747,10 @@ async fn c10_c15_renewal_rejects_wrong_and_expired_tokens(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert!(expiry_after < expiry_before, "the expired lease was not extended");
+    assert!(
+        expiry_after < expiry_before,
+        "the expired lease was not extended"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -649,8 +761,22 @@ async fn c23_concurrent_renewals_are_monotonic(pool: PgPool) {
         .unwrap();
     let cfg = cfg();
     let (a, b) = tokio::join!(
-        renew_lease_by_token(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, &cfg, claimed.lease_generation),
-        renew_lease_by_token(&pool, fx.project_id, claimed.run_id, &claimed.lease_token, &cfg, claimed.lease_generation),
+        renew_lease_by_token(
+            &pool,
+            fx.project_id,
+            claimed.run_id,
+            &claimed.lease_token,
+            &cfg,
+            claimed.lease_generation
+        ),
+        renew_lease_by_token(
+            &pool,
+            fx.project_id,
+            claimed.run_id,
+            &claimed.lease_token,
+            &cfg,
+            claimed.lease_generation
+        ),
     );
     let first = a.expect("concurrent renewal a");
     let second = b.expect("concurrent renewal b");
@@ -663,9 +789,16 @@ async fn c23_concurrent_renewals_are_monotonic(pool: PgPool) {
             .unwrap();
     assert_eq!(stored, max, "the lease never moves backwards");
 
-    let wrong = renew_lease_by_token(&pool, fx.project_id, claimed.run_id, "wrong", &cfg, claimed.lease_generation)
-        .await
-        .unwrap_err();
+    let wrong = renew_lease_by_token(
+        &pool,
+        fx.project_id,
+        claimed.run_id,
+        "wrong",
+        &cfg,
+        claimed.lease_generation,
+    )
+    .await
+    .unwrap_err();
     assert!(matches!(wrong, LeaseError::Forbidden));
     let stored_after: chrono::DateTime<chrono::Utc> =
         sqlx::query_scalar("SELECT lease_expires_at FROM delivery.task_run WHERE id = $1")
@@ -689,7 +822,10 @@ async fn c16_dual_entry_concurrency_keeps_one_active_run(pool: PgPool) {
             .map(|outcome| matches!(outcome, Some(o) if o.kind == pm_application::run_dispatch::ClaimKind::Claimed))
             .unwrap_or(false),
     );
-    assert_eq!(successes, 1, "exactly one entry point may claim the same task");
+    assert_eq!(
+        successes, 1,
+        "exactly one entry point may claim the same task"
+    );
     let active: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM delivery.task_run WHERE task_id = $1 AND status IN ('queued','claimed','running')",
     )
@@ -697,7 +833,10 @@ async fn c16_dual_entry_concurrency_keeps_one_active_run(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert!(active <= 1, "the active-run unique index holds under a dual-entry race");
+    assert!(
+        active <= 1,
+        "the active-run unique index holds under a dual-entry race"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -707,14 +846,22 @@ async fn c19_reclaim_invalidates_the_old_token(pool: PgPool) {
         .await
         .unwrap();
     // 造过期：Model A 重领走 B3-1（同一 Run 恢复）并签发新 token。
-    sqlx::query("UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1")
-        .bind(first.run_id)
-        .execute(&pool)
-        .await
-        .unwrap();
-    let err = get_run_context(&pool, fx.project_id, first.run_id, &first.lease_token, first.lease_generation)
-        .await
-        .unwrap_err();
+    sqlx::query(
+        "UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(first.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let err = get_run_context(
+        &pool,
+        fx.project_id,
+        first.run_id,
+        &first.lease_token,
+        first.lease_generation,
+    )
+    .await
+    .unwrap_err();
     assert!(matches!(err, LeaseError::Expired));
 
     let second = claim_task_run(&pool, fx.project_id, fx.task_id, "codex", None, &cfg())
@@ -728,21 +875,42 @@ async fn c19_reclaim_invalidates_the_old_token(pool: PgPool) {
         first.lease_generation + 1,
         "B3-1 reclaim bumps the lease generation"
     );
-    let old = get_run_context(&pool, fx.project_id, first.run_id, &first.lease_token, first.lease_generation)
-        .await
-        .unwrap_err();
-    assert!(matches!(old, LeaseError::Forbidden), "the old token is invalidated");
+    let old = get_run_context(
+        &pool,
+        fx.project_id,
+        first.run_id,
+        &first.lease_token,
+        first.lease_generation,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(old, LeaseError::Forbidden),
+        "the old token is invalidated"
+    );
     // 旧 token + 新 generation 同样拒绝（generation 与 token 双验证）。
-    let old_gen = get_run_context(&pool, fx.project_id, first.run_id, &second.lease_token, first.lease_generation)
-        .await
-        .unwrap_err();
+    let old_gen = get_run_context(
+        &pool,
+        fx.project_id,
+        first.run_id,
+        &second.lease_token,
+        first.lease_generation,
+    )
+    .await
+    .unwrap_err();
     assert!(
         matches!(old_gen, LeaseError::Forbidden),
         "a stale generation never regains authorization, even with the fresh token"
     );
-    get_run_context(&pool, fx.project_id, second.run_id, &second.lease_token, second.lease_generation)
-        .await
-        .expect("the new token works");
+    get_run_context(
+        &pool,
+        fx.project_id,
+        second.run_id,
+        &second.lease_token,
+        second.lease_generation,
+    )
+    .await
+    .expect("the new token works");
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -754,16 +922,11 @@ async fn c12_policy_failure_refuses_the_claim_with_an_audit_snapshot(pool: PgPoo
             Err("policy backend down".to_string())
         }
     }
-    let outcome = claim_once_with_policy(
-        &pool,
-        "worker-1",
-        &cfg(),
-        DispatchMode::On,
-        &FailingPolicy,
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let outcome =
+        claim_once_with_policy(&pool, "worker-1", &cfg(), DispatchMode::On, &FailingPolicy)
+            .await
+            .unwrap()
+            .unwrap();
     assert_eq!(
         outcome.kind,
         pm_application::run_dispatch::ClaimKind::Skipped,
@@ -795,10 +958,10 @@ async fn c13_project_without_human_members_claims_and_audits_as_service(pool: Pg
     let customer: Uuid = sqlx::query_scalar(
         "INSERT INTO core.customer (name, tenant_id) VALUES ('no-human', $1) RETURNING id",
     )
-        .bind(SYSTEM_TENANT)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    .bind(SYSTEM_TENANT)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     let project_id: Uuid = sqlx::query_scalar(
         "INSERT INTO core.project (customer_id, code, name, tenant_id) \
          VALUES ($1, 'D2-C13', 'no-human', $2) RETURNING id",
@@ -863,10 +1026,11 @@ async fn c13_project_without_human_members_claims_and_audits_as_service(pool: Pg
     );
 
     // 显式生成的 Run 与 task_run_repository 快照都在，未被跳过。
-    let snapshots: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.task_run_repository WHERE run_id = $1")
-        .bind(claimed.run_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let snapshots: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.task_run_repository WHERE run_id = $1")
+            .bind(claimed.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(snapshots, 1);
 }

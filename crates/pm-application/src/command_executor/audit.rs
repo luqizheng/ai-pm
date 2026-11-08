@@ -19,7 +19,8 @@ pub(crate) async fn insert_audit(
         CommandSource::AiProposal { run_id, .. } => Some(*run_id),
         _ => None,
     };
-    let compensation = compensation.map(|spec| serde_json::to_value(spec).expect("CompensationSpec serializes"));
+    let compensation =
+        compensation.map(|spec| serde_json::to_value(spec).expect("CompensationSpec serializes"));
     sqlx::query_scalar(
         "INSERT INTO governance.audit_log \
          (project_id, actor_id, action, target_type, target_id, before_data, after_data, compensation_command, analysis_run_id, source_kind, source_ref, \
@@ -47,7 +48,6 @@ pub(crate) async fn insert_audit(
     .map_err(db_err)
 }
 
-
 /// The audit identity of a command execution: `(source_kind, source_ref)` —
 /// the join anchor Task 15's approval flow reads (`analysis_run_id` keeps
 /// carrying the AiProposal run id as before).
@@ -62,7 +62,6 @@ pub(crate) fn audit_source(ctx: &ExecutionContext) -> (&'static str, Option<Uuid
         CommandSource::System => ("system", None),
     }
 }
-
 
 /// Binds a snapshot field value with the right Postgres representation. SQLx
 /// sends `serde_json::Value` as JSONB, so a plain JSON string bound into a
@@ -86,5 +85,3 @@ pub(crate) fn bind_field<'q>(
         object_or_array => query.bind(object_or_array.clone()),
     }
 }
-
-

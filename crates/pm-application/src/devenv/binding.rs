@@ -14,7 +14,7 @@ use sqlx::PgPool;
 use sqlx::Row;
 use uuid::Uuid;
 
-use super::{BindingRow, DeviceError, device_owner};
+use super::{device_owner, BindingRow, DeviceError};
 use crate::actor::AuditActor;
 use crate::authz::require_project_member;
 use crate::caller::HumanActor;
@@ -51,7 +51,10 @@ pub async fn bind_project(
         }
     }
 
-    let mut tx = pool.begin().await.map_err(|e| DeviceError::Db(e.to_string()))?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| DeviceError::Db(e.to_string()))?;
 
     // 已有行（含已解绑）→ 复活并更新；声明变化 → 旧验证结果失效（同一事务）。
     let existing = sqlx::query(
@@ -72,8 +75,9 @@ pub async fn bind_project(
     let binding_id = match existing {
         Some(row) => {
             let id: Uuid = row.get("id");
-            let was_unbound =
-                row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("unbound_at").is_some();
+            let was_unbound = row
+                .get::<Option<chrono::DateTime<chrono::Utc>>, _>("unbound_at")
+                .is_some();
             let old_declared: Vec<Uuid> = super::uuid_list(row.get("declared_repository_ids"));
             let declarations_changed = old_declared != declared_repository_ids.to_vec();
             // 复活（曾解绑）或声明变化 → 清空验证结果；否则保留既有验证结果。
@@ -136,7 +140,9 @@ pub async fn bind_project(
     .await
     .map_err(|e| DeviceError::Db(e.to_string()))?;
 
-    tx.commit().await.map_err(|e| DeviceError::Db(e.to_string()))?;
+    tx.commit()
+        .await
+        .map_err(|e| DeviceError::Db(e.to_string()))?;
 
     Ok(BindingRow {
         id: row.get("id"),
@@ -164,7 +170,10 @@ pub async fn unbind_binding(
     if tenant_id != caller.tenant_id || owner != caller.principal_id {
         return Err(DeviceError::NotFound);
     }
-    let mut tx = pool.begin().await.map_err(|e| DeviceError::Db(e.to_string()))?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| DeviceError::Db(e.to_string()))?;
     let row = sqlx::query(
         "SELECT project_id FROM devenv.device_project_binding \
          WHERE id = $1 AND device_id = $2 AND unbound_at IS NULL FOR UPDATE",
@@ -193,7 +202,9 @@ pub async fn unbind_binding(
     )
     .await?;
 
-    tx.commit().await.map_err(|e| DeviceError::Db(e.to_string()))?;
+    tx.commit()
+        .await
+        .map_err(|e| DeviceError::Db(e.to_string()))?;
     Ok(())
 }
 
@@ -202,11 +213,12 @@ pub(crate) async fn project_repository_ids(
     pool: &PgPool,
     project_id: Uuid,
 ) -> Result<Vec<Uuid>, DeviceError> {
-    let rows = sqlx::query_scalar("SELECT id FROM integration.project_repository WHERE project_id = $1")
-        .bind(project_id)
-        .fetch_all(pool)
-        .await
-        .map_err(|e| DeviceError::Db(e.to_string()))?;
+    let rows =
+        sqlx::query_scalar("SELECT id FROM integration.project_repository WHERE project_id = $1")
+            .bind(project_id)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| DeviceError::Db(e.to_string()))?;
     Ok(rows)
 }
 

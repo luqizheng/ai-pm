@@ -56,29 +56,24 @@ impl Fixture {
     }
 
     fn url(&self) -> String {
-        format!(
-            "file://{}",
-            self.repo.to_string_lossy().replace('\\', "/")
-        )
+        format!("file://{}", self.repo.to_string_lossy().replace('\\', "/"))
     }
 }
 
 async fn clone_and_collect(fx: &Fixture, limits: Limits) -> RepoFacts {
     let dest = fx.root.join("cache");
-    git_access::clone_bare(
-        &fx.url(),
-        None,
-        &dest,
-        Duration::from_secs(60),
-    )
-    .await
-    .unwrap();
+    git_access::clone_bare(&fx.url(), None, &dest, Duration::from_secs(60))
+        .await
+        .unwrap();
     collect(&dest, "main", limits).await.unwrap()
 }
 
 fn assert_docs(paths: &[String], expected: &[&str]) {
     for path in expected {
-        assert!(paths.contains(&path.to_string()), "missing doc {path}: {paths:?}");
+        assert!(
+            paths.contains(&path.to_string()),
+            "missing doc {path}: {paths:?}"
+        );
     }
 }
 

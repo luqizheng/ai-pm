@@ -24,7 +24,6 @@ pub async fn get_ssh_key(
     ))
 }
 
-
 /// 列出项目所有密钥（含已吊销），供管理页展示。
 pub async fn list_ssh_keys(
     pool: &PgPool,
@@ -51,7 +50,6 @@ pub async fn list_ssh_keys(
         )
         .collect())
 }
-
 
 /// 生成或复用项目密钥。`rotate=false` 时已有 active 直接返回（向导幂等）；
 /// `rotate=true` 时覆盖为新的密钥对（管理页「重新生成」）。
@@ -119,7 +117,6 @@ pub async fn ensure_ssh_key(
     })
 }
 
-
 /// 兼容既有调用方：等同于 rotate=true。
 pub async fn generate_ssh_key(
     pool: &PgPool,
@@ -128,7 +125,6 @@ pub async fn generate_ssh_key(
 ) -> Result<SshKeyView, RepositoryError> {
     ensure_ssh_key(pool, project_id, actor, true).await
 }
-
 
 /// 吊销密钥；仍被 verified 仓库引用时拒绝。
 pub async fn revoke_ssh_key(
@@ -172,7 +168,6 @@ pub async fn revoke_ssh_key(
     Ok(())
 }
 
-
 pub async fn delete_ssh_key(
     pool: &PgPool,
     project_id: Uuid,
@@ -200,7 +195,6 @@ pub async fn delete_ssh_key(
     Ok(())
 }
 
-
 /// 解密私钥（仅供后续 clone 切片使用；P0 不暴露 REST）。
 pub fn open_ssh_private_key(
     project_id: Uuid,
@@ -211,5 +205,3 @@ pub fn open_ssh_private_key(
 }
 
 // ----------------------------------------------------------------- repositories
-
-

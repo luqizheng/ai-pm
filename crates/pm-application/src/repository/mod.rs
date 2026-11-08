@@ -16,8 +16,8 @@ pub(crate) use serde::{Deserialize, Serialize};
 pub(crate) use sqlx::PgPool;
 pub(crate) use uuid::Uuid;
 
-pub(crate) use crate::git_access::{self, GitError};
 pub(crate) use crate::actor::AuditActor;
+pub(crate) use crate::git_access::{self, GitError};
 pub(crate) use crate::pm_write::PmWriteError;
 pub(crate) use crate::secret::{self, SecretError};
 
@@ -76,13 +76,11 @@ pub enum RepositoryError {
     Db(sqlx::Error),
 }
 
-
 impl From<sqlx::Error> for RepositoryError {
     fn from(e: sqlx::Error) -> Self {
         RepositoryError::Db(e)
     }
 }
-
 
 impl From<SecretError> for RepositoryError {
     fn from(e: SecretError) -> Self {
@@ -97,13 +95,11 @@ impl From<SecretError> for RepositoryError {
     }
 }
 
-
 impl From<GitError> for RepositoryError {
     fn from(e: GitError) -> Self {
         RepositoryError::Git(e.to_string())
     }
 }
-
 
 impl From<PmWriteError> for RepositoryError {
     fn from(e: PmWriteError) -> Self {
@@ -119,7 +115,6 @@ impl From<PmWriteError> for RepositoryError {
 }
 
 // ------------------------------------------------------------------ rows / dto
-
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct RepositoryRow {
@@ -147,7 +142,6 @@ pub struct RepositoryRow {
     pub updated_at: DateTime<Utc>,
 }
 
-
 /// 对外只暴露公钥与指纹；私钥密文不出库。
 #[derive(Debug, Clone, Serialize)]
 pub struct SshKeyView {
@@ -159,7 +153,6 @@ pub struct SshKeyView {
     pub created_at: DateTime<Utc>,
 }
 
-
 /// 校验后的 git 地址。`normalized` 是写库的规范形式。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GitUrl {
@@ -168,7 +161,6 @@ pub struct GitUrl {
     pub path: String,
     pub normalized: String,
 }
-
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateRepositoryRequest {
@@ -188,7 +180,6 @@ pub struct CreateRepositoryRequest {
     pub selected_commit: Option<String>,
 }
 
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct UpdateRepositoryRequest {
     pub revision: i64,
@@ -204,7 +195,6 @@ pub struct UpdateRepositoryRequest {
     // confirm_repository_version（POST /update-version），防止绕过人工确认（S01-03 §5.1）。
 }
 
-
 /// POST /v1/pm/repositories/{id}/update-version：人类确认更新采用基准（G-05）。
 /// 不触碰 head_commit_sha（Observed HEAD 只属 verify），也不触碰任何正式基线。
 #[derive(Debug, Clone, Deserialize)]
@@ -216,4 +206,3 @@ pub struct ConfirmVersionRequest {
 }
 
 // -------------------------------------------------------------------- ssh key
-

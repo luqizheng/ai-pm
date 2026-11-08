@@ -49,7 +49,6 @@ pub async fn insert_task_run(
     Ok(CreatedRun { run_id, attempt_no })
 }
 
-
 /// R6：固定的工作区路径算法。`repos/<safe-name>-<repository_id>`——`repository_id`
 /// 后缀保证唯一与可复现；仓库改名不改变既有映射；`safe_name` 只保留 `[a-z0-9-]`，
 /// 从字符层杜绝非法字符与路径穿越（`..`、`/`、`\`）。
@@ -97,7 +96,6 @@ pub fn validate_workspace_path(raw: &str) -> Result<String, ExecutorError> {
 // RunExecutor 端口（R7：端口在 pm-application，实现留在 D3 的 pm-infrastructure）
 // ---------------------------------------------------------------------------
 
-
 /// 一次可执行的 Run：平台已锁定任务、基线与策略快照。
 #[derive(Debug, Clone)]
 pub struct ExecutableRun {
@@ -118,7 +116,6 @@ pub struct ExecutableRun {
     pub repositories: Vec<RunRepositoryBaseline>,
 }
 
-
 /// 每仓锁定的基线（与 `delivery.task_run_repository` 对应）。
 #[derive(Debug, Clone)]
 pub struct RunRepositoryBaseline {
@@ -128,7 +125,6 @@ pub struct RunRepositoryBaseline {
     pub write_access: bool,
     pub workspace_path: String,
 }
-
 
 /// 运行期工作区根（T-030 Q-D3-2）：`{root}/{run_id}/{workspace_path}`。
 /// 编排器与适配器共用同一派生规则，进程重启后仍能定位既有目录。
@@ -140,16 +136,21 @@ pub fn workspace_root_from_env() -> String {
 /// 编排器与适配器共用；写失败不阻断主流程（事件是尽力而为的可观测性）。
 pub fn append_executor_event(root: &str, run_id: Uuid, event: &serde_json::Value) {
     use std::io::Write;
-    let dir = std::path::Path::new(root).join(run_id.to_string()).join("logs");
+    let dir = std::path::Path::new(root)
+        .join(run_id.to_string())
+        .join("logs");
     if std::fs::create_dir_all(&dir).is_err() {
         return;
     }
     let path = dir.join("executor-events.jsonl");
-    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
         let _ = writeln!(file, "{event}");
     }
 }
-
 
 /// 执行端会话（D3 填充）。`session` 格式 `{kind}:{uuid-v4}`（T-030 Q-D3-6）；
 /// `workspace_root` 是本 Run 的运行期目录根（`{AI_PM_WORKSPACE_ROOT}/{run_id}`），
@@ -163,7 +164,6 @@ pub struct ExecutorSession {
     pub run_id: Uuid,
     pub workspace_root: String,
 }
-
 
 /// T-032 §6.4：结构化退出结果（替代裸 `Option<i32>`）。
 ///
@@ -183,7 +183,6 @@ pub enum ExitOutcome {
     Lost,
 }
 
-
 /// 一次轮询得到的阶段进度。
 ///
 /// T-032 T1 终裁：`Uncertain` = 跨重启孤儿且**三重证据**（pid 文件 / run 目录
@@ -194,10 +193,11 @@ pub enum ExecutorProgress {
     Pending,
     Running,
     /// 进程已退出并收割，携带结构化退出结果。
-    Done { outcome: ExitOutcome },
+    Done {
+        outcome: ExitOutcome,
+    },
     Uncertain,
 }
-
 
 /// 终止信号的原因。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -210,7 +210,6 @@ pub enum TerminateReason {
     /// T-032 T4：长期无进展（`last_progress_at` 停滞超阈值）。
     ProgressStalled,
 }
-
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExecutorError {
@@ -237,11 +236,9 @@ pub trait RunExecutor: Send + Sync {
     ) -> Result<(), ExecutorError>;
 }
 
-
 /// Noop 执行器（R7）：只实现接口，**绝不伪造执行成功**——`start` 直接返回
 /// [`ExecutorError::Unsupported`]，因此 D1 永远不会把 Run 推进到 `running`/`succeeded`。
 pub struct NoopExecutor;
-
 
 #[async_trait::async_trait]
 impl RunExecutor for NoopExecutor {

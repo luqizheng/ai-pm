@@ -12,8 +12,6 @@ pub struct TransitionFacts {
     pub acceptance_evidence_complete: bool,
 }
 
-
-
 impl TransitionFacts {
     /// 既有命令通道的事实：交付证据（Running→Submitted / Reviewing→Completed）
     /// 的完整校验属 D4；此处保持既有行为不变，其余事实保持默认 false。
@@ -78,8 +76,9 @@ pub(crate) async fn apply_task_transition(
             });
         }
     }
-    let from = TaskStatus::from_str(&status_before)
-        .ok_or_else(|| CommandError::Validation(format!("unknown task status `{status_before}`")))?;
+    let from = TaskStatus::from_str(&status_before).ok_or_else(|| {
+        CommandError::Validation(format!("unknown task status `{status_before}`"))
+    })?;
     let input = TransitionInput {
         task_id: Some(task_id),
         from,
@@ -158,4 +157,3 @@ pub(crate) async fn system_context(
         source: CommandSource::System,
     })
 }
-

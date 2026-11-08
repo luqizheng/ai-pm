@@ -37,7 +37,10 @@ pub struct FailureJudgeReport {
 
 /// 不可恢复的失败类别（B4-D：立即失败，不为计数反复尝试）。
 fn is_terminating(category: &str) -> bool {
-    matches!(category, "permission" | "missing_dependency" | "policy_violation")
+    matches!(
+        category,
+        "permission" | "missing_dependency" | "policy_violation"
+    )
 }
 
 /// 扫描一轮需要判定的 delivery run，逐条判定。
@@ -97,12 +100,11 @@ pub async fn judge_delivery_failures(
         let mut tx = pool.begin().await?;
 
         // 已有失败证据行 → 幂等跳过（该 run 已被判定过）。
-        let already: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM delivery.task_run_failure WHERE run_id = $1",
-        )
-        .bind(run_id)
-        .fetch_one(&mut *tx)
-        .await?;
+        let already: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM delivery.task_run_failure WHERE run_id = $1")
+                .bind(run_id)
+                .fetch_one(&mut *tx)
+                .await?;
         if already > 0 {
             tx.commit().await?;
             continue;
@@ -181,15 +183,12 @@ pub async fn judge_delivery_failures(
         .bind(task_id)
         .fetch_one(&mut *tx)
         .await?;
-        let exhausted = counters.0 >= cfg.max_run_attempts
-            || counters.1 >= cfg.max_run_attempts;
+        let exhausted = counters.0 >= cfg.max_run_attempts || counters.1 >= cfg.max_run_attempts;
         if exhausted {
-            sqlx::query(
-                "UPDATE delivery.task SET retry_exhausted = true WHERE id = $1",
-            )
-            .bind(task_id)
-            .execute(&mut *tx)
-            .await?;
+            sqlx::query("UPDATE delivery.task SET retry_exhausted = true WHERE id = $1")
+                .bind(task_id)
+                .execute(&mut *tx)
+                .await?;
             transition_task_failed(&mut tx, project_id, task_id, &failure_category).await?;
             audit_review(
                 &mut tx,
@@ -263,4 +262,3 @@ pub async fn judge_failures_once(pool: &PgPool) -> FailureJudgeReport {
 
 /// 扫描谓词的单一真源导出（测试断言用：必须含 delivery 谓词）。
 pub const FAILURE_SCAN_KIND_PREDICATE: &str = run_kind::DELIVERY;
-

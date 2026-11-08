@@ -16,9 +16,9 @@ use crate::command_executor::{apply_task_transition, system_context, TransitionF
 use crate::outbox::OutboxAppend;
 use crate::run_dispatch::{
     append_executor_event, audit_run, claim_once, recover_lost_run, renew_lease, run_status,
-    ClaimKind, DispatchMode, ExitOutcome, RunDispatchConfig, RunDispatchError, ExecutableRun,
-    ExecutorProgress, ExecutorSession, RunExecutor, RunRepositoryBaseline, TerminateReason,
-    workspace_root_from_env,
+    workspace_root_from_env, ClaimKind, DispatchMode, ExecutableRun, ExecutorProgress,
+    ExecutorSession, ExitOutcome, RunDispatchConfig, RunDispatchError, RunExecutor,
+    RunRepositoryBaseline, TerminateReason,
 };
 use pm_domain::TaskStatus;
 
@@ -141,8 +141,9 @@ pub async fn claim_and_start(
                         run_id,
                         workspace_root: workspace_root_from_env(),
                     };
-                    if let Err(error) =
-                        executor.terminate(&session, TerminateReason::Cancelled).await
+                    if let Err(error) = executor
+                        .terminate(&session, TerminateReason::Cancelled)
+                        .await
                     {
                         // 终止失败：Run 保持 claimed（未被确认），lease 到期后
                         // reconcile/cleanup 兜底重试——终态不被伪造。
@@ -279,14 +280,18 @@ pub async fn poll_active_runs(
 
         // ① 绝对截止（T3：固化值，优先于租约与一切其他信号）。
         if deadline_exceeded(deadline_at) {
-            let _ = executor.terminate(&session, TerminateReason::TimedOut).await;
+            let _ = executor
+                .terminate(&session, TerminateReason::TimedOut)
+                .await;
             record_termination(pool, run_id, project_id, "timeout").await?;
             handled += 1;
             continue;
         }
         // ④ 存量 fallback：无固化 deadline 的行沿用 began_at + timeout_seconds。
         if deadline_at.is_none() && timed_out(began_at, timeout_seconds) {
-            let _ = executor.terminate(&session, TerminateReason::TimedOut).await;
+            let _ = executor
+                .terminate(&session, TerminateReason::TimedOut)
+                .await;
             record_termination(pool, run_id, project_id, "timeout").await?;
             handled += 1;
             continue;
@@ -337,7 +342,9 @@ pub async fn poll_active_runs(
             }
             ExecutorProgress::Pending | ExecutorProgress::Running => {
                 let expiring_soon = lease_expires_at
-                    .map(|at| at < chrono::Utc::now() + chrono::Duration::seconds(cfg.lease_secs / 2))
+                    .map(|at| {
+                        at < chrono::Utc::now() + chrono::Duration::seconds(cfg.lease_secs / 2)
+                    })
                     .unwrap_or(true);
                 if expiring_soon {
                     let renewed = renew_lease(pool, run_id, worker_id, cfg.lease_secs).await?;
@@ -409,7 +416,10 @@ pub async fn cancel_run(
             workspace_root: workspace_root_from_env(),
         };
         // 进程可能已自行退出：terminate 内部先 try_wait，不强杀尸体。
-        if let Err(error) = executor.terminate(&session, TerminateReason::Cancelled).await {
+        if let Err(error) = executor
+            .terminate(&session, TerminateReason::Cancelled)
+            .await
+        {
             tracing::warn!(
                 run = %run_id,
                 error = %error,
@@ -462,7 +472,9 @@ pub async fn reconcile_orphans(
     .fetch_all(pool)
     .await?;
     for (run_id, project_id) in orphans {
-        let Ok(mut tx) = pool.begin().await else { continue };
+        let Ok(mut tx) = pool.begin().await else {
+            continue;
+        };
         if crate::pm_write::append_audit(
             &mut tx,
             project_id,
@@ -593,7 +605,6 @@ fn stale_since(at: Option<chrono::DateTime<chrono::Utc>>, stale_secs: i64) -> bo
     matches!(at, Some(at) if (chrono::Utc::now() - at) > chrono::Duration::seconds(stale_secs))
 }
 
-
 fn timed_out(
     began_at: Option<chrono::DateTime<chrono::Utc>>,
     timeout_seconds: Option<i32>,
@@ -606,12 +617,11 @@ fn timed_out(
 }
 
 async fn project_of(pool: &PgPool, run_id: Uuid) -> Result<Uuid, RunDispatchError> {
-    let project_id: Uuid = sqlx::query_scalar(
-        "SELECT project_id FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(run_id)
-    .fetch_one(pool)
-    .await?;
+    let project_id: Uuid =
+        sqlx::query_scalar("SELECT project_id FROM delivery.task_run WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(pool)
+            .await?;
     Ok(project_id)
 }
 
@@ -646,13 +656,12 @@ async fn executable_run(
     .await?;
     // I3-E 执行期强校验（V1.1 简化裁决）：仓库能否进入执行环境，以**本次 Run 的
     // 定格访问快照**为准——不在快照内的仓（范围外 / 非 verified）不得暴露给执行端。
-    let policy_snapshot: Option<serde_json::Value> = sqlx::query_scalar(
-        "SELECT policy_snapshot FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(run_id)
-    .fetch_optional(pool)
-    .await?
-    .flatten();
+    let policy_snapshot: Option<serde_json::Value> =
+        sqlx::query_scalar("SELECT policy_snapshot FROM delivery.task_run WHERE id = $1")
+            .bind(run_id)
+            .fetch_optional(pool)
+            .await?
+            .flatten();
     let repositories = baseline_rows
         .iter()
         .filter(|row| {
@@ -723,17 +732,16 @@ async fn start_failed(
     };
     // B3-1 语义：执行器未成功启动，任务回 ready 等待下一次领取。任务状态仍经
     // 唯一受守卫入口（R1）；任务不在 claimed（竞态被回收）时跳过。
-    let (task_id, task_state): (Option<Uuid>, Option<String>) =
-        sqlx::query_as(
-            "SELECT t.id, t.status \
+    let (task_id, task_state): (Option<Uuid>, Option<String>) = sqlx::query_as(
+        "SELECT t.id, t.status \
            FROM delivery.task_run r \
            JOIN delivery.task t ON t.project_id = r.project_id AND t.id = r.task_id \
           WHERE r.id = $1",
-        )
-        .bind(run_id)
-        .fetch_optional(&mut *tx)
-        .await?
-        .unwrap_or((None, None));
+    )
+    .bind(run_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .unwrap_or((None, None));
     if let (Some(task_id), Some(task_state)) = (task_id, task_state) {
         if task_state == "claimed" {
             let ctx = system_context(&mut tx, project_id)

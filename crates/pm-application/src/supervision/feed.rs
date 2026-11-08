@@ -24,7 +24,6 @@ pub async fn notifications_feed(
     .await
 }
 
-
 /// One `governance.human_intervention` row — the durable record of a human
 /// power being exercised. `executed_at` is `Some(now)` for interventions that
 /// took effect (veto applied, freeze flipped) and `None` for recorded-but-not-
@@ -61,7 +60,6 @@ pub(crate) async fn record_intervention(
     .map(|_| ())
 }
 
-
 /// One `integration.notification` for the feed. `source_proposal_id` stays
 /// NULL: the column is UNIQUE per proposal (Task 14 already claims it with the
 /// proposal's own change_applied / redline_pending row), so the proposal
@@ -85,4 +83,3 @@ pub(crate) async fn notify(
     .await
     .map(|_| ())
 }
-

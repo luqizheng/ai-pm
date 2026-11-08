@@ -19,7 +19,6 @@ pub async fn list_repositories(
     Ok(rows)
 }
 
-
 pub async fn create_repository(
     pool: &PgPool,
     project_id: Uuid,
@@ -101,7 +100,6 @@ pub async fn create_repository(
     Ok(row)
 }
 
-
 /// 更新仓库身份/角色/分支/备注。**不触碰** selected_*（Confirmed 基准）——
 /// 那只能走 `confirm_repository_version`（S01-03 §5.1：不得绕过人工确认）。
 pub async fn update_repository(
@@ -163,7 +161,6 @@ pub async fn update_repository(
     Ok(row)
 }
 
-
 pub async fn delete_repository(
     pool: &PgPool,
     repository_id: Uuid,
@@ -208,7 +205,6 @@ pub async fn delete_repository(
 
 // ------------------------------------------------------------------- internals
 
-
 /// 一次可达性校验的结果（同时已回写到仓库行）。
 #[derive(Debug, Clone, Serialize)]
 pub struct VerifyOutcome {
@@ -219,7 +215,6 @@ pub struct VerifyOutcome {
     pub error_code: Option<String>,
     pub error_detail: Option<String>,
 }
-
 
 /// 归档：保留行与历史，只把状态置 `archived`。
 pub async fn archive_repository(
@@ -259,7 +254,6 @@ pub async fn archive_repository(
     tx.commit().await?;
     Ok(row)
 }
-
 
 /// 人类确认更新项目采用基准（G-05 承载，POST /update-version）。
 ///
@@ -356,7 +350,6 @@ pub async fn confirm_repository_version(
     Ok(row)
 }
 
-
 /// `git ls-remote --heads` 校验可达性并回写状态。
 ///
 /// SSH 地址必须有 active 项目密钥；本地 `file://`（测试夹具）走匿名。
@@ -370,12 +363,12 @@ pub async fn confirm_repository_version(
 /// 失败只 warn 不阻断 verify 本身（重跑 verify 即可重触发）。
 /// verify 初始行投影（触发链需要 tenant/name/旧 HEAD）。
 type VerifyRepoRow = (
-    Uuid,             // project_id
-    Uuid,             // tenant_id
-    String,           // name
-    String,           // url
-    Option<String>,   // default_branch
-    Option<String>,   // head_commit_sha（Observed，verify 前值）
+    Uuid,           // project_id
+    Uuid,           // tenant_id
+    String,         // name
+    String,         // url
+    Option<String>, // default_branch
+    Option<String>, // head_commit_sha（Observed，verify 前值）
 );
 
 pub async fn verify_repository(
@@ -445,7 +438,10 @@ pub async fn verify_repository(
                     })
                     .or_else(|| heads.first().map(|h| h.branch.clone()));
                 let sha = branch.as_ref().and_then(|branch| {
-                    heads.iter().find(|h| &h.branch == branch).map(|h| h.sha.clone())
+                    heads
+                        .iter()
+                        .find(|h| &h.branch == branch)
+                        .map(|h| h.sha.clone())
                 });
                 VerifyOutcome {
                     repository_id,
@@ -587,5 +583,3 @@ async fn submit_repository_snapshot_intake(
 }
 
 // ------------------------------------------------------------------- internals
-
-

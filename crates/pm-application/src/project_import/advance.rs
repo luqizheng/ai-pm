@@ -22,7 +22,6 @@ pub async fn import_proposals(
     existing_proposals(pool, project_id, run_id).await
 }
 
-
 /// 审批决策后推进导入状态：
 /// - 任一提案被驳回 → import `rejected`（已批准部分不回滚）；
 /// - 全部 executed → import `applied` + 项目 `planning` + 审计；
@@ -108,7 +107,6 @@ pub async fn advance_import_after_decision(
     Ok(())
 }
 
-
 pub(crate) async fn existing_proposals(
     pool: &PgPool,
     project_id: Uuid,
@@ -139,4 +137,3 @@ pub(crate) async fn existing_proposals(
         analysis_run_id: run_id,
     })
 }
-

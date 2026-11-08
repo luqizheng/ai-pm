@@ -141,12 +141,7 @@ async fn world(pool: &PgPool) -> World {
 }
 
 /// 种一个项目。
-async fn seed_project(
-    pool: &PgPool,
-    tenant_id: Uuid,
-    customer_id: Uuid,
-    code: &str,
-) -> Uuid {
+async fn seed_project(pool: &PgPool, tenant_id: Uuid, customer_id: Uuid, code: &str) -> Uuid {
     sqlx::query_scalar(
         "INSERT INTO core.project (tenant_id, customer_id, code, name) \
          VALUES ($1, $2, $3, $3) RETURNING id",

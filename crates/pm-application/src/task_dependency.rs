@@ -153,14 +153,12 @@ pub async fn list_dependencies(
     tenant_id: Uuid,
     task_id: Uuid,
 ) -> Result<DependencyGraph, DependencyError> {
-    let _ = sqlx::query(
-        "SELECT 1 FROM delivery.task WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(task_id)
-    .bind(tenant_id)
-    .fetch_optional(pool)
-    .await?
-    .ok_or(DependencyError::TaskNotFound)?;
+    let _ = sqlx::query("SELECT 1 FROM delivery.task WHERE id = $1 AND tenant_id = $2")
+        .bind(task_id)
+        .bind(tenant_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or(DependencyError::TaskNotFound)?;
 
     // 边表行与任务同租户（tenant_id NOT NULL + 组合外键，I1/I5）；边查询同样
     // 按 tenant 锚定，保证返回的相邻任务都属于本租户。
@@ -214,12 +212,11 @@ pub async fn add_dependency(
     // ⓪ 无锁预读项目（图锁键）：取锁必须先于任何行锁（T-025 P0）。预读后行
     //    若消失，① 的 FOR UPDATE 返回 None → TaskNotFound。本项目内的并发
     //    建边/删边/终态迁移由此全序化（设计稿评审 §2.1：并发反向边恰一成功）。
-    let graph_key: Uuid =
-        sqlx::query_scalar("SELECT project_id FROM delivery.task WHERE id = $1")
-            .bind(task_id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .ok_or(DependencyError::TaskNotFound)?;
+    let graph_key: Uuid = sqlx::query_scalar("SELECT project_id FROM delivery.task WHERE id = $1")
+        .bind(task_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(DependencyError::TaskNotFound)?;
     acquire_project_graph_lock(&mut tx, graph_key).await?;
 
     // ① 锁下游任务行（项目图锁已持有：检环/插边/解锁判定在本项目内串行）。
@@ -342,20 +339,18 @@ pub async fn remove_dependency(
 
     // ⓪ 与 add_dependency 同款：先无锁预读项目取图锁，再锁行（T-025 P0）。
     //    删边同样修改依赖图，必须与建边/终态迁移共用同一把锁。
-    let graph_key: Uuid =
-        sqlx::query_scalar("SELECT project_id FROM delivery.task WHERE id = $1")
-            .bind(task_id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .ok_or(DependencyError::TaskNotFound)?;
+    let graph_key: Uuid = sqlx::query_scalar("SELECT project_id FROM delivery.task WHERE id = $1")
+        .bind(task_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(DependencyError::TaskNotFound)?;
     acquire_project_graph_lock(&mut tx, graph_key).await?;
 
-    let downstream =
-        sqlx::query("SELECT project_id FROM delivery.task WHERE id = $1 FOR UPDATE")
-            .bind(task_id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .ok_or(DependencyError::TaskNotFound)?;
+    let downstream = sqlx::query("SELECT project_id FROM delivery.task WHERE id = $1 FOR UPDATE")
+        .bind(task_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(DependencyError::TaskNotFound)?;
     let project_id: Uuid = downstream.get("project_id");
 
     let deleted = sqlx::query(
@@ -452,7 +447,9 @@ async fn unlock_task_if_ready(
     }
 
     // R1：状态推进仍经唯一受守卫入口（含 revision guard 与 update_task_status 审计）。
-    let ctx = system_context(tx, project_id).await.map_err(transition_err)?;
+    let ctx = system_context(tx, project_id)
+        .await
+        .map_err(transition_err)?;
     let (_, revision) = apply_task_transition(
         tx,
         task_id,

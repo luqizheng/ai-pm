@@ -49,7 +49,6 @@ fn default_true() -> bool {
     true
 }
 
-
 /// 双 Option 反序列化：字段缺失 = `None`（不改），显式 `null` = `Some(None)`（清空）。
 fn double_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
 where
@@ -59,7 +58,6 @@ where
     Ok(Some(Option::<T>::deserialize(deserializer)?))
 }
 
-
 /// 交付物条目（D2 §5：JSONB 对象数组，`id` 供 D4 对账锚定）。
 #[derive(Debug, Deserialize)]
 pub struct DeliverableInput {
@@ -67,7 +65,6 @@ pub struct DeliverableInput {
     pub id: Option<String>,
     pub path: String,
 }
-
 
 /// 逐条验收项（D2 C 裁决：独立表逐条留痕）。
 #[derive(Debug, Deserialize)]
@@ -80,7 +77,6 @@ pub struct AcceptanceCriterionInput {
     pub verification_kind: Option<String>,
 }
 
-
 /// 任务 → 知识文档引用（C2：以 `document_id` 为准）。
 #[derive(Debug, Deserialize)]
 pub struct KnowledgeRefInput {
@@ -88,7 +84,6 @@ pub struct KnowledgeRefInput {
     #[serde(default = "default_true")]
     pub is_required: bool,
 }
-
 
 #[derive(Debug)]
 pub enum PmWriteError {
@@ -107,7 +102,6 @@ impl From<sqlx::Error> for PmWriteError {
     }
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct CreateTaskRequest {
     #[serde(default)]
@@ -123,7 +117,6 @@ pub struct CreateTaskRequest {
     #[serde(default)]
     pub assignee_id: Option<Uuid>,
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateTaskRequest {
@@ -153,4 +146,3 @@ pub struct UpdateTaskRequest {
     #[serde(default)]
     pub knowledge_refs: Option<Vec<KnowledgeRefInput>>,
 }
-

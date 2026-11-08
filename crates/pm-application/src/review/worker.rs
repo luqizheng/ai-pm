@@ -68,7 +68,10 @@ pub enum ReviewStep {
         advance: AdvanceOutcome,
     },
     /// 审查运行失败（run 落 `failed`）并已排下一轮重试。
-    Failed { run_id: Uuid, retry_run_id: Option<Uuid> },
+    Failed {
+        run_id: Uuid,
+        retry_run_id: Option<Uuid>,
+    },
 }
 
 /// worker 循环的一次完整步进：先回收，再领取执行，最后重试失败的。
@@ -180,13 +183,12 @@ async fn run_review(
 
     let mut tx = pool.begin().await?;
     // 终态条件校验：run 仍是本 worker 领取的 `running`（防重复执行覆盖）。
-    let still_running: bool = sqlx::query_scalar(
-        "SELECT (status = 'running') FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(review_run_id)
-    .fetch_optional(&mut *tx)
-    .await?
-    .unwrap_or(false);
+    let still_running: bool =
+        sqlx::query_scalar("SELECT (status = 'running') FROM delivery.task_run WHERE id = $1")
+            .bind(review_run_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .unwrap_or(false);
     if !still_running {
         tx.rollback().await.ok();
         return Ok(ReviewStep::Idle);
@@ -278,12 +280,11 @@ async fn fail_review(
     cfg: &ReviewConfig,
     reason: &str,
 ) -> Result<ReviewStep, ReviewError> {
-    let row = sqlx::query(
-        "SELECT project_id, task_id, attempt_no FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(review_run_id)
-    .fetch_one(pool)
-    .await?;
+    let row =
+        sqlx::query("SELECT project_id, task_id, attempt_no FROM delivery.task_run WHERE id = $1")
+            .bind(review_run_id)
+            .fetch_one(pool)
+            .await?;
     let project_id: Uuid = row.get("project_id");
     let task_id: Uuid = row.get("task_id");
     let attempt_no: i32 = row.get("attempt_no");
@@ -325,7 +326,16 @@ async fn fail_review(
     }
     tx.commit().await?;
 
-    let retry = schedule_retry(pool, outbox, project_id, task_id, review_run_id, attempt_no, cfg).await?;
+    let retry = schedule_retry(
+        pool,
+        outbox,
+        project_id,
+        task_id,
+        review_run_id,
+        attempt_no,
+        cfg,
+    )
+    .await?;
     Ok(ReviewStep::Failed {
         run_id: review_run_id,
         retry_run_id: retry,
@@ -358,12 +368,13 @@ async fn schedule_retry(
             tx.commit().await?;
             return Ok(None);
         };
-        let next_attempt: i32 =
-            sqlx::query_scalar("SELECT coalesce(max(attempt_no), 0) + 1 FROM delivery.task_run \
-                                 WHERE task_id = $1 AND run_kind = 'review'")
-                .bind(task_id)
-                .fetch_one(&mut *tx)
-                .await?;
+        let next_attempt: i32 = sqlx::query_scalar(
+            "SELECT coalesce(max(attempt_no), 0) + 1 FROM delivery.task_run \
+                                 WHERE task_id = $1 AND run_kind = 'review'",
+        )
+        .bind(task_id)
+        .fetch_one(&mut *tx)
+        .await?;
         let new_run: Uuid = sqlx::query_scalar(
             "INSERT INTO delivery.task_run \
              (project_id, task_id, attempt_no, status, run_kind, role_id, executor_kind, \
@@ -422,7 +433,9 @@ pub async fn run_review_loop(pool: PgPool, outbox: std::sync::Arc<dyn OutboxAppe
     let cfg = ReviewConfig::from_env();
     loop {
         match review_step(&pool, outbox.as_ref(), &cfg).await {
-            Ok(ReviewStep::Idle) => tokio::time::sleep(Duration::from_millis(REVIEW_IDLE_POLL_MS)).await,
+            Ok(ReviewStep::Idle) => {
+                tokio::time::sleep(Duration::from_millis(REVIEW_IDLE_POLL_MS)).await
+            }
             Ok(_) => {}
             Err(error) => {
                 tracing::warn!(error = %error, "review step failed; backing off");
@@ -431,6 +444,3 @@ pub async fn run_review_loop(pool: PgPool, outbox: std::sync::Arc<dyn OutboxAppe
         }
     }
 }
-
-
-

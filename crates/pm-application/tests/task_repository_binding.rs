@@ -9,11 +9,9 @@
 //! 6 禁 MCP 参数伪造归属 → 同上（未绑定仓库 deny）+ `bind_rejects_unknown_repository`
 
 use pm_application::actor::AuditActor;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::repo_access::{build_task_repo_access_tx, execution_allows};
-use pm_application::task_repository_binding::{
-    self, BindRepositoryEntry, TaskRepoBindingError,
-};
+use pm_application::task_repository_binding::{self, BindRepositoryEntry, TaskRepoBindingError};
 use pm_domain::{RepoAccess, SYSTEM_TENANT};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -69,12 +67,14 @@ fn entry(repository_id: Uuid) -> BindRepositoryEntry {
 }
 
 async fn audit_count(pool: &PgPool, project_id: Uuid, action: &str) -> i64 {
-    sqlx::query_scalar("SELECT count(*) FROM governance.audit_log WHERE project_id = $1 AND action = $2")
-        .bind(project_id)
-        .bind(action)
-        .fetch_one(pool)
-        .await
-        .unwrap()
+    sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log WHERE project_id = $1 AND action = $2",
+    )
+    .bind(project_id)
+    .bind(action)
+    .fetch_one(pool)
+    .await
+    .unwrap()
 }
 
 /// 约束 4：重复写入幂等——同 (task, repo) 收敛更新，不产重复行；
@@ -87,7 +87,12 @@ async fn bind_is_idempotent_converging_upsert(pool: PgPool) {
 
     // 首绑：默认值（write_access=true / base_ref='main' / role='primary'）。
     let bound = task_repository_binding::bind_task_repositories(
-        &pool, SYSTEM_TENANT, project_id, task_id, &[entry(repo_a)], &actor,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        task_id,
+        &[entry(repo_a)],
+        &actor,
     )
     .await
     .unwrap();
@@ -107,7 +112,7 @@ async fn bind_is_idempotent_converging_upsert(pool: PgPool) {
         &[BindRepositoryEntry {
             repository_id: repo_a,
             write_access: Some(false),
-            base_ref: None,     // 保留 'main'
+            base_ref: None, // 保留 'main'
             role: Some("secondary".into()),
             path_scope: None,
         }],
@@ -123,7 +128,10 @@ async fn bind_is_idempotent_converging_upsert(pool: PgPool) {
             .unwrap();
     assert_eq!(count, 1, "idempotent upsert must not duplicate rows");
     assert!(!rebound[0].write_access, "provided field must converge");
-    assert_eq!(rebound[0].base_ref, "main", "omitted field must keep current value");
+    assert_eq!(
+        rebound[0].base_ref, "main",
+        "omitted field must keep current value"
+    );
     assert_eq!(rebound[0].role, "secondary");
 
     // 多仓一次绑：两个独立行。
@@ -158,7 +166,12 @@ async fn bind_requires_verified_repository(pool: PgPool) {
     let actor = AuditActor::principal(human_id);
 
     let err = task_repository_binding::bind_task_repositories(
-        &pool, SYSTEM_TENANT, project_id, task_id, &[entry(pending)], &actor,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        task_id,
+        &[entry(pending)],
+        &actor,
     )
     .await
     .unwrap_err();
@@ -205,7 +218,12 @@ async fn bind_rejects_cross_project_repository(pool: PgPool) {
     let actor = AuditActor::principal(human_id);
 
     let err = task_repository_binding::bind_task_repositories(
-        &pool, SYSTEM_TENANT, project_id, task_id, &[entry(foreign_repo)], &actor,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        task_id,
+        &[entry(foreign_repo)],
+        &actor,
     )
     .await
     .unwrap_err();
@@ -213,7 +231,12 @@ async fn bind_rejects_cross_project_repository(pool: PgPool) {
 
     let unknown_repo = Uuid::new_v4();
     let err = task_repository_binding::bind_task_repositories(
-        &pool, SYSTEM_TENANT, project_id, task_id, &[entry(unknown_repo)], &actor,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        task_id,
+        &[entry(unknown_repo)],
+        &actor,
     )
     .await
     .unwrap_err();
@@ -225,7 +248,9 @@ async fn bind_rejects_cross_project_repository(pool: PgPool) {
         SYSTEM_TENANT,
         project_id,
         unknown_task,
-        &[entry(seed_repository(&pool, project_id, "ok", "verified").await)],
+        &[entry(
+            seed_repository(&pool, project_id, "ok", "verified").await,
+        )],
         &actor,
     )
     .await
@@ -252,7 +277,12 @@ async fn claim_snapshot_and_execution_allows_consume_binding(pool: PgPool) {
 
     // 绑定后：同一事实出现在 claim 快照。
     task_repository_binding::bind_task_repositories(
-        &pool, SYSTEM_TENANT, project_id, task_id, &[entry(bound_repo)], &actor,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        task_id,
+        &[entry(bound_repo)],
+        &actor,
     )
     .await
     .unwrap();
@@ -293,7 +323,10 @@ async fn claim_snapshot_and_execution_allows_consume_binding(pool: PgPool) {
     )
     .await
     .unwrap();
-    assert!(!forged, "unbound repository must be denied even if same-project verified");
+    assert!(
+        !forged,
+        "unbound repository must be denied even if same-project verified"
+    );
 }
 
 /// 约束 4（逆操作）：解绑幂等；解绑后快照同步收敛。
@@ -303,28 +336,42 @@ async fn unbind_is_idempotent(pool: PgPool) {
     let repo = seed_repository(&pool, project_id, "web", "verified").await;
     let actor = AuditActor::principal(human_id);
     task_repository_binding::bind_task_repositories(
-        &pool, SYSTEM_TENANT, project_id, task_id, &[entry(repo)], &actor,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        task_id,
+        &[entry(repo)],
+        &actor,
     )
     .await
     .unwrap();
 
     assert!(task_repository_binding::unbind_task_repository(
-        &pool, SYSTEM_TENANT, project_id, task_id, repo, &actor,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        task_id,
+        repo,
+        &actor,
     )
     .await
     .unwrap());
     // 幂等：再解绑返回 false 而非报错。
     assert!(!task_repository_binding::unbind_task_repository(
-        &pool, SYSTEM_TENANT, project_id, task_id, repo, &actor,
+        &pool,
+        SYSTEM_TENANT,
+        project_id,
+        task_id,
+        repo,
+        &actor,
     )
     .await
     .unwrap());
 
-    let rows = task_repository_binding::list_task_repositories(
-        &pool, SYSTEM_TENANT, project_id, task_id,
-    )
-    .await
-    .unwrap();
+    let rows =
+        task_repository_binding::list_task_repositories(&pool, SYSTEM_TENANT, project_id, task_id)
+            .await
+            .unwrap();
     assert!(rows.is_empty());
     assert!(audit_count(&pool, project_id, "task.repository.unbound").await == 1);
 

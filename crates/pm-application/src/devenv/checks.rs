@@ -13,7 +13,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::binding::project_repository_ids;
-use super::{DeviceError, DeviceReadiness, DeviceRow, device_owner, fetch_device, list_bindings};
+use super::{device_owner, fetch_device, list_bindings, DeviceError, DeviceReadiness, DeviceRow};
 use crate::authz::require_project_member;
 use crate::caller::HumanActor;
 
@@ -99,7 +99,10 @@ pub async fn report_checks(
         "evidence": checks.evidence.clone(),
     });
 
-    let mut tx = pool.begin().await.map_err(|e| DeviceError::Db(e.to_string()))?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| DeviceError::Db(e.to_string()))?;
 
     for (binding_id, verified) in &verified_by_binding {
         let json = serde_json::to_value(verified).map_err(|e| DeviceError::Db(e.to_string()))?;
@@ -125,7 +128,9 @@ pub async fn report_checks(
     .await
     .map_err(|e| DeviceError::Db(e.to_string()))?;
 
-    tx.commit().await.map_err(|e| DeviceError::Db(e.to_string()))?;
+    tx.commit()
+        .await
+        .map_err(|e| DeviceError::Db(e.to_string()))?;
 
     fetch_device(pool, device_id)
         .await?

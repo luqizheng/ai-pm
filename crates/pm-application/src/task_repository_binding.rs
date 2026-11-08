@@ -107,13 +107,12 @@ pub async fn bind_task_repositories(
     let mut tx = pool.begin().await?;
 
     // 约束 3（任务侧）：Task 必须属于本租户本项目。
-    let task_tenant: Option<Uuid> = sqlx::query_scalar(
-        "SELECT tenant_id FROM delivery.task WHERE id = $1 AND project_id = $2",
-    )
-    .bind(task_id)
-    .bind(project_id)
-    .fetch_optional(&mut *tx)
-    .await?;
+    let task_tenant: Option<Uuid> =
+        sqlx::query_scalar("SELECT tenant_id FROM delivery.task WHERE id = $1 AND project_id = $2")
+            .bind(task_id)
+            .bind(project_id)
+            .fetch_optional(&mut *tx)
+            .await?;
     if task_tenant.is_none() || task_tenant != Some(tenant_id) {
         return Err(TaskRepoBindingError::TaskNotFound);
     }
@@ -208,13 +207,12 @@ pub async fn unbind_task_repository(
     actor: &AuditActor,
 ) -> Result<bool, TaskRepoBindingError> {
     let mut tx = pool.begin().await?;
-    let task_tenant: Option<Uuid> = sqlx::query_scalar(
-        "SELECT tenant_id FROM delivery.task WHERE id = $1 AND project_id = $2",
-    )
-    .bind(task_id)
-    .bind(project_id)
-    .fetch_optional(&mut *tx)
-    .await?;
+    let task_tenant: Option<Uuid> =
+        sqlx::query_scalar("SELECT tenant_id FROM delivery.task WHERE id = $1 AND project_id = $2")
+            .bind(task_id)
+            .bind(project_id)
+            .fetch_optional(&mut *tx)
+            .await?;
     if task_tenant.is_none() || task_tenant != Some(tenant_id) {
         return Err(TaskRepoBindingError::TaskNotFound);
     }

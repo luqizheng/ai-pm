@@ -14,7 +14,6 @@ pub(crate) fn outbox_event_for_task_target(to: &str) -> Option<&'static str> {
     }
 }
 
-
 /// Compensation specs are stored as JSONB and replayed with interpolated
 /// identifiers; column names must be plain lowercase SQL identifiers.
 pub(crate) fn validate_identifier(name: &str) -> Result<(), CommandError> {
@@ -35,12 +34,9 @@ pub(crate) fn validate_identifier(name: &str) -> Result<(), CommandError> {
 /// 单条批量命令的条目上限（spec §十六：建议 ≤200，超出拆批）。
 pub(crate) const MAX_BATCH_ITEMS: usize = 200;
 
-
 pub(crate) fn validate_batch(len: usize, what: &str) -> Result<(), CommandError> {
     if len == 0 {
-        return Err(CommandError::Validation(format!(
-            "{what} batch is empty"
-        )));
+        return Err(CommandError::Validation(format!("{what} batch is empty")));
     }
     if len > MAX_BATCH_ITEMS {
         return Err(CommandError::Validation(format!(
@@ -50,8 +46,6 @@ pub(crate) fn validate_batch(len: usize, what: &str) -> Result<(), CommandError>
     Ok(())
 }
 
-
 pub(crate) fn db_err(e: sqlx::Error) -> CommandError {
     CommandError::Db(e)
 }
-

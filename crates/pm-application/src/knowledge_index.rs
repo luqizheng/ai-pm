@@ -49,14 +49,9 @@ pub fn raw_score(title: &str, anchor: &str, content: &str, needle: &str) -> i64 
 ///
 /// `ref_boost` 由调用方判定（只认当前 published 修订上锚点非空且相等的引用），
 /// 本函数不做引用查询，保证 SQL 路径与 Rust 路径口径逐项一致（K-14）。
-pub fn score_section(
-    doc_type: &str,
-    raw: i64,
-    ref_boost: i64,
-) -> i64 {
+pub fn score_section(doc_type: &str, raw: i64, ref_boost: i64) -> i64 {
     (raw * doc_type_weight(doc_type) + 5) / 10 + ref_boost
 }
-
 
 /// 一个 Markdown 章节（标题 + 正文 + 定位信息）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

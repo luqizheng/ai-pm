@@ -34,8 +34,8 @@ pub mod queue;
 pub mod worker;
 
 pub use anchor::{
-    CriterionAnchor, RepositoryAnchor, input_manifest_hash, review_policy_version,
-    reviewed_manifest_hash,
+    input_manifest_hash, review_policy_version, reviewed_manifest_hash, CriterionAnchor,
+    RepositoryAnchor,
 };
 pub use collect::{collect_review_input, detect_anchor_drift, CollectedReview};
 pub use decide::{
@@ -52,6 +52,4 @@ pub use queue::{
     enqueue_review, load_reviewed_delivery, EnqueueOutcome, ReviewError, ReviewedDelivery,
     PLATFORM_EXECUTOR, REVIEWER_ROLE,
 };
-pub use worker::{
-    review_step, run_review_loop, ReviewConfig, ReviewStep, REVIEW_IDLE_POLL_MS,
-};
+pub use worker::{review_step, run_review_loop, ReviewConfig, ReviewStep, REVIEW_IDLE_POLL_MS};

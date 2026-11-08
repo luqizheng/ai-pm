@@ -202,7 +202,10 @@ async fn register_once(
     caller: &HumanActor,
     req: &RegisterDeviceRequest,
 ) -> Result<RegisterAttempt, DeviceError> {
-    let mut tx = pool.begin().await.map_err(|e| DeviceError::Db(e.to_string()))?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| DeviceError::Db(e.to_string()))?;
 
     let requested_id = req.device_id.unwrap_or_else(Uuid::new_v4);
     let inserted = sqlx::query(
@@ -230,7 +233,9 @@ async fn register_once(
         let row = fetch_device_in(&mut tx, requested_id)
             .await?
             .ok_or(DeviceError::NotFound)?;
-        tx.commit().await.map_err(|e| DeviceError::Db(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| DeviceError::Db(e.to_string()))?;
         return Ok(RegisterAttempt::Done(RegisterDeviceOutcome {
             device: row,
             reused: false,
@@ -290,7 +295,9 @@ async fn register_once(
         let row = fetch_device_in(&mut tx, fresh_id)
             .await?
             .ok_or(DeviceError::NotFound)?;
-        tx.commit().await.map_err(|e| DeviceError::Db(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| DeviceError::Db(e.to_string()))?;
         return Ok(RegisterAttempt::Done(RegisterDeviceOutcome {
             device: row,
             reused: false,
@@ -316,7 +323,9 @@ async fn register_once(
     let row = fetch_device_in(&mut tx, requested_id)
         .await?
         .ok_or(DeviceError::NotFound)?;
-    tx.commit().await.map_err(|e| DeviceError::Db(e.to_string()))?;
+    tx.commit()
+        .await
+        .map_err(|e| DeviceError::Db(e.to_string()))?;
     Ok(RegisterAttempt::Done(RegisterDeviceOutcome {
         device: row,
         reused: true,
@@ -377,7 +386,10 @@ pub async fn get_device(
             project_accessible: accessible,
         });
     }
-    Ok(DeviceDetail { device, bindings: views })
+    Ok(DeviceDetail {
+        device,
+        bindings: views,
+    })
 }
 
 /// 撤销设备（生命周期 → revoked）。幂等。

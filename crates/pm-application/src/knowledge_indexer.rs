@@ -346,7 +346,9 @@ pub async fn apply_transition(
     // 1) 锁：`(revision, provider)` 粒度。成功重建 / stale 清理 / failed 清理
     //    共用同一把锁——否则「旧操作删掉新产物」。
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))")
-        .bind(format!("ai.document_section_index:{revision_id}:{provider}"))
+        .bind(format!(
+            "ai.document_section_index:{revision_id}:{provider}"
+        ))
         .execute(&mut *tx)
         .await?;
 
@@ -372,12 +374,11 @@ pub async fn apply_transition(
     let head_revision_id: Option<Uuid> = row.get("head_revision_id");
 
     // 锁内重读盘上正文并算哈希。
-    let disk_hash = match std::fs::read_to_string(
-        knowledge::safe_join(root.path(), &canonical_path)?,
-    ) {
-        Ok(text) => Some(knowledge::content_hash(&text)),
-        Err(_) => None,
-    };
+    let disk_hash =
+        match std::fs::read_to_string(knowledge::safe_join(root.path(), &canonical_path)?) {
+            Ok(text) => Some(knowledge::content_hash(&text)),
+            Err(_) => None,
+        };
 
     let transition = match transition {
         Transition::Indexed { sections } => {

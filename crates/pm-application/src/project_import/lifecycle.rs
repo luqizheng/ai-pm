@@ -15,7 +15,17 @@ pub async fn list_imports(
     Ok(rows
         .into_iter()
         .map(
-            |(id, status, progress, model_name, draft_revision, analysis_run_id, created_at, proposed_at, applied_at)| {
+            |(
+                id,
+                status,
+                progress,
+                model_name,
+                draft_revision,
+                analysis_run_id,
+                created_at,
+                proposed_at,
+                applied_at,
+            )| {
                 ImportListItem {
                     id,
                     status,
@@ -32,7 +42,6 @@ pub async fn list_imports(
         .collect())
 }
 
-
 /// 启动一次导入：校验空项目 + **必填的 verified 仓库集合**，落事件与 job。
 ///
 /// N-3：`repository_ids` 必填且非空——不再由服务端「取全部 verified 仓库」。
@@ -44,10 +53,11 @@ pub async fn start_import(
     actor: &AuditActor,
     req: &StartImportRequest,
 ) -> Result<StartImport, ImportError> {
-    let project_exists: Option<Uuid> = sqlx::query_scalar("SELECT id FROM core.project WHERE id = $1")
-        .bind(project_id)
-        .fetch_optional(pool)
-        .await?;
+    let project_exists: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM core.project WHERE id = $1")
+            .bind(project_id)
+            .fetch_optional(pool)
+            .await?;
     if project_exists.is_none() {
         return Err(ImportError::ProjectNotFound);
     }
@@ -249,10 +259,12 @@ pub async fn start_import(
         Some(operation_id),
     )
     .await?;
-    sqlx::query("UPDATE core.project SET status = 'initializing' WHERE id = $1 AND status = 'planning'")
-        .bind(project_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "UPDATE core.project SET status = 'initializing' WHERE id = $1 AND status = 'planning'",
+    )
+    .bind(project_id)
+    .execute(&mut *tx)
+    .await?;
     tx.commit().await?;
 
     Ok(StartImport {
@@ -261,7 +273,6 @@ pub async fn start_import(
         replayed: false,
     })
 }
-
 
 /// 读取导入详情；`queued/cloning/reading/analyzing` 阶段不返回草案。
 pub async fn get_import(
@@ -307,9 +318,8 @@ pub async fn get_import(
     };
 
     // 来源快照的事实来自**最新一轮 Attempt**（R-4-1：Source 只留身份与指针）。
-    let sources: Vec<ImportSourceRow> =
-        sqlx::query_as(
-            "SELECT s.repository_id, r.name, s.head_commit_sha, \
+    let sources: Vec<ImportSourceRow> = sqlx::query_as(
+        "SELECT s.repository_id, r.name, s.head_commit_sha, \
                     COALESCE(a.commit_count, 0), COALESCE(a.doc_count, 0), \
                     COALESCE(a.size_bytes, 0), COALESCE(a.truncated, false), a.error_code \
              FROM integration.repo_import_source s \
@@ -318,10 +328,10 @@ pub async fn get_import(
                     ON a.tenant_id = s.tenant_id AND a.import_id = s.import_id \
                    AND a.repository_id = s.repository_id AND a.attempt_no = s.current_attempt_no \
              WHERE s.import_id = $1 ORDER BY r.name",
-        )
-        .bind(import_id)
-        .fetch_all(pool)
-        .await?;
+    )
+    .bind(import_id)
+    .fetch_all(pool)
+    .await?;
 
     // 轮次历史（R-4-1：成功与失败都留档）。
     let attempt_rows: Vec<(Uuid, i32, String, Option<String>, Option<String>, DateTime<Utc>, Option<DateTime<Utc>>)> =
@@ -370,7 +380,16 @@ pub async fn get_import(
         sources: sources
             .into_iter()
             .map(
-                |(repository_id, label, head_commit_sha, commit_count, doc_count, size_bytes, truncated, error_code)| {
+                |(
+                    repository_id,
+                    label,
+                    head_commit_sha,
+                    commit_count,
+                    doc_count,
+                    size_bytes,
+                    truncated,
+                    error_code,
+                )| {
                     ImportSourceView {
                         repository_id,
                         label,
@@ -380,16 +399,13 @@ pub async fn get_import(
                         size_bytes,
                         truncated,
                         error_code,
-                        attempts: attempts_by_repo
-                            .remove(&repository_id)
-                            .unwrap_or_default(),
+                        attempts: attempts_by_repo.remove(&repository_id).unwrap_or_default(),
                     }
                 },
             )
             .collect(),
     })
 }
-
 
 /// 可取消/终止的导入状态：在途四态 + `draft_ready` + `proposed`（C-2）。
 ///
@@ -402,24 +418,24 @@ pub async fn cancel_import(
     actor: &AuditActor,
     reason: Option<&str>,
 ) -> Result<(), ImportError> {
-    let status: Option<String> =
-        sqlx::query_scalar("SELECT status FROM integration.repo_import WHERE id = $1 AND project_id = $2")
-            .bind(import_id)
-            .bind(project_id)
-            .fetch_optional(pool)
-            .await?;
+    let status: Option<String> = sqlx::query_scalar(
+        "SELECT status FROM integration.repo_import WHERE id = $1 AND project_id = $2",
+    )
+    .bind(import_id)
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
     let status = status.ok_or(ImportError::NotFound)?;
-    if !IN_PROGRESS.contains(&status.as_str())
-        && status != "draft_ready"
-        && status != "proposed"
-    {
+    if !IN_PROGRESS.contains(&status.as_str()) && status != "draft_ready" && status != "proposed" {
         return Err(ImportError::NotCancellable);
     }
     let mut tx = pool.begin().await?;
-    sqlx::query("UPDATE integration.repo_import SET status = 'cancelled', updated_at = now() WHERE id = $1")
-        .bind(import_id)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "UPDATE integration.repo_import SET status = 'cancelled', updated_at = now() WHERE id = $1",
+    )
+    .bind(import_id)
+    .execute(&mut *tx)
+    .await?;
     // 在飞 Attempt 取消并留档（R-4-1：失败/取消现场也留）。
     sqlx::query(
         "UPDATE integration.repo_import_source_attempt \
@@ -465,7 +481,6 @@ pub async fn cancel_import(
     Ok(())
 }
 
-
 /// 显式终止 `proposed` 态的导入（C-2）。
 ///
 /// 与 `cancel_import` 的差别：**只接受 `proposed`**——在途与 `draft_ready`
@@ -476,17 +491,25 @@ pub async fn terminate_import(
     import_id: Uuid,
     actor: &AuditActor,
 ) -> Result<(), ImportError> {
-    let status: Option<String> =
-        sqlx::query_scalar("SELECT status FROM integration.repo_import WHERE id = $1 AND project_id = $2")
-            .bind(import_id)
-            .bind(project_id)
-            .fetch_optional(pool)
-            .await?;
+    let status: Option<String> = sqlx::query_scalar(
+        "SELECT status FROM integration.repo_import WHERE id = $1 AND project_id = $2",
+    )
+    .bind(import_id)
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
     let status = status.ok_or(ImportError::NotFound)?;
     if status != "proposed" {
         return Err(ImportError::InvalidState("terminate requires proposed"));
     }
-    cancel_import(pool, project_id, import_id, actor, Some("proposed_terminated")).await
+    cancel_import(
+        pool,
+        project_id,
+        import_id,
+        actor,
+        Some("proposed_terminated"),
+    )
+    .await
 }
 
 pub(crate) async fn set_stage(
@@ -511,7 +534,6 @@ pub(crate) async fn set_stage(
     .await?;
     Ok(())
 }
-
 
 pub(crate) async fn fail_import(pool: &PgPool, import_id: Uuid, code: &str, detail: &str) {
     let detail: String = detail.chars().take(500).collect();
@@ -565,7 +587,6 @@ pub(crate) async fn fail_import(pool: &PgPool, import_id: Uuid, code: &str, deta
     let _ = tx.commit().await;
 }
 
-
 /// 执行一次导入 job。Fake 模型也能跑通 `queued → draft_ready`。
 pub async fn run_import_job(
     pool: &PgPool,
@@ -599,15 +620,20 @@ pub async fn run_import_job(
     .fetch_all(pool)
     .await?;
     if repos.is_empty() {
-        fail_import(pool, import_id, "no_verified_repository", "no verified repository").await;
+        fail_import(
+            pool,
+            import_id,
+            "no_verified_repository",
+            "no verified repository",
+        )
+        .await;
         return Ok(());
     }
-    let tenant_id: Uuid = sqlx::query_scalar(
-        "SELECT tenant_id FROM integration.repo_import WHERE id = $1",
-    )
-    .bind(import_id)
-    .fetch_one(pool)
-    .await?;
+    let tenant_id: Uuid =
+        sqlx::query_scalar("SELECT tenant_id FROM integration.repo_import WHERE id = $1")
+            .bind(import_id)
+            .fetch_one(pool)
+            .await?;
 
     let key_ciphertext: Option<Vec<u8>> = sqlx::query_scalar(
         "SELECT private_key_ciphertext FROM integration.project_ssh_key \
@@ -621,7 +647,8 @@ pub async fn run_import_job(
             let private = crate::repository::open_ssh_private_key(project_id, &bytes)
                 .map_err(|e| ImportError::Git(e.to_string()))?;
             Some(
-                git_access::write_temp_key(&private).map_err(|e| ImportError::Git(e.to_string()))?,
+                git_access::write_temp_key(&private)
+                    .map_err(|e| ImportError::Git(e.to_string()))?,
             )
         }
         None => None,
@@ -653,7 +680,13 @@ pub async fn run_import_job(
 
         let branch = match default_branch {
             Some(branch) => branch,
-            None => match git_access::ls_remote(&url, key_path.as_deref(), std::time::Duration::from_secs(30)).await {
+            None => match git_access::ls_remote(
+                &url,
+                key_path.as_deref(),
+                std::time::Duration::from_secs(30),
+            )
+            .await
+            {
                 Ok(heads) => heads
                     .iter()
                     .find(|h| h.branch == "main")
@@ -670,7 +703,8 @@ pub async fn run_import_job(
             Err(err) => {
                 // 同上：逐仓失败隔离。
                 let (code, detail) = git_error_code(&err);
-                record_attempt_failure(pool, import_id, repository_id, attempt_no, code, &detail).await;
+                record_attempt_failure(pool, import_id, repository_id, attempt_no, code, &detail)
+                    .await;
                 continue;
             }
         };
@@ -785,11 +819,12 @@ pub async fn run_import_job(
     .fetch_one(pool)
     .await?;
     let mut tx = pool.begin().await?;
-    let current_revision: i64 =
-        sqlx::query_scalar("SELECT draft_revision FROM integration.repo_import WHERE id = $1 FOR UPDATE")
-            .bind(import_id)
-            .fetch_one(&mut *tx)
-            .await?;
+    let current_revision: i64 = sqlx::query_scalar(
+        "SELECT draft_revision FROM integration.repo_import WHERE id = $1 FOR UPDATE",
+    )
+    .bind(import_id)
+    .fetch_one(&mut *tx)
+    .await?;
     let revision = current_revision + 1;
     sqlx::query(
         "INSERT INTO integration.repo_import_draft_version \
@@ -881,7 +916,6 @@ async fn ensure_discovery_session_for_import(
     }
 }
 
-
 /// 导入域审计（I6-B-06）：Attempt / Draft 层的动作行。
 ///
 /// Worker 侧动作的执行主体是调度服务 principal（`AuditActor::dispatch()`）。
@@ -956,9 +990,11 @@ pub(crate) async fn record_attempt_failure(
     .await;
 }
 
-
 /// 由 job 的入站事件反查导入 id（worker 用）。
-pub async fn import_id_for_event(pool: &PgPool, event_id: Uuid) -> Result<Option<Uuid>, ImportError> {
+pub async fn import_id_for_event(
+    pool: &PgPool,
+    event_id: Uuid,
+) -> Result<Option<Uuid>, ImportError> {
     let key: Option<String> =
         sqlx::query_scalar("SELECT idempotency_key FROM integration.inbound_event WHERE id = $1")
             .bind(event_id)
@@ -966,5 +1002,3 @@ pub async fn import_id_for_event(pool: &PgPool, event_id: Uuid) -> Result<Option
             .await?;
     Ok(key.and_then(|key| key.parse::<Uuid>().ok()))
 }
-
-

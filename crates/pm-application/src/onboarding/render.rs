@@ -2,12 +2,15 @@
 //!
 //! 不存在两套内容源：Markdown 的每一句都能在 JSON 里找到对应字段。
 
-use super::{API_KEY_PLACEHOLDER, Catalog, Guide};
+use super::{Catalog, Guide, API_KEY_PLACEHOLDER};
 
 /// 渲染成 Markdown（人打开就能照着做）。
 pub fn to_markdown(guide: &Guide) -> String {
     let mut out = String::new();
-    out.push_str(&format!("# AI-PM 执行端接入：{}\n\n", guide.tool.display_name));
+    out.push_str(&format!(
+        "# AI-PM 执行端接入：{}\n\n",
+        guide.tool.display_name
+    ));
     out.push_str(&format!(
         "平台地址：`{}`　MCP 端点：`{}`　传输：`{}`\n\n",
         guide.platform_base_url, guide.mcp_endpoint, guide.transport
@@ -30,7 +33,9 @@ pub fn to_markdown(guide: &Guide) -> String {
 
     out.push_str("\n## 2. 配置 MCP\n\n");
     out.push_str(&format!("写入位置：{}\n\n", guide.tool.config_target));
-    out.push_str(&format!("配置片段（`{API_KEY_PLACEHOLDER}` 处填入你的 API Key）：\n\n"));
+    out.push_str(&format!(
+        "配置片段（`{API_KEY_PLACEHOLDER}` 处填入你的 API Key）：\n\n"
+    ));
     match guide.tool.config_format.as_str() {
         "toml" => {
             let content = guide
@@ -46,7 +51,8 @@ pub fn to_markdown(guide: &Guide) -> String {
             let mut value = guide.config_template.clone();
             if let Some(servers) = value.get_mut("mcpServers").and_then(|v| v.as_object_mut()) {
                 for server in servers.values_mut() {
-                    if let Some(headers) = server.get_mut("headers").and_then(|v| v.as_object_mut()) {
+                    if let Some(headers) = server.get_mut("headers").and_then(|v| v.as_object_mut())
+                    {
                         for header in headers.values_mut() {
                             if let Some(text) = header.as_str() {
                                 *header = serde_json::Value::String(
@@ -116,7 +122,11 @@ pub fn catalog_to_markdown(catalog: &Catalog) -> String {
             tool.display_name,
             tool.config_format,
             tool.config_target,
-            if tool.verified { "是" } else { "否（通用条目）" }
+            if tool.verified {
+                "是"
+            } else {
+                "否（通用条目）"
+            }
         ));
     }
     out.push_str(

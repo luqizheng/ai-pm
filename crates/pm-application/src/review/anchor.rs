@@ -90,10 +90,7 @@ fn review_checks() -> Vec<CheckDeclaration> {
 /// 交付锚定哈希：被审 run + 逐仓 `(repository_id, base_commit, commit_sha)`。
 ///
 /// 仓按 `repository_id` 排序后入载荷——锚定必须与入库顺序无关。
-pub fn reviewed_manifest_hash(
-    task_run_id: Uuid,
-    repositories: &[RepositoryAnchor],
-) -> String {
+pub fn reviewed_manifest_hash(task_run_id: Uuid, repositories: &[RepositoryAnchor]) -> String {
     let mut sorted: Vec<&RepositoryAnchor> = repositories.iter().collect();
     sorted.sort_by_key(|repo| repo.repository_id);
     let payload = ReviewedManifestPayload {
@@ -106,10 +103,7 @@ pub fn reviewed_manifest_hash(
 /// 输入锚定哈希：交付锚定 + 验收条目快照 `(ordinal, text, verification_kind)`。
 ///
 /// 条目按 `ordinal` 排序后入载荷——条目顺序调整不改变锚定，内容改写必变。
-pub fn input_manifest_hash(
-    reviewed_manifest_hash: &str,
-    criteria: &[CriterionAnchor],
-) -> String {
+pub fn input_manifest_hash(reviewed_manifest_hash: &str, criteria: &[CriterionAnchor]) -> String {
     let mut sorted: Vec<&CriterionAnchor> = criteria.iter().collect();
     sorted.sort_by_key(|criterion| criterion.ordinal);
     let payload = InputManifestPayload {
@@ -129,8 +123,8 @@ pub fn review_policy_version() -> String {
 }
 
 fn digest_json<T: Serialize>(value: &T) -> String {
-    let bytes = serde_json::to_vec(value)
-        .expect("anchor payload only contains serializable primitives");
+    let bytes =
+        serde_json::to_vec(value).expect("anchor payload only contains serializable primitives");
     hex(&Sha256::digest(&bytes))
 }
 
@@ -178,9 +172,9 @@ mod tests {
     fn reviewed_hash_moves_with_any_anchored_field() {
         let run_id = Uuid::from_u128(9);
         let base = reviewed_manifest_hash(run_id, &[repo(1, "base-a", "commit-a")]);
-        let other_run = reviewed_manifest_hash(Uuid::from_u128(10), &[repo(1, "base-a", "commit-a")]);
-        let other_commit =
-            reviewed_manifest_hash(run_id, &[repo(1, "base-a", "commit-a2")]);
+        let other_run =
+            reviewed_manifest_hash(Uuid::from_u128(10), &[repo(1, "base-a", "commit-a")]);
+        let other_commit = reviewed_manifest_hash(run_id, &[repo(1, "base-a", "commit-a2")]);
         let other_base = reviewed_manifest_hash(run_id, &[repo(1, "base-a2", "commit-a")]);
         assert_ne!(base, other_run);
         assert_ne!(base, other_commit);
@@ -197,7 +191,10 @@ mod tests {
         assert_eq!(forward, backward);
 
         let edited = criterion(10, "编译通过且无回归", "automated_test");
-        assert_ne!(forward, input_manifest_hash(&manifest, &[edited, criterion(20, "文档更新", "manual")]));
+        assert_ne!(
+            forward,
+            input_manifest_hash(&manifest, &[edited, criterion(20, "文档更新", "manual")])
+        );
     }
 
     #[test]

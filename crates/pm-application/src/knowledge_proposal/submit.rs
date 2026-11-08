@@ -1,5 +1,9 @@
 use super::*;
-use serde::Serialize;use sqlx::{PgPool, Postgres, Row, Transaction};use uuid::Uuid;use crate::knowledge::{self, KnowledgeError, KnowledgeRoot};use crate::knowledge_quality::{self, GateFailure, GateInput, QualityGateResult};
+use crate::knowledge::{self, KnowledgeError, KnowledgeRoot};
+use crate::knowledge_quality::{self, GateFailure, GateInput, QualityGateResult};
+use serde::Serialize;
+use sqlx::{PgPool, Postgres, Row, Transaction};
+use uuid::Uuid;
 
 pub(crate) async fn current_doc(
     pool: &PgPool,
@@ -31,7 +35,6 @@ pub(crate) async fn current_doc(
         )
     }))
 }
-
 
 /// 提交一次提案：质量门决定「自动提交 / 红线挂起 / 拒绝」。
 ///
@@ -93,9 +96,10 @@ pub async fn submit_proposal(
     let hash = knowledge::content_hash(&req.markdown);
 
     // `base_revision` 校验：与当前 head 不一致 → 409，不产生修订。
-    if let Err(err) =
-        crate::knowledge_write_coordinator::check_base_revision(req.base_revision_id, current_revision_id)
-    {
+    if let Err(err) = crate::knowledge_write_coordinator::check_base_revision(
+        req.base_revision_id,
+        current_revision_id,
+    ) {
         guard.release().await;
         return Err(err);
     }
@@ -168,8 +172,10 @@ pub async fn submit_proposal(
         crate::knowledge_write_coordinator::WriteCommand::SubmitProposal,
     )
     .await?;
-    if let crate::knowledge_write_coordinator::OperationClaim::Replayed { proposal_id, revision_id } =
-        claim
+    if let crate::knowledge_write_coordinator::OperationClaim::Replayed {
+        proposal_id,
+        revision_id,
+    } = claim
     {
         tx.rollback().await?;
         if let Some(revision_id) = revision_id {
@@ -245,7 +251,10 @@ pub async fn submit_proposal(
         root,
         &path,
         &req.markdown,
-        &format!("docs({}): {} (rev {revision_no})", req.doc_type, req.doc_key),
+        &format!(
+            "docs({}): {} (rev {revision_no})",
+            req.doc_type, req.doc_key
+        ),
     )?;
 
     let outcome = finalize_committed(
@@ -273,7 +282,6 @@ pub async fn submit_proposal(
     guard.release().await;
     Ok(outcome)
 }
-
 
 /// 人类确认红线提案：确认后写 Git 并落修订。
 ///
@@ -345,7 +353,8 @@ pub async fn confirm_redline_proposal(
         crate::knowledge_write_coordinator::WriteCommand::ConfirmRedline,
     )
     .await?;
-    if let crate::knowledge_write_coordinator::OperationClaim::Replayed { revision_id, .. } = claim {
+    if let crate::knowledge_write_coordinator::OperationClaim::Replayed { revision_id, .. } = claim
+    {
         tx.rollback().await?;
         if let Some(revision_id) = revision_id {
             let outcome = load_committed_outcome(pool, project_id, revision_id).await?;

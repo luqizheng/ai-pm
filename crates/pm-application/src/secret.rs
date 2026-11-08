@@ -109,8 +109,8 @@ pub fn generate_ed25519(comment: &str) -> Result<GeneratedKey, SecretError> {
         .map_err(|e| SecretError::SshKeygen(e.to_string()))?
         .trim()
         .to_string();
-    let private_key = std::fs::read_to_string(&key_path)
-        .map_err(|e| SecretError::SshKeygen(e.to_string()))?;
+    let private_key =
+        std::fs::read_to_string(&key_path).map_err(|e| SecretError::SshKeygen(e.to_string()))?;
     let fingerprint = fingerprint_of(&pub_path)?;
 
     Ok(GeneratedKey {
@@ -192,7 +192,10 @@ mod tests {
         with_secret(Some("test-secret-key"), || {
             let sealed = seal_text(project(), b"private-key-material").unwrap();
             let other = Uuid::parse_str("22222222-2222-4222-8222-222222222222").unwrap();
-            assert!(matches!(open_text(other, &sealed), Err(SecretError::Crypto)));
+            assert!(matches!(
+                open_text(other, &sealed),
+                Err(SecretError::Crypto)
+            ));
         });
     }
 

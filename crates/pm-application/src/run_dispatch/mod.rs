@@ -20,7 +20,9 @@ pub(crate) use pm_domain::TaskStatus;
 pub(crate) use crate::command_executor::{
     apply_task_transition, system_context, ExecutionContext, TransitionFacts,
 };
-pub(crate) use crate::policy_composition::{EffectivePolicy, PolicyLayer, PolicyLayers, POLICY_SCHEMA};
+pub(crate) use crate::policy_composition::{
+    EffectivePolicy, PolicyLayer, PolicyLayers, POLICY_SCHEMA,
+};
 
 /// Run 生命周期状态（S4：独立于 [`TaskStatus`] 的枚举，避免同名 `claimed` 混用）。
 pub mod run_status {
@@ -40,11 +42,8 @@ pub mod run_stage {
 }
 
 /// 活跃 Run 集合（B1 / I1 统一定义，必须与 `uq_task_run_active` 的部分谓词一致）。
-pub const ACTIVE_RUN_STATUSES: [&str; 3] = [
-    run_status::QUEUED,
-    run_status::CLAIMED,
-    run_status::RUNNING,
-];
+pub const ACTIVE_RUN_STATUSES: [&str; 3] =
+    [run_status::QUEUED, run_status::CLAIMED, run_status::RUNNING];
 
 /// `SQL IN (...)` 片段，供各查询复用，杜绝各处手写不一致的集合。
 pub const ACTIVE_RUN_STATUSES_SQL: &str = "'queued', 'claimed', 'running'";
@@ -107,7 +106,6 @@ pub enum RunDispatchError {
     Random,
 }
 
-
 /// 调度模式（R4 / Q8）：**只控制新 Run 的领取**，不控制租约健康检查与过期回收。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DispatchMode {
@@ -118,7 +116,6 @@ pub enum DispatchMode {
     /// 领取后把 Run 交给已注册的 `RunExecutor`（D3 接入 Codex 后启用）。
     On,
 }
-
 
 impl DispatchMode {
     pub fn from_env() -> Self {
@@ -134,7 +131,6 @@ impl DispatchMode {
         !matches!(self, Self::Off)
     }
 }
-
 
 /// 调度参数（读 `AI_PM_*` 环境变量，不硬编码）。
 #[derive(Debug, Clone, Copy)]
@@ -153,7 +149,6 @@ pub struct RunDispatchConfig {
     /// T-032 T4：无进展阈值（秒）——`last_progress_at` 停滞超阈值即终止。
     pub progress_stale_secs: i64,
 }
-
 
 impl RunDispatchConfig {
     pub fn from_env() -> Self {
@@ -184,11 +179,9 @@ impl RunDispatchConfig {
     }
 }
 
-
 /// 一次成功创建的 Run（共享封装返回值）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CreatedRun {
     pub run_id: Uuid,
     pub attempt_no: i32,
 }
-

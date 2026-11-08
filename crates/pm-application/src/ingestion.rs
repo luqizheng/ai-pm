@@ -69,12 +69,13 @@ pub async fn submit_event(
 
     // 先解析租户：project 不存在时子查询会返回 NULL，只会撞 NOT NULL 约束，
     // 掩盖掉原本清晰的 UnknownProject 语义，故显式查一次。
-    let tenant_id: uuid::Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
-        .bind(req.project_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(IngestionError::Db)?
-        .ok_or(IngestionError::UnknownProject)?;
+    let tenant_id: uuid::Uuid =
+        sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+            .bind(req.project_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(IngestionError::Db)?
+            .ok_or(IngestionError::UnknownProject)?;
 
     let inserted: Option<(EventId, String)> = sqlx::query_as(
         "INSERT INTO integration.inbound_event \
@@ -129,9 +130,9 @@ pub async fn submit_event(
                     tx.commit().await.map_err(IngestionError::Db)?;
                     Ok(SubmitOutcome::Duplicate { event_id, status })
                 }
-                Some((event_id, _, _)) => {
-                    Err(IngestionError::IdempotencyConflict { existing_event_id: event_id })
-                }
+                Some((event_id, _, _)) => Err(IngestionError::IdempotencyConflict {
+                    existing_event_id: event_id,
+                }),
                 None => unreachable!(
                     "ON CONFLICT DO NOTHING fired but the conflicting row is not readable"
                 ),
@@ -145,7 +146,9 @@ pub async fn submit_event(
 /// a plain [`IngestionError::Db`].
 fn fk_to_unknown_project(err: sqlx::Error) -> IngestionError {
     match &err {
-        sqlx::Error::Database(db) if db.is_foreign_key_violation() => IngestionError::UnknownProject,
+        sqlx::Error::Database(db) if db.is_foreign_key_violation() => {
+            IngestionError::UnknownProject
+        }
         _ => IngestionError::Db(err),
     }
 }

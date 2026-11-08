@@ -8,18 +8,16 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::delivery::{
-    DeliveryError, DeliveryOptions, SubmittedRepository, SubmittedTest, SubmitResultRequest,
-    submit_delivery_with,
+    submit_delivery_with, DeliveryError, DeliveryOptions, SubmitResultRequest, SubmittedRepository,
+    SubmittedTest,
 };
-use pm_application::run_context::{ProgressReport, report_progress};
-use pm_application::run_dispatch::{
-    RunDispatchConfig, claim_task_run, workspace_path_for,
-};
+use pm_application::run_context::{report_progress, ProgressReport};
+use pm_application::run_dispatch::{claim_task_run, workspace_path_for, RunDispatchConfig};
+use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 // ---------------------------------------------------------------------------
 // git 工作区夹具
@@ -54,7 +52,10 @@ fn init_workspace(base: &Path, run_id: Uuid, workspace_path: &str) -> (PathBuf, 
     git(&root, &["init", "-q", "-b", "main"]);
     std::fs::write(root.join("README.md"), "# base\n").expect("write base file");
     git(&root, &["add", "."]);
-    git(&root, &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "base"]);
+    git(
+        &root,
+        &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "base"],
+    );
     let sha = head_sha(&root);
     (root, sha)
 }
@@ -65,7 +66,10 @@ fn commit_change(root: &Path, files: &[&str]) -> String {
         std::fs::write(root.join(file), "changed\n").expect("write changed file");
     }
     git(root, &["add", "."]);
-    git(root, &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "change"]);
+    git(
+        root,
+        &["-c", "commit.gpgsign=false", "commit", "-q", "-m", "change"],
+    );
     head_sha(root)
 }
 
@@ -101,11 +105,7 @@ fn cfg() -> RunDispatchConfig {
 /// 建项目 + 任务 + N 个仓 + queued Run，并领取租约、推进到 `running`。
 ///
 /// `write_access` 决定仓是否可写；只读仓也进契约集合（校验范围 = 契约全集）。
-async fn seed(
-    pool: &PgPool,
-    code: &str,
-    repos: &[(&str, bool)],
-) -> Fx {
+async fn seed(pool: &PgPool, code: &str, repos: &[(&str, bool)]) -> Fx {
     let outcome = bootstrap_project(
         pool,
         BootstrapRequest {
@@ -239,7 +239,12 @@ impl Fx {
     }
 
     /// 可写仓的正常提交声明（commit_sha 取工作区实际 HEAD）。
-    fn writable_report(&self, index: usize, commit_sha: &str, base_commit: &str) -> SubmittedRepository {
+    fn writable_report(
+        &self,
+        index: usize,
+        commit_sha: &str,
+        base_commit: &str,
+    ) -> SubmittedRepository {
         SubmittedRepository {
             repository_id: self.repos[index].repository_id,
             base_commit: base_commit.to_string(),
@@ -318,7 +323,10 @@ async fn c71_migration_shape_is_in_place(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(deletes, "r", "the run foreign key must be ON DELETE RESTRICT");
+    assert_eq!(
+        deletes, "r",
+        "the run foreign key must be ON DELETE RESTRICT"
+    );
 
     // 聚合视图存在。
     let view: String = sqlx::query_scalar(
@@ -337,7 +345,12 @@ async fn c71_migration_shape_is_in_place(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn c72_three_repository_delivery_lands_commits_and_submits_the_task(pool: PgPool) {
-    let fx = seed(&pool, "D4-C72", &[("alpha", true), ("beta", true), ("gamma", true)]).await;
+    let fx = seed(
+        &pool,
+        "D4-C72",
+        &[("alpha", true), ("beta", true), ("gamma", true)],
+    )
+    .await;
     let mut reports = Vec::new();
     for (index, (root, base_sha)) in fx.workspaces.iter().enumerate() {
         let commit = commit_change(root, &[&format!("file{index}.md")]);
@@ -346,8 +359,12 @@ async fn c72_three_repository_delivery_lands_commits_and_submits_the_task(pool: 
     let mut request = fx.request(reports);
     request.integration_status = Some("passed".to_string());
 
-    let outcome = submit_delivery_with(&pool, &request, &fx.options()).await.unwrap();
-    let manifest = outcome.manifest().expect("a three-repository delivery is accepted");
+    let outcome = submit_delivery_with(&pool, &request, &fx.options())
+        .await
+        .unwrap();
+    let manifest = outcome
+        .manifest()
+        .expect("a three-repository delivery is accepted");
     assert_eq!(manifest.commit_count, 3);
     assert_eq!(manifest.integration_status, "passed");
     assert_eq!(commit_count(&pool).await, 3);
@@ -452,7 +469,9 @@ async fn c75_commit_that_is_not_a_descendant_is_rejected(pool: PgPool) {
     let outcome = submit_delivery_with(&pool, &fx.request(reports), &fx.options())
         .await
         .unwrap();
-    let rejection = outcome.rejection().expect("a non-descendant commit is rejected");
+    let rejection = outcome
+        .rejection()
+        .expect("a non-descendant commit is rejected");
     assert_eq!(rejection.code, "commit_not_descendant");
     assert_eq!(commit_count(&pool).await, 0);
 }
@@ -483,7 +502,9 @@ async fn c88_commit_that_is_not_the_workspace_head_is_rejected(pool: PgPool) {
     let outcome = submit_delivery_with(&pool, &fx.request(reports), &fx.options())
         .await
         .unwrap();
-    let rejection = outcome.rejection().expect("a stale HEAD commit is rejected");
+    let rejection = outcome
+        .rejection()
+        .expect("a stale HEAD commit is rejected");
     assert_eq!(rejection.code, "commit_not_descendant");
     assert_eq!(commit_count(&pool).await, 0);
 }
@@ -512,7 +533,9 @@ async fn c77_c91_repository_outside_the_contract_is_rejected(pool: PgPool) {
     let outcome = submit_delivery_with(&pool, &fx.request(reports), &fx.options())
         .await
         .unwrap();
-    let rejection = outcome.rejection().expect("a repository outside the contract is rejected");
+    let rejection = outcome
+        .rejection()
+        .expect("a repository outside the contract is rejected");
     assert_eq!(rejection.code, "repo_not_in_contract");
     assert_eq!(commit_count(&pool).await, 0);
 
@@ -564,16 +587,27 @@ async fn c78_repeated_submission_after_success_replays_the_same_manifest(pool: P
     let reports = vec![fx.writable_report(0, &commit, &fx.workspaces[0].1)];
     let request = fx.request(reports);
 
-    let first = submit_delivery_with(&pool, &request, &fx.options()).await.unwrap();
-    let first_manifest = first.manifest().expect("the first submission is accepted").clone();
+    let first = submit_delivery_with(&pool, &request, &fx.options())
+        .await
+        .unwrap();
+    let first_manifest = first
+        .manifest()
+        .expect("the first submission is accepted")
+        .clone();
 
     // 幂等识别在管线最前部——成功提交后 Run 已非活跃，fencing 会拒绝重试，
     // 幂等若不在最前部就永远到不了。
-    let second = submit_delivery_with(&pool, &request, &fx.options()).await.unwrap();
+    let second = submit_delivery_with(&pool, &request, &fx.options())
+        .await
+        .unwrap();
     let second_manifest = second.manifest().expect("the replay is accepted");
     assert_eq!(second_manifest.commit_count, first_manifest.commit_count);
     assert_eq!(second_manifest.run_id, first_manifest.run_id);
-    assert_eq!(commit_count(&pool).await, 1, "the replay must not land a second commit row");
+    assert_eq!(
+        commit_count(&pool).await,
+        1,
+        "the replay must not land a second commit row"
+    );
     assert_eq!(
         audit_count(&pool, "delivery.submitted").await,
         1,
@@ -586,7 +620,9 @@ async fn c86_same_run_with_a_different_commit_is_a_conflict(pool: PgPool) {
     let fx = seed(&pool, "D4-C86", &[("alpha", true)]).await;
     let commit = commit_change(&fx.workspaces[0].0, &["alpha.md"]);
     let request = fx.request(vec![fx.writable_report(0, &commit, &fx.workspaces[0].1)]);
-    submit_delivery_with(&pool, &request, &fx.options()).await.unwrap();
+    submit_delivery_with(&pool, &request, &fx.options())
+        .await
+        .unwrap();
 
     // 同一 Run、同一仓，但提交内容不同 → 指纹不一致 → 409。
     let mut conflicting = request.clone();
@@ -624,11 +660,13 @@ async fn c79_invalid_integration_status_is_rejected(pool: PgPool) {
 async fn c80_expired_lease_does_not_land_a_row(pool: PgPool) {
     let fx = seed(&pool, "D4-C80", &[("alpha", true)]).await;
     let commit = commit_change(&fx.workspaces[0].0, &["alpha.md"]);
-    sqlx::query("UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1")
-        .bind(fx.run_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(fx.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     let error = submit_delivery_with(
         &pool,
@@ -657,7 +695,9 @@ async fn c81_not_run_delivery_is_recorded_as_a_fact(pool: PgPool) {
     )
     .await
     .unwrap();
-    let manifest = outcome.manifest().expect("a not_run delivery is still accepted");
+    let manifest = outcome
+        .manifest()
+        .expect("a not_run delivery is still accepted");
     assert_eq!(manifest.integration_status, "not_run");
     let stored: String =
         sqlx::query_scalar("SELECT integration_status FROM delivery.task_run WHERE id = $1")
@@ -674,7 +714,12 @@ async fn c81_not_run_delivery_is_recorded_as_a_fact(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn c82_manifest_view_reports_the_three_states(pool: PgPool) {
-    let fx = seed(&pool, "D4-C82", &[("alpha", true), ("beta", true), ("gamma", true)]).await;
+    let fx = seed(
+        &pool,
+        "D4-C82",
+        &[("alpha", true), ("beta", true), ("gamma", true)],
+    )
+    .await;
 
     // 从未提交 → never_submitted。
     let state: String = sqlx::query_scalar(
@@ -700,7 +745,10 @@ async fn c82_manifest_view_reports_the_three_states(pool: PgPool) {
     let outcome = submit_delivery_with(&pool, &fx.request(reports), &fx.options())
         .await
         .unwrap();
-    assert!(outcome.manifest().is_some(), "a partial delivery is accepted");
+    assert!(
+        outcome.manifest().is_some(),
+        "a partial delivery is accepted"
+    );
     let (expected, actual): (i32, i32) = sqlx::query_as(
         "SELECT expected_delivery_count, actual_delivery_count \
            FROM delivery.v_task_delivery_manifest \
@@ -903,7 +951,9 @@ async fn c94_git_timeout_rejects_the_whole_order(pool: PgPool) {
     )
     .await
     .unwrap();
-    let rejection = outcome.rejection().expect("a git timeout rejects the order");
+    let rejection = outcome
+        .rejection()
+        .expect("a git timeout rejects the order");
     assert_eq!(rejection.code, "commit_not_descendant");
     assert_eq!(commit_count(&pool).await, 0, "no partial commit may land");
 }
@@ -958,9 +1008,13 @@ async fn c96_duplicate_repository_id_is_rejected(pool: PgPool) {
     let fx = seed(&pool, "D4-C96", &[("alpha", true)]).await;
     let commit = commit_change(&fx.workspaces[0].0, &["alpha.md"]);
     let report = fx.writable_report(0, &commit, &fx.workspaces[0].1);
-    let error = submit_delivery_with(&pool, &fx.request(vec![report.clone(), report]), &fx.options())
-        .await
-        .expect_err("a duplicate repository_id is refused");
+    let error = submit_delivery_with(
+        &pool,
+        &fx.request(vec![report.clone(), report]),
+        &fx.options(),
+    )
+    .await
+    .expect_err("a duplicate repository_id is refused");
     assert!(matches!(error, DeliveryError::InvalidRequest(_)));
     assert_eq!(commit_count(&pool).await, 0);
 }
@@ -1014,17 +1068,16 @@ async fn c83_view_separates_the_latest_run_from_the_latest_submitted_run(pool: P
         .unwrap();
     }
 
-    let (latest_run, latest_submitted, attempt, state): (Uuid, Uuid, i32, String) =
-        sqlx::query_as(
-            "SELECT latest_run_id, latest_submitted_run_id, latest_attempt_no, delivery_state \
+    let (latest_run, latest_submitted, attempt, state): (Uuid, Uuid, i32, String) = sqlx::query_as(
+        "SELECT latest_run_id, latest_submitted_run_id, latest_attempt_no, delivery_state \
                FROM delivery.v_task_delivery_manifest \
               WHERE task_id = $1 AND repository_id = $2",
-        )
-        .bind(fx.task_id)
-        .bind(fx.repos[0].repository_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    )
+    .bind(fx.task_id)
+    .bind(fx.repos[0].repository_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(latest_run, second_run, "latest_run is the newest attempt");
     assert_eq!(
         latest_submitted, second_run,

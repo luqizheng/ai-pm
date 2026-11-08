@@ -1,4 +1,4 @@
-﻿//! Project bootstrap and project-scoped read service tests (Task 8, Step 1).
+//! Project bootstrap and project-scoped read service tests (Task 8, Step 1).
 //!
 //! Bootstrap semantics under test: idempotency guard on `core.project.code`
 //! (second call with the same code → `BootstrapError::Duplicate`, no second
@@ -7,13 +7,13 @@
 //! (`task.project_id != project_id` → `ReadError::NotFound`).
 
 use pm_application::bootstrap::{
-    BootstrapError, BootstrapRequest, bootstrap_project, resolve_assignee,
+    bootstrap_project, resolve_assignee, BootstrapError, BootstrapRequest,
 };
-use pm_application::read::{ReadError, task_context};
-use serde_json::{Value, json};
+use pm_application::read::{task_context, ReadError};
+use pm_domain::SYSTEM_TENANT;
+use serde_json::{json, Value};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 fn req(code: &str, name: &str) -> BootstrapRequest {
     BootstrapRequest {
@@ -28,9 +28,13 @@ fn req(code: &str, name: &str) -> BootstrapRequest {
 /// first one (the name must still be the first call's name: no upsert).
 #[sqlx::test(migrations = "../../migrations")]
 async fn bootstrap_rejects_duplicate_project_code_without_second_project(pool: PgPool) {
-    let first = bootstrap_project(&pool, req("TP-1", "first name")).await.unwrap();
+    let first = bootstrap_project(&pool, req("TP-1", "first name"))
+        .await
+        .unwrap();
 
-    let err = bootstrap_project(&pool, req("TP-1", "second name")).await.unwrap_err();
+    let err = bootstrap_project(&pool, req("TP-1", "second name"))
+        .await
+        .unwrap_err();
     match err {
         BootstrapError::Duplicate(code) => assert_eq!(code, "TP-1"),
         other => panic!("expected BootstrapError::Duplicate, got {other:?}"),
@@ -45,8 +49,16 @@ async fn bootstrap_rejects_duplicate_project_code_without_second_project(pool: P
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(row.get::<i64, _>("n"), 1, "second bootstrap created a second project");
-    assert_eq!(row.get::<String, _>("name"), "first name", "second bootstrap upserted the project");
+    assert_eq!(
+        row.get::<i64, _>("n"),
+        1,
+        "second bootstrap created a second project"
+    );
+    assert_eq!(
+        row.get::<String, _>("name"),
+        "first name",
+        "second bootstrap upserted the project"
+    );
     assert_eq!(row.get::<String, _>("status"), "planning");
 
     // The failed call must not leave extra customers either (name == code).
@@ -71,7 +83,9 @@ async fn bootstrap_rejects_duplicate_project_code_without_second_project(pool: P
 /// and 5 skill bindings pinned to the 0003 seed at 'v1'.
 #[sqlx::test(migrations = "../../migrations")]
 async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
-    let outcome = bootstrap_project(&pool, req("TP-2", "seeded project")).await.unwrap();
+    let outcome = bootstrap_project(&pool, req("TP-2", "seeded project"))
+        .await
+        .unwrap();
 
     // The five principal ids are distinct and resolve to the right kinds and
     // display names (base name + code suffix).
@@ -99,7 +113,11 @@ async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
             "display_name `{display}` must carry the base name and the code suffix"
         );
     }
-    for id in [outcome.architect_id, outcome.developer_id, outcome.tester_id] {
+    for id in [
+        outcome.architect_id,
+        outcome.developer_id,
+        outcome.tester_id,
+    ] {
         let row = sqlx::query("SELECT kind FROM core.principal WHERE id = $1")
             .bind(id)
             .fetch_one(&pool)
@@ -107,13 +125,12 @@ async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
             .unwrap_or_else(|_| panic!("principal {id} missing"));
         assert_eq!(row.get::<String, _>("kind"), "dev_agent");
     }
-    let tenant_agents: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM core.tenant_agent WHERE tenant_id = $1",
-    )
-    .bind(SYSTEM_TENANT)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let tenant_agents: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM core.tenant_agent WHERE tenant_id = $1")
+            .bind(SYSTEM_TENANT)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(tenant_agents, 3, "tenant must own exactly three dev agents");
     // 0015 幂等种入的平台 service principal（ai-pm-dispatch）不属于 bootstrap
     // 产物，统计时排除它。
@@ -122,7 +139,10 @@ async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(principal_count, 5, "bootstrap must create exactly 5 principals");
+    assert_eq!(
+        principal_count, 5,
+        "bootstrap must create exactly 5 principals"
+    );
 
     // Project members: each principal has exactly the expected role.
     let roles: Vec<(Uuid, String)> = sqlx::query_as(
@@ -153,7 +173,10 @@ async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(row.get::<Uuid, _>("ai_principal_id"), outcome.ai_principal_id);
+    assert_eq!(
+        row.get::<Uuid, _>("ai_principal_id"),
+        outcome.ai_principal_id
+    );
     assert_eq!(row.get::<String, _>("model_provider"), "fake");
     assert_eq!(row.get::<String, _>("model_name"), "fake");
     assert_eq!(row.get::<Value, _>("model_config"), json!({}));
@@ -172,10 +195,18 @@ async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
     assert_eq!(
         bindings,
         vec![
-            ("architecture_consistency".to_string(), "v1".to_string(), true),
+            (
+                "architecture_consistency".to_string(),
+                "v1".to_string(),
+                true
+            ),
             ("requirement_analysis".to_string(), "v1".to_string(), true),
             ("risk_detection".to_string(), "v1".to_string(), true),
-            ("scheduling_orchestration".to_string(), "v1".to_string(), true),
+            (
+                "scheduling_orchestration".to_string(),
+                "v1".to_string(),
+                true
+            ),
             ("task_analysis".to_string(), "v1".to_string(), true),
         ]
     );
@@ -185,8 +216,12 @@ async fn bootstrap_seeds_principals_members_config_and_bindings(pool: PgPool) {
 /// id over a task of project B must return `ReadError::NotFound`.
 #[sqlx::test(migrations = "../../migrations")]
 async fn task_context_hides_tasks_from_other_projects(pool: PgPool) {
-    let a = bootstrap_project(&pool, req("TP-A", "project a")).await.unwrap();
-    let b = bootstrap_project(&pool, req("TP-B", "project b")).await.unwrap();
+    let a = bootstrap_project(&pool, req("TP-A", "project a"))
+        .await
+        .unwrap();
+    let b = bootstrap_project(&pool, req("TP-B", "project b"))
+        .await
+        .unwrap();
 
     let task_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.task (project_id, title, tenant_id) \
@@ -209,7 +244,9 @@ async fn task_context_hides_tasks_from_other_projects(pool: PgPool) {
 /// JSONB, and a bare task with neither → both `None`.
 #[sqlx::test(migrations = "../../migrations")]
 async fn task_context_returns_requirement_and_milestone_json(pool: PgPool) {
-    let outcome = bootstrap_project(&pool, req("TP-C", "project c")).await.unwrap();
+    let outcome = bootstrap_project(&pool, req("TP-C", "project c"))
+        .await
+        .unwrap();
     let project_id = outcome.project_id;
 
     let milestone_id: Uuid = sqlx::query_scalar(
@@ -281,7 +318,11 @@ async fn task_context_returns_requirement_and_milestone_json(pool: PgPool) {
     assert_eq!(row.title, "implement login");
     assert_eq!(row.status, "draft");
     assert_eq!(row.revision, 1);
-    assert_eq!(row.requirement, Some(json!({"goal": "login v2"})), "latest linked revision must win");
+    assert_eq!(
+        row.requirement,
+        Some(json!({"goal": "login v2"})),
+        "latest linked revision must win"
+    );
     let milestone = row.milestone.expect("milestone must be present");
     assert_eq!(milestone["name"], json!("M1"));
     assert_eq!(milestone["status"], json!("planned"));
@@ -302,21 +343,31 @@ async fn task_context_returns_requirement_and_milestone_json(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn resolve_assignee_maps_agent_roles(pool: PgPool) {
-    let outcome = bootstrap_project(&pool, req("TP-3", "roles")).await.unwrap();
+    let outcome = bootstrap_project(&pool, req("TP-3", "roles"))
+        .await
+        .unwrap();
     assert_eq!(
-        resolve_assignee(&pool, outcome.project_id, "developer").await.unwrap(),
+        resolve_assignee(&pool, outcome.project_id, "developer")
+            .await
+            .unwrap(),
         Some(outcome.developer_id)
     );
     assert_eq!(
-        resolve_assignee(&pool, outcome.project_id, "architect").await.unwrap(),
+        resolve_assignee(&pool, outcome.project_id, "architect")
+            .await
+            .unwrap(),
         Some(outcome.architect_id)
     );
     assert_eq!(
-        resolve_assignee(&pool, outcome.project_id, "tester").await.unwrap(),
+        resolve_assignee(&pool, outcome.project_id, "tester")
+            .await
+            .unwrap(),
         Some(outcome.tester_id)
     );
     assert_eq!(
-        resolve_assignee(&pool, outcome.project_id, "unknown").await.unwrap(),
+        resolve_assignee(&pool, outcome.project_id, "unknown")
+            .await
+            .unwrap(),
         None
     );
 }

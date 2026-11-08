@@ -139,14 +139,31 @@ pub async fn register_source_input(
     .bind(project_id)
     .bind(kind)
     .bind(&title)
-    .bind(req.content.as_deref().map(str::trim).filter(|c| !c.is_empty()))
-    .bind(req.source_ref.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+    .bind(
+        req.content
+            .as_deref()
+            .map(str::trim)
+            .filter(|c| !c.is_empty()),
+    )
+    .bind(
+        req.source_ref
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty()),
+    )
     .bind(actor.principal_id)
     .fetch_one(&mut *tx)
     .await
     .map_err(PmWriteError::Db)?;
-    append_audit(&mut *tx, project_id, actor, "source.registered", "source_input", Some(input_id))
-        .await?;
+    append_audit(
+        &mut *tx,
+        project_id,
+        actor,
+        "source.registered",
+        "source_input",
+        Some(input_id),
+    )
+    .await?;
     tx.commit().await?;
     Ok(entry)
 }

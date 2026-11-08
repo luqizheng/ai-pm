@@ -1,19 +1,19 @@
-﻿//! R1：Task 状态变更统一经 `pm-domain::validate_transition` 守卫的回归测试。
+//! R1：Task 状态变更统一经 `pm-domain::validate_transition` 守卫的回归测试。
 //!
 //! 既有 `update_task_status` 用例过去可直写非法边（如 `draft→completed`）；接入
 //! 统一守卫后这些边必须被拒，且拒绝不得改动状态。真实数据库，不 Mock。
 
 use std::sync::Arc;
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::command_executor::{
     ActorKind, CommandSource, ExecutionContext, PgCommandExecutor,
 };
 use pm_application::PolicyEngine;
+use pm_domain::SYSTEM_TENANT;
 use pm_domain::{CommandError, ProjectCommand, TaskStatus};
 use sqlx::PgPool;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 async fn seed(pool: &PgPool, code: &str, status: &str) -> (Uuid, Uuid, Uuid) {
     let o = bootstrap_project(
@@ -95,15 +95,21 @@ async fn illegal_edge_is_refused_and_leaves_state_untouched(pool: PgPool) {
         matches!(err, CommandError::Validation(_)),
         "the guard must reject with a validation error, got {err:?}"
     );
-    assert_eq!(task_status(&pool, t).await, "draft", "refused edge must not change state");
-    let audits: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM governance.audit_log WHERE target_id = $1",
-    )
-    .bind(t)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(audits, 0, "a refused transition must not write an audit row");
+    assert_eq!(
+        task_status(&pool, t).await,
+        "draft",
+        "refused edge must not change state"
+    );
+    let audits: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM governance.audit_log WHERE target_id = $1")
+            .bind(t)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        audits, 0,
+        "a refused transition must not write an audit row"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -157,20 +163,25 @@ async fn dispatch_path_uses_the_same_guard(pool: PgPool) {
         max_run_attempts: 3,
         max_infrastructure_attempts: 5,
         timeout_secs: 1800,
-            deadline_default_secs: 3600,
-            agent_heartbeat_stale_secs: 900,
-            progress_stale_secs: 3600,
+        deadline_default_secs: 3600,
+        agent_heartbeat_stale_secs: 900,
+        progress_stale_secs: 3600,
     };
     let out = claim_once(&pool, "w1", &cfg, DispatchMode::On)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(out.kind, pm_application::run_dispatch::ClaimKind::Skipped);
-    assert_eq!(task_status(&pool, t).await, "draft", "a non-ready task must not be claimed");
-    let run_status: String = sqlx::query_scalar("SELECT status FROM delivery.task_run WHERE id = $1")
-        .bind(run)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    assert_eq!(
+        task_status(&pool, t).await,
+        "draft",
+        "a non-ready task must not be claimed"
+    );
+    let run_status: String =
+        sqlx::query_scalar("SELECT status FROM delivery.task_run WHERE id = $1")
+            .bind(run)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(run_status, "queued");
 }

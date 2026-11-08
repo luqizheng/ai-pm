@@ -6,11 +6,12 @@
 use std::sync::Arc;
 
 use pm_application::command_executor::{
-    ActorKind, CommandSource, CompensationSpec, CompensableTable, ExecutionContext, PgCommandExecutor,
+    ActorKind, CommandSource, CompensableTable, CompensationSpec, ExecutionContext,
+    PgCommandExecutor,
 };
 use pm_application::PolicyEngine;
-use pm_domain::{CommandError, ProjectCommand, TaskStatus};
 use pm_domain::SYSTEM_TENANT;
+use pm_domain::{CommandError, ProjectCommand, TaskStatus};
 use serde_json::{json, Value};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
@@ -27,10 +28,10 @@ async fn seed(pool: &PgPool) -> Fixture {
     let customer_id: Uuid = sqlx::query_scalar(
         "INSERT INTO core.customer (name, tenant_id) VALUES ('cust', $1) RETURNING id",
     )
-        .bind(SYSTEM_TENANT)
-        .fetch_one(pool)
-        .await
-        .unwrap();
+    .bind(SYSTEM_TENANT)
+    .fetch_one(pool)
+    .await
+    .unwrap();
     let human_id: Uuid = sqlx::query_scalar(
         "INSERT INTO core.principal (kind, display_name) VALUES ('human', 'owner') RETURNING id",
     )
@@ -172,21 +173,27 @@ async fn update_task_status_executes_and_writes_audit_with_restore_compensation(
     assert_eq!(row.get::<String, _>("action"), "update_task_status");
     assert_eq!(row.get::<String, _>("target_type"), "task");
     assert_eq!(row.get::<Uuid, _>("target_id"), f.task_id);
-    assert!(row.get::<Option<Uuid>, _>("compensated_command_id").is_none());
+    assert!(row
+        .get::<Option<Uuid>, _>("compensated_command_id")
+        .is_none());
     let before: Value = row.get("before_data");
     assert_eq!(before, json!({ "status": "draft", "revision": 1 }));
     let after: Value = row.get("after_data");
     assert_eq!(after, json!({ "status": "ready", "revision": 2 }));
 
     let compensation: Value = row.get("compensation_command");
-    let spec: CompensationSpec = serde_json::from_value(compensation).expect("compensation spec roundtrips");
+    let spec: CompensationSpec =
+        serde_json::from_value(compensation).expect("compensation spec roundtrips");
     match spec {
         CompensationSpec::Restore(entries) => {
             assert_eq!(entries.len(), 1);
             assert_eq!(entries[0].table, CompensableTable::Task);
             assert_eq!(entries[0].target_id, f.task_id);
             // old status, guarded at the executed command's resulting revision
-            assert_eq!(entries[0].fields, json!({ "status": "draft", "revision": 2 }));
+            assert_eq!(
+                entries[0].fields,
+                json!({ "status": "draft", "revision": 2 })
+            );
         }
         other => panic!("expected Restore compensation, got {other:?}"),
     }
@@ -222,14 +229,24 @@ async fn stale_expected_revision_conflicts_and_leaves_row_untouched(pool: PgPool
         .await
         .expect_err("stale revision must conflict");
     match err {
-        CommandError::RevisionConflict { expected, actual } => assert_eq!((expected, actual), (1, 2)),
+        CommandError::RevisionConflict { expected, actual } => {
+            assert_eq!((expected, actual), (1, 2))
+        }
         other => panic!("expected RevisionConflict, got {other:?}"),
     }
 
     let (status, revision) = task_state(&pool, f.task_id).await;
-    assert_eq!((status.as_str(), revision), ("ready", 2), "conflicting command must not change state");
+    assert_eq!(
+        (status.as_str(), revision),
+        ("ready", 2),
+        "conflicting command must not change state"
+    );
     let audits = audit_rows_for(&pool, f.task_id).await;
-    assert_eq!(audits.len(), 1, "rejected command must not write an audit row");
+    assert_eq!(
+        audits.len(),
+        1,
+        "rejected command must not write an audit row"
+    );
 }
 
 /// 3) compensate(audit_id) → status back to backlog, revision=3, original audit
@@ -241,20 +258,28 @@ async fn compensate_restores_previous_status_and_marks_original_audit(pool: PgPo
 
     let receipt = ex
         .execute(
-ProjectCommand::UpdateTaskStatus {
-            task_id: f.task_id,
-            expected_revision: 1,
-            new_status: TaskStatus::Ready,
-        },
-        ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
-    )
-    .await
-    .expect("execute succeeds");
+            ProjectCommand::UpdateTaskStatus {
+                task_id: f.task_id,
+                expected_revision: 1,
+                new_status: TaskStatus::Ready,
+            },
+            ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
+        )
+        .await
+        .expect("execute succeeds");
 
     let rollback = ex
-        .compensate(receipt.audit_id, "wrong move", ctx(&f, ActorKind::Human, CommandSource::HumanIntervention {
-            intervention_id: Uuid::new_v4(),
-        }))
+        .compensate(
+            receipt.audit_id,
+            "wrong move",
+            ctx(
+                &f,
+                ActorKind::Human,
+                CommandSource::HumanIntervention {
+                    intervention_id: Uuid::new_v4(),
+                },
+            ),
+        )
         .await
         .expect("compensation must succeed");
     assert_eq!(rollback.command_kind, "rollback_command");
@@ -264,13 +289,12 @@ ProjectCommand::UpdateTaskStatus {
     let (status, revision) = task_state(&pool, f.task_id).await;
     assert_eq!((status.as_str(), revision), ("draft", 3));
 
-    let compensated: Option<Uuid> = sqlx::query_scalar(
-        "SELECT compensated_command_id FROM governance.audit_log WHERE id = $1",
-    )
-    .bind(receipt.audit_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let compensated: Option<Uuid> =
+        sqlx::query_scalar("SELECT compensated_command_id FROM governance.audit_log WHERE id = $1")
+            .bind(receipt.audit_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(compensated, Some(rollback.audit_id));
 
     // Source identity: the executed row points at its channel, the rollback
@@ -278,7 +302,10 @@ ProjectCommand::UpdateTaskStatus {
     let executed = audit_source_of(&pool, receipt.audit_id).await;
     assert_eq!(executed, ("bootstrap".to_string(), None));
     let rolled_back = audit_source_of(&pool, rollback.audit_id).await;
-    assert_eq!(rolled_back, ("rollback".to_string(), Some(receipt.audit_id)));
+    assert_eq!(
+        rolled_back,
+        ("rollback".to_string(), Some(receipt.audit_id))
+    );
 
     let audits = audit_rows_for(&pool, f.task_id).await;
     assert_eq!(
@@ -299,21 +326,29 @@ async fn compensating_same_audit_twice_fails_with_already_compensated(pool: PgPo
 
     let receipt = ex
         .execute(
-ProjectCommand::UpdateTaskStatus {
-            task_id: f.task_id,
-            expected_revision: 1,
-            new_status: TaskStatus::Ready,
-        },
-        ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
+            ProjectCommand::UpdateTaskStatus {
+                task_id: f.task_id,
+                expected_revision: 1,
+                new_status: TaskStatus::Ready,
+            },
+            ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap),
+        )
+        .await
+        .expect("execute succeeds");
+    ex.compensate(
+        receipt.audit_id,
+        "first rollback",
+        ctx(&f, ActorKind::Human, CommandSource::Bootstrap),
     )
     .await
-    .expect("execute succeeds");
-    ex.compensate(receipt.audit_id, "first rollback", ctx(&f, ActorKind::Human, CommandSource::Bootstrap))
-        .await
-        .expect("first compensation succeeds");
+    .expect("first compensation succeeds");
 
     let err = ex
-        .compensate(receipt.audit_id, "second rollback", ctx(&f, ActorKind::Human, CommandSource::Bootstrap))
+        .compensate(
+            receipt.audit_id,
+            "second rollback",
+            ctx(&f, ActorKind::Human, CommandSource::Bootstrap),
+        )
         .await
         .expect_err("second compensation must fail");
     match err {
@@ -322,7 +357,11 @@ ProjectCommand::UpdateTaskStatus {
     }
 
     let (status, revision) = task_state(&pool, f.task_id).await;
-    assert_eq!((status.as_str(), revision), ("draft", 3), "double compensation must not re-bump");
+    assert_eq!(
+        (status.as_str(), revision),
+        ("draft", 3),
+        "double compensation must not re-bump"
+    );
 }
 
 /// 5) execute → execute a second legal change (revision moves on) → compensate
@@ -355,18 +394,32 @@ async fn test_compensate_after_further_change_conflicts(pool: PgPool) {
     .expect("second execute succeeds");
 
     let err = ex
-        .compensate(first.audit_id, "late rollback", ctx(&f, ActorKind::Human, CommandSource::Bootstrap))
+        .compensate(
+            first.audit_id,
+            "late rollback",
+            ctx(&f, ActorKind::Human, CommandSource::Bootstrap),
+        )
         .await
         .expect_err("stale compensation must conflict");
     match err {
-        CommandError::RevisionConflict { expected, actual } => assert_eq!((expected, actual), (2, 3)),
+        CommandError::RevisionConflict { expected, actual } => {
+            assert_eq!((expected, actual), (2, 3))
+        }
         other => panic!("expected RevisionConflict, got {other:?}"),
     }
 
     let (status, revision) = task_state(&pool, f.task_id).await;
-    assert_eq!((status.as_str(), revision), ("claimed", 3), "newer state must not be overwritten");
+    assert_eq!(
+        (status.as_str(), revision),
+        ("claimed", 3),
+        "newer state must not be overwritten"
+    );
     let audits = audit_rows_for(&pool, f.task_id).await;
-    assert_eq!(audits.len(), 2, "failed compensation must not write a rollback audit row");
+    assert_eq!(
+        audits.len(),
+        2,
+        "failed compensation must not write a rollback audit row"
+    );
     assert!(audits.iter().all(|(_, compensated)| compensated.is_none()));
 }
 
@@ -419,7 +472,11 @@ async fn test_redline_rejected_for_ai_actor(pool: PgPool) {
         other => panic!("expected RedLineBlocked, got {other:?}"),
     }
     let (status, revision) = milestone_state(&pool, milestone_id).await;
-    assert_eq!((status.as_str(), revision), ("planned", 1), "blocked command must not change state");
+    assert_eq!(
+        (status.as_str(), revision),
+        ("planned", 1),
+        "blocked command must not change state"
+    );
 
     let approval_id = Uuid::new_v4();
     let receipt = ex
@@ -551,7 +608,11 @@ async fn seed_requirement_without_current(
     (requirement_id, draft_revision_id)
 }
 
-async fn seed_milestone_with_plan(pool: &PgPool, project_id: Uuid, planned_at: DateTime<Utc>) -> Uuid {
+async fn seed_milestone_with_plan(
+    pool: &PgPool,
+    project_id: Uuid,
+    planned_at: DateTime<Utc>,
+) -> Uuid {
     sqlx::query_scalar(
         "INSERT INTO delivery.milestone (project_id, name, planned_at, tenant_id) \
          VALUES ($1, 'planned milestone', $2, (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
@@ -572,15 +633,14 @@ async fn revision_state(pool: &PgPool, revision_id: Uuid) -> String {
 }
 
 async fn requirement_pointer(pool: &PgPool, requirement_id: Uuid) -> (Option<Uuid>, i64) {
-    let row = sqlx::query("SELECT current_revision_id, row_revision FROM delivery.requirement WHERE id = $1")
-        .bind(requirement_id)
-        .fetch_one(pool)
-        .await
-        .unwrap();
-    (
-        row.get("current_revision_id"),
-        row.get("row_revision"),
+    let row = sqlx::query(
+        "SELECT current_revision_id, row_revision FROM delivery.requirement WHERE id = $1",
     )
+    .bind(requirement_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    (row.get("current_revision_id"), row.get("row_revision"))
 }
 
 /// The stored compensation spec of one audit row (`NULL` → `None`).
@@ -616,11 +676,12 @@ async fn create_task_inserts_row_and_audits_delete_compensation(pool: PgPool) {
     let task_id = receipt.target_id;
     assert_ne!(task_id, f.task_id, "a new row must be created");
 
-    let row = sqlx::query("SELECT status, revision, title, assignee_id FROM delivery.task WHERE id = $1")
-        .bind(task_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let row =
+        sqlx::query("SELECT status, revision, title, assignee_id FROM delivery.task WHERE id = $1")
+            .bind(task_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(row.get::<String, _>("status"), "draft");
     assert_eq!(row.get::<i64, _>("revision"), 1);
     assert_eq!(row.get::<String, _>("title"), "Write fallback plan");
@@ -638,7 +699,11 @@ async fn create_task_inserts_row_and_audits_delete_compensation(pool: PgPool) {
     assert_eq!(audit.get::<String, _>("target_type"), "task");
     assert_eq!(audit.get::<Uuid, _>("target_id"), task_id);
     let after: Value = audit.get("after_data");
-    assert_eq!(after["id"], json!(task_id), "audit data must record the new id");
+    assert_eq!(
+        after["id"],
+        json!(task_id),
+        "audit data must record the new id"
+    );
     let spec: CompensationSpec =
         serde_json::from_value(audit.get::<Value, _>("compensation_command"))
             .expect("compensation spec roundtrips");
@@ -653,19 +718,25 @@ async fn create_task_inserts_row_and_audits_delete_compensation(pool: PgPool) {
         .compensate(
             receipt.audit_id,
             "undo create",
-            ctx(&f, ActorKind::Human, CommandSource::HumanIntervention {
-                intervention_id: Uuid::new_v4(),
-            }),
+            ctx(
+                &f,
+                ActorKind::Human,
+                CommandSource::HumanIntervention {
+                    intervention_id: Uuid::new_v4(),
+                },
+            ),
         )
         .await
         .expect("compensation must delete the created task");
-    let remaining: Option<Uuid> =
-        sqlx::query_scalar("SELECT id FROM delivery.task WHERE id = $1")
-            .bind(task_id)
-            .fetch_optional(&pool)
-            .await
-            .unwrap();
-    assert!(remaining.is_none(), "compensated create_task must remove the row");
+    let remaining: Option<Uuid> = sqlx::query_scalar("SELECT id FROM delivery.task WHERE id = $1")
+        .bind(task_id)
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+    assert!(
+        remaining.is_none(),
+        "compensated create_task must remove the row"
+    );
     let compensated: Option<Uuid> =
         sqlx::query_scalar("SELECT compensated_command_id FROM governance.audit_log WHERE id = $1")
             .bind(receipt.audit_id)
@@ -715,14 +786,19 @@ async fn approve_command_is_refused_via_executor(pool: PgPool) {
             ctx(
                 &f,
                 ActorKind::Human,
-                CommandSource::RedlineApproval { approval_id: Uuid::new_v4() },
+                CommandSource::RedlineApproval {
+                    approval_id: Uuid::new_v4(),
+                },
             ),
         )
         .await
         .expect_err("executor must refuse confirmations — REST is the only path");
     match err {
         CommandError::Validation(message) => {
-            assert!(message.contains("confirmation is refused"), "got: {message}");
+            assert!(
+                message.contains("confirmation is refused"),
+                "got: {message}"
+            );
         }
         other => panic!("expected Validation, got {other:?}"),
     }
@@ -740,7 +816,6 @@ async fn approve_command_is_refused_via_executor(pool: PgPool) {
         "refusal must not audit"
     );
 }
-
 
 /// 13) Registry invariant: every command that has a handler and is not a red
 ///     line must declare a compensation command in its audit row. Two kinds are
@@ -789,7 +864,9 @@ async fn test_every_auto_command_declares_compensation(pool: PgPool) {
                 let spec: CompensationSpec = serde_json::from_value(
                     compensation_of(&pool, receipt.audit_id)
                         .await
-                        .unwrap_or_else(|| panic!("{kind}: non-redline command must declare a compensation")),
+                        .unwrap_or_else(|| {
+                            panic!("{kind}: non-redline command must declare a compensation")
+                        }),
                 )
                 .expect("compensation spec roundtrips");
                 assert!(matches!(spec, CompensationSpec::Delete { .. }));
@@ -818,7 +895,10 @@ async fn test_every_auto_command_declares_compensation(pool: PgPool) {
                     requirement_id: r.requirement_id,
                     revision_id: r.draft_revision_id,
                 };
-                assert!(policy.is_redline(&cmd), "approve must be red-lined (S02D-02 #3)");
+                assert!(
+                    policy.is_redline(&cmd),
+                    "approve must be red-lined (S02D-02 #3)"
+                );
                 let err = ex
                     .execute(cmd, ctx(&f, ActorKind::AiPm, CommandSource::Bootstrap))
                     .await
@@ -846,7 +926,9 @@ async fn test_every_auto_command_declares_compensation(pool: PgPool) {
                 let spec: CompensationSpec = serde_json::from_value(
                     compensation_of(&pool, receipt.audit_id)
                         .await
-                        .unwrap_or_else(|| panic!("{kind}: non-redline command must declare a compensation")),
+                        .unwrap_or_else(|| {
+                            panic!("{kind}: non-redline command must declare a compensation")
+                        }),
                 )
                 .expect("compensation spec roundtrips");
                 assert!(matches!(spec, CompensationSpec::Restore(_)));
@@ -860,13 +942,20 @@ async fn test_every_auto_command_declares_compensation(pool: PgPool) {
                     milestone_id: sign_milestone_id,
                     expected_revision: 1,
                 };
-                assert!(policy.is_redline(&cmd), "sign_acceptance must stay a red line");
+                assert!(
+                    policy.is_redline(&cmd),
+                    "sign_acceptance must stay a red line"
+                );
                 let receipt = ex
                     .execute(
                         cmd,
-                        ctx(&f, ActorKind::Human, CommandSource::RedlineApproval {
-                            approval_id: Uuid::new_v4(),
-                        }),
+                        ctx(
+                            &f,
+                            ActorKind::Human,
+                            CommandSource::RedlineApproval {
+                                approval_id: Uuid::new_v4(),
+                            },
+                        ),
                     )
                     .await
                     .expect("human through RedlineApproval executes the red line");

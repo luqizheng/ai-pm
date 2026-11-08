@@ -148,7 +148,9 @@ pub async fn grant_approver(
 
     view_of(pool, project_id, grantee)
         .await?
-        .ok_or(PmWriteError::NotFound("approver grant not found after grant"))
+        .ok_or(PmWriteError::NotFound(
+            "approver grant not found after grant",
+        ))
 }
 
 /// 撤销 Approver（Lead 专属）：仅对生效行操作；无生效行 404。

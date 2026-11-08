@@ -9,10 +9,17 @@ pub async fn freeze(
     actor_id: PrincipalId,
     reason: &str,
 ) -> Result<(), SupervisionError> {
-    set_automation_mode(pool, project_id, actor_id, reason, "controlled", "freeze", "project_frozen")
-        .await
+    set_automation_mode(
+        pool,
+        project_id,
+        actor_id,
+        reason,
+        "controlled",
+        "freeze",
+        "project_frozen",
+    )
+    .await
 }
-
 
 /// Lifts the brake: back to `ai_lead`, with intervention('unfreeze') and a
 /// `project_unfrozen` notification.
@@ -22,10 +29,17 @@ pub async fn unfreeze(
     actor_id: PrincipalId,
     reason: &str,
 ) -> Result<(), SupervisionError> {
-    set_automation_mode(pool, project_id, actor_id, reason, "ai_lead", "unfreeze", "project_unfrozen")
-        .await
+    set_automation_mode(
+        pool,
+        project_id,
+        actor_id,
+        reason,
+        "ai_lead",
+        "unfreeze",
+        "project_unfrozen",
+    )
+    .await
 }
-
 
 /// One mode flip inside one transaction: config UPDATE, intervention row,
 /// notification row — or nothing.
@@ -75,5 +89,3 @@ pub(crate) async fn set_automation_mode(
     tx.commit().await?;
     Ok(())
 }
-
-

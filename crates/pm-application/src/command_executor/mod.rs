@@ -25,11 +25,11 @@
 pub(crate) use std::collections::HashMap;
 pub(crate) use std::sync::Arc;
 
-pub(crate) use pm_domain::{
-    validate_transition, AuditId, CommandError, MilestoneId, PrincipalId, ProjectCommand, ProjectId,
-    RequirementId, RevisionId, TaskId, TaskStatus, TransitionInput,
-};
 pub(crate) use pm_domain::import::{DocumentDraft, MilestoneDraft, RequirementDraft, TaskDraft};
+pub(crate) use pm_domain::{
+    validate_transition, AuditId, CommandError, MilestoneId, PrincipalId, ProjectCommand,
+    ProjectId, RequirementId, RevisionId, TaskId, TaskStatus, TransitionInput,
+};
 pub(crate) use serde::{Deserialize, Serialize};
 pub(crate) use serde_json::{json, Value};
 pub(crate) use sqlx::Row;
@@ -62,7 +62,6 @@ pub enum ActorKind {
     Service,
 }
 
-
 /// Where a command came from. `AiProposal` additionally lands the run id in
 /// `governance.audit_log.analysis_run_id`.
 #[derive(Debug, Clone)]
@@ -81,7 +80,6 @@ pub enum CommandSource {
     /// 平台内部动作（如 Run 调度领取、租约回收）——无人类/提案身份。
     System,
 }
-
 
 /// Execution identity: which project, which principal, on whose behalf, from
 /// which channel.
@@ -103,7 +101,6 @@ impl ExecutionContext {
     }
 }
 
-
 /// A compensable table, mapped to `(schema.table, primary-key column,
 /// revision column)` by [`CompensableTable::mapping`] (shared with the Task 7
 /// handlers — do not inline).
@@ -114,7 +111,6 @@ pub enum CompensableTable {
     Milestone,
 }
 
-
 impl CompensableTable {
     /// Fully-qualified table name, primary-key column, optimistic-lock column.
     pub(crate) fn mapping(self) -> (&'static str, &'static str, &'static str) {
@@ -124,7 +120,6 @@ impl CompensableTable {
         }
     }
 }
-
 
 /// One row snapshot inside a [`CompensationSpec::Restore`].
 ///
@@ -139,7 +134,6 @@ pub struct SnapshotEntry {
     pub fields: Value,
 }
 
-
 /// How to undo an executed command, stored in
 /// `governance.audit_log.compensation_command`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -153,7 +147,6 @@ pub enum CompensationSpec {
     },
 }
 
-
 /// What one successful execution (or compensation) produced.
 #[derive(Debug, Clone)]
 pub struct ExecutionReceipt {
@@ -162,7 +155,6 @@ pub struct ExecutionReceipt {
     pub target_id: Uuid,
     pub resulting_revision: i64,
 }
-
 
 /// Postgres-backed command executor: the write-safety base for V2. All project
 /// commands go through [`PgCommandExecutor::execute`]; rollbacks go through
@@ -175,4 +167,3 @@ pub struct PgCommandExecutor {
 }
 
 pub(crate) type Tx = sqlx::Transaction<'static, sqlx::Postgres>;
-

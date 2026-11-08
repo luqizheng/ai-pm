@@ -1,7 +1,17 @@
 use super::*;
 
-const SESSION_COLS: &str = "id, project_id, source, kind, status, created_by, created_at, updated_at";
-type SessionRow = (Uuid, Uuid, String, String, String, Uuid, DateTime<Utc>, DateTime<Utc>);
+const SESSION_COLS: &str =
+    "id, project_id, source, kind, status, created_by, created_at, updated_at";
+type SessionRow = (
+    Uuid,
+    Uuid,
+    String,
+    String,
+    String,
+    Uuid,
+    DateTime<Utc>,
+    DateTime<Utc>,
+);
 
 fn to_session(row: SessionRow) -> DiscoverySessionView {
     DiscoverySessionView {

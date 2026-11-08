@@ -192,9 +192,7 @@ fn artifacts_for_criterion<'a>(
     let scoped: Vec<&ArtifactProbe> = input
         .artifacts
         .iter()
-        .filter(|probe| {
-            mentioned.is_empty() || mentioned.iter().any(|path| *path == &probe.path)
-        })
+        .filter(|probe| mentioned.is_empty() || mentioned.iter().any(|path| *path == &probe.path))
         .collect();
     scoped
 }
@@ -227,8 +225,9 @@ pub fn evaluate(input: &ReviewInput) -> ReviewOutcome {
                 severity: Severity::Blocker,
                 criterion_id: None,
                 code_location: None,
-                message: "integration_status is `failed`; no reviewer or human may complete this task"
-                    .to_string(),
+                message:
+                    "integration_status is `failed`; no reviewer or human may complete this task"
+                        .to_string(),
                 evidence_ref: None,
             });
         }
@@ -309,8 +308,11 @@ pub fn evaluate(input: &ReviewInput) -> ReviewOutcome {
             }
             "artifact_exists" => {
                 let probes = artifacts_for_criterion(input, criterion);
-                let missing: Vec<&ArtifactProbe> =
-                    probes.iter().copied().filter(|probe| !probe.exists).collect();
+                let missing: Vec<&ArtifactProbe> = probes
+                    .iter()
+                    .copied()
+                    .filter(|probe| !probe.exists)
+                    .collect();
                 let evidence = serde_json::json!({
                     "artifacts": probes
                         .iter()
@@ -336,7 +338,10 @@ pub fn evaluate(input: &ReviewInput) -> ReviewOutcome {
                             severity: Severity::Blocker,
                             criterion_id: Some(criterion.criterion_id),
                             code_location: Some(format!("{}:{}", probe.repository_id, probe.path)),
-                            message: format!("artifact `{}` does not exist in the reviewed delivery", probe.path),
+                            message: format!(
+                                "artifact `{}` does not exist in the reviewed delivery",
+                                probe.path
+                            ),
                             evidence_ref: None,
                         });
                     }
@@ -462,7 +467,10 @@ fn decide_verdict(
     if input.integration_status == "passed" && !failed_tests.is_empty() {
         return ReviewVerdict::Inconclusive;
     }
-    if has_blocker("evidence_missing") || has_blocker("test_failed") || has_blocker("artifact_missing") {
+    if has_blocker("evidence_missing")
+        || has_blocker("test_failed")
+        || has_blocker("artifact_missing")
+    {
         return ReviewVerdict::ChangesRequested;
     }
     ReviewVerdict::Approved

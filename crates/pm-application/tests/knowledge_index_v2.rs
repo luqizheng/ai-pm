@@ -10,18 +10,18 @@
 
 use std::time::Duration;
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::knowledge::{self, CreateDocumentRequest, KnowledgeRoot};
 use pm_application::knowledge_indexer::{
-    DB_SECTION_INDEX_VERSION, DB_SECTION_PROVIDER, DbSectionIndexer, IndexOutcome, KnowledgeIndexer,
-    SearchPage, index_states,
+    index_states, DbSectionIndexer, IndexOutcome, KnowledgeIndexer, SearchPage,
+    DB_SECTION_INDEX_VERSION, DB_SECTION_PROVIDER,
 };
 use pm_application::knowledge_proposal::{self, ProposalOutcome, ProposalRequest};
 use pm_application::knowledge_reference::{self, AddReferenceRequest};
 use pm_application::knowledge_search::KnowledgeSearchService;
 use pm_application::knowledge_write_coordinator::{
-    DEFAULT_WRITE_LOCK_TIMEOUT_MS, WriteCommand, check_base_revision, claim_operation,
-    find_operation,
+    check_base_revision, claim_operation, find_operation, WriteCommand,
+    DEFAULT_WRITE_LOCK_TIMEOUT_MS,
 };
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -31,9 +31,7 @@ use pm_domain::SYSTEM_TENANT;
 // ─────────────────────────────────────────────────────────── 夹具
 
 fn temp_root() -> KnowledgeRoot {
-    KnowledgeRoot::new(
-        std::env::temp_dir().join(format!("ai-pm-kn-idx-{}", Uuid::new_v4())),
-    )
+    KnowledgeRoot::new(std::env::temp_dir().join(format!("ai-pm-kn-idx-{}", Uuid::new_v4())))
 }
 
 fn cleanup(root: &KnowledgeRoot) {
@@ -203,7 +201,8 @@ async fn k02_rebuild_is_idempotent_and_sections_are_contiguous(pool: PgPool) {
     let boot = boot(&pool, "IDX-02").await;
     let root = temp_root();
     // 三个标题 + 一段前言 → preamble + 3 个章节 = 4 行。
-    let markdown = "前言说明。\n\n# 标题一\n\n正文一。\n\n## 标题二\n\n正文二。\n\n### 标题三\n\n正文三。\n";
+    let markdown =
+        "前言说明。\n\n# 标题一\n\n正文一。\n\n## 标题二\n\n正文二。\n\n### 标题三\n\n正文三。\n";
     let (_document_id, revision_id) =
         create_doc(&pool, &root, &boot, "IDX-02-DOC", "knowledge", markdown).await;
 
@@ -225,7 +224,10 @@ async fn k02_rebuild_is_idempotent_and_sections_are_contiguous(pool: PgPool) {
     .unwrap();
     assert_eq!(rows.len(), 4);
     for (index, (section_no, _)) in rows.iter().enumerate() {
-        assert_eq!(*section_no, index as i32, "section_no must be contiguous from 0");
+        assert_eq!(
+            *section_no, index as i32,
+            "section_no must be contiguous from 0"
+        );
     }
 
     // 连跑两次：行数不变、状态不变。
@@ -239,7 +241,10 @@ async fn k02_rebuild_is_idempotent_and_sections_are_contiguous(pool: PgPool) {
     assert_eq!(section_count(&pool, revision_id).await, 4);
     let (status, indexed_hash, index_version) = state_of(&pool, revision_id).await;
     assert_eq!(status, "indexed");
-    assert_eq!(indexed_hash.as_deref(), Some(revision_hash(&pool, revision_id).await.as_str()));
+    assert_eq!(
+        indexed_hash.as_deref(),
+        Some(revision_hash(&pool, revision_id).await.as_str())
+    );
     assert_eq!(index_version.as_deref(), Some(DB_SECTION_INDEX_VERSION));
     assert_invariants(&pool, revision_id).await;
 
@@ -319,7 +324,10 @@ async fn k04_publish_via_create_document_indexes_immediately(pool: PgPool) {
     .await;
 
     let (status, _, _) = state_of(&pool, revision_id).await;
-    assert_eq!(status, "indexed", "create_document must rebuild synchronously");
+    assert_eq!(
+        status, "indexed",
+        "create_document must rebuild synchronously"
+    );
     assert!(section_count(&pool, revision_id).await > 0);
 
     let result = search(
@@ -332,7 +340,10 @@ async fn k04_publish_via_create_document_indexes_immediately(pool: PgPool) {
         None,
     )
     .await;
-    assert!(!result.used_fallback, "a fresh index must serve the DB path");
+    assert!(
+        !result.used_fallback,
+        "a fresh index must serve the DB path"
+    );
     assert_eq!(result.hits.len(), 1);
 
     cleanup(&root);
@@ -353,8 +364,7 @@ async fn k05_publish_via_submit_proposal_indexes_immediately(pool: PgPool) {
         ),
     )
     .await
-    .unwrap()
-    else {
+    .unwrap() else {
         panic!("expected committed");
     };
 
@@ -395,16 +405,17 @@ async fn k06_redline_confirmation_indexes_immediately(pool: PgPool) {
         panic!("expected redline_pending");
     };
 
-    let ProposalOutcome::Committed { revision_id, .. } = knowledge_proposal::confirm_redline_proposal(
-        &pool,
-        &root,
-        proposal_id,
-        boot.project_id,
-        boot.human_id,
-        format!("idx-confirm-{proposal_id}"),
-    )
-    .await
-    .unwrap()
+    let ProposalOutcome::Committed { revision_id, .. } =
+        knowledge_proposal::confirm_redline_proposal(
+            &pool,
+            &root,
+            proposal_id,
+            boot.project_id,
+            boot.human_id,
+            format!("idx-confirm-{proposal_id}"),
+        )
+        .await
+        .unwrap()
     else {
         panic!("expected committed after confirmation");
     };
@@ -704,7 +715,9 @@ async fn k11_pagination_uses_offset_and_clamps_the_limit(pool: PgPool) {
     // 12 个章节各含一个唯一序号，便于定位。
     let mut markdown = String::from("# 目录\n\n");
     for index in 0..12 {
-        markdown.push_str(&format!("## 章节{index:02}\n\n命中标记 body{index:02}。\n\n"));
+        markdown.push_str(&format!(
+            "## 章节{index:02}\n\n命中标记 body{index:02}。\n\n"
+        ));
     }
     create_doc(&pool, &root, &boot, "IDX-11-DOC", "knowledge", &markdown).await;
 
@@ -750,8 +763,16 @@ async fn k11_pagination_uses_offset_and_clamps_the_limit(pool: PgPool) {
     )
     .await;
     assert_eq!(page.hits.len(), 5);
-    let page_anchors: Vec<&str> = page.hits.iter().map(|hit| hit.section.anchor.as_str()).collect();
-    let all_anchors: Vec<&str> = all.hits.iter().map(|hit| hit.section.anchor.as_str()).collect();
+    let page_anchors: Vec<&str> = page
+        .hits
+        .iter()
+        .map(|hit| hit.section.anchor.as_str())
+        .collect();
+    let all_anchors: Vec<&str> = all
+        .hits
+        .iter()
+        .map(|hit| hit.section.anchor.as_str())
+        .collect();
     assert_eq!(page_anchors, all_anchors[5..10].to_vec());
 
     // limit 夹紧到 1..=100。
@@ -842,7 +863,11 @@ async fn k13_fallback_serves_documents_whose_index_state_is_missing_or_failed(po
     .await;
     assert!(missing.used_fallback);
     assert_eq!(missing.stale_revision_ids, vec![revision_id]);
-    assert_eq!(missing.hits.len(), 1, "fallback must still find the section");
+    assert_eq!(
+        missing.hits.len(),
+        1,
+        "fallback must still find the section"
+    );
 
     // 状态 failed → 回退。
     sqlx::query(
@@ -923,9 +948,15 @@ async fn k14_db_and_fallback_paths_score_identically(pool: PgPool) {
 
     assert_eq!(indexed.hits.len(), fallback.hits.len());
     assert_eq!(indexed.hits[0].score, fallback.hits[0].score);
-    assert_eq!(indexed.hits[0].section.anchor, fallback.hits[0].section.anchor);
+    assert_eq!(
+        indexed.hits[0].section.anchor,
+        fallback.hits[0].section.anchor
+    );
     assert_eq!(indexed.hits[0].revision_id, fallback.hits[0].revision_id);
-    assert_eq!(indexed.hits[0].revision_hash, fallback.hits[0].revision_hash);
+    assert_eq!(
+        indexed.hits[0].revision_hash,
+        fallback.hits[0].revision_hash
+    );
     let _ = document_id;
 
     cleanup(&root);
@@ -1011,7 +1042,11 @@ async fn k18_index_version_participates_in_validity(pool: PgPool) {
     )
     .await;
     assert!(stale.used_fallback, "a version mismatch must fall back");
-    assert_eq!(stale.hits.len(), 1, "fallback still returns the authoritative hit");
+    assert_eq!(
+        stale.hits.len(),
+        1,
+        "fallback still returns the authoritative hit"
+    );
 
     // 全量重建 → 版本对齐 → 回到 DB 直查。
     let indexer = DbSectionIndexer::new(pool.clone(), root.clone());
@@ -1029,7 +1064,10 @@ async fn k18_index_version_participates_in_validity(pool: PgPool) {
         None,
     )
     .await;
-    assert!(!repaired.used_fallback, "a rebuilt index must serve the DB path");
+    assert!(
+        !repaired.used_fallback,
+        "a rebuilt index must serve the DB path"
+    );
 
     cleanup(&root);
 }
@@ -1086,7 +1124,9 @@ async fn k19_invariants_hold_on_every_path(pool: PgPool) {
         "# 标题\n\n原始。\n",
     )
     .await;
-    let path = root.path().join("projects/IDX-19/knowledge/IDX-19-DRIFT.md");
+    let path = root
+        .path()
+        .join("projects/IDX-19/knowledge/IDX-19-DRIFT.md");
     std::fs::write(&path, "# 标题\n\n改过。\n").unwrap();
     let indexer = DbSectionIndexer::new(pool.clone(), root.clone());
     indexer
@@ -1310,15 +1350,8 @@ async fn k23_large_document_rebuild_stays_within_budget(pool: PgPool) {
         markdown.len()
     );
 
-    let (_document_id, revision_id) = create_doc(
-        &pool,
-        &root,
-        &boot,
-        "IDX-23-DOC",
-        "knowledge",
-        &markdown,
-    )
-    .await;
+    let (_document_id, revision_id) =
+        create_doc(&pool, &root, &boot, "IDX-23-DOC", "knowledge", &markdown).await;
 
     let indexer = DbSectionIndexer::new(pool.clone(), root.clone());
     let started = std::time::Instant::now();
@@ -1340,7 +1373,10 @@ async fn k23_large_document_rebuild_stays_within_budget(pool: PgPool) {
     );
 
     // 回填实测值供设计稿 §5.6 引用。
-    println!("K23_PERF sections=221 bytes={} rebuild_ms={elapsed_ms}", markdown.len());
+    println!(
+        "K23_PERF sections=221 bytes={} rebuild_ms={elapsed_ms}",
+        markdown.len()
+    );
 
     cleanup(&root);
 }
@@ -1394,7 +1430,11 @@ async fn k24_mixed_pages_have_no_duplicates_gaps_or_drift(pool: PgPool) {
     assert_eq!(all.hits.len(), 2);
 
     // 无重复。
-    let anchors: Vec<String> = all.hits.iter().map(|hit| hit.section.anchor.clone()).collect();
+    let anchors: Vec<String> = all
+        .hits
+        .iter()
+        .map(|hit| hit.section.anchor.clone())
+        .collect();
     let unique: std::collections::HashSet<&String> = anchors.iter().collect();
     assert_eq!(unique.len(), anchors.len(), "no duplicate rows");
 
@@ -1423,8 +1463,15 @@ async fn k24_mixed_pages_have_no_duplicates_gaps_or_drift(pool: PgPool) {
         None,
     )
     .await;
-    let again_anchors: Vec<String> = again.hits.iter().map(|hit| hit.section.anchor.clone()).collect();
-    assert_eq!(anchors, again_anchors, "ordering must be stable across runs");
+    let again_anchors: Vec<String> = again
+        .hits
+        .iter()
+        .map(|hit| hit.section.anchor.clone())
+        .collect();
+    assert_eq!(
+        anchors, again_anchors,
+        "ordering must be stable across runs"
+    );
 
     let _ = (db_document, db_revision);
 
@@ -1502,7 +1549,10 @@ async fn k25_project_level_reindex_restores_the_db_path(pool: PgPool) {
         None,
     )
     .await;
-    assert!(!repaired.used_fallback, "full reindex must restore the DB path");
+    assert!(
+        !repaired.used_fallback,
+        "full reindex must restore the DB path"
+    );
     assert_eq!(repaired.hits.len(), 1);
 
     cleanup(&root);
@@ -1543,7 +1593,10 @@ async fn k26_same_project_writes_are_serialized(pool: PgPool) {
     assert_eq!(section_count(&pool, revision_b).await, 1);
     assert_invariants(&pool, revision_a).await;
     assert_invariants(&pool, revision_b).await;
-    assert!(elapsed.as_millis() < 30_000, "serialized writes must not deadlock");
+    assert!(
+        elapsed.as_millis() < 30_000,
+        "serialized writes must not deadlock"
+    );
 
     cleanup(&root);
 }
@@ -1576,7 +1629,9 @@ async fn k27_operation_id_replay_produces_one_revision(pool: PgPool) {
         .await
         .unwrap();
     let ProposalOutcome::Committed {
-        revision_id, revision_no, ..
+        revision_id,
+        revision_no,
+        ..
     } = &first
     else {
         panic!("expected committed, got {first:?}");
@@ -1588,7 +1643,9 @@ async fn k27_operation_id_replay_produces_one_revision(pool: PgPool) {
         .await
         .unwrap();
     let ProposalOutcome::Committed {
-        revision_id, revision_no, ..
+        revision_id,
+        revision_no,
+        ..
     } = &second
     else {
         panic!("expected committed on replay, got {second:?}");
@@ -1639,8 +1696,7 @@ async fn k28_stale_base_revision_is_refused(pool: PgPool) {
         ),
     )
     .await
-    .unwrap()
-    else {
+    .unwrap() else {
         panic!("expected committed");
     };
 
@@ -1690,9 +1746,7 @@ async fn k28_stale_base_revision_is_refused(pool: PgPool) {
 // ────────────────────────────────────── K-29 跨实例 / 跨项目并行
 
 #[sqlx::test(migrations = "../../migrations")]
-async fn k29_two_pools_serialize_the_same_project_and_parallelize_across_projects(
-    pool: PgPool,
-) {
+async fn k29_two_pools_serialize_the_same_project_and_parallelize_across_projects(pool: PgPool) {
     let boot = boot(&pool, "IDX-29").await;
     let root = temp_root();
 
@@ -1702,11 +1756,9 @@ async fn k29_two_pools_serialize_the_same_project_and_parallelize_across_project
         .fetch_one(&pool)
         .await
         .unwrap();
-    let other_pool = PgPool::connect(&format!(
-        "postgres://aipm:aipm@127.0.0.1:5433/{current_db}"
-    ))
-    .await
-    .ok();
+    let other_pool = PgPool::connect(&format!("postgres://aipm:aipm@127.0.0.1:5433/{current_db}"))
+        .await
+        .ok();
 
     // 跨项目：两个项目同时写入，互不阻塞。
     let other_boot = boot_project(&pool, "IDX-29-B").await;
@@ -1828,7 +1880,10 @@ async fn write_operation_ledger_records_the_command(pool: PgPool) {
     )
     .await
     .unwrap();
-    assert!(matches!(claim, pm_application::OperationClaim::Fresh { .. }));
+    assert!(matches!(
+        claim,
+        pm_application::OperationClaim::Fresh { .. }
+    ));
     tx.rollback().await.unwrap();
 
     // 事务回滚 → 账本行消失（不产生「已执行」的假象）。
@@ -1863,7 +1918,9 @@ async fn index_state_view_reports_hash_and_version(pool: PgPool) {
     )
     .await;
 
-    let states = index_states(&pool, boot.project_id, document_id).await.unwrap();
+    let states = index_states(&pool, boot.project_id, document_id)
+        .await
+        .unwrap();
     assert_eq!(states.len(), 1);
     assert_eq!(states[0].status, "indexed");
     assert_eq!(states[0].provider, DB_SECTION_PROVIDER);

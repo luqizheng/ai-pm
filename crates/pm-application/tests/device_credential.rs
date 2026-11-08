@@ -5,12 +5,10 @@
 //! ACP-467 撤销后下一请求失效（约束 A/B/C 落地证据）。
 
 use pm_application::actor::AuditActor;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use pm_application::device_credential::{
-    self, DeviceCredentialError, KNOWN_PERMISSIONS,
-};
-use pm_application::run_dispatch::{claim_task_run_as_client, RunDispatchConfig};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_application::device_credential::{self, DeviceCredentialError, KNOWN_PERMISSIONS};
 use pm_application::repo_access::build_task_repo_access_tx;
+use pm_application::run_dispatch::{claim_task_run_as_client, RunDispatchConfig};
 use pm_domain::SYSTEM_TENANT;
 use serde_json::json;
 use sqlx::PgPool;
@@ -96,11 +94,9 @@ async fn acp460_issue_once_revoke_then_rotate(pool: PgPool) {
     let device_id = seed_device(&pool, SYSTEM_TENANT, human_id, "runner-1").await;
     let a = actor(human_id);
 
-    let issued = device_credential::issue_device_credential(
-        &pool, SYSTEM_TENANT, device_id, &a,
-    )
-    .await
-    .unwrap();
+    let issued = device_credential::issue_device_credential(&pool, SYSTEM_TENANT, device_id, &a)
+        .await
+        .unwrap();
     assert!(issued.plaintext.starts_with("cpk_"));
     assert_eq!(issued.plaintext.len(), 4 + 64, "32-byte random as hex");
 
@@ -112,27 +108,31 @@ async fn acp460_issue_once_revoke_then_rotate(pool: PgPool) {
             .await
             .unwrap();
     assert!(stored.is_some());
-    assert!(!stored.as_deref().unwrap().contains("cpk_"), "only the hash is stored");
+    assert!(
+        !stored.as_deref().unwrap().contains("cpk_"),
+        "only the hash is stored"
+    );
 
     // 已有未撤销凭据 → 409。
-    let again = device_credential::issue_device_credential(
-        &pool, SYSTEM_TENANT, device_id, &a,
-    )
-    .await
-    .unwrap_err();
-    assert!(matches!(again, DeviceCredentialError::ActiveCredentialExists));
+    let again = device_credential::issue_device_credential(&pool, SYSTEM_TENANT, device_id, &a)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        again,
+        DeviceCredentialError::ActiveCredentialExists
+    ));
 
     // 撤销（幂等）→ 可重签（轮换两步制）。
-    assert!(device_credential::revoke_device_credential(
-        &pool, SYSTEM_TENANT, device_id, &a,
-    )
-    .await
-    .unwrap());
-    assert!(!device_credential::revoke_device_credential(
-        &pool, SYSTEM_TENANT, device_id, &a,
-    )
-    .await
-    .unwrap());
+    assert!(
+        device_credential::revoke_device_credential(&pool, SYSTEM_TENANT, device_id, &a,)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !device_credential::revoke_device_credential(&pool, SYSTEM_TENANT, device_id, &a,)
+            .await
+            .unwrap()
+    );
     device_credential::issue_device_credential(&pool, SYSTEM_TENANT, device_id, &a)
         .await
         .unwrap();
@@ -145,11 +145,9 @@ async fn acp465_resolve_validates_all_four_conditions(pool: PgPool) {
     let device_id = seed_device(&pool, SYSTEM_TENANT, human_id, "runner-a").await;
     let a = actor(human_id);
 
-    let issued = device_credential::issue_device_credential(
-        &pool, SYSTEM_TENANT, device_id, &a,
-    )
-    .await
-    .unwrap();
+    let issued = device_credential::issue_device_credential(&pool, SYSTEM_TENANT, device_id, &a)
+        .await
+        .unwrap();
 
     // ① 正常解析（granted_permissions 默认三码）。
     let ok = device_credential::resolve(&pool, &issued.plaintext)
@@ -164,53 +162,54 @@ async fn acp465_resolve_validates_all_four_conditions(pool: PgPool) {
         .all(|p| KNOWN_PERMISSIONS.contains(&p.as_str())));
 
     // ② 错 key → None（无 fallback 语义：调用方一律 401）。
-    assert!(
-        device_credential::resolve(&pool, "cpk_deadb00f")
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(device_credential::resolve(&pool, "cpk_deadb00f")
+        .await
+        .unwrap()
+        .is_none());
     // 非 cpk 前缀 → None。
-    assert!(
-        device_credential::resolve(&pool, "eyJhbGciOi...")
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(device_credential::resolve(&pool, "eyJhbGciOi...")
+        .await
+        .unwrap()
+        .is_none());
 
     // ③ 已撤销 → None（约束 C：撤销即时）。
     device_credential::revoke_device_credential(&pool, SYSTEM_TENANT, device_id, &a)
         .await
         .unwrap();
-    assert!(device_credential::resolve(&pool, &issued.plaintext).await.unwrap().is_none());
+    assert!(device_credential::resolve(&pool, &issued.plaintext)
+        .await
+        .unwrap()
+        .is_none());
 
     // ④ device 非 active（revoked 设备）→ None。
     let device2 = seed_device(&pool, SYSTEM_TENANT, human_id, "runner-b").await;
-    let issued2 = device_credential::issue_device_credential(
-        &pool, SYSTEM_TENANT, device2, &a,
-    )
-    .await
-    .unwrap();
+    let issued2 = device_credential::issue_device_credential(&pool, SYSTEM_TENANT, device2, &a)
+        .await
+        .unwrap();
     sqlx::query("UPDATE devenv.device SET status = 'revoked' WHERE id = $1")
         .bind(device2)
         .execute(&pool)
         .await
         .unwrap();
-    assert!(device_credential::resolve(&pool, &issued2.plaintext).await.unwrap().is_none());
+    assert!(device_credential::resolve(&pool, &issued2.plaintext)
+        .await
+        .unwrap()
+        .is_none());
 
     // ⑤ owner inactive → None。
     let device3 = seed_device(&pool, SYSTEM_TENANT, human_id, "runner-c").await;
-    let issued3 = device_credential::issue_device_credential(
-        &pool, SYSTEM_TENANT, device3, &a,
-    )
-    .await
-    .unwrap();
+    let issued3 = device_credential::issue_device_credential(&pool, SYSTEM_TENANT, device3, &a)
+        .await
+        .unwrap();
     sqlx::query("UPDATE core.principal SET is_active = false WHERE id = $1")
         .bind(human_id)
         .execute(&pool)
         .await
         .unwrap();
-    assert!(device_credential::resolve(&pool, &issued3.plaintext).await.unwrap().is_none());
+    assert!(device_credential::resolve(&pool, &issued3.plaintext)
+        .await
+        .unwrap()
+        .is_none());
 }
 
 /// ACP-461/462：凭据通道 claim → 稳定身份（lease_client_id + client:{id} +
@@ -232,7 +231,14 @@ async fn acp461_462_client_channel_claim_stable_identity(pool: PgPool) {
     .unwrap();
 
     let claimed = claim_task_run_as_client(
-        &pool, project_id, task_id, device_id, "runner-x", None, &RunDispatchConfig::from_env(), &a,
+        &pool,
+        project_id,
+        task_id,
+        device_id,
+        "runner-x",
+        None,
+        &RunDispatchConfig::from_env(),
+        &a,
     )
     .await
     .unwrap();
@@ -318,14 +324,15 @@ async fn acp466_composite_fk_rejects_cross_tenant_binding(pool: PgPool) {
     let _ = other;
 
     // 跨租户绑定 → 外键违例（库层拒绝，非应用层软校验）。
-    let err = sqlx::query(
-        "UPDATE delivery.task_run SET lease_client_id = $1 WHERE id = $2",
-    )
-    .bind(foreign_device)
-    .bind(run_id)
-    .execute(&pool)
-    .await;
-    assert!(err.is_err(), "composite FK must reject cross-tenant binding");
+    let err = sqlx::query("UPDATE delivery.task_run SET lease_client_id = $1 WHERE id = $2")
+        .bind(foreign_device)
+        .bind(run_id)
+        .execute(&pool)
+        .await;
+    assert!(
+        err.is_err(),
+        "composite FK must reject cross-tenant binding"
+    );
     let msg = err.unwrap_err().to_string();
     assert!(msg.contains("fk_task_run_client_tenant"), "{msg}");
 }
@@ -439,7 +446,10 @@ async fn acp463_backfill_classification_predicate(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert!(legacy.is_none(), "self-reported client_name must NOT be auto-promoted");
+    assert!(
+        legacy.is_none(),
+        "self-reported client_name must NOT be auto-promoted"
+    );
 
     // 快照读方不受影响（绑定事实与 claim/execution_allows 同表——约束 5 延续）。
     let mut tx = pool.begin().await.unwrap();

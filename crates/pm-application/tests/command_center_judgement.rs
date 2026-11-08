@@ -50,7 +50,10 @@ fn unreachable_blocks_but_pending_is_system_work() {
 #[test]
 fn zero_repositories_makes_analysis_not_applicable() {
     assert_eq!(j::code_analysis_status(0, None), st::NOT_APPLICABLE);
-    assert_eq!(j::code_analysis_status(0, Some("analyzing")), st::NOT_APPLICABLE);
+    assert_eq!(
+        j::code_analysis_status(0, Some("analyzing")),
+        st::NOT_APPLICABLE
+    );
 }
 
 #[test]
@@ -68,8 +71,14 @@ fn analysis_in_flight_is_system_progress() {
 fn analysis_draft_awaits_human_not_completed() {
     // G-01 行为变化：draft_ready / proposed 的下一步动作由人承担
     // （草案自述「需人工确认」），不再是 completed。
-    assert_eq!(j::code_analysis_status(1, Some("draft_ready")), st::WAITING_FOR_HUMAN);
-    assert_eq!(j::code_analysis_status(1, Some("proposed")), st::WAITING_FOR_HUMAN);
+    assert_eq!(
+        j::code_analysis_status(1, Some("draft_ready")),
+        st::WAITING_FOR_HUMAN
+    );
+    assert_eq!(
+        j::code_analysis_status(1, Some("proposed")),
+        st::WAITING_FOR_HUMAN
+    );
     assert_eq!(j::code_analysis_status(1, Some("applied")), st::COMPLETED);
 }
 

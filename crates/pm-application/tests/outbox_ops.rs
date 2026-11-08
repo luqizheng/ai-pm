@@ -12,7 +12,7 @@
 //! | E-18a | `total` 与分页无关（总数独立于 limit） |
 //! | E-21 | 重放后再消费不产生第二份通知（幂等锚点） |
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::outbox_ops::{self, ReplayOutcome};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -74,14 +74,19 @@ async fn dead_letter_listing_is_project_scoped_and_total_is_the_project_total(po
     seed_event(&pool, project_a, "TaskReady", "a-live", "pending").await;
     seed_event(&pool, project_b, "TaskReady", "b-1", "dead_letter").await;
 
-    let listing = outbox_ops::dead_letters(&pool, project_a, 10).await.unwrap();
+    let listing = outbox_ops::dead_letters(&pool, project_a, 10)
+        .await
+        .unwrap();
     assert_eq!(
         listing.items.len(),
         2,
         "only this project's dead letters may be listed"
     );
     assert!(
-        listing.items.iter().all(|row| row.last_error.as_deref() == Some("boom")),
+        listing
+            .items
+            .iter()
+            .all(|row| row.last_error.as_deref() == Some("boom")),
         "the failure reason must be visible for triage"
     );
     assert_eq!(
@@ -134,7 +139,10 @@ async fn replay_requeues_the_dead_letter_and_does_not_wait_for_consumption(pool:
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(still_pending, 1, "replay must not wait for (or perform) consumption");
+    assert_eq!(
+        still_pending, 1,
+        "replay must not wait for (or perform) consumption"
+    );
 }
 
 /// E-07：跨项目事件与不存在事件**统一 `NotFound`**（防事件 ID 探测）。
@@ -198,15 +206,14 @@ async fn a_replayed_run_completed_event_does_not_duplicate_the_notification(pool
     let event_id = seed_event(&pool, project_id, "RunCompleted", "k-run", "dead_letter").await;
 
     // 模拟一次已消费（handler 写过审计 + 通知），随后事件被死信。
-    let payload = serde_json::json!({ "run_id": run_id, "task_id": Uuid::new_v4(), "status": "succeeded" });
-    sqlx::query(
-        "UPDATE integration.outbox_event SET payload = $2 WHERE id = $1",
-    )
-    .bind(event_id)
-    .bind(&payload)
-    .execute(&pool)
-    .await
-    .unwrap();
+    let payload =
+        serde_json::json!({ "run_id": run_id, "task_id": Uuid::new_v4(), "status": "succeeded" });
+    sqlx::query("UPDATE integration.outbox_event SET payload = $2 WHERE id = $1")
+        .bind(event_id)
+        .bind(&payload)
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query(
         "INSERT INTO governance.audit_log \
          (project_id, actor_id, action, target_type, target_id, after_data, source_kind, tenant_id) \
@@ -232,7 +239,9 @@ async fn a_replayed_run_completed_event_does_not_duplicate_the_notification(pool
     .unwrap();
 
     // 重放 → 再次消费（幂等锚点命中 → 不重复写）。
-    let outcome = outbox_ops::replay(&pool, project_id, event_id).await.unwrap();
+    let outcome = outbox_ops::replay(&pool, project_id, event_id)
+        .await
+        .unwrap();
     assert_eq!(outcome, ReplayOutcome::Replayed);
 
     let audits: i64 = sqlx::query_scalar(
@@ -254,7 +263,10 @@ async fn a_replayed_run_completed_event_does_not_duplicate_the_notification(pool
     .await
     .unwrap();
     assert_eq!(audits, 1, "the audit fact is recorded exactly once");
-    assert_eq!(notifications, 1, "the notification is produced exactly once");
+    assert_eq!(
+        notifications, 1,
+        "the notification is produced exactly once"
+    );
 }
 
 // ---------------------------------------------------------------------------

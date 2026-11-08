@@ -8,7 +8,6 @@ pub struct ApplyProject {
     pub description: String,
 }
 
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct ApplyRequest {
     pub draft_revision: i64,
@@ -23,7 +22,6 @@ pub struct ApplyRequest {
     pub write_knowledge_documents: bool,
 }
 
-
 #[derive(Debug, Clone, Serialize)]
 pub struct ProposalRef {
     pub kind: String,
@@ -32,14 +30,12 @@ pub struct ProposalRef {
     pub item_count: usize,
 }
 
-
 #[derive(Debug, Clone, Serialize)]
 pub struct ProposedImport {
     pub outcome: String,
     pub proposals: Vec<ProposalRef>,
     pub analysis_run_id: Uuid,
 }
-
 
 pub(crate) fn lowest_confidence(draft: &ProjectDraft) -> &'static str {
     use pm_domain::proposal::Confidence;
@@ -63,7 +59,6 @@ pub(crate) fn lowest_confidence(draft: &ProjectDraft) -> &'static str {
     }
 }
 
-
 pub(crate) fn evidence_labels(items: impl Iterator<Item = String>) -> Vec<String> {
     let mut labels: Vec<String> = items.collect();
     labels.sort();
@@ -71,7 +66,6 @@ pub(crate) fn evidence_labels(items: impl Iterator<Item = String>) -> Vec<String
     labels.truncate(50);
     labels
 }
-
 
 pub(crate) fn profile_markdown(draft: &ProjectDraft) -> String {
     let mut out = format!(
@@ -104,7 +98,6 @@ pub(crate) fn profile_markdown(draft: &ProjectDraft) -> String {
     out.push_str("> 本文由仓库冷启动导入生成，需人工确认。\n");
     out
 }
-
 
 /// 把草案按类型转成 ≤4 条提案。只写 `ai.analysis_run` / `ai.change_proposal` /
 /// `governance.approval_request`，`delivery.*` 零直接写入。
@@ -372,11 +365,9 @@ pub async fn propose_import(
     .await?;
     tx.commit().await?;
 
-Ok(ProposedImport {
+    Ok(ProposedImport {
         outcome: "proposed".to_string(),
         proposals,
         analysis_run_id: run_id,
     })
 }
-
-

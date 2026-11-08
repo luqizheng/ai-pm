@@ -4,13 +4,13 @@
 //! 值可追溯）、PATCH 不得触碰 Confirmed 基准、归档后禁止确认、缺分支拒绝。
 
 use pm_application::actor::AuditActor;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::repository::{
-    ConfirmVersionRequest, CreateRepositoryRequest, RepositoryError, UpdateRepositoryRequest,
     archive_repository, confirm_repository_version, create_repository, update_repository,
+    ConfirmVersionRequest, CreateRepositoryRequest, RepositoryError, UpdateRepositoryRequest,
 };
 use pm_domain::SYSTEM_TENANT;
-use sqlx::{PgPool, query_scalar};
+use sqlx::{query_scalar, PgPool};
 use uuid::Uuid;
 
 fn actor(principal_id: Uuid) -> AuditActor {
@@ -32,11 +32,13 @@ async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
 }
 
 async fn principal_id(pool: &PgPool) -> Uuid {
-    query_scalar("INSERT INTO core.principal (kind, display_name, is_active) \
-         VALUES ('human', 'confirmer', true) RETURNING id")
-        .fetch_one(pool)
-        .await
-        .unwrap()
+    query_scalar(
+        "INSERT INTO core.principal (kind, display_name, is_active) \
+         VALUES ('human', 'confirmer', true) RETURNING id",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap()
 }
 
 async fn confirmation_count(pool: &PgPool, repository_id: Uuid) -> i64 {
@@ -78,15 +80,14 @@ async fn create_with_selected_commit_writes_initial_confirmation(pool: PgPool) {
     assert!(row.selected_confirmed_at.is_some());
     // 首条确认记录：接入即确认（previous 为空）。
     assert_eq!(confirmation_count(&pool, row.id).await, 1);
-    let (prev_branch, prev_commit): (Option<String>, Option<String>) =
-        sqlx::query_as(
-            "SELECT previous_branch, previous_commit \
+    let (prev_branch, prev_commit): (Option<String>, Option<String>) = sqlx::query_as(
+        "SELECT previous_branch, previous_commit \
              FROM integration.repository_version_confirmation WHERE repository_id = $1",
-        )
-        .bind(row.id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    )
+    .bind(row.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(prev_branch, None);
     assert_eq!(prev_commit, None);
 }
@@ -273,7 +274,9 @@ async fn archived_repository_rejects_confirmation(pool: PgPool) {
     )
     .await
     .unwrap();
-    archive_repository(&pool, row.id, &actor(who)).await.unwrap();
+    archive_repository(&pool, row.id, &actor(who))
+        .await
+        .unwrap();
 
     let err = confirm_repository_version(
         &pool,
@@ -289,13 +292,12 @@ async fn archived_repository_rejects_confirmation(pool: PgPool) {
     .unwrap_err();
     assert!(matches!(err, RepositoryError::Archived));
     // 归档后基准未被改动。
-    let commit: Option<String> = query_scalar(
-        "SELECT selected_commit FROM integration.project_repository WHERE id = $1",
-    )
-    .bind(row.id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let commit: Option<String> =
+        query_scalar("SELECT selected_commit FROM integration.project_repository WHERE id = $1")
+            .bind(row.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(commit.as_deref(), Some("abc1234"));
 }
 

@@ -135,7 +135,11 @@ pub async fn verify_repository_head(
     // ④ 变更文件数现算（Q-D4-3：Git 现算为准）。
     let diff = git_run(
         &root,
-        &["diff", "--name-status", &format!("{base_commit}..{commit_sha}")],
+        &[
+            "diff",
+            "--name-status",
+            &format!("{base_commit}..{commit_sha}"),
+        ],
         timeout,
     )
     .await?;
@@ -145,7 +149,9 @@ pub async fn verify_repository_head(
         .filter(|line| !line.is_empty())
         .count() as i32;
 
-    let author = git_text(&root, &["show", "-s", "--format=%an", commit_sha], timeout).await.ok();
+    let author = git_text(&root, &["show", "-s", "--format=%an", commit_sha], timeout)
+        .await
+        .ok();
     let authored_at = git_text(&root, &["show", "-s", "--format=%aI", commit_sha], timeout)
         .await
         .ok()

@@ -89,9 +89,16 @@ pub async fn load_official_goal(
     pool: &PgPool,
     project_id: Uuid,
 ) -> Result<Option<OfficialGoal>, sqlx::Error> {
-    let row: Option<(Uuid, Uuid, i32, String, String, Option<String>, chrono::DateTime<chrono::Utc>)> =
-        sqlx::query_as(
-            "SELECT d.id, r.id, r.revision_no, r.content_hash, r.git_commit_sha, \
+    let row: Option<(
+        Uuid,
+        Uuid,
+        i32,
+        String,
+        String,
+        Option<String>,
+        chrono::DateTime<chrono::Utc>,
+    )> = sqlx::query_as(
+        "SELECT d.id, r.id, r.revision_no, r.content_hash, r.git_commit_sha, \
                     r.change_summary, r.created_at \
              FROM ai.project_document d \
              JOIN LATERAL ( \
@@ -101,13 +108,21 @@ pub async fn load_official_goal(
                    ORDER BY revision_no DESC LIMIT 1 \
              ) r ON true \
              WHERE d.project_id = $1 AND d.doc_key = $2",
-        )
-        .bind(project_id)
-        .bind(GOAL_DOC_KEY)
-        .fetch_optional(pool)
-        .await?;
+    )
+    .bind(project_id)
+    .bind(GOAL_DOC_KEY)
+    .fetch_optional(pool)
+    .await?;
     Ok(row.map(
-        |(document_id, revision_id, revision_no, content_hash, git_commit_sha, change_summary, published_at)| {
+        |(
+            document_id,
+            revision_id,
+            revision_no,
+            content_hash,
+            git_commit_sha,
+            change_summary,
+            published_at,
+        )| {
             OfficialGoal {
                 document_id,
                 revision_id,
@@ -130,7 +145,10 @@ pub async fn goal_head_revision(
 }
 
 /// 供审计/展示：Goal 文档 id（不存在 → None）。
-pub async fn goal_document_id(pool: &PgPool, project_id: Uuid) -> Result<Option<Uuid>, sqlx::Error> {
+pub async fn goal_document_id(
+    pool: &PgPool,
+    project_id: Uuid,
+) -> Result<Option<Uuid>, sqlx::Error> {
     sqlx::query_scalar("SELECT id FROM ai.project_document WHERE project_id = $1 AND doc_key = $2")
         .bind(project_id)
         .bind(GOAL_DOC_KEY)

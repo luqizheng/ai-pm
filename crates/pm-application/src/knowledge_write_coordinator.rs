@@ -81,11 +81,12 @@ pub async fn acquire(
     loop {
         let conn = pool.acquire().await.map_err(KnowledgeError::Db)?;
         let mut conn = conn.detach();
-        let acquired: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock(hashtextextended($1::text, 0))")
-            .bind(&key)
-            .fetch_one(&mut conn)
-            .await
-            .map_err(KnowledgeError::Db)?;
+        let acquired: bool =
+            sqlx::query_scalar("SELECT pg_try_advisory_lock(hashtextextended($1::text, 0))")
+                .bind(&key)
+                .fetch_one(&mut conn)
+                .await
+                .map_err(KnowledgeError::Db)?;
         if acquired {
             tracing::info!(
                 project_id = %project_id,

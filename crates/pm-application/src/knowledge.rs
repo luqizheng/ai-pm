@@ -203,7 +203,13 @@ impl KnowledgeRoot {
             git(&self.root, &["add", "templates"])?;
             git(
                 &self.root,
-                &["commit", "-m", "chore: bootstrap knowledge templates", "--", "templates"],
+                &[
+                    "commit",
+                    "-m",
+                    "chore: bootstrap knowledge templates",
+                    "--",
+                    "templates",
+                ],
             )?;
         }
         Ok(())
@@ -319,7 +325,9 @@ pub async fn create_document(
     let guard = crate::knowledge_write_coordinator::acquire(
         pool,
         project_id,
-        std::time::Duration::from_millis(crate::knowledge_write_coordinator::DEFAULT_WRITE_LOCK_TIMEOUT_MS),
+        std::time::Duration::from_millis(
+            crate::knowledge_write_coordinator::DEFAULT_WRITE_LOCK_TIMEOUT_MS,
+        ),
     )
     .await?;
 
@@ -341,12 +349,13 @@ pub async fn create_document(
         ));
     }
 
-    let exists: Option<Uuid> =
-        sqlx::query_scalar("SELECT id FROM ai.project_document WHERE project_id = $1 AND doc_key = $2")
-            .bind(project_id)
-            .bind(&req.doc_key)
-            .fetch_optional(pool)
-            .await?;
+    let exists: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM ai.project_document WHERE project_id = $1 AND doc_key = $2",
+    )
+    .bind(project_id)
+    .bind(&req.doc_key)
+    .fetch_optional(pool)
+    .await?;
     if exists.is_some() {
         guard.release().await;
         return Err(KnowledgeError::Exists(req.doc_key));
@@ -377,11 +386,7 @@ pub async fn create_document(
         root,
         &path,
         &req.markdown,
-        &format!(
-            "docs({}): add {}",
-            req.doc_type,
-            req.doc_key
-        ),
+        &format!("docs({}): add {}", req.doc_type, req.doc_key),
     )?;
 
     let mut tx = pool.begin().await?;
@@ -395,7 +400,8 @@ pub async fn create_document(
         crate::knowledge_write_coordinator::WriteCommand::CreateDocument,
     )
     .await?;
-    if let crate::knowledge_write_coordinator::OperationClaim::Replayed { revision_id, .. } = claim {
+    if let crate::knowledge_write_coordinator::OperationClaim::Replayed { revision_id, .. } = claim
+    {
         tx.rollback().await?;
         if let Some(revision_id) = revision_id {
             let existing = load_created_document(pool, project_id, revision_id).await?;
@@ -550,9 +556,8 @@ pub async fn read_document(
         row.ok_or(KnowledgeError::NotFound)?;
 
     let abs = safe_join(root.path(), &canonical_path)?;
-    let markdown = std::fs::read_to_string(&abs).map_err(|err| {
-        KnowledgeError::Io(format!("{}: {err}", abs.display()))
-    })?;
+    let markdown = std::fs::read_to_string(&abs)
+        .map_err(|err| KnowledgeError::Io(format!("{}: {err}", abs.display())))?;
     if content_hash(&markdown) != recorded_hash {
         return Err(KnowledgeError::Stale);
     }
@@ -734,7 +739,11 @@ pub(crate) fn head_sha(root: &Path) -> Result<String, KnowledgeError> {
 /// 读形态，rebuild_projection / 审计回放共用。`relative` 必须是仓库内相对路径
 /// （canonical_path 产物），path traversal 由 `git show` 的 `<sha>:<path>` 语法
 /// 天然约束（不存在逃逸路径）。
-pub(crate) fn git_read_at(root: &Path, relative: &str, sha: &str) -> Result<String, KnowledgeError> {
+pub(crate) fn git_read_at(
+    root: &Path,
+    relative: &str,
+    sha: &str,
+) -> Result<String, KnowledgeError> {
     git(root, &["show", &format!("{sha}:{relative}")])
 }
 
@@ -790,11 +799,19 @@ mod tests {
         let root = temp_root();
         root.ensure_ready().unwrap();
         assert!(root.path().join(".git").exists());
-        assert!(root.path().join("templates").join("requirement.md").exists());
+        assert!(root
+            .path()
+            .join("templates")
+            .join("requirement.md")
+            .exists());
 
         let first = head_sha(root.path()).unwrap();
         root.ensure_ready().unwrap();
-        assert_eq!(head_sha(root.path()).unwrap(), first, "second call must not commit");
+        assert_eq!(
+            head_sha(root.path()).unwrap(),
+            first,
+            "second call must not commit"
+        );
 
         let _ = std::fs::remove_dir_all(root.path());
     }
@@ -804,8 +821,10 @@ mod tests {
         let root = temp_root();
         root.ensure_ready().unwrap();
         let body = "# 需求\n\n正文\n";
-        let (sha1, hash1) = write_and_commit(&root, "projects/P1/requirement/R1.md", body, "docs: R1").unwrap();
-        let (sha2, hash2) = write_and_commit(&root, "projects/P1/requirement/R1.md", body, "docs: R1").unwrap();
+        let (sha1, hash1) =
+            write_and_commit(&root, "projects/P1/requirement/R1.md", body, "docs: R1").unwrap();
+        let (sha2, hash2) =
+            write_and_commit(&root, "projects/P1/requirement/R1.md", body, "docs: R1").unwrap();
         assert_eq!(sha1, sha2);
         assert_eq!(hash1, hash2);
         assert_eq!(content_hash(body), hash1);

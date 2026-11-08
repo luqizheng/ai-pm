@@ -12,11 +12,7 @@ use crate::knowledge::KnowledgeError;
 use crate::knowledge_index::parse_markdown_tree;
 
 /// 三类红线（用户确认的定义）。
-pub const REDLINE_KINDS: [&str; 3] = [
-    "external_commitment",
-    "delete_history",
-    "rewrite_delivered",
-];
+pub const REDLINE_KINDS: [&str; 3] = ["external_commitment", "delete_history", "rewrite_delivered"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GateFailure {
@@ -168,10 +164,7 @@ pub async fn evaluate(
     } else {
         None
     };
-    let redline = input
-        .declared_redline
-        .map(str::to_string)
-        .or(inferred);
+    let redline = input.declared_redline.map(str::to_string).or(inferred);
     if let Some(kind) = redline {
         if REDLINE_KINDS.contains(&kind.as_str()) {
             result.redline_kind = Some(kind);

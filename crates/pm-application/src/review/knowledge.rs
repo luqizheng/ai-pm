@@ -97,9 +97,8 @@ pub(crate) async fn write_proposal_in_tx(
         .bind(project_id)
         .fetch_one(&mut **tx)
         .await?;
-    let canonical_path =
-        crate::knowledge::canonical_path(&project_code, "knowledge", &doc_key)
-            .map_err(|e| ReviewError::Transition(e.to_string()))?;
+    let canonical_path = crate::knowledge::canonical_path(&project_code, "knowledge", &doc_key)
+        .map_err(|e| ReviewError::Transition(e.to_string()))?;
     let markdown = render_markdown(writeback, task_id);
     let content_hash = crate::knowledge::content_hash(&markdown);
 
@@ -168,4 +167,3 @@ pub(crate) async fn assemble_writeback(
         change_summary,
     })
 }
-

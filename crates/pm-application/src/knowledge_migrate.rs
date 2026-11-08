@@ -94,12 +94,7 @@ pub async fn rollback_requirement_migration(
     knowledge::delete_document(pool, root, project_id, document_id).await
 }
 
-fn render_requirement(
-    code: &str,
-    title: &str,
-    revision_id: Uuid,
-    content: &Value,
-) -> String {
+fn render_requirement(code: &str, title: &str, revision_id: Uuid, content: &Value) -> String {
     let pretty = serde_json::to_string_pretty(content).unwrap_or_default();
     format!(
         "---\nid: {code}\ntype: requirement\nsource_events:\n  - requirement_revision:{revision_id}\n---\n\n# {title}\n\n## 结构化内容\n\n```json\n{pretty}\n```\n"

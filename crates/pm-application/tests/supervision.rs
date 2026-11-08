@@ -1,4 +1,4 @@
-﻿//! Task 15 acceptance: the three human powers of the V2 supervision desk —
+//! Task 15 acceptance: the three human powers of the V2 supervision desk —
 //! veto (post-hoc rollback through real snapshot compensation), the freeze
 //! brake (claim-level stop of the AI), and red-line confirmation — plus the
 //! notification feed, against a real Postgres with the deterministic
@@ -18,16 +18,16 @@ use chrono::{DateTime, Utc};
 use pm_ai::model::AnalysisModel;
 use pm_ai::orchestrator::Orchestrator;
 use pm_ai::FakeModel;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::supervision::{
-    DecideRequest, Decision, DecisionOutcome, SupervisionError, VetoOutcome, VetoRequest,
-    decide_approval, freeze, notifications_feed, unfreeze, veto,
+    decide_approval, freeze, notifications_feed, unfreeze, veto, DecideRequest, Decision,
+    DecisionOutcome, SupervisionError, VetoOutcome, VetoRequest,
 };
 use pm_application::{CommandError, PgCommandExecutor, PolicyEngine};
-use pm_infrastructure::job_queue::{self, ClaimedJob};
-use serde_json::{Value, json};
-use uuid::Uuid;
 use pm_domain::SYSTEM_TENANT;
+use pm_infrastructure::job_queue::{self, ClaimedJob};
+use serde_json::{json, Value};
+use uuid::Uuid;
 
 /// FakeModel's embedded project id (mirrors the fixture string).
 fn project_id() -> Uuid {
@@ -55,10 +55,14 @@ const MOVED_PLANNED_AT: &str = "2026-11-06T09:00:00Z";
 const SEEDED_PLANNED_AT: &str = "2026-11-03T09:00:00Z";
 
 fn moved_planned_at() -> DateTime<Utc> {
-    MOVED_PLANNED_AT.parse().expect("fixed fixture date must parse")
+    MOVED_PLANNED_AT
+        .parse()
+        .expect("fixed fixture date must parse")
 }
 fn seeded_planned_at() -> DateTime<Utc> {
-    SEEDED_PLANNED_AT.parse().expect("fixed seed date must parse")
+    SEEDED_PLANNED_AT
+        .parse()
+        .expect("fixed seed date must parse")
 }
 
 struct Seed {
@@ -94,16 +98,20 @@ async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     .execute(pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'AI PM')")
-        .bind(ai_principal_id)
-        .execute(pool)
-        .await
-        .unwrap();
-    sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', 'Supervisor')")
-        .bind(human_id)
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'AI PM')",
+    )
+    .bind(ai_principal_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', 'Supervisor')",
+    )
+    .bind(human_id)
+    .execute(pool)
+    .await
+    .unwrap();
     sqlx::query(
         "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'dev_agent', 'Dev Agent')",
     )
@@ -306,13 +314,12 @@ async fn veto_executed_proposal_rolls_back_then_reports_already_compensated(pool
     assert_eq!(revision, 9);
 
     // The original audit row points at its rollback row.
-    let compensated: Uuid = sqlx::query_scalar(
-        "SELECT compensated_command_id FROM governance.audit_log WHERE id = $1",
-    )
-    .bind(executed_audit_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let compensated: Uuid =
+        sqlx::query_scalar("SELECT compensated_command_id FROM governance.audit_log WHERE id = $1")
+            .bind(executed_audit_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(compensated, new_audit_id);
 
     // intervention('veto') carrying both anchors.
@@ -414,7 +421,10 @@ async fn veto_reports_rollback_failed_when_target_moved_on(pool: sqlx::PgPool) {
     .await
     .unwrap_err();
     assert!(
-        matches!(err, SupervisionError::Command(CommandError::RevisionConflict { .. })),
+        matches!(
+            err,
+            SupervisionError::Command(CommandError::RevisionConflict { .. })
+        ),
         "expected RevisionConflict, got {err:?}"
     );
 
@@ -427,14 +437,16 @@ async fn veto_reports_rollback_failed_when_target_moved_on(pool: sqlx::PgPool) {
             .unwrap();
     assert_eq!(status, "awaiting_decision");
     assert_eq!(revision, 9);
-    let compensated: Option<Uuid> = sqlx::query_scalar(
-        "SELECT compensated_command_id FROM governance.audit_log WHERE id = $1",
-    )
-    .bind(executed_audit_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert!(compensated.is_none(), "a failed rollback must not mark the audit row compensated");
+    let compensated: Option<Uuid> =
+        sqlx::query_scalar("SELECT compensated_command_id FROM governance.audit_log WHERE id = $1")
+            .bind(executed_audit_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(
+        compensated.is_none(),
+        "a failed rollback must not mark the audit row compensated"
+    );
 
     let failures: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM governance.human_intervention \
@@ -508,7 +520,10 @@ async fn veto_of_irreversible_command_records_rollback_failed(pool: sqlx::PgPool
     .await
     .unwrap();
     assert_eq!(failures, 1, "the veto must be on record");
-    assert_eq!(not_executed, 1, "rollback_failed is recorded as not executed");
+    assert_eq!(
+        not_executed, 1,
+        "rollback_failed is recorded as not executed"
+    );
 
     let notifications: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM integration.notification \
@@ -565,13 +580,12 @@ async fn approve_executes_once_and_second_decide_is_already_decided(pool: sqlx::
     assert_eq!(revision, 5);
 
     // The proposal carries the executed linkage; the approval is approved.
-    let (proposal_status, executed_audit_id): (String, Uuid) = sqlx::query_as(
-        "SELECT status, executed_audit_id FROM ai.change_proposal WHERE id = $1",
-    )
-    .bind(proposal_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (proposal_status, executed_audit_id): (String, Uuid) =
+        sqlx::query_as("SELECT status, executed_audit_id FROM ai.change_proposal WHERE id = $1")
+            .bind(proposal_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(proposal_status, "executed");
     assert_eq!(executed_audit_id, receipt.audit_id);
     let approval_status: String =
@@ -583,13 +597,12 @@ async fn approve_executes_once_and_second_decide_is_already_decided(pool: sqlx::
     assert_eq!(approval_status, "approved");
 
     // The audit row carries the approval identity — the Task 6 join anchor.
-    let (source_kind, source_ref): (String, Uuid) = sqlx::query_as(
-        "SELECT source_kind, source_ref FROM governance.audit_log WHERE id = $1",
-    )
-    .bind(receipt.audit_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (source_kind, source_ref): (String, Uuid) =
+        sqlx::query_as("SELECT source_kind, source_ref FROM governance.audit_log WHERE id = $1")
+            .bind(receipt.audit_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(source_kind, "redline_approval");
     assert_eq!(source_ref, approval_id);
 
@@ -608,7 +621,10 @@ async fn approve_executes_once_and_second_decide_is_already_decided(pool: sqlx::
     .await
     .unwrap_err();
     assert!(
-        matches!(err, SupervisionError::Command(CommandError::AlreadyDecided { .. })),
+        matches!(
+            err,
+            SupervisionError::Command(CommandError::AlreadyDecided { .. })
+        ),
         "expected AlreadyDecided, got {err:?}"
     );
     let executions: i64 = sqlx::query_scalar(
@@ -620,12 +636,11 @@ async fn approve_executes_once_and_second_decide_is_already_decided(pool: sqlx::
     .await
     .unwrap();
     assert_eq!(executions, 1, "the command must execute exactly once");
-    let revision: i64 =
-        sqlx::query_scalar("SELECT revision FROM delivery.milestone WHERE id = $1")
-            .bind(milestone_id())
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let revision: i64 = sqlx::query_scalar("SELECT revision FROM delivery.milestone WHERE id = $1")
+        .bind(milestone_id())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(revision, 5, "no second execution bumps the milestone again");
 }
 
@@ -636,17 +651,21 @@ async fn freeze_stops_claiming_and_unfreeze_resumes(pool: sqlx::PgPool) {
     let seed = seed_world(&pool).await;
     let job = seed_job(&pool, &seed, "bug_report", json!({ "text": "boom" })).await;
 
-    freeze(&pool, seed.project_id, seed.human_id, "发布冻结，先刹车").await
+    freeze(&pool, seed.project_id, seed.human_id, "发布冻结，先刹车")
+        .await
         .unwrap();
-    let mode: String =
-        sqlx::query_scalar("SELECT automation_mode FROM ai.project_ai_config WHERE project_id = $1")
-            .bind(seed.project_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let mode: String = sqlx::query_scalar(
+        "SELECT automation_mode FROM ai.project_ai_config WHERE project_id = $1",
+    )
+    .bind(seed.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(mode, "controlled");
     assert!(
-        job_queue::claim(&pool, "ai_analysis", "worker-1", 60).await.is_none(),
+        job_queue::claim(&pool, "ai_analysis", "worker-1", 60)
+            .await
+            .is_none(),
         "a frozen project must not hand out jobs"
     );
     let interventions: Vec<String> = sqlx::query_as(
@@ -660,31 +679,32 @@ async fn freeze_stops_claiming_and_unfreeze_resumes(pool: sqlx::PgPool) {
     .map(|(t,)| t)
     .collect();
     assert_eq!(interventions, vec!["freeze".to_string()]);
-    let kinds: Vec<String> = sqlx::query_as(
-        "SELECT kind FROM integration.notification WHERE project_id = $1",
-    )
-    .bind(seed.project_id)
-    .fetch_all(&pool)
-    .await
-    .unwrap()
-    .into_iter()
-    .map(|(k,)| k)
-    .collect();
+    let kinds: Vec<String> =
+        sqlx::query_as("SELECT kind FROM integration.notification WHERE project_id = $1")
+            .bind(seed.project_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|(k,)| k)
+            .collect();
     assert_eq!(kinds, vec!["project_frozen".to_string()]);
 
-    unfreeze(&pool, seed.project_id, seed.human_id, "恢复 AI 领航").await
+    unfreeze(&pool, seed.project_id, seed.human_id, "恢复 AI 领航")
+        .await
         .unwrap();
     let claimed = job_queue::claim(&pool, "ai_analysis", "worker-1", 60)
         .await
         .expect("an unfrozen project hands the job out again");
     assert_eq!(claimed.project_id, seed.project_id);
     assert_eq!(claimed.event_id, job.event_id);
-    let mode: String =
-        sqlx::query_scalar("SELECT automation_mode FROM ai.project_ai_config WHERE project_id = $1")
-            .bind(seed.project_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let mode: String = sqlx::query_scalar(
+        "SELECT automation_mode FROM ai.project_ai_config WHERE project_id = $1",
+    )
+    .bind(seed.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(mode, "ai_lead");
     let kinds: Vec<String> = sqlx::query_as(
         "SELECT kind FROM integration.notification WHERE project_id = $1 ORDER BY created_at, kind",
@@ -710,7 +730,8 @@ async fn frozen_project_human_confirm_still_executes(pool: sqlx::PgPool) {
     let seed = seed_world(&pool).await;
     run_redline_acceptance(&pool, &seed).await;
 
-    freeze(&pool, seed.project_id, seed.human_id, "冻结期间处理确认").await
+    freeze(&pool, seed.project_id, seed.human_id, "冻结期间处理确认")
+        .await
         .unwrap();
 
     let approval_id: Uuid =
@@ -733,7 +754,10 @@ async fn frozen_project_human_confirm_still_executes(pool: sqlx::PgPool) {
     )
     .await
     .unwrap();
-    assert!(matches!(outcome, DecisionOutcome::Executed { .. }), "got {outcome:?}");
+    assert!(
+        matches!(outcome, DecisionOutcome::Executed { .. }),
+        "got {outcome:?}"
+    );
 
     let (status, revision): (String, i64) =
         sqlx::query_as("SELECT status, revision FROM delivery.milestone WHERE id = $1")
@@ -742,7 +766,10 @@ async fn frozen_project_human_confirm_still_executes(pool: sqlx::PgPool) {
             .await
             .unwrap();
     assert_eq!(status, "accepted");
-    assert_eq!(revision, 5, "the human confirm path executes despite the freeze");
+    assert_eq!(
+        revision, 5,
+        "the human confirm path executes despite the freeze"
+    );
 }
 
 /// (6) the veto window expiring does not disable the veto: 「随时否决」 — the
@@ -777,7 +804,10 @@ async fn veto_still_rolls_back_after_veto_window_expired(pool: sqlx::PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert!(window < Utc::now(), "premise: the window must already be expired");
+    assert!(
+        window < Utc::now(),
+        "premise: the window must already be expired"
+    );
 
     let outcome = veto(
         &pool,
@@ -792,16 +822,18 @@ async fn veto_still_rolls_back_after_veto_window_expired(pool: sqlx::PgPool) {
     )
     .await
     .unwrap();
-    assert!(matches!(outcome, VetoOutcome::RolledBack { .. }), "got {outcome:?}");
+    assert!(
+        matches!(outcome, VetoOutcome::RolledBack { .. }),
+        "got {outcome:?}"
+    );
 
     // The milestone move is undone: back to the seeded plan, revision forward.
-    let (planned_at, revision): (Option<DateTime<Utc>>, i64) = sqlx::query_as(
-        "SELECT planned_at, revision FROM delivery.milestone WHERE id = $1",
-    )
-    .bind(milestone_id())
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (planned_at, revision): (Option<DateTime<Utc>>, i64) =
+        sqlx::query_as("SELECT planned_at, revision FROM delivery.milestone WHERE id = $1")
+            .bind(milestone_id())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(planned_at, Some(seeded_planned_at()));
     assert_eq!(revision, 6, "4 seeded -> 5 executed -> 6 restored");
     let moved: Option<DateTime<Utc>> = Some(moved_planned_at());
@@ -841,7 +873,9 @@ async fn notifications_feed_orders_desc_and_paginates(pool: sqlx::PgPool) {
         .unwrap();
     }
 
-    let feed = notifications_feed(&pool, boot.project_id, None, 100).await.unwrap();
+    let feed = notifications_feed(&pool, boot.project_id, None, 100)
+        .await
+        .unwrap();
     assert_eq!(feed.len(), 5);
     for pair in feed.windows(2) {
         assert!(
@@ -854,7 +888,9 @@ async fn notifications_feed_orders_desc_and_paginates(pool: sqlx::PgPool) {
     assert_eq!(feed[4].kind, "a_oldest");
 
     // The limit truncates from the top (the newest rows survive).
-    let top2 = notifications_feed(&pool, boot.project_id, None, 2).await.unwrap();
+    let top2 = notifications_feed(&pool, boot.project_id, None, 2)
+        .await
+        .unwrap();
     assert_eq!(top2.len(), 2);
     assert_eq!(top2[0].id, feed[0].id);
     assert_eq!(top2[1].id, feed[1].id);

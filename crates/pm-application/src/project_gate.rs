@@ -43,12 +43,16 @@ impl ProjectActivity {
 }
 
 /// 读项目活动状态（连接池版；判定层防御纵深读）。
-pub async fn project_activity(pool: &PgPool, project_id: Uuid) -> Result<ProjectActivity, GateError> {
-    let status: Option<String> = sqlx::query_scalar("SELECT status FROM core.project WHERE id = $1")
-        .bind(project_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| GateError::Db(e.to_string()))?;
+pub async fn project_activity(
+    pool: &PgPool,
+    project_id: Uuid,
+) -> Result<ProjectActivity, GateError> {
+    let status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM core.project WHERE id = $1")
+            .bind(project_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| GateError::Db(e.to_string()))?;
     Ok(match status.as_deref() {
         None => return Err(GateError::NotFound),
         Some("archived") => ProjectActivity::Archived,

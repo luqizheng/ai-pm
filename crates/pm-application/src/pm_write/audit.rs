@@ -36,7 +36,6 @@ pub async fn owner_actor(pool: &PgPool, project_id: Uuid) -> Result<Uuid, PmWrit
     .ok_or(PmWriteError::Validation("no human principal available as actor"))
 }
 
-
 pub(crate) async fn append_audit(
     tx: &mut sqlx::PgConnection,
     project_id: Uuid,
@@ -66,7 +65,6 @@ pub(crate) async fn append_audit(
     .await?;
     Ok(())
 }
-
 
 /// 人工写路径的审计行（D2 契约变更需要 `after_data` 快照）。
 pub(crate) async fn append_audit_with_after(
@@ -103,7 +101,6 @@ pub(crate) async fn append_audit_with_after(
 
 // ------------------------------------------------------- requirement revisions
 
-
 /// 审批决策的审计行（action='approval.decide'，approve/reject 都落一条；
 /// approve 的红线执行审计由 command_executor 另行落 redline 行）。
 pub async fn record_decision_audit(
@@ -113,9 +110,15 @@ pub async fn record_decision_audit(
     approval_id: Uuid,
 ) -> Result<(), PmWriteError> {
     let mut tx = pool.begin().await?;
-    append_audit(&mut tx, project_id, actor, "approval.decide", "approval_request", Some(approval_id)).await?;
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "approval.decide",
+        "approval_request",
+        Some(approval_id),
+    )
+    .await?;
     tx.commit().await?;
     Ok(())
 }
-
-

@@ -84,15 +84,22 @@ pub async fn get_question(
     tenant_id: Uuid,
     question_id: Uuid,
 ) -> Result<DiscoveryQuestionView, DiscoveryError> {
-    let row: Option<(Uuid, Uuid, Option<Uuid>, String, Option<String>, String, DateTime<Utc>)> =
-        sqlx::query_as(
-            "SELECT id, session_id, finding_id, question, why_blocking, status, created_at \
+    let row: Option<(
+        Uuid,
+        Uuid,
+        Option<Uuid>,
+        String,
+        Option<String>,
+        String,
+        DateTime<Utc>,
+    )> = sqlx::query_as(
+        "SELECT id, session_id, finding_id, question, why_blocking, status, created_at \
              FROM discovery.discovery_question WHERE tenant_id = $1 AND id = $2",
-        )
-        .bind(tenant_id)
-        .bind(question_id)
-        .fetch_optional(pool)
-        .await?;
+    )
+    .bind(tenant_id)
+    .bind(question_id)
+    .fetch_optional(pool)
+    .await?;
     let Some(row) = row else {
         return Err(DiscoveryError::QuestionNotFound);
     };
@@ -121,16 +128,23 @@ pub async fn list_questions(
     tenant_id: Uuid,
     session_id: Uuid,
 ) -> Result<Vec<DiscoveryQuestionView>, DiscoveryError> {
-    let rows: Vec<(Uuid, Uuid, Option<Uuid>, String, Option<String>, String, DateTime<Utc>)> =
-        sqlx::query_as(
-            "SELECT id, session_id, finding_id, question, why_blocking, status, created_at \
+    let rows: Vec<(
+        Uuid,
+        Uuid,
+        Option<Uuid>,
+        String,
+        Option<String>,
+        String,
+        DateTime<Utc>,
+    )> = sqlx::query_as(
+        "SELECT id, session_id, finding_id, question, why_blocking, status, created_at \
              FROM discovery.discovery_question \
              WHERE tenant_id = $1 AND session_id = $2 ORDER BY created_at, id",
-        )
-        .bind(tenant_id)
-        .bind(session_id)
-        .fetch_all(pool)
-        .await?;
+    )
+    .bind(tenant_id)
+    .bind(session_id)
+    .fetch_all(pool)
+    .await?;
     let answers: Vec<AnswerRow> = sqlx::query_as(
         "SELECT a.id, a.question_id, a.answer, a.answered_by, a.created_at \
          FROM discovery.discovery_answer a \

@@ -620,7 +620,9 @@ pub async fn submit_revision(
             // 未绑定的 pending = 上次 submit 在状态翻转后、绑定前中断 → 本次只补绑定。
         }
         _ => {
-            return Err(PmWriteError::Conflict("only draft revisions can be submitted"));
+            return Err(PmWriteError::Conflict(
+                "only draft revisions can be submitted",
+            ));
         }
     }
     tx.commit().await?;
@@ -662,7 +664,9 @@ pub async fn confirm_revision(
     require_human(pool, actor).await?;
     let expected_hash = req.expected_content_hash.trim().to_string();
     if expected_hash.is_empty() {
-        return Err(PmWriteError::Validation("expected_content_hash is required"));
+        return Err(PmWriteError::Validation(
+            "expected_content_hash is required",
+        ));
     }
 
     let mut tx = pool.begin().await?;
@@ -691,7 +695,9 @@ pub async fn confirm_revision(
     let (_, state, content_hash, markdown_version_ref) =
         lock_revision(&mut tx, requirement_id, revision_id).await?;
     if state != "pending_confirmation" {
-        return Err(PmWriteError::Conflict("revision is not pending confirmation"));
+        return Err(PmWriteError::Conflict(
+            "revision is not pending confirmation",
+        ));
     }
     // 六要素之一（I2 §6.4-2）：必须已绑定 Markdown 版本——submit 是唯一绑定点。
     if markdown_version_ref.is_none() {
@@ -801,7 +807,9 @@ pub async fn reject_revision(
     let (_, state, content_hash, markdown_version_ref) =
         lock_revision(&mut tx, requirement_id, revision_id).await?;
     if state != "pending_confirmation" {
-        return Err(PmWriteError::Conflict("revision is not pending confirmation"));
+        return Err(PmWriteError::Conflict(
+            "revision is not pending confirmation",
+        ));
     }
 
     sqlx::query("UPDATE delivery.requirement_revision SET state = 'rejected' WHERE id = $1")

@@ -194,12 +194,9 @@ pub async fn collect(root: &Path, branch: &str, limits: Limits) -> Result<RepoFa
     }
 
     // 文件树。
-    let raw_tree = git_access::git_stdout(
-        root,
-        &["ls-tree", "-r", "--name-only", branch],
-        GIT_TIMEOUT,
-    )
-    .await?;
+    let raw_tree =
+        git_access::git_stdout(root, &["ls-tree", "-r", "--name-only", branch], GIT_TIMEOUT)
+            .await?;
     let mut files: Vec<String> = String::from_utf8_lossy(&raw_tree)
         .lines()
         .filter(|line| !line.trim().is_empty())

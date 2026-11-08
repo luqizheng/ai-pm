@@ -67,7 +67,11 @@ pub async fn add_proposal(
     session_id: Uuid,
     new_proposal: NewProposal,
 ) -> Result<DiscoveryProposalView, DiscoveryError> {
-    validate_one_of(&new_proposal.action, &[PROPOSAL_ACTION_ADD, PROPOSAL_ACTION_MODIFY], "action")?;
+    validate_one_of(
+        &new_proposal.action,
+        &[PROPOSAL_ACTION_ADD, PROPOSAL_ACTION_MODIFY],
+        "action",
+    )?;
     if new_proposal.target_document.trim().is_empty() {
         return Err(DiscoveryError::Validation(
             "target_document must not be blank".to_string(),

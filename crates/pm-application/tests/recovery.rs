@@ -5,7 +5,7 @@
 //! previous_chain_id 链间弱关联（0052 / 专家 2.6）。
 
 use pm_application::actor::AuditActor;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::device_credential;
 use pm_application::interaction::{
     mark_consumed, record_response_persisted, report_interaction, submit_interaction_response,
@@ -60,7 +60,12 @@ async fn seed(pool: &PgPool, code: &str) -> (Uuid, Uuid, Uuid, Uuid) {
     .execute(pool)
     .await
     .unwrap();
-    (outcome.project_id, task_id, outcome.human_id, outcome.dev_agent_id)
+    (
+        outcome.project_id,
+        task_id,
+        outcome.human_id,
+        outcome.dev_agent_id,
+    )
 }
 
 /// 建设备 + 签发凭据（V-05-1 语义：lease_client_id 绑定在 claim 时落）。
@@ -131,7 +136,11 @@ async fn claim_as_client(
     )
     .await
     .unwrap();
-    (claimed.run_id, claimed.lease_owner, claimed.lease_generation)
+    (
+        claimed.run_id,
+        claimed.lease_owner,
+        claimed.lease_generation,
+    )
 }
 
 fn interaction_input(
@@ -158,17 +167,29 @@ fn interaction_input(
 #[sqlx::test(migrations = "../../migrations")]
 async fn acp452_offline_recovery_via_discover_and_reacquire(pool: PgPool) {
     let fx = seed(&pool, "RC-452").await;
-    let (device_id, _key) = seed_device_with_credential(&pool, SYSTEM_TENANT, fx.2, "runner-off").await;
+    let (device_id, _key) =
+        seed_device_with_credential(&pool, SYSTEM_TENANT, fx.2, "runner-off").await;
     let (run_id, worker_id, gen0) = claim_as_client(&pool, fx.0, fx.1, device_id, fx.2).await;
 
     // 介入 → terminate ack → 回复持久化（interaction_response 落库）→ continue 下发。
-    let reported = report_interaction(&pool, &interaction_input(&fx, run_id, "evt-1"), &AuditActor::dispatch())
+    let reported = report_interaction(
+        &pool,
+        &interaction_input(&fx, run_id, "evt-1"),
+        &AuditActor::dispatch(),
+    )
+    .await
+    .unwrap();
+    let polled = cmd::poll_commands(&pool, fx.0, run_id, &worker_id)
         .await
         .unwrap();
-    let polled = cmd::poll_commands(&pool, fx.0, run_id, &worker_id).await.unwrap();
     cmd::ack_command(
-        &pool, fx.0, polled[0].command_id, &worker_id, cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })), None,
+        &pool,
+        fx.0,
+        polled[0].command_id,
+        &worker_id,
+        cmd::AckOutcome::Acked,
+        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        None,
     )
     .await
     .unwrap();
@@ -214,7 +235,11 @@ async fn acp452_offline_recovery_via_discover_and_reacquire(pool: PgPool) {
 
     // ② 续领：同 Run generation+1、新 token、deadline/attempt 不变。
     let lease = recovery::reacquire_lease(
-        &pool, SYSTEM_TENANT, fx.0, run_id, device_id,
+        &pool,
+        SYSTEM_TENANT,
+        fx.0,
+        run_id,
+        device_id,
         RunDispatchConfig::from_env().lease_secs,
         &AuditActor::principal(fx.2),
     )
@@ -235,12 +260,19 @@ async fn acp452_offline_recovery_via_discover_and_reacquire(pool: PgPool) {
     assert_eq!(attempt_after, attempt_before, "same run, no B3-2 attempt");
 
     // ③ reroute：continue 以新 generation 可达（集合比对含 reacquired）。
-    let polled2 = cmd::poll_commands(&pool, fx.0, run_id, &lease.worker_id).await.unwrap();
+    let polled2 = cmd::poll_commands(&pool, fx.0, run_id, &lease.worker_id)
+        .await
+        .unwrap();
     assert_eq!(polled2.len(), 1);
     assert_eq!(polled2[0].command_type, "agent.task.continue");
     cmd::ack_command(
-        &pool, fx.0, polled2[0].command_id, &lease.worker_id, cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })), None,
+        &pool,
+        fx.0,
+        polled2[0].command_id,
+        &lease.worker_id,
+        cmd::AckOutcome::Acked,
+        Some(json!({ "session_created": true, "input_injected": true })),
+        None,
     )
     .await
     .unwrap();
@@ -253,7 +285,10 @@ async fn acp452_offline_recovery_via_discover_and_reacquire(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(reply, 1, "persisted human reply survives the offline window");
+    assert_eq!(
+        reply, 1,
+        "persisted human reply survives the offline window"
+    );
     assert_eq!(
         sqlx::query_scalar::<_, String>("SELECT status FROM delivery.task WHERE id = $1")
             .bind(fx.1)
@@ -274,9 +309,13 @@ async fn acp454_fencing_after_reacquire(pool: PgPool) {
     let (run_id, worker_id, _gen) = claim_as_client(&pool, fx.0, fx.1, device_id, fx.2).await;
 
     // 进入等待窗口（shield=start_wait）：介入 → 回复持久化。
-    let reported = report_interaction(&pool, &interaction_input(&fx, run_id, "evt-1"), &AuditActor::dispatch())
-        .await
-        .unwrap();
+    let reported = report_interaction(
+        &pool,
+        &interaction_input(&fx, run_id, "evt-1"),
+        &AuditActor::dispatch(),
+    )
+    .await
+    .unwrap();
     record_response_persisted(
         &pool,
         fx.0,
@@ -289,7 +328,11 @@ async fn acp454_fencing_after_reacquire(pool: PgPool) {
 
     // 续领一次（generation+1 → 旧 token 失效）。
     let lease = recovery::reacquire_lease(
-        &pool, SYSTEM_TENANT, fx.0, run_id, device_id,
+        &pool,
+        SYSTEM_TENANT,
+        fx.0,
+        run_id,
+        device_id,
         RunDispatchConfig::from_env().lease_secs,
         &AuditActor::principal(fx.2),
     )
@@ -299,20 +342,20 @@ async fn acp454_fencing_after_reacquire(pool: PgPool) {
     let _ = worker_id;
 
     // 旧 token（续领前签发）执行面 → 拒绝（get_run_context 租约校验语义）。
-    let old_token_hash_valid: Option<String> = sqlx::query_scalar(
-        "SELECT lease_token_hash FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let old_token_hash_valid: Option<String> =
+        sqlx::query_scalar("SELECT lease_token_hash FROM delivery.task_run WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(old_token_hash_valid.is_some());
     // （T2 语义：续领后 token 哈希已换——旧 token 比对必败，此处验证哈希已轮换。）
-    let shield: String = sqlx::query_scalar("SELECT scheduling_shield FROM delivery.task_run WHERE id = $1")
-        .bind(run_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let shield: String =
+        sqlx::query_scalar("SELECT scheduling_shield FROM delivery.task_run WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(shield, "start_wait");
 
     // legacy 门：无 lease_client_id 的 Run（历史自报形态）续领 → 拒绝。
@@ -337,7 +380,11 @@ async fn acp454_fencing_after_reacquire(pool: PgPool) {
         .await
         .unwrap();
     let err = recovery::reacquire_lease(
-        &pool, SYSTEM_TENANT, project2, legacy_run, device_id,
+        &pool,
+        SYSTEM_TENANT,
+        project2,
+        legacy_run,
+        device_id,
         RunDispatchConfig::from_env().lease_secs,
         &AuditActor::principal(fx.2),
     )
@@ -346,9 +393,14 @@ async fn acp454_fencing_after_reacquire(pool: PgPool) {
     assert!(err.to_string().contains("legacy"), "{err}");
 
     // 他 Client 冒领 → 拒绝。
-    let other_device = seed_device_with_credential(&pool, SYSTEM_TENANT, fx.2, "runner-other").await;
+    let other_device =
+        seed_device_with_credential(&pool, SYSTEM_TENANT, fx.2, "runner-other").await;
     let err = recovery::reacquire_lease(
-        &pool, SYSTEM_TENANT, fx.0, run_id, other_device.0,
+        &pool,
+        SYSTEM_TENANT,
+        fx.0,
+        run_id,
+        other_device.0,
         RunDispatchConfig::from_env().lease_secs,
         &AuditActor::principal(fx.2),
     )
@@ -365,9 +417,13 @@ async fn acp455_continue_waits_for_terminate_confirmation(pool: PgPool) {
     let (device_id, _) = seed_device_with_credential(&pool, SYSTEM_TENANT, fx.2, "runner-t").await;
     let (run_id, worker_id, _) = claim_as_client(&pool, fx.0, fx.1, device_id, fx.2).await;
 
-    let reported = report_interaction(&pool, &interaction_input(&fx, run_id, "evt-1"), &AuditActor::dispatch())
-        .await
-        .unwrap();
+    let reported = report_interaction(
+        &pool,
+        &interaction_input(&fx, run_id, "evt-1"),
+        &AuditActor::dispatch(),
+    )
+    .await
+    .unwrap();
     // terminate 不 ack（未确认）→ 回复持久化 + continue 下发。
     let sub = SubmitResponseInput {
         project_id: fx.0,
@@ -387,7 +443,11 @@ async fn acp455_continue_waits_for_terminate_confirmation(pool: PgPool) {
         .await
         .unwrap();
     let lease = recovery::reacquire_lease(
-        &pool, SYSTEM_TENANT, fx.0, run_id, device_id,
+        &pool,
+        SYSTEM_TENANT,
+        fx.0,
+        run_id,
+        device_id,
         RunDispatchConfig::from_env().lease_secs,
         &AuditActor::principal(fx.2),
     )
@@ -395,9 +455,13 @@ async fn acp455_continue_waits_for_terminate_confirmation(pool: PgPool) {
     .unwrap();
 
     // 情形 6：continue 不予下发（terminate 未确认），即使是续领后的新租约。
-    let polled = cmd::poll_commands(&pool, fx.0, run_id, &lease.worker_id).await.unwrap();
+    let polled = cmd::poll_commands(&pool, fx.0, run_id, &lease.worker_id)
+        .await
+        .unwrap();
     assert!(
-        polled.iter().all(|c| c.command_type != "agent.task.continue"),
+        polled
+            .iter()
+            .all(|c| c.command_type != "agent.task.continue"),
         "continue must stay filtered while terminate is unconfirmed"
     );
 
@@ -407,14 +471,21 @@ async fn acp455_continue_waits_for_terminate_confirmation(pool: PgPool) {
         .find(|c| c.command_type == "agent.process.terminate")
         .expect("terminate surfaces after reacquire");
     cmd::ack_command(
-        &pool, fx.0, t.command_id, &lease.worker_id, cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Lost", "pid": null })), None,
+        &pool,
+        fx.0,
+        t.command_id,
+        &lease.worker_id,
+        cmd::AckOutcome::Acked,
+        Some(json!({ "exit_outcome": "Lost", "pid": null })),
+        None,
     )
     .await
     .unwrap();
 
     // 确认后 → continue 出现 → 新 Session 可启动。
-    let polled2 = cmd::poll_commands(&pool, fx.0, run_id, &lease.worker_id).await.unwrap();
+    let polled2 = cmd::poll_commands(&pool, fx.0, run_id, &lease.worker_id)
+        .await
+        .unwrap();
     assert_eq!(polled2.len(), 1);
     assert_eq!(polled2[0].command_type, "agent.task.continue");
     let _ = (worker_id, submitted);
@@ -425,53 +496,91 @@ async fn acp455_continue_waits_for_terminate_confirmation(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn previous_chain_id_links_closed_predecessor(pool: PgPool) {
     let fx = seed(&pool, "RC-CHAIN").await;
-    let (device_id, _) = seed_device_with_credential(&pool, SYSTEM_TENANT, fx.2, "runner-chain").await;
+    let (device_id, _) =
+        seed_device_with_credential(&pool, SYSTEM_TENANT, fx.2, "runner-chain").await;
     let (run_id, worker_id, _) = claim_as_client(&pool, fx.0, fx.1, device_id, fx.2).await;
 
     // 链 1：介入 → 回复 → continue acked（链关闭）。
-    let r1 = report_interaction(&pool, &interaction_input(&fx, run_id, "evt-1"), &AuditActor::dispatch())
+    let r1 = report_interaction(
+        &pool,
+        &interaction_input(&fx, run_id, "evt-1"),
+        &AuditActor::dispatch(),
+    )
+    .await
+    .unwrap();
+    let p1 = cmd::poll_commands(&pool, fx.0, run_id, &worker_id)
         .await
         .unwrap();
-    let p1 = cmd::poll_commands(&pool, fx.0, run_id, &worker_id).await.unwrap();
     cmd::ack_command(
-        &pool, fx.0, p1[0].command_id, &worker_id, cmd::AckOutcome::Acked,
-        Some(json!({ "exit_outcome": "Killed", "pid": 1 })), None,
+        &pool,
+        fx.0,
+        p1[0].command_id,
+        &worker_id,
+        cmd::AckOutcome::Acked,
+        Some(json!({ "exit_outcome": "Killed", "pid": 1 })),
+        None,
     )
     .await
     .unwrap();
     record_response_persisted(
-        &pool, fx.0, r1.interaction_id, json!({ "response_id": "r1" }), &AuditActor::dispatch(),
+        &pool,
+        fx.0,
+        r1.interaction_id,
+        json!({ "response_id": "r1" }),
+        &AuditActor::dispatch(),
     )
     .await
     .unwrap();
     // 手动下发 continue 并 acked（关链）。
     let mut tx = pool.begin().await.unwrap();
     let c1 = cmd::issue_continue_command(
-        &mut tx, fx.0, fx.1, run_id, r1.interaction_id, None, &worker_id, 1,
+        &mut tx,
+        fx.0,
+        fx.1,
+        run_id,
+        r1.interaction_id,
+        None,
+        &worker_id,
+        1,
         json!({ "decision": "approve" }),
     )
     .await
     .unwrap();
     tx.commit().await.unwrap();
-    cmd::poll_commands(&pool, fx.0, run_id, &worker_id).await.unwrap();
+    cmd::poll_commands(&pool, fx.0, run_id, &worker_id)
+        .await
+        .unwrap();
     cmd::ack_command(
-        &pool, fx.0, c1, &worker_id, cmd::AckOutcome::Acked,
-        Some(json!({ "session_created": true, "input_injected": true })), None,
+        &pool,
+        fx.0,
+        c1,
+        &worker_id,
+        cmd::AckOutcome::Acked,
+        Some(json!({ "session_created": true, "input_injected": true })),
+        None,
     )
     .await
     .unwrap();
 
     // 链 2：新介入 → previous_chain_id = 链 1 的 interaction。
-    let r2 = report_interaction(&pool, &interaction_input(&fx, run_id, "evt-2"), &AuditActor::dispatch())
-        .await
-        .unwrap();
+    let r2 = report_interaction(
+        &pool,
+        &interaction_input(&fx, run_id, "evt-2"),
+        &AuditActor::dispatch(),
+    )
+    .await
+    .unwrap();
     let prev: Option<Uuid> =
         sqlx::query_scalar("SELECT previous_chain_id FROM delivery.task_interaction WHERE id = $1")
             .bind(r2.interaction_id)
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(prev, Some(r1.interaction_id), "new chain links its closed predecessor");
+    assert_eq!(
+        prev,
+        Some(r1.interaction_id),
+        "new chain links its closed predecessor"
+    );
 
     // 首链（无前驱）→ NULL。
     let first_prev: Option<Uuid> =

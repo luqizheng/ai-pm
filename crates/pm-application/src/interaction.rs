@@ -358,7 +358,10 @@ pub async fn report_interaction(
 
 fn map_waiting_conflict(e: sqlx::Error) -> InteractionError {
     if let sqlx::Error::Database(db) = &e {
-        if db.constraint().is_some_and(|c| c.contains("uq_task_waiting_active")) {
+        if db
+            .constraint()
+            .is_some_and(|c| c.contains("uq_task_waiting_active"))
+        {
             return InteractionError::Conflict(
                 "task already has an active waiting row from another flow".into(),
             );
@@ -400,9 +403,7 @@ pub(crate) async fn record_response_persisted_tx(
     .bind(project_id)
     .fetch_optional(&mut **tx)
     .await?
-    .ok_or_else(|| {
-        InteractionError::Conflict("interaction is not in pending state".into())
-    })?;
+    .ok_or_else(|| InteractionError::Conflict("interaction is not in pending state".into()))?;
     let run_id: Uuid = row.get("run_id");
     sqlx::query(
         "UPDATE delivery.task_run SET scheduling_shield = 'start_wait' \
@@ -455,15 +456,17 @@ pub async fn mark_consumed(
     // 语义不变。迟到/重复回执幂等（无 Task/guard/执行面副作用）。
     let resolved_delivery: Option<Uuid> = match delivery_id {
         Some(did) => Some(did),
-        None => sqlx::query_scalar(
-            "SELECT id FROM delivery.interaction_response_delivery \
+        None => {
+            sqlx::query_scalar(
+                "SELECT id FROM delivery.interaction_response_delivery \
               WHERE interaction_id = $1 AND project_id = $2 \
                 AND status IN ('delivering', 'delivered') LIMIT 1",
-        )
-        .bind(interaction_id)
-        .bind(project_id)
-        .fetch_optional(&mut *tx)
-        .await?,
+            )
+            .bind(interaction_id)
+            .bind(project_id)
+            .fetch_optional(&mut *tx)
+            .await?
+        }
     };
     if let Some(did) = resolved_delivery {
         crate::response_delivery::mark_consumed_tx(&mut tx, project_id, did, actor)
@@ -503,7 +506,12 @@ pub async fn mark_consumed(
     .await?;
 
     // 链关闭 → 等待 resolve（§5.3）。
-    resolve_waiting(&mut tx, task_id, &format!("interaction {interaction_id} consumed")).await?;
+    resolve_waiting(
+        &mut tx,
+        task_id,
+        &format!("interaction {interaction_id} consumed"),
+    )
+    .await?;
 
     // Task 回 Running（仅当仍在 awaiting_decision；其他状态（如已取消）跳过）。
     let task_status: Option<String> = sqlx::query_scalar(
@@ -519,16 +527,9 @@ pub async fn mark_consumed(
             .map_err(|e| InteractionError::Transition(e.to_string()))?;
         let mut facts = TransitionFacts::for_dispatch();
         facts.waiting_resolved = true;
-        apply_task_transition(
-            &mut tx,
-            task_id,
-            None,
-            TaskStatus::Running,
-            &facts,
-            &ctx,
-        )
-        .await
-        .map_err(|e| InteractionError::Transition(e.to_string()))?;
+        apply_task_transition(&mut tx, task_id, None, TaskStatus::Running, &facts, &ctx)
+            .await
+            .map_err(|e| InteractionError::Transition(e.to_string()))?;
     }
 
     append_audit_with_payload(
@@ -701,9 +702,15 @@ pub(crate) async fn cancel_open_interaction_tx(
     .await?;
     resolve_waiting(tx, task_id, &format!("interaction cancelled: {reason}")).await?;
     // ACP-05 终态钩子：介入取消 → 该 Run 的非终态 continuation closed。
-    crate::continuation::close_open_by_run_tx(tx, project_id, run_id, "interaction_cancelled", actor)
-        .await
-        .map_err(|e| InteractionError::Conflict(e.to_string()))?;
+    crate::continuation::close_open_by_run_tx(
+        tx,
+        project_id,
+        run_id,
+        "interaction_cancelled",
+        actor,
+    )
+    .await
+    .map_err(|e| InteractionError::Conflict(e.to_string()))?;
     // §5.3 映射行：cancelled（Task 活）→ 回转前置状态（awaiting_decision →
     // Running，waiting_resolved 事实由本次取消提供）；其他状态跳过。
     let task_status: Option<String> = sqlx::query_scalar(
@@ -948,13 +955,12 @@ pub async fn submit_interaction_response(
     }
     // 检查②身份半边：回复者必须是真人主体（api_key 门在 REST handler 的
     // auth_mode 层，此处 principal.kind 双保险）。
-    let is_human: Option<bool> = sqlx::query_scalar(
-        "SELECT kind = 'human' FROM core.principal WHERE id = $1",
-    )
-    .bind(input.responder_principal_id)
-    .fetch_optional(pool)
-    .await?
-    .flatten();
+    let is_human: Option<bool> =
+        sqlx::query_scalar("SELECT kind = 'human' FROM core.principal WHERE id = $1")
+            .bind(input.responder_principal_id)
+            .fetch_optional(pool)
+            .await?
+            .flatten();
     if is_human != Some(true) {
         return Err(InteractionError::Forbidden(
             "responses must come from a human principal".into(),
@@ -1037,13 +1043,12 @@ pub async fn submit_interaction_response(
     validate_response_payload(&input.response_payload, options.as_ref(), required_response)?;
 
     // 运行侧快照（continue 路由目标）：lease_owner/lease_generation。
-    let run = sqlx::query(
-        "SELECT lease_owner, lease_generation FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(run_id)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or(InteractionError::NotFound)?;
+    let run =
+        sqlx::query("SELECT lease_owner, lease_generation FROM delivery.task_run WHERE id = $1")
+            .bind(run_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(InteractionError::NotFound)?;
     let lease_owner: Option<String> = run.get("lease_owner");
     let Some(worker_id) = lease_owner else {
         return Err(InteractionError::Conflict(
@@ -1117,13 +1122,11 @@ pub async fn submit_interaction_response(
         input.response_payload.clone(),
     )
     .await?;
-    sqlx::query(
-        "UPDATE delivery.interaction_response SET continue_command_id = $2 WHERE id = $1",
-    )
-    .bind(response_id)
-    .bind(continue_command_id)
-    .execute(&mut *tx)
-    .await?;
+    sqlx::query("UPDATE delivery.interaction_response SET continue_command_id = $2 WHERE id = $1")
+        .bind(response_id)
+        .bind(continue_command_id)
+        .execute(&mut *tx)
+        .await?;
 
     // ACP-04（0050）：三写第三笔——投递账（一回复一账；重投复用原行）。
     let delivery_id = crate::response_delivery::create_on_response_tx(
@@ -1194,9 +1197,7 @@ fn validate_response_payload(
                 ))
             }
         }
-    } else if required_response
-        && decision.is_none()
-        && content.is_none_or(|c| c.trim().is_empty())
+    } else if required_response && decision.is_none() && content.is_none_or(|c| c.trim().is_empty())
     {
         return Err(InteractionError::Validation(
             "response_payload requires a decision or non-empty content".into(),

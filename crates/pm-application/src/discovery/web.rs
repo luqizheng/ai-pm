@@ -16,15 +16,7 @@ pub async fn start_session_from_import(
     created_by: Uuid,
     import_id: Option<Uuid>,
 ) -> Result<StartWebSession, DiscoveryError> {
-    start_session_from_import_as(
-        pool,
-        tenant_id,
-        project_id,
-        created_by,
-        import_id,
-        "WEB",
-    )
-    .await
+    start_session_from_import_as(pool, tenant_id, project_id, created_by, import_id, "WEB").await
 }
 
 /// 同上，但**来源可指定**：Worker 在导入草案就绪后自动开 `source=SYSTEM` 会话
@@ -37,8 +29,15 @@ pub async fn start_session_from_import_as(
     import_id: Option<Uuid>,
     source: &str,
 ) -> Result<StartWebSession, DiscoveryError> {
-    let session =
-        create_session(pool, tenant_id, project_id, source, "INITIAL_ONBOARDING", created_by).await?;
+    let session = create_session(
+        pool,
+        tenant_id,
+        project_id,
+        source,
+        "INITIAL_ONBOARDING",
+        created_by,
+    )
+    .await?;
     let Some(import_id) = import_id else {
         return Ok(StartWebSession {
             session,
@@ -249,21 +248,18 @@ pub async fn record_finding_verification(
     let answer_view_text = answer.to_string();
     let (question, answer) = match existing {
         Some((question_id, question_status)) if question_status == QUESTION_STATUS_OPEN => {
-            let answered = answer_question_tx(&mut tx, tenant_id, question_id, answer, answered_by).await?;
+            let answered =
+                answer_question_tx(&mut tx, tenant_id, question_id, answer, answered_by).await?;
             let question = get_question_tx(&mut tx, tenant_id, question_id).await?;
             (question, Some(answered))
         }
         _ => {
             let question = add_question_tx(
-                &mut tx,
-                tenant_id,
-                project_id,
-                session_id,
-                finding_id,
-                status,
+                &mut tx, tenant_id, project_id, session_id, finding_id, status,
             )
             .await?;
-            let answered = answer_question_tx(&mut tx, tenant_id, question.id, answer, answered_by).await?;
+            let answered =
+                answer_question_tx(&mut tx, tenant_id, question.id, answer, answered_by).await?;
             (question, Some(answered))
         }
     };
@@ -326,16 +322,25 @@ async fn get_finding_tx(
     tenant_id: Uuid,
     finding_id: Uuid,
 ) -> Result<DiscoveryFindingView, DiscoveryError> {
-    let row: Option<(Uuid, Uuid, String, String, Option<f64>, String, Uuid, Option<String>, chrono::DateTime<chrono::Utc>)> =
-        sqlx::query_as(&format!(
-            "SELECT id, session_id, kind, content, confidence, verification_status, \
+    let row: Option<(
+        Uuid,
+        Uuid,
+        String,
+        String,
+        Option<f64>,
+        String,
+        Uuid,
+        Option<String>,
+        chrono::DateTime<chrono::Utc>,
+    )> = sqlx::query_as(&format!(
+        "SELECT id, session_id, kind, content, confidence, verification_status, \
                     project_id, actor_role, created_at \
              FROM discovery.discovery_finding WHERE tenant_id = $1 AND id = $2"
-        ))
-        .bind(tenant_id)
-        .bind(finding_id)
-        .fetch_optional(&mut **tx)
-        .await?;
+    ))
+    .bind(tenant_id)
+    .bind(finding_id)
+    .fetch_optional(&mut **tx)
+    .await?;
     let Some(row) = row else {
         return Err(DiscoveryError::FindingNotFound);
     };
@@ -347,16 +352,22 @@ async fn get_finding_tx(
     .bind(finding_id)
     .fetch_all(&mut **tx)
     .await?;
-    let rows: Vec<(String, Option<String>, Option<String>, Option<Uuid>, Option<String>, Option<i32>)> =
-        sqlx::query_as(
-            "SELECT evidence_type, description, file_path, repository_id, commit_sha, attempt_no \
+    let rows: Vec<(
+        String,
+        Option<String>,
+        Option<String>,
+        Option<Uuid>,
+        Option<String>,
+        Option<i32>,
+    )> = sqlx::query_as(
+        "SELECT evidence_type, description, file_path, repository_id, commit_sha, attempt_no \
              FROM discovery.discovery_finding_evidence \
              WHERE tenant_id = $1 AND finding_id = $2 ORDER BY created_at, id",
-        )
-        .bind(tenant_id)
-        .bind(finding_id)
-        .fetch_all(&mut **tx)
-        .await?;
+    )
+    .bind(tenant_id)
+    .bind(finding_id)
+    .fetch_all(&mut **tx)
+    .await?;
     let evidence = serde_json::Value::Array(
         rows.into_iter()
             .map(
@@ -525,15 +536,22 @@ async fn get_question_tx(
     tenant_id: Uuid,
     question_id: Uuid,
 ) -> Result<DiscoveryQuestionView, DiscoveryError> {
-    let row: Option<(Uuid, Uuid, Option<Uuid>, String, Option<String>, String, chrono::DateTime<chrono::Utc>)> =
-        sqlx::query_as(
-            "SELECT id, session_id, finding_id, question, why_blocking, status, created_at \
+    let row: Option<(
+        Uuid,
+        Uuid,
+        Option<Uuid>,
+        String,
+        Option<String>,
+        String,
+        chrono::DateTime<chrono::Utc>,
+    )> = sqlx::query_as(
+        "SELECT id, session_id, finding_id, question, why_blocking, status, created_at \
              FROM discovery.discovery_question WHERE tenant_id = $1 AND id = $2",
-        )
-        .bind(tenant_id)
-        .bind(question_id)
-        .fetch_optional(&mut **tx)
-        .await?;
+    )
+    .bind(tenant_id)
+    .bind(question_id)
+    .fetch_optional(&mut **tx)
+    .await?;
     let Some(row) = row else {
         return Err(DiscoveryError::QuestionNotFound);
     };

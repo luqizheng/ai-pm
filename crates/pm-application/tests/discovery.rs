@@ -2,10 +2,8 @@
 //! question-answer / proposal（Q7 base_revision 校验）/ 租户隔离 /
 //! repo_import 单向挂接（Q1）。
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use pm_application::discovery::{
-    self, DiscoveryError, FindingCreator, NewFinding, NewProposal,
-};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_application::discovery::{self, DiscoveryError, FindingCreator, NewFinding, NewProposal};
 use pm_domain::SYSTEM_TENANT;
 use serde_json::json;
 use sqlx::PgPool;
@@ -125,7 +123,13 @@ async fn session_lifecycle_follows_the_state_machine(pool: PgPool) {
     .unwrap();
     assert_eq!(session.status, "IN_PROGRESS");
 
-    for target in ["NEEDS_USER_INPUT", "IN_PROGRESS", "PAUSED", "IN_PROGRESS", "REVIEW_REQUIRED"] {
+    for target in [
+        "NEEDS_USER_INPUT",
+        "IN_PROGRESS",
+        "PAUSED",
+        "IN_PROGRESS",
+        "REVIEW_REQUIRED",
+    ] {
         let s = discovery::transition_session(&pool, fx.tenant_id, session.id, target)
             .await
             .unwrap();
@@ -557,15 +561,9 @@ async fn proposals_validate_base_revision_and_decision_state(pool: PgPool) {
     .unwrap();
     assert_eq!(add.base_revision_id, None);
 
-    let approved = discovery::set_proposal_status(
-        &pool,
-        fx.tenant_id,
-        modify.id,
-        "approved",
-        None,
-    )
-    .await
-    .unwrap();
+    let approved = discovery::set_proposal_status(&pool, fx.tenant_id, modify.id, "approved", None)
+        .await
+        .unwrap();
     assert_eq!(approved.status, "approved");
 
     let twice = discovery::set_proposal_status(&pool, fx.tenant_id, modify.id, "rejected", None)
@@ -607,7 +605,10 @@ async fn cross_tenant_access_is_rejected(pool: PgPool) {
         other_human,
     )
     .await;
-    assert!(matches!(foreign_session, Err(DiscoveryError::ProjectNotFound)));
+    assert!(matches!(
+        foreign_session,
+        Err(DiscoveryError::ProjectNotFound)
+    ));
 
     let finding = discovery::add_finding(
         &pool,
@@ -639,7 +640,10 @@ async fn cross_tenant_access_is_rejected(pool: PgPool) {
         None,
     )
     .await;
-    assert!(matches!(foreign_finding, Err(DiscoveryError::SessionNotFound)));
+    assert!(matches!(
+        foreign_finding,
+        Err(DiscoveryError::SessionNotFound)
+    ));
 
     let foreign_list = discovery::list_sessions(&pool, other_tenant, other_project)
         .await
@@ -769,7 +773,12 @@ async fn i2_026_initial_state_is_derived_not_supplied(pool: PgPool) {
 async fn i2_c_decision_is_audited_with_before_after(pool: PgPool) {
     let fx = seed(&pool).await;
     let session = discovery::create_session(
-        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        "WEB",
+        "INITIAL_ONBOARDING",
+        fx.human_id,
     )
     .await
     .unwrap();
@@ -836,7 +845,12 @@ async fn i2_c_decision_is_audited_with_before_after(pool: PgPool) {
 async fn i2_c_operation_id_replays_without_side_effects(pool: PgPool) {
     let fx = seed(&pool).await;
     let session = discovery::create_session(
-        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        "WEB",
+        "INITIAL_ONBOARDING",
+        fx.human_id,
     )
     .await
     .unwrap();
@@ -914,7 +928,12 @@ async fn i2_c_operation_id_replays_without_side_effects(pool: PgPool) {
 async fn i2_c_only_humans_can_decide(pool: PgPool) {
     let fx = seed(&pool).await;
     let session = discovery::create_session(
-        &pool, fx.tenant_id, fx.project_id, "CODEX", "INITIAL_ONBOARDING", fx.human_id,
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        "CODEX",
+        "INITIAL_ONBOARDING",
+        fx.human_id,
     )
     .await
     .unwrap();
@@ -978,7 +997,12 @@ async fn i2_c_only_humans_can_decide(pool: PgPool) {
 async fn i2_c_repeated_same_decision_is_a_noop(pool: PgPool) {
     let fx = seed(&pool).await;
     let session = discovery::create_session(
-        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        "WEB",
+        "INITIAL_ONBOARDING",
+        fx.human_id,
     )
     .await
     .unwrap();
@@ -1023,7 +1047,10 @@ async fn i2_c_repeated_same_decision_is_a_noop(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(audits, 2, "each decision round is audited; the status stays CONFIRMED");
+    assert_eq!(
+        audits, 2,
+        "each decision round is audited; the status stays CONFIRMED"
+    );
     let status: String = sqlx::query_scalar(
         "SELECT verification_status FROM discovery.discovery_finding WHERE id = $1",
     )
@@ -1042,7 +1069,12 @@ async fn i2_c_repeated_same_decision_is_a_noop(pool: PgPool) {
 async fn i2_e_concurrent_decisions_serialize_with_unique_final_state(pool: PgPool) {
     let fx = seed(&pool).await;
     let session = discovery::create_session(
-        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        "WEB",
+        "INITIAL_ONBOARDING",
+        fx.human_id,
     )
     .await
     .unwrap();
@@ -1082,17 +1114,36 @@ async fn i2_e_concurrent_decisions_serialize_with_unique_final_state(pool: PgPoo
 
     let (a, b) = tokio::join!(
         discovery::record_finding_verification(
-            &pool, fx.tenant_id, session.id, finding.id, "CONFIRMED", "甲确认", fx.human_id,
-            None, None,
+            &pool,
+            fx.tenant_id,
+            session.id,
+            finding.id,
+            "CONFIRMED",
+            "甲确认",
+            fx.human_id,
+            None,
+            None,
         ),
         discovery::record_finding_verification(
-            &pool, fx.tenant_id, session.id, finding.id, "CONFIRMED", "乙确认", other,
-            None, None,
+            &pool,
+            fx.tenant_id,
+            session.id,
+            finding.id,
+            "CONFIRMED",
+            "乙确认",
+            other,
+            None,
+            None,
         ),
     );
     assert!(a.is_ok(), "a: {a:?}");
-    assert!(b.is_ok(), "b: {b:?}（条件更新使同值决定成为 no-op 而非冲突）");
-    let after = discovery::get_finding(&pool, fx.tenant_id, finding.id).await.unwrap();
+    assert!(
+        b.is_ok(),
+        "b: {b:?}（条件更新使同值决定成为 no-op 而非冲突）"
+    );
+    let after = discovery::get_finding(&pool, fx.tenant_id, finding.id)
+        .await
+        .unwrap();
     assert_eq!(after.verification_status, "CONFIRMED");
     let audits: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM governance.audit_log \
@@ -1103,21 +1154,40 @@ async fn i2_e_concurrent_decisions_serialize_with_unique_final_state(pool: PgPoo
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(audits, 2, "both rounds are audited; only the first changes status");
+    assert_eq!(
+        audits, 2,
+        "both rounds are audited; only the first changes status"
+    );
 
     // 确认对拒绝并发：行锁串行 → 后到者覆盖（状态机允许的重开路径），终态唯一。
     let (c, d) = tokio::join!(
         discovery::record_finding_verification(
-            &pool, fx.tenant_id, session.id, finding.id, "REJECTED", "甲拒绝", fx.human_id,
-            None, None,
+            &pool,
+            fx.tenant_id,
+            session.id,
+            finding.id,
+            "REJECTED",
+            "甲拒绝",
+            fx.human_id,
+            None,
+            None,
         ),
         discovery::record_finding_verification(
-            &pool, fx.tenant_id, session.id, finding.id, "CONFIRMED", "乙再确认", other,
-            None, None,
+            &pool,
+            fx.tenant_id,
+            session.id,
+            finding.id,
+            "CONFIRMED",
+            "乙再确认",
+            other,
+            None,
+            None,
         ),
     );
     assert!(c.is_ok() && d.is_ok(), "c: {c:?} d: {d:?}");
-    let after = discovery::get_finding(&pool, fx.tenant_id, finding.id).await.unwrap();
+    let after = discovery::get_finding(&pool, fx.tenant_id, finding.id)
+        .await
+        .unwrap();
     assert!(
         after.verification_status == "REJECTED" || after.verification_status == "CONFIRMED",
         "final state must be one deterministic winner, got {}",
@@ -1131,7 +1201,12 @@ async fn i2_e_concurrent_decisions_serialize_with_unique_final_state(pool: PgPoo
 async fn i2_e_archived_project_rejects_decisions(pool: PgPool) {
     let fx = seed(&pool).await;
     let session = discovery::create_session(
-        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        "WEB",
+        "INITIAL_ONBOARDING",
+        fx.human_id,
     )
     .await
     .unwrap();
@@ -1174,7 +1249,9 @@ async fn i2_e_archived_project_rejects_decisions(pool: PgPool) {
     assert!(matches!(err, DiscoveryError::Validation(_)));
 
     // 零副作用：状态未变、无审计。
-    let after = discovery::get_finding(&pool, fx.tenant_id, finding.id).await.unwrap();
+    let after = discovery::get_finding(&pool, fx.tenant_id, finding.id)
+        .await
+        .unwrap();
     assert_eq!(after.verification_status, "PENDING");
     let audits: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM governance.audit_log WHERE action IN ('finding.decided','discovery_finding_revision_requested')",
@@ -1190,12 +1267,22 @@ async fn i2_e_archived_project_rejects_decisions(pool: PgPool) {
 async fn i2_e_cross_session_decision_is_rejected(pool: PgPool) {
     let fx = seed(&pool).await;
     let s1 = discovery::create_session(
-        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        "WEB",
+        "INITIAL_ONBOARDING",
+        fx.human_id,
     )
     .await
     .unwrap();
     let s2 = discovery::create_session(
-        &pool, fx.tenant_id, fx.project_id, "CODEX", "UPDATE", fx.human_id,
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        "CODEX",
+        "UPDATE",
+        fx.human_id,
     )
     .await
     .unwrap();
@@ -1230,7 +1317,9 @@ async fn i2_e_cross_session_decision_is_rejected(pool: PgPool) {
     .await
     .unwrap_err();
     assert!(matches!(err, DiscoveryError::FindingNotFound));
-    let after = discovery::get_finding(&pool, fx.tenant_id, finding.id).await.unwrap();
+    let after = discovery::get_finding(&pool, fx.tenant_id, finding.id)
+        .await
+        .unwrap();
     assert_eq!(after.verification_status, "PENDING", "zero side effects");
 }
 
@@ -1240,7 +1329,12 @@ async fn i2_e_cross_session_decision_is_rejected(pool: PgPool) {
 async fn i2_033_revision_request_derives_display_state_from_audit(pool: PgPool) {
     let fx = seed(&pool).await;
     let session = discovery::create_session(
-        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        "WEB",
+        "INITIAL_ONBOARDING",
+        fx.human_id,
     )
     .await
     .unwrap();
@@ -1262,9 +1356,16 @@ async fn i2_033_revision_request_derives_display_state_from_audit(pool: PgPool) 
     .unwrap();
 
     // AI 侧挂一个 open question（不得参与推导）。
-    discovery::add_question(&pool, fx.tenant_id, session.id, "AI 澄清问题", None, Some(finding.id))
-        .await
-        .unwrap();
+    discovery::add_question(
+        &pool,
+        fx.tenant_id,
+        session.id,
+        "AI 澄清问题",
+        None,
+        Some(finding.id),
+    )
+    .await
+    .unwrap();
 
     let outcome = discovery::record_finding_verification(
         &pool,
@@ -1296,7 +1397,9 @@ async fn i2_033_revision_request_derives_display_state_from_audit(pool: PgPool) 
     assert_eq!(action, "discovery_finding_revision_requested");
 
     // 读取侧（list 路径）同样推导出待补充。
-    let listed = discovery::list_findings(&pool, fx.tenant_id, session.id).await.unwrap();
+    let listed = discovery::list_findings(&pool, fx.tenant_id, session.id)
+        .await
+        .unwrap();
     let target = listed.iter().find(|f| f.id == finding.id).unwrap();
     assert_eq!(target.display_state, "REVISION_REQUESTED");
 }
@@ -1306,7 +1409,12 @@ async fn i2_033_revision_request_derives_display_state_from_audit(pool: PgPool) 
 async fn i2_033_missing_audit_falls_back_conservatively(pool: PgPool) {
     let fx = seed(&pool).await;
     let session = discovery::create_session(
-        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        "WEB",
+        "INITIAL_ONBOARDING",
+        fx.human_id,
     )
     .await
     .unwrap();
@@ -1326,7 +1434,9 @@ async fn i2_033_missing_audit_falls_back_conservatively(pool: PgPool) {
     )
     .await
     .unwrap();
-    let listed = discovery::list_findings(&pool, fx.tenant_id, session.id).await.unwrap();
+    let listed = discovery::list_findings(&pool, fx.tenant_id, session.id)
+        .await
+        .unwrap();
     assert_eq!(listed[0].display_state, "PENDING");
 }
 
@@ -1335,7 +1445,12 @@ async fn i2_033_missing_audit_falls_back_conservatively(pool: PgPool) {
 async fn i2_e_same_operation_id_with_different_payload_replays_first(pool: PgPool) {
     let fx = seed(&pool).await;
     let session = discovery::create_session(
-        &pool, fx.tenant_id, fx.project_id, "WEB", "INITIAL_ONBOARDING", fx.human_id,
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        "WEB",
+        "INITIAL_ONBOARDING",
+        fx.human_id,
     )
     .await
     .unwrap();
@@ -1357,18 +1472,35 @@ async fn i2_e_same_operation_id_with_different_payload_replays_first(pool: PgPoo
     .unwrap();
 
     let first = discovery::record_finding_verification(
-        &pool, fx.tenant_id, session.id, finding.id, "CONFIRMED", "首次", fx.human_id,
-        None, Some("op-x"),
+        &pool,
+        fx.tenant_id,
+        session.id,
+        finding.id,
+        "CONFIRMED",
+        "首次",
+        fx.human_id,
+        None,
+        Some("op-x"),
     )
     .await
     .unwrap();
     assert_eq!(first.finding.verification_status, "CONFIRMED");
 
     let second = discovery::record_finding_verification(
-        &pool, fx.tenant_id, session.id, finding.id, "REJECTED", "不同内容", fx.human_id,
-        None, Some("op-x"),
+        &pool,
+        fx.tenant_id,
+        session.id,
+        finding.id,
+        "REJECTED",
+        "不同内容",
+        fx.human_id,
+        None,
+        Some("op-x"),
     )
     .await
     .unwrap();
-    assert_eq!(second.finding.verification_status, "CONFIRMED", "replay must not apply the new payload");
+    assert_eq!(
+        second.finding.verification_status, "CONFIRMED",
+        "replay must not apply the new payload"
+    );
 }

@@ -56,7 +56,6 @@ pub(crate) async fn snapshot_repositories(
     Ok(summary)
 }
 
-
 /// 隔离已启动的执行器实例并记录终止结果（B3-2 的前置）。
 pub(crate) async fn isolate_started_run(
     tx: &mut Transaction<'_, Postgres>,
@@ -89,7 +88,6 @@ pub(crate) async fn isolate_started_run(
     Ok(())
 }
 
-
 /// 退避回队（资格类不满足）：同一行回 `queued`，`dispatch_attempts+1`，指数退避。
 pub(crate) async fn requeue_with_backoff(
     tx: &mut Transaction<'_, Postgres>,
@@ -115,7 +113,6 @@ pub(crate) async fn requeue_with_backoff(
     .map(|_| ())
 }
 
-
 /// 同事务内把 Run 重置回可领取的 `queued`（不递增 dispatch_attempts）。
 pub(crate) async fn requeue_for_redispatch(
     tx: &mut Transaction<'_, Postgres>,
@@ -132,7 +129,6 @@ pub(crate) async fn requeue_for_redispatch(
     .await
     .map(|_| ())
 }
-
 
 /// B3-2 共享收尾：隔离已启动的失联 Run 并新建重试 Run（`supersedes_run_id` 指向
 /// 旧 Run）+ 审计。`claim_core` 的回收分支与 `run_executor::reconcile_orphans`
@@ -166,7 +162,6 @@ pub(crate) async fn recover_lost_run(
     Ok(created)
 }
 
-
 /// Run 落 `cancelled`（任务终态/不存在），并留审计。
 pub(crate) async fn cancel_run(
     tx: &mut Transaction<'_, Postgres>,
@@ -188,7 +183,6 @@ pub(crate) async fn cancel_run(
 
 /// 平台专用审计兜底 principal（`0015` 幂等种子）。
 pub const DISPATCH_SERVICE_PRINCIPAL: Uuid = Uuid::from_u128(1);
-
 
 /// 续租（§5.9，D3 执行器实例内部通道）：仅租约持有者可续。
 ///
@@ -220,7 +214,6 @@ pub async fn renew_lease(
     .await?;
     Ok(updated.rows_affected() == 1)
 }
-
 
 /// fencing（T25 + T-032 T2 终裁）：仅**当前 Run 的当前执行会话、当前执行权世代**
 /// 可回传结果。被回收 / 被替代的旧执行实例（过期 session、旧 generation、非活跃
@@ -318,15 +311,16 @@ pub(crate) async fn audit_run_as(
     after: serde_json::Value,
 ) -> Result<(), sqlx::Error> {
     let mut after = after;
-    let run_meta: Option<(Option<String>, Option<String>)> = sqlx::query_as(
-        "SELECT lease_owner, client_name FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(run_id)
-    .fetch_optional(&mut **tx)
-    .await?;
+    let run_meta: Option<(Option<String>, Option<String>)> =
+        sqlx::query_as("SELECT lease_owner, client_name FROM delivery.task_run WHERE id = $1")
+            .bind(run_id)
+            .fetch_optional(&mut **tx)
+            .await?;
     if let (Some((lease_owner, client_name)), Some(map)) = (run_meta, after.as_object_mut()) {
-        map.entry("lease_owner").or_insert(serde_json::json!(lease_owner));
-        map.entry("client_name").or_insert(serde_json::json!(client_name));
+        map.entry("lease_owner")
+            .or_insert(serde_json::json!(lease_owner));
+        map.entry("client_name")
+            .or_insert(serde_json::json!(client_name));
     }
 
     sqlx::query(
@@ -349,4 +343,3 @@ pub(crate) async fn audit_run_as(
     .await?;
     Ok(())
 }
-

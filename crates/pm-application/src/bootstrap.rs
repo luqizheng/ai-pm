@@ -344,12 +344,14 @@ async fn insert_principal(
     kind: &str,
     display_name: &str,
 ) -> Result<PrincipalId, BootstrapError> {
-    sqlx::query_scalar("INSERT INTO core.principal (kind, display_name) VALUES ($1, $2) RETURNING id")
-        .bind(kind)
-        .bind(display_name)
-        .fetch_one(&mut **tx)
-        .await
-        .map_err(BootstrapError::Db)
+    sqlx::query_scalar(
+        "INSERT INTO core.principal (kind, display_name) VALUES ($1, $2) RETURNING id",
+    )
+    .bind(kind)
+    .bind(display_name)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(BootstrapError::Db)
 }
 
 /// 取（或建）该租户的三个 `dev_agent` 实例，返回 (architect, developer, tester)。
@@ -396,11 +398,7 @@ async fn ensure_tenant_agents(
         ids.insert(code.to_string(), principal_id);
     }
 
-    Ok((
-        ids["architect"],
-        ids["developer"],
-        ids["tester"],
-    ))
+    Ok((ids["architect"], ids["developer"], ids["tester"]))
 }
 
 async fn insert_member(

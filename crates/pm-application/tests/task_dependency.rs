@@ -1,4 +1,4 @@
-﻿//! T-024 Task 依赖与解锁：真实数据库集成测试（验收矩阵 C49–C56 / C58）。
+//! T-024 Task 依赖与解锁：真实数据库集成测试（验收矩阵 C49–C56 / C58）。
 //!
 //! 覆盖领取侧判定（前置未满足 → Skip 回退避）、终态触发级联解锁、加边/删边后
 //! 的立即解锁、幂等事件与事务原子性。跨项目/环/重复边等写边校验在
@@ -7,16 +7,16 @@
 use std::sync::Arc;
 
 use pm_application::actor::AuditActor;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::command_executor::{
     ActorKind, CommandSource, ExecutionContext, PgCommandExecutor,
 };
-use pm_application::run_dispatch::{ClaimKind, DispatchMode, RunDispatchConfig, claim_once};
+use pm_application::run_dispatch::{claim_once, ClaimKind, DispatchMode, RunDispatchConfig};
 use pm_application::task_dependency::{
-    DependencyError, add_dependency, list_dependencies, remove_dependency,
+    add_dependency, list_dependencies, remove_dependency, DependencyError,
 };
 use pm_application::PolicyEngine;
-use pm_domain::{ProjectCommand, SYSTEM_TENANT, TaskStatus};
+use pm_domain::{ProjectCommand, TaskStatus, SYSTEM_TENANT};
 use pm_infrastructure::outbox::ClaimedOutboxEvent;
 use pm_infrastructure::outbox_handlers::TaskReadyHandler;
 use pm_infrastructure::outbox_worker::OutboxHandler;
@@ -151,9 +151,9 @@ fn cfg() -> RunDispatchConfig {
         max_run_attempts: 3,
         max_infrastructure_attempts: 5,
         timeout_secs: 1800,
-            deadline_default_secs: 3600,
-            agent_heartbeat_stale_secs: 900,
-            progress_stale_secs: 3600,
+        deadline_default_secs: 3600,
+        agent_heartbeat_stale_secs: 900,
+        progress_stale_secs: 3600,
     }
 }
 
@@ -198,12 +198,7 @@ async fn task_ready_events(pool: &PgPool, project_id: Uuid, task_id: Uuid) -> i6
     .unwrap()
 }
 
-async fn transition(
-    pool: &PgPool,
-    fx: &Fx,
-    task_id: Uuid,
-    to: TaskStatus,
-) {
+async fn transition(pool: &PgPool, fx: &Fx, task_id: Uuid, to: TaskStatus) {
     executor(pool)
         .execute(
             ProjectCommand::UpdateTaskStatus {
@@ -253,22 +248,22 @@ async fn c49_unmet_dependency_requeues_the_run_without_failure(pool: PgPool) {
     assert_eq!(outcome.kind, ClaimKind::Skipped);
     assert_eq!(run_status(&pool, run).await, "queued");
 
-    let (reason, attempts): (Option<String>, i32) =
-        sqlx::query_as("SELECT release_reason, dispatch_attempts FROM delivery.task_run WHERE id = $1")
-            .bind(run)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(reason.as_deref(), Some("dependency_unmet"));
-    assert_eq!(attempts, 1);
-
-    let failures: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.task_run_failure WHERE run_id = $1",
+    let (reason, attempts): (Option<String>, i32) = sqlx::query_as(
+        "SELECT release_reason, dispatch_attempts FROM delivery.task_run WHERE id = $1",
     )
     .bind(run)
     .fetch_one(&pool)
     .await
     .unwrap();
+    assert_eq!(reason.as_deref(), Some("dependency_unmet"));
+    assert_eq!(attempts, 1);
+
+    let failures: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.task_run_failure WHERE run_id = $1")
+            .bind(run)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(failures, 0, "unmet dependency is not an execution failure");
     assert_eq!(task_status(&pool, downstream).await, "ready");
 }
@@ -410,7 +405,10 @@ async fn c54_repeated_task_ready_consumption_creates_a_single_run(pool: PgPool) 
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(runs, 1, "duplicate TaskReady must collapse to one active run");
+    assert_eq!(
+        runs, 1,
+        "duplicate TaskReady must collapse to one active run"
+    );
     assert_eq!(task_ready_events(&pool, fx.project_id, downstream).await, 1);
 }
 
@@ -472,13 +470,12 @@ async fn c58_rejected_edge_leaves_no_partial_rows_or_audit(pool: PgPool) {
     let err = add_dependency(&pool, a, b, &actor(&fx)).await.unwrap_err();
     assert!(matches!(err, DependencyError::Cycle));
 
-    let edges: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.task_dependency WHERE project_id = $1",
-    )
-    .bind(fx.project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let edges: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.task_dependency WHERE project_id = $1")
+            .bind(fx.project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(edges, 1, "the rejected edge must not be persisted");
 
     let audits: i64 = sqlx::query_scalar(
@@ -606,19 +603,24 @@ async fn c62_dependency_unmet_never_consumes_the_execution_budget(pool: PgPool) 
             .unwrap()
             .expect("a candidate run exists");
         assert_eq!(outcome.kind, ClaimKind::Skipped);
-        let (reason, attempts, infra, status): (Option<String>, i32, i32, String) =
-            sqlx::query_as(
-                "SELECT release_reason, dispatch_attempts, infrastructure_retry_count, status \
+        let (reason, attempts, infra, status): (Option<String>, i32, i32, String) = sqlx::query_as(
+            "SELECT release_reason, dispatch_attempts, infrastructure_retry_count, status \
                    FROM delivery.task_run WHERE id = $1",
-            )
-            .bind(run)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(status, "queued", "round {attempt}: the run must stay claimable");
+        )
+        .bind(run)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            status, "queued",
+            "round {attempt}: the run must stay claimable"
+        );
         assert_eq!(reason.as_deref(), Some("dependency_unmet"));
         assert_eq!(attempts, attempt, "only the dispatch backoff counter moves");
-        assert_eq!(infra, 0, "round {attempt}: infra budget must stay untouched");
+        assert_eq!(
+            infra, 0,
+            "round {attempt}: infra budget must stay untouched"
+        );
     }
 
     let failures: i64 =
@@ -702,7 +704,7 @@ async fn c63_failed_upstream_keeps_the_downstream_blocked(pool: PgPool) {
 /// D5 的终态集合：`failed` 必须排除在「已满足」之外（失败上游需重试/取消/取代）。
 #[test]
 fn d5_satisfied_set_excludes_failed() {
-    use pm_application::task_dependency::{SATISFIED_STATUSES, unlocks_downstream};
+    use pm_application::task_dependency::{unlocks_downstream, SATISFIED_STATUSES};
     assert!(!SATISFIED_STATUSES.contains(&"failed"));
     assert!(unlocks_downstream(TaskStatus::Completed));
     assert!(unlocks_downstream(TaskStatus::Cancelled));
@@ -742,11 +744,18 @@ async fn t025_list_dependencies_is_tenant_scoped(pool: PgPool) {
     // 本租户：一条边可见
     let upstream = seed_task(&pool, fx.project_id, "ready").await;
     let downstream = seed_task(&pool, fx.project_id, "draft").await;
-    add_dependency(&pool, downstream, upstream, &AuditActor::principal(fx.actor_id))
+    add_dependency(
+        &pool,
+        downstream,
+        upstream,
+        &AuditActor::principal(fx.actor_id),
+    )
+    .await
+    .unwrap();
+
+    let graph = list_dependencies(&pool, SYSTEM_TENANT, downstream)
         .await
         .unwrap();
-
-    let graph = list_dependencies(&pool, SYSTEM_TENANT, downstream).await.unwrap();
     assert_eq!(graph.upstream.len(), 1);
 
     // 跨租户 task_id（同一 UUID，换租户视角）→ 404 语义（TaskNotFound）

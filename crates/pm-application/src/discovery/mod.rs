@@ -24,8 +24,8 @@ pub use proposal::*;
 pub use question::*;
 pub use session::*;
 pub use web::{
-    FindingVerificationOutcome, StartWebSession, record_finding_verification,
-    start_session_from_import, start_session_from_import_as,
+    record_finding_verification, start_session_from_import, start_session_from_import_as,
+    FindingVerificationOutcome, StartWebSession,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -71,8 +71,7 @@ pub const SESSION_STATUSES: [&str; 5] = [
     "PAUSED",
 ];
 
-pub const FINDING_KINDS: [&str; 4] =
-    ["observed", "user_confirmed", "speculation", "contradicted"];
+pub const FINDING_KINDS: [&str; 4] = ["observed", "user_confirmed", "speculation", "contradicted"];
 pub const VERIFICATION_STATUSES: [&str; 4] = ["PENDING", "CONFIRMED", "REJECTED", "CONFLICT"];
 
 pub const QUESTION_STATUS_OPEN: &str = "open";
@@ -86,7 +85,11 @@ pub const PROPOSAL_STATUS_APPROVED: &str = "approved";
 pub const PROPOSAL_STATUS_REJECTED: &str = "rejected";
 pub const PROPOSAL_STATUS_CONFLICT: &str = "conflict";
 
-pub(crate) fn validate_one_of(value: &str, allowed: &[&str], label: &str) -> Result<(), DiscoveryError> {
+pub(crate) fn validate_one_of(
+    value: &str,
+    allowed: &[&str],
+    label: &str,
+) -> Result<(), DiscoveryError> {
     if allowed.contains(&value) {
         Ok(())
     } else {

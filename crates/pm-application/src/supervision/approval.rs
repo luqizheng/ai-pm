@@ -52,7 +52,10 @@ pub async fn decide_approval(
     .await?
     .rows_affected();
     if decided == 0 {
-        return Err(CommandError::AlreadyDecided { approval_id: req.approval_id }.into());
+        return Err(CommandError::AlreadyDecided {
+            approval_id: req.approval_id,
+        }
+        .into());
     }
 
     match req.decision {
@@ -75,12 +78,9 @@ pub async fn decide_approval(
             )
             .await?;
             tx.commit().await?;
-            let _ = crate::project_import::advance_import_after_decision(
-                pool,
-                analysis_run_id,
-                &actor,
-            )
-            .await;
+            let _ =
+                crate::project_import::advance_import_after_decision(pool, analysis_run_id, &actor)
+                    .await;
             Ok(DecisionOutcome::Rejected)
         }
         Decision::Approve => {
@@ -96,7 +96,9 @@ pub async fn decide_approval(
                         project_id,
                         actor: actor.clone(),
                         actor_kind: ActorKind::Human,
-                        source: CommandSource::RedlineApproval { approval_id: req.approval_id },
+                        source: CommandSource::RedlineApproval {
+                            approval_id: req.approval_id,
+                        },
                     },
                 )
                 .await;
@@ -138,5 +140,3 @@ pub async fn decide_approval(
         }
     }
 }
-
-

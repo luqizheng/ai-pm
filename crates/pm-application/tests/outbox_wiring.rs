@@ -3,15 +3,15 @@
 
 use std::sync::Arc;
 
-use pm_application::PolicyEngine;
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::command_executor::{
     ActorKind, CommandSource, ExecutionContext, PgCommandExecutor,
 };
+use pm_application::PolicyEngine;
+use pm_domain::SYSTEM_TENANT;
 use pm_domain::{CommandError, ProjectCommand, TaskStatus};
 use sqlx::PgPool;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 struct Fixture {
     project_id: Uuid,
@@ -74,19 +74,15 @@ async fn ready_transition_enqueues_task_ready_in_the_same_transaction(pool: PgPo
         .await
         .expect("draft -> ready must execute");
 
-    let (event_type, aggregate_id, status, payload): (
-        String,
-        String,
-        String,
-        serde_json::Value,
-    ) = sqlx::query_as(
-        "SELECT event_type, aggregate_id, status, payload \
+    let (event_type, aggregate_id, status, payload): (String, String, String, serde_json::Value) =
+        sqlx::query_as(
+            "SELECT event_type, aggregate_id, status, payload \
          FROM integration.outbox_event WHERE project_id = $1",
-    )
-    .bind(f.project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+        )
+        .bind(f.project_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(event_type, "TaskReady");
     assert_eq!(aggregate_id, f.task_id.to_string());
     assert_eq!(status, "pending");
@@ -184,7 +180,10 @@ async fn outbox_write_failure_rolls_back_the_status_change(pool: PgPool) {
             ctx(&f),
         )
         .await;
-    assert!(result.is_err(), "a failed outbox write must fail the command");
+    assert!(
+        result.is_err(),
+        "a failed outbox write must fail the command"
+    );
 
     let (status, revision): (String, i64) =
         sqlx::query_as("SELECT status, revision FROM delivery.task WHERE id = $1")

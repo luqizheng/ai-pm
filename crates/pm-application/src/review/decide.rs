@@ -102,13 +102,9 @@ pub(crate) async fn load_effective_policy(
             .bind(task_id)
             .fetch_one(&mut **tx)
             .await?;
-    let layers = crate::run_dispatch::load_policy_layers(
-        tx,
-        project_id,
-        task_id,
-        task_type.as_deref(),
-    )
-    .await?;
+    let layers =
+        crate::run_dispatch::load_policy_layers(tx, project_id, task_id, task_type.as_deref())
+            .await?;
     Ok(EffectivePolicy::compose(&layers))
 }
 
@@ -172,9 +168,16 @@ pub async fn load_completion_gate(
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum ApprovalOutcome {
-    Completed { task_id: Uuid, proposal_id: Option<Uuid> },
-    ChangesRequested { task_id: Uuid },
-    AlreadyDecided { status: String },
+    Completed {
+        task_id: Uuid,
+        proposal_id: Option<Uuid>,
+    },
+    ChangesRequested {
+        task_id: Uuid,
+    },
+    AlreadyDecided {
+        status: String,
+    },
 }
 
 /// 审批裁决的错误（HTTP 映射见 `pm-api`）。
@@ -232,10 +235,7 @@ pub enum AdvanceOutcome {
     /// `reviewing→changes_requested`。
     ChangesRequested,
     /// 降级人工：`review_approval` + `task_waiting`，任务停 `reviewing`。
-    AwaitingApproval {
-        approval_id: Uuid,
-        kind: String,
-    },
+    AwaitingApproval { approval_id: Uuid, kind: String },
 }
 
 /// 拍②收尾：按 §5.1 矩阵推进任务（**调用方必须已在本事务内**落好 findings +
@@ -249,11 +249,10 @@ pub async fn advance_after_review(
     outcome: &ReviewOutcome,
     change_summary: Option<String>,
 ) -> Result<AdvanceOutcome, ReviewError> {
-    let task_id: Uuid =
-        sqlx::query_scalar("SELECT task_id FROM delivery.task_run WHERE id = $1")
-            .bind(review_run_id)
-            .fetch_one(&mut **tx)
-            .await?;
+    let task_id: Uuid = sqlx::query_scalar("SELECT task_id FROM delivery.task_run WHERE id = $1")
+        .bind(review_run_id)
+        .fetch_one(&mut **tx)
+        .await?;
 
     let verdict = outcome.verdict.as_str().to_string();
     let findings_summary: Vec<String> = outcome
@@ -397,9 +396,14 @@ async fn complete_task(
         change_summary.clone(),
     )
     .await?;
-    let proposal_id =
-        crate::review::knowledge::write_proposal_in_tx(tx, project_id, task_id, review_run_id, &writeback)
-            .await?;
+    let proposal_id = crate::review::knowledge::write_proposal_in_tx(
+        tx,
+        project_id,
+        task_id,
+        review_run_id,
+        &writeback,
+    )
+    .await?;
 
     emit_event(
         tx,
@@ -466,12 +470,11 @@ async fn open_approval(
     kind: &str,
     reason: Option<&str>,
 ) -> Result<Uuid, ReviewError> {
-    let manifest_hash: String = sqlx::query_scalar(
-        "SELECT reviewed_manifest_hash FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(review_run_id)
-    .fetch_one(&mut **tx)
-    .await?;
+    let manifest_hash: String =
+        sqlx::query_scalar("SELECT reviewed_manifest_hash FROM delivery.task_run WHERE id = $1")
+            .bind(review_run_id)
+            .fetch_one(&mut **tx)
+            .await?;
     let approval_id: Uuid = sqlx::query_scalar(
         "INSERT INTO governance.review_approval \
          (project_id, task_id, review_run_id, delivery_run_id, delivery_manifest_hash, kind, \
@@ -563,7 +566,9 @@ pub async fn decide_review_approval(
             .await
             .map_err(|e| ApprovalError::GateRefused(e.to_string()))?;
         if gate.hard_blocked() {
-            return Err(ApprovalError::GateRefused("integration_status=failed".to_string()));
+            return Err(ApprovalError::GateRefused(
+                "integration_status=failed".to_string(),
+            ));
         }
         if gate.has_failed_criteria() {
             return Err(ApprovalError::GateRefused(
@@ -610,12 +615,20 @@ pub async fn decide_review_approval(
         )
         .await
         .map_err(|e| ApprovalError::Transition(e.to_string()))?;
-        ApprovalOutcome::Completed { task_id, proposal_id }
+        ApprovalOutcome::Completed {
+            task_id,
+            proposal_id,
+        }
     } else {
         insert_decision_finding(&mut tx, request, task_id, review_run_id, delivery_run_id).await?;
-        transition_task(&mut tx, request.project_id, task_id, TaskStatus::ChangesRequested)
-            .await
-            .map_err(|e| ApprovalError::Transition(e.to_string()))?;
+        transition_task(
+            &mut tx,
+            request.project_id,
+            task_id,
+            TaskStatus::ChangesRequested,
+        )
+        .await
+        .map_err(|e| ApprovalError::Transition(e.to_string()))?;
         end_waiting(&mut tx, task_id, "approval rejected").await?;
         ApprovalOutcome::ChangesRequested { task_id }
     };
@@ -714,9 +727,16 @@ pub(crate) async fn transition_task(
     let ctx = system_context(tx, project_id)
         .await
         .map_err(|e| ReviewError::Transition(e.to_string()))?;
-    apply_task_transition(tx, task_id, None, to, &TransitionFacts::for_dispatch(), &ctx)
-        .await
-        .map_err(|e| ReviewError::Transition(e.to_string()))?;
+    apply_task_transition(
+        tx,
+        task_id,
+        None,
+        to,
+        &TransitionFacts::for_dispatch(),
+        &ctx,
+    )
+    .await
+    .map_err(|e| ReviewError::Transition(e.to_string()))?;
     Ok(())
 }
 
@@ -768,4 +788,3 @@ async fn emit_event(
         .await?;
     Ok(())
 }
-

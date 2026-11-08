@@ -1,13 +1,15 @@
 use super::*;
 
-pub(crate) async fn project_code(pool: &PgPool, project_id: Uuid) -> Result<String, RepositoryError> {
+pub(crate) async fn project_code(
+    pool: &PgPool,
+    project_id: Uuid,
+) -> Result<String, RepositoryError> {
     sqlx::query_scalar("SELECT code FROM core.project WHERE id = $1")
         .bind(project_id)
         .fetch_optional(pool)
         .await?
         .ok_or(RepositoryError::ProjectNotFound)
 }
-
 
 pub(crate) async fn append_audit(
     tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
@@ -39,7 +41,6 @@ pub(crate) async fn append_audit(
     Ok(())
 }
 
-
 pub(crate) fn require_text(
     value: Option<String>,
     message: &'static str,
@@ -55,7 +56,6 @@ pub(crate) fn require_text(
     Ok(text)
 }
 
-
 pub(crate) fn optional_text(
     value: Option<String>,
     max: usize,
@@ -70,7 +70,6 @@ pub(crate) fn optional_text(
     Ok(Some(text))
 }
 
-
 pub(crate) fn normalize_role(raw: &str) -> Result<String, RepositoryError> {
     let role = raw.trim();
     if REPOSITORY_ROLES.contains(&role) {
@@ -79,5 +78,3 @@ pub(crate) fn normalize_role(raw: &str) -> Result<String, RepositoryError> {
         Err(RepositoryError::InvalidRole)
     }
 }
-
-

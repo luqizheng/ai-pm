@@ -1,26 +1,23 @@
-﻿//! 知识空间 V2 真实数据库集成测试：质量门 8 项、提案流、红线确认、否决回滚、
+//! 知识空间 V2 真实数据库集成测试：质量门 8 项、提案流、红线确认、否决回滚、
 //! 索引回退、证据引用与需求正文迁移。每个用例使用独立临时 Git 知识根，不触碰
 //! 真实知识仓库。
 
-
 use std::process::Command;
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::knowledge::{self, KnowledgeRoot};
 use pm_application::knowledge_indexer::{DbSectionIndexer, KnowledgeIndexer, SearchPage};
 use pm_application::knowledge_migrate;
 use pm_application::knowledge_proposal::{self, ProposalOutcome, ProposalRequest};
-use pm_application::knowledge_reference::{self, AddReferenceRequest};
 use pm_application::knowledge_quality::{GateFailure, QualityGateResult};
+use pm_application::knowledge_reference::{self, AddReferenceRequest};
 use pm_application::knowledge_search::KnowledgeSearchService;
+use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 fn temp_root() -> KnowledgeRoot {
-    KnowledgeRoot::new(
-        std::env::temp_dir().join(format!("ai-pm-kn-v2-{}", Uuid::new_v4())),
-    )
+    KnowledgeRoot::new(std::env::temp_dir().join(format!("ai-pm-kn-v2-{}", Uuid::new_v4())))
 }
 
 fn cleanup(root: &KnowledgeRoot) {
@@ -54,9 +51,7 @@ fn git_head(root: &KnowledgeRoot) -> String {
 }
 
 fn markdown(title: &str, body: &str) -> String {
-    format!(
-        "---\nsource_events:\n  - EVT-1\n---\n\n# {title}\n\n## 正文\n\n{body}\n"
-    )
+    format!("---\nsource_events:\n  - EVT-1\n---\n\n# {title}\n\n## 正文\n\n{body}\n")
 }
 
 struct Boot {
@@ -128,7 +123,12 @@ async fn clean_proposal_auto_commits_and_records_gate_result(pool: PgPool) {
     let outcome = knowledge_proposal::submit_proposal(
         &pool,
         &root,
-        proposal(&boot, "REQ-1", markdown("需求一", "自动提交正文。"), Some("首版")),
+        proposal(
+            &boot,
+            "REQ-1",
+            markdown("需求一", "自动提交正文。"),
+            Some("首版"),
+        ),
     )
     .await
     .unwrap();
@@ -157,13 +157,12 @@ async fn clean_proposal_auto_commits_and_records_gate_result(pool: PgPool) {
     assert!(!hash.is_empty());
     assert_eq!(doc_type, "requirement");
 
-    let gate_json: serde_json::Value = sqlx::query_scalar(
-        "SELECT quality_gate_result FROM ai.document_proposal WHERE id = $1",
-    )
-    .bind(proposal_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let gate_json: serde_json::Value =
+        sqlx::query_scalar("SELECT quality_gate_result FROM ai.document_proposal WHERE id = $1")
+            .bind(proposal_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     let gate: QualityGateResult = serde_json::from_value(gate_json).unwrap();
     assert!(gate.passed, "clean proposal must pass all gates");
     assert!(!gate.duplicate);
@@ -214,16 +213,21 @@ async fn duplicate_content_is_an_idempotent_no_op(pool: PgPool) {
     )
     .await
     .unwrap();
-    assert!(matches!(second, ProposalOutcome::Duplicate { document_id: id, .. } if id == document_id));
-    assert_eq!(commit_count(&root), commits, "duplicate must not commit again");
+    assert!(
+        matches!(second, ProposalOutcome::Duplicate { document_id: id, .. } if id == document_id)
+    );
+    assert_eq!(
+        commit_count(&root),
+        commits,
+        "duplicate must not commit again"
+    );
 
-    let revisions: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.document_revision WHERE document_id = $1",
-    )
-    .bind(document_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let revisions: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ai.document_revision WHERE document_id = $1")
+            .bind(document_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(revisions, 1);
 
     cleanup(&root);
@@ -239,8 +243,14 @@ async fn missing_source_is_rejected_by_the_source_gate(pool: PgPool) {
         .await
         .unwrap();
     let failures = failures_of(&outcome);
-    assert!(failures.iter().any(|f| f.gate == "source" && f.code == "source_missing"));
-    assert_eq!(commit_count(&root), 0, "rejected proposal must not write Git");
+    assert!(failures
+        .iter()
+        .any(|f| f.gate == "source" && f.code == "source_missing"));
+    assert_eq!(
+        commit_count(&root),
+        0,
+        "rejected proposal must not write Git"
+    );
 
     cleanup(&root);
 }
@@ -262,7 +272,9 @@ async fn proposal_without_heading_is_rejected_by_the_index_gate(pool: PgPool) {
     .await
     .unwrap();
     let failures = failures_of(&outcome);
-    assert!(failures.iter().any(|f| f.gate == "index" && f.code == "index_no_heading"));
+    assert!(failures
+        .iter()
+        .any(|f| f.gate == "index" && f.code == "index_no_heading"));
 
     cleanup(&root);
 }
@@ -271,7 +283,12 @@ async fn proposal_without_heading_is_rejected_by_the_index_gate(pool: PgPool) {
 async fn redline_proposal_holds_until_a_human_confirms(pool: PgPool) {
     let boot = boot(&pool, "KV2-5").await;
     let root = temp_root();
-    let mut req = proposal(&boot, "REQ-5", markdown("需求五", "对外承诺。"), Some("首版"));
+    let mut req = proposal(
+        &boot,
+        "REQ-5",
+        markdown("需求五", "对外承诺。"),
+        Some("首版"),
+    );
     req.redline_kind = Some("external_commitment".to_string());
     let outcome = knowledge_proposal::submit_proposal(&pool, &root, req)
         .await
@@ -279,7 +296,11 @@ async fn redline_proposal_holds_until_a_human_confirms(pool: PgPool) {
     let ProposalOutcome::RedlinePending { proposal_id } = outcome else {
         panic!("expected redline_pending");
     };
-    assert_eq!(commit_count(&root), 0, "red-line proposal must not write Git");
+    assert_eq!(
+        commit_count(&root),
+        0,
+        "red-line proposal must not write Git"
+    );
     let status: String =
         sqlx::query_scalar("SELECT status FROM ai.document_proposal WHERE id = $1")
             .bind(proposal_id)
@@ -302,13 +323,12 @@ async fn redline_proposal_holds_until_a_human_confirms(pool: PgPool) {
         panic!("expected committed after confirmation");
     };
     assert!(commit_count(&root) >= 1, "confirmation must write a commit");
-    let confirmed_by: Option<Uuid> = sqlx::query_scalar(
-        "SELECT redline_confirmed_by FROM ai.document_revision WHERE id = $1",
-    )
-    .bind(revision_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let confirmed_by: Option<Uuid> =
+        sqlx::query_scalar("SELECT redline_confirmed_by FROM ai.document_revision WHERE id = $1")
+            .bind(revision_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(confirmed_by, Some(boot.human_id));
 
     cleanup(&root);
@@ -318,7 +338,12 @@ async fn redline_proposal_holds_until_a_human_confirms(pool: PgPool) {
 async fn non_human_cannot_confirm_a_redline_proposal(pool: PgPool) {
     let boot = boot(&pool, "KV2-6").await;
     let root = temp_root();
-    let mut req = proposal(&boot, "REQ-6", markdown("需求六", "对外承诺。"), Some("首版"));
+    let mut req = proposal(
+        &boot,
+        "REQ-6",
+        markdown("需求六", "对外承诺。"),
+        Some("首版"),
+    );
     req.redline_kind = Some("external_commitment".to_string());
     let ProposalOutcome::RedlinePending { proposal_id } =
         knowledge_proposal::submit_proposal(&pool, &root, req)
@@ -389,16 +414,23 @@ async fn veto_reverts_git_and_rolls_the_pointer_back(pool: PgPool) {
     .unwrap();
     assert_eq!(outcome.rolled_back_revision_id, rev2);
     assert_eq!(outcome.restored_revision_id, Some(rev1));
-    assert_eq!(commit_count(&root), commits_before + 1, "veto must add a revert commit");
-    assert_eq!(git_head(&root), outcome.new_commit_sha, "HEAD is the revert commit");
+    assert_eq!(
+        commit_count(&root),
+        commits_before + 1,
+        "veto must add a revert commit"
+    );
+    assert_eq!(
+        git_head(&root),
+        outcome.new_commit_sha,
+        "HEAD is the revert commit"
+    );
 
-    let status: String = sqlx::query_scalar(
-        "SELECT status FROM ai.document_revision WHERE id = $1",
-    )
-    .bind(rev2)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM ai.document_revision WHERE id = $1")
+            .bind(rev2)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(status, "rolled_back");
     let proposal_status: String = sqlx::query_scalar(
         "SELECT status FROM ai.document_proposal WHERE resulting_revision_id = $1",
@@ -468,7 +500,10 @@ async fn index_hash_drift_falls_back_to_the_authoritative_file(pool: PgPool) {
         )
         .await
         .unwrap();
-    assert!(result.used_fallback, "hash drift must fall back to direct read");
+    assert!(
+        result.used_fallback,
+        "hash drift must fall back to direct read"
+    );
     assert_eq!(result.stale_revision_ids, vec![revision_id]);
     assert!(
         !result.hits.is_empty(),
@@ -481,7 +516,10 @@ async fn index_hash_drift_falls_back_to_the_authoritative_file(pool: PgPool) {
         .rebuild_document(boot.project_id, revision_id)
         .await
         .unwrap();
-    assert!(matches!(outcome, pm_application::IndexOutcome::Indexed { .. }));
+    assert!(matches!(
+        outcome,
+        pm_application::IndexOutcome::Indexed { .. }
+    ));
 
     let repaired = service
         .search(
@@ -492,16 +530,16 @@ async fn index_hash_drift_falls_back_to_the_authoritative_file(pool: PgPool) {
         )
         .await
         .unwrap();
-    assert!(!repaired.used_fallback, "a rebuilt index must serve the DB path");
+    assert!(
+        !repaired.used_fallback,
+        "a rebuilt index must serve the DB path"
+    );
     assert!(!repaired.hits.is_empty());
 
-    let states = pm_application::knowledge_indexer::index_states(
-        &pool,
-        boot.project_id,
-        document_id,
-    )
-    .await
-    .unwrap();
+    let states =
+        pm_application::knowledge_indexer::index_states(&pool, boot.project_id, document_id)
+            .await
+            .unwrap();
     assert_eq!(states.len(), 1);
     assert_eq!(states[0].status, "indexed");
 
@@ -539,8 +577,12 @@ async fn knowledge_reference_is_idempotent_and_listable(pool: PgPool) {
         source_id: None,
         created_by: boot.human_id,
     };
-    let first = knowledge_reference::add_reference(&pool, make()).await.unwrap();
-    let second = knowledge_reference::add_reference(&pool, make()).await.unwrap();
+    let first = knowledge_reference::add_reference(&pool, make())
+        .await
+        .unwrap();
+    let second = knowledge_reference::add_reference(&pool, make())
+        .await
+        .unwrap();
     assert_eq!(first, second, "same reference must be idempotent");
 
     let rows = knowledge_reference::list_references(&pool, boot.project_id, document_id)
@@ -589,50 +631,42 @@ async fn requirement_body_migration_is_reversible_and_leaves_pg_untouched(pool: 
     )
     .await
     .unwrap();
-    let ProposalOutcome::Committed {
-        document_id, ..
-    } = outcome
-    else {
+    let ProposalOutcome::Committed { document_id, .. } = outcome else {
         panic!("expected migration commit");
     };
 
-    let path: String = sqlx::query_scalar(
-        "SELECT canonical_path FROM ai.project_document WHERE id = $1",
-    )
-    .bind(document_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let path: String =
+        sqlx::query_scalar("SELECT canonical_path FROM ai.project_document WHERE id = $1")
+            .bind(document_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     let markdown = std::fs::read_to_string(root.path().join(&path)).unwrap();
     assert!(markdown.contains("REQ-100"));
     assert!(markdown.contains("迁移需求"));
     assert!(markdown.contains("source_events:"));
 
     // 回滚：删除迁移生成的文档与 Git 文件，PG 需求修订保持不变。
-    knowledge_migrate::rollback_requirement_migration(
-        &pool,
-        &root,
-        boot.project_id,
-        document_id,
-    )
-    .await
-    .unwrap();
-    let docs: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.project_document WHERE project_id = $1",
-    )
-    .bind(boot.project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    knowledge_migrate::rollback_requirement_migration(&pool, &root, boot.project_id, document_id)
+        .await
+        .unwrap();
+    let docs: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ai.project_document WHERE project_id = $1")
+            .bind(boot.project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(docs, 0);
-    let pg_revision: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.requirement_revision WHERE id = $1",
-    )
-    .bind(revision_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(pg_revision, 1, "rollback must not touch the PG requirement revision");
+    let pg_revision: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.requirement_revision WHERE id = $1")
+            .bind(revision_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        pg_revision, 1,
+        "rollback must not touch the PG requirement revision"
+    );
 
     cleanup(&root);
 }

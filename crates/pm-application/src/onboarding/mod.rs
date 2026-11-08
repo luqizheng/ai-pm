@@ -13,7 +13,7 @@ pub mod render;
 
 use serde::{Deserialize, Serialize};
 
-pub use catalog::{ConfigFormat, ToolEntry, find, is_valid_slug};
+pub use catalog::{find, is_valid_slug, ConfigFormat, ToolEntry};
 
 /// API Key 在指引里的占位符（出现即为占位，不是真实凭据）。
 pub const API_KEY_PLACEHOLDER: &str = "<API_KEY>";

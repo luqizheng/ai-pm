@@ -16,5 +16,3 @@ pub async fn apply_transition(
         .map_err(|e| RunDispatchError::Transition(e.to_string()))?;
     Ok(())
 }
-
-

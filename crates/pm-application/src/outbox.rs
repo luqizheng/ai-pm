@@ -329,7 +329,10 @@ pub fn event_is_enabled(event_type: &str) -> bool {
         return false;
     }
     if let Ok(value) = std::env::var("AI_PM_OUTBOX_EVENTS") {
-        return value.split(',').map(str::trim).any(|item| item == event_type);
+        return value
+            .split(',')
+            .map(str::trim)
+            .any(|item| item == event_type);
     }
     spec.enabled_by_default
 }

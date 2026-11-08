@@ -23,7 +23,7 @@ use pm_domain::TaskStatus;
 
 use crate::command_executor::{apply_task_transition, system_context, TransitionFacts};
 use crate::review::anchor::{
-    reviewed_manifest_hash, review_policy_version, CriterionAnchor, RepositoryAnchor,
+    review_policy_version, reviewed_manifest_hash, CriterionAnchor, RepositoryAnchor,
 };
 
 /// Reviewer Run 的角色标识（`chk_review_role_present` 要求 review 行必须带角色）。
@@ -199,7 +199,8 @@ pub async fn enqueue_review(
     };
 
     // 锚定计算（需要基线快照 + 交付 commit；`delivered` 时两者必然齐备）。
-    let reviewed = match load_reviewed_delivery(&mut tx, project_id, task_id, delivery_run_id).await {
+    let reviewed = match load_reviewed_delivery(&mut tx, project_id, task_id, delivery_run_id).await
+    {
         Ok(reviewed) if !reviewed.reviewed_manifest_hash.is_empty() => reviewed,
         Ok(_) => {
             tx.commit().await?;
@@ -266,14 +267,8 @@ pub async fn enqueue_review(
     .map_err(|e| ReviewError::Transition(e.to_string()))?;
 
     // 建 review run（queued）。attempt_no 按 kind 分轨。
-    let review_run_id = insert_review_run(
-        &mut tx,
-        project_id,
-        task_id,
-        delivery_run_id,
-        &reviewed,
-    )
-    .await?;
+    let review_run_id =
+        insert_review_run(&mut tx, project_id, task_id, delivery_run_id, &reviewed).await?;
 
     audit_review(
         &mut tx,

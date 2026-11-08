@@ -1,12 +1,15 @@
 use super::*;
-use serde::Serialize;use sqlx::{PgPool, Postgres, Row, Transaction};use uuid::Uuid;use crate::knowledge::{self, KnowledgeError, KnowledgeRoot};use crate::knowledge_quality::{self, GateFailure, GateInput, QualityGateResult};
+use crate::knowledge::{self, KnowledgeError, KnowledgeRoot};
+use crate::knowledge_quality::{self, GateFailure, GateInput, QualityGateResult};
+use serde::Serialize;
+use sqlx::{PgPool, Postgres, Row, Transaction};
+use uuid::Uuid;
 
 pub(crate) async fn require_human(pool: &PgPool, principal_id: Uuid) -> Result<(), KnowledgeError> {
-    let kind: Option<String> =
-        sqlx::query_scalar("SELECT kind FROM core.principal WHERE id = $1")
-            .bind(principal_id)
-            .fetch_optional(pool)
-            .await?;
+    let kind: Option<String> = sqlx::query_scalar("SELECT kind FROM core.principal WHERE id = $1")
+        .bind(principal_id)
+        .fetch_optional(pool)
+        .await?;
     match kind.as_deref() {
         Some("human") => Ok(()),
         Some(other) => Err(KnowledgeError::Conflict(format!(
@@ -15,7 +18,6 @@ pub(crate) async fn require_human(pool: &PgPool, principal_id: Uuid) -> Result<(
         None => Err(KnowledgeError::NotFound),
     }
 }
-
 
 /// 知识域审计行。`actor` 的 `principal_id` 是执行主体（人工 = 真人 / MCP = 项目
 /// `ai_pm`）；真人三列与设备归因来自认证上下文，缺省为 NULL（T-088）。
@@ -50,9 +52,7 @@ pub(crate) async fn audit(
     Ok(())
 }
 
-
 /// 供索引层复用的质量门结果序列化。
 pub fn gates_as_json(result: &QualityGateResult) -> serde_json::Value {
     serde_json::to_value(result).unwrap_or_default()
 }
-

@@ -1,14 +1,14 @@
-﻿//! Slice D1 `run_dispatch` 真实数据库集成测试：并发领取、租约回收（B3-1/B3-2）、
+//! Slice D1 `run_dispatch` 真实数据库集成测试：并发领取、租约回收（B3-1/B3-2）、
 //! 可领取性判定、多仓快照、审计、开关语义与工作区路径算法（R6）。
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::run_dispatch::{
     accept_executor_result, claim_once, renew_lease, workspace_path_for, DispatchMode,
     RunDispatchConfig,
 };
+use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 struct Fx {
     project_id: Uuid,
@@ -25,9 +25,9 @@ fn cfg() -> RunDispatchConfig {
         max_run_attempts: 3,
         max_infrastructure_attempts: 5,
         timeout_secs: 1800,
-            deadline_default_secs: 3600,
-            agent_heartbeat_stale_secs: 900,
-            progress_stale_secs: 3600,
+        deadline_default_secs: 3600,
+        agent_heartbeat_stale_secs: 900,
+        progress_stale_secs: 3600,
     }
 }
 
@@ -150,49 +150,83 @@ async fn concurrent_claims_yield_exactly_one_claimed_run(pool: PgPool) {
 async fn second_claim_of_same_run_returns_none(pool: PgPool) {
     let _fx = seed(&pool, "RD-C2", true).await;
     let cfg = cfg();
-    let first = claim_once(&pool, "w1", &cfg, DispatchMode::On).await.unwrap();
+    let first = claim_once(&pool, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap();
     assert!(first.is_some());
-    let second = claim_once(&pool, "w1", &cfg, DispatchMode::On).await.unwrap();
-    assert!(second.is_none(), "a claimed run with a live lease is not re-claimable");
+    let second = claim_once(&pool, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap();
+    assert!(
+        second.is_none(),
+        "a claimed run with a live lease is not re-claimable"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn unstarted_expired_lease_recovers_same_run(pool: PgPool) {
     let fx = seed(&pool, "RD-C3", true).await;
     let cfg = cfg();
-    let claimed = claim_once(&pool, "w1", &cfg, DispatchMode::On).await.unwrap().unwrap();
-    // 执行器尚未启动（executor_session IS NULL），租约过期。
-    sqlx::query("UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1")
-        .bind(claimed.run_id)
-        .execute(&pool)
+    let claimed = claim_once(&pool, "w1", &cfg, DispatchMode::On)
         .await
+        .unwrap()
         .unwrap();
-    let again = claim_once(&pool, "w2", &cfg, DispatchMode::On).await.unwrap().unwrap();
-    assert_eq!(again.run_id, claimed.run_id, "B3-1: the same run must be recovered, not recreated");
+    // 执行器尚未启动（executor_session IS NULL），租约过期。
+    sqlx::query(
+        "UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(claimed.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let again = claim_once(&pool, "w2", &cfg, DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        again.run_id, claimed.run_id,
+        "B3-1: the same run must be recovered, not recreated"
+    );
     assert_eq!(run_status(&pool, claimed.run_id).await, "queued");
     assert_eq!(task_status(&pool, fx.task_id).await, "ready");
-    let failures: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.task_run_failure WHERE run_id = $1")
-        .bind(claimed.run_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(failures, 0, "an unstarted lease expiry is not an execution failure");
+    let failures: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.task_run_failure WHERE run_id = $1")
+            .bind(claimed.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        failures, 0,
+        "an unstarted lease expiry is not an execution failure"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn started_lost_run_is_isolated_and_superseded(pool: PgPool) {
     let fx = seed(&pool, "RD-C4", true).await;
     let cfg = cfg();
-    let claimed = claim_once(&pool, "w1", &cfg, DispatchMode::On).await.unwrap().unwrap();
+    let claimed = claim_once(&pool, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
     // 执行器已启动（记录 session），随后租约过期。
     sqlx::query("UPDATE delivery.task_run SET executor_session = 'sess-1', stage = 'started', lease_expires_at = now() - interval '1 second' WHERE id = $1")
         .bind(claimed.run_id)
         .execute(&pool)
         .await
         .unwrap();
-    let reclaimed = claim_once(&pool, "w2", &cfg, DispatchMode::On).await.unwrap().unwrap();
-    assert_eq!(reclaimed.kind, pm_application::run_dispatch::ClaimKind::Reclaimed);
-    assert_ne!(reclaimed.run_id, claimed.run_id, "B3-2: a new run is created");
+    let reclaimed = claim_once(&pool, "w2", &cfg, DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        reclaimed.kind,
+        pm_application::run_dispatch::ClaimKind::Reclaimed
+    );
+    assert_ne!(
+        reclaimed.run_id, claimed.run_id,
+        "B3-2: a new run is created"
+    );
     assert_eq!(run_status(&pool, claimed.run_id).await, "timed_out");
     let terminated: Option<chrono::DateTime<chrono::Utc>> =
         sqlx::query_scalar("SELECT terminated_at FROM delivery.task_run WHERE id = $1")
@@ -200,7 +234,10 @@ async fn started_lost_run_is_isolated_and_superseded(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert!(terminated.is_some(), "the old instance termination must be recorded");
+    assert!(
+        terminated.is_some(),
+        "the old instance termination must be recorded"
+    );
     let (attempt_no, supersedes): (i32, Option<Uuid>) =
         sqlx::query_as("SELECT attempt_no, supersedes_run_id FROM delivery.task_run WHERE id = $1")
             .bind(reclaimed.run_id)
@@ -216,14 +253,21 @@ async fn started_lost_run_is_isolated_and_superseded(pool: PgPool) {
 async fn unassigned_task_is_skipped(pool: PgPool) {
     let fx = seed(&pool, "RD-C5", false).await;
     let cfg = cfg();
-    let outcome = claim_once(&pool, "w1", &cfg, DispatchMode::On).await.unwrap().unwrap();
-    assert_eq!(outcome.kind, pm_application::run_dispatch::ClaimKind::Skipped);
-    assert_eq!(run_status(&pool, fx.run_id).await, "queued");
-    let reason: Option<String> = sqlx::query_scalar("SELECT release_reason FROM delivery.task_run WHERE id = $1")
-        .bind(fx.run_id)
-        .fetch_one(&pool)
+    let outcome = claim_once(&pool, "w1", &cfg, DispatchMode::On)
         .await
+        .unwrap()
         .unwrap();
+    assert_eq!(
+        outcome.kind,
+        pm_application::run_dispatch::ClaimKind::Skipped
+    );
+    assert_eq!(run_status(&pool, fx.run_id).await, "queued");
+    let reason: Option<String> =
+        sqlx::query_scalar("SELECT release_reason FROM delivery.task_run WHERE id = $1")
+            .bind(fx.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(reason.as_deref(), Some("no_executor_assignee"));
 }
 
@@ -236,13 +280,17 @@ async fn retry_exhausted_task_is_skipped(pool: PgPool) {
         .await
         .unwrap();
 
-    let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On).await.unwrap().unwrap();
-    assert_eq!(out.kind, pm_application::run_dispatch::ClaimKind::Skipped);
-    let reason: Option<String> = sqlx::query_scalar("SELECT release_reason FROM delivery.task_run WHERE id = $1")
-        .bind(out.run_id)
-        .fetch_one(&pool)
+    let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
         .await
+        .unwrap()
         .unwrap();
+    assert_eq!(out.kind, pm_application::run_dispatch::ClaimKind::Skipped);
+    let reason: Option<String> =
+        sqlx::query_scalar("SELECT release_reason FROM delivery.task_run WHERE id = $1")
+            .bind(out.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(reason.as_deref(), Some("retry_exhausted"));
 }
 
@@ -255,16 +303,23 @@ async fn unverified_repository_is_skipped_with_backoff(pool: PgPool) {
         .await
         .unwrap();
 
-    let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On).await.unwrap().unwrap();
+    let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(out.kind, pm_application::run_dispatch::ClaimKind::Skipped);
-    let (reason, dispatch_attempts): (Option<String>, i32) =
-        sqlx::query_as("SELECT release_reason, dispatch_attempts FROM delivery.task_run WHERE id = $1")
-            .bind(out.run_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let (reason, dispatch_attempts): (Option<String>, i32) = sqlx::query_as(
+        "SELECT release_reason, dispatch_attempts FROM delivery.task_run WHERE id = $1",
+    )
+    .bind(out.run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(reason.as_deref(), Some("repository_not_verified"));
-    assert_eq!(dispatch_attempts, 1, "a denied claim must back off, not drop the run");
+    assert_eq!(
+        dispatch_attempts, 1,
+        "a denied claim must back off, not drop the run"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -284,7 +339,10 @@ async fn multi_repository_snapshot_has_unique_paths(pool: PgPool) {
         .await
         .unwrap();
     }
-    let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On).await.unwrap().unwrap();
+    let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
     let rows: Vec<(Uuid, String, bool)> = sqlx::query_as(
         "SELECT repository_id, workspace_path, write_access FROM delivery.task_run_repository WHERE run_id = $1",
     )
@@ -292,18 +350,28 @@ async fn multi_repository_snapshot_has_unique_paths(pool: PgPool) {
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert_eq!(rows.len(), 3, "each declared repository lands one snapshot row");
+    assert_eq!(
+        rows.len(),
+        3,
+        "each declared repository lands one snapshot row"
+    );
     let mut paths: Vec<String> = rows.iter().map(|r| r.1.clone()).collect();
     paths.sort();
     paths.dedup();
     assert_eq!(paths.len(), 3, "workspace paths must be unique");
-    assert!(rows.iter().any(|r| !r.2), "the read-only repository is kept in the snapshot");
+    assert!(
+        rows.iter().any(|r| !r.2),
+        "the read-only repository is kept in the snapshot"
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn claim_writes_exactly_one_audit_row(pool: PgPool) {
     let fx = seed(&pool, "RD-C9", true).await;
-    let _ = claim_once(&pool, "w1", &cfg(), DispatchMode::On).await.unwrap().unwrap();
+    let _ = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
     let count: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM governance.audit_log WHERE target_type = 'task_run' AND action = 'claim_task_run'",
     )
@@ -319,7 +387,10 @@ async fn off_mode_does_not_claim_but_still_reclaims(pool: PgPool) {
     let fx = seed(&pool, "RD-C10", true).await;
     let cfg = cfg();
     // 先以 On 领取一条。
-    let claimed = claim_once(&pool, "w1", &cfg, DispatchMode::On).await.unwrap().unwrap();
+    let claimed = claim_once(&pool, "w1", &cfg, DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
     // 再放一条 queued（另一任务），off 下不得领取。
     let task2: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.task (project_id, title, status, revision, assignee_id, tenant_id) \
@@ -340,18 +411,27 @@ async fn off_mode_does_not_claim_but_still_reclaims(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    let none = claim_once(&pool, "w1", &cfg, DispatchMode::Off).await.unwrap();
+    let none = claim_once(&pool, "w1", &cfg, DispatchMode::Off)
+        .await
+        .unwrap();
     assert!(none.is_none(), "R4: off must not claim new runs");
     assert_eq!(run_status(&pool, run2).await, "queued");
 
     // R4：off 下回收仍执行——把已领取 Run 的租约置过期。
-    sqlx::query("UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1")
-        .bind(claimed.run_id)
-        .execute(&pool)
+    sqlx::query(
+        "UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(claimed.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let reclaimed = claim_once(&pool, "w1", &cfg, DispatchMode::Off)
         .await
         .unwrap();
-    let reclaimed = claim_once(&pool, "w1", &cfg, DispatchMode::Off).await.unwrap();
-    assert!(reclaimed.is_some(), "off must still run expired-lease reclamation");
+    assert!(
+        reclaimed.is_some(),
+        "off must still run expired-lease reclamation"
+    );
 }
 
 #[test]
@@ -360,14 +440,26 @@ fn workspace_path_is_stable_safe_and_id_keyed() {
     let a = workspace_path_for(id, "Web App! ../etc");
     let b = workspace_path_for(id, "Web App! ../etc");
     assert_eq!(a, b, "R6: the path must be reproducible");
-    assert!(a.starts_with("repos/web-app-etc-"), "unsafe chars are stripped: {a}");
-    assert!(!a.contains("..") && !a.contains('/') || a.starts_with("repos/"), "no traversal: {a}");
+    assert!(
+        a.starts_with("repos/web-app-etc-"),
+        "unsafe chars are stripped: {a}"
+    );
+    assert!(
+        !a.contains("..") && !a.contains('/') || a.starts_with("repos/"),
+        "no traversal: {a}"
+    );
     assert!(!a.contains("../"), "path traversal must be impossible");
     // 仓库改名（同 id）不改变映射。
     let renamed = workspace_path_for(id, "totally-different-name");
-    assert_ne!(renamed, a, "name change yields a different safe-name segment");
+    assert_ne!(
+        renamed, a,
+        "name change yields a different safe-name segment"
+    );
     let same_id = workspace_path_for(id, "x");
-    assert!(same_id.ends_with(&id.to_string()), "the id suffix keeps the mapping unique");
+    assert!(
+        same_id.ends_with(&id.to_string()),
+        "the id suffix keeps the mapping unique"
+    );
 }
 async fn grant_approval(
     pool: &PgPool,
@@ -442,7 +534,9 @@ async fn lease_renewal_requires_the_current_owner(pool: PgPool) {
         .unwrap();
     assert!(renew_lease(&pool, out.run_id, "owner", 300).await.unwrap());
     assert!(
-        !renew_lease(&pool, out.run_id, "intruder", 300).await.unwrap(),
+        !renew_lease(&pool, out.run_id, "intruder", 300)
+            .await
+            .unwrap(),
         "a non-owner must not renew the lease"
     );
 }
@@ -461,12 +555,17 @@ async fn outcome_stays_null_until_a_terminal_result(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert!(outcome.is_none(), "S2: a claimed run must not carry an outcome");
-    sqlx::query("UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1")
-        .bind(out.run_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    assert!(
+        outcome.is_none(),
+        "S2: a claimed run must not carry an outcome"
+    );
+    sqlx::query(
+        "UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(out.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     let again = claim_once(&pool, "w2", &cfg, DispatchMode::On)
         .await
         .unwrap()
@@ -503,8 +602,14 @@ async fn policy_snapshot_records_the_composed_policy(pool: PgPool) {
     assert_eq!(snap["execution_enabled"], serde_json::json!(true));
     assert!(snap["captured_at"].is_string());
     assert!(snap["repository_baselines"].is_array());
-    assert_eq!(snap["effective_policy"]["auto_accept"], serde_json::json!(true));
-    assert_eq!(snap["effective_policy"]["additional_checks"], serde_json::json!([]));
+    assert_eq!(
+        snap["effective_policy"]["auto_accept"],
+        serde_json::json!(true)
+    );
+    assert_eq!(
+        snap["effective_policy"]["additional_checks"],
+        serde_json::json!([])
+    );
     assert_eq!(snap["policy_version"].as_str().unwrap().len(), 12);
     assert_eq!(snap["policy_hash"].as_str().unwrap().len(), 64);
     assert!(snap.get("approval_status").is_some());
@@ -568,9 +673,13 @@ async fn fencing_rejects_stale_executor_sessions(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    assert!(accept_executor_result(&pool, out.run_id, "sess-live", 1).await.unwrap());
+    assert!(accept_executor_result(&pool, out.run_id, "sess-live", 1)
+        .await
+        .unwrap());
     assert!(
-        !accept_executor_result(&pool, out.run_id, "sess-stale", 1).await.unwrap(),
+        !accept_executor_result(&pool, out.run_id, "sess-stale", 1)
+            .await
+            .unwrap(),
         "a stale executor session must be fenced out"
     );
 }
@@ -639,7 +748,14 @@ async fn release_backoff(pool: &PgPool, run_id: Uuid) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn r5_project_level_requirement_blocks_until_approved(pool: PgPool) {
     let fx = seed(&pool, "RD-R5P", true).await;
-    insert_policy(&pool, "project", &fx.project_id.to_string(), true, fx.human_id).await;
+    insert_policy(
+        &pool,
+        "project",
+        &fx.project_id.to_string(),
+        true,
+        fx.human_id,
+    )
+    .await;
     let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
         .await
         .unwrap()
@@ -666,7 +782,14 @@ async fn r5_project_level_requirement_blocks_until_approved(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn r5_lower_level_false_cannot_relax_a_higher_requirement(pool: PgPool) {
     let fx = seed(&pool, "RD-R5L", true).await;
-    insert_policy(&pool, "project", &fx.project_id.to_string(), true, fx.human_id).await;
+    insert_policy(
+        &pool,
+        "project",
+        &fx.project_id.to_string(),
+        true,
+        fx.human_id,
+    )
+    .await;
     sqlx::query(
         "INSERT INTO delivery.task_policy_override \
          (task_id, project_id, require_human_approval, updated_by, tenant_id) VALUES ($1, $2, false, $3, \
@@ -698,7 +821,11 @@ async fn r5_organization_and_task_type_levels_are_synthesized(pool: PgPool) {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(out.kind, pm_application::run_dispatch::ClaimKind::Skipped, "org level gates");
+    assert_eq!(
+        out.kind,
+        pm_application::run_dispatch::ClaimKind::Skipped,
+        "org level gates"
+    );
 
     sqlx::query("DELETE FROM delivery.policy_scope WHERE scope = 'organization'")
         .execute(&pool)
@@ -732,16 +859,21 @@ async fn t19_b3_recovery_split_unstarted_keeps_run_started_supersedes(pool: PgPo
         .unwrap()
         .unwrap();
     // 未启动执行器：租约过期 → 同一 Run 恢复。
-    sqlx::query("UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1")
-        .bind(first.run_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE delivery.task_run SET lease_expires_at = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(first.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     let recovered = claim_once(&pool, "w2", &cfg, DispatchMode::On)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(recovered.run_id, first.run_id, "unstarted: the same run is recovered");
+    assert_eq!(
+        recovered.run_id, first.run_id,
+        "unstarted: the same run is recovered"
+    );
 
     // 已启动执行器：租约过期 → 旧 Run 隔离 + 新建 Run 并 supersede。
     sqlx::query(
@@ -758,7 +890,10 @@ async fn t19_b3_recovery_split_unstarted_keeps_run_started_supersedes(pool: PgPo
         .await
         .unwrap()
         .unwrap();
-    assert_ne!(superseded.run_id, first.run_id, "started: a new run supersedes");
+    assert_ne!(
+        superseded.run_id, first.run_id,
+        "started: a new run supersedes"
+    );
     assert_eq!(run_status(&pool, first.run_id).await, "timed_out");
     let supersedes: Option<Uuid> =
         sqlx::query_scalar("SELECT supersedes_run_id FROM delivery.task_run WHERE id = $1")
@@ -779,11 +914,12 @@ async fn t26_exhausted_retry_creates_no_new_run(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let before: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.task_run WHERE task_id = $1")
-        .bind(fx.task_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let before: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.task_run WHERE task_id = $1")
+            .bind(fx.task_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
         .await
         .unwrap()
@@ -796,12 +932,16 @@ async fn t26_exhausted_retry_creates_no_new_run(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(reason.as_deref(), Some("retry_exhausted"));
-    let after: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.task_run WHERE task_id = $1")
-        .bind(fx.task_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    assert_eq!(after, before, "an exhausted retry budget must not spawn a new run");
+    let after: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM delivery.task_run WHERE task_id = $1")
+            .bind(fx.task_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        after, before,
+        "an exhausted retry budget must not spawn a new run"
+    );
 }
 /// R5：某一层策略读取失败（脏 `additional_checks`）必须上抛，禁止默认放行。
 #[sqlx::test(migrations = "../../migrations")]
@@ -841,7 +981,14 @@ async fn policy_layer_read_failure_fails_closed(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn pending_approval_evidence_blocks_the_claim(pool: PgPool) {
     let fx = seed(&pool, "RD-R5PD", true).await;
-    insert_policy(&pool, "project", &fx.project_id.to_string(), true, fx.human_id).await;
+    insert_policy(
+        &pool,
+        "project",
+        &fx.project_id.to_string(),
+        true,
+        fx.human_id,
+    )
+    .await;
     let proposal = grant_approval(&pool, fx.project_id, fx.task_id, fx.human_id, "pending").await;
 
     let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
@@ -857,13 +1004,12 @@ async fn pending_approval_evidence_blocks_the_claim(pool: PgPool) {
             .unwrap();
     assert_eq!(reason.as_deref(), Some("policy_requires_approval"));
 
-    let status: String = sqlx::query_scalar(
-        "SELECT status FROM governance.approval_request WHERE proposal_id = $1",
-    )
-    .bind(proposal)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM governance.approval_request WHERE proposal_id = $1")
+            .bind(proposal)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(
         status, "pending",
         "a pending request must not be treated as approved evidence"

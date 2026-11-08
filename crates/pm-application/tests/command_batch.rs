@@ -1,21 +1,19 @@
-﻿//! 冷启动批量命令（CreateMilestones / CreateRequirements / CreateTasks /
+//! 冷启动批量命令（CreateMilestones / CreateRequirements / CreateTasks /
 //! WriteDocuments）的执行器集成测试。
 
 use std::sync::Arc;
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::command_executor::{
     ActorKind, CommandSource, ExecutionContext, PgCommandExecutor,
 };
 use pm_application::PolicyEngine;
-use pm_domain::import::{
-    AssigneeRole, DocumentDraft, MilestoneDraft, RequirementDraft, TaskDraft,
-};
+use pm_domain::import::{AssigneeRole, DocumentDraft, MilestoneDraft, RequirementDraft, TaskDraft};
 use pm_domain::proposal::Confidence;
 use pm_domain::ProjectCommand;
+use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 struct Fixture {
     project_id: Uuid,
@@ -76,7 +74,13 @@ fn requirement(key: &str, code: &str) -> RequirementDraft {
     }
 }
 
-fn task(key: &str, title: &str, milestone: Option<&str>, req: Option<&str>, role: Option<AssigneeRole>) -> TaskDraft {
+fn task(
+    key: &str,
+    title: &str,
+    milestone: Option<&str>,
+    req: Option<&str>,
+    role: Option<AssigneeRole>,
+) -> TaskDraft {
     TaskDraft {
         key: key.to_string(),
         title: title.to_string(),
@@ -153,7 +157,10 @@ async fn create_requirements_batch_writes_draft_revisions(pool: PgPool) {
     assert_eq!(rows.len(), 2);
     for (code, lifecycle_status, current, v1_state) in rows {
         assert_eq!(lifecycle_status, "active", "{code}");
-        assert!(current.is_none(), "{code}: import must not move the pointer");
+        assert!(
+            current.is_none(),
+            "{code}: import must not move the pointer"
+        );
         assert_eq!(v1_state, "draft", "{code}");
     }
 
@@ -209,8 +216,20 @@ async fn create_tasks_resolves_links_and_agents(pool: PgPool) {
         .execute(
             ProjectCommand::CreateTasks {
                 tasks: vec![
-                    task("T1", "实现加载器", Some("核心地形"), Some("REQ-001"), Some(AssigneeRole::Developer)),
-                    task("T2", "未知角色任务", None, None, Some(AssigneeRole::Architect)),
+                    task(
+                        "T1",
+                        "实现加载器",
+                        Some("核心地形"),
+                        Some("REQ-001"),
+                        Some(AssigneeRole::Developer),
+                    ),
+                    task(
+                        "T2",
+                        "未知角色任务",
+                        None,
+                        None,
+                        Some(AssigneeRole::Architect),
+                    ),
                 ],
             },
             ctx(&fx),
@@ -246,7 +265,10 @@ async fn create_tasks_resolves_links_and_agents(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(linked, 0, "unconfirmed import must not create an execution basis");
+    assert_eq!(
+        linked, 0,
+        "unconfirmed import must not create an execution basis"
+    );
 
     let confirmed_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.requirement (project_id, code, title, lifecycle_status, tenant_id) \
@@ -319,7 +341,9 @@ async fn create_tasks_resolves_links_and_agents(pool: PgPool) {
     let findings = audit["findings"].as_array().unwrap();
     assert!(findings.iter().any(|f| f["kind"] == "assignee_unresolved"));
     assert!(
-        findings.iter().any(|f| f["kind"] == "requirement_unconfirmed"),
+        findings
+            .iter()
+            .any(|f| f["kind"] == "requirement_unconfirmed"),
         "unconfirmed import must surface requirement_unresolved: {findings:?}"
     );
 }
@@ -365,13 +389,12 @@ async fn write_documents_batch_commits_and_compensates(pool: PgPool) {
     for (_, path) in &docs {
         assert!(root.join(path).exists(), "missing file {path}");
     }
-    let revisions: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.document_revision WHERE project_id = $1",
-    )
-    .bind(fx.project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let revisions: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM ai.document_revision WHERE project_id = $1")
+            .bind(fx.project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(revisions, 2);
 
     // 第二篇非法类型 → 第一篇被补偿删除（只保留此前已存在的文档）。
@@ -397,7 +420,10 @@ async fn write_documents_batch_commits_and_compensates(pool: PgPool) {
         )
         .await
         .unwrap_err();
-    assert!(matches!(err, pm_domain::CommandError::Validation(_)), "{err:?}");
+    assert!(
+        matches!(err, pm_domain::CommandError::Validation(_)),
+        "{err:?}"
+    );
     let fresh: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM ai.project_document WHERE project_id = $1 AND doc_key = 'fresh'",
     )

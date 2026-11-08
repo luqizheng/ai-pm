@@ -269,20 +269,40 @@ async fn evidence_by_finding_tx(
     if finding_ids.is_empty() {
         return Ok(map);
     }
-    let rows: Vec<(Uuid, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<Uuid>, Option<String>, Option<i32>)> =
-        sqlx::query_as(
-            "SELECT finding_id, evidence_type, description, file_path, symbol, code_range, \
+    let rows: Vec<(
+        Uuid,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<Uuid>,
+        Option<String>,
+        Option<i32>,
+    )> = sqlx::query_as(
+        "SELECT finding_id, evidence_type, description, file_path, symbol, code_range, \
                     repository_id, commit_sha, attempt_no \
              FROM discovery.discovery_finding_evidence \
              WHERE tenant_id = $1 AND finding_id = ANY($2) \
              ORDER BY created_at, id",
-        )
-        .bind(tenant_id)
-        .bind(finding_ids)
-        .fetch_all(&mut **tx)
-        .await?;
+    )
+    .bind(tenant_id)
+    .bind(finding_ids)
+    .fetch_all(&mut **tx)
+    .await?;
 
-    for (finding_id, evidence_type, description, file_path, symbol, code_range, repository_id, commit_sha, attempt_no) in rows {
+    for (
+        finding_id,
+        evidence_type,
+        description,
+        file_path,
+        symbol,
+        code_range,
+        repository_id,
+        commit_sha,
+        attempt_no,
+    ) in rows
+    {
         let item = serde_json::json!({
             "evidence_type": evidence_type,
             "description": description,
@@ -315,20 +335,40 @@ async fn evidence_by_finding(
     if finding_ids.is_empty() {
         return Ok(map);
     }
-    let rows: Vec<(Uuid, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<Uuid>, Option<String>, Option<i32>)> =
-        sqlx::query_as(
-            "SELECT finding_id, evidence_type, description, file_path, symbol, code_range, \
+    let rows: Vec<(
+        Uuid,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<Uuid>,
+        Option<String>,
+        Option<i32>,
+    )> = sqlx::query_as(
+        "SELECT finding_id, evidence_type, description, file_path, symbol, code_range, \
                     repository_id, commit_sha, attempt_no \
              FROM discovery.discovery_finding_evidence \
              WHERE tenant_id = $1 AND finding_id = ANY($2) \
              ORDER BY created_at, id",
-        )
-        .bind(tenant_id)
-        .bind(finding_ids)
-        .fetch_all(pool)
-        .await?;
+    )
+    .bind(tenant_id)
+    .bind(finding_ids)
+    .fetch_all(pool)
+    .await?;
 
-    for (finding_id, evidence_type, description, file_path, symbol, code_range, repository_id, commit_sha, attempt_no) in rows {
+    for (
+        finding_id,
+        evidence_type,
+        description,
+        file_path,
+        symbol,
+        code_range,
+        repository_id,
+        commit_sha,
+        attempt_no,
+    ) in rows
+    {
         let item = serde_json::json!({
             "evidence_type": evidence_type,
             "description": description,
@@ -406,7 +446,11 @@ pub(crate) async fn add_finding_in_tx(
         ("user_confirmed", FindingCreator::HumanDirect) => "CONFIRMED",
         _ => "PENDING",
     };
-    validate_one_of(verification_status, &VERIFICATION_STATUSES, "verification_status")?;
+    validate_one_of(
+        verification_status,
+        &VERIFICATION_STATUSES,
+        "verification_status",
+    )?;
     if new_finding.content.trim().is_empty() {
         return Err(DiscoveryError::Validation(
             "content must not be blank".to_string(),
@@ -472,7 +516,9 @@ pub(crate) async fn add_finding_in_tx(
     }
     let ids = vec![row.0];
     let mut evidence_map = evidence_by_finding_tx(tx, tenant_id, &ids).await?;
-    let evidence = evidence_map.remove(&row.0).unwrap_or_else(|| serde_json::json!([]));
+    let evidence = evidence_map
+        .remove(&row.0)
+        .unwrap_or_else(|| serde_json::json!([]));
     Ok(to_finding(row, repository_ids, evidence, None))
 }
 
@@ -576,7 +622,10 @@ pub async fn list_findings(
         .into_iter()
         .map(|row| {
             let ids = links.get(&row.0).cloned().unwrap_or_default();
-            let evidence = evidence_map.get(&row.0).cloned().unwrap_or_else(|| serde_json::json!([]));
+            let evidence = evidence_map
+                .get(&row.0)
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!([]));
             let latest = decisions.get(&row.0).map(String::as_str);
             to_finding(row, ids, evidence, latest)
         })
@@ -607,7 +656,9 @@ pub async fn get_finding(
     .fetch_all(pool)
     .await?;
     let mut evidence_map = evidence_by_finding(pool, tenant_id, &[row.0]).await?;
-    let evidence = evidence_map.remove(&row.0).unwrap_or_else(|| serde_json::json!([]));
+    let evidence = evidence_map
+        .remove(&row.0)
+        .unwrap_or_else(|| serde_json::json!([]));
     let decisions = latest_decision_actions(pool, row.6, &[row.0]).await?;
     let latest = decisions.get(&row.0).map(String::as_str);
     Ok(to_finding(row, ids, evidence, latest))

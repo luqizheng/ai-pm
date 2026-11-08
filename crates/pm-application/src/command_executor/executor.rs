@@ -56,7 +56,9 @@ impl PgCommandExecutor {
         ctx: ExecutionContext,
     ) -> Result<ExecutionReceipt, CommandError> {
         if self.policy.is_redline(&cmd) && ctx.actor_kind != ActorKind::Human {
-            return Err(CommandError::RedLineBlocked { command: cmd.kind() });
+            return Err(CommandError::RedLineBlocked {
+                command: cmd.kind(),
+            });
         }
         match cmd {
             ProjectCommand::CreateTask {
@@ -72,7 +74,10 @@ impl PgCommandExecutor {
                 task_id,
                 expected_revision,
                 new_status,
-            } => self.update_task_status(task_id, expected_revision, new_status, &ctx).await,
+            } => {
+                self.update_task_status(task_id, expected_revision, new_status, &ctx)
+                    .await
+            }
             ProjectCommand::ApproveRequirementRevision { .. } => {
                 self.refuse_requirement_confirmation(&ctx).await
             }
@@ -82,14 +87,23 @@ impl PgCommandExecutor {
                 new_planned_at,
                 expected_revision,
             } => {
-                self.adjust_milestone_plan(project_id, milestone_id, new_planned_at, expected_revision, &ctx)
-                    .await
+                self.adjust_milestone_plan(
+                    project_id,
+                    milestone_id,
+                    new_planned_at,
+                    expected_revision,
+                    &ctx,
+                )
+                .await
             }
             ProjectCommand::SignAcceptance {
                 project_id,
                 milestone_id,
                 expected_revision,
-            } => self.sign_acceptance(project_id, milestone_id, expected_revision, &ctx).await,
+            } => {
+                self.sign_acceptance(project_id, milestone_id, expected_revision, &ctx)
+                    .await
+            }
             ProjectCommand::CreateMilestones { milestones } => {
                 self.create_milestones(milestones, &ctx).await
             }
@@ -134,7 +148,9 @@ impl PgCommandExecutor {
         .fetch_optional(&mut *tx)
         .await
         .map_err(db_err)?;
-        let row = row.ok_or_else(|| CommandError::Validation(format!("audit row {target_audit_id} not found")))?;
+        let row = row.ok_or_else(|| {
+            CommandError::Validation(format!("audit row {target_audit_id} not found"))
+        })?;
 
         let audit_project_id: ProjectId = row.get("project_id");
         if audit_project_id != ctx.project_id {
@@ -143,7 +159,10 @@ impl PgCommandExecutor {
                 ctx.project_id
             )));
         }
-        if row.get::<Option<Uuid>, _>("compensated_command_id").is_some() {
+        if row
+            .get::<Option<Uuid>, _>("compensated_command_id")
+            .is_some()
+        {
             return Err(CommandError::AlreadyCompensated {
                 audit_id: target_audit_id,
             });
@@ -157,7 +176,9 @@ impl PgCommandExecutor {
                 "audit row {target_audit_id} carries no compensation command (irreversible command)"
             ))
         })?)
-        .map_err(|e| CommandError::Validation(format!("stored compensation command is unreadable: {e}")))?;
+        .map_err(|e| {
+            CommandError::Validation(format!("stored compensation command is unreadable: {e}"))
+        })?;
 
         let (before_rows, after_rows, resulting_revision, inverse) =
             apply_compensation(&mut tx, &spec).await?;
@@ -299,7 +320,10 @@ impl PgCommandExecutor {
         .await
         .map_err(db_err)?;
         let (status_before, revision) = match row {
-            Some(row) => (row.get::<String, _>("status"), row.get::<i64, _>("revision")),
+            Some(row) => (
+                row.get::<String, _>("status"),
+                row.get::<i64, _>("revision"),
+            ),
             None => {
                 return Err(CommandError::Validation(format!(
                     "milestone {milestone_id} not found in project {}",
@@ -521,20 +545,20 @@ impl PgCommandExecutor {
         for draft in tasks {
             let title = draft.title.trim();
             if title.is_empty() {
-                return Err(CommandError::Validation("task title is required".to_string()));
+                return Err(CommandError::Validation(
+                    "task title is required".to_string(),
+                ));
             }
 
             let milestone_id: Option<Uuid> = match draft.milestone_key.as_deref() {
-                Some(name) if !name.trim().is_empty() => {
-                    sqlx::query_scalar(
-                        "SELECT id FROM delivery.milestone WHERE project_id = $1 AND name = $2",
-                    )
-                    .bind(ctx.project_id)
-                    .bind(name.trim())
-                    .fetch_optional(&mut *tx)
-                    .await
-                    .map_err(db_err)?
-                }
+                Some(name) if !name.trim().is_empty() => sqlx::query_scalar(
+                    "SELECT id FROM delivery.milestone WHERE project_id = $1 AND name = $2",
+                )
+                .bind(ctx.project_id)
+                .bind(name.trim())
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(db_err)?,
                 _ => None,
             };
             if draft.milestone_key.is_some() && milestone_id.is_none() {
@@ -920,5 +944,3 @@ impl PgCommandExecutor {
         })
     }
 }
-
-

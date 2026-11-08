@@ -72,12 +72,11 @@ pub async fn collect_review_input(
         tx.commit().await?;
         state
     };
-    let integration_status: String = sqlx::query_scalar(
-        "SELECT integration_status FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(delivery_run_id)
-    .fetch_one(pool)
-    .await?;
+    let integration_status: String =
+        sqlx::query_scalar("SELECT integration_status FROM delivery.task_run WHERE id = $1")
+            .bind(delivery_run_id)
+            .fetch_one(pool)
+            .await?;
 
     let criteria = load_criterion_snapshots(pool, project_id, task_id).await?;
     let tests = load_tests(pool, delivery_run_id).await?;
@@ -128,7 +127,10 @@ async fn load_criterion_snapshots(
 }
 
 /// 逐仓测试证据（`test_evidence.tests[]`，D4 原样落库）。
-async fn load_tests(pool: &PgPool, delivery_run_id: Uuid) -> Result<Vec<TestEvidence>, ReviewError> {
+async fn load_tests(
+    pool: &PgPool,
+    delivery_run_id: Uuid,
+) -> Result<Vec<TestEvidence>, ReviewError> {
     let rows = sqlx::query(
         "SELECT repository_id, test_evidence FROM delivery.task_repository_commit \
           WHERE task_run_id = $1 ORDER BY repository_id",
@@ -155,10 +157,7 @@ async fn load_tests(pool: &PgPool, delivery_run_id: Uuid) -> Result<Vec<TestEvid
             out.push(TestEvidence {
                 repository_id,
                 name,
-                passed: test
-                    .get("passed")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false),
+                passed: test.get("passed").and_then(Value::as_bool).unwrap_or(false),
                 evidence_ref: test
                     .get("evidence_ref")
                     .and_then(Value::as_str)
@@ -270,4 +269,3 @@ pub async fn detect_anchor_drift(
     let _ = review_run_id;
     Ok(None)
 }
-

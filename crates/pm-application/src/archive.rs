@@ -60,13 +60,14 @@ pub async fn archive_project(
     let mut tx = pool.begin().await.map_err(db_err)?;
 
     // 1) 锁项目行。
-    let status: Option<String> =
-        sqlx::query_scalar("SELECT status FROM core.project WHERE id = $1 AND tenant_id = $2 FOR UPDATE")
-            .bind(project_id)
-            .bind(tenant_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(db_err)?;
+    let status: Option<String> = sqlx::query_scalar(
+        "SELECT status FROM core.project WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+    )
+    .bind(project_id)
+    .bind(tenant_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(db_err)?;
     let Some(status) = status else {
         return Err(ArchiveError::NotFound);
     };

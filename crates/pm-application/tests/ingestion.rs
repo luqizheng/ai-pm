@@ -1,4 +1,4 @@
-﻿//! Idempotent inbound event ingestion tests (Task 9, Step 1).
+//! Idempotent inbound event ingestion tests (Task 9, Step 1).
 //!
 //! Contract under test: `submit_event` runs the event insert plus the
 //! `ai_analysis` job insert in one transaction, deduplicates on
@@ -10,13 +10,13 @@
 //! Projects are seeded with `bootstrap_project` (Task 8), which provides the
 //! `core.project` row and the three principals the event FKs point at.
 
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use pm_application::ingestion::{IngestionError, SubmitEventRequest, SubmitOutcome, submit_event};
-use serde_json::{Value, json};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_application::ingestion::{submit_event, IngestionError, SubmitEventRequest, SubmitOutcome};
+use pm_domain::SYSTEM_TENANT;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 fn seed(code: &str) -> BootstrapRequest {
     BootstrapRequest {
@@ -57,7 +57,12 @@ fn expected_hash(payload: &Value) -> String {
 async fn accepted_submission_creates_event_and_job(pool: PgPool) {
     let boot = bootstrap_project(&pool, seed("ING-1")).await.unwrap();
     let payload = json!({"text": "login returns 500", "channel": "#support"});
-    let req = submit_req(boot.project_id, boot.human_id, "feishu-msg-1", payload.clone());
+    let req = submit_req(
+        boot.project_id,
+        boot.human_id,
+        "feishu-msg-1",
+        payload.clone(),
+    );
 
     let outcome = submit_event(&pool, req).await.unwrap();
     let SubmitOutcome::Accepted { event_id } = outcome else {
@@ -78,17 +83,22 @@ async fn accepted_submission_creates_event_and_job(pool: PgPool) {
     assert_eq!(event.get::<String, _>("event_type"), "bug_report");
     assert_eq!(event.get::<String, _>("idempotency_key"), "feishu-msg-1");
     assert_eq!(event.get::<Value, _>("payload"), payload);
-    assert_eq!(event.get::<String, _>("payload_hash"), expected_hash(&payload));
+    assert_eq!(
+        event.get::<String, _>("payload_hash"),
+        expected_hash(&payload)
+    );
     assert_eq!(event.get::<String, _>("status"), "received");
 
-    let jobs: Vec<(String, String)> = sqlx::query_as(
-        "SELECT job_type, status FROM integration.job WHERE event_id = $1",
-    )
-    .bind(event_id)
-    .fetch_all(&pool)
-    .await
-    .unwrap();
-    assert_eq!(jobs, vec![("ai_analysis".to_string(), "queued".to_string())]);
+    let jobs: Vec<(String, String)> =
+        sqlx::query_as("SELECT job_type, status FROM integration.job WHERE event_id = $1")
+            .bind(event_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        jobs,
+        vec![("ai_analysis".to_string(), "queued".to_string())]
+    );
 }
 
 /// Step 1 test 2: resubmitting the same `(project_id, source, idempotency_key)`
@@ -100,7 +110,12 @@ async fn duplicate_resubmission_returns_same_event_without_second_job(pool: PgPo
     let payload = json!({"text": "export broken"});
     let first = submit_event(
         &pool,
-        submit_req(boot.project_id, boot.human_id, "feishu-msg-2", payload.clone()),
+        submit_req(
+            boot.project_id,
+            boot.human_id,
+            "feishu-msg-2",
+            payload.clone(),
+        ),
     )
     .await
     .unwrap();
@@ -117,8 +132,14 @@ async fn duplicate_resubmission_returns_same_event_without_second_job(pool: PgPo
     let SubmitOutcome::Duplicate { event_id, status } = second else {
         panic!("expected SubmitOutcome::Duplicate, got {second:?}")
     };
-    assert_eq!(event_id, first_id, "duplicate must point at the original event");
-    assert_eq!(status, "received", "duplicate must carry the original event status");
+    assert_eq!(
+        event_id, first_id,
+        "duplicate must point at the original event"
+    );
+    assert_eq!(
+        status, "received",
+        "duplicate must carry the original event status"
+    );
 
     let counts: (i64, i64) = sqlx::query_as(
         "SELECT (SELECT count(*) FROM integration.inbound_event), \
@@ -127,7 +148,11 @@ async fn duplicate_resubmission_returns_same_event_without_second_job(pool: PgPo
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(counts, (1, 1), "duplicate must not add an event row or a job row");
+    assert_eq!(
+        counts,
+        (1, 1),
+        "duplicate must not add an event row or a job row"
+    );
 }
 
 /// Step 1 test 3: same key with a different payload is rejected with
@@ -137,7 +162,12 @@ async fn same_key_with_different_payload_is_conflict(pool: PgPool) {
     let boot = bootstrap_project(&pool, seed("ING-3")).await.unwrap();
     let first = submit_event(
         &pool,
-        submit_req(boot.project_id, boot.human_id, "feishu-msg-3", json!({"text": "v1"})),
+        submit_req(
+            boot.project_id,
+            boot.human_id,
+            "feishu-msg-3",
+            json!({"text": "v1"}),
+        ),
     )
     .await
     .unwrap();
@@ -147,7 +177,12 @@ async fn same_key_with_different_payload_is_conflict(pool: PgPool) {
 
     let err = submit_event(
         &pool,
-        submit_req(boot.project_id, boot.human_id, "feishu-msg-3", json!({"text": "v2"})),
+        submit_req(
+            boot.project_id,
+            boot.human_id,
+            "feishu-msg-3",
+            json!({"text": "v2"}),
+        ),
     )
     .await
     .unwrap_err();
@@ -174,7 +209,11 @@ async fn same_key_with_different_payload_is_conflict(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(hash, expected_hash(&json!({"text": "v1"})), "original payload must survive");
+    assert_eq!(
+        hash,
+        expected_hash(&json!({"text": "v1"})),
+        "original payload must survive"
+    );
 }
 
 /// Step 1 test 4: a submission whose project does not exist (and one whose
@@ -187,19 +226,35 @@ async fn unknown_project_and_actor_map_to_unknown_project(pool: PgPool) {
 
     let err = submit_event(
         &pool,
-        submit_req(Uuid::new_v4(), boot.human_id, "feishu-msg-4a", json!({"text": "x"})),
+        submit_req(
+            Uuid::new_v4(),
+            boot.human_id,
+            "feishu-msg-4a",
+            json!({"text": "x"}),
+        ),
     )
     .await
     .unwrap_err();
-    assert!(matches!(err, IngestionError::UnknownProject), "unknown project, got {err:?}");
+    assert!(
+        matches!(err, IngestionError::UnknownProject),
+        "unknown project, got {err:?}"
+    );
 
     let err = submit_event(
         &pool,
-        submit_req(boot.project_id, Uuid::new_v4(), "feishu-msg-4b", json!({"text": "x"})),
+        submit_req(
+            boot.project_id,
+            Uuid::new_v4(),
+            "feishu-msg-4b",
+            json!({"text": "x"}),
+        ),
     )
     .await
     .unwrap_err();
-    assert!(matches!(err, IngestionError::UnknownProject), "unknown actor, got {err:?}");
+    assert!(
+        matches!(err, IngestionError::UnknownProject),
+        "unknown actor, got {err:?}"
+    );
 
     // Neither failed submission may leave rows behind.
     let counts: (i64, i64) = sqlx::query_as(

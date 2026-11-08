@@ -25,11 +25,7 @@ use crate::actor::AuditActor;
 pub const CREDENTIAL_PREFIX: &str = "cpk_";
 
 /// V1 已知权限码全集（granted_permissions 裁剪值域；lmms 字典落地后对齐）。
-pub const KNOWN_PERMISSIONS: [&str; 3] = [
-    "PM_MCP_READ",
-    "PM_MCP_AGENT_REPORT",
-    "PM_MCP_COMMAND",
-];
+pub const KNOWN_PERMISSIONS: [&str; 3] = ["PM_MCP_READ", "PM_MCP_AGENT_REPORT", "PM_MCP_COMMAND"];
 
 #[derive(Debug, thiserror::Error)]
 pub enum DeviceCredentialError {
@@ -152,7 +148,11 @@ pub async fn issue_device_credential(
     tx.commit()
         .await
         .map_err(|e| DeviceCredentialError::Db(e.to_string()))?;
-    Ok(IssuedCredential { plaintext, device_id, issued_at })
+    Ok(IssuedCredential {
+        plaintext,
+        device_id,
+        issued_at,
+    })
 }
 
 /// 租户级审计（governance.tenant_audit_log；四身份列全写——C174 守卫）。
@@ -303,10 +303,7 @@ pub async fn resolve(
     let status: String = row.get("status");
     let revoked_at: Option<chrono::DateTime<chrono::Utc>> = row.get("credential_revoked_at");
     let owner_active: bool = row.get("owner_active");
-    if status != "active"
-        || revoked_at.is_some()
-        || !owner_active
-    {
+    if status != "active" || revoked_at.is_some() || !owner_active {
         return Ok(None);
     }
     Ok(Some(ResolvedClientCredential {

@@ -28,7 +28,6 @@ pub(crate) async fn load_scope_layer(
     .transpose()
 }
 
-
 /// 任务级覆盖；缺行返回 `None`，`NULL` 列由 `PolicyLayer` 逐字段表达。
 pub(crate) async fn load_task_layer(
     tx: &mut Transaction<'_, Postgres>,
@@ -55,7 +54,6 @@ pub(crate) async fn load_task_layer(
     .transpose()
 }
 
-
 /// 四层策略读取（§15.4）：organization → project → task_type → task。
 pub(crate) async fn load_policy_layers(
     tx: &mut Transaction<'_, Postgres>,
@@ -78,12 +76,12 @@ pub(crate) async fn load_policy_layers(
     })
 }
 
-
 /// `additional_checks` 必须是数组；脏数据上抛为策略读取失败，**不得静默忽略**。
-pub(crate) fn decode_checks(value: serde_json::Value) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+pub(crate) fn decode_checks(
+    value: serde_json::Value,
+) -> Result<Vec<serde_json::Value>, sqlx::Error> {
     serde_json::from_value(value).map_err(|error| sqlx::Error::Decode(Box::new(error)))
 }
-
 
 /// 有效审批评估（R5）：`required` 已由四层合成给出，因此任务级 `false`
 /// 无法放宽高层 `true`。需要审批时必须存在 `approved` 证据；未决（pending）
@@ -121,7 +119,7 @@ pub(crate) async fn assess_approval(
     Ok(("unknown", false))
 }
 
-        /// 可领取性判定的结果：`deny` 非空表示拒绝；策略字段供 `policy_snapshot` 记录。
+/// 可领取性判定的结果：`deny` 非空表示拒绝；策略字段供 `policy_snapshot` 记录。
 pub struct ClaimAssessment {
     pub deny: Option<&'static str>,
     pub approval_required: bool,
@@ -133,7 +131,6 @@ pub struct ClaimAssessment {
     pub policy_hash: String,
     pub effective_policy: EffectivePolicy,
 }
-
 
 /// 可领取性判定（§5.6 清单，全部通过才领取）。
 pub(crate) async fn claimability_assessment(
@@ -232,5 +229,3 @@ pub(crate) async fn claimability_assessment(
     }
     Ok(assessment)
 }
-
-

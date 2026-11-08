@@ -46,7 +46,6 @@ pub struct ProposalRequest {
     pub created_by: Uuid,
 }
 
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum ProposalOutcome {
@@ -75,7 +74,6 @@ pub enum ProposalOutcome {
     },
 }
 
-
 #[derive(Debug, Clone, Serialize)]
 pub struct ProposalRow {
     pub id: Uuid,
@@ -89,7 +87,6 @@ pub struct ProposalRow {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-
 #[derive(Debug, Clone, Serialize)]
 pub struct RevisionVetoOutcome {
     pub new_commit_sha: String,
@@ -97,11 +94,9 @@ pub struct RevisionVetoOutcome {
     pub restored_revision_id: Option<Uuid>,
 }
 
-
 #[derive(Debug, Clone)]
 pub(crate) struct CurrentDoc {
     document_id: Option<Uuid>,
     revision_id: Option<Uuid>,
     revision_no: i32,
 }
-

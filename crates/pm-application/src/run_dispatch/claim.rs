@@ -13,7 +13,6 @@ pub enum ClaimKind {
     Cancelled,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClaimOutcome {
     pub run_id: Uuid,
@@ -29,7 +28,6 @@ pub struct ClaimOutcome {
     pub lease_owner: String,
 }
 
-
 /// 租约持有者（A 裁决）：Model B 是 worker 标识，Model A 是 MCP 客户端。
 ///
 /// **`lease_owner` 不是凭证**：它只用于展示与 fencing 的辅助归因，真正的凭证
@@ -37,12 +35,15 @@ pub struct ClaimOutcome {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum LeaseOwner<'a> {
     Worker(&'a str),
-    Mcp { client_name: &'a str },
+    Mcp {
+        client_name: &'a str,
+    },
     /// V-05-1 Client Registry 凭据通道（0049）：稳定身份 = device.id；
     /// lease_owner = `client:{device_id}`（跨重启稳定，R-11 token8 债消除）。
-    Client { device_id: Uuid },
+    Client {
+        device_id: Uuid,
+    },
 }
-
 
 /// 领取路径的全部分叉点（A-2：复用同一事务模板，只以参数表达差异）。
 #[derive(Debug, Clone, Copy)]
@@ -63,7 +64,6 @@ pub(crate) struct ClaimOptions<'a> {
     /// `claimed_device_id` 同时落 `task_run.executor_id`（同源同值，仅归因）。
     audit_actor: Option<&'a crate::actor::AuditActor>,
 }
-
 
 /// Model A（执行端显式领取）成功后的返回：一次领取即可拿到的全部凭据。
 #[derive(Debug, Clone)]
@@ -89,17 +89,14 @@ pub trait ExecutionPolicy: Send + Sync {
     fn execution_enabled(&self) -> Result<bool, String>;
 }
 
-
 /// 生产默认策略：可执行（与 D1 快照中的字面量语义一致）。
 pub struct DefaultExecutionPolicy;
-
 
 impl ExecutionPolicy for DefaultExecutionPolicy {
     fn execution_enabled(&self) -> Result<bool, String> {
         Ok(true)
     }
 }
-
 
 /// 领取（或回收）**恰好一条**可执行的 Run；无候选返回 `Ok(None)`。
 ///
@@ -117,7 +114,6 @@ pub async fn claim_once(
 ) -> Result<Option<ClaimOutcome>, RunDispatchError> {
     claim_once_with_policy(pool, worker_id, cfg, mode, &DefaultExecutionPolicy).await
 }
-
 
 /// 同 [`claim_once`]，但可注入执行策略读取实现（G5 / 验收 C12）。
 pub async fn claim_once_with_policy(
@@ -145,7 +141,6 @@ pub async fn claim_once_with_policy(
     )
     .await
 }
-
 
 /// **Model A（A 裁决）：执行端显式领取指定任务**。
 ///
@@ -235,7 +230,6 @@ pub async fn claim_task_run_as(
     .await
 }
 
-
 /// 同 [`claim_task_run`]，但可注入执行策略读取实现（G5 / 验收 C12）。
 #[allow(clippy::too_many_arguments)]
 pub async fn claim_task_run_with_policy(
@@ -307,7 +301,6 @@ async fn finalize_claimed_run(
     })
 }
 
-
 /// A/B 两入口的**唯一事务模板**（A-2）：候选筛选、租约签发、开关门控与审计
 /// payload 都由 [`ClaimOptions`] 表达，禁止复制事务体。
 ///
@@ -335,9 +328,9 @@ pub(crate) async fn claim_core(
 ) -> Result<Option<ClaimOutcome>, RunDispatchError> {
     // Model A：范围已确定，单 Project 内直接走阶段 B。
     if let Some(task_id) = opts.task_filter {
-        let project_id = opts
-            .project_filter
-            .ok_or_else(|| RunDispatchError::InvalidOption("Model A requires a project scope".into()))?;
+        let project_id = opts.project_filter.ok_or_else(|| {
+            RunDispatchError::InvalidOption("Model A requires a project scope".into())
+        })?;
         return claim_core_in_project(pool, cfg, opts, policy, project_id, Some(task_id)).await;
     }
 
@@ -388,12 +381,11 @@ async fn claim_core_in_project(
     // ① 锁 Project 行（统一锁序第一把锁：project → run → task）。
     //    归档事务同锁序 → 归档与 claim 线性化：归档先提交 → 这里读到 archived
     //    合法跳过；claim 先提交 → 归档随后把 queued 条件取消（I1-010/012/013）。
-    let project_status: Option<String> = sqlx::query_scalar(
-        "SELECT status FROM core.project WHERE id = $1 FOR UPDATE",
-    )
-    .bind(project_id)
-    .fetch_optional(&mut *tx)
-    .await?;
+    let project_status: Option<String> =
+        sqlx::query_scalar("SELECT status FROM core.project WHERE id = $1 FOR UPDATE")
+            .bind(project_id)
+            .fetch_optional(&mut *tx)
+            .await?;
     if project_status.as_deref() == Some("archived") {
         tx.commit().await?;
         return Ok(None);
@@ -444,9 +436,9 @@ async fn claim_core_in_project(
     let Some(candidate) = candidate else {
         if let Some(task_id) = opts.task_filter {
             // Model A：区分「任务不存在」「已有活跃 Run」「等 TaskReady」三种前置失败。
-            let project_id = opts
-                .project_filter
-                .ok_or_else(|| RunDispatchError::InvalidOption("Model A requires a project scope".into()))?;
+            let project_id = opts.project_filter.ok_or_else(|| {
+                RunDispatchError::InvalidOption("Model A requires a project scope".into())
+            })?;
             let task_exists: Option<String> = sqlx::query_scalar(
                 "SELECT status FROM delivery.task WHERE id = $1 AND project_id = $2",
             )
@@ -491,7 +483,7 @@ async fn claim_core_in_project(
     // I1-C：归档守卫已在阶段 B 的 Project 行锁内完成（见 claim_core_in_project ①）——
     // 不再需要池外防御纵深读；锁内读到的必然是归档后的已提交状态。
 
-// ③ 锁任务行（顺序固定：project → run → task）。B2：新 Run 的 INSERT 必须在此之后。
+    // ③ 锁任务行（顺序固定：project → run → task）。B2：新 Run 的 INSERT 必须在此之后。
     let task = sqlx::query(
         "SELECT status, revision, retry_exhausted, task_type FROM delivery.task \
           WHERE id = $1 AND project_id = $2 FOR UPDATE",
@@ -555,7 +547,9 @@ async fn claim_core_in_project(
         if candidate_shield != "none" {
             if opts.task_filter.is_some() {
                 tx.rollback().await?;
-                return Err(RunDispatchError::TaskNotReady("awaiting_interaction".into()));
+                return Err(RunDispatchError::TaskNotReady(
+                    "awaiting_interaction".into(),
+                ));
             }
             audit_run(
                 &mut tx,
@@ -589,7 +583,14 @@ async fn claim_core_in_project(
             // B3-1：执行器尚未启动 → 恢复**同一** Run（重置租约回队列），不新建、不记失败。
             // 任务仍在 claimed：把它退回 ready 以便重新领取（同一 Run）。
             if task_state == "claimed" {
-                apply_transition(&mut tx, task_id, TaskStatus::Claimed, TaskStatus::Ready, &ctx).await?;
+                apply_transition(
+                    &mut tx,
+                    task_id,
+                    TaskStatus::Claimed,
+                    TaskStatus::Ready,
+                    &ctx,
+                )
+                .await?;
                 task_state = "ready".to_string();
             }
             requeue_for_redispatch(&mut tx, run_id).await?;
@@ -708,7 +709,8 @@ async fn claim_core_in_project(
     match policy.execution_enabled() {
         Ok(true) => {}
         Ok(false) => {
-            requeue_with_backoff(&mut tx, run_id, dispatch_attempts, cfg, "policy_disabled").await?;
+            requeue_with_backoff(&mut tx, run_id, dispatch_attempts, cfg, "policy_disabled")
+                .await?;
             audit_run(
                 &mut tx,
                 project_id,
@@ -732,8 +734,14 @@ async fn claim_core_in_project(
             }));
         }
         Err(error) => {
-            requeue_with_backoff(&mut tx, run_id, dispatch_attempts, cfg, "policy_unavailable")
-                .await?;
+            requeue_with_backoff(
+                &mut tx,
+                run_id,
+                dispatch_attempts,
+                cfg,
+                "policy_unavailable",
+            )
+            .await?;
             audit_run(
                 &mut tx,
                 project_id,
@@ -759,9 +767,14 @@ async fn claim_core_in_project(
     }
 
     // ⑦ 可领取性判定（全部通过才领取）。
-    let assessment =
-        claimability_assessment(&mut tx, project_id, task_id, retry_exhausted, task_type.as_deref())
-            .await?;
+    let assessment = claimability_assessment(
+        &mut tx,
+        project_id,
+        task_id,
+        retry_exhausted,
+        task_type.as_deref(),
+    )
+    .await?;
     if let Some(reason) = assessment.deny {
         if opts.task_filter.is_some() {
             tx.rollback().await?;
@@ -788,7 +801,14 @@ async fn claim_core_in_project(
     }
 
     // ⑧ 状态推进（R1：经统一守卫 validate_transition，与 Run 更新同事务）。
-    apply_transition(&mut tx, task_id, TaskStatus::Ready, TaskStatus::Claimed, &ctx).await?;
+    apply_transition(
+        &mut tx,
+        task_id,
+        TaskStatus::Ready,
+        TaskStatus::Claimed,
+        &ctx,
+    )
+    .await?;
 
     // ⑨ 租约签发（D 裁决 + T-032 终裁）：Model A / Model B **统一签发**明文
     //    token（ADR-0002 L1：执行端 MCP 认证凭据；worker 注入执行端环境 L2），
@@ -873,23 +893,20 @@ async fn claim_core_in_project(
     // `execution_enabled` 由策略门与审批证据推导，不再是字面量。
     // I3-C/D（V1.1 简化裁决）：每仓**可访问**快照（Task 范围 ∩ 仓库状态 verified，
     // 单一 `read_write` 档位）叠加进快照；其内容寻址哈希落 `policy_snapshot_hash`。
-    let run_tenant: Uuid = sqlx::query_scalar(
-        "SELECT tenant_id FROM delivery.task_run WHERE id = $1",
-    )
-    .bind(run_id)
-    .fetch_one(&mut *tx)
-    .await?;
-    let repo_access = crate::repo_access::build_task_repo_access_tx(
-        &mut tx,
-        run_tenant,
-        project_id,
-        task_id,
-    )
-    .await
-    .map_err(|e| match e {
-        crate::repo_access::RepoAccessError::Db(db) => RunDispatchError::Db(sqlx::Error::Protocol(db)),
-        other => RunDispatchError::InvalidOption(other.to_string()),
-    })?;
+    let run_tenant: Uuid =
+        sqlx::query_scalar("SELECT tenant_id FROM delivery.task_run WHERE id = $1")
+            .bind(run_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    let repo_access =
+        crate::repo_access::build_task_repo_access_tx(&mut tx, run_tenant, project_id, task_id)
+            .await
+            .map_err(|e| match e {
+                crate::repo_access::RepoAccessError::Db(db) => {
+                    RunDispatchError::Db(sqlx::Error::Protocol(db))
+                }
+                other => RunDispatchError::InvalidOption(other.to_string()),
+            })?;
     let policy_snapshot = serde_json::json!({
         "policy_schema": POLICY_SCHEMA,
         "policy_version": assessment.policy_version,
@@ -958,7 +975,6 @@ async fn claim_core_in_project(
     }))
 }
 
-
 /// 平台生成的任务分支名（C1）：格式 `task/<task_id 前 8 位>`，幂等回填。
 /// 已存在（含人工指定）时保持原值，执行端不得自定分支名。
 pub(crate) async fn backfill_git_branch(
@@ -977,5 +993,3 @@ pub(crate) async fn backfill_git_branch(
         .fetch_one(&mut **tx)
         .await
 }
-
-

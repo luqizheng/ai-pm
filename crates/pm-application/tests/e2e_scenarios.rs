@@ -1,4 +1,4 @@
-﻿//! Task 18 — end-to-end scenario acceptance suite (主稿 §17.1, the M1 rows).
+//! Task 18 — end-to-end scenario acceptance suite (主稿 §17.1, the M1 rows).
 //!
 //! Ten scenarios over the real Postgres and the real main chain. Every test
 //! is self-contained: the shared fixture world (ids matching the FakeModel's
@@ -19,24 +19,24 @@ use chrono::{DateTime, Utc};
 use pm_ai::model::{AnalysisContext, AnalysisModel};
 use pm_ai::orchestrator::{HandleOutcome, Orchestrator, OrchestratorError};
 use pm_ai::skill_router::SkillId;
-use pm_ai::{FakeModel, ModelError, context as ai_context};
-use pm_application::bootstrap::{BootstrapRequest, bootstrap_project};
-use pm_application::ingestion::{SubmitEventRequest, SubmitOutcome, submit_event};
+use pm_ai::{context as ai_context, FakeModel, ModelError};
+use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_application::ingestion::{submit_event, SubmitEventRequest, SubmitOutcome};
 use pm_application::supervision::{
-    DecideRequest, Decision, DecisionOutcome, VetoOutcome, VetoRequest, decide_approval, freeze,
-    unfreeze, veto,
+    decide_approval, freeze, unfreeze, veto, DecideRequest, Decision, DecisionOutcome, VetoOutcome,
+    VetoRequest,
 };
 use pm_application::{
-    ActorKind, CommandError, CommandSource, ExecutionContext, PgCommandExecutor, PolicyEngine,
-    ReadError, task_context,
+    task_context, ActorKind, CommandError, CommandSource, ExecutionContext, PgCommandExecutor,
+    PolicyEngine, ReadError,
 };
+use pm_domain::SYSTEM_TENANT;
 use pm_domain::{
-    AnalysisResult, Confidence, Finding, Proposal, ProjectCommand, RiskLevel, TaskStatus,
+    AnalysisResult, Confidence, Finding, ProjectCommand, Proposal, RiskLevel, TaskStatus,
 };
 use pm_infrastructure::job_queue;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use uuid::Uuid;
-use pm_domain::SYSTEM_TENANT;
 
 // ---------------------------------------------------------------------------
 // Fixture world (copied from the Task 15 suite's conventions: the seeded rows
@@ -69,10 +69,14 @@ const MOVED_PLANNED_AT: &str = "2026-11-06T09:00:00Z";
 const SEEDED_PLANNED_AT: &str = "2026-11-03T09:00:00Z";
 
 fn moved_planned_at() -> DateTime<Utc> {
-    MOVED_PLANNED_AT.parse().expect("fixed fixture date must parse")
+    MOVED_PLANNED_AT
+        .parse()
+        .expect("fixed fixture date must parse")
 }
 fn seeded_planned_at() -> DateTime<Utc> {
-    SEEDED_PLANNED_AT.parse().expect("fixed seed date must parse")
+    SEEDED_PLANNED_AT
+        .parse()
+        .expect("fixed seed date must parse")
 }
 
 struct Seed {
@@ -108,11 +112,13 @@ async fn seed_world(pool: &sqlx::PgPool) -> Seed {
     .execute(pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'AI PM')")
-        .bind(ai_principal_id)
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'AI PM')",
+    )
+    .bind(ai_principal_id)
+    .execute(pool)
+    .await
+    .unwrap();
     sqlx::query(
         "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', 'Supervisor')",
     )
@@ -301,11 +307,13 @@ async fn worker_loop(
 /// Rushes a backed-off job back into the claimable present (the suite must
 /// not sleep out real exponential backoffs).
 async fn fast_forward_backoff(pool: &sqlx::PgPool, job_id: Uuid) {
-    sqlx::query("UPDATE integration.job SET available_at = now() WHERE id = $1 AND status = 'queued'")
-        .bind(job_id)
-        .execute(pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE integration.job SET available_at = now() WHERE id = $1 AND status = 'queued'",
+    )
+    .bind(job_id)
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 /// The single `integration.job` row of `event_id` (one event, one job).
@@ -361,7 +369,11 @@ async fn s1_ten_idempotent_submissions_execute_commands_once(pool: sqlx::PgPool)
             let SubmitOutcome::Duplicate { event_id, status } = outcome else {
                 panic!("submission {submission} must be an idempotent Duplicate, got {outcome:?}");
             };
-            assert_eq!(event_id, first_event_id.unwrap(), "replays return the original event");
+            assert_eq!(
+                event_id,
+                first_event_id.unwrap(),
+                "replays return the original event"
+            );
             assert_eq!(status, "received");
         }
     }
@@ -391,13 +403,15 @@ async fn s1_ten_idempotent_submissions_execute_commands_once(pool: sqlx::PgPool)
         seed.project_id,
     )
     .await;
-    assert_eq!(audits, 3, "each of the three fixture commands audited exactly once");
-    let tasks: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM delivery.task WHERE project_id = $1")
-            .bind(seed.project_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    assert_eq!(
+        audits, 3,
+        "each of the three fixture commands audited exactly once"
+    );
+    let tasks: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.task WHERE project_id = $1")
+        .bind(seed.project_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(tasks, 2, "TASK-102 plus the one created investigation task");
     let (task_revision, milestone_revision): (i64, i64) = sqlx::query_as(
         "SELECT (SELECT revision FROM delivery.task WHERE id = $2), \
@@ -410,7 +424,10 @@ async fn s1_ten_idempotent_submissions_execute_commands_once(pool: sqlx::PgPool)
     .await
     .unwrap();
     assert_eq!(task_revision, 8, "7 seeded, bumped once to needs_info");
-    assert_eq!(milestone_revision, 5, "4 seeded, bumped once to the moved plan");
+    assert_eq!(
+        milestone_revision, 5,
+        "4 seeded, bumped once to the moved plan"
+    );
 
     // A second worker pass finds nothing claimable and executes nothing more.
     let handled_again = worker_loop(&pool, &orch, "worker-s1", usize::MAX).await;
@@ -422,7 +439,10 @@ async fn s1_ten_idempotent_submissions_execute_commands_once(pool: sqlx::PgPool)
         seed.project_id,
     )
     .await;
-    assert_eq!(audits_again, 3, "redelivery through the queue executes nothing twice");
+    assert_eq!(
+        audits_again, 3,
+        "redelivery through the queue executes nothing twice"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -442,7 +462,8 @@ async fn s2_model_timeout_retries_then_fails_job_event_preserved(pool: sqlx::PgP
         "task_ref": task_102_id().to_string(),
         "milestone_ref": milestone_id().to_string(),
     });
-    let event_id = submit_fixture(&pool, &seed, "technical_design_submitted", payload.clone()).await;
+    let event_id =
+        submit_fixture(&pool, &seed, "technical_design_submitted", payload.clone()).await;
     let job_id = job_id_of(&pool, event_id).await;
 
     let orch = orchestrator(&pool);
@@ -460,15 +481,20 @@ async fn s2_model_timeout_retries_then_fails_job_event_preserved(pool: sqlx::PgP
     assert_eq!(attempts, 1);
     assert_eq!(status, "queued", "attempt 1 < max: retryable");
     assert_eq!(last_error, "model_timeout");
-    let (event_status, stored_payload): (String, Value) = sqlx::query_as(
-        "SELECT status, payload FROM integration.inbound_event WHERE id = $1",
-    )
-    .bind(event_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(event_status, "received", "a model failure must not consume the event");
-    assert_eq!(stored_payload, payload, "the original payload is preserved verbatim");
+    let (event_status, stored_payload): (String, Value) =
+        sqlx::query_as("SELECT status, payload FROM integration.inbound_event WHERE id = $1")
+            .bind(event_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        event_status, "received",
+        "a model failure must not consume the event"
+    );
+    assert_eq!(
+        stored_payload, payload,
+        "the original payload is preserved verbatim"
+    );
 
     // Attempts two and three: fresh failed runs per retry (run-level retries
     // are new rows), until the job goes terminally failed.
@@ -506,11 +532,19 @@ async fn s2_model_timeout_retries_then_fails_job_event_preserved(pool: sqlx::PgP
     assert_eq!(timeout_runs, 3);
 
     // Nothing ever executed: no proposals, no audit, event still received.
-    let proposals =
-        scalar_i64(&pool, "SELECT count(*) FROM ai.change_proposal WHERE project_id = $1", seed.project_id).await;
+    let proposals = scalar_i64(
+        &pool,
+        "SELECT count(*) FROM ai.change_proposal WHERE project_id = $1",
+        seed.project_id,
+    )
+    .await;
     assert_eq!(proposals, 0);
-    let audits =
-        scalar_i64(&pool, "SELECT count(*) FROM governance.audit_log WHERE project_id = $1", seed.project_id).await;
+    let audits = scalar_i64(
+        &pool,
+        "SELECT count(*) FROM governance.audit_log WHERE project_id = $1",
+        seed.project_id,
+    )
+    .await;
     assert_eq!(audits, 0);
     let (task_revision, milestone_revision): (i64, i64) = sqlx::query_as(
         "SELECT (SELECT revision FROM delivery.task WHERE id = $2), \
@@ -522,7 +556,10 @@ async fn s2_model_timeout_retries_then_fails_job_event_preserved(pool: sqlx::PgP
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(task_revision, 7, "no silent state change under a failing model");
+    assert_eq!(
+        task_revision, 7,
+        "no silent state change under a failing model"
+    );
     assert_eq!(milestone_revision, 4);
 
     // A terminal job is never handed out again.
@@ -604,7 +641,10 @@ async fn s3_second_agent_on_same_expected_revision_gets_revision_conflict(pool: 
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(status, "awaiting_decision", "agent B must not have flipped it to completed");
+    assert_eq!(
+        status, "awaiting_decision",
+        "agent B must not have flipped it to completed"
+    );
     assert_eq!(revision, 8);
     let audits: i64 =
         sqlx::query_scalar("SELECT count(*) FROM governance.audit_log WHERE target_id = $1")
@@ -621,12 +661,12 @@ async fn s3_second_agent_on_same_expected_revision_gets_revision_conflict(pool: 
             ProjectCommand::UpdateTaskStatus {
                 task_id: task_102_id(),
                 expected_revision: 8,
-new_status: TaskStatus::Cancelled,
-        },
-        direct(agent_b),
-    )
-    .await
-    .expect("a retry on the current revision must succeed");
+                new_status: TaskStatus::Cancelled,
+            },
+            direct(agent_b),
+        )
+        .await
+        .expect("a retry on the current revision must succeed");
     assert_eq!(retried.resulting_revision, 9);
 }
 
@@ -644,8 +684,13 @@ async fn s4_auto_applied_milestone_change_veto_restores_data_and_closes_audit_ch
     pool: sqlx::PgPool,
 ) {
     let seed = seed_world(&pool).await;
-    let event_id =
-        submit_fixture(&pool, &seed, "technical_design_submitted", cache_overlap_payload()).await;
+    let event_id = submit_fixture(
+        &pool,
+        &seed,
+        "technical_design_submitted",
+        cache_overlap_payload(),
+    )
+    .await;
     let orch = orchestrator(&pool);
     let handled = worker_loop(&pool, &orch, "worker-s4", usize::MAX).await;
     assert_eq!(handled, 1, "premise: the chain ran once");
@@ -659,7 +704,11 @@ async fn s4_auto_applied_milestone_change_veto_restores_data_and_closes_audit_ch
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(planned_at, Some(moved_planned_at()), "the AI move took effect");
+    assert_eq!(
+        planned_at,
+        Some(moved_planned_at()),
+        "the AI move took effect"
+    );
     assert_eq!(revision, 5);
     let applied = scalar_i64(
         &pool,
@@ -668,7 +717,10 @@ async fn s4_auto_applied_milestone_change_veto_restores_data_and_closes_audit_ch
         seed.project_id,
     )
     .await;
-    assert_eq!(applied, 3, "one change_applied notification per executed proposal");
+    assert_eq!(
+        applied, 3,
+        "one change_applied notification per executed proposal"
+    );
 
     let (proposal_id, executed_audit_id): (Uuid, Uuid) = sqlx::query_as(
         "SELECT id, executed_audit_id FROM ai.change_proposal \
@@ -712,20 +764,23 @@ async fn s4_auto_applied_milestone_change_veto_restores_data_and_closes_audit_ch
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(planned_at, Some(seeded_planned_at()), "the original plan is back");
+    assert_eq!(
+        planned_at,
+        Some(seeded_planned_at()),
+        "the original plan is back"
+    );
     assert_ne!(planned_at, Some(moved_planned_at()));
     assert_eq!(revision, 6, "4 seeded -> 5 executed -> 6 restored");
 
     // The audit chain closes both ways: the original execution points at its
     // rollback, and the rollback audit is a `rollback_command` whose source
     // is the audit it undoes.
-    let compensated: Uuid = sqlx::query_scalar(
-        "SELECT compensated_command_id FROM governance.audit_log WHERE id = $1",
-    )
-    .bind(executed_audit_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let compensated: Uuid =
+        sqlx::query_scalar("SELECT compensated_command_id FROM governance.audit_log WHERE id = $1")
+            .bind(executed_audit_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(compensated, new_audit_id);
     let (action, source_kind, source_ref): (String, String, Uuid) = sqlx::query_as(
         "SELECT action, source_kind, source_ref FROM governance.audit_log WHERE id = $1",
@@ -736,7 +791,10 @@ async fn s4_auto_applied_milestone_change_veto_restores_data_and_closes_audit_ch
     .unwrap();
     assert_eq!(action, "rollback_command");
     assert_eq!(source_kind, "rollback");
-    assert_eq!(source_ref, executed_audit_id, "the rollback names the audit it undoes");
+    assert_eq!(
+        source_ref, executed_audit_id,
+        "the rollback names the audit it undoes"
+    );
 
     // The veto reached the feed with the rollback anchor.
     let (kind, payload): (String, Value) = sqlx::query_as(
@@ -788,11 +846,13 @@ async fn s5_redline_becomes_pending_approval_and_approve_executes_once(pool: sql
     .unwrap();
     assert_eq!(required_role, "authorized_acceptor");
     assert_eq!(
-        sqlx::query_scalar::<_, String>("SELECT status FROM governance.approval_request WHERE id = $1")
-            .bind(approval_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap(),
+        sqlx::query_scalar::<_, String>(
+            "SELECT status FROM governance.approval_request WHERE id = $1"
+        )
+        .bind(approval_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
         "pending"
     );
     assert_eq!(
@@ -875,7 +935,10 @@ async fn s5_redline_becomes_pending_approval_and_approve_executes_once(pool: sql
     .await
     .unwrap_err();
     assert!(
-        matches!(err, pm_application::SupervisionError::Command(CommandError::AlreadyDecided { .. })),
+        matches!(
+            err,
+            pm_application::SupervisionError::Command(CommandError::AlreadyDecided { .. })
+        ),
         "expected AlreadyDecided, got {err:?}"
     );
     let executions_again = scalar_i64(
@@ -972,27 +1035,43 @@ async fn s6_change_policy_proposal_is_never_executed_and_leaves_a_failed_record(
 
     // Layer 2 (orchestrator validation): the model's proposal becomes a
     // `failed` proposal row and nothing else.
-    submit_fixture(&pool, &seed, "technical_design_submitted", json!({ "trigger": "policy" }))
-        .await;
-    let orch = orchestrator_with_model(&pool, Arc::new(ChangePolicyModel { project_id: seed.project_id }));
+    submit_fixture(
+        &pool,
+        &seed,
+        "technical_design_submitted",
+        json!({ "trigger": "policy" }),
+    )
+    .await;
+    let orch = orchestrator_with_model(
+        &pool,
+        Arc::new(ChangePolicyModel {
+            project_id: seed.project_id,
+        }),
+    );
     let handled = worker_loop(&pool, &orch, "worker-s6", usize::MAX).await;
     assert_eq!(handled, 1);
 
-    let (command_type, status): (String, String) = sqlx::query_as(
-        "SELECT command_type, status FROM ai.change_proposal WHERE project_id = $1",
-    )
-    .bind(seed.project_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (command_type, status): (String, String) =
+        sqlx::query_as("SELECT command_type, status FROM ai.change_proposal WHERE project_id = $1")
+            .bind(seed.project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(command_type, "change_policy");
     assert_eq!(status, "failed", "validation failure, not executed");
 
     // No side effects anywhere: no audit write, no approval, no notification,
     // the policy config untouched.
-    let audits =
-        scalar_i64(&pool, "SELECT count(*) FROM governance.audit_log WHERE project_id = $1", seed.project_id).await;
-    assert_eq!(audits, 0, "an unhandleable command must never reach the audit trail");
+    let audits = scalar_i64(
+        &pool,
+        "SELECT count(*) FROM governance.audit_log WHERE project_id = $1",
+        seed.project_id,
+    )
+    .await;
+    assert_eq!(
+        audits, 0,
+        "an unhandleable command must never reach the audit trail"
+    );
     let approvals = scalar_i64(
         &pool,
         "SELECT count(*) FROM governance.approval_request WHERE project_id = $1",
@@ -1040,7 +1119,13 @@ async fn s6_change_policy_proposal_is_never_executed_and_leaves_a_failed_record(
 #[sqlx::test(migrations = "../../migrations")]
 async fn s7_second_veto_on_rolled_back_proposal_is_already_compensated(pool: sqlx::PgPool) {
     let seed = seed_world(&pool).await;
-    submit_fixture(&pool, &seed, "technical_design_submitted", cache_overlap_payload()).await;
+    submit_fixture(
+        &pool,
+        &seed,
+        "technical_design_submitted",
+        cache_overlap_payload(),
+    )
+    .await;
     let orch = orchestrator(&pool);
     let handled = worker_loop(&pool, &orch, "worker-s7", usize::MAX).await;
     assert_eq!(handled, 1);
@@ -1119,22 +1204,30 @@ async fn s7_second_veto_on_rolled_back_proposal_is_already_compensated(pool: sql
         seed.project_id,
     )
     .await;
-    assert_eq!(audits_after_second, audits_after_first, "no second rollback audit");
-    let rollbacks: Uuid = sqlx::query_scalar(
-        "SELECT compensated_command_id FROM governance.audit_log WHERE id = $1",
-    )
-    .bind(executed_audit_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(rollbacks, new_audit_id, "the chain still points at the first rollback");
+    assert_eq!(
+        audits_after_second, audits_after_first,
+        "no second rollback audit"
+    );
+    let rollbacks: Uuid =
+        sqlx::query_scalar("SELECT compensated_command_id FROM governance.audit_log WHERE id = $1")
+            .bind(executed_audit_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        rollbacks, new_audit_id,
+        "the chain still points at the first rollback"
+    );
     let interventions = scalar_i64(
         &pool,
         "SELECT count(*) FROM governance.human_intervention WHERE project_id = $1",
         seed.project_id,
     )
     .await;
-    assert_eq!(interventions, 2, "each veto records itself, executed or not");
+    assert_eq!(
+        interventions, 2,
+        "each veto records itself, executed or not"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1155,34 +1248,43 @@ async fn s8_freeze_stops_claiming_unfreeze_resumes_and_no_event_is_lost(pool: sq
     let job_id = job_id_of(&pool, event_id).await;
 
     // Brake on.
-    freeze(&pool, seed.project_id, seed.human_id, "发布前刹车").await.unwrap();
+    freeze(&pool, seed.project_id, seed.human_id, "发布前刹车")
+        .await
+        .unwrap();
 
     let orch = orchestrator(&pool);
     let handled = worker_loop(&pool, &orch, "worker-s8", usize::MAX).await;
     assert_eq!(handled, 0, "a frozen project must hand out no jobs");
-    let job_status: String =
-        sqlx::query_scalar("SELECT status FROM integration.job WHERE id = $1")
-            .bind(job_id)
+    let job_status: String = sqlx::query_scalar("SELECT status FROM integration.job WHERE id = $1")
+        .bind(job_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(job_status, "queued", "the job waits, not lost, not failed");
+    let (event_status, stored_payload): (String, Value) =
+        sqlx::query_as("SELECT status, payload FROM integration.inbound_event WHERE id = $1")
+            .bind(event_id)
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(job_status, "queued", "the job waits, not lost, not failed");
-    let (event_status, stored_payload): (String, Value) = sqlx::query_as(
-        "SELECT status, payload FROM integration.inbound_event WHERE id = $1",
-    )
-    .bind(event_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(event_status, "received", "the event is preserved during the freeze");
+    assert_eq!(
+        event_status, "received",
+        "the event is preserved during the freeze"
+    );
     assert_eq!(stored_payload, payload);
-    let audits =
-        scalar_i64(&pool, "SELECT count(*) FROM governance.audit_log WHERE project_id = $1", seed.project_id).await;
+    let audits = scalar_i64(
+        &pool,
+        "SELECT count(*) FROM governance.audit_log WHERE project_id = $1",
+        seed.project_id,
+    )
+    .await;
     assert_eq!(audits, 0, "nothing executed while frozen");
 
     // Brake off: the very same event's job is handed out again and the
     // claimed job completes through the real handler.
-    unfreeze(&pool, seed.project_id, seed.human_id, "恢复 AI 领航").await.unwrap();
+    unfreeze(&pool, seed.project_id, seed.human_id, "恢复 AI 领航")
+        .await
+        .unwrap();
     let claimed = job_queue::claim(&pool, "ai_analysis", "worker-s8", 60)
         .await
         .expect("after unfreeze the job must be claimable again");
@@ -1196,12 +1298,11 @@ async fn s8_freeze_stops_claiming_unfreeze_resumes_and_no_event_is_lost(pool: sq
         .await
         .expect("job complete must succeed");
 
-    let job_status: String =
-        sqlx::query_scalar("SELECT status FROM integration.job WHERE id = $1")
-            .bind(job_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let job_status: String = sqlx::query_scalar("SELECT status FROM integration.job WHERE id = $1")
+        .bind(job_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(job_status, "completed");
     let event_status: String =
         sqlx::query_scalar("SELECT status FROM integration.inbound_event WHERE id = $1")
@@ -1209,9 +1310,16 @@ async fn s8_freeze_stops_claiming_unfreeze_resumes_and_no_event_is_lost(pool: sq
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(event_status, "applied", "the preserved event was fully processed");
-    let audits =
-        scalar_i64(&pool, "SELECT count(*) FROM governance.audit_log WHERE project_id = $1", seed.project_id).await;
+    assert_eq!(
+        event_status, "applied",
+        "the preserved event was fully processed"
+    );
+    let audits = scalar_i64(
+        &pool,
+        "SELECT count(*) FROM governance.audit_log WHERE project_id = $1",
+        seed.project_id,
+    )
+    .await;
     assert_eq!(audits, 3);
 }
 
@@ -1250,7 +1358,10 @@ async fn s9_task_context_from_wrong_project_is_not_found(pool: sqlx::PgPool) {
     let err = task_context(&pool, other.project_id, task_102_id())
         .await
         .expect_err("a foreign project must not see the task");
-    assert!(matches!(err, ReadError::NotFound), "expected NotFound, got {err:?}");
+    assert!(
+        matches!(err, ReadError::NotFound),
+        "expected NotFound, got {err:?}"
+    );
 
     // Same error as a task that exists nowhere — no probing oracle.
     let missing = task_context(&pool, seed.project_id, Uuid::new_v4()).await;
@@ -1270,8 +1381,13 @@ async fn s9_task_context_from_wrong_project_is_not_found(pool: sqlx::PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn s10_crash_mid_handle_reuses_the_open_run_without_duplicates(pool: sqlx::PgPool) {
     let seed = seed_world(&pool).await;
-    let event_id =
-        submit_fixture(&pool, &seed, "technical_design_submitted", cache_overlap_payload()).await;
+    let event_id = submit_fixture(
+        &pool,
+        &seed,
+        "technical_design_submitted",
+        cache_overlap_payload(),
+    )
+    .await;
     let job_id = job_id_of(&pool, event_id).await;
 
     // Crash simulation: the worker claimed the job, opened the run, then
@@ -1284,22 +1400,26 @@ async fn s10_crash_mid_handle_reuses_the_open_run_without_duplicates(pool: sqlx:
     let crashed_run_id = ai_context::start_run(&pool, claimed.event_id)
         .await
         .expect("start_run must open the first run");
-    let (run_status, finished): (String, Option<DateTime<Utc>>) = sqlx::query_as(
-        "SELECT status, finished_at FROM ai.analysis_run WHERE id = $1",
-    )
-    .bind(crashed_run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (run_status, finished): (String, Option<DateTime<Utc>>) =
+        sqlx::query_as("SELECT status, finished_at FROM ai.analysis_run WHERE id = $1")
+            .bind(crashed_run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(run_status, "analyzing");
-    assert!(finished.is_none(), "premise: the run was dropped mid-handle");
+    assert!(
+        finished.is_none(),
+        "premise: the run was dropped mid-handle"
+    );
 
     // Recovery: expire the dead lease, re-claim, re-handle to completion.
-    sqlx::query("UPDATE integration.job SET lease_until = now() - interval '1 second' WHERE id = $1")
-        .bind(job_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE integration.job SET lease_until = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(job_id)
+    .execute(&pool)
+    .await
+    .unwrap();
     let orch = orchestrator(&pool);
     let handled = worker_loop(&pool, &orch, "worker-s10-recovered", usize::MAX).await;
     assert_eq!(handled, 1);
@@ -1321,7 +1441,10 @@ async fn s10_crash_mid_handle_reuses_the_open_run_without_duplicates(pool: sqlx:
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(attempt_count, 0, "the adopted run is the first attempt, finished");
+    assert_eq!(
+        attempt_count, 0,
+        "the adopted run is the first attempt, finished"
+    );
 
     // Exactly-once side effects across the crash boundary.
     let (proposals, executed_proposals): (i64, i64) = sqlx::query_as(
@@ -1348,7 +1471,10 @@ async fn s10_crash_mid_handle_reuses_the_open_run_without_duplicates(pool: sqlx:
         seed.project_id,
     )
     .await;
-    assert_eq!(notifications, 3, "one notification per proposal, no duplicates");
+    assert_eq!(
+        notifications, 3,
+        "one notification per proposal, no duplicates"
+    );
     let (task_revision, milestone_revision): (i64, i64) = sqlx::query_as(
         "SELECT (SELECT revision FROM delivery.task WHERE id = $2), \
                 (SELECT revision FROM delivery.milestone WHERE id = $3)",
@@ -1359,16 +1485,18 @@ async fn s10_crash_mid_handle_reuses_the_open_run_without_duplicates(pool: sqlx:
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(task_revision, 8, "single forward move despite the crash+retry");
+    assert_eq!(
+        task_revision, 8,
+        "single forward move despite the crash+retry"
+    );
     assert_eq!(milestone_revision, 5);
 
     // The job and event closed out normally.
-    let job_status: String =
-        sqlx::query_scalar("SELECT status FROM integration.job WHERE id = $1")
-            .bind(job_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let job_status: String = sqlx::query_scalar("SELECT status FROM integration.job WHERE id = $1")
+        .bind(job_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(job_status, "completed");
     let event_status: String =
         sqlx::query_scalar("SELECT status FROM integration.inbound_event WHERE id = $1")
@@ -1380,11 +1508,14 @@ async fn s10_crash_mid_handle_reuses_the_open_run_without_duplicates(pool: sqlx:
 
     // Idempotent redelivery on top: a completed run is AlreadyDone, the
     // handler completes as a no-op, nothing new appears.
-    let outcome = orch.handle_ai_job(&pm_infrastructure::job_queue::ClaimedJob {
-        job_id,
-        event_id,
-        project_id: seed.project_id,
-    }).await.unwrap();
+    let outcome = orch
+        .handle_ai_job(&pm_infrastructure::job_queue::ClaimedJob {
+            job_id,
+            event_id,
+            project_id: seed.project_id,
+        })
+        .await
+        .unwrap();
     assert_eq!(outcome, HandleOutcome::Completed);
     let runs_after_redelivery: i64 =
         sqlx::query_scalar("SELECT count(*) FROM ai.analysis_run WHERE event_id = $1")
