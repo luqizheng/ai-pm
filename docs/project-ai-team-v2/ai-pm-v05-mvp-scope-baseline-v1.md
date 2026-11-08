@@ -3,12 +3,14 @@
 | 文档属性 | 内容 |
 | --- | --- |
 | 文档编号 | V05-00 |
-| 版本 | V1.2（V1.1 + Product Cognition & Knowledge Base 正式命名与概念关系收编） |
+| 版本 | V1.3（V1.2 + 目标 1 闭环登记 + PC/KB 应用完善收纳（KP 批次）+ V-05-6/7 关闭） |
 | 类型 | MVP Scope Baseline（产品第一个可演示闭环的范围基线） |
-| 日期 | 2026-11-06 |
+| 日期 | 2026-11-06（V1.3 修订 2026-11-08） |
 | 用户裁决（第一批） | Big View = 产品统一领域模型总图；Runner = 用户 PC 客户端软件；简化版调度进 MVP |
 | 用户裁决（第二批） | V-05-1 = **升级 devenv.device**；V-05-3 = **不取代、共存**（project_role 独立新实体，member.role 原样保留）；V-05-4 = **冻结 ACP V1.3.1 基线**（用户无异议按推荐）；V-05-5 = **ZCode / Codex / DeepSeek Harness 优先** + Runner 走 MCP 自领（无异议）；**Knowledge Base 纳入 V0.5**（目标 4）；V-05-2 展开解释后终裁 |
 | 用户裁决（第三批） | 目标 2 正式命名 = **Product Cognition & Knowledge Base — Product Definition V1.0**：Product Cognition（独立产品能力：建立/维护/验证产品整体认知）· Product Big View（其核心全貌视图）· Product View（观察视角：业务能力/功能模块/业务流程/页面交互等）· Knowledge Base（并列独立能力：资料管理/知识提取/Discussion Memory/知识检索） |
+| 用户裁决（第四批，2026-11-08） | **V0.5 增列「PC/KB 应用完善」**：KP-1（PC-01B 正式模型实施）/ KP-2（PC-01C 确认闭环）/ KP-3（KB 三层最小面）；PC-I6 全验收面剩余等显式切出 V0.6（§3.3/§八.8）。同日 V-05-6/7 实质关闭（Q-PC-01~13 已裁） |
+| 目标 1 状态 | ✅ **2026-11-08 闭环**：检查点 1（注册→建团→建项目→关联仓库→PC/KB draft 全链 PASS，8d81fbd）+ 检查点 2 R4（.59 Runner 真二进制 cpk 全链→平台远端只读验证 accepted，三边界全关，**ACP-09 正式关闭**，`docs/checkpoint2-r4-acceptance-record-v1.md`） |
 | 前置资产 | V2 架构基线 V1.0（Q1=A/Q2=B/Q3=A）· V2 代码对照核验报告 V1.0 · S03-ACP V1.3.1（独立评审通过）· S01-08 知识库与 Git 备份设计稿 V1.0（四裁决已定，待实施） |
 | 优先级裁决 | S01 后续切片降级为非迫切；S03-00 V1.2 审计并行推进、不阻塞 V0.5 |
 
@@ -49,9 +51,9 @@ Human ──REST/UI──> AI-PM Platform（控制平面：AI Team / 调度 / �
 
 | 通道 | 协议 | 现状 |
 | --- | --- | --- |
-| Platform ↔ Runner | MCP 四工具（pm_claim_task / pm_get_run_context / pm_report_progress / pm_submit_result）+ Interaction/命令查询最小面（待实施设计） | 四工具已齐（核验报告 §3.3）；Runner 循环 = 现有 worker run_executor 的客户端化抽取 |
-| Runner ↔ Agent Client | Adapter（stdin/args/env/文件约定；spawn/ExitOutcome/Job Object/进程组能力自 `codex_executor.rs` 演化） | **V0.5 Adapter 优先级（V-05-5）：ZCode → Codex → DeepSeek Harness**；其余仅留 Adapter 接口位 |
-| Human ↔ Platform | REST/UI 回复入口（ACP §8.3 六项权限检查 fail-closed） | 待建（ACP V1.3.1 §8） |
+| Platform ↔ Runner | MCP 四工具（pm_claim_task / pm_get_run_context / pm_report_progress / pm_submit_result）+ Interaction/命令查询面 + discover/续领/checkpoint（26 工具） | ✅ **已全落地**（迁移 0046~0055；.59 真机三边界全关，ACP-09 关闭） |
+| Runner ↔ Agent Client | Adapter（stdin/args/env/文件约定；spawn/ExitOutcome/Job Object/进程组能力自 `codex_executor.rs` 演化） | ✅ **V-05-5 落地**：ZCode → Codex → DeepSeek Harness 优先级链 + 模板库（CLI 真机档待 CLI 可用环境，其余协议层已验） |
+| Human ↔ Platform | REST/UI 回复入口（ACP §8.3 六项权限检查 fail-closed） | ✅ **已建**（ACP-03 迁移 0047 + .59 真机验证） |
 
 ### 2.3 与 S03-ACP V1.3.1 的关系
 
@@ -76,12 +78,20 @@ Human ──REST/UI──> AI-PM Platform（控制平面：AI Team / 调度 / �
 ### 3.2 与既有资产的关系
 
 - **设计基础**：S01-04 认知设计修订稿 V1.2（专家供稿 2026-11-05，待技术核验）的核心原则全部适用于 PC 能力：AI 自动准备材料、正式分析由人启动、认知结果逐项人工确认、已确认认知不可直接覆盖只能提案、混合 Context（核心认知默认注入 + 按任务检索）；`pm_cognition.rs`（迁移 0036，S01-04 V1 已实现，结构化事实派生不虚构 LLM）为种子。
-- **层级冲突待对齐（V-05-7）**：S01-04 V1.2 §2.3 把 "Product Cognition" 定义为 Project Cognition **六域之一**（产品定位/核心能力/用户场景/功能边界/操作流程/约束/体验原则）；本批正式定义将其升格为**独立产品能力**，其余维度（业务能力/功能模块/业务流程/页面交互）以 Product View 表达。两框架的映射须在 S01-04 技术核验/评审时统一。
-- **正式稿落盘**：「Product Definition V1.0」文件尚未落盘（全仓检索无此文件）；本节为裁决转述，成稿落盘后以其为权威输入。
+- **层级关系已定（V-05-7 关闭，Q-PC-01~13）**：PC **全新建**——不复用 `ai.cognition_*`/`baseline_*`；S01-04 Project Cognition = **技术认知**六域，保持独立服务其自身领域（不改名、零迁移、不受 PC 表结构反向约束）；Product Plan 不属 PC（Q-PC-13），PC 仅维护对 Plan 的关系引用。原两框架映射疑虑按此口径消解。
+- **权威文档族（正式稿已落盘，以其为准）**：产品定义 `docs/product-cognition-knowledge-base/product-cognition-knowledge-base-definition-architecture-v1.md` · 详细需求 V1.1 九文件（PC-FR-001~030）· 操作链终态 `docs/product/pc-kb-operation-v1.md`（commit→分析→人工确认）· 架构 `docs/architecture/knowledge-services/kb-pc-independent-services-architecture-v1.1.md`（13 ADR 全批）· PC-01B 数据模型 V1.1 七主题文件（17 表）· P2-13×PC-I6 LLM 裁决包（D-1~D-4 全裁）。
 
-### 3.3 V0.5 范围（V-05-6，待裁）
+### 3.3 V0.5 范围（V-05-6 关闭 → 第四批收纳 KP 批次，2026-11-08）
 
-推荐最小集：**PC 模型**（结构化认知对象 + 来源/确认状态/版本）+ **Big View 全貌** + **建立/维护/验证链**（复用知识提案/确认/否决链与质量门，零新机制）+ **Product View 框架**（四视角为路由点位逐个点亮：业务能力/功能模块先行，业务流程/页面交互 V0.6+）。
+正式实施基线 = **PC-I0～I6 七切片**（Q-PC-10 已裁）。现状对照（对照操作链终态文档与代码）：I0 ✅ / I1 半（0053 最小 6 表 ≠ 01B 正式 17 表）/ I2 半（来源/证据四元组有、关系面无）/ I3~I5 未动 / I6 起笔已落（f90d6f9：仓库快照 LLM 增强，迁移 0062 三模式 analysis_mode）。操作链前半场（commit→分析→落库→K2/P3 查看）已通；**断点 = 人工确认入口未建**（K2/P3 只能看不能确认）。
+
+| 批 | 内容 | 依赖 | 兑现 |
+| --- | --- | --- | --- |
+| **KP-1** | PC-01B 实施：0053 最小表 → 正式 17 表收敛（对象/关系/版本成员/治理；迁移按台账取号） | PC-01B V1.1 设计已在 | PC-I1/I2 补全 |
+| **KP-2** | PC-01C 确认闭环：proposal/审批端点（`pc.proposal*` / `pc.approval`）+ draft→确认→正式版本链（p4/p5 出 501） | KP-1 | 操作链终态最后一段；PC-I3 |
+| **KP-3** | KB 三层最小面：k5 来源管理 + k4 Structured Memory + **Discussion Memory（落库 + 按 Task 注入）** | 独立，可与 KP-1 并行 | 目标 4 主交付物 |
+
+**后置 V0.6（第四批显式切出）**：NO_CHANGE/CONFLICT 与冲突发现（等关系建模，AC-019 质量红线不容虚构）、Requirement/Design·ADR 影响分析族、完整性/一致性检查、主动认知维护（PC-I4/I5/I6 剩余）、Team Source Pool、知识检索全量面、KBGIT/PCGIT 正文权威、L0~L3 审批矩阵正式化。
 
 ### 3.4 原"统一领域模型总图"任务正名（与 Big View 解耦）
 
@@ -125,6 +135,8 @@ Human ──REST/UI──> AI-PM Platform（控制平面：AI Team / 调度 / �
 
 S01-08 四裁决（KB-3）：知识库仓库独立配置（R-01）·自动同步为主+手动 Sync Now（R-02）·GitHub/GitLab/Gitea/自建（R-03）·创建项目非必需（R-04）；失败不阻断、不丢数据、不自动覆盖远程冲突。
 
+**实现现状（2026-11-08 对照 `docs/product/pc-kb-operation-v1.md` 与代码）**：三层只通中段——Extracted Content 半层（KB digest）随 checkpoint-1/PC-I6 起笔可用；Original Sources 管理（k5）、Structured Memory 评审（k4）、Discussion Memory、知识检索均未建；K1/K3/K4/K5/K6/P1/P2/P4/P5 九端点 501 骨架（`knowledge_services.rs`）。第四批收纳 **KP-3 兑现最小面**，其余后置 V0.6。
+
 **与 V-05-2 的域边界（防两个 Git 裁决互相污染）**：知识库同步 = **平台侧 push**（平台持知识库仓库凭据、系统自动安排同步——S01-08 R-02 本义）；V-05-2（代码仓库 Client 自管 push）**不适用**知识库域。实施时 git 能力分两档：只读验证面（现有 `git_access.rs`，显式无 push）+ 知识库同步 push 面（WP-7 新增，仅限知识库仓库）。
 
 ---
@@ -134,16 +146,16 @@ S01-08 四裁决（KB-3）：知识库仓库独立配置（R-01）·自动同步
 | WP | 内容 | 依赖 | 交付 |
 | --- | --- | --- | --- |
 | WP-0 | 前置裁决批（V-05-1~5） | — | ✅ **五项全部已裁（2026-11-06），WP-0 清零，无阻塞项** |
-| WP-1 | **Product Cognition 能力**（目标 2）：PC 模型 + Big View 全貌 + 建立/维护/验证链（复用提案链）+ Product View 框架 | WP-0；范围随 V-05-6/7 终裁 | PC 能力 MVP |
+| WP-1 | **Product Cognition 能力**（目标 2）：经第四批收纳具体化为 **KP-1（PC-01B 正式模型实施）+ KP-2（确认闭环）**（§3.3） | PC-I0~I6 基线（Q-PC-10） | 分析→**确认**→版本化闭环（Big View 数据面） |
 | WP-1b | **V0.5 统一数据模型（Platform Domain Model）**（§3.4，原 Big View 任务正名）：四路资产合并 + 实体三档标注 | WP-0 | 模型总图 + 实体字典；V2 基线 §十一修订；全 WP 的 DB/API 设计输入 |
-| WP-2 | AI Team 后端纵切：迁移批（0045 起）+ 应用服务 + REST + 审计 + task_repository/task_waiting 生产写入口 | WP-1 | Roles/Client/授权/凭据/能力全链 API |
-| WP-3 | ai-pm-runner 客户端：MCP 自领循环 + 本地 workspace（`{root}/{run_id}/`）+ Adapter 框架 + **ZCode/Codex/DeepSeek Harness Adapter** + interaction 上报 + Continuation 消费 | WP-2（凭据）；骨架可与 WP-1 并行 | Runner 可执行文件（Windows 优先） |
-| WP-4 | 平台侧简化调度：调度决策插入 TaskReadyHandler 链前 + 无 Client 等待语义 + Run 快照扩展 Client 维度 | WP-2 | 建 Task→自动选中已授权在线 Client |
-| WP-5 | 人工介入与恢复（平台侧）：Interaction 实体 + REST/UI 回复入口 + worker_command + 等待窗口调度屏蔽（N-1/ACP-427/428）+ AI Team 前端页 + 待办入口 | WP-3 接口对齐 | 介入→回复→Continuation 全链 |
-| WP-7 | **Knowledge Base 正式四职责**（§五）：S01-08 实施（资料管理·Git 备份）+ Discussion Memory 最小面（落库+按 Task 注入）+ 知识检索入口 + KB-4 浏览页 | S01-08 设计稿；与 WP-2~5 并行 | 资料可管理、知识可提取、讨论可记忆、统一可检索、可同步用户 Git |
-| WP-6 | E2E MVP 验收（§九故事线 + ACP 验收子集 + KB/PC 闭环验证） | WP-1~5、WP-7 | 验收报告 |
+| WP-2 | AI Team 后端纵切：迁移批 + 应用服务 + REST + 审计 + task_repository/task_waiting 生产写入口 | WP-1 | ✅ 主体已落地（0049~0061 批次：Client Registry/Capability Registry/调度/回复链；简化调度竞争缓解 D-1=b 实施中） |
+| WP-3 | ai-pm-runner 客户端：MCP 自领循环 + 本地 workspace + Adapter + interaction 上报 + Continuation 消费 + 离线恢复 | — | ✅ **已落地（2026-11-08，checkpoint-2）**：`apps/ai-pm-runner` 真二进制，.59 真机三边界全关（ACP-09 正式关闭）；Windows 计划任务形态=Runner 设计 §8.1 |
+| WP-4 | 平台侧简化调度 | WP-2 | ✅ 简化版已落（pm-worker 第四循环）；**派发器↔Runner 竞争**已裁 D-1=b 缓解 / D-2=c 正式方向（并入调度入口闭合） |
+| WP-5 | 人工介入与恢复（平台侧） | WP-3 接口对齐 | ✅ **已落地**：Interaction + REST 回复（0047）+ worker_command + 离线恢复（0052）+ AI 会话前端（Batch G）；UI 批按 U-1=C/U-2=A 排期 |
+| WP-7 | **Knowledge Base 正式四职责**（§五）：第四批收纳具体化为 **KP-3（KB 三层最小面：k5 来源 + k4 Structured Memory + Discussion Memory 落库/按 Task 注入）**；S01-08 同步、浏览页、检索入口随 KP-3 及后续批 | 独立并行 | 资料可管理、记忆可沉淀、讨论可注入 |
+| WP-6 | E2E MVP 验收（§九故事线 + ACP 验收子集 + **PC/KB 确认闭环验证**） | WP-1（KP-1/2）、KP-3、WP-2~5 | 验收报告 |
 
-依赖关系：WP-0 → WP-1 →（WP-2 → WP-4/WP-5）；WP-3 骨架并行、凭据接入依赖 WP-2；WP-7 独立并行；全部汇合于 WP-6。
+依赖关系：WP-0 ✅ → KP-1 → KP-2 串行；KP-3 独立并行；WP-3/4/5 ✅；全部汇合于 WP-6。
 
 实施设计切片（ACP-01/02/08 等）在 WP-3/WP-5 开工前落盘，闭合 N-1/N-2 与命令查询面。
 
@@ -158,8 +170,8 @@ S01-08 四裁决（KB-3）：知识库仓库独立配置（R-01）·自动同步
 | V-05-3 | project_role 与 member.role 关系 | ✅ **已裁：不取代、共存**（project_role 新独立实体；member.role 六值与 agent_definition 零迁移） |
 | V-05-4 | S03-ACP V1.3.1 基线冻结 | ✅ **已裁：冻结**（用户无异议，按推荐执行；N-1/N-2 进实施设计闭合清单） |
 | V-05-5 | MVP 先行 Adapter + Runner 接入通道 | ✅ **已裁：ZCode / Codex / DeepSeek Harness 优先 + Runner 走 MCP 自领**（OpenCode/Trae/Claude Code 仅留接口位） |
-| V-05-6 | Product Cognition V0.5 范围档位 | ⏳ 待裁。推荐：PC 模型+Big View+提案/确认链+Product View 框架（业务能力/功能模块先行，业务流程/页面交互 V0.6+） |
-| V-05-7 | 与 S01-04 V1.2 六域 Project Cognition 的关系 | ⏳ 待裁。推荐：PC 升格独立能力，S01-04 技术核验/评审时按视图模型对齐（六域内容映射为 Big View/View 切片）；正式稿落盘后以其为准 |
+| V-05-6 | Product Cognition V0.5 范围档位 | ✅ **关闭（2026-11-08 第四批收纳）**：档位由 PC-I0~I6 基线（Q-PC-10）+ KP-1/KP-2/KP-3 批次承载（§3.3）；PC-I4/I5/I6 剩余切出 V0.6 |
+| V-05-7 | 与 S01-04 V1.2 六域 Project Cognition 的关系 | ✅ **关闭（Q-PC-01~13）**：PC 全新建；S01-04 Project Cognition = 技术认知六域，保持独立服务其自身领域（不改名/零迁移/不受反向约束）；Product Plan 不属 PC（Q-PC-13） |
 
 ---
 
@@ -172,6 +184,7 @@ S01-08 四裁决（KB-3）：知识库仓库独立配置（R-01）·自动同步
 5. 多 Runner 高可用、Runner 自动升级、LLM Provider 凭据向 Client 透传（V2 §九明确不作为前置条件）。
 6. OpenCode / Trae / Claude Code 完整 Adapter（仅框架接口就位；ZCode/Codex/DeepSeek Harness 为 V0.5 优先三家）。
 7. 租户级 Team Onboarding（docs/team-onboarding/ 三稿，独立在途批，与本项目并行不混）。
+8. **PC/KB 应用深化剩余面（2026-11-08 第四批收纳时切出 V0.6）**：NO_CHANGE/CONFLICT 与冲突发现、Requirement/Design·ADR 影响分析族、完整性/一致性检查、主动认知维护、Team Source Pool、知识检索全量面、KBGIT/PCGIT 正文权威、L0~L3 审批矩阵正式化。
 
 ---
 
@@ -185,15 +198,16 @@ S01-08 四裁决（KB-3）：知识库仓库独立配置（R-01）·自动同步
 6. Runner 收到回复投递 → **同一 Run 内 Continuation**：终止旧进程、新 Session/Process 携带原始上下文 + Checkpoint + 人工回复启动（D-01~D-07）。
 7. 执行完成 → `pm_submit_result` → 交付验证 → 验收闭环（复用现有 manifest/verdict）。
 8. 知识产物经提案链进入知识库（人工确认）→ 知识库按 S01-08 自动同步到用户 Git 服务器（KB-3）。
-9. 项目资料/讨论沉淀为 PC 认知提案 → 人工逐项确认 → Big View 全貌更新（目标 2 闭环；S01-04 核心原则：AI 提议、人类确认、已确认不可直接覆盖）。
+9. 项目资料/讨论沉淀为 PC 认知提案 → 人工经**确认入口（KP-2：`pc.proposal*` / `pc.approval`）逐项确认** → 正式版本闭合（KP-1 17 表模型）→ Big View 全貌更新（目标 2 闭环；核心原则：AI 提议、人类确认、已确认不可直接覆盖）。
+10. 讨论/会话沉淀为 Structured Memory 与 Discussion Memory（KP-3）→ 按 Task 检索注入后续 Agent Context（目标 4 闭环）。
 
-验收标准：ACP-401~428 相关子集 + V0.5 新增验收（Client 凭据签发/撤销生效、无 Client 时 `no_client_available` 等待、等待窗口自动调度屏蔽 ACP-427/428、task_repository 写入口可用、知识库同步成功/失败重试不丢数据）。
+验收标准：ACP-401~428 相关子集 + V0.5 新增验收（Client 凭据签发/撤销生效、无 Client 时 `no_client_available` 等待、等待窗口自动调度屏蔽 ACP-427/428、task_repository 写入口可用、知识库同步成功/失败重试不丢数据）+ **第四批新增**：PC 确认闭环（draft→proposal→人工确认→正式版本，AI 无确认权不回归）+ KB 三层（来源登记/Structured Memory 评审/Discussion Memory 落库并按 Task 注入）。
 
 ---
 
 ## 十、工程纪律
 
-1. **迁移号自 0045 起**（0043/0044 已被并行会话占用），落地前重核 `docs/ai-pm-migration-ledger.md`。
+1. **迁移号按台账纪律对账取号**：先读 `docs/ai-pm-migration-ledger.md` 再 `ls migrations/`（2026-11-08 实况至 0062；KP 批预期自 0063 起）；单一负责人分配，后实施者撞号无条件顺移并回填台账。
 2. ai-pm 主 checkout 存在并行会话在途未提交物（team_llm 修改、0043 迁移、team-onboarding 三稿）：**禁 sweep、禁 git add -A**，只提交本批文件。
 3. 禁重建区（核验报告 §四）继续有效：不建 task_execution/execution_result 新表、不改 13 态状态机、不动 MCP 四工具契约、WAITING_FOR_* 不做成状态。
 4. Runner 凭据面遵循 ADR-0002 凭据分离与 team_llm_credential 先例（AES-256-GCM 替换制）。
