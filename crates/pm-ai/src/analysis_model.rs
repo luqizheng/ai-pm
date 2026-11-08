@@ -215,6 +215,10 @@ impl AnalysisModel for RecordingAnalysisModel {
             error_message.as_deref(),
             elapsed_ms(started),
             Some(context.event_id),
+            // Batch H: only the conversation-reply chain reads the provider
+            // `usage` object; the analysis chain keeps its token columns
+            // NULL (its usage accounting remains挂账).
+            None,
         )
         .await;
         result

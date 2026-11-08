@@ -26,11 +26,14 @@ import { SCOPE_ALL, useScopeStore } from "@/api/scope";
  * 数据 = pm-api `/v1/pm/projects/{id}/conversations*`（`@/api/conversations`）：
  *   - 进入页面拉本人会话列表（updated_at DESC）；空列表不阻塞输入——
  *     首次发送自动建会话（title 取首条消息截断）再落消息；
- *   - 选中会话 → 拉消息（(created_at, id) ASC，limit 500 = 服务端 clamp 上限）；
+ *   - 选中会话 → 拉消息：**首屏最新窗口**（Batch H）——`latest=true`，
+ *     limit 200（服务端 DESC 取最新 200 条再反转为 ASC），会话很长时首屏
+ *     停在最新尾部而不是最旧 500 条；更早历史暂不做回翻（挂账）；
  *   - **增量轮询**（Batch G）：选中会话后每 POLL_INTERVAL_MS 用
  *     `after/after_id`（最后一条消息）拉新消息并追加（任何 role——assistant
  *     回复由 ai-pm-worker 的会话回复链落库）；发送成功后立即触发一次；
- *     切会话/项目切换/卸载清理定时器；轮询失败（429/网络抖动）静默保留旧态；
+ *     时间线为空时轮询退化为与首屏相同的最新窗口；切会话/项目切换/卸载
+ *     清理定时器；轮询失败（429/网络抖动）静默保留旧态；
  *   - 发送链路：等待 201 后按返回记录插入本地时间线（不乐观插入），
  *     失败保留原文提供一键重发，不静默丢弃；
  *   - assistant 消息按返回 role 渲染到 AI 侧，内容一律来自服务端，不伪造。
@@ -49,8 +52,13 @@ const projectId = computed(() => {
   return "";
 });
 
-/** 单次拉取条数 = 服务端 clamp 上限（MAX_MESSAGE_LIMIT）。 */
+/** 增量轮询单次拉取条数 = 服务端 clamp 上限（MAX_MESSAGE_LIMIT）。 */
 const MESSAGE_PAGE_LIMIT = 500;
+/**
+ * 首屏最新窗口条数（Batch H）：`latest=true, limit=200`——会话超过 200 条
+ * 时首屏停在最新 200 条（ASC 返回），不再从最旧 500 条起。
+ */
+const FIRST_PAGE_LIMIT = 200;
 /** 增量轮询间隔：assistant 回复生成以秒计，4s 是延迟与请求量的折中。 */
 const POLL_INTERVAL_MS = 4000;
 /** 自动建会话时从首条消息截取的 title 长度。 */
@@ -104,7 +112,8 @@ async function pollMessages() {
     const last = timeline.value.at(-1) ?? null;
     const query = last
       ? { after: last.createdAt, after_id: last.id, limit: MESSAGE_PAGE_LIMIT }
-      : { limit: MESSAGE_PAGE_LIMIT };
+      : // 空时间线退化 = 与首屏一致的最新窗口（Batch H）。
+        { latest: true, limit: FIRST_PAGE_LIMIT };
     const records = await listMessages(projectId.value, conversationId, query);
     if (selectedId.value !== conversationId) return;
     const known = new Set(timeline.value.map(message => message.id));
@@ -158,8 +167,11 @@ function toTimelineMessage(
 async function loadMessages(conversationId: string) {
   messagesLoading.value = true;
   try {
+    // 首屏最新窗口（Batch H）：latest=true, limit=200——服务端 DESC 取最新
+    // 200 条再反转为 ASC；轮询增量仍走 after/after_id 不变。
     const records = await listMessages(projectId.value, conversationId, {
-      limit: MESSAGE_PAGE_LIMIT
+      latest: true,
+      limit: FIRST_PAGE_LIMIT
     });
     if (selectedId.value !== conversationId) return;
     timeline.value = records.map(toTimelineMessage);

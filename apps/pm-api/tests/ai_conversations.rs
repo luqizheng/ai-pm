@@ -611,3 +611,89 @@ async fn cursor_combinations_are_validated(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+// ── Batch H：latest 首屏「最新窗口」─────────────────────────────────────
+
+/// 用例 8：`latest=true&limit=N` 返回**最新** N 条、顺序仍 ASC（首屏不再从
+/// 最旧窗口起）；消息数 ≤ limit 时即全量。latest 与 before / after 任一同给
+/// → 400（从简：组合语义不做）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn latest_query_returns_newest_window_and_conflicts_are_400(pool: PgPool) {
+    let tenant = seed_tenant(&pool, "1").await;
+    let alice = seed_member(&pool, tenant, "alice").await;
+    let customer = seed_customer(&pool, tenant, "c1").await;
+    let project = seed_project(&pool, tenant, customer, "p1", alice).await;
+    let app = app(pool);
+    let token = token_for("alice", 1);
+
+    let (_, v) = create_conversation(app.clone(), &token, project).await;
+    let conversation_id: Uuid = v["id"].as_str().unwrap().parse().unwrap();
+    let mut contents = Vec::new();
+    for i in 0..4 {
+        let (_, m) = post_message(
+            app.clone(),
+            &token,
+            project,
+            conversation_id,
+            json!({"content": format!("m{i}")}),
+        )
+        .await;
+        contents.push(m);
+    }
+
+    // latest=true&limit=2 → 最新 2 条（m2,m3），ASC。
+    let (status, v) = list_messages_query(
+        app.clone(),
+        &token,
+        project,
+        conversation_id,
+        "?latest=true&limit=2",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{v}");
+    let items = v.as_array().unwrap();
+    assert_eq!(items.len(), 2, "{v}");
+    assert_eq!(items[0]["content"], json!("m2"));
+    assert_eq!(items[1]["content"], json!("m3"));
+    assert_eq!(items[1]["id"], contents[3]["id"]);
+
+    // ≤ limit：全量 ASC（latest 与默认同形）。
+    let (status, v) = list_messages_query(
+        app.clone(),
+        &token,
+        project,
+        conversation_id,
+        "?latest=true",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{v}");
+    assert_eq!(v.as_array().map(Vec::len), Some(4), "{v}");
+
+    // latest + before 同给 → 400。
+    let (status, _) = list_messages_query(
+        app.clone(),
+        &token,
+        project,
+        conversation_id,
+        &format!(
+            "?latest=true&before={}",
+            contents[0]["created_at"].as_str().unwrap()
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // latest + after 同给 → 400。
+    let (status, _) = list_messages_query(
+        app,
+        &token,
+        project,
+        conversation_id,
+        &format!(
+            "?latest=true&after={}",
+            contents[0]["created_at"].as_str().unwrap()
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

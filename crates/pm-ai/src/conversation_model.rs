@@ -53,10 +53,38 @@ impl ConversationTurn {
     }
 }
 
+/// Token accounting reported by the provider in the chat-completions
+/// `usage` object (Batch H: the conversation chain persists it to
+/// `ai.llm_call_record`; the analysis/repo chains keep their columns NULL).
+/// Per-field serde defaults tolerate partial usage objects (a provider
+/// reporting only some counters must not fail the reply).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+pub struct Usage {
+    #[serde(default)]
+    pub prompt_tokens: i64,
+    #[serde(default)]
+    pub completion_tokens: i64,
+    #[serde(default)]
+    pub total_tokens: i64,
+}
+
+/// One successful completion: the free-text reply plus the provider's
+/// optional token `usage` (missing → `None`, never an error — providers
+/// without usage accounting must keep working).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConversationCompletion {
+    pub content: String,
+    pub usage: Option<Usage>,
+}
+
 /// The subset of the chat-completions response this port consumes.
 #[derive(Deserialize)]
 struct ChatCompletionResponse {
     choices: Vec<Choice>,
+    /// Absent or `null` in some providers → `None` (with `#[serde(default)]`
+    /// a missing key is fine; per-field defaults tolerate partial objects).
+    #[serde(default)]
+    usage: Option<Usage>,
 }
 
 #[derive(Deserialize)]
@@ -77,7 +105,7 @@ pub async fn complete(
     model: &str,
     timeout: chrono::Duration,
     messages: &[ConversationTurn],
-) -> Result<String, ModelError> {
+) -> Result<ConversationCompletion, ModelError> {
     // Same client posture as the analysis/repo adapters: no_proxy so a stale
     // OS proxy cannot hijack provider traffic; timeout bounds the whole
     // request (connect + headers + body).
@@ -162,7 +190,10 @@ pub async fn complete(
                 "model returned an empty reply".to_string(),
             ));
         }
-        return Ok(content);
+        return Ok(ConversationCompletion {
+            content,
+            usage: completion.usage,
+        });
     }
     Err(last_error.unwrap_or_else(|| {
         ModelError::Unavailable("conversation model call failed without an error".to_string())
@@ -192,7 +223,7 @@ mod tests {
             })))
             .mount(&server)
             .await;
-        let reply = complete(
+        let completion = complete(
             &server.uri(),
             "key",
             "m",
@@ -201,7 +232,68 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(reply, "plain **markdown** reply");
+        assert_eq!(completion.content, "plain **markdown** reply");
+        // No usage object in the envelope → None (never an error).
+        assert_eq!(completion.usage, None);
+    }
+
+    /// Batch H: the provider's `usage` object is surfaced on the completion
+    /// (conversation chain persists prompt/completion tokens to
+    /// `ai.llm_call_record`).
+    #[tokio::test]
+    async fn usage_object_is_surfaced_when_present() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "choices": [{"message": {"content": "reply"}}],
+                "usage": {"prompt_tokens": 12, "completion_tokens": 34, "total_tokens": 46}
+            })))
+            .mount(&server)
+            .await;
+        let completion = complete(
+            &server.uri(),
+            "key",
+            "m",
+            chrono::Duration::seconds(5),
+            &turns(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            completion.usage,
+            Some(Usage {
+                prompt_tokens: 12,
+                completion_tokens: 34,
+                total_tokens: 46
+            })
+        );
+    }
+
+    /// A `null` usage (some providers omit accounting entirely) is None, not
+    /// an envelope error; the non-usage reply shape keeps working.
+    #[tokio::test]
+    async fn null_usage_is_none_not_an_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "choices": [{"message": {"content": "reply"}}],
+                "usage": null
+            })))
+            .mount(&server)
+            .await;
+        let completion = complete(
+            &server.uri(),
+            "key",
+            "m",
+            chrono::Duration::seconds(5),
+            &turns(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(completion.content, "reply");
+        assert_eq!(completion.usage, None);
     }
 
     #[tokio::test]

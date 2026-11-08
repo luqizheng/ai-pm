@@ -3,10 +3,13 @@
 //! recorded too, never only the successes).
 //!
 //! Contract: recording must never take the calling chain down — an insert
-//! failure is logged and dropped. Usage/token columns are left NULL (the
-//! adapters do not read the chat-completions `usage` object yet; the Phase
-//! 6 LLM Gateway owns the fuller schema). Latency is wall-clock around the
-//! whole `analyze`/`draft` call.
+//! failure is logged and dropped. Usage/token columns (`prompt_tokens` /
+//! `completion_tokens`, migration 0041 — there is no `total_tokens` column)
+//! are filled only by the conversation-reply chain (Batch H: the adapter
+//! reads the chat-completions `usage` object); the analysis and repo-import
+//! chains still pass `None` and keep their columns NULL (their usage
+//! accounting remains挂账 for the Phase 6 LLM Gateway). Latency is
+//! wall-clock around the whole `analyze`/`draft`/reply call.
 
 /// `purpose` values written by this crate. The column is free-form TEXT
 /// today (Phase 3 policy resolution will own the vocabulary); the constants
@@ -56,7 +59,9 @@ pub(crate) fn elapsed_ms(started: std::time::Instant) -> i64 {
 /// Best-effort by contract: an insert failure is logged, never propagated.
 /// `event_id` (analysis chain only) links the row to the event's current
 /// analysis run via subquery — no run row (or a NULL event) simply leaves
-/// `analysis_run_id` NULL. Tenant/project/provider FKs come from the
+/// `analysis_run_id` NULL. `usage` (conversation-reply chain only, Batch H)
+/// fills `prompt_tokens` / `completion_tokens`; `None` (analysis / repo
+/// chains) leaves both NULL. Tenant/project/provider FKs come from the
 /// resolved provider context, so fake-model calls are never recorded here
 /// (they have no provider row).
 #[allow(clippy::too_many_arguments)]
@@ -71,15 +76,21 @@ pub(crate) async fn record_call(
     error_message: Option<&str>,
     latency_ms: i64,
     event_id: Option<uuid::Uuid>,
+    usage: Option<crate::conversation_model::Usage>,
 ) {
+    let (prompt_tokens, completion_tokens) = match usage {
+        Some(u) => (Some(u.prompt_tokens), Some(u.completion_tokens)),
+        None => (None, None),
+    };
     let result = sqlx::query(
         "INSERT INTO ai.llm_call_record \
          (tenant_id, project_id, provider_id, model, purpose, status, \
-          error_kind, error_message, latency_ms, analysis_run_id) \
+          error_kind, error_message, latency_ms, analysis_run_id, \
+          prompt_tokens, completion_tokens) \
          VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $1, $2, \
                  $3, $4, $5, $6, $7, $8, \
                  (SELECT id FROM ai.analysis_run WHERE event_id = $9 \
-                  ORDER BY created_at DESC LIMIT 1))",
+                  ORDER BY created_at DESC LIMIT 1), $10, $11)",
     )
     .bind(project_id)
     .bind(provider_id)
@@ -90,6 +101,8 @@ pub(crate) async fn record_call(
     .bind(error_message)
     .bind(latency_ms)
     .bind(event_id)
+    .bind(prompt_tokens)
+    .bind(completion_tokens)
     .execute(pool)
     .await;
     if let Err(e) = result {

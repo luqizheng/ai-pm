@@ -272,6 +272,38 @@ COMPOSE_OVERLAY=docker-compose.test-server.yml bash scripts/start-prod.sh \
 # ⚠️ token-service 容器重建会重新生成 JWT 密钥（密钥存容器内文件，无卷）→ 所有旧 JWT 失效，需重新登录
 ```
 
+### 7.1 AI 会话回复启用（Batch G/H）
+
+`ai-pm-worker` 内置第七条循环：assistant 会话回复（`/project/assistant`
+页面上用户发消息 → worker 扫描 pending 会话 → 调 LLM → 落 assistant 回复）。
+开关默认 **off**（新的计费型生产者不得在升级后静默启动），启用方式：
+
+```bash
+# .env.prod 追加（或改现有值），然后重建 ai-pm-worker：
+#   set -a && source .env && source .env.prod && set +a 后按 §七 起栈命令重建
+AI_PM_CONVERSATION_REPLY=on
+```
+
+- `AI_PM_CONVERSATION_REPLY=off|on`（缺省 `off`；typo 如 `ture` 视为
+  `off` 并打 WARN 日志——不会静默开启计费循环）。启动日志
+  `conversation reply loop (AI_PM_CONVERSATION_REPLY=off|on, default off)`
+  会打印生效模式。
+- LLM 提供方解析与 `AI_PM_ANALYSIS_MODEL` 同源（Task 17 三级选择）：
+  `AI_PM_ANALYSIS_MODEL=auto`（缺省）按「项目指定 provider（严格，不回退）
+  → 租户首个 enabled provider」解析；`fake` 钉死夹具（仅开发/测试）。
+  Provider 在 pm-api 的 Team LLM 管理面配置（0041，owner/admin 守卫）。
+- **无 provider 时**：会话不回复也不伪造——WARN 日志
+  `no LLM provider resolved for this conversation ... skipping the reply`，
+  30s 冷却后重试；页面表现为消息一直等不到 assistant 回复（属预期行为，
+  不是故障）。解析失败（凭据解密失败等）同样 WARN 跳过。
+- 每次真实调用落一行 `ai.llm_call_record`（purpose=`conversation_reply`，
+  Batch H 起含 prompt/completion token 列）；失败调用同样落记录
+  （error_kind 七类）。排查入口：`docker logs infrastructure-ai-pm-worker-1`
+  + 查 `ai.llm_call_record` 表。
+- 页面入口：前端 `/project/assistant`（侧边栏「助手」/TopBar 按钮）；会话
+  按项目+属主隔离，首屏拉最新 200 条消息（Batch H `latest` 窗口），增量
+  4s 轮询。
+
 ---
 
 ## 八. 故障排查（实测踩坑索引）

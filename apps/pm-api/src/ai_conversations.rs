@@ -5,11 +5,12 @@
 //! - `POST   /conversations/{id}/messages`          body `{content, content_type?}`
 //!   → 201 消息视图；**role 恒 `user`**（body 不收 role——assistant / system 的
 //!   生产者是后续 AI 链批次，不走 REST）；
-//! - `GET    /conversations/{id}/messages?before=&after=&after_id=&limit=`
+//! - `GET    /conversations/{id}/messages?before=&after=&after_id=&limit=&latest=`
 //!   `created_at, id` ASC；`before` 为向后 keyset 游标（`created_at < before`），
 //!   `after`(+`after_id`) 为向前增量游标（Batch G 前端轮询：
 //!   `created_at > after OR (created_at = after AND id > after_id)`）；
-//!   before/after 同给 400。
+//!   before/after 同给 400。Batch H `latest=true`：首屏「最新窗口」——
+//!   DESC 取 limit 行再反转为 ASC（与 before/after 同给 400）。
 //!
 //! 边界：项目不可见（非成员 / 跨租户 / 软删）→ 404；会话不存在或**跨属主**
 //! 一律 404（防探测）。消息只存储，不接任何模型调用。
@@ -63,6 +64,10 @@ pub(crate) struct ListMessagesQuery {
     /// 同微秒决胜键：`created_at = after AND id > after_id`（须与 after 成对）。
     pub after_id: Option<Uuid>,
     pub limit: Option<i64>,
+    /// Batch H 首屏「最新窗口」：true 时按 `(created_at, id)` DESC 取 limit
+    /// 行再反转为 ASC 返回（最新 limit 条）；缺省 false（ASC 取最旧 limit
+    /// 条）。与 before/after 任一同给 400（从简：组合语义不做）。
+    pub latest: Option<bool>,
 }
 
 pub(crate) fn router() -> Router<AppState> {
@@ -196,6 +201,8 @@ async fn list_messages_handler(
         after,
         query.after_id,
         query.limit,
+        // Batch H：缺省 false（旧语义），前端首屏显式传 true。
+        query.latest.unwrap_or(false),
     )
     .await?;
     Ok(Json(items))

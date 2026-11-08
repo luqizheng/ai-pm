@@ -241,11 +241,14 @@ impl ConversationReplyWorker {
                 .await;
                 let latency = elapsed_ms(started);
                 match reply {
-                    Ok(content) => {
+                    Ok(completion) => {
                         // Record first, append second: a storage failure must
                         // not erase the (truthful) ok record of a model call
                         // that already happened — and every real call lands
-                        // exactly one record either way.
+                        // exactly one record either way. Batch H: the
+                        // provider's usage (when present) fills the
+                        // prompt/completion token columns (no total_tokens
+                        // column in 0041 — the total rides in metadata).
                         call_record::record_call(
                             &self.pool,
                             conversation.project_id,
@@ -257,10 +260,17 @@ impl ConversationReplyWorker {
                             None,
                             latency,
                             None,
+                            completion.usage,
                         )
                         .await;
-                        self.append_reply(conversation, content, &cfg.model, latency)
-                            .await?;
+                        self.append_reply(
+                            conversation,
+                            completion.content,
+                            &cfg.model,
+                            latency,
+                            completion.usage,
+                        )
+                        .await?;
                         Ok(())
                     }
                     Err(err) => {
@@ -275,6 +285,7 @@ impl ConversationReplyWorker {
                             Some(call_record::analysis_error_kind(&err)),
                             Some(message.as_str()),
                             latency,
+                            None,
                             None,
                         )
                         .await;
@@ -337,21 +348,32 @@ impl ConversationReplyWorker {
     /// storage cap (`MAX_CONTENT_CHARS`): a pathological oversized reply
     /// must fail closed here rather than retry-loop a billable model call
     /// forever (the clamp only trims an absurd outlier, never normal text).
+    /// `usage` (Batch H, when the provider reported it) adds `total_tokens`
+    /// to the observation metadata (the 0041 record table has no
+    /// total_tokens column, so the metadata copy is the only total).
     async fn append_reply(
         &self,
         conversation: &PendingConversation,
         content: String,
         model_name: &str,
         latency_ms: i64,
+        usage: Option<conversation_model::Usage>,
     ) -> Result<(), pm_application::ai_conversations::ConversationError> {
         let clamped: String = content
             .chars()
             .take(pm_application::ai_conversations::MAX_CONTENT_CHARS)
             .collect();
-        let metadata = serde_json::json!({
-            "model": model_name,
-            "latency_ms": latency_ms,
-        });
+        let metadata = match usage {
+            Some(u) => serde_json::json!({
+                "model": model_name,
+                "latency_ms": latency_ms,
+                "total_tokens": u.total_tokens,
+            }),
+            None => serde_json::json!({
+                "model": model_name,
+                "latency_ms": latency_ms,
+            }),
+        };
         pm_application::ai_conversations::append_message(
             &self.pool,
             conversation.tenant_id,
@@ -570,19 +592,25 @@ mod tests {
         assert!(row.2["latency_ms"].is_i64(), "latency must be recorded");
 
         // Call record: purpose=conversation_reply, ok, provider linked,
-        // analysis_run_id NULL (no analysis run backs a chat turn).
-        let record: (String, String, Uuid, Option<Uuid>) = sqlx::query_as(
-            "SELECT purpose, status, provider_id, analysis_run_id \
-             FROM ai.llm_call_record WHERE project_id = $1",
-        )
-        .bind(project_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        // analysis_run_id NULL (no analysis run backs a chat turn). The
+        // mock reply carries no `usage` object → token columns stay NULL
+        // (Batch H: absent usage must never fabricate zeros).
+        let record: (String, String, Uuid, Option<Uuid>, Option<i64>, Option<i64>) =
+            sqlx::query_as(
+                "SELECT purpose, status, provider_id, analysis_run_id, \
+                        prompt_tokens, completion_tokens \
+                 FROM ai.llm_call_record WHERE project_id = $1",
+            )
+            .bind(project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(record.0, "conversation_reply");
         assert_eq!(record.1, "ok");
         assert_eq!(record.2, provider_id);
         assert!(record.3.is_none());
+        assert!(record.4.is_none(), "no usage → prompt_tokens NULL");
+        assert!(record.5.is_none(), "no usage → completion_tokens NULL");
 
         // The model context: system prompt first, then the user turn.
         let requests = server.received_requests().await.unwrap();
@@ -597,6 +625,55 @@ mod tests {
         // Replied conversation left the scan set naturally.
         let report = worker.reply_round().await.unwrap();
         assert_eq!(report, ReplyReport::default());
+    }
+
+    /// Batch H: a provider reply carrying the chat-completions `usage`
+    /// object → prompt/completion token columns land on
+    /// `ai.llm_call_record`, and `total_tokens` rides in the assistant
+    /// message metadata (0041 has no total_tokens column).
+    #[sqlx::test(migrations = "../../migrations")]
+    async fn usage_from_provider_is_persisted_to_record_and_metadata(pool: sqlx::PgPool) {
+        let project_id = seed_project(&pool).await;
+        let owner = seed_owner(&pool).await;
+        let conversation_id = seed_conversation(&pool, project_id, owner).await;
+        seed_message(&pool, conversation_id, "user", "hi").await;
+
+        let server = MockServer::start().await;
+        seed_enabled_provider(&pool, &server.uri(), "test-model").await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "choices": [{"message": {"content": "reply with usage"}}],
+                "usage": {"prompt_tokens": 111, "completion_tokens": 22, "total_tokens": 133}
+            })))
+            .mount(&server)
+            .await;
+
+        let mut worker = ConversationReplyWorker::new(pool.clone());
+        let report = worker.reply_round().await.unwrap();
+        assert_eq!(report.replied, 1);
+
+        let (prompt, completion): (Option<i64>, Option<i64>) = sqlx::query_as(
+            "SELECT prompt_tokens, completion_tokens FROM ai.llm_call_record \
+             WHERE project_id = $1 AND purpose = 'conversation_reply'",
+        )
+        .bind(project_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(prompt, Some(111));
+        assert_eq!(completion, Some(22));
+
+        let (metadata,): (Value,) = sqlx::query_as(
+            "SELECT metadata FROM ai.conversation_message \
+             WHERE conversation_id = $1 AND role = 'assistant'",
+        )
+        .bind(conversation_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(metadata["model"], "test-model");
+        assert_eq!(metadata["total_tokens"], 133);
     }
 
     #[sqlx::test(migrations = "../../migrations")]
@@ -1011,6 +1088,29 @@ mod tests {
         .await?;
         assert_eq!(status, "ok");
         assert!(latency.is_some());
+
+        // Batch H: real DeepSeek chat completions always carry a `usage`
+        // object → the token columns must be non-NULL on the record and the
+        // total must ride in the assistant metadata.
+        let (prompt_tokens, completion_tokens): (Option<i64>, Option<i64>) = sqlx::query_as(
+            "SELECT prompt_tokens, completion_tokens FROM ai.llm_call_record \
+             WHERE project_id = $1 AND purpose = 'conversation_reply'",
+        )
+        .bind(project_id)
+        .fetch_one(pool)
+        .await?;
+        assert!(
+            prompt_tokens.is_some() && completion_tokens.is_some(),
+            "real DeepSeek usage must fill the token columns \
+             (prompt={prompt_tokens:?}, completion={completion_tokens:?})"
+        );
+        println!(
+            "real DeepSeek usage: prompt={prompt_tokens:?}, completion={completion_tokens:?}"
+        );
+        assert!(
+            metadata["total_tokens"].is_i64(),
+            "real DeepSeek usage must surface total_tokens in metadata"
+        );
         Ok(())
     }
 }

@@ -65,6 +65,12 @@ export interface ListMessagesQuery {
   after_id?: string;
   /** 服务端 clamp [1, 500]，缺省 200。 */
   limit?: number;
+  /**
+   * Batch H 首屏「最新窗口」：true 时服务端按 `(created_at, id)` DESC 取
+   * limit 行再反转为 ASC 返回（即最新的 limit 条）；缺省 false（旧行为：
+   * ASC 取最旧 limit 条）。与 before/after 任一同给会 400。
+   */
+  latest?: boolean;
 }
 
 export function createConversation(

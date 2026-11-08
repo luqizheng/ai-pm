@@ -4,6 +4,8 @@
 //! 覆盖：after(+after_id) 组合键集的边界排序（同 created_at 由 id 决胜）、
 //! after-only 退化、before/after 互斥 400、after_id 缺 after 400、
 //! ASC+id 双键全序、append metadata 原样落库。
+//! Batch H：`latest=true` 最新窗口（>limit 时返回**最新** limit 条、顺序仍
+//! ASC）、latest 与 before/after 任一同给 400。
 
 use pm_application::ai_conversations::{
     append_message, create_conversation, list_messages, ConversationError,
@@ -99,6 +101,7 @@ async fn forward_cursor_orders_ties_by_id(pool: PgPool) {
         None,
         None,
         None,
+        false,
     )
     .await
     .unwrap();
@@ -125,6 +128,7 @@ async fn forward_cursor_orders_ties_by_id(pool: PgPool) {
         Some(first_tie.created_at),
         Some(first_tie.id),
         None,
+        false,
     )
     .await
     .unwrap();
@@ -148,6 +152,7 @@ async fn forward_cursor_orders_ties_by_id(pool: PgPool) {
         Some(second_tie.created_at),
         Some(second_tie.id),
         None,
+        false,
     )
     .await
     .unwrap();
@@ -193,6 +198,7 @@ async fn after_only_degenerates_to_timestamp_cursor(pool: PgPool) {
         Some(after),
         None,
         None,
+        false,
     )
     .await
     .unwrap();
@@ -214,6 +220,7 @@ async fn after_only_degenerates_to_timestamp_cursor(pool: PgPool) {
         None,
         None,
         None,
+        false,
     )
     .await
     .unwrap();
@@ -256,6 +263,7 @@ async fn cursor_combination_validation_errors(pool: PgPool) {
         Some(t),
         None,
         None,
+        false,
     )
     .await;
     assert!(
@@ -273,6 +281,7 @@ async fn cursor_combination_validation_errors(pool: PgPool) {
         None,
         Some(Uuid::new_v4()),
         None,
+        false,
     )
     .await;
     assert!(
@@ -323,5 +332,160 @@ async fn append_message_persists_metadata(pool: PgPool) {
     assert_eq!(
         observed.metadata,
         serde_json::json!({"model": "test-model", "latency_ms": 42})
+    );
+}
+
+/// Batch H：`latest=true` 最新窗口——消息数 > limit 时返回**最新**的
+/// limit 条（不是最旧的 limit 条），且返回顺序仍是 `(created_at, id)` ASC；
+/// limit 缺省回落 [`DEFAULT_MESSAGE_LIMIT`]（这里显式传小值控制窗口）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn latest_window_returns_the_newest_tail_in_ascending_order(pool: PgPool) {
+    let project = seed_project(&pool).await;
+    let owner = seed_owner(&pool).await;
+    let conversation = create_conversation(&pool, SYSTEM_TENANT, project, owner, "latest")
+        .await
+        .unwrap()
+        .id;
+    // 6 条消息，limit=2：默认分支取最旧 2 条（m0,m1），latest 取最新 2 条（m4,m5）。
+    for (i, at) in [
+        ("m0", "2026-11-08T10:00:00Z"),
+        ("m1", "2026-11-08T10:01:00Z"),
+        ("m2", "2026-11-08T10:02:00Z"),
+        ("m3", "2026-11-08T10:03:00Z"),
+        ("m4", "2026-11-08T10:04:00Z"),
+        ("m5", "2026-11-08T10:05:00Z"),
+    ] {
+        seed_message_at(&pool, conversation, Uuid::new_v4(), at, i).await;
+    }
+
+    let default_window = list_messages(
+        &pool,
+        SYSTEM_TENANT,
+        project,
+        owner,
+        conversation,
+        None,
+        None,
+        None,
+        Some(2),
+        false,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        default_window
+            .iter()
+            .map(|m| m.content.as_str())
+            .collect::<Vec<_>>(),
+        vec!["m0", "m1"],
+        "default (latest=false) keeps the oldest-window behavior"
+    );
+
+    let latest_window = list_messages(
+        &pool,
+        SYSTEM_TENANT,
+        project,
+        owner,
+        conversation,
+        None,
+        None,
+        None,
+        Some(2),
+        true,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        latest_window
+            .iter()
+            .map(|m| m.content.as_str())
+            .collect::<Vec<_>>(),
+        vec!["m4", "m5"],
+        "latest=true must return the NEWEST limit rows"
+    );
+    // 顺序仍 ASC：时间不减，末条是全表最新一条。
+    let times: Vec<_> = latest_window.iter().map(|m| m.created_at).collect();
+    assert!(
+        times.windows(2).all(|w| w[0] <= w[1]),
+        "latest window must be returned in ascending order"
+    );
+    assert_eq!(latest_window.last().unwrap().content, "m5");
+}
+
+/// Batch H：latest 消息数 ≤ limit 时即全量（顺序 ASC，与默认分支一致）；
+/// latest 与 before / after 任一同给一律 400（从简裁决：组合语义不做）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn latest_validation_and_small_window(pool: PgPool) {
+    let project = seed_project(&pool).await;
+    let owner = seed_owner(&pool).await;
+    let conversation = create_conversation(&pool, SYSTEM_TENANT, project, owner, "latest")
+        .await
+        .unwrap()
+        .id;
+    seed_message_at(
+        &pool,
+        conversation,
+        Uuid::new_v4(),
+        "2026-11-08T10:00:00Z",
+        "only",
+    )
+    .await;
+
+    // ≤ limit：全量返回。
+    let views = list_messages(
+        &pool,
+        SYSTEM_TENANT,
+        project,
+        owner,
+        conversation,
+        None,
+        None,
+        None,
+        None,
+        true,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        views.iter().map(|m| m.content.as_str()).collect::<Vec<_>>(),
+        vec!["only"]
+    );
+
+    let t = chrono::DateTime::parse_from_rfc3339("2026-11-08T10:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    let with_before = list_messages(
+        &pool,
+        SYSTEM_TENANT,
+        project,
+        owner,
+        conversation,
+        Some(t),
+        None,
+        None,
+        None,
+        true,
+    )
+    .await;
+    assert!(
+        matches!(with_before, Err(ConversationError::Validation(_))),
+        "{with_before:?}"
+    );
+    let with_after = list_messages(
+        &pool,
+        SYSTEM_TENANT,
+        project,
+        owner,
+        conversation,
+        None,
+        Some(t),
+        None,
+        None,
+        true,
+    )
+    .await;
+    assert!(
+        matches!(with_after, Err(ConversationError::Validation(_))),
+        "{with_after:?}"
     );
 }

@@ -12,9 +12,10 @@ import type {
 
 import AssistantView from "./AssistantView.vue";
 
-// 会话接线批（2026-11-08）+ Batch G 轮询批：页面数据一律来自
-// @/api/conversations（D-4 REST），这里只 mock IO 函数；三件套组件为真实
-// 实现——发送链路、增量轮询与 assistant 渲染是被测对象。
+// 会话接线批（2026-11-08）+ Batch G 轮询批 + Batch H 首屏最新窗口：
+// 页面数据一律来自 @/api/conversations（D-4 REST），这里只 mock IO 函数；
+// 三件套组件为真实实现——发送链路、增量轮询、首屏 latest 参数与 assistant
+// 渲染是被测对象。
 const listConversations = vi.fn();
 const createConversation = vi.fn();
 const appendMessage = vi.fn();
@@ -124,7 +125,11 @@ describe("AssistantView（会话接线）", () => {
     const { wrapper } = await mountPage();
 
     expect(listConversations).toHaveBeenCalledWith("p1");
-    expect(listMessages).toHaveBeenCalledWith("p1", "c1", { limit: 500 });
+    // Batch H 首屏：最新窗口（latest=true, limit=200），不再是旧 500 条首屏。
+    expect(listMessages).toHaveBeenCalledWith("p1", "c1", {
+      latest: true,
+      limit: 200
+    });
 
     // 切换器：updated_at DESC 首项默认选中，title 为空回落未命名
     const select = wrapper.findComponent(Select);
@@ -188,7 +193,10 @@ describe("AssistantView（会话接线）", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const { wrapper } = await mountPage();
-      expect(listMessages).toHaveBeenCalledWith("p1", "c1", { limit: 500 });
+      expect(listMessages).toHaveBeenCalledWith("p1", "c1", {
+        latest: true,
+        limit: 200
+      });
 
       // 下一轮增量：worker 已把 assistant 回复落库
       listMessages.mockResolvedValue([
@@ -335,15 +343,19 @@ describe("AssistantView（会话接线）", () => {
       wrapper.findComponent(Select).vm.$emit("update:modelValue", "c2");
       await flushPromises();
 
-      expect(listMessages).toHaveBeenCalledWith("p1", "c2", { limit: 500 });
+      expect(listMessages).toHaveBeenCalledWith("p1", "c2", {
+        latest: true,
+        limit: 200
+      });
       // c2 无消息：时间线为空，无伪造内容
       expect(wrapper.findAll(".ai-conversation-message")).toHaveLength(0);
       expect(wrapper.text()).toContain(t("assistant.recordedNotice"));
 
-      // 新时间线的第一轮增量：c2 时间线为空 → 无游标全量拉取
+      // 新时间线的第一轮增量：c2 时间线为空 → 退化为与首屏一致的最新窗口
       await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
       expect(listMessages).toHaveBeenLastCalledWith("p1", "c2", {
-        limit: 500
+        latest: true,
+        limit: 200
       });
     } finally {
       vi.useRealTimers();

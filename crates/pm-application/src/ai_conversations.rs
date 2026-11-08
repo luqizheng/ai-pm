@@ -224,6 +224,12 @@ pub async fn append_message(
 ///   组合；`before` 与 `after` 同时给出互斥 400（Validation）。
 ///
 /// Batch G：`after` 组合是前端增量轮询的游标（清偿「>500 条新尾部不可达」）。
+///
+/// Batch H `latest`（首屏「最新窗口」）：true 时按 `(created_at, id)` DESC
+/// 取 `limit` 行（即**最新**的 limit 条）再反转为 ASC 返回——前端首屏从
+/// 最旧窗口起的历史问题就此清偿。**从简裁决**：`latest` 与 `before` /
+/// `after` 任一同给一律 400（after 在 DESC 集内的语义复杂且无用例，不做
+/// 组合语义）；`latest` 缺省 false（旧行为：ASC 取最旧 limit 条）。
 #[allow(clippy::too_many_arguments)]
 pub async fn list_messages(
     pool: &PgPool,
@@ -235,6 +241,7 @@ pub async fn list_messages(
     after: Option<DateTime<Utc>>,
     after_id: Option<Uuid>,
     limit: Option<i64>,
+    latest: bool,
 ) -> Result<Vec<MessageView>, ConversationError> {
     if before.is_some() && after.is_some() {
         return Err(ConversationError::Validation(
@@ -244,6 +251,12 @@ pub async fn list_messages(
     if after_id.is_some() && after.is_none() {
         return Err(ConversationError::Validation(
             "after_id requires the after cursor".into(),
+        ));
+    }
+    // Batch H 从简：latest 与 keyset 游标互斥（组合语义无用例，不做）。
+    if latest && (before.is_some() || after.is_some()) {
+        return Err(ConversationError::Validation(
+            "latest cannot be combined with before/after cursors".into(),
         ));
     }
     let limit = limit
@@ -265,24 +278,45 @@ pub async fn list_messages(
         return Err(ConversationError::NotFound);
     }
 
-    let rows = sqlx::query(
-        "SELECT id, conversation_id, role, content, content_type, metadata, created_at \
-         FROM ai.conversation_message \
-         WHERE conversation_id = $1 \
-           AND ($2::timestamptz IS NULL OR created_at < $2) \
-           AND ($3::timestamptz IS NULL OR created_at > $3 \
-                OR (created_at = $3 AND $4::uuid IS NOT NULL AND id > $4)) \
-         ORDER BY created_at ASC, id ASC \
-         LIMIT $5",
-    )
-    .bind(conversation_id)
-    .bind(before)
-    .bind(after)
-    .bind(after_id)
-    .bind(limit)
-    .fetch_all(pool)
-    .await
-    .map_err(db)?;
+    let rows = if latest {
+        // 最新窗口：DESC 取 limit 行再按双键 ASC 反转返回（SQL 内完成，
+        // 返回顺序与默认分支一致）。
+        sqlx::query(
+            "SELECT id, conversation_id, role, content, content_type, metadata, created_at \
+             FROM ( \
+                 SELECT id, conversation_id, role, content, content_type, metadata, created_at \
+                 FROM ai.conversation_message \
+                 WHERE conversation_id = $1 \
+                 ORDER BY created_at DESC, id DESC \
+                 LIMIT $2 \
+             ) latest_window \
+             ORDER BY created_at ASC, id ASC",
+        )
+        .bind(conversation_id)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(db)?
+    } else {
+        sqlx::query(
+            "SELECT id, conversation_id, role, content, content_type, metadata, created_at \
+             FROM ai.conversation_message \
+             WHERE conversation_id = $1 \
+               AND ($2::timestamptz IS NULL OR created_at < $2) \
+               AND ($3::timestamptz IS NULL OR created_at > $3 \
+                    OR (created_at = $3 AND $4::uuid IS NOT NULL AND id > $4)) \
+             ORDER BY created_at ASC, id ASC \
+             LIMIT $5",
+        )
+        .bind(conversation_id)
+        .bind(before)
+        .bind(after)
+        .bind(after_id)
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+        .map_err(db)?
+    };
     Ok(rows.iter().map(message_from_row).collect())
 }
 

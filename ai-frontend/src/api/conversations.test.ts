@@ -94,4 +94,19 @@ describe("conversations api（D-4 会话 REST）", () => {
       { after: "2026-11-08T10:00:00Z", after_id: "m1", limit: 500 }
     );
   });
+
+  it("listMessages: latest=true 首屏最新窗口透传为 query（Batch H，服务端 DESC 取 limit 再反转 ASC）", async () => {
+    await listMessages("p1", "c1", { latest: true, limit: 200 });
+    expect(httpGet).toHaveBeenCalledWith(
+      "/v1/pm/projects/p1/conversations/c1/messages",
+      { latest: true, limit: 200 }
+    );
+
+    // 缺省不携带（服务端 latest=false 旧语义）。
+    await listMessages("p1", "c1", { limit: 500 });
+    expect(httpGet).toHaveBeenLastCalledWith(
+      "/v1/pm/projects/p1/conversations/c1/messages",
+      { limit: 500 }
+    );
+  });
 });
