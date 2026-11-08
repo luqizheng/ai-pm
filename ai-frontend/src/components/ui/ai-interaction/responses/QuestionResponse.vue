@@ -8,7 +8,7 @@ import Input from "@/components/ui/input/Input.vue";
 import Radio from "@/components/ui/radio/Radio.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import AiResponseCard from "../card/AiResponseCard.vue";
-import { aiIdentity } from "../fixtures";
+import { defaultAiIdentity } from "../identity";
 import { useAiInteraction } from "../useAiInteraction";
 import type {
   AiEvidence,
@@ -48,7 +48,7 @@ const props = withDefaults(
     evidence?: AiEvidence;
   }>(),
   {
-    identity: () => aiIdentity,
+    identity: () => defaultAiIdentity,
     timestamp: "",
     density: "default",
     submit: undefined,
@@ -112,7 +112,9 @@ const draftSaved = ref(false);
 const submittedAt = ref("");
 const formEl = ref<HTMLElement | null>(null);
 
-const identity = computed<AiIdentity>(() => props.identity ?? aiIdentity);
+const identity = computed<AiIdentity>(
+  () => props.identity ?? defaultAiIdentity
+);
 const total = computed(() => props.payload.questions.length);
 const answeredCount = computed(
   () => props.payload.questions.filter(isAnswered).length

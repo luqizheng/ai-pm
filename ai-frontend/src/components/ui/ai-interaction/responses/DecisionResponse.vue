@@ -8,7 +8,7 @@ import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
 import ConfirmationDialog from "@/components/ui/confirmation-dialog/ConfirmationDialog.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import AiResponseCard from "../card/AiResponseCard.vue";
-import { aiIdentity } from "../fixtures";
+import { defaultAiIdentity } from "../identity";
 import { useAiInteraction } from "../useAiInteraction";
 import type {
   AiEvidence,
@@ -41,7 +41,7 @@ const props = withDefaults(
     evidence?: AiEvidence;
   }>(),
   {
-    identity: () => aiIdentity,
+    identity: () => defaultAiIdentity,
     timestamp: "",
     density: "default",
     submit: undefined,
@@ -88,7 +88,9 @@ const submittedAt = ref("");
 const uid = useId();
 const commentId = `ai-decision-comment-${uid}`;
 
-const identity = computed<AiIdentity>(() => props.identity ?? aiIdentity);
+const identity = computed<AiIdentity>(
+  () => props.identity ?? defaultAiIdentity
+);
 const selectedOption = computed<DecisionOption | undefined>(() =>
   props.payload.options.find(option => option.id === selectedId.value)
 );

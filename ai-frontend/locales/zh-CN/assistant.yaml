@@ -1,0 +1,17 @@
+assistant:
+  pageTitle: AI 助手
+  subtitle: 与 AI-PM 就当前项目展开会话；消息持久保存，AI 回复通道开通后可继续追问。
+  switcherLabel: 会话
+  switcherPlaceholder: 选择会话
+  untitled: 未命名会话
+  messagesLoading: 消息加载中…
+  emptyGuide: 还没有会话。在下方输入第一条消息，发送时将自动创建会话。
+  recordedNotice: 已记录到会话；AI 回复通道尚未开通，AI 暂不会回复。
+  sendError: 消息发送失败
+  resend: 重发
+  noProjectTitle: 未选择项目
+  noProjectDesc: AI 会话按项目归属；请先在顶部切换到具体项目再开始会话。
+  loadingTitle: 会话加载中
+  loadingDesc: 正在读取本项目会话列表…
+  loadError: 会话列表加载失败
+  loadRetry: 重试

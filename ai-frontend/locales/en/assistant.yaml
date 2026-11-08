@@ -1,0 +1,17 @@
+assistant:
+  pageTitle: AI Assistant
+  subtitle: Talk with AI-PM about the current project. Messages are stored for good; the AI reply channel will pick up follow-ups once enabled.
+  switcherLabel: Conversation
+  switcherPlaceholder: Select a conversation
+  untitled: Untitled conversation
+  messagesLoading: Loading messages…
+  emptyGuide: No conversations yet. Type your first message below; sending it creates a conversation automatically.
+  recordedNotice: Recorded to the conversation; the AI reply channel is not yet available, so AI-PM will not respond yet.
+  sendError: Failed to send message
+  resend: Resend
+  noProjectTitle: No project selected
+  noProjectDesc: Conversations belong to a project. Switch to a concrete project in the top bar before starting one.
+  loadingTitle: Loading conversations
+  loadingDesc: Fetching this project's conversations…
+  loadError: Failed to load conversations
+  loadRetry: Retry

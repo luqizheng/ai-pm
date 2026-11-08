@@ -7,7 +7,7 @@ import Button from "@/components/ui/button/Button.vue";
 import MarkdownViewer from "@/components/ui/markdown-editor/MarkdownViewer.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import AiResponseCard from "../card/AiResponseCard.vue";
-import { aiIdentity } from "../fixtures";
+import { defaultAiIdentity } from "../identity";
 import { createMockSubmit } from "../submitAdapter";
 import type {
   AiEvidence,
@@ -38,7 +38,7 @@ const props = withDefaults(
     evidence?: AiEvidence;
   }>(),
   {
-    identity: () => aiIdentity,
+    identity: () => defaultAiIdentity,
     timestamp: "",
     density: "default",
     submit: undefined,

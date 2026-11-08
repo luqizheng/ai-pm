@@ -9,7 +9,7 @@ import ConfirmationDialog from "@/components/ui/confirmation-dialog/Confirmation
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import AiResponseCard from "../card/AiResponseCard.vue";
 import AiSubmissionStatus from "../card/AiSubmissionStatus.vue";
-import { aiIdentity } from "../fixtures";
+import { defaultAiIdentity } from "../identity";
 import { createMockSubmit } from "../submitAdapter";
 import type {
   AiEvidence,
@@ -42,7 +42,7 @@ const props = withDefaults(
     evidence?: AiEvidence;
   }>(),
   {
-    identity: () => aiIdentity,
+    identity: () => defaultAiIdentity,
     timestamp: "",
     density: "default",
     submit: undefined,

@@ -5,7 +5,7 @@ import { Check, Copy, FileText, MessageSquare } from "lucide-vue-next";
 
 import MarkdownViewer from "@/components/ui/markdown-editor/MarkdownViewer.vue";
 import AiResponseCard from "../card/AiResponseCard.vue";
-import { aiIdentity } from "../fixtures";
+import { defaultAiIdentity } from "../identity";
 import type {
   AiEvidence,
   AiIdentity,
@@ -34,7 +34,7 @@ const props = withDefaults(
     evidence?: AiEvidence;
   }>(),
   {
-    identity: () => aiIdentity,
+    identity: () => defaultAiIdentity,
     timestamp: "",
     density: "default",
     submit: undefined,

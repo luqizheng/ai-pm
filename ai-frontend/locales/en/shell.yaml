@@ -182,6 +182,7 @@ shell:
         discovery: Code Discovery
         requirements: Requirements
         execution: AI Execution Center
+        assistant: AI Assistant
         knowledge: Knowledge Review
         devenv: Development Environment
         environments: Execution Environments

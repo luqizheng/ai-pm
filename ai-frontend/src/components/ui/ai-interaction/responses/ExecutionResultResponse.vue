@@ -27,7 +27,7 @@ import TableHeader from "@/components/ui/table/TableHeader.vue";
 import TableRow from "@/components/ui/table/TableRow.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import AiResponseCard from "../card/AiResponseCard.vue";
-import { aiIdentity } from "../fixtures";
+import { defaultAiIdentity } from "../identity";
 import { createMockSubmit } from "../submitAdapter";
 import { useAiInteraction } from "../useAiInteraction";
 import type {
@@ -83,7 +83,7 @@ const props = withDefaults(
     evidence?: AiEvidence;
   }>(),
   {
-    identity: () => aiIdentity,
+    identity: () => defaultAiIdentity,
     timestamp: "",
     density: "default",
     submit: undefined,
@@ -139,7 +139,9 @@ const changeReason = ref("");
 const changeError = ref("");
 const retryRequested = ref(false);
 
-const identity = computed<AiIdentity>(() => props.identity ?? aiIdentity);
+const identity = computed<AiIdentity>(
+  () => props.identity ?? defaultAiIdentity
+);
 const executionState = computed(() => props.payload.executionState);
 const stateVariant = computed<BadgeVariant>(() => {
   const map: Record<ExecutionState, BadgeVariant> = {

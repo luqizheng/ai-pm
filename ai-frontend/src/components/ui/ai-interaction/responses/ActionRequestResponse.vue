@@ -12,7 +12,7 @@ import {
 
 import ConfirmationDialog from "@/components/ui/confirmation-dialog/ConfirmationDialog.vue";
 import AiResponseCard from "../card/AiResponseCard.vue";
-import { aiIdentity } from "../fixtures";
+import { defaultAiIdentity } from "../identity";
 import { useAiInteraction } from "../useAiInteraction";
 import type {
   ActionRequestPayload,
@@ -48,7 +48,7 @@ const props = withDefaults(
     evidence?: AiEvidence;
   }>(),
   {
-    identity: () => aiIdentity,
+    identity: () => defaultAiIdentity,
     timestamp: "",
     density: "default",
     submit: undefined,
@@ -89,7 +89,9 @@ const {
 const detailsOpen = ref(false);
 const dialogOpen = ref(false);
 
-const identity = computed<AiIdentity>(() => props.identity ?? aiIdentity);
+const identity = computed<AiIdentity>(
+  () => props.identity ?? defaultAiIdentity
+);
 const isReadonly = computed(() => submitted.value);
 const riskLabel = computed(() =>
   t(`ai.actionRequest.risk.${props.payload.riskLevel}`)

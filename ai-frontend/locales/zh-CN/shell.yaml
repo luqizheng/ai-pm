@@ -182,6 +182,7 @@ shell:
         discovery: 代码检索
         requirements: 需求
         execution: AI 执行中心
+        assistant: AI 助手
         knowledge: 知识审阅
         devenv: 开发环境
         environments: 执行环境

@@ -24,7 +24,6 @@ import { useAuthStore } from "@/stores/auth";
 import { useShellStore } from "@/stores/shell";
 import { useTeamStore } from "@/stores/team";
 
-
 /**
  * 全局顶栏（Application Shell §2A，52px）。
  *
@@ -247,8 +246,12 @@ async function onSignOutConfirm() {
       <!-- 主题快捷开关（铃铛旁：深/浅单击往返；与设置偏好页同源 lib/theme） -->
       <ThemeToggle />
 
-      <!-- 全局 AI 助手入口 -->
-      <button type="button" class="shell-topbar__assistant">
+      <!-- 全局 AI 助手入口（2026-11-08 接线：push 项目 AI 会话页） -->
+      <button
+        type="button"
+        class="shell-topbar__assistant"
+        @click="router.push('/project/assistant')"
+      >
         <Sparkles :size="14" aria-hidden="true" />
         <span>{{ t("shell.app.topbar.assistant") }}</span>
       </button>

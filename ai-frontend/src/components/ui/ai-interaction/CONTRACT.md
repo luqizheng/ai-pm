@@ -188,3 +188,18 @@ state.begin() /
 `--size-ai-content-collapsed`、`--size-ai-evidence-max-height`、`--size-ai-artifact-preview-height`、
 `--size-ai-log-max-height`、`--size-ai-diff-line`、`--size-ai-avatar`、`--size-ai-avatar-lg`、
 `--size-ai-option-min-height`、`--size-ai-conversation-max-width`、`--size-ai-message-gap`。
+
+## 11. 接线批变更记录（V1.1，2026-11-08 — AI 会话三件套接真实后端）
+
+- `conversation/**` 与 `responses/**` 共 9 个组件的缺省 AI 身份回落值从
+  `fixtures.aiIdentity` 换成新模块 `identity.ts` 的 `defaultAiIdentity`
+  （`{ name: "AI-PM", avatarLabel: "AI" }`）。原因：发布构建 mock 门禁
+  （`build/release-guard.ts`）禁止任何产物 chunk 引用 fixtures 模块；组件
+  静态依赖演示数据会把 fixtures 打进业务页 chunk。**props / emit 契约不变**。
+  行为差异：缺省回落不再携带演示角色副标（「研发负责人」）——演示目录页
+  显式传 `fixtures.aiIdentity` 的地方不受影响，仅纯 AI 文本消息的身份章
+  少一行 role。
+- `fixtures.ts` 本身保持只读未动；`types.ts` 未动。
+- 业务消费方（`src/views/project/assistant/AssistantView.vue`）直接调
+  `@/api/conversations`（会话 REST），不经 `useAiInteraction`——该状态机
+  服务于响应卡的提交生命周期，会话消息发送无卡片生命周期，走页面适配层。

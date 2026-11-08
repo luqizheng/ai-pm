@@ -10,7 +10,7 @@ import InformationalResponse from "../responses/InformationalResponse.vue";
 import ProposalResponse from "../responses/ProposalResponse.vue";
 import QuestionResponse from "../responses/QuestionResponse.vue";
 import RecommendationResponse from "../responses/RecommendationResponse.vue";
-import { aiIdentity } from "../fixtures";
+import { defaultAiIdentity } from "../identity";
 import type { AiResponseType, ConversationMessage } from "../types";
 
 /**
@@ -35,7 +35,9 @@ const interaction = computed(() => props.message.interaction);
 const cardComponent = computed(() =>
   interaction.value ? CARD_COMPONENTS[interaction.value.type] : null
 );
-const identity = computed(() => interaction.value?.identity ?? aiIdentity);
+const identity = computed(
+  () => interaction.value?.identity ?? defaultAiIdentity
+);
 const timeLabel = computed(() => formatTime(props.message.createdAt));
 
 /** 内联卡绑定：density 固定 conversation，时间用信封时间 */
