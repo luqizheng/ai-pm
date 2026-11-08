@@ -227,6 +227,9 @@ fn build_router(
         .merge(crate::ai_roles::router())
         // AI Team 总览与执行监控（UI-2，U-1=C）：现有表只读聚合（零迁移）。
         .merge(crate::ai_team_monitor::router())
+        // Execution Policies 读写面（UI-3，U-2=A）：四层策略现状 + 项目层/任务
+        // 覆盖层写入（org/task_type V1 只读，零迁移）。
+        .merge(crate::ai_team_policies::router())
         // 最小对话存储（V2 D-4=A）：AI PM 对话记忆（会话 + 消息，属主隔离；
         // REST 恒 role=user，assistant 生产者是后续 AI 链批次）。
         .merge(crate::ai_conversations::router())

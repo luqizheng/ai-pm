@@ -5,6 +5,7 @@
 pub mod ai_conversations;
 pub mod ai_roles;
 pub mod ai_team_monitor;
+pub mod ai_team_policies;
 pub mod audit_stream;
 pub mod auth;
 pub mod command_center;

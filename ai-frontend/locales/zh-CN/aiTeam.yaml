@@ -5,9 +5,6 @@ aiTeam:
     modelPolicies: 模型策略
     monitor: 执行监控
     executionPolicies: 执行策略
-  comingSoon:
-    title: 即将提供
-    hint: 该子页随后续批次落地；当前不做任何演示数据。
   noProject:
     title: 未选择项目
     hint: 请从项目总控台进入项目设置，或先在顶栏切换到具体项目。
@@ -119,3 +116,63 @@ aiTeam:
       reason: 原因
       time: 时间
     systemActor: 系统
+  executionPolicies:
+    title: 执行策略
+    description: 四层执行策略（organization → project → task_type → task）的现状与管理。高层强制审批、低层不得放宽；行缺失或字段为空 = 该层不表态（继承上层）。
+    loadFailed: 执行策略加载失败
+    refresh: 刷新
+    orgHeading: 组织层
+    orgUnset: 未设置（默认）
+    orgManagedHint: 该层由平台管理（租户全局 "*" 行），本页只读；未设置时走默认合成。
+    orgApprovalOn: 已强制人工审批
+    orgApprovalOff: 已明确不强制人工审批
+    projectHeading: 项目层
+    projectUnset: 未设置（继承组织层）
+    projectHint: 为本项目显式开启或免除执行前人工审批；低层 false 无法放宽高层的 true。清除后恢复继承组织层。
+    field:
+      requireHumanApproval: 执行前人工审批
+    save: 保存
+    saving: 保存中…
+    saved: 项目层执行策略已保存
+    cleared: 已清除项目层设置，恢复继承组织层
+    clearInherit: 清除（恢复继承组织层）
+    saveFailed: 保存失败
+    taskTypesHeading: 任务类型层
+    taskTypesHint: 租户内跨项目全局口径，由平台管理，本页只读。
+    taskTypesEmpty: 暂无任务类型策略行
+    taskTypeColumn:
+      type: 任务类型
+      requireHumanApproval: 人工审批
+      updatedAt: 更新时间
+    overridesHeading: 任务级覆盖
+    overridesHint: 本项目任务覆盖行；字段为「继承」表示不表态（NULL = 继承上层）。
+    overridesEmpty: 暂无任务级覆盖（新增入口在任务详情页，V1 未提供）
+    overrideColumn:
+      task: 任务
+      autoAccept: 自动验收
+      autoMerge: 自动合并
+      autoPublishKnowledge: 知识自动生效
+      requireHumanApproval: 人工审批
+      updatedAt: 更新时间
+      actions: 操作
+    inherit: 继承
+    on: 开
+    off: 关
+    clearOverride: 清除覆盖
+    clearing: 清除中…
+    overrideCleared: 已清除任务覆盖，恢复全继承
+    clearOverrideFailed: 清除覆盖失败
+    forbidden: 无权限：只有租户管理员或项目 Owner 可以修改执行策略。已为你禁用全部控件。
+    compositionHeading: 合成规则
+    compositionLayersLabel: 叠加顺序
+    compositionDefaultsHeading: 默认值（无任何层表态时）
+    defaultsLabel:
+      autoAccept: 自动验收
+      autoMerge: 自动合并
+      autoPublishKnowledge: 知识自动生效
+      requireHumanApproval: 人工审批
+      additionalChecks: 额外校验
+    capabilityOn: 允许
+    capabilityOff: 禁止
+    approvalRequired: 要求
+    approvalNotRequired: 不要求

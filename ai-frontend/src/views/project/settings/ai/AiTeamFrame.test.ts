@@ -10,6 +10,8 @@ const listProjectAiRoles = vi.fn();
 const getProjectAiPolicy = vi.fn();
 const resolveTenantId = vi.fn();
 const listLlmProviders = vi.fn();
+const getProjectAiTeamMonitor = vi.fn();
+const getProjectAiExecutionPolicies = vi.fn();
 
 vi.mock("@/api/aiRoles", () => ({
   listProjectAiRoles: (...args: unknown[]) => listProjectAiRoles(...args),
@@ -21,6 +23,16 @@ vi.mock("@/api/llm", () => ({
   setProjectAiPolicy: vi.fn(),
   resolveTenantId: (...args: unknown[]) => resolveTenantId(...args),
   listLlmProviders: (...args: unknown[]) => listLlmProviders(...args)
+}));
+vi.mock("@/api/aiTeam", () => ({
+  getProjectAiTeamOverview: vi.fn(),
+  getProjectAiTeamMonitor: (...args: unknown[]) =>
+    getProjectAiTeamMonitor(...args),
+  getProjectAiExecutionPolicies: (...args: unknown[]) =>
+    getProjectAiExecutionPolicies(...args),
+  setProjectExecutionPolicy: vi.fn(),
+  setTaskPolicyOverride: vi.fn(),
+  clearTaskPolicyOverride: vi.fn()
 }));
 
 /**
@@ -78,16 +90,36 @@ describe("Project Setting · AI Team 骨架", () => {
     expect(tabs[4].text()).toBe("执行策略");
   });
 
-  it("未落地子页渲染「即将提供」空态（无假数据），并保留页签条", async () => {
-    // UI-2 后 Overview / Monitor 已落地；占位页只剩 Execution Policies
+  it("Execution Policies 子页落地后渲染内容区（五子页无占位残留），并保留页签条", async () => {
+    // UI-3 起 Execution Policies 有了真实内容区（分层卡 + 合成规则），
+    // 「即将提供」占位视图与 aiTeam.comingSoon 文案已一并移除。
+    getProjectAiExecutionPolicies.mockResolvedValue({
+      organization: null,
+      project: null,
+      taskTypes: [],
+      taskOverrides: [],
+      composition: {
+        layer_order: ["organization", "project", "task_type", "task"],
+        defaults: {
+          auto_accept: true,
+          auto_merge: true,
+          auto_publish_knowledge: true,
+          require_human_approval: false,
+          additional_checks: []
+        },
+        rules: []
+      }
+    });
     const { wrapper } = await navigate(
       "/project/settings/ai/execution-policies?project_id=prj-1"
     );
-    const coming = wrapper.find('[data-testid="ai-coming-soon"]');
-    expect(coming.exists()).toBe(true);
-    expect(coming.text()).toContain("即将提供");
-    // 页头描述 = 子页名 + 规划中徽标词
-    expect(wrapper.text()).toContain("执行策略 · 规划中");
+    expect(getProjectAiExecutionPolicies).toHaveBeenCalledWith("prj-1");
+    expect(
+      wrapper.find('[data-testid="ai-exec-pol-composition"]').exists()
+    ).toBe(true);
+    expect(wrapper.find('[data-testid="ai-coming-soon"]').exists()).toBe(
+      false
+    );
     expect(wrapper.find('[data-testid="ai-tabs"]').exists()).toBe(true);
   });
 

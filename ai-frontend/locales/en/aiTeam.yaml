@@ -5,9 +5,6 @@ aiTeam:
     modelPolicies: Model Policies
     monitor: Execution Monitor
     executionPolicies: Execution Policies
-  comingSoon:
-    title: Coming soon
-    hint: This sub-page lands in a later batch; no demo data is shown.
   noProject:
     title: No project selected
     hint: Enter Project Settings from a Project Command Center, or switch to a specific project first.
@@ -119,3 +116,63 @@ aiTeam:
       reason: Reason
       time: Time
     systemActor: system
+  executionPolicies:
+    title: Execution Policies
+    description: "Current state and management of the four execution-policy layers (organization → project → task_type → task). Higher layers force approval and lower layers cannot relax it; a missing row or empty field means the layer does not speak (inherits the upper layer)."
+    loadFailed: Failed to load execution policies
+    refresh: Refresh
+    orgHeading: Organization layer
+    orgUnset: Unset (default)
+    orgManagedHint: "This layer is managed by the platform (the tenant-global \"*\" row) and is read-only here; when unset the composed default applies."
+    orgApprovalOn: Human approval enforced
+    orgApprovalOff: Explicitly not requiring human approval
+    projectHeading: Project layer
+    projectUnset: Unset (inherits the organization layer)
+    projectHint: Explicitly require or waive pre-execution human approval for this project; a lower-layer false cannot relax a higher-layer true. Clearing restores inheritance from the organization layer.
+    field:
+      requireHumanApproval: Human approval before execution
+    save: Save
+    saving: Saving…
+    saved: Project-layer execution policy saved
+    cleared: Project-layer setting cleared; inheriting the organization layer again
+    clearInherit: Clear (inherit organization layer)
+    saveFailed: Failed to save
+    taskTypesHeading: Task type layer
+    taskTypesHint: Tenant-wide across projects, managed by the platform, read-only here.
+    taskTypesEmpty: No task-type policy rows yet
+    taskTypeColumn:
+      type: Task type
+      requireHumanApproval: Human approval
+      updatedAt: Updated At
+    overridesHeading: Task-level overrides
+    overridesHint: Override rows for this project's tasks; a field showing "inherit" means it does not speak (NULL = inherits the upper layer).
+    overridesEmpty: No task-level overrides yet (the creation entry lives on the task detail page and is not provided in V1)
+    overrideColumn:
+      task: Task
+      autoAccept: Auto acceptance
+      autoMerge: Auto merge
+      autoPublishKnowledge: Auto knowledge publish
+      requireHumanApproval: Human approval
+      updatedAt: Updated At
+      actions: Actions
+    inherit: inherit
+    on: "on"
+    off: "off"
+    clearOverride: Clear override
+    clearing: Clearing…
+    overrideCleared: Task override cleared; full inheritance restored
+    clearOverrideFailed: Failed to clear the override
+    forbidden: "Not allowed: only tenant admins or the project owner can change execution policies. All controls have been disabled for you."
+    compositionHeading: Composition rules
+    compositionLayersLabel: Layer order
+    compositionDefaultsHeading: Defaults (when no layer speaks)
+    defaultsLabel:
+      autoAccept: Auto acceptance
+      autoMerge: Auto merge
+      autoPublishKnowledge: Auto knowledge publish
+      requireHumanApproval: Human approval
+      additionalChecks: Additional checks
+    capabilityOn: allowed
+    capabilityOff: disallowed
+    approvalRequired: required
+    approvalNotRequired: not required

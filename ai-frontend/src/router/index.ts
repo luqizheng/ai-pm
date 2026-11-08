@@ -26,11 +26,11 @@ import SettingsProjectPlaceholderView from "@/views/project/settings/SettingsPro
 import SettingsProjectRepositoriesView from "@/views/project/settings/SettingsProjectRepositoriesView.vue";
 import SettingsProjectRunnersView from "@/views/project/settings/SettingsProjectRunnersView.vue";
 import SettingsProjectRunnerDetailView from "@/views/project/settings/SettingsProjectRunnerDetailView.vue";
-import AiTeamComingSoonView from "@/views/project/settings/ai/AiTeamComingSoonView.vue";
 import SettingsProjectAiRolesView from "@/views/project/settings/ai/SettingsProjectAiRolesView.vue";
 import SettingsProjectAiOverviewView from "@/views/project/settings/ai/SettingsProjectAiOverviewView.vue";
 import SettingsProjectAiModelPoliciesView from "@/views/project/settings/ai/SettingsProjectAiModelPoliciesView.vue";
 import SettingsProjectAiMonitorView from "@/views/project/settings/ai/SettingsProjectAiMonitorView.vue";
+import SettingsProjectAiExecutionPoliciesView from "@/views/project/settings/ai/SettingsProjectAiExecutionPoliciesView.vue";
 import RequirementDetailView from "@/views/project/requirement-detail/RequirementDetailView.vue";
 import RequirementHistoryView from "@/views/project/requirement-history/RequirementHistoryView.vue";
 import OnboardingWelcomeView from "@/views/onboarding/OnboardingWelcomeView.vue";
@@ -172,13 +172,12 @@ export function buildRoutes(): RouteRecordRaw[] {
       component: SettingsProjectRunnerDetailView,
       meta: { title: "environments.detail.title" }
     },
-    // AI Team（UI-1，U-2=A 五子页落地序 Roles→Overview→ModelPolicies→Monitor→
-    // ExecutionPolicies）：外层仍是侧栏单条「AI 配置」入口，五子页走子路由 +
-    // 页内页签条（AiTeamFrame）。UI-1 落地 Roles 与 Model Policies；UI-2 落地
-    // Overview 与 Execution Monitor（U-1=C 聚合端点）；Execution Policies 仍为
-    // 「即将提供」空态（AiTeamComingSoonView）。
-    // 各子页 meta.title 保持 settings.nav.projectAi（页头标题同源），
-    // 未落地子页另挂 meta.aiDesc 供占位页取描述。
+    // AI Team（UI-1/UI-2/UI-3，U-2=A 五子页全部落地）：外层仍是侧栏单条
+    // 「AI 配置」入口，五子页走子路由 + 页内页签条（AiTeamFrame）。
+    // UI-1 落地 Roles 与 Model Policies；UI-2 落地 Overview 与 Execution
+    // Monitor（U-1=C 聚合端点）；UI-3 落地 Execution Policies（四层策略读写，
+    // org/task_type 层 V1 只读）。
+    // 各子页 meta.title 保持 settings.nav.projectAi（页头标题同源）。
     {
       path: "/project/settings/ai",
       redirect: "/project/settings/ai/roles",
@@ -206,11 +205,8 @@ export function buildRoutes(): RouteRecordRaw[] {
     },
     {
       path: "/project/settings/ai/execution-policies",
-      component: AiTeamComingSoonView,
-      meta: {
-        title: "settings.nav.projectAi",
-        aiDesc: "aiTeam.tabs.executionPolicies"
-      }
+      component: SettingsProjectAiExecutionPoliciesView,
+      meta: { title: "settings.nav.projectAi" }
     }
   );
 
