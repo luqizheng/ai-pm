@@ -426,7 +426,8 @@ async fn k4_approve_versions_supersedes_and_emits_event(pool: PgPool) {
     assert!(kb_pc_contracts::events::validate_payload_references(payload).is_ok());
 
     // 审计：提案 / 批准全链，四身份列全写（C174/C180）。
-    let rows: Vec<(String, Uuid, Option<Uuid>, Option<String>, Option<String>)> = sqlx::query_as(
+    type AuditRow = (String, Uuid, Option<Uuid>, Option<String>, Option<String>);
+    let rows: Vec<AuditRow> = sqlx::query_as(
         "SELECT action, actor_id, actor_identity_id, actor_client, actor_auth_mode \
            FROM governance.audit_log WHERE source_kind = 'kb_service' AND target_id = $1 \
           ORDER BY created_at, id",

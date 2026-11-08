@@ -386,7 +386,6 @@ pub async fn propose_create(
     .await?;
     audit(
         &mut tx,
-        tenant_id,
         project_id,
         actor,
         "kb.memory.change_proposed",
@@ -590,7 +589,6 @@ pub async fn propose_change(
     .await?;
     audit(
         &mut tx,
-        tenant_id,
         project_id,
         actor,
         "kb.memory.change_proposed",
@@ -716,7 +714,6 @@ pub async fn review(
             .await?;
             audit(
                 &mut tx,
-                tenant_id,
                 project_id,
                 actor,
                 "kb.memory.change_approved",
@@ -768,7 +765,6 @@ pub async fn review(
             .await?;
             audit(
                 &mut tx,
-                tenant_id,
                 project_id,
                 actor,
                 audit_action,

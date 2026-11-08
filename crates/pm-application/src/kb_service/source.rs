@@ -89,10 +89,11 @@ fn is_hex_sha256(value: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
-/// 规范化并校验登记请求，返回 (uri, inline, size_bytes, content_hash)。
-fn normalize(
-    req: &RegisterSourceRequest,
-) -> Result<(Option<String>, Option<String>, Option<i64>, String), KbServiceError> {
+/// 规范化产物：(uri, inline, size_bytes, content_hash)。
+type NormalizedSource = (Option<String>, Option<String>, Option<i64>, String);
+
+/// 规范化并校验登记请求。
+fn normalize(req: &RegisterSourceRequest) -> Result<NormalizedSource, KbServiceError> {
     if !SOURCE_KINDS.contains(&req.source_kind.as_str()) {
         return Err(KbServiceError::Invalid(format!(
             "source_kind must be one of {SOURCE_KINDS:?}"
@@ -219,7 +220,6 @@ pub async fn register_source(
     if let Some(action) = action {
         audit(
             &mut tx,
-            tenant_id,
             project_id,
             actor,
             action,

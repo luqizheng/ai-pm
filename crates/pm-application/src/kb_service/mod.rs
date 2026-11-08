@@ -88,9 +88,9 @@ pub(crate) async fn ensure_project_writable(
 }
 
 /// KB 域审计行（四身份列全写——C174/C180；`after_data` 只放元数据，不落正文）。
+/// tenant 由 project 行内派生（knowledge_proposal 同款；调用点已持 project 锁）。
 pub(crate) async fn audit(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    tenant_id: Uuid,
     project_id: Uuid,
     actor: &AuditActor,
     action: &str,
@@ -102,7 +102,8 @@ pub(crate) async fn audit(
         "INSERT INTO governance.audit_log \
          (project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
           action, target_type, target_id, after_data, source_kind, tenant_id) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
     .bind(actor.principal_id)
@@ -115,7 +116,6 @@ pub(crate) async fn audit(
     .bind(target_id)
     .bind(after_data)
     .bind(AUDIT_SOURCE_KIND)
-    .bind(tenant_id)
     .execute(&mut **tx)
     .await?;
     Ok(())
