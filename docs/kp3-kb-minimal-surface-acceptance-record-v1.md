@@ -108,7 +108,15 @@
 
 ## §五.1 回归结果
 
-（待回填）
+| 项 | 值 |
+| --- | --- |
+| 日期 | 2026-11-09（合入前终验） |
+| 基线 | `c272488`（feat/kp3-kb-minimal-surface，rebased on master `5ecb0e3`；迁移终号 **0065**——0063 归 D-2=c、0064 归 KP-1 PC-01B，两度顺移） |
+| 执行 | `bash scripts/cargo-test.sh` 全量模式（nextest `--no-fail-fast` + `cargo test --doc`）；专用库 `aipm-kp3-pg`(16463，显式 127.0.0.1)；template1 预建 64 迁移快档 |
+| 结果 | **1214 tests run: 1214 passed, 0 failed, 4 skipped**；nextest 段 125.0s，全链 253s |
+| 首轮记录 | 1213/1214——唯一红 = KP-1 `migration_0064` 收敛用例的 head 钉点（`head migration must be 0064`，被 0065 顺移合法推进）；修复 `c272488`（按版本号精确摘除 0064，不再按尾部截断 + head 断言更新 65）后套件 2/2 绿，终轮全绿 |
+| consul 结论 | `digua-common-consul` registration 套件 10/10（no_proxy 修复 `48fc816` 后三连绿 + 本轮全量内含全绿）——上一完整轮的 5 红清偿闭合 |
+| 白名单外新增红 | **0** |
 
 ## §五.2 clippy 结果
 
