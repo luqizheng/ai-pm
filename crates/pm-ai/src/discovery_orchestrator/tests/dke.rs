@@ -194,7 +194,7 @@ async fn correction_records_both_rows_and_keeps_kb_pc_untouched(pool: sqlx::PgPo
         "{marker}"
     );
 
-    // F2(b)：零提案行（不造影子 ai.project_document、不绕 FK）。
+    // F2(b)：零提案行（不造影子文档行、不绕 FK 语义）。
     let proposals: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM discovery.discovery_proposal WHERE session_id = $1",
     )
