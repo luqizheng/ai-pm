@@ -426,6 +426,7 @@ pub fn register_all_handlers(
     snapshot_model: Option<
         std::sync::Arc<dyn pm_application::snapshot_analysis::SnapshotAnalysisModel>,
     >,
+    discovery_orchestrator_enabled: bool,
 ) -> OutboxWorker {
     super::kb_pc_handlers::register_kb_pc_handlers(
         worker
@@ -440,5 +441,6 @@ pub fn register_all_handlers(
             ),
         pool,
         snapshot_model,
+        discovery_orchestrator_enabled,
     )
 }

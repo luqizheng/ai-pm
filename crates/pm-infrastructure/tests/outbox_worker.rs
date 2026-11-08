@@ -218,8 +218,12 @@ async fn a_failed_notification_rolls_back_the_audit_written_in_the_same_transact
 /// 装配集合必须与目录一致。
 #[sqlx::test(migrations = "../../migrations")]
 async fn the_shared_assembly_covers_every_catalog_event_with_a_handler(pool: PgPool) {
-    let worker =
-        register_all_handlers(OutboxWorker::new(pool.clone(), "w-1".to_string()), &pool, None);
+    let worker = register_all_handlers(
+        OutboxWorker::new(pool.clone(), "w-1".to_string()),
+        &pool,
+        None,
+        false,
+    );
     let mut registered = worker.handled_event_types();
     registered.sort_unstable();
     let mut expected: Vec<&str> = pm_application::outbox::handled_event_types().collect();

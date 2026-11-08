@@ -11,6 +11,7 @@ pub(crate) use serde::{Deserialize, Serialize};
 pub(crate) use sqlx::PgPool;
 pub(crate) use uuid::Uuid;
 
+mod auto_onboarding;
 mod finding;
 mod message;
 mod orchestrator_round;
@@ -20,6 +21,7 @@ mod session;
 mod slots;
 mod web;
 
+pub use auto_onboarding::*;
 pub use finding::*;
 pub use message::*;
 pub use orchestrator_round::*;

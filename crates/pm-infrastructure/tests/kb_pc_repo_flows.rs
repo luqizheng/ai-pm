@@ -189,6 +189,8 @@ fn worker_with_model(
         OutboxWorker::new(pool.clone(), "kbpc-test-worker".to_string()),
         pool,
         snapshot_model,
+        // DK-E 自动开访谈与编排器同开关；本文件的 KB/PC 流不开启（默认 off）。
+        false,
     )
 }
 
@@ -319,7 +321,10 @@ async fn verify_triggers_full_kb_pc_chain(pool: PgPool) {
     assert_eq!(pc_status, "COMPLETED");
     let pc_result = pc_result.expect("real derivation pins analysis source");
     assert_eq!(pc_result["target_domain"], "pc");
-    assert_eq!(pc_result["target_type"], "source", "KP-1: pc_analysis_ref anchors pc.source");
+    assert_eq!(
+        pc_result["target_type"], "source",
+        "KP-1: pc_analysis_ref anchors pc.source"
+    );
     assert_eq!(derived_status(&pool, intake_id).await, "Completed");
 
     // 信号面：pc_analyze.signal_ref 记录真实信号（四元组引用，无 service 字段）。
@@ -377,13 +382,11 @@ async fn verify_triggers_full_kb_pc_chain(pool: PgPool) {
     assert!(evidence
         .iter()
         .all(|(v, c, _, _)| v == "unverified" && c == "medium"));
-    assert!(evidence
-        .iter()
-        .all(|(_, _, anchor, desc)| anchor.is_some()
-            && desc
-                .as_deref()
-                .unwrap_or_default()
-                .contains(&intake_id.to_string())));
+    assert!(evidence.iter().all(|(_, _, anchor, desc)| anchor.is_some()
+        && desc
+            .as_deref()
+            .unwrap_or_default()
+            .contains(&intake_id.to_string())));
 
     // source：kb_document 通道（C-4 收窄 CHECK）+ 四元组钉 KB 文档修订。
     let source: (String, String, String, Option<String>) = sqlx::query_as(
