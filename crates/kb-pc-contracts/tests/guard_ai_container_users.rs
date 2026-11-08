@@ -5,9 +5,10 @@
 //! Requirement Projection 五方使用），目标态分家消解（KB→kb.document*、
 //! PC→pc.document*、Platform 保留自用）。过渡期红线：**禁止新增使用方**（PC
 //! 禁止接入）。本测试把该规约变成 CI 断言：静态扫描生产代码（`apps/*/src`、
-//! `crates/*/src`）与 `migrations/`，凡出现两表名（SQL 字符串/注释中的引用
-//! 即算使用证据）的文件集合必须与基线**全等**——多了拒绝（新增接入），少了
-//! 也拒绝（基线过期，须人工更新白名单并回填 V1.1 §4.7）。
+//! `crates/*/src`）与迁移面，凡出现两表名（SQL 字符串/注释中的引用即算使用
+//! 证据）的文件集合必须与白名单**全等**——多了拒绝（新增接入），少了也拒绝
+//! （基线过期，须人工更新白名单并回填 V1.1 §4.7）。迁移面（2026-11-09 基线
+//! 合并后）：唯一合法落点 = `0001_baseline.sql`，其余迁移文件零命中。
 //!
 //! 白名单基线 = 2026-11-07 全仓 grep 实测（V1.1 §4.7.1 全集 + pm-api 适配层
 //! `documents.rs` 直查）。测试文件（`tests/`）与契约注释不计入。
@@ -45,15 +46,10 @@ const CODE_WHITELIST: &[&str] = &[
     "apps/pm-api/src/documents.rs",
 ];
 
-/// 迁移白名单（V1.1 §4.7.2：表本体/租户化/FK/索引六迁移）。
-const MIGRATION_WHITELIST: &[&str] = &[
-    "0006_knowledge_documents.sql",
-    "0014_knowledge_v2.sql",
-    "0015_task_contract.sql",
-    "0019_tenant.sql",
-    "0024_knowledge_section_index.sql",
-    "0025_discovery.sql",
-];
+/// 迁移面基线（2026-11-09 基线合并）：`ai.document*` 的唯一合法迁移落点 =
+/// 0001_baseline.sql（pg_dump 终态，schema 所有权随基线）；此后任何新迁移
+/// （0002+）命中两表名即违规（ADR-06a 冻结不变，历史白名单随旧链退役）。
+const BASELINE_MIGRATION: &str = "0001_baseline.sql";
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -151,11 +147,13 @@ fn ai_document_container_user_set_does_not_grow() {
 #[test]
 fn ai_document_container_migration_set_is_frozen() {
     let root = repo_root();
-    let hits = scan_migration_hits(&root);
-    let (extra, missing) = diff(&hits, MIGRATION_WHITELIST);
+    let extra: Vec<String> = scan_migration_hits(&root)
+        .into_iter()
+        .filter(|name| name != BASELINE_MIGRATION)
+        .collect();
     assert!(
-        extra.is_empty() && missing.is_empty(),
-        "migration files referencing ai.document* changed:\n  new migrations must NOT touch ai.project_document/ai.document_revision (ADR-06a; shared container is frozen): {extra:?}\n  stale whitelist entries: {missing:?}"
+        extra.is_empty(),
+        "migration files referencing ai.document* changed:\n  唯一合法落点 = {BASELINE_MIGRATION}（2026-11-09 基线合并）；新迁移不得触碰 ai.project_document/ai.document_revision (ADR-06a; shared container is frozen): {extra:?}"
     );
 }
 

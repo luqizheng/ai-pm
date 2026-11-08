@@ -294,14 +294,3 @@ async fn section_rows_cannot_cross_tenants(pool: PgPool) {
         "a ledger row must not point at another tenant's project"
     );
 }
-
-#[test]
-fn migration_file_is_present_and_forward() {
-    let sql = include_str!("../../../migrations/0024_knowledge_section_index.sql");
-    assert!(sql.contains("CREATE TABLE IF NOT EXISTS ai.document_section_index"));
-    assert!(sql.contains("CREATE TABLE IF NOT EXISTS ai.knowledge_write_operation"));
-    assert!(sql.contains("UNIQUE (document_revision_id, provider, section_no)"));
-    assert!(sql.contains("UNIQUE (project_id, operation_id)"));
-    assert!(sql.contains("ON DELETE CASCADE"));
-    assert!(!sql.contains("DROP COLUMN"));
-}
