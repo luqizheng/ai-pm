@@ -411,6 +411,8 @@ async fn streamable_http_smoke_lists_tools_and_serves_calls(pool: PgPool) {
             "pm_ack_command",
             "pm_claim_task",
             "pm_confirm_document_proposal",
+            // 批 3 Recovery（d9d02f7）发现面工具。
+            "pm_discover_runs",
             "pm_discovery_complete",
             "pm_discovery_get",
             "pm_discovery_get_context",
@@ -423,6 +425,9 @@ async fn streamable_http_smoke_lists_tools_and_serves_calls(pool: PgPool) {
             "pm_list_tasks",
             "pm_poll_commands",
             "pm_propose_document",
+            // 批 3 Recovery（d9d02f7）续领 + 批 5 ACP-06/07（4a592d7）Checkpoint。
+            "pm_reacquire_lease",
+            "pm_report_checkpoint",
             "pm_report_consumption",
             "pm_report_interaction",
             "pm_report_progress",
