@@ -58,7 +58,9 @@ async fn list_handler(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(tenant_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = guard_tenant(&caller, tenant_id) {
+    if let Err(resp) = crate::team_llm_guard::verify_active_member(&state.pool, &caller, tenant_id)
+        .await
+    {
         return resp;
     }
     // 名册只读对所有 ACTIVE 成员开放（0044 Team Onboarding 口径：查看团队
@@ -100,7 +102,9 @@ async fn detail_handler(
     Extension(caller): Extension<AuthedPrincipal>,
     Path((tenant_id, principal_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
-    if let Err(resp) = guard_tenant(&caller, tenant_id) {
+    if let Err(resp) = crate::team_llm_guard::verify_active_member(&state.pool, &caller, tenant_id)
+        .await
+    {
         return resp;
     }
     if !caller.is_admin {
@@ -450,7 +454,7 @@ async fn apply_writes(
                 claimed_device_id: None,
             };
             let revoked_project_ids =
-                revoke_principal_memberships(&mut **tx, tenant_id, principal_id, &actor)
+                revoke_principal_memberships(tx, tenant_id, principal_id, &actor)
                     .await
                     .map_err(|err| {
                         tracing::error!(error = %err, "tenant member cascade revoke failed");

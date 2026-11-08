@@ -76,7 +76,7 @@ pub async fn latest_decision_actions(
     )
     .bind(project_id)
     .bind(finding_ids)
-    .bind(&DECISION_AUDIT_ACTIONS)
+    .bind(DECISION_AUDIT_ACTIONS)
     .fetch_all(pool)
     .await?;
     for (finding_id, action) in rows {
@@ -269,7 +269,7 @@ async fn evidence_by_finding_tx(
     if finding_ids.is_empty() {
         return Ok(map);
     }
-    let rows: Vec<(
+    type Row = (
         Uuid,
         String,
         Option<String>,
@@ -279,7 +279,8 @@ async fn evidence_by_finding_tx(
         Option<Uuid>,
         Option<String>,
         Option<i32>,
-    )> = sqlx::query_as(
+    );
+    let rows: Vec<Row> = sqlx::query_as(
         "SELECT finding_id, evidence_type, description, file_path, symbol, code_range, \
                     repository_id, commit_sha, attempt_no \
              FROM discovery.discovery_finding_evidence \
@@ -335,7 +336,7 @@ async fn evidence_by_finding(
     if finding_ids.is_empty() {
         return Ok(map);
     }
-    let rows: Vec<(
+    type Row = (
         Uuid,
         String,
         Option<String>,
@@ -345,7 +346,8 @@ async fn evidence_by_finding(
         Option<Uuid>,
         Option<String>,
         Option<i32>,
-    )> = sqlx::query_as(
+    );
+    let rows: Vec<Row> = sqlx::query_as(
         "SELECT finding_id, evidence_type, description, file_path, symbol, code_range, \
                     repository_id, commit_sha, attempt_no \
              FROM discovery.discovery_finding_evidence \

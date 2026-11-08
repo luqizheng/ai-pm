@@ -565,7 +565,7 @@ async fn cursor_combinations_are_validated(pool: PgPool) {
 
     let (_, v) = create_conversation(app.clone(), &token, project).await;
     let conversation_id: Uuid = v["id"].as_str().unwrap().parse().unwrap();
-    let base = format!("/v1/pm/projects/{project}/conversations/{conversation_id}/messages");
+    let _base = format!("/v1/pm/projects/{project}/conversations/{conversation_id}/messages");
 
     // before + after 同给 → 400。
     let (status, _) = list_messages_query(

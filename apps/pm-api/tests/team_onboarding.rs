@@ -690,7 +690,8 @@ async fn team_profile_update_and_audit_rows(pool: PgPool) {
 
     // 审计四列口径：team.updated（first-admin 路径的租户是镜像而来，无
     // team.created——认领建团的审计在 create_team 用例里断言）。
-    let rows: Vec<(String, String, Uuid, Option<Uuid>, Option<String>)> = sqlx::query_as(
+    type Row = (String, String, Uuid, Option<Uuid>, Option<String>);
+    let rows: Vec<Row> = sqlx::query_as(
         "SELECT action, target_type, actor_id, actor_identity_id, actor_auth_mode \
            FROM governance.tenant_audit_log WHERE tenant_id = $1 ORDER BY created_at",
     )

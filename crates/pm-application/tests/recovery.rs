@@ -8,7 +8,7 @@ use pm_application::actor::AuditActor;
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::device_credential;
 use pm_application::interaction::{
-    mark_consumed, record_response_persisted, report_interaction, submit_interaction_response,
+    record_response_persisted, report_interaction, submit_interaction_response,
     ReportInteractionInput, SubmitResponseInput,
 };
 use pm_application::recovery;
@@ -285,7 +285,7 @@ async fn acp452_offline_recovery_via_discover_and_reacquire(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(lease.lease_generation, gen0 + 1);
-    assert!(lease.lease_token.starts_with("IGNORED") == false);
+    assert!(!lease.lease_token.starts_with("IGNORED"));
     assert_eq!(
         lease.deadline_at, deadline_before,
         "T3: deadline must not move on offline recovery"

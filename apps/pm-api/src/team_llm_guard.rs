@@ -21,6 +21,41 @@ pub(crate) fn guard_tenant(caller: &AuthedPrincipal, tenant_id: Uuid) -> Result<
     Ok(())
 }
 
+/// 读面守卫（设计稿 §6.3 Verify Active Membership，TEAM-QA-B05-02）：
+/// 被 remove 的成员 `principal.tenant_id` 锚不变，仅比对锚会被绕过——
+/// 读名册等成员面接口必须回库验证「当前仍是 active 成员」。
+/// 写面无需此守卫：`apply_member_change` 已从库读 actor 角色并要求 admin。
+pub(crate) async fn verify_active_member(
+    pool: &sqlx::PgPool,
+    caller: &AuthedPrincipal,
+    tenant_id: Uuid,
+) -> Result<(), Response> {
+    guard_tenant(caller, tenant_id)?;
+    let active: Option<Uuid> = sqlx::query_scalar(
+        "SELECT tm.tenant_id \
+           FROM core.tenant_member tm \
+           JOIN core.principal p ON p.id = tm.principal_id \
+           JOIN core.tenant t ON t.id = tm.tenant_id AND t.is_active \
+          WHERE tm.tenant_id = $1 AND tm.principal_id = $2 AND p.is_active",
+    )
+    .bind(tenant_id)
+    .bind(caller.principal_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "active membership check failed");
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "message": "internal error" })),
+        )
+            .into_response()
+    })?;
+    if active.is_none() {
+        return Err(err_forbidden("not an active member"));
+    }
+    Ok(())
+}
+
 pub(crate) fn err_not_found(message: &str) -> Response {
     (StatusCode::NOT_FOUND, Json(json!({ "message": message }))).into_response()
 }

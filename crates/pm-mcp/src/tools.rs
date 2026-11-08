@@ -341,7 +341,7 @@ pub async fn list_tasks(
 ) -> Result<Value, ToolError> {
     ensure_member(pool, caller, args.project_id).await?;
     let limit = args.limit.unwrap_or(20).clamp(1, 100) as i64;
-    let rows: Vec<(
+    type Row = (
         Uuid,
         String,
         String,
@@ -349,7 +349,8 @@ pub async fn list_tasks(
         Option<Uuid>,
         Option<Uuid>,
         chrono::DateTime<chrono::Utc>,
-    )> = sqlx::query_as(
+    );
+    let rows: Vec<Row> = sqlx::query_as(
         "SELECT t.id, t.title, t.priority, t.status, t.assignee_id, \
                 q.run_id, t.created_at \
          FROM delivery.task t \
@@ -1727,8 +1728,8 @@ pub struct ReacquireLeaseArgs {
     pub run_id: Uuid,
 }
 
-/// 同主体续领：同 Run 重签租约（generation+1 + 新 token + deadline 不动=T3）
-/// + 非终局命令同事务改路由（reacquired_generation 写回）。不创建新
+/// 同主体续领：同 Run 重签租约（generation+1 + 新 token + deadline 不动=T3），
+/// 并在同一事务内改路由非终局命令（reacquired_generation 写回）。不创建新
 /// Session——continue 仍受情形 6 过滤（ACP-C4：terminate ACKED 是新
 /// Session 启动前置）。
 pub async fn reacquire_lease(

@@ -34,6 +34,8 @@ impl ScriptedExecutor {
         }
     }
 
+    /// 诊断面：部分用例直接断言 `terminated` 原子计数，本读取器留作观测口。
+    #[allow(dead_code)]
     fn terminate_count(&self) -> usize {
         self.terminated.load(std::sync::atomic::Ordering::SeqCst)
     }
@@ -160,7 +162,7 @@ async fn seed_claimed_run(pool: &PgPool, code: &str) -> (Uuid, Uuid, Uuid, Uuid)
 /// 推进 running）且立即终止子进程（阶段 C 登记失败 → kill，§8.3）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn archive_between_spawn_and_confirmation_blocks_start(pool: PgPool) {
-    let (project_id, task_id, run_id, owner) = seed_claimed_run(&pool, "I1E-1").await;
+    let (_project_id, task_id, run_id, owner) = seed_claimed_run(&pool, "I1E-1").await;
     let executor = std::sync::Arc::new(ScriptedExecutor::new());
 
     // 归档先落定（P2 cancel_run 撤凭据 + 终态化——stage='dispatch' 意图保留）。
@@ -256,7 +258,7 @@ async fn start_confirmation_rejects_archived_project_and_terminates(pool: PgPool
 /// I1-030：terminate 失败 → 账本行退避重试，Run 终态不回滚。
 #[sqlx::test(migrations = "../../migrations")]
 async fn failed_terminate_keeps_terminal_state_and_retries(pool: PgPool) {
-    let (project_id, _task_id, run_id, _owner) = seed_claimed_run(&pool, "I1E-3").await;
+    let (_project_id, _task_id, run_id, _owner) = seed_claimed_run(&pool, "I1E-3").await;
     let executor = std::sync::Arc::new(ScriptedExecutor::new());
     executor
         .terminate_fails
@@ -299,7 +301,7 @@ async fn failed_terminate_keeps_terminal_state_and_retries(pool: PgPool) {
 /// I1-040：重试达到阈值 → needs_human（持续可查询）；人工介入 requeue 后可再清。
 #[sqlx::test(migrations = "../../migrations")]
 async fn cleanup_exhaustion_lands_in_needs_human_and_recovers(pool: PgPool) {
-    let (project_id, _task_id, run_id, _owner) = seed_claimed_run(&pool, "I1E-4").await;
+    let (_project_id, _task_id, run_id, _owner) = seed_claimed_run(&pool, "I1E-4").await;
     let executor = std::sync::Arc::new(ScriptedExecutor::new());
     executor
         .terminate_fails

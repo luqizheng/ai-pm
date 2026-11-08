@@ -599,8 +599,8 @@ async fn c184_only_tools_call_triggers_device_layer(pool: PgPool) {
 async fn c176_http_side_ignored_variants_and_valid_claim(pool: PgPool) {
     let pool = pool.clone();
     let tenant = seed_tenant(&pool, "1").await;
-    let alice = seed_member(&pool, tenant, "alice").await;
-    let bob = seed_member(&pool, tenant, "bob").await;
+    let _alice = seed_member(&pool, tenant, "alice").await;
+    let _bob = seed_member(&pool, tenant, "bob").await;
     let app = app(pool.clone());
     let alice_token = token_for("alice", 1);
     let bob_token = token_for("bob", 1);

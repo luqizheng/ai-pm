@@ -259,6 +259,7 @@ async fn start_run(
     })))
 }
 
+#[allow(clippy::too_many_arguments)] // 认知对象落库行写入面，列清单与 pc 表对应
 async fn insert_item(
     tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
     tenant_id: Uuid,

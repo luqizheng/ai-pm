@@ -2,6 +2,11 @@
 //! binary (`main.rs`) and the integration tests (`tests/routes.rs`) drive the
 //! exact same route table.
 
+// 本 crate 大量 handler/辅助函数以 axum `Response` 直接作 `Err` 类型
+// （提前返回现成 HTTP 响应，IntoResponse 面零转换）。`Response<Body>` 天然
+// ≥128B，触发 result_large_err；装箱 Response 属反模式，整层显式豁免。
+#![allow(clippy::result_large_err)]
+
 pub mod ai_conversations;
 pub mod ai_roles;
 pub mod ai_team_monitor;

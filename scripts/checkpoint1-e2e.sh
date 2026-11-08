@@ -64,6 +64,8 @@ step "③ POST /v1/pm/teams 建第一个团（$TEAM_NAME）"
 curl -sf -X POST "$PM/v1/pm/teams" -H "$AUTH" -H 'content-type: application/json' \
   -d "{\"name\":\"$TEAM_NAME\",\"description\":\"checkpoint-1 first team\"}" \
   | tee "$EVIDENCE_DIR/team.json"
+TENANT_ID="$(python -c "import json;d=json.load(open('$EVIDENCE_DIR/team.json'));print(d['id'] or d['tenantId'] or d['tenant_id'])")"
+echo "tenant_id=$TENANT_ID"
 
 step "④ GET /v1/pm/me（应 is_active=true、team 就位）"
 curl -sf "$PM/v1/pm/me" -H "$AUTH" | tee "$EVIDENCE_DIR/me-after-team.json"
@@ -84,6 +86,31 @@ echo ">>>>>>> 请把下面的 deploy key 公钥挂到 GitLab（tooling/ai-pm →
 echo "$PUBKEY"
 echo "<<<<<<< 挂好后按回车继续…"
 read -r
+
+# ── 可选：LLM Provider 接入（CHECKPOINT1_E2E_PROVIDER=1 启用，P2-13×PC-I6）──
+# 注册租户级 enabled Provider 后，三级解析（项目未指定 → 租户首个 enabled）
+# 即命中，verify→intake 的 KB/PC 分析走 LLM 增强路径（0062 analysis_mode=llm，
+# 可在 K2/P3 产物与 kb.document_revision/pc.cognition_revision 断言）。
+# 不设本开关则维持结构化派生（analysis_mode=derived），链路行为与 checkpoint-1
+# 验证记录一致。
+if [ "${CHECKPOINT1_E2E_PROVIDER:-0}" = "1" ]; then
+  step "⑥b 注册并启用 LLM Provider（LLM 接管分析开关）"
+  : "${PROVIDER_ENDPOINT:?CHECKPOINT1_E2E_PROVIDER=1 需要 PROVIDER_ENDPOINT（OpenAI 兼容 base url）}"
+  : "${PROVIDER_MODEL:?CHECKPOINT1_E2E_PROVIDER=1 需要 PROVIDER_MODEL}"
+  : "${PROVIDER_API_KEY:?CHECKPOINT1_E2E_PROVIDER=1 需要 PROVIDER_API_KEY}"
+  PROVIDER_NAME="${PROVIDER_NAME:-e2e-provider}"
+  PROVIDER_ID="$(curl -sf -X POST "$PM/v1/pm/tenants/$TENANT_ID/llm-providers" \
+    -H "$AUTH" -H 'content-type: application/json' \
+    -d "{\"name\":\"$PROVIDER_NAME\",\"provider_type\":\"openai_compatible\",\"endpoint\":\"$PROVIDER_ENDPOINT\",\"configuration\":{\"model\":\"$PROVIDER_MODEL\"},\"api_key\":\"$PROVIDER_API_KEY\",\"timeout_secs\":120}" \
+    | tee "$EVIDENCE_DIR/provider.json" \
+    | python -c "import sys,json;d=json.load(sys.stdin);print(d['id'] or d['providerId'])")"
+  echo "provider_id=$PROVIDER_ID"
+  curl -sf -X POST "$PM/v1/pm/tenants/$TENANT_ID/llm-providers/$PROVIDER_ID/status" \
+    -H "$AUTH" -H 'content-type: application/json' \
+    -d '{"action":"enable"}' | tee "$EVIDENCE_DIR/provider-enable.json"
+  echo
+  echo "（已启用；无 provider/调用失败时分析自动回退结构化派生并标 analysis_mode）"
+fi
 
 step "⑦ POST /v1/pm/projects/{id}/repositories 关联仓库（$REPO_URL）"
 REPO_ID="$(curl -sf -X POST "$PM/v1/pm/projects/$PROJECT_ID/repositories" -H "$AUTH" -H 'content-type: application/json' \

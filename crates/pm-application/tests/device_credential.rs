@@ -10,7 +10,6 @@ use pm_application::device_credential::{self, DeviceCredentialError, KNOWN_PERMI
 use pm_application::repo_access::build_task_repo_access_tx;
 use pm_application::run_dispatch::{claim_task_run_as_client, RunDispatchConfig};
 use pm_domain::SYSTEM_TENANT;
-use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -453,7 +452,7 @@ async fn acp463_backfill_classification_predicate(pool: PgPool) {
 
     // 快照读方不受影响（绑定事实与 claim/execution_allows 同表——约束 5 延续）。
     let mut tx = pool.begin().await.unwrap();
-    let snaps = build_task_repo_access_tx(&mut *tx, SYSTEM_TENANT, project_id, task_id)
+    let snaps = build_task_repo_access_tx(&mut tx, SYSTEM_TENANT, project_id, task_id)
         .await
         .unwrap();
     tx.commit().await.unwrap();

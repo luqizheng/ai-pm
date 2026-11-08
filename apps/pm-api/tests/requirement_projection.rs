@@ -3,52 +3,15 @@
 //! → 按 ref 读 Git 一致 → rebuild_projection 重建投影 → 漂移显式拒绝 →
 //! 绑定幂等（不产生重复 Git 提交）→ 未绑定 confirm 拒绝（六要素）。
 
-use axum::body::{to_bytes, Body};
-use axum::http::StatusCode;
-use pm_api::audit_stream::AuditFeed;
-use pm_api::mcp_hosts::McpHosts;
-use pm_api::routes::router_with_feed_and_knowledge;
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::knowledge::KnowledgeRoot;
 use pm_application::requirement::{
     self, ConfirmRevisionRequest, CreateRequirementRequest, DraftRevisionRequest,
 };
 use sqlx::PgPool;
-use tower::ServiceExt;
 use uuid::Uuid;
 
 mod common;
-
-fn request(method: &str, uri: &str, body: Option<serde_json::Value>) -> axum::http::Request<Body> {
-    let builder = axum::http::Request::builder().method(method).uri(uri);
-    match body {
-        Some(v) => builder
-            .header("content-type", "application/json")
-            .body(Body::from(v.to_string()))
-            .unwrap(),
-        None => builder.body(Body::empty()).unwrap(),
-    }
-}
-
-async fn send(
-    pool: &PgPool,
-    root: &KnowledgeRoot,
-    req: axum::http::Request<Body>,
-) -> (StatusCode, serde_json::Value) {
-    let app = router_with_feed_and_knowledge(
-        pool.clone(),
-        AuditFeed::new(),
-        McpHosts::default(),
-        root.clone(),
-    );
-    let response = app.oneshot(req).await.unwrap();
-    let status = response.status();
-    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (
-        status,
-        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
-    )
-}
 
 fn actor_of(principal_id: Uuid) -> pm_application::actor::AuditActor {
     pm_application::actor::AuditActor {
@@ -143,7 +106,7 @@ async fn submit_binds_projection_and_read_at_ref_matches(pool: PgPool) {
         submitted(&pool, &root, project_id, "REQ-1", markdown).await;
 
     // 绑定行：doc_key/doc_type/revision_no/哈希。
-    let (doc_key, doc_type, rev_no, git_sha, hash): (String, String, i32, String, String) =
+    let (doc_key, doc_type, rev_no, git_sha, _hash): (String, String, i32, String, String) =
         sqlx::query_as(
             "SELECT d.doc_key, d.doc_type, r.revision_no, r.git_commit_sha, r.content_hash \
              FROM ai.project_document d \

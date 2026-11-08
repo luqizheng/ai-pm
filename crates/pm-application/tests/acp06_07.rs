@@ -91,7 +91,7 @@ async fn seed_device(pool: &PgPool, tenant_id: Uuid, owner: Uuid, name: &str) ->
 /// ACP-478：登记幂等（同 run+hash 返回原 id）；Platform 只存元数据不存正文。
 #[sqlx::test(migrations = "../../migrations")]
 async fn acp478_checkpoint_registration_idempotent(pool: PgPool) {
-    let (project_id, task_id, human_id, _) = seed(&pool, "A78").await;
+    let (project_id, task_id, _human_id, _) = seed(&pool, "A78").await;
     let run_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) 
          VALUES ($1, $2, 1, 'queued', (SELECT tenant_id FROM core.project WHERE id = $1)) 
@@ -162,7 +162,7 @@ async fn acp478_checkpoint_registration_idempotent(pool: PgPool) {
 /// ACP-479：无 Checkpoint 不阻止介入/继续（interaction_report 全链零依赖）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn acp479_no_checkpoint_never_blocks(pool: PgPool) {
-    let (project_id, task_id, human_id, _) = seed(&pool, "A479").await;
+    let (project_id, task_id, _human_id, _) = seed(&pool, "A479").await;
     let run_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, execution_mode, stage, lease_owner, lease_token_hash, lease_generation, lease_expires_at, deadline_at, tenant_id) 
          VALUES ($1, $2, 1, 'claimed', 'spawn', 'started', 'client:dbg', 'h', 1, now() + interval '300 seconds', now() + interval '3600 seconds', (SELECT tenant_id FROM core.project WHERE id = $1)) 
@@ -257,7 +257,7 @@ async fn acp479_no_checkpoint_never_blocks(pool: PgPool) {
 /// ACP-480：worker_receipt 通道登记（registered_via=worker_receipt，不判真实性）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn acp480_worker_receipt_channel_registers(pool: PgPool) {
-    let (project_id, task_id, human_id, _) = seed(&pool, "A480").await;
+    let (project_id, task_id, _human_id, _) = seed(&pool, "A480").await;
     let run_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.task_run (project_id, task_id, attempt_no, status, tenant_id) 
          VALUES ($1, $2, 1, 'queued', (SELECT tenant_id FROM core.project WHERE id = $1)) 

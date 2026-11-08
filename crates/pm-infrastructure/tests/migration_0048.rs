@@ -9,7 +9,7 @@
 //! ⑤ 组合 FK（tenant+project / tenant+intake）；⑥ 幂等键冲突行为。
 
 use pm_domain::SYSTEM_TENANT;
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 use uuid::Uuid;
 
 async fn seed_principal(pool: &PgPool) {

@@ -269,7 +269,7 @@ async fn claim_snapshot_and_execution_allows_consume_binding(pool: PgPool) {
 
     // 绑定前：快照空（这就是 P0 空洞本来的样子）。
     let mut tx = pool.begin().await.unwrap();
-    let before = build_task_repo_access_tx(&mut *tx, SYSTEM_TENANT, project_id, task_id)
+    let before = build_task_repo_access_tx(&mut tx, SYSTEM_TENANT, project_id, task_id)
         .await
         .unwrap();
     tx.commit().await.unwrap();
@@ -287,7 +287,7 @@ async fn claim_snapshot_and_execution_allows_consume_binding(pool: PgPool) {
     .await
     .unwrap();
     let mut tx = pool.begin().await.unwrap();
-    let snapshot = build_task_repo_access_tx(&mut *tx, SYSTEM_TENANT, project_id, task_id)
+    let snapshot = build_task_repo_access_tx(&mut tx, SYSTEM_TENANT, project_id, task_id)
         .await
         .unwrap();
     tx.commit().await.unwrap();

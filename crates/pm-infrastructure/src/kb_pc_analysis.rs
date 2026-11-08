@@ -545,6 +545,7 @@ pub async fn analyze_repository_snapshot(
     Ok((document_id, revision_id, content_hash))
 }
 
+#[allow(clippy::too_many_arguments)] // 修订行写入面（0062 加 analysis_mode），列清单与表结构对应
 async fn insert_kb_revision(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     tenant_id: Uuid,

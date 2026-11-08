@@ -241,7 +241,7 @@ pub async fn list_project_delivery(
                 "no_contract".to_string()
             } else if delivery_states.iter().all(|s| *s == "delivered") {
                 "delivered".to_string()
-            } else if delivery_states.iter().any(|s| *s == "partial") {
+            } else if delivery_states.contains(&"partial") {
                 "partial".to_string()
             } else {
                 "missing".to_string()

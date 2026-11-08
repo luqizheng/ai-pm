@@ -262,7 +262,7 @@ async fn no_response_carries_a_real_credential(pool: PgPool) {
                     && token[3..]
                         .chars()
                         .next()
-                        .map_or(false, |c| c.is_ascii_alphanumeric())
+                        .is_some_and(|c| c.is_ascii_alphanumeric())
             });
         assert!(!leak, "{uri} leaked an api-key-shaped string");
     }

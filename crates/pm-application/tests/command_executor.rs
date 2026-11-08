@@ -576,54 +576,6 @@ async fn seed_requirement_with_current(
     }
 }
 
-/// A requirement with no approved revision yet (`current_revision_id IS NULL`)
-/// and a single draft revision (version 1). Returns `(requirement_id, draft_id)`.
-async fn seed_requirement_without_current(
-    pool: &PgPool,
-    project_id: Uuid,
-    author_id: Uuid,
-    code: &str,
-) -> (Uuid, Uuid) {
-    let requirement_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.requirement (project_id, code, title, tenant_id) \
-         VALUES ($1, $2, 'seeded requirement', (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
-    )
-    .bind(project_id)
-    .bind(code)
-    .fetch_one(pool)
-    .await
-    .unwrap();
-    let draft_revision_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO delivery.requirement_revision \
-         (requirement_id, project_id, version, content, state, content_hash, created_by, tenant_id) \
-         VALUES ($1, $2, 1, '{\"text\": \"v1\"}', 'draft', 'hash-1', $3, \
-                 (SELECT tenant_id FROM core.project WHERE id = $2)) RETURNING id",
-    )
-    .bind(requirement_id)
-    .bind(project_id)
-    .bind(author_id)
-    .fetch_one(pool)
-    .await
-    .unwrap();
-    (requirement_id, draft_revision_id)
-}
-
-async fn seed_milestone_with_plan(
-    pool: &PgPool,
-    project_id: Uuid,
-    planned_at: DateTime<Utc>,
-) -> Uuid {
-    sqlx::query_scalar(
-        "INSERT INTO delivery.milestone (project_id, name, planned_at, tenant_id) \
-         VALUES ($1, 'planned milestone', $2, (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
-    )
-    .bind(project_id)
-    .bind(planned_at)
-    .fetch_one(pool)
-    .await
-    .unwrap()
-}
-
 async fn revision_state(pool: &PgPool, revision_id: Uuid) -> String {
     sqlx::query_scalar("SELECT state FROM delivery.requirement_revision WHERE id = $1")
         .bind(revision_id)

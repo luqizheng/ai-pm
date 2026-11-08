@@ -261,7 +261,7 @@ async fn lifecycle_with_credential_gate_and_status_flow(pool: PgPool) {
     assert_eq!(row["credential_hint"], "****abcd");
     assert_eq!(row["status"], "configured");
     assert!(
-        json!(row).to_string().contains("sk-secret") == false,
+        !json!(row).to_string().contains("sk-secret"),
         "plaintext key must never be echoed: {row}"
     );
     let revision = row["revision"].as_i64().unwrap();
@@ -414,7 +414,7 @@ async fn delete_requires_archive_and_no_call_records(pool: PgPool) {
     )
     .await;
     let id: Uuid = Uuid::parse_str(row["id"].as_str().unwrap()).unwrap();
-    let mut revision = row["revision"].as_i64().unwrap();
+    let revision = row["revision"].as_i64().unwrap();
 
     // enabled 才能走 disable → archive；先补凭证。
     let (status, row) = call(
@@ -479,7 +479,7 @@ async fn configuration_changes_are_audited(pool: PgPool) {
     .await;
     let id: Uuid = Uuid::parse_str(row["id"].as_str().unwrap()).unwrap();
     let revision = row["revision"].as_i64().unwrap();
-    let (status, row) = call(
+    let (status, _row) = call(
         &w.app,
         "POST",
         &format!("{}/{}/credential", base_uri(w.tenant_id), id),
@@ -489,13 +489,14 @@ async fn configuration_changes_are_audited(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::OK);
 
-    let lines: Vec<(
+    type Row = (
         String,
         Option<Uuid>,
         Option<String>,
         Option<String>,
         Option<Uuid>,
-    )> = sqlx::query_as(
+    );
+    let lines: Vec<Row> = sqlx::query_as(
         "SELECT action, actor_identity_id, actor_client, actor_auth_mode, target_id \
              FROM governance.tenant_audit_log \
              WHERE tenant_id = $1 AND target_type = 'llm_provider' ORDER BY created_at",
@@ -527,26 +528,6 @@ async fn configuration_changes_are_audited(pool: PgPool) {
 // ────────────────────────────────────────────── 项目策略（§10.2 / 0043）
 
 use pm_application::team_llm::resolve_repo_call_config;
-
-async fn seed_project_with_owner(pool: &PgPool, tenant_id: Uuid, owner: Uuid, code: &str) -> Uuid {
-    let customer_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO core.customer (tenant_id, name) VALUES ($1, 'c') RETURNING id",
-    )
-    .bind(tenant_id)
-    .fetch_one(pool)
-    .await
-    .unwrap();
-    sqlx::query_scalar(
-        "INSERT INTO core.project (tenant_id, customer_id, code, name, status) \
-         VALUES ($1, $2, $3, $3, 'planning') RETURNING id",
-    )
-    .bind(tenant_id)
-    .bind(customer_id)
-    .bind(code)
-    .fetch_one(pool)
-    .await
-    .unwrap()
-}
 
 /// §10.2：项目指定 Team enabled Provider；PUT 带守卫 + CAS；恢复继承 = provider_id 缺省。
 #[sqlx::test(migrations = "../../migrations")]

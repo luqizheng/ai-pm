@@ -313,7 +313,3 @@ fn knowledge_err(e: KnowledgeError) -> PmWriteError {
         other => PmWriteError::Db(sqlx::Error::Protocol(other.to_string())),
     }
 }
-
-fn knowledge_db(e: sqlx::Error) -> PmWriteError {
-    PmWriteError::Db(e)
-}

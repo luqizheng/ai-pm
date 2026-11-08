@@ -13,13 +13,12 @@
 //! | E | pc.evidence_requested → kb_supply(optional) 任务创建 → 父不阻塞 |
 //! | F | 聚合优先级：NEEDS_HUMAN_REVIEW > FAILED > PROCESSING > COMPLETED |
 
-use std::time::Duration;
 
-use pm_application::intake::{self, RoutingPolicy, SignalEnvelope, SubmitIntake, TaskSpec};
+use pm_application::intake::{self, RoutingPolicy, SignalEnvelope, SubmitIntake};
 use pm_application::outbox::{OutboxAppend, OutboxEvent};
 use pm_domain::SYSTEM_TENANT;
 use pm_infrastructure::outbox_handlers::register_all_handlers;
-use pm_infrastructure::outbox_worker::{OutboxWorker, OUTBOX_IDLE_POLL_MS};
+use pm_infrastructure::outbox_worker::OutboxWorker;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
@@ -609,7 +608,7 @@ async fn multi_signal_merge_appends_to_active_task(pool: PgPool) {
     seed_principal(&pool).await;
     let project = seed_project(&pool, "IDEM-2").await;
     let receipt = submit(&pool, project, "document_upload").await;
-    let kb_task = task_id_of_type(&pool, receipt.intake_id, "kb_analyze").await;
+    let _kb_task = task_id_of_type(&pool, receipt.intake_id, "kb_analyze").await;
 
     let policy = RoutingPolicy::default();
     let signal = |rationale: &str| SignalEnvelope {

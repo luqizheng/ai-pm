@@ -320,7 +320,7 @@ pub async fn report_interaction(
     .bind(deadline_at)
     .execute(&mut *tx)
     .await
-    .map_err(|e| map_waiting_conflict(e))?;
+    .map_err(map_waiting_conflict)?;
 
     // ⑧ D-03：Interaction 持久化同事务内下发 terminate 命令（V1.3.1 §11.3 步骤 3；
     //    §5.2 报文即 payload）。worker_id = lease_owner 快照（R-ACP-3）。
