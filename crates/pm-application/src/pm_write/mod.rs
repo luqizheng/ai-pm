@@ -121,6 +121,12 @@ pub struct CreateTaskRequest {
     /// 校验该版本所属项目行必须指向本任务的目标 project（跨项目 → Validation）。
     #[serde(default)]
     pub ai_role_version_id: Option<Uuid>,
+    /// DK-D（设计稿 §7.2/E4）：创建时即落验收口径，与任务行**同事务**。
+    /// 提供即按 `task_acceptance_criterion` 逐条写入（ordinal 缺省按 `max+10`）。
+    /// 放在 create 而不是再调一次 `update_task`：任务从诞生起就必须可验收，
+    /// 且避免"建了任务但还没验收口径"的中间态（AI 生成的任务尤其如此）。
+    #[serde(default)]
+    pub acceptance_criteria: Option<Vec<AcceptanceCriterionInput>>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -62,6 +62,11 @@ pub async fn create_task(
     .bind(req.ai_role_version_id)
     .execute(&mut *tx)
     .await?;
+    // DK-D（§7.2/E4）：验收口径与任务行同事务落库——创建即"可验收"，
+    // 不留下"任务已存在但无验收口径"的中间态。
+    if let Some(criteria) = req.acceptance_criteria {
+        replace_acceptance_criteria(&mut tx, project_id, task_id, criteria).await?;
+    }
     append_audit(
         &mut tx,
         project_id,
@@ -419,4 +424,91 @@ pub(crate) async fn task_row(pool: &PgPool, task_id: Uuid) -> Result<TaskRow, Pm
     .fetch_one(pool)
     .await
     .map_err(PmWriteError::from)
+}
+
+/// 任务 → 需求修订的钉定（`delivery.task_requirement`，F15）。
+///
+/// **E1 的唯一执法点**：`revision_id` 必须指向 `state='approved'` 的修订，且该
+/// 修订属于 `requirement_id`、需求与任务同项目。编排器（DK-D 任务分解）与将来
+/// 任何"任务挂需求执行依据"的路径都只经这里，不各自直写表（V-6）。
+///
+/// 幂等：同一 `(task_id, revision_id)` 已存在 → `Ok(false)`（重放 no-op）；
+/// 新建 → `Ok(true)`。返回 `Ok` 而非 409 是刻意的——分解批的重放不应中断。
+///
+/// 注意既有偏差：`task_requirement` 当前 PK 是 `(task_id, revision_id)`，
+/// S02 裁决目标是 `(task_id, requirement_id)`；PK 改造属 S02-I4（0039 明文
+/// 「本迁移不动」），本批**不实施**，只按目标语义写（同一 Task 对同一
+/// Requirement 默认一个执行依据）。
+pub async fn link_task_requirement(
+    pool: &PgPool,
+    task_id: Uuid,
+    requirement_id: Uuid,
+    revision_id: Uuid,
+    actor: &AuditActor,
+) -> Result<bool, PmWriteError> {
+    let mut tx = pool.begin().await?;
+    let task: Option<(Uuid, Uuid)> =
+        sqlx::query_as("SELECT project_id, tenant_id FROM delivery.task WHERE id = $1")
+            .bind(task_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let (project_id, tenant_id) = task.ok_or(PmWriteError::NotFound("task not found"))?;
+
+    // 修订必须存在、属于该需求、属于同一项目，且已定稿（E1 硬约束）。
+    let revision: Option<(String, Uuid)> = sqlx::query_as(
+        "SELECT rr.state, r.project_id \
+           FROM delivery.requirement_revision rr \
+           JOIN delivery.requirement r ON r.id = rr.requirement_id \
+          WHERE rr.id = $1 AND rr.requirement_id = $2 AND rr.tenant_id = $3",
+    )
+    .bind(revision_id)
+    .bind(requirement_id)
+    .bind(tenant_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let (state, requirement_project) =
+        revision.ok_or(PmWriteError::NotFound("requirement revision not found"))?;
+    if requirement_project != project_id {
+        return Err(PmWriteError::Validation(
+            "requirement belongs to another project",
+        ));
+    }
+    if state != "approved" {
+        return Err(PmWriteError::Validation(
+            "only an approved requirement revision can be pinned to a task",
+        ));
+    }
+
+    let inserted = sqlx::query(
+        "INSERT INTO delivery.task_requirement \
+         (project_id, task_id, requirement_id, revision_id, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5) \
+         ON CONFLICT (task_id, revision_id) DO NOTHING",
+    )
+    .bind(project_id)
+    .bind(task_id)
+    .bind(requirement_id)
+    .bind(revision_id)
+    .bind(tenant_id)
+    .execute(&mut *tx)
+    .await?;
+    if inserted.rows_affected() == 0 {
+        return Ok(false);
+    }
+
+    append_audit_with_after(
+        &mut tx,
+        project_id,
+        actor,
+        "task.requirement_linked",
+        "task",
+        Some(task_id),
+        json!({
+            "requirement_id": requirement_id,
+            "revision_id": revision_id,
+        }),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(true)
 }

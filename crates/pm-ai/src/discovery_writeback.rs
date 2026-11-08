@@ -221,6 +221,9 @@ pub enum WriteBackError {
     Requirement(PmWriteError),
     #[error("discovery error: {0}")]
     Discovery(String),
+    /// 依赖落库失败（`task_dependency::add_dependency`；环/跨项目/状态不允许）。
+    #[error("task dependency error: {0}")]
+    Dependency(String),
 }
 
 impl From<PmWriteError> for WriteBackError {
@@ -476,20 +479,26 @@ impl WriteBackHook for NoWriteBack {
 
 /// 本 session 起草出的需求（按 `content.basis_finding_ids` 与 session 的
 /// CONFIRMED finding 求交认定——D-DK-4 不建信封，这个交集就是"归属"事实）。
+///
+/// 同时带**最新修订**（幂等判定与"人还在复核"的读数）与**当前正式修订**
+/// （`current_revision_id`，只可能是 approved；任务钉定只认它，§3.4）。
 #[derive(Debug, Clone)]
 struct SessionRequirement {
     requirement_id: Uuid,
     requirement_code: String,
     requirement_title: String,
-    revision_id: Uuid,
-    revision_version: i32,
-    revision_state: String,
-    markdown: String,
+    latest_revision_id: Uuid,
+    latest_revision_version: i32,
+    latest_state: String,
+    /// 当前正式修订（`NULL` = 尚无定稿版本 → B5 的拒绝判据）。
+    approved_revision_id: Option<Uuid>,
+    approved_revision_version: Option<i32>,
+    approved_markdown: String,
 }
 
 impl SessionRequirement {
     fn approved(&self) -> bool {
-        self.revision_state == "approved"
+        self.approved_revision_id.is_some()
     }
 }
 
@@ -544,7 +553,11 @@ impl DiscoveryWriteBack {
         })
     }
 
-    /// 由 basis 交集认定的「本 session 的需求」，取最新修订。
+    /// 由 basis 交集认定的「本 session 的需求」。
+    ///
+    /// 交集扫**全部修订**（不只最新）：起草标记可能落在被后续修订取代的历史
+    /// 修订上，只扫最新会让归属在同一需求被人类续改后消失，从而重复建需求。
+    /// 同时返回最新修订与当前正式修订（任务钉定只认后者，§3.4）。
     async fn session_requirements(
         &self,
         tenant_id: Uuid,
@@ -554,21 +567,36 @@ impl DiscoveryWriteBack {
         if basis_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let rows: Vec<(Uuid, String, String, Uuid, i32, String, Option<String>)> = sqlx::query_as(
-            "SELECT r.id, r.code, r.title, rv.id, rv.version, rv.state, rv.content->>'markdown' \
+        let rows: Vec<(
+            Uuid,
+            String,
+            String,
+            Uuid,
+            i32,
+            String,
+            Option<Uuid>,
+            Option<i32>,
+            Option<String>,
+        )> = sqlx::query_as(
+            "SELECT r.id, r.code, r.title, lat.id, lat.version, lat.state, \
+                    cur.id, cur.version, cur.content->>'markdown' \
                FROM delivery.requirement r \
                JOIN LATERAL ( \
-                   SELECT id, version, state, content \
+                   SELECT id, version, state \
                      FROM delivery.requirement_revision v \
                     WHERE v.requirement_id = r.id \
                     ORDER BY v.version DESC LIMIT 1 \
-               ) rv ON TRUE \
+               ) lat ON TRUE \
+               LEFT JOIN delivery.requirement_revision cur ON cur.id = r.current_revision_id \
               WHERE r.tenant_id = $1 AND r.project_id = $2 \
                 AND EXISTS ( \
-                    SELECT 1 \
-                      FROM jsonb_array_elements_text( \
-                               coalesce(rv.content->'basis_finding_ids', '[]'::jsonb)) e \
-                     WHERE e.value::uuid = ANY($3)) \
+                    SELECT 1 FROM delivery.requirement_revision rv2 \
+                     WHERE rv2.requirement_id = r.id \
+                       AND EXISTS ( \
+                           SELECT 1 FROM jsonb_array_elements_text( \
+                                            coalesce(rv2.content->'basis_finding_ids', \
+                                                     '[]'::jsonb)) e \
+                            WHERE e.value::uuid = ANY($3))) \
               ORDER BY r.created_at, r.id",
         )
         .bind(tenant_id)
@@ -579,19 +607,96 @@ impl DiscoveryWriteBack {
         Ok(rows
             .into_iter()
             .map(
-                |(requirement_id, code, title, revision_id, version, state, markdown)| {
-                    SessionRequirement {
-                        requirement_id,
-                        requirement_code: code,
-                        requirement_title: title,
-                        revision_id,
-                        revision_version: version,
-                        revision_state: state,
-                        markdown: markdown.unwrap_or_default(),
-                    }
+                |(
+                    requirement_id,
+                    code,
+                    title,
+                    latest_revision_id,
+                    latest_revision_version,
+                    latest_state,
+                    approved_revision_id,
+                    approved_revision_version,
+                    approved_markdown,
+                )| SessionRequirement {
+                    requirement_id,
+                    requirement_code: code,
+                    requirement_title: title,
+                    latest_revision_id,
+                    latest_revision_version,
+                    latest_state,
+                    approved_revision_id,
+                    approved_revision_version,
+                    approved_markdown: approved_markdown.unwrap_or_default(),
                 },
             )
             .collect())
+    }
+
+    /// 需求级验收口径（`requirement_acceptance_criterion`，0056；§7.1 源一）。
+    async fn acceptance_statements(
+        &self,
+        project_id: Uuid,
+        requirement_id: Uuid,
+    ) -> Result<Vec<String>, WriteBackError> {
+        let rows: Vec<String> = sqlx::query_scalar(
+            "SELECT statement FROM delivery.requirement_acceptance_criterion \
+              WHERE project_id = $1 AND requirement_id = $2 \
+              ORDER BY position, id",
+        )
+        .bind(project_id)
+        .bind(requirement_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// 角色候选（§7.1 源三）：本项目**已启用**的 AI Role 的最新版本。
+    /// LLM 只能从这些 `role_key` 里挑（越界丢弃，不编造角色）。
+    async fn role_candidates(
+        &self,
+        tenant_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<Vec<RoleCandidate>, WriteBackError> {
+        let rows: Vec<(Uuid, Uuid, String, String)> = sqlx::query_as(
+            "SELECT DISTINCT ON (pr.role_id) v.id, pr.role_id, t.role_key, v.version \
+               FROM ai.ai_role_version v \
+               JOIN ai.project_ai_role pr ON pr.id = v.project_role_id \
+               JOIN ai.ai_role_template t ON t.id = pr.role_id \
+              WHERE pr.tenant_id = $1 AND pr.project_id = $2 AND pr.enabled \
+              ORDER BY pr.role_id, v.created_at DESC",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut candidates: Vec<RoleCandidate> = rows
+            .into_iter()
+            .map(|(version_id, role_id, role_key, version)| RoleCandidate {
+                version_id,
+                role_id,
+                role_key,
+                version,
+            })
+            .collect();
+        candidates.sort_by(|a, b| a.role_key.cmp(&b.role_key));
+        Ok(candidates)
+    }
+
+    /// 该需求修订是否已挂任务（`task_requirement`）——扫描谓词的排他面。
+    async fn revision_has_tasks(
+        &self,
+        requirement_id: Uuid,
+        revision_id: Uuid,
+    ) -> Result<bool, WriteBackError> {
+        let has: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM delivery.task_requirement \
+                             WHERE requirement_id = $1 AND revision_id = $2)",
+        )
+        .bind(requirement_id)
+        .bind(revision_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(has)
     }
 
     /// 需求编号：模型建议 → 归一化 → 同项目重号顺延（`-2`/`-3`…）。
@@ -692,9 +797,165 @@ fn sanitize_requirement_code(suggestion: Option<&str>, session_id: Uuid) -> Stri
     out
 }
 
+/// 通过系统骨架校验的一条任务（依赖已解析成批内下标，天然无环）。
+#[derive(Debug, Clone)]
+struct ValidatedTask {
+    kind: BatchTaskKind,
+    title: String,
+    description: Option<String>,
+    acceptance: Vec<String>,
+    /// 批内更早任务的下标（`depends_on` 的键 → 位置）。
+    prerequisites: Vec<usize>,
+    role_version_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone)]
+struct ValidatedBatch {
+    tasks: Vec<ValidatedTask>,
+    /// 超上限被截断丢弃的条数（§7.3：系统定数量，超了截断而不是整批拒绝）。
+    truncated: usize,
+    /// 角色建议越界被丢弃的条数（§7.3：角色只从候选选，越界即丢弃）。
+    dropped_role_suggestions: usize,
+}
+
+/// 任务分解的系统骨架校验（§7.2/§7.3；纯函数，可单测）。
+///
+/// 系统定、模型不可协商的四件事：
+/// 1. **数量**：前置 ≤ [`MAX_PREREQUISITE_TASKS`]、主任务 ≤ [`MAX_MAIN_TASKS`]，
+///    超出**截断**（不是整批拒绝——数量溢出属可裁剪的噪声）；
+/// 2. **必填**：title 非空；**每条**任务（含前置任务）至少一条非空验收口径，
+///    否则**整批拒绝**（E4：无验收口径的任务永远完不成，会把主任务锁死）；
+/// 3. **依赖**：`depends_on` 必须指向本批内**更早出现**的任务键——未知键/前向
+///    引用/自引用一律整批拒绝；这是"禁止标题字符串语义"（E3）的编译期等价物，
+///    同时使依赖图天然无环；
+/// 4. **角色**：`role_ref` 只能命中候选 `role_key`，否则丢弃该建议（不报错、
+///    不编造角色）并计数。
+fn validate_task_batch(
+    raw: RawTaskBatch,
+    roles: &[RoleCandidate],
+) -> Result<ValidatedBatch, WriteBackError> {
+    let mut truncated = 0usize;
+    let mut prerequisite = raw.prerequisite;
+    if prerequisite.len() > MAX_PREREQUISITE_TASKS {
+        truncated += prerequisite.len() - MAX_PREREQUISITE_TASKS;
+        tracing::warn!(
+            given = prerequisite.len(),
+            limit = MAX_PREREQUISITE_TASKS,
+            "task decomposition: prerequisite tasks truncated to the system limit"
+        );
+        prerequisite.truncate(MAX_PREREQUISITE_TASKS);
+    }
+    let mut main = raw.main;
+    if main.len() > MAX_MAIN_TASKS {
+        truncated += main.len() - MAX_MAIN_TASKS;
+        tracing::warn!(
+            given = main.len(),
+            limit = MAX_MAIN_TASKS,
+            "task decomposition: main tasks truncated to the system limit"
+        );
+        main.truncate(MAX_MAIN_TASKS);
+    }
+
+    let mut dropped_role_suggestions = 0usize;
+    let mut tasks: Vec<ValidatedTask> = Vec::with_capacity(prerequisite.len() + main.len());
+    let mut keys: Vec<String> = Vec::new();
+
+    for (kind, group) in [
+        (BatchTaskKind::Prerequisite, prerequisite),
+        (BatchTaskKind::Main, main),
+    ] {
+        for task in group {
+            let title = task.title.trim().to_string();
+            if title.is_empty() {
+                return Err(WriteBackError::BatchRejected(
+                    "LLM returned a task without a title".to_string(),
+                ));
+            }
+            let key = task.key.trim().to_string();
+            if key.is_empty() {
+                return Err(WriteBackError::BatchRejected(format!(
+                    "task {title:?} has no batch key — dependency edges cannot be expressed"
+                )));
+            }
+            if keys.iter().any(|existing| existing == &key) {
+                return Err(WriteBackError::BatchRejected(format!(
+                    "duplicate task key {key:?} in the batch"
+                )));
+            }
+
+            // E4：无验收口径即整批拒绝。
+            let acceptance: Vec<String> = task
+                .acceptance_criteria
+                .iter()
+                .map(|text| text.trim().to_string())
+                .filter(|text| !text.is_empty())
+                .collect();
+            if acceptance.is_empty() {
+                return Err(WriteBackError::BatchRejected(format!(
+                    "task {title:?} has no acceptance criteria — a task that cannot be verified is not generated"
+                )));
+            }
+
+            // 依赖只允许指向"更早出现的键"（无未知键、无前向引用、无自引用、无环）。
+            let mut prerequisites = Vec::with_capacity(task.depends_on.len());
+            for reference in &task.depends_on {
+                let reference = reference.trim();
+                let index = keys
+                    .iter()
+                    .position(|existing| existing == reference)
+                    .ok_or_else(|| {
+                        WriteBackError::BatchRejected(format!(
+                            "task {title:?} depends on unknown or later key {reference:?}"
+                        ))
+                    })?;
+                if !prerequisites.contains(&index) {
+                    prerequisites.push(index);
+                }
+            }
+
+            let role_version_id = match task.role_ref.as_deref().map(str::trim) {
+                Some(reference) if !reference.is_empty() => {
+                    match roles.iter().find(|c| c.role_key == reference) {
+                        Some(candidate) => Some(candidate.version_id),
+                        None => {
+                            dropped_role_suggestions += 1;
+                            tracing::warn!(
+                                role_ref = reference,
+                                "task decomposition: role suggestion outside the candidate set dropped"
+                            );
+                            None
+                        }
+                    }
+                }
+                _ => None,
+            };
+
+            keys.push(key);
+            tasks.push(ValidatedTask {
+                kind,
+                title,
+                description: task
+                    .description
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|d| !d.is_empty())
+                    .map(str::to_string),
+                acceptance,
+                prerequisites,
+                role_version_id,
+            });
+        }
+    }
+
+    Ok(ValidatedBatch {
+        tasks,
+        truncated,
+        dropped_role_suggestions,
+    })
+}
+
 #[async_trait]
 impl WriteBackHook for DiscoveryWriteBack {
-    /// §8.1 前半：`REVIEW_REQUIRED` 之后，AI 主体经既有九命令
     /// `create_requirement → update_draft（含 basis）→ submit_revision`，
     /// **到此止步**（停在 `pending_confirmation`，等人类 Approver 确认）。
     async fn on_review_required(
@@ -724,8 +985,8 @@ impl WriteBackHook for DiscoveryWriteBack {
             return Ok(DraftOutcome {
                 kind: DraftOutcomeKind::AlreadyDrafted,
                 requirement_id: Some(current.requirement_id),
-                revision_id: Some(current.revision_id),
-                revision_state: Some(current.revision_state.clone()),
+                revision_id: Some(current.latest_revision_id),
+                revision_state: Some(current.latest_state.clone()),
                 basis_finding_ids: basis_ids,
                 reason: Some("session_already_drafted"),
             });
@@ -854,14 +1115,217 @@ impl WriteBackHook for DiscoveryWriteBack {
         })
     }
 
-    /// 任务分解（§7）：实现见本文件后半。
+    /// 任务分解（§7）：触发 = 本 session 起草的需求已有 approved 修订，且该修订
+    /// 尚无 `task_requirement` 行；前置门 = 未定稿直接拒绝（B5）。
     async fn decompose_if_approved(
         &self,
-        _tenant_id: Uuid,
-        _session: &DiscoverySessionView,
+        tenant_id: Uuid,
+        session: &DiscoverySessionView,
     ) -> Result<DecomposeOutcome, WriteBackError> {
-        Ok(DecomposeOutcome::NothingToDo {
-            reason: "decompose_not_implemented",
-        })
+        if !self.mode.enabled() {
+            return Ok(DecomposeOutcome::NothingToDo {
+                reason: "orchestrator_off",
+            });
+        }
+
+        let findings = self.confirmed_findings(tenant_id, session.id).await?;
+        if findings.is_empty() {
+            return Ok(DecomposeOutcome::NothingToDo {
+                reason: "no_confirmed_finding",
+            });
+        }
+        let basis_ids: Vec<Uuid> = findings.iter().map(|f| f.id).collect();
+        let candidates = self
+            .session_requirements(tenant_id, session.project_id, &basis_ids)
+            .await?;
+        if candidates.is_empty() {
+            return Ok(DecomposeOutcome::NothingToDo {
+                reason: "no_requirement_drafted",
+            });
+        }
+
+        // B5 前置门：本 session 的需求还没定稿 → 拒绝生成，文案指向需求页。
+        // fail-closed：任何一条候选未 approved 即整轮拒绝（不挑"能拆的那条"）。
+        for candidate in &candidates {
+            if !candidate.approved() {
+                tracing::warn!(
+                    requirement_id = %candidate.requirement_id,
+                    latest_revision = candidate.latest_revision_version,
+                    latest_state = %candidate.latest_state,
+                    "task decomposition blocked: requirement has no approved revision (B5)"
+                );
+                return Err(WriteBackError::RequirementNotApproved {
+                    requirement_id: candidate.requirement_id,
+                });
+            }
+        }
+
+        // 扫描谓词的排他面：approved 修订已挂任务 → 本轮无事可做（幂等的来源）。
+        let mut target = None;
+        for candidate in candidates {
+            let revision_id = candidate.approved_revision_id.ok_or_else(|| {
+                WriteBackError::Discovery("approved requirement without approved revision".into())
+            })?;
+            if !self
+                .revision_has_tasks(candidate.requirement_id, revision_id)
+                .await?
+            {
+                target = Some((candidate, revision_id));
+                break;
+            }
+        }
+        let Some((target, revision_id)) = target else {
+            return Ok(DecomposeOutcome::NothingToDo {
+                reason: "tasks_already_generated",
+            });
+        };
+
+        // 三源齐备：approved 正文 + 需求级验收口径（0056）+ 能力面（DK-C）+ 角色候选。
+        let acceptance_criteria = self
+            .acceptance_statements(session.project_id, target.requirement_id)
+            .await?;
+        let capability = self.capability.project(session.project_id).await?;
+        let roles = self.role_candidates(tenant_id, session.project_id).await?;
+        let ctx = TaskDecomposeContext {
+            project_id: session.project_id,
+            requirement_id: target.requirement_id,
+            requirement_code: target.requirement_code.clone(),
+            requirement_title: target.requirement_title.clone(),
+            markdown: target.approved_markdown.clone(),
+            acceptance_criteria,
+            capability,
+            roles: roles.clone(),
+        };
+
+        let reply = match self.model.decompose_tasks(&ctx).await {
+            Ok(reply) => {
+                self.record_model_call(
+                    session.project_id,
+                    "ok",
+                    None,
+                    reply.latency_ms,
+                    Some(&reply.provider),
+                )
+                .await;
+                reply
+            }
+            Err(failure) => {
+                self.record_model_call(
+                    session.project_id,
+                    "failed",
+                    Some(crate::call_record::analysis_error_kind(&failure.error)),
+                    failure.latency_ms,
+                    failure.provider.as_ref(),
+                )
+                .await;
+                return Err(WriteBackError::Model(failure.error));
+            }
+        };
+
+        // 系统骨架校验（§7.3）：上限截断 / 必填验收口径 / 依赖键 / 角色越界。
+        let batch = validate_task_batch(reply.value, &roles)?;
+        if batch.tasks.is_empty() {
+            return Ok(DecomposeOutcome::NothingToDo {
+                reason: "empty_batch",
+            });
+        }
+
+        let actor = pm_application::actor::AuditActor::principal(
+            self.ai_principal(session.project_id).await?,
+        );
+        let mut generated: Vec<GeneratedTask> = Vec::with_capacity(batch.tasks.len());
+        for (index, task) in batch.tasks.iter().enumerate() {
+            // ① create_task（status 恒 draft，F16/E2）+ 验收口径同事务
+            let row = pm_application::pm_write::create_task(
+                &self.pool,
+                pm_application::pm_write::CreateTaskRequest {
+                    project_id: Some(session.project_id),
+                    milestone_id: None,
+                    title: Some(task.title.clone()),
+                    description: task.description.clone(),
+                    priority: Some("normal".to_string()),
+                    assignee_id: None,
+                    ai_role_version_id: task.role_version_id,
+                    acceptance_criteria: Some(
+                        task.acceptance
+                            .iter()
+                            .map(|text| pm_application::pm_write::AcceptanceCriterionInput {
+                                ordinal: None,
+                                text: text.clone(),
+                                verification_kind: Some("manual".to_string()),
+                            })
+                            .collect(),
+                    ),
+                },
+                &actor,
+            )
+            .await?;
+
+            // ② task_requirement 钉定（E1：revision 必为 approved，服务层执法）
+            pm_application::pm_write::link_task_requirement(
+                &self.pool,
+                row.id,
+                target.requirement_id,
+                revision_id,
+                &actor,
+            )
+            .await?;
+
+            // ③ 前置依赖落边表（E3：不是标题字符串语义；D6 允许 draft 下游建边）
+            let mut depends_on = Vec::with_capacity(task.prerequisites.len());
+            for upstream_index in &task.prerequisites {
+                let upstream = generated.get(*upstream_index).ok_or_else(|| {
+                    WriteBackError::BatchRejected(format!(
+                        "task #{index} references a prerequisite that was not created"
+                    ))
+                })?;
+                pm_application::task_dependency::add_dependency(
+                    &self.pool,
+                    row.id,
+                    upstream.task_id,
+                    &actor,
+                )
+                .await
+                .map_err(|error| WriteBackError::Dependency(format!("{error:?}")))?;
+                depends_on.push(upstream.task_id);
+            }
+
+            generated.push(GeneratedTask {
+                task_id: row.id,
+                title: task.title.clone(),
+                kind: task.kind,
+                depends_on,
+                acceptance_criteria: task.acceptance.len(),
+                ai_role_version_id: task.role_version_id,
+            });
+        }
+
+        let prerequisite_count = generated
+            .iter()
+            .filter(|t| t.kind == BatchTaskKind::Prerequisite)
+            .count();
+        let main_count = generated.len() - prerequisite_count;
+        tracing::info!(
+            project_id = %session.project_id,
+            session_id = %session.id,
+            requirement_id = %target.requirement_id,
+            revision_id = %revision_id,
+            revision_version = target.approved_revision_version.unwrap_or_default(),
+            tasks = generated.len(),
+            prerequisites = prerequisite_count,
+            truncated = batch.truncated,
+            dropped_roles = batch.dropped_role_suggestions,
+            "discovery write-back: task batch drafted (status=draft, awaiting human batch approval)"
+        );
+
+        Ok(DecomposeOutcome::Generated(TaskBatchOutcome {
+            requirement_id: target.requirement_id,
+            revision_id,
+            tasks: generated,
+            prerequisite_count,
+            main_count,
+            truncated: batch.truncated,
+            dropped_role_suggestions: batch.dropped_role_suggestions,
+        }))
     }
 }
