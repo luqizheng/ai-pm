@@ -115,6 +115,10 @@
 | 执行事件持久化 | V2 **正式运行前**必须 | 先做最小方案（event_id/team/project/task/run/client/event_type/generation/occurred_at/received_at，幂等写入+审计查询）——不做大型事件溯源 |
 | Phase 5 双轨收敛 | 否 | 独立规划不阻塞启动；须定最终收敛方向，避免双轨长期并存成为事实架构 |
 
+> **注记（2026-11-08）**：本表「调度入口」设计闭合的既定输入新增一条——派发器 ↔
+> Runner 竞争缓解裁决 D-2=c（Runner 心跳注册为派发可用性来源，可用性真源统一）。
+> 详见 `ai-pm-v05-dispatch-competition-adjudication-record-v1.md` §四。
+
 ## 10. ACP-04 / 05 联合设计检查单（WP-D 入题）
 
 ① Delivery 引用 Run 还是 Session？② Consumption 是否需要 continuation_generation？③ Delivery 状态是否参与 Task 完成判定？④ ACP-05 是否消费 ACP-04 持久化结果？⑤ ACP-04 是否依赖 05 未建的正式 Session 身份？（若依赖 → 先定字段契约再分阶段落地，**不得临时另建 Session 身份**。）
