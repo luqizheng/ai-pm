@@ -62,6 +62,11 @@ pub async fn create_task(
     .bind(req.ai_role_version_id)
     .execute(&mut *tx)
     .await?;
+    // DK-D（§7.2/E4）：验收口径与任务行同事务落库——创建即"可验收"，
+    // 不留下"任务已存在但无验收口径"的中间态。
+    if let Some(criteria) = req.acceptance_criteria {
+        replace_acceptance_criteria(&mut tx, project_id, task_id, criteria).await?;
+    }
     append_audit(
         &mut tx,
         project_id,
@@ -142,6 +147,13 @@ pub async fn update_task(
     // 「边合法但缺证据」的迁移同样在此被拒（走命令通道带证据执行）。
     let from_status = TaskStatus::from_str(&current_status)
         .ok_or(PmWriteError::Validation("invalid current status"))?;
+    // DK-0 §7.4 / E2（2026-11-08）：**AI 永不置 ready**。「任务进入就绪队列」是
+    // 人类动作（整批预览一次确认），所以 `draft → ready` 这条边在服务层就要真人
+    // ——闸门落在唯一的状态直写入口上（§6.2 四道闸的服务层这道），而不是只写在
+    // 编排器白名单里。同状态 no-op（ready → ready）不算迁移，不取闸。
+    if new_status == TaskStatus::Ready && new_status != from_status {
+        crate::requirement::require_human_conn(&mut tx, actor).await?;
+    }
     if new_status != from_status {
         let input = pm_domain::task_transition::TransitionInput {
             task_id: None,
@@ -409,6 +421,89 @@ pub(crate) async fn replace_knowledge_refs(
     Ok(input.len())
 }
 
+/// 整批 `draft → ready`（DK-0 §7.4 / D-DK-8 / E5）：**人类动作**。
+///
+/// 为什么必须存在：`update_task` 的直写**不生产 outbox 事件**，而 `TaskReady`
+/// 是入调度的唯一触发（handler 建 Run）。AI 生成的任务全是 draft，人类整批确认
+/// 后若走直写，任务永远不进调度——本函数把整批确认接上既有命令通道：
+/// 每条任务经 [`crate::command_executor::PgCommandExecutor::execute`]
+/// （`UpdateTaskStatus` → `apply_task_transition` + 同事务 `TaskReady`），
+/// 因此 E5 的「TaskReady 事件数 = 确认任务数」由结构保证，而不是靠调用方纪律。
+///
+/// 闸门：`require_human`（E2：AI 调本函数 → `Forbidden`，且调用方无旁路——
+/// 直写路径同样有 `draft → ready` 真人闸）。
+///
+/// 幂等：已是 `ready` 的任务进 `already_ready`（不重复发事件）；非 draft/ready
+/// 状态进 `skipped`（执行中的任务不能被"批准确认"回退）。
+pub async fn mark_task_batch_ready(
+    pool: &PgPool,
+    executor: &crate::command_executor::PgCommandExecutor,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    task_ids: &[Uuid],
+    actor: &AuditActor,
+) -> Result<MarkTasksReadyOutcome, PmWriteError> {
+    if task_ids.is_empty() {
+        return Err(PmWriteError::Validation("task_ids is required"));
+    }
+    crate::requirement::require_human(pool, actor).await?;
+
+    // 全部 id 必须属于本项目本租户（越权/未知一律 NotFound，不泄露存在性）。
+    let rows: Vec<(Uuid, String, i64)> = sqlx::query_as(
+        "SELECT id, status, revision FROM delivery.task \
+          WHERE tenant_id = $1 AND project_id = $2 AND id = ANY($3) \
+          ORDER BY created_at, id",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(task_ids)
+    .fetch_all(pool)
+    .await?;
+    if rows.len() != task_ids.len() {
+        return Err(PmWriteError::NotFound("task not found in this project"));
+    }
+
+    let mut outcome = MarkTasksReadyOutcome::default();
+    for (task_id, status, revision) in rows {
+        match status.as_str() {
+            "ready" => outcome.already_ready.push(task_id),
+            "draft" => {
+                executor
+                    .execute(
+                        pm_domain::ProjectCommand::UpdateTaskStatus {
+                            task_id,
+                            expected_revision: revision,
+                            new_status: pm_domain::TaskStatus::Ready,
+                        },
+                        crate::command_executor::ExecutionContext {
+                            project_id,
+                            actor: actor.clone(),
+                            actor_kind: crate::command_executor::ActorKind::Human,
+                            source: crate::command_executor::CommandSource::HumanAction,
+                        },
+                    )
+                    .await
+                    .map_err(|error| match error {
+                        pm_domain::CommandError::RevisionConflict { .. } => {
+                            PmWriteError::Conflict("revision conflict")
+                        }
+                        pm_domain::CommandError::Validation(message) => {
+                            PmWriteError::Validation(Box::leak(message.into_boxed_str()))
+                        }
+                        pm_domain::CommandError::Db(error) => PmWriteError::Db(error),
+                        other => {
+                            PmWriteError::Validation(Box::leak(other.to_string().into_boxed_str()))
+                        }
+                    })?;
+                outcome.ready.push(task_id);
+            }
+            // 其余 11 态（claimed/running/终态…）不接受整批确认。
+            _ => outcome.skipped.push(task_id),
+        }
+    }
+    Ok(outcome)
+}
+
 pub(crate) async fn task_row(pool: &PgPool, task_id: Uuid) -> Result<TaskRow, PmWriteError> {
     sqlx::query_as::<_, TaskRow>(
         "SELECT id, project_id, milestone_id, title, description, status, priority, \
@@ -419,4 +514,91 @@ pub(crate) async fn task_row(pool: &PgPool, task_id: Uuid) -> Result<TaskRow, Pm
     .fetch_one(pool)
     .await
     .map_err(PmWriteError::from)
+}
+
+/// 任务 → 需求修订的钉定（`delivery.task_requirement`，F15）。
+///
+/// **E1 的唯一执法点**：`revision_id` 必须指向 `state='approved'` 的修订，且该
+/// 修订属于 `requirement_id`、需求与任务同项目。编排器（DK-D 任务分解）与将来
+/// 任何"任务挂需求执行依据"的路径都只经这里，不各自直写表（V-6）。
+///
+/// 幂等：同一 `(task_id, revision_id)` 已存在 → `Ok(false)`（重放 no-op）；
+/// 新建 → `Ok(true)`。返回 `Ok` 而非 409 是刻意的——分解批的重放不应中断。
+///
+/// 注意既有偏差：`task_requirement` 当前 PK 是 `(task_id, revision_id)`，
+/// S02 裁决目标是 `(task_id, requirement_id)`；PK 改造属 S02-I4（0039 明文
+/// 「本迁移不动」），本批**不实施**，只按目标语义写（同一 Task 对同一
+/// Requirement 默认一个执行依据）。
+pub async fn link_task_requirement(
+    pool: &PgPool,
+    task_id: Uuid,
+    requirement_id: Uuid,
+    revision_id: Uuid,
+    actor: &AuditActor,
+) -> Result<bool, PmWriteError> {
+    let mut tx = pool.begin().await?;
+    let task: Option<(Uuid, Uuid)> =
+        sqlx::query_as("SELECT project_id, tenant_id FROM delivery.task WHERE id = $1")
+            .bind(task_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let (project_id, tenant_id) = task.ok_or(PmWriteError::NotFound("task not found"))?;
+
+    // 修订必须存在、属于该需求、属于同一项目，且已定稿（E1 硬约束）。
+    let revision: Option<(String, Uuid)> = sqlx::query_as(
+        "SELECT rr.state, r.project_id \
+           FROM delivery.requirement_revision rr \
+           JOIN delivery.requirement r ON r.id = rr.requirement_id \
+          WHERE rr.id = $1 AND rr.requirement_id = $2 AND rr.tenant_id = $3",
+    )
+    .bind(revision_id)
+    .bind(requirement_id)
+    .bind(tenant_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let (state, requirement_project) =
+        revision.ok_or(PmWriteError::NotFound("requirement revision not found"))?;
+    if requirement_project != project_id {
+        return Err(PmWriteError::Validation(
+            "requirement belongs to another project",
+        ));
+    }
+    if state != "approved" {
+        return Err(PmWriteError::Validation(
+            "only an approved requirement revision can be pinned to a task",
+        ));
+    }
+
+    let inserted = sqlx::query(
+        "INSERT INTO delivery.task_requirement \
+         (project_id, task_id, requirement_id, revision_id, tenant_id) \
+         VALUES ($1, $2, $3, $4, $5) \
+         ON CONFLICT (task_id, revision_id) DO NOTHING",
+    )
+    .bind(project_id)
+    .bind(task_id)
+    .bind(requirement_id)
+    .bind(revision_id)
+    .bind(tenant_id)
+    .execute(&mut *tx)
+    .await?;
+    if inserted.rows_affected() == 0 {
+        return Ok(false);
+    }
+
+    append_audit_with_after(
+        &mut tx,
+        project_id,
+        actor,
+        "task.requirement_linked",
+        "task",
+        Some(task_id),
+        json!({
+            "requirement_id": requirement_id,
+            "revision_id": revision_id,
+        }),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(true)
 }

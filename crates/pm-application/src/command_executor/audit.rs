@@ -60,6 +60,7 @@ pub(crate) fn audit_source(ctx: &ExecutionContext) -> (&'static str, Option<Uuid
         CommandSource::RedlineApproval { approval_id } => ("redline_approval", Some(*approval_id)),
         CommandSource::Bootstrap => ("bootstrap", None),
         CommandSource::System => ("system", None),
+        CommandSource::HumanAction => ("human_action", None),
     }
 }
 

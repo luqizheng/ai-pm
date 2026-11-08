@@ -58,6 +58,7 @@ async fn submitted(
             requirement_type: None,
             priority: None,
             markdown: Some(markdown.to_string()),
+            basis_finding_ids: None,
         },
         &actor,
     )
@@ -70,6 +71,7 @@ async fn submitted(
         DraftRevisionRequest {
             markdown: markdown.to_string(),
             summary: Some("投影验证".to_string()),
+            basis_finding_ids: None,
         },
         &actor,
     )
@@ -225,6 +227,7 @@ async fn bind_is_idempotent_and_unbound_confirm_is_refused(pool: PgPool) {
             requirement_type: None,
             priority: None,
             markdown: None,
+            basis_finding_ids: None,
         },
         &actor,
     )
@@ -237,6 +240,7 @@ async fn bind_is_idempotent_and_unbound_confirm_is_refused(pool: PgPool) {
         DraftRevisionRequest {
             markdown: "# raw".to_string(),
             summary: None,
+            basis_finding_ids: None,
         },
         &actor,
     )
@@ -306,6 +310,7 @@ async fn bind_is_idempotent_and_unbound_confirm_is_refused(pool: PgPool) {
             requirement_type: None,
             priority: None,
             markdown: None,
+            basis_finding_ids: None,
         },
         &actor,
     )
@@ -318,6 +323,7 @@ async fn bind_is_idempotent_and_unbound_confirm_is_refused(pool: PgPool) {
         DraftRevisionRequest {
             markdown: "# reentry".to_string(),
             summary: None,
+            basis_finding_ids: None,
         },
         &actor,
     )

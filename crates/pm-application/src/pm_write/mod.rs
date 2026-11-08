@@ -8,6 +8,7 @@
 #![allow(unused_imports)]
 
 pub(crate) use serde::Deserialize;
+pub(crate) use serde::Serialize;
 pub(crate) use serde_json::json;
 pub(crate) use sha2::{Digest, Sha256};
 pub(crate) use sqlx::PgPool;
@@ -121,6 +122,29 @@ pub struct CreateTaskRequest {
     /// 校验该版本所属项目行必须指向本任务的目标 project（跨项目 → Validation）。
     #[serde(default)]
     pub ai_role_version_id: Option<Uuid>,
+    /// DK-D（设计稿 §7.2/E4）：创建时即落验收口径，与任务行**同事务**。
+    /// 提供即按 `task_acceptance_criterion` 逐条写入（ordinal 缺省按 `max+10`）。
+    /// 放在 create 而不是再调一次 `update_task`：任务从诞生起就必须可验收，
+    /// 且避免"建了任务但还没验收口径"的中间态（AI 生成的任务尤其如此）。
+    #[serde(default)]
+    pub acceptance_criteria: Option<Vec<AcceptanceCriterionInput>>,
+}
+
+/// 整批 `draft → ready` 请求（DK-0 §7.4 / D-DK-8：整批预览 + 一次确认）。
+#[derive(Debug, Deserialize)]
+pub struct MarkTasksReadyRequest {
+    pub task_ids: Vec<Uuid>,
+}
+
+/// 整批确认结果（E5 的读数面：`ready.len()` 即本批 TaskReady 事件数）。
+#[derive(Debug, Default, Serialize)]
+pub struct MarkTasksReadyOutcome {
+    /// 本批真正迁到 `ready` 的任务（每条一个 `TaskReady` 事件）。
+    pub ready: Vec<Uuid>,
+    /// 已是 `ready` 的任务（幂等 no-op，不重复发事件）。
+    pub already_ready: Vec<Uuid>,
+    /// 非 draft/ready（执行中/终态）而不接受整批确认的任务。
+    pub skipped: Vec<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -16,8 +16,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ApiError, ApiResult};
-use pm_application::pm_write::{self, CreateTaskRequest, UpdateTaskRequest};
+use crate::support::{require_project_visible, ApiError, ApiResult};
+use pm_application::pm_write::{self, CreateTaskRequest, MarkTasksReadyRequest, UpdateTaskRequest};
 use pm_application::supervision::{DecideRequest, Decision, SupervisionError};
 
 fn conflict(message: &'static str) -> Response {
@@ -206,4 +206,37 @@ pub(crate) async fn update_task_handler(
     let actor = principal.audit_actor();
     let task = pm_write::update_task(&state.pool, task_id, body, &actor).await?;
     Ok((StatusCode::OK, Json(task)).into_response())
+}
+
+/// `POST /v1/pm/projects/{project_id}/tasks/mark-ready`（DK-0 §7.4 / D-DK-8 / E5）：
+/// 整批 `draft → ready` 的**人类确认**入口。
+///
+/// 走既有命令通道（`AppState::executor` 的 `UpdateTaskStatus` → 受守卫迁移 +
+/// 同事务 `TaskReady`），因此每条任务恰好一个 `TaskReady` 事件；AI 主体调 →
+/// 403（服务层 `require_human`，E2）。业务裁决零实现：本 handler 只做租户/成员
+/// 前置与参数转交（V-6）。
+pub(crate) async fn mark_tasks_ready_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(project_id): Path<Uuid>,
+    Json(body): Json<MarkTasksReadyRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    project_in_tenant(&state.pool, project_id, principal.tenant_id).await?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await?;
+    let outcome = pm_write::mark_task_batch_ready(
+        &state.pool,
+        &state.executor,
+        principal.tenant_id,
+        project_id,
+        &body.task_ids,
+        &principal.audit_actor(),
+    )
+    .await?;
+    Ok(Json(json!({ "result": outcome })))
 }

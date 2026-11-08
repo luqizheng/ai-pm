@@ -90,6 +90,7 @@ async fn create_requirement(pool: &PgPool, project_id: Uuid, code: &str) -> Uuid
             requirement_type: None,
             priority: None,
             markdown: Some(format!("# {code}")),
+            basis_finding_ids: None,
         },
         &actor,
     )

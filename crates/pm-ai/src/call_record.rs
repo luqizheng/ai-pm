@@ -28,9 +28,9 @@ pub const PURPOSE_CONVERSATION_ROUTER: &str = "conversation_router";
 /// KB digest 与 PC 对象各记一条，purpose 区分面（0062 analysis_mode 对账）。
 pub const PURPOSE_KB_SNAPSHOT_ANALYSIS: &str = "kb_snapshot_analysis";
 pub const PURPOSE_PC_SNAPSHOT_ANALYSIS: &str = "pc_snapshot_analysis";
-/// D-DK-11（2026-11-08）：访谈编排轮次。与 `conversation_reply`（闲聊）分开
-/// 记账，"闲聊成本 vs 编排成本"才可分；`purpose` 是自由 TEXT（0041 无 CHECK），
-/// 加常量不需迁移。
+/// D-DK-11（2026-11-08）：对话编排轮次的 LLM 调用（编排轮 + 需求起草 + 任务分解）。
+/// 独立值而非复用 `conversation_reply`：账本上必须能分开「闲聊成本」与
+/// 「编排成本」（`purpose` 是自由 TEXT，0041 无 CHECK，零迁移）。
 pub const PURPOSE_DISCOVERY_ORCHESTRATION: &str = "discovery_orchestration";
 
 /// Maps an analysis-chain [`ModelError`] onto the §11 error taxonomy
@@ -40,7 +40,7 @@ pub const PURPOSE_DISCOVERY_ORCHESTRATION: &str = "discovery_orchestration";
 /// `model_unavailable` kind — the same word the orchestrator stores on
 /// `ai.analysis_run.failure_code` — keeps both observability surfaces
 /// aligned; `provider_error` covers unusable upstream output.
-pub(crate) fn analysis_error_kind(err: &crate::model::ModelError) -> &'static str {
+pub fn analysis_error_kind(err: &crate::model::ModelError) -> &'static str {
     match err {
         crate::model::ModelError::Timeout => "timeout",
         crate::model::ModelError::Unavailable(_) => "model_unavailable",

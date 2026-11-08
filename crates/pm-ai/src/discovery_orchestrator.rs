@@ -62,9 +62,9 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use pm_application::discovery::{
-    apply_orchestrator_round, list_findings, list_questions, normalize_text, parse_slot_tag,
-    slots_for_kind, DiscoveryError, DiscoveryFindingView, DiscoveryQuestionView, FindingRef,
-    RoundDraft, RoundFinding, RoundQuestion, Slot,
+    apply_orchestrator_round, get_session, list_findings, list_questions, normalize_text,
+    parse_slot_tag, slots_for_kind, DiscoveryError, DiscoveryFindingView, DiscoveryQuestionView,
+    FindingRef, RoundDraft, RoundFinding, RoundQuestion, Slot,
 };
 
 use crate::analysis_model::select_analysis_model_config;
@@ -74,6 +74,7 @@ use crate::discovery_context::{
     InterviewContextBuilder, InterviewKind, KEY_KNOWLEDGE_DIGEST, KEY_PRODUCT_COGNITION,
     KEY_PROJECT_PROFILE, KEY_REQUIREMENTS, KEY_TASKS,
 };
+use crate::discovery_writeback::{DraftOutcomeKind, NoWriteBack, WriteBackHook};
 use crate::model::ModelError;
 
 /// 每轮处理的会话数（FIFO 头）。
@@ -778,6 +779,10 @@ pub struct OrchestratorReport {
     pub stale_rounds: usize,
     pub failed: usize,
     pub overreach_total: usize,
+    /// DK-D 写回：`on_review_required` 产出草案（Submitted）的次数。
+    pub drafts_submitted: usize,
+    /// DK-D 写回：`decompose_if_approved` 生成任务批（Generated 且非空）的次数。
+    pub task_batches_generated: usize,
 }
 
 impl OrchestratorReport {
@@ -835,6 +840,9 @@ pub struct DiscoveryOrchestratorWorker {
     supplemental: Vec<PromptSection>,
     /// DK-C 正式接入（逐会话 S1~S5 只读投影）；`None` = 未接（单测/降级）。
     context_builder: Option<Arc<dyn InterviewContextBuilder>>,
+    /// DK-D 写回钩子（默认空实现；生产注入 `DiscoveryWriteBack` 需真
+    /// `WriteBackModel`，属 DK-F）。
+    write_back: Arc<dyn WriteBackHook>,
     cooldowns: HashMap<Uuid, Instant>,
     /// session → (上一轮的缺口槽位集合, 连续轮数)。
     slot_streaks: HashMap<Uuid, (Vec<String>, u8)>,
@@ -853,6 +861,7 @@ impl DiscoveryOrchestratorWorker {
             pool,
             supplemental: Vec::new(),
             context_builder: None,
+            write_back: Arc::new(NoWriteBack),
             cooldowns: HashMap::new(),
             slot_streaks: HashMap::new(),
             invalid_streaks: HashMap::new(),
@@ -877,6 +886,14 @@ impl DiscoveryOrchestratorWorker {
     /// 按只读侧 fail-open 降级（WARN + S6-only 继续，§2.4），绝不阻塞访谈轮次。
     pub fn with_context_builder(mut self, builder: Arc<dyn InterviewContextBuilder>) -> Self {
         self.context_builder = Some(builder);
+        self
+    }
+
+    /// DK-D 正式接入：注入写回钩子（`DiscoveryWriteBack`）。钩子失败只 WARN
+    /// （主链七步已提交，写回是衍生动作）；`REVIEW_REQUIRED` 后起草草案、
+    /// 每轮 applied 后检查任务分解（验收记录 §九 约定）。
+    pub fn with_write_back(mut self, hook: Arc<dyn WriteBackHook>) -> Self {
+        self.write_back = hook;
         self
     }
 
@@ -926,6 +943,72 @@ impl DiscoveryOrchestratorWorker {
                     "interview context build failed (DK-C): falling back to S6-only (read-side fail-open)"
                 );
                 Vec::new()
+            }
+        }
+    }
+
+    /// DK-D 写回钩子（验收记录 §九 与 DK-B 的约定）：
+    /// - `REVIEW_REQUIRED` 跃迁后调 [`WriteBackHook::on_review_required`]（起草
+    ///   需求草案，AI 止步 `pending_confirmation`）；
+    /// - 每轮 applied 后调 [`WriteBackHook::decompose_if_approved`]（approved
+    ///   需求的任务分解；`NothingToDo` 是正常空转）。
+    ///
+    /// 失败只 WARN：主链七步已在单事务里提交，写回是衍生动作，不因钩子故障
+    /// 回滚或重试整轮（B5 拒绝的文案本身指向人类下一步，属设计内出口）。
+    async fn run_write_back(
+        &self,
+        session: &PendingSession,
+        summary: &RoundSummary,
+        report: &mut OrchestratorReport,
+    ) {
+        let view = match get_session(&self.pool, session.tenant_id, session.id).await {
+            Ok(view) => view,
+            Err(error) => {
+                tracing::warn!(
+                    session_id = %session.id,
+                    %error,
+                    "write-back hook skipped: could not re-read the session view (DK-D)"
+                );
+                return;
+            }
+        };
+        if summary.outcome.status == pm_application::discovery::SESSION_STATUS_REVIEW_REQUIRED {
+            match self
+                .write_back
+                .on_review_required(session.tenant_id, &view)
+                .await
+            {
+                Ok(outcome) => {
+                    if matches!(outcome.kind, DraftOutcomeKind::Submitted) {
+                        report.drafts_submitted += 1;
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        session_id = %session.id,
+                        %error,
+                        "write-back: requirement draft failed after REVIEW_REQUIRED (DK-D)"
+                    );
+                }
+            }
+        }
+        match self
+            .write_back
+            .decompose_if_approved(session.tenant_id, &view)
+            .await
+        {
+            Ok(crate::discovery_writeback::DecomposeOutcome::Generated(batch)) => {
+                if !batch.tasks.is_empty() {
+                    report.task_batches_generated += 1;
+                }
+            }
+            Ok(_) => {}
+            Err(error) => {
+                tracing::warn!(
+                    session_id = %session.id,
+                    %error,
+                    "write-back: task decomposition failed (DK-D)"
+                );
             }
         }
     }
@@ -1001,7 +1084,8 @@ impl DiscoveryOrchestratorWorker {
         let previous = self.slot_streaks.get(&session.id).cloned();
         match self.try_round(session, previous.as_ref()).await {
             Ok(summary) => {
-                match summary.streak {
+                // clone 而非移动：summary 后续还要整只借给写回钩子（DK-D）。
+                match summary.streak.clone() {
                     Some(streak) => {
                         self.slot_streaks.insert(session.id, streak);
                     }
@@ -1020,6 +1104,9 @@ impl DiscoveryOrchestratorWorker {
                     "NEEDS_USER_INPUT" => report.to_needs_user_input += 1,
                     _ => {}
                 }
+                // DK-D 写回钩子（主链七步已提交后的衍生动作；先于 streak 簿记，
+                // 借用而非移动 summary）。
+                self.run_write_back(session, &summary, report).await;
                 if summary.escalated {
                     tracing::warn!(
                         session_id = %session.id,

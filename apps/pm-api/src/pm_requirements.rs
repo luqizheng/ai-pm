@@ -24,7 +24,8 @@ use pm_application::requirement_acceptance::{
     self, AddCriterionRequest, CriterionVerdictRequest, UpdateCriterionRequest,
 };
 use pm_application::requirement_traceability::{
-    self, LinkFindingRequest, LinkSourceInputRequest, RegisterSourceInputRequest,
+    self, LinkFindingRequest, LinkSourceInputRequest, MaterializeBasisRequest,
+    RegisterSourceInputRequest,
 };
 
 /// 需求级端点公共前置：租户边界（越权/不存在一律 404）+ 项目成员可见性。
@@ -404,6 +405,33 @@ async fn unlink_finding(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
+/// `POST /v1/pm/requirements/{requirement_id}/basis/materialize`（DK-0 §3.3
+/// D-DK-5 的人类半步）：把修订里 AI 写的 `content.basis_finding_ids` 一键物化成
+/// 正式溯源关联（`requirement_finding` + `source_input(kind='discovery')`）。
+///
+/// 真人闸在服务层（`require_human`）+ 每个既有子服务各自的闸——AI 调用即 403
+/// （B4），本 handler 只做成员可见性前置（V-6）。
+async fn materialize_basis(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(requirement_id): Path<Uuid>,
+    Json(body): Json<MaterializeBasisRequest>,
+) -> ApiResult<(axum::http::StatusCode, Json<serde_json::Value>)> {
+    require_requirement_visible(&state, requirement_id, &caller).await?;
+    let outcome = requirement_traceability::materialize_basis(
+        &state.pool,
+        caller.tenant_id,
+        requirement_id,
+        body,
+        &caller.audit_actor(),
+    )
+    .await?;
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!(outcome)),
+    ))
+}
+
 // ────────────────────────────────── Acceptance Criteria（S02-I5，§11）
 
 async fn list_criteria(
@@ -559,6 +587,11 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/pm/requirements/{requirement_id}/findings/{finding_id}",
             axum::routing::delete(unlink_finding),
+        )
+        // DK-0 §3.3（D-DK-5）：按 basis 清单一键物化（人类一步，S02D-20 不动）。
+        .route(
+            "/v1/pm/requirements/{requirement_id}/basis/materialize",
+            post(materialize_basis),
         )
         .route(
             "/v1/pm/requirements/{requirement_id}/acceptance-criteria",

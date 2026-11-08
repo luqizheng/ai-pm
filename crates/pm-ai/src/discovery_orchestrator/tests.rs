@@ -1106,3 +1106,165 @@ async fn context_builder_failure_degrades_to_s6_only(pool: sqlx::PgPool) {
         "read-side fail-open: round still applies without S1~S5"
     );
 }
+
+// ── DK-D 集成：写回钩子在轮次路径上的调用纪律 ──────────────────────────────
+
+use crate::discovery_writeback::{DecomposeOutcome, DraftOutcome, WriteBackError};
+
+/// 记录调用序列的钩子桩：证明「谁在何时被调」而不假装做写回。
+struct RecordingHook {
+    calls: StdArc<std::sync::Mutex<Vec<&'static str>>>,
+    fail: bool,
+}
+
+#[async_trait::async_trait]
+impl crate::discovery_writeback::WriteBackHook for RecordingHook {
+    async fn on_review_required(
+        &self,
+        _tenant_id: Uuid,
+        _session: &pm_application::discovery::DiscoverySessionView,
+    ) -> Result<DraftOutcome, WriteBackError> {
+        self.calls.lock().unwrap().push("on_review_required");
+        if self.fail {
+            return Err(WriteBackError::Disabled);
+        }
+        Ok(DraftOutcome::skipped("stub"))
+    }
+
+    async fn decompose_if_approved(
+        &self,
+        _tenant_id: Uuid,
+        _session: &pm_application::discovery::DiscoverySessionView,
+    ) -> Result<DecomposeOutcome, WriteBackError> {
+        self.calls.lock().unwrap().push("decompose");
+        if self.fail {
+            return Err(WriteBackError::Disabled);
+        }
+        Ok(DecomposeOutcome::NothingToDo { reason: "stub" })
+    }
+}
+
+/// REVIEW_REQUIRED 轮：on_review_required → decompose 依序各调一次。
+#[sqlx::test(migrations = "../../migrations")]
+async fn write_back_hook_fires_in_order_on_review_required(pool: sqlx::PgPool) {
+    let project_id = seed_project(&pool).await;
+    let (session_id, _) = seed_session(&pool, project_id, "TASK_DISCOVERY").await;
+    seed_all_task_slots(&pool, session_id).await;
+    append_message(
+        &pool,
+        SYSTEM_TENANT,
+        session_id,
+        "user",
+        "WEB",
+        "验收就是登录成功率和短信到达率都要有监控",
+    )
+    .await
+    .unwrap();
+
+    let server = MockServer::start().await;
+    seed_provider(&pool, &server.uri(), "test-model").await;
+    mount_reply(
+        &server,
+        &json!({"answer_markdown": "已记录。", "findings": [], "questions": []}).to_string(),
+    )
+    .await;
+
+    let calls = StdArc::new(std::sync::Mutex::new(Vec::new()));
+    let mut worker = DiscoveryOrchestratorWorker::new(pool.clone()).with_write_back(StdArc::new(
+        RecordingHook {
+            calls: calls.clone(),
+            fail: false,
+        },
+    ));
+    let report = worker.orchestrate_round().await.unwrap();
+    assert_eq!(report.to_review_required, 1, "{report:?}");
+    assert_eq!(
+        *calls.lock().unwrap(),
+        vec!["on_review_required", "decompose"],
+        "hook order must be draft-then-decompose on a REVIEW_REQUIRED round"
+    );
+}
+
+/// 非 REVIEW_REQUIRED 轮（槽位未绿 → IN_PROGRESS）：只调 decompose。
+#[sqlx::test(migrations = "../../migrations")]
+async fn write_back_hook_skips_draft_when_not_review_required(pool: sqlx::PgPool) {
+    let project_id = seed_project(&pool).await;
+    let (session_id, _) = seed_session(&pool, project_id, "TASK_DISCOVERY").await;
+    seed_slot_finding(&pool, session_id, "core_behavior", "observed").await;
+    append_message(
+        &pool,
+        SYSTEM_TENANT,
+        session_id,
+        "user",
+        "WEB",
+        "手机号登录，先这些",
+    )
+    .await
+    .unwrap();
+
+    let server = MockServer::start().await;
+    seed_provider(&pool, &server.uri(), "test-model").await;
+    mount_reply(
+        &server,
+        &json!({"answer_markdown": "收到。", "findings": [], "questions": []}).to_string(),
+    )
+    .await;
+
+    let calls = StdArc::new(std::sync::Mutex::new(Vec::new()));
+    let mut worker = DiscoveryOrchestratorWorker::new(pool.clone()).with_write_back(StdArc::new(
+        RecordingHook {
+            calls: calls.clone(),
+            fail: false,
+        },
+    ));
+    let report = worker.orchestrate_round().await.unwrap();
+    assert_eq!(report.applied, 1, "{report:?}");
+    assert_eq!(
+        *calls.lock().unwrap(),
+        vec!["decompose"],
+        "draft hook must not fire on a non-REVIEW_REQUIRED round"
+    );
+}
+
+/// 钩子失败 fail-soft：主链七步已提交，轮次照常 applied，不因写回故障回滚。
+#[sqlx::test(migrations = "../../migrations")]
+async fn write_back_hook_failure_does_not_fail_the_round(pool: sqlx::PgPool) {
+    let project_id = seed_project(&pool).await;
+    let (session_id, _) = seed_session(&pool, project_id, "TASK_DISCOVERY").await;
+    seed_all_task_slots(&pool, session_id).await;
+    append_message(
+        &pool,
+        SYSTEM_TENANT,
+        session_id,
+        "user",
+        "WEB",
+        "验收就是登录成功率和短信到达率都要有监控",
+    )
+    .await
+    .unwrap();
+
+    let server = MockServer::start().await;
+    seed_provider(&pool, &server.uri(), "test-model").await;
+    mount_reply(
+        &server,
+        &json!({"answer_markdown": "已记录。", "findings": [], "questions": []}).to_string(),
+    )
+    .await;
+
+    let calls = StdArc::new(std::sync::Mutex::new(Vec::new()));
+    let mut worker = DiscoveryOrchestratorWorker::new(pool.clone()).with_write_back(StdArc::new(
+        RecordingHook {
+            calls: calls.clone(),
+            fail: true,
+        },
+    ));
+    let report = worker.orchestrate_round().await.unwrap();
+    assert_eq!(report.applied, 1, "{report:?}");
+    assert_eq!(report.drafts_submitted, 0);
+    assert_eq!(report.task_batches_generated, 0);
+    assert_eq!(
+        *calls.lock().unwrap(),
+        vec!["on_review_required", "decompose"]
+    );
+    assert_eq!(session_status(&pool, session_id).await, "REVIEW_REQUIRED");
+}

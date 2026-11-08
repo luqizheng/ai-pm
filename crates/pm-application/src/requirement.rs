@@ -83,6 +83,11 @@ pub struct RevisionView {
     pub base_current_revision_id: Option<Uuid>,
     pub base_row_revision: Option<i64>,
     pub submitted_at: Option<DateTime<Utc>>,
+    /// 提案级来源标记（DK-0 §3.3 / D-DK-5）：编排器随 draft 写入的
+    /// "我依据了这些 finding"，**非权威**——不进 `requirement_finding`，
+    /// 不参与任何校验；正式溯源关联仍由真人 `link_finding` 物化（S02D-20）。
+    /// 缺省 `NULL`（历史修订与非 AI 起草修订没有该子键）。
+    pub basis_finding_ids: Option<serde_json::Value>,
     pub created_by: Uuid,
     pub created_by_name: Option<String>,
     /// 过渡列（I1-D09：读取消费者迁 Confirmation 后删列）。
@@ -129,6 +134,11 @@ pub struct CreateRequirementRequest {
     /// 首版草稿正文（缺省 = `# {title}`）。
     #[serde(default)]
     pub markdown: Option<String>,
+    /// 提案级来源标记（DK-0 §3.3）：本 session 内**已 CONFIRMED** 的 finding id。
+    /// 缺省 = 不带标记（人类直接创建需求的常态）；带标记时整条草案要么全合法、
+    /// 要么整条拒绝（不写带病提案）。
+    #[serde(default)]
+    pub basis_finding_ids: Option<Vec<Uuid>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -136,6 +146,10 @@ pub struct DraftRevisionRequest {
     pub markdown: String,
     #[serde(default)]
     pub summary: Option<String>,
+    /// 提案级来源标记（见 [`CreateRequirementRequest::basis_finding_ids`]）。
+    /// `None` = 不改（`update_draft` 保留原清单）；`Some([])` = 显式清空。
+    #[serde(default)]
+    pub basis_finding_ids: Option<Vec<Uuid>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -184,11 +198,22 @@ impl LifecycleAction {
 // ─────────────────────────────────────────────────────────── 内部助手
 
 /// 真人主体校验（S02D-02 #2：AI 主体提交确认/治理类命令 → 拒绝，403 可观测）。
-/// S02-I3 起供 `requirement_traceability` 复用（登记/关联同为真人命令，§7.4）。
+/// S02-I3 起供 `requirement_traceability` 复用（登记/关联同为真人命令，§7.4）；
+/// DK-D 起供任务 `draft → ready` 复用（§7.4「AI 永不置 ready」，E2）。
 pub async fn require_human(pool: &PgPool, actor: &AuditActor) -> Result<(), PmWriteError> {
+    let mut conn = pool.acquire().await.map_err(PmWriteError::Db)?;
+    require_human_conn(&mut conn, actor).await
+}
+
+/// [`require_human`] 的连接版：调用方已在事务内时用它，避免事务中再取第二条
+/// 连接（单连接池下会自锁）。判定逻辑只有这一处。
+pub async fn require_human_conn(
+    conn: &mut sqlx::PgConnection,
+    actor: &AuditActor,
+) -> Result<(), PmWriteError> {
     let kind: Option<String> = sqlx::query_scalar("SELECT kind FROM core.principal WHERE id = $1")
         .bind(actor.principal_id)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *conn)
         .await
         .map_err(PmWriteError::Db)?;
     match kind.as_deref() {
@@ -202,7 +227,8 @@ pub async fn require_human(pool: &PgPool, actor: &AuditActor) -> Result<(), PmWr
 
 /// 修订视图的 SELECT 片段（content 投影提取 + principal 显示名 JOIN）。
 const REVISION_VIEW_COLS: &str = "rv.id, rv.requirement_id, rv.version, rv.state, rv.content, \
-     rv.content->>'markdown' AS markdown, rv.content->>'summary' AS summary, rv.content_hash, \
+     rv.content->>'markdown' AS markdown, rv.content->>'summary' AS summary, \
+     rv.content->'basis_finding_ids' AS basis_finding_ids, rv.content_hash, \
      rv.markdown_version_ref, rv.base_current_revision_id, rv.base_row_revision, rv.submitted_at, \
      rv.created_by, cb.display_name AS created_by_name, rv.approved_by, ab.display_name AS approved_by_name, \
      rv.created_at";
@@ -300,6 +326,78 @@ fn valid_or_default<'a>(
     }
 }
 
+// ─────────────────────────────────────── 提案级来源标记（DK-0 §3.3 / D-DK-5）
+
+/// `content.basis_finding_ids` 的硬边界（设计稿 §3.3 边界纪律）。
+///
+/// 三条同时成立才写进草案，任一条失败 → 整条草案拒绝生成（不留带病提案）：
+/// 1. **存在且同项目**：id 必须在 `(tenant_id, project_id)` 内能找到
+///    （跨项目/跨租户按不存在处理，不泄露存在性）；
+/// 2. **已 CONFIRMED**：`verification_status='CONFIRMED'` 才是可信访谈事实
+///    （澄清 ≠ 确认，但草案只能立在已澄清事实上）；
+/// 3. **本 session 内**：所有 id 必须落在同一个 `discovery_session`——请求体
+///    不带 session 参数（不扩大设计面），因此以「清单自身单一 session」表达
+///    「本 session」；跨 session 混合即拒绝。
+///
+/// 只做校验与去重保序，不落任何关联表：正式溯源仍由真人
+/// `link_finding` / `register_source_input` 物化（S02D-20 不动）。
+async fn resolve_basis_findings(
+    conn: &mut sqlx::PgConnection,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    ids: &[Uuid],
+) -> Result<Vec<Uuid>, PmWriteError> {
+    let mut deduped: Vec<Uuid> = Vec::with_capacity(ids.len());
+    for id in ids {
+        if !deduped.contains(id) {
+            deduped.push(*id);
+        }
+    }
+    if deduped.is_empty() {
+        return Ok(deduped);
+    }
+
+    let rows: Vec<(Uuid, Uuid, String)> = sqlx::query_as(
+        "SELECT id, session_id, verification_status FROM discovery.discovery_finding \
+         WHERE tenant_id = $1 AND project_id = $2 AND id = ANY($3)",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(&deduped)
+    .fetch_all(&mut *conn)
+    .await
+    .map_err(PmWriteError::Db)?;
+
+    if rows.len() != deduped.len() {
+        return Err(PmWriteError::Validation(
+            "basis finding not found in this project — draft rejected",
+        ));
+    }
+    if rows.iter().any(|(_, _, status)| status != "CONFIRMED") {
+        return Err(PmWriteError::Validation(
+            "basis finding is not CONFIRMED — draft rejected",
+        ));
+    }
+    let mut sessions: Vec<Uuid> = rows.iter().map(|(_, session, _)| *session).collect();
+    sessions.sort();
+    sessions.dedup();
+    if sessions.len() > 1 {
+        return Err(PmWriteError::Validation(
+            "basis findings span multiple discovery sessions — draft rejected",
+        ));
+    }
+    Ok(deduped)
+}
+
+/// 把已校验的 basis 清单写进修订 content（与 `markdown`/`summary` 并列）。
+/// 空清单不写子键（"没有标记" 与 "标记为空数组" 语义相同，统一取前者）。
+fn with_basis(mut content: serde_json::Value, basis: &[Uuid]) -> serde_json::Value {
+    if !basis.is_empty() {
+        content["basis_finding_ids"] = json!(basis);
+    }
+    content
+}
+
 // ─────────────────────────────────────────────────────────────── 命令
 
 /// 创建需求（CreateRequirement）：lifecycle_status='active' + 首版 v1 草稿
@@ -382,10 +480,15 @@ pub async fn create_requirement(
     }
 
     let revision_id = Uuid::new_v4();
+    let basis = match &req.basis_finding_ids {
+        Some(ids) => resolve_basis_findings(&mut tx, tenant_id, project_id, ids).await?,
+        None => Vec::new(),
+    };
     let mut content = json!({ "markdown": markdown });
     if let Some(s) = &summary {
         content["summary"] = json!(s);
     }
+    let content = with_basis(content, &basis);
     let content_hash = hex_sha256(markdown.as_bytes());
     sqlx::query(
         "INSERT INTO delivery.requirement_revision \
@@ -452,6 +555,11 @@ pub async fn create_draft(
     {
         content["summary"] = json!(s);
     }
+    let basis = match &req.basis_finding_ids {
+        Some(ids) => resolve_basis_findings(&mut tx, tenant_id, project_id, ids).await?,
+        None => Vec::new(),
+    };
+    let content = with_basis(content, &basis);
     let content_hash = hex_sha256(markdown.as_bytes());
     let revision_id = Uuid::new_v4();
     sqlx::query(
@@ -525,6 +633,21 @@ pub async fn update_draft(
     {
         content["summary"] = json!(s);
     }
+    // DK-0 §3.3：`None` = 不改（保留原标记——content 是全量重建的，
+    // 不显式保留就会静默丢标记）；`Some([])` = 显式清空；`Some(ids)` = 替换。
+    let basis = match &req.basis_finding_ids {
+        Some(ids) => resolve_basis_findings(&mut tx, tenant_id, project_id, ids).await?,
+        None => sqlx::query_scalar::<_, Option<serde_json::Value>>(
+            "SELECT content->'basis_finding_ids' FROM delivery.requirement_revision WHERE id = $1",
+        )
+        .bind(revision_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(PmWriteError::Db)?
+        .and_then(|value| serde_json::from_value::<Vec<Uuid>>(value).ok())
+        .unwrap_or_default(),
+    };
+    let content = with_basis(content, &basis);
     let content_hash = hex_sha256(markdown.as_bytes());
     sqlx::query(
         "UPDATE delivery.requirement_revision SET content = $3, content_hash = $4 \

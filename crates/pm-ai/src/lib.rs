@@ -8,6 +8,7 @@ pub mod conversation_reply;
 pub mod conversation_router_model;
 pub mod discovery_context;
 pub mod discovery_orchestrator;
+pub mod discovery_writeback;
 pub mod fake_model;
 pub mod model;
 pub mod openai_adapter;
@@ -30,6 +31,11 @@ pub use discovery_context::{
     ContextSection, FactIndex, FilteredRefs, InterviewContext, InterviewContextBuilder,
     InterviewContextError, InterviewKind, PgInterviewContextBuilder, SectionDraft, DROPPED_MARKER,
     MAX_EVIDENCE_REFS, SECTION_ORDER, TOTAL_BUDGET_CHARS,
+};
+pub use discovery_writeback::{
+    CapabilityFacts, CapabilityProjection, DecomposeOutcome, DiscoveryWriteBack, DraftOutcome,
+    DraftOutcomeKind, EmptyCapabilityProjection, NoWriteBack, RequirementDraft, TaskBatchOutcome,
+    WriteBackHook, WriteBackMode, WriteBackModel, AI_FORBIDDEN_COMMANDS, AI_WRITABLE_COMMANDS,
 };
 pub use fake_model::FakeModel;
 pub use model::{AnalysisContext, AnalysisModel, ModelError};
