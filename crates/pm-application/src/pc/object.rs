@@ -32,7 +32,11 @@ fn doc_slug(object_key: Option<&str>, object_id: Uuid) -> (String, String) {
     // 正典 doc_key = pc:{object_type}:{object_key} 仅当 object_key 为 §11.2
     // slug 字符集（[A-Za-z0-9._-]）；否则兜底 pc-object-{object_id}（偏差 e）。
     let valid = object_key
-        .map(|k| !k.is_empty() && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-'))
+        .map(|k| {
+            !k.is_empty()
+                && k.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-')
+        })
         .unwrap_or(false);
     match (valid, object_key) {
         (true, Some(key)) => {
@@ -214,8 +218,7 @@ pub async fn upsert_object_draft(
             .bind(actor.principal_id)
             .fetch_one(&mut *tx)
             .await?;
-            let (doc_key, canonical_path) =
-                doc_slug(input.object_key.as_deref(), object_id);
+            let (doc_key, canonical_path) = doc_slug(input.object_key.as_deref(), object_id);
             let document_id: Uuid = sqlx::query_scalar(
                 "INSERT INTO pc.document (tenant_id, project_id, doc_key, canonical_path) \
                  VALUES ($1, $2, $3, $4) RETURNING id",
@@ -390,12 +393,11 @@ async fn first_revision_for(
     content_markdown: &str,
 ) -> Result<Uuid, PcError> {
     // identity 占位行尚无文档：建文档 + 首修订
-    let object: (Option<String>, String) = sqlx::query_as(
-        "SELECT object_key, object_type FROM pc.cognition_object WHERE id = $1",
-    )
-    .bind(object_id)
-    .fetch_one(&mut **tx)
-    .await?;
+    let object: (Option<String>, String) =
+        sqlx::query_as("SELECT object_key, object_type FROM pc.cognition_object WHERE id = $1")
+            .bind(object_id)
+            .fetch_one(&mut **tx)
+            .await?;
     let (doc_key, canonical_path) = doc_slug(object.0.as_deref(), object_id);
     let document_id: Uuid = sqlx::query_scalar(
         "INSERT INTO pc.document (tenant_id, project_id, doc_key, canonical_path) \

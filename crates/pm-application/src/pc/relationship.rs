@@ -12,7 +12,10 @@ use super::{load_relationship_type, sha256_hex, type_set_allows, PcError};
 /// 关系端点：PC 内对象（身份 + Revision 钉扎）或跨域四元组（§13）。
 #[derive(Debug, Clone)]
 pub enum PcEndpoint {
-    Object { object_id: Uuid, revision_id: Option<Uuid> },
+    Object {
+        object_id: Uuid,
+        revision_id: Option<Uuid>,
+    },
     External {
         domain: String,
         target_type: String,
@@ -42,7 +45,10 @@ async fn resolve_endpoint(
     side: &str,
 ) -> Result<ResolvedEndpoint, PcError> {
     match endpoint {
-        PcEndpoint::Object { object_id, revision_id } => {
+        PcEndpoint::Object {
+            object_id,
+            revision_id,
+        } => {
             let row: Option<(String, Option<Uuid>, String)> = sqlx::query_as(
                 "SELECT object_type, current_revision_id, lifecycle_status \
                    FROM pc.cognition_object \
@@ -76,9 +82,11 @@ async fn resolve_endpoint(
                         PcError::Invalid(format!("{side} revision does not belong to the object"))
                     })?)
                 }
-                None => Some(current.ok_or_else(|| PcError::Invalid(format!(
-                    "{side} object has no revision yet (identity placeholder)"
-                )))?),
+                None => Some(current.ok_or_else(|| {
+                    PcError::Invalid(format!(
+                        "{side} object has no revision yet (identity placeholder)"
+                    ))
+                })?),
             };
             Ok(ResolvedEndpoint {
                 object_id: Some(*object_id),
@@ -90,7 +98,12 @@ async fn resolve_endpoint(
                 ext_revision_id: None,
             })
         }
-        PcEndpoint::External { domain, target_type, target_id, revision_id } => {
+        PcEndpoint::External {
+            domain,
+            target_type,
+            target_id,
+            revision_id,
+        } => {
             let parsed = parse_domain(domain)
                 .map_err(|e| PcError::Invalid(format!("{side} endpoint domain: {e}")))?;
             match parsed.channel_state() {
@@ -123,8 +136,9 @@ async fn resolve_endpoint(
                     let rev = revision_id.as_deref().ok_or_else(|| {
                         PcError::Invalid("requirement endpoint requires revision".into())
                     })?;
-                    let rev_uuid = Uuid::parse_str(rev)
-                        .map_err(|_| PcError::Invalid("requirement revision id must be uuid".into()))?;
+                    let rev_uuid = Uuid::parse_str(rev).map_err(|_| {
+                        PcError::Invalid("requirement revision id must be uuid".into())
+                    })?;
                     let ok: Option<Uuid> = sqlx::query_scalar(
                         "SELECT rv.id FROM delivery.requirement_revision rv \
                            JOIN delivery.requirement r ON r.tenant_id = rv.tenant_id \
@@ -165,21 +179,10 @@ async fn resolve_endpoint(
                         )));
                     }
                 }
-                kb_pc_contracts::registry::TargetDomain::ProjectGoal => {
-                    let ok: Option<Uuid> = sqlx::query_scalar(
-                        "SELECT id FROM ai.project_document \
-                          WHERE tenant_id = $1 AND project_id = $2 AND doc_key = 'project-goal'",
-                    )
-                    .bind(tenant_id)
-                    .bind(project_id)
-                    .fetch_optional(&mut *exec)
-                    .await?;
-                    if ok.is_none() {
-                        return Err(PcError::NotFound(format!(
-                            "{side} project goal document not found"
-                        )));
-                    }
-                }
+                // project_goal：01B §13.1 原文要求的「共享文档容器存在性探测」与
+                // ADR-06a 守卫冲突（C-1：PC 禁止接入该容器，过渡期规约 §7.1-1）
+                // ——守卫为准（用户裁决），本批仅通道校验，探测归后续 goal 域
+                // 只读接口（偏差 j，验收记录同源）。
                 // project_cognition（只读）/其余开放域：V1 仅通道校验，不做存在性探测
                 _ => {}
             }
@@ -221,8 +224,10 @@ pub async fn create_relationship_draft(
         .map_err(|_| PcError::NotFound("project not found".into()))?;
 
     let mut tx = pool.begin().await?;
-    let source = resolve_endpoint(&mut *tx, tenant_id, project_id, &input.source, "source").await?;
-    let target = resolve_endpoint(&mut *tx, tenant_id, project_id, &input.target, "target").await?;
+    let source =
+        resolve_endpoint(tx.as_mut(), tenant_id, project_id, &input.source, "source").await?;
+    let target =
+        resolve_endpoint(tx.as_mut(), tenant_id, project_id, &input.target, "target").await?;
 
     // 端点类型合法性（§6.2 字典集合；跨域按 domain.type 形态）
     let src_key = source
@@ -310,9 +315,15 @@ pub async fn create_relationship_draft(
         rel_type.type_key,
         rel_type.directionality,
         src_pin,
-        source.object_revision_id.map(|r| r.to_string()).unwrap_or_default(),
+        source
+            .object_revision_id
+            .map(|r| r.to_string())
+            .unwrap_or_default(),
         tgt_pin,
-        target.object_revision_id.map(|r| r.to_string()).unwrap_or_default(),
+        target
+            .object_revision_id
+            .map(|r| r.to_string())
+            .unwrap_or_default(),
         source.ext_revision_id.clone().unwrap_or_default(),
         serde_json::to_string(&input.properties).unwrap_or_default(),
     );

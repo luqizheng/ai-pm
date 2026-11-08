@@ -224,11 +224,10 @@ async fn formal_model_ddl_negatives_and_seeds(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(snapshot, 4, "checkpoint snapshot types kept (deviation b)");
-    let rel_types: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM pc.relationship_type")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let rel_types: i64 = sqlx::query_scalar("SELECT count(*) FROM pc.relationship_type")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(rel_types, 12, "17 matrix rows folded into 12 type keys");
     let l2: Vec<(String,)> = sqlx::query_as(
         "SELECT type_key FROM pc.object_type WHERE governance_level = 'L2' ORDER BY type_key",
@@ -238,7 +237,12 @@ async fn formal_model_ddl_negatives_and_seeds(pool: PgPool) {
     .unwrap();
     assert_eq!(
         l2.into_iter().map(|r| r.0).collect::<Vec<_>>(),
-        ["business_process", "business_rule", "product_decision", "product_vision"],
+        [
+            "business_process",
+            "business_rule",
+            "product_decision",
+            "product_vision"
+        ],
         "fixed-L2 types (§3.3)"
     );
 
@@ -294,15 +298,17 @@ async fn formal_model_ddl_negatives_and_seeds(pool: PgPool) {
     .bind(project)
     .execute(&pool)
     .await;
-    assert!(revived.is_err(), "deprecated must be terminal (trg_pc_object_lifecycle)");
+    assert!(
+        revived.is_err(),
+        "deprecated must be terminal (trg_pc_object_lifecycle)"
+    );
 
     let m3 = insert_object(&pool, tenant, project, "module", human).await;
-    let sup = sqlx::query(
-        "UPDATE pc.cognition_object SET lifecycle_status = 'superseded' WHERE id = $1",
-    )
-    .bind(m3)
-    .execute(&pool)
-    .await;
+    let sup =
+        sqlx::query("UPDATE pc.cognition_object SET lifecycle_status = 'superseded' WHERE id = $1")
+            .bind(m3)
+            .execute(&pool)
+            .await;
     assert!(sup.is_err(), "superseded requires superseded_by_id");
 
     // ── append-only：cognition_revision / document_revision ──
@@ -320,7 +326,10 @@ async fn formal_model_ddl_negatives_and_seeds(pool: PgPool) {
             .bind(_doc_rev_a)
             .execute(&pool)
             .await;
-    assert!(doc_rev_touched.is_err(), "document_revision must be append-only");
+    assert!(
+        doc_rev_touched.is_err(),
+        "document_revision must be append-only"
+    );
     let _ = doc_a;
 
     // ── T-27：RR 端点身份与关系行不一致拒绝 ──
@@ -388,13 +397,15 @@ async fn formal_model_ddl_negatives_and_seeds(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    let rr_touched = sqlx::query(
-        "UPDATE pc.relationship_revision SET change_summary = 'x' WHERE id = $1",
-    )
-    .bind(rel_rev)
-    .execute(&pool)
-    .await;
-    assert!(rr_touched.is_err(), "relationship_revision must be append-only");
+    let rr_touched =
+        sqlx::query("UPDATE pc.relationship_revision SET change_summary = 'x' WHERE id = $1")
+            .bind(rel_rev)
+            .execute(&pool)
+            .await;
+    assert!(
+        rr_touched.is_err(),
+        "relationship_revision must be append-only"
+    );
 
     // ── T-03/T-04：版本成员互斥 CHECK；T-26：闭合触发器 ──
     let proposal = insert_proposal(&pool, tenant, project, human, "approved").await;
@@ -441,7 +452,10 @@ async fn formal_model_ddl_negatives_and_seeds(pool: PgPool) {
     .bind(rel_rev)
     .execute(&pool)
     .await;
-    assert!(broken.is_err(), "trg_pc_vm_closure must reject missing endpoint member");
+    assert!(
+        broken.is_err(),
+        "trg_pc_vm_closure must reject missing endpoint member"
+    );
     // 补齐端点成员后同一关系成员可入库（闭合满足）
     insert_object_member(&pool, tenant, project, version, obj_b, rev_b).await;
     sqlx::query(
@@ -497,7 +511,10 @@ async fn formal_model_ddl_negatives_and_seeds(pool: PgPool) {
     .bind(&hash)
     .execute(&pool)
     .await;
-    assert!(a2.is_err(), "uq_pc_approval_pending must forbid a second pending");
+    assert!(
+        a2.is_err(),
+        "uq_pc_approval_pending must forbid a second pending"
+    );
 
     let reanchor = sqlx::query("UPDATE pc.approval SET proposal_content_hash = 'x' WHERE id = $1")
         .bind(a1)
@@ -525,7 +542,10 @@ async fn formal_model_ddl_negatives_and_seeds(pool: PgPool) {
         .bind(p2)
         .execute(&pool)
         .await;
-    assert!(retitled.is_err(), "trg_pc_proposal_anchors must freeze submitted content");
+    assert!(
+        retitled.is_err(),
+        "trg_pc_proposal_anchors must freeze submitted content"
+    );
 
     // ── 写账本状态机：终态不可变 ──
     let op: Uuid = sqlx::query_scalar(
@@ -568,7 +588,10 @@ async fn formal_model_ddl_negatives_and_seeds(pool: PgPool) {
     .bind(rev_a)
     .execute(&pool)
     .await;
-    assert!(cross.is_err(), "cross-project member must violate composite FK");
+    assert!(
+        cross.is_err(),
+        "cross-project member must violate composite FK"
+    );
 
     // ── 派生视图可用 ──
     let view_rows: i64 = sqlx::query_scalar("SELECT count(*) FROM pc.v_revision_versioned")
@@ -636,7 +659,9 @@ async fn run_convergence(db_url: &str) -> Result<(), String> {
         assert_eq!(last.version, 63, "head migration must be 0063");
         list.truncate(list.len() - 1);
     }
-    let pool = sqlx::PgPool::connect(db_url).await.map_err(|e| e.to_string())?;
+    let pool = sqlx::PgPool::connect(db_url)
+        .await
+        .map_err(|e| e.to_string())?;
     pre.run(&pool).await.map_err(|e| e.to_string())?;
 
     // ② 灌 0053 形态存量（收敛前旧列集）
@@ -725,8 +750,16 @@ async fn run_convergence(db_url: &str) -> Result<(), String> {
 
     // 旧形态证据 ×2：rev1 时点（→钉 rev1）与 rev2 时点（→钉 rev2）
     for (slot, head, at) in [
-        ("snapshot", "aaaa1111", rev1_created + chrono::Duration::minutes(1)),
-        ("tech_stack", "bbbb2222", rev2_created + chrono::Duration::minutes(1)),
+        (
+            "snapshot",
+            "aaaa1111",
+            rev1_created + chrono::Duration::minutes(1),
+        ),
+        (
+            "tech_stack",
+            "bbbb2222",
+            rev2_created + chrono::Duration::minutes(1),
+        ),
     ] {
         sqlx::query(
             "INSERT INTO pc.evidence \
@@ -752,14 +785,17 @@ async fn run_convergence(db_url: &str) -> Result<(), String> {
     post.run(&pool).await.map_err(|e| e.to_string())?;
 
     // ④ 断言：正文迁移（object → document 1:1；revision → document_revision 1:1）
-    let doc: (Uuid, String, String) = sqlx::query_as(
-        "SELECT id, doc_key, canonical_path FROM pc.document WHERE project_id = $1",
-    )
-    .bind(project)
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| e.to_string())?;
-    assert_eq!(doc.1, format!("pc-object-{object_id}"), "doc_key fallback (deviation e)");
+    let doc: (Uuid, String, String) =
+        sqlx::query_as("SELECT id, doc_key, canonical_path FROM pc.document WHERE project_id = $1")
+            .bind(project)
+            .fetch_one(&pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    assert_eq!(
+        doc.1,
+        format!("pc-object-{object_id}"),
+        "doc_key fallback (deviation e)"
+    );
     assert_eq!(doc.2, format!("pc/repository/{object_id}.md"));
 
     let doc_revs: Vec<(i32, String, String)> = sqlx::query_as(
@@ -773,7 +809,11 @@ async fn run_convergence(db_url: &str) -> Result<(), String> {
     assert_eq!(doc_revs.len(), 2, "both legacy revisions migrated");
     assert_eq!(doc_revs[0].2, "# 快照 v1");
     assert_eq!(doc_revs[1].2, "# 快照 v2");
-    assert_eq!(doc_revs[0].1, sha256_hex("# 快照 v1"), "content_hash = sha256(content)");
+    assert_eq!(
+        doc_revs[0].1,
+        sha256_hex("# 快照 v1"),
+        "content_hash = sha256(content)"
+    );
     assert_eq!(doc_revs[1].1, sha256_hex("# 快照 v2"));
 
     // 修订行回填：project/document 引用/hash/change_summary；analysis_mode 保留
@@ -787,8 +827,16 @@ async fn run_convergence(db_url: &str) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     assert_eq!(rev_row.0, doc.0, "document_id backfilled");
     assert_eq!(rev_row.1, "快照 r2", "summary renamed to change_summary");
-    assert_eq!(rev_row.2, sha256_hex("# 快照 v2"), "content_hash backfilled");
-    assert_eq!(rev_row.3.as_deref(), Some("derived"), "0062 analysis_mode preserved");
+    assert_eq!(
+        rev_row.2,
+        sha256_hex("# 快照 v2"),
+        "content_hash backfilled"
+    );
+    assert_eq!(
+        rev_row.3.as_deref(),
+        Some("derived"),
+        "0062 analysis_mode preserved"
+    );
 
     // 修订 append-only 已生效
     let touched =
@@ -808,8 +856,15 @@ async fn run_convergence(db_url: &str) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
     assert_eq!(obj_row.0, "旧名", "name renamed to display_name");
-    assert_eq!(obj_row.1, Some(rev2), "current_revision_id = latest revision");
-    assert_eq!(obj_row.2, DISPATCH, "created_by backfilled to dispatch principal");
+    assert_eq!(
+        obj_row.1,
+        Some(rev2),
+        "current_revision_id = latest revision"
+    );
+    assert_eq!(
+        obj_row.2, DISPATCH,
+        "created_by backfilled to dispatch principal"
+    );
 
     // 来源收敛：source_kind / 指纹 / collected_by
     let src_row: (String, Option<String>, Uuid) = sqlx::query_as(
@@ -820,24 +875,32 @@ async fn run_convergence(db_url: &str) -> Result<(), String> {
     .await
     .map_err(|e| e.to_string())?;
     assert_eq!(src_row.0, "kb_document");
-    assert_eq!(src_row.1.as_deref(), Some("abc123hash"), "locator content_hash extracted");
+    assert_eq!(
+        src_row.1.as_deref(),
+        Some("abc123hash"),
+        "locator content_hash extracted"
+    );
     assert_eq!(src_row.2, DISPATCH);
 
     // 证据收敛：按时间钉修订 + document_section 四元组 + 槽位/legacy JSON 归档
-    let ev_rows: Vec<(Uuid, String, Option<String>, Option<String>, Option<String>)> =
-        sqlx::query_as(
-            "SELECT object_revision_id, evidence_type, section_anchor, target_id, description \
+    type EvidenceRow = (Uuid, String, Option<String>, Option<String>, Option<String>);
+    let ev_rows: Vec<EvidenceRow> = sqlx::query_as(
+        "SELECT object_revision_id, evidence_type, section_anchor, target_id, description \
                FROM pc.evidence WHERE project_id = $1 ORDER BY section_anchor",
-        )
-        .bind(project)
-        .fetch_all(&pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    )
+    .bind(project)
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| e.to_string())?;
     assert_eq!(ev_rows.len(), 2);
     assert_eq!(ev_rows[0].0, rev1, "earlier evidence pinned to revision 1");
     assert_eq!(ev_rows[1].0, rev2, "later evidence pinned to revision 2");
     assert_eq!(ev_rows[0].1, "document_section");
-    assert_eq!(ev_rows[0].2.as_deref(), Some("snapshot"), "slot -> section_anchor");
+    assert_eq!(
+        ev_rows[0].2.as_deref(),
+        Some("snapshot"),
+        "slot -> section_anchor"
+    );
     assert_eq!(ev_rows[1].2.as_deref(), Some("tech_stack"));
     assert_eq!(
         ev_rows[0].3.as_deref(),
@@ -845,7 +908,10 @@ async fn run_convergence(db_url: &str) -> Result<(), String> {
         "quad target_id from source"
     );
     let legacy = ev_rows[0].4.as_deref().expect("legacy locator archived");
-    assert!(legacy.contains("aaaa1111"), "legacy locator JSON preserved in description");
+    assert!(
+        legacy.contains("aaaa1111"),
+        "legacy locator JSON preserved in description"
+    );
     assert!(legacy.contains("intake_id"), "attribution preserved");
 
     pool.close().await;

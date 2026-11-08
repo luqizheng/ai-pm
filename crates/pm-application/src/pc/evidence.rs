@@ -36,12 +36,14 @@ pub async fn register_source(
         DomainChannelState::Open | DomainChannelState::ReadOnly => {}
         DomainChannelState::NotYetOpen => {
             return Err(PcError::Invalid(format!(
-                "source domain `{}` channel is not open", input.target_domain
+                "source domain `{}` channel is not open",
+                input.target_domain
             )));
         }
         DomainChannelState::PermanentlyExcluded => {
             return Err(PcError::Invalid(format!(
-                "source domain `{}` is permanently excluded", input.target_domain
+                "source domain `{}` is permanently excluded",
+                input.target_domain
             )));
         }
     }

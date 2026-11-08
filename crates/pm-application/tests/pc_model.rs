@@ -102,12 +102,11 @@ fn draft(
 }
 
 async fn seed_requirement_with_revision(pool: &PgPool, project_id: Uuid) -> (Uuid, Uuid) {
-    let tenant: Uuid =
-        sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
-            .bind(project_id)
-            .fetch_one(pool)
-            .await
-            .unwrap();
+    let tenant: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
     let requirement_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.requirement (tenant_id, project_id, code, title, lifecycle_status) \
          VALUES ($1, $2, $3, 'req', 'active') RETURNING id",
@@ -133,21 +132,28 @@ async fn seed_requirement_with_revision(pool: &PgPool, project_id: Uuid) -> (Uui
     (requirement_id, revision_id)
 }
 
+/// 提案成员夹具行（change_kind + 双维度目标）。
+type MemberRow = (
+    String,
+    Option<Uuid>,
+    Option<Uuid>,
+    Option<Uuid>,
+    Option<Uuid>,
+);
+
 /// SQL 夹具：approved 提案 + 锚定审批（KP-1 不建提案命令——KP-2 范围）。
 async fn seed_approved_proposal(
     pool: &PgPool,
     project_id: Uuid,
     expected_version_no: i64,
-    members: &[(Uuid, Option<Uuid>, Option<Uuid>, Option<Uuid>)], // (kind_marker unused) change_kind fixed below
-    member_rows: &[(String, Option<Uuid>, Option<Uuid>, Option<Uuid>, Option<Uuid>)],
+    member_rows: &[MemberRow],
     title: &str,
 ) -> Uuid {
-    let tenant: Uuid =
-        sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
-            .bind(project_id)
-            .fetch_one(pool)
-            .await
-            .unwrap();
+    let tenant: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
     let pins: Vec<VersionMemberPin> = member_rows
         .iter()
         .filter_map(|(_, o, or, r, rr)| match (o, or) {
@@ -166,7 +172,14 @@ async fn seed_approved_proposal(
             },
         })
         .collect();
-    let hash = canonical_proposal_hash(title, "publish fixture", "manual_input", "L1", expected_version_no, &pins);
+    let hash = canonical_proposal_hash(
+        title,
+        "publish fixture",
+        "manual_input",
+        "L1",
+        expected_version_no,
+        &pins,
+    );
     // 先 draft 建提案 + 成员（锚定触发器放行 draft），再置 approved + 审批事实。
     let proposal_id: Uuid = sqlx::query_scalar(
         "INSERT INTO pc.proposal \
@@ -223,7 +236,6 @@ async fn seed_approved_proposal(
     .execute(pool)
     .await
     .unwrap();
-    let _ = members;
     proposal_id
 }
 
@@ -245,7 +257,10 @@ async fn object_draft_upsert_idempotent_and_content_addressed(pool: PgPool) {
         draft("no_such_type", Some("k"), "n", "c", None),
     )
     .await;
-    assert!(matches!(bad, Err(PcError::Invalid(_))), "unknown type rejected");
+    assert!(
+        matches!(bad, Err(PcError::Invalid(_))),
+        "unknown type rejected"
+    );
 
     // 具名草稿：首建 rev1
     let r1 = upsert_object_draft(
@@ -257,23 +272,21 @@ async fn object_draft_upsert_idempotent_and_content_addressed(pool: PgPool) {
     .await
     .unwrap();
     assert!(r1.revision_created && r1.revision_no == 1);
-    let lifecycle: String = sqlx::query_scalar(
-        "SELECT lifecycle_status FROM pc.cognition_object WHERE id = $1",
-    )
-    .bind(r1.object_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let lifecycle: String =
+        sqlx::query_scalar("SELECT lifecycle_status FROM pc.cognition_object WHERE id = $1")
+            .bind(r1.object_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(lifecycle, "draft", "draft objects never self-activate");
 
     // analysis_mode：人工草稿 NULL（分析产物才带归因）
-    let mode: Option<String> = sqlx::query_scalar(
-        "SELECT analysis_mode FROM pc.cognition_revision WHERE id = $1",
-    )
-    .bind(r1.revision_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let mode: Option<String> =
+        sqlx::query_scalar("SELECT analysis_mode FROM pc.cognition_revision WHERE id = $1")
+            .bind(r1.revision_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(mode, None, "manual draft leaves analysis_mode NULL");
 
     // 内容寻址去重：同内容再 upsert → 复用修订
@@ -281,27 +294,41 @@ async fn object_draft_upsert_idempotent_and_content_addressed(pool: PgPool) {
         &pool,
         project,
         &lead,
-        draft("feature", Some("feat-checkout"), "结账（改名）", "# 结账 v1", None),
+        draft(
+            "feature",
+            Some("feat-checkout"),
+            "结账（改名）",
+            "# 结账 v1",
+            None,
+        ),
     )
     .await
     .unwrap();
     assert!(!r2.revision_created, "same content must reuse the revision");
     assert_eq!(r2.revision_id, r1.revision_id);
-    let display: String = sqlx::query_scalar(
-        "SELECT display_name FROM pc.cognition_object WHERE id = $1",
-    )
-    .bind(r1.object_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(display, "结账（改名）", "display_name follows latest upsert");
+    let display: String =
+        sqlx::query_scalar("SELECT display_name FROM pc.cognition_object WHERE id = $1")
+            .bind(r1.object_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        display, "结账（改名）",
+        "display_name follows latest upsert"
+    );
 
     // 内容变化 → 推号 rev2 + 指针前移
     let r3 = upsert_object_draft(
         &pool,
         project,
         &lead,
-        draft("feature", Some("feat-checkout"), "结账", "# 结账 v2", Some("llm")),
+        draft(
+            "feature",
+            Some("feat-checkout"),
+            "结账",
+            "# 结账 v2",
+            Some("llm"),
+        ),
     )
     .await
     .unwrap();
@@ -316,15 +343,29 @@ async fn object_draft_upsert_idempotent_and_content_addressed(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(pointer, r3.revision_id);
-    assert_eq!(mode.as_deref(), Some("llm"), "analysis attribution on analysis revisions");
+    assert_eq!(
+        mode.as_deref(),
+        Some("llm"),
+        "analysis attribution on analysis revisions"
+    );
 
     // 匿名草稿恒新建
-    let a1 = upsert_object_draft(&pool, project, &lead, draft("module", None, "m", "# m", None))
-        .await
-        .unwrap();
-    let a2 = upsert_object_draft(&pool, project, &lead, draft("module", None, "m", "# m", None))
-        .await
-        .unwrap();
+    let a1 = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("module", None, "m", "# m", None),
+    )
+    .await
+    .unwrap();
+    let a2 = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("module", None, "m", "# m", None),
+    )
+    .await
+    .unwrap();
     assert_ne!(a1.object_id, a2.object_id);
 
     // identity 占位：服务建骨架 → upsert 同 key 回填首修订并转 draft
@@ -342,19 +383,27 @@ async fn object_draft_upsert_idempotent_and_content_addressed(pool: PgPool) {
         &pool,
         project,
         &lead,
-        draft("product_vision", Some("vision"), "产品愿景", "# Vision", None),
+        draft(
+            "product_vision",
+            Some("vision"),
+            "产品愿景",
+            "# Vision",
+            None,
+        ),
     )
     .await
     .unwrap();
-    assert_eq!(fill.object_id, skeleton, "identity placeholder is reused by key");
+    assert_eq!(
+        fill.object_id, skeleton,
+        "identity placeholder is reused by key"
+    );
     assert!(fill.revision_created);
-    let lifecycle: String = sqlx::query_scalar(
-        "SELECT lifecycle_status FROM pc.cognition_object WHERE id = $1",
-    )
-    .bind(skeleton)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let lifecycle: String =
+        sqlx::query_scalar("SELECT lifecycle_status FROM pc.cognition_object WHERE id = $1")
+            .bind(skeleton)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(lifecycle, "draft");
 
     // 终态拒绝：SQL 置 deprecated（发布事务语义，库层触发器同样拦截复活）
@@ -373,7 +422,10 @@ async fn object_draft_upsert_idempotent_and_content_addressed(pool: PgPool) {
         draft("feature", Some("feat-checkout"), "m", "# m2", None),
     )
     .await;
-    assert!(matches!(dead, Err(PcError::Conflict(_))), "terminal object refuses new revisions");
+    assert!(
+        matches!(dead, Err(PcError::Conflict(_))),
+        "terminal object refuses new revisions"
+    );
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -411,14 +463,23 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
         &lead,
         pm_application::pc::RelationshipDraftInput {
             relationship_type: "contains".into(),
-            source: PcEndpoint::Object { object_id: feature.object_id, revision_id: None },
-            target: PcEndpoint::Object { object_id: scenario.object_id, revision_id: None },
+            source: PcEndpoint::Object {
+                object_id: feature.object_id,
+                revision_id: None,
+            },
+            target: PcEndpoint::Object {
+                object_id: scenario.object_id,
+                revision_id: None,
+            },
             properties: serde_json::json!({}),
             change_summary: None,
         },
     )
     .await;
-    assert!(matches!(illegal, Err(PcError::Invalid(_))), "endpoint type must be legal");
+    assert!(
+        matches!(illegal, Err(PcError::Invalid(_))),
+        "endpoint type must be legal"
+    );
 
     // 合法：uses（scenario → feature）
     let (rel_id, rr_id) = create_relationship_draft(
@@ -427,8 +488,14 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
         &lead,
         pm_application::pc::RelationshipDraftInput {
             relationship_type: "uses".into(),
-            source: PcEndpoint::Object { object_id: scenario.object_id, revision_id: None },
-            target: PcEndpoint::Object { object_id: feature.object_id, revision_id: None },
+            source: PcEndpoint::Object {
+                object_id: scenario.object_id,
+                revision_id: None,
+            },
+            target: PcEndpoint::Object {
+                object_id: feature.object_id,
+                revision_id: None,
+            },
             properties: serde_json::json!({}),
             change_summary: Some("uses".into()),
         },
@@ -444,8 +511,14 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(dir, "directed");
-    assert_eq!(src, scenario.revision_id, "source endpoint pins scenario revision");
-    assert_eq!(tgt, feature.revision_id, "target endpoint pins feature revision");
+    assert_eq!(
+        src, scenario.revision_id,
+        "source endpoint pins scenario revision"
+    );
+    assert_eq!(
+        tgt, feature.revision_id,
+        "target endpoint pins feature revision"
+    );
 
     // 重复身份 → Conflict（活跃唯一）
     let dup = create_relationship_draft(
@@ -454,14 +527,23 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
         &lead,
         pm_application::pc::RelationshipDraftInput {
             relationship_type: "uses".into(),
-            source: PcEndpoint::Object { object_id: scenario.object_id, revision_id: None },
-            target: PcEndpoint::Object { object_id: feature.object_id, revision_id: None },
+            source: PcEndpoint::Object {
+                object_id: scenario.object_id,
+                revision_id: None,
+            },
+            target: PcEndpoint::Object {
+                object_id: feature.object_id,
+                revision_id: None,
+            },
             properties: serde_json::json!({}),
             change_summary: None,
         },
     )
     .await;
-    assert!(matches!(dup, Err(PcError::Conflict(_))), "duplicate active identity");
+    assert!(
+        matches!(dup, Err(PcError::Conflict(_))),
+        "duplicate active identity"
+    );
 
     // 自引用（affects 允许 decision→decision 端点集，但 allow_self_reference=false）
     let decision = upsert_object_draft(
@@ -478,14 +560,23 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
         &lead,
         pm_application::pc::RelationshipDraftInput {
             relationship_type: "affects".into(),
-            source: PcEndpoint::Object { object_id: decision.object_id, revision_id: None },
-            target: PcEndpoint::Object { object_id: decision.object_id, revision_id: None },
+            source: PcEndpoint::Object {
+                object_id: decision.object_id,
+                revision_id: None,
+            },
+            target: PcEndpoint::Object {
+                object_id: decision.object_id,
+                revision_id: None,
+            },
             properties: serde_json::json!({}),
             change_summary: None,
         },
     )
     .await;
-    assert!(matches!(self_ref, Err(PcError::Invalid(_))), "self reference forbidden");
+    assert!(
+        matches!(self_ref, Err(PcError::Invalid(_))),
+        "self reference forbidden"
+    );
 
     // 跨域 requirement：无 Revision 拒绝（Q-PC-03）
     let no_rev = create_relationship_draft(
@@ -494,7 +585,10 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
         &lead,
         pm_application::pc::RelationshipDraftInput {
             relationship_type: "specified_by".into(),
-            source: PcEndpoint::Object { object_id: feature.object_id, revision_id: None },
+            source: PcEndpoint::Object {
+                object_id: feature.object_id,
+                revision_id: None,
+            },
             target: PcEndpoint::External {
                 domain: "requirement".into(),
                 target_type: "requirement_revision".into(),
@@ -506,7 +600,10 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
         },
     )
     .await;
-    assert!(matches!(no_rev, Err(PcError::Invalid(_))), "requirement endpoint requires revision");
+    assert!(
+        matches!(no_rev, Err(PcError::Invalid(_))),
+        "requirement endpoint requires revision"
+    );
 
     // 合法（带 Revision）+ 存在性通过
     let with_rev = create_relationship_draft(
@@ -515,7 +612,10 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
         &lead,
         pm_application::pc::RelationshipDraftInput {
             relationship_type: "specified_by".into(),
-            source: PcEndpoint::Object { object_id: feature.object_id, revision_id: None },
+            source: PcEndpoint::Object {
+                object_id: feature.object_id,
+                revision_id: None,
+            },
             target: PcEndpoint::External {
                 domain: "requirement".into(),
                 target_type: "requirement_revision".into(),
@@ -527,7 +627,10 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
         },
     )
     .await;
-    assert!(with_rev.is_ok(), "legal cross-domain endpoint with revision");
+    assert!(
+        with_rev.is_ok(),
+        "legal cross-domain endpoint with revision"
+    );
 
     // 通道关闭：design（NotYetOpen）
     let design = create_relationship_draft(
@@ -536,7 +639,10 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
         &lead,
         pm_application::pc::RelationshipDraftInput {
             relationship_type: "specified_by".into(),
-            source: PcEndpoint::Object { object_id: feature.object_id, revision_id: None },
+            source: PcEndpoint::Object {
+                object_id: feature.object_id,
+                revision_id: None,
+            },
             target: PcEndpoint::External {
                 domain: "design".into(),
                 target_type: "design".into(),
@@ -548,7 +654,10 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
         },
     )
     .await;
-    assert!(matches!(design, Err(PcError::Invalid(_))), "design channel closed");
+    assert!(
+        matches!(design, Err(PcError::Invalid(_))),
+        "design channel closed"
+    );
 
     // product_plan（PermanentlyExcluded）
     let plan = create_relationship_draft(
@@ -557,7 +666,10 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
         &lead,
         pm_application::pc::RelationshipDraftInput {
             relationship_type: "specified_by".into(),
-            source: PcEndpoint::Object { object_id: feature.object_id, revision_id: None },
+            source: PcEndpoint::Object {
+                object_id: feature.object_id,
+                revision_id: None,
+            },
             target: PcEndpoint::External {
                 domain: "product_plan".into(),
                 target_type: "plan".into(),
@@ -569,7 +681,10 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
         },
     )
     .await;
-    assert!(matches!(plan, Err(PcError::Invalid(_))), "product_plan excluded");
+    assert!(
+        matches!(plan, Err(PcError::Invalid(_))),
+        "product_plan excluded"
+    );
 
     let _ = rel_id;
 }
@@ -583,9 +698,14 @@ async fn source_and_evidence_registration(pool: PgPool) {
     seed_principals(&pool).await;
     let project = seed_project_with_lead(&pool, "pc-s1").await;
     let lead = AuditActor::principal(LEAD);
-    let obj = upsert_object_draft(&pool, project, &lead, draft("feature", Some("f"), "F", "# F", None))
-        .await
-        .unwrap();
+    let obj = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("feature", Some("f"), "F", "# F", None),
+    )
+    .await
+    .unwrap();
 
     // kb_document 无 Revision → 库层收窄 CHECK 拒绝
     let kb_rev = Uuid::new_v4();
@@ -609,7 +729,10 @@ async fn source_and_evidence_registration(pool: PgPool) {
         },
     )
     .await;
-    assert!(narrowed.is_err(), "kb_document must pin a kb revision (C-4)");
+    assert!(
+        narrowed.is_err(),
+        "kb_document must pin a kb revision (C-4)"
+    );
 
     // kb_document 合法（存在的 kb 修订）
     let tenant: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
@@ -679,7 +802,10 @@ async fn source_and_evidence_registration(pool: PgPool) {
         },
     )
     .await;
-    assert!(matches!(closed, Err(PcError::Invalid(_))), "design source channel closed");
+    assert!(
+        matches!(closed, Err(PcError::Invalid(_))),
+        "design source channel closed"
+    );
 
     // 证据：document_section（主体 = 对象修订）
     let ev = register_evidence(
@@ -709,13 +835,12 @@ async fn source_and_evidence_registration(pool: PgPool) {
     )
     .await
     .unwrap();
-    let pinned: Uuid = sqlx::query_scalar(
-        "SELECT object_revision_id FROM pc.evidence WHERE id = $1",
-    )
-    .bind(ev)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let pinned: Uuid =
+        sqlx::query_scalar("SELECT object_revision_id FROM pc.evidence WHERE id = $1")
+            .bind(ev)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(pinned, obj.revision_id);
 
     // 判别器：commit 类证据缺 commit_sha → 库层 CHECK
@@ -745,7 +870,10 @@ async fn source_and_evidence_registration(pool: PgPool) {
         },
     )
     .await;
-    assert!(bad_code.is_err(), "commit evidence requires file_path + commit_sha");
+    assert!(
+        bad_code.is_err(),
+        "commit evidence requires file_path + commit_sha"
+    );
 
     // 主体不存在 → NotFound
     let ghost = register_evidence(
@@ -788,15 +916,30 @@ async fn publish_happy_path_idempotent_and_lifecycle(pool: PgPool) {
     let lead = AuditActor::principal(LEAD);
 
     // 草稿面：A（feature，2 修订）、B（scenario，1 修订）
-    let a1 = upsert_object_draft(&pool, project, &lead, draft("feature", Some("fa"), "A", "# A1", None))
-        .await
-        .unwrap();
-    let a2 = upsert_object_draft(&pool, project, &lead, draft("feature", Some("fa"), "A", "# A2", None))
-        .await
-        .unwrap();
-    let b = upsert_object_draft(&pool, project, &lead, draft("scenario", Some("sb"), "B", "# B1", None))
-        .await
-        .unwrap();
+    let _a1 = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("feature", Some("fa"), "A", "# A1", None),
+    )
+    .await
+    .unwrap();
+    let a2 = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("feature", Some("fa"), "A", "# A2", None),
+    )
+    .await
+    .unwrap();
+    let b = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("scenario", Some("sb"), "B", "# B1", None),
+    )
+    .await
+    .unwrap();
     assert_eq!(a2.revision_no, 2);
 
     // 关系草稿：uses（B@1 → A@2）
@@ -806,8 +949,14 @@ async fn publish_happy_path_idempotent_and_lifecycle(pool: PgPool) {
         &lead,
         pm_application::pc::RelationshipDraftInput {
             relationship_type: "uses".into(),
-            source: PcEndpoint::Object { object_id: b.object_id, revision_id: None },
-            target: PcEndpoint::Object { object_id: a2.object_id, revision_id: Some(a2.revision_id) },
+            source: PcEndpoint::Object {
+                object_id: b.object_id,
+                revision_id: None,
+            },
+            target: PcEndpoint::Object {
+                object_id: a2.object_id,
+                revision_id: Some(a2.revision_id),
+            },
             properties: serde_json::json!({}),
             change_summary: None,
         },
@@ -839,7 +988,7 @@ async fn publish_happy_path_idempotent_and_lifecycle(pool: PgPool) {
             None,
         ),
     ];
-    let proposal = seed_approved_proposal(&pool, project, 0, &[], &member_rows, "首版本").await;
+    let proposal = seed_approved_proposal(&pool, project, 0, &member_rows, "首版本").await;
 
     let receipt = publish_version(
         &pool,
@@ -858,29 +1007,39 @@ async fn publish_happy_path_idempotent_and_lifecycle(pool: PgPool) {
 
     // snapshot_hash = 成员集规范哈希（A@2, B@1, R@RR）
     let expected_hash = canonical_members_hash(&[
-        VersionMemberPin { kind: MemberKind::Object, identity_id: a2.object_id, revision_id: a2.revision_id },
-        VersionMemberPin { kind: MemberKind::Object, identity_id: b.object_id, revision_id: b.revision_id },
-        VersionMemberPin { kind: MemberKind::Relationship, identity_id: rel_id, revision_id: rr_id },
+        VersionMemberPin {
+            kind: MemberKind::Object,
+            identity_id: a2.object_id,
+            revision_id: a2.revision_id,
+        },
+        VersionMemberPin {
+            kind: MemberKind::Object,
+            identity_id: b.object_id,
+            revision_id: b.revision_id,
+        },
+        VersionMemberPin {
+            kind: MemberKind::Relationship,
+            identity_id: rel_id,
+            revision_id: rr_id,
+        },
     ]);
     assert_eq!(receipt.snapshot_hash, expected_hash);
 
     // 版本成员三行
-    let member_n: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM pc.version_member WHERE version_id = $1",
-    )
-    .bind(receipt.version_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(member_n, 3);
-
-    // 提案 applied / 审批事实保留 / 账本 completed
-    let pstatus: String =
-        sqlx::query_scalar("SELECT status FROM pc.proposal WHERE id = $1")
-            .bind(proposal)
+    let member_n: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM pc.version_member WHERE version_id = $1")
+            .bind(receipt.version_id)
             .fetch_one(&pool)
             .await
             .unwrap();
+    assert_eq!(member_n, 3);
+
+    // 提案 applied / 审批事实保留 / 账本 completed
+    let pstatus: String = sqlx::query_scalar("SELECT status FROM pc.proposal WHERE id = $1")
+        .bind(proposal)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(pstatus, "applied");
     let opstatus: String = sqlx::query_scalar(
         "SELECT status FROM pc.write_operation \
@@ -969,14 +1128,18 @@ async fn publish_gates_fail_closed(pool: PgPool) {
     let ai = AuditActor::principal(AI_BOT);
     let outsider = AuditActor::principal(OUTSIDER);
 
-    let a = upsert_object_draft(&pool, project, &lead, draft("feature", Some("g-a"), "A", "# A", None))
-        .await
-        .unwrap();
+    let a = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("feature", Some("g-a"), "A", "# A", None),
+    )
+    .await
+    .unwrap();
     let proposal = seed_approved_proposal(
         &pool,
         project,
         0,
-        &[],
         &[(
             "update_object".to_string(),
             Some(a.object_id),
@@ -993,17 +1156,26 @@ async fn publish_gates_fail_closed(pool: PgPool) {
         &pool,
         project,
         &ai,
-        PublishVersionInput { proposal_id: proposal, operation_id: "op-ai".into() },
+        PublishVersionInput {
+            proposal_id: proposal,
+            operation_id: "op-ai".into(),
+        },
     )
     .await;
-    assert!(matches!(ai_attempt, Err(PcError::Forbidden(_))), "AI principal must be rejected");
+    assert!(
+        matches!(ai_attempt, Err(PcError::Forbidden(_))),
+        "AI principal must be rejected"
+    );
 
     // 非成员真人 → 403（A3 闸）
     let outsider_attempt = publish_version(
         &pool,
         project,
         &outsider,
-        PublishVersionInput { proposal_id: proposal, operation_id: "op-out".into() },
+        PublishVersionInput {
+            proposal_id: proposal,
+            operation_id: "op-out".into(),
+        },
     )
     .await;
     assert!(matches!(outsider_attempt, Err(PcError::Forbidden(_))));
@@ -1040,10 +1212,16 @@ async fn publish_gates_fail_closed(pool: PgPool) {
         &pool,
         project,
         &lead,
-        PublishVersionInput { proposal_id: proposal, operation_id: "op-frozen".into() },
+        PublishVersionInput {
+            proposal_id: proposal,
+            operation_id: "op-frozen".into(),
+        },
     )
     .await;
-    assert!(matches!(frozen, Err(PcError::Forbidden(_))), "L3 freeze blocks publish");
+    assert!(
+        matches!(frozen, Err(PcError::Forbidden(_))),
+        "L3 freeze blocks publish"
+    );
 
     // 解冻后：CAS 失配（提案基线 0 vs 现存版本 1）→ 409 + 提案转 failed
     sqlx::query("UPDATE pc.conflict SET status = 'resolved', resolved_by = $2, resolved_at = now(), resolution_note = 'ok' WHERE id = $1")
@@ -1053,14 +1231,18 @@ async fn publish_gates_fail_closed(pool: PgPool) {
         .await
         .unwrap();
     // 先发布一个别的提案造出版本 1
-    let a2 = upsert_object_draft(&pool, project, &lead, draft("feature", Some("g-a"), "A", "# A2", None))
-        .await
-        .unwrap();
+    let a2 = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("feature", Some("g-a"), "A", "# A2", None),
+    )
+    .await
+    .unwrap();
     let proposal2 = seed_approved_proposal(
         &pool,
         project,
         0,
-        &[],
         &[(
             "update_object".to_string(),
             Some(a2.object_id),
@@ -1075,7 +1257,10 @@ async fn publish_gates_fail_closed(pool: PgPool) {
         &pool,
         project,
         &lead,
-        PublishVersionInput { proposal_id: proposal2, operation_id: "op-base".into() },
+        PublishVersionInput {
+            proposal_id: proposal2,
+            operation_id: "op-base".into(),
+        },
     )
     .await
     .unwrap();
@@ -1084,16 +1269,21 @@ async fn publish_gates_fail_closed(pool: PgPool) {
         &pool,
         project,
         &lead,
-        PublishVersionInput { proposal_id: proposal, operation_id: "op-cas".into() },
+        PublishVersionInput {
+            proposal_id: proposal,
+            operation_id: "op-cas".into(),
+        },
     )
     .await;
-    assert!(matches!(cas, Err(PcError::Conflict(_))), "stale baseline must fail CAS");
-    let pstatus: String =
-        sqlx::query_scalar("SELECT status FROM pc.proposal WHERE id = $1")
-            .bind(proposal)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    assert!(
+        matches!(cas, Err(PcError::Conflict(_))),
+        "stale baseline must fail CAS"
+    );
+    let pstatus: String = sqlx::query_scalar("SELECT status FROM pc.proposal WHERE id = $1")
+        .bind(proposal)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(pstatus, "failed", "CAS mismatch moves proposal to failed");
     let opstatus: String = sqlx::query_scalar(
         "SELECT status FROM pc.write_operation \

@@ -62,6 +62,9 @@ impl ProposalMemberPin {
     }
 }
 
+/// 前版本成员携带行（object/revision × 双维度的四元组投影）。
+type CarriedRow = (Option<Uuid>, Option<Uuid>, Option<Uuid>, Option<Uuid>);
+
 /// 发布事务（01B §18.1 十四步语义；偏差：PCGIT 后置——write_operation 仅发布
 /// 幂等，无 Git 侧动作；⑫b 同事务 outbox，事件目录 has_handler 已翻真）。
 ///
@@ -193,7 +196,9 @@ pub async fn publish_version(
     .fetch_optional(&mut *tx)
     .await?;
     let Some((approval_id, approval_hash, approval_expected)) = approval else {
-        return Err(PcError::Conflict("no approved approval for proposal".into()));
+        return Err(PcError::Conflict(
+            "no approved approval for proposal".into(),
+        ));
     };
     let _ = approval_id;
 
@@ -300,10 +305,7 @@ pub async fn publish_version(
     }
 
     // ⑥ L3 冻结校验（未解决冲突圈定提案目标 → 拒绝）
-    let target_objects: Vec<Uuid> = member_rows
-        .iter()
-        .filter_map(|m| m.object_id)
-        .collect();
+    let target_objects: Vec<Uuid> = member_rows.iter().filter_map(|m| m.object_id).collect();
     let target_relationships: Vec<Uuid> = member_rows
         .iter()
         .filter_map(|m| m.relationship_id)
@@ -333,7 +335,7 @@ pub async fn publish_version(
     // ⑦ 成员集构建：前版本携带 − 废弃目标 + 提案目标 + 端点自动并入（F-05）
     let mut set: BTreeSet<VersionMemberPin> = BTreeSet::new();
     if let Some((_, pred_id)) = current_version {
-        let carried: Vec<(Option<Uuid>, Option<Uuid>, Option<Uuid>, Option<Uuid>)> = sqlx::query_as(
+        let carried: Vec<CarriedRow> = sqlx::query_as(
             "SELECT object_id, object_revision_id, relationship_id, relationship_revision_id \
                FROM pc.version_member WHERE version_id = $1",
         )
@@ -381,19 +383,20 @@ pub async fn publish_version(
     }
     // 端点自动并入（§10.1 成员时序契约 3）：关系成员的 PC 内端点必须可还原
     for m in &member_rows {
-        let Some(rr) = m.relationship_revision_id else { continue };
-        let endpoints: Vec<(Option<Uuid>, Option<Uuid>, Option<Uuid>, Option<Uuid>)> =
-            sqlx::query_as(
-                "SELECT source_object_id, source_object_revision_id, \
-                        target_object_id, target_object_revision_id \
-                   FROM pc.relationship_revision \
-                  WHERE tenant_id = $1 AND project_id = $2 AND id = $3",
-            )
-            .bind(tenant_id)
-            .bind(project_id)
-            .bind(rr)
-            .fetch_all(&mut *tx)
-            .await?;
+        let Some(rr) = m.relationship_revision_id else {
+            continue;
+        };
+        let endpoints: Vec<CarriedRow> = sqlx::query_as(
+            "SELECT source_object_id, source_object_revision_id, \
+                    target_object_id, target_object_revision_id \
+               FROM pc.relationship_revision \
+              WHERE tenant_id = $1 AND project_id = $2 AND id = $3",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(rr)
+        .fetch_all(&mut *tx)
+        .await?;
         for (so, sr, to, tr) in endpoints {
             for (o, r) in [(so, sr), (to, tr)] {
                 if let (Some(o), Some(r)) = (o, r) {
@@ -568,7 +571,9 @@ pub async fn publish_version(
     .execute(&mut *tx)
     .await?;
     if applied.rows_affected() != 1 {
-        return Err(PcError::Conflict("proposal status moved during publish".into()));
+        return Err(PcError::Conflict(
+            "proposal status moved during publish".into(),
+        ));
     }
     sqlx::query(
         "UPDATE pc.write_operation SET status = 'completed', version_id = $2, updated_at = now() \
@@ -615,7 +620,9 @@ pub async fn publish_version(
     }
     let rel_active_ids: Vec<Uuid> = member_rows
         .iter()
-        .filter(|m| m.change_kind == "create_relationship" || m.change_kind == "update_relationship")
+        .filter(|m| {
+            m.change_kind == "create_relationship" || m.change_kind == "update_relationship"
+        })
         .filter_map(|m| m.relationship_id)
         .collect();
     if !rel_active_ids.is_empty() {

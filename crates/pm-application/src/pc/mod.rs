@@ -32,8 +32,12 @@ mod object;
 mod publish;
 mod relationship;
 
-pub use evidence::{register_evidence, register_source, EvidenceInput, EvidenceSubject, SourceInput};
-pub use object::{create_object_identity, upsert_object_draft, ObjectUpsertReceipt, UpsertObjectDraft};
+pub use evidence::{
+    register_evidence, register_source, EvidenceInput, EvidenceSubject, SourceInput,
+};
+pub use object::{
+    create_object_identity, upsert_object_draft, ObjectUpsertReceipt, UpsertObjectDraft,
+};
 pub use publish::{publish_version, ProposalMemberPin, PublishReceipt, PublishVersionInput};
 pub use relationship::{create_relationship_draft, PcEndpoint, RelationshipDraftInput};
 
@@ -137,12 +141,11 @@ pub(crate) async fn ensure_publish_authorized(
     project_id: Uuid,
     actor: &AuditActor,
 ) -> Result<(), PcError> {
-    let kind: Option<String> =
-        sqlx::query_scalar("SELECT kind FROM core.principal WHERE id = $1")
-            .bind(actor.principal_id)
-            .fetch_optional(pool)
-            .await?
-            .ok_or_else(|| PcError::NotFound("principal not found".into()))?;
+    let kind: Option<String> = sqlx::query_scalar("SELECT kind FROM core.principal WHERE id = $1")
+        .bind(actor.principal_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| PcError::NotFound("principal not found".into()))?;
     if kind.as_deref() != Some("human") {
         return Err(PcError::Forbidden(
             "formal pc writes require a human principal (AI is fail-closed)".into(),
@@ -195,11 +198,14 @@ pub struct RelationshipTypeSpec {
     pub governance_level: String,
 }
 
+/// 关系类型行投影（directionality, source 集合, target 集合, self_ref, gov level）。
+type RelationshipTypeRow = (String, Vec<String>, Vec<String>, bool, String);
+
 pub(crate) async fn load_relationship_type(
     exec: impl sqlx::PgExecutor<'_>,
     type_key: &str,
 ) -> Result<RelationshipTypeSpec, PcError> {
-    let row: Option<(String, Vec<String>, Vec<String>, bool, String)> = sqlx::query_as(
+    let row: Option<RelationshipTypeRow> = sqlx::query_as(
         "SELECT directionality, source_object_types, target_object_types, \
                 allow_self_reference, governance_level \
            FROM pc.relationship_type WHERE type_key = $1 AND status = 'active'",
@@ -208,7 +214,13 @@ pub(crate) async fn load_relationship_type(
     .fetch_optional(exec)
     .await?;
     row.map(
-        |(directionality, source_object_types, target_object_types, allow_self_reference, governance_level)| {
+        |(
+            directionality,
+            source_object_types,
+            target_object_types,
+            allow_self_reference,
+            governance_level,
+        )| {
             RelationshipTypeSpec {
                 type_key: type_key.to_string(),
                 directionality,
@@ -253,7 +265,10 @@ mod tests {
             pin(MemberKind::Object, 1, 11),
         ];
         assert_eq!(canonical_members_hash(&a), canonical_members_hash(&b));
-        let c = vec![pin(MemberKind::Object, 1, 12), pin(MemberKind::Object, 1, 11)];
+        let c = vec![
+            pin(MemberKind::Object, 1, 12),
+            pin(MemberKind::Object, 1, 11),
+        ];
         assert_ne!(canonical_members_hash(&a), canonical_members_hash(&c));
         assert_eq!(canonical_members_hash(&[]), canonical_members_hash(&[]));
     }
