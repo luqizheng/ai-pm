@@ -42,8 +42,8 @@ docker exec -i infrastructure-aipm-pg-1 psql -U aipm -d aipm < scripts/seed-demo
 
 ### 测试提速：模板库（`template1`）预建
 
-`#[sqlx::test]` 每个用例都会从头跑一遍 `migrations/`（20 个迁移 ≈1.9s/用例；
-全仓 298 个 DB 用例，光建库+迁移就约 1500s 串行 CPU）。sqlx 0.8 建库语句是裸
+`#[sqlx::test]` 每个用例都会从头跑一遍 `migrations/`（2026-11-09 起为基线单文件
+`0001_baseline.sql` ≈3.6s/次；基线合并前旧链 64 文件 ≈4.06s）。sqlx 0.8 建库语句是裸
 `create database "<name>"`，Postgres 默认以 `template1` 为模板，所以只要跑测试前
 把迁移预跑进 `template1`（连 `_sqlx_migrations` 记账行一并写入），每个用例的建库
 就退化成文件拷贝，sqlx 查到迁移已全部 applied（checksum 一致）直接跳过全部 DDL：

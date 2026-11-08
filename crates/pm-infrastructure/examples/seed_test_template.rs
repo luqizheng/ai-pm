@@ -3,8 +3,8 @@
 //!
 //! 为什么存在（实测依据见 README「测试提速」段）：
 //!   `#[sqlx::test]` 每个用例都 `CREATE DATABASE` 再从零跑一遍 `migrations/`
-//!   （20 个迁移 ≈ 1.9s，其中 0019_tenant.sql 单文件 368 行）。全仓 298 个
-//!   `#[sqlx::test]` 用例，光建库+迁移就吃掉约 1500s 串行 CPU。
+//!   （2026-11-09 基线合并后 = 单文件 0001_baseline.sql ≈3.6s；此前旧链
+//!   64 文件 ≈4.06s/次，最早 20 文件时代 ≈1.9s，298 用例吃掉约 1500s 串行 CPU）。
 //!   sqlx 0.8 的 `test_support` 建库语句是裸 `create database "<name>"`，
 //!   Postgres 对它的默认模板就是 `template1`；所以只要 `template1` 里已经
 //!   有「全部迁移 + `_sqlx_migrations` 记账行」，每个用例的建库就退化成

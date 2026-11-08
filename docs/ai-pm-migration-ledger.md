@@ -3,7 +3,17 @@
 > 统一登记迁移号段的预留与占用（评审 P1-1 收编产物，2026-11-02）。
 > 规则：① 设计稿预留**不锁定**实施——实施以先到者为准，后到者按台账顺移并回填本表；② 取号前必须先对账本表与 `migrations/` 实况；③ 实施完成后把「状态」置为「已应用」并填文件名。
 
-## 一、已应用（权威 = `migrations/` 目录）
+## 〇、基线合并（2026-11-09，冻结点 squash，编号自此重启）
+
+旧链 0001~0065（64 文件，0029 历史空号）已在全会话冻结点合并为 **`migrations/0001_baseline.sql`**（pg_dump 终态提取，非朴素拼接；新链建库 vs 旧链建库 schema/data 逐行 diff 为零）。约束与影响：
+
+- **后续新迁移自 0002 起编号**，不再受旧链历史与空号约束；
+- **存量数据库不兼容**：旧链库的 `_sqlx_migrations` checksum 与新链对不上，`sqlx::migrate!` 会拒迁（pm-api 启动即 migrate，fail-fast）——本机容器与 **.10 服务器栈**升级前须**重锚**（drop 重建；或 pg_dump/restore 后清账重放 0001）；
+- 迁移文件文本断言用例（migration_0012/0014 的 `migration_file_is_present_and_forward`）与 `scripts/upgrade-drill-0028-to-0031.sh` 演练随之退役（无迁移链即无升级场景）；migration_0064.rs 的手工建链「收敛路径」用例同样退役，fresh DDL 断言保留；
+- 下节历史「已应用」表保留为审计记录，文件名不再对应 `migrations/` 现存文件；
+- DK 系列在途迁移（原 `0065_conversation_discovery_link`，DK-A）恢复时改取 **0002**。
+
+## 一、已应用（历史审计——文件已并入 0001_baseline.sql）
 
 | 号 | 文件 | 任务 | 状态 |
 |---|---|---|---|

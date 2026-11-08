@@ -187,11 +187,3 @@ async fn task_repository_cross_project_fk_is_enforced(pool: PgPool) {
         "a repository must belong to the same project as the task"
     );
 }
-
-#[test]
-fn migration_file_is_present_and_forward() {
-    // 0011 为 forward-only：仅补列 / 建表 / 换约束，不删已有列（代码审查锚点）。
-    let sql = include_str!("../../../migrations/0011_run_dispatch.sql");
-    assert!(sql.contains("ADD COLUMN IF NOT EXISTS"));
-    assert!(!sql.contains("DROP COLUMN"));
-}

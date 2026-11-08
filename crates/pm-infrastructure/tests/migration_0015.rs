@@ -1,6 +1,8 @@
 //! 0015_task_contract 迁移验证（D2 契约，`docs/ai-pm-slice-d2-mcp-context-v1.md` §五）：
-//! 契约四列、两张关联表、run 级凭据三列、service principal 种子；并验证
-//! forward-only 可重入与约束/外键。真实数据库，不 Mock。
+//! 契约四列、两张关联表、run 级凭据三列、service principal 种子；约束/外键
+//! 与列默认值断言。真实数据库，不 Mock。
+//! （迁移重入断言已随 2026-11-09 基线合并退役——0001_baseline.sql 吸收
+//! 0001~0065，无迁移链即无重跑场景，见 docs/ai-pm-migration-ledger.md。）
 
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
@@ -70,16 +72,12 @@ async fn contract_columns_and_tables_exist(pool: PgPool) {
     .expect("delivery.task_knowledge_ref must exist");
 }
 
-/// C14：重复执行 0015 不报错，且存量行拿到默认值（`constraints={}`、`deliverables=[]`）。
+/// 契约列默认值生效（`constraints={}`、`deliverables=[]`）+ dispatch service
+/// principal 种子恰好一条（kind='service'）。
 #[sqlx::test(migrations = "../../migrations")]
-async fn migration_is_rerunnable_and_backfills_defaults(pool: PgPool) {
-    let project_id = seed_project(&pool, "M15-RERUN").await;
+async fn task_contract_defaults_and_dispatch_seed_present(pool: PgPool) {
+    let project_id = seed_project(&pool, "M15-DEFAULTS").await;
     let task_id = seed_task(&pool, project_id, "existing").await;
-
-    sqlx::raw_sql(include_str!("../../../migrations/0015_task_contract.sql"))
-        .execute(&pool)
-        .await
-        .expect("0015 must be re-runnable");
 
     let (constraints, deliverables): (serde_json::Value, serde_json::Value) =
         sqlx::query_as("SELECT constraints, deliverables FROM delivery.task WHERE id = $1")
@@ -252,18 +250,4 @@ async fn knowledge_ref_rejects_cross_project_document(pool: PgPool) {
         err.is_err(),
         "a document of another project must not be referenced"
     );
-}
-
-#[test]
-fn migration_file_is_forward_only() {
-    let sql = include_str!("../../../migrations/0015_task_contract.sql");
-    assert!(sql.contains("ADD COLUMN IF NOT EXISTS goal"));
-    assert!(
-        sql.contains("ADD COLUMN IF NOT EXISTS deliverables JSONB NOT NULL DEFAULT '[]'::jsonb")
-    );
-    assert!(sql.contains("CREATE TABLE IF NOT EXISTS delivery.task_acceptance_criterion"));
-    assert!(sql.contains("CREATE TABLE IF NOT EXISTS delivery.task_knowledge_ref"));
-    assert!(sql.contains("ADD COLUMN IF NOT EXISTS lease_token_hash"));
-    assert!(sql.contains("ai-pm-dispatch"));
-    assert!(!sql.contains("DROP COLUMN"));
 }
