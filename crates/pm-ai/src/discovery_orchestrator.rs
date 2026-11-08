@@ -1066,6 +1066,14 @@ impl DiscoveryOrchestratorWorker {
         let tenant_id = session.tenant_id;
         let session_id = session.id;
 
+        // 未知 kind 没有槽位表 → 槽位判定无意义（空表的 all_green() 会假绿），
+        // 直接判本轮不合规，不浪费一次模型调用。
+        if slots_for_kind(&session.kind).is_empty() {
+            return Err(RoundFailure::Invalid {
+                reason: format!("session kind {:?} has no slot table", session.kind),
+            });
+        }
+
         let findings = list_findings(&self.pool, tenant_id, session_id).await?;
         let questions = list_questions(&self.pool, tenant_id, session_id).await?;
         let messages = self.load_recent_messages(tenant_id, session_id).await?;

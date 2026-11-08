@@ -88,6 +88,12 @@ fn discovery_error(err: DiscoveryError) -> Response {
             StatusCode::CONFLICT,
             json!({ "error": "invalid_state_transition", "from": from, "to": to }),
         ),
+        // DK-B：编排轮次的前置假设失效（用户又说了话）。REST 目前不发起编排轮，
+        // 该分支仅为错误枚举穷尽；语义上属并发冲突。
+        DiscoveryError::StaleRound { expected, actual } => (
+            StatusCode::CONFLICT,
+            json!({ "error": "stale_round", "expected_message_id": expected, "actual_message_id": actual }),
+        ),
         DiscoveryError::Validation(detail) => (
             StatusCode::UNPROCESSABLE_ENTITY,
             json!({ "error": "validation_error", "detail": detail }),
