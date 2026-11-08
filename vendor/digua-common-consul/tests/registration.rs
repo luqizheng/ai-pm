@@ -85,6 +85,17 @@ fn service_tags_split_and_trim() {
     );
 }
 
+/// 测试直连 client：钉 no_proxy——注册表残留 ProxyServer（v2rayN 已死的
+/// 127.0.0.1:10808）会让默认 client 的 Windows 系统代理探测把 wiremock 请求
+/// 劫持到拒连端口（os error 10061）；openai_adapter.rs 同款先例。
+fn direct_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .pool_max_idle_per_host(0)
+        .no_proxy()
+        .build()
+        .expect("direct client builds")
+}
+
 // ── Low-level HTTP operations ───────────────────────────────────────────────
 
 fn test_cfg(consul_addr: String) -> RegistrationConfig {
@@ -118,9 +129,7 @@ async fn register_puts_payload_with_health_check() {
         .mount_as_scoped(&server)
         .await;
 
-    register(&reqwest::Client::new(), &cfg)
-        .await
-        .expect("register ok");
+    register(&direct_client(), &cfg).await.expect("register ok");
     // `mock` (MockGuard) asserts its expectation when dropped at test end.
     // The health-check URL contract is asserted via the payload matchers
     // above plus this direct check on the config the payload derives from:
@@ -136,7 +145,7 @@ async fn register_surveys_http_error() {
         .respond_with(ResponseTemplate::new(500))
         .mount(&server)
         .await;
-    let err = register(&reqwest::Client::new(), &cfg)
+    let err = register(&direct_client(), &cfg)
         .await
         .expect_err("500 is an error");
     assert!(err.contains("500"));
@@ -159,14 +168,11 @@ async fn is_registered_reads_agent_state() {
         .mount(&server)
         .await;
 
-    // 禁用连接池复用：wiremock 在期望耗尽后可能关闭 keep-alive 连接，
-    // 复用旧连接会以 "error sending request" 输（probe 2 稳定复现）——
-    // is_registered 的 Err 语义是「下个 tick 重试」，测试要测的是分支，
-    // 不是传输层竞态。每次探测走全新连接。
-    let client = reqwest::Client::builder()
-        .pool_max_idle_per_host(0)
-        .build()
-        .expect("client builds");
+    // no_proxy + 池禁用：is_registered 的 Err 语义是「下个 tick 重试」，测试要测
+    // 的是分支，不是传输层竞态——keep-alive 复用（wiremock 期望耗尽后关连）与
+    // 注册表残留 ProxyServer（127.0.0.1:10808，v2rayN 已死 → 10061）都会以
+    // "error sending request" 输；全链显式 127.0.0.1 直连（direct_client 注释）。
+    let client = direct_client();
     assert!(!is_registered(&client, &cfg).await.expect("probe 1"));
     assert!(is_registered(&client, &cfg).await.expect("probe 2"));
 }
@@ -181,7 +187,7 @@ async fn deregister_hits_service_id_path() {
         .expect(1)
         .mount_as_scoped(&server)
         .await;
-    deregister(&reqwest::Client::new(), &cfg)
+    deregister(&direct_client(), &cfg)
         .await
         .expect("deregister ok");
     // `mock` asserts its expectation when dropped at test end.
@@ -232,7 +238,7 @@ async fn guard_registers_then_deregisters() {
     assert!(guard.enabled(), "guard must manage a registration");
 
     // Wait for the background task's initial registration to land.
-    let client = reqwest::Client::new();
+    let client = direct_client();
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
         if is_registered(

@@ -14,13 +14,20 @@
 //!
 //! PC → KB 只读（PK1，§12.4）复用 K3/K5 同一路由；KB → PC 无任何路由
 //! （§12.5 移除，附录 B.2）。
+//!
+//! **KP-3 落真**：K4（记忆审核转达，CAS）与 K5（来源只读查询）经
+//! `pm_application::kb_service::KbServiceLive`（`KbServicePort` 进程内实现，调用方
+//! 身份/项目作用域按请求绑定——差异说明 D-KP3-3）；K5 同路径追加 `POST` 来源登记
+//! （§12.2 未列的 V0.5 管理面，见 `kb_memory_api.rs`，D-KP3-5）。K1/K3/K6 与 P 系
+//! 受理/治理面维持 501。
 
 use axum::{
     extract::{Extension, Path, Query, State},
     routing::{get, post},
     Json, Router,
 };
-use kb_pc_contracts::ports::{KbServicePort, PortError, PortNotWired};
+use kb_pc_contracts::ports::{KbMemoryReviewRequest, KbServicePort, PortError, PortNotWired};
+use pm_application::kb_service::{KbCaller, KbServiceLive};
 use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -39,7 +46,10 @@ pub(crate) fn router() -> Router<AppState> {
             get(k3_document_revision),
         )
         .route("/v1/kb/memories/{memory_id}/review", post(k4_review_memory))
-        .route("/v1/kb/sources", get(k5_list_sources))
+        .route(
+            "/v1/kb/sources",
+            get(k5_list_sources).post(crate::kb_memory_api::register_source),
+        )
         .route(
             "/v1/kb/supply-requests/{request_id}/fulfil",
             post(k6_fulfil_supply),
@@ -65,7 +75,14 @@ impl From<PortError> for ApiError {
             ),
             PortError::NotFound(_) => ApiError::NotFound("resource not found"),
             PortError::Forbidden(_) => ApiError::Forbidden("caller lacks permission"),
-            PortError::Invalid(_) => ApiError::BadRequest("invalid request"),
+            PortError::Invalid(m) => ApiError::Text(axum::http::StatusCode::BAD_REQUEST, m),
+            // KP-3 补齐（差异说明 D-KP3-1）：CAS/状态冲突 409 带 KB 侧可读原因（stale 基线 /
+            // 在途提案 / 项目已归档）；内部错误 500 不回显详情（KB 侧已记日志）。
+            PortError::Conflict(m) => ApiError::Text(axum::http::StatusCode::CONFLICT, m),
+            PortError::Internal(_) => ApiError::Text(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "internal error".to_string(),
+            ),
         }
     }
 }
@@ -93,6 +110,18 @@ async fn guard(state: &AppState, caller: &AuthedPrincipal, project_id: Uuid) -> 
 /// `body`/`path` 参数在此仅为签名占位（Phase 4/5 的真实实现按契约解析）。
 async fn skeleton_501<T>(_opaque: T) -> ApiResult<Json<serde_json::Value>> {
     Err(ApiError::from(PortError::NotWired("skeleton")))
+}
+
+/// KP-3：请求级 KB 端口（调用方身份 + 租户 + 项目作用域绑定在实例上，D-KP3-3）。
+fn kb_port(state: &AppState, caller: &AuthedPrincipal, project_id: Uuid) -> KbServiceLive {
+    KbServiceLive::for_caller(
+        state.pool.clone(),
+        KbCaller {
+            tenant_id: caller.tenant_id,
+            project_id,
+            actor: caller.audit_actor(),
+        },
+    )
 }
 
 // ── Platform → KB（K1~K6）───────────────────────────────────────────────────
@@ -259,6 +288,9 @@ async fn k3_document_revision(
     }
 }
 
+/// K4（KP-3 落真）：记忆审核转达（CAS：`base_memory_revision_id` = 当前待审提案）。
+/// 响应按 §12.2 形状 `{ memory_id, review_status }`，附被审修订四元组 `revision_ref`
+/// （端口返回 `KbAnalysisStatus` 的映射，差异说明 D-KP3-2）。
 async fn k4_review_memory(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
@@ -268,10 +300,39 @@ async fn k4_review_memory(
 ) -> ApiResult<Json<serde_json::Value>> {
     let project_id = require_project_param(&query)?;
     guard(&state, &caller, project_id).await?;
-    let _ = memory_id;
-    skeleton_501(body).await
+    let request: KbMemoryReviewRequest = serde_json::from_value(body).map_err(|e| {
+        ApiError::Text(
+            axum::http::StatusCode::BAD_REQUEST,
+            format!("invalid review body: {e}"),
+        )
+    })?;
+    let port = kb_port(&state, &caller, project_id);
+    let status = KbServicePort::review_memory(&port, &memory_id, request).await?;
+    Ok(Json(json!({
+        "memory_id": memory_id,
+        "review_status": status.status,
+        "revision_ref": status.memory_draft_refs.first(),
+    })))
 }
 
+/// K5 `evidence_of` wire 形态：`<memory|memory_revision>:<uuid>`（knowledge_base 域隐含，
+/// 差异说明 D-KP3-4）；类型合法性由端口裁决。
+fn parse_evidence_of(raw: &str) -> ApiResult<kb_pc_contracts::DomainRef> {
+    let (target_type, target_id) = raw
+        .split_once(':')
+        .filter(|(t, i)| !t.trim().is_empty() && !i.trim().is_empty())
+        .ok_or(ApiError::BadRequest(
+            "evidence_of must be <memory|memory_revision>:<uuid>",
+        ))?;
+    Ok(kb_pc_contracts::DomainRef::for_domain(
+        kb_pc_contracts::registry::TargetDomain::KnowledgeBase,
+        target_type.trim(),
+        target_id.trim(),
+        None,
+    ))
+}
+
+/// K5（KP-3 落真）：项目关联的 Original Sources（`?evidence_of=` 过滤被某记忆引用的来源）。
 async fn k5_list_sources(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
@@ -279,20 +340,13 @@ async fn k5_list_sources(
 ) -> ApiResult<Json<serde_json::Value>> {
     let project_id = require_project_param(&query)?;
     guard(&state, &caller, project_id).await?;
-    let port = PortNotWired;
-    let evidence_of = query.get("evidence_of").map(|raw| {
-        // 只读查询骨架：evidence_of 以 knowledge_base 文档四元组表达（PK1 通道）。
-        kb_pc_contracts::DomainRef::for_domain(
-            kb_pc_contracts::registry::TargetDomain::KnowledgeBase,
-            "document",
-            raw.clone(),
-            None,
-        )
-    });
-    match KbServicePort::list_sources(&port, project_id, evidence_of.as_ref()).await {
-        Ok(items) => Ok(Json(json!({ "items": items }))),
-        Err(e) => Err(ApiError::from(e)),
-    }
+    let evidence_of = query
+        .get("evidence_of")
+        .map(|raw| parse_evidence_of(raw))
+        .transpose()?;
+    let port = kb_port(&state, &caller, project_id);
+    let items = KbServicePort::list_sources(&port, project_id, evidence_of.as_ref()).await?;
+    Ok(Json(json!({ "items": items })))
 }
 
 async fn k6_fulfil_supply(

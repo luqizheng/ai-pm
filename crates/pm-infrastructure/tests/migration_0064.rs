@@ -649,15 +649,19 @@ fn sha256_hex(input: &str) -> String {
 }
 
 async fn run_convergence(db_url: &str) -> Result<(), String> {
-    // ① 迁移 0001..0063（截断 Migrator：迁移清单按版本升序，掐掉尾部 0064）
+    // ① 迁移 0001..0063（从 Migrator 清单按版本号精确摘除 0064——head 之后可能
+    //    有后续批次的迁移（KP-3 顺移 0065），不能按「掐尾部」截断）
     let mut pre = Migrator::new(Path::new("../../migrations"))
         .await
         .map_err(|e| e.to_string())?;
     {
         let list = pre.migrations.to_mut();
         let last = list.last().expect("migrations non-empty");
-        assert_eq!(last.version, 64, "head migration must be 0064");
-        list.truncate(list.len() - 1);
+        assert_eq!(
+            last.version, 65,
+            "head migration must be 0065 (KP-3 KB minimal surface)"
+        );
+        list.retain(|m| m.version != 64);
     }
     let pool = sqlx::PgPool::connect(db_url)
         .await

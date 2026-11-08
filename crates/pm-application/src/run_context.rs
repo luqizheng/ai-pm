@@ -212,6 +212,14 @@ pub struct RunContract {
     pub acceptance_criteria: Vec<AcceptanceCriterionView>,
     pub repositories: Vec<RepositoryView>,
     pub knowledge_refs: Vec<KnowledgeRefView>,
+    /// KP-3 Discussion Memory 注入（用户裁决 B，2026-11-08；差异说明 D-KP3-7）：按 Task
+    /// 检索的 L1 记忆 CURRENT 版本摘要（task 本身 + 关联需求为主题，`kb.memory_ref`
+    /// subject ⋈ `kb.memory_revision` CURRENT）。开关 `AI_PM_DISCUSSION_MEMORY_INJECTION`
+    /// 默认 off；off 或无命中时**不序列化**——契约输出与 KP-3 前逐字节一致
+    /// （additive，`CONTRACT_VERSION` 不跳）。空集合只表示「当前浅层记忆中没有找到相关
+    /// 记录」，不代表过去从未讨论。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub discussion_memory: Vec<crate::discussion_memory::DiscussionMemoryView>,
     pub policy: PolicyView,
 }
 
@@ -314,12 +322,35 @@ pub struct RepoAccessView {
 /// 读取本 Run 的完整执行契约（只读、不续租）。
 ///
 /// T-032 T2：`generation` 为执行端领取时拿到的执行权世代，服务端双验证。
+/// Discussion Memory 注入面按环境开关 `AI_PM_DISCUSSION_MEMORY_INJECTION` 判定
+/// （默认 off，见 [`get_run_context_with`]）。
 pub async fn get_run_context(
     pool: &PgPool,
     project_id: Uuid,
     run_id: Uuid,
     lease_token: &str,
     generation: i32,
+) -> Result<RunContract, LeaseError> {
+    get_run_context_with(
+        pool,
+        project_id,
+        run_id,
+        lease_token,
+        generation,
+        crate::discussion_memory::DiscussionMemoryInjectionMode::from_env(),
+    )
+    .await
+}
+
+/// [`get_run_context`] 的显式注入开关形态（测试与需要固定口径的调用方使用，避免
+/// 依赖进程级环境变量）。
+pub async fn get_run_context_with(
+    pool: &PgPool,
+    project_id: Uuid,
+    run_id: Uuid,
+    lease_token: &str,
+    generation: i32,
+    injection: crate::discussion_memory::DiscussionMemoryInjectionMode,
 ) -> Result<RunContract, LeaseError> {
     let lease = verify_lease(pool, project_id, run_id, lease_token, generation).await?;
 
@@ -432,6 +463,14 @@ pub async fn get_run_context(
             content_hash: goal.content_hash,
         });
 
+    // KP-3：Discussion Memory 按 Task 检索注入（只取 CURRENT 版本；开关 off = 不查询）。
+    let discussion_memory = if injection.enabled() {
+        crate::discussion_memory::discussion_memory_for_task(pool, project_id, lease.task_id)
+            .await?
+    } else {
+        Vec::new()
+    };
+
     Ok(RunContract {
         contract_version: CONTRACT_VERSION,
         goal,
@@ -461,6 +500,7 @@ pub async fn get_run_context(
         acceptance_criteria,
         repositories,
         knowledge_refs,
+        discussion_memory,
         policy,
     })
 }
