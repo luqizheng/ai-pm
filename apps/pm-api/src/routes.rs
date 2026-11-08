@@ -64,6 +64,39 @@ pub(crate) struct AppState {
     /// 文件代理（2026-11-07 file-service 收口配套）。`None` = 未配置
     /// bootstrap token（裸机 dev），/v1/file/* 返回 503。
     pub(crate) file: crate::files::FileProxyHandle,
+    /// DK-A：对话载体判定（`AI_PM_CONVERSATION_ROUTER` + 意图分类端口）。
+    pub(crate) conversation_routing: ConversationRouting,
+}
+
+/// DK-A 对话载体判定装配：开关 + 意图分类器。生产 = [`ConversationRouting::from_env`]
+/// （LLM 分类器，开关读环境、默认 off）；测试经
+/// [`router_with_auth_config_and_routing`] 注入固定开关与夹具分类器。
+#[derive(Clone)]
+pub struct ConversationRouting {
+    pub mode: pm_application::conversation_router::RouterMode,
+    pub classifier: Arc<dyn pm_application::conversation_router::IntentClassifier>,
+}
+
+impl ConversationRouting {
+    pub fn from_env(pool: &PgPool) -> Self {
+        let mode = pm_application::conversation_router::RouterMode::from_env();
+        tracing::info!(
+            ?mode,
+            "conversation router mode selected (AI_PM_CONVERSATION_ROUTER)"
+        );
+        Self {
+            mode,
+            classifier: Arc::new(pm_ai::LlmIntentClassifier::new(pool.clone())),
+        }
+    }
+
+    /// 开关 off + 无分类器（只有规则 1/2）。
+    pub fn off() -> Self {
+        Self {
+            mode: pm_application::conversation_router::RouterMode::Off,
+            classifier: Arc::new(pm_application::conversation_router::DisabledClassifier),
+        }
+    }
 }
 
 /// The pm-api route table, stateful over the shared connection pool and
@@ -117,7 +150,7 @@ pub fn router_with_feed_and_knowledge(
         pool: pool.clone(),
         config: crate::auth::AuthConfig::default(),
     };
-    build_router(pool, audit_feed, false, mcp_hosts, knowledge).layer(
+    build_router(pool, audit_feed, false, mcp_hosts, knowledge, None).layer(
         axum::middleware::from_fn_with_state(auth, crate::auth::inject_dev_principal),
     )
 }
@@ -128,18 +161,22 @@ fn build_router(
     guard_mcp: bool,
     mcp_hosts: crate::mcp_hosts::McpHosts,
     knowledge: pm_application::knowledge::KnowledgeRoot,
+    conversation_routing: Option<ConversationRouting>,
 ) -> Router {
     let policy = Arc::new(
         PolicyEngine::from_yaml(include_str!("../../../policies/ai-pm-ai-lead-v2.yaml"))
             .expect("canonical policy yaml must parse"),
     );
     let executor = Arc::new(PgCommandExecutor::new(pool.clone(), policy));
+    let conversation_routing =
+        conversation_routing.unwrap_or_else(|| ConversationRouting::from_env(&pool));
     let state = AppState {
         pool,
         executor,
         audit_feed,
         knowledge,
         file: crate::files::FileProxy::from_env(),
+        conversation_routing,
     };
     // The MCP service clones the pool inside its own state factory; it cannot
     // share `state` (different service type), hence a separate handle.
@@ -389,6 +426,36 @@ pub fn router_with_auth_config_and_feed_and_hosts(
     audit_feed: crate::audit_stream::AuditFeed,
     mcp_hosts: crate::mcp_hosts::McpHosts,
 ) -> Router {
+    authed_router(pool, jwks, config, audit_feed, mcp_hosts, None)
+}
+
+/// [`router_with_auth_config`] with an explicit DK-A conversation routing
+/// (tests pin the `AI_PM_CONVERSATION_ROUTER` mode and inject a fixture
+/// classifier instead of mutating process-wide env vars).
+pub fn router_with_auth_config_and_routing(
+    pool: PgPool,
+    jwks: Arc<digua_common_jwt::JWKSCache>,
+    config: crate::auth::AuthConfig,
+    routing: ConversationRouting,
+) -> Router {
+    authed_router(
+        pool,
+        jwks,
+        config,
+        crate::audit_stream::AuditFeed::new(),
+        crate::mcp_hosts::McpHosts::default(),
+        Some(routing),
+    )
+}
+
+fn authed_router(
+    pool: PgPool,
+    jwks: Arc<digua_common_jwt::JWKSCache>,
+    config: crate::auth::AuthConfig,
+    audit_feed: crate::audit_stream::AuditFeed,
+    mcp_hosts: crate::mcp_hosts::McpHosts,
+    routing: Option<ConversationRouting>,
+) -> Router {
     let auth = crate::auth::AuthState {
         jwks: Some(jwks),
         pool: pool.clone(),
@@ -400,6 +467,7 @@ pub fn router_with_auth_config_and_feed_and_hosts(
         true,
         mcp_hosts,
         pm_application::knowledge::KnowledgeRoot::from_env(),
+        routing,
     )
     .layer(axum::middleware::from_fn_with_state(
         auth.clone(),
