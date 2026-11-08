@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>图3 · 目标执行计划卡（示意）</title>
+<style>
+  body { margin: 0; padding: 24px; background: #f3f4f6; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif; color: #111827; }
+  .wrap { max-width: 620px; margin: 0 auto; }
+  .plan { background: #fff; border: 1px solid #e6e9ee; border-radius: 14px; padding: 18px 22px 16px; }
+  .plan-head { display: flex; align-items: center; justify-content: space-between; }
+  .plan-head h2 { font-size: 16px; font-weight: 700; margin: 0; }
+  .status { background: #fdf3e7; color: #d97a2b; font-size: 12px; border-radius: 999px; padding: 2px 10px; }
+  .goal-id { font-size: 12.5px; color: #8a919e; margin-top: 14px; }
+  .goal-title { font-size: 18px; font-weight: 700; margin: 2px 0 4px; }
+  .goal-desc { font-size: 13px; color: #6b7280; margin: 0; }
+  .sec { font-size: 13.5px; font-weight: 600; color: #2a2f3a; margin: 16px 0 6px; }
+  .step { margin-bottom: 10px; }
+  .step .row { display: flex; align-items: baseline; gap: 14px; }
+  .step .no { font-size: 15px; font-weight: 700; min-width: 18px; text-align: right; }
+  .step .title { font-size: 14px; font-weight: 700; }
+  .step .sub { margin-left: 32px; padding-left: 12px; border-left: 2px solid #e8ebef; font-size: 12.5px; color: #8a919e; margin-top: 3px; }
+  .constraint { background: #fdf6ec; border: 1px solid #f3e3c9; border-radius: 10px; padding: 12px 14px; margin-top: 14px; }
+  .constraint .t { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700; margin-bottom: 4px; }
+  .constraint .t svg { width: 15px; height: 15px; color: #e08a2e; flex: none; }
+  .constraint .b { font-size: 13px; color: #4a4f5a; }
+  .actions { display: flex; gap: 12px; margin-top: 14px; }
+  .btn { flex: 1; border-radius: 999px; padding: 10px 0; font-size: 14px; font-weight: 600; text-align: center; cursor: pointer; font-family: inherit; }
+  .btn.primary { background: #111827; color: #fff; border: 1px solid #111827; }
+  .btn.primary:hover { background: #1f2937; }
+  .btn.ghost { background: #fff; color: #2a2f3a; border: 1px solid #d7dbe2; }
+  .btn.ghost:hover { background: #f4f6f9; }
+  .caption { font-size: 12px; color: #8a919e; margin-top: 10px; padding-left: 4px; }
+  .ic { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="plan">
+    <div class="plan-head">
+      <h2>目标执行计划</h2>
+      <span class="status">待确认</span>
+    </div>
+    <div class="goal-id">目标 GOAL-001</div>
+    <div class="goal-title">完成森林地形生成系统</div>
+    <p class="goal-desc">基于高度、温度、湿度生成森林分布，并支持世界地图多级缩放。</p>
+    <div class="sec">AI 建议的任务拆解</div>
+    <div class="step">
+      <div class="row"><span class="no">1</span><span class="title">分析现有地形数据接口</span></div>
+      <div class="sub">架构 AI · 检查数据结构与性能约束</div>
+    </div>
+    <div class="step">
+      <div class="row"><span class="no">2</span><span class="title">设计森林分布算法</span></div>
+      <div class="sub">架构 AI · 确定密度、群落、边界规则</div>
+    </div>
+    <div class="step">
+      <div class="row"><span class="no">3</span><span class="title">实现森林生成模块</span></div>
+      <div class="sub">开发 AI · Rust + Bevy</div>
+    </div>
+    <div class="step">
+      <div class="row"><span class="no">4</span><span class="title">测试多尺度渲染性能</span></div>
+      <div class="sub">测试 AI · 功能与性能验证</div>
+    </div>
+    <div class="constraint">
+      <div class="t"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>需要确认的约束</div>
+      <div class="b">目标帧率、地图可视范围、最低硬件配置尚未明确。</div>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn primary">设计计划审批流程</button>
+      <button type="button" class="btn ghost">约束澄清</button>
+    </div>
+    <div class="caption">示例计划，尚未创建真实任务。</div>
+  </div>
+</div>
+</body>
+</html>

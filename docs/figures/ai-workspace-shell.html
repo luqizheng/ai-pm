@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>图2 · 桌面端主界面布局（示意）</title>
+<style>
+  body { margin: 0; padding: 24px; background: #f3f4f6; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif; color: #111827; }
+  .wrap { max-width: 1240px; margin: 0 auto; }
+  .ws { background: #fff; border: 1px solid #e2e5ea; border-radius: 14px; overflow: hidden; }
+  .ws-top { display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 16px; border-bottom: 1px solid #eef0f3; }
+  .ws-top .logo { color: #4d80f0; width: 18px; height: 18px; flex: none; }
+  .ws-top .brand { font-size: 15px; font-weight: 700; }
+  .ws-top .crumb { font-size: 13px; color: #9aa1ac; }
+  .ws-top .spacer { flex: 1; }
+  .ws-top .tool { color: #5b6472; width: 17px; height: 17px; margin-left: 12px; }
+  .ws-body { display: grid; grid-template-columns: 232px 1fr 280px; min-height: 430px; }
+  @media (max-width: 1080px) { .ws-body { grid-template-columns: 210px 1fr; } .ws-right { display: none; } }
+  @media (max-width: 780px) { .ws-body { grid-template-columns: 1fr; } .ws-left { display: none; } }
+  .ws-left { padding: 14px 12px; border-right: 1px solid #eef0f3; }
+  .ws-left .label { font-size: 12px; color: #9aa1ac; padding: 0 10px 6px; }
+  .ws-left .item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 13.5px; color: #2a2f3a; }
+  .ws-left .item svg { width: 15px; height: 15px; color: #5b6472; flex: none; }
+  .ws-left .item:hover { background: #f4f6f9; }
+  .ws-left .divider { border-top: 1px solid #eef0f3; margin: 12px 4px; }
+  .ws-left .recent { padding: 5px 10px; font-size: 13px; color: #5b6472; }
+  .ws-main { padding: 16px 20px; }
+  .ws-main .head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .ws-main .head h2 { font-size: 16px; font-weight: 700; margin: 0; }
+  .pill { background: #eef3ff; color: #4d80f0; font-size: 12px; border-radius: 999px; padding: 2px 10px; }
+  .m-card { border: 1px solid #e8ebef; border-radius: 10px; padding: 12px 16px; margin-bottom: 12px; background: #fff; }
+  .m-card .t { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+  .m-card .t svg { width: 15px; height: 15px; color: #4d80f0; flex: none; }
+  .m-card .s { font-size: 13px; color: #6b7280; margin-bottom: 6px; }
+  .m-card .b { font-size: 13px; color: #3a4150; }
+  .track { background: #eceef2; border-radius: 999px; height: 8px; margin-top: 10px; overflow: hidden; }
+  .fill { width: 65%; height: 100%; background: #3fbf7f; border-radius: 999px; }
+  .ws-right { padding: 14px 18px; border-left: 1px solid #eef0f3; }
+  .ws-right h3 { font-size: 14px; font-weight: 700; margin: 0 0 4px; }
+  .ws-right .g { font-size: 12px; color: #9aa1ac; margin: 14px 0 4px; }
+  .ws-right .v { font-size: 13px; color: #2a2f3a; padding: 2px 0; display: flex; align-items: center; gap: 8px; }
+  .ws-right .v svg { width: 14px; height: 14px; color: #5b6472; flex: none; }
+  .ws-ai { border-top: 1px solid #eef0f3; padding: 12px 16px; }
+  .ai-box { display: flex; align-items: center; gap: 10px; border: 1px solid #e2e5ea; border-radius: 12px; padding: 12px 14px; }
+  .ai-box svg { width: 16px; height: 16px; color: #4d80f0; flex: none; }
+  .ai-box .ph { flex: 1; font-size: 14px; color: #9aa1ac; }
+  .ai-box .hint { font-size: 12px; color: #9aa1ac; white-space: nowrap; }
+  .caption { font-size: 12px; color: #8a919e; margin-top: 8px; padding-left: 4px; }
+  .ic { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="ws">
+    <div class="ws-top" title="顶部栏 · 高 52–60px · 始终固定">
+      <svg class="ic logo" viewBox="0 0 24 24" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+      <span class="brand">Atlas R&amp;D</span>
+      <span class="crumb">/ 地图编辑器</span>
+      <span class="spacer"></span>
+      <svg class="ic tool" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <svg class="ic tool" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+      <svg class="ic tool" viewBox="0 0 24 24" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg>
+    </div>
+    <div class="ws-body">
+      <nav class="ws-left" title="左导航 · 宽 220–260px · 可折叠至 56–64px" aria-label="空间导航">
+        <div class="label">工作空间</div>
+        <div class="item"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>项目总控</div>
+        <div class="item"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>目标计划</div>
+        <div class="item"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></svg>AI 执行</div>
+        <div class="item"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>决策中心</div>
+        <div class="item"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88"/></svg>项目认知</div>
+        <div class="divider"></div>
+        <div class="label">最近工作</div>
+        <div class="recent">地形架构评审</div>
+        <div class="recent">森林系统开发</div>
+      </nav>
+      <main class="ws-main" title="主工作区 · 自适应 · 最小 600px · 支持标签页 / 分栏 / 全屏">
+        <div class="head">
+          <h2>项目工作区</h2>
+          <span class="pill">AI 模式</span>
+        </div>
+        <div class="m-card">
+          <div class="t"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>AI 负责人摘要</div>
+          <div class="b">本轮研发计划正在推进，当前存在一项架构决策阻塞。</div>
+        </div>
+        <div class="m-card">
+          <div class="t">待处理决策</div>
+          <div class="s">地形渲染方案选择</div>
+          <div class="b">推荐先验证 GPU Shader 方案的性能与兼容性。</div>
+        </div>
+        <div class="m-card">
+          <div class="t">执行进展</div>
+          <div class="s">森林生成模块 · 开发验证</div>
+          <div class="track" role="progressbar" aria-label="森林生成模块进度" aria-valuenow="65" aria-valuemin="0" aria-valuemax="100"><div class="fill"></div></div>
+        </div>
+      </main>
+      <aside class="ws-right" title="右上下文栏 · 宽 280–360px · 可隐藏 / 可固定" aria-label="当前上下文">
+        <h3>当前上下文</h3>
+        <div class="g">项目</div>
+        <div class="v">地图编辑器</div>
+        <div class="g">AI 负责人</div>
+        <div class="v"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>项目负责人</div>
+        <div class="g">关联知识</div>
+        <div class="v">架构规范</div>
+        <div class="v">迭代目标</div>
+        <div class="v">历史决策</div>
+        <div class="g">操作权限</div>
+        <div class="v">审批：合并 / 发布</div>
+      </aside>
+    </div>
+    <div class="ws-ai" title="AI 指令栏 · 最小高 64px · 支持展开为完整对话">
+      <div class="ai-box">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>
+        <span class="ph">告诉 AI 负责人，你希望完成什么……</span>
+        <span class="hint">/ 引用对象 · @ 指定 Agent · Enter 发送</span>
+      </div>
+    </div>
+  </div>
+  <div class="caption">示意布局，具体项目数据为模拟。实际桌面版建议左右面板可折叠和调整宽度。</div>
+</div>
+</body>
+</html>

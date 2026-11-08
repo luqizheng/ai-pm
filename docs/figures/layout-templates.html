@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>图4 · 动态布局模板</title>
+<style>
+  body { margin: 0; padding: 24px; background: #f3f4f6; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif; color: #111827; }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  .lt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 640px) { .lt-grid { grid-template-columns: 1fr; } }
+  .tpl { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px 16px; }
+  .tpl h3 { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+  .blk { background: #f1f2f4; border-radius: 8px; }
+  .tpl .row { display: flex; gap: 12px; }
+  .tpl .b-a { flex: 13; height: 60px; }
+  .tpl .b-b { flex: 10; height: 60px; }
+  .tpl .b-side { width: 48%; height: 68px; margin-left: auto; }
+  .tpl .b-full { height: 40px; }
+  .tpl .b-tall { width: 62%; height: 84px; margin-left: auto; }
+  .tpl .cap { font-size: 13px; color: #6b7280; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="lt-grid">
+    <section class="tpl">
+      <h3>Overview</h3>
+      <div class="row"><div class="blk b-a"></div><div class="blk b-b"></div></div>
+      <div class="cap">总控、项目概览</div>
+    </section>
+    <section class="tpl">
+      <h3>Split Review</h3>
+      <div class="blk b-side"></div>
+      <div class="cap">决策、代码审查</div>
+    </section>
+    <section class="tpl">
+      <h3>Timeline</h3>
+      <div class="blk b-full"></div>
+      <div class="cap">Agent 执行追踪</div>
+    </section>
+    <section class="tpl">
+      <h3>Explorer</h3>
+      <div class="blk b-tall"></div>
+      <div class="cap">知识、文件、产物</div>
+    </section>
+  </div>
+</div>
+</body>
+</html>

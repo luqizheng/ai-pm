@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>图1 · AI R&amp;D Workspace 信息架构</title>
+<style>
+  body {
+    margin: 0;
+    padding: 24px;
+    background: #f3f4f6;
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    color: #111827;
+  }
+  .ia-frame { max-width: 1000px; margin: 0 auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; padding: 26px 22px 22px; }
+  .ia-header { text-align: center; margin-bottom: 20px; }
+  .ia-header svg { color: #4d80f0; width: 24px; height: 24px; }
+  .ia-header h2 { font-size: 20px; font-weight: 700; margin: 6px 0 4px; letter-spacing: .2px; }
+  .ia-header p { color: #6b7280; font-size: 13px; margin: 0; }
+  .ia-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 640px) { .ia-columns { grid-template-columns: 1fr; } }
+  .ia-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px 20px 14px; }
+  .ia-card h3 { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 700; margin: 0 0 10px; }
+  .ia-card h3 svg { color: #4d80f0; width: 18px; height: 18px; flex: none; }
+  .ia-list { list-style: none; margin: 0; padding: 0; }
+  .ia-list li { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 14px; color: #1f2937; }
+  .ia-num { font-weight: 700; font-size: 13px; color: #111827; min-width: 22px; }
+  .ia-domain { margin-top: 14px; }
+  .ia-domain h3 { margin-bottom: 4px; }
+  .ia-objects { text-align: center; font-size: 14px; font-weight: 600; color: #111827; margin: 10px 0 6px; letter-spacing: .2px; }
+  .ia-cross { text-align: center; color: #6b7280; font-size: 12px; margin: 0; }
+  .ia-ic { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+<div class="ia-frame">
+  <header class="ia-header">
+    <svg class="ia-ic" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+    <h2>AI R&amp;D Workspace</h2>
+    <p>统一工作空间 · 项目上下文 · 权限体系</p>
+  </header>
+  <div class="ia-columns">
+    <section class="ia-card">
+      <h3><svg class="ia-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>AI 原生空间</h3>
+      <ul class="ia-list">
+        <li><span class="ia-num">01</span>总控台</li>
+        <li><span class="ia-num">02</span>目标与计划</li>
+        <li><span class="ia-num">03</span>AI 执行中心</li>
+        <li><span class="ia-num">04</span>决策中心</li>
+        <li><span class="ia-num">05</span>项目认知中心</li>
+        <li><span class="ia-num">06</span>产物验收</li>
+      </ul>
+    </section>
+    <section class="ia-card">
+      <h3><svg class="ia-ic" viewBox="0 0 24 24" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>传统业务空间</h3>
+      <ul class="ia-list">
+        <li>需求管理</li>
+        <li>任务与缺陷</li>
+        <li>迭代与里程碑</li>
+        <li>项目文档</li>
+        <li>版本与发布</li>
+        <li>团队与配置</li>
+      </ul>
+    </section>
+  </div>
+  <section class="ia-card ia-domain">
+    <h3><svg class="ia-ic" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>统一领域与知识服务</h3>
+    <p class="ia-objects">Goal · Requirement · Task · AgentRun · Decision · Knowledge · Artifact · Event</p>
+    <p class="ia-cross">权限 / 审计 / 版本 / 引用 / 状态机</p>
+  </section>
+</div>
+</body>
+</html>
