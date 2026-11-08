@@ -45,13 +45,6 @@ pub async fn append_message(
     source: &str,
     content: &str,
 ) -> Result<DiscoveryMessageView, DiscoveryError> {
-    validate_one_of(speaker, &["ai", "user"], "speaker")?;
-    validate_one_of(source, &SESSION_SOURCES, "source")?;
-    if content.trim().is_empty() {
-        return Err(DiscoveryError::Validation(
-            "content must not be blank".to_string(),
-        ));
-    }
     let mut tx = pool.begin().await?;
     // 会话行锁 = 本 session 的追加互斥点（跨进程有效）。顺带完成存在性校验。
     let locked: Option<(Uuid,)> = sqlx::query_as(
@@ -64,6 +57,30 @@ pub async fn append_message(
     .await?;
     if locked.is_none() {
         return Err(DiscoveryError::SessionNotFound);
+    }
+    let message =
+        append_message_in_tx(&mut tx, tenant_id, session_id, speaker, source, content).await?;
+    tx.commit().await?;
+    Ok(message)
+}
+
+/// 事务内追加（调用方**必须**已持有该 session 的行锁——见 [`append_message`]
+/// 与 `apply_orchestrator_round`：后者在一次事务里同时写 finding/question/
+/// 状态/消息，行锁即该轮的会话互斥点）。
+pub(crate) async fn append_message_in_tx(
+    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tenant_id: Uuid,
+    session_id: Uuid,
+    speaker: &str,
+    source: &str,
+    content: &str,
+) -> Result<DiscoveryMessageView, DiscoveryError> {
+    validate_one_of(speaker, &["ai", "user"], "speaker")?;
+    validate_one_of(source, &SESSION_SOURCES, "source")?;
+    if content.trim().is_empty() {
+        return Err(DiscoveryError::Validation(
+            "content must not be blank".to_string(),
+        ));
     }
     let row: MessageRow = sqlx::query_as(&format!(
         "INSERT INTO discovery.discovery_message \
@@ -78,9 +95,8 @@ pub async fn append_message(
     .bind(speaker)
     .bind(source)
     .bind(content)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut **tx)
     .await?;
-    tx.commit().await?;
     Ok(to_message(row))
 }
 

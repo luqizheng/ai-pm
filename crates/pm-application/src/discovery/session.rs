@@ -170,18 +170,47 @@ pub async fn transition_session(
     Ok(to_session(row))
 }
 
+/// 合法状态边（唯一来源：`session_transition_allowed` 与编排器的多跳路径共用）。
+///
+/// **设计勘误（DK-B）**：设计稿 F2 声称含 `NEEDS_USER_INPUT → REVIEW_REQUIRED`，
+/// 代码实际**没有**这条边（本表即事实）。编排器保持零迁移：走
+/// `NEEDS_USER_INPUT → IN_PROGRESS → REVIEW_REQUIRED` 两跳，终态一致。
+pub(crate) const SESSION_EDGES: [(&str, &str); 10] = [
+    ("IN_PROGRESS", "NEEDS_USER_INPUT"),
+    ("IN_PROGRESS", "REVIEW_REQUIRED"),
+    ("IN_PROGRESS", "PAUSED"),
+    ("IN_PROGRESS", "COMPLETED"),
+    ("NEEDS_USER_INPUT", "IN_PROGRESS"),
+    ("NEEDS_USER_INPUT", "COMPLETED"),
+    ("REVIEW_REQUIRED", "IN_PROGRESS"),
+    ("REVIEW_REQUIRED", "COMPLETED"),
+    ("PAUSED", "IN_PROGRESS"),
+    ("PAUSED", "COMPLETED"),
+];
+
 fn session_transition_allowed(from: &str, to: &str) -> bool {
-    matches!(
-        (from, to),
-        ("IN_PROGRESS", "NEEDS_USER_INPUT")
-            | ("IN_PROGRESS", "REVIEW_REQUIRED")
-            | ("IN_PROGRESS", "PAUSED")
-            | ("IN_PROGRESS", "COMPLETED")
-            | ("NEEDS_USER_INPUT", "IN_PROGRESS")
-            | ("NEEDS_USER_INPUT", "COMPLETED")
-            | ("REVIEW_REQUIRED", "IN_PROGRESS")
-            | ("REVIEW_REQUIRED", "COMPLETED")
-            | ("PAUSED", "IN_PROGRESS")
-            | ("PAUSED", "COMPLETED")
-    )
+    SESSION_EDGES.contains(&(from, to))
+}
+
+/// 从 `from` 到 `to` 的合法路径（0/1/2 跳）；无路径返回 `None`。
+///
+/// 编排器只用来落「本轮结束后的状态」：单跳优先，必要时走两跳
+/// （见 [`SESSION_EDGES`] 的勘误说明）。路径每一跳都必须在既有边上，
+/// 不新造转移。
+pub(crate) fn session_transition_path(from: &str, to: &str) -> Option<Vec<String>> {
+    if from == to {
+        return Some(Vec::new());
+    }
+    if session_transition_allowed(from, to) {
+        return Some(vec![to.to_string()]);
+    }
+    for (a, mid) in SESSION_EDGES {
+        if a != from {
+            continue;
+        }
+        if session_transition_allowed(mid, to) {
+            return Some(vec![mid.to_string(), to.to_string()]);
+        }
+    }
+    None
 }
