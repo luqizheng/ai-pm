@@ -181,6 +181,7 @@ D2 落地前的三个硬缺口：
 | `acceptance_criteria[]` | `delivery.task_acceptance_criterion` | 否（0 条合法，D5 按策略判定） |
 | `repositories[]` | `delivery.task_run_repository` **JOIN** `integration.project_repository` | 否（领取时已锁定） |
 | `knowledge_refs[]` | `delivery.task_knowledge_ref` **JOIN** `ai.project_document` + 最新 `document_revision` | 否 |
+| `discussion_memory[]` | **KP-3 增补（2026-11-08，用户裁决 B / 差异说明 D-KP3-7）**：`kb.memory_ref`(subject=task 及其 `task_requirement` 关联需求) **JOIN** `kb.memory_revision`(仅 `version_status='CURRENT'`)——摘要级（无 body）；开关 `AI_PM_DISCUSSION_MEMORY_INJECTION` 默认 off，off 或无命中时**字段不序列化**（additive，`contract_version` 不跳） | 是（开关 off / 无命中时缺省） |
 | `policy.*` | `delivery.task_run.policy_snapshot`（D2.1 起为 `composed-v1`，D1/D2 原为 `d1-minimal`） | 否 |
 | `run.lease.heartbeat_interval_secs` | 配置 `AI_PM_RUN_HEARTBEAT_SECS`，默认 60 | 否 |
 

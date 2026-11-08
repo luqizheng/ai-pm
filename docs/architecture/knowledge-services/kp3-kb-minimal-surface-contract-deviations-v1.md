@@ -57,3 +57,10 @@
 
 - **生产**：K4 批准与业务同事务写 outbox；payload 严守目录三字段——`memory_ref`（钉被批准修订：`{knowledge_base, memory, <memory_id>, <revision_id>}`）、`reviewed_by`（审核人 principal id）、`approval_state`（批准后的版本状态 `CURRENT` / `WITHDRAWN`）；幂等键 `kb_memory_approved:{memory_revision_id}`（目录列 = memory_revision_id）；生产前过 `events::validate_payload_references`。驳回/退回不产事件（无批准）。
 - **既有消费端瑕疵（只登记不改）**：Platform 消费者 `KbMemoryApprovedHandler`（`crates/pm-infrastructure/src/kb_pc_handlers.rs`）通知去重键 = `memory_id`，同一记忆的第二次批准不再产生通知行。该文件为同日并行会话热点，本批不动；建议后续改为 `memory_revision_id`。
+
+## D-KP3-9 · vendored `digua-common-consul` 请求 client 钉 `no_proxy`（环境缺陷修复，2026-11-08 用户现场裁决「全链 127.0.0.1 直连」）
+
+- **现象**：本批全量回归中 `vendor/digua-common-consul` 的 `registration.rs` 全部 wiremock 用例 `error sending request`（os error 10061 拒绝连接）；裸 `std::net::TcpStream` 连 `127.0.0.1:<同端口>` 成功——wiremock 0.6.5 `builder.rs:107` 本就显式绑 `127.0.0.1:0`（v4，无 localhost/::1 分歧）。
+- **根因**：reqwest **0.12.28** 的 Windows 系统代理探测读取注册表残留 `ProxyServer=127.0.0.1:10808`（`ProxyEnable=0` 仍生效）；默认 `Client::new()` 未钉 `no_proxy` → 请求被劫持到 v2rayN 代理端口。v2rayN 进程存活时放行 localhost 直连故基线绿；进程退出（随当日 Docker Desktop 重启）后全部拒连。与 `openai_adapter.rs:58` 注释登记的既有危害完全同源（「a stale OS proxy would hijack them」，该处已钉 `no_proxy()`）。
+- **处置**：`make_client()`（生产注册循环共用）与全部测试 client 显式 `.no_proxy()`；测试侧新增 `direct_client()` helper。consul 走 docker 内网 DNS（`http://consul:8500`），语义上永不经代理。10/10 三连绿，套件 6.3s→0.12s（commit `48fc816`）。
+- **归宿**：vendored 目录改动需**反哺 lmms 上游仓**（SDK 通道：上游改→发布→kellnr→ai-pm 摘补丁），挂验收记录 §七。
