@@ -19,6 +19,7 @@ pub mod device_claim;
 pub mod documents;
 pub mod files;
 pub mod intakes;
+pub mod kb_memory_api;
 pub mod knowledge_services;
 pub mod mcp_hosts;
 pub mod onboarding;

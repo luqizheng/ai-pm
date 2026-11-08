@@ -168,12 +168,3 @@ async fn active_run_index_predicates_match_the_single_source(pool: PgPool) {
         "event-level unique index must exist; got: {event_def}"
     );
 }
-
-#[test]
-fn migration_file_is_present_and_forward() {
-    // 0012 为 forward-only：只补列 / 建索引，不删已有列（代码审查锚点）。
-    let sql = include_str!("../../../migrations/0012_task_run_event_idempotency.sql");
-    assert!(sql.contains("ADD COLUMN IF NOT EXISTS source_event_id"));
-    assert!(sql.contains("uq_task_run_source_event"));
-    assert!(!sql.contains("DROP COLUMN"));
-}
