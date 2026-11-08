@@ -4,7 +4,8 @@
 > 的 **DK-A 批**实施验收（对齐既有验收记录体例：形态 → 证据 → 偏差 → 合并须知）。
 > 裁决 D-DK-1~11 见设计稿 §13；本批只做 D-DK-1/2/3 落地与 D-DK-9 附注的
 > **C7 前半段**（REST 入口侧）。
-> 实施分支：`feat/dk0-dialog-orchestration-design`（worktree `ai-pm-dk0`）。
+> 实施分支：`feat/dk0-dialog-orchestration-design`（worktree `ai-pm-dk0`）——
+> **已合入 master**（`7df4460` merge(dk-a)），worktree 与分支随后按 KP-3 体例清理。
 
 ## 一、实施形态
 
@@ -129,24 +130,32 @@
 | 6 | `pm-ai` 从 pm-api 的 **dev-dependency 升为正式依赖** | 生产路径要注入 LLM 分类器（`ConversationRouting::from_env`） |
 | 7 | 分类器**无 provider 时不记账** | 无 provider 行可挂账（同 `snapshot_model` 先例）；失败记账只在真实调用发生时 |
 
-## 四、合并须知（合 master 前必读）
+## 四、合并处置（**已合入 master**，2026-11-09）
 
-本批与并行批在同一分支族上并行开发，合并时有三处必须人工处置：
+本批与并行批在同一分支族上并行开发，合并时有三处必须人工处置——**三处均已按预期处置**：
 
 1. **`crates/pm-application/src/discovery/message.rs` 与 DK-B 重叠**：
    DK-B 的 `91024f1`（C7 双入口 seq 串行）已把池版 `append_message` 改为「事务内取会话行锁 + 调事务内函数」。
    本批的 `append_message_in_tx` **刻意与其同名同签名**（`tx: &mut Transaction<'static, Postgres>`），
    并新增 `session::lock_session_in` 作统一取锁点。合并时：**取 DK-B 的池版 `append_message`**，
-   本批的事务内函数与 `lock_session_in` 可直接套用（冲突面 = 该文件的 `append_message` 函数体）。
+   本批的事务内函数与 `lock_session_in` 直接套用（冲突面 = 该文件的 `append_message` 函数体）。
+   **合并后核验**：池版 `append_message` 事务内取 `discovery_session` 行 `FOR UPDATE`，
+   `append_message_in_tx` 为唯一的消息 INSERT 点（`message.rs:40/52/75`）。
    本批的 C7 用例 `concurrent_threads_on_one_session_never_collide_on_seq` 覆盖「REST 升级/续接入口」
    这一侧；DK-B 的用例覆盖「两个独立连接池」那一侧——两侧合起来才是 D-DK-9 附注的完整 C7。
 2. **`crates/pm-ai/src/call_record.rs` 与 DK-B / DK-D 重叠**：本批加 `PURPOSE_CONVERSATION_ROUTER`，
-   DK-B/D 加 `PURPOSE_DISCOVERY_ORCHESTRATION`——**同文件不同常量**，合并时两行都要留。
+   DK-B/D 加 `PURPOSE_DISCOVERY_ORCHESTRATION`——**同文件不同常量**，两行都留。
+   **合并后核验**：三个常量并存（`conversation_reply` / `conversation_router` / `discovery_orchestration`，
+   `call_record.rs:23/26/34`）。
 3. **迁移台账**：本批迁移已在台账 §〇·二「基线后在途迁移」以 **0002** 行登记
    （含完整取号史）；master 版台账已含基线合并上下文，合并无冲突面。
 
 另：`ai.conversation` 新增列 → 若前端有会话列表的 `ConversationView` 契约消费方，
 本批已在响应里多出 `discovery_session_id` 字段（**新增字段，不改既有字段语义**）；前端接线属 DK-F 范围。
+
+**合并落地**：DK-A 六个提交（`7cff433` 迁移 → `bf14ac5` 服务层 → `251eee2` REST →
+`05bced9` LLM 端口 → `48b8a3b` 测试 → `3f6c465` 文档）经 `7df4460`（merge(dk-a)）
+合入 master；其后再由 `86b5f66`（DK-B 集成）与 `97738c9`（DK-D 集成）承接 DK-A 底座。
 
 ## 五、未做（留给后续批）
 
