@@ -33,6 +33,12 @@ cd "$repo_root" || exit 1
 
 export DATABASE_URL="${DATABASE_URL:-postgres://aipm:aipm@127.0.0.1:5433/aipm}"
 
+# 系统代理免疫（本机 v2rayN 系统代理开着时，reqwest 会劫持 loopback 导致
+# wiremock/本地端点测试 "error sending request"——lmms 侧同款坑）：loopback
+# 恒免代理。追加语义，不覆盖调用方已有的 NO_PROXY 条目。
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}localhost,127.0.0.1,::1"
+export no_proxy="$NO_PROXY"
+
 if ! command -v cargo-nextest >/dev/null 2>&1; then
     echo "[test] 未找到 cargo-nextest，先跑：cargo install cargo-nextest --locked" >&2
     exit 1

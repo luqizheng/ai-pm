@@ -35,6 +35,7 @@ pub mod knowledge_write_coordinator;
 pub mod onboarding;
 pub mod outbox;
 pub mod outbox_ops;
+pub mod pc;
 pub mod pm_write;
 pub mod policy_composition;
 pub mod policy_engine;

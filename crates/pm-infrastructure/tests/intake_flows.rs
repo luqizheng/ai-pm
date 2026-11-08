@@ -764,6 +764,7 @@ fn handler_assembly_covers_catalog() {
             ev::PC_CHANGE_PROPOSED,
             ev::PC_CONFLICT_DETECTED,
             ev::PC_EVIDENCE_REQUESTED,
+            ev::PC_COGNITION_VERSION_PUBLISHED,
             ev::PROCESSING_FAILED,
         ];
         v.sort_unstable();

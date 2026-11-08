@@ -22,6 +22,8 @@
 | 0052 | `0052_recovery_foundation.sql` | Recovery Foundation（`worker_command.reacquired_generation` + `task_interaction.previous_chain_id` 链间弱关联）——批 3 实施（联合基线 §4） | 已应用（2026-11-08） |
 | 0053 | `0053_checkpoint1_kb_pc_minimal.sql` | Checkpoint-1 最小纵切：KB/PC 目标表最小子集（kb.document/revision + pc.object_type/cognition_object/cognition_revision/source/evidence；正文暂存 PG、关系/版本/提案/冲突面不建——偏差登记在迁移头注）——取号时 0052 尚为 tentative 预留，按台账纪律 max+1 取号（Recovery 批后实施占 0052，双方无撞号） | 已应用（2026-11-08，checkpoint-1 会话） |
 | 0054 | `0054_acp06_07.sql` | ACP-06 Checkpoint 登记元数据（正文在 Workspace）+ ACP-07 Deadline 重新授权（独立审计/有效期；T3 不改原 deadline）——联合设计 acp06-07-joint-v1.md（批 5） | 已应用（2026-11-08） |
+| 0063 | `0063_runner_availability.sql` | D-2=c 派发可用性真源：is_runner + last_heartbeat_at 设备级心跳 + 领取型项目 worker 排除（runner_availability 批，20:31:56 先落地） | 已应用（2026-11-08，派发竞争批） |
+| 0064 | `0064_pc_formal_model.sql` | KP-1 PC-01B 正式模型：pc 正式 18 表（对象/关系/版本成员/治理/追溯/账本 + 正文承载 pc.document\*）+ 0053 最小表原地收敛（正文迁 pc.document_revision、证据钉修订、locator 拆结构化列）+ 触发器/种子/闭合约束——设计权威 docs/architecture/product-cognition/pc-01b/ V1.2；**原取 0063 与 D-2=c 撞号，对方先落地 4 秒，按台账纪律②顺移 0064（2026-11-08 20:32 后实施）**；偏差登记（PCGIT 后置/snapshot 四类型保留/analysis_mode 保留且放宽可空=非分析草稿 NULL/证据身份含 commit_sha/doc_key 兜底形态/补 source_context 列）在迁移头注与验收记录 | 已应用（2026-11-08，KP-1 会话） |
 | 0022 | `0022_delivery_manifest.sql` | T-041（D4） | 已应用（2026-11-02） |
 | 0023 | `0023_run_executor_hardening.sql` | T-032 | 已应用 |
 | 0024 | `0024_knowledge_section_index.sql` | T-060（知识索引 V2） | 已应用（2026-11-02） |

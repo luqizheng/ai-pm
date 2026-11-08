@@ -134,19 +134,6 @@ type KbRevisionRow = (
     chrono::DateTime<chrono::Utc>,
 );
 
-/// P3：pc.cognition_object × 最新 cognition_revision 行投影。
-type PcObjectRow = (
-    Uuid,
-    String,
-    String,
-    String,
-    String,
-    Option<i32>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-);
-
 /// K2（checkpoint-1 落真）：`{id}` = kb_analyze 任务 ID（intake_task）。
 /// 返回任务状态 + result_ref；真实分析的 result_ref 指向 kb.document 修订，
 /// 就地展开文档/修订明细（含 digest 正文）；桩产物（非 UUID ref）只回任务面。
@@ -345,9 +332,16 @@ async fn p2_submit_decision(
     skeleton_501(body).await
 }
 
-/// P3（checkpoint-1 落真）：`{id}` = pc_analyze 任务 ID（intake_task）。
-/// 返回任务状态 + result_ref；真实派生按 evidence.locator->>'task_id' 展开
-/// 本次分析产出的 cognition objects（含最新修订内容）；桩产物只回任务面。
+/// P3（KP-1 起）：`{id}` = pc_analyze 任务 ID（intake_task）。
+/// 返回任务状态 + result_ref；真实派生按 `pc_analysis_ref`（锚 pc.source 行）
+/// 展开 source → evidence → revision → object（含 pc.document_revision 正文）；
+/// checkpoint-1 旧任务的 legacy result_ref（target_type=cognition_object）走
+/// 直查对象分支（收敛后对象行仍在，读面兼容）。桩产物只回任务面。
+///
+/// 形状变化登记（KP-1 验收记录）：objects[].name→display_name 语义（键名不变）、
+/// latest_revision.status 移除（版本化由 `versioned` 布尔派生——01B §5.3 不冗余
+/// revision_status）、latest_revision.summary 改由 change_summary 承载、
+/// 新增 analysis_mode（0062 列）。
 async fn p3_analysis_status(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
@@ -392,57 +386,135 @@ async fn p3_analysis_status(
         "created_at": created_at,
         "updated_at": updated_at,
     });
-    let rows: Vec<PcObjectRow> = sqlx::query_as(
-        "SELECT o.id, o.object_type, o.object_key, o.name, o.lifecycle_status, \
-                rev.revision_no, rev.summary, rev.content, rev.status \
-           FROM pc.evidence e \
-           JOIN pc.cognition_object o ON o.id = e.cognition_object_id \
-           LEFT JOIN LATERAL ( \
-                SELECT revision_no, summary, content, status \
-                  FROM pc.cognition_revision cr \
-                 WHERE cr.object_id = o.id \
-                 ORDER BY revision_no DESC LIMIT 1 \
-           ) rev ON true \
-          WHERE e.project_id = $1 AND e.locator->>'task_id' = $2 \
-          ORDER BY o.created_at ASC, o.id ASC",
-    )
-    .bind(project_id)
-    .bind(pc_analysis_id.to_string())
-    .fetch_all(&state.pool)
-    .await?;
-    if !rows.is_empty() {
-        body["objects"] = json!(rows
-            .into_iter()
-            .map(
-                |(
-                    id,
-                    object_type,
-                    object_key,
-                    name,
-                    lifecycle,
-                    revision_no,
-                    summary,
-                    content,
-                    revision_status,
-                )| {
-                    json!({
-                        "object_id": id,
-                        "object_type": object_type,
-                        "object_key": object_key,
-                        "name": name,
-                        "lifecycle_status": lifecycle,
-                        "latest_revision": revision_no.map(|no| json!({
-                            "revision_no": no,
-                            "summary": summary,
-                            "content": content,
-                            "status": revision_status,
-                        })),
-                    })
-                }
+
+    let ref_type = result_ref
+        .as_ref()
+        .and_then(|r| r.get("target_type"))
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let ref_id = result_ref
+        .as_ref()
+        .and_then(|r| r.get("target_id"))
+        .and_then(|v| v.as_str())
+        .and_then(|raw| Uuid::parse_str(raw).ok());
+
+    // 新形状：pc_analysis_ref 锚 pc.source（KP-1 链路）——按来源展开本次分析
+    // 产出的对象集（evidence.subject → revision → object + 最新正文）。
+    if ref_type == "source" {
+        if let Some(source_id) = ref_id {
+            let rows: Vec<PcObjectRow> = sqlx::query_as(
+                "SELECT o.id, o.object_type, o.object_key, o.display_name, o.lifecycle_status, \
+                        rev.revision_no, rev.change_summary, dr.content, rev.analysis_mode, \
+                        (vm.object_revision_id IS NOT NULL) AS versioned \
+                   FROM pc.evidence e \
+                   JOIN pc.cognition_revision rev ON rev.id = e.object_revision_id \
+                   JOIN pc.cognition_object o ON o.id = rev.object_id \
+                   LEFT JOIN LATERAL ( \
+                        SELECT r2.revision_no, r2.change_summary, r2.analysis_mode \
+                          FROM pc.cognition_revision r2 \
+                         WHERE r2.tenant_id = o.tenant_id AND r2.project_id = o.project_id \
+                           AND r2.object_id = o.id \
+                         ORDER BY r2.revision_no DESC LIMIT 1 \
+                   ) rev ON true \
+                   LEFT JOIN pc.document_revision dr ON dr.id = rev.document_revision_id \
+                   LEFT JOIN pc.v_revision_versioned vm ON vm.object_revision_id = rev.id \
+                  WHERE e.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
+                    AND e.project_id = $1 AND e.source_id = $2 \
+                  ORDER BY o.created_at ASC, o.id ASC",
             )
-            .collect::<Vec<_>>());
+            .bind(project_id)
+            .bind(source_id)
+            .fetch_all(&state.pool)
+            .await?;
+            body["objects"] = json!(rows
+                .into_iter()
+                .map(pc_object_json)
+                .collect::<Vec<_>>());
+            return Ok(Json(body));
+        }
+    }
+
+    // legacy：checkpoint-1 旧任务的 result_ref 锚主对象——收敛后对象行仍在，
+    // 直查对象 + 当前修订（读面兼容，新分析不再产生此形状）。
+    if ref_type == "cognition_object" {
+        if let Some(object_id) = ref_id {
+            let rows: Vec<PcObjectRow> = sqlx::query_as(
+                "SELECT o.id, o.object_type, o.object_key, o.display_name, o.lifecycle_status, \
+                        rev.revision_no, rev.change_summary, dr.content, rev.analysis_mode, \
+                        (vm.object_revision_id IS NOT NULL) AS versioned \
+                   FROM pc.cognition_object o \
+                   LEFT JOIN LATERAL ( \
+                        SELECT r2.revision_no, r2.change_summary, r2.analysis_mode, \
+                               r2.document_revision_id, r2.id AS rid \
+                          FROM pc.cognition_revision r2 \
+                         WHERE r2.tenant_id = o.tenant_id AND r2.project_id = o.project_id \
+                           AND r2.object_id = o.id \
+                         ORDER BY r2.revision_no DESC LIMIT 1 \
+                   ) rev ON true \
+                   LEFT JOIN pc.document_revision dr ON dr.id = rev.document_revision_id \
+                   LEFT JOIN pc.v_revision_versioned vm ON vm.object_revision_id = rev.rid \
+                  WHERE o.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
+                    AND o.project_id = $1 AND o.id = $2 \
+                  ORDER BY o.created_at ASC, o.id ASC",
+            )
+            .bind(project_id)
+            .bind(object_id)
+            .fetch_all(&state.pool)
+            .await?;
+            if !rows.is_empty() {
+                body["objects"] = json!(rows
+                    .into_iter()
+                    .map(pc_object_json)
+                    .collect::<Vec<_>>());
+            }
+        }
     }
     Ok(Json(body))
+}
+
+/// P3 对象行投影（新/旧形状共用）：列序见两处查询。
+type PcObjectRow = (
+    Uuid,
+    String,
+    String,
+    String,
+    String,
+    Option<i32>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<bool>,
+);
+
+fn pc_object_json(
+    (
+        id,
+        object_type,
+        object_key,
+        display_name,
+        lifecycle,
+        revision_no,
+        change_summary,
+        content,
+        analysis_mode,
+        versioned,
+    ): PcObjectRow,
+) -> serde_json::Value {
+    json!({
+        "object_id": id,
+        "object_type": object_type,
+        "object_key": object_key,
+        "name": display_name,
+        "lifecycle_status": lifecycle,
+        "latest_revision": revision_no.map(|no| json!({
+            "revision_no": no,
+            "summary": change_summary,
+            "content": content,
+            "analysis_mode": analysis_mode,
+            "versioned": versioned.unwrap_or(false),
+        })),
+    })
 }
 
 async fn p4_proposal(
