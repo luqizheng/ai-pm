@@ -229,20 +229,28 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
         let Some(repository_id) = kb_pc_analysis::source_repository_id(&source_ref) else {
             return complete_pc_as_stub(&self.pool, project_id, task_id).await;
         };
-        let (facts, _) =
-            match kb_pc_analysis::collect_repository_facts(&self.pool, repository_id).await {
-                Ok(v) => v,
-                Err(err) => {
-                    return report_processing_failed(
-                        &self.pool,
-                        project_id,
-                        task_id,
-                        "pc_derive_failed",
-                        &err.to_string(),
-                    )
-                    .await
-                }
-            };
+        // 锚链次选：observed_head 来自 intake source_ref（verify 的 Observed
+        // HEAD）；selected_commit 在 collect_repository_facts 内部优先。
+        let observed_head = source_ref.get("head_commit_sha").and_then(|v| v.as_str());
+        let (facts, _) = match kb_pc_analysis::collect_repository_facts(
+            &self.pool,
+            repository_id,
+            observed_head,
+        )
+        .await
+        {
+            Ok(v) => v,
+            Err(err) => {
+                return report_processing_failed(
+                    &self.pool,
+                    project_id,
+                    task_id,
+                    "pc_derive_failed",
+                    &err.to_string(),
+                )
+                .await
+            }
+        };
 
         match kb_pc_analysis::derive_pc_cognition(
             &self.pool,

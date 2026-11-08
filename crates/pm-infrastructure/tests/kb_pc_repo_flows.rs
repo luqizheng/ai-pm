@@ -9,10 +9,11 @@
 //! | 用例 | 断言焦点 |
 //! |---|---|
 //! | 1 | verify（HEAD 前进）自动受理 intake → kb 修订落库 → 信号 → pc 5 对象 draft → 父 COMPLETED |
-//! | 2 | 同 HEAD 重复 verify：intake 重放零增量（repo_verify 幂等键） |
+//! | 2 | 同 HEAD 重复 verify：intake 重放零增量（repo_snapshot 幂等键族） |
 //! | 3 | 新 commit 再 verify：kb revision_no=2；pc 对象身份稳定、内容寻址去重（tech_stack 不追加修订）；evidence 追加 |
 //! | 4 | LLM 增强（P2-13/D-1=A，wiremock provider）：digest 尾注翻转为 LLM、pc 三区正文、analysis_mode=llm、白名单证据、ok 记账×2 |
 //! | 5 | LLM 失败（D-3=A，wiremock 500）：全链仍 COMPLETED，产物回退纯派生，analysis_mode=derived_fallback，failed 记账×2 |
+//! | 6 | 确认基准锚定（D-A/A-1，2026-11-08 裁决）：confirm 回锚首 commit → repo_confirm intake → KB 修订锚 selected_commit（tip 更晚不漂移） |
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -21,7 +22,9 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use pm_application::actor::AuditActor;
-use pm_application::repository::verify_repository;
+use pm_application::repository::{
+    confirm_repository_version, verify_repository, ConfirmVersionRequest,
+};
 use pm_domain::SYSTEM_TENANT;
 use pm_infrastructure::outbox_handlers::register_all_handlers;
 use pm_infrastructure::outbox_worker::{DispatchOutcome, OutboxWorker};
@@ -33,6 +36,8 @@ const SEED_PRINCIPAL: Uuid = Uuid::from_u128(0x1111_1111_1111_1111_1111_1111_111
 struct LocalRepo {
     root: PathBuf,
     url: String,
+    /// 首个 commit 的 SHA（确认基准锚定用例的锚点）。
+    initial_sha: String,
 }
 
 impl Drop for LocalRepo {
@@ -78,8 +83,27 @@ fn init_repo(initial_subject: &str) -> LocalRepo {
             initial_subject,
         ],
     );
+    let initial_sha = git_stdout(&path, &["rev-parse", "HEAD"]);
     let url = format!("file://{}", path.to_string_lossy().replace('\\', "/"));
-    LocalRepo { root, url }
+    LocalRepo {
+        root,
+        url,
+        initial_sha,
+    }
+}
+
+fn git_stdout(path: &PathBuf, args: &[&str]) -> String {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(path)
+        .env("GIT_AUTHOR_NAME", "Fixture")
+        .env("GIT_AUTHOR_EMAIL", "fixture@example.com")
+        .env("GIT_COMMITTER_NAME", "Fixture")
+        .env("GIT_COMMITTER_EMAIL", "fixture@example.com")
+        .output()
+        .expect("git must be on PATH");
+    assert!(output.status.success(), "git {args:?} failed");
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
 fn append_commit(repo: &LocalRepo, subject: &str) {
@@ -182,7 +206,7 @@ async fn drain(worker: &OutboxWorker) {
 async fn latest_snapshot_intake(pool: &PgPool, repository_id: Uuid) -> Uuid {
     sqlx::query_scalar(
         "SELECT id FROM integration.intake_record \
-          WHERE idempotency_key LIKE 'repo_verify:' || $1 || ':%' \
+          WHERE idempotency_key LIKE 'repo_%:' || $1 || ':%' \
           ORDER BY created_at DESC LIMIT 1",
     )
     .bind(repository_id.to_string())
@@ -398,7 +422,7 @@ async fn reverify_same_head_is_idempotent(pool: PgPool) {
     verify(&pool, repository_id).await;
     let intake_n: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM integration.intake_record \
-          WHERE idempotency_key LIKE 'repo_verify:' || $1 || ':%'",
+          WHERE idempotency_key LIKE 'repo_%:' || $1 || ':%'",
     )
     .bind(repository_id.to_string())
     .fetch_one(&pool)
@@ -743,4 +767,75 @@ async fn llm_failure_falls_back_to_derived_and_records_failed(pool: PgPool) {
             ("pc_snapshot_analysis".to_string(), "failed".to_string()),
         ]
     );
+}
+
+// ── 用例 6：确认基准锚定（D-A/A-1，裁决 2026-11-08）─────────────────────────
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn confirm_pins_analysis_anchor_to_selected_commit(pool: PgPool) {
+    seed_principal(&pool).await;
+    let project = seed_project(&pool, "CP1-F").await;
+    let repo = init_repo("feat: initial");
+    let repository_id = seed_repository(&pool, project, &repo.url).await;
+
+    // 先按 tip（两个 commit）分析一轮：KB rev1 锚 head（tip，≠ 稍后确认的
+    // initial commit）。
+    append_commit(&repo, "feat: second change");
+    verify(&pool, repository_id).await;
+    drain(&worker(&pool)).await;
+
+    // G-05 确认：把采用基准回锚到首个 commit（比 tip 更旧）。
+    let confirmed = confirm_repository_version(
+        &pool,
+        repository_id,
+        &AuditActor::principal(SEED_PRINCIPAL),
+        ConfirmVersionRequest {
+            selected_branch: "main".to_string(),
+            selected_commit: repo.initial_sha.clone(),
+            reason: Some("anchor to initial baseline".into()),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        confirmed.selected_commit.as_deref(),
+        Some(repo.initial_sha.as_str())
+    );
+
+    // A-1：确认联动新 intake（repo_confirm 幂等键族；latest_snapshot_intake
+    // 按 repo_snapshot 族 LIKE 取最新）。
+    let intake_id = latest_snapshot_intake(&pool, repository_id).await;
+    let key: String =
+        sqlx::query_scalar("SELECT idempotency_key FROM integration.intake_record WHERE id = $1")
+            .bind(intake_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        key,
+        format!("repo_confirm:{repository_id}:{}", repo.initial_sha)
+    );
+
+    drain(&worker(&pool)).await;
+
+    // KB：修订 2 锚 selected_commit——default_branch tip 更晚也不漂移。
+    let revisions: Vec<(i32, Option<String>)> = sqlx::query_as(
+        "SELECT r.revision_no, r.source_commit_sha FROM kb.document_revision r \
+           JOIN kb.document d ON d.id = r.document_id \
+          WHERE d.project_id = $1 ORDER BY r.revision_no",
+    )
+    .bind(project)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(revisions.len(), 2);
+    assert_eq!(revisions[1].0, 2);
+    assert_eq!(
+        revisions[1].1.as_deref(),
+        Some(repo.initial_sha.as_str()),
+        "analysis must pin the confirmed commit, not the branch tip"
+    );
+
+    // PC 链路收口（对象随锚更新，内容寻址正常追加/去重）。
+    assert_eq!(derived_status(&pool, intake_id).await, "Completed");
 }
