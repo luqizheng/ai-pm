@@ -78,3 +78,20 @@
 ## 六、下一步建议序
 
 V2.0-D Capability Registry V1（0061 执行体能力表+bootstrap 播种+registry-first 解析）→ 前端三件套接线 → AI Team 管理 UI（Q4 裁决口径）→ 真实栈冒烟（R4 时刻一并）。
+
+## 八、收口时点待补充总账（2026-11-08 晚，用户指示「先记录后补充」）
+
+**裁决类（一句话即可执行）**
+- ~~稿 Q2~~ **已裁 A（2026-11-08）**——稿三问全部关闭（Q3 经 D-1=A、Q4 经 U-2=A）。
+- org/task_type 策略写入口（UI-3 有意只读）+ 0016 能力列是否纳入管理面——**待裁**。
+
+**协调类（非纯代码）**
+- 真实栈部署冒烟：重建 pm-api/worker 镜像 + .10 配 `AI_PM_CONVERSATION_REPLY=on`（runbook §7.1）——建议随 Checkpoint-2 的 .10 窗口。
+- Phase 3：删 legacy ROLE_EXECUTOR_MAP（registry-first 已接管）+ analysis_model 与 repo_model 两处三级解析合一。
+
+**债务类（他人/基线，非本链引入）**
+- pm-api `team_onboarding_qa` 2 红（DEF-01，团队 QA 会话）；前端 3 个 e2e spec 被 vitest 误收集（vitest config 加 exclude 即解）；6 个他人文件 eslint/prettier 红。
+- `NotificationDropdown.test.ts` 负载敏感 flake（本日新观察，隔离重跑绿）——需加时/降噪。
+
+**功能挂账（随批次补充）**
+- analysis/repo_import 链 usage 计量；任务详情页的 override 新增入口；monitor/overrides 分页（Phase 4 事件表一并）；前端更早历史回翻（API `before` 已支持）；无 provider 时会话用户侧显式提示。
