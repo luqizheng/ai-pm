@@ -1,34 +1,37 @@
-//! PC-01B 正式认知模型服务层（KP-1；V-6 写入纪律：PC 正式表唯一业务写入面）。
+//! PC-01B 正式认知模型服务层（KP-1 数据面 + 发布事务；KP-2 确认闭环；V-6 写入纪律：
+//! PC 正式表唯一业务写入面）。
 //!
-//! 范围（KP-1 显式边界，KP-2 另批）：
-//! * **数据面（PC-I1/I2）**：对象草稿 upsert（内容寻址 + CAS 推号）、对象 identity
-//!   占位、关系草稿（端点解析/类型合法性/跨域四元组通道校验）、来源与证据登记。
-//! * **版本面（PC-I3 数据层）**：发布事务 §18.1（十四步语义；⑫ 审计 + ⑫b
-//!   outbox 同事务回写）+ 成员集构建（前版本携带 + 提案目标 + F-05 端点自动
-//!   并入）+ 规范哈希。提案 create/submit/approve/reject 命令与 REST/UI 归 KP-2
-//!   ——本批发布入口只接受**已 approved** 的提案（测试以 SQL 夹具构造）。
+//! 范围：
+//! * **数据面（PC-I1/I2，KP-1）**：对象草稿 upsert（内容寻址 + CAS 推号）、对象 identity
+//!   占位、关系草稿（端点解析/类型合法性/跨域四元组通道校验）、来源与证据登记；
+//!   Profile/Vision 单例骨架随项目创建（KP-2，PC-D-06）。
+//! * **版本面（PC-I3）**：发布事务 §18.1（十四步语义；⑫ 审计 + ⑫b outbox 同事务回写）、
+//!   成员集构建（前版本携带 + 提案目标替换同身份 + F-05 端点自动并入）与规范哈希；
+//!   提案 create/submit/approve/reject/withdraw 命令 + P5 决策编排 + P4 读面 + 分析→
+//!   提案起草（KP-2，`proposal.rs`）。
 //!
 //! 门禁不破（fail-closed）：
-//! * 正式写入（发布）= 真人主体（`kind='human'`）+ A3 权限闸（Lead OR
-//!   `core.approver_grant` 生效行）——AI/服务主体恒 403（Q2-C / 01A §9.3）；
-//! * 草稿面（对象/关系/来源/证据）不判主体身份——AI 分析产物恒 draft，
-//!   `lifecycle_status` 永不入 active（仅发布事务推进）；
-//! * L3 冻结：提案目标命中未解决冲突 → 发布 403。
+//! * 正式写入（审批 approve/reject + 发布）= 真人主体（`kind='human'`）+ A3 权限闸
+//!   （Lead OR `core.approver_grant` 生效行）——AI/服务主体恒 403（Q2-C / 01A §9.3）；
+//! * 提案面（create/submit）与草稿面（对象/关系/来源/证据）不判主体身份——AI 只能
+//!   提案、产物恒 draft，`lifecycle_status` 永不入 active（仅发布事务推进）；
+//! * L3 冻结：提案目标命中未解决冲突 → submit / approve / 发布 403（三处同口径）。
 //!
 //! 哈希纪律（确定性，单元测试锁定）：`content_hash` = sha256(markdown)（0039
 //! 口径）；成员集/提案内容哈希 = 规范序列化（排序：kind → identity → revision）
 //! 后 sha256。锁序（§17.3）：advisory → proposal → approval → members 读写 →
 //! version → version_member → audit → outbox（尾项）。
 //!
-//! 偏差登记（详见迁移 0063 头注与验收记录）：PCGIT 后置（正文暂存
+//! 偏差登记（详见迁移头注与验收记录）：PCGIT 后置（正文暂存
 //! pc.document_revision.content，`git_commit_sha` 恒 NULL，write_operation 仅
 //! 发布幂等用）；analysis_mode 仅分析产物携带（人工草稿 NULL）。
 //!
-//! 文件分工：`object.rs`（对象/修订草稿）、`relationship.rs`（关系与端点）、
-//! `evidence.rs`（来源与证据）、`publish.rs`（发布事务）。
+//! 文件分工：`object.rs`（对象/修订草稿 + 单例骨架）、`relationship.rs`（关系与端点）、
+//! `evidence.rs`（来源与证据）、`proposal.rs`（提案/审批命令）、`publish.rs`（发布事务）。
 
 mod evidence;
 mod object;
+mod proposal;
 mod publish;
 mod relationship;
 
@@ -36,7 +39,16 @@ pub use evidence::{
     register_evidence, register_source, EvidenceInput, EvidenceSubject, SourceInput,
 };
 pub use object::{
-    create_object_identity, upsert_object_draft, ObjectUpsertReceipt, UpsertObjectDraft,
+    create_object_identity, ensure_product_singletons, upsert_object_draft, ObjectUpsertReceipt,
+    UpsertObjectDraft,
+};
+pub use proposal::{
+    analysis_outcome_key, approve_proposal, create_proposal, decide_proposal, load_proposal,
+    propose_from_analysis, reject_proposal, submit_proposal, withdraw_proposal,
+    AnalysisProposalInput, AnalysisProposalOutcome, ApprovalReceipt, ApprovalView,
+    CreateProposalInput, DecisionAction, DecisionInput, DecisionOutcome, ProposalDecisionInput,
+    ProposalHeadView, ProposalMemberView, ProposalReceipt, ProposalView, PublishedVersionView,
+    ORIGIN_KINDS,
 };
 pub use publish::{publish_version, ProposalMemberPin, PublishReceipt, PublishVersionInput};
 pub use relationship::{create_relationship_draft, PcEndpoint, RelationshipDraftInput};
@@ -135,8 +147,8 @@ pub fn canonical_proposal_hash(
 
 // ── 主体门禁（正式写入）──────────────────────────────────────────────────
 
-/// 真人主体 + A3 权限（发布入口唯一门；AI/服务主体恒 403，Q2-C）。
-pub(crate) async fn ensure_publish_authorized(
+/// 真人主体 + A3 权限（正式写入唯一门：审批裁决 + 发布；AI/服务主体恒 403，Q2-C）。
+pub(crate) async fn ensure_formal_authorized(
     pool: &PgPool,
     project_id: Uuid,
     actor: &AuditActor,
@@ -160,6 +172,33 @@ pub(crate) async fn ensure_publish_authorized(
             crate::pm_write::PmWriteError::Conflict(m) => PcError::Conflict(m.to_string()),
             other => PcError::Db(sqlx::Error::Configuration(format!("{other:?}").into())),
         })
+}
+
+/// L3 冻结判定（§10.3：未解决冲突经 conflict_object 圈定的对象/关系；与发布⑥同口径）。
+/// 命中返回冲突 ID；`resolved/dismissed` 解冻，`reopened` 重新冻结。
+pub(crate) async fn frozen_by_conflict(
+    exec: impl sqlx::PgExecutor<'_>,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    objects: &[Uuid],
+    relationships: &[Uuid],
+) -> Result<Option<Uuid>, PcError> {
+    Ok(sqlx::query_scalar(
+        "SELECT c.id FROM pc.conflict c \
+           JOIN pc.conflict_object co ON (co.tenant_id, co.project_id, co.conflict_id) \
+             = (c.tenant_id, c.project_id, c.id) \
+          WHERE c.tenant_id = $1 AND c.project_id = $2 \
+            AND c.status IN ('detected','under_review','awaiting_human','reopened') \
+            AND ((co.object_id = ANY($3) AND cardinality($3) > 0) \
+              OR (co.relationship_id = ANY($4) AND cardinality($4) > 0)) \
+          LIMIT 1",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(objects)
+    .bind(relationships)
+    .fetch_optional(exec)
+    .await?)
 }
 
 // ── 类型注册校验（PC-D-04：字典表 + 代码注册表共同约束）────────────────────

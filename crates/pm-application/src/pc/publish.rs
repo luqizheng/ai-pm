@@ -13,8 +13,8 @@ use crate::actor::AuditActor;
 use crate::outbox::{OutboxAppend, OutboxEvent, PgOutboxAppend};
 
 use super::{
-    canonical_members_hash, canonical_proposal_hash, ensure_publish_authorized, MemberKind,
-    PcError, VersionMemberPin,
+    canonical_members_hash, canonical_proposal_hash, ensure_formal_authorized, MemberKind, PcError,
+    VersionMemberPin,
 };
 
 /// 发布入参（成员集从提案行构建；operation_id = 发布幂等键）。
@@ -43,7 +43,7 @@ pub struct ProposalMemberPin {
 }
 
 impl ProposalMemberPin {
-    fn pin(&self) -> Option<VersionMemberPin> {
+    pub(crate) fn pin(&self) -> Option<VersionMemberPin> {
         match (self.object_id, self.object_revision_id) {
             (Some(o), Some(r)) => Some(VersionMemberPin {
                 kind: MemberKind::Object,
@@ -86,7 +86,7 @@ pub async fn publish_version(
         .map_err(|_| PcError::NotFound("project not found".into()))?;
 
     // ④ 前置门禁（事务外只读判定；事务内不再重判——与 H-11 已知窗口一致，§23 R-3）
-    ensure_publish_authorized(pool, project_id, actor).await?;
+    ensure_formal_authorized(pool, project_id, actor).await?;
 
     let mut tx = pool.begin().await?;
 
@@ -682,8 +682,9 @@ pub async fn publish_version(
     })
 }
 
-/// 提案内容哈希的库侧重算输入（元数据来自行、成员来自 proposal_member 排序）。
-async fn canonical_proposal_hash_from_rows(
+/// 提案内容哈希的库侧重算输入（元数据来自行、成员来自 proposal_member 排序）；
+/// 提交/裁决/发布三处锚点比对共用。
+pub(super) async fn canonical_proposal_hash_from_rows(
     exec: impl sqlx::PgExecutor<'_>,
     _tenant_id: Uuid,
     _project_id: Uuid,
