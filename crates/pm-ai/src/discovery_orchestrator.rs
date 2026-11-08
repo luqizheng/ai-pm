@@ -833,6 +833,8 @@ pub struct DiscoveryOrchestratorWorker {
     slot_streaks: HashMap<Uuid, (Vec<String>, u8)>,
     /// session → 连续契约不合规轮数。
     invalid_streaks: HashMap<Uuid, u8>,
+    /// 单轮失败后的冷却（默认 [`RETRY_COOLDOWN`]；测试可置零以免等待）。
+    retry_cooldown: Duration,
     /// session → 已升级人工介入的 last_message_id（同一消息不再重试；
     /// 用户再说话（id 变化）自动解除）。
     halted: HashMap<Uuid, Uuid>,
@@ -846,8 +848,15 @@ impl DiscoveryOrchestratorWorker {
             cooldowns: HashMap::new(),
             slot_streaks: HashMap::new(),
             invalid_streaks: HashMap::new(),
+            retry_cooldown: RETRY_COOLDOWN,
             halted: HashMap::new(),
         }
+    }
+
+    /// 冷却时长注入点（生产用默认 30s；测试用它去掉等待）。
+    pub fn with_retry_cooldown(mut self, cooldown: Duration) -> Self {
+        self.retry_cooldown = cooldown;
+        self
     }
 
     /// DK-C 接入点：S1~S5 的只读投影（投影本身由 DK-C 实现，本批不接入）。
@@ -869,7 +878,7 @@ impl DiscoveryOrchestratorWorker {
             if self
                 .cooldowns
                 .get(&session.id)
-                .is_some_and(|at| now.duration_since(*at) < RETRY_COOLDOWN)
+                .is_some_and(|at| now.duration_since(*at) < self.retry_cooldown)
             {
                 continue;
             }
@@ -884,7 +893,7 @@ impl DiscoveryOrchestratorWorker {
             self.orchestrate_session(&session, &mut report).await;
         }
         self.cooldowns
-            .retain(|_, at| now.duration_since(*at) < RETRY_COOLDOWN);
+            .retain(|_, at| now.duration_since(*at) < self.retry_cooldown);
         Ok(report)
     }
 
@@ -1439,3 +1448,6 @@ fn render_interview_section(
     }
     out
 }
+
+#[cfg(test)]
+mod tests;
