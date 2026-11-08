@@ -40,6 +40,8 @@ async fn main() {
         OutboxWorker::new(pool.clone(), worker_id.clone()),
         &pool,
         Some(snapshot_model),
+        // 与访谈编排器同一个开关：分析完成 → 自动开访谈（默认 off）。
+        pm_ai::discovery_orchestrator::DiscoveryOrchestratorMode::from_env().enabled(),
     );
     // 目录一致性校验：不一致即 panic（fail fast），不带着假死信配置进入消费循环。
     worker.assert_catalog_consistent();

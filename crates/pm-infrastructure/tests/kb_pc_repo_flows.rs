@@ -190,6 +190,8 @@ fn worker_with_model(
         OutboxWorker::new(pool.clone(), "kbpc-test-worker".to_string()),
         pool,
         snapshot_model,
+        // DK-E 自动开访谈与编排器同开关；本文件的 KB/PC 流不开启（默认 off）。
+        false,
     )
 }
 

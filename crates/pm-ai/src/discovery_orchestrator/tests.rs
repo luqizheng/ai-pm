@@ -719,6 +719,7 @@ async fn replaying_the_same_last_message_is_a_no_op(pool: sqlx::PgPool) {
         consume_question: None,
         answer_text: "就这样".to_string(),
         next_status: "IN_PROGRESS".to_string(),
+        correction: None,
     };
     apply_orchestrator_round(&pool, SYSTEM_TENANT, session_id, draft.clone())
         .await
@@ -888,6 +889,7 @@ async fn the_service_refuses_ai_completion(pool: sqlx::PgPool) {
         consume_question: None,
         answer_text: "好了".to_string(),
         next_status: "COMPLETED".to_string(),
+        correction: None,
     };
     let error = apply_orchestrator_round(&pool, SYSTEM_TENANT, session_id, draft)
         .await
@@ -1268,3 +1270,6 @@ async fn write_back_hook_failure_does_not_fail_the_round(pool: sqlx::PgPool) {
     );
     assert_eq!(session_status(&pool, session_id).await, "REVIEW_REQUIRED");
 }
+
+/// DK-E：三态提案分支（更正回流）验收面（独立文件，避免与 DK-B 用例纠缠）。
+mod dke;

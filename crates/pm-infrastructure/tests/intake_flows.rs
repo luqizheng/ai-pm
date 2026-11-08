@@ -13,7 +13,6 @@
 //! | E | pc.evidence_requested → kb_supply(optional) 任务创建 → 父不阻塞 |
 //! | F | 聚合优先级：NEEDS_HUMAN_REVIEW > FAILED > PROCESSING > COMPLETED |
 
-
 use pm_application::intake::{self, RoutingPolicy, SignalEnvelope, SubmitIntake};
 use pm_application::outbox::{OutboxAppend, OutboxEvent};
 use pm_domain::SYSTEM_TENANT;
@@ -93,6 +92,7 @@ fn worker(pool: &PgPool) -> OutboxWorker {
         OutboxWorker::new(pool.clone(), "test-worker".to_string()),
         pool,
         None,
+        false,
     )
 }
 
