@@ -291,6 +291,25 @@ requirements:
   loadingTitle: 正在加载需求
   loadingDesc: 正在从服务获取需求列表与详情。
   proposeNoBody: 当前需求没有正文，无法提交确认；请先编辑正文。
+  # ── S02-I5 验收标准接线批（2026-11-08）──
+  critKindManual: 人工
+  critKindAutomatedTest: 自动化测试
+  critKindArtifactExists: 产物存在
+  critKindReview: 审查
+  critKindPerformance: 性能
+  critKindSecurity: 安全
+  critVerdictPending: 待裁决
+  critVerdictPassed: 已通过
+  critVerdictFailed: 未通过
+  critVerdictPass: 裁决通过
+  critVerdictFail: 裁决未通过
+  critRemove: 移除验收标准
+  critAddPlaceholder: 输入可测的验收陈述…
+  critAdd: 添加
+  critAddToggle: 新增验收标准
+  critGovernanceNote: 验收标准为治理内容：新增/移除/裁决须项目 Lead 或显式 Approver。
+  driftHintTitle: 验收标准有漂移
+  driftHintBody: 验收标准在该修订提交后有过修改，请复核是否仍与本次确认一致。
 requirementDetail:
   pageTitle: 需求详情
   openFull: 打开详情页

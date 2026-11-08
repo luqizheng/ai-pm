@@ -169,6 +169,24 @@ const relatedKindLabel = (kind: string) =>
     task: t("pm.requirements.relatedTask")
   })[kind] ?? kind;
 
+/** 验收标准承载词表（Q-13 扩枚举）与裁决词表（Q-14）标签。 */
+const criterionKindLabel = (kind: string) =>
+  ({
+    manual: t("pm.requirements.critKindManual"),
+    automated_test: t("pm.requirements.critKindAutomatedTest"),
+    artifact_exists: t("pm.requirements.critKindArtifactExists"),
+    review: t("pm.requirements.critKindReview"),
+    performance: t("pm.requirements.critKindPerformance"),
+    security: t("pm.requirements.critKindSecurity")
+  })[kind] ?? kind;
+
+const criterionVerdictLabel = (verdict: string) =>
+  ({
+    pending: t("pm.requirements.critVerdictPending"),
+    passed: t("pm.requirements.critVerdictPassed"),
+    failed: t("pm.requirements.critVerdictFailed")
+  })[verdict] ?? verdict;
+
 function onSave() {
   emit("save", {
     markdown: form.markdown.trim(),
@@ -350,8 +368,26 @@ function onSave() {
           <li
             v-for="criterion in entry.acceptance_criteria"
             :key="criterion.id"
+            class="req-detail__criterion"
           >
-            {{ criterion.statement }}
+            <span class="req-detail__criterion-text">{{
+              criterion.statement
+            }}</span>
+            <Badge
+              v-if="criterion.verification_kind"
+              variant="neutral"
+              size="sm"
+              outline
+            >
+              {{ criterionKindLabel(criterion.verification_kind) }}
+            </Badge>
+            <Badge
+              v-if="criterion.verdict && criterion.verdict !== 'pending'"
+              :variant="criterion.verdict === 'passed' ? 'success' : 'danger'"
+              size="sm"
+            >
+              {{ criterionVerdictLabel(criterion.verdict) }}
+            </Badge>
           </li>
         </ol>
         <p
@@ -675,6 +711,19 @@ function onSave() {
 .req-detail__criteria li::marker {
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+}
+
+.req-detail__criterion {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.req-detail__criterion-text {
+  min-width: 0;
+  word-break: break-word;
 }
 
 .req-detail__sources {
