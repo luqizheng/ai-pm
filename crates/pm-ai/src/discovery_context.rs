@@ -408,3 +408,503 @@ fn clip_chars(text: &str, max: usize) -> String {
     text.chars().take(max).collect()
 }
 
+// ── 行数/窗口上限（只压在**源**上，不参与预算判定）────────────────────────
+
+const S2_OBJECT_LIMIT: usize = 40;
+/// 单对象 content 摘录上限（summary 缺失时使用；summary 存在则只用 summary）。
+const S2_CONTENT_EXCERPT: usize = 400;
+const S3_DOC_LIMIT: usize = 5;
+const S4_REQUIREMENT_LIMIT: usize = 30;
+/// approved revision 首段上限（`content->>'summary'` 优先）。
+const S4_FIRST_PARAGRAPH: usize = 240;
+const S5_RECENT_TASK_LIMIT: usize = 10;
+const S6_FINDING_LIMIT: usize = 40;
+const S6_QA_LIMIT: usize = 20;
+/// 单条 finding / 问答对正文上限（S6 内部逐条截断，deferred 不裁）。
+const S6_ITEM_CHARS: usize = 400;
+
+// ── 只读投影 SQL（全部单条 SELECT；无 INSERT/UPDATE/DELETE）───────────────
+//
+// 这些常量同时是 D1 的静态断言对象（tests 扫描：不得出现 provider/凭据列）。
+
+const SQL_SESSION_KIND: &str = "SELECT s.kind FROM discovery.discovery_session s \
+     WHERE s.tenant_id = $1 AND s.project_id = $2 AND s.id = $3";
+
+const SQL_PROJECT_PROFILE: &str = "SELECT p.name, COALESCE(p.description, '') FROM core.project p \
+     WHERE p.tenant_id = $1 AND p.id = $2";
+
+const SQL_PROJECT_DOCUMENTS: &str =
+    "SELECT d.doc_key, d.doc_type, d.canonical_path FROM ai.project_document d \
+     WHERE d.tenant_id = $1 AND d.project_id = $2 ORDER BY d.doc_key LIMIT 20";
+
+const SQL_KNOWLEDGE_DIGESTS: &str = "SELECT t.doc_key, t.source_commit_sha, t.content FROM ( \
+       SELECT DISTINCT ON (d.id) d.id AS document_id, d.doc_key, \
+              r.source_commit_sha, r.content, r.created_at \
+         FROM kb.document d JOIN kb.document_revision r ON r.document_id = d.id \
+        WHERE d.tenant_id = $1 AND d.project_id = $2 AND d.doc_key LIKE 'repo-%' \
+        ORDER BY d.id, r.revision_no DESC \
+     ) t ORDER BY t.created_at DESC LIMIT $3";
+
+const SQL_COGNITION_OBJECTS: &str = "SELECT o.object_type, o.object_key, o.name, \
+              rev.summary, rev.content \
+         FROM pc.cognition_object o \
+         LEFT JOIN LATERAL ( \
+              SELECT summary, content FROM pc.cognition_revision cr \
+               WHERE cr.object_id = o.id \
+               ORDER BY cr.revision_no DESC LIMIT 1 \
+         ) rev ON TRUE \
+        WHERE o.tenant_id = $1 AND o.project_id = $2 \
+          AND o.lifecycle_status <> 'deprecated' \
+        ORDER BY o.created_at ASC, o.id";
+
+const SQL_REQUIREMENTS: &str =
+    "SELECT r.code, r.title, r.requirement_type, r.priority, cur.version, \
+            cur.content->>'summary', cur.content->>'markdown' \
+       FROM delivery.requirement r \
+       LEFT JOIN delivery.requirement_revision cur \
+              ON cur.id = r.current_revision_id AND cur.state = 'approved' \
+      WHERE r.tenant_id = $1 AND r.project_id = $2 AND r.lifecycle_status = 'active' \
+      ORDER BY r.updated_at DESC, r.code LIMIT $3";
+
+const SQL_TASK_STATUS_COUNTS: &str = "SELECT t.status, count(*) FROM delivery.task t \
+     WHERE t.tenant_id = $1 AND t.project_id = $2 GROUP BY t.status ORDER BY t.status";
+
+const SQL_RECENT_TASKS: &str = "SELECT t.title, t.status FROM delivery.task t \
+     WHERE t.tenant_id = $1 AND t.project_id = $2 \
+     ORDER BY t.updated_at DESC, t.id LIMIT $3";
+
+const SQL_SESSION_FINDINGS: &str = "SELECT f.kind, f.content, f.verification_status \
+       FROM discovery.discovery_finding f \
+      WHERE f.tenant_id = $1 AND f.project_id = $2 AND f.session_id = $3 \
+      ORDER BY f.created_at DESC, f.id LIMIT $4";
+
+const SQL_SESSION_QUESTIONS: &str = "SELECT q.question, q.why_blocking, q.status, a.answer \
+       FROM discovery.discovery_question q \
+       LEFT JOIN LATERAL ( \
+            SELECT ans.answer FROM discovery.discovery_answer ans \
+             WHERE ans.question_id = q.id \
+             ORDER BY ans.created_at DESC, ans.id DESC LIMIT 1 \
+       ) a ON TRUE \
+      WHERE q.tenant_id = $1 AND q.project_id = $2 AND q.session_id = $3 \
+        AND q.status IN ('answered', 'deferred') \
+      ORDER BY q.created_at DESC, q.id LIMIT $4";
+
+// 行投影类型（`sqlx::query_as` 的元组目标；别名仅为可读与 clippy 整齐）。
+type CognitionObjectRow = (String, String, String, Option<String>, Option<String>);
+type DigestRow = (String, Option<String>, String);
+type RequirementRow = (
+    String,
+    String,
+    String,
+    String,
+    Option<i32>,
+    Option<String>,
+    Option<String>,
+);
+type FindingRow = (String, String, String);
+type QuestionRow = (String, Option<String>, String, Option<String>);
+
+/// 多行文本的「首段」（首个空行前），超长再截。
+fn first_paragraph(text: &str) -> String {
+    let trimmed = text.trim();
+    let head = trimmed.split("\n\n").next().unwrap_or(trimmed).trim();
+    clip_chars(head, S4_FIRST_PARAGRAPH)
+}
+
+// ── PG 实现：六节只读投影 ─────────────────────────────────────────────────
+
+/// 六节只读投影的默认实现。零写入、零缓存表、进程内无状态。
+pub struct PgInterviewContextBuilder {
+    pool: sqlx::PgPool,
+}
+
+impl PgInterviewContextBuilder {
+    pub fn new(pool: sqlx::PgPool) -> Self {
+        Self { pool }
+    }
+
+    async fn session_kind(
+        &self,
+        tenant_id: Uuid,
+        project_id: Uuid,
+        session_id: Uuid,
+    ) -> Result<String, InterviewContextError> {
+        sqlx::query_scalar(SQL_SESSION_KIND)
+            .bind(tenant_id)
+            .bind(project_id)
+            .bind(session_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(InterviewContextError::SessionNotFound(session_id))
+    }
+
+    /// S1：项目画像（名称/描述 + 既有知识文档清单）。
+    async fn project_profile(
+        &self,
+        tenant_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<String, InterviewContextError> {
+        let profile: Option<(String, String)> = sqlx::query_as(SQL_PROJECT_PROFILE)
+            .bind(tenant_id)
+            .bind(project_id)
+            .fetch_optional(&self.pool)
+            .await?;
+        let Some((name, description)) = profile else {
+            return Err(InterviewContextError::ProjectNotFound(project_id));
+        };
+        let documents: Vec<(String, String, String)> = sqlx::query_as(SQL_PROJECT_DOCUMENTS)
+            .bind(tenant_id)
+            .bind(project_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut body = format!("- 项目：`{name}`\n");
+        if !description.trim().is_empty() {
+            body.push_str(&format!("- 描述：{}\n", description.trim()));
+        }
+        if documents.is_empty() {
+            body.push_str("- 既有知识文档：无\n");
+        } else {
+            body.push_str("- 既有知识文档（`doc_key`／类型／路径）：\n");
+            for (doc_key, doc_type, path) in documents {
+                body.push_str(&format!("  - `{doc_key}`／{doc_type}／`{path}`\n"));
+            }
+        }
+        Ok(body)
+    }
+
+    /// S2：PC 认知对象（4 类，优先级 tech_stack > module > repository > delivery_activity）。
+    async fn product_cognition(
+        &self,
+        tenant_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<String, InterviewContextError> {
+        // 表实况以迁移为准：0053 只有 pc.cognition_object / pc.cognition_revision
+        // （KP-1 的正式模型尚未落地，此处不得引用未建表）。
+        let rows: Vec<CognitionObjectRow> = sqlx::query_as(SQL_COGNITION_OBJECTS)
+            .bind(tenant_id)
+            .bind(project_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+        if rows.is_empty() {
+            return Ok("- 暂无认知对象（尚未完成仓库快照分析或人工确认）\n".to_string());
+        }
+        let mut ordered = rows;
+        ordered.sort_by_key(|(object_type, object_key, ..)| {
+            (object_type_priority(object_type), object_key.clone())
+        });
+
+        let mut body = String::new();
+        for (object_type, object_key, name, summary, content) in
+            ordered.into_iter().take(S2_OBJECT_LIMIT)
+        {
+            let gist = match summary.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                // summary 优先（设计稿 §5.3），content 只在缺 summary 时摘录。
+                Some(summary) => clip_chars(summary, S2_CONTENT_EXCERPT),
+                None => content
+                    .as_deref()
+                    .map(|c| clip_chars(c.trim(), S2_CONTENT_EXCERPT))
+                    .unwrap_or_default(),
+            };
+            body.push_str(&format!(
+                "- `{object_key}`（{object_type}／{name}）：{}\n",
+                gist.replace('\n', " ")
+            ));
+        }
+        Ok(body)
+    }
+
+    /// S3：KB digest（`doc_key='repo-{id}'`，取每篇最新修订，按创建时间倒序前 N 篇）。
+    async fn knowledge_digest(
+        &self,
+        tenant_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<String, InterviewContextError> {
+        let rows: Vec<DigestRow> = sqlx::query_as(SQL_KNOWLEDGE_DIGESTS)
+            .bind(tenant_id)
+            .bind(project_id)
+            .bind(S3_DOC_LIMIT as i64)
+            .fetch_all(&self.pool)
+            .await?;
+        if rows.is_empty() {
+            return Ok("- 暂无仓库快照 digest\n".to_string());
+        }
+        let mut body = String::new();
+        for (doc_key, sha, content) in rows {
+            let anchor = sha
+                .as_deref()
+                .map(|sha| {
+                    let short: String = sha.chars().take(8).collect();
+                    format!("`{short}`")
+                })
+                .unwrap_or_else(|| "（无快照锚）".to_string());
+            body.push_str(&format!(
+                "## `{doc_key}`（锚 {anchor}）\n{}\n\n",
+                content.trim()
+            ));
+        }
+        Ok(body)
+    }
+
+    /// S4：需求域现状（active + 当前 approved revision 的 summary／首段，最近 30 条）。
+    async fn requirements(
+        &self,
+        tenant_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<String, InterviewContextError> {
+        let rows: Vec<RequirementRow> = sqlx::query_as(SQL_REQUIREMENTS)
+            .bind(tenant_id)
+            .bind(project_id)
+            .bind(S4_REQUIREMENT_LIMIT as i64)
+            .fetch_all(&self.pool)
+            .await?;
+        if rows.is_empty() {
+            return Ok("- 暂无已登记需求\n".to_string());
+        }
+        let mut body = String::new();
+        for (code, title, requirement_type, priority, version, summary, markdown) in rows {
+            let version_label = match version {
+                Some(v) => format!("v{v}（approved）"),
+                None => "无正式版本".to_string(),
+            };
+            let gist = summary
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(|s| clip_chars(s, S4_FIRST_PARAGRAPH))
+                .or_else(|| {
+                    markdown
+                        .as_deref()
+                        .map(first_paragraph)
+                        .filter(|s| !s.is_empty())
+                })
+                .unwrap_or_else(|| "（无摘要）".to_string());
+            body.push_str(&format!(
+                "- `{code}` {title}（{requirement_type}／{priority}／{version_label}）：{}\n",
+                gist.replace('\n', " ")
+            ));
+        }
+        Ok(body)
+    }
+
+    /// S5：任务现状（按 status 计数 + 最近 N 条 title）。
+    async fn tasks(
+        &self,
+        tenant_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<String, InterviewContextError> {
+        let counts: Vec<(String, i64)> = sqlx::query_as(SQL_TASK_STATUS_COUNTS)
+            .bind(tenant_id)
+            .bind(project_id)
+            .fetch_all(&self.pool)
+            .await?;
+        let recent: Vec<(String, String)> = sqlx::query_as(SQL_RECENT_TASKS)
+            .bind(tenant_id)
+            .bind(project_id)
+            .bind(S5_RECENT_TASK_LIMIT as i64)
+            .fetch_all(&self.pool)
+            .await?;
+        let total: i64 = counts.iter().map(|(_, n)| *n).sum();
+        let mut body = format!("- 任务总数：{total}\n");
+        if counts.is_empty() {
+            body.push_str("- 按状态：无\n");
+        } else {
+            body.push_str("- 按状态：");
+            let parts: Vec<String> = counts
+                .iter()
+                .map(|(status, n)| format!("{status}={n}"))
+                .collect();
+            body.push_str(&parts.join("，"));
+            body.push('\n');
+        }
+        if recent.is_empty() {
+            body.push_str("- 最近任务：无\n");
+        } else {
+            body.push_str("- 最近任务（标题／状态）：\n");
+            for (title, status) in recent {
+                body.push_str(&format!("  - {}／{status}\n", title.trim()));
+            }
+        }
+        Ok(body)
+    }
+
+    /// S6：本次访谈的结构化记忆。
+    ///
+    /// **不用轮次窗口**（§5.4）：只读 finding / question / answer 三表，不读
+    /// `discovery_message`——访谈记忆归结构化存储，早期 finding 不会因轮次多而丢。
+    /// deferred 问题必留（先占额度，再填 finding 与已答问答）。
+    async fn interview_state(
+        &self,
+        tenant_id: Uuid,
+        project_id: Uuid,
+        session_id: Uuid,
+        kind: InterviewKind,
+    ) -> Result<String, InterviewContextError> {
+        let findings: Vec<FindingRow> = sqlx::query_as(SQL_SESSION_FINDINGS)
+            .bind(tenant_id)
+            .bind(project_id)
+            .bind(session_id)
+            .bind(S6_FINDING_LIMIT as i64)
+            .fetch_all(&self.pool)
+            .await?;
+        let questions: Vec<QuestionRow> = sqlx::query_as(SQL_SESSION_QUESTIONS)
+            .bind(tenant_id)
+            .bind(project_id)
+            .bind(session_id)
+            .bind(S6_QA_LIMIT as i64)
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut body = format!("- 访谈类型：{}\n", kind.label());
+
+        // ① deferred 必留（预算内先占位）。
+        let deferred: Vec<_> = questions
+            .iter()
+            .filter(|q| q.2.as_str() == "deferred")
+            .collect();
+        if deferred.is_empty() {
+            body.push_str("- 已延后问题：无\n");
+        } else {
+            body.push_str("- 已延后问题（不阻塞，但复核页必须列出）：\n");
+            for (question, why_blocking, _, _) in deferred {
+                body.push_str(&format!(
+                    "  - {}（原因：{}）\n",
+                    clip_chars(question.trim(), S6_ITEM_CHARS),
+                    why_blocking.as_deref().map(str::trim).unwrap_or("未注明")
+                ));
+            }
+        }
+
+        // ② 已答问答对（created_at DESC）。
+        let answered: Vec<_> = questions
+            .iter()
+            .filter(|q| q.2.as_str() == "answered")
+            .collect();
+        if answered.is_empty() {
+            body.push_str("- 已答问答：无\n");
+        } else {
+            body.push_str("- 已答问答（最近优先）：\n");
+            for (question, _, _, answer) in answered {
+                body.push_str(&format!(
+                    "  - 问：{}\n    答：{}\n",
+                    clip_chars(question.trim(), S6_ITEM_CHARS),
+                    answer
+                        .as_deref()
+                        .map(|a| clip_chars(a.trim(), S6_ITEM_CHARS))
+                        .unwrap_or_else(|| "（未落答案）".to_string())
+                ));
+            }
+        }
+
+        // ③ findings 按 kind 分组（created_at DESC 已由 SQL 保证）。
+        if findings.is_empty() {
+            body.push_str("- 本 session 发现：暂无\n");
+        } else {
+            let mut by_kind: Vec<(&str, Vec<(&str, &str)>)> = Vec::new();
+            for (kind, content, verification) in &findings {
+                let idx = match by_kind.iter().position(|(k, _)| *k == kind.as_str()) {
+                    Some(idx) => idx,
+                    None => {
+                        by_kind.push((kind.as_str(), Vec::new()));
+                        by_kind.len() - 1
+                    }
+                };
+                by_kind[idx]
+                    .1
+                    .push((content.as_str(), verification.as_str()));
+            }
+            body.push_str("- 本 session 发现（按 kind 分组）：\n");
+            for (kind, items) in by_kind {
+                body.push_str(&format!("  - [{kind}]\n"));
+                for (content, verification) in items {
+                    body.push_str(&format!(
+                        "    - {}（{verification}）\n",
+                        clip_chars(content.trim(), S6_ITEM_CHARS).replace('\n', " ")
+                    ));
+                }
+            }
+        }
+        Ok(body)
+    }
+}
+
+fn object_type_priority(object_type: &str) -> u8 {
+    match object_type {
+        "tech_stack" => 0,
+        "module" => 1,
+        "repository" => 2,
+        "delivery_activity" => 3,
+        _ => 4,
+    }
+}
+
+#[async_trait]
+impl InterviewContextBuilder for PgInterviewContextBuilder {
+    async fn build(
+        &self,
+        tenant_id: Uuid,
+        project_id: Uuid,
+        session_id: Uuid,
+        kind: InterviewKind,
+    ) -> Result<InterviewContext, InterviewContextError> {
+        // 会话必须属于该租户/项目（跨租户即 NotFound，不泄露存在性）。
+        let db_kind = self.session_kind(tenant_id, project_id, session_id).await?;
+        let effective_kind = match InterviewKind::parse(&db_kind) {
+            Some(persisted) => {
+                if persisted != kind {
+                    tracing::warn!(
+                        %session_id,
+                        persisted = persisted.as_db_str(),
+                        requested = kind.as_db_str(),
+                        "interview context: requested kind differs from persisted session kind; using persisted"
+                    );
+                }
+                persisted
+            }
+            None => kind,
+        };
+
+        // 六节投影：全部只读，顺序即 §5.2。
+        let drafts = vec![
+            SectionDraft::new(KEY_ROLE, "角色与边界", ROLE_BODY),
+            SectionDraft::new(KEY_SECURITY, "安全边界", SECURITY_BODY),
+            SectionDraft::new(
+                KEY_PROJECT_PROFILE,
+                "项目画像",
+                self.project_profile(tenant_id, project_id).await?,
+            ),
+            SectionDraft::new(
+                KEY_PRODUCT_COGNITION,
+                "产品认知",
+                self.product_cognition(tenant_id, project_id).await?,
+            ),
+            SectionDraft::new(
+                KEY_KNOWLEDGE_DIGEST,
+                "知识摘要",
+                self.knowledge_digest(tenant_id, project_id).await?,
+            ),
+            SectionDraft::new(
+                KEY_REQUIREMENTS,
+                "需求现状",
+                self.requirements(tenant_id, project_id).await?,
+            ),
+            SectionDraft::new(
+                KEY_TASKS,
+                "任务现状",
+                self.tasks(tenant_id, project_id).await?,
+            ),
+            SectionDraft::new(
+                KEY_INTERVIEW_STATE,
+                "本次访谈",
+                self.interview_state(tenant_id, project_id, session_id, effective_kind)
+                    .await?,
+            ),
+            SectionDraft::new(KEY_SLOT_STATE, "槽位状态", SLOT_STATE_BODY),
+            SectionDraft::new(KEY_TURN_TASK, "本轮任务", TURN_TASK_BODY),
+            SectionDraft::new(KEY_OUTPUT_CONTRACT, "输出契约", OUTPUT_CONTRACT_BODY),
+        ];
+        Ok(assemble(drafts))
+    }
+}
+

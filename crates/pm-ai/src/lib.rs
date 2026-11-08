@@ -24,8 +24,8 @@ pub use conversation_model::{
 pub use conversation_reply::{ConversationReplyMode, ConversationReplyWorker, ReplyReport};
 pub use discovery_context::{
     assemble as assemble_interview_context, ContextSection, InterviewContext,
-    InterviewContextBuilder, InterviewContextError, InterviewKind, SectionDraft, DROPPED_MARKER,
-    SECTION_ORDER, TOTAL_BUDGET_CHARS,
+    InterviewContextBuilder, InterviewContextError, InterviewKind, PgInterviewContextBuilder,
+    SectionDraft, DROPPED_MARKER, SECTION_ORDER, TOTAL_BUDGET_CHARS,
 };pub use fake_model::FakeModel;
 pub use model::{AnalysisContext, AnalysisModel, ModelError};
 pub use openai_adapter::{OpenAiCompatibleModel, SYSTEM_PROMPT};
