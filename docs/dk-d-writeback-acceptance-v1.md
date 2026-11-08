@@ -196,10 +196,9 @@ LLM 只回填：title / 描述 / 验收口径文本 / 依赖建议 / 角色建�
 
 ### 7.1 全量回归
 
-> 结果与失败用例清单见本节末（运行中/完成时回填）：
->
-> - 命令：`DATABASE_URL=postgres://aipm:aipm@127.0.0.1:16503/aipm bash scripts/cargo-test.sh`
-> - 结果：**待回填**
+本批单独验证时用专用库（`DATABASE_URL=postgres://aipm:aipm@127.0.0.1:16503/aipm bash scripts/cargo-test.sh`）
+只跑了**新增 27 例**（全绿）；仓库级全量回归在 DK-D 分支并入 DK-A/B/C 集成树之后统一执行，
+权威结果见 §7.2（1301/1301 PASS）。
 
 ### 7.2 集成树全量回归（2026-11-09，merge master 接 DK-A/B/C 后）
 
