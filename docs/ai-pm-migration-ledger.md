@@ -18,6 +18,7 @@
 | 号 | 文件 | 任务 | 状态 |
 |---|---|---|---|
 | 0002 | `0002_conversation_discovery_link.sql` | DK-A 对话编排底座：`ai.conversation.discovery_session_id` 1 列 + 三元组外键 `(tenant_id, project_id, discovery_session_id) → discovery.discovery_session(tenant_id, project_id, id)`（比设计稿 (tenant_id,id) 更严：钉同项目）+ 部分索引；无回填——设计 `docs/product/ai-pm-dialog-orchestration-design-v1.md` §9.2-①（D-DK-2）。**取号史**：设计稿预留 0063 → 并行批依次取走 0063/0064/0065 → 顺移 0066 → **2026-11-09 冻结点基线合并后改取 0002**（§〇） | 已实施（2026-11-09，DK-A 收官；验收 `docs/product/ai-pm-dk-a-acceptance-record-v1.md`，1226/1226 全绿） |
+| 0003 | `0003_conversation_context_anchor.sql` | 对话上下文整合 Batch 2：`ai.conversation.context_anchor` jsonb 可空 1 列（线程级上下文锚点，建会话时定格、消息级不收，D-IC-1）+ 三重 CHECK（对象形态 / 键白名单 `project_id, project_name, repository_name, default_branch, repository_role` 减法表达 / 锚点 project_id 与行同项目）；NULL=无锚点，存量零回填——设计 `docs/product/ai-pm-assistant-context-integration-plan-v1.md` §三 Batch 2；服务端配套 `POST /conversations` 锚点校验（`deny_unknown_fields` + 仓库真实性 400）。**取号史**：DK-F 分支台账曾代登在途；0004 已由 DK-F 占用（llm_call_record_metadata），本表 0003 行=占用者就地登记 | 已实施（2026-11-09，整合会话 sess_05e4b2f0；pm-api ai_conversations 10/10 + pm-application 909/909 + pm-ai 154/154 绿） |
 
 ## 一、已应用（历史审计——文件已并入 0001_baseline.sql）
 

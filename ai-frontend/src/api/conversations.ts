@@ -28,6 +28,10 @@ export interface Conversation {
   updated_at: string;
   /** 最近一条消息时间；尚无消息时为 null（列表按 updated_at DESC 排序）。 */
   last_message_at: string | null;
+  /** DK-A：线程最近一次升级指向的访谈会话；null = 纯 chat 线程。 */
+  discovery_session_id?: string | null;
+  /** Batch 2：线程级上下文锚点；null = 无锚点。 */
+  context_anchor?: ConversationContextAnchor | null;
 }
 
 export type ConversationMessageRole = "user" | "assistant" | "system" | string;
@@ -43,8 +47,25 @@ export interface ConversationMessage {
   created_at: string;
 }
 
+/**
+ * 线程级上下文锚点（Batch 2，0003）。
+ *
+ * 建会话时定格，消息级不收（D-IC-1）。服务端校验：project_id 须与目标
+ * 项目一致、repository_name 须为本项目真实仓库、default_branch 须为该
+ * 仓库默认分支——非法值 400。
+ */
+export interface ConversationContextAnchor {
+  project_id?: string;
+  project_name?: string;
+  repository_name?: string;
+  default_branch?: string;
+  repository_role?: string;
+}
+
 export interface CreateConversationPayload {
   title?: string;
+  /** 上下文锚点；缺省 = 无锚点（存量线程）。 */
+  context?: ConversationContextAnchor;
 }
 
 export interface AppendMessagePayload {

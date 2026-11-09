@@ -26,8 +26,8 @@ use axum::{
     Extension, Json, Router,
 };
 use pm_application::ai_conversations::{
-    create_conversation, list_conversations, list_messages, ConversationError, ConversationView,
-    MessageView,
+    create_conversation, list_conversations, list_messages, ContextAnchor, ConversationError,
+    ConversationView, MessageView,
 };
 use pm_application::conversation_router::{
     send_message, undo_handoff, RouterError, SendMessageRequest, UndoOutcome,
@@ -53,6 +53,9 @@ impl From<ConversationError> for ApiError {
 #[derive(Debug, Deserialize)]
 pub(crate) struct CreateConversationBody {
     pub title: Option<String>,
+    /// Batch 2（0003）：线程级上下文锚点（建会话时定格，消息级不收）。
+    /// 缺省 = 无锚点；非法形态由服务层校验后 400。
+    pub context: Option<ContextAnchor>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -128,6 +131,7 @@ async fn create_conversation_handler(
         project_id,
         principal.principal_id,
         &title,
+        body.context.as_ref(),
     )
     .await?;
     Ok((StatusCode::CREATED, Json(conversation)).into_response())
