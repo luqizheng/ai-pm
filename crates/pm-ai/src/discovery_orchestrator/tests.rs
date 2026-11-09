@@ -1370,7 +1370,7 @@ async fn existing_finding_ids_are_visible_in_the_prompt(pool: sqlx::PgPool) {
     // 提示词必须带得上这个 id（body 断言）。
     Mock::given(method("POST"))
         .and(path("/chat/completions"))
-        .and(body_string_contains(&finding_id.to_string()))
+        .and(body_string_contains(finding_id.to_string()))
         .respond_with(json_reply(
             &json!({"answer_markdown": "收到。", "findings": [], "questions": []}).to_string(),
         ))

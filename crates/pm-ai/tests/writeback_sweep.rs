@@ -34,8 +34,11 @@ use uuid::Uuid;
 // ─────────────────────────────────────────────────────────────── 夹具
 
 struct Fx {
+    #[allow(dead_code)]
     project_id: Uuid,
+    #[allow(dead_code)]
     ai_principal: Uuid,
+    #[allow(dead_code)]
     human_id: Uuid,
     session_id: Uuid,
     provider_id: Uuid,
