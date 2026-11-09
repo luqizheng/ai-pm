@@ -76,13 +76,14 @@ const metadata = computed(() => {
       { key: "owner", value: demo.value.repository.owner }
     ];
   }
-  const repository = shell.currentRepository;
+  // 真实态：仓库元数据取自单一真源（shell.assistantContext）
+  const context = shell.assistantContext;
   const rows: Array<{ key: string; value: string }> = [];
-  if (repository?.defaultBranch) {
-    rows.push({ key: "defaultBranch", value: repository.defaultBranch });
+  if (context.defaultBranch) {
+    rows.push({ key: "defaultBranch", value: context.defaultBranch });
   }
-  if (repository?.role) {
-    rows.push({ key: "yourRole", value: repository.role });
+  if (context.repositoryRole) {
+    rows.push({ key: "yourRole", value: context.repositoryRole });
   }
   return rows;
 });
@@ -94,14 +95,15 @@ const currentProject = computed(() => shell.currentProject);
 
 /**
  * 助手可用上下文的作用域串。
- * 切换中不回落旧项目名（Figma「07」No stale project data is displayed）。
+ *
+ * 与指令栏共用 shell store 的 `assistantContext`（整合计划 Batch 1 单一
+ * 真源）；切换中不回落旧项目名（Figma「07」No stale project data is
+ * displayed）。
  */
 const commandScope = computed(() => {
-  const project = currentProject.value;
-  const name = project ? project.name : t("shell.app.project.switching");
-  const branch =
-    demo.value?.repository.defaultBranch ||
-    shell.currentRepository?.defaultBranch;
+  const context = shell.assistantContext;
+  const name = context.projectName ?? t("shell.app.project.switching");
+  const branch = demo.value?.repository.defaultBranch || context.defaultBranch;
   return branch ? `${name} / Repository / ${branch}` : name;
 });
 </script>

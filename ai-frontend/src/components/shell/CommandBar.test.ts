@@ -151,4 +151,73 @@ describe("CommandBar", () => {
     ).toBe(chip.text());
     expect(shell.pendingAssistantPrompt).toBeNull();
   });
+
+  // ───────────────────────────────── 单一真源与快照交接（整合计划 Batch 1）
+
+  it("作用域串与右上下文栏同源（均取 assistantContext）", async () => {
+    const { wrapper } = mountShell(CommandBar);
+    const shell = useShellStore();
+    shell.setProjects([{ id: "p1", name: "Atlas Platform" }]);
+    shell.setCurrentProject("p1");
+    shell.currentRepository = {
+      name: "atlas-platform",
+      defaultBranch: "main",
+      role: "main",
+      status: "verified"
+    };
+    await nextTick();
+
+    expect(
+      wrapper.find(".shell-commandbar__field").attributes("placeholder")
+    ).toContain(`${shell.assistantContext.projectName} / Repository / main`);
+  });
+
+  it("提交时把上下文快照带入交接槽（不只传文本）", async () => {
+    const { wrapper } = mountShell(CommandBar);
+    const shell = useShellStore();
+    shell.setProjects([{ id: "p1", name: "Atlas Platform" }]);
+    shell.setCurrentProject("p1");
+    shell.currentRepository = {
+      name: "atlas-platform",
+      defaultBranch: "main",
+      role: "main",
+      status: "verified"
+    };
+    await nextTick();
+
+    await wrapper.find(".shell-commandbar__field").setValue("分析风险");
+    await wrapper.find(".shell-commandbar__send").trigger("click");
+    await nextTick();
+
+    expect(shell.pendingAssistantPrompt?.context).toEqual({
+      projectId: "p1",
+      projectName: "Atlas Platform",
+      projectDescription: null,
+      repositoryName: "atlas-platform",
+      defaultBranch: "main",
+      repositoryRole: "main"
+    });
+  });
+
+  it("提交后切换项目，交接快照仍是提交时刻的上下文", async () => {
+    const { wrapper } = mountShell(CommandBar);
+    const shell = useShellStore();
+    shell.setProjects([
+      { id: "p1", name: "Atlas Platform" },
+      { id: "p2", name: "Research Sandbox" }
+    ]);
+    shell.setCurrentProject("p1");
+    await nextTick();
+
+    await wrapper.find(".shell-commandbar__field").setValue("分析风险");
+    await wrapper.find(".shell-commandbar__send").trigger("click");
+    await nextTick();
+
+    await shell.switchProject("p2");
+
+    expect(shell.pendingAssistantPrompt?.context.projectId).toBe("p1");
+    expect(shell.pendingAssistantPrompt?.context.projectName).toBe(
+      "Atlas Platform"
+    );
+  });
 });

@@ -59,4 +59,49 @@ describe("ContextPanel", () => {
 
     expect(shell.contextOpen).toBe(false);
   });
+
+  // ───────────────────────────────── 单一真源（整合计划 Batch 1）
+
+  it("仓库元数据取自 assistantContext 单一真源", async () => {
+    const { wrapper } = mountShell(ContextPanel);
+    const shell = useShellStore();
+    shell.setProjects([{ id: "p1", name: "Atlas Platform" }]);
+    shell.setCurrentProject("p1");
+    shell.currentRepository = {
+      name: "atlas-platform",
+      defaultBranch: "release/2026",
+      role: "admin",
+      status: "verified"
+    };
+    await nextTick();
+
+    // 非 mock 预览态：不渲染相关文档段，只渲染真实仓库元数据
+    const rows = wrapper.findAll(".shell-context__meta-row");
+    const pairs = rows.map(row => ({
+      label: row.find(".shell-context__meta-label").text(),
+      value: row.find(".shell-context__meta-value").text()
+    }));
+    expect(pairs).toEqual([
+      { label: "默认分支", value: "release/2026" },
+      { label: "我的角色", value: "admin" }
+    ]);
+  });
+
+  it("助手上下文作用域串与 store 的 assistantContext 一致", async () => {
+    const { wrapper } = mountShell(ContextPanel);
+    const shell = useShellStore();
+    shell.setProjects([{ id: "p1", name: "Atlas Platform" }]);
+    shell.setCurrentProject("p1");
+    shell.currentRepository = {
+      name: "atlas-platform",
+      defaultBranch: "main",
+      role: "main",
+      status: "verified"
+    };
+    await nextTick();
+
+    expect(wrapper.find(".shell-context__ai-text").text()).toContain(
+      `${shell.assistantContext.projectName} / Repository / ${shell.assistantContext.defaultBranch}`
+    );
+  });
 });
