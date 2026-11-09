@@ -2,12 +2,12 @@
 # 2026-11-06 从 docker-compose-services.yml 拆出独立文件（此前 2026-11-05 曾由
 # docker-compose-aipm.yml 并入 services.yml），恢复「升级 lmms 层 = 整目录覆盖
 # lmms 命名文件、ai-pm 命名文件天然存活」能力，见 README「与上游模板包的有意差异」#2。
-# 镜像来源：
-#   ai-pm 仓（本仓）：    docker build --target runtime-pm-api ... -t aipm/pm-api:0.1.0 . 等
-#   ai-frontend-web：     docker build --target runtime-web -t aipm/ai-frontend-web:0.1.0 .
-#                         （源=本仓 ai-frontend/，经根 Dockerfile runtime-web 目标；
-#                          2026-11-07 起 8092 为唯一前端公共入口，旧 ai-pm-web 仓的
-#                          aipm-web/aipm-bff 已退役删除）
+# 镜像来源（dev 模式：就地 build，不引用 image）：
+#   全部服务共用一个根 Dockerfile（构建上下文 = 仓库根），按 target 出四个镜像：
+#   pm-api → runtime-pm-api、pm-worker → runtime-pm-worker、
+#   ai-pm-worker → runtime-ai-pm-worker、ai-frontend-web → runtime-web。
+#   ai-frontend-web 的前置：ai-frontend/dist 需先在宿主产出（根 Dockerfile 只装 nginx；
+#   2026-11-07 起 8092 为唯一前端公共入口，旧 ai-pm-web 仓的 aipm-web/aipm-bff 已退役删除）。
 # 全部挂 superpowers 网络（与 lmms 栈同网络，服务名互访）。
 #
 # ⚠️ YAML anchor 不能跨 include 文件：下面两个 anchor 与 docker-compose-services.yml
@@ -27,7 +27,10 @@ x-loki-labels: &loki-labels
 
 services:
   pm-api:
-    image: ${AIPM_REGISTRY:-aipm}/pm-api:${AIPM_VERSION:-0.1.0}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: runtime-pm-api
     # 2026-11-05 起 pm 与 iam 一致挂网关对外（/v1/pm/* → pm-api，见 config/api-gateway/
     # routes/pm.router.toml）；consul 自注册经 *consul-env（13e7363，无 registrator）。
     labels:
@@ -84,7 +87,10 @@ services:
       - superpowers
 
   pm-worker:
-    image: ${AIPM_REGISTRY:-aipm}/pm-worker:${AIPM_VERSION:-0.1.0}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: runtime-pm-worker
     environment:
       DATABASE_URL: "${DATABASE_URL}"
       # DK-F：与分析完成→自动开访谈同一个开关（D-DK-9 / DK-E）。
@@ -101,7 +107,10 @@ services:
       - superpowers
 
   ai-pm-worker:
-    image: ${AIPM_REGISTRY:-aipm}/ai-pm-worker:${AIPM_VERSION:-0.1.0}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: runtime-ai-pm-worker
     environment:
       DATABASE_URL: "${DATABASE_URL}"
       AI_PM_POLICY_FILE: /app/policies/ai-pm-ai-lead-v2.yaml
@@ -131,7 +140,10 @@ services:
   # /api 与 /gw 都反代 api-gateway:3000——见 ai-frontend/docker/nginx.conf；
   # Docker 内嵌 DNS 惰性解析，启动不依赖 upstream 存活，无需 depends_on）
   ai-frontend-web:
-    image: ${AIPM_REGISTRY:-aipm}/ai-frontend-web:${AIPM_VERSION:-0.1.0}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: runtime-web
     ports:
       - "8092:80"
     restart: unless-stopped
