@@ -9,17 +9,28 @@ import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import Select from "@/components/ui/select/Select.vue";
 import { PageFrame } from "@/components/shell";
 import { AiConversationPanel } from "@/components/ui/ai-interaction/conversation";
-import type { ConversationMessage } from "@/components/ui/ai-interaction/types";
+import {
+  INTERACTION_STATUSES,
+  PAYLOAD_REQUIRED_FIELDS,
+  RESPONSE_TYPES,
+  type AiEvidence,
+  type AiIdentity,
+  type AiInteractionEnvelope,
+  type AiResponseType,
+  type ConversationMessage,
+  type InteractionStatus
+} from "@/components/ui/ai-interaction/types";
 import {
   appendMessage,
   createConversation,
   listConversations,
   listMessages,
   type Conversation,
+  type ConversationContextAnchor,
   type ConversationMessage as ConversationMessageRecord
 } from "@/api/conversations";
 import { SCOPE_ALL, useScopeStore } from "@/api/scope";
-import { useShellStore } from "@/stores/shell";
+import { useShellStore, type AssistantContextSnapshot } from "@/stores/shell";
 
 /**
  * Project AI conversation page（V2 D-4 会话 REST + Batch G assistant 回复）。
@@ -59,6 +70,24 @@ const projectId = computed(() => {
   if (scoped && scoped !== SCOPE_ALL && scoped !== "all") return scoped;
   return "";
 });
+
+/**
+ * 指令栏交接的上下文快照（整合计划 Batch 1）。
+ *
+ * 提交时刻定格——「问的是哪个项目」由快照回答，而非页面挂载时的活态项目，
+ * 避免导航途中切项目导致问题落到别的项目。
+ */
+const pendingContext = ref<AssistantContextSnapshot | null>(null);
+
+/**
+ * 生效的项目上下文。
+ *
+ * 交接窗口内以快照项目为准（问的是它，就落到它）；**发送完成后**释放快照、
+ * 回落到活态项目——快照只管交接那一段，不锁死整页。
+ */
+const effectiveProjectId = computed(
+  () => pendingContext.value?.projectId ?? projectId.value
+);
 
 /** 增量轮询单次拉取条数 = 服务端 clamp 上限（MAX_MESSAGE_LIMIT）。 */
 const MESSAGE_PAGE_LIMIT = 500;
@@ -114,7 +143,8 @@ function schedulePolling() {
  */
 async function pollMessages() {
   const conversationId = selectedId.value;
-  if (disposed || !projectId.value || !conversationId || pollInFlight) return;
+  if (disposed || !effectiveProjectId.value || !conversationId || pollInFlight)
+    return;
   pollInFlight = true;
   try {
     const last = timeline.value.at(-1) ?? null;
@@ -122,7 +152,11 @@ async function pollMessages() {
       ? { after: last.createdAt, after_id: last.id, limit: MESSAGE_PAGE_LIMIT }
       : // 空时间线退化 = 与首屏一致的最新窗口（Batch H）。
         { latest: true, limit: FIRST_PAGE_LIMIT };
-    const records = await listMessages(projectId.value, conversationId, query);
+    const records = await listMessages(
+      effectiveProjectId.value,
+      conversationId,
+      query
+    );
     if (selectedId.value !== conversationId) return;
     const known = new Set(timeline.value.map(message => message.id));
     const fresh = records
@@ -144,7 +178,9 @@ const selectedConversation = computed(
 );
 
 const contextLabel = computed(() => {
-  const project = scope.projects.find(item => item.id === projectId.value);
+  const project = scope.projects.find(
+    item => item.id === effectiveProjectId.value
+  );
   return project?.name ?? "";
 });
 
@@ -160,15 +196,88 @@ const conversationOptions = computed(() =>
 
 // ───────────────────────────────────────────────────────── 数据加载
 
-/** 后端记录 → 组件库时间线消息。role 仅 user 走用户侧，其余一律 AI 侧。 */
+/**
+ * 后端信封 → 组件库 `interaction` 信封（Batch 3B）。
+ *
+ * **fail-closed**：类型不在 8 类白名单内 / 载荷缺必填字段 → 返回 null，
+ * 该消息退化为**纯文本**（不留空白、不伪造卡片、不抛未处理异常）。
+ */
+function toInteractionEnvelope(
+  metadata: unknown
+): AiInteractionEnvelope | undefined {
+  if (!metadata || typeof metadata !== "object") return undefined;
+  const envelope = (metadata as Record<string, unknown>).envelope;
+  if (!envelope || typeof envelope !== "object") return undefined;
+
+  const raw = envelope as Record<string, unknown>;
+  const type = raw.type;
+  if (
+    typeof type !== "string" ||
+    !(RESPONSE_TYPES as readonly string[]).includes(type)
+  ) {
+    return undefined;
+  }
+  const status = raw.status;
+  if (
+    typeof status !== "string" ||
+    !(INTERACTION_STATUSES as readonly string[]).includes(status)
+  ) {
+    return undefined;
+  }
+  const payload = raw.payload;
+  if (!payload || typeof payload !== "object") return undefined;
+  const identity = raw.identity;
+  if (!identity || typeof identity !== "object") return undefined;
+
+  // payload 深校验（fail-closed 第二半）：必填字段缺一即整信封拒收——
+  // 卡片组件对缺失 TS 必填字段会渲染崩，宁退纯文本不冒渲染崩风险。
+  const payloadRecord = payload as Record<string, unknown>;
+  const required =
+    PAYLOAD_REQUIRED_FIELDS[type as AiResponseType] ?? [];
+  for (const field of required) {
+    if (!(field in payloadRecord)) return undefined;
+  }
+
+  return {
+    id: typeof raw.id === "string" ? raw.id : "",
+    type: type as AiResponseType,
+    status: status as InteractionStatus,
+    identity: identity as AiIdentity,
+    createdAt:
+      typeof raw.createdAt === "string"
+        ? raw.createdAt
+        : typeof raw.created_at === "string"
+          ? raw.created_at
+          : "",
+    title: typeof raw.title === "string" ? raw.title : "",
+    description:
+      typeof raw.description === "string" ? raw.description : undefined,
+    conclusion:
+      typeof raw.conclusion === "string" ? raw.conclusion : undefined,
+    evidence:
+      raw.evidence && typeof raw.evidence === "object"
+        ? (raw.evidence as AiEvidence)
+        : undefined,
+    payload: payload as Record<string, unknown>
+  };
+}
+
+/**
+ * 后端记录 → 组件库时间线消息。role 仅 user 走用户侧，其余一律 AI 侧。
+ *
+ * **信封消费**（Batch 3B）：消息 metadata 带 `envelope` → 组装 `interaction`
+ * 内联渲染响应卡；无信封或信封非法 → 纯文本（AI 的普通消息保持轻量）。
+ */
 function toTimelineMessage(
   record: ConversationMessageRecord
 ): ConversationMessage {
+  const interaction = toInteractionEnvelope(record.metadata);
   return {
     id: record.id,
     role: record.role === "user" ? "user" : "ai",
     createdAt: record.created_at,
-    text: record.content
+    text: record.content,
+    ...(interaction ? { interaction } : {})
   };
 }
 
@@ -177,10 +286,14 @@ async function loadMessages(conversationId: string) {
   try {
     // 首屏最新窗口（Batch H）：latest=true, limit=200——服务端 DESC 取最新
     // 200 条再反转为 ASC；轮询增量仍走 after/after_id 不变。
-    const records = await listMessages(projectId.value, conversationId, {
-      latest: true,
-      limit: FIRST_PAGE_LIMIT
-    });
+    const records = await listMessages(
+      effectiveProjectId.value,
+      conversationId,
+      {
+        latest: true,
+        limit: FIRST_PAGE_LIMIT
+      }
+    );
     if (selectedId.value !== conversationId) return;
     timeline.value = records.map(toTimelineMessage);
   } finally {
@@ -204,7 +317,8 @@ function onSelect(id: string) {
 }
 
 async function load() {
-  if (!projectId.value) {
+  const target = effectiveProjectId.value;
+  if (!target) {
     stopPolling();
     loading.value = false;
     return;
@@ -213,7 +327,7 @@ async function load() {
   loading.value = true;
   loadError.value = "";
   try {
-    conversations.value = await listConversations(projectId.value);
+    conversations.value = await listConversations(target);
     selectedId.value = conversations.value[0]?.id ?? "";
     timeline.value = [];
     if (selectedId.value) await loadMessages(selectedId.value);
@@ -238,18 +352,43 @@ function deriveTitle(text: string): string {
 }
 
 /**
+ * 会话上下文锚点（Batch 2，0003）。
+ *
+ * 取**交接快照**（指令栏提交时刻定格）；页面内直接新建会话时取活态
+ * assistantContext。锚点只声明「这个线程对着哪个项目/仓库说话」——服务端
+ * 校验真实性（仓库/分支必须是本项目真实存在的），注入内容由服务端另行
+ * 投影（Batch 3A）。
+ */
+const contextAnchor = computed<ConversationContextAnchor | undefined>(() => {
+  const snapshot = pendingContext.value ?? shell.assistantContext;
+  const anchor: ConversationContextAnchor = {};
+  if (snapshot.projectId) anchor.project_id = snapshot.projectId;
+  if (snapshot.projectName) anchor.project_name = snapshot.projectName;
+  if (snapshot.repositoryName) anchor.repository_name = snapshot.repositoryName;
+  if (snapshot.defaultBranch) anchor.default_branch = snapshot.defaultBranch;
+  if (snapshot.repositoryRole) anchor.repository_role = snapshot.repositoryRole;
+  return Object.keys(anchor).length ? anchor : undefined;
+});
+
+/**
  * 发送 = 等待 201 再插入（不乐观插入）：面板 emit send 即清空输入框，
  * 失败时原文进 pendingText 供「重发」，避免静默丢字。
+ *
+ * **项目落点取 `effectiveProjectId`**（整合计划 Batch 1）：指令栏交接来的
+ * 提问按提交时刻的快照项目发送，不受页面挂载后切项目影响。
  */
 async function handleSend(text: string) {
-  if (sending.value || !projectId.value) return;
+  const target = effectiveProjectId.value;
+  if (sending.value || !target) return;
   sending.value = true;
   sendError.value = "";
   try {
     let conversationId = selectedId.value;
     if (!conversationId) {
-      const created = await createConversation(projectId.value, {
-        title: deriveTitle(text)
+      const anchor = contextAnchor.value;
+      const created = await createConversation(target, {
+        title: deriveTitle(text),
+        ...(anchor ? { context: anchor } : {})
       });
       conversations.value = [created, ...conversations.value];
       drafting.value = false;
@@ -257,7 +396,7 @@ async function handleSend(text: string) {
       timeline.value = [];
       conversationId = created.id;
     }
-    const record = await appendMessage(projectId.value, conversationId, {
+    const record = await appendMessage(target, conversationId, {
       content: text
     });
     timeline.value = [...timeline.value, toTimelineMessage(record)];
@@ -298,10 +437,17 @@ onMounted(() => {
 
 // 指令栏转来的提问（B-1：指令栏是会话的收起入口）。槽为对象（同文案
 // 连续提交也能触发）；immediate 覆盖「先入队再进页」的导航时序。
+//
+// **上下文快照随交接一并取走**（整合计划 Batch 1）：提交时刻的项目/仓库
+// 上下文在此定格，随后建会话与发送都以此为准，不受页面挂载后切项目影响。
 watch(
   () => shell.pendingAssistantPrompt,
   pending => {
-    if (pending) void sendAfterLoad(shell.takeAssistantPrompt()!.text);
+    if (!pending) return;
+    const taken = shell.takeAssistantPrompt();
+    if (!taken) return;
+    pendingContext.value = taken.context;
+    void sendAfterLoad(taken.text);
   },
   { immediate: true }
 );
@@ -311,7 +457,10 @@ async function sendAfterLoad(text: string) {
   while (loading.value) {
     await new Promise(resolve => setTimeout(resolve, 20));
   }
-  void handleSend(text);
+  await handleSend(text);
+  // **交接窗口结束**：释放快照，后续发送回落到活态项目
+  // （快照只管交接那一段，不锁死整页——整合计划 Batch 1）。
+  pendingContext.value = null;
 }
 
 /** 新建会话：立即可见（空时间线），首条消息发出时才落库。 */
@@ -329,8 +478,11 @@ onUnmounted(() => {
   stopPolling();
 });
 
-// 项目上下文变化（顶栏切项目 / 测试环境路由晚于挂载落定）→ 重拉会话列表。
-watch(projectId, next => {
+// 项目上下文变化（顶栏切项目 / 交接快照释放 / 路由晚于挂载落定）→ 重拉会话列表。
+//
+// 跟随 **effectiveProjectId** 而非活态 projectId：交接窗口内快照项目优先，
+// 快照释放后若与活态项目不同，列表自动跟回活态项目（不滞留旧会话）。
+watch(effectiveProjectId, next => {
   if (!next) {
     stopPolling();
     conversations.value = [];

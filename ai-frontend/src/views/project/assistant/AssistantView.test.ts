@@ -417,6 +417,73 @@ describe("AssistantView（会话接线）", () => {
     expect(appendMessage).toHaveBeenCalledTimes(2);
   });
 
+  it("交接快照：指令栏提交时的项目决定发送落点（提交后切项目不漂移）", async () => {
+    const { wrapper } = await mountPage();
+    const shell = useShellStore();
+    shell.setProjects([
+      { id: "p1", name: "Atlas Platform" },
+      { id: "p2", name: "Research Sandbox" }
+    ]);
+    shell.setCurrentProject("p1");
+
+    // 提交时刻定格快照：项目 p1
+    shell.queueAssistantPrompt("梳理当前迭代风险");
+    // 交接后立刻切到 p2——快照不应漂移
+    await shell.switchProject("p2");
+    await flushPromises();
+
+    expect(appendMessage).toHaveBeenCalledWith("p1", "c1", {
+      content: "梳理当前迭代风险"
+    });
+    expect(wrapper.text()).toContain("梳理当前迭代风险");
+  });
+
+  it("交接快照：无项目上下文时不落到哨兵项目", async () => {
+    await mountPage();
+    const shell = useShellStore();
+
+    shell.queueAssistantPrompt("没有项目上下文");
+    await flushPromises();
+
+    // 快照 projectId 为 null → 回落到路由上下文 p1，不落哨兵
+    expect(appendMessage).toHaveBeenCalledWith("p1", "c1", {
+      content: "没有项目上下文"
+    });
+  });
+
+  it("Batch 2：新建会话时随 body 带上上下文锚点", async () => {
+    // 无既有会话 → 首条消息经自动建会话（createConversation 带锚点）。
+    // mock 须在挂载前设定：mountPage 内即拉会话列表。
+    listConversations.mockResolvedValue([]);
+
+    const { wrapper } = await mountPage();
+    const shell = useShellStore();
+    shell.setProjects([{ id: "p1", name: "Atlas Platform" }]);
+    shell.setCurrentProject("p1");
+    shell.currentRepository = {
+      name: "atlas-platform",
+      defaultBranch: "main",
+      role: "main",
+      status: "verified"
+    };
+    await flushPromises();
+
+    shell.queueAssistantPrompt("梳理当前迭代风险");
+    await flushPromises();
+
+    expect(createConversation).toHaveBeenCalledWith("p1", {
+      title: "梳理当前迭代风险",
+      context: {
+        project_id: "p1",
+        project_name: "Atlas Platform",
+        repository_name: "atlas-platform",
+        default_branch: "main",
+        repository_role: "main"
+      }
+    });
+    expect(wrapper.text()).toContain("梳理当前迭代风险");
+  });
+
   it("新建会话按钮：进入草稿态不落库，首条消息经自动建会话落新会话", async () => {
     const { wrapper } = await mountPage();
 
@@ -456,5 +523,107 @@ describe("AssistantView（会话接线）", () => {
       (wrapper.findComponent(Select).props("options") as { value: string }[])[0]
         .value
     ).toBe("nc1");
+  });
+});
+
+// ── Batch 3B：响应卡信封消费（metadata.envelope → interaction）─────────
+
+describe("AssistantView（信封消费）", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    md2html.mockReset();
+    md2html.mockResolvedValue("<p>md-rendered</p>");
+    listConversations.mockResolvedValue([conversation({})]);
+    createConversation.mockResolvedValue(
+      conversation({ id: "nc1", title: "first message" })
+    );
+    appendMessage.mockImplementation(
+      async (_p: string, cid: string, body: { content: string }) =>
+        record({
+          id: `m-${body.content.slice(0, 6)}`,
+          conversation_id: cid,
+          content: body.content,
+          created_at: "2026-11-08T10:05:00Z"
+        })
+    );
+  });
+
+  /** 合法信封 = payload 满足前端 RecommendationPayload 必填全集（与后端同源）。 */
+  function envelopeFixture(over: Record<string, unknown> = {}) {
+    return {
+      id: "env-1",
+      type: "recommendation",
+      status: "presented",
+      identity: { name: "AI-PM", role: "研发负责人" },
+      createdAt: "2026-11-08T09:59:30Z",
+      title: "建议拆分任务",
+      payload: {
+        summary: "当前迭代风险集中，建议拆分",
+        explanationMarkdown: "依据风险分布……",
+        benefits: [{ label: "风险可见", detail: "逐项暴露" }],
+        risks: [{ label: "迁移成本" }]
+      },
+      ...over
+    };
+  }
+
+  it("合法信封：AI 消息内联渲染响应卡（type/status/payload 透传）", async () => {
+    listMessages.mockResolvedValue([
+      record({
+        id: "m-card",
+        role: "assistant",
+        content: "卡片消息",
+        metadata: { envelope: envelopeFixture() }
+      })
+    ]);
+    const { wrapper } = await mountPage();
+    await flushPromises();
+
+    // class 透传：__card 与 ai-card 同落一个根元素（复合选择器，非后代）。
+    const card = wrapper.find(".ai-conversation-message__card.ai-card");
+    expect(card.exists()).toBe(true);
+    expect(card.attributes("data-type")).toBe("recommendation");
+  });
+
+  it("白名单外类型：fail-closed 退化为纯文本，不伪造卡片", async () => {
+    listMessages.mockResolvedValue([
+      record({
+        id: "m-bad-type",
+        role: "assistant",
+        content: "坏类型消息",
+        metadata: { envelope: envelopeFixture({ type: "chat-message" }) }
+      })
+    ]);
+    const { wrapper } = await mountPage();
+    await flushPromises();
+
+    expect(wrapper.find(".ai-conversation-message__card").exists()).toBe(false);
+    // 内容仍以纯文本（Markdown 链）渲染——md2html 收到原文即证明未丢字。
+    expect(md2html).toHaveBeenCalledWith("坏类型消息", expect.anything());
+  });
+
+  it("payload 缺必填字段：退化为纯文本（fail-closed）", async () => {
+    listMessages.mockResolvedValue([
+      record({
+        id: "m-bad-payload",
+        role: "assistant",
+        content: "坏载荷消息",
+        metadata: { envelope: envelopeFixture({ payload: {} }) }
+      })
+    ]);
+    const { wrapper } = await mountPage();
+    await flushPromises();
+
+    expect(wrapper.find(".ai-conversation-message__card").exists()).toBe(false);
+    expect(md2html).toHaveBeenCalledWith("坏载荷消息", expect.anything());
+  });
+
+  it("无信封 metadata：旧行为不变（纯 Markdown，零卡片）", async () => {
+    listMessages.mockResolvedValue([record({})]);
+    const { wrapper } = await mountPage();
+    await flushPromises();
+
+    expect(wrapper.find(".ai-conversation-message__card").exists()).toBe(false);
+    expect(wrapper.text()).toContain("latest risks");
   });
 });

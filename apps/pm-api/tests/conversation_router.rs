@@ -366,6 +366,15 @@ async fn explicit_interview_upgrade_is_atomic_and_single_written(pool: PgPool) {
         rows[1].2["handoff"]["discovery_session_id"],
         json!(sid.to_string())
     );
+    // Batch 3B：边界消息附 informational 信封（场景驱动生产）；
+    // handoff 事实键原样保留——移植后链接态滤行使不进面板，信封对其他 AI 卡照常生效。
+    assert_eq!(rows[1].2["envelope"]["type"], json!("informational"));
+    assert_eq!(rows[1].2["envelope"]["status"], json!("presented"));
+    assert_eq!(rows[1].2["envelope"]["title"], json!("已切换到需求澄清"));
+    assert_eq!(
+        rows[1].2["envelope"]["payload"]["contentMarkdown"].is_string(),
+        json!(true)
+    );
     assert_eq!(rows.iter().filter(|r| r.0 == "system").count(), 1);
     assert!(rows.iter().all(|r| r.1 != REQUIREMENT), "需求句不得落 chat");
 

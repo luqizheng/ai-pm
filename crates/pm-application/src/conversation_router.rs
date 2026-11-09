@@ -719,6 +719,27 @@ async fn upgrade_in(
             "created_session": created_session,
         }
     });
+    // 附一张 informational 卡（Batch 3B 场景驱动生产）：把「已切换到需求
+    // 澄清」这条边界事实以卡片形态呈现——用户看到的与 metadata 一致。
+    // 信封非法则**不挂**（fail-closed：宁可只显示文字，也不显示坏卡）。
+    let envelope = crate::ai_interaction_envelope::InteractionEnvelope {
+        id: session_id.to_string(),
+        kind: "informational".to_string(),
+        status: "presented".to_string(),
+        identity: serde_json::json!({"name": "AI-PM", "role": "需求澄清"}),
+        created_at: at.to_rfc3339(),
+        title: HANDOFF_NOTICE.to_string(),
+        description: Some(summary.clone()),
+        conclusion: None,
+        evidence: None,
+        payload: serde_json::json!({
+            "contentMarkdown": format!("本线程已切换到需求澄清访谈。\n\n{summary}"),
+        }),
+    };
+    let mut metadata = metadata;
+    if envelope.validate().is_ok() {
+        metadata["envelope"] = serde_json::to_value(&envelope).unwrap_or(serde_json::Value::Null);
+    }
     let boundary = insert_message_in(
         tx,
         conversation_id,
