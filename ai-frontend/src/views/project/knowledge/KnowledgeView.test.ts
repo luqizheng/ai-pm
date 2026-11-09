@@ -20,6 +20,7 @@ const listPcObjects = vi.fn();
 const listPcProposals = vi.fn();
 const decidePcProposal = vi.fn();
 const retrievalQuery = vi.fn();
+const ingestKbDocument = vi.fn();
 
 vi.mock("@/api/knowledge", () => ({
   listKbDocuments: (...args: unknown[]) => listKbDocuments(...args),
@@ -28,7 +29,8 @@ vi.mock("@/api/knowledge", () => ({
   listPcObjects: (...args: unknown[]) => listPcObjects(...args),
   listPcProposals: (...args: unknown[]) => listPcProposals(...args),
   decidePcProposal: (...args: unknown[]) => decidePcProposal(...args),
-  retrievalQuery: (...args: unknown[]) => retrievalQuery(...args)
+  retrievalQuery: (...args: unknown[]) => retrievalQuery(...args),
+  ingestKbDocument: (...args: unknown[]) => ingestKbDocument(...args)
 }));
 
 function kbRow(overrides: Partial<KbDocumentRow>): KbDocumentRow {
@@ -124,21 +126,21 @@ function proposalRow(overrides: Partial<PcProposalRow>): PcProposalRow {
   };
 }
 
+const listKbBase: KbDocumentRow[] = [
+  kbRow({}),
+  kbRow({
+    document_id: "doc-2",
+    doc_key: "billing-rule",
+    doc_type: "knowledge",
+    revision_no: 1,
+    status: "draft",
+    published_at: null
+  })
+];
+
 beforeEach(() => {
   vi.clearAllMocks();
-  listKbDocuments.mockResolvedValue({
-    items: [
-      kbRow({}),
-      kbRow({
-        document_id: "doc-2",
-        doc_key: "billing-rule",
-        doc_type: "knowledge",
-        revision_no: 1,
-        status: "draft",
-        published_at: null
-      })
-    ]
-  });
+  listKbDocuments.mockResolvedValue({ items: listKbBase });
   listPcObjects.mockResolvedValue({ items: [pcRow({})] });
   listPcProposals.mockResolvedValue({
     items: [
@@ -156,6 +158,27 @@ beforeEach(() => {
   );
   confirmKbRevision.mockResolvedValue({});
   decidePcProposal.mockResolvedValue({});
+  ingestKbDocument.mockResolvedValue({
+    document_id: "doc-ingested",
+    revision_id: "rev-ing",
+    revision_no: 1,
+    status: "draft"
+  });
+  // 摄入后刷新：第二次调用返回含新文档的列表（runIngest 里按 id 找行打开详情）。
+  listKbDocuments.mockImplementation(() =>
+    Promise.resolve({
+      items: [
+        ...listKbBase,
+        kbRow({
+          document_id: "doc-ingested",
+          doc_key: "fresh-doc",
+          status: "draft",
+          revision_no: 1,
+          published_at: null
+        })
+      ]
+    })
+  );
   retrievalQuery.mockResolvedValue({
     plan_source: "deterministic_fallback",
     degraded: true,
@@ -287,6 +310,42 @@ describe("KnowledgeView", () => {
 
     expect(getKbDocument).toHaveBeenCalledWith("doc-1", "proj-1");
     expect(wrapper.find(".kb-detail").exists()).toBe(true);
+  });
+
+  it("ingest panel: paste markdown creates a draft and opens its detail", async () => {
+    const wrapper = await mountView();
+    await wrapper.find(".impact-panel summary").trigger("click");
+    // 摄入面板是 KB 页签下第二个 details。
+    const panels = wrapper.findAll("details.impact-panel");
+    await panels[1].find("summary").trigger("click");
+    await panels[1].find(".impact-input").setValue("fresh-doc");
+    await panels[1].find("textarea").setValue("# 新文档\n\n粘贴正文。");
+    await panels[1].find(".ingest-run").trigger("click");
+    await flushPromises();
+
+    expect(ingestKbDocument).toHaveBeenCalledTimes(1);
+    const [pid, body] = ingestKbDocument.mock.calls[0];
+    expect(pid).toBe("proj-1");
+    expect(body.doc_key).toBe("fresh-doc");
+    expect(body.kind).toBe("markdown");
+    // base64 解码回 UTF-8 原文（atob 产出 latin1 化字节串，须按字节还原）。
+    const decoded = new TextDecoder().decode(
+      Uint8Array.from(atob(body.content_b64), c => c.charCodeAt(0))
+    );
+    expect(decoded).toContain("粘贴正文");
+    // 成功后刷新列表 + 打开详情。
+    expect(getKbDocument).toHaveBeenCalled();
+    expect(wrapper.text()).toContain("已摄入为草稿");
+  });
+
+  it("ingest panel validates empty input", async () => {
+    const wrapper = await mountView();
+    const panels = wrapper.findAll("details.impact-panel");
+    await panels[1].find("summary").trigger("click");
+    await panels[1].find(".ingest-run").trigger("click");
+    await flushPromises();
+    expect(ingestKbDocument).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain("请填写文档标识");
   });
 
   it("impact panel renders traversal path and node labels", async () => {

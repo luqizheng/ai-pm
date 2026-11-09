@@ -677,7 +677,7 @@ WP-6 不作为实质工作包，不增加独立架构建设任务，只管理 V1
 
 | # | 门控项 | 启用条件 |
 | --- | --- | --- |
-| G-1 | **D-1 Embedding Provider** | 确定 Provider/模型配置/版本管理/成本/失败策略——没有明确 Provider 与项目模型策略，不启用 Vector |
+| G-1 | **D-1 Embedding Provider** | **已裁（2026-11-10，用户确认）：bge-m3 @ Ollama 本地**——1024 维（正合 `kb.chunk_embedding` 草案 `vector(1024)`）、中英双语、公司文档不出域、走 team_llm `openai_compatible` 面（Ollama `/v1/embeddings` 兼容端点）+ purpose=embedding、成本=零 API 费、失败策略=vector 通道自动降级 BM25/PageIndex。**Vector 通道本体仍按 G-3 门控**（启用须重跑 WP-5 全套评估）；激活时注册 Ollama provider（endpoint `http://<host>:11434/v1`，model `bge-m3`）到项目模型策略即达条件 |
 | G-2 | **敏感知识钩子** | 为敏感知识的检索权限/脱敏/上下文注入预留确定性 Policy Hook——安全策略未完成前 fail-closed |
 | G-3 | **Vector 通道接入** | kb_vector/pc_vector 进 RRF——**必须执行 WP-5 全套评估证明召回排序有实际改善**（不假设必提升） |
 | G-4 | **真 BM25** | 依赖 D-8 真实语料评估（§7.3 五步门槛）——收益足以抵消新增基础设施/运维/一致性成本才引入 |

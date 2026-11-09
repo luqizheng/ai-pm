@@ -6,10 +6,12 @@ import {
   confirmKbRevision,
   decidePcProposal,
   getKbDocument,
+  ingestKbDocument,
   listKbDocuments,
   listPcObjects,
   listPcProposals,
   retrievalQuery,
+  type IngestKind,
   type KbDocumentDetail,
   type KbDocumentRow,
   type PcObjectRow,
@@ -232,6 +234,97 @@ const latestDraft = computed(() => {
   return detail.value.revisions.find(r => r.status === "draft") ?? null;
 });
 
+/* ── 摄入（上传/粘贴 → 解析 → draft；确认走既有详情按钮）────────────── */
+
+const ingestOpen = ref(false);
+const ingestDocKey = ref("");
+const ingestDocType = ref("knowledge");
+const ingestKind = ref<IngestKind>("markdown");
+const ingestText = ref("");
+const ingestFileName = ref("");
+const ingestBase64 = ref("");
+const ingestRunning = ref(false);
+const ingestNotice = ref("");
+const ingestError = ref("");
+
+function pickFile(event: Event) {
+  const inputEl = event.target as HTMLInputElement;
+  const file = inputEl.files?.[0];
+  if (!file) return;
+  ingestFileName.value = file.name;
+  // doc_key 自动建议：文件名主干（小写、空白/下划线→-）。
+  const stem = file.name.replace(/\.[^.]+$/, "");
+  ingestDocKey.value =
+    ingestDocKey.value || stem.toLowerCase().replace(/[\s_]+/g, "-");
+  const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+  if (ext === "docx") {
+    ingestKind.value = "docx";
+  } else if (ext === "txt") {
+    ingestKind.value = "text";
+  } else {
+    ingestKind.value = "markdown";
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    // dataURL 去前缀即 base64（对 docx 二进制同样安全）。
+    const result = String(reader.result ?? "");
+    ingestBase64.value = result.slice(result.indexOf(",") + 1);
+    ingestText.value = "";
+  };
+  reader.readAsDataURL(file);
+}
+
+function switchToPaste() {
+  // 粘贴模式：清文件态，kind 固定 markdown。
+  ingestFileName.value = "";
+  ingestBase64.value = "";
+  ingestKind.value = "markdown";
+}
+
+async function runIngest() {
+  if (!canLoad.value || ingestRunning.value) return;
+  const docKey = ingestDocKey.value.trim();
+  if (!docKey) {
+    ingestError.value = t("s01.knowledge.error.ingestKey");
+    return;
+  }
+  // 内容来源二选一：文件（base64）或粘贴文本。
+  let contentB64 = ingestBase64.value;
+  let kind = ingestKind.value;
+  if (!contentB64) {
+    if (!ingestText.value.trim()) {
+      ingestError.value = t("s01.knowledge.error.ingestContent");
+      return;
+    }
+    kind = "markdown";
+    contentB64 = btoa(
+      String.fromCharCode(...new TextEncoder().encode(ingestText.value))
+    );
+  }
+  ingestRunning.value = true;
+  ingestError.value = "";
+  ingestNotice.value = "";
+  try {
+    const result = await ingestKbDocument(currentProjectId.value as string, {
+      doc_key: docKey,
+      doc_type: ingestDocType.value,
+      kind,
+      content_b64: contentB64
+    });
+    ingestNotice.value = t("s01.knowledge.notice.ingested", {
+      no: result.revision_no
+    });
+    // 刷新列表并打开新 draft 详情（确认按钮就在详情里）。
+    await loadLists();
+    const row = kbRows.value.find(r => r.document_id === result.document_id);
+    if (row) await openDetail(row);
+  } catch {
+    ingestError.value = t("s01.knowledge.error.ingest");
+  } finally {
+    ingestRunning.value = false;
+  }
+}
+
 onMounted(async () => {
   await loadLists();
   await applyDeepLink();
@@ -377,6 +470,86 @@ watch(
       >
         {{ t("s01.knowledge.hint.emptyPc") }}
       </p>
+
+      <!-- 摄入面板（KB 页签）：上传/粘贴 → 解析 → draft（确认在详情里） -->
+      <details
+        v-if="activeTab === 'kb'"
+        class="impact-panel"
+        :open="ingestOpen"
+      >
+        <summary @click.prevent="ingestOpen = !ingestOpen">
+          {{ t("s01.knowledge.ingest.title") }}
+        </summary>
+        <div class="impact-body">
+          <div class="ingest-row">
+            <label class="ingest-file">
+              <input
+                type="file"
+                accept=".md,.markdown,.txt,.docx"
+                @change="pickFile"
+              />
+              <span>{{
+                ingestFileName || t("s01.knowledge.ingest.pickFile")
+              }}</span>
+            </label>
+            <button
+              v-if="ingestFileName"
+              class="kb-close"
+              @click="switchToPaste"
+            >
+              {{ t("s01.knowledge.ingest.switchPaste") }}
+            </button>
+          </div>
+          <div class="ingest-row">
+            <input
+              v-model="ingestDocKey"
+              class="impact-input"
+              :placeholder="t('s01.knowledge.ingest.docKey')"
+            />
+            <select v-model="ingestDocType" class="impact-input ingest-select">
+              <option value="knowledge">
+                {{ t("s01.knowledge.ingest.typeKnowledge") }}
+              </option>
+              <option value="architecture">
+                {{ t("s01.knowledge.ingest.typeArchitecture") }}
+              </option>
+              <option value="decision">
+                {{ t("s01.knowledge.ingest.typeDecision") }}
+              </option>
+              <option value="requirement">
+                {{ t("s01.knowledge.ingest.typeRequirement") }}
+              </option>
+            </select>
+          </div>
+          <textarea
+            v-if="!ingestFileName"
+            v-model="ingestText"
+            class="impact-input ingest-textarea"
+            :placeholder="t('s01.knowledge.ingest.pastePlaceholder')"
+            rows="6"
+          />
+          <div class="ingest-actions">
+            <button
+              class="kb-confirm ingest-run"
+              :disabled="ingestRunning"
+              @click="runIngest"
+            >
+              {{
+                ingestRunning
+                  ? t("s01.knowledge.ingest.running")
+                  : t("s01.knowledge.ingest.run")
+              }}
+            </button>
+          </div>
+          <p v-if="ingestNotice" class="kb-notice" role="status">
+            {{ ingestNotice }}
+          </p>
+          <p v-if="ingestError" class="knowledge-error" role="alert">
+            {{ ingestError }}
+          </p>
+          <p class="knowledge-hint">{{ t("s01.knowledge.ingest.hint") }}</p>
+        </div>
+      </details>
 
       <!-- KB 文档列表 -->
       <ul v-if="activeTab === 'kb' && kbRows.length" class="kb-list">
@@ -785,5 +958,37 @@ watch(
   padding: 0;
   font-size: 11px;
   color: var(--text-warning, #8a5a00);
+}
+
+.ingest-row {
+  display: flex;
+  gap: var(--space-2, 8px);
+  align-items: center;
+}
+
+.ingest-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px dashed var(--border-subtle, var(--ws-border, #d0d0d0));
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-secondary, var(--ws-text, #555));
+}
+
+.ingest-file input[type="file"] {
+  display: none;
+}
+
+.ingest-select {
+  max-width: 160px;
+}
+
+.ingest-textarea {
+  resize: vertical;
+  font-family: inherit;
+  min-height: 120px;
 }
 </style>
