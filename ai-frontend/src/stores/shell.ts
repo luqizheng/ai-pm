@@ -41,6 +41,31 @@ export interface RepositoryContext {
   status: string;
 }
 
+/**
+ * 助手上下文快照（提交时刻定格）。
+ *
+ * **单一真源的快照投影**：指令栏提交时把当时的上下文定格下来，交接给
+ * 会话页——导航、切换项目都不改变这份快照，避免「问的是 A 项目、记到
+ * B 项目」。字段与 `AssistantContext` 同构，便于直接回填。
+ */
+export interface AssistantContextSnapshot {
+  /** 项目 id；切换中或未选项目时为 null */
+  projectId: string | null;
+  /** 项目名；切换中为 null（不回落到旧项目） */
+  projectName: string | null;
+  /** 项目说明 */
+  projectDescription: string | null;
+  /** 仓库名 */
+  repositoryName: string | null;
+  /** 默认分支 */
+  defaultBranch: string | null;
+  /** 本人角色 */
+  repositoryRole: string | null;
+}
+
+/** 助手上下文（活态）——指令栏 / 右上下文栏 / 会话页共用同一对象 */
+export type AssistantContext = AssistantContextSnapshot;
+
 function initialSidebarCollapsed(): boolean {
   try {
     return localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1";
@@ -65,8 +90,14 @@ export const useShellStore = defineStore("app-shell", () => {
   /**
    * 指令栏 → 会话页的单槽交接：指令栏只入队并导航，真正发送由会话页走
    * 其既有发送链（自动建会话 / 失败重发）；消费即清空，避免重复发送。
+   *
+   * **携带上下文快照**（整合计划 Batch 1）：提交时刻定格，导航/切换项目
+   * 都不改变它——会话页据此把问题落到「问的时候的那个项目」。
    */
-  const pendingAssistantPrompt = ref<{ text: string } | null>(null);
+  const pendingAssistantPrompt = ref<{
+    text: string;
+    context: AssistantContextSnapshot;
+  } | null>(null);
 
   /** 可选项目清单（骨架阶段由调用方注入，接真实数据源时替换） */
   const projects = ref<ProjectOption[]>([]);
@@ -103,6 +134,39 @@ export const useShellStore = defineStore("app-shell", () => {
     () => projects.value.find(p => p.id === switchingProjectId.value) ?? null
   );
 
+  /**
+   * 助手上下文（活态单一真源）。
+   *
+   * 指令栏作用域串、右上下文栏「助手可用的上下文」卡、会话页三处**共用
+   * 这一份**，不再各自派生（F-1/F-2/F-8 的派生分裂根因）。
+   *
+   * 切换期间项目与仓库字段全为 null —— 不暴露旧项目数据
+   * （Figma「07」No stale project data is displayed）。仓库随项目切换
+   * 异步重载，故切换窗口内旧分支同样不得外泄。
+   */
+  const assistantContext = computed<AssistantContext>(() => {
+    if (switching.value) {
+      return {
+        projectId: null,
+        projectName: null,
+        projectDescription: null,
+        repositoryName: null,
+        defaultBranch: null,
+        repositoryRole: null
+      };
+    }
+    const project = currentProject.value;
+    const repository = currentRepository.value;
+    return {
+      projectId: project?.id ?? null,
+      projectName: project?.name ?? null,
+      projectDescription: project?.description ?? null,
+      repositoryName: repository?.name ?? null,
+      defaultBranch: repository?.defaultBranch ?? null,
+      repositoryRole: repository?.role ?? null
+    };
+  });
+
   function toggleSidebar() {
     setSidebarCollapsed(!sidebarCollapsed.value);
   }
@@ -131,14 +195,23 @@ export const useShellStore = defineStore("app-shell", () => {
 
   /** 指令栏提交提问（空白忽略）；会话页经 takeAssistantPrompt 消费。
    *  槽用新对象承载（而非裸字符串）：相同文案连续提交也能再次触发
-   *  会话页对 pendingAssistantPrompt 的 watch。 */
+   *  会话页对 pendingAssistantPrompt 的 watch。
+   *  **上下文在提交时刻定格**（快照），导航/切换项目不改变它。 */
   function queueAssistantPrompt(text: string) {
     const value = text.trim();
-    if (value) pendingAssistantPrompt.value = { text: value };
+    if (value) {
+      pendingAssistantPrompt.value = {
+        text: value,
+        context: { ...assistantContext.value }
+      };
+    }
   }
 
   /** 取出并清空待发提问（无则 null） */
-  function takeAssistantPrompt(): { text: string } | null {
+  function takeAssistantPrompt(): {
+    text: string;
+    context: AssistantContextSnapshot;
+  } | null {
     const value = pendingAssistantPrompt.value;
     pendingAssistantPrompt.value = null;
     return value;
@@ -211,6 +284,7 @@ export const useShellStore = defineStore("app-shell", () => {
     switching,
     currentProject,
     switchingProject,
+    assistantContext,
     toggleSidebar,
     setSidebarCollapsed,
     toggleContext,

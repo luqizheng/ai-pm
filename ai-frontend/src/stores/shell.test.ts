@@ -132,4 +132,104 @@ describe("shell store", () => {
     expect(shell.switching).toBe(false);
     expect(shell.currentProjectId).toBe("p1");
   });
+
+  // ───────────────────────────────────────────── 助手上下文单一真源
+
+  it("assistantContext 由当前项目与仓库派生（指令栏/右栏/会话页共用）", () => {
+    const shell = useShellStore();
+    shell.setProjects([
+      { id: "p1", name: "Atlas Platform", description: "Acme Research" }
+    ]);
+    shell.setCurrentProject("p1");
+    shell.currentRepository = {
+      name: "atlas-platform",
+      defaultBranch: "main",
+      role: "main",
+      status: "verified"
+    };
+
+    expect(shell.assistantContext).toEqual({
+      projectId: "p1",
+      projectName: "Atlas Platform",
+      projectDescription: "Acme Research",
+      repositoryName: "atlas-platform",
+      defaultBranch: "main",
+      repositoryRole: "main"
+    });
+  });
+
+  it("切换中 assistantContext 不暴露旧项目数据", async () => {
+    const shell = useShellStore();
+    shell.setProjects([
+      { id: "p1", name: "Atlas Platform" },
+      { id: "p2", name: "Research Sandbox" }
+    ]);
+    shell.setCurrentProject("p1");
+    shell.currentRepository = {
+      name: "atlas-platform",
+      defaultBranch: "main",
+      role: "main",
+      status: "verified"
+    };
+
+    void shell.switchProject("p2", () => new Promise<void>(() => {}));
+
+    expect(shell.assistantContext.projectId).toBeNull();
+    expect(shell.assistantContext.projectName).toBeNull();
+    expect(shell.assistantContext.defaultBranch).toBeNull();
+  });
+
+  it("入队提问时定格上下文快照", () => {
+    const shell = useShellStore();
+    shell.setProjects([{ id: "p1", name: "Atlas Platform" }]);
+    shell.setCurrentProject("p1");
+    shell.currentRepository = {
+      name: "atlas-platform",
+      defaultBranch: "main",
+      role: "main",
+      status: "verified"
+    };
+
+    shell.queueAssistantPrompt("分析风险");
+
+    expect(shell.pendingAssistantPrompt?.text).toBe("分析风险");
+    expect(shell.pendingAssistantPrompt?.context).toEqual({
+      projectId: "p1",
+      projectName: "Atlas Platform",
+      projectDescription: null,
+      repositoryName: "atlas-platform",
+      defaultBranch: "main",
+      repositoryRole: "main"
+    });
+  });
+
+  it("提交后切换项目，快照不漂移（仍是提交时刻的上下文）", async () => {
+    const shell = useShellStore();
+    shell.setProjects([
+      { id: "p1", name: "Atlas Platform" },
+      { id: "p2", name: "Research Sandbox" }
+    ]);
+    shell.setCurrentProject("p1");
+
+    shell.queueAssistantPrompt("分析风险");
+    await shell.switchProject("p2");
+
+    expect(shell.pendingAssistantPrompt?.context.projectId).toBe("p1");
+    expect(shell.pendingAssistantPrompt?.context.projectName).toBe(
+      "Atlas Platform"
+    );
+  });
+
+  it("取出待发提问即清空槽（消费即清空，不重复发送）", () => {
+    const shell = useShellStore();
+    shell.setProjects([{ id: "p1", name: "Atlas Platform" }]);
+    shell.setCurrentProject("p1");
+    shell.queueAssistantPrompt("分析风险");
+
+    const taken = shell.takeAssistantPrompt();
+
+    expect(taken?.text).toBe("分析风险");
+    expect(taken?.context.projectId).toBe("p1");
+    expect(shell.pendingAssistantPrompt).toBeNull();
+  });
 });

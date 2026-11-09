@@ -697,3 +697,184 @@ async fn latest_query_returns_newest_window_and_conflicts_are_400(pool: PgPool) 
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+// ── Batch 2：线程级上下文锚点（0003）──────────────────────────────────
+
+/// 建会话（可带 context 锚点）。
+async fn create_conversation_with(
+    app: axum::Router,
+    token: &str,
+    project_id: Uuid,
+    body: Value,
+) -> (StatusCode, Value) {
+    body_json(
+        app.oneshot(request(
+            "POST",
+            &format!("/v1/pm/projects/{project_id}/conversations"),
+            token,
+            Some(body),
+        ))
+        .await
+        .unwrap(),
+    )
+    .await
+}
+
+/// 播种本项目真实仓库（锚点真实性校验的对照物）。
+async fn seed_repository(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    name: &str,
+    default_branch: &str,
+) -> Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO integration.project_repository \
+             (tenant_id, project_id, name, url, default_branch, status) \
+         VALUES ($1, $2, $3, $4, $5, 'verified') RETURNING id",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(name)
+    .bind(format!("https://example.invalid/{name}.git"))
+    .bind(default_branch)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+/// A-4：合法锚点落库；缺省 context → 锚点为 null（存量兼容）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn context_anchor_is_stored_on_creation(pool: PgPool) {
+    let tenant = seed_tenant(&pool, "1").await;
+    let alice = seed_member(&pool, tenant, "alice").await;
+    let customer = seed_customer(&pool, tenant, "c1").await;
+    let project = seed_project(&pool, tenant, customer, "p1", alice).await;
+    seed_repository(&pool, tenant, project, "atlas-platform", "main").await;
+    let app = app(pool);
+    let token = token_for("alice", 1);
+
+    // 带锚点建会话 → 201 且锚点回显。
+    let (status, v) = create_conversation_with(
+        app.clone(),
+        &token,
+        project,
+        json!({
+            "title": "带上下文",
+            "context": {
+                "project_id": project.to_string(),
+                "project_name": "p1",
+                "repository_name": "atlas-platform",
+                "default_branch": "main",
+                "repository_role": "main"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{v}");
+    assert_eq!(v["context_anchor"]["repository_name"], json!("atlas-platform"));
+    assert_eq!(v["context_anchor"]["default_branch"], json!("main"));
+
+    // 缺省 context → 锚点为 null（存量会话兼容）。
+    let (status, v) = create_conversation(app.clone(), &token, project).await;
+    assert_eq!(status, StatusCode::CREATED, "{v}");
+    assert!(v["context_anchor"].is_null(), "{v}");
+
+    // 列表回读同样带锚点。
+    let (status, v) = body_json(
+        app.oneshot(request(
+            "GET",
+            &format!("/v1/pm/projects/{project}/conversations"),
+            &token,
+            None,
+        ))
+        .await
+        .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{v}");
+    let items = v.as_array().expect("array");
+    let anchored = items
+        .iter()
+        .find(|item| item["title"] == json!("带上下文"))
+        .expect("anchored conversation");
+    assert_eq!(
+        anchored["context_anchor"]["repository_name"],
+        json!("atlas-platform")
+    );
+}
+
+/// A-5：白名单外字段 / 不存在的仓库 / 跨项目锚点 / 非法分支 → 400。
+#[sqlx::test(migrations = "../../migrations")]
+async fn context_anchor_rejects_invalid_values(pool: PgPool) {
+    let tenant = seed_tenant(&pool, "1").await;
+    let alice = seed_member(&pool, tenant, "alice").await;
+    let customer = seed_customer(&pool, tenant, "c1").await;
+    let project = seed_project(&pool, tenant, customer, "p1", alice).await;
+    let other_project = seed_project(&pool, tenant, customer, "p2", alice).await;
+    seed_repository(&pool, tenant, project, "atlas-platform", "main").await;
+    let app = app(pool);
+    let token = token_for("alice", 1);
+
+    // 白名单外字段 → 422（axum Json 拒绝器：body 无法反序列化成契约结构）。
+    // 与 400 区分：400 = 结构合法但语义越界（仓库不存在 / 跨项目锚点）。
+    let (status, _) = create_conversation_with(
+        app.clone(),
+        &token,
+        project,
+        json!({
+            "context": {
+                "project_id": project.to_string(),
+                "secret_token": "leak"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    // 仓库不存在（本项目内）→ 400。
+    let (status, _) = create_conversation_with(
+        app.clone(),
+        &token,
+        project,
+        json!({
+            "context": {
+                "project_id": project.to_string(),
+                "repository_name": "no-such-repo"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // 锚点 project_id 与目标项目不符 → 400。
+    let (status, _) = create_conversation_with(
+        app.clone(),
+        &token,
+        project,
+        json!({
+            "context": {
+                "project_id": other_project.to_string(),
+                "repository_name": "atlas-platform"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    // 分支不属于该仓库 → 400。
+    let (status, _) = create_conversation_with(
+        app.clone(),
+        &token,
+        project,
+        json!({
+            "context": {
+                "project_id": project.to_string(),
+                "repository_name": "atlas-platform",
+                "default_branch": "release/9999"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

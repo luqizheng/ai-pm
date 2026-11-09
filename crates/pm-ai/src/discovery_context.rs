@@ -370,6 +370,106 @@ pub fn assemble(drafts: Vec<SectionDraft>) -> InterviewContext {
     }
 }
 
+// ── chat 段预算（整合计划 Batch 3A；与访谈预算**独立**）──────────────────
+//
+// 复用同一套「整节删除优先于逐节压缩 + 记账」结构，但 chat 只有两节、
+// 独立 8,000 字符预算——访谈是长程结构化任务，chat 是一问一答，
+// 二者不共享额度（访谈的 36,000 常量不动）。
+
+/// chat 分节顺序（与 `assemble_chat` 一致）。
+pub const CHAT_SECTION_ORDER: [&str; 2] = [
+    crate::chat_context::CHAT_KEY_PROJECT_PROFILE,
+    crate::chat_context::CHAT_KEY_REPOSITORY_FACTS,
+];
+
+/// chat 整节删除顺序：仓库事实先删（项目画像是更基本的上下文）。
+pub const CHAT_DROP_ORDER: [&str; 1] =
+    [crate::chat_context::CHAT_KEY_REPOSITORY_FACTS];
+
+/// 把原始小节装配成 chat 注入产物（受 chat 预算约束）。
+///
+/// 与 [`assemble`] 同构，独立预算与节集：整节删除（仓库事实优先）→ 逐节
+/// 截断 → 兜底。纯函数，无 IO。
+pub fn assemble_chat(drafts: Vec<SectionDraft>) -> crate::chat_context::ChatContext {
+    use crate::chat_context::{
+        CHAT_CAP_PROJECT_PROFILE, CHAT_CAP_REPOSITORY_FACTS, CHAT_TOTAL_BUDGET_CHARS,
+    };
+
+    // 1) 固定顺序。
+    let mut ordered = drafts;
+    ordered.sort_by_key(|d| {
+        CHAT_SECTION_ORDER
+            .iter()
+            .position(|k| *k == d.key.as_str())
+            .unwrap_or(CHAT_SECTION_ORDER.len())
+    });
+
+    // 2) 整节删除（超预算时按 CHAT_DROP_ORDER 逐节删，每删一节重判）。
+    let mut kept: Vec<SectionDraft> = ordered;
+    let mut dropped: Vec<String> = Vec::new();
+    for key in CHAT_DROP_ORDER {
+        let total: usize = kept.iter().map(|d| d.body.chars().count()).sum();
+        if total <= CHAT_TOTAL_BUDGET_CHARS {
+            break;
+        }
+        if let Some(pos) = kept.iter().position(|d| d.key == key) {
+            kept.remove(pos);
+            dropped.push(key.to_string());
+        }
+    }
+
+    // 3) 逐节截断到各自上限。
+    let mut sections: Vec<ContextSection> = kept
+        .into_iter()
+        .map(|d| {
+            let chars = d.body.chars().count();
+            ContextSection {
+                key: d.key,
+                title: d.title,
+                body: d.body,
+                chars,
+                truncated: false,
+            }
+        })
+        .collect();
+    for section in sections.iter_mut() {
+        let cap = match section.key.as_str() {
+            crate::chat_context::CHAT_KEY_PROJECT_PROFILE => CHAT_CAP_PROJECT_PROFILE,
+            crate::chat_context::CHAT_KEY_REPOSITORY_FACTS => CHAT_CAP_REPOSITORY_FACTS,
+            _ => continue,
+        };
+        if section.chars > cap {
+            section.body = clip_chars(&section.body, cap);
+            section.chars = section.body.chars().count();
+            section.truncated = true;
+        }
+    }
+
+    // 4) 兜底：截断后仍超预算（当前常量不可达，防未来调值破不变式）。
+    loop {
+        let total: usize = sections.iter().map(|s| s.chars).sum();
+        if total <= CHAT_TOTAL_BUDGET_CHARS {
+            break;
+        }
+        let Some(next_key) = CHAT_DROP_ORDER
+            .iter()
+            .map(|key| key.to_string())
+            .find(|key| sections.iter().any(|s| s.key == *key))
+        else {
+            break;
+        };
+        sections.retain(|s| s.key != next_key);
+        dropped.push(next_key);
+    }
+
+    let chars_total: usize = sections.iter().map(|s| s.chars).sum();
+    crate::chat_context::ChatContext {
+        sections,
+        sections_dropped: dropped,
+        chars_total,
+    }
+}
+
 fn cap_for(key: &str) -> Option<usize> {
     Some(match key {
         KEY_PROJECT_PROFILE => CAP_PROJECT_PROFILE,

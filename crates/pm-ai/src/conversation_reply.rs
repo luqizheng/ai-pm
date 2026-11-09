@@ -107,6 +107,11 @@ struct PendingConversation {
     tenant_id: Uuid,
     project_id: Uuid,
     principal_id: Uuid,
+    /// Batch 2（0003）：线程级上下文锚点；NULL = 无锚点（存量线程）。
+    ///
+    /// 锚点只用于**定位**注入源（哪个仓库），不直接进模型——注入内容一律
+    /// 由服务端按锚点重新投影实时事实（Batch 3A）。
+    context_anchor: Option<serde_json::Value>,
 }
 
 impl ConversationReplyWorker {
@@ -148,8 +153,8 @@ impl ConversationReplyWorker {
     /// Pending = latest message (created_at, id DESC) has role='user';
     /// FIFO by that latest message's (created_at, id) ascending.
     async fn scan_pending(&self) -> Result<Vec<PendingConversation>, sqlx::Error> {
-        let rows = sqlx::query_as::<_, (Uuid, Uuid, Uuid, Uuid)>(
-            "SELECT c.id, c.tenant_id, c.project_id, c.principal_id \
+        let rows = sqlx::query_as::<_, (Uuid, Uuid, Uuid, Uuid, Option<serde_json::Value>)>(
+            "SELECT c.id, c.tenant_id, c.project_id, c.principal_id, c.context_anchor \
              FROM ai.conversation c \
              JOIN LATERAL ( \
                  SELECT id, role, created_at FROM ai.conversation_message m \
@@ -165,11 +170,12 @@ impl ConversationReplyWorker {
         Ok(rows
             .into_iter()
             .map(
-                |(id, tenant_id, project_id, principal_id)| PendingConversation {
+                |(id, tenant_id, project_id, principal_id, context_anchor)| PendingConversation {
                     id,
                     tenant_id,
                     project_id,
                     principal_id,
+                    context_anchor,
                 },
             )
             .collect())
@@ -224,11 +230,30 @@ impl ConversationReplyWorker {
     async fn try_reply(&self, conversation: &PendingConversation) -> Result<(), ReplyFailure> {
         let history = self.load_history(conversation.id).await?;
 
+        // Batch 3A：chat 精简注入（S1 项目画像 + S2 仓库事实）。
+        //
+        // 注入源 = 线程锚点（Batch 2）→ 服务端按锚点**重新投影**实时事实；
+        // 锚点缺失或查不到 → 零注入，模型上下文与注入前逐字节一致
+        // （向后兼容：存量线程行为不变）。
+        //
+        // 注入失败（DB 错）**不阻断回复**——上下文是增强，不是回复的前提。
+        let (injected, injection_meta) = match self.build_injection(conversation).await {
+            Ok(pair) => pair,
+            Err(error) => {
+                tracing::warn!(
+                    conversation_id = %conversation.id,
+                    %error,
+                    "chat context injection failed; replying without injected context"
+                );
+                (None, serde_json::Value::Null)
+            }
+        };
+
         // Task 17 three-level selection, reused verbatim: strict project
         // designation → first enabled tenant provider → none.
         match select_analysis_model_config(&self.pool, conversation.project_id).await {
             crate::analysis_model::ModelSelection::Provider(cfg) => {
-                let messages = Self::build_messages(&history);
+                let messages = Self::build_messages(&history, injected.as_deref());
                 let timeout = chrono::Duration::seconds(i64::from(cfg.timeout_secs).max(1));
                 let started = Instant::now();
                 let reply = conversation_model::complete(
@@ -269,6 +294,7 @@ impl ConversationReplyWorker {
                             &cfg.model,
                             latency,
                             completion.usage,
+                            injection_meta.clone(),
                         )
                         .await?;
                         Ok(())
@@ -330,18 +356,50 @@ impl ConversationReplyWorker {
         Ok(rows)
     }
 
-    fn build_messages(history: &[(String, String)]) -> Vec<ConversationTurn> {
-        let mut messages = Vec::with_capacity(history.len() + 1);
+    fn build_messages(
+        history: &[(String, String)],
+        injected: Option<&str>,
+    ) -> Vec<ConversationTurn> {
+        let mut messages = Vec::with_capacity(history.len() + 2);
         messages.push(ConversationTurn::new(
             "system",
             conversation_model::CONVERSATION_SYSTEM_PROMPT,
         ));
+        // 注入作为**第二个 system 轮**紧跟基础系统提示：`<context>` 内一律
+        // 按数据对待（防注入），标题即来源标注——事实引用须能落到某节。
+        if let Some(context) = injected {
+            messages.push(ConversationTurn::new("system", context));
+        }
         messages.extend(
             history
                 .iter()
                 .map(|(role, content)| ConversationTurn::new(role, content.clone())),
         );
         messages
+    }
+
+    /// 构造 chat 注入（Batch 3A）。
+    ///
+    /// 返回 `(注入正文, 记账载荷)`：无锚点 / 查不到项目 → `(None, Null)`——
+    /// 调用方据此**完全跳过注入**（旧行为不变）。
+    async fn build_injection(
+        &self,
+        conversation: &PendingConversation,
+    ) -> Result<(Option<String>, serde_json::Value), sqlx::Error> {
+        let repository = crate::chat_context::anchor_repository(
+            conversation.context_anchor.as_ref(),
+        );
+        let context = crate::chat_context::build_chat_context(
+            &self.pool,
+            conversation.tenant_id,
+            conversation.project_id,
+            repository.as_deref(),
+        )
+        .await?;
+        if context.is_empty() {
+            return Ok((None, serde_json::Value::Null));
+        }
+        Ok((Some(context.render()), context.metadata()))
     }
 
     /// Append the assistant turn. Content is defensively clamped to the
@@ -358,12 +416,16 @@ impl ConversationReplyWorker {
         model_name: &str,
         latency_ms: i64,
         usage: Option<conversation_model::Usage>,
+        injection_meta: serde_json::Value,
     ) -> Result<(), pm_application::ai_conversations::ConversationError> {
         let clamped: String = content
             .chars()
             .take(pm_application::ai_conversations::MAX_CONTENT_CHARS)
             .collect();
-        let metadata = match usage {
+        // 注入记账（D2 可观测性）挂在 assistant 消息的 metadata 上——
+        // `ai.llm_call_record` 无 metadata 列（DK-C 已登记该缺口），
+        // 而消息 metadata 列已在（0060），零迁移。
+        let mut metadata = match usage {
             Some(u) => serde_json::json!({
                 "model": model_name,
                 "latency_ms": latency_ms,
@@ -374,6 +436,9 @@ impl ConversationReplyWorker {
                 "latency_ms": latency_ms,
             }),
         };
+        if !injection_meta.is_null() {
+            metadata["injection"] = injection_meta;
+        }
         pm_application::ai_conversations::append_message(
             &self.pool,
             conversation.tenant_id,
@@ -612,15 +677,17 @@ mod tests {
         assert!(record.4.is_none(), "no usage → prompt_tokens NULL");
         assert!(record.5.is_none(), "no usage → completion_tokens NULL");
 
-        // The model context: system prompt first, then the user turn.
+        // The model context: system prompt first, then the injected context
+        // (Batch 3A), then the user turn.
         let requests = server.received_requests().await.unwrap();
         assert_eq!(requests.len(), 1);
         let body: Value = serde_json::from_slice(&requests[0].body).unwrap();
         let messages = body["messages"].as_array().unwrap();
-        assert_eq!(messages.len(), 2, "system + 1 user turn");
+        assert_eq!(messages.len(), 3, "system + injection + 1 user turn");
         assert_eq!(messages[0]["role"], "system");
-        assert_eq!(messages[1]["role"], "user");
-        assert_eq!(messages[1]["content"], "哪个任务风险最高？");
+        assert_eq!(messages[1]["role"], "system");
+        assert_eq!(messages[2]["role"], "user");
+        assert_eq!(messages[2]["content"], "哪个任务风险最高？");
 
         // Replied conversation left the scan set naturally.
         let report = worker.reply_round().await.unwrap();
@@ -870,11 +937,21 @@ mod tests {
         assert_eq!(requests.len(), 1);
         let body: Value = serde_json::from_slice(&requests[0].body).unwrap();
         let messages = body["messages"].as_array().unwrap();
-        assert_eq!(messages.len(), 21, "system + 20-turn window");
+        // Batch 3A：注入作为第二个 system 轮（紧跟基础系统提示），
+        // 故轮数 = system + 注入 + 20-turn 窗口。
+        assert_eq!(messages.len(), 22, "system + injection + 20-turn window");
         assert_eq!(messages[0]["role"], "system");
+        assert_eq!(messages[1]["role"], "system");
+        assert!(
+            messages[1]["content"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("项目画像"),
+            "second system turn carries the injected context"
+        );
         // Dropped: turn-00..turn-04; kept: turn-05..turn-24, ascending.
-        assert_eq!(messages[1]["content"], "turn-05");
-        assert_eq!(messages[20]["content"], "turn-24");
+        assert_eq!(messages[2]["content"], "turn-05");
+        assert_eq!(messages[21]["content"], "turn-24");
     }
 
     /// The system prompt must instruct the model to mirror the user's
@@ -915,11 +992,25 @@ mod tests {
             ("user".to_string(), "q".to_string()),
             ("assistant".to_string(), "a".to_string()),
         ];
-        let messages = ConversationReplyWorker::build_messages(&history);
+        let messages = ConversationReplyWorker::build_messages(&history, None);
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[0].role, "system");
         assert_eq!(messages[1], ConversationTurn::new("user", "q"));
         assert_eq!(messages[2], ConversationTurn::new("assistant", "a"));
+    }
+
+    /// Batch 3A：注入作为第二个 system 轮紧跟基础系统提示；
+    /// 无注入时轮次与位置与注入前逐字节一致（向后兼容）。
+    #[test]
+    fn build_messages_inserts_injection_as_second_system_turn() {
+        let history = vec![("user".to_string(), "q".to_string())];
+        let messages =
+            ConversationReplyWorker::build_messages(&history, Some("<context>项目画像</context>"));
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0].role, "system");
+        assert_eq!(messages[1].role, "system");
+        assert_eq!(messages[1].content, "<context>项目画像</context>");
+        assert_eq!(messages[2], ConversationTurn::new("user", "q"));
     }
 
     /// body_partial_json is exercised in one test to prove the wire payload

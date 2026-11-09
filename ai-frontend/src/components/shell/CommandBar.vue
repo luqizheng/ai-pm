@@ -47,13 +47,16 @@ const expanded = computed(() => shell.commandbarExpanded);
 /**
  * 助手作用域：当前项目 / 仓库 / 分支。
  *
+ * 作用域串与右上下文栏「助手可用的上下文」卡、会话页**共用 shell store
+ * 的 `assistantContext`**（整合计划 Batch 1 单一真源），不再各自派生。
+ *
  * 切换中不回落旧项目名（Figma「07」No stale project data is displayed），
  * 而是用「正在切换项目…」占位，等新上下文就绪后再显示新项目。
  */
 const commandScope = computed(() => {
-  const project = shell.currentProject;
-  const name = project ? project.name : t("shell.app.project.switching");
-  const branch = shell.currentRepository?.defaultBranch;
+  const context = shell.assistantContext;
+  const name = context.projectName ?? t("shell.app.project.switching");
+  const branch = context.defaultBranch;
   return branch ? `${name} / Repository / ${branch}` : name;
 });
 
@@ -136,11 +139,16 @@ function applySuggestion(key: string) {
         @keydown="onKeydown"
       />
       <kbd class="shell-commandbar__kbd">⌘ J</kbd>
-      <IconTooltip :content="t('shell.app.commandbar.attach')" side="top">
+      <!-- 附件按钮诚实禁用（D-IC-6）：能力未建成，不做空头摆设 -->
+      <IconTooltip
+        :content="t('shell.app.commandbar.attachPending')"
+        side="top"
+      >
         <button
           type="button"
           class="shell-commandbar__icon-button"
-          :aria-label="t('shell.app.commandbar.attach')"
+          :aria-label="t('shell.app.commandbar.attachPending')"
+          disabled
         >
           <Paperclip :size="14" aria-hidden="true" />
         </button>

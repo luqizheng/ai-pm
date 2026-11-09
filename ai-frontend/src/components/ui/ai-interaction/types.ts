@@ -25,6 +25,23 @@ export type AiResponseType =
   | "execution-result";
 
 /**
+ * 8 类响应白名单（运行时校验用）。
+ *
+ * 与后端 `pm_application::ai_interaction_envelope::RESPONSE_TYPES` 同源——
+ * 白名单外的类型一律拒收（fail-closed），不伪造卡片。
+ */
+export const RESPONSE_TYPES: readonly AiResponseType[] = [
+  "informational",
+  "recommendation",
+  "proposal",
+  "question",
+  "decision",
+  "artifact",
+  "action-request",
+  "execution-result"
+];
+
+/**
  * 交互生命周期（表现态）：
  * created → presented → in-progress → submitted → validating → processing
  *        → accepted / rejected / deferred / resolved / failed
@@ -41,6 +58,66 @@ export type InteractionStatus =
   | "deferred"
   | "resolved"
   | "failed";
+
+/** 生命周期状态白名单（运行时校验用；与后端同源）。 */
+export const INTERACTION_STATUSES: readonly InteractionStatus[] = [
+  "created",
+  "presented",
+  "in-progress",
+  "submitted",
+  "validating",
+  "processing",
+  "accepted",
+  "rejected",
+  "deferred",
+  "resolved",
+  "failed"
+];
+
+/** 终态集合（提交后卡转只读汇总的依据）。 */
+export const TERMINAL_STATUSES: readonly InteractionStatus[] = [
+  "accepted",
+  "rejected",
+  "deferred",
+  "resolved",
+  "failed"
+];
+
+/**
+ * 各类型 payload 的必填字段（运行时校验用）。
+ *
+ * 与后端 `pm_application::ai_interaction_envelope::required_fields` 逐字段
+ * 同源（= 本文件 8 类 payload 接口的 TS 必填项全集）：卡片组件对缺失字段
+ * 会渲染崩，消费端必须在组装 `interaction` 前挡住（fail-closed：缺一即
+ * 整信封拒收，消息退化为纯文本，不伪造卡、不留空白）。
+ */
+export const PAYLOAD_REQUIRED_FIELDS: Record<
+  AiResponseType,
+  readonly string[]
+> = {
+  informational: ["contentMarkdown"],
+  recommendation: ["summary", "explanationMarkdown", "benefits", "risks"],
+  proposal: ["proposalType", "changes", "impact", "related", "version"],
+  question: ["groupTitle", "questions"],
+  decision: ["background", "impact", "options"],
+  artifact: ["artifactType", "contentMarkdown", "version"],
+  "action-request": [
+    "action",
+    "target",
+    "impact",
+    "permission",
+    "riskLevel",
+    "statement"
+  ],
+  "execution-result": [
+    "agentName",
+    "taskRef",
+    "executionState",
+    "summary",
+    "changedFiles",
+    "logs"
+  ]
+};
 
 /** 提交阶段（控制按钮 loading / 结果条） */
 export type SubmissionPhase = "idle" | "submitting" | "success" | "error";

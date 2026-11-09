@@ -17,6 +17,12 @@ const props = withDefaults(
     messages: ConversationMessage[];
     title?: string;
     contextLabel?: string;
+    /** 真实提交通道（Batch 3C），透传给消息内的响应卡。 */
+    submit?: (
+      payload: unknown,
+      action?: string,
+      messageId?: string
+    ) => Promise<unknown>;
   }>(),
   {
     title: "",
@@ -61,6 +67,7 @@ function onSend(text: string): void {
           v-for="message in messages"
           :key="message.id"
           :message="message"
+          :submit="submit"
         />
       </div>
     </div>

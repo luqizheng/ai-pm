@@ -232,6 +232,10 @@ shell:
       aiNotice: 助手可用的上下文
       readOnly: 只读上下文
       noAttachment: 当前请求未附加文件
+      injectionSources: 注入源
+      sourceProject: 项目画像
+      sourceRepository: 仓库事实
+      sourceNone: 未锚定（会话内按需回答）
     commandbar:
       title: AI 助手
       reviewFirst: 任何操作前请先确认
@@ -246,6 +250,7 @@ shell:
       expand: 展开指令栏
       collapse: 收起指令栏
       attach: 附加文件
+      attachPending: 附件能力建设中
       send: 发送
     page:
       placeholderTitle: 该页面正在建设中

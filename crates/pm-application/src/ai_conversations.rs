@@ -29,6 +29,138 @@ pub const MAX_TITLE_CHARS: usize = 500;
 /// 单条消息内容长度上限。
 pub const MAX_CONTENT_CHARS: usize = 100_000;
 
+/// 上下文锚点白名单键（与 0003 迁移 CHECK 同源）。
+///
+/// 锚点是**只读投影快照**：只记「这个线程当时对着哪个项目/仓库说话」，
+/// 不含凭据、指令或可执行内容——注入内容一律由服务端按锚点重新投影
+/// （整合计划 Batch 3A），锚点本身只是定位。
+pub const CONTEXT_ANCHOR_KEYS: [&str; 5] = [
+    "project_id",
+    "project_name",
+    "repository_name",
+    "default_branch",
+    "repository_role",
+];
+
+/// 锚点单字段长度上限（防超长注入）。
+pub const MAX_ANCHOR_FIELD_CHARS: usize = 255;
+
+/// 线程级上下文锚点（建会话时定格，消息级不收）。
+///
+/// 粒度见整合计划 D-IC-1：一线程一上下文；消息级锚点会让人为每条消息
+/// 伪造上下文且每条可漂移。
+///
+/// **未知字段一律拒绝**（`deny_unknown_fields`）：锚点是白名单结构，
+/// 静默忽略未知键等于开了后门——调用方可塞入任意内容而不被察觉。
+/// 与 0003 迁移的白名单 CHECK 同源，双层把关。
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContextAnchor {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository_role: Option<String>,
+}
+
+impl ContextAnchor {
+    /// 空锚点（无任何有效字段）→ 不落库。
+    pub fn is_empty(&self) -> bool {
+        self.project_id.is_none()
+            && self.project_name.is_none()
+            && self.repository_name.is_none()
+            && self.default_branch.is_none()
+            && self.repository_role.is_none()
+    }
+
+    /// 校验：project_id 须与目标项目一致；各字段长度受限。
+    pub fn validate(&self, project_id: Uuid) -> Result<(), ConversationError> {
+        if let Some(raw) = self.project_id.as_deref() {
+            let parsed = Uuid::parse_str(raw).map_err(|_| {
+                ConversationError::Validation("context.project_id must be a uuid".to_string())
+            })?;
+            if parsed != project_id {
+                return Err(ConversationError::Validation(
+                    "context.project_id must match the target project".to_string(),
+                ));
+            }
+        }
+        for (key, value) in [
+            ("project_name", &self.project_name),
+            ("repository_name", &self.repository_name),
+            ("default_branch", &self.default_branch),
+            ("repository_role", &self.repository_role),
+        ] {
+            if let Some(text) = value {
+                if text.trim().chars().count() > MAX_ANCHOR_FIELD_CHARS {
+                    return Err(ConversationError::Validation(format!(
+                        "context.{key} must be at most {MAX_ANCHOR_FIELD_CHARS} characters"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// 落库形态（JSONB 对象；空锚点 → None）。
+    pub fn to_json(&self) -> Option<serde_json::Value> {
+        if self.is_empty() {
+            return None;
+        }
+        let mut map = serde_json::Map::new();
+        for (key, value) in [
+            ("project_id", &self.project_id),
+            ("project_name", &self.project_name),
+            ("repository_name", &self.repository_name),
+            ("default_branch", &self.default_branch),
+            ("repository_role", &self.repository_role),
+        ] {
+            if let Some(text) = value {
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    map.insert(
+                        key.to_string(),
+                        serde_json::Value::String(trimmed.to_string()),
+                    );
+                }
+            }
+        }
+        if map.is_empty() {
+            None
+        } else {
+            Some(serde_json::Value::Object(map))
+        }
+    }
+
+    /// 从库里读回（NULL / 非对象 → None）。
+    pub fn from_json(value: Option<serde_json::Value>) -> Option<Self> {
+        let obj = value?;
+        let obj = obj.as_object()?;
+        let get = |key: &str| {
+            obj.get(key)
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        };
+        let anchor = Self {
+            project_id: get("project_id"),
+            project_name: get("project_name"),
+            repository_name: get("repository_name"),
+            default_branch: get("default_branch"),
+            repository_role: get("repository_role"),
+        };
+        if anchor.is_empty() {
+            None
+        } else {
+            Some(anchor)
+        }
+    }
+}
+
 /// 会话视图（REST 直接序列化）。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ConversationView {
@@ -43,6 +175,8 @@ pub struct ConversationView {
     pub last_message_at: Option<DateTime<Utc>>,
     /// DK-A（0065）：线程最近一次升级指向的访谈会话；NULL = 纯 chat 线程。
     pub discovery_session_id: Option<Uuid>,
+    /// Batch 2（0003）：线程级上下文锚点；NULL = 无锚点。
+    pub context_anchor: Option<ContextAnchor>,
 }
 
 /// 消息视图（REST 直接序列化）。
@@ -72,12 +206,16 @@ pub enum ConversationError {
 }
 
 /// 建会话（属主 = 调用 principal；标题缺省空串）。
+///
+/// **上下文锚点**（Batch 2，0003）：建会话时一次性定格，消息级不收
+/// （D-IC-1）。锚点校验失败 → [`ConversationError::Validation`]（400）。
 pub async fn create_conversation(
     pool: &PgPool,
     tenant_id: Uuid,
     project_id: Uuid,
     principal_id: Uuid,
     title: &str,
+    context: Option<&ContextAnchor>,
 ) -> Result<ConversationView, ConversationError> {
     let title = title.trim();
     if title.chars().count() > MAX_TITLE_CHARS {
@@ -85,14 +223,23 @@ pub async fn create_conversation(
             "title must be at most {MAX_TITLE_CHARS} characters"
         )));
     }
+    let anchor_json = match context {
+        Some(anchor) => {
+            anchor.validate(project_id)?;
+            validate_anchor_repository(pool, tenant_id, project_id, anchor).await?;
+            anchor.to_json()
+        }
+        None => None,
+    };
     let row = sqlx::query(
-        "INSERT INTO ai.conversation (tenant_id, project_id, principal_id, title) \
-         VALUES ($1, $2, $3, $4) RETURNING id",
+        "INSERT INTO ai.conversation (tenant_id, project_id, principal_id, title, context_anchor) \
+         VALUES ($1, $2, $3, $4, $5) RETURNING id",
     )
     .bind(tenant_id)
     .bind(project_id)
     .bind(principal_id)
     .bind(title)
+    .bind(anchor_json)
     .fetch_one(pool)
     .await
     .map_err(db)?;
@@ -100,6 +247,59 @@ pub async fn create_conversation(
     fetch_conversation(pool, tenant_id, project_id, principal_id, id)
         .await?
         .ok_or(ConversationError::NotFound)
+}
+
+/// 锚点仓库真实性校验（Batch 2 验收 A-5）。
+///
+/// 锚点里的仓库名/分支必须是**本项目真实存在**的仓库与分支——否则前端
+/// 可伪造任意上下文（白名单校验只管形态，不管事实）。仓库不存在 → 400；
+/// 分支不属于该仓库 → 400。
+///
+/// 仓库名缺省时不做仓库校验（锚点只声明项目级上下文是合法用法）。
+async fn validate_anchor_repository(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    anchor: &ContextAnchor,
+) -> Result<(), ConversationError> {
+    let repo_name = match anchor.repository_name.as_deref() {
+        Some(name) if !name.trim().is_empty() => name.trim(),
+        _ => return Ok(()),
+    };
+    let row = sqlx::query(
+        "SELECT default_branch FROM integration.project_repository \
+         WHERE tenant_id = $1 AND project_id = $2 AND name = $3 \
+         LIMIT 1",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(repo_name)
+    .fetch_optional(pool)
+    .await
+    .map_err(db)?;
+    let default_branch: Option<String> = match row {
+        Some(row) => row.get("default_branch"),
+        None => {
+            return Err(ConversationError::Validation(
+                "context.repository_name must exist in the target project".to_string(),
+            ))
+        }
+    };
+    if let Some(branch) = anchor.default_branch.as_deref() {
+        let branch = branch.trim();
+        if !branch.is_empty() {
+            match default_branch.as_deref() {
+                Some(default) if default == branch => {}
+                _ => {
+                    return Err(ConversationError::Validation(
+                        "context.default_branch must match the repository default branch"
+                            .to_string(),
+                    ))
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// 列出**本人**在本项目的会话（updated_at DESC，截断 [`CONVERSATION_LIST_LIMIT`]）。
@@ -111,7 +311,8 @@ pub async fn list_conversations(
 ) -> Result<Vec<ConversationView>, ConversationError> {
     let rows = sqlx::query(
         "SELECT id, tenant_id, project_id, principal_id, title, status, \
-                created_at, updated_at, last_message_at, discovery_session_id \
+                created_at, updated_at, last_message_at, discovery_session_id, \
+                context_anchor \
          FROM ai.conversation \
          WHERE tenant_id = $1 AND project_id = $2 AND principal_id = $3 \
          ORDER BY updated_at DESC \
@@ -362,7 +563,8 @@ async fn fetch_conversation(
 ) -> Result<Option<ConversationView>, ConversationError> {
     let rows = sqlx::query(
         "SELECT id, tenant_id, project_id, principal_id, title, status, \
-                created_at, updated_at, last_message_at, discovery_session_id \
+                created_at, updated_at, last_message_at, discovery_session_id, \
+                context_anchor \
          FROM ai.conversation \
          WHERE id = $1 AND tenant_id = $2 AND project_id = $3 AND principal_id = $4",
     )
@@ -388,6 +590,7 @@ fn conversation_from_row(row: sqlx::postgres::PgRow) -> ConversationView {
         updated_at: row.get("updated_at"),
         last_message_at: row.get("last_message_at"),
         discovery_session_id: row.get("discovery_session_id"),
+        context_anchor: ContextAnchor::from_json(row.get("context_anchor")),
     }
 }
 

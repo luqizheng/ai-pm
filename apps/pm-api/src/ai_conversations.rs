@@ -26,8 +26,11 @@ use axum::{
     Extension, Json, Router,
 };
 use pm_application::ai_conversations::{
-    create_conversation, list_conversations, list_messages, ConversationError, ConversationView,
-    MessageView,
+    create_conversation, list_conversations, list_messages, ContextAnchor, ConversationError,
+    ConversationView, MessageView,
+};
+use pm_application::ai_interactions::{
+    submit_interaction, InteractionError, InteractionRequest,
 };
 use pm_application::conversation_router::{
     send_message, undo_handoff, RouterError, SendMessageRequest, UndoOutcome,
@@ -53,6 +56,9 @@ impl From<ConversationError> for ApiError {
 #[derive(Debug, Deserialize)]
 pub(crate) struct CreateConversationBody {
     pub title: Option<String>,
+    /// Batch 2（0003）：线程级上下文锚点（建会话时定格，消息级不收）。
+    /// 缺省 = 无锚点；非法形态由服务层校验后 400。
+    pub context: Option<ContextAnchor>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,6 +69,21 @@ pub(crate) struct AppendMessageBody {
     pub mode: Option<String>,
     /// DK-A 规则 2：显式续接本项目指定访谈会话。
     pub discovery_session_id: Option<Uuid>,
+}
+
+impl From<InteractionError> for ApiError {
+    fn from(e: InteractionError) -> Self {
+        match e {
+            // 不存在与跨属主同形 404（不泄露存在性）。
+            InteractionError::NotFound => ApiError::NotFound("interaction_target_not_found"),
+            InteractionError::NotInteractive => {
+                ApiError::BadRequest("message has no interaction envelope")
+            }
+            InteractionError::Validation(m) => ApiError::Text(StatusCode::BAD_REQUEST, m),
+            InteractionError::Conflict(code) => ApiError::Conflict(code),
+            InteractionError::Db(detail) => ApiError::Internal(sqlx::Error::Protocol(detail)),
+        }
+    }
 }
 
 impl From<RouterError> for ApiError {
@@ -106,6 +127,10 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/pm/projects/{project_id}/conversations/{conversation_id}/handoff/undo",
             post(undo_handoff_handler),
         )
+        .route(
+            "/v1/pm/projects/{project_id}/conversations/{conversation_id}/messages/{message_id}/interaction",
+            post(submit_interaction_handler),
+        )
 }
 
 async fn create_conversation_handler(
@@ -128,6 +153,7 @@ async fn create_conversation_handler(
         project_id,
         principal.principal_id,
         &title,
+        body.context.as_ref(),
     )
     .await?;
     Ok((StatusCode::CREATED, Json(conversation)).into_response())
@@ -186,6 +212,53 @@ async fn append_message_handler(
     )
     .await?;
     Ok((StatusCode::CREATED, Json(outcome)).into_response())
+}
+
+/// Batch 3C 交互写回：卡片终态落库 + 信封回读（同事务）；终态幂等 / 换
+/// action 409 / 属主外 404 同形。
+#[derive(Debug, Deserialize)]
+pub(crate) struct InteractionBody {
+    pub action: String,
+    pub reason: Option<String>,
+    pub option_id: Option<String>,
+    pub answer: Option<serde_json::Value>,
+}
+
+async fn submit_interaction_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path((project_id, conversation_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
+    Json(body): Json<InteractionBody>,
+) -> ApiResult<Response> {
+    require_project_visible(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await?;
+    let view = submit_interaction(
+        &state.pool,
+        principal.tenant_id,
+        project_id,
+        conversation_id,
+        message_id,
+        principal.principal_id,
+        &InteractionRequest {
+            action: body.action,
+            reason: body.reason,
+            option_id: body.option_id,
+            answer: body.answer,
+        },
+    )
+    .await?;
+    // 幂等重放 200，新建 201。
+    let status = if view.replayed {
+        StatusCode::OK
+    } else {
+        StatusCode::CREATED
+    };
+    Ok((status, Json(view)).into_response())
 }
 
 /// DK-A 撤销升级（A4）：30 分钟窗口内回退线程链接；本次升级新建的访谈置 PAUSED。

@@ -76,13 +76,14 @@ const metadata = computed(() => {
       { key: "owner", value: demo.value.repository.owner }
     ];
   }
-  const repository = shell.currentRepository;
+  // 真实态：仓库元数据取自单一真源（shell.assistantContext）
+  const context = shell.assistantContext;
   const rows: Array<{ key: string; value: string }> = [];
-  if (repository?.defaultBranch) {
-    rows.push({ key: "defaultBranch", value: repository.defaultBranch });
+  if (context.defaultBranch) {
+    rows.push({ key: "defaultBranch", value: context.defaultBranch });
   }
-  if (repository?.role) {
-    rows.push({ key: "yourRole", value: repository.role });
+  if (context.repositoryRole) {
+    rows.push({ key: "yourRole", value: context.repositoryRole });
   }
   return rows;
 });
@@ -92,16 +93,20 @@ const relatedLinks = computed<RelatedLink[]>(() => demo.value?.links ?? []);
 /** 当前项目（切换中为 null → 显示切换态而非旧项目） */
 const currentProject = computed(() => shell.currentProject);
 
+/** 助手上下文单一真源（Batch 1）：注入源清单与指令栏/会话页同源。 */
+const assistantContext = computed(() => shell.assistantContext);
+
 /**
  * 助手可用上下文的作用域串。
- * 切换中不回落旧项目名（Figma「07」No stale project data is displayed）。
+ *
+ * 与指令栏共用 shell store 的 `assistantContext`（整合计划 Batch 1 单一
+ * 真源）；切换中不回落旧项目名（Figma「07」No stale project data is
+ * displayed）。
  */
 const commandScope = computed(() => {
-  const project = currentProject.value;
-  const name = project ? project.name : t("shell.app.project.switching");
-  const branch =
-    demo.value?.repository.defaultBranch ||
-    shell.currentRepository?.defaultBranch;
+  const context = shell.assistantContext;
+  const name = context.projectName ?? t("shell.app.project.switching");
+  const branch = demo.value?.repository.defaultBranch || context.defaultBranch;
   return branch ? `${name} / Repository / ${branch}` : name;
 });
 </script>
@@ -197,7 +202,9 @@ const commandScope = computed(() => {
         </a>
       </section>
 
-      <!-- 助手可用上下文 -->
+      <!-- 助手可用上下文（Batch 4 诚实化）：列真实注入源，与后端
+           Batch 3A 两节一一对应（S1 项目画像 / S2 仓库事实）；仓库未锚定
+           时如实显示「未锚定」，不冒充注入面。 -->
       <section class="shell-context__ai">
         <div class="shell-context__ai-head">
           <Sparkles :size="14" aria-hidden="true" />
@@ -206,6 +213,28 @@ const commandScope = computed(() => {
         <p class="shell-context__ai-text">
           {{ commandScope }} · {{ t("shell.app.context.noAttachment") }}
         </p>
+        <div class="shell-context__ai-sources">
+          <span class="shell-context__ai-sources-label">{{
+            t("shell.app.context.injectionSources")
+          }}</span>
+          <span class="shell-context__ai-source">
+            {{ t("shell.app.context.sourceProject") }}
+            <template v-if="assistantContext.projectName">
+              · {{ assistantContext.projectName }}
+            </template>
+          </span>
+          <span class="shell-context__ai-source">
+            {{ t("shell.app.context.sourceRepository") }}
+            <template v-if="assistantContext.repositoryName">
+              · {{ assistantContext.repositoryName }}/{{
+                assistantContext.defaultBranch
+              }}
+            </template>
+            <template v-else>
+              · {{ t("shell.app.context.sourceNone") }}
+            </template>
+          </span>
+        </div>
         <Badge variant="neutral">
           {{ t("shell.app.context.readOnly") }}
         </Badge>
@@ -426,6 +455,27 @@ const commandScope = computed(() => {
 .shell-context__ai-text {
   margin: 0;
   color: var(--ws-text-secondary);
+  font-size: var(--font-size-caption);
+}
+
+/* 注入源清单（Batch 4 诚实化） */
+.shell-context__ai-sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--ws-elevated);
+  border-radius: var(--radius-xs);
+}
+
+.shell-context__ai-sources-label {
+  color: var(--ws-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-micro);
+}
+
+.shell-context__ai-source {
+  color: var(--ws-text-primary);
   font-size: var(--font-size-caption);
 }
 

@@ -37,7 +37,7 @@ const props = withDefaults(
     identity?: AiIdentity;
     timestamp?: string;
     density?: CardDensity;
-    submit?: (payload: unknown) => Promise<SubmitResult>;
+    submit?: (payload: unknown, action?: string) => Promise<SubmitResult>;
     initialStatus?: InteractionStatus;
     evidence?: AiEvidence;
   }>(),
@@ -59,8 +59,8 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const mockSubmit = createMockSubmit({ latencyMs: 600 });
-const submitAdapter = (payload: unknown) =>
-  (props.submit ?? mockSubmit)(payload);
+const submitAdapter = (payload: unknown, action?: string) =>
+  (props.submit ?? mockSubmit)(payload, action);
 
 const state = useAiInteraction({
   initialStatus: props.initialStatus,

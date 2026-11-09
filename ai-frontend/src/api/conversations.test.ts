@@ -43,6 +43,29 @@ describe("conversations api（D-4 会话 REST）", () => {
     );
   });
 
+  it("createConversation: context 锚点随 body 透传（Batch 2）", async () => {
+    await createConversation("p1", {
+      title: "带上下文",
+      context: {
+        project_id: "p1",
+        project_name: "Atlas Platform",
+        repository_name: "atlas-platform",
+        default_branch: "main",
+        repository_role: "main"
+      }
+    });
+    expect(httpPost).toHaveBeenCalledWith("/v1/pm/projects/p1/conversations", {
+      title: "带上下文",
+      context: {
+        project_id: "p1",
+        project_name: "Atlas Platform",
+        repository_name: "atlas-platform",
+        default_branch: "main",
+        repository_role: "main"
+      }
+    });
+  });
+
   it("listConversations: GET 本人会话列表（无 query）", async () => {
     await listConversations("p1");
     expect(httpGet).toHaveBeenCalledTimes(1);

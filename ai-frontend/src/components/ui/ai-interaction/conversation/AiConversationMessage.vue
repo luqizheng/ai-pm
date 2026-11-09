@@ -18,7 +18,18 @@ import type { AiResponseType, ConversationMessage } from "../types";
  * 会话消息：用户消息靠右（次级面、无 AI 身份章），AI 消息靠左
  * （普通消息带头像章与时间；结构化交互内联渲染对应响应卡）。
  */
-const props = defineProps<{ message: ConversationMessage }>();
+const props = defineProps<{
+  message: ConversationMessage;
+  /**
+   * 真实提交通道（Batch 3C）：(payload, action, messageId)；缺省时各卡
+   * 自行回落 mock（目录页/设计态）。
+   */
+  submit?: (
+    payload: unknown,
+    action?: string,
+    messageId?: string
+  ) => Promise<unknown>;
+}>();
 
 const CARD_COMPONENTS: Record<AiResponseType, Component> = {
   informational: markRaw(InformationalResponse),
@@ -45,13 +56,18 @@ const timeLabel = computed(() => formatTime(props.message.createdAt));
 const cardBindings = computed(() => {
   const value = interaction.value;
   if (!value) return {};
-  return {
+  const bindings: Record<string, unknown> = {
     payload: value.payload,
     identity: value.identity,
     timestamp: formatTime(value.createdAt),
     density: "conversation" as const,
     initialStatus: value.status
   };
+  if (props.submit) {
+    bindings.submit = (payload: unknown, action?: string) =>
+      props.submit!(payload, action, props.message.id);
+  }
+  return bindings;
 });
 
 function formatTime(iso: string): string {

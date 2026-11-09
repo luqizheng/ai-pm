@@ -232,6 +232,10 @@ shell:
       aiNotice: Available to assistant
       readOnly: Read-only context
       noAttachment: No files attached to the current request
+      injectionSources: Injected sources
+      sourceProject: Project profile
+      sourceRepository: Repository facts
+      sourceNone: Not anchored (answered on demand)
     commandbar:
       title: AI assistant
       reviewFirst: Review before any action
@@ -246,6 +250,7 @@ shell:
       expand: Expand command bar
       collapse: Collapse command bar
       attach: Attach file
+      attachPending: Attachments coming soon
       send: Send
     page:
       placeholderTitle: This page is under construction

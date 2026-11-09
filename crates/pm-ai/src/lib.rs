@@ -3,6 +3,7 @@
 pub mod analysis_model;
 pub mod call_record;
 pub mod capability_projection;
+pub mod chat_context;
 pub mod context;
 pub mod conversation_model;
 pub mod conversation_reply;
@@ -23,6 +24,11 @@ pub mod writeback_model;
 pub use analysis_model::{select_analysis_model_config, ModelSelection, RoutedAnalysisModel};
 pub use call_record::PURPOSE_CONVERSATION_REPLY;
 pub use capability_projection::PgCapabilityProjection;
+pub use chat_context::{
+    anchor_repository, build_chat_context, ChatContext, CHAT_CAP_PROJECT_PROFILE,
+    CHAT_CAP_REPOSITORY_FACTS, CHAT_KEY_PROJECT_PROFILE, CHAT_KEY_REPOSITORY_FACTS,
+    CHAT_TOTAL_BUDGET_CHARS,
+};
 pub use context::{build, fail_run, finish_run, save_snapshot, start_run, ContextError};
 pub use conversation_model::{
     complete as complete_conversation, ConversationTurn, CONVERSATION_SYSTEM_PROMPT,

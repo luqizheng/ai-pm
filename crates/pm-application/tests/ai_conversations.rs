@@ -77,7 +77,7 @@ async fn seed_message_at(
 async fn forward_cursor_orders_ties_by_id(pool: PgPool) {
     let project = seed_project(&pool).await;
     let owner = seed_owner(&pool).await;
-    let conversation = create_conversation(&pool, SYSTEM_TENANT, project, owner, "cursor")
+    let conversation = create_conversation(&pool, SYSTEM_TENANT, project, owner, "cursor", None)
         .await
         .unwrap()
         .id;
@@ -164,7 +164,7 @@ async fn forward_cursor_orders_ties_by_id(pool: PgPool) {
 async fn after_only_degenerates_to_timestamp_cursor(pool: PgPool) {
     let project = seed_project(&pool).await;
     let owner = seed_owner(&pool).await;
-    let conversation = create_conversation(&pool, SYSTEM_TENANT, project, owner, "cursor")
+    let conversation = create_conversation(&pool, SYSTEM_TENANT, project, owner, "cursor", None)
         .await
         .unwrap()
         .id;
@@ -236,7 +236,7 @@ async fn after_only_degenerates_to_timestamp_cursor(pool: PgPool) {
 async fn cursor_combination_validation_errors(pool: PgPool) {
     let project = seed_project(&pool).await;
     let owner = seed_owner(&pool).await;
-    let conversation = create_conversation(&pool, SYSTEM_TENANT, project, owner, "cursor")
+    let conversation = create_conversation(&pool, SYSTEM_TENANT, project, owner, "cursor", None)
         .await
         .unwrap()
         .id;
@@ -296,7 +296,7 @@ async fn cursor_combination_validation_errors(pool: PgPool) {
 async fn append_message_persists_metadata(pool: PgPool) {
     let project = seed_project(&pool).await;
     let owner = seed_owner(&pool).await;
-    let conversation = create_conversation(&pool, SYSTEM_TENANT, project, owner, "meta")
+    let conversation = create_conversation(&pool, SYSTEM_TENANT, project, owner, "meta", None)
         .await
         .unwrap()
         .id;
@@ -342,7 +342,7 @@ async fn append_message_persists_metadata(pool: PgPool) {
 async fn latest_window_returns_the_newest_tail_in_ascending_order(pool: PgPool) {
     let project = seed_project(&pool).await;
     let owner = seed_owner(&pool).await;
-    let conversation = create_conversation(&pool, SYSTEM_TENANT, project, owner, "latest")
+    let conversation = create_conversation(&pool, SYSTEM_TENANT, project, owner, "latest", None)
         .await
         .unwrap()
         .id;
@@ -418,7 +418,7 @@ async fn latest_window_returns_the_newest_tail_in_ascending_order(pool: PgPool) 
 async fn latest_validation_and_small_window(pool: PgPool) {
     let project = seed_project(&pool).await;
     let owner = seed_owner(&pool).await;
-    let conversation = create_conversation(&pool, SYSTEM_TENANT, project, owner, "latest")
+    let conversation = create_conversation(&pool, SYSTEM_TENANT, project, owner, "latest", None)
         .await
         .unwrap()
         .id;
