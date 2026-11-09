@@ -10,6 +10,7 @@ import {
   ScanSearch,
   Settings2,
   Sparkles,
+  SquareKanban,
   Terminal,
   UsersRound
 } from "lucide-vue-next";
@@ -145,6 +146,18 @@ export const navGroups: NavGroup[] = [
         icon: ListChecks,
         component: () =>
           import("@/views/project/requirements/RequirementsView.vue").then(
+            module => module.default
+          )
+      },
+      // 任务管理（S04，docs/ui/s04，2026-11-10）：任务拆解 / 任务池 / 执行
+      // 规划 / 执行准备的工作区。总览与任务池接真（/v1/pm/tasks 系），
+      // 其余子页在对应接口落地前走 mock-preview 或占位页（router/index.ts）。
+      {
+        path: "/project/tasks",
+        labelKey: "shell.app.side.item.taskManagement",
+        icon: SquareKanban,
+        component: () =>
+          import("@/views/project/tasks/overview/TasksOverviewView.vue").then(
             module => module.default
           )
       },

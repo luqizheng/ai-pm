@@ -22,6 +22,7 @@ import ProjectCreateView from "@/views/project/create/ProjectCreateView.vue";
 import CognitionPage from "@/views/project/cognition/CognitionPage.vue";
 import BaselinePage from "@/views/project/baseline/BaselinePage.vue";
 import CommandCenterView from "@/views/project/command-center/CommandCenterView.vue";
+import TasksBacklogView from "@/views/project/tasks/backlog/TasksBacklogView.vue";
 import SettingsProjectPlaceholderView from "@/views/project/settings/SettingsProjectPlaceholderView.vue";
 import SettingsProjectRepositoriesView from "@/views/project/settings/SettingsProjectRepositoriesView.vue";
 import SettingsProjectRunnersView from "@/views/project/settings/SettingsProjectRunnersView.vue";
@@ -136,6 +137,54 @@ export function buildRoutes(): RouteRecordRaw[] {
     component: CommandCenterView,
     meta: { title: "s01.command-center.pageTitle" }
   });
+
+  // ─── 任务管理（S04 · docs/ui/s04，2026-11-10）───
+  // 子页为独立路由 + 页内页签条（TasksFrame，同 AiTeamFrame 组织）。
+  // 总览/任务池接真（/v1/pm/tasks 系）；拆解与详情在任务读/AI 拆解接口
+  // 落地前仅 mock 预览（VITE_USE_MOCK=1 注册真实页，发布构建走占位页，
+  // 避免 fixtures 演示数据进入 dist，见 build/release-guard.ts）；
+  // 执行规划与执行准备待后续批次（占位页）。
+  routes.push(
+    {
+      path: "/project/tasks/planning",
+      component: PlaceholderView,
+      meta: { title: "s04.tasks.page.planningTitle" }
+    },
+    {
+      path: "/project/tasks/readiness",
+      component: PlaceholderView,
+      meta: { title: "s04.tasks.page.readinessTitle" }
+    },
+    mockPreview
+      ? {
+          path: "/project/tasks/breakdown",
+          component: () =>
+            import("@/views/project/tasks/breakdown/TaskBreakdownView.vue"),
+          meta: { title: "s04.tasks.page.breakdownTitle" }
+        }
+      : {
+          path: "/project/tasks/breakdown",
+          component: PlaceholderView,
+          meta: { title: "s04.tasks.page.breakdownTitle" }
+        },
+    mockPreview
+      ? {
+          path: "/project/tasks/:taskId",
+          component: () =>
+            import("@/views/project/tasks/detail/TaskDetailView.vue"),
+          meta: { title: "s04.tasks.page.detailTitle" }
+        }
+      : {
+          path: "/project/tasks/:taskId",
+          component: PlaceholderView,
+          meta: { title: "s04.tasks.page.detailTitle" }
+        },
+    {
+      path: "/project/tasks/backlog",
+      component: TasksBacklogView,
+      meta: { title: "s04.tasks.page.backlogTitle" }
+    }
+  );
 
   // Project Setting（V1.0 稿，2026-11-07）：项目配置中心，不占主导航——
   // 入口 = 项目总控台页头「项目设置」（CommandCenterHeader settings 事件）。

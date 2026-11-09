@@ -181,6 +181,7 @@ shell:
         repository: Repository
         discovery: Code Discovery
         requirements: Requirements
+        taskManagement: Task Management
         execution: AI Execution Center
         assistant: AI Assistant
         knowledge: Knowledge Review

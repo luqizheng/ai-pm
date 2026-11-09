@@ -1,0 +1,222 @@
+tasks:
+  tabs:
+    overview: Overview
+    breakdown: Breakdown
+    backlog: Backlog
+    planning: Execution Planning
+    readiness: Readiness
+  page:
+    overviewTitle: Task Overview
+    overviewDesc: Organize, review and prepare engineering work (S04 planning readiness, not execution).
+    breakdownTitle: Task Breakdown
+    breakdownDesc: Transform the approved implementation baseline into structured engineering tasks.
+    backlogTitle: Task Backlog
+    backlogDesc: Manage and organize all project engineering tasks.
+    planningTitle: Execution Planning
+    planningDesc: Task dependencies, sequencing and parallel organization (under construction).
+    readinessTitle: Execution Readiness
+    readinessDesc: Task completeness gate before handing over to S05 (under construction).
+    detailTitle: Task Detail
+  common:
+    createTask: Create Task
+    edit: Edit
+    save: Save
+    cancel: Cancel
+    close: Close
+    refresh: Refresh
+    loading: Loading tasks…
+    empty: No tasks yet
+    emptyHint: No engineering tasks yet. Create one or generate from the implementation baseline.
+    errorTitle: Failed to load
+    actionFailed: Action failed
+    searchPlaceholder: Search task ID / title…
+    filters: Filters
+    clearFilters: Clear filters
+    all: All
+    unassigned: Unassigned
+    notAvailable: —
+    selectedCount: "{count} selected"
+    selectionEmpty: Select tasks first
+    viewTask: View
+    statusLabel: Status
+    priorityLabel: Priority
+    assigneeLabel: Assignee
+    updatedLabel: Updated
+    taskLabel: Task
+    optional: optional
+  status:
+    draft: Draft
+    ready: Ready
+    claimed: Claimed
+    running: Running
+    awaiting_decision: Awaiting Decision
+    blocked: Blocked
+    submitted: Submitted
+    reviewing: Reviewing
+    completed: Completed
+    changes_requested: Changes Requested
+    failed: Failed
+    cancelled: Cancelled
+    superseded: Superseded
+  priority:
+    urgent: Urgent
+    high: High
+    normal: Normal
+    low: Low
+  overview:
+    statTotal: Total Tasks
+    statDraft: Draft (awaiting confirmation)
+    statReady: Ready for Execution
+    statBlocked: Blocked
+    statUnassigned: Unassigned
+    statHintTotal: All engineering tasks in the project
+    statHintDraft: AI/human created, awaiting human mark-ready
+    statHintReady: Entered the execution queue
+    statHintBlocked: Dependencies or upstream conditions unmet
+    statHintUnassigned: Needs an assignee
+    distributionTitle: Task Distribution
+    distributionStatus: By status
+    distributionPriority: By priority
+    planningNote: Planning readiness distribution — not engineering execution progress.
+    attentionTitle: Human Attention Required
+    attentionUnassigned: "{count} tasks have no assignee"
+    attentionBlocked: "{count} tasks are blocked"
+    attentionDraft: "{count} draft tasks await human confirmation (mark ready)"
+    attentionGo: Handle
+    attentionEmpty: Nothing requires human attention.
+    upcomingTitle: Recent Tasks
+    insightsTitle: AI Planning Insights
+    insightsEmpty: No AI planning insights.
+    insightsDevNote: Demo data (dev mock); the AI planning insights API is not wired yet.
+    insightAccept: Accept
+    insightReject: Dismiss
+    insightAccepted: Accepted
+    insightRejected: Dismissed
+    loadFailed: Failed to load tasks. Please retry later.
+    truncatedHint: More than 200 tasks; stats below cover the first 200 only.
+  backlog:
+    viewTable: Table
+    viewKanban: Kanban
+    colTitle: Title
+    colMilestone: Milestone
+    createTitle: Create Task
+    editTitle: Edit Task
+    fieldTitle: Title
+    fieldTitleRequired: Title is required
+    fieldDesc: Description
+    fieldStatus: Status
+    fieldPriority: Priority
+    fieldAssignee: Assignee ID
+    submitCreate: Create
+    submitUpdate: Save Changes
+    markReady: Mark Ready
+    markReadyConfirmTitle: Mark selected tasks ready
+    markReadyConfirmDesc: "{count} draft tasks will be marked ready and enter the execution queue. This is a human action and cannot be undone."
+    markReadyResult: "{ready} marked ready, {skipped} skipped (not in draft)."
+    markReadyNone: No draft tasks among the selection.
+    dependenciesTitle: Dependencies
+    dependsOn: Depends On
+    blocks: Blocks
+    noDependencies: No dependencies.
+    addDependency: Add dependency
+    dependencyPlaceholder: Predecessor task ID (UUID)
+    dependencyAdd: Add
+    dependencyRemove: Remove
+    dependencySelf: A task cannot depend on itself.
+    rowMenu: Row actions
+    openDetail: Open detail
+    editTask: Edit
+    manageDependencies: Dependencies
+    conflict: The task was modified by someone else (version conflict). Refresh and retry.
+    createFailed: Failed to create task
+    saved: Saved
+    dragHint: Drag a card onto a status column to change its status (validated by the backend state machine).
+    kanbanLaneActive: In progress
+    kanbanLaneClosed: Closed
+  breakdown:
+    baselineTitle: Implementation Baseline
+    baselineStatus: Approved
+    viewSource: View baseline
+    generate: Generate Task Breakdown
+    generating: AI decomposing…
+    generateDone: Breakdown ready — review the proposals
+    regenerate: Regenerate
+    treeTitle: Task Hierarchy
+    featureLabel: Feature
+    proposalBadge: Proposal
+    editedBadge: AI · Edited
+    accept: Accept
+    reject: Reject
+    stateAccepted: Accepted
+    stateRejected: Rejected
+    acceptSelected: Accept Selected
+    rejectSelected: Reject Selected
+    clearSelection: Clear selection
+    addSubtask: Add subtask
+    summaryBar: Proposals {proposals} · Pending {pending} · Accepted {accepted} · Rejected {rejected}
+    allReviewedTitle: Breakdown review complete
+    allReviewedDesc: All proposals are decided. See formal tasks in the Backlog.
+    aiPanelTitle: AI Decomposition Analysis
+    aiWhy: Why this task exists
+    aiTrace: Source traceability
+    aiMissing: Missing work
+    aiOverlap: Potential overlap
+    aiSubtasks: Suggested subtasks
+    aiRisks: Technical risks
+    aiCriteria: Suggested acceptance criteria
+    requiresBaseline: An approved implementation baseline (S03) is required to generate tasks.
+    mockNote: Demo data (dev mock); the AI decomposition API is not wired yet. Proposals live in this page session only.
+  detail:
+    back: Back to backlog
+    approve: Approve
+    unapprove: Undo confirmation
+    approvalState: Approval state
+    approvalHuman: Human confirmed (mark-ready)
+    approvalNone: No human confirmation yet
+    sectionObjective: Objective & Scope
+    sectionTrace: Source Traceability
+    sectionDeps: Dependencies
+    sectionSpec: Execution Specification
+    sectionCriteria: Acceptance Criteria
+    sectionDelivery: Delivery Requirements
+    sectionHistory: History & Audit
+    objective: Objective
+    background: Background
+    scope: In Scope
+    outOfScope: Out of Scope
+    expected: Expected Result
+    dependsOn: Depends On
+    blocks: Blocks
+    related: Related Tasks
+    traceRequirement: Requirement
+    traceDesign: Technical Design
+    traceAdr: ADR
+    traceBaseline: Implementation Baseline
+    traceVersion: Version
+    repo: Target Repository
+    module: Target Module
+    instructions: Implementation Instructions
+    constraints: Technical Constraints
+    context: Required Context
+    criteriaId: ID
+    criteriaDesc: Description
+    criteriaMethod: Verification
+    criteriaEvidence: Required Evidence
+    criteriaMandatory: Mandatory
+    criteriaOptional: Optional
+    deliveryRequired: Required deliverables
+    deliveryOptional: Optional deliverables
+    historyAi: AI action
+    historyHuman: Human action
+    historyCreated: Task created
+    historyStatusChange: Status changed
+    historyCriteria: Acceptance criteria updated
+    aiPanelTitle: AI Project Lead
+    aiUnderstanding: Task understanding
+    aiMissing: Missing information
+    aiRisks: Risks
+    aiSuggestions: Suggestions
+    suggestionApply: Apply
+    suggestionIgnore: Ignore
+    suggestionApplied: Applied
+    mockNote: Demo data (dev mock); the task detail read API is not wired yet. Nothing is written back from this page.

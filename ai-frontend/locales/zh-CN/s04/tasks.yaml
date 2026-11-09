@@ -1,0 +1,222 @@
+tasks:
+  tabs:
+    overview: 总览
+    breakdown: 任务拆解
+    backlog: 任务池
+    planning: 执行规划
+    readiness: 执行准备
+  page:
+    overviewTitle: 任务总览
+    overviewDesc: 组织、评审并准备研发工作（S04 规划准备度，不含工程执行）。
+    breakdownTitle: 任务拆解
+    breakdownDesc: 把已批准的实施基线转化为结构化研发任务。
+    backlogTitle: 任务池
+    backlogDesc: 管理与组织项目全部研发任务。
+    planningTitle: 执行规划
+    planningDesc: 任务依赖、执行顺序与并行组织（建设中）。
+    readinessTitle: 执行准备
+    readinessDesc: 移交 S05 前的任务完整度检查（建设中）。
+    detailTitle: 任务详情
+  common:
+    createTask: 新建任务
+    edit: 编辑
+    save: 保存
+    cancel: 取消
+    close: 关闭
+    refresh: 刷新
+    loading: 正在加载任务…
+    empty: 暂无任务
+    emptyHint: 尚无研发任务，可新建任务或从实施基线拆解生成。
+    errorTitle: 加载失败
+    actionFailed: 操作失败
+    searchPlaceholder: 搜索任务 ID / 标题…
+    filters: 筛选
+    clearFilters: 清除筛选
+    all: 全部
+    unassigned: 未分配
+    notAvailable: —
+    selectedCount: 已选 {count} 项
+    selectionEmpty: 请先选择任务
+    viewTask: 查看
+    statusLabel: 状态
+    priorityLabel: 优先级
+    assigneeLabel: 负责人
+    updatedLabel: 更新时间
+    taskLabel: 任务
+    optional: 可选
+  status:
+    draft: 草稿
+    ready: 待执行
+    claimed: 已认领
+    running: 执行中
+    awaiting_decision: 待决策
+    blocked: 阻塞
+    submitted: 已提交
+    reviewing: 评审中
+    completed: 已完成
+    changes_requested: 需修改
+    failed: 失败
+    cancelled: 已取消
+    superseded: 已作废
+  priority:
+    urgent: 紧急
+    high: 高
+    normal: 普通
+    low: 低
+  overview:
+    statTotal: 全部任务
+    statDraft: 草稿（待确认）
+    statReady: 待执行
+    statBlocked: 阻塞
+    statUnassigned: 无负责人
+    statHintTotal: 项目全部研发任务
+    statHintDraft: AI/人工创建、待人工置为待执行
+    statHintReady: 已进入执行队列
+    statHintBlocked: 依赖或上游条件未满足
+    statHintUnassigned: 需要指派负责人
+    distributionTitle: 任务分布
+    distributionStatus: 按状态
+    distributionPriority: 按优先级
+    planningNote: 以上为规划准备度分布，不代表工程执行进度。
+    attentionTitle: 需要人工处理
+    attentionUnassigned: "{count} 个任务未分配负责人"
+    attentionBlocked: "{count} 个任务处于阻塞状态"
+    attentionDraft: "{count} 个草稿任务待人工确认（置为待执行）"
+    attentionGo: 去处理
+    attentionEmpty: 暂无需要人工处理的事项。
+    upcomingTitle: 近期任务
+    insightsTitle: AI 规划建议
+    insightsEmpty: 暂无 AI 规划建议。
+    insightsDevNote: 演示数据（dev mock），AI 规划建议接口尚未接线。
+    insightAccept: 采纳
+    insightReject: 忽略
+    insightAccepted: 已采纳
+    insightRejected: 已忽略
+    loadFailed: 任务列表加载失败，请稍后重试。
+    truncatedHint: 任务超过 200 条，以下统计仅基于前 200 条。
+  backlog:
+    viewTable: 表格
+    viewKanban: 看板
+    colTitle: 标题
+    colMilestone: 里程碑
+    createTitle: 新建任务
+    editTitle: 编辑任务
+    fieldTitle: 标题
+    fieldTitleRequired: 标题为必填项
+    fieldDesc: 描述
+    fieldStatus: 状态
+    fieldPriority: 优先级
+    fieldAssignee: 负责人 ID
+    submitCreate: 创建
+    submitUpdate: 保存修改
+    markReady: 置为待执行
+    markReadyConfirmTitle: 批量置为待执行
+    markReadyConfirmDesc: 将把所选 {count} 个草稿任务置为「待执行」并进入执行队列。该操作由人工发起，不可撤销。
+    markReadyResult: "{ready} 个已置为待执行，{skipped} 个被跳过（非草稿态）。"
+    markReadyNone: 所选任务中没有草稿态任务。
+    dependenciesTitle: 依赖关系
+    dependsOn: 前置依赖
+    blocks: 下游任务
+    noDependencies: 无依赖关系。
+    addDependency: 添加前置依赖
+    dependencyPlaceholder: 前置任务 ID（UUID）
+    dependencyAdd: 添加
+    dependencyRemove: 移除
+    dependencySelf: 不能依赖任务自身。
+    rowMenu: 行操作
+    openDetail: 打开详情
+    editTask: 编辑
+    manageDependencies: 依赖
+    conflict: 任务已被他人修改（版本冲突），请刷新后重试。
+    createFailed: 创建任务失败
+    saved: 已保存
+    dragHint: 拖拽卡片到目标状态列即可变更状态（后端状态机校验）。
+    kanbanLaneActive: 进行中
+    kanbanLaneClosed: 已结束
+  breakdown:
+    baselineTitle: 实施基线
+    baselineStatus: 已批准
+    viewSource: 查看基线
+    generate: 生成任务拆解
+    generating: AI 拆解中…
+    generateDone: 拆解完成，请评审提案
+    regenerate: 重新生成
+    treeTitle: 任务层级
+    featureLabel: 特性
+    proposalBadge: 提案
+    editedBadge: AI · 已编辑
+    accept: 接受
+    reject: 拒绝
+    stateAccepted: 已接受
+    stateRejected: 已拒绝
+    acceptSelected: 接受所选
+    rejectSelected: 拒绝所选
+    clearSelection: 取消选择
+    addSubtask: 添加子任务
+    summaryBar: 提案 {proposals} · 待评审 {pending} · 已接受 {accepted} · 已拒绝 {rejected}
+    allReviewedTitle: 拆解评审完成
+    allReviewedDesc: 全部提案已裁决，可在任务池查看正式任务。
+    aiPanelTitle: AI 拆解分析
+    aiWhy: 为什么需要这个任务
+    aiTrace: 来源追溯
+    aiMissing: 缺失工作
+    aiOverlap: 潜在重叠
+    aiSubtasks: 建议子任务
+    aiRisks: 技术风险
+    aiCriteria: 建议验收标准
+    requiresBaseline: 需要已批准的实施基线（S03）才能生成任务。
+    mockNote: 演示数据（dev mock）：AI 拆解接口尚未接线，提案仅存在于本页会话。
+  detail:
+    back: 返回任务池
+    approve: 批准
+    unapprove: 撤销确认
+    approvalState: 审批状态
+    approvalHuman: 人工已确认（mark-ready）
+    approvalNone: 未执行人工确认
+    sectionObjective: 目标与范围
+    sectionTrace: 来源追溯
+    sectionDeps: 依赖关系
+    sectionSpec: 执行说明
+    sectionCriteria: 验收标准
+    sectionDelivery: 交付要求
+    sectionHistory: 历史与审计
+    objective: 目标
+    background: 背景
+    scope: 范围内
+    outOfScope: 范围外
+    expected: 预期结果
+    dependsOn: 前置依赖
+    blocks: 阻塞
+    related: 相关任务
+    traceRequirement: 需求
+    traceDesign: 技术设计
+    traceAdr: ADR
+    traceBaseline: 实施基线
+    traceVersion: 版本
+    repo: 目标仓库
+    module: 目标模块
+    instructions: 实施说明
+    constraints: 技术约束
+    context: 所需上下文
+    criteriaId: 编号
+    criteriaDesc: 描述
+    criteriaMethod: 验证方式
+    criteriaEvidence: 所需证据
+    criteriaMandatory: 必测
+    criteriaOptional: 可选
+    deliveryRequired: 必交付
+    deliveryOptional: 可选交付
+    historyAi: AI 操作
+    historyHuman: 人工操作
+    historyCreated: 创建任务
+    historyStatusChange: 状态变更
+    historyCriteria: 更新验收标准
+    aiPanelTitle: AI Project Lead
+    aiUnderstanding: 任务理解
+    aiMissing: 缺失信息
+    aiRisks: 风险
+    aiSuggestions: 建议
+    suggestionApply: 采纳
+    suggestionIgnore: 忽略
+    suggestionApplied: 已采纳
+    mockNote: 演示数据（dev mock）：任务详情读接口尚未接线，本页不回写后端。
