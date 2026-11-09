@@ -127,3 +127,12 @@ DK-F 六范围（两场景真栈全链 + §8.3 全表 + 缺口清偿 + Stage 2 �
    - 它声明暂停且 tree 暂净：先 ff master 到 `eca4030`，它余下批次基于新 master 自续（冲突清单已交付其会话）。
 4. **移植验收口径**（=§五 Stage 2 的回归面）：`AssistantView.test.ts` 的 DK-F 三例（落点/边界消息/未链接不变）+ 既有用例 + 它的信封用例全绿；typecheck 干净。
 
+
+## 九、合并执行记录（2026-11-09，触发条件满足后实际执行）
+
+**触发核验**：整合会话 Batch1~4 已全部落盘（master `05eb38db..e99d28f3` 8 commits，用户已 push，origin/master=e99d28f3）；主 checkout 树净（仅 1 个未跟踪 docs 稿，不参与合并）。
+
+**实际动作**（§八.3「它先落」时序）：
+1. 真合并 `5369ee4`：master 并入 `feat/dk-f-demo`。冲突 4 处按 §八.3 口径解——`pm-ai/lib.rs` 并集（capability_projection ∥ chat_context）；`pm-application/lib.rs` 自动合并即正确并集（dkf 全模块 + ai_interaction_envelope/ai_interactions，逐模块核对无缺）；台账 0003/0004/0005 三行并存（0004 状态改已实施）；`conversations.ts` master 契约形状 + DK-F `SendMessageOutcome`/`ConversationHandoff` 并存；`AssistantView.vue` = 整合定稿版为底 + 重放 `daaa590` 九处移植本体（imports 并集/访谈段状态与映射/system 边界过滤/syncInterviewLink 五调用点/handleSend 落点判定/模板访谈段保留 master `:submit` 卡片链/样式块）。
+2. **门禁全绿**：clippy `--workspace --all-targets -D warnings` PASS；nextest **1367/1367 passed**（4 skipped，doctest ok，DATABASE_URL→dkf 栈 16493）；前端 typecheck 干净 + vitest **997/997 用例全绿**（994=master 基线 + DK-F 三例与契约例；§八.4 口径逐项过）。3 个 e2e spec 文件级失败（vitest 误收集 Playwright spec）与 master 基线逐位一致——存量行为，非本合并引入，另行挂账。
+3. master `--no-ff` ← 分支 tip，push master + 分支。
