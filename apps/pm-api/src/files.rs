@@ -18,7 +18,7 @@
 //!   pm-api，不是浏览器）。
 //! - 客户端传入的 `tenant_id` 一律丢弃（server-derived，防越权写）。
 //!
-//! 复用 `vendor/digua-file-sdk`（源码快照，与 lmms 上游同源）。FileClient
+//! 复用 `digua_file_sdk`（kellnr 发行版，与 lmms 上游同源）。FileClient
 //! 的 bearer 是进程级 supplier 闭包，而本层 token 按请求租户变化——为避免
 //! 共享 bearer 槽的租户串号，每请求构建独立 FileClient（文件操作低频，
 //! mesh 内明文 HTTP，代价可接受）。

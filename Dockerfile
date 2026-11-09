@@ -14,16 +14,15 @@ RUN apt-get update \
 ARG CARGO_PROXY=""
 ENV http_proxy=${CARGO_PROXY} \
     https_proxy=${CARGO_PROXY}
-# 仓库 cargo 配置：私有 registry（kellnr：digua_common_jwt 等 lmms 基座 crate）
-# 与 crates.io 镜像源（rsproxy）。不带进镜像则 cargo 报
+# 仓库 cargo 配置：私有 registry（kellnr：digua_common_jwt / digua_file_sdk /
+# digua_common_consul 等 lmms 基座 crate）与 crates.io 镜像源（rsproxy）。
+# lmms 基座 crate 自 2026-11-09 起走 kellnr 发行版（仓内不再有 vendor/ 源码
+# 快照），所以构建期会真的去 kellnr 拉包——不带 .cargo 会报
 # "registry index was not found in any configuration: `kellnr`"。
 # ⚠️ 内网构建须能访问 192.168.2.12:16444（kellnr 匿名读可用）。
 COPY .cargo .cargo
 COPY Cargo.toml Cargo.lock ./
 COPY crates crates
-# vendor/digua-common-jwt：临时源码快照（Cargo.toml 的 digua_common_jwt path 依赖，
-# 调试期替代 kellnr 1.6.0；回退时同步删除本行）
-COPY vendor vendor
 COPY apps apps
 COPY migrations migrations
 COPY policies policies

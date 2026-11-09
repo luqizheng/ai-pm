@@ -3,8 +3,6 @@ resolver = "2"
 members = [
     "crates/*",
     "apps/*",
-    "vendor/digua-http-client",
-    "vendor/digua-file-sdk",
 ]
 
 [workspace.package]
@@ -73,32 +71,20 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Dev dependencies
 wiremock = "0.6"
 # lmms 基座 crates（kellnr 私有 registry；token 在 ~/.cargo/credentials.toml [registries.kellnr]）
-# ⚠️ digua_common_jwt 暂用源码快照（2026-11-05 用户裁决：调试期不采用发行版本）。
-# 来源 = low-memory-micro-services libs/common-jwt @5022fd76（与 iam/gateway 的
-# path 依赖同源同行为）。同步命令：
-#   rm -rf vendor/digua-common-jwt && cp -r ../low-memory-micro-services/libs/common-jwt vendor/digua-common-jwt
-# lmms 发布带行为变更的新版本后回退：
-#   digua_common_jwt = { version = "<新版本>", registry = "kellnr" }
-#   （并删除 vendor/digua-common-jwt 与 Dockerfile 的 COPY vendor 行）
-digua_common_jwt = { path = "vendor/digua-common-jwt" }
-
-# digua_common_consul 同走源码快照（与 common-jwt 同裁决：调试期不采用发行版本）。
-# 来源 = low-memory-micro-services libs/common-consul @<同步时 HEAD>。同步命令：
-#   rm -rf vendor/digua-common-consul && cp -r ../low-memory-micro-services/libs/common-consul vendor/digua-common-consul
-digua_common_consul = { path = "vendor/digua-common-consul" }
-
-# digua_file_sdk + digua_http_client 同走源码快照（2026-11-07 file-service
-# 收口配套：file-service 只认 service-jwt，pm-api 经本 SDK 代理文件调用）。
-# 来源 = low-memory-micro-services sdk/rust/{digua-http-client,file-service-sdk} @6deb40a3。
-# 同步命令：
-#   cp -r ../low-memory-micro-services/sdk/rust/digua-http-client vendor/digua-http-client
-#   cp -r ../low-memory-micro-services/sdk/rust/file-service-sdk vendor/digua-file-sdk
-# vendor/digua-http-client 有一处有意补丁：ensure_crypto_provider no-op
-# （上游为 rustls/aws_lc_rs，本仓 reqwest=native-tls 无 provider 可装，
-# 且避免 aws-lc-sys 的 C 编译依赖）。
-# file-sdk 的 reqwest 增量 feature=multipart（additive，与 workspace 定义兼容）。
-# common-jwt 新快照引入的 workspace 依赖（与 lmms 根定义同参）
-jsonwebtoken = { version = "9", default-features = false, features = ["pem", "use_pem"] }
-hex = "0.4"
-digua_http_client = { path = "vendor/digua-http-client" }
-digua_file_sdk = { path = "vendor/digua-file-sdk" }
+#
+# 2026-11-09 起改走 kellnr 发行版，本仓不再维护 vendor/ 源码快照。两条理由：
+#   ① 快照必漂移——本次核对发现仓内快照（common-jwt 取自 lmms @5022fd76）已
+#      落后于 lmms 现行源码，而 kellnr 上的 1.6.0 更旧（common-jwt 的 per-tenant
+#      铸造缓存整块缺失）；快照与发行版两头都不准。
+#   ② 违背上游规约——lmms AGENTS.md「跨仓库分发」明写：发版 = 镜像 + 各种包，
+#      下游走包升级，不做源码级同步。Rust 侧发布目标就是 kellnr。
+# 升级方式：lmms 发新版 → cargo update -p digua_file_sdk（等 kellnr 索引可见）。
+#
+# TLS 后端：本仓 reqwest 钉 native-tls（Windows schannel / Linux openssl，零 C
+# 编译依赖），所以这四个 crate 一律 default-features = false + tls-native。
+# lmms 1.7.0 起把 TLS 后端做成可选 feature 轴（默认仍是 tls-rustls）；不关
+# default features 的话 reqwest 会被 union 上 rustls-tls-webpki-roots，把
+# aws-lc-sys（cmake + C 编译器）拖进本仓的构建机与容器镜像。
+digua_common_jwt = { version = "1.7.0", registry = "kellnr", default-features = false, features = ["tls-native"] }
+digua_common_consul = { version = "1.7.0", registry = "kellnr", default-features = false, features = ["tls-native"] }
+digua_file_sdk = { version = "1.7.0", registry = "kellnr", default-features = false, features = ["tls-native"] }
