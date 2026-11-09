@@ -52,6 +52,8 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/kb/documents/{document_id}/revisions/{revision_id}/confirm",
             post(confirm_document_revision),
         )
+        .route("/v1/kb/documents", get(list_kb_documents))
+        .route("/v1/kb/documents/{document_id}", get(get_kb_document))
 }
 
 impl From<KbServiceError> for ApiError {
@@ -170,6 +172,39 @@ async fn confirm_document_revision(
     )
     .await?;
     Ok(Json(json!(outcome)))
+}
+
+
+// ── KB 文档库读面（前端 KnowledgeView 消费）────────────────────────────────
+
+/// `GET /v1/kb/documents?project_id=`：项目 KB 文档列表（最新修订投影）。
+async fn list_kb_documents(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Query(query): Query<HashMap<String, String>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let project_id = scope(&state, &caller, &query).await?;
+    let items =
+        document::list_documents(&state.pool, caller.tenant_id, project_id).await?;
+    Ok(Json(json!({ "items": items })))
+}
+
+/// `GET /v1/kb/documents/{document_id}?project_id=`：详情（正文 + 修订历史）。
+async fn get_kb_document(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(document_id): Path<String>,
+    Query(query): Query<HashMap<String, String>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let project_id = scope(&state, &caller, &query).await?;
+    let document_id = path_id(&document_id, "kb document not found")?;
+    let detail =
+        document::get_document(&state.pool, caller.tenant_id, project_id, document_id).await?;
+    Ok(Json(json!({
+        "document": detail.document,
+        "content": detail.content,
+        "revisions": detail.revisions,
+    })))
 }
 
 // ── Structured Memory（L1）──────────────────────────────────────────────────

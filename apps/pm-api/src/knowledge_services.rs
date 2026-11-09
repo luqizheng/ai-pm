@@ -39,6 +39,7 @@ use kb_pc_contracts::DomainRef;
 use pm_application::kb_service::{KbCaller, KbServiceLive};
 use pm_application::pc::{self, DecisionAction, PcError, ProposalDecisionInput};
 use serde_json::json;
+use sqlx::Row;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -75,6 +76,8 @@ pub(crate) fn router() -> Router<AppState> {
         )
         .route("/v1/pc/conflicts/{conflict_id}", get(p6_conflict))
         .route("/v1/pc/versions/{version_id}", get(p7_version))
+        // PC 对象浏览（前端 KnowledgeView PC 页签；只读管理面）
+        .route("/v1/pc/objects", get(list_pc_objects))
 }
 
 impl From<PortError> for ApiError {
@@ -771,4 +774,46 @@ async fn p7_version(
     guard(&state, &caller, project_id).await?;
     let _ = version_id;
     skeleton_501(()).await
+}
+
+/// `GET /v1/pc/objects?project_id=`：项目 PC 认知对象列表（最新修订投影 + 正文
+/// 摘要）。只读管理面（前端 PC 页签消费）；`require_project_visible` 同口径。
+async fn list_pc_objects(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let project_id = query
+        .get("project_id")
+        .and_then(|v| uuid::Uuid::parse_str(v).ok())
+        .ok_or(ApiError::BadRequest("project_id is required"))?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await?;
+    let rows: Vec<serde_json::Value> = sqlx::query(
+        "SELECT o.id, o.object_type, o.object_key, o.display_name, o.lifecycle_status,                 o.updated_at, rev.revision_no, rev.change_summary,                 left(dr.content, 240) AS excerpt            FROM pc.cognition_object o            LEFT JOIN LATERAL (                 SELECT r2.revision_no, r2.change_summary, r2.document_revision_id                   FROM pc.cognition_revision r2                  WHERE r2.tenant_id = o.tenant_id AND r2.project_id = o.project_id                    AND r2.object_id = o.id                  ORDER BY r2.revision_no DESC LIMIT 1            ) rev ON true            LEFT JOIN pc.document_revision dr ON dr.id = rev.document_revision_id           WHERE o.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1)             AND o.project_id = $1           ORDER BY o.updated_at DESC, o.display_name ASC",
+    )
+    .bind(project_id)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        json!({
+            "object_id": row.get::<uuid::Uuid, _>("id"),
+            "object_type": row.get::<String, _>("object_type"),
+            "object_key": row.get::<Option<String>, _>("object_key"),
+            "display_name": row.get::<String, _>("display_name"),
+            "lifecycle_status": row.get::<String, _>("lifecycle_status"),
+            "revision_no": row.get::<Option<i32>, _>("revision_no"),
+            "change_summary": row.get::<Option<String>, _>("change_summary"),
+            "excerpt": row.get::<Option<String>, _>("excerpt"),
+            "updated_at": row.get::<chrono::DateTime<chrono::Utc>, _>("updated_at"),
+        })
+    })
+    .collect();
+    Ok(Json(json!({ "items": rows })))
 }

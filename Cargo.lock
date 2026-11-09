@@ -1664,6 +1664,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "kb-pc-contracts",
  "pm-application",
  "pm-domain",
  "pm-infrastructure",

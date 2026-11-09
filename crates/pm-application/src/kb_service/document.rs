@@ -243,3 +243,144 @@ async fn emit_revision_published(
         .await?;
     Ok(())
 }
+
+// ── 读面（KB 文档库管理面；前端 KnowledgeView 消费）────────────────────────
+
+/// 文档列表行（最新修订投影）。
+#[derive(Debug, Clone, Serialize)]
+pub struct KbDocumentRow {
+    pub document_id: Uuid,
+    pub doc_key: String,
+    pub doc_type: String,
+    pub revision_no: i32,
+    pub status: String,
+    pub content_hash: String,
+    pub published_at: Option<DateTime<Utc>>,
+    pub confirmed_by: Option<Uuid>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// 项目内 KB 文档列表（最新修订投影；项目成员可读）。
+pub async fn list_documents(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+) -> Result<Vec<KbDocumentRow>, KbServiceError> {
+    let rows = sqlx::query(
+        "SELECT d.id, d.doc_key, d.doc_type, d.updated_at, \
+                r.revision_no, r.status, r.content_hash, r.published_at, r.confirmed_by \
+           FROM kb.document d \
+           LEFT JOIN LATERAL ( \
+                SELECT r2.revision_no, r2.status, r2.content_hash, r2.published_at, r2.confirmed_by \
+                  FROM kb.document_revision r2 \
+                 WHERE r2.document_id = d.id \
+                 ORDER BY r2.revision_no DESC LIMIT 1 \
+           ) r ON true \
+          WHERE d.tenant_id = $1 AND d.project_id = $2 \
+          ORDER BY d.updated_at DESC, d.doc_key ASC",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| KbDocumentRow {
+            document_id: row.get("id"),
+            doc_key: row.get("doc_key"),
+            doc_type: row.get("doc_type"),
+            revision_no: row.get::<Option<i32>, _>("revision_no").unwrap_or(0),
+            status: row
+                .get::<Option<String>, _>("status")
+                .unwrap_or_else(|| "empty".to_string()),
+            content_hash: row
+                .get::<Option<String>, _>("content_hash")
+                .unwrap_or_default(),
+            published_at: row.get("published_at"),
+            confirmed_by: row.get("confirmed_by"),
+            updated_at: row.get("updated_at"),
+        })
+        .collect())
+}
+
+/// 修订历史行。
+#[derive(Debug, Clone, Serialize)]
+pub struct KbRevisionRow {
+    pub revision_id: Uuid,
+    pub revision_no: i32,
+    pub status: String,
+    pub content_hash: String,
+    pub confirmed_by: Option<Uuid>,
+    pub published_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// 文档详情（正文 = 最新修订；含全部修订历史）。
+pub struct KbDocumentDetail {
+    pub document: KbDocumentRow,
+    pub content: Option<String>,
+    pub revisions: Vec<KbRevisionRow>,
+}
+
+/// 文档详情（项目成员可读；404 防枚举同 confirm）。
+pub async fn get_document(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    document_id: Uuid,
+) -> Result<KbDocumentDetail, KbServiceError> {
+    let owned: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM kb.document \
+          WHERE id = $1 AND tenant_id = $2 AND project_id = $3",
+    )
+    .bind(document_id)
+    .bind(tenant_id)
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some(_) = owned else {
+        return Err(KbServiceError::NotFound("kb document not found"));
+    };
+
+    let documents = list_documents(pool, tenant_id, project_id).await?;
+    let Some(document) = documents.into_iter().find(|d| d.document_id == document_id) else {
+        return Err(KbServiceError::NotFound("kb document not found"));
+    };
+
+    let revisions = sqlx::query(
+        "SELECT id, revision_no, status, content_hash, confirmed_by, published_at, created_at \
+           FROM kb.document_revision \
+          WHERE document_id = $1 \
+          ORDER BY revision_no DESC",
+    )
+    .bind(document_id)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|row| KbRevisionRow {
+        revision_id: row.get("id"),
+        revision_no: row.get("revision_no"),
+        status: row.get("status"),
+        content_hash: row.get("content_hash"),
+        confirmed_by: row.get("confirmed_by"),
+        published_at: row.get("published_at"),
+        created_at: row.get("created_at"),
+    })
+    .collect();
+
+    // 正文 = 最新修订内容（最新修订可能未发布——详情如实展示并标状态）。
+    let content = sqlx::query_scalar(
+        "SELECT content FROM kb.document_revision \
+          WHERE document_id = $1 ORDER BY revision_no DESC LIMIT 1",
+    )
+    .bind(document_id)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
+
+    Ok(KbDocumentDetail {
+        document,
+        content,
+        revisions,
+    })
+}
