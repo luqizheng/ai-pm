@@ -448,14 +448,34 @@ export const router = createRouter({
   scrollBehavior: () => ({ top: 0 })
 });
 
-// 设计系统目录页（无导航外壳的全屏页，meta.layout = "design"）：
-// 全部由设计稿样本数据驱动，仅开发期按需挂载；发布构建里该分支被静态剔除，
-// 目录页与其 fixtures 不会进入 dist（见 build/release-guard.ts）。
-if (import.meta.env.DEV) {
-  void import("./design").then(({ designRoutes }) => {
-    for (const route of designRoutes) router.addRoute(route);
-  });
-}
+/**
+ * 设计系统目录路由（无导航外壳的全屏页，meta.layout = "design"）的注册就绪 promise。
+ *
+ * 全部由设计稿样本数据驱动，仅开发期按需挂载；发布构建里该分支被静态剔除，
+ * 目录页与其 fixtures 不会进入 dist（见 build/release-guard.ts）。
+ * —— 因此这里必须用**动态 import**：静态 import 会把 design.ts 拉进模块图，
+ * 其中的懒加载视图 import 带着 fixtures 一起进 dist（摇树救不了 import() 的
+ * 副作用，release-guard 会当场拦下发布构建）。
+ *
+ * 注册必须**早于 router 的首次导航**：router.install() 触发的首航会**同步**解析
+ * 路由表，而 import("./design") 要等一次模块加载才落地——首航早于注册时
+ * /design 只匹配 404 兜底（无 meta.layout），认证守卫会把匿名访客踢去登录页；
+ * 且 addRoute 不会重新解析已完成的导航（vue-router 只递增 routesVersion），
+ * 于是冷启动直达 /design 永远停在登录墙。
+ * → entry.ts 必须 await 本 promise 之后再装 router。
+ */
+export const designRoutesReady: Promise<void> = import.meta.env.DEV
+  ? import("./design")
+      .then(({ designRoutes }) => {
+        for (const route of designRoutes) {
+          router.addRoute(route);
+        }
+      })
+      .catch((error: unknown) => {
+        // 设计目录是开发期附属品：加载失败不得阻断应用启动
+        console.error("[router] 设计目录路由注册失败", error);
+      })
+  : Promise.resolve();
 
 /**
  * 认证守卫：无任何凭据时把业务页重定向到登录页。
@@ -464,6 +484,22 @@ if (import.meta.env.DEV) {
  * 单飞刷新处理；两者都缺失才视为未登录，避免刷新可用时被误踢。
  */
 export const PUBLIC_LAYOUTS = new Set(["auth", "bare", "design"]);
+
+/**
+ * 设计目录路径前缀（与 src/router/design.ts 的路由表同源）。
+ *
+ * 设计系统目录对**匿名访客始终开放**：路由自带 meta.layout = "design"，
+ * 正常路径下由 PUBLIC_LAYOUTS 放行。这里再按前缀兜一层，是让这条约定不依赖
+ * 路由注册时序——即便设计目录模块加载失败、路由表尚未就位，匿名访客也只落
+ * 404 占位页，而不会被挡在登录墙后面。
+ */
+const DESIGN_PATH_PREFIX = "/design";
+
+function isDesignPath(path: string): boolean {
+  return (
+    path === DESIGN_PATH_PREFIX || path.startsWith(`${DESIGN_PATH_PREFIX}/`)
+  );
+}
 
 router.beforeEach(to => {
   const layout = typeof to.meta.layout === "string" ? to.meta.layout : "";
@@ -474,6 +510,11 @@ router.beforeEach(to => {
     ) {
       return "/dashboard";
     }
+    return true;
+  }
+
+  // 设计目录公开：设计与令牌目录任何人可看，不要求登录
+  if (isDesignPath(to.path)) {
     return true;
   }
 
