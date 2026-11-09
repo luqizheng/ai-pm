@@ -129,3 +129,42 @@ export function listMessages(
     query
   );
 }
+
+// ── Batch 3C：交互写回（生命周期终态权威 + 信封回读）──────────────────
+
+/** 交互写回记录（服务端权威终态；`recorded ≠ 生效`）。 */
+export interface InteractionRecord {
+  id: string;
+  message_id: string;
+  conversation_id: string;
+  action: string;
+  status: string;
+  reason?: string | null;
+  option_id?: string | null;
+  answer?: unknown;
+  decided_by: string;
+  /** 服务端生成的人类可读记录号（INT-XXXXXXXX）。 */
+  reference: string;
+  created_at: string;
+  /** true = 幂等重放（非新建，200 返回既有记录）。 */
+  replayed: boolean;
+}
+
+export interface SubmitInteractionPayload {
+  action: "accept" | "reject" | "submit" | "defer" | "decision";
+  reason?: string;
+  option_id?: string;
+  answer?: unknown;
+}
+
+export function submitInteraction(
+  projectId: string,
+  conversationId: string,
+  messageId: string,
+  body: SubmitInteractionPayload
+) {
+  return http.post<InteractionRecord>(
+    `/v1/pm/projects/${projectId}/conversations/${conversationId}/messages/${messageId}/interaction`,
+    body
+  );
+}

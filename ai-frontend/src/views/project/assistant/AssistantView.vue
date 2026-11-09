@@ -25,9 +25,11 @@ import {
   createConversation,
   listConversations,
   listMessages,
+  submitInteraction,
   type Conversation,
   type ConversationContextAnchor,
-  type ConversationMessage as ConversationMessageRecord
+  type ConversationMessage as ConversationMessageRecord,
+  type SubmitInteractionPayload
 } from "@/api/conversations";
 import { SCOPE_ALL, useScopeStore } from "@/api/scope";
 import { useShellStore, type AssistantContextSnapshot } from "@/stores/shell";
@@ -352,6 +354,88 @@ function deriveTitle(text: string): string {
 }
 
 /**
+ * 响应卡真提交（Batch 3C）：卡片动作 → 写回端点权威落库。
+ *
+ * 动作映射：accept→accept / reject→reject(带 reason) / resolve→decision
+ * （option_id + answer.confirmed 服务端复验）/ submit→submit（答案整体入
+ * answer）。defer 是卡内本地态（组件库不触发 submit），不落端点（挂账）。
+ *
+ * 返回 SubmitResult 形状（卡的状态机消费）；端点 4xx/409 抛 Error →
+ * 卡走错误相 + 重试入口（A-19）。写回成功后刷新本条消息的信封
+ * （本地把终态/记录号同步进 timeline，与 A-21 回读一致）。
+ */
+async function handleCardSubmit(
+  payload: unknown,
+  action?: string,
+  messageId?: string
+): Promise<{ recorded: boolean; reference?: string }> {
+  const target = effectiveProjectId.value;
+  const conversationId = selectedId.value;
+  if (!action || !messageId || !target || !conversationId) {
+    throw new Error("interaction is missing context");
+  }
+  const source = (payload ?? {}) as Record<string, unknown>;
+  const body: SubmitInteractionPayload = (() => {
+    switch (action) {
+      case "accept":
+        return { action: "accept" };
+      case "reject":
+        return {
+          action: "reject",
+          reason:
+            typeof source.reason === "string" && source.reason.trim()
+              ? source.reason.trim()
+              : undefined
+        };
+      case "resolve":
+        return {
+          action: "decision",
+          option_id:
+            typeof source.optionId === "string" ? source.optionId : undefined,
+          answer: {
+            confirmed: source.confirmedAsSelf === true,
+            comment:
+              typeof source.comment === "string" ? source.comment : undefined,
+            optionLabel:
+              typeof source.optionLabel === "string"
+                ? source.optionLabel
+                : undefined
+          }
+        };
+      default:
+        return { action: "submit", answer: payload };
+    }
+  })();
+
+  try {
+    const record = await submitInteraction(
+      target,
+      conversationId,
+      messageId,
+      body
+    );
+    // 信封本地终态化（与 A-21 服务端回读一致，免等待下一次轮询）。
+    const index = timeline.value.findIndex(item => item.id === messageId);
+    if (index >= 0 && timeline.value[index].interaction) {
+      const message = timeline.value[index];
+      timeline.value[index] = {
+        ...message,
+        interaction: {
+          ...message.interaction!,
+          status: record.status as InteractionStatus,
+          // SubmitResult 结果经信封 result 面向回读可见；卡内已展示记录号
+        }
+      };
+    }
+    return { recorded: true, reference: record.reference };
+  } catch (error) {
+    throw new Error(
+      error instanceof Error ? error.message : String(error ?? "submit failed")
+    );
+  }
+}
+
+/**
  * 会话上下文锚点（Batch 2，0003）。
  *
  * 取**交接快照**（指令栏提交时刻定格）；页面内直接新建会话时取活态
@@ -570,6 +654,7 @@ watch(effectiveProjectId, next => {
             :messages="timeline"
             :title="panelTitle"
             :context-label="contextLabel"
+            :submit="handleCardSubmit"
             @send="handleSend"
           />
         </div>

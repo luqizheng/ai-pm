@@ -34,6 +34,7 @@ const listConversations = vi.fn();
 const createConversation = vi.fn();
 const appendMessage = vi.fn();
 const listMessages = vi.fn();
+const submitInteraction = vi.fn();
 
 vi.mock("@/api/conversations", async importOriginal => {
   const actual = await importOriginal<typeof import("@/api/conversations")>();
@@ -42,7 +43,8 @@ vi.mock("@/api/conversations", async importOriginal => {
     listConversations: (...args: unknown[]) => listConversations(...args),
     createConversation: (...args: unknown[]) => createConversation(...args),
     appendMessage: (...args: unknown[]) => appendMessage(...args),
-    listMessages: (...args: unknown[]) => listMessages(...args)
+    listMessages: (...args: unknown[]) => listMessages(...args),
+    submitInteraction: (...args: unknown[]) => submitInteraction(...args)
   };
 });
 
@@ -625,5 +627,108 @@ describe("AssistantView（信封消费）", () => {
 
     expect(wrapper.find(".ai-conversation-message__card").exists()).toBe(false);
     expect(wrapper.text()).toContain("latest risks");
+  });
+});
+
+// ── Batch 3C：卡片真提交接线（卡动作 → 写回端点 + 本地终态）──────────
+
+describe("AssistantView（交互写回接线）", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    md2html.mockReset();
+    md2html.mockResolvedValue("<p>md-rendered</p>");
+    listConversations.mockResolvedValue([conversation({})]);
+    createConversation.mockResolvedValue(
+      conversation({ id: "nc1", title: "first message" })
+    );
+    appendMessage.mockImplementation(
+      async (_p: string, cid: string, body: { content: string }) =>
+        record({
+          id: `m-${body.content.slice(0, 6)}`,
+          conversation_id: cid,
+          content: body.content,
+          created_at: "2026-11-08T10:05:00Z"
+        })
+    );
+  });
+
+  function cardEnvelope() {
+    return {
+      id: "env-1",
+      type: "recommendation",
+      status: "presented",
+      identity: { name: "AI-PM", role: "研发负责人" },
+      createdAt: "2026-11-08T09:59:30Z",
+      title: "建议拆分任务",
+      payload: {
+        summary: "当前迭代风险集中，建议拆分",
+        explanationMarkdown: "依据风险分布……",
+        benefits: [{ label: "风险可见", detail: "逐项暴露" }],
+        risks: [{ label: "迁移成本" }]
+      }
+    };
+  }
+
+  it("点卡「接收」→ 写回端点收 accept + 记录号回传 + 信封本地终态", async () => {
+    listMessages.mockResolvedValue([
+      record({
+        id: "m-card",
+        role: "assistant",
+        content: "卡片消息",
+        metadata: { envelope: cardEnvelope() }
+      })
+    ]);
+    submitInteraction.mockResolvedValue({
+      id: "it-1",
+      message_id: "m-card",
+      conversation_id: "c1",
+      action: "accept",
+      status: "accepted",
+      decided_by: "prc",
+      reference: "INT-AB12CD34",
+      created_at: "2026-11-08T10:06:00Z",
+      replayed: false
+    });
+    const { wrapper } = await mountPage();
+    await flushPromises();
+
+    const accept = wrapper
+      .findAll("button")
+      .find(node => node.text().includes("接收"));
+    expect(accept).toBeTruthy();
+    await accept!.trigger("click");
+    await flushPromises();
+
+    expect(submitInteraction).toHaveBeenCalledWith("p1", "c1", "m-card", {
+      action: "accept"
+    });
+    // 卡面记录号（真端点回传，非 mock INT-*）
+    expect(wrapper.text()).toContain("INT-AB12CD34");
+    // 信封本地终态化（时间线内同步，不等轮询）
+    const card = wrapper.find(".ai-conversation-message__card.ai-card");
+    expect(card.classes()).toContain("ai-card");
+  });
+
+  it("端点 4xx：错误上卡（错误相），不伪造成功", async () => {
+    listMessages.mockResolvedValue([
+      record({
+        id: "m-card",
+        role: "assistant",
+        content: "卡片消息",
+        metadata: { envelope: cardEnvelope() }
+      })
+    ]);
+    submitInteraction.mockRejectedValue(new Error("interaction target not found"));
+    const { wrapper } = await mountPage();
+    await flushPromises();
+
+    const accept = wrapper
+      .findAll("button")
+      .find(node => node.text().includes("接收"));
+    await accept!.trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("interaction target not found");
+    expect(wrapper.text()).not.toContain("INT-");
   });
 });

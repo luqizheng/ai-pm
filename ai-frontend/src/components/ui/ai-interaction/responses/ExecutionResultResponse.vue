@@ -78,7 +78,10 @@ const props = withDefaults(
     identity?: AiIdentity;
     timestamp?: string;
     density?: CardDensity;
-    submit?: (payload: unknown) => Promise<SubmitResult>;
+    submit?: (
+    payload: unknown,
+    action?: string
+  ) => Promise<SubmitResult>;
     initialStatus?: InteractionStatus;
     evidence?: AiEvidence;
   }>(),
@@ -111,9 +114,9 @@ const messageKeyFor = (payload: unknown): string => {
 
 const state = useAiInteraction({
   initialStatus: props.initialStatus,
-  submit: async payload => {
+  submit: async (payload, action) => {
     const result = props.submit
-      ? await props.submit(payload)
+      ? await props.submit(payload, action)
       : await fallbackSubmit(payload);
     return { ...result, messageKey: messageKeyFor(payload) };
   }

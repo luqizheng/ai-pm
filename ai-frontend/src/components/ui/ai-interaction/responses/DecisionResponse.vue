@@ -36,7 +36,10 @@ const props = withDefaults(
     identity?: AiIdentity;
     timestamp?: string;
     density?: CardDensity;
-    submit?: (payload: unknown) => Promise<SubmitResult>;
+    submit?: (
+    payload: unknown,
+    action?: string
+  ) => Promise<SubmitResult>;
     initialStatus?: InteractionStatus;
     evidence?: AiEvidence;
   }>(),
@@ -59,9 +62,9 @@ const { t } = useI18n();
 
 const state = useAiInteraction({
   initialStatus: props.initialStatus,
-  submit: async payload => {
+  submit: async (payload, action) => {
     const result = props.submit
-      ? await props.submit(payload)
+      ? await props.submit(payload, action)
       : ({ recorded: true } satisfies SubmitResult);
     return { ...result, messageKey: "ai.decision.success" };
   }

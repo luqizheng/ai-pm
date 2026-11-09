@@ -33,7 +33,10 @@ const props = withDefaults(
     identity?: AiIdentity;
     timestamp?: string;
     density?: CardDensity;
-    submit?: (payload: unknown) => Promise<SubmitResult>;
+    submit?: (
+    payload: unknown,
+    action?: string
+  ) => Promise<SubmitResult>;
     initialStatus?: InteractionStatus;
     evidence?: AiEvidence;
   }>(),
@@ -58,7 +61,7 @@ const mockSubmit = createMockSubmit({ latencyMs: 600 });
 
 const state = useAiInteraction({
   initialStatus: props.initialStatus,
-  submit: payload => (props.submit ?? mockSubmit)(payload)
+  submit: (payload, action) => (props.submit ?? mockSubmit)(payload, action)
 });
 const { status, phase, result, error, submitting, isTerminal } = state;
 
