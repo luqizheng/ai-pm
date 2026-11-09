@@ -20,6 +20,7 @@
 //! 不落正文（检查单 A-4）；跨域事件只走 outbox（`kb.memory.approved`）。
 
 pub mod document;
+pub mod indexer;
 pub mod memory;
 pub mod port;
 pub mod retrieval;

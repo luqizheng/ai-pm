@@ -175,6 +175,8 @@ Reject 命令 / Reject API / Reject 事件 / 索引撤销与清零 / 已发布�
 - **处置**：为该事件配**留痕型 handler** `KbDocumentRevisionPublishedHandler`（照 `PcVersionPublishedHandler` 同款 `notify_once` 留痕，去重键=revision_id），并装配进 `register_all_handlers`。WP-3 接手**同一事件、同一 trait 形状**换成真索引动作，worker 装配不动。
 - **副作用登记**：装配覆盖断言 `handler_assembly_covers_catalog` 里有一份**手工对照清单**，新增事件类型必须同步（本次已同步）。
 
+**发现 F-3 · PC 侧同款全拒触发器（WP-3 实施中）**：`trg_pc_document_revision_immutable` 是 `BEFORE DELETE OR UPDATE` 全拒——tsv 派生列无法落表，与 kb 侧 0006 同一冻结模式同一自述。处置（迁移 0009 同款纪律）：置换为 `pc.guard_document_revision()` 精细守卫——DELETE 禁 / 内容列不可变 / **派生列 `search_tsv` 允许更新**（索引管线唯一写入口，不触碰知识正文）。
+
 **其他实现口径（非偏差，记录备查）**：
 - **时间戳以库时钟为准**：`published_at` 用 `now()`（PG 微秒精度）+ `RETURNING` 回读，**不用** Rust `Utc::now()`（纳秒）——否则返回值与库内不一致，幂等断言即依赖两者相等。
 - **ADR-06a 守扫注释字面量**：迁移头注若写全旧 ai 域表名会被守卫判为"新迁移触碰冻结容器"——措辞避开（老坑复发一次）。

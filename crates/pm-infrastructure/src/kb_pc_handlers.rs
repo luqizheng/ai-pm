@@ -671,6 +671,25 @@ impl OutboxHandler for PcVersionPublishedHandler {
             .and_then(|v| v.as_str())
             .ok_or_else(|| "version_published missing version_ref.target_id".to_string())?
             .to_string();
+        // WP-3：PC 域 FTS 消费——版本成员对象的现行正文行 tsv 重算（消费事务内，
+        // 幂等重算；pc_index:{version_id} 生产侧幂等键在 outbox）。
+        if let Ok(version_uuid) = version_id.parse::<uuid::Uuid>() {
+            let mut tx = match self.pool.begin().await {
+                Ok(tx) => tx,
+                Err(err) => return Err(format!("pc index consume begin failed: {err}")),
+            };
+            if let Err(err) = pm_application::kb_service::indexer::recompute_pc_revision_tsv(
+                &mut tx,
+                version_uuid,
+            )
+            .await
+            {
+                return Err(format!("pc revision tsv recompute failed: {err}"));
+            }
+            if let Err(err) = tx.commit().await {
+                return Err(format!("pc index consume commit failed: {err}"));
+            }
+        }
         notify_once(
             &self.pool,
             event.project_id,
@@ -682,12 +701,12 @@ impl OutboxHandler for PcVersionPublishedHandler {
     }
 }
 
-/// kb.document_revision.published → 状态感知留痕（WP-0 内容管线接缝）。
+/// kb.document_revision.published → **检索索引消费**（WP-3 接真；WP-0 期为留痕）。
 ///
-/// **当前是留痕占位**：真正的检索索引管线在 WP-3 落地（`KbRevisionPublishedIndexHandler`
-/// 接同一事件、同一 trait 形状，worker 装配不动）。本 handler 先把「修订已正式发布」
-/// 这一事实记进平台通知面（去重键 = revision_id），满足 outbox 目录不变量
-/// 「有 handler 才有资格默认生产」。
+/// 家族现行六步在 [`pm_application::kb_service::indexer::
+/// index_published_revision`] 内（advisory 锁 + 权威读现行 + 过期事件只清旧不
+/// 覆盖新 + 索引与 state 同事务）。索引成功后仍落平台通知留痕（去重键=revision_id，
+/// 语义与 WP-0 一致）。
 pub struct KbDocumentRevisionPublishedHandler {
     pool: PgPool,
 }
@@ -701,15 +720,53 @@ impl KbDocumentRevisionPublishedHandler {
 #[async_trait::async_trait]
 impl OutboxHandler for KbDocumentRevisionPublishedHandler {
     async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
-        let revision_id = event
+        let doc_ref = event
             .payload
             .get("document_ref")
-            .and_then(|r| r.get("target_revision_id"))
+            .ok_or_else(|| "kb_document_revision_published missing document_ref".to_string())?;
+        let document_id = doc_ref
+            .get("target_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                "kb_document_revision_published missing document_ref.target_id".to_string()
+            })?
+            .to_string();
+        let revision_id = doc_ref
+            .get("target_revision_id")
             .and_then(|v| v.as_str())
             .ok_or_else(|| {
                 "kb_document_revision_published missing document_ref.target_revision_id".to_string()
             })?
             .to_string();
+
+        let document_uuid = document_id
+            .parse::<uuid::Uuid>()
+            .map_err(|e| format!("kb_document_revision_published bad document id: {e}"))?;
+        let revision_uuid = revision_id
+            .parse::<uuid::Uuid>()
+            .map_err(|e| format!("kb_document_revision_published bad revision id: {e}"))?;
+
+        match pm_application::kb_service::indexer::index_published_revision(
+            &self.pool,
+            document_uuid,
+            revision_uuid,
+        )
+        .await
+        {
+            Ok((action, sections)) => {
+                tracing::info!(
+                    %document_id,
+                    %revision_id,
+                    action,
+                    sections,
+                    "kb revision index consumed"
+                );
+            }
+            // 索引失败：返回 Err 让 worker 重试（RT-012 可恢复；耗尽后 failed 台账
+            // 由 rebuild 记录）。
+            Err(err) => return Err(format!("kb revision indexing failed: {err}")),
+        }
+
         notify_once(
             &self.pool,
             event.project_id,

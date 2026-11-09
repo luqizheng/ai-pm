@@ -19,6 +19,7 @@
 //! Planner 是计划生成能力——两者不绑定。Planner 关闭时执行固定双域策略。
 
 pub mod channels;
+pub mod cjk;
 pub mod service;
 pub mod traversal;
 pub mod validator;

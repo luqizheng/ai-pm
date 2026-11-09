@@ -177,18 +177,35 @@ impl RetrievalServiceLive {
             }
         }
 
-        // 其余通道（V1 占位，WP-3 接真索引后替换）。
-        if plan.retrieval_modes.contains(&RetrievalChannel::PcFts) {
-            let result = channels::pc_fts_channel().await;
+        // PC FTS（WP-3 接真）。
+        if plan.retrieval_modes.contains(&RetrievalChannel::PcFts)
+            && channels::mode_includes_pc(plan.mode)
+        {
+            let result = channels::pc_fts_channel(
+                &self.pool,
+                validated.tenant_id(),
+                validated.project_id(),
+                queries,
+                limit,
+            )
+            .await;
             hits.extend(result.hits);
             if let Some(code) = result.unavailable {
                 unavailable_codes.push(code);
             }
         }
+        // KB Section（WP-3 接真）。
         if plan.retrieval_modes.contains(&RetrievalChannel::KbSection)
             && channels::mode_includes_kb(plan.mode)
         {
-            let result = channels::kb_section_channel().await;
+            let result = channels::kb_section_channel(
+                &self.pool,
+                validated.tenant_id(),
+                validated.project_id(),
+                queries,
+                limit,
+            )
+            .await;
             hits.extend(result.hits);
             if let Some(code) = result.unavailable {
                 unavailable_codes.push(code);

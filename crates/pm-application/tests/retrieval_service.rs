@@ -273,7 +273,7 @@ async fn pc_only_plan_hits_pc_entity(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../../migrations")]
-async fn kb_only_plan_reports_index_unavailable(pool: PgPool) {
+async fn kb_only_plan_on_empty_index_returns_clean_empty(pool: PgPool) {
     let (project_id, human_id) = seed(&pool, "RT-004").await;
     let plan_json = serde_json::json!({
         "intent": "factual_lookup",
@@ -295,12 +295,13 @@ async fn kb_only_plan_reports_index_unavailable(pool: PgPool) {
         .await
         .unwrap();
     assert!(resp.validation.all_passed());
-    // V1 索引未落地 → 通道不可用原因码如实进 degradations（不假装有结果）。
+    // WP-3 后 KB 通道已接真：空索引 = 正常空结果（通道健康，不报 unavailable）。
     assert!(
-        resp.evidence
+        !resp
+            .evidence
             .degradations
             .contains(&"kb_section_index_unavailable".to_string()),
-        "unavailable channel must be reported, got {:?}",
+        "live channel with empty index is not an unavailable channel, got {:?}",
         resp.evidence.degradations
     );
     assert!(resp.evidence.evidence.is_empty());
