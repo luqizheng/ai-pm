@@ -18,8 +18,10 @@
 //! **Planner OFF ≠ Cross-domain OFF**（裁决 Q-B 补充）：D-7 是数据访问边界，
 //! Planner 是计划生成能力——两者不绑定。Planner 关闭时执行固定双域策略。
 
+pub mod assembly;
 pub mod channels;
 pub mod cjk;
+pub mod fusion;
 pub mod service;
 pub mod traversal;
 pub mod validator;

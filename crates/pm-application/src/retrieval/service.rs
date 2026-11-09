@@ -67,19 +67,38 @@ impl RetrievalServiceLive {
         // ③ 执行（通道级硬过滤已在此完成）。
         let hits = self.execute_channels(&validated).await?;
 
-        // ④ 证据组装（WP-4 完整形态；本批为骨架：条数/字符预算在 WP-4 落地）。
+        // ③b 跨域关系扩展（计划请求了 relationship 通道时内联执行；遍历边不参与
+        // RRF，直接进证据集）。
+        let traversal = if validator::wants_cross_domain(validated.plan()) {
+            self.expand(&validated).await.unwrap_or_default()
+        } else {
+            TraversalResult::default()
+        };
+
+        // ④ WP-4 全管线：融合（RRF+去重）→ 组装（五维/预算裁剪/[E-n] 编号）。
+        // gaps 同源：bundle.gaps 直接取 traversal.gaps（同一数据源，不分别计算）。
         let mut degradations: Vec<String> = degradation
             .map(|r| r.as_str().to_string())
             .into_iter()
             .collect();
         degradations.extend(hits.unavailable_codes.iter().cloned());
 
-        let evidence = EvidenceBundle {
-            evidence: hits.hits,
-            traversal: TraversalResult::default(),
-            gaps: Vec::new(),
+        let fused = super::fusion::fuse(hits.hits);
+        let output = super::assembly::assemble(super::assembly::AssembleInput {
+            evidence: fused,
+            traversal,
             degradations,
-            budget_report: BudgetReport::default(),
+            as_of: chrono::Utc::now(),
+        });
+
+        // gaps 同源纪律：bundle.gaps 直接取遍历结果 gaps（同一数据源，不分别计算）。
+        let bundle_gaps = output.traversal.gaps.clone();
+        let evidence = EvidenceBundle {
+            evidence: output.evidence,
+            traversal: output.traversal,
+            gaps: bundle_gaps,
+            degradations: output.degradations,
+            budget_report: output.budget,
         };
 
         Ok(RetrievalResponse {

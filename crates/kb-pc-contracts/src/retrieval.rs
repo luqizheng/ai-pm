@@ -551,6 +551,9 @@ pub struct RetrievalEvidence {
     #[serde(default)]
     pub relevance_score: Option<f32>,
     pub retrieval_channel: RetrievalChannel,
+    /// 命中来源通道（去重合并后；含首通道——RRF 融合的"同物多通道命中"审计面）。
+    #[serde(default)]
+    pub via_channels: Vec<RetrievalChannel>,
     #[serde(default)]
     pub title: Option<String>,
     pub content_excerpt: String,
