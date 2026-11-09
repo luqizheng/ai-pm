@@ -58,6 +58,7 @@ pub mod requirement_acceptance;
 pub mod requirement_projection;
 pub mod requirement_traceability;
 pub mod response_delivery;
+pub mod retrieval;
 pub mod review;
 pub mod rows;
 pub mod run_cleanup;

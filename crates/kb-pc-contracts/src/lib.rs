@@ -13,6 +13,8 @@
 //! - [`envelope`]：事件信封（V1.1 §13.1 十一字段）。
 //! - [`events`]：14 项跨服务事件目录（V1.1 §13.3，目录=单一真源；与
 //!   `pm-application::outbox::CATALOG` 的登记面共用本清单常量）。
+//! - [`retrieval`]：PC/KB 统一检索契约（检索架构 V1.0 WP-1）——**计划校验是纯
+//!   函数**，产出字段私有的 `ValidatedPlan`：未经校验的计划在类型上无法进入执行层。
 //! - [`ports`]：KbServicePort / PcServicePort 端口 trait（V1.1 §12 契约），
 //!   V1 进程内实现占位——`PortNotWired` 返回未接线错误，业务落点归 Phase 4/5。
 //!
@@ -25,8 +27,17 @@ pub mod envelope;
 pub mod events;
 pub mod ports;
 pub mod registry;
+pub mod retrieval;
 
 pub use domain_ref::DomainRef;
 pub use envelope::EventEnvelope;
 pub use ports::{KbServicePort, PcServicePort, PortError};
 pub use registry::{DomainChannelState, OwningService, RegistryError, TargetDomain};
+pub use retrieval::{
+    validate_plan, AuthorityStatus, BudgetReport, ChannelHits, EntityAnchor, EvidenceBundle,
+    FreshnessBucket, KnowledgeDomain, PlannerModel, PlannerModelError, RetrievalBudget,
+    RetrievalCaller, RetrievalChannel, RetrievalDegradationReason, RetrievalEvidence,
+    RetrievalIntent, RetrievalMode, RetrievalPlan, RetrievalPlanSource, RetrievalPort,
+    TraversalDirection, TraversalEdge, TraversalGap, TraversalResult, TraversalSpec, ValidatedPlan,
+    ValidationCheck, ValidationInputs, ValidationReport,
+};
