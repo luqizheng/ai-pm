@@ -199,6 +199,15 @@ describe("CommandBar", () => {
     });
   });
 
+  it("附件按钮诚实禁用（D-IC-6）：不可点、标签为「建设中」", async () => {
+    const { wrapper } = mountShell(CommandBar);
+    await nextTick();
+
+    const attach = wrapper.find('button[aria-label="附件能力建设中"]');
+    expect(attach.exists()).toBe(true);
+    expect(attach.attributes("disabled")).toBeDefined();
+  });
+
   it("提交后切换项目，交接快照仍是提交时刻的上下文", async () => {
     const { wrapper } = mountShell(CommandBar);
     const shell = useShellStore();

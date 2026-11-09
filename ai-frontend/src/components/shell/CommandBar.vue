@@ -139,11 +139,16 @@ function applySuggestion(key: string) {
         @keydown="onKeydown"
       />
       <kbd class="shell-commandbar__kbd">⌘ J</kbd>
-      <IconTooltip :content="t('shell.app.commandbar.attach')" side="top">
+      <!-- 附件按钮诚实禁用（D-IC-6）：能力未建成，不做空头摆设 -->
+      <IconTooltip
+        :content="t('shell.app.commandbar.attachPending')"
+        side="top"
+      >
         <button
           type="button"
           class="shell-commandbar__icon-button"
-          :aria-label="t('shell.app.commandbar.attach')"
+          :aria-label="t('shell.app.commandbar.attachPending')"
+          disabled
         >
           <Paperclip :size="14" aria-hidden="true" />
         </button>
