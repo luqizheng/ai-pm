@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 
 import MarkdownEditor from "@/components/ui/markdown-editor/MarkdownEditor.vue";
+import { resolveAttachmentUrl, uploadAttachment } from "@/api/base/attachments";
 
 /**
  * Markdown rich-text field for long AI answers / artifact bodies.
@@ -40,6 +41,8 @@ const isReadonly = computed(() => props.readonly || props.disabled);
         :min-height="minHeight"
         :readonly="isReadonly"
         :placeholder="t('ai.controls.richText.placeholder')"
+        :uploader="uploadAttachment"
+        :resolve-url="resolveAttachmentUrl"
         @update:model-value="emit('update:modelValue', $event)"
       />
     </div>

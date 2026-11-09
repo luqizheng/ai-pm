@@ -8,6 +8,7 @@ import Button from "@/components/ui/button/Button.vue";
 import ConfirmationDialog from "@/components/ui/confirmation-dialog/ConfirmationDialog.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import MarkdownViewer from "@/components/ui/markdown-editor/MarkdownViewer.vue";
+import { resolveAttachmentUrl } from "@/api/base/attachments";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import AiResponseCard from "../card/AiResponseCard.vue";
 import { defaultAiIdentity } from "../identity";
@@ -356,7 +357,10 @@ onBeforeUnmount(() => {
     </section>
 
     <section v-else class="ai-artifact__preview">
-      <MarkdownViewer :model-value="content" />
+      <MarkdownViewer
+        :model-value="content"
+        :resolve-url="resolveAttachmentUrl"
+      />
     </section>
 
     <div

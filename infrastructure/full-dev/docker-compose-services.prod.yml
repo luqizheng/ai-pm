@@ -23,6 +23,12 @@ services:
   file-service:
     ports: !override []
     restart: unless-stopped
+  # RustFS：浏览器经预签名 URL 直传直取，9000 必须对客户端可达
+  # （唯一例外于「只暴露 api-gateway」的口径——对象存储是预签名的终点）。
+  # 9001 控制台不外露。
+  rustfs:
+    ports: !override ["9000:9000"]
+    restart: unless-stopped
   prue_backend:
     ports: !override []
     restart: unless-stopped

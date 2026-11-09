@@ -7,8 +7,12 @@ import { file as fileServices } from "./file";
 /**
  * Markdown 附件端口的上游实现。
  *
- * 传输层一律走 `file-services`（multipart → api-gateway `/v1/file/*` → 对象存储），
- * 不直连 S3：RustFS 的兼容矩阵里 POST Object 表单上传尚未支持，且签名密钥不应下发到浏览器。
+ * 传输链：浏览器 → pm-api 文件代理（`/v1/file/*`）→ file-service → 对象存储
+ * （RustFS，S3 兼容）。上传走 multipart，不直连 S3：RustFS 的兼容矩阵里
+ * POST Object 表单上传尚未支持，且签名密钥不应下发到浏览器。
+ *
+ * 下载走 file-service 签发的预签名 URL（浏览器直取对象存储字节，免 JWT）。
+ * 正文只存 `/v1/file/{id}`，渲染时现签现用（见 markdown-editor/file-ref.ts）。
  */
 
 /** 预签名有效期（秒），与网关侧保持一致的小值，够一次页面渲染即可 */

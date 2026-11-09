@@ -21,3 +21,5 @@ issuer = "superpowers-token-service"
 "audit-service"         = { host = "audit-service",        port = 8084 }
 "prue_backend"          = { host = "prue_backend",         port = 8087 }
 "file-service"          = { host = "file-service",         port = 8082 }
+# pm-api（ai-pm 自有业务服务）：/v1/pm/* 与 /v1/file/* 用户面入口
+"pm-api"                = { host = "pm-api",               port = 8090 }

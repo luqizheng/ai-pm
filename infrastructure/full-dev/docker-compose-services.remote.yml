@@ -22,6 +22,9 @@ services:
   file-service:
     restart: unless-stopped
 
+  rustfs:
+    restart: unless-stopped
+
   api-gateway:
     restart: unless-stopped
 
