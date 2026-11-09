@@ -6,6 +6,9 @@ global:
     groupCreate: 创建
     recentLabel: 最近搜索
     recentHint: 最近
+    domainKb: KB 文档
+    domainPc: PC 对象
+    metaTruncated: 内容已截断
     countResults: "{count} 条结果 · 仅可访问对象"
     searching: 正在搜索可用对象…
     clearQuery: 清除查询

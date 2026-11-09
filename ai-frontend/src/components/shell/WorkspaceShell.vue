@@ -4,11 +4,9 @@ import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 
 import SearchPalette from "@/components/global/search/SearchPalette.vue";
-import type {
-  SearchCommand,
-  SearchFn
-} from "@/components/global/search/types";
+import type { SearchCommand, SearchFn } from "@/components/global/search/types";
 import { listProjects } from "@/api/projects";
+import { retrievalQuery } from "@/api/knowledge";
 import { useShellStore } from "@/stores/shell";
 import CommandBar from "./CommandBar.vue";
 import ContextPanel from "./ContextPanel.vue";
@@ -70,8 +68,32 @@ async function bootstrapProjectContext() {
   }
 }
 
-/** 全局搜索：后端尚未提供跨域搜索接口，发布态返回空结果而不是演示记录 */
-const searchFn: SearchFn = async () => [];
+/**
+ * 全局搜索：接统一检索 API（/v1/retrieval/query）。
+ *
+ * - KB 文档 / PC 对象证据 → 「document」结果类，target 落知识库页；
+ * - Planner 未开启时后端走确定性双域直查（degraded=planner_disabled）——
+ *   对搜索面板透明，端点始终可用；
+ * - 无项目上下文或请求失败 → 空结果（面板 Error 态仅留给真正异常）。
+ */
+const searchFn: SearchFn = async query => {
+  const projectId = shell.currentProjectId;
+  if (!projectId || !query.trim()) return [];
+  const resp = await retrievalQuery(query, projectId);
+  return resp.evidence.evidence.map(item => {
+    const isPc = item.source_domain === "PC";
+    return {
+      id: item.evidence_id,
+      objectType: "document" as const,
+      label: item.title ?? item.content_excerpt.slice(0, 48),
+      description: isPc
+        ? `${t("global.search.domainPc")} · ${item.authority_status}`
+        : `${t("global.search.domainKb")} · ${item.authority_status}`,
+      meta: item.truncated ? t("global.search.metaTruncated") : undefined,
+      target: "/project/knowledge"
+    };
+  });
+};
 
 bootstrapProjectContext();
 watch(

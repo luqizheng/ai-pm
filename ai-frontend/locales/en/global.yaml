@@ -6,6 +6,9 @@ global:
     groupCreate: CREATE
     recentLabel: RECENT SEARCHES
     recentHint: Recent
+    domainKb: KB document
+    domainPc: PC object
+    metaTruncated: Content truncated
     countResults: "{count} results · Available objects only"
     searching: Searching available objects…
     clearQuery: Clear query

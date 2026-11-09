@@ -1,0 +1,35 @@
+knowledge:
+  page:
+    title: 知识库
+    description: KB 文档（含发布确认）与 PC 认知对象的统一浏览面。
+  tab:
+    kb: KB 文档
+    pc: PC 对象
+  status:
+    draft: 草稿
+    published: 已发布
+    rejected: 已拒绝
+    empty: 无修订
+  lifecycle:
+    identity: 占位
+    draft: 草稿
+    active: 现行
+    deprecated: 已废弃
+    superseded: 已替代
+  field:
+    revision: 修订
+    revisions: 修订历史
+    content: 正文
+  action:
+    confirm: 确认发布
+    confirming: 确认中…
+    close: 收起
+  notice:
+    confirmed: 已确认发布（同人重复确认不会改原确认记录）
+  error:
+    load: 加载失败，请稍后重试
+    confirm: 确认失败（需要真人交互登录态；AI / API Key 无确认权）
+  hint:
+    loading: 加载中…
+    emptyKb: 暂无 KB 文档——分析产物经确认后在此可见
+    emptyPc: 暂无 PC 认知对象——提案发布后在此可见

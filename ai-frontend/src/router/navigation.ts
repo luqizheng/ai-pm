@@ -169,7 +169,11 @@ export const navGroups: NavGroup[] = [
       {
         path: "/project/knowledge",
         labelKey: "shell.app.side.item.knowledge",
-        icon: BookOpen
+        icon: BookOpen,
+        component: () =>
+          import("@/views/project/knowledge/KnowledgeView.vue").then(
+            module => module.default
+          )
       },
       {
         path: "/project/devenv",

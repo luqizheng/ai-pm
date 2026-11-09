@@ -1,0 +1,35 @@
+knowledge:
+  page:
+    title: Knowledge Base
+    description: Unified browsing for KB documents (with publish confirmation) and PC cognition objects.
+  tab:
+    kb: KB Documents
+    pc: PC Objects
+  status:
+    draft: Draft
+    published: Published
+    rejected: Rejected
+    empty: No revision
+  lifecycle:
+    identity: Identity
+    draft: Draft
+    active: Active
+    deprecated: Deprecated
+    superseded: Superseded
+  field:
+    revision: Rev
+    revisions: Revisions
+    content: Content
+  action:
+    confirm: Confirm & Publish
+    confirming: Confirming…
+    close: Close
+  notice:
+    confirmed: Published (repeat confirmation by the same user keeps the original record)
+  error:
+    load: Failed to load, please retry
+    confirm: Confirmation failed (requires an interactive human session; AI / API keys cannot confirm)
+  hint:
+    loading: Loading…
+    emptyKb: No KB documents yet — analysis drafts appear here after confirmation
+    emptyPc: No PC cognition objects yet — they appear here after version publication
