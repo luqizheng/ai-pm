@@ -62,6 +62,10 @@ services:
       # api-gateway 的 egress_map（静态服务名 → container DNS）。
       DATABASE_URL: postgres://aipm:aipm@aipm-pg:5432/aipm
       PM_API_PORT: "8090"
+      # DK-F：对话载体判定开关（D-DK-3，缺省 off）。on 时才允许
+      # LLM 隐式把「需求句」升级为访谈会话（可见 + 可撤销）；off 时只有
+      # 显式 mode=interview 才升级。透传后可由 .env.prod 开关而无需重建镜像。
+      AI_PM_CONVERSATION_ROUTER: ${AI_PM_CONVERSATION_ROUTER:-off}
       # 鉴权（slice B）：默认 jwks fail-closed，JWKS 取自同网络（superpowers）的 lmms token-service
       AI_PM_AUTH_MODE: "jwks"
       AI_PM_JWKS_URL: http://token-service:8082/.well-known/jwks.json
@@ -104,6 +108,12 @@ services:
     image: ${AIPM_REGISTRY:-aipm}/pm-worker:${AIPM_VERSION:-0.1.0}
     environment:
       DATABASE_URL: postgres://aipm:aipm@aipm-pg:5432/aipm
+      # DK-F：与分析完成→自动开访谈同一个开关（D-DK-9 / DK-E）。
+      # pm-worker 只消费 `kb.analysis.completed`（不跑编排循环），但两个
+      # worker 必须同值——否则谁领到事件谁决定是否开访谈。
+      AI_PM_DISCOVERY_ORCHESTRATOR: ${AI_PM_DISCOVERY_ORCHESTRATOR:-off}
+      # deploy key 私钥解密主密钥（与 pm-api 同值）；KB 仓库快照分析在 worker 侧执行。
+      AI_PM_SECRET_KEY: "${AI_PM_SECRET_KEY:-}"
     depends_on:
       aipm-pg:
         condition: service_healthy
@@ -121,6 +131,16 @@ services:
       # （pm-worker 是纯 outbox 分发，不参与 Run 调度）。
       AI_PM_RUN_DISPATCH: ${AI_PM_RUN_DISPATCH:-off}
       AI_PM_RUN_DISPATCH_EXCLUDE_PROJECTS: ${AI_PM_RUN_DISPATCH_EXCLUDE_PROJECTS:-}
+      # DK-F：第八循环（访谈编排器）开关（D-DK-9，缺省 off）。on 时本 worker
+      # 跑编排轮次 + 写回钩子（需求草案止步 pending_confirmation + draft 任务批）。
+      AI_PM_DISCOVERY_ORCHESTRATOR: ${AI_PM_DISCOVERY_ORCHESTRATOR:-off}
+      # DK-F：第七循环（对话框 AI 回复）开关，缺省 off。
+      AI_PM_CONVERSATION_REPLY: ${AI_PM_CONVERSATION_REPLY:-off}
+      # DK-F：知识 Git 根（需求修订 Markdown 的绑定点）。缺省 <cwd>/../ai-pm-knowledge，
+      # 容器内落在容器文件系统——重建即丢，故显式给可持久路径。
+      AI_PM_KNOWLEDGE_ROOT: ${AI_PM_KNOWLEDGE_ROOT:-/data/knowledge}
+    volumes:
+      - aipm_knowledge:/data/knowledge
     depends_on:
       aipm-pg:
         condition: service_healthy
@@ -142,6 +162,10 @@ services:
 volumes:
   aipm_pg_data:
     name: infrastructure_aipm_pg_data
+  # DK-F：知识 Git 根（Markdown 真源）——需求修订的提交/绑定写这里，
+  # 容器重建即丢会让历史修订的 git sha 不可寻址，故命名卷持久化。
+  aipm_knowledge:
+    name: infrastructure_aipm_knowledge
 networks:
   superpowers:
     external: true

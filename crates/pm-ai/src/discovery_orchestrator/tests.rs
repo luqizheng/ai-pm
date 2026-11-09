@@ -1271,5 +1271,120 @@ async fn write_back_hook_failure_does_not_fail_the_round(pool: sqlx::PgPool) {
     assert_eq!(session_status(&pool, session_id).await, "REVIEW_REQUIRED");
 }
 
+/// DK-F 真栈缺陷的回归用例：**同事务内写入的消息必须按 `seq` 定序**。
+///
+/// 真栈实测（场景 2 首条访谈消息）：载体升级在**同一个事务**里写了
+/// 「交接摘要」(ai) 与用户原话 (user) 两条消息——它们共享同一个
+/// `created_at`（事务时间戳）。而扫描面用 `ORDER BY created_at DESC, id DESC`
+/// 取「最新消息」，次级键是随机 UUID → 约一半概率选中 ai 那条 →
+/// 「最新消息不是 user」→ 会话不进编排扫描集 → 访谈静默卡死。
+///
+/// 本用例把 id 的字典序安排成「ai 更大」，使旧的 `id DESC` 次级排序**必然**
+/// 选中 ai（即必然复现缺陷），而 `seq DESC`（会话内权威顺序）必然选中 user。
+/// 于是用例是确定性的：修好 → `processed == 1`；没修 → `processed == 0`。
+#[sqlx::test(migrations = "../../migrations")]
+async fn latest_message_is_ordered_by_seq_not_by_timestamp_tiebreak(pool: sqlx::PgPool) {
+    let project_id = seed_project(&pool).await;
+    let (session_id, _) = seed_session(&pool, project_id, "TASK_DISCOVERY").await;
+
+    // id 刻意让 ai 行更大（uuid 字典序）——旧排序（id DESC）会选中 ai。
+    let ai_id = Uuid::parse_str("ffffffff-ffff-4fff-8fff-ffffffffffff").unwrap();
+    let user_id = Uuid::parse_str("00000000-0000-4000-8000-000000000001").unwrap();
+
+    // 同一事务里写两条消息 → created_at 相同，seq 递增（ai=1, user=2）。
+    let mut tx = pool.begin().await.unwrap();
+    for (id, speaker, content, seq) in [
+        (ai_id, "ai", "【交接摘要】", 1_i64),
+        (user_id, "user", "我要做手机号登录", 2_i64),
+    ] {
+        sqlx::query(
+            "INSERT INTO discovery.discovery_message \
+             (id, tenant_id, session_id, speaker, source, content, seq) \
+             VALUES ($1, $2, $3, $4, 'WEB', $5, $6)",
+        )
+        .bind(id)
+        .bind(SYSTEM_TENANT)
+        .bind(session_id)
+        .bind(speaker)
+        .bind(content)
+        .bind(seq)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    }
+    tx.commit().await.unwrap();
+
+    // 两条消息的 created_at 确实相同（前提成立）。
+    let (distinct_timestamps,): (i64,) = sqlx::query_as(
+        "SELECT count(DISTINCT created_at) FROM discovery.discovery_message WHERE session_id = $1",
+    )
+    .bind(session_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        distinct_timestamps, 1,
+        "fixture must reproduce the same-transaction timestamp tie"
+    );
+
+    // 扫描面：最新消息必须是 user（seq=2），会话才进编排候选集。
+    // 用例只断言「被扫描到」（模型回包不在本用例的断言面内）。
+    let mut worker = DiscoveryOrchestratorWorker::new(pool.clone());
+    let report = worker.orchestrate_round().await.unwrap();
+    assert_eq!(
+        report.processed, 1,
+        "the user message must be seen as the latest message: {report:?}"
+    );
+    assert_eq!(
+        report.stale_rounds, 0,
+        "the round must not be dropped as stale: {report:?}"
+    );
+}
+
+/// DK-F 真栈缺陷的回归用例：**既有 finding 的 id 必须出现在提示词里**。
+///
+/// 真栈实测（场景 2 更正轮）：输出契约要求 `target_finding_ref` 照抄
+/// 「[既有发现]」里的 **uuid**，但 S6 渲染只写了正文没写 id → 模型只能照抄
+/// 正文 → 服务端解析不出 uuid → 每轮更正都降级为「observed, unbound」，
+/// F1（contradicted + user_confirmed 双行）在真栈永不成立。
+///
+/// 用例把「提示词正文含该 finding 的 id」钉住。
+#[sqlx::test(migrations = "../../migrations")]
+async fn existing_finding_ids_are_visible_in_the_prompt(pool: sqlx::PgPool) {
+    let project_id = seed_project(&pool).await;
+    let (session_id, _) = seed_session(&pool, project_id, "TASK_DISCOVERY").await;
+    let finding_id = seed_slot_finding(&pool, session_id, "core_behavior", "observed").await;
+    append_message(
+        &pool,
+        SYSTEM_TENANT,
+        session_id,
+        "user",
+        "WEB",
+        "手机号登录，先这些",
+    )
+    .await
+    .unwrap();
+
+    let server = MockServer::start().await;
+    seed_provider(&pool, &server.uri(), "test-model").await;
+    // 提示词必须带得上这个 id（body 断言）。
+    Mock::given(method("POST"))
+        .and(path("/chat/completions"))
+        .and(body_string_contains(finding_id.to_string()))
+        .respond_with(json_reply(
+            &json!({"answer_markdown": "收到。", "findings": [], "questions": []}).to_string(),
+        ))
+        .mount(&server)
+        .await;
+
+    let mut worker = DiscoveryOrchestratorWorker::new(pool.clone());
+    let report = worker.orchestrate_round().await.unwrap();
+    assert_eq!(report.applied, 1, "{report:?}");
+    assert_eq!(
+        report.failed, 0,
+        "the model call must have matched: {report:?}"
+    );
+}
+
 /// DK-E：三态提案分支（更正回流）验收面（独立文件，避免与 DK-B 用例纠缠）。
 mod dke;

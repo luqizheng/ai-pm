@@ -17,3 +17,11 @@ assistant:
   loadingDesc: 正在读取本项目会话列表…
   loadError: 会话列表加载失败
   loadRetry: 重试
+  interviewNotice: 已进入需求澄清
+  interviewSegmentLabel: 需求澄清访谈
+  interviewStatus: 访谈状态
+  todoTitle: 待办
+  openQuestions: 待回答问题
+  whyBlockingPrefix: 为什么需要问
+  pendingKnowledge: 待知识应用
+  confirmedFacts: 已确认事实

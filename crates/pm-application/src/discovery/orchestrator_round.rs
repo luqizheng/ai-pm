@@ -176,10 +176,16 @@ pub async fn apply_orchestrator_round(
     }
 
     // 2) 整轮幂等：最新消息必须仍是本轮看到的那条（§4.6）。
+    //
+    // 排序用 `seq`（会话内单调序列）而不是 `created_at`：同一事务里写的多条
+    // 消息共享同一 `created_at`（事务时间戳），`created_at DESC, id DESC` 的
+    // 次级排序键是随机 UUID——真栈实测会让扫描面与本检查**各自选中不同的
+    // 「最新消息」**，于是每轮都被判 `StaleRound` 丢弃，访谈静默卡死。
+    // `seq` 在会话行锁下计算，是权威顺序（DK-B C7）。
     let latest: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM discovery.discovery_message \
          WHERE tenant_id = $1 AND session_id = $2 \
-         ORDER BY created_at DESC, id DESC LIMIT 1",
+         ORDER BY seq DESC LIMIT 1",
     )
     .bind(tenant_id)
     .bind(session_id)

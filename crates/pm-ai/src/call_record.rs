@@ -89,6 +89,41 @@ pub(crate) async fn record_call(
     event_id: Option<uuid::Uuid>,
     usage: Option<crate::conversation_model::Usage>,
 ) {
+    record_call_with_metadata(
+        pool,
+        project_id,
+        provider_id,
+        model,
+        purpose,
+        status,
+        error_kind,
+        error_message,
+        latency_ms,
+        event_id,
+        usage,
+        None,
+    )
+    .await;
+}
+
+/// [`record_call`] plus the structured `metadata` column (migration 0003,
+/// DK-F/D2). Today only the orchestrator round writes it — the §5.3 prompt
+/// budget accounting (`sections_dropped` …); every other chain stays NULL.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn record_call_with_metadata(
+    pool: &sqlx::PgPool,
+    project_id: uuid::Uuid,
+    provider_id: uuid::Uuid,
+    model: &str,
+    purpose: &str,
+    status: &str,
+    error_kind: Option<&str>,
+    error_message: Option<&str>,
+    latency_ms: i64,
+    event_id: Option<uuid::Uuid>,
+    usage: Option<crate::conversation_model::Usage>,
+    metadata: Option<serde_json::Value>,
+) {
     let (prompt_tokens, completion_tokens) = match usage {
         Some(u) => (Some(u.prompt_tokens), Some(u.completion_tokens)),
         None => (None, None),
@@ -97,11 +132,11 @@ pub(crate) async fn record_call(
         "INSERT INTO ai.llm_call_record \
          (tenant_id, project_id, provider_id, model, purpose, status, \
           error_kind, error_message, latency_ms, analysis_run_id, \
-          prompt_tokens, completion_tokens) \
+          prompt_tokens, completion_tokens, metadata) \
          VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $1, $2, \
                  $3, $4, $5, $6, $7, $8, \
                  (SELECT id FROM ai.analysis_run WHERE event_id = $9 \
-                  ORDER BY created_at DESC LIMIT 1), $10, $11)",
+                  ORDER BY created_at DESC LIMIT 1), $10, $11, $12)",
     )
     .bind(project_id)
     .bind(provider_id)
@@ -114,6 +149,7 @@ pub(crate) async fn record_call(
     .bind(event_id)
     .bind(prompt_tokens)
     .bind(completion_tokens)
+    .bind(metadata)
     .execute(pool)
     .await;
     if let Err(e) = result {

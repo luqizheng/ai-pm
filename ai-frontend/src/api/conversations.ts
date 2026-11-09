@@ -74,6 +74,35 @@ export interface AppendMessagePayload {
   content_type?: string;
 }
 
+/** DK-A 升级交接面（服务端 `HandoffView`）：边界消息 + 撤销窗口。 */
+export interface ConversationHandoff {
+  boundary_message_id: string;
+  discovery_session_id: string;
+  /** explicit | implicit_continue | implicit_intent */
+  trigger: string;
+  /** requirement_intake | kb_correction | project_onboarding | … */
+  intent: string | null;
+  created_session: boolean;
+  /** 「已切换到需求澄清」等服务端措辞（展示优先用它）。 */
+  notice: string;
+  /** 30 分钟撤销窗口截止（RFC3339）。 */
+  undo_until: string;
+}
+
+/**
+ * 发送消息的落点信封（DK-A）：消息字段平铺 + 落点判定。
+ * - `landed = "chat"`：消息落本线程（conversation_message），形状与
+ *   `ConversationMessage` 一致；
+ * - `landed = "interview"`：消息落 discovery 段——此时平铺字段为
+ *   DiscoveryMessageView（id/session_id/speaker/source/content/seq/created_at），
+ *   且带 `handoff`。
+ */
+export interface SendMessageOutcome extends ConversationMessage {
+  landed?: "chat" | "interview" | string;
+  discovery_session_id?: string | null;
+  handoff?: ConversationHandoff | null;
+}
+
 export interface ListMessagesQuery {
   /** RFC3339 keyset 游标：只取 `created_at < before` 的更早消息。 */
   before?: string;
@@ -113,7 +142,7 @@ export function appendMessage(
   conversationId: string,
   body: AppendMessagePayload
 ) {
-  return http.post<ConversationMessage>(
+  return http.post<SendMessageOutcome>(
     `/v1/pm/projects/${projectId}/conversations/${conversationId}/messages`,
     body
   );

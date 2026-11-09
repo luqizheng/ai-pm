@@ -1,0 +1,123 @@
+# DK-F 演示栈（本机专用，独立于 prod/ckpt 栈）：
+#   - ai-pm 三服务（pm-api / pm-worker / ai-pm-worker）跑**本批新镜像**（:dkf）；
+#   - 专用 PG（aipm-dkf-pg，宿主 16493）+ 空库 pm_dkf（pm-api 启动自动跑迁移
+#     0001_baseline → 0002 → 0003）；
+#   - 身份面复用 .10 已有的 lmms 栈（iam 登录 + token-service JWKS）——本机不再
+#     起 lmms 全家（其配置目录不在本仓，见 infrastructure/services/ 的挂载契约）。
+#
+# 用法（在 infrastructure/ 下，DK-F worktree 内）：
+#   export AI_PM_SECRET_KEY='<与 .10 一致的封私钥主密钥>'
+#   export DK_F_FIRST_ADMIN_SUBJECT='<.10 登录后 JWT 的 sub>'
+#   docker compose -f docker-compose.dkf.yml up -d
+# 端口：pm-api 宿主 18090（避开 .10 的 8090 与本机其它占用）。
+services:
+  aipm-dkf-pg:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: aipm
+      POSTGRES_PASSWORD: aipm
+      POSTGRES_DB: pm_dkf
+    volumes:
+      - aipm_dkf_pg_data:/var/lib/postgresql/data
+    ports:
+      - "16493:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aipm -d pm_dkf"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - dkf
+
+  pm-api:
+    image: ${AIPM_REGISTRY:-aipm}/pm-api:dkf
+    environment:
+      DATABASE_URL: postgres://aipm:aipm@aipm-dkf-pg:5432/pm_dkf
+      PM_API_PORT: "8090"
+      # 身份面 = .10 的 lmms 栈（JWKS 验签 + setup-status 探针）。
+      AI_PM_AUTH_MODE: "jwks"
+      AI_PM_JWKS_URL: ${DK_F_JWKS_URL:-http://192.168.2.10:8082/.well-known/jwks.json}
+      AI_PM_TOKEN_SERVICE_URL: ${DK_F_TOKEN_SERVICE_URL:-http://192.168.2.10:8082}
+      AI_PM_SETUP_STATUS_URL: ${DK_F_SETUP_STATUS_URL:-http://192.168.2.10:3000/v1/iam/auth/setup-status}
+      # 首管理员对：.10 登录主体的 (tenant, subject) → 本地库直接开 active+owner。
+      AI_PM_FIRST_ADMIN_TENANT: "1"
+      AI_PM_FIRST_ADMIN_SUBJECT: "${DK_F_FIRST_ADMIN_SUBJECT:-}"
+      # 封私钥主密钥（与 .10 同值，否则历史 deploy key 不可解）。
+      AI_PM_SECRET_KEY: "${AI_PM_SECRET_KEY:-}"
+      # DK-F：对话载体判定 on（需求句可隐式升级为访谈会话）。
+      AI_PM_CONVERSATION_ROUTER: "on"
+      # 知识 Git 根（需求修订 Markdown 绑定点）——与 worker 共用同一卷。
+      AI_PM_KNOWLEDGE_ROOT: /data/knowledge
+      AI_PM_MCP_ALLOWED_HOSTS: "localhost,127.0.0.1"
+      AI_PM_PUBLIC_BASE_URL: "http://127.0.0.1:18090"
+      SERVICE_BOOTSTRAP_TOKEN: "${PM_DEV_BT:-}"
+    volumes:
+      - aipm_dkf_knowledge:/data/knowledge
+      # 场景 2 的本地仓库（verify 的 git ls-remote 在 pm-api 侧执行）。
+      - aipm_dkf_demo_repo:/repos:ro
+    ports:
+      - "18090:8090"
+    depends_on:
+      aipm-dkf-pg:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - dkf
+
+  pm-worker:
+    image: ${AIPM_REGISTRY:-aipm}/pm-worker:dkf
+    environment:
+      DATABASE_URL: postgres://aipm:aipm@aipm-dkf-pg:5432/pm_dkf
+      AI_PM_SECRET_KEY: "${AI_PM_SECRET_KEY:-}"
+      # 与 ai-pm-worker 同值：谁领到 kb.analysis.completed 谁决定是否自动开访谈。
+      AI_PM_DISCOVERY_ORCHESTRATOR: "on"
+      AI_PM_REPO_CACHE_ROOT: /repo-cache
+    volumes:
+      - aipm_dkf_repo_cache:/repo-cache
+      # 场景 2 的本地仓库（file:// 形态，verify/clone 都在容器内进行）。
+      - aipm_dkf_demo_repo:/repos:ro
+    depends_on:
+      aipm-dkf-pg:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - dkf
+
+  ai-pm-worker:
+    image: ${AIPM_REGISTRY:-aipm}/ai-pm-worker:dkf
+    environment:
+      DATABASE_URL: postgres://aipm:aipm@aipm-dkf-pg:5432/pm_dkf
+      AI_PM_POLICY_FILE: /app/policies/ai-pm-ai-lead-v2.yaml
+      AI_PM_SECRET_KEY: "${AI_PM_SECRET_KEY:-}"
+      # 第八循环（访谈编排 + 写回）与第七循环（对话框回复）均开。
+      AI_PM_DISCOVERY_ORCHESTRATOR: "on"
+      AI_PM_CONVERSATION_REPLY: "on"
+      # Run 派发：本次 demo 只验「入调度」（queued Run），不接真执行体。
+      AI_PM_RUN_DISPATCH: "on"
+      AI_PM_REPO_CACHE_ROOT: /repo-cache
+      AI_PM_KNOWLEDGE_ROOT: /data/knowledge
+    volumes:
+      - aipm_dkf_repo_cache:/repo-cache
+      - aipm_dkf_knowledge:/data/knowledge
+      - aipm_dkf_demo_repo:/repos:ro
+    depends_on:
+      aipm-dkf-pg:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - dkf
+
+volumes:
+  aipm_dkf_pg_data:
+    name: infrastructure_aipm_dkf_pg_data
+  aipm_dkf_knowledge:
+    name: infrastructure_aipm_dkf_knowledge
+  aipm_dkf_repo_cache:
+    name: infrastructure_aipm_dkf_repo_cache
+  aipm_dkf_demo_repo:
+    name: infrastructure_aipm_dkf_demo_repo
+
+networks:
+  dkf:
+    name: infrastructure_dkf

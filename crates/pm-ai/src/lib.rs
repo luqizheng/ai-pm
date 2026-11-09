@@ -2,6 +2,7 @@
 
 pub mod analysis_model;
 pub mod call_record;
+pub mod capability_projection;
 pub mod chat_context;
 pub mod context;
 pub mod conversation_model;
@@ -18,9 +19,11 @@ pub mod repo_model;
 pub mod self_review;
 pub mod skill_router;
 pub mod snapshot_model;
+pub mod writeback_model;
 
 pub use analysis_model::{select_analysis_model_config, ModelSelection, RoutedAnalysisModel};
 pub use call_record::PURPOSE_CONVERSATION_REPLY;
+pub use capability_projection::PgCapabilityProjection;
 pub use chat_context::{
     anchor_repository, build_chat_context, ChatContext, CHAT_CAP_PROJECT_PROFILE,
     CHAT_CAP_REPOSITORY_FACTS, CHAT_KEY_PROJECT_PROFILE, CHAT_KEY_REPOSITORY_FACTS,
@@ -56,4 +59,7 @@ pub use skill_router::{route, SkillId};
 pub use snapshot_model::{
     LlmSnapshotAnalysisModel, SnapshotModelMode, SNAPSHOT_DIGEST_SYSTEM_PROMPT,
     SNAPSHOT_OBJECTS_SYSTEM_PROMPT,
+};
+pub use writeback_model::{
+    LlmWriteBackModel, DECOMPOSE_TASKS_SYSTEM_PROMPT, DRAFT_REQUIREMENT_SYSTEM_PROMPT,
 };

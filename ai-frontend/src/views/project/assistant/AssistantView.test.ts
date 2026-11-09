@@ -12,6 +12,7 @@ import type {
 } from "@/api/conversations";
 
 import AssistantView from "./AssistantView.vue";
+import type { DiscoverySessionDetail } from "@/api/discovery";
 
 // AI 文本消息走 MarkdownViewer（Vditor md2html）：happy-dom 禁脚本加载会抛
 // 未处理 rejection 并污染并行 worker 的其他套件——按 responses-a/pages-b 的
@@ -48,6 +49,18 @@ vi.mock("@/api/conversations", async importOriginal => {
   };
 });
 
+// DK-F 访谈段接线：页面经 @/api/discovery 读 discovery 段（详情），
+// 这里 mock IO，断言访谈分隔条/访谈时间线/待办块的呈现。
+const getDiscoverySession = vi.fn();
+
+vi.mock("@/api/discovery", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/api/discovery")>();
+  return {
+    ...actual,
+    getDiscoverySession: (...args: unknown[]) => getDiscoverySession(...args)
+  };
+});
+
 const t = (key: string, params?: Record<string, unknown>) =>
   i18n.global.t(key, params ?? {}) as string;
 
@@ -65,6 +78,7 @@ function conversation(over: Partial<Conversation>): Conversation {
     created_at: "2026-11-08T09:00:00Z",
     updated_at: "2026-11-08T10:00:00Z",
     last_message_at: "2026-11-08T10:00:00Z",
+    discovery_session_id: null,
     ...over
   };
 }
@@ -80,6 +94,83 @@ function record(
     content_type: "markdown",
     metadata: {},
     created_at: "2026-11-08T09:59:00Z",
+    ...over
+  };
+}
+
+/** DK-F 访谈段夹具：discovery 会话详情（messages/findings/questions）。 */
+function discoveryDetail(
+  over: Partial<DiscoverySessionDetail>
+): DiscoverySessionDetail {
+  return {
+    session: {
+      id: "s1",
+      project_id: "p1",
+      source: "WEB",
+      kind: "TASK_DISCOVERY",
+      status: "NEEDS_USER_INPUT",
+      created_by: "prc-1",
+      created_at: "2026-11-08T10:05:00Z",
+      updated_at: "2026-11-08T10:06:00Z"
+    },
+    messages: [
+      {
+        id: "d1",
+        session_id: "s1",
+        speaker: "user",
+        source: "WEB",
+        content: "本项目需要手机登录",
+        seq: 1,
+        created_at: "2026-11-08T10:05:00Z"
+      },
+      {
+        id: "d2",
+        session_id: "s1",
+        speaker: "ai",
+        source: "SYSTEM",
+        content: "收到，先澄清验收口径。",
+        seq: 2,
+        created_at: "2026-11-08T10:05:30Z"
+      }
+    ],
+    findings: [
+      {
+        id: "f1",
+        session_id: "s1",
+        kind: "user_confirmed",
+        content: "需要手机号登录",
+        confidence: 0.9,
+        verification_status: "CONFIRMED",
+        evidence: [],
+        actor_role: "slot:core_behavior",
+        repository_ids: [],
+        created_at: "2026-11-08T10:05:30Z"
+      }
+    ],
+    questions: [
+      {
+        id: "q1",
+        session_id: "s1",
+        finding_id: "f1",
+        question: "哪些端需要手机登录？",
+        why_blocking: "不确认会导致验收范围缺失",
+        status: "open",
+        created_at: "2026-11-08T10:05:30Z",
+        answers: []
+      },
+      {
+        id: "q2",
+        session_id: "s1",
+        finding_id: null,
+        question:
+          "[更正待知识应用] 项目知识（KB digest / PC 对象）：认证方式由 JWT 更正为 session cookie。",
+        why_blocking: null,
+        status: "deferred",
+        created_at: "2026-11-08T10:06:00Z",
+        answers: []
+      }
+    ],
+    proposals: [],
     ...over
   };
 }
@@ -129,6 +220,7 @@ describe("AssistantView（会话接线）", () => {
     createConversation.mockResolvedValue(
       conversation({ id: "nc1", title: "first message" })
     );
+    getDiscoverySession.mockResolvedValue(discoveryDetail({}));
     appendMessage.mockImplementation(
       async (_p: string, cid: string, body: { content: string }) =>
         record({
@@ -525,6 +617,102 @@ describe("AssistantView（会话接线）", () => {
       (wrapper.findComponent(Select).props("options") as { value: string }[])[0]
         .value
     ).toBe("nc1");
+  });
+
+  // ────────────────────────────── DK-F 访谈段接线（§2.5 体例）──────────────
+
+  it("DK-F 落点：landed=interview 时消息不进 chat 时间线，访谈段分隔条与待办出现", async () => {
+    const { wrapper } = await mountPage();
+
+    // 发送落点 = 升级为访谈（服务端回包带 landed/discovery_session_id/handoff）。
+    appendMessage.mockResolvedValueOnce({
+      ...record({ id: "m-int", content: "本项目需要手机登录" }),
+      landed: "interview",
+      discovery_session_id: "s1",
+      handoff: {
+        boundary_message_id: "bm1",
+        discovery_session_id: "s1",
+        trigger: "implicit_intent",
+        intent: "requirement_intake",
+        created_session: true,
+        notice: "已切换到需求澄清",
+        undo_until: "2026-11-08T10:35:00Z"
+      }
+    });
+
+    const textarea = wrapper.find("textarea");
+    await textarea.setValue("本项目需要手机登录");
+    const sendButton = wrapper
+      .findAll("button")
+      .find(
+        node =>
+          node.attributes("aria-label") === t("ai.conversation.composer.send")
+      );
+    await sendButton?.trigger("click");
+    await flushPromises();
+
+    // chat 面板时间线不含该消息（落 discovery 段；访谈段里的同文本是
+    // discovery_message 的合法呈现，作用域断言分开）。
+    const panel = wrapper.find(".ai-conversation");
+    expect(panel.text()).not.toContain("本项目需要手机登录");
+    // 边界分隔条 = 服务端提示（handoff.notice），非 AI 气泡
+    expect(wrapper.text()).toContain("已切换到需求澄清");
+    // 访谈段时间线（discovery_message 映射）：user 消息为原样气泡，
+    // AI 消息经 MarkdownViewer 渲染（原文进 md2html，产物上屏）。
+    expect(getDiscoverySession).toHaveBeenCalledWith("p1", "s1");
+    expect(md2html).toHaveBeenCalledWith("收到，先澄清验收口径。", expect.anything());
+    expect(wrapper.text()).toContain("md-rendered");
+    // 待办块：待答问题（含 why_blocking 提示）
+    expect(wrapper.text()).toContain(t("assistant.todoTitle"));
+    expect(wrapper.text()).toContain("哪些端需要手机登录？");
+    expect(wrapper.text()).toContain("不确认会导致验收范围缺失");
+  });
+
+  it("DK-F 边界消息：system 行渲染为分隔条上下文，不渲染为 AI 气泡", async () => {
+    // 会话行已带链接（升级过的线程重进）：首屏含一条 system 边界消息。
+    listMessages.mockImplementation(async (_p: string, cid: string) =>
+      cid === "c1"
+        ? [
+            record({ id: "m0", created_at: "2026-11-08T09:50:00Z" }),
+            record({
+              id: "bm1",
+              role: "system",
+              content: "已切换到需求澄清",
+              created_at: "2026-11-08T09:55:00Z",
+              metadata: {
+                handoff: { discovery_session_id: "s1", trigger: "implicit_intent" }
+              }
+            })
+          ]
+        : []
+    );
+    listConversations.mockResolvedValue([
+      conversation({ discovery_session_id: "s1" })
+    ]);
+    const { wrapper } = await mountPage();
+
+    // system 行不进 chat 面板（作用域=面板）；访谈段里 discovery 的
+    // user/ai 消息各自渲染，面板内只见 m0 一条用户消息。
+    const panel = wrapper.find(".ai-conversation");
+    expect(panel.findAll('[data-role="user"]')).toHaveLength(1);
+    expect(panel.findAll('[data-role="ai"]')).toHaveLength(0);
+    // 链接存在 → 分隔条 + 访谈段 + 待办块可见
+    expect(wrapper.text()).toContain(t("assistant.interviewNotice"));
+    expect(wrapper.text()).toContain("[更正待知识应用]");
+    expect(wrapper.text()).toContain(t("assistant.pendingKnowledge"));
+    // 已确认事实入待办
+    expect(wrapper.text()).toContain(t("assistant.confirmedFacts"));
+    expect(wrapper.text()).toContain("需要手机号登录");
+  });
+
+  it("DK-F 未链接线程：不拉访谈段，时间线与既有行为完全一致", async () => {
+    const { wrapper } = await mountPage();
+
+    expect(getDiscoverySession).not.toHaveBeenCalled();
+    expect(wrapper.find(".assistant-interview").exists()).toBe(false);
+    expect(wrapper.text()).not.toContain(t("assistant.interviewNotice"));
+    // 既有时间线不受影响
+    expect(wrapper.findAll('[data-role="user"]')).toHaveLength(2);
   });
 });
 

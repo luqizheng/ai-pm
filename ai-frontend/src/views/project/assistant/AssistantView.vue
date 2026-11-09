@@ -9,6 +9,7 @@ import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import Select from "@/components/ui/select/Select.vue";
 import { PageFrame } from "@/components/shell";
 import { AiConversationPanel } from "@/components/ui/ai-interaction/conversation";
+import AiConversationMessage from "@/components/ui/ai-interaction/conversation/AiConversationMessage.vue";
 import {
   INTERACTION_STATUSES,
   PAYLOAD_REQUIRED_FIELDS,
@@ -29,8 +30,14 @@ import {
   type Conversation,
   type ConversationContextAnchor,
   type ConversationMessage as ConversationMessageRecord,
+  type SendMessageOutcome,
   type SubmitInteractionPayload
 } from "@/api/conversations";
+import {
+  getDiscoverySession,
+  type DiscoverySessionDetail,
+  type DiscoveryMessage
+} from "@/api/discovery";
 import { SCOPE_ALL, useScopeStore } from "@/api/scope";
 import { useShellStore, type AssistantContextSnapshot } from "@/stores/shell";
 
@@ -114,6 +121,20 @@ const sending = ref(false);
 const sendError = ref("");
 const pendingText = ref("");
 
+// ───────────────────────────────────────────────────── 访谈段（DK-F 接线）
+//
+// 线程升级为访谈会话后（DK-A 载体升级），后续消息落 discovery 段
+// （discovery_message，不在 conversation_message 里）——本页把时间线
+// 拼成两段：chat 段（面板原样）+ 边界分隔条 + 访谈段 + 待办块。
+// 链接真源 = 会话行的 discovery_session_id（发送落点回包同步更新）。
+
+/** 选中线程当前链接的访谈会话 id；空 = 纯 chat 线程。 */
+const interviewSessionId = ref("");
+/** 访谈段数据（messages/findings/questions + session.status）。 */
+const interview = ref<DiscoverySessionDetail | null>(null);
+/** 升级时的服务端提示（handoff.notice，如「已切换到需求澄清」）。 */
+const handoffNotice = ref("");
+
 // ───────────────────────────────────────────────────────── 增量轮询
 
 let pollTimer: number | null = null;
@@ -161,8 +182,9 @@ async function pollMessages() {
     );
     if (selectedId.value !== conversationId) return;
     const known = new Set(timeline.value.map(message => message.id));
+    // system 边界消息不进面板时间线（访谈分隔条另行渲染，DK-F）。
     const fresh = records
-      .filter(record => !known.has(record.id))
+      .filter(record => !known.has(record.id) && record.role !== "system")
       .map(toTimelineMessage);
     if (fresh.length > 0) {
       timeline.value = [...timeline.value, ...fresh];
@@ -172,7 +194,65 @@ async function pollMessages() {
   } finally {
     pollInFlight = false;
   }
+  // 访谈段与 chat 段同一节奏刷新（链接存在时；失败静默保留旧态）。
+  if (interviewSessionId.value) void loadInterview(interviewSessionId.value);
   if (selectedId.value === conversationId) schedulePolling();
+}
+
+// ────────────────────────────────────────────── 访谈段加载与映射
+
+/** 拉访谈会话详情（messages/findings/questions）；失败静默保留旧态。 */
+async function loadInterview(sessionId: string) {
+  if (!effectiveProjectId.value || !sessionId) return;
+  try {
+    const detail = await getDiscoverySession(effectiveProjectId.value, sessionId);
+    if (interviewSessionId.value === sessionId) interview.value = detail;
+  } catch {
+    // 静默：访谈段失败不打扰 chat 段。
+  }
+}
+
+/** discovery 消息 → 组件库时间线消息（speaker user 走用户侧，其余 AI 侧）。 */
+function toInterviewTimelineMessage(
+  message: DiscoveryMessage
+): ConversationMessage {
+  return {
+    id: message.id,
+    role: message.speaker === "user" ? "user" : "ai",
+    createdAt: message.created_at,
+    text: message.content
+  };
+}
+
+const interviewMessages = computed(() =>
+  (interview.value?.messages ?? []).map(toInterviewTimelineMessage)
+);
+
+/** 待答问题（open；why_blocking 说明「不问清会导致什么」）。 */
+const openQuestions = computed(
+  () => interview.value?.questions.filter(q => q.status === "open") ?? []
+);
+
+/** 待知识应用（deferred；更正标记正文带 [更正待知识应用] 前缀）。 */
+const deferredQuestions = computed(
+  () => interview.value?.questions.filter(q => q.status === "deferred") ?? []
+);
+
+/** 已确认事实（人工裁决 CONFIRMED 的 finding）。 */
+const confirmedFindings = computed(
+  () =>
+    interview.value?.findings.filter(f => f.verification_status === "CONFIRMED") ??
+    []
+);
+
+/** 发送落点回包：升级为访谈时更新链接 + 提示，并立即拉一段访谈数据。 */
+function applyLanding(outcome: SendMessageOutcome) {
+  if (outcome.landed === "interview" && outcome.discovery_session_id) {
+    interviewSessionId.value = outcome.discovery_session_id;
+    handoffNotice.value = outcome.handoff?.notice ?? "";
+    interview.value = null;
+    void loadInterview(outcome.discovery_session_id);
+  }
 }
 
 const selectedConversation = computed(
@@ -295,10 +375,21 @@ async function loadMessages(conversationId: string) {
       }
     );
     if (selectedId.value !== conversationId) return;
-    timeline.value = records.map(toTimelineMessage);
+    // system 边界消息不进面板时间线（访谈分隔条另行渲染，DK-F）。
+    timeline.value = records
+      .filter(record => record.role !== "system")
+      .map(toTimelineMessage);
   } finally {
     messagesLoading.value = false;
   }
+}
+
+/** 线程 → 访谈链接切换：重置访谈段并按会话行上的链接重拉。 */
+function syncInterviewLink(conversation: Conversation | null) {
+  interviewSessionId.value = conversation?.discovery_session_id ?? "";
+  handoffNotice.value = "";
+  interview.value = null;
+  if (interviewSessionId.value) void loadInterview(interviewSessionId.value);
 }
 
 function onSelect(id: string) {
@@ -309,6 +400,7 @@ function onSelect(id: string) {
   selectedId.value = id;
   sendError.value = "";
   pendingText.value = "";
+  syncInterviewLink(conversations.value.find(item => item.id === id) ?? null);
   void loadMessages(id)
     .catch(() => {})
     .finally(() => {
@@ -330,6 +422,7 @@ async function load() {
     conversations.value = await listConversations(target);
     selectedId.value = conversations.value[0]?.id ?? "";
     timeline.value = [];
+    syncInterviewLink(conversations.value[0] ?? null);
     if (selectedId.value) await loadMessages(selectedId.value);
   } catch (error) {
     loadError.value =
@@ -481,7 +574,12 @@ async function handleSend(text: string) {
     const record = await appendMessage(target, conversationId, {
       content: text
     });
-    timeline.value = [...timeline.value, toTimelineMessage(record)];
+    // 落点判定（DK-A）：升级为访谈时同步链接 + 提示 + 立即拉访谈段；
+    // 访谈落点的消息在 discovery 段（随访谈段拉取呈现），不进 chat 时间线。
+    applyLanding(record);
+    if (record.landed !== "interview") {
+      timeline.value = [...timeline.value, toTimelineMessage(record)];
+    }
     pendingText.value = "";
     // 发送成功立即触发一次增量轮询：assistant 回复可能已落库
     //（去重保证与本地追加的 user 消息不冲突）。
@@ -498,6 +596,10 @@ async function handleSend(text: string) {
       const item = conversations.value[0];
       item.updated_at = record.created_at;
       item.last_message_at = record.created_at;
+      // 落点回包携带的链接同步到会话行（切回该线程时访谈段直接可见）。
+      if (record.discovery_session_id) {
+        item.discovery_session_id = record.discovery_session_id;
+      }
     }
   } catch (error) {
     sendError.value =
@@ -553,6 +655,7 @@ function startConversation() {
   timeline.value = [];
   sendError.value = "";
   pendingText.value = "";
+  syncInterviewLink(null);
 }
 
 onUnmounted(() => {
@@ -570,6 +673,7 @@ watch(effectiveProjectId, next => {
     conversations.value = [];
     selectedId.value = "";
     timeline.value = [];
+    syncInterviewLink(null);
     loading.value = false;
     loadError.value = "";
     return;
@@ -647,7 +751,10 @@ watch(effectiveProjectId, next => {
           </span>
         </div>
 
-        <div class="assistant-stage">
+        <div
+          class="assistant-stage"
+          :class="{ 'assistant-stage--split': interviewSessionId }"
+        >
           <AiConversationPanel
             :messages="timeline"
             :title="panelTitle"
@@ -655,6 +762,107 @@ watch(effectiveProjectId, next => {
             :submit="handleCardSubmit"
             @send="handleSend"
           />
+          <!-- DK-F 访谈段（§2.5 体例）：边界分隔条 + 两段中的 discovery 段 + 待办 -->
+          <section
+            v-if="interviewSessionId"
+            class="assistant-interview"
+            :aria-label="t('assistant.interviewSegmentLabel')"
+          >
+            <p class="assistant-interview__separator" role="separator">
+              <span class="assistant-interview__separator-label">
+                {{ handoffNotice || t("assistant.interviewNotice") }}
+              </span>
+              <span
+                v-if="interview?.session.status"
+                class="assistant-interview__status"
+              >
+                {{ t("assistant.interviewStatus") }}:
+                {{ interview.session.status }}
+              </span>
+            </p>
+            <div
+              v-if="interviewMessages.length > 0"
+              class="assistant-interview__timeline"
+            >
+              <AiConversationMessage
+                v-for="message in interviewMessages"
+                :key="message.id"
+                :message="message"
+              />
+            </div>
+            <div class="assistant-interview__todo">
+              <h3 class="assistant-interview__todo-title">
+                {{ t("assistant.todoTitle") }}
+              </h3>
+              <div
+                v-if="openQuestions.length > 0"
+                class="assistant-interview__group"
+              >
+                <h4 class="assistant-interview__group-title">
+                  {{ t("assistant.openQuestions") }}
+                  ({{ openQuestions.length }})
+                </h4>
+                <ul class="assistant-interview__list">
+                  <li
+                    v-for="question in openQuestions"
+                    :key="question.id"
+                    class="assistant-interview__item"
+                  >
+                    <span class="assistant-interview__item-text">
+                      {{ question.question }}
+                    </span>
+                    <span
+                      v-if="question.why_blocking"
+                      class="assistant-interview__item-hint"
+                    >
+                      {{ t("assistant.whyBlockingPrefix") }}:
+                      {{ question.why_blocking }}
+                    </span>
+                  </li>
+                </ul>
+              </div>
+              <div
+                v-if="deferredQuestions.length > 0"
+                class="assistant-interview__group"
+              >
+                <h4 class="assistant-interview__group-title">
+                  {{ t("assistant.pendingKnowledge") }}
+                  ({{ deferredQuestions.length }})
+                </h4>
+                <ul class="assistant-interview__list">
+                  <li
+                    v-for="question in deferredQuestions"
+                    :key="question.id"
+                    class="assistant-interview__item"
+                  >
+                    <span class="assistant-interview__item-text">
+                      {{ question.question }}
+                    </span>
+                  </li>
+                </ul>
+              </div>
+              <div
+                v-if="confirmedFindings.length > 0"
+                class="assistant-interview__group"
+              >
+                <h4 class="assistant-interview__group-title">
+                  {{ t("assistant.confirmedFacts") }}
+                  ({{ confirmedFindings.length }})
+                </h4>
+                <ul class="assistant-interview__list">
+                  <li
+                    v-for="finding in confirmedFindings"
+                    :key="finding.id"
+                    class="assistant-interview__item"
+                  >
+                    <span class="assistant-interview__item-text">
+                      {{ finding.content }}
+                    </span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </section>
         </div>
 
         <Alert
@@ -723,5 +931,121 @@ watch(effectiveProjectId, next => {
 
 .assistant-stage > * {
   height: 100%;
+}
+
+/* 访谈段分栏（DK-F）：chat 面板 + discovery 段上下排布；
+   未链接时布局与既有完全一致（.assistant-stage--split 不出现）。 */
+.assistant-stage--split {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.assistant-stage--split > * {
+  height: auto;
+  min-height: 0;
+}
+
+.assistant-stage--split > .ai-conversation {
+  flex: 1 1 52%;
+}
+
+.assistant-interview {
+  display: flex;
+  flex: 1 1 48%;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  padding: var(--space-3);
+  overflow-y: auto;
+  background: var(--ws-surface);
+  border: var(--border-1) solid var(--ws-border);
+  border-radius: var(--radius-md);
+}
+
+.assistant-interview__separator {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-small);
+}
+
+.assistant-interview__separator-label {
+  padding: var(--space-1) var(--space-3);
+  background: var(--surface-raised);
+  border: var(--border-1) solid var(--ws-border);
+  border-radius: var(--radius-full);
+  color: var(--ws-text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.assistant-interview__status {
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-micro);
+}
+
+.assistant-interview__timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.assistant-interview__todo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.assistant-interview__todo-title {
+  margin: 0;
+  color: var(--ws-text-primary);
+  font-size: var(--font-size-body);
+  font-weight: var(--weight-semibold);
+}
+
+.assistant-interview__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.assistant-interview__group-title {
+  margin: 0;
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-small);
+  font-weight: var(--weight-medium);
+}
+
+.assistant-interview__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assistant-interview__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1) var(--space-2);
+  background: var(--ws-canvas);
+  border: var(--border-1) solid var(--ws-border);
+  border-radius: var(--radius-sm);
+}
+
+.assistant-interview__item-text {
+  color: var(--ws-text-primary);
+  font-size: var(--font-size-small);
+}
+
+.assistant-interview__item-hint {
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-micro);
 }
 </style>
