@@ -3,13 +3,14 @@
 | 文档属性 | 内容 |
 | --- | --- |
 | 文档编号 | V05-00 |
-| 版本 | V1.3（V1.2 + 目标 1 闭环登记 + PC/KB 应用完善收纳（KP 批次）+ V-05-6/7 关闭） |
+| 版本 | V1.4（V1.3 + 第五批收纳：DK-0 对话编排全链（DK-A~F）+ 对话上下文整合批（Batch1~4）+ 前端 DK-F Stage 2；新增 §五之二/§九 11~12/§八.9/§六 WP-8~9/V-05-8） |
 | 类型 | MVP Scope Baseline（产品第一个可演示闭环的范围基线） |
-| 日期 | 2026-11-06（V1.3 修订 2026-11-08） |
+| 日期 | 2026-11-06（V1.4 修订 2026-11-09） |
 | 用户裁决（第一批） | Big View = 产品统一领域模型总图；Runner = 用户 PC 客户端软件；简化版调度进 MVP |
 | 用户裁决（第二批） | V-05-1 = **升级 devenv.device**；V-05-3 = **不取代、共存**（project_role 独立新实体，member.role 原样保留）；V-05-4 = **冻结 ACP V1.3.1 基线**（用户无异议按推荐）；V-05-5 = **ZCode / Codex / DeepSeek Harness 优先** + Runner 走 MCP 自领（无异议）；**Knowledge Base 纳入 V0.5**（目标 4）；V-05-2 展开解释后终裁 |
 | 用户裁决（第三批） | 目标 2 正式命名 = **Product Cognition & Knowledge Base — Product Definition V1.0**：Product Cognition（独立产品能力：建立/维护/验证产品整体认知）· Product Big View（其核心全貌视图）· Product View（观察视角：业务能力/功能模块/业务流程/页面交互等）· Knowledge Base（并列独立能力：资料管理/知识提取/Discussion Memory/知识检索） |
 | 用户裁决（第四批，2026-11-08） | **V0.5 增列「PC/KB 应用完善」**：KP-1（PC-01B 正式模型实施）/ KP-2（PC-01C 确认闭环）/ KP-3（KB 三层最小面）；PC-I6 全验收面剩余等显式切出 V0.6（§3.3/§八.8）。同日 V-05-6/7 实质关闭（Q-PC-01~13 已裁） |
+| 用户裁决（第五批，2026-11-09，按推荐） | **收纳对话化入口三件**：A1 DK-0 对话编排全链（DK-A~F，独立节 §五之二 横切目标 2/3/4）+ A2 对话上下文整合批（Batch1~4，作为 A1 伴生批一并入册）+ A3 前端 DK-F Stage 2；**B1** 两 Demo 场景写入 §九 故事线 11/12（验收=DK-F §8.3 30/30 本机栈）；**B2** Stage 3（.10 部署批）**属 V0.5 收官内**挂账单批（三开关 off 时 .10 上对话编排不可见）；**B3** 三开关**代码默认 off 维持**，.10 部署 env 配 on |
 | 目标 1 状态 | ✅ **2026-11-08 闭环**：检查点 1（注册→建团→建项目→关联仓库→PC/KB draft 全链 PASS，8d81fbd）+ 检查点 2 R4（.59 Runner 真二进制 cpk 全链→平台远端只读验证 accepted，三边界全关，**ACP-09 正式关闭**，`docs/checkpoint2-r4-acceptance-record-v1.md`） |
 | 前置资产 | V2 架构基线 V1.0（Q1=A/Q2=B/Q3=A）· V2 代码对照核验报告 V1.0 · S03-ACP V1.3.1（独立评审通过）· S01-08 知识库与 Git 备份设计稿 V1.0（四裁决已定，待实施） |
 | 优先级裁决 | S01 后续切片降级为非迫切；S03-00 V1.2 审计并行推进、不阻塞 V0.5 |
@@ -20,7 +21,7 @@
 
 用户在 Platform 上为项目**创建 AI Team**（定义 Roles、授权自己的 Agent Client），通过部署在本机的 **ai-pm-runner** 驱动本地 AI 工具（Codex 等）执行任务；执行中 Agent 可发起人工介入，人类经 REST/UI 回复后任务在**同一 Run 内 Continuation 恢复**，直至交付验收。
 
-这是产品的 MVP：三方通信（目标 1）是通路，AI Team 创建（目标 3）是入口，Product Cognition（目标 2，Product Big View 为其核心全貌视图）与 Knowledge Base（目标 4）是并列的认知/知识两大独立能力；V0.5 统一数据模型（WP-1b）保证全系统建在同一个模型上而不是四张皮。
+这是产品的 MVP：三方通信（目标 1）是通路，AI Team 创建（目标 3）是入口，Product Cognition（目标 2，Product Big View 为其核心全貌视图）与 Knowledge Base（目标 4）是并列的认知/知识两大独立能力；V0.5 统一数据模型（WP-1b）保证全系统建在同一个模型上而不是四张皮。第五批收纳（V1.4）增补：**AI 对话框升级为项目的对话化入口**（§五之二）——访谈沉淀需求与知识、AI 提议一律经人类确认生效。
 
 ---
 
@@ -141,6 +142,37 @@ S01-08 四裁决（KB-3）：知识库仓库独立配置（R-01）·自动同步
 
 ---
 
+## 五之二、对话化入口（目标 2/3/4 横切，2026-11-09 第五批收纳）
+
+**定位**：AI 对话框（载体 = `ai.conversation`，迁移 0060）从纯聊天升级为项目的**对话化入口**——按载体 a+ 裁决（D-DK-1），每个线程 = 唯一会话目录，chat 段落 `conversation_message`、访谈段（interview）落 `discovery_message`，**chat→interview 单向升级永不回落**；判定在服务端（前端只消费发送落点回包 `landed`）。横切三目标：访谈产物沉淀为需求修订/认知/知识提案（目标 2/4，写回经统一应用服务 fail-closed，AI 无确认权）、知识注入支撑项目问答（目标 2/4）、任务分解承接调度（目标 3）。核心原则不变：**AI 提议、人类确认、已确认不可直接覆盖**。
+
+**裁决依据**：D-DK-1~11（设计稿 `docs/product/ai-pm-dialog-orchestration-design-v1.md`）+ 整合批裁决（D-IC 系列，计划稿 `docs/product/ai-pm-assistant-context-integration-plan-v1.md`）。
+
+| 批次 | 内容 | 迁移 | 状态 |
+| --- | --- | --- | --- |
+| **DK-A**（WP-8） | 载体判定规则 1~5（显式优先/本地关键词闸/LLM 分类≥0.7）+ 单向升级四步同事务 + 30 分钟撤销窗 + 意图分类；REST 唯一发送入口回 `landed` 落点信封 | 0002（conversation↔discovery 链接列 + 三元组 FK） | ✅ 已合 master |
+| **DK-B**（WP-8） | 访谈编排器（worker 第八循环）：findings/questions 回填 + 槽位表 + 「问完毕」三条件 + 状态迁移走既有边；会话行锁三入口串行（C7） | 零迁移 | ✅ 已合 master |
+| **DK-C**（WP-8） | 知识注入：11 节固定投影（S1~S6 数据节 + 5 脚手架节），**总额度 36,000 字符定值**，超限两步裁剪（整节删 S5→S4→S2→S3，再逐节截断）+ 被删节不静默 + 裁剪记账 | 0004（llm_call_record.metadata，落 `sections_dropped`） | ✅ 已合 master |
+| **DK-D**（WP-8） | 写回通道（fail-soft）：REVIEW_REQUIRED 起草止步 `pending_confirmation` + 需求修订 basis 两层溯源 + 任务分解四校验 + 整批 ready 补断链防御；**`draft→ready` 真人闸** | 零迁移 | ✅ 已合 master |
+| **DK-E**（WP-8） | 场景 2 更正链：correction 意图 fail-closed 识别 + contradicted/user_confirmed 双 finding + deferred「更正待知识应用」标记（零提案行；KB 挂 KP-3 k4、PC 挂 KP-2）+ 导入自动开 INITIAL_ONBOARDING 访谈 | 零迁移 | ✅ 已合 master |
+| **DK-F**（WP-8） | Demo 真栈联调：两场景全链 + §8.3 全表 **30/30 PASS**（真栈缺陷修复×4，各带回归+变异检验）；验收 `docs/product/ai-pm-dk-f-acceptance-record-v1.md` | — | ✅ 已合 master |
+| **整合批**（WP-9，A1 伴生批） | Batch 1 壳级助手上下文单一真源 + 指令栏快照交接；Batch 2 线程级上下文锚点（建会话定格 + 服务端真实性校验）；Batch 3A chat 精简注入（S1 项目画像 + S2 仓库事实）；Batch 3B 响应卡信封协议（8 类白名单 fail-closed，非法信封退化纯文本）；Batch 3C 交互写回端点 + 生命周期落库（一卡一生命周期）；Batch 4 UI 诚实化（注入源清单 + 附件禁用） | 0003（context_anchor）/ 0005（conversation_interaction） | ✅ 已合 master |
+| **前端 Stage 2**（A3） | 两段时间线 + 边界分隔条（handoff.notice）+ 访谈待办块（open/deferred/已确认事实）；随整合定稿版移植合入（merge 67ba747c） | 零迁移 | ✅ 已合 master |
+
+**三开关**（全部**代码默认 off**；B3 裁决：.10 部署批 env 配 on）：
+
+| 开关 | 域 | 默认 |
+| --- | --- | --- |
+| `AI_PM_CONVERSATION_ROUTER` | 对话路由/载体升级（DK-A 判定规则 3~4） | off |
+| `AI_PM_DISCOVERY_ORCHESTRATOR` | 访谈编排器 + 写回装配（DK-B/D 共用同一开关） | off |
+| `AI_PM_CONVERSATION_REPLY` | chat 段会话回复链（assistant 回复） | off |
+
+**验收状态**：DK-F §8.3 全表 30/30（本机 demo 栈，DeepSeek 真外呼，迁移链 0001→0002→0004）；§九 故事线 11/12 即两场景故事线。
+
+**Stage 3（.10 窗口）= V0.5 收官内挂账单批（B2 裁决）**：镜像重发（含全部 DK/KP 产物）→ 重锚（迁移基线 squash 后旧库 checksum 不兼容）→ R3 最小 recreate → env 三开关 on + provider → R1~R8 回归 + 两场景冒烟。
+
+---
+
 ## 六、工作包分解
 
 | WP | 内容 | 依赖 | 交付 |
@@ -153,9 +185,11 @@ S01-08 四裁决（KB-3）：知识库仓库独立配置（R-01）·自动同步
 | WP-4 | 平台侧简化调度 | WP-2 | ✅ 简化版已落（pm-worker 第四循环）；**派发器↔Runner 竞争**已裁 D-1=b 缓解 / D-2=c 正式方向（并入调度入口闭合） |
 | WP-5 | 人工介入与恢复（平台侧） | WP-3 接口对齐 | ✅ **已落地**：Interaction + REST 回复（0047）+ worker_command + 离线恢复（0052）+ AI 会话前端（Batch G）；UI 批按 U-1=C/U-2=A 排期 |
 | WP-7 | **Knowledge Base 正式四职责**（§五）：第四批收纳具体化为 **KP-3（KB 三层最小面：k5 来源 + k4 Structured Memory + Discussion Memory 落库/按 Task 注入）**；S01-08 同步、浏览页、检索入口随 KP-3 及后续批 | 独立并行 | 资料可管理、记忆可沉淀、讨论可注入 |
-| WP-6 | E2E MVP 验收（§九故事线 + ACP 验收子集 + **PC/KB 确认闭环验证**） | WP-1（KP-1/2）、KP-3、WP-2~5 | 验收报告 |
+| WP-6 | E2E MVP 验收（§九故事线 1~10 + ACP 验收子集 + **PC/KB 确认闭环验证**；V1.4 增故事线 11/12 对话两场景） | WP-1（KP-1/2）、KP-3、WP-2~5、WP-8/9 | 验收报告（**收官端到端验收待跑**，含 .10 Stage 3） |
+| WP-8 | **对话编排（DK-0 全链，§五之二）**：DK-A~F 六批（载体判定/编排器/知识注入 36k 预算/写回真人闸/更正链/demo 真栈） | KP-1/KP-2/KP-3（写回落点）+ DK-A 底座先行 | ✅ **全部已合 master（2026-11-09，origin/master=67ba747c）**；三开关默认 off；Stage 3（.10）挂账随 WP-6 |
+| WP-9 | **对话上下文整合批（WP-8 伴生批）**：Batch 1~4（壳级单一真源/线程锚点/chat 精简注入/信封协议+交互写回/UI 诚实化）+ 前端 Stage 2 两段时间线 | WP-8（共用 ai.conversation 载体） | ✅ 已合 master（迁移 0003/0005） |
 
-依赖关系：WP-0 ✅ → KP-1 → KP-2 串行；KP-3 独立并行；WP-3/4/5 ✅；全部汇合于 WP-6。
+依赖关系：WP-0 ✅ → KP-1 → KP-2 串行；KP-3 独立并行；WP-3/4/5 ✅；WP-8 依赖 KP 批落点、WP-9 伴生 WP-8；全部汇合于 WP-6（收官端到端验收 + .10 Stage 3）。
 
 实施设计切片（ACP-01/02/08 等）在 WP-3/WP-5 开工前落盘，闭合 N-1/N-2 与命令查询面。
 
@@ -172,6 +206,7 @@ S01-08 四裁决（KB-3）：知识库仓库独立配置（R-01）·自动同步
 | V-05-5 | MVP 先行 Adapter + Runner 接入通道 | ✅ **已裁：ZCode / Codex / DeepSeek Harness 优先 + Runner 走 MCP 自领**（OpenCode/Trae/Claude Code 仅留接口位） |
 | V-05-6 | Product Cognition V0.5 范围档位 | ✅ **关闭（2026-11-08 第四批收纳）**：档位由 PC-I0~I6 基线（Q-PC-10）+ KP-1/KP-2/KP-3 批次承载（§3.3）；PC-I4/I5/I6 剩余切出 V0.6 |
 | V-05-7 | 与 S01-04 V1.2 六域 Project Cognition 的关系 | ✅ **关闭（Q-PC-01~13）**：PC 全新建；S01-04 Project Cognition = 技术认知六域，保持独立服务其自身领域（不改名/零迁移/不受反向约束）；Product Plan 不属 PC（Q-PC-13） |
+| V-05-8 | 第五批收纳（对话化入口） | ✅ **已裁（2026-11-09，按推荐）**：A1 DK-0 全链（DK-A~F）入册为 §五之二横切节 + A2 整合批（Batch1~4）作伴生批一并入册 + A3 前端 Stage 2 登记；B1 两场景入 §九 故事线 11/12（验收=DK-F §8.3 30/30 本机栈）；B2 Stage 3（.10 部署批）属 V0.5 收官内；B3 三开关代码默认 off 维持、.10 env 配 on。编排细则裁决 D-DK-1~11 见设计稿，整合批 D-IC 见计划稿 |
 
 ---
 
@@ -185,6 +220,7 @@ S01-08 四裁决（KB-3）：知识库仓库独立配置（R-01）·自动同步
 6. OpenCode / Trae / Claude Code 完整 Adapter（仅框架接口就位；ZCode/Codex/DeepSeek Harness 为 V0.5 优先三家）。
 7. 租户级 Team Onboarding（docs/team-onboarding/ 三稿，独立在途批，与本项目并行不混）。
 8. **PC/KB 应用深化剩余面（2026-11-08 第四批收纳时切出 V0.6）**：NO_CHANGE/CONFLICT 与冲突发现、Requirement/Design·ADR 影响分析族、完整性/一致性检查、主动认知维护、Team Source Pool、知识检索全量面、KBGIT/PCGIT 正文权威、L0~L3 审批矩阵正式化。
+9. **对话编排剩余面（2026-11-09 第五批收纳时切出 V0.6/挂账）**：检索式知识注入（DK-0 定版 = 固定节投影，无检索面）、provider 感知注入预算（36k 字符定值 vs Ollama 本地小窗 8k~32k token 的适配）、前端会话更早历史回翻（Batch H 挂账）、响应卡 defer 动作落写回端点（Batch 3C 挂账）、访谈 deferred「更正待知识应用」的知识应用闭环（随 KP-3 k4 / KP-2 后续批）。
 
 ---
 
@@ -200,14 +236,16 @@ S01-08 四裁决（KB-3）：知识库仓库独立配置（R-01）·自动同步
 8. 知识产物经提案链进入知识库（人工确认）→ 知识库按 S01-08 自动同步到用户 Git 服务器（KB-3）。
 9. 项目资料/讨论沉淀为 PC 认知提案 → 人工经**确认入口（KP-2：`pc.proposal*` / `pc.approval`）逐项确认** → 正式版本闭合（KP-1 17 表模型）→ Big View 全貌更新（目标 2 闭环；核心原则：AI 提议、人类确认、已确认不可直接覆盖）。
 10. 讨论/会话沉淀为 Structured Memory 与 Discussion Memory（KP-3）→ 按 Task 检索注入后续 Agent Context（目标 4 闭环）。
+11. **（第五批，场景 1）** 用户在对话框录入新建项目 → AI 逐题访谈（INITIAL_ONBOARDING，问题带 why_blocking）→ 问毕（三条件与）→ 生成需求提案与前置任务（含「手机登录」示例需求）→ **draft→ready 真人闸** → 进调度（目标 3 对话化入口；验收 = DK-F §8.3 场景 1，本机 demo 栈）。
+12. **（第五批，场景 2）** 旧项目导入 → 自动生成 KB/PC（分析链）→ 分析时 AI 提问项目背景（自动开 INITIAL_ONBOARDING 访谈）→ 对话问答项目情况（知识注入 36k 预算投影）→ 答错经**更正链**更正（contradicted/user_confirmed 双 finding + deferred「更正待知识应用」）→ KB/PC 更新（验收 = DK-F §8.3 场景 2，本机 demo 栈）。
 
-验收标准：ACP-401~428 相关子集 + V0.5 新增验收（Client 凭据签发/撤销生效、无 Client 时 `no_client_available` 等待、等待窗口自动调度屏蔽 ACP-427/428、task_repository 写入口可用、知识库同步成功/失败重试不丢数据）+ **第四批新增**：PC 确认闭环（draft→proposal→人工确认→正式版本，AI 无确认权不回归）+ KB 三层（来源登记/Structured Memory 评审/Discussion Memory 落库并按 Task 注入）。
+验收标准：ACP-401~428 相关子集 + V0.5 新增验收（Client 凭据签发/撤销生效、无 Client 时 `no_client_available` 等待、等待窗口自动调度屏蔽 ACP-427/428、task_repository 写入口可用、知识库同步成功/失败重试不丢数据）+ **第四批新增**：PC 确认闭环（draft→proposal→人工确认→正式版本，AI 无确认权不回归）+ KB 三层（来源登记/Structured Memory 评审/Discussion Memory 落库并按 Task 注入）+ **第五批新增**：对话编排两场景（故事线 11/12，DK-F §8.3 全表 30/30 本机栈已过；**收官端到端验收**待 WP-6 整合后全链跑一遍，.10 真栈复验随 Stage 3 部署批）。
 
 ---
 
 ## 十、工程纪律
 
-1. **迁移号按台账纪律对账取号**：先读 `docs/ai-pm-migration-ledger.md` 再 `ls migrations/`（2026-11-08 实况至 0062；KP 批预期自 0063 起）；单一负责人分配，后实施者撞号无条件顺移并回填台账。
+1. **迁移号按台账纪律对账取号**：先读 `docs/ai-pm-migration-ledger.md` 再 `ls migrations/`（**2026-11-09 迁移基线合并后**：0001~0065 已 squash 进 `0001_baseline.sql`，新链自 **0002** 起，已用至 **0005**）；单一负责人分配，后实施者撞号无条件顺移并回填台账。
 2. ai-pm 主 checkout 存在并行会话在途未提交物（team_llm 修改、0043 迁移、team-onboarding 三稿）：**禁 sweep、禁 git add -A**，只提交本批文件。
 3. 禁重建区（核验报告 §四）继续有效：不建 task_execution/execution_result 新表、不改 13 态状态机、不动 MCP 四工具契约、WAITING_FOR_* 不做成状态。
 4. Runner 凭据面遵循 ADR-0002 凭据分离与 team_llm_credential 先例（AES-256-GCM 替换制）。
