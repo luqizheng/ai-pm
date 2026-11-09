@@ -18,6 +18,8 @@
 | 号 | 文件 | 任务 | 状态 |
 |---|---|---|---|
 | 0002 | `0002_conversation_discovery_link.sql` | DK-A 对话编排底座：`ai.conversation.discovery_session_id` 1 列 + 三元组外键 `(tenant_id, project_id, discovery_session_id) → discovery.discovery_session(tenant_id, project_id, id)`（比设计稿 (tenant_id,id) 更严：钉同项目）+ 部分索引；无回填——设计 `docs/product/ai-pm-dialog-orchestration-design-v1.md` §9.2-①（D-DK-2）。**取号史**：设计稿预留 0063 → 并行批依次取走 0063/0064/0065 → 顺移 0066 → **2026-11-09 冻结点基线合并后改取 0002**（§〇） | 已实施（2026-11-09，DK-A 收官；验收 `docs/product/ai-pm-dk-a-acceptance-record-v1.md`，1226/1226 全绿） |
+| 0003 | `0003_conversation_context_anchor.sql` | 对话上下文整合 Batch 2（会话 `ai.conversation` 线程锚点列 + `POST /conversations` 校验）——**占用者=并行会话 sess_05e4b2f0**（主 checkout 工作区，2026-11-09 在途未合）；本表先行登记防止再撞 | 在途（未合 master） |
+| 0004 | `0004_llm_call_record_metadata.sql` | DK-F 真栈联调：`ai.llm_call_record.metadata` JSONB 可空 1 列（无回填、无约束/索引）；编排轮次写 `sections_dropped` 等——设计 §5.3/§8.3-D2（D-DK-7 硬验收）；缺口登记 `docs/product/ai-pm-dk-f-step0-verification-v1.md` G-2。**取号史**：初取 0003 → 并行会话 0003_conversation_context_anchor 先占（其库已应用）→ DK-F 顺移 **0004**（2026-11-09） | 实施中（2026-11-09，DK-F） |
 
 ## 一、已应用（历史审计——文件已并入 0001_baseline.sql）
 

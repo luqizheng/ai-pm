@@ -83,6 +83,8 @@ pub const MAX_SESSIONS_PER_ROUND: usize = 5;
 pub const SCAN_CAP: i64 = 25;
 /// 单轮失败后的冷却（无 provider / 模型错 / 契约不合规）。
 pub const RETRY_COOLDOWN: Duration = Duration::from_secs(30);
+/// DK-F：写回扫描的单会话冷却（起草幂等由写回侧保证，冷却防反复进模型）。
+pub const WRITE_BACK_COOLDOWN: Duration = Duration::from_secs(60);
 /// 每轮提问上限（§4.2，超额截断 + WARN）。
 pub const MAX_QUESTIONS_PER_ROUND: usize = 3;
 /// 访谈段保留的最近原始轮数（§5.4 K=6）。
@@ -956,6 +958,11 @@ pub struct DiscoveryOrchestratorWorker {
     /// DK-D 写回钩子（默认空实现；生产注入 `DiscoveryWriteBack` 需真
     /// `WriteBackModel`，属 DK-F）。
     write_back: Arc<dyn WriteBackHook>,
+    /// DK-F：写回扫描（见 [`DiscoveryOrchestratorWorker::sweep_write_back`]）的
+    /// 单会话冷却——扫描面每轮都跑，没有冷却会让已起草的会话反复进模型。
+    write_back_cooldown: Duration,
+    /// DK-F：写回扫描的会话冷却簿（session → 上次扫描时刻）。
+    write_back_cooldowns: HashMap<Uuid, Instant>,
     cooldowns: HashMap<Uuid, Instant>,
     /// session → (上一轮的缺口槽位集合, 连续轮数)。
     slot_streaks: HashMap<Uuid, (Vec<String>, u8)>,
@@ -975,6 +982,8 @@ impl DiscoveryOrchestratorWorker {
             supplemental: Vec::new(),
             context_builder: None,
             write_back: Arc::new(NoWriteBack),
+            write_back_cooldown: WRITE_BACK_COOLDOWN,
+            write_back_cooldowns: HashMap::new(),
             cooldowns: HashMap::new(),
             slot_streaks: HashMap::new(),
             invalid_streaks: HashMap::new(),
@@ -1010,15 +1019,27 @@ impl DiscoveryOrchestratorWorker {
         self
     }
 
+    /// DK-F（真栈联调）：写回扫描的冷却时长注入点（生产默认 60s）。
+    pub fn with_write_back_cooldown(mut self, cooldown: Duration) -> Self {
+        self.write_back_cooldown = cooldown;
+        self
+    }
+
     /// DK-C：为本会话投影 S1~S5。未接投影器 / kind 未知 / 投影失败 → 空
     /// （S6-only）。产出已过 DK-C 预算（各节上限与本模块 [`SectionId::cap`]
     /// 一致），再进 [`assemble_prompt`] 的统一裁剪是幂等的。
-    async fn project_sections(&self, session: &PendingSession) -> Vec<PromptSection> {
+    ///
+    /// 返回值第二项 = DK-C 投影层已整节丢掉的节（预算裁剪记账，DK-F/D2 落
+    /// `llm_call_record.metadata.sections_dropped`；与编排层提示词裁剪分开记）。
+    async fn project_sections(
+        &self,
+        session: &PendingSession,
+    ) -> (Vec<PromptSection>, Vec<String>) {
         let Some(builder) = self.context_builder.as_ref() else {
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         };
         let Some(kind) = InterviewKind::parse(&session.kind) else {
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         };
         match builder
             .build(session.tenant_id, session.project_id, session.id, kind)
@@ -1039,7 +1060,7 @@ impl DiscoveryOrchestratorWorker {
                     (KEY_REQUIREMENTS, SectionId::S4Requirements),
                     (KEY_TASKS, SectionId::S5Tasks),
                 ];
-                S1_TO_S5
+                let sections = S1_TO_S5
                     .iter()
                     .filter_map(|(key, id)| {
                         context.section(key).map(|section| PromptSection {
@@ -1047,7 +1068,8 @@ impl DiscoveryOrchestratorWorker {
                             text: section.body.clone(),
                         })
                     })
-                    .collect()
+                    .collect();
+                (sections, context.sections_dropped.clone())
             }
             Err(error) => {
                 tracing::warn!(
@@ -1055,7 +1077,7 @@ impl DiscoveryOrchestratorWorker {
                     %error,
                     "interview context build failed (DK-C): falling back to S6-only (read-side fail-open)"
                 );
-                Vec::new()
+                (Vec::new(), Vec::new())
             }
         }
     }
@@ -1126,6 +1148,115 @@ impl DiscoveryOrchestratorWorker {
         }
     }
 
+    /// DK-F（真栈联调发现并修复）：**写回扫描面**。
+    ///
+    /// DK-D 的接线把写回钩子挂在「编排轮次之后」（[`Self::run_write_back`]），
+    /// 真栈跑起来发现这是一条**断头路**：
+    ///
+    /// 1. 起草的输入是**人工已确认（CONFIRMED）**的 finding——`on_review_required`
+    ///    只认 `verification_status='CONFIRMED'`（写回侧的硬门）；
+    /// 2. 而 finding 的确认状态**只能由人工裁决**产生（`record_finding_verification`），
+    ///    编排轮次自己写的 finding 一律是 `PENDING`；
+    /// 3. 于是「轮次跃迁到 `REVIEW_REQUIRED` 的那一刻」一定还没有 CONFIRMED
+    ///    finding → 起草必然被跳过（`no_confirmed_finding`）；
+    /// 4. 人工裁决之后，会话已停在 `REVIEW_REQUIRED`，**不再满足编排扫描谓词**
+    ///    （只扫 `IN_PROGRESS`/`NEEDS_USER_INPUT`）→ 再没有第二轮 → 永远没人起草。
+    ///
+    /// 单测看不见这个断点：DK-D 的测试**直接造终态** CONFIRMED finding 再手动
+    /// 调钩子，绕过了「轮次内触发」这一前提。
+    ///
+    /// 本方法补上被缺的触发面：**独立于编排扫描谓词**的写回扫描——扫处于
+    /// `REVIEW_REQUIRED` 且**已有 CONFIRMED finding** 的会话，对它们调写回钩子。
+    /// 幂等由写回侧保证（已起草 → `AlreadyDrafted`；已挂任务 → `NothingToDo`），
+    /// 冷却（[`Self::write_back_cooldown`]）防止已起草的会话反复进模型。
+    ///
+    /// 边界不变：AI 仍只能起草（止步 `pending_confirmation`）与生成 draft 任务批；
+    /// 需求确认、任务 ready 全是人的动作（R3）。
+    pub async fn sweep_write_back(&mut self) -> Result<OrchestratorReport, sqlx::Error> {
+        let mut report = OrchestratorReport::default();
+        let candidates = self.scan_write_back_candidates().await?;
+        let now = Instant::now();
+        for (tenant_id, session_id) in candidates {
+            if self
+                .write_back_cooldowns
+                .get(&session_id)
+                .is_some_and(|at| now.duration_since(*at) < self.write_back_cooldown)
+            {
+                continue;
+            }
+            self.write_back_cooldowns.insert(session_id, now);
+            let view = match get_session(&self.pool, tenant_id, session_id).await {
+                Ok(view) => view,
+                Err(error) => {
+                    tracing::warn!(
+                        session_id = %session_id,
+                        %error,
+                        "write-back sweep: could not read the session view"
+                    );
+                    continue;
+                }
+            };
+            match self.write_back.on_review_required(tenant_id, &view).await {
+                Ok(outcome) => {
+                    if matches!(outcome.kind, DraftOutcomeKind::Submitted) {
+                        report.drafts_submitted += 1;
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        session_id = %session_id,
+                        %error,
+                        "write-back sweep: requirement draft failed"
+                    );
+                }
+            }
+            match self
+                .write_back
+                .decompose_if_approved(tenant_id, &view)
+                .await
+            {
+                Ok(crate::discovery_writeback::DecomposeOutcome::Generated(batch)) => {
+                    if !batch.tasks.is_empty() {
+                        report.task_batches_generated += 1;
+                    }
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(
+                        session_id = %session_id,
+                        %error,
+                        "write-back sweep: task decomposition failed"
+                    );
+                }
+            }
+        }
+        self.write_back_cooldowns
+            .retain(|_, at| now.duration_since(*at) < self.write_back_cooldown);
+        Ok(report)
+    }
+
+    /// 写回扫描谓词：`REVIEW_REQUIRED` 且**已有 CONFIRMED finding** 的会话。
+    ///
+    /// 「已有 CONFIRMED finding」是起草的真正前置条件（写回侧的硬门），
+    /// 用它做谓词可以在人工裁决前就把会话排除掉——避免每轮都对一个
+    /// 「还没人裁决」的会话问模型。
+    async fn scan_write_back_candidates(&self) -> Result<Vec<(Uuid, Uuid)>, sqlx::Error> {
+        let rows = sqlx::query_as::<_, (Uuid, Uuid)>(
+            "SELECT s.tenant_id, s.id \
+             FROM discovery.discovery_session s \
+             WHERE s.status = 'REVIEW_REQUIRED' \
+               AND EXISTS (SELECT 1 FROM discovery.discovery_finding f \
+                            WHERE f.tenant_id = s.tenant_id AND f.session_id = s.id \
+                              AND f.verification_status = 'CONFIRMED') \
+             ORDER BY s.updated_at ASC, s.id ASC \
+             LIMIT $1",
+        )
+        .bind(SCAN_CAP)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
     /// 一轮扫描 + 编排。
     pub async fn orchestrate_round(&mut self) -> Result<OrchestratorReport, sqlx::Error> {
         let mut report = OrchestratorReport::default();
@@ -1166,7 +1297,7 @@ impl DiscoveryOrchestratorWorker {
              JOIN LATERAL ( \
                  SELECT id, speaker, created_at FROM discovery.discovery_message m \
                  WHERE m.tenant_id = s.tenant_id AND m.session_id = s.id \
-                 ORDER BY m.created_at DESC, m.id DESC LIMIT 1 \
+                 ORDER BY m.seq DESC LIMIT 1 \
              ) last ON last.speaker = 'user' \
              WHERE s.status IN ('IN_PROGRESS', 'NEEDS_USER_INPUT') \
              ORDER BY last.created_at ASC, last.id ASC \
@@ -1354,8 +1485,22 @@ impl DiscoveryOrchestratorWorker {
             return Err(RoundFailure::Stale);
         }
 
-        let projected = self.project_sections(session).await;
+        let (projected, context_dropped) = self.project_sections(session).await;
         let prompt = self.build_prompt(session, &findings, &questions, &messages, projected);
+        // DK-F/D2：提示词预算裁剪记账（§5.3「裁剪必须可观测」）。编排层丢掉的
+        // 节 + DK-C 投影层丢掉的节合并成一栏；`sections_absent` 是「本就无此源」，
+        // 与「被预算丢掉」分开（两者不可混为一谈）。
+        let mut dropped_sections: Vec<String> =
+            prompt.dropped.iter().map(|k| (*k).to_string()).collect();
+        dropped_sections.extend(context_dropped.iter().cloned());
+        dropped_sections.sort();
+        dropped_sections.dedup();
+        let call_metadata = serde_json::json!({
+            "sections_included": prompt.included,
+            "sections_dropped": dropped_sections,
+            "sections_absent": prompt.absent,
+            "chars_total": prompt.chars_total,
+        });
         let conversation = {
             let mut turns = Vec::with_capacity(prompt.turns.len() + 1);
             turns.push(ConversationTurn::new("system", prompt.system.clone()));
@@ -1391,7 +1536,7 @@ impl DiscoveryOrchestratorWorker {
         let completion = match completion {
             Ok(completion) => {
                 // 观测面：先记账再落库（存储失败不得抹掉真实发生过的调用）。
-                call_record::record_call(
+                call_record::record_call_with_metadata(
                     &self.pool,
                     session.project_id,
                     cfg.provider_id,
@@ -1403,13 +1548,14 @@ impl DiscoveryOrchestratorWorker {
                     latency,
                     None,
                     completion.usage,
+                    Some(call_metadata.clone()),
                 )
                 .await;
                 completion
             }
             Err(err) => {
                 let message = err.to_string();
-                call_record::record_call(
+                call_record::record_call_with_metadata(
                     &self.pool,
                     session.project_id,
                     cfg.provider_id,
@@ -1421,6 +1567,7 @@ impl DiscoveryOrchestratorWorker {
                     latency,
                     None,
                     None,
+                    Some(call_metadata.clone()),
                 )
                 .await;
                 return Err(RoundFailure::Model(err));
@@ -1558,12 +1705,17 @@ impl DiscoveryOrchestratorWorker {
         tenant_id: Uuid,
         session_id: Uuid,
     ) -> Result<Vec<RecentMessage>, DiscoveryError> {
+        // 排序用 `seq`（会话内单调序列，在会话行锁下计算）而不是 `created_at`：
+        // 同一事务里写的多条消息共享同一 `created_at`（事务时间戳），
+        // `created_at DESC, id DESC` 的次级键是随机 UUID → 「最新消息」的判定
+        // 不确定（真栈实测：访谈会静默卡死）。
+        // 子查询必须把 `seq` 选出来——外层的 ORDER BY 只能引用子查询输出列。
         let rows: Vec<(Uuid, String, String, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
             "SELECT id, speaker, content, created_at FROM ( \
-                 SELECT id, speaker, content, created_at FROM discovery.discovery_message \
+                 SELECT id, speaker, content, created_at, seq FROM discovery.discovery_message \
                  WHERE tenant_id = $1 AND session_id = $2 \
-                 ORDER BY created_at DESC, id DESC LIMIT $3 \
-             ) recent ORDER BY created_at ASC, id ASC",
+                 ORDER BY seq DESC LIMIT $3 \
+             ) recent ORDER BY seq ASC",
         )
         .bind(tenant_id)
         .bind(session_id)
@@ -1670,9 +1822,13 @@ fn render_interview_section(
                 let slot = parse_slot_tag(finding.actor_role.as_deref())
                     .map(|slot| format!("（槽位：{}）", slot_label(kind, slot)))
                     .unwrap_or_default();
+                // DK-F：把 finding 的 **id 一并渲染出来**——输出契约要求
+                // `target_finding_ref` 照抄「[既有发现]」里的 uuid，而不渲染 id
+                // 时模型只能照抄正文 → 更正分支的 target 永远解析不出来
+                // （真栈实测：每轮更正都降级为「observed, unbound」，F1 永不成立）。
                 out.push_str(&format!(
-                    "- [{}] {}{slot}\n",
-                    finding.verification_status, finding.content
+                    "- [{}] (id={}) {}{slot}\n",
+                    finding.verification_status, finding.id, finding.content
                 ));
             }
             out.push('\n');

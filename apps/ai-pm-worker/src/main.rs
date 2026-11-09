@@ -340,8 +340,28 @@ fn spawn_discovery_orchestrator(pool: PgPool) {
         let mut worker =
             pm_ai::discovery_orchestrator::DiscoveryOrchestratorWorker::new(pool.clone())
                 .with_context_builder(std::sync::Arc::new(pm_ai::PgInterviewContextBuilder::new(
-                    pool,
+                    pool.clone(),
                 )));
+        // DK-F（G-1）：生产写回接线。DK-D 只落了端口与骨架（`NoWriteBack`
+        // 默认、模型仅测试 Fake），其验收记录 §十一「生产注入」把「真 provider
+        // 适配 + KnowledgeRoot 配置 + CapabilityProjection 真投影」派给本批。
+        //
+        // 边界不变：写回钩子只写「草案」（止步 pending_confirmation）与 draft
+        // 任务批；AI 无确认权（R3）。知识 Git 根由 `AI_PM_KNOWLEDGE_ROOT` 决定
+        // （默认 `<cwd>/../ai-pm-knowledge`）——需求修订的 Markdown 绑定点就在
+        // 那里，容器里必须可写。
+        let write_back = pm_ai::discovery_writeback::DiscoveryWriteBack {
+            pool: pool.clone(),
+            model: std::sync::Arc::new(pm_ai::LlmWriteBackModel::new(pool.clone())),
+            capability: std::sync::Arc::new(pm_ai::PgCapabilityProjection::new(pool.clone())),
+            knowledge: pm_application::knowledge::KnowledgeRoot::from_env(),
+            mode: pm_ai::discovery_writeback::WriteBackMode::from_env(),
+        };
+        tracing::info!(
+            knowledge_root = %pm_application::knowledge::KnowledgeRoot::from_env().path().display(),
+            "discovery write-back wired (draft-only: AI stops at pending_confirmation)",
+        );
+        worker = worker.with_write_back(std::sync::Arc::new(write_back));
         loop {
             match worker.orchestrate_round().await {
                 Ok(report) if report.has_activity() => {
@@ -364,6 +384,24 @@ fn spawn_discovery_orchestrator(pool: PgPool) {
                 Ok(_) => {}
                 Err(e) => {
                     tracing::warn!(error = %e, "discovery orchestration round failed; backing off")
+                }
+            }
+            // DK-F：写回扫描面（真栈联调补的触发面）。编排轮次只在
+            // `IN_PROGRESS`/`NEEDS_USER_INPUT` 上跑，而起草的输入是人工已
+            // CONFIRMED 的 finding——两者之间隔着「人工裁决」这一步，所以
+            // 轮次内的写回调用永远看不到可起草的输入。扫描面独立于编排谓词：
+            // 扫 `REVIEW_REQUIRED` + 已有 CONFIRMED finding 的会话。
+            match worker.sweep_write_back().await {
+                Ok(report) if report.drafts_submitted > 0 || report.task_batches_generated > 0 => {
+                    tracing::info!(
+                        drafts_submitted = report.drafts_submitted,
+                        task_batches_generated = report.task_batches_generated,
+                        "discovery write-back sweep"
+                    );
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!(error = %e, "discovery write-back sweep failed; backing off")
                 }
             }
             tokio::time::sleep(std::time::Duration::from_millis(
