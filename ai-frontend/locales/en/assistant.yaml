@@ -17,3 +17,11 @@ assistant:
   loadingDesc: Fetching this project's conversations…
   loadError: Failed to load conversations
   loadRetry: Retry
+  interviewNotice: Switched to requirement clarification
+  interviewSegmentLabel: Requirement clarification interview
+  interviewStatus: Interview status
+  todoTitle: To-do
+  openQuestions: Open questions
+  whyBlockingPrefix: Why this matters
+  pendingKnowledge: Pending knowledge application
+  confirmedFacts: Confirmed facts
