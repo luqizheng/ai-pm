@@ -37,10 +37,7 @@ const props = withDefaults(
     identity?: AiIdentity;
     timestamp?: string;
     density?: CardDensity;
-    submit?: (
-    payload: unknown,
-    action?: string
-  ) => Promise<SubmitResult>;
+    submit?: (payload: unknown, action?: string) => Promise<SubmitResult>;
     initialStatus?: InteractionStatus;
     evidence?: AiEvidence;
   }>(),

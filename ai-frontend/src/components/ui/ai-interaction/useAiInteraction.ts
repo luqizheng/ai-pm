@@ -20,7 +20,10 @@ export interface UseAiInteractionOptions {
    * 提交适配器。第二参 = 触发动作（Batch 3C 真端点路由用；目录页 mock
    * 忽略即可——向后兼容的扩展参，2026-11-09）。
    */
-  submit?: (payload: unknown, action?: InteractionAction) => Promise<SubmitResult>;
+  submit?: (
+    payload: unknown,
+    action?: InteractionAction
+  ) => Promise<SubmitResult>;
 }
 
 export type InteractionAction = "accept" | "reject" | "submit" | "resolve";

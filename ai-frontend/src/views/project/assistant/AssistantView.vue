@@ -234,8 +234,7 @@ function toInteractionEnvelope(
   // payload 深校验（fail-closed 第二半）：必填字段缺一即整信封拒收——
   // 卡片组件对缺失 TS 必填字段会渲染崩，宁退纯文本不冒渲染崩风险。
   const payloadRecord = payload as Record<string, unknown>;
-  const required =
-    PAYLOAD_REQUIRED_FIELDS[type as AiResponseType] ?? [];
+  const required = PAYLOAD_REQUIRED_FIELDS[type as AiResponseType] ?? [];
   for (const field of required) {
     if (!(field in payloadRecord)) return undefined;
   }
@@ -254,8 +253,7 @@ function toInteractionEnvelope(
     title: typeof raw.title === "string" ? raw.title : "",
     description:
       typeof raw.description === "string" ? raw.description : undefined,
-    conclusion:
-      typeof raw.conclusion === "string" ? raw.conclusion : undefined,
+    conclusion: typeof raw.conclusion === "string" ? raw.conclusion : undefined,
     evidence:
       raw.evidence && typeof raw.evidence === "object"
         ? (raw.evidence as AiEvidence)
@@ -422,7 +420,7 @@ async function handleCardSubmit(
         ...message,
         interaction: {
           ...message.interaction!,
-          status: record.status as InteractionStatus,
+          status: record.status as InteractionStatus
           // SubmitResult 结果经信封 result 面向回读可见；卡内已展示记录号
         }
       };

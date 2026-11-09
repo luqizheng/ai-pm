@@ -718,7 +718,9 @@ describe("AssistantView（交互写回接线）", () => {
         metadata: { envelope: cardEnvelope() }
       })
     ]);
-    submitInteraction.mockRejectedValue(new Error("interaction target not found"));
+    submitInteraction.mockRejectedValue(
+      new Error("interaction target not found")
+    );
     const { wrapper } = await mountPage();
     await flushPromises();
 

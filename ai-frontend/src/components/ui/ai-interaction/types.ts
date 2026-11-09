@@ -91,7 +91,10 @@ export const TERMINAL_STATUSES: readonly InteractionStatus[] = [
  * 会渲染崩，消费端必须在组装 `interaction` 前挡住（fail-closed：缺一即
  * 整信封拒收，消息退化为纯文本，不伪造卡、不留空白）。
  */
-export const PAYLOAD_REQUIRED_FIELDS: Record<AiResponseType, readonly string[]> = {
+export const PAYLOAD_REQUIRED_FIELDS: Record<
+  AiResponseType,
+  readonly string[]
+> = {
   informational: ["contentMarkdown"],
   recommendation: ["summary", "explanationMarkdown", "benefits", "risks"],
   proposal: ["proposalType", "changes", "impact", "related", "version"],
@@ -115,7 +118,6 @@ export const PAYLOAD_REQUIRED_FIELDS: Record<AiResponseType, readonly string[]> 
     "logs"
   ]
 };
-
 
 /** 提交阶段（控制按钮 loading / 结果条） */
 export type SubmissionPhase = "idle" | "submitting" | "success" | "error";
