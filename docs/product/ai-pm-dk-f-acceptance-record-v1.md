@@ -113,3 +113,17 @@
 ## 七、一句话结论
 
 DK-F 六范围（两场景真栈全链 + §8.3 全表 + 缺口清偿 + Stage 2 最小接线 + 交付文档）全部落地；**V0.5 只剩跨会话前端整合的移植步**（契约已定，非本批阻塞项）。
+
+## 八、合并执行决定（2026-11-09，用户委托：后续合并全部由 DK-F 会话决断）
+
+**现状**：`feat/dk-f-demo` = `eca4030`（已并入 master cb5f9e0，门禁 1340/1340 + clippy PASS + 前端 974/974）已推远端；master 本体仍 = cb5f9e0，被主 checkout 的整合会话在途工作（28 个未提交文件，与 DK-F 重叠）阻塞——git 拒绝在 dirty 重叠文件上合并，且强并会让该会话后续提交用旧内容静默覆盖 DK-F 文件。
+
+**决断（定死，不再逐次确认）**：
+
+1. **DK-F → master = fast-forward 到 `eca4030`**（分支已含 master，零新增冲突）。
+2. **唯一安全触发点 = 整合会话把全部批次落盘**（master 出现其 commits 且重叠文件不再 dirty）。禁止 stash/代提交等绕行（用户已裁、且会打断在途会话的分批计划）。
+3. **触发后由 DK-F 会话执行**（两种时序同一套动作）：
+   - 它先落：把新 master 并入 `feat/dk-f-demo`（真合并——`pm-ai/src/lib.rs` 与 `pm-application/src/lib.rs` 模块注册取并集、台账各行并存、`AssistantView.vue`=**它定稿版 + 重放 `daaa590` diff（即 Stage 2 移植本体）**）→ 门禁（全量 nextest + clippy + 前端 vitest/typecheck）→ master `--no-ff` 到分支 tip → push。
+   - 它声明暂停且 tree 暂净：先 ff master 到 `eca4030`，它余下批次基于新 master 自续（冲突清单已交付其会话）。
+4. **移植验收口径**（=§五 Stage 2 的回归面）：`AssistantView.test.ts` 的 DK-F 三例（落点/边界消息/未链接不变）+ 既有用例 + 它的信封用例全绿；typecheck 干净。
+
