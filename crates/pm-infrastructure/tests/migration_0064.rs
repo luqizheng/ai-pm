@@ -215,7 +215,11 @@ async fn formal_model_ddl_negatives_and_seeds(pool: PgPool) {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(rel_types, 12, "17 matrix rows folded into 12 type keys");
+    // 12（0064 种子）+ 8（检索 WP-2 迁移 0007 新增：2 条直达边 + 3 条跨域 + 3 条 KB 域内）。
+    assert_eq!(
+        rel_types, 20,
+        "12 seeds + 8 retrieval WP-2 seeds (migration 0007)"
+    );
     let l2: Vec<(String,)> = sqlx::query_as(
         "SELECT type_key FROM pc.object_type WHERE governance_level = 'L2' ORDER BY type_key",
     )

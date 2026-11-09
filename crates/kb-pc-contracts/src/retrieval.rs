@@ -653,8 +653,11 @@ pub trait RetrievalPort: Send + Sync {
     ) -> Result<ValidatedPlan, ValidationReport>;
     /// 执行多通道检索。
     async fn execute(&self, plan: ValidatedPlan) -> Result<ChannelHits, PortError>;
-    /// 受控跨域关系扩展（WP-2 接真；V1 占位返回未接线）。
-    async fn expand(&self, seed: &[EntityAnchor], hops: u8) -> Result<TraversalResult, PortError>;
+    /// 受控跨域关系扩展（WP-2 接真）。
+    ///
+    /// **入参是 `ValidatedPlan`（不是裸 seed）**——扩展必须走同一套授权与校验：
+    /// 已校验计划天然携带**已核租户/项目**（遍历的数据边界）与跳数预算。
+    async fn expand(&self, plan: &ValidatedPlan) -> Result<TraversalResult, PortError>;
     /// 组装可引用证据。
     async fn evidence(
         &self,

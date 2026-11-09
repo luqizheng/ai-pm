@@ -10,10 +10,9 @@
 use std::sync::Arc;
 
 use kb_pc_contracts::retrieval::{
-    BudgetReport, ChannelHits, EntityAnchor, EvidenceBundle, PlannerModel, PlannerModelError,
-    RetrievalCaller, RetrievalChannel, RetrievalDegradationReason, RetrievalEvidence,
-    RetrievalPlan, RetrievalPlanSource, RetrievalPort, TraversalResult, ValidatedPlan,
-    ValidationReport,
+    BudgetReport, ChannelHits, EvidenceBundle, PlannerModel, PlannerModelError, RetrievalCaller,
+    RetrievalChannel, RetrievalDegradationReason, RetrievalEvidence, RetrievalPlan,
+    RetrievalPlanSource, RetrievalPort, TraversalResult, ValidatedPlan, ValidationReport,
 };
 use sqlx::PgPool;
 
@@ -244,13 +243,35 @@ impl RetrievalPort for RetrievalServiceLive {
 
     async fn expand(
         &self,
-        _seed: &[EntityAnchor],
-        _hops: u8,
+        plan: &ValidatedPlan,
     ) -> Result<TraversalResult, kb_pc_contracts::PortError> {
-        // WP-2 接真遍历引擎；在此之前恒 501——**不让 Planner 误判多跳已可用**。
-        Err(kb_pc_contracts::PortError::NotWired(
-            "RetrievalServiceLive::expand (multi-hop traversal lands in WP-2)",
-        ))
+        // WP-2 接真遍历引擎：种子解析 → 受控遍历（双端隔离 + 环检测 + 预算）。
+        let p = plan.plan();
+        let budget = p
+            .budget
+            .unwrap_or(kb_pc_contracts::retrieval::RetrievalBudget {
+                max_candidates: kb_pc_contracts::retrieval::MAX_CANDIDATES_LIMIT,
+                max_hops: 3,
+                timeout_ms: kb_pc_contracts::retrieval::MAX_TIMEOUT_MS,
+            });
+        let seed_nodes = super::traversal::resolve_seed_nodes(
+            &self.pool,
+            plan.tenant_id(),
+            plan.project_id(),
+            &p.entities,
+            budget.max_candidates,
+        )
+        .await;
+        let request = super::traversal::TraversalRequest {
+            seed_nodes,
+            max_hops: budget.max_hops,
+            max_candidates: budget.max_candidates,
+            timeout_ms: budget.timeout_ms,
+        };
+        Ok(
+            super::traversal::traverse(&self.pool, plan.tenant_id(), plan.project_id(), &request)
+                .await,
+        )
     }
 
     async fn evidence(

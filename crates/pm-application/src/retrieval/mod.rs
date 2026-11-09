@@ -20,6 +20,7 @@
 
 pub mod channels;
 pub mod service;
+pub mod traversal;
 pub mod validator;
 
 use serde::Serialize;
