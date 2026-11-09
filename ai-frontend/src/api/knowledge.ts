@@ -109,6 +109,14 @@ export interface RetrievalEvidenceItem {
   truncated: boolean;
 }
 
+export interface TraversalEdgeView {
+  relationship_id: string;
+  relationship_type: string;
+  source_id: string;
+  target_id: string;
+  traversal_direction: "forward" | "reverse";
+}
+
 export interface RetrievalQueryResponse {
   plan_source: "llm_planner" | "deterministic_fallback";
   degraded: boolean;
@@ -116,7 +124,10 @@ export interface RetrievalQueryResponse {
   validation: { checks: { id: string; passed: boolean; reason?: string }[] };
   evidence: {
     evidence: RetrievalEvidenceItem[];
-    traversal: { edges: unknown[]; gaps: { kind: string; detail: string }[] };
+    traversal: {
+      edges: TraversalEdgeView[];
+      gaps: { kind: string; detail: string }[];
+    };
     gaps: { kind: string; detail: string }[];
     degradations: string[];
     budget_report: Record<string, number | boolean>;
@@ -131,6 +142,63 @@ export function retrievalQuery(query: string, projectId: string) {
   return http.post<RetrievalQueryResponse>(
     "/v1/retrieval/query",
     { query },
+    { params: { project_id: projectId } }
+  );
+}
+
+/* ── PC 提案审批（P4 详查 / P5 决策；列表=管理面）──────────────────────── */
+
+export interface PcProposalRow {
+  proposal_id: string;
+  title: string;
+  status:
+    | "draft"
+    | "submitted"
+    | "approved"
+    | "rejected"
+    | "withdrawn"
+    | "expired"
+    | "applied"
+    | "failed";
+  risk_level: string;
+  confidence: string;
+  origin_kind: string;
+  expected_version_no: number;
+  member_count: number;
+  submitted_at: string | null;
+  created_at: string;
+}
+
+/** 项目 PC 提案列表（status 可选过滤）。 */
+export function listPcProposals(projectId: string, status?: string) {
+  return http.get<{ items: PcProposalRow[] }>("/v1/pc/proposals", {
+    project_id: projectId,
+    ...(status ? { status } : {})
+  });
+}
+
+/**
+ * 提案决策（approve=批准并发布 / reject=驳回）。
+ *
+ * CAS：`expected_version_no` = 调用方看到的提案基线，失配 409。权限门在后端
+ * （human + 治理授权；AI/Key 403）。
+ */
+export function decidePcProposal(
+  proposalId: string,
+  projectId: string,
+  decision: {
+    action: "approve" | "reject";
+    note?: string;
+    expected_version_no: number;
+  }
+) {
+  return http.post(
+    `/v1/pc/proposals/${proposalId}/decision`,
+    {
+      action: decision.action,
+      ...(decision.note ? { note: decision.note } : {}),
+      expected_version_no: decision.expected_version_no
+    },
     { params: { project_id: projectId } }
   );
 }

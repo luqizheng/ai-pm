@@ -78,6 +78,8 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/v1/pc/versions/{version_id}", get(p7_version))
         // PC 对象浏览（前端 KnowledgeView PC 页签；只读管理面）
         .route("/v1/pc/objects", get(list_pc_objects))
+        // PC 提案列表（前端审批页签；P4 按 id 详查 / P5 决策走既有端点）
+        .route("/v1/pc/proposals", get(list_pc_proposals))
 }
 
 impl From<PortError> for ApiError {
@@ -812,6 +814,53 @@ async fn list_pc_objects(
             "change_summary": row.get::<Option<String>, _>("change_summary"),
             "excerpt": row.get::<Option<String>, _>("excerpt"),
             "updated_at": row.get::<chrono::DateTime<chrono::Utc>, _>("updated_at"),
+        })
+    })
+    .collect();
+    Ok(Json(json!({ "items": rows })))
+}
+
+/// `GET /v1/pc/proposals?project_id=&status=`：项目 PC 提案列表（审批页签供给）。
+///
+/// 只读管理面；`status` 可选过滤（审批页签默认拉 `submitted` + 全量两段由前端
+/// 组合）；决策（approve/reject + CAS）走既有 P5 端点。
+async fn list_pc_proposals(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let project_id = query
+        .get("project_id")
+        .and_then(|v| uuid::Uuid::parse_str(v).ok())
+        .ok_or(ApiError::BadRequest("project_id is required"))?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await?;
+    let status_filter = query.get("status").map(|s| s.trim().to_string());
+    let rows: Vec<serde_json::Value> = sqlx::query(
+        "SELECT p.id, p.title, p.status, p.risk_level, p.confidence, p.origin_kind,                 p.expected_version_no, p.proposal_content_hash, p.submitted_at, p.created_at,                 (SELECT count(*) FROM pc.proposal_member m                   WHERE m.tenant_id = p.tenant_id AND m.project_id = p.project_id                     AND m.proposal_id = p.id) AS member_count            FROM pc.proposal p           WHERE p.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1)             AND p.project_id = $1             AND ($2::text IS NULL OR p.status = $2)           ORDER BY p.created_at DESC",
+    )
+    .bind(project_id)
+    .bind(status_filter)
+    .fetch_all(&state.pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        json!({
+            "proposal_id": row.get::<uuid::Uuid, _>("id"),
+            "title": row.get::<String, _>("title"),
+            "status": row.get::<String, _>("status"),
+            "risk_level": row.get::<String, _>("risk_level"),
+            "confidence": row.get::<String, _>("confidence"),
+            "origin_kind": row.get::<String, _>("origin_kind"),
+            "expected_version_no": row.get::<i64, _>("expected_version_no"),
+            "member_count": row.get::<i64, _>("member_count"),
+            "submitted_at": row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("submitted_at"),
+            "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
         })
     })
     .collect();

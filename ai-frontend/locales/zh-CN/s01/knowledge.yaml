@@ -5,6 +5,7 @@ knowledge:
   tab:
     kb: KB 文档
     pc: PC 对象
+    proposals: PC 提案
   status:
     draft: 草稿
     published: 已发布
@@ -33,3 +34,25 @@ knowledge:
     loading: 加载中…
     emptyKb: 暂无 KB 文档——分析产物经确认后在此可见
     emptyPc: 暂无 PC 认知对象——提案发布后在此可见
+    emptyProposals: 暂无提案——AI 分析起草或人工创建后在此可见
+  proposalStatus:
+    draft: 草稿
+    submitted: 待审批
+    approved: 已批准
+    rejected: 已驳回
+    withdrawn: 已撤回
+    expired: 已过期
+    applied: 已应用
+    failed: 失败
+  proposal:
+    members: 个成员对象
+    approve: 批准并发布
+    reject: 驳回
+  impact:
+    title: 影响分析（跨域关系遍历）
+    placeholder: 例如：修改订单状态会影响哪些需求与设计？
+    run: 分析
+    running: 分析中…
+    degraded: 规划器未介入（{reason}）——已用固定双域策略
+    noEdges: 未找到正式关系路径（gaps 见下）
+    gap: 缺口

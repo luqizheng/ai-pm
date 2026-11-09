@@ -4,14 +4,20 @@ import { useI18n } from "vue-i18n";
 import PageFrame from "@/components/shell/PageFrame.vue";
 import {
   confirmKbRevision,
+  decidePcProposal,
   getKbDocument,
   listKbDocuments,
   listPcObjects,
+  listPcProposals,
+  retrievalQuery,
   type KbDocumentDetail,
   type KbDocumentRow,
-  type PcObjectRow
+  type PcObjectRow,
+  type PcProposalRow,
+  type RetrievalQueryResponse
 } from "@/api/knowledge";
 import { useShellStore } from "@/stores/shell";
+import { useRoute } from "vue-router";
 import MarkdownViewer from "@/components/ui/markdown-editor/MarkdownViewer.vue";
 
 /**
@@ -25,13 +31,14 @@ const { t } = useI18n();
 const shell = useShellStore();
 const currentProjectId = computed(() => shell.currentProjectId);
 
-type TabKey = "kb" | "pc";
+type TabKey = "kb" | "pc" | "proposals";
 const activeTab = ref<TabKey>("kb");
 const loading = ref(false);
 const errorText = ref("");
 
 const kbRows = ref<KbDocumentRow[]>([]);
 const pcRows = ref<PcObjectRow[]>([]);
+const proposalRows = ref<PcProposalRow[]>([]);
 
 /** 展开的文档详情（按 document_id 缓存，避免来回切换重复拉取）。 */
 const detail = ref<KbDocumentDetail | null>(null);
@@ -47,12 +54,14 @@ async function loadLists() {
   errorText.value = "";
   try {
     const projectId = currentProjectId.value as string;
-    const [kb, pc] = await Promise.all([
+    const [kb, pc, proposals] = await Promise.all([
       listKbDocuments(projectId),
-      listPcObjects(projectId)
+      listPcObjects(projectId),
+      listPcProposals(projectId)
     ]);
     kbRows.value = kb.items;
     pcRows.value = pc.items;
+    proposalRows.value = proposals.items;
   } catch {
     errorText.value = t("s01.knowledge.error.load");
   } finally {
@@ -105,6 +114,93 @@ async function confirmPublish(row: KbDocumentRow) {
   }
 }
 
+/* ── PC 提案审批（P5；CAS + 治理授权门在后端）────────────────────────── */
+
+const decidingId = ref<string | null>(null);
+const decisionNotice = ref("");
+
+async function decide(row: PcProposalRow, action: "approve" | "reject") {
+  if (!canLoad.value || decidingId.value) return;
+  decidingId.value = row.proposal_id;
+  decisionNotice.value = "";
+  try {
+    await decidePcProposal(row.proposal_id, currentProjectId.value as string, {
+      action,
+      expected_version_no: row.expected_version_no
+    });
+    decisionNotice.value = t(
+      `s01.knowledge.notice.${action === "approve" ? "approved" : "rejected"}`
+    );
+    await loadLists();
+  } catch {
+    decisionNotice.value = t("s01.knowledge.error.decide");
+  } finally {
+    decidingId.value = null;
+  }
+}
+
+function proposalTone(status: string): string {
+  if (status === "approved" || status === "applied") return "tone-ok";
+  if (status === "submitted") return "tone-warn";
+  if (status === "rejected" || status === "failed") return "tone-bad";
+  return "tone-muted";
+}
+
+/* ── 深链（搜索结果 → 自动展开 / 切页签）────────────────────────────── */
+
+const route = useRoute();
+
+async function applyDeepLink() {
+  const docId = route.query.doc;
+  const objectId = route.query.object;
+  if (typeof docId === "string" && docId) {
+    activeTab.value = "kb";
+    if (!detail.value || detail.value.document.document_id !== docId) {
+      const row = kbRows.value.find(r => r.document_id === docId);
+      if (row) await openDetail(row);
+    }
+    return;
+  }
+  if (typeof objectId === "string" && objectId) {
+    activeTab.value = "pc";
+  }
+}
+
+/* ── 影响分析（遍历可视化；检索响应自带 traversal）───────────────────── */
+
+const impactQuery = ref("");
+const impactRunning = ref(false);
+const impactResult = ref<RetrievalQueryResponse | null>(null);
+const impactError = ref("");
+
+/** pc:{uuid} 节点映射为展示名（来自已加载的 PC 对象列表）；其余截短。 */
+function nodeLabel(node: string): string {
+  if (node.startsWith("pc:")) {
+    const id = node.slice(3);
+    const match = pcRows.value.find(o => o.object_id === id);
+    if (match) return match.display_name;
+  }
+  return node.length > 18 ? `${node.slice(0, 15)}…` : node;
+}
+
+async function runImpact() {
+  if (!canLoad.value || impactRunning.value || !impactQuery.value.trim())
+    return;
+  impactRunning.value = true;
+  impactError.value = "";
+  impactResult.value = null;
+  try {
+    impactResult.value = await retrievalQuery(
+      impactQuery.value.trim(),
+      currentProjectId.value as string
+    );
+  } catch {
+    impactError.value = t("s01.knowledge.error.load");
+  } finally {
+    impactRunning.value = false;
+  }
+}
+
 function closeDetail() {
   detail.value = null;
   confirmedNotice.value = "";
@@ -136,11 +232,24 @@ const latestDraft = computed(() => {
   return detail.value.revisions.find(r => r.status === "draft") ?? null;
 });
 
-onMounted(loadLists);
-watch(currentProjectId, () => {
-  closeDetail();
-  loadLists();
+onMounted(async () => {
+  await loadLists();
+  await applyDeepLink();
 });
+watch(currentProjectId, async () => {
+  closeDetail();
+  impactResult.value = null;
+  await loadLists();
+  // 项目就绪后再放深链（搜索点击先于项目注入到达时，此处兜底）。
+  await applyDeepLink();
+});
+// 同页深链（搜索结果二次点击）也响应。
+watch(
+  () => route.query,
+  () => {
+    applyDeepLink();
+  }
+);
 </script>
 
 <template>
@@ -168,7 +277,87 @@ watch(currentProjectId, () => {
         >
           {{ t("s01.knowledge.tab.pc") }} ({{ pcRows.length }})
         </button>
+        <button
+          role="tab"
+          :aria-selected="activeTab === 'proposals'"
+          class="knowledge-tab"
+          :class="{ 'is-active': activeTab === 'proposals' }"
+          @click="activeTab = 'proposals'"
+        >
+          {{ t("s01.knowledge.tab.proposals") }} ({{ proposalRows.length }})
+        </button>
       </div>
+
+      <!-- 影响分析（遍历可视化；正式关系多跳） -->
+      <details class="impact-panel">
+        <summary>{{ t("s01.knowledge.impact.title") }}</summary>
+        <div class="impact-body">
+          <form class="impact-form" @submit.prevent="runImpact">
+            <input
+              v-model="impactQuery"
+              class="impact-input"
+              :placeholder="t('s01.knowledge.impact.placeholder')"
+            />
+            <button class="kb-confirm" :disabled="impactRunning" type="submit">
+              {{
+                impactRunning
+                  ? t("s01.knowledge.impact.running")
+                  : t("s01.knowledge.impact.run")
+              }}
+            </button>
+          </form>
+          <p v-if="impactError" class="knowledge-error" role="alert">
+            {{ impactError }}
+          </p>
+          <template v-if="impactResult">
+            <p v-if="impactResult.degraded" class="knowledge-hint">
+              {{
+                t("s01.knowledge.impact.degraded", {
+                  reason: impactResult.degradation_reason ?? ""
+                })
+              }}
+            </p>
+            <ol
+              v-if="impactResult.evidence.traversal.edges.length"
+              class="impact-path"
+            >
+              <li
+                v-for="edge in impactResult.evidence.traversal.edges"
+                :key="edge.relationship_id + edge.traversal_direction"
+              >
+                <span class="impact-node">{{ nodeLabel(edge.source_id) }}</span>
+                <span class="impact-edge">
+                  {{ edge.traversal_direction === "reverse" ? "←" : "→" }}
+                  {{ edge.relationship_type }}
+                  {{ edge.traversal_direction === "reverse" ? "←" : "→" }}
+                </span>
+                <span class="impact-node">{{ nodeLabel(edge.target_id) }}</span>
+              </li>
+            </ol>
+            <p v-else class="knowledge-hint">
+              {{ t("s01.knowledge.impact.noEdges") }}
+            </p>
+            <ul
+              v-if="
+                impactResult.evidence.gaps.length ||
+                impactResult.evidence.traversal.gaps.length
+              "
+              class="impact-gaps"
+            >
+              <li
+                v-for="(gap, gi) in [
+                  ...impactResult.evidence.gaps,
+                  ...impactResult.evidence.traversal.gaps
+                ]"
+                :key="gi"
+              >
+                {{ t("s01.knowledge.impact.gap") }}: {{ gap.kind }} —
+                {{ gap.detail }}
+              </li>
+            </ul>
+          </template>
+        </div>
+      </details>
 
       <p v-if="errorText" class="knowledge-error" role="alert">
         {{ errorText }}
@@ -262,6 +451,44 @@ watch(currentProjectId, () => {
                 <MarkdownViewer :model-value="detail.content ?? ''" />
               </details>
             </template>
+          </div>
+        </li>
+      </ul>
+
+      <!-- PC 提案审批 -->
+      <ul
+        v-if="activeTab === 'proposals' && proposalRows.length"
+        class="pc-list"
+      >
+        <li v-for="p in proposalRows" :key="p.proposal_id" class="pc-row">
+          <div class="pc-head">
+            <span class="pc-name">{{ p.title }}</span>
+            <span class="kb-badge" :class="proposalTone(p.status)">{{
+              t(`s01.knowledge.proposalStatus.${p.status}`)
+            }}</span>
+            <span class="pc-type"
+              >v{{ p.expected_version_no }} · {{ p.member_count }}
+              {{ t("s01.knowledge.proposal.members") }}</span
+            >
+          </div>
+          <p v-if="decisionNotice" class="kb-notice" role="status">
+            {{ decisionNotice }}
+          </p>
+          <div v-if="p.status === 'submitted'" class="kb-detail-actions">
+            <button
+              class="kb-confirm"
+              :disabled="decidingId === p.proposal_id"
+              @click="decide(p, 'approve')"
+            >
+              {{ t("s01.knowledge.proposal.approve") }}
+            </button>
+            <button
+              class="kb-close"
+              :disabled="decidingId === p.proposal_id"
+              @click="decide(p, 'reject')"
+            >
+              {{ t("s01.knowledge.proposal.reject") }}
+            </button>
           </div>
         </li>
       </ul>
@@ -496,5 +723,67 @@ watch(currentProjectId, () => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.impact-panel {
+  border: 1px solid var(--border-subtle, var(--ws-border, #d0d0d0));
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.impact-panel summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary, var(--ws-text, #555));
+}
+
+.impact-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+  padding-top: var(--space-3, 12px);
+}
+
+.impact-form {
+  display: flex;
+  gap: var(--space-2, 8px);
+}
+
+.impact-input {
+  flex: 1;
+  border: 1px solid var(--border-subtle, var(--ws-border, #d0d0d0));
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  background: var(--surface-card, var(--ws-surface, #fff));
+  color: var(--text-primary, var(--ws-text, #111));
+}
+
+.impact-path {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.impact-node {
+  font-weight: 600;
+  color: var(--text-primary, var(--ws-text, #111));
+}
+
+.impact-edge {
+  color: var(--accent-subtle, var(--ws-accent, #2563eb));
+  margin: 0 6px;
+}
+
+.impact-gaps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  color: var(--text-warning, #8a5a00);
 }
 </style>

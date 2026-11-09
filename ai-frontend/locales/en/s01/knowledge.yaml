@@ -5,6 +5,7 @@ knowledge:
   tab:
     kb: KB Documents
     pc: PC Objects
+    proposals: PC Proposals
   status:
     draft: Draft
     published: Published
@@ -33,3 +34,25 @@ knowledge:
     loading: Loading…
     emptyKb: No KB documents yet — analysis drafts appear here after confirmation
     emptyPc: No PC cognition objects yet — they appear here after version publication
+    emptyProposals: No proposals yet — AI drafts or manual creations appear here
+  proposalStatus:
+    draft: Draft
+    submitted: Awaiting review
+    approved: Approved
+    rejected: Rejected
+    withdrawn: Withdrawn
+    expired: Expired
+    applied: Applied
+    failed: Failed
+  proposal:
+    members: member object(s)
+    approve: Approve & Publish
+    reject: Reject
+  impact:
+    title: Impact analysis (cross-domain traversal)
+    placeholder: e.g. what requirements and designs does changing order status affect?
+    run: Analyze
+    running: Analyzing…
+    degraded: Planner bypassed ({reason}) — fixed dual-domain strategy used
+    noEdges: No formal relationship path found (see gaps)
+    gap: Gap
