@@ -4,7 +4,7 @@ import { createPinia } from "pinia";
 import App from "./App.vue";
 import { i18n } from "./lib/i18n";
 import { installVirtualScrollbars } from "./lib/virtual-scrollbar";
-import { router } from "./router";
+import { designRoutesReady, router } from "./router";
 
 /**
  * ai-frontend 入口。
@@ -14,7 +14,19 @@ import { router } from "./router";
  */
 import "./styles/index.css";
 
-createApp(App).use(createPinia()).use(i18n).use(router).mount("#app");
+const app = createApp(App);
+app.use(createPinia()).use(i18n);
 
-// 全系统虚拟滚动条（Figma 式 overlay，原生条已在 index.css 全局隐藏）
-installVirtualScrollbars();
+/**
+ * router 必须在设计目录路由注册完成后才装：router.install() 会立刻触发首航，
+ * 首航若早于注册，/design 只匹配 404 兜底并被认证守卫踢去登录页——而设计目录
+ * 对匿名访客始终开放（见 src/router/index.ts 的 designRoutesReady 注释）。
+ * 设计目录仅开发期存在，生产构建里该 promise 立即兑现，不产生额外等待。
+ */
+void designRoutesReady.then(() => {
+  app.use(router);
+  app.mount("#app");
+
+  // 全系统虚拟滚动条（Figma 式 overlay，原生条已在 index.css 全局隐藏）
+  installVirtualScrollbars();
+});
