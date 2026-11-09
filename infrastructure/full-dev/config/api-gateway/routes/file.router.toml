@@ -1,9 +1,40 @@
-# 2026-11-07 裁决：file-service 收口为纯内部服务（/file/* 只认 service-jwt,
-# aud=file-service），用户面路由全部撤下。文件动作经业务服务出站调用
-# （ServiceJwtCache），归属身份由调用方在 metadata 中显式声明。
-# presign 签名 URL 仍是用户免 JWT 下载的合法通道，但创建动作不再对用户开放。
+# 文件路由（2026-11-10 重排）。
+#
+# ① file-service 收口为纯内部服务（/file/* 只认 service-jwt，aud=file-service），
+#    网关无法铸造该类 token——用户面路由全部改走 pm-api 的文件代理
+#    （apps/pm-api/src/files.rs：按请求租户铸 service-jwt，归属身份由鉴权层决定）。
+# ② 预签名 URL 仍是用户免 JWT 下载的合法通道，但创建动作不再对用户开放；
+#    浏览器凭 presign 直连对象存储（RustFS）取字节。
+#
+# 命名空间归属：本文件独占 /v1/file/*（health 静态段在前、通配在后；网关按
+# glob 文件名加载，本文件先于 pm.router.toml 生效）。
 [[route]]
 upstream   = "/v1/file/health"
 downstream = "/health"
 service    = "file-service"
 public     = true
+
+[[route]]
+upstream   = "/v1/file/upload"
+downstream = "/v1/file/upload"
+service    = "pm-api"
+
+[[route]]
+upstream   = "/v1/file/list"
+downstream = "/v1/file/list"
+service    = "pm-api"
+
+[[route]]
+upstream   = "/v1/file/presign"
+downstream = "/v1/file/presign"
+service    = "pm-api"
+
+[[route]]
+upstream   = "/v1/file/{id}/info"
+downstream = "/v1/file/{id}/info"
+service    = "pm-api"
+
+[[route]]
+upstream   = "/v1/file/{id}"
+downstream = "/v1/file/{id}"
+service    = "pm-api"

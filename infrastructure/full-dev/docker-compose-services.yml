@@ -32,6 +32,45 @@ x-loki-labels: &loki-labels
 
 
 services:
+  # ── 对象存储（RustFS，S3 兼容）─────────────────────────────────────────────
+  # 附件与大产物的权威存储。file-service 以 rustfs 后端直连本服务
+  # （FILE_STORAGE_BACKEND=rustfs），浏览器经预签名 URL 直传直取。
+  #
+  # ⚠️ RUSTFS_PUBLIC_ENDPOINT 必须是「浏览器与容器都能解析」的同一个地址：
+  #    预签名把 host 写进 SigV4 签名，两端不一致签名即失效，且 file-service
+  #    自身的服务端读写也走同一个 endpoint（内部取不到 host.docker.internal
+  #    之外的地址时，file-service 会绕宿主发布端口回环，属预期行为）。
+  #    本机 dev 用 host.docker.internal；跨主机部署改成本机 LAN IP。
+  rustfs:
+    image: "${IMAGE_RUSTFS:?IMAGE_RUSTFS 未定义——请加载 .image.env（node scripts/update-image-env.js -v <ver>）}"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    labels:
+      <<: *loki-labels
+      service: rustfs
+    environment:
+      RUSTFS_ACCESS_KEY: "${RUSTFS_ACCESS_KEY:?RUSTFS_ACCESS_KEY 未定义}"
+      RUSTFS_SECRET_KEY: "${RUSTFS_SECRET_KEY:?RUSTFS_SECRET_KEY 未定义}"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      # 单盘布局：必须挂到镜像自带的 /data（该目录属主是 rustfs:10001，Docker
+      # 复制镜像目录属主到命名卷）。挂到 /data/<子目录> 会由 Docker 以 root 创建，
+      # RustFS 以非 root 运行 → Permission denied。
+      RUSTFS_VOLUMES: "/data"
+      RUSTFS_CORS_ALLOWED_ORIGINS: "${RUSTFS_CORS_ALLOWED_ORIGINS:-*}"
+    volumes:
+      - rustfs-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - superpowers
+
   file-service:
     image: "${IMAGE_FILE_SERVICE:?IMAGE_FILE_SERVICE 未定义——请加载 .image.env（node scripts/update-image-env.js -v <ver>）}"
     build:
@@ -47,12 +86,28 @@ services:
       SERVICE_PORT: "8082"
       JWKS_URL: "${JWKS_URL}"
       DATABASE_URL: "${DATABASE_URL}"
-      STORAGE_PATH: "/var/lib/file-service/storage"
+      # 存储后端：rustfs（= S3 兼容语义；上游内置 local|rustfs|s3 三档）。
+      # 文件元数据仍落 file-service 自己的库，对象字节落 RustFS。
+      FILE_STORAGE_BACKEND: "rustfs"
+      S3_ENDPOINT: "${RUSTFS_PUBLIC_ENDPOINT:?RUSTFS_PUBLIC_ENDPOINT 未定义——浏览器与容器必须都能解析的同一地址}"
+      S3_ACCESS_KEY: "${RUSTFS_ACCESS_KEY:?RUSTFS_ACCESS_KEY 未定义}"
+      S3_SECRET_KEY: "${RUSTFS_SECRET_KEY:?RUSTFS_SECRET_KEY 未定义}"
+      S3_BUCKET: "${RUSTFS_BUCKET:-ai-pm}"
+      S3_REGION: "${RUSTFS_REGION:-us-east-1}"
+      S3_PATH_STYLE: "true"
+      S3_AUTO_CREATE_BUCKET: "true"
       RUST_LOG: "info"
       OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
       SERVICE_NAME: "file-service"
-    volumes:
-      - file-storage:/var/lib/file-service/storage
+    # RUSTFS_PUBLIC_ENDPOINT 用的是独立主机名（默认 rustfs.local）而非容器名：
+    # 预签名 URL 把 host 写进 SigV4 签名，浏览器侧必须能解析同一个名字。
+    # 容器侧把该名字指到宿主网关（host-gateway）→ 命中宿主发布的 9000 端口；
+    # 浏览器侧由 hosts/DNS 指到同一端口（见 .env.example 的说明）。
+    extra_hosts:
+      - "rustfs.local:host-gateway"
+    depends_on:
+      rustfs:
+        condition: service_healthy
     networks:
       - superpowers
 
@@ -287,8 +342,8 @@ services:
 
 
 volumes:
-  file-storage:
-    name: superpowers_file-storage
+  rustfs-data:
+    name: superpowers_rustfs-data
 
 networks:
   superpowers:

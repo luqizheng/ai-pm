@@ -1,0 +1,25 @@
+# pm-api 用户面路由（2026-11-10 恢复）。
+#
+# 1) /v1/pm/*：pm 与 iam 一致挂网关对外（vite /api → :3000，prod nginx /api → :3000）。
+#    pm-api 内部路径同为 /v1/pm/*，无下游前缀改写（identity 映射）。
+# 2) /v1/file/*：文件动作走 pm-api 的文件代理，**不直连 file-service**——
+#    file-service 已收口为纯内部服务（只认 service-jwt，aud=file-service），
+#    网关无法铸造该类 token；pm-api 的代理按请求租户铸 service-jwt，是唯一
+#    合法的用户面入口（apps/pm-api/src/files.rs）。该命名空间归
+#    file.router.toml，本文件只管 pm 业务面。
+# 非 public：网关边缘先验 JWT（GW_JWKS_URL / GW_ISSUER），pm-api 自身 jwks fail-closed 二次验证。
+[[route]]
+upstream   = "/v1/pm/health"
+downstream = "/health"
+service    = "pm-api"
+public     = true
+
+[[route]]
+upstream   = "/v1/pm/{rest}"
+downstream = "/v1/pm/{rest}"
+service    = "pm-api"
+
+[[route]]
+upstream   = "/v1/pm"
+downstream = "/v1/pm"
+service    = "pm-api"

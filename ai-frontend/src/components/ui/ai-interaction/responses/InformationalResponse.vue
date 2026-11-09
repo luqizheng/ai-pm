@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { Check, Copy, FileText, MessageSquare } from "lucide-vue-next";
 
 import MarkdownViewer from "@/components/ui/markdown-editor/MarkdownViewer.vue";
+import { resolveAttachmentUrl } from "@/api/base/attachments";
 import AiResponseCard from "../card/AiResponseCard.vue";
 import { defaultAiIdentity } from "../identity";
 import type {
@@ -113,7 +114,10 @@ onBeforeUnmount(() => {
     :actions="actions"
     @action="onAction"
   >
-    <MarkdownViewer :model-value="props.payload.contentMarkdown" />
+    <MarkdownViewer
+      :model-value="props.payload.contentMarkdown"
+      :resolve-url="resolveAttachmentUrl"
+    />
 
     <section v-if="sources.length" class="ai-info__sources">
       <p class="ai-info__sources-label">

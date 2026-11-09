@@ -323,6 +323,17 @@ describe("RichTextEditorControl", () => {
 
     expect(wrapper.emitted("update:modelValue")?.[0]).toEqual(["# 新正文"]);
   });
+
+  it("注入附件端口：编辑器拿到上传处理器（上传链路可达）", () => {
+    const wrapper = mountControl(RichTextEditorControl, {
+      modelValue: ""
+    });
+
+    void wrapper;
+    const instance = fake.instances[0];
+    const upload = instance.options.upload as { handler?: unknown };
+    expect(upload.handler).toBeTypeOf("function");
+  });
 });
 
 describe("DiffViewer", () => {

@@ -5,6 +5,7 @@ import { CircleCheck, TriangleAlert } from "lucide-vue-next";
 
 import Button from "@/components/ui/button/Button.vue";
 import MarkdownViewer from "@/components/ui/markdown-editor/MarkdownViewer.vue";
+import { resolveAttachmentUrl } from "@/api/base/attachments";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 import AiResponseCard from "../card/AiResponseCard.vue";
 import { defaultAiIdentity } from "../identity";
@@ -177,7 +178,10 @@ function onAction(key: string) {
     @retry="retry"
   >
     <section class="ai-reco__explanation">
-      <MarkdownViewer :model-value="props.payload.explanationMarkdown" />
+      <MarkdownViewer
+        :model-value="props.payload.explanationMarkdown"
+        :resolve-url="resolveAttachmentUrl"
+      />
     </section>
 
     <section v-if="props.payload.benefits.length" class="ai-reco__block">

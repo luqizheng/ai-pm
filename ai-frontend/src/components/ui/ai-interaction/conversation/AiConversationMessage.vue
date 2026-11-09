@@ -11,6 +11,7 @@ import ProposalResponse from "../responses/ProposalResponse.vue";
 import QuestionResponse from "../responses/QuestionResponse.vue";
 import RecommendationResponse from "../responses/RecommendationResponse.vue";
 import MarkdownViewer from "@/components/ui/markdown-editor/MarkdownViewer.vue";
+import { resolveAttachmentUrl } from "@/api/base/attachments";
 import { defaultAiIdentity } from "../identity";
 import type { AiResponseType, ConversationMessage } from "../types";
 
@@ -121,6 +122,7 @@ function formatTime(iso: string): string {
         v-if="message.text"
         class="ai-conversation-message__text"
         :model-value="message.text"
+        :resolve-url="resolveAttachmentUrl"
       >
         <template #empty>
           <p class="ai-conversation-message__plain">{{ message.text }}</p>
