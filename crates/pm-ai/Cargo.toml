@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
+kb-pc-contracts = { path = "../kb-pc-contracts" }
 pm-application = { path = "../pm-application" }
 pm-domain = { path = "../pm-domain" }
 pm-infrastructure = { path = "../pm-infrastructure" }

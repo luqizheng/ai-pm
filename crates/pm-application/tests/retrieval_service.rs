@@ -27,7 +27,7 @@ struct FakePlanner {
 
 #[async_trait::async_trait]
 impl PlannerModel for FakePlanner {
-    async fn plan(&self, _query: &str) -> Result<String, PlannerModelError> {
+    async fn plan(&self, _project_id: Uuid, _query: &str) -> Result<String, PlannerModelError> {
         self.result.clone()
     }
 }

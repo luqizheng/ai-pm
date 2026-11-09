@@ -630,7 +630,10 @@ pub enum PlannerModelError {
 #[async_trait]
 pub trait PlannerModel: Send + Sync {
     /// 产出检索计划（JSON 文本，由调用方解析）。
-    async fn plan(&self, query: &str) -> Result<String, PlannerModelError>;
+    ///
+    /// `project_id` 必传——**模型策略是项目级的**（`ai.project_ai_model_policy`
+    /// + Team Provider 三级解析）。
+    async fn plan(&self, project_id: Uuid, query: &str) -> Result<String, PlannerModelError>;
 }
 
 /// 统一检索端口（V1 进程内；Phase 7 换 HTTP）。

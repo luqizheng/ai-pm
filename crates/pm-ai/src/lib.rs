@@ -16,6 +16,7 @@ pub mod model;
 pub mod openai_adapter;
 pub mod orchestrator;
 pub mod repo_model;
+pub mod retrieval_planner;
 pub mod self_review;
 pub mod skill_router;
 pub mod snapshot_model;

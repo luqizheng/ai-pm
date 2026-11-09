@@ -53,7 +53,7 @@ impl RetrievalServiceLive {
         caller: &RetrievalCaller,
     ) -> Result<RetrievalResponse, RetrievalError> {
         // ① 计划（LLM 或确定性降级）。
-        let (plan, source, degradation) = self.build_plan(query).await;
+        let (plan, source, degradation) = self.build_plan(caller.project_id, query).await;
 
         // ② 校验（不可绕过的唯一执行入口）。
         let validated = validator::validate(&self.pool, plan, caller)
@@ -95,6 +95,7 @@ impl RetrievalServiceLive {
     /// 计划构建（LLM 或降级）。
     async fn build_plan(
         &self,
+        project_id: uuid::Uuid,
         query: &str,
     ) -> (
         RetrievalPlan,
@@ -110,7 +111,7 @@ impl RetrievalServiceLive {
             );
         };
 
-        match planner.plan(query).await {
+        match planner.plan(project_id, query).await {
             Ok(raw) => match serde_json::from_str::<RetrievalPlan>(&raw) {
                 Ok(plan) => (plan, RetrievalPlanSource::LlmPlanner, None),
                 Err(_) => (
@@ -218,9 +219,9 @@ impl RetrievalPort for RetrievalServiceLive {
     async fn plan(
         &self,
         query: &str,
-        _caller: &RetrievalCaller,
+        caller: &RetrievalCaller,
     ) -> Result<RetrievalPlan, kb_pc_contracts::PortError> {
-        let (plan, _, _) = self.build_plan(query).await;
+        let (plan, _, _) = self.build_plan(caller.project_id, query).await;
         Ok(plan)
     }
 

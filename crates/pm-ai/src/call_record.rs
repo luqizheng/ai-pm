@@ -27,6 +27,8 @@ pub const PURPOSE_CONVERSATION_ROUTER: &str = "conversation_router";
 /// P2-13/D-1=A（2026-11-08）：仓库快照分析的 LLM 增强调用（PC-I6 起笔切片）。
 /// KB digest 与 PC 对象各记一条，purpose 区分面（0062 analysis_mode 对账）。
 pub const PURPOSE_KB_SNAPSHOT_ANALYSIS: &str = "kb_snapshot_analysis";
+/// WP-1：检索规划器（成本归因 RT-025）。
+pub const PURPOSE_RETRIEVAL_PLANNER: &str = "retrieval_planner";
 pub const PURPOSE_PC_SNAPSHOT_ANALYSIS: &str = "pc_snapshot_analysis";
 /// D-DK-11（2026-11-08）：对话编排轮次的 LLM 调用（编排轮 + 需求起草 + 任务分解）。
 /// 独立值而非复用 `conversation_reply`：账本上必须能分开「闲聊成本」与
