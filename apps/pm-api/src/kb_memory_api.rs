@@ -53,6 +53,7 @@ pub(crate) fn router() -> Router<AppState> {
             post(confirm_document_revision),
         )
         .route("/v1/kb/documents", get(list_kb_documents))
+        .route("/v1/kb/documents/ingest", post(ingest_kb_document))
         .route("/v1/kb/documents/{document_id}", get(get_kb_document))
 }
 
@@ -174,6 +175,61 @@ async fn confirm_document_revision(
     Ok(Json(json!(outcome)))
 }
 
+// ── 摄入链（解析→draft）─────────────────────────────────────────────────
+
+/// `POST /v1/kb/documents/ingest?project_id=`：摄入（解析→draft；等待真人确认）。
+///
+/// 红线③：解析只能产生 Draft——本端点不产事件、不进检索；确认走 confirm 门。
+/// body：`{ "doc_key": "...", "doc_type": "knowledge", "kind": "markdown"|"text"|"docx", "content_b64": "..." }`
+/// （docx 为二进制 base64；md/txt 亦可直接 UTF-8 文本 base64。）
+async fn ingest_kb_document(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Query(query): Query<HashMap<String, String>>,
+    Json(body): Json<serde_json::Value>,
+) -> ApiResult<Json<serde_json::Value>> {
+    use base64::Engine as _;
+    let project_id = scope(&state, &caller, &query).await?;
+    let doc_key = body["doc_key"].as_str().unwrap_or("").trim().to_string();
+    let doc_type = body["doc_type"].as_str().unwrap_or("knowledge").to_string();
+    let kind = body["kind"].as_str().unwrap_or("").to_string();
+    let content_b64 = body["content_b64"].as_str().unwrap_or("").to_string();
+    if doc_key.is_empty() || content_b64.is_empty() {
+        return Err(ApiError::BadRequest("doc_key and content_b64 are required"));
+    }
+    let parse_kind = match kind.as_str() {
+        "markdown" => pm_application::knowledge_parse::ParseKind::Markdown,
+        "text" => pm_application::knowledge_parse::ParseKind::Text,
+        "docx" => pm_application::knowledge_parse::ParseKind::Docx,
+        _ => return Err(ApiError::BadRequest("kind must be markdown | text | docx")),
+    };
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(content_b64.as_bytes())
+        .map_err(|_| ApiError::BadRequest("content_b64 is not valid base64"))?;
+
+    let input = pm_application::kb_service::document::IngestInput {
+        doc_key,
+        doc_type,
+        parse_kind,
+        bytes,
+    };
+    let (document_id, revision_id, revision_no) =
+        pm_application::kb_service::document::ingest_document(
+            &state.pool,
+            caller.tenant_id,
+            project_id,
+            input,
+            &caller.audit_actor(),
+        )
+        .await
+        .map_err(|e| ApiError::from(e))?;
+    Ok(Json(json!({
+        "document_id": document_id,
+        "revision_id": revision_id,
+        "revision_no": revision_no,
+        "status": "draft"
+    })))
+}
 
 // ── KB 文档库读面（前端 KnowledgeView 消费）────────────────────────────────
 
@@ -184,8 +240,7 @@ async fn list_kb_documents(
     Query(query): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let project_id = scope(&state, &caller, &query).await?;
-    let items =
-        document::list_documents(&state.pool, caller.tenant_id, project_id).await?;
+    let items = document::list_documents(&state.pool, caller.tenant_id, project_id).await?;
     Ok(Json(json!({ "items": items })))
 }
 

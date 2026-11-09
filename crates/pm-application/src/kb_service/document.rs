@@ -384,3 +384,99 @@ pub async fn get_document(
         revisions,
     })
 }
+
+/* ── 摄入链（WP-0 解析层接线；红线③：解析只能产生 Draft）────────────────── */
+
+/// 摄入输入。
+pub struct IngestInput {
+    pub doc_key: String,
+    pub doc_type: String,
+    pub parse_kind: crate::knowledge_parse::ParseKind,
+    pub bytes: Vec<u8>,
+}
+
+/// 摄入：解析（纯函数）→ 家族追加 draft 修订（新 doc_key 建 document）。
+///
+/// **不产事件、不发 outbox**——draft 无检索语义；真人确认（[`confirm_revision`]
+/// ）才产 `published` 事件。版本族语义：同 doc_key 追加 revision_no = max+1
+/// （显式指定目标家族，非文件名自动归并——后者 gated D-6）。
+pub async fn ingest_document(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    input: IngestInput,
+    actor: &AuditActor,
+) -> Result<(Uuid, Uuid, i32), KbServiceError> {
+    let parsed = crate::knowledge_parse::parse(input.parse_kind, &input.bytes)
+        .map_err(|e| KbServiceError::Invalid(format!("parse failed: {e}")))?;
+    if parsed.markdown.trim().is_empty() {
+        return Err(KbServiceError::Invalid("parsed content is empty".into()));
+    }
+
+    let mut tx = pool.begin().await?;
+    ensure_project_writable(&mut tx, project_id).await?;
+
+    let content_hash = crate::pc::sha256_hex(&parsed.markdown);
+    let document_id: Uuid = match sqlx::query_scalar(
+        "SELECT id FROM kb.document \
+          WHERE tenant_id = $1 AND project_id = $2 AND doc_key = $3",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(&input.doc_key)
+    .fetch_optional(&mut *tx)
+    .await?
+    {
+        Some(id) => id,
+        None => sqlx::query_scalar(
+            "INSERT INTO kb.document (tenant_id, project_id, doc_key, doc_type, canonical_path) \
+             VALUES ($1, $2, $3, $4, $5) RETURNING id",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(&input.doc_key)
+        .bind(&input.doc_type)
+        .bind(format!("kb/{}", input.doc_key))
+        .fetch_one(&mut *tx)
+        .await?,
+    };
+    let revision_no: i32 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(revision_no), 0) + 1 FROM kb.document_revision WHERE document_id = $1",
+    )
+    .bind(document_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let revision_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO kb.document_revision \
+         (tenant_id, document_id, revision_no, content_hash, status, content, created_by) \
+         VALUES ($1, $2, $3, $4, 'draft', $5, $6) RETURNING id",
+    )
+    .bind(tenant_id)
+    .bind(document_id)
+    .bind(revision_no)
+    .bind(&content_hash)
+    .bind(&parsed.markdown)
+    .bind(actor.principal_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    super::audit(
+        &mut tx,
+        project_id,
+        actor,
+        "kb.document_revision.ingested",
+        "kb_document_revision",
+        revision_id,
+        serde_json::json!({
+            "document_id": document_id.to_string(),
+            "doc_key": input.doc_key,
+            "revision_no": revision_no,
+            "warnings": parsed.warnings,
+        }),
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok((document_id, revision_id, revision_no))
+}
