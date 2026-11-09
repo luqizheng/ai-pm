@@ -682,6 +682,45 @@ impl OutboxHandler for PcVersionPublishedHandler {
     }
 }
 
+/// kb.document_revision.published → 状态感知留痕（WP-0 内容管线接缝）。
+///
+/// **当前是留痕占位**：真正的检索索引管线在 WP-3 落地（`KbRevisionPublishedIndexHandler`
+/// 接同一事件、同一 trait 形状，worker 装配不动）。本 handler 先把「修订已正式发布」
+/// 这一事实记进平台通知面（去重键 = revision_id），满足 outbox 目录不变量
+/// 「有 handler 才有资格默认生产」。
+pub struct KbDocumentRevisionPublishedHandler {
+    pool: PgPool,
+}
+
+impl KbDocumentRevisionPublishedHandler {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait::async_trait]
+impl OutboxHandler for KbDocumentRevisionPublishedHandler {
+    async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
+        let revision_id = event
+            .payload
+            .get("document_ref")
+            .and_then(|r| r.get("target_revision_id"))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                "kb_document_revision_published missing document_ref.target_revision_id".to_string()
+            })?
+            .to_string();
+        notify_once(
+            &self.pool,
+            event.project_id,
+            "kb_document_revision_published",
+            &revision_id,
+            serde_json::json!({ "dedup_key": revision_id, "payload": event.payload }),
+        )
+        .await
+    }
+}
+
 /// pc.analysis.completed → 任务终态（NO_CHANGE 结论也是合法 COMPLETED，§9.4.2）。
 pub struct PcAnalysisCompletedHandler {
     pool: PgPool,
@@ -1107,6 +1146,10 @@ pub fn register_kb_pc_handlers(
         .with_handler(
             ev::PC_COGNITION_VERSION_PUBLISHED,
             Arc::new(PcVersionPublishedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::KB_DOCUMENT_REVISION_PUBLISHED,
+            Arc::new(KbDocumentRevisionPublishedHandler::new(pool.clone())),
         )
         .with_handler(
             ev::PROCESSING_FAILED,

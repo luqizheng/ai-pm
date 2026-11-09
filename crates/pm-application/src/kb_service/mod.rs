@@ -19,6 +19,7 @@
 //! `governance.audit_log`，`source_kind='kb_service'`，四身份列全写（C174/C180），
 //! 不落正文（检查单 A-4）；跨域事件只走 outbox（`kb.memory.approved`）。
 
+pub mod document;
 pub mod memory;
 pub mod port;
 pub mod retrieval;
@@ -34,6 +35,8 @@ pub use port::{KbCaller, KbServiceLive};
 pub const TYPE_SOURCE: &str = "source";
 pub const TYPE_MEMORY: &str = "memory";
 pub const TYPE_MEMORY_REVISION: &str = "memory_revision";
+/// `kb.document` 域内对象类型（四元组 `target_type` 取值）。
+pub const TYPE_DOCUMENT: &str = "document";
 
 /// 审计来源标签（`governance.audit_log.source_kind`）。
 pub const AUDIT_SOURCE_KIND: &str = "kb_service";

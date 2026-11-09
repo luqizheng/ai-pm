@@ -199,7 +199,7 @@ pub const CATALOG: &[EventSpec] = &[
         enabled_by_default: false,
         producer: "requirement.rs（留位；I4 改绑命令启用）",
     },
-    // ── KB-PC 服务化 13 项跨服务事件（V1.1 §13.3；wire 权威=
+    // ── KB-PC 服务化 14 项跨服务事件（V1.1 §13.3；wire 权威=
     // kb-pc-contracts::events::CATALOG，此处登记运行时面）。KP-1 起发布事务
     // 真实生产 pc.cognition.version_published（pc/publish.rs ⑫b），Platform
     // 消费面=状态感知留痕（kb_pc_handlers::PcVersionPublishedHandler）。
@@ -295,6 +295,22 @@ pub const CATALOG: &[EventSpec] = &[
         has_handler: true,
         enabled_by_default: true,
         producer: "任意服务失败上报",
+    },
+    EventSpec {
+        event_type: kb_pc_contracts::events::KB_DOCUMENT_REVISION_PUBLISHED,
+        event_version: 1,
+        // 消费方 = 检索索引管线（WP-3，尚未落地）→ 当前由**留痕型 handler**
+        // `KbDocumentRevisionPublishedHandler` 承接（把「修订已正式发布」记进平台
+        // 通知面，去重键 = revision_id）；WP-3 接手同一事件、同一 trait 形状，
+        // worker 装配不动。
+        //
+        // 生产侧为何现在就产：WP-0 事务性事件红线——确认与事件必须同事务提交，
+        // 不得先改库态再异步补事件。消费端缺席期不影响正确性：事件不丢
+        //（outbox 持久化 + 幂等键 `kb_document_revision_published:{revision_id}`），
+        // WP-3 上线时由 `rebuild_kb_index` 全量重建对齐存量索引。
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "kb_service/document.rs（KB 修订确认，WP-0）",
     },
 ];
 

@@ -1,4 +1,4 @@
-//! 13 项跨服务事件目录（V1.1 §13.3；**目录=单一真源，新增/变更走评审**）。
+//! 14 项跨服务事件目录（V1.1 §13.3；**目录=单一真源，新增/变更走评审**）。
 //!
 //! 本清单是 wire 层权威：事件类型常量、event_version、payload schema（字段
 //! 级声明）。`pm-application::outbox::CATALOG` 是生产登记面（enabled_by_default
@@ -15,7 +15,7 @@ pub type PayloadField = (&'static str, &'static str);
 pub struct EventContract {
     /// 事件类型（wire 形态，小写点分）。
     pub event_type: &'static str,
-    /// 当前版本（ADR-11：整数递增 + additive-only；13 项全部 v1 起步）。
+    /// 当前版本（ADR-11：整数递增 + additive-only；14 项全部 v1 起步）。
     pub event_version: u32,
     /// 生产方（信封顶层 producer）。
     pub producer: &'static str,
@@ -39,6 +39,9 @@ pub const KB_ANALYSIS_REQUESTED: &str = "kb.analysis.requested";
 pub const KB_ANALYSIS_COMPLETED: &str = "kb.analysis.completed";
 pub const KB_COGNITION_SIGNAL_EMITTED: &str = "kb.cognition_signal.emitted";
 pub const KB_MEMORY_APPROVED: &str = "kb.memory.approved";
+/// WP-0 内容管线接缝：KB 文档修订正式发布（draft → published）。
+/// 消费方 = 检索索引管线（WP-3）；**同事务写入**（不得先改库态再异步补事件）。
+pub const KB_DOCUMENT_REVISION_PUBLISHED: &str = "kb.document_revision.published";
 pub const PC_ANALYZE_REQUESTED: &str = "pc.analyze.requested";
 pub const PC_DECISION_SUBMITTED: &str = "pc.decision.submitted";
 pub const PC_ANALYSIS_COMPLETED: &str = "pc.analysis.completed";
@@ -50,7 +53,7 @@ pub const PROCESSING_FAILED: &str = "processing.failed";
 
 pub const EVENT_VERSION: u32 = 1;
 
-/// 13 项跨服务事件契约（V1.1 §13.3 目录全量）。
+/// 14 项跨服务事件契约（V1.1 §13.3 目录全量）。
 pub const CATALOG: &[EventContract] = &[
     EventContract {
         event_type: INTAKE_RECEIVED,
@@ -114,6 +117,19 @@ pub const CATALOG: &[EventContract] = &[
             ("memory_ref", "DomainRef"),
             ("reviewed_by", "string"),
             ("approval_state", "string"),
+        ],
+    },
+    EventContract {
+        event_type: KB_DOCUMENT_REVISION_PUBLISHED,
+        event_version: EVENT_VERSION,
+        producer: PRODUCER_KB,
+        consumers: &["platform"],
+        idempotency_key_hint: "document_revision_id",
+        payload_fields: &[
+            ("document_ref", "DomainRef"),
+            ("confirmed_by", "string"),
+            ("published_at", "string"),
+            ("revision_no", "number"),
         ],
     },
     EventContract {
@@ -309,8 +325,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn catalog_has_exactly_thirteen_events() {
-        assert_eq!(CATALOG.len(), 13);
+    fn catalog_has_exactly_fourteen_events() {
+        assert_eq!(CATALOG.len(), 14);
         for c in CATALOG {
             assert_eq!(c.event_version, 1, "{} must be v1", c.event_type);
             assert!(c.event_type.chars().all(|ch| ch == '.'

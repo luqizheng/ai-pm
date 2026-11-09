@@ -26,6 +26,7 @@ use axum::{
     Json, Router,
 };
 use pm_application::discussion_memory::{resolve_refs, MemoryRefRequest};
+use pm_application::kb_service::document;
 use pm_application::kb_service::memory::{self, ChangeAction, MemoryContent};
 use pm_application::kb_service::source::{self, RegisterSourceRequest};
 use pm_application::kb_service::KbServiceError;
@@ -46,6 +47,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/kb/memories/{memory_id}/changes",
             post(propose_memory_change),
+        )
+        .route(
+            "/v1/kb/documents/{document_id}/revisions/{revision_id}/confirm",
+            post(confirm_document_revision),
         )
 }
 
@@ -136,6 +141,35 @@ async fn get_source(
     let source_id = path_id(&source_id, "source not found")?;
     let view = source::get_source(&state.pool, project_id, source_id).await?;
     Ok(Json(json!(view)))
+}
+
+// ── Document Revisions（WP-0 内容管线接缝）────────────────────────────────
+
+/// `POST /v1/kb/documents/{document_id}/revisions/{revision_id}/confirm`：
+/// 确认发布（draft → published；幂等重确认 200 且不改原确认人/确认时间）。
+///
+/// **确认权三重门**（WP-0 裁决 Q-A=A\*）：可信人类交互上下文（`auth_mode=interactive`
+/// ——AI/Service Key 一律 403）+ 真人主体 + 项目成员。`scope()` 已含
+/// `require_project_visible`——非成员 404（不泄漏项目存在性）。
+async fn confirm_document_revision(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path((document_id, revision_id)): Path<(String, String)>,
+    Query(query): Query<HashMap<String, String>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let project_id = scope(&state, &caller, &query).await?;
+    let document_id = path_id(&document_id, "kb document revision not found")?;
+    let revision_id = path_id(&revision_id, "kb document revision not found")?;
+    let outcome = document::confirm_revision(
+        &state.pool,
+        caller.tenant_id,
+        project_id,
+        document_id,
+        revision_id,
+        &caller.audit_actor(),
+    )
+    .await?;
+    Ok(Json(json!(outcome)))
 }
 
 // ── Structured Memory（L1）──────────────────────────────────────────────────

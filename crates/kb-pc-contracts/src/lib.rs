@@ -11,7 +11,7 @@
 //! - [`registry`]：domain 注册表（PC-01B §13.1 逐域通道表的操作化）：wire
 //!   字符串 ↔ 枚举、归属服务、通道开放状态；解析失败返回告警错误类型。
 //! - [`envelope`]：事件信封（V1.1 §13.1 十一字段）。
-//! - [`events`]：13 项跨服务事件目录（V1.1 §13.3，目录=单一真源；与
+//! - [`events`]：14 项跨服务事件目录（V1.1 §13.3，目录=单一真源；与
 //!   `pm-application::outbox::CATALOG` 的登记面共用本清单常量）。
 //! - [`ports`]：KbServicePort / PcServicePort 端口 trait（V1.1 §12 契约），
 //!   V1 进程内实现占位——`PortNotWired` 返回未接线错误，业务落点归 Phase 4/5。
