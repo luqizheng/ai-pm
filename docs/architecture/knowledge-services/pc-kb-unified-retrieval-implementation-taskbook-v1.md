@@ -685,6 +685,19 @@ WP-6 不作为实质工作包，不增加独立架构建设任务，只管理 V1
 
 **五项门控共同原则：后置能力不能绕过 RetrievalPort、Policy Validator、EvidenceBundle 与 WP-5 评估体系。** Vector 与 BM25 都只能替换或扩展检索通道，**不能改变**：权限与版本硬过滤 / authority 五值语义 / 五维分列 / Traversal 不参与 RRF / Evidence 溯源 / Gaps-Degradations / BudgetReport。
 
+## 十一·B · WP-5 交付登记（2026-11-10，五交付物全落）
+
+| # | 交付物 | 状态 |
+| --- | --- | --- |
+| ① | RT 全量收口（RT-001~038 + 前缀测试 + 负向矩阵 NEG-01~06） | ✅ cargo-test 1403/1403 |
+| ② | Evaluation Harness（`examples/retrieval_eval.rs`，离线；同生产代码路径） | ✅ |
+| ③ | Synthetic Dataset V1（50 题 13 列完整 Ground Truth） | ✅ `docs/evaluation/datasets/synthetic-v1.csv` |
+| ④ | 指标实现（Recall@K/MRR/Exact/CJK/Edge×2/Endpoint/Miss/Locator/Authority + 三分法） | ✅ |
+| ⑤ | D-8 裁决包 | ✅ **GATED**（`docs/evaluation/d8-bm25-adjudication-v1.md`） |
+
+**V1 基线（合成集，Planner OFF）**：Recall@1 0.552 / **Recall@5 1.000** / MRR 0.741 / Exact 1.000 / Edge Recall 1.000 / Miss Recognition 1.000 / p95 4ms / 负向矩阵 6/6。
+**评估抓出并修复**：①AND 语义跨界 bigram 假阴性 → 查询改 OR（recall@5 0.167→1.000）；②种子零边静默空转 → `no_active_edge` gap。
+
 ## 十二、收官条款（Retrieval V1 最终设计原则）
 
 **工作包终态**：WP-0 已裁决基线 · WP-1 已批准 · WP-2 已批准最终修订 · WP-3 已批准最终修订 · WP-4 已批准 · WP-5 已批准 · WP-6 清单化。

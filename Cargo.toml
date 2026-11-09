@@ -28,6 +28,7 @@ inherits = "dev"
 debug = 0
 
 [workspace.dependencies]
+anyhow = "1"
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 # HTTP layer

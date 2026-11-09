@@ -1,0 +1,914 @@
+{
+  "metadata": {
+    "dataset_version": "synthetic-v1",
+    "evaluation_timestamp": "2026-11-09T22:57:07.605532700+00:00",
+    "index_version": "v1",
+    "planner_enabled": false,
+    "planner_model": null,
+    "project_code": "EVAL-SYNTH-20261109-225707",
+    "query_count": 50,
+    "retrieval_api_version": "v1.0-wp4",
+    "retrieval_config_version": "v1"
+  },
+  "metrics": {
+    "authority_assertion": 1.0,
+    "cjk_recall": 0.6,
+    "db_latency_p50_ms": 3.0,
+    "db_latency_p95_ms": 4.0,
+    "edge_precision": 0.0,
+    "edge_recall": 0.0,
+    "endpoint_hit_rate": 0.0,
+    "exact_hit_rate": 1.0,
+    "fail_found_not_read": 0,
+    "fail_knowledge_wrong": 0,
+    "fail_not_found": 25,
+    "locator_effectiveness": 1.0,
+    "miss_recognition_rate": 0.0,
+    "mrr": 0.16666666666666666,
+    "negative_isolation_pass_rate": 1.0,
+    "planner_cost_total": 0.0,
+    "queries": 50,
+    "recall_at_1": 0.16666666666666666,
+    "recall_at_5": 0.16666666666666666
+  },
+  "per_query": [
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 8,
+      "qid": "F-01"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 4,
+      "qid": "F-02"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 4,
+      "qid": "F-03"
+    },
+    {
+      "any_expected_hit": true,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": 1,
+      "gaps": [],
+      "hit_doc_keys": [
+        "eval-adr-007"
+      ],
+      "latency_ms": 4,
+      "qid": "F-04"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 4,
+      "qid": "F-05"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 4,
+      "qid": "F-06"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "F-07"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "F-08"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "F-09"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 2,
+      "qid": "F-10"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 2,
+      "qid": "F-11"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 2,
+      "qid": "F-12"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "F-13"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 4,
+      "qid": "F-14"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "F-15"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 2,
+      "qid": "F-16"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 2,
+      "qid": "F-17"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 2,
+      "qid": "F-18"
+    },
+    {
+      "any_expected_hit": true,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": 1,
+      "gaps": [],
+      "hit_doc_keys": [
+        "eval-adr-007"
+      ],
+      "latency_ms": 3,
+      "qid": "F-19"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "factual_lookup",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 2,
+      "qid": "F-20"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "impact_analysis",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [
+        [
+          "module-covered-by-design",
+          "结算模块",
+          "settlement-design"
+        ]
+      ],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 5,
+      "qid": "X-01"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "impact_analysis",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [
+        [
+          "governed_by",
+          "订单",
+          "支付审批规则"
+        ],
+        [
+          "governed_by",
+          "支付审批规则",
+          "支付流程"
+        ],
+        [
+          "constrains",
+          "支付审批规则",
+          "req-eval-001"
+        ]
+      ],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "X-02"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "impact_analysis",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [
+        [
+          "governed_by",
+          "支付审批规则",
+          "订单"
+        ],
+        [
+          "governed_by",
+          "支付审批规则",
+          "支付流程"
+        ],
+        [
+          "constrains",
+          "支付审批规则",
+          "req-eval-001"
+        ]
+      ],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "X-03"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "impact_analysis",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [
+        [
+          "governed_by",
+          "支付流程",
+          "支付审批规则"
+        ],
+        [
+          "governed_by",
+          "支付审批规则",
+          "订单"
+        ],
+        [
+          "constrains",
+          "支付审批规则",
+          "req-eval-001"
+        ]
+      ],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "X-04"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "impact_analysis",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [
+        [
+          "governed_by",
+          "支付审批规则",
+          "订单"
+        ],
+        [
+          "governed_by",
+          "支付审批规则",
+          "支付流程"
+        ],
+        [
+          "constrains",
+          "支付审批规则",
+          "req-eval-001"
+        ]
+      ],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "X-05"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "impact_analysis",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [
+        [
+          "governed_by",
+          "订单",
+          "支付审批规则"
+        ],
+        [
+          "governed_by",
+          "支付审批规则",
+          "支付流程"
+        ],
+        [
+          "constrains",
+          "支付审批规则",
+          "req-eval-001"
+        ]
+      ],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "X-06"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "impact_analysis",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [
+        "no_active_edge"
+      ],
+      "hit_doc_keys": [],
+      "latency_ms": 2,
+      "qid": "X-07"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "impact_analysis",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [
+        [
+          "module-covered-by-design",
+          "结算模块",
+          "settlement-design"
+        ]
+      ],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "X-08"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "impact_analysis",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [
+        [
+          "governed_by",
+          "支付审批规则",
+          "订单"
+        ],
+        [
+          "governed_by",
+          "支付审批规则",
+          "支付流程"
+        ],
+        [
+          "constrains",
+          "支付审批规则",
+          "req-eval-001"
+        ]
+      ],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "X-09"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "impact_analysis",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [
+        [
+          "governed_by",
+          "订单",
+          "支付审批规则"
+        ],
+        [
+          "governed_by",
+          "支付审批规则",
+          "支付流程"
+        ],
+        [
+          "constrains",
+          "支付审批规则",
+          "req-eval-001"
+        ]
+      ],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "X-10"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "completeness_check",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [
+        [
+          "module-covered-by-design",
+          "结算模块",
+          "settlement-design"
+        ]
+      ],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "C-01"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "completeness_check",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [
+        "no_active_edge"
+      ],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "C-02"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "completeness_check",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [
+        [
+          "governed_by",
+          "订单",
+          "支付审批规则"
+        ],
+        [
+          "governed_by",
+          "支付审批规则",
+          "支付流程"
+        ],
+        [
+          "constrains",
+          "支付审批规则",
+          "req-eval-001"
+        ]
+      ],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "C-03"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "completeness_check",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [
+        [
+          "governed_by",
+          "支付流程",
+          "支付审批规则"
+        ],
+        [
+          "governed_by",
+          "支付审批规则",
+          "订单"
+        ],
+        [
+          "constrains",
+          "支付审批规则",
+          "req-eval-001"
+        ]
+      ],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "C-04"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "completeness_check",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "C-05"
+    },
+    {
+      "any_expected_hit": true,
+      "budget_dropped": 0,
+      "category": "cjk_recall",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": 1,
+      "gaps": [],
+      "hit_doc_keys": [
+        "refund-policy"
+      ],
+      "latency_ms": 3,
+      "qid": "Z-01"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "cjk_recall",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "Z-02"
+    },
+    {
+      "any_expected_hit": true,
+      "budget_dropped": 0,
+      "category": "cjk_recall",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": 1,
+      "gaps": [],
+      "hit_doc_keys": [
+        "meeting-m3"
+      ],
+      "latency_ms": 3,
+      "qid": "Z-03"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "cjk_recall",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "Z-04"
+    },
+    {
+      "any_expected_hit": true,
+      "budget_dropped": 0,
+      "category": "cjk_recall",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": 1,
+      "gaps": [],
+      "hit_doc_keys": [
+        "settlement-design"
+      ],
+      "latency_ms": 2,
+      "qid": "Z-05"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "freshness",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "T-01"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "freshness",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 2,
+      "qid": "T-02"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "freshness",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "T-03"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "freshness",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 2,
+      "qid": "T-04"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "freshness",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 2,
+      "qid": "T-05"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "gap",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 2,
+      "qid": "G-01"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "gap",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 2,
+      "qid": "G-02"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "gap",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 4,
+      "qid": "G-03"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "gap",
+      "degradation_reason": "",
+      "degraded": false,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [
+        "no_active_edge"
+      ],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "G-04"
+    },
+    {
+      "any_expected_hit": false,
+      "budget_dropped": 0,
+      "category": "gap",
+      "degradation_reason": "planner_disabled",
+      "degraded": true,
+      "edges": [],
+      "endpoint_hit": false,
+      "first_hit_rank": null,
+      "gaps": [],
+      "hit_doc_keys": [],
+      "latency_ms": 3,
+      "qid": "G-05"
+    }
+  ]
+}
