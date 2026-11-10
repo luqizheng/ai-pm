@@ -1,165 +1,97 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
-
-import ConfirmationDialog from "@/components/ui/confirmation-dialog/ConfirmationDialog.vue";
-import { mountShell } from "@/components/shell/test-utils";
-import { i18n } from "@/lib/i18n";
+import { createMemoryHistory, createRouter } from "vue-router";
 
 import RequirementImpactView from "./RequirementImpactView.vue";
+import { mountShell } from "@/components/shell/test-utils";
+import { buildRoutes } from "@/router";
+import type { RequirementImpact } from "@/api/requirement-read";
 
-const t = (key: string, params?: Record<string, unknown>) =>
-  i18n.global.t(key, params ?? {}) as string;
+/**
+ * 影响分析（S02-UI-07，接真）行为测试：
+ * **只列事实不下结论**——谁绑了本需求、绑的是哪一版、是否已过期。
+ * 过期绑定（is_current=false）必须显式标出，不得当成当前依据。
+ */
+
+const getRequirementImpact = vi.fn();
+
+vi.mock("@/api/requirement-read", () => ({
+  getRequirementImpact: (...args: unknown[]) => getRequirementImpact(...args)
+}));
+
+function impact(): RequirementImpact {
+  return {
+    requirement_id: "req-1",
+    code: "REQ-001",
+    title: "用户登录",
+    current_version: 3,
+    designs: [
+      {
+        kind: "design",
+        target_id: "design-1",
+        code: "TD-001",
+        title: "登录设计",
+        bound_version: 2,
+        current_version: 3,
+        is_current: false,
+        target_status: "approved"
+      }
+    ],
+    tasks: [
+      {
+        kind: "task",
+        target_id: "aaaaaaaa-1111-1111-1111-111111111111",
+        code: null,
+        title: "实现登录端点",
+        bound_version: 3,
+        current_version: 3,
+        is_current: true,
+        target_status: "draft"
+      }
+    ],
+    stale_binding_count: 1
+  };
+}
+
+async function mountView() {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: buildRoutes()
+  });
+  await router.push("/project/requirements/req-1/impact");
+  await router.isReady();
+  const { wrapper } = mountShell(
+    RequirementImpactView,
+    { attachTo: document.body },
+    router
+  );
+  await flushPromises();
+  return { wrapper, router };
+}
+
+beforeEach(() => {
+  getRequirementImpact.mockReset();
+  getRequirementImpact.mockResolvedValue(impact());
+});
 
 describe("RequirementImpactView", () => {
-  it("渲染影响分析页：页头五要素、变更摘要、依赖图、影响面板与决策面板", async () => {
-    const mounted = mountShell(RequirementImpactView);
-    await mounted.router.push("/project/requirements/req-001/impact");
-    await flushPromises();
+  it("读真实影响端点并分列设计/任务绑定", async () => {
+    const { wrapper } = await mountView();
 
-    const text = mounted.wrapper.text();
-
-    // 页头（S02-UI-07 §2）：五要素
-    expect(text).toContain(t("pm.requirementImpact.pageTitle"));
-    expect(text).toContain("REQ-001");
-    expect(text).toContain(t("pm.requirementImpact.baselineNotIncluded"));
-    expect(text).toContain(
-      t("pm.requirements.revisionVersion", { version: 2 })
+    expect(getRequirementImpact).toHaveBeenCalledWith("req-1");
+    expect(wrapper.find('[data-testid="ri-design-TD-001"]').text()).toContain(
+      "登录设计"
     );
-    expect(text).toContain(t("pm.requirementImpact.statusAnalyzed"));
-    // 变更摘要（§3）
-    expect(text).toContain(t("pm.requirementImpact.summaryTitle"));
-    expect(text).toContain(t("pm.requirementImpact.summaryProposedBy"));
-    // 依赖图（§4）
-    expect(text).toContain(t("pm.requirementImpact.graphTitle"));
-    for (const code of [
-      "AC-001",
-      "TASK-210",
-      "KB-AUTH-012",
-      "BL-002",
-      "M-01"
-    ]) {
-      expect(text).toContain(code);
-    }
-    // 四级影响（§4）
-    expect(text).toContain(t("pm.requirementImpact.levelDirect"));
-    expect(text).toContain(t("pm.requirementImpact.levelIndirect"));
-    expect(text).toContain(t("pm.requirementImpact.levelPotential"));
-    expect(text).toContain(t("pm.requirementImpact.levelUncertain"));
-    // 影响面板（§5）：A-D 四类
-    expect(text).toContain(t("pm.requirementImpact.panelRequirement"));
-    expect(text).toContain(t("pm.requirementImpact.panelImplementation"));
-    expect(text).toContain(t("pm.requirementImpact.panelDocumentation"));
-    expect(text).toContain(t("pm.requirementImpact.panelBaseline"));
-    // AI 分析（§6）与决策面板（§7）
-    expect(text).toContain(t("pm.requirementImpact.aiTitle"));
-    expect(text).toContain(t("pm.requirementImpact.decisionTitle"));
-    expect(text).toContain(t("pm.requirementImpact.decisionAccept"));
+    expect(wrapper.text()).toContain("实现登录端点");
   });
 
-  it("依赖不虚构：REQ-001 的图中无 REQ-004（两者无真实关系）", async () => {
-    const mounted = mountShell(RequirementImpactView);
-    await mounted.router.push("/project/requirements/req-001/impact");
-    await flushPromises();
+  it("过期绑定显式标出并给缺口提示", async () => {
+    const { wrapper } = await mountView();
 
-    expect(mounted.wrapper.findAll(".rdg__target").length).toBe(5);
-    expect(mounted.wrapper.text()).not.toContain("REQ-004");
-  });
-
-  it("AI 分析明确标注为分析而非确认事实", async () => {
-    const mounted = mountShell(RequirementImpactView);
-    await mounted.router.push("/project/requirements/req-001/impact");
-    await flushPromises();
-
-    const text = mounted.wrapper.text();
-    expect(text).toContain(t("pm.requirementImpact.aiBadge"));
-    expect(text).toContain(t("pm.requirementImpact.aiDisclaimer"));
-    expect(text).toContain(t("pm.requirementImpact.aiRisk"));
-    expect(text).toContain(t("pm.requirementImpact.aiConfidence"));
-  });
-
-  it("决策前复述变更摘要与影响发现计数", async () => {
-    const mounted = mountShell(RequirementImpactView);
-    await mounted.router.push("/project/requirements/req-001/impact");
-    await flushPromises();
-
-    const text = mounted.wrapper.text();
-    expect(text).toContain(t("pm.requirementImpact.decisionRecapFindings"));
-    expect(text).toContain(
-      t("pm.requirementImpact.decisionRecapText", { findings: 7, direct: 2 })
+    expect(wrapper.text()).toContain("存在过期绑定");
+    expect(wrapper.find('[data-testid="ri-design-TD-001"]').text()).toContain(
+      "已过期"
     );
-  });
-
-  it("接受变更经显式确认弹窗，确认后留决策记录", async () => {
-    const mounted = mountShell(RequirementImpactView);
-    await mounted.router.push("/project/requirements/req-001/impact");
-    await flushPromises();
-
-    const acceptButton = mounted.wrapper
-      .findAll("button")
-      .find(
-        node => node.text().trim() === t("pm.requirementImpact.decisionAccept")
-      );
-    await acceptButton?.trigger("click");
-    await flushPromises();
-
-    // 弹窗（Teleport 到 body）与人工审阅勾选
-    expect(document.body.textContent).toContain(
-      t("pm.requirementImpact.acceptModalTitle")
-    );
-    expect(document.body.textContent).toContain(
-      t("pm.requirementImpact.acceptCheckbox")
-    );
-
-    mounted.wrapper.findComponent(ConfirmationDialog).vm.$emit("confirm");
-    await flushPromises();
-
-    expect(mounted.wrapper.text()).toContain(
-      t("pm.requirementImpact.decisionAccepted")
-    );
-  });
-
-  it("拒绝变更经危险确认弹窗，确认后留决策记录", async () => {
-    const mounted = mountShell(RequirementImpactView);
-    await mounted.router.push("/project/requirements/req-001/impact");
-    await flushPromises();
-
-    const rejectButton = mounted.wrapper
-      .findAll("button")
-      .find(
-        node => node.text().trim() === t("pm.requirementImpact.decisionReject")
-      );
-    await rejectButton?.trigger("click");
-    await flushPromises();
-
-    expect(document.body.textContent).toContain(
-      t("pm.requirementImpact.rejectModalTitle")
-    );
-
-    mounted.wrapper.findComponent(ConfirmationDialog).vm.$emit("confirm");
-    await flushPromises();
-
-    expect(mounted.wrapper.text()).toContain(
-      t("pm.requirementImpact.decisionRejected")
-    );
-  });
-
-  it("要求更多分析：分析状态回到等待分析并留决策记录", async () => {
-    const mounted = mountShell(RequirementImpactView);
-    await mounted.router.push("/project/requirements/req-001/impact");
-    await flushPromises();
-
-    const moreButton = mounted.wrapper
-      .findAll("button")
-      .find(
-        node =>
-          node.text().trim() === t("pm.requirementImpact.decisionMoreAnalysis")
-      );
-    await moreButton?.trigger("click");
-    await flushPromises();
-
-    const text = mounted.wrapper.text();
-    expect(text).toContain(t("pm.requirementImpact.statusPending"));
-    expect(text).toContain(t("pm.requirementImpact.decisionMoreAnalysis"));
   });
 });

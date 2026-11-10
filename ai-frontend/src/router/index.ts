@@ -87,12 +87,6 @@ function navItemRoutes(item: NavItem): RouteRecordRaw[] {
   return routes;
 }
 
-/**
- * mock 预览开关：与 VITE_USE_MOCK 同源（.env.development / .env.test = 1）。
- * 发布构建中该常量折叠为 false，仅 mock 分支的 fixtures 页面不会被加载/打包。
- */
-const mockPreview = import.meta.env.VITE_USE_MOCK === "1";
-
 /** 全部路由记录（导航树 → 路由） */
 export function buildRoutes(): RouteRecordRaw[] {
   const routes: RouteRecordRaw[] = [];
@@ -333,43 +327,25 @@ export function buildRoutes(): RouteRecordRaw[] {
 
   // 需求评审与确认（S02-UI-03）：人工评审提案并作出正式决策，不占主导航——
   // 入口 = Requirements Workspace 页头「需求评审」。静态段优先于下方动态段匹配。
-  // 后端评审提案接口未落地：仅 mock 预览（VITE_USE_MOCK=1）注册真实页，
-  // 发布构建走占位页，避免把 fixtures 演示数据打进 dist（见 build/release-guard.ts）。
-  routes.push(
-    mockPreview
-      ? {
-          path: "/project/requirements/review",
-          component: () =>
-            import(
-              "@/views/project/requirement-review/RequirementReviewView.vue"
-            ),
-          meta: { title: "pm.requirementReview.pageTitle" }
-        }
-      : {
-          path: "/project/requirements/review",
-          component: PlaceholderView,
-          meta: { title: "pm.requirementReview.pageTitle" }
-        }
-  );
+  // 需求评审（S02-UI-03）：接真后端 requirement-review-queue（待确认修订）。
+  routes.push({
+    path: "/project/requirements/review",
+    component: () =>
+      import("@/views/project/requirement-review/RequirementReviewView.vue"),
+    meta: { title: "pm.requirementReview.pageTitle" }
+  });
 
   // 需求基线管理（S02-UI-06）：正式基线快照的管理 / 准备向导 / 比较，
   // 不占主导航——入口 = Requirements Workspace 页头「需求基线」。
-  routes.push(
-    mockPreview
-      ? {
-          path: "/project/requirements/baselines",
-          component: () =>
-            import(
-              "@/views/project/requirement-baseline/RequirementBaselineView.vue"
-            ),
-          meta: { title: "pm.requirementBaseline.pageTitle" }
-        }
-      : {
-          path: "/project/requirements/baselines",
-          component: PlaceholderView,
-          meta: { title: "pm.requirementBaseline.pageTitle" }
-        }
-  );
+  // 需求基线（S02-UI-04）：接真后端 requirement-baseline（派生视图）。
+  routes.push({
+    path: "/project/requirements/baselines",
+    component: () =>
+      import(
+        "@/views/project/requirement-baseline/RequirementBaselineView.vue"
+      ),
+    meta: { title: "pm.requirementBaseline.pageTitle" }
+  });
 
   // 修订与历史（S02-UI-05）：单条需求的修订时间线 / 详情 / 两版比较 / 审计，
   // 不占主导航——入口 = 需求详情页的两处历史入口（页头与 History Tab）。
@@ -381,23 +357,13 @@ export function buildRoutes(): RouteRecordRaw[] {
 
   // 变更影响分析（S02-UI-07）：拟议修订的依赖可视化 / 影响面板 / AI 分析 /
   // 人类决策，不占主导航——入口 = 需求详情页页头「影响分析」。
-  // 同上：后端影响分析接口未落地，仅 mock 预览注册真实页。
-  routes.push(
-    mockPreview
-      ? {
-          path: "/project/requirements/:requirementId/impact",
-          component: () =>
-            import(
-              "@/views/project/requirement-impact/RequirementImpactView.vue"
-            ),
-          meta: { title: "pm.requirementImpact.pageTitle" }
-        }
-      : {
-          path: "/project/requirements/:requirementId/impact",
-          component: PlaceholderView,
-          meta: { title: "pm.requirementImpact.pageTitle" }
-        }
-  );
+  // 变更影响分析（S02-UI-07）：接真后端 requirements/{id}/impact。
+  routes.push({
+    path: "/project/requirements/:requirementId/impact",
+    component: () =>
+      import("@/views/project/requirement-impact/RequirementImpactView.vue"),
+    meta: { title: "pm.requirementImpact.pageTitle" }
+  });
 
   // 需求详情与追溯（S02-UI-02）：单条需求检查页，不占主导航——
   // 入口 = Requirements Workspace 详情面板「打开详情页」与追溯链关联需求导航。
