@@ -42,7 +42,25 @@
 | `flow_14_cross_tenant_isolation` | 跨租户隔离 | **PASS** | 非成员主体对本项目需求列表可见数为 0 |
 | `flow_15_archive_and_no_key_leak` | 归档 + 私钥零泄露 | **PASS** | 归档 → `status=archived`；重复归档 409 `ALREADY_ARCHIVED`；`POST /ssh-keys` 响应**无** `private_key` 字段 |
 
-### 1.2 全量回归（同一基线）
+### 1.2 P0 发布验收 · 阶段 A（P0-001a/002/003/004/005/006/007）
+
+**7/7 PASS**（两次复跑全绿，35.0s / 29.3s；Playwright + 真 vite `:8850`（`VITE_USE_MOCK=0`）+ 真 pm-api `:18490`（jwks）+ 一次性库；载体 `ai-frontend/e2e/p0-*.spec.ts` + `playwright.p0.config.ts`，规格 11/12 号文档的落地）
+
+| 用例 | 场景 | 结果 | 关键断言（实测值） |
+|---|---|---|---|
+| **P0-001a** | 会话建立与身份正确 | **PASS** | 中转页分流 `/onboarding`；localStorage 四件套；`/me` `onboarding_required=true`；DB：provision 主体行 `is_active=f` |
+| **P0-002** | 首登无 Team | **PASS** | 双入口 testid 可见；无 Skip/Later；深链 `/projects` 现状=不被拦（R4）；API `team=null`；DB **ACTIVE 成员=0 + `tenant.slug IS NULL`**（R5 口径） |
+| **P0-003** | 建团→邀请→接受全链 | **PASS** | UI 建团→横幅；邀请 **201**；受邀者 UI `accept-confirm` 接受；`/me` 入团；DB 恰 `member,owner` 两个 ACTIVE 成员。**R65 修正**：受邀者与 owner 同 tid（跨 tid 被服务端硬拒） |
+| **P0-004** | UI 建项目归属 Team | **PASS** | 列表页入口→表单→CC `?project_id=`；列表按 code 命中（R58：无单体 GET 路由）；DB `tenant_id` 归属 + 恰 5 人编制 |
+| **P0-005** | 零外部依赖进 CC | **PASS** | `项目初始化` 文本可见；无阻断提示；CC 200 + items 非空（**R68：`blocks.initialization_progress.data.items`**）；DB `ai.project_ai_config` = `true/ai_lead`、仓库 0 行 |
+| **P0-006** | 初始化 7 事项 7 态派生一致 | **PASS** | items ≥7 且 key/status 全在已知集合；`project_basics` = `completed` + `source_state='planning'`；刷新不丢 |
+| **P0-007** | 同/跨 Team 隔离 | **PASS** | A1 需求对 A2/B1 列表不可见；**带 `project_id` 过滤的集合读非成员=404**（R68：比规格 R19 更强）；不带过滤全列表不含他项目数据；单体读 404；跨项目写 404 且修订行数不变、标题未动 |
+
+**落地过程中修正的规格断言（R65~R68，编号续接全局序列避让 18 号文档 R57~R64；已回写规格 11/12 §0）**：跨 tid 接受邀请被硬拒；无单项目 GET 路由；需求创建响应 `{requirement}` 包裹 + DraftRevision 必填 `markdown`；CC 响应 `Block<T>` 包装、过滤集合读非成员=404（隔离比规格声称更强）。
+
+一键复跑：`bash test-case/evidence/p0/run-p0.sh`（证据落 `test-case/evidence/p0/`）。
+
+### 1.3 全量回归（同一基线）
 
 | 层 | 命令 | 结果 |
 |---|---|---|
@@ -159,6 +177,7 @@
 | # | 计划中的用例 | 状态 | 原因 |
 |---|---|---|---|
 | 1 | ~~L3 UI E2E~~ | ✅ **已落地（2026-11-10 第二批）** | §1.0：UIFLOW-01~08 全部 PASS，接入真实仓库链路（UIFLOW-06），一键 `run-e2e-flow-ui.sh` |
+| 5 | **P0 阶段 B~D**（P0-008~014 / 015~021+040~048 / 049~056） | 部分可执行未落地 | 阶段 A 已落地（§1.2，7/38）；B~D 需 intake 编排 / worker / MCP 客户端 / 知识空间等可控依赖，按 13~17 号规格逐步落地；NOT_IMPLEMENTED 项（045b/051/052/049b）待功能转正 |
 | 2 | FLOW-02 的**导入**路径（GitHub 侧） | BLOCKED | GitHub 完整 bare clone 偶发 `early EOF`（OBS-01）；FLOW-02 当前只覆盖 GitHub 的 **verify**（`ls-remote`）路径，导入走 GitLab |
 | 3 | L4 两机实测（T-090 / T-091） | 未执行 | 需 192.168.2.10 / .43 两台内网机器，本批未涉及 |
 | 4 | 执行器真实执行（Run → 交付 commit） | 未覆盖 | `AI_PM_RUN_EXECUTOR` 默认 noop；需真实 Codex / Z-Code 执行端，属 L4 范畴 |

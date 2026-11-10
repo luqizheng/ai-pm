@@ -30,3 +30,6 @@ ai-frontend/build/**/*.js.map
 # E2E 执行日志（每次跑按时间戳落盘；不入库，结论进 test-case/*.md）
 test-case/evidence/e2e-flow/*.log
 test-case/evidence/e2e-flow/e2e-nextest-*.log
+test-case/evidence/p0/*.log
+test-case/evidence/p0/playwright-artifacts/
+test-case/evidence/e2e-flow/playwright-ui-artifacts/
