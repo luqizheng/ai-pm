@@ -167,21 +167,25 @@ pub async fn pc_fts_channel(
     if tsv_query.is_empty() {
         return ChannelResult::default();
     }
+    // **OR 语义**（WP-5 基线修正）：plainto_tsquery 的 AND 放大跨词边界 bigram
+    // 假阴性（"费率是多少"切出"率是/是多"，正文没有这两个 bigram → 整查询灭）。
+    // 查询改 OR，相关性排序交给 ts_rank + 通道复合权重（命中词多者分高）。
+    let tsquery = tsv_query.split_whitespace().collect::<Vec<_>>().join(" | ");
     let rows = match sqlx::query(
         "SELECT o.id AS object_id, o.display_name, dr.id AS revision_id, dr.content, \
-                ts_rank(dr.search_tsv, plainto_tsquery('simple', $3)) AS rank \
+                ts_rank(dr.search_tsv, to_tsquery('simple', $3)) AS rank \
            FROM pc.cognition_object o \
            JOIN pc.cognition_revision cr ON cr.id = o.current_revision_id \
            JOIN pc.document_revision dr ON dr.id = cr.document_revision_id \
           WHERE o.tenant_id = $1 AND o.project_id = $2 \
             AND o.lifecycle_status IN ('active', 'draft', 'identity') \
-            AND dr.search_tsv @@ plainto_tsquery('simple', $3) \
+            AND dr.search_tsv @@ to_tsquery('simple', $3) \
           ORDER BY rank DESC, o.updated_at DESC \
           LIMIT $4",
     )
     .bind(tenant_id)
     .bind(project_id)
-    .bind(&tsv_query)
+    .bind(&tsquery)
     .bind(limit as i64)
     .fetch_all(pool)
     .await
@@ -253,10 +257,12 @@ pub async fn kb_section_channel(
     if tsv_query.is_empty() {
         return ChannelResult::default();
     }
+    // OR 语义（同 pc_fts 通道注释；AND 放大跨词边界 bigram 假阴性）。
+    let tsquery = tsv_query.split_whitespace().collect::<Vec<_>>().join(" | ");
     let rows = match sqlx::query(
         "SELECT s.document_id, s.document_revision_id, s.section_no, s.title, s.content, \
                 d.doc_type, dr.content_hash, \
-                ts_rank(s.search_tsv, plainto_tsquery('simple', $3)) AS rank, \
+                ts_rank(s.search_tsv, to_tsquery('simple', $3)) AS rank, \
                 (position(lower($4) in lower(s.title)) > 0) AS in_title \
            FROM kb.document_section_index s \
            JOIN kb.document_index_state st \
@@ -266,13 +272,13 @@ pub async fn kb_section_channel(
           WHERE s.tenant_id = $1 AND s.project_id = $2 AND s.provider = $5 \
             AND st.status = 'indexed' AND st.index_version = $6 \
             AND st.indexed_content_hash = dr.content_hash \
-            AND s.search_tsv @@ plainto_tsquery('simple', $3) \
+            AND s.search_tsv @@ to_tsquery('simple', $3) \
           ORDER BY rank DESC, s.section_no ASC \
           LIMIT $7",
     )
     .bind(tenant_id)
     .bind(project_id)
-    .bind(&tsv_query)
+    .bind(&tsquery)
     .bind(first)
     .bind(KB_SECTION_PROVIDER)
     .bind(KB_INDEX_VERSION)

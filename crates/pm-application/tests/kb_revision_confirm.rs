@@ -541,3 +541,99 @@ async fn published_status_requires_confirmer_and_time(pool: PgPool) {
     .await
     .unwrap();
 }
+
+// ── 摄入链（解析→draft→确认；红线③）────────────────────────────────────────
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn ingest_markdown_creates_draft_then_confirm_publishes(pool: PgPool) {
+    let fx = seed(&pool, "WP0-INGEST-OK").await;
+    let input = pm_application::kb_service::document::IngestInput {
+        doc_key: "ingest-doc".into(),
+        doc_type: "knowledge".into(),
+        parse_kind: pm_application::knowledge_parse::ParseKind::Markdown,
+        bytes: "# 摄入文档\n\n正文内容。".into(),
+    };
+    let (document_id, revision_id, revision_no) =
+        pm_application::kb_service::document::ingest_document(
+            &pool,
+            fx.tenant_id,
+            fx.project_id,
+            input,
+            &fx.human,
+        )
+        .await
+        .unwrap();
+    assert_eq!(revision_no, 1);
+
+    // draft 不产 published 事件（红线③：解析只能产生 Draft）。
+    assert!(
+        outbox_rows(&pool, fx.project_id).await.is_empty(),
+        "ingest must not emit published events"
+    );
+
+    // 确认 → published。
+    let outcome = document::confirm_revision(
+        &pool,
+        fx.tenant_id,
+        fx.project_id,
+        document_id,
+        revision_id,
+        &fx.human,
+    )
+    .await
+    .unwrap();
+    assert_eq!(outcome.status, "published");
+    assert_eq!(outbox_rows(&pool, fx.project_id).await.len(), 1);
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn ingest_docx_parses_outline_and_appends_family_revision(pool: PgPool) {
+    let fx = seed(&pool, "WP0-INGEST-DOCX").await;
+    // 合成 docx：标题 + 两段。
+    let document_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>合同要点</w:t></w:r></w:p>
+<w:p><w:r><w:t>付款条件为验收后三十天。</w:t></w:r></w:p>
+</w:body></w:document>"#;
+    let mut cursor = std::io::Cursor::new(Vec::new());
+    {
+        let mut zip = zip::ZipWriter::new(&mut cursor);
+        let options: zip::write::SimpleFileOptions = Default::default();
+        zip.start_file("word/document.xml", options).unwrap();
+        std::io::Write::write_all(&mut zip, document_xml.as_bytes()).unwrap();
+        zip.finish().unwrap();
+    }
+    let docx_bytes = cursor.into_inner();
+
+    // 同 doc_key 两次摄入 → 家族修订 1、2（显式指定目标，非自动归并）。
+    for expected_no in [1i32, 2] {
+        let input = pm_application::kb_service::document::IngestInput {
+            doc_key: "contract-brief".into(),
+            doc_type: "knowledge".into(),
+            parse_kind: pm_application::knowledge_parse::ParseKind::Docx,
+            bytes: docx_bytes.clone(),
+        };
+        let (_, _, revision_no) = pm_application::kb_service::document::ingest_document(
+            &pool,
+            fx.tenant_id,
+            fx.project_id,
+            input,
+            &fx.human,
+        )
+        .await
+        .unwrap();
+        assert_eq!(revision_no, expected_no);
+    }
+
+    // 最新 draft 含大纲映射（# 合同要点）。
+    let content: String = sqlx::query_scalar(
+        "SELECT r.content FROM kb.document_revision r \
+           JOIN kb.document d ON d.id = r.document_id \
+          WHERE d.doc_key = 'contract-brief' ORDER BY r.revision_no DESC LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(content.contains("# 合同要点"));
+    assert!(content.contains("付款条件为验收后三十天。"));
+}

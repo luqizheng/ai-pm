@@ -28,6 +28,10 @@ inherits = "dev"
 debug = 0
 
 [workspace.dependencies]
+anyhow = "1"
+base64 = "0.22"
+quick-xml = "0.42"
+zip = { version = "3.0", default-features = false, features = ["deflate"] }
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 # HTTP layer

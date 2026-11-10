@@ -26,8 +26,12 @@ knowledge:
     confirming: 确认中…
     close: 收起
   notice:
+    ingested: 已摄入为草稿（修订 {no}）——请在详情中确认发布
     confirmed: 已确认发布（同人重复确认不会改原确认记录）
   error:
+    ingestKey: 请填写文档标识
+    ingestContent: 请提供文件或粘贴内容
+    ingest: 摄入失败（解析或网络）
     load: 加载失败，请稍后重试
     confirm: 确认失败（需要真人交互登录态；AI / API Key 无确认权）
   hint:
@@ -56,3 +60,16 @@ knowledge:
     degraded: 规划器未介入（{reason}）——已用固定双域策略
     noEdges: 未找到正式关系路径（gaps 见下）
     gap: 缺口
+  ingest:
+    title: 摄入文档（解析 → 草稿）
+    pickFile: 选择文件（.md / .txt / .docx）
+    switchPaste: 改为粘贴文本
+    docKey: 文档标识（如 payment-spec）
+    pastePlaceholder: 直接粘贴 Markdown 文本…
+    typeKnowledge: 知识
+    typeArchitecture: 架构
+    typeDecision: 决策
+    typeRequirement: 需求
+    run: 摄入为草稿
+    running: 解析中…
+    hint: 摄入只生成草稿——不会进入检索，需在详情中确认发布后才生效。

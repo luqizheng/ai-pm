@@ -677,13 +677,26 @@ WP-6 不作为实质工作包，不增加独立架构建设任务，只管理 V1
 
 | # | 门控项 | 启用条件 |
 | --- | --- | --- |
-| G-1 | **D-1 Embedding Provider** | 确定 Provider/模型配置/版本管理/成本/失败策略——没有明确 Provider 与项目模型策略，不启用 Vector |
+| G-1 | **D-1 Embedding Provider** | **已裁（2026-11-10，用户确认）：bge-m3 @ Ollama 本地**——1024 维（正合 `kb.chunk_embedding` 草案 `vector(1024)`）、中英双语、公司文档不出域、走 team_llm `openai_compatible` 面（Ollama `/v1/embeddings` 兼容端点）+ purpose=embedding、成本=零 API 费、失败策略=vector 通道自动降级 BM25/PageIndex。**Vector 通道本体仍按 G-3 门控**（启用须重跑 WP-5 全套评估）；激活时注册 Ollama provider（endpoint `http://<host>:11434/v1`，model `bge-m3`）到项目模型策略即达条件。**已部署（2026-11-10）**：192.168.2.10 用户态 Ollama v0.40.16 + bge-m3（1024 维中文验证过，`http://192.168.2.10:11434/v1`，crontab @reboot 自启，无 sudo 用户态安装）——G-1 条件全达成；Vector 通道本体仍按 G-3 门控（启用须重跑 WP-5 全套评估） |
 | G-2 | **敏感知识钩子** | 为敏感知识的检索权限/脱敏/上下文注入预留确定性 Policy Hook——安全策略未完成前 fail-closed |
 | G-3 | **Vector 通道接入** | kb_vector/pc_vector 进 RRF——**必须执行 WP-5 全套评估证明召回排序有实际改善**（不假设必提升） |
 | G-4 | **真 BM25** | 依赖 D-8 真实语料评估（§7.3 五步门槛）——收益足以抵消新增基础设施/运维/一致性成本才引入 |
 | G-5 | **Reranker 深化** | 依 WP-5 排序误差分析评估 Cross-Encoder 等——同时评估延迟/成本/排序收益 |
 
 **五项门控共同原则：后置能力不能绕过 RetrievalPort、Policy Validator、EvidenceBundle 与 WP-5 评估体系。** Vector 与 BM25 都只能替换或扩展检索通道，**不能改变**：权限与版本硬过滤 / authority 五值语义 / 五维分列 / Traversal 不参与 RRF / Evidence 溯源 / Gaps-Degradations / BudgetReport。
+
+## 十一·B · WP-5 交付登记（2026-11-10，五交付物全落）
+
+| # | 交付物 | 状态 |
+| --- | --- | --- |
+| ① | RT 全量收口（RT-001~038 + 前缀测试 + 负向矩阵 NEG-01~06） | ✅ cargo-test 1403/1403 |
+| ② | Evaluation Harness（`examples/retrieval_eval.rs`，离线；同生产代码路径） | ✅ |
+| ③ | Synthetic Dataset V1（50 题 13 列完整 Ground Truth） | ✅ `docs/evaluation/datasets/synthetic-v1.csv` |
+| ④ | 指标实现（Recall@K/MRR/Exact/CJK/Edge×2/Endpoint/Miss/Locator/Authority + 三分法） | ✅ |
+| ⑤ | D-8 裁决包 | ✅ **GATED**（`docs/evaluation/d8-bm25-adjudication-v1.md`） |
+
+**V1 基线（合成集，Planner OFF）**：Recall@1 0.552 / **Recall@5 1.000** / MRR 0.741 / Exact 1.000 / Edge Recall 1.000 / Miss Recognition 1.000 / p95 4ms / 负向矩阵 6/6。
+**评估抓出并修复**：①AND 语义跨界 bigram 假阴性 → 查询改 OR（recall@5 0.167→1.000）；②种子零边静默空转 → `no_active_edge` gap。
 
 ## 十二、收官条款（Retrieval V1 最终设计原则）
 

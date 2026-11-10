@@ -1,0 +1,51 @@
+qid,category,query,seed_entity,expected_doc_keys,expected_keywords,expected_edges,expected_endpoint,allow_alternatives,expect_miss,expected_authority,expected_freshness,note
+F-01,factual_lookup,支付手续费费率是多少？,,payment-spec,千分之五,,,,,current_published,recent,家族现行 v1.3
+F-02,factual_lookup,对账周期是怎么规定的？,,payment-spec,T+1,,,,,current_published,recent,v1.3 新增条款
+F-03,factual_lookup,退款政策里审批链是什么？,,refund-policy,退款审批,,,,,current_published,recent,中文专项语料
+F-04,factual_lookup,EVAL-ADR-007,,eval-adr-007,事件驱动,,,,,current_published,recent,编号直查
+F-05,factual_lookup,事件驱动架构决策的后果是什么？,,eval-adr-007,后果,,,,,current_published,recent,ADR 内容检索
+F-06,factual_lookup,结算的定义,,glossary,结算,,,,,current_published,recent,术语表
+F-07,factual_lookup,账期的定义,,glossary,账期,,,,,current_published,recent,术语表
+F-08,factual_lookup,3 月发布评审的结论是什么？,,meeting-m3,评审结论,,,,,current_published,recent,会议纪要
+F-09,factual_lookup,结算模块的技术设计是什么？,,settlement-design,结算,,,,,current_published,recent,设计文档
+F-10,factual_lookup,支付流程有哪些环节？,,settlement-design,支付流程,,,,,current_published,recent,设计文档章节
+F-11,factual_lookup,费率 v1.2 当时是多少？,,payment-spec,千分之三,,,,1,allow_miss,n_a,RT-007 类：历史不入现行索引，V1 通道预期 miss 计识别
+F-12,factual_lookup,发票开具的要求是什么？,,refund-policy,发票,,,,,current_published,recent,跨节关键词
+F-13,factual_lookup,EVAL-ADR-007 的备选方案有哪些？,,eval-adr-007,备选,,,,,current_published,recent,ADR 结构
+F-14,factual_lookup,结算模块与支付流程的衔接,,settlement-design,支付流程,,,,,current_published,recent,章节命中
+F-15,factual_lookup,评审会上定了哪些事项？,,meeting-m3,事项,,,,,current_published,recent,会议纪要
+F-16,factual_lookup,什么是账期？,,glossary,账期,,,,,current_published,recent,术语直查
+F-17,factual_lookup,支付的退款审批人是谁？,,refund-policy,审批人,,,,,current_published,recent,政策细节
+F-18,factual_lookup,费率相关的完整规定,,payment-spec,费率,,,,,current_published,recent,宽泛关键词
+F-19,factual_lookup,eval-adr-007,,eval-adr-007,事件驱动,,,,,current_published,recent,小写编号归一
+F-20,factual_lookup,结算模块设计里的对账要求,,settlement-design,对账,,,,,current_published,recent,跨文档词
+X-01,impact_analysis,结算模块影响了哪些设计？,结算模块,,,module-covered-by-design:结算模块:settlement-design,settlement-design,,,,,正向边
+X-02,impact_analysis,订单受哪些业务规则约束？,订单,,,governed_by:订单:支付审批规则,支付审批规则,,,,,反向边（governed_by 反向）
+X-03,impact_analysis,支付审批规则约束了哪个需求？,支付审批规则,,,constrains:支付审批规则:req-eval-001,req-eval-001,,,,,PC→S02 需求域
+X-04,impact_analysis,支付流程受什么约束？,支付流程,,,governed_by:支付流程:支付审批规则,支付审批规则,,,,,正向 governed_by
+X-05,impact_analysis,哪些流程受支付审批规则约束？,支付审批规则,,,governed_by:支付流程:支付审批规则;governed_by:订单:支付审批规则,,1,,,,多端点入边（允许替代组合）
+X-06,impact_analysis,订单状态变更会影响哪些需求和设计？,订单,,,governed_by:订单:支付审批规则,支付审批规则,,,,,两跳首段（预算内）
+X-07,impact_analysis,营销模块有哪些设计覆盖？,营销模块,,,,,,,,,完整性：零覆盖→空边+gap
+X-08,impact_analysis,结算模块的设计文档是哪个？,结算模块,,,module-covered-by-design:结算模块:settlement-design,settlement-design,,,,,同 X-01 换问法
+X-09,impact_analysis,支付审批规则影响面分析,支付审批规则,,,constrains:支付审批规则:req-eval-001,req-eval-001,1,,,,多跳组合允许替代
+X-10,impact_analysis,订单和支付流程的共同约束是什么？,订单,,,governed_by:订单:支付审批规则,支付审批规则,1,,,,两跳经共享规则
+C-01,completeness_check,结算模块的设计覆盖完整吗？,结算模块,,,module-covered-by-design:结算模块:settlement-design,settlement-design,,,,,已覆盖
+C-02,completeness_check,营销模块的设计覆盖完整吗？,营销模块,,,,,,,,,未覆盖→no_active_edge gap
+C-03,completeness_check,订单有规则约束吗？,订单,,,governed_by:订单:支付审批规则,支付审批规则,,,,,已覆盖
+C-04,completeness_check,支付流程的规则覆盖情况？,支付流程,,,governed_by:支付流程:支付审批规则,支付审批规则,,,,,已覆盖
+C-05,completeness_check,盘点所有模块的设计覆盖情况,,,,,,,,,,无种子盘点题：允许返回已知边或空
+Z-01,cjk_recall,退款审批链条,,refund-policy,退款审批,,,,,current_published,recent,中文双字组
+Z-02,cjk_recall,费率调整记录,,payment-spec,费率,,,,,current_published,recent,中文
+Z-03,cjk_recall,评审结论,,meeting-m3,评审结论,,,,,current_published,recent,中文
+Z-04,cjk_recall,结算与对账,,settlement-design,对账,,,,,current_published,recent,中文
+Z-05,cjk_recall,状态机设计,,settlement-design,状态机,,,,,current_published,recent,中文（语料需含）
+T-01,freshness,现在的支付费率标准,,payment-spec,千分之五,,,,,current_published,recent,现行 v1.3
+T-02,freshness,最新的对账周期条款,,payment-spec,T+1,,,,,current_published,recent,现行
+T-03,freshness,当前有效的退款政策,,refund-policy,退款审批,,,,,current_published,recent,现行
+T-04,freshness,目前生效的费率是千分之三吗？,,payment-spec,千分之五,,,,,current_published,recent,否定干扰：期望命中现行内容而非确认旧值
+T-05,freshness,支付规范现行版本的费率约定,,payment-spec,千分之五,,,,,current_published,recent,现行
+G-01,gap,量子加密签名机制,,,,,,,1,,,语料外（词组全不在语料 bigram 集）
+G-02,gap,跨境仓单质押监管,,,,,,,1,,,语料外（修正：原'发票'撞语料词）
+G-03,gap,外汇牌价波动预警,,,,,,,1,,,语料外（修正：原'结算'撞语料词）
+G-04,gap,营销模块的设计文档在哪？,营销模块,,,,,,1,,,孤立对象：零正式边→no_active_edge gap
+G-05,gap,供应商准入制度,,,,,,,1,,,语料外

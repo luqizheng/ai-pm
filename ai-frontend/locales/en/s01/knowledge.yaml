@@ -26,8 +26,12 @@ knowledge:
     confirming: Confirming…
     close: Close
   notice:
+    ingested: Ingested as draft (rev {no}) — confirm in the detail view
     confirmed: Published (repeat confirmation by the same user keeps the original record)
   error:
+    ingestKey: Document key is required
+    ingestContent: Provide a file or paste content
+    ingest: Ingest failed (parse or network)
     load: Failed to load, please retry
     confirm: Confirmation failed (requires an interactive human session; AI / API keys cannot confirm)
   hint:
@@ -56,3 +60,16 @@ knowledge:
     degraded: Planner bypassed ({reason}) — fixed dual-domain strategy used
     noEdges: No formal relationship path found (see gaps)
     gap: Gap
+  ingest:
+    title: Ingest document (parse → draft)
+    pickFile: Choose file (.md / .txt / .docx)
+    switchPaste: Paste text instead
+    docKey: Document key (e.g. payment-spec)
+    pastePlaceholder: Paste Markdown text directly…
+    typeKnowledge: Knowledge
+    typeArchitecture: Architecture
+    typeDecision: Decision
+    typeRequirement: Requirement
+    run: Ingest as draft
+    running: Parsing…
+    hint: Ingesting only creates a draft — it will not enter retrieval until confirmed in the detail view.

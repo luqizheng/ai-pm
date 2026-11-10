@@ -202,3 +202,34 @@ export function decidePcProposal(
     { params: { project_id: projectId } }
   );
 }
+
+/* ── 摄入（解析→draft；等待真人确认）─────────────────────────────────── */
+
+export type IngestKind = "markdown" | "text" | "docx";
+
+export interface IngestResult {
+  document_id: string;
+  revision_id: string;
+  revision_no: number;
+  status: "draft";
+}
+
+/**
+ * 摄入：解析（纯函数，后端）→ 家族追加 draft 修订。
+ *
+ * 红线③：解析只能产生 Draft——本端点不发 published 事件、不进检索；
+ * 确认走 confirmKbRevision（真人门）。
+ */
+export function ingestKbDocument(
+  projectId: string,
+  input: {
+    doc_key: string;
+    doc_type: string;
+    kind: IngestKind;
+    content_b64: string;
+  }
+) {
+  return http.post<IngestResult>("/v1/kb/documents/ingest", input, {
+    params: { project_id: projectId }
+  });
+}

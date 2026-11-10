@@ -1,0 +1,25 @@
+{
+  "baseline_run": "20261109-230426",
+  "dataset_version": "synthetic-v1",
+  "metrics": {
+    "authority_assertion": 1.0,
+    "cjk_recall": 1.0,
+    "db_latency_p50_ms": 2.0,
+    "db_latency_p95_ms": 4.0,
+    "edge_precision": 0.4666666666666667,
+    "edge_recall": 1.0,
+    "endpoint_hit_rate": 1.0,
+    "exact_hit_rate": 1.0,
+    "fail_found_not_read": 0,
+    "fail_knowledge_wrong": 0,
+    "fail_not_found": 0,
+    "locator_effectiveness": 1.0,
+    "miss_recognition_rate": 1.0,
+    "mrr": 0.7413793103448276,
+    "negative_isolation_pass_rate": 1.0,
+    "planner_cost_total": 0.0,
+    "queries": 50,
+    "recall_at_1": 0.5517241379310345,
+    "recall_at_5": 1.0
+  }
+}

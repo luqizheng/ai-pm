@@ -184,6 +184,16 @@ pub async fn traverse(
         });
     }
 
+    // 种子命中但零正式边：如实报告缺口（RT-011——"关系不存在"要可见，不静默）。
+    if edges.is_empty() && !request.seed_nodes.is_empty() {
+        gaps.push(TraversalGap {
+            kind: "no_active_edge".into(),
+            detail: format!(
+                "seeds resolved ({}) but no active formal relationship edges found",
+                request.seed_nodes.len()
+            ),
+        });
+    }
     // 候选预算耗尽：取满上限即可能还有更多。
     if edges.len() >= limit {
         gaps.push(TraversalGap {
