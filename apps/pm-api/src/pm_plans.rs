@@ -88,7 +88,10 @@ async fn create_plan(
         &caller.audit_actor(),
     )
     .await?;
-    Ok((axum::http::StatusCode::CREATED, Json(serde_json::json!(detail))))
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!(detail)),
+    ))
 }
 
 async fn get_plan(
@@ -183,7 +186,10 @@ async fn decompose(
     )
     .await
     .map_err(ApiError::from)?;
-    Ok((axum::http::StatusCode::CREATED, Json(serde_json::json!(outcome))))
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!(outcome)),
+    ))
 }
 
 /// 拆解历史（本计划的 AI 修订清单）。
@@ -193,12 +199,9 @@ async fn list_decompositions(
     Path(plan_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
     require_plan_visible(&state, plan_id, &caller).await?;
-    let items = pm_ai::plan_decomposition::list_decompositions(
-        &state.pool,
-        caller.tenant_id,
-        plan_id,
-    )
-    .await?;
+    let items =
+        pm_ai::plan_decomposition::list_decompositions(&state.pool, caller.tenant_id, plan_id)
+            .await?;
     Ok(Json(serde_json::json!({ "items": items })))
 }
 
@@ -310,7 +313,10 @@ pub(crate) fn router() -> Router<AppState> {
             get(list_plans).post(create_plan),
         )
         .route("/v1/pm/task-plans/{plan_id}", get(get_plan))
-        .route("/v1/pm/task-plans/{plan_id}/revisions", post(create_revision))
+        .route(
+            "/v1/pm/task-plans/{plan_id}/revisions",
+            post(create_revision),
+        )
         .route(
             "/v1/pm/task-plans/{plan_id}/revisions/{revision_id}",
             patch(update_revision_draft),
@@ -323,13 +329,13 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/pm/task-plans/{plan_id}/approvals",
             post(request_plan_approval),
         )
-        .route(
-            "/v1/pm/task-plans/{plan_id}/materialize",
-            post(materialize),
-        )
+        .route("/v1/pm/task-plans/{plan_id}/materialize", post(materialize))
         .route("/v1/pm/task-plans/{plan_id}/handoff", get(handoff))
         .route("/v1/pm/task-plans/{plan_id}/progress", get(progress))
-        .route("/v1/pm/task-plans/{plan_id}/supersede", post(supersede_plan))
+        .route(
+            "/v1/pm/task-plans/{plan_id}/supersede",
+            post(supersede_plan),
+        )
         .route(
             "/v1/pm/projects/{project_id}/task-plans/decompose",
             post(decompose),

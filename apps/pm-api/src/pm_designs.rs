@@ -20,11 +20,10 @@ use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
 use pm_application::design::{
-    self, AddFindingRequest, CreateAdrRequest, CreateDesignRequest,
-    DecideApprovalRequest, DraftAdrRevisionRequest, DraftDesignRevisionRequest,
-    FreezeBaselineRequest, LinkAdrDesignRequest, LinkAdrRequirementRequest,
-    LinkDesignRequirementRequest, ResolveFindingRequest, SetBlockingRequest, SupersedeAdrRequest,
-    SupersedeBaselineRequest,
+    self, AddFindingRequest, CreateAdrRequest, CreateDesignRequest, DecideApprovalRequest,
+    DraftAdrRevisionRequest, DraftDesignRevisionRequest, FreezeBaselineRequest,
+    LinkAdrDesignRequest, LinkAdrRequirementRequest, LinkDesignRequirementRequest,
+    ResolveFindingRequest, SetBlockingRequest, SupersedeAdrRequest, SupersedeBaselineRequest,
 };
 
 /// 设计级端点公共前置：租户边界（越权/不存在一律 404）+ 项目成员可见性。
@@ -33,13 +32,12 @@ async fn require_design_visible(
     design_id: Uuid,
     principal: &AuthedPrincipal,
 ) -> ApiResult<Uuid> {
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM design.design WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(design_id)
-    .bind(principal.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?;
+    let project_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT project_id FROM design.design WHERE id = $1 AND tenant_id = $2")
+            .bind(design_id)
+            .bind(principal.tenant_id)
+            .fetch_optional(&state.pool)
+            .await?;
     let project_id = project_id.ok_or(ApiError::NotFound("design not found"))?;
     require_project_visible(
         &state.pool,
@@ -133,7 +131,10 @@ async fn create_design(
         &caller.audit_actor(),
     )
     .await?;
-    Ok((axum::http::StatusCode::CREATED, Json(serde_json::json!(detail))))
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!(detail)),
+    ))
 }
 
 async fn get_design(
@@ -211,13 +212,9 @@ async fn list_revision_requirements(
     Path((design_id, revision_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<serde_json::Value>> {
     require_revision_visible(&state, design_id, revision_id, &caller).await?;
-    let items = design::list_design_requirements(
-        &state.pool,
-        caller.tenant_id,
-        design_id,
-        revision_id,
-    )
-    .await?;
+    let items =
+        design::list_design_requirements(&state.pool, caller.tenant_id, design_id, revision_id)
+            .await?;
     Ok(Json(serde_json::json!({ "items": items })))
 }
 
@@ -237,7 +234,10 @@ async fn link_requirement(
         &caller.audit_actor(),
     )
     .await?;
-    Ok((axum::http::StatusCode::CREATED, Json(serde_json::json!(link))))
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!(link)),
+    ))
 }
 
 async fn unlink_requirement(
@@ -266,8 +266,7 @@ async fn list_findings(
     Path((design_id, revision_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<serde_json::Value>> {
     require_revision_visible(&state, design_id, revision_id, &caller).await?;
-    let items =
-        design::list_review_findings(&state.pool, caller.tenant_id, revision_id).await?;
+    let items = design::list_review_findings(&state.pool, caller.tenant_id, revision_id).await?;
     Ok(Json(serde_json::json!({ "items": items })))
 }
 
@@ -339,13 +338,9 @@ async fn request_adr_approval(
     Path(adr_id): Path<Uuid>,
 ) -> ApiResult<(axum::http::StatusCode, Json<serde_json::Value>)> {
     require_adr_visible(&state, adr_id, &caller).await?;
-    let approval = design::request_adr_approval(
-        &state.pool,
-        caller.tenant_id,
-        adr_id,
-        &caller.audit_actor(),
-    )
-    .await?;
+    let approval =
+        design::request_adr_approval(&state.pool, caller.tenant_id, adr_id, &caller.audit_actor())
+            .await?;
     Ok((
         axum::http::StatusCode::CREATED,
         Json(serde_json::json!({ "approval": approval })),
@@ -426,7 +421,10 @@ async fn create_adr(
         &caller.audit_actor(),
     )
     .await?;
-    Ok((axum::http::StatusCode::CREATED, Json(serde_json::json!(detail))))
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(serde_json::json!(detail)),
+    ))
 }
 
 async fn get_adr(
@@ -543,13 +541,8 @@ async fn deprecate_adr(
 ) -> ApiResult<Json<serde_json::Value>> {
     require_adr_visible(&state, adr_id, &caller).await?;
     ensure_trusted_context(&caller)?;
-    let entry = design::deprecate_adr(
-        &state.pool,
-        caller.tenant_id,
-        adr_id,
-        &caller.audit_actor(),
-    )
-    .await?;
+    let entry =
+        design::deprecate_adr(&state.pool, caller.tenant_id, adr_id, &caller.audit_actor()).await?;
     Ok(Json(serde_json::json!({ "adr": entry })))
 }
 
