@@ -143,17 +143,14 @@ export function buildRoutes(): RouteRecordRaw[] {
   // 总览/任务池接真（/v1/pm/tasks 系）；拆解与详情在任务读/AI 拆解接口
   // 落地前仅 mock 预览（VITE_USE_MOCK=1 注册真实页，发布构建走占位页，
   // 避免 fixtures 演示数据进入 dist，见 build/release-guard.ts）；
-  // 执行规划与执行准备待后续批次（占位页）。
+  // 执行规划（依赖图/时间线）与执行准备接口均未落地，第二批一并走
+  // mock 预览注册（S04-UI-05/06/07）。
   routes.push(
     {
+      // 执行规划含依赖图/时间线两个子视图，/planning 重定向到依赖图
       path: "/project/tasks/planning",
-      component: PlaceholderView,
+      redirect: "/project/tasks/planning/graph",
       meta: { title: "s04.tasks.page.planningTitle" }
-    },
-    {
-      path: "/project/tasks/readiness",
-      component: PlaceholderView,
-      meta: { title: "s04.tasks.page.readinessTitle" }
     },
     mockPreview
       ? {
@@ -166,6 +163,44 @@ export function buildRoutes(): RouteRecordRaw[] {
           path: "/project/tasks/breakdown",
           component: PlaceholderView,
           meta: { title: "s04.tasks.page.breakdownTitle" }
+        },
+    mockPreview
+      ? {
+          path: "/project/tasks/planning/graph",
+          component: () =>
+            import("@/views/project/tasks/planning/DependencyGraphView.vue"),
+          meta: { title: "s04.tasks.page.planningTitle" }
+        }
+      : {
+          path: "/project/tasks/planning/graph",
+          component: PlaceholderView,
+          meta: { title: "s04.tasks.page.planningTitle" }
+        },
+    mockPreview
+      ? {
+          path: "/project/tasks/planning/timeline",
+          component: () =>
+            import("@/views/project/tasks/planning/TimelineView.vue"),
+          meta: { title: "s04.tasks.page.planningTitle" }
+        }
+      : {
+          path: "/project/tasks/planning/timeline",
+          component: PlaceholderView,
+          meta: { title: "s04.tasks.page.planningTitle" }
+        },
+    mockPreview
+      ? {
+          path: "/project/tasks/readiness",
+          component: () =>
+            import(
+              "@/views/project/tasks/readiness/ExecutionReadinessView.vue"
+            ),
+          meta: { title: "s04.tasks.page.readinessTitle" }
+        }
+      : {
+          path: "/project/tasks/readiness",
+          component: PlaceholderView,
+          meta: { title: "s04.tasks.page.readinessTitle" }
         },
     mockPreview
       ? {

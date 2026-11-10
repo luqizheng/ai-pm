@@ -220,3 +220,151 @@ tasks:
     suggestionIgnore: 忽略
     suggestionApplied: 已采纳
     mockNote: 演示数据（dev mock）：任务详情读接口尚未接线，本页不回写后端。
+
+  planning:
+    viewGraph: 依赖图
+    viewGroups: 并行组
+    viewTimeline: 时间线
+    metricsVersion: 规划版本
+    metricsScheduled: 已排期
+    metricsUnscheduled: 未排期
+    metricsApproved: 已批准任务
+    metricsWithDeps: 含依赖
+    metricsParallel: 可并行
+    metricsUnresolved: 未解决依赖
+    metricsCritical: 关键依赖
+    metricsMilestones: 里程碑
+    savePlan: 保存规划
+    savedNotice: 规划已保存（演示态，无后端写入）。
+    validateDeps: 校验依赖
+    validateSchedule: 校验排期
+    optimize: 优化规划
+    compareVersions: 比较版本
+    zoomIn: 放大
+    zoomOut: 缩小
+    fit: 适应画布
+    legendBlocked: 阻塞
+    legendCritical: 关键路径
+    legendParallel: 可并行
+    legendNormal: 常规
+    inspectorTitle: 依赖检查器
+    upstream: 上游依赖
+    downstream: 下游任务
+    depReason: 依赖原因
+    addDep: 添加前置依赖
+    addDepPlaceholder: 前置任务编号
+    addDepBtn: 添加
+    removeDep: 移除
+    viewTask: 打开任务
+    errSelf: 不能依赖任务自身。
+    errUnknown: 任务编号不存在。
+    errDuplicate: 依赖关系已存在。
+    errCycle: 该依赖会形成循环依赖。
+    validationTitle: 依赖校验结果
+    validationClean: 未发现问题。
+    validationRanAt: 校验于 {time}
+    issueInvalidRef: 引用了不存在的任务 {code}。
+    issueBlockedUpstream: 前置任务 {code} 处于阻塞状态，下游无法就绪。
+    issueConflict: "{a} 与 {b} 修改同一模块，存在并行冲突风险。"
+    groupsTitle: 并行执行组
+    groupPreconditions: 前置条件
+    groupRepos: 仓库分布
+    groupConflicts: 潜在冲突
+    groupRationale: 并行依据
+    groupMove: 移至组
+    groupNone: 暂无并行组，可在 AI 建议中采纳并行化方案。
+    aiTitle: AI 规划建议
+    aiAccept: 采纳
+    aiReject: 忽略
+    aiAccepted: 已采纳
+    aiRejected: 已忽略
+    aiImpact: 影响
+    mockNote: 演示数据（dev mock）——规划聚合与并行分析接口尚未接线，改动仅存在于本页会话。
+  timeline:
+    scaleDay: 日
+    scaleWeek: 周
+    scaleMonth: 月
+    today: 今天
+    groupByFeature: 按特性分组
+    showDeps: 依赖连线
+    showMilestones: 里程碑
+    workloadTitle: 负载分布（按负责人）
+    workloadHint: 预估工作量为规划估算，不代表实际工程执行时间。
+    unscheduledTray: 未排期任务
+    dragHint: 拖拽任务条调整排期；把未排期任务拖入画布完成排期；拖拽会预览下游顺延。
+    badOrder: "{code} 的排期违反依赖顺序。"
+    unscheduledIssue: "{count} 个任务未排期。"
+    impactPreview: 下游影响预览
+    confirmMoveTitle: 保存排期变更
+    confirmMoveDesc: 将移动 {code}（{delta} 天），下游 {count} 个任务随之顺延，需确认后生效。
+    saveChanges: 保存排期
+    milestoneLabel: 里程碑
+    milestoneDue: 计划 {date}
+    versionSaved: 已保存规划版本 {version}。
+    comparing: 正在比较 {version}（虚线为历史排期）。
+    exitCompare: 退出比较
+  readiness:
+    validate: 校验准备度
+    validateRunning: 校验中…
+    lastValidation: 上次校验 {time}
+    stateReady: 可执行
+    stateAttention: 需处理
+    stateBlocked: 阻塞
+    statePass: 通过
+    stateWarn: 需处理
+    stateBlock: 阻塞
+    stateNa: 不适用
+    checklistTitle: 准备度检查表
+    catDefinition: 任务定义
+    catTrace: 来源追溯
+    catDependency: 依赖校验
+    catPreparation: 工程准备
+    catAcceptance: 验收与交付
+    catApproval: 人工审批
+    a1: 任务有明确目标与范围
+    a2: 预期结果已定义
+    a3: 实施说明可用
+    b1: 已关联需求
+    b2: 已关联技术设计与 ADR
+    b3: 实施基线有效且已批准
+    c1: 依赖关系已定义且无环
+    c2: 前置条件满足、无未决阻塞
+    d1: 仓库已分配且已验证
+    d2: 目标模块与技术约束已明确
+    e1: 验收标准可独立验证
+    e2: 交付物与所需测试已定义
+    f1: 必要的人工批准已完成
+    f2: 规划变更已由人工确认
+    tableTitle: 任务准备度
+    colMissing: 缺失信息
+    colReadiness: 准备度
+    issuesTitle: 待处置问题
+    severityHigh: 高
+    severityMedium: 中
+    severityLow: 低
+    reason: 原因
+    resolution: 建议处置
+    openTask: 打开任务
+    markResolved: 标记已解决
+    waive: 豁免
+    waiveTitle: 豁免确认
+    waiveDesc: 豁免 {code} 的问题需记录理由并留痕，仅当条件确实无法满足时使用。
+    waivePlaceholder: 豁免理由
+    waiveConfirm: 确认豁免
+    issueResolved: 已解决
+    issueWaived: 已豁免
+    issueOpen: 未决
+    aiTitle: AI 准备度分析
+    handoffTitle: S05 移交
+    handoffIncluded: 纳入 {count}
+    handoffExcluded: 排除 {count}
+    handoffVersion: 移交版本 {version}
+    handoffIssues: 未决问题 {count}
+    handoffAction: 准备 S05 移交
+    handoffBlockedHint: 存在未决问题或审批未完成，暂不可移交；先处置问题或走豁免留痕。
+    handoffConfirmTitle: 确认移交 S05
+    handoffConfirmDesc: "版本 {version}——纳入 {included} 个任务、排除 {excluded} 个，未决问题 {issues} 个；移交后计划进入 S05 执行队列。"
+    handoffConfirmBtn: 确认移交
+    handoffDone: 移交包 {version} 已交付 S05（演示态，无后端写入）。
+    handoffDoneDesc: 本页不启动 Agent、不执行代码；执行由 S05 调度。
+    mockNote: 演示数据（dev mock）——准备度与移交接口尚未接线，动作仅存在于本页会话。

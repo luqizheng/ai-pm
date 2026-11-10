@@ -220,3 +220,151 @@ tasks:
     suggestionIgnore: Ignore
     suggestionApplied: Applied
     mockNote: Demo data (dev mock); the task detail read API is not wired yet. Nothing is written back from this page.
+
+  planning:
+    viewGraph: Dependency Graph
+    viewGroups: Parallel Groups
+    viewTimeline: Timeline
+    metricsVersion: Planning version
+    metricsScheduled: Scheduled
+    metricsUnscheduled: Unscheduled
+    metricsApproved: Approved tasks
+    metricsWithDeps: With dependencies
+    metricsParallel: Parallelizable
+    metricsUnresolved: Unresolved dependencies
+    metricsCritical: Critical dependencies
+    metricsMilestones: Milestones
+    savePlan: Save Plan
+    savedNotice: Plan saved (demo; nothing written).
+    validateDeps: Validate Dependencies
+    validateSchedule: Validate Schedule
+    optimize: Optimize Plan
+    compareVersions: Compare Versions
+    zoomIn: Zoom in
+    zoomOut: Zoom out
+    fit: Fit
+    legendBlocked: Blocked
+    legendCritical: Critical path
+    legendParallel: Parallelizable
+    legendNormal: Normal
+    inspectorTitle: Dependency Inspector
+    upstream: Upstream
+    downstream: Downstream
+    depReason: Dependency reason
+    addDep: Add dependency
+    addDepPlaceholder: Predecessor code
+    addDepBtn: Add
+    removeDep: Remove
+    viewTask: Open Task
+    errSelf: A task cannot depend on itself.
+    errUnknown: Unknown task code.
+    errDuplicate: Dependency already exists.
+    errCycle: This dependency would create a cycle.
+    validationTitle: Dependency Validation Results
+    validationClean: No issues found.
+    validationRanAt: Validated at {time}
+    issueInvalidRef: References unknown task {code}.
+    issueBlockedUpstream: Predecessor {code} is blocked; downstream cannot become ready.
+    issueConflict: "{a} and {b} modify the same module and may conflict in parallel."
+    groupsTitle: Parallel Execution Groups
+    groupPreconditions: Preconditions
+    groupRepos: Repository distribution
+    groupConflicts: Potential conflicts
+    groupRationale: Parallelization rationale
+    groupMove: Move to group
+    groupNone: No parallel groups yet; accept an AI parallelization suggestion.
+    aiTitle: AI Planning Assistant
+    aiAccept: Accept
+    aiReject: Dismiss
+    aiAccepted: Accepted
+    aiRejected: Dismissed
+    aiImpact: Impact
+    mockNote: Demo data (dev mock) — planning aggregation/parallel analysis APIs not wired; changes live in this page session only.
+  timeline:
+    scaleDay: Day
+    scaleWeek: Week
+    scaleMonth: Month
+    today: Today
+    groupByFeature: Group by feature
+    showDeps: Dependency connectors
+    showMilestones: Milestones
+    workloadTitle: Workload distribution (by assignee)
+    workloadHint: Estimated effort is a planning estimate, not actual engineering time.
+    unscheduledTray: Unscheduled tasks
+    dragHint: Drag bars to reschedule; drop unscheduled tasks onto the canvas; downstream impact is previewed while dragging.
+    badOrder: "{code} schedule violates dependency order."
+    unscheduledIssue: "{count} tasks are unscheduled."
+    impactPreview: Downstream impact preview
+    confirmMoveTitle: Save schedule change
+    confirmMoveDesc: Moving {code} by {delta} days; {count} downstream tasks shift accordingly after confirmation.
+    saveChanges: Save schedule
+    milestoneLabel: Milestone
+    milestoneDue: Planned {date}
+    versionSaved: Planning version {version} saved.
+    comparing: Comparing {version} (dashed = previous schedule).
+    exitCompare: Exit compare
+  readiness:
+    validate: Validate Task Readiness
+    validateRunning: Validating…
+    lastValidation: Last validation {time}
+    stateReady: Ready
+    stateAttention: Needs Attention
+    stateBlocked: Blocked
+    statePass: Passed
+    stateWarn: Needs Attention
+    stateBlock: Blocked
+    stateNa: n.a.
+    checklistTitle: Readiness Checklist
+    catDefinition: Task Definition
+    catTrace: Source Traceability
+    catDependency: Dependency Validation
+    catPreparation: Engineering Preparation
+    catAcceptance: Acceptance & Delivery
+    catApproval: Human Approval
+    a1: Task has a clear objective and scope
+    a2: Expected result is defined
+    a3: Implementation instructions are available
+    b1: Requirements are linked
+    b2: Technical design and ADRs are linked
+    b3: Implementation baseline is valid and approved
+    c1: Dependencies defined and acyclic
+    c2: Predecessor conditions met, no unresolved blocking
+    d1: Repository assigned and verified
+    d2: Target module and constraints documented
+    e1: Acceptance criteria independently verifiable
+    e2: Deliverables and required tests defined
+    f1: Required human approvals completed
+    f2: Planning changes confirmed by humans
+    tableTitle: Task Readiness
+    colMissing: Missing Information
+    colReadiness: Readiness
+    issuesTitle: Issue Resolution
+    severityHigh: High
+    severityMedium: Medium
+    severityLow: Low
+    reason: Reason
+    resolution: Recommended Resolution
+    openTask: Open Task
+    markResolved: Mark Resolved
+    waive: Waive
+    waiveTitle: Waiver
+    waiveDesc: Waiving the issue for {code} requires a logged reason; use only when the condition genuinely cannot be met.
+    waivePlaceholder: Waiver reason
+    waiveConfirm: Confirm Waiver
+    issueResolved: Resolved
+    issueWaived: Waived
+    issueOpen: Open
+    aiTitle: AI Readiness Analysis
+    handoffTitle: S05 Handoff
+    handoffIncluded: Included {count}
+    handoffExcluded: Excluded {count}
+    handoffVersion: Handoff version {version}
+    handoffIssues: Unresolved issues {count}
+    handoffAction: Prepare S05 Handoff
+    handoffBlockedHint: Open issues or missing approvals block the handoff; resolve them or waive with a logged reason.
+    handoffConfirmTitle: Confirm S05 Handoff
+    handoffConfirmDesc: "Version {version} — {included} tasks included, {excluded} excluded, {issues} unresolved issues; the plan enters the S05 execution queue."
+    handoffConfirmBtn: Confirm Handoff
+    handoffDone: Handoff package {version} delivered to S05 (demo; nothing written).
+    handoffDoneDesc: This page launches no agents and executes no code; execution is dispatched by S05.
+    mockNote: Demo data (dev mock) — readiness/handoff APIs not wired; actions live in this page session only.
