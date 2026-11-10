@@ -138,6 +138,44 @@ export function buildRoutes(): RouteRecordRaw[] {
     meta: { title: "s01.command-center.pageTitle" }
   });
 
+  // ─── 设计与技术决策（S03 · docs/ui/s03，2026-11-10）───
+  // 四个子页 = 独立路由 + 页内页签条（DesignFrame，同 TasksFrame 组织）。
+  // 全部接真后端（/v1/pm/projects/{id}/designs · adrs · design-analysis ·
+  // design-approvals · design-workspace · implementation-readiness），
+  // 无 mock 分支：发布构建与 dev 走同一条真数据路径。
+  routes.push(
+    {
+      path: "/project/design/technical-designs",
+      component: () =>
+        import("@/views/project/design/designs/TechnicalDesignsView.vue"),
+      meta: { title: "s03.design.page.designsTitle" }
+    },
+    {
+      path: "/project/design/technical-designs/:designId",
+      component: () =>
+        import("@/views/project/design/designs/TechnicalDesignDetailView.vue"),
+      meta: { title: "s03.design.page.designDetailTitle" }
+    },
+    {
+      path: "/project/design/adrs",
+      component: () => import("@/views/project/design/adrs/AdrView.vue"),
+      meta: { title: "s03.design.page.adrsTitle" }
+    },
+    {
+      path: "/project/design/adrs/:adrId",
+      component: () => import("@/views/project/design/adrs/AdrDetailView.vue"),
+      meta: { title: "s03.design.page.adrDetailTitle" }
+    },
+    {
+      path: "/project/design/readiness",
+      component: () =>
+        import(
+          "@/views/project/design/readiness/ImplementationReadinessView.vue"
+        ),
+      meta: { title: "s03.design.page.readinessTitle" }
+    }
+  );
+
   // ─── 任务管理（S04 · docs/ui/s04，2026-11-10）───
   // 子页为独立路由 + 页内页签条（TasksFrame，同 AiTeamFrame 组织）。
   // 总览/任务池接真（/v1/pm/tasks 系）；拆解与详情在任务读/AI 拆解接口

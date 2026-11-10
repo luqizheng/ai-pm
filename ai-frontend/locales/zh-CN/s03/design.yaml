@@ -1,0 +1,152 @@
+design:
+  module: 技术设计
+  tabs:
+    analysis: 分析
+    designs: 技术设计
+    adrs: 架构决策
+    readiness: 实施准备
+  page:
+    analysisTitle: 分析
+    analysisDesc: 需求覆盖、架构引用与影响关系（需求被新版本取代时需重新评估）。
+    designsTitle: 技术设计
+    designsDesc: 技术设计的版本链、评审状态与需求依据。
+    designDetailTitle: 技术设计详情
+    designDetailDesc: 版本链、正文、需求覆盖与评审问题。
+    adrsTitle: 架构决策
+    adrsDesc: 独立决策记录、决策状态与影响关系。
+    adrDetailTitle: 架构决策详情
+    adrDetailDesc: 决策内容、版本链与关联设计需求。
+    readinessTitle: 实施准备
+    readinessDesc: 实施准入门禁、已冻结基线与交接 S04 的任务。
+  common:
+    refresh: 刷新
+    back: 返回
+    open: 查看
+    openDesign: 查看设计
+    actions: 操作
+    all: 全部
+    none: 无
+    unknown: 未知
+    noRevision: 无版本
+    noProjectTitle: 请先选择项目
+    noProjectHint: 技术设计与架构决策属于项目，需要先选定项目上下文。
+    errorTitle: 加载失败
+    filters: 筛选
+  context:
+    title: 工作空间
+    designs: 技术设计
+    adrs: 架构决策
+    baselines: 实施基线
+    pendingApprovals: 待办审批
+    openFindings: 未闭问题
+    linkedRequirements: 需求覆盖
+    staleRequirements: 过期绑定
+  revisionState:
+    draft: 草稿
+    pending_confirmation: 待确认
+    approved: 已批准
+    rejected: 已否决
+    superseded: 已被取代
+  requirementState:
+    draft: 草稿
+    pending_confirmation: 待确认
+    approved: 已确认
+    rejected: 已否决
+    superseded: 已被取代
+  adrStatus:
+    proposed: 已提出
+    under_review: 评审中
+    accepted: 已接受
+    rejected: 已否决
+    superseded: 已被取代
+    deprecated: 已废弃
+  approvalStatus:
+    pending: 待裁决
+    approved: 已批准
+    rejected: 已否决
+  severity:
+    info: 提示
+    warning: 警告
+    blocker: 阻塞
+  findingStatus:
+    open: 未闭
+    acknowledged: 已知悉
+    resolved: 已解决
+  gate:
+    design_approved: 设计已批准
+    requirements_confirmed: 需求依据已确认
+    adrs_resolved: 关键决策已解决
+    acceptance_criteria: 验收标准齐备
+    repositories_verified: 仓库基准已核验
+  analysis:
+    staleTitle: 存在过期需求依据
+    staleHint: 有 {count} 个设计仍引用已被取代的需求修订，需先做影响分析。
+    staleBadge: 过期依据 {count}
+    supersededRequirement: 依据已过期
+    version: v{version}
+    requirementsTitle: 需求覆盖
+    noRequirements: 该设计未绑定需求修订。
+    adrsTitle: 影响关系
+    noAdrs: 该设计未被任何架构决策引用。
+  designs:
+    emptyTitle: 暂无技术设计
+    emptyHint: 项目内尚无技术设计，创建后可在此管理版本链与评审。
+    notFoundTitle: 设计不存在
+    notFoundHint: 该技术设计已被删除或你无权查看。
+    colCode: 编号
+    colTitle: 标题
+    colCurrentVersion: 当前正式版本
+    colLatestVersion: 最新版本
+    colReview: 评审状态
+    colFindings: 评审问题
+    colUpdated: 更新时间
+    pendingApproval: 待裁决 {count}
+    noPendingApproval: 无待办
+    openFindings: 未闭 {count}
+    noFindings: 无
+  detail:
+    revisionsTitle: 版本链
+    noRevisions: 该设计尚无版本。
+    contentTitle: 版本正文
+    noContent: 该版本没有正文内容。
+    findingsTitle: 评审问题
+    noFindings: 该版本没有登记评审问题。
+    aiSource: AI 产出
+  adrs:
+    emptyTitle: 暂无架构决策
+    emptyHint: 项目内尚无架构决策，重要技术决策应独立记录以便追溯。
+    notFoundTitle: 决策不存在
+    notFoundHint: 该架构决策已被删除或你无权查看。
+    colCode: 编号
+    colTitle: 标题
+    colStatus: 决策状态
+    colBlocking: 实施阻塞
+    colReview: 评审状态
+    colUpdated: 更新时间
+    metaTitle: 决策概览
+    contentTitle: 决策内容
+    impactTitle: 影响关系
+    noImpact: 该决策尚未关联设计或需求。
+    blocking: 阻塞实施
+    notBlocking: 不阻塞
+    supersededBy: 被替代为
+    decisionQuestion: 决策问题
+    context: 背景
+    options: 备选方案
+    chosenOption: 选定方案
+    rationale: 选择理由
+    consequences: 后果
+  readiness:
+    gateTitle: 实施准入门禁
+    ready: 已就绪
+    notReady: 未就绪
+    passed: 通过
+    failed: 未通过
+    noApprovedRevisions: 项目内没有已批准的设计版本，门禁无从判定。
+    baselinesTitle: 已冻结实施基线
+    noBaselines: 尚未冻结任何实施基线。
+    frozen: 已冻结
+    superseded: 已被替代
+    handoffTitle: 交接 S04
+    handoffHint: 以基线 {code} 为实施依据的任务。
+    noHandoffTasks: 尚无任务以该基线为实施依据。

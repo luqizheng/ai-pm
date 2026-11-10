@@ -209,6 +209,7 @@ shell:
         discovery: Code Discovery
         requirements: Requirements
         taskManagement: Task Management
+        technicalDesign: Technical Design
         execution: AI Execution Center
         assistant: AI Assistant
         knowledge: Knowledge Review

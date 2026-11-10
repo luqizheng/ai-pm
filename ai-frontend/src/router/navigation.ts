@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  ListTree,
   Folders,
   Home,
   Inbox,
@@ -146,6 +147,17 @@ export const navGroups: NavGroup[] = [
         icon: ListChecks,
         component: () =>
           import("@/views/project/requirements/RequirementsView.vue").then(
+            module => module.default
+          )
+      },
+      // 技术设计（S03，docs/ui/s03，2026-11-10）：分析 / 技术设计 / 架构决策 /
+      // 实施准备四个子页，全部接真后端（/v1/pm/designs · adrs · design-* 系）。
+      {
+        path: "/project/design",
+        labelKey: "shell.app.side.item.technicalDesign",
+        icon: ListTree,
+        component: () =>
+          import("@/views/project/design/analysis/DesignAnalysisView.vue").then(
             module => module.default
           )
       },
