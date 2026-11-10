@@ -1050,14 +1050,13 @@ pub async fn accept_invitation_link(
 ) -> Result<AcceptOutcome, TeamOnboardingError> {
     let mut tx = pool.begin().await?;
     type Row = Option<(Uuid, Uuid, String, String, Option<i32>, i32, DateTime<Utc>)>;
-    let locked: Row =
-        sqlx::query_as(
-            "SELECT id, tenant_id, default_role, status, max_uses, used_count, expires_at \
+    let locked: Row = sqlx::query_as(
+        "SELECT id, tenant_id, default_role, status, max_uses, used_count, expires_at \
                FROM core.tenant_invitation_link WHERE token_hash = $1 FOR UPDATE",
-        )
-        .bind(hash_token(token))
-        .fetch_optional(&mut *tx)
-        .await?;
+    )
+    .bind(hash_token(token))
+    .fetch_optional(&mut *tx)
+    .await?;
     let Some((link_id, tenant_id, default_role, status, max_uses, used_count, expires_at)) = locked
     else {
         return Err(TeamOnboardingError::InvitationNotFound);
@@ -1066,7 +1065,9 @@ pub async fn accept_invitation_link(
     // 状态闸（死 token 先拒）：REVOKED / 过期（惰性翻转）。EXHAUSTED 的判定
     // 延后到成员检查之后——已是成员的重复提交是幂等 already_member，不因
     // 名额耗尽而变 error（UNIQUE(link_id, principal_id) 已有领用记录）。
-    if status.as_str() == "REVOKED" { return Err(TeamOnboardingError::Revoked) }
+    if status.as_str() == "REVOKED" {
+        return Err(TeamOnboardingError::Revoked);
+    }
     if expires_at <= now() {
         sqlx::query(
             "UPDATE core.tenant_invitation_link SET status = 'EXPIRED' \

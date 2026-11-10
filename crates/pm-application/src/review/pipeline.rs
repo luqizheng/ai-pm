@@ -224,9 +224,8 @@ pub fn evaluate(input: &ReviewInput) -> ReviewOutcome {
             severity: Severity::Blocker,
             criterion_id: None,
             code_location: None,
-            message:
-                "integration_status is `failed`; no reviewer or human may complete this task"
-                    .to_string(),
+            message: "integration_status is `failed`; no reviewer or human may complete this task"
+                .to_string(),
             evidence_ref: None,
         });
     }
@@ -389,22 +388,21 @@ pub fn evaluate(input: &ReviewInput) -> ReviewOutcome {
     }
 
     // ── L4 证据一致性 ─────────────────────────────────────────────────
-    if input.integration_status == "not_run"
-        && !automated_criteria.is_empty() {
-            for criterion in &automated_criteria {
-                findings.push(ReviewFinding {
-                    finding_kind: "evidence_missing".to_string(),
-                    severity: Severity::Blocker,
-                    criterion_id: Some(criterion.criterion_id),
-                    code_location: None,
-                    message: format!(
-                        "criterion #{} requires automated tests but integration_status is `not_run`",
-                        criterion.ordinal
-                    ),
-                    evidence_ref: None,
-                });
-            }
+    if input.integration_status == "not_run" && !automated_criteria.is_empty() {
+        for criterion in &automated_criteria {
+            findings.push(ReviewFinding {
+                finding_kind: "evidence_missing".to_string(),
+                severity: Severity::Blocker,
+                criterion_id: Some(criterion.criterion_id),
+                code_location: None,
+                message: format!(
+                    "criterion #{} requires automated tests but integration_status is `not_run`",
+                    criterion.ordinal
+                ),
+                evidence_ref: None,
+            });
         }
+    }
     if input.integration_status == "passed" && !failed_tests.is_empty() {
         findings.push(ReviewFinding {
             finding_kind: "evidence_conflict".to_string(),

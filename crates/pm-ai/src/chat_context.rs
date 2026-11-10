@@ -33,9 +33,7 @@
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::discovery_context::{
-    ContextSection, SectionDraft, assemble_chat, CHAT_SECTION_ORDER,
-};
+use crate::discovery_context::{assemble_chat, ContextSection, SectionDraft, CHAT_SECTION_ORDER};
 
 /// chat 注入总量硬预算（字符）。与访谈的 36,000 独立。
 pub const CHAT_TOTAL_BUDGET_CHARS: usize = 8_000;
@@ -69,9 +67,7 @@ impl ChatContext {
     pub fn render(&self) -> String {
         self.sections
             .iter()
-            .map(|section| {
-                format!("## {}\n{}", section.title, section.body)
-            })
+            .map(|section| format!("## {}\n{}", section.title, section.body))
             .collect::<Vec<_>>()
             .join("\n\n")
     }
@@ -89,7 +85,8 @@ const SQL_PROJECT_PROFILE: &str = "SELECT p.name, COALESCE(p.description, '') AS
             p.status \
      FROM core.project p WHERE p.tenant_id = $1 AND p.id = $2";
 
-const SQL_REPOSITORY_FACTS: &str = "SELECT r.name, COALESCE(r.default_branch, '') AS default_branch, \
+const SQL_REPOSITORY_FACTS: &str =
+    "SELECT r.name, COALESCE(r.default_branch, '') AS default_branch, \
             r.role, r.status, COALESCE(r.head_commit_sha, '') AS head_commit_sha \
      FROM integration.project_repository r \
      WHERE r.tenant_id = $1 AND r.project_id = $2 AND r.name = $3 \

@@ -383,8 +383,7 @@ pub const CHAT_SECTION_ORDER: [&str; 2] = [
 ];
 
 /// chat 整节删除顺序：仓库事实先删（项目画像是更基本的上下文）。
-pub const CHAT_DROP_ORDER: [&str; 1] =
-    [crate::chat_context::CHAT_KEY_REPOSITORY_FACTS];
+pub const CHAT_DROP_ORDER: [&str; 1] = [crate::chat_context::CHAT_KEY_REPOSITORY_FACTS];
 
 /// 把原始小节装配成 chat 注入产物（受 chat 预算约束）。
 ///

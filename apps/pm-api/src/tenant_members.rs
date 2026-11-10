@@ -58,8 +58,8 @@ async fn list_handler(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(tenant_id): Path<Uuid>,
 ) -> Response {
-    if let Err(resp) = crate::team_llm_guard::verify_active_member(&state.pool, &caller, tenant_id)
-        .await
+    if let Err(resp) =
+        crate::team_llm_guard::verify_active_member(&state.pool, &caller, tenant_id).await
     {
         return resp;
     }
@@ -102,8 +102,8 @@ async fn detail_handler(
     Extension(caller): Extension<AuthedPrincipal>,
     Path((tenant_id, principal_id)): Path<(Uuid, Uuid)>,
 ) -> Response {
-    if let Err(resp) = crate::team_llm_guard::verify_active_member(&state.pool, &caller, tenant_id)
-        .await
+    if let Err(resp) =
+        crate::team_llm_guard::verify_active_member(&state.pool, &caller, tenant_id).await
     {
         return resp;
     }

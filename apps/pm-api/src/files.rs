@@ -380,9 +380,9 @@ fn out_meta_from(meta: IncomingUploadMeta, caller: &AuthedPrincipal) -> UploadFi
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     use axum::http::StatusCode;
-    
+
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 

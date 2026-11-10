@@ -334,7 +334,15 @@ pub async fn get_import(
     .await?;
 
     // 轮次历史（R-4-1：成功与失败都留档）。
-    type Row = (Uuid, i32, String, Option<String>, Option<String>, DateTime<Utc>, Option<DateTime<Utc>>);
+    type Row = (
+        Uuid,
+        i32,
+        String,
+        Option<String>,
+        Option<String>,
+        DateTime<Utc>,
+        Option<DateTime<Utc>>,
+    );
     let attempt_rows: Vec<Row> =
         sqlx::query_as(
             "SELECT repository_id, attempt_no, status, commit_sha, error_code, started_at, finished_at \

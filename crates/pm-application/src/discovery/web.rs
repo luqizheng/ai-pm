@@ -333,9 +333,11 @@ async fn get_finding_tx(
         Option<String>,
         chrono::DateTime<chrono::Utc>,
     )>;
-    let row: Row = sqlx::query_as("SELECT id, session_id, kind, content, confidence, verification_status, \
+    let row: Row = sqlx::query_as(
+        "SELECT id, session_id, kind, content, confidence, verification_status, \
                     project_id, actor_role, created_at \
-             FROM discovery.discovery_finding WHERE tenant_id = $1 AND id = $2")
+             FROM discovery.discovery_finding WHERE tenant_id = $1 AND id = $2",
+    )
     .bind(tenant_id)
     .bind(finding_id)
     .fetch_optional(&mut **tx)

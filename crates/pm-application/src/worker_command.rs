@@ -585,20 +585,20 @@ pub async fn ack_command(
                     // 启动冻结（continuation_start_frozen_at）+ 命令 failed
                     // + 告警已承载失败语义，不得为表达阻塞而绕开 13 态。
                     // 其余状态不构成阻塞处理路径（原 match 的 `_ => {}`）。
-                    
-                        let ctx = system_context(&mut tx, project_id)
-                            .await
-                            .map_err(|e| CommandFaceError::Validation(e.to_string()))?;
-                        apply_task_transition(
-                            &mut tx,
-                            task_id,
-                            None,
-                            TaskStatus::Blocked,
-                            &TransitionFacts::for_dispatch(),
-                            &ctx,
-                        )
+
+                    let ctx = system_context(&mut tx, project_id)
                         .await
                         .map_err(|e| CommandFaceError::Validation(e.to_string()))?;
+                    apply_task_transition(
+                        &mut tx,
+                        task_id,
+                        None,
+                        TaskStatus::Blocked,
+                        &TransitionFacts::for_dispatch(),
+                        &ctx,
+                    )
+                    .await
+                    .map_err(|e| CommandFaceError::Validation(e.to_string()))?;
                 }
             }
             // ACP-04（0050）：投递账 failed——continue 注入失败/重试耗尽

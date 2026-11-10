@@ -29,9 +29,7 @@ use pm_application::ai_conversations::{
     create_conversation, list_conversations, list_messages, ContextAnchor, ConversationError,
     ConversationView, MessageView,
 };
-use pm_application::ai_interactions::{
-    submit_interaction, InteractionError, InteractionRequest,
-};
+use pm_application::ai_interactions::{submit_interaction, InteractionError, InteractionRequest};
 use pm_application::conversation_router::{
     send_message, undo_handoff, RouterError, SendMessageRequest, UndoOutcome,
 };

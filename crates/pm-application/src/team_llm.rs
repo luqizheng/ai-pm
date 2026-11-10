@@ -992,7 +992,13 @@ pub async fn get_project_ai_policy(
     tenant_id: Uuid,
     project_id: Uuid,
 ) -> Result<ProjectAiPolicyRow, TeamLlmError> {
-    type Row = Option<(Option<Uuid>, Option<String>, Option<String>, i64, Option<DateTime<Utc>>)>;
+    type Row = Option<(
+        Option<Uuid>,
+        Option<String>,
+        Option<String>,
+        i64,
+        Option<DateTime<Utc>>,
+    )>;
     let row: Row =
         sqlx::query_as(
             "SELECT pol.provider_id, p.name, p.status, COALESCE(pol.revision, 1) AS revision, pol.updated_at \

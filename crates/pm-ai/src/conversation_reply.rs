@@ -386,9 +386,8 @@ impl ConversationReplyWorker {
         &self,
         conversation: &PendingConversation,
     ) -> Result<(Option<String>, serde_json::Value), sqlx::Error> {
-        let repository = crate::chat_context::anchor_repository(
-            conversation.context_anchor.as_ref(),
-        );
+        let repository =
+            crate::chat_context::anchor_repository(conversation.context_anchor.as_ref());
         let context = crate::chat_context::build_chat_context(
             &self.pool,
             conversation.tenant_id,
@@ -1195,9 +1194,7 @@ mod tests {
             "real DeepSeek usage must fill the token columns \
              (prompt={prompt_tokens:?}, completion={completion_tokens:?})"
         );
-        println!(
-            "real DeepSeek usage: prompt={prompt_tokens:?}, completion={completion_tokens:?}"
-        );
+        println!("real DeepSeek usage: prompt={prompt_tokens:?}, completion={completion_tokens:?}");
         assert!(
             metadata["total_tokens"].is_i64(),
             "real DeepSeek usage must surface total_tokens in metadata"

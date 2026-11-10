@@ -600,6 +600,12 @@ async fn missing_relation_yields_empty_result_not_fabricated_edges(pool: PgPool)
 
     assert!(result.edges.is_empty(), "no fabricated relations");
     assert!(!result.nodes.contains(&format!("pc:{module}")));
+    // RT-011：关系缺失必须可见（no_active_edge gap），不静默空转。
+    assert!(
+        result.gaps.iter().any(|g| g.kind == "no_active_edge"),
+        "missing relations must be reported as a gap, got {:?}",
+        result.gaps
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]

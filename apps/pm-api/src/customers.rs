@@ -141,7 +141,8 @@ async fn list_customers(
                            JOIN core.project_member m ON m.project_id = p.id \
                           WHERE p.customer_id = c.id AND m.principal_id = $3)) \
            AND ($1::text IS NULL OR c.name ILIKE $1 OR c.code ILIKE $1 OR c.short_name ILIKE $1) \
-           AND ($2::text IS NULL OR c.status = $2)".to_string();
+           AND ($2::text IS NULL OR c.status = $2)"
+        .to_string();
     let total: i64 = sqlx::query_scalar(&total_sql)
         .bind(query.as_deref())
         .bind(status.as_deref())

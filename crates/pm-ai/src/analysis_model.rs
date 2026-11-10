@@ -234,10 +234,19 @@ mod tests {
     #[test]
     fn mode_parse_pins_fake_and_defaults_to_auto() {
         assert_eq!(AnalysisModelMode::parse(None), AnalysisModelMode::Auto);
-        assert_eq!(AnalysisModelMode::parse(Some("auto")), AnalysisModelMode::Auto);
-        assert_eq!(AnalysisModelMode::parse(Some("fake")), AnalysisModelMode::Fake);
+        assert_eq!(
+            AnalysisModelMode::parse(Some("auto")),
+            AnalysisModelMode::Auto
+        );
+        assert_eq!(
+            AnalysisModelMode::parse(Some("fake")),
+            AnalysisModelMode::Fake
+        );
         // A typo must not silently pin fake: warn + default auto.
-        assert_eq!(AnalysisModelMode::parse(Some("fkae")), AnalysisModelMode::Auto);
+        assert_eq!(
+            AnalysisModelMode::parse(Some("fkae")),
+            AnalysisModelMode::Auto
+        );
     }
 
     /// Bootstrap-equivalent rows (same shape as tests/orchestrator.rs):
@@ -268,11 +277,13 @@ mod tests {
     /// row (anonymous endpoints are allowed), so the decrypt path stays out.
     async fn seed_enabled_provider(pool: &sqlx::PgPool, endpoint: &str) -> uuid::Uuid {
         let principal_id = Uuid::new_v4();
-        sqlx::query("INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'Seed')")
-            .bind(principal_id)
-            .execute(pool)
-            .await
-            .unwrap();
+        sqlx::query(
+            "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'ai_pm', 'Seed')",
+        )
+        .bind(principal_id)
+        .execute(pool)
+        .await
+        .unwrap();
         let provider_id = Uuid::new_v4();
         sqlx::query(
             "INSERT INTO ai.team_llm_provider \
@@ -361,11 +372,13 @@ mod tests {
         // 200's expectation is exhausted.
         wiremock::Mock::given(wiremock::matchers::method("POST"))
             .and(wiremock::matchers::path("/chat/completions"))
-            .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "choices": [{"message": {"content":
-                    "{\"summary\":\"s\",\"findings\":[],\"proposals\":[]}"}}
-                ]
-            })))
+            .respond_with(
+                wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "choices": [{"message": {"content":
+                        "{\"summary\":\"s\",\"findings\":[],\"proposals\":[]}"}}
+                    ]
+                })),
+            )
             .up_to_n_times(1)
             .expect(1)
             .mount(&server)

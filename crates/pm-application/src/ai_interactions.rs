@@ -229,7 +229,10 @@ pub async fn submit_interaction(
 
     // 权威行。reference 冲突概率可忽略；唯一键兜底重试一次即可（不引入循环）。
     let interaction_id = Uuid::new_v4();
-    let reference = format!("INT-{}", interaction_id.simple().to_string()[..8].to_uppercase());
+    let reference = format!(
+        "INT-{}",
+        interaction_id.simple().to_string()[..8].to_uppercase()
+    );
     let created_at: DateTime<Utc> = sqlx::query_scalar(
         "INSERT INTO ai.conversation_interaction \
              (tenant_id, project_id, conversation_id, message_id, action, status, \

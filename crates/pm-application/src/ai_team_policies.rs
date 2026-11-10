@@ -181,11 +181,13 @@ async fn fetch_scope_row(
     .bind(scope_key)
     .fetch_optional(pool)
     .await?;
-    Ok(row.map(|(require_human_approval, updated_by, updated_at)| ScopePolicyView {
-        require_human_approval,
-        updated_by,
-        updated_at,
-    }))
+    Ok(row.map(
+        |(require_human_approval, updated_by, updated_at)| ScopePolicyView {
+            require_human_approval,
+            updated_by,
+            updated_at,
+        },
+    ))
 }
 
 /// 项目 Execution Policies 聚合读取（可见性校验在 REST 层；这里保证归属）。
@@ -217,12 +219,14 @@ pub async fn get_project_execution_policies(
     .await?;
     let task_types = task_type_rows
         .into_iter()
-        .map(|(task_type, require_human_approval, updated_by, updated_at)| TaskTypePolicyView {
-            task_type,
-            require_human_approval,
-            updated_by,
-            updated_at,
-        })
+        .map(
+            |(task_type, require_human_approval, updated_by, updated_at)| TaskTypePolicyView {
+                task_type,
+                require_human_approval,
+                updated_by,
+                updated_at,
+            },
+        )
         .collect();
 
     // 覆盖行上限 100（V1 不分页）；排序锚 updated_at DESC（表无 created_at）。
@@ -453,12 +457,11 @@ async fn task_project_id(
     tenant_id: Uuid,
     task_id: Uuid,
 ) -> Result<Uuid, AiTeamPolicyError> {
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(task_id)
-    .bind(tenant_id)
-    .fetch_optional(pool)
-    .await?;
+    let project_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2")
+            .bind(task_id)
+            .bind(tenant_id)
+            .fetch_optional(pool)
+            .await?;
     project_id.ok_or(AiTeamPolicyError::TaskNotFound)
 }
