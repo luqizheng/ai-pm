@@ -1,0 +1,152 @@
+design:
+  module: Technical Design
+  tabs:
+    analysis: Analysis
+    designs: Technical Designs
+    adrs: Architecture Decisions
+    readiness: Implementation Readiness
+  page:
+    analysisTitle: Analysis
+    analysisDesc: Requirement coverage, architecture references and impact relations (a superseded requirement requires impact assessment).
+    designsTitle: Technical Designs
+    designsDesc: Revision chain, review status and requirement basis of technical designs.
+    designDetailTitle: Technical Design Detail
+    designDetailDesc: Revision chain, body, requirement coverage and review findings.
+    adrsTitle: Architecture Decisions
+    adrsDesc: Standalone decision records, decision status and impact relations.
+    adrDetailTitle: Architecture Decision Detail
+    adrDetailDesc: Decision content, revision chain and linked designs/requirements.
+    readinessTitle: Implementation Readiness
+    readinessDesc: Implementation readiness gate, frozen baselines and the tasks handed over to S04.
+  common:
+    refresh: Refresh
+    back: Back
+    open: Open
+    openDesign: Open design
+    actions: Actions
+    all: All
+    none: None
+    unknown: Unknown
+    noRevision: No revision
+    noProjectTitle: Select a project first
+    noProjectHint: Technical designs and architecture decisions belong to a project — pick a project context first.
+    errorTitle: Failed to load
+    filters: Filters
+  context:
+    title: Workspace
+    designs: Technical designs
+    adrs: Architecture decisions
+    baselines: Implementation baselines
+    pendingApprovals: Pending approvals
+    openFindings: Open findings
+    linkedRequirements: Requirement coverage
+    staleRequirements: Stale bindings
+  revisionState:
+    draft: Draft
+    pending_confirmation: Pending confirmation
+    approved: Approved
+    rejected: Rejected
+    superseded: Superseded
+  requirementState:
+    draft: Draft
+    pending_confirmation: Pending confirmation
+    approved: Confirmed
+    rejected: Rejected
+    superseded: Superseded
+  adrStatus:
+    proposed: Proposed
+    under_review: Under review
+    accepted: Accepted
+    rejected: Rejected
+    superseded: Superseded
+    deprecated: Deprecated
+  approvalStatus:
+    pending: Pending decision
+    approved: Approved
+    rejected: Rejected
+  severity:
+    info: Info
+    warning: Warning
+    blocker: Blocker
+  findingStatus:
+    open: Open
+    acknowledged: Acknowledged
+    resolved: Resolved
+  gate:
+    design_approved: Designs approved
+    requirements_confirmed: Requirement basis confirmed
+    adrs_resolved: Key decisions resolved
+    acceptance_criteria: Acceptance criteria complete
+    repositories_verified: Repository baseline verified
+  analysis:
+    staleTitle: Stale requirement basis detected
+    staleHint: "{count} design(s) still reference superseded requirement revisions — run impact assessment first."
+    staleBadge: "{count} stale basis"
+    supersededRequirement: Basis superseded
+    version: v{version}
+    requirementsTitle: Requirement coverage
+    noRequirements: This design has no requirement revision bound.
+    adrsTitle: Impact relations
+    noAdrs: No architecture decision references this design.
+  designs:
+    emptyTitle: No technical designs
+    emptyHint: This project has no technical design yet — create one to manage its revision chain and review.
+    notFoundTitle: Design not found
+    notFoundHint: This technical design was removed or you have no access to it.
+    colCode: Code
+    colTitle: Title
+    colCurrentVersion: Current version
+    colLatestVersion: Latest version
+    colReview: Review status
+    colFindings: Findings
+    colUpdated: Updated
+    pendingApproval: "{count} pending"
+    noPendingApproval: Nothing pending
+    openFindings: "{count} open"
+    noFindings: None
+  detail:
+    revisionsTitle: Revision chain
+    noRevisions: This design has no revision yet.
+    contentTitle: Revision body
+    noContent: This revision has no body content.
+    findingsTitle: Review findings
+    noFindings: No review finding registered on this revision.
+    aiSource: AI-authored
+  adrs:
+    emptyTitle: No architecture decisions
+    emptyHint: This project has no architecture decision yet — major technical decisions should be recorded standalone for traceability.
+    notFoundTitle: Decision not found
+    notFoundHint: This architecture decision was removed or you have no access to it.
+    colCode: Code
+    colTitle: Title
+    colStatus: Decision status
+    colBlocking: Implementation blocking
+    colReview: Review status
+    colUpdated: Updated
+    metaTitle: Decision overview
+    contentTitle: Decision content
+    impactTitle: Impact relations
+    noImpact: This decision is not linked to any design or requirement yet.
+    blocking: Blocks implementation
+    notBlocking: Not blocking
+    supersededBy: Superseded by
+    decisionQuestion: Decision question
+    context: Context
+    options: Options
+    chosenOption: Chosen option
+    rationale: Rationale
+    consequences: Consequences
+  readiness:
+    gateTitle: Implementation readiness gate
+    ready: Ready
+    notReady: Not ready
+    passed: Passed
+    failed: Failed
+    noApprovedRevisions: No approved design revision in this project — the gate cannot be evaluated.
+    baselinesTitle: Frozen implementation baselines
+    noBaselines: No implementation baseline frozen yet.
+    frozen: Frozen
+    superseded: Superseded
+    handoffTitle: Handover to S04
+    handoffHint: Tasks using baseline {code} as their implementation basis.
+    noHandoffTasks: No task uses this baseline as its implementation basis yet.

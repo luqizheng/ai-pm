@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { getProjectGoal, type ProjectGoalView } from "@/api/goal";
 import { useI18n } from "vue-i18n";
 import { PageFrame } from "@/components/shell";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
@@ -8,6 +9,8 @@ import Skeleton from "@/components/ui/skeleton/Skeleton.vue";
 
 import CommandCenterHeader from "./components/CommandCenterHeader.vue";
 import ProjectHealthSection from "./components/ProjectHealthSection.vue";
+import InitializationCard from "./components/InitializationCard.vue";
+import GoalCard from "./components/GoalCard.vue";
 import AttentionPanel from "./components/AttentionPanel.vue";
 import TaskOverviewCard from "./components/TaskOverviewCard.vue";
 import AiAgentsOverviewCard from "./components/AiAgentsOverviewCard.vue";
@@ -45,6 +48,8 @@ const translate: Translate = (key, params) => t(key, params ?? {});
 
 const mockPreview = import.meta.env.VITE_USE_MOCK === "1";
 const data = ref<CommandCenterData | null>(null);
+/** 项目正式 Goal（元数据 + 知识文档正文）；null = 加载中或未选项目 */
+const goal = ref<ProjectGoalView | null>(null);
 const phase = ref<"loading" | "ready" | "empty" | "error">("loading");
 
 function currentProjectId(): string {
@@ -70,6 +75,9 @@ async function load() {
   }
 
   phase.value = "loading";
+  // Goal 与总控台并行拉取：Goal 读失败不应把整页打成 error——它是一张
+  // 独立的卡，失败时卡内显示自己的状态（missing / body_unavailable）。
+  void loadGoal(projectId);
   try {
     const loader = props.loader ?? defaultLoader;
     data.value = await loader(projectId);
@@ -77,6 +85,18 @@ async function load() {
   } catch {
     data.value = null;
     phase.value = "error";
+  }
+}
+
+async function loadGoal(projectId: string) {
+  if (!projectId) {
+    goal.value = null;
+    return;
+  }
+  try {
+    goal.value = await getProjectGoal(projectId);
+  } catch {
+    goal.value = null;
   }
 }
 
@@ -108,7 +128,10 @@ function openSettings() {
   const projectId = route.query.project_id;
   void router.push({
     path: "/project/settings",
-    query: typeof projectId === "string" && projectId ? { project_id: projectId } : {}
+    query:
+      typeof projectId === "string" && projectId
+        ? { project_id: projectId }
+        : {}
   });
 }
 </script>
@@ -147,9 +170,51 @@ function openSettings() {
         @settings="openSettings"
       />
 
+      <GoalCard
+        :title="t('s01.command-center.goalTitle')"
+        :labels="{
+          revision: t('s01.command-center.goalRevision'),
+          publishedAt: t('s01.command-center.goalPublishedAt'),
+          commit: t('s01.command-center.goalCommit')
+        }"
+        :states="{
+          missingTitle: t('s01.command-center.goalMissingTitle'),
+          missingHint: t('s01.command-center.goalMissingHint'),
+          bodyUnavailableTitle: t(
+            's01.command-center.goalBodyUnavailableTitle'
+          ),
+          bodyUnavailableHint: t('s01.command-center.goalBodyUnavailableHint')
+        }"
+        :badges="{
+          ready: t('s01.command-center.goalBadgeReady'),
+          missing: t('s01.command-center.goalBadgeMissing'),
+          bodyUnavailable: t('s01.command-center.goalBadgeBodyUnavailable')
+        }"
+        :data="goal"
+      />
+
+      <InitializationCard
+        :title="t('s01.command-center.initTitle')"
+        :progress-label="
+          t('s01.command-center.initProgress', {
+            done: data.initialization?.requiredDone ?? 0,
+            total: data.initialization?.requiredTotal ?? 0
+          })
+        "
+        :completion-labels="{
+          complete: t('s01.command-center.initComplete'),
+          incomplete: t('s01.command-center.initIncomplete'),
+          notDeterminable: t('s01.command-center.initNotDeterminable')
+        }"
+        :required-label="t('s01.command-center.initRequired')"
+        :data="data.initialization"
+      />
+
       <ProjectHealthSection
         :title="t('s01.command-center.healthTitle')"
-        :meta="t('s01.command-center.healthMeta', { time: data.healthMetaTime })"
+        :meta="
+          t('s01.command-center.healthMeta', { time: data.healthMetaTime })
+        "
         :action-label="t('s01.command-center.healthAction')"
         :metrics="data.health"
       />

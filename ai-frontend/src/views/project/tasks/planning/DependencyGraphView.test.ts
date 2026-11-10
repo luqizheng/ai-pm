@@ -1,17 +1,77 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 
 import DependencyGraphView from "./DependencyGraphView.vue";
 import { mountShell } from "@/components/shell/test-utils";
 import { buildRoutes } from "@/router";
+import { useShellStore } from "@/stores/shell";
+import type { DependencyGraph } from "@/api/task-plans";
 
 /**
- * 执行规划 · 依赖图（S04-UI-05，mock 预览页）交互模型测试：
- * 分层图渲染、选择高亮 + 检查器、依赖增删四类校验（自/未知/重复/环）、
- * 依赖校验问题面板、并行组视图与 AI 并行化采纳。
+ * 依赖图（S04-UI-05，接真）行为测试：
+ * 节点 / 边 / 分层 / 关键路径 / 并行组 / 环检测全部来自
+ * GET /projects/{id}/dependency-graph 的真实投影——不在前端重算拓扑。
  */
+
+const getDependencyGraph = vi.fn();
+
+vi.mock("@/api/task-plans", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/api/task-plans")>(
+      "@/api/task-plans"
+    );
+  return {
+    ...actual,
+    getDependencyGraph: (...args: unknown[]) => getDependencyGraph(...args)
+  };
+});
+
+function graph(overrides: Partial<DependencyGraph> = {}): DependencyGraph {
+  return {
+    nodes: [
+      {
+        id: "aaaaaaaa-1111-1111-1111-111111111111",
+        title: "前置任务",
+        status: "completed",
+        priority: "normal",
+        planned_start_at: null,
+        planned_end_at: null,
+        estimate_hours: null,
+        repository_name: "core-api"
+      },
+      {
+        id: "bbbbbbbb-2222-2222-2222-222222222222",
+        title: "后续任务",
+        status: "draft",
+        priority: "high",
+        planned_start_at: null,
+        planned_end_at: null,
+        estimate_hours: 8,
+        repository_name: null
+      }
+    ],
+    edges: [
+      {
+        from_task_id: "aaaaaaaa-1111-1111-1111-111111111111",
+        to_task_id: "bbbbbbbb-2222-2222-2222-222222222222",
+        dependency_type: "FS"
+      }
+    ],
+    layers: [
+      ["aaaaaaaa-1111-1111-1111-111111111111"],
+      ["bbbbbbbb-2222-2222-2222-222222222222"]
+    ],
+    critical_path: [
+      "aaaaaaaa-1111-1111-1111-111111111111",
+      "bbbbbbbb-2222-2222-2222-222222222222"
+    ],
+    parallel_groups: [],
+    cycles: [],
+    ...overrides
+  };
+}
 
 async function mountView() {
   const router = createRouter({
@@ -20,116 +80,50 @@ async function mountView() {
   });
   await router.push("/project/tasks/planning/graph");
   await router.isReady();
-  const wrapper = mountShell(
+  const { wrapper } = mountShell(
     DependencyGraphView,
     { attachTo: document.body },
     router
-  ).wrapper;
+  );
+  const shell = useShellStore();
+  shell.setProjects([{ id: "proj-1", name: "评测项目" }]);
+  shell.setCurrentProject("proj-1");
   await flushPromises();
   return { wrapper, router };
 }
 
+beforeEach(() => {
+  getDependencyGraph.mockReset();
+  getDependencyGraph.mockResolvedValue(graph());
+});
+
 describe("DependencyGraphView", () => {
-  it("渲染分层依赖图（节点/关键路径标记/图例）", async () => {
+  it("读真实依赖图端点并渲染节点与依赖边", async () => {
     const { wrapper } = await mountView();
 
+    expect(getDependencyGraph).toHaveBeenCalledWith("proj-1");
+    const text = wrapper.text();
+    expect(text).toContain("前置任务");
+    expect(text).toContain("后续任务");
     expect(wrapper.find('[data-testid="pg-canvas"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="pg-node-T-001"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="pg-node-T-011"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="pg-node-T-001"]').classes()).toContain(
-      "is-critical"
-    );
-    expect(wrapper.find('[data-testid="pg-node-T-003"]').classes()).toContain(
-      "is-parallel"
-    );
   });
 
-  it("选择节点联动检查器：上游依赖与依赖原因", async () => {
-    const { wrapper } = await mountView();
-
-    await wrapper.find('[data-testid="pg-node-T-011"]').trigger("click");
-    await flushPromises();
-
-    const inspector = wrapper.find('[data-testid="pg-inspector"]');
-    expect(inspector.exists()).toBe(true);
-    expect(inspector.text()).toContain("T-007");
-    expect(inspector.text()).toContain("T-009");
-    expect(wrapper.find('[data-testid="pg-dep-remove-T-007"]').exists()).toBe(
-      true
+  it("有环依赖时校验面板报出，而不是静默渲染", async () => {
+    getDependencyGraph.mockResolvedValue(
+      graph({
+        cycles: [
+          [
+            "aaaaaaaa-1111-1111-1111-111111111111",
+            "bbbbbbbb-2222-2222-2222-222222222222"
+          ]
+        ]
+      })
     );
-  });
-
-  it("添加依赖四类校验：自依赖 / 未知编号 / 重复 / 环路", async () => {
-    const { wrapper } = await mountView();
-
-    // 自依赖
-    await wrapper.find('[data-testid="pg-node-T-002"]').trigger("click");
-    await wrapper.find('[data-testid="pg-dep-input"] input').setValue("T-002");
-    await wrapper.find('[data-testid="pg-dep-add"]').trigger("click");
-    expect(wrapper.find('[data-testid="pg-dep-error"]').text()).toContain(
-      "自身"
-    );
-
-    // 未知编号
-    await wrapper.find('[data-testid="pg-dep-input"] input').setValue("T-099");
-    await wrapper.find('[data-testid="pg-dep-add"]').trigger("click");
-    expect(wrapper.find('[data-testid="pg-dep-error"]').text()).toContain(
-      "不存在"
-    );
-
-    // 重复
-    await wrapper.find('[data-testid="pg-dep-input"] input').setValue("T-001");
-    await wrapper.find('[data-testid="pg-dep-add"]').trigger("click");
-    expect(wrapper.find('[data-testid="pg-dep-error"]').text()).toContain(
-      "已存在"
-    );
-
-    // 环路：T-001 ← … ← T-009，再让 T-001 依赖 T-009 成环
-    await wrapper.find('[data-testid="pg-node-T-001"]').trigger("click");
-    await wrapper.find('[data-testid="pg-dep-input"] input').setValue("T-009");
-    await wrapper.find('[data-testid="pg-dep-add"]').trigger("click");
-    expect(wrapper.find('[data-testid="pg-dep-error"]').text()).toContain(
-      "循环"
-    );
-
-    // 合法依赖生效：T-003 → T-001（无环）
-    await wrapper.find('[data-testid="pg-node-T-003"]').trigger("click");
-    await wrapper.find('[data-testid="pg-dep-input"] input').setValue("T-001");
-    await wrapper.find('[data-testid="pg-dep-add"]').trigger("click");
-    expect(wrapper.find('[data-testid="pg-dep-error"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="pg-dep-remove-T-001"]').exists()).toBe(
-      true
-    );
-  });
-
-  it("依赖校验发现未知引用与同模块冲突", async () => {
     const { wrapper } = await mountView();
 
     await wrapper.find('[data-testid="pg-validate"]').trigger("click");
     await flushPromises();
 
-    const panel = wrapper.find('[data-testid="pg-validation"]');
-    expect(panel.exists()).toBe(true);
-    expect(panel.text()).toContain("T-060");
-    expect(panel.text()).toContain("T-014");
-    expect(panel.text()).toContain("T-015");
-  });
-
-  it("并行组视图渲染分组；采纳 AI 并行化建议落地新组", async () => {
-    const { wrapper } = await mountView();
-
-    await wrapper
-      .find('[data-testid="pg-rec-R-1"] [type="button"]')
-      .trigger("click");
-    await flushPromises();
-
-    await wrapper.find('[data-testid="pg-mode-groups"]').trigger("click");
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="pg-groups"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="pg-group-G-A"]').text()).toContain(
-      "T-001"
-    );
-    expect(wrapper.text()).toContain("前后端并行组");
+    expect(wrapper.find('[data-testid="pg-validation"]').exists()).toBe(true);
   });
 });

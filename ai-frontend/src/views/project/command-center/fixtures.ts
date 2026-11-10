@@ -352,6 +352,7 @@ export function commandCenterDataFixture(t: Translate): CommandCenterData {
     knowledge: knowledgeStatsFixture,
     members: membersFixture,
     memberHumanCount: 8,
-    memberAgentCount: 4
+    memberAgentCount: 4,
+    initialization: null
   };
 }

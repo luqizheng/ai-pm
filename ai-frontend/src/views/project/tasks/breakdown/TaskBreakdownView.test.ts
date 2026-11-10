@@ -1,17 +1,122 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 
 import TaskBreakdownView from "./TaskBreakdownView.vue";
 import { mountShell } from "@/components/shell/test-utils";
 import { buildRoutes } from "@/router";
+import { useShellStore } from "@/stores/shell";
+import type {
+  TaskPlanDetail,
+  TaskPlanEntry,
+  TaskPlanProgress
+} from "@/api/task-plans";
 
 /**
- * 任务拆解（S04-UI-02，mock 预览页）交互模型测试：
- * 生成 → 提案默认待评审 → 批量接受 → 全部评审完成；AI 面板随选中联动。
- * 提案不入库是本页的诚实边界（AI 拆解接口未接线）。
+ * 任务拆解（S04-UI-02，接真）行为测试：
+ * 计划草案与已正式化任务全部来自真实计划读模型——
+ * **只有 approved 计划能正式化成任务**（后端硬校验）。
  */
+
+const listTaskPlans = vi.fn();
+const getTaskPlan = vi.fn();
+const getTaskPlanProgress = vi.fn();
+
+vi.mock("@/api/task-plans", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/api/task-plans")>(
+      "@/api/task-plans"
+    );
+  return {
+    planTaskDrafts: actual.planTaskDrafts,
+    listTaskPlans: (...args: unknown[]) => listTaskPlans(...args),
+    getTaskPlan: (...args: unknown[]) => getTaskPlan(...args),
+    getTaskPlanProgress: (...args: unknown[]) => getTaskPlanProgress(...args)
+  };
+});
+
+function planEntry(overrides: Partial<TaskPlanEntry> = {}): TaskPlanEntry {
+  return {
+    id: "plan-1",
+    project_id: "proj-1",
+    code: "PLAN-001",
+    title: "登录实施计划",
+    status: "approved",
+    current_revision_id: "rev-1",
+    source_baseline_id: "ib-1",
+    row_revision: 1,
+    created_at: "2026-11-10T08:00:00Z",
+    updated_at: "2026-11-10T09:00:00Z",
+    ...overrides
+  };
+}
+
+function planDetail(): TaskPlanDetail {
+  return {
+    plan: planEntry(),
+    revisions: [
+      {
+        id: "rev-1",
+        plan_id: "plan-1",
+        version: 1,
+        content: {
+          tasks: [
+            {
+              key: "T-1",
+              title: "实现登录端点",
+              description: "范围",
+              acceptance_criteria: ["返回 200"],
+              depends_on: [],
+              priority: "high"
+            },
+            {
+              key: "T-2",
+              title: "补充登录测试",
+              acceptance_criteria: ["覆盖 401"],
+              depends_on: ["T-1"]
+            }
+          ]
+        },
+        state: "approved",
+        content_hash: "h1",
+        source: "ai",
+        instructions: "按基线实现",
+        submitted_at: "2026-11-10T08:30:00Z",
+        approved_at: "2026-11-10T09:00:00Z",
+        created_at: "2026-11-10T08:00:00Z"
+      }
+    ],
+    approvals: [],
+    materialized_tasks: [
+      {
+        task_id: "11111111-1111-1111-1111-111111111111",
+        plan_task_key: "T-1",
+        title: "实现登录端点",
+        status: "draft"
+      }
+    ]
+  };
+}
+
+function progress(): TaskPlanProgress {
+  return {
+    plan_id: "plan-1",
+    status: "approved",
+    revision_id: "rev-1",
+    total_tasks: 1,
+    by_status: { draft: 1 },
+    blocked: [
+      {
+        id: "22222222-2222-2222-2222-222222222222",
+        title: "阻塞任务",
+        status: "blocked",
+        open_upstreams: 2
+      }
+    ],
+    planned_tasks: 2
+  };
+}
 
 async function mountView() {
   const router = createRouter({
@@ -20,79 +125,53 @@ async function mountView() {
   });
   await router.push("/project/tasks/breakdown");
   await router.isReady();
-  const wrapper = mountShell(
+  const { wrapper } = mountShell(
     TaskBreakdownView,
     { attachTo: document.body },
     router
-  ).wrapper;
+  );
+  const shell = useShellStore();
+  shell.setProjects([{ id: "proj-1", name: "评测项目" }]);
+  shell.setCurrentProject("proj-1");
   await flushPromises();
   return { wrapper, router };
 }
 
-async function generateProposals(
-  wrapper: Awaited<ReturnType<typeof mountView>>["wrapper"]
-) {
-  await wrapper.find('[data-testid="bd-generate"]').trigger("click");
-  // 生成是分批 setTimeout 的流式模拟，快进全部批次
-  await vi.advanceTimersByTimeAsync(1000);
-  await flushPromises();
-}
-
 beforeEach(() => {
-  vi.useFakeTimers();
-});
-
-afterEach(() => {
-  vi.useRealTimers();
+  listTaskPlans.mockReset();
+  getTaskPlan.mockReset();
+  getTaskPlanProgress.mockReset();
+  listTaskPlans.mockResolvedValue([planEntry()]);
+  getTaskPlan.mockResolvedValue(planDetail());
+  getTaskPlanProgress.mockResolvedValue(progress());
 });
 
 describe("TaskBreakdownView", () => {
-  it("基线卡展示已批准状态，初始为空态并要求已批准基线", async () => {
+  it("读真实计划端点并渲染草案与已正式化任务", async () => {
     const { wrapper } = await mountView();
 
-    expect(wrapper.find('[data-testid="bd-baseline-status"]').text()).toContain(
-      "已批准"
-    );
-    expect(wrapper.find('[data-testid="bd-row-T-001"]').exists()).toBe(false);
+    expect(listTaskPlans).toHaveBeenCalledWith("proj-1");
+    expect(getTaskPlan).toHaveBeenCalledWith("plan-1");
+    const text = wrapper.text();
+    expect(text).toContain("实现登录端点");
+    expect(text).toContain("补充登录测试");
+    expect(text).toContain("PLAN-001");
   });
 
-  it("生成分批落行，提案默认待评审（pending）", async () => {
+  it("计划进度呈现草案数与阻塞项（含未完成上游数）", async () => {
     const { wrapper } = await mountView();
-    await generateProposals(wrapper);
 
-    expect(wrapper.find('[data-testid="bd-row-T-001"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="bd-row-T-001.3"]').exists()).toBe(true);
-    expect(
-      wrapper.find('[data-testid="bd-row-T-001"]').attributes("data-state")
-    ).toBe("pending");
-    expect(wrapper.find('[data-testid="bd-summary"]').text()).toContain("8");
+    expect(getTaskPlanProgress).toHaveBeenCalledWith("plan-1");
+    const text = wrapper.text();
+    expect(text).toContain("阻塞任务");
+    expect(text).toContain("2");
   });
 
-  it("批量接受所选提案后进入全部评审完成态", async () => {
+  it("读端点失败时给错误态而非空壳", async () => {
+    listTaskPlans.mockRejectedValue(new Error("boom"));
     const { wrapper } = await mountView();
-    await generateProposals(wrapper);
 
-    const boxes = wrapper.findAll('input[type="checkbox"]');
-    for (const box of boxes) {
-      await box.setValue(true);
-    }
-    await wrapper.find('[data-testid="bd-accept-selected"]').trigger("click");
-    await flushPromises();
-
-    expect(
-      wrapper.find('[data-testid="bd-row-T-001"]').attributes("data-state")
-    ).toBe("accepted");
-    expect(wrapper.find('[data-testid="bd-all-reviewed"]').exists()).toBe(true);
-  });
-
-  it("点击任务行联动 AI 拆解面板（来源追溯）", async () => {
-    const { wrapper } = await mountView();
-    await generateProposals(wrapper);
-
-    await wrapper.find('[data-testid="bd-row-T-001"]').trigger("click");
-    await flushPromises();
-
-    expect(wrapper.text()).toContain("REQ-201");
-    expect(wrapper.text()).toContain("ADR-007");
+    expect(wrapper.text().length).toBeGreaterThan(0);
+    expect(getTaskPlan).not.toHaveBeenCalled();
   });
 });

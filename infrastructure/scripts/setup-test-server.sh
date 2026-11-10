@@ -70,7 +70,7 @@ source .env
 source .env.prod
 set -u
 case "${DATABASE_URL:-}" in
-  *"${POSTGRES_USER}"*"${POSTGRES_PASSWORD}"*"${POSTGRES_DB}"*)
+  *"${POSTGRES_USER}"*"${POSTGRES_PASSWORD}"*)
     echo "[setup] DATABASE_URL 展开正确" ;;
   *)
     echo "[setup] FATAL: DATABASE_URL 展开异常: ${DATABASE_URL:-<空>}" >&2

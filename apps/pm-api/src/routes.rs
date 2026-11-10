@@ -259,6 +259,9 @@ fn build_router(
         .merge(crate::pm_discovery::router())
         // Task 前置依赖（T-024）：建边 / 删边 / 上下游查询。
         .merge(crate::task_dependencies::router())
+        .merge(crate::pm_tasks::router())
+        .merge(crate::pm_execution::router())
+        .merge(crate::pm_requirement_read::router())
         .merge(crate::task_repositories::router())
         // 项目 AI Role 目录与启停（V2 D-1=A）：模板合并视图 / 启停 / 版本历史。
         .merge(crate::ai_roles::router())

@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  ListTree,
   Folders,
   Home,
   Inbox,
@@ -134,11 +135,15 @@ export const navGroups: NavGroup[] = [
       // Git 仓库管理已迁入 Project Setting（/project/settings/repositories，
       // V1.0 稿「统一入口」裁决，2026-11-07）：旧路径 /project/repository/*
       // 在 router/index.ts 重定向。
+      // 代码发现（S01-I2，2026-11-10）：接真 discovery sessions 系。
       {
         path: "/project/discovery",
         labelKey: "shell.app.side.item.discovery",
         icon: ScanSearch,
-        expandable: true
+        component: () =>
+          import("@/views/project/discovery/DiscoveryView.vue").then(
+            module => module.default
+          )
       },
       {
         path: "/project/requirements",
@@ -146,6 +151,17 @@ export const navGroups: NavGroup[] = [
         icon: ListChecks,
         component: () =>
           import("@/views/project/requirements/RequirementsView.vue").then(
+            module => module.default
+          )
+      },
+      // 技术设计（S03，docs/ui/s03，2026-11-10）：分析 / 技术设计 / 架构决策 /
+      // 实施准备四个子页，全部接真后端（/v1/pm/designs · adrs · design-* 系）。
+      {
+        path: "/project/design",
+        labelKey: "shell.app.side.item.technicalDesign",
+        icon: ListTree,
+        component: () =>
+          import("@/views/project/design/analysis/DesignAnalysisView.vue").then(
             module => module.default
           )
       },
@@ -161,11 +177,15 @@ export const navGroups: NavGroup[] = [
             module => module.default
           )
       },
+      // 执行中心（S05，docs/ui/s05，2026-11-10）：七页接真后端。
       {
         path: "/project/execution",
         labelKey: "shell.app.side.item.execution",
         icon: Sparkles,
-        badge: 2
+        component: () =>
+          import("@/views/project/execution/ExecutionCenterView.vue").then(
+            module => module.default
+          )
       },
       // 项目 AI 会话（V2 D-4 会话 REST 接线批，2026-11-08）：/project/execution
       // 的「AI 执行中心」语义是执行编排（槽位保留），会话页不劫持该标签，

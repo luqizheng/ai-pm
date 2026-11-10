@@ -9,8 +9,10 @@
 //! 不限主体（AI 允许，来源留痕 `source='ai'`）；decide / freeze / supersede /
 //! deprecate / blocking 是确认类命令，一律真人门。
 
+use std::collections::HashMap;
+
 use axum::{
-    extract::{Extension, Path, State},
+    extract::{Extension, Path, Query, State},
     routing::{get, patch, post},
     Json, Router,
 };
@@ -568,12 +570,16 @@ async fn set_implementation_blocking(
 
 // ───────────────────────────────────── Implementation Baseline（Q5）
 
-/// Readiness Gate 五条件 dry-run 判定（不改任何状态）。
+/// Readiness Gate 五条件 dry-run 判定（**不改任何状态**）。
+///
+/// 纯读语义（POST 不当用）：查询参数 `design_revision_ids` 为逗号分隔的
+/// 设计版本 id 列表。缺省 = 本项目全部已批准的设计版本，即「当前整体是否
+/// 可进入 S04」的默认判定。
 async fn implementation_readiness(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
-    Json(body): Json<FreezeBaselineRequest>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     require_project_visible(
         &state.pool,
@@ -582,11 +588,41 @@ async fn implementation_readiness(
         caller.principal_id,
     )
     .await?;
+    let requested: Vec<Uuid> = params
+        .get("design_revision_ids")
+        .map(|raw| {
+            raw.split(',')
+                .filter_map(|part| Uuid::parse_str(part.trim()).ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    // 缺省 = 项目内全部已批准的设计版本（与「当前整体就绪」口径一致）。
+    let design_revision_ids = if requested.is_empty() {
+        sqlx::query_scalar(
+            "SELECT id FROM design.design_revision \
+             WHERE tenant_id = $1 AND project_id = $2 AND state = 'approved' \
+             ORDER BY created_at",
+        )
+        .bind(caller.tenant_id)
+        .bind(project_id)
+        .fetch_all(&state.pool)
+        .await?
+    } else {
+        requested
+    };
+    if design_revision_ids.is_empty() {
+        // 无已批准版本 = 门禁必然不通过；返回空判定而非报错（前端据此显示空态）。
+        return Ok(Json(serde_json::json!(design::GateReport {
+            ready: false,
+            design_revision_ids: Vec::new(),
+            conditions: Vec::new(),
+        })));
+    }
     let report = design::evaluate_readiness(
         &state.pool,
         caller.tenant_id,
         project_id,
-        &body.design_revision_ids,
+        &design_revision_ids,
     )
     .await?;
     Ok(Json(serde_json::json!(report)))
@@ -634,6 +670,82 @@ async fn list_baselines(
     )
     .await?;
     let items = design::list_baselines(&state.pool, caller.tenant_id, project_id).await?;
+    Ok(Json(serde_json::json!({ "items": items })))
+}
+
+/// 项目级审批收件箱（S03-05）：待办 + 历史，按「待办优先、时间倒序」排。
+async fn list_approvals(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(project_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
+    let items = design::list_approvals(&state.pool, caller.tenant_id, project_id).await?;
+    Ok(Json(serde_json::json!({ "items": items })))
+}
+
+/// S03 工作空间项目级聚合（S03 四页共用上下文与计数）。
+async fn design_workspace(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(project_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
+    let workspace = design::design_workspace(&state.pool, caller.tenant_id, project_id).await?;
+    Ok(Json(serde_json::json!(workspace)))
+}
+
+/// S03-01/02 分析页：每个设计的需求覆盖与影响关系。
+async fn design_analysis(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(project_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
+    let items = design::design_analysis(&state.pool, caller.tenant_id, project_id).await?;
+    Ok(Json(serde_json::json!({ "items": items })))
+}
+
+/// 基线 → 任务交接事实（S03-06 交接 S04）。
+async fn baseline_tasks(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(baseline_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let project_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT project_id FROM design.implementation_baseline WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(baseline_id)
+    .bind(caller.tenant_id)
+    .fetch_optional(&state.pool)
+    .await?;
+    let project_id = project_id.ok_or(ApiError::NotFound("baseline not found"))?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
+    let items = design::baseline_tasks(&state.pool, caller.tenant_id, baseline_id).await?;
     Ok(Json(serde_json::json!({ "items": items })))
 }
 
@@ -767,7 +879,7 @@ pub(crate) fn router() -> Router<AppState> {
         )
         .route(
             "/v1/pm/projects/{project_id}/implementation-readiness",
-            post(implementation_readiness),
+            get(implementation_readiness),
         )
         .route(
             "/v1/pm/projects/{project_id}/implementation-baselines",
@@ -776,6 +888,23 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/pm/implementation-baselines/{baseline_id}",
             get(get_baseline),
+        )
+        .route(
+            "/v1/pm/implementation-baselines/{baseline_id}/tasks",
+            get(baseline_tasks),
+        )
+        // S03 工作空间读面（前端四页共用；2026-11-10 接线批）。
+        .route(
+            "/v1/pm/projects/{project_id}/design-approvals",
+            get(list_approvals),
+        )
+        .route(
+            "/v1/pm/projects/{project_id}/design-workspace",
+            get(design_workspace),
+        )
+        .route(
+            "/v1/pm/projects/{project_id}/design-analysis",
+            get(design_analysis),
         )
         .route(
             "/v1/pm/implementation-baselines/{baseline_id}/supersede",

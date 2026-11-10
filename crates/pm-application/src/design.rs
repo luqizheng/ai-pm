@@ -20,6 +20,8 @@
 //! 不可变（SC-02/SC-08）：revision 正文库级触发器冻结（draft 改稿除外）；
 //! 基线冻结后仅 status 可显式变更；任务引用基线 id 而非内容。
 
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Utc};
 use pm_domain::design::{AdrRevisionState, AdrStatus, DesignRevisionState};
 use serde::{Deserialize, Serialize};
@@ -180,6 +182,101 @@ pub struct BaselineEntry {
     pub frozen_at: DateTime<Utc>,
     pub superseded_by_baseline_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
+}
+
+/// 审批收件箱行（项目级）：审批行 + 目标展示标识 + 发起/裁决人显示名。
+#[derive(Debug, sqlx::FromRow, Serialize)]
+pub struct ApprovalInboxRow {
+    pub id: Uuid,
+    pub kind: String,
+    pub design_id: Option<Uuid>,
+    pub adr_id: Option<Uuid>,
+    pub baseline_id: Option<Uuid>,
+    pub target_id: Uuid,
+    pub target_hash: String,
+    pub status: String,
+    pub requested_by: Uuid,
+    pub requested_by_name: Option<String>,
+    pub decided_by: Option<Uuid>,
+    pub decided_by_name: Option<String>,
+    pub decision_reason: Option<String>,
+    pub decided_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    /// 目标展示码（设计 code / ADR code / 基线 code）。
+    pub target_code: Option<String>,
+    /// 目标展示标题。
+    pub target_title: Option<String>,
+}
+
+/// S03 工作空间项目级聚合（S03 四页共用上下文）。
+#[derive(Debug, Serialize)]
+pub struct DesignWorkspace {
+    pub design_count: i64,
+    pub adr_count: i64,
+    pub baseline_count: i64,
+    pub pending_approval_count: i64,
+    pub open_finding_count: i64,
+    pub linked_requirement_count: i64,
+    pub stale_requirement_count: i64,
+    /// 设计按当前修订状态计数（draft / pending_confirmation / approved …）。
+    pub design_states: BTreeMap<String, i64>,
+    /// ADR 按生命周期状态计数（proposed / under_review / accepted …）。
+    pub adr_states: BTreeMap<String, i64>,
+}
+
+/// 基线 → 任务交接行。
+#[derive(Debug, sqlx::FromRow, Serialize)]
+pub struct BaselineTaskRow {
+    pub id: Uuid,
+    pub title: String,
+    pub status: String,
+    pub priority: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// 分析页：设计的需求覆盖行（绑定到具体需求修订）。
+#[derive(Debug, sqlx::FromRow, Clone, Serialize)]
+pub struct AnalysisRequirementLink {
+    pub design_id: Uuid,
+    pub design_revision_id: Uuid,
+    pub requirement_id: Uuid,
+    pub requirement_revision_id: Uuid,
+    pub requirement_code: Option<String>,
+    pub requirement_title: Option<String>,
+    pub requirement_version: Option<i32>,
+    pub requirement_state: Option<String>,
+    /// 绑定的是否为该需求当前正式版本；false = 已被新版本取代（需影响分析）。
+    pub is_current: Option<bool>,
+}
+
+/// 分析页：影响关系行（本设计被哪些 ADR 引用）。
+#[derive(Debug, sqlx::FromRow, Clone, Serialize)]
+pub struct AnalysisAdrLink {
+    pub design_id: Uuid,
+    pub adr_revision_id: Uuid,
+    pub adr_id: Uuid,
+    pub adr_code: Option<String>,
+    pub adr_title: Option<String>,
+    pub adr_status: Option<String>,
+    pub adr_version: Option<i32>,
+}
+
+/// 分析页：单个设计的分析行（需求覆盖 + 影响关系 + 未闭问题数）。
+#[derive(Debug, Serialize)]
+pub struct DesignAnalysisRow {
+    pub design_id: Uuid,
+    pub code: String,
+    pub title: String,
+    pub lifecycle_status: String,
+    pub current_revision_id: Option<Uuid>,
+    pub current_version: Option<i32>,
+    pub current_state: Option<String>,
+    pub requirement_count: i64,
+    /// 引用了已被取代的需求修订的绑定数（影响分析的重点）。
+    pub stale_requirement_count: i64,
+    pub open_finding_count: i64,
+    pub requirements: Vec<AnalysisRequirementLink>,
+    pub adrs: Vec<AnalysisAdrLink>,
 }
 
 // ───────────────────────────────────────────────────────────────────── 请求
@@ -1500,6 +1597,221 @@ pub async fn request_adr_approval(
     .await?;
     tx.commit().await.map_err(PmWriteError::Db)?;
     fetch_approval_view(pool, tenant_id, approval_id).await
+}
+
+/// 项目级审批收件箱（S03-05 评审与批准；S03 工作空间「待办审批」）。
+///
+/// 覆盖三种审批 kind（design_revision / adr_acceptance / baseline_freeze），
+/// 并带出目标的展示标识（设计 code / ADR code / 基线 code）——审批行本身
+/// 只存 target_id，UI 需要一个列表能直接读的标题。
+pub async fn list_approvals(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+) -> Result<Vec<ApprovalInboxRow>, PmWriteError> {
+    sqlx::query_as(
+        "SELECT a.id, a.kind, a.design_id, a.adr_id, a.baseline_id, a.target_id, \
+                a.target_hash, a.status, a.requested_by, a.decided_by, \
+                a.decision_reason, a.decided_at, a.created_at, \
+                COALESCE(d.code, ad.code, b.code) AS target_code, \
+                COALESCE(d.title, ad.title, b.code) AS target_title, \
+                rb.display_name AS requested_by_name, db.display_name AS decided_by_name \
+         FROM design.design_approval a \
+         LEFT JOIN design.design d ON d.id = a.design_id \
+         LEFT JOIN design.adr ad ON ad.id = a.adr_id \
+         LEFT JOIN design.implementation_baseline b ON b.id = a.baseline_id \
+         LEFT JOIN core.principal rb ON rb.id = a.requested_by \
+         LEFT JOIN core.principal db ON db.id = a.decided_by \
+         WHERE a.tenant_id = $1 AND a.project_id = $2 \
+         ORDER BY (a.status = 'pending') DESC, a.created_at DESC",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .fetch_all(pool)
+    .await
+    .map_err(PmWriteError::Db)
+}
+
+/// S03 工作空间聚合（S03 四页共用的项目级上下文 + 计数）。
+///
+/// 一次读出：设计/ADR/基线计数 + 待办审批数 + 待处理评审问题数 + 当前
+/// 正式版本与草稿版本清单——S03 四页的页头与空态判据都从这里取，避免
+/// 前端为每个计数各打一次请求。
+pub async fn design_workspace(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+) -> Result<DesignWorkspace, PmWriteError> {
+    let designs = list_designs(pool, tenant_id, project_id).await?;
+    let adrs = list_adrs(pool, tenant_id, project_id).await?;
+    let baselines = list_baselines(pool, tenant_id, project_id).await?;
+    let approvals = list_approvals(pool, tenant_id, project_id).await?;
+
+    let open_findings: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM design.review_finding \
+         WHERE tenant_id = $1 AND project_id = $2 AND status = 'open'",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .fetch_one(pool)
+    .await
+    .map_err(PmWriteError::Db)?;
+
+    // 需求覆盖：设计 ↔ 需求绑定按「当前正式版本」计数（被新版本取代的绑定
+    // 不计入覆盖，避免把过期依据当成已覆盖）。
+    let (linked_requirements, stale_requirements): (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE r.current_revision_id = dr.requirement_revision_id), \
+                count(*) FILTER (WHERE r.current_revision_id IS DISTINCT FROM dr.requirement_revision_id) \
+         FROM design.design_requirement dr \
+         LEFT JOIN delivery.requirement r ON r.id = dr.requirement_id \
+         WHERE dr.tenant_id = $1 AND dr.project_id = $2",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .fetch_one(pool)
+    .await
+    .map_err(PmWriteError::Db)?;
+
+    let mut design_states: BTreeMap<String, i64> = BTreeMap::new();
+    for design in &designs {
+        let state = design.current_state.as_deref().unwrap_or("none");
+        *design_states.entry(state.to_string()).or_insert(0) += 1;
+    }
+    let mut adr_states: BTreeMap<String, i64> = BTreeMap::new();
+    for adr in &adrs {
+        *adr_states.entry(adr.status.clone()).or_insert(0) += 1;
+    }
+
+    Ok(DesignWorkspace {
+        design_count: designs.len() as i64,
+        adr_count: adrs.len() as i64,
+        baseline_count: baselines.len() as i64,
+        pending_approval_count: approvals.iter().filter(|a| a.status == "pending").count() as i64,
+        open_finding_count: open_findings,
+        linked_requirement_count: linked_requirements,
+        stale_requirement_count: stale_requirements,
+        design_states,
+        adr_states,
+    })
+}
+
+/// 基线 → 任务交接事实（S03-06 交接 S04）。
+///
+/// 冻结基线时钉定的任务引用（`delivery.task.implementation_baseline_id`），
+/// 供「交接 S04」区展示：哪些任务以本基线为实施依据。
+pub async fn baseline_tasks(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    baseline_id: Uuid,
+) -> Result<Vec<BaselineTaskRow>, PmWriteError> {
+    sqlx::query_as(
+        "SELECT t.id, t.title, t.status, t.priority, t.created_at \
+         FROM delivery.task t \
+         WHERE t.tenant_id = $1 AND t.implementation_baseline_id = $2 \
+         ORDER BY t.created_at",
+    )
+    .bind(tenant_id)
+    .bind(baseline_id)
+    .fetch_all(pool)
+    .await
+    .map_err(PmWriteError::Db)
+}
+
+/// S03-01/02 分析页读模型：每个设计的**需求覆盖**与**影响关系**。
+///
+/// - 需求覆盖：设计 ↔ 需求绑定按修订锚定（§3.4 第一条）；`is_current=false`
+///   表示需求已被新版本取代而设计仍引用旧版——这正是 §6.2「不允许的行为」
+///   之一，也是影响分析页要标红的那一类。
+/// - 影响关系：本设计被哪些 ADR 引用（`design.adr_design_revision`），以及
+///   本设计涉及的需求（供「改一处影响哪些需求」的反向视图）。
+pub async fn design_analysis(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+) -> Result<Vec<DesignAnalysisRow>, PmWriteError> {
+    let designs = list_designs(pool, tenant_id, project_id).await?;
+
+    let requirement_links: Vec<AnalysisRequirementLink> = sqlx::query_as(
+        "SELECT dr.design_id, dr.design_revision_id, dr.requirement_id, \
+                dr.requirement_revision_id, r.code AS requirement_code, \
+                r.title AS requirement_title, rv.version AS requirement_version, \
+                rv.state AS requirement_state, \
+                (r.current_revision_id = dr.requirement_revision_id) AS is_current \
+         FROM design.design_requirement dr \
+         LEFT JOIN delivery.requirement r ON r.id = dr.requirement_id \
+         LEFT JOIN delivery.requirement_revision rv ON rv.id = dr.requirement_revision_id \
+         WHERE dr.tenant_id = $1 AND dr.project_id = $2 \
+         ORDER BY r.code",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .fetch_all(pool)
+    .await
+    .map_err(PmWriteError::Db)?;
+
+    let adr_links: Vec<AnalysisAdrLink> = sqlx::query_as(
+        "SELECT l.design_id, l.adr_revision_id, a.id AS adr_id, a.code AS adr_code, \
+                a.title AS adr_title, a.status AS adr_status, rv.version AS adr_version \
+         FROM design.adr_design_revision l \
+         LEFT JOIN design.adr a ON a.id = l.adr_id \
+         LEFT JOIN design.adr_revision rv ON rv.id = l.adr_revision_id \
+         WHERE l.tenant_id = $1 AND l.project_id = $2 \
+         ORDER BY a.code",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .fetch_all(pool)
+    .await
+    .map_err(PmWriteError::Db)?;
+
+    let finding_rows: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT design_id, count(*) FROM design.review_finding \
+         WHERE tenant_id = $1 AND project_id = $2 AND status = 'open' \
+         GROUP BY design_id",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .fetch_all(pool)
+    .await
+    .map_err(PmWriteError::Db)?;
+
+    let mut rows = Vec::with_capacity(designs.len());
+    for design in designs {
+        let requirements: Vec<AnalysisRequirementLink> = requirement_links
+            .iter()
+            .filter(|link| link.design_id == design.id)
+            .cloned()
+            .collect();
+        let adrs: Vec<AnalysisAdrLink> = adr_links
+            .iter()
+            .filter(|link| link.design_id == design.id)
+            .cloned()
+            .collect();
+        let open_findings = finding_rows
+            .iter()
+            .find(|(design_id, _)| *design_id == design.id)
+            .map(|(_, count)| *count)
+            .unwrap_or(0);
+        let stale_requirement_count = requirements
+            .iter()
+            .filter(|l| l.is_current != Some(true))
+            .count() as i64;
+        rows.push(DesignAnalysisRow {
+            design_id: design.id,
+            code: design.code,
+            title: design.title,
+            lifecycle_status: design.lifecycle_status,
+            current_revision_id: design.current_revision_id,
+            current_version: design.current_version,
+            current_state: design.current_state,
+            requirement_count: requirements.len() as i64,
+            stale_requirement_count,
+            open_finding_count: open_findings,
+            requirements,
+            adrs,
+        });
+    }
+    Ok(rows)
 }
 
 pub async fn fetch_approval_view(

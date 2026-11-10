@@ -1,236 +1,314 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import ConfirmationDialog from "@/components/ui/confirmation-dialog/ConfirmationDialog.vue";
-import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
+import { useRoute, useRouter } from "vue-router";
+import { ArrowLeft, RefreshCw } from "lucide-vue-next";
+
+import Alert from "@/components/ui/alert/Alert.vue";
+import Badge from "@/components/ui/badge/Badge.vue";
 import Button from "@/components/ui/button/Button.vue";
+import Card from "@/components/ui/card/Card.vue";
+import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import { PageFrame } from "@/components/shell";
-
-import AiAnalysisCard from "./components/AiAnalysisCard.vue";
-import ChangeSummary from "./components/ChangeSummary.vue";
-import DecisionPanel from "./components/DecisionPanel.vue";
-import DependencyGraph from "./components/DependencyGraph.vue";
-import ImpactHeader from "./components/ImpactHeader.vue";
-import ImpactPanel from "./components/ImpactPanel.vue";
-
-import { requirementsFixture } from "../requirements/fixtures";
-import { impactAnalysisFixture, impactDecisionOwnerFixture } from "./fixtures";
-import type {
-  ChangeImpactAnalysis,
-  ImpactDecisionKind
-} from "./impact-contract";
-import type { RequirementEntry } from "../requirements/requirement-entry";
+import {
+  getRequirementImpact,
+  type RequirementImpact,
+  type RequirementImpactRow
+} from "@/api/requirement-read";
 
 /**
- * 变更影响分析页（S02-UI-07）。
+ * 需求变更影响分析页（S02-UI-07，接真）。
  *
- * 分析对象 = REQ-001 v2（pending_confirmation 拟议修订）。
- * 左列 = 变更摘要 + 依赖图；右列 = 影响面板（A-D）+ AI 分析 + 人类决策。
- * 红线：影响对象全部来自需求域真实关系（不虚构依赖）；AI 产出标注为
- * 分析非事实；接受/拒绝必须经显式确认弹窗，要求更多分析也记录决策。
+ * 数据 = GET /v1/pm/requirements/{requirement_id}/impact。
+ *
+ * 关键语义：**只列事实，不下结论**——谁绑定了本需求（设计 / 任务）、
+ * 绑的是哪一版、是否已被新版本取代。是否重做、是否改基线由人裁决。
+ *
+ * 诚实缺位：AI 影响分析段、影响等级（direct/indirect/potential）、
+ * 受影响发现/文档清单——后端无对应读面，本页不造这些结论。
  */
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
-const { t } = useI18n();
-
-const requirements = ref<RequirementEntry[]>(
-  structuredClone(requirementsFixture) as RequirementEntry[]
-);
-const analysis = ref<ChangeImpactAnalysis>(
-  structuredClone(impactAnalysisFixture) as ChangeImpactAnalysis
-);
 
 const requirementId = computed(() => String(route.params.requirementId ?? ""));
-const matched = computed(
-  () => requirementId.value === analysis.value.requirement_id
-);
+const impact = ref<RequirementImpact | null>(null);
+const loading = ref(true);
+const loadError = ref(false);
 
-const confirmDialog = ref<null | "accept" | "reject">(null);
-const decision = ref<{
-  kind: ImpactDecisionKind;
-  actor: string;
-  acted_at: string;
-} | null>(null);
-
-const confirmDialogOpen = computed(() => confirmDialog.value !== null);
-
-const confirmDialogProps = computed(() =>
-  confirmDialog.value === "reject"
-    ? {
-        title: t("pm.requirementImpact.rejectModalTitle"),
-        description: t("pm.requirementImpact.rejectModalDesc", {
-          code: analysis.value.requirement_code
-        }),
-        confirmLabel: t("pm.requirementImpact.decisionReject"),
-        variant: "danger" as const,
-        checkbox: ""
-      }
-    : {
-        title: t("pm.requirementImpact.acceptModalTitle"),
-        description: t("pm.requirementImpact.acceptModalDesc", {
-          code: analysis.value.requirement_code
-        }),
-        confirmLabel: t("pm.requirementImpact.decisionAccept"),
-        variant: "default" as const,
-        checkbox: t("pm.requirementImpact.acceptCheckbox")
-      }
-);
-
-function nowLabel(): string {
-  return new Date().toISOString().slice(0, 16).replace("T", " ");
-}
-
-function onAcceptConfirm() {
-  const requirement = requirements.value.find(
-    item => item.id === analysis.value.requirement_id
-  );
-  if (requirement) {
-    requirement.status = "confirmed";
-    for (const revision of requirement.revisions) {
-      if (revision.state === "pending_confirmation") {
-        revision.state = "approved";
-        revision.decision = {
-          kind: "confirmed",
-          actor: impactDecisionOwnerFixture,
-          acted_at: nowLabel()
-        };
-      } else if (revision.state === "approved") {
-        revision.state = "superseded";
-      }
-    }
-    requirement.updated_at = nowLabel();
+async function load() {
+  if (!requirementId.value) {
+    loading.value = false;
+    return;
   }
-  decision.value = {
-    kind: "accepted",
-    actor: impactDecisionOwnerFixture,
-    acted_at: nowLabel()
-  };
-  confirmDialog.value = null;
-}
-
-function onRejectConfirm() {
-  const requirement = requirements.value.find(
-    item => item.id === analysis.value.requirement_id
-  );
-  if (requirement) {
-    requirement.status = "draft";
-    for (const revision of requirement.revisions) {
-      if (revision.state === "pending_confirmation") {
-        revision.state = "rejected";
-        revision.decision = {
-          kind: "rejected",
-          actor: impactDecisionOwnerFixture,
-          acted_at: nowLabel()
-        };
-      }
-    }
-    requirement.updated_at = nowLabel();
+  loading.value = true;
+  loadError.value = false;
+  try {
+    impact.value = await getRequirementImpact(requirementId.value);
+  } catch {
+    loadError.value = true;
+    impact.value = null;
+  } finally {
+    loading.value = false;
   }
-  decision.value = {
-    kind: "rejected",
-    actor: impactDecisionOwnerFixture,
-    acted_at: nowLabel()
-  };
-  confirmDialog.value = null;
 }
 
-function onMoreAnalysis() {
-  analysis.value.status = "pending";
-  decision.value = {
-    kind: "more_analysis",
-    actor: impactDecisionOwnerFixture,
-    acted_at: nowLabel()
-  };
+onMounted(load);
+watch(requirementId, load);
+
+const designs = computed(() => impact.value?.designs ?? []);
+const tasks = computed(() => impact.value?.tasks ?? []);
+const staleCount = computed(() => impact.value?.stale_binding_count ?? 0);
+
+function versionLabel(row: RequirementImpactRow): string {
+  if (!row.bound_version) return t("pm.requirementImpact.noVersion");
+  return t("pm.requirementImpact.versionBadge", { version: row.bound_version });
 }
 
-function goBackToRequirement() {
-  void router.push(`/project/requirements/${analysis.value.requirement_id}`);
+function goBack() {
+  void router.push(`/project/requirements/${requirementId.value}`);
 }
 </script>
 
 <template>
-  <PageFrame>
-    <EmptyState
-      v-if="!matched"
-      :title="t('pm.requirementDetail.notFoundTitle')"
-      :description="t('pm.requirementDetail.notFoundDesc')"
-      :action-label="t('pm.requirementDetail.backToList')"
-      @action="router.push('/project/requirements')"
+  <PageFrame
+    :breadcrumbs="[
+      { label: t('pm.requirements.pageTitle') },
+      {
+        label: impact?.code ?? t('pm.requirementImpact.pageTitle'),
+        to: `/project/requirements/${requirementId}`
+      }
+    ]"
+    :title="t('pm.requirementImpact.pageTitle')"
+    :description="impact?.title ?? t('pm.requirementImpact.pageDesc')"
+  >
+    <template #actions>
+      <Button
+        variant="secondary"
+        size="sm"
+        data-testid="ri-back"
+        @click="goBack"
+      >
+        <ArrowLeft :size="14" />
+        {{ t("pm.requirementImpact.back") }}
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        data-testid="ri-refresh"
+        @click="load"
+      >
+        <RefreshCw :size="14" />
+        {{ t("pm.requirementImpact.refresh") }}
+      </Button>
+    </template>
+
+    <Alert
+      v-if="loadError"
+      variant="danger"
+      size="sm"
+      :title="t('pm.requirementImpact.errorTitle')"
     />
 
-    <template v-else>
-      <ImpactHeader :analysis="analysis" />
+    <EmptyState
+      v-else-if="!loading && !impact"
+      :title="t('pm.requirementImpact.notFoundTitle')"
+      :description="t('pm.requirementImpact.notFoundHint')"
+    />
 
-      <div class="ri-layout">
-        <div class="ri-layout__main">
-          <ChangeSummary :change="analysis.change" />
-          <DependencyGraph :analysis="analysis" />
-        </div>
-        <div class="ri-layout__side">
-          <ImpactPanel :findings="analysis.findings" />
-          <AiAnalysisCard :ai="analysis.ai" />
-          <DecisionPanel
-            :analysis="analysis"
-            :decision="decision"
-            @accept="confirmDialog = 'accept'"
-            @more-analysis="onMoreAnalysis"
-            @reject="confirmDialog = 'reject'"
-          />
-        </div>
+    <template v-else-if="impact">
+      <Alert
+        v-if="staleCount > 0"
+        variant="warning"
+        size="sm"
+        :title="t('pm.requirementImpact.staleTitle')"
+      >
+        {{ t("pm.requirementImpact.staleHint", { count: staleCount }) }}
+      </Alert>
+
+      <div class="ri-stats" data-testid="ri-stats">
+        <span class="ri-stat">
+          <span class="ri-stat__label">
+            {{ t("pm.requirementImpact.statCurrent") }}
+          </span>
+          <span class="ri-stat__value">
+            {{
+              impact.current_version
+                ? t("pm.requirementImpact.versionBadge", {
+                    version: impact.current_version
+                  })
+                : t("pm.requirementImpact.noVersion")
+            }}
+          </span>
+        </span>
+        <span class="ri-stat">
+          <span class="ri-stat__label">
+            {{ t("pm.requirementImpact.statDesigns") }}
+          </span>
+          <span class="ri-stat__value">{{ designs.length }}</span>
+        </span>
+        <span class="ri-stat">
+          <span class="ri-stat__label">
+            {{ t("pm.requirementImpact.statTasks") }}
+          </span>
+          <span class="ri-stat__value">{{ tasks.length }}</span>
+        </span>
+        <span class="ri-stat">
+          <span class="ri-stat__label">
+            {{ t("pm.requirementImpact.statStale") }}
+          </span>
+          <span
+            class="ri-stat__value"
+            :class="{ 'is-warning': staleCount > 0 }"
+          >
+            {{ staleCount }}
+          </span>
+        </span>
       </div>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        class="ri-back"
-        @click="goBackToRequirement"
-      >
-        {{ t("pm.requirementHistory.actionBack") }}
-      </Button>
+      <Card class="ri-section" data-testid="ri-designs">
+        <template #header>
+          {{ t("pm.requirementImpact.designsTitle") }}
+        </template>
+        <p v-if="designs.length === 0" class="ri-empty">
+          {{ t("pm.requirementImpact.noDesigns") }}
+        </p>
+        <ul v-else class="ri-list">
+          <li
+            v-for="row in designs"
+            :key="row.target_id"
+            class="ri-row"
+            :data-testid="`ri-design-${row.code}`"
+          >
+            <span class="ri-row__code">{{ row.code }}</span>
+            <span class="ri-row__title">{{ row.title }}</span>
+            <span class="ri-row__meta">{{ versionLabel(row) }}</span>
+            <Badge
+              :variant="row.is_current === false ? 'warning' : 'success'"
+              size="sm"
+            >
+              {{
+                row.is_current === false
+                  ? t("pm.requirementImpact.stale")
+                  : t("pm.requirementImpact.current")
+              }}
+            </Badge>
+            <Badge v-if="row.target_status" variant="neutral" size="sm">
+              {{ row.target_status }}
+            </Badge>
+          </li>
+        </ul>
+      </Card>
 
-      <ConfirmationDialog
-        :open="confirmDialogOpen"
-        :title="confirmDialogProps.title"
-        :description="confirmDialogProps.description"
-        :confirm-label="confirmDialogProps.confirmLabel"
-        :cancel-label="t('common.cancel')"
-        :variant="confirmDialogProps.variant"
-        :checkbox-label="confirmDialogProps.checkbox"
-        @update:open="value => !value && (confirmDialog = null)"
-        @confirm="
-          confirmDialog === 'accept' ? onAcceptConfirm() : onRejectConfirm()
-        "
-        @cancel="confirmDialog = null"
-      />
+      <Card class="ri-section" data-testid="ri-tasks">
+        <template #header>
+          {{ t("pm.requirementImpact.tasksTitle") }}
+        </template>
+        <p v-if="tasks.length === 0" class="ri-empty">
+          {{ t("pm.requirementImpact.noTasks") }}
+        </p>
+        <ul v-else class="ri-list">
+          <li
+            v-for="row in tasks"
+            :key="row.target_id"
+            class="ri-row"
+            :data-testid="`ri-task-${row.target_id.slice(0, 8)}`"
+          >
+            <span class="ri-row__title">{{ row.title }}</span>
+            <span class="ri-row__meta">{{ versionLabel(row) }}</span>
+            <Badge
+              :variant="row.is_current === false ? 'warning' : 'success'"
+              size="sm"
+            >
+              {{
+                row.is_current === false
+                  ? t("pm.requirementImpact.stale")
+                  : t("pm.requirementImpact.current")
+              }}
+            </Badge>
+            <Badge v-if="row.target_status" variant="neutral" size="sm">
+              {{
+                t(
+                  `pm.requirementImpact.taskState.${row.target_status}`,
+                  row.target_status
+                )
+              }}
+            </Badge>
+          </li>
+        </ul>
+      </Card>
     </template>
   </PageFrame>
 </template>
 
 <style scoped>
-.ri-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 55%) minmax(0, 1fr);
-  gap: var(--space-4);
-  align-items: start;
-  min-width: 0;
+.ri-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  background: var(--ws-surface);
+  border: var(--border-1) solid var(--ws-border);
+  border-radius: var(--radius-lg);
 }
 
-.ri-layout__main,
-.ri-layout__side {
+.ri-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-caption);
+}
+
+.ri-stat__label {
+  color: var(--ws-text-secondary);
+}
+
+.ri-stat__value {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semibold);
+  color: var(--ws-text-primary);
+}
+
+.ri-stat__value.is-warning {
+  color: var(--ws-color-warning-text);
+}
+
+.ri-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  min-width: 0;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.ri-back {
-  align-self: flex-start;
+.ri-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-caption);
 }
 
-@media (max-width: 1100px) {
-  .ri-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.ri-row__code {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ws-text-primary);
+}
+
+.ri-row__title {
+  flex: 1;
+  min-width: 140px;
+  color: var(--ws-text-primary);
+}
+
+.ri-row__meta {
+  color: var(--ws-text-secondary);
+}
+
+.ri-empty {
+  font-size: var(--font-size-caption);
+  color: var(--ws-text-secondary);
 }
 </style>

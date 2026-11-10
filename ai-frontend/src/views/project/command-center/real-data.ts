@@ -2,11 +2,16 @@ import { getCommandCenter } from "@/api/command-center";
 import type {
   CommandCenter,
   CommandCenterBlock,
+  InitializationProgress,
   ProjectSummary,
   RunBrief,
   WorkSummary
 } from "@/api/command-center";
-import type { CommandCenterData, Translate } from "./command-center-data";
+import type {
+  CommandCenterData,
+  CommandCenterInitData,
+  Translate
+} from "./command-center-data";
 import type { TaskStat, TaskStatTone } from "./task-overview";
 
 /** 诚实空态：区块 `status=unavailable` 不得当 0 / 空集合用 */
@@ -31,7 +36,8 @@ function formatDuration(fromIso?: string, toIso?: string): string {
   if (!fromIso) return "";
   const start = new Date(fromIso).getTime();
   const end = toIso ? new Date(toIso).getTime() : Date.now();
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "";
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start)
+    return "";
   const minutes = Math.round((end - start) / 60000);
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
@@ -111,10 +117,7 @@ const TASK_WAITING_KEYS = [
 const TASK_DONE_KEYS = ["completed", "done"];
 const TASK_FAILED_KEYS = ["failed"];
 
-function sumStatuses(
-  byStatus: Record<string, number>,
-  keys: string[]
-): number {
+function sumStatuses(byStatus: Record<string, number>, keys: string[]): number {
   return keys.reduce((total, key) => total + (byStatus[key] ?? 0), 0);
 }
 
@@ -182,7 +185,56 @@ function buildHealth(
   ];
 }
 
-function buildTaskStats(work: WorkSummary | undefined, t: Translate): TaskStat[] {
+/**
+ * 初始化进度块 → 视图模型。
+ *
+ * **不伪造完成**：`completion = not_determinable` 时原样透出，由页面显示
+ * 「无法判定」——不得因为事项都过了就宣称完成（后端契约 §4.5）。
+ */
+function buildInitialization(
+  block: InitializationProgress | undefined,
+  t: Translate
+): CommandCenterInitData | null {
+  if (!block) return null;
+  const items = (block.items ?? []).map(item => ({
+    key: item.key,
+    title: item.title,
+    statusLabel: t(`s01.command-center.init.status.${item.status}`, {
+      status: item.status
+    }),
+    tone: initStatusTone(item.status),
+    required: item.required,
+    detail: item.detail ?? ""
+  }));
+  const required = (block.items ?? []).filter(item => item.required);
+  return {
+    items,
+    completion: block.completion,
+    requiredDone: required.filter(item => item.status === "completed").length,
+    requiredTotal: required.length
+  };
+}
+
+/** 展示层状态七值 → 语义档（`waiting_for_human` 是球在人手里，用 warning）。 */
+function initStatusTone(status: string): TaskStatTone {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "blocked":
+      return "danger";
+    case "waiting_for_human":
+      return "warning";
+    case "in_progress":
+      return "info";
+    default:
+      return "neutral";
+  }
+}
+
+function buildTaskStats(
+  work: WorkSummary | undefined,
+  t: Translate
+): TaskStat[] {
   const byStatus = work?.task_by_status ?? {};
   const unit = t("s01.command-center.tasks.unit");
   return [
@@ -257,10 +309,7 @@ function buildAgentRows(work: WorkSummary | undefined, t: Translate) {
   }));
 }
 
-function buildRunEntries(
-  runs: RunBrief[] | undefined,
-  t: Translate
-) {
+function buildRunEntries(runs: RunBrief[] | undefined, t: Translate) {
   return (runs ?? []).map(run => ({
     id: run.run_id,
     runId: run.run_id,
@@ -353,6 +402,10 @@ export async function loadCommandCenterData(
     // 知识快照与成员名单当前接口未提供
     knowledge: [],
     members: [],
+    initialization: buildInitialization(
+      blockData<InitializationProgress>(center.blocks.initialization_progress),
+      t
+    ),
     memberHumanCount: summary?.member_count ?? 0,
     memberAgentCount: 0
   };

@@ -209,6 +209,7 @@ shell:
         discovery: 代码检索
         requirements: 需求
         taskManagement: 任务管理
+        technicalDesign: 技术设计
         execution: AI 执行中心
         assistant: AI 助手
         knowledge: 知识审阅

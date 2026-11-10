@@ -351,66 +351,25 @@ requirementDetail:
   notFoundDesc: This requirement does not exist or has been removed.
   backToList: Back to requirements
 requirementReview:
-  pageTitle: Requirement Review
-  pageSubtitle: Review proposed requirements and make formal decisions.
-  entryLabel: Requirement Review
-  originHint: Proposals come from the requirement domain (AI / human / import)
-  queueTitle: Review Queue
-  queueAria: Review queue
-  filterAria: Filter by review status
-  filterAll: All
-  filterPending: Pending Review
-  filterChanges: Changes Requested
-  filterConfirmed: Confirmed
-  filterRejected: Rejected
-  pendingCount: "{count} pending review"
-  queueEmptyTitle: No proposals
-  queueEmptyDesc: No proposals under this filter; switch filters or wait for new ones.
-  conflictIndicator: Unresolved conflict
-  sourceAi: AI proposal
-  sourceHuman: Human proposal
-  sourceImport: Import
-  statusPending: Pending Review
-  statusChanges: Changes Requested
-  statusConfirmed: Confirmed
-  statusRejected: Rejected
-  detailTitle: Review Detail
-  detailEmptyTitle: No proposal selected
-  detailEmptyDesc: Select a proposal in the queue to review and decide.
-  proposalTitle: Proposed Requirement
-  proposalId: Proposal ID
-  proposalNew: New requirement proposal
-  proposalRevision: "Revision proposal → {code}"
-  submittedAt: Submitted
-  evidenceTitle: Source Evidence
-  analysisTitle: AI Analysis
-  analysisBadge: AI output
-  comparisonTitle: Existing Requirement Comparison
-  comparisonNone: No similar requirement found; treat as a new requirement.
-  comparisonProposalSide: Proposal
-  comparisonExistingSide: "Existing {code}"
-  blockAdded: Added
-  blockModified: Modified
-  blockRemoved: Removed
-  blockDuplication: Potential duplication
-  decisionPanelTitle: Human Decision
-  decisionPanelNote: Decisions are human-only; AI has no authority to confirm requirements.
-  actionConfirm: Confirm
-  actionChanges: Request Changes
-  actionReject: Reject
-  decisionRecordLabel: Decision record
-  confirmModalTitle: Confirm proposal
-  confirmCheckbox: I have reviewed the proposal and comparison.
-  confirmNewSummary: "{code} will be finalized as a formal requirement with {count} acceptance criteria."
-  confirmRevisionSummary: "{code} will create a new formal revision on {target}; the current approved revision becomes superseded."
-  changesModalTitle: Request Changes
-  changesCommentLabel: Required modifications
-  changesCommentPlaceholder: Describe what must change and why…
-  changesConsequence: The proposal returns to its submitter for revision; the linked requirement is unaffected.
-  rejectModalTitle: Reject proposal
-  rejectReasonLabel: Rejection reason
-  rejectReasonPlaceholder: State the rejection reason; it will be archived for future reference…
-  rejectConsequence: The proposal is rejected and archived; the linked requirement is unaffected.
+  refresh: Refresh
+  errorTitle: Failed to load
+  noProjectTitle: Select a project first
+  noProjectHint: Requirement review belongs to a project — pick a project context first.
+  emptyTitle: No revision awaiting review
+  emptyHint: No revision is currently in the pending-confirmation state.
+  queueTitle: Revisions awaiting review ({count})
+  pendingBadge: Pending
+  bodyTitle: Revision body
+  noBody: This revision has no body content.
+  openRequirement: Open requirement
+  noBase: No previous version
+  metaVersion: Revision version
+  metaBase: Previous formal version
+  metaSubmitted: Submitted at
+  metaAuthor: Author
+  metaSources: Sources
+  metaHash: Content hash
+  versionBadge: v{version}
 requirementHistory:
   pageTitle: Requirement History
   breadcrumbAria: Requirement history breadcrumb
@@ -458,139 +417,53 @@ requirementHistory:
   proposeReason: New revision proposed from the revision history page.
   noOverwriteNote: "History is immutable: this page offers no restore or overwrite action; all changes are made through new revisions."
 requirementBaseline:
-  pageTitle: Requirement Baselines
-  pageSubtitle: Manage approved requirement snapshots and their revisions.
-  breadcrumbAria: Requirement baselines breadcrumb
-  actionViewCurrent: View Current Baseline
-  actionPrepare: Prepare New Baseline
-  actionCompare: Compare Baselines
-  overviewTitle: Current Baseline
-  overviewEmptyTitle: No baseline yet
-  overviewEmptyDesc: Establish the first formal baseline via "Prepare New Baseline".
-  overviewId: Baseline ID
-  overviewVersion: Baseline version
-  overviewDate: Established
-  overviewBy: Established by
-  overviewCount: Included requirements
-  baselineVersion: "v{version}"
-  statusActive: Active
-  statusSuperseded: Superseded
-  listAria: Baseline history
-  listTitle: Baseline History
-  listEmpty: No baseline records
-  listCount: "{count} requirements"
-  detailTitle: Baseline Detail
-  detailEmptyTitle: No baseline selected
-  detailEmptyDesc: Select a baseline in the list to inspect its detail.
-  detailMetaTitle: Baseline Metadata
-  detailIncludedTitle: Included Requirements
-  detailIncludedEmpty: This baseline includes no requirements.
-  detailSummaryTitle: Baseline Summary
-  summaryTotal: Total requirements
-  summaryDistribution: "{functional} functional · {nonFunctional} non-functional"
-  wizardTitle: Prepare New Baseline
-  wizardStep: "Step {current} / {total}"
-  stepSelect: Select requirements
-  stepRevisions: Review revisions
-  stepIssues: Check unresolved issues
-  stepSummary: Review summary
-  stepConfirm: Human confirmation
-  lockedTitle: Requirements that cannot be included
-  lockedNote: Unconfirmed and conflicting requirements are never included; incomplete acceptance criteria must be fixed first.
-  issueDraft: Draft requirements
-  issuePending: Pending confirmation
-  issueConflict: Conflicting requirements
-  issueIncomplete: Incomplete acceptance criteria
-  issueNone: None
-  issueCount: "{count}"
-  issueNote: These requirements are excluded from the baseline; they can be included in a later baseline once resolved.
-  wizardNoPick: No requirements selected yet.
-  wizardPrev: Previous
-  wizardNext: Next
-  wizardEstablish: Establish Baseline
-  wizardConfirmText: "Baseline v{version} will include formal revisions of {count} confirmed requirements."
-  wizardConfirmNote: Establishing a baseline requires human confirmation; the snapshot is immutable once established.
-  compareTitle: Baseline Comparison
-  compareOldLabel: Previous baseline
-  compareNewLabel: New baseline
-  compareOldAria: Select previous baseline
-  compareNewAria: Select new baseline
-  compareEmptyTitle: Nothing to compare
-  compareEmptyDesc: Choose two baselines.
-  compareScope: "Comparing {from} → {to}"
-  compareNoDiff: No difference between the two baselines.
-  compareAdded: "Added ({count})"
-  compareRemoved: "Removed ({count})"
-  compareModified: "Modified ({count})"
-  confirmModalTitle: Establish requirement baseline
-  confirmModalDesc: "Baseline v{version} will include formal revisions of {count} confirmed requirements."
-  confirmCheckbox: I have reviewed the baseline inclusion list.
-  newBaselineDescription: "Includes formal revisions of {count} confirmed requirements."
+  refresh: Refresh
+  errorTitle: Failed to load
+  noProjectTitle: Select a project first
+  noProjectHint: The requirement baseline belongs to a project — pick a project context first.
+  emptyTitle: No requirements
+  emptyHint: This project has no active requirement yet.
+  statTotal: Total requirements
+  statConfirmed: Confirmed
+  statUnconfirmed: Unconfirmed
+  gapTitle: Unconfirmed requirements present
+  gapHint: "{count} requirement(s) are not confirmed and therefore not in the baseline."
+  colCode: Code
+  colTitle: Title
+  colVersion: Current version
+  colState: Revision state
+  colCriteria: Acceptance criteria
+  colSources: Sources
+  colConfirmed: Confirmed by
+  versionBadge: v{version}
+  noRevision: No revision
+  notConfirmed: Unconfirmed
+  state:
+    approved: Confirmed
+    pending_confirmation: Pending
+    draft: Draft
+    rejected: Rejected
+    superseded: Superseded
 requirementImpact:
-  pageTitle: Change Impact Analysis
-  pageSubtitle: Understand the downstream impact of requirement changes.
-  entryLabel: Impact Analysis
-  breadcrumbAria: Change impact analysis breadcrumb
-  currentBaseline: Current baseline version
-  baselineNotIncluded: Not in current baseline
-  proposedRevision: Proposed revision
-  statusAnalyzed: Analysis ready
-  statusPending: Pending analysis
-  summaryTitle: Change Summary
-  summarySourceLabel: Change source
-  sourceReviewMeeting: Review meeting
-  summaryOriginal: Original requirement
-  summaryProposed: Proposed change
-  summaryReason: Change reason
-  summaryProposedBy: Proposed by
-  summarySubmittedAt: Submitted
-  graphTitle: Dependency Impact Graph
-  graphSourceNode: Proposed change
-  graphNoInventNote: "Impact targets all come from real requirement-domain relations (related tasks, source references, baseline records and acceptance criteria snapshots); no dependencies are invented."
-  levelDirect: Direct impact
-  levelIndirect: Indirect impact
-  levelPotential: Potential impact
-  levelUncertain: Uncertain impact
-  kindCriteria: Acceptance criteria
-  kindTask: Project task
-  kindKnowledge: Knowledge document
-  kindBaseline: Requirement baseline
-  kindMilestone: Project milestone
-  panelTitle: Impact Analysis Panel
-  panelEmpty: No impact findings yet.
-  panelGroupCount: "{count}"
-  panelGroupNone: No affected items found in this category.
-  panelRequirement: Requirement Impact
-  panelImplementation: Implementation Impact
-  panelDocumentation: Documentation Impact
-  panelBaseline: Baseline Impact
-  aiTitle: AI Impact Analysis
-  aiBadge: AI output
-  aiDisclaimer: "The following is AI-generated analysis for decision support, not confirmed facts; humans remain responsible for decisions."
-  aiRisk: Risk assessment
-  aiConfidence: Confidence
-  riskLow: Low
-  riskMedium: Medium
-  riskHigh: High
-  confidenceHigh: High
-  confidenceMedium: Medium
-  confidenceLow: Low
-  aiEvidence: Evidence
-  aiRecommendations: Recommendations
-  decisionTitle: Human Decision
-  decisionNote: Decisions are human-only
-  decisionAccept: Accept Proposed Change
-  decisionMoreAnalysis: Request More Analysis
-  decisionReject: Reject Change
-  decisionAccepted: Accepted
-  decisionRejected: Rejected
-  decisionRecapFindings: Impact findings
-  decisionRecapText: "{findings} findings in total, {direct} direct; review all findings before acceptance."
-  acceptModalTitle: Accept proposed change
-  acceptModalDesc: "The proposed revision of {code} will be approved as the formal version and related states updated accordingly."
-  acceptCheckbox: I have reviewed the change summary and all impact findings.
-  rejectModalTitle: Reject change
-  rejectModalDesc: "The proposed revision of {code} will be rejected and the requirement returns to draft."
+  refresh: Refresh
+  back: Back to requirement
+  errorTitle: Failed to load
+  notFoundTitle: Requirement not found
+  notFoundHint: This requirement was removed or you have no access to it.
+  staleTitle: Stale bindings detected
+  staleHint: "{count} binding(s) still point at a superseded revision and need re-assessment."
+  statCurrent: Current version
+  statDesigns: Linked designs
+  statTasks: Linked tasks
+  statStale: Stale bindings
+  designsTitle: Linked designs
+  noDesigns: No design is bound to this requirement.
+  tasksTitle: Linked tasks
+  noTasks: No task is bound to this requirement.
+  stale: Stale
+  current: Current
+  noVersion: No version
+  versionBadge: v{version}
 tasks:
   pageTitle: Tasks
   subtitle: Task list across all projects.

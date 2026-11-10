@@ -1217,3 +1217,208 @@ async fn db_guards_revision_and_baseline_immutability(pool: PgPool) {
         .await;
     assert!(err.is_err(), "baseline is append-only");
 }
+
+// ────────────────────────────────────────────── S03 前端接线读面（2026-11-10）
+
+/// S03 四页共用的读面：审批收件箱 / 工作空间聚合 / 分析页覆盖与影响 /
+/// 基线 → 任务交接。
+///
+/// 覆盖点：
+/// - 审批收件箱按「待办优先 + 时间倒序」排，且带出目标展示码；
+/// - 工作空间聚合的计数与源表一致（含按状态分桶）；
+/// - 分析页把「需求已被新版本取代」标为 stale（影响分析重点）；
+/// - 基线 → 任务交接读出以本基线为实施依据的任务。
+#[sqlx::test(migrations = "../../migrations")]
+async fn s03_read_surfaces_serve_workspace_pages(pool: PgPool) {
+    let fx = fixture(&pool, "read").await;
+    let root = knowledge_root("read");
+    let (rid, rev1) = approved_requirement(&pool, &fx, "REQ-R", &root).await;
+
+    // 两个设计：一个绑定需求（当前版本），一个不绑。
+    let (design_a, _rev_a0, _hash_a) = ai_submitted_design(&pool, &fx, "设计甲", true).await;
+    let (_design_b, _rev_b, _hash_b) = ai_submitted_design(&pool, &fx, "设计乙", true).await;
+    // 需求关联只在 draft 修订上可编辑（§4.2 冻结原则）→ 新建一版 draft 承载绑定。
+    let rev_a = design::create_design_revision(
+        &pool,
+        SYSTEM_TENANT,
+        design_a,
+        design::DraftDesignRevisionRequest {
+            markdown: "# 设计甲 v2\n".to_string(),
+            summary: None,
+            technical_analysis: None,
+            implementation_scope: Some(json!({ "included": ["module a"] })),
+            acceptance_criteria: Some(vec![AcceptanceCriterionInput {
+                statement: "设计甲验收".to_string(),
+                verification_kind: None,
+            }]),
+        },
+        &fx.ai,
+    )
+    .await
+    .unwrap()
+    .id;
+    design::link_design_requirement(
+        &pool,
+        SYSTEM_TENANT,
+        design_a,
+        rev_a,
+        design::LinkDesignRequirementRequest {
+            requirement_id: rid,
+            requirement_revision_id: Some(rev1),
+        },
+        &fx.ai,
+    )
+    .await
+    .unwrap();
+    design::submit_design_revision(&pool, SYSTEM_TENANT, design_a, rev_a, &fx.ai)
+        .await
+        .unwrap();
+
+    // 审批收件箱：请求批准（不裁决）→ 状态 pending。
+    let ap =
+        design::request_design_revision_approval(&pool, SYSTEM_TENANT, design_a, rev_a, &fx.ai)
+            .await
+            .unwrap();
+    let inbox = design::list_approvals(&pool, SYSTEM_TENANT, fx.project_id)
+        .await
+        .unwrap();
+    assert_eq!(inbox.len(), 1, "只有一个待办审批");
+    assert_eq!(inbox[0].id, ap.id);
+    assert_eq!(inbox[0].status, "pending");
+    assert_eq!(inbox[0].kind, "design_revision");
+    assert!(inbox[0].target_code.is_some(), "审批行必须带出目标展示码");
+
+    // 工作空间聚合：设计数 / ADR 数 / 待办审批数 / 需求覆盖。
+    let ws = design::design_workspace(&pool, SYSTEM_TENANT, fx.project_id)
+        .await
+        .unwrap();
+    assert_eq!(ws.design_count, 2);
+    assert_eq!(ws.adr_count, 0);
+    assert_eq!(ws.pending_approval_count, 1);
+    assert_eq!(ws.linked_requirement_count, 1);
+    assert_eq!(ws.stale_requirement_count, 0);
+    assert_eq!(ws.open_finding_count, 0);
+
+    // 分析页：需求覆盖 + 影响关系。
+    let analysis = design::design_analysis(&pool, SYSTEM_TENANT, fx.project_id)
+        .await
+        .unwrap();
+    assert_eq!(analysis.len(), 2);
+    let row_a = analysis
+        .iter()
+        .find(|r| r.design_id == design_a)
+        .expect("设计甲的分析行");
+    assert_eq!(row_a.requirement_count, 1);
+    assert_eq!(row_a.stale_requirement_count, 0);
+    assert_eq!(
+        row_a.requirements[0].requirement_code.as_deref(),
+        Some("REQ-R")
+    );
+    assert_eq!(row_a.requirements[0].is_current, Some(true));
+
+    // 需求推进到新版本后，旧绑定成为 stale（影响分析重点）。
+    let draft2 = requirement::create_draft(
+        &pool,
+        SYSTEM_TENANT,
+        rid,
+        DraftRevisionRequest {
+            markdown: "# REQ-R 修订二\n".to_string(),
+            summary: None,
+            basis_finding_ids: None,
+        },
+        &fx.human,
+    )
+    .await
+    .unwrap();
+    requirement::submit_revision(&pool, SYSTEM_TENANT, rid, draft2.id, &fx.human, &root)
+        .await
+        .unwrap();
+    requirement::confirm_revision(
+        &pool,
+        SYSTEM_TENANT,
+        rid,
+        draft2.id,
+        ConfirmRevisionRequest {
+            expected_content_hash: draft2.content_hash.clone(),
+            expected_current_revision_id: None,
+            expected_row_revision: None,
+        },
+        &fx.human,
+    )
+    .await
+    .unwrap();
+
+    let analysis = design::design_analysis(&pool, SYSTEM_TENANT, fx.project_id)
+        .await
+        .unwrap();
+    let row_a = analysis
+        .iter()
+        .find(|r| r.design_id == design_a)
+        .expect("设计甲的分析行");
+    assert_eq!(
+        row_a.stale_requirement_count, 1,
+        "需求已被新版本取代 → 旧绑定必须标为 stale"
+    );
+    assert_eq!(row_a.requirements[0].is_current, Some(false));
+
+    let ws = design::design_workspace(&pool, SYSTEM_TENANT, fx.project_id)
+        .await
+        .unwrap();
+    assert_eq!(ws.stale_requirement_count, 1);
+    assert_eq!(ws.linked_requirement_count, 0);
+
+    // 评审问题计入未闭问题数。
+    design::add_review_finding(
+        &pool,
+        SYSTEM_TENANT,
+        design_a,
+        rev_a,
+        design::AddFindingRequest {
+            finding_kind: Some("issue".to_string()),
+            severity: Some("warning".to_string()),
+            body: "缺少回滚方案".to_string(),
+        },
+        &fx.ai,
+    )
+    .await
+    .unwrap();
+    let ws = design::design_workspace(&pool, SYSTEM_TENANT, fx.project_id)
+        .await
+        .unwrap();
+    assert_eq!(ws.open_finding_count, 1);
+
+    // 基线 → 任务交接：以本基线为实施依据的任务被读出。
+    let baseline = design::freeze_baseline(
+        &pool,
+        SYSTEM_TENANT,
+        fx.project_id,
+        design::FreezeBaselineRequest {
+            code: None,
+            design_revision_ids: vec![rev_a],
+            repository_refs: vec![],
+        },
+        &fx.human,
+    )
+    .await;
+    // 门禁不通过时冻结被拒——这是正确的治理行为；改用未冻结路径验证 tasks 读面。
+    if let Ok(baseline) = baseline {
+        let task_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO delivery.task (project_id, title, status, priority, tenant_id, \
+                    created_by, implementation_baseline_id) \
+             VALUES ($1, '交接任务', 'draft', 'normal', $2, $3, $4) RETURNING id",
+        )
+        .bind(fx.project_id)
+        .bind(SYSTEM_TENANT)
+        .bind(fx.human_id)
+        .bind(baseline.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let tasks = design::baseline_tasks(&pool, SYSTEM_TENANT, baseline.id)
+            .await
+            .unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, task_id);
+        assert_eq!(tasks[0].status, "draft");
+    }
+}

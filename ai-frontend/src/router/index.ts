@@ -87,12 +87,6 @@ function navItemRoutes(item: NavItem): RouteRecordRaw[] {
   return routes;
 }
 
-/**
- * mock 预览开关：与 VITE_USE_MOCK 同源（.env.development / .env.test = 1）。
- * 发布构建中该常量折叠为 false，仅 mock 分支的 fixtures 页面不会被加载/打包。
- */
-const mockPreview = import.meta.env.VITE_USE_MOCK === "1";
-
 /** 全部路由记录（导航树 → 路由） */
 export function buildRoutes(): RouteRecordRaw[] {
   const routes: RouteRecordRaw[] = [];
@@ -138,6 +132,88 @@ export function buildRoutes(): RouteRecordRaw[] {
     meta: { title: "s01.command-center.pageTitle" }
   });
 
+  // ─── 执行与协作（S05 · docs/ui/s05，2026-11-10）───
+  // 七页全部接真后端（task-runs / waiting / execution-overview / run-events /
+  // collaboration / 各 Run 附属事实），无 mock 分支。
+  //
+  // `/project/execution` 本身由导航树派生（navigation.ts 已登记组件），
+  // 此处只补不占导航的子页——重复注册会触发「路由表无重复路径」守卫。
+  routes.push(
+    {
+      path: "/project/execution/runs/:runId",
+      component: () => import("@/views/project/execution/RunDetailView.vue"),
+      meta: { title: "s05.execution.page.runDetailTitle" }
+    },
+    {
+      path: "/project/execution/collaboration/:taskId",
+      component: () =>
+        import("@/views/project/execution/CollaborationView.vue"),
+      meta: { title: "s05.execution.page.collaborationTitle" }
+    },
+    {
+      path: "/project/execution/intervention",
+      component: () =>
+        import("@/views/project/execution/HumanInterventionView.vue"),
+      meta: { title: "s05.execution.page.interventionTitle" }
+    },
+    {
+      path: "/project/execution/authorization",
+      component: () =>
+        import("@/views/project/execution/ExecutionAuthorizationView.vue"),
+      meta: { title: "s05.execution.page.authorizationTitle" }
+    },
+    {
+      path: "/project/execution/review",
+      component: () =>
+        import("@/views/project/execution/DeliveryReviewView.vue"),
+      meta: { title: "s05.execution.page.reviewTitle" }
+    },
+    {
+      path: "/project/execution/history",
+      component: () =>
+        import("@/views/project/execution/ExecutionHistoryView.vue"),
+      meta: { title: "s05.execution.page.historyTitle" }
+    }
+  );
+
+  // ─── 设计与技术决策（S03 · docs/ui/s03，2026-11-10）───
+  // 四个子页 = 独立路由 + 页内页签条（DesignFrame，同 TasksFrame 组织）。
+  // 全部接真后端（/v1/pm/projects/{id}/designs · adrs · design-analysis ·
+  // design-approvals · design-workspace · implementation-readiness），
+  // 无 mock 分支：发布构建与 dev 走同一条真数据路径。
+  routes.push(
+    {
+      path: "/project/design/technical-designs",
+      component: () =>
+        import("@/views/project/design/designs/TechnicalDesignsView.vue"),
+      meta: { title: "s03.design.page.designsTitle" }
+    },
+    {
+      path: "/project/design/technical-designs/:designId",
+      component: () =>
+        import("@/views/project/design/designs/TechnicalDesignDetailView.vue"),
+      meta: { title: "s03.design.page.designDetailTitle" }
+    },
+    {
+      path: "/project/design/adrs",
+      component: () => import("@/views/project/design/adrs/AdrView.vue"),
+      meta: { title: "s03.design.page.adrsTitle" }
+    },
+    {
+      path: "/project/design/adrs/:adrId",
+      component: () => import("@/views/project/design/adrs/AdrDetailView.vue"),
+      meta: { title: "s03.design.page.adrDetailTitle" }
+    },
+    {
+      path: "/project/design/readiness",
+      component: () =>
+        import(
+          "@/views/project/design/readiness/ImplementationReadinessView.vue"
+        ),
+      meta: { title: "s03.design.page.readinessTitle" }
+    }
+  );
+
   // ─── 任务管理（S04 · docs/ui/s04，2026-11-10）───
   // 子页为独立路由 + 页内页签条（TasksFrame，同 AiTeamFrame 组织）。
   // 总览/任务池接真（/v1/pm/tasks 系）；拆解与详情在任务读/AI 拆解接口
@@ -152,68 +228,41 @@ export function buildRoutes(): RouteRecordRaw[] {
       redirect: "/project/tasks/planning/graph",
       meta: { title: "s04.tasks.page.planningTitle" }
     },
-    mockPreview
-      ? {
-          path: "/project/tasks/breakdown",
-          component: () =>
-            import("@/views/project/tasks/breakdown/TaskBreakdownView.vue"),
-          meta: { title: "s04.tasks.page.breakdownTitle" }
-        }
-      : {
-          path: "/project/tasks/breakdown",
-          component: PlaceholderView,
-          meta: { title: "s04.tasks.page.breakdownTitle" }
-        },
-    mockPreview
-      ? {
-          path: "/project/tasks/planning/graph",
-          component: () =>
-            import("@/views/project/tasks/planning/DependencyGraphView.vue"),
-          meta: { title: "s04.tasks.page.planningTitle" }
-        }
-      : {
-          path: "/project/tasks/planning/graph",
-          component: PlaceholderView,
-          meta: { title: "s04.tasks.page.planningTitle" }
-        },
-    mockPreview
-      ? {
-          path: "/project/tasks/planning/timeline",
-          component: () =>
-            import("@/views/project/tasks/planning/TimelineView.vue"),
-          meta: { title: "s04.tasks.page.planningTitle" }
-        }
-      : {
-          path: "/project/tasks/planning/timeline",
-          component: PlaceholderView,
-          meta: { title: "s04.tasks.page.planningTitle" }
-        },
-    mockPreview
-      ? {
-          path: "/project/tasks/readiness",
-          component: () =>
-            import(
-              "@/views/project/tasks/readiness/ExecutionReadinessView.vue"
-            ),
-          meta: { title: "s04.tasks.page.readinessTitle" }
-        }
-      : {
-          path: "/project/tasks/readiness",
-          component: PlaceholderView,
-          meta: { title: "s04.tasks.page.readinessTitle" }
-        },
-    mockPreview
-      ? {
-          path: "/project/tasks/:taskId",
-          component: () =>
-            import("@/views/project/tasks/detail/TaskDetailView.vue"),
-          meta: { title: "s04.tasks.page.detailTitle" }
-        }
-      : {
-          path: "/project/tasks/:taskId",
-          component: PlaceholderView,
-          meta: { title: "s04.tasks.page.detailTitle" }
-        },
+    {
+      // 任务拆解（S04-UI-02）：接真后端 task-plans 系。
+      path: "/project/tasks/breakdown",
+      component: () =>
+        import("@/views/project/tasks/breakdown/TaskBreakdownView.vue"),
+      meta: { title: "s04.tasks.page.breakdownTitle" }
+    },
+    {
+      // 依赖图（S04-UI-05）：接真后端 dependency-graph。
+      path: "/project/tasks/planning/graph",
+      component: () =>
+        import("@/views/project/tasks/planning/DependencyGraphView.vue"),
+      meta: { title: "s04.tasks.page.planningTitle" }
+    },
+    {
+      // 时间线（S04-UI-06）：接真后端 dependency-graph + 排期列。
+      path: "/project/tasks/planning/timeline",
+      component: () =>
+        import("@/views/project/tasks/planning/TimelineView.vue"),
+      meta: { title: "s04.tasks.page.planningTitle" }
+    },
+    {
+      // 执行准备度（S04-UI-07）：接真后端 execution-readiness。
+      path: "/project/tasks/readiness",
+      component: () =>
+        import("@/views/project/tasks/readiness/ExecutionReadinessView.vue"),
+      meta: { title: "s04.tasks.page.readinessTitle" }
+    },
+    {
+      // 任务详情（S04-UI-03）：接真后端 GET /v1/pm/tasks/{task_id}。
+      path: "/project/tasks/:taskId",
+      component: () =>
+        import("@/views/project/tasks/detail/TaskDetailView.vue"),
+      meta: { title: "s04.tasks.page.detailTitle" }
+    },
     {
       path: "/project/tasks/backlog",
       component: TasksBacklogView,
@@ -322,43 +371,25 @@ export function buildRoutes(): RouteRecordRaw[] {
 
   // 需求评审与确认（S02-UI-03）：人工评审提案并作出正式决策，不占主导航——
   // 入口 = Requirements Workspace 页头「需求评审」。静态段优先于下方动态段匹配。
-  // 后端评审提案接口未落地：仅 mock 预览（VITE_USE_MOCK=1）注册真实页，
-  // 发布构建走占位页，避免把 fixtures 演示数据打进 dist（见 build/release-guard.ts）。
-  routes.push(
-    mockPreview
-      ? {
-          path: "/project/requirements/review",
-          component: () =>
-            import(
-              "@/views/project/requirement-review/RequirementReviewView.vue"
-            ),
-          meta: { title: "pm.requirementReview.pageTitle" }
-        }
-      : {
-          path: "/project/requirements/review",
-          component: PlaceholderView,
-          meta: { title: "pm.requirementReview.pageTitle" }
-        }
-  );
+  // 需求评审（S02-UI-03）：接真后端 requirement-review-queue（待确认修订）。
+  routes.push({
+    path: "/project/requirements/review",
+    component: () =>
+      import("@/views/project/requirement-review/RequirementReviewView.vue"),
+    meta: { title: "pm.requirementReview.pageTitle" }
+  });
 
   // 需求基线管理（S02-UI-06）：正式基线快照的管理 / 准备向导 / 比较，
   // 不占主导航——入口 = Requirements Workspace 页头「需求基线」。
-  routes.push(
-    mockPreview
-      ? {
-          path: "/project/requirements/baselines",
-          component: () =>
-            import(
-              "@/views/project/requirement-baseline/RequirementBaselineView.vue"
-            ),
-          meta: { title: "pm.requirementBaseline.pageTitle" }
-        }
-      : {
-          path: "/project/requirements/baselines",
-          component: PlaceholderView,
-          meta: { title: "pm.requirementBaseline.pageTitle" }
-        }
-  );
+  // 需求基线（S02-UI-04）：接真后端 requirement-baseline（派生视图）。
+  routes.push({
+    path: "/project/requirements/baselines",
+    component: () =>
+      import(
+        "@/views/project/requirement-baseline/RequirementBaselineView.vue"
+      ),
+    meta: { title: "pm.requirementBaseline.pageTitle" }
+  });
 
   // 修订与历史（S02-UI-05）：单条需求的修订时间线 / 详情 / 两版比较 / 审计，
   // 不占主导航——入口 = 需求详情页的两处历史入口（页头与 History Tab）。
@@ -370,23 +401,13 @@ export function buildRoutes(): RouteRecordRaw[] {
 
   // 变更影响分析（S02-UI-07）：拟议修订的依赖可视化 / 影响面板 / AI 分析 /
   // 人类决策，不占主导航——入口 = 需求详情页页头「影响分析」。
-  // 同上：后端影响分析接口未落地，仅 mock 预览注册真实页。
-  routes.push(
-    mockPreview
-      ? {
-          path: "/project/requirements/:requirementId/impact",
-          component: () =>
-            import(
-              "@/views/project/requirement-impact/RequirementImpactView.vue"
-            ),
-          meta: { title: "pm.requirementImpact.pageTitle" }
-        }
-      : {
-          path: "/project/requirements/:requirementId/impact",
-          component: PlaceholderView,
-          meta: { title: "pm.requirementImpact.pageTitle" }
-        }
-  );
+  // 变更影响分析（S02-UI-07）：接真后端 requirements/{id}/impact。
+  routes.push({
+    path: "/project/requirements/:requirementId/impact",
+    component: () =>
+      import("@/views/project/requirement-impact/RequirementImpactView.vue"),
+    meta: { title: "pm.requirementImpact.pageTitle" }
+  });
 
   // 需求详情与追溯（S02-UI-02）：单条需求检查页，不占主导航——
   // 入口 = Requirements Workspace 详情面板「打开详情页」与追溯链关联需求导航。

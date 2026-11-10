@@ -1,0 +1,28 @@
+discovery:
+  pageTitle: Code Discovery
+  pageDesc: AI produces findings and asks for clarification; humans confirm or reject.
+  refresh: Refresh
+  loading: Loading session…
+  errorTitle: Failed to load
+  actionFailed: Action failed
+  noProjectTitle: Select a project first
+  noProjectHint: Code discovery belongs to a project — pick a project context first.
+  emptyTitle: No discovery session
+  emptyHint: This project has no discovery session yet; start one to confirm findings here.
+  sessionsTitle: Discovery sessions ({count})
+  findingsTitle: Findings ({pending} pending / {total} total)
+  findingsEmpty: This session has no finding yet.
+  confirm: Confirm
+  reject: Reject
+  questionsTitle: Blocking questions ({open} open / {total} total)
+  questionsEmpty: This session has no question yet.
+  answerNote: The in-page answer entry is not open yet; answers and status appear here once submitted.
+  verification:
+    PENDING: Pending
+    CONFIRMED: Confirmed
+    REJECTED: Rejected
+    CONFLICT: Conflict
+  questionStatus:
+    open: Open
+    answered: Answered
+    deferred: Deferred

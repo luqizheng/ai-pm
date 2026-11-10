@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { ClipboardCheck, Plus, RefreshCw, ShieldCheck } from "lucide-vue-next";
@@ -8,7 +8,7 @@ import Button from "@/components/ui/button/Button.vue";
 import ConfirmationDialog from "@/components/ui/confirmation-dialog/ConfirmationDialog.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import { PageFrame } from "@/components/shell";
-import { useScopeStore } from "@/api/scope";
+import { SCOPE_ALL, useScopeStore } from "@/api/scope";
 import {
   confirmRevision,
   createRequirement,
@@ -64,7 +64,7 @@ const scope = useScopeStore();
 const projectId = computed(() => {
   const fromQuery = route.query.project_id;
   if (typeof fromQuery === "string" && fromQuery) return fromQuery;
-  if (scope.currentProjectId && scope.currentProjectId !== "all") {
+  if (scope.currentProjectId && scope.currentProjectId !== SCOPE_ALL) {
     return scope.currentProjectId;
   }
   return "";
@@ -356,6 +356,12 @@ function openCreateDialog() {
 }
 
 onMounted(() => {
+  void load();
+});
+
+// 项目上下文变化（壳切项目 / 路由带入 project_id）必须重载——
+// 需求列表是项目级读模型，不重载会停留在上一个项目的数据。
+watch(projectId, () => {
   void load();
 });
 </script>

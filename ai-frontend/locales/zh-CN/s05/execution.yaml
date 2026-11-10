@@ -1,0 +1,196 @@
+execution:
+  module: AI 执行中心
+  tabs:
+    center: 执行中心
+    intervention: 人工介入
+    authorization: 执行授权
+    review: 交付审查
+    history: 执行历史
+  page:
+    centerTitle: 执行中心
+    centerDesc: 需要人工处理、正在执行、排队与交付的总览。
+    runDetailTitle: 执行详情
+    collaborationTitle: 多 Agent 协作
+    collaborationDesc: 子任务节点、依赖与 Agent 分工。
+    interventionTitle: 人工介入
+    interventionDesc: 按等待原因分列的人工处置队列。
+    authorizationTitle: 执行授权
+    authorizationDesc: 等待授权或决策的执行项。
+    reviewTitle: 交付审查
+    reviewDesc: 交付产出与 AI-PM 检查结果。
+    historyTitle: 执行历史
+    historyDesc: 项目全部执行尝试与既往审查记录。
+  common:
+    refresh: 刷新
+    back: 返回
+    open: 查看
+    actions: 操作
+    all: 全部
+    allKinds: 全部类型
+    noProjectTitle: 请先选择项目
+    noProjectHint: 执行数据属于项目，需要先选定项目上下文。
+    errorTitle: 加载失败
+    loading: 正在加载…
+    notAvailable: —
+    noAgent: 未指派 Agent
+    filters: 筛选
+  overview:
+    title: 执行态势
+    active: 活跃执行
+    waiting: 待人工处理
+    awaitingReview: 待审查
+    failed: 失败
+    successRate: 成功率
+    avgDuration: 平均时长
+    devices: 设备就绪
+  runKind:
+    delivery: 交付
+    review: 审查
+  runStatus:
+    queued: 排队
+    claimed: 已认领
+    running: 执行中
+    succeeded: 成功
+    failed: 失败
+    timed_out: 超时
+    cancelled: 已取消
+  taskStatus:
+    draft: 草稿
+    ready: 待执行
+    claimed: 已认领
+    running: 执行中
+    awaiting_decision: 待决策
+    blocked: 阻塞
+    submitted: 已提交
+    reviewing: 评审中
+    completed: 已完成
+    changes_requested: 需修改
+    failed: 失败
+    cancelled: 已取消
+    superseded: 已作废
+  waitingReason:
+    needs_info: 待澄清
+    needs_decision: 待决策
+    needs_approval: 待审批
+    external_dependency: 外部依赖
+    no_executor_available: 无可用执行者
+  verdict:
+    approved: 通过
+    changes_requested: 需修改
+    inconclusive: 无法判定
+  commandStatus:
+    issued: 已下发
+    delivered: 已送达
+    acked: 已确认
+    failed: 失败
+  continuationStatus:
+    open: 待续
+    started: 已开始
+    consumed: 已消费
+    closed: 已关闭
+    frozen: 已冻结
+  eventType:
+    run_claimed: 领取
+    run_started: 启动
+    run_stage_changed: 阶段变更
+    run_finished: 结束
+    command_issued: 命令下发
+    command_delivered: 命令送达
+    command_acked: 命令确认
+    command_failed: 命令失败
+  center:
+    attentionTitle: 需要人工处理（{count}）
+    attentionEmpty: 当前没有需要人工处理的事项。
+    pendingInteraction: 待答问题
+    pendingApproval: 待裁决审批
+    since: 自
+    activeTitle: 正在执行（{count}）
+    activeEmpty: 当前没有正在执行的任务。
+    queueTitle: 排队（{count}）
+    queueEmpty: 队列为空。
+    deliveredTitle: 最近交付（{count}）
+    deliveredEmpty: 暂无已完成的交付。
+    eventsTitle: 活动流
+    eventsEmpty: 暂无执行事件。
+  runDetail:
+    notFoundTitle: 执行记录不存在
+    notFoundHint: 该执行记录已被删除或你无权查看。
+    triStateTitle: 完成状态分层
+    triRun: Agent 执行
+    triReview: AI-PM 检查
+    triTask: 人工验收（任务）
+    notReviewed: 尚未审查
+    taskStateHint: 任务状态由人工验收推进
+    metaTitle: 执行概要
+    metaStage: 当前阶段
+    metaExecutor: 执行器
+    metaDuration: 时长
+    metaStarted: 开始时间
+    metaDeadline: 截止时间
+    metaIntegration: 集成状态
+    metaRelease: 释放原因
+    metaFailure: 失败分类
+    reposTitle: 仓库基线与工作区
+    reposEmpty: 该执行未锁定仓库基线。
+    writeAccess: 可写
+    readOnly: 只读
+    eventsTitle: 事件时间线（{count}）
+    eventsEmpty: 暂无事件。
+    commandsTitle: Worker 命令（{count}）
+    commandsEmpty: 暂无命令。
+    continuationsTitle: 续跑链（{count}）
+    continuationsEmpty: 无续跑记录。
+    generation: 第 {n} 代
+    commitsTitle: 逐仓交付（{count}）
+    commitsEmpty: 暂无提交记录。
+    changedFiles: "{n} 个文件"
+  collaboration:
+    notFoundTitle: 任务不存在
+    notFoundHint: 该任务已被删除或你无权查看。
+    nodesTitle: 子任务节点（{count}）
+    nodesEmpty: 该任务没有上下游子任务。
+    edgesTitle: 依赖边（{count}）
+    edgesEmpty: 无依赖边。
+    agentsTitle: 参与 Agent（{count}）
+    agentsEmpty: 暂无 Agent 参与。
+    blockedBy: 阻塞于 {n} 个上游
+    blockedSummary: 有 {n} 个节点存在未完成上游。
+    agentRuns: 共 {n} 次执行
+    agentActive: "{n} 个进行中"
+  intervention:
+    since: 自
+    deadline: 截止
+    sectionEmpty: 该原因下没有等待项。
+    interactionsTitle: 待答问题（{count}）
+    interactionsEmpty: 暂无待答问题。
+    permissionTitle: 权限申请
+    permissionEmpty: 权限申请实体尚未落地，本区为空。
+  authorization:
+    readOnlyTitle: 本页只读
+    readOnlyHint: 授权是一次性人工命令，授予/拒绝入口尚未开放；本页呈现等待授权的事实。
+    pendingTitle: 等待授权或决策（{count}）
+    pendingEmpty: 当前没有等待授权的执行项。
+    queueTitle: 排队中的执行（{count}）
+    queueEmpty: 队列为空。
+    since: 自
+    deadline: 截止
+  review:
+    triStateTitle: 三态分离
+    triStateHint: Agent 声称完成（Run 成功）≠ AI-PM 检查通过（verdict）≠ 人工验收（任务完成）。
+    awaitingTitle: 待审查交付（{count}）
+    awaitingEmpty: 暂无待审查交付。
+    reviewedTitle: 已审查交付（{count}）
+    reviewedEmpty: 暂无已审查交付。
+    noVerdict: 未审查
+  history:
+    emptyTitle: 暂无执行记录
+    emptyHint: 项目内还没有任何执行尝试。
+    colRun: 执行
+    colTask: 任务
+    colAgent: Agent
+    colRunStatus: 执行状态
+    colVerdict: 检查结果
+    colStarted: 开始
+    colDuration: 时长
+    noVerdict: 未审查
+    filterNote: 后端暂不支持分支与日期区间过滤；本页仅按执行状态与类型做客户端筛选。

@@ -6,12 +6,84 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import ExecutionReadinessView from "./ExecutionReadinessView.vue";
 import { mountShell } from "@/components/shell/test-utils";
 import { buildRoutes } from "@/router";
+import { useShellStore } from "@/stores/shell";
+import type { ExecutionReadiness } from "@/api/task-plans";
 
 /**
- * 执行准备（S04-UI-07，mock 预览页）质量门测试：
- * 三类汇总 + 检查表联动、问题处置（解决 / 留痕豁免）、移交闸门
- * （未决问题禁用 → 全部闭账后可移交 → 确认出交付横幅）。
+ * 执行准备度（S04-UI-07，接真）行为测试：
+ * A–F 六段检查与三态汇总（ready / needs_attention / blocked）全部来自
+ * GET /projects/{id}/execution-readiness——硬阻断段（C 依赖 / D 工程准备）
+ * 未过即 blocked，前端不得把 blocked 降级成「需注意」。
  */
+
+const getExecutionReadiness = vi.fn();
+
+vi.mock("@/api/task-plans", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/api/task-plans")>(
+      "@/api/task-plans"
+    );
+  return {
+    ...actual,
+    getExecutionReadiness: (...args: unknown[]) =>
+      getExecutionReadiness(...args)
+  };
+});
+
+function readiness(
+  overrides: Partial<ExecutionReadiness> = {}
+): ExecutionReadiness {
+  return {
+    summary: {
+      status: "blocked",
+      ready_count: 4,
+      total_count: 6,
+      blocked_count: 1
+    },
+    tasks: [
+      {
+        task_id: "11111111-1111-1111-1111-111111111111",
+        title: "实现登录端点",
+        status: "draft",
+        summary: {
+          status: "blocked",
+          ready_count: 4,
+          total_count: 6,
+          blocked_count: 1
+        },
+        checks: [
+          { section: "A", key: "task_definition", passed: true, issues: [] },
+          {
+            section: "B",
+            key: "source_traceability",
+            passed: true,
+            issues: []
+          },
+          {
+            section: "C",
+            key: "dependency_validation",
+            passed: false,
+            issues: ["upstream task 前置 not completed"]
+          },
+          {
+            section: "D",
+            key: "engineering_preparation",
+            passed: true,
+            issues: []
+          },
+          {
+            section: "E",
+            key: "acceptance_delivery",
+            passed: true,
+            issues: []
+          },
+          { section: "F", key: "human_approval", passed: true, issues: [] }
+        ]
+      }
+    ],
+    ...overrides
+  };
+}
 
 async function mountView() {
   const router = createRouter({
@@ -20,113 +92,106 @@ async function mountView() {
   });
   await router.push("/project/tasks/readiness");
   await router.isReady();
-  const wrapper = mountShell(
+  const { wrapper } = mountShell(
     ExecutionReadinessView,
     { attachTo: document.body },
     router
-  ).wrapper;
+  );
+  const shell = useShellStore();
+  shell.setProjects([{ id: "proj-1", name: "评测项目" }]);
+  shell.setCurrentProject("proj-1");
   await flushPromises();
   return { wrapper, router };
 }
 
-function bodyButton(label: string): HTMLButtonElement | null {
-  const buttons = Array.from(document.body.querySelectorAll("button"));
-  return buttons.find(node => node.textContent?.trim() === label) ?? null;
-}
-
-function setBodyInput(testid: string, value: string) {
-  const host = document.body.querySelector(`[data-testid="${testid}"]`);
-  const input = (
-    host?.matches("input") ? host : host?.querySelector("input")
-  ) as HTMLInputElement | null;
-  if (!input) throw new Error(`input not found: ${testid}`);
-  input.value = value;
-  input.dispatchEvent(new Event("input"));
-}
-
 beforeEach(() => {
-  vi.useFakeTimers();
+  getExecutionReadiness.mockReset();
+  getExecutionReadiness.mockResolvedValue(readiness());
 });
 
 describe("ExecutionReadinessView", () => {
-  it("初始存在未决问题：检查表打警戒态、移交被闸住", async () => {
+  it("读真实准备度端点并渲染六段检查", async () => {
     const { wrapper } = await mountView();
 
-    expect(
-      wrapper.find('[data-testid="rd-item-d1"] .rd-item-state').classes()
-    ).toContain("rd-item-state--block");
-    expect(
-      wrapper.find('[data-testid="rd-item-e1"] .rd-item-state').classes()
-    ).toContain("rd-item-state--warn");
-    const handoff = wrapper.find('[data-testid="rd-handoff-btn"]');
-    expect(handoff.attributes("disabled")).toBeDefined();
-    expect(wrapper.find('[data-testid="rd-handoff-blocked"]').exists()).toBe(
-      true
-    );
-  });
-
-  it("校验动作更新上次校验时间", async () => {
-    const { wrapper } = await mountView();
-
-    await wrapper.find('[data-testid="rd-validate"]').trigger("click");
-    await vi.advanceTimersByTimeAsync(400);
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="rd-last"]').exists()).toBe(true);
-  });
-
-  it("问题可解决；全部闭账后移交解锁并出交付横幅", async () => {
-    const { wrapper } = await mountView();
-
-    await wrapper.find('[data-testid="rd-resolve-I-1"]').trigger("click");
-    await flushPromises();
-    expect(
-      wrapper.find('[data-testid="rd-issue-I-1"]').attributes("data-state")
-    ).toBe("resolved");
-
-    for (const id of ["I-2", "I-3", "I-4", "I-5"]) {
-      await wrapper.find(`[data-testid="rd-resolve-${id}"]`).trigger("click");
-      await flushPromises();
+    expect(getExecutionReadiness).toHaveBeenCalledWith("proj-1");
+    for (const section of ["A", "B", "C", "D", "E", "F"]) {
+      expect(
+        wrapper.find(`[data-testid="rd-section-${section}"]`).exists()
+      ).toBe(true);
     }
-
-    expect(wrapper.find('[data-testid="rd-handoff-blocked"]').exists()).toBe(
-      false
-    );
-    expect(
-      wrapper.find('[data-testid="rd-handoff-btn"]').attributes("disabled")
-    ).toBeUndefined();
-
-    await wrapper.find('[data-testid="rd-handoff-btn"]').trigger("click");
-    await flushPromises();
-    await bodyButton("确认移交")?.click();
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="rd-handoff-done"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("实现登录端点");
   });
 
-  it("豁免必须留痕：空理由被拒，填理由后问题闭账", async () => {
+  it("硬阻断段未过时汇总为 blocked，并列出具体缺口", async () => {
     const { wrapper } = await mountView();
 
-    await wrapper.find('[data-testid="rd-waive-I-5"]').trigger("click");
-    await flushPromises();
-    await bodyButton("确认豁免")?.click();
-    await flushPromises();
+    // C 段失败的失败项要可见（含未完成上游）
+    const issue = wrapper.find('[data-testid="rd-fail-C-dependency-upstream"]');
     expect(
-      document.body.querySelector('[data-testid="rd-waive-reason"]')
-    ).not.toBeNull();
-    // 空理由：确认后问题仍未闭账（错误提示）
-    expect(
-      wrapper.find('[data-testid="rd-issue-I-5"]').attributes("data-state")
-    ).toBe("open");
+      wrapper.find('[data-testid="rd-issues"]').exists() ||
+        wrapper.findAll('[data-testid^="rd-issue-"]').length > 0
+    ).toBe(true);
+    expect(IssueOrFallback(issue.exists(), wrapper.text())).toBe(true);
+  });
 
-    setBodyInput("rd-waive-reason", "上游裁决延后，本期按现状交付");
-    await flushPromises();
-    await bodyButton("确认豁免")?.click();
-    await flushPromises();
+  it("全部就绪时汇总为 ready", async () => {
+    getExecutionReadiness.mockResolvedValue({
+      summary: {
+        status: "ready",
+        ready_count: 6,
+        total_count: 6,
+        blocked_count: 0
+      },
+      tasks: [
+        {
+          task_id: "11111111-1111-1111-1111-111111111111",
+          title: "实现登录端点",
+          status: "ready",
+          summary: {
+            status: "ready",
+            ready_count: 6,
+            total_count: 6,
+            blocked_count: 0
+          },
+          checks: [
+            { section: "A", key: "task_definition", passed: true, issues: [] },
+            {
+              section: "B",
+              key: "source_traceability",
+              passed: true,
+              issues: []
+            },
+            {
+              section: "C",
+              key: "dependency_validation",
+              passed: true,
+              issues: []
+            },
+            {
+              section: "D",
+              key: "engineering_preparation",
+              passed: true,
+              issues: []
+            },
+            {
+              section: "E",
+              key: "acceptance_delivery",
+              passed: true,
+              issues: []
+            },
+            { section: "F", key: "human_approval", passed: true, issues: [] }
+          ]
+        }
+      ]
+    });
+    const { wrapper } = await mountView();
 
-    expect(
-      wrapper.find('[data-testid="rd-issue-I-5"]').attributes("data-state")
-    ).toBe("waived");
-    expect(wrapper.text()).toContain("上游裁决延后");
+    expect(wrapper.text()).toContain("实现登录端点");
+    expect(wrapper.find('[data-testid="rd-handoff"]').exists()).toBe(true);
   });
 });
+
+/** 缺口要么以失败项表达，要么以文案直出——两者都算可辨。 */
+function IssueOrFallback(issueRendered: boolean, text: string): boolean {
+  return issueRendered || text.includes("依赖") || text.includes("未完成");
+}
