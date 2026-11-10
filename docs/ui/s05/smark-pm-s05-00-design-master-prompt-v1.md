@@ -73,8 +73,8 @@ The UI must always be explicit about which of these it is showing:
 - One task → many runs (retries create new attempts; history is never overwritten).
 - One execution may involve multiple agents (collaboration view).
 - An execution can complete while delivery review is still pending.
-- Agent waiting is `awaiting_decision` + a waiting reason (needs_info / needs_decision / needs_approval / external_dependency) — never a "WAITING_FOR_X status".
-- **Three-stage completion separation** (must be visually distinguishable everywhere): ① Agent claims completion (run succeeded, delivery submitted) → ② AI-PM verification passes (manifest reconciliation + review verdict) → ③ Human formally accepts (task completed). Only ③ changes project delivery status.
+- Agent waiting is `awaiting_decision` + a waiting reason (**five values**: needs_info / needs_decision / needs_approval / external_dependency / no_executor_available) — never a "WAITING_FOR_X status". (`no_executor_available` = no ready execution environment; it is the reason shown when a task waits for an available device.)
+- **Three-stage completion separation** (must be visually distinguishable everywhere): ① Agent claims completion (run succeeded, delivery submitted) → ② AI-PM verification passes (manifest reconciliation + review verdict) → ③ Human formally accepts (task completed). Only ③ changes project delivery status. Review verdict has exactly three values — approved / changes_requested / inconclusive; "not yet reviewed" is an empty verdict, not a fourth value.
 
 ### 5. Screens
 

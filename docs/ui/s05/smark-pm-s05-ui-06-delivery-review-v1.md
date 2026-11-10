@@ -97,8 +97,8 @@ Explicit list with per-item state: acceptance criteria (each mapped to its verif
 ## 10. Human Actions
 
 - **Accept Delivery** — enabled only when no blocking checklist item is failed; confirm dialog summarizes what is being accepted and which evidence supports it; on accept: Task moves to completed (delivery state updated), requirement/knowledge status update is queued by PM-AI (not by the agent).
-- **Request Changes** — requires feedback text and optionally selects affected acceptance criteria; the task returns for further execution; the new attempt appears in history while the previous attempt and its review stay intact. Shows the existing verdict `changes_requested` and the feedback history.
-- **Reject Delivery** — requires reason; marks the delivery rejected (distinct from changes requested).
+- **Request Changes** — requires feedback text and optionally selects affected acceptance criteria; the review verdict becomes `changes_requested` (one of exactly three verdict values) and the task returns for further execution; the new attempt appears in history while the previous attempt and its review stay intact. Feedback history is retained.
+- **Reject Delivery** — requires reason; distinct from Request Changes: the task is not continued, it is terminated by human decision (task ends in a terminal state, not `changes_requested`). The review verdict column shows `changes_requested` / `approved` / `inconclusive` — a rejection is a human task decision, not a fourth verdict value; label it accordingly (e.g. "Rejected by reviewer" on the attempt row).
 
 ## 11. Right Context Panel
 

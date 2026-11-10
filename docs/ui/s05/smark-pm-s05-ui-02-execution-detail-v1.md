@@ -69,7 +69,7 @@ Core rule: execution detail must be readable and auditable; structured events ar
 
 ## 6. Execution Timeline
 
-Structured events, each: timestamp · event type · summary · **source** (human / platform / agent) · optional reference (commit SHA, command id, waiting reason). Event vocabulary mirrors the execution event log: task authorized · run claimed / re-claim (new generation) · run started · stage changed · waiting raised / answered · command issued / delivered / acked / failed (e.g. terminate) · run finished (outcome + reason) · delivery submitted · review decided. Terminal events styled with outcome color; retried runs show a "new attempt" marker linking back to the previous run (history preserved).
+Structured events, each: timestamp · event type · summary · **source** (human / platform / agent) · optional reference (commit SHA, command id, waiting reason). Event vocabulary mirrors the execution event log (eight persisted types): `run_claimed` / `run_started` / `run_stage_changed` / `run_finished` / `command_issued` / `command_delivered` / `command_acked` / `command_failed` — plus platform-side milestones that are not events but must appear (task authorized, waiting raised, waiting answered, delivery submitted, review decided). Waiting raised/answered maps to the interaction lifecycle **pending → responded / timed_out / cancelled → consumed**; a command event names its type (`agent.process.terminate` / `agent.task.continue`). Terminal events styled with outcome color; retried runs show a "new attempt" marker linking back to the previous run (history preserved).
 
 ## 7. Current Agent Activity
 

@@ -20,7 +20,7 @@ Design the Human Intervention workbench: the dedicated surface where humans hand
 4. **Execution Failure** — failure summary, error context, failed stage, blast radius; decide Retry / Modify & Retry / Cancel / escalate.
 5. **Permission Required** — exactly which permission, why, on which resource (never a generic write-permission toggle).
 
-Semantics: a waiting task shows Task state `awaiting_decision` + **waiting reason** (needs_info / needs_decision / needs_approval / external_dependency) + the interaction lifecycle (pending → answered → consumed). The human reply is persisted and never overwritten; deadline semantics are explicit (timeout creates a new interaction, it does not silently resume).
+Semantics: a waiting task shows Task state `awaiting_decision` + **waiting reason** (five values: needs_info / needs_decision / needs_approval / external_dependency / no_executor_available) + the interaction lifecycle (**pending → responded / timed_out / cancelled → consumed**). The human reply is persisted and never overwritten; deadline semantics are explicit (a timed-out interaction creates a new interaction, it never silently resumes).
 
 ## 2. Global Layout
 
@@ -67,6 +67,7 @@ Semantics: a waiting task shows Task state `awaiting_decision` + **waiting reaso
 - **Clarification (needs_info)**: agent's question verbatim · supporting evidence (design excerpt, requirement link, code refs the agent already inspected) · answer editor (persisted, auditable) · attach context · explicit note "answering resumes the same execution (continuation), deadline unchanged" · secondary **Cancel Execution** with confirm.
 - **Failure (decision)**: failure summary · category (execution / infrastructure / timeout) · failed stage · error context (structured, expandable to raw) · impact list ("blocks Frontend T-060c, Test harness unaffected") · actions **[Retry]** (new Run attempt) · **[Modify & Retry]** (edit task instructions/scope first) · **[Cancel]** · **[Escalate]** (assign to another human with note).
 - **Blocked (external_dependency / needs_decision)**: blocking reason · affected subtasks (from collaboration view) · suggested resolutions (with links: resolve ADR, complete predecessor, adjust scope) · **[Resolve]** or **[Reassign wait reason]**.
+- **No execution environment (no_executor_available)**: the task is ready but no Device is available/ready — show available devices with their readiness chain, and offer to authorize an execution once one is ready (→05) or to adjust the agent assignment. No generic retry button that would loop.
 - **Permission required**: exact permission name · why it is needed · affected resource (repository / path scope / device) · requester (agent + run) · **[Grant]** (scoped, logged, auditable) · **[Deny with reason]**. No global toggles.
 - **Authorization**: compact card (see S05-UI-05) → **[Open Authorization Flow]**.
 

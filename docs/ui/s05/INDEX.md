@@ -14,7 +14,7 @@
 
 ## 领域语义裁决（防状态混淆，全部页面强制）
 
-- **Task ≠ Run ≠ Agent ≠ Delivery ≠ Review**：Task 是工程工作项（13 态状态机，含 awaiting_decision 单状态 + waiting reason 四值 needs_info / needs_decision / needs_approval / external_dependency——**不做 WAITING_FOR_* 状态**）；Run 是一次执行尝试（7 态 queued/claimed/running/succeeded/failed/timed_out/cancelled，attempt_no 分轨编号，**一个 Task 可多次 Run**）；Agent 是参与执行的 AI 工人（Device 载体 + readiness：installed/connected/authenticated/ready/degraded/failed）；Delivery 是执行产出（逐仓 commit + 测试证据 + 交付清单）；Review 是人对 Delivery 的裁决（approved / changes_requested / inconclusive）。
+- **Task ≠ Run ≠ Agent ≠ Delivery ≠ Review**：Task 是工程工作项（13 态状态机，含 awaiting_decision 单状态 + waiting reason **五值** needs_info / needs_decision / needs_approval / external_dependency / **no_executor_available**——**不做 WAITING_FOR_* 状态**）；Run 是一次执行尝试（7 态 queued/claimed/running/succeeded/failed/timed_out/cancelled，attempt_no 按 kind 分轨 delivery/review，**一个 Task 可多次 Run**）；Agent 是参与执行的 AI 工人（Device 载体 + readiness：installed/connected/authenticated/ready/degraded/failed）；Delivery 是执行产出（逐仓 commit + 测试证据 + 交付清单）；Review 是人对 Delivery 的裁决（**三值** approved / changes_requested / inconclusive——未评审时为空，非第四值）。
 - **完成三态分离**：Agent 声称完成（Run succeeded / Delivery submitted）≠ AI-PM 检查通过（manifest 对账 + review verdict）≠ 人工正式验收（Task completed，需验收证据齐备）。UI 必须让三者视觉可区分。
 - 执行授权是「任务级一次性授权」（五重资格门 + 授权范围），ACP-07 的 Deadline 重授权是 Run 级续期——两者 UI 语义不同，不得混用。
 
@@ -32,6 +32,8 @@
 | 07 | [smark-pm-s05-ui-07-execution-history-v1.md](smark-pm-s05-ui-07-execution-history-v1.md) | Execution History | 执行历史与既往审查记录 |
 
 每份页面提示词内嵌全局框架与 V2 令牌，**独立可投喂 Figma AI，不依赖上下文**；均含低保真线框、组件清单、交互状态、视觉风格四件套。
+
+**参考件**：[reference/00-input-brief-s05-v1.md](reference/00-input-brief-s05-v1.md) — 原始需求简报归档 + 收敛映射表（哪条采纳、哪条按我们的设计覆盖、依据在哪）。**简报作参考，我们的提示词才是投喂件。**
 
 ## 连续工作流（与 S04 的闭环衔接）
 
@@ -66,3 +68,21 @@ S04-07 Execution Readiness「Prepare S05 Handoff」（S04 出口）
 - 执行状态色：Ready `#8DC5AF` · Running/Info `#6EA8FE` · Waiting/Warning `#E0B15E` · Failed/Blocked `#F07E88` · Completed `#34C08B` · 中性（queued/cancelled/draft）灰系 `#A8BBC9`。
 - 优先级：P0 Critical / P1 High / P2 Medium / P3 Low。
 - Agent 命名：Architecture / Backend / Frontend / Test / Review Agent（角色徽标 + Device 名，禁止装饰性头像）。
+
+## 契约真源（2026-11-10 逐项核对库级 CHECK）
+
+| 契约 | 取值 | 出处 |
+|---|---|---|
+| Task 状态（13 态） | draft / ready / claimed / running / awaiting_decision / blocked / submitted / reviewing / completed / changes_requested / failed / cancelled / superseded | `delivery.task` CHECK |
+| Run 状态（7 态） | queued / claimed / running / succeeded / failed / timed_out / cancelled | `delivery.task_run` CHECK |
+| Run kind | delivery / review（attempt_no 按 kind 分轨） | `task_run_run_kind_check` |
+| 执行形态 | human（Agent 自执行） / spawn（平台拉起进程） | `task_run_execution_mode_check` |
+| Waiting reason（5 值） | needs_info / needs_decision / needs_approval / external_dependency / **no_executor_available** | `delivery.task_waiting` CHECK |
+| Interaction 生命周期 | pending → responded / timed_out / cancelled → consumed | `delivery.task_interaction` CHECK |
+| Continuation 状态 | open / started / consumed / closed / frozen | `delivery.continuation` CHECK |
+| Review verdict（3 值） | approved / changes_requested / inconclusive（未评审为空） | `task_run_review_verdict_check` |
+| Device readiness（6 态） | installed / connected / authenticated / ready / degraded / failed | `devenv.device` CHECK |
+| Worker 命令 | 类型 agent.process.terminate / agent.task.continue；状态 issued → delivered → acked / failed | `delivery.worker_command` CHECK |
+| 执行事件（8 类） | run_claimed / run_started / run_stage_changed / run_finished / command_issued / command_delivered / command_acked / command_failed | 迁移 0013 `delivery.task_run_event` |
+
+**注**：`needs_info` 是历史值，域层已并入 `awaiting_decision`（V3 L1 合并裁决）——UI 展示统一用 `awaiting_decision` + 上述五值 reason，不再单独展示 needs_info 状态。

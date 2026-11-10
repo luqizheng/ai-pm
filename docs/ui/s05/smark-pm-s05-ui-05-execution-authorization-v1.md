@@ -83,7 +83,7 @@ Five checks, each with pass/fail and a link to the evidence: task ready · sourc
 - Repositories: each with name · read/write access · path scope · base branch/commit snapshot.
 - Branch: platform-generated task branch (read-only label — the platform owns branch naming).
 - Agent: proposed agent + role + Device carrier.
-- Execution mode: MCP self-execution (agent runs in its own process) vs platform-spawned process — shown as an explicit, non-technical label with an explanatory line ("the agent runs the work itself; PM-AI only coordinates").
+- Execution mode (two real values, shown with plain labels): **human** = the agent executes the work itself in its own process (MCP self-execution; PM-AI only coordinates) · **spawn** = the platform launches the agent process and supervises it.
 - Timeouts: execution timeout and absolute deadline, with the note that re-claim does not extend the deadline.
 - **Modify Execution Scope**: narrow write access / path scope / repository set / timeout. Changes are previewed as a diff against the handed-off scope, and require confirm.
 

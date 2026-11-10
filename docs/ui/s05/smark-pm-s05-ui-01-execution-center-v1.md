@@ -73,7 +73,8 @@ Upstream context: tasks arrive here from S04 "Execution Readiness" handoff and w
 Prominent section at top, warning-tinted container. One row per item needing a human:
 
 - Items: execution authorization required · agent waiting for clarification · execution blocked by missing dependencies · failed execution requiring a decision · delivery awaiting review · Run-level deadline expired needing re-authorization.
-- Row: task ID + title · priority (P0–P3) · state badges (**Task state ≠ Run state ≠ waiting reason** — show e.g. Task `running` + Run `#2 failed` + reason `needs_info`) · related agent · last updated · **action button** (Authorize / Answer / Decide / Review).
+- Row: task ID + title · priority (P0–P3) · state badges (**Task state ≠ Run state ≠ waiting reason** — show e.g. Task `awaiting_decision` + Run `#2 failed` + reason `needs_info`) · related agent · last updated · **action button** (Authorize / Answer / Decide / Review).
+- Waiting reason badge takes one of five values: needs_info / needs_decision / needs_approval / external_dependency / no_executor_available — each with its own micro-copy so the human knows what kind of input is expected.
 - Sort: priority, then age. Click row → Execution Detail; action button → the corresponding focused flow (05/04/06).
 
 ## 6. Section B — Currently Executing
@@ -82,7 +83,7 @@ Rows for running executions: task ID + title · Run chip (`Run #N`) with progres
 
 ## 7. Section C — Execution Queue
 
-Tasks waiting: authorization pending (link to 05) · queued run (waiting for available device — show device readiness reason if none) · blocked by dependency/failure (show blocking reference). Empty queue state: neutral explanation, not an error.
+Tasks waiting: authorization pending (link to 05) · queued run waiting for an available execution environment (reason `no_executor_available` — show which device is missing or not ready) · blocked by dependency/failure (show blocking reference). Empty queue state: neutral explanation, not an error.
 
 ## 8. Section D — Recent Deliveries
 

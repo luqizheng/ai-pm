@@ -61,10 +61,10 @@ It serves audit and post-mortem needs: "which runs touched this repo last month"
 
 ## 6. History Table
 
-Columns: **Run** (`#N` + kind badge delivery/review) · **Task** (ID + title, link) · **Agent / Device** (role + readiness dot) · **Status** (run state badge) · **Review verdict** (pending/approved/changes_requested/rejected) · **Started** · **Duration** · **Commits** · **Files** · **Updated**.
+Columns: **Run** (`#N` + kind badge delivery/review) · **Task** (ID + title, link) · **Agent / Device** (role + readiness dot) · **Status** (run state badge) · **Review verdict** (approved / changes_requested / inconclusive / "—" when not yet reviewed) · **Started** · **Duration** · **Commits** · **Files** · **Updated**.
 
 - Sorted by started desc by default; sticky header; compact row height; tabular numerals for duration/commits/files.
-- Run states and review verdicts are **separate columns** — a successful run may still carry a `changes_requested` verdict. This distinction must be visually obvious.
+- Run states and review verdicts are **separate columns** — a successful run may still carry a `changes_requested` verdict. This distinction must be visually obvious. Review verdict has exactly three values; a human rejection appears as a task-level outcome on the attempt row, not as a fourth verdict value.
 - Row expansion (inline, no navigation): outcome reason, authorized scope vs actual paths, changed file count, test summary, failure category, and links to the run detail / delivery review.
 - Failed and cancelled attempts remain visible forever — they are the audit trail.
 
