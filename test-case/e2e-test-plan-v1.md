@@ -113,7 +113,7 @@ L1（`#[sqlx::test]` + axum `oneshot`）覆盖不到四类真实故障，这四�
 | **FLOW-08** | 跨租户隔离 | 非成员主体对本项目需求列表可见数为 0 | ✅ PASS |
 | **FLOW-09** | 项目归档 + 私钥零泄露 | 归档 → `status='archived'`；重复归档 409 `ALREADY_ARCHIVED`；`POST /ssh-keys` 响应**无** `private_key` | ✅ PASS |
 
-### 4.2 L3 · UI（`UIFLOW-*`）——**未落地，下一批**
+### 4.2 L3 · UI（`UIFLOW-*`）——**已落地**（`ai-frontend/e2e/flow.spec.ts`，8/8 PASS）
 
 | ID | 场景 | 断言要点 |
 |---|---|---|
@@ -144,13 +144,15 @@ bash test-case/evidence/e2e-flow/run-e2e-flow.sh
 
 **实测**：7/7 PASS，单次 19.7 s。
 
-### 5.2 L3 一键（**未落地**，下一批）
+### 5.2 L3 一键（**已落地**）
 
 ```bash
-cd ai-frontend && pnpm exec playwright test -c playwright.e2e.config.ts
+bash test-case/evidence/e2e-flow/run-e2e-flow-ui.sh
 ```
 
-L3 复用既有 `e2e/team/` 基建（JWKS + 真 pm-api + 真 vite），接入本批的真实仓库链路。
+载体：`ai-frontend/playwright.flow.config.ts`（vite `:8860`，`VITE_USE_MOCK=0`，`reuseExistingServer: false`）+ `e2e/flow/global-setup.ts`（一次性库 `aipm_e2e_flow_ui` + 本地 JWKS `:18496` + 真 pm-api `:18495`）。与 team-qa（:8850/:18490 系）、s02（:8848）端口互斥。
+
+实测：UIFLOW-01~08 全部 PASS，34.7s。UIFLOW-06 接入**真实远端**——私钥经 `cargo run -p pm-application --example seal_ssh_key`（薄封装平台 `seal_text`）装进平台密钥库，不在 TS 侧重实现加密。
 
 ### 5.3 与既有 E2E 的关系
 
@@ -184,7 +186,7 @@ L3 复用既有 `e2e/team/` 基建（JWKS + 真 pm-api + 真 vite），接入本
 
 | # | 缺口 | 状态 |
 |---|---|---|
-| **G-E2E-1** | **L3 UI E2E 未落地**——UIFLOW-01 ~ 08（真浏览器）尚未实现 | 下一批 |
+| ~~G-E2E-1~~ | ~~L3 UI E2E 未落地~~ | ✅ **已关闭（2026-11-10）**：`e2e/flow.spec.ts` 8/8 PASS，见执行报告 §1.0 |
 | **G-E2E-2** | **GitHub 侧导入未覆盖**——GitHub 完整 bare clone 偶发 `early EOF`（`fetch-pack: unexpected disconnect`），平台 `clone_bare` 无重试；FLOW-02 当前只覆盖 GitHub 的 verify（`ls-remote`）路径 | 已登记（OBS-01） |
 | **G-E2E-3** | **执行器真实执行未覆盖**——`AI_PM_RUN_EXECUTOR` 默认 noop；Run → 真实 commit → 交付态属 L4 范畴 | 待 L4 |
 | **G-E2E-4** | 提案 `item_count` 在 `GET /imports/{id}/proposals` 恒为 0（`existing_proposals` 不回填） | 已登记（OBS-02），纯展示瑕疵 |

@@ -1,6 +1,6 @@
 # E2E 全流程 · 执行报告 V1.0
 
-> **用例文件**：`apps/pm-api/tests/e2e_flow.rs`（真 router + 真 PG + 真 Git 远端）
+> **用例文件**：L2=`apps/pm-api/tests/e2e_flow.rs`（真 router + 真 PG + 真 Git 远端）；L3=`ai-frontend/e2e/flow.spec.ts`（Playwright + 真 vite + 真 pm-api，2026-11-10 第二批落地）
 > **计划**：`test-case/e2e-test-plan-v1.md`（FLOW-01 ~ FLOW-16）
 > **执行日期**：2026-11-10
 > **基线**：master @ `2b3f509e` + 本批修复（见 §3）
@@ -10,6 +10,25 @@
 ---
 
 ## 1. 执行结果总览
+
+### 1.0 L3 UI E2E · UIFLOW-01 ~ 08（`ai-frontend/e2e/flow.spec.ts` + `playwright.flow.config.ts`）
+
+**8/8 PASS**（两次复跑全绿，34.7s / 35.7s；Playwright + MS Edge headless 1440×900 zh-CN + 真 vite `:8860`（`VITE_USE_MOCK=0`）+ 真 pm-api `:18495`（jwks）+ 一次性库）
+
+| 用例 | 场景 | 结果 | 关键断言（实测值） |
+|---|---|---|---|
+| **UIFLOW-01** | 未建团 → 登录中转页分流 | **PASS** | `/auth/signing-in` → `/onboarding`；`/me.onboarding_required=true`、`team=null`；DB：租户内 ACTIVE 成员数 = 0（不产生虚假默认团队）。深链 `/projects` **不被拦**（现状记录，见 §3.1 OBS-03） |
+| **UIFLOW-02** | UI 建团 → 邀请页横幅 | **PASS** | `onboarding-choice-create` → 填表 → `/onboarding/invite`；横幅含团队名；API：`onboarding_required=false`、`tenant_role=owner`、`team.name` 一致 |
+| **UIFLOW-03** | UI 建项目 → 总控台；列表可见 | **PASS** | 表单提交 → `/project/command-center?project_id=<uuid>`；`/projects` 列表显示项目名；DB：`core.project_member` 恰 5 行（owner/ai_pm/architect/developer/tester） |
+| **UIFLOW-04** | 需求页读真 | **PASS** | API 造需求（201）→ `/project/requirements?project_id=` 渲染标题；API 列表确认 `latest_state=draft` |
+| **UIFLOW-05** | 任务页读真 | **PASS** | API 造 2 条 draft 任务（201）→ 总览 `ov-stat-draft` 徽标 = 2；backlog 两标题真实渲染 |
+| **UIFLOW-06** | 仓库设置页读真（**真实远端**） | **PASS** | 平台密钥库注入本机私钥（走平台 `seal_text` 路径）→ GitLab + GitHub 两仓库 API verify 均 `verified`（HEAD sha 40 位）→ UI 两行各带「已验证」徽标 |
+| **UIFLOW-07** | 路由守卫 | **PASS** | 裸 context 无 token 访问 `/project/requirements` → `/auth/login`（修复环境泄漏后稳定落点，见 DEF-E2E-04） |
+| **UIFLOW-08** | 零 mock 校验（网络面板） | **PASS** | 页面 `/api/**` 请求全部 2xx、零 `fixtures/demo/mock` 路径；DB：展示的需求行确在 `delivery.requirement`（假绿排除） |
+
+> 用例按真实用户旅程**串行**（同一 owner 租户走完全链）；串行的原因：UIFLOW-02 建的团是 03~08 的前置，03 建的项目是 04~06、08 的前置——前置链路断了，跑后面只会产出误导性失败。
+
+### 1.1 L2 服务级 E2E · FLOW-00 ~ 09（`apps/pm-api/tests/e2e_flow.rs`）
 
 **7/7 PASS**（nextest；单次全量 19.7 s）
 
@@ -23,7 +42,7 @@
 | `flow_14_cross_tenant_isolation` | 跨租户隔离 | **PASS** | 非成员主体对本项目需求列表可见数为 0 |
 | `flow_15_archive_and_no_key_leak` | 归档 + 私钥零泄露 | **PASS** | 归档 → `status=archived`；重复归档 409 `ALREADY_ARCHIVED`；`POST /ssh-keys` 响应**无** `private_key` 字段 |
 
-### 1.1 全量回归（同一基线）
+### 1.2 全量回归（同一基线）
 
 | 层 | 命令 | 结果 |
 |---|---|---|
@@ -58,6 +77,8 @@
 ```
 
 因此 FLOW-01/04 验证的是**平台自己的解密 + 临时密钥 + Git 协议栈**，不是测试代码另起的捷径。
+
+> **L3（Node 侧）同路**：UIFLOW-06 不能在 TS 里重实现 AES-256-GCM 信封（两套实现漂移 = 假绿/假红，见 `docs/e2e-spec/00` §7.2 红线）。`e2e/flow/stack.ts` 的 `sealPrivateKey()` 调 `cargo run -p pm-application --example seal_ssh_key`（薄封装平台 `seal_text`，输出 hex），再经 psql `decode(hex)` 落库——加密永远只有平台一份实现。
 
 ### 2.3 实测前置事实
 
@@ -108,7 +129,23 @@
 | **修复** | `ai-frontend/vitest.config.ts` 显式 `exclude: [...configDefaults.exclude, "e2e/**"]` |
 | **验证** | `pnpm exec vitest run` → **184 files / 1052 tests passed，0 failed** |
 
-### 3.1 本批修复未涉及（登记但不擅自改）
+### DEF-E2E-04（P2·套件环境泄漏，已修复）：UIFLOW-07 登录页被本机 full-dev 网关劫持成注册页
+
+| 项 | 内容 |
+|---|---|
+| **现象** | UIFLOW-07 期望「无 token 访问受保护页 → `/auth/login`」，实测落在 **`/auth/setup`**（注册页）——同一套件两次运行结果取决于本机碰巧在跑什么 |
+| **根因** | vite 的 `/gw` 代理默认打 `LMMS_GATEWAY_URL ?? 127.0.0.1:3000`（`vite.config.ts:47`）。本栈没有 iam 网关，但本机恰好在跑 full-dev 栈（`superpowers-full-api-gateway-1` 占 3000）→ `iam.auth.setupStatus()` 打到了**外部真实网关**，返回 `setup_required=true` → LoginView 重定向 `/auth/setup`（`LoginView.vue:65-67`）。测试结果依赖宿主机上碰巧运行的服务 = 环境泄漏 |
+| **修复** | `playwright.flow.config.ts` 的 webServer env 显式 `LMMS_GATEWAY_URL: "http://127.0.0.1:59999"`（死端口）→ `fetchSetupStatus` 走 **fail-open=null**（`api/setup.ts:44-50`「只有确证 setup_required=true 才引导到注册页」）→ 登录页稳定停留 |
+| **验证** | UIFLOW-07 转绿；连续两次全量复跑全绿（34.7s / 35.7s） |
+| **教训** | E2E 栈里**每一个**对外依赖都必须显式钉死（连「死端口」也是钉法之一）——默认值会静默命中宿主机上的其它服务 |
+
+### 3.1 待裁决项引用（不计缺陷）
+
+| # | 观察 | 说明 |
+|---|---|---|
+| OBS-03 | onboarding 门只在登录中转页，无路由级守卫 | UIFLOW-01 实测：`/auth/signing-in` 被分流到 `/onboarding`，但深链 `/projects` **不被拦**。与 team-onboarding.spec **B09-18 的 fixme** 同源（「待裁决：onboarding 门只在登录中转页」），按 team-qa 计划 §5 **PENDING-DECISION** 口径记录现状，不计缺陷。若产品裁决补路由级守卫，UIFLOW-01 的深链断言应同步改为「被拦」 |
+
+### 3.2 本批修复未涉及（登记但不擅自改）
 
 | # | 观察 | 说明 |
 |---|---|---|
@@ -121,7 +158,7 @@
 
 | # | 计划中的用例 | 状态 | 原因 |
 |---|---|---|---|
-| 1 | **L3 UI E2E**（UIFLOW-01 ~ 08，Playwright + 真浏览器） | **NOT IMPLEMENTED** | 本批先落 L2（服务级，真 router + 真 PG + 真 Git）。UI 层复用既有 `e2e/team-onboarding.spec.ts` 基建，尚未接入本批的真实仓库链路 |
+| 1 | ~~L3 UI E2E~~ | ✅ **已落地（2026-11-10 第二批）** | §1.0：UIFLOW-01~08 全部 PASS，接入真实仓库链路（UIFLOW-06），一键 `run-e2e-flow-ui.sh` |
 | 2 | FLOW-02 的**导入**路径（GitHub 侧） | BLOCKED | GitHub 完整 bare clone 偶发 `early EOF`（OBS-01）；FLOW-02 当前只覆盖 GitHub 的 **verify**（`ls-remote`）路径，导入走 GitLab |
 | 3 | L4 两机实测（T-090 / T-091） | 未执行 | 需 192.168.2.10 / .43 两台内网机器，本批未涉及 |
 | 4 | 执行器真实执行（Run → 交付 commit） | 未覆盖 | `AI_PM_RUN_EXECUTOR` 默认 noop；需真实 Codex / Z-Code 执行端，属 L4 范畴 |
@@ -131,6 +168,7 @@
 ## 5. 复跑方式
 
 ```bash
+# ── L2 服务级（FLOW-*）────────────────────────────────────────────
 # 全量（含 SSH 前置检查）
 bash test-case/evidence/e2e-flow/run-e2e-flow.sh
 
@@ -140,6 +178,19 @@ bash test-case/evidence/e2e-flow/run-e2e-flow.sh --skip-ssh-check
 # 直接跑（需 DATABASE_URL 指向可 CREATE DATABASE 的 PG）
 DATABASE_URL='postgres://aipm:aipm@127.0.0.1:16433/aipm' \
   cargo nextest run -p pm-api --test e2e_flow --no-fail-fast
+
+# ── L3 UI（UIFLOW-*）──────────────────────────────────────────────
+# 一键（自动构建 pm-api + seal_ssh_key → Playwright + 真 vite/pwm-api）
+bash test-case/evidence/e2e-flow/run-e2e-flow-ui.sh
+
+# 保留一次性库（调试页面状态）；跳过真实仓库用例（UIFLOW-06 标 skip）
+FLOW_E2E_KEEP_DB=1 bash test-case/evidence/e2e-flow/run-e2e-flow-ui.sh
+FLOW_E2E_SKIP_SSH=1 bash test-case/evidence/e2e-flow/run-e2e-flow-ui.sh
+
+# 直接跑（需先 export FLOW_E2E_PM_API_BIN=<pm-api 可执行文件>）
+cd ai-frontend && pnpm exec playwright test -c playwright.flow.config.ts
 ```
 
-**证据落盘**：`test-case/evidence/e2e-flow/e2e-nextest-<stamp>.log`（不入库，已加 `.gitignore`）。
+**证据落盘**（`test-case/evidence/e2e-flow/`）：
+- L2：`e2e-nextest-<stamp>.log`（不入库，已加 `.gitignore`）
+- L3：`e2e-ui-<stamp>.log`（运行日志，不入库）、`playwright-ui-report/`（HTML 报告）、`playwright-ui-results.json`、`playwright-ui-artifacts/`（失败现场截图 + trace，仅失败时产生）
