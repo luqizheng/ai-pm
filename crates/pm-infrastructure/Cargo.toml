@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+digua_common_jwt.workspace = true
+digua_file_sdk.workspace = true
+reqwest.workspace = true
 kb-pc-contracts = { path = "../kb-pc-contracts" }
 pm-domain = { path = "../pm-domain" }
 sha2.workspace = true

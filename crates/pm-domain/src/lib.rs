@@ -3,6 +3,7 @@
 pub mod ai_role;
 pub mod command;
 pub mod design;
+pub mod docproc;
 pub mod error;
 pub mod ids;
 pub mod import;

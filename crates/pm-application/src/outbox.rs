@@ -140,6 +140,23 @@ pub const CATALOG: &[EventSpec] = &[
         enabled_by_default: true,
         producer: "run_executor.rs",
     },
+    // ── Document Processing（0016/TD-02 §4）：Team 级事件族（project_id 可空）。
+    // 完成/失败事件由 docproc_worker 单事务外发；handler 仅落地送达语义
+    // （审计/通知消费面 P1 开放——「不假装消费」的对面：事件本身是 U-06 契约）。
+    EventSpec {
+        event_type: "DocprocJobCompleted",
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "docproc_worker.rs",
+    },
+    EventSpec {
+        event_type: "DocprocJobFailed",
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "docproc_worker.rs",
+    },
     // ── S02D-22 需求域事件族（S02-04 V1.2 §13.3）：目录登记先行，消费方
     // （总控台/通知/I7 巡检差分）落地前不生产——「不假装消费」。生产点=
     // pm-application::requirement（S02-I1 服务内留位，启用时随命令事务写入）。

@@ -17,6 +17,7 @@ pm-application = { path = "../../crates/pm-application" }
 pm-ai = { path = "../../crates/pm-ai" }
 pm-domain = { path = "../../crates/pm-domain" }
 pm-mcp = { path = "../../crates/pm-mcp" }
+pm-infrastructure = { path = "../../crates/pm-infrastructure" }
 serde.workspace = true
 uuid.workspace = true
 serde_json.workspace = true

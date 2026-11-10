@@ -16,6 +16,7 @@ pub mod audit_stream;
 pub mod auth;
 pub mod command_center;
 pub mod customers;
+pub mod docproc;
 pub mod device_claim;
 pub mod documents;
 pub mod files;
