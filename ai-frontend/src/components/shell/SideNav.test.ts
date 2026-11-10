@@ -63,8 +63,11 @@ describe("SideNav", () => {
     const { wrapper } = mountShell(SideNav);
     await nextTick();
 
+    // 徽标数字来自导航树静态配置（非实时计数）。AI 执行中心原先的
+    // 「2」是演示期硬编码占位，S05 接真后由 execution-overview 实时聚合
+    // 承载，导航上不再放假的固定数字。
     const badges = wrapper.findAll(".shell-sidenav__badge");
-    expect(badges.map(el => el.text())).toEqual(["3", "2"]);
+    expect(badges.map(el => el.text())).toEqual(["3"]);
   });
 
   it("展开态显示条目文案并隐藏组分隔线", async () => {

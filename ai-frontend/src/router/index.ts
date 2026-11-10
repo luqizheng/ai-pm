@@ -135,13 +135,10 @@ export function buildRoutes(): RouteRecordRaw[] {
   // ─── 执行与协作（S05 · docs/ui/s05，2026-11-10）───
   // 七页全部接真后端（task-runs / waiting / execution-overview / run-events /
   // collaboration / 各 Run 附属事实），无 mock 分支。
+  //
+  // `/project/execution` 本身由导航树派生（navigation.ts 已登记组件），
+  // 此处只补不占导航的子页——重复注册会触发「路由表无重复路径」守卫。
   routes.push(
-    {
-      path: "/project/execution",
-      component: () =>
-        import("@/views/project/execution/ExecutionCenterView.vue"),
-      meta: { title: "s05.execution.page.centerTitle" }
-    },
     {
       path: "/project/execution/runs/:runId",
       component: () => import("@/views/project/execution/RunDetailView.vue"),
