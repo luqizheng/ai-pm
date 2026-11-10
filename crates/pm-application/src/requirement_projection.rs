@@ -233,6 +233,30 @@ pub async fn bind_projection(
     .await
     .map_err(knowledge_err)?;
 
+    // S05-02 知识注入（批 3）：需求文档投影完成 → 为该需求**已关联的任务**
+    // 回填知识锚点（覆盖「先绑任务、后提交需求」的时序；反向时序由
+    // `pm_write::task` 绑需求时直接绑定）。
+    // ADR-06a：文档身份表是冻结的共享容器——本文件在既有使用方白名单内，
+    // 文档身份的解析只能落在这里。
+    let document_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM ai.project_document WHERE project_id = $1 AND doc_key = $2",
+    )
+    .bind(project_id)
+    .bind(crate::task_knowledge::requirement_doc_key(requirement_id))
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(PmWriteError::Db)?;
+    if let Some(document_id) = document_id {
+        crate::task_knowledge::backfill_document_anchor(
+            &mut tx,
+            project_id,
+            requirement_id,
+            document_id,
+        )
+        .await
+        .map_err(PmWriteError::Db)?;
+    }
+
     tx.commit().await.map_err(PmWriteError::Db)?;
     guard.release().await;
     Ok(sha)

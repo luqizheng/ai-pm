@@ -220,6 +220,13 @@ pub struct RunContract {
     /// 记录」，不代表过去从未讨论。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub discussion_memory: Vec<crate::discussion_memory::DiscussionMemoryView>,
+    /// S05-02 知识注入（用户裁决 2026-11-10：显式锚点 + 人工确认）：任务**锚定**
+    /// 的知识文档章节内容（`ai.document_section_index` 正文，非仅锚点）。
+    /// 开关 `AI_PM_KNOWLEDGE_SECTION_INJECTION` 默认 off；off 或无锚点时**不
+    /// 序列化**——契约输出与本字段引入前逐字节一致（additive，`CONTRACT_VERSION`
+    /// 不跳）。空集合只表示「本任务未锚定可注入的知识文档」，不代表项目无知识。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub knowledge_sections: Vec<crate::task_knowledge::SectionView>,
     pub policy: PolicyView,
 }
 
@@ -293,9 +300,13 @@ pub struct KnowledgeRefView {
     pub doc_key: String,
     pub doc_type: String,
     pub canonical_path: String,
-    /// live 解析：每次读取都取 `document_revision` 的最新版本（§4.2 R-F11）。
+    /// live 解析：每次读取都取 `document_revision` 的最新版本（§4.2 R-F11）；
+    /// 若锚点被人工**钉版**（`pinned_revision_no`），则以钉版为准（可复现）。
     pub revision_no: Option<i32>,
     pub is_required: bool,
+    /// 人工钉版修订号（NULL = 未钉版，取最新 published）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pinned_revision_no: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -351,6 +362,29 @@ pub async fn get_run_context_with(
     lease_token: &str,
     generation: i32,
     injection: crate::discussion_memory::DiscussionMemoryInjectionMode,
+) -> Result<RunContract, LeaseError> {
+    get_run_context_with_injection(
+        pool,
+        project_id,
+        run_id,
+        lease_token,
+        generation,
+        injection,
+        crate::task_knowledge::KnowledgeInjectionMode::from_env(),
+    )
+    .await
+}
+
+/// [`get_run_context_with`] 的双开关形态：Discussion Memory 注入 + **S05-02
+/// 知识章节注入**。两个开关独立，互不影响（各自默认 off）。
+pub async fn get_run_context_with_injection(
+    pool: &PgPool,
+    project_id: Uuid,
+    run_id: Uuid,
+    lease_token: &str,
+    generation: i32,
+    injection: crate::discussion_memory::DiscussionMemoryInjectionMode,
+    knowledge_injection: crate::task_knowledge::KnowledgeInjectionMode,
 ) -> Result<RunContract, LeaseError> {
     let lease = verify_lease(pool, project_id, run_id, lease_token, generation).await?;
 
@@ -423,35 +457,116 @@ pub async fn get_run_context_with(
         })
         .collect();
 
+    // S05-02：知识锚点（钉版优先，否则最新 published——§4.2 R-F11 的 live 解析
+    // 在「人工钉版」时让位于钉版，因为钉版才是被确认的执行依据）。
+    // ADR-06a：文档身份/修订表是冻结的共享容器——本文件在既有使用方白名单内，
+    // 锚点身份与修订的解析只落在这里；章节正文取自章节索引表。
     let knowledge_refs = sqlx::query(
         "SELECT kr.document_id, pd.doc_key, pd.doc_type, pd.canonical_path, \
-                latest.revision_no, kr.is_required \
+                COALESCE(kr.pinned_revision_no, latest.revision_no) AS revision_no, \
+                kr.is_required, kr.pinned_revision_no, \
+                COALESCE(pinned.id, latest.id) AS revision_id \
            FROM delivery.task_knowledge_ref kr \
            JOIN ai.project_document pd \
              ON pd.id = kr.document_id AND pd.project_id = kr.project_id \
            LEFT JOIN LATERAL ( \
-               SELECT dr.revision_no FROM ai.document_revision dr \
+               SELECT dr.id, dr.revision_no FROM ai.document_revision dr \
                 WHERE dr.document_id = pd.id AND dr.status = 'published' \
                 ORDER BY dr.revision_no DESC LIMIT 1 \
            ) latest ON TRUE \
+           LEFT JOIN LATERAL ( \
+               SELECT dr.id FROM ai.document_revision dr \
+                WHERE dr.document_id = pd.id AND dr.revision_no = kr.pinned_revision_no \
+                  AND dr.status = 'published' \
+                ORDER BY dr.revision_no DESC LIMIT 1 \
+           ) pinned ON TRUE \
           WHERE kr.task_id = $1 AND kr.project_id = $2 \
-          ORDER BY pd.doc_key",
+          ORDER BY kr.is_required DESC, pd.doc_key",
     )
     .bind(lease.task_id)
     .bind(project_id)
     .fetch_all(pool)
     .await?;
+    let mut anchor_meta: Vec<AnchorMeta> = Vec::new();
+    let mut revision_ids: Vec<Uuid> = Vec::new();
     let knowledge_refs = knowledge_refs
         .into_iter()
-        .map(|row| KnowledgeRefView {
-            document_id: row.get("document_id"),
-            doc_key: row.get("doc_key"),
-            doc_type: row.get("doc_type"),
-            canonical_path: row.get("canonical_path"),
-            revision_no: row.get("revision_no"),
-            is_required: row.get("is_required"),
+        .map(|row| {
+            let document_id: Uuid = row.get("document_id");
+            let doc_key: String = row.get("doc_key");
+            let is_required: bool = row.get("is_required");
+            let revision_no: Option<i32> = row.get("revision_no");
+            let revision_id: Option<Uuid> = row.get("revision_id");
+            if let Some(revision_id) = revision_id {
+                revision_ids.push(revision_id);
+            }
+            anchor_meta.push(AnchorMeta {
+                revision_id,
+                document_id,
+                doc_key: doc_key.clone(),
+                is_required,
+                revision_no,
+            });
+            KnowledgeRefView {
+                document_id,
+                doc_key,
+                doc_type: row.get("doc_type"),
+                canonical_path: row.get("canonical_path"),
+                revision_no,
+                is_required,
+                pinned_revision_no: row.get("pinned_revision_no"),
+            }
         })
         .collect();
+
+    // S05-02：锚定文档的**章节正文**注入（开关 off = 不查询，契约逐字节不变）。
+    let knowledge_sections = if knowledge_injection.enabled() && !revision_ids.is_empty() {
+        let raw = crate::task_knowledge::resolve_sections(pool, &revision_ids).await?;
+        let mut sections: Vec<crate::task_knowledge::SectionView> = Vec::new();
+        for item in raw {
+            let Some(meta) = anchor_meta
+                .iter()
+                .find(|meta| meta.revision_id == Some(item.revision_id))
+            else {
+                continue;
+            };
+            let Some(revision_no) = meta.revision_no else {
+                continue;
+            };
+            sections.push(crate::task_knowledge::SectionView {
+                document_id: meta.document_id,
+                doc_key: meta.doc_key.clone(),
+                revision_no,
+                section_no: item.section_no,
+                title: item.title,
+                anchor: item.anchor,
+                content: item.content,
+                is_required: meta.is_required,
+            });
+        }
+        // 每文档 ≤ MAX_SECTIONS_PER_DOC 节；全文 ≤ MAX_TOTAL_SECTIONS 节；
+        // is_required 优先。
+        let mut per_doc: std::collections::HashMap<Uuid, i32> = std::collections::HashMap::new();
+        let mut kept: Vec<crate::task_knowledge::SectionView> = Vec::new();
+        for section in sections {
+            let count = per_doc.entry(section.document_id).or_insert(0);
+            if *count as i64 >= crate::task_knowledge::MAX_SECTIONS_PER_DOC {
+                continue;
+            }
+            *count += 1;
+            kept.push(section);
+        }
+        kept.sort_by(|a, b| {
+            b.is_required
+                .cmp(&a.is_required)
+                .then_with(|| a.doc_key.cmp(&b.doc_key))
+                .then_with(|| a.section_no.cmp(&b.section_no))
+        });
+        kept.truncate(crate::task_knowledge::MAX_TOTAL_SECTIONS as usize);
+        kept
+    } else {
+        Vec::new()
+    };
 
     // I4-E：正式 Goal 快照（缺 Goal 是显式信号，不是错误）。
     let goal = load_official_goal(pool, project_id)
@@ -501,6 +616,7 @@ pub async fn get_run_context_with(
         repositories,
         knowledge_refs,
         discussion_memory,
+        knowledge_sections,
         policy,
     })
 }
@@ -835,4 +951,15 @@ async fn report_progress_impl(
         lease_expires_at: expires_at,
         task_status,
     })
+}
+
+
+/// 知识锚点装配元数据（章节合并时的锚点侧信息）。
+#[derive(Debug, Clone)]
+struct AnchorMeta {
+    revision_id: Option<Uuid>,
+    document_id: Uuid,
+    doc_key: String,
+    is_required: bool,
+    revision_no: Option<i32>,
 }

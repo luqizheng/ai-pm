@@ -84,6 +84,10 @@ pub struct KnowledgeRefInput {
     pub document_id: Uuid,
     #[serde(default = "default_true")]
     pub is_required: bool,
+    /// 钉版修订号（S05-02，迁移 0014）：NULL=取该文档最新 published 修订
+    /// （默认，不落后）；非空=人工确认时钉定的版本（可复现）。
+    #[serde(default)]
+    pub pinned_revision_no: Option<i32>,
 }
 
 #[derive(Debug)]

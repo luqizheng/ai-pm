@@ -192,6 +192,7 @@ async fn seed(pool: &PgPool, code: &str, with_contract: bool) -> Fx {
                 knowledge_refs: Some(vec![KnowledgeRefInput {
                     document_id,
                     is_required: true,
+                    pinned_revision_no: None,
                 }]),
             },
             &pm_application::actor::AuditActor::principal(author),
@@ -236,7 +237,24 @@ struct ContractMirror {
     acceptance_criteria: Vec<CriterionMirror>,
     repositories: Vec<RepositoryMirror>,
     knowledge_refs: Vec<KnowledgeRefMirror>,
+    /// S05-02 知识章节注入（additive；开关 off 时不序列化 → default 空集合）。
+    #[serde(default)]
+    knowledge_sections: Vec<KnowledgeSectionMirror>,
     policy: PolicyMirror,
+}
+
+/// S05-02：注入的知识章节正文镜像（正文来自 `ai.document_section_index`）。
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KnowledgeSectionMirror {
+    document_id: Uuid,
+    doc_key: String,
+    revision_no: i32,
+    section_no: i32,
+    title: String,
+    anchor: String,
+    content: String,
+    is_required: bool,
 }
 
 /// I4-E：Goal 快照镜像（身份与版本锚点，正文经知识读取路径获取）。
@@ -319,6 +337,9 @@ struct KnowledgeRefMirror {
     canonical_path: String,
     revision_no: Option<i32>,
     is_required: bool,
+    /// S05-02：人工钉版修订号（NULL=未钉版，取最新 published）。
+    #[serde(default)]
+    pinned_revision_no: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]

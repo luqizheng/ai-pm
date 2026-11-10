@@ -179,6 +179,7 @@ async fn write_full_contract(pool: &PgPool, fx: &Fx) -> Uuid {
             knowledge_refs: Some(vec![KnowledgeRefInput {
                 document_id,
                 is_required: true,
+                pinned_revision_no: None,
             }]),
         },
         &pm_application::actor::AuditActor::dispatch(),
