@@ -1,0 +1,196 @@
+execution:
+  module: AI Execution Center
+  tabs:
+    center: Execution Center
+    intervention: Human Intervention
+    authorization: Authorization
+    review: Delivery Review
+    history: Execution History
+  page:
+    centerTitle: Execution Center
+    centerDesc: Human attention, running work, queue and deliveries in one view.
+    runDetailTitle: Execution Detail
+    collaborationTitle: Multi-Agent Collaboration
+    collaborationDesc: Subtask nodes, dependencies and agent assignment.
+    interventionTitle: Human Intervention
+    interventionDesc: Human queues grouped by waiting reason.
+    authorizationTitle: Execution Authorization
+    authorizationDesc: Work items waiting for authorization or decision.
+    reviewTitle: Delivery Review
+    reviewDesc: Delivery output and the AI-PM check result.
+    historyTitle: Execution History
+    historyDesc: Every execution attempt in the project and its review record.
+  common:
+    refresh: Refresh
+    back: Back
+    open: Open
+    actions: Actions
+    all: All
+    allKinds: All kinds
+    noProjectTitle: Select a project first
+    noProjectHint: Execution data belongs to a project — pick a project context first.
+    errorTitle: Failed to load
+    loading: Loading…
+    notAvailable: —
+    noAgent: No agent assigned
+    filters: Filters
+  overview:
+    title: Execution posture
+    active: Active runs
+    waiting: Awaiting human
+    awaitingReview: Awaiting review
+    failed: Failed
+    successRate: Success rate
+    avgDuration: Avg duration
+    devices: Devices ready
+  runKind:
+    delivery: delivery
+    review: review
+  runStatus:
+    queued: Queued
+    claimed: Claimed
+    running: Running
+    succeeded: Succeeded
+    failed: Failed
+    timed_out: Timed out
+    cancelled: Cancelled
+  taskStatus:
+    draft: Draft
+    ready: Ready
+    claimed: Claimed
+    running: Running
+    awaiting_decision: Awaiting decision
+    blocked: Blocked
+    submitted: Submitted
+    reviewing: In review
+    completed: Completed
+    changes_requested: Changes requested
+    failed: Failed
+    cancelled: Cancelled
+    superseded: Superseded
+  waitingReason:
+    needs_info: Needs clarification
+    needs_decision: Needs decision
+    needs_approval: Needs approval
+    external_dependency: External dependency
+    no_executor_available: No executor available
+  verdict:
+    approved: Approved
+    changes_requested: Changes requested
+    inconclusive: Inconclusive
+  commandStatus:
+    issued: Issued
+    delivered: Delivered
+    acked: Acknowledged
+    failed: Failed
+  continuationStatus:
+    open: Open
+    started: Started
+    consumed: Consumed
+    closed: Closed
+    frozen: Frozen
+  eventType:
+    run_claimed: Claimed
+    run_started: Started
+    run_stage_changed: Stage changed
+    run_finished: Finished
+    command_issued: Command issued
+    command_delivered: Command delivered
+    command_acked: Command acknowledged
+    command_failed: Command failed
+  center:
+    attentionTitle: Awaiting human ({count})
+    attentionEmpty: Nothing needs human attention right now.
+    pendingInteraction: Pending question
+    pendingApproval: Pending approval
+    since: since
+    activeTitle: Running ({count})
+    activeEmpty: No task is running right now.
+    queueTitle: Queue ({count})
+    queueEmpty: The queue is empty.
+    deliveredTitle: Recent deliveries ({count})
+    deliveredEmpty: No completed delivery yet.
+    eventsTitle: Activity stream
+    eventsEmpty: No execution event yet.
+  runDetail:
+    notFoundTitle: Execution record not found
+    notFoundHint: This execution record was removed or you have no access to it.
+    triStateTitle: Completion state layers
+    triRun: Agent execution
+    triReview: AI-PM check
+    triTask: Human acceptance (task)
+    notReviewed: Not reviewed yet
+    taskStateHint: Task state advances only through human acceptance
+    metaTitle: Execution summary
+    metaStage: Current stage
+    metaExecutor: Executor
+    metaDuration: Duration
+    metaStarted: Started
+    metaDeadline: Deadline
+    metaIntegration: Integration status
+    metaRelease: Release reason
+    metaFailure: Failure category
+    reposTitle: Repository baselines and workspace
+    reposEmpty: This run pinned no repository baseline.
+    writeAccess: Writable
+    readOnly: Read-only
+    eventsTitle: Event timeline ({count})
+    eventsEmpty: No event yet.
+    commandsTitle: Worker commands ({count})
+    commandsEmpty: No command yet.
+    continuationsTitle: Continuation chain ({count})
+    continuationsEmpty: No continuation record.
+    generation: generation {n}
+    commitsTitle: Per-repository deliveries ({count})
+    commitsEmpty: No commit recorded.
+    changedFiles: "{n} file(s)"
+  collaboration:
+    notFoundTitle: Task not found
+    notFoundHint: This task was removed or you have no access to it.
+    nodesTitle: Subtask nodes ({count})
+    nodesEmpty: This task has no upstream or downstream subtask.
+    edgesTitle: Dependency edges ({count})
+    edgesEmpty: No dependency edge.
+    agentsTitle: Participating agents ({count})
+    agentsEmpty: No agent involved yet.
+    blockedBy: blocked by {n} upstream
+    blockedSummary: "{n} node(s) still have unfinished upstream."
+    agentRuns: "{n} run(s) total"
+    agentActive: "{n} active"
+  intervention:
+    since: since
+    deadline: Deadline
+    sectionEmpty: No waiting item under this reason.
+    interactionsTitle: Pending questions ({count})
+    interactionsEmpty: No pending question.
+    permissionTitle: Permission requests
+    permissionEmpty: The permission-request entity is not implemented yet; this section stays empty.
+  authorization:
+    readOnlyTitle: Read-only page
+    readOnlyHint: Authorization is a one-off human command; the grant/deny entry point is not open yet. This page shows the facts of what is waiting.
+    pendingTitle: Awaiting authorization or decision ({count})
+    pendingEmpty: No execution item is waiting for authorization.
+    queueTitle: Queued executions ({count})
+    queueEmpty: The queue is empty.
+    since: since
+    deadline: Deadline
+  review:
+    triStateTitle: Three-state separation
+    triStateHint: Agent claims done (run succeeded) ≠ AI-PM check passed (verdict) ≠ human acceptance (task completed).
+    awaitingTitle: Deliveries awaiting review ({count})
+    awaitingEmpty: No delivery awaiting review.
+    reviewedTitle: Reviewed deliveries ({count})
+    reviewedEmpty: No reviewed delivery yet.
+    noVerdict: Not reviewed
+  history:
+    emptyTitle: No execution record
+    emptyHint: This project has no execution attempt yet.
+    colRun: Run
+    colTask: Task
+    colAgent: Agent
+    colRunStatus: Run status
+    colVerdict: Check result
+    colStarted: Started
+    colDuration: Duration
+    noVerdict: Not reviewed
+    filterNote: The backend does not support branch or date-range filters yet; this page filters client-side by run status and kind only.

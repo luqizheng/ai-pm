@@ -173,11 +173,15 @@ export const navGroups: NavGroup[] = [
             module => module.default
           )
       },
+      // 执行中心（S05，docs/ui/s05，2026-11-10）：七页接真后端。
       {
         path: "/project/execution",
         labelKey: "shell.app.side.item.execution",
         icon: Sparkles,
-        badge: 2
+        component: () =>
+          import("@/views/project/execution/ExecutionCenterView.vue").then(
+            module => module.default
+          )
       },
       // 项目 AI 会话（V2 D-4 会话 REST 接线批，2026-11-08）：/project/execution
       // 的「AI 执行中心」语义是执行编排（槽位保留），会话页不劫持该标签，

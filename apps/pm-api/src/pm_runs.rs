@@ -195,6 +195,8 @@ pub(crate) struct TaskRunRow {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub started_at: Option<chrono::DateTime<chrono::Utc>>,
     pub finished_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// 评审裁决（三值：approved / changes_requested / inconclusive；未评审为 NULL）。
+    pub review_verdict: Option<String>,
     pub failure_category: Option<String>,
     pub failure_reason: Option<String>,
 }
@@ -228,7 +230,7 @@ async fn task_runs(
     let items: Vec<TaskRunRow> = sqlx::query_as(
         "SELECT r.id, r.task_id, t.title AS task_title, r.attempt_no, r.run_kind, r.status, \
                 r.outcome, r.agent_id, r.executor_kind, r.executor_session, r.lease_expires_at, \
-                r.created_at, r.started_at, r.finished_at, \
+                r.created_at, r.started_at, r.finished_at, r.review_verdict, \
                 f.category AS failure_category, f.reason_code AS failure_reason \
          FROM delivery.task_run r \
          JOIN delivery.task t ON t.id = r.task_id \

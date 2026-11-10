@@ -132,6 +132,53 @@ export function buildRoutes(): RouteRecordRaw[] {
     meta: { title: "s01.command-center.pageTitle" }
   });
 
+  // ─── 执行与协作（S05 · docs/ui/s05，2026-11-10）───
+  // 七页全部接真后端（task-runs / waiting / execution-overview / run-events /
+  // collaboration / 各 Run 附属事实），无 mock 分支。
+  routes.push(
+    {
+      path: "/project/execution",
+      component: () =>
+        import("@/views/project/execution/ExecutionCenterView.vue"),
+      meta: { title: "s05.execution.page.centerTitle" }
+    },
+    {
+      path: "/project/execution/runs/:runId",
+      component: () => import("@/views/project/execution/RunDetailView.vue"),
+      meta: { title: "s05.execution.page.runDetailTitle" }
+    },
+    {
+      path: "/project/execution/collaboration/:taskId",
+      component: () =>
+        import("@/views/project/execution/CollaborationView.vue"),
+      meta: { title: "s05.execution.page.collaborationTitle" }
+    },
+    {
+      path: "/project/execution/intervention",
+      component: () =>
+        import("@/views/project/execution/HumanInterventionView.vue"),
+      meta: { title: "s05.execution.page.interventionTitle" }
+    },
+    {
+      path: "/project/execution/authorization",
+      component: () =>
+        import("@/views/project/execution/ExecutionAuthorizationView.vue"),
+      meta: { title: "s05.execution.page.authorizationTitle" }
+    },
+    {
+      path: "/project/execution/review",
+      component: () =>
+        import("@/views/project/execution/DeliveryReviewView.vue"),
+      meta: { title: "s05.execution.page.reviewTitle" }
+    },
+    {
+      path: "/project/execution/history",
+      component: () =>
+        import("@/views/project/execution/ExecutionHistoryView.vue"),
+      meta: { title: "s05.execution.page.historyTitle" }
+    }
+  );
+
   // ─── 设计与技术决策（S03 · docs/ui/s03，2026-11-10）───
   // 四个子页 = 独立路由 + 页内页签条（DesignFrame，同 TasksFrame 组织）。
   // 全部接真后端（/v1/pm/projects/{id}/designs · adrs · design-analysis ·
