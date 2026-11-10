@@ -205,6 +205,18 @@ async fn issue_command(
     .bind(&payload)
     .execute(&mut **tx)
     .await?;
+    // S05 监控事件面（0013）：命令签发落账（与签发同一事务；tag=命令 id）。
+    crate::run_events::record_run_event(
+        tx,
+        run_id,
+        crate::run_events::RunEvent {
+            event_type: crate::run_events::event_type::COMMAND_ISSUED,
+            generation: Some(lease_generation),
+            dedupe_tag: &command_id.to_string(),
+            detail: Some(json!({ "command_type": command_type, "worker_id": worker_id })),
+        },
+    )
+    .await?;
     Ok(command_id)
 }
 
@@ -229,6 +241,7 @@ pub async fn poll_commands(
     .await?
     .ok_or(CommandFaceError::NotFound)?;
 
+    let mut tx = pool.begin().await?;
     let rows = sqlx::query(
         "UPDATE delivery.worker_command c \
             SET status = 'delivered', \
@@ -246,8 +259,8 @@ pub async fn poll_commands(
             AND NOT (c.command_type = 'agent.task.continue' \
                      AND EXISTS (SELECT 1 FROM delivery.worker_command t \
                                   WHERE t.run_id = c.run_id \
-                                    AND t.command_type = 'agent.process.terminate' \
-                                    AND t.status IN ('issued', 'delivered'))) \
+                                  AND t.command_type = 'agent.process.terminate' \
+                                  AND t.status IN ('issued', 'delivered'))) \
          RETURNING c.id, c.command_type, c.interaction_id, c.payload, \
                    c.issued_at, c.claim_count",
     )
@@ -256,8 +269,28 @@ pub async fn poll_commands(
     .bind(worker_id)
     .bind(command_claim_lease_secs())
     .bind(run_generation.unwrap_or(0))
-    .fetch_all(pool)
+    .fetch_all(&mut *tx)
     .await?;
+
+    // S05 监控事件面（0013）：命令下发落账（与领取同一事务；tag=命令 id，
+    // 同命令重复领取/重投不重复落账）。
+    for row in &rows {
+        crate::run_events::record_run_event(
+            &mut tx,
+            run_id,
+            crate::run_events::RunEvent {
+                event_type: crate::run_events::event_type::COMMAND_DELIVERED,
+                generation: None,
+                dedupe_tag: &row.get::<Uuid, _>("id").to_string(),
+                detail: Some(json!({
+                    "command_type": row.get::<String, _>("command_type"),
+                    "worker_id": worker_id,
+                })),
+            },
+        )
+        .await?;
+    }
+    tx.commit().await?;
 
     // ACP-04（0050）：投递账推进——continue 命令领取 = 投递尝试
     //（delivering + attempt_count+1；failed 重投复用原行，ACP-471）。
@@ -449,6 +482,18 @@ pub async fn ack_command(
             .bind(&receipt)
             .execute(&mut *tx)
             .await?;
+            // S05 监控事件面（0013）：命令回执落账（与回执同一事务；tag=命令 id）。
+            crate::run_events::record_run_event(
+                &mut tx,
+                run_id,
+                crate::run_events::RunEvent {
+                    event_type: crate::run_events::event_type::COMMAND_ACKED,
+                    generation: None,
+                    dedupe_tag: &command_id.to_string(),
+                    detail: Some(json!({ "command_type": command_type })),
+                },
+            )
+            .await?;
             if command_type == COMMAND_CONTINUE {
                 // 屏蔽释放点：INPUT_INJECTED 已确认（V1.1 §4.1）。
                 sqlx::query(
@@ -530,6 +575,21 @@ pub async fn ack_command(
             .bind(last_error.clone())
             .bind(&receipt)
             .execute(&mut *tx)
+            .await?;
+            // S05 监控事件面（0013）：命令失败落账（与失败标记同一事务）。
+            crate::run_events::record_run_event(
+                &mut tx,
+                run_id,
+                crate::run_events::RunEvent {
+                    event_type: crate::run_events::event_type::COMMAND_FAILED,
+                    generation: None,
+                    dedupe_tag: &command_id.to_string(),
+                    detail: Some(json!({
+                        "command_type": command_type,
+                        "last_error": last_error,
+                    })),
+                },
+            )
             .await?;
             if command_type == COMMAND_TERMINATE {
                 // §11.4：重试耗尽 → 冻结新 Session 启动（不冻结回复提交），

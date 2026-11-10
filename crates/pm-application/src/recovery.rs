@@ -311,6 +311,25 @@ pub async fn reacquire_lease(
     .await
     .map_err(|e| RecoveryError::Db(e.to_string()))?;
 
+    // S05 监控事件面（0013）：续领=同一 Run 内新执行权世代 → run_claimed
+    // （generation+1 使其成新行；同事务）。
+    crate::run_events::record_run_event(
+        &mut tx,
+        run_id,
+        crate::run_events::RunEvent {
+            event_type: crate::run_events::event_type::RUN_CLAIMED,
+            generation: Some(new_generation),
+            dedupe_tag: "",
+            detail: Some(serde_json::json!({
+                "reacquired": true,
+                "lease_owner": new_owner,
+                "device_id": client_device_id,
+            })),
+        },
+    )
+    .await
+    .map_err(|e| RecoveryError::Db(e.to_string()))?;
+
     tx.commit()
         .await
         .map_err(|e| RecoveryError::Db(e.to_string()))?;

@@ -85,6 +85,22 @@ pub(crate) async fn isolate_started_run(
     .execute(&mut **tx)
     .await
     .ok();
+    // S05 监控事件面（0013）：失联隔离终态落账（同事务；B3-2 新建重试 Run 的
+    // 领取经 claim_core 落自己的 run_claimed）。
+    crate::run_events::record_run_event(
+        tx,
+        run_id,
+        crate::run_events::RunEvent {
+            event_type: crate::run_events::event_type::RUN_FINISHED,
+            generation: None,
+            dedupe_tag: "",
+            detail: Some(serde_json::json!({
+                "outcome": "timed_out",
+                "reason": "lease_expired",
+            })),
+        },
+    )
+    .await?;
     Ok(())
 }
 
@@ -177,6 +193,19 @@ pub(crate) async fn cancel_run(
     .bind(run_id)
     .bind(reason)
     .execute(&mut **tx)
+    .await
+    .map(|_| ())?;
+    // S05 监控事件面（0013）：取消终态落账（同事务）。
+    crate::run_events::record_run_event(
+        tx,
+        run_id,
+        crate::run_events::RunEvent {
+            event_type: crate::run_events::event_type::RUN_FINISHED,
+            generation: None,
+            dedupe_tag: "",
+            detail: Some(serde_json::json!({ "outcome": "cancelled", "reason": reason })),
+        },
+    )
     .await
     .map(|_| ())
 }

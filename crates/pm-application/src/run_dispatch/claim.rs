@@ -996,6 +996,22 @@ async fn claim_core_in_project(
     )
     .await?;
 
+    // S05 监控事件面（0013）：领取时刻落账（同事务；重领 generation+1 自然成新行）。
+    crate::run_events::record_run_event(
+        &mut tx,
+        run_id,
+        crate::run_events::RunEvent {
+            event_type: crate::run_events::event_type::RUN_CLAIMED,
+            generation: Some(lease_generation),
+            dedupe_tag: "",
+            detail: Some(serde_json::json!({
+                "lease_owner": lease_owner,
+                "execution_mode": execution_mode,
+            })),
+        },
+    )
+    .await?;
+
     tx.commit().await?;
     Ok(Some(ClaimOutcome {
         run_id,

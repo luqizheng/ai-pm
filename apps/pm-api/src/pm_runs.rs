@@ -32,7 +32,10 @@ use serde_json::json;
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/v1/pm/task-runs", get(task_runs))
+        // S05 监控事件面（0013）：项目级汇总（静态段先于 {run_id} 匹配）。
+        .route("/v1/pm/task-runs/summary", get(task_runs_summary))
         .route("/v1/pm/task-runs/{run_id}", get(task_run_detail))
+        .route("/v1/pm/task-runs/{run_id}/events", get(task_run_events))
         // ACP-07（0054）：Deadline 过期重授权（UI 快捷入口；Lead/Approver 守卫
         // = 租户 admin 或项目 owner；独立审计 + 独立有效期，不改原 deadline）。
         .route(
@@ -353,4 +356,122 @@ async fn task_run_detail(
     .fetch_all(&state.pool)
     .await?;
     Ok(Json(TaskRunDetail { run, repositories }))
+}
+
+// ── S05 执行监控事件面（0013）──────────────────────────────────────────────
+
+/// 单条 run 事件（`delivery.task_run_event`；只读——表本身追加式禁 UPDATE）。
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub(crate) struct RunEventRow {
+    pub id: Uuid,
+    pub event_type: String,
+    pub lease_generation: i32,
+    pub dedupe_tag: String,
+    pub client_id: Option<Uuid>,
+    pub occurred_at: chrono::DateTime<chrono::Utc>,
+    pub received_at: chrono::DateTime<chrono::Utc>,
+    pub detail: Option<serde_json::Value>,
+}
+
+/// `GET /v1/pm/task-runs/{run_id}/events?type=`：run 事件时间线（occurred_at
+/// 降序）。404 口径与 `task_run_detail` 一致（不存在 / 跨租户 / 非成员）；
+/// `type` 只认 0013 CHECK 白名单，非法值视为未传。
+async fn task_run_events(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(run_id): Path<Uuid>,
+    Query(params): Query<HashMap<String, String>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let page = paging(&params);
+    let event_type = params
+        .get("type")
+        .filter(|v| pm_application::run_events::EVENT_TYPES.contains(&v.as_str()))
+        .cloned();
+    let visible: Option<Uuid> = sqlx::query_scalar(
+        "SELECT r.id FROM delivery.task_run r \
+          WHERE r.id = $1 AND r.tenant_id = $2 \
+            AND EXISTS (SELECT 1 FROM core.project_member m \
+                         WHERE m.project_id = r.project_id AND m.principal_id = $3)",
+    )
+    .bind(run_id)
+    .bind(caller.tenant_id)
+    .bind(caller.principal_id)
+    .fetch_optional(&state.pool)
+    .await?;
+    if visible.is_none() {
+        return Err(ApiError::NotFound("run_not_found"));
+    }
+    let items: Vec<RunEventRow> = sqlx::query_as(
+        "SELECT id, event_type, lease_generation, dedupe_tag, client_id, \
+                occurred_at, received_at, detail \
+           FROM delivery.task_run_event \
+          WHERE run_id = $1 AND ($2::text IS NULL OR event_type = $2) \
+          ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT $3 OFFSET $4",
+    )
+    .bind(run_id)
+    .bind(event_type.as_deref())
+    .bind(page.size)
+    .bind(page.offset)
+    .fetch_all(&state.pool)
+    .await?;
+    let total: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM delivery.task_run_event \
+          WHERE run_id = $1 AND ($2::text IS NULL OR event_type = $2)",
+    )
+    .bind(run_id)
+    .bind(event_type.as_deref())
+    .fetch_one(&state.pool)
+    .await?;
+    Ok(Json(page.to_response(items, total)))
+}
+
+/// 项目内 Run 汇总（V2.0-G「汇总端点」最小面）：状态/结果分布 + 活跃数 +
+/// 近 24h 事件数 + 最近事件时刻。`project_id` 必填（无跨项目模糊汇总）。
+async fn task_runs_summary(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Query(params): Query<HashMap<String, String>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let project_id = project_filter(&params).ok_or(ApiError::NotFound("project_not_found"))?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
+    let row: (i64, serde_json::Value, serde_json::Value, i64) = sqlx::query_as(
+        "SELECT count(*), \
+                COALESCE((SELECT jsonb_object_agg(status, c) FROM ( \
+                     SELECT status, count(*) AS c FROM delivery.task_run \
+                      WHERE project_id = $1 AND tenant_id = $2 GROUP BY status) s), '{}'::jsonb), \
+                COALESCE((SELECT jsonb_object_agg(outcome, c) FROM ( \
+                     SELECT outcome, count(*) AS c FROM delivery.task_run \
+                      WHERE project_id = $1 AND tenant_id = $2 AND outcome IS NOT NULL \
+                      GROUP BY outcome) s), '{}'::jsonb), \
+                count(*) FILTER (WHERE status IN ('queued', 'claimed', 'running')) \
+           FROM delivery.task_run WHERE project_id = $1 AND tenant_id = $2",
+    )
+    .bind(project_id)
+    .bind(caller.tenant_id)
+    .fetch_one(&state.pool)
+    .await?;
+    let ev: (i64, Option<chrono::DateTime<chrono::Utc>>) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE received_at > now() - interval '24 hours'), \
+                max(occurred_at) \
+           FROM delivery.task_run_event WHERE project_id = $1 AND tenant_id = $2",
+    )
+    .bind(project_id)
+    .bind(caller.tenant_id)
+    .fetch_one(&state.pool)
+    .await?;
+    Ok(Json(json!({
+        "project_id": project_id,
+        "total": row.0,
+        "by_status": row.1,
+        "by_outcome": row.2,
+        "active": row.3,
+        "events_24h": ev.0,
+        "last_event_at": ev.1,
+    })))
 }
