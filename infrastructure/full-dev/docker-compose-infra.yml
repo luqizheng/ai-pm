@@ -65,14 +65,17 @@ services:
   postgres:
     image: "${IMAGE_POSTGRES:?IMAGE_POSTGRES 未定义——请加载 .image.env}"
     hostname: postgres
+    # 库名真源 = .env 的 POSTGRES_DB（DATABASE_URL 由它拼出）：
+    # initdb 建 POSTGRES_DB 指定的库（缺省 postgres），连接串指向同一个库。
     environment:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 未定义——请加载 .env}"
-      POSTGRES_DB: "${POSTGRES_DB:-coder}"
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_DB: "${POSTGRES_DB:-postgres}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-coder}"]
+      # pg_isready 只探测「服务端是否接受连接」，不校验库名，故不带 -d
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5

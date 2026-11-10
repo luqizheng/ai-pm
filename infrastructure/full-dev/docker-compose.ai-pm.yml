@@ -1,4 +1,7 @@
 # ── ai-pm 自有服务（本仓所有；升级模板包时本文件不被覆盖） ──────────────────
+# ⚠️ 本文件只作 docker-compose.yml 的 include 片，不单独成栈：
+#    depends_on 的 postgres（infra 片）/token-service（services 片）不在本文件内，
+#    单独 -f 本文件会因 undefined service 直接校验失败（compose 硬错误）。
 # 2026-11-06 从 docker-compose-services.yml 拆出独立文件（此前 2026-11-05 曾由
 # docker-compose-aipm.yml 并入 services.yml），恢复「升级 lmms 层 = 整目录覆盖
 # lmms 命名文件、ai-pm 命名文件天然存活」能力，见 README「与上游模板包的有意差异」#2。
@@ -8,6 +11,11 @@
 #   ai-pm-worker → runtime-ai-pm-worker、ai-frontend-web → runtime-web。
 #   ai-frontend-web 的前置：ai-frontend/dist 需先在宿主产出（根 Dockerfile 只装 nginx；
 #   2026-11-07 起 8092 为唯一前端公共入口，旧 ai-pm-web 仓的 aipm-web/aipm-bff 已退役删除）。
+# PG：ai-pm 与 lmms 共用 infra 片 postgres（2026-11-10 裁决，撤销 spec 裁决 #3 的
+#   「ai-pm 独立 PG 实例」）——三服务直接用共享 ${DATABASE_URL}，不再单设 aipm-pg。
+# 依赖声明口径：depends_on 引用的服务必须存在于本次 compose 集（infra/services 片
+#   经 docker-compose.yml include 进来，postgres/token-service 均合法）；引用不存在
+#   的服务名是 compose 硬错误，required:false 也不豁免。
 # 全部挂 superpowers 网络（与 lmms 栈同网络，服务名互访）。
 #
 # ⚠️ YAML anchor 不能跨 include 文件：下面两个 anchor 与 docker-compose-services.yml
@@ -78,7 +86,7 @@ services:
     ports:
       - "8090:8090"
     depends_on:
-      aipm-pg:
+      postgres:
         condition: service_healthy
       token-service:
         condition: service_healthy
@@ -100,7 +108,7 @@ services:
       # deploy key 私钥解密主密钥（与 pm-api 同值）；KB 仓库快照分析在 worker 侧执行。
       AI_PM_SECRET_KEY: "${AI_PM_SECRET_KEY:-}"
     depends_on:
-      aipm-pg:
+      postgres:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -130,7 +138,7 @@ services:
     volumes:
       - aipm_knowledge:/data/knowledge
     depends_on:
-      aipm-pg:
+      postgres:
         condition: service_healthy
     restart: unless-stopped
     networks:

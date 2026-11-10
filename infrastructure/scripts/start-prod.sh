@@ -80,8 +80,9 @@ load_env "$ENV_BASE"
 load_env "$ENV_PROD"
 
 # 4. 校验关键 vars（PG 主库 + 中间件 + lmms 登录验证栈的 service-jwt bootstrap token）
-# （CONFIG_DEV_BT 随 config-service 移除一并退役，538c65ad/13e7363）
-for v in POSTGRES_HOST POSTGRES_PORT POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB \
+# （CONFIG_DEV_BT 随 config-service 移除一并退役，538c65ad/13e7363；
+#   POSTGRES_DB 已移除——库名以 DATABASE_URL 为单一真源，2026-11-10）
+for v in POSTGRES_HOST POSTGRES_PORT POSTGRES_USER POSTGRES_PASSWORD \
          DATABASE_URL RABBITMQ_DEFAULT_PASS \
          IAM_DEV_BT TOKEN_DEV_BT NOTIFICATION_DEV_BT AUDIT_DEV_BT \
          PRUE_DEV_BT GATEWAY_DEV_BT FILE_DEV_BT; do
