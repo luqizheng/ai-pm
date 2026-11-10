@@ -772,7 +772,10 @@ async fn context_anchor_is_stored_on_creation(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED, "{v}");
-    assert_eq!(v["context_anchor"]["repository_name"], json!("atlas-platform"));
+    assert_eq!(
+        v["context_anchor"]["repository_name"],
+        json!("atlas-platform")
+    );
     assert_eq!(v["context_anchor"]["default_branch"], json!("main"));
 
     // 缺省 context → 锚点为 null（存量会话兼容）。

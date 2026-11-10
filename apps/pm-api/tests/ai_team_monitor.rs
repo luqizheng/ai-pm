@@ -111,12 +111,7 @@ async fn seed_tenant_member(pool: &PgPool, tenant_id: Uuid, sub: &str) -> Uuid {
     principal
 }
 
-async fn seed_project_member(
-    pool: &PgPool,
-    tenant_id: Uuid,
-    project_id: Uuid,
-    principal_id: Uuid,
-) {
+async fn seed_project_member(pool: &PgPool, tenant_id: Uuid, project_id: Uuid, principal_id: Uuid) {
     sqlx::query(
         "INSERT INTO core.project_member (tenant_id, project_id, principal_id, role) \
          VALUES ($1, $2, $3, 'owner')",
@@ -249,7 +244,13 @@ async fn seed_provider(
     .unwrap()
 }
 
-async fn bind_policy(pool: &PgPool, tenant_id: Uuid, project_id: Uuid, provider_id: Uuid, by: Uuid) {
+async fn bind_policy(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    provider_id: Uuid,
+    by: Uuid,
+) {
     sqlx::query(
         "INSERT INTO ai.project_ai_model_policy \
            (tenant_id, project_id, provider_id, updated_by) VALUES ($1, $2, $3, $4)",
@@ -518,7 +519,16 @@ async fn overview_counts_roles_runs_tasks_and_provider(pool: PgPool) {
     .unwrap();
 
     // runs：1 活跃 + 24h 内 succeeded/failed 各 1 + 24h 外 failed 1（不计）
-    seed_run(&pool, project, task, 1, "queued", "now() - interval '1 hour'", &[]).await;
+    seed_run(
+        &pool,
+        project,
+        task,
+        1,
+        "queued",
+        "now() - interval '1 hour'",
+        &[],
+    )
+    .await;
     seed_run(
         &pool,
         project,
@@ -629,7 +639,10 @@ async fn overview_empty_project_zero_and_unbound(pool: PgPool) {
         body["runs"],
         json!({ "active": 0, "succeeded_24h": 0, "failed_24h": 0 })
     );
-    assert_eq!(body["tasks"], json!({ "awaiting_decision": 0, "blocked": 0 }));
+    assert_eq!(
+        body["tasks"],
+        json!({ "awaiting_decision": 0, "blocked": 0 })
+    );
     // 无任何 Provider → 未绑定且无名字
     assert_eq!(
         body["provider"],

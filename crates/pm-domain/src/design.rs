@@ -177,8 +177,10 @@ mod tests {
         assert!(d.can_transition_to(DesignRevisionState::Rejected));
         // Draft → Approved 非法：必须经待批（设计修改与审批是两件事）。
         assert!(!d.can_transition_to(DesignRevisionState::Approved));
-        assert!(DesignRevisionState::PendingConfirmation.can_transition_to(DesignRevisionState::Approved));
-        assert!(DesignRevisionState::PendingConfirmation.can_transition_to(DesignRevisionState::Rejected));
+        assert!(DesignRevisionState::PendingConfirmation
+            .can_transition_to(DesignRevisionState::Approved));
+        assert!(DesignRevisionState::PendingConfirmation
+            .can_transition_to(DesignRevisionState::Rejected));
         assert!(DesignRevisionState::Approved.can_transition_to(DesignRevisionState::Superseded));
         for terminal in [
             DesignRevisionState::Approved,

@@ -6,8 +6,8 @@
 use pm_application::actor::AuditActor;
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::interaction::{
-    mark_consumed, report_interaction, submit_interaction_response,
-    ReportInteractionInput, SubmitResponseInput,
+    mark_consumed, report_interaction, submit_interaction_response, ReportInteractionInput,
+    SubmitResponseInput,
 };
 use pm_application::worker_command as cmd;
 use pm_domain::SYSTEM_TENANT;

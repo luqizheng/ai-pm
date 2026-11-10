@@ -609,11 +609,10 @@ pub async fn principal_is_human(
     conn: &mut sqlx::PgConnection,
     principal_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    let kind: Option<String> =
-        sqlx::query_scalar("SELECT kind FROM core.principal WHERE id = $1")
-            .bind(principal_id)
-            .fetch_optional(&mut *conn)
-            .await?;
+    let kind: Option<String> = sqlx::query_scalar("SELECT kind FROM core.principal WHERE id = $1")
+        .bind(principal_id)
+        .fetch_optional(&mut *conn)
+        .await?;
     Ok(kind.as_deref() == Some("human"))
 }
 
@@ -706,11 +705,7 @@ fn build_revision_content(req: &DraftDesignRevisionRequest) -> Value {
     if let Some(s) = req.implementation_scope.clone().filter(|v| !v.is_null()) {
         obj.insert("implementation_scope".into(), s);
     }
-    if let Some(c) = req
-        .acceptance_criteria
-        .as_ref()
-        .filter(|v| !v.is_empty())
-    {
+    if let Some(c) = req.acceptance_criteria.as_ref().filter(|v| !v.is_empty()) {
         obj.insert(
             "acceptance_criteria".into(),
             serde_json::to_value(c).expect("serialize criteria"),
@@ -886,7 +881,15 @@ pub async fn create_design(
     .execute(&mut *tx)
     .await
     .map_err(PmWriteError::Db)?;
-    append_audit(&mut tx, project_id, actor, "design.created", "design", Some(design_id)).await?;
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "design.created",
+        "design",
+        Some(design_id),
+    )
+    .await?;
     tx.commit().await.map_err(PmWriteError::Db)?;
     design_detail(pool, tenant_id, design_id).await
 }
@@ -978,9 +981,7 @@ pub async fn update_design_revision_draft(
         lock_design_revision(&mut tx, tenant_id, design_id, revision_id).await?;
     let from = parse_state(&state)?;
     if !from.content_editable() {
-        return Err(PmWriteError::Conflict(
-            "only draft revisions can be edited",
-        ));
+        return Err(PmWriteError::Conflict("only draft revisions can be edited"));
     }
     sqlx::query(
         "UPDATE design.design_revision SET content = $1, content_hash = $2 \
@@ -1028,7 +1029,9 @@ pub async fn submit_design_revision(
         .map(str::trim)
         .unwrap_or("");
     if markdown.is_empty() {
-        return Err(PmWriteError::Validation("markdown is required before submit"));
+        return Err(PmWriteError::Validation(
+            "markdown is required before submit",
+        ));
     }
     sqlx::query(
         "UPDATE design.design_revision \
@@ -1093,8 +1096,7 @@ pub async fn link_design_requirement(
 ) -> Result<DesignRequirementLink, PmWriteError> {
     let mut tx = pool.begin().await.map_err(PmWriteError::Db)?;
     let (project_id, _, _, _) = lock_design(&mut tx, tenant_id, design_id).await?;
-    let (_, state, _, _) =
-        lock_design_revision(&mut tx, tenant_id, design_id, revision_id).await?;
+    let (_, state, _, _) = lock_design_revision(&mut tx, tenant_id, design_id, revision_id).await?;
     if !parse_state(&state)?.content_editable() {
         return Err(PmWriteError::Conflict(
             "requirement links are only editable on draft revisions",
@@ -1112,11 +1114,11 @@ pub async fn link_design_requirement(
     .await
     .map_err(PmWriteError::Db)?
     .ok_or(PmWriteError::NotFound("requirement not found"))?;
-    let revision_id_target = req.requirement_revision_id.unwrap_or(
-        req_current.ok_or(PmWriteError::Validation(
-            "requirement has no current revision to link",
-        ))?,
-    );
+    let revision_id_target =
+        req.requirement_revision_id
+            .unwrap_or(req_current.ok_or(PmWriteError::Validation(
+                "requirement has no current revision to link",
+            ))?);
     let (rev_state,): (String,) = sqlx::query_as(
         "SELECT state FROM delivery.requirement_revision \
          WHERE id = $1 AND requirement_id = $2 AND tenant_id = $3",
@@ -1183,8 +1185,7 @@ pub async fn unlink_design_requirement(
 ) -> Result<(), PmWriteError> {
     let mut tx = pool.begin().await.map_err(PmWriteError::Db)?;
     let (project_id, _, _, _) = lock_design(&mut tx, tenant_id, design_id).await?;
-    let (_, state, _, _) =
-        lock_design_revision(&mut tx, tenant_id, design_id, revision_id).await?;
+    let (_, state, _, _) = lock_design_revision(&mut tx, tenant_id, design_id, revision_id).await?;
     if !parse_state(&state)?.content_editable() {
         return Err(PmWriteError::Conflict(
             "requirement links are only editable on draft revisions",
@@ -1260,8 +1261,7 @@ pub async fn add_review_finding(
     }
     let mut tx = pool.begin().await.map_err(PmWriteError::Db)?;
     let (project_id, _, _, _) = lock_design(&mut tx, tenant_id, design_id).await?;
-    let (_, state, _, _) =
-        lock_design_revision(&mut tx, tenant_id, design_id, revision_id).await?;
+    let (_, state, _, _) = lock_design_revision(&mut tx, tenant_id, design_id, revision_id).await?;
     let parsed = parse_state(&state)?;
     if !matches!(
         parsed,
@@ -1321,7 +1321,9 @@ pub async fn resolve_review_finding(
     actor: &AuditActor,
 ) -> Result<ReviewFindingView, PmWriteError> {
     if !["acknowledged", "resolved"].contains(&req.status.as_str()) {
-        return Err(PmWriteError::Validation("status must be acknowledged or resolved"));
+        return Err(PmWriteError::Validation(
+            "status must be acknowledged or resolved",
+        ));
     }
     let mut tx = pool.begin().await.map_err(PmWriteError::Db)?;
     let (project_id, status, severity): (Uuid, String, String) = sqlx::query_as(
@@ -1362,7 +1364,15 @@ pub async fn resolve_review_finding(
     .execute(&mut *tx)
     .await
     .map_err(PmWriteError::Db)?;
-    append_audit(&mut tx, project_id, actor, "review_finding.closed", "review_finding", Some(finding_id)).await?;
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "review_finding.closed",
+        "review_finding",
+        Some(finding_id),
+    )
+    .await?;
     tx.commit().await.map_err(PmWriteError::Db)?;
     sqlx::query_as(
         "SELECT id, design_revision_id, finding_kind, severity, body, status, \
@@ -1454,7 +1464,9 @@ pub async fn request_adr_approval(
     .fetch_optional(&mut *tx)
     .await
     .map_err(PmWriteError::Db)?
-    .ok_or(PmWriteError::Conflict("adr has no submitted content revision"))?;
+    .ok_or(PmWriteError::Conflict(
+        "adr has no submitted content revision",
+    ))?;
     let approval_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO design.design_approval \
@@ -1522,7 +1534,9 @@ pub async fn decide_approval(
     actor: &AuditActor,
 ) -> Result<ApprovalView, PmWriteError> {
     if !["approve", "reject"].contains(&req.decision.as_str()) {
-        return Err(PmWriteError::Validation("decision must be approve or reject"));
+        return Err(PmWriteError::Validation(
+            "decision must be approve or reject",
+        ));
     }
     let mut tx = pool.begin().await.map_err(PmWriteError::Db)?;
     require_human_conn(&mut tx, actor).await?;
@@ -1580,13 +1594,8 @@ pub async fn decide_approval(
                     ));
                 }
             }
-            let (version, state, content_hash, _) = lock_design_revision(
-                &mut tx,
-                tenant_id,
-                design_id,
-                target_id,
-            )
-            .await?;
+            let (version, state, content_hash, _) =
+                lock_design_revision(&mut tx, tenant_id, design_id, target_id).await?;
             if content_hash != target_hash {
                 return Err(PmWriteError::Conflict(
                     "content hash mismatch: the reviewed content is not the current content",
@@ -1727,8 +1736,8 @@ pub async fn decide_approval(
         "task_plan" => {
             // 计划裁决走独立事务（apply_plan_decision 内含 require_human +
             // 状态机校验）；随后在本事务内终局化审批行。
-            let target_plan_id = plan_id
-                .ok_or(PmWriteError::Validation("approval missing plan"))?;
+            let target_plan_id =
+                plan_id.ok_or(PmWriteError::Validation("approval missing plan"))?;
             crate::task_plan::apply_plan_decision(
                 pool,
                 tenant_id,
@@ -1763,7 +1772,11 @@ async fn finalize_approval(
     actor: &AuditActor,
     after: Value,
 ) -> Result<(), PmWriteError> {
-    let decision = if req.decision == "approve" { "approved" } else { "rejected" };
+    let decision = if req.decision == "approve" {
+        "approved"
+    } else {
+        "rejected"
+    };
     sqlx::query(
         "UPDATE design.design_approval \
          SET status = $1, decided_by = $2, decision_reason = $3, decided_at = now() \
@@ -1944,7 +1957,11 @@ fn build_adr_content(req: &DraftAdrRevisionRequest) -> Value {
     if !req.options.is_empty() {
         obj.insert("options".into(), json!(req.options));
     }
-    if let Some(s) = req.chosen_option.as_deref().filter(|s| !s.trim().is_empty()) {
+    if let Some(s) = req
+        .chosen_option
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+    {
         obj.insert("chosen_option".into(), json!(s));
     }
     if let Some(s) = req.rationale.as_deref().filter(|s| !s.trim().is_empty()) {
@@ -2023,7 +2040,15 @@ pub async fn create_adr(
     .execute(&mut *tx)
     .await
     .map_err(PmWriteError::Db)?;
-    append_audit(&mut tx, project_id, actor, "adr.created", "adr", Some(adr_id)).await?;
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "adr.created",
+        "adr",
+        Some(adr_id),
+    )
+    .await?;
     tx.commit().await.map_err(PmWriteError::Db)?;
     adr_detail(pool, tenant_id, adr_id).await
 }
@@ -2075,7 +2100,15 @@ pub async fn create_adr_revision(
     .execute(&mut *tx)
     .await
     .map_err(PmWriteError::Db)?;
-    append_audit(&mut tx, project_id, actor, "adr_revision.created", "adr_revision", Some(revision_id)).await?;
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "adr_revision.created",
+        "adr_revision",
+        Some(revision_id),
+    )
+    .await?;
     tx.commit().await.map_err(PmWriteError::Db)?;
     sqlx::query_as(
         "SELECT id, adr_id, version, content, state, content_hash, created_by, created_at \
@@ -2124,8 +2157,8 @@ pub async fn submit_adr_revision(
     .execute(&mut *tx)
     .await
     .map_err(PmWriteError::Db)?;
-    let adr_from = AdrStatus::parse(&status)
-        .ok_or_else(|| PmWriteError::Validation("unknown adr status"))?;
+    let adr_from =
+        AdrStatus::parse(&status).ok_or_else(|| PmWriteError::Validation("unknown adr status"))?;
     if adr_from == AdrStatus::Proposed {
         adr_transition_or_conflict(adr_from, AdrStatus::UnderReview)?;
         sqlx::query(
@@ -2285,11 +2318,11 @@ pub async fn link_adr_requirement(
     .await
     .map_err(PmWriteError::Db)?
     .ok_or(PmWriteError::NotFound("requirement not found"))?;
-    let revision_id_target = req.requirement_revision_id.unwrap_or(
-        req_current.ok_or(PmWriteError::Validation(
-            "requirement has no current revision to link",
-        ))?,
-    );
+    let revision_id_target =
+        req.requirement_revision_id
+            .unwrap_or(req_current.ok_or(PmWriteError::Validation(
+                "requirement has no current revision to link",
+            ))?);
     let (rev_state,): (String,) = sqlx::query_as(
         "SELECT state FROM delivery.requirement_revision \
          WHERE id = $1 AND requirement_id = $2 AND tenant_id = $3",
@@ -2366,7 +2399,9 @@ pub async fn supersede_adr(
     .map_err(PmWriteError::Db)?
     .ok_or(PmWriteError::Validation("successor adr not found"))?;
     if successor_project != project_id {
-        return Err(PmWriteError::Validation("successor adr is in another project"));
+        return Err(PmWriteError::Validation(
+            "successor adr is in another project",
+        ));
     }
     if successor_status != AdrStatus::Accepted.as_str() {
         return Err(PmWriteError::Validation(
@@ -2436,7 +2471,15 @@ pub async fn deprecate_adr(
     .execute(&mut *tx)
     .await
     .map_err(PmWriteError::Db)?;
-    append_audit(&mut tx, project_id, actor, "adr.deprecated", "adr", Some(adr_id)).await?;
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "adr.deprecated",
+        "adr",
+        Some(adr_id),
+    )
+    .await?;
     tx.commit().await.map_err(PmWriteError::Db)?;
     sqlx::query_as(
         "SELECT a.id, a.project_id, a.code, a.title, a.status, a.blockers_implementation, \
@@ -2695,9 +2738,8 @@ pub async fn freeze_baseline(
         })).collect::<Vec<_>>(),
     });
     let content_hash = content_hash_of(&content);
-    let gate_json = serde_json::to_value(&gate).map_err(|e| {
-        PmWriteError::Db(sqlx::Error::Protocol(format!("gate serialization: {e}")))
-    })?;
+    let gate_json = serde_json::to_value(&gate)
+        .map_err(|e| PmWriteError::Db(sqlx::Error::Protocol(format!("gate serialization: {e}"))))?;
 
     let code = match req.code.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         Some(c) => c.to_string(),
@@ -2812,10 +2854,14 @@ pub async fn supersede_baseline(
         .map_err(PmWriteError::Db)?
         .ok_or(PmWriteError::Validation("successor baseline not found"))?;
         if s_project != project_id {
-            return Err(PmWriteError::Validation("successor baseline is in another project"));
+            return Err(PmWriteError::Validation(
+                "successor baseline is in another project",
+            ));
         }
         if s_status != "frozen" {
-            return Err(PmWriteError::Validation("successor baseline must be frozen"));
+            return Err(PmWriteError::Validation(
+                "successor baseline must be frozen",
+            ));
         }
         sqlx::query(
             "UPDATE design.implementation_baseline \

@@ -66,7 +66,10 @@ fn knowledge_root(tag: &str) -> KnowledgeRoot {
 }
 
 /// 门禁可过的设计内容（范围 + 可验证验收标准）。
-fn gate_ready_content() -> (Option<serde_json::Value>, Option<Vec<AcceptanceCriterionInput>>) {
+fn gate_ready_content() -> (
+    Option<serde_json::Value>,
+    Option<Vec<AcceptanceCriterionInput>>,
+) {
     (
         Some(json!({ "included": ["authentication module"], "excluded": [], "modules": ["auth"] })),
         Some(vec![AcceptanceCriterionInput {
@@ -226,15 +229,10 @@ async fn sc01_ai_drafts_design_human_approves_ai_cannot_decide(pool: PgPool) {
     let (design_id, rev_id, hash) = ai_submitted_design(&pool, &fx, "登录设计", true).await;
 
     // AI 请求批准（允许），AI 裁决（禁止，SC-05）。
-    let approval = design::request_design_revision_approval(
-        &pool,
-        SYSTEM_TENANT,
-        design_id,
-        rev_id,
-        &fx.ai,
-    )
-    .await
-    .unwrap();
+    let approval =
+        design::request_design_revision_approval(&pool, SYSTEM_TENANT, design_id, rev_id, &fx.ai)
+            .await
+            .unwrap();
     let ai_decide = design::decide_approval(
         &pool,
         SYSTEM_TENANT,
@@ -255,7 +253,9 @@ async fn sc01_ai_drafts_design_human_approves_ai_cannot_decide(pool: PgPool) {
     );
 
     // 人类批准（SC-01）。
-    let decided = decide(&pool, &fx, approval.id, "approve", None).await.unwrap();
+    let decided = decide(&pool, &fx, approval.id, "approve", None)
+        .await
+        .unwrap();
     assert_eq!(decided.status, "approved");
     let detail = design::design_detail(&pool, SYSTEM_TENANT, design_id)
         .await
@@ -286,9 +286,10 @@ async fn sc02_new_revision_approval_supersedes_but_never_overwrites(pool: PgPool
     let fx = fixture(&pool, "sc02").await;
     let (design_id, rev1, _) = ai_submitted_design(&pool, &fx, "基线设计", true).await;
     // 首修订已由 ai_submitted_design 提交，这里直接请求批准并批准。
-    let ap1 = design::request_design_revision_approval(&pool, SYSTEM_TENANT, design_id, rev1, &fx.ai)
-        .await
-        .unwrap();
+    let ap1 =
+        design::request_design_revision_approval(&pool, SYSTEM_TENANT, design_id, rev1, &fx.ai)
+            .await
+            .unwrap();
     decide(&pool, &fx, ap1.id, "approve", None).await.unwrap();
 
     let v1_content = design::design_detail(&pool, SYSTEM_TENANT, design_id)
@@ -420,11 +421,7 @@ async fn sc03_one_design_links_three_requirements_revision_bound(pool: PgPool) {
 
     // 绑定三个需求；REQ-A 显式指定修订 id（= 当前正式版本 rev2），
     // REQ-B/REQ-C 缺省绑当前正式版本。
-    for (rid, rvid) in [
-        (r1, Some(r1_rev2.id)),
-        (r2, None),
-        (r3, None),
-    ] {
+    for (rid, rvid) in [(r1, Some(r1_rev2.id)), (r2, None), (r3, None)] {
         design::link_design_requirement(
             &pool,
             SYSTEM_TENANT,
@@ -450,7 +447,10 @@ async fn sc03_one_design_links_three_requirements_revision_bound(pool: PgPool) {
     );
     assert_eq!(r1_link.is_current, Some(true));
     let r2_link = links.iter().find(|l| l.requirement_id == r2).unwrap();
-    assert_eq!(r2_link.requirement_revision_id, r2_rev, "缺省绑当前正式版本");
+    assert_eq!(
+        r2_link.requirement_revision_id, r2_rev,
+        "缺省绑当前正式版本"
+    );
     assert_eq!(r2_link.is_current, Some(true));
 
     // 绑定未确认修订被拒（§2.2）。
@@ -593,7 +593,9 @@ async fn sc04_adr_links_multiple_designs_and_requirements(pool: PgPool) {
     assert!(matches!(ai_err, PmWriteError::Forbidden(_)));
     decide(&pool, &fx, ap.id, "approve", None).await.unwrap();
 
-    let detail = design::adr_detail(&pool, SYSTEM_TENANT, adr_id).await.unwrap();
+    let detail = design::adr_detail(&pool, SYSTEM_TENANT, adr_id)
+        .await
+        .unwrap();
     assert_eq!(detail.adr.status, "accepted");
     assert_eq!(detail.design_links.len(), 2, "ADR 关联两个设计版本");
     assert_eq!(detail.requirement_links.len(), 2, "ADR 关联两个需求修订");
@@ -605,15 +607,10 @@ async fn sc04_adr_links_multiple_designs_and_requirements(pool: PgPool) {
 async fn sc06_concurrent_approvals_conflict_not_corrupt_current(pool: PgPool) {
     let fx = fixture(&pool, "sc06").await;
     let (design_id, rev1, _) = ai_submitted_design(&pool, &fx, "并发设计", true).await;
-    let ap1 = design::request_design_revision_approval(
-        &pool,
-        SYSTEM_TENANT,
-        design_id,
-        rev1,
-        &fx.ai,
-    )
-    .await
-    .unwrap();
+    let ap1 =
+        design::request_design_revision_approval(&pool, SYSTEM_TENANT, design_id, rev1, &fx.ai)
+            .await
+            .unwrap();
     decide(&pool, &fx, ap1.id, "approve", None).await.unwrap();
 
     // 两个新修订同时进入待批（两位审批人看到同一当前版本 rev1）。
@@ -657,9 +654,13 @@ async fn sc06_concurrent_approvals_conflict_not_corrupt_current(pool: PgPool) {
     let ap3 = submitted_with_approval(&pool, &fx, design_id, rev3.id).await;
 
     // 审批人甲批准 rev2（核准时当前版本 = rev1）。
-    decide(&pool, &fx, ap2, "approve", Some(rev1)).await.unwrap();
+    decide(&pool, &fx, ap2, "approve", Some(rev1))
+        .await
+        .unwrap();
     // 审批人乙拿着旧快照（当前版本仍以为是 rev1）批准 rev3 → 显式 409。
-    let err = decide(&pool, &fx, ap3, "approve", Some(rev1)).await.unwrap_err();
+    let err = decide(&pool, &fx, ap3, "approve", Some(rev1))
+        .await
+        .unwrap_err();
     assert!(
         matches!(err, PmWriteError::Conflict(_)),
         "并发批准必须显式冲突，实际 {err:?}"
@@ -667,7 +668,11 @@ async fn sc06_concurrent_approvals_conflict_not_corrupt_current(pool: PgPool) {
     let detail = design::design_detail(&pool, SYSTEM_TENANT, design_id)
         .await
         .unwrap();
-    assert_eq!(detail.design.current_revision_id, Some(rev2.id), "当前版本未被并发破坏");
+    assert_eq!(
+        detail.design.current_revision_id,
+        Some(rev2.id),
+        "当前版本未被并发破坏"
+    );
 }
 
 // ────────────────────────────────────────────────────────────── SC-07
@@ -713,15 +718,10 @@ async fn sc07_readiness_gate_blocks_unresolved_blocking_adr(pool: PgPool) {
     design::submit_design_revision(&pool, SYSTEM_TENANT, design_id, draft.id, &fx.ai)
         .await
         .unwrap();
-    let ap = design::request_design_revision_approval(
-        &pool,
-        SYSTEM_TENANT,
-        design_id,
-        draft.id,
-        &fx.ai,
-    )
-    .await
-    .unwrap();
+    let ap =
+        design::request_design_revision_approval(&pool, SYSTEM_TENANT, design_id, draft.id, &fx.ai)
+            .await
+            .unwrap();
     decide(&pool, &fx, ap.id, "approve", None).await.unwrap();
 
     // 阻塞项 ADR：draft 期关联设计修订 → 提交后处于未决（under_review）。
@@ -757,15 +757,20 @@ async fn sc07_readiness_gate_blocks_unresolved_blocking_adr(pool: PgPool) {
     )
     .await
     .unwrap();
-    design::submit_adr_revision(&pool, SYSTEM_TENANT, adr.adr.id, adr.revisions[0].id, &fx.ai)
-        .await
-        .unwrap();
+    design::submit_adr_revision(
+        &pool,
+        SYSTEM_TENANT,
+        adr.adr.id,
+        adr.revisions[0].id,
+        &fx.ai,
+    )
+    .await
+    .unwrap();
 
     // 条件 3 失败：阻塞 ADR 处于 under_review。
-    let report =
-        design::evaluate_readiness(&pool, SYSTEM_TENANT, fx.project_id, &[draft.id])
-            .await
-            .unwrap();
+    let report = design::evaluate_readiness(&pool, SYSTEM_TENANT, fx.project_id, &[draft.id])
+        .await
+        .unwrap();
     assert!(!report.ready);
     let adr_cond = report
         .conditions
@@ -779,10 +784,9 @@ async fn sc07_readiness_gate_blocks_unresolved_blocking_adr(pool: PgPool) {
         .await
         .unwrap();
     decide(&pool, &fx, ap.id, "approve", None).await.unwrap();
-    let report =
-        design::evaluate_readiness(&pool, SYSTEM_TENANT, fx.project_id, &[draft.id])
-            .await
-            .unwrap();
+    let report = design::evaluate_readiness(&pool, SYSTEM_TENANT, fx.project_id, &[draft.id])
+        .await
+        .unwrap();
     assert!(report.ready, "五条件全过后门禁放行：{report:?}");
 
     // 范围缺失的修订过不了条件 4。
@@ -804,20 +808,14 @@ async fn sc07_readiness_gate_blocks_unresolved_blocking_adr(pool: PgPool) {
     design::submit_design_revision(&pool, SYSTEM_TENANT, design_id, bare.id, &fx.ai)
         .await
         .unwrap();
-    let ap = design::request_design_revision_approval(
-        &pool,
-        SYSTEM_TENANT,
-        design_id,
-        bare.id,
-        &fx.ai,
-    )
-    .await
-    .unwrap();
-    decide(&pool, &fx, ap.id, "approve", None).await.unwrap();
-    let report =
-        design::evaluate_readiness(&pool, SYSTEM_TENANT, fx.project_id, &[bare.id])
+    let ap =
+        design::request_design_revision_approval(&pool, SYSTEM_TENANT, design_id, bare.id, &fx.ai)
             .await
             .unwrap();
+    decide(&pool, &fx, ap.id, "approve", None).await.unwrap();
+    let report = design::evaluate_readiness(&pool, SYSTEM_TENANT, fx.project_id, &[bare.id])
+        .await
+        .unwrap();
     assert!(!report.ready);
     assert!(report
         .conditions
@@ -871,15 +869,10 @@ async fn sc08_baseline_frozen_immune_to_later_design_changes(pool: PgPool) {
     design::submit_design_revision(&pool, SYSTEM_TENANT, design_id, draft.id, &fx.ai)
         .await
         .unwrap();
-    let ap = design::request_design_revision_approval(
-        &pool,
-        SYSTEM_TENANT,
-        design_id,
-        draft.id,
-        &fx.ai,
-    )
-    .await
-    .unwrap();
+    let ap =
+        design::request_design_revision_approval(&pool, SYSTEM_TENANT, design_id, draft.id, &fx.ai)
+            .await
+            .unwrap();
     decide(&pool, &fx, ap.id, "approve", None).await.unwrap();
 
     // 冻结基线（真人门；AI 拒绝）。
@@ -966,15 +959,10 @@ async fn sc08_baseline_frozen_immune_to_later_design_changes(pool: PgPool) {
     design::submit_design_revision(&pool, SYSTEM_TENANT, design_id, rev2.id, &fx.ai)
         .await
         .unwrap();
-    let ap = design::request_design_revision_approval(
-        &pool,
-        SYSTEM_TENANT,
-        design_id,
-        rev2.id,
-        &fx.ai,
-    )
-    .await
-    .unwrap();
+    let ap =
+        design::request_design_revision_approval(&pool, SYSTEM_TENANT, design_id, rev2.id, &fx.ai)
+            .await
+            .unwrap();
     decide(&pool, &fx, ap.id, "approve", None).await.unwrap();
 
     let after = design::baseline_detail(&pool, SYSTEM_TENANT, baseline.id)
@@ -1002,13 +990,12 @@ async fn sc08_baseline_frozen_immune_to_later_design_changes(pool: PgPool) {
     )
     .await
     .unwrap();
-    let task_baseline: Option<Uuid> = sqlx::query_scalar(
-        "SELECT implementation_baseline_id FROM delivery.task WHERE id = $1",
-    )
-    .bind(task.id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let task_baseline: Option<Uuid> =
+        sqlx::query_scalar("SELECT implementation_baseline_id FROM delivery.task WHERE id = $1")
+            .bind(task.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(task_baseline, Some(baseline.id));
 
     // 新基线冻结 → 旧基线显式替代 → 旧基线不可再被新任务引用。
@@ -1150,7 +1137,11 @@ async fn db_guards_revision_and_baseline_immutability(pool: PgPool) {
     )
     .await
     .unwrap();
-    assert_ne!(updated.content_hash, json!(null).to_string().len().to_string(), "hash 应变化");
+    assert_ne!(
+        updated.content_hash,
+        json!(null).to_string().len().to_string(),
+        "hash 应变化"
+    );
     assert_ne!(updated.content["markdown"], "# 可改草稿\n");
 
     // 基线冻结列不可变（先造一个门禁可过修订）。

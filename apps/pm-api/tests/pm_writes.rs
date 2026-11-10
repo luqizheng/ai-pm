@@ -579,13 +579,12 @@ async fn create_task_with_ai_role_version_persists_anchor(pool: PgPool) {
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
     let task = body_json(response).await;
-    let stored: Option<Uuid> = sqlx::query_scalar(
-        "SELECT ai_role_version_id FROM delivery.task WHERE id = $1",
-    )
-    .bind(task["id"].as_str().unwrap().parse::<Uuid>().unwrap())
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let stored: Option<Uuid> =
+        sqlx::query_scalar("SELECT ai_role_version_id FROM delivery.task WHERE id = $1")
+            .bind(task["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(stored, Some(version), "the role anchor must be persisted");
 
     // 不带锚 = 历史 Task 兼容形态，仍 201 且列 NULL。
@@ -599,13 +598,12 @@ async fn create_task_with_ai_role_version_persists_anchor(pool: PgPool) {
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
     let task = body_json(response).await;
-    let stored: Option<Uuid> = sqlx::query_scalar(
-        "SELECT ai_role_version_id FROM delivery.task WHERE id = $1",
-    )
-    .bind(task["id"].as_str().unwrap().parse::<Uuid>().unwrap())
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let stored: Option<Uuid> =
+        sqlx::query_scalar("SELECT ai_role_version_id FROM delivery.task WHERE id = $1")
+            .bind(task["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(stored, None);
 }
 

@@ -46,12 +46,11 @@ async fn role_version_id(pool: &PgPool, project_id: Uuid, role_key: &str) -> Uui
 /// V2.0-D：同时授同名 capability 行（source='agent_definition'），使新候选
 /// 进入 registry——多候选空闲语义在 registry 路径上验证（R4）。
 async fn add_dev_agent_member(pool: &PgPool, project_id: Uuid, role: &str) -> Uuid {
-    let tenant_id: Uuid =
-        sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
-            .bind(project_id)
-            .fetch_one(pool)
-            .await
-            .unwrap();
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
     let principal: Uuid = sqlx::query_scalar(
         "INSERT INTO core.principal (kind, display_name) \
          VALUES ('dev_agent', $1) RETURNING id",

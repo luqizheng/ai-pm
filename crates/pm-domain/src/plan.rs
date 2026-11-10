@@ -30,7 +30,12 @@ pub enum TaskPlanStatus {
 }
 
 impl TaskPlanStatus {
-    pub const ALL: [Self; 4] = [Self::Draft, Self::InReview, Self::Approved, Self::Superseded];
+    pub const ALL: [Self; 4] = [
+        Self::Draft,
+        Self::InReview,
+        Self::Approved,
+        Self::Superseded,
+    ];
 
     pub fn as_str(self) -> &'static str {
         match self {
@@ -133,7 +138,9 @@ mod tests {
         assert!(TaskPlanRevisionState::Draft.can_transition_to(TaskPlanRevisionState::Submitted));
         assert!(!TaskPlanRevisionState::Draft.can_transition_to(TaskPlanRevisionState::Approved));
         assert!(TaskPlanRevisionState::Submitted.can_transition_to(TaskPlanRevisionState::Approved));
-        assert!(TaskPlanRevisionState::Approved.can_transition_to(TaskPlanRevisionState::Superseded));
+        assert!(
+            TaskPlanRevisionState::Approved.can_transition_to(TaskPlanRevisionState::Superseded)
+        );
         assert!(TaskPlanRevisionState::Draft.content_editable());
         assert!(!TaskPlanRevisionState::Submitted.content_editable());
     }

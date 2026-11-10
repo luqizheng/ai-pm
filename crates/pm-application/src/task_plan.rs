@@ -174,7 +174,9 @@ pub fn validate_plan_tasks(tasks: &[PlanTaskDraft]) -> Result<(), String> {
             return Err(format!("tasks[{i}] (`{key}`) title is empty"));
         }
         if t.acceptance_criteria.iter().any(|c| c.trim().is_empty()) {
-            return Err(format!("tasks[{i}] (`{key}`) has an empty acceptance criterion"));
+            return Err(format!(
+                "tasks[{i}] (`{key}`) has an empty acceptance criterion"
+            ));
         }
         if t.acceptance_criteria.is_empty() {
             return Err(format!("tasks[{i}] (`{key}`) has no acceptance criteria"));
@@ -291,7 +293,12 @@ fn parse_revision_state(state: &str) -> Result<TaskPlanRevisionState, PmWriteErr
         .ok_or_else(|| PmWriteError::Validation("unknown plan revision state"))
 }
 
-fn transition_or_conflict<S: Copy>(legal: impl Fn(S, S) -> bool, from: S, to: S, what: &'static str) -> Result<(), PmWriteError> {
+fn transition_or_conflict<S: Copy>(
+    legal: impl Fn(S, S) -> bool,
+    from: S,
+    to: S,
+    what: &'static str,
+) -> Result<(), PmWriteError> {
     if legal(from, to) {
         Ok(())
     } else {
@@ -471,7 +478,15 @@ pub async fn create_plan(
     .execute(&mut *tx)
     .await
     .map_err(PmWriteError::Db)?;
-    append_audit(&mut tx, project_id, actor, "task_plan.created", "task_plan", Some(plan_id)).await?;
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "task_plan.created",
+        "task_plan",
+        Some(plan_id),
+    )
+    .await?;
     tx.commit().await.map_err(PmWriteError::Db)?;
     plan_detail(pool, tenant_id, plan_id).await
 }
@@ -567,7 +582,9 @@ pub async fn update_plan_revision_draft(
     let (version, state, _, _) =
         lock_plan_revision(&mut tx, tenant_id, plan_id, revision_id).await?;
     if !parse_revision_state(&state)?.content_editable() {
-        return Err(PmWriteError::Conflict("only draft plan revisions can be edited"));
+        return Err(PmWriteError::Conflict(
+            "only draft plan revisions can be edited",
+        ));
     }
     sqlx::query(
         "UPDATE plan.task_plan_revision SET content = $1, content_hash = $2 \
@@ -665,7 +682,8 @@ pub async fn request_plan_approval(
     actor: &AuditActor,
 ) -> Result<ApprovalView, PmWriteError> {
     let mut tx = pool.begin().await.map_err(PmWriteError::Db)?;
-    let (project_id, status, current_revision_id, _) = lock_plan(&mut tx, tenant_id, plan_id).await?;
+    let (project_id, status, current_revision_id, _) =
+        lock_plan(&mut tx, tenant_id, plan_id).await?;
     if status != TaskPlanStatus::InReview.as_str() {
         return Err(PmWriteError::Conflict(
             "only in_review plans can be requested for approval",
@@ -728,7 +746,8 @@ pub(crate) async fn apply_plan_decision(
 ) -> Result<(), PmWriteError> {
     let mut tx = pool.begin().await.map_err(PmWriteError::Db)?;
     require_human_conn(&mut tx, actor).await?;
-    let (project_id, status, current_revision_id, _) = lock_plan(&mut tx, tenant_id, plan_id).await?;
+    let (project_id, status, current_revision_id, _) =
+        lock_plan(&mut tx, tenant_id, plan_id).await?;
     let from_plan = parse_status(&status)?;
     let to_plan = if approve {
         TaskPlanStatus::Approved
@@ -854,7 +873,9 @@ pub async fn supersede_plan(
     .map_err(PmWriteError::Db)?
     .ok_or(PmWriteError::Validation("successor plan not found"))?;
     if s_project != project_id {
-        return Err(PmWriteError::Validation("successor plan is in another project"));
+        return Err(PmWriteError::Validation(
+            "successor plan is in another project",
+        ));
     }
     if s_status != TaskPlanStatus::Approved.as_str() {
         return Err(PmWriteError::Validation("successor plan must be approved"));
@@ -932,8 +953,7 @@ pub async fn materialize_plan(
     let selected: Vec<&PlanTaskDraft> = match &req.task_keys {
         None => tasks.iter().collect(),
         Some(keys) => {
-            let wanted: std::collections::HashSet<&str> =
-                keys.iter().map(|k| k.trim()).collect();
+            let wanted: std::collections::HashSet<&str> = keys.iter().map(|k| k.trim()).collect();
             let picked: Vec<&PlanTaskDraft> = tasks
                 .iter()
                 .filter(|t| wanted.contains(t.key.trim()))
@@ -1182,13 +1202,12 @@ pub async fn prepare_handoff(
         ));
     }
     // 上下文载荷（来源追溯 + 基线 + 验收 + 仓库 + 依赖）。
-    let baseline_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT implementation_baseline_id FROM delivery.task WHERE id = $1",
-    )
-    .bind(task_id)
-    .fetch_one(pool)
-    .await
-    .map_err(PmWriteError::Db)?;
+    let baseline_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT implementation_baseline_id FROM delivery.task WHERE id = $1")
+            .bind(task_id)
+            .fetch_one(pool)
+            .await
+            .map_err(PmWriteError::Db)?;
     let criteria_list: Vec<Value> = sqlx::query(
         "SELECT id, ordinal, text, verification_kind \
          FROM delivery.task_acceptance_criterion WHERE task_id = $1 ORDER BY ordinal",

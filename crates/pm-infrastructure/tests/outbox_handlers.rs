@@ -378,7 +378,10 @@ async fn seed_ready_task_with_role(pool: &PgPool, project_id: Uuid, version_id: 
     .fetch_one(pool)
     .await
     .unwrap();
-    Seeded { project_id, task_id }
+    Seeded {
+        project_id,
+        task_id,
+    }
 }
 
 /// D-2=A 正分支：ready 无 assignee + enabled developer 角色 + 项目里有合格
@@ -406,15 +409,21 @@ async fn auto_resolves_assignee_and_creates_run_for_role_anchored_task(pool: PgP
         1,
         "a resolved executor must proceed to run creation"
     );
-    let (assignee, status): (Option<Uuid>, String) = sqlx::query_as(
-        "SELECT assignee_id, status FROM delivery.task WHERE id = $1",
-    )
-    .bind(s.task_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(assignee, Some(boot.developer_id), "assignee must be auto-written");
-    assert_eq!(status, "ready", "auto-assign must not move the task out of ready");
+    let (assignee, status): (Option<Uuid>, String) =
+        sqlx::query_as("SELECT assignee_id, status FROM delivery.task WHERE id = $1")
+            .bind(s.task_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        assignee,
+        Some(boot.developer_id),
+        "assignee must be auto-written"
+    );
+    assert_eq!(
+        status, "ready",
+        "auto-assign must not move the task out of ready"
+    );
 
     let audit: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM governance.audit_log \
@@ -493,7 +502,10 @@ async fn no_qualified_executor_records_waiting_and_skips_run(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(waiting, 1, "redelivery must collapse to the same waiting row");
+    assert_eq!(
+        waiting, 1,
+        "redelivery must collapse to the same waiting row"
+    );
     let skip_audit: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM governance.audit_log \
           WHERE action = 'task_ready_skipped' AND target_id = $1",
@@ -502,5 +514,8 @@ async fn no_qualified_executor_records_waiting_and_skips_run(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(skip_audit, 1, "redelivery must not duplicate the skip audit");
+    assert_eq!(
+        skip_audit, 1,
+        "redelivery must not duplicate the skip audit"
+    );
 }

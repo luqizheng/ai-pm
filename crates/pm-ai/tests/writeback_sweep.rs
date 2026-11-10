@@ -21,9 +21,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use pm_ai::discovery_orchestrator::DiscoveryOrchestratorWorker;
 use pm_ai::discovery_writeback::{
-    DecomposeOutcome, DiscoveryWriteBack, DraftOutcome, DraftOutcomeKind, EmptyCapabilityProjection,
-    ModelCallFailure, ModelReply, ProviderStamp, RawTaskBatch, RequirementDraft,
-    RequirementDraftContext, TaskDecomposeContext, WriteBackError, WriteBackMode, WriteBackModel,
+    DecomposeOutcome, DiscoveryWriteBack, DraftOutcome, DraftOutcomeKind,
+    EmptyCapabilityProjection, ModelCallFailure, ModelReply, ProviderStamp, RawTaskBatch,
+    RequirementDraft, RequirementDraftContext, TaskDecomposeContext, WriteBackError, WriteBackMode,
+    WriteBackModel,
 };
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::knowledge::KnowledgeRoot;
@@ -170,8 +171,7 @@ fn draft_reply() -> RequirementDraft {
         code: Some("PHONE-LOGIN".to_string()),
         title: "手机号验证码登录".to_string(),
         summary: Some("普通买家可用手机号+短信验证码登录".to_string()),
-        markdown: "# 手机号验证码登录\n\n## 目标\n普通买家可用手机号登录。\n"
-            .to_string(),
+        markdown: "# 手机号验证码登录\n\n## 目标\n普通买家可用手机号登录。\n".to_string(),
     }
 }
 
@@ -231,7 +231,10 @@ async fn sweep_drafts_after_human_confirms_findings(pool: PgPool) {
 
     let mut worker = worker_with(&pool, &fx, drafts.clone());
     let report = worker.sweep_write_back().await.unwrap();
-    assert_eq!(report.drafts_submitted, 1, "CONFIRMED finding must be drafted");
+    assert_eq!(
+        report.drafts_submitted, 1,
+        "CONFIRMED finding must be drafted"
+    );
     assert_eq!(requirement_count(&pool, fx.project_id).await, 1);
 
     // ④ AI 止步 pending_confirmation（approved 只能由真人产生）。
@@ -288,8 +291,7 @@ async fn write_back_off_means_zero_writes(pool: PgPool) {
         knowledge: fx.root.clone(),
         mode: WriteBackMode::Off,
     };
-    let mut worker =
-        DiscoveryOrchestratorWorker::new(pool.clone()).with_write_back(Arc::new(hook));
+    let mut worker = DiscoveryOrchestratorWorker::new(pool.clone()).with_write_back(Arc::new(hook));
     let report = worker.sweep_write_back().await.unwrap();
     assert_eq!(report.drafts_submitted, 0);
     assert_eq!(requirement_count(&pool, fx.project_id).await, 0);
