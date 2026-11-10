@@ -161,11 +161,7 @@ async fn create_conversation(app: axum::Router, token: &str, project_id: Uuid) -
 }
 
 /// 播一条带信封的 assistant 消息（交互靶子）。
-async fn seed_card_message(
-    pool: &PgPool,
-    conversation_id: Uuid,
-    envelope_status: &str,
-) -> Uuid {
+async fn seed_card_message(pool: &PgPool, conversation_id: Uuid, envelope_status: &str) -> Uuid {
     sqlx::query_scalar(
         "INSERT INTO ai.conversation_message \
              (conversation_id, role, content, content_type, metadata) \

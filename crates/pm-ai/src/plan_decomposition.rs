@@ -225,9 +225,7 @@ fn cap(s: &str, max: usize) -> String {
 }
 
 /// LLM 原始批 → 计划草案（prerequisite + main 合一；依赖键原样保留）。
-fn draft_tasks_from_batch(
-    batch: &crate::discovery_writeback::RawTaskBatch,
-) -> Vec<PlanTaskDraft> {
+fn draft_tasks_from_batch(batch: &crate::discovery_writeback::RawTaskBatch) -> Vec<PlanTaskDraft> {
     let mut tasks = Vec::new();
     for section in [&batch.prerequisite, &batch.main] {
         for t in section {
@@ -279,11 +277,12 @@ pub async fn decompose(
             "plan must be in draft for decomposition; return it first if approved",
         )));
     }
-    let baseline_id = req.baseline_id.or(source_baseline).ok_or(
-        DecomposeError::Pm(PmWriteError::Validation(
+    let baseline_id = req
+        .baseline_id
+        .or(source_baseline)
+        .ok_or(DecomposeError::Pm(PmWriteError::Validation(
             "no frozen baseline bound to this plan; pass baseline_id",
-        )),
-    )?;
+        )))?;
     let baseline_content =
         decomposition_admission(pool, tenant_id, project_id, baseline_id).await?;
 

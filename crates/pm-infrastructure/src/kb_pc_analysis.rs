@@ -857,7 +857,12 @@ pub async fn derive_pc_cognition(
                 code_range: None,
                 commit_sha: None,
                 section_anchor: Some(
-                    draft.object_key.rsplit(':').next().unwrap_or("snapshot").to_string(),
+                    draft
+                        .object_key
+                        .rsplit(':')
+                        .next()
+                        .unwrap_or("snapshot")
+                        .to_string(),
                 ),
                 start_line: None,
                 end_line: None,

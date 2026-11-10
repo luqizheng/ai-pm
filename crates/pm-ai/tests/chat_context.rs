@@ -68,14 +68,9 @@ async fn chat_context_injects_two_sections_with_accounting(pool: PgPool) {
     let project = seed_project(&pool, "Atlas Platform", "Acme Research").await;
     seed_repository(&pool, project, "atlas-platform", "main").await;
 
-    let context = build_chat_context(
-        &pool,
-        SYSTEM_TENANT,
-        project,
-        Some("atlas-platform"),
-    )
-    .await
-    .expect("context builds");
+    let context = build_chat_context(&pool, SYSTEM_TENANT, project, Some("atlas-platform"))
+        .await
+        .expect("context builds");
 
     assert!(!context.is_empty());
     let keys: Vec<&str> = context.sections.iter().map(|s| s.key.as_str()).collect();
@@ -149,11 +144,14 @@ async fn chat_context_missing_project_is_empty(pool: PgPool) {
         .expect("context builds");
 
     assert!(context.is_empty());
-    assert_eq!(context.metadata(), serde_json::json!({
-        "sections_included": Vec::<String>::new(),
-        "sections_dropped": Vec::<String>::new(),
-        "chars_total": 0,
-    }));
+    assert_eq!(
+        context.metadata(),
+        serde_json::json!({
+            "sections_included": Vec::<String>::new(),
+            "sections_dropped": Vec::<String>::new(),
+            "chars_total": 0,
+        })
+    );
 }
 
 /// A-8：chat 预算独立于访谈（8k vs 36k），且互不影响。
@@ -224,8 +222,14 @@ fn anchor_repository_reads_only_string_values() {
         anchor_repository(Some(&json!({"repository_name": "atlas-platform"}))),
         Some("atlas-platform".to_string())
     );
-    assert_eq!(anchor_repository(Some(&json!({"repository_name": "  "}))), None);
-    assert_eq!(anchor_repository(Some(&json!({"repository_name": 42}))), None);
+    assert_eq!(
+        anchor_repository(Some(&json!({"repository_name": "  "}))),
+        None
+    );
+    assert_eq!(
+        anchor_repository(Some(&json!({"repository_name": 42}))),
+        None
+    );
     assert_eq!(anchor_repository(Some(&json!({}))), None);
     assert_eq!(anchor_repository(None), None);
 }

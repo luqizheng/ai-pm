@@ -12,9 +12,8 @@ use std::sync::Arc;
 
 use pm_ai::plan_decomposition;
 use pm_application::actor::AuditActor;
-use pm_application::command_executor::PgCommandExecutor;
-use pm_application::PolicyEngine;
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+use pm_application::command_executor::PgCommandExecutor;
 use pm_application::design::{self, AcceptanceCriterionInput};
 use pm_application::knowledge::KnowledgeRoot;
 use pm_application::pm_write::{self, PmWriteError};
@@ -22,6 +21,7 @@ use pm_application::requirement::{
     self, ConfirmRevisionRequest, CreateRequirementRequest, DraftRevisionRequest,
 };
 use pm_application::task_plan;
+use pm_application::PolicyEngine;
 use pm_domain::SYSTEM_TENANT;
 use serde_json::json;
 use sqlx::PgPool;
@@ -72,9 +72,16 @@ fn knowledge_root(tag: &str) -> KnowledgeRoot {
     KnowledgeRoot::new(std::env::temp_dir().join(format!("ai-pm-s04-{tag}-{}", Uuid::new_v4())))
 }
 
-fn gate_ready_content(title: &str) -> (Option<serde_json::Value>, Option<Vec<AcceptanceCriterionInput>>) {
+fn gate_ready_content(
+    title: &str,
+) -> (
+    Option<serde_json::Value>,
+    Option<Vec<AcceptanceCriterionInput>>,
+) {
     (
-        Some(json!({ "included": [format!("{title} module")], "excluded": [], "modules": ["auth"] })),
+        Some(
+            json!({ "included": [format!("{title} module")], "excluded": [], "modules": ["auth"] }),
+        ),
         Some(vec![AcceptanceCriterionInput {
             statement: format!("{title} 验收：自动化测试通过"),
             verification_kind: Some("automated_test".to_string()),
@@ -189,9 +196,15 @@ async fn frozen_baseline(pool: &PgPool, fx: &Fx, code: &str, root: &KnowledgeRoo
     design::submit_design_revision(pool, SYSTEM_TENANT, design_id, draft_rev.id, &fx.ai)
         .await
         .unwrap();
-    let ap = design::request_design_revision_approval(pool, SYSTEM_TENANT, design_id, draft_rev.id, &fx.ai)
-        .await
-        .unwrap();
+    let ap = design::request_design_revision_approval(
+        pool,
+        SYSTEM_TENANT,
+        design_id,
+        draft_rev.id,
+        &fx.ai,
+    )
+    .await
+    .unwrap();
     design::decide_approval(
         pool,
         SYSTEM_TENANT,
@@ -313,7 +326,9 @@ async fn full_chain_plan_approve_materialize_ready_handoff(pool: PgPool) {
     let (plan_id, rev_id) = approved_plan(&pool, &fx, baseline_id, "CHAIN").await;
 
     // 计划状态 approved。
-    let detail = task_plan::plan_detail(&pool, SYSTEM_TENANT, plan_id).await.unwrap();
+    let detail = task_plan::plan_detail(&pool, SYSTEM_TENANT, plan_id)
+        .await
+        .unwrap();
     assert_eq!(detail.plan.status, "approved");
     let rev = detail.revisions.iter().find(|r| r.id == rev_id).unwrap();
     assert_eq!(rev.state, "approved");
@@ -324,7 +339,10 @@ async fn full_chain_plan_approve_materialize_ready_handoff(pool: PgPool) {
         &pool,
         SYSTEM_TENANT,
         plan_id,
-        task_plan::MaterializeRequest { plan_revision_id: None, task_keys: None },
+        task_plan::MaterializeRequest {
+            plan_revision_id: None,
+            task_keys: None,
+        },
         &fx.ai,
     )
     .await
@@ -398,16 +416,24 @@ async fn full_chain_plan_approve_materialize_ready_handoff(pool: PgPool) {
         &pool,
         SYSTEM_TENANT,
         plan_id,
-        task_plan::MaterializeRequest { plan_revision_id: None, task_keys: None },
+        task_plan::MaterializeRequest {
+            plan_revision_id: None,
+            task_keys: None,
+        },
         &fx.ai,
     )
     .await
     .unwrap();
     assert_eq!(outcome2["created"].as_array().unwrap().len(), 0);
-    assert_eq!(outcome2["already_materialized"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        outcome2["already_materialized"].as_array().unwrap().len(),
+        3
+    );
 
     // 未置 ready 的任务不可交接。
-    let err = task_plan::prepare_handoff(&pool, SYSTEM_TENANT, t001).await.unwrap_err();
+    let err = task_plan::prepare_handoff(&pool, SYSTEM_TENANT, t001)
+        .await
+        .unwrap_err();
     assert!(matches!(err, PmWriteError::Conflict(_)));
 
     // T001 无上游依赖：真人置 ready（复用 mark_task_batch_ready；AI 禁）。
@@ -435,18 +461,27 @@ async fn full_chain_plan_approve_materialize_ready_handoff(pool: PgPool) {
     assert!(ready.ready.contains(&t001));
 
     // 交接：资格检查 + 载荷。
-    let payload = task_plan::prepare_handoff(&pool, SYSTEM_TENANT, t001).await.unwrap();
+    let payload = task_plan::prepare_handoff(&pool, SYSTEM_TENANT, t001)
+        .await
+        .unwrap();
     assert_eq!(payload["task_id"], json!(t001));
     assert_eq!(payload["implementation_baseline_id"], json!(baseline_id));
     assert!(payload["acceptance_criteria"].as_array().unwrap().len() >= 1);
     assert!(payload["repositories"].as_array().unwrap().is_empty());
 
     // T003 依赖未完成 → 交接拒绝。
-    let err = task_plan::prepare_handoff(&pool, SYSTEM_TENANT, t003).await.unwrap_err();
-    assert!(matches!(err, PmWriteError::Conflict(_)), "依赖未完成必须拦截");
+    let err = task_plan::prepare_handoff(&pool, SYSTEM_TENANT, t003)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, PmWriteError::Conflict(_)),
+        "依赖未完成必须拦截"
+    );
 
     // 进度读模型。
-    let progress = task_plan::plan_progress(&pool, SYSTEM_TENANT, plan_id).await.unwrap();
+    let progress = task_plan::plan_progress(&pool, SYSTEM_TENANT, plan_id)
+        .await
+        .unwrap();
     assert_eq!(progress.total_tasks, 3);
     assert_eq!(progress.planned_tasks, 3);
     assert!(progress.by_status.get("draft").is_some());
@@ -474,9 +509,15 @@ async fn ai_cannot_decide_plan_approval(pool: PgPool) {
     )
     .await
     .unwrap();
-    task_plan::submit_plan_revision(&pool, SYSTEM_TENANT, detail.plan.id, detail.revisions[0].id, &fx.ai)
-        .await
-        .unwrap();
+    task_plan::submit_plan_revision(
+        &pool,
+        SYSTEM_TENANT,
+        detail.plan.id,
+        detail.revisions[0].id,
+        &fx.ai,
+    )
+    .await
+    .unwrap();
     let ap = task_plan::request_plan_approval(&pool, SYSTEM_TENANT, detail.plan.id, &fx.ai)
         .await
         .unwrap();
@@ -501,7 +542,10 @@ async fn ai_cannot_decide_plan_approval(pool: PgPool) {
         &pool,
         SYSTEM_TENANT,
         detail.plan.id,
-        task_plan::MaterializeRequest { plan_revision_id: None, task_keys: None },
+        task_plan::MaterializeRequest {
+            plan_revision_id: None,
+            task_keys: None,
+        },
         &fx.ai,
     )
     .await
@@ -628,7 +672,10 @@ async fn plan_lifecycle_and_resplit_preserves_materialized(pool: PgPool) {
         &pool,
         SYSTEM_TENANT,
         plan_id,
-        task_plan::MaterializeRequest { plan_revision_id: None, task_keys: None },
+        task_plan::MaterializeRequest {
+            plan_revision_id: None,
+            task_keys: None,
+        },
         &fx.ai,
     )
     .await
@@ -677,7 +724,10 @@ async fn plan_lifecycle_and_resplit_preserves_materialized(pool: PgPool) {
         SYSTEM_TENANT,
         plan_id,
         rev1,
-        task_plan::DraftPlanRevisionRequest { tasks: tasks2, instructions: None },
+        task_plan::DraftPlanRevisionRequest {
+            tasks: tasks2,
+            instructions: None,
+        },
         &fx.human,
     )
     .await
@@ -708,9 +758,15 @@ async fn plan_lifecycle_and_resplit_preserves_materialized(pool: PgPool) {
     )
     .await
     .unwrap();
-    task_plan::submit_plan_revision(&pool, SYSTEM_TENANT, plan2.plan.id, plan2.revisions[0].id, &fx.ai)
-        .await
-        .unwrap();
+    task_plan::submit_plan_revision(
+        &pool,
+        SYSTEM_TENANT,
+        plan2.plan.id,
+        plan2.revisions[0].id,
+        &fx.ai,
+    )
+    .await
+    .unwrap();
     let ap2 = task_plan::request_plan_approval(&pool, SYSTEM_TENANT, plan2.plan.id, &fx.ai)
         .await
         .unwrap();
@@ -755,13 +811,12 @@ async fn plan_lifecycle_and_resplit_preserves_materialized(pool: PgPool) {
     .unwrap();
     assert_eq!(old.status, "superseded");
     // 已正式化任务仍存在（替代不删任务）。
-    let n: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM delivery.task WHERE plan_revision_id = $1",
-    )
-    .bind(rev1)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let n: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM delivery.task WHERE plan_revision_id = $1")
+            .bind(rev1)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(n, 3);
 }
 
@@ -812,7 +867,10 @@ async fn decomposition_requires_frozen_baseline(pool: PgPool) {
     .await
     .unwrap_err();
     assert!(
-        matches!(err, plan_decomposition::DecomposeError::Pm(PmWriteError::Validation(_))),
+        matches!(
+            err,
+            plan_decomposition::DecomposeError::Pm(PmWriteError::Validation(_))
+        ),
         "无基线必须拒绝"
     );
 

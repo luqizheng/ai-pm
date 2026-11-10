@@ -396,6 +396,27 @@ pub(crate) async fn replace_acceptance_criteria(
     Ok(normalized.len())
 }
 
+/// 需求文档身份解析（ADR-06a：本文件在既有使用方白名单内，文档身份表只此处解析）。
+///
+/// 文档身份规则 `doc_key = "req-{requirement_id}"`（投影唯一绑定点规则，见
+/// `requirement_projection::doc_key`）。文档尚不存在（需求未提交/未投影）
+/// → `None`（调用方跳过绑定，投影后回填）。
+async fn requirement_document_id(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    project_id: Uuid,
+    requirement_id: Uuid,
+) -> Result<Option<Uuid>, PmWriteError> {
+    let document_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM ai.project_document WHERE project_id = $1 AND doc_key = $2",
+    )
+    .bind(project_id)
+    .bind(crate::task_knowledge::requirement_doc_key(requirement_id))
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(PmWriteError::Db)?;
+    Ok(document_id)
+}
+
 /// 全量替换知识引用；文档必须属于同一项目（跨项目一律拒绝）。
 pub(crate) async fn replace_knowledge_refs(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -431,8 +452,8 @@ pub(crate) async fn replace_knowledge_refs(
     for item in &input {
         sqlx::query(
             "INSERT INTO delivery.task_knowledge_ref \
-             (project_id, task_id, document_id, is_required, tenant_id) \
-             VALUES ($1, $2, $3, $4, \
+             (project_id, task_id, document_id, is_required, pinned_revision_no, tenant_id) \
+             VALUES ($1, $2, $3, $4, $5, \
                      (SELECT tenant_id FROM core.project WHERE id = $1)) \
              ON CONFLICT (task_id, document_id) DO NOTHING",
         )
@@ -440,6 +461,7 @@ pub(crate) async fn replace_knowledge_refs(
         .bind(task_id)
         .bind(item.document_id)
         .bind(item.is_required)
+        .bind(item.pinned_revision_no)
         .execute(&mut **tx)
         .await?;
     }
@@ -611,6 +633,23 @@ pub async fn link_task_requirement(
         return Ok(false);
     }
 
+    // S05-02 知识注入（批 3）：任务绑定需求 → 同事务生成该需求的**知识锚点**
+    // （候选，is_required=true、未钉版）。人工可用 `update_task` 的
+    // `knowledge_refs` 全量替换增删/改 required/钉版。
+    // 需求文档尚未投影时此处不绑（投影后由 `requirement_projection` 回填）。
+    //
+    // ADR-06a：文档身份表是冻结的共享容器——本文件已在既有使用方白名单内，
+    // 文档身份的解析只能落在这里（新增文件直接访问会被守卫拒绝）。
+    let anchored = match requirement_document_id(&mut tx, project_id, requirement_id).await? {
+        Some(document_id) => {
+            crate::task_knowledge::bind_document_anchor(&mut tx, project_id, task_id, document_id)
+                .await
+                .map_err(PmWriteError::Db)?;
+            Some(document_id)
+        }
+        None => None,
+    };
+
     append_audit_with_after(
         &mut tx,
         project_id,
@@ -621,6 +660,7 @@ pub async fn link_task_requirement(
         json!({
             "requirement_id": requirement_id,
             "revision_id": revision_id,
+            "knowledge_anchor_document_id": anchored,
         }),
     )
     .await?;

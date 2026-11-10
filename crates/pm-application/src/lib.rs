@@ -72,6 +72,7 @@ pub mod secret;
 pub mod snapshot_analysis;
 pub mod supervision;
 pub mod task_dependency;
+pub mod task_knowledge;
 pub mod task_plan;
 pub mod task_repository_binding;
 pub mod team_llm;

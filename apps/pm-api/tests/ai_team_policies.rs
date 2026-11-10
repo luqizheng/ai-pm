@@ -279,7 +279,10 @@ async fn read_with_all_layers_maps_rows(pool: PgPool) {
     let token = token_for("usr-owner", 62);
     let view = policies_of(&a, &token, project_id).await;
 
-    assert_eq!(view["organization"]["require_human_approval"], true, "{view}");
+    assert_eq!(
+        view["organization"]["require_human_approval"], true,
+        "{view}"
+    );
     assert_eq!(view["project"]["require_human_approval"], false);
     assert_eq!(view["project"]["updated_by"], json!(owner));
     let task_types = view["taskTypes"].as_array().unwrap();
@@ -461,15 +464,16 @@ async fn task_override_upsert_delete_forbidden_and_validation(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
-    let overrides: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM delivery.task_policy_override")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(overrides, 0);
-    assert!(audit_rows(&pool, project_id, "execution_policy.task_override_updated")
+    let overrides: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.task_policy_override")
+        .fetch_one(&pool)
         .await
-        .is_empty());
+        .unwrap();
+    assert_eq!(overrides, 0);
+    assert!(
+        audit_rows(&pool, project_id, "execution_policy.task_override_updated")
+            .await
+            .is_empty()
+    );
 
     // owner upsert：写的字段落值、未写字段 = NULL 继承
     let (status, body) = call(
@@ -505,11 +509,10 @@ async fn task_override_upsert_delete_forbidden_and_validation(pool: PgPool) {
     // DELETE → 恢复全继承 + cleared 审计
     let (status, _) = call(&a, "DELETE", &uri, &owner_token, None).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
-    let overrides: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM delivery.task_policy_override")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let overrides: i64 = sqlx::query_scalar("SELECT count(*) FROM delivery.task_policy_override")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(overrides, 0);
     let cleared = audit_rows(&pool, project_id, "execution_policy.task_override_cleared").await;
     assert_eq!(cleared.len(), 1);
@@ -521,4 +524,3 @@ async fn task_override_upsert_delete_forbidden_and_validation(pool: PgPool) {
     let cleared = audit_rows(&pool, project_id, "execution_policy.task_override_cleared").await;
     assert_eq!(cleared.len(), 1);
 }
-
