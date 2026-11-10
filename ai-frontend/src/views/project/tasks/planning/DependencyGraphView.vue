@@ -1,64 +1,70 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { Minus, Plus, Scan, Sparkles, Waypoints } from "lucide-vue-next";
+import { Minus, Plus, RefreshCw, Scan, Waypoints } from "lucide-vue-next";
 
 import Alert from "@/components/ui/alert/Alert.vue";
 import Button from "@/components/ui/button/Button.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
-import Input from "@/components/ui/input/Input.vue";
-import Select from "@/components/ui/select/Select.vue";
 import { PageFrame } from "@/components/shell";
+import { getDependencyGraph } from "@/api/task-plans";
 import TasksFrame from "../TasksFrame.vue";
 import TaskPriorityChip from "../components/TaskPriorityChip.vue";
 import TaskStatusChip from "../components/TaskStatusChip.vue";
+import { useDesignProject } from "../../design/use-design-project";
 import PlanningViewTabs from "./PlanningViewTabs.vue";
 import {
-  planningEdges,
-  planningGroupsFixture,
-  planningRecsFixture,
-  planningTasks,
-  type ParallelGroupFixture,
-  type PlanningRecFixture,
-  type PlanningTaskFixture
-} from "./fixtures";
+  toGraphView,
+  validateGraph,
+  type GraphIssue,
+  type GraphViewModel
+} from "./dependency-graph-adapter";
 
 /**
- * 执行规划 · 依赖图页根（S04-UI-05，mock 预览）。
+ * 执行规划 · 依赖图页根（S04-UI-05，接真）。
  *
- * 项目级依赖图聚合端点未落地（后端仅有逐任务 upstream/downstream），
- * 本页以 fixtures 演示：分层布局的有向图（节点/依赖边/关键路径/阻塞/
- * 可并行 halo）、节点选择高亮上下游 + 依赖检查器（增删依赖含环路/
- * 重复/自依赖/未知编号校验）、并行执行组（第二视图）、AI 规划建议
- * （并行化采纳后落地为组）。全部改动仅存在于本页会话。
+ * 数据 = pm-api REST（GET /v1/pm/projects/{project_id}/dependency-graph）：
+ * 节点（标题/状态/优先级/排期/仓库）+ FS 依赖边 + **后端算好的**分层、
+ * 关键路径、并行组与环检测。前端只做布局与高亮，不再自行推导拓扑。
+ *
+ * 诚实缺位：依赖关系**只读**（后端没有依赖增删写端点），因此检查器不提供
+ * 增删依赖；「依赖原因 / 并行组前置条件与冲突说明 / AI 规划建议」后端无
+ * 来源，渲染空态，不用演示文案填充。
  */
 const router = useRouter();
 const { t } = useI18n();
+const { projectId, hasProject } = useDesignProject();
 
-type Task = PlanningTaskFixture;
+const graph = ref<GraphViewModel | null>(null);
+const loading = ref(true);
+const loadError = ref(false);
 
-const tasks: Task[] = planningTasks;
-const taskByCode = new Map(tasks.map(task => [task.code, task]));
-const edges = ref(
-  planningEdges.filter(
-    edge => taskByCode.has(edge.from) && taskByCode.has(edge.to)
-  )
-);
-// 未知引用（T-060）保留在原始边里，供依赖校验发现问题
-const rawEdges = ref([...planningEdges]);
-const groups = ref<ParallelGroupFixture[]>(planningGroupsFixture());
-const recs = ref<PlanningRecFixture[]>(planningRecsFixture());
-const recDecisions = ref<Record<string, "accepted" | "rejected">>({});
-
-const savedNotice = ref("");
-const viewMode = ref<"graph" | "groups">("graph");
-
-function taskOf(code: string): Task | undefined {
-  return taskByCode.get(code);
+async function load() {
+  if (!hasProject.value) {
+    graph.value = null;
+    loading.value = false;
+    return;
+  }
+  loading.value = true;
+  loadError.value = false;
+  try {
+    graph.value = toGraphView(await getDependencyGraph(projectId.value));
+  } catch {
+    loadError.value = true;
+    graph.value = null;
+  } finally {
+    loading.value = false;
+  }
 }
 
-// ─── 分层布局（最长路径分层；fixtures 保证无环） ─────────────────────
+onMounted(load);
+watch(projectId, load);
+
+const nodes = computed(() => graph.value?.nodes ?? []);
+const edges = computed(() => graph.value?.edges ?? []);
+
+// ─── 分层布局（层号来自后端 layers） ──────────────────────────────────
 
 const NODE_W = 176;
 const NODE_H = 72;
@@ -66,54 +72,42 @@ const GAP_X = 56;
 const GAP_Y = 28;
 const MARGIN = 24;
 
-function predecessorsOf(code: string): string[] {
-  return edges.value.filter(edge => edge.to === code).map(edge => edge.from);
-}
-
-function levelOf(code: string, seen: Set<string> = new Set()): number {
-  if (seen.has(code)) return 0;
-  seen.add(code);
-  const preds = predecessorsOf(code);
-  if (preds.length === 0) return 0;
-  return Math.max(...preds.map(pred => levelOf(pred, seen))) + 1;
-}
-
 const layout = computed(() => {
-  const levels = new Map<number, Task[]>();
-  for (const task of tasks) {
-    const level = levelOf(task.code);
-    if (!levels.has(level)) levels.set(level, []);
-    levels.get(level)?.push(task);
-  }
   const positions = new Map<string, { x: number; y: number }>();
-  let maxRows = 0;
-  const sortedLevels = [...levels.keys()].sort((a, b) => a - b);
-  sortedLevels.forEach(level => {
-    const column = levels.get(level) ?? [];
-    maxRows = Math.max(maxRows, column.length);
-    column.forEach((task, index) => {
-      positions.set(task.code, {
-        x: MARGIN + level * (NODE_W + GAP_X),
-        y: MARGIN + index * (NODE_H + GAP_Y)
+  const layers = graph.value?.layers ?? [];
+  layers.forEach((layer, index) => {
+    (layer ?? []).forEach((id, row) => {
+      positions.set(id, {
+        x: MARGIN + index * (NODE_W + GAP_X),
+        y: MARGIN + row * (NODE_H + GAP_Y)
       });
     });
   });
-  const width = MARGIN * 2 + sortedLevels.length * (NODE_W + GAP_X) - GAP_X;
+  // 兜底：未出现在 layers 的节点追加到最后一列（不静默丢弃）
+  const orphan = nodes.value.filter(node => !positions.has(node.id));
+  orphan.forEach((node, index) => {
+    positions.set(node.id, {
+      x: MARGIN + layers.length * (NODE_W + GAP_X),
+      y: MARGIN + index * (NODE_H + GAP_Y)
+    });
+  });
+
+  let maxRows = 0;
+  for (const layer of layers) maxRows = Math.max(maxRows, layer.length);
+  maxRows = Math.max(maxRows, orphan.length);
+
+  const width = MARGIN * 2 + (layers.length + 1) * (NODE_W + GAP_X) - GAP_X;
   const height = MARGIN * 2 + maxRows * (NODE_H + GAP_Y) - GAP_Y;
   return { positions, width, height };
 });
 
 const edgePaths = computed(() =>
-  rawEdges.value
+  edges.value
     .filter(edge => layout.value.positions.has(edge.to))
     .map(edge => {
       const to = layout.value.positions.get(edge.to);
       const from = layout.value.positions.get(edge.from);
       if (!to) return null;
-      const critical = Boolean(
-        taskOf(edge.from)?.critical && taskOf(edge.to)?.critical
-      );
-      // 未知引用（from 不存在）：从画布左缘引入，保留视觉痕迹供校验定位
       const d = from
         ? `M ${from.x + NODE_W} ${from.y + NODE_H / 2} H ${(from.x + NODE_W + to.x) / 2} V ${to.y + NODE_H / 2} H ${to.x}`
         : `M 0 ${to.y + NODE_H / 2} H ${to.x}`;
@@ -122,7 +116,7 @@ const edgePaths = computed(() =>
         from: edge.from,
         to: edge.to,
         d,
-        critical,
+        critical: edge.critical,
         missing: !from
       };
     })
@@ -171,10 +165,11 @@ function onPanEnd() {
 
 const selectedCode = ref("");
 
-function descendantsOf(
-  code: string,
-  seen: Set<string> = new Set()
-): Set<string> {
+function nodeOf(id: string) {
+  return nodes.value.find(node => node.id === id) ?? null;
+}
+
+function descendantsOf(code: string, seen = new Set<string>()): Set<string> {
   for (const edge of edges.value.filter(item => item.from === code)) {
     if (!seen.has(edge.to)) {
       seen.add(edge.to);
@@ -184,7 +179,7 @@ function descendantsOf(
   return seen;
 }
 
-function ancestorsOf(code: string, seen: Set<string> = new Set()): Set<string> {
+function ancestorsOf(code: string, seen = new Set<string>()): Set<string> {
   for (const edge of edges.value.filter(item => item.to === code)) {
     if (!seen.has(edge.from)) {
       seen.add(edge.from);
@@ -194,7 +189,7 @@ function ancestorsOf(code: string, seen: Set<string> = new Set()): Set<string> {
   return seen;
 }
 
-const selected = computed(() => taskOf(selectedCode.value) ?? null);
+const selected = computed(() => nodeOf(selectedCode.value));
 const selectedUpstream = computed(() =>
   selectedCode.value
     ? edges.value.filter(edge => edge.to === selectedCode.value)
@@ -207,7 +202,7 @@ const selectedDownstream = computed(() =>
 );
 
 function nodeClass(code: string) {
-  const task = taskOf(code);
+  const node = nodeOf(code);
   const related =
     !selectedCode.value ||
     code === selectedCode.value ||
@@ -216,205 +211,57 @@ function nodeClass(code: string) {
   return {
     "is-selected": selectedCode.value === code,
     "is-dimmed": !related,
-    "is-critical": Boolean(task?.critical),
-    "is-parallel": Boolean(task?.parallel),
-    "is-blocked": task?.status === "blocked"
+    "is-critical": Boolean(node?.critical),
+    "is-parallel": Boolean(node?.parallel),
+    "is-blocked": node?.status === "blocked"
   };
 }
 
-function edgeClass(key: string, from: string, to: string) {
+function edgeClass(from: string, to: string) {
   const related =
     !selectedCode.value ||
     from === selectedCode.value ||
     to === selectedCode.value ||
     ancestorsOf(selectedCode.value).has(from) ||
     descendantsOf(selectedCode.value).has(to);
-  const critical = Boolean(taskOf(from)?.critical && taskOf(to)?.critical);
   return {
     "is-dimmed": !related,
-    "is-critical": critical
+    "is-critical": Boolean(nodeOf(from)?.critical && nodeOf(to)?.critical)
   };
 }
 
-// ─── 依赖增删（自依赖 / 未知 / 重复 / 环路校验） ──────────────────────
-
-const depInput = ref("");
-const depError = ref("");
-
-function wouldCycle(from: string, to: string): boolean {
-  const stack = [to];
-  const seen = new Set<string>();
-  while (stack.length > 0) {
-    const current = stack.pop() as string;
-    if (current === from) return true;
-    if (seen.has(current)) continue;
-    seen.add(current);
-    for (const edge of edges.value.filter(item => item.from === current)) {
-      stack.push(edge.to);
-    }
-  }
-  return false;
+function openTask(id: string) {
+  void router.push(`/project/tasks/${id}`);
 }
 
-function submitDependency() {
-  depError.value = "";
-  if (!selectedCode.value) return;
-  const target = depInput.value.trim();
-  if (!target) return;
-  if (target === selectedCode.value) {
-    depError.value = t("s04.tasks.planning.errSelf");
-    return;
-  }
-  if (!taskByCode.has(target)) {
-    depError.value = t("s04.tasks.planning.errUnknown");
-    return;
-  }
-  if (
-    edges.value.some(
-      edge => edge.from === target && edge.to === selectedCode.value
-    )
-  ) {
-    depError.value = t("s04.tasks.planning.errDuplicate");
-    return;
-  }
-  if (wouldCycle(target, selectedCode.value)) {
-    depError.value = t("s04.tasks.planning.errCycle");
-    return;
-  }
-  edges.value = [...edges.value, { from: target, to: selectedCode.value }];
-  rawEdges.value = [
-    ...rawEdges.value,
-    { from: target, to: selectedCode.value }
-  ];
-  depInput.value = "";
-}
+// ─── 依赖校验（全部由真实读模型推导） ─────────────────────────────────
 
-function removeDependency(from: string) {
-  if (!selectedCode.value) return;
-  edges.value = edges.value.filter(
-    edge => !(edge.from === from && edge.to === selectedCode.value)
-  );
-  rawEdges.value = rawEdges.value.filter(
-    edge => !(edge.from === from && edge.to === selectedCode.value)
-  );
-}
-
-function openTask(code: string) {
-  void router.push(`/project/tasks/${code}`);
-}
-
-// ─── 依赖校验 ──────────────────────────────────────────────────────────
-
-interface ValidationIssue {
-  key: string;
-  text: string;
-  tone: "danger" | "warning";
-}
-
-const validationIssues = ref<ValidationIssue[] | null>(null);
+const validationIssues = ref<GraphIssue[] | null>(null);
 const validatedAt = ref("");
 
 function validate() {
-  const issues: ValidationIssue[] = [];
-  for (const edge of rawEdges.value) {
-    if (!taskByCode.has(edge.from)) {
-      issues.push({
-        key: `ref-${edge.from}-${edge.to}`,
-        text: t("s04.tasks.planning.issueInvalidRef", { code: edge.from }),
-        tone: "danger"
-      });
-    }
-    const source = taskOf(edge.from);
-    if (source?.status === "blocked") {
-      issues.push({
-        key: `blocked-${edge.from}-${edge.to}`,
-        text: t("s04.tasks.planning.issueBlockedUpstream", { code: edge.from }),
-        tone: "warning"
-      });
-    }
-  }
-  const byModule = new Map<string, Task[]>();
-  for (const task of tasks) {
-    if (!byModule.has(task.module)) byModule.set(task.module, []);
-    byModule.get(task.module)?.push(task);
-  }
-  for (const sameModule of byModule.values()) {
-    if (sameModule.length < 2) continue;
-    issues.push({
-      key: `conflict-${sameModule[0].code}-${sameModule[1].code}`,
-      text: t("s04.tasks.planning.issueConflict", {
-        a: sameModule[0].code,
-        b: sameModule[1].code
-      }),
-      tone: "warning"
-    });
-  }
-  validationIssues.value = issues;
+  if (!graph.value) return;
+  validationIssues.value = validateGraph(graph.value, {
+    cycle: codes => t("s04.tasks.planning.issueCycle", { codes }),
+    blockedUpstream: code =>
+      t("s04.tasks.planning.issueBlockedUpstream", { code }),
+    repoConflict: (a, b, repo) =>
+      t("s04.tasks.planning.issueRepoConflict", { a, b, repo })
+  });
   validatedAt.value = new Date().toLocaleTimeString();
 }
 
-// ─── 并行组 ────────────────────────────────────────────────────────────
+// ─── 并行组（后端计算） ────────────────────────────────────────────────
 
-const groupOptions = computed(() =>
-  groups.value.map(group => ({ value: group.id, label: group.name }))
+const groups = computed(() => graph.value?.parallelGroups ?? []);
+const groupedIds = computed(
+  () => new Set(groups.value.flatMap(group => group.taskIds))
+);
+const ungroupedNodes = computed(() =>
+  nodes.value.filter(node => !groupedIds.value.has(node.id))
 );
 
-function moveToGroup(taskCode: string, groupId: string) {
-  groups.value = groups.value.map(group => {
-    const without = group.taskCodes.filter(code => code !== taskCode);
-    if (group.id === groupId) {
-      return { ...group, taskCodes: [...without, taskCode] };
-    }
-    return { ...group, taskCodes: without };
-  });
-}
-
-function unassignedTasks() {
-  const grouped = new Set(groups.value.flatMap(group => group.taskCodes));
-  return tasks.filter(task => !grouped.has(task.code));
-}
-
-// ─── AI 规划建议 ───────────────────────────────────────────────────────
-
-function decideRec(id: string, decision: "accepted" | "rejected") {
-  recDecisions.value = { ...recDecisions.value, [id]: decision };
-  if (decision !== "accepted") return;
-  const rec = recs.value.find(item => item.id === id);
-  if (rec?.newGroup) {
-    groups.value = [
-      ...groups.value,
-      {
-        id: `G-AI-${id}`,
-        name: rec.newGroup.name,
-        taskCodes: [...rec.newGroup.taskCodes],
-        preconditions: rec.newGroup.preconditions,
-        repos: [...rec.newGroup.repos],
-        conflicts: rec.newGroup.conflicts,
-        rationale: rec.newGroup.rationale
-      }
-    ];
-  }
-}
-
-const pendingRecs = computed(() =>
-  recs.value.filter(rec => !recDecisions.value[rec.id])
-);
-
-const decidedRecs = computed(() =>
-  recs.value
-    .filter(rec => recDecisions.value[rec.id])
-    .map(rec => ({
-      id: rec.id,
-      label:
-        recDecisions.value[rec.id] === "accepted"
-          ? t("s04.tasks.planning.aiAccepted")
-          : t("s04.tasks.planning.aiRejected")
-    }))
-);
-
-function savePlan() {
-  savedNotice.value = t("s04.tasks.planning.savedNotice");
-}
+const viewMode = ref<"graph" | "groups">("graph");
 </script>
 
 <template>
@@ -427,431 +274,363 @@ function savePlan() {
       <Button
         variant="secondary"
         size="sm"
-        data-testid="pg-validate"
-        @click="validate"
+        data-testid="pg-refresh"
+        @click="load"
       >
-        {{ t("s04.tasks.planning.validateDeps") }}
+        <RefreshCw :size="14" />
+        {{ t("s04.tasks.common.refresh") }}
       </Button>
       <Button
         variant="primary"
         size="sm"
-        data-testid="pg-save"
-        @click="savePlan"
+        data-testid="pg-validate"
+        :disabled="!graph"
+        @click="validate"
       >
-        {{ t("s04.tasks.planning.savePlan") }}
+        {{ t("s04.tasks.planning.validateDeps") }}
       </Button>
     </template>
 
     <TasksFrame />
     <PlanningViewTabs />
 
-    <Alert variant="info" :title="t('s04.tasks.planning.mockNote')" />
     <Alert
-      v-if="savedNotice"
-      variant="success"
-      :title="savedNotice"
-      data-testid="pg-saved"
+      v-if="loadError"
+      variant="danger"
+      :title="t('s04.tasks.common.errorTitle')"
+    >
+      {{ t("s04.tasks.planning.loadFailed") }}
+    </Alert>
+
+    <EmptyState
+      v-else-if="!hasProject"
+      :title="t('s04.tasks.common.noProjectTitle')"
+      :description="t('s04.tasks.common.noProjectHint')"
     />
 
-    <div class="pg-toolbar">
-      <div class="pg-toolbar__modes" role="tablist">
-        <button
-          type="button"
-          class="pg-mode"
-          :class="{ 'is-active': viewMode === 'graph' }"
-          data-testid="pg-mode-graph"
-          @click="viewMode = 'graph'"
-        >
-          <Waypoints :size="13" />
-          {{ t("s04.tasks.planning.viewGraph") }}
-        </button>
-        <button
-          type="button"
-          class="pg-mode"
-          :class="{ 'is-active': viewMode === 'groups' }"
-          data-testid="pg-mode-groups"
-          @click="viewMode = 'groups'"
-        >
-          {{ t("s04.tasks.planning.viewGroups") }}
-        </button>
-      </div>
-      <div class="pg-toolbar__spacer" />
-      <template v-if="viewMode === 'graph'">
-        <Button
-          variant="ghost"
-          size="sm"
-          :aria-label="t('s04.tasks.planning.zoomOut')"
-          @click="zoomOut"
-        >
-          <Minus :size="13" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          :aria-label="t('s04.tasks.planning.zoomIn')"
-          @click="zoomIn"
-        >
-          <Plus :size="13" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          :aria-label="t('s04.tasks.planning.fit')"
-          @click="fit"
-        >
-          <Scan :size="13" />
-        </Button>
-      </template>
-    </div>
+    <EmptyState
+      v-else-if="!loading && nodes.length === 0"
+      :title="t('s04.tasks.common.empty')"
+      :description="t('s04.tasks.planning.noTasksHint')"
+    />
 
-    <div v-if="viewMode === 'graph'" class="pg-workspace">
-      <section class="pg-canvas-col">
-        <div class="pg-legend">
-          <span class="pg-legend__item"
-            ><i class="pg-dot pg-dot--danger" />{{
-              t("s04.tasks.planning.legendBlocked")
-            }}</span
+    <template v-else>
+      <Alert variant="info" :title="t('s04.tasks.planning.readOnlyNote')" />
+
+      <div class="pg-toolbar">
+        <div class="pg-toolbar__modes" role="tablist">
+          <button
+            type="button"
+            class="pg-mode"
+            :class="{ 'is-active': viewMode === 'graph' }"
+            data-testid="pg-mode-graph"
+            @click="viewMode = 'graph'"
           >
-          <span class="pg-legend__item"
-            ><i class="pg-dot pg-dot--critical" />{{
-              t("s04.tasks.planning.legendCritical")
-            }}</span
+            <Waypoints :size="13" />
+            {{ t("s04.tasks.planning.viewGraph") }}
+          </button>
+          <button
+            type="button"
+            class="pg-mode"
+            :class="{ 'is-active': viewMode === 'groups' }"
+            data-testid="pg-mode-groups"
+            @click="viewMode = 'groups'"
           >
-          <span class="pg-legend__item"
-            ><i class="pg-dot pg-dot--parallel" />{{
-              t("s04.tasks.planning.legendParallel")
-            }}</span
-          >
-          <span class="pg-legend__item"
-            ><i class="pg-dot" />{{
-              t("s04.tasks.planning.legendNormal")
-            }}</span
-          >
+            {{ t("s04.tasks.planning.viewGroups") }}
+          </button>
         </div>
-        <div
-          class="pg-canvas"
-          data-testid="pg-canvas"
-          @pointerdown="onPanStart"
-          @pointermove="onPanMove"
-          @pointerup="onPanEnd"
-          @pointerleave="onPanEnd"
-        >
-          <div
-            class="pg-canvas__layer"
-            :style="{
-              width: `${layout.width}px`,
-              height: `${layout.height}px`,
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`
-            }"
-          >
-            <svg class="pg-edges" :width="layout.width" :height="layout.height">
-              <defs>
-                <marker
-                  id="pg-arrow"
-                  markerWidth="8"
-                  markerHeight="8"
-                  refX="7"
-                  refY="4"
-                  orient="auto"
-                >
-                  <path d="M0,0 L8,4 L0,8 Z" class="pg-edge-arrow" />
-                </marker>
-                <marker
-                  id="pg-arrow-critical"
-                  markerWidth="8"
-                  markerHeight="8"
-                  refX="7"
-                  refY="4"
-                  orient="auto"
-                >
-                  <path d="M0,0 L8,4 L0,8 Z" class="pg-edge-arrow--critical" />
-                </marker>
-              </defs>
-              <path
-                v-for="edge in edgePaths"
-                :key="edge.key"
-                :d="edge.d"
-                class="pg-edge"
-                :class="edgeClass(edge.key, edge.from, edge.to)"
-                :marker-end="
-                  edge.critical ? 'url(#pg-arrow-critical)' : 'url(#pg-arrow)'
-                "
-                fill="none"
-              />
-            </svg>
-            <button
-              v-for="task in tasks"
-              :key="task.code"
-              type="button"
-              class="pg-node"
-              :class="nodeClass(task.code)"
-              :style="{
-                left: `${layout.positions.get(task.code)?.x}px`,
-                top: `${layout.positions.get(task.code)?.y}px`,
-                width: `${NODE_W}px`,
-                height: `${NODE_H}px`
-              }"
-              :data-testid="`pg-node-${task.code}`"
-              :title="task.title"
-              @click="selectedCode = task.code"
-            >
-              <span class="pg-node__code">
-                {{ task.code }}
-                <i v-if="task.critical" class="pg-node__flag">⚑</i>
-              </span>
-              <span class="pg-node__title">{{ task.title }}</span>
-              <span class="pg-node__meta">
-                <TaskPriorityChip :priority="task.priority" />
-                <span class="pg-node__repo">{{ task.repo }}</span>
-              </span>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <aside class="pg-side">
-        <section v-if="selected" class="pg-panel" data-testid="pg-inspector">
-          <h2>{{ t("s04.tasks.planning.inspectorTitle") }}</h2>
-          <p class="pg-panel__task">
-            <span class="pg-node__code">{{ selected.code }}</span>
-            {{ selected.title }}
-            <TaskStatusChip :status="selected.status" />
-          </p>
-          <section class="pg-panel__section">
-            <h3>{{ t("s04.tasks.planning.depReason") }}</h3>
-            <p>{{ selected.reason }}</p>
-          </section>
-          <section class="pg-panel__section">
-            <h3>{{ t("s04.tasks.planning.upstream") }}</h3>
-            <p v-if="selectedUpstream.length === 0" class="pg-panel__empty">
-              {{ t("s04.tasks.backlog.noDependencies") }}
-            </p>
-            <ul>
-              <li
-                v-for="edge in selectedUpstream"
-                :key="`${edge.from}->${edge.to}`"
-              >
-                <button
-                  type="button"
-                  class="pg-panel__link"
-                  @click="selectedCode = edge.from"
-                >
-                  {{ edge.from }}
-                </button>
-                <button
-                  type="button"
-                  class="pg-panel__remove"
-                  :data-testid="`pg-dep-remove-${edge.from}`"
-                  @click="removeDependency(edge.from)"
-                >
-                  {{ t("s04.tasks.planning.removeDep") }}
-                </button>
-              </li>
-            </ul>
-          </section>
-          <section class="pg-panel__section">
-            <h3>{{ t("s04.tasks.planning.downstream") }}</h3>
-            <p v-if="selectedDownstream.length === 0" class="pg-panel__empty">
-              {{ t("s04.tasks.backlog.noDependencies") }}
-            </p>
-            <ul>
-              <li
-                v-for="edge in selectedDownstream"
-                :key="`${edge.from}->${edge.to}`"
-              >
-                <button
-                  type="button"
-                  class="pg-panel__link"
-                  @click="selectedCode = edge.to"
-                >
-                  {{ edge.to }}
-                </button>
-              </li>
-            </ul>
-          </section>
-          <section class="pg-panel__section">
-            <h3>{{ t("s04.tasks.planning.addDep") }}</h3>
-            <div class="pg-panel__add">
-              <Input
-                v-model="depInput"
-                :placeholder="t('s04.tasks.planning.addDepPlaceholder')"
-                data-testid="pg-dep-input"
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                data-testid="pg-dep-add"
-                @click="submitDependency"
-              >
-                {{ t("s04.tasks.planning.addDepBtn") }}
-              </Button>
-            </div>
-            <p
-              v-if="depError"
-              class="pg-panel__error"
-              data-testid="pg-dep-error"
-            >
-              {{ depError }}
-            </p>
-          </section>
-          <Button variant="ghost" size="sm" @click="openTask(selected.code)">
-            {{ t("s04.tasks.planning.viewTask") }}
-          </Button>
-        </section>
-
-        <section class="pg-panel" data-testid="pg-recs">
-          <h2>
-            <Sparkles :size="14" />
-            {{ t("s04.tasks.planning.aiTitle") }}
-          </h2>
-          <ul class="pg-recs">
-            <li
-              v-for="rec in pendingRecs"
-              :key="rec.id"
-              class="pg-rec"
-              :data-testid="`pg-rec-${rec.id}`"
-            >
-              <p class="pg-rec__text">{{ rec.text }}</p>
-              <p class="pg-rec__impact">
-                {{ t("s04.tasks.planning.aiImpact") }}：{{ rec.impact }}
-              </p>
-              <div class="pg-rec__actions">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  @click="decideRec(rec.id, 'accepted')"
-                >
-                  {{ t("s04.tasks.planning.aiAccept") }}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  @click="decideRec(rec.id, 'rejected')"
-                >
-                  {{ t("s04.tasks.planning.aiReject") }}
-                </Button>
-              </div>
-            </li>
-            <li
-              v-for="decided in decidedRecs"
-              :key="`done-${decided.id}`"
-              class="pg-rec pg-rec--decided"
-            >
-              {{ decided.label }} · {{ decided.id }}
-            </li>
-          </ul>
-        </section>
-
-        <section
-          v-if="validationIssues"
-          class="pg-panel"
-          data-testid="pg-validation"
-        >
-          <h2>{{ t("s04.tasks.planning.validationTitle") }}</h2>
-          <p class="pg-panel__empty">
-            {{ t("s04.tasks.planning.validationRanAt", { time: validatedAt }) }}
-          </p>
-          <EmptyState
-            v-if="validationIssues.length === 0"
-            :title="t('s04.tasks.planning.validationClean')"
+        <div class="pg-toolbar__spacer" />
+        <template v-if="viewMode === 'graph'">
+          <Button
+            variant="ghost"
             size="sm"
-          />
-          <ul v-else class="pg-issues">
-            <li
-              v-for="issue in validationIssues"
-              :key="issue.key"
-              class="pg-issue"
-              :class="`pg-issue--${issue.tone}`"
+            :aria-label="t('s04.tasks.planning.zoomOut')"
+            @click="zoomOut"
+          >
+            <Minus :size="13" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            :aria-label="t('s04.tasks.planning.zoomIn')"
+            @click="zoomIn"
+          >
+            <Plus :size="13" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            :aria-label="t('s04.tasks.planning.fit')"
+            @click="fit"
+          >
+            <Scan :size="13" />
+          </Button>
+        </template>
+      </div>
+
+      <div v-if="viewMode === 'graph'" class="pg-workspace">
+        <section class="pg-canvas-col">
+          <div class="pg-legend">
+            <span class="pg-legend__item"
+              ><i class="pg-dot pg-dot--danger" />{{
+                t("s04.tasks.planning.legendBlocked")
+              }}</span
             >
-              {{ issue.text }}
+            <span class="pg-legend__item"
+              ><i class="pg-dot pg-dot--critical" />{{
+                t("s04.tasks.planning.legendCritical")
+              }}</span
+            >
+            <span class="pg-legend__item"
+              ><i class="pg-dot pg-dot--parallel" />{{
+                t("s04.tasks.planning.legendParallel")
+              }}</span
+            >
+            <span class="pg-legend__item"
+              ><i class="pg-dot" />{{
+                t("s04.tasks.planning.legendNormal")
+              }}</span
+            >
+          </div>
+          <div
+            class="pg-canvas"
+            data-testid="pg-canvas"
+            @pointerdown="onPanStart"
+            @pointermove="onPanMove"
+            @pointerup="onPanEnd"
+            @pointerleave="onPanEnd"
+          >
+            <div
+              class="pg-canvas__layer"
+              :style="{
+                width: `${layout.width}px`,
+                height: `${layout.height}px`,
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`
+              }"
+            >
+              <svg
+                class="pg-edges"
+                :width="layout.width"
+                :height="layout.height"
+              >
+                <defs>
+                  <marker
+                    id="pg-arrow"
+                    markerWidth="8"
+                    markerHeight="8"
+                    refX="7"
+                    refY="4"
+                    orient="auto"
+                  >
+                    <path d="M0,0 L8,4 L0,8 Z" class="pg-edge-arrow" />
+                  </marker>
+                  <marker
+                    id="pg-arrow-critical"
+                    markerWidth="8"
+                    markerHeight="8"
+                    refX="7"
+                    refY="4"
+                    orient="auto"
+                  >
+                    <path
+                      d="M0,0 L8,4 L0,8 Z"
+                      class="pg-edge-arrow--critical"
+                    />
+                  </marker>
+                </defs>
+                <path
+                  v-for="edge in edgePaths"
+                  :key="edge.key"
+                  :d="edge.d"
+                  class="pg-edge"
+                  :class="edgeClass(edge.from, edge.to)"
+                  :marker-end="
+                    edge.critical ? 'url(#pg-arrow-critical)' : 'url(#pg-arrow)'
+                  "
+                  fill="none"
+                />
+              </svg>
+              <button
+                v-for="task in nodes"
+                :key="task.id"
+                type="button"
+                class="pg-node"
+                :class="nodeClass(task.id)"
+                :style="{
+                  left: `${layout.positions.get(task.id)?.x}px`,
+                  top: `${layout.positions.get(task.id)?.y}px`,
+                  width: `${NODE_W}px`,
+                  height: `${NODE_H}px`
+                }"
+                :data-testid="`pg-node-${task.code}`"
+                :data-critical="task.critical ? 'true' : 'false'"
+                :data-parallel="task.parallel ? 'true' : 'false'"
+                :title="task.title"
+                @click="selectedCode = task.id"
+              >
+                <span class="pg-node__code">
+                  {{ task.code }}
+                  <i v-if="task.critical" class="pg-node__flag">⚑</i>
+                </span>
+                <span class="pg-node__title">{{ task.title }}</span>
+                <span class="pg-node__meta">
+                  <TaskPriorityChip :priority="task.priority" />
+                  <span class="pg-node__repo">{{ task.repo }}</span>
+                </span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <aside class="pg-side">
+          <section v-if="selected" class="pg-panel" data-testid="pg-inspector">
+            <h2>{{ t("s04.tasks.planning.inspectorTitle") }}</h2>
+            <p class="pg-panel__task">
+              <span class="pg-node__code">{{ selected.code }}</span>
+              {{ selected.title }}
+              <TaskStatusChip :status="selected.status" />
+            </p>
+            <section class="pg-panel__section">
+              <h3>{{ t("s04.tasks.planning.upstream") }}</h3>
+              <p v-if="selectedUpstream.length === 0" class="pg-panel__empty">
+                {{ t("s04.tasks.backlog.noDependencies") }}
+              </p>
+              <ul>
+                <li
+                  v-for="edge in selectedUpstream"
+                  :key="`${edge.from}->${edge.to}`"
+                >
+                  <button
+                    type="button"
+                    class="pg-panel__link"
+                    :data-testid="`pg-upstream-${nodeOf(edge.from)?.code}`"
+                    @click="selectedCode = edge.from"
+                  >
+                    {{ nodeOf(edge.from)?.code }} ·
+                    {{ nodeOf(edge.from)?.title }}
+                  </button>
+                </li>
+              </ul>
+            </section>
+            <section class="pg-panel__section">
+              <h3>{{ t("s04.tasks.planning.downstream") }}</h3>
+              <p v-if="selectedDownstream.length === 0" class="pg-panel__empty">
+                {{ t("s04.tasks.backlog.noDependencies") }}
+              </p>
+              <ul>
+                <li
+                  v-for="edge in selectedDownstream"
+                  :key="`${edge.from}->${edge.to}`"
+                >
+                  <button
+                    type="button"
+                    class="pg-panel__link"
+                    :data-testid="`pg-downstream-${nodeOf(edge.to)?.code}`"
+                    @click="selectedCode = edge.to"
+                  >
+                    {{ nodeOf(edge.to)?.code }} · {{ nodeOf(edge.to)?.title }}
+                  </button>
+                </li>
+              </ul>
+            </section>
+            <Button variant="ghost" size="sm" @click="openTask(selected.id)">
+              {{ t("s04.tasks.planning.viewTask") }}
+            </Button>
+          </section>
+
+          <section class="pg-panel" data-testid="pg-recs">
+            <h2>{{ t("s04.tasks.planning.aiTitle") }}</h2>
+            <EmptyState
+              :title="t('s04.tasks.planning.aiUnavailable')"
+              :description="t('s04.tasks.planning.aiUnavailableHint')"
+              size="sm"
+            />
+          </section>
+
+          <section
+            v-if="validationIssues"
+            class="pg-panel"
+            data-testid="pg-validation"
+          >
+            <h2>{{ t("s04.tasks.planning.validationTitle") }}</h2>
+            <p class="pg-panel__empty">
+              {{
+                t("s04.tasks.planning.validationRanAt", { time: validatedAt })
+              }}
+            </p>
+            <EmptyState
+              v-if="validationIssues.length === 0"
+              :title="t('s04.tasks.planning.validationClean')"
+              size="sm"
+            />
+            <ul v-else class="pg-issues">
+              <li
+                v-for="issue in validationIssues"
+                :key="issue.key"
+                class="pg-issue"
+                :class="`pg-issue--${issue.tone}`"
+              >
+                {{ issue.text }}
+              </li>
+            </ul>
+          </section>
+        </aside>
+      </div>
+
+      <div v-else class="pg-groups" data-testid="pg-groups">
+        <EmptyState
+          v-if="groups.length === 0"
+          :title="t('s04.tasks.planning.groupNone')"
+          size="sm"
+        />
+        <section
+          v-for="group in groups"
+          :key="group.id"
+          class="pg-group"
+          :data-testid="`pg-group-${group.id}`"
+        >
+          <header class="pg-group__head">
+            <h3>
+              {{ t("s04.tasks.planning.groupName", { index: group.index }) }}
+            </h3>
+            <span class="pg-group__count">{{ group.taskIds.length }}</span>
+          </header>
+          <dl class="pg-group__meta">
+            <div>
+              <dt>{{ t("s04.tasks.planning.groupRepos") }}</dt>
+              <dd>
+                <span v-for="repo in group.repos" :key="repo" class="bd-chip">{{
+                  repo
+                }}</span>
+              </dd>
+            </div>
+          </dl>
+          <ul class="pg-group__tasks">
+            <li v-for="code in group.codes" :key="code">
+              <span class="pg-node__code">{{ code }}</span>
+              <span class="pg-group__task-title">{{
+                nodeOf(group.taskIds[group.codes.indexOf(code)] ?? "")?.title
+              }}</span>
             </li>
           </ul>
         </section>
-      </aside>
-    </div>
-
-    <div v-else class="pg-groups" data-testid="pg-groups">
-      <EmptyState
-        v-if="groups.length === 0"
-        :title="t('s04.tasks.planning.groupNone')"
-        size="sm"
-      />
-      <section
-        v-for="group in groups"
-        :key="group.id"
-        class="pg-group"
-        :data-testid="`pg-group-${group.id}`"
-      >
-        <header class="pg-group__head">
-          <h3>{{ group.name }}</h3>
-          <span class="pg-group__count">{{ group.taskCodes.length }}</span>
-        </header>
-        <dl class="pg-group__meta">
-          <div>
-            <dt>{{ t("s04.tasks.planning.groupPreconditions") }}</dt>
-            <dd>{{ group.preconditions }}</dd>
-          </div>
-          <div>
-            <dt>{{ t("s04.tasks.planning.groupRepos") }}</dt>
-            <dd>
-              <span v-for="repo in group.repos" :key="repo" class="bd-chip">{{
-                repo
-              }}</span>
-            </dd>
-          </div>
-          <div>
-            <dt>{{ t("s04.tasks.planning.groupConflicts") }}</dt>
-            <dd>{{ group.conflicts }}</dd>
-          </div>
-          <div>
-            <dt>{{ t("s04.tasks.planning.groupRationale") }}</dt>
-            <dd>{{ group.rationale }}</dd>
-          </div>
-        </dl>
-        <ul class="pg-group__tasks">
-          <li v-for="code in group.taskCodes" :key="code">
-            <span class="pg-node__code">{{ code }}</span>
-            <span class="pg-group__task-title">{{ taskOf(code)?.title }}</span>
-            <label class="pg-group__move">
-              <span class="pg-visually-hidden">{{
-                t("s04.tasks.planning.groupMove")
-              }}</span>
-              <Select
-                :model-value="group.id"
-                :options="groupOptions"
-                :aria-label="t('s04.tasks.planning.groupMove')"
-                :data-testid="`pg-move-${code}`"
-                @update:model-value="value => moveToGroup(code, String(value))"
-              />
-            </label>
-          </li>
-        </ul>
-      </section>
-      <section
-        v-if="unassignedTasks().length > 0"
-        class="pg-group pg-group--unassigned"
-      >
-        <header class="pg-group__head">
-          <h3>{{ t("s04.tasks.common.unassigned") }}</h3>
-        </header>
-        <ul class="pg-group__tasks">
-          <li v-for="task in unassignedTasks()" :key="task.code">
-            <span class="pg-node__code">{{ task.code }}</span>
-            <span class="pg-group__task-title">{{ task.title }}</span>
-            <label class="pg-group__move">
-              <Select
-                :options="groupOptions"
-                :placeholder="t('s04.tasks.planning.groupMove')"
-                :data-testid="`pg-move-${task.code}`"
-                @update:model-value="
-                  value => value && moveToGroup(task.code, String(value))
-                "
-              />
-            </label>
-          </li>
-        </ul>
-      </section>
-    </div>
+        <section
+          v-if="ungroupedNodes.length > 0"
+          class="pg-group pg-group--unassigned"
+          data-testid="pg-group-unassigned"
+        >
+          <header class="pg-group__head">
+            <h3>{{ t("s04.tasks.common.unassigned") }}</h3>
+          </header>
+          <ul class="pg-group__tasks">
+            <li v-for="node in ungroupedNodes" :key="node.id">
+              <span class="pg-node__code">{{ node.code }}</span>
+              <span class="pg-group__task-title">{{ node.title }}</span>
+            </li>
+          </ul>
+        </section>
+      </div>
+    </template>
   </PageFrame>
 </template>
 
@@ -1134,77 +913,13 @@ function savePlan() {
   font-family: var(--font-mono);
   font-size: var(--font-size-caption);
   cursor: pointer;
-}
-
-.pg-panel__remove {
-  border: none;
-  background: none;
-  padding: 0;
-  color: var(--ws-color-danger);
-  font-size: var(--font-size-micro);
-  cursor: pointer;
+  text-align: left;
 }
 
 .pg-panel__empty {
   margin: 0;
   color: var(--ws-text-secondary);
   font-size: var(--font-size-caption);
-}
-
-.pg-panel__add {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.pg-panel__add > :first-child {
-  flex: 1;
-}
-
-.pg-panel__error {
-  margin: 0;
-  color: var(--ws-color-danger);
-  font-size: var(--font-size-caption);
-}
-
-.pg-recs {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.pg-rec {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-3);
-  border: var(--border-1) dashed var(--ws-color-info);
-  border-radius: var(--radius-sm);
-}
-
-.pg-rec--decided {
-  border: none;
-  color: var(--ws-text-secondary);
-  font-size: var(--font-size-caption);
-}
-
-.pg-rec__text {
-  margin: 0;
-  color: var(--ws-text-primary);
-  font-size: var(--font-size-caption);
-}
-
-.pg-rec__impact {
-  margin: 0;
-  color: var(--ws-text-secondary);
-  font-size: var(--font-size-micro);
-}
-
-.pg-rec__actions {
-  display: flex;
-  gap: var(--space-2);
 }
 
 .pg-issues {
@@ -1325,18 +1040,6 @@ function savePlan() {
   flex: 1;
   color: var(--ws-text-primary);
   font-size: var(--font-size-body);
-}
-
-.pg-group__move {
-  min-width: calc(var(--space-24) + var(--space-16));
-}
-
-.pg-visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
 }
 
 @media (max-width: 1100px) {

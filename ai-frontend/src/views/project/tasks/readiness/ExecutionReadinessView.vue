@@ -1,175 +1,110 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { ClipboardCheck, ShieldCheck, Sparkles } from "lucide-vue-next";
+import { ClipboardCheck, ShieldCheck } from "lucide-vue-next";
 
 import Alert from "@/components/ui/alert/Alert.vue";
 import Button from "@/components/ui/button/Button.vue";
-import ConfirmationDialog from "@/components/ui/confirmation-dialog/ConfirmationDialog.vue";
-import Dialog from "@/components/ui/dialog/Dialog.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
-import Input from "@/components/ui/input/Input.vue";
 import { PageFrame } from "@/components/shell";
-import TasksFrame from "../TasksFrame.vue";
-import TaskPriorityChip from "../components/TaskPriorityChip.vue";
 import {
-  readinessChecklistFixture,
-  readinessIssuesFixture,
-  readinessPlan,
-  readinessRecsFixture,
-  readinessTasksFixture,
-  type IssueState,
-  type ReadinessState
-} from "./fixtures";
+  getExecutionReadiness,
+  type ExecutionReadiness
+} from "@/api/task-plans";
+import TasksFrame from "../TasksFrame.vue";
+import TaskStatusChip from "../components/TaskStatusChip.vue";
+import { useDesignProject } from "../../design/use-design-project";
+import {
+  toReadinessView,
+  type ReadinessSectionView,
+  type ReadinessViewModel
+} from "./execution-readiness-adapter";
 
 /**
- * 执行准备页根（S04-UI-07，mock 预览）。
+ * 执行准备页根（S04-UI-07，接真）。
  *
- * 准备度聚合与 S05 移交端点未落地（后端仅 mark-ready 单点闸门），
- * 本页以 fixtures 演示质量门：三类准备度汇总（可点过滤）、A–F 检查表
- * （状态随问题联动）、任务准备度表、问题处置（**解决或留痕豁免**——
- * 豁免必须填理由，仅当条件确实无法满足）、AI 分析、S05 移交（存在
- * 未决问题或审批未完即禁用；确认对话框列明纳入/排除/版本）。
- * 本页不启动 Agent、不执行代码；动作只改本页会话状态。
+ * 数据 = pm-api REST（GET /v1/pm/projects/{project_id}/execution-readiness）：
+ * 后端已按任务跑完 A–F 六段检查并给出三态汇总，前端只做展示聚合
+ * （段级通过率、缺项清单、待处置问题）。
+ *
+ * 诚实缺位：
+ * - **无写端点**——准备度问题没有「解决 / 豁免」命令（后端只有 mark-ready
+ *   单点闸门），因此本页不提供会让人误以为已落库的处置按钮，只提供
+ *   「打开任务」直达处置现场；
+ * - S05 移交走命令端点，前端未接线 → 只呈现就绪事实，不提供移交按钮；
+ * - AI 准备度分析后端无读端点 → 空态。
  */
 const router = useRouter();
 const { t } = useI18n();
+const { projectId, hasProject } = useDesignProject();
 
-const plan = readinessPlan;
-const issues = ref(
-  readinessIssuesFixture().map(issue => ({
-    ...issue,
-    state: "open" as IssueState,
-    waiverReason: ""
-  }))
-);
-const tasks = ref(readinessTasksFixture());
-const recs = ref(readinessRecsFixture());
-const reviewedRecs = ref<Set<string>>(new Set());
-
-const validateRunning = ref(false);
+const payload = ref<ExecutionReadiness | null>(null);
+const loading = ref(true);
+const loadError = ref(false);
 const lastValidation = ref("");
 
-const segment = ref<"all" | ReadinessState>("all");
-const handoffDelivered = ref(false);
-
-const issueStateOf = (id: string): IssueState =>
-  issues.value.find(issue => issue.id === id)?.state ?? "open";
-
-function itemState(item: {
-  baseState: "pass" | "na";
-  issueIds: string[];
-}): "pass" | "na" | "warn" | "block" {
-  const open = item.issueIds.filter(id => issueStateOf(id) === "open");
-  if (open.length === 0) return item.baseState;
-  const anyBlocking = issues.value.some(
-    issue => open.includes(issue.id) && issue.blocking
-  );
-  return anyBlocking ? "block" : "warn";
-}
-
-const checklist = computed(() =>
-  readinessChecklistFixture.map(item => ({ ...item, state: itemState(item) }))
-);
-
-const openIssues = computed(() =>
-  issues.value.filter(issue => issue.state === "open")
-);
-
-const handoffEnabled = computed(
-  () => openIssues.value.length === 0 && !handoffDelivered.value
-);
-
-// ─── 校验 ──────────────────────────────────────────────────────────────
-
-async function validate() {
-  if (validateRunning.value) return;
-  validateRunning.value = true;
-  // 演示校验耗时；真实实现为聚合端点
-  await new Promise(resolve => setTimeout(resolve, 300));
-  lastValidation.value = new Date().toLocaleTimeString();
-  validateRunning.value = false;
-}
-
-// ─── 问题处置 ──────────────────────────────────────────────────────────
-
-const waiveTarget = ref<string>("");
-const waiveReason = ref("");
-const waiveError = ref("");
-
-const waiveOpen = computed(() => waiveTarget.value !== "");
-
-function openWaive(issueId: string) {
-  waiveTarget.value = issueId;
-  waiveReason.value = "";
-  waiveError.value = "";
-}
-
-function confirmWaive() {
-  if (!waiveReason.value.trim()) {
-    waiveError.value = t("s04.tasks.readiness.waivePlaceholder");
+async function load() {
+  if (!hasProject.value) {
+    payload.value = null;
+    loading.value = false;
     return;
   }
-  issues.value = issues.value.map(issue =>
-    issue.id === waiveTarget.value
-      ? { ...issue, state: "waived", waiverReason: waiveReason.value.trim() }
-      : issue
-  );
-  waiveTarget.value = "";
+  loading.value = true;
+  loadError.value = false;
+  try {
+    payload.value = await getExecutionReadiness(projectId.value);
+    lastValidation.value = new Date().toLocaleTimeString();
+  } catch {
+    loadError.value = true;
+    payload.value = null;
+  } finally {
+    loading.value = false;
+  }
 }
 
-function resolveIssue(issueId: string) {
-  // 演示语义：处置动作已在任务详情完成，此处落账
-  issues.value = issues.value.map(issue =>
-    issue.id === issueId ? { ...issue, state: "resolved" } : issue
-  );
-}
+onMounted(load);
+watch(projectId, load);
 
-function openTask(code: string) {
-  void router.push(`/project/tasks/${code}`);
-}
-
-// ─── 表过滤 ────────────────────────────────────────────────────────────
-
-const filteredTasks = computed(() =>
-  segment.value === "all"
-    ? tasks.value
-    : tasks.value.filter(task => task.state === segment.value)
+const model = computed<ReadinessViewModel | null>(() =>
+  payload.value ? toReadinessView(payload.value) : null
 );
 
-function stateLabel(state: ReadinessState): string {
+const segment = ref<"all" | "ready" | "needs_attention" | "blocked">("all");
+
+const filteredTasks = computed(() => {
+  const tasks = model.value?.tasks ?? [];
+  if (segment.value === "all") return tasks;
+  return tasks.filter(task => task.state === segment.value);
+});
+
+function stateLabel(state: string): string {
   if (state === "ready") return t("s04.tasks.readiness.stateReady");
-  if (state === "attention") return t("s04.tasks.readiness.stateAttention");
-  return t("s04.tasks.readiness.stateBlocked");
+  if (state === "blocked") return t("s04.tasks.readiness.stateBlocked");
+  return t("s04.tasks.readiness.stateAttention");
 }
 
-// ─── AI 分析 ───────────────────────────────────────────────────────────
-
-const visibleRecs = computed(() =>
-  recs.value.filter(rec => !reviewedRecs.value.has(rec.id))
-);
-
-function reviewRec(id: string) {
-  reviewedRecs.value = new Set([...reviewedRecs.value, id]);
+function sectionLabel(section: string): string {
+  const key = `s04.tasks.readiness.cat${section
+    .charAt(0)
+    .toUpperCase()}${section.slice(1)}`;
+  const translated = t(key);
+  return translated === key ? section : translated;
 }
 
-// ─── S05 移交 ─────────────────────────────────────────────────────────
+function sectionStateLabel(state: ReadinessSectionView["state"]): string {
+  if (state === "pass") return t("s04.tasks.readiness.statePass");
+  if (state === "block") return t("s04.tasks.readiness.stateBlock");
+  return t("s04.tasks.readiness.stateWarn");
+}
 
-const handoffConfirmOpen = ref(false);
+function severityLabel(severity: string): string {
+  if (severity === "high") return t("s04.tasks.readiness.severityHigh");
+  return t("s04.tasks.readiness.severityMedium");
+}
 
-const handoffDescription = computed(() =>
-  t("s04.tasks.readiness.handoffConfirmDesc", {
-    version: plan.version,
-    included: plan.included,
-    excluded: plan.excluded,
-    issues: openIssues.value.length
-  })
-);
-
-function confirmHandoff() {
-  handoffConfirmOpen.value = false;
-  handoffDelivered.value = true;
+function openTask(taskId: string) {
+  void router.push(`/project/tasks/${taskId}`);
 }
 </script>
 
@@ -183,350 +118,299 @@ function confirmHandoff() {
       <Button
         variant="primary"
         size="sm"
-        :disabled="validateRunning"
+        :disabled="loading"
         data-testid="rd-validate"
-        @click="validate"
+        @click="load"
       >
         <ShieldCheck :size="14" />
-        {{
-          validateRunning
-            ? t("s04.tasks.readiness.validateRunning")
-            : t("s04.tasks.readiness.validate")
-        }}
+        {{ t("s04.tasks.readiness.validate") }}
       </Button>
     </template>
 
     <TasksFrame />
 
-    <Alert variant="info" :title="t('s04.tasks.readiness.mockNote')" />
+    <Alert
+      v-if="loadError"
+      variant="danger"
+      :title="t('s04.tasks.common.errorTitle')"
+    >
+      {{ t("s04.tasks.readiness.loadFailed") }}
+    </Alert>
 
-    <p v-if="lastValidation" class="rd-last" data-testid="rd-last">
-      {{ t("s04.tasks.readiness.lastValidation", { time: lastValidation }) }}
-    </p>
+    <EmptyState
+      v-else-if="!hasProject"
+      :title="t('s04.tasks.common.noProjectTitle')"
+      :description="t('s04.tasks.common.noProjectHint')"
+    />
 
-    <section class="rd-summary">
-      <button
-        v-for="seg in [
-          { key: 'ready', count: plan.ready, tone: 'ready' },
-          { key: 'attention', count: plan.attention, tone: 'warning' },
-          { key: 'blocked', count: plan.blocked, tone: 'danger' }
-        ]"
-        :key="seg.key"
-        type="button"
-        class="rd-segment"
-        :class="{ 'is-active': segment === seg.key }"
-        :data-testid="`rd-seg-${seg.key}`"
-        @click="segment = seg.key"
-      >
-        <span class="rd-segment__count">{{ seg.count }}</span>
-        <span class="rd-segment__label">
-          {{
-            t(
-              `s04.tasks.readiness.state${seg.key.charAt(0).toUpperCase()}${seg.key.slice(1)}`
-            )
-          }}
-          · {{ Math.round((seg.count / (plan.included || 1)) * 100) }}%
-        </span>
-      </button>
-      <button
-        type="button"
-        class="rd-segment"
-        :class="{ 'is-active': segment === 'all' }"
-        data-testid="rd-seg-all"
-        @click="segment = 'all'"
-      >
-        <span class="rd-segment__count">{{ plan.included }}</span>
-        <span class="rd-segment__label">{{ t("s04.tasks.common.all") }}</span>
-      </button>
-    </section>
+    <EmptyState
+      v-else-if="!loading && model && model.tasks.length === 0"
+      :title="t('s04.tasks.common.empty')"
+      :description="t('s04.tasks.readiness.noTasksHint')"
+    />
 
-    <section class="rd-card">
-      <header class="rd-card__head">
-        <h2>
-          <ClipboardCheck :size="14" />
-          {{ t("s04.tasks.readiness.checklistTitle") }}
-        </h2>
-      </header>
-      <div class="rd-checklist">
-        <section
-          v-for="cat in [
-            'catDefinition',
-            'catTrace',
-            'catDependency',
-            'catPreparation',
-            'catAcceptance',
-            'catApproval'
+    <template v-else-if="model">
+      <p v-if="lastValidation" class="rd-last" data-testid="rd-last">
+        {{ t("s04.tasks.readiness.lastValidation", { time: lastValidation }) }}
+      </p>
+
+      <section class="rd-summary">
+        <button
+          v-for="seg in [
+            {
+              key: 'ready',
+              count: model.readyCount,
+              tone: 'ready',
+              label: t('s04.tasks.readiness.stateReady')
+            },
+            {
+              key: 'needs_attention',
+              count: model.attentionCount,
+              tone: 'warning',
+              label: t('s04.tasks.readiness.stateAttention')
+            },
+            {
+              key: 'blocked',
+              count: model.blockedCount,
+              tone: 'danger',
+              label: t('s04.tasks.readiness.stateBlocked')
+            }
           ]"
-          :key="cat"
-          class="rd-cat"
+          :key="seg.key"
+          type="button"
+          class="rd-segment"
+          :class="{ 'is-active': segment === seg.key }"
+          :data-testid="`rd-seg-${seg.key}`"
+          @click="segment = seg.key"
         >
-          <h3>{{ t(`s04.tasks.readiness.${cat}`) }}</h3>
-          <ul>
-            <li
-              v-for="item in checklist.filter(entry => entry.category === cat)"
-              :key="item.key"
-              :data-testid="`rd-item-${item.key}`"
-            >
-              <i class="rd-item-state" :class="`rd-item-state--${item.state}`">
-                {{
-                  item.state === "pass"
-                    ? "✓"
-                    : item.state === "block"
-                      ? "⛔"
-                      : item.state === "warn"
-                        ? "⚠"
-                        : "—"
-                }}
-              </i>
-              <span class="rd-item-text">{{
-                t(`s04.tasks.readiness.${item.key}`)
-              }}</span>
-              <span class="rd-item-state-label">{{
-                t(
-                  `s04.tasks.readiness.state${item.state.charAt(0).toUpperCase()}${item.state.slice(1)}`
-                )
-              }}</span>
-            </li>
-          </ul>
-        </section>
-      </div>
-    </section>
+          <span class="rd-segment__count">{{ seg.count }}</span>
+          <span class="rd-segment__label">
+            {{ seg.label }} ·
+            {{ Math.round((seg.count / (model.totalCount || 1)) * 100) }}%
+          </span>
+        </button>
+        <button
+          type="button"
+          class="rd-segment"
+          :class="{ 'is-active': segment === 'all' }"
+          data-testid="rd-seg-all"
+          @click="segment = 'all'"
+        >
+          <span class="rd-segment__count">{{ model.totalCount }}</span>
+          <span class="rd-segment__label">{{ t("s04.tasks.common.all") }}</span>
+        </button>
+      </section>
 
-    <section class="rd-card">
-      <header class="rd-card__head">
-        <h2>{{ t("s04.tasks.readiness.tableTitle") }}</h2>
-        <span class="rd-card__hint"
-          >{{ filteredTasks.length }} / {{ tasks.length }}</span
-        >
-      </header>
-      <table class="rd-table">
-        <thead>
-          <tr>
-            <th>{{ t("s04.tasks.common.taskLabel") }}</th>
-            <th>{{ t("s04.tasks.common.priorityLabel") }}</th>
-            <th>{{ t("s04.tasks.readiness.colReadiness") }}</th>
-            <th>{{ t("s04.tasks.readiness.colMissing") }}</th>
-            <th>{{ t("s04.tasks.backlog.colMilestone") }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="task in filteredTasks"
-            :key="task.code"
-            :data-testid="`rd-row-${task.code}`"
+      <section class="rd-card">
+        <header class="rd-card__head">
+          <h2>
+            <ClipboardCheck :size="14" />
+            {{ t("s04.tasks.readiness.checklistTitle") }}
+          </h2>
+        </header>
+        <div class="rd-checklist">
+          <section
+            v-for="section in model.sections"
+            :key="section.section"
+            class="rd-cat"
+            :data-testid="`rd-section-${section.section}`"
           >
-            <td>
-              <button
-                type="button"
-                class="rd-row-link"
-                @click="openTask(task.code)"
-              >
-                <span class="rd-row-code">{{ task.code }}</span>
-                {{ task.title }}
-              </button>
-            </td>
-            <td><TaskPriorityChip :priority="task.priority" /></td>
-            <td>
+            <h3>{{ section.section }} · {{ sectionLabel(section.section) }}</h3>
+            <p class="rd-cat__state">
               <span
-                class="rd-row-state"
-                :class="`rd-row-state--${task.state}`"
-                >{{ stateLabel(task.state) }}</span
+                class="rd-item-state"
+                :class="`rd-item-state--${section.state}`"
               >
-            </td>
-            <td>{{ task.missing.join(", ") || "—" }}</td>
-            <td>{{ task.repo ?? "—" }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section class="rd-card" data-testid="rd-issues">
-      <header class="rd-card__head">
-        <h2>{{ t("s04.tasks.readiness.issuesTitle") }}</h2>
-        <span class="rd-card__hint"
-          >{{ openIssues.length }}
-          {{ t("s04.tasks.readiness.issueOpen") }}</span
-        >
-      </header>
-      <EmptyState
-        v-if="issues.length === 0"
-        :title="t('s04.tasks.planning.validationClean')"
-        size="sm"
-      />
-      <ul v-else class="rd-issue-list">
-        <li
-          v-for="issue in issues"
-          :key="issue.id"
-          class="rd-issue"
-          :class="{ 'is-closed': issue.state !== 'open' }"
-          :data-testid="`rd-issue-${issue.id}`"
-          :data-state="issue.state"
-        >
-          <div class="rd-issue__main">
-            <span
-              class="rd-issue__severity"
-              :class="`rd-issue__severity--${issue.severity}`"
-            >
-              {{
-                t(
-                  `s04.tasks.readiness.severity${issue.severity.charAt(0).toUpperCase()}${issue.severity.slice(1)}`
-                )
-              }}
-            </span>
-            <span class="rd-issue__code">{{ issue.code }}</span>
-            <span class="rd-issue__reason">{{ issue.reason }}</span>
-            <span class="rd-issue__state">
-              {{
-                issue.state === "open"
-                  ? t("s04.tasks.readiness.issueOpen")
-                  : issue.state === "resolved"
-                    ? t("s04.tasks.readiness.issueResolved")
-                    : t("s04.tasks.readiness.issueWaived")
-              }}
-              <template v-if="issue.waiverReason"
-                >（{{ issue.waiverReason }}）</template
+                {{
+                  section.state === "pass"
+                    ? "✓"
+                    : section.state === "block"
+                      ? "⛔"
+                      : "⚠"
+                }}
+              </span>
+              <span class="rd-item-state-label">{{
+                sectionStateLabel(section.state)
+              }}</span>
+              <span class="rd-cat__count">
+                {{
+                  t("s04.tasks.readiness.checkSummary", {
+                    passed: section.passed,
+                    total: section.total
+                  })
+                }}
+              </span>
+            </p>
+            <EmptyState
+              v-if="section.failures.length === 0"
+              :title="t('s04.tasks.readiness.sectionClean')"
+              size="sm"
+            />
+            <ul v-else class="rd-cat__failures">
+              <li
+                v-for="failure in section.failures"
+                :key="failure.taskId"
+                :data-testid="`rd-fail-${section.section}-${failure.code}`"
               >
-            </span>
-          </div>
-          <p class="rd-issue__resolution">
-            {{ t("s04.tasks.readiness.resolution") }}：{{ issue.resolution }}
-          </p>
-          <div v-if="issue.state === 'open'" class="rd-issue__actions">
-            <Button variant="secondary" size="sm" @click="openTask(issue.code)">
-              {{ t("s04.tasks.readiness.openTask") }}
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              :data-testid="`rd-resolve-${issue.id}`"
-              @click="resolveIssue(issue.id)"
-            >
-              {{ t("s04.tasks.readiness.markResolved") }}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              :data-testid="`rd-waive-${issue.id}`"
-              @click="openWaive(issue.id)"
-            >
-              {{ t("s04.tasks.readiness.waive") }}
-            </Button>
-          </div>
-        </li>
-      </ul>
-    </section>
+                <button
+                  type="button"
+                  class="rd-row-link"
+                  @click="openTask(failure.taskId)"
+                >
+                  <span class="rd-row-code">{{ failure.code }}</span>
+                  {{ failure.title }}
+                </button>
+                <span class="rd-cat__issues">{{
+                  failure.issues.join("；")
+                }}</span>
+              </li>
+            </ul>
+          </section>
+        </div>
+      </section>
 
-    <section class="rd-card" data-testid="rd-recs">
-      <header class="rd-card__head">
-        <h2>
-          <Sparkles :size="14" />
-          {{ t("s04.tasks.readiness.aiTitle") }}
-        </h2>
-      </header>
-      <EmptyState
-        v-if="visibleRecs.length === 0"
-        :title="t('s04.tasks.overview.insightsEmpty')"
-        size="sm"
-      />
-      <ul v-else class="rd-recs">
-        <li
-          v-for="rec in visibleRecs"
-          :key="rec.id"
-          :data-testid="`rd-rec-${rec.id}`"
-        >
-          <p>{{ rec.text }}</p>
-          <Button variant="secondary" size="sm" @click="reviewRec(rec.id)">
-            {{ t("s04.tasks.overview.attentionGo") }}
-          </Button>
-        </li>
-      </ul>
-    </section>
+      <section class="rd-card">
+        <header class="rd-card__head">
+          <h2>{{ t("s04.tasks.readiness.tableTitle") }}</h2>
+          <span class="rd-card__hint"
+            >{{ filteredTasks.length }} / {{ model.tasks.length }}</span
+          >
+        </header>
+        <table class="rd-table">
+          <thead>
+            <tr>
+              <th>{{ t("s04.tasks.common.taskLabel") }}</th>
+              <th>{{ t("s04.tasks.common.statusLabel") }}</th>
+              <th>{{ t("s04.tasks.readiness.colReadiness") }}</th>
+              <th>{{ t("s04.tasks.readiness.colMissing") }}</th>
+              <th>{{ t("s04.tasks.readiness.colChecks") }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="task in filteredTasks"
+              :key="task.taskId"
+              :data-testid="`rd-row-${task.code}`"
+            >
+              <td>
+                <button
+                  type="button"
+                  class="rd-row-link"
+                  @click="openTask(task.taskId)"
+                >
+                  <span class="rd-row-code">{{ task.code }}</span>
+                  {{ task.title }}
+                </button>
+              </td>
+              <td><TaskStatusChip :status="task.status" /></td>
+              <td>
+                <span
+                  class="rd-row-state"
+                  :class="`rd-row-state--${task.state}`"
+                  >{{ stateLabel(task.state) }}</span
+                >
+              </td>
+              <td>{{ task.missing.join(", ") || "—" }}</td>
+              <td>
+                {{
+                  t("s04.tasks.readiness.checkSummary", {
+                    passed: task.passedChecks,
+                    total: task.totalChecks
+                  })
+                }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
 
-    <section class="rd-card rd-handoff" data-testid="rd-handoff">
-      <header class="rd-card__head">
-        <h2>{{ t("s04.tasks.readiness.handoffTitle") }}</h2>
-        <span class="rd-card__hint">{{
-          t("s04.tasks.readiness.handoffVersion", { version: plan.version })
-        }}</span>
-      </header>
-      <Alert
-        v-if="handoffDelivered"
-        variant="success"
-        :title="t('s04.tasks.readiness.handoffDone', { version: plan.version })"
-        data-testid="rd-handoff-done"
-      >
-        {{ t("s04.tasks.readiness.handoffDoneDesc") }}
-      </Alert>
-      <template v-else>
+      <section class="rd-card" data-testid="rd-issues">
+        <header class="rd-card__head">
+          <h2>{{ t("s04.tasks.readiness.issuesTitle") }}</h2>
+          <span class="rd-card__hint"
+            >{{ model.issues.length }}
+            {{ t("s04.tasks.readiness.issueOpen") }}</span
+          >
+        </header>
+        <EmptyState
+          v-if="model.issues.length === 0"
+          :title="t('s04.tasks.planning.validationClean')"
+          size="sm"
+        />
+        <ul v-else class="rd-issue-list">
+          <li
+            v-for="issue in model.issues"
+            :key="issue.id"
+            class="rd-issue"
+            :data-testid="`rd-issue-${issue.code}-${issue.key}`"
+          >
+            <div class="rd-issue__main">
+              <span
+                class="rd-issue__severity"
+                :class="`rd-issue__severity--${issue.severity}`"
+              >
+                {{ severityLabel(issue.severity) }}
+              </span>
+              <span class="rd-issue__code">{{ issue.code }}</span>
+              <span class="rd-issue__reason">{{ issue.reason }}</span>
+            </div>
+            <div class="rd-issue__actions">
+              <Button
+                variant="secondary"
+                size="sm"
+                @click="openTask(issue.taskId)"
+              >
+                {{ t("s04.tasks.readiness.openTask") }}
+              </Button>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section class="rd-card" data-testid="rd-recs">
+        <header class="rd-card__head">
+          <h2>{{ t("s04.tasks.readiness.aiTitle") }}</h2>
+        </header>
+        <EmptyState
+          :title="t('s04.tasks.readiness.aiUnavailable')"
+          :description="t('s04.tasks.readiness.aiUnavailableHint')"
+          size="sm"
+        />
+      </section>
+
+      <section class="rd-card rd-handoff" data-testid="rd-handoff">
+        <header class="rd-card__head">
+          <h2>{{ t("s04.tasks.readiness.handoffTitle") }}</h2>
+        </header>
         <div class="rd-handoff__facts">
           <span>{{
-            t("s04.tasks.readiness.handoffIncluded", { count: plan.included })
+            t("s04.tasks.readiness.handoffIncluded", {
+              count: model.totalCount
+            })
           }}</span>
           <span>{{
-            t("s04.tasks.readiness.handoffExcluded", { count: plan.excluded })
+            t("s04.tasks.readiness.handoffExcluded", {
+              count: model.attentionCount + model.blockedCount
+            })
           }}</span>
           <span>{{
-            t("s04.tasks.readiness.handoffIssues", { count: openIssues.length })
+            t("s04.tasks.readiness.handoffIssues", {
+              count: model.issues.length
+            })
           }}</span>
         </div>
         <p
-          v-if="!handoffEnabled"
+          v-if="model.status !== 'ready'"
           class="rd-handoff__hint"
           data-testid="rd-handoff-blocked"
         >
           {{ t("s04.tasks.readiness.handoffBlockedHint") }}
         </p>
-        <Button
-          variant="primary"
-          size="sm"
-          :disabled="!handoffEnabled"
-          data-testid="rd-handoff-btn"
-          @click="handoffConfirmOpen = true"
-        >
-          {{ t("s04.tasks.readiness.handoffAction") }}
-        </Button>
-      </template>
-    </section>
-
-    <Dialog
-      :open="waiveOpen"
-      :title="t('s04.tasks.readiness.waiveTitle')"
-      size="md"
-      @update:open="waiveTarget = ''"
-    >
-      <div class="rd-waive">
-        <p>{{ t("s04.tasks.readiness.waiveDesc", { code: waiveTarget }) }}</p>
-        <Input
-          v-model="waiveReason"
-          :placeholder="t('s04.tasks.readiness.waivePlaceholder')"
-          data-testid="rd-waive-reason"
-        />
-        <p v-if="waiveError" class="rd-waive__error">{{ waiveError }}</p>
-      </div>
-      <template #footer>
-        <Button variant="ghost" size="sm" @click="waiveTarget = ''">
-          {{ t("s04.tasks.common.cancel") }}
-        </Button>
-        <Button
-          variant="primary"
-          size="sm"
-          data-testid="rd-waive-confirm"
-          @click="confirmWaive"
-        >
-          {{ t("s04.tasks.readiness.waiveConfirm") }}
-        </Button>
-      </template>
-    </Dialog>
-
-    <ConfirmationDialog
-      :open="handoffConfirmOpen"
-      :title="t('s04.tasks.readiness.handoffConfirmTitle')"
-      :description="handoffDescription"
-      :confirm-label="t('s04.tasks.readiness.handoffConfirmBtn')"
-      :cancel-label="t('s04.tasks.common.cancel')"
-      @confirm="confirmHandoff"
-      @cancel="handoffConfirmOpen = false"
-    />
+        <p class="rd-handoff__hint" data-testid="rd-handoff-unavailable">
+          {{ t("s04.tasks.readiness.handoffUnavailable") }}
+        </p>
+      </section>
+    </template>
   </PageFrame>
 </template>
 
@@ -612,19 +496,37 @@ function confirmHandoff() {
   font-weight: var(--weight-semibold);
 }
 
-.rd-cat ul {
+.rd-cat__state {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+}
+
+.rd-cat__count {
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.rd-cat__failures {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.rd-cat li {
+.rd-cat__failures li {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.rd-cat__issues {
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-micro);
 }
 
 .rd-item-state {
@@ -656,12 +558,6 @@ function confirmHandoff() {
 .rd-item-state--na {
   border: var(--border-1) solid var(--ws-border);
   color: var(--ws-text-disabled);
-}
-
-.rd-item-text {
-  flex: 1;
-  color: var(--ws-text-primary);
-  font-size: var(--font-size-caption);
 }
 
 .rd-item-state-label {
@@ -700,6 +596,7 @@ function confirmHandoff() {
   color: var(--ws-text-primary);
   font-size: var(--font-size-body);
   cursor: pointer;
+  text-align: left;
 }
 
 .rd-row-link:hover {
@@ -720,7 +617,7 @@ function confirmHandoff() {
   color: var(--ws-color-status-ready);
 }
 
-.rd-row-state--attention {
+.rd-row-state--needs_attention {
   color: var(--ws-color-warning);
 }
 
@@ -744,10 +641,6 @@ function confirmHandoff() {
   padding: var(--space-3);
   border: var(--border-1) solid var(--ws-border);
   border-radius: var(--radius-sm);
-}
-
-.rd-issue.is-closed {
-  opacity: 0.65;
 }
 
 .rd-issue__main {
@@ -777,11 +670,6 @@ function confirmHandoff() {
   color: var(--ws-color-warning);
 }
 
-.rd-issue__severity--low {
-  border-color: var(--ws-border);
-  color: var(--ws-text-secondary);
-}
-
 .rd-issue__code {
   color: var(--ws-text-secondary);
   font-family: var(--font-mono);
@@ -794,46 +682,9 @@ function confirmHandoff() {
   font-size: var(--font-size-body);
 }
 
-.rd-issue__state {
-  color: var(--ws-text-secondary);
-  font-size: var(--font-size-caption);
-}
-
-.rd-issue__resolution {
-  margin: 0;
-  color: var(--ws-text-secondary);
-  font-size: var(--font-size-caption);
-}
-
 .rd-issue__actions {
   display: flex;
   gap: var(--space-2);
-}
-
-.rd-recs {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.rd-recs li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border: var(--border-1) dashed var(--ws-color-info);
-  border-radius: var(--radius-sm);
-}
-
-.rd-recs p {
-  flex: 1;
-  margin: 0;
-  color: var(--ws-text-primary);
-  font-size: var(--font-size-caption);
 }
 
 .rd-handoff__facts {
@@ -852,24 +703,6 @@ function confirmHandoff() {
 .rd-handoff__hint {
   margin: 0 0 var(--space-3);
   color: var(--ws-color-warning);
-  font-size: var(--font-size-caption);
-}
-
-.rd-waive {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.rd-waive p {
-  margin: 0;
-  color: var(--ws-text-primary);
-  font-size: var(--font-size-body);
-}
-
-.rd-waive__error {
-  margin: 0;
-  color: var(--ws-color-danger);
   font-size: var(--font-size-caption);
 }
 

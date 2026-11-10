@@ -1,17 +1,122 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 
 import TaskDetailView from "./TaskDetailView.vue";
 import { mountShell } from "@/components/shell/test-utils";
 import { buildRoutes } from "@/router";
+import type { TaskDetailView as TaskDetailModel } from "@/api/task-plans";
 
 /**
- * 任务详情（S04-UI-03，mock 预览页）信息模型测试：
- * 七区块齐全、审批状态本地切换、AI 建议采纳/忽略。页面不回写后端
- * （无 GET 读端点），这是 mock 阶段的诚实边界。
+ * 任务详情（S04-UI-03，接真）行为测试：
+ * 依据追溯 / 依赖方向 / 验收标准 / 审计历史全部来自
+ * GET /v1/pm/tasks/{task_id} 的真实读模型——**不得用演示文案填充**。
  */
+
+const getTaskDetail = vi.fn();
+
+vi.mock("@/api/task-plans", () => ({
+  getTaskDetail: (...args: unknown[]) => getTaskDetail(...args)
+}));
+
+function detail(): TaskDetailModel {
+  return {
+    task: {
+      id: "11111111-1111-1111-1111-111111111111",
+      project_id: "proj-1",
+      title: "实现登录端点",
+      description: "登录端点、凭据校验、令牌签发。",
+      status: "draft",
+      priority: "high",
+      assignee_id: null,
+      revision: 1,
+      goal: "在 core-api 提供 POST /v1/auth/login 端点。",
+      constraints: { security: "不得记录明文凭据" },
+      deliverables: ["代码变更（core-api）", "单元测试"],
+      git_branch: null,
+      planned_start_at: null,
+      planned_end_at: null,
+      estimate_hours: null,
+      implementation_baseline_id: "ib-1",
+      plan_revision_id: null,
+      created_at: "2026-11-10T08:00:00Z",
+      updated_at: "2026-11-10T09:00:00Z"
+    },
+    traces: [
+      {
+        kind: "requirement",
+        target_id: "req-1",
+        code: "REQ-001",
+        title: "用户登录",
+        version: "3",
+        state: "approved"
+      },
+      {
+        kind: "adr",
+        target_id: "adr-1",
+        code: "ADR-001",
+        title: "会话安全",
+        version: null,
+        state: "accepted"
+      }
+    ],
+    dependencies: [
+      {
+        id: "22222222-2222-2222-2222-222222222222",
+        title: "定义认证请求模型",
+        status: "completed",
+        priority: "normal",
+        direction: "upstream"
+      },
+      {
+        id: "33333333-3333-3333-3333-333333333333",
+        title: "补充认证测试",
+        status: "draft",
+        priority: "normal",
+        direction: "downstream"
+      }
+    ],
+    repositories: [
+      {
+        repository_id: "repo-1",
+        repository_name: "core-api",
+        base_ref: "main",
+        base_commit: "abc123",
+        write_access: true,
+        path_scope: ["services/auth"],
+        role: "primary",
+        repository_verified: true
+      }
+    ],
+    criteria: [
+      {
+        id: "44444444-4444-4444-4444-444444444444",
+        ordinal: 1,
+        text: "给定有效凭据，登录返回 200 与访问令牌",
+        verification_kind: "automated_test"
+      }
+    ],
+    approvals: [],
+    history: [
+      {
+        id: "h1",
+        actor_id: "p-1",
+        actor_name: "张三",
+        action: "task.created",
+        created_at: "2026-11-10T08:00:00Z"
+      }
+    ],
+    baseline: {
+      id: "ib-1",
+      code: "IB-001",
+      status: "frozen",
+      content: {
+        scope: { included: ["auth"], excluded: ["OAuth"], modules: ["auth"] }
+      }
+    }
+  };
+}
 
 async function mountView() {
   const router = createRouter({
@@ -29,66 +134,55 @@ async function mountView() {
   return { wrapper, router };
 }
 
+beforeEach(() => {
+  getTaskDetail.mockReset();
+  getTaskDetail.mockResolvedValue(detail());
+});
+
 describe("TaskDetailView", () => {
-  it("渲染七区块完整信息模型与来源追溯", async () => {
+  it("读真实单任务端点并渲染七区块", async () => {
     const { wrapper } = await mountView();
 
-    expect(wrapper.find('[data-testid="dt-section-objective"]').exists()).toBe(
-      true
+    expect(getTaskDetail).toHaveBeenCalledWith(
+      "11111111-1111-1111-1111-111111111111"
     );
-    expect(wrapper.find('[data-testid="dt-section-trace"]').exists()).toBe(
-      true
-    );
-    expect(wrapper.find('[data-testid="dt-section-deps"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="dt-section-spec"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="dt-section-criteria"]').exists()).toBe(
-      true
-    );
-    expect(wrapper.find('[data-testid="dt-section-delivery"]').exists()).toBe(
-      true
-    );
-    expect(wrapper.find('[data-testid="dt-section-history"]').exists()).toBe(
-      true
-    );
-    expect(wrapper.text()).toContain("REQ-201");
-    expect(wrapper.text()).toContain("ADR-007");
+    for (const section of [
+      "dt-section-objective",
+      "dt-section-trace",
+      "dt-section-deps",
+      "dt-section-spec",
+      "dt-section-criteria",
+      "dt-section-delivery",
+      "dt-section-history"
+    ]) {
+      expect(wrapper.find(`[data-testid="${section}"]`).exists()).toBe(true);
+    }
+    expect(wrapper.text()).toContain("实现登录端点");
+    expect(wrapper.text()).toContain("REQ-001");
+    expect(wrapper.text()).toContain("ADR-001");
   });
 
-  it("批准动作切换审批状态徽标（本地演示态）", async () => {
+  it("依赖方向区分前置与后继；验收标准与交付来自真实字段", async () => {
     const { wrapper } = await mountView();
 
+    const deps = wrapper.find('[data-testid="dt-section-deps"]').text();
+    expect(deps).toContain("定义认证请求模型");
+    expect(deps).toContain("补充认证测试");
     expect(
-      wrapper
-        .find('[data-testid="dt-chips"] [data-approval]')
-        .attributes("data-approval")
-    ).toBe("none");
-
-    await wrapper.find('[data-testid="dt-approve"]').trigger("click");
-
+      wrapper.find('[data-testid="dt-section-criteria"]').text()
+    ).toContain("登录返回 200");
     expect(
-      wrapper
-        .find('[data-testid="dt-chips"] [data-approval]')
-        .attributes("data-approval")
-    ).toBe("human_confirmed");
+      wrapper.find('[data-testid="dt-section-delivery"]').text()
+    ).toContain("代码变更（core-api）");
+    expect(wrapper.find('[data-testid="dt-section-spec"]').text()).toContain(
+      "core-api"
+    );
   });
 
-  it("AI 建议支持采纳与忽略，采纳后计数可见", async () => {
+  it("读端点失败时给错误态而非空壳", async () => {
+    getTaskDetail.mockRejectedValue(new Error("boom"));
     const { wrapper } = await mountView();
 
-    expect(wrapper.find('[data-testid="dt-suggestion-s1"]').exists()).toBe(
-      true
-    );
-
-    await wrapper
-      .find('[data-testid="dt-suggestion-s1"] button')
-      .trigger("click");
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="dt-applied-count"]').exists()).toBe(
-      true
-    );
-    expect(wrapper.find('[data-testid="dt-suggestion-s1"]').exists()).toBe(
-      false
-    );
+    expect(wrapper.text()).toContain("加载失败");
   });
 });

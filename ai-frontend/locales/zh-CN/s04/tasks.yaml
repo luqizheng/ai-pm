@@ -44,6 +44,8 @@ tasks:
     updatedLabel: 更新时间
     taskLabel: 任务
     optional: 可选
+    noProjectTitle: 请先选择项目
+    noProjectHint: 任务计划与执行规划按项目聚合；请在顶栏切换到目标项目。
   status:
     draft: 草稿
     ready: 待执行
@@ -173,6 +175,19 @@ tasks:
     approvalState: 审批状态
     approvalHuman: 人工已确认（mark-ready）
     approvalNone: 未执行人工确认
+    approvalPending: 待人工裁决
+    loading: 正在加载任务详情…
+    loadErrorTitle: 加载失败
+    loadErrorHint: 任务详情读取失败，请稍后重试。
+    notFoundTitle: 任务不存在
+    notFoundHint: 该任务已被删除或你无权查看。
+    noTraces: 尚未关联任何需求、设计或实施基线。
+    noDependencies: 尚未登记依赖关系。
+    noCriteria: 尚未登记验收标准。
+    noDeliverables: 尚未登记交付要求。
+    noHistory: 暂无审计历史。
+    aiSuggestionsUnavailable: 暂无 AI 建议
+    aiSuggestionsHint: 任务建议读端点尚未落地，本区不展示演示内容。
     sectionObjective: 目标与范围
     sectionTrace: 来源追溯
     sectionDeps: 依赖关系

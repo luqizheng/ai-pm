@@ -6,12 +6,66 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import TimelineView from "./TimelineView.vue";
 import { mountShell } from "@/components/shell/test-utils";
 import { buildRoutes } from "@/router";
+import { useShellStore } from "@/stores/shell";
+import type { DependencyGraph } from "@/api/task-plans";
 
 /**
- * 执行规划 · 时间线（S04-UI-06，mock 预览页）交互模型测试：
- * 双栏甘特渲染（任务条/里程碑/未排期托盘）、比例尺切换、拖拽移动
- * （下游顺延预览 + 确认）、排期校验、AI 排期建议采纳、版本保存。
+ * 时间线（S04-UI-06，接真）行为测试：
+ * 任务条几何来自 delivery.task 的**生效排期**（planned_start_at /
+ * planned_end_at / estimate_hours）；**未排期任务必须进未排期托盘**，
+ * 不得静默丢弃。
  */
+
+const getDependencyGraph = vi.fn();
+
+vi.mock("@/api/task-plans", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/api/task-plans")>(
+      "@/api/task-plans"
+    );
+  return {
+    ...actual,
+    getDependencyGraph: (...args: unknown[]) => getDependencyGraph(...args)
+  };
+});
+
+function graph(overrides: Partial<DependencyGraph> = {}): DependencyGraph {
+  return {
+    nodes: [
+      {
+        id: "aaaaaaaa-1111-1111-1111-111111111111",
+        title: "已排期任务",
+        status: "draft",
+        priority: "normal",
+        planned_start_at: "2026-11-20T09:00:00Z",
+        planned_end_at: "2026-11-22T18:00:00Z",
+        estimate_hours: 16,
+        repository_name: "core-api"
+      },
+      {
+        id: "bbbbbbbb-2222-2222-2222-222222222222",
+        title: "未排期任务",
+        status: "draft",
+        priority: "low",
+        planned_start_at: null,
+        planned_end_at: null,
+        estimate_hours: null,
+        repository_name: null
+      }
+    ],
+    edges: [],
+    layers: [
+      [
+        "aaaaaaaa-1111-1111-1111-111111111111",
+        "bbbbbbbb-2222-2222-2222-222222222222"
+      ]
+    ],
+    critical_path: [],
+    parallel_groups: [],
+    cycles: [],
+    ...overrides
+  };
+}
 
 async function mountView() {
   const router = createRouter({
@@ -20,104 +74,40 @@ async function mountView() {
   });
   await router.push("/project/tasks/planning/timeline");
   await router.isReady();
-  const wrapper = mountShell(
+  const { wrapper } = mountShell(
     TimelineView,
     { attachTo: document.body },
     router
-  ).wrapper;
+  );
+  const shell = useShellStore();
+  shell.setProjects([{ id: "proj-1", name: "评测项目" }]);
+  shell.setCurrentProject("proj-1");
   await flushPromises();
   return { wrapper, router };
 }
 
-function bodyButton(label: string): HTMLButtonElement | null {
-  const buttons = Array.from(document.body.querySelectorAll("button"));
-  return buttons.find(node => node.textContent?.trim() === label) ?? null;
-}
-
 beforeEach(() => {
-  vi.useFakeTimers();
+  getDependencyGraph.mockReset();
+  getDependencyGraph.mockResolvedValue(graph());
 });
 
 describe("TimelineView", () => {
-  it("渲染任务条/里程碑/未排期托盘", async () => {
+  it("已排期任务出任务条，未排期任务进托盘", async () => {
     const { wrapper } = await mountView();
 
-    const bar = wrapper.find('[data-testid="tl-bar-T-001"]');
-    expect(bar.exists()).toBe(true);
-    expect(bar.attributes("data-start")).toBe("2026-11-16");
-    expect(wrapper.find('[data-testid="tl-tray-T-010"]').exists()).toBe(true);
-    expect(wrapper.text()).toContain("认证基础完成");
+    expect(getDependencyGraph).toHaveBeenCalledWith("proj-1");
+    expect(wrapper.find('[data-testid="tl-board"]').exists()).toBe(true);
+    const tray = wrapper.find('[data-testid="tl-tray"]');
+    expect(tray.exists()).toBe(true);
+    expect(tray.text()).toContain("未排期任务");
   });
 
-  it("比例尺切换改变任务条几何（周 → 月）", async () => {
-    const { wrapper } = await mountView();
-
-    const before = wrapper
-      .find('[data-testid="tl-bar-T-002"]')
-      .attributes("style");
-    await wrapper.find('[data-testid="tl-scale-month"]').trigger("click");
-    await flushPromises();
-    const after = wrapper
-      .find('[data-testid="tl-bar-T-002"]')
-      .attributes("style");
-
-    expect(before).toContain("54px");
-    expect(after).toContain("18px");
-  });
-
-  it("拖拽移动任务条 → 下游顺延确认 → 排期生效", async () => {
-    const { wrapper } = await mountView();
-    const bar = wrapper.find('[data-testid="tl-bar-T-001"]');
-
-    // 周比例尺 18px/天：+36px = 后移 2 天；下游 T-002/T-005/T-009 等随之顺延
-    await bar.trigger("pointerdown", { clientX: 100, pointerId: 1 });
-    await bar.trigger("pointermove", { clientX: 136, pointerId: 1 });
-    await bar.trigger("pointerup", { pointerId: 1 });
-    await flushPromises();
-
-    const confirmButton = bodyButton("保存排期");
-    expect(confirmButton).not.toBeNull();
-    await confirmButton?.click();
-    await flushPromises();
-
-    expect(
-      wrapper.find('[data-testid="tl-bar-T-001"]').attributes("data-start")
-    ).toBe("2026-11-18");
-    // 下游 T-002 同步顺延：11-19 → 11-21
-    expect(
-      wrapper.find('[data-testid="tl-bar-T-002"]').attributes("data-start")
-    ).toBe("2026-11-21");
-  });
-
-  it("排期校验报告未排期任务", async () => {
+  it("排期校验报出未排期任务", async () => {
     const { wrapper } = await mountView();
 
     await wrapper.find('[data-testid="tl-validate"]').trigger("click");
     await flushPromises();
 
-    const panel = wrapper.find('[data-testid="tl-validation"]');
-    expect(panel.exists()).toBe(true);
-    expect(panel.text()).toContain("3");
-  });
-
-  it("采纳 AI 排期建议走确认并移动任务条；保存版本出通知", async () => {
-    const { wrapper } = await mountView();
-
-    await wrapper
-      .find('[data-testid="tl-rec-TL-1"] [type="button"]')
-      .trigger("click");
-    await flushPromises();
-    await bodyButton("保存排期")?.click();
-    await flushPromises();
-
-    expect(
-      wrapper.find('[data-testid="tl-bar-T-006"]').attributes("data-start")
-    ).toBe("2026-11-25");
-
-    await wrapper.find('[data-testid="tl-save"]').trigger("click");
-    await flushPromises();
-    expect(wrapper.find('[data-testid="tl-notice"]').exists()).toBe(true);
-    // reka Select 不透传 attrs，比较入口以占位文案断言
-    expect(wrapper.text()).toContain("比较版本");
+    expect(wrapper.find('[data-testid="tl-validation"]').exists()).toBe(true);
   });
 });

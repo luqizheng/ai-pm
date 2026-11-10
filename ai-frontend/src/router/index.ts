@@ -190,68 +190,41 @@ export function buildRoutes(): RouteRecordRaw[] {
       redirect: "/project/tasks/planning/graph",
       meta: { title: "s04.tasks.page.planningTitle" }
     },
-    mockPreview
-      ? {
-          path: "/project/tasks/breakdown",
-          component: () =>
-            import("@/views/project/tasks/breakdown/TaskBreakdownView.vue"),
-          meta: { title: "s04.tasks.page.breakdownTitle" }
-        }
-      : {
-          path: "/project/tasks/breakdown",
-          component: PlaceholderView,
-          meta: { title: "s04.tasks.page.breakdownTitle" }
-        },
-    mockPreview
-      ? {
-          path: "/project/tasks/planning/graph",
-          component: () =>
-            import("@/views/project/tasks/planning/DependencyGraphView.vue"),
-          meta: { title: "s04.tasks.page.planningTitle" }
-        }
-      : {
-          path: "/project/tasks/planning/graph",
-          component: PlaceholderView,
-          meta: { title: "s04.tasks.page.planningTitle" }
-        },
-    mockPreview
-      ? {
-          path: "/project/tasks/planning/timeline",
-          component: () =>
-            import("@/views/project/tasks/planning/TimelineView.vue"),
-          meta: { title: "s04.tasks.page.planningTitle" }
-        }
-      : {
-          path: "/project/tasks/planning/timeline",
-          component: PlaceholderView,
-          meta: { title: "s04.tasks.page.planningTitle" }
-        },
-    mockPreview
-      ? {
-          path: "/project/tasks/readiness",
-          component: () =>
-            import(
-              "@/views/project/tasks/readiness/ExecutionReadinessView.vue"
-            ),
-          meta: { title: "s04.tasks.page.readinessTitle" }
-        }
-      : {
-          path: "/project/tasks/readiness",
-          component: PlaceholderView,
-          meta: { title: "s04.tasks.page.readinessTitle" }
-        },
-    mockPreview
-      ? {
-          path: "/project/tasks/:taskId",
-          component: () =>
-            import("@/views/project/tasks/detail/TaskDetailView.vue"),
-          meta: { title: "s04.tasks.page.detailTitle" }
-        }
-      : {
-          path: "/project/tasks/:taskId",
-          component: PlaceholderView,
-          meta: { title: "s04.tasks.page.detailTitle" }
-        },
+    {
+      // 任务拆解（S04-UI-02）：接真后端 task-plans 系。
+      path: "/project/tasks/breakdown",
+      component: () =>
+        import("@/views/project/tasks/breakdown/TaskBreakdownView.vue"),
+      meta: { title: "s04.tasks.page.breakdownTitle" }
+    },
+    {
+      // 依赖图（S04-UI-05）：接真后端 dependency-graph。
+      path: "/project/tasks/planning/graph",
+      component: () =>
+        import("@/views/project/tasks/planning/DependencyGraphView.vue"),
+      meta: { title: "s04.tasks.page.planningTitle" }
+    },
+    {
+      // 时间线（S04-UI-06）：接真后端 dependency-graph + 排期列。
+      path: "/project/tasks/planning/timeline",
+      component: () =>
+        import("@/views/project/tasks/planning/TimelineView.vue"),
+      meta: { title: "s04.tasks.page.planningTitle" }
+    },
+    {
+      // 执行准备度（S04-UI-07）：接真后端 execution-readiness。
+      path: "/project/tasks/readiness",
+      component: () =>
+        import("@/views/project/tasks/readiness/ExecutionReadinessView.vue"),
+      meta: { title: "s04.tasks.page.readinessTitle" }
+    },
+    {
+      // 任务详情（S04-UI-03）：接真后端 GET /v1/pm/tasks/{task_id}。
+      path: "/project/tasks/:taskId",
+      component: () =>
+        import("@/views/project/tasks/detail/TaskDetailView.vue"),
+      meta: { title: "s04.tasks.page.detailTitle" }
+    },
     {
       path: "/project/tasks/backlog",
       component: TasksBacklogView,

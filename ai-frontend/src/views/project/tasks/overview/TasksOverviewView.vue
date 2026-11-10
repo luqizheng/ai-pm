@@ -157,9 +157,11 @@ const upcoming = computed(() =>
     .slice(0, 8)
 );
 
-/** AI 规划建议：接口未接线，发布态恒为空；dev 动态引入 fixtures 演示 */
-const INSIGHTS_MOCK = import.meta.env.VITE_USE_MOCK === "1";
-
+/**
+ * AI 规划建议：后端无该端点（S04-UI-01 §5.5）。
+ *
+ * 恒为空态——不用演示文案填充。落地读端点后在此接线。
+ */
 interface InsightItem {
   id: string;
   title: string;
@@ -171,19 +173,6 @@ interface InsightItem {
 const insights = ref<InsightItem[]>([]);
 const insightDecisions = ref<Record<string, "accepted" | "rejected">>({});
 const insightsLoading = ref(false);
-
-async function loadInsights() {
-  if (!INSIGHTS_MOCK) return;
-  insightsLoading.value = true;
-  try {
-    const { overviewInsights } = await import("./fixtures");
-    insights.value = overviewInsights();
-  } finally {
-    insightsLoading.value = false;
-  }
-}
-
-onMounted(loadInsights);
 
 function decideInsight(id: string, decision: "accepted" | "rejected") {
   insightDecisions.value = { ...insightDecisions.value, [id]: decision };

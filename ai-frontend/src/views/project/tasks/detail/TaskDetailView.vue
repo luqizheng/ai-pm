@@ -1,60 +1,69 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
-import { ArrowLeft, Check, Sparkles, X } from "lucide-vue-next";
+import { ArrowLeft, Sparkles } from "lucide-vue-next";
 
-import Alert from "@/components/ui/alert/Alert.vue";
 import Button from "@/components/ui/button/Button.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import { PageFrame } from "@/components/shell";
+import { getTaskDetail, type TaskDetailView } from "@/api/task-plans";
 import TasksFrame from "../TasksFrame.vue";
 import TaskPriorityChip from "../components/TaskPriorityChip.vue";
 import TaskStatusChip from "../components/TaskStatusChip.vue";
 import { shortId } from "../tasks-contract";
-import { taskDetailFixture, type TaskDetailFixture } from "./fixtures";
+import { toDetailView, type DetailViewModel } from "./task-detail-adapter";
 
 /**
- * 任务详情页根（S04-UI-03，mock 预览）。
+ * 任务详情页根（S04-UI-03，接真）。
  *
- * 后端无 GET 单任务读端点（执行说明/交付/验收标准仅 PATCH 可写、REST
- * 不可读），本页以 fixtures 演示 S04-UI-03 的信息模型：目标与范围 /
- * 来源追溯 / 依赖 / 执行说明 / 验收标准 / 交付要求 / 历史审计 + 右侧
- * AI Project Lead 建议。批准 / 退回等动作只改本页本地状态（演示审批
- * 流），不回写后端；路由仅在 VITE_USE_MOCK=1 注册真实页。
+ * 数据 = pm-api REST（GET /v1/pm/tasks/{task_id}）：任务本体 + 依据追溯
+ * （需求 / 设计 / ADR / 实施基线）+ 上下游依赖 + 仓库绑定 + 验收标准
+ * + 人工审批 + 审计历史，一次读完，页面不做 N+1。
+ *
+ * 诚实缺位：后端任务模型无「背景 / 预期结果 / 执行说明 / 上下文」独立字段，
+ * 也无 AI 建议读端点——这些段渲染空态，不用演示文案填充。批准 / 退回是
+ * 演示动作（无后端命令），已移除。
  */
 const route = useRoute();
 const router = useRouter();
 const { t } = useI18n();
 
-const task = taskDetailFixture;
+const taskId = computed(() => String(route.params.taskId ?? ""));
+const raw = ref<TaskDetailView | null>(null);
+const loading = ref(true);
+const loadError = ref(false);
 
-const approval = ref<TaskDetailFixture["approval"]>(task.approval);
-const appliedSuggestions = ref<Set<string>>(new Set());
-const dismissedSuggestions = ref<Set<string>>(new Set());
+async function load() {
+  if (!taskId.value) {
+    loading.value = false;
+    return;
+  }
+  loading.value = true;
+  loadError.value = false;
+  try {
+    raw.value = await getTaskDetail(taskId.value);
+  } catch {
+    loadError.value = true;
+    raw.value = null;
+  } finally {
+    loading.value = false;
+  }
+}
 
-const mockNote = t("s04.tasks.detail.mockNote");
+onMounted(load);
+watch(taskId, load);
+
+const task = computed<DetailViewModel | null>(() =>
+  raw.value ? toDetailView(raw.value) : null
+);
+
+const approval = computed(() => task.value?.approval ?? "none");
 
 const breadcrumbs = computed(() => [
   { label: t("shell.app.side.item.taskManagement"), to: "/project/tasks" },
   { label: t("s04.tasks.tabs.backlog"), to: "/project/tasks/backlog" }
 ]);
-
-function applySuggestion(id: string) {
-  appliedSuggestions.value = new Set([...appliedSuggestions.value, id]);
-}
-
-function dismissSuggestion(id: string) {
-  dismissedSuggestions.value = new Set([...dismissedSuggestions.value, id]);
-}
-
-const visibleSuggestions = computed(() =>
-  task.suggestions.filter(
-    suggestion =>
-      !dismissedSuggestions.value.has(suggestion.id) &&
-      !appliedSuggestions.value.has(suggestion.id)
-  )
-);
 
 function traceLabel(kind: string): string {
   switch (kind) {
@@ -77,8 +86,12 @@ function goBack() {
 <template>
   <PageFrame
     :breadcrumbs="breadcrumbs"
-    :title="task.title"
-    :description="`${t('s04.tasks.common.taskLabel')} ${shortId(task.id)}`"
+    :title="task?.title ?? t('s04.tasks.detail.loading')"
+    :description="
+      task
+        ? `${t('s04.tasks.common.taskLabel')} ${shortId(task.id)}`
+        : t('s04.tasks.detail.loading')
+    "
   >
     <template #actions>
       <Button variant="secondary" size="sm" @click="goBack">
@@ -89,247 +102,195 @@ function goBack() {
 
     <TasksFrame />
 
-    <Alert variant="info" :title="mockNote" />
+    <EmptyState
+      v-if="loadError"
+      :title="t('s04.tasks.detail.loadErrorTitle')"
+      :description="t('s04.tasks.detail.loadErrorHint')"
+    />
 
-    <section class="dt-header">
-      <div class="dt-header__chips" data-testid="dt-chips">
-        <TaskStatusChip :status="task.status" />
-        <TaskPriorityChip :priority="task.priority" />
-        <span class="dt-header__approval" :data-approval="approval">
-          {{
-            approval === "human_confirmed"
-              ? t("s04.tasks.detail.approvalHuman")
-              : t("s04.tasks.detail.approvalNone")
-          }}
-        </span>
-      </div>
-      <div class="dt-header__actions">
-        <Button
-          variant="primary"
-          size="sm"
-          data-testid="dt-approve"
-          :disabled="approval === 'human_confirmed'"
-          @click="approval = 'human_confirmed'"
-        >
-          <Check :size="13" />
-          {{ t("s04.tasks.detail.approve") }}
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          data-testid="dt-return"
-          :disabled="approval === 'none'"
-          @click="approval = 'none'"
-        >
-          <X :size="13" />
-          {{ t("s04.tasks.detail.unapprove") }}
-        </Button>
-      </div>
-    </section>
+    <EmptyState
+      v-else-if="!loading && !task"
+      :title="t('s04.tasks.detail.notFoundTitle')"
+      :description="t('s04.tasks.detail.notFoundHint')"
+    />
 
-    <div class="dt-layout">
-      <div class="dt-main">
-        <section class="dt-section" data-testid="dt-section-objective">
-          <h2>{{ t("s04.tasks.detail.sectionObjective") }}</h2>
-          <dl>
-            <dt>{{ t("s04.tasks.detail.objective") }}</dt>
-            <dd>{{ task.objective }}</dd>
-            <dt>{{ t("s04.tasks.detail.background") }}</dt>
-            <dd>{{ task.background }}</dd>
-            <dt>{{ t("s04.tasks.detail.scope") }}</dt>
-            <dd>{{ task.scope }}</dd>
-            <dt>{{ t("s04.tasks.detail.outOfScope") }}</dt>
-            <dd>{{ task.outOfScope }}</dd>
-            <dt>{{ t("s04.tasks.detail.expected") }}</dt>
-            <dd>{{ task.expected }}</dd>
-          </dl>
-        </section>
+    <template v-else-if="task">
+      <section class="dt-header">
+        <div class="dt-header__chips" data-testid="dt-chips">
+          <TaskStatusChip :status="task.status" />
+          <TaskPriorityChip :priority="task.priority" />
+          <span class="dt-header__approval" :data-approval="approval">
+            {{
+              approval === "human_confirmed"
+                ? t("s04.tasks.detail.approvalHuman")
+                : approval === "pending"
+                  ? t("s04.tasks.detail.approvalPending")
+                  : t("s04.tasks.detail.approvalNone")
+            }}
+          </span>
+        </div>
+      </section>
 
-        <section class="dt-section" data-testid="dt-section-trace">
-          <h2>{{ t("s04.tasks.detail.sectionTrace") }}</h2>
-          <ul class="dt-traces">
-            <li
-              v-for="trace in task.traces"
-              :key="trace.label"
-              class="dt-trace"
-            >
-              <span class="dt-trace__kind">{{ traceLabel(trace.kind) }}</span>
-              <span class="dt-trace__label">{{ trace.label }}</span>
-              <span class="dt-trace__version"
-                >{{ t("s04.tasks.detail.traceVersion") }}
-                {{ trace.version }}</span
+      <div class="dt-layout">
+        <div class="dt-main">
+          <section class="dt-section" data-testid="dt-section-objective">
+            <h2>{{ t("s04.tasks.detail.sectionObjective") }}</h2>
+            <dl>
+              <dt>{{ t("s04.tasks.detail.objective") }}</dt>
+              <dd>
+                {{ task.objective || t("s04.tasks.common.notAvailable") }}
+              </dd>
+              <dt>{{ t("s04.tasks.detail.scope") }}</dt>
+              <dd>{{ task.scope || t("s04.tasks.common.notAvailable") }}</dd>
+              <dt>{{ t("s04.tasks.detail.outOfScope") }}</dt>
+              <dd>
+                {{ task.outOfScope || t("s04.tasks.common.notAvailable") }}
+              </dd>
+            </dl>
+          </section>
+
+          <section class="dt-section" data-testid="dt-section-trace">
+            <h2>{{ t("s04.tasks.detail.sectionTrace") }}</h2>
+            <p v-if="task.traces.length === 0" class="dt-section__empty">
+              {{ t("s04.tasks.detail.noTraces") }}
+            </p>
+            <ul v-else class="dt-traces">
+              <li
+                v-for="trace in task.traces"
+                :key="`${trace.kind}-${trace.label}`"
+                class="dt-trace"
               >
-              <span class="dt-trace__status">{{ trace.status }}</span>
-            </li>
-          </ul>
-        </section>
+                <span class="dt-trace__kind">{{ traceLabel(trace.kind) }}</span>
+                <span class="dt-trace__label">{{ trace.label }}</span>
+                <span class="dt-trace__version"
+                  >{{ t("s04.tasks.detail.traceVersion") }}
+                  {{ trace.version }}</span
+                >
+                <span class="dt-trace__status">{{ trace.status }}</span>
+              </li>
+            </ul>
+          </section>
 
-        <section class="dt-section" data-testid="dt-section-deps">
-          <h2>{{ t("s04.tasks.detail.sectionDeps") }}</h2>
-          <ul class="dt-deps">
-            <li v-for="dep in task.dependencies" :key="dep.code">
-              <span class="dt-deps__direction">
-                {{
-                  dep.direction === "upstream"
-                    ? t("s04.tasks.detail.dependsOn")
-                    : t("s04.tasks.detail.blocks")
-                }}
-              </span>
-              <span class="dt-deps__code">{{ dep.code }}</span>
-              <span class="dt-deps__title">{{ dep.title }}</span>
-              <TaskStatusChip :status="dep.status" />
-            </li>
-          </ul>
-        </section>
-
-        <section class="dt-section" data-testid="dt-section-spec">
-          <h2>{{ t("s04.tasks.detail.sectionSpec") }}</h2>
-          <dl>
-            <dt>{{ t("s04.tasks.detail.repo") }}</dt>
-            <dd>{{ task.repo }}</dd>
-            <dt>{{ t("s04.tasks.detail.module") }}</dt>
-            <dd>{{ task.module }}</dd>
-            <dt>{{ t("s04.tasks.detail.instructions") }}</dt>
-            <dd>{{ task.instructions }}</dd>
-            <dt>{{ t("s04.tasks.detail.constraints") }}</dt>
-            <dd>{{ task.constraints }}</dd>
-            <dt>{{ t("s04.tasks.detail.context") }}</dt>
-            <dd>{{ task.context }}</dd>
-          </dl>
-        </section>
-
-        <section class="dt-section" data-testid="dt-section-criteria">
-          <h2>{{ t("s04.tasks.detail.sectionCriteria") }}</h2>
-          <table class="dt-table">
-            <thead>
-              <tr>
-                <th>{{ t("s04.tasks.detail.criteriaId") }}</th>
-                <th>{{ t("s04.tasks.detail.criteriaDesc") }}</th>
-                <th>{{ t("s04.tasks.detail.criteriaMethod") }}</th>
-                <th>{{ t("s04.tasks.detail.criteriaEvidence") }}</th>
-                <th>{{ t("s04.tasks.detail.criteriaMandatory") }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="criterion in task.criteria" :key="criterion.id">
-                <td class="dt-table__mono">{{ criterion.id }}</td>
-                <td>{{ criterion.description }}</td>
-                <td>{{ criterion.method }}</td>
-                <td>{{ criterion.evidence }}</td>
-                <td>
+          <section class="dt-section" data-testid="dt-section-deps">
+            <h2>{{ t("s04.tasks.detail.sectionDeps") }}</h2>
+            <p v-if="task.dependencies.length === 0" class="dt-section__empty">
+              {{ t("s04.tasks.detail.noDependencies") }}
+            </p>
+            <ul v-else class="dt-deps">
+              <li v-for="dep in task.dependencies" :key="dep.code">
+                <span class="dt-deps__direction">
                   {{
-                    criterion.mandatory
-                      ? t("s04.tasks.detail.criteriaMandatory")
-                      : t("s04.tasks.detail.criteriaOptional")
+                    dep.direction === "upstream"
+                      ? t("s04.tasks.detail.dependsOn")
+                      : t("s04.tasks.detail.blocks")
                   }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
+                </span>
+                <span class="dt-deps__code">{{ dep.code }}</span>
+                <span class="dt-deps__title">{{ dep.title }}</span>
+                <TaskStatusChip :status="dep.status" />
+              </li>
+            </ul>
+          </section>
 
-        <section class="dt-section" data-testid="dt-section-delivery">
-          <h2>{{ t("s04.tasks.detail.sectionDelivery") }}</h2>
-          <div class="dt-delivery">
-            <div>
-              <h3>{{ t("s04.tasks.detail.deliveryRequired") }}</h3>
-              <ul>
-                <li v-for="item in task.requiredDeliverables" :key="item">
-                  {{ item }}
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3>{{ t("s04.tasks.detail.deliveryOptional") }}</h3>
-              <ul>
-                <li v-for="item in task.optionalDeliverables" :key="item">
-                  {{ item }}
-                </li>
-              </ul>
-            </div>
-          </div>
-        </section>
+          <section class="dt-section" data-testid="dt-section-spec">
+            <h2>{{ t("s04.tasks.detail.sectionSpec") }}</h2>
+            <dl>
+              <dt>{{ t("s04.tasks.detail.repo") }}</dt>
+              <dd>{{ task.repo || t("s04.tasks.common.notAvailable") }}</dd>
+              <dt>{{ t("s04.tasks.detail.module") }}</dt>
+              <dd>{{ task.module || t("s04.tasks.common.notAvailable") }}</dd>
+              <dt>{{ t("s04.tasks.detail.constraints") }}</dt>
+              <dd>
+                {{ task.constraints || t("s04.tasks.common.notAvailable") }}
+              </dd>
+            </dl>
+          </section>
 
-        <section class="dt-section" data-testid="dt-section-history">
-          <h2>{{ t("s04.tasks.detail.sectionHistory") }}</h2>
-          <ol class="dt-history">
-            <li
-              v-for="event in task.history"
-              :key="event.id"
-              :class="`dt-history__item--${event.actor}`"
+          <section class="dt-section" data-testid="dt-section-criteria">
+            <h2>{{ t("s04.tasks.detail.sectionCriteria") }}</h2>
+            <p v-if="task.criteria.length === 0" class="dt-section__empty">
+              {{ t("s04.tasks.detail.noCriteria") }}
+            </p>
+            <table v-else class="dt-table">
+              <thead>
+                <tr>
+                  <th>{{ t("s04.tasks.detail.criteriaId") }}</th>
+                  <th>{{ t("s04.tasks.detail.criteriaDesc") }}</th>
+                  <th>{{ t("s04.tasks.detail.criteriaMethod") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="criterion in task.criteria" :key="criterion.id">
+                  <td class="dt-table__mono">{{ criterion.id }}</td>
+                  <td>{{ criterion.description }}</td>
+                  <td>{{ criterion.method }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section class="dt-section" data-testid="dt-section-delivery">
+            <h2>{{ t("s04.tasks.detail.sectionDelivery") }}</h2>
+            <p
+              v-if="task.requiredDeliverables.length === 0"
+              class="dt-section__empty"
             >
-              <span class="dt-history__badge">
-                {{
-                  event.actor === "ai"
-                    ? t("s04.tasks.detail.historyAi")
-                    : t("s04.tasks.detail.historyHuman")
-                }}
-              </span>
-              <span class="dt-history__action">{{ event.action }}</span>
-              <span class="dt-history__detail">{{ event.detail }}</span>
-              <span class="dt-history__at">{{ event.at }}</span>
-            </li>
-          </ol>
-        </section>
-      </div>
-
-      <aside class="dt-panel">
-        <h2 class="dt-panel__title">
-          <Sparkles :size="14" />
-          {{ t("s04.tasks.detail.aiPanelTitle") }}
-        </h2>
-        <section class="dt-panel__section">
-          <h3>{{ t("s04.tasks.detail.aiUnderstanding") }}</h3>
-          <p>{{ task.objective }}</p>
-        </section>
-        <section class="dt-panel__section">
-          <h3>{{ t("s04.tasks.detail.aiMissing") }}</h3>
-          <p>{{ t("s04.tasks.detail.context") }}：{{ task.context }}</p>
-        </section>
-        <section class="dt-panel__section">
-          <h3>{{ t("s04.tasks.detail.aiSuggestions") }}</h3>
-          <EmptyState
-            v-if="visibleSuggestions.length === 0"
-            :title="t('s04.tasks.overview.insightsEmpty')"
-            size="sm"
-          />
-          <ul v-else class="dt-suggestions">
-            <li
-              v-for="suggestion in visibleSuggestions"
-              :key="suggestion.id"
-              class="dt-suggestion"
-              :data-testid="`dt-suggestion-${suggestion.id}`"
-            >
-              <p>{{ suggestion.text }}</p>
-              <div class="dt-suggestion__actions">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  @click="applySuggestion(suggestion.id)"
-                >
-                  {{ t("s04.tasks.detail.suggestionApply") }}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  @click="dismissSuggestion(suggestion.id)"
-                >
-                  {{ t("s04.tasks.detail.suggestionIgnore") }}
-                </Button>
+              {{ t("s04.tasks.detail.noDeliverables") }}
+            </p>
+            <div v-else class="dt-delivery">
+              <div>
+                <h3>{{ t("s04.tasks.detail.deliveryRequired") }}</h3>
+                <ul>
+                  <li v-for="item in task.requiredDeliverables" :key="item">
+                    {{ item }}
+                  </li>
+                </ul>
               </div>
-            </li>
-          </ul>
-          <p
-            v-if="appliedSuggestions.size > 0"
-            class="dt-panel__applied"
-            data-testid="dt-applied-count"
-          >
-            {{ t("s04.tasks.detail.suggestionApplied") }} ·
-            {{ appliedSuggestions.size }}
-          </p>
-        </section>
-      </aside>
-    </div>
+            </div>
+          </section>
+
+          <section class="dt-section" data-testid="dt-section-history">
+            <h2>{{ t("s04.tasks.detail.sectionHistory") }}</h2>
+            <p v-if="task.history.length === 0" class="dt-section__empty">
+              {{ t("s04.tasks.detail.noHistory") }}
+            </p>
+            <ol v-else class="dt-history">
+              <li
+                v-for="event in task.history"
+                :key="event.id"
+                :class="`dt-history__item--${event.actor}`"
+              >
+                <span class="dt-history__badge">
+                  {{ t("s04.tasks.detail.historyHuman") }}
+                </span>
+                <span class="dt-history__action">{{ event.action }}</span>
+                <span class="dt-history__detail">{{ event.detail }}</span>
+                <span class="dt-history__at">{{ event.at }}</span>
+              </li>
+            </ol>
+          </section>
+        </div>
+
+        <aside class="dt-panel">
+          <h2 class="dt-panel__title">
+            <Sparkles :size="14" />
+            {{ t("s04.tasks.detail.aiPanelTitle") }}
+          </h2>
+          <section class="dt-panel__section">
+            <h3>{{ t("s04.tasks.detail.aiUnderstanding") }}</h3>
+            <p>{{ task.objective || t("s04.tasks.common.notAvailable") }}</p>
+          </section>
+          <section class="dt-panel__section">
+            <h3>{{ t("s04.tasks.detail.aiSuggestions") }}</h3>
+            <EmptyState
+              :title="t('s04.tasks.detail.aiSuggestionsUnavailable')"
+              :description="t('s04.tasks.detail.aiSuggestionsHint')"
+              size="sm"
+            />
+          </section>
+        </aside>
+      </div>
+    </template>
   </PageFrame>
 </template>
 

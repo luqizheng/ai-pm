@@ -18,6 +18,8 @@ tasks:
     readinessDesc: Task completeness gate before handing over to S05 (under construction).
     detailTitle: Task Detail
   common:
+    noProjectTitle: Select a project first
+    noProjectHint: Task planning belongs to a project — pick a project context first.
     createTask: Create Task
     edit: Edit
     save: Save
@@ -167,6 +169,19 @@ tasks:
     requiresBaseline: An approved implementation baseline (S03) is required to generate tasks.
     mockNote: Demo data (dev mock); the AI decomposition API is not wired yet. Proposals live in this page session only.
   detail:
+    approvalPending: Pending human decision
+    loading: Loading task detail…
+    loadErrorTitle: Failed to load
+    loadErrorHint: Could not read the task detail. Please retry.
+    notFoundTitle: Task not found
+    notFoundHint: This task was removed or you have no access to it.
+    noTraces: No requirement, design or implementation baseline linked yet.
+    noDependencies: No dependency registered yet.
+    noCriteria: No acceptance criterion registered yet.
+    noDeliverables: No deliverable registered yet.
+    noHistory: No audit history yet.
+    aiSuggestionsUnavailable: No AI suggestions
+    aiSuggestionsHint: The task-suggestion read surface is not available yet; this panel stays empty.
     back: Back to backlog
     approve: Approve
     unapprove: Undo confirmation
