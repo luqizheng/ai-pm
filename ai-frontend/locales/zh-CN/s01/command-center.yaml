@@ -7,6 +7,17 @@ command-center:
   createdLabel: 创建
   settings: 项目设置
   healthTitle: 项目健康度
+  goalTitle: 项目目标
+  goalRevision: 修订
+  goalPublishedAt: 发布时间
+  goalCommit: 提交
+  goalMissingTitle: 尚未建立项目目标
+  goalMissingHint: 该项目还没有正式目标文档；目标缺失是显式信号，系统不会臆测。
+  goalBodyUnavailableTitle: 目标正文当前不可读
+  goalBodyUnavailableHint: 目标文档存在，但正文无法读取（知识仓未配置、文件缺失或内容哈希不符）。这不是「没有目标」。
+  goalBadgeReady: 可用
+  goalBadgeMissing: 未建立
+  goalBadgeBodyUnavailable: 正文不可读
   initTitle: 项目初始化
   initProgress: "必需 {done} / {total}"
   initComplete: 已完成
