@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 import { Check, Pencil, RefreshCw, SearchX } from "lucide-vue-next";
@@ -10,7 +10,7 @@ import Button from "@/components/ui/button/Button.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import PageFrame from "@/components/shell/PageFrame.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
-import { useScopeStore } from "@/api/scope";
+import { SCOPE_ALL, useScopeStore } from "@/api/scope";
 import {
   decideCognitionItem,
   listProjectKnowledge,
@@ -50,7 +50,7 @@ const editingId = ref("");
 const projectId = computed(() => {
   const fromQuery = route.query.project_id;
   if (typeof fromQuery === "string" && fromQuery) return fromQuery;
-  if (scope.currentProjectId && scope.currentProjectId !== "all") {
+  if (scope.currentProjectId && scope.currentProjectId !== SCOPE_ALL) {
     return scope.currentProjectId;
   }
   return "";
@@ -125,6 +125,10 @@ async function decide(
 }
 
 onMounted(load);
+
+// 项目上下文变化（壳切项目 / 路由带入 project_id）必须重载——
+// 该页读模型是项目级的，不重载会停留在上一个项目的数据。
+watch(projectId, load);
 </script>
 
 <template>

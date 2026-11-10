@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 import { ExternalLink, Plus, RefreshCw } from "lucide-vue-next";
@@ -10,7 +10,7 @@ import Button from "@/components/ui/button/Button.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import { StatCard } from "@/components/ui/stat-card";
 import PageFrame from "@/components/shell/PageFrame.vue";
-import { useScopeStore } from "@/api/scope";
+import { SCOPE_ALL, useScopeStore } from "@/api/scope";
 import {
   bindDevice,
   getDevice,
@@ -47,7 +47,7 @@ const showRegister = ref(false);
 const projectId = computed(() => {
   const q = route.query.project_id;
   if (typeof q === "string" && q) return q;
-  return scope.currentProjectId && scope.currentProjectId !== "all"
+  return scope.currentProjectId && scope.currentProjectId !== SCOPE_ALL
     ? scope.currentProjectId
     : "";
 });
@@ -155,6 +155,10 @@ function revoke(device: Device) {
 }
 
 onMounted(load);
+
+// 项目上下文变化（壳切项目 / 路由带入 project_id）必须重载——
+// 该页读模型是项目级的，不重载会停留在上一个项目的数据。
+watch(projectId, load);
 </script>
 
 <template>

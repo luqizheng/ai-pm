@@ -10,7 +10,7 @@ import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import { PageFrame } from "@/components/shell";
 import { listTasks } from "@/api/tasks";
 import type { Task } from "@/api/types";
-import { useScopeStore } from "@/api/scope";
+import { SCOPE_ALL, useScopeStore } from "@/api/scope";
 import TasksFrame from "../TasksFrame.vue";
 import TaskPriorityChip from "../components/TaskPriorityChip.vue";
 import TaskStatusChip from "../components/TaskStatusChip.vue";
@@ -42,7 +42,7 @@ const scope = useScopeStore();
 const projectId = computed(() => {
   const fromQuery = route.query.project_id;
   if (typeof fromQuery === "string" && fromQuery) return fromQuery;
-  if (scope.currentProjectId && scope.currentProjectId !== "all") {
+  if (scope.currentProjectId && scope.currentProjectId !== SCOPE_ALL) {
     return scope.currentProjectId;
   }
   return "";
