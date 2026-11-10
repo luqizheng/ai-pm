@@ -16,3 +16,13 @@ run-workspaces/
 ai-ai-frontend/.testtmp/__pycache__/
 __pycache__/
 .test-env.md
+# 前端误跑 tsc 产生的编译产物（源码是 .ts / .vue，同目录 .js/.js.map 不入库；
+# 2026-11-10 清理 1060 个误生成文件后加护栏）
+ai-frontend/src/**/*.js
+ai-frontend/src/**/*.js.map
+ai-frontend/build/**/*.js
+ai-frontend/build/**/*.js.map
+
+# 本机部署/工具目录
+/docker-deploy/
+/.zcode/
