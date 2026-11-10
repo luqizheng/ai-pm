@@ -83,17 +83,35 @@ pub async fn archive_project(
         .map_err(db_err)?;
 
     // 3) P1：queued Run 条件取消（只动 queued——claimed/running 交 P2 协议）。
-    let queued_runs_cancelled = sqlx::query(
+    let cancelled_run_ids: Vec<Uuid> = sqlx::query_scalar(
         "UPDATE delivery.task_run SET status = 'cancelled', termination_reason = $2, \
          terminated_at = now() \
-         WHERE project_id = $1 AND status = 'queued'",
+         WHERE project_id = $1 AND status = 'queued' RETURNING id",
     )
     .bind(project_id)
     .bind(reason)
-    .execute(&mut *tx)
+    .fetch_all(&mut *tx)
     .await
-    .map_err(db_err)?
-    .rows_affected() as i64;
+    .map_err(db_err)?;
+    let queued_runs_cancelled = cancelled_run_ids.len() as i64;
+    // S05 监控事件面（0013）：归档批量取消逐 Run 落账（同一事务）。
+    for run_id in &cancelled_run_ids {
+        crate::run_events::record_run_event(
+            &mut tx,
+            *run_id,
+            crate::run_events::RunEvent {
+                event_type: crate::run_events::event_type::RUN_FINISHED,
+                generation: None,
+                dedupe_tag: "",
+                detail: Some(serde_json::json!({
+                    "outcome": "cancelled",
+                    "reason": reason,
+                })),
+            },
+        )
+        .await
+        .map_err(db_err)?;
+    }
 
     // 4) N-2：终态化在飞 Import + 释放初始化名额 + 取消在飞 Attempt。
     let imports_finalized = sqlx::query(

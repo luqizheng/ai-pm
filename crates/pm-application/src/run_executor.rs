@@ -202,6 +202,21 @@ pub async fn claim_and_start(
                     }),
                 )
                 .await?;
+                // S05 监控事件面（0013）：spawn 启动落账（同事务）。
+                crate::run_events::record_run_event(
+                    &mut tx,
+                    run_id,
+                    crate::run_events::RunEvent {
+                        event_type: crate::run_events::event_type::RUN_STARTED,
+                        generation: Some(outcome.lease_generation),
+                        dedupe_tag: "",
+                        detail: Some(serde_json::json!({
+                            "executor_kind": executor.kind(),
+                            "executor_session": session_text,
+                        })),
+                    },
+                )
+                .await?;
             }
             tx.commit().await?;
             Ok(StartOutcome::Started {
@@ -773,7 +788,7 @@ async fn start_failed(
     .execute(&mut *tx)
     .await?;
     if status == "queued" && retry_count >= cfg.max_infrastructure_attempts {
-        sqlx::query(
+        let exhausted = sqlx::query(
             "UPDATE delivery.task_run \
                 SET status = 'failed', outcome = 'failed', finished_at = now(), \
                     release_reason = 'infrastructure_exhausted' \
@@ -781,6 +796,38 @@ async fn start_failed(
         )
         .bind(run_id)
         .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        if exhausted == 1 {
+            // S05 监控事件面（0013）：基础设施耗尽终态落账（同事务）。
+            crate::run_events::record_run_event(
+                &mut tx,
+                run_id,
+                crate::run_events::RunEvent {
+                    event_type: crate::run_events::event_type::RUN_FINISHED,
+                    generation: None,
+                    dedupe_tag: "",
+                    detail: Some(serde_json::json!({
+                        "outcome": "failed",
+                        "reason": "infrastructure_exhausted",
+                    })),
+                },
+            )
+            .await?;
+        }
+    } else {
+        // S05 监控事件面（0013）：启动失败退避回队落账（同 generation 至多一次：
+        // 重试必先重领 → generation+1）。
+        crate::run_events::record_run_event(
+            &mut tx,
+            run_id,
+            crate::run_events::RunEvent {
+                event_type: crate::run_events::event_type::RUN_STAGE_CHANGED,
+                generation: None,
+                dedupe_tag: "requeued",
+                detail: Some(serde_json::json!({ "reason": "executor_start_failed" })),
+            },
+        )
         .await?;
     }
     audit_run(
@@ -873,6 +920,21 @@ async fn record_termination(
         serde_json::json!({ "termination_reason": reason_code, "result": terminal }),
     )
     .await?;
+    // S05 监控事件面（0013）：人为/监管终止终态落账（同事务）。
+    crate::run_events::record_run_event(
+        &mut tx,
+        run_id,
+        crate::run_events::RunEvent {
+            event_type: crate::run_events::event_type::RUN_FINISHED,
+            generation: None,
+            dedupe_tag: "",
+            detail: Some(serde_json::json!({
+                "outcome": terminal,
+                "reason": reason_code,
+            })),
+        },
+    )
+    .await?;
     emit_run_completed(&mut tx, project_id, run_id, task_id, terminal, None).await?;
     tx.commit().await?;
     Ok(true)
@@ -951,6 +1013,22 @@ async fn finish_run(
         task_id,
         if succeeded { "succeeded" } else { "failed" },
         None,
+    )
+    .await?;
+    // S05 监控事件面（0013）：进程自然退出终态落账（同事务；先到先得的条件
+    // UPDATE 保证同 generation 至多一次）。
+    crate::run_events::record_run_event(
+        &mut tx,
+        run_id,
+        crate::run_events::RunEvent {
+            event_type: crate::run_events::event_type::RUN_FINISHED,
+            generation: None,
+            dedupe_tag: "",
+            detail: Some(serde_json::json!({
+                "outcome": if succeeded { "succeeded" } else { "failed" },
+                "exit": format!("{outcome:?}"),
+            })),
+        },
     )
     .await?;
     tx.commit().await?;

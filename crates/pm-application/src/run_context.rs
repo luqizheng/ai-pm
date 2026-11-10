@@ -700,7 +700,8 @@ async fn report_progress_impl(
     .bind(report.stage)
     .fetch_one(&mut *tx)
     .await?;
-    let _ = stage_changed; // 进展判定已在 SQL CASE 内完成（与 stage 读取同事务一致）
+    // 进展判定已在 SQL CASE 内完成（与 stage 读取同事务一致）；该布尔供
+    // 事件面（0013）判定「阶段推进」落账。
     audit_run_opt(
         &mut tx,
         project_id,
@@ -722,10 +723,12 @@ async fn report_progress_impl(
     // T-032：平台已写入启动意图（executor_session 非空 = Model B spawn）→
     // 首报不写 mcp session、claimed→running 由编排器推进（T-031 实施裁定 2 +
     // T1 终裁：执行端不得覆盖平台 session）。
+    let mut first_started = false;
     if report.stage == run_stage::STARTED
         && lease.status == run_status::CLAIMED
         && lease.executor_session.is_none()
     {
+        first_started = true;
         // 首报 started：任务状态经唯一受守卫通道推进。
         let ctx = system_context(&mut tx, project_id)
             .await
@@ -792,6 +795,34 @@ async fn report_progress_impl(
             "run_progress_reported",
             run_id,
             serde_json::json!({ "note": note, "stage": report.stage }),
+        )
+        .await?;
+    }
+
+    // S05 监控事件面（0013）：MCP 通道启动/阶段推进落账（同事务；幂等键
+    // generation+stage——同阶段重报不重复，续领（generation+1）后同阶段可再记）。
+    if first_started {
+        crate::run_events::record_run_event(
+            &mut tx,
+            run_id,
+            crate::run_events::RunEvent {
+                event_type: crate::run_events::event_type::RUN_STARTED,
+                generation: Some(generation),
+                dedupe_tag: "",
+                detail: Some(serde_json::json!({ "executor_kind": "mcp" })),
+            },
+        )
+        .await?;
+    } else if stage_changed {
+        crate::run_events::record_run_event(
+            &mut tx,
+            run_id,
+            crate::run_events::RunEvent {
+                event_type: crate::run_events::event_type::RUN_STAGE_CHANGED,
+                generation: Some(generation),
+                dedupe_tag: report.stage,
+                detail: report.note.map(|n| serde_json::json!({ "note": n })),
+            },
         )
         .await?;
     }
