@@ -90,6 +90,9 @@ pub async fn confirm_revision(
                 KbServiceError::Forbidden("kb revision confirmation requires a human principal")
             }
             crate::pm_write::PmWriteError::Db(err) => KbServiceError::Db(err),
+            crate::pm_write::PmWriteError::ValidationMsg(m) => {
+                KbServiceError::Invalid(m.into())
+            }
             crate::pm_write::PmWriteError::Conflict(m)
             | crate::pm_write::PmWriteError::Validation(m) => KbServiceError::Invalid(m.into()),
         })?;

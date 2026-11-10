@@ -635,6 +635,9 @@ pub async fn review(
                 KbServiceError::Forbidden("memory review requires a human principal")
             }
             crate::pm_write::PmWriteError::Db(err) => KbServiceError::Db(err),
+            crate::pm_write::PmWriteError::ValidationMsg(m) => {
+                KbServiceError::Invalid(m.into())
+            }
             crate::pm_write::PmWriteError::Conflict(m)
             | crate::pm_write::PmWriteError::Validation(m) => KbServiceError::Invalid(m.into()),
         })?;
@@ -1153,9 +1156,20 @@ mod tests {
 
     #[test]
     fn closed_channel_domain_is_rejected() {
-        let mut r = evidence("d1");
-        r.target_domain = "design".into();
-        assert!(validate_refs(&[r]).is_err());
+        // design/adr 通道已随 S03 后端落地开放（2026-11-10，registry.rs），
+        // 引用可解析；仍未开放的 product_reality 必须被拒（PC-01B §13.1）。
+        let mut design_ref = evidence("d1");
+        design_ref.target_domain = "design".into();
+        assert!(validate_refs(&[design_ref]).is_ok());
+        let mut adr_ref = evidence("d1");
+        adr_ref.target_domain = "adr".into();
+        assert!(validate_refs(&[adr_ref]).is_ok());
+        let mut closed = evidence("d1");
+        closed.target_domain = "product_reality".into();
+        assert!(validate_refs(&[closed]).is_err());
+        let mut unknown = evidence("d1");
+        unknown.target_domain = "kb_typo".into();
+        assert!(validate_refs(&[unknown]).is_err());
     }
 
     #[test]

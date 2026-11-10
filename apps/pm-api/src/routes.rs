@@ -288,6 +288,8 @@ fn build_router(
         // S01-05 项目基线：提案派生（知识+仓库快照）→ 逐项确认 → 版本不可变。
         .merge(crate::pm_baseline::router())
         .merge(crate::pm_requirements::router())
+        .merge(crate::pm_designs::router())
+        .merge(crate::pm_plans::router())
         // 文件代理（2026-11-07）：file-service 收口 mesh-only 后的用户面
         // 入口，同形状复刻其 REST 契约，出站走 per-tenant 服务 JWT。
         .merge(crate::files::router())

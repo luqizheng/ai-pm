@@ -59,6 +59,7 @@ pub mod requirement;
 pub mod requirement_acceptance;
 pub mod requirement_projection;
 pub mod requirement_traceability;
+pub mod task_plan;
 pub mod response_delivery;
 pub mod retrieval;
 pub mod review;

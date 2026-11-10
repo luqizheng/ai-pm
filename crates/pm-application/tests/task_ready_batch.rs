@@ -48,6 +48,7 @@ async fn draft_task(pool: &PgPool, fx: &Fx, title: &str) -> Uuid {
         pool,
         CreateTaskRequest {
             project_id: Some(fx.project_id),
+            implementation_baseline_id: None,
             milestone_id: None,
             title: Some(title.to_string()),
             description: None,

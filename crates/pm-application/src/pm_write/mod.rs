@@ -94,6 +94,8 @@ pub enum PmWriteError {
     /// 有身份但无权限（S02-I1：AI 主体提交确认类命令 / 非 Lead 治理命令，
     /// S02D-02 #2 + §7.4 职责表）。
     Forbidden(&'static str),
+    /// 动态校验消息（S04 计划草案校验：带任务键定位的 400 文案）。
+    ValidationMsg(String),
     Db(sqlx::Error),
 }
 
@@ -122,6 +124,10 @@ pub struct CreateTaskRequest {
     /// 校验该版本所属项目行必须指向本任务的目标 project（跨项目 → Validation）。
     #[serde(default)]
     pub ai_role_version_id: Option<Uuid>,
+    /// S03→S04 交接（总体设计 §6.3）：Task 钉定不可变实施基线（SC-08）。
+    /// 非空时校验：基线存在、属于目标项目、状态 frozen（superseded 拒绝）。
+    #[serde(default)]
+    pub implementation_baseline_id: Option<Uuid>,
     /// DK-D（设计稿 §7.2/E4）：创建时即落验收口径，与任务行**同事务**。
     /// 提供即按 `task_acceptance_criterion` 逐条写入（ordinal 缺省按 `max+10`）。
     /// 放在 create 而不是再调一次 `update_task`：任务从诞生起就必须可验收，

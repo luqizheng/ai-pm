@@ -15,6 +15,7 @@ pub mod fake_model;
 pub mod model;
 pub mod openai_adapter;
 pub mod orchestrator;
+pub mod plan_decomposition;
 pub mod repo_model;
 pub mod retrieval_planner;
 pub mod self_review;

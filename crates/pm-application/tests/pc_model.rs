@@ -4,7 +4,7 @@
 //! 1. 对象草稿 upsert：具名幂等 / 内容寻址去重 / 推号 CAS / identity 占位回填 /
 //!    匿名新建 / 未知类型拒绝 / 终态拒绝。
 //! 2. 关系草稿：端点类型合法性 / 跨域通道（requirement 必填 Revision、
-//!    design 关闭、product_plan 永久排除）/ 存在性探测 / 自引用 / 重复身份。
+//!    design/adr 随 S03 开放、product_reality 关闭、product_plan 永久排除）/ 存在性探测 / 自引用 / 重复身份。
 //! 3. 来源/证据：kb_document 收窄、通道校验、判别器（库层兜底）、主体归属。
 //! 4. 发布事务：approved 提案（SQL 夹具）→ 版本 + 成员（端点自动并入）+
 //!    snapshot_hash + proposal applied + 生命周期推进 + 审计 + outbox +
@@ -632,8 +632,8 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
         "legal cross-domain endpoint with revision"
     );
 
-    // 通道关闭：design（NotYetOpen）
-    let design = create_relationship_draft(
+    // 通道关闭：product_reality（NotYetOpen；design/adr 已随 S03 开放）
+    let reality = create_relationship_draft(
         &pool,
         project,
         &lead,
@@ -644,8 +644,8 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
                 revision_id: None,
             },
             target: PcEndpoint::External {
-                domain: "design".into(),
-                target_type: "design".into(),
+                domain: "product_reality".into(),
+                target_type: "reality".into(),
                 target_id: "x".into(),
                 revision_id: None,
             },
@@ -655,8 +655,8 @@ async fn relationship_draft_endpoint_rules(pool: PgPool) {
     )
     .await;
     assert!(
-        matches!(design, Err(PcError::Invalid(_))),
-        "design channel closed"
+        matches!(reality, Err(PcError::Invalid(_))),
+        "product_reality channel closed"
     );
 
     // product_plan（PermanentlyExcluded）
@@ -782,15 +782,15 @@ async fn source_and_evidence_registration(pool: PgPool) {
     .await
     .unwrap();
 
-    // design 域来源 → 通道关闭
+    // product_reality 来源 → 通道关闭（design/adr 已随 S03 开放）
     let closed = register_source(
         &pool,
         project,
         &lead,
         SourceInput {
             source_kind: "external_reference".into(),
-            target_domain: "design".into(),
-            target_type: "design".into(),
+            target_domain: "product_reality".into(),
+            target_type: "reality".into(),
             target_id: "x".into(),
             target_revision_id: None,
             revision_missing_reason: Some("r".into()),
@@ -804,7 +804,7 @@ async fn source_and_evidence_registration(pool: PgPool) {
     .await;
     assert!(
         matches!(closed, Err(PcError::Invalid(_))),
-        "design source channel closed"
+        "product_reality source channel closed"
     );
 
     // 证据：document_section（主体 = 对象修订）

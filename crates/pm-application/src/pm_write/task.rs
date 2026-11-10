@@ -44,13 +44,37 @@ pub async fn create_task(
         }
     }
 
+    // S03→S04 交接（总体设计 §6.3）：Task 引用基线 id 而非内容——基线冻结后
+    // 不受设计/需求后续变化影响（SC-08）。跨项目或已 superseded 的基线拒绝。
+    if let Some(baseline_id) = req.implementation_baseline_id {
+        let (b_project, b_status): (Uuid, String) = sqlx::query_as(
+            "SELECT project_id, status FROM design.implementation_baseline WHERE id = $1",
+        )
+        .bind(baseline_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or(PmWriteError::Validation(
+            "implementation_baseline_id does not exist",
+        ))?;
+        if b_project != project_id {
+            return Err(PmWriteError::Validation(
+                "implementation_baseline_id does not belong to this project",
+            ));
+        }
+        if b_status != "frozen" {
+            return Err(PmWriteError::Validation(
+                "implementation_baseline_id is not frozen",
+            ));
+        }
+    }
+
     let mut tx = pool.begin().await?;
     let task_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO delivery.task \
-         (id, project_id, milestone_id, title, description, status, priority, assignee_id, revision, tenant_id, ai_role_version_id) \
+         (id, project_id, milestone_id, title, description, status, priority, assignee_id, revision, tenant_id, ai_role_version_id, implementation_baseline_id) \
          VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, 1, \
-                 (SELECT tenant_id FROM core.project WHERE id = $2), $8)",
+                 (SELECT tenant_id FROM core.project WHERE id = $2), $8, $9)",
     )
     .bind(task_id)
     .bind(project_id)
@@ -60,6 +84,7 @@ pub async fn create_task(
     .bind(priority)
     .bind(req.assignee_id)
     .bind(req.ai_role_version_id)
+    .bind(req.implementation_baseline_id)
     .execute(&mut *tx)
     .await?;
     // DK-D（§7.2/E4）：验收口径与任务行同事务落库——创建即"可验收"，

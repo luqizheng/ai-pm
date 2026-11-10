@@ -2,9 +2,11 @@
 
 pub mod ai_role;
 pub mod command;
+pub mod design;
 pub mod error;
 pub mod ids;
 pub mod import;
+pub mod plan;
 pub mod policy;
 pub mod project_member;
 pub mod proposal;

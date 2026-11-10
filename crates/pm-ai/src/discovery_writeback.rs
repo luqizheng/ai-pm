@@ -1241,6 +1241,7 @@ impl WriteBackHook for DiscoveryWriteBack {
                     description: task.description.clone(),
                     priority: Some("normal".to_string()),
                     assignee_id: None,
+                    implementation_baseline_id: None,
                     ai_role_version_id: task.role_version_id,
                     acceptance_criteria: Some(
                         task.acceptance

@@ -60,6 +60,9 @@ impl From<pm_application::pm_write::PmWriteError> for ApiError {
             pm_application::pm_write::PmWriteError::NotFound(m) => ApiError::NotFound(m),
             pm_application::pm_write::PmWriteError::Conflict(m) => ApiError::Conflict(m),
             pm_application::pm_write::PmWriteError::Validation(m) => ApiError::BadRequest(m),
+            pm_application::pm_write::PmWriteError::ValidationMsg(m) => {
+                ApiError::Text(axum::http::StatusCode::BAD_REQUEST, m)
+            }
             pm_application::pm_write::PmWriteError::Forbidden(m) => ApiError::Forbidden(m),
             pm_application::pm_write::PmWriteError::Db(err) => ApiError::Internal(err),
         }

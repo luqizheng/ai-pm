@@ -28,6 +28,8 @@ pub mod pm_acceptance;
 pub mod pm_approvers;
 pub mod pm_artifacts;
 pub mod pm_baseline;
+pub mod pm_designs;
+pub mod pm_plans;
 pub mod pm_cognition;
 pub mod pm_delivery;
 pub mod pm_devices;

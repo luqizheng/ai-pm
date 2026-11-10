@@ -44,9 +44,10 @@ pub enum TargetDomain {
     ProjectCognition,
     /// `pc`：PC-Service 自身领域对象（proposal/conflict/version/…）。
     ProductCognition,
-    /// `design`：Design/Architecture 域（通道未开放；不以 document_revision 冒充）。
+    /// `design`：Design/Architecture 域（S03 后端落地，2026-11-10 通道开放；
+    /// 不以 document_revision 冒充——实体族见 design.design*）。
     Design,
-    /// `adr`：ADR 域（通道未开放）。
+    /// `adr`：ADR 域（S03 后端落地，通道开放；实体族 design.adr*）。
     Adr,
     /// `product_reality`：通道未开放（01C 后评估）。
     ProductReality,
@@ -75,13 +76,13 @@ impl TargetDomain {
         match self {
             TargetDomain::Requirement
             | TargetDomain::ProjectGoal
-            | TargetDomain::ProjectCognition => OwningService::Platform,
+            | TargetDomain::ProjectCognition
+            | TargetDomain::Design
+            | TargetDomain::Adr => OwningService::Platform,
             TargetDomain::KnowledgeBase => OwningService::Kb,
             TargetDomain::ProductCognition => OwningService::Pc,
-            // 通道未开放域暂挂 Platform（无实际写入方；开放时随评审改判）。
-            TargetDomain::Design | TargetDomain::Adr | TargetDomain::ProductReality => {
-                OwningService::Platform
-            }
+            // product_reality 通道仍未开放（01C 后评估；开放时随评审改判）。
+            TargetDomain::ProductReality => OwningService::Platform,
             TargetDomain::ProductPlan => OwningService::Platform,
         }
     }
@@ -94,9 +95,8 @@ impl TargetDomain {
             }
             TargetDomain::ProjectCognition => DomainChannelState::ReadOnly,
             TargetDomain::ProductCognition => DomainChannelState::Open,
-            TargetDomain::Design | TargetDomain::Adr | TargetDomain::ProductReality => {
-                DomainChannelState::NotYetOpen
-            }
+            TargetDomain::Design | TargetDomain::Adr => DomainChannelState::Open,
+            TargetDomain::ProductReality => DomainChannelState::NotYetOpen,
             TargetDomain::ProductPlan => DomainChannelState::PermanentlyExcluded,
         }
     }
@@ -183,9 +183,16 @@ mod tests {
             resolve_reference(TargetDomain::ProductCognition),
             Ok(OwningService::Pc)
         );
-        // design/adr 通道未开放；product_plan 永久排除。
-        assert!(resolve_reference(TargetDomain::Design).is_err());
-        assert!(resolve_reference(TargetDomain::Adr).is_err());
+        // design/adr 通道随 S03 后端落地开放（2026-11-10）；product_plan 永久排除。
+        assert_eq!(
+            resolve_reference(TargetDomain::Design),
+            Ok(OwningService::Platform)
+        );
+        assert_eq!(
+            resolve_reference(TargetDomain::Adr),
+            Ok(OwningService::Platform)
+        );
+        assert!(resolve_reference(TargetDomain::ProductReality).is_err());
         assert!(resolve_reference(TargetDomain::ProductPlan).is_err());
     }
 }

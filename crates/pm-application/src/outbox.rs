@@ -199,6 +199,44 @@ pub const CATALOG: &[EventSpec] = &[
         enabled_by_default: false,
         producer: "requirement.rs（留位；I4 改绑命令启用）",
     },
+    // ── S03 设计与技术决策事件族（总体设计 V1.0 §13；目录登记先行，消费方
+    // （通知/S04 计划面/前端差分）落地前不生产——「不假装消费」。生产点=
+    // pm-application::design（启用时随审批事务写入）。
+    EventSpec {
+        event_type: "DesignRevisionSubmitted",
+        event_version: 1,
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "design.rs（留位）",
+    },
+    EventSpec {
+        event_type: "DesignApproved",
+        event_version: 1,
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "design.rs（留位）",
+    },
+    EventSpec {
+        event_type: "AdrAccepted",
+        event_version: 1,
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "design.rs（留位）",
+    },
+    EventSpec {
+        event_type: "AdrSuperseded",
+        event_version: 1,
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "design.rs（留位）",
+    },
+    EventSpec {
+        event_type: "BaselineFrozen",
+        event_version: 1,
+        has_handler: false,
+        enabled_by_default: false,
+        producer: "design.rs（留位）",
+    },
     // ── KB-PC 服务化 14 项跨服务事件（V1.1 §13.3；wire 权威=
     // kb-pc-contracts::events::CATALOG，此处登记运行时面）。KP-1 起发布事务
     // 真实生产 pc.cognition.version_published（pc/publish.rs ⑫b），Platform
