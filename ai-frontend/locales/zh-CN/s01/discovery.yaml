@@ -1,0 +1,28 @@
+discovery:
+  pageTitle: 代码发现
+  pageDesc: AI 产出发现并要求澄清，人工负责确认或否决。
+  refresh: 刷新
+  loading: 正在加载会话…
+  errorTitle: 加载失败
+  actionFailed: 操作失败
+  noProjectTitle: 请先选择项目
+  noProjectHint: 代码发现属于项目，需要先选定项目上下文。
+  emptyTitle: 暂无发现会话
+  emptyHint: 项目内还没有代码发现会话；发起会话后可在此逐条确认发现。
+  sessionsTitle: 发现会话（{count}）
+  findingsTitle: 发现（待确认 {pending} / 共 {total}）
+  findingsEmpty: 该会话暂无发现。
+  confirm: 确认
+  reject: 否决
+  questionsTitle: 阻塞问题（未答 {open} / 共 {total}）
+  questionsEmpty: 该会话暂无问题。
+  answerNote: 问题答复入口尚未在页面开放；答复后状态与回答会显示在此。
+  verification:
+    PENDING: 待确认
+    CONFIRMED: 已确认
+    REJECTED: 已否决
+    CONFLICT: 冲突待裁决
+  questionStatus:
+    open: 未答复
+    answered: 已答复
+    deferred: 已搁置

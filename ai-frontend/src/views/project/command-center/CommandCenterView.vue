@@ -8,6 +8,7 @@ import Skeleton from "@/components/ui/skeleton/Skeleton.vue";
 
 import CommandCenterHeader from "./components/CommandCenterHeader.vue";
 import ProjectHealthSection from "./components/ProjectHealthSection.vue";
+import InitializationCard from "./components/InitializationCard.vue";
 import AttentionPanel from "./components/AttentionPanel.vue";
 import TaskOverviewCard from "./components/TaskOverviewCard.vue";
 import AiAgentsOverviewCard from "./components/AiAgentsOverviewCard.vue";
@@ -108,7 +109,10 @@ function openSettings() {
   const projectId = route.query.project_id;
   void router.push({
     path: "/project/settings",
-    query: typeof projectId === "string" && projectId ? { project_id: projectId } : {}
+    query:
+      typeof projectId === "string" && projectId
+        ? { project_id: projectId }
+        : {}
   });
 }
 </script>
@@ -147,9 +151,28 @@ function openSettings() {
         @settings="openSettings"
       />
 
+      <InitializationCard
+        :title="t('s01.command-center.initTitle')"
+        :progress-label="
+          t('s01.command-center.initProgress', {
+            done: data.initialization?.requiredDone ?? 0,
+            total: data.initialization?.requiredTotal ?? 0
+          })
+        "
+        :completion-labels="{
+          complete: t('s01.command-center.initComplete'),
+          incomplete: t('s01.command-center.initIncomplete'),
+          notDeterminable: t('s01.command-center.initNotDeterminable')
+        }"
+        :required-label="t('s01.command-center.initRequired')"
+        :data="data.initialization"
+      />
+
       <ProjectHealthSection
         :title="t('s01.command-center.healthTitle')"
-        :meta="t('s01.command-center.healthMeta', { time: data.healthMetaTime })"
+        :meta="
+          t('s01.command-center.healthMeta', { time: data.healthMetaTime })
+        "
         :action-label="t('s01.command-center.healthAction')"
         :metrics="data.health"
       />

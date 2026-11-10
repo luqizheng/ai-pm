@@ -135,11 +135,15 @@ export const navGroups: NavGroup[] = [
       // Git 仓库管理已迁入 Project Setting（/project/settings/repositories，
       // V1.0 稿「统一入口」裁决，2026-11-07）：旧路径 /project/repository/*
       // 在 router/index.ts 重定向。
+      // 代码发现（S01-I2，2026-11-10）：接真 discovery sessions 系。
       {
         path: "/project/discovery",
         labelKey: "shell.app.side.item.discovery",
         icon: ScanSearch,
-        expandable: true
+        component: () =>
+          import("@/views/project/discovery/DiscoveryView.vue").then(
+            module => module.default
+          )
       },
       {
         path: "/project/requirements",

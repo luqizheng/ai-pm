@@ -7,6 +7,21 @@ command-center:
   createdLabel: Created
   settings: Project Settings
   healthTitle: Project Health
+  initTitle: Project Initialization
+  initProgress: "Required {done} / {total}"
+  initComplete: Complete
+  initIncomplete: Incomplete
+  initNotDeterminable: Cannot be determined
+  initRequired: Required
+  init:
+    status:
+      not_started: Not started
+      in_progress: In progress
+      waiting_for_human: Awaiting human
+      completed: Completed
+      blocked: Blocked
+      not_applicable: Not applicable
+      undetermined: Undetermined
   healthMeta: Updated {time}
   healthAction: Metric Definitions
   attentionTitle: Needs Attention
