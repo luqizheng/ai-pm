@@ -210,7 +210,11 @@ export const navGroups: NavGroup[] = [
       {
         path: "/admin/settings",
         labelKey: "shell.app.side.item.adminSettings",
-        icon: Settings2
+        icon: Settings2,
+        component: () =>
+          import("@/views/admin/AdminSettingsView.vue").then(
+            module => module.default
+          )
       },
       {
         path: "/admin/members",

@@ -277,6 +277,7 @@ fn build_router(
         // KP-3 KB 管理面（0065）：来源详情 / 记忆提案 / 记忆列表与详情（审核只走 K4）。
         .merge(crate::kb_memory_api::router())
         .merge(crate::retrieval::router())
+        .merge(crate::admin_config::router())
         // 执行端接入引导（T-080）：公开的 `/install`、`/install/{tool}`。
         .merge(crate::onboarding::router())
         // 技能包同源分发（T-089）：manifest + zip 下载（公开，`/install*` 已放行）。

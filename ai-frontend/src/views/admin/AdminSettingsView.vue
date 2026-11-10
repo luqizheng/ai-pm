@@ -1,0 +1,300 @@
+<script setup lang="ts">
+import { onMounted, ref } from "vue";
+import { useI18n } from "vue-i18n";
+import PageFrame from "@/components/shell/PageFrame.vue";
+import {
+  getEmbeddingConfig,
+  saveEmbeddingConfig,
+  testEmbeddingConfig,
+  type EmbeddingTestResult
+} from "@/api/adminConfig";
+
+/**
+ * 系统设置（/admin/settings）——当前面：embedding 供给（Ollama 地址 + 模型）。
+ *
+ * 门：后端 is_admin（AI/Key/普通成员 403）。测试连接 = 实调 /embeddings 探针
+ * （不写库），返回维度与延迟。
+ */
+const { t } = useI18n();
+
+const endpoint = ref("");
+const model = ref("");
+const enabled = ref(false);
+const loading = ref(false);
+const saving = ref(false);
+const savedNotice = ref("");
+const testing = ref(false);
+const testResult = ref<EmbeddingTestResult | null>(null);
+const errorText = ref("");
+
+async function load() {
+  loading.value = true;
+  errorText.value = "";
+  try {
+    const cfg = await getEmbeddingConfig();
+    endpoint.value = cfg.endpoint;
+    model.value = cfg.model;
+    enabled.value = cfg.enabled;
+  } catch {
+    errorText.value = t("shell.adminSettings.error.load");
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function save() {
+  if (saving.value) return;
+  saving.value = true;
+  savedNotice.value = "";
+  errorText.value = "";
+  try {
+    const cfg = await saveEmbeddingConfig({
+      endpoint: endpoint.value.trim(),
+      model: model.value.trim(),
+      enabled: enabled.value
+    });
+    endpoint.value = cfg.endpoint;
+    model.value = cfg.model;
+    enabled.value = cfg.enabled;
+    savedNotice.value = t("shell.adminSettings.notice.saved");
+  } catch {
+    errorText.value = t("shell.adminSettings.error.save");
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function runTest() {
+  if (testing.value) return;
+  testing.value = true;
+  errorText.value = "";
+  try {
+    testResult.value = await testEmbeddingConfig({
+      endpoint: endpoint.value.trim(),
+      model: model.value.trim()
+    });
+  } catch {
+    testResult.value = null;
+    errorText.value = t("shell.adminSettings.error.test");
+  } finally {
+    testing.value = false;
+  }
+}
+
+onMounted(load);
+</script>
+
+<template>
+  <PageFrame
+    :title="t('shell.adminSettings.title')"
+    :description="t('shell.adminSettings.description')"
+  >
+    <div class="admin-settings">
+      <p v-if="errorText" class="settings-error" role="alert">
+        {{ errorText }}
+      </p>
+      <p v-if="loading" class="settings-hint">
+        {{ t("shell.adminSettings.hint.loading") }}
+      </p>
+
+      <section class="settings-card">
+        <h3 class="settings-heading">
+          {{ t("shell.adminSettings.embedding.heading") }}
+        </h3>
+        <p class="settings-desc">
+          {{ t("shell.adminSettings.embedding.description") }}
+        </p>
+
+        <div class="settings-field">
+          <label for="embed-endpoint">{{
+            t("shell.adminSettings.embedding.endpoint")
+          }}</label>
+          <input
+            id="embed-endpoint"
+            v-model="endpoint"
+            class="settings-input"
+            type="text"
+            placeholder="http://192.168.2.10:11434/v1"
+          />
+        </div>
+        <div class="settings-field">
+          <label for="embed-model">{{
+            t("shell.adminSettings.embedding.model")
+          }}</label>
+          <input
+            id="embed-model"
+            v-model="model"
+            class="settings-input"
+            type="text"
+            placeholder="bge-m3"
+          />
+        </div>
+        <label class="settings-check">
+          <input v-model="enabled" type="checkbox" />
+          <span>{{ t("shell.adminSettings.embedding.enabled") }}</span>
+        </label>
+
+        <div class="admin-actions">
+          <button class="admin-save" :disabled="saving" @click="save">
+            {{
+              saving
+                ? t("shell.adminSettings.action.saving")
+                : t("shell.adminSettings.action.save")
+            }}
+          </button>
+          <button class="admin-test" :disabled="testing" @click="runTest">
+            {{
+              testing
+                ? t("shell.adminSettings.action.testing")
+                : t("shell.adminSettings.action.test")
+            }}
+          </button>
+        </div>
+        <p v-if="savedNotice" class="settings-ok" role="status">
+          {{ savedNotice }}
+        </p>
+
+        <div
+          v-if="testResult"
+          class="test-result"
+          :class="{ 'is-bad': !testResult.ok }"
+        >
+          <template v-if="testResult.ok">
+            {{
+              t("shell.adminSettings.test.ok", {
+                dims: testResult.dims,
+                ms: testResult.latency_ms
+              })
+            }}
+          </template>
+          <template v-else>
+            {{
+              t("shell.adminSettings.test.fail", {
+                error: testResult.error ?? ""
+              })
+            }}
+          </template>
+        </div>
+
+        <p class="settings-hint">
+          {{ t("shell.adminSettings.embedding.hint") }}
+        </p>
+      </section>
+    </div>
+  </PageFrame>
+</template>
+
+<style scoped>
+.admin-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+  max-width: 720px;
+}
+
+.settings-card {
+  border: 1px solid var(--border-subtle, var(--ws-border, #d0d0d0));
+  border-radius: 10px;
+  background: var(--surface-card, var(--ws-surface, #fff));
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.settings-heading {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, var(--ws-text, #111));
+}
+
+.settings-desc,
+.settings-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary, var(--ws-text, #555));
+}
+
+.settings-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-danger, #b42318);
+}
+
+.settings-ok {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-success, #1b7a43);
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-field label {
+  font-size: 12px;
+  color: var(--text-secondary, var(--ws-text, #555));
+}
+
+.settings-input {
+  border: 1px solid var(--border-subtle, var(--ws-border, #d0d0d0));
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  background: var(--surface-card, var(--ws-surface, #fff));
+  color: var(--text-primary, var(--ws-text, #111));
+}
+
+.settings-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary, var(--ws-text, #555));
+}
+
+.admin-actions {
+  display: flex;
+  gap: var(--space-2, 8px);
+}
+
+.admin-actions button {
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.admin-save {
+  background: var(--accent-subtle, var(--ws-accent, #2563eb));
+  color: var(--text-on-accent, #fff);
+}
+
+.admin-test {
+  background: transparent;
+  border: 1px solid var(--border-subtle, var(--ws-border, #d0d0d0));
+  color: var(--text-secondary, var(--ws-text, #555));
+}
+
+.admin-actions button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.test-result {
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-success-subtle, #e7f5ec);
+  color: var(--text-success, #1b7a43);
+}
+
+.test-result.is-bad {
+  background: var(--surface-danger-subtle, #fdeceb);
+  color: var(--text-danger, #b42318);
+}
+</style>

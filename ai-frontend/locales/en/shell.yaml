@@ -64,6 +64,33 @@ shell:
     submit: Sign in
     failed: Incorrect username or password, please try again
     securityNote: Credentials stay in this browser and are cleared on sign-out
+  adminSettings:
+    title: System Settings
+    description: "Platform-level configuration — currently: embedding supply (Ollama endpoint and model)."
+    hint:
+      loading: Loading…
+    action:
+      save: Save
+      saving: Saving…
+      test: Test connection
+      testing: Testing…
+    embedding:
+      heading: Embedding Supply
+      description: Model service for document vectorization (semantic retrieval / dedup).
+      endpoint: Service endpoint (OpenAI-compatible /v1)
+      model: Model name
+      enabled: Enable embedding consumption
+      hint: Takes effect immediately after save; changing the model requires a full re-embedding of stored content. Test connection is side-effect free.
+    test:
+      ok: Connected — {dims} dims, {ms} ms
+      fail: Connection failed — {error}
+    notice:
+      saved: Saved
+    error:
+      load: Load failed (system administrator required)
+      save: Save failed (system administrator required)
+      test: Test request failed
+
   adminAnnouncements:
     title: Announcements
     description: Manage notifications delivered to workspace members.

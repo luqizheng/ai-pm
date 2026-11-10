@@ -64,6 +64,33 @@ shell:
     submit: 登录
     failed: 用户名或密码不正确，请重新输入
     securityNote: 会话凭证仅保存在本机浏览器，退出登录后清除
+  adminSettings:
+    title: 系统设置
+    description: 平台级配置——当前面：embedding 供给（Ollama 地址与模型）。
+    hint:
+      loading: 加载中…
+    action:
+      save: 保存
+      saving: 保存中…
+      test: 测试连接
+      testing: 测试中…
+    embedding:
+      heading: Embedding 供给
+      description: 文档向量化（语义检索/去重）的模型服务地址与模型名。
+      endpoint: 服务地址（OpenAI 兼容 /v1）
+      model: 模型名
+      enabled: 启用 embedding 消费
+      hint: 保存后立即生效；修改模型会要求对已嵌入内容做全量重嵌。测试连接不发库。
+    test:
+      ok: 连接成功——{dims} 维，{ms} ms
+      fail: 连接失败——{error}
+    notice:
+      saved: 已保存
+    error:
+      load: 加载失败（需要系统管理员）
+      save: 保存失败（需要系统管理员）
+      test: 测试请求失败
+
   adminAnnouncements:
     title: 公告管理
     description: 维护发送给工作区成员的通知公告。
