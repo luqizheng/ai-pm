@@ -379,6 +379,15 @@ async fn seed_provider(pool: &sqlx::PgPool, endpoint: &str, model: &str) -> Uuid
     .execute(pool)
     .await
     .unwrap();
+    // Phase 3B：解析链只认目录面——补目录模型 + 授权 + general 策略
+    crate::test_seed::seed_model_catalog(
+        pool,
+        SYSTEM_TENANT,
+        provider_id,
+        model,
+        principal_id,
+    )
+    .await;
     provider_id
 }
 

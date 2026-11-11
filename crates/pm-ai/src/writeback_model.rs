@@ -31,7 +31,7 @@ use async_trait::async_trait;
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::analysis_model::{select_analysis_model_config, ModelSelection};
+use crate::analysis_model::{select_model_for_role, ModelSelection};
 use crate::conversation_model::{self, ConversationTurn};
 use crate::discovery_writeback::{
     ModelCallFailure, ModelReply, ProviderStamp, RawTaskBatch, RequirementDraft,
@@ -101,17 +101,19 @@ impl LlmWriteBackModel {
         system: &str,
         user_payload: String,
     ) -> Result<(serde_json::Value, ProviderStamp, i64), ModelCallFailure> {
-        let cfg = match select_analysis_model_config(&self.pool, project_id).await {
+        // Phase 3B role chain（任务书 §6.3）：需求起草/任务分解写回 =
+        // knowledge_management 用途；解析失败显式记账（无 provider 行可挂时
+        // 由调用方留痕）。
+        let cfg = match select_model_for_role(&self.pool, project_id, "knowledge_management")
+            .await
+        {
             ModelSelection::Provider(cfg) => cfg,
-            ModelSelection::NoProvider => {
-                // No provider row to anchor a record to — the caller logs it.
-                return Err(ModelCallFailure::from(ModelError::Unavailable(
-                    "no LLM provider resolved for this project".to_string(),
-                )));
+            ModelSelection::ConfigurationFailed { detail, .. } => {
+                return Err(ModelCallFailure::from(ModelError::Configuration(detail)));
             }
             ModelSelection::ResolutionFailed(reason) => {
                 return Err(ModelCallFailure::from(ModelError::Unavailable(format!(
-                    "provider resolution failed: {reason}"
+                    "model resolution failed: {reason}"
                 ))));
             }
         };

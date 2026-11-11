@@ -5,6 +5,7 @@ pub(crate) fn model_error_code(err: &ModelError) -> (&'static str, String) {
         ModelError::Timeout => ("model_timeout", err.to_string()),
         ModelError::Unavailable(reason) => ("model_unavailable", reason.clone()),
         ModelError::BadOutput(reason) => ("bad_output", reason.clone()),
+        ModelError::Configuration(reason) => ("configuration", reason.clone()),
     }
 }
 

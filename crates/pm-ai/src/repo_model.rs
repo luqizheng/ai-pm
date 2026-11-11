@@ -6,6 +6,7 @@
 
 use async_trait::async_trait;
 use pm_application::repo_facts::pm_ai_port::ModelError as RepoModelError;
+use pm_application::team_llm_catalog::ModelResolutionError;
 pub use pm_application::repo_facts::{RepoAnalysisModel, RepoMaterial};
 use pm_domain::import::{
     AssigneeRole, Evidence, EvidenceKind, MilestoneDraft, OrgChart, ProjectDraft, RequirementDraft,
@@ -249,34 +250,23 @@ impl OpenAiRepoAnalysisModel {
     }
 }
 
-/// 选择项目可用的仓库分析模型（0041：`ai.llm_provider` 退役，改租户作用域）：
-/// 项目 → 租户 → 首个 `enabled` 且 configuration.model 非空的 Provider 实例
-/// （创建序）；取不到回退确定性 Fake（`model_name='fake'`，既有 dev 行为——
-/// Phase 3 策略解析链接管后由统一 Gateway 给显式 Configuration Error）。
+/// 选择项目可用的仓库分析模型（Phase 3B：四级 Role 链，role_key='general'，
+/// 任务书 §6.3）。解析失败 = 显式 Configuration Error——Fake 回退随统一解析
+/// 链退役（2026-11-11 挂账兑现；DEC-LLM-004 Fail-Fast）。
 pub async fn model_from_llm_provider(
     pool: &sqlx::PgPool,
     project_id: uuid::Uuid,
-) -> (std::sync::Arc<dyn RepoAnalysisModel>, String) {
-    match pm_application::team_llm::resolve_repo_call_config(pool, project_id).await {
-        Ok(Some(cfg)) => {
-            let model = OpenAiRepoAnalysisModel::new(
-                &cfg.endpoint,
-                &cfg.model,
-                &cfg.api_key,
-                chrono::Duration::seconds(i64::from(cfg.timeout_secs)),
-            );
-            return (std::sync::Arc::new(model), cfg.model);
-        }
-        Ok(None) => {}
-        Err(err) => {
-            // 凭证解密等基础设施失败：回退 Fake 并留痕，import 结果可解释。
-            tracing::warn!(error = %err, "repo model resolution failed; falling back to fake");
-        }
-    }
-    (
-        std::sync::Arc::new(FakeRepoAnalysisModel),
-        "fake".to_string(),
-    )
+) -> Result<(std::sync::Arc<dyn RepoAnalysisModel>, String), ModelResolutionError> {
+    let cfg =
+        pm_application::team_llm_catalog::resolve_model_for_role(pool, project_id, "general")
+            .await?;
+    let model = OpenAiRepoAnalysisModel::new(
+        &cfg.endpoint,
+        &cfg.model,
+        &cfg.api_key,
+        chrono::Duration::seconds(i64::from(cfg.timeout_secs)),
+    );
+    Ok((std::sync::Arc::new(model), cfg.model))
 }
 
 /// 取首个 `{` 到末个 `}`（剥离 markdown fence）；快照分析链共用。
@@ -471,10 +461,23 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../../migrations")]
-    async fn model_falls_back_to_fake_without_provider(pool: sqlx::PgPool) {
-        let (model, name) = model_from_llm_provider(&pool, uuid::Uuid::new_v4()).await;
-        assert_eq!(name, "fake");
-        let draft = model.draft(&[material()], &OrgChart::p0()).await.unwrap();
-        assert!(!draft.requirements.is_empty());
+    async fn model_resolution_fails_explicitly_without_any_policy(pool: sqlx::PgPool) {
+        // Phase 3B：Fake 回退退役（DEC-LLM-004 Fail-Fast）——无任何配置时
+        // 显式 general_policy_missing，不再产出 fixture 数据。
+        // match 而非 unwrap_err：Ok 类型（trait object）不实现 Debug。
+        let err = match model_from_llm_provider(&pool, uuid::Uuid::new_v4()).await {
+            Err(err) => err,
+            Ok(_) => panic!("expected an explicit configuration error, got a model"),
+        };
+        assert!(
+            matches!(
+                err,
+                ModelResolutionError::Configuration {
+                    reason: "no_model_for_role",
+                    ..
+                }
+            ),
+            "{err:?}"
+        );
     }
 }

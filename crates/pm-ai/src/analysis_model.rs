@@ -15,7 +15,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use async_trait::async_trait;
-use pm_application::team_llm::{resolve_repo_call_config, ResolvedProvider};
+use pm_application::team_llm::ResolvedProvider;
+use pm_application::team_llm_catalog::{resolve_model_for_role, ModelResolutionError};
 use pm_domain::ProjectId;
 
 use crate::call_record::{self, elapsed_ms, PURPOSE_AI_ANALYSIS};
@@ -23,6 +24,9 @@ use crate::fake_model::FakeModel;
 use crate::model::{AnalysisContext, AnalysisModel, ModelError};
 use crate::openai_adapter::OpenAiCompatibleModel;
 use crate::skill_router::SkillId;
+
+/// 主分析链的调用用途 Role（任务书 §6.3 九链映射表）。
+pub const ANALYSIS_ROLE_AI_PM_LEAD: &str = "ai_pm_lead";
 
 /// How the worker picks the analysis model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,32 +62,39 @@ impl AnalysisModelMode {
     }
 }
 
-/// The auto-mode resolution outcome for one project (the selection logic
+/// The role-chain resolution outcome for one project (the selection logic
 /// is exposed as a plain enum so tests can pin the branches without
 /// reaching into the constructed model).
 #[derive(Debug)]
 pub enum ModelSelection {
-    /// A usable provider: endpoint/model/key resolved (key decrypted).
+    /// A usable provider: endpoint/model/key resolved (key decrypted),
+    /// model carries its catalog `model_ref` for记账归因.
     Provider(ResolvedProvider),
-    /// No provider applies — no project designation (or the designated
-    /// one is not currently usable, which is strictly *not* a fallback)
-    /// and no enabled tenant provider. Upper layer: fake + warning.
-    NoProvider,
-    /// Resolution itself failed (project row missing, credential decrypt,
-    /// database). Upper layer: fake + warning carrying the error.
+    /// 四级链走完仍无可用模型，或命中行严格校验失败（§6.1 reason 词表）。
+    /// 上层必须产出显式 Configuration Error（DEC-LLM-004：禁止降级/回退）。
+    ConfigurationFailed {
+        reason: &'static str,
+        detail: String,
+    },
+    /// 解析基础设施失败（DB / 项目行缺失）。
     ResolutionFailed(String),
 }
 
-/// The three-level resolution (§10.3 transitional ruling, pre Phase 3
-/// policy chain), reused verbatim from the team-LLM module.
-pub async fn select_analysis_model_config(
+/// 四级 Role 解析链（Phase 3B，任务书 §6）：项目 Role 覆盖 → Team Role
+/// 策略 → Team general → 显式 Configuration Error；命中即严格校验。
+pub async fn select_model_for_role(
     pool: &sqlx::PgPool,
     project_id: ProjectId,
+    role_key: &str,
 ) -> ModelSelection {
-    match resolve_repo_call_config(pool, project_id).await {
-        Ok(Some(cfg)) => ModelSelection::Provider(cfg),
-        Ok(None) => ModelSelection::NoProvider,
-        Err(e) => ModelSelection::ResolutionFailed(e.to_string()),
+    match resolve_model_for_role(pool, project_id, role_key).await {
+        Ok(cfg) => ModelSelection::Provider(cfg),
+        Err(ModelResolutionError::Configuration { reason, detail }) => {
+            ModelSelection::ConfigurationFailed { reason, detail }
+        }
+        Err(ModelResolutionError::Infrastructure(e)) => {
+            ModelSelection::ResolutionFailed(e.to_string())
+        }
     }
 }
 
@@ -115,12 +126,13 @@ impl RoutedAnalysisModel {
         match self.mode {
             AnalysisModelMode::Fake => Ok(Arc::new(FakeModel::from_fixtures())),
             AnalysisModelMode::Auto => {
-                match select_analysis_model_config(&self.pool, project_id).await {
+                match select_model_for_role(&self.pool, project_id, ANALYSIS_ROLE_AI_PM_LEAD).await
+                {
                     ModelSelection::Provider(cfg) => {
                         tracing::info!(
                             provider_id = %cfg.provider_id,
                             model = %cfg.model,
-                            "analysis model resolved to tenant LLM provider"
+                            "analysis model resolved via role chain (ai_pm_lead)"
                         );
                         // The DB CHECK keeps timeout_secs >= 1; the clamp only
                         // guards raw-seeded rows against the adapter's panic.
@@ -139,19 +151,16 @@ impl RoutedAnalysisModel {
                             inner: Arc::new(real),
                         }))
                     }
-                    ModelSelection::NoProvider => {
-                        // DEC-LLM-004/§10.3：末级必须是显式 Configuration Error，
-                        // 不回退 FakeModel（fake 输出是 fixture，不是模型判断）。
+                    ModelSelection::ConfigurationFailed { reason, detail } => {
+                        // §6.1：四级链无可用模型或严格校验失败——显式
+                        // Configuration Error，不降级不回退（DEC-LLM-004）。
                         tracing::warn!(
                             %project_id,
-                            reason = "no_provider",
-                            "no LLM provider resolved for this project (no usable project \
-                             designation, no enabled tenant provider); failing with an explicit \
-                             configuration error"
+                            reason,
+                            "analysis model resolution returned an explicit configuration failure"
                         );
                         Err(ModelError::Configuration(format!(
-                            "no enabled LLM provider resolved for project {project_id}; \
-                             configure a provider in Team Settings → AI Configuration"
+                            "model resolution failed for project {project_id}: {reason}: {detail}"
                         )))
                     }
                     ModelSelection::ResolutionFailed(error) => {
@@ -159,11 +168,10 @@ impl RoutedAnalysisModel {
                             %project_id,
                             reason = "resolution_failed",
                             %error,
-                            "LLM provider resolution failed; failing with an explicit \
-                             configuration error"
+                            "analysis model resolution failed (infrastructure)"
                         );
                         Err(ModelError::Configuration(format!(
-                            "LLM provider resolution failed for project {project_id}: {error}"
+                            "model resolution failed for project {project_id}: {error}"
                         )))
                     }
                 }
@@ -309,6 +317,15 @@ mod tests {
         .execute(pool)
         .await
         .unwrap();
+        // Phase 3B：解析链只认目录面——补目录模型 + 授权 + general 策略
+        crate::test_seed::seed_model_catalog(
+            pool,
+            SYSTEM_TENANT,
+            provider_id,
+            "glm-4-flash",
+            principal_id,
+        )
+        .await;
         provider_id
     }
 
@@ -316,7 +333,7 @@ mod tests {
     async fn auto_resolves_the_tenant_enabled_provider(pool: sqlx::PgPool) {
         let project_id = seed_project(&pool).await;
         let provider_id = seed_enabled_provider(&pool, "http://127.0.0.1:9").await;
-        match select_analysis_model_config(&pool, project_id).await {
+        match select_model_for_role(&pool, project_id, ANALYSIS_ROLE_AI_PM_LEAD).await {
             ModelSelection::Provider(cfg) => {
                 assert_eq!(cfg.provider_id, provider_id);
                 assert_eq!(cfg.model, "glm-4-flash");
@@ -326,21 +343,27 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../../migrations")]
-    async fn auto_without_any_provider_yields_no_provider_selection(pool: sqlx::PgPool) {
+    async fn auto_without_any_policy_yields_explicit_configuration_failure(pool: sqlx::PgPool) {
         let project_id = seed_project(&pool).await;
-        // 选择层仍产出 NoProvider 枚举；消费层（model_for）把它映射为
-        // 显式 ModelError::Configuration（DEC-LLM-004，无 fake 回退）。
+        // 四级链走完无任何配置 → general_policy_missing（§6.1）；消费层
+        // （model_for）产出显式 ModelError::Configuration（无 fake 回退）。
         assert!(matches!(
-            select_analysis_model_config(&pool, project_id).await,
-            ModelSelection::NoProvider
+            select_model_for_role(&pool, project_id, ANALYSIS_ROLE_AI_PM_LEAD).await,
+            ModelSelection::ConfigurationFailed {
+                reason: "general_policy_missing",
+                ..
+            }
         ));
     }
 
     #[sqlx::test(migrations = "../../migrations")]
-    async fn unknown_project_is_a_resolution_failure_not_no_provider(pool: sqlx::PgPool) {
+    async fn unknown_project_is_an_explicit_configuration_failure(pool: sqlx::PgPool) {
         assert!(matches!(
-            select_analysis_model_config(&pool, Uuid::new_v4()).await,
-            ModelSelection::ResolutionFailed(_)
+            select_model_for_role(&pool, Uuid::new_v4(), ANALYSIS_ROLE_AI_PM_LEAD).await,
+            ModelSelection::ConfigurationFailed {
+                reason: "no_model_for_role",
+                ..
+            }
         ));
     }
 

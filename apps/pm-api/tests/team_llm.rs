@@ -527,7 +527,7 @@ async fn configuration_changes_are_audited(pool: PgPool) {
 
 // ────────────────────────────────────────────── 项目策略（§10.2 / 0043）
 
-use pm_application::team_llm::resolve_repo_call_config;
+use pm_application::team_llm_catalog::{resolve_model_for_role, ModelResolutionError};
 
 /// §10.2：项目指定 Team enabled Provider；PUT 带守卫 + CAS；恢复继承 = provider_id 缺省。
 #[sqlx::test(migrations = "../../migrations")]
@@ -655,9 +655,11 @@ async fn project_policy_forbidden_for_plain_member(pool: PgPool) {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
-/// 解析序（§10.3）：项目指定优先且严格——指定非 enabled 不回退 Team 默认。
+/// Phase 3B 四级 Role 链（任务书 §6.1/§6.2）：无配置 → 显式
+/// general_policy_missing；Team general 策略生效；项目 Provider 约束严格校验
+/// （provider_constraint_violation，不静默换）。
 #[sqlx::test(migrations = "../../migrations")]
-async fn resolution_prefers_project_policy_and_does_not_fall_back(pool: PgPool) {
+async fn resolution_role_chain_and_provider_constraint(pool: PgPool) {
     let w = world(pool).await;
     std::env::set_var("AI_PM_SECRET_KEY", "team-llm-test-secret");
 
@@ -678,39 +680,95 @@ async fn resolution_prefers_project_policy_and_does_not_fall_back(pool: PgPool) 
     .await
     .unwrap();
 
-    // Team 级两个 enabled：ds-1（创建序第一）与 ds-2
+    let catalog_base = format!("/v1/pm/tenants/{}/llm-models", w.tenant_id);
+
+    // ① 无任何配置 → 显式 general_policy_missing（§6.1 末级）
+    let failure = resolve_model_for_role(&w.pool, project_id, "general")
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(
+            failure,
+            ModelResolutionError::Configuration {
+                reason: "general_policy_missing",
+                ..
+            }
+        ),
+        "{failure:?}"
+    );
+
+    // ② Provider（openai_compatible 本地豁免无凭证 enable）+ 登记模型 +
+    //    启用 + 授权 → Team general 策略 → 解析命中
     let (_, p1) = create_provider(
         &w,
         json!({
-            "name": "ds-1", "provider_type": "deepseek",
-            "endpoint": "https://api.example.com/v1",
-            "configuration": { "model": "m1" }, "api_key": "sk-1"
-        }),
-    )
-    .await;
-    let (_, p2) = create_provider(
-        &w,
-        json!({
-            "name": "ds-2", "provider_type": "deepseek",
-            "endpoint": "https://api.example.com/v1",
-            "configuration": { "model": "m2" }, "api_key": "sk-2"
+            "name": "ds-1", "provider_type": "openai_compatible",
+            "endpoint": "https://api.example.com/v1"
         }),
     )
     .await;
     let id1 = Uuid::parse_str(p1["id"].as_str().unwrap()).unwrap();
-    let id2 = Uuid::parse_str(p2["id"].as_str().unwrap()).unwrap();
-    let rev1 = p1["revision"].as_i64().unwrap();
-
-    // 创建态 = configured（带 key），显式 enable 才进入可解析集合（§12 生命周期）。
     let (_, e1) = call(
         &w.app,
         "POST",
         &format!("{}/{}/status", base_uri(w.tenant_id), id1),
         &w.admin_token,
-        Some(json!({ "expected_revision": rev1, "action": "enable" })),
+        Some(json!({ "expected_revision": p1["revision"].as_i64().unwrap(), "action": "enable" })),
     )
     .await;
     assert_eq!(e1["status"], "enabled", "{e1}");
+    let (_, m1) = call(
+        &w.app,
+        "POST",
+        &catalog_base,
+        &w.admin_token,
+        Some(json!({ "provider_id": id1, "model_id": "m1", "display_name": "M1" })),
+    )
+    .await;
+    let mid1 = Uuid::parse_str(m1["id"].as_str().unwrap()).unwrap();
+    let (_, _) = call(
+        &w.app,
+        "PATCH",
+        &format!("{catalog_base}/{mid1}"),
+        &w.admin_token,
+        Some(json!({ "expected_revision": 1, "enabled": true })),
+    )
+    .await;
+    let (_, _) = call(
+        &w.app,
+        "PUT",
+        &format!("/v1/pm/tenants/{}/llm-model-authorizations", w.tenant_id),
+        &w.admin_token,
+        Some(json!({ "items": [{ "model_id": mid1, "action": "grant" }] })),
+    )
+    .await;
+    let (_, _) = call(
+        &w.app,
+        "PUT",
+        &format!("/v1/pm/tenants/{}/llm-model-policies", w.tenant_id),
+        &w.admin_token,
+        Some(json!({ "items": [{ "role_key": "general", "model_id": mid1 }] })),
+    )
+    .await;
+
+    let cfg = resolve_model_for_role(&w.pool, project_id, "general")
+        .await
+        .unwrap();
+    assert_eq!(cfg.provider_id, id1);
+    assert_eq!(cfg.model, "m1");
+    assert_eq!(cfg.model_ref, Some(mid1));
+
+    // ③ 第二个 Provider + 项目约束 = 该 Provider（其上无可用模型）→
+    //    provider_constraint_violation 显式失败，绝不落到 ds-1
+    let (_, p2) = create_provider(
+        &w,
+        json!({
+            "name": "ds-2", "provider_type": "openai_compatible",
+            "endpoint": "https://api.example.com/v1"
+        }),
+    )
+    .await;
+    let id2 = Uuid::parse_str(p2["id"].as_str().unwrap()).unwrap();
     let (_, e2) = call(
         &w.app,
         "POST",
@@ -720,16 +778,6 @@ async fn resolution_prefers_project_policy_and_does_not_fall_back(pool: PgPool) 
     )
     .await;
     assert_eq!(e2["status"], "enabled", "{e2}");
-    let rev2 = e2["revision"].as_i64().unwrap();
-
-    // ② 未指定 → Team 默认 = ds-1（创建序第一）
-    let cfg = resolve_repo_call_config(&w.pool, project_id)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(cfg.provider_id, id1);
-
-    // ① 项目指定 ds-2 → 覆盖 Team 默认
     let (_, _) = call(
         &w.app,
         "PUT",
@@ -738,42 +786,30 @@ async fn resolution_prefers_project_policy_and_does_not_fall_back(pool: PgPool) 
         Some(json!({ "provider_id": id2, "expected_revision": 1 })),
     )
     .await;
-    let cfg = resolve_repo_call_config(&w.pool, project_id)
+    let failure = resolve_model_for_role(&w.pool, project_id, "general")
         .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(cfg.provider_id, id2);
-    assert_eq!(cfg.model, "m2");
-
-    // 严格不回退：指定的 ds-2 停用后 → None（Fake 可见），绝不落到 ds-1
-    //（CAS：expected == 当前 revision，即 enable 后的 rev2）。
-    let (_, d2) = call(
-        &w.app,
-        "POST",
-        &format!("{}/{}/status", base_uri(w.tenant_id), id2),
-        &w.admin_token,
-        Some(json!({ "expected_revision": rev2, "action": "disable" })),
-    )
-    .await;
-    assert_eq!(d2["status"], "disabled", "{d2}");
-    let cfg = resolve_repo_call_config(&w.pool, project_id).await.unwrap();
+        .unwrap_err();
     assert!(
-        cfg.is_none(),
-        "designated disabled must NOT fall back to ds-1"
+        matches!(
+            failure,
+            ModelResolutionError::Configuration {
+                reason: "provider_constraint_violation",
+                ..
+            }
+        ),
+        "{failure:?}"
     );
 
-    // 清掉指定 → 回到 Team 默认 ds-1
+    // ④ 清掉约束 → 回 ds-1/m1（general 策略不受约束残留影响）
     sqlx::query("DELETE FROM ai.project_ai_model_policy WHERE project_id = $1")
         .bind(project_id)
         .execute(&w.pool)
         .await
         .unwrap();
-    let cfg = resolve_repo_call_config(&w.pool, project_id)
+    let cfg = resolve_model_for_role(&w.pool, project_id, "general")
         .await
-        .unwrap()
         .unwrap();
     assert_eq!(cfg.provider_id, id1);
-    let _ = rev1;
 }
 
 /// D-3=A（adjudication pack §〇/§四）：同一 Provider 可被多个项目各自指定
@@ -826,7 +862,7 @@ async fn two_projects_may_share_one_provider(pool: PgPool) {
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
-        assert_eq!(body["provider_id"], json!(provider_id));
+        assert_eq!(body["provider_constraint"], json!(provider_id));
     }
 
     // 两个项目 GET 均回读同一 Provider。
@@ -840,7 +876,7 @@ async fn two_projects_may_share_one_provider(pool: PgPool) {
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
-        assert_eq!(body["provider_id"], json!(provider_id));
+        assert_eq!(body["provider_constraint"], json!(provider_id));
         assert_eq!(body["provider_name"], "ds-shared");
     }
 }

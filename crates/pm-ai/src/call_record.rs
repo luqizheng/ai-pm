@@ -60,6 +60,7 @@ pub(crate) fn repo_error_kind(
         pm_application::repo_facts::pm_ai_port::ModelError::Timeout => "timeout",
         pm_application::repo_facts::pm_ai_port::ModelError::Unavailable(_) => "model_unavailable",
         pm_application::repo_facts::pm_ai_port::ModelError::BadOutput(_) => "provider_error",
+        pm_application::repo_facts::pm_ai_port::ModelError::Configuration(_) => "configuration",
     }
 }
 

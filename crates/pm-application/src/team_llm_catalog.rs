@@ -23,7 +23,7 @@ use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::actor::AuditActor;
-use crate::team_llm::TeamLlmError;
+use crate::team_llm::{decrypt_api_key_bytes, ResolvedProvider, TeamLlmError};
 
 /// 模型策略 Role 词表（任务书 §3 裁决 D-P3-1：设计稿 §10.1 七 Role 的
 /// snake_case；与项目执行职能词表 `ai_role.rs` 正交）。
@@ -506,13 +506,13 @@ pub async fn upsert_authorizations(
 
         let row: (String, DateTime<Utc>, i64) = sqlx::query_as(
             "INSERT INTO ai.team_llm_model_authorization \
-             (tenant_id, model_id, authorization, granted_by) \
+             (tenant_id, model_id, state, granted_by) \
              VALUES ($1, $2, $3, $4) \
              ON CONFLICT (tenant_id, model_id) DO UPDATE SET \
-             authorization = EXCLUDED.authorization, granted_by = EXCLUDED.granted_by, \
+             state = EXCLUDED.state, granted_by = EXCLUDED.granted_by, \
              granted_at = now(), revision = team_llm_model_authorization.revision + 1, \
              updated_at = now() \
-             RETURNING authorization, granted_at, revision",
+             RETURNING state, granted_at, revision",
         )
         .bind(tenant_id)
         .bind(item.model_id)
@@ -569,7 +569,7 @@ async fn ensure_model_usable(
     model_row_id: Uuid,
 ) -> Result<Uuid, TeamLlmError> {
     let row: Option<(bool, Option<String>, String)> = sqlx::query_as(
-        "SELECT m.enabled, a.authorization, p.status \
+        "SELECT m.enabled, a.state, p.status \
          FROM ai.team_llm_model m \
          LEFT JOIN ai.team_llm_model_authorization a \
            ON a.tenant_id = m.tenant_id AND a.model_id = m.id \
@@ -879,4 +879,197 @@ pub async fn set_project_overrides(
     tx.commit().await?;
 
     get_project_ai_policies(pool, tenant_id, project_id).await
+}
+// ─────────────────────────────────────────────────────────── 解析链（AC-09/§6）
+
+/// 模型解析失败（§6.1 reason 词表）：业务性 Configuration Error 与基础设施
+/// 失败分轨——上层据此产出显式配置错误（禁止降级）或留痕告警。
+#[derive(Debug, thiserror::Error)]
+pub enum ModelResolutionError {
+    #[error("{reason}: {detail}")]
+    Configuration { reason: &'static str, detail: String },
+    #[error(transparent)]
+    Infrastructure(#[from] sqlx::Error),
+}
+
+/// 四级解析的行取数 JOIN（三级 source 表不同，JOIN 面同构）。
+const RESOLVE_JOINS: &str = "JOIN ai.team_llm_model m ON m.id = o.model_id AND m.tenant_id = o.tenant_id \
+    JOIN ai.team_llm_provider p ON p.id = m.provider_id AND p.tenant_id = m.tenant_id \
+    LEFT JOIN ai.team_llm_model_authorization a ON a.tenant_id = m.tenant_id AND a.model_id = m.id \
+    LEFT JOIN ai.team_llm_credential c ON c.id = p.credential_id";
+
+type ResolveRowTuple = (
+    Uuid,            // m.id（model_ref）
+    Uuid,            // p.id（provider_id）
+    String,          // p.endpoint
+    String,          // m.model_id
+    String,          // p.provider_type
+    Option<Vec<u8>>, // c.api_key_ciphertext
+    i32,             // p.timeout_secs
+    bool,            // m.enabled
+    Option<String>,  // a.state（授权状态）
+    String,          // p.status
+);
+
+/// 四级解析链（任务书 §6.1，设计稿 §10.3 完整兑现）：
+/// 项目 Role 覆盖 → Team Role 策略 → Team general → 显式 Configuration Error。
+/// **命中即严格校验（enabled ∧ team_wide ∧ provider enabled ∧ 凭证可用 ∧
+/// 项目 Provider 约束），任一失败即 Configuration Error，不回退下一级**
+/// （DEC-LLM-004 Fail-Fast；reason 词表见 ModelResolutionError）。
+pub async fn resolve_model_for_role(
+    pool: &PgPool,
+    project_id: Uuid,
+    role_key: &str,
+) -> Result<ResolvedProvider, ModelResolutionError> {
+    if !ROLE_KEYS.contains(&role_key) {
+        return Err(ModelResolutionError::Configuration {
+            reason: "general_policy_missing",
+            detail: format!("unknown role_key {role_key:?}"),
+        });
+    }
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or(ModelResolutionError::Configuration {
+            reason: "no_model_for_role",
+            detail: format!("project {project_id} not found"),
+        })?;
+
+    // 第 1 级：项目 Role 覆盖
+    let override_row: Option<ResolveRowTuple> = sqlx::query_as(&format!(
+        "SELECT m.id, p.id, p.endpoint, m.model_id, p.provider_type, c.api_key_ciphertext, \
+         p.timeout_secs, m.enabled, a.state, p.status \
+         FROM ai.project_ai_model_override o \
+         {RESOLVE_JOINS} \
+         WHERE o.tenant_id = $1 AND o.role_key = $2 AND o.project_id = $3"
+    ))
+    .bind(tenant_id)
+    .bind(role_key)
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+    if let Some(row) = override_row {
+        return validate_and_build_resolved(pool, tenant_id, project_id, row).await;
+    }
+
+    // 第 2 级：Team Role 策略
+    let policy_row: Option<ResolveRowTuple> = sqlx::query_as(&format!(
+        "SELECT m.id, p.id, p.endpoint, m.model_id, p.provider_type, c.api_key_ciphertext, \
+         p.timeout_secs, m.enabled, a.state, p.status \
+         FROM ai.team_llm_model_policy o \
+         {RESOLVE_JOINS} \
+         WHERE o.tenant_id = $1 AND o.role_key = $2"
+    ))
+    .bind(tenant_id)
+    .bind(role_key)
+    .fetch_optional(pool)
+    .await?;
+    if let Some(row) = policy_row {
+        return validate_and_build_resolved(pool, tenant_id, project_id, row).await;
+    }
+
+    // 第 3 级：Team general（兜底）
+    let general_row: Option<ResolveRowTuple> = sqlx::query_as(&format!(
+        "SELECT m.id, p.id, p.endpoint, m.model_id, p.provider_type, c.api_key_ciphertext, \
+         p.timeout_secs, m.enabled, a.state, p.status \
+         FROM ai.team_llm_model_policy o \
+         {RESOLVE_JOINS} \
+         WHERE o.tenant_id = $1 AND o.role_key = 'general'"
+    ))
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some(row) = general_row else {
+        return Err(ModelResolutionError::Configuration {
+            reason: "general_policy_missing",
+            detail: format!(
+                "no model override, no '{role_key}' policy, and no 'general' policy is configured; \
+                 configure one in Team Settings → AI Configuration"
+            ),
+        });
+    };
+    validate_and_build_resolved(pool, tenant_id, project_id, row).await
+}
+
+/// 命中行的严格校验（§6.1）+ 凭证解密 + 项目 Provider 约束（§6.2）。
+async fn validate_and_build_resolved(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    row: ResolveRowTuple,
+) -> Result<ResolvedProvider, ModelResolutionError> {
+    let (
+        model_ref,
+        provider_id,
+        endpoint,
+        model,
+        provider_type,
+        ciphertext,
+        timeout_secs,
+        enabled,
+        authorization,
+        provider_status,
+    ) = row;
+    if !enabled {
+        return Err(ModelResolutionError::Configuration {
+            reason: "model_disabled",
+            detail: format!("model {model:?} is disabled"),
+        });
+    }
+    if authorization.as_deref() != Some("team_wide") {
+        return Err(ModelResolutionError::Configuration {
+            reason: "authorization_revoked",
+            detail: format!("model {model:?} is not authorized for projects"),
+        });
+    }
+    if provider_status != "enabled" {
+        return Err(ModelResolutionError::Configuration {
+            reason: "provider_not_enabled",
+            detail: format!("model {model:?}'s provider is not enabled"),
+        });
+    }
+    let api_key = match ciphertext {
+        Some(bytes) => decrypt_api_key_bytes(&bytes).map_err(|_| {
+            ModelResolutionError::Configuration {
+                reason: "credential_missing",
+                detail: "api key could not be decrypted".to_string(),
+            }
+        })?,
+        None if provider_type == "openai_compatible" => String::new(),
+        None => {
+            return Err(ModelResolutionError::Configuration {
+                reason: "credential_missing",
+                detail: "provider has no credential configured".to_string(),
+            })
+        }
+    };
+    // 项目 Provider 约束（§6.2：现 project_ai_model_policy 单跳降级为候选
+    // 过滤器；约束行存在时解析结果的 Provider 必须一致，显式失败不静默换）
+    let constraint: Option<Uuid> = sqlx::query_scalar(
+        "SELECT provider_id FROM ai.project_ai_model_policy \
+         WHERE tenant_id = $1 AND project_id = $2",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?;
+    if let Some(constrained) = constraint {
+        if provider_id != constrained {
+            return Err(ModelResolutionError::Configuration {
+                reason: "provider_constraint_violation",
+                detail: format!(
+                    "resolved model {model:?} lives on a different provider than the project constraint"
+                ),
+            });
+        }
+    }
+    Ok(ResolvedProvider {
+        provider_id,
+        endpoint,
+        model,
+        api_key,
+        timeout_secs,
+        model_ref: Some(model_ref),
+    })
 }

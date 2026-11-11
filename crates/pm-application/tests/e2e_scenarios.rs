@@ -280,6 +280,7 @@ async fn worker_loop(
                     ModelError::Timeout => "model_timeout",
                     ModelError::Unavailable(_) => "model_unavailable",
                     ModelError::BadOutput(_) => "model_bad_output",
+                    ModelError::Configuration(_) => "model_configuration",
                 };
                 job_queue::fail(pool, job.job_id, code, 3, 1)
                     .await

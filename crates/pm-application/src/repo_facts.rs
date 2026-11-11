@@ -314,6 +314,9 @@ pub mod pm_ai_port {
         Timeout,
         Unavailable(String),
         BadOutput(String),
+        /// 模型/Provider 配置不可用（§11 Configuration Error；Phase 3B repo
+        /// 链切四级 Role 解析后携带显式失败原因）。
+        Configuration(String),
     }
 
     impl std::fmt::Display for ModelError {
@@ -325,6 +328,9 @@ pub mod pm_ai_port {
                 }
                 ModelError::BadOutput(reason) => {
                     write!(f, "analysis model returned bad output: {reason}")
+                }
+                ModelError::Configuration(reason) => {
+                    write!(f, "analysis model configuration error: {reason}")
                 }
             }
         }

@@ -20,7 +20,7 @@ use kb_pc_contracts::retrieval::{PlannerModel, PlannerModelError};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::analysis_model::{select_analysis_model_config, ModelSelection};
+use crate::analysis_model::{select_model_for_role, ModelSelection};
 use crate::call_record::{record_call, PURPOSE_RETRIEVAL_PLANNER};
 use crate::conversation_model::{self, ConversationTurn};
 use crate::model::ModelError;
@@ -62,9 +62,10 @@ impl LlmRetrievalPlanner {
 #[async_trait::async_trait]
 impl PlannerModel for LlmRetrievalPlanner {
     async fn plan(&self, project_id: Uuid, query: &str) -> Result<String, PlannerModelError> {
-        let cfg = match select_analysis_model_config(&self.pool, project_id).await {
+        // Phase 3B role chain（任务书 §6.3）：检索规划 = general 用途。
+        let cfg = match select_model_for_role(&self.pool, project_id, "general").await {
             ModelSelection::Provider(cfg) => cfg,
-            ModelSelection::NoProvider => {
+            ModelSelection::ConfigurationFailed { .. } => {
                 return Err(PlannerModelError::NoProvider);
             }
             ModelSelection::ResolutionFailed(reason) => {

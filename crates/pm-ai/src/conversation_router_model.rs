@@ -20,7 +20,7 @@ use pm_application::conversation_router::{
 };
 use uuid::Uuid;
 
-use crate::analysis_model::{select_analysis_model_config, ModelSelection};
+use crate::analysis_model::{select_model_for_role, ModelSelection};
 use crate::call_record::{self, elapsed_ms, PURPOSE_CONVERSATION_ROUTER};
 use crate::conversation_model::{self, ConversationTurn};
 use crate::model::ModelError;
@@ -89,10 +89,11 @@ impl IntentClassifier for LlmIntentClassifier {
         project_id: Uuid,
         content: &str,
     ) -> Result<IntentClassification, ClassifierError> {
-        let cfg = match select_analysis_model_config(&self.pool, project_id).await {
+        // Phase 3B role chain（任务书 §6.3）：意图分类 = general 用途。
+        let cfg = match select_model_for_role(&self.pool, project_id, "general").await {
             ModelSelection::Provider(cfg) => cfg,
-            ModelSelection::NoProvider => {
-                return Err(ClassifierError::NoProvider("no provider resolved".into()))
+            ModelSelection::ConfigurationFailed { detail, .. } => {
+                return Err(ClassifierError::NoProvider(detail))
             }
             ModelSelection::ResolutionFailed(reason) => {
                 return Err(ClassifierError::NoProvider(reason))

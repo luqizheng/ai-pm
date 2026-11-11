@@ -31,7 +31,8 @@ use pm_application::snapshot_analysis::{
     SnapshotAnalysisModel, SnapshotDigestEnrichment, SnapshotObjectEnrichment,
     SnapshotObjectSkeleton, SnapshotObjectsEnrichment,
 };
-use pm_application::team_llm::{resolve_repo_call_config, ResolvedProvider};
+use pm_application::team_llm::ResolvedProvider;
+use pm_application::team_llm_catalog::{resolve_model_for_role, ModelResolutionError};
 
 use crate::call_record::{self, elapsed_ms, repo_error_kind};
 
@@ -139,13 +140,24 @@ impl LlmSnapshotAnalysisModel {
         if self.mode == SnapshotModelMode::Derived {
             return Ok(None);
         }
-        match resolve_repo_call_config(&self.pool, project_id).await {
-            Ok(Some(cfg)) => Ok(Some(cfg)),
-            // 无 provider = 合法默认（结构化派生），不告警不记账。
-            Ok(None) => Ok(None),
-            Err(err) => {
-                // 解析失败（凭证解密/项目行缺失/DB）：无 provider 行可挂记账，
-                // 留结构化 WARN 后按调用失败走（上层回退派生并标 fallback）。
+        // Phase 3B role chain（任务书 §6.3）：快照增强 = knowledge_management
+        // 用途。Derived 模式的 Ok(None) = 合法默认（结构化派生），不告警不记账。
+        match resolve_model_for_role(&self.pool, project_id, "knowledge_management").await {
+            Ok(cfg) => Ok(Some(cfg)),
+            Err(ModelResolutionError::Configuration { reason, detail }) => {
+                // 无可用模型：LLM 增强不可用——上层回退派生并标 fallback；
+                // 显式 Configuration（不静默换模型，DEC-LLM-004）。
+                tracing::warn!(
+                    %project_id,
+                    reason,
+                    %detail,
+                    "snapshot llm enhancement unavailable; falling back to derived facts"
+                );
+                Err(ModelError::Configuration(detail))
+            }
+            Err(ModelResolutionError::Infrastructure(err)) => {
+                // 解析基础设施失败（DB/凭证解密）：留结构化 WARN 后按调用失败走
+                // （上层回退派生并标 fallback）。
                 tracing::warn!(
                     %project_id,
                     error = %err,
@@ -810,6 +822,15 @@ mod tests {
         .execute(pool)
         .await
         .unwrap();
+        // Phase 3B：解析链只认目录面——补目录模型 + 授权 + general 策略
+        crate::test_seed::seed_model_catalog(
+            pool,
+            pm_domain::SYSTEM_TENANT,
+            provider_id,
+            "test-model",
+            principal_id,
+        )
+        .await;
         provider_id
     }
 
@@ -886,19 +907,21 @@ mod tests {
                 .unwrap();
         assert_eq!(provider_seen, provider_id);
 
-        // 无 provider 的项目 → Ok(None)，零记账。注意三级解析的「租户首个
-        // enabled」兜底：lonely 与上面种子 provider 同租户，会解析到它——
-        // 先显式 disable，才真正落到 NoProvider 分支（顺带覆盖停用语义）。
+        // Phase 3B：provider 停用 → 四级链严格校验失败 → 显式
+        // Configuration Error（§6.1，不静默换模型）；快照管道捕获后回退派生
+        // 并标 fallback。零记账语义保留（Err 无 provider 记账面）。
         sqlx::query("UPDATE ai.team_llm_provider SET status = 'disabled'")
             .execute(&pool)
             .await
             .unwrap();
         let lonely = seed_project(&pool).await;
-        let none = model
+        let outcome = model
             .enrich_digest(lonely, "demo", "file:///repo", &facts())
-            .await
-            .unwrap();
-        assert!(none.is_none());
+            .await;
+        assert!(
+            matches!(outcome, Err(ModelError::Configuration(_))),
+            "explicit configuration failure expected (derived-fallback path)"
+        );
         let lonely_rows: i64 =
             sqlx::query_scalar("SELECT count(*) FROM ai.llm_call_record WHERE project_id = $1")
                 .bind(lonely)

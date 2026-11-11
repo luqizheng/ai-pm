@@ -205,8 +205,9 @@ pub use task_dependency::{
 };
 pub use team_llm::{
     create_team_provider, delete_team_provider, get_project_ai_policy, list_team_providers,
-    replace_team_credential, resolve_repo_call_config, set_project_ai_policy,
-    set_team_provider_status, test_team_provider, update_team_provider, CreateTeamProviderRequest,
-    ProjectAiPolicyRow, ReplaceCredentialRequest, ResolvedProvider, SetStatusRequest, TeamLlmError,
-    TeamLlmProviderRow, TestResult, UpdateTeamProviderRequest, PROVIDER_TYPES,
+    replace_team_credential, set_project_ai_policy, set_team_provider_status, test_team_provider,
+    update_team_provider, CreateTeamProviderRequest, ProjectAiPolicyRow, ReplaceCredentialRequest,
+    ResolvedProvider, SetStatusRequest, TeamLlmError, TeamLlmProviderRow, TestResult,
+    UpdateTeamProviderRequest, PROVIDER_TYPES,
 };
+pub use team_llm_catalog::{resolve_model_for_role, ModelResolutionError};

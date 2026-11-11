@@ -8,7 +8,7 @@
 //! `guard_project_manager` 是项目域。
 
 use axum::{
-    extract::{Extension, Path, Query, State},
+    extract::{rejection::JsonRejection, Extension, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::get,
@@ -101,11 +101,19 @@ async fn create_model_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
     Path(tenant_id): Path<Uuid>,
-    Json(body): Json<CreateModelRequest>,
+    body: Result<Json<CreateModelRequest>, JsonRejection>,
 ) -> Response {
+    // 守卫先于 body 提取：权限拒绝（403）优先于媒体类型/JSON 错误（415/400）
     if let Err(resp) = require_admin(&caller, tenant_id).await {
         return resp;
     }
+    let Ok(Json(body)) = body else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "message": "invalid JSON body" })),
+        )
+            .into_response();
+    };
     match create_model(&state.pool, &audit_actor(&caller), tenant_id, body).await {
         Ok(row) => (StatusCode::CREATED, Json(row)).into_response(),
         Err(err) => error_response(err),
@@ -116,11 +124,19 @@ async fn update_model_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
     Path((tenant_id, model_row_id)): Path<(Uuid, Uuid)>,
-    Json(body): Json<UpdateModelRequest>,
+    body: Result<Json<UpdateModelRequest>, JsonRejection>,
 ) -> Response {
+    // 守卫先于 body 提取（同上）
     if let Err(resp) = require_admin(&caller, tenant_id).await {
         return resp;
     }
+    let Ok(Json(body)) = body else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "message": "invalid JSON body" })),
+        )
+            .into_response();
+    };
     match update_model(&state.pool, &audit_actor(&caller), tenant_id, model_row_id, body).await {
         Ok(row) => (StatusCode::OK, Json(row)).into_response(),
         Err(err) => error_response(err),
@@ -137,11 +153,19 @@ async fn authorizations_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
     Path(tenant_id): Path<Uuid>,
-    Json(body): Json<AuthorizationsBody>,
+    body: Result<Json<AuthorizationsBody>, JsonRejection>,
 ) -> Response {
+    // 守卫先于 body 提取（同上）
     if let Err(resp) = require_admin(&caller, tenant_id).await {
         return resp;
     }
+    let Ok(Json(body)) = body else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "message": "invalid JSON body" })),
+        )
+            .into_response();
+    };
     match upsert_authorizations(&state.pool, &audit_actor(&caller), tenant_id, body.items).await {
         Ok(rows) => (StatusCode::OK, Json(json!({ "items": rows }))).into_response(),
         Err(err) => error_response(err),
@@ -172,11 +196,19 @@ async fn team_policies_put_handler(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
     Path(tenant_id): Path<Uuid>,
-    Json(body): Json<TeamPoliciesBody>,
+    body: Result<Json<TeamPoliciesBody>, JsonRejection>,
 ) -> Response {
+    // 守卫先于 body 提取（同上）
     if let Err(resp) = require_admin(&caller, tenant_id).await {
         return resp;
     }
+    let Ok(Json(body)) = body else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "message": "invalid JSON body" })),
+        )
+            .into_response();
+    };
     match set_team_policies(&state.pool, &audit_actor(&caller), tenant_id, body.items).await {
         Ok(rows) => (StatusCode::OK, Json(json!({ "items": rows }))).into_response(),
         Err(err) => error_response(err),

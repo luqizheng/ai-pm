@@ -185,7 +185,7 @@ pub fn encrypt_api_key(key: &str) -> Result<(Vec<u8>, String), TeamLlmError> {
     Ok((payload, hint_of(key)))
 }
 
-fn decrypt_api_key_bytes(payload: &[u8]) -> Result<String, TeamLlmError> {
+pub(crate) fn decrypt_api_key_bytes(payload: &[u8]) -> Result<String, TeamLlmError> {
     if payload.len() <= NONCE_LEN {
         return Err(TeamLlmError::Crypto);
     }
@@ -1186,7 +1186,7 @@ pub async fn set_project_ai_policy(
     Ok(row)
 }
 
-/// 解析后的调用配置（repo_import 等 worker 路径构造模型用；明文 Key 只在
+/// 解析后的调用配置（worker/分析链路径构造模型用；明文 Key 只在
 /// 后端内存流转，绝不回显）。
 #[derive(Debug, Clone)]
 pub struct ResolvedProvider {
@@ -1195,92 +1195,11 @@ pub struct ResolvedProvider {
     pub model: String,
     pub api_key: String,
     pub timeout_secs: i32,
+    /// 解析出的目录模型行（Phase 3B；记账归因 ai.llm_call_record.model_ref
+    /// 接线在 3C）。过渡解析链产出的实例为 None。
+    pub model_ref: Option<Uuid>,
 }
 
-/// 为项目解析可用的 Provider（repo_import 过渡语义，Phase 3 策略解析链接管前）：
-/// 项目 → 租户 → 首个 `enabled` 且 configuration.model 非空的实例（创建序）。
-/// 取不到返回 None——上层回退 Fake（既有 dev 行为，非静默降级：主链 Task 17
-/// 接线后由统一 Gateway + 策略解析给出显式 Configuration Error）。
-pub async fn resolve_repo_call_config(
-    pool: &PgPool,
-    project_id: Uuid,
-) -> Result<Option<ResolvedProvider>, TeamLlmError> {
-    // 三级解析（§10.3，Phase 3 策略解析前的过渡口径）：
-    //   1) 项目指定（严格：指定的 Provider 非 enabled/缺模型 → None，不回退 Team 默认）
-    //   2) 未指定 → Team 首个 enabled（创建序）
-    //   3) 都没有 → None（上层回退 Fake，model_name='fake' 可见）
-    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
-        .bind(project_id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or(TeamLlmError::NotFound)?;
-
-    type Row = Option<(Uuid, String, String, Option<Vec<u8>>, String, i32)>;
-    let designated: Row = sqlx::query_as(
-        "SELECT p.id, p.endpoint, p.configuration->>'model', c.api_key_ciphertext, p.provider_type, p.timeout_secs \
-         FROM ai.project_ai_model_policy pol \
-         JOIN ai.team_llm_provider p ON p.id = pol.provider_id AND p.tenant_id = pol.tenant_id \
-         LEFT JOIN ai.team_llm_credential c ON c.id = p.credential_id \
-         WHERE pol.tenant_id = $1 AND pol.project_id = $2 \
-           AND p.status = 'enabled' \
-           AND COALESCE(p.configuration->>'model', '') <> ''",
-    )
-    .bind(tenant_id)
-    .bind(project_id)
-    .fetch_optional(pool)
-    .await?;
-    let designated = match designated {
-        Some(row) => Some(row),
-        None => {
-            // 项目有指定但当前不可用（停用/归档/缺模型）→ 严格失败，不回退。
-            let has_row: Option<Uuid> = sqlx::query_scalar(
-                "SELECT provider_id FROM ai.project_ai_model_policy \
-                 WHERE tenant_id = $1 AND project_id = $2",
-            )
-            .bind(tenant_id)
-            .bind(project_id)
-            .fetch_optional(pool)
-            .await?;
-            if has_row.is_some() {
-                return Ok(None);
-            }
-            None
-        }
-    };
-
-    let row = match designated {
-        Some(row) => Some(row),
-        None => sqlx::query_as(
-            "SELECT p.id, p.endpoint, p.configuration->>'model', c.api_key_ciphertext, p.provider_type, p.timeout_secs \
-             FROM ai.team_llm_provider p \
-             LEFT JOIN ai.team_llm_credential c ON c.id = p.credential_id \
-             WHERE p.tenant_id = $1 \
-               AND p.status = 'enabled' \
-               AND COALESCE(p.configuration->>'model', '') <> '' \
-             ORDER BY p.created_at, p.id \
-             LIMIT 1",
-        )
-        .bind(tenant_id)
-        .fetch_optional(pool)
-        .await?,
-    };
-
-    let Some((provider_id, endpoint, model, ciphertext, provider_type, timeout_secs)) = row else {
-        return Ok(None);
-    };
-    let api_key = match ciphertext {
-        Some(bytes) => decrypt_api_key_bytes(&bytes)?,
-        None if provider_type == "openai_compatible" => String::new(),
-        None => return Ok(None),
-    };
-    Ok(Some(ResolvedProvider {
-        provider_id,
-        endpoint,
-        model,
-        api_key,
-        timeout_secs,
-    }))
-}
 
 #[cfg(test)]
 mod tests {

@@ -34,7 +34,7 @@ use std::time::{Duration, Instant};
 
 use uuid::Uuid;
 
-use crate::analysis_model::select_analysis_model_config;
+use crate::analysis_model::select_model_for_role;
 use crate::call_record::{self, elapsed_ms, PURPOSE_CONVERSATION_REPLY};
 use crate::conversation_model::{self, ConversationTurn, CONTEXT_WINDOW};
 use crate::model::ModelError;
@@ -249,9 +249,9 @@ impl ConversationReplyWorker {
             }
         };
 
-        // Task 17 three-level selection, reused verbatim: strict project
-        // designation → first enabled tenant provider → none.
-        match select_analysis_model_config(&self.pool, conversation.project_id).await {
+        // Phase 3B role chain（任务书 §6.3）：对话回复 = general 用途；
+        // 四级解析（覆盖 → Role 策略 → general → 显式 Configuration Error）。
+        match select_model_for_role(&self.pool, conversation.project_id, "general").await {
             crate::analysis_model::ModelSelection::Provider(cfg) => {
                 let messages = Self::build_messages(&history, injected.as_deref());
                 let timeout = chrono::Duration::seconds(i64::from(cfg.timeout_secs).max(1));
@@ -319,14 +319,22 @@ impl ConversationReplyWorker {
                     }
                 }
             }
-            crate::analysis_model::ModelSelection::NoProvider => Err(ReplyFailure::NoProvider {
-                reason: "no_provider",
-            }),
+            crate::analysis_model::ModelSelection::ConfigurationFailed { reason, detail } => {
+                tracing::warn!(
+                    conversation_id = %conversation.id,
+                    reason,
+                    %detail,
+                    "LLM model resolution returned an explicit configuration failure for this conversation"
+                );
+                Err(ReplyFailure::NoProvider {
+                    reason: "no_model_for_role",
+                })
+            }
             crate::analysis_model::ModelSelection::ResolutionFailed(error) => {
                 tracing::warn!(
                     conversation_id = %conversation.id,
                     error = %error,
-                    "LLM provider resolution failed for this conversation"
+                    "LLM model resolution failed for this conversation"
                 );
                 Err(ReplyFailure::NoProvider {
                     reason: "resolution_failed",
@@ -542,6 +550,15 @@ mod tests {
         .execute(pool)
         .await
         .unwrap();
+        // Phase 3B：解析链只认目录面——补目录模型 + 授权 + general 策略
+        crate::test_seed::seed_model_catalog(
+            pool,
+            SYSTEM_TENANT,
+            provider_id,
+            model,
+            principal_id,
+        )
+        .await;
         provider_id
     }
 
@@ -1134,6 +1151,15 @@ mod tests {
             .bind(credential_id)
             .execute(pool)
             .await?;
+        // Phase 3B：解析链只认目录面——补目录模型 + 授权 + general 策略
+        crate::test_seed::seed_model_catalog(
+            pool,
+            SYSTEM_TENANT,
+            provider_id,
+            "deepseek-chat",
+            provider_principal,
+        )
+        .await;
 
         // One full round against the real API (generous timeout for a cold
         // first call; DeepSeek chat completions typically answer in seconds).

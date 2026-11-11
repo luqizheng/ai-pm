@@ -355,7 +355,7 @@ async fn manual_registration_and_duplicate_rejection(pool: PgPool) {
     assert_eq!(status, StatusCode::CREATED, "{row}");
     let archived_id = Uuid::parse_str(row["id"].as_str().unwrap()).unwrap();
     let revision = row["revision"].as_i64().unwrap();
-    let (status, _) = call(
+    let (status, enabled) = call(
         &w.app,
         "POST",
         &format!("/v1/pm/tenants/{}/llm-providers/{archived_id}/status", w.tenant_id),
@@ -364,12 +364,13 @@ async fn manual_registration_and_duplicate_rejection(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+    // archive 的 CAS 基准 = enable 后的 revision（create 时的 1 已被推到 2）
     let (status, row) = call(
         &w.app,
         "POST",
         &format!("/v1/pm/tenants/{}/llm-providers/{archived_id}/status", w.tenant_id),
         &w.admin_token,
-        Some(json!({ "action": "archive", "expected_revision": row["revision"].as_i64().unwrap() })),
+        Some(json!({ "action": "archive", "expected_revision": enabled["revision"].as_i64().unwrap() })),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{row}");
@@ -705,7 +706,12 @@ async fn project_override_and_provider_constraint(pool: PgPool) {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
     assert!(body["message"].as_str().unwrap().contains("constraint"));
 
-    // 删行恢复继承（overrides 只含 null 项；约束保持）
+    // 删行恢复继承（overrides 只含 null 项；约束保持）。
+    // 注意：违规 PUT（400）的 provider 约束部分幂等生效（同值 upsert 仍推
+    // revision）——黑盒回读当前 revision 作为 CAS 基准，不依赖失败请求前的
+    // 快照值；「两段式 PUT 非原子」改进挂账 3C。
+    let (_, current) = call(&w.app, "GET", &uri, &w.admin_token, None).await;
+    let constraint_revision = current["provider_constraint_revision"].as_i64().unwrap();
     let (status, body) = call(
         &w.app,
         "PUT",
@@ -713,7 +719,7 @@ async fn project_override_and_provider_constraint(pool: PgPool) {
         &w.admin_token,
         Some(json!({
             "provider_id": p1,
-            "expected_revision": body["provider_constraint_revision"].as_i64().unwrap(),
+            "expected_revision": constraint_revision,
             "overrides": [{ "role_key": "ai_pm_lead", "model_id": null }]
         })),
     )

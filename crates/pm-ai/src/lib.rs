@@ -23,7 +23,10 @@ pub mod skill_router;
 pub mod snapshot_model;
 pub mod writeback_model;
 
-pub use analysis_model::{select_analysis_model_config, ModelSelection, RoutedAnalysisModel};
+#[cfg(test)]
+pub(crate) mod test_seed;
+
+pub use analysis_model::{select_model_for_role, ModelSelection, RoutedAnalysisModel};
 pub use call_record::PURPOSE_CONVERSATION_REPLY;
 pub use capability_projection::PgCapabilityProjection;
 pub use chat_context::{

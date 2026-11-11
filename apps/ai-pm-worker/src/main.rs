@@ -428,8 +428,28 @@ async fn handle_repo_job(pool: &PgPool, job: &ClaimedJob) {
             return;
         }
     };
+    // Phase 3B：四级 Role 链（role_key='general'）；解析失败 = 显式
+    // Configuration Error，job 直接失败（不回退 Fake，DEC-LLM-004 兑现）。
     let (model, model_name) =
-        pm_ai::repo_model::model_from_llm_provider(pool, job.project_id).await;
+        match pm_ai::repo_model::model_from_llm_provider(pool, job.project_id).await {
+            Ok(pair) => pair,
+            Err(err) => {
+                tracing::error!(
+                    job_id = %job.job_id,
+                    error = %err,
+                    "repo import model resolution failed (explicit configuration error)"
+                );
+                let _ = job_queue::fail(
+                    pool,
+                    job.job_id,
+                    &format!("model_configuration: {err}"),
+                    MAX_JOB_ATTEMPTS,
+                    JOB_BACKOFF_BASE_SECS,
+                )
+                .await;
+                return;
+            }
+        };
     if let Err(e) = sqlx::query("UPDATE integration.repo_import SET model_name = $2 WHERE id = $1")
         .bind(import_id)
         .bind(&model_name)

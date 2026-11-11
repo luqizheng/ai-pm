@@ -59,12 +59,14 @@ CREATE TABLE ai.team_llm_model_authorization (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid NOT NULL,
     model_id uuid NOT NULL,
-    authorization text DEFAULT 'team_wide'::text NOT NULL,
+    -- 列名 state（授权状态）：authorization 是 PG 保留字，不能裸用作列名；
+    -- JSON 契约字段仍为 authorization（AuthorizationRow Serialize 不变）
+    state text DEFAULT 'team_wide'::text NOT NULL,
     granted_by uuid NOT NULL,
     granted_at timestamp with time zone DEFAULT now() NOT NULL,
     revision bigint DEFAULT 1 NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT team_llm_model_authorization_state_check CHECK (authorization = ANY (ARRAY['team_wide'::text, 'revoked'::text]))
+    CONSTRAINT team_llm_model_authorization_state_check CHECK (state = ANY (ARRAY['team_wide'::text, 'revoked'::text]))
 );
 
 ALTER TABLE ONLY ai.team_llm_model_authorization
