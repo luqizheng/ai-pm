@@ -20,8 +20,8 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use pm_application::ai_context_items::{
-    attach_items, list_items, patch_lifecycle, remove_item, AttachItemRequest, ContextItemError,
-    PatchLifecycleRequest,
+    attach_items, list_candidates, list_interactions, list_items, patch_lifecycle, remove_item,
+    AttachItemRequest, ContextItemError, PatchLifecycleRequest,
 };
 
 use crate::auth::AuthedPrincipal;
@@ -41,6 +41,14 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/pm/projects/{project_id}/conversations/{conversation_id}/context-items/{item_id}/lifecycle",
             patch(patch_context_item_lifecycle_handler),
+        )
+        .route(
+            "/v1/pm/projects/{project_id}/conversations/{conversation_id}/interactions",
+            get(list_conversation_interactions_handler),
+        )
+        .route(
+            "/v1/pm/projects/{project_id}/context-candidates",
+            get(list_context_candidates_handler),
         )
 }
 
@@ -215,4 +223,73 @@ async fn remove_context_item_handler(
     .await
     .map_err(map_error)?;
     Ok(Json(serde_json::json!(item)))
+}
+
+#[derive(Deserialize)]
+struct CandidateQuery {
+    /// 候选类型（必选单值：AI-02 选择器按类型分页签请求）。
+    r#type: String,
+    q: Option<String>,
+    page: Option<i64>,
+    size: Option<i64>,
+    /// 给出时逐项计算「已附加」标识。
+    conversation_id: Option<Uuid>,
+}
+
+/// GET `/v1/pm/projects/{project_id}/context-candidates`：
+/// Add Context 选择器的服务端聚合（CX3 终裁——前端不得分别请求五个业务域
+/// 再自行拼接权限；类型筛选 + 关键词 + 分页 + 已附加标识 + 版本标签 + 摘要）。
+async fn list_context_candidates_handler(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(project_id): Path<Uuid>,
+    Query(query): Query<CandidateQuery>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
+    let (items, total) = list_candidates(
+        &state.pool,
+        caller.tenant_id,
+        project_id,
+        &query.r#type,
+        query.q.as_deref(),
+        query.page.unwrap_or(1),
+        query.size.unwrap_or(20),
+        query.conversation_id,
+    )
+    .await
+    .map_err(map_error)?;
+    Ok(Json(serde_json::json!({ "items": items, "total": total })))
+}
+
+/// GET `/v1/pm/projects/{project_id}/conversations/{conversation_id}/interactions`：
+/// 交互/审批记录的**权威**读源（CX3 终裁——Actions / History 不再用客户端推断
+/// 充当权威数据）。属主隔离 404 同形。
+async fn list_conversation_interactions_handler(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path((project_id, conversation_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
+    let records = list_interactions(
+        &state.pool,
+        caller.tenant_id,
+        project_id,
+        caller.principal_id,
+        conversation_id,
+    )
+    .await
+    .map_err(map_error)?;
+    Ok(Json(serde_json::json!({ "interactions": records })))
 }

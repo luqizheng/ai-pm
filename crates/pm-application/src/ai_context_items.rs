@@ -1246,3 +1246,260 @@ pub async fn load_injection_sources(
     }
     Ok(sources)
 }
+
+// ──────────────────────────────── B4 / CX3：权威读接口（interactions + 候选聚合）
+
+/// 交互记录视图（Actions / History 的**权威**读源——不再客户端派生）。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct InteractionRecordView {
+    pub id: Uuid,
+    pub conversation_id: Uuid,
+    pub message_id: Uuid,
+    /// 原始动作词表：accept / reject / submit / defer / decision。
+    pub action: String,
+    /// 终态：accepted / rejected / deferred / submitted / resolved。
+    pub status: String,
+    pub reason: Option<String>,
+    pub option_id: Option<String>,
+    pub answer: serde_json::Value,
+    pub decided_by: Uuid,
+    pub decided_by_name: Option<String>,
+    /// 服务端生成的人类可读记录号（INT-XXXXXXXX）。
+    pub reference: String,
+    pub created_at: DateTime<Utc>,
+    /// 关联消息正文摘要（前 160 字符；上下文定位用）。
+    pub message_excerpt: Option<String>,
+}
+
+/// 列会话的交互记录（B4 · CX3：Actions / History 的权威数据源）。
+///
+/// **属主隔离 404 同形**：会话不属于该 (tenant, project, principal) → NotFound；
+/// 按时间倒序。操作者名 join `core.principal.display_name`（可空——主体可能被清）。
+pub async fn list_interactions(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    principal_id: Uuid,
+    conversation_id: Uuid,
+) -> Result<Vec<InteractionRecordView>, ContextItemError> {
+    ensure_conversation_owned(pool, tenant_id, project_id, principal_id, conversation_id).await?;
+    let rows = sqlx::query(
+        "SELECT r.id, r.conversation_id, r.message_id, r.action, r.status, r.reason, \
+                r.option_id, r.answer, r.decided_by, p.display_name AS decided_by_name, \
+                r.reference, r.created_at, \
+                LEFT(m.content, 160) AS message_excerpt \
+           FROM ai.conversation_interaction r \
+           JOIN ai.conversation c ON c.id = r.conversation_id \
+           LEFT JOIN core.principal p ON p.id = r.decided_by \
+           LEFT JOIN ai.conversation_message m ON m.id = r.message_id \
+          WHERE r.conversation_id = $1 AND r.tenant_id = $2 AND r.project_id = $3 \
+          ORDER BY r.created_at DESC, r.id ASC",
+    )
+    .bind(conversation_id)
+    .bind(tenant_id)
+    .bind(project_id)
+    .fetch_all(pool)
+    .await
+    .map_err(ContextItemError::db)?;
+
+    use sqlx::Row;
+    Ok(rows
+        .iter()
+        .map(|row| InteractionRecordView {
+            id: row.get("id"),
+            conversation_id: row.get("conversation_id"),
+            message_id: row.get("message_id"),
+            action: row.get("action"),
+            status: row.get("status"),
+            reason: row.get("reason"),
+            option_id: row.get("option_id"),
+            answer: row.get("answer"),
+            decided_by: row.get("decided_by"),
+            decided_by_name: row.get("decided_by_name"),
+            reference: row.get("reference"),
+            created_at: row.get("created_at"),
+            message_excerpt: row.get("message_excerpt"),
+        })
+        .collect())
+}
+
+/// 候选对象视图（Add Context 选择器的**服务端聚合**——前端不得分别请求
+/// 五个业务域再自行拼接权限）。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ContextCandidateView {
+    pub object_type: String,
+    pub object_id: String,
+    /// 展示键（code / filename / domain）。
+    pub code: String,
+    pub title: String,
+    /// 简短摘要（title / goal / 内容前缀）。
+    pub summary: String,
+    /// 版本标签（有正式内容版本的对象；task 无）。
+    pub version_label: Option<String>,
+    /// 对当前会话而言是否已附加（`conversation_id` 给出时计算）。
+    pub attached: bool,
+}
+
+/// 候选对象聚合查询（B4 · CX3）。
+///
+/// - `object_type` **必选**（AI-02 选择器按类型分页签请求，服务端单域一条 SQL，
+///   避免跨六域 UNION 分页的不可预测性）；
+/// - `q` 对 code / title / 内容前缀做 ILIKE 过滤；
+/// - 分页返回 `{ items, total }`；
+/// - `conversation_id` 给出时逐项计算 `attached` 标识
+///   （attachment='attached'；detached 的历史条目不算已附加，可再次附加）；
+/// - 只列**可候选**的行（各域活跃状态，见 SQL 内过滤）。
+pub async fn list_candidates(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    object_type: &str,
+    q: Option<&str>,
+    page: i64,
+    size: i64,
+    conversation_id: Option<Uuid>,
+) -> Result<(Vec<ContextCandidateView>, i64), ContextItemError> {
+    if !OBJECT_TYPES.contains(&object_type) {
+        return Err(ContextItemError::Validation(format!(
+            "unknown object_type {object_type:?}"
+        )));
+    }
+    let page = page.max(1);
+    let size = size.clamp(1, 100);
+    let offset = (page - 1) * size;
+    let like = q
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| format!("%{s}%"));
+
+    // 各域候选 SQL（列形状统一：object_id, code, title, summary, version_label）。
+    let (sql, count_sql) = match object_type {
+        "requirement" => (
+            "SELECT r.id::text, r.code, r.title, r.title, \
+                    (SELECT max(version)::text FROM delivery.requirement_revision \
+                      WHERE requirement_id = r.id) AS version_label \
+               FROM delivery.requirement r \
+              WHERE r.tenant_id = $1 AND r.project_id = $2 AND r.lifecycle_status = 'active' \
+                AND ($3::text IS NULL OR r.code ILIKE $3 OR r.title ILIKE $3) \
+              ORDER BY r.updated_at DESC, r.id LIMIT $4 OFFSET $5",
+            "SELECT count(*) FROM delivery.requirement r \
+              WHERE r.tenant_id = $1 AND r.project_id = $2 AND r.lifecycle_status = 'active' \
+                AND ($3::text IS NULL OR r.code ILIKE $3 OR r.title ILIKE $3)",
+        ),
+        "design" => (
+            "SELECT d.id::text, d.code, d.title, d.title, \
+                    (SELECT max(version)::text FROM design.design_revision \
+                      WHERE design_id = d.id) AS version_label \
+               FROM design.design d \
+              WHERE d.tenant_id = $1 AND d.project_id = $2 AND d.lifecycle_status = 'active' \
+                AND ($3::text IS NULL OR d.code ILIKE $3 OR d.title ILIKE $3) \
+              ORDER BY d.updated_at DESC, d.id LIMIT $4 OFFSET $5",
+            "SELECT count(*) FROM design.design d \
+              WHERE d.tenant_id = $1 AND d.project_id = $2 AND d.lifecycle_status = 'active' \
+                AND ($3::text IS NULL OR d.code ILIKE $3 OR d.title ILIKE $3)",
+        ),
+        "adr" => (
+            "SELECT a.id::text, a.code, a.title, a.title, \
+                    (SELECT max(version)::text FROM design.adr_revision \
+                      WHERE adr_id = a.id) AS version_label \
+               FROM design.adr a \
+              WHERE a.tenant_id = $1 AND a.project_id = $2 \
+                AND a.status NOT IN ('superseded', 'deprecated', 'rejected') \
+                AND ($3::text IS NULL OR a.code ILIKE $3 OR a.title ILIKE $3) \
+              ORDER BY a.updated_at DESC, a.id LIMIT $4 OFFSET $5",
+            "SELECT count(*) FROM design.adr a \
+              WHERE a.tenant_id = $1 AND a.project_id = $2 \
+                AND a.status NOT IN ('superseded', 'deprecated', 'rejected') \
+                AND ($3::text IS NULL OR a.code ILIKE $3 OR a.title ILIKE $3)",
+        ),
+        "knowledge" => (
+            "SELECT k.id::text, k.domain, LEFT(k.content, 60), LEFT(k.content, 120), \
+                    k.version::text \
+               FROM ai.project_knowledge k \
+              WHERE k.tenant_id = $1 AND k.project_id = $2 AND k.status = 'active' \
+                AND ($3::text IS NULL OR k.content ILIKE $3) \
+              ORDER BY k.confirmed_at DESC, k.id LIMIT $4 OFFSET $5",
+            "SELECT count(*) FROM ai.project_knowledge k \
+              WHERE k.tenant_id = $1 AND k.project_id = $2 AND k.status = 'active' \
+                AND ($3::text IS NULL OR k.content ILIKE $3)",
+        ),
+        "document" => (
+            "SELECT d.id::text, d.filename, d.filename, d.filename, \
+                    dv.version_number::text \
+               FROM docproc.document d \
+               LEFT JOIN docproc.document_version dv ON dv.id = d.current_version_id \
+              WHERE d.tenant_id = $1 AND d.project_id = $2 \
+                AND ($3::text IS NULL OR d.filename ILIKE $3) \
+              ORDER BY d.updated_at DESC, d.id LIMIT $4 OFFSET $5",
+            "SELECT count(*) FROM docproc.document d \
+              WHERE d.tenant_id = $1 AND d.project_id = $2 \
+                AND ($3::text IS NULL OR d.filename ILIKE $3)",
+        ),
+        _ /* task */ => (
+            "SELECT t.id::text, t.title, t.title, COALESCE(t.goal, t.title), \
+                    NULL \
+               FROM delivery.task t \
+              WHERE t.tenant_id = $1 AND t.project_id = $2 \
+                AND t.status NOT IN ('cancelled', 'superseded') \
+                AND ($3::text IS NULL OR t.title ILIKE $3 OR t.goal ILIKE $3) \
+              ORDER BY t.updated_at DESC, t.id LIMIT $4 OFFSET $5",
+            "SELECT count(*) FROM delivery.task t \
+              WHERE t.tenant_id = $1 AND t.project_id = $2 \
+                AND t.status NOT IN ('cancelled', 'superseded') \
+                AND ($3::text IS NULL OR t.title ILIKE $3 OR t.goal ILIKE $3)",
+        ),
+    };
+
+    let total: i64 = sqlx::query_scalar(count_sql)
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(like.clone())
+        .fetch_one(pool)
+        .await
+        .map_err(ContextItemError::db)?;
+
+    let rows = sqlx::query(sql)
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(like)
+        .bind(size)
+        .bind(offset)
+        .fetch_all(pool)
+        .await
+        .map_err(ContextItemError::db)?;
+
+    use sqlx::Row;
+    let mut items = Vec::with_capacity(rows.len());
+    for row in rows {
+        let object_id: String = row.get(0);
+        let attached = match conversation_id {
+            Some(conversation_id) => {
+                let exists: bool = sqlx::query_scalar(
+                    "SELECT EXISTS (\
+                         SELECT 1 FROM ai.conversation_context_item \
+                          WHERE conversation_id = $1 AND object_type = $2 \
+                            AND object_id = $3 AND attachment = 'attached'\
+                     )",
+                )
+                .bind(conversation_id)
+                .bind(object_type)
+                .bind(&object_id)
+                .fetch_one(pool)
+                .await
+                .map_err(ContextItemError::db)?;
+                exists
+            }
+            None => false,
+        };
+        items.push(ContextCandidateView {
+            object_type: object_type.to_string(),
+            object_id,
+            code: row.get(1),
+            title: row.get(2),
+            summary: row.get(3),
+            version_label: row.get(4),
+            attached,
+        });
+    }
+    Ok((items, total))
+}
