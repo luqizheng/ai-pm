@@ -1462,28 +1462,19 @@ pub async fn request_design_revision_approval(
             "only pending_confirmation revisions can be requested for approval",
         ));
     }
-    let approval_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO design.design_approval \
-         (id, tenant_id, project_id, kind, design_id, target_id, target_hash, requested_by) \
-         VALUES ($1, $2, $3, 'design_revision', $4, $5, $6, $7)",
+    let approval_id = insert_design_approval(
+        &mut tx,
+        tenant_id,
+        project_id,
+        "design_revision",
+        "design_id",
+        design_id,
+        revision_id,
+        &content_hash,
+        actor.principal_id,
+        "an approval is already pending for this revision",
     )
-    .bind(approval_id)
-    .bind(tenant_id)
-    .bind(project_id)
-    .bind(design_id)
-    .bind(revision_id)
-    .bind(&content_hash)
-    .bind(actor.principal_id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| {
-        if is_unique_violation(&e) {
-            PmWriteError::Conflict("an approval is already pending for this revision")
-        } else {
-            PmWriteError::Db(e)
-        }
-    })?;
+    .await?;
     append_audit(
         &mut tx,
         project_id,
@@ -1524,28 +1515,19 @@ pub async fn request_adr_approval(
     .ok_or(PmWriteError::Conflict(
         "adr has no submitted content revision",
     ))?;
-    let approval_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO design.design_approval \
-         (id, tenant_id, project_id, kind, adr_id, target_id, target_hash, requested_by) \
-         VALUES ($1, $2, $3, 'adr_acceptance', $4, $5, $6, $7)",
+    let approval_id = insert_design_approval(
+        &mut tx,
+        tenant_id,
+        project_id,
+        "adr_acceptance",
+        "adr_id",
+        adr_id,
+        adr_id,
+        &content_hash,
+        actor.principal_id,
+        "an approval is already pending for this adr",
     )
-    .bind(approval_id)
-    .bind(tenant_id)
-    .bind(project_id)
-    .bind(adr_id)
-    .bind(adr_id)
-    .bind(&content_hash)
-    .bind(actor.principal_id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| {
-        if is_unique_violation(&e) {
-            PmWriteError::Conflict("an approval is already pending for this adr")
-        } else {
-            PmWriteError::Db(e)
-        }
-    })?;
+    .await?;
     append_audit(
         &mut tx,
         project_id,
@@ -1772,6 +1754,48 @@ pub async fn design_analysis(
         });
     }
     Ok(rows)
+}
+
+/// 专表审批插入 + pending 唯一冲突映射（批 A4 单源：design_revision /
+/// adr_acceptance / task_plan 三域同构 INSERT 收敛于此）。
+/// `entity_col` ∈ {design_id, adr_id, plan_id}（与 kind 一一对应）。
+#[allow(clippy::too_many_arguments)] // 审批插入行，列清单与 design_approval 对应
+pub(crate) async fn insert_design_approval(
+    tx: &mut sqlx::PgConnection,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    kind: &str,
+    entity_col: &str,
+    entity_id: Uuid,
+    target_id: Uuid,
+    target_hash: &str,
+    requested_by: Uuid,
+    pending_conflict: &'static str,
+) -> Result<Uuid, PmWriteError> {
+    let approval_id = Uuid::new_v4();
+    sqlx::query(&format!(
+        "INSERT INTO design.design_approval \
+         (id, tenant_id, project_id, kind, {entity_col}, target_id, target_hash, requested_by) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+    ))
+    .bind(approval_id)
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(kind)
+    .bind(entity_id)
+    .bind(target_id)
+    .bind(target_hash)
+    .bind(requested_by)
+    .execute(tx)
+    .await
+    .map_err(|e| {
+        if is_unique_violation(&e) {
+            PmWriteError::Conflict(pending_conflict)
+        } else {
+            PmWriteError::Db(e)
+        }
+    })?;
+    Ok(approval_id)
 }
 
 pub async fn fetch_approval_view(

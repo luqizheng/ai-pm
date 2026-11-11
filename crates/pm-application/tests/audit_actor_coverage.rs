@@ -40,13 +40,10 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     ("apps/pm-api/src/device_claim.rs", 1), // T-088：设备声明被忽略（tenant_audit_log）
     // T-088 新增：设备绑定审计（devenv 域）
     ("crates/pm-application/src/devenv/binding.rs", 1),
-    // Team LLM Provider 管理面（0041）：created/updated/rotated/tested/enabled/disabled/archived/deleted 共用本 helper
-    ("crates/pm-application/src/team_llm.rs", 1),
-    // Team LLM 模型目录 / 策略（Phase 3B）：目录与策略事件审计（tenant_audit_log，
-    // 与 team_llm.rs 同构——四列身份显式绑定）
-    ("crates/pm-application/src/team_llm_catalog.rs", 1),
-    // Team Onboarding（0044）：team.created/updated + 邀请/链接/激活全链共用本 helper
-    ("crates/pm-application/src/team_onboarding.rs", 1),
+    // Team LLM Provider / 模型目录 / Onboarding / 设备凭据四域的 tenant_audit_log
+    // 写入已归并到 pm_write::insert_tenant_audit 单点（批 A2，原四条清单项撤销；
+    // 转发壳只带 target_type，不再含 INSERT 文本）。
+    ("crates/pm-application/src/pm_write/support.rs", 1),
     // KB-PC 服务化（0048 Intake）：信号路由留痕（系统面 dispatch principal，四列显式 NULL）
     ("crates/pm-application/src/intake.rs", 1),
     // KB-PC 服务化：intake_task 人工重试（REST 面，写全四身份列）
@@ -56,9 +53,8 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     // KP-1 / PC-01B 发布事务（pc/publish.rs）：⑫ pc_version.publish（发布者四列）
     // + CAS 失配补偿 pc_version.publish_failed（系统面 dispatch principal，四列显式 NULL）
     ("crates/pm-application/src/pc/publish.rs", 2),
-    // Client Registry（0049，跨批补登记）：设备凭据 issue/revoke/permissions 审计（tenant_audit_log，
-    // 设备无 project 归属；checkpoint-1 会话全量门禁发现漏登记——0049 批实施遗漏）
-    ("crates/pm-application/src/device_credential.rs", 1),
+    // Client Registry（0049，跨批补登记）：设备凭据 issue/revoke/permissions 审计
+    // （原在 device_credential.rs，批 A2 归并入 pm_write/support.rs 单点）
     // KP-3 KB 三层最小面（0065）：来源登记/关联、记忆提案、K4 审核（批准/驳回/退回）共用本
     // helper（REST 面真人或 Key 调用方，四身份列全写；source_kind='kb_service'）
     ("crates/pm-application/src/kb_service/mod.rs", 1),

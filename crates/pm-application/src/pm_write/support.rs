@@ -66,6 +66,7 @@ pub(crate) async fn lock_head_row(
 /// WHERE id = $1 AND {parent_col} = $2 AND tenant_id = $3`。
 ///
 /// 行结构由调用方的 `R`（sqlx 元组）与 `cols` 一一对应。
+#[allow(clippy::too_many_arguments)] // 表名/列名/双 id 的参数化行锁
 pub(crate) async fn lock_revision_row<R>(
     conn: &mut sqlx::PgConnection,
     tenant_id: Uuid,
@@ -90,6 +91,43 @@ where
     .await
     .map_err(PmWriteError::Db)?
     .ok_or(PmWriteError::NotFound(not_found))
+}
+
+/// 租户级审计（governance.tenant_audit_log；四身份列全写——C174 守卫）。
+/// `target_*` 走 0041 通用列；审计失败即整体回滚（调用方在事务内执行）。
+/// 单一实现点：team_llm / team_onboarding / team_llm_catalog /
+/// device_credential 四域原各持一份同构 SQL（批 A2 归并）。
+#[allow(clippy::too_many_arguments)] // 审计插入行，列清单与 tenant_audit_log 对应
+pub(crate) async fn insert_tenant_audit(
+    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
+    tenant_id: Uuid,
+    actor: &AuditActor,
+    action: &str,
+    target_type: &str,
+    target_id: Uuid,
+    before: Option<serde_json::Value>,
+    after: Option<serde_json::Value>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO governance.tenant_audit_log \
+         (tenant_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
+          action, target_type, target_id, target_principal_id, before_data, after_data) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, $10, $11)",
+    )
+    .bind(tenant_id)
+    .bind(actor.principal_id)
+    .bind(actor.identity_id)
+    .bind(&actor.client)
+    .bind(&actor.auth_mode)
+    .bind(actor.claimed_device_id)
+    .bind(action)
+    .bind(target_type)
+    .bind(target_id)
+    .bind(before)
+    .bind(after)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 /// 项目内顺序发号：`{prefix}-NNN`（NNN 三位补零），取全表同前缀最大序号 +1。

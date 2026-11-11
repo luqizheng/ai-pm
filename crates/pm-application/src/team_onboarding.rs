@@ -267,6 +267,7 @@ fn tenant_display_name(name: &str) -> String {
     name.trim().to_string()
 }
 
+/// 审计插入（SQL 单源：`pm_write::insert_tenant_audit`，批 A2 归并）。
 #[allow(clippy::too_many_arguments)] // 审计插入行，列清单与 governance.audit_log 对应
 async fn insert_tenant_audit(
     tx: &mut Transaction<'static, Postgres>,
@@ -278,26 +279,17 @@ async fn insert_tenant_audit(
     before: Option<Value>,
     after: Option<Value>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "INSERT INTO governance.tenant_audit_log \
-         (tenant_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
-          action, target_type, target_id, target_principal_id, before_data, after_data) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, $10, $11)",
+    crate::pm_write::insert_tenant_audit(
+        tx,
+        tenant_id,
+        actor,
+        action,
+        target_type,
+        target_id,
+        before,
+        after,
     )
-    .bind(tenant_id)
-    .bind(actor.principal_id)
-    .bind(actor.identity_id)
-    .bind(&actor.client)
-    .bind(&actor.auth_mode)
-    .bind(actor.claimed_device_id)
-    .bind(action)
-    .bind(target_type)
-    .bind(target_id)
-    .bind(before)
-    .bind(after)
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
+    .await
 }
 
 /// slug 唯一冲突（23505 on `uq_tenant_slug`）映射为稳定 409。

@@ -14,7 +14,6 @@
 use chrono::{DateTime, Utc};
 use kb_pc_contracts::registry::{parse_domain, resolve_reference, TargetDomain};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
@@ -268,8 +267,8 @@ fn content_hash(content: &MemoryContent, refs: &[ResolvedRef]) -> String {
         "body": content.body.as_deref().map(str::trim),
         "refs": keys,
     });
-    let digest = Sha256::digest(canonical.to_string().as_bytes());
-    digest.iter().map(|b| format!("{b:02x}")).collect()
+    // 摘要原语单源：`pm_write::hex_sha256`（批 A3）。
+    crate::pm_write::hex_sha256(canonical.to_string().as_bytes())
 }
 
 #[allow(clippy::too_many_arguments)]

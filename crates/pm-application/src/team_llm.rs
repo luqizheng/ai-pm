@@ -295,6 +295,7 @@ fn validate_configuration(configuration: &Value) -> Result<(), TeamLlmError> {
 /// 租户审计写入口（单 INSERT；四列身份口径见 `audit_actor_coverage` 清单）。
 /// Provider 等 Team 资源事件的目标不是 principal，走 0041 新增的
 /// `target_type`/`target_id` 通用列；审计失败即整体回滚。
+/// （单一实现见 `pm_write::insert_tenant_audit`，批 A2 归并。）
 async fn insert_tenant_audit(
     tx: &mut Transaction<'static, Postgres>,
     tenant_id: Uuid,
@@ -304,25 +305,17 @@ async fn insert_tenant_audit(
     before: Option<Value>,
     after: Option<Value>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "INSERT INTO governance.tenant_audit_log \
-         (tenant_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
-          action, target_type, target_id, target_principal_id, before_data, after_data) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'llm_provider', $8, NULL, $9, $10)",
+    crate::pm_write::insert_tenant_audit(
+        tx,
+        tenant_id,
+        actor,
+        action,
+        "llm_provider",
+        target_id,
+        before,
+        after,
     )
-    .bind(tenant_id)
-    .bind(actor.principal_id)
-    .bind(actor.identity_id)
-    .bind(&actor.client)
-    .bind(&actor.auth_mode)
-    .bind(actor.claimed_device_id)
-    .bind(action)
-    .bind(target_id)
-    .bind(before)
-    .bind(after)
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
+    .await
 }
 
 // ─────────────────────────────────────────────────────────── 读取

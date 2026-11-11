@@ -676,28 +676,23 @@ pub async fn request_plan_approval(
     .await
     .map_err(PmWriteError::Db)?
     .ok_or(PmWriteError::Conflict("plan has no submitted revision"))?;
-    let approval_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO design.design_approval \
-         (id, tenant_id, project_id, kind, plan_id, target_id, target_hash, requested_by) \
-         VALUES ($1, $2, $3, 'task_plan', $4, $5, $6, $7)",
+    // target_id = 当前修订（in_review 计划必有 current_revision_id；上一步
+    // hash 抓取已对 None 报 Conflict，此处解包不改变可观察行为）。
+    let target_revision_id =
+        current_revision_id.ok_or(PmWriteError::Conflict("plan has no submitted revision"))?;
+    let approval_id = crate::design::insert_design_approval(
+        &mut tx,
+        tenant_id,
+        project_id,
+        "task_plan",
+        "plan_id",
+        plan_id,
+        target_revision_id,
+        &content_hash,
+        actor.principal_id,
+        "an approval is already pending for this plan",
     )
-    .bind(approval_id)
-    .bind(tenant_id)
-    .bind(project_id)
-    .bind(plan_id)
-    .bind(current_revision_id)
-    .bind(&content_hash)
-    .bind(actor.principal_id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| {
-        if is_unique_violation(&e) {
-            PmWriteError::Conflict("an approval is already pending for this plan")
-        } else {
-            PmWriteError::Db(e)
-        }
-    })?;
+    .await?;
     append_audit(
         &mut tx,
         project_id,

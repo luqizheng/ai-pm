@@ -156,6 +156,7 @@ pub async fn issue_device_credential(
 }
 
 /// 租户级审计（governance.tenant_audit_log；四身份列全写——C174 守卫）。
+/// （SQL 单源：`pm_write::insert_tenant_audit`，批 A2 归并。）
 async fn insert_tenant_audit(
     tx: &mut Transaction<'static, sqlx::Postgres>,
     tenant_id: Uuid,
@@ -164,25 +165,18 @@ async fn insert_tenant_audit(
     target_id: Uuid,
     after: serde_json::Value,
 ) -> Result<(), DeviceCredentialError> {
-    sqlx::query(
-        "INSERT INTO governance.tenant_audit_log \
-         (tenant_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
-          action, target_type, target_id, target_principal_id, before_data, after_data) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'device', $8, NULL, NULL, $9)",
+    crate::pm_write::insert_tenant_audit(
+        tx,
+        tenant_id,
+        actor,
+        action,
+        "device",
+        target_id,
+        None,
+        Some(after),
     )
-    .bind(tenant_id)
-    .bind(actor.principal_id)
-    .bind(actor.identity_id)
-    .bind(&actor.client)
-    .bind(&actor.auth_mode)
-    .bind(actor.claimed_device_id)
-    .bind(action)
-    .bind(target_id)
-    .bind(after)
-    .execute(&mut **tx)
     .await
-    .map_err(|e| DeviceCredentialError::Db(e.to_string()))?;
-    Ok(())
+    .map_err(|e| DeviceCredentialError::Db(e.to_string()))
 }
 
 /// 撤销（幂等）：`credential_revoked_at = now()`；下一请求起全通道 401

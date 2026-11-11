@@ -5,24 +5,14 @@
 //! INDEX-REBUILD-01（全量重建=增量一致）、INDEX-DRAFT-01（draft 不产索引行）、
 //! INDEX-FAIL-01（失败台账）、CJK 检索端到端（bigram 召回）。
 
-use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+mod common;
 use pm_application::kb_service::indexer::{self, KB_SECTION_PROVIDER};
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
-    bootstrap_project(
-        pool,
-        BootstrapRequest {
-            project_code: code.to_string(),
-            project_name: code.to_string(),
-            tenant_id: SYSTEM_TENANT,
-        },
-    )
-    .await
-    .unwrap()
-    .project_id
+    common::bootstrap_system_project(pool, code).await.0
 }
 
 /// 种文档 + 修订（status 可指定）。

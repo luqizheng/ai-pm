@@ -12,25 +12,14 @@
 //! | E-18a | `total` 与分页无关（总数独立于 limit） |
 //! | E-21 | 重放后再消费不产生第二份通知（幂等锚点） |
 
-use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+mod common;
 use pm_application::outbox_ops::{self, ReplayOutcome};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use pm_domain::SYSTEM_TENANT;
 
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
-    let outcome = bootstrap_project(
-        pool,
-        BootstrapRequest {
-            project_code: code.to_string(),
-            project_name: code.to_string(),
-            tenant_id: SYSTEM_TENANT,
-        },
-    )
-    .await
-    .expect("bootstrap project");
-    outcome.project_id
+    common::bootstrap_system_project(pool, code).await.0
 }
 
 /// 直接写一条 outbox 事件（绕过生产端，专注运维层语义）。
