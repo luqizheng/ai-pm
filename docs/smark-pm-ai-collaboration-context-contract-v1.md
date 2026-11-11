@@ -286,12 +286,24 @@ Attached 列表 · History 中可见移除事件 · **不删原始业务对象**
 | 切片 | 内容 | 依赖 | 验收 |
 |---|---|---|---|
 | **B1** | **安全边界修复**：DEF-P0-01 默认拒绝 · DEF-P0-02 真人审批守卫 · auto_accept 语义拆分 | — | 策略层单测：默认拒绝 / 交集任一层否决 / 真人审批不可绕过 / **所有策略配置路径回归** | ✅ 已落地（`27fad9b6`） |
-| **B2** | **Context Item 数据模型与 CRUD**：迁移 0019 · Rust 模型 · 双轴状态机（PATCH 白名单）· 批量附加 · 权限与归属校验 · 软移除 · Context API | CX1/CX3 | 集成测试：附加/启停/移除/软删留痕/**越权**/**跨项目 404 同形** |
+| **B2** | **Context Item 数据模型与 CRUD**：迁移 0019 · Rust 模型 · 双轴状态机（PATCH 白名单）· 批量附加 · 权限与归属校验 · 软移除 · Context API | CX1/CX3 | 集成测试：附加/启停/移除/软删留痕/**越权**/**跨项目 404 同形** | ✅ 已落地（`57203cec`） |
 | **B3** | **对象级 AI 注入**：S3+ 对象节 · 版本校验（SQL-07 重读复核）· 内容投影 · 预算裁剪（稳定次排序 + 独立记账）· 注入记账 | B2 | 注入测试：各状态注入矩阵 / 超预算裁剪可重复 / 未批准只给元数据 / 三闸不破 |
 | **B4** | **真实读取接口**：interactions GET · 候选对象聚合查询（类型/关键词/分页/已附加/可用性/只读/摘要）· 权限过滤 · 属主隔离 | CX3 | 集成测试：字段完整 / 候选过滤 / 404 同形 |
 | **B5** | **前端对接**：AI-02 Context · Sources · Results · Actions · History **全部改读真实后端数据，不再客户端派生权威状态** | B2/B3/B4 | 前端门禁全绿 + 右栏派生视图降级为**非权威展示** |
 
 > B1 独立在最前：它是**已确认的安全边界**，与上下文建模无依赖，先收口收益最大、风险最小。
+
+### B2 实施结果（2026-11-12 · `57203cec`）
+
+| 项 | 落地 |
+|---|---|
+| 迁移 0019 | `ai.conversation_context_item`：双轴分列（attachment 两态 / lifecycle 四态）· read_only 独立列 · `UNIQUE NULLS NOT DISTINCT`（SQL-02）· unavailable_reason 与状态同生同灭（SQL-03）· 版本列可空 + row_version 专列（SQL-01）· 软移除语义（SQL-04） |
+| 对象校验 | `validate_object_reference` 按分类型矩阵逐类实现（requirement/design/adr 修订复核 version+hash · knowledge 行内版本 · document version_number+checksum · **task 仅行版本，拒绝伪造内容版本**）；写入即复核（SQL-05/07 写入半边）；对象必须归属本项目（SQL-06） |
+| 端点 | GET 列表（含 include_detached 供 History）· POST 批量附加（≤20，逐项校验，重复 409）· PATCH lifecycle（**状态机白名单**；Detached 不可 Enable；unavailable 必填原因、离开即清空）· DELETE 软移除（不删业务对象、审计留痕） |
+| 真人门 | **pending → active 必须 `core.principal.kind='human'`**（DR-C2；fail-closed） |
+| 审计 | attach / lifecycle / remove 逐笔走 `pm_write::append_audit_with_after`（四身份列；SQL-08） |
+| 测试 | `context_items.rs` 5 例：附加+列表+重复 409+不存在 400 · 任务拒绝内容版本字段+row_version 复核 · 状态机全流转（含真人门与原因同生同灭）· 软移除留痕+审计 2 条 · **跨属主 404 同形**（peer 激活+入项目成员后读写均 404，属主不误伤） |
+| 门禁 | 全仓 **1519 例通过 / 0 失败**（较 B1 +5） |
 
 ### B1 实施结果（2026-11-11 · `27fad9b6`）
 
