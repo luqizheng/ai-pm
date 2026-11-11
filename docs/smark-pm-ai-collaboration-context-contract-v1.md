@@ -288,11 +288,22 @@ Attached 列表 · History 中可见移除事件 · **不删原始业务对象**
 | **B1** | **安全边界修复**：DEF-P0-01 默认拒绝 · DEF-P0-02 真人审批守卫 · auto_accept 语义拆分 | — | 策略层单测：默认拒绝 / 交集任一层否决 / 真人审批不可绕过 / **所有策略配置路径回归** | ✅ 已落地（`27fad9b6`） |
 | **B2** | **Context Item 数据模型与 CRUD**：迁移 0019 · Rust 模型 · 双轴状态机（PATCH 白名单）· 批量附加 · 权限与归属校验 · 软移除 · Context API | CX1/CX3 | 集成测试：附加/启停/移除/软删留痕/**越权**/**跨项目 404 同形** | ✅ 已落地（`57203cec`） |
 | **B3** | **对象级 AI 注入**：S3+ 对象节 · 版本校验（SQL-07 重读复核）· 内容投影 · 预算裁剪（稳定次排序 + 独立记账）· 注入记账 | B2 | 注入测试：各状态注入矩阵 / 超预算裁剪可重复 / 未批准只给元数据 / 三闸不破 | ✅ 已落地（本次提交） |
-| **B4** | **真实读取接口**：interactions GET · 候选对象聚合查询（类型/关键词/分页/已附加/可用性/只读/摘要）· 权限过滤 · 属主隔离 | CX3 | 集成测试：字段完整 / 候选过滤 / 404 同形 |
+| **B4** | **真实读取接口**：interactions GET · 候选对象聚合查询（类型/关键词/分页/已附加/可用性/只读/摘要）· 权限过滤 · 属主隔离 | CX3 | 集成测试：字段完整 / 候选过滤 / 404 同形 | ✅ 已落地（本次提交） |
 | **B5** | **前端对接**：AI-02 Context · Sources · Results · Actions · History **全部改读真实后端数据，不再客户端派生权威状态** | B2/B3/B4 | 前端门禁全绿 + 右栏派生视图降级为**非权威展示** |
 
 > B1 独立在最前：它是**已确认的安全边界**，与上下文建模无依赖，先收口收益最大、风险最小。
 
+### B4 实施结果（2026-11-12）
+
+| 项 | 落地 |
+|---|---|
+| interactions GET | `GET /v1/pm/projects/{pid}/conversations/{cid}/interactions`——操作者 / 原始 action / 处理状态 / reason / option_id / answer / 记录号 / 关联消息摘要（160 字符）；**属主隔离 404 同形**；Actions / History 的权威读源 |
+| candidates GET | `GET /v1/pm/projects/{pid}/context-candidates?type=&q=&page=&size=&conversation_id=`——**type 必选单值**（AI-02 按类型分页签，单域一条 SQL，不做跨六域 UNION 分页）；ILIKE 关键词；分页 {items,total}；conversation_id 给出时逐项算 attached（detached 不算，可再次附加）；version_label 带 max(revision) |
+| 域过滤 | requirement/design lifecycle=active · adr 排除 superseded/deprecated/rejected · knowledge active · task 排除 cancelled/superseded · document 按项目归属 |
+| 测试 | +4（交互权威字段完整 / 跨属主 404 同形 / 候选过滤+分页+attached 标识+未知类型 400 / 多域覆盖） |
+| 门禁 | 全仓 **1527 例通过 / 0 失败** |
+
+---
 ### B3 实施结果（2026-11-12）
 
 | 项 | 落地 |
