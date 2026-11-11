@@ -9,6 +9,7 @@ import { listProjects } from "@/api/projects";
 import { retrievalQuery } from "@/api/knowledge";
 import { useShellStore } from "@/stores/shell";
 import AssistantColumn from "./AssistantColumn.vue";
+import ProjectSwitchGuardDialog from "./ProjectSwitchGuardDialog.vue";
 import ContextPanel from "./ContextPanel.vue";
 import SideNav from "./SideNav.vue";
 import TopBar from "./TopBar.vue";
@@ -239,6 +240,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       v-if="shell.contextOpen && !shell.focusMode"
       class="workspace-context"
     />
+
+    <!-- 切项目确认（G12 · DR-C6）：有活跃会话时切换项目先确认 -->
+    <ProjectSwitchGuardDialog />
 
     <!-- 全局搜索 / 命令面板（⌘ K，Figma「01 — Global Search」） -->
     <SearchPalette

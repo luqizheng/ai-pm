@@ -23,6 +23,7 @@ import {
 import { AUTH_PATHS } from "@/router/auth";
 import { useAuthStore } from "@/stores/auth";
 import { useShellStore } from "@/stores/shell";
+import { useAssistantStore } from "@/stores/assistant";
 import { useTeamStore } from "@/stores/team";
 
 /**
@@ -45,6 +46,7 @@ import { useTeamStore } from "@/stores/team";
 const { t } = useI18n();
 const router = useRouter();
 const shell = useShellStore();
+const assistant = useAssistantStore();
 const auth = useAuthStore();
 const teamStore = useTeamStore();
 
@@ -128,9 +130,14 @@ const switcherTexts = computed<ProjectSwitcherText>(() => ({
   }
 }));
 
-/** 切换项目（与左导航项目头共用 store 的切换状态机） */
-async function onSelectProject(id: string) {
-  await shell.switchProject(id);
+/**
+ * 切换项目（与左导航项目头共用 store 的切换状态机）。
+ *
+ * **切项目不得静默转移会话与上下文**（G12 · DR-C6）：当前有活跃会话时
+ * 先走确认（`requestProjectSwitch` 打开守卫对话框），确认后在目标项目另起。
+ */
+function onSelectProject(id: string) {
+  shell.requestProjectSwitch(id, assistant.activeConversationId !== null);
 }
 
 /** 通知：打开关联对象 / 前往完整通知中心 */

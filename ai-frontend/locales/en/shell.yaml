@@ -317,6 +317,12 @@ shell:
           context_change: Context change
           approval: Approval
           execution: Execution
+    projectSwitchGuard:
+      title: Switch project
+      description: You are switching to "{project}". The current conversation and context will not follow — after confirming, a new conversation starts in the target project, while past conversations stay with their original project.
+      descriptionFallback: The current conversation and context will not follow to the target project — after confirming, a new conversation starts there.
+      confirm: Switch project
+      cancel: Cancel
     commandbar:
       title: AI assistant
       reviewFirst: Review before any action

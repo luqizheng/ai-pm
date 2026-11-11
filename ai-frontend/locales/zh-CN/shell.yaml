@@ -317,6 +317,12 @@ shell:
           context_change: 上下文变更
           approval: 审批
           execution: 执行
+    projectSwitchGuard:
+      title: 切换项目
+      description: 你正在切换到「{project}」。当前会话与上下文不会跟着转移——确认后在目标项目另起会话，历史会话仍归属原项目。
+      descriptionFallback: 当前会话与上下文不会跟着转移到目标项目——确认后在目标项目另起会话。
+      confirm: 确认切换
+      cancel: 取消
     commandbar:
       title: AI 助手
       reviewFirst: 任何操作前请先确认

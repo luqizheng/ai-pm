@@ -296,6 +296,15 @@ export const useShellStore = defineStore("app-shell", () => {
   }
 
   /**
+   * 待确认的切项目目标（基线 G12 · DR-C6）。
+   *
+   * 切项目**不得静默转移会话与上下文**：当前有活跃会话时先确认——
+   * 确认后在目标项目另起会话（历史会话保留原项目归属），取消则维持现状。
+   * 无活跃会话时直接切换，不打扰。
+   */
+  const pendingProjectSwitch = ref<string | null>(null);
+
+  /**
    * 切换项目。
    *
    * 两阶段：先进入 switching 态（导航与页面显示切换态，不显示旧项目数据），
@@ -319,11 +328,40 @@ export const useShellStore = defineStore("app-shell", () => {
     }
   }
 
+  /**
+   * 请求切换项目（切项目入口统一走这里）。
+   *
+   * @param id 目标项目 id
+   * @param hasActiveConversation 当前是否有活跃会话（有则先确认）
+   */
+  function requestProjectSwitch(id: string, hasActiveConversation: boolean) {
+    if (id === currentProjectId.value) return;
+    if (hasActiveConversation) {
+      pendingProjectSwitch.value = id;
+      return;
+    }
+    void switchProject(id);
+  }
+
+  /** 确认切换：落地目标项目（会话在目标项目另起，历史归属不变）。 */
+  async function confirmProjectSwitch() {
+    const id = pendingProjectSwitch.value;
+    pendingProjectSwitch.value = null;
+    if (!id) return;
+    await switchProject(id);
+  }
+
+  /** 取消切换：维持当前项目与上下文。 */
+  function cancelProjectSwitch() {
+    pendingProjectSwitch.value = null;
+  }
+
   return {
     sidebarCollapsed,
     contextOpen,
     commandbarExpanded,
     focusMode,
+    pendingProjectSwitch,
     pendingAssistantPrompt,
     projects,
     currentProjectId,
@@ -342,6 +380,9 @@ export const useShellStore = defineStore("app-shell", () => {
     setContextOpen,
     toggleCommandbar,
     setCommandbarExpanded,
+    requestProjectSwitch,
+    confirmProjectSwitch,
+    cancelProjectSwitch,
     enterFocusMode,
     exitFocusMode,
     toggleFocusMode,

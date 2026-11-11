@@ -20,6 +20,7 @@ import {
   type NavItem
 } from "@/router/navigation";
 import { useShellStore } from "@/stores/shell";
+import { useAssistantStore } from "@/stores/assistant";
 
 /**
  * 左导航（AI R&D Workspace Application Shell §2B + Figma「04 — Global Navigation」）。
@@ -37,6 +38,7 @@ import { useShellStore } from "@/stores/shell";
 const { t } = useI18n();
 const route = useRoute();
 const shell = useShellStore();
+const assistant = useAssistantStore();
 
 /** 展开态下各分组的折叠状态（key = 分组 id） */
 const collapsedGroups = ref<Record<string, boolean>>(
@@ -80,7 +82,8 @@ function itemLabel(item: NavItem) {
  * （同一目的地在新项目下解析，不可达时回落到项目概览）。
  */
 async function onSelectProject(id: string) {
-  await shell.switchProject(id);
+  // 切项目守卫：有活跃会话时先确认（G12 · DR-C6）
+  shell.requestProjectSwitch(id, assistant.activeConversationId !== null);
 }
 </script>
 

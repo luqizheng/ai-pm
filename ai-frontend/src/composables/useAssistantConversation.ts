@@ -441,6 +441,8 @@ export function useAssistantConversation(
    * **单一写者**：会话机制是唯一写者，右栏与列读同一份——右栏不另起 fetch。
    */
   function publish() {
+    // 活跃会话 id（切项目守卫的判据）
+    assistant.setActiveConversationId(selectedId.value || null);
     const view = deriveView(
       timeline.value,
       conversations.value,
@@ -679,6 +681,7 @@ export function useAssistantConversation(
     stopPolling();
     drafting.value = true;
     selectedId.value = "";
+    assistant.setActiveConversationId(null);
     timeline.value = [];
     injection.value = null;
     sendError.value = "";

@@ -79,6 +79,8 @@ export const useAssistantStore = defineStore("assistant-view", () => {
   const actions = ref<AssistantActionItem[]>([]);
   /** 历史事件（五类合并，按时间倒序由消费方排序） */
   const history = ref<AssistantHistoryEvent[]>([]);
+  /** 当前活跃会话 id（切项目守卫的判据：有活跃会话才需要确认）。 */
+  const activeConversationId = ref<string | null>(null);
   /** History Drawer 是否打开 */
   const historyOpen = ref(false);
   /** History Drawer 当前筛选类别（"all" = 全部） */
@@ -90,6 +92,10 @@ export const useAssistantStore = defineStore("assistant-view", () => {
       ? history.value
       : history.value.filter(event => event.category === historyCategory.value)
   );
+
+  function setActiveConversationId(id: string | null) {
+    activeConversationId.value = id;
+  }
 
   function setActiveTab(tab: AssistantTab) {
     activeTab.value = tab;
@@ -132,6 +138,7 @@ export const useAssistantStore = defineStore("assistant-view", () => {
 
   /** 切换项目/会话：清空派生视图（不串项目）。 */
   function reset() {
+    activeConversationId.value = null;
     injection.value = null;
     results.value = [];
     actions.value = [];
@@ -141,6 +148,7 @@ export const useAssistantStore = defineStore("assistant-view", () => {
 
   return {
     activeTab,
+    activeConversationId,
     injection,
     results,
     actions,
@@ -149,6 +157,7 @@ export const useAssistantStore = defineStore("assistant-view", () => {
     historyCategory,
     filteredHistory,
     setActiveTab,
+    setActiveConversationId,
     setInjection,
     setResults,
     setActions,
