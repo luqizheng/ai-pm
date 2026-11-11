@@ -12,7 +12,7 @@
 | ① 四栏容器 + AI Chat 常驻列 | **已落地** | `53ddf93` |
 | ② 会话能力并入常驻列 | **已落地** | `64c8e40` |
 | ③ Context Panel 四 Tab + History Drawer | **已落地** | `846abed` |
-| ④ 专注模式 + 切项目提示（G12） | 专注模式已落地；切项目提示待实施 | `53ddf93` |
+| ④ 专注模式 + 切项目提示（G12） | **已落地** | `53ddf93`（专注模式）· `f68c060`（切项目确认） |
 
 已落地的关键事实（以代码为准）：
 
@@ -25,8 +25,13 @@
   （`useAssistantConversation`）发布到 `stores/assistant.ts`，右栏与常驻列读同一份，
   **右栏不另起 fetch**；Sources 只展示**真实注入记账**（后端 `metadata.injection`），
   未收到回复即显示未注入，**不冒充注入面**（G2 断点的正解）。
-- **仍未落地**：对象级上下文（Attach / Remove / 双轴状态机）属 AI-02 阶段；
-  审批与执行的**服务端读接口** V1 无（`/interaction` 仅 POST 写回），
+- **切项目确认已落地**（G12 · DR-C6）：有活跃会话时切换项目先确认——确认 = 保留当前
+  会话并在目标项目另起（历史会话保留原项目归属），取消 = 维持现状；两个切换入口
+  （顶栏 / 左导航）走同一道门；文案明说「不会跟着转移」。
+- **仍未落地**：对象级上下文（Attach / Remove / 双轴状态机）属 AI-02 阶段，
+  **需后端扩展锚点白名单**（`0003` 白名单现为 5 键：project_id / project_name /
+  repository_name / default_branch / repository_role，装不下对象级上下文 +
+  版本）；审批与执行的**服务端读接口** V1 无（`/interaction` 仅 POST 写回），
   Actions / History 的审批与执行类别目前由客户端派生。
 
 ---

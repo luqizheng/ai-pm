@@ -197,7 +197,11 @@
 | ① 四栏容器 + AI Chat 列 | ✅ | token 改宽（188/518/446/288）；壳 grid 三栏→四列，四区**显式列位**（沿用既有防自动放置结论）；新增 `.workspace-chat`（grid-column 3）；专注模式 `data-focus="on"` 列组合 | `53ddf93` |
 | ② 会话能力并入常驻列 | ✅ | 抽出 `useAssistantConversation` composable（会话页与列共用，**不重建会话体系**）；会话页 23/23 测试行为等价；CommandBar 加 `embedded` 就地发送；`/project/assistant` 路由时列收起避免同屏重复 | `64c8e40` |
 | ③ Context Panel 四 Tab + History Drawer | ✅ | 新增 `stores/assistant.ts` 派生视图（**单一写者**：会话机制发布；**读者**：列与右栏）；Sources 消费真实 `metadata.injection`，未注入如实显示；History Drawer 覆盖右栏不改四栏宽度 | `846abed` |
-| ④ 专注模式 + 切项目提示（G12） | ◐ | 专注模式已落地（顶栏开关 + 退出逐项还原）；切项目提示待实施 | `53ddf93` |
+| ④ 专注模式 + 切项目提示（G12） | ✅ | 专注模式：顶栏开关（列收起后唯一退出入口）+ 退出逐项还原右栏开合态；切项目确认：有活跃会话先确认（顶栏/左导航共用一道门），文案明说「不会跟着转移」 | `53ddf93` · `f68c060` |
+
+**壳迁移四阶段全部落地**（① 53ddf93 · ② 64c8e40 · ③ 846abed · ④ f68c060），
+对应 §5 切分。下一步是 AI-02 阶段的**对象级上下文**——它不在壳迁移范围内，
+且**需后端扩展锚点白名单**（见 §M3/M4/M9 与基线 G3/G4/G5/G9）。
 
 **评估期发现的存量缺陷（已修）**：`SideNav.vue` 存在残缺属性 `<div class="shell-sidenav__groups" ">`（`a3f92f7c` 引入），属性名非法导致**整个壳测试文件在 master 上挂 6 例**——评估前必须先修，否则壳层验证无闸门。
 
