@@ -83,6 +83,7 @@ global:
     label: 账户菜单
     myProfile: 我的资料
     accountSettings: 账户设置
+    teamSettings: 团队设置
     security: 安全
     personalPreferences: 个人偏好
     keyboardShortcuts: 键盘快捷键

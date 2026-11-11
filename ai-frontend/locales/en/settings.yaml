@@ -389,6 +389,10 @@ settings:
   team:
     landing:
       title: Team Settings
+      desc: Manage team-level members, general information, and AI model services. Editable by team admins only.
+      membersDesc: Team members, roles and access.
+      invitationsDesc: Pending invitations and invite links.
+      generalDesc: Team name, identity and general information.
       aiDesc: Manage the team's LLM providers, credentials and connections (team admins only)
     ai:
       desc: "Team-owned provider instances: multiple per type allowed; credentials encrypted; a passing test never auto-enables."

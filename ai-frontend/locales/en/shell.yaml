@@ -216,6 +216,7 @@ shell:
         devenv: Development Environment
         environments: Execution Environments
         adminSettings: Settings
+        aiProviders: AI Configuration (Models)
         adminMembers: Members
         adminAnnouncements: Announcements
       sub:

@@ -389,6 +389,10 @@ settings:
   team:
     landing:
       title: 团队设置
+      desc: 管理团队级成员、基本信息与 AI 模型服务。团队配置仅团队管理员可修改。
+      membersDesc: 团队成员、角色与访问管理。
+      invitationsDesc: 待处理邀请与邀请链接。
+      generalDesc: 团队名称、标识与基本信息。
       aiDesc: 管理团队的大模型 Provider、凭证与连接（仅团队管理员）
     ai:
       desc: Team-owned Provider 实例：同类型可多个，凭证加密保存，测试成功不自动启用。

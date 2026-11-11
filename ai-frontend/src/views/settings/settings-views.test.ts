@@ -75,18 +75,20 @@ vi.mock("@/api/base/self-service", () => ({
 import { mountShell } from "@/lib/test-utils";
 import { buildRoutes } from "@/router";
 
-import SettingsAiView from "./SettingsAiView.vue";
 import SettingsLandingView from "./SettingsLandingView.vue";
 import SettingsNotificationsView from "./SettingsNotificationsView.vue";
 import SettingsPreferencesView from "./SettingsPreferencesView.vue";
 import SettingsProfileView from "./SettingsProfileView.vue";
 import SettingsSecurityView from "./SettingsSecurityView.vue";
+import SettingsTeamLandingView from "./SettingsTeamLandingView.vue";
 
 /**
- * 应用设置视图契约（Settings Framework 个人域，/settings/* 应用壳内）：
+ * 应用设置视图契约（Settings Framework，/settings/* 应用壳内）：
  *   - /settings 重定向到个人域落地页；
  *   - 路由无 meta.layout（WorkspaceShell 应用壳内渲染，非设计目录）；
- *   - 落地页五类目卡 + 侧栏条目指向应用路径 /settings/*；
+ *   - 个人落地页四类目卡 + 侧栏条目指向应用路径 /settings/personal/*；
+ *   - 团队设置独立主页（2026-11-11 裁决：团队域从个人账号设置剥离，
+ *     AI 配置归团队域；个人域「AI 偏好」应用侧移除，设计目录保留展示）；
  *   - 每节可挂载且渲染关键内容（≥1 条行为用例/节，与设计目录共用节组件）。
  *
  * 注：确认弹窗 Teleport 到 body，断言与点击走 document.body。
@@ -142,33 +144,49 @@ describe("应用设置路由", () => {
 });
 
 describe("落地页", () => {
-  it("个人五类目卡 + 团队区入口卡，均指向应用路径 /settings/*", async () => {
+  it("个人四类目卡 + 侧栏条目，均指向应用路径 /settings/personal/*", async () => {
     const { wrapper } = await mountAt(
       SettingsLandingView,
       "/settings/personal"
     );
     const cards = wrapper.findAll(".personal-landing__card");
-    // 0041 起团队设置区落应用；0044 起团队域四卡（成员/邀请/基本/AI 配置）
-    expect(cards).toHaveLength(9);
+    // 2026-11-11 裁决：AI 配置归团队域独立页（/settings/team），
+    // 个人域「AI 偏好」移除 → 个人落地页四卡、无团队区
+    expect(cards).toHaveLength(4);
     expect(cards.map(card => card.attributes("href"))).toEqual([
       "/settings/personal/profile",
       "/settings/personal/security",
       "/settings/personal/preferences",
-      "/settings/personal/notifications",
-      "/settings/personal/ai",
-      "/settings/team/members",
-      "/settings/team/invitations",
-      "/settings/team/general",
-      "/settings/team/ai-providers"
+      "/settings/personal/notifications"
     ]);
 
     // 侧栏导航项同样指向应用路径（设计目录路径不得泄漏进应用壳）
     const links = wrapper
       .findAll("a.settings-nav-item")
       .map(a => a.attributes("href"));
-    expect(links).toHaveLength(5);
+    expect(links).toHaveLength(4);
     expect(links.every(href => href?.startsWith("/settings/personal/"))).toBe(
       true
+    );
+  });
+
+  it("团队设置主页：四类目卡指向 /settings/team/*，各卡描述独立", async () => {
+    const { wrapper } = await mountAt(
+      SettingsTeamLandingView,
+      "/settings/team"
+    );
+    const cards = wrapper.findAll(".team-landing__card");
+    expect(cards).toHaveLength(4);
+    expect(cards.map(card => card.attributes("href"))).toEqual([
+      "/settings/team/members",
+      "/settings/team/invitations",
+      "/settings/team/general",
+      "/settings/team/ai-providers"
+    ]);
+    // 回归：此前四卡共用 AI 描述文案（aiDesc 错挂）
+    expect(wrapper.text()).toContain("团队成员、角色与访问管理。");
+    expect(wrapper.text()).toContain(
+      "管理团队的大模型 Provider、凭证与连接（仅团队管理员）"
     );
   });
 });
@@ -276,9 +294,4 @@ describe("个人域五节（共享节组件）", () => {
     }
   });
 
-  it("AI 偏好页：三种交互方式 + 边界说明", async () => {
-    const { wrapper } = await mountAt(SettingsAiView, "/settings/personal/ai");
-    expect(wrapper.findAll(".ui-radio")).toHaveLength(3);
-    expect(wrapper.text()).toContain("个人 AI 偏好只影响你本人");
-  });
 });

@@ -216,6 +216,7 @@ shell:
         devenv: 开发环境
         environments: 执行环境
         adminSettings: 设置
+        aiProviders: AI 配置（模型服务）
         adminMembers: 成员
         adminAnnouncements: 公告管理
       sub:

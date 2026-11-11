@@ -24,8 +24,14 @@ import { PERSONAL_NAV, type SettingsNavEntry } from "@/components/settings";
  */
 export const APP_SETTINGS_ROOT = "/settings";
 
-/** 个人域应用侧栏条目（/settings/personal/*；frame 为设计目录索引元数据，不进应用） */
-export const PERSONAL_APP_NAV: SettingsNavEntry[] = PERSONAL_NAV.map(entry => ({
+/** 个人域应用侧栏条目（/settings/personal/*；frame 为设计目录索引元数据，不进应用）
+ *
+ * 2026-11-11 用户裁决：AI 配置归团队域独立页面（/settings/team），
+ * 个人域「AI 偏好」应用侧移除（设计目录 /design/settings/personal/ai 保留展示）。
+ */
+export const PERSONAL_APP_NAV: SettingsNavEntry[] = PERSONAL_NAV.filter(
+  entry => entry.id !== "ai"
+).map(entry => ({
   id: entry.id,
   proposed: entry.proposed,
   to: entry.to.replace(/^\/design\/settings/, APP_SETTINGS_ROOT)
@@ -36,8 +42,7 @@ export const PERSONAL_ICONS: Record<string, Component> = {
   profile: UserRound,
   security: ShieldCheck,
   preferences: SlidersHorizontal,
-  notifications: Bell,
-  ai: Sparkles
+  notifications: Bell
 };
 
 /** 团队域应用侧栏条目（/settings/team/*）。设计目录 tenant 四类中仅

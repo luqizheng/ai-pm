@@ -83,6 +83,7 @@ global:
     label: Account menu
     myProfile: My Profile
     accountSettings: Account Settings
+    teamSettings: Team Settings
     security: Security
     personalPreferences: Personal Preferences
     keyboardShortcuts: Keyboard Shortcuts

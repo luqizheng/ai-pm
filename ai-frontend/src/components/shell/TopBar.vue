@@ -149,13 +149,14 @@ function onCreateProject() {
 }
 
 /**
- * 账户菜单普通项 → 设置域路由（Settings Framework 个人域，
+ * 账户菜单普通项 → 设置域路由（Settings Framework 个人/团队域，
  * /settings/*，应用壳内渲染）。
  * 帮助文档暂无应用内落地页（HelpMenu 已覆盖文档入口）。
  */
 const ACCOUNT_SELECT_ROUTES: Record<string, string> = {
   "my-profile": "/settings/personal/profile",
   "account-settings": "/settings",
+  "team-settings": "/settings/team",
   security: "/settings/personal/security",
   "personal-preferences": "/settings/personal/preferences"
 };

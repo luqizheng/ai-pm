@@ -73,7 +73,7 @@ describe("UserMenuAccountMenu", () => {
     expect(context).toEqual(["未加入团队"]);
   });
 
-  it("六项操作齐备，退出登录为末项", async () => {
+  it("七项操作齐备，退出登录为末项", async () => {
     const wrapper = mountMenu();
     await nextTick();
     await wrapper.find(".user-menu-button").trigger("click");
@@ -83,6 +83,7 @@ describe("UserMenuAccountMenu", () => {
     expect(labels).toEqual([
       "我的资料",
       "账户设置",
+      "团队设置",
       "安全",
       "个人偏好",
       "键盘快捷键",

@@ -177,8 +177,8 @@ onMounted(async () => {
     <SettingsAppFrame
       :breadcrumb="[
         {
-          label: $t('settings.personal.landing.title'),
-          to: '/settings/personal'
+          label: $t('settings.team.landing.title'),
+          to: '/settings/team'
         },
         { label: $t('team.settings.title') }
       ]"

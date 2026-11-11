@@ -47,7 +47,7 @@ const testMessages = reactive<Record<string, { ok: boolean; text: string }>>(
 );
 
 const breadcrumb = [
-  { label: t("settings.personal.landing.title"), to: "/settings/personal" },
+  { label: t("settings.team.landing.title"), to: "/settings/team" },
   { label: t("settings.nav.aiProviders") }
 ];
 

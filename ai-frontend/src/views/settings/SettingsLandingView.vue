@@ -4,18 +4,15 @@ import { useI18n } from "vue-i18n";
 import SettingsPageLayout from "@/components/settings/SettingsPageLayout.vue";
 import SettingsSidebar from "@/components/settings/SettingsSidebar.vue";
 
-import {
-  PERSONAL_APP_NAV,
-  PERSONAL_ICONS,
-  TEAM_APP_NAV,
-  TEAM_ICONS
-} from "./nav";
+import { PERSONAL_APP_NAV, PERSONAL_ICONS } from "./nav";
 
 /**
  * 应用设置落地页（个人域，§4A）。
- * 五个类目卡（资料/安全/偏好/通知/AI 偏好），个人域恒为本人授权；
+ * 四个类目卡（资料/安全/偏好/通知），个人域恒为本人授权；
  * 入口 = 顶栏账户菜单（UserMenu「账户设置」），结构与设计目录
  * 落地页一致，卡片指向应用路径 /settings/personal/*。
+ * 2026-11-11 用户裁决：团队设置（含 AI 配置）剥离为独立页
+ * /settings/team；个人域「AI 偏好」应用侧移除。
  */
 const { t } = useI18n();
 
@@ -23,8 +20,7 @@ const categoryDescKeys: Record<string, string> = {
   profile: "settings.personal.categories.profile",
   security: "settings.personal.categories.security",
   preferences: "settings.personal.categories.preferences",
-  notifications: "settings.personal.categories.notifications",
-  ai: "settings.personal.categories.ai"
+  notifications: "settings.personal.categories.notifications"
 };
 
 const breadcrumb = [{ label: t("settings.personal.landing.title") }];
@@ -77,30 +73,6 @@ const breadcrumb = [{ label: t("settings.personal.landing.title") }];
         </RouterLink>
       </section>
 
-      <!-- 团队设置区（0041 起）：Team≡tenant 的团队级配置入口 -->
-      <h2 class="personal-landing__scope-title">
-        {{ t("settings.team.landing.title") }}
-      </h2>
-      <section class="personal-landing__grid">
-        <RouterLink
-          v-for="entry in TEAM_APP_NAV"
-          :key="entry.id"
-          class="personal-landing__card"
-          :to="entry.to"
-        >
-          <component
-            :is="TEAM_ICONS[entry.id]"
-            class="personal-landing__icon"
-            aria-hidden="true"
-          />
-          <h2 class="personal-landing__card-title">
-            {{ t(`settings.nav.${entry.id}`) }}
-          </h2>
-          <p class="personal-landing__card-desc">
-            {{ t("settings.team.landing.aiDesc") }}
-          </p>
-        </RouterLink>
-      </section>
     </SettingsPageLayout>
   </div>
 </template>
@@ -110,12 +82,6 @@ const breadcrumb = [{ label: t("settings.personal.landing.title") }];
   padding: var(--space-5) var(--space-8);
 }
 
-.personal-landing__scope-title {
-  margin: var(--space-6) 0 var(--space-3);
-  font-size: var(--ws-font-size-body);
-  font-weight: var(--weight-semibold);
-  color: var(--ws-text-primary);
-}
 
 .personal-landing__hint {
   margin: 0 0 var(--space-4);

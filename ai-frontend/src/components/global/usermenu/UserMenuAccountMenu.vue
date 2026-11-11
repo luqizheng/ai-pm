@@ -59,6 +59,7 @@ const open = ref(false);
 const menuItems = computed(() => [
   { id: "my-profile", label: t("global.usermenu.myProfile") },
   { id: "account-settings", label: t("global.usermenu.accountSettings") },
+  { id: "team-settings", label: t("global.usermenu.teamSettings") },
   { id: "security", label: t("global.usermenu.security") },
   {
     id: "personal-preferences",

@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  Cpu,
   ListTree,
   Folders,
   Home,
@@ -247,6 +248,17 @@ export const navGroups: NavGroup[] = [
         icon: Megaphone,
         component: () =>
           import("@/views/admin/AdminAnnouncementsView.vue").then(
+            module => module.default
+          )
+      },
+      // 团队级 LLM Provider 管理（0041 Team LLM Provider）：路由随导航树派生
+      // （原 router/index.ts 手工注册已迁入，保持「导航树 = 菜单与路由的单源」）。
+      {
+        path: "/settings/team/ai-providers",
+        labelKey: "shell.app.side.item.aiProviders",
+        icon: Cpu,
+        component: () =>
+          import("@/views/settings/SettingsTeamAiView.vue").then(
             module => module.default
           )
       }

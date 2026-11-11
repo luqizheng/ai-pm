@@ -15,8 +15,7 @@ import SettingsProfileView from "@/views/settings/SettingsProfileView.vue";
 import SettingsSecurityView from "@/views/settings/SettingsSecurityView.vue";
 import SettingsPreferencesView from "@/views/settings/SettingsPreferencesView.vue";
 import SettingsNotificationsView from "@/views/settings/SettingsNotificationsView.vue";
-import SettingsAiView from "@/views/settings/SettingsAiView.vue";
-import SettingsTeamAiView from "@/views/settings/SettingsTeamAiView.vue";
+import SettingsTeamLandingView from "@/views/settings/SettingsTeamLandingView.vue";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 import ProjectCreateView from "@/views/project/create/ProjectCreateView.vue";
 import CognitionPage from "@/views/project/cognition/CognitionPage.vue";
@@ -458,21 +457,21 @@ export function buildRoutes(): RouteRecordRaw[] {
       path: "/settings/personal/notifications",
       component: SettingsNotificationsView,
       meta: { title: "settings.nav.notifications" }
-    },
-    {
-      path: "/settings/personal/ai",
-      component: SettingsAiView,
-      meta: { title: "settings.nav.ai" }
     }
   );
 
-  // 团队域设置（0041 Team LLM Provider）：Team≡tenant，AI 配置先落地；
-  // 入口 = 设置落地页「团队设置」卡片。
+  // 团队设置独立主页（2026-11-11 用户裁决：团队域从个人账号设置落地页剥离）
   routes.push({
-    path: "/settings/team/ai-providers",
-    component: SettingsTeamAiView,
-    meta: { title: "settings.nav.aiProviders" }
+    path: "/settings/team",
+    component: SettingsTeamLandingView,
+    meta: { title: "settings.team.landing.title" }
   });
+
+  // 个人域「AI 偏好」（/settings/personal/ai）已随同一裁决移除；
+  // AI 配置（模型服务）= 团队域独立页面 /settings/team/ai-providers。
+
+  // 团队域设置（0041 Team LLM Provider）的 /settings/team/ai-providers 已迁入
+  // 导航树（navigation.ts admin 组），路由由 buildRoutes 派生——保持单源。
 
   // ─── Team Onboarding（0044，产品裁决 Q1：首登必须建团或入团）───
   // 无 Skip/Later；layout="bare"（应用壳之外）但**不进 PUBLIC_LAYOUTS**——
