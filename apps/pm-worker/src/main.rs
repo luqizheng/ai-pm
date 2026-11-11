@@ -45,6 +45,21 @@ async fn main() {
     );
     // 目录一致性校验：不一致即 panic（fail fast），不带着假死信配置进入消费循环。
     worker.assert_catalog_consistent();
+
+    // Document Processing job 循环（0016/TD-04）：表即队列，独立于 outbox
+    // 消费。未配置 file-service（无 SERVICE_BOOTSTRAP_TOKEN）⇒ 跳过——诚实
+    // 降级，不假消费。
+    if let Some(docproc) = pm_infrastructure::docproc_worker::DocprocWorker::from_env(
+        pool.clone(),
+        pm_infrastructure::docproc_store::FileServiceStore::from_env("pm-worker")
+            .map(|s| s as std::sync::Arc<dyn pm_application::docproc_service::ArtifactStore>),
+    ) {
+        tokio::spawn(async move {
+            docproc.run().await;
+        });
+    } else {
+        tracing::warn!("docproc worker disabled (no file-service config)");
+    }
     tracing::info!(
         service = "pm-worker",
         %worker_id,

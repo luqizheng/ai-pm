@@ -3,6 +3,12 @@
 version = 4
 
 [[package]]
+name = "adler2"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
+
+[[package]]
 name = "aead"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -691,6 +697,8 @@ version = "1.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "626d4928326b646e70f65ed36fc7cf9f206bdb68a0019ee7c6b4709da4e084c4"
 dependencies = [
+ "crc32fast",
+ "miniz_oxide",
  "zlib-rs",
 ]
 
@@ -1418,6 +1426,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "miniz_oxide"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b63fbc4a50860e98e7b2aa7804ded1db5cbc3aff9193adaff57a6931bf7c4b4c"
+dependencies = [
+ "adler2",
+ "simd-adler32",
+]
+
+[[package]]
 name = "mio"
 version = "1.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1738,6 +1756,7 @@ dependencies = [
  "pm-ai",
  "pm-application",
  "pm-domain",
+ "pm-infrastructure",
  "pm-mcp",
  "reqwest",
  "serde",
@@ -1761,6 +1780,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "flate2",
  "getrandom 0.3.4",
  "kb-pc-contracts",
  "pm-ai",
@@ -1798,11 +1818,14 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "digua_common_jwt",
+ "digua_file_sdk",
  "kb-pc-contracts",
  "libc",
  "pm-ai",
  "pm-application",
  "pm-domain",
+ "reqwest",
  "serde_json",
  "sha2",
  "sqlx",

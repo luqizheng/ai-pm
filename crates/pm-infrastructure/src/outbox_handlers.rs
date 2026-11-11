@@ -420,6 +420,26 @@ impl OutboxHandler for RunCompletedHandler {
 ///
 /// 并发边界：「集合一致」不等于「并发安全」——原子领取（`SKIP LOCKED` + 租约）
 /// 与各 Handler 的幂等锚点另行保证（`RunCompletedHandler` 见其 advisory lock）。
+/// **Docproc 事件落地 Handler**（0016/TD-02 §4）。
+///
+/// Document Processing 的完成/失败事件是 Team 级（project_id 可空）审计
+/// 与通知契约：本 handler 承担送达语义（标记 delivered），消费面（跨服务
+/// 订阅、通知落表）P1 按需扩展——此处只做结构化日志，不假装业务写入。
+pub struct DocprocSettleHandler;
+
+#[async_trait::async_trait]
+impl OutboxHandler for DocprocSettleHandler {
+    async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
+        tracing::info!(
+            event_type = %event.event_type,
+            job = %event.aggregate_id,
+            status = event.payload.get("status").and_then(|v| v.as_str()).unwrap_or("?"),
+            "Docproc event settled"
+        );
+        Ok(())
+    }
+}
+
 pub fn register_all_handlers(
     worker: OutboxWorker,
     pool: &PgPool,
@@ -438,6 +458,14 @@ pub fn register_all_handlers(
             .with_handler(
                 "RunCompleted",
                 Arc::new(RunCompletedHandler::new(pool.clone())),
+            )
+            .with_handler(
+                "DocprocJobCompleted",
+                Arc::new(DocprocSettleHandler),
+            )
+            .with_handler(
+                "DocprocJobFailed",
+                Arc::new(DocprocSettleHandler),
             ),
         pool,
         snapshot_model,

@@ -70,6 +70,39 @@ pub async fn append(
     .await
 }
 
+/// **Team 级事件**（无 project 归属，如 Document Processing 的 Team 级文档）。
+///
+/// 0016 迁移放开了 `integration.outbox_event.project_id` 的 NOT NULL——
+/// 不设哨兵假值（AGENTS 规则 1：直接改契约）；既有查询均为 `= project_id`
+/// 过滤，NULL 行天然不命中。tenant 由调用方显式给出。
+pub struct NewTeamOutboxEvent<'a> {
+    pub tenant_id: uuid::Uuid,
+    pub event_type: &'a str,
+    pub aggregate_type: &'a str,
+    pub aggregate_id: &'a str,
+    pub payload: serde_json::Value,
+    pub idempotency_key: &'a str,
+}
+
+pub async fn append_team(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    event: NewTeamOutboxEvent<'_>,
+) -> Result<uuid::Uuid, sqlx::Error> {
+    sqlx::query_scalar(
+        "INSERT INTO integration.outbox_event \
+         (project_id, event_type, aggregate_type, aggregate_id, payload, idempotency_key, tenant_id) \
+         VALUES (NULL, $1, $2, $3, $4, $5, $6) RETURNING id",
+    )
+    .bind(event.event_type)
+    .bind(event.aggregate_type)
+    .bind(event.aggregate_id)
+    .bind(event.payload)
+    .bind(event.idempotency_key)
+    .bind(event.tenant_id)
+    .fetch_one(&mut **tx)
+    .await
+}
+
 /// Claim one due event for `worker_id`, granting a lease of `lease_secs`.
 /// Returns `None` when nothing is claimable.
 ///

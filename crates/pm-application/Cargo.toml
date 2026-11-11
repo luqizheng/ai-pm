@@ -22,9 +22,11 @@ tracing.workspace = true
 uuid.workspace = true
 quick-xml.workspace = true
 zip.workspace = true
+flate2.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
+zip.workspace = true
 async-trait.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true

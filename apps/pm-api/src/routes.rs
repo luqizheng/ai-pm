@@ -64,6 +64,10 @@ pub(crate) struct AppState {
     /// 文件代理（2026-11-07 file-service 收口配套）。`None` = 未配置
     /// bootstrap token（裸机 dev），/v1/file/* 返回 503。
     pub(crate) file: crate::files::FileProxyHandle,
+    /// Document Processing 存储（0016/TD-02）。`None` = 未配置 file-service，
+    /// /v1/document-processing/* 返回 503。
+    pub(crate) docproc_store:
+        Option<std::sync::Arc<dyn pm_application::docproc_service::ArtifactStore>>,
     /// DK-A：对话载体判定（`AI_PM_CONVERSATION_ROUTER` + 意图分类端口）。
     pub(crate) conversation_routing: ConversationRouting,
 }
@@ -176,6 +180,8 @@ fn build_router(
         audit_feed,
         knowledge,
         file: crate::files::FileProxy::from_env(),
+        docproc_store: pm_infrastructure::docproc_store::FileServiceStore::from_env("pm-api")
+            .map(|s| s as std::sync::Arc<dyn pm_application::docproc_service::ArtifactStore>),
         conversation_routing,
     };
     // The MCP service clones the pool inside its own state factory; it cannot
@@ -297,6 +303,8 @@ fn build_router(
         // 文件代理（2026-11-07）：file-service 收口 mesh-only 后的用户面
         // 入口，同形状复刻其 REST 契约，出站走 per-tenant 服务 JWT。
         .merge(crate::files::router())
+        // Document Processing（0016）：平台级文档上传/解析/产物/比较/导出。
+        .merge(crate::docproc::router())
         .merge(crate::pm_approvers::router())
         .merge(crate::pm_interactions::router())
         // 审计实时流（SSE）。EventSource 无法带 Authorization，token 走
