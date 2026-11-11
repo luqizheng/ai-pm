@@ -1,6 +1,7 @@
 # Document Processing · TD-03 Parser Adapter 技术设计 — V1
 
 **上游：** 规格 §4/§7.2 + 仓库实证（knowledge_parse.rs 已有 DOCX 解析基座）
+**落地状态：** V1 已实现（commit f1403ea3）——八格式适配器全落地，OCR 接口见 §6。
 **选型总裁决：** **纯 Rust（zip + quick-xml），零外部进程、零 LibreOffice/Pandoc**——沿用 knowledge_parse.rs 裁决 Q-B 的先例（「纯 Rust ZIP+XML，零 LibreOffice」）。规格 §7.2 的 Pandoc/MarkItDown/Docling 候选**否决**：引入 Python/外部二进制违背仓内部署形态（容器镜像只有 Rust 产物），且 spec 自己要求 Adapter 隔离具体技术——我们隔离的方式就是不用外部技术。中文评测策略见 §5。
 
 ---
@@ -100,3 +101,29 @@ pub trait ParserAdapter: Send + Sync {
 - PDF 图片提取/OCR 引擎（P1，ocr_required 清单已产出）。
 - 脚注/尾注（DOCX `footnotes.xml` → 整体警告占位）。
 - 复杂合并单元格 HTML 保真（拍平 + 警告）。
+
+
+## 6. OCR Adapter 接口落地（规格 D-04 V1 五项能力）
+
+`pm-application/src/docproc_ocr.rs`：
+
+```rust
+pub trait OcrAdapter: Send + Sync {
+    fn name(&self) -> &'static str;
+    fn version(&self) -> &'static str;
+    fn detect(&self, bytes: &[u8]) -> Result<OcrDetection, ParseError>;
+}
+```
+
+| 规格 §2.4 要求 | V1 实装 |
+|---|---|
+| ① 判断 PDF 是否含可提取文本 | 页级文本长度判定（`parse_pdf` 每页文本条数） |
+| ② 检测疑似扫描页面 | 页文本≈0 → `status='pending'` |
+| ③ 识别需 OCR 的页 | `OcrPageStatus{page, status}` 清单 |
+| ④ 生成 OCR 任务数据结构 | `OcrDetection{engine, engine_version, pages}` → `ocr_result` artifact metadata |
+| ⑤ 记录 OCR 状态与结果 | job `ocr_detect` 分支 → artifact + 完成事件（`pending_pages` 计数） |
+| ⑥ 预留 OCR Adapter 接口 | `OcrAdapter` trait；P1 换 OCRmyPDF 仅替换 `ocr_adapter()` 返回值，worker 无感 |
+
+**P1 引擎契约**：`OcrAdapter` 返回值需追加 `ocr_text` / `quality`（识别质量），并遵守「OCR 结果不能视为绝对准确的原文」（规格 §4.6）——结果 metadata 必须携带引擎名与版本。
+
+**实测修正**：扫描页 PDF（页对象存在但无内容流）V1 初版误报 `Corrupted`——已修正为「空文本页 → 进 ocr_required」（`docproc_parse/pdf.rs`），否则 D-04 的扫描件检测能力形同虚设。

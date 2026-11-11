@@ -1,6 +1,7 @@
 # Document Processing · TD-05 KB/PC 集成契约 — V1
 
 **上游：** 规格 D-05/§2.2/§6.6 + 仓内实证（kb_service::confirm_revision 的 require_human 真人门、KnowledgeRoot Git 权威、kb-pc-contracts 端口）
+**落地状态：** V1 已实现（commit 6106129a）——迁移 0017（kb.document_revision 加 source_ref/source_checksum）+ `kb_service::ingest_from_docproc` + `confirm_revision` ④b checksum 复检；见本文 §7 实装记录。
 **一条铁律（D-05）：** 转换成功 ≠ 正式知识。docproc 产物进入业务域时**永远以候选（draft/提案）形态**出现，确认动作只能由对应业务域的既有真人门完成。
 
 ---
@@ -72,3 +73,18 @@ pub trait DocprocReader: Send + Sync {
 | 来源追溯：转换内容可追溯到原始文档 | source_ref + TD-01 source_mapping（artifact→version→document 链） |
 | 索引隔离：转换成功 ≠ PageIndex 完成 | §3 PageIndex 由 published 触发，docproc 零触碰 |
 | 正式知识权威唯一（Git） | §1 边界 3：docproc 产物永存对象存储层，Git 权威由领域写入 |
+
+
+## 7. V1 实装记录（commit 6106129a）
+
+| 设计项 | 实装 | 位置 |
+|---|---|---|
+| 候选引用（引用不复制） | `kb.document_revision.source_ref = docproc:artifact:{uuid}` + `source_checksum` | 迁移 0017 |
+| 候选创建 | `kb_service::ingest_from_docproc`（拉取 markdown + 校验 checksum → 建 draft） | pm-application/src/kb_service/document.rs |
+| 确认时复检 | `confirm_revision` ④b：source_ref 解析 → 查 docproc.artifact.checksum → 与 source_checksum 不一致则 **Conflict（留在 draft）** | 同上 |
+| 正式知识权威 | 未改：Git 路径/版本/确认仍走既有 `confirm_revision` 通道 | 零改动 |
+| PageIndex | 未触碰（转换成功不触发索引） | — |
+
+**租户边界实证**：`kb.document` 的 `(tenant_id, project_id)` 外键强制 KB 项目与 docproc 文档同租户——跨租户接入被数据库层拒绝（测试中先撞 FK 后修正夹具）。这不是额外约束，是既有租户模型在接入面的显形。
+
+**D-05 铁律的结构性守卫**：用例 `docproc_failure_stays_draft_never_publishes_knowledge` 以源码面断言固化——`docproc_service` 与 `docproc_worker` 均不含任何 KB 写入口（`use crate::kb_service` / `kb.document_revision` 字面量不存在），确认权永远在业务域。
