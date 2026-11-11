@@ -362,7 +362,8 @@ async fn non_human_cannot_confirm_a_redline_proposal(pool: PgPool) {
     )
     .await
     .unwrap_err();
-    assert!(matches!(err, knowledge::KnowledgeError::Conflict(_)));
+    // DEF-P0-03：非真人确认 = 授权拒绝（Forbidden），不是状态冲突（Conflict）。
+    assert!(matches!(err, knowledge::KnowledgeError::Forbidden(_)));
 
     cleanup(&root);
 }

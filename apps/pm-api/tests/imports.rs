@@ -603,6 +603,92 @@ fn grounding_drops_fabricated_evidence() {
     assert_eq!(grounded.requirements[0].code, "REQ-001");
 }
 
+/// DEF-E2E-02 的回归：草案标题必须唯一。
+///
+/// 平台以「项目 + 标题」为任务身份，执行器 `create_tasks` 遇同标题即合并。
+/// 真实仓库的 commit subject 天然重复（ai-pm 自身 300 条 commit 只有 293 个
+/// 不同 subject）——标题重复会让落地条目数少于提案宣称数，且无任何提示。
+/// 接地层按证据引用（commit sha / doc 路径）消歧。
+#[test]
+fn grounding_disambiguates_duplicate_titles() {
+    let repo_id = "repo-1".to_string();
+    let commit = |sha: &str, subject: &str| CommitFact {
+        sha: sha.to_string(),
+        author: "T".to_string(),
+        authored_at: "2026-10-31T00:00:00Z".to_string(),
+        subject: subject.to_string(),
+    };
+    let facts = RepoFacts {
+        head_commit_sha: "a".repeat(40),
+        default_branch: "main".to_string(),
+        commits: vec![
+            commit(&"a".repeat(40), "fix: 同样的标题"),
+            commit(&"b".repeat(40), "fix: 同样的标题"),
+            commit(&"c".repeat(40), "fix: 同样的标题"),
+        ],
+        hot_files: vec![],
+        languages: vec![],
+        file_count: 0,
+        docs: vec![],
+        truncated: false,
+        size_bytes: 1,
+    };
+    let materials = vec![pm_application::repo_facts::RepoMaterial {
+        repository_id: repo_id.clone(),
+        facts,
+    }];
+    let evidence = |sha: &str| Evidence {
+        kind: EvidenceKind::Commit,
+        repo_id: repo_id.clone(),
+        r#ref: sha.to_string(),
+        detail: String::new(),
+    };
+    let task = |key: &str, sha: &str| TaskDraft {
+        key: key.to_string(),
+        title: "fix: 同样的标题".to_string(),
+        description: String::new(),
+        priority: "normal".to_string(),
+        milestone_key: None,
+        requirement_key: None,
+        assignee_role: Some(AssigneeRole::Developer),
+        confidence: Confidence::Medium,
+        evidence: vec![evidence(sha)],
+    };
+    let draft = ProjectDraft {
+        tasks: vec![
+            task("T1", &"a".repeat(40)),
+            task("T2", &"b".repeat(40)),
+            task("T3", &"c".repeat(40)),
+        ],
+        ..ProjectDraft::default()
+    };
+
+    let (grounded, dropped) = ground_draft(&draft, &materials);
+    assert_eq!(dropped, 0, "all three tasks are grounded");
+
+    let titles: Vec<&str> = grounded.tasks.iter().map(|t| t.title.as_str()).collect();
+    let mut unique = titles.clone();
+    unique.sort_unstable();
+    unique.dedup();
+    assert_eq!(
+        unique.len(),
+        titles.len(),
+        "titles must be unique so the executor does not merge them: {titles:?}"
+    );
+    // 第一条保持原样；后续条按 sha 消歧。
+    assert_eq!(titles[0], "fix: 同样的标题");
+    assert!(
+        titles[1].contains(&"b".repeat(7)),
+        "second task: {}",
+        titles[1]
+    );
+    assert!(
+        titles[2].contains(&"c".repeat(7)),
+        "third task: {}",
+        titles[2]
+    );
+}
+
 /// 造一个**克隆必然失败**的仓库（URL 指向不存在的本地路径）。
 async fn seed_broken_repo(pool: &PgPool, project_id: Uuid) -> Uuid {
     let actor_id: Uuid = sqlx::query_scalar(

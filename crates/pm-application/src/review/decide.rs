@@ -175,9 +175,6 @@ pub enum ApprovalOutcome {
     ChangesRequested {
         task_id: Uuid,
     },
-    AlreadyDecided {
-        status: String,
-    },
 }
 
 /// 审批裁决的错误（HTTP 映射见 `pm-api`）。
@@ -533,7 +530,10 @@ pub async fn decide_review_approval(
     let status: String = row.get("status");
     if status != "pending" {
         tx.rollback().await.ok();
-        return Ok(ApprovalOutcome::AlreadyDecided { status });
+        // DEF-P0-04：重复裁决 = 冲突（409），不是 200。API 契约（pm_reviews.rs
+        // 模块头「AlreadyDecided | 409」）与错误码枚举都按 409 定义；此前这里
+        // 返回 Ok(AlreadyDecided) → HTTP 200，客户端会把「未生效」读成「成功」。
+        return Err(ApprovalError::AlreadyDecided(status));
     }
     let task_id: Uuid = row.get("task_id");
     let review_run_id: Uuid = row.get("review_run_id");

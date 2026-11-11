@@ -12,6 +12,7 @@ pub(crate) use sqlx::PgPool;
 pub(crate) use uuid::Uuid;
 
 pub(crate) use crate::actor::AuditActor;
+pub(crate) use crate::command_executor::MAX_BATCH_ITEMS;
 pub(crate) use crate::git_access;
 pub(crate) use crate::pm_write::PmWriteError;
 pub(crate) use crate::repo_facts::{self, pm_ai_port::ModelError, RepoAnalysisModel, RepoMaterial};

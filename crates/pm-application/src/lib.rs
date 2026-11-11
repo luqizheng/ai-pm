@@ -108,7 +108,7 @@ pub use bootstrap::{
 pub use caller::{CallerContext, DeviceClaim, DeviceClaimIgnoredReason, HumanActor};
 pub use command_executor::{
     ActorKind, CommandSource, CompensableTable, CompensationSpec, ExecutionContext,
-    ExecutionReceipt, PgCommandExecutor, SnapshotEntry,
+    ExecutionReceipt, PgCommandExecutor, SnapshotEntry, MAX_BATCH_ITEMS,
 };
 pub use discovery::{
     add_finding, add_proposal, add_question, answer_question, append_message, create_session,

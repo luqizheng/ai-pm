@@ -1,0 +1,554 @@
+{
+  "config": {
+    "argv": [
+      "C:\\nvm4w\\nodejs\\node.exe",
+      "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\node_modules\\@playwright\\test\\cli.js",
+      "test",
+      "-c",
+      "playwright.flow.config.ts"
+    ],
+    "configFile": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\playwright.flow.config.ts",
+    "rootDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow\\global-setup.ts",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "D:/kudi-project/templates/ai-pm/test-case/evidence/e2e-flow/playwright-ui-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "flow.spec.ts"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\e2e-flow\\playwright-ui-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "name": "",
+        "testDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
+        "snapshotDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
+        "testIgnore": [],
+        "testMatch": "flow.spec.ts",
+        "timeout": 90000,
+        "use": {
+          "baseURL": "http://127.0.0.1:8860",
+          "channel": "msedge",
+          "headless": true,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "locale": "zh-CN",
+          "screenshot": "only-on-failure",
+          "trace": "retain-on-failure"
+        },
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": ""
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "../test-case/evidence/e2e-flow/playwright-ui-results.json"
+        }
+      ],
+      [
+        "html",
+        {
+          "outputFolder": "../test-case/evidence/e2e-flow/playwright-ui-report",
+          "open": "never"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "default",
+    "updateSourceMethod": "patch",
+    "version": "1.65.0",
+    "workers": 1,
+    "webServer": {
+      "command": "pnpm exec vite --port 8860 --strictPort",
+      "url": "http://127.0.0.1:8860",
+      "reuseExistingServer": false,
+      "timeout": 180000,
+      "env": {
+        "PM_API_URL": "http://127.0.0.1:18495",
+        "VITE_USE_MOCK": "0",
+        "VITE_PORT": "8860",
+        "LMMS_GATEWAY_URL": "http://127.0.0.1:59999"
+      }
+    }
+  },
+  "suites": [
+    {
+      "title": "flow.spec.ts",
+      "file": "flow.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "UIFLOW-01 未建团 → signing-in 分流 /onboarding；深链 /projects 被拦；无虚假团队",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 6027,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T14:40:47.770Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f353db48c569834dc22b-069df5c2b6119e61a2da",
+          "file": "flow.spec.ts",
+          "line": 64,
+          "column": 1
+        },
+        {
+          "title": "UIFLOW-02 UI 建团 → 邀请页横幅；后端创建者 = owner",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2411,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T14:40:54.227Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f353db48c569834dc22b-03c7832e016a4196d4fd",
+          "file": "flow.spec.ts",
+          "line": 96,
+          "column": 1
+        },
+        {
+          "title": "UIFLOW-03 UI 建项目 → 进总控台带 project_id；列表可见；5 人编制",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3439,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T14:40:56.647Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f353db48c569834dc22b-b3cb60291cc1a7eb37e7",
+          "file": "flow.spec.ts",
+          "line": 120,
+          "column": 1
+        },
+        {
+          "title": "UIFLOW-04 API 造需求 → 需求页显示真实标题",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2194,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T14:41:00.097Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f353db48c569834dc22b-a554d4a3be5d5633a46c",
+          "file": "flow.spec.ts",
+          "line": 153,
+          "column": 1
+        },
+        {
+          "title": "UIFLOW-05 API 造 2 条 draft 任务 → 总览计数与 backlog 标题一致",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3079,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T14:41:02.311Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f353db48c569834dc22b-7dc746daffd9a64dcdc3",
+          "file": "flow.spec.ts",
+          "line": 179,
+          "column": 1
+        },
+        {
+          "title": "UIFLOW-06 真实仓库接 verify → 仓库页显示两行已验证",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 7893,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T14:41:05.405Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f353db48c569834dc22b-d471993e5b63258a29e0",
+          "file": "flow.spec.ts",
+          "line": 209,
+          "column": 1
+        },
+        {
+          "title": "UIFLOW-07 无登录态访问受保护页 → /auth/login",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1963,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T14:41:13.308Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f353db48c569834dc22b-196a5f437328ce23707f",
+          "file": "flow.spec.ts",
+          "line": 253,
+          "column": 1
+        },
+        {
+          "title": "UIFLOW-08 页面请求全部命中真 pm-api，零 fixture/mock 响应",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2110,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T14:41:15.279Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\flow.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "f353db48c569834dc22b-44c9b6d8750af902e327",
+          "file": "flow.spec.ts",
+          "line": 264,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-11-10T14:40:43.679Z",
+    "duration": 35675.834,
+    "expected": 8,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}
