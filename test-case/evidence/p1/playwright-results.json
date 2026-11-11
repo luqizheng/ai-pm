@@ -1,0 +1,1393 @@
+{
+  "config": {
+    "argv": [
+      "C:\\nvm4w\\nodejs\\node.exe",
+      "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\node_modules\\@playwright\\test\\cli.js",
+      "test",
+      "--config=playwright.p1.config.ts",
+      "--list"
+    ],
+    "configFile": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\playwright.p1.config.ts",
+    "rootDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0\\global-setup.ts",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {},
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "D:/kudi-project/templates/ai-pm/test-case/evidence/p1/playwright-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {},
+        "id": "",
+        "name": "",
+        "testDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "p1-*.spec.ts"
+        ],
+        "timeout": 120000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\p1\\playwright-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {},
+        "name": "",
+        "testDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
+        "snapshotDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
+        "testIgnore": [],
+        "testMatch": "p1-*.spec.ts",
+        "timeout": 120000,
+        "use": {
+          "baseURL": "http://127.0.0.1:8850",
+          "channel": "msedge",
+          "headless": true,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "locale": "zh-CN",
+          "screenshot": "only-on-failure",
+          "trace": "retain-on-failure"
+        },
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": ""
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "../test-case/evidence/p1/playwright-results.json"
+        }
+      ],
+      [
+        "html",
+        {
+          "outputFolder": "../test-case/evidence/p1/playwright-report",
+          "open": "never"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "default",
+    "updateSourceMethod": "patch",
+    "version": "1.65.0",
+    "workers": 1,
+    "webServer": {
+      "command": "pnpm exec vite --port 8850 --strictPort",
+      "url": "http://127.0.0.1:8850",
+      "reuseExistingServer": false,
+      "timeout": 180000,
+      "env": {
+        "PM_API_URL": "http://127.0.0.1:18490",
+        "VITE_USE_MOCK": "0",
+        "VITE_PORT": "8850",
+        "LMMS_GATEWAY_URL": "http://127.0.0.1:59999"
+      }
+    }
+  },
+  "suites": [
+    {
+      "title": "p1-01-init-persistence.spec.ts",
+      "file": "p1-01-init-persistence.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "TC-01 部分初始化：7 个固定 key，basics=completed 其余 not_started",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-01-init-persistence.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "b3e03e0904bd2f8092b2-838d7a5729544649bd3c",
+          "file": "p1-01-init-persistence.spec.ts",
+          "line": 70,
+          "column": 1
+        },
+        {
+          "title": "TC-02 刷新后初始化快照一致",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-01-init-persistence.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "b3e03e0904bd2f8092b2-9ce3ab9ddc0d24a8ef0f",
+          "file": "p1-01-init-persistence.spec.ts",
+          "line": 100,
+          "column": 1
+        },
+        {
+          "title": "TC-03 重登（新 context）后初始化快照一致",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-01-init-persistence.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "b3e03e0904bd2f8092b2-ccdca76fa0fcdbb67bba",
+          "file": "p1-01-init-persistence.spec.ts",
+          "line": 112,
+          "column": 1
+        },
+        {
+          "title": "TC-04 重开项目一致；访问 projectB 不影响 projectA 快照",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-01-init-persistence.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "b3e03e0904bd2f8092b2-c28719dd1337f87a297f",
+          "file": "p1-01-init-persistence.spec.ts",
+          "line": 125,
+          "column": 1
+        },
+        {
+          "title": "TC-05 字段一致性：无 expanded；required 与 required_items 自洽",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-01-init-persistence.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "b3e03e0904bd2f8092b2-3512f74db7363d3c046f",
+          "file": "p1-01-init-persistence.spec.ts",
+          "line": 140,
+          "column": 1
+        },
+        {
+          "title": "TC-06 fresh context 快照 = 领域表重算（纯派生，无缓存参与）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-01-init-persistence.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "b3e03e0904bd2f8092b2-56e4b1fd0ef8e00d93f0",
+          "file": "p1-01-init-persistence.spec.ts",
+          "line": 154,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "p1-02-login-landing.spec.ts",
+      "file": "p1-02-login-landing.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "TC-01 登录后默认落地 /personal（不进项目页）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "071dc7d5e54bcedb879d-6175202901ed04a8f21b",
+          "file": "p1-02-login-landing.spec.ts",
+          "line": 44,
+          "column": 1
+        },
+        {
+          "title": "TC-02 未登录访问 /personal 被守卫拦到登录页",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "071dc7d5e54bcedb879d-fe6a4dab99a44ff58c8e",
+          "file": "p1-02-login-landing.spec.ts",
+          "line": 64,
+          "column": 1
+        },
+        {
+          "title": "TC-03 returnTo 链路证据：守卫写入 redirect，落地恒 /personal",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "071dc7d5e54bcedb879d-8a8ba83e48c2152122b9",
+          "file": "p1-02-login-landing.spec.ts",
+          "line": 78,
+          "column": 1
+        },
+        {
+          "title": "TC-04 刷新 /personal 后仍保持",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "071dc7d5e54bcedb879d-5eb27059fc53528fcc0d",
+          "file": "p1-02-login-landing.spec.ts",
+          "line": 92,
+          "column": 1
+        },
+        {
+          "title": "TC-05 已登录访问 /auth/login 被送出登录流程（实际落 /dashboard）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "071dc7d5e54bcedb879d-3384a9f9e237011486f4",
+          "file": "p1-02-login-landing.spec.ts",
+          "line": 106,
+          "column": 1
+        },
+        {
+          "title": "TC-06 从 /personal 进出项目往返正常",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "071dc7d5e54bcedb879d-4b7eb9a696f4439ebe81",
+          "file": "p1-02-login-landing.spec.ts",
+          "line": 117,
+          "column": 1
+        },
+        {
+          "title": "TC-07 无 Team 用户被引导 Onboarding，建团后进入 /personal",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "071dc7d5e54bcedb879d-5d260a2e3b2da35271e0",
+          "file": "p1-02-login-landing.spec.ts",
+          "line": 135,
+          "column": 1
+        },
+        {
+          "title": "TC-08 多 tid 会话各自落地 /personal 且项目列表互斥",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "071dc7d5e54bcedb879d-e98f43fc6327c195bcb9",
+          "file": "p1-02-login-landing.spec.ts",
+          "line": 161,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "p1-03-personal-list-permissions.spec.ts",
+      "file": "p1-03-personal-list-permissions.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "TC-01 列表过滤：各自只见自己的项目，total 一致",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-03-personal-list-permissions.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "50c30c87a88f7088f372-ccb723faf00cba6cc276",
+          "file": "p1-03-personal-list-permissions.spec.ts",
+          "line": 43,
+          "column": 1
+        },
+        {
+          "title": "TC-02 跨租户读：列表互斥 + 对方项目详情 404",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-03-personal-list-permissions.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "50c30c87a88f7088f372-5dbd1805e9f2fbeed2b2",
+          "file": "p1-03-personal-list-permissions.spec.ts",
+          "line": 53,
+          "column": 1
+        },
+        {
+          "title": "TC-03 列表集合与 DB 租户项目集合一致（无泄漏/无缺失）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-03-personal-list-permissions.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "50c30c87a88f7088f372-6a9190f68f2e95a0f032",
+          "file": "p1-03-personal-list-permissions.spec.ts",
+          "line": 70,
+          "column": 1
+        },
+        {
+          "title": "TC-04 撤销 project_member 后下一次列表请求立即收窄",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-03-personal-list-permissions.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "50c30c87a88f7088f372-f3f35a16d1a6cabe268c",
+          "file": "p1-03-personal-list-permissions.spec.ts",
+          "line": 85,
+          "column": 1
+        },
+        {
+          "title": "TC-05 列表行不携带伪造期限字段",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-03-personal-list-permissions.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "50c30c87a88f7088f372-55bd7d14f68233c40db0",
+          "file": "p1-03-personal-list-permissions.spec.ts",
+          "line": 97,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "p1-04-bootstrap-install.spec.ts",
+      "file": "p1-04-bootstrap-install.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "TC-01/02 /install 目录 + 指引 + 未知 slug 兜底",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-04-bootstrap-install.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "8aa789605c7123eceb1a-89f3bf3d204f0ae36da1",
+          "file": "p1-04-bootstrap-install.spec.ts",
+          "line": 39,
+          "column": 1
+        },
+        {
+          "title": "TC-03 release-manifest：四 SKILL + 脚本 + SHA-256 + integrity_only",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-04-bootstrap-install.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "8aa789605c7123eceb1a-9d796f23ec2e4d28977c",
+          "file": "p1-04-bootstrap-install.spec.ts",
+          "line": 57,
+          "column": 1
+        },
+        {
+          "title": "TC-04/05 zip 完整性（sha256 == manifest）且不含凭证样式串",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-04-bootstrap-install.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "8aa789605c7123eceb1a-ae81e8fe59dc5b5072b1",
+          "file": "p1-04-bootstrap-install.spec.ts",
+          "line": 83,
+          "column": 1
+        },
+        {
+          "title": "TC-06 无凭据业务调用被拒（认证边界）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-04-bootstrap-install.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "8aa789605c7123eceb1a-55b6fa2a9dd309fe0545",
+          "file": "p1-04-bootstrap-install.spec.ts",
+          "line": 106,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "p1-05-zero-deps.spec.ts",
+      "file": "p1-05-zero-deps.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "TC-01 零依赖建项目：CC 可读 + ai.project_ai_config 就绪",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-05-zero-deps.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "c6528978d9ff774e5557-fbef292fb5e48afcecc8",
+          "file": "p1-05-zero-deps.spec.ts",
+          "line": 36,
+          "column": 1
+        },
+        {
+          "title": "TC-02 分析链走已配置 provider（model_name ≠ fake）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-05-zero-deps.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "c6528978d9ff774e5557-e15b785bd71a7ee9058e",
+          "file": "p1-05-zero-deps.spec.ts",
+          "line": 50,
+          "column": 1
+        },
+        {
+          "title": "TC-03 会话回复链落库（assistant 消息）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-05-zero-deps.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "c6528978d9ff774e5557-3d59454c462bd58c1f8b",
+          "file": "p1-05-zero-deps.spec.ts",
+          "line": 78,
+          "column": 1
+        },
+        {
+          "title": "TC-04 需求建议停在人待确认态",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-05-zero-deps.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "c6528978d9ff774e5557-956ff7cf406709987111",
+          "file": "p1-05-zero-deps.spec.ts",
+          "line": 106,
+          "column": 1
+        },
+        {
+          "title": "TC-05 provider 不可达时明确失败（D54）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-05-zero-deps.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                },
+                {
+                  "type": "fixme",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-05-zero-deps.spec.ts",
+                    "line": 146,
+                    "column": 6
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "c6528978d9ff774e5557-44c873b5f34bfc420012",
+          "file": "p1-05-zero-deps.spec.ts",
+          "line": 146,
+          "column": 6
+        }
+      ]
+    },
+    {
+      "title": "p1-06-baseline-confirm.spec.ts",
+      "file": "p1-06-baseline-confirm.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "TC-01 提案派生条目带来源引用",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "237bddaae54989e7ae21-992e634c5337e0ae4dea",
+          "file": "p1-06-baseline-confirm.spec.ts",
+          "line": 72,
+          "column": 1
+        },
+        {
+          "title": "TC-02 逐项决策；重复决策 409",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "237bddaae54989e7ae21-5b264aa121634af33852",
+          "file": "p1-06-baseline-confirm.spec.ts",
+          "line": 99,
+          "column": 1
+        },
+        {
+          "title": "TC-03 investigation 条目不阻断确认；版本与 confirmed_by 落库",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "237bddaae54989e7ae21-0ae08e458ff0ad27e046",
+          "file": "p1-06-baseline-confirm.spec.ts",
+          "line": 125,
+          "column": 1
+        },
+        {
+          "title": "TC-04 有 proposed 条目时 confirm 被拒 409",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "237bddaae54989e7ae21-3623d27a688baae5ee46",
+          "file": "p1-06-baseline-confirm.spec.ts",
+          "line": 169,
+          "column": 1
+        },
+        {
+          "title": "TC-05 二轮确认 version 递增，旧提案 superseded",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "237bddaae54989e7ae21-3a87c80f9fe56d11dea0",
+          "file": "p1-06-baseline-confirm.spec.ts",
+          "line": 201,
+          "column": 1
+        },
+        {
+          "title": "TC-06 已确认提案的条目不可再决策",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "237bddaae54989e7ae21-1707014040769a1e30b4",
+          "file": "p1-06-baseline-confirm.spec.ts",
+          "line": 237,
+          "column": 1
+        },
+        {
+          "title": "TC-07 AI 令牌确认 Baseline 被拒 403（DEF-P0-02）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                },
+                {
+                  "type": "fixme",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                    "line": 261,
+                    "column": 6
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "237bddaae54989e7ae21-802fef70cddd57c16089",
+          "file": "p1-06-baseline-confirm.spec.ts",
+          "line": 261,
+          "column": 6
+        }
+      ]
+    },
+    {
+      "title": "p1-07-def0304-regression.spec.ts",
+      "file": "p1-07-def0304-regression.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "TC-01 陈旧哈希定稿 409，新哈希 200（统一入口）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "bbe58b0b04a04cee2a5d-275dfd1a50c46be06024",
+          "file": "p1-07-def0304-regression.spec.ts",
+          "line": 36,
+          "column": 1
+        },
+        {
+          "title": "TC-02 真并发双 confirm 无静默双 200",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "bbe58b0b04a04cee2a5d-4bec52aa7697ab8ec2f6",
+          "file": "p1-07-def0304-regression.spec.ts",
+          "line": 77,
+          "column": 1
+        },
+        {
+          "title": "TC-03 历史 Revision 保留且状态正确",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "bbe58b0b04a04cee2a5d-98d9f0ff1800e622451e",
+          "file": "p1-07-def0304-regression.spec.ts",
+          "line": 106,
+          "column": 1
+        },
+        {
+          "title": "TC-04 REST 建任务拒绝 AI 身份（403）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "bbe58b0b04a04cee2a5d-dee864310b59a1e47714",
+          "file": "p1-07-def0304-regression.spec.ts",
+          "line": 122,
+          "column": 1
+        },
+        {
+          "title": "TC-05 执行器与 REST 语义一致（DEF-P0-01）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                },
+                {
+                  "type": "fixme",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
+                    "line": 147,
+                    "column": 6
+                  }
+                }
+              ],
+              "expectedStatus": "skipped",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "bbe58b0b04a04cee2a5d-c0d888a988b8c2cc15d9",
+          "file": "p1-07-def0304-regression.spec.ts",
+          "line": 147,
+          "column": 6
+        },
+        {
+          "title": "TC-06 旧式定稿/审批路径无定稿效果（非 2xx 探针）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "bbe58b0b04a04cee2a5d-a66dfca97e58206988b6",
+          "file": "p1-07-def0304-regression.spec.ts",
+          "line": 154,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-11-10T23:53:04.182Z",
+    "duration": 7619.359,
+    "expected": 0,
+    "skipped": 41,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

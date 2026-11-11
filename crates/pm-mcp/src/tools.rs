@@ -473,6 +473,8 @@ fn map_knowledge_error(err: KnowledgeError) -> ToolError {
             ToolError::Conflict("document content drifted from its recorded hash".into())
         }
         KnowledgeError::Conflict(message) => ToolError::Conflict(message),
+        // DEF-P0-03：人工门拒绝 = 权限错误（不是冲突）。
+        KnowledgeError::Forbidden(message) => ToolError::Forbidden(message),
         // T-060：写锁排队超时（可重试）；base_revision 过期（不产生修订）。
         KnowledgeError::ProjectWriteBusy(message) => ToolError::Conflict(message),
         KnowledgeError::RevisionConflict(message) => ToolError::Conflict(message),

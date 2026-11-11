@@ -94,8 +94,15 @@ pub(crate) async fn acquire_project_graph_lock(
     tx: &mut Tx,
     project_id: Uuid,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))")
-        .bind(project_id)
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('task-graph:' || $1::text, 0))")
+        // DEF-P0-05：键必须以 **text** 绑定，且 SQL 文本带独立前缀。
+        // ① `bind(Uuid)` + `$1::text`：服务端把参数解析为 text，而 sqlx 按 uuid
+        //    编成 16 字节 → 服务端当 text 解析 → 随机 `invalid byte sequence for
+        //    encoding "UTF8"`（任务完成/审核裁决 500，flaky）。
+        // ② SQL 文本与知识索引器的锁语句**完全相同**时，sqlx 的语句缓存按 SQL
+        //    文本复用：同一连接先按 text 绑定准备过、后续按 uuid 绑定复用缓存
+        //    语句 → 触发 ①。前缀让两条语句的缓存键不再相撞。
+        .bind(project_id.to_string())
         .execute(&mut **tx)
         .await?;
     Ok(())

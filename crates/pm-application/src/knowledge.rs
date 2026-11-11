@@ -85,6 +85,12 @@ pub enum KnowledgeError {
     Stale,
     #[error("knowledge conflict: {0}")]
     Conflict(String),
+    /// 人工门拒绝：调用方已认证但**无权执行该命令**（如非真人主体确认红线
+    /// 提案）。与 [`KnowledgeError::Conflict`] 严格分开——前者是「不允许」，
+    /// HTTP 403；后者是「状态冲突」，HTTP 409。DEF-P0-03：知识域此前把人工门
+    /// 失败报成 Conflict，导致授权拒绝被客户端当成可重试冲突。
+    #[error("knowledge forbidden: {0}")]
+    Forbidden(String),
     #[error("knowledge root misconfigured: {0}")]
     Config(String),
     #[error("knowledge root io error: {0}")]
