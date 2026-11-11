@@ -12,7 +12,9 @@ pub(crate) async fn require_human(pool: &PgPool, principal_id: Uuid) -> Result<(
         .await?;
     match kind.as_deref() {
         Some("human") => Ok(()),
-        Some(other) => Err(KnowledgeError::Conflict(format!(
+        // DEF-P0-03：授权拒绝不是状态冲突——落 Forbidden（HTTP 403），
+        // 与需求域 `requirement::require_human`（PmWriteError::Forbidden）同口径。
+        Some(other) => Err(KnowledgeError::Forbidden(format!(
             "principal {principal_id} is `{other}`, a human confirmation is required"
         ))),
         None => Err(KnowledgeError::NotFound),

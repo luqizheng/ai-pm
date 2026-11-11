@@ -126,6 +126,21 @@ L1（`#[sqlx::test]` + axum `oneshot`）覆盖不到四类真实故障，这四�
 | **UIFLOW-07** | 路由守卫 | 无 token 访问受保护页 → `/auth/login`；登出后返回守卫生效 |
 | **UIFLOW-08** | 零 mock 校验 | 抓取网络面板：所有 `/api` 请求命中真 pm-api，无本地 fixture 响应 |
 
+### 4.3 P0 发布验收 · 阶段 A~D（`P0-*`）——**已落地**（41 collected / 38 PASS / 3 NOT_IMPLEMENTED，见执行报告 §1.2 / §1.4）
+
+载体：`ai-frontend/e2e/p0-0{1..7}-*.spec.ts` + `ai-frontend/e2e/p0/{fixtures,helpers,global-setup}.ts` + `ai-frontend/playwright.p0.config.ts`；一键 `bash test-case/evidence/p0/run-p0.sh`。
+栈：真 vite `:8850`（`VITE_USE_MOCK=0`）+ 真 pm-api `:18490`（jwks）+ **真 ai-pm-worker**（`AI_PM_RUN_DISPATCH=on` / `AI_PM_RUN_EXECUTOR=mock`）+ mock LLM（OpenAI 兼容）+ 一次性库。
+
+| 阶段 | 用例 | 状态 | 断言要点（落地口径） |
+|---|---|---|---|
+| **A** | P0-001a~007 | ✅ 7 PASS | 会话/建团/建项目/CC 初始化/7 事项 7 态/跨团队隔离 |
+| **B** | P0-008a~014 | ✅ 8 PASS | 会话持久化 · worker 回复链 · 分析链（`completed`）· 人工门 403 · 需求/知识三存储权威 · 修订哈希门 · 知识红线（Git HEAD 不动）· 索引可删可重建 |
+| **C** | P0-015~021 + 040~048 | ✅ 17 PASS + 1 NI（045b） | 物化/隔离 · Run 生命周期（承接人须 dev_agent）· 失败退避链 · 事件面 · 交付三态（租约活跃期提交）· Review 审核（重复裁决 409）· 多仓 manifest · 取消与迟到拒绝 · MCP 认证/设备绑定/install/工具集/注入/幂等 |
+| **D** | P0-049a~056 | ✅ 7 PASS + 2 NI（051/052） | 分析链可追溯与幂等 · 来源可信度契约 · 统一协调（过期基线 409）· 质量门禁 · Revision↔Git 一致 · 恢复面（reindex_required 载体） |
+
+> **三个"确定性替身"**（真链路内的受控端点，非 mock 后端）：mock LLM（provider 指向它，回复链/分析链走真 HTTP）、fake-codex 执行脚本（真 spawn + 真 worktree + 真 commit，只换执行内容）、本地 `file://` 仓库夹具（真 clone/镜像/worktree，差别只在远端地址）。
+> **NOT_IMPLEMENTED 三项**（不计 PASS）：045b（MCP 回传通道 D4 未开通）、051（外部 Commit 发现管道未实现）、052（澄清采纳闭环专用管道未实现）。
+
 ---
 
 ## 5. 执行方式
@@ -154,11 +169,24 @@ bash test-case/evidence/e2e-flow/run-e2e-flow-ui.sh
 
 实测：UIFLOW-01~08 全部 PASS，34.7s。UIFLOW-06 接入**真实远端**——私钥经 `cargo run -p pm-application --example seal_ssh_key`（薄封装平台 `seal_text`）装进平台密钥库，不在 TS 侧重实现加密。
 
-### 5.3 与既有 E2E 的关系
+### 5.3 P0 发布验收一键（**已落地**）
+
+```bash
+bash test-case/evidence/p0/run-p0.sh
+```
+
+载体：`ai-frontend/playwright.p0.config.ts`（vite `:8850`，`VITE_USE_MOCK=0`）+ `ai-frontend/e2e/p0/global-setup.ts`（一次性库 `aipm_p0_e2e` + 本地 JWKS + 真 pm-api `:18490` + **真 ai-pm-worker** + mock LLM + fake-codex 执行脚本）。与 team-qa（:8850/:18490 系）端口互斥，串行复用。
+
+**脚本行为**：① 启 QA PG 容器（127.0.0.1，禁 localhost）→ ② 构建 `pm-api` + `ai-pm-worker` + `submit_run_result` example（rust-lld 需显式 `LIB`/`INCLUDE`）→ ③ `playwright test -c playwright.p0.config.ts` → ④ 证据落 `test-case/evidence/p0/`（run/e2e/pm-api 日志 + HTML 报告 + results.json）。
+
+**实测**：41 collected / 38 PASS / 3 NOT_IMPLEMENTED，全量 1.9 min。
+
+### 5.4 与既有 E2E 的关系
 
 | 套件 | 范围 | 载体 | 入口 |
 |---|---|---|---|
 | `apps/pm-api/tests/e2e_flow.rs`（新增） | **全流程主链 + 真实 Git 远端** | Rust 集成（真 router + 真 PG + 真 SSH） | `bash test-case/evidence/e2e-flow/run-e2e-flow.sh` |
+| `e2e/p0-0{1..7}-*.spec.ts`（新增） | **P0 发布验收 阶段 A~D（41 例）** | Playwright（真 pm-api + 真 worker + 真 vite） | `bash test-case/evidence/p0/run-p0.sh` |
 | `e2e/team-onboarding.spec.ts` | Team Onboarding 20 例 | Playwright（真 pm-api + 真 vite） | `bash test-case/evidence/team-qa/run-team-qa.sh` |
 | `e2e/s02-ui.spec.ts` | 已整体 skip（fixtures 演示态退役） | — | — |
 | `e2e/s02-ui-live.spec.ts` | S02 真栈 UI | Playwright | `pnpm exec playwright test -c playwright.config.ts` |

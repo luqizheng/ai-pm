@@ -36,18 +36,39 @@ fi
 export NO_PROXY="127.0.0.1,localhost${NO_PROXY:+,$NO_PROXY}"
 export no_proxy="$NO_PROXY"
 
-# ── 构建 pm-api（global-setup 由 TEAM_QA_PM_API_BIN 拉起） ───────────────
-say "build: pm-api"
+# ── 构建（pm-api + ai-pm-worker + 提交助手 example；P0 栈 = D11 worker 进栈） ──
+say "build: pm-api + ai-pm-worker + submit_run_result"
 cd "$REPO" || exit 1
 if ! cargo build -q -p pm-api --bin pm-api 2>&1 | tail -3 | tee -a "$LOG"; then
   say "BUILD FAIL: pm-api"; exit 1
 fi
+if ! cargo build -q -p ai-pm-worker --bin ai-pm-worker 2>&1 | tail -3 | tee -a "$LOG"; then
+  say "BUILD FAIL: ai-pm-worker"; exit 1
+fi
+if ! cargo build -q -p pm-application --example submit_run_result 2>&1 | tail -3 | tee -a "$LOG"; then
+  say "BUILD FAIL: submit_run_result"; exit 1
+fi
 BIN="$REPO/target/debug/pm-api.exe"
 [ -x "$BIN" ] || BIN="$REPO/target/debug/pm-api"
 export TEAM_QA_PM_API_BIN="$BIN"
+WORKER="$REPO/target/debug/ai-pm-worker.exe"
+[ -x "$WORKER" ] || WORKER="$REPO/target/debug/ai-pm-worker"
+export P0_WORKER_BIN="$WORKER"
+export AI_PM_SECRET_KEY="${AI_PM_SECRET_KEY:-e2e-p0-secret}"
+
+# rust-lld 链接器不读 VS 安装注册表，LIB 缺失即报 secur32.lib 找不到
+# （dev shell 带出的 LIB 环境不可靠）。在此显式构造：SDK(um/ucrt) + MSVC CRT。
+SDK_LIB="C:\Program Files (x86)\Windows Kits\10\Lib\10.0.26100.0"
+MSVC_LIB="$(ls -d "/c/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/"*/lib/x64 2>/dev/null | head -1 | sed 's|^/c/|C:/|; s|/|\\|g')"
+if [ -n "$MSVC_LIB" ]; then
+  export LIB="$SDK_LIB\um\x64;$SDK_LIB\ucrt\x64;$MSVC_LIB"
+  export INCLUDE="$SDK_LIB\..\..\Include\10.0.26100.0\um;$SDK_LIB\..\..\Include\10.0.26100.0\ucrt;$SDK_LIB\..\..\Include\10.0.26100.0\shared"
+  say "LIB set for rust-lld (MSVC CRT found)"
+fi
 export TEAM_QA_PG_CONTAINER="$PG_CONTAINER"
 export TEAM_QA_PG_PORT="$PG_PORT"
 export TEAM_QA_LOG="$EV/pm-api-$STAMP.log"
+export RUST_LOG="${RUST_LOG:-info}"
 
 # ── 执行 ───────────────────────────────────────────────────────────────
 say "run: playwright p0 suite (vite :8850 / pm-api :18490 / jwks :18491)"

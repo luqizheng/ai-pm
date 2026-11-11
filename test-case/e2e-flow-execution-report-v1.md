@@ -1,11 +1,11 @@
-# E2E 全流程 · 执行报告 V1.0
+# E2E 全流程 · 执行报告 V1.1
 
-> **用例文件**：L2=`apps/pm-api/tests/e2e_flow.rs`（真 router + 真 PG + 真 Git 远端）；L3=`ai-frontend/e2e/flow.spec.ts`（Playwright + 真 vite + 真 pm-api，2026-11-10 第二批落地）
-> **计划**：`test-case/e2e-test-plan-v1.md`（FLOW-01 ~ FLOW-16）
-> **执行日期**：2026-11-10
-> **基线**：master @ `2b3f509e` + 本批修复（见 §3）
-> **执行入口**：`bash test-case/evidence/e2e-flow/run-e2e-flow.sh`
-> **判定口径**：HTTP 码 + 响应字段 + **DB 终态** 三者一致才算 PASS；未执行不算 PASS。
+> **用例文件**：L2=`apps/pm-api/tests/e2e_flow.rs`（真 router + 真 PG + 真 Git 远端）；L3=`ai-frontend/e2e/flow.spec.ts`（Playwright + 真 vite + 真 pm-api，2026-11-10 第二批落地）；**P0 发布验收**=`ai-frontend/e2e/p0-0{1..7}-*.spec.ts`（Playwright + 真 vite + 真 pm-api + **真 ai-pm-worker**，2026-11-11 第三批落地，§1.2/§1.4）
+> **计划**：`test-case/e2e-test-plan-v1.md`（FLOW-01 ~ FLOW-16 + P0 阶段 A~D）
+> **执行日期**：2026-11-10（L2/L3）· 2026-11-11（P0 阶段 B~D）
+> **基线**：`feat/e2e-flow-suite` @ `684bc418` + 本批修复（见 §3）
+> **执行入口**：`bash test-case/evidence/e2e-flow/run-e2e-flow.sh`（L2/L3）· `bash test-case/evidence/p0/run-p0.sh`（P0 全量）
+> **判定口径**：HTTP 码 + 响应字段 + **DB 终态** 三者一致才算 PASS；未执行不算 PASS；NOT_IMPLEMENTED 单列（不计 PASS）。
 
 ---
 
@@ -60,15 +60,74 @@
 
 一键复跑：`bash test-case/evidence/p0/run-p0.sh`（证据落 `test-case/evidence/p0/`）。
 
-### 1.3 全量回归（同一基线）
+### 1.4 P0 发布验收 · 阶段 B~D（P0-008a~014 / 015~021+040~048 / 049a~056）
+
+**41 collected / 38 PASS / 3 NOT_IMPLEMENTED（045b、051、052）**（全量 1.9 min；Playwright + 真 vite `:8850`（`VITE_USE_MOCK=0`）+ 真 pm-api `:18490`（jwks）+ **真 ai-pm-worker**（D11 进栈：`AI_PM_RUN_DISPATCH=on` / `AI_PM_RUN_EXECUTOR=mock`）+ mock LLM（OpenAI 兼容，确定性响应）+ 一次性库 `aipm_p0_e2e`；载体 `ai-frontend/e2e/p0-0{3,4,5,6,7}-*.spec.ts` + `ai-frontend/e2e/p0/{fixtures,helpers,global-setup}.ts`）
+
+**阶段 B · Project AI-PM 核心 + Requirement/Knowledge 三层权威（8/8 PASS）**
+
+| 用例 | 场景 | 结果 | 关键断言（实测值） |
+|---|---|---|---|
+| **P0-008a** | 无外部工具的会话存储 | **PASS** | 会话与项目关联；user 消息落库；刷新不丢 |
+| **P0-008b** | 真实回复链（worker + provider） | **PASS** | 注册 mock provider（enable 乐观锁 409 重试）→ worker 回复链 → assistant 消息出现 |
+| **P0-009** | 分析链 | **PASS** | `POST /api/v1/events` → `ai.analysis_run.status='completed'`（**R93**：不是 `succeeded`）；结构化结果含 proposals；`ai.change_proposal` + `governance.approval_request` 各 ≥1；**零自动落地**（`delivery.requirement` = 0） |
+| **P0-010** | 人工确认门 | **PASS** | AI 主体直调 confirm → 403（`human principal`）；api_key 通道 → 403；两次拒绝后 `current_revision_id` 不变；人工确认 → v1 `superseded` / v2 `approved`；审计含 confirm |
+| **P0-011** | 三存储关联 | **PASS** | create 只落 PG draft（**R27**：文件与 commit 诞生于 submit）；submit+confirm 后：文件含正文、Git commit 含正文、`rv.markdown_version_ref` = 该 commit、content_hash 命中、投影行 ≥1 |
+| **P0-012** | 修订 + 陈旧哈希门 | **PASS** | Rev3 诞生 → 旧版 `superseded`、新版权威生效；持旧哈希 confirm → 409 且 `current_revision_id` 不变 |
+| **P0-013** | 知识域红线 | **PASS** | 红线提案 → `redline_pending`；**Git HEAD 不动**、本文档 published 修订 = 0；AI 身份确认 → 403、api_key 确认 → 403；人工确认 → published 修订 = 1 且 HEAD 推进 |
+| **P0-014** | PageIndex 可删可重建 | **PASS** | 删 `ai.document_section_index`（按 `document_revision_id` 关联）→ 权威三面不动、索引行 = 0；`POST /v1/pm/documents/revisions/{id}/reindex`（body 必带 `project_id`）→ 索引行 > 0、修订行数不变、检索命中 |
+
+**阶段 C · Task 执行与交付 + 外部 Agent/MCP（18 例：17 PASS + 1 NOT_IMPLEMENTED）**
+
+| 用例 | 场景 | 结果 | 关键断言（实测值） |
+|---|---|---|---|
+| **P0-015** | 计划物化 + 跨项目隔离 | **PASS** | task(draft) 归属正确；跨项目主体读写均 404，标题未动 |
+| **P0-016** | Run 生命周期 | **PASS** | 承接人必须是 `dev_agent`（**R97**：真人承接 → `no_executor_assignee` 退避）；mark-ready → queued→claimed→running→succeeded（attempt_no=1）；重复 mark-ready → `skipped`、活跃 Run = 0；lease 明文只在执行端环境变量 |
+| **P0-016B** | 执行失败链 | **PASS** | 不可 clone 的仓库 → `executor_start_failed` failure 行 + 退避重排队（基线不可解析时判 `baseline_unavailable`，故夹具必须给 `head_commit_sha`） |
+| **P0-017** | 事件/命令面 | **PASS** | `/v1/pm/task-runs/{id}/events` 含 `run_finished`；commands 读面 200；审计 `run_finished` 落账 |
+| **P0-018** | 交付三态 | **PASS** | 未交付任务 → `never_submitted`；**租约只在 claimed/running 有效**（R99：Run 收尾后提交 → `lease_invalid`）→ 交付必须在 Run 活跃期提交：accepted → `delivered` + manifest commit 行 = 1 + 任务 `submitted` |
+| **P0-019** | Review 审核 | **PASS** | 交付 → review 审批面（列表端点**必须带 `project_id`**）；人工 approved → 任务 `completed`；**重复裁决 → 409**（DEF-P0-04）；api_key 裁决 → 403 |
+| **P0-020** | 多仓交付 | **PASS** | 双仓提交 → manifest 2 行 + `runs/{id}/commits` 双向可读 + git 直验 sha 存在；申报 `changed_files` 与 git 实测不符 → `commit_not_descendant` 拒绝（平台自带一致性校验） |
+| **P0-021** | 取消 + 迟到提交 | **PASS** | running 中 cancel → `cancelled`；终态 Run 的迟到交付 → `lease_invalid` 拒绝、commit 行 = 0；`/waiting`、`/agents` 读面 200 |
+| **P0-040** | MCP 连接认证 | **PASS** | `PM_MCP_READ` 令牌可用、5 工具固定集可见；无 token / 无权限 → 401/403 |
+| **P0-041** | 设备绑定 | **PASS** | **实现口径（R77）**：MCP 读面授权 = **项目成员资格**（`ensure_member`），`X-AI-PM-Device-Id` 只做归因 → 跨项目（同一真人成员）放行、非成员主体拒绝；设备绑定的强制点在**派发侧**（D-2=c）：绑定 runner 设备的项目 → Run 恒 `queued`（10 s 观察窗内 `dispatch_attempts=0`） |
+| **P0-042** | /install + Skills 包 | **PASS** | `/install?format=json` 目录含 `codex`；`/install/codex?format=json` 的 bootstrap 段含包地址 + manifest + 4 端点；manifest `sha256` == 实包字节 sha256（**R101**：manifest 是整包 sha256 + `contents` 清单，不是 per-file 列表）；4 个 `SKILL.md`（四件套） |
+| **P0-043** | ready 任务可见 | **PASS** | mark-ready 后任务经 MCP 可见可读 |
+| **P0-044** | 知识读工具缺口 | **PASS** | 固定 5 工具集不含知识读工具（通道缺口如实呈现）；正式知识经 documents REST 可得 |
+| **P0-045a** | 内部编排链 | **PASS** | 本项目自证：绑仓 → mark-ready → 执行 → 交付提交 → 收尾；Run `succeeded` + `run_finished` 事件与终态同源 |
+| **P0-045b** | MCP 回传通道 | **NOT_IMPLEMENTED** | 执行端无 MCP 凭据（D4 未开通）——回传走内部编排链（045a 已证）。不计 PASS |
+| **P0-046** | commit 归属 | **PASS** | manifest 行数与 `runs/{id}/commits` 读面一致 |
+| **P0-047** | 越权与注入 | **PASS** | 伪造 task_ref → 工具错误；`PM_MCP_READ` 调写工具 → 权限错误；注入文本经**提案面**（`pm_propose_document` + 红线）→ `redline_pending`、**零 published 修订**、注入文本原样落库（当数据不当指令） |
+| **P0-048** | 幂等与 fencing | **PASS** | TaskReady 重放不重复建 Run；终态 Run 凭据已清（`lease_owner`/`lease_token_hash` NULL）不复活 |
+
+**阶段 D · 知识学习与治理（8 例：7 PASS + 2 NOT_IMPLEMENTED）**
+
+| 用例 | 场景 | 结果 | 关键断言（实测值） |
+|---|---|---|---|
+| **P0-049a** | 分析链可追溯 | **PASS** | events API → analysis `completed`；`change_proposal.analysis_run_id` 非空（可追溯）；同 `idempotency_key` 重放 → 同 `event_id`、事件表行数不变；AI 主体零 published 修订 |
+| **P0-050** | 来源与可信度 | **PASS** | `kb.memory_ref`（`ref_role`/`target_domain`/`target_type`/`revision_missing_reason`）+ `kb.source`（`source_kind`/`content_hash`）+ 引用缺失必声明原因的 CHECK 约束 |
+| **P0-051** | 外部 Commit 自动发现 | **NOT_IMPLEMENTED** | 无发现管道（表名反证）——归属验证语义由 P0-020 覆盖。不计 PASS |
+| **P0-052** | 澄清与采纳闭环 | **NOT_IMPLEMENTED** | 无专用管道；澄清语义载体 `delivery.task_interaction` 的链式列（`event_id`/`previous_chain_id`/`continuation_generation`/`chain_open`）可观测。不计 PASS |
+| **P0-053** | 统一协调 | **PASS** | 同文档两提案**串行**落账（p1→rev1、p2→rev2）；p3 声明过期 `base_revision_id` → **409**；正式修订恰 2 条且 head = p2 的哈希（无静默覆盖）；幂等账本表存在 |
+| **P0-054** | 质量门禁 | **PASS** | 无来源锚的低质提案 → `rejected`（`rejection_reason` 含规则码）；被拒提案确认 → 409 |
+| **P0-055** | Revision ↔ Git 一致性 | **PASS** | published 修订恒有 `git_commit_sha`（0 违例） |
+| **P0-056** | 恢复面 | **PASS** | 幂等账本表存在；`reindex_required` 的真实载体是**质量门结果 JSON**（`ai.document_proposal.quality_gate_result`，R102：不是独立列） |
+
+> **P0 栈的三个"确定性替身"**（均为真链路内的受控端点，非 mock 后端）：① mock LLM（OpenAI 兼容 `/chat/completions`）——provider 指向它，回复链与分析链都走真 HTTP；② fake-codex 执行脚本（`AI_PM_CODEX_BIN`）——真 spawn、真 worktree、真 commit，**只把"执行内容"换成确定性脚本**；③ 本地 `file://` 仓库夹具——真 clone / 真镜像 / 真 worktree，差别只在远端地址。
+
+### 1.5 全量回归（同一基线）
 
 | 层 | 命令 | 结果 |
 |---|---|---|
-| Rust 全仓 | `cargo nextest run --workspace --no-fail-fast` | **1464 passed / 0 failed / 4 skipped**（207 s） |
+| Rust 全仓 | `cargo nextest run --workspace --no-fail-fast` | **1464 passed / 0 failed / 4 skipped**（791.6 s，末次全绿） |
+| Rust L2 E2E（含真远端） | `cargo nextest run -p pm-api --test e2e_flow` | **7/7 PASS**（真 GitLab 192.168.2.16 + GitHub 两个远端） |
+| P0 全量 | `bash test-case/evidence/p0/run-p0.sh` | **41 collected / 38 PASS / 3 NOT_IMPLEMENTED**，连跑两次 ALL GREEN（1.7 min/次） |
 | Rust doctest | `cargo test --workspace --doc` | 全绿 |
-| 前端单测 | `pnpm exec vitest run` | **184 files / 1052 tests passed**（50 s） |
+| 前端单测 | `pnpm exec vitest run` | **184 files / 1052 tests passed**（58.7 s） |
 | clippy | `bash scripts/clippy.sh` | 6 处**存量** `type_complexity`（design.rs / task_plan.rs / task_read.rs），与本批无关（stash 基线对比确认） |
-| rustfmt | `cargo fmt --all -- --check` | 仅 `run_context.rs` 一处**存量**差异，本批文件全部合规 |
+| rustfmt | `cargo fmt --all -- --check` | 仅 `run_context.rs` 一处**存量**差异；本批文件（含新 example）全部合规 |
+
+> **环境事实（新登记）**：① QA PG 容器默认 `max_locks_per_transaction=64`，全量 nextest 并行建库时锁表耗尽 → 批量 `53200 out of shared memory`（**看着像代码坏了，其实是环境**）；修法：`ALTER SYSTEM SET max_locks_per_transaction = 512;` + **重启容器**（该参数 postmaster 级，`pg_reload_conf()` 无效）。② 内网 GitLab `192.168.2.16` 随 VPN 隧道时通时不通——不通时 L2 真远端 3 例报「git authentication failed」（实为 22 端口 timeout，GitHub 同刻仍通可区分）。两者均非本批代码问题。
 
 ---
 
@@ -157,13 +216,64 @@
 | **验证** | UIFLOW-07 转绿；连续两次全量复跑全绿（34.7s / 35.7s） |
 | **教训** | E2E 栈里**每一个**对外依赖都必须显式钉死（连「死端口」也是钉法之一）——默认值会静默命中宿主机上的其它服务 |
 
-### 3.1 待裁决项引用（不计缺陷）
+### 3.1 阶段 B~D 新发现并修复的缺陷
+
+#### DEF-P0-03（P2，已修复）：知识域人工门把「授权拒绝」报成 409 Conflict
+
+| 项 | 内容 |
+|---|---|
+| **现象** | `POST /v1/pm/documents/proposals/{id}/confirm` 以 `kind='ai_pm'` 主体（或 api_key 通道）调用时返回 **409 KNOWLEDGE_CONFLICT**，而规格与需求域的同款人工门都是 **403** |
+| **根因** | 知识域有自己的 `require_human`（`crates/pm-application/src/knowledge_proposal/support.rs:8`），非真人主体被映射成 `KnowledgeError::Conflict` → HTTP 409；需求域的同款判定（`requirement::require_human`）走 `PmWriteError::Forbidden` → HTTP 403。**同一平台内两套人工门语义不一致** |
+| **影响面** | 授权拒绝被客户端当成「可重试的状态冲突」；审计与监控按 409 归类会掩盖越权尝试；规格 13/17 号的 403 断言无法成立 |
+| **修复** | `KnowledgeError` 新增 `Forbidden(String)`（与 `Conflict` 严格分开）；知识域人工门改抛 `Forbidden`；`pm-api` 映射为 **403 KNOWLEDGE_FORBIDDEN**；`pm-mcp` 的 `map_knowledge_error` 同步映射 `ToolError::Forbidden`；回归用例 `knowledge_v2.rs::non_human_cannot_confirm_a_redline_proposal` 改断言 `Forbidden` |
+| **验证** | P0-013 转绿（AI 身份 / api_key 双 403）；P0-054 的被拒提案仍 409（真冲突，语义未混） |
+
+#### DEF-P0-04（P2，已修复）：重复裁决返回 200（裁决其实没生效）
+
+| 项 | 内容 |
+|---|---|
+| **现象** | 同一条 review 审批二次裁决 → HTTP **200**（响应体 `outcome=already_decided`），而 API 契约（`pm_reviews.rs` 模块头「AlreadyDecided \| 409 \| already_decided」）与错误码枚举都按 409 定义 |
+| **根因** | 服务层在「审批行非 pending」时返回 `Ok(ApprovalOutcome::AlreadyDecided{..})`（`review/decide.rs:534`），**没走** `Err(ApprovalError::AlreadyDecided)`——于是 API 层的 409 映射分支是死代码，重复裁决被报成成功 |
+| **影响面** | 客户端重试（如裁决请求超时后重发）会读到 200，误以为裁决已生效；实际终态行未被改动 |
+| **修复** | 改抛 `Err(ApprovalError::AlreadyDecided(status))` → HTTP 409；删除随之失效的 `ApprovalOutcome::AlreadyDecided` 变体（不留兼容分支） |
+| **验证** | P0-019 转绿（人工 approved → 重复 rejected → 409，且终态不变） |
+
+#### DEF-P0-05（P2·flaky，已修复）：依赖图 advisory lock 把 Uuid 绑到 `$1::text` 参数 → 随机 UTF-8 报错
+
+| 项 | 内容 |
+|---|---|
+| **现象** | Review 人工裁决偶发 **500**：`state transition refused: database error: invalid byte sequence for encoding "UTF8": 0xa9`；任务完成/裁决链路随机失败（12 小时里 1 次，P0 全量 5 次里 1 次） |
+| **定位** | Postgres 侧日志给出确切语句：`STATEMENT: SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`，`CONTEXT: unnamed portal parameter $1` |
+| **根因** | 两处共用**同一条 SQL 文本**的 advisory lock：依赖图锁（`task_dependency.rs:97`，绑 `Uuid`）与知识索引锁（`knowledge_indexer.rs:349`，绑 `String`）。`$1::text` 让服务端把参数类型解析为 **text**；sqlx 的**语句缓存按 SQL 文本复用**，同一连接若先按 text 绑定准备过该语句，后续按 uuid 绑定复用缓存语句时，服务端把 uuid 的 **16 字节二进制**当 text 解析 → 随机命中非法 UTF-8 字节 |
+| **修复** | 依赖图锁改为**绑字符串**（`project_id.to_string()`）并给 SQL 加 `task-graph:` 前缀（两条语句的缓存键不再相撞）；并发回归用例 `task_dependency_concurrency.rs` 同步对齐（锁键必须与实现同口径） |
+| **验证** | `task_dependency_concurrency` 9/9 PASS；P0 全量 41/41 ALL GREEN（复跑两次）；Postgres 日志不再出现该错误 |
+| **教训** | **同一 SQL 文本 + 不同参数类型 = sqlx 语句缓存的隐性雷**：参数类型必须与 SQL 的 `$n::type` 显式一致（text 参数就绑字符串），且不同锁域用不同前缀避免缓存键相撞 |
+
+### 3.2 阶段 B~D 的实现事实源偏差（规格与实现不符，按实现为准）
+
+> 裁决口径：**以我们的实现为事实源**。下列偏差是 E2E 实测出来的「规格写法 ≠ 实现行为」，规格文档需按此回写（已在 `docs/e2e-spec/` 就地标注）。
+
+| 编号 | 规格写法 | 实现事实（实测） | 影响 |
+|---|---|---|---|
+| **R92** | intake 的 `analysis_request` 产生 `ai.analysis_run` | intake 的 analysis_request 路由到 **kb_analyze**（kb stub），**不产生** analysis_run；`ai_analysis` 的真实入口是 `POST /api/v1/events`（`ingestion.rs:103`） | 规格 13 号 R23 需改写 |
+| **R93** | 分析终态 = `succeeded` | `ai.analysis_run.status` 终态字面量是 **`completed`**（`succeeded` 是 Run 的词汇） | 断言词统一 |
+| **R94** | `model_name` 反映命中的 provider | `ai.analysis_run.model_name` 来自 `ai.project_ai_config`（bootstrap 默认 `'fake'`），provider 命中由 worker 日志 + mock 调用记录证明 | 断言放宽为「如实记录」 |
+| **R95** | 缺设备声明 → 拒绝 | `DeviceClaim::absent()` **仍执行**（C176：无归属但放行） | P0-041 断言方向翻转 |
+| **R96** | `pm_get_task_context` 参数 `task_id` | 参数名是 **`task_ref`**（`pm-mcp/src/tools.rs:78`） | 用错参数名 → 工具报缺参错误（假红） |
+| **R97** | 任务有承接人即可被领取 | 可领取性判定第 4 条要求承接人 `kind='dev_agent'`（`run_dispatch/policy.rs:179`）；真人承接 → Run 被判 `no_executor_assignee` 退避回队 | 物化链必须派给 dev_agent（bootstrap 播种的 developer 主体） |
+| **R98** | 基线不可解析 → 仍会执行 | 可领取性判定第 6 条：基线不可解析 → `baseline_unavailable` 退避（永远到不了执行器） | 失败注入夹具必须给 `head_commit_sha` |
+| **R99** | 交付提交可在 Run 结束后做 | 租约只在 `status ∈ {claimed, running}` 且 `lease_token_hash` 未清时有效；Run 收尾后提交 → `lease_invalid` | 交付必须在 Run 活跃期提交（E2E 用「释放文件」协议制造窗口） |
+| **R100** | 设备未绑定项目 → 工具层拒绝 | MCP 读面授权 = **项目成员资格**（`ensure_member`）；设备头只做归因。设备绑定的强制点在**派发侧**（D-2=c：绑定 runner 设备的项目，worker 候选发现直接排除） | 规格 16 号场景 B 需改写为「派发侧谓词」 |
+| **R101** | manifest 含 per-file sha256 列表 | manifest 是**整包 sha256** + `contents` 清单（`skills_package.rs:34`） | 断言按整包哈希 |
+| **R102** | `reindex_required` 是索引表列 | 它是**质量门结果 JSON** 的字段（`quality_gate_result->>'reindex_required'`）；`ai.document_index_state` 无此列 | 断言落点改到提案行 |
+
+### 3.3 待裁决项引用（不计缺陷）
 
 | # | 观察 | 说明 |
 |---|---|---|
 | OBS-03 | onboarding 门只在登录中转页，无路由级守卫 | UIFLOW-01 实测：`/auth/signing-in` 被分流到 `/onboarding`，但深链 `/projects` **不被拦**。与 team-onboarding.spec **B09-18 的 fixme** 同源（「待裁决：onboarding 门只在登录中转页」），按 team-qa 计划 §5 **PENDING-DECISION** 口径记录现状，不计缺陷。若产品裁决补路由级守卫，UIFLOW-01 的深链断言应同步改为「被拦」 |
 
-### 3.2 本批修复未涉及（登记但不擅自改）
+### 3.4 本批修复未涉及（登记但不擅自改）
 
 | # | 观察 | 说明 |
 |---|---|---|
@@ -177,7 +287,7 @@
 | # | 计划中的用例 | 状态 | 原因 |
 |---|---|---|---|
 | 1 | ~~L3 UI E2E~~ | ✅ **已落地（2026-11-10 第二批）** | §1.0：UIFLOW-01~08 全部 PASS，接入真实仓库链路（UIFLOW-06），一键 `run-e2e-flow-ui.sh` |
-| 5 | **P0 阶段 B~D**（P0-008~014 / 015~021+040~048 / 049~056） | 部分可执行未落地 | 阶段 A 已落地（§1.2，7/38）；B~D 需 intake 编排 / worker / MCP 客户端 / 知识空间等可控依赖，按 13~17 号规格逐步落地；NOT_IMPLEMENTED 项（045b/051/052/049b）待功能转正 |
+| 5 | ~~P0 阶段 B~D~~ | ✅ **已落地（2026-11-11 第三批）** | §1.4：P0-008a~014 / 015~021+040~048 / 049a~056 全部落地，41 collected / 38 PASS / 3 NOT_IMPLEMENTED（045b、051、052）；一键 `run-p0.sh` |
 | 2 | FLOW-02 的**导入**路径（GitHub 侧） | BLOCKED | GitHub 完整 bare clone 偶发 `early EOF`（OBS-01）；FLOW-02 当前只覆盖 GitHub 的 **verify**（`ls-remote`）路径，导入走 GitLab |
 | 3 | L4 两机实测（T-090 / T-091） | 未执行 | 需 192.168.2.10 / .43 两台内网机器，本批未涉及 |
 | 4 | 执行器真实执行（Run → 交付 commit） | 未覆盖 | `AI_PM_RUN_EXECUTOR` 默认 noop；需真实 Codex / Z-Code 执行端，属 L4 范畴 |
@@ -208,8 +318,23 @@ FLOW_E2E_SKIP_SSH=1 bash test-case/evidence/e2e-flow/run-e2e-flow-ui.sh
 
 # 直接跑（需先 export FLOW_E2E_PM_API_BIN=<pm-api 可执行文件>）
 cd ai-frontend && pnpm exec playwright test -c playwright.flow.config.ts
+
+# ── P0 发布验收（阶段 A~D，41 例）────────────────────────────────
+# 一键（自动构建 pm-api + ai-pm-worker + submit_run_result → Playwright +
+#      真 vite / 真 pm-api / 真 worker / mock LLM）
+bash test-case/evidence/p0/run-p0.sh
+
+# 保留一次性库（排障用）
+TEAM_QA_KEEP_DB=1 bash test-case/evidence/p0/run-p0.sh
+
+# 单套件（需先 export TEAM_QA_PM_API_BIN / P0_WORKER_BIN）
+cd ai-frontend && pnpm exec playwright test -c playwright.p0.config.ts e2e/p0-05-task-delivery.spec.ts
 ```
 
 **证据落盘**（`test-case/evidence/e2e-flow/`）：
 - L2：`e2e-nextest-<stamp>.log`（不入库，已加 `.gitignore`）
 - L3：`e2e-ui-<stamp>.log`（运行日志，不入库）、`playwright-ui-report/`（HTML 报告）、`playwright-ui-results.json`、`playwright-ui-artifacts/`（失败现场截图 + trace，仅失败时产生）
+
+**证据落盘**（`test-case/evidence/p0/`）：
+- `run-<stamp>.log`（编排日志）、`e2e-<stamp>.log`（Playwright 输出）、`pm-api-<stamp>.log`（后端日志）
+- `playwright-report/`（HTML 报告）、`playwright-results.json`、`playwright-artifacts/`（失败现场截图 + trace）

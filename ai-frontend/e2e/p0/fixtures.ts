@@ -13,15 +13,29 @@ import { api, claimTeam, signToken } from "../team/stack";
 export const P0_PG_CONTAINER =
   process.env.TEAM_QA_PG_CONTAINER ?? "aipm-teamqa-pg";
 export const P0_PG_PORT = process.env.TEAM_QA_PG_PORT ?? "16499";
-export const P0_DB = "aipm_teamqa_e2e";
+export const P0_DB = process.env.P0_DB ?? "aipm_p0_e2e";
 
-/** 容器内 psql 只读断言（`docker exec`）。 */
+/**
+ * 容器内 psql 只读断言（`docker exec`）。
+ *
+ * `-q` 必须带：否则 psql 把命令状态行（`UPDATE 1` / `SELECT 3`）一并打到
+ * stdout，断言拿到的是「结果 + 状态行」的混合串（曾把 `ai_pm` 读成
+ * `ai_pm\nUPDATE 1`）。
+ */
 export function psql(sql: string, db: string = P0_DB): string {
   return execFileSync(
     "docker",
-    ["exec", P0_PG_CONTAINER, "psql", "-U", "aipm", "-d", db, "-tAc", sql],
+    ["exec", P0_PG_CONTAINER, "psql", "-U", "aipm", "-d", db, "-tAqc", sql],
     { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }
   ).trim();
+}
+
+export interface PlanTaskSpec {
+  key: string;
+  title: string;
+  acceptance_criteria: string[];
+  depends_on?: string[];
+  priority?: string;
 }
 
 export interface TestUser {

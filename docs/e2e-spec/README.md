@@ -17,6 +17,7 @@
 | `17-p0-07-playwright-spec-v1.md` | **P0-07 可执行 Playwright 规格**（知识学习/Commit 采纳/统一协调 八例 049~056；门禁 8 规则后端强制、协调者幂等账本、kb.memory_ref 溯源、**051/052 管道 NOT_IMPLEMENTED**，评审 R50–R56，裁决 D32–D36） | V1.0（2026-11-10） |
 | `18-p1-test-specification-v1.md` | **P1 测试规格 V1.1**（七组：初始化持久/登录落地/列表权限/Bootstrap/零外部依赖/Baseline 六裁决 R-BL-01~06/DEF-03·04 回归；**V1.1 按代码事实修正**：S27=需求层术语非运行时代理、`POST /v1/pm/tasks` 存在且 human 闸（R33 回改）、Baseline 确认无真人守卫 → **DEF-P0-02**；评审 R57–R64 + R69–R70（R65–R68 归 12 号落地实测），裁决 D37–D42） | V1.1（2026-11-11） |
 | `19-p1-executable-cases-v1.md` | **P1 可执行用例集**：**七组用例 + E2E 实现全部完成**（2026-11-11）。落地评审 R71–R91；`ai-frontend/e2e/p1-01…07.spec.ts` ×7 共 **41 用例** + `playwright.p1.config.ts`（复用 p0 栈），`--list` 解析全通过；fixme ×3（DEF-P0-02 / DEF-P0-01 / D54 不可达 provider）；运行命令与待映射 D43–D58 见文内 | 已完成 |
+| `20-p0-impl-facts-v1.md` | **P0 规格 ↔ 实现事实源偏差（R92–R102）**：2026-11-11 P0 阶段 B~D 实测对照表（分析链入口、终态词、承接人须 dev_agent、租约活跃期、知识门 8 规则构造要求、可领取性清单）+ 由偏差牵出的 DEF-P0-03/04 | V1.0（2026-11-11）｜裁决口径：**实现为准**，规格按本表回写 |
 
 ## 与 `test-case/` 的分工（不重复真源）
 

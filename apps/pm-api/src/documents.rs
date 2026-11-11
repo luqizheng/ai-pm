@@ -632,6 +632,8 @@ fn error_response(err: KnowledgeError) -> Response {
         KnowledgeError::NotFound => (StatusCode::NOT_FOUND, "KNOWLEDGE_DOCUMENT_NOT_FOUND"),
         KnowledgeError::Stale => (StatusCode::CONFLICT, "KNOWLEDGE_DOCUMENT_STALE"),
         KnowledgeError::Conflict(_) => (StatusCode::CONFLICT, "KNOWLEDGE_CONFLICT"),
+        // DEF-P0-03：人工门 / 权限拒绝 → 403（不是 409）。
+        KnowledgeError::Forbidden(_) => (StatusCode::FORBIDDEN, "KNOWLEDGE_FORBIDDEN"),
         KnowledgeError::InvalidKey(_) | KnowledgeError::InvalidType(_) => {
             (StatusCode::BAD_REQUEST, "KNOWLEDGE_INVALID_REQUEST")
         }

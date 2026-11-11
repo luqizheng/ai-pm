@@ -144,8 +144,8 @@ async fn graph_lock_serializes_writers_and_exposes_committed_edges(pool: PgPool)
     // 连接 1：取图锁 → 插边（不提交）。
     let mut conn1 = pool.acquire().await.unwrap();
     let mut tx1 = conn1.begin().await.unwrap();
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))")
-        .bind(fx.project_id)
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('task-graph:' || $1::text, 0))")
+        .bind(fx.project_id.to_string())
         .execute(&mut *tx1)
         .await
         .unwrap();
@@ -166,12 +166,13 @@ async fn graph_lock_serializes_writers_and_exposes_committed_edges(pool: PgPool)
     let mut conn2 = pool.acquire().await.unwrap();
     {
         let mut tx2 = conn2.begin().await.unwrap();
-        let held: bool =
-            sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(hashtextextended($1::text, 0))")
-                .bind(fx.project_id)
-                .fetch_one(&mut *tx2)
-                .await
-                .unwrap();
+        let held: bool = sqlx::query_scalar(
+            "SELECT pg_try_advisory_xact_lock(hashtextextended('task-graph:' || $1::text, 0))",
+        )
+        .bind(fx.project_id.to_string())
+        .fetch_one(&mut *tx2)
+        .await
+        .unwrap();
         assert!(!held, "graph lock must be held by the uncommitted writer");
         assert!(
             // 检环方向与 C59 同款：从 upstream=a 沿边回到 task=b（边 A 依赖 B）。
@@ -185,12 +186,13 @@ async fn graph_lock_serializes_writers_and_exposes_committed_edges(pool: PgPool)
     tx1.commit().await.unwrap();
     {
         let mut tx3 = conn2.begin().await.unwrap();
-        let held: bool =
-            sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(hashtextextended($1::text, 0))")
-                .bind(fx.project_id)
-                .fetch_one(&mut *tx3)
-                .await
-                .unwrap();
+        let held: bool = sqlx::query_scalar(
+            "SELECT pg_try_advisory_xact_lock(hashtextextended('task-graph:' || $1::text, 0))",
+        )
+        .bind(fx.project_id.to_string())
+        .fetch_one(&mut *tx3)
+        .await
+        .unwrap();
         assert!(
             held,
             "graph lock must be free after the first writer commits"
@@ -211,20 +213,21 @@ async fn graph_locks_of_different_projects_do_not_block(pool: PgPool) {
 
     let mut conn1 = pool.acquire().await.unwrap();
     let mut tx1 = conn1.begin().await.unwrap();
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))")
-        .bind(fx1.project_id)
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('task-graph:' || $1::text, 0))")
+        .bind(fx1.project_id.to_string())
         .execute(&mut *tx1)
         .await
         .unwrap();
 
     let mut conn2 = pool.acquire().await.unwrap();
     let mut tx2 = conn2.begin().await.unwrap();
-    let held: bool =
-        sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(hashtextextended($1::text, 0))")
-            .bind(fx2.project_id)
-            .fetch_one(&mut *tx2)
-            .await
-            .unwrap();
+    let held: bool = sqlx::query_scalar(
+        "SELECT pg_try_advisory_xact_lock(hashtextextended('task-graph:' || $1::text, 0))",
+    )
+    .bind(fx2.project_id.to_string())
+    .fetch_one(&mut *tx2)
+    .await
+    .unwrap();
     assert!(held, "a different project's graph lock must not be blocked");
 }
 
@@ -492,8 +495,8 @@ async fn ui_terminal_write_waits_for_the_project_graph_lock(pool: PgPool) {
     // 连接 1：像并发图写者一样持锁不放。
     let mut conn1 = pool.acquire().await.unwrap();
     let mut tx1 = conn1.begin().await.unwrap();
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))")
-        .bind(fx.project_id)
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('task-graph:' || $1::text, 0))")
+        .bind(fx.project_id.to_string())
         .execute(&mut *tx1)
         .await
         .unwrap();

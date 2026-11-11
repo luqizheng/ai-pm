@@ -27,10 +27,7 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
     let Ok(private) = std::fs::read_to_string(&args[2]) else {
-        eprintln!(
-            "seal_ssh_key: cannot read key file {}",
-            args[2]
-        );
+        eprintln!("seal_ssh_key: cannot read key file {}", args[2]);
         return ExitCode::FAILURE;
     };
 
