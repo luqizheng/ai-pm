@@ -88,13 +88,17 @@
 
 推荐顺序：**F0 → A → C → B → D**，E/G 随行穿插。A 在 C 前面：先把四件套归并，design.rs 拆分时顺手少搬一份副本。
 
-### 批 A 明细（首批，供裁决后直接开工）
+### 批 A 明细（✅ 已完成 2026-11-12，commit 6e3156f0 + beb8e535）
 
-1. `pm-application/src/support/revision.rs`：lock_revision/fetch_revision/content_hash_of/transition_or_conflict/is_unique_violation 单一实现，design/task_plan/requirement 三处改调用。
-2. `pm-application/src/support/tenant_audit.rs`：`record_audit(pool, actor, action, target_type, target_id, detail)`，7 处改调用。
-3. content_hash 归一到一处（JSON 规范化策略先对齐 4 处实现再合并，防哈希漂移——knowledge.rs:701 与 memory.rs:249 语义不同则保留各自命名区分）。
-4. 审批请求流提 `request_approval()` 模板函数，3 处改调用。
-5. `tests/common/mod.rs`：seed_project/seed_device/项目 INSERT 夹具收编，16 文件改引用。
+实施记录（与原计划的偏差已标注）：
+
+1. ~~`pm-application/src/support/revision.rs`~~ → **实际落点 `pm_write/support.rs`**（`hex_sha256` 已在此，三域 import 路径零新增）：`is_unique_violation`/`content_hash_of`/`transition_or_conflict`（泛型版）/`next_code` 单一实现；`lock_head_row`/`lock_revision_row` 通用行锁（三域锁函数留 1 行转发壳，调用点零改动）；requirement_revision 行锁顺带补租户过滤。全量 1507 绿。
+2. **A2 完成**：`insert_tenant_audit`（target_type 参数化）归并 pm-write 单点 + 4 转发壳。**pm-api 侧 2 处（device_claim/tenant_members）形态不同**——写 `target_principal_id` 而非 `target_type/target_id`，actor 是 pm-api 本地类型，归批 B 随域收口。审计守卫 C174/C180 清单同步收敛（4 项撤销、pm_write/support.rs 登记 1 项）。
+3. **A3 完成**：knowledge/memory/policy_composition 三处手写 digest→hex 循环换 `pm_write::hex_sha256`（digest 层单源，各自业务规范化保留）；删 3 份 sha2 导入 + policy_composition 本地 hex helper。
+4. **A4 完成**：`insert_design_approval`（design.rs，pub(crate)）——三域同构 INSERT + pending 唯一冲突映射单源；前置校验与尾部 commit/读视图留调用方。
+5. **A5 部分完成**：`seed_project` 实测散布 **43 个测试文件**（原体检低估为 16）。新建 `crates/pm-application/tests/common/mod.rs`（`bootstrap_system_project` + `ensure_tenant_member`），转换 pm-application 侧 7 个最简形文件；`retrieval_negative_matrix`/`retrieval_traversal` 是自建 principal 变体、pm-api 侧已有自己的 common——其余 30+ 文件随批 B/C 触及时顺手收编。
+
+**批 A 验证**：clippy --all PASS + 全量 1507 passed / 4 skipped ×2 轮。
 
 ## 4. 决策点（已裁决）
 
