@@ -660,7 +660,10 @@ describe("AssistantView（会话接线）", () => {
     // 访谈段时间线（discovery_message 映射）：user 消息为原样气泡，
     // AI 消息经 MarkdownViewer 渲染（原文进 md2html，产物上屏）。
     expect(getDiscoverySession).toHaveBeenCalledWith("p1", "s1");
-    expect(md2html).toHaveBeenCalledWith("收到，先澄清验收口径。", expect.anything());
+    expect(md2html).toHaveBeenCalledWith(
+      "收到，先澄清验收口径。",
+      expect.anything()
+    );
     expect(wrapper.text()).toContain("md-rendered");
     // 待办块：待答问题（含 why_blocking 提示）
     expect(wrapper.text()).toContain(t("assistant.todoTitle"));
@@ -680,7 +683,10 @@ describe("AssistantView（会话接线）", () => {
               content: "已切换到需求澄清",
               created_at: "2026-11-08T09:55:00Z",
               metadata: {
-                handoff: { discovery_session_id: "s1", trigger: "implicit_intent" }
+                handoff: {
+                  discovery_session_id: "s1",
+                  trigger: "implicit_intent"
+                }
               }
             })
           ]
