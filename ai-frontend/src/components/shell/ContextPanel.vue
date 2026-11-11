@@ -132,14 +132,20 @@ const TABS: Array<{ id: AssistantTab; labelKey: string }> = [
 const activeTab = computed(() => assistant.activeTab);
 
 /**
- * 已附加对象（归属轴 Attached）——线程锚定的作用域。
+ * 已附加对象（归属轴 Attached）——**权威读面**（GET context-items，B5）。
  *
- * 取自 `assistantContext`（项目 / 仓库 / 分支），即 AI 当前**确实带着**的
- * 上下文；未锚定时为空（不冒充）。
+ * 线程锚定（项目 / 仓库）+ 对象级条目两段合成：对象条目来自
+ * `assistant.contextItems`（含版本引用与双轴状态），项目 / 仓库来自
+ * `assistantContext`（AI 当前确实带着的线程作用域）。未锚定如实显示。
  */
 const attachedObjects = computed(() => {
   const context = assistantContext.value;
-  const items: Array<{ key: string; label: string; version?: string }> = [];
+  const items: Array<{
+    key: string;
+    label: string;
+    version?: string;
+    lifecycle?: string;
+  }> = [];
   if (context.projectName) {
     items.push({
       key: "project",
@@ -152,6 +158,20 @@ const attachedObjects = computed(() => {
       key: "repository",
       label: context.repositoryName,
       version: context.defaultBranch ?? undefined
+    });
+  }
+  for (const item of assistant.contextItems) {
+    if (item.attachment !== "attached") continue;
+    items.push({
+      key: item.id,
+      label: item.object_code ?? item.object_id,
+      version:
+        item.version != null
+          ? `v${item.version}`
+          : item.row_version != null
+            ? `row ${item.row_version}`
+            : undefined,
+      lifecycle: item.lifecycle
     });
   }
   return items;
@@ -488,28 +508,26 @@ const historyEvents = computed(() =>
         </ul>
       </template>
 
-      <!-- ── Actions：待授权 / 已授权 / 执行结果（区分发起方） ── -->
+      <!-- ── Actions：交互记录（**权威读面** GET interactions，B5）── -->
       <template v-else>
         <p v-if="actions.length === 0" class="shell-context__empty">
           {{ t("shell.app.context.noActions") }}
         </p>
         <ul v-else class="shell-context__objects">
           <li
-            v-for="item in actions"
-            :key="item.id"
+            v-for="entry in actions"
+            :key="entry.id"
             class="shell-context__object"
           >
             <span class="shell-context__object-name">
-              {{ t(`shell.app.context.responseTypes.${item.kind}`) }}
+              {{ entry.action }} · {{ entry.reference }}
             </span>
             <span class="shell-context__object-version">
-              {{
-                item.initiator === "ai"
-                  ? t("shell.app.context.initiator.ai")
-                  : t("shell.app.context.initiator.user")
-              }}
+              {{ entry.decided_by_name ?? t("shell.app.context.initiator.ai") }}
             </span>
-            <Badge v-if="item.status" variant="info">{{ item.status }}</Badge>
+            <Badge v-if="entry.status" variant="info">
+              {{ entry.status }}
+            </Badge>
           </li>
         </ul>
       </template>

@@ -26,11 +26,15 @@ import {
 import { useShellStore, type AssistantContextSnapshot } from "@/stores/shell";
 import {
   useAssistantStore,
-  type AssistantActionItem,
   type AssistantHistoryEvent,
   type AssistantInjection,
   type AssistantResultItem
 } from "@/stores/assistant";
+import {
+  listContextItems,
+  listInteractions,
+  type InteractionEntry
+} from "@/api/contextItems";
 
 /**
  * Project AI 会话机制（AI Collaboration V1.0 / DR-C8 第 ② 步的复用底座）。
@@ -183,27 +187,13 @@ export function toAssistantInjection(
 }
 
 /**
- * 时间线 → 派生视图（结果 / 动作 / 历史）。
+ * 时间线 → 结果展示面（Results Tab）。
  *
- * - **结果**：assistant 消息（有信封按信封类型，无信封按纯文本）；
- * - **动作**：带信封且可交互的 assistant 消息（AI 请求），用户确认后状态推进；
- * - **历史**：会话列表 + 时间线派生的五类事件。
- *
- * 单一写者：会话机制加载/写回后调用，右栏与列读同一份。
+ * Results 是**展示**（结果就在时间线里）；Actions / History 的权威状态
+ * 一律来自 GET interactions（B5 硬要求），不再从时间线推断。
  */
-function deriveView(
-  timeline: ConversationMessage[],
-  conversations: Conversation[],
-  injection: AssistantInjection | null
-): {
-  results: AssistantResultItem[];
-  actions: AssistantActionItem[];
-  history: AssistantHistoryEvent[];
-} {
+function deriveResults(timeline: ConversationMessage[]): AssistantResultItem[] {
   const results: AssistantResultItem[] = [];
-  const actions: AssistantActionItem[] = [];
-  const history: AssistantHistoryEvent[] = [];
-
   for (const message of timeline) {
     if (message.role === "user") continue;
     const interaction = message.interaction;
@@ -216,47 +206,44 @@ function deriveView(
       status: interaction?.status ?? "",
       createdAt: message.createdAt
     });
-    // 有信封的 assistant 消息 = 一次可交互动作（AI 请求）
-    if (interaction) {
-      actions.push({
-        id: message.id,
-        kind: responseType,
-        initiator: "ai",
-        status: interaction.status,
-        createdAt: message.createdAt
-      });
+  }
+  return results;
+}
+
+/**
+ * History 五类事件合成（**每条都来自权威源**，B5）：
+ * - conversation：会话列表（GET conversations）；
+ * - ai_action / approval：GET interactions（accepted/rejected → approval 类）；
+ * - context_change：注入记账（后端 metadata.injection 落库即一次上下文注入）；
+ * - execution：V1 无执行读端点（`/interaction` 仅 POST 写回），如实留空——
+ *   不用推断数据冒充（契约 90 Part 8 实施边界）。
+ */
+function deriveHistory(
+  conversations: Conversation[],
+  injection: AssistantInjection | null,
+  interactions: InteractionEntry[]
+): AssistantHistoryEvent[] {
+  const history: AssistantHistoryEvent[] = [];
+
+  for (const entry of interactions) {
+    const terminal = entry.status === "accepted" || entry.status === "rejected";
+    history.push({
+      id: `action:${entry.id}`,
+      category: "ai_action",
+      name: `${entry.action} · ${entry.reference}`,
+      actor: entry.decided_by_name ?? "ai",
+      createdAt: entry.created_at,
+      status: entry.status
+    });
+    if (terminal) {
       history.push({
-        id: `action:${message.id}`,
-        category: "ai_action",
-        name: title,
-        actor: "ai",
-        createdAt: message.createdAt,
-        status: interaction.status
+        id: `approval:${entry.id}`,
+        category: "approval",
+        name: `${entry.action} · ${entry.reference}`,
+        actor: entry.decided_by_name ?? "user",
+        createdAt: entry.created_at,
+        status: entry.status
       });
-      // 终态即一条审批记录（V1 无审批读接口，客户端派生）
-      if (
-        interaction.status === "accepted" ||
-        interaction.status === "rejected"
-      ) {
-        history.push({
-          id: `approval:${message.id}`,
-          category: "approval",
-          name: title,
-          actor: "user",
-          createdAt: message.createdAt,
-          status: interaction.status
-        });
-      }
-      if (responseType === "execution-result") {
-        history.push({
-          id: `execution:${message.id}`,
-          category: "execution",
-          name: title,
-          actor: "ai",
-          createdAt: message.createdAt,
-          status: interaction.status
-        });
-      }
     }
   }
 
@@ -282,7 +269,7 @@ function deriveView(
     });
   }
 
-  return { results, actions, history };
+  return history;
 }
 
 /**
@@ -381,7 +368,7 @@ export function useAssistantConversation(
         .find(record => record.role !== "system");
       const latestInjection = toAssistantInjection(latestAssistant?.metadata);
       if (latestInjection) injection.value = latestInjection;
-      publish();
+      void publish();
     } catch {
       // 静默：轮询失败保留旧态（429 限流/网络抖动均不打扰用户）。
     } finally {
@@ -411,7 +398,7 @@ export function useAssistantConversation(
         .find(record => record.role !== "system");
       const latestInjection = toAssistantInjection(latestAssistant?.metadata);
       if (latestInjection) injection.value = latestInjection;
-      publish();
+      void publish();
     } finally {
       messagesLoading.value = false;
     }
@@ -436,22 +423,45 @@ export function useAssistantConversation(
   }
 
   /**
-   * 发布派生视图（右栏 Sources / Results / Actions / History 的数据源）。
+   * 发布视图（右栏 Sources / Results / Actions / History 的数据源）。
    *
    * **单一写者**：会话机制是唯一写者，右栏与列读同一份——右栏不另起 fetch。
+   * Actions / Context Items 为**权威读面**（GET interactions / GET context-items，
+   * B5 硬要求：不再客户端派生权威状态）；读面失败不打断对话（保留旧态）。
    */
-  function publish() {
+  async function publish() {
     // 活跃会话 id（切项目守卫的判据）
     assistant.setActiveConversationId(selectedId.value || null);
-    const view = deriveView(
-      timeline.value,
-      conversations.value,
-      injection.value
-    );
     assistant.setInjection(injection.value);
-    assistant.setResults(view.results);
-    assistant.setActions(view.actions);
-    assistant.setHistory(view.history);
+    assistant.setResults(deriveResults(timeline.value));
+
+    const conversationId = selectedId.value;
+    const target = projectId.value;
+    if (!conversationId || !target) {
+      assistant.setActions([]);
+      assistant.setContextItems([]);
+      assistant.setHistory(
+        deriveHistory(conversations.value, injection.value, [])
+      );
+      return;
+    }
+    try {
+      const [interactionPage, itemPage] = await Promise.all([
+        listInteractions(target, conversationId),
+        listContextItems(target, conversationId)
+      ]);
+      assistant.setActions(interactionPage.interactions);
+      assistant.setContextItems(itemPage.items);
+      assistant.setHistory(
+        deriveHistory(
+          conversations.value,
+          injection.value,
+          interactionPage.interactions
+        )
+      );
+    } catch {
+      // 读面失败：保留旧态（Actions / History 空态或旧数据可见）。
+    }
   }
 
   async function load() {
@@ -469,7 +479,7 @@ export function useAssistantConversation(
       selectedId.value = conversations.value[0]?.id ?? "";
       timeline.value = [];
       onConversationChanged?.(conversations.value[0] ?? null);
-      publish();
+      void publish();
       if (selectedId.value) await loadMessages(selectedId.value);
     } catch (error) {
       loadError.value =
@@ -574,7 +584,7 @@ export function useAssistantConversation(
         };
       }
       // 写回成功 → 动作状态推进，派生视图同步（审批记录进历史）。
-      publish();
+      void publish();
       return { recorded: true, reference: record.reference };
     } catch (error) {
       throw new Error(

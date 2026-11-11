@@ -244,3 +244,95 @@ describe("ContextPanel（四 Tab + History Drawer）", () => {
     expect(wrapper.find(".shell-context__project-name").exists()).toBe(true);
   });
 });
+
+// ─────────────────────── B5：Actions / Context Tab 权威读面（不再客户端派生）──
+
+import { useAssistantStore } from "@/stores/assistant";
+
+describe("ContextPanel（B5 权威读面）", () => {
+  it("Actions Tab 渲染权威交互记录（action · reference · 处理者）", async () => {
+    const { wrapper } = mountShell(ContextPanel);
+    const assistant = useAssistantStore();
+    assistant.setActions([
+      {
+        id: "it-1",
+        conversation_id: "c1",
+        message_id: "m1",
+        action: "accept",
+        status: "accepted",
+        reason: null,
+        option_id: null,
+        answer: {},
+        decided_by: "p1",
+        decided_by_name: "usr-lead",
+        reference: "INT-00000001",
+        created_at: "2026-11-12T10:00:00Z",
+        message_excerpt: null
+      }
+    ]);
+    await nextTick();
+
+    // 切到 Actions Tab
+    const tabs = wrapper.findAll(".shell-context__tab");
+    await tabs[3].trigger("click");
+    await nextTick();
+
+    const text = wrapper.find(".shell-context__body").text();
+    // 权威字段：原始动作 + 服务端记录号 + 处理者（不再客户端推断 kind/initiator）
+    expect(text).toContain("accept · INT-00000001");
+    expect(text).toContain("usr-lead");
+    expect(text).toContain("accepted");
+  });
+
+  it("Context Tab 对象列表渲染权威 context-items（含版本引用）", async () => {
+    const { wrapper } = mountShell(ContextPanel);
+    const assistant = useAssistantStore();
+    assistant.setContextItems([
+      {
+        id: "item-1",
+        conversation_id: "c1",
+        object_type: "requirement",
+        object_id: "0d18a93e-cb8b-42cf-9a18-ed6d191ff7eb",
+        object_code: "REQ-B4A",
+        revision_id: null,
+        version: 3,
+        content_hash: null,
+        row_version: null,
+        attachment: "attached",
+        lifecycle: "active",
+        read_only: false,
+        source: "page",
+        unavailable_reason: null,
+        added_by: "p1",
+        added_at: "2026-11-12T10:00:00Z",
+        updated_at: "2026-11-12T10:00:00Z"
+      },
+      {
+        id: "item-2",
+        conversation_id: "c1",
+        object_type: "task",
+        object_id: "38b7d336-c490-48df-a00c-c0f18a671380",
+        object_code: null,
+        revision_id: null,
+        version: null,
+        content_hash: null,
+        row_version: 4,
+        attachment: "detached",
+        lifecycle: "active",
+        read_only: false,
+        source: "page",
+        unavailable_reason: null,
+        added_by: "p1",
+        added_at: "2026-11-12T10:00:00Z",
+        updated_at: "2026-11-12T10:00:00Z"
+      }
+    ]);
+    await nextTick();
+
+    const text = wrapper.find(".shell-context__body").text();
+    // attached 条目出现（名称 + 版本引用）；detached 的不出现。
+    expect(text).toContain("REQ-B4A");
+    expect(text).toContain("v3");
+    expect(text).not.toContain("38b7d336");
+  });
+});

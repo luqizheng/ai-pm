@@ -1,5 +1,6 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
+import type { ContextItem, InteractionEntry } from "@/api/contextItems";
 
 /**
  * 助手会话派生视图（AI Collaboration V1.0 / DR-C8 第 ③ 步）。
@@ -46,17 +47,6 @@ export interface AssistantResultItem {
   createdAt: string;
 }
 
-/** 一条动作（AI 请求 / 用户授权 / 执行结果）。 */
-export interface AssistantActionItem {
-  id: string;
-  /** 信封类型或动作标识 */
-  kind: string;
-  /** 发起方：ai = AI 请求，user = 人工确认 */
-  initiator: "ai" | "user";
-  status: string;
-  createdAt: string;
-}
-
 /** 一条历史事件（Drawer 五类之一）。 */
 export interface AssistantHistoryEvent {
   id: string;
@@ -73,10 +63,19 @@ export const useAssistantStore = defineStore("assistant-view", () => {
   const activeTab = ref<AssistantTab>("context");
   /** 真实注入记账（无则 null —— 未收到回复即未注入） */
   const injection = ref<AssistantInjection | null>(null);
-  /** 当前会话的 AI 结果 */
+  /** 当前会话的 AI 结果（时间线展示面；非权威审批状态） */
   const results = ref<AssistantResultItem[]>([]);
-  /** 当前会话的动作 */
-  const actions = ref<AssistantActionItem[]>([]);
+  /**
+   * 当前会话的交互记录（**权威**——GET interactions，B4 契约）。
+   * Actions Tab 与 History 的 ai_action / approval 类一律以此为准，
+   * 不再从时间线客户端推断（B5 硬要求）。
+   */
+  const actions = ref<InteractionEntry[]>([]);
+  /**
+   * 会话上下文条目（**权威**——GET context-items）。
+   * Context Tab 的对象列表以此为准（含版本引用 / 双轴状态）。
+   */
+  const contextItems = ref<ContextItem[]>([]);
   /** 历史事件（五类合并，按时间倒序由消费方排序） */
   const history = ref<AssistantHistoryEvent[]>([]);
   /** 当前活跃会话 id（切项目守卫的判据：有活跃会话才需要确认）。 */
@@ -109,8 +108,12 @@ export const useAssistantStore = defineStore("assistant-view", () => {
     results.value = items;
   }
 
-  function setActions(items: AssistantActionItem[]) {
+  function setActions(items: InteractionEntry[]) {
     actions.value = items;
+  }
+
+  function setContextItems(items: ContextItem[]) {
+    contextItems.value = items;
   }
 
   function setHistory(events: AssistantHistoryEvent[]) {
@@ -141,6 +144,7 @@ export const useAssistantStore = defineStore("assistant-view", () => {
     activeConversationId.value = null;
     injection.value = null;
     results.value = [];
+    contextItems.value = [];
     actions.value = [];
     history.value = [];
     historyCategory.value = "all";
@@ -152,6 +156,7 @@ export const useAssistantStore = defineStore("assistant-view", () => {
     injection,
     results,
     actions,
+    contextItems,
     history,
     historyOpen,
     historyCategory,
@@ -161,6 +166,7 @@ export const useAssistantStore = defineStore("assistant-view", () => {
     setInjection,
     setResults,
     setActions,
+    setContextItems,
     setHistory,
     pushHistory,
     openHistory,
