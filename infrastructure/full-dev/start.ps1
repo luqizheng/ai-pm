@@ -1,18 +1,25 @@
-﻿# start.ps1 —— 全栈自包含部署单元（infra + observability + services）
+﻿# start.ps1 —— 全栈部署单元启动（infra + observability + lmms services + ai-pm）
 # ─────────────────────────────────────────────────────────────────────────────
 # 用法：
-#   .\start.ps1                 # prod 片（业务端口只留 gateway :3000）；仓内自动 --build
-#   .\start.ps1 --remote        # 跨主机分置片（保留业务端口供 consul 回拨）+ 自动 --no-build
-#   .\start.ps1 --logs          # 叠加日志栈（loki + promtail）
-#   .\start.ps1 --build         # 强制 build（覆盖自动检测）
-#   .\start.ps1 --no-build      # 强制跳过 build（覆盖自动检测）
-#   .\start.ps1 --force-recreate  # 透传其余 docker compose up 参数
+#   .\start.ps1               # 构建前端 dist + ai-pm 四服务镜像，然后 up（默认 prod 片）
+#   .\start.ps1 --no-build    # 跳过全部构建，直接 up（沿用现有镜像与 dist）
+#   .\start.ps1 --no-fe-build # 跳过 pnpm dist 构建（dist 已是最新时用），仍构建 ai-pm 镜像
+#   .\start.ps1 --remote      # 跨主机分置片（保留业务端口供 consul 回拨）
+#   .\start.ps1 --logs        # 叠加日志栈（loki + promtail）
+#   .\start.ps1 --force-recreate  # 其余参数透传 docker compose up
+#
+# 构建口径（2026-11-11 重写，替换旧 file-service 存在性探测）：
+#   - 仅 ai-pm 四服务本地构建：pm-api / pm-worker / ai-pm-worker / ai-frontend-web，
+#     共用仓库根 Dockerfile 按 target 出镜像（见 docker-compose.ai-pm.yml）。
+#   - ai-frontend-web 前置：ai-frontend/dist 须先在宿主产出（pnpm build），
+#     根 Dockerfile 只装 nginx。默认自动执行；--no-fe-build 或 --no-build 跳过。
+#   - 其余 lmms 服务一律用 .image.env 的 ${IMAGE_*} 镜像，不构建。
 #
 # env 加载（后者覆盖前者）：
 #   1. .env       —— 环境配置（IP / 口令 / 拓扑）
 #                  向上回退：$DIR\..\..\.env → $DIR\..\.env → $DIR\.env
 #   2. .env.prod  —— 运维覆盖层（可选；缺失不阻塞）
-#   3. .image.env —— **镜像钉版**（平台镜像机器生成 + 基础镜像手工维护），最后加载 → 权威
+#   3. .image.env —— **镜像钉版**，最后加载 → 权威
 #
 # compose 的 image: 只引用 ${IMAGE_*}，值来自 .image.env；缺变量直接报错。
 # ─────────────────────────────────────────────────────────────────────────────
@@ -21,14 +28,15 @@ param(
     [switch]$Remote,
     [switch]$Prod,
     [switch]$Logs,
-    [switch]$Build,
     [switch]$NoBuild,
+    [switch]$NoFeBuild,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$UpArgs
 )
 
-$Script:Dir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Project    = 'superpowers-full'
+$Script:Dir      = Split-Path -Parent $MyInvocation.MyCommand.Path
+$Script:RepoRoot = (Resolve-Path (Join-Path $Dir '..\..')).Path
+$Project         = 'superpowers-full'
 
 if ($UpArgs -contains '--help' -or $UpArgs -contains '-h') {
     $inHeader = $true
@@ -46,14 +54,37 @@ if ($UpArgs -contains '--help' -or $UpArgs -contains '-h') {
 Set-StrictMode -Version Latest
 # 注意：不用 $ErrorActionPreference='Stop' 统一拦截——本机 PS5 会把原生命令的
 # stderr 输出（如 docker network create 的 "already exists"）升级为致命错误，
-# 破坏 bash 版的容错语义；改为每个 docker 调用点显式检查 $LASTEXITCODE。
+# 破坏 bash 版的容错语义；改为每个调用点显式检查 $LASTEXITCODE。
 
-$Base       = 'docker-compose-services'
-$Overlay    = if ($Remote) { 'remote' } else { 'prod' }
-$WithLogs   = [int]$Logs.IsPresent
-$BuildArg   = ''
-if ($Build) { $BuildArg = '--build' }
-if ($NoBuild) { $BuildArg = '--no-build' }
+# ── 双横线参数归一 ───────────────────────────────────────────────────────────
+# PowerShell 只识别单横线开关（-NoBuild）；习惯上写的 --no-build 会落进
+# $UpArgs 透传给 compose 造成歧义。这里显式归一：认识的开关就地生效并从
+# $UpArgs 剔除，其余继续透传。
+if ($UpArgs) {
+    $SwitchMap = @{
+        '--remote'      = 'Remote'
+        '--prod'        = 'Prod'
+        '--logs'        = 'Logs'
+        '--no-build'    = 'NoBuild'
+        '--no-fe-build' = 'NoFeBuild'
+    }
+    $keep = @()
+    foreach ($a in $UpArgs) {
+        $k = "$a".ToLowerInvariant()
+        if ($SwitchMap.ContainsKey($k)) {
+            Set-Variable -Name $SwitchMap[$k] -Value $true -Scope Script
+            Log "flag: $k"
+        }
+        else {
+            $keep += $a
+        }
+    }
+    $UpArgs = $keep
+}
+
+$Overlay = if ($Remote) { 'remote' } else { 'prod' }
+# 仅 ai-pm 自有服务需要本地构建（docker-compose.ai-pm.yml 定义）
+$AiPmServices = @('pm-api', 'pm-worker', 'ai-pm-worker', 'ai-frontend-web')
 
 function Log([string]$msg) { Write-Host "[start:$Project] $msg" }
 function Die([string]$msg, [int]$code = 10) {
@@ -62,20 +93,10 @@ function Die([string]$msg, [int]$code = 10) {
 }
 
 # ── 基础文件校验 ─────────────────────────────────────────────────────────────
-if (-not (Test-Path (Join-Path $Dir "$Base.yml")))           { Die "$Base.yml not found next to start.ps1" }
-if (-not (Test-Path (Join-Path $Dir "$Base.$Overlay.yml")))  { Die "overlay $Base.$Overlay.yml not found" }
-
-$ImageEnv = Join-Path $Dir '.image.env'
-if (-not (Test-Path $ImageEnv)) { Die ".image.env not found in $Dir（生成：node scripts/update-image-env.js）" }
-
-# ── 自动 build / image 模式检测 ──────────────────────────────────────────────
-# 仓内开发：$Dir\..\..\services\file-service\Dockerfile 存在 → --build
-# 远程部署：该路径不存在（目录被拷出仓） → --no-build（用 registry 镜像）
-if (-not $BuildArg) {
-    $dockerfile = Join-Path $Dir '..\..\services\file-service\Dockerfile'
-    $BuildArg = if (Test-Path $dockerfile) { '--build' } else { '--no-build' }
-}
-Log "mode: $BuildArg (overlay: $Overlay, logs: $WithLogs)"
+if (-not (Test-Path (Join-Path $Dir 'docker-compose.yml')))                    { Die 'docker-compose.yml not found next to start.ps1' }
+if (-not (Test-Path (Join-Path $Dir "docker-compose-services.$Overlay.yml"))) { Die "overlay docker-compose-services.$Overlay.yml not found" }
+if (-not (Test-Path (Join-Path $Dir '.image.env')))                            { Die ".image.env not found in $Dir" }
+if (-not (Test-Path (Join-Path $RepoRoot 'Dockerfile')))                       { Die "repo-root Dockerfile not found: $RepoRoot" }
 
 # ── env 分层加载（dotenv 格式：KEY=VALUE，# 注释，空行忽略） ─────────────────
 # 对齐 bash `set -a; source` 语义：非单引号值在加载期展开 ${VAR} / $VAR
@@ -120,7 +141,7 @@ Import-DotEnv (Join-Path $Dir '..\.env.prod')
 Import-DotEnv (Join-Path $Dir '.env.prod')
 Import-DotEnv (Join-Path $Dir '..\..\.image.env')
 Import-DotEnv (Join-Path $Dir '..\.image.env')
-Import-DotEnv $ImageEnv
+Import-DotEnv (Join-Path $Dir '.image.env')
 
 # ── REQUIRED 校验 ────────────────────────────────────────────────────────────
 foreach ($v in @(
@@ -142,7 +163,7 @@ foreach ($v in @(
         Die "env var $v empty (set in .image.env)"
     }
 }
-if ($WithLogs -eq 1) {
+if ($Logs.IsPresent) {
     foreach ($v in @('IMAGE_LOKI','IMAGE_PROMTAIL')) {
         if ([string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($v, 'Process'))) {
             Die "env var $v empty (set in .image.env; needed by --logs)"
@@ -152,13 +173,44 @@ if ($WithLogs -eq 1) {
 
 # ── compose env 文件（手工执行 compose 时也能复现同一份展开） ────────────────
 $ComposeEnvArgs = @()
-foreach ($f in @((Join-Path $Dir '.env'), (Join-Path $Dir '.env.prod'), $ImageEnv)) {
+foreach ($f in @((Join-Path $Dir '.env'), (Join-Path $Dir '.env.prod'), (Join-Path $Dir '.image.env'))) {
     if (Test-Path $f) { $ComposeEnvArgs += @('--env-file', $f) }
 }
 
 # ── compose 文件链 ───────────────────────────────────────────────────────────
-$ComposeFiles = @('-f', 'docker-compose.yml', '-f', "$Base.$Overlay.yml")
-if ($WithLogs -eq 1) { $ComposeFiles += @('-f', 'docker-compose-observability.logs.yml') }
+# docker-compose.yml 已 include infra / observability / services / ai-pm 四片；
+# overlay 叠加在顶层覆盖业务服务端口与拓扑。
+$ComposeFiles = @('-f', 'docker-compose.yml', '-f', "docker-compose-services.$Overlay.yml")
+if ($Logs.IsPresent) { $ComposeFiles += @('-f', 'docker-compose-observability.logs.yml') }
+
+# ── 前端 dist 构建（ai-frontend-web 的前置产物） ─────────────────────────────
+if (-not $NoBuild -and -not $NoFeBuild) {
+    $FeDir = Join-Path $RepoRoot 'ai-frontend'
+    if (-not (Test-Path (Join-Path $FeDir 'package.json'))) { Die "ai-frontend not found: $FeDir" }
+    if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
+        Die 'pnpm not found in PATH（前端构建需要 node>=22 / pnpm>=11；或用 --no-fe-build 跳过）'
+    }
+    Log "frontend dist build (pnpm build)..."
+    Push-Location $FeDir
+    try {
+        & pnpm build
+        if ($LASTEXITCODE -ne 0) { Die 'pnpm build failed' 15 }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+# ── ai-pm 镜像构建（仅四服务；其余服务全走 .image.env 镜像） ─────────────────
+if (-not $NoBuild) {
+    Log "build ai-pm images: $($AiPmServices -join ', ')"
+    $buildCmd = @('compose', '-p', $Project) + $ComposeEnvArgs + $ComposeFiles + @('build') + $AiPmServices
+    & docker @buildCmd
+    if ($LASTEXITCODE -ne 0) { Die 'docker compose build failed' 15 }
+}
+else {
+    Log 'build skipped (--no-build)'
+}
 
 # ── 启动 ─────────────────────────────────────────────────────────────────────
 $netOut = docker network create superpowers 2>&1
@@ -168,14 +220,13 @@ if ($LASTEXITCODE -ne 0 -and "$netOut" -notmatch 'already exists') {
 
 Push-Location $Dir
 try {
-    Log "up (overlay: $Overlay, $BuildArg)..."
+    Log "up (overlay: $Overlay)..."
     $upCmd = @('compose', '-p', $Project) + $ComposeEnvArgs + $ComposeFiles + @('up', '-d')
-    if ($BuildArg) { $upCmd += $BuildArg }
-    if ($UpArgs)   { $upCmd += $UpArgs }
+    if ($UpArgs) { $upCmd += $UpArgs }
     & docker @upCmd
     if ($LASTEXITCODE -ne 0) { Die 'up failed' 20 }
     $n = (docker compose -p $Project ps --services 2>$null | Measure-Object).Count
-    Log "running: $n services — gateway :3000 | grafana :3001 | prometheus :9090 | jaeger :16686 | consul :8500"
+    Log "running: $n services — frontend :8092 | gateway :3000 | grafana :3001 | prometheus :9090 | jaeger :16686 | consul :8500"
 }
 finally {
     Pop-Location
