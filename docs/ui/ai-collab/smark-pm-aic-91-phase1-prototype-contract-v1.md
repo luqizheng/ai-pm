@@ -11,7 +11,7 @@
 |---|---|---|
 | ① 四栏容器 + AI Chat 常驻列 | **已落地** | `53ddf93` |
 | ② 会话能力并入常驻列 | **已落地** | `64c8e40` |
-| ③ Context Panel 四 Tab + History Drawer | 待实施 | — |
+| ③ Context Panel 四 Tab + History Drawer | **已落地** | `846abed` |
 | ④ 专注模式 + 切项目提示（G12） | 专注模式已落地；切项目提示待实施 | `53ddf93` |
 
 已落地的关键事实（以代码为准）：
@@ -21,6 +21,13 @@
 - 指令栏以 `embedded` 模式成为列内 Composer（就地发送）；独立模式行为不变（入队交接仍服务顶栏助手入口）。
 - 完整会话页路由 `/project/assistant` 时 AI Chat 列收起，避免同屏重复会话面。
 - 专注模式开关在**顶栏**（列收起后顶栏是唯一退出入口），退出逐项还原进入前的右栏开合态。
+- 右栏四一级 Tab + History Drawer 已落地（阶段③）：派生数据由**单一写者**
+  （`useAssistantConversation`）发布到 `stores/assistant.ts`，右栏与常驻列读同一份，
+  **右栏不另起 fetch**；Sources 只展示**真实注入记账**（后端 `metadata.injection`），
+  未收到回复即显示未注入，**不冒充注入面**（G2 断点的正解）。
+- **仍未落地**：对象级上下文（Attach / Remove / 双轴状态机）属 AI-02 阶段；
+  审批与执行的**服务端读接口** V1 无（`/interaction` 仅 POST 写回），
+  Actions / History 的审批与执行类别目前由客户端派生。
 
 ---
 
