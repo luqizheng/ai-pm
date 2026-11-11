@@ -6,7 +6,8 @@
 | 任务性质 | **后端契约 + 实施设计**（先定契约，再实施） |
 | 触发 | 四栏 Shell 迁移四阶段已落地（前端）；AI-02 的对象级上下文**卡在后端** |
 | 关联 | [设计基线](product/ai-pm-ai-collaboration-workspace-v1.md)（附录 B 差距 G3/G4/G5/G9/G10）· [裁决 DR-C2/C3/C7/C8](ui/ai-collab/smark-pm-aic-95-decision-record-v1.md) · [壳迁移评估任务书](smark-pm-ai-collaboration-shell-migration-assessment-v1.md) |
-| 产出 | 本文件即契约草案（含待裁决项）→ 评审通过后拆实施切片 |
+| 产出 | 本文件即**正式契约**（架构评审已通过 CX1~CX4；SQL-01~SQL-08 为实施前置约束） |
+| 评审 | **架构评审通过（2026-11-11）**：CX1~CX4 全数裁定；SQL 与 API 契约按评审意见修订后实施 |
 | 纪律 | 所有代码引用已 grep 实证；迁移号按现状取 **0019**（0018 已被 team_llm_catalog 占用） |
 
 ---
@@ -79,30 +80,33 @@ Rust 侧：`crates/pm-application/src/ai_conversations.rs:58` `ContextAnchor`（
 
 理由：DR-C7 要求每条 Context 有**独立生命周期**（Active / Inactive / Pending / Unavailable）+ Enable/Disable + 变更历史 + 审计。JSONB 单列做不了「按条目状态机 + 按条目审计 + 按条目版本引用」；新项目无存量数据，可直接建表（无迁移负担）。
 
-**表结构建议**：
+**表结构（评审修订版 · SQL-01~SQL-08 逐条落点）**：
 
 ```sql
+-- 0019_conversation_context_item.sql
 CREATE TABLE ai.conversation_context_item (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid NOT NULL,
     project_id uuid NOT NULL,
     conversation_id uuid NOT NULL,
-    -- 对象定位（跨域统一：type + id + 版本引用）
-    object_type text NOT NULL,           -- requirement | design | adr | task | knowledge | document | repository | project
-    object_id text NOT NULL,             -- uuid 或稳定 code
-    object_code text,                    -- 展示用（REQ-001 / DESIGN-004）
-    -- 版本引用（对象级；无版本的对象置空）
-    revision_id uuid,                    -- requirement_revision.id / design_revision.id
-    version integer,                     -- 该修订的 version
-    content_hash text,                   -- 引用时的内容哈希（防「同版本不同内容」）
-    -- 归属与生命周期（DR-C7 双轴）
-    attachment text NOT NULL DEFAULT 'attached',  -- attached | detached
-    lifecycle text NOT NULL DEFAULT 'active',    -- active | inactive | pending | unavailable
-    read_only boolean NOT NULL DEFAULT false,   -- 可写性标记（Read-only）
-    -- 来源与权限范围（基线 §7.2）
-    source text NOT NULL,                -- page | manual | discovery | ai_suggestion
-    permission_scope text NOT NULL,      -- 记录判定时的权限范围快照
-    unavailable_reason text,             -- lifecycle=unavailable 时的原因（必填）
+    -- ── 对象定位（多态；**不存正文**）────────────────────────────
+    object_type text NOT NULL,
+    object_id text NOT NULL,
+    object_code text,
+    -- ── 版本引用（**按类型解释**，见 SQL-01；无内容版本的对象留空）──
+    revision_id uuid,             -- requirement_revision.id / design_revision.id / …
+    version integer,              -- 该修订的版本号（**不得为乐观锁伪造**）
+    content_hash text,             -- 引用时内容哈希（注入时服务端复核，见 SQL-07）
+    row_version bigint,            -- 仅乐观锁类对象（如 task）记此，**不参与版本语义**
+    -- ── 归属轴（**只有两态**）──────────────────────────────────
+    attachment text NOT NULL DEFAULT 'attached',   -- attached | detached
+    -- ── 生命周期轴 ────────────────────────────────────────────
+    lifecycle text NOT NULL DEFAULT 'active',     -- active | inactive | pending | unavailable
+    -- ── 可写性（**独立于 lifecycle**，不随 PATCH 切换）────────────
+    read_only boolean NOT NULL DEFAULT false,
+    -- ── 来源与不可用原因 ──────────────────────────────────────
+    source text NOT NULL,                            -- page | manual | discovery | ai_suggestion
+    unavailable_reason text,                         -- 进入 unavailable 必填（SQL-03 约束）
     added_by uuid NOT NULL,
     added_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -111,17 +115,52 @@ CREATE TABLE ai.conversation_context_item (
         CHECK (attachment = ANY (ARRAY['attached','detached'])),
     CONSTRAINT conversation_context_item_lifecycle_check
         CHECK (lifecycle = ANY (ARRAY['active','inactive','pending','unavailable'])),
-    -- Pending 不得自动转 Active 的服务端保证：pending 态不得声称可用
+    -- 离开 unavailable 时原因须清空（不得留误导性当前原因）
     CONSTRAINT conversation_context_item_unavailable_reason_check
-        CHECK ((lifecycle <> 'unavailable') OR (unavailable_reason IS NOT NULL AND length(btrim(unavailable_reason)) > 0)),
-    CONSTRAINT conversation_context_item_uniq UNIQUE (conversation_id, object_type, object_id, revision_id)
+        CHECK ((lifecycle = 'unavailable') = (unavailable_reason IS NOT NULL)),
+    -- 同一会话不重复附加同一对象；revision_id 可空 → NULLS NOT DISTINCT（PG16）
+    CONSTRAINT conversation_context_item_uniq
+        UNIQUE NULLS NOT DISTINCT (conversation_id, object_type, object_id, revision_id),
+    CONSTRAINT conversation_context_item_fk_conversation
+        FOREIGN KEY (conversation_id) REFERENCES ai.conversation (id)
 );
 ```
 
-**待裁决 CX1**：
-- (a) 独立表（建议） vs (b) 扩展锚点 JSONB 加 `objects[]`；
-- 若选 (a)：「生命周期」与「归属」是否合成一列（当前建议**两列**——DR-C7 双轴）；
-- 唯一键是否含 `revision_id`（同一对象挂两个版本？建议**不允许**，版本变更走 replace）。
+> **归属字段口径（评审要求：服从既有属主隔离模式，不为查询方便加冗余）**：
+> 照 `ai.conversation_interaction` 的做法——保留 `tenant_id` / `project_id` 列，
+> FK 只钉 `conversation_id`，**不建** (tenant,project,id) 三元组唯一键；
+> 「item 与其 conversation 同租户同项目」由**服务层 join 校验**（SQL-06），
+> 跨属主访问按既有先例 **404 同形**。
+
+### SQL-01 ~ SQL-08（实施前置约束，缺一不得开工）
+
+| # | 修改项 | 落地要求 |
+|---|---|---|
+| **SQL-01** | **多态版本引用** | 不得在一个通用表里假装所有对象都有 `revision_id UUID + version INTEGER`。按下表**分类型**解释与校验；**没有正式内容版本的对象不得伪造内容版本** |
+| **SQL-02** | **唯一约束** | `UNIQUE NULLS NOT DISTINCT (conversation_id, object_type, object_id, revision_id)`（PG16 支持），解决 `revision_id` 可空时普通 UNIQUE 放行重复的问题 |
+| **SQL-03** | **双轴状态** | `attachment`（attached/detached）与 `lifecycle`（active/inactive/pending/unavailable）**分列**；`read_only` 独立列；**Available 不入库**（是候选查询结果）；`unavailable_reason` 与 `lifecycle='unavailable'` **同生同灭**（离开即清空，不留误导性当前原因） |
+| **SQL-04** | **软移除** | DELETE 语义 = 移除出当前 Conversation（`attachment='detached'`），**不删原始业务对象**、**不丢版本引用与操作记录**；移除事件进 History |
+| **SQL-05** | **权限校验** | 所有对象操作在**服务端**校验存在性 / 项目归属 / 权限；**不信任客户端传入的权限快照**（`permission_scope` 只作记录，不作判据） |
+| **SQL-06** | **项目隔离** | Context Item 的 `project_id` / `tenant_id` 须与其 Conversation 一致（服务层 join 校验）；跨项目/跨属主访问 **404 同形** |
+| **SQL-07** | **版本一致性** | 注入时**重新读取**被引用修订并**复核版本与 content_hash**；不采信 Context Item 里存的历史 hash |
+| **SQL-08** | **审计** | 附加 / 启用 / 停用 / 移除 / 状态异常均可追溯（写入 `ai.conversation_interaction` 或独立审计表，见下） |
+
+**SQL-01 分类型版本引用矩阵**（本仓已实证的版本载体）：
+
+| object_type | 定位 | 版本载体 | 注入正文的前提 |
+|---|---|---|---|
+| `requirement` | `delivery.requirement.id` | `delivery.requirement_revision`（`version` + `state` + `content_hash`） | 该修订 `state='approved'` 才注入正文；否则只给标题/版本/状态 |
+| `design` | `design.design.id` | `design.design_revision`（同构） | 同上 |
+| `adr` | `design.adr.id` | `design.adr_revision` | 同上 |
+| `knowledge` | `ai.project_knowledge.id` | `version integer` + `status` + `confirmed_by/confirmed_at` | 已确认（`confirmed_by` 非空）才注入正文 |
+| `document` | `docproc.document.id` | `docproc.document_version`（`version_number` + `checksum`；**append-only**） | 引用指定版本并复核 checksum |
+| `task` | `delivery.task.id` | **无内容版本**（`revision bigint` 是乐观锁）→ 记 `row_version`，**不参与版本语义** | 注入任务标题/状态/验收摘要；**不伪造内容版本** |
+| `repository` | `integration.project_repository.name` | 无（实时投影） | 走 S2 仓库事实节，**不进对象节** |
+| `project` | `core.project.id` | 无（实时投影） | 走 S1 项目画像节，**不进对象节** |
+
+> **审批约束的适用范围（评审修正）**：「未批准正文不注入」**只对存在正式审批要求的对象**
+> 成立（requirement / design / adr / knowledge / document 的正式修订）。Project 与
+> Repository 事实本身没有 approved 修订状态，**不得把审批状态机套到它们身上**。
 
 ### D-CX2 · 注入链扩节：对象节（S3+）
 
@@ -135,10 +174,43 @@ CREATE TABLE ai.conversation_context_item (
 | 裁剪 | 超预算按 `updated_at DESC` 保留最近；被裁的进 `sections_dropped`（**前端已消费该字段**，阶段③已接真） |
 | 安全 | 沿用三闸：注入隔离（`<context>` 内按数据对待 + 来源标注）· 不注入凭据 · **不注入未确认/未批准的对象正文**——`revision.state` 非 `approved` 时只注入标题与版本，不注入正文 |
 
-**待裁决 CX2**：
-- (a) 对象节按对象分节（建议） vs (b) 合并单节；
-- (b) 总预算是否从 8,000 提到 10,000（建议**不提**，先用余量）；
-- (c) 未批准修订是否只注入标题+版本（建议**是**——否则等于让 AI 看到草稿正文）。
+**评审裁定（CX2 = A，通过）**：采用**按对象分节**，**不提高现有 8,000 总预算**。
+
+**注入节与预算（终裁）**：
+
+| 节 | 键 | 预算 |
+|---|---|---:|
+| 总预算 | — | **8,000（不变）** |
+| S1 项目画像 | `project_profile` | 2,000 |
+| S2 仓库事实 | `repository_facts` | 4,000 |
+| S3+ 对象上下文 | `object:<type>:<id>` | **2,000**（原余量，不新增） |
+
+**注入规则矩阵（终裁）**：
+
+| 对象状态 | AI 可获得的内容 |
+|---|---|
+| Attached + Active，且对象可读 | 按权限投影对象内容（已批准不可变修订可注入正文摘要） |
+| Inactive | **不注入** |
+| Pending | **不注入正式对象正文** |
+| Unavailable | **不注入**，但记录原因（进记账/事件） |
+| Detached | **不注入** |
+| 受正式审批约束、修订未批准 | **只注入**允许公开的标题 / 版本 / 状态元数据，**不注入草稿正文** |
+
+> 「未批准不注入正文」**只适用于存在正式审批要求的对象**（requirement / design /
+> adr / knowledge / document）；Project 与 Repository 事实无 approved 修订状态，
+> 不得套用同一审批状态机。
+
+**超预算裁剪（评审追加的两条约束）**：
+1. 按 `updated_at DESC` 保留较新对象，**且必须有稳定的第二排序键**（建议
+   `context_item.id`）——保证同样输入下结果**可重复**；
+2. **每个对象节独立记账**：被裁剪的对象进 `sections_dropped`（前端已消费该字段，
+   阶段③已接真），不能只记总字符数。
+
+**版本一致性（SQL-07 落到注入层）**：`content_hash` **必须与实际注入的修订内容对应**。
+服务端**重新读取**被引用的修订并**复核版本与 hash**，不采信 Context Item 里保存的
+旧 hash——避免「Context 引用与对象内容不一致」。
+
+**安全原则不变**：注入隔离 · 不注入凭据 · 锚点不即事实（三闸均不因扩节而放松）。
 
 ### D-CX3 · 读接口（前端右栏与 AI-02 页面需要）
 
@@ -153,10 +225,38 @@ CREATE TABLE ai.conversation_context_item (
 | GET | `/v1/pm/projects/{project_id}/context-candidates?type=&q=` | 可选对象（Available 列表；按当前项目 + 权限过滤） | AI-02 Add Context 选择器 |
 | GET | `/v1/pm/projects/{project_id}/conversations/{conversation_id}/interactions` | 审批/交互记录（**权威**，替掉客户端派生） | 右栏 Actions / History 的审批类 |
 
-**待裁决 CX3**：
-- (a) Remove 软删（建议） vs 物理删；
-- (b) 候选对象 GET 是否需要独立端点（建议**要**：跨 5 个域做统一候选聚合，放服务端比前端 N 次请求可靠）；
-- (c) interactions 读端点是否并入本任务（建议**并入**：否则右栏 Actions/History 长期只能客户端派生）。
+**评审裁定（CX3 = A，通过）**：采用独立 Context Item API，并把 **interactions 读接口**
+与**候选对象聚合查询**一并纳入本任务。
+
+**契约细节（评审补充）**：
+
+| 方法 | 路径 | 契约要点 |
+|---|---|---|
+| GET | `.../context-items` | 返回归属、生命周期、只读属性、版本引用、来源、不可用原因 |
+| POST | `.../context-items` | **支持批量附加**；逐项校验存在性 / 权限 / 项目归属 / 版本 |
+| PATCH | `.../context-items/{item_id}` | **状态机白名单**（见下），不接受客户端任意 lifecycle 字符串 |
+| DELETE | `.../context-items/{item_id}` | **软移除** → `attachment='detached'`，保留审计 |
+| GET | `/v1/pm/projects/{project_id}/context-candidates` | 类型筛选 · 关键词 · **分页** · 已附加标识 · 可用性 · 只读标识 · 简短摘要（**服务端聚合**，前端不得分别请求五个业务域再自行拼权限） |
+| GET | `.../interactions` | 审批/交互**权威**读数据源 |
+
+**PATCH 状态机（终裁；`read_only` 不在此列——它由来源对象权限计算，不随 PATCH 切换）**：
+
+| 转换 | 允许条件 |
+|---|---|
+| Active → Inactive | 允许授权用户执行 Disable |
+| Inactive → Active | **必须重新检查**对象可读权限与版本有效性 |
+| Pending → Active | **必须满足相应人为确认要求**，不得由普通 AI 操作直接完成 |
+| 任意 → Unavailable | 必须有**服务端判定依据与原因**（`unavailable_reason` 必填） |
+| Unavailable → Active | 必须重新检查对象可用性、权限与版本 |
+| Detached → 恢复 | **不允许**通过 Enable 直接恢复；须**重新附加并重新校验** |
+
+**软移除语义（终裁）**：移除 = 从当前 Conversation 移除，**不是**删除原始
+Requirement / Design / Knowledge 等业务对象。移除后：不再注入 AI · 不再出现在
+Attached 列表 · History 中可见移除事件 · **不删原始业务对象** · **不丢版本引用与操作记录**。
+
+**interactions 读端点（终裁）**：返回真实交互记录——操作者 · 原始 Action · 处理状态 ·
+处理时间 · 处理理由 · 关联消息 · 关联对象 · 审批/拒绝结果；**保持既有属主隔离**：
+跨 Project / 跨 Conversation / 跨属主访问不得泄露资源是否存在，按既有约定 **404 同形**。
 
 ### D-CX4 · DEF-P0-01 / DEF-P0-02 收口（与本任务同区域）
 
@@ -167,23 +267,32 @@ CREATE TABLE ai.conversation_context_item (
 
 补充要求（DR-C2）：`auto_accept` 语义拆分（可进非正式 Draft / 不可正式审批）；权限取交集（Team ∩ Project ∩ Action Policy）；**修复后必须服务端自动化测试验证**，不以 UI 按钮限制替代。
 
-**待裁决 CX4**：默认拒绝的**爆炸半径**——现存策略数据是否需要一次性迁移/校正（若存量策略本就少，可直接改默认语义 + 回归测试；若多，需一次性校正脚本——**注意本仓规则：新项目无存量数据，不做迁移脚本**，改默认语义即可）。
+**评审裁定（CX4 = A，通过）**：与本任务**同批修复**，且 **B1 必须排在最前面**。
 
----
+- **DEF-P0-01 默认拒绝**：无任何策略层表态时默认允许 → 改为「**没有明确授权 = DENY**」。
+  有效权限 = `Team Policy ∩ Project Policy ∩ Action Policy`；**任何一层拒绝即最终拒绝；
+  任何一层没有明确授权，也不得被解释为允许**。
+- **DEF-P0-02 真人审批守卫**（服务端强制）：Requirement 正式确认/发布 · Revision 正式批准 ·
+  Knowledge 正式确认/发布 · Decision 正式确认。AI 可提出 / 分析 / 生成草稿 / 提交审批请求，
+  但**不能批准自己的提案**，也不能经其他接口绕过人工审批。
+- **auto_accept 语义拆分**：① 接受 AI 建议进 Draft（按策略授权）② 正式审批并发布
+  （**必须真人执行**）。
+- **存量策略**：新项目、无存量策略数据 → **直接改默认语义，不写一次性校正脚本**；
+  但**必须对所有策略配置路径做回归测试**，避免其他代码路径继续默认放行。
+- **验收**：不得只测 UI —— 必须有**服务端自动化测试**证明默认拒绝与真人审批守卫不可绕过。
 
-## 三、实施切片建议（评审通过后）
+## 三、实施切片（评审终裁顺序）
 
 | 切片 | 内容 | 依赖 | 验收 |
 |---|---|---|---|
-| **B1** | DEF-P0-01 默认拒绝 + DEF-P0-02 真人守卫（含服务端自动化测试） | — | 策略层单测：默认拒绝 / 交集否决 / 真人审批不可绕过 |
-| **B2** | `0019_conversation_context_item.sql` + `ContextItem` 模型 + CRUD + 权限/归属校验 + 端点（CX3 前四行） | CX1/CX3 | 集成测试：附加/启停/移除/越权/跨项目 |
-| **B3** | 注入链对象节（CX2）+ 记账扩字段 | B2 | 注入测试：对象节内容/预算裁剪/未批准只给标题与版本/三闸不破 |
-| **B4** | interactions 读端点（CX3 最后一行）+ 候选对象聚合 GET | CX3 | 集成测试：属主隔离 404 同形 / 候选过滤 |
-| **B5** | 前端对接（对象级 Context 面板、AI-02 页面、Sources 真实账） | B2/B3/B4 | 前端门禁全绿 + 右栏不再客户端派生 |
+| **B1** | **安全边界修复**：DEF-P0-01 默认拒绝 · DEF-P0-02 真人审批守卫 · auto_accept 语义拆分 | — | 策略层单测：默认拒绝 / 交集任一层否决 / 真人审批不可绕过 / **所有策略配置路径回归** |
+| **B2** | **Context Item 数据模型与 CRUD**：迁移 0019 · Rust 模型 · 双轴状态机（PATCH 白名单）· 批量附加 · 权限与归属校验 · 软移除 · Context API | CX1/CX3 | 集成测试：附加/启停/移除/软删留痕/**越权**/**跨项目 404 同形** |
+| **B3** | **对象级 AI 注入**：S3+ 对象节 · 版本校验（SQL-07 重读复核）· 内容投影 · 预算裁剪（稳定次排序 + 独立记账）· 注入记账 | B2 | 注入测试：各状态注入矩阵 / 超预算裁剪可重复 / 未批准只给元数据 / 三闸不破 |
+| **B4** | **真实读取接口**：interactions GET · 候选对象聚合查询（类型/关键词/分页/已附加/可用性/只读/摘要）· 权限过滤 · 属主隔离 | CX3 | 集成测试：字段完整 / 候选过滤 / 404 同形 |
+| **B5** | **前端对接**：AI-02 Context · Sources · Results · Actions · History **全部改读真实后端数据，不再客户端派生权威状态** | B2/B3/B4 | 前端门禁全绿 + 右栏派生视图降级为**非权威展示** |
 
-> 切片顺序刻意把 **B1 独立在前**：DEF-P0-01/02 是**已确认的安全边界**，与上下文建模无依赖，先收口收益最大、风险最小。
-
----
+> B1 独立在最前：它是**已确认的安全边界**，与上下文建模无依赖，先收口收益最大、风险最小。
+> B5 的硬要求：**Actions / History 不得继续用客户端推断的状态充当权威数据**。
 
 ## 四、明确不做（本任务范围外）
 
@@ -197,7 +306,36 @@ CREATE TABLE ai.conversation_context_item (
 
 ---
 
-## 五、给后端的三条提醒
+## 五、评审裁决汇总（2026-11-11）
+
+| 裁决项 | 最终选择 |
+|---|---|
+| CX1 Context Set | **A：独立表**（不扩锚点 JSONB） |
+| CX1 状态模型 | **双轴保留**（attachment 与 lifecycle 分列，read_only 独立） |
+| CX1 Available | **候选查询状态，不入 Context Item**（存储态只有 attached / detached） |
+| CX2 对象注入 | **A：按对象分节**（`object:<type>:<id>`） |
+| CX2 总预算 | **保持 8,000**（S1 2000 / S2 4000 / S3+ 2000） |
+| CX2 未批准正文 | **不注入**（仅对存在正式审批要求的对象适用） |
+| CX3 Remove | **软移除**（→ detached，保留审计，不删业务对象） |
+| CX3 Candidate GET | **纳入**（服务端聚合，前端不自拼五域） |
+| CX3 Interactions GET | **纳入**（Actions / History 的权威读源） |
+| CX3 PATCH | **状态机白名单**（read_only 不随 PATCH 切换） |
+| CX4 默认拒绝 | **必须修复**（无明确授权 = DENY） |
+| CX4 真人审批 | **必须服务端强制**（不可绕过） |
+| CX4 存量迁移 | **不做一次性校正脚本**（新项目无存量策略） |
+
+**架构方向通过；SQL 与 API 契约修订后实施**（SQL-01~SQL-08 为开工前置，缺一不得动手）。
+
+### 评审追加的防复发要求（务必写进实现）
+
+1. **不得为迁就 UI 把对象正文 / 状态 / 权限塞进 JSONB** —— 否则会重新出现
+   「前端显示 ≠ AI 实际注入」的不一致。Context Item 只存定位与版本引用。
+2. **Context Item 存的是定位与版本引用，不是正文** —— 正文与状态一律服务端重读。
+3. **不采信客户端传入的权限快照**（SQL-05）—— 权限判定只在服务端。
+
+---
+
+## 六、给后端的三条提醒
 
 1. **锚点不即事实**这条既有原则要延续到对象：**Context 条目里存的是定位 + 版本引用，不是正文**；正文与状态一律服务端重读（否则「同版本不同内容」会骗过 AI）。
 2. **注入预算别动总口径**：chat 8k / 访谈 36k 是既有独立预算，S1+S2 上限合计 6,000，**余量 2,000 够对象节**；扩总预算会连带影响既有注入快照与测试基线。

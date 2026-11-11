@@ -67,9 +67,15 @@ Context types:
 Status is expressed on **two orthogonal axes** — do not flatten them into one list:
 
 **Axis 1 · Attachment (relation to the current Conversation)**
-- **Available** — discoverable, not yet part of this Conversation's working context
 - **Attached** — added to this Conversation's working context
-- **Read-only** — referenceable but not modifiable (a modifier tag, combinable with Attached)
+- **Detached** — was attached, now removed; history is kept (removed items are no longer injected)
+
+> Note: **Available is not a stored state** — it is the result of the candidate-object
+> query (Get Context Candidates). Candidates that are not attached yet simply do not
+> exist as Context Items.
+
+**Read-only** is a writability attribute (not a lifecycle state): referenceable but not
+modifiable. It is computed from the source object's actual permission, not toggled by hand.
 
 **Axis 2 · Lifecycle (state of the item itself)**
 - **Active** — currently available to the AI

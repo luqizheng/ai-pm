@@ -214,7 +214,7 @@ Effective Permission = Team Policy ∩ Project Policy ∩ Action Policy
 | AI-01 七类 Card | DR-C4 | Artifact 内嵌，Risk 需结构化字段 |
 | 四区域尺寸 | DR-C5 | 188/518/446/288 |
 | History Drawer 五类 | DR-C3 | 不设第五主 Tab |
-| **Context 双轴状态模型** | **DR-C7（已确认）** | 专家明确赞成保留双轴，不建议合并为单轴 |
+| **Context 双轴状态模型** | **DR-C7（已确认）** | 专家明确赞成保留双轴；**后端契约评审修正**：存储态只有 attached/detached，**Available 是候选查询结果不入库**；`read_only` 为独立可写性属性 |
 | 四栏 Shell 结构升级 · 专注模式 · 密度规则 · 渐进迁移 | **DR-C8（已裁定）** | 见 95 裁决记录 DR-C8 |
 
 **DR-C7 摘要**：Active / Inactive / Pending / Unavailable 是**生命周期轴**，与 Available / Attached / Read-only **归属轴**正交，不是替换关系。AI 实际使用的是「Attached + Active」。

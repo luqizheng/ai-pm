@@ -189,13 +189,14 @@ Context 条目的状态由**两条正交轴**共同表达，不是两个互斥�
 
 | 轴 | 取值 | 回答的问题 |
 |---|---|---|
-| **归属轴**（Attachment） | Available / Attached | 该条目**是否属于当前 Conversation** 的工作上下文 |
+| **归属轴**（Attachment） | attached / detached（**存储态**） | 该条目**是否属于当前 Conversation** 的工作上下文；**Available 是候选查询结果，不入库**（后端契约评审 2026-11-11 修正） |
 | **可写性标记** | Read-only | 可参考但不可修改（修饰标记，可与 Attached 组合） |
 | **生命周期轴**（Lifecycle） | Active / Inactive / Pending / Unavailable | 该条目**自身处于什么状态** |
 
 ### 规则
 
-- **AI 实际可使用 = Attached + Active**，且同时满足权限策略与实际可读取条件。
+- **AI 实际可使用 = Attached + Active**，且同时满足**实时权限检查、对象存在性、版本有效性**（后端契约评审 2026-11-11 补）。
+- **`read_only` 是可写性属性**，不属于生命周期状态，不随状态流转切换，由来源对象的实际权限与业务规则计算。
 - **Attached + Inactive** = 已附加但停用（Disable 的结果，条目仍在列表中）。
 - **Disable ≠ Remove**：Disable 转入 Inactive（可逆），Remove 从列表删除（需确认）。
 - **Pending 不得自动转为 Active**——等待用户确认。
