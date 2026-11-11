@@ -1,34 +1,35 @@
 # 测试耗时画像与提速（2026-11-11 实测）
 
-**结论先行：全量 1499 用例从 421s 降到 255s（-40%），零代码改动——只调测试库
-durability 配置。** 剩余时间的 63% 集中在 925 个「1~3s」的数据库用例（每个
-用例都新建库 + 跑全量迁移），13% 集中在 7 个 git 重负载用例。
+**结论：全量墙钟 421s → 211s（-50%），零产品代码改动。** 两处杠杆：测试库
+durability 配置（-166s）与 git 夹具改用 `fast-import`（-41s）。
 
-## 1. 怎么测
+## 1. 怎么用
 
 ```bash
-bash scripts/setup-test-db.sh          # 一次性：测试库 durability 调优（4x）
-bash scripts/test-timing.sh            # 全量：编译 + 执行分阶段计时
+bash scripts/setup-test-db.sh              # 一次性：测试库调优（迁移 380ms→65ms）
+bash scripts/test-timing.sh                # 全量画像（编译+执行分阶段，per-test 计时）
 bash scripts/test-timing.sh -p pm-application --test docproc_pipeline
+
+cargo nextest run --profile fast           # 本地内环：排除真远端 SSH 套件
+cargo nextest run                          # 全套（含 e2e_flow 真远端）
 ```
 
 产出：`target/test-timing/{nextest.log,summary.txt}`（per-test 计时、套件聚合、
-耗时分布）。计时来自 nextest 每条用例的输出行，不是估算。
+分布）。计时取自 nextest 每条用例输出行，非估算。
 
-> 为什么不用 `cargo test`：libtest 的 `--report-time` 是 nightly-only；且
-> `cargo test` 串行跑测试二进制，nextest 是进程级并行 + 原生耗时统计。
+> 为什么不用 `cargo test`：libtest 的 `--report-time` 是 nightly-only；`cargo test`
+> 还按二进制串行。nextest 是进程级并行 + 原生耗时输出。
 
-## 2. 慢在哪（调优前 / 调优后）
+## 2. 三阶段实测
 
-| 指标 | 调优前 | 调优后 |
-|---|---|---|
-| 执行墙钟 | 421s | **255s** |
-| 用例 CPU 之和 | 4309s | **2391s** |
-| 并行效率 | 10.2x / 20 核 | 9.4x / 20 核 |
-| 单例均值 | 2.87s | 1.60s |
-| sqlx 用例建库+迁移 | 525ms | **130ms**（迁移 380→65ms） |
+| 阶段 | 用例数 | 执行墙钟 | CPU 之和 | 并行度 | 失败 |
+|---|---|---|---|---|---|
+| 基线（默认 durability） | 1499 | 421s | 4309s | 10.2x | 2（含 1 回归） |
+| ① 测试库 fsync=off | 1498 | 255s | 2391s | 9.4x | 0 |
+| ② + git fast-import 夹具 | 1499 | 214s | 2339s | 10.9x | 0 |
+| ③ + `--profile fast`（排除真远端） | 1491 | **211s** | 2298s | 10.9x | 0 |
 
-固定成本解剖（`cargo run -p pm-application --example testdb_bench`）：
+单例固定成本解剖（`cargo run -p pm-application --example testdb_bench`）：
 
 | 阶段 | 默认 durability | fsync=off |
 |---|---|---|
@@ -38,44 +39,39 @@ bash scripts/test-timing.sh -p pm-application --test docproc_pipeline
 | DROP DATABASE | 50ms | 12ms |
 | 合计 | **≈525ms** | **≈130ms** |
 
-**根因**：`#[sqlx::test]` 每个用例都 `CREATE DATABASE` + 重跑 17 个迁移（363 张
-表、索引、触发器、种子）。近 1400 个 sqlx 用例 ⇒ 每人 0.4~0.5s 纯 DDL；且
-20 路并行时 DDL 争用把单例耗时再放大 2 倍（串行 1.19s → 并行 2.5s）。
+**根因 1**：`#[sqlx::test]` 每用例 `CREATE DATABASE` + 重跑 17 个迁移（363 表）。
+近 1400 个 sqlx 用例 ⇒ 每人 0.4s 纯 DDL；20 路并行时 DDL 争用再把单例放大 2 倍
+（串行 1.19s → 并行 2.5s）。测试库数据可弃，`fsync/full_page_writes/
+synchronous_commit=off` 即可（`scripts/setup-test-db.sh`，仅限测试容器）。
 
-**为什么调 fsync 就够**：测试库每次用例新建、结束即删，没有需要保护的数据；
-DDL 密集负载下 WAL fsync 是主要等待点。
+**根因 2**：`repo_facts::collect_truncates_at_three_hundred_commits` 逐条
+`git add`+`git commit` 造 301 个提交 = 602 次进程 spawn；Windows 下单次 ≈70ms
+⇒ 单例 45~86s，是当时全量最大单例。改用一次 `git fast-import`（`Fixture::
+commit_many`）⇒ **1.18s（72x）**，套件 CPU 96s → 1.4s。
 
-## 3. 剩余热点（调优后 CPU 时间）
+## 3. 当前剩余热点（fast profile，CPU 时间）
 
-| 套件/用例 | 用例数 | 均值 | CPU 合计 |
+| 套件 | 用例数 | 均值 | CPU |
 |---|---|---|---|
-| `pm-application::knowledge_index_v2` | 29 | 4.56s | 132s |
-| `pm-application::delivery` | 24 | 4.06s | 97s |
-| `pm-application::repo_facts` | 5 | **19.2s** | 96s |
-| `pm-ai`（库内联单测） | 125 | 0.63s | 79s |
-| `pm-infrastructure::kb_pc_repo_flows` | 7 | 9.43s | 66s |
-| `pm-api::e2e_flow` | 7 | 7.98s | 56s |
+| `pm-application::knowledge_index_v2` | 29 | 4.91s | 142s |
+| `pm-application::delivery` | 24 | 4.38s | 105s |
+| `pm-ai`（库内单测） | 125 | 0.67s | 83s |
+| `pm-application`（lib 单测） | 141 | 0.42s | 60s |
+| `pm-infrastructure::kb_pc_repo_flows` | 7 | 7.43s | 52s |
+| `pm-application::review` | 14 | 3.69s | 52s |
 
-单例前 3 名（合计 157s CPU，占全量 6.6%）：
+这些是**真实工作量**（大文档索引 220 章节、并发语义用例 k29 单例 35s、真 git
+仓库提交链 + outbox 跑批），不是无谓开销。
 
-1. `repo_facts::collect_truncates_at_three_hundred_commits` — **85.7s**（造 300 个
-   git commit，每个都是一次进程 spawn）
-2. `e2e_flow::flow_04_cold_start_import_from_real_repo` — 36.6s（真仓库导入）
-3. `knowledge_index_v2::k29_two_pools_serialize_the_same_project...` — 34.7s
-   （并发语义用例，慢是设计意图）
+## 4. 还能做什么（按 ROI，未实施）
 
-耗时分布：`0–0.5s` 384 例（89s）｜`0.5–1s` 49 例（38s）｜`1–3s` **925 例
-（1501s）**｜`3–10s` 133 例（560s）｜`≥10s` 7 例（203s）。
-
-## 4. 还可以做的（未实施，按 ROI 排序）
-
-| 措施 | 预期收益 | 代价/风险 |
+| 措施 | 预期 | 代价 |
 |---|---|---|
-| 把 300-commit 用例降到 50 commit 或复用夹具仓库 | -60~80s CPU | 需确认用例语义（截断阈值断言） |
-| `git commit` 批量造历史改用 `git fast-import` | -50s CPU | 单点改造 |
-| nextest `-j` 调优（实测 j=13 时争用仍轻，j=20 效率 9.4x） | 墙钟 -10~20% | 需扫一遍最优值 |
-| release 档跑测试 | 解析/git 重负载显著变快 | 编译时间翻倍，CI 需权衡 |
-| 模板库（`CREATE DATABASE ... TEMPLATE`）替代逐用例迁移 | 再省 60ms/用例 | sqlx::test 不支持，需自建 fixture，改动面大 |
+| nextest `-j` 扫最优（当前 10.9x/20 核） | 墙钟 -10~20% | 需多轮全量测量 |
+| release 档跑测试（解析/git 重负载明显变快） | 执行 -30%+ | 编译时间翻倍 |
+| 模板库（`CREATE DATABASE ... TEMPLATE`）替代逐用例迁移 | 再省 65ms/用例 | sqlx::test 不支持，需自建 fixture，改动面大 |
+| `knowledge_index_v2` 的 220 章节夹具降到最低有效规模 | -30s CPU | 需逐用例确认断言阈值 |
+| 拆分 heavy 套件到独立 CI 分片（`--partition`） | 墙钟随分片数线性下降 | CI 侧配置 |
 
 ## 5. 复现命令
 
@@ -84,9 +80,10 @@ DDL 密集负载下 WAL fsync 是主要等待点。
 DATABASE_URL='postgres://aipm:aipm@127.0.0.1:16433/aipm' \
   cargo run -p pm-application --example testdb_bench
 
-# 并行争用曲线
-for J in 1 4 13; do cargo nextest run -p pm-application --test docproc_pipeline -j $J; done
+# 并行争用曲线（改 -j 看墙钟与 CPU 和）
+cargo nextest run -p pm-application --test docproc_pipeline -j 1
+cargo nextest run -p pm-application --test docproc_pipeline -j 13
 ```
 
-> DATABASE_URL 必须是 `127.0.0.1`（AGENTS.md 规则 3）；测试库容器
-> `aipm-pg-gate:16433`。
+> DATABASE_URL 必须用 `127.0.0.1`（AGENTS.md 规则 3：localhost 走 `::1` 黑洞）。
+> 测试库容器 `aipm-pg-gate:16433`。

@@ -4,6 +4,11 @@
 #
 # timing：耗时画像专用——JUnit 输出（per-test 计时真源）+ 放宽慢测试告警。
 #   用法：bash scripts/test-timing.sh [cargo/nextest 过滤参数]
+#
+# fast：本地内环快速验证——排除依赖**真实外网远端**的 `e2e_flow` 套件
+#   （GitLab/GitHub over SSH，可达性随网络波动；见 docs/ai-pm-test-performance-v1.md）。
+#   用法：cargo nextest run --profile fast
+#   全套（含真远端）仍是 `cargo nextest run`（default profile）。
 
 [profile.timing]
 slow-timeout = { period = "180s" }
@@ -12,3 +17,7 @@ slow-timeout = { period = "180s" }
 path = "target/test-timing/junit.xml"
 store-success-output = false
 store-failure-output = true
+
+[profile.fast]
+# 真远端前提检查 + 冷启动导入：外网可达性不是代码正确性，本地内环不跑。
+default-filter = "not binary(e2e_flow)"

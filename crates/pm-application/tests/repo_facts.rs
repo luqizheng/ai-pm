@@ -55,6 +55,77 @@ impl Fixture {
         self.git(&["-c", "commit.gpgsign=false", "commit", "-q", "-m", message]);
     }
 
+    fn git_stdout(&self, args: &[&str]) -> String {
+        let out = Command::new("git")
+            .args(args)
+            .current_dir(&self.repo)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "git {args:?} failed");
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    /// 用**一次** `git fast-import` 追加 `n` 个提交（每个提交只改 `path`）。
+    ///
+    /// 逐条 `git add -A` + `git commit` = 每次提交 2 次进程 spawn；Windows 下单次
+    /// spawn ≈70ms，301 次提交 ≈45s，是全量测试里最大的单例。fast-import 用单进程
+    /// 流式写入等价历史（提交数/顺序/subject 语义不变）。
+    fn commit_many(&self, n: usize, path: &str) {
+        let head = self.git_stdout(&["rev-parse", "HEAD"]);
+        let mut script = String::new();
+        for i in 0..n {
+            let subject = format!("chore: bump {i}");
+            let content = format!("{i}");
+            script.push_str("commit refs/heads/main");
+            script.push('\n');
+            script.push_str(&format!(
+                "committer Test <test@example.com> {} +0000",
+                1_700_000_000 + i as i64
+            ));
+            script.push('\n');
+            script.push_str(&format!("data {}", subject.len()));
+            script.push('\n');
+            script.push_str(&subject);
+            script.push('\n');
+            if i == 0 {
+                // from 必须在提交信息 data 之后（fast-import 的命令顺序），
+                // 且要显式接当前 HEAD，否则新链会被判为非快进而不更新 ref。
+                script.push_str(&format!("from {head}"));
+                script.push('\n');
+            }
+            script.push_str(&format!("M 100644 inline {path}"));
+            script.push('\n');
+            script.push_str(&format!("data {}", content.len()));
+            script.push('\n');
+            script.push_str(&content);
+            script.push('\n');
+        }
+        script.push_str("done");
+        script.push('\n');
+
+        self.fast_import(&script);
+    }
+
+    /// 管道写入 fast-import 脚本（一次进程）。
+    fn fast_import(&self, script: &str) {
+        let mut child = Command::new("git")
+            .arg("fast-import")
+            .arg("--quiet")
+            .current_dir(&self.repo)
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        use std::io::Write as _;
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(script.as_bytes())
+            .unwrap();
+        let status = child.wait().unwrap();
+        assert!(status.success(), "git fast-import failed");
+    }
+
     fn url(&self) -> String {
         format!("file://{}", self.repo.to_string_lossy().replace('\\', "/"))
     }
@@ -109,10 +180,9 @@ async fn collect_truncates_at_three_hundred_commits() {
     let fx = Fixture::new();
     fx.write("README.md", b"# demo\n");
     fx.commit_all("init");
-    for i in 0..300 {
-        fx.write("counter.txt", format!("{i}\n").as_bytes());
-        fx.commit_all(&format!("chore: bump {i}"));
-    }
+    // 301 个提交（init + 300）一次 fast-import 造出：断言的是提交数与截断标志，
+    // 逐条 add+commit 在 Windows 上要 600 次进程 spawn（≈45s）。
+    fx.commit_many(300, "counter.txt");
 
     let facts = clone_and_collect(&fx, Limits::default()).await;
     assert_eq!(facts.commits.len(), 300);
