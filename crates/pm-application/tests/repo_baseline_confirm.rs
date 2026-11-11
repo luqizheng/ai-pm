@@ -3,13 +3,12 @@
 //! 覆盖：接入即确认（首条确认记录）、人类确认更新（append-only 历史 + previous
 //! 值可追溯）、PATCH 不得触碰 Confirmed 基准、归档后禁止确认、缺分支拒绝。
 
+mod common;
 use pm_application::actor::AuditActor;
-use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::repository::{
     archive_repository, confirm_repository_version, create_repository, update_repository,
     ConfirmVersionRequest, CreateRepositoryRequest, RepositoryError, UpdateRepositoryRequest,
 };
-use pm_domain::SYSTEM_TENANT;
 use sqlx::{query_scalar, PgPool};
 use uuid::Uuid;
 
@@ -18,17 +17,7 @@ fn actor(principal_id: Uuid) -> AuditActor {
 }
 
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
-    let o = bootstrap_project(
-        pool,
-        BootstrapRequest {
-            project_code: code.to_string(),
-            project_name: code.to_string(),
-            tenant_id: SYSTEM_TENANT,
-        },
-    )
-    .await
-    .unwrap();
-    o.project_id
+    common::bootstrap_system_project(pool, code).await.0
 }
 
 async fn principal_id(pool: &PgPool) -> Uuid {

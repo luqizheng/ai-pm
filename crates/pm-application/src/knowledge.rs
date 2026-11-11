@@ -11,7 +11,6 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 use chrono::{DateTime, Utc};
-use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -697,14 +696,9 @@ pub async fn delete_document(
     Ok(())
 }
 
-/// Lowercase hex sha256 used for `content_hash`.
+/// Lowercase hex sha256 used for `content_hash`（摘要原语单源：`pm_write::hex_sha256`）。
 pub fn content_hash(markdown: &str) -> String {
-    let digest = Sha256::digest(markdown.as_bytes());
-    let mut out = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        out.push_str(&format!("{byte:02x}"));
-    }
-    out
+    crate::pm_write::hex_sha256(markdown.as_bytes())
 }
 
 pub(crate) fn safe_join(root: &Path, relative: &str) -> Result<PathBuf, KnowledgeError> {

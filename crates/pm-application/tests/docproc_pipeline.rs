@@ -151,8 +151,7 @@ async fn upload_dedup_and_versions(pool: PgPool) {
         100 * 1024 * 1024,
     )
     .await
-    .err()
-    .expect("must reject exe");
+    .expect_err("must reject exe");
     assert!(matches!(err, svc::DocprocError::UnsupportedFormat(_)));
 }
 
@@ -764,8 +763,7 @@ async fn kb_confirm_rejects_checksum_drift(pool: PgPool) {
         &actor,
     )
     .await
-    .err()
-    .expect("drift must be rejected");
+    .expect_err("drift must be rejected");
     assert!(
         matches!(err, pm_application::kb_service::KbServiceError::Conflict(_)),
         "got {err:?}"

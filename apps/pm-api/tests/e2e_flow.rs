@@ -501,7 +501,7 @@ async fn flow_04_cold_start_import_from_real_repo(pool: PgPool) {
     for proposal in proposals {
         let count = proposal["item_count"].as_u64().unwrap_or(u64::MAX);
         assert!(
-            count >= 1 && count <= 200,
+            (1..=200).contains(&count),
             "each proposal must stay within the executor batch limit: {proposal}"
         );
     }

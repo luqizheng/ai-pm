@@ -222,7 +222,7 @@ async fn ingest_kb_document(
             &caller.audit_actor(),
         )
         .await
-        .map_err(|e| ApiError::from(e))?;
+        .map_err(ApiError::from)?;
     Ok(Json(json!({
         "document_id": document_id,
         "revision_id": revision_id,

@@ -142,6 +142,5 @@ pub(crate) fn check_len(
 }
 
 /// 唯一约束冲突 → 业务冲突（并发提案撞单 pending 索引等）。
-pub(crate) fn is_unique_violation(err: &sqlx::Error) -> bool {
-    matches!(err, sqlx::Error::Database(db) if db.code().as_deref() == Some("23505"))
-}
+/// 单一定义点：`pm_write::is_unique_violation`（批 A1 归并）。
+pub(crate) use crate::pm_write::is_unique_violation;

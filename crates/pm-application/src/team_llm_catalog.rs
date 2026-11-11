@@ -148,8 +148,8 @@ pub struct PolicyItem {
 
 // ─────────────────────────────────────────────────────────── 审计
 
-/// 目录/策略事件审计（SQL 与 team_llm::insert_tenant_audit 同构；target_type
-/// 走通用列：`llm_model` / `llm_team_policy` / `llm_project_policy`）。
+/// 目录/策略事件审计（SQL 单源：`pm_write::insert_tenant_audit`，批 A2 归并；
+/// target_type 走通用列：`llm_model` / `llm_team_policy` / `llm_project_policy`）。
 async fn insert_catalog_audit(
     tx: &mut Transaction<'static, Postgres>,
     tenant_id: Uuid,
@@ -158,24 +158,17 @@ async fn insert_catalog_audit(
     target_id: Uuid,
     after: Option<serde_json::Value>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "INSERT INTO governance.tenant_audit_log \
-         (tenant_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
-          action, target_type, target_id, target_principal_id, before_data, after_data) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'llm_model', $8, NULL, NULL, $9)",
+    crate::pm_write::insert_tenant_audit(
+        tx,
+        tenant_id,
+        actor,
+        action,
+        "llm_model",
+        target_id,
+        None,
+        after,
     )
-    .bind(tenant_id)
-    .bind(actor.principal_id)
-    .bind(actor.identity_id)
-    .bind(&actor.client)
-    .bind(&actor.auth_mode)
-    .bind(actor.claimed_device_id)
-    .bind(action)
-    .bind(target_id)
-    .bind(after)
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
+    .await
 }
 
 // ─────────────────────────────────────────────────────────── 读取
@@ -185,24 +178,8 @@ const MODEL_SELECT: &str = "SELECT m.id, m.provider_id, p.name AS provider_name,
     m.revision, m.created_by, m.created_at, m.updated_at \
     FROM ai.team_llm_model m JOIN ai.team_llm_provider p ON p.id = m.provider_id AND p.tenant_id = m.tenant_id";
 
-fn map_model_row(
-    row: (
-        Uuid,
-        Uuid,
-        String,
-        String,
-        String,
-        Vec<String>,
-        Option<i32>,
-        bool,
-        String,
-        Option<DateTime<Utc>>,
-        i64,
-        Uuid,
-        DateTime<Utc>,
-        DateTime<Utc>,
-    ),
-) -> ModelRow {
+// 14 列投影元组，行结构由 MODEL_SELECT 固定（定义见下方 ModelTuple）。
+fn map_model_row(row: ModelTuple) -> ModelRow {
     ModelRow {
         id: row.0,
         provider_id: row.1,

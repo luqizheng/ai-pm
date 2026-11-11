@@ -480,13 +480,13 @@ pub async fn project_dependency_graph(
     })
 }
 
+/// 图分析四元组：(分层, 关键路径, 并行组, 环)。
+type GraphAnalysis = (Vec<Vec<Uuid>>, Vec<Uuid>, Vec<Vec<Uuid>>, Vec<Vec<Uuid>>);
+
 /// 图分析：分层（最长路径）、关键路径、并行组、环检测。
 ///
 /// 全部为 O(V+E) 级别的投影算法（Kahn 拓扑 + 最长路径 DP），不是完整 CPM。
-fn analyze_graph(
-    nodes: &[DependencyGraphNode],
-    edges: &[DependencyGraphEdge],
-) -> (Vec<Vec<Uuid>>, Vec<Uuid>, Vec<Vec<Uuid>>, Vec<Vec<Uuid>>) {
+fn analyze_graph(nodes: &[DependencyGraphNode], edges: &[DependencyGraphEdge]) -> GraphAnalysis {
     let ids: Vec<Uuid> = nodes.iter().map(|node| node.id).collect();
     let index: std::collections::HashMap<Uuid, usize> =
         ids.iter().enumerate().map(|(i, id)| (*id, i)).collect();
@@ -978,16 +978,16 @@ pub async fn set_task_schedule(
         }
     }
     let mut tx = pool.begin().await.map_err(PmWriteError::Db)?;
-    let before: Option<(Option<DateTime<Utc>>, Option<DateTime<Utc>>, Option<f64>)> =
-        sqlx::query_as(
-            "SELECT planned_start_at, planned_end_at, estimate_hours FROM delivery.task \
+    type TaskScheduleRow = (Option<DateTime<Utc>>, Option<DateTime<Utc>>, Option<f64>);
+    let before: Option<TaskScheduleRow> = sqlx::query_as(
+        "SELECT planned_start_at, planned_end_at, estimate_hours FROM delivery.task \
              WHERE tenant_id = $1 AND id = $2",
-        )
-        .bind(tenant_id)
-        .bind(task_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(PmWriteError::Db)?;
+    )
+    .bind(tenant_id)
+    .bind(task_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(PmWriteError::Db)?;
     let before = before.ok_or(PmWriteError::NotFound("task not found"))?;
     let project_id: Uuid =
         sqlx::query_scalar("SELECT project_id FROM delivery.task WHERE tenant_id = $1 AND id = $2")

@@ -32,7 +32,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::actor::AuditActor;
-use crate::pm_write::{append_audit, hex_sha256, PmWriteError};
+use crate::pm_write::{append_audit, hex_sha256, lock_head_row, lock_revision_row, PmWriteError};
 
 pub const REQUIREMENT_TYPES: [&str; 2] = ["functional", "non_functional"];
 pub const REQUIREMENT_PRIORITIES: [&str; 3] = ["low", "normal", "high"];
@@ -267,40 +267,42 @@ async fn fetch_entry(
 }
 
 /// 需求行加锁读取（写命令公共前置：租户边界 + 行锁）。
+/// （通用实现见 `pm_write::lock_head_row`。）
 async fn lock_requirement(
     tx: &mut sqlx::PgConnection,
     tenant_id: Uuid,
     requirement_id: Uuid,
 ) -> Result<(Uuid, String, Option<Uuid>, i64), PmWriteError> {
-    sqlx::query_as(
-        "SELECT project_id, lifecycle_status, current_revision_id, row_revision \
-         FROM delivery.requirement WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+    lock_head_row(
+        tx,
+        tenant_id,
+        requirement_id,
+        "delivery.requirement",
+        "lifecycle_status",
+        "requirement not found",
     )
-    .bind(requirement_id)
-    .bind(tenant_id)
-    .fetch_optional(&mut *tx)
     .await
-    .map_err(PmWriteError::Db)?
-    .ok_or(PmWriteError::NotFound("requirement not found"))
 }
 
 /// 修订行加锁读取：(version, state, content_hash, markdown_version_ref)。
+/// （通用实现见 `pm_write::lock_revision_row`；本表旧版锁缺租户过滤，此处补上。）
 async fn lock_revision(
     tx: &mut sqlx::PgConnection,
+    tenant_id: Uuid,
     requirement_id: Uuid,
     revision_id: Uuid,
 ) -> Result<(i32, String, String, Option<String>), PmWriteError> {
-    sqlx::query_as(
-        "SELECT version, state, content_hash, markdown_version_ref \
-         FROM delivery.requirement_revision \
-         WHERE id = $1 AND requirement_id = $2 FOR UPDATE",
+    lock_revision_row(
+        tx,
+        tenant_id,
+        revision_id,
+        requirement_id,
+        "delivery.requirement_revision",
+        "requirement_id",
+        "version, state, content_hash, markdown_version_ref",
+        "revision not found",
     )
-    .bind(revision_id)
-    .bind(requirement_id)
-    .fetch_optional(&mut *tx)
     .await
-    .map_err(PmWriteError::Db)?
-    .ok_or(PmWriteError::NotFound("revision not found"))
 }
 
 /// 写命令公共前置：需求必须 active（withdrawn/archived 不再接受新的治理写入；
@@ -619,7 +621,7 @@ pub async fn update_draft(
         lock_requirement(&mut tx, tenant_id, requirement_id).await?;
     ensure_active(&lifecycle)?;
 
-    let (_, state, _, _) = lock_revision(&mut tx, requirement_id, revision_id).await?;
+    let (_, state, _, _) = lock_revision(&mut tx, tenant_id, requirement_id, revision_id).await?;
     if state != "draft" {
         return Err(PmWriteError::Conflict("only draft revisions can be edited"));
     }
@@ -700,7 +702,7 @@ pub async fn submit_revision(
         lock_requirement(&mut tx, tenant_id, requirement_id).await?;
     ensure_active(&lifecycle)?;
 
-    let (_, state, _, _) = lock_revision(&mut tx, requirement_id, revision_id).await?;
+    let (_, state, _, _) = lock_revision(&mut tx, tenant_id, requirement_id, revision_id).await?;
     let (markdown,): (Option<String>,) = sqlx::query_as(
         "SELECT content->>'markdown' FROM delivery.requirement_revision WHERE id = $1",
     )
@@ -816,7 +818,7 @@ pub async fn confirm_revision(
     }
 
     let (_, state, content_hash, markdown_version_ref) =
-        lock_revision(&mut tx, requirement_id, revision_id).await?;
+        lock_revision(&mut tx, tenant_id, requirement_id, revision_id).await?;
     if state != "pending_confirmation" {
         return Err(PmWriteError::Conflict(
             "revision is not pending confirmation",
@@ -928,7 +930,7 @@ pub async fn reject_revision(
     crate::approver::ensure_governance_authorized(pool, project_id, actor.principal_id).await?;
 
     let (_, state, content_hash, markdown_version_ref) =
-        lock_revision(&mut tx, requirement_id, revision_id).await?;
+        lock_revision(&mut tx, tenant_id, requirement_id, revision_id).await?;
     if state != "pending_confirmation" {
         return Err(PmWriteError::Conflict(
             "revision is not pending confirmation",

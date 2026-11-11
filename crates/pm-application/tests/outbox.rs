@@ -1,24 +1,13 @@
 //! Outbox 写入端口的事务语义（spec §20.6.1 / §20.6.3）：事件随业务事务一起
 //! 提交才可见、回滚即随之消失、重复的语义事件按幂等键坍缩为一行。
 
-use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+mod common;
 use pm_application::outbox::{OutboxAppend, OutboxEvent, PgOutboxAppend};
-use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
 
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
-    bootstrap_project(
-        pool,
-        BootstrapRequest {
-            project_code: code.to_string(),
-            project_name: code.to_string(),
-            tenant_id: SYSTEM_TENANT,
-        },
-    )
-    .await
-    .unwrap()
-    .project_id
+    common::bootstrap_system_project(pool, code).await.0
 }
 
 fn event<'a>(project_id: Uuid, key: &'a str) -> OutboxEvent<'a> {

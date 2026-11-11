@@ -10,7 +10,7 @@
 //! | E-03 | 幂等键是 `run_completed:<run_id>` |
 //! | E-19 | 环境变量**不能**开启无 handler 事件；未登记类型一律禁产 |
 
-use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
+mod common;
 use pm_application::outbox::{
     event_is_enabled, event_spec, handled_event_types, OutboxAppend, OutboxEvent, PgOutboxAppend,
     CATALOG,
@@ -19,20 +19,9 @@ use pm_application::run_dispatch::NoopExecutor;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use pm_domain::SYSTEM_TENANT;
 
 async fn seed_project(pool: &PgPool, code: &str) -> Uuid {
-    let outcome = bootstrap_project(
-        pool,
-        BootstrapRequest {
-            project_code: code.to_string(),
-            project_name: code.to_string(),
-            tenant_id: SYSTEM_TENANT,
-        },
-    )
-    .await
-    .expect("bootstrap project");
-    outcome.project_id
+    common::bootstrap_system_project(pool, code).await.0
 }
 
 /// 建一条处于 `claimed` 态的 delivery run（终态路径的前置状态）。

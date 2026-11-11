@@ -126,7 +126,7 @@ fn docx_list_items_become_bullets() {
 #[test]
 fn docx_list_numpr_becomes_bullet() {
     // 带 numPr 的段落 → "- "。
-    let mut docx = build_docx(&[("Heading1", "清单")]);
+    let docx = build_docx(&[("Heading1", "清单")]);
     // 追加一个带 numPr 的段落（重写构造：直接拼 XML）。
     let document_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>

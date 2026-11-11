@@ -25,7 +25,10 @@ use uuid::Uuid;
 
 use crate::actor::AuditActor;
 use crate::design::{ApprovalView, DECIDE_APPROVAL_ACTIONS};
-use crate::pm_write::{append_audit, append_audit_with_after, hex_sha256, PmWriteError};
+use crate::pm_write::{
+    append_audit, append_audit_with_after, content_hash_of, is_unique_violation, lock_head_row,
+    lock_revision_row, next_code, transition_or_conflict, PmWriteError,
+};
 use crate::requirement::require_human_conn;
 
 // ───────────────────────────────────────────────────────────────────── 视图
@@ -151,10 +154,6 @@ const PLAN_VIEW_COLS: &str = "SELECT p.id, p.project_id, p.code, p.title, p.stat
 
 const PLAN_FROM: &str = "FROM plan.task_plan p";
 
-fn is_unique_violation(e: &sqlx::Error) -> bool {
-    matches!(e, sqlx::Error::Database(db) if db.code().as_deref() == Some("23505"))
-}
-
 /// 草案规范化：键非空唯一、标题非空、验收每条非空、依赖只指向更早出现的键
 /// （前向图，与 discovery_writeback::validate_task_batch 同款系统侧纪律）。
 pub fn validate_plan_tasks(tasks: &[PlanTaskDraft]) -> Result<(), String> {
@@ -205,62 +204,52 @@ fn build_revision_content(tasks: &[PlanTaskDraft]) -> Value {
     json!({ "tasks": tasks })
 }
 
-fn content_hash_of(content: &Value) -> String {
-    let bytes = serde_json::to_vec(content).expect("serialize content");
-    hex_sha256(&bytes)
-}
-
+/// 项目内顺序发号（通用实现见 `pm_write::next_code`）。
 pub(crate) async fn next_plan_code(
     conn: &mut sqlx::PgConnection,
     tenant_id: Uuid,
     project_id: Uuid,
 ) -> Result<String, sqlx::Error> {
-    let max: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(NULLIF(regexp_replace(code, '\\D', '', 'g'), '')::bigint), 0) \
-         FROM plan.task_plan WHERE tenant_id = $1 AND project_id = $2 AND code LIKE 'TP-%'",
-    )
-    .bind(tenant_id)
-    .bind(project_id)
-    .fetch_one(&mut *conn)
-    .await?;
-    Ok(format!("TP-{:03}", max + 1))
+    next_code(conn, tenant_id, project_id, "plan.task_plan", "TP").await
 }
 
+/// 加锁读计划头行：(project_id, status, current_revision_id, row_revision)。
+/// （通用实现见 `pm_write::lock_head_row`。）
 async fn lock_plan(
     conn: &mut sqlx::PgConnection,
     tenant_id: Uuid,
     plan_id: Uuid,
 ) -> Result<(Uuid, String, Option<Uuid>, i64), PmWriteError> {
-    sqlx::query_as(
-        "SELECT project_id, status, current_revision_id, row_revision \
-         FROM plan.task_plan WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+    lock_head_row(
+        conn,
+        tenant_id,
+        plan_id,
+        "plan.task_plan",
+        "status",
+        "task plan not found",
     )
-    .bind(plan_id)
-    .bind(tenant_id)
-    .fetch_optional(&mut *conn)
     .await
-    .map_err(PmWriteError::Db)?
-    .ok_or(PmWriteError::NotFound("task plan not found"))
 }
 
+/// 加锁读修订行：(version, state, content_hash, content)。
+/// （通用实现见 `pm_write::lock_revision_row`。）
 async fn lock_plan_revision(
     conn: &mut sqlx::PgConnection,
     tenant_id: Uuid,
     plan_id: Uuid,
     revision_id: Uuid,
 ) -> Result<(i32, String, String, Value), PmWriteError> {
-    sqlx::query_as(
-        "SELECT version, state, content_hash, content \
-         FROM plan.task_plan_revision \
-         WHERE id = $1 AND plan_id = $2 AND tenant_id = $3 FOR UPDATE",
+    lock_revision_row(
+        conn,
+        tenant_id,
+        revision_id,
+        plan_id,
+        "plan.task_plan_revision",
+        "plan_id",
+        "version, state, content_hash, content",
+        "task plan revision not found",
     )
-    .bind(revision_id)
-    .bind(plan_id)
-    .bind(tenant_id)
-    .fetch_optional(&mut *conn)
     .await
-    .map_err(PmWriteError::Db)?
-    .ok_or(PmWriteError::NotFound("task plan revision not found"))
 }
 
 async fn fetch_revision_view(
@@ -291,19 +280,6 @@ fn parse_status(status: &str) -> Result<TaskPlanStatus, PmWriteError> {
 fn parse_revision_state(state: &str) -> Result<TaskPlanRevisionState, PmWriteError> {
     TaskPlanRevisionState::parse(state)
         .ok_or_else(|| PmWriteError::Validation("unknown plan revision state"))
-}
-
-fn transition_or_conflict<S: Copy>(
-    legal: impl Fn(S, S) -> bool,
-    from: S,
-    to: S,
-    what: &'static str,
-) -> Result<(), PmWriteError> {
-    if legal(from, to) {
-        Ok(())
-    } else {
-        Err(PmWriteError::Conflict(what))
-    }
 }
 
 async fn materialized_tasks_of(
@@ -700,28 +676,23 @@ pub async fn request_plan_approval(
     .await
     .map_err(PmWriteError::Db)?
     .ok_or(PmWriteError::Conflict("plan has no submitted revision"))?;
-    let approval_id = Uuid::new_v4();
-    sqlx::query(
-        "INSERT INTO design.design_approval \
-         (id, tenant_id, project_id, kind, plan_id, target_id, target_hash, requested_by) \
-         VALUES ($1, $2, $3, 'task_plan', $4, $5, $6, $7)",
+    // target_id = 当前修订（in_review 计划必有 current_revision_id；上一步
+    // hash 抓取已对 None 报 Conflict，此处解包不改变可观察行为）。
+    let target_revision_id =
+        current_revision_id.ok_or(PmWriteError::Conflict("plan has no submitted revision"))?;
+    let approval_id = crate::design::insert_design_approval(
+        &mut tx,
+        tenant_id,
+        project_id,
+        "task_plan",
+        "plan_id",
+        plan_id,
+        target_revision_id,
+        &content_hash,
+        actor.principal_id,
+        "an approval is already pending for this plan",
     )
-    .bind(approval_id)
-    .bind(tenant_id)
-    .bind(project_id)
-    .bind(plan_id)
-    .bind(current_revision_id)
-    .bind(&content_hash)
-    .bind(actor.principal_id)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| {
-        if is_unique_violation(&e) {
-            PmWriteError::Conflict("an approval is already pending for this plan")
-        } else {
-            PmWriteError::Db(e)
-        }
-    })?;
+    .await?;
     append_audit(
         &mut tx,
         project_id,
@@ -1115,7 +1086,8 @@ pub async fn prepare_handoff(
     task_id: Uuid,
 ) -> Result<Value, PmWriteError> {
     // 任务归属 + 计划锚定（跨租户按不存在处理）。
-    let row: Option<(Uuid, String, String, Option<Uuid>, Option<String>)> = sqlx::query_as(
+    type HandoffTaskRow = (Uuid, String, String, Option<Uuid>, Option<String>);
+    let row: Option<HandoffTaskRow> = sqlx::query_as(
         "SELECT t.project_id, t.status, t.title, t.plan_revision_id, t.plan_task_key \
          FROM delivery.task t WHERE t.id = $1 AND t.tenant_id = $2",
     )

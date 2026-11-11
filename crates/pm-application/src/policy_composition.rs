@@ -18,7 +18,6 @@
 use std::collections::BTreeSet;
 
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 
 /// 快照模式标识：既写入 `policy_snapshot.snapshot_scope`，也参与哈希。
 /// 语义变更（例如将来引入分动作审批字段）必须升版本，避免同 hash 不同含义。
@@ -113,7 +112,7 @@ impl EffectivePolicy {
         };
         let bytes = serde_json::to_vec(&payload)
             .expect("policy hash payload only contains serializable primitives");
-        hex(&Sha256::digest(&bytes))
+        crate::pm_write::hex_sha256(&bytes)
     }
 
     /// 内容寻址版本号：`policy_hash` 的前 12 位。
@@ -167,16 +166,6 @@ fn union_checks(layers: &[&PolicyLayer]) -> Vec<serde_json::Value> {
 
 fn canonical_check(value: &serde_json::Value) -> String {
     serde_json::to_string(value).expect("serde_json::Value is always serializable")
-}
-
-fn hex(bytes: &[u8]) -> String {
-    const DIGITS: &[u8; 16] = b"0123456789abcdef";
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        out.push(DIGITS[(byte >> 4) as usize] as char);
-        out.push(DIGITS[(byte & 0x0f) as usize] as char);
-    }
-    out
 }
 
 #[cfg(test)]
