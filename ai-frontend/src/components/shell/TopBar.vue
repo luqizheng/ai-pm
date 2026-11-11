@@ -5,6 +5,7 @@ import { useRouter } from "vue-router";
 import { Search, Sparkles } from "lucide-vue-next";
 
 import { resolveAvatarSrc } from "@/api/base/self-service";
+import { LocaleToggle } from "@/components/global/locale";
 import NotificationDropdown from "@/components/global/notification/NotificationDropdown.vue";
 import { ThemeToggle } from "@/components/global/theme";
 import TeamSwitcher from "@/components/global/team/TeamSwitcher.vue";
@@ -31,7 +32,8 @@ import { useTeamStore } from "@/stores/team";
  *     + 项目切换器（Figma「06 — Project Context Switcher」33:82961，
  *     Global/ProjectSwitcher 五态 Trigger + Menu）
  * 中：全局搜索 / 命令面板入口（⌘ K）
- * 右：通知（下拉）、主题快捷开关（深/浅往返）、全局 AI 助手入口、
+ * 右：语言快捷开关（中/英往返）、通知（下拉）、主题快捷开关（深/浅往返）、
+ *     全局 AI 助手入口、
  *     帮助（菜单 + 快捷键对话框）、账户菜单（含退出登录确认）
  *
  * 按 Shell V1.1 限制：**不引入 Workspace Switcher**——
@@ -238,6 +240,9 @@ async function onSignOutConfirm() {
 
     <!-- 右：全局工具区 -->
     <div class="shell-topbar__right">
+      <!-- 语言快捷开关（铃铛旁：中/英单击往返；与设置偏好页同源 lib/i18n） -->
+      <LocaleToggle />
+
       <!-- 通知下拉（铃铛触发，含文本未读徽标；Global/Notification 族） -->
       <NotificationDropdown
         @open="onOpenNotification"

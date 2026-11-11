@@ -44,6 +44,8 @@ shell:
     switchTo: Switch to {language}
     zh-CN: 中文
     en: English
+    shortZh: 中
+    shortEn: EN
   login:
     title: AI-PM Console
     tagline: Projects, requirements, tasks and approvals on one spine

@@ -44,6 +44,8 @@ shell:
     switchTo: 切换到 {language}
     zh-CN: 中文
     en: English
+    shortZh: 中
+    shortEn: EN
   login:
     title: AI-PM 平台
     tagline: 项目、需求、任务与审批，走同一条主干
