@@ -388,11 +388,40 @@ async fn c99_c131_active_review_does_not_block_delivery_and_is_unique_per_task(p
 // C100：自动闭环
 // ---------------------------------------------------------------------------
 
+/// 显式授权 auto_accept（DEF-P0-01 默认拒绝后，**自动闭环必须显式配置**）。
+///
+/// 能力类字段在**所有适用层**都须显式允许；此处任务无 task_type，适用层为
+/// organization + project。
+async fn allow_auto_accept(pool: &PgPool, project_id: Uuid, actor: Uuid) {
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    for (scope, key) in [
+        ("organization", "*".to_string()),
+        ("project", project_id.to_string()),
+    ] {
+        sqlx::query(
+            "INSERT INTO delivery.policy_scope              (scope, scope_key, require_human_approval, auto_accept, auto_merge,               auto_publish_knowledge, updated_by, tenant_id)              VALUES ($1, $2, false, true, true, true, $3, $4)              ON CONFLICT (tenant_id, scope, scope_key) DO UPDATE SET                 auto_accept = true, auto_merge = true, auto_publish_knowledge = true",
+        )
+        .bind(scope)
+        .bind(&key)
+        .bind(actor)
+        .bind(tenant_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+}
+
 #[sqlx::test(migrations = "../../migrations")]
 async fn c100_delivered_auto_accept_completes_with_proposal_and_events(pool: PgPool) {
     enable_notification_events();
     let fx = seed_delivered(&pool, "D5-C100", true, "passed").await;
     insert_criterion(&pool, fx.project_id, fx.task_id, 10, "automated_test").await;
+    // DEF-P0-01 默认拒绝：自动闭环需**显式授权**（无配置即不得自动放行）。
+    allow_auto_accept(&pool, fx.project_id, fx.human_id).await;
 
     let queued = enqueue_review(&pool, fx.project_id, fx.task_id)
         .await
@@ -464,6 +493,48 @@ async fn c100_delivered_auto_accept_completes_with_proposal_and_events(pool: PgP
         "an event without a handler must not be produced: {events:?}"
     );
     assert_eq!(audit_count(&pool, "review.completed").await, 1);
+}
+
+// ---------------------------------------------------------------------------
+// C102：默认拒绝（DEF-P0-01）——无任何策略授权时不得自动放行
+// ---------------------------------------------------------------------------
+
+/// 未显式授权 auto_accept（无任何 policy_scope 行）→ 交付评审**不得**自动完成，
+/// 必须停在人工审批门（auto_accept_gate）。这是 DEF-P0-01 在业务层的断言：
+/// 「没有明确授权 = 不允许」。
+#[sqlx::test(migrations = "../../migrations")]
+async fn c102_default_deny_stops_at_approval_gate_without_explicit_authorization(pool: PgPool) {
+    let fx = seed_delivered(&pool, "D5-C102", true, "passed").await;
+    insert_criterion(&pool, fx.project_id, fx.task_id, 10, "automated_test").await;
+
+    // **不**调用 allow_auto_accept —— 没有任何显式授权。
+    enqueue_review(&pool, fx.project_id, fx.task_id)
+        .await
+        .unwrap();
+    let step = review_step(&pool, &outbox(), &ReviewConfig::from_env())
+        .await
+        .unwrap();
+    let ReviewStep::Reviewed {
+        verdict, advance, ..
+    } = step
+    else {
+        panic!("expected a reviewed step, got {step:?}");
+    };
+    assert_eq!(verdict, "approved");
+    let AdvanceOutcome::AwaitingApproval { approval_id, kind } = advance else {
+        panic!("default deny must stop at the approval gate, got {advance:?}");
+    };
+    assert_eq!(kind, "auto_accept_gate");
+
+    // 任务停在 reviewing（未完成）+ 落 pending 审批行。
+    assert_eq!(task_status(&pool, fx.task_id).await, "reviewing");
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM governance.review_approval WHERE id = $1")
+            .bind(approval_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "pending");
 }
 
 // ---------------------------------------------------------------------------

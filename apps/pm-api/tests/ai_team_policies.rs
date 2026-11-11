@@ -203,8 +203,8 @@ async fn audit_rows(pool: &PgPool, project_id: Uuid, action: &str) -> Vec<(Value
 }
 
 /// 空态读面：org/project 行缺失 = null、task_types/overrides 空、composition
-/// 默认值照 `policy_composition::compose` 代码事实（能力默认允许、审批默认
-/// 不要求、额外校验空）。
+/// 默认值照 `policy_composition::compose` 代码事实（**能力默认拒绝**
+/// ——DEF-P0-01：没有明确授权 = 不允许；审批默认不要求、额外校验空）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn read_empty_state_composition_defaults(pool: PgPool) {
     let tenant_id = seed_tenant(&pool, "61").await;
@@ -226,9 +226,10 @@ async fn read_empty_state_composition_defaults(pool: PgPool) {
         composition["layer_order"],
         json!(["organization", "project", "task_type", "task"])
     );
-    assert_eq!(composition["defaults"]["auto_accept"], true);
-    assert_eq!(composition["defaults"]["auto_merge"], true);
-    assert_eq!(composition["defaults"]["auto_publish_knowledge"], true);
+    // DEF-P0-01：空态（无任何策略行）= 无明确授权 = **默认拒绝**。
+    assert_eq!(composition["defaults"]["auto_accept"], false);
+    assert_eq!(composition["defaults"]["auto_merge"], false);
+    assert_eq!(composition["defaults"]["auto_publish_knowledge"], false);
     assert_eq!(composition["defaults"]["require_human_approval"], false);
     assert_eq!(composition["defaults"]["additional_checks"], json!([]));
     let rules = composition["rules"].as_array().unwrap();
@@ -236,6 +237,14 @@ async fn read_empty_state_composition_defaults(pool: PgPool) {
     assert!(
         rules.iter().any(|r| r["key"] == "constraints"),
         "constraints rule (高层强制审批低层不得放宽) must be present"
+    );
+    // 对外口径必须写明默认拒绝（不得再宣称「无表态时默认允许」）。
+    assert!(
+        rules.iter().any(|r| r["key"] == "capabilities" && r["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("默认拒绝")),
+        "capabilities rule must state the default-deny semantics"
     );
 }
 

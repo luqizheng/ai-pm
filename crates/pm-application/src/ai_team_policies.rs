@@ -14,13 +14,17 @@
 //!   task_type 行按租户全域（scope_key = 任务类型文本，跨项目口径）；任务
 //!   覆盖按项目列出。
 //! - 合成规则（[`policy_composition::EffectivePolicy::compose`]）：
-//!   * 能力类（auto_accept/auto_merge/auto_publish_knowledge）各表态层取交集，
-//!     缺层/NULL = 不表态（放行），全空表 = 默认允许；
+//!   * 能力类（auto_accept/auto_merge/auto_publish_knowledge）各存在层取交集，
+//!     **默认拒绝**（DEF-P0-01）：缺层不参与投票，但存在层内 NULL = 未授权 →
+//!     拒绝；全空表 = 无明确授权 → 拒绝；
 //!   * 约束类 require_human_approval 任一层 true 即 true（高层强制审批、
 //!     低层不得放宽），默认 false；
 //!   * require_human_approval=true 时否决 auto_accept（auto_merge 与
 //!     auto_publish_knowledge 独立判定，不受牵连）；
 //!   * additional_checks 各层并集去重（规范化 JSON 排序）。
+//! - **默认拒绝**（DEF-P0-01 / DR-C2）：无明确授权 = DENY；能力类字段由
+//!   「缺层放行」改为「存在层内沉默即拒绝」，合成结果变更 → policy schema
+//!   升为 `composed-v2`（同 hash 不得不同含义）。
 //! - **V1 写面限定**：只有 project 层与 task 覆盖层可写；organization 影响
 //!   租户全局 '*'、task_type 跨项目，写入口留待显式裁决（REST 层不挂写路由）。
 //! - 写路径同事务落 `governance.audit_log`（action 见各函数文档；低频管理
@@ -147,7 +151,7 @@ pub fn composition_doc() -> PolicyCompositionDoc {
             },
             PolicyRuleDoc {
                 key: "capabilities",
-                text: "能力类字段（auto_accept / auto_merge / auto_publish_knowledge）取所有表态层的交集：全部允许才允许；无任何层表态时默认允许。",
+                text: "能力类字段（auto_accept / auto_merge / auto_publish_knowledge）**默认拒绝**：取所有存在层的交集，全部显式允许才允许；任一层未表态（NULL）即该层未授权 → 拒绝；无任何层配置时同样拒绝（没有明确授权 = 不允许）。",
             },
             PolicyRuleDoc {
                 key: "constraints",

@@ -576,12 +576,8 @@ async fn seed_enabled_provider(pool: &PgPool, project_id: Uuid, endpoint: &str) 
         .execute(pool)
         .await
         .unwrap();
-    sqlx::query_scalar(
-        "INSERT INTO ai.team_llm_provider \
-         (id, tenant_id, name, provider_type, endpoint, configuration, status, timeout_secs, created_by) \
-         VALUES ($1, (SELECT tenant_id FROM core.project WHERE id = $2), 'fixture-provider', \
-                 'openai_compatible', $3, '{\"model\": \"test-model\"}', 'enabled', 30, $4) \
-         RETURNING id",
+    let provider_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO ai.team_llm_provider          (id, tenant_id, name, provider_type, endpoint, configuration, status, timeout_secs, created_by)          VALUES ($1, (SELECT tenant_id FROM core.project WHERE id = $2), 'fixture-provider',                  'openai_compatible', $3, '{\"model\": \"test-model\"}', 'enabled', 30, $4)          RETURNING id",
     )
     .bind(Uuid::new_v4())
     .bind(project_id)
@@ -589,7 +585,54 @@ async fn seed_enabled_provider(pool: &PgPool, project_id: Uuid, endpoint: &str) 
     .bind(principal_id)
     .fetch_one(pool)
     .await
-    .unwrap()
+    .unwrap();
+
+    // Phase 3B 目录面：Role 解析链只认目录面（team_llm_model +
+    // team_llm_model_authorization + team_llm_model_policy），provider 的
+    // configuration->>'model' 不再参与解析——故补齐目录模型、team_wide 授权与
+    // `knowledge_management` 角色策略，否则解析失败 → 快照增强回退派生。
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "INSERT INTO ai.team_llm_model          (tenant_id, provider_id, model_id, display_name, enabled, created_by)          VALUES ($1, $2, 'test-model', 'test-model', true, $3)",
+    )
+    .bind(tenant_id)
+    .bind(provider_id)
+    .bind(principal_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    let model_ref: Uuid = sqlx::query_scalar(
+        "SELECT id FROM ai.team_llm_model          WHERE tenant_id = $1 AND provider_id = $2 AND model_id = 'test-model'",
+    )
+    .bind(tenant_id)
+    .bind(provider_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO ai.team_llm_model_authorization          (tenant_id, model_id, state, granted_by)          VALUES ($1, $2, 'team_wide', $3)",
+    )
+    .bind(tenant_id)
+    .bind(model_ref)
+    .bind(principal_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO ai.team_llm_model_policy          (tenant_id, role_key, model_id, updated_by)          VALUES ($1, 'knowledge_management', $2, $3)",
+    )
+    .bind(tenant_id)
+    .bind(model_ref)
+    .bind(principal_id)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    provider_id
 }
 
 /// 五骨架的 LLM 响应体（object_key 与 `plan_cognition_objects` 的派生键一致；

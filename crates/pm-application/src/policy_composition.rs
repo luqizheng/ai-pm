@@ -2,9 +2,14 @@
 //!
 //! 两分运算，**不能用同一个 AND 处理所有字段**：
 //! - 能力类（`auto_accept` / `auto_merge` / `auto_publish_knowledge`）：
-//!   所有适用层都必须允许（`None` = 该层不表态，不额外收紧）。
+//!   **默认拒绝**（DEF-P0-01 / DR-C2）——所有适用层都必须**显式允许**；
+//!   任一层沉默（`None`）= 该层未授权 → 拒绝；无任何适用层 → 拒绝。
 //! - 约束类（`require_human_approval` / `additional_checks`）：只能增加，
 //!   任一层要求审批即要求审批；额外校验取并集去重。
+//!
+//! **默认拒绝的适用层口径**：`applicable` = **实际存在**的策略层（缺行不参与
+//! 投票，任务类型层可整体缺省）；在**存在**的层内，字段沉默即该层未授权。
+//! 「没有任何一层配置过策略」= 无明确授权 = 拒绝。
 //!
 //! `policy_version` / `policy_hash` 采用**内容寻址**：对规范化后的有效策略取
 //! sha256，`policy_hash` 为全量小写 hex，`policy_version` 为前 12 位。时间戳不在
@@ -17,7 +22,11 @@ use sha2::{Digest, Sha256};
 
 /// 快照模式标识：既写入 `policy_snapshot.snapshot_scope`，也参与哈希。
 /// 语义变更（例如将来引入分动作审批字段）必须升版本，避免同 hash 不同含义。
-pub const POLICY_SCHEMA: &str = "composed-v1";
+///
+/// **v2（2026-11-11 · DEF-P0-01）**：能力类由「缺层放行 / 全空默认允许」改为
+/// **默认拒绝**——同一份策略内容的合成结果与 v1 不同，故升版本，使 v1/v2 快照
+/// 的 hash 天然不同，不会出现「同 hash 不同含义」。
+pub const POLICY_SCHEMA: &str = "composed-v2";
 
 /// 单层策略声明。`None` 一律表示该层不表态。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -61,6 +70,8 @@ struct HashPayload<'a> {
 
 impl EffectivePolicy {
     /// 四层合成。缺层 / `None` 一律视为「该层不表态」。
+    ///
+    /// **能力类默认拒绝**（DEF-P0-01）：`None` 不是「允许」，是「未授权」。
     pub fn compose(layers: &PolicyLayers) -> Self {
         let applicable: Vec<&PolicyLayer> = [
             layers.organization.as_ref(),
@@ -122,12 +133,20 @@ impl EffectivePolicy {
     }
 }
 
-/// 能力类：所有表态层都必须允许；无表态层时视为允许（不额外收紧）。
+/// 能力类：**默认拒绝**（DEF-P0-01 / DR-C2「没有明确授权 = DENY」）。
+///
+/// - 适用层为空（从未配置策略）→ 拒绝；
+/// - 任一层显式 `Some(false)` → 拒绝；
+/// - 任一层沉默（`None`）→ **该层未授权** → 拒绝；
+/// - 只有**全部**适用层都显式 `Some(true)` 才允许。
+///
+/// 口径说明：`layers` 只含**实际存在**的层（缺行不投票，任务类型层可缺省）；
+/// 「沉默不等于允许」在**存在**的层内成立。
 fn resolve_capability(
     layers: &[&PolicyLayer],
     field: impl Fn(&PolicyLayer) -> Option<bool>,
 ) -> bool {
-    layers.iter().all(|layer| field(layer).unwrap_or(true))
+    !layers.is_empty() && layers.iter().all(|layer| field(layer) == Some(true))
 }
 
 /// 约束类：并集去重，按规范化 JSON 排序保证顺序稳定。
@@ -185,17 +204,53 @@ mod tests {
 
     #[test]
     fn all_layers_allow_capabilities() {
+        // 全部**适用层显式允许**才放行（默认拒绝口径）。
         let layers = PolicyLayers {
             organization: Some(layer(Some(true), Some(true), Some(true), Some(false), &[])),
-            project: Some(layer(Some(true), None, Some(true), None, &[])),
-            task_type: Some(layer(None, Some(true), None, None, &[])),
-            task: Some(layer(None, None, None, None, &[])),
+            project: Some(layer(Some(true), Some(true), Some(true), None, &[])),
+            task_type: Some(layer(Some(true), Some(true), Some(true), None, &[])),
+            task: Some(layer(Some(true), Some(true), Some(true), None, &[])),
         };
         let effective = EffectivePolicy::compose(&layers);
         assert!(effective.auto_accept);
         assert!(effective.auto_merge);
         assert!(effective.auto_publish_knowledge);
         assert!(!effective.require_human_approval);
+    }
+
+    #[test]
+    fn default_deny_when_no_layer_states_the_capability() {
+        // DEF-P0-01：存在层但**沉默** → 该层未授权 → 拒绝。
+        let layers = PolicyLayers {
+            organization: Some(layer(None, None, None, None, &[])),
+            project: Some(layer(None, None, None, None, &[])),
+            task_type: None,
+            task: Some(layer(None, None, None, None, &[])),
+        };
+        let effective = EffectivePolicy::compose(&layers);
+        assert!(!effective.auto_accept, "silence is not authorization");
+        assert!(!effective.auto_merge, "silence is not authorization");
+        assert!(
+            !effective.auto_publish_knowledge,
+            "silence is not authorization"
+        );
+        assert!(!effective.require_human_approval);
+        assert!(effective.additional_checks.is_empty());
+    }
+
+    #[test]
+    fn default_deny_when_a_present_layer_stays_silent() {
+        // 一层显式允许、另一层沉默 → 交集下仍拒绝（沉默不得被解释为允许）。
+        let layers = PolicyLayers {
+            organization: Some(layer(Some(true), Some(true), Some(true), None, &[])),
+            project: Some(layer(None, None, None, None, &[])),
+            task_type: None,
+            task: None,
+        };
+        let effective = EffectivePolicy::compose(&layers);
+        assert!(!effective.auto_accept, "silent present layer denies");
+        assert!(!effective.auto_merge);
+        assert!(!effective.auto_publish_knowledge);
     }
 
     #[test]
@@ -213,7 +268,8 @@ mod tests {
     }
 
     #[test]
-    fn absent_layers_do_not_narrow_capabilities() {
+    fn absent_layers_default_deny_capabilities() {
+        // DEF-P0-01：**从未配置过任何策略** = 无明确授权 = 拒绝。
         let layers = PolicyLayers {
             organization: None,
             project: None,
@@ -221,20 +277,24 @@ mod tests {
             task: None,
         };
         let effective = EffectivePolicy::compose(&layers);
-        assert!(effective.auto_accept);
-        assert!(effective.auto_merge);
-        assert!(effective.auto_publish_knowledge);
+        assert!(!effective.auto_accept, "no policy configured means deny");
+        assert!(!effective.auto_merge, "no policy configured means deny");
+        assert!(
+            !effective.auto_publish_knowledge,
+            "no policy configured means deny"
+        );
         assert!(!effective.require_human_approval);
         assert!(effective.additional_checks.is_empty());
     }
 
     #[test]
     fn human_approval_vetoes_auto_accept_only() {
+        // 各能力在**全部适用层**都显式允许；审批要求只否决 auto_accept。
         let layers = PolicyLayers {
-            organization: Some(layer(None, None, None, None, &[])),
-            project: Some(layer(None, None, None, None, &[])),
-            task_type: Some(layer(None, None, None, Some(true), &[])),
-            task: Some(layer(Some(false), Some(true), Some(true), None, &[])),
+            organization: Some(layer(Some(true), Some(true), Some(true), None, &[])),
+            project: Some(layer(Some(true), Some(true), Some(true), None, &[])),
+            task_type: Some(layer(Some(true), Some(true), Some(true), Some(true), &[])),
+            task: Some(layer(Some(true), Some(true), Some(true), None, &[])),
         };
         let effective = EffectivePolicy::compose(&layers);
         assert!(effective.require_human_approval);
@@ -281,9 +341,11 @@ mod tests {
             organization: Some(layer(Some(true), Some(true), Some(true), None, &["a"])),
             ..Default::default()
         });
+        // 层拆分不变（两夹具须合成出**同一有效策略**：默认拒绝口径下，
+        // 存在但沉默的层会拒绝，故第二夹具的任务层须显式允许）。
         let second = EffectivePolicy::compose(&PolicyLayers {
             organization: Some(layer(Some(true), Some(true), Some(true), None, &["a"])),
-            task: Some(layer(None, None, None, None, &["a"])),
+            task: Some(layer(Some(true), Some(true), Some(true), None, &["a"])),
             ..Default::default()
         });
         assert_eq!(

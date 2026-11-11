@@ -42,6 +42,9 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     ("crates/pm-application/src/devenv/binding.rs", 1),
     // Team LLM Provider 管理面（0041）：created/updated/rotated/tested/enabled/disabled/archived/deleted 共用本 helper
     ("crates/pm-application/src/team_llm.rs", 1),
+    // Team LLM 模型目录 / 策略（Phase 3B）：目录与策略事件审计（tenant_audit_log，
+    // 与 team_llm.rs 同构——四列身份显式绑定）
+    ("crates/pm-application/src/team_llm_catalog.rs", 1),
     // Team Onboarding（0044）：team.created/updated + 邀请/链接/激活全链共用本 helper
     ("crates/pm-application/src/team_onboarding.rs", 1),
     // KB-PC 服务化（0048 Intake）：信号路由留痕（系统面 dispatch principal，四列显式 NULL）

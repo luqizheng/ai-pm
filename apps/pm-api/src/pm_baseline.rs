@@ -307,11 +307,55 @@ async fn decide_item(
 /// POST 确认基线（显式人类动作）：要求提案存在、无 proposed 条目
 /// （deferred/investigation 作为 documented uncertainties 保留）；
 /// 成功 → 版本头落库 + 提案转 confirmed（条目即不可变）。
+///
+/// **确认权三重门**（DEF-P0-02 · DR-C2「受保护操作必须真人审批」）：
+///
+/// 1. **可信人类交互上下文**——`auth_mode='interactive'` 放行；`api_key`
+///    （Agent / Service Key）与 `unknown` 一律拒绝：**携带真人 JWT 不等于
+///    真人操作**，无法区分真人与 Agent 代持凭据时拒绝确认。`off`（本地开发
+///    免鉴权兜底）放行——该模式的主体按构造即真人
+///    （`DEV_OFF_PRINCIPAL`，`core.principal.kind='human'`），且生产不进入该模式；
+/// 2. **真人主体**——`core.principal.kind='human'`（AI 主体 `ai_pm` / `dev_agent`
+///    / `service` 不得确认基线，更不得确认自己产出的提案）；
+/// 3. **项目可见性**——非成员 404（不泄漏项目存在性）。
+///
+/// 该门**不可绕过**：后端强制，不依赖前端按钮是否禁用。
 async fn confirm_baseline(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
+    // ① 身份真实性——纯内存 fail-fast，不开事务（fail-closed）。
+    //    interactive = 真人交互会话；off = 本地开发兜底（主体按构造为真人）。
+    //    api_key（Agent / Service Key）与 unknown 一律拒绝。
+    match caller.auth_mode.as_str() {
+        "interactive" | "off" => {}
+        _ => {
+            return Err(ApiError::Forbidden(
+                "baseline confirmation requires an interactive human session",
+            ))
+        }
+    }
+
+    // ② 真人主体——AI 主体（ai_pm / dev_agent / service）不得确认正式基线。
+    pm_application::requirement::require_human(&state.pool, &caller.audit_actor())
+        .await
+        .map_err(|e| match e {
+            pm_application::pm_write::PmWriteError::Forbidden(_)
+            | pm_application::pm_write::PmWriteError::NotFound(_) => {
+                ApiError::Forbidden("baseline confirmation requires a human principal")
+            }
+            pm_application::pm_write::PmWriteError::Db(err) => ApiError::Internal(err),
+            pm_application::pm_write::PmWriteError::ValidationMsg(m) => {
+                ApiError::Text(axum::http::StatusCode::INTERNAL_SERVER_ERROR, m)
+            }
+            pm_application::pm_write::PmWriteError::Validation(m)
+            | pm_application::pm_write::PmWriteError::Conflict(m) => {
+                ApiError::Text(axum::http::StatusCode::INTERNAL_SERVER_ERROR, m.to_string())
+            }
+        })?;
+
+    // ③ 项目可见性（非成员 404）。
     require_project_visible(
         &state.pool,
         project_id,

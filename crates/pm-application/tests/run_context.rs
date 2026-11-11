@@ -421,7 +421,7 @@ async fn c3_c24_c25_run_context_maps_every_contract_field(pool: PgPool) {
     assert!(contract.knowledge_refs[0].is_required);
 
     assert!(contract.policy.execution_enabled);
-    assert_eq!(contract.policy.snapshot_scope, "composed-v1");
+    assert_eq!(contract.policy.snapshot_scope, "composed-v2");
 }
 
 #[sqlx::test(migrations = "../../migrations")]

@@ -181,8 +181,14 @@ pub struct RegisterDeviceOutcome {
 /// 登记 / 复用设备（D5：id 优先）。
 ///
 /// 并发语义：同一 UUID 的并发请求**收敛为一行**——INSERT 走
-/// `ON CONFLICT (id) DO NOTHING`，随后回读并按复用规则判定；已存在但已撤销的
+/// `ON CONFLICT DO NOTHING`，随后回读并按复用规则判定；已存在但已撤销的
 /// 设备**不得自动恢复**（新建新 id，旧行留历史）。
+///
+/// **仲裁索引不能只写 `id`**：本表同时有 `PRIMARY KEY (id)` 与
+/// `UNIQUE (tenant_id, id)`；并发插入同一 id 时 PostgreSQL 可能先命中复合
+/// 唯一约束，而 `ON CONFLICT (id)` 只吞仲裁索引上的冲突 → 错误逃逸（并发登记
+/// 报唯一键冲突而非收敛为一行）。故 INSERT **不指定仲裁目标**，任何唯一冲突
+/// 都归入「已存在」分支，由回读 + 复用规则收敛。
 pub async fn register_device(
     pool: &PgPool,
     caller: &HumanActor,
@@ -225,7 +231,7 @@ async fn register_once(
          (id, tenant_id, owner_principal_id, name, platform, os_version, \
           executor_kind, executor_version, status, readiness, is_runner) \
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', NULL, $9) \
-         ON CONFLICT (id) DO NOTHING",
+         ON CONFLICT DO NOTHING",
     )
     .bind(requested_id)
     .bind(caller.tenant_id)

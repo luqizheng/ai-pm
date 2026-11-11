@@ -748,9 +748,37 @@ async fn outcome_stays_null_until_a_terminal_result(pool: PgPool) {
     );
 }
 
+/// 显式授权能力类字段（DEF-P0-01 默认拒绝后，能力必须**显式**配置）。
+///
+/// 适用层为 organization + project（任务无 task_type）——两层都须显式允许。
+async fn allow_capabilities(pool: &PgPool, project_id: Uuid, actor: Uuid) {
+    let tenant_id: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+        .bind(project_id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    for (scope, key) in [
+        ("organization", "*".to_string()),
+        ("project", project_id.to_string()),
+    ] {
+        sqlx::query(
+            "INSERT INTO delivery.policy_scope              (scope, scope_key, require_human_approval, auto_accept, auto_merge,               auto_publish_knowledge, updated_by, tenant_id)              VALUES ($1, $2, false, true, true, true, $3, $4)              ON CONFLICT (tenant_id, scope, scope_key) DO UPDATE SET                 auto_accept = true, auto_merge = true, auto_publish_knowledge = true",
+        )
+        .bind(scope)
+        .bind(&key)
+        .bind(actor)
+        .bind(tenant_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+}
+
 #[sqlx::test(migrations = "../../migrations")]
 async fn policy_snapshot_records_the_composed_policy(pool: PgPool) {
-    let _fx = seed(&pool, "RD-T24", true).await;
+    let fx = seed(&pool, "RD-T24", true).await;
+    // DEF-P0-01：能力类默认拒绝——显式授权后才允许自动能力。
+    allow_capabilities(&pool, fx.project_id, fx.human_id).await;
     let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
         .await
         .unwrap()
@@ -761,8 +789,8 @@ async fn policy_snapshot_records_the_composed_policy(pool: PgPool) {
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(snap["snapshot_scope"], serde_json::json!("composed-v1"));
-    assert_eq!(snap["policy_schema"], serde_json::json!("composed-v1"));
+    assert_eq!(snap["snapshot_scope"], serde_json::json!("composed-v2"));
+    assert_eq!(snap["policy_schema"], serde_json::json!("composed-v2"));
     assert_eq!(snap["approval_required"], serde_json::json!(false));
     assert_eq!(snap["execution_enabled"], serde_json::json!(true));
     assert!(snap["captured_at"].is_string());
@@ -778,6 +806,36 @@ async fn policy_snapshot_records_the_composed_policy(pool: PgPool) {
     assert_eq!(snap["policy_version"].as_str().unwrap().len(), 12);
     assert_eq!(snap["policy_hash"].as_str().unwrap().len(), 64);
     assert!(snap.get("approval_status").is_some());
+}
+
+/// DEF-P0-01：未显式授权任何能力 → 快照里的能力字段必须是**拒绝**。
+#[sqlx::test(migrations = "../../migrations")]
+async fn policy_snapshot_defaults_to_deny_without_explicit_authorization(pool: PgPool) {
+    let _fx = seed(&pool, "RD-T24D", true).await;
+    let out = claim_once(&pool, "w1", &cfg(), DispatchMode::On)
+        .await
+        .unwrap()
+        .unwrap();
+    let snap: serde_json::Value =
+        sqlx::query_scalar("SELECT policy_snapshot FROM delivery.task_run WHERE id = $1")
+            .bind(out.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(snap["policy_schema"], serde_json::json!("composed-v2"));
+    assert_eq!(
+        snap["effective_policy"]["auto_accept"],
+        serde_json::json!(false),
+        "no explicit authorization means deny"
+    );
+    assert_eq!(
+        snap["effective_policy"]["auto_merge"],
+        serde_json::json!(false)
+    );
+    assert_eq!(
+        snap["effective_policy"]["auto_publish_knowledge"],
+        serde_json::json!(false)
+    );
 }
 
 #[sqlx::test(migrations = "../../migrations")]

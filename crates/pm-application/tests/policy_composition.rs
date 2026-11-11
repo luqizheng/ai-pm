@@ -208,8 +208,9 @@ async fn four_layer_capability_composition_lands_in_snapshot(pool: PgPool) {
     assert_eq!(out.kind, ClaimKind::Claimed);
 
     let snapshot = snapshot(&pool, out.run_id).await;
-    assert_eq!(snapshot["policy_schema"], serde_json::json!("composed-v1"));
-    assert_eq!(snapshot["snapshot_scope"], serde_json::json!("composed-v1"));
+    // DEF-P0-01：能力类语义变更 → policy schema 升 v2（同 hash 不得不同含义）。
+    assert_eq!(snapshot["policy_schema"], serde_json::json!("composed-v2"));
+    assert_eq!(snapshot["snapshot_scope"], serde_json::json!("composed-v2"));
     assert_eq!(
         snapshot["effective_policy"]["auto_accept"],
         serde_json::json!(false),
