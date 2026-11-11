@@ -396,11 +396,22 @@ impl ConversationReplyWorker {
     ) -> Result<(Option<String>, serde_json::Value), sqlx::Error> {
         let repository =
             crate::chat_context::anchor_repository(conversation.context_anchor.as_ref());
-        let context = crate::chat_context::build_chat_context(
+        // B3 / CX2：会话上下文条目（attached + active）→ 对象节（S3+）。
+        // 投影层重读对象实况（SQL-07）；无条目 = 空切片，行为与 B2 前一致。
+        let objects = pm_application::ai_context_items::load_injection_sources(
+            &self.pool,
+            conversation.tenant_id,
+            conversation.project_id,
+            conversation.id,
+        )
+        .await
+        .unwrap_or_default();
+        let context = crate::chat_context::build_chat_context_with_objects(
             &self.pool,
             conversation.tenant_id,
             conversation.project_id,
             repository.as_deref(),
+            &objects,
         )
         .await?;
         if context.is_empty() {
@@ -551,14 +562,8 @@ mod tests {
         .await
         .unwrap();
         // Phase 3B：解析链只认目录面——补目录模型 + 授权 + general 策略
-        crate::test_seed::seed_model_catalog(
-            pool,
-            SYSTEM_TENANT,
-            provider_id,
-            model,
-            principal_id,
-        )
-        .await;
+        crate::test_seed::seed_model_catalog(pool, SYSTEM_TENANT, provider_id, model, principal_id)
+            .await;
         provider_id
     }
 

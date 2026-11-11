@@ -41,9 +41,14 @@ pub const CHAT_TOTAL_BUDGET_CHARS: usize = 8_000;
 pub const CHAT_CAP_PROJECT_PROFILE: usize = 2_000;
 pub const CHAT_CAP_REPOSITORY_FACTS: usize = 4_000;
 
+/// 对象节（S3+）总预算：原 8,000 的余量（CX2 终裁，不提总预算）。
+pub const CHAT_CAP_OBJECT_CONTEXT: usize = 2_000;
+
 /// 分节键。
 pub const CHAT_KEY_PROJECT_PROFILE: &str = "project_profile";
 pub const CHAT_KEY_REPOSITORY_FACTS: &str = "repository_facts";
+/// 对象节键前缀（B3 / CX2：按对象分节，键 = `object:<type>:<object_id>`）。
+pub const CHAT_KEY_OBJECT_PREFIX: &str = "object:";
 
 /// 注入载荷（含记账）。
 #[derive(Debug, Clone)]
@@ -175,4 +180,68 @@ pub fn anchor_repository(anchor: Option<&serde_json::Value>) -> Option<String> {
 /// chat 分节顺序（供测试断言；与 `assemble_chat` 的固定顺序同源）。
 pub fn chat_section_order() -> [&'static str; 2] {
     CHAT_SECTION_ORDER
+}
+
+/// 构造带对象节（S3+）的 chat 注入（B3 / CX2）。
+///
+/// 在 S1（项目画像）/ S2（仓库事实）之外，把会话上下文条目投影为**按对象
+/// 分节**的 S3+（键 `object:<type>:<object_id>`，每对象独立记账）：
+///
+/// - **对象预算 2,000**（CX2 终裁：原 8,000 的余量，不提总预算）；
+/// - 条目顺序沿用 `load_injection_sources` 的 `updated_at DESC, id ASC`
+///   （稳定次排序，超预算裁剪结果**可重复**）；
+/// - 逐对象装配：`meta` 行必带，`body`（已批准正文摘要）在预算内才带；
+///   **放不下的对象整节裁掉**，键进 `sections_dropped`（逐对象记账，
+///   不是只记总字符数）；
+/// - 对象节与 S1/S2 互不挤占：S1/S2 走 [`build_chat_context`] 的既有预算，
+///   对象节独立 2,000——总注入量仍 ≤ 8,000。
+///
+/// 条目由调用方（conversation_reply）经
+/// `pm_application::ai_context_items::load_injection_sources` 取得——
+/// 本函数纯装配，无对象 IO（正文已在投影层重读，SQL-07）。
+pub async fn build_chat_context_with_objects(
+    pool: &sqlx::PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    anchor_repository: Option<&str>,
+    objects: &[pm_application::ai_context_items::InjectionSource],
+) -> Result<ChatContext, sqlx::Error> {
+    let mut context = build_chat_context(pool, tenant_id, project_id, anchor_repository).await?;
+
+    let mut remaining = CHAT_CAP_OBJECT_CONTEXT;
+    let mut object_sections: Vec<ContextSection> = Vec::new();
+    for item in objects {
+        // 元数据行必带（标题 + meta）；正文仅在预算内追加。
+        let meta_line = format!("{} · {}", item.title, item.meta);
+        let mut body_chars = meta_line.chars().count();
+        let mut body = meta_line;
+        if let Some(text) = &item.body {
+            let room = remaining.saturating_sub(body_chars);
+            if room > 0 {
+                let taken: String = text.chars().take(room).collect();
+                body.push_str(
+                    "
+",
+                );
+                body.push_str(&taken);
+                body_chars += taken.chars().count() + 1;
+            }
+        }
+        if body_chars > remaining {
+            // 放不下整节 → 整节裁掉，键进 dropped（逐对象记账）。
+            context.sections_dropped.push(item.section_key.clone());
+            continue;
+        }
+        remaining -= body_chars;
+        object_sections.push(ContextSection {
+            key: item.section_key.clone(),
+            title: item.title.clone(),
+            body,
+            chars: body_chars,
+            truncated: false,
+        });
+    }
+    context.sections.extend(object_sections);
+    context.chars_total = context.sections.iter().map(|s| s.chars).sum();
+    Ok(context)
 }

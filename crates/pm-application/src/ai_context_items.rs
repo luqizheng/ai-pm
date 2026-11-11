@@ -969,3 +969,280 @@ pub async fn list_items(
     .map_err(ContextItemError::db)?;
     Ok(rows.iter().map(item_from_row).collect())
 }
+
+// ─────────────────────────────────────────── 注入源投影（B3 · SQL-07）
+
+/// 单对象注入源（正文与状态均为**服务端重读**的实时事实——不采信条目快照）。
+#[derive(Debug, Clone)]
+pub struct InjectionSource {
+    pub item_id: Uuid,
+    /// 分节键：`object:<type>:<object_id>`（每对象独立记账，CX2）。
+    pub section_key: String,
+    /// 显示名（code / title / filename）。
+    pub title: String,
+    /// 元数据行（类型 · 版本 · 状态 / 不可用原因）。
+    pub meta: String,
+    /// 已批准正文的截断摘要；None = 仅元数据（未批准 / 无正文域）。
+    pub body: Option<String>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// 对象正文的单条截断上限（chat 对象预算 2,000 内容纳一节带正文）。
+pub const INJECTION_BODY_CAP_CHARS: usize = 1_400;
+
+fn clip(text: &str, cap: usize) -> String {
+    if text.chars().count() <= cap {
+        text.to_string()
+    } else {
+        text.chars().take(cap).collect()
+    }
+}
+
+/// 加载会话**实际可注入**的上下文条目（B3 / CX2 注入矩阵）。
+///
+/// 只取 `attachment='attached' AND lifecycle='active'`（Inactive / Pending /
+/// Unavailable / Detached 一律不注入）；排序 `updated_at DESC, id ASC`
+/// （稳定第二排序键，保证同样输入结果可重复）。每条**重读**对象实况：
+/// - requirement / design / adr：读被引用修订（未钉修订则读当前修订）；
+///   **仅 `state='approved'` 注入正文摘要**，否则只给标题 / 版本 / 状态元数据；
+/// - knowledge：内容行即版本（行级 confirmed_by NOT NULL），注入正文摘要；
+/// - document：**仅元数据**（正文在文件存储，不在库）；
+/// - task：仅元数据（标题 / 状态 / 目标）；行版本漂移在 meta 中如实标注。
+pub async fn load_injection_sources(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    conversation_id: Uuid,
+) -> Result<Vec<InjectionSource>, ContextItemError> {
+    let items = sqlx::query(
+        "SELECT i.id, i.object_type, i.object_id, i.object_code, i.revision_id, \
+                i.version, i.content_hash, i.row_version, i.updated_at \
+           FROM ai.conversation_context_item i \
+          WHERE i.conversation_id = $1 AND i.tenant_id = $2 AND i.project_id = $3 \
+            AND i.attachment = 'attached' AND i.lifecycle = 'active' \
+          ORDER BY i.updated_at DESC, i.id ASC",
+    )
+    .bind(conversation_id)
+    .bind(tenant_id)
+    .bind(project_id)
+    .fetch_all(pool)
+    .await
+    .map_err(ContextItemError::db)?;
+
+    use sqlx::Row;
+    let mut sources = Vec::with_capacity(items.len());
+    for row in items {
+        let item_id: Uuid = row.get("id");
+        let object_type: String = row.get("object_type");
+        let object_id: String = row.get("object_id");
+        let object_code: Option<String> = row.get("object_code");
+        let revision_id: Option<Uuid> = row.get("revision_id");
+        let row_version: Option<i64> = row.get("row_version");
+        let updated_at: DateTime<Utc> = row.get("updated_at");
+        let Ok(oid) = object_id.parse::<Uuid>() else {
+            continue; // 脏行跳过（不中断整会话注入）
+        };
+        let section_key = format!("object:{object_type}:{object_id}");
+
+        let (title, meta, body) = match object_type.as_str() {
+            "requirement" => {
+                let Some((title, current)) = sqlx::query_as::<_, (String, Option<Uuid>)>(
+                    "SELECT title, current_revision_id FROM delivery.requirement \
+                     WHERE tenant_id = $1 AND project_id = $2 AND id = $3",
+                )
+                .bind(tenant_id)
+                .bind(project_id)
+                .bind(oid)
+                .fetch_optional(pool)
+                .await
+                .map_err(ContextItemError::db)?
+                else {
+                    continue;
+                };
+                let rev = revision_id.or(current);
+                let (state, version, markdown): (Option<String>, Option<i32>, Option<String>) =
+                    match rev {
+                        Some(rev) => sqlx::query_as(
+                            "SELECT state, version, content->>'markdown' \
+                             FROM delivery.requirement_revision WHERE id = $1",
+                        )
+                        .bind(rev)
+                        .fetch_optional(pool)
+                        .await
+                        .map_err(ContextItemError::db)?
+                        .map(|(s, v, m)| (Some(s), Some(v), Some(m)))
+                        .unwrap_or((None, None, None)),
+                        None => (None, None, None),
+                    };
+                let body = match (state.as_deref(), &markdown) {
+                    (Some("approved"), Some(m)) if !m.trim().is_empty() => {
+                        Some(clip(m, INJECTION_BODY_CAP_CHARS))
+                    }
+                    _ => None, // 未批准 → 只给元数据，不注入草稿正文
+                };
+                (
+                    title,
+                    format!(
+                        "requirement · {}",
+                        match (version, state.as_deref()) {
+                            (Some(v), Some(s)) => format!("v{v} {s}"),
+                            _ => "revision unavailable".to_string(),
+                        }
+                    ),
+                    body,
+                )
+            }
+            design_or_adr @ ("design" | "adr") => {
+                let (table, rev_table) = if design_or_adr == "design" {
+                    ("design.design", "design.design_revision")
+                } else {
+                    ("design.adr", "design.adr_revision")
+                };
+                let Some(title) = sqlx::query_scalar::<_, String>(&format!(
+                    "SELECT title FROM {table} WHERE tenant_id = $1 AND project_id = $2 AND id = $3"
+                ))
+                .bind(tenant_id)
+                .bind(project_id)
+                .bind(oid)
+                .fetch_optional(pool)
+                .await
+                .map_err(ContextItemError::db)?
+                else {
+                    continue;
+                };
+                let rev = match revision_id {
+                    Some(rev) => Some(rev),
+                    None => sqlx::query_scalar::<_, Option<Uuid>>(&format!(
+                        "SELECT current_revision_id FROM {table} \
+                             WHERE tenant_id = $1 AND project_id = $2 AND id = $3"
+                    ))
+                    .bind(tenant_id)
+                    .bind(project_id)
+                    .bind(oid)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(ContextItemError::db)?
+                    .flatten(),
+                };
+                let (state, version, markdown): (Option<String>, Option<i32>, Option<String>) =
+                    match rev {
+                        Some(rev) => sqlx::query_as(&format!(
+                            "SELECT state, version, content->>'markdown' \
+                             FROM {rev_table} WHERE id = $1"
+                        ))
+                        .bind(rev)
+                        .fetch_optional(pool)
+                        .await
+                        .map_err(ContextItemError::db)?
+                        .map(|(s, v, m)| (Some(s), Some(v), Some(m)))
+                        .unwrap_or((None, None, None)),
+                        None => (None, None, None),
+                    };
+                let body = match (state.as_deref(), &markdown) {
+                    (Some("approved"), Some(m)) if !m.trim().is_empty() => {
+                        Some(clip(m, INJECTION_BODY_CAP_CHARS))
+                    }
+                    _ => None,
+                };
+                (
+                    title,
+                    format!(
+                        "{design_or_adr} · {}",
+                        match (version, state.as_deref()) {
+                            (Some(v), Some(s)) => format!("v{v} {s}"),
+                            _ => "revision unavailable".to_string(),
+                        }
+                    ),
+                    body,
+                )
+            }
+            "knowledge" => {
+                let Some((domain, version, content)) = sqlx::query_as::<_, (String, i32, String)>(
+                    "SELECT domain, version, content FROM ai.project_knowledge \
+                     WHERE tenant_id = $1 AND project_id = $2 AND id = $3",
+                )
+                .bind(tenant_id)
+                .bind(project_id)
+                .bind(oid)
+                .fetch_optional(pool)
+                .await
+                .map_err(ContextItemError::db)?
+                else {
+                    continue;
+                };
+                (
+                    domain.clone(),
+                    format!("knowledge · v{version} {domain}"),
+                    Some(clip(&content, INJECTION_BODY_CAP_CHARS)),
+                )
+            }
+            "document" => {
+                // 正文在文件存储（RustFS），库内只有元数据 → 仅注入元数据。
+                let Some((filename, version)) = sqlx::query_as::<_, (String, Option<i32>)>(
+                    "SELECT d.filename, dv.version_number \
+                     FROM docproc.document d \
+                     LEFT JOIN docproc.document_version dv ON dv.id = d.current_version_id \
+                     WHERE d.tenant_id = $1 AND d.project_id = $2 AND d.id = $3",
+                )
+                .bind(tenant_id)
+                .bind(project_id)
+                .bind(oid)
+                .fetch_optional(pool)
+                .await
+                .map_err(ContextItemError::db)?
+                else {
+                    continue;
+                };
+                (
+                    filename,
+                    format!(
+                        "document · {}",
+                        version
+                            .map(|v| format!("v{v}"))
+                            .unwrap_or_else(|| "no version".to_string())
+                    ),
+                    None,
+                )
+            }
+            "task" => {
+                let Some((title, status, goal, revision)) =
+                    sqlx::query_as::<_, (String, String, Option<String>, i64)>(
+                        "SELECT title, status, goal, revision FROM delivery.task \
+                         WHERE tenant_id = $1 AND project_id = $2 AND id = $3",
+                    )
+                    .bind(tenant_id)
+                    .bind(project_id)
+                    .bind(oid)
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(ContextItemError::db)?
+                else {
+                    continue;
+                };
+                // 行版本漂移如实标注（乐观锁快照非内容版本）。
+                let drift = row_version.map(|rv| rv != revision).unwrap_or(false);
+                let meta = if drift {
+                    format!("task · {status} · row version advanced")
+                } else {
+                    format!("task · {status}")
+                };
+                let body = goal
+                    .as_deref()
+                    .filter(|g| !g.trim().is_empty())
+                    .map(|g| clip(g, INJECTION_BODY_CAP_CHARS));
+                (title, meta, body)
+            }
+            _ => continue,
+        };
+
+        sources.push(InjectionSource {
+            item_id,
+            section_key,
+            title: object_code.unwrap_or(title),
+            meta,
+            body,
+            updated_at,
+        });
+    }
+    Ok(sources)
+}

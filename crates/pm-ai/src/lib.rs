@@ -30,9 +30,9 @@ pub use analysis_model::{select_model_for_role, ModelSelection, RoutedAnalysisMo
 pub use call_record::PURPOSE_CONVERSATION_REPLY;
 pub use capability_projection::PgCapabilityProjection;
 pub use chat_context::{
-    anchor_repository, build_chat_context, ChatContext, CHAT_CAP_PROJECT_PROFILE,
-    CHAT_CAP_REPOSITORY_FACTS, CHAT_KEY_PROJECT_PROFILE, CHAT_KEY_REPOSITORY_FACTS,
-    CHAT_TOTAL_BUDGET_CHARS,
+    anchor_repository, build_chat_context, build_chat_context_with_objects, ChatContext,
+    CHAT_CAP_OBJECT_CONTEXT, CHAT_CAP_PROJECT_PROFILE, CHAT_CAP_REPOSITORY_FACTS,
+    CHAT_KEY_PROJECT_PROFILE, CHAT_KEY_REPOSITORY_FACTS, CHAT_TOTAL_BUDGET_CHARS,
 };
 pub use context::{build, fail_run, finish_run, save_snapshot, start_run, ContextError};
 pub use conversation_model::{

@@ -233,3 +233,99 @@ fn anchor_repository_reads_only_string_values() {
     assert_eq!(anchor_repository(Some(&json!({}))), None);
     assert_eq!(anchor_repository(None), None);
 }
+
+// ────────────────────────────── B3 / CX2：对象节（S3+）装配与预算记账 ──────────
+
+use pm_ai::chat_context::{build_chat_context_with_objects, CHAT_CAP_OBJECT_CONTEXT};
+use pm_application::ai_context_items::InjectionSource;
+
+fn object_source(key: &str, title: &str, meta: &str, body: Option<String>) -> InjectionSource {
+    InjectionSource {
+        item_id: Uuid::new_v4(),
+        section_key: key.to_string(),
+        title: title.to_string(),
+        meta: meta.to_string(),
+        body,
+        updated_at: chrono::Utc::now(),
+    }
+}
+
+/// 对象节按预算装配：装得下的注入、放不下的整节裁掉且**逐对象**记账。
+#[sqlx::test(migrations = "../../migrations")]
+async fn object_sections_respect_budget_and_drop_per_object(pool: PgPool) {
+    let project_id = seed_project(&pool, "CX2", "object section fixture").await;
+
+    // 两个小对象（都装得下）+ 一个大对象（放不下 → 整节裁掉）。
+    let small_a = object_source(
+        "object:knowledge:00000000-0000-0000-0000-00000000000a",
+        "K-1",
+        "knowledge · v1 identity",
+        Some("confirmed fact a.".repeat(10)),
+    );
+    let small_b = object_source(
+        "object:task:00000000-0000-0000-0000-00000000000b",
+        "T-1",
+        "task · ready",
+        None,
+    );
+    let oversized = object_source(
+        "object:requirement:00000000-0000-0000-0000-00000000000c",
+        "REQ-BIG",
+        "requirement · v1 approved",
+        Some("x".repeat(CHAT_CAP_OBJECT_CONTEXT + 500)),
+    );
+    // 大对象放前面（updated_at DESC 顺序的模拟）：裁剪记账语义更受考验。
+    let objects = [oversized, small_a, small_b];
+
+    let context = build_chat_context_with_objects(&pool, SYSTEM_TENANT, project_id, None, &objects)
+        .await
+        .unwrap();
+
+    let keys: Vec<&str> = context.sections.iter().map(|s| s.key.as_str()).collect();
+    assert!(
+        keys.contains(&"object:knowledge:00000000-0000-0000-0000-00000000000a"),
+        "small object a must be included: {keys:?}"
+    );
+    assert!(
+        keys.contains(&"object:task:00000000-0000-0000-0000-00000000000b"),
+        "small object b must be included: {keys:?}"
+    );
+    assert!(
+        !keys.contains(&"object:requirement:00000000-0000-0000-0000-00000000000c"),
+        "oversized object must be dropped: {keys:?}"
+    );
+    // 逐对象记账：被裁对象的键进 sections_dropped（不是只记总字符）。
+    assert!(
+        context
+            .sections_dropped
+            .contains(&"object:requirement:00000000-0000-0000-0000-00000000000c".to_string()),
+        "dropped object key must be in sections_dropped: {:?}",
+        context.sections_dropped
+    );
+    // 对象节总字符 ≤ 对象预算；总注入量 ≤ chat 总预算。
+    let object_chars: usize = context
+        .sections
+        .iter()
+        .filter(|s| s.key.starts_with("object:"))
+        .map(|s| s.chars)
+        .sum();
+    assert!(object_chars <= CHAT_CAP_OBJECT_CONTEXT);
+    assert!(context.chars_total <= CHAT_TOTAL_BUDGET_CHARS);
+}
+
+/// 无对象条目 = 行为与 B2 前一致（空对象切片不产生任何对象节）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn empty_object_slice_keeps_legacy_behavior(pool: PgPool) {
+    let project_id = seed_project(&pool, "CX2-EMPTY", "no objects").await;
+
+    let base = build_chat_context(&pool, SYSTEM_TENANT, project_id, Some("repo-cx2"))
+        .await
+        .unwrap();
+    let extended =
+        build_chat_context_with_objects(&pool, SYSTEM_TENANT, project_id, Some("repo-cx2"), &[])
+            .await
+            .unwrap();
+
+    assert_eq!(base.render(), extended.render());
+    assert_eq!(base.chars_total, extended.chars_total);
+}
