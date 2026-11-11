@@ -9,7 +9,6 @@
 
 use pm_application::docproc_parse::ParseCtx;
 use pm_application::docproc_service as svc;
-use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;
 use uuid::Uuid;
 

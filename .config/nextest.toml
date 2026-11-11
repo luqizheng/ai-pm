@@ -1,0 +1,14 @@
+# nextest 配置（仓库级）
+#
+# 只定义额外 profile，不改动 default 行为（`cargo nextest run` 语义不变）。
+#
+# timing：耗时画像专用——JUnit 输出（per-test 计时真源）+ 放宽慢测试告警。
+#   用法：bash scripts/test-timing.sh [cargo/nextest 过滤参数]
+
+[profile.timing]
+slow-timeout = { period = "180s" }
+
+[profile.timing.junit]
+path = "target/test-timing/junit.xml"
+store-success-output = false
+store-failure-output = true

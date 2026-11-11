@@ -753,6 +753,10 @@ fn handler_assembly_covers_catalog() {
             "TaskReady",
             "DeliverySubmitted",
             "RunCompleted",
+            // Document Processing（0016/TD-02 §4）：Team 级事件（project 可空），
+            // handler 承担送达语义（DocprocSettleHandler）。
+            "DocprocJobCompleted",
+            "DocprocJobFailed",
             ev::INTAKE_RECEIVED,
             ev::KB_ANALYSIS_REQUESTED,
             ev::KB_ANALYSIS_COMPLETED,
