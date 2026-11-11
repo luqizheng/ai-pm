@@ -30,7 +30,10 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::actor::AuditActor;
-use crate::pm_write::{append_audit, append_audit_with_after, hex_sha256, PmWriteError};
+use crate::pm_write::{
+    append_audit, append_audit_with_after, content_hash_of, is_unique_violation, lock_head_row,
+    lock_revision_row, next_code, transition_or_conflict, PmWriteError,
+};
 use crate::requirement::require_human_conn;
 
 /// 任务级同款验收验证方式（复用 pm_write 词表）。
@@ -698,10 +701,6 @@ fn acceptance_ready(content: &Value) -> Result<(), String> {
 
 // ─────────────────────────────────────────────────────────────── 内部助手
 
-fn is_unique_violation(e: &sqlx::Error) -> bool {
-    matches!(e, sqlx::Error::Database(db) if db.code().as_deref() == Some("23505"))
-}
-
 pub async fn principal_is_human(
     conn: &mut sqlx::PgConnection,
     principal_id: Uuid,
@@ -713,40 +712,22 @@ pub async fn principal_is_human(
     Ok(kind.as_deref() == Some("human"))
 }
 
-async fn next_code(
-    conn: &mut sqlx::PgConnection,
-    tenant_id: Uuid,
-    project_id: Uuid,
-    table: &str,
-    prefix: &str,
-) -> Result<String, sqlx::Error> {
-    let max: i64 = sqlx::query_scalar(&format!(
-        "SELECT COALESCE(MAX(NULLIF(regexp_replace(code, '\\D', '', 'g'), '')::bigint), 0) \
-         FROM {table} WHERE tenant_id = $1 AND project_id = $2 AND code LIKE '{prefix}-%'"
-    ))
-    .bind(tenant_id)
-    .bind(project_id)
-    .fetch_one(&mut *conn)
-    .await?;
-    Ok(format!("{prefix}-{:03}", max + 1))
-}
-
 /// 加锁读设计身份行：(project_id, lifecycle_status, current_revision_id, row_revision)。
+/// （通用实现见 `pm_write::lock_head_row`。）
 async fn lock_design(
     conn: &mut sqlx::PgConnection,
     tenant_id: Uuid,
     design_id: Uuid,
 ) -> Result<(Uuid, String, Option<Uuid>, i64), PmWriteError> {
-    sqlx::query_as(
-        "SELECT project_id, lifecycle_status, current_revision_id, row_revision \
-         FROM design.design WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
+    lock_head_row(
+        conn,
+        tenant_id,
+        design_id,
+        "design.design",
+        "lifecycle_status",
+        "design not found",
     )
-    .bind(design_id)
-    .bind(tenant_id)
-    .fetch_optional(&mut *conn)
     .await
-    .map_err(PmWriteError::Db)?
-    .ok_or(PmWriteError::NotFound("design not found"))
 }
 
 async fn fetch_revision_view(
@@ -769,24 +750,24 @@ async fn fetch_revision_view(
 }
 
 /// 加锁读修订行：(version, state, content_hash, content)。
+/// （通用实现见 `pm_write::lock_revision_row`。）
 async fn lock_design_revision(
     conn: &mut sqlx::PgConnection,
     tenant_id: Uuid,
     design_id: Uuid,
     revision_id: Uuid,
 ) -> Result<(i32, String, String, Value), PmWriteError> {
-    sqlx::query_as(
-        "SELECT version, state, content_hash, content \
-         FROM design.design_revision \
-         WHERE id = $1 AND design_id = $2 AND tenant_id = $3 FOR UPDATE",
+    lock_revision_row(
+        conn,
+        tenant_id,
+        revision_id,
+        design_id,
+        "design.design_revision",
+        "design_id",
+        "version, state, content_hash, content",
+        "design revision not found",
     )
-    .bind(revision_id)
-    .bind(design_id)
-    .bind(tenant_id)
-    .fetch_optional(&mut *conn)
     .await
-    .map_err(PmWriteError::Db)?
-    .ok_or(PmWriteError::NotFound("design revision not found"))
 }
 
 /// 草稿内容的 JSON 组装（单一定义点：draft 语义全模块一致）。
@@ -809,30 +790,6 @@ fn build_revision_content(req: &DraftDesignRevisionRequest) -> Value {
         );
     }
     content
-}
-
-fn content_hash_of(content: &Value) -> String {
-    let bytes = serde_json::to_vec(content).expect("serialize content");
-    hex_sha256(&bytes)
-}
-
-fn transition_or_conflict(
-    from: DesignRevisionState,
-    to: DesignRevisionState,
-) -> Result<(), PmWriteError> {
-    if from.can_transition_to(to) {
-        Ok(())
-    } else {
-        Err(PmWriteError::Conflict("illegal design revision transition"))
-    }
-}
-
-fn adr_transition_or_conflict(from: AdrStatus, to: AdrStatus) -> Result<(), PmWriteError> {
-    if from.can_transition_to(to) {
-        Ok(())
-    } else {
-        Err(PmWriteError::Conflict("illegal adr transition"))
-    }
 }
 
 fn parse_state(state: &str) -> Result<DesignRevisionState, PmWriteError> {
@@ -1119,7 +1076,12 @@ pub async fn submit_design_revision(
     let (version, state, content_hash, content) =
         lock_design_revision(&mut tx, tenant_id, design_id, revision_id).await?;
     let from = parse_state(&state)?;
-    transition_or_conflict(from, DesignRevisionState::PendingConfirmation)?;
+    transition_or_conflict(
+        |f, t| f.can_transition_to(t),
+        from,
+        DesignRevisionState::PendingConfirmation,
+        "illegal design revision transition",
+    )?;
     let markdown = content
         .get("markdown")
         .and_then(Value::as_str)
@@ -1919,7 +1881,7 @@ pub async fn decide_approval(
             } else {
                 DesignRevisionState::Rejected
             };
-            transition_or_conflict(from, to)?;
+            transition_or_conflict(|f, t| f.can_transition_to(t), from, to, "illegal design revision transition")?;
             if req.decision == "approve" {
                 // SC-05 前置：存在未关闭的 blocker 评审问题 → 拒绝批准。
                 let open_blockers: i64 = sqlx::query_scalar(
@@ -2005,7 +1967,7 @@ pub async fn decide_approval(
             } else {
                 AdrStatus::Rejected
             };
-            adr_transition_or_conflict(from, to)?;
+            transition_or_conflict(|f, t| f.can_transition_to(t), from, to, "illegal adr transition")?;
             // 内容锚定：当前内容版本哈希必须与审批人核准的哈希一致。
             let content_hash: String = sqlx::query_scalar(
                 "SELECT content_hash FROM design.adr_revision \
@@ -2472,7 +2434,12 @@ pub async fn submit_adr_revision(
     let adr_from =
         AdrStatus::parse(&status).ok_or_else(|| PmWriteError::Validation("unknown adr status"))?;
     if adr_from == AdrStatus::Proposed {
-        adr_transition_or_conflict(adr_from, AdrStatus::UnderReview)?;
+        transition_or_conflict(
+            |f, t| f.can_transition_to(t),
+            adr_from,
+            AdrStatus::UnderReview,
+            "illegal adr transition",
+        )?;
         sqlx::query(
             "UPDATE design.adr SET status = 'under_review', updated_at = now() \
              WHERE id = $1 AND tenant_id = $2",
@@ -2696,9 +2663,11 @@ pub async fn supersede_adr(
     let mut tx = pool.begin().await.map_err(PmWriteError::Db)?;
     require_human_conn(&mut tx, actor).await?;
     let (project_id, status, _, _) = lock_adr(&mut tx, tenant_id, adr_id).await?;
-    adr_transition_or_conflict(
+    transition_or_conflict(
+        |f, t| f.can_transition_to(t),
         AdrStatus::parse(&status).ok_or_else(|| PmWriteError::Validation("unknown adr status"))?,
         AdrStatus::Superseded,
+        "illegal adr transition",
     )?;
     let (successor_status, successor_project): (String, Uuid) = sqlx::query_as(
         "SELECT status, project_id FROM design.adr \
@@ -2770,9 +2739,11 @@ pub async fn deprecate_adr(
     let mut tx = pool.begin().await.map_err(PmWriteError::Db)?;
     require_human_conn(&mut tx, actor).await?;
     let (project_id, status, _, _) = lock_adr(&mut tx, tenant_id, adr_id).await?;
-    adr_transition_or_conflict(
+    transition_or_conflict(
+        |f, t| f.can_transition_to(t),
         AdrStatus::parse(&status).ok_or_else(|| PmWriteError::Validation("unknown adr status"))?,
         AdrStatus::Deprecated,
+        "illegal adr transition",
     )?;
     sqlx::query(
         "UPDATE design.adr SET status = 'deprecated', row_revision = row_revision + 1, updated_at = now() \
