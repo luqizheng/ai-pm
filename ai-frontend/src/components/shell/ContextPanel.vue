@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
   ArrowUpRight,
   Box,
   FileText,
+  History,
   PanelRightClose,
   Pin,
   Sparkles
@@ -14,23 +16,32 @@ import Badge from "@/components/ui/badge/Badge.vue";
 import IconTooltip from "./IconTooltip.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useShellStore } from "@/stores/shell";
+import { useAssistantStore, type AssistantTab } from "@/stores/assistant";
 import type { RelatedLink } from "./demo";
 
 /**
- * 右上下文栏（Application Shell §2D，320px）。
+ * 右上下文栏（AI Collaboration V1.0 / DR-C3 + DR-C8 第 ③ 步，288px）。
  *
- * **可选且可独立关闭**——不是每页常驻。内容随当前对象变化：
- * 当前项目 → 仓库详情 → 相关文档 → 助手可用上下文。
+ * **四个一级 Tab**（Context / Sources / Results / Actions）+ History Drawer——
+ * History 不是第五个主 Tab，走二级入口的 Drawer；Drawer 覆盖本栏视觉区，
+ * **不改四栏宽度**。
  *
- * 底部「已固定到本页」提示对应 pin 动作（当前为静态态，不做真实固定）。
+ * 数据来源（**同源，不另起 fetch**）：
+ *   - Context：壳 store 的 `assistantContext`（上下文单一真源）+ 当前路由对象；
+ *   - Sources：**真实注入记账**（后端 `metadata.injection`，经会话机制写入
+ *     assistant store）——没有注入数据就显示未注入，**不冒充**注入面；
+ *   - Results / Actions / History：会话派生视图（assistant store），
+ *     由 `useAssistantConversation` 作为唯一写者发布。
  *
  * 当前项目取自 store：切换项目时随之更新；切换过程中不显示旧项目数据
  * （Figma「07」No stale project data is displayed）。
  */
 
 const { t } = useI18n();
+const route = useRoute();
 const shell = useShellStore();
 const auth = useAuthStore();
+const assistant = useAssistantStore();
 
 /** mock 预览（本地 dev / 单测）：展示设计稿样本；发布构建走真实仓库上下文 */
 const mockPreview = import.meta.env.VITE_USE_MOCK === "1";
@@ -109,13 +120,115 @@ const commandScope = computed(() => {
   const branch = demo.value?.repository.defaultBranch || context.defaultBranch;
   return branch ? `${name} / Repository / ${branch}` : name;
 });
+
+/** 四个一级 Tab（DR-C3）。 */
+const TABS: Array<{ id: AssistantTab; labelKey: string }> = [
+  { id: "context", labelKey: "shell.app.context.tabs.context" },
+  { id: "sources", labelKey: "shell.app.context.tabs.sources" },
+  { id: "results", labelKey: "shell.app.context.tabs.results" },
+  { id: "actions", labelKey: "shell.app.context.tabs.actions" }
+];
+
+const activeTab = computed(() => assistant.activeTab);
+
+/**
+ * 已附加对象（归属轴 Attached）——线程锚定的作用域。
+ *
+ * 取自 `assistantContext`（项目 / 仓库 / 分支），即 AI 当前**确实带着**的
+ * 上下文；未锚定时为空（不冒充）。
+ */
+const attachedObjects = computed(() => {
+  const context = assistantContext.value;
+  const items: Array<{ key: string; label: string; version?: string }> = [];
+  if (context.projectName) {
+    items.push({
+      key: "project",
+      label: context.projectName,
+      version: context.projectId ?? undefined
+    });
+  }
+  if (context.repositoryName) {
+    items.push({
+      key: "repository",
+      label: context.repositoryName,
+      version: context.defaultBranch ?? undefined
+    });
+  }
+  return items;
+});
+
+/**
+ * 可用对象（归属轴 Available）——当前页面的业务对象。
+ *
+ * 由当前路由推导（类型 + id）；对象级上下文模型未落地（G3/G4），此处**只
+ * 呈现当前页面对象**，不列全项目对象。切换页面即变，**不自动 Attached**。
+ */
+const availableObject = computed(() => {
+  const path = route.path;
+  const segments = path.split("/").filter(Boolean);
+  const last = segments.at(-1) ?? "";
+  const isDetail = /^[0-9a-f-]{8,}$/i.test(last) || /^\d+$/.test(last);
+  if (!isDetail) return null;
+  const typeKey = path.includes("/design/")
+    ? "design"
+    : path.includes("/requirements/")
+      ? "requirement"
+      : path.includes("/tasks/") || path.includes("/execution/")
+        ? "task"
+        : "object";
+  return {
+    typeKey,
+    typeLabel: t(`shell.app.context.objectTypes.${typeKey}`),
+    id: last
+  };
+});
+
+/** 注入记账（真实；无则 null —— 未收到 AI 回复即未注入）。 */
+const injection = computed(() => assistant.injection);
+
+/** 派生结果 / 动作（会话机制发布）。 */
+const results = computed(() => assistant.results);
+const actions = computed(() => assistant.actions);
+
+/** History Drawer（五类 + 全部）。 */
+const HISTORY_CATEGORIES = [
+  "all",
+  "conversation",
+  "ai_action",
+  "context_change",
+  "approval",
+  "execution"
+] as const;
+
+const historyCategories = computed(() =>
+  HISTORY_CATEGORIES.map(id => ({
+    id,
+    labelKey: `shell.app.context.historyCategories.category.${id}`
+  }))
+);
+
+const historyEvents = computed(() =>
+  [...assistant.filteredHistory].sort((a, b) =>
+    b.createdAt.localeCompare(a.createdAt)
+  )
+);
 </script>
 
 <template>
   <aside class="shell-context" :aria-label="t('shell.app.context.title')">
-    <!-- 头部：标题 + pin + 关闭 -->
+    <!-- 头部：标题 + History 入口 + pin + 关闭 -->
     <div class="shell-context__header">
       <h2 class="shell-context__title">{{ t("shell.app.context.title") }}</h2>
+      <IconTooltip :content="t('shell.app.context.history')" side="bottom">
+        <button
+          type="button"
+          class="shell-context__icon-button"
+          :aria-label="t('shell.app.context.history')"
+          @click="assistant.openHistory()"
+        >
+          <History :size="16" aria-hidden="true" />
+        </button>
+      </IconTooltip>
       <IconTooltip :content="t('shell.app.context.pin')" side="bottom">
         <button
           type="button"
@@ -137,145 +250,353 @@ const commandScope = computed(() => {
       </IconTooltip>
     </div>
 
-    <div class="shell-context__body">
-      <!-- 当前项目 -->
-      <section class="shell-context__section">
-        <p class="shell-context__eyebrow">
-          {{ t("shell.app.context.currentProject") }}
-        </p>
-        <div class="shell-context__identity">
-          <span class="shell-context__project-icon" aria-hidden="true">
-            <Box :size="16" />
-          </span>
-          <span class="shell-context__identity-text">
-            <span class="shell-context__project-name">{{
-              currentProject?.name ?? t("shell.app.project.switching")
-            }}</span>
-            <span v-if="organization" class="shell-context__project-org">
-              {{ organization }}
-            </span>
-          </span>
-        </div>
-        <p class="shell-context__description">
-          {{ currentProject?.description ?? t("shell.app.project.switching") }}
-        </p>
-      </section>
-
-      <hr class="shell-context__divider" />
-
-      <!-- 仓库详情 -->
-      <section class="shell-context__section">
-        <h3 class="shell-context__heading">
-          {{ t("shell.app.context.repositoryDetails") }}
-        </h3>
-        <dl class="shell-context__meta">
-          <div
-            v-for="row in metadata"
-            :key="row.key"
-            class="shell-context__meta-row"
-          >
-            <dt class="shell-context__meta-label">
-              {{ t(`shell.app.context.fields.${row.key}`) }}
-            </dt>
-            <dd class="shell-context__meta-value">{{ row.value }}</dd>
-          </div>
-        </dl>
-      </section>
-
-      <hr class="shell-context__divider" />
-
-      <!-- 相关文档（当前无真实文档源时整段不渲染） -->
-      <section v-if="relatedLinks.length" class="shell-context__section">
-        <h3 class="shell-context__heading">
-          {{ t("shell.app.context.related") }}
-        </h3>
-        <a
-          v-for="link in relatedLinks"
-          :key="link.id"
-          class="shell-context__link"
-          href="#"
-          @click.prevent
-        >
-          <FileText :size="14" aria-hidden="true" />
-          <span class="shell-context__link-text">{{ link.label }}</span>
-          <ArrowUpRight :size="12" aria-hidden="true" />
-        </a>
-      </section>
-
-      <!-- 助手可用上下文（Batch 4 诚实化）：列真实注入源，与后端
-           Batch 3A 两节一一对应（S1 项目画像 / S2 仓库事实）；仓库未锚定
-           时如实显示「未锚定」，不冒充注入面。 -->
-      <section class="shell-context__ai">
-        <div class="shell-context__ai-head">
-          <Sparkles :size="14" aria-hidden="true" />
-          <span>{{ t("shell.app.context.aiNotice") }}</span>
-        </div>
-        <p class="shell-context__ai-text">
-          {{ commandScope }} · {{ t("shell.app.context.noAttachment") }}
-        </p>
-        <div class="shell-context__ai-sources">
-          <span class="shell-context__ai-sources-label">{{
-            t("shell.app.context.injectionSources")
-          }}</span>
-          <span class="shell-context__ai-source">
-            {{ t("shell.app.context.sourceProject") }}
-            <template v-if="assistantContext.projectName">
-              · {{ assistantContext.projectName }}
-            </template>
-          </span>
-          <span class="shell-context__ai-source">
-            {{ t("shell.app.context.sourceRepository") }}
-            <template v-if="assistantContext.repositoryName">
-              · {{ assistantContext.repositoryName }}/{{
-                assistantContext.defaultBranch
-              }}
-            </template>
-            <template v-else>
-              · {{ t("shell.app.context.sourceNone") }}
-            </template>
-          </span>
-        </div>
-        <Badge variant="neutral">
-          {{ t("shell.app.context.readOnly") }}
-        </Badge>
-      </section>
+    <!-- 四个一级 Tab（切换不重排壳） -->
+    <div class="shell-context__tabs" role="tablist">
+      <button
+        v-for="tab in TABS"
+        :key="tab.id"
+        type="button"
+        role="tab"
+        class="shell-context__tab"
+        :class="{ 'is-active': activeTab === tab.id }"
+        :aria-selected="activeTab === tab.id"
+        @click="assistant.setActiveTab(tab.id)"
+      >
+        {{ t(tab.labelKey) }}
+      </button>
     </div>
 
-    <!-- 底部固定提示 -->
-    <div class="shell-context__footer">
-      <Pin :size="12" aria-hidden="true" />
-      <span>{{ t("shell.app.context.pinned") }}</span>
+    <div class="shell-context__body">
+      <!-- ── Context：当前项目 / 仓库 / 关联 / 已附加 / 可用对象 ── -->
+      <template v-if="activeTab === 'context'">
+        <section class="shell-context__section">
+          <p class="shell-context__eyebrow">
+            {{ t("shell.app.context.currentProject") }}
+          </p>
+          <div class="shell-context__identity">
+            <span class="shell-context__project-icon" aria-hidden="true">
+              <Box :size="16" />
+            </span>
+            <span class="shell-context__identity-text">
+              <span class="shell-context__project-name">{{
+                currentProject?.name ?? t("shell.app.project.switching")
+              }}</span>
+              <span v-if="organization" class="shell-context__project-org">
+                {{ organization }}
+              </span>
+            </span>
+          </div>
+          <p class="shell-context__description">
+            {{
+              currentProject?.description ?? t("shell.app.project.switching")
+            }}
+          </p>
+        </section>
+
+        <hr class="shell-context__divider" />
+
+        <section class="shell-context__section">
+          <h3 class="shell-context__heading">
+            {{ t("shell.app.context.repositoryDetails") }}
+          </h3>
+          <dl class="shell-context__meta">
+            <div
+              v-for="row in metadata"
+              :key="row.key"
+              class="shell-context__meta-row"
+            >
+              <dt class="shell-context__meta-label">
+                {{ t(`shell.app.context.fields.${row.key}`) }}
+              </dt>
+              <dd class="shell-context__meta-value">{{ row.value }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <hr class="shell-context__divider" />
+
+        <!-- 相关文档（当前无真实文档源时整段不渲染） -->
+        <section v-if="relatedLinks.length" class="shell-context__section">
+          <h3 class="shell-context__heading">
+            {{ t("shell.app.context.related") }}
+          </h3>
+          <a
+            v-for="link in relatedLinks"
+            :key="link.id"
+            class="shell-context__link"
+            href="#"
+            @click.prevent
+          >
+            <FileText :size="14" aria-hidden="true" />
+            <span class="shell-context__link-text">{{ link.label }}</span>
+            <ArrowUpRight :size="12" aria-hidden="true" />
+          </a>
+        </section>
+
+        <hr class="shell-context__divider" />
+
+        <!-- 已附加对象（Attached） -->
+        <section class="shell-context__section">
+          <h3 class="shell-context__heading">
+            {{ t("shell.app.context.attached") }}
+          </h3>
+          <p v-if="attachedObjects.length === 0" class="shell-context__empty">
+            {{ t("shell.app.context.notAnchored") }}
+          </p>
+          <ul v-else class="shell-context__objects">
+            <li
+              v-for="item in attachedObjects"
+              :key="item.key"
+              class="shell-context__object"
+            >
+              <span class="shell-context__object-name">{{ item.label }}</span>
+              <span class="shell-context__object-version">{{
+                item.version ?? t("shell.app.context.objectTypes.project")
+              }}</span>
+              <Badge variant="info">{{
+                t("shell.app.context.state.attached")
+              }}</Badge>
+            </li>
+          </ul>
+        </section>
+
+        <hr class="shell-context__divider" />
+
+        <!-- 可用对象（Available）：当前页面对象，默认不附加 -->
+        <section class="shell-context__section">
+          <h3 class="shell-context__heading">
+            {{ t("shell.app.context.available") }}
+          </h3>
+          <p v-if="!availableObject" class="shell-context__empty">
+            {{ t("shell.app.context.noAvailableObject") }}
+          </p>
+          <ul v-else class="shell-context__objects">
+            <li class="shell-context__object">
+              <span class="shell-context__object-name">
+                {{ availableObject.typeLabel }}
+              </span>
+              <span class="shell-context__object-version">
+                {{ availableObject.id }}
+              </span>
+              <Badge>{{ t("shell.app.context.state.available") }}</Badge>
+            </li>
+          </ul>
+        </section>
+      </template>
+
+      <!-- ── Sources：真实注入记账（不冒充注入面） ── -->
+      <template v-else-if="activeTab === 'sources'">
+        <section class="shell-context__ai">
+          <div class="shell-context__ai-head">
+            <Sparkles :size="14" aria-hidden="true" />
+            <span>{{ t("shell.app.context.aiNotice") }}</span>
+          </div>
+          <p class="shell-context__ai-text">
+            {{ commandScope }} · {{ t("shell.app.context.noAttachment") }}
+          </p>
+          <div class="shell-context__ai-sources">
+            <span class="shell-context__ai-sources-label">{{
+              t("shell.app.context.injectionSources")
+            }}</span>
+            <span class="shell-context__ai-source">
+              {{ t("shell.app.context.sourceProject") }}
+              <template v-if="assistantContext.projectName">
+                · {{ assistantContext.projectName }}
+              </template>
+            </span>
+            <span class="shell-context__ai-source">
+              {{ t("shell.app.context.sourceRepository") }}
+              <template v-if="assistantContext.repositoryName">
+                · {{ assistantContext.repositoryName
+                }}<template v-if="assistantContext.defaultBranch">
+                  /{{ assistantContext.defaultBranch }}</template
+                >
+              </template>
+              <template v-else>
+                · {{ t("shell.app.context.notAnchored") }}
+              </template>
+            </span>
+          </div>
+        </section>
+
+        <hr class="shell-context__divider" />
+
+        <!-- 注入记账：只认后端落库的 metadata.injection -->
+        <section class="shell-context__section">
+          <h3 class="shell-context__heading">
+            {{ t("shell.app.context.injectionLedger") }}
+          </h3>
+          <p v-if="!injection" class="shell-context__empty">
+            {{ t("shell.app.context.noInjection") }}
+          </p>
+          <dl v-else class="shell-context__meta">
+            <div class="shell-context__meta-row">
+              <dt class="shell-context__meta-label">
+                {{ t("shell.app.context.injectionIncluded") }}
+              </dt>
+              <dd class="shell-context__meta-value">
+                {{
+                  injection.sectionsIncluded.length
+                    ? injection.sectionsIncluded.join(", ")
+                    : t("shell.app.context.none")
+                }}
+              </dd>
+            </div>
+            <div class="shell-context__meta-row">
+              <dt class="shell-context__meta-label">
+                {{ t("shell.app.context.injectionDropped") }}
+              </dt>
+              <dd class="shell-context__meta-value">
+                {{
+                  injection.dropped.length
+                    ? injection.dropped.join(", ")
+                    : t("shell.app.context.none")
+                }}
+              </dd>
+            </div>
+            <div class="shell-context__meta-row">
+              <dt class="shell-context__meta-label">
+                {{ t("shell.app.context.injectionChars") }}
+              </dt>
+              <dd class="shell-context__meta-value">
+                {{ injection.charsTotal }}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      </template>
+
+      <!-- ── Results：当前会话的 AI 产出 ── -->
+      <template v-else-if="activeTab === 'results'">
+        <p v-if="results.length === 0" class="shell-context__empty">
+          {{ t("shell.app.context.noResults") }}
+        </p>
+        <ul v-else class="shell-context__objects">
+          <li
+            v-for="item in results"
+            :key="item.id"
+            class="shell-context__object"
+          >
+            <span class="shell-context__object-name">{{ item.title }}</span>
+            <span class="shell-context__object-version">
+              {{ t(`shell.app.context.responseTypes.${item.responseType}`) }}
+            </span>
+            <Badge v-if="item.status" variant="info">
+              {{ item.status }}
+            </Badge>
+          </li>
+        </ul>
+      </template>
+
+      <!-- ── Actions：待授权 / 已授权 / 执行结果（区分发起方） ── -->
+      <template v-else>
+        <p v-if="actions.length === 0" class="shell-context__empty">
+          {{ t("shell.app.context.noActions") }}
+        </p>
+        <ul v-else class="shell-context__objects">
+          <li
+            v-for="item in actions"
+            :key="item.id"
+            class="shell-context__object"
+          >
+            <span class="shell-context__object-name">
+              {{ t(`shell.app.context.responseTypes.${item.kind}`) }}
+            </span>
+            <span class="shell-context__object-version">
+              {{
+                item.initiator === "ai"
+                  ? t("shell.app.context.initiator.ai")
+                  : t("shell.app.context.initiator.user")
+              }}
+            </span>
+            <Badge v-if="item.status" variant="info">{{ item.status }}</Badge>
+          </li>
+        </ul>
+      </template>
+    </div>
+
+    <!-- History Drawer：覆盖本栏视觉区，不改四栏宽度 -->
+    <div
+      v-if="assistant.historyOpen"
+      class="shell-context__drawer"
+      role="dialog"
+      :aria-label="t('shell.app.context.history')"
+    >
+      <div class="shell-context__drawer-head">
+        <span class="shell-context__drawer-title">{{
+          t("shell.app.context.history")
+        }}</span>
+        <button
+          type="button"
+          class="shell-context__icon-button"
+          :aria-label="t('shell.app.context.historyClose')"
+          @click="assistant.closeHistory()"
+        >
+          <PanelRightClose :size="16" aria-hidden="true" />
+        </button>
+      </div>
+      <div class="shell-context__drawer-filters">
+        <button
+          v-for="category in historyCategories"
+          :key="category.id"
+          type="button"
+          class="shell-context__chip"
+          :class="{
+            'is-active': assistant.historyCategory === category.id
+          }"
+          @click="assistant.openHistory(category.id)"
+        >
+          {{ t(category.labelKey) }}
+        </button>
+      </div>
+      <ul class="shell-context__drawer-list">
+        <li
+          v-for="event in historyEvents"
+          :key="event.id"
+          class="shell-context__drawer-item"
+        >
+          <span class="shell-context__object-name">{{ event.name }}</span>
+          <span class="shell-context__object-version">
+            {{
+              t(
+                `shell.app.context.historyCategories.category.${event.category}`
+              )
+            }}
+            <template v-if="event.actor"> · {{ event.actor }} </template>
+          </span>
+          <span v-if="event.status" class="shell-context__object-version">
+            {{ event.status }}
+          </span>
+        </li>
+      </ul>
     </div>
   </aside>
 </template>
 
 <style scoped>
 .shell-context {
+  position: relative;
   display: flex;
   flex-direction: column;
-  width: 100%;
   height: 100%;
-  overflow-y: auto;
-  background: var(--ws-sidebar);
-  border-left: var(--border-1) solid var(--ws-border);
+  overflow: hidden;
 }
 
-/* 头部 */
 .shell-context__header {
+  flex: none;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  height: var(--ws-topbar-height);
-  padding: 0 var(--space-5);
-  border-bottom: var(--border-1) solid var(--ws-border);
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--ws-border);
 }
 
 .shell-context__title {
   flex: 1;
   margin: 0;
-  color: var(--ws-text-primary);
-  font-size: var(--font-size-body);
+  font-size: var(--ws-font-size-section);
   font-weight: var(--weight-semibold);
+  color: var(--ws-text-primary);
 }
 
 .shell-context__icon-button {
@@ -284,110 +605,127 @@ const commandScope = computed(() => {
   justify-content: center;
   width: var(--size-control-sm);
   height: var(--size-control-sm);
-  padding: 0;
-  color: var(--ws-text-secondary);
-  cursor: pointer;
-  background: transparent;
   border: none;
   border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ws-text-secondary);
+  cursor: pointer;
 }
 
 .shell-context__icon-button:hover {
-  color: var(--ws-text-primary);
   background: var(--ws-hover-veil);
+  color: var(--ws-text-primary);
 }
 
-.shell-context__icon-button:focus-visible {
+.shell-context__icon-button.is-pinned {
+  color: var(--ws-accent);
+}
+
+/* 四个一级 Tab */
+.shell-context__tabs {
+  flex: none;
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3) 0;
+  border-bottom: 1px solid var(--ws-border);
+}
+
+.shell-context__tab {
+  flex: 1;
+  padding: var(--space-1) 0 var(--space-2);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ws-text-secondary);
+  font-size: var(--ws-font-size-caption);
+  cursor: pointer;
+}
+
+.shell-context__tab.is-active {
+  color: var(--ws-accent);
+  border-bottom-color: var(--ws-accent);
+}
+
+.shell-context__tab:focus-visible {
   outline: none;
   box-shadow: var(--ws-focus-ring);
 }
 
-/* pin 按钮为常亮态（Figma：底色 accent-surface） */
-.shell-context__icon-button.is-pinned {
-  color: var(--ws-text-primary);
-  background: var(--ws-color-accent-surface);
-}
-
-/* 主体 */
 .shell-context__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  padding: var(--space-5);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3);
 }
 
 .shell-context__section {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
+}
+
+.shell-context__divider {
+  margin: var(--space-3) 0;
+  border: none;
+  border-top: 1px solid var(--ws-border);
 }
 
 .shell-context__eyebrow {
   margin: 0;
   color: var(--ws-text-secondary);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-micro);
-}
-
-.shell-context__identity {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.shell-context__project-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--size-control-lg);
-  height: var(--size-control-lg);
-  color: var(--ws-text-primary);
-  background: var(--ws-elevated);
-  border-radius: var(--radius-sm);
-}
-
-.shell-context__identity-text {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.shell-context__project-name {
-  color: var(--ws-text-primary);
-  font-size: var(--font-size-body);
-  font-weight: var(--weight-medium);
-}
-
-.shell-context__project-org {
-  color: var(--ws-text-secondary);
-  font-size: var(--font-size-caption);
-}
-
-.shell-context__description {
-  margin: 0;
-  color: var(--ws-text-secondary);
-  font-size: var(--font-size-body);
-}
-
-.shell-context__divider {
-  height: var(--border-1);
-  margin: 0;
-  background: var(--ws-border);
-  border: none;
+  font-size: var(--ws-font-size-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .shell-context__heading {
   margin: 0;
   color: var(--ws-text-primary);
-  font-size: var(--font-size-body);
+  font-size: var(--ws-font-size-body);
   font-weight: var(--weight-medium);
 }
 
-/* 元数据表 */
+.shell-context__identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.shell-context__project-icon {
+  display: inline-flex;
+  color: var(--ws-text-secondary);
+}
+
+.shell-context__identity-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.shell-context__project-name {
+  color: var(--ws-text-primary);
+  font-weight: var(--weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-context__project-org {
+  color: var(--ws-text-secondary);
+  font-size: var(--ws-font-size-micro);
+}
+
+.shell-context__description {
+  margin: 0;
+  color: var(--ws-text-secondary);
+  font-size: var(--ws-font-size-caption);
+  line-height: 1.5;
+}
+
 .shell-context__meta {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
   margin: 0;
 }
 
@@ -400,93 +738,193 @@ const commandScope = computed(() => {
 
 .shell-context__meta-label {
   color: var(--ws-text-secondary);
-  font-size: var(--font-size-caption);
+  font-size: var(--ws-font-size-caption);
 }
 
 .shell-context__meta-value {
-  margin: 0;
   color: var(--ws-text-primary);
-  font-size: var(--font-size-caption);
+  font-size: var(--ws-font-size-caption);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* 相关链接 */
 .shell-context__link {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  color: var(--ws-text-primary);
-  font-size: var(--font-size-caption);
+  color: var(--ws-text-secondary);
+  font-size: var(--ws-font-size-caption);
   text-decoration: none;
 }
 
-.shell-context__link:hover .shell-context__link-text {
+.shell-context__link:hover {
   color: var(--ws-accent);
-}
-
-.shell-context__link:focus-visible {
-  outline: none;
-  box-shadow: var(--ws-focus-ring);
 }
 
 .shell-context__link-text {
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* 助手上下文卡 */
 .shell-context__ai {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-3);
-  background: var(--ws-surface);
-  border: var(--border-1) solid var(--ws-border);
+  border: 1px solid var(--ws-border);
   border-radius: var(--ws-radius-card);
+  background: var(--ws-elevated);
 }
 
 .shell-context__ai-head {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  color: var(--ws-text-primary);
-  font-size: var(--font-size-body);
-  font-weight: var(--weight-medium);
+  color: var(--ws-accent);
+  font-size: var(--ws-font-size-caption);
 }
 
 .shell-context__ai-text {
   margin: 0;
-  color: var(--ws-text-secondary);
-  font-size: var(--font-size-caption);
+  color: var(--ws-text-primary);
+  font-size: var(--ws-font-size-caption);
 }
 
-/* 注入源清单（Batch 4 诚实化） */
 .shell-context__ai-sources {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  padding: var(--space-2);
-  background: var(--ws-elevated);
-  border-radius: var(--radius-xs);
 }
 
 .shell-context__ai-sources-label {
   color: var(--ws-text-secondary);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-micro);
+  font-size: var(--ws-font-size-micro);
 }
 
 .shell-context__ai-source {
-  color: var(--ws-text-primary);
-  font-size: var(--font-size-caption);
+  color: var(--ws-text-secondary);
+  font-size: var(--ws-font-size-micro);
 }
 
-/* 底部 */
-.shell-context__footer {
+.shell-context__objects {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shell-context__object {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-5);
-  margin-top: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-sm);
+  background: var(--ws-surface);
+}
+
+.shell-context__object-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ws-text-primary);
+  font-size: var(--ws-font-size-caption);
+}
+
+.shell-context__object-version {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ws-text-secondary);
-  font-size: var(--font-size-caption);
+  font-size: var(--ws-font-size-micro);
+}
+
+.shell-context__empty {
+  margin: 0;
+  color: var(--ws-text-secondary);
+  font-size: var(--ws-font-size-caption);
+}
+
+/* History Drawer：覆盖本栏视觉区，不改四栏宽度 */
+.shell-context__drawer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--ws-sidebar);
+}
+
+.shell-context__drawer-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--ws-border);
+}
+
+.shell-context__drawer-title {
+  flex: 1;
+  color: var(--ws-text-primary);
+  font-size: var(--ws-font-size-section);
+  font-weight: var(--weight-semibold);
+}
+
+.shell-context__drawer-filters {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--ws-border);
+}
+
+.shell-context__chip {
+  padding: 0 var(--space-2);
+  height: var(--size-control-sm);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--ws-text-secondary);
+  font-size: var(--ws-font-size-micro);
+  cursor: pointer;
+}
+
+.shell-context__chip.is-active {
+  border-color: var(--ws-accent);
+  color: var(--ws-accent);
+}
+
+.shell-context__drawer-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.shell-context__drawer-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-sm);
+  background: var(--ws-surface);
 }
 </style>

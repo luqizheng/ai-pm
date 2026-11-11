@@ -10,6 +10,23 @@ import { mountShell } from "./test-utils";
 /**
  * 右上下文栏行为（Application Shell §2D）。
  */
+
+/**
+ * 切到 Sources Tab（DR-C3：注入源归 Sources，不在 Context Tab）。
+ *
+ * 注入源/作用域串的断言意图不变，只是先切 Tab 再断言。
+ */
+async function openSourcesTab(wrapper: { find: (s: string) => unknown }) {
+  const tabs = wrapper.findAll(".shell-context__tab") as Array<{
+    text: () => string;
+    trigger: (e: string) => Promise<void>;
+  }>;
+  const sources = tabs.find(tab => tab.text() === "来源");
+  expect(sources).toBeTruthy();
+  await sources!.trigger("click");
+  await nextTick();
+}
+
 describe("ContextPanel", () => {
   it("渲染当前项目与仓库元数据", async () => {
     const { wrapper } = mountShell(ContextPanel);
@@ -41,6 +58,8 @@ describe("ContextPanel", () => {
     await vi.waitFor(() => {
       expect(wrapper.findAll(".shell-context__link").length).toBe(2);
     });
+    // 注入源归 Sources Tab（DR-C3）
+    await openSourcesTab(wrapper);
     expect(wrapper.find(".shell-context__ai").exists()).toBe(true);
   });
 
@@ -99,6 +118,7 @@ describe("ContextPanel", () => {
       status: "verified"
     };
     await nextTick();
+    await openSourcesTab(wrapper);
 
     const sources = wrapper.find(".shell-context__ai-sources").text();
     expect(sources).toContain("注入源");
@@ -117,6 +137,7 @@ describe("ContextPanel", () => {
     shell.setProjects([{ id: "p1", name: "Atlas Platform" }]);
     shell.setCurrentProject("p1");
     await nextTick();
+    await openSourcesTab(wrapper);
 
     const sources = wrapper.find(".shell-context__ai-sources").text();
     // 未锚定如实显示「未锚定」，且不出现任何仓库名/分支（无 "/仓库/分支" 面）
@@ -136,9 +157,90 @@ describe("ContextPanel", () => {
       status: "verified"
     };
     await nextTick();
+    await openSourcesTab(wrapper);
 
     expect(wrapper.find(".shell-context__ai-text").text()).toContain(
       `${shell.assistantContext.projectName} / Repository / ${shell.assistantContext.defaultBranch}`
     );
+  });
+});
+
+// ───────────────────────────────── 四一级 Tab + History Drawer（DR-C3）
+
+describe("ContextPanel（四 Tab + History Drawer）", () => {
+  it("四个一级 Tab 齐备，切换不重排壳", async () => {
+    const { wrapper } = mountShell(ContextPanel);
+    await nextTick();
+
+    const tabs = wrapper.findAll(".shell-context__tab");
+    expect(tabs.map(tab => tab.text())).toEqual([
+      "上下文",
+      "来源",
+      "结果",
+      "操作"
+    ]);
+    // 默认在 Context Tab
+    expect(wrapper.attributes("aria-label")).toBe("上下文");
+    expect(wrapper.find(".shell-context__project-name").exists()).toBe(true);
+  });
+
+  it("Sources Tab 无注入记账时如实显示「未注入」，不冒充注入面", async () => {
+    const { wrapper } = mountShell(ContextPanel);
+    await nextTick();
+    await openSourcesTab(wrapper);
+
+    expect(wrapper.text()).toContain("尚未收到 AI 回复");
+  });
+
+  it("Results / Actions Tab 无数据时给空态，不填充演示数据", async () => {
+    const { wrapper } = mountShell(ContextPanel);
+    await nextTick();
+
+    const tabs = wrapper.findAll(".shell-context__tab");
+    await tabs[2].trigger("click");
+    await nextTick();
+    expect(wrapper.text()).toContain("当前会话还没有 AI 结果");
+
+    await tabs[3].trigger("click");
+    await nextTick();
+    expect(wrapper.text()).toContain("当前会话还没有待授权操作");
+  });
+
+  it("History Drawer：二级入口打开、五类筛选、关闭后回到原 Tab", async () => {
+    const { wrapper } = mountShell(ContextPanel);
+    await nextTick();
+
+    // History 不是第五个主 Tab —— 走二级入口
+    expect(wrapper.findAll(".shell-context__tab").length).toBe(4);
+
+    const history = wrapper
+      .findAll(".shell-context__icon-button")
+      .find(el => el.attributes("aria-label") === "历史记录");
+    expect(history).toBeTruthy();
+
+    await history!.trigger("click");
+    await nextTick();
+
+    // Drawer 覆盖本栏，五个类别可筛选
+    const chips = wrapper.findAll(".shell-context__chip");
+    expect(chips.map(chip => chip.text())).toEqual([
+      "全部",
+      "会话",
+      "AI 动作",
+      "上下文变更",
+      "审批",
+      "执行"
+    ]);
+
+    const close = wrapper
+      .findAll(".shell-context__icon-button")
+      .find(el => el.attributes("aria-label") === "关闭历史记录");
+    expect(close).toBeTruthy();
+    await close!.trigger("click");
+    await nextTick();
+
+    // 关闭后回到原先的 Tab（Context）
+    expect(wrapper.find(".shell-context__drawer").exists()).toBe(false);
+    expect(wrapper.find(".shell-context__project-name").exists()).toBe(true);
   });
 });

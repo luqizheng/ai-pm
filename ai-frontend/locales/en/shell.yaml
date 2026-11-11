@@ -259,23 +259,64 @@ shell:
         visibility: Visibility
         defaultBranch: Default branch
         yourRole: Your role
-        owner: Owner
-      related: Related information
-      aiNotice: Available to assistant
+        owner: Owning team
+      related: Related documents
+      aiNotice: Context available to the assistant
       readOnly: Read-only context
-      noAttachment: No files attached to the current request
-      injectionSources: Injected sources
+      noAttachment: No attachment in this request
+      injectionSources: Injection sources
       sourceProject: Project profile
       sourceRepository: Repository facts
       sourceNone: Not anchored (answered on demand)
-    chat:
-      title: AI assistant
-      emptyTitle: No conversation open
-      emptyHint: Ask directly below, or open the full conversation for history and interviews.
-      openConversation: Open full conversation
-      focus: Focus
-      focusEnter: Enter focus mode
-      focusExit: Exit focus mode
+      tabs:
+        context: Context
+        sources: Sources
+        results: Results
+        actions: Actions
+      attached: Attached objects
+      available: Available objects
+      notAnchored: Not anchored
+      noAvailableObject: No business object on the current page
+      objectTypes:
+        project: Project
+        requirement: Requirement
+        design: Design
+        task: Task
+        object: Object
+      state:
+        attached: Attached
+        available: Available
+      injectionLedger: Injection ledger
+      injectionIncluded: Included this turn
+      injectionDropped: Dropped
+      injectionChars: Injected characters
+      noInjection: No AI reply yet, no injection ledger
+      none: None
+      noResults: No AI result in this conversation yet
+      noActions: No pending action in this conversation yet
+      initiator:
+        ai: AI request
+        user: Human confirmed
+      responseTypes:
+        informational: Information
+        recommendation: Recommendation
+        proposal: Proposal
+        question: Question
+        decision: Decision
+        artifact: Artifact
+        action-request: Action request
+        execution-result: Execution result
+        text: Text
+      history: History
+      historyClose: Close history
+      historyCategories:
+        category:
+          all: All
+          conversation: Conversation
+          ai_action: AI action
+          context_change: Context change
+          approval: Approval
+          execution: Execution
     commandbar:
       title: AI assistant
       reviewFirst: Review before any action

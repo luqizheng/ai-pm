@@ -268,14 +268,55 @@ shell:
       sourceProject: 项目画像
       sourceRepository: 仓库事实
       sourceNone: 未锚定（会话内按需回答）
-    chat:
-      title: AI 助手
-      emptyTitle: 尚未打开会话
-      emptyHint: 在下方直接提问，或打开完整会话查看历史与访谈。
-      openConversation: 打开完整会话
-      focus: 专注
-      focusEnter: 进入专注模式
-      focusExit: 退出专注模式
+      tabs:
+        context: 上下文
+        sources: 来源
+        results: 结果
+        actions: 操作
+      attached: 已附加对象
+      available: 可用对象
+      notAnchored: 未锚定
+      noAvailableObject: 当前页面没有可用的业务对象
+      objectTypes:
+        project: 项目
+        requirement: 需求
+        design: 设计
+        task: 任务
+        object: 对象
+      state:
+        attached: 已附加
+        available: 可用
+      injectionLedger: 注入记账
+      injectionIncluded: 本次注入
+      injectionDropped: 已丢弃
+      injectionChars: 注入字符数
+      noInjection: 尚未收到 AI 回复，暂无注入记账
+      none: 无
+      noResults: 当前会话还没有 AI 结果
+      noActions: 当前会话还没有待授权操作
+      initiator:
+        ai: AI 请求
+        user: 人工确认
+      responseTypes:
+        informational: 信息
+        recommendation: 建议
+        proposal: 提案
+        question: 问题
+        decision: 决策
+        artifact: 产物
+        action-request: 动作请求
+        execution-result: 执行结果
+        text: 文本
+      history: 历史记录
+      historyClose: 关闭历史记录
+      historyCategories:
+        category:
+          all: 全部
+          conversation: 会话
+          ai_action: AI 动作
+          context_change: 上下文变更
+          approval: 审批
+          execution: 执行
     commandbar:
       title: AI 助手
       reviewFirst: 任何操作前请先确认

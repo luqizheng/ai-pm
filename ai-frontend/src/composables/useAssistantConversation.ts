@@ -24,6 +24,13 @@ import {
   type InteractionStatus
 } from "@/components/ui/ai-interaction/types";
 import { useShellStore, type AssistantContextSnapshot } from "@/stores/shell";
+import {
+  useAssistantStore,
+  type AssistantActionItem,
+  type AssistantHistoryEvent,
+  type AssistantInjection,
+  type AssistantResultItem
+} from "@/stores/assistant";
 
 /**
  * Project AI 会话机制（AI Collaboration V1.0 / DR-C8 第 ② 步的复用底座）。
@@ -151,6 +158,134 @@ export interface UseAssistantConversationOptions {
 }
 
 /**
+ * 后端注入记账 → 派生视图的注入结构（诚实性：只认后端落库的字段）。
+ *
+ * `metadata.injection` 形如 `{ sections_included, dropped, chars_total }`
+ * （后端 `conversation_reply.rs` 写入）。缺字段或非对象 → null（右栏显示
+ * 「尚未注入」，不冒充注入面）。
+ */
+export function toAssistantInjection(
+  metadata: unknown
+): AssistantInjection | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const injection = (metadata as Record<string, unknown>).injection;
+  if (!injection || typeof injection !== "object") return null;
+  const raw = injection as Record<string, unknown>;
+  const included = Array.isArray(raw.sections_included)
+    ? raw.sections_included.filter((v): v is string => typeof v === "string")
+    : [];
+  const dropped = Array.isArray(raw.dropped)
+    ? raw.dropped.filter((v): v is string => typeof v === "string")
+    : [];
+  const charsTotal = typeof raw.chars_total === "number" ? raw.chars_total : 0;
+  if (!included.length && !dropped.length && !charsTotal) return null;
+  return { sectionsIncluded: included, dropped, charsTotal };
+}
+
+/**
+ * 时间线 → 派生视图（结果 / 动作 / 历史）。
+ *
+ * - **结果**：assistant 消息（有信封按信封类型，无信封按纯文本）；
+ * - **动作**：带信封且可交互的 assistant 消息（AI 请求），用户确认后状态推进；
+ * - **历史**：会话列表 + 时间线派生的五类事件。
+ *
+ * 单一写者：会话机制加载/写回后调用，右栏与列读同一份。
+ */
+function deriveView(
+  timeline: ConversationMessage[],
+  conversations: Conversation[],
+  injection: AssistantInjection | null
+): {
+  results: AssistantResultItem[];
+  actions: AssistantActionItem[];
+  history: AssistantHistoryEvent[];
+} {
+  const results: AssistantResultItem[] = [];
+  const actions: AssistantActionItem[] = [];
+  const history: AssistantHistoryEvent[] = [];
+
+  for (const message of timeline) {
+    if (message.role === "user") continue;
+    const interaction = message.interaction;
+    const responseType = interaction?.type ?? "text";
+    const title = interaction?.title || message.text.slice(0, 40);
+    results.push({
+      id: message.id,
+      responseType,
+      title,
+      status: interaction?.status ?? "",
+      createdAt: message.createdAt
+    });
+    // 有信封的 assistant 消息 = 一次可交互动作（AI 请求）
+    if (interaction) {
+      actions.push({
+        id: message.id,
+        kind: responseType,
+        initiator: "ai",
+        status: interaction.status,
+        createdAt: message.createdAt
+      });
+      history.push({
+        id: `action:${message.id}`,
+        category: "ai_action",
+        name: title,
+        actor: "ai",
+        createdAt: message.createdAt,
+        status: interaction.status
+      });
+      // 终态即一条审批记录（V1 无审批读接口，客户端派生）
+      if (
+        interaction.status === "accepted" ||
+        interaction.status === "rejected"
+      ) {
+        history.push({
+          id: `approval:${message.id}`,
+          category: "approval",
+          name: title,
+          actor: "user",
+          createdAt: message.createdAt,
+          status: interaction.status
+        });
+      }
+      if (responseType === "execution-result") {
+        history.push({
+          id: `execution:${message.id}`,
+          category: "execution",
+          name: title,
+          actor: "ai",
+          createdAt: message.createdAt,
+          status: interaction.status
+        });
+      }
+    }
+  }
+
+  for (const conversation of conversations) {
+    history.push({
+      id: `conversation:${conversation.id}`,
+      category: "conversation",
+      name: conversation.title || conversation.id,
+      actor: "user",
+      createdAt: conversation.updated_at || conversation.created_at,
+      status: conversation.status
+    });
+  }
+
+  if (injection) {
+    history.push({
+      id: "injection:latest",
+      category: "context_change",
+      name: injection.sectionsIncluded.join(" + ") || "context",
+      actor: "ai",
+      createdAt: "",
+      detail: `${injection.charsTotal}`
+    });
+  }
+
+  return { results, actions, history };
+}
+
+/**
  * 会话机制实例。返回状态 + 方法，供会话页与常驻列各自组装界面。
  */
 export function useAssistantConversation(
@@ -165,6 +300,8 @@ export function useAssistantConversation(
     fallbackTitle = "—"
   } = options;
   const shell = useShellStore();
+  /** 派生视图写者（右栏与列读同一份）——DR-C8 第 ③ 步。 */
+  const assistant = useAssistantStore();
 
   const conversations = ref<Conversation[]>([]);
   const selectedId = ref("");
@@ -178,6 +315,8 @@ export function useAssistantConversation(
   const pendingText = ref("");
   /** 新会话草稿态：点了「新建会话」但尚未发出首条消息（不落库）。 */
   const drafting = ref(false);
+  /** 真实注入记账（后端 metadata.injection；无则 null）。 */
+  const injection = ref<AssistantInjection | null>(null);
 
   // ───────────────────────────────────────────────────────── 增量轮询
 
@@ -236,6 +375,13 @@ export function useAssistantConversation(
       if (fresh.length > 0) {
         timeline.value = [...timeline.value, ...fresh];
       }
+      // 注入记账取最新一条 assistant 消息（后端落库的 metadata.injection）。
+      const latestAssistant = [...records]
+        .reverse()
+        .find(record => record.role !== "system");
+      const latestInjection = toAssistantInjection(latestAssistant?.metadata);
+      if (latestInjection) injection.value = latestInjection;
+      publish();
     } catch {
       // 静默：轮询失败保留旧态（429 限流/网络抖动均不打扰用户）。
     } finally {
@@ -260,6 +406,12 @@ export function useAssistantConversation(
       timeline.value = records
         .filter(record => record.role !== "system")
         .map(toTimelineMessage);
+      const latestAssistant = [...records]
+        .reverse()
+        .find(record => record.role !== "system");
+      const latestInjection = toAssistantInjection(latestAssistant?.metadata);
+      if (latestInjection) injection.value = latestInjection;
+      publish();
     } finally {
       messagesLoading.value = false;
     }
@@ -283,6 +435,23 @@ export function useAssistantConversation(
       });
   }
 
+  /**
+   * 发布派生视图（右栏 Sources / Results / Actions / History 的数据源）。
+   *
+   * **单一写者**：会话机制是唯一写者，右栏与列读同一份——右栏不另起 fetch。
+   */
+  function publish() {
+    const view = deriveView(
+      timeline.value,
+      conversations.value,
+      injection.value
+    );
+    assistant.setInjection(injection.value);
+    assistant.setResults(view.results);
+    assistant.setActions(view.actions);
+    assistant.setHistory(view.history);
+  }
+
   async function load() {
     const target = projectId.value;
     if (!target) {
@@ -298,6 +467,7 @@ export function useAssistantConversation(
       selectedId.value = conversations.value[0]?.id ?? "";
       timeline.value = [];
       onConversationChanged?.(conversations.value[0] ?? null);
+      publish();
       if (selectedId.value) await loadMessages(selectedId.value);
     } catch (error) {
       loadError.value =
@@ -318,9 +488,11 @@ export function useAssistantConversation(
     conversations.value = [];
     selectedId.value = "";
     timeline.value = [];
+    injection.value = null;
     onConversationChanged?.(null);
     loading.value = false;
     loadError.value = "";
+    assistant.reset();
   }
 
   // ───────────────────────────────────────────────────────── 发送链路
@@ -399,6 +571,8 @@ export function useAssistantConversation(
           }
         };
       }
+      // 写回成功 → 动作状态推进，派生视图同步（审批记录进历史）。
+      publish();
       return { recorded: true, reference: record.reference };
     } catch (error) {
       throw new Error(
@@ -506,9 +680,11 @@ export function useAssistantConversation(
     drafting.value = true;
     selectedId.value = "";
     timeline.value = [];
+    injection.value = null;
     sendError.value = "";
     pendingText.value = "";
     onConversationChanged?.(null);
+    assistant.reset();
   }
 
   const selectedConversation = computed(
