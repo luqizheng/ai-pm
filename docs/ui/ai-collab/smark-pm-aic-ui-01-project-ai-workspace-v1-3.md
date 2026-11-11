@@ -1,8 +1,8 @@
-# AI-01 · Global Workspace Shell（v1-2 · 第一阶段）
+# AI-01 · Global Workspace Shell（v1-3 · 第一阶段）
 
 > **前置**：先投喂 [00 主提示词](smark-pm-aic-00-design-master-prompt-v1-1.md) 全文，再投喂本文件。
 > **阶段**：第一阶段第 1 步。**AI-01 通过验收后，才允许复制其 Shell 到 AI-02 及其余五个页面。**
-> **裁决依据**：[95 裁决记录](smark-pm-aic-95-decision-record-v1.md)（DR-C1~C7）· 视觉 V2 深色锁定（DR-C1）。
+> **裁决依据**：[95 裁决记录](smark-pm-aic-95-decision-record-v1.md)（DR-C1~C8）· 视觉 V2 深色锁定（DR-C1）· 四栏结构升级（DR-C8）。
 
 ## Figma Prompt
 
@@ -12,17 +12,17 @@ Use a 1440 × 1000px canvas with the locked V2 "Slate & Muted Teal" dark design 
 
 Visual direction: Professional B2B SaaS · restrained and clean · high information density · clear hierarchy · neutral background · minimal decorative elements · no oversized cards · no excessive whitespace.
 
-AI Chat is a persistent working area, not a temporary popover. The Context Panel is the visual management area of AI's current working context, not a generic settings panel.
+AI Chat is a **persistent resident column**, not a temporary popover and not a bottom command strip. The Context Panel is the visual management area of AI's current working context, not a generic settings panel.
 
-### Four-region layout
+### Shell structure
 
-Use a strict fixed-width baseline:
+Keep the existing 52px TopBar spanning the top of the work area. The four-region layout applies to the work area **below** the TopBar.
 
 | Region | Width | Responsibility |
 |---|---:|---|
 | Navigation | 188px | Global navigation, project entry |
 | Main Area | 518px | Current business page and primary work content |
-| AI Chat | 446px | AI conversation, analysis, suggestions, execution interaction |
+| AI Chat | 446px | Resident AI conversation |
 | Context Panel | 288px | Context, Sources, Results, Actions |
 
 Total = 1440px.
@@ -31,6 +31,7 @@ Layout constraints:
 - Do NOT add fixed margins or gutters between the four regions that are not counted in these widths. Establish separation with internal padding, dividers, and content spacing.
 - Do NOT shrink AI Chat or Context Panel to squeeze the Main Area.
 - Each region scrolls independently. The page must never shift or misalign because one region has long content.
+- The TopBar, the four regions, and the V2 visual system are **inherited from the existing app shell** — this is a structural upgrade of the work area, not a visual redesign of the application.
 
 ### Navigation — 188px
 
@@ -60,7 +61,7 @@ Group ADMINISTRATION (collapsed by default):
 - Announcements
 - AI Providers
 
-Show the current Project context explicitly in the navigation when a Project is selected.
+Show the current Project context explicitly in the navigation when a Project is selected. Show current user information at the bottom.
 
 The AI Assistant entry opens the AI Collaboration area. In V1 the user MUST select a Project first — never create a Conversation without a Project binding.
 
@@ -75,15 +76,25 @@ Primary business region for the current page. In AI-01 display:
 
 The Main Area must not be squeezed by AI Chat content and must not carry Context Panel management responsibilities.
 
-### AI Chat — 446px
+**Focus Mode** — 518px is the normal working width, but complex editing is not permanently constrained:
 
-Persistent AI conversation region containing:
+Provide a visible, keyboard-reachable control to enter Focus Mode. In Focus Mode:
+- AI Chat and Context Panel collapse, expanding the business work area.
+- The four-region layout is restored on exit.
+- The current Project, Conversation, and Context are unchanged.
+- In-progress edits and conversation state are not lost.
+
+### AI Chat — 446px, resident column
+
+Persistent AI conversation column containing:
 - Conversation Header
 - Message Timeline
 - AI Response Cards
-- User Input Composer
-- Attachment / Context Reference
-- Send / Stop / Retry basic actions
+- User Input Composer (message input, attachment, context reference, Send / Stop / Retry)
+
+The Composer sits permanently at the bottom of the AI Chat column — it is the existing bottom command strip promoted into this column, no longer docked to the Main Area.
+
+The AI Chat column coexists with the business page: entering a Project keeps the AI Chat in place; the user does not navigate away to a separate conversation page.
 
 Must support these seven UI Response Cards (DR-C4):
 
@@ -112,6 +123,8 @@ Exactly four primary tabs pinned at the top:
 Do not add a fifth History tab.
 
 Content of each tab must be readable and operable within 288px. Switching tabs must not re-lay-out the shell.
+
+**Information density rule**: within 288px show only the high-value summary and status (name, type, status and similar key facts). Full details belong in a detail Drawer or expanded view — do not force complete content into the list.
 
 ### History Drawer
 
@@ -157,4 +170,5 @@ This round prioritizes the 1440px desktop experience; a full mobile workflow is 
 - Open an AI result detail from the Results tab.
 - Open and close the History Drawer.
 - Open the Project Selector from AI Assistant when no Project is selected, then create a Project-bound Conversation.
+- Enter and exit Focus Mode — the four-region layout is restored and no state is lost.
 - Confirm each region scrolls independently.

@@ -2,11 +2,11 @@
 
 | 项目 | 内容 |
 |---|---|
-| 日期 | 2026-11-11 |
-| 状态 | **已确认**（用户正式裁决） |
+| 日期 | 2026-11-11（DR-C1~C6 用户裁决）→ 2026-11-11（DR-C7、DR-C8 专家正式裁定） |
+| 状态 | **已确认**（DR-C1~C8 全部生效） |
 | 适用范围 | 产品设计 · Figma · Frontend · Backend · Prototype · QA |
 | 上位文档 | `docs/product/ai-pm-ai-collaboration-workspace-v1.md`（设计基线） |
-| 本包 | `docs/ui/ai-collab/`（Figma AI 提示词包，v1-1 修订版） |
+| 本包 | `docs/ui/ai-collab/`（提示词包；00/03~07/90 为 v1-1，AI-01/AI-02 为 v1-3，91 为 v1-1） |
 
 本文件是本模块的**裁决真源**。提示词包与设计基线若与本文件冲突，以本文件为准。
 
@@ -181,6 +181,117 @@ Team-level AI Conversation · Multi-project Context · Cross-project Knowledge S
 
 ---
 
+## DR-C7 · Context 状态双轴模型
+
+**状态：CONFIRMED（专家明确赞成，不建议合并为单轴）**
+
+Context 条目的状态由**两条正交轴**共同表达，不是两个互斥词表：
+
+| 轴 | 取值 | 回答的问题 |
+|---|---|---|
+| **归属轴**（Attachment） | Available / Attached | 该条目**是否属于当前 Conversation** 的工作上下文 |
+| **可写性标记** | Read-only | 可参考但不可修改（修饰标记，可与 Attached 组合） |
+| **生命周期轴**（Lifecycle） | Active / Inactive / Pending / Unavailable | 该条目**自身处于什么状态** |
+
+### 规则
+
+- **AI 实际可使用 = Attached + Active**，且同时满足权限策略与实际可读取条件。
+- **Attached + Inactive** = 已附加但停用（Disable 的结果，条目仍在列表中）。
+- **Disable ≠ Remove**：Disable 转入 Inactive（可逆），Remove 从列表删除（需确认）。
+- **Pending 不得自动转为 Active**——等待用户确认。
+- **Unavailable 必须展示原因**，不得只显示状态词。
+- 状态必须**文字明示**，不能只用颜色表达。
+
+> 理由（专家）：两轴表达的是两个不同问题——「是否属于当前会话」与「该条目处于什么生命周期状态」；合并成单轴会丢失其中一个维度。
+
+---
+
+## DR-C8 · 四栏 Shell 结构升级裁定（V1.0 目标基线）
+
+**状态：CONFIRMED（专家正式裁定，2026-11-11）**
+
+**采用四栏 Shell，替代现有三栏 Shell，作为 V1.0 后续设计与开发的目标结构。**
+
+这不是从零重做，而是在现有 Shell 基础上**渐进式结构升级**。现有 V2「Slate & Muted Teal」深色设计系统、Design Tokens、**52px TopBar**、导航体系及现有上下文数据机制**继续保留，不另起视觉系统**。
+
+### 1. 为什么必须改结构（不只是视觉偏好）
+
+| 现有模式 | 目标模式 |
+|---|---|
+| 业务页面为主，AI 是底部指令栏 | 业务页面与 AI 对话**并行**，AI 持续参与当前项目工作 |
+| 完整 AI 对话需跳转独立页面 | 对话与业务页**同屏共存** |
+| Context 是展示卡片 | Context 是**可管理、可追溯**的工作上下文 |
+
+若保留三栏，AI 对话仍是附属功能，用户须在业务工作与 AI 对话之间来回切换——与 AI Collaboration Workspace 要实现的工作方式不一致。
+
+### 2. 目标布局
+
+1440px 桌面基准下，**主体工作区**（TopBar 下方）采用四栏：
+
+| 区域 | 目标宽度 | 职责 |
+|---|---:|---|
+| Navigation | 188px | 全局导航 |
+| Main Area | 518px | 当前业务页面 |
+| AI Chat | 446px | 常驻 AI 对话 |
+| Context Panel | 288px | Context / Sources / Results / Actions |
+| **合计** | **1440px** | |
+
+> **52px TopBar 继续保留，横跨主体工作区上方**；四栏宽度指 TopBar **下方**的主体区域。
+
+### 3. 现有结构调整清单（发给开发）
+
+1. **SideNav**：232px → 188px，保留折叠能力。
+2. **Main Area**：自适应 `1fr` → 基准 518px。
+3. **CommandBar**：不再作为 Main Area 底部指令栏，**升级为 AI Chat 常驻列中的输入组件**。
+4. **AI Assistant**：将现有 `/project/assistant` 独立路由的**核心对话能力整合进常驻 AI Chat 列**，使业务页面与 AI 对话同时存在。
+5. **Context Panel**：从现有单张上下文卡升级为 288px 四 Tab 面板。
+6. **History**：新增 History Drawer，覆盖 Context Panel 显示区域，不增第五 Tab，不改四栏宽度。
+
+> **复用约束**：现有路由及会话能力应尽可能复用，**不要因为 UI 调整而重复建设会话体系**。
+
+### 4. Main Area 专注模式（Focus Mode）
+
+518px 是**常态**工作宽度，复杂编辑场景不永久受限。
+
+- 临时收起 AI Chat 与 Context Panel，扩大业务工作区。
+- 退出后**恢复原来的四栏布局**。
+- **不改变**当前 Project、Conversation、Context。
+- **不丢失**正在编辑的内容或对话状态。
+
+Diff 默认采用 Inline / Unified Diff，**不强制**在 518px 内左右并排。
+
+### 5. Context Panel 信息密度规则
+
+288px 内**只展示高价值摘要与状态**（名称、类型、状态等关键信息）；**完整内容放入详情 Drawer 或展开视图**，不强行塞入列表。
+
+### 6. 必须保留的既有约束
+
+- V2 深色设计系统及 Token 唯一真源不变。
+- 现有 Project / Conversation 绑定关系不变；V1 不支持无 Project 绑定的 Conversation。
+- 切换 Project 不得转移或混用 Conversation、Context、Sources、Results、Actions、History。
+- Default Deny 与人工审批硬门槛不变。
+- AI Chat 中的 Action Request **不代表已经获得授权**。
+- **UI 调整不能被视为后端权限缺陷已经修复**（DEF-P0-01 / DEF-P0-02 仍需独立修复与验证）。
+
+### 7. Shell 渐进迁移顺序（实施建议）
+
+**不要一次性把现有三栏全部推倒。**按三步推进，降低 CommandBar、Conversation、Context 数据机制受影响的风险：
+
+1. 先建立**四栏容器与 AI Chat 列**（Shell 骨架就位）。
+2. 再迁移**现有会话能力**进常驻 AI Chat 列（复用 `/project/assistant` 的对话机制，不重建）。
+3. 最后升级 **Context Panel**（四 Tab + History Drawer）。
+
+### 8. 实施顺序与门禁
+
+| 阶段 | 内容 | 门禁 |
+|---|---|---|
+| 第一阶段 | **AI-01** Global Workspace Shell：四栏布局 · AI Chat 常驻列 · Context 四 Tab · History Drawer · Project Selector 与 Conversation 绑定 | — |
+| 第二阶段 | **AI-02** Context Management：**复用** AI-01 Shell，不重新设计布局；Context 双轴状态 · 添加/启用/停用/移除/详情 · Sources/Results/Actions · History 交互与状态联动 | **AI-01 与 AI-02 全部通过验收后，才允许复制 Shell 到其余五个页面** |
+
+> **本裁定确认的是产品布局与交互目标，不代表前端代码已完成，也不代表相关后端能力已通过验证。**
+
+---
+
 ## 落地对照
 
 | 裁决 | 落点 |
@@ -191,6 +302,8 @@ Team-level AI Conversation · Multi-project Context · Cross-project Knowledge S
 | DR-C4 | 00 §0.5 · AI-03（七卡映射 + Risk 结构化字段 + Progress 状态 + Artifact 内嵌） |
 | DR-C5 | 00 §0.2 · AI-01（188/518/446/288）· AI-04（518px 禁双栏）· 90 §4.7 |
 | DR-C6 | 00 §0.7 · AI-01（Global AI = Project 选择）· AI-07（绑定规则 + 切项目隔离） |
+| DR-C7 | 00 §0.8（双轴模型）· AI-02 v1-3（Context 列表状态与操作）· 91 §附录 |
+| DR-C8 | 00 §0.2（TopBar + 主体四区）· AI-01 v1-3（专注模式 · 密度规则 · 渐进迁移）· AI-02 v1-3（详情入 Drawer）· 91 §C5 |
 
 ## 实施边界
 

@@ -1,12 +1,13 @@
-# AI-02 · Context Management（v1-2 · 第一阶段）
+# AI-02 · Context Management（v1-3 · 第一阶段）
 
 > **前置**：先投喂 [00 主提示词](smark-pm-aic-00-design-master-prompt-v1-1.md) 全文，再投喂本文件。
 > **阶段**：第一阶段第 2 步。**复用 AI-01 的完整 Shell**（复制，不重新设计），只深化 Context 管理内容与交互。
 > **约束**：不得修改四区域尺寸、主 Tab 结构、History 入口规则。
+> **裁决依据**：[95 裁决记录](smark-pm-aic-95-decision-record-v1.md) DR-C3 / C5 / C7 / C8。
 
 ## Figma Prompt
 
-Create the Context Management page inside the **exact same AI-01 four-region workspace** (Navigation 188 / Main Area 518 / AI Chat 446 / Context Panel 288), using the locked V2 "Slate & Muted Teal" dark visual system.
+Create the Context Management page inside the **exact same AI-01 four-region workspace** (Navigation 188 / Main Area 518 / AI Chat 446 / Context Panel 288, below the 52px TopBar), using the locked V2 "Slate & Muted Teal" dark visual system.
 
 Do not redesign the Navigation, the Main Area shell, the AI Chat column, or the Context Panel chrome. Copy the AI-01 Shell frame and deepen only the Context Panel content and interactions.
 
@@ -41,17 +42,16 @@ Show:
 
 **These numbers must be driven by prototype state — never fixed decorative numbers.**
 
-#### Context List
+#### Context List — summary only
 
-Each Context item shows:
+Within 288px, the list shows **only the high-value summary and status**. Show:
 - Context Name
 - Context Type
-- Source
-- Summary
-- Current Status
-- Updated time
-- Related object (if any)
+- Current Status (text, not colour alone)
+- A one-line summary / source hint
 - Action entry
+
+**Do not force complete content into the list.** Summary text, full source description, usage information, timestamps and related-object details belong in the detail Drawer or an expanded row.
 
 Context types:
 - Project
@@ -62,7 +62,7 @@ Context types:
 - Conversation
 - User Provided
 
-### Context status model (two axes)
+### Context status model — two axes (DR-C7, confirmed)
 
 Status is expressed on **two orthogonal axes** — do not flatten them into one list:
 
@@ -79,6 +79,7 @@ Status is expressed on **two orthogonal axes** — do not flatten them into one 
 
 Rules:
 - Status must have explicit text, never colour alone.
+- **AI actually uses an item only when it is Attached + Active**, and only if permission policy allows and the item is genuinely readable.
 - **Pending must never be silently treated as Active.**
 - **Unavailable must show the reason** it is unavailable.
 - **Disable ≠ Remove.** Disable moves an item to Inactive and it stays in the list; Remove deletes it (with confirmation).
@@ -127,18 +128,18 @@ If a candidate is unavailable, the reason must be stated explicitly.
 
 ### Context Details
 
-Clicking a Context item opens a detail area or Drawer showing:
+Clicking a Context item opens a **detail Drawer** (the 288px list carries summaries only). The Drawer shows:
 - Context Name
 - Type
 - Source
 - Description
-- Current Status
+- Current Status (both axes)
 - Added At
 - Last Updated
 - Related Object
 - Usage Information
 
-Enable, Disable, and Remove are available from the detail view.
+Enable, Disable, and Remove are available from the Drawer.
 
 **Do not mix the Context item's own source information with the Context item itself.**
 
@@ -239,16 +240,18 @@ Closing the Drawer restores the previously active tab and scroll position.
 
 - Add objects.
 - Remove objects.
-- Preview objects.
+- Preview objects in the detail Drawer.
 - Change reference version.
 - Inspect permission.
 - Navigate to Sources.
 - Open History Drawer.
 - Switch Main Area page without losing Attached Context.
 - Enable / Disable a Context item and watch the list, counts, and detail view update together.
+- Enter and exit Main Area Focus Mode — Context, Conversation, and attached items must be unchanged.
 
 Important:
 - Available does not mean Attached.
 - Read-only does not mean unavailable.
 - Every AI execution must preserve the context snapshot it actually used.
 - Disable is reversible; Remove requires confirmation.
+- Lists carry summaries; full details live in the Drawer.

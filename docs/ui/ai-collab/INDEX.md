@@ -10,16 +10,18 @@
 
 | 序 | 文件 | 用途 |
 |---|---|---|
-| 00 | [smark-pm-aic-00-design-master-prompt-v1-1.md](smark-pm-aic-00-design-master-prompt-v1-1.md) | 全局主提示词：产品定位、四区尺寸、V2 视觉令牌、交互原则、卡名映射、权限审批模型、会话绑定。**每页投喂 Figma AI 前必须先给本文件** |
-| 95 | [smark-pm-aic-95-decision-record-v1.md](smark-pm-aic-95-decision-record-v1.md) | 正式裁决记录（DR-C1~C6）。**设计/前端/后端/QA 的共同依据** |
-| 01 | [smark-pm-aic-ui-01-project-ai-workspace-v1-1.md](smark-pm-aic-ui-01-project-ai-workspace-v1-1.md) | AI-01 Project AI Workspace（布局母版，其余六页复制其 Shell） |
-| 02 | [smark-pm-aic-ui-02-context-management-v1-1.md](smark-pm-aic-ui-02-context-management-v1-1.md) | AI-02 Context Management（Available / Attached / Read-only） |
+| 00 | [smark-pm-aic-00-design-master-prompt-v1-1.md](smark-pm-aic-00-design-master-prompt-v1-1.md) | 全局主提示词：产品定位、TopBar + 四区尺寸、V2 视觉令牌、交互原则、卡名映射、权限审批模型、会话绑定、专注模式、渐进迁移。**每页投喂 Figma AI 前必须先给本文件** |
+| 95 | [smark-pm-aic-95-decision-record-v1.md](smark-pm-aic-95-decision-record-v1.md) | 正式裁决记录（**DR-C1~C8**）。**设计/前端/后端/QA 的共同依据** |
+| 01 | [smark-pm-aic-ui-01-project-ai-workspace-v1-3.md](smark-pm-aic-ui-01-project-ai-workspace-v1-3.md) | **AI-01 Global Workspace Shell**（第一阶段 · 四栏骨架 + AI Chat 常驻列 + 四 Tab + History Drawer + 专注模式；其余六页复制其 Shell） |
+| 02 | [smark-pm-aic-ui-02-context-management-v1-3.md](smark-pm-aic-ui-02-context-management-v1-3.md) | **AI-02 Context Management**（第一阶段 · 复用 Shell，双轴状态、摘要优先、详情入 Drawer） |
 | 03 | [smark-pm-aic-ui-03-ai-response-cards-v1-1.md](smark-pm-aic-ui-03-ai-response-cards-v1-1.md) | AI-03 AI Response Cards（七类卡 ↔ 八类 Envelope） |
 | 04 | [smark-pm-aic-ui-04-draft-review-v1-1.md](smark-pm-aic-ui-04-draft-review-v1-1.md) | AI-04 Draft & Review（Draft → Approval Pending → 正式 Revision） |
 | 05 | [smark-pm-aic-ui-05-ai-execution-control-v1-1.md](smark-pm-aic-ui-05-ai-execution-control-v1-1.md) | AI-05 AI Execution Control（授权 ≠ 审批） |
 | 06 | [smark-pm-aic-ui-06-exception-permission-v1-1.md](smark-pm-aic-ui-06-exception-permission-v1-1.md) | AI-06 Exception & Permission（六异常场景 + 硬审批边界） |
 | 07 | [smark-pm-aic-ui-07-conversation-continuity-v1-1.md](smark-pm-aic-ui-07-conversation-continuity-v1-1.md) | AI-07 Conversation Continuity（Project 绑定 + 历史快照） |
 | 90 | [smark-pm-aic-90-cross-page-prototype-spec-v1-1.md](smark-pm-aic-90-cross-page-prototype-spec-v1-1.md) | 跨页 Prototype 契约 + 执行顺序 + 16 步演示流 + 验收清单 + 实施边界 |
+| 91 | [smark-pm-aic-91-phase1-prototype-contract-v1.md](smark-pm-aic-91-phase1-prototype-contract-v1.md) | **第一阶段契约**：全局状态 + Context 状态变化 + 专注模式 + 渐进迁移 + 19 步演示 + 验收清单 + 阶段门禁 |
+| — | [smark-pm-aic-expert-briefing-v1.md](smark-pm-aic-expert-briefing-v1.md) | 专家现状说明（当前三栏壳实况 → 目标四区差异 + 已裁 Q1~Q4），留档追溯 |
 | — | [smark-pm-aic-open-conflicts-v1.md](smark-pm-aic-open-conflicts-v1.md) | 冲突清单（**已全部裁决**，留档追溯） |
 
 ## 实际执行顺序（十步，禁止一次性生成七页）
@@ -30,10 +32,10 @@
 
 最终验收以 [90 §B 三成败场景](smark-pm-aic-90-cross-page-prototype-spec-v1-1.md) + [Part 7 完整清单](smark-pm-aic-90-cross-page-prototype-spec-v1-1.md)为门；任一失败即整体返工。
 
-## 正式布局尺寸（DR-C5）
+## 正式布局尺寸（DR-C5 / DR-C8）
 
-画板 1440 × 1000px · Navigation 188px · Main Area 518px · AI Chat 446px · Context Panel 288px。
-Main Area 仅 518px，**不强制双栏 Diff**，采用 Inline / Unified Diff 或单列切换。
+画板 1440 × 1000px · **52px TopBar 保留并横跨主体工作区**（四栏位于其下方）· Navigation 188px · Main Area 518px · AI Chat 446px · Context Panel 288px。
+Main Area 仅 518px，**不强制双栏 Diff**，采用 Inline / Unified Diff 或单列切换；深度编辑走**专注模式**（收起 AI Chat + Context Panel，退出恢复四栏）。
 
 ## 裁决要点速查
 
@@ -45,6 +47,17 @@ Main Area 仅 518px，**不强制双栏 Diff**，采用 Inline / Unified Diff �
 | DR-C4 | 八类 Envelope 不变；七类 UI 卡映射；Risk 须结构化字段，Progress 须真实执行状态 |
 | DR-C5 | 188 / 518 / 446 / 288；518px 禁双栏 Diff |
 | DR-C6 | V1 无未绑定 Project 的会话；Global AI 只是 Project 选择入口 |
+| **DR-C7** | **Context 状态双轴**（归属 Available/Attached + Read-only 标记）⊥（生命周期 Active/Inactive/Pending/Unavailable）；AI 实际可用 = Attached + Active |
+| **DR-C8** | **四栏 Shell 正式通过**（在现有三栏壳上渐进升级，保留 TopBar 与 V2 视觉，不重做）；Main Area 专注模式；288px 摘要优先、详情入 Drawer；实施按「四栏容器 → 迁移会话能力 → 升级 Context Panel」三步推进 |
+
+## 当前阶段（第一阶段：AI-01 → AI-02）
+
+| 阶段 | 文档 | 门禁 |
+|---|---|---|
+| 1 | [AI-01 v1-3](smark-pm-aic-ui-01-project-ai-workspace-v1-3.md) Global Workspace Shell | — |
+| 2 | [AI-02 v1-3](smark-pm-aic-ui-02-context-management-v1-3.md) Context Management | **AI-01 与 AI-02 全部通过验收后，才允许复制 Shell 到其余五个页面** |
+
+契约与演示：[91 第一阶段 Prototype 契约](smark-pm-aic-91-phase1-prototype-contract-v1.md)（全局状态 · Context 状态变化 · 专注模式 · 渐进迁移 · 19 步演示 · 验收清单）。
 
 ## 与设计基线的关系
 

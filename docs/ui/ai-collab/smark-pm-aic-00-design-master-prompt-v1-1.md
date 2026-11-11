@@ -51,24 +51,47 @@
 4. AI Chat 不因业务页面切换而消失。
 5. Context Panel 支持折叠。
 6. 用户调整宽度不能破坏布局。
+7. **四区域之间不额外添加未计入宽度的固定边距**——视觉分隔由区域内部 padding、分隔线与内容间距承担。
+8. **各区域独立滚动**，不得因单个区域内容过长导致整页错位或位移。
+
+> **52px TopBar 保留在四栏之上，横跨主体工作区**（DR-C8）；以上四栏宽度指 **TopBar 下方的主体区域**。
+>
+> **渐进迁移（DR-C8）**：Shell 骨架按三步推进——① 建立四栏容器与 AI Chat 列 → ② 迁移现有会话能力进常驻 AI Chat 列（复用既有路由与会话机制，**不重建会话体系**）→ ③ 升级 Context Panel（四 Tab + History Drawer）。原底部指令栏（CommandBar）**升级为 AI Chat 列中的输入组件**，不再占据 Main Area 底部。
 
 ### A. Left Navigation（188px，固定，不因 AI 操作改变）
 
-Smark PM Logo · Projects · Current Project · Requirements · Tasks · Designs · Knowledge · Decisions · AI Assistant · Settings · Help · User Profile。
+导航按**分组分层**呈现（与已上线应用壳一致，非扁平列表）：
 
-当前菜单需有清晰 Active 状态；只用 Sidebar 表面色（--ws-sidebar），不用强调色大面块。
+| 组 | 项 |
+|---|---|
+| PERSONAL | Personal Home · Inbox |
+| WORKSPACE | Dashboard · Projects |
+| MODULES（**仅选中 Project 时出现**） | Discovery · Requirements · Technical Design · Task Management · Execution · AI Assistant · Knowledge · Dev Environment |
+| ADMINISTRATION（默认收起） | Settings · Members · Announcements · AI Providers |
+
+底部显示当前用户信息。当前菜单需有清晰 Active 状态；只用 Sidebar 表面色（--ws-sidebar），不用强调色大面块。
 
 ### B. Main Area（518px）
 
 显示当前业务对象，包含：Breadcrumb · Page Title · Object Status · Business Content · Relevant Actions。
 
-> **518px 宽度约束（DR-C5）**：不允许强制双栏 Original / Proposed Diff。差异展示采用 Inline Diff / Unified Diff / 单列 Original–Proposed 切换 / 必要时独立展开比较视图。
+> **518px 宽度约束（DR-C5 / DR-C8）**：不允许强制双栏 Original / Proposed Diff。差异展示采用 Inline Diff / Unified Diff / 单列 Original–Proposed 切换 / 必要时独立展开比较视图。
 
-### C. AI Chat Assistance（446px）
+**Main Area 专注模式（Focus Mode，DR-C8）**——518px 是常态宽度，复杂编辑不永久受限：
 
-包含：Conversation Header · Conversation Messages · AI Response Cards · Message Composer（Message Input · Attachment · Context Reference · Send Button）。
+- 临时收起 AI Chat 与 Context Panel，扩大业务工作区。
+- 退出后**恢复原来的四栏布局**。
+- **不改变**当前 Project、Conversation、Context。
+- **不丢失**正在编辑的内容或对话状态。
+- 需有明确的进入入口与退出方式（键盘可见的控件 + 视觉状态标识）。
 
-AI Chat 独立存在，不嵌入业务页面，不使用全屏聊天替代主 UI。
+### C. AI Chat Assistance（446px，常驻独立列）
+
+包含：Conversation Header · Conversation Messages · AI Response Cards · Message Composer（Message Input · Attachment · Context Reference · Send / Stop / Retry）。
+
+- AI Chat 独立存在，**不嵌入业务页面**，不使用全屏聊天替代主 UI。
+- **Composer 常驻在 AI Chat 列底部**（由原底部指令栏升级而来，见 0.2 渐进迁移说明）。
+- 与业务页面**并行共存**：进入 Project 后 AI Chat 持续在场，不需跳转独立页面。
 
 ### D. Right Context Panel（288px，始终独立存在）
 
@@ -82,6 +105,8 @@ AI Chat 独立存在，不嵌入业务页面，不使用全屏聊天替代主 UI
 | Actions | 待授权操作、执行任务及操作结果 |
 
 **History 不是第五个主 Tab**，通过二级入口或 History Drawer 访问。Drawer 内容五类：Conversation History · AI Action History · Context Change History · Approval History · Execution History，支持分类查看；**历史保留发生时的状态，不得被当前 Context 覆盖**；Drawer 不得改变四区布局。
+
+**信息密度规则（DR-C8）**：288px 内**只展示高价值摘要与状态**（名称、类型、状态等关键信息）；**完整内容放入详情 Drawer 或展开视图**，不强行塞入列表。
 
 ## 0.3 视觉规范（DR-C1 · V2「Slate & Muted Teal」）
 
