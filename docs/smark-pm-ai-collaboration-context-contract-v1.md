@@ -289,10 +289,24 @@ Attached 列表 · History 中可见移除事件 · **不删原始业务对象**
 | **B2** | **Context Item 数据模型与 CRUD**：迁移 0019 · Rust 模型 · 双轴状态机（PATCH 白名单）· 批量附加 · 权限与归属校验 · 软移除 · Context API | CX1/CX3 | 集成测试：附加/启停/移除/软删留痕/**越权**/**跨项目 404 同形** | ✅ 已落地（`57203cec`） |
 | **B3** | **对象级 AI 注入**：S3+ 对象节 · 版本校验（SQL-07 重读复核）· 内容投影 · 预算裁剪（稳定次排序 + 独立记账）· 注入记账 | B2 | 注入测试：各状态注入矩阵 / 超预算裁剪可重复 / 未批准只给元数据 / 三闸不破 | ✅ 已落地（本次提交） |
 | **B4** | **真实读取接口**：interactions GET · 候选对象聚合查询（类型/关键词/分页/已附加/可用性/只读/摘要）· 权限过滤 · 属主隔离 | CX3 | 集成测试：字段完整 / 候选过滤 / 404 同形 | ✅ 已落地（本次提交） |
-| **B5** | **前端对接**：AI-02 Context · Sources · Results · Actions · History **全部改读真实后端数据，不再客户端派生权威状态** | B2/B3/B4 | 前端门禁全绿 + 右栏派生视图降级为**非权威展示** |
+| **B5** | **前端对接**：AI-02 Context · Sources · Results · Actions · History **全部改读真实后端数据，不再客户端派生权威状态** | B2/B3/B4 | 前端门禁全绿 + 右栏派生视图降级为**非权威展示** | ✅ 已落地（`0667cab8`） |
 
 > B1 独立在最前：它是**已确认的安全边界**，与上下文建模无依赖，先收口收益最大、风险最小。
 
+### B5 实施结果（2026-11-12 · `0667cab8`）
+
+| 项 | 落地 |
+|---|---|
+| 权威读面 API | `api/contextItems.ts`：GET context-items / interactions / context-candidates（ContextItem 双轴类型 · InteractionEntry 权威字段 · Candidate 聚合形状） |
+| store 权威化 | `assistant.actions` 改为权威 `InteractionEntry[]`；新增 `contextItems`；deriveView 收敛为 deriveResults（Results 仅展示面，非权威状态） |
+| 会话机制接线 | publish 拉权威读面（与消息轮询同节奏 + 写回后即时刷新）；失败不打断对话（保留旧态） |
+| History 五类 | ai_action / approval ← interactions（**accepted/rejected → approval 类**）；conversation ← 会话列表；context_change ← 注入记账；**execution 如实留空**（V1 无执行读端点，不用推断冒充——契约 90 Part 8） |
+| 右栏渲染 | Actions：`action · reference · 处理者`（权威字段）；Context Tab：attached 条目 + 版本引用（`v{version}` / `row {row_version}`），detached 不出现 |
+| 门禁 | 前端 187 文件 / **1074 例全绿** · vue-tsc · eslint · i18n（4990 key） |
+
+**B1~B5 全部完成。** AI-02 对象级上下文链路（数据模型 → 注入 → 权威读 → 前端）端到端打通。
+
+---
 ### B4 实施结果（2026-11-12）
 
 | 项 | 落地 |
