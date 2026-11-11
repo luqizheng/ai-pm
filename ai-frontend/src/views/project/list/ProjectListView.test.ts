@@ -154,15 +154,20 @@ describe("ProjectListView", () => {
     expect(mounted.wrapper.text()).not.toContain(t("pm.projects.errorTitle"));
   });
 
-  it("点击项目行打开项目总控台", async () => {
+  it("点击项目行打开项目总控台，并携带项目上下文 query", async () => {
     const mounted = await mountList();
 
     const row = mounted.wrapper.find(".proj-row");
     await row.trigger("click");
     await flushPromises();
 
+    // 总控台以 ?project_id= 为数据真源（CommandCenterView 只认 URL query），
+    // 不带 query 会命中「请先在顶栏选择一个项目」空态
     expect(mounted.router.currentRoute.value.path).toBe(
       "/project/command-center"
+    );
+    expect(mounted.router.currentRoute.value.query.project_id).toBe(
+      "proj-001"
     );
   });
 });

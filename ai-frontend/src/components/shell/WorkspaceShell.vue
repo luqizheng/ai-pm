@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
 import SearchPalette from "@/components/global/search/SearchPalette.vue";
 import type { SearchCommand, SearchFn } from "@/components/global/search/types";
@@ -26,7 +26,14 @@ import TopBar from "./TopBar.vue";
 
 const { t } = useI18n();
 const router = useRouter();
+const route = useRoute();
 const shell = useShellStore();
+
+/** URL query 上的项目上下文（?project_id=；各入口跳转统一走该通道） */
+function urlProjectId(): string | null {
+  const query = route.query.project_id;
+  return typeof query === "string" && query ? query : null;
+}
 
 /** 全局搜索面板开关（⌘K / 顶栏搜索入口） */
 const searchOpen = ref(false);
@@ -59,8 +66,12 @@ async function bootstrapProjectContext() {
     } catch {
       restored = null;
     }
+    // 恢复优先级：URL 上下文 > 上次本地偏好 > 首个项目
+    // （URL query 是页面数据真源，顶栏必须与当前路由一致）
     const preferred =
-      page.items.find(project => project.id === restored) ?? page.items[0];
+      page.items.find(project => project.id === urlProjectId()) ??
+      page.items.find(project => project.id === restored) ??
+      page.items[0];
     if (preferred) shell.setCurrentProject(preferred.id);
   } catch {
     // 项目列表不可用时保持空壳（各页自行展示空态），不注入演示数据
@@ -111,6 +122,17 @@ watch(
   { immediate: true }
 );
 
+// 路由携带 ?project_id= 时，顶栏项目选择器跟随同一项目
+// （打开项目 = 切换当前项目上下文；store 的持久化与仓库上下文由上方 watch 联动）
+watch(
+  urlProjectId,
+  projectId => {
+    if (projectId && projectId !== shell.currentProjectId) {
+      shell.setCurrentProject(projectId);
+    }
+  }
+);
+
 /**
  * 全局命令（Figma「01 — Global Search」Global commands：导航 / 创建 /
  * 附加命令）。文案走 i18n，专有名词（项目名 / 模块名）取自壳状态与导航表。
@@ -122,8 +144,11 @@ const searchCommands = computed<SearchCommand[]>(() => {
       label: `${t("global.search.commands.openProject")} · ${shell.currentProject?.name ?? ""}`,
       group: "navigate",
       icon: "folder",
-      // 项目上下文入口 = 项目总控台（Git 仓库等模块已迁入 Project Setting）
-      target: "/project/command-center"
+      // 项目上下文入口 = 项目总控台（Git 仓库等模块已迁入 Project Setting）；
+      // 总控台只认 ?project_id=，命令必须携带当前项目
+      target: shell.currentProjectId
+        ? `/project/command-center?project_id=${encodeURIComponent(shell.currentProjectId)}`
+        : "/project/command-center"
     },
     {
       id: "cmd-navigate-repositories",
