@@ -61,6 +61,10 @@ Main Area 仅 518px，**不强制双栏 Diff**，采用 Inline / Unified Diff �
 
 **开发侧前置**：先做 [Shell 组件复用与迁移边界评估任务书](../../smark-pm-ai-collaboration-shell-migration-assessment-v1.md)（复用矩阵 · 迁移边界 M1~M9 · 测试闸门 · 分阶段切分），评估通过后再按 AI-01 / AI-02 实施。
 
+**后端侧前置**：AI-02 的对象级上下文卡在后端——见 [对象级上下文与审批读接口契约任务书](../../smark-pm-ai-collaboration-context-contract-v1.md)（Context Set 建模 · 注入链扩节 · 审批读接口 · DEF-P0-01/02 收口 · 切片 B1~B5 · 待裁决 CX1~CX4）。
+
+**实施进度**：壳迁移四阶段（① 四栏容器 + AI Chat 常驻列 + 专注模式 · ② 会话能力并入常驻列 · ③ 右栏四 Tab + History Drawer · ④ 切项目确认 G12）**已全部落地**，详见 91 契约的「实施进度」表。
+
 ## 与设计基线的关系
 
 设计基线（`docs/product/ai-pm-ai-collaboration-workspace-v1.md`）是**上游骨架**；本包是**可执行设计规范**。两者的冲突以 95 裁决记录为准，已同步修订基线 §1.1 / §3.1 / §5.1 / §5.3 与附录 B。
