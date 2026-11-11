@@ -20,7 +20,7 @@ const SUGGESTION_KEYS = ["explain", "setup"] as const;
 const ASSISTANT_PATH = "/project/assistant";
 
 /**
- * 底部 AI 指令栏（Application Shell §2E，72–120px）。
+ * AI 指令栏 / Composer（Application Shell §2E，72–120px）。
  *
  * 两态：
  *   - 收起 72px：单行提示输入（占位符带当前上下文）+ ⌘ J 芯片
@@ -31,14 +31,24 @@ const ASSISTANT_PATH = "/project/assistant";
  *
  * 作用域串随当前项目变化（切换中不显示旧项目数据，Figma「07」）。
  *
- * 提交（发送键 / Enter）= 入队到 shell store 并进入会话页，由会话页真正
- * 发送（混合工作区 B-1：指令栏是会话的收起态入口）。建议芯片只把文案
- * 填进输入框，不自动发送——发送前由人确认（「建议未执行」提示）。
+ * 两种落点（DR-C8 第 ② 步）：
+ *   - **独立模式（默认）**：提交 = 入队到 shell store 并进入会话页，由
+ *     会话页真正发送（混合工作区 B-1：指令栏是会话的收起态入口）。
+ *   - **内嵌模式（embedded）**：组件位于 AI Chat 常驻列内，提交 **就地
+ *     emit**，由列内的会话机制直接发送——不再入队、不再跳转。
+ *
+ * 建议芯片只把文案填进输入框，不自动发送——发送前由人确认。
  */
 
 const { t } = useI18n();
 const router = useRouter();
 const shell = useShellStore();
+
+const props = withDefaults(defineProps<{ embedded?: boolean }>(), {
+  embedded: false
+});
+
+const emit = defineEmits<{ (event: "submit", text: string): void }>();
 
 const prompt = ref("");
 
@@ -77,6 +87,12 @@ const fieldRef = ref<HTMLInputElement | null>(null);
 function submit() {
   const text = prompt.value.trim();
   if (!text) return;
+  // 内嵌模式（AI Chat 常驻列）：就地发送，不入队、不跳转。
+  if (props.embedded) {
+    prompt.value = "";
+    emit("submit", text);
+    return;
+  }
   shell.queueAssistantPrompt(text);
   prompt.value = "";
   if (router.currentRoute.value.path !== ASSISTANT_PATH) {

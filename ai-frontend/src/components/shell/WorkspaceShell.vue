@@ -38,6 +38,10 @@ function urlProjectId(): string | null {
   return typeof query === "string" && query ? query : null;
 }
 
+/** 完整会话页路由——该页本身即会话面，AI Chat 列收起避免同屏重复。 */
+const ASSISTANT_PATH = "/project/assistant";
+const isAssistantRoute = computed(() => route.path === ASSISTANT_PATH);
+
 /** 全局搜索面板开关（⌘K / 顶栏搜索入口） */
 const searchOpen = ref(false);
 
@@ -224,8 +228,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       </div>
     </main>
 
-    <!-- AI Chat 常驻独立列（DR-C8）：专注模式下收起，主区独占工作区 -->
-    <AssistantColumn v-if="!shell.focusMode" class="workspace-chat" />
+    <!-- AI Chat 常驻独立列（DR-C8）：专注模式下收起，主区独占工作区；
+         完整会话页（/project/assistant）本身即会话面，此时列收起避免同屏重复。 -->
+    <AssistantColumn
+      v-if="!shell.focusMode && !isAssistantRoute"
+      class="workspace-chat"
+    />
 
     <ContextPanel
       v-if="shell.contextOpen && !shell.focusMode"
