@@ -32,7 +32,10 @@ pub(crate) fn validate_identifier(name: &str) -> Result<(), CommandError> {
 }
 
 /// 单条批量命令的条目上限（spec §十六：建议 ≤200，超出拆批）。
-pub(crate) const MAX_BATCH_ITEMS: usize = 200;
+///
+/// 导入层（`project_import::proposal`）按此上限把大批草案**拆成多条命令**，
+/// 故上限必须是跨模块可见的常量——否则调用方只能各写一份魔数。
+pub const MAX_BATCH_ITEMS: usize = 200;
 
 pub(crate) fn validate_batch(len: usize, what: &str) -> Result<(), CommandError> {
     if len == 0 {

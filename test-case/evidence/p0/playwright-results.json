@@ -1,0 +1,510 @@
+{
+  "config": {
+    "argv": [
+      "C:\\nvm4w\\nodejs\\node.exe",
+      "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\node_modules\\@playwright\\test\\cli.js",
+      "test",
+      "-c",
+      "playwright.p0.config.ts"
+    ],
+    "configFile": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\playwright.p0.config.ts",
+    "rootDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\team\\global-setup.ts",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "D:/kudi-project/templates/ai-pm/test-case/evidence/p0/playwright-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "p0-*.spec.ts"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\p0\\playwright-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "name": "",
+        "testDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
+        "snapshotDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
+        "testIgnore": [],
+        "testMatch": "p0-*.spec.ts",
+        "timeout": 90000,
+        "use": {
+          "baseURL": "http://127.0.0.1:8850",
+          "channel": "msedge",
+          "headless": true,
+          "viewport": {
+            "width": 1440,
+            "height": 900
+          },
+          "locale": "zh-CN",
+          "screenshot": "only-on-failure",
+          "trace": "retain-on-failure"
+        },
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": ""
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "../test-case/evidence/p0/playwright-results.json"
+        }
+      ],
+      [
+        "html",
+        {
+          "outputFolder": "../test-case/evidence/p0/playwright-report",
+          "open": "never"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "default",
+    "updateSourceMethod": "patch",
+    "version": "1.65.0",
+    "workers": 1,
+    "webServer": {
+      "command": "pnpm exec vite --port 8850 --strictPort",
+      "url": "http://127.0.0.1:8850",
+      "reuseExistingServer": false,
+      "timeout": 180000,
+      "env": {
+        "PM_API_URL": "http://127.0.0.1:18490",
+        "VITE_USE_MOCK": "0",
+        "VITE_PORT": "8850",
+        "LMMS_GATEWAY_URL": "http://127.0.0.1:59999"
+      }
+    }
+  },
+  "suites": [
+    {
+      "title": "p0-01-team-onboarding.spec.ts",
+      "file": "p0-01-team-onboarding.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "P0-001a 会话注入 → 中转页分流；身份与主体行落库",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4244,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T15:46:21.719Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3e9ff97a738d91326739-1e0bf226f6e270ca160c",
+          "file": "p0-01-team-onboarding.spec.ts",
+          "line": 24,
+          "column": 1
+        },
+        {
+          "title": "P0-002 首登无 Team → 分流 /onboarding 双入口；深链现状=不被拦；无虚假默认团队",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5476,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T15:46:26.203Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3e9ff97a738d91326739-4cd6b094c546ee6048db",
+          "file": "p0-01-team-onboarding.spec.ts",
+          "line": 76,
+          "column": 1
+        },
+        {
+          "title": "P0-003 UI 建团 → API 邀请 → 受邀者 UI 接受 → owner/member 落库",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3210,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T15:46:31.698Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-01-team-onboarding.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "3e9ff97a738d91326739-b4975f75d97ac3c095a0",
+          "file": "p0-01-team-onboarding.spec.ts",
+          "line": 136,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "p0-02-team-project.spec.ts",
+      "file": "p0-02-team-project.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "P0-004 UI 建项目 → 跳 CC 带 project_id；tenant_id 归属 + 5 人编制",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2371,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T15:46:34.932Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "0c785c6480c7baa85b53-cadb09f5735d683278dd",
+          "file": "p0-02-team-project.spec.ts",
+          "line": 38,
+          "column": 1
+        },
+        {
+          "title": "P0-005 零外部依赖 → CC 可用；AI 配置就绪；无阻断提示",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2405,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T15:46:37.316Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "0c785c6480c7baa85b53-a3197b855ae0c73f6323",
+          "file": "p0-02-team-project.spec.ts",
+          "line": 92,
+          "column": 1
+        },
+        {
+          "title": "P0-006 初始化 7 事项 7 态派生一致；project_basics 恒 completed；刷新不丢",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3387,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T15:46:39.730Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "0c785c6480c7baa85b53-7704fad3b4063115570d",
+          "file": "p0-02-team-project.spec.ts",
+          "line": 138,
+          "column": 1
+        },
+        {
+          "title": "P0-007 集合读过滤、单体读 404、跨项目写 404、原始数据不变",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 763,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-10T15:46:43.126Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0-02-team-project.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "0c785c6480c7baa85b53-9eda1260315f83b9becf",
+          "file": "p0-02-team-project.spec.ts",
+          "line": 206,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-11-10T15:46:16.488Z",
+    "duration": 29329.454999999998,
+    "expected": 7,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

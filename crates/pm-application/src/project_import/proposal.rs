@@ -212,13 +212,20 @@ pub async fn propose_import(
                 .iter()
                 .map(|ev| format!("{}:{}", ev.repo_id, ev.r#ref))
         }));
-        commands.push((
-            "create_requirements".to_string(),
-            pm_domain::ProjectCommand::CreateRequirements {
-                requirements: selected_requirements.clone(),
-            },
-            evidence,
-        ));
+        // 大草案拆批（spec §16「超出拆批并提示」）：执行器对单条批量命令有
+        // `MAX_BATCH_ITEMS` 上限（200），真实仓库的 docs/commits 轻易超过它
+        // （ai-pm 自身 300 条 commit + 402 篇 doc）。不拆批时整批命令被守卫
+        // 拒绝 → 审批 409「command execution failed」→ 导入永远停在 proposed。
+        // 按批拆分后每条命令各自成提案，审批链逐条放行即可全部落地。
+        for chunk in selected_requirements.chunks(MAX_BATCH_ITEMS) {
+            commands.push((
+                "create_requirements".to_string(),
+                pm_domain::ProjectCommand::CreateRequirements {
+                    requirements: chunk.to_vec(),
+                },
+                evidence.clone(),
+            ));
+        }
     }
     if !selected_tasks.is_empty() {
         let tasks: Vec<pm_domain::import::TaskDraft> = selected_tasks
@@ -241,11 +248,15 @@ pub async fn propose_import(
                 .iter()
                 .map(|ev| format!("{}:{}", ev.repo_id, ev.r#ref))
         }));
-        commands.push((
-            "create_tasks".to_string(),
-            pm_domain::ProjectCommand::CreateTasks { tasks },
-            evidence,
-        ));
+        for chunk in tasks.chunks(MAX_BATCH_ITEMS) {
+            commands.push((
+                "create_tasks".to_string(),
+                pm_domain::ProjectCommand::CreateTasks {
+                    tasks: chunk.to_vec(),
+                },
+                evidence.clone(),
+            ));
+        }
     }
     if req.write_knowledge_documents {
         let mut documents: Vec<pm_domain::import::DocumentDraft> = selected_requirements
@@ -267,11 +278,15 @@ pub async fn propose_import(
             markdown: profile_markdown(&draft),
             change_summary: Some("冷启动导入：项目画像".to_string()),
         });
-        commands.push((
-            "write_documents".to_string(),
-            pm_domain::ProjectCommand::WriteDocuments { documents },
-            Vec::new(),
-        ));
+        for chunk in documents.chunks(MAX_BATCH_ITEMS) {
+            commands.push((
+                "write_documents".to_string(),
+                pm_domain::ProjectCommand::WriteDocuments {
+                    documents: chunk.to_vec(),
+                },
+                Vec::new(),
+            ));
+        }
     }
 
     let confidence = lowest_confidence(&draft);
