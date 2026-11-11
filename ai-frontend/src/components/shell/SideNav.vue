@@ -11,7 +11,7 @@ import {
 import { useRoute } from "vue-router";
 
 import IconTooltip from "./IconTooltip.vue";
-import ProjectSwitcher from "./ProjectSwitcher.vue";
+
 import {
   isNavChildActive,
   isNavItemActive,
@@ -113,7 +113,7 @@ async function onSelectProject(id: string) {
       </button>
     </div>
 
-    <div class="shell-sidenav__groups">
+    <div class="shell-sidenav__groups" ">
       <template v-for="group in navGroups" :key="group.id">
         <!-- 分组之间的分隔线（折叠态可见） -->
         <div
@@ -154,7 +154,8 @@ async function onSelectProject(id: string) {
           >
             <!-- 项目上下文头（Figma Project Context Header / Selected|Open|Empty）
                  仅展开态 + 项目上下文分组；承担「切换项目」入口。 -->
-            <div
+            <!-- 不再展示，因为设计原因，多团队，多项目之后，这里展开之后太大了 -->
+            <!-- <div
               v-if="!shell.sidebarCollapsed && group.projectScoped"
               class="shell-sidenav__project"
             >
@@ -165,7 +166,7 @@ async function onSelectProject(id: string) {
                 :switching-to-id="shell.switchingProjectId"
                 @select="onSelectProject"
               />
-            </div>
+            </div> -->
 
             <template v-for="item in group.items" :key="item.path">
               <IconTooltip
