@@ -59,6 +59,8 @@ Main Area 仅 518px，**不强制双栏 Diff**，采用 Inline / Unified Diff �
 
 契约与演示：[91 第一阶段 Prototype 契约](smark-pm-aic-91-phase1-prototype-contract-v1.md)（全局状态 · Context 状态变化 · 专注模式 · 渐进迁移 · 19 步演示 · 验收清单）。
 
+**开发侧前置**：先做 [Shell 组件复用与迁移边界评估任务书](../../smark-pm-ai-collaboration-shell-migration-assessment-v1.md)（复用矩阵 · 迁移边界 M1~M9 · 测试闸门 · 分阶段切分），评估通过后再按 AI-01 / AI-02 实施。
+
 ## 与设计基线的关系
 
 设计基线（`docs/product/ai-pm-ai-collaboration-workspace-v1.md`）是**上游骨架**；本包是**可执行设计规范**。两者的冲突以 95 裁决记录为准，已同步修订基线 §1.1 / §3.1 / §5.1 / §5.3 与附录 B。
