@@ -13,7 +13,7 @@
 
 use axum::{
     extract::{Path, Query, State},
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch},
     Extension, Json, Router,
 };
 use serde::Deserialize;
