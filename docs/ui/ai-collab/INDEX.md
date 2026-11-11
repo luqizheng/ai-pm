@@ -18,7 +18,13 @@
 | 07 | [smark-pm-aic-ui-07-conversation-continuity-v1.md](smark-pm-aic-ui-07-conversation-continuity-v1.md) | AI-07 Conversation Continuity（连续性/历史快照） |
 | 90 | [smark-pm-aic-90-cross-page-prototype-spec-v1.md](smark-pm-aic-90-cross-page-prototype-spec-v1.md) | 跨页 Prototype 交互规则 + 端到端演示流 + Figma 文件组织 |
 
-推荐生成顺序：00 → 01 → 02 → 03 → 04 → 05 → 06 → 07 → 90（90 的端到端流依赖前八页组件）。
+## 实际执行顺序（十步，禁止一次性生成七页）
+
+一次性生成七页易致布局漂移、组件不一致、交互断裂。按 [90 §A](smark-pm-aic-90-cross-page-prototype-spec-v1.md) 十步执行：**Design System → Workspace Shell → AI-01 → AI-02~07 → Prototype Flows**。
+
+**特别建议：先完成 AI-01，再复制其 Workspace Shell 到其他六个页面；不要让 Figma AI 每次重新设计四栏布局。**（00 主提示词已内置此规则，每次投喂自动携带。）
+
+最终验收以 [90 §B 三成败场景](smark-pm-aic-90-cross-page-prototype-spec-v1.md)为门：①切页对话与 Attached 不丢 ②Proposal 后三区分工可编辑/可查源/可追问 ③正式确认后 Chat、Main Area、Context Panel 三处状态一致更新。任一失败即整体返工。
 
 ## 与设计基线的三处细化（以本包为准）
 

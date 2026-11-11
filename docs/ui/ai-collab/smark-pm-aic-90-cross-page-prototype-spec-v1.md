@@ -1,6 +1,28 @@
 # 90 · 跨页 Prototype 交互规范 + 端到端演示流 + Figma 文件组织
 
 > 本文件是 AI-01~07 七个页面必须共同遵守的 Prototype 规范与验收标准。视觉与布局契约见 [00 主提示词](smark-pm-aic-00-design-master-prompt-v1.md)。
+> 编号说明：本文件内部沿用 Part 2~5；执行顺序（§A）与最终验收重点（§B）为包级章节，避免与内部 Part 编号冲突。
+
+---
+
+## §A · 实际执行顺序
+
+**不要一次性让 Figma AI 生成七个页面**——容易造成布局漂移、组件不一致和交互断裂。严格按以下十步执行：
+
+| 顺序 | 工作 | 对应 Figma Page | 交付检查 |
+|---|---|---|---|
+| 1 | Global Design System | Page 00 | 色板对齐 `--ws-*` 命名；字阶 21/15/13/12/11；禁紫禁渐变 |
+| 2 | Global Workspace Shell | Page 01 | 四区比例 13/36/31/20；Resize 不破四区；4 Tab + History Drawer |
+| 3 | AI-01 | Page 02 | 主页面成立，是其余六页的布局母版 |
+| 4 | AI-02 | Page 03 | Available / Attached / Read-only 三态可辨 |
+| 5 | AI-03 | Page 04 | 七类卡结构一致，状态色符合 00 映射 |
+| 6 | AI-04 | Page 05 | Accept ≠ 发布，正式确认走人工 |
+| 7 | AI-05 | Page 06 | 授权前不可执行，失败步骤可见 |
+| 8 | AI-06 | Page 07 | 六异常场景各有恢复动作 |
+| 9 | AI-07 | Page 08 | 切页/切项目对话与上下文保持 |
+| 10 | Prototype Flows | Page 09 | 14 步端到端流可点击走通 |
+
+**特别建议：先完成 AI-01，再复制其 Workspace Shell 到其他六个页面。不要让 Figma AI 每次重新设计四栏布局。**其余六页的提示词中 "Reuse the exact AI-01 global layout" 即指复制 AI-01 的 Shell，而不是重新生成。
 
 ---
 
@@ -176,6 +198,45 @@ The final prototype is accepted only when:
 10. Exception and recovery flows work.
 11. Project switching does not silently transfer context.
 12. Historical results retain their original context.
+
+---
+
+## §B · 最终验收重点（三成败场景）
+
+上面 12 条是完整清单，但**以下三个交互是整个设计的成败关键**。任一场景跑不通，即判定整体返工，不以其余条目合格补救：
+
+### 场景 1 · 页面切换，对话与上下文不丢
+
+用户从 Requirement 切换到 Design：
+- AI Chat 不丢失（消息、草稿、状态原样）。
+- Attached Context 不被清空。
+- 新打开的 Design 只进 Available，不自动 Attach。
+
+（主验页面：AI-07；联动 AI-02）
+
+### 场景 2 · Proposal 生成后三区分工
+
+AI 生成 Proposal 后，用户可以：
+- 在 Main Area 编辑（结构化对比 + 内联编辑）；
+- 在 Context Panel 检查来源（对象 + 精确版本/Revision）；
+- 在 Chat 继续讨论（追问、要求修改）。
+
+三区同时可用、互不遮蔽。
+
+（主验页面：AI-04；联动 AI-03）
+
+### 场景 3 · 正式确认后三处状态一致更新
+
+用户正式确认后：
+- AI Chat 显示提交/审批结果；
+- Main Area 显示新 Revision 并保留旧版本；
+- Context Panel 刷新对象状态与版本。
+
+三处状态必须一致，不允许出现「Chat 说已生效、Main Area 还是旧版」类撕裂。
+
+（主验页面：AI-04；联动 AI-02 / AI-07 历史快照）
+
+**这三个场景跑通，才算真正实现 Project、AI Chat 和 Context 的联动。**
 
 ---
 
