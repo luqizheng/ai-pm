@@ -358,7 +358,10 @@ async fn manual_registration_and_duplicate_rejection(pool: PgPool) {
     let (status, enabled) = call(
         &w.app,
         "POST",
-        &format!("/v1/pm/tenants/{}/llm-providers/{archived_id}/status", w.tenant_id),
+        &format!(
+            "/v1/pm/tenants/{}/llm-providers/{archived_id}/status",
+            w.tenant_id
+        ),
         &w.admin_token,
         Some(json!({ "action": "enable", "expected_revision": revision })),
     )
@@ -391,7 +394,10 @@ async fn manual_registration_and_duplicate_rejection(pool: PgPool) {
     let (status, body) = call(
         &w.app,
         "GET",
-        &format!("/v1/pm/tenants/{}/llm-models?provider_id={provider_id}", w.tenant_id),
+        &format!(
+            "/v1/pm/tenants/{}/llm-models?provider_id={provider_id}",
+            w.tenant_id
+        ),
         &w.admin_token,
         None,
     )
@@ -492,7 +498,7 @@ async fn policy_write_requires_usable_model(pool: PgPool) {
 
     // 2) 启用但未授权 → 400
     let revision = row["revision"].as_i64().unwrap();
-    let (status, _) = call(
+    let (_status, _) = call(
         &w.app,
         "PATCH",
         &format!("/v1/pm/tenants/{}/llm-models/{disabled_id}", w.tenant_id),
@@ -512,7 +518,7 @@ async fn policy_write_requires_usable_model(pool: PgPool) {
     assert!(body["message"].as_str().unwrap().contains("not authorized"));
 
     // 3) 授权后 → 201 级 OK
-    let (status, _) = call(
+    let (_status, _) = call(
         &w.app,
         "PUT",
         &format!("/v1/pm/tenants/{}/llm-model-authorizations", w.tenant_id),
@@ -566,7 +572,10 @@ async fn team_policies_put_and_inheritance(pool: PgPool) {
     assert_eq!(items.len(), 7, "七 Role 全量返回");
     let general = items.iter().find(|r| r["role_key"] == "general").unwrap();
     assert_eq!(general["model_id"], json!(model_id));
-    let risk = items.iter().find(|r| r["role_key"] == "risk_analysis").unwrap();
+    let risk = items
+        .iter()
+        .find(|r| r["role_key"] == "risk_analysis")
+        .unwrap();
     assert_eq!(risk["model_id"], Value::Null);
     assert_eq!(risk["inherit_general"], true, "未配置 Role 继承 general");
 
@@ -763,5 +772,8 @@ async fn audit_four_columns_and_target_type(pool: PgPool) {
     assert_eq!(target_type, "llm_model");
     assert_eq!(action, "llm_model.created");
     assert!(!actor_id.to_string().is_empty());
-    assert!(auth_mode.is_some() || identity_id.is_some(), "四列身份至少落 actor_auth_mode/identity");
+    assert!(
+        auth_mode.is_some() || identity_id.is_some(),
+        "四列身份至少落 actor_auth_mode/identity"
+    );
 }

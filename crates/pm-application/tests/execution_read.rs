@@ -67,7 +67,7 @@ async fn seed_run(
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn waiting_queue_reads_reason_five_values_and_interactions(pool: PgPool) {
-    let (project_id, human_id) = fixture(&pool, "wait").await;
+    let (project_id, _human_id) = fixture(&pool, "wait").await;
 
     // 一个任务至多一条活跃等待（uq_task_waiting_active）→ 五个任务各一条。
     for reason in [
@@ -115,7 +115,7 @@ async fn waiting_queue_reads_reason_five_values_and_interactions(pool: PgPool) {
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn execution_overview_counts_match_source_tables(pool: PgPool) {
-    let (project_id, human_id) = fixture(&pool, "overview").await;
+    let (project_id, _human_id) = fixture(&pool, "overview").await;
     let task_id = seed_task(&pool, project_id, "运行任务", "running").await;
     let _running = seed_run(&pool, project_id, task_id, 1, "running").await;
     let _succeeded = seed_run(&pool, project_id, task_id, 2, "succeeded").await;

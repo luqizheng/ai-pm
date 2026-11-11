@@ -1433,12 +1433,10 @@ pub async fn resolve_review_finding(
     .await
     .map_err(PmWriteError::Db)?
     .ok_or(PmWriteError::NotFound("finding not found"))?;
-    let legal = match (status.as_str(), req.status.as_str()) {
-        ("open", "acknowledged") => true,
-        ("open", "resolved") => true,
-        ("acknowledged", "resolved") => true,
-        _ => false,
-    };
+    let legal = matches!(
+        (status.as_str(), req.status.as_str()),
+        ("open", "acknowledged") | ("open", "resolved") | ("acknowledged", "resolved")
+    );
     if !legal {
         return Err(PmWriteError::Conflict("illegal finding status transition"));
     }
@@ -1852,7 +1850,7 @@ pub async fn decide_approval(
     }
     let mut tx = pool.begin().await.map_err(PmWriteError::Db)?;
     require_human_conn(&mut tx, actor).await?;
-    let (project_id, kind, design_id, adr_id, _baseline_id, plan_id, target_id, target_hash): (
+    type ApprovalDecisionRow = (
         Uuid,
         String,
         Option<Uuid>,
@@ -1861,7 +1859,9 @@ pub async fn decide_approval(
         Option<Uuid>,
         Uuid,
         String,
-    ) = sqlx::query_as(
+    );
+    let (project_id, kind, design_id, adr_id, _baseline_id, plan_id, target_id, target_hash): ApprovalDecisionRow =
+        sqlx::query_as(
         "SELECT project_id, kind, design_id, adr_id, baseline_id, plan_id, target_id, target_hash \
          FROM design.design_approval WHERE id = $1 AND tenant_id = $2 FOR UPDATE",
     )

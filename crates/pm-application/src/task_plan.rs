@@ -1115,7 +1115,8 @@ pub async fn prepare_handoff(
     task_id: Uuid,
 ) -> Result<Value, PmWriteError> {
     // 任务归属 + 计划锚定（跨租户按不存在处理）。
-    let row: Option<(Uuid, String, String, Option<Uuid>, Option<String>)> = sqlx::query_as(
+    type HandoffTaskRow = (Uuid, String, String, Option<Uuid>, Option<String>);
+    let row: Option<HandoffTaskRow> = sqlx::query_as(
         "SELECT t.project_id, t.status, t.title, t.plan_revision_id, t.plan_task_key \
          FROM delivery.task t WHERE t.id = $1 AND t.tenant_id = $2",
     )

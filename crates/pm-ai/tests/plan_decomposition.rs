@@ -32,6 +32,7 @@ struct Fx {
     human: AuditActor,
     ai: AuditActor,
     human_id: Uuid,
+    #[allow(dead_code)] // 播种用，断言不读
     ai_id: Uuid,
 }
 
@@ -289,7 +290,7 @@ async fn approved_plan(pool: &PgPool, fx: &Fx, baseline_id: Uuid, code: &str) ->
     .await
     .unwrap();
     let plan_id = detail.plan.id;
-    assert_eq!(detail.plan.code, format!("TP-001"));
+    assert_eq!(detail.plan.code, "TP-001".to_string());
     let rev = &detail.revisions[0];
     assert_eq!(rev.source, "ai");
     let rev_id = rev.id;
@@ -466,7 +467,10 @@ async fn full_chain_plan_approve_materialize_ready_handoff(pool: PgPool) {
         .unwrap();
     assert_eq!(payload["task_id"], json!(t001));
     assert_eq!(payload["implementation_baseline_id"], json!(baseline_id));
-    assert!(payload["acceptance_criteria"].as_array().unwrap().len() >= 1);
+    assert!(!payload["acceptance_criteria"]
+        .as_array()
+        .unwrap()
+        .is_empty());
     assert!(payload["repositories"].as_array().unwrap().is_empty());
 
     // T003 依赖未完成 → 交接拒绝。

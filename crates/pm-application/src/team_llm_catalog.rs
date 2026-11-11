@@ -185,24 +185,8 @@ const MODEL_SELECT: &str = "SELECT m.id, m.provider_id, p.name AS provider_name,
     m.revision, m.created_by, m.created_at, m.updated_at \
     FROM ai.team_llm_model m JOIN ai.team_llm_provider p ON p.id = m.provider_id AND p.tenant_id = m.tenant_id";
 
-fn map_model_row(
-    row: (
-        Uuid,
-        Uuid,
-        String,
-        String,
-        String,
-        Vec<String>,
-        Option<i32>,
-        bool,
-        String,
-        Option<DateTime<Utc>>,
-        i64,
-        Uuid,
-        DateTime<Utc>,
-        DateTime<Utc>,
-    ),
-) -> ModelRow {
+// 14 列投影元组，行结构由 MODEL_SELECT 固定（定义见下方 ModelTuple）。
+fn map_model_row(row: ModelTuple) -> ModelRow {
     ModelRow {
         id: row.0,
         provider_id: row.1,

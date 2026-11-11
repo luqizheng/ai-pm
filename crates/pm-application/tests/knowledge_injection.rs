@@ -23,6 +23,7 @@ use uuid::Uuid;
 struct Fx {
     project_id: Uuid,
     task_id: Uuid,
+    #[allow(dead_code)] // 播种用，断言不读
     agent_id: Uuid,
     author: Uuid,
 }

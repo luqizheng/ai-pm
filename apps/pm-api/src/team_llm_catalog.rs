@@ -54,9 +54,7 @@ async fn require_admin(
     caller: &AuthedPrincipal,
     tenant_id: Uuid,
 ) -> Result<(), Response> {
-    if let Err(resp) = guard_tenant(caller, tenant_id) {
-        return Err(resp);
-    }
+    guard_tenant(caller, tenant_id)?;
     if !caller.is_admin {
         return Err(err_forbidden("tenant admin required"));
     }

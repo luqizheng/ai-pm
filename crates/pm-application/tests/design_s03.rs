@@ -29,6 +29,7 @@ struct Fx {
     human: AuditActor,
     ai: AuditActor,
     human_id: Uuid,
+    #[allow(dead_code)] // 播种用，断言不读
     ai_id: Uuid,
 }
 
@@ -112,7 +113,7 @@ async fn ai_submitted_design(
     let design_id = detail.design.id;
     let rev = &detail.revisions[0];
     assert_eq!(rev.source, "ai", "AI 主体创建的设计修订必须留痕 source=ai");
-    let mut rev = rev.clone();
+    let mut rev = rev;
     if !gate_ready {
         // 无范围/验收的版本：直接用首修订（缺省内容）提交。
     }
@@ -364,7 +365,7 @@ async fn sc02_new_revision_approval_supersedes_but_never_overwrites(pool: PgPool
 async fn sc03_one_design_links_three_requirements_revision_bound(pool: PgPool) {
     let fx = fixture(&pool, "sc03").await;
     let root = knowledge_root("sc03");
-    let (r1, r1_rev1) = approved_requirement(&pool, &fx, "REQ-A", &root).await;
+    let (r1, _r1_rev1) = approved_requirement(&pool, &fx, "REQ-A", &root).await;
     let (r2, r2_rev) = approved_requirement(&pool, &fx, "REQ-B", &root).await;
     let (r3, _) = approved_requirement(&pool, &fx, "REQ-C", &root).await;
 
