@@ -6,10 +6,12 @@ import { listRepositories } from "@/api/repositories";
  * 应用壳状态（AI R&D Workspace Application Shell）。
  *
  * 壳自身的开关：
- *   - sidebarCollapsed：左导航折叠（展开 232px / 折叠 60px）
- *   - contextOpen：右上下文栏（320px，可关）
+ *   - sidebarCollapsed：左导航折叠（展开 188px / 折叠 60px）
+ *   - contextOpen：右上下文栏（288px，可关）
  *   - commandbarExpanded：AI 指令栏（收起 72px / 展开 120px）
  *   - pendingAssistantPrompt：指令栏提交、待会话页（/project/assistant）消费的提问
+ *   - focusMode：专注模式（DR-C8）——临时收起 AI Chat 与 Context Panel，
+ *     主区独占工作区；退出逐项还原进入前的开合状态
  *
  * 项目上下文（Figma「04 — Global Navigation」Project Context Header /
  * 「07 — Project Switching」）：
@@ -18,8 +20,8 @@ import { listRepositories } from "@/api/repositories";
  *   切换期间 **不暴露旧项目数据**（Figma：No stale project data is displayed），
  *   故 currentProject 在切换期间为 null，消费方显示切换态。
  *
- * 折叠态落在 CSS 属性开关上（壳根元素 data-sidebar / data-context），
- * 由 `.workspace-shell` 的 grid 模板消费——见 src/styles/index.css。
+ * 折叠态落在 CSS 属性开关上（壳根元素 data-sidebar / data-context /
+ * data-focus），由 `.workspace-shell` 的 grid 模板消费——见 src/styles/index.css。
  */
 
 /** 折叠态持久化键（与主题/语言键同族：aipm.*） */
@@ -88,6 +90,17 @@ export const useShellStore = defineStore("app-shell", () => {
   const contextOpen = ref(true);
   const commandbarExpanded = ref(false);
   /**
+   * 专注模式（DR-C8）：临时收起 AI Chat 与 Context Panel，主区独占工作区。
+   *
+   * **只改布局，不改业务语义**：进入/退出都不触碰 currentProjectId、
+   * assistantContext、pendingAssistantPrompt 等上下文与交接状态。
+   *
+   * 进入前记录右栏开合态（contextOpen），退出时逐项还原——专注模式
+   * 不吞掉用户原本的右栏开关选择。
+   */
+  const focusMode = ref(false);
+  const contextOpenBeforeFocus = ref<boolean | null>(null);
+  /**
    * 指令栏 → 会话页的单槽交接：指令栏只入队并导航，真正发送由会话页走
    * 其既有发送链（自动建会话 / 失败重发）；消费即清空，避免重复发送。
    *
@@ -115,6 +128,9 @@ export const useShellStore = defineStore("app-shell", () => {
 
   /** 壳根元素的 data-context 取值 */
   const contextState = computed(() => (contextOpen.value ? "open" : "closed"));
+
+  /** 壳根元素的 data-focus 取值（专注模式） */
+  const focusState = computed(() => (focusMode.value ? "on" : "off"));
 
   /** 切换中（期间不暴露旧项目数据） */
   const switching = computed(() => switchingProjectId.value !== null);
@@ -191,6 +207,39 @@ export const useShellStore = defineStore("app-shell", () => {
 
   function setCommandbarExpanded(expanded: boolean) {
     commandbarExpanded.value = expanded;
+  }
+
+  /**
+   * 进入专注模式：收起 AI Chat 与 Context Panel，主区独占。
+   *
+   * 进入前记录右栏开合态（供退出时还原）；**不改动**任何项目 / 会话 /
+   * 上下文状态，故当前编辑内容与对话状态天然保留。
+   */
+  function enterFocusMode() {
+    if (focusMode.value) return;
+    contextOpenBeforeFocus.value = contextOpen.value;
+    focusMode.value = true;
+  }
+
+  /**
+   * 退出专注模式：恢复四栏，并还原进入前的右栏开合态。
+   * 专注模式期间用户若手动改了右栏开关，以用户最后一次选择为准。
+   */
+  function exitFocusMode() {
+    if (!focusMode.value) return;
+    focusMode.value = false;
+    if (contextOpenBeforeFocus.value !== null) {
+      contextOpen.value = contextOpenBeforeFocus.value;
+      contextOpenBeforeFocus.value = null;
+    }
+  }
+
+  function toggleFocusMode() {
+    if (focusMode.value) {
+      exitFocusMode();
+    } else {
+      enterFocusMode();
+    }
   }
 
   /** 指令栏提交提问（空白忽略）；会话页经 takeAssistantPrompt 消费。
@@ -274,6 +323,7 @@ export const useShellStore = defineStore("app-shell", () => {
     sidebarCollapsed,
     contextOpen,
     commandbarExpanded,
+    focusMode,
     pendingAssistantPrompt,
     projects,
     currentProjectId,
@@ -281,6 +331,7 @@ export const useShellStore = defineStore("app-shell", () => {
     currentRepository,
     sidebarState,
     contextState,
+    focusState,
     switching,
     currentProject,
     switchingProject,
@@ -291,6 +342,9 @@ export const useShellStore = defineStore("app-shell", () => {
     setContextOpen,
     toggleCommandbar,
     setCommandbarExpanded,
+    enterFocusMode,
+    exitFocusMode,
+    toggleFocusMode,
     queueAssistantPrompt,
     takeAssistantPrompt,
     setProjects,

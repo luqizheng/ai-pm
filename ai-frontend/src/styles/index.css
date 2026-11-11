@@ -21,15 +21,25 @@ body {
   overflow: hidden;
 }
 
-/* Workspace Shell 三栏布局基类 —— 设计系统 V1.0 §二/§六
- * 列：左导航 232px（折叠 60px）| 主区自适应 | 右上下文 320px（可关）
- * 属性开关由 WorkspaceShell 根元素写入（data-sidebar / data-context）。 */
+/* Workspace Shell 四栏布局基类 —— 设计系统 V1.0 §二/§六
+ * + AI Collaboration V1.0 DR-C5/DR-C8（渐进升级：主体工作区由三栏→四栏）
+ *
+ * 列（1440px 桌面基准，TopBar 52px 位于其上方）：
+ *   左导航 188px（折叠 60px）| 主区基准 518px | AI Chat 446px | 右上下文 288px（可关）
+ *
+ * 主区取 minmax(0, 1fr)：在 1440px 基准下正好 = 518px（188+446+288=922，
+ * 1440-922=518）；窄屏时收缩避免横向溢出，宽屏时吸收余量而不挤压
+ * AI Chat 与 Context Panel（两者固定宽，不因主区而变）。
+ *
+ * 属性开关由 WorkspaceShell 根元素写入（data-sidebar / data-context /
+ * data-focus），由 grid 模板消费。 */
 .workspace-shell {
   --ws-sidebar-current: var(--ws-sidebar-width);
   display: grid;
   grid-template-columns:
     var(--ws-sidebar-current)
     minmax(0, 1fr)
+    var(--ws-chat-width)
     var(--ws-context-width);
   grid-template-rows: var(--ws-topbar-height) minmax(0, 1fr);
   height: 100dvh;
@@ -45,13 +55,23 @@ body {
 .workspace-shell[data-context="closed"] {
   grid-template-columns:
     var(--ws-sidebar-current)
+    minmax(0, 1fr)
+    var(--ws-chat-width);
+}
+
+/* 专注模式（DR-C8）：临时收起 AI Chat 与 Context Panel，主区独占工作区。
+ * 退出后由根元素去掉 data-focus 恢复四栏；收起/开启状态由 shell store 记录，
+ * 退出时逐项还原（不改 Project / Conversation / Context）。 */
+.workspace-shell[data-focus="on"] {
+  grid-template-columns:
+    var(--ws-sidebar-current)
     minmax(0, 1fr);
 }
 
-/* 顶栏横跨三栏。
+/* 顶栏横跨全部列。
  * 显式定位说明（用户验收反馈的栏位错位根因）：CSS Grid 自动放置会把
  * 「锁行不锁列」的项目先于全自动项目放置——右栏（grid-row:2）先抢第 2 列，
- * 主区被挤到第 3 列。三个栏位子项因此全部显式声明列位，不依赖自动放置。 */
+ * 主区被挤到第 3 列。四个栏位子项因此全部显式声明列位，不依赖自动放置。 */
 .workspace-topbar {
   grid-column: 1 / -1;
   grid-row: 1;
@@ -62,9 +82,9 @@ body {
   border-bottom: 1px solid var(--ws-border);
 }
 
-/* 主列（含总控台与指令栏）：右栏关闭时由网格自然扩展。
+/* 主列（含总控台与页面内容）：右栏关闭 / 专注模式时由网格自然扩展。
  * 滚动收敛在 .workspace-main-scroll —— main 本体 overflow:hidden，
- * 否则长页内容会从盒子下方渗出、盖住指令栏（用户验收反馈）。 */
+ * 否则长页内容会从盒子下方渗出、盖住底部元素（用户验收反馈）。 */
 .workspace-main {
   grid-column: 2;
   grid-row: 2;
@@ -81,6 +101,21 @@ body {
   overflow-y: auto;
 }
 
+/* AI Chat 常驻独立列（DR-C8：由主列底部指令栏升级而来）。
+ * 固定宽 --ws-chat-width，独立滚动；内部自上而下为会话头 / 时间线 /
+ * 输入组件（Composer 原指令栏降级为本列的输入组件）。 */
+.workspace-chat {
+  grid-column: 3;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ws-surface);
+  border-left: 1px solid var(--ws-border);
+}
+
 /* 左导航 / 右上下文列容器 */
 .workspace-leftnav {
   grid-column: 1;
@@ -91,22 +126,21 @@ body {
 }
 
 .workspace-context {
-  grid-column: 3;
+  grid-column: 4;
   grid-row: 2;
   background: var(--ws-sidebar);
   border-left: 1px solid var(--ws-border);
   overflow-y: auto;
 }
 
-/* AI 指令栏：壳级独立组件，全部工作区页共用。
- * 停靠式通栏——Figma「03 — Application Shell」两帧均为：
- * 位于主列底部、上边框分隔、与主列等宽（不压右上下文栏）。
- * 展开 120px / 收起 72px（--ws-commandbar-height-max / -min）。
- * 展开态与收起态由组件自身高度切换实现，此处只负责停靠与边框。 */
+/* AI 指令栏 → AI Chat 列内的输入组件（DR-C8）。
+ * 原为停靠在主列底部的通栏（与主列等宽、不压右栏）；现为 AI Chat 常驻列
+ * 的底部输入区（Composer），上边框分隔时间线与输入。
+ * 展开 120px / 收起 72px（--ws-commandbar-height-max / -min）。 */
 .workspace-commandbar {
   flex: none;
   border-top: var(--border-1) solid var(--ws-border);
-  background: var(--ws-sidebar);
+  background: var(--ws-surface);
 }
 
 /* 通用交互面 */

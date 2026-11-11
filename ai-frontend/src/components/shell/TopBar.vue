@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
-import { Search, Sparkles } from "lucide-vue-next";
+import { Maximize2, Minimize2, Search, Sparkles } from "lucide-vue-next";
 
 import { resolveAvatarSrc } from "@/api/base/self-service";
 import { LocaleToggle } from "@/components/global/locale";
@@ -252,6 +252,28 @@ async function onSignOutConfirm() {
       <!-- 主题快捷开关（铃铛旁：深/浅单击往返；与设置偏好页同源 lib/theme） -->
       <ThemeToggle />
 
+      <!-- 专注模式开关（DR-C8）：临时收起 AI Chat 与右栏，主区独占工作区。
+           置于顶栏——专注模式下 AI Chat 列已收起，此处是唯一的退出入口。 -->
+      <button
+        type="button"
+        class="shell-topbar__focus"
+        :aria-label="
+          shell.focusMode
+            ? t('shell.app.chat.focusExit')
+            : t('shell.app.chat.focusEnter')
+        "
+        :title="
+          shell.focusMode
+            ? t('shell.app.chat.focusExit')
+            : t('shell.app.chat.focusEnter')
+        "
+        @click="shell.toggleFocusMode()"
+      >
+        <Minimize2 v-if="shell.focusMode" :size="14" aria-hidden="true" />
+        <Maximize2 v-else :size="14" aria-hidden="true" />
+        <span>{{ t("shell.app.chat.focus") }}</span>
+      </button>
+
       <!-- 全局 AI 助手入口（2026-11-08 接线：push 项目 AI 会话页） -->
       <button
         type="button"
@@ -416,6 +438,31 @@ async function onSignOutConfirm() {
 }
 
 .shell-topbar__assistant:focus-visible {
+  outline: none;
+  box-shadow: var(--ws-focus-ring);
+}
+
+/* 专注模式开关（DR-C8）——顶栏常驻，是专注模式下唯一的退出入口 */
+.shell-topbar__focus {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--size-control-sm);
+  padding: 0 var(--space-2);
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-body);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.shell-topbar__focus:hover {
+  background: var(--ws-hover-veil);
+  color: var(--ws-text-primary);
+}
+
+.shell-topbar__focus:focus-visible {
   outline: none;
   box-shadow: var(--ws-focus-ring);
 }

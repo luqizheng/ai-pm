@@ -8,7 +8,7 @@ import type { SearchCommand, SearchFn } from "@/components/global/search/types";
 import { listProjects } from "@/api/projects";
 import { retrievalQuery } from "@/api/knowledge";
 import { useShellStore } from "@/stores/shell";
-import CommandBar from "./CommandBar.vue";
+import AssistantColumn from "./AssistantColumn.vue";
 import ContextPanel from "./ContextPanel.vue";
 import SideNav from "./SideNav.vue";
 import TopBar from "./TopBar.vue";
@@ -16,12 +16,15 @@ import TopBar from "./TopBar.vue";
 /**
  * 应用壳根（AI R&D Workspace Application Shell）。
  *
- * 五区域（Shell V1.1 §2）：
- *   顶栏 52px / 左导航 232px（折叠 60px）/ 主内容区 / 右上下文栏 320px（可关）/
- *   底部 AI 指令栏 72–120px
+ * 四栏主体工作区（AI Collaboration V1.0 / DR-C5 + DR-C8，1440px 基准）：
+ *   顶栏 52px（横跨全部列）/
+ *   左导航 188px（折叠 60px）/ 主内容区 518px / AI Chat 446px（常驻独立列）/
+ *   右上下文栏 288px（可关）
  *
- * 布局由 `.workspace-shell` 的 grid 承担，折叠态经根元素
- * `data-sidebar` / `data-context` 属性切换（见 src/styles/index.css）。
+ * 布局由 `.workspace-shell` 的 grid 承担，状态经根元素
+ * `data-sidebar` / `data-context` / `data-focus` 属性切换
+ * （见 src/styles/index.css）。专注模式（data-focus="on"）收起
+ * AI Chat 与右上下文栏，主区独占工作区。
  */
 
 const { t } = useI18n();
@@ -124,14 +127,11 @@ watch(
 
 // 路由携带 ?project_id= 时，顶栏项目选择器跟随同一项目
 // （打开项目 = 切换当前项目上下文；store 的持久化与仓库上下文由上方 watch 联动）
-watch(
-  urlProjectId,
-  projectId => {
-    if (projectId && projectId !== shell.currentProjectId) {
-      shell.setCurrentProject(projectId);
-    }
+watch(urlProjectId, projectId => {
+  if (projectId && projectId !== shell.currentProjectId) {
+    shell.setCurrentProject(projectId);
   }
-);
+});
 
 /**
  * 全局命令（Figma「01 — Global Search」Global commands：导航 / 创建 /
@@ -212,6 +212,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
     class="workspace-shell"
     :data-sidebar="shell.sidebarState"
     :data-context="shell.contextState"
+    :data-focus="shell.focusState"
   >
     <TopBar class="workspace-topbar" @search="searchOpen = true" />
 
@@ -221,10 +222,15 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       <div class="workspace-main-scroll">
         <RouterView />
       </div>
-      <CommandBar class="workspace-commandbar" />
     </main>
 
-    <ContextPanel v-if="shell.contextOpen" class="workspace-context" />
+    <!-- AI Chat 常驻独立列（DR-C8）：专注模式下收起，主区独占工作区 -->
+    <AssistantColumn v-if="!shell.focusMode" class="workspace-chat" />
+
+    <ContextPanel
+      v-if="shell.contextOpen && !shell.focusMode"
+      class="workspace-context"
+    />
 
     <!-- 全局搜索 / 命令面板（⌘ K，Figma「01 — Global Search」） -->
     <SearchPalette

@@ -73,10 +73,18 @@
   --ws-font-size-micro: 11px;
   --ws-row-height: 36px;
 
-  /* 布局尺寸 —— V1.0 §二 Shell 图 */
-  --ws-sidebar-width: 232px;
+  /* 布局尺寸 —— V1.0 §二 Shell 图
+   *
+   * 四栏主体工作区（AI Collaboration V1.0 / DR-C5 + DR-C8）：
+   * 188 + 518 + 446 + 288 = 1440px（1440px 桌面基准，TopBar 52px 在其上方）。
+   * 主区与 AI Chat 列为固定基准宽；AI Chat 是**常驻独立列**（不再是主列
+   * 底部的停靠指令栏），指令栏降级为该列内的输入组件。
+   */
+  --ws-sidebar-width: 188px;
   --ws-sidebar-collapsed: 60px;
-  --ws-context-width: 320px;
+  --ws-main-width: 518px;
+  --ws-chat-width: 446px;
+  --ws-context-width: 288px;
   --ws-topbar-height: 52px;
   --ws-commandbar-height-min: 72px;
   --ws-commandbar-height-max: 120px;

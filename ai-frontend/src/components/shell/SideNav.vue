@@ -21,7 +21,6 @@ import {
 } from "@/router/navigation";
 import { useShellStore } from "@/stores/shell";
 
-
 /**
  * 左导航（AI R&D Workspace Application Shell §2B + Figma「04 — Global Navigation」）。
  *
@@ -113,7 +112,7 @@ async function onSelectProject(id: string) {
       </button>
     </div>
 
-    <div class="shell-sidenav__groups" ">
+    <div class="shell-sidenav__groups">
       <template v-for="group in navGroups" :key="group.id">
         <!-- 分组之间的分隔线（折叠态可见） -->
         <div

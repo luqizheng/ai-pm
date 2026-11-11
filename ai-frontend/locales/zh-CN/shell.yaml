@@ -268,6 +268,14 @@ shell:
       sourceProject: 项目画像
       sourceRepository: 仓库事实
       sourceNone: 未锚定（会话内按需回答）
+    chat:
+      title: AI 助手
+      emptyTitle: 尚未打开会话
+      emptyHint: 在下方直接提问，或打开完整会话查看历史与访谈。
+      openConversation: 打开完整会话
+      focus: 专注
+      focusEnter: 进入专注模式
+      focusExit: 退出专注模式
     commandbar:
       title: AI 助手
       reviewFirst: 任何操作前请先确认
