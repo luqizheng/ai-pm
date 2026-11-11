@@ -20,8 +20,8 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use pm_application::ai_context_items::{
-    attach_items, list_items, patch_lifecycle, remove_item, AttachItemRequest,
-    ContextItemError, PatchLifecycleRequest,
+    attach_items, list_items, patch_lifecycle, remove_item, AttachItemRequest, ContextItemError,
+    PatchLifecycleRequest,
 };
 
 use crate::auth::AuthedPrincipal;
@@ -50,12 +50,8 @@ fn map_error(err: ContextItemError) -> ApiError {
         ContextItemError::Validation(msg) => {
             ApiError::Text(axum::http::StatusCode::BAD_REQUEST, msg)
         }
-        ContextItemError::Forbidden(msg) => {
-            ApiError::Text(axum::http::StatusCode::FORBIDDEN, msg)
-        }
-        ContextItemError::Conflict(msg) => {
-            ApiError::Text(axum::http::StatusCode::CONFLICT, msg)
-        }
+        ContextItemError::Forbidden(msg) => ApiError::Text(axum::http::StatusCode::FORBIDDEN, msg),
+        ContextItemError::Conflict(msg) => ApiError::Text(axum::http::StatusCode::CONFLICT, msg),
         ContextItemError::Db(e) => {
             tracing::error!(error = %e, "context item db error");
             ApiError::Internal(sqlx::Error::Protocol(e))

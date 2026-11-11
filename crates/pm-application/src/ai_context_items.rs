@@ -359,14 +359,12 @@ async fn validate_object_reference(
             // 对象行即版本（supersedes 链）；revision_id 必须为空。
             if req.revision_id.is_some() {
                 return Err(ContextItemError::Validation(
-                    "knowledge items carry their own version; revision_id must be null"
-                        .to_string(),
+                    "knowledge items carry their own version; revision_id must be null".to_string(),
                 ));
             }
             if req.content_hash.is_some() {
                 return Err(ContextItemError::Validation(
-                    "knowledge has no content_hash column; content_hash must be null"
-                        .to_string(),
+                    "knowledge has no content_hash column; content_hash must be null".to_string(),
                 ));
             }
             let row: Option<(String, i32)> = sqlx::query_as(
@@ -563,9 +561,7 @@ async fn audit(
     )
     .await
     .map_err(|e| match e {
-        sqlx::Error::Database(db_err) => {
-            ContextItemError::Db(db_err.message().to_string())
-        }
+        sqlx::Error::Database(db_err) => ContextItemError::Db(db_err.message().to_string()),
         err => ContextItemError::Db(err.to_string()),
     })
 }
@@ -597,14 +593,7 @@ pub async fn attach_items(
             "at most {MAX_BATCH_ITEMS} items per batch"
         )));
     }
-    ensure_conversation_owned(
-        pool,
-        tenant_id,
-        project_id,
-        principal_id,
-        conversation_id,
-    )
-    .await?;
+    ensure_conversation_owned(pool, tenant_id, project_id, principal_id, conversation_id).await?;
 
     let mut tx = pool.begin().await.map_err(ContextItemError::db)?;
     let mut attached = Vec::with_capacity(items.len());
@@ -646,9 +635,7 @@ pub async fn attach_items(
         .fetch_one(&mut *tx)
         .await
         .map_err(|e| match e {
-            sqlx::Error::Database(ref db_err)
-                if db_err.code().as_deref() == Some("23505") =>
-            {
+            sqlx::Error::Database(ref db_err) if db_err.code().as_deref() == Some("23505") => {
                 ContextItemError::Conflict(
                     "the object is already attached to this conversation".to_string(),
                 )
@@ -742,14 +729,7 @@ pub async fn patch_lifecycle(
     actor: &AuditActor,
     req: &PatchLifecycleRequest,
 ) -> Result<ContextItemView, ContextItemError> {
-    ensure_conversation_owned(
-        pool,
-        tenant_id,
-        project_id,
-        principal_id,
-        conversation_id,
-    )
-    .await?;
+    ensure_conversation_owned(pool, tenant_id, project_id, principal_id, conversation_id).await?;
     let item = fetch_item_owned(
         pool,
         tenant_id,
@@ -903,14 +883,7 @@ pub async fn remove_item(
     item_id: Uuid,
     actor: &AuditActor,
 ) -> Result<ContextItemView, ContextItemError> {
-    ensure_conversation_owned(
-        pool,
-        tenant_id,
-        project_id,
-        principal_id,
-        conversation_id,
-    )
-    .await?;
+    ensure_conversation_owned(pool, tenant_id, project_id, principal_id, conversation_id).await?;
     let item = fetch_item_owned(
         pool,
         tenant_id,
@@ -975,14 +948,7 @@ pub async fn list_items(
     conversation_id: Uuid,
     include_detached: bool,
 ) -> Result<Vec<ContextItemView>, ContextItemError> {
-    ensure_conversation_owned(
-        pool,
-        tenant_id,
-        project_id,
-        principal_id,
-        conversation_id,
-    )
-    .await?;
+    ensure_conversation_owned(pool, tenant_id, project_id, principal_id, conversation_id).await?;
     let attachment_filter = if include_detached { "%" } else { "attached" };
     let rows = sqlx::query(
         "SELECT i.id, i.conversation_id, i.object_type, i.object_id, i.object_code, \

@@ -49,7 +49,10 @@ async fn send(app: &axum::Router, request: Request<Body>) -> (StatusCode, Value)
     let response = app.clone().oneshot(request).await.unwrap();
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
 }
 
 fn app(pool: PgPool) -> axum::Router {
@@ -113,7 +116,12 @@ async fn seed(pool: &PgPool, code: &str) -> (axum::Router, Uuid, Uuid) {
         ),
     )
     .await;
-    assert_eq!(created.0, StatusCode::CREATED, "conversation: {}", created.1);
+    assert_eq!(
+        created.0,
+        StatusCode::CREATED,
+        "conversation: {}",
+        created.1
+    );
     let conversation: Uuid = created.1["id"].as_str().unwrap().parse().unwrap();
 
     (a, project_id, conversation)
@@ -240,12 +248,11 @@ async fn task_items_reject_content_version_fields(pool: PgPool) {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
 
     // row_version 快照合法（与实际 revision 一致）。
-    let revision: i64 =
-        sqlx::query_scalar("SELECT revision FROM delivery.task WHERE id = $1")
-            .bind(task)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let revision: i64 = sqlx::query_scalar("SELECT revision FROM delivery.task WHERE id = $1")
+        .bind(task)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     let (status, body) = send(
         &a,
         req(
@@ -365,7 +372,11 @@ async fn lifecycle_state_machine_and_human_gate(pool: PgPool) {
     // 任意 → unavailable：缺原因 → 400；给原因 → 200。
     let (status, _) = send(
         &a,
-        req("PATCH", &lifecycle_uri, Some(json!({ "lifecycle": "unavailable" }))),
+        req(
+            "PATCH",
+            &lifecycle_uri,
+            Some(json!({ "lifecycle": "unavailable" })),
+        ),
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -428,13 +439,12 @@ async fn soft_remove_keeps_object_and_history(pool: PgPool) {
     assert_eq!(body["attachment"], json!("detached"));
 
     // 业务对象未被删除。
-    let still_there: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM delivery.requirement WHERE id = $1",
-    )
-    .bind(requirement)
-    .fetch_optional(&pool)
-    .await
-    .unwrap();
+    let still_there: Option<Uuid> =
+        sqlx::query_scalar::<_, Uuid>("SELECT id FROM delivery.requirement WHERE id = $1")
+            .bind(requirement)
+            .fetch_optional(&pool)
+            .await
+            .unwrap();
     assert_eq!(still_there, Some(requirement), "business object must stay");
 
     // 默认列表不再出现；include_detached=true 可见（History）。
@@ -528,7 +538,12 @@ async fn cross_owner_access_is_404_same_shape(pool: PgPool) {
         ),
     )
     .await;
-    assert_eq!(activated.0, StatusCode::OK, "peer activation: {}", activated.1);
+    assert_eq!(
+        activated.0,
+        StatusCode::OK,
+        "peer activation: {}",
+        activated.1
+    );
     sqlx::query(
         "INSERT INTO core.project_member (tenant_id, project_id, principal_id, role)          SELECT tenant_id, $1, $2, 'member' FROM core.project WHERE id = $1          ON CONFLICT DO NOTHING",
     )
