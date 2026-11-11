@@ -408,7 +408,7 @@ async fn delete_requires_archive_and_no_call_records(pool: PgPool) {
         &w,
         json!({
             "name": "p1", "provider_type": "openai_compatible",
-            "endpoint": "http://127.0.0.1:9/v1",
+            "endpoint": "http://203.0.113.1:9/v1",
             "configuration": { "model": "test-model" }
         }),
     )
@@ -584,7 +584,7 @@ async fn project_policy_set_get_and_inheritance(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["provider_id"], Value::Null);
+    assert_eq!(body["provider_constraint"], Value::Null);
 
     // PUT 指定 ds-2
     let (status, body) = call(
@@ -596,9 +596,9 @@ async fn project_policy_set_get_and_inheritance(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["provider_id"], json!(id2));
+    assert_eq!(body["provider_constraint"], json!(id2));
     assert_eq!(body["provider_name"], "ds-2");
-    let rev = body["revision"].as_i64().unwrap();
+    let rev = body["provider_constraint_revision"].as_i64().unwrap();
 
     // CAS 409
     let (status, body) = call(
@@ -621,7 +621,7 @@ async fn project_policy_set_get_and_inheritance(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["provider_id"], Value::Null);
+    assert_eq!(body["provider_constraint"], Value::Null);
 }
 
 /// member 既非租户 admin 也非项目 owner → 403。

@@ -120,6 +120,7 @@ impl PlannerModel for LlmRetrievalPlanner {
                     ModelError::Timeout => ("timeout", Some(err.to_string())),
                     ModelError::Unavailable(_) => ("provider_unavailable", Some(err.to_string())),
                     ModelError::BadOutput(_) => ("bad_output", Some(err.to_string())),
+                    ModelError::Configuration(_) => ("configuration", Some(err.to_string())),
                 };
                 record_call(
                     &self.pool,
@@ -141,6 +142,7 @@ impl PlannerModel for LlmRetrievalPlanner {
                         PlannerModelError::ProviderUnavailable(reason)
                     }
                     ModelError::BadOutput(reason) => PlannerModelError::InvalidOutput(reason),
+                    ModelError::Configuration(_) => PlannerModelError::NoProvider,
                 })
             }
         }

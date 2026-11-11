@@ -706,6 +706,7 @@ fn model_failure_code(err: &ModelError) -> &'static str {
         ModelError::Timeout => "model_timeout",
         ModelError::Unavailable(_) => "model_unavailable",
         ModelError::BadOutput(_) => "model_bad_output",
+        ModelError::Configuration(_) => "model_configuration",
     }
 }
 

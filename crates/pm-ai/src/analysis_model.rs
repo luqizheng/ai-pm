@@ -6,9 +6,9 @@
 //! enable/disable is picked up by the next event without a restart.
 //!
 //! Mode knob `AI_PM_ANALYSIS_MODEL` (Task 17 ruling):
-//! - `auto` (default): resolve as above; a `None` or failed resolution
-//!   falls back to the deterministic [`FakeModel`] **with a loud
-//!   structured warning** — the fake fallback is never silent.
+//! - `auto` (default): resolve as above; a `None` or failed resolution is a
+//!   **显式 Configuration Error**（DEC-LLM-004/§10.3：不静默降级、不回退
+//!   FakeModel——fake 输出是 fixture 数据，冒充分析结论违反 Fail-Fast 裁决）。
 //! - `fake`: pin the fixtures (development/tests only).
 
 use std::sync::Arc;
@@ -27,7 +27,8 @@ use crate::skill_router::SkillId;
 /// How the worker picks the analysis model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnalysisModelMode {
-    /// Per-project provider resolution, fake fallback with warnings.
+    /// Per-project provider resolution; unresolved → explicit
+    /// [`ModelError::Configuration`]（无 fake 回退）。
     Auto,
     /// Always the deterministic fake (development/tests only).
     Fake,
@@ -107,9 +108,12 @@ impl RoutedAnalysisModel {
         Self { pool, mode }
     }
 
-    async fn model_for(&self, project_id: ProjectId) -> Arc<dyn AnalysisModel> {
+    async fn model_for(
+        &self,
+        project_id: ProjectId,
+    ) -> Result<Arc<dyn AnalysisModel>, ModelError> {
         match self.mode {
-            AnalysisModelMode::Fake => Arc::new(FakeModel::from_fixtures()),
+            AnalysisModelMode::Fake => Ok(Arc::new(FakeModel::from_fixtures())),
             AnalysisModelMode::Auto => {
                 match select_analysis_model_config(&self.pool, project_id).await {
                     ModelSelection::Provider(cfg) => {
@@ -127,33 +131,40 @@ impl RoutedAnalysisModel {
                             &cfg.api_key,
                             timeout,
                         );
-                        Arc::new(RecordingAnalysisModel {
+                        Ok(Arc::new(RecordingAnalysisModel {
                             pool: self.pool.clone(),
                             project_id,
                             provider_id: cfg.provider_id,
                             model_name: cfg.model.clone(),
                             inner: Arc::new(real),
-                        })
+                        }))
                     }
                     ModelSelection::NoProvider => {
+                        // DEC-LLM-004/§10.3：末级必须是显式 Configuration Error，
+                        // 不回退 FakeModel（fake 输出是 fixture，不是模型判断）。
                         tracing::warn!(
                             %project_id,
                             reason = "no_provider",
-                            "no LLM provider resolved for this project (no usable project designation, \
-                             no enabled tenant provider); running the deterministic FAKE model — \
-                             analysis output is fixture data, not real model judgment"
+                            "no LLM provider resolved for this project (no usable project \
+                             designation, no enabled tenant provider); failing with an explicit \
+                             configuration error"
                         );
-                        Arc::new(FakeModel::from_fixtures())
+                        Err(ModelError::Configuration(format!(
+                            "no enabled LLM provider resolved for project {project_id}; \
+                             configure a provider in Team Settings → AI Configuration"
+                        )))
                     }
                     ModelSelection::ResolutionFailed(error) => {
                         tracing::warn!(
                             %project_id,
                             reason = "resolution_failed",
                             %error,
-                            "LLM provider resolution failed; running the deterministic FAKE model — \
-                             analysis output is fixture data, not real model judgment"
+                            "LLM provider resolution failed; failing with an explicit \
+                             configuration error"
                         );
-                        Arc::new(FakeModel::from_fixtures())
+                        Err(ModelError::Configuration(format!(
+                            "LLM provider resolution failed for project {project_id}: {error}"
+                        )))
                     }
                 }
             }
@@ -169,7 +180,7 @@ impl AnalysisModel for RoutedAnalysisModel {
         skills: &[SkillId],
     ) -> Result<pm_domain::AnalysisResult, ModelError> {
         self.model_for(context.project_id)
-            .await
+            .await?
             .analyze(context, skills)
             .await
     }
@@ -315,8 +326,10 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../../migrations")]
-    async fn auto_without_any_provider_selects_the_fake_fallback_branch(pool: sqlx::PgPool) {
+    async fn auto_without_any_provider_yields_no_provider_selection(pool: sqlx::PgPool) {
         let project_id = seed_project(&pool).await;
+        // 选择层仍产出 NoProvider 枚举；消费层（model_for）把它映射为
+        // 显式 ModelError::Configuration（DEC-LLM-004，无 fake 回退）。
         assert!(matches!(
             select_analysis_model_config(&pool, project_id).await,
             ModelSelection::NoProvider

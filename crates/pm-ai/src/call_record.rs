@@ -47,6 +47,7 @@ pub fn analysis_error_kind(err: &crate::model::ModelError) -> &'static str {
         crate::model::ModelError::Timeout => "timeout",
         crate::model::ModelError::Unavailable(_) => "model_unavailable",
         crate::model::ModelError::BadOutput(_) => "provider_error",
+        crate::model::ModelError::Configuration(_) => "configuration",
     }
 }
 

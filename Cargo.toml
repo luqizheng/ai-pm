@@ -37,6 +37,8 @@ flate2 = { version = "1", default-features = false, features = ["rust_backend"] 
 tokio = { version = "1", features = ["full"] }
 # HTTP layer
 axum = { version = "0.8", features = ["multipart", "macros"] }
+# URL parsing（team_llm endpoint 校验 §17 SSRF）
+url = "2"
 # SSE: broadcast receiver -> Stream adapter
 tokio-stream = { version = "0.1", features = ["sync"] }
 # Database (no TLS feature: local Postgres only; no offline mode, `query!` macros are banned)

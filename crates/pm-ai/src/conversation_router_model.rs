@@ -147,6 +147,8 @@ fn map_model_error(err: ModelError) -> ClassifierError {
         ModelError::Timeout => ClassifierError::Timeout,
         ModelError::Unavailable(r) => ClassifierError::Unavailable(r),
         ModelError::BadOutput(r) => ClassifierError::BadOutput(r),
+        // 配置错误 = 三级解析无可用 provider（§10.3 末级），语义同 NoProvider。
+        ModelError::Configuration(r) => ClassifierError::NoProvider(r),
     }
 }
 

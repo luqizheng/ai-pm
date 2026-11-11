@@ -24,11 +24,12 @@ use uuid::Uuid;
 
 use pm_application::actor::AuditActor;
 use pm_application::team_llm::{
-    create_team_provider, delete_team_provider, get_project_ai_policy, list_team_providers,
-    replace_team_credential, set_project_ai_policy, set_team_provider_status, test_team_provider,
-    update_team_provider, CreateTeamProviderRequest, ReplaceCredentialRequest, SetStatusRequest,
-    TeamLlmError, UpdateTeamProviderRequest,
+    create_team_provider, delete_team_provider, list_team_providers, replace_team_credential,
+    set_project_ai_policy, set_team_provider_status, test_team_provider, update_team_provider,
+    CreateTeamProviderRequest, ReplaceCredentialRequest, SetStatusRequest, TeamLlmError,
+    UpdateTeamProviderRequest,
 };
+use pm_application::team_llm_catalog::{get_project_ai_policies, set_project_overrides, PolicyItem};
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
@@ -104,6 +105,10 @@ struct ProjectPolicyPutBody {
     provider_id: Option<Uuid>,
     #[serde(default)]
     expected_revision: i64,
+    /// Role 覆盖批量（model_id=None = 恢复继承 Team）；缺省 = 不动覆盖面
+    /// （Phase 3A 语义扩展，任务书 §5）。
+    #[serde(default)]
+    overrides: Option<Vec<PolicyItem>>,
 }
 
 async fn project_policy_handler(
@@ -114,8 +119,9 @@ async fn project_policy_handler(
     if let Err(resp) = guard_project_manager(&state, &caller, project_id).await {
         return resp;
     }
-    match get_project_ai_policy(&state.pool, caller.tenant_id, project_id).await {
-        Ok(row) => (StatusCode::OK, Json(row)).into_response(),
+    // Phase 3A：返回完整视图（Provider 约束 + Role 覆盖 + Team 默认参照）
+    match get_project_ai_policies(&state.pool, caller.tenant_id, project_id).await {
+        Ok(view) => (StatusCode::OK, Json(view)).into_response(),
         Err(err) => error_response(err),
     }
 }
@@ -129,7 +135,8 @@ async fn project_policy_put_handler(
     if let Err(resp) = guard_project_manager(&state, &caller, project_id).await {
         return resp;
     }
-    match set_project_ai_policy(
+    // Provider 约束原语义不变（None = 恢复继承，CAS）；Role 覆盖可选批量。
+    if let Err(err) = set_project_ai_policy(
         &state.pool,
         &audit_actor(&caller),
         caller.tenant_id,
@@ -139,16 +146,27 @@ async fn project_policy_put_handler(
     )
     .await
     {
-        Ok(row) => (StatusCode::OK, Json(row)).into_response(),
+        return error_response(err);
+    }
+    if let Some(overrides) = body.overrides {
+        if let Err(err) =
+            set_project_overrides(&state.pool, &audit_actor(&caller), caller.tenant_id, project_id, overrides)
+                .await
+        {
+            return error_response(err);
+        }
+    }
+    match get_project_ai_policies(&state.pool, caller.tenant_id, project_id).await {
+        Ok(view) => (StatusCode::OK, Json(view)).into_response(),
         Err(err) => error_response(err),
     }
 }
 
-fn audit_actor(caller: &AuthedPrincipal) -> AuditActor {
+pub(crate) fn audit_actor(caller: &AuthedPrincipal) -> AuditActor {
     caller.audit_actor()
 }
 
-fn error_response(err: TeamLlmError) -> Response {
+pub(crate) fn error_response(err: TeamLlmError) -> Response {
     let (status, body) = match &err {
         TeamLlmError::NotFound => (
             StatusCode::NOT_FOUND,

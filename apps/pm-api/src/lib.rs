@@ -58,6 +58,7 @@ pub mod support;
 pub mod task_dependencies;
 pub mod task_repositories;
 pub mod team_llm;
+pub mod team_llm_catalog;
 pub mod team_llm_guard;
 pub mod team_onboarding;
 pub mod tenant_members;

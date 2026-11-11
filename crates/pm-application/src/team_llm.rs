@@ -200,12 +200,69 @@ fn decrypt_api_key_bytes(payload: &[u8]) -> Result<String, TeamLlmError> {
 
 fn validate_endpoint(endpoint: &str) -> Result<String, TeamLlmError> {
     let endpoint = endpoint.trim().trim_end_matches('/').to_string();
-    if !(endpoint.starts_with("http://") || endpoint.starts_with("https://")) {
+    let parsed = url::Url::parse(&endpoint)
+        .map_err(|_| TeamLlmError::Validation("endpoint is not a valid URL"))?;
+    if !(parsed.scheme() == "http" || parsed.scheme() == "https") {
         return Err(TeamLlmError::Validation(
             "endpoint must start with http:// or https://",
         ));
     }
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| TeamLlmError::Validation("endpoint must include a host"))?;
+    if !is_public_host(host) {
+        // §17 SSRF 防护（2026-11-11 D-3）：仅放行公网地址。字面校验
+        // （localhost / 私网 / 回环 / 链路本地 / ULA / 未指定）；DNS 解析后
+        // 校验（防 rebinding）随统一 Gateway 挂账。企业内网网关如需豁免
+        // 须经独立产品裁决。
+        return Err(TeamLlmError::Validation(
+            "endpoint host must be a public address; localhost, private, loopback \
+             and link-local hosts are blocked",
+        ));
+    }
     Ok(endpoint)
+}
+
+/// Host 字面校验：域名只拦 localhost 及其子域；IP 用地址段判定。
+/// url crate 对 IPv6 host 序列化保留方括号（"[::1]"），解析前先剥掉。
+fn is_public_host(host: &str) -> bool {
+    let lower = host.to_ascii_lowercase();
+    if lower == "localhost" || lower.ends_with(".localhost") {
+        return false;
+    }
+    let bare = lower
+        .strip_prefix('[')
+        .and_then(|s| s.strip_suffix(']'))
+        .unwrap_or(&lower);
+    match bare.parse::<std::net::IpAddr>() {
+        Ok(ip) => !is_private_ip(ip),
+        Err(_) => true,
+    }
+}
+
+fn is_private_ip(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            // 未指定 / 回环 / 私网(10/8,172.16/12,192.168/16) / 链路本地 /
+            // CGNAT(100.64/10)
+            v4.is_unspecified()
+                || v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || (v4.octets()[0] == 100 && (64..=127).contains(&v4.octets()[1]))
+        }
+        std::net::IpAddr::V6(v6) => {
+            // IPv4-mapped 私网地址换回 v4 判定（::ffff:10.0.0.1 不得绕过）
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_private_ip(std::net::IpAddr::V4(v4));
+            }
+            let s = v6.segments();
+            v6.is_unspecified()
+                || v6.is_loopback()
+                || (s[0] & 0xfe00) == 0xfc00 // fc00::/7 ULA
+                || (s[0] & 0xffc0) == 0xfe80 // fe80::/10 链路本地
+        }
+    }
 }
 
 fn validate_provider_type(provider_type: &str) -> Result<(), TeamLlmError> {
@@ -1233,6 +1290,38 @@ mod tests {
     fn hint_keeps_only_last_four_chars() {
         assert_eq!(hint_of("sk-1234567890abcd"), "****abcd");
         assert_eq!(hint_of("abc"), "****abc");
+    }
+
+    /// §17 SSRF 防护：公网放行，localhost/私网/回环/链路本地/ULA 拒绝。
+    #[test]
+    fn endpoint_blocks_private_hosts() {
+        assert_eq!(
+            validate_endpoint("https://api.openai.com/v1").unwrap(),
+            "https://api.openai.com/v1"
+        );
+        assert_eq!(
+            validate_endpoint("http://203.0.113.1:9/v1").unwrap(),
+            "http://203.0.113.1:9/v1"
+        );
+        for bad in [
+            "http://localhost:11434/v1",
+            "http://foo.localhost/v1",
+            "http://127.0.0.1:9/v1",
+            "http://10.1.2.3/v1",
+            "http://192.168.1.1/v1",
+            "http://172.16.0.9/v1",
+            "http://169.254.10.10/v1",
+            "http://0.0.0.0/v1",
+            "http://100.64.0.1/v1",
+            "http://[::1]:8080/v1",
+            "http://[fe80::1]/v1",
+            "http://[fd00::1]/v1",
+            "http://[::ffff:10.0.0.1]/v1",
+            "ftp://api.openai.com",
+            "not-a-url",
+        ] {
+            assert!(validate_endpoint(bad).is_err(), "must block {bad}");
+        }
     }
 
     #[test]

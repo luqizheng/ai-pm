@@ -30,6 +30,10 @@ pub enum ModelError {
     Timeout,
     Unavailable(String),
     BadOutput(String),
+    /// Provider/model configuration unusable (§11 Configuration Error)：
+    /// 三级解析无可用 provider、凭证解密失败等。禁止静默降级——
+    /// DEC-LLM-004：明确失败并提示管理员。
+    Configuration(String),
 }
 
 impl std::fmt::Display for ModelError {
@@ -39,6 +43,9 @@ impl std::fmt::Display for ModelError {
             ModelError::Unavailable(reason) => write!(f, "analysis model unavailable: {reason}"),
             ModelError::BadOutput(reason) => {
                 write!(f, "analysis model returned bad output: {reason}")
+            }
+            ModelError::Configuration(reason) => {
+                write!(f, "analysis model configuration error: {reason}")
             }
         }
     }
