@@ -4,6 +4,7 @@ pub mod acceptance_overview;
 pub mod acp06_07;
 pub mod actor;
 pub mod ai_conversations;
+pub mod ai_context_items;
 pub mod ai_interaction_envelope;
 pub mod ai_interactions;
 pub mod ai_roles;

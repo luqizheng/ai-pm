@@ -281,6 +281,7 @@ fn build_router(
         // 最小对话存储（V2 D-4=A）：AI PM 对话记忆（会话 + 消息，属主隔离；
         // REST 恒 role=user，assistant 生产者是后续 AI 链批次）。
         .merge(crate::ai_conversations::router())
+        .merge(crate::ai_context_items::router())
         // Outbox 运维（T-061）：死信列表 / 死信重放 / 事件状态监控。
         .merge(crate::outbox_ops::router())
         .merge(crate::intakes::router())

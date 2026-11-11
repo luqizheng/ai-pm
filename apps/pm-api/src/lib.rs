@@ -9,6 +9,7 @@
 
 pub mod admin_config;
 pub mod ai_conversations;
+pub mod ai_context_items;
 pub mod ai_roles;
 pub mod ai_team_monitor;
 pub mod ai_team_policies;
