@@ -34,6 +34,7 @@ pub mod knowledge;
 pub mod knowledge_index;
 pub mod knowledge_indexer;
 pub mod knowledge_migrate;
+pub mod docproc_ocr;
 pub mod docproc_ops;
 pub mod docproc_parse;
 pub mod docproc_service;

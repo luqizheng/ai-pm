@@ -574,3 +574,265 @@ fn docx_adapter_outline_via_outline_lvl() {
     assert!(outcome.markdown.contains("| A | B |"));
     assert_eq!(outcome.report.tables, 1);
 }
+
+/* ── TD-05 KB 接入（引用不复制 + 确认复检 + D-05 铁律） ──────────────────── */
+
+/// 项目 + 交互式真人（KB confirm 三重门的 interactive 通道）。
+async fn kb_fixture(pool: &PgPool, tenant_id: Uuid) -> (Uuid, pm_application::actor::AuditActor) {
+    // KB 项目必须与 docproc 文档同租户——kb.document 的 (tenant_id, project_id)
+    // FK 是租户边界的数据库层锚点（跨租户接入被库直接拒绝）。
+    let project_id = pm_application::bootstrap::bootstrap_project(
+        pool,
+        pm_application::bootstrap::BootstrapRequest {
+            project_code: format!("docproc-kb-{}", Uuid::new_v4()),
+            project_name: "docproc-kb".to_string(),
+            tenant_id,
+        },
+    )
+    .await
+    .unwrap()
+    .project_id;
+    let pid: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.principal (id, kind, display_name) VALUES ($1, 'human', $2) RETURNING id",
+    )
+    .bind(Uuid::new_v4())
+    .bind(format!("kb-human-{}", Uuid::new_v4()))
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let identity: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.principal_identity (provider, subject, principal_id, tenant_id) \
+         VALUES ('test', $1, $2, $3) RETURNING id",
+    )
+    .bind(format!("ext-{}", Uuid::new_v4()))
+    .bind(pid)
+    .bind(tenant_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    // 项目成员（confirm 的成员校验）
+    sqlx::query(
+        "INSERT INTO core.project_member (project_id, principal_id, role, tenant_id) \
+         VALUES ($1, $2, 'owner', $3)",
+    )
+    .bind(project_id)
+    .bind(pid)
+    .bind(tenant_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    let actor = pm_application::actor::AuditActor::identified(
+        pid,
+        identity,
+        Some("web".into()),
+        Some("interactive".into()),
+    );
+    (project_id, actor)
+}
+
+async fn parsed_markdown_artifact(
+    pool: &PgPool,
+    st: &std::sync::Arc<dyn svc::ArtifactStore>,
+) -> (Uuid, Uuid) {
+    let (tenant_id, principal_id) = fixture(pool).await;
+    let docx = build_docx("KB 候选标题", "候选正文内容");
+    let doc = upload(pool, st, tenant_id, principal_id, "kb-src.docx", &docx).await;
+    let job = svc::create_job(
+        pool,
+        svc::CreateJobInput {
+            tenant_id,
+            document_id: doc.document_id,
+            processing_type: "parse",
+            config: serde_json::json!({}),
+            created_by: principal_id,
+        },
+    )
+    .await
+    .unwrap();
+    let worker =
+        pm_infrastructure::docproc_worker::DocprocWorker::from_env(pool.clone(), Some(st.clone()))
+            .expect("worker");
+    worker.run_once().await.unwrap();
+    let view = svc::job_view(pool, tenant_id, job.job_id).await.unwrap();
+    let artifact_id = view
+        .artifacts
+        .iter()
+        .find(|a| a.artifact_type == "markdown")
+        .unwrap()
+        .artifact_id;
+    (artifact_id, tenant_id)
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn kb_candidate_from_docproc_then_confirm_with_checksum_recheck(pool: PgPool) {
+    use pm_application::kb_service::document as kb;
+    let st = store();
+    let (artifact_id, docproc_tenant) = parsed_markdown_artifact(&pool, &st).await;
+    let (project_id, actor) = kb_fixture(&pool, docproc_tenant).await;
+
+    // ① 建候选 draft：source_ref + source_checksum 落库，正文来自 docproc
+    let (document_id, revision_id, revision_no) = kb::ingest_from_docproc(
+        &pool,
+        docproc_tenant,
+        project_id,
+        "docproc-candidate",
+        "knowledge",
+        artifact_id,
+        "1",
+        st.as_ref(),
+        &actor,
+    )
+    .await
+    .unwrap();
+    assert_eq!(revision_no, 1);
+    let (source_ref, source_checksum, content, status): (
+        Option<String>,
+        Option<String>,
+        String,
+        String,
+    ) = sqlx::query_as(
+        "SELECT source_ref, source_checksum, content, status::text FROM kb.document_revision WHERE id = $1",
+    )
+    .bind(revision_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        source_ref.as_deref(),
+        Some(format!("docproc:artifact:{artifact_id}").as_str())
+    );
+    assert!(source_checksum.is_some());
+    assert!(content.contains("候选正文内容"));
+    assert_eq!(status, "draft");
+
+    // ② D-05 铁律：转换成功 ≠ 正式知识——确认前绝不 published
+    let published_before: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM kb.document_revision WHERE document_id = $1 AND status = 'published')",
+    )
+    .bind(document_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(!published_before);
+
+    // ③ 真人确认 → published（checksum 复检通过）
+    let outcome = kb::confirm_revision(
+        &pool,
+        docproc_tenant,
+        project_id,
+        document_id,
+        revision_id,
+        &actor,
+    )
+    .await
+    .unwrap();
+    assert_eq!(outcome.status, "published");
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn kb_confirm_rejects_checksum_drift(pool: PgPool) {
+    use pm_application::kb_service::document as kb;
+    let st = store();
+    let (artifact_id, docproc_tenant) = parsed_markdown_artifact(&pool, &st).await;
+    let (project_id, actor) = kb_fixture(&pool, docproc_tenant).await;
+    let (document_id, revision_id, _) = kb::ingest_from_docproc(
+        &pool,
+        docproc_tenant,
+        project_id,
+        "docproc-drift",
+        "knowledge",
+        artifact_id,
+        "1",
+        st.as_ref(),
+        &actor,
+    )
+    .await
+    .unwrap();
+
+    // 模拟引用失效：改掉记录的 checksum（artifact 本身不可变——守卫兜底）
+    sqlx::query("UPDATE kb.document_revision SET source_checksum = 'deadbeef' WHERE id = $1")
+        .bind(revision_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let err = kb::confirm_revision(
+        &pool,
+        docproc_tenant,
+        project_id,
+        document_id,
+        revision_id,
+        &actor,
+    )
+    .await
+    .err()
+    .expect("drift must be rejected");
+    assert!(
+        matches!(err, pm_application::kb_service::KbServiceError::Conflict(_)),
+        "got {err:?}"
+    );
+    // 仍是 draft（fail-closed，未落 published）
+    let status: String =
+        sqlx::query_scalar("SELECT status::text FROM kb.document_revision WHERE id = $1")
+            .bind(revision_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "draft");
+}
+
+#[test]
+fn docproc_failure_stays_draft_never_publishes_knowledge() {
+    // D-05 的结构性保证：docproc 侧无任何 KB/PC 写入口（只导出候选引用）。
+    // 固化「转换成功不自动确认正式知识」：模块依赖方向单向。
+    let svc_src = include_str!("../src/docproc_service.rs");
+    assert!(
+        !svc_src.contains("use crate::kb_service") && !svc_src.contains("kb.document_revision"),
+        "docproc_service must not write the KB domain (D-05: confirmation belongs to the business domain)"
+    );
+    let worker_src = include_str!("../../pm-infrastructure/src/docproc_worker.rs");
+    assert!(
+        !worker_src.contains("kb_service::") && !worker_src.contains("kb.document_revision"),
+        "docproc worker must never publish KB knowledge automatically (D-05)"
+    );
+}
+
+/* ── D-04 OCR Adapter 接口（V1 检测） ──────────────────────────────────── */
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn ocr_detect_job_produces_page_statuses(pool: PgPool) {
+    let (tenant_id, principal_id) = fixture(&pool).await;
+    let st = store();
+    // 扫描件：页对象存在但无内容流 → pending
+    let scanned = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+                    2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n\
+                    3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n\
+                    trailer\n<< /Root 1 0 R >>\n%%EOF\n";
+    let doc = upload(&pool, &st, tenant_id, principal_id, "scan.pdf", scanned).await;
+    let job = svc::create_job(
+        &pool,
+        svc::CreateJobInput {
+            tenant_id,
+            document_id: doc.document_id,
+            processing_type: "ocr_detect",
+            config: serde_json::json!({}),
+            created_by: principal_id,
+        },
+    )
+    .await
+    .unwrap();
+    let worker =
+        pm_infrastructure::docproc_worker::DocprocWorker::from_env(pool.clone(), Some(st.clone()))
+            .expect("worker");
+    worker.run_once().await.unwrap();
+    let view = svc::job_view(&pool, tenant_id, job.job_id).await.unwrap();
+    assert_eq!(view.status, "completed");
+    let ocr = view
+        .artifacts
+        .iter()
+        .find(|a| a.artifact_type == "ocr_result")
+        .unwrap();
+    assert_eq!(ocr.metadata["engine"], "detection-only");
+    assert_eq!(ocr.metadata["pending_pages"].as_u64().unwrap(), 1);
+    assert_eq!(ocr.metadata["pages"][0]["status"], "pending");
+}

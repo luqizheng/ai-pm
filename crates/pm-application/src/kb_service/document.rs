@@ -121,6 +121,48 @@ pub async fn confirm_revision(
     let confirmed_by: Option<Uuid> = row.get("confirmed_by");
     let published_at: Option<DateTime<Utc>> = row.get("published_at");
 
+    // ④b TD-05 §3 溯源复检：docproc 产物引用的候选，确认前核对其 checksum
+    //    是否仍与 docproc.artifact 一致（artifact append-only 不可变——不一致
+    //    只可能是引用失效/被伪造，fail-closed 拒绝并提示重拉）。
+    let source_ref: Option<String> =
+        sqlx::query_scalar("SELECT source_ref FROM kb.document_revision WHERE id = $1")
+            .bind(revision_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    if let Some(source_ref) = source_ref.filter(|r| r.starts_with("docproc:artifact:")) {
+        let artifact_id: Uuid = source_ref
+            .trim_start_matches("docproc:artifact:")
+            .parse()
+            .map_err(|_| {
+                KbServiceError::Invalid(format!(
+                    "kb revision source_ref is malformed: {source_ref}"
+                ))
+            })?;
+        let artifact_checksum: Option<String> = sqlx::query_scalar(
+            "SELECT checksum FROM docproc.artifact WHERE id = $1 AND tenant_id = $2",
+        )
+        .bind(artifact_id)
+        .bind(tenant_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(current) = artifact_checksum else {
+            return Err(KbServiceError::Conflict(
+                "kb revision source artifact is gone; re-ingest from Document Processing".into(),
+            ));
+        };
+        let recorded: Option<String> =
+            sqlx::query_scalar("SELECT source_checksum FROM kb.document_revision WHERE id = $1")
+                .bind(revision_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        if recorded.as_deref() != Some(current.as_str()) {
+            return Err(KbServiceError::Conflict(
+                "kb revision source artifact checksum drift; re-ingest from Document Processing"
+                    .into(),
+            ));
+        }
+    }
+
     // ⑤ Revision 状态校验。
     match status.as_str() {
         // 幂等：已发布再次确认 → no-op，**不改原确认人与确认时间**。
@@ -243,6 +285,101 @@ async fn emit_revision_published(
         )
         .await?;
     Ok(())
+}
+
+/// 从 Document Processing 产物建 KB 候选 draft（TD-05 §3）。
+///
+/// **引用不复制**：draft 行记 `source_ref = docproc:artifact:{id}` +
+/// `source_checksum`（拉取时校验过的一致性锚点）；确认时
+/// ([`confirm_revision`] ④b) 按 checksum 复检。**转换成功 ≠ 正式知识**
+/// （D-05）：本函数只建候选，确认权仍在 [`confirm_revision`] 的三重真人门。
+#[allow(clippy::too_many_arguments)]
+pub async fn ingest_from_docproc(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    doc_key: &str,
+    doc_type: &str,
+    artifact_id: Uuid,
+    tenant_key: &str,
+    store: &dyn crate::docproc_service::ArtifactStore,
+    actor: &AuditActor,
+) -> Result<(Uuid, Uuid, i32), KbServiceError> {
+    let (markdown, checksum) =
+        crate::docproc_service::artifact_markdown(pool, store, tenant_id, tenant_key, artifact_id)
+            .await
+            .map_err(|e| KbServiceError::Invalid(format!("docproc artifact unavailable: {e}")))?;
+    if markdown.trim().is_empty() {
+        return Err(KbServiceError::Invalid(
+            "docproc artifact content is empty".into(),
+        ));
+    }
+
+    let mut tx = pool.begin().await?;
+    ensure_project_writable(&mut tx, project_id).await?;
+
+    // doc_key 家族归属（同 ingest_document：显式指定，非文件名自动归并）
+    let document_id: Uuid = match sqlx::query_scalar(
+        "SELECT id FROM kb.document           WHERE tenant_id = $1 AND project_id = $2 AND doc_key = $3",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(doc_key)
+    .fetch_optional(&mut *tx)
+    .await?
+    {
+        Some(id) => id,
+        None => sqlx::query_scalar(
+            "INSERT INTO kb.document (tenant_id, project_id, doc_key, doc_type, canonical_path)              VALUES ($1, $2, $3, $4, $5) RETURNING id",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(doc_key)
+        .bind(doc_type)
+        .bind(format!("kb/{}", doc_key))
+        .fetch_one(&mut *tx)
+        .await?,
+    };
+    let revision_no: i32 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(revision_no), 0) + 1 FROM kb.document_revision WHERE document_id = $1",
+    )
+    .bind(document_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let revision_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO kb.document_revision          (tenant_id, document_id, revision_no, content_hash, status, content, created_by,           source_ref, source_checksum)          VALUES ($1, $2, $3, $4, 'draft', $5, $6, $7, $8) RETURNING id",
+    )
+    .bind(tenant_id)
+    .bind(document_id)
+    .bind(revision_no)
+    .bind(crate::pc::sha256_hex(&markdown))
+    .bind(&markdown)
+    .bind(actor.principal_id)
+    .bind(format!("docproc:artifact:{}", artifact_id))
+    .bind(&checksum)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    audit(
+        &mut tx,
+        project_id,
+        actor,
+        "kb.document_revision.ingested",
+        "kb_document_revision",
+        revision_id,
+        serde_json::json!({
+            "document_id": document_id.to_string(),
+            "doc_key": doc_key,
+            "revision_no": revision_no,
+            "source_ref": format!("docproc:artifact:{}", artifact_id),
+            "source_checksum": checksum,
+        }),
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok((document_id, revision_id, revision_no))
 }
 
 // ── 读面（KB 文档库管理面；前端 KnowledgeView 消费）────────────────────────

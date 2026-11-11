@@ -595,7 +595,7 @@ fn parse_pdf(bytes: &[u8]) -> Result<ParseOutcome, ParseError> {
     let content_streams: Vec<Vec<u8>> = if !page_spans.is_empty() {
         page_spans
             .iter()
-            .filter_map(|s| {
+            .map(|s| {
                 let dict = dict_of(bytes, s);
                 let mut merged: Option<Vec<u8>> = None;
                 for r in refs_after(dict, b"/Contents") {
@@ -611,7 +611,9 @@ fn parse_pdf(bytes: &[u8]) -> Result<ParseOutcome, ParseError> {
                         }
                     }
                 }
-                merged
+                // 页对象无内容流 = 无可提取文本（扫描页）→ 空流照常成节，
+                // 落 ocr_required（D-04；不误报 Corrupted）
+                merged.unwrap_or_default()
             })
             .collect()
     } else {

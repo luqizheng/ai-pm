@@ -127,10 +127,96 @@ impl DocprocWorker {
             "parse" => self.execute_parse(job).await,
             "compare" => self.execute_compare(job).await,
             "export" => self.execute_export(job).await,
+            "ocr_detect" => self.execute_ocr_detect(job).await,
             other => Err(DocprocJobError::Bad(format!(
                 "unknown processing_type {other}"
             ))),
         }
+    }
+
+    /// ocr_detect：页级 OCR 状态检测 → ocr_result artifact（规格 D-04 V1
+    /// 五项能力；引擎 P1 经 OcrAdapter trait 替换，worker 无感）。
+    async fn execute_ocr_detect(&self, job: &svc::ClaimedJob) -> Result<(), DocprocJobError> {
+        let tenant_key: String = sqlx::query_scalar(
+            "SELECT d.upstream_tenant_key FROM docproc.document d \
+             JOIN docproc.document_version v ON v.document_id = d.id WHERE v.id = $1",
+        )
+        .bind(job.document_version_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(DocprocJobError::Db)?;
+        let (bytes, _, _) = svc::version_bytes(
+            &self.pool,
+            self.store.as_ref(),
+            job.tenant_id,
+            &tenant_key,
+            job.document_version_id,
+        )
+        .await
+        .map_err(map_docproc_err)?;
+
+        let detection = {
+            let bytes = bytes.clone();
+            tokio::task::spawn_blocking(move || {
+                pm_application::docproc_ocr::ocr_adapter().detect(&bytes)
+            })
+            .await
+            .map_err(|e| DocprocJobError::Bad(format!("ocr detect task join: {e}")))?
+            .map_err(DocprocJobError::Parse)?
+        };
+
+        let pending = detection
+            .pages
+            .iter()
+            .filter(|p| p.status == "pending")
+            .count();
+        let metadata = serde_json::json!({
+            "engine": detection.engine,
+            "engine_version": detection.engine_version,
+            "pages": detection.pages,
+            "pending_pages": pending,
+            "note": "V1 detection only; OCR engine lands in P1 (D-04)",
+        });
+        let bytes_out = serde_json::to_vec_pretty(&metadata).expect("ocr metadata serialize");
+        let cs = svc::checksum(&bytes_out);
+        let key = self
+            .store
+            .put(&tenant_key, &format!("ocr-{}.json", job.id), bytes_out)
+            .await
+            .map_err(DocprocJobError::Store)?;
+        svc::insert_artifact(
+            &self.pool,
+            svc::NewArtifact {
+                tenant_id: job.tenant_id,
+                job_id: job.id,
+                artifact_type: "ocr_result",
+                storage_key: &key,
+                mime_type: "application/json",
+                checksum: &cs,
+                metadata,
+            },
+        )
+        .await
+        .map_err(DocprocJobError::Db)?;
+        svc::finish_job(
+            &self.pool,
+            job.id,
+            "completed",
+            "ocr-detect",
+            env!("CARGO_PKG_VERSION"),
+            100,
+        )
+        .await
+        .map_err(DocprocJobError::Db)?;
+        self.emit_completed(
+            job,
+            "completed",
+            vec![],
+            serde_json::json!({ "pending_pages": pending }),
+        )
+        .await
+        .map_err(DocprocJobError::Db)?;
+        Ok(())
     }
 
     /// parse：取 tenant_key → 原始字节 → adapter → 产物落存。
