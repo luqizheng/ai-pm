@@ -28,7 +28,7 @@ import { useAssistantStore } from "@/stores/assistant";
  * 三种导航上下文分列四组，不混成一张扁平菜单：
  *   personal / workspace —— 全局与个人上下文
  *   modules —— 当前项目下的业务模块（带项目上下文头）
- *   admin —— 管理（默认收起）
+ *   admin —— 管理
  *
  * 两态（Figma 7-3454 展开 232px / 7:3724 折叠 60px）：
  *   - 展开：分组可折叠、条目带文案、Repository 带二级上下文子菜单、底部键盘提示
@@ -40,12 +40,8 @@ const route = useRoute();
 const shell = useShellStore();
 const assistant = useAssistantStore();
 
-/** 展开态下各分组的折叠状态（key = 分组 id） */
-const collapsedGroups = ref<Record<string, boolean>>(
-  Object.fromEntries(
-    navGroups.map(group => [group.id, group.defaultCollapsed ?? false])
-  )
-);
+/** 展开态下各分组的折叠状态（key = 分组 id，默认全部展开） */
+const collapsedGroups = ref<Record<string, boolean>>({});
 
 const currentPath = computed(() => route.path);
 
@@ -58,6 +54,15 @@ function toggleGroup(group: NavGroup) {
     ...collapsedGroups.value,
     [group.id]: !isGroupCollapsed(group)
   };
+}
+
+/**
+ * 分组分隔线可见性（Figma 展开态：集群边界各一条——全局上下文│项目模块│
+ * 管理；折叠态：除首组外组间全加）。
+ */
+function showDivider(group: NavGroup) {
+  if (shell.sidebarCollapsed) return group.id !== navGroups[0].id;
+  return group.id === "modules" || group.id === "admin";
 }
 
 function isActive(item: NavItem) {
@@ -117,9 +122,9 @@ async function onSelectProject(id: string) {
 
     <div class="shell-sidenav__groups">
       <template v-for="group in navGroups" :key="group.id">
-        <!-- 分组之间的分隔线（折叠态可见） -->
+        <!-- 分组分隔线（展开态：集群边界；折叠态：组间） -->
         <div
-          v-if="shell.sidebarCollapsed && group.id !== navGroups[0].id"
+          v-if="showDivider(group)"
           class="shell-sidenav__divider"
           aria-hidden="true"
         />
@@ -274,7 +279,7 @@ async function onSelectProject(id: string) {
 .shell-sidenav {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
   width: 100%;
   height: 100%;
   padding: var(--space-3) var(--space-2);
@@ -288,8 +293,8 @@ async function onSelectProject(id: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: var(--size-control-md);
-  padding: 0 var(--space-2);
+  height: var(--size-control-sm);
+  padding: 0 0 0 10px;
 }
 
 .shell-sidenav__control-label {
@@ -327,7 +332,7 @@ async function onSelectProject(id: string) {
 .shell-sidenav__groups {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
 
 .shell-sidenav__group {
@@ -339,10 +344,10 @@ async function onSelectProject(id: string) {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  height: var(--size-control-sm);
+  height: var(--size-control-xs);
   padding: 0 var(--space-3);
   color: var(--ws-text-secondary);
-  font-size: var(--font-size-micro);
+  font-size: var(--font-size-nano);
   font-weight: var(--weight-medium);
   text-align: left;
   cursor: pointer;
@@ -413,7 +418,7 @@ async function onSelectProject(id: string) {
   height: var(--ws-row-height);
   padding: 0 var(--space-3);
   color: var(--ws-text-secondary);
-  font-size: var(--font-size-caption);
+  font-size: var(--font-size-body);
   text-decoration: none;
   border-radius: var(--radius-sm);
 }
@@ -430,6 +435,7 @@ async function onSelectProject(id: string) {
 
 .shell-sidenav__item.is-active {
   color: var(--ws-text-primary);
+  font-weight: var(--weight-medium);
   background: var(--ws-color-accent-surface);
 }
 
@@ -457,11 +463,16 @@ async function onSelectProject(id: string) {
 }
 
 .shell-sidenav__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  min-width: 18px;
   margin-left: auto;
-  padding: 0 var(--space-1);
+  padding: 0 5px;
   color: var(--ws-text-secondary);
   font-family: var(--font-mono);
-  font-size: var(--font-size-micro);
+  font-size: var(--font-size-nano);
   background: var(--ws-elevated);
   border-radius: var(--radius-xs);
 }
@@ -491,9 +502,8 @@ async function onSelectProject(id: string) {
 
 /* 组分隔线（折叠态） */
 .shell-sidenav__divider {
-  width: var(--space-6);
   height: var(--border-1);
-  margin: 0 auto;
+  margin: 0 var(--space-3);
   background: var(--ws-border);
 }
 
@@ -550,6 +560,17 @@ async function onSelectProject(id: string) {
 .shell-sidenav__shortcut-icon {
   display: inline-flex;
   color: var(--ws-text-secondary);
+}
+
+/* 键位芯片（Figma Keyboard shortcut：elevated 底 + 1px 描边 + mono） */
+.shell-sidenav__kbd {
+  padding: 1px var(--space-1);
+  color: var(--ws-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-nano);
+  background: var(--ws-elevated);
+  border: var(--border-1) solid var(--ws-border);
+  border-radius: var(--radius-xs);
 }
 
 @media (prefers-reduced-motion: reduce) {

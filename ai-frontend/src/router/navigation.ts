@@ -26,7 +26,7 @@ import type { Component } from "vue";
  *   1. personal —— 个人工作区（跨项目）
  *   2. workspace —— 全局工作区（项目列表 / 总览）
  *   3. modules —— 当前项目下的业务模块（**仅在选中项目时出现**）
- *   4. admin —— 管理（默认收起）
+ *   4. admin —— 管理
  *
  * 路由表（src/router/index.ts）由本文件派生，避免「菜单与路由漂移」。
  * 演示期文案走 i18n key（shell.app.side.item.*），标题留空时取该 key。
@@ -74,8 +74,6 @@ export interface NavGroup {
   labelKey: string;
   /** 该组的导航项 */
   items: NavItem[];
-  /** 默认收起（Figma 的 ADMINISTRATION 组） */
-  defaultCollapsed?: boolean;
   /** 组标题右侧徽标 */
   badge?: number;
   /** 该组是否属于「项目上下文」分组（下方带项目标记行） */
@@ -226,7 +224,6 @@ export const navGroups: NavGroup[] = [
     id: "admin",
     labelKey: "shell.app.side.group.admin",
     badge: 2,
-    defaultCollapsed: true,
     items: [
       {
         path: "/admin/settings",

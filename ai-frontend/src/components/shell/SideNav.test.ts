@@ -30,7 +30,7 @@ describe("SideNav", () => {
     ]);
   });
 
-  it("管理组默认收起，点击分组标题后展开其条目", async () => {
+  it("管理组默认展开与其他组同级，点击分组标题可收起", async () => {
     const { wrapper } = mountShell(SideNav);
     await nextTick();
 
@@ -38,14 +38,15 @@ describe("SideNav", () => {
       wrapper
         .findAll(".shell-sidenav__item")
         .filter(el => (el.attributes("href") ?? "").includes("/admin/"));
-    // 收起的分组必须真正离开 DOM（否则仍占键盘 Tab 顺序）
-    expect(adminItems().length).toBe(0);
+    // 默认展开：管理组与其他分组同级呈现，不收成一行小标题
+    expect(adminItems().length).toBe(3);
 
     const toggles = wrapper.findAll(".shell-sidenav__group-toggle");
     await toggles[3].trigger("click");
     await nextTick();
 
-    expect(adminItems().length).toBe(3);
+    // 收起后条目真正离开 DOM（否则仍占键盘 Tab 顺序）
+    expect(adminItems().length).toBe(0);
   });
 
   it("当前路由对应的导航项带激活标记", async () => {
@@ -70,12 +71,13 @@ describe("SideNav", () => {
     expect(badges.map(el => el.text())).toEqual(["3"]);
   });
 
-  it("展开态显示条目文案并隐藏组分隔线", async () => {
+  it("展开态显示条目文案，分隔线只在集群边界", async () => {
     const { wrapper } = mountShell(SideNav);
     await nextTick();
 
     expect(wrapper.find(".shell-sidenav__item-label").exists()).toBe(true);
-    expect(wrapper.find(".shell-sidenav__divider").exists()).toBe(false);
+    // 分隔线仅在集群边界各一条（全局上下文│项目模块│管理）
+    expect(wrapper.findAll(".shell-sidenav__divider").length).toBe(2);
   });
 
   it("折叠态隐藏条目文案，改用图标与未读圆点", async () => {
@@ -85,7 +87,8 @@ describe("SideNav", () => {
     await nextTick();
 
     expect(wrapper.find(".shell-sidenav__item-label").exists()).toBe(false);
-    expect(wrapper.find(".shell-sidenav__divider").exists()).toBe(true);
+    // 折叠态：除首组外组间全加（4 组 → 3 条）
+    expect(wrapper.findAll(".shell-sidenav__divider").length).toBe(3);
     expect(wrapper.find(".shell-sidenav__dot").exists()).toBe(true);
   });
 

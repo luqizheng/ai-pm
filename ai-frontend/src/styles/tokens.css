@@ -76,13 +76,13 @@
   /* 布局尺寸 —— V1.0 §二 Shell 图
    *
    * 四栏主体工作区（AI Collaboration V1.0 / DR-C5 + DR-C8）：
-   * 188 + 518 + 446 + 288 = 1440px（1440px 桌面基准，TopBar 52px 在其上方）。
+   * 232 + 474 + 446 + 288 = 1440px（1440px 桌面基准，TopBar 52px 在其上方）。
    * 主区与 AI Chat 列为固定基准宽；AI Chat 是**常驻独立列**（不再是主列
    * 底部的停靠指令栏），指令栏降级为该列内的输入组件。
    */
-  --ws-sidebar-width: 188px;
+  --ws-sidebar-width: 232px;
   --ws-sidebar-collapsed: 60px;
-  --ws-main-width: 518px;
+  --ws-main-width: 474px;
   --ws-chat-width: 446px;
   --ws-context-width: 288px;
   --ws-topbar-height: 52px;
@@ -205,6 +205,8 @@
      Figma 修正（组件库 2026-11-04）：控件三档 32/40→28/44（sm28/md36/lg44）；
      spinner 14→16px（Figma 内嵌图标 16）；checkbox 回归 16px（库 Medium 档；
      登录页 14px 即 Small 档） */
+  /* 壳级分组标题行 24px（Figma Expanded navigation group toggle） */
+  --size-control-xs: 24px;
   --size-control-sm: 28px;
   --size-control-md: 36px;
   --size-control-lg: 44px;
