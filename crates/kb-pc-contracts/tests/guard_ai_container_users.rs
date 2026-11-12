@@ -44,8 +44,9 @@ const CODE_WHITELIST: &[&str] = &[
     "crates/pm-application/src/run_context.rs",
     "crates/pm-application/src/pm_write/task.rs",
     "crates/pm-application/src/command_executor/executor.rs",
-    // pm-api 文档适配层（直查 ai.document*）
-    "apps/pm-api/src/documents.rs",
+    // 文档适配层（直查 ai.document*；批 B 域11 守卫查询迁仓储后落点
+    // pm-infrastructure，V1.1 §4.7 使用方语义不变）
+    "crates/pm-infrastructure/src/repo_guard_query.rs",
 ];
 
 /// 迁移面基线（2026-11-09 基线合并）：`ai.document*` 的唯一合法迁移落点 =

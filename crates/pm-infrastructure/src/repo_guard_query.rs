@@ -130,4 +130,79 @@ impl GuardQueryRepo for PgGuardQueryRepo {
         .await?;
         Ok(row)
     }
+
+    async fn project_tenant(&self, project_id: Uuid) -> Result<Option<Uuid>, sqlx::Error> {
+        let t: Option<Uuid> =
+            sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
+                .bind(project_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(t)
+    }
+
+    async fn repository_exists(
+        &self,
+        tenant_id: Uuid,
+        repository_id: Uuid,
+    ) -> Result<bool, sqlx::Error> {
+        let id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM integration.project_repository WHERE id = $1 AND tenant_id = $2",
+        )
+        .bind(repository_id)
+        .bind(tenant_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(id.is_some())
+    }
+
+    async fn device_owner(
+        &self,
+        tenant_id: Uuid,
+        device_id: Uuid,
+    ) -> Result<Option<Uuid>, sqlx::Error> {
+        let owner: Option<Uuid> = sqlx::query_scalar(
+            "SELECT owner_principal_id FROM devenv.device WHERE id = $1 AND tenant_id = $2",
+        )
+        .bind(device_id)
+        .bind(tenant_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(owner)
+    }
+
+    async fn discovery_question_exists(
+        &self,
+        tenant_id: Uuid,
+        session_id: Uuid,
+        question_id: Uuid,
+    ) -> Result<bool, sqlx::Error> {
+        let id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM discovery.discovery_question \
+             WHERE tenant_id = $1 AND id = $2 AND session_id = $3",
+        )
+        .bind(tenant_id)
+        .bind(question_id)
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(id.is_some())
+    }
+
+    async fn published_document_revision_ids(
+        &self,
+        tenant_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<Vec<Uuid>, sqlx::Error> {
+        let ids: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT r.id FROM ai.document_revision r \
+               JOIN ai.project_document d ON d.id = r.document_id \
+              WHERE d.project_id = $1 AND d.tenant_id = $2 AND r.status = 'published' \
+              ORDER BY d.doc_key, r.revision_no",
+        )
+        .bind(project_id)
+        .bind(tenant_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(ids)
+    }
 }

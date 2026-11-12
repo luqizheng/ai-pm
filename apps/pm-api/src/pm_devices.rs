@@ -23,6 +23,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::guard_query_repo;
+use pm_application::repo::GuardQueryRepo;
 use pm_application::devenv::{
     bind_project, get_device, list_devices, register_device, report_checks, revoke_device,
     unbind_binding, BindingRow, DeviceChecks, DeviceDetail, DeviceError, DeviceRow,
@@ -200,14 +202,10 @@ async fn ensure_credential_manager(
     principal: &AuthedPrincipal,
     device_id: Uuid,
 ) -> Result<(), Response> {
-    let owner: Option<Uuid> = sqlx::query_scalar::<_, Uuid>(
-        "SELECT owner_principal_id FROM devenv.device WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(device_id)
-    .bind(principal.tenant_id)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|e| {
+    let owner: Option<Uuid> = guard_query_repo(&state.pool)
+        .device_owner(principal.tenant_id, device_id)
+        .await
+        .map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "code": "internal", "message": e.to_string() })),

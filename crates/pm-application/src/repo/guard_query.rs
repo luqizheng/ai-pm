@@ -57,4 +57,30 @@ pub trait GuardQueryRepo: Send + Sync {
         &self,
         approval_id: Uuid,
     ) -> Result<Option<(String, Option<chrono::DateTime<chrono::Utc>>)>, sqlx::Error>;
+
+    /// 项目行租户归属（ai_team_policies / ai_roles 的项目边界；不存在 → None）。
+    async fn project_tenant(&self, project_id: Uuid) -> Result<Option<Uuid>, sqlx::Error>;
+
+    /// 仓库存在性（租户边界）。
+    async fn repository_exists(&self, tenant_id: Uuid, repository_id: Uuid)
+        -> Result<bool, sqlx::Error>;
+
+    /// 设备属主（租户边界；凭据管理权判定输入）。
+    async fn device_owner(&self, tenant_id: Uuid, device_id: Uuid)
+        -> Result<Option<Uuid>, sqlx::Error>;
+
+    /// 发现问题存在性（租户 + 会话边界）。
+    async fn discovery_question_exists(
+        &self,
+        tenant_id: Uuid,
+        session_id: Uuid,
+        question_id: Uuid,
+    ) -> Result<bool, sqlx::Error>;
+
+    /// 项目已发布文档修订 id 列表（documents 批量处理范围）。
+    async fn published_document_revision_ids(
+        &self,
+        tenant_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<Vec<Uuid>, sqlx::Error>;
 }
