@@ -145,7 +145,7 @@ SeeCode viewer 的交互——hover trace（悬停高亮邻接）、focus panel�
 
 | 原编号 | 原内容 | 新编号 | 新内容 | 阻断等级 |
 |---|---|---|---|---|
-| AC-7 | 沙箱隔离（opaque origin / 零凭证 / CSP Header） | **AC-7'** | **产物静态化断言**：入库 SVG 产物中 `<script>` / `foreignObject` / 可执行 `on*` 属性 / 外部引用（`http(s)://`、`//host`、`url(http`）/ `<use>`/`<image>` 外链 计数均为 0；`<img>` 引用产物时浏览器不执行任何脚本（无 CSP 违规、无 console 注入） | B1 + 发布阻断 |
+| AC-7 | 沙箱隔离（opaque origin / 零凭证 / CSP Header） | **AC-7'** | **产物静态化断言**：入库 SVG 产物中 `<script>` / `foreignObject` / 可执行 `on*` 属性 / 外部引用（`http(s)://`、`//host`、`url(http`）/ `<use>`/`<image>` 外链 计数均为 0；`<img>` 引用产物时浏览器不执行任何脚本（无 CSP 违规、无 console 注入） **已实现**：`crates/pm-application/src/visualization/artifact_safety.rs`（`inspect_svg`），以**真实 SeeCode 产物**为夹具验收（`crates/pm-application/tests/fixtures/seecode_real_artifact.svg` + `tests/viz_artifact_safety.rs`）。 B1 + 发布阻断 |
 | AC-8 | 权限 404 同形 / 403 | AC-8 | **不变**（权限维度与渲染形态无关） | B1 |
 | AC-18 | postMessage 协议安全 | **AC-18'** | **无第三方产物代码参与前端交互**：交互通道的前端执行路径中不加载任何 SeeCode 产物脚本（构建产物断言：无产物 JS 引入；源码断言：交互组件不 import 产物 HTML）；产物 SVG 以 `<img>`（或 `<object>`+无脚本）引用 | B1 + 发布阻断 |
 | AC-6 | 零外网 + 导出链实测 | **AC-6'** | **服务端 SVG 导出链零外网**：实测导出过程与产物均无外部请求（字体 base64 内嵌已验证）；删除"浏览器内页面 Export 菜单"路径的依赖声明 | B1 |
