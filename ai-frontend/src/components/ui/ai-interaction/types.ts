@@ -13,7 +13,7 @@ import type { Component } from "vue";
  * 正式业务变更由业务接口负责，组件提交只记录「用户选择」。
  */
 
-/** 8 类响应 */
+/** 9 类响应 */
 export type AiResponseType =
   | "informational"
   | "recommendation"
@@ -22,10 +22,11 @@ export type AiResponseType =
   | "decision"
   | "artifact"
   | "action-request"
-  | "execution-result";
+  | "execution-result"
+  | "viz-artifact";
 
 /**
- * 8 类响应白名单（运行时校验用）。
+ * 9 类响应白名单（运行时校验用）。
  *
  * 与后端 `pm_application::ai_interaction_envelope::RESPONSE_TYPES` 同源——
  * 白名单外的类型一律拒收（fail-closed），不伪造卡片。
@@ -38,7 +39,8 @@ export const RESPONSE_TYPES: readonly AiResponseType[] = [
   "decision",
   "artifact",
   "action-request",
-  "execution-result"
+  "execution-result",
+  "viz-artifact"
 ];
 
 /**
@@ -116,7 +118,9 @@ export const PAYLOAD_REQUIRED_FIELDS: Record<
     "summary",
     "changedFiles",
     "logs"
-  ]
+  ],
+  // 可视化产物：必须带槽位与产物 id——缺任一字段即整信封拒收（fail-closed）。
+  "viz-artifact": ["artifactId", "slotKey", "previewUrl"]
 };
 
 /** 提交阶段（控制按钮 loading / 结果条） */

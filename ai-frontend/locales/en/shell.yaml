@@ -306,6 +306,7 @@ shell:
         artifact: Artifact
         action-request: Action request
         execution-result: Execution result
+        viz-artifact: Visualization artifact
         text: Text
       history: History
       historyClose: Close history

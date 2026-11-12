@@ -306,6 +306,7 @@ shell:
         artifact: 产物
         action-request: 动作请求
         execution-result: 执行结果
+        viz-artifact: 可视化产物
         text: 文本
       history: 历史记录
       historyClose: 关闭历史记录

@@ -10,6 +10,7 @@ import InformationalResponse from "../responses/InformationalResponse.vue";
 import ProposalResponse from "../responses/ProposalResponse.vue";
 import QuestionResponse from "../responses/QuestionResponse.vue";
 import RecommendationResponse from "../responses/RecommendationResponse.vue";
+import VizArtifactResponse from "@/components/viz/responses/VizArtifactResponse.vue";
 import MarkdownViewer from "@/components/ui/markdown-editor/MarkdownViewer.vue";
 import { resolveAttachmentUrl } from "@/api/base/attachments";
 import { defaultAiIdentity } from "../identity";
@@ -40,7 +41,8 @@ const CARD_COMPONENTS: Record<AiResponseType, Component> = {
   decision: markRaw(DecisionResponse),
   artifact: markRaw(ArtifactResponse),
   "action-request": markRaw(ActionRequestResponse),
-  "execution-result": markRaw(ExecutionResultResponse)
+  "execution-result": markRaw(ExecutionResultResponse),
+  "viz-artifact": markRaw(VizArtifactResponse)
 };
 
 const isUser = computed(() => props.message.role === "user");

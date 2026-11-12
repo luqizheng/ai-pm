@@ -1,0 +1,66 @@
+# Visualization Engine 文案（中文基准语言）。
+#
+# 与后端契约同源：docs/visualization/ai-pm-viz-16-v0-8-viewer-design-v1.md
+# 命名空间 viz.*；zh-CN 与 en 的 key 集合必须完全一致
+# （scripts/check-i18n-namespace.js 强制）。
+
+artifact:
+  counts: "{nodes} 个节点 · {edges} 条关系"
+  version: "v{version}"
+  state:
+    draft: "草稿 · 未生效"
+    published: "已发布"
+    stale: "已过期"
+    rejected: "已拒绝"
+  explanatory: "AI 生成 · 非正式认知"
+  staleHint: "此图形所依据的业务数据已经发生变化，当前展示的是历史版本。"
+  interactionHint: "交互探索在 P1 上线；当前可通过表格视图与溯源面板访问节点级信息。"
+  loadFailed: "图形加载失败，请改用表格视图。"
+  accept: "接受"
+  reject: "拒绝"
+
+table:
+  nodes: "节点（{count}）"
+  edges: "关系（{count}）"
+  column:
+    label: "名称"
+    kind: "类型"
+    status: "状态"
+    source: "来源"
+    relation: "关系"
+    from: "起点"
+    to: "终点"
+    nature: "关系性质"
+  unlinked: "无溯源"
+  derived: "间接推导"
+  direct: "直接关系"
+
+trace:
+  untitled: "节点详情"
+  description: "来源、关系与性质"
+  close: "关闭"
+  identity: "标识"
+  kind: "类型"
+  status: "状态"
+  nature: "性质"
+  business: "正式业务对象"
+  source: "来源"
+  domain: "领域"
+  type: "类型"
+  id: "对象 ID"
+  revision: "版本"
+  openSource: "打开原文档"
+  unlinkedHint: "该节点没有溯源信息。"
+  relationships: "关系（出 {out} · 入 {in}）"
+  derivedVia: "经 {via} 推导"
+  noRelations: "该节点没有可见关系。"
+
+consistency:
+  current: "数据版本一致"
+  mixed: "混合时点数据"
+  stale: "来源已变化"
+
+tab:
+  graph: "图形"
+  empty: "暂无图形"
+  emptyHint: "当前项目还没有可用的图形产物。可在对话中要求生成。"

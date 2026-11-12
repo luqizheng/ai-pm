@@ -1,0 +1,64 @@
+# Visualization Engine strings (English).
+#
+# Key set must match zh-CN exactly (scripts/check-i18n-namespace.js).
+
+artifact:
+  counts: "{nodes} nodes · {edges} relations"
+  version: "v{version}"
+  state:
+    draft: "Draft · not in effect"
+    published: "Published"
+    stale: "Stale"
+    rejected: "Rejected"
+  explanatory: "AI generated · not formal cognition"
+  staleHint: "The business data behind this diagram has changed; the historical version is shown."
+  interactionHint: "Interactive exploration ships in P1; node details are available via the table and trace panel."
+  loadFailed: "Failed to load the diagram — use the table view instead."
+  accept: "Accept"
+  reject: "Reject"
+
+table:
+  nodes: "Nodes ({count})"
+  edges: "Relations ({count})"
+  column:
+    label: "Name"
+    kind: "Type"
+    status: "Status"
+    source: "Source"
+    relation: "Relation"
+    from: "From"
+    to: "To"
+    nature: "Relation nature"
+  unlinked: "No source"
+  derived: "Derived"
+  direct: "Direct"
+
+trace:
+  untitled: "Node details"
+  description: "Source, relations and nature"
+  close: "Close"
+  identity: "Identity"
+  kind: "Type"
+  status: "Status"
+  nature: "Nature"
+  business: "Formal business object"
+  source: "Source"
+  domain: "Domain"
+  type: "Type"
+  id: "Object ID"
+  revision: "Revision"
+  openSource: "Open source document"
+  unlinkedHint: "This node has no source traceability."
+  relationships: "Relations (out {out} · in {in})"
+  derivedVia: "derived via {via}"
+  noRelations: "This node has no visible relations."
+
+consistency:
+  current: "Consistent revision"
+  mixed: "Mixed-revision data"
+  stale: "Source changed"
+
+tab:
+  graph: "Graphs"
+  empty: "No graphs yet"
+  emptyHint: "This project has no graph artifacts yet. Ask in the conversation to generate one."

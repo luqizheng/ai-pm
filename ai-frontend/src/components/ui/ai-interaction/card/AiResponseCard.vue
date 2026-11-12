@@ -98,7 +98,8 @@ const TYPE_KEY: Record<AiResponseType, string> = {
   decision: "ai.card.type.decision",
   artifact: "ai.card.type.artifact",
   "action-request": "ai.card.type.actionRequest",
-  "execution-result": "ai.card.type.executionResult"
+  "execution-result": "ai.card.type.executionResult",
+  "viz-artifact": "ai.card.type.vizArtifact"
 };
 
 const TYPE_BADGE: Record<AiResponseType, BadgeVariant> = {
@@ -109,7 +110,8 @@ const TYPE_BADGE: Record<AiResponseType, BadgeVariant> = {
   decision: "warning",
   artifact: "info",
   "action-request": "warning",
-  "execution-result": "success"
+  "execution-result": "success",
+  "viz-artifact": "info"
 };
 
 const typeLabel = computed(() => t(TYPE_KEY[props.type]));
