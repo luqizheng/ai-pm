@@ -272,6 +272,10 @@ pub mod repos {
         pm_infrastructure::repo_acceptance_read::PgAcceptanceReadRepo::new(pool.clone())
     }
 
+    pub fn viz_read_repo(pool: &sqlx::PgPool) -> pm_infrastructure::repo_viz_read::PgVizReadRepo {
+        pm_infrastructure::repo_viz_read::PgVizReadRepo::new(pool.clone())
+    }
+
     pub fn platform_ops_repo(
         pool: &sqlx::PgPool,
     ) -> pm_infrastructure::repo_platform_ops::PgPlatformOpsRepo {

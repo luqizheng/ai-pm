@@ -23,6 +23,8 @@ pub mod runs;
 pub mod tenant_members;
 pub mod lists;
 
+pub mod viz_read;
+
 pub use acceptance_read::AcceptanceReadRepo;
 pub use ai_team_monitor::AiTeamMonitorRepo;
 pub use baseline::{BaselineRepo, BaselineRepoError};

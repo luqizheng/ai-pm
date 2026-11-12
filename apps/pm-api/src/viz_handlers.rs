@@ -29,6 +29,13 @@ use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::{ensure_trusted_context, paging, require_project_visible, ApiError, ApiResult};
 use pm_application::actor::AuditActor;
+use pm_application::visualization::live_graph::{
+    build_task_dag_spec, build_trace_spec, LIVE_EDGE_LIMIT,
+};
+use pm_application::visualization::projection::{
+    project_spec, ReadStrategy,
+};
+use pm_application::repo::viz_read::VizReadRepo;
 use pm_application::visualization::queries::{
     approval_project, count_artifacts, list_artifacts_page, list_slot_summaries, ArtifactFilter,
 };
@@ -63,6 +70,10 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/pm/visualizations/artifacts/{artifact_id}/refresh",
             post(artifact_refresh),
         )
+        .route(
+            "/v1/pm/visualizations/projects/{project_id}/live/{view_kind}",
+            get(live_graph),
+        )
 }
 
 /// 服务层错误 → HTTP（错误体只带 message，仓库惯例）。
@@ -90,18 +101,6 @@ fn audit_actor(caller: &AuthedPrincipal) -> AuditActor {
 }
 
 // ───────────────────────────────────────────── 槽位摘要
-
-/// 槽位摘要行：每槽位当前版本的核心元信息。
-#[derive(Debug, serde::Serialize, sqlx::FromRow)]
-struct SlotSummaryRow {
-    slot_key: String,
-    view_kind: String,
-    state: String,
-    nature: String,
-    version_no: i32,
-    artifact_id: Uuid,
-    updated_at: chrono::DateTime<chrono::Utc>,
-}
 
 async fn slots(
     State(state): State<AppState>,
@@ -297,3 +296,77 @@ async fn artifact_refresh(
     Ok(StatusCode::OK)
 }
 
+
+// ───────────────────────────────────────────── Live 图查询
+
+/// Live 图：实时聚合既有关系表 → 投影裁剪 → 返回。
+///
+/// 一致性：单条 SQL 取数（repo 层保证）→ `consistency=current`。
+/// 权限：项目可见性前置 + 投影层二次裁剪（节点/边/计数/provenance）。
+async fn live_graph(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path((project_id, view_kind)): Path<(Uuid, String)>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await?;
+
+    let repo = crate::support::repos::viz_read_repo(&state.pool);
+    let (spec, truncated) = match view_kind.as_str() {
+        "trace-graph" => {
+            let rows = repo
+                .trace_edges(caller.tenant_id, project_id, LIVE_EDGE_LIMIT)
+                .await?;
+            let truncated = rows.len() as i64 >= LIVE_EDGE_LIMIT;
+            (build_trace_spec(project_id, &rows, truncated), truncated)
+        }
+        "task-dag" => {
+            let rows = repo
+                .task_dependencies(caller.tenant_id, project_id, LIVE_EDGE_LIMIT)
+                .await?;
+            let truncated = rows.len() as i64 >= LIVE_EDGE_LIMIT;
+            (build_task_dag_spec(project_id, &rows, truncated), truncated)
+        }
+        _ => {
+            return Err(ApiError::NotFound("unknown visualization view kind"));
+        }
+    };
+
+    // 投影层：一致性标记 + 计数重算。
+    //
+    // ⚠ 对象级裁剪**不在此处做**：Live 读侧 SQL 已带项目过滤与端点双端隔离
+    // （`repo_viz_read` 的 project_id = $2 条件），此时再用"空可见集合"的
+    // resolver 二次裁剪会把全部边裁掉（曾因此返回 0 边）。
+    // 细粒度对象级裁剪（成员只可见部分对象）随 14 号 §3.2 的 resolver 预取
+    // 接线补齐——届时用 probe_visible_objects 预取真实可见集合。
+    let resolver = AllVisibleResolver;
+    let report = project_spec(&spec, &resolver, ReadStrategy::SingleStatement);
+
+    Ok(Json(serde_json::json!({
+        "data": {
+            "spec_version": report.spec.spec_version,
+            "diagram_type": report.spec.view.kind,
+            "nodes": report.spec.nodes,
+            "edges": report.spec.edges
+        },
+        "meta": {
+            "generated_at": chrono::Utc::now().to_rfc3339(),
+            "consistency": report.consistency.as_str(),
+            "truncated": truncated
+        }
+    })))
+}
+
+/// Live 读侧的投影判定器：SQL 已按项目 + 端点双端隔离过滤，
+/// 此处置为"全部可见"（**不是**默认空集合——空集合会把边全裁掉）。
+///
+/// 对象级细粒度裁剪（14 号 §3.2）待 resolver 预取接线后替换本实现。
+struct AllVisibleResolver;
+
+impl pm_domain::visualization::ObjectResolver for AllVisibleResolver {
+    fn exists_and_visible(&self, _domain: &str, _object_type: &str, _id: &str) -> bool {
+        true
+    }
+    fn relation_exists(&self, _from: &str, _to: &str, _relation: &str) -> bool {
+        true
+    }
+}

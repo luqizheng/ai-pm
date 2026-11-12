@@ -10,6 +10,7 @@
 pub mod adapter_contract;
 pub mod artifact_safety;
 pub mod artifact_service;
+pub mod live_graph;
 pub mod projection;
 pub mod queries;
 pub mod registry_loader;
@@ -24,6 +25,7 @@ pub use artifact_service::{
     create_draft, decide_approval, get_artifact, mark_stale, request_approval, ArtifactRecord,
     VizError,
 };
+pub use live_graph::{build_task_dag_spec, build_trace_spec, LIVE_EDGE_LIMIT};
 pub use queries::{
     approval_project, count_artifacts, list_artifacts_page, list_slot_summaries,
     ArtifactFilter, ArtifactListRow, SlotSummaryRow,
