@@ -18,6 +18,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::guard_query_repo;
+use pm_application::repo::GuardQueryRepo;
 use pm_application::repository::{
     archive_repository, confirm_repository_version, create_repository, delete_repository,
     delete_ssh_key, ensure_ssh_key, generate_ssh_key, get_ssh_key, list_repositories,
@@ -130,13 +132,10 @@ async fn repository_in_tenant(
     repository_id: Uuid,
     tenant_id: Uuid,
 ) -> Result<(), Response> {
-    match sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM integration.project_repository WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(repository_id)
-    .bind(tenant_id)
-    .fetch_optional(pool)
-    .await
+    match guard_query_repo(pool)
+        .repository_exists(tenant_id, repository_id)
+        .await
+        .map(|exists| if exists { Some(Uuid::default()) } else { None })
     {
         Ok(Some(_)) => Ok(()),
         Ok(None) => Err(repository_error(RepositoryError::NotFound)),

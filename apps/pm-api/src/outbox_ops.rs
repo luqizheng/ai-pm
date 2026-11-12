@@ -21,7 +21,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{require_project_visible, ApiResult};
+use crate::support::{require_project_visible, repos::platform_ops_repo, ApiResult};
+use pm_application::repo::platform_ops::PlatformOpsRepo;
 use pm_application::outbox_ops::{self, ReplayOutcome};
 
 pub(crate) fn router() -> Router<AppState> {
@@ -160,23 +161,9 @@ async fn audit_replay(
     event_id: Uuid,
     result: &str,
 ) -> ApiResult<()> {
-    if let Err(e) = sqlx::query(
-        "INSERT INTO governance.audit_log \
-         (project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
-          action, target_type, target_id, after_data, source_kind, tenant_id) \
-         VALUES ($1, $2, $3, $4, $5, $6, 'outbox_dead_letter_replay', 'outbox_event', $7, $8, 'pm_api', \
-                 (SELECT tenant_id FROM core.project WHERE id = $1))",
-    )
-    .bind(project_id)
-    .bind(actor.principal_id)
-    .bind(actor.identity_id)
-    .bind(&actor.client)
-    .bind(&actor.auth_mode)
-    .bind(actor.claimed_device_id)
-    .bind(event_id)
-    .bind(serde_json::json!({ "result": result }))
-    .execute(&state.pool)
-    .await
+    if let Err(e) = platform_ops_repo(&state.pool)
+        .audit_outbox_replay(project_id, actor, event_id, result)
+        .await
     {
         tracing::error!(error = %e, %event_id, "outbox replay audit write failed");
     }

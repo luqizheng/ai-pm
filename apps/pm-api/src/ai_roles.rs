@@ -26,6 +26,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::guard_query_repo;
+use pm_application::repo::GuardQueryRepo;
 use crate::support::{require_project_visible, ApiError, ApiResult};
 
 impl From<AiRoleError> for ApiError {
@@ -64,12 +66,9 @@ async fn require_project_tenant(
     project_id: Uuid,
     principal: &AuthedPrincipal,
 ) -> ApiResult<()> {
-    let project_tenant: Option<Uuid> =
-        sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
-            .bind(project_id)
-            .fetch_optional(&state.pool)
-            .await?;
-    if project_tenant.as_ref() != Some(&principal.tenant_id) {
+    if guard_query_repo(&state.pool).project_tenant(project_id).await?.as_ref()
+        != Some(&principal.tenant_id)
+    {
         return Err(ApiError::NotFound("project not found"));
     }
     Ok(())

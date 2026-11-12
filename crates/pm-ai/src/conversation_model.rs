@@ -106,7 +106,40 @@ pub async fn complete(
     timeout: chrono::Duration,
     messages: &[ConversationTurn],
 ) -> Result<ConversationCompletion, ModelError> {
-    // Same client posture as the analysis/repo adapters: no_proxy so a stale
+    // Attempt 1 + one retry for 5xx / timeout only (see module doc).
+    let mut last_error = None;
+    for _ in 0..2 {
+        match complete_raw(endpoint, api_key, model, timeout, messages, TEMPERATURE).await {
+            Ok(completion) => return Ok(completion),
+            // 5xx 与超时可重试；其他传输失败通常是确定性的（DNS、拒连）
+            // ——快速失败。
+            Err(err @ (ModelError::Timeout | ModelError::Unavailable(_)))
+                if matches!(&err, ModelError::Unavailable(r) if r.contains("upstream returned HTTP"))
+                    || matches!(err, ModelError::Timeout) =>
+            {
+                last_error = Some(err);
+                continue;
+            }
+            Err(err) => return Err(err),
+        }
+    }
+    Err(last_error.unwrap_or(ModelError::Timeout))
+}
+
+/// Single-shot chat-completions call shared by every role adapter (批 D 单源：
+/// repo/snapshot 两个手写残留迁移后，全 crate 只剩这一个 HTTP 端点)。
+///
+/// `temperature` 由调用方给定（确定性任务 0，会话任务 [`TEMPERATURE`]）；
+/// 无重试——重试语义属于 [`complete`]。
+pub async fn complete_raw(
+    endpoint: &str,
+    api_key: &str,
+    model: &str,
+    timeout: chrono::Duration,
+    messages: &[ConversationTurn],
+    temperature: f64,
+) -> Result<ConversationCompletion, ModelError> {
+    // Same client posture as the analysis adapter: no_proxy so a stale
     // OS proxy cannot hijack provider traffic; timeout bounds the whole
     // request (connect + headers + body).
     let client = reqwest::Client::builder()
@@ -117,87 +150,68 @@ pub async fn complete(
     let base_url = endpoint.trim_end_matches('/');
     let body = serde_json::json!({
         "model": model,
-        "temperature": TEMPERATURE,
+        "temperature": temperature,
         "messages": messages
             .iter()
             .map(|turn| serde_json::json!({"role": turn.role, "content": turn.content}))
             .collect::<Vec<_>>(),
     });
 
-    // Attempt 1 + one retry for 5xx / timeout only (see module doc).
-    let mut last_error = None;
-    for _ in 0..2 {
-        let response = match client
-            .post(format!("{base_url}/chat/completions"))
-            .bearer_auth(api_key)
-            .json(&body)
-            .send()
-            .await
-        {
-            Ok(response) => response,
-            Err(err) => {
-                let mapped = if err.is_timeout() {
-                    ModelError::Timeout
-                } else if err.is_connect() {
-                    ModelError::Unavailable(format!("cannot reach conversation model: {err}"))
-                } else {
-                    ModelError::Unavailable(format!("conversation model request failed: {err}"))
-                };
-                // Timeouts are worth one retry; other transport failures are
-                // usually deterministic (DNS, refused) — fail fast.
-                if matches!(mapped, ModelError::Timeout) {
-                    last_error = Some(mapped);
-                    continue;
-                }
-                return Err(mapped);
+    let response = client
+        .post(format!("{base_url}/chat/completions"))
+        .bearer_auth(api_key)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|err| {
+            if err.is_timeout() {
+                ModelError::Timeout
+            } else if err.is_connect() {
+                ModelError::Unavailable(format!("cannot reach model endpoint: {err}"))
+            } else {
+                ModelError::Unavailable(format!("model request failed: {err}"))
             }
-        };
+        })?;
 
-        let status = response.status();
-        if status.is_server_error() {
-            // Transient upstream failure: retry once, then surface.
-            last_error = Some(ModelError::Unavailable(format!(
-                "upstream returned HTTP {status}"
-            )));
-            continue;
-        }
-        if !status.is_success() {
-            // 4xx: caller misconfiguration (bad key, wrong model). Retrying
-            // cannot help, so it must not read as Unavailable.
-            let brief = response.text().await.unwrap_or_default();
-            return Err(ModelError::BadOutput(format!(
-                "upstream rejected request with HTTP {status}: {}",
-                brief.chars().take(200).collect::<String>()
-            )));
-        }
-
-        let completion: ChatCompletionResponse = response
-            .json()
-            .await
-            .map_err(|e| ModelError::BadOutput(format!("unexpected response envelope: {e}")))?;
-        let content = completion
-            .choices
-            .into_iter()
-            .next()
-            .ok_or_else(|| ModelError::BadOutput("response contained no choices".to_string()))?
-            .message
-            .content;
-        // Free-text contract: the only quality gate is non-emptiness. An
-        // empty reply would violate the append validation downstream anyway,
-        // so it is rejected here where it can be recorded as provider error.
-        if content.trim().is_empty() {
-            return Err(ModelError::BadOutput(
-                "model returned an empty reply".to_string(),
-            ));
-        }
-        return Ok(ConversationCompletion {
-            content,
-            usage: completion.usage,
-        });
+    let status = response.status();
+    if status.is_server_error() {
+        return Err(ModelError::Unavailable(format!(
+            "upstream returned HTTP {status}"
+        )));
     }
-    Err(last_error.unwrap_or_else(|| {
-        ModelError::Unavailable("conversation model call failed without an error".to_string())
-    }))
+    if !status.is_success() {
+        // 4xx: caller misconfiguration (bad key, wrong model). Retrying
+        // cannot help, so it must not read as Unavailable.
+        let text = response.text().await.unwrap_or_default();
+        return Err(ModelError::BadOutput(format!(
+            "upstream rejected request with HTTP {status}: {}",
+            text.chars().take(200).collect::<String>()
+        )));
+    }
+
+    let completion: ChatCompletionResponse = response
+        .json()
+        .await
+        .map_err(|e| ModelError::BadOutput(format!("unexpected response envelope: {e}")))?;
+    let content = completion
+        .choices
+        .into_iter()
+        .next()
+        .ok_or_else(|| ModelError::BadOutput("response contained no choices".to_string()))?
+        .message
+        .content;
+    // Free-text contract: the only quality gate is non-emptiness. An
+    // empty reply would violate the append validation downstream anyway,
+    // so it is rejected here where it can be recorded as provider error.
+    if content.trim().is_empty() {
+        return Err(ModelError::BadOutput(
+            "model returned an empty reply".to_string(),
+        ));
+    }
+    Ok(ConversationCompletion {
+        content,
+        usage: completion.usage,
+    })
 }
 
 #[cfg(test)]

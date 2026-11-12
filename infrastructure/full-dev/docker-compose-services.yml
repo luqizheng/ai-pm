@@ -147,10 +147,9 @@ services:
       - superpowers
 
   token-service:
+    # 镜像来自外部 lmms 构建（本仓 services/token-service/ 仅持有 config，
+    # 无源码无 Dockerfile——本地 build 段已移除，批 G 处置）。
     image: "${IMAGE_TOKEN_SERVICE:?IMAGE_TOKEN_SERVICE 未定义——请加载 .image.env（node scripts/update-image-env.js -v <ver>）}"
-    build:
-      context: ../..
-      dockerfile: services/token-service/Dockerfile
     ports:
       - "8082:8082"
     labels:
@@ -254,10 +253,9 @@ services:
       - superpowers
 
   notification-service:
+    # 镜像来自外部 lmms 构建（本仓 services/notification-service/ 仅持有
+    # config，无源码无 Dockerfile——本地 build 段已移除，批 G 处置）。
     image: "${IMAGE_NOTIFICATION_SERVICE:?IMAGE_NOTIFICATION_SERVICE 未定义——请加载 .image.env（node scripts/update-image-env.js -v <ver>）}"
-    build:
-      context: ../..
-      dockerfile: services/notification-service/Dockerfile
     ports:
       - "8083:8083"
     labels:

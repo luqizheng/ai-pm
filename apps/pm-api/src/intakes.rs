@@ -21,6 +21,8 @@ use pm_application::intake::{self, SubmitIntake, TaskSpec};
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::platform_ops_repo;
+use pm_application::repo::platform_ops::PlatformOpsRepo;
 use crate::support::{require_project_visible, ApiError, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
@@ -173,14 +175,9 @@ async fn intake_view(
     caller: &AuthedPrincipal,
 ) -> ApiResult<intake::IntakeState> {
     // 先取 intake 归属项目再过可见性（intake_state 本身不做租户过滤）。
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM integration.intake_record \
-          WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(intake_id)
-    .bind(caller.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?;
+    let project_id = platform_ops_repo(&state.pool)
+        .intake_project_id(caller.tenant_id, intake_id)
+        .await?;
     let project_id = project_id.ok_or(ApiError::NotFound("intake not found"))?;
     require_project_visible(
         &state.pool,
@@ -199,25 +196,14 @@ async fn intake_view(
 
 async fn audit_retry(state: &AppState, caller: &AuthedPrincipal, intake_id: Uuid, task_id: Uuid) {
     let actor = caller.audit_actor();
-    if let Err(e) = sqlx::query(
-        "INSERT INTO governance.audit_log \
-         (project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
-          action, target_type, target_id, after_data, source_kind, tenant_id) \
-         VALUES ((SELECT project_id FROM integration.intake_record WHERE id = $1), $2, $3, $4, $5, $6, \
-                 'intake_task_retry', 'intake_task', $7, $8, 'pm_api', \
-                 (SELECT tenant_id FROM core.project WHERE id = \
-                   (SELECT project_id FROM integration.intake_record WHERE id = $1)))",
-    )
-    .bind(intake_id)
-    .bind(actor.principal_id)
-    .bind(actor.identity_id)
-    .bind(&actor.client)
-    .bind(&actor.auth_mode)
-    .bind(actor.claimed_device_id)
-    .bind(task_id)
-    .bind(serde_json::json!({ "retry": "attempt+1", "reuse_row": true }))
-    .execute(&state.pool)
-    .await
+    if let Err(e) = platform_ops_repo(&state.pool)
+        .audit_intake_retry(
+            intake_id,
+            &actor,
+            task_id,
+            serde_json::json!({ "retry": "attempt+1", "reuse_row": true }),
+        )
+        .await
     {
         tracing::error!(error = %e, %task_id, "intake retry audit write failed");
     }

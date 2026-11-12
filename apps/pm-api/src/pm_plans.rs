@@ -20,6 +20,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::guard_query_repo;
+use pm_application::repo::GuardQueryRepo;
 use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
 use pm_application::task_plan::{
     self, CreatePlanRequest, DraftPlanRevisionRequest, MaterializeRequest, SupersedePlanRequest,
@@ -31,14 +33,10 @@ async fn require_plan_visible(
     plan_id: Uuid,
     principal: &AuthedPrincipal,
 ) -> ApiResult<Uuid> {
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM plan.task_plan WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(plan_id)
-    .bind(principal.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?;
-    let project_id = project_id.ok_or(ApiError::NotFound("task plan not found"))?;
+    let project_id = guard_query_repo(&state.pool)
+        .plan_project_id(principal.tenant_id, plan_id)
+        .await?
+        .ok_or(ApiError::NotFound("task plan not found"))?;
     require_project_visible(
         &state.pool,
         project_id,

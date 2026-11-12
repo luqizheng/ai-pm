@@ -28,6 +28,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use pm_application::repo::acceptance_read::AcceptanceReadRepo;
+use crate::support::repos::acceptance_read_repo;
 use crate::support::{require_project_visible, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
@@ -66,33 +68,10 @@ async fn list_handler(
         principal.principal_id,
     )
     .await?;
-    let rows: Vec<ApprovalRow> = sqlx::query_as(
-        "SELECT a.id, a.task_id, a.review_run_id, a.delivery_run_id, a.kind, a.status, \
-                a.decided_by, a.decision_reason, a.decided_at, a.created_at, t.title AS task_title \
-           FROM governance.review_approval a \
-           JOIN delivery.task t ON t.id = a.task_id \
-          WHERE a.project_id = $1 \
-          ORDER BY a.created_at DESC LIMIT 100",
-    )
-    .bind(project_id)
-    .fetch_all(&state.pool)
-    .await?;
+    let rows = acceptance_read_repo(&state.pool)
+        .project_approvals(project_id)
+        .await?;
     Ok(Json(json!({ "items": rows, "total": rows.len() })))
-}
-
-#[derive(Debug, serde::Serialize, sqlx::FromRow)]
-pub(crate) struct ApprovalRow {
-    pub id: Uuid,
-    pub task_id: Uuid,
-    pub review_run_id: Uuid,
-    pub delivery_run_id: Uuid,
-    pub kind: String,
-    pub status: String,
-    pub decided_by: Option<Uuid>,
-    pub decision_reason: Option<String>,
-    pub decided_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub task_title: String,
 }
 
 async fn decision_handler(

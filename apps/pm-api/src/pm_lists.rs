@@ -2,6 +2,9 @@
 //! `frontend/src/api/mock/fixtures.ts`）。统一 `{items,total,page,size}` 裸
 //! payload、`project_id?` 过滤、`created_at DESC` 排序、page/size 分页；鉴权由
 //! 路由外层的 `auth::require_bearer` 层承担（handlers 不做会话提取）。
+//!
+//! 数据访问已收口到仓储（任务书批 B）：SQL 在
+//! `pm_infrastructure::repo_lists::PgPmListRepo`，本模块零 SQL。
 
 use axum::{
     extract::{Extension, Path, Query, State},
@@ -16,15 +19,13 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::{
-    customer_filter, paging, project_filter, require_project_visible, ApiResult, Paging,
+    customer_filter, paging, project_filter, require_project_visible, ApiError, ApiResult, Paging,
 };
 use pm_application::bootstrap::{
     bootstrap_project_for_customer_owned, bootstrap_project_owned, BootstrapError, BootstrapRequest,
 };
-use pm_application::rows::{
-    ApprovalRow, AuditLogRow, DecisionRow, MilestoneRow, PrincipalRow, ProjectRow,
-    RequirementRevisionRow, RequirementRow, TaskRow,
-};
+use pm_application::repo::{ListPage, PmListRepo};
+use pm_infrastructure::repo_lists::PgPmListRepo;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -60,6 +61,10 @@ pub(crate) fn router() -> Router<AppState> {
         )
 }
 
+fn repo(state: &AppState) -> PgPmListRepo {
+    PgPmListRepo::new(state.pool.clone())
+}
+
 async fn principals(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
@@ -68,25 +73,9 @@ async fn principals(
     let is_active = params
         .get("is_active")
         .and_then(|value| value.parse::<bool>().ok());
-    // 平台专用 service principal（`ai-pm-dispatch`，0015 幂等种子）是审计兜底
-    // 身份，不属于可指派的人员/代理列表，故不对外暴露。
-    let items: Vec<PrincipalRow> = sqlx::query_as(
-        "SELECT id, kind, display_name, is_active, created_at FROM core.principal \
-          WHERE kind <> 'service' AND ($3::bool IS NULL OR is_active = $3) \
-          ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-    )
-    .bind(page.size)
-    .bind(page.offset)
-    .bind(is_active)
-    .fetch_all(&state.pool)
-    .await?;
-    let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM core.principal \
-          WHERE kind <> 'service' AND ($1::bool IS NULL OR is_active = $1)",
-    )
-    .bind(is_active)
-    .fetch_one(&state.pool)
-    .await?;
+    let (items, total) = repo(&state)
+        .list_principals(is_active, ListPage { size: page.size, offset: page.offset })
+        .await?;
     Ok(Json(page.to_response(items, total)))
 }
 
@@ -97,41 +86,14 @@ async fn projects(
 ) -> ApiResult<Json<serde_json::Value>> {
     let page = paging(&params);
     let customer_id = customer_filter(&params);
-    // customer_id 是 NOT NULL 外键，INNER JOIN 不会丢行；COALESCE 只为让行结构
-    // 保持 String（前端不需要区分「有客户但没名字」）。可见性（T-022）：只列
-    // 调用者在 `core.project_member` 里的项目。
-    let items: Vec<ProjectRow> = sqlx::query_as(
-        "SELECT p.id, p.customer_id, COALESCE(c.name, '') AS customer_name, \
-                COALESCE(c.status, 'active') AS customer_status, \
-                p.code, p.name, p.description, p.status, p.revision, p.created_at, p.updated_at \
-         FROM core.project p JOIN core.customer c ON c.id = p.customer_id \
-         WHERE p.tenant_id = $5 \
-           AND p.status <> 'deleted' \
-           AND EXISTS (SELECT 1 FROM core.project_member m \
-                        WHERE m.project_id = p.id AND m.principal_id = $4) \
-           AND ($1::uuid IS NULL OR p.customer_id = $1) \
-         ORDER BY p.created_at DESC LIMIT $2 OFFSET $3",
-    )
-    .bind(customer_id)
-    .bind(page.size)
-    .bind(page.offset)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_all(&state.pool)
-    .await?;
-    let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM core.project p \
-          WHERE p.tenant_id = $3 \
-            AND p.status <> 'deleted' \
-            AND EXISTS (SELECT 1 FROM core.project_member m \
-                         WHERE m.project_id = p.id AND m.principal_id = $2) \
-            AND ($1::uuid IS NULL OR p.customer_id = $1)",
-    )
-    .bind(customer_id)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_one(&state.pool)
-    .await?;
+    let (items, total) = repo(&state)
+        .list_projects(
+            caller.tenant_id,
+            caller.principal_id,
+            customer_id,
+            ListPage { size: page.size, offset: page.offset },
+        )
+        .await?;
     Ok(Json(page.to_response(items, total)))
 }
 
@@ -189,7 +151,7 @@ async fn create_project_handler(
                     )
                         .into_response()
                 }
-                Err(err) => return crate::support::ApiError::from(err).into_response(),
+                Err(err) => return ApiError::from(err).into_response(),
             }
             bootstrap_project_for_customer_owned(
                 &state.pool,
@@ -204,24 +166,15 @@ async fn create_project_handler(
     };
     match outcome {
         Ok(outcome) => {
-            if !body.description.trim().is_empty() {
-                let _ = sqlx::query("UPDATE core.project SET description = $2 WHERE id = $1")
-                    .bind(outcome.project_id)
-                    .bind(body.description.trim())
-                    .execute(&state.pool)
+            let description = body.description.trim();
+            if !description.is_empty() {
+                let _ = repo(&state)
+                    .set_project_description(outcome.project_id, description)
                     .await;
             }
-            match sqlx::query_as::<_, ProjectRow>(
-                "SELECT p.id, p.customer_id, COALESCE(c.name, '') AS customer_name, \
-                        COALESCE(c.status, 'active') AS customer_status, \
-                        p.code, p.name, p.description, p.status, p.revision, p.created_at, p.updated_at \
-                 FROM core.project p JOIN core.customer c ON c.id = p.customer_id \
-                 WHERE p.id = $1 AND p.tenant_id = $2",
-            )
-            .bind(outcome.project_id)
-            .bind(caller.tenant_id)
-            .fetch_one(&state.pool)
-            .await
+            match repo(&state)
+                .find_project_row(caller.tenant_id, outcome.project_id)
+                .await
             {
                 Ok(row) => (StatusCode::CREATED, Json(row)).into_response(),
                 Err(err) => (
@@ -267,35 +220,14 @@ async fn requirements(
         )
         .await?;
     }
-    let items: Vec<RequirementRow> = sqlx::query_as(
-        "SELECT r.id, r.project_id, r.code, r.title, r.lifecycle_status, r.current_revision_id, \
-                r.row_revision, r.created_at \
-         FROM delivery.requirement r \
-         WHERE r.tenant_id = $5 \
-           AND EXISTS (SELECT 1 FROM core.project_member m \
-                        WHERE m.project_id = r.project_id AND m.principal_id = $4) \
-           AND ($1::uuid IS NULL OR r.project_id = $1) \
-         ORDER BY r.created_at DESC LIMIT $2 OFFSET $3",
-    )
-    .bind(project_id)
-    .bind(page.size)
-    .bind(page.offset)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_all(&state.pool)
-    .await?;
-    let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.requirement r \
-          WHERE r.tenant_id = $3 \
-            AND EXISTS (SELECT 1 FROM core.project_member m \
-                         WHERE m.project_id = r.project_id AND m.principal_id = $2) \
-            AND ($1::uuid IS NULL OR r.project_id = $1)",
-    )
-    .bind(project_id)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_one(&state.pool)
-    .await?;
+    let (items, total) = repo(&state)
+        .list_requirements(
+            caller.tenant_id,
+            caller.principal_id,
+            project_id,
+            ListPage { size: page.size, offset: page.offset },
+        )
+        .await?;
     Ok(Json(page.to_response(items, total)))
 }
 
@@ -315,36 +247,14 @@ async fn tasks(
         )
         .await?;
     }
-    let items: Vec<TaskRow> = sqlx::query_as(
-        "SELECT t.id, t.project_id, t.milestone_id, t.title, t.description, t.status, \
-                t.priority, t.assignee_id, t.revision, t.ai_role_version_id, \
-                t.created_at, t.updated_at \
-         FROM delivery.task t \
-         WHERE t.tenant_id = $5 \
-           AND EXISTS (SELECT 1 FROM core.project_member m \
-                        WHERE m.project_id = t.project_id AND m.principal_id = $4) \
-           AND ($1::uuid IS NULL OR t.project_id = $1) \
-         ORDER BY t.created_at DESC LIMIT $2 OFFSET $3",
-    )
-    .bind(project_id)
-    .bind(page.size)
-    .bind(page.offset)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_all(&state.pool)
-    .await?;
-    let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.task t \
-          WHERE t.tenant_id = $3 \
-            AND EXISTS (SELECT 1 FROM core.project_member m \
-                         WHERE m.project_id = t.project_id AND m.principal_id = $2) \
-            AND ($1::uuid IS NULL OR t.project_id = $1)",
-    )
-    .bind(project_id)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_one(&state.pool)
-    .await?;
+    let (items, total) = repo(&state)
+        .list_tasks(
+            caller.tenant_id,
+            caller.principal_id,
+            project_id,
+            ListPage { size: page.size, offset: page.offset },
+        )
+        .await?;
     Ok(Json(page.to_response(items, total)))
 }
 
@@ -364,34 +274,14 @@ async fn milestones(
         )
         .await?;
     }
-    let items: Vec<MilestoneRow> = sqlx::query_as(
-        "SELECT m.id, m.project_id, m.name, m.planned_at, m.status, m.revision \
-         FROM delivery.milestone m \
-         WHERE m.tenant_id = $5 \
-           AND EXISTS (SELECT 1 FROM core.project_member pm \
-                        WHERE pm.project_id = m.project_id AND pm.principal_id = $4) \
-           AND ($1::uuid IS NULL OR m.project_id = $1) \
-         ORDER BY m.planned_at NULLS LAST, m.name ASC LIMIT $2 OFFSET $3",
-    )
-    .bind(project_id)
-    .bind(page.size)
-    .bind(page.offset)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_all(&state.pool)
-    .await?;
-    let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.milestone m \
-          WHERE m.tenant_id = $3 \
-            AND EXISTS (SELECT 1 FROM core.project_member pm \
-                         WHERE pm.project_id = m.project_id AND pm.principal_id = $2) \
-            AND ($1::uuid IS NULL OR m.project_id = $1)",
-    )
-    .bind(project_id)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_one(&state.pool)
-    .await?;
+    let (items, total) = repo(&state)
+        .list_milestones(
+            caller.tenant_id,
+            caller.principal_id,
+            project_id,
+            ListPage { size: page.size, offset: page.offset },
+        )
+        .await?;
     Ok(Json(page.to_response(items, total)))
 }
 
@@ -411,35 +301,14 @@ async fn approvals(
         )
         .await?;
     }
-    let items: Vec<ApprovalRow> = sqlx::query_as(
-        "SELECT a.id, a.project_id, a.proposal_id, a.status, a.required_role, a.decided_by, \
-                a.decision_reason, a.decided_at, a.created_at \
-         FROM governance.approval_request a \
-         WHERE a.tenant_id = $5 \
-           AND EXISTS (SELECT 1 FROM core.project_member m \
-                        WHERE m.project_id = a.project_id AND m.principal_id = $4) \
-           AND ($1::uuid IS NULL OR a.project_id = $1) \
-         ORDER BY a.created_at DESC LIMIT $2 OFFSET $3",
-    )
-    .bind(project_id)
-    .bind(page.size)
-    .bind(page.offset)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_all(&state.pool)
-    .await?;
-    let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM governance.approval_request a \
-          WHERE a.tenant_id = $3 \
-            AND EXISTS (SELECT 1 FROM core.project_member m \
-                         WHERE m.project_id = a.project_id AND m.principal_id = $2) \
-            AND ($1::uuid IS NULL OR a.project_id = $1)",
-    )
-    .bind(project_id)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_one(&state.pool)
-    .await?;
+    let (items, total) = repo(&state)
+        .list_approvals(
+            caller.tenant_id,
+            caller.principal_id,
+            project_id,
+            ListPage { size: page.size, offset: page.offset },
+        )
+        .await?;
     Ok(Json(page.to_response(items, total)))
 }
 
@@ -460,39 +329,14 @@ async fn decisions(
         )
         .await?;
     }
-    let items: Vec<DecisionRow> = sqlx::query_as(
-        "SELECT a.id, a.project_id, a.status, a.required_role, a.decided_by, \
-                a.decision_reason, a.decided_at, a.created_at, \
-                p.id AS proposal_id, p.status AS proposal_status, p.target_type, \
-                p.command_type, p.rationale, p.risk_level, p.evidence, \
-                p.proposed_data, p.analysis_run_id \
-         FROM governance.approval_request a \
-         LEFT JOIN ai.change_proposal p ON p.id = a.proposal_id \
-         WHERE a.tenant_id = $5 \
-           AND EXISTS (SELECT 1 FROM core.project_member m \
-                        WHERE m.project_id = a.project_id AND m.principal_id = $4) \
-           AND ($1::uuid IS NULL OR a.project_id = $1) \
-         ORDER BY a.created_at DESC LIMIT $2 OFFSET $3",
-    )
-    .bind(project_id)
-    .bind(page.size)
-    .bind(page.offset)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_all(&state.pool)
-    .await?;
-    let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM governance.approval_request a \
-         WHERE a.tenant_id = $3 \
-           AND EXISTS (SELECT 1 FROM core.project_member m \
-                        WHERE m.project_id = a.project_id AND m.principal_id = $2) \
-           AND ($1::uuid IS NULL OR a.project_id = $1)",
-    )
-    .bind(project_id)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_one(&state.pool)
-    .await?;
+    let (items, total) = repo(&state)
+        .list_decisions(
+            caller.tenant_id,
+            caller.principal_id,
+            project_id,
+            ListPage { size: page.size, offset: page.offset },
+        )
+        .await?;
     Ok(Json(page.to_response(items, total)))
 }
 
@@ -512,34 +356,14 @@ async fn audit_logs(
         )
         .await?;
     }
-    let items: Vec<AuditLogRow> = sqlx::query_as(
-        "SELECT g.id, g.project_id, g.actor_id, g.action, g.target_type, g.target_id, g.created_at \
-         FROM governance.audit_log g \
-         WHERE g.tenant_id = $5 \
-           AND EXISTS (SELECT 1 FROM core.project_member m \
-                        WHERE m.project_id = g.project_id AND m.principal_id = $4) \
-           AND ($1::uuid IS NULL OR g.project_id = $1) \
-         ORDER BY g.created_at DESC LIMIT $2 OFFSET $3",
-    )
-    .bind(project_id)
-    .bind(page.size)
-    .bind(page.offset)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_all(&state.pool)
-    .await?;
-    let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM governance.audit_log g \
-          WHERE g.tenant_id = $3 \
-            AND EXISTS (SELECT 1 FROM core.project_member m \
-                         WHERE m.project_id = g.project_id AND m.principal_id = $2) \
-            AND ($1::uuid IS NULL OR g.project_id = $1)",
-    )
-    .bind(project_id)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_one(&state.pool)
-    .await?;
+    let (items, total) = repo(&state)
+        .list_audit_logs(
+            caller.tenant_id,
+            caller.principal_id,
+            project_id,
+            ListPage { size: page.size, offset: page.offset },
+        )
+        .await?;
     Ok(Json(page.to_response(items, total)))
 }
 
@@ -549,20 +373,9 @@ async fn revisions(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(requirement_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let items: Vec<RequirementRevisionRow> = sqlx::query_as(
-        "SELECT rv.id, rv.requirement_id, rv.project_id, rv.version, rv.content, rv.state, \
-                rv.content_hash, rv.created_by, rv.approved_by, rv.created_at \
-         FROM delivery.requirement_revision rv \
-         WHERE rv.requirement_id = $1 AND rv.tenant_id = $2 \
-           AND EXISTS (SELECT 1 FROM core.project_member m \
-                        WHERE m.project_id = rv.project_id AND m.principal_id = $3) \
-         ORDER BY rv.version DESC",
-    )
-    .bind(requirement_id)
-    .bind(caller.tenant_id)
-    .bind(caller.principal_id)
-    .fetch_all(&state.pool)
-    .await?;
+    let items = repo(&state)
+        .list_requirement_revisions(caller.tenant_id, caller.principal_id, requirement_id)
+        .await?;
     let total = items.len() as i64;
     Ok(Json(serde_json::json!({ "items": items, "total": total })))
 }

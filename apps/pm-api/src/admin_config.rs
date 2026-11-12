@@ -18,10 +18,11 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::json;
-use sqlx::Row;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use pm_application::repo::platform_ops::PlatformOpsRepo;
+use crate::support::repos::platform_ops_repo;
 use crate::support::{ApiError, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
@@ -46,22 +47,19 @@ fn require_system_admin(caller: &AuthedPrincipal) -> ApiResult<()> {
     Ok(())
 }
 
-fn row_to_json(row: &sqlx::postgres::PgRow) -> serde_json::Value {
+fn row_to_json(endpoint: &str, model: &str, enabled: bool, updated_at: chrono::DateTime<chrono::Utc>) -> serde_json::Value {
     json!({
-        "endpoint": row.get::<String, _>("endpoint"),
-        "model": row.get::<String, _>("model"),
-        "enabled": row.get::<bool, _>("enabled"),
-        "updated_at": row.get::<chrono::DateTime<chrono::Utc>, _>("updated_at"),
+        "endpoint": endpoint,
+        "model": model,
+        "enabled": enabled,
+        "updated_at": updated_at,
     })
 }
 
 async fn load_config(pool: &sqlx::PgPool) -> Result<serde_json::Value, sqlx::Error> {
-    let row = sqlx::query(
-        "SELECT endpoint, model, enabled, updated_at FROM platform.embedding_config WHERE id = 1",
-    )
-    .fetch_one(pool)
-    .await?;
-    Ok(row_to_json(&row))
+    let (endpoint, model, enabled, updated_at) =
+        platform_ops_repo(pool).load_embedding_config().await?;
+    Ok(row_to_json(&endpoint, &model, enabled, updated_at))
 }
 
 /// `GET /v1/admin/embedding-config`：读配置（管理员）。
@@ -100,24 +98,16 @@ async fn put_embedding_config(
     if model.is_empty() {
         return Err(ApiError::BadRequest("model must not be empty"));
     }
-    let updated = sqlx::query(
-        "UPDATE platform.embedding_config \
-            SET endpoint = $2, model = $3, enabled = $4, updated_by = $5, updated_at = now() \
-          WHERE id = 1 \
-          RETURNING endpoint, model, enabled, updated_at",
-    )
-    .bind(&endpoint)
-    .bind(&model)
-    .bind(body.enabled)
-    .bind(caller.principal_id)
-    .fetch_one(&state.pool)
-    .await
-    .map_err(ApiError::Internal)?;
+    let updated = platform_ops_repo(&state.pool)
+        .update_embedding_config(&endpoint, &model, body.enabled, caller.principal_id)
+        .await
+        .map_err(ApiError::Internal)?;
+    let (endpoint, model, enabled, updated_at) = updated;
     Ok(Json(json!({
-        "endpoint": updated.get::<String, _>("endpoint"),
-        "model": updated.get::<String, _>("model"),
-        "enabled": updated.get::<bool, _>("enabled"),
-        "updated_at": updated.get::<chrono::DateTime<chrono::Utc>, _>("updated_at"),
+        "endpoint": endpoint,
+        "model": model,
+        "enabled": enabled,
+        "updated_at": updated_at,
     })))
 }
 

@@ -16,6 +16,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::guard_query_repo;
+use pm_application::repo::GuardQueryRepo;
 use pm_application::discovery::{
     add_finding, add_question, answer_question, defer_question, get_session_detail, list_sessions,
     record_finding_verification, start_session_from_import, transition_session, DiscoveryError,
@@ -130,15 +132,10 @@ async fn question_in_session(
     session_id: Uuid,
     question_id: Uuid,
 ) -> Result<(), Response> {
-    let ok: Option<Uuid> = match sqlx::query_scalar(
-        "SELECT id FROM discovery.discovery_question \
-         WHERE tenant_id = $1 AND id = $2 AND session_id = $3",
-    )
-    .bind(tenant_id)
-    .bind(question_id)
-    .bind(session_id)
-    .fetch_optional(pool)
-    .await
+    let ok: Option<Uuid> = match guard_query_repo(pool)
+        .discovery_question_exists(tenant_id, session_id, question_id)
+        .await
+        .map(|exists| if exists { Some(question_id) } else { None })
     {
         Ok(ok) => ok,
         Err(err) => return Err(discovery_error(DiscoveryError::Db(err))),

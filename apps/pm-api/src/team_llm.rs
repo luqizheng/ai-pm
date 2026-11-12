@@ -33,6 +33,8 @@ use pm_application::team_llm_catalog::{get_project_ai_policies, set_project_over
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::guard_query_repo;
+use pm_application::repo::GuardQueryRepo;
 use crate::team_llm_guard::{err_forbidden, err_not_found, guard_tenant};
 
 pub(crate) fn router() -> Router<AppState> {
@@ -73,11 +75,7 @@ async fn guard_project_manager(
     project_id: Uuid,
 ) -> Result<(), Response> {
     let project_tenant: Option<Uuid> =
-        sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
-            .bind(project_id)
-            .fetch_one(&state.pool)
-            .await
-            .ok();
+        guard_query_repo(&state.pool).project_tenant(project_id).await.ok().flatten();
     if project_tenant.is_none() {
         return Err(err_not_found("project not found"));
     }

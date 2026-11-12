@@ -17,6 +17,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::platform_ops_repo;
+use pm_application::repo::platform_ops::PlatformOpsRepo;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -37,21 +39,10 @@ async fn me_handler(
     // 派生（被移除者 team=null，与 memberships=[] 自洽）。memberships 按
     // principal 查全量（V1 单团队现实下为 0/1 行；契约按多团队 shape 设计，
     // 上游支持后免改）。
-    let memberships = sqlx::query_as::<_, (Uuid, String, String, Option<String>, Option<String>)>(
-        // 只统计 ACTIVE 成员关系：未激活 principal 的 provision member 行
-        // 不算「已加入」（onboarding_required 语义与之配套）；休眠租户
-        // 的成员关系已随 dissolve 清空，双重保险再滤 is_active。
-        "SELECT t.id, t.display_name, tm.role, t.slug, t.description \
-           FROM core.tenant_member tm \
-           JOIN core.tenant t ON t.id = tm.tenant_id \
-           JOIN core.principal p ON p.id = tm.principal_id \
-          WHERE tm.principal_id = $1 AND p.is_active AND t.is_active \
-          ORDER BY t.created_at",
-    )
-    .bind(principal.principal_id)
-    .fetch_all(&state.pool)
-    .await
-    .unwrap_or_default();
+    let memberships = platform_ops_repo(&state.pool)
+        .principal_memberships(principal.principal_id)
+        .await
+        .unwrap_or_default();
 
     let has_team = !memberships.is_empty();
     let team_json = memberships
@@ -104,19 +95,11 @@ async fn update_handler(
     }
     // 平台 service principal（`ai-pm-dispatch`）不参与人员激活开关；
     // 且只能操作**本租户**的成员（跨租户 id 一律按不存在处理）。
-    let affected = sqlx::query(
-        "UPDATE core.principal SET is_active = $2 \
-          WHERE id = $1 AND kind <> 'service' \
-            AND EXISTS (SELECT 1 FROM core.tenant_member m \
-                         WHERE m.principal_id = core.principal.id AND m.tenant_id = $3)",
-    )
-    .bind(principal_id)
-    .bind(body.is_active)
-    .bind(caller.tenant_id)
-    .execute(&state.pool)
-    .await;
+    let affected = platform_ops_repo(&state.pool)
+        .set_principal_active(principal_id, body.is_active, caller.tenant_id)
+        .await;
     match affected {
-        Ok(result) if result.rows_affected() == 1 => (
+        Ok(1) => (
             StatusCode::OK,
             Json(json!({ "id": principal_id, "is_active": body.is_active })),
         )

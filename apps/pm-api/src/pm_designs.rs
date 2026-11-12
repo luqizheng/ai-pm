@@ -20,6 +20,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::design_guard_repo;
+use pm_application::repo::DesignGuardRepo;
 use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
 use pm_application::design::{
     self, AddFindingRequest, CreateAdrRequest, CreateDesignRequest, DecideApprovalRequest,
@@ -34,13 +36,10 @@ async fn require_design_visible(
     design_id: Uuid,
     principal: &AuthedPrincipal,
 ) -> ApiResult<Uuid> {
-    let project_id: Option<Uuid> =
-        sqlx::query_scalar("SELECT project_id FROM design.design WHERE id = $1 AND tenant_id = $2")
-            .bind(design_id)
-            .bind(principal.tenant_id)
-            .fetch_optional(&state.pool)
-            .await?;
-    let project_id = project_id.ok_or(ApiError::NotFound("design not found"))?;
+    let project_id = design_guard_repo(&state.pool)
+        .design_project_id(principal.tenant_id, design_id)
+        .await?
+        .ok_or(ApiError::NotFound("design not found"))?;
     require_project_visible(
         &state.pool,
         project_id,
@@ -56,13 +55,10 @@ async fn require_adr_visible(
     adr_id: Uuid,
     principal: &AuthedPrincipal,
 ) -> ApiResult<Uuid> {
-    let project_id: Option<Uuid> =
-        sqlx::query_scalar("SELECT project_id FROM design.adr WHERE id = $1 AND tenant_id = $2")
-            .bind(adr_id)
-            .bind(principal.tenant_id)
-            .fetch_optional(&state.pool)
-            .await?;
-    let project_id = project_id.ok_or(ApiError::NotFound("adr not found"))?;
+    let project_id = design_guard_repo(&state.pool)
+        .adr_project_id(principal.tenant_id, adr_id)
+        .await?
+        .ok_or(ApiError::NotFound("adr not found"))?;
     require_project_visible(
         &state.pool,
         project_id,
@@ -80,15 +76,10 @@ async fn require_revision_visible(
     principal: &AuthedPrincipal,
 ) -> ApiResult<()> {
     require_design_visible(state, design_id, principal).await?;
-    let exists: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM design.design_revision WHERE id = $1 AND design_id = $2 AND tenant_id = $3",
-    )
-    .bind(revision_id)
-    .bind(design_id)
-    .bind(principal.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?;
-    if exists.is_none() {
+    if !design_guard_repo(&state.pool)
+        .revision_exists(principal.tenant_id, design_id, revision_id)
+        .await?
+    {
         return Err(ApiError::NotFound("design revision not found"));
     }
     Ok(())
@@ -357,14 +348,10 @@ async fn decide_approval(
     Json(body): Json<DecideApprovalRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
     // 审批行的项目可见性先行（防跨项目探测：不存在与不可见同形 404）。
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM design.design_approval WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(approval_id)
-    .bind(caller.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?;
-    let project_id = project_id.ok_or(ApiError::NotFound("approval not found"))?;
+    let project_id = design_guard_repo(&state.pool)
+        .approval_project_id(caller.tenant_id, approval_id)
+        .await?
+        .ok_or(ApiError::NotFound("approval not found"))?;
     require_project_visible(
         &state.pool,
         project_id,
@@ -598,15 +585,9 @@ async fn implementation_readiness(
         .unwrap_or_default();
     // 缺省 = 项目内全部已批准的设计版本（与「当前整体就绪」口径一致）。
     let design_revision_ids = if requested.is_empty() {
-        sqlx::query_scalar(
-            "SELECT id FROM design.design_revision \
-             WHERE tenant_id = $1 AND project_id = $2 AND state = 'approved' \
-             ORDER BY created_at",
-        )
-        .bind(caller.tenant_id)
-        .bind(project_id)
-        .fetch_all(&state.pool)
-        .await?
+        design_guard_repo(&state.pool)
+            .approved_revision_ids(caller.tenant_id, project_id)
+            .await?
     } else {
         requested
     };
@@ -730,14 +711,10 @@ async fn baseline_tasks(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(baseline_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM design.implementation_baseline WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(baseline_id)
-    .bind(caller.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?;
-    let project_id = project_id.ok_or(ApiError::NotFound("baseline not found"))?;
+    let project_id = design_guard_repo(&state.pool)
+        .baseline_project_id(caller.tenant_id, baseline_id)
+        .await?
+        .ok_or(ApiError::NotFound("baseline not found"))?;
     require_project_visible(
         &state.pool,
         project_id,
@@ -754,14 +731,10 @@ async fn get_baseline(
     Extension(caller): Extension<AuthedPrincipal>,
     Path(baseline_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM design.implementation_baseline WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(baseline_id)
-    .bind(caller.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?;
-    let project_id = project_id.ok_or(ApiError::NotFound("baseline not found"))?;
+    let project_id = design_guard_repo(&state.pool)
+        .baseline_project_id(caller.tenant_id, baseline_id)
+        .await?
+        .ok_or(ApiError::NotFound("baseline not found"))?;
     require_project_visible(
         &state.pool,
         project_id,
@@ -780,14 +753,10 @@ async fn supersede_baseline(
     Path(baseline_id): Path<Uuid>,
     Json(body): Json<SupersedeBaselineRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM design.implementation_baseline WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(baseline_id)
-    .bind(caller.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?;
-    let project_id = project_id.ok_or(ApiError::NotFound("baseline not found"))?;
+    let project_id = design_guard_repo(&state.pool)
+        .baseline_project_id(caller.tenant_id, baseline_id)
+        .await?
+        .ok_or(ApiError::NotFound("baseline not found"))?;
     require_project_visible(
         &state.pool,
         project_id,

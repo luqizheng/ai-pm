@@ -24,6 +24,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::guard_query_repo;
+use pm_application::repo::GuardQueryRepo;
 
 /// 租户 + 成员边界（对外入口，T-022）：跨租户或调用者不是项目成员的
 /// project 一律按不存在处理，不泄露存在性。
@@ -555,16 +557,9 @@ pub(crate) async fn reindex_project_handler(
         Ok(guard) => guard,
         Err(err) => return error_response(err),
     };
-    let revisions: Vec<Uuid> = match sqlx::query_scalar(
-        "SELECT r.id FROM ai.document_revision r \
-           JOIN ai.project_document d ON d.id = r.document_id \
-          WHERE d.project_id = $1 AND d.tenant_id = $2 AND r.status = 'published' \
-          ORDER BY d.doc_key, r.revision_no",
-    )
-    .bind(body.project_id)
-    .bind(principal.tenant_id)
-    .fetch_all(&state.pool)
-    .await
+    let revisions: Vec<Uuid> = match guard_query_repo(&state.pool)
+        .published_document_revision_ids(principal.tenant_id, body.project_id)
+        .await
     {
         Ok(rows) => rows,
         Err(err) => {

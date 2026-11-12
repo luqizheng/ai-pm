@@ -1391,3 +1391,24 @@ async fn existing_finding_ids_are_visible_in_the_prompt(pool: sqlx::PgPool) {
 
 /// DK-E：三态提案分支（更正回流）验收面（独立文件，避免与 DK-B 用例纠缠）。
 mod dke;
+
+/// 批 D-2：两份 DROP_ORDER（enum 版 vs 字符串键版）语义对齐锁定——
+/// 预算裁剪顺序是 §5.3/D-DK-7 契约，两处实现各自演进时由本测试兜底。
+#[test]
+fn discovery_drop_orders_are_semantically_aligned() {
+    let pairs = [
+        (SectionId::S5Tasks, KEY_TASKS),
+        (SectionId::S4Requirements, KEY_REQUIREMENTS),
+        (SectionId::S2Cognition, KEY_PRODUCT_COGNITION),
+        (SectionId::S3Digest, KEY_KNOWLEDGE_DIGEST),
+    ];
+    assert_eq!(DROP_ORDER.len(), pairs.len());
+    assert_eq!(crate::discovery_context::DROP_ORDER.len(), pairs.len());
+    for (i, (sid, key)) in pairs.iter().enumerate() {
+        assert_eq!(DROP_ORDER[i], *sid, "enum 版第 {i} 位漂移");
+        assert_eq!(
+            crate::discovery_context::DROP_ORDER[i], *key,
+            "字符串键版第 {i} 位漂移"
+        );
+    }
+}

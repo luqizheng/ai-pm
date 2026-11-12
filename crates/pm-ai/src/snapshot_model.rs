@@ -25,6 +25,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use async_trait::async_trait;
+use crate::conversation_model::{complete_raw, ConversationTurn};
 use pm_application::repo_facts::pm_ai_port::ModelError;
 use pm_application::repo_facts::RepoFacts;
 use pm_application::snapshot_analysis::{
@@ -269,10 +270,10 @@ async fn record_outcome<T>(
 // ── OpenAI 兼容调用与响应校验（无 DB 依赖，wiremock 直测）─────────────────
 
 pub(crate) struct SnapshotLlmClient {
-    client: reqwest::Client,
     base_url: String,
     model: String,
     api_key: String,
+    timeout: chrono::Duration,
 }
 
 impl SnapshotLlmClient {
@@ -283,55 +284,37 @@ impl SnapshotLlmClient {
         timeout: chrono::Duration,
     ) -> Self {
         Self {
-            client: reqwest::Client::builder()
-                .no_proxy()
-                .timeout(timeout.to_std().expect("timeout must be positive"))
-                .build()
-                .expect("reqwest client must build"),
             base_url: base_url.trim_end_matches('/').to_string(),
             model: model.to_string(),
             api_key: api_key.to_string(),
+            timeout,
         }
     }
 
     async fn complete(&self, system: &str, user: String) -> Result<String, ModelError> {
-        let body = serde_json::json!({
-            "model": self.model,
-            "temperature": 0,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        });
-        let response = self
-            .client
-            .post(format!("{}/chat/completions", self.base_url))
-            .bearer_auth(&self.api_key)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|err| {
-                if err.is_timeout() {
-                    ModelError::Timeout
-                } else if err.is_connect() {
-                    ModelError::Unavailable(format!("cannot reach snapshot model: {err}"))
-                } else {
-                    ModelError::Unavailable(format!("snapshot model request failed: {err}"))
-                }
-            })?;
-        if !response.status().is_success() {
-            return Err(ModelError::BadOutput(format!(
-                "snapshot model returned HTTP {}",
-                response.status()
-            )));
-        }
-        let value: serde_json::Value = response.json().await.map_err(|e| {
-            ModelError::BadOutput(format!("snapshot model response is not json: {e}"))
+        let messages = [
+            ConversationTurn::new("system", system),
+            ConversationTurn::new("user", user),
+        ];
+        // 快照摘要是确定性任务：temperature=0（单源前原值）。
+        let completion = complete_raw(
+            &self.base_url,
+            &self.api_key,
+            &self.model,
+            self.timeout,
+            &messages,
+            0.0,
+        )
+        .await
+        .map_err(|e| match e {
+            crate::model::ModelError::Timeout => ModelError::Timeout,
+            crate::model::ModelError::Unavailable(reason) => ModelError::Unavailable(reason),
+            crate::model::ModelError::BadOutput(reason) => ModelError::BadOutput(reason),
+            crate::model::ModelError::Configuration(detail) => {
+                ModelError::Unavailable(format!("model configuration: {detail}"))
+            }
         })?;
-        value["choices"][0]["message"]["content"]
-            .as_str()
-            .map(str::to_string)
-            .ok_or_else(|| ModelError::BadOutput("missing choices[0].message.content".to_string()))
+        Ok(completion.content)
     }
 
     pub(crate) async fn enrich_digest(

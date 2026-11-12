@@ -28,7 +28,8 @@ const REQUIRED_COLUMNS: [&str; 4] = [
 const PRODUCTION_SITES: &[(&str, usize)] = &[
     ("crates/pm-application/src/pm_write/audit.rs", 2), // A1, A2
     ("crates/pm-application/src/repository/support.rs", 1), // A3
-    ("apps/pm-api/src/tenant_members.rs", 1),           // A4 (tenant_audit_log)
+    // A4（tenant_audit_log；批 B 域5 迁仓储后落点 pm-infrastructure）
+    ("crates/pm-infrastructure/src/repo_tenant_members.rs", 1),
     ("crates/pm-application/src/command_executor/audit.rs", 1), // A5
     ("crates/pm-application/src/delivery/mod.rs", 1),   // A6
     ("crates/pm-application/src/knowledge_proposal/support.rs", 1), // A7
@@ -36,18 +37,18 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     ("crates/pm-application/src/review/queue.rs", 1),   // A9
     ("crates/pm-application/src/run_dispatch/lease.rs", 1), // A10
     ("crates/pm-infrastructure/src/outbox_handlers.rs", 3), // A11 + D-2=A：TaskReady 自动写 assignee / no_executor_available skip（系统面 dispatch principal，四列显式 NULL）
-    ("apps/pm-api/src/outbox_ops.rs", 1),                   // A12
-    ("apps/pm-api/src/device_claim.rs", 1), // T-088：设备声明被忽略（tenant_audit_log）
     // T-088 新增：设备绑定审计（devenv 域）
     ("crates/pm-application/src/devenv/binding.rs", 1),
     // Team LLM Provider / 模型目录 / Onboarding / 设备凭据四域的 tenant_audit_log
     // 写入已归并到 pm_write::insert_tenant_audit 单点（批 A2，原四条清单项撤销；
     // 转发壳只带 target_type，不再含 INSERT 文本）。
     ("crates/pm-application/src/pm_write/support.rs", 1),
-    // KB-PC 服务化（0048 Intake）：信号路由留痕（系统面 dispatch principal，四列显式 NULL）
-    ("crates/pm-application/src/intake.rs", 1),
-    // KB-PC 服务化：intake_task 人工重试（REST 面，写全四身份列）
-    ("apps/pm-api/src/intakes.rs", 1),
+    // KB-PC 服务化（0048 Intake）：信号路由留痕（系统面 dispatch principal，四列显式 NULL；
+    // 批 C-3 拆目录后落点 intake/signal.rs）
+    ("crates/pm-application/src/intake/signal.rs", 1),
+    // KB-PC 服务化：intake_task 人工重试（REST 面，写全四身份列；批 B 收尾迁仓储）
+    // 与 outbox 死信重放（A12）、设备声明忽略（T-088）一并落 repo_platform_ops.rs
+    ("crates/pm-infrastructure/src/repo_platform_ops.rs", 3),
     // Checkpoint-1：KB 仓库快照分析 + PC 认知派生（worker 系统面 dispatch principal，四列显式 NULL）
     ("crates/pm-infrastructure/src/kb_pc_analysis.rs", 2),
     // KP-1 / PC-01B 发布事务（pc/publish.rs）：⑫ pc_version.publish（发布者四列）
