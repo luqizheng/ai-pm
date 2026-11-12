@@ -225,6 +225,7 @@ pub trait ObjectResolver {
 | `E_SPEC_LABEL_CONTROL_CHARS` | Blocker | label 含控制字符 | `nodes[i].label` |
 | `E_SPEC_SLOT_NOT_ALLOWED` | Blocker | slot_key 不在调用者白名单 | `slot_key` |
 | `E_SPEC_DERIVED_TRACE_INVALID` | Blocker | derived_trace.direct=true 或 via 为空或 via 元素非节点 | `edges[i].derived` |
+| `E_SPEC_NATURE_MISMATCH` | Blocker | Edge.nature=business 但端点节点为 explanatory（或 Artifact=explanatory 却声明 business 边） | `edges[i].nature` |
 | `W_SPEC_NODE_WITHOUT_EDGE` | Warning | 孤立节点 | `nodes[i].id` |
 | `W_SPEC_DUPLICATE_LABEL` | Warning | 同 kind 同 label 重复 | `nodes[i].label` |
 | `W_SPEC_DANGLING_EDGE` | Warning | 端点存在但被权限裁剪 | `edges[i]` |
@@ -393,7 +394,7 @@ budget 档位与边数上限：strict ≤30 节点 / ≤45 边；balanced ≤150
 | V0-1.1 | pm-domain 子目录骨架 | `crates/pm-domain/src/visualization/{mod.rs,spec.rs,source_ref.rs,nature.rs}` + `lib.rs` 登记 + Cargo 依赖 | `cargo build -p pm-domain` 通过；无未用导入（`scripts/clippy.sh` -D warnings） |
 | V0-1.2 | 类型与 serde 形态 | §3 类型落地 + 序列化往返测试 | 内联单测：往返一致；枚举 as_str/parse 成对；optional 字段不产生 null |
 | V0-1.3 | 问题码表与校验器骨架 | `validation/{mod.rs,codes.rs}` + `ValidationContext` + `ObjectResolver` trait | 骨架编译；`ValidationReport::has_blockers()` 行为正确 |
-| V0-1.4 | 规则实现 | §4.3 全部码实现（纯函数） | 每个码至少 1 条触发用例 + 1 条不触发用例（内联单测） |
+| V0-1.4 | 规则实现 | §4.3 全部码实现（纯函数；含 14 号 §6.2 增补的 `E_SPEC_NATURE_MISMATCH`） | 每个码至少 1 条触发用例 + 1 条不触发用例（内联单测） |
 | V0-1.5 | Registry 文件与加载器 | `policies/viz-relation-registry.yaml` + `pm-application/src/visualization/registry_loader.rs` | 加载器：字段缺失 fail-fast；draft relation 产出 Blocker；deprecated 仍可解释 |
 | V0-1.6 | source_hash 实现 | `pm-application/src/visualization/source_hash.rs` | 确定性：同输入两次哈希一致；排序无关（打乱输入顺序结果相同）；编码为裸小写 hex |
 | V0-1.7 | Golden 语料 | `validation/golden/{cases,expected}` | ≥12 case（覆盖每个 E 码至少 1 条、每个 W 码至少 1 条）；全绿 |
