@@ -34,44 +34,40 @@ describe("Table", () => {
     expect(w.classes()).toContain("is-selected");
   });
 
-  it("表头默认 scope=col", () => {
-    expect(mount(TableHeader).attributes("scope")).toBe("col");
+  it("表头单元格默认 scope=col", () => {
+    expect(mount(TableHead).attributes("scope")).toBe("col");
   });
 
-  it("可排序表头带 is-sortable 类", () => {
-    expect(
-      mount(TableHeader, { props: { sortable: true } }).classes()
-    ).toContain("is-sortable");
-    expect(mount(TableHeader).classes()).not.toContain("is-sortable");
+  it("可排序表头单元格带 is-sortable 类", () => {
+    expect(mount(TableHead, { props: { sortable: true } }).classes()).toContain(
+      "is-sortable"
+    );
+    expect(mount(TableHead).classes()).not.toContain("is-sortable");
   });
 
   it("thead / tbody 语义正确", () => {
-    expect(mount(TableHead).element.tagName).toBe("THEAD");
+    expect(mount(TableHeader).element.tagName).toBe("THEAD");
     expect(mount(TableBody).element.tagName).toBe("TBODY");
   });
 
   it("表头单元格语义为 th，数据单元格为 td", () => {
-    expect(mount(TableHeader).element.tagName).toBe("TH");
+    expect(mount(TableHead).element.tagName).toBe("TH");
     expect(mount(TableCell).element.tagName).toBe("TD");
     expect(mount(TableRow).element.tagName).toBe("TR");
   });
 
   it("排序状态输出 aria-sort（Phase 2 §5.3）", () => {
     expect(
-      mount(TableHeader, { props: { sort: "ascending" } }).attributes(
-        "aria-sort"
-      )
+      mount(TableHead, { props: { sort: "ascending" } }).attributes("aria-sort")
     ).toBe("ascending");
     expect(
-      mount(TableHeader, { props: { sort: "descending" } }).attributes(
-        "aria-sort"
-      )
+      mount(TableHead, { props: { sort: "descending" } }).attributes("aria-sort")
     ).toBe("descending");
-    expect(mount(TableHeader).attributes("aria-sort")).toBeUndefined();
+    expect(mount(TableHead).attributes("aria-sort")).toBeUndefined();
   });
 
   it("可排序表头内含可聚焦按钮，键盘可达（Phase 2 §9.4）", () => {
-    const w = mount(TableHeader, { props: { sortable: true } });
+    const w = mount(TableHead, { props: { sortable: true } });
     expect(w.find("button").exists()).toBe(true);
     expect(w.find("button").attributes("type")).toBe("button");
   });
