@@ -266,4 +266,10 @@ pub mod repos {
     pub fn run_repo(pool: &sqlx::PgPool) -> pm_infrastructure::repo_runs::PgRunRepo {
         pm_infrastructure::repo_runs::PgRunRepo::new(pool.clone())
     }
+
+    pub fn kb_pc_query_repo(
+        pool: &sqlx::PgPool,
+    ) -> pm_infrastructure::repo_kb_pc_query::PgKbPcQueryRepo {
+        pm_infrastructure::repo_kb_pc_query::PgKbPcQueryRepo::new(pool.clone())
+    }
 }

@@ -39,12 +39,14 @@ use kb_pc_contracts::DomainRef;
 use pm_application::kb_service::{KbCaller, KbServiceLive};
 use pm_application::pc::{self, DecisionAction, PcError, ProposalDecisionInput};
 use serde_json::json;
-use sqlx::Row;
 use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::kb_pc_query_repo;
+use pm_application::repo::kb_pc_query::AnalysisTaskRow;
+use pm_application::repo::kb_pc_query::KbPcQueryRepo;
 use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
@@ -176,32 +178,6 @@ async fn k1_submit_analysis(
     skeleton_501(body).await
 }
 
-/// K2/P3 共用：分析任务面行投影（intake_task × intake_record）。
-type AnalysisTaskRow = (
-    String,
-    Option<serde_json::Value>,
-    Option<String>,
-    chrono::DateTime<chrono::Utc>,
-    chrono::DateTime<chrono::Utc>,
-    Uuid,
-    String,
-    Option<String>,
-);
-
-/// K2：kb.document × kb.document_revision 行投影。
-type KbRevisionRow = (
-    Uuid,
-    Uuid,
-    String,
-    String,
-    i32,
-    String,
-    Option<String>,
-    String,
-    Option<String>,
-    chrono::DateTime<chrono::Utc>,
-);
-
 /// K2（checkpoint-1 落真）：`{id}` = kb_analyze 任务 ID（intake_task）。
 /// 返回任务状态 + result_ref；真实分析的 result_ref 指向 kb.document 修订，
 /// 就地展开文档/修订明细（含 digest 正文）；桩产物（非 UUID ref）只回任务面。
@@ -213,19 +189,11 @@ async fn k2_analysis_status(
 ) -> ApiResult<Json<serde_json::Value>> {
     let project_id = require_project_param(&query)?;
     guard(&state, &caller, project_id).await?;
-    let task: Option<AnalysisTaskRow> = sqlx::query_as(
-        "SELECT t.task_status, t.result_ref, t.last_error, t.created_at, t.updated_at, \
-                i.id, i.intake_type, i.title \
-           FROM integration.intake_task t \
-           JOIN integration.intake_record i ON i.id = t.intake_id \
-          WHERE t.id = $1 AND t.project_id = $2 \
-            AND t.target_service = 'kb' AND t.task_type = 'kb_analyze'",
-    )
-    .bind(kb_analysis_id)
-    .bind(project_id)
-    .fetch_optional(&state.pool)
-    .await?;
-    let Some((
+    let repo = kb_pc_query_repo(&state.pool);
+    let task = repo
+        .analysis_task(project_id, kb_analysis_id, "kb", "kb_analyze")
+        .await?;
+    let Some(AnalysisTaskRow {
         task_status,
         result_ref,
         last_error,
@@ -234,7 +202,7 @@ async fn k2_analysis_status(
         intake_id,
         intake_type,
         title,
-    )) = task
+    }) = task
     else {
         return Err(ApiError::NotFound("kb analysis task not found"));
     };
@@ -263,48 +231,21 @@ async fn k2_analysis_status(
                 .and_then(|raw| Uuid::parse_str(raw).ok())
         });
     if let Some(revision_id) = revision_id {
-        let revision: Option<KbRevisionRow> = sqlx::query_as(
-            "SELECT r.id, d.id, d.doc_key, d.doc_type, r.revision_no, r.status, \
-                    r.source_commit_sha, r.content_hash, r.change_summary, r.created_at \
-               FROM kb.document_revision r \
-               JOIN kb.document d ON d.id = r.document_id \
-              WHERE r.id = $1 AND d.project_id = $2",
-        )
-        .bind(revision_id)
-        .bind(project_id)
-        .fetch_optional(&state.pool)
-        .await?;
-        if let Some((
-            rev_id,
-            doc_id,
-            doc_key,
-            doc_type,
-            revision_no,
-            revision_status,
-            source_commit_sha,
-            content_hash,
-            change_summary,
-            rev_created_at,
-        )) = revision
-        {
-            let content: Option<String> =
-                sqlx::query_scalar("SELECT content FROM kb.document_revision WHERE id = $1")
-                    .bind(rev_id)
-                    .fetch_optional(&state.pool)
-                    .await?;
+        if let Some(rev) = repo.kb_revision(project_id, revision_id).await? {
+            let content = repo.kb_revision_content(rev.rev_id).await?;
             body["document"] = json!({
-                "document_id": doc_id,
-                "doc_key": doc_key,
-                "doc_type": doc_type,
+                "document_id": rev.doc_id,
+                "doc_key": rev.doc_key,
+                "doc_type": rev.doc_type,
                 "revision": {
-                    "revision_id": rev_id,
-                    "revision_no": revision_no,
-                    "status": revision_status,
-                    "source_commit_sha": source_commit_sha,
-                    "content_hash": content_hash,
-                    "change_summary": change_summary,
+                    "revision_id": rev.rev_id,
+                    "revision_no": rev.revision_no,
+                    "status": rev.revision_status,
+                    "source_commit_sha": rev.source_commit_sha,
+                    "content_hash": rev.content_hash,
+                    "change_summary": rev.change_summary,
                     "content": content,
-                    "created_at": rev_created_at,
+                    "created_at": rev.created_at,
                 },
             });
         }
@@ -444,19 +385,11 @@ async fn p3_analysis_status(
 ) -> ApiResult<Json<serde_json::Value>> {
     let project_id = require_project_param(&query)?;
     guard(&state, &caller, project_id).await?;
-    let task: Option<AnalysisTaskRow> = sqlx::query_as(
-        "SELECT t.task_status, t.result_ref, t.last_error, t.created_at, t.updated_at, \
-                i.id, i.intake_type, i.title \
-           FROM integration.intake_task t \
-           JOIN integration.intake_record i ON i.id = t.intake_id \
-          WHERE t.id = $1 AND t.project_id = $2 \
-            AND t.target_service = 'pc' AND t.task_type = 'pc_analyze'",
-    )
-    .bind(pc_analysis_id)
-    .bind(project_id)
-    .fetch_optional(&state.pool)
-    .await?;
-    let Some((
+    let repo = kb_pc_query_repo(&state.pool);
+    let task = repo
+        .analysis_task(project_id, pc_analysis_id, "pc", "pc_analyze")
+        .await?;
+    let Some(AnalysisTaskRow {
         task_status,
         result_ref,
         last_error,
@@ -465,7 +398,7 @@ async fn p3_analysis_status(
         intake_id,
         intake_type,
         title,
-    )) = task
+    }) = task
     else {
         return Err(ApiError::NotFound("pc analysis task not found"));
     };
@@ -497,24 +430,15 @@ async fn p3_analysis_status(
     // proposal 四元组）——结论 PROPOSED + 提案摘要，经提案来源展开本次分析对象集。
     if ref_type == "proposal" {
         if let Some(proposal_id) = ref_id {
-            let proposal: Option<(Option<Uuid>, String, String)> = sqlx::query_as(
-                "SELECT source_id, status, governance_level FROM pc.proposal \
-                  WHERE tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
-                    AND project_id = $1 AND id = $2",
-            )
-            .bind(project_id)
-            .bind(proposal_id)
-            .fetch_optional(&state.pool)
-            .await?;
-            if let Some((source_id, status, governance_level)) = proposal {
+            if let Some(head) = repo.pc_proposal_head(project_id, proposal_id).await? {
                 body["conclusion"] = json!("PROPOSED");
                 body["proposal_ref"] = json!(pc_ref("proposal", proposal_id));
                 body["proposal"] = json!({
                     "proposal_id": proposal_id,
-                    "status": status,
-                    "governance_level": governance_level,
+                    "status": head.status,
+                    "governance_level": head.governance_level,
                 });
-                if let Some(source_id) = source_id {
+                if let Some(source_id) = head.source_id {
                     body["objects"] =
                         json!(objects_of_source(&state, project_id, source_id).await?);
                 }
@@ -536,29 +460,7 @@ async fn p3_analysis_status(
     // 直查对象 + 当前修订（读面兼容，新分析不再产生此形状）。
     if ref_type == "cognition_object" {
         if let Some(object_id) = ref_id {
-            let rows: Vec<PcObjectRow> = sqlx::query_as(
-                "SELECT o.id, o.object_type, o.object_key, o.display_name, o.lifecycle_status, \
-                        rev.revision_no, rev.change_summary, dr.content, rev.analysis_mode, \
-                        vm.in_published_version AS versioned \
-                   FROM pc.cognition_object o \
-                   LEFT JOIN LATERAL ( \
-                        SELECT r2.revision_no, r2.change_summary, r2.analysis_mode, \
-                               r2.document_revision_id, r2.id AS rid \
-                          FROM pc.cognition_revision r2 \
-                         WHERE r2.tenant_id = o.tenant_id AND r2.project_id = o.project_id \
-                           AND r2.object_id = o.id \
-                         ORDER BY r2.revision_no DESC LIMIT 1 \
-                   ) rev ON true \
-                   LEFT JOIN pc.document_revision dr ON dr.id = rev.document_revision_id \
-                   LEFT JOIN pc.v_revision_versioned vm ON vm.object_revision_id = rev.rid \
-                  WHERE o.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
-                    AND o.project_id = $1 AND o.id = $2 \
-                  ORDER BY o.created_at ASC, o.id ASC",
-            )
-            .bind(project_id)
-            .bind(object_id)
-            .fetch_all(&state.pool)
-            .await?;
+            let rows = repo.pc_object_legacy(project_id, object_id).await?;
             if !rows.is_empty() {
                 body["objects"] = json!(rows.into_iter().map(pc_object_json).collect::<Vec<_>>());
             }
@@ -567,59 +469,19 @@ async fn p3_analysis_status(
     Ok(Json(body))
 }
 
-/// P3 来源展开：本次分析证据钉扎的对象集 + 各对象最新修订（正文、归因、是否已入正式
-/// 版本）。KP-2 勘误：KP-1 原查询 `rev` 别名重复（PG 42712，真实分析任务 P3 恒 500）
-/// 且 `versioned` 误读视图恒非空的 object_revision_id——改为子查询去重 + 视图
-/// `in_published_version`。
 async fn objects_of_source(
     state: &AppState,
     project_id: Uuid,
     source_id: Uuid,
 ) -> ApiResult<Vec<serde_json::Value>> {
-    let rows: Vec<PcObjectRow> = sqlx::query_as(
-        "SELECT o.id, o.object_type, o.object_key, o.display_name, o.lifecycle_status, \
-                latest.revision_no, latest.change_summary, dr.content, latest.analysis_mode, \
-                vm.in_published_version AS versioned \
-           FROM (SELECT DISTINCT cr.object_id \
-                   FROM pc.evidence e \
-                   JOIN pc.cognition_revision cr \
-                     ON cr.tenant_id = e.tenant_id AND cr.project_id = e.project_id \
-                    AND cr.id = e.object_revision_id \
-                  WHERE e.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
-                    AND e.project_id = $1 AND e.source_id = $2) hit \
-           JOIN pc.cognition_object o ON o.id = hit.object_id \
-           LEFT JOIN LATERAL ( \
-                SELECT r2.id, r2.revision_no, r2.change_summary, r2.analysis_mode, \
-                       r2.document_revision_id \
-                  FROM pc.cognition_revision r2 \
-                 WHERE r2.tenant_id = o.tenant_id AND r2.project_id = o.project_id \
-                   AND r2.object_id = o.id \
-                 ORDER BY r2.revision_no DESC LIMIT 1 \
-           ) latest ON true \
-           LEFT JOIN pc.document_revision dr ON dr.id = latest.document_revision_id \
-           LEFT JOIN pc.v_revision_versioned vm ON vm.object_revision_id = latest.id \
-          ORDER BY o.created_at ASC, o.id ASC",
-    )
-    .bind(project_id)
-    .bind(source_id)
-    .fetch_all(&state.pool)
-    .await?;
+    let rows = kb_pc_query_repo(&state.pool)
+        .pc_objects_of_source(project_id, source_id)
+        .await?;
     Ok(rows.into_iter().map(pc_object_json).collect())
 }
 
 /// P3 对象行投影（新/旧形状共用）：列序见两处查询。
-type PcObjectRow = (
-    Uuid,
-    String,
-    String,
-    String,
-    String,
-    Option<i32>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Option<bool>,
-);
+type PcObjectRow = pm_application::repo::kb_pc_query::PcObjectRow;
 
 fn pc_object_json(
     (
@@ -796,27 +658,24 @@ async fn list_pc_objects(
         principal.principal_id,
     )
     .await?;
-    let rows: Vec<serde_json::Value> = sqlx::query(
-        "SELECT o.id, o.object_type, o.object_key, o.display_name, o.lifecycle_status,                 o.updated_at, rev.revision_no, rev.change_summary,                 left(dr.content, 240) AS excerpt            FROM pc.cognition_object o            LEFT JOIN LATERAL (                 SELECT r2.revision_no, r2.change_summary, r2.document_revision_id                   FROM pc.cognition_revision r2                  WHERE r2.tenant_id = o.tenant_id AND r2.project_id = o.project_id                    AND r2.object_id = o.id                  ORDER BY r2.revision_no DESC LIMIT 1            ) rev ON true            LEFT JOIN pc.document_revision dr ON dr.id = rev.document_revision_id           WHERE o.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1)             AND o.project_id = $1           ORDER BY o.updated_at DESC, o.display_name ASC",
-    )
-    .bind(project_id)
-    .fetch_all(&state.pool)
-    .await?
-    .into_iter()
-    .map(|row| {
-        json!({
-            "object_id": row.get::<uuid::Uuid, _>("id"),
-            "object_type": row.get::<String, _>("object_type"),
-            "object_key": row.get::<Option<String>, _>("object_key"),
-            "display_name": row.get::<String, _>("display_name"),
-            "lifecycle_status": row.get::<String, _>("lifecycle_status"),
-            "revision_no": row.get::<Option<i32>, _>("revision_no"),
-            "change_summary": row.get::<Option<String>, _>("change_summary"),
-            "excerpt": row.get::<Option<String>, _>("excerpt"),
-            "updated_at": row.get::<chrono::DateTime<chrono::Utc>, _>("updated_at"),
+    let rows: Vec<pm_application::repo::kb_pc_query::PcObjectListRow> =
+        kb_pc_query_repo(&state.pool).list_pc_objects(project_id).await?;
+    let rows: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|r| {
+            json!({
+                "object_id": r.id,
+                "object_type": r.object_type,
+                "object_key": r.object_key,
+                "display_name": r.display_name,
+                "lifecycle_status": r.lifecycle_status,
+                "revision_no": r.revision_no,
+                "change_summary": r.change_summary,
+                "excerpt": r.excerpt,
+                "updated_at": r.updated_at,
+            })
         })
-    })
-    .collect();
+        .collect();
     Ok(Json(json!({ "items": rows })))
 }
 
@@ -841,28 +700,26 @@ async fn list_pc_proposals(
     )
     .await?;
     let status_filter = query.get("status").map(|s| s.trim().to_string());
-    let rows: Vec<serde_json::Value> = sqlx::query(
-        "SELECT p.id, p.title, p.status, p.risk_level, p.confidence, p.origin_kind,                 p.expected_version_no, p.proposal_content_hash, p.submitted_at, p.created_at,                 (SELECT count(*) FROM pc.proposal_member m                   WHERE m.tenant_id = p.tenant_id AND m.project_id = p.project_id                     AND m.proposal_id = p.id) AS member_count            FROM pc.proposal p           WHERE p.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1)             AND p.project_id = $1             AND ($2::text IS NULL OR p.status = $2)           ORDER BY p.created_at DESC",
-    )
-    .bind(project_id)
-    .bind(status_filter)
-    .fetch_all(&state.pool)
-    .await?
-    .into_iter()
-    .map(|row| {
-        json!({
-            "proposal_id": row.get::<uuid::Uuid, _>("id"),
-            "title": row.get::<String, _>("title"),
-            "status": row.get::<String, _>("status"),
-            "risk_level": row.get::<String, _>("risk_level"),
-            "confidence": row.get::<String, _>("confidence"),
-            "origin_kind": row.get::<String, _>("origin_kind"),
-            "expected_version_no": row.get::<i64, _>("expected_version_no"),
-            "member_count": row.get::<i64, _>("member_count"),
-            "submitted_at": row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("submitted_at"),
-            "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+    let rows: Vec<pm_application::repo::kb_pc_query::PcProposalListRow> =
+        kb_pc_query_repo(&state.pool)
+            .list_pc_proposals(project_id, status_filter.as_deref())
+            .await?;
+    let rows: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|r| {
+            json!({
+                "proposal_id": r.id,
+                "title": r.title,
+                "status": r.status,
+                "risk_level": r.risk_level,
+                "confidence": r.confidence,
+                "origin_kind": r.origin_kind,
+                "expected_version_no": r.expected_version_no,
+                "member_count": r.member_count,
+                "submitted_at": r.submitted_at,
+                "created_at": r.created_at,
+            })
         })
-    })
-    .collect();
+        .collect();
     Ok(Json(json!({ "items": rows })))
 }
