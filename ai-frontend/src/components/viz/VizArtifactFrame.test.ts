@@ -86,12 +86,28 @@ describe("VizArtifactFrame", () => {
     );
   });
 
-  it("stale 状态显示过期提示", async () => {
+  it("stale 状态显示过期提示（独立 StaleBar 组件）", async () => {
     const wrapper = mountShell(VizArtifactFrame, {
       props: { artifact: artifact({ state: "stale" }) }
     });
     await settle();
-    expect(wrapper.find('[data-testid="viz-stale-hint"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="viz-stale-bar"]').exists()).toBe(true);
+  });
+
+  it("非 stale 状态不显示过期提示", async () => {
+    const wrapper = mountShell(VizArtifactFrame, {
+      props: { artifact: artifact({ state: "published" }) }
+    });
+    await settle();
+    expect(wrapper.find('[data-testid="viz-stale-bar"]').exists()).toBe(false);
+  });
+
+  it("提供 SVG 导出入口（经产物字节接口，不裸取 URL）", async () => {
+    const wrapper = mountShell(VizArtifactFrame, {
+      props: { artifact: artifact() }
+    });
+    await settle();
+    expect(wrapper.find('[data-testid="viz-export-svg"]').exists()).toBe(true);
   });
 
   it("explanatory 产物显示「非正式认知」标识", async () => {

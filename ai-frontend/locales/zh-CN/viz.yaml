@@ -18,6 +18,9 @@ artifact:
   loadFailed: "图形加载失败，请改用表格视图。"
   accept: "接受"
   reject: "拒绝"
+  accepted: "已接受该图形呈现（业务事实仍需原领域审批）"
+  rejected: "已拒绝该图形呈现"
+  exportFailed: "导出失败，请重试"
 
 table:
   nodes: "节点（{count}）"
@@ -65,8 +68,14 @@ tab:
   graph: "图形"
   loading: "加载中…"
   loadFailed: "图形列表加载失败"
+  loadFailedHint: "请重试；若持续失败请联系管理员。"
+  retry: "重试"
   empty: "暂无图形"
   emptyHint: "当前项目还没有可用的图形产物。可在对话中要求生成。"
+
+stale:
+  changed: "已变化来源：{count}"
+  regenerate: "重新生成"
 
 version:
   label: "版本"
@@ -74,6 +83,7 @@ version:
   compare: "版本对比"
   exportSvg: "导出 SVG"
   exportHtml: "导出 HTML"
+  diffSummary: "v{left} → v{right}：节点 {nodes} · 关系 {edges}"
 
 explanation:
   keyFindings: "关键发现"

@@ -10,11 +10,13 @@
  * 节点级信息经表格视图与溯源面板访问（UX-D11 / UX-P0-11）。
  */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { AlertTriangle, FileWarning } from "lucide-vue-next";
+import { FileWarning } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 import { fetchArtifactSvgUrl } from "@/api/visualizations";
+import { exportArtifactHtml, exportArtifactSvg } from "@/lib/viz/export";
 import type { VizArtifact } from "@/lib/viz/types";
 import Badge from "@/components/ui/badge/Badge.vue";
+import VizStaleBar from "./VizStaleBar.vue";
 
 interface Props {
   /** 产物元数据。 */
@@ -31,6 +33,8 @@ const emit = defineEmits<{
   accept: [];
   reject: [];
   openSource: [nodeId: string];
+  regenerate: [];
+  exportArtifact: [format: "svg" | "html"];
 }>();
 
 const { t } = useI18n();
@@ -55,6 +59,28 @@ function releaseUrl(): void {
   if (svgUrl.value) {
     URL.revokeObjectURL(svgUrl.value);
     svgUrl.value = null;
+  }
+}
+
+/** 导出产物（服务端取字节 → 下载）。失败只提示，不阻断。 */
+async function handleExport(format: "svg" | "html"): Promise<void> {
+  try {
+    if (format === "svg") {
+      await exportArtifactSvg(
+        props.artifact.id,
+        props.artifact.slot_key,
+        props.artifact.version_no
+      );
+    } else {
+      await exportArtifactHtml(
+        props.artifact.id,
+        props.artifact.slot_key,
+        props.artifact.version_no
+      );
+    }
+    emit("exportArtifact", format);
+  } catch {
+    loadError.value = t("viz.artifact.exportFailed");
   }
 }
 
@@ -136,37 +162,52 @@ const isExplanatory = computed(() => props.artifact.nature === "explanatory");
       />
     </figure>
 
-    <p
-      v-if="artifact.state === 'stale'"
-      class="viz-frame__stale"
-      :data-testid="'viz-stale-hint'"
-    >
-      <AlertTriangle :size="14" aria-hidden="true" />
-      <span>{{ t("viz.artifact.staleHint") }}</span>
-    </p>
+    <VizStaleBar
+      :visible="artifact.state === 'stale'"
+      @regenerate="emit('regenerate')"
+    />
 
     <p class="viz-frame__hint" :data-testid="'viz-interaction-hint'">
       {{ t("viz.artifact.interactionHint") }}
     </p>
 
-    <footer v-if="actionable" class="viz-frame__actions">
+    <footer class="viz-frame__actions">
       <button
         type="button"
-        class="viz-frame__action viz-frame__action--accept"
-        :disabled="isExplanatory"
-        :data-testid="'viz-accept'"
-        @click="emit('accept')"
+        class="viz-frame__action"
+        :data-testid="'viz-export-svg'"
+        @click="handleExport('svg')"
       >
-        {{ t("viz.artifact.accept") }}
+        {{ t("viz.version.exportSvg") }}
       </button>
       <button
+        v-if="!isExplanatory"
         type="button"
-        class="viz-frame__action viz-frame__action--reject"
-        :data-testid="'viz-reject'"
-        @click="emit('reject')"
+        class="viz-frame__action"
+        :data-testid="'viz-export-html'"
+        @click="handleExport('html')"
       >
-        {{ t("viz.artifact.reject") }}
+        {{ t("viz.version.exportHtml") }}
       </button>
+      <template v-if="actionable">
+        <button
+          type="button"
+          class="viz-frame__action viz-frame__action--accept"
+          :disabled="isExplanatory"
+          :data-testid="'viz-accept'"
+          @click="emit('accept')"
+        >
+          {{ t("viz.artifact.accept") }}
+        </button>
+        <button
+          type="button"
+          class="viz-frame__action viz-frame__action--reject"
+          :data-testid="'viz-reject'"
+          @click="emit('reject')"
+        >
+          {{ t("viz.artifact.reject") }}
+        </button>
+      </template>
     </footer>
   </section>
 </template>

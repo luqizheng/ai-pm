@@ -15,15 +15,18 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { PageFrame } from "@/components/shell";
-import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import { SCOPE_ALL, useScopeStore } from "@/api/scope";
 import {
   getArtifact,
+  listArtifacts,
   listSlots,
   type VizSlotSummary
 } from "@/api/visualizations";
 import type { VizArtifact, VizNode } from "@/lib/viz/types";
 import VizArtifactFrame from "@/components/viz/VizArtifactFrame.vue";
+import VizAiExplanation from "@/components/viz/VizAiExplanation.vue";
+import VizEmptyState from "@/components/viz/VizEmptyState.vue";
+import VizFeedbackArea from "@/components/viz/VizFeedbackArea.vue";
 import VizSpecTable from "@/components/viz/VizSpecTable.vue";
 import VizTracePanel from "@/components/viz/VizTracePanel.vue";
 import VizVersionBar from "@/components/viz/VizVersionBar.vue";
@@ -38,6 +41,9 @@ const loading = ref(false);
 const failed = ref(false);
 const traceOpen = ref(false);
 const traceNode = ref<VizNode | null>(null);
+const history = ref<VizArtifact[]>([]);
+const compareHint = ref<string | null>(null);
+const feedbackText = ref<string | null>(null);
 
 /** 项目 id：query 优先 → 回退 scope（排除哨兵）。 */
 const projectId = computed(() => {
@@ -72,9 +78,56 @@ async function load(): Promise<void> {
 async function selectSlot(slot: VizSlotSummary): Promise<void> {
   try {
     artifact.value = await getArtifact(slot.artifact_id);
+    history.value = await loadHistory(slot.slot_key);
+    compareHint.value = null;
   } catch {
     failed.value = true;
   }
+}
+
+/** 取槽位历史版本（用于版本栏与对比）。 */
+async function loadHistory(slotKey: string): Promise<VizArtifact[]> {
+  try {
+    const response = await listArtifacts(projectId.value, {
+      slot_key: slotKey,
+      size: 20
+    });
+    return (response.items ?? []).filter(a => a.id !== artifact.value?.id);
+  } catch {
+    return [];
+  }
+}
+
+/** 切换到指定版本。 */
+async function selectVersion(artifactId: string): Promise<void> {
+  try {
+    artifact.value = await getArtifact(artifactId);
+  } catch {
+    failed.value = true;
+  }
+}
+
+/** 版本对比：展示两版之间的对象差异概要（结构化 diff，非像素对比）。 */
+function compareVersions(leftId: string, rightId: string): void {
+  const left = allVersions.value.find(a => a.id === leftId);
+  const right = allVersions.value.find(a => a.id === rightId);
+  if (!left || !right) return;
+  compareHint.value = t("viz.version.diffSummary", {
+    left: left.version_no,
+    right: right.version_no,
+    nodes: right.spec.nodes.length - left.spec.nodes.length,
+    edges: right.spec.edges.length - left.spec.edges.length
+  });
+}
+
+/** 全部版本（当前 + 历史），供对比查找。 */
+const allVersions = computed(() =>
+  artifact.value ? [artifact.value, ...history.value] : []
+);
+
+/** 反馈：主视图内不直接触发生成——回到对话上下文执行（V0-5 链路）。 */
+function onFeedback(text: string): void {
+  feedbackText.value = text;
 }
 
 function openTrace(node: VizNode): void {
@@ -98,12 +151,7 @@ onMounted(() => {
         <p v-else-if="failed" class="viz-view__muted">
           {{ t("viz.tab.loadFailed") }}
         </p>
-        <EmptyState
-          v-else-if="slots.length === 0"
-          size="sm"
-          :title="t('viz.tab.empty')"
-          :description="t('viz.tab.emptyHint')"
-        />
+        <VizEmptyState v-else-if="slots.length === 0" />
         <ul v-else class="viz-view__slot-list">
           <li v-for="slot in slots" :key="slot.slot_key">
             <button
@@ -120,16 +168,38 @@ onMounted(() => {
 
       <section class="viz-view__main">
         <template v-if="artifact">
-          <VizVersionBar :artifact="artifact" />
-          <VizArtifactFrame :artifact="artifact" />
+          <VizVersionBar
+            :artifact="artifact"
+            :history="history"
+            :explanatory="artifact.nature === 'explanatory'"
+            @select-version="selectVersion"
+            @compare="compareVersions"
+          />
+          <p
+            v-if="compareHint"
+            class="viz-view__compare"
+            :data-testid="'viz-compare-hint'"
+          >
+            {{ compareHint }}
+          </p>
+          <VizArtifactFrame
+            :artifact="artifact"
+            actionable
+            @accept="onFeedback(t('viz.artifact.accepted'))"
+            @reject="onFeedback(t('viz.artifact.rejected'))"
+            @regenerate="onFeedback(t('viz.stale.regenerate'))"
+          />
           <VizSpecTable :spec="artifact.spec" @select-node="openTrace" />
+          <VizFeedbackArea @feedback="onFeedback" />
+          <p
+            v-if="feedbackText"
+            class="viz-view__compare"
+            :data-testid="'viz-feedback-hint'"
+          >
+            {{ feedbackText }}
+          </p>
         </template>
-        <EmptyState
-          v-else
-          size="sm"
-          :title="t('viz.tab.empty')"
-          :description="t('viz.tab.emptyHint')"
-        />
+        <VizEmptyState v-else :failed="failed" @action="load" />
       </section>
     </div>
 

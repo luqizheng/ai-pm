@@ -15,6 +15,7 @@
 import { http } from "./base";
 import type { ListResponse, Paged } from "./types";
 import type { VizArtifact, VizLiveResponse, VizSpec } from "@/lib/viz/types";
+import { toLiveSpec, toVizArtifact } from "@/lib/viz/specAdapter";
 
 /** 槽位摘要（槽位列表用，不返回 spec 全文）。 */
 export interface VizSlotSummary {
@@ -59,10 +60,14 @@ export async function listArtifacts(
   if (query.state) params.state = query.state;
   if (query.page) params.page = query.page;
   if (query.size) params.size = query.size;
-  return http.get<Paged<VizArtifact>>(
+  const response = await http.get<Paged<unknown>>(
     `/v1/pm/visualizations/projects/${projectId}/artifacts`,
     { params }
   );
+  return {
+    ...response,
+    items: (response.items ?? []).map(dto => toVizArtifact(dto))
+  };
 }
 
 /**
@@ -75,10 +80,11 @@ export async function createDraft(
   projectId: string,
   spec: VizSpec
 ): Promise<VizArtifact> {
-  return http.post<VizArtifact>(
+  const dto = await http.post<unknown>(
     `/v1/pm/visualizations/projects/${projectId}/artifacts`,
     spec
   );
+  return toVizArtifact(dto);
 }
 
 /** 审批决定：批准 / 拒绝（拒绝必带 reason）。 */
@@ -122,6 +128,21 @@ export async function fetchArtifactSvgUrl(artifactId: string): Promise<string> {
   return URL.createObjectURL(new Blob([response], { type: "image/svg+xml" }));
 }
 
+/**
+ * 取渲染产物字节（任意格式）。
+ *
+ * 走 SDK 而非裸 fetch——产物接口需要 Bearer 头，裸 fetch 会丢鉴权。
+ */
+export async function fetchArtifactOutputBlob(
+  artifactId: string,
+  format: "svg" | "png" | "html"
+): Promise<Blob> {
+  return http.get<Blob>(
+    `/v1/pm/visualizations/artifacts/${artifactId}/outputs/${format}`,
+    { responseType: "blob" }
+  );
+}
+
 /** Live 图查询（在线交互图，P1）。 */
 export async function getLiveGraph(
   projectId: string,
@@ -132,4 +153,14 @@ export async function getLiveGraph(
     `/v1/pm/visualizations/projects/${projectId}/live/${viewKind}`,
     { params }
   );
+}
+
+/** Live 图 → 前端 VizSpec（走唯一转换点）。 */
+export async function getLiveSpec(
+  projectId: string,
+  viewKind: string,
+  params: Record<string, string> = {}
+): Promise<VizSpec> {
+  const response = await getLiveGraph(projectId, viewKind, params);
+  return toLiveSpec(response);
 }

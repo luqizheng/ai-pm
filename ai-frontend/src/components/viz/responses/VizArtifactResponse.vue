@@ -14,6 +14,8 @@ import { useI18n } from "vue-i18n";
 
 import Badge from "@/components/ui/badge/Badge.vue";
 import Button from "@/components/ui/button/Button.vue";
+import VizAiExplanation from "@/components/viz/VizAiExplanation.vue";
+import VizFeedbackArea from "@/components/viz/VizFeedbackArea.vue";
 import AiResponseCard from "@/components/ui/ai-interaction/card/AiResponseCard.vue";
 import { defaultAiIdentity } from "@/components/ui/ai-interaction/identity";
 import type {
@@ -33,6 +35,17 @@ export interface VizArtifactPayload {
   versionNo?: number;
   nodeCount?: number;
   edgeCount?: number;
+  /** AI 解释（受控字段，非模型自由文本直出）。 */
+  explanation?: {
+    summary?: string;
+    keyFindings?: string[];
+    directRelations?: string[];
+    indirectRelations?: string[];
+    risks?: string[];
+    pendingConfirmations?: string[];
+  };
+  /** 审批 id（Accept / Reject 用）。 */
+  approvalId?: string;
 }
 
 const props = withDefaults(
@@ -52,6 +65,12 @@ const props = withDefaults(
 );
 
 const { t } = useI18n();
+
+const emit = defineEmits<{
+  accept: [approvalId: string | undefined];
+  reject: [approvalId: string | undefined];
+  feedback: [text: string];
+}>();
 
 const isExplanatory = computed(() => props.payload.nature === "explanatory");
 const stateLabel = computed(() =>
@@ -107,14 +126,31 @@ const stateLabel = computed(() =>
         {{ t("viz.artifact.interactionHint") }}
       </p>
 
+      <VizAiExplanation
+        v-if="payload.explanation"
+        :explanation="payload.explanation"
+      />
+
       <div v-if="!isExplanatory" class="viz-response__actions">
-        <Button size="sm" variant="primary" :data-testid="'viz-accept'">
+        <Button
+          size="sm"
+          variant="primary"
+          :data-testid="'viz-accept'"
+          @click="emit('accept', payload.approvalId)"
+        >
           {{ t("viz.artifact.accept") }}
         </Button>
-        <Button size="sm" variant="ghost" :data-testid="'viz-reject'">
+        <Button
+          size="sm"
+          variant="ghost"
+          :data-testid="'viz-reject'"
+          @click="emit('reject', payload.approvalId)"
+        >
           {{ t("viz.artifact.reject") }}
         </Button>
       </div>
+
+      <VizFeedbackArea @feedback="emit('feedback', $event)" />
     </div>
   </AiResponseCard>
 </template>

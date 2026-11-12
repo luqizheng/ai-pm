@@ -16,6 +16,9 @@ artifact:
   loadFailed: "Failed to load the diagram — use the table view instead."
   accept: "Accept"
   reject: "Reject"
+  accepted: "Presentation accepted (business facts still need approval in their own domain)"
+  rejected: "Presentation rejected"
+  exportFailed: "Export failed, please retry"
 
 table:
   nodes: "Nodes ({count})"
@@ -63,8 +66,14 @@ tab:
   graph: "Graphs"
   loading: "Loading…"
   loadFailed: "Failed to load the graph list"
+  loadFailedHint: "Please retry; contact an administrator if it persists."
+  retry: "Retry"
   empty: "No graphs yet"
   emptyHint: "This project has no graph artifacts yet. Ask in the conversation to generate one."
+
+stale:
+  changed: "Changed sources: {count}"
+  regenerate: "Regenerate"
 
 version:
   label: "Version"
@@ -72,6 +81,7 @@ version:
   compare: "Compare versions"
   exportSvg: "Export SVG"
   exportHtml: "Export HTML"
+  diffSummary: "v{left} → v{right}: {nodes} nodes · {edges} relations"
 
 explanation:
   keyFindings: "Key findings"

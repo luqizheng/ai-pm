@@ -205,7 +205,7 @@ src/lib/viz/
 | # | 任务 | 完成定义 |
 |---|---|---|
 | V0-8.1 | API 层 | `src/api/visualizations.ts`（顶部块注释写契约与边界 → 类型 → 纯函数 `http.get`；分页用 `Paged<T>`）；Blob 下载 helper（复用 `self-service.ts:90-108` 范式） |
-| V0-8.2 | 类型与转换 | `src/lib/viz/types.ts` + `specAdapter.ts`（后端 payload → VizSpec **唯一**转换点） |
+| V0-8.2 | 类型与转换 | `src/lib/viz/types.ts` + `src/lib/viz/specAdapter.ts`（后端 payload → VizSpec **唯一**转换点；**不做静默默认**——字段缺失即抛 `VizContractError`，不让契约破损被默认值掩盖；API 层统一经该转换点，组件只面对前端模型） |
 | V0-8.3 | 产物卡 | `VizArtifactResponse.vue` + `VizArtifactFrame.vue`（`<img>` + blob + revoke + 状态条 + 操作槽） |
 | V0-8.4 | 降级表格 | `VizSpecTable.vue`（nodes/edges + source_ref 列 + unlinked 标注）；**同时作为 P0 节点导航通道** |
 | V0-8.5 | 溯源侧栏 | `VizTracePanel.vue`（Sheet 范式 + Direct/Indirect 分区） |
