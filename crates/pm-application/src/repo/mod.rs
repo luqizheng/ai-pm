@@ -9,6 +9,7 @@
 //! 需要 NotFound/Conflict 语义的域在迁移时逐步引入 `RepoError`，不在骨架期
 //! 预设抽象。
 
+pub mod acceptance_read;
 pub mod ai_team_monitor;
 pub mod baseline;
 pub mod cognition;
@@ -16,11 +17,13 @@ pub mod identity;
 pub mod customer;
 pub mod design_guard;
 pub mod guard_query;
+pub mod platform_ops;
 pub mod kb_pc_query;
 pub mod runs;
 pub mod tenant_members;
 pub mod lists;
 
+pub use acceptance_read::AcceptanceReadRepo;
 pub use ai_team_monitor::AiTeamMonitorRepo;
 pub use baseline::{BaselineRepo, BaselineRepoError};
 pub use cognition::{CognitionRepo, CognitionRepoError};
@@ -28,6 +31,7 @@ pub use identity::{IdentityRepo, IdentityRepoError};
 pub use customer::CustomerRepo;
 pub use design_guard::DesignGuardRepo;
 pub use guard_query::GuardQueryRepo;
+pub use platform_ops::PlatformOpsRepo;
 pub use kb_pc_query::KbPcQueryRepo;
 pub use runs::RunRepo;
 pub use tenant_members::{MemberRepo, MemberRepoError};
