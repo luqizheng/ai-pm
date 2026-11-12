@@ -65,7 +65,7 @@ AI-PM 当前的信息表达只有两层：**文本叙事**（Markdown 文档、�
 - 图形以 Artifact 形式持久化：`viz_artifact`（spec + 渲染产物 + 来源指纹 + 版本号 + 状态机）。
 - 状态机：`draft → published → stale`（+ `rejected`）；草稿不可见（仅作者预览），发布需审批（P3）。
 - 同一"图形槽位"（slot，如 `project:{id}/architecture-map`）多版本并存，可对比、可回看。
-- Stale 判定：Artifact 记录其输入数据指纹（source_hash：所引用对象 id+revision_id+content_hash 集合的哈希）；任一源对象变更 → 标记 stale，不删除旧版本。
+- Stale 判定：Artifact 记录其输入数据指纹（source_hash：按 12 号设计 §6 规范化后的小写 hex sha256）；任一源对象变更 → 标记 stale，不删除旧版本。
 
 ### FR-2 在线图视图（Live View）
 - 六领域图视图（清单见 D5 矩阵），数据来自图查询端点实时聚合，随数据即时更新，不落 Artifact。

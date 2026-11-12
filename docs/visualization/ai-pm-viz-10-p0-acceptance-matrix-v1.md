@@ -20,7 +20,7 @@
 
 | AC | 主题 | 阶段 | 实施任务 | 阻断 | 依赖 |
 |---|---|---|---|---|---|
-| AC-1 | Spec 校验 E/W/I + Golden | P0 | V0-1/V0-4 | B1 | R-06/07/09（设计闭合） |
+| AC-1 | Spec 校验 E/W/I + Golden | P0 | V0-1/V0-4 | B1 | R-06/07/09（设计闭合）；实现方案见 [12 号 V0-1 设计](ai-pm-viz-12-v0-1-spec-validation-design-v1.md) |
 | AC-2 | Adapter 多目标 + 降级 | P0 基础 / P1 完整 | V0-4/V0-9 | B1（P0 部分） | V-4 |
 | AC-3 | Artifact 状态机全路径 | P0 | V0-2 | B1 | R-04 |
 | AC-4 | stale 指纹矩阵 | P0 | V0-2/V0-3 | B1 | R-04/05/07 |
@@ -50,7 +50,7 @@
 
 | AC | 测试场景 | 实施任务 | 验收证据 | 阻断 |
 |---|---|---|---|---|
-| AC-1 | T-01 合法样例集（每 kind ≥1）全过校验；T-02 非法样例逐条返回预期 `{code,at,fix}`（未知引用/缺 source_ref/超预算/未登记 rel）；T-03 Golden：固定输入→校验输出与规范化结构快照比对，任何人改 Spec 行为必须显式更新快照并过审 | V0-1/V0-4 | `pm-domain/visualization/validation` 单测 + `tests/viz_golden/` 快照库 + CI `viz-golden` job | B1 |
+| AC-1 | T-01 合法样例集（每 kind ≥1）全过校验；T-02 非法样例逐条返回预期 `{code,at,fix}`（未知引用/缺 source_ref/超预算/未登记 rel）；T-03 Golden：固定输入→校验输出与规范化结构快照比对，任何人改 Spec 行为必须显式更新快照并过审 | V0-1/V0-4 | `crates/pm-domain/src/visualization/validation` 内联单测 + `validation/golden/{cases,expected}` 手写比对 + `scripts/viz-spec-lint.js` | B1 |
 | AC-4 | T-04 指纹变更矩阵：对 revision_id/content_hash/关系版本/槽位配置各自变更 → stale 判定逐一断言；T-05 published 内容不可变（UPDATE 拒绝） | V0-2/V0-3 | Rust 集成测 `apps/pm-api/tests/viz_stale.rs` | B1 |
 
 ### B. Artifact 生命周期（AC-3，依赖 R-04 状态机分离设计）
@@ -89,17 +89,19 @@
 | AC | 测试场景 | 实施任务 | 验收证据 | 阻断 |
 |---|---|---|---|---|
 | AC-2（P0 部分） | T-25 每已交付 kind ≥1 主呈现 + ≥1 Fallback；Contract 八项断言（合法 HTML/SVG、零意外外网、无注入、溯源保留、节点/边身份保留、失败可处理）；T-26 降级演练：模拟 SeeCode 不可用 → Fallback 按矩阵生效、链路不阻断。P0 **不要求** G6 第二渲染目标（完整语义 P1 闭合） | V0-4/V0-9 | `tests/viz_contract.rs` + 演练记录 | B1 |
-| AC-12 | T-27 `VIZ_ENABLED=false`：API 404/403 语义、前端入口隐藏、后台任务不调度、既有链路回归、已有 Artifact 不阻塞业务请求（ADR-001 七项） | V0-8 + 专项 | CI `viz-detach` job：关分区跑全量既有测试绿 | B1 |
+| AC-12 | T-27 `VIZ_ENABLED=false`：API 404/403 语义、前端入口隐藏、后台任务不调度、既有链路回归、已有 Artifact 不阻塞业务请求（ADR-001 七项） | V0-8 + 专项 | `scripts/test.sh` 内 `viz-detach` 分支：关分区跑全量既有测试绿（仓内无 CI workflow，落本地脚本） | B1 |
 | AC-13 | T-28 发布构建产物无 fixtures/demo/mock 引用 | V0-8 | release-guard 既有门禁输出 | B1 |
 | AC-14 | T-29 `viz.*` 命名空间完整 + 硬编码扫描 | V0-8 | `check:i18n` 双脚本输出 | B1 |
 | AC-15 | T-30 任一节点点击 → TracePanel 显示 source_ref 并可跳转 locator；无溯源对象显式 unlinked 灰标（UI 断言） | V0-2/V0-8 | vitest + e2e | B1 |
-| AC-16 | T-31 接受图形后审计断言：业务域对象零变更（**viz 自身四表写入允许**，按 ADR V1.0.1 §2.1）；T-32 架构 lint：viz 模块 import 领域写 service 即构建失败 | V0-2/V0-5 | 审计查询输出 + lint job `viz-no-write-path` | B1 |
+| AC-16 | T-31 接受图形后审计断言：业务域对象零变更（**viz 自身四表写入允许**，按 ADR V1.0.1 §2.1）；T-32 架构 lint：viz 模块 import 领域写 service 即构建失败 | V0-2/V0-5 | 审计查询输出 + `scripts/viz-no-write-path.sh` | B1 |
 | AC-11（P0 部分） | T-33 预算执行：>500 节点 E 级拒绝；30/150/500 分档行为断言；150 节点帧率**基线定义与测量脚本**交付（实测达标 P1） | V0-1/V0-8 | 校验单测 + `docs/visualization/viz-perf-baseline.md` + 测量脚本 | B1（P0 部分） |
 | AC-10 | T-34 中文用例集：长标签换行/图例中文/SVG 内嵌字体/深色一致（HTML+SVG 双路） | V0-10 | `e2e/viz/i18n-zh.spec.ts` + 快照 | B1 |
 
 ## 4. 场景-证据汇总
 
-24+ 组场景（T-01~T-34，含复用），证据工件共 5 类：Rust 集成测（6 个新测试文件）、playwright 安全/E2E（独立 config，5 个 spec）、vitest（组件级）、CI 任务（`viz-golden`/`viz-detach`/`viz-no-write-path` + 既有 release-guard/check:i18n）、人工签收件（V-2/V-3/V-4 签收、`viz-offline-audit.md`、`viz-perf-baseline.md`、R-03 决策记录、降级演练记录）。
+24+ 组场景（T-01~T-34，含复用），证据工件共 5 类：Rust 集成测（6 个新测试文件）、playwright 安全/E2E（独立 config，5 个 spec）、vitest（组件级）、**本地门禁脚本**（`scripts/viz-registry-lint.js`/`scripts/viz-spec-lint.js`/`scripts/viz-no-write-path.sh` + 既有 release-guard/check:i18n，经 `scripts/test.sh` 串联 —— **仓内无 CI workflow，"CI 任务"一律落为本地脚本**）、人工签收件（V-2/V-3/V-4 签收、`viz-offline-audit.md`、`viz-perf-baseline.md`、R-03 决策记录、降级演练记录）。
+
+> 另：**Golden 快照无 insta/expect-test 可用**（仓内零快照 crate）→ 手写文件比对，方案见 [12 号 V0-1 设计](ai-pm-viz-12-v0-1-spec-validation-design-v1.md) §8.1。
 
 ## 5. P1 移交清单（不阻断 M1，P1 前必须闭合）
 
@@ -123,6 +125,18 @@
 | 待办 | Migration Owner 于 V0-1 启动日在**真实 master** 上复核 `ls migrations/` 与台账后签收确认；若复核结果 >0054 则顺延；确认前任何 viz 迁移不得建文件 |
 
 R-02 关闭声明：本矩阵 §2 已登记全部 21 条归属；请 QA Owner 签收。R-03 维持开放（AC-6-PNG=B2）。
+
+### 6.1 R-01 补充核查（2026-11-12 第二轮，跨分支）
+
+| 证据 | 结果 |
+|---|---|
+| `git ls-files migrations/`（master/origin/master 树） | 仅 **0001–0019**（19 个文件） |
+| `git log --all --diff-filter=A -- 'migrations/*.sql'` | 跨分支出现的迁移号已达 **0064**（0044–0064 区间有 0029、0045、0048 缺号） |
+| `0055` 占用情况 | **已被 `0055_device_name_active_unique.sql` 占用**（devenv 修复迁移），不可取用 |
+| 相关提交是否在 origin/master | 5393e706 / cca7d070 / 0c05946e / 4a592d7c **均在 origin/master 历史中**，但对应文件不在 master 当前工作树 → 迁移文件存在"已合入历史、未留存工作树"的不一致 |
+| 结论 | **本文件先前"暂定 0055"作废**；真实可用编号须以 master 实际迁移目录实况 + 台账双源核对后确定，且需确认迁移目录的真实归属（master 树仅 0019 vs 历史 0064 的不一致本身需先解释） |
+
+**处置（依 2026-11-12 决策）**：编号核查**不阻断设计阶段与 V0-1 实施**；编号确认收敛到**建表任务（V0-2）启动前必须闭环**，届时由 Migration Owner 在真实 master 上给出：① 实际迁移目录归属；② 下一个可用编号；③ 台账登记行。三项缺一不可开始写迁移文件。
 
 ## 7. M1 验收清单（整合 ADR V1.0.1 §8）
 

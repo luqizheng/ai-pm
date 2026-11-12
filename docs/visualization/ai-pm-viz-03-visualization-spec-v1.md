@@ -62,11 +62,11 @@
       "source_domain": "delivery",
       "source_object_ids": ["R-042", "D-017"],
       "source_revision_refs": ["R-042@rev12", "D-017@rev3"],
-      "source_snapshot_hash": "sha256:…"
+      "source_snapshot_hash": "<64位小写hex>"
     },
     "renderer_id": "seecode",
     "renderer_version": "0.6.3",
-    "source_hash": "sha256:…"        // 输入对象指纹集合的哈希（stale 判定）
+    "source_hash": "<64位小写hex>"   // 输入指纹集合哈希（stale 判定；编码对齐 pm_write::hex_sha256，不加前缀）
   }
 }
 ```
