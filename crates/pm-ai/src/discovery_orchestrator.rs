@@ -1510,27 +1510,30 @@ impl DiscoveryOrchestratorWorker {
 
         // Phase 3B role chain（任务书 §6.3）：编排轮 = requirement_analysis
         // 用途；ConfigurationFailed 的 reason 直接透传词表值。
-        let cfg =
-            match select_model_for_role(&self.pool, session.project_id, "requirement_analysis")
-                .await
-            {
-                crate::analysis_model::ModelSelection::Provider(cfg) => cfg,
-                crate::analysis_model::ModelSelection::ConfigurationFailed { reason, detail } => {
-                    tracing::warn!(
-                        session_id = %session_id,
-                        reason,
-                        %detail,
-                        "orchestrator: model resolution returned an explicit configuration failure"
-                    );
-                    return Err(RoundFailure::NoProvider { reason });
-                }
-                crate::analysis_model::ModelSelection::ResolutionFailed(error) => {
-                    tracing::warn!(session_id = %session_id, error = %error, "orchestrator: model resolution failed");
-                    return Err(RoundFailure::NoProvider {
-                        reason: "resolution_failed",
-                    });
-                }
-            };
+        let cfg = match select_model_for_role(
+            &self.pool,
+            session.project_id,
+            "requirement_analysis",
+        )
+        .await
+        {
+            crate::analysis_model::ModelSelection::Provider(cfg) => cfg,
+            crate::analysis_model::ModelSelection::ConfigurationFailed { reason, detail } => {
+                tracing::warn!(
+                    session_id = %session_id,
+                    reason,
+                    %detail,
+                    "orchestrator: model resolution returned an explicit configuration failure"
+                );
+                return Err(RoundFailure::NoProvider { reason });
+            }
+            crate::analysis_model::ModelSelection::ResolutionFailed(error) => {
+                tracing::warn!(session_id = %session_id, error = %error, "orchestrator: model resolution failed");
+                return Err(RoundFailure::NoProvider {
+                    reason: "resolution_failed",
+                });
+            }
+        };
         let timeout = chrono::Duration::seconds(i64::from(cfg.timeout_secs).max(1));
         let started = Instant::now();
         let completion = conversation_model::complete(

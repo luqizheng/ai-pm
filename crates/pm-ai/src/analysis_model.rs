@@ -119,10 +119,7 @@ impl RoutedAnalysisModel {
         Self { pool, mode }
     }
 
-    async fn model_for(
-        &self,
-        project_id: ProjectId,
-    ) -> Result<Arc<dyn AnalysisModel>, ModelError> {
+    async fn model_for(&self, project_id: ProjectId) -> Result<Arc<dyn AnalysisModel>, ModelError> {
         match self.mode {
             AnalysisModelMode::Fake => Ok(Arc::new(FakeModel::from_fixtures())),
             AnalysisModelMode::Auto => {

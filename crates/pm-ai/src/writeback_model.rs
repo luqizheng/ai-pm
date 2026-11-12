@@ -104,8 +104,7 @@ impl LlmWriteBackModel {
         // Phase 3B role chain（任务书 §6.3）：需求起草/任务分解写回 =
         // knowledge_management 用途；解析失败显式记账（无 provider 行可挂时
         // 由调用方留痕）。
-        let cfg = match select_model_for_role(&self.pool, project_id, "knowledge_management")
-            .await
+        let cfg = match select_model_for_role(&self.pool, project_id, "knowledge_management").await
         {
             ModelSelection::Provider(cfg) => cfg,
             ModelSelection::ConfigurationFailed { detail, .. } => {

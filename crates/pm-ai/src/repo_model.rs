@@ -6,8 +6,8 @@
 
 use async_trait::async_trait;
 use pm_application::repo_facts::pm_ai_port::ModelError as RepoModelError;
-use pm_application::team_llm_catalog::ModelResolutionError;
 pub use pm_application::repo_facts::{RepoAnalysisModel, RepoMaterial};
+use pm_application::team_llm_catalog::ModelResolutionError;
 use pm_domain::import::{
     AssigneeRole, Evidence, EvidenceKind, MilestoneDraft, OrgChart, ProjectDraft, RequirementDraft,
     RiskDraft, TaskDraft, UnknownDraft,
@@ -257,9 +257,8 @@ pub async fn model_from_llm_provider(
     pool: &sqlx::PgPool,
     project_id: uuid::Uuid,
 ) -> Result<(std::sync::Arc<dyn RepoAnalysisModel>, String), ModelResolutionError> {
-    let cfg =
-        pm_application::team_llm_catalog::resolve_model_for_role(pool, project_id, "general")
-            .await?;
+    let cfg = pm_application::team_llm_catalog::resolve_model_for_role(pool, project_id, "general")
+        .await?;
     let model = OpenAiRepoAnalysisModel::new(
         &cfg.endpoint,
         &cfg.model,
