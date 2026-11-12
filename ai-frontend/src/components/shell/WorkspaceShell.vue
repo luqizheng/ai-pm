@@ -19,7 +19,7 @@ import TopBar from "./TopBar.vue";
  *
  * 四栏主体工作区（AI Collaboration V1.0 / DR-C5 + DR-C8，1440px 基准）：
  *   顶栏 52px（横跨全部列）/
- *   左导航 188px（折叠 60px）/ 主内容区 518px / AI Chat 446px（常驻独立列）/
+ *   左导航 232px（折叠 60px）/ 主内容区 474px / AI Chat 446px（常驻独立列）/
  *   右上下文栏 288px（可关）
  *
  * 布局由 `.workspace-shell` 的 grid 承担，状态经根元素

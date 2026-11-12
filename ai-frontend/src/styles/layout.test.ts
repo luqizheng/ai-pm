@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
  * 契约：**四个**栏位子项必须显式声明 grid-column，不依赖自动放置。
  *
  * 四栏主体工作区（AI Collaboration V1.0 / DR-C5 + DR-C8，1440px 基准）：
- *   左导航 188px | 主区 518px（1fr，基准下正好 518）| AI Chat 446px | 右上下文 288px
+ *   左导航 232px | 主区 474px（1fr，基准下正好 474）| AI Chat 446px | 右上下文 288px
  */
 const css = readFileSync(
   resolve(process.cwd(), "src/styles/index.css"),
@@ -37,7 +37,7 @@ describe("workspace 布局契约", () => {
     expect(body).toMatch(/var\(--ws-context-width\)/);
   });
 
-  it("四列宽度合计 1440px（188 + 518 + 446 + 288）——token 层契约", () => {
+  it("四列宽度合计 1440px（232 + 474 + 446 + 288）——token 层契约", () => {
     const tokens = readFileSync(
       resolve(process.cwd(), "src/styles/tokens.css"),
       "utf8"
@@ -47,11 +47,11 @@ describe("workspace 布局契约", () => {
       expect(m, `tokens.css 缺少 --${name}`).toBeTruthy();
       return Number(m![1]);
     };
-    expect(width("ws-sidebar-width")).toBe(188);
-    expect(width("ws-main-width")).toBe(518);
+    expect(width("ws-sidebar-width")).toBe(232);
+    expect(width("ws-main-width")).toBe(474);
     expect(width("ws-chat-width")).toBe(446);
     expect(width("ws-context-width")).toBe(288);
-    // 1440px 桌面基准：188 + 446 + 288 = 922，主区 1fr 恰好补足 518
+    // 1440px 桌面基准：232 + 446 + 288 = 966，主区 1fr 恰好补足 474
     expect(1440 - width("ws-sidebar-width") - width("ws-chat-width") - width("ws-context-width")).toBe(
       width("ws-main-width")
     );
