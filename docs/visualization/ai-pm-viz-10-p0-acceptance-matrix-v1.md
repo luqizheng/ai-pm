@@ -99,7 +99,7 @@
 
 ## 4. 场景-证据汇总
 
-24+ 组场景（T-01~T-34，含复用），证据工件共 5 类：Rust 集成测（6 个新测试文件）、playwright 安全/E2E（独立 config，5 个 spec）、vitest（组件级）、**本地门禁脚本**（`scripts/viz-registry-lint.js`/`scripts/viz-spec-lint.js`/`scripts/viz-no-write-path.sh` + 既有 release-guard/check:i18n，经 `scripts/test.sh` 串联 —— **仓内无 CI workflow，"CI 任务"一律落为本地脚本**）、人工签收件（V-2/V-3/V-4 签收、`viz-offline-audit.md`、`viz-perf-baseline.md`、R-03 决策记录、降级演练记录）。
+24+ 组场景（T-01~T-34，含复用），证据工件共 5 类：Rust 集成测（6 个新测试文件）、playwright 安全/E2E（独立 config，5 个 spec）、vitest（组件级）、**本地门禁脚本**（`scripts/check-viz.sh` 统一入口 → `viz-registry-lint.js`/`viz-spec-lint.js`/`viz-no-write-path.sh`，另加既有 release-guard/check:i18n —— **仓内无 CI workflow，"CI 任务"一律落为本地脚本**）、人工签收件（V-2/V-3/V-4 签收、`viz-offline-audit.md`、`viz-perf-baseline.md`、R-03 决策记录、降级演练记录）。
 
 > 另：**Golden 快照无 insta/expect-test 可用**（仓内零快照 crate）→ 手写文件比对，方案见 [12 号 V0-1 设计](ai-pm-viz-12-v0-1-spec-validation-design-v1.md) §8.1。
 

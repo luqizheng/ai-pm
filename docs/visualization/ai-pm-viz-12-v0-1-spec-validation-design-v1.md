@@ -355,9 +355,9 @@ budget 档位与边数上限：strict ≤30 节点 / ≤45 边；balanced ≤150
 
 | 脚本 | 作用 | 接线 |
 |---|---|---|
-| `scripts/viz-registry-lint.js` | Registry lint：未登记 relation、字段缺失、kind 不匹配、draft 未会签、语义变更未升版 | 与 `scripts/check-prism-tokens.js` 同风格（CommonJS node），由 `scripts/test.sh` 调用 |
-| `scripts/viz-spec-lint.js` | Spec 字段纯净性：禁止渲染器保留字（`row/col/skin/motion/budget` 之外的自有字段白名单）、禁止未知顶层字段 | 同上 |
-| `scripts/viz-no-write-path.sh` | 架构 lint：viz 模块不得 import 领域写 service（扫描 `crates/*/src/visualization/**` 的 use 语句） | 同上（AC-16 T-32） |
+| `scripts/viz-registry-lint.js` | Registry lint：未登记 relation、字段缺失、kind 不匹配、draft 未会签、语义变更未升版 | 与 `scripts/check-prism-tokens.js` 同风格（CommonJS node），由 **`scripts/check-viz.sh` 统一入口**调用（**不挂 `scripts/test.sh`**——那是 Rust nextest 入口，混入会拖慢 Rust 测试且语义不同） |
+| `scripts/viz-spec-lint.js` | Spec 字段纯净性：禁止渲染器保留字（`row/col/skin/motion/theme/…`）、禁止未知字段（分层白名单） | 同上（未改） |
+| `scripts/viz-no-write-path.sh` | 架构 lint：viz 模块不得 import 领域写 service，且不得出现 SQL 写语句（只读投影层） | 同上（AC-16 T-32） |
 
 **注意**：仓内 `check-i18n-hardcode.js` 有基线文件惯例（`scripts/i18n-hardcode-baseline.json`）→ 若新增前端文案需同步维护基线（V0-8 阶段）。
 
@@ -387,7 +387,7 @@ budget 档位与边数上限：strict ≤30 节点 / ≤45 边；balanced ≤150
 | # | 既有文档写法 | 实证结论 | 更正 |
 |---|---|---|---|
 | 1 | D3 §3 / D1 用 `"sha256:…"` | 仓内哈希为**裸小写 hex**，无前缀（`pm_write/support.rs:3-11`） | 统一改为 64 位小写 hex；本设计 §6 为准 |
-| 2 | 10 号矩阵多处写"CI job（viz-golden / viz-detach / viz-no-write-path）" | 仓内**无 CI workflow**，无法新增 job | 改为**本地脚本 + `scripts/test.sh` 串联**；"CI"语义 = 本地门禁脚本 |
+| 2 | 10 号矩阵多处写"CI job（viz-golden / viz-detach / viz-no-write-path）" | 仓内**无 CI workflow**，无法新增 job | 改为**本地脚本 + 统一入口 `scripts/check-viz.sh`**（不挂 `scripts/test.sh`——那是 Rust nextest 入口，混入会拖慢 Rust 测试且语义不同）；"CI"语义 = 本地门禁脚本 |
 | 3 | 10 号矩阵 AC-2 写"≥2 渲染目标" | P0 不含 G6（ADR-VIZ-002/011） | P0 = 每 kind ≥1 主呈现 + ≥1 Fallback；G6 双目标完整语义在 P1（矩阵 §2 已分阶段，需同步本文 §10 引用） |
 | 4 | 10 号矩阵提"JSON Schema 校验" | workspace 无 jsonschema/valico（仅 pm-mcp 有 schemars） | 校验以**手写 Rust 校验器**为准；如需对外发布 JSON Schema 作为文档资产，另行登记 |
 | 5 | D3 提"Golden 快照测试" | 无 insta/expect-test | Golden 改为**手写文件比对**（本文 §8.1） |
@@ -404,7 +404,7 @@ budget 档位与边数上限：strict ≤30 节点 / ≤45 边；balanced ≤150
 | V0-1.5 | Registry 文件与加载器 | `policies/viz-relation-registry.yaml` + `pm-application/src/visualization/registry_loader.rs` | 加载器：字段缺失 fail-fast；draft relation 产出 Blocker；deprecated 仍可解释 |
 | V0-1.6 | source_hash 实现 | `pm-application/src/visualization/source_hash.rs` | 确定性：同输入两次哈希一致；排序无关（打乱输入顺序结果相同）；编码为裸小写 hex |
 | V0-1.7 | Golden 语料 | `validation/golden/{cases,expected}` | ≥12 case（覆盖每个 E 码至少 1 条、每个 W 码至少 1 条）；全绿 |
-| V0-1.8 | 脚本门禁 | `scripts/viz-registry-lint.js`、`scripts/viz-spec-lint.js`、`scripts/viz-no-write-path.sh` | 三脚本可独立运行；接入 `scripts/test.sh` |
+| V0-1.8 | 脚本门禁 | `scripts/viz-registry-lint.js`、`scripts/viz-spec-lint.js`、`scripts/viz-no-write-path.sh` + 统一入口 `scripts/check-viz.sh` | 三脚本可独立运行且**经反测确认能抓违规**（注入 `use crate::pm_write::…` / 注入 `row`+`skin` 字段 / 把 relation 改 active 但删会签 → 均以退出码 1 报错）；统一入口 `bash scripts/check-viz.sh`；前端侧 `pnpm check:viz` 可调 |
 | V0-1.9 | 文档回填 | 本文 + D3 兼容附录 + 索引表 | D3 §9 开放问题 1（词表会签）标记进行中；偏差更正清单同步到 10 号矩阵 |
 
 **V0-1 完成定义**：AC-1 全绿（校验 + Golden）、AC-21 P0 基础部分绿、Registry 词表经领域 Owner 会签（或全部标 draft 并阻断使用）、三个 lint 脚本接入 test.sh。
