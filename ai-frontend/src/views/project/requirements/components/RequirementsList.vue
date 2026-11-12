@@ -283,6 +283,17 @@ watch(
   flex-direction: column;
   gap: var(--space-3);
   min-width: 0;
+  /* 窄容器（workspace 主区列 ≈410px）下收纳次要信息，保住标题可读宽度。
+     收纳规则只声明在本组件——Badge 根元素只带本组件 scopeId，跨组件
+     scope 的选择器不匹配（RequirementsView 侧曾因此失效）。 */
+  container-type: inline-size;
+}
+
+@container (max-width: 640px) {
+  .req-row .ui-badge,
+  .req-row__meta {
+    display: none;
+  }
 }
 
 .req-list__view-toggle {

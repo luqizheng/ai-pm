@@ -452,6 +452,7 @@ watch(projectId, () => {
           @select="onStatusFilter"
         />
 
+        <div class="req-workspace-frame">
         <div class="req-workspace">
           <div class="req-workspace__main">
             <RequirementsList
@@ -475,6 +476,7 @@ watch(projectId, () => {
             :active-tab="contextTab"
             @update:active-tab="contextTab = $event"
           />
+        </div>
         </div>
 
         <RevisionSheet v-model:open="revisionOpen" :entry="selectedEntry" />
@@ -503,6 +505,14 @@ watch(projectId, () => {
 </template>
 
 <style scoped>
+/* 断点按容器宽而非 viewport：workspace 主区列（1440 契约 ≈474px）远窄于
+   1100px，viewport 断点永不触发；32% 侧栏会把列表标题挤压到零宽。
+   container-type 声明在外层 frame——容器查询查不到自身。 */
+.req-workspace-frame {
+  container-type: inline-size;
+  min-width: 0;
+}
+
 .req-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 32%;
@@ -521,6 +531,16 @@ watch(projectId, () => {
 @media (max-width: 1100px) {
   .req-workspace {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 1100px) {
+  .req-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .req-workspace .req-context {
+    display: none;
   }
 }
 </style>
