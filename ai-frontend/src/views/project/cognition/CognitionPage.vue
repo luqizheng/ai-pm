@@ -209,7 +209,7 @@ watch(projectId, load);
             data-testid="cognition-run"
           >
             <Badge
-              :variant="run.status === 'completed' ? 'info' : 'neutral'"
+              :variant="run.status === 'completed' ? 'success' : 'neutral'"
               size="sm"
             >
               {{ t(`s01.cognition.runs.status.${run.status}`) }}
@@ -256,7 +256,7 @@ watch(projectId, load);
               <Badge
                 :variant="
                   item.state === 'confirmed'
-                    ? 'info'
+                    ? 'success'
                     : item.state === 'rejected'
                       ? 'danger'
                       : 'neutral'

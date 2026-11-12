@@ -246,12 +246,4 @@ const contextItems = computed(() => {
   font-weight: var(--weight-semibold);
   color: var(--ws-text-primary);
 }
-
-.design-context__item.is-warning .design-context__value {
-  color: var(--ws-color-warning-text);
-}
-
-.design-context__item.is-danger .design-context__value {
-  color: var(--ws-color-danger-text);
-}
 </style>

@@ -59,7 +59,7 @@ describe("AdminSettingsView", () => {
   it("loads and shows the current embedding config", async () => {
     const wrapper = await mountView();
     expect(getEmbeddingConfig).toHaveBeenCalledTimes(1);
-    const inputs = wrapper.findAll(".settings-input");
+    const inputs = wrapper.findAll(".settings-input input");
     expect((inputs[0].element as HTMLInputElement).value).toContain(
       "192.168.2.10:11434"
     );
@@ -68,7 +68,7 @@ describe("AdminSettingsView", () => {
 
   it("saves edited endpoint and model", async () => {
     const wrapper = await mountView();
-    const inputs = wrapper.findAll(".settings-input");
+    const inputs = wrapper.findAll(".settings-input input");
     await inputs[0].setValue("http://127.0.0.1:11434/v1");
     await inputs[1].setValue("bge-m3");
     await wrapper.find(".admin-actions .admin-save").trigger("click");

@@ -85,7 +85,7 @@ const chips = computed(() => {
       key: "active",
       label: t("s05.execution.overview.active"),
       value: String(data.active_run_count),
-      tone: data.active_run_count > 0 ? "info" : "neutral"
+      tone: "neutral"
     },
     {
       key: "waiting",
@@ -248,21 +248,5 @@ const chips = computed(() => {
   font-variant-numeric: tabular-nums;
   font-weight: var(--weight-semibold);
   color: var(--ws-text-primary);
-}
-
-.exec-overview__chip.is-info .exec-overview__value {
-  color: var(--ws-color-info-text);
-}
-
-.exec-overview__chip.is-warning .exec-overview__value {
-  color: var(--ws-color-warning-text);
-}
-
-.exec-overview__chip.is-danger .exec-overview__value {
-  color: var(--ws-color-danger-text);
-}
-
-.exec-overview__chip.is-success .exec-overview__value {
-  color: var(--ws-color-success-text);
 }
 </style>

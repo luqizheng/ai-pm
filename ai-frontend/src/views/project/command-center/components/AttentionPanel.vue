@@ -43,9 +43,6 @@ const emit = defineEmits<{
   (e: "inbox"): void;
   (e: "open", item: AttentionItem): void;
 }>();
-
-const countColor = (tone: "danger" | "warning") =>
-  tone === "danger" ? "var(--danger-strong)" : "var(--warning-strong)";
 </script>
 
 <template>
@@ -66,10 +63,7 @@ const countColor = (tone: "danger" | "warning") =>
             class="pm-attention__count"
           >
             <span class="pm-attention__count-label">{{ count.label }}</span>
-            <span
-              class="pm-attention__count-num"
-              :style="{ color: countColor(count.tone) }"
-            >
+            <span class="pm-attention__count-num">
               {{ count.count }}
             </span>
           </span>
@@ -191,6 +185,7 @@ const countColor = (tone: "danger" | "warning") =>
   line-height: var(--line-height-micro);
   font-weight: var(--weight-medium);
   font-variant-numeric: tabular-nums;
+  color: var(--ws-text-primary);
 }
 
 .pm-attention__inbox {

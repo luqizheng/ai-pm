@@ -205,7 +205,7 @@ watch(projectId, load);
               <Badge
                 :variant="
                   item.state === 'confirmed'
-                    ? 'info'
+                    ? 'success'
                     : item.state === 'rejected'
                       ? 'danger'
                       : 'neutral'

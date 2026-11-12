@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
-import Badge from "@/components/ui/badge/Badge.vue";
+import Badge, { type BadgeVariant } from "@/components/ui/badge/Badge.vue";
 import ListItem from "@/components/ui/list-item/ListItem.vue";
 
 import type { DueInfo } from "@/api/personal-home";
@@ -26,6 +26,12 @@ const props = defineProps<Props>();
 const emit = defineEmits<{ (e: "open"): void }>();
 
 const { t, locale } = useI18n();
+
+const statusVariant = computed<BadgeVariant>(() => {
+  if (props.status === "completed") return "success";
+  if (props.status === "in_progress") return "info";
+  return "neutral";
+});
 
 const description = computed(() => {
   const object = props.subject;
@@ -68,7 +74,7 @@ const dueTone = computed(() => {
       <span v-if="priority === 'high'" class="pm-task__priority">{{
         priority
       }}</span>
-      <Badge size="sm">{{ status }}</Badge>
+      <Badge :variant="statusVariant" size="sm">{{ status }}</Badge>
       <span class="pm-task__due" :data-tone="dueTone">{{ dueLabel }}</span>
     </template>
   </ListItem>
@@ -78,7 +84,7 @@ const dueTone = computed(() => {
 .pm-task__priority {
   font-family: var(--font-mono);
   font-size: var(--font-size-nano);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caption);
   text-transform: uppercase;
   color: var(--ws-color-warning-text);
 }

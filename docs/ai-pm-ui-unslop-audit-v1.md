@@ -143,3 +143,26 @@
 - 转待裁项（§4）与既有门禁债（§5）**本轮一律不动**，尤其不得顺手修 `KnowledgeView.vue` / `AdminSettingsView.vue` 的裸色值，不得扩容 `i18n-hardcode-baseline.json`。
 - 修改完成后按项目既有验收基线回归：`vue-tsc`、`eslint`、`vitest`、`check:prism-tokens`、`check:i18n`；注意两个门禁**修改前本来就是红的**，须以「不新增违规」为判据，而非要求全绿。
 - 若要做渲染态对齐与密度核实，需先补齐 Playwright / Chromium，再按 §6 第 2 条补验。
+
+---
+
+## 8. 执行记录与完成状态（2026-11-13，分支 feat/unslop-b10-fixes）
+
+### 8.1 批次执行
+
+| 批次 | commit | 内容 | 验证 |
+|---|---|---|---|
+| B10 收尾批（✅ 项） | `76eeef69` | 23 文件：A14/A15 lucide 归一、A16 danger `-text` 档、A17 success 横幅去 accent 底、A20 页签口径对齐、A24 补 hover、A25 disabled 档误用、A28 图标中性、A32/A33 裸枚举走 t()、A35/A36 i18n 与真源对齐、A12×6 文件 tabular-nums、A13×3 文件在途禁用、A34 hover 方向修正 | vitest 37/37；eslint/prettier/vue-tsc 绿；i18n 命名空间 45/5110 对齐；PRISM 146 与硬编码 39 均存量持平 |
+| B11 批（🟡 按建议动作） | `eca4fc5e` | 12 文件：A18/A26/A27 AdminSettingsView 迁移 ui kit + token 归一；A19 ProjectGrid 触屏兜底；A21 KnowledgeView 页签改下缘指示条式 + accent 语义修正；A22 草稿行去 accent 铺底；A23 事件圆点中性；A29/A30 AssignedTaskItem 状态映射 + 字距 token；A31 confirmed/completed→success；A05 口径统一（DesignFrame/AttentionPanel/ExecutionFrame 聚合计数回归中性） | vitest 47/47（AdminSettings 测试选择器随 ui Input 外壳化适配 `.settings-input input`）；eslint/prettier/vue-tsc 绿；**PRISM 146→114（迁移顺带清债，零新增）**；硬编码 39 持平 |
+
+注：A26（AdminSettingsView 任意值）为 ✅ 项，执行批 1 时遗漏，已在 B11 批补齐。
+
+### 8.2 uppercase + `--tracking-caption` 裁决（B7 收口，§3 uppercase 转待裁项结案）
+
+**裁决：保留，判设计意图，不改码。** 依据：① 依据链第 1 优先级（V2）明确「本次只调色彩，不改字体/字距」；② `--tracking-caption` 是 tokens.css 为 caption 用途的既有 token；③ Figma 板与设计目录（AI R&D / DESIGN CATALOG、导航分组标签）自身即采用大写注记；④ 中文语境下 uppercase 视觉无效果，仅影响 en 文案。涉及 B7 五卡 + B10 四文件（AuditCard/RevisionDetailCard/RevisionTimeline/VersionComparison）一律不改。若未来设计侧决定去大写，应作为全站字距专项另立批次（波及 9+ 文件）。
+
+### 8.3 完成状态
+
+- **views/ 全站 187 文件审计闭环**（B1–B10），台账 ✅/🟡 项全部执行或按裁决结案；§4 转待裁项与 §5 门禁债维持「不新增违规」判据（PRISM 现存 114、i18n 硬编码 39）。
+- 浏览器实渲染目检通过：A14/A20/A26/A27/A28/A29/A35/A36 及壳/空态/错误态无破坏（`VITE_USE_MOCK=1` dev 栈）。
+- **范围外（后续可选，不阻塞结案）**：`src/components/` 非 shell/ui 功能组件逐审；渲染态对齐与密度核验（需 Playwright/Chromium）。

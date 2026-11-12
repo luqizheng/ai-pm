@@ -375,7 +375,7 @@ onMounted(load);
   height: var(--size-timeline-dot);
   margin-top: var(--size-dot-xs);
   border-radius: 50%;
-  background: var(--ws-accent);
+  background: var(--ws-text-secondary);
 }
 
 .ai-monitor__event-body {

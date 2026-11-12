@@ -702,10 +702,11 @@ watch(
 }
 
 .knowledge-tab {
-  border: 1px solid var(--border-subtle, var(--ws-border, #d0d0d0));
+  border: 0;
+  border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--text-secondary, var(--ws-text, #333));
-  border-radius: 999px;
+  border-radius: 0;
   padding: 6px 14px;
   cursor: pointer;
   font-size: 13px;
@@ -716,9 +717,8 @@ watch(
 }
 
 .knowledge-tab.is-active {
-  background: var(--accent-subtle, var(--ws-accent, #2563eb));
-  border-color: transparent;
-  color: var(--text-on-accent, #fff);
+  color: var(--text-primary, var(--ws-text, #111));
+  border-bottom-color: var(--accent);
 }
 
 .knowledge-hint,
@@ -749,7 +749,7 @@ watch(
 }
 
 .kb-row.is-open {
-  border-color: var(--accent-subtle, var(--ws-accent, #2563eb));
+  border-color: var(--accent);
 }
 
 .kb-row-head {
@@ -956,7 +956,7 @@ watch(
 }
 
 .impact-edge {
-  color: var(--accent-subtle, var(--ws-accent, #2563eb));
+  color: var(--accent);
   margin: 0 6px;
 }
 

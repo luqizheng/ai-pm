@@ -537,11 +537,12 @@ function openTask(taskId: string) {
   cursor: pointer;
   min-height: var(--ws-row-height);
   border-left: calc(var(--space-1) / 2) dashed var(--ws-color-info);
-  background: var(--ws-color-accent-surface);
+  background: transparent;
 }
 
 .bd-row.is-selected {
   outline: var(--size-focus-ring) solid var(--ws-accent);
+  background: var(--ws-color-accent-surface);
 }
 
 .bd-row__code {
