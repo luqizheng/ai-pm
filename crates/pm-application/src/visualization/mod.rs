@@ -7,12 +7,16 @@
 //! - [`registry_loader`]：Relation Registry 加载与结构校验（fail-fast）。
 //! - [`source_hash`]：图形输入指纹（stale 判定依据）。
 
+pub mod adapter_contract;
 pub mod artifact_safety;
 pub mod projection;
 pub mod registry_loader;
 pub mod resolver;
 pub mod source_hash;
 
+pub use adapter_contract::{
+    contract, verify, ContractCheck, OutputFormat, RenderAdapter, RenderError, RenderOutput,
+};
 pub use artifact_safety::{inspect_svg, SafetyViolation, SvgSafetyReport};
 pub use resolver::{
     probe_visible_objects, CallerScope, InMemoryObjectResolver, SourceKey,
