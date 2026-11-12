@@ -103,14 +103,27 @@ WHERE dr.tenant_id = $1
 | L2-e | 因权限裁剪产生的边 → `W_SPEC_DANGLING_EDGE`（12 号 §4.3），UI 明示"部分关系因权限未展示" | ADR-VIZ-009 |
 | L2-f | 截断显式化：`truncated` + `truncation_reason` + 丢弃计数（范式：`traversal.rs:187-210` 的 `no_active_edge`/`candidate_budget_exceeded`/`traversal_depth_exceeded`；`assembly.rs:163-181`） | 同上 |
 
-**依赖方向约定（R-05 裁决落地点，V-10）**：`task.depends_on_task` 的 Registry 语义方向为 **dependent → prerequisite**（`task_id → depends_on_task_id`）。因此：
+**依赖方向约定（R-05 裁决落地点，V-10）**：`task.depends_on_task` 的 Registry 语义方向为 **dependent → prerequisite**（`task_id → depends_on_task_id`，即"A 依赖 B"记为语义边 `A → B`）。
 
-| 计算 | 使用方向 |
+**仓库既有约定（2026-11-12 实证，须对齐）**：
+
+| 证据 | 既有约定 |
 |---|---|
-| 依赖闭包 / 关键路径（CPM） | `prerequisite → dependent`（顺执行方向） |
-| 影响分析 / 下游影响 | **反向遍历**（Registry 方向的逆） |
+| `crates/pm-application/src/execution_read.rs:568-570` | 协作图边 `from_task_id = depends_on_task_id`（前置）、`to_task_id = task_id`（依赖方）→ **既有图边方向 = prerequisite → dependent**（与 Registry 语义方向相反） |
+| `crates/pm-application/src/execution_read.rs:548-550` | `open_upstream_count` 统计 `d.depends_on_task_id` 未完成数，注释为「**未完成的上游依赖数**」→ **术语约定：upstream = 前置任务（prerequisite）** |
 
-两处必须各自显式声明方向；直接按 Registry 方向遍历影响分析会得到**反向结论**（A 依赖 B 却报"B 受 A 影响"）。DAG 视觉流向的翻转属 presentation transform，不改语义方向。
+**方向矩阵（V0-3 强制）**：
+
+| 计算 | 遍历方向 | 说明 |
+|---|---|---|
+| **依赖闭包**（A 依赖了谁） | 沿 Registry 方向 `dependent → prerequisite` | 从 A 顺边走即得全部前置任务 |
+| **影响分析**（改 B 影响谁） | Registry 方向的**反向**（= `prerequisite → dependent`） | 改 B 影响 A：A 在 B 的下游 |
+| **关键路径 / CPM** | 沿 `prerequisite → dependent` | 顺执行顺序推进，与既有图边方向一致 |
+| **上游/下游术语** | upstream = 前置任务；downstream = 依赖方 | 与 `open_upstream_count` 既有语义一致，**不得反向** |
+
+> ⚠️ **易错点**：影响分析（prerequisite → dependent）与依赖闭包（dependent → prerequisite）**方向相反**。若影响分析层直接按 Registry 方向遍历（A→B），会得出"B 受 A 影响"的**反向结论**（实际是 A 受 B 影响）。两处必须各自显式声明方向，禁止依赖"默认约定"。
+> ⚠️ **术语陷阱**：`upstream` 在本仓 = **前置任务**（非"受影响的上游"）。既有实现已用此义，V0-3 改动需连带核验既有端点语义。
+> **对齐结论**：既有图边方向（prerequisite → dependent）与影响分析方向一致 → **DAG 视觉无需翻转**，直接沿既有方向渲染；仅 Registry 存储的语义方向与之相反，两者由显式映射隔离。
 
 **关键性质**：L2-d 的计数重算使**不同权限用户看到的同一张图，其节点数/边数只反映各自可见部分**——但这本身可能通过"计数差异"泄露"存在某些不可见对象"。因此：
 

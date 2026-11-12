@@ -18,7 +18,8 @@
 | V-07 | Lint 检查项扩至 15 条 | 架构预审 | 补全 |
 | V-08 | Q-1/Q-2/Q-3 正式答复（分层保留 / `pc.related`+交叉校验 / 方向分离） | 架构预审 | 裁决 |
 | **V-09** | **R-07 方向与端点修正**：`ref_role='evidence'` 指向 **kb.source（L2 原文/原始资料）**，不是任意业务对象；语义为 `memory → evidence_source`，关系名改为 `kb.evidence_supported_by` | **产品经理代码实证** | **纠错** |
-| **V-10** | R-05 方向裁决的**算法层落地约束**：影响分析与依赖闭包必须显式声明所用方向，禁止各层各自约定 | 产品经理 | 补全 |
+| **V-10** | R-05 方向裁决的**算法层落地约束**：依赖闭包（沿 Registry 方向）与影响分析（反向）方向相反，必须各自显式声明，禁止各层各自约定 | 产品经理 | 补全 |
+| **V-11** | **与仓库既有方向/术语约定对齐**：既有图边方向 = `prerequisite → dependent`（`execution_read.rs:568-570`）、`upstream` = 前置任务（`:548-550`）；Registry 语义方向不随之改，但投影层须提供显式方向映射 | 产品经理（代码实证） | 补全 |
 
 ### V-09 证据（本次代码实证）
 
@@ -241,12 +242,22 @@ dependent_task → prerequisite_task        即  task_id → depends_on_task_id
 
 **⚠️ 算法层落地约束（V1.1 新增，V-10）**：
 
-| 计算 | 使用方向 | 理由 |
+| 计算 | 遍历方向 | 理由 |
 |---|---|---|
-| 依赖闭包 / 关键路径（CPM） | `prerequisite → dependent`（顺执行方向） | 路径沿执行顺序推进 |
-| 影响分析 / 下游影响 | `dependent → prerequisite` 的**反向遍历** | 改 B 影响 A，与语义边方向相反 |
+| **依赖闭包**（A 依赖了谁） | 沿 Registry 方向 `dependent → prerequisite` | 从 A 顺边走即得全部前置任务 |
+| **影响分析**（改 B 影响谁） | Registry 方向的**反向**（= `prerequisite → dependent`） | 改 B 影响 A：A 在 B 的下游 |
+| **关键路径 / CPM** | 沿 `prerequisite → dependent` | 顺执行顺序推进 |
 
-若影响分析直接按 Registry 方向遍历，将得到**反向结论**。两处必须各自显式声明方向，禁止依赖"默认约定"。
+> ⚠️ **影响分析与依赖闭包方向相反**：若影响分析直接按 Registry 方向遍历（A→B），将得出"B 受 A 影响"的**反向结论**（实际是 A 受 B 影响）。两处必须各自显式声明方向，禁止依赖"默认约定"。
+
+**⚠️ 与仓库既有约定对齐（2026-11-12 代码实证，V-11）**：
+
+| 证据 | 既有约定 | 对 Registry 的要求 |
+|---|---|---|
+| `crates/pm-application/src/execution_read.rs:568-570` | 协作图边 `from = depends_on_task_id`（前置）、`to = task_id`（依赖方）→ **既有图边方向 = prerequisite → dependent**，与 Registry 语义方向相反 | Registry 语义方向不因既有实现而改；但**投影层必须提供显式方向映射**，不得让两者混用 |
+| `crates/pm-application/src/execution_read.rs:548-550` | `open_upstream_count` 统计前置任务未完成数，注释「未完成的上游依赖数」→ **upstream = 前置任务** | 术语沿用既有义（upstream = prerequisite）；**不得反向使用** |
+
+**实践结论**：既有图边方向（prerequisite → dependent）与影响分析方向一致 → **DAG 视觉无需翻转**，直接沿既有方向渲染；仅 Registry 存储的语义方向与之相反，二者由显式映射隔离。
 
 **Owner 会签重点**：确认 `task_id` 表示依赖任务、`depends_on_task_id` 表示前置任务，并确认业务查询与 DAG 布局分别采用的方向约定。
 
