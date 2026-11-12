@@ -13,6 +13,8 @@ use serde_json::Value;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::guard_query_repo;
+use pm_application::repo::GuardQueryRepo;
 use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
@@ -36,14 +38,10 @@ async fn interaction_project(
     interaction_id: uuid::Uuid,
     caller: &AuthedPrincipal,
 ) -> ApiResult<uuid::Uuid> {
-    let project_id: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM delivery.task_interaction WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(interaction_id)
-    .bind(caller.tenant_id)
-    .fetch_optional(pool)
-    .await?;
-    project_id.ok_or(ApiError::NotFound("interaction not found"))
+    guard_query_repo(pool)
+        .interaction_project_id(caller.tenant_id, interaction_id)
+        .await?
+        .ok_or(ApiError::NotFound("interaction not found"))
 }
 
 async fn submit_response(

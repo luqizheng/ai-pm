@@ -9,13 +9,14 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::guard_query_repo;
+use pm_application::repo::GuardQueryRepo;
 use crate::support::{require_project_visible, ApiError, ApiResult};
 use pm_application::pm_write::{self, CreateTaskRequest, MarkTasksReadyRequest, UpdateTaskRequest};
 use pm_application::supervision::{DecideRequest, Decision, SupervisionError};
@@ -34,25 +35,19 @@ async fn project_in_tenant(
     project_id: Uuid,
     tenant_id: Uuid,
 ) -> ApiResult<()> {
-    let found: Option<Uuid> =
-        sqlx::query_scalar("SELECT id FROM core.project WHERE id = $1 AND tenant_id = $2")
-            .bind(project_id)
-            .bind(tenant_id)
-            .fetch_optional(pool)
-            .await?;
-    found
-        .map(|_| ())
-        .ok_or(ApiError::NotFound("unknown project"))
+    if guard_query_repo(pool).project_exists(tenant_id, project_id).await? {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound("unknown project"))
+    }
 }
 
 async fn task_in_tenant(pool: &sqlx::PgPool, task_id: Uuid, tenant_id: Uuid) -> ApiResult<()> {
-    let found: Option<Uuid> =
-        sqlx::query_scalar("SELECT id FROM delivery.task WHERE id = $1 AND tenant_id = $2")
-            .bind(task_id)
-            .bind(tenant_id)
-            .fetch_optional(pool)
-            .await?;
-    found.map(|_| ()).ok_or(ApiError::NotFound("not found"))
+    if guard_query_repo(pool).task_exists(tenant_id, task_id).await? {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound("not found"))
+    }
 }
 
 // ------------------------------------------------------------------ decide
@@ -72,14 +67,9 @@ pub(crate) async fn decide_handler(
     Json(body): Json<DecideBody>,
 ) -> Response {
     // mock 校验顺序：存在性 → pending → decision → reason。
-    let (project_id, status): (Uuid, String) = match sqlx::query_as(
-        "SELECT project_id, status FROM governance.approval_request \
-          WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(approval_id)
-    .bind(principal.tenant_id)
-    .fetch_optional(&state.pool)
-    .await
+    let (project_id, status): (Uuid, String) = match guard_query_repo(&state.pool)
+        .approval_head(principal.tenant_id, approval_id)
+        .await
     {
         Ok(Some(row)) => row,
         Ok(None) => {
@@ -137,14 +127,11 @@ pub(crate) async fn decide_handler(
             {
                 return ApiError::from(err).into_response();
             }
-            match sqlx::query_as::<_, (String, Option<DateTime<Utc>>)>(
-                "SELECT status, decided_at FROM governance.approval_request WHERE id = $1",
-            )
-            .bind(approval_id)
-            .fetch_one(&state.pool)
-            .await
+            match guard_query_repo(&state.pool)
+                .approval_decision_row(approval_id)
+                .await
             {
-                Ok((status, decided_at)) => (
+                Ok(Some((status, decided_at))) => (
                     StatusCode::OK,
                     Json(json!({
                         "id": approval_id,
@@ -153,6 +140,7 @@ pub(crate) async fn decide_handler(
                     })),
                 )
                     .into_response(),
+                Ok(None) => ApiError::Internal(sqlx::Error::RowNotFound).into_response(),
                 Err(err) => ApiError::Internal(err).into_response(),
             }
         }

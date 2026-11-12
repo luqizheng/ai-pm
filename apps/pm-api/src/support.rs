@@ -267,6 +267,12 @@ pub mod repos {
         pm_infrastructure::repo_runs::PgRunRepo::new(pool.clone())
     }
 
+    pub fn guard_query_repo(
+        pool: &sqlx::PgPool,
+    ) -> pm_infrastructure::repo_guard_query::PgGuardQueryRepo {
+        pm_infrastructure::repo_guard_query::PgGuardQueryRepo::new(pool.clone())
+    }
+
     pub fn customer_repo(
         pool: &sqlx::PgPool,
     ) -> pm_infrastructure::repo_customer::PgCustomerRepo {

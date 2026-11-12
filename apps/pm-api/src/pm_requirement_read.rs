@@ -12,6 +12,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::guard_query_repo;
+use pm_application::repo::GuardQueryRepo;
 use crate::support::{require_project_visible, ApiResult};
 use pm_application::requirement_read;
 
@@ -75,15 +77,10 @@ async fn requirement_impact(
     Path(requirement_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
     // 需求的项目边界：不存在 / 跨租户 / 非成员一律 404。
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM delivery.requirement WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(requirement_id)
-    .bind(caller.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?;
-    let project_id =
-        project_id.ok_or(crate::support::ApiError::NotFound("requirement not found"))?;
+    let project_id = guard_query_repo(&state.pool)
+        .requirement_project_id(caller.tenant_id, requirement_id)
+        .await?
+        .ok_or(crate::support::ApiError::NotFound("requirement not found"))?;
     require_project_visible(
         &state.pool,
         project_id,

@@ -14,6 +14,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::guard_query_repo;
+use pm_application::repo::GuardQueryRepo;
 use crate::support::{require_project_visible, require_task_project, ApiError, ApiResult};
 use pm_application::execution_read;
 
@@ -51,14 +53,10 @@ async fn require_run_project(
     run_id: Uuid,
     principal: &AuthedPrincipal,
 ) -> ApiResult<Uuid> {
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM delivery.task_run WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(run_id)
-    .bind(principal.tenant_id)
-    .fetch_optional(&state.pool)
-    .await?;
-    let project_id = project_id.ok_or(ApiError::NotFound("run_not_found"))?;
+    let project_id = guard_query_repo(&state.pool)
+        .run_project_id(principal.tenant_id, run_id)
+        .await?
+        .ok_or(ApiError::NotFound("run_not_found"))?;
     require_project_visible(
         &state.pool,
         project_id,

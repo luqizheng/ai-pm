@@ -22,6 +22,8 @@ use pm_application::run_executor;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::guard_query_repo;
+use pm_application::repo::GuardQueryRepo;
 use crate::support::require_project_visible;
 
 pub(crate) fn router() -> Router<AppState> {
@@ -114,14 +116,10 @@ async fn cancel_run_handler(
     body: Option<Json<CancelRunBody>>,
 ) -> Response {
     // Run → 项目 → 可见性（T-022）。
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM delivery.task_run WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(run_id)
-    .bind(caller.tenant_id)
-    .fetch_optional(&state.pool)
-    .await
-    .unwrap_or(None);
+    let project_id: Option<Uuid> = guard_query_repo(&state.pool)
+        .run_project_id(caller.tenant_id, run_id)
+        .await
+        .unwrap_or(None);
     let Some(project_id) = project_id else {
         return not_found();
     };
