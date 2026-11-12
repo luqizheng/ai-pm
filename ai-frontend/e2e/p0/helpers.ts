@@ -122,18 +122,24 @@ export async function asAiPrincipal(
   return { token, principalId };
 }
 
-/** 注册 mock LLM provider（openai_compatible → mock server）并绑定为项目策略。 */
+/** 注册 mock LLM provider 并绑定为项目策略。
+ * provider_type 用 ollama：mock LLM 落在 127.0.0.1（回环），§17 SSRF 防护
+ * （2026-11-11 D-3）只放行公网端点，ollama 类型按 2026-11-12 产品裁决豁免
+ * （自托管推理服务合法落 localhost）。调用侧所有类型统一走 OpenAI 兼容
+ * /chat/completions 面，类型取值不改变运行时行为。 */
 export async function registerMockProvider(
   owner: TestOwner,
   projectId: string
 ): Promise<{ providerId: string }> {
   const endpoint = process.env.P0_MOCK_LLM_URL;
   if (!endpoint) throw new Error("P0_MOCK_LLM_URL missing (global-setup must run)");
+  // 真 LLM 模式（P0_REAL_LLM_URL）下模型名来自 P0_LLM_MODEL（如 qwen2.5:3b）
+  const modelName = process.env.P0_LLM_MODEL ?? "mock-e2e";
   const created = await api("POST", `/v1/pm/tenants/${owner.team.id}/llm-providers`, owner.token, {
     name: "mock-e2e",
-    provider_type: "openai_compatible",
+    provider_type: "ollama", // 回环端点豁免（见函数注释）
     endpoint,
-    configuration: { model: "mock-e2e" },
+    configuration: { model: modelName },
     api_key: "e2e-mock-key",
     timeout_secs: 30
   });
@@ -165,13 +171,92 @@ export async function registerMockProvider(
   if (!enabled) throw new Error("provider enable failed after retries");
 
   const policyNow = await api("GET", `/v1/pm/projects/${projectId}/ai-model-policies`, owner.token);
-  const policyRevision = policyNow.body?.revision ?? policyNow.body?.policy?.revision ?? 0;
+  // Phase 3A 视图：revision 在 provider_constraint_revision；无策略行时为
+  // undefined，与 set_project_ai_policy 的 CAS「无行 = 1」同口径取 1。
+  const policyRevision = policyNow.body?.provider_constraint_revision ?? 1;
   const policy = await api("PUT", `/v1/pm/projects/${projectId}/ai-model-policies`, owner.token, {
     provider_id: providerId,
     expected_revision: policyRevision
   });
   if (![200, 201].includes(policy.status))
     throw new Error(`project policy bind failed: ${policy.status} ${JSON.stringify(policy.body)}`);
+
+  // Phase 3A 模型解析四级链（team_llm_catalog::resolve_model_for_role）：
+  // 项目覆盖 → Team Role 策略 → Team general 兜底 → general_policy_missing。
+  // 仅绑 provider 不够，还须登记 Team 模型行并把 ai_pm_lead / general 两个
+  // 角色指向它（会话回复解析走 general，分析链走 ai_pm_lead）。
+  const modelCreated = await api(
+    "POST",
+    `/v1/pm/tenants/${owner.team.id}/llm-models`,
+    owner.token,
+    {
+      provider_id: providerId,
+      model_id: modelName,
+      display_name: modelName
+    }
+  );
+  if (![200, 201].includes(modelCreated.status))
+    throw new Error(
+      `team model create failed: ${modelCreated.status} ${JSON.stringify(modelCreated.body)}`
+    );
+  const modelRowId = modelCreated.body.id as string;
+
+  // 模型行默认 disabled（created.enabled=false）——解析校验拒绝禁用模型，
+  // 先 GET 列表取 revision 再 PATCH 启用（乐观锁，409 重试一次）。
+  let modelEnabled = false;
+  for (let attempt = 0; attempt < 3 && !modelEnabled; attempt += 1) {
+    const models = await api(
+      "GET",
+      `/v1/pm/tenants/${owner.team.id}/llm-models`,
+      owner.token
+    );
+    const row = (models.body.items ?? models.body ?? []).find(
+      (item: { id: string }) => item.id === modelRowId
+    );
+    if (row?.enabled) {
+      modelEnabled = true;
+      break;
+    }
+    const patched = await api(
+      "PATCH",
+      `/v1/pm/tenants/${owner.team.id}/llm-models/${modelRowId}`,
+      owner.token,
+      { expected_revision: row?.revision ?? 0, enabled: true }
+    );
+    if ([200, 201].includes(patched.status)) modelEnabled = true;
+    else if (patched.status !== 409)
+      throw new Error(
+        `model enable failed: ${patched.status} ${JSON.stringify(patched.body)}`
+      );
+  }
+  if (!modelEnabled) throw new Error("model enable failed after retries");
+
+  // 授权模型给项目使用（grant；未授权模型配策略被 400 拒绝）
+  const granted = await api(
+    "PUT",
+    `/v1/pm/tenants/${owner.team.id}/llm-model-authorizations`,
+    owner.token,
+    { items: [{ model_id: modelRowId, action: "grant" }] }
+  );
+  if (![200, 201].includes(granted.status))
+    throw new Error(
+      `model authorization failed: ${granted.status} ${JSON.stringify(granted.body)}`
+    );
+  const policies = await api(
+    "PUT",
+    `/v1/pm/tenants/${owner.team.id}/llm-model-policies`,
+    owner.token,
+    {
+      items: [
+        { role_key: "ai_pm_lead", model_id: modelRowId },
+        { role_key: "general", model_id: modelRowId }
+      ]
+    }
+  );
+  if (![200, 201].includes(policies.status))
+    throw new Error(
+      `team model policies set failed: ${policies.status} ${JSON.stringify(policies.body)}`
+    );
   return { providerId };
 }
 

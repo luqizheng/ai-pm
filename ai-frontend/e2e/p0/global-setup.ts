@@ -76,17 +76,25 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   });
   await new Promise<void>(r => jwksServer.listen(JWKS_PORT, "127.0.0.1", r));
 
-  // ── mock LLM ────────────────────────────────────────────────────────────
-  const mockLlm = spawn(process.execPath, [join(HERE, "mock-llm.mjs"), String(MOCK_LLM_PORT)], {
-    stdio: ["ignore", "ignore", "inherit"]
-  });
-  const mockUrl = `http://127.0.0.1:${MOCK_LLM_PORT}`;
+  // ── mock LLM / 真 LLM（P0_REAL_LLM_URL 指向外部 OpenAI 兼容端点，如本机
+  //    Ollama http://127.0.0.1:11434/v1；设置后不 spawn mock）─────────────────
+  const realLlmUrl = process.env.P0_REAL_LLM_URL;
+  const mockLlm = realLlmUrl
+    ? null
+    : spawn(process.execPath, [join(HERE, "mock-llm.mjs"), String(MOCK_LLM_PORT)], {
+        stdio: ["ignore", "ignore", "inherit"]
+      });
+  const mockUrl = realLlmUrl ?? `http://127.0.0.1:${MOCK_LLM_PORT}`;
   let mockReady = false;
-  for (let attempt = 0; attempt < 40 && !mockReady; attempt += 1) {
+  for (let attempt = 0; attempt < (realLlmUrl ? 10 : 40) && !mockReady; attempt += 1) {
     mockReady = await fetch(`${mockUrl}/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ messages: [{ role: "user", content: "ping" }] })
+      // Ollama 兼容面要求 model 字段；mock server 忽略它
+      body: JSON.stringify({
+        model: process.env.P0_LLM_MODEL ?? "mock-e2e",
+        messages: [{ role: "user", content: "ping" }]
+      })
     })
       .then(res => res.ok)
       .catch(() => false);
@@ -161,7 +169,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   return async () => {
     worker.kill();
     api.kill();
-    mockLlm.kill();
+    mockLlm?.kill();
     await new Promise(r => setTimeout(r, 800));
     jwksServer.close();
     rmSync(knowledgeRoot, { recursive: true, force: true });
