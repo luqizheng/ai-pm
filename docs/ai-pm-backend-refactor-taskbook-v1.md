@@ -157,6 +157,8 @@ PmListRepo / BaselineRepo / CognitionRepo / IdentityRepo / MemberRepo / RunRepo 
 
 **守卫战果（批 B 累计）**：审计守卫 ×2（intake 路径、tenant_members 路径——均为拆迁后清单随迁）、ADR-06a 容器守卫 ×1（documents → repo_guard_query）。
 
+**✅ 批 B pm-api 全清（2026-11-12，收尾批 03688633）**：37 文件 179 处 → **1 处判定保留**（support.rs 的 project_visible EXISTS——全站 require_project_visible 底层，豁免上限 1）。收尾批新增 AcceptanceReadRepo（验收读 6 处，4 行类型上移）与 PlatformOpsRepo（admin/docproc/杂项守卫/审计 INSERT 共 14 处）；三处审计 INSERT 迁仓储时 C174/C180 守卫清单同步合并。门禁固化：**scripts/guard-pm-api-sql.sh**（grep 计数 + support.rs 豁免上限 1，违规非零退出；纳入验收门禁）。仓储体系终态：pm-application/src/repo/ 14 个 port ↔ pm-infrastructure/repo_* 14 个实现，构造器统一 support::repos。验证：workspace 零警告 + clippy PASS + 全量 1507 passed + 守卫 10/10。
+
 **操作事故记录**：收尾盘点时误执行 `git checkout master -- .` 污染工作区（master 的 viz 前端文件混入 index），已 `git checkout HEAD -- . && git reset --hard HEAD` 完整恢复并重跑全量验证。教训：**统计类操作禁止用 checkout 检出对比**，用 `git show branch:path` 或 `git diff branch --stat`。
 
 （pm_lists 22 处 + pm_baseline 18 处归零）。首域样板（读模型 trait，错误=sqlx::Error）；第二域升级出**写事务域样板**：`BaselineRepoError { Db, Conflict, NotFound }` 域语义错误在仓储事务内翻译，HTTP 层只映射状态码（`repo_err()` 三行映射）+ 保留授权门。后续域照此二分：纯读域用 sqlx::Error，有唯一性/状态语义的写域用域错误枚举。剩余：pm_cognition(15) → auth(14) → tenant_members(13) → 其余 32 文件。
