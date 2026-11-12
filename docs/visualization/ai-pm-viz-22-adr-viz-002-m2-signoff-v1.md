@@ -198,7 +198,7 @@ apps/ai-pm-worker/src/viz/  ← Adapter 实现（子进程调用 + 输出捕获 
 | RenderAdapter 接口 + 八项契约断言 | ✅ `adapter_contract.rs` |
 | SVG 静态化检查 | ✅ `artifact_safety.rs`（真实 SeeCode 产物夹具已验证） |
 | 渲染编排 + 失败不落库 + 幂等落库 | ✅ `render_job.rs` |
-| 产物落库表（format 分列 text/bytea） | ✅ 迁移 0061 |
+| 产物落库表（format 分列 text/bytea） | ✅ 迁移 0020 |
 | 前端 `<img>` 静态呈现 + 表格降级 | ✅ V0-8 |
 | **本修订的 §3 执行隔离（四项）** | ✅ **已实现**：`pm-infrastructure/src/viz_render_sandbox.rs`（见 §7.1） |
 | §3.3 零外网 / §3.5 静态化 / §3.6 拒绝入库 | ✅ 已有（部署网络策略 + `artifact_safety` + `render_job`） |

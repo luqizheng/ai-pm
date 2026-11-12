@@ -1,6 +1,6 @@
 # AI-PM Visualization Engine 立项文档包 · 索引与裁决摘要 V1.1
 
-> 状态：**实施前架构复审附条件通过（ADR V1.0.1）**；[V1.0.2 安全修订](ai-pm-viz-15-v0-6-security-review-v1.md)（放弃 iframe → 产物静态化）待 Architecture/Security Owner 签收。R-01 取号结论 0061（待签收）、R-02 已关闭、R-03（PNG）开放按 B2 处理。未进入完整实施。
+> 状态：**实施前架构复审附条件通过（ADR V1.0.1）**；[V1.0.2 安全修订](ai-pm-viz-15-v0-6-security-review-v1.md)（放弃 iframe → 产物静态化）待 Architecture/Security Owner 签收。R-01 取号结论 0020（已按实测复核更正）、R-02 已关闭、R-03（PNG）开放按 B2 处理。未进入完整实施。
 
 ## 1. 文档导航
 
@@ -18,7 +18,7 @@
 | 10 | [**P0 验收矩阵 V1.0**](ai-pm-viz-10-p0-acceptance-matrix-v1.md) | AC-1~21 逐条：阶段归属（关闭 R-02）、实施任务、测试场景 T-01~T-34、验收证据、阻断等级（B1/B2/P1）、R-01 核查证据、M1 清单 |
 | 11 | [**P0 签收材料包 V1.0**](ai-pm-viz-11-signoff-pack-v1.md) | 7 张角色单页签收表（S-1~S-7）+ 启动门槛待办追踪 + R-03 口径 + 回执归档表 + 专家再介入触发条件 |
 | 12 | [**V0-1 技术设计**](ai-pm-viz-12-v0-1-spec-validation-design-v1.md) | **可直接进入实现**：仓库落点、Rust 类型草案、校验器（22 个问题码 + 纯函数形态）、Relation Registry 治理、source_hash 规范、Golden 手写比对方案、9 项实施任务、6 项偏差更正 |
-| 13 | [**V0-2 数据模型设计**](ai-pm-viz-13-v0-2-data-model-design-v1.md) | **取号结论 0061**（0020/0055~0060 曾存在，sqlx 版本单调性）+ `viz` schema 四表 DDL + Artifact/Approval 状态机分离（R-04）+ 容量清理规则（R-05）+ API 端点 + 10 项实施任务 |
+| 13 | [**V0-2 数据模型设计**](ai-pm-viz-13-v0-2-data-model-design-v1.md) | **取号结论 0020**（台账 §〇 新链自 0002 起；实测真实环境 _sqlx_migrations max 18 无旧链残留）+ `viz` schema 四表 DDL + Artifact/Approval 状态机分离（R-04）+ 容量清理规则（R-05）+ API 端点 + 10 项实施任务 |
 | 14 | [**V0-3 权限投影与一致性设计**](ai-pm-viz-14-v0-3-projection-consistency-design-v1.md) | **双层过滤**（查询层端点 project 校验 + 投影层整边丢弃/计数重算）、11 项泄露面清单、`consistency=current` 严格定义（R-07）、nature 粒度（R-06）、Resolver 落点、泄露矩阵测试 |
 | 15 | [**V0-6 安全方向审查**](ai-pm-viz-15-v0-6-security-review-v1.md) | **放弃 iframe → 产物静态化 + 零脚本呈现**（实测 SeeCode v0.6.3：SVG 纯 Node 出图、0 脚本/0 外链/字体内嵌、转义有效）；三层新防线、交互归 G6、AC-6′/7′/18′ 重写、M-1~M-8 修订清单 |
 | 16 | [**V0-8 Viewer 设计**](ai-pm-viz-16-v0-8-viewer-design-v1.md) | 产物通道（`<img>`+Blob，零图形依赖）+ 降级表格（P0 兼作节点导航）+ G6 交互通道（P1）；**第 9 类信封六处必改**、右栏 Graph Tab 三处、令牌/i18n 规则、11 项实施任务 |

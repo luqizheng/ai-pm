@@ -1,4 +1,4 @@
--- 0061：Visualization Engine 基础表（viz schema · ADR-VIZ-006 / 13 号数据模型设计）
+-- 0020：Visualization Engine 基础表（viz schema · ADR-VIZ-006 / 13 号数据模型设计）
 --
 -- 用途：AI-PM Visualization Engine 的产物存储——图形产物（Artifact）、
 -- 发布审批（Approval）、渲染产物（Render Output）、槽位配置（Slot Config）。
@@ -30,12 +30,15 @@
 --      失败产物不落本表（只进审计与 job 记录）；保留期与版本上限由
 --      slot_config 承载，清理 sweep 在 worker 挂载。
 --
--- 迁移号：0061。
---   ⚠ 取号依据（13 号 §2.2）：master 工作树迁移目录最大号 0019，但台账记载
---   0020/0021（agent_run_identity / task_dependency）与 0055~0060 曾以文件形式
---   存在（基线 squash 前并入 0001_baseline）；sqlx _sqlx_migrations 记录版本号，
---   新号必须大于任何环境可能已应用的最大版本（=0060）→ 取 0061。
---   ⚠ 待 Migration Owner 在真实 master 上复核签收（签收前本文件不得应用）。
+-- 迁移号：0020。
+--   取号依据（2026-11-12 实测复核，替代此前 0061 的假设式论证）：
+--   ① 台账 §〇 明文：旧链 0001~0065 已合并为 0001_baseline.sql，
+--      **后续新迁移自 0002 起编号，不再受旧链历史与空号约束**。
+--   ② 实测当前有效迁移集 migrations/ 最大号 = 0019 → 下一个 = 0020。
+--   ③ 实测真实环境（infra postgres 库 _sqlx_migrations）= max 18 / 18 条，
+--      **无任何旧链残留**（0044~0054 等）→ 不存在"复用历史号触发 VersionMissing"的风险，
+--      此前"必须 >0060"的假设不成立，已纠正。
+--   ④ sqlx 不要求版本号连续，只要求库内已应用版本 ⊆ 文件集合。
 
 CREATE SCHEMA IF NOT EXISTS viz;
 

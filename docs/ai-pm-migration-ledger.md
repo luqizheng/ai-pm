@@ -26,12 +26,12 @@
 | 0012 | `0012_system_embedding_config.sql` | 系统级 embedding 供给配置：新建 `platform` schema 单行表 `platform.embedding_config`（`id smallint PK CHECK(id=1)` 强制单例；endpoint/model/enabled/updated_by/updated_at；种子 `http://192.168.2.10:11434/v1` + `bge-m3`，enabled=false——Vector 通道 G-3 门控，配置先行消费后置）。配套 REST `GET/PUT /v1/admin/embedding-config` + `POST /v1/admin/embedding-config/test`（实调 `/embeddings` 返回 `{ok, dims, latency_ms, error}`，写门 `require_system_admin`）+ 前端系统设置页（`/admin/settings`） | 已实施（2026-11-10，平台管理面批；验收 `crates/pm-application/tests/system_embedding_config.rs` 5/5 绿 + 前端 `AdminSettingsView.test.ts` 4/4 绿 + i18n 命名空间对齐） |
 | 0013 | `0013_task_run_event.sql` | S05 执行监控最小事件面（roadmap §9 最小方案）：`delivery.task_run_event` 追加式事件账（幂等键 UNIQUE(run_id,event_type,lease_generation,dedupe_tag) + ON CONFLICT DO NOTHING；event_type 八值 CHECK；禁 UPDATE trigger；tenant/project 维度冗余列、无数据库级 FK）+ `pm-application/src/run_events.rs` 唯一写入入口（与主操作同事务打点：claim/续领/启动/阶段/终态/命令四态/归档取消）+ REST `GET /v1/pm/task-runs/{run_id}/events` 与 `/summary`——现状对照 `docs/s05/S05-00-code-facts-and-gap-analysis-v1.md` 缺口 S05-05。**取号史**：0012 被 master 在途工作占用（system_embedding_config）→ 本批取 **0013**（台账纪律 1：max+1）；0012 已于同日合入 master，两号不冲突 | 已实施（2026-11-10，S05 后端批 1；验收 `docs/s05/S05-run-events-monitoring-report-v1.md`） |
 | 0014 | `0014_task_knowledge_pin.sql` | S05-02 执行上下文注入闭环（批 3）：`delivery.task_knowledge_ref` 增 `pinned_revision_no integer NULL`（CHECK ≥1）——NULL=取该文档最新 published 修订（默认，不落后）；非空=人工确认时钉定的版本（可复现）。配套 `pm-application/src/task_knowledge.rs`（锚点绑定/回填/章节解析）、锚点生产链路（`pm_write::link_task_requirement` 同事务生成 + `requirement_projection::bind_projection` 投影后回填）、`RunContract.knowledge_sections[]`（additive 正文注入，开关 `AI_PM_KNOWLEDGE_SECTION_INJECTION` 默认 off，`contract_version` 不跳）+ `knowledge_refs[].pinned_revision_no`——用户裁决「显式锚点 + 人工确认」；差异说明 `docs/architecture/knowledge-services/kp-s05-knowledge-injection-contract-deviations-v1.md`（D-KP-S05-1）+ D2 §4.2 映射表补行 | 已实施（2026-11-10，S05 后台批 3；验收 `docs/s05/S05-batch3-knowledge-injection-report-v1.md`） |
-| 0015 | `0015_task_schedule.sql` | 任务调度列（planned_start_at/planned_end_at/estimate_hours）+ 列级注释 | 已实施（2026-11-10；本行 2026-11-12 由 V0-2 批次补登——台账此前漏记 0015~0019，见 0061 行取号说明） |
+| 0015 | `0015_task_schedule.sql` | 任务调度列（planned_start_at/planned_end_at/estimate_hours）+ 列级注释 | 已实施（2026-11-10；本行 2026-11-12 由 V0-2 批次补登——台账此前漏记 0015~0019，见 0020 行取号说明） |
 | 0016 | `0016_docproc_domain.sql` | docproc 域四表（文档处理 TD-01~05） | 已实施（2026-11-10；补登同上） |
 | 0017 | `0017_kb_docproc_source_ref.sql` | kb 文档来源引用列 | 已实施（2026-11-10；补登同上） |
 | 0018 | `0018_team_llm_catalog.sql` | Team LLM Model Catalog（`ai.team_llm_model` + (tenant_id,id) 组合唯一键） | 已实施（2026-11-10；补登同上） |
 | 0019 | `0019_conversation_context_item.sql` | 会话级对象上下文条目（CX1，AI-02） | 已实施（2026-11-10；补登同上） |
-| 0061 | `0061_visualization_artifact.sql` | Visualization Engine 基础表：新建 `viz` schema 四表（artifact 状态机+发布不可变守卫触发器 / approval 与 artifact 状态机分离+每槽位 pending 部分唯一索引+裁决锚点不可变守卫 / render_output 按 format 分列 text|bytea / slot_config 保留期与版本上限）+ `viz_artifact_nature_publish_check`（explanatory 不得 published）——设计 `docs/visualization/ai-pm-viz-13-v0-2-data-model-design-v1.md`（并入 ADR V1.0.1 附录 A）。**取号史**：初稿假设 0020 作废——0020/0021/0055~0060 曾以文件存在（基线 squash 并入 0001），sqlx 版本单调性要求 >0060 → 取 **0061**（13 号 §2.2）；**⚠ 待 Migration Owner 在真实 master 复核签收后方可在真实环境应用** | 已建档（2026-11-12，V0-2 批；签收状态=待定） |
+| 0020 | `0020_visualization_artifact.sql` | Visualization Engine 基础表：新建 `viz` schema 四表（artifact 状态机+发布不可变守卫触发器 / approval 与 artifact 状态机分离+每槽位 pending 部分唯一索引+裁决锚点不可变守卫 / render_output 按 format 分列 text&#124;bytea / slot_config 保留期与版本上限）+ `viz_artifact_nature_publish_check`（explanatory 不得 published）——设计 `docs/visualization/ai-pm-viz-13-v0-2-data-model-design-v1.md`（并入 ADR V1.0.1 附录 A）。**取号史**：初稿按"必须 > 历史最大 0060"取 0061；**2026-11-12 实测复核推翻该假设**——台账 §〇 明文新链自 0002 起不受旧链约束，且真实环境 `_sqlx_migrations` = max 18 / 18 条**无旧链残留** → 按「当前目录最大 0019 + 1」改为 **0020**（纠错记录留存，便于审计） | 已建档（2026-11-12，V0-2 批；迁移链经 sqlx::test 全量重放验证 7 例绿） |
 
 ## 一、已应用（历史审计——文件已并入 0001_baseline.sql）
 
@@ -69,5 +69,7 @@
 ## 三、纪律
 
 1. 新设计稿取号：先读本表 → 再 `ls migrations/` 核实 → 预留号 = `migrations/` 最大号 + 1 与本表最大预留号 + 1 的较大者。
+   **旧链（0001~0065，已并入 0001_baseline.sql）的历史号不参与取号计算**——§一「已应用（历史审计）」区的号段仅作审计，新号只看 §〇·二 与 `migrations/` 实况。
+   若怀疑某环境残留旧链 `_sqlx_migrations` 记录，先查该环境 `SELECT max(version) FROM _sqlx_migrations`（2026-11-12 实测真实环境 = 18，无残留）。
 2. 实施撞号：后实施者无条件顺移，不得改已应用迁移；顺移后同步回填本表 + 自己的设计稿。
 3. 本表由每个取号/顺移动作的执行任务就地维护（含在对应 `chore(todo)` 或 `feat` 提交内）。
