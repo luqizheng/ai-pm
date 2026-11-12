@@ -277,6 +277,12 @@ relations:
 | 未知 relation 阻断 | `E_SPEC_RELATION_NOT_REGISTERED` |
 | 类型不匹配阻断 | `E_SPEC_RELATION_KIND_MISMATCH`（source/target type 与两端 node.kind 不符；`*` 通配） |
 | lint 检查未登记/类型错/方向反 | `scripts/viz-registry-lint.js`（§8） |
+| **状态模型（V1.1 补 `rejected`）** | `draft`（未会签，**不可投影**）/ `active` / `deprecated`（曾 active 后被替代，保留历史解释）/ `rejected`（会签否决，从未启用）——**未会签 ≠ 默认允许** |
+| **反向视图（R-08 裁决）** | `view_alias: true` + `reverse_view_of: <key>`：别名不新增业务事实、不参与底层关系计数；**同一底层事实不得同时产出两条边** |
+| **合成关系（R-09）** | `synthetic: true` + `source: vizspec` + `business_fact: false`；必须校验 `derived` 元数据完整 |
+| **跨 Registry 校验（R-06 裁决）** | `type_key_source: pc.relationship_type`；`type_key` 必须存在于 PC 权威注册表，方向/端点类型/`governance_level`/`owner_domain` 全部沿用 PC 定义；**PC 侧停用即不得投影** |
+| **来源标识（V-06）** | 用稳定 `schema.table.column` 或领域注册表标识；**迁移文件行号仅作审查依据，不得作为唯一运行时来源标识** |
+| **方向分离（R-05 裁决）** | Registry 语义方向 ≠ 视觉流向；语义方向单一事实源，视觉翻转须为显式 presentation transform（详见 [17 号](ai-pm-viz-17-relation-registry-signoff-v1.md) R-05 与 [14 号](ai-pm-viz-14-v0-3-projection-consistency-design-v1.md)） |
 
 ### 5.3 owner 会签记录
 

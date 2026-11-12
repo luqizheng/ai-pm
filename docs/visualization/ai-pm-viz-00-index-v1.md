@@ -22,7 +22,7 @@
 | 14 | [**V0-3 权限投影与一致性设计**](ai-pm-viz-14-v0-3-projection-consistency-design-v1.md) | **双层过滤**（查询层端点 project 校验 + 投影层整边丢弃/计数重算）、11 项泄露面清单、`consistency=current` 严格定义（R-07）、nature 粒度（R-06）、Resolver 落点、泄露矩阵测试 |
 | 15 | [**V0-6 安全方向审查**](ai-pm-viz-15-v0-6-security-review-v1.md) | **放弃 iframe → 产物静态化 + 零脚本呈现**（实测 SeeCode v0.6.3：SVG 纯 Node 出图、0 脚本/0 外链/字体内嵌、转义有效）；三层新防线、交互归 G6、AC-6′/7′/18′ 重写、M-1~M-8 修订清单 |
 | 16 | [**V0-8 Viewer 设计**](ai-pm-viz-16-v0-8-viewer-design-v1.md) | 产物通道（`<img>`+Blob，零图形依赖）+ 降级表格（P0 兼作节点导航）+ G6 交互通道（P1）；**第 9 类信封六处必改**、右栏 Graph Tab 三处、令牌/i18n 规则、11 项实施任务 |
-| 17 | [**Registry 词表会签表**](ai-pm-viz-17-relation-registry-signoff-v1.md) | **V0-1 唯一硬人工依赖**：8+1 条 relation 逐条会签（语义/方向/两端/Owner）+ 三个共答问题 + 落地步骤；未会签 = draft = 校验 Blocker |
+| 17 | [**Registry 词表会签表 V1.1**](ai-pm-viz-17-relation-registry-signoff-v1.md) | **V0-1 唯一硬人工依赖**：架构预审 V1.1（V-01~V-10 修订）+ 三个架构裁决（**R-05 方向分离 / R-06 PC 唯一词汇权威 / R-08 反向视图≠新事实**）+ **R-07 代码实证修正**（evidence → kb.source）+ 15 条 Lint + 会签记录表 |
 | 18 | [**UX 规格 V1.1**](ai-pm-viz-18-v0-8-ux-spec-v1-1.md) | **交互规格权威**（专家 V1.0 + 安全修订 UX-R01~R12）：六原则、角色场景、P0/P1 交互规格、五流程、生命周期、AI 联动、权限一致性、UX 验收 UX-P0-01~11 / UX-P1-01~08、**12 项产品裁决（UX-D01~D12）** |
 
 ## 2. 立项核心判断（一段话版）

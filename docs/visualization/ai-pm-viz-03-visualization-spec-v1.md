@@ -114,7 +114,7 @@ V1 首批词表：
 | `task.implements_requirement` | Task↔Req |
 | `task.depends_on_task` | Task 依赖 |
 | `pc.*`（透传 pc.relationship 类型） | 产品认知关系 |
-| `kb.supported_by_memory` | 知识溯源 |
+| `kb.evidence_supported_by` | 记忆以原始资料（kb.source）为依据（R-07，方向：memory → evidence_source） |
 | `derived_trace`（**合成边，非业务事实**） | 二跳拼接：`{kind:"derived_trace", direct:false, via:[{type,id}], semantic_confidence:"structurally_supported"}`（DV-8）——只声明路径结构完整，不夸大业务确定性 |
 
 ## 6. 版本与 Stale（与既有机制对齐）

@@ -40,7 +40,7 @@
 ### S-2 Domain Owners 签收表（Relation Registry）
 
 - **待签收**：首批 relation 词表（`domain.relation`）+ 会签记录。
-- **范围**：`task.implements_requirement`、`design.covers_requirement` / `requirement.refines_design`、`design.decided_by_adr`、`task.depends_on_task`、`pc.*`、`kb.supported_by_memory`、`derived_trace`（合成边）。
+- **范围**：`task.implements_requirement`、`design.covers_requirement`（+ `requirement.refines_design` 反向视图别名）、`design.decided_by_adr`、`task.depends_on_task`、`pc.*`、`kb.evidence_supported_by`、`derived_trace`（合成边）。**词表已升 V1.1（架构预审修订，含 R-07 方向修正）→ 见 [17 号](ai-pm-viz-17-relation-registry-signoff-v1.md)。**
 - **判定标准**：每个 relation 具备 key / 业务语义 / source type / target type / 方向 / 所属领域 / Owner / 状态与版本；语义变更按新版本或新关系处理；废弃关系保留历史解释能力。
 - **判定标准（附加）**：Registry 是映射与校验机制，**不是新的业务关系权威**；会签须在 V0-1 内完成。
 - **签收结论**：☐ 确认　☐ 有条件（待补条目：______）　☐ 有异议：________________

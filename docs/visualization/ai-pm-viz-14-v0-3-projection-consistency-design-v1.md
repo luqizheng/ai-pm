@@ -103,6 +103,15 @@ WHERE dr.tenant_id = $1
 | L2-e | 因权限裁剪产生的边 → `W_SPEC_DANGLING_EDGE`（12 号 §4.3），UI 明示"部分关系因权限未展示" | ADR-VIZ-009 |
 | L2-f | 截断显式化：`truncated` + `truncation_reason` + 丢弃计数（范式：`traversal.rs:187-210` 的 `no_active_edge`/`candidate_budget_exceeded`/`traversal_depth_exceeded`；`assembly.rs:163-181`） | 同上 |
 
+**依赖方向约定（R-05 裁决落地点，V-10）**：`task.depends_on_task` 的 Registry 语义方向为 **dependent → prerequisite**（`task_id → depends_on_task_id`）。因此：
+
+| 计算 | 使用方向 |
+|---|---|
+| 依赖闭包 / 关键路径（CPM） | `prerequisite → dependent`（顺执行方向） |
+| 影响分析 / 下游影响 | **反向遍历**（Registry 方向的逆） |
+
+两处必须各自显式声明方向；直接按 Registry 方向遍历影响分析会得到**反向结论**（A 依赖 B 却报"B 受 A 影响"）。DAG 视觉流向的翻转属 presentation transform，不改语义方向。
+
 **关键性质**：L2-d 的计数重算使**不同权限用户看到的同一张图，其节点数/边数只反映各自可见部分**——但这本身可能通过"计数差异"泄露"存在某些不可见对象"。因此：
 
 > **决策（需 Security Owner 确认，D-2）**：默认**不返回**因权限裁剪而减少的计数。即响应中的 `total_nodes` / `total_edges` 表示"**你可见范围内**的图规模"，而不是"全量图规模"；**不提供** "全量规模"字段。否则计数差异将成为探测通道。
@@ -244,7 +253,7 @@ WHERE dr.tenant_id = $1
 ### 7.3 关系边判定
 
 - `relation_exists(from, to, relation)`：查 Registry 登记的关系表 + L1 条件 + 端点可见性。
-- **Registry 的 `source_type/target_type` 决定查哪张表**（`task.implements_requirement` → `delivery.task_requirement`；`design.covers_requirement` → `design.design_requirement`；`task.depends_on_task` → `delivery.task_dependency`；`design.decided_by_adr` → `design.adr_design_revision` + `design.adr_requirement`；`pc.*` → `pc.relationship`；`kb.supported_by_memory` → `kb.memory_ref`）。
+- **Registry 的 `source_type/target_type` 决定查哪张表**（`task.implements_requirement` → `delivery.task_requirement`；`design.covers_requirement` → `design.design_requirement`；`task.depends_on_task` → `delivery.task_dependency`；`design.decided_by_adr` → `design.adr_design_revision` + `design.adr_requirement`；`pc.*` → `pc.relationship` + `pc.relationship_type` 交叉校验（R-06）；`kb.evidence_supported_by` → `kb.memory_ref` 且过滤 `ref_role='evidence'`（R-07，target 恒为 kb.source）。
 - **映射表属于 Visualization 层**（不引入业务表变更，符合 ADR-VIZ-005）。
 
 ## 8. 角色与人类门
