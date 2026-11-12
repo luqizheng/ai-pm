@@ -120,11 +120,12 @@ describe("workspace tokens", () => {
   });
 
   it("布局尺寸与密度 token 按 V1.0 §1.2/§二 定义（主题无关，:root 定义即继承）", () => {
-    // 四栏主体工作区（AI Collaboration V1.0 / DR-C5 + DR-C8，1440px 基准）：
-    // 188 + 518 + 446 + 288 = 1440
-    expect(dark.get("sidebar-width")).toBe("188px");
+    // 四栏主体工作区（AI Collaboration V1.0 / DR-C5 + DR-C8，1440px 基准；
+    // 侧边导航 Figma 对齐后侧栏 188→232、主区 518→474）：
+    // 232 + 474 + 446 + 288 = 1440
+    expect(dark.get("sidebar-width")).toBe("232px");
     expect(dark.get("sidebar-collapsed")).toBe("60px");
-    expect(dark.get("main-width")).toBe("518px");
+    expect(dark.get("main-width")).toBe("474px");
     expect(dark.get("chat-width")).toBe("446px");
     expect(dark.get("context-width")).toBe("288px");
     expect(dark.get("topbar-height")).toBe("52px");

@@ -1,6 +1,6 @@
 {
   "name": "ai-pm-frontend",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "AI-PM 平台前端 —— PRISM 壳 + 项目管理业务视图",
