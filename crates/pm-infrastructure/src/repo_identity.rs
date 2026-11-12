@@ -75,6 +75,16 @@ impl IdentityRepo for PgIdentityRepo {
         .bind(subject)
         .fetch_optional(&self.pool)
         .await?;
+        if let Some((identity_id, ..)) = &row {
+            // 节流：5 分钟内的重复请求不再写库（Q1；原 auth.rs 语义）。
+            sqlx::query(
+                "UPDATE core.principal_identity SET last_seen_at = now() \
+                  WHERE id = $1 AND last_seen_at < now() - interval '5 minutes'",
+            )
+            .bind(identity_id)
+            .execute(&self.pool)
+            .await?;
+        }
         Ok(row.map(|(identity_id, principal_id, is_active, display_name)| ResolvedIdentity {
             identity_id,
             principal_id,

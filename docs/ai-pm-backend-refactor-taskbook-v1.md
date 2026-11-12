@@ -141,7 +141,25 @@
 
 **守卫战果 ×3**：C-2 ADR-06a 容器守卫、批 A C174/C180 审计守卫、C-3 后审计守卫（intake 路径，拆目录时只跑了针对性测试漏网、全量时被守卫抓住）——源码级守卫体系持续有效，教训：**拆文件类改动必须过全量**（守卫按路径扫描）。
 
-**进度**：pm-api 37 文件 SQL 收口 2/37（pm_lists 22 处 + pm_baseline 18 处归零）。首域样板（读模型 trait，错误=sqlx::Error）；第二域升级出**写事务域样板**：`BaselineRepoError { Db, Conflict, NotFound }` 域语义错误在仓储事务内翻译，HTTP 层只映射状态码（`repo_err()` 三行映射）+ 保留授权门。后续域照此二分：纯读域用 sqlx::Error，有唯一性/状态语义的写域用域错误枚举。剩余：pm_cognition(15) → auth(14) → tenant_members(13) → 其余 32 文件。
+**进度（收尾盘点 2026-11-12，域 12 后）**：pm-api 37 文件 SQL 已收口 **26/37**（pm_lists 22 + pm_baseline 18 + pm_cognition 15 + auth 14 + tenant_members 13 + pm_runs 11 + knowledge_services 9 + pm_designs 8 + ai_team_monitor 8 + customers 6 + 守卫合并两波 20+7 = 151 处归零）。剩余 **11 文件 21 处**：
+
+- 验收/工件读列表 6 处：pm_acceptance(3) + pm_artifacts(2) + pm_reviews(1) → AcceptanceReadRepo（新 port）
+- 审计 INSERT 3 处：intakes(1) + device_claim(1) + outbox_ops(1) → 迁仓储时**必须同步改 C174/C180 守卫清单**
+- 管理面 4 处：principals(1 UPDATE) + admin_config(2 embedding 配置) + team_llm_guard(1) → AdminRepo
+- docproc 3 处：文档存在性/版本链 → DocprocGuardRepo
+- support 横切 2 处：require_project_visible 底层 EXISTS + task→project_id（project_visible 被全站 require_project_visible 依赖，收口收益低、风险高，**可判定保留**）
+
+**仓储体系现状**（pm-application/src/repo/ 12 个 port + pm-infrastructure/repo_* 12 个实现）：
+PmListRepo / BaselineRepo / CognitionRepo / IdentityRepo / MemberRepo / RunRepo / KbPcQueryRepo / DesignGuardRepo / AiTeamMonitorRepo / CustomerRepo / GuardQueryRepo + AiTeamMonitorRepo（行类型）。
+构造器统一走 `pm-api/src/support.rs::repos`（handler 只依赖 trait）。
+
+**错误分层定案**：纯读域 = sqlx::Error（ApiError::Internal）；写事务域 = 域错误枚举（Db/Conflict/NotFound/RuleRejected），HTTP 层三行映射。错误码契约（OWNER_LAST 等）经测试锁定。
+
+**守卫战果（批 B 累计）**：审计守卫 ×2（intake 路径、tenant_members 路径——均为拆迁后清单随迁）、ADR-06a 容器守卫 ×1（documents → repo_guard_query）。
+
+**操作事故记录**：收尾盘点时误执行 `git checkout master -- .` 污染工作区（master 的 viz 前端文件混入 index），已 `git checkout HEAD -- . && git reset --hard HEAD` 完整恢复并重跑全量验证。教训：**统计类操作禁止用 checkout 检出对比**，用 `git show branch:path` 或 `git diff branch --stat`。
+
+（pm_lists 22 处 + pm_baseline 18 处归零）。首域样板（读模型 trait，错误=sqlx::Error）；第二域升级出**写事务域样板**：`BaselineRepoError { Db, Conflict, NotFound }` 域语义错误在仓储事务内翻译，HTTP 层只映射状态码（`repo_err()` 三行映射）+ 保留授权门。后续域照此二分：纯读域用 sqlx::Error，有唯一性/状态语义的写域用域错误枚举。剩余：pm_cognition(15) → auth(14) → tenant_members(13) → 其余 32 文件。
 
 ## 5. 验收门禁（每批必过）
 
