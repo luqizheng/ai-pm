@@ -12,6 +12,7 @@ pub mod outbox_worker;
 pub mod repo_baseline;
 pub mod repo_cognition;
 pub mod repo_identity;
+pub mod repo_ai_team_monitor;
 pub mod repo_design_guard;
 pub mod repo_kb_pc_query;
 pub mod repo_runs;

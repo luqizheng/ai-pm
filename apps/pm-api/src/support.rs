@@ -267,6 +267,12 @@ pub mod repos {
         pm_infrastructure::repo_runs::PgRunRepo::new(pool.clone())
     }
 
+    pub fn ai_team_monitor_repo(
+        pool: &sqlx::PgPool,
+    ) -> pm_infrastructure::repo_ai_team_monitor::PgAiTeamMonitorRepo {
+        pm_infrastructure::repo_ai_team_monitor::PgAiTeamMonitorRepo::new(pool.clone())
+    }
+
     pub fn design_guard_repo(
         pool: &sqlx::PgPool,
     ) -> pm_infrastructure::repo_design_guard::PgDesignGuardRepo {
