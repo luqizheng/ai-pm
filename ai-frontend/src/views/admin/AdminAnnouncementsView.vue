@@ -290,7 +290,7 @@ onMounted(load);
 .admin-announcements__error {
   margin: 0;
   font-size: var(--ws-font-size-caption);
-  color: var(--ws-color-danger);
+  color: var(--ws-color-danger-text);
 }
 
 .admin-announcements__row-actions {

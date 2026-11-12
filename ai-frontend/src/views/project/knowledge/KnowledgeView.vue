@@ -711,6 +711,10 @@ watch(
   font-size: 13px;
 }
 
+.knowledge-tab:hover {
+  background: var(--ws-hover-veil);
+}
+
 .knowledge-tab.is-active {
   background: var(--accent-subtle, var(--ws-accent, #2563eb));
   border-color: transparent;
@@ -758,6 +762,10 @@ watch(
   border: 0;
   cursor: pointer;
   text-align: left;
+}
+
+.kb-row-head:hover {
+  background: var(--ws-hover-veil);
 }
 
 .kb-doc-key {

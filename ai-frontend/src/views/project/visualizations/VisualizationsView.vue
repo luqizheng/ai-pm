@@ -304,6 +304,10 @@ onMounted(() => {
   cursor: pointer;
 }
 
+.viz-view__slot:hover {
+  border-color: var(--border-hover-strong);
+}
+
 .viz-view__main {
   display: flex;
   flex-direction: column;
@@ -327,6 +331,10 @@ onMounted(() => {
   background: var(--surface-base);
   border: none;
   cursor: pointer;
+}
+
+.viz-view__live-tab:hover {
+  color: var(--text-primary);
 }
 
 .viz-view__live-tab--on {

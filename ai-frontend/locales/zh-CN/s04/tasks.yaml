@@ -18,6 +18,8 @@ tasks:
     readinessDesc: 移交 S05 前的任务完整度检查（建设中）。
     detailTitle: 任务详情
   common:
+    prevPage: 上一页
+    nextPage: 下一页
     createTask: 新建任务
     edit: 编辑
     save: 保存

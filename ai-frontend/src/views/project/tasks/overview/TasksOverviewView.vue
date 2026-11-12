@@ -702,6 +702,7 @@ function decideInsight(id: string, decision: "accepted" | "rejected") {
   border-bottom: var(--border-1) solid var(--ws-border);
   color: var(--ws-text-primary);
   font-size: var(--font-size-body);
+  font-variant-numeric: tabular-nums;
 }
 
 .ov-table__row {
@@ -759,7 +760,7 @@ function decideInsight(id: string, decision: "accepted" | "rejected") {
 
 .ov-insight__meta {
   margin: 0;
-  color: var(--ws-text-disabled);
+  color: var(--ws-text-secondary);
   font-size: var(--font-size-micro);
 }
 

@@ -261,6 +261,7 @@ function goBackToList() {
 
       <ConfirmationDialog
         :open="proposeDialogOpen"
+        :disabled="acting"
         :title="t('pm.requirementHistory.proposeModalTitle')"
         :description="t('pm.requirementHistory.proposeModalDesc')"
         :confirm-label="t('common.confirm')"

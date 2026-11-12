@@ -11,6 +11,8 @@ design:
     sectionSettings: Settings framework
   theme:
     toggle: Toggle light / dark preview
+    dark: Dark
+    light: Light
   aiInteraction:
     index:
       title: Overview — architecture / lifecycle / frame index

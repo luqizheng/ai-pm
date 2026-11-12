@@ -194,7 +194,12 @@ function goBack() {
               }}
             </Badge>
             <Badge v-if="row.target_status" variant="neutral" size="sm">
-              {{ row.target_status }}
+              {{
+                t(
+                  `pm.requirementImpact.taskState.${row.target_status}`,
+                  row.target_status
+                )
+              }}
             </Badge>
           </li>
         </ul>

@@ -251,7 +251,7 @@ function openRequirement(requirementId: string) {
 }
 
 .rv-item:hover {
-  background: var(--surface-base);
+  background: var(--ws-hover-veil);
 }
 
 .rv-item:focus-visible {
@@ -308,6 +308,7 @@ function openRequirement(requirementId: string) {
 .rv-meta__row dd {
   margin: 0;
   color: var(--ws-text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
 .rv-meta__mono {

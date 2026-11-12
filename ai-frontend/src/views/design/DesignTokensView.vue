@@ -59,7 +59,7 @@ const spacingScale = [
 ];
 
 const typeScale = [
-  { name: "--font-size-page", value: "21px" },
+  { name: "--ws-font-size-page", value: "21px" },
   { name: "--font-size-body-strong", value: "15px" },
   { name: "--font-size-body", value: "13px" },
   { name: "--font-size-caption", value: "12px" },

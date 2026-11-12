@@ -262,7 +262,7 @@ function finish(): void {
   padding: var(--space-4) var(--space-5);
   border: 1px solid var(--ws-color-success);
   border-radius: var(--radius-md);
-  background: var(--accent-surface);
+  background: var(--success-subtle);
   color: var(--ws-color-success-text);
 }
 

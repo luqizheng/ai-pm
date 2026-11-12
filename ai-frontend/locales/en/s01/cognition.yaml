@@ -37,6 +37,7 @@ cognition:
       title: No cognition items yet
       description: Start an analysis run to produce cognition items from project records and repository metadata.
   knowledge:
+    version: "v{version}"
     title: Project Knowledge
     empty: Nothing confirmed yet — confirmed cognition items become project knowledge with your name and time on record.
   domain:

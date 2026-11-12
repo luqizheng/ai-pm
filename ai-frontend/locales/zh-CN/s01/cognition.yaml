@@ -37,6 +37,7 @@ cognition:
       title: 暂无认知条目
       description: 启动一次分析 Run，从项目记录与仓库元数据产出认知条目。
   knowledge:
+    version: "v{version}"
     title: 项目知识
     empty: 尚无确认记录——确认后的认知条目将成为带确认人与时间的项目知识。
   domain:

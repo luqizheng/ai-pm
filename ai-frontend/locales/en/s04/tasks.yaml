@@ -18,6 +18,8 @@ tasks:
     readinessDesc: Task completeness gate before handing over to S05 (under construction).
     detailTitle: Task Detail
   common:
+    prevPage: Previous page
+    nextPage: Next page
     noProjectTitle: Select a project first
     noProjectHint: Task planning belongs to a project — pick a project context first.
     createTask: Create Task

@@ -35,6 +35,12 @@ import {
  */
 
 const { t } = useI18n();
+
+/** evidence.type 为后端裸枚举：走 i18n 映射，未登记的枚举值回退原文 */
+function evidenceTypeLabel(value: unknown): string {
+  if (typeof value !== "string" || value === "") return "—";
+  return t(`s01.cognition.review.evidenceType.${value}`, value);
+}
 const route = useRoute();
 const scope = useScopeStore();
 
@@ -285,7 +291,7 @@ watch(projectId, load);
               <p class="cog-page__item-content">{{ item.content }}</p>
               <p class="cog-page__item-evidence">
                 {{ t("s01.cognition.review.evidence") }}:
-                {{ String(item.evidence?.type ?? "—") }}
+                {{ evidenceTypeLabel(item.evidence?.type) }}
               </p>
               <div
                 v-if="item.state === 'proposed'"
@@ -295,6 +301,7 @@ watch(projectId, load);
                   variant="primary"
                   size="sm"
                   :loading="decidingId === item.id"
+                  :disabled="Boolean(decidingId)"
                   :data-testid="`cognition-confirm-${item.id}`"
                   @click="decide(item, 'confirm')"
                 >
@@ -342,7 +349,9 @@ watch(projectId, load);
               <Badge variant="neutral" size="sm">{{
                 domainTag(entry.domain)
               }}</Badge>
-              <Badge variant="info" size="sm">v{{ entry.version }}</Badge>
+              <Badge variant="info" size="sm">{{
+                t("s01.cognition.knowledge.version", { version: entry.version })
+              }}</Badge>
             </div>
             <p class="cog-page__item-content">{{ entry.content }}</p>
           </li>
@@ -372,6 +381,7 @@ watch(projectId, load);
 .cog-page__stat b {
   color: var(--ws-text-primary);
   font-size: var(--font-size-h4);
+  font-variant-numeric: tabular-nums;
 }
 
 .cog-page__stat span {
@@ -421,6 +431,7 @@ watch(projectId, load);
 .cog-page__run-meta {
   color: var(--ws-text-secondary);
   font-size: var(--font-size-caption);
+  font-variant-numeric: tabular-nums;
 }
 
 .cog-page__item {

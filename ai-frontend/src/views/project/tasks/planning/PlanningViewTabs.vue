@@ -66,10 +66,19 @@ const activeKey = computed(
   color: var(--ws-text-secondary);
   text-decoration: none;
   white-space: nowrap;
+  transition:
+    color var(--duration-fast) var(--ease-decelerate),
+    background-color var(--duration-fast) var(--ease-decelerate);
 }
 
 .pl-views__tab:hover {
   background-color: var(--surface-base);
+}
+
+.pl-views__tab:focus-visible {
+  outline: var(--size-focus-ring) solid var(--ws-accent);
+  outline-offset: 0;
+  border-radius: var(--radius-xs);
 }
 
 .pl-views__tab.is-active {
@@ -79,7 +88,7 @@ const activeKey = computed(
 .pl-views__tab.is-active::after {
   position: absolute;
   right: 0;
-  bottom: calc(var(--space-1) * -1);
+  bottom: 0;
   left: 0;
   height: var(--size-indicator);
   background: var(--ws-accent);

@@ -227,6 +227,7 @@ a.rh-header__crumb:focus-visible {
   font-size: var(--font-size-caption);
   line-height: var(--line-height-caption);
   color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 

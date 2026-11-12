@@ -20,6 +20,9 @@ const { t } = useI18n();
 
 const { theme, toggleTheme } = useTheme();
 const isLight = computed(() => theme.value === "light");
+const themeLabel = computed(() =>
+  t(isLight.value ? "design.theme.dark" : "design.theme.light")
+);
 
 /** 进入目录前的主题（卸载时恢复） */
 let previousTheme: "dark" | "light" | null = null;
@@ -228,7 +231,7 @@ const navSections = computed(() => [
           :aria-pressed="isLight ? 'true' : 'false'"
           @click="toggleTheme"
         >
-          {{ isLight ? "Dark" : "Light" }} · {{ t("design.theme.toggle") }}
+          {{ themeLabel }} · {{ t("design.theme.toggle") }}
         </button>
       </header>
 

@@ -3,6 +3,8 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
+  ChevronLeft,
+  ChevronRight,
   Columns3,
   GitBranch,
   List,
@@ -716,18 +718,20 @@ function gotoPage(next: number) {
           variant="ghost"
           size="sm"
           :disabled="page <= 1"
+          :aria-label="t('s04.tasks.common.prevPage')"
           @click="gotoPage(page - 1)"
         >
-          ‹
+          <ChevronLeft :size="14" aria-hidden="true" />
         </Button>
         <span class="bl-pager__label">{{ page }} / {{ totalPages }}</span>
         <Button
           variant="ghost"
           size="sm"
           :disabled="page >= totalPages"
+          :aria-label="t('s04.tasks.common.nextPage')"
           @click="gotoPage(page + 1)"
         >
-          ›
+          <ChevronRight :size="14" aria-hidden="true" />
         </Button>
       </div>
     </template>
@@ -991,6 +995,7 @@ function gotoPage(next: number) {
   border-bottom: var(--border-1) solid var(--ws-border);
   color: var(--ws-text-primary);
   font-size: var(--font-size-body);
+  font-variant-numeric: tabular-nums;
   vertical-align: middle;
 }
 
@@ -1134,7 +1139,7 @@ function gotoPage(next: number) {
 
 .bl-form__error {
   margin: 0;
-  color: var(--ws-color-danger);
+  color: var(--ws-color-danger-text);
   font-size: var(--font-size-caption);
 }
 
@@ -1182,7 +1187,7 @@ function gotoPage(next: number) {
   border: none;
   background: none;
   padding: 0;
-  color: var(--ws-color-danger);
+  color: var(--ws-color-danger-text);
   font-size: var(--font-size-caption);
   cursor: pointer;
 }

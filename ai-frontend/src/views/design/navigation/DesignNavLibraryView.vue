@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { Folders } from "lucide-vue-next";
+import { Folders, PanelLeftClose, PanelLeftOpen } from "lucide-vue-next";
 
 import { SidebarItem } from "@/components/ui/sidebar-item";
 import { NavigationGroup } from "@/components/ui/navigation-group";
@@ -128,14 +128,14 @@ const crumbs = [
               class="library__collapse"
               aria-label="Collapse sidebar"
             >
-              «
+              <PanelLeftClose :size="16" aria-hidden="true" />
             </button>
             <button
               type="button"
               class="library__collapse"
               aria-label="Expand sidebar"
             >
-              »
+              <PanelLeftOpen :size="16" aria-hidden="true" />
             </button>
           </div>
         </Specimen>

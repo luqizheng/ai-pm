@@ -11,6 +11,8 @@ design:
     sectionSettings: Settings 框架
   theme:
     toggle: 切换浅色 / 深色预览
+    dark: 深色
+    light: 浅色
   aiInteraction:
     index:
       title: 总览 — 架构 / 生命周期 / 帧索引

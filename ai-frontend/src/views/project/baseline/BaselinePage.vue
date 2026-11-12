@@ -221,6 +221,7 @@ watch(projectId, load);
                 variant="primary"
                 size="sm"
                 :loading="busy === item.id"
+                :disabled="Boolean(busy)"
                 :data-testid="`baseline-confirm-${item.id}`"
                 @click="decide(item, 'confirm')"
               >
@@ -279,6 +280,7 @@ watch(projectId, load);
   margin: 0;
   color: var(--ws-text-secondary);
   font-size: var(--font-size-caption);
+  font-variant-numeric: tabular-nums;
 }
 .bl-page__card {
   display: flex;

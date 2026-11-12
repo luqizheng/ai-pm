@@ -228,7 +228,7 @@ function back(): void {
 }
 
 .create__notice svg {
-  color: var(--accent);
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
