@@ -88,14 +88,16 @@ describe("组件样式契约（Figma 组件库数值必须来自 token）", () =
 
   it("Table 行高 / 表头高 / Badge 高来自 token", () => {
     expect(source("table", "TableRow.vue")).toContain("var(--size-row)");
-    expect(source("table", "TableHeader.vue")).toContain(
+    // 表头单元格样式在 TableHead.vue（th 渲染器）——8ccdaacc 修正模板对调后
+    // 的语义正确归属；TableHeader.vue 只做 thead 包装。
+    expect(source("table", "TableHead.vue")).toContain(
       "var(--size-header-cell)"
     );
     expect(source("badge", "Badge.vue")).toContain("var(--size-badge)");
   });
 
   it("Table 表头字重为 450 档", () => {
-    const s = source("table", "TableHeader.vue");
+    const s = source("table", "TableHead.vue");
     expect(s).toContain("var(--weight-caption)");
     expect(s).not.toContain("var(--weight-regular)");
   });
