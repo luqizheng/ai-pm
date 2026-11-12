@@ -53,12 +53,33 @@ describe("shell store", () => {
     expect(useShellStore().sidebarCollapsed).toBe(true);
   });
 
-  it("切换 AI 面板（一体）与指令栏展开态", () => {
+  it("AI 面板总开关：全开 ⇄ 全关；上下文单独关闭后一键补开", () => {
     const shell = useShellStore();
 
+    // 全开 → 全关
     shell.toggleAiPanel();
     expect(shell.aiPanelOpen).toBe(false);
+    expect(shell.panelState).toBe("closed");
     expect(shell.contextState).toBe("closed");
+
+    // 全关 → 全开（上下文一并补开，开启即全开）
+    shell.toggleAiPanel();
+    expect(shell.aiPanelOpen).toBe(true);
+    expect(shell.contextOpen).toBe(true);
+    expect(shell.panelState).toBe("open");
+    expect(shell.contextState).toBe("open");
+
+    // 上下文栏单独关闭（AI 列头部关闭按钮）：助手列保留
+    shell.setContextOpen(false);
+    expect(shell.contextOpen).toBe(false);
+    expect(shell.aiPanelOpen).toBe(true);
+    expect(shell.panelState).toBe("open");
+    expect(shell.contextState).toBe("closed");
+
+    // 顶栏「助手」一键补开 → 回归全开
+    shell.toggleAiPanel();
+    expect(shell.contextOpen).toBe(true);
+    expect(shell.aiPanelOpen).toBe(true);
 
     shell.toggleCommandbar();
     expect(shell.commandbarExpanded).toBe(true);

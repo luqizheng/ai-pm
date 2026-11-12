@@ -47,6 +47,11 @@ describe("WorkspaceShell", () => {
     expect(wrapper.find(".workspace-context").exists()).toBe(false);
     expect(wrapper.find(".shell-topbar__assistant").exists()).toBe(false);
     expect(wrapper.find(".workspace-main").exists()).toBe(true);
+    // 生效态 data-*：列被移除时网格同步收列（否则主区右侧留 AI 列宽空带）
+    expect(wrapper.attributes("data-ai-panel")).toBe("closed");
+    expect(wrapper.attributes("data-context")).toBe("closed");
+    // 专注模式对管理页无意义（本无 AI 面板可收）：顶栏不出现专注开关
+    expect(wrapper.find(".shell-topbar__focus").exists()).toBe(false);
   });
 
   it("专注模式：data-focus=on 时收起 AI Chat 与右栏，退出恢复", async () => {
@@ -94,27 +99,38 @@ describe("WorkspaceShell", () => {
     expect(wrapper.attributes("data-sidebar")).toBe("collapsed");
   });
 
-  it("AI 面板一体开关：关闭按钮收起两列，顶栏「助手」再开", async () => {
+  it("AI 面板：关闭按钮只收上下文栏（原位可恢复）；顶栏「助手」补开 / 全关 / 全开", async () => {
     const { wrapper } = mountShell(WorkspaceShell);
     await nextTick();
 
-    // 关闭按钮在 AI Chat 列头部（自上下文栏头部移入）
-    const close = wrapper.find(".workspace-chat__close");
-    expect(close.exists()).toBe(true);
-
-    await close.trigger("click");
+    // AI 列头部的「关闭上下文栏」：仅收右栏，助手列保留（三列布局）
+    await wrapper.find(".workspace-chat__context-toggle").trigger("click");
     await nextTick();
 
-    // 一体收起：AI Chat 列与右上下文栏同时从 DOM 移除，主区独占
     expect(wrapper.attributes("data-context")).toBe("closed");
-    expect(wrapper.find(".workspace-chat").exists()).toBe(false);
+    expect(wrapper.find(".workspace-chat").exists()).toBe(true);
     expect(wrapper.find(".workspace-context").exists()).toBe(false);
 
-    // 顶栏「助手」= 同一开关：再点整体重开（默认全开）
-    await wrapper.find(".shell-topbar__assistant").trigger("click");
+    // 原位恢复按钮：再点 → 上下文栏恢复
+    await wrapper.find(".workspace-chat__context-toggle").trigger("click");
     await nextTick();
 
     expect(wrapper.attributes("data-context")).toBe("open");
+    expect(wrapper.find(".workspace-context").exists()).toBe(true);
+
+    // 全开时顶栏「助手」→ 整体关闭（两列齐收，主区独占）
+    await wrapper.find(".shell-topbar__assistant").trigger("click");
+    await nextTick();
+
+    expect(wrapper.attributes("data-ai-panel")).toBe("closed");
+    expect(wrapper.find(".workspace-chat").exists()).toBe(false);
+    expect(wrapper.find(".workspace-context").exists()).toBe(false);
+
+    // 再点 → 全开
+    await wrapper.find(".shell-topbar__assistant").trigger("click");
+    await nextTick();
+
+    expect(wrapper.attributes("data-ai-panel")).toBe("open");
     expect(wrapper.find(".workspace-chat").exists()).toBe(true);
     expect(wrapper.find(".workspace-context").exists()).toBe(true);
   });

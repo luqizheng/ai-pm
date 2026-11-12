@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { LayoutGrid, LayoutList, X } from "lucide-vue-next";
+import { SearchForm } from "@/components/ui/search-form";
 import SearchInput from "@/components/ui/search-input/SearchInput.vue";
 import Select from "@/components/ui/select/Select.vue";
 import type { SelectOption } from "@/components/ui/select/types";
@@ -10,6 +11,7 @@ import type { SelectOption } from "@/components/ui/select/types";
  * 项目工具栏（Projects List §5）：搜索 + 生命周期过滤 + 排序
  * + 「需要关注」过滤 chip + 列表/网格视图切换。
  * 全部受控（页根持有状态，指标条与工具栏联动）。
+ * 布局统一走 SearchForm（搜索限宽 + 筛选横排 + 右对齐视图切换）。
  */
 interface Props {
   search: string;
@@ -44,15 +46,16 @@ const sortOptions = computed<SelectOption[]>(() => [
 </script>
 
 <template>
-  <div class="proj-toolbar">
-    <SearchInput
-      :model-value="props.search"
-      :placeholder="t('pm.projects.searchPlaceholder')"
-      size="sm"
-      class="proj-toolbar__search"
-      :aria-label="t('pm.projects.searchPlaceholder')"
-      @update:model-value="emit('update:search', $event)"
-    />
+  <SearchForm class="proj-toolbar">
+    <template #search>
+      <SearchInput
+        :model-value="props.search"
+        :placeholder="t('pm.projects.searchPlaceholder')"
+        size="sm"
+        :aria-label="t('pm.projects.searchPlaceholder')"
+        @update:model-value="emit('update:search', $event)"
+      />
+    </template>
     <Select
       :model-value="props.lifecycle"
       :options="lifecycleOptions"
@@ -79,47 +82,42 @@ const sortOptions = computed<SelectOption[]>(() => [
       <span class="ui-sr-only">{{ t("pm.projects.attentionChipRemove") }}</span>
     </button>
 
-    <div
-      class="proj-toolbar__view-toggle"
-      role="group"
-      :aria-label="t('pm.projects.viewLabel')"
-    >
-      <button
-        type="button"
-        class="proj-toolbar__view-btn"
-        :class="{ 'proj-toolbar__view-btn--active': props.viewMode === 'list' }"
-        :aria-pressed="props.viewMode === 'list'"
-        :aria-label="t('pm.projects.viewList')"
-        @click="emit('update:viewMode', 'list')"
+    <template #append>
+      <div
+        class="proj-toolbar__view-toggle"
+        role="group"
+        :aria-label="t('pm.projects.viewLabel')"
       >
-        <LayoutList aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        class="proj-toolbar__view-btn"
-        :class="{ 'proj-toolbar__view-btn--active': props.viewMode === 'grid' }"
-        :aria-pressed="props.viewMode === 'grid'"
-        :aria-label="t('pm.projects.viewGrid')"
-        @click="emit('update:viewMode', 'grid')"
-      >
-        <LayoutGrid aria-hidden="true" />
-      </button>
-    </div>
-  </div>
+        <button
+          type="button"
+          class="proj-toolbar__view-btn"
+          :class="{
+            'proj-toolbar__view-btn--active': props.viewMode === 'list'
+          }"
+          :aria-pressed="props.viewMode === 'list'"
+          :aria-label="t('pm.projects.viewList')"
+          @click="emit('update:viewMode', 'list')"
+        >
+          <LayoutList aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          class="proj-toolbar__view-btn"
+          :class="{
+            'proj-toolbar__view-btn--active': props.viewMode === 'grid'
+          }"
+          :aria-pressed="props.viewMode === 'grid'"
+          :aria-label="t('pm.projects.viewGrid')"
+          @click="emit('update:viewMode', 'grid')"
+        >
+          <LayoutGrid aria-hidden="true" />
+        </button>
+      </div>
+    </template>
+  </SearchForm>
 </template>
 
 <style scoped>
-.proj-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.proj-toolbar__search {
-  width: var(--size-list-search-width);
-}
-
 .proj-toolbar__chip {
   display: inline-flex;
   align-items: center;
@@ -127,7 +125,7 @@ const sortOptions = computed<SelectOption[]>(() => [
   height: var(--size-control-sm);
   padding: 0 var(--space-2);
   border: var(--border-1) solid var(--border-default);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--warning-strong);
   font-family: var(--font-ui);
@@ -155,7 +153,6 @@ const sortOptions = computed<SelectOption[]>(() => [
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  margin-left: auto;
 }
 
 .proj-toolbar__view-btn {

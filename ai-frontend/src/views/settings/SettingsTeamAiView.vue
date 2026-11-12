@@ -344,6 +344,7 @@ onMounted(load);
 
 <template>
   <PageFrame
+    narrow
     :breadcrumbs="breadcrumb"
     :title="t('settings.nav.aiProviders')"
     :description="t('settings.team.ai.desc')"

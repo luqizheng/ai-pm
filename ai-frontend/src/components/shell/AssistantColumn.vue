@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { PanelRightClose, Plus } from "lucide-vue-next";
+import { PanelRightClose, PanelRightOpen, Plus } from "lucide-vue-next";
 
 import Button from "@/components/ui/button/Button.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
@@ -71,6 +71,11 @@ void load();
 function onSubmit(text: string) {
   void handleSend(text);
 }
+
+/** 上下文栏开关钮（列头部右侧）：随状态切换 收起 ⇄ 恢复。 */
+const contextToggleLabel = computed(() =>
+  shell.contextOpen ? t("shell.app.context.close") : t("shell.app.context.open")
+);
 </script>
 
 <template>
@@ -100,17 +105,21 @@ function onSubmit(text: string) {
       <span v-if="messagesLoading" class="workspace-chat__status" role="status">
         {{ t("assistant.messagesLoading") }}
       </span>
-      <!-- AI 面板一体关闭（2026-11-12 规则）：原「关闭上下文栏」按钮从上下文栏
-           头部移入此处——助手列与上下文栏是一体面板，点击两列同时收起，
-           再开经顶栏「助手」按钮。 -->
-      <IconTooltip :content="t('shell.app.context.close')" side="bottom">
+      <!-- 上下文栏开关（自上下文栏头部移入，2026-11-12）：仅作用于右上下文栏，
+           AI 列保留；收起后原位保留恢复按钮（图标/文案随状态切换）。 -->
+      <IconTooltip :content="contextToggleLabel" side="bottom">
         <button
           type="button"
-          class="workspace-chat__close"
-          :aria-label="t('shell.app.context.close')"
-          @click="shell.toggleAiPanel()"
+          class="workspace-chat__context-toggle"
+          :aria-label="contextToggleLabel"
+          @click="shell.setContextOpen(!shell.contextOpen)"
         >
-          <PanelRightClose :size="16" aria-hidden="true" />
+          <PanelRightClose
+            v-if="shell.contextOpen"
+            :size="16"
+            aria-hidden="true"
+          />
+          <PanelRightOpen v-else :size="16" aria-hidden="true" />
         </button>
       </IconTooltip>
     </header>
@@ -139,6 +148,7 @@ function onSubmit(text: string) {
           :title="panelTitle"
           :context-label="shell.assistantContext.projectName ?? ''"
           :submit="handleCardSubmit"
+          hide-composer
         />
         <p v-if="sendError" class="workspace-chat__error">
           {{ sendError }}
@@ -154,7 +164,8 @@ function onSubmit(text: string) {
       </template>
     </div>
 
-    <!-- 输入组件：原底部指令栏升级为本列的输入区（就地发送） -->
+    <!-- 输入组件：原底部指令栏升级为本列的输入区（就地发送）；
+         会话面板内置 Composer 已隐藏（其 send 在列内未接线，避免双输入框） -->
     <CommandBar embedded class="workspace-commandbar" @submit="onSubmit" />
   </section>
 </template>
@@ -192,8 +203,8 @@ function onSubmit(text: string) {
   font-size: var(--ws-font-size-caption);
 }
 
-/* AI 面板一体关闭按钮（自上下文栏头部移入）：外观与上下文栏图标钮同款 */
-.workspace-chat__close {
+/* 上下文栏开关按钮（自上下文栏头部移入）：外观与上下文栏图标钮同款 */
+.workspace-chat__context-toggle {
   flex: none;
   margin-left: auto;
   display: inline-flex;
@@ -208,7 +219,7 @@ function onSubmit(text: string) {
   cursor: pointer;
 }
 
-.workspace-chat__close:hover {
+.workspace-chat__context-toggle:hover {
   background: var(--ws-hover-veil);
   color: var(--ws-text-primary);
 }

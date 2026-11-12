@@ -5,6 +5,7 @@ import { LayoutList, Rows3 } from "lucide-vue-next";
 import Badge from "@/components/ui/badge/Badge.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 
+import { SearchForm } from "@/components/ui/search-form";
 import SearchInput from "@/components/ui/search-input/SearchInput.vue";
 import Select from "@/components/ui/select/Select.vue";
 import StatusIndicator from "@/components/ui/status-indicator/StatusIndicator.vue";
@@ -164,13 +165,14 @@ watch(
 
 <template>
   <section class="req-list" :aria-label="t('pm.requirements.listAria')">
-    <div class="req-list__toolbar">
-      <SearchInput
-        v-model="search"
-        :placeholder="t('pm.requirements.searchPlaceholder')"
-        size="sm"
-        class="req-list__search"
-      />
+    <SearchForm class="req-list__toolbar">
+      <template #search>
+        <SearchInput
+          v-model="search"
+          :placeholder="t('pm.requirements.searchPlaceholder')"
+          size="sm"
+        />
+      </template>
       <Select
         :model-value="props.statusFilter"
         :options="statusOptions"
@@ -196,33 +198,35 @@ watch(
         size="sm"
         :aria-label="t('pm.requirements.sortLabel')"
       />
-      <div
-        class="req-list__view-toggle"
-        role="group"
-        :aria-label="t('pm.requirements.viewToggle')"
-      >
-        <button
-          type="button"
-          class="req-list__view-btn"
-          :class="{ 'req-list__view-btn--active': !isCompact }"
-          :aria-pressed="!isCompact"
-          :aria-label="t('pm.requirements.viewList')"
-          @click="viewMode = 'list'"
+      <template #append>
+        <div
+          class="req-list__view-toggle"
+          role="group"
+          :aria-label="t('pm.requirements.viewToggle')"
         >
-          <LayoutList aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          class="req-list__view-btn"
-          :class="{ 'req-list__view-btn--active': isCompact }"
-          :aria-pressed="isCompact"
-          :aria-label="t('pm.requirements.viewCompact')"
-          @click="viewMode = 'compact'"
-        >
-          <Rows3 aria-hidden="true" />
-        </button>
-      </div>
-    </div>
+          <button
+            type="button"
+            class="req-list__view-btn"
+            :class="{ 'req-list__view-btn--active': !isCompact }"
+            :aria-pressed="!isCompact"
+            :aria-label="t('pm.requirements.viewList')"
+            @click="viewMode = 'list'"
+          >
+            <LayoutList aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            class="req-list__view-btn"
+            :class="{ 'req-list__view-btn--active': isCompact }"
+            :aria-pressed="isCompact"
+            :aria-label="t('pm.requirements.viewCompact')"
+            @click="viewMode = 'compact'"
+          >
+            <Rows3 aria-hidden="true" />
+          </button>
+        </div>
+      </template>
+    </SearchForm>
 
     <EmptyState
       v-if="visibleEntries.length === 0"
@@ -281,22 +285,10 @@ watch(
   min-width: 0;
 }
 
-.req-list__toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.req-list__search {
-  width: var(--size-list-search-width);
-}
-
 .req-list__view-toggle {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  margin-left: auto;
 }
 
 .req-list__view-btn {

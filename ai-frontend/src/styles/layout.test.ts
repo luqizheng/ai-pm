@@ -52,9 +52,12 @@ describe("workspace 布局契约", () => {
     expect(width("ws-chat-width")).toBe(446);
     expect(width("ws-context-width")).toBe(288);
     // 1440px 桌面基准：188 + 446 + 288 = 922，主区 1fr 恰好补足 518
-    expect(1440 - width("ws-sidebar-width") - width("ws-chat-width") - width("ws-context-width")).toBe(
-      width("ws-main-width")
-    );
+    expect(
+      1440 -
+        width("ws-sidebar-width") -
+        width("ws-chat-width") -
+        width("ws-context-width")
+    ).toBe(width("ws-main-width"));
   });
 
   it("顶栏横跨全部列（首行）", () => {
@@ -84,10 +87,19 @@ describe("workspace 布局契约", () => {
     expect(body).toMatch(/min-width:\s*0/);
   });
 
-  it("右上下文显式定位第 4 列", () => {
-    const body = ruleBody(".workspace-context");
-    expect(body).toMatch(/grid-column:\s*4\s*;/);
-    expect(body).toMatch(/grid-row:\s*2/);
+  it("右上下文显式定位第 4 列（会话页特例收至第 3 列）", () => {
+    // 默认四栏：上下文栏锁定第 4 列（不依赖自动放置）；
+    // (^|\}) 锚定行首，避开会话页特例选择器的后代段
+    const base = css.match(/(^|\})\s*\.workspace-context\s*\{([^}]*)\}/);
+    expect(base, "index.css 缺少 .workspace-context 规则").toBeTruthy();
+    expect(base![2]).toMatch(/grid-column:\s*4\s*;/);
+    expect(base![2]).toMatch(/grid-row:\s*2/);
+    // 会话页特例（助手列收、上下文栏留，DR-C8）：三列模板且上下文占第 3 列，
+    // 主区不留 AI Chat 列宽的空带
+    const special = ruleBody(
+      '.workspace-shell[data-ai-panel="closed"][data-context="open"] .workspace-context'
+    );
+    expect(special).toMatch(/grid-column:\s*3\s*;/);
   });
 
   it("专注模式（DR-C8）：收起 AI Chat 与右栏，主区独占", () => {
@@ -103,6 +115,13 @@ describe("workspace 布局契约", () => {
   it("右栏关闭时保留 AI Chat 列（三列）", () => {
     const body = ruleBody('.workspace-shell[data-context="closed"]');
     expect(body).toMatch(/var\(--ws-chat-width\)/);
+    expect(body).not.toMatch(/var\(--ws-context-width\)/);
+  });
+
+  it("AI 面板整体关闭时主区独占（助手列与右栏列位均不保留）", () => {
+    const body = ruleBody('.workspace-shell[data-ai-panel="closed"]');
+    expect(body).toMatch(/grid-template-columns/);
+    expect(body).not.toMatch(/var\(--ws-chat-width\)/);
     expect(body).not.toMatch(/var\(--ws-context-width\)/);
   });
 

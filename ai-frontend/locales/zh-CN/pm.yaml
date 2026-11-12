@@ -14,7 +14,7 @@ overview:
   empty: 暂无数据
 projects:
   pageTitle: 项目
-  subtitle: 在一个地方管理与访问你的全部项目。
+  subtitle: 在一个地方管理与访问你的全部项目
   emptyHint: 还没有项目，点击右上角「新建项目」开始。
   new: 新建项目
   newTitle: 新建项目
@@ -27,7 +27,7 @@ projects:
   metricRecent: 最近活跃
   metricAttention: 需要关注
   metricArchived: 已归档
-  searchPlaceholder: 搜索项目...
+  searchPlaceholder: 搜索项目
   filterLabel: 生命周期过滤
   filterAll: 全部项目
   filterActive: 进行中

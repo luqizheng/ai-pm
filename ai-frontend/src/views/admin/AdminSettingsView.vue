@@ -2,6 +2,7 @@
 import { onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import PageFrame from "@/components/shell/PageFrame.vue";
+import { translateError } from "@/api/base";
 import {
   getEmbeddingConfig,
   saveEmbeddingConfig,
@@ -13,7 +14,8 @@ import {
  * 系统设置（/admin/settings）——当前面：embedding 供给（Ollama 地址 + 模型）。
  *
  * 门：后端 is_admin（AI/Key/普通成员 403）。测试连接 = 实调 /embeddings 探针
- * （不写库），返回维度与延迟。
+ * （不写库），返回维度与延迟。错误文案透出服务端真实原因（网关路由缺失、
+ * 403 等），不再笼统归因为「需要系统管理员」。
  */
 const { t } = useI18n();
 
@@ -35,8 +37,10 @@ async function load() {
     endpoint.value = cfg.endpoint;
     model.value = cfg.model;
     enabled.value = cfg.enabled;
-  } catch {
-    errorText.value = t("shell.adminSettings.error.load");
+  } catch (error) {
+    errorText.value = t("shell.adminSettings.error.load", {
+      reason: translateError(String(error))
+    });
   } finally {
     loading.value = false;
   }
@@ -57,8 +61,10 @@ async function save() {
     model.value = cfg.model;
     enabled.value = cfg.enabled;
     savedNotice.value = t("shell.adminSettings.notice.saved");
-  } catch {
-    errorText.value = t("shell.adminSettings.error.save");
+  } catch (error) {
+    errorText.value = t("shell.adminSettings.error.save", {
+      reason: translateError(String(error))
+    });
   } finally {
     saving.value = false;
   }
@@ -73,9 +79,11 @@ async function runTest() {
       endpoint: endpoint.value.trim(),
       model: model.value.trim()
     });
-  } catch {
+  } catch (error) {
     testResult.value = null;
-    errorText.value = t("shell.adminSettings.error.test");
+    errorText.value = t("shell.adminSettings.error.test", {
+      reason: translateError(String(error))
+    });
   } finally {
     testing.value = false;
   }
@@ -86,6 +94,7 @@ onMounted(load);
 
 <template>
   <PageFrame
+    narrow
     :title="t('shell.adminSettings.title')"
     :description="t('shell.adminSettings.description')"
   >
@@ -189,7 +198,6 @@ onMounted(load);
   display: flex;
   flex-direction: column;
   gap: var(--space-4, 16px);
-  max-width: 720px;
 }
 
 .settings-card {

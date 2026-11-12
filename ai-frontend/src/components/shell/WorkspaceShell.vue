@@ -7,8 +7,8 @@ import SearchPalette from "@/components/global/search/SearchPalette.vue";
 import type { SearchCommand, SearchFn } from "@/components/global/search/types";
 import { listProjects } from "@/api/projects";
 import { retrievalQuery } from "@/api/knowledge";
-import { isManagementPath } from "@/router/navigation";
 import { useShellStore } from "@/stores/shell";
+import { useShellChrome } from "./use-shell-chrome";
 import AssistantColumn from "./AssistantColumn.vue";
 import ProjectSwitchGuardDialog from "./ProjectSwitchGuardDialog.vue";
 import ContextPanel from "./ContextPanel.vue";
@@ -24,9 +24,12 @@ import TopBar from "./TopBar.vue";
  *   右上下文栏 288px（可关）
  *
  * 布局由 `.workspace-shell` 的 grid 承担，状态经根元素
- * `data-sidebar` / `data-context` / `data-focus` 属性切换
+ * `data-sidebar` / `data-context` / `data-ai-panel` / `data-focus` 属性切换
  * （见 src/styles/index.css）。专注模式（data-focus="on"）收起
  * AI Chat 与右上下文栏，主区独占工作区。
+ *
+ * 列的**生效可见性**（管理页 / 会话页 / 专注 / 开关共同决定）统一来自
+ * use-shell-chrome：v-if 移除列时 data-* 同步收列，grid 模板不留空列。
  */
 
 const { t } = useI18n();
@@ -34,18 +37,14 @@ const router = useRouter();
 const route = useRoute();
 const shell = useShellStore();
 
+/** 路由相关的 chrome 可见性（管理页 / 会话页判定单源） */
+const { assistantVisible, contextVisible } = useShellChrome();
+
 /** URL query 上的项目上下文（?project_id=；各入口跳转统一走该通道） */
 function urlProjectId(): string | null {
   const query = route.query.project_id;
   return typeof query === "string" && query ? query : null;
 }
-
-/** 完整会话页路由——该页本身即会话面，AI Chat 列收起避免同屏重复。 */
-const ASSISTANT_PATH = "/project/assistant";
-const isAssistantRoute = computed(() => route.path === ASSISTANT_PATH);
-
-/** 管理页（导航「管理」组）：租户运营面，AI 助手不出现。 */
-const isManagementRoute = computed(() => isManagementPath(route.path));
 
 /** 全局搜索面板开关（⌘K / 顶栏搜索入口） */
 const searchOpen = ref(false);
@@ -220,7 +219,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   <div
     class="workspace-shell"
     :data-sidebar="shell.sidebarState"
-    :data-context="shell.contextState"
+    :data-context="contextVisible ? 'open' : 'closed'"
+    :data-ai-panel="assistantVisible ? 'open' : 'closed'"
     :data-focus="shell.focusState"
   >
     <TopBar class="workspace-topbar" @search="searchOpen = true" />
@@ -233,27 +233,18 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       </div>
     </main>
 
-    <!-- AI Chat 常驻独立列（DR-C8）+ 右上下文栏 = AI 面板一体开关
-         （aiPanelOpen，默认全开；顶栏「助手」按钮与列头部关闭按钮都作用于整体）：
-         专注模式下收起，主区独占工作区；
-         完整会话页（/project/assistant）本身即会话面，此时列收起避免同屏重复；
-         管理页（导航「管理」组）为租户运营面，AI 面板不出现。 -->
-    <AssistantColumn
-      v-if="
-        shell.aiPanelOpen &&
-        !shell.focusMode &&
-        !isAssistantRoute &&
-        !isManagementRoute
-      "
-      class="workspace-chat"
-    />
+    <!-- AI Chat 常驻独立列（DR-C8）与右上下文栏组成 AI 面板：
+         总开关 aiPanelOpen（顶栏「助手」按钮，全开 ⇄ 全关）；
+         上下文栏另有子开关 contextOpen（AI 列头部的「关闭上下文栏」，
+         仅收右栏、助手列保留）。专注模式收起两列，主区独占工作区；
+         完整会话页（/project/assistant）本身即会话面，助手列收起
+         （上下文栏保留，走三列特例模板）；管理页（导航「管理」组）
+         为租户运营面，AI 面板不出现。可见性判定单源 = use-shell-chrome。 -->
+    <AssistantColumn v-if="assistantVisible" class="workspace-chat" />
 
-    <!-- 右上下文栏与 AI Chat 一体（含会话 History）：专注模式 / 管理页 / 面板
-         关闭时同步收起；完整会话页仍保留上下文。 -->
-    <ContextPanel
-      v-if="shell.aiPanelOpen && !shell.focusMode && !isManagementRoute"
-      class="workspace-context"
-    />
+    <!-- 右上下文栏（含会话 History）：面板总开关 + 自身子开关共同决定；
+         完整会话页仍保留上下文。 -->
+    <ContextPanel v-if="contextVisible" class="workspace-context" />
 
     <!-- 切项目确认（G12 · DR-C6）：有活跃会话时切换项目先确认 -->
     <ProjectSwitchGuardDialog />

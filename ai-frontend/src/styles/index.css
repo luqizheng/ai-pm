@@ -52,12 +52,36 @@ body {
   --ws-sidebar-current: var(--ws-sidebar-collapsed);
 }
 
-/* AI 面板整体关闭（2026-11-12 规则）：助手列与上下文栏一体收起，
- * 主区独占——列模板与专注模式同型。 */
+/* 上下文栏单独关闭（AI 列头部「关闭上下文栏」按钮）：AI Chat 列保留（三列） */
 .workspace-shell[data-context="closed"] {
   grid-template-columns:
     var(--ws-sidebar-current)
+    minmax(0, 1fr)
+    var(--ws-chat-width);
+}
+
+/* AI 面板整体关闭（顶栏「助手」全关）：助手列与上下文栏齐收，主区独占。
+ * 全关时 data-context 必为 closed，本规则在后覆盖三列模板。
+ * 生效态判定见 use-shell-chrome：管理页列被 v-if 移除时 data-* 同步收列，
+ * grid 模板不留空列（否则主区右侧留 AI 列宽的空带）。 */
+.workspace-shell[data-ai-panel="closed"] {
+  grid-template-columns:
+    var(--ws-sidebar-current)
     minmax(0, 1fr);
+}
+
+/* 会话页特例（DR-C8）：完整会话页本身即会话面——助手列收起而右上下文栏
+ * 保留（生效态 data-ai-panel=closed + data-context=open）。三列模板 +
+ * 上下文列占第 3 列，主区不留 AI Chat 列宽的空带。 */
+.workspace-shell[data-ai-panel="closed"][data-context="open"] {
+  grid-template-columns:
+    var(--ws-sidebar-current)
+    minmax(0, 1fr)
+    var(--ws-context-width);
+}
+
+.workspace-shell[data-ai-panel="closed"][data-context="open"] .workspace-context {
+  grid-column: 3;
 }
 
 /* 专注模式（DR-C8）：临时收起 AI Chat 与 Context Panel，主区独占工作区。

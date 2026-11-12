@@ -14,6 +14,7 @@ import {
 import Alert from "@/components/ui/alert/Alert.vue";
 import Button from "@/components/ui/button/Button.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
+import { SearchForm } from "@/components/ui/search-form";
 import { SearchInput } from "@/components/ui/search-input";
 import { Select } from "@/components/ui/select";
 import type { SelectOption } from "@/components/ui/select/types";
@@ -183,9 +184,9 @@ onMounted(load);
       />
     </div>
 
-    <!-- 筛选工具行 -->
-    <div class="env-toolbar">
-      <div class="env-toolbar__search">
+    <!-- 筛选工具行（统一 SearchForm：搜索限宽 + 筛选横排） -->
+    <SearchForm class="env-toolbar">
+      <template #search>
         <SearchInput
           v-model="query"
           :placeholder="t('environments.filter.searchPlaceholder')"
@@ -193,7 +194,7 @@ onMounted(load);
           size="sm"
           data-testid="env-search"
         />
-      </div>
+      </template>
       <div class="env-toolbar__filter" data-testid="env-filter-status">
         <Select
           v-model="statusFilter"
@@ -210,7 +211,7 @@ onMounted(load);
           :aria-label="t('environments.filter.platform')"
         />
       </div>
-    </div>
+    </SearchForm>
 
     <!-- 设备卡片网格 -->
     <div v-if="filteredDevices.length" class="env-grid">
@@ -287,22 +288,9 @@ onMounted(load);
   gap: var(--space-3);
 }
 
-/* 工具行：搜索与两个筛选按比例伸缩（原固定 360/368px 在窄列里各占一行） */
+/* 工具行：横排布局统一由 SearchForm 提供，这里只保留页级间距与 testid 挂点 */
 .env-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
   gap: var(--space-3);
-}
-
-.env-toolbar__search {
-  flex: 2 1 14rem;
-  min-width: 0;
-}
-
-.env-toolbar__filter {
-  flex: 1 1 9rem;
-  min-width: 0;
 }
 
 .env-grid {

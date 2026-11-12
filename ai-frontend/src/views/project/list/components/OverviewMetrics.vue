@@ -10,6 +10,9 @@ import type { StatusIndicatorTone } from "@/components/ui/status-indicator/statu
  * 四个聚合指标（Total / Recently Active / Requiring Attention / Archived）——
  * 聚合指示而非独立状态或实体；紧凑单行，点击指标应用对应过滤（受控）。
  * 「需要关注」= 存在核验失败（unreachable）仓库的项目，来自真实域模型。
+ *
+ * 视觉：聚合计数不是状态，只有「需要关注」承载真实语义色，其余状态点保持中性，
+ * 避免四个指标各亮一色导致焦点分散（unslop 色彩纪律）。
  */
 interface Props {
   counts: Record<"total" | "recent" | "attention" | "archived", number>;
@@ -25,13 +28,13 @@ const metrics = computed(() => [
   {
     key: "all",
     countKey: "total" as const,
-    tone: "info" as StatusIndicatorTone,
+    tone: "neutral" as StatusIndicatorTone,
     label: t("pm.projects.metricTotal")
   },
   {
     key: "active",
     countKey: "recent" as const,
-    tone: "success" as StatusIndicatorTone,
+    tone: "neutral" as StatusIndicatorTone,
     label: t("pm.projects.metricRecent")
   },
   {
@@ -92,7 +95,7 @@ function isActive(key: string): boolean {
   height: var(--size-control-sm);
   padding: 0 var(--space-3);
   border: var(--border-1) solid var(--border-default);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: transparent;
   font-family: var(--font-ui);
   cursor: pointer;

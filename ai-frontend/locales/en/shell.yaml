@@ -89,9 +89,9 @@ shell:
     notice:
       saved: Saved
     error:
-      load: Load failed (system administrator required)
-      save: Save failed (system administrator required)
-      test: Test request failed
+      load: "Load failed: {reason}"
+      save: "Save failed: {reason}"
+      test: "Test request failed: {reason}"
 
   adminAnnouncements:
     title: Announcements
@@ -251,6 +251,7 @@ shell:
     context:
       title: Context
       close: Close context panel
+      open: Open context panel
       pin: Pin to this page
       pinned: Pinned for this page
       currentProject: Current project

@@ -343,6 +343,7 @@ onMounted(async () => {
 
 <template>
   <PageFrame
+    narrow
     :title="$t('team.members.title')"
     :description="$t('team.members.description')"
   >
@@ -546,7 +547,11 @@ onMounted(async () => {
       :title="$t('team.invitations.title')"
       :description="$t('team.invitations.description')"
       size="lg"
-      @update:open="value => { if (!value) inviteOpen = false; }"
+      @update:open="
+        value => {
+          if (!value) inviteOpen = false;
+        }
+      "
     >
       <p v-if="inviteError" class="tm-error">{{ inviteError }}</p>
 

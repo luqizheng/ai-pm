@@ -15,6 +15,9 @@ import PageHeader from "./PageHeader.vue";
  *   - 根布局不是纵列的工作台（如通知中心双栏）在插槽内自带容器，
  *     并省略 `title`（标题区由其内部组件承担）。
  *
+ * `narrow` 变体：管理 / 设置等表单型页面内容限宽居中——这类页面主区
+ * 独占全宽（无 AI 面板），拉满可读性差；列表 / 工作台页保持默认全宽。
+ *
  * `PlaceholderView` = PageFrame + 「建设中」空态的特例（未落地路由的默认页）。
  */
 interface Props {
@@ -24,16 +27,22 @@ interface Props {
   title?: string;
   /** 页面描述（透传 PageHeader） */
   description?: string;
+  /** 窄页变体：内容限宽居中（管理 / 设置等表单页） */
+  narrow?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   breadcrumbs: () => [],
-  description: undefined
+  description: undefined,
+  narrow: false
 });
 </script>
 
 <template>
-  <div class="shell-page-frame">
+  <div
+    class="shell-page-frame"
+    :class="{ 'shell-page-frame--narrow': props.narrow }"
+  >
     <PageHeader
       v-if="props.title"
       :breadcrumbs="props.breadcrumbs"
@@ -55,5 +64,13 @@ const props = withDefaults(defineProps<Props>(), {
   flex-direction: column;
   gap: var(--space-6);
   padding: var(--space-5) var(--space-8);
+}
+
+/* 窄页变体：内容限宽居中。宽度取搜索入口 / 表单卡两列的舒适上限，
+ * 媒体查询断点之下自然随主区收缩。 */
+.shell-page-frame--narrow {
+  width: 100%;
+  max-width: var(--ws-page-narrow-width, 60rem);
+  margin-inline: auto;
 }
 </style>

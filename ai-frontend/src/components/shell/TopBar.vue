@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRoute, useRouter } from "vue-router";
+import { useRouter } from "vue-router";
 import { Maximize2, Minimize2, Search, Sparkles } from "lucide-vue-next";
 
 import { resolveAvatarSrc } from "@/api/base/self-service";
@@ -21,11 +21,11 @@ import {
   type ProjectSwitcherText
 } from "@/components/global/project-switcher";
 import { AUTH_PATHS } from "@/router/auth";
-import { isManagementPath } from "@/router/navigation";
 import { useAuthStore } from "@/stores/auth";
 import { useShellStore } from "@/stores/shell";
 import { useAssistantStore } from "@/stores/assistant";
 import { useTeamStore } from "@/stores/team";
+import { useShellChrome } from "./use-shell-chrome";
 
 /**
  * 全局顶栏（Application Shell §2A，52px）。
@@ -46,7 +46,6 @@ import { useTeamStore } from "@/stores/team";
 
 const { t } = useI18n();
 const router = useRouter();
-const route = useRoute();
 const shell = useShellStore();
 const assistant = useAssistantStore();
 const auth = useAuthStore();
@@ -54,8 +53,9 @@ const teamStore = useTeamStore();
 
 const emit = defineEmits<{ search: [] }>();
 
-/** 管理页（导航「管理」组）不出现 AI 助手入口（与壳层 AI Chat 列同一判定）。 */
-const isManagementRoute = computed(() => isManagementPath(route.path));
+/** 壳层 chrome 可见性（单源）：管理页不出现 AI 助手入口与专注开关
+ *  （判定与壳层列渲染同一处派生）。 */
+const { isManagementRoute, focusAvailable } = useShellChrome();
 
 const shortcutsOpen = ref(false);
 const signOutOpen = ref(false);
@@ -265,8 +265,10 @@ async function onSignOutConfirm() {
       <ThemeToggle />
 
       <!-- 专注模式开关（DR-C8）：临时收起 AI Chat 与右栏，主区独占工作区。
-           置于顶栏——专注模式下 AI Chat 列已收起，此处是唯一的退出入口。 -->
+           置于顶栏——专注模式下 AI Chat 列已收起，此处是唯一的退出入口。
+           管理页本无 AI 面板可收，专注对其无意义，入口隐藏。 -->
       <button
+        v-if="focusAvailable"
         type="button"
         class="shell-topbar__focus"
         :aria-label="
@@ -286,8 +288,9 @@ async function onSignOutConfirm() {
         <span>{{ t("shell.app.chat.focus") }}</span>
       </button>
 
-      <!-- AI 面板开关（2026-11-12 规则）：开/关作用于「AI 助手列 + 上下文栏」
-           整体（一体面板），不再跳转会话页（会话页仍由左导航「助手」项进入）；
+      <!-- AI 面板总开关（2026-11-12 规则）：作用于「AI 助手列 + 上下文栏」整体——
+           全开 ⇄ 全关；上下文栏被单独关闭时点击先一键补开（回归全开）。
+           不再跳转会话页（会话页仍由左导航「助手」项进入）；
            管理页（导航「管理」组）不出现该入口。 -->
       <button
         v-if="!isManagementRoute"

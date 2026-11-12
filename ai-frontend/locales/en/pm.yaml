@@ -14,7 +14,7 @@ overview:
   empty: No data
 projects:
   pageTitle: Projects
-  subtitle: Manage and access all your projects in one place.
+  subtitle: Manage and access all your projects in one place
   emptyHint: No projects yet — use "New Project" in the top right to start.
   new: New Project
   newTitle: New Project
@@ -27,7 +27,7 @@ projects:
   metricRecent: Recently Active
   metricAttention: Requires Attention
   metricArchived: Archived
-  searchPlaceholder: Search projects...
+  searchPlaceholder: Search projects
   filterLabel: Lifecycle filter
   filterAll: All Projects
   filterActive: Active

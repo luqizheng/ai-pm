@@ -17,6 +17,8 @@ const props = withDefaults(
     messages: ConversationMessage[];
     title?: string;
     contextLabel?: string;
+    /** 隐藏内置 Composer：宿主已自带输入区（如 Shell AI 列的 CommandBar）时置 true。 */
+    hideComposer?: boolean;
     /** 真实提交通道（Batch 3C），透传给消息内的响应卡。 */
     submit?: (
       payload: unknown,
@@ -26,7 +28,8 @@ const props = withDefaults(
   }>(),
   {
     title: "",
-    contextLabel: ""
+    contextLabel: "",
+    hideComposer: false
   }
 );
 
@@ -73,6 +76,7 @@ function onSend(text: string): void {
     </div>
 
     <AiConversationComposer
+      v-if="!hideComposer"
       v-model="draft"
       :context-label="contextLabel"
       @send="onSend"

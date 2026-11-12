@@ -105,18 +105,30 @@ describe("AssistantColumn（AI Chat 常驻列）", () => {
     shell.setCurrentProject(projectId);
   }
 
-  it("AI 面板一体关闭：点击头部关闭按钮翻转 store 的 aiPanelOpen", async () => {
+  it("上下文栏开关：收起后原位保留恢复按钮，再点恢复", async () => {
     const { wrapper } = mountShell(AssistantColumn);
     const shell = useShellStore();
-    expect(shell.aiPanelOpen).toBe(true);
+    expect(shell.contextOpen).toBe(true);
 
-    const close = wrapper.find(".workspace-chat__close");
-    expect(close.exists()).toBe(true);
+    const toggle = () => wrapper.find(".workspace-chat__context-toggle");
+    expect(toggle().exists()).toBe(true);
+    // 收起态：aria-label 为「关闭上下文栏」
+    expect(toggle().attributes("aria-label")).toBe("关闭上下文栏");
 
-    await close.trigger("click");
+    await toggle().trigger("click");
     await nextTick();
 
-    expect(shell.aiPanelOpen).toBe(false);
+    expect(shell.contextOpen).toBe(false);
+    // 总开关不受影响：助手列仍在
+    expect(shell.aiPanelOpen).toBe(true);
+    // 原位保留恢复按钮，文案切换为「打开上下文栏」
+    expect(toggle().exists()).toBe(true);
+    expect(toggle().attributes("aria-label")).toBe("打开上下文栏");
+
+    // 再点 → 恢复上下文栏
+    await toggle().trigger("click");
+    await nextTick();
+    expect(shell.contextOpen).toBe(true);
   });
 
   it("按当前项目拉会话列表并渲染时间线", async () => {

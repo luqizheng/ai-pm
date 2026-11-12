@@ -89,9 +89,9 @@ shell:
     notice:
       saved: 已保存
     error:
-      load: 加载失败（需要系统管理员）
-      save: 保存失败（需要系统管理员）
-      test: 测试请求失败
+      load: 加载失败：{reason}
+      save: 保存失败：{reason}
+      test: 测试请求失败：{reason}
 
   adminAnnouncements:
     title: 公告管理
@@ -251,6 +251,7 @@ shell:
     context:
       title: 上下文
       close: 关闭上下文栏
+      open: 打开上下文栏
       pin: 固定到本页
       pinned: 已固定到本页
       currentProject: 当前项目
