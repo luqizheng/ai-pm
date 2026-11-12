@@ -12,11 +12,13 @@
 pub mod baseline;
 pub mod cognition;
 pub mod identity;
+pub mod runs;
 pub mod tenant_members;
 pub mod lists;
 
 pub use baseline::{BaselineRepo, BaselineRepoError};
 pub use cognition::{CognitionRepo, CognitionRepoError};
 pub use identity::{IdentityRepo, IdentityRepoError};
+pub use runs::RunRepo;
 pub use tenant_members::{MemberRepo, MemberRepoError};
 pub use lists::{ListPage, PmListRepo};

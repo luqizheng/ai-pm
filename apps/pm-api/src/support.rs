@@ -262,4 +262,8 @@ pub mod repos {
     ) -> pm_infrastructure::repo_tenant_members::PgMemberRepo {
         pm_infrastructure::repo_tenant_members::PgMemberRepo::new(pool.clone())
     }
+
+    pub fn run_repo(pool: &sqlx::PgPool) -> pm_infrastructure::repo_runs::PgRunRepo {
+        pm_infrastructure::repo_runs::PgRunRepo::new(pool.clone())
+    }
 }
