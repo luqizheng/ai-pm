@@ -85,6 +85,11 @@ impl VizProblem {
 }
 
 /// 对象存在性与可见性判定（由应用层实现；pm-domain 不依赖 DB）。
+///
+/// **同步是刻意的**：可见性判定基于**应用层预取好的可见集合**做内存查表——
+/// 校验器与投影层因此保持纯函数（无 IO、无 DB），且避免逐对象查库（N+1）。
+/// 应用层负责「批量预取 → 构建实现」的异步环节（见 pm-application 的
+/// `visibility_probe`）。
 pub trait ObjectResolver {
     /// 对象是否存在**且调用者可见**。
     ///
@@ -107,6 +112,32 @@ pub struct ValidationContext<'a> {
     pub allowed_slots: &'a [String],
     /// 当前发布使用的 Registry 版本（用于版本落后提示）。
     pub current_registry_version: Option<&'a str>,
+}
+
+/// 收集 Spec 中需要做可见性判定的全部引用（`(domain, type, id)` 去重）。
+///
+/// 应用层用它**一次性批量预取**可见集合，再构建内存判定器——
+/// 校验器与投影层因此不必逐对象查库。
+///
+/// 覆盖：节点 `source_ref`（含其 revision 指向的对象）与 `derived_trace.via`
+/// 上的中间对象（间接推导路径上的对象同样可能无权）。
+pub fn collect_visibility_refs(spec: &VizSpec) -> Vec<(String, String, String)> {
+    let mut refs: Vec<(String, String, String)> = Vec::new();
+    for node in &spec.nodes {
+        if let Some(source) = &node.source_ref {
+            refs.push((source.domain.clone(), source.r#type.clone(), source.id.clone()));
+        }
+    }
+    for edge in &spec.edges {
+        if let Some(derived) = &edge.derived {
+            for via in &derived.via {
+                refs.push((String::new(), String::new(), via.clone()));
+            }
+        }
+    }
+    refs.sort();
+    refs.dedup();
+    refs
 }
 
 /// 校验入口：**纯函数**。

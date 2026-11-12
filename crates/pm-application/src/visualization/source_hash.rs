@@ -139,9 +139,12 @@ fn sorted_nodes(spec: &VizSpec) -> Vec<serde_json::Value> {
     indexed.into_iter().map(|(_, value)| value).collect()
 }
 
+/// 边排序键（from, to, relation, id）。
+type EdgeSortKey<'a> = (&'a str, &'a str, &'a str, &'a str);
+
 /// 边按 (from, to, relation, id) 排序后的 JSON 列表。
 fn sorted_edges(spec: &VizSpec) -> Vec<serde_json::Value> {
-    let mut indexed: Vec<((&str, &str, &str, &str), serde_json::Value)> = spec
+    let mut indexed: Vec<(EdgeSortKey<'_>, serde_json::Value)> = spec
         .edges
         .iter()
         .map(|edge| {

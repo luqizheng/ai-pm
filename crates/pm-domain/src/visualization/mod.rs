@@ -31,5 +31,6 @@ pub use spec::{
     SPEC_VERSION,
 };
 pub use validation::{
-    codes, validate, ObjectResolver, Severity, ValidationContext, ValidationReport, VizProblem,
+    codes, collect_visibility_refs, validate, ObjectResolver, Severity, ValidationContext,
+    ValidationReport, VizProblem,
 };
