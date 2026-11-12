@@ -12,6 +12,7 @@
 pub mod baseline;
 pub mod cognition;
 pub mod identity;
+pub mod design_guard;
 pub mod kb_pc_query;
 pub mod runs;
 pub mod tenant_members;
@@ -20,6 +21,7 @@ pub mod lists;
 pub use baseline::{BaselineRepo, BaselineRepoError};
 pub use cognition::{CognitionRepo, CognitionRepoError};
 pub use identity::{IdentityRepo, IdentityRepoError};
+pub use design_guard::DesignGuardRepo;
 pub use kb_pc_query::KbPcQueryRepo;
 pub use runs::RunRepo;
 pub use tenant_members::{MemberRepo, MemberRepoError};
