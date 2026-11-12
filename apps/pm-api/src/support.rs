@@ -256,4 +256,10 @@ pub mod repos {
     pub fn cognition_repo(pool: &sqlx::PgPool) -> pm_infrastructure::repo_cognition::PgCognitionRepo {
         pm_infrastructure::repo_cognition::PgCognitionRepo::new(pool.clone())
     }
+
+    pub fn member_repo(
+        pool: &sqlx::PgPool,
+    ) -> pm_infrastructure::repo_tenant_members::PgMemberRepo {
+        pm_infrastructure::repo_tenant_members::PgMemberRepo::new(pool.clone())
+    }
 }

@@ -28,7 +28,8 @@ const REQUIRED_COLUMNS: [&str; 4] = [
 const PRODUCTION_SITES: &[(&str, usize)] = &[
     ("crates/pm-application/src/pm_write/audit.rs", 2), // A1, A2
     ("crates/pm-application/src/repository/support.rs", 1), // A3
-    ("apps/pm-api/src/tenant_members.rs", 1),           // A4 (tenant_audit_log)
+    // A4（tenant_audit_log；批 B 域5 迁仓储后落点 pm-infrastructure）
+    ("crates/pm-infrastructure/src/repo_tenant_members.rs", 1),
     ("crates/pm-application/src/command_executor/audit.rs", 1), // A5
     ("crates/pm-application/src/delivery/mod.rs", 1),   // A6
     ("crates/pm-application/src/knowledge_proposal/support.rs", 1), // A7
