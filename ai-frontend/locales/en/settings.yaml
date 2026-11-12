@@ -444,6 +444,7 @@ settings:
         deepseek: DeepSeek
         glm: Zhipu GLM
         minimax: MiniMax
+        ollama: Ollama (local)
         openai_compatible: OpenAI-compatible (local/self-hosted)
       status:
         not_configured: Not configured

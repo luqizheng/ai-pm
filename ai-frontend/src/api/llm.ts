@@ -12,6 +12,7 @@ export type LlmProviderType =
   | "deepseek"
   | "glm"
   | "minimax"
+  | "ollama"
   | "openai_compatible";
 
 export type LlmProviderStatus =

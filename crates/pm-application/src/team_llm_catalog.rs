@@ -1007,13 +1007,13 @@ async fn validate_and_build_resolved(
         });
     }
     let api_key = match ciphertext {
-        Some(bytes) => decrypt_api_key_bytes(&bytes).map_err(|_| {
-            ModelResolutionError::Configuration {
+        Some(bytes) => {
+            decrypt_api_key_bytes(&bytes).map_err(|_| ModelResolutionError::Configuration {
                 reason: "credential_missing",
                 detail: "api key could not be decrypted".to_string(),
-            }
-        })?,
-        None if provider_type == "openai_compatible" => String::new(),
+            })?
+        }
+        None if matches!(provider_type.as_str(), "openai_compatible" | "ollama") => String::new(),
         None => {
             return Err(ModelResolutionError::Configuration {
                 reason: "credential_missing",

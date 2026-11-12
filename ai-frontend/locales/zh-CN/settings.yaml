@@ -444,6 +444,7 @@ settings:
         deepseek: DeepSeek
         glm: 智谱 GLM
         minimax: MiniMax
+        ollama: Ollama（本地）
         openai_compatible: OpenAI 兼容（本地/自建）
       status:
         not_configured: 未配置

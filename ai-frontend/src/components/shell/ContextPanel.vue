@@ -238,7 +238,9 @@ const historyEvents = computed(() =>
 
 <template>
   <aside class="shell-context" :aria-label="t('shell.app.context.title')">
-    <!-- 头部：标题 + History 入口 + pin + 关闭 -->
+    <!-- 头部：标题 + History 入口 + pin。
+         「关闭上下文栏」按钮已移入 AI Chat 列头部（2026-11-12 规则：
+         助手列与上下文栏一体开合，关闭入口随助手列）。 -->
     <div class="shell-context__header">
       <h2 class="shell-context__title">{{ t("shell.app.context.title") }}</h2>
       <IconTooltip :content="t('shell.app.context.history')" side="bottom">
@@ -258,16 +260,6 @@ const historyEvents = computed(() =>
           :aria-label="t('shell.app.context.pin')"
         >
           <Pin :size="16" aria-hidden="true" />
-        </button>
-      </IconTooltip>
-      <IconTooltip :content="t('shell.app.context.close')" side="bottom">
-        <button
-          type="button"
-          class="shell-context__icon-button"
-          :aria-label="t('shell.app.context.close')"
-          @click="shell.toggleContext()"
-        >
-          <PanelRightClose :size="16" aria-hidden="true" />
         </button>
       </IconTooltip>
     </div>

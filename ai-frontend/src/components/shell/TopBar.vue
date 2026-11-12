@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { Maximize2, Minimize2, Search, Sparkles } from "lucide-vue-next";
 
 import { resolveAvatarSrc } from "@/api/base/self-service";
@@ -21,6 +21,7 @@ import {
   type ProjectSwitcherText
 } from "@/components/global/project-switcher";
 import { AUTH_PATHS } from "@/router/auth";
+import { isManagementPath } from "@/router/navigation";
 import { useAuthStore } from "@/stores/auth";
 import { useShellStore } from "@/stores/shell";
 import { useAssistantStore } from "@/stores/assistant";
@@ -45,12 +46,16 @@ import { useTeamStore } from "@/stores/team";
 
 const { t } = useI18n();
 const router = useRouter();
+const route = useRoute();
 const shell = useShellStore();
 const assistant = useAssistantStore();
 const auth = useAuthStore();
 const teamStore = useTeamStore();
 
 const emit = defineEmits<{ search: [] }>();
+
+/** 管理页（导航「管理」组）不出现 AI 助手入口（与壳层 AI Chat 列同一判定）。 */
+const isManagementRoute = computed(() => isManagementPath(route.path));
 
 const shortcutsOpen = ref(false);
 const signOutOpen = ref(false);
@@ -281,11 +286,16 @@ async function onSignOutConfirm() {
         <span>{{ t("shell.app.chat.focus") }}</span>
       </button>
 
-      <!-- 全局 AI 助手入口（2026-11-08 接线：push 项目 AI 会话页） -->
+      <!-- AI 面板开关（2026-11-12 规则）：开/关作用于「AI 助手列 + 上下文栏」
+           整体（一体面板），不再跳转会话页（会话页仍由左导航「助手」项进入）；
+           管理页（导航「管理」组）不出现该入口。 -->
       <button
+        v-if="!isManagementRoute"
         type="button"
         class="shell-topbar__assistant"
-        @click="router.push('/project/assistant')"
+        :class="{ 'is-active': shell.aiPanelOpen }"
+        :aria-pressed="shell.aiPanelOpen"
+        @click="shell.toggleAiPanel()"
       >
         <Sparkles :size="14" aria-hidden="true" />
         <span>{{ t("shell.app.topbar.assistant") }}</span>
@@ -441,6 +451,11 @@ async function onSignOutConfirm() {
 }
 
 .shell-topbar__assistant:hover {
+  background: var(--ws-hover-veil);
+}
+
+/* 面板开启态（一体开关的视觉反馈）：淡色底标示「开着」，点击整组收起 */
+.shell-topbar__assistant.is-active {
   background: var(--ws-hover-veil);
 }
 

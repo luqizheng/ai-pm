@@ -103,6 +103,18 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     ]
   },
   {
+    // 自托管推理服务：默认端点指本机（AGENTS.md 约定 127.0.0.1，禁 localhost），
+    // OpenAI 兼容面 /v1；模型列表来自本地 /models（拉过哪些模型就有哪些），
+    // 无需 API Key，列表为空时手动输入 model id（如 llama3:8b）。
+    type: "ollama",
+    i18nKey: "settings.team.ai.providerTypes.ollama",
+    defaultEndpoint: "http://127.0.0.1:11434/v1",
+    modelSource: "api",
+    listModelsEndpoint: "/models",
+    requireApiKeyForModels: false,
+    staticModels: []
+  },
+  {
     type: "openai_compatible",
     i18nKey: "settings.team.ai.providerTypes.openai_compatible",
     defaultEndpoint: "",
@@ -124,9 +136,7 @@ export function defaultEndpointOf(type: LlmProviderType): string {
 }
 
 /** 给 Select 的 options（value = type，label 由 i18n 解析）。 */
-export function providerTypeDropdown(i18n: {
-  t: (key: string) => string;
-}) {
+export function providerTypeDropdown(i18n: { t: (key: string) => string }) {
   return PROVIDER_CATALOG.map(e => ({
     value: e.type,
     label: i18n.t(e.i18nKey)

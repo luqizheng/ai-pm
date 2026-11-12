@@ -294,3 +294,21 @@ export function isNavChildActive(
 ): boolean {
   return currentPath === child.path;
 }
+
+/**
+ * 判定某路径是否为「管理」分组下的页面（admin 组全部导航项 + 子路径）。
+ *
+ * 管理页（平台设置 / 成员 / 公告 / AI Provider）是租户级运营面，没有项目
+ * 上下文，AI 助手（壳层 AI Chat 列、顶栏助手入口）在这些页面不出现。
+ * 判定从导航树派生，保持「导航树 = 菜单与路由的单源」。
+ */
+export function isManagementPath(currentPath: string): boolean {
+  const admin = navGroups.find(group => group.id === "admin");
+  if (!admin) return false;
+  return admin.items.some(item => {
+    const roots = [item.path, ...(item.children?.map(c => c.path) ?? [])];
+    return roots.some(
+      path => currentPath === path || currentPath.startsWith(`${path}/`)
+    );
+  });
+}

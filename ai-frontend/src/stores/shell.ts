@@ -7,7 +7,9 @@ import { listRepositories } from "@/api/repositories";
  *
  * 壳自身的开关：
  *   - sidebarCollapsed：左导航折叠（展开 188px / 折叠 60px）
- *   - contextOpen：右上下文栏（288px，可关）
+ *   - aiPanelOpen：AI 面板（AI Chat 446px + 右上下文 288px，**一体开关**——
+ *     2026-11-12 规则：助手列与上下文栏是一个整体，顶栏「助手」按钮与
+ *     AI 列头部的关闭按钮都作用于整个面板，默认全开）
  *   - commandbarExpanded：AI 指令栏（收起 72px / 展开 120px）
  *   - pendingAssistantPrompt：指令栏提交、待会话页（/project/assistant）消费的提问
  *   - focusMode：专注模式（DR-C8）——临时收起 AI Chat 与 Context Panel，
@@ -87,7 +89,8 @@ function persistSidebar(collapsed: boolean) {
 
 export const useShellStore = defineStore("app-shell", () => {
   const sidebarCollapsed = ref(initialSidebarCollapsed());
-  const contextOpen = ref(true);
+  /** AI 面板一体开关：AI Chat 列 + 右上下文栏（默认全开）。 */
+  const aiPanelOpen = ref(true);
   const commandbarExpanded = ref(false);
   /**
    * 专注模式（DR-C8）：临时收起 AI Chat 与 Context Panel，主区独占工作区。
@@ -95,11 +98,11 @@ export const useShellStore = defineStore("app-shell", () => {
    * **只改布局，不改业务语义**：进入/退出都不触碰 currentProjectId、
    * assistantContext、pendingAssistantPrompt 等上下文与交接状态。
    *
-   * 进入前记录右栏开合态（contextOpen），退出时逐项还原——专注模式
-   * 不吞掉用户原本的右栏开关选择。
+   * 进入前记录 AI 面板开合态（aiPanelOpen），退出时逐项还原——专注模式
+   * 不吞掉用户原本的面板开关选择。
    */
   const focusMode = ref(false);
-  const contextOpenBeforeFocus = ref<boolean | null>(null);
+  const aiPanelOpenBeforeFocus = ref<boolean | null>(null);
   /**
    * 指令栏 → 会话页的单槽交接：指令栏只入队并导航，真正发送由会话页走
    * 其既有发送链（自动建会话 / 失败重发）；消费即清空，避免重复发送。
@@ -126,8 +129,8 @@ export const useShellStore = defineStore("app-shell", () => {
     sidebarCollapsed.value ? "collapsed" : "expanded"
   );
 
-  /** 壳根元素的 data-context 取值 */
-  const contextState = computed(() => (contextOpen.value ? "open" : "closed"));
+  /** 壳根元素的 data-context 取值（AI 面板一体开合 → grid 列模板切换） */
+  const contextState = computed(() => (aiPanelOpen.value ? "open" : "closed"));
 
   /** 壳根元素的 data-focus 取值（专注模式） */
   const focusState = computed(() => (focusMode.value ? "on" : "off"));
@@ -193,12 +196,13 @@ export const useShellStore = defineStore("app-shell", () => {
     persistSidebar(collapsed);
   }
 
-  function toggleContext() {
-    contextOpen.value = !contextOpen.value;
+  /** AI 面板一体开关（AI Chat 列 + 右上下文栏同时开合）。 */
+  function toggleAiPanel() {
+    aiPanelOpen.value = !aiPanelOpen.value;
   }
 
-  function setContextOpen(open: boolean) {
-    contextOpen.value = open;
+  function setAiPanelOpen(open: boolean) {
+    aiPanelOpen.value = open;
   }
 
   function toggleCommandbar() {
@@ -217,20 +221,20 @@ export const useShellStore = defineStore("app-shell", () => {
    */
   function enterFocusMode() {
     if (focusMode.value) return;
-    contextOpenBeforeFocus.value = contextOpen.value;
+    aiPanelOpenBeforeFocus.value = aiPanelOpen.value;
     focusMode.value = true;
   }
 
   /**
-   * 退出专注模式：恢复四栏，并还原进入前的右栏开合态。
-   * 专注模式期间用户若手动改了右栏开关，以用户最后一次选择为准。
+   * 退出专注模式：恢复布局，并还原进入前的 AI 面板开合态。
+   * 专注模式期间用户若手动改了面板开关，以用户最后一次选择为准。
    */
   function exitFocusMode() {
     if (!focusMode.value) return;
     focusMode.value = false;
-    if (contextOpenBeforeFocus.value !== null) {
-      contextOpen.value = contextOpenBeforeFocus.value;
-      contextOpenBeforeFocus.value = null;
+    if (aiPanelOpenBeforeFocus.value !== null) {
+      aiPanelOpen.value = aiPanelOpenBeforeFocus.value;
+      aiPanelOpenBeforeFocus.value = null;
     }
   }
 
@@ -358,7 +362,7 @@ export const useShellStore = defineStore("app-shell", () => {
 
   return {
     sidebarCollapsed,
-    contextOpen,
+    aiPanelOpen,
     commandbarExpanded,
     focusMode,
     pendingProjectSwitch,
@@ -376,8 +380,8 @@ export const useShellStore = defineStore("app-shell", () => {
     assistantContext,
     toggleSidebar,
     setSidebarCollapsed,
-    toggleContext,
-    setContextOpen,
+    toggleAiPanel,
+    setAiPanelOpen,
     toggleCommandbar,
     setCommandbarExpanded,
     requestProjectSwitch,

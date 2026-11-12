@@ -36,12 +36,15 @@ const NONCE_LEN: usize = 12;
 /// DB CHECK / 常量 / 前端联合类型三处同步（核验报告 R-LLM-08）。
 /// 2026-11-12 规则：永久移除 anthropic 直连；其用户改用 openai_compatible。
 /// 同日扩展：glm / minimax 加入，两者均走 OpenAI 兼容面。
-pub const PROVIDER_TYPES: [&str; 6] = [
+/// 同日（下午）扩展：ollama 加入——自托管推理服务，走 OpenAI 兼容面
+/// （默认 `127.0.0.1:11434/v1`），允许本地/私网端点，凭证可选。
+pub const PROVIDER_TYPES: [&str; 7] = [
     "openai",
     "gemini",
     "deepseek",
     "glm",
     "minimax",
+    "ollama",
     "openai_compatible",
 ];
 
@@ -200,7 +203,10 @@ pub(crate) fn decrypt_api_key_bytes(payload: &[u8]) -> Result<String, TeamLlmErr
 
 // ─────────────────────────────────────────────────────────── 校验
 
-fn validate_endpoint(endpoint: &str) -> Result<String, TeamLlmError> {
+/// 端点校验（scheme + host 白名单）。`ollama` 类型豁免公网白名单——Ollama 是
+/// 自托管推理服务，端点几乎总是落在 localhost / 私网（默认 `127.0.0.1:11434`），
+/// 公网白名单会让该类型不可用（2026-11-12 产品裁决）。
+fn validate_endpoint_for_type(endpoint: &str, provider_type: &str) -> Result<String, TeamLlmError> {
     let endpoint = endpoint.trim().trim_end_matches('/').to_string();
     let parsed = url::Url::parse(&endpoint)
         .map_err(|_| TeamLlmError::Validation("endpoint is not a valid URL"))?;
@@ -212,7 +218,7 @@ fn validate_endpoint(endpoint: &str) -> Result<String, TeamLlmError> {
     let host = parsed
         .host_str()
         .ok_or_else(|| TeamLlmError::Validation("endpoint must include a host"))?;
-    if !is_public_host(host) {
+    if !is_public_host(host) && provider_type != "ollama" {
         // §17 SSRF 防护（2026-11-11 D-3）：仅放行公网地址。字面校验
         // （localhost / 私网 / 回环 / 链路本地 / ULA / 未指定）；DNS 解析后
         // 校验（防 rebinding）随统一 Gateway 挂账。企业内网网关如需豁免
@@ -397,7 +403,7 @@ pub async fn create_team_provider(
         return Err(TeamLlmError::Validation("name is required"));
     }
     validate_provider_type(&req.provider_type)?;
-    let endpoint = validate_endpoint(&req.endpoint)?;
+    let endpoint = validate_endpoint_for_type(&req.endpoint, &req.provider_type)?;
     let configuration = req.configuration.unwrap_or_else(|| json!({}));
     validate_configuration(&configuration)?;
     let timeout_secs = req.timeout_secs.unwrap_or(120);
@@ -540,10 +546,6 @@ pub async fn update_team_provider(
     if let Some(provider_type) = &req.provider_type {
         validate_provider_type(provider_type)?;
     }
-    let endpoint = match req.endpoint.as_deref() {
-        Some(endpoint) => Some(validate_endpoint(endpoint)?),
-        None => None,
-    };
     if let Some(configuration) = &req.configuration {
         validate_configuration(configuration)?;
     }
@@ -552,6 +554,29 @@ pub async fn update_team_provider(
     }
 
     let mut tx = pool.begin().await?;
+
+    // 端点公网白名单豁免依赖生效类型（ollama 允许本地/私网）：请求显式换型
+    // 用新值，否则取当前行类型。行不存在时在此给 404。
+    let endpoint = match req.endpoint.as_deref() {
+        Some(endpoint) => {
+            let effective_type = match &req.provider_type {
+                Some(provider_type) => provider_type.clone(),
+                None => {
+                    let current_type: Option<String> = sqlx::query_scalar(
+                        "SELECT provider_type FROM ai.team_llm_provider \
+                         WHERE tenant_id = $1 AND id = $2",
+                    )
+                    .bind(tenant_id)
+                    .bind(provider_id)
+                    .fetch_optional(&mut *tx)
+                    .await?;
+                    current_type.ok_or(TeamLlmError::NotFound)?
+                }
+            };
+            Some(validate_endpoint_for_type(endpoint, &effective_type)?)
+        }
+        None => None,
+    };
 
     let updated = sqlx::query(
         "UPDATE ai.team_llm_provider SET \
@@ -694,8 +719,8 @@ pub async fn test_team_provider(
         .filter(|m| !m.is_empty())
         .ok_or(TeamLlmError::Validation("model is required before testing"))?;
 
-    // 取凭证（可选）：`openai_compatible`（Ollama 等本地端点）允许匿名探测；
-    // 其余类型无凭证 = Configuration Error（显式，不静默）。
+    // 取凭证（可选）：`openai_compatible` / `ollama`（本地/自建端点）允许
+    // 匿名探测；其余类型无凭证 = Configuration Error（显式，不静默）。
     let ciphertext: Option<Vec<u8>> = sqlx::query_scalar(
         "SELECT api_key_ciphertext FROM ai.team_llm_credential WHERE id = \
          (SELECT credential_id FROM ai.team_llm_provider WHERE tenant_id = $1 AND id = $2)",
@@ -707,7 +732,7 @@ pub async fn test_team_provider(
     .flatten();
     let api_key = match ciphertext {
         Some(bytes) => Some(decrypt_api_key_bytes(&bytes)?),
-        None if row.provider_type == "openai_compatible" => None,
+        None if matches!(row.provider_type.as_str(), "openai_compatible" | "ollama") => None,
         None => {
             return Err(TeamLlmError::Validation(
                 "credential is required before testing",
@@ -917,8 +942,13 @@ pub async fn set_team_provider_status(
             if current.status == "enabled" {
                 return Ok(current); // 幂等
             }
-            // 凭证门禁：`openai_compatible`（本地端点，无鉴权）豁免。
-            if !current.has_credential && current.provider_type != "openai_compatible" {
+            // 凭证门禁：`openai_compatible` / `ollama`（本地端点，无鉴权）豁免。
+            if !current.has_credential
+                && !matches!(
+                    current.provider_type.as_str(),
+                    "openai_compatible" | "ollama"
+                )
+            {
                 return Err(TeamLlmError::Validation(
                     "credential is required before enabling",
                 ));
@@ -1206,15 +1236,16 @@ mod tests {
         assert_eq!(hint_of("abc"), "****abc");
     }
 
-    /// §17 SSRF 防护：公网放行，localhost/私网/回环/链路本地/ULA 拒绝。
+    /// §17 SSRF 防护：公网放行，localhost/私网/回环/链路本地/ULA 拒绝；
+    /// `ollama` 类型豁免白名单（本地端点是 Ollama 的常规形态），scheme 仍校验。
     #[test]
     fn endpoint_blocks_private_hosts() {
         assert_eq!(
-            validate_endpoint("https://api.openai.com/v1").unwrap(),
+            validate_endpoint_for_type("https://api.openai.com/v1", "deepseek").unwrap(),
             "https://api.openai.com/v1"
         );
         assert_eq!(
-            validate_endpoint("http://203.0.113.1:9/v1").unwrap(),
+            validate_endpoint_for_type("http://203.0.113.1:9/v1", "deepseek").unwrap(),
             "http://203.0.113.1:9/v1"
         );
         for bad in [
@@ -1234,8 +1265,26 @@ mod tests {
             "ftp://api.openai.com",
             "not-a-url",
         ] {
-            assert!(validate_endpoint(bad).is_err(), "must block {bad}");
+            assert!(
+                validate_endpoint_for_type(bad, "deepseek").is_err(),
+                "must block {bad}"
+            );
         }
+        // ollama：本地/私网放行（尾斜杠归一仍生效）
+        assert_eq!(
+            validate_endpoint_for_type("http://127.0.0.1:11434/v1", "ollama").unwrap(),
+            "http://127.0.0.1:11434/v1"
+        );
+        assert_eq!(
+            validate_endpoint_for_type("http://localhost:11434/", "ollama").unwrap(),
+            "http://localhost:11434"
+        );
+        assert_eq!(
+            validate_endpoint_for_type("http://192.168.1.10:11434", "ollama").unwrap(),
+            "http://192.168.1.10:11434"
+        );
+        // ollama 的 scheme 校验不豁免
+        assert!(validate_endpoint_for_type("ftp://localhost:11434", "ollama").is_err());
     }
 
     #[test]
@@ -1248,6 +1297,7 @@ mod tests {
                 "deepseek",
                 "glm",
                 "minimax",
+                "ollama",
                 "openai_compatible"
             ]
         );
@@ -1257,6 +1307,7 @@ mod tests {
         assert!(adapter_available("deepseek"));
         assert!(adapter_available("glm"));
         assert!(adapter_available("minimax"));
+        assert!(adapter_available("ollama"));
         assert!(adapter_available("openai_compatible"));
     }
 

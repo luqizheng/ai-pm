@@ -38,7 +38,7 @@ import {
  * 团队设置 — AI 配置（Team LLM Provider Management §13）。
  * Team≡tenant：Provider 是团队资源，仅 owner/admin 可管理（后端守卫；
  * 非管理员在此会收到 403 文案）。生命周期：测试成功≠自动启用；
- * enable 需已配凭证（openai_compatible 本地端点豁免）。
+ * enable 需已配凭证（openai_compatible / ollama 本地端点豁免）。
  */
 const { t } = useI18n();
 const toast = useToast();
@@ -58,11 +58,13 @@ const breadcrumb = [
 ];
 
 // ── 新建 ─────────────────────────────────────────────────────
+// 新建表单默认类型 = DeepSeek（2026-11-12 规则）
+const DEFAULT_PROVIDER_TYPE = "deepseek" as LlmProvider["provider_type"];
 const showCreate = ref(false);
 const creating = ref(false);
 const draft = reactive({
   name: "",
-  provider_type: "openai_compatible" as LlmProvider["provider_type"],
+  provider_type: DEFAULT_PROVIDER_TYPE,
   endpoint: "",
   model: "",
   api_key: "",
@@ -84,7 +86,9 @@ watch(
     }
     // 切换 provider 时清空 model（避免旧类型的残留值）
     draft.model = "";
-  }
+  },
+  // immediate：默认类型（DeepSeek）的端点在表单初始化时即预填
+  { immediate: true }
 );
 
 // ── Model 字段状态机：只在新建 Provider 表单启用 ──
@@ -200,10 +204,12 @@ async function create() {
     });
     applyRow(row);
     showCreate.value = false;
+    // 重置回默认类型：端点与 autoEndpoint 同步预填（类型值未变化，watch 不会触发）
+    autoEndpoint.value = defaultEndpointOf(DEFAULT_PROVIDER_TYPE);
     Object.assign(draft, {
       name: "",
-      provider_type: "openai_compatible",
-      endpoint: "",
+      provider_type: DEFAULT_PROVIDER_TYPE,
+      endpoint: autoEndpoint.value,
       model: "",
       api_key: "",
       timeout: "120"
@@ -383,8 +389,8 @@ onMounted(load);
         <FormField :label="t('settings.team.ai.fields.model')">
           <div class="tp-model-field">
             <Combobox
-              autocomplete="off"
               v-model="draft.model"
+              autocomplete="off"
               :options="modelComboboxOptions"
               :input-placeholder="modelInputPlaceholder"
               :placeholder="modelInputPlaceholder"

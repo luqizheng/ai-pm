@@ -13,12 +13,12 @@ describe("shell store", () => {
     setActivePinia(createPinia());
   });
 
-  it("默认展开：左导航展开、右栏打开、指令栏收起", () => {
+  it("默认展开：左导航展开、AI 面板打开（助手+上下文一体）、指令栏收起", () => {
     const shell = useShellStore();
 
     expect(shell.sidebarCollapsed).toBe(false);
     expect(shell.sidebarState).toBe("expanded");
-    expect(shell.contextOpen).toBe(true);
+    expect(shell.aiPanelOpen).toBe(true);
     expect(shell.contextState).toBe("open");
     expect(shell.commandbarExpanded).toBe(false);
   });
@@ -53,11 +53,11 @@ describe("shell store", () => {
     expect(useShellStore().sidebarCollapsed).toBe(true);
   });
 
-  it("切换右上下文栏与指令栏展开态", () => {
+  it("切换 AI 面板（一体）与指令栏展开态", () => {
     const shell = useShellStore();
 
-    shell.toggleContext();
-    expect(shell.contextOpen).toBe(false);
+    shell.toggleAiPanel();
+    expect(shell.aiPanelOpen).toBe(false);
     expect(shell.contextState).toBe("closed");
 
     shell.toggleCommandbar();

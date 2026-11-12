@@ -52,11 +52,12 @@ body {
   --ws-sidebar-current: var(--ws-sidebar-collapsed);
 }
 
+/* AI 面板整体关闭（2026-11-12 规则）：助手列与上下文栏一体收起，
+ * 主区独占——列模板与专注模式同型。 */
 .workspace-shell[data-context="closed"] {
   grid-template-columns:
     var(--ws-sidebar-current)
-    minmax(0, 1fr)
-    var(--ws-chat-width);
+    minmax(0, 1fr);
 }
 
 /* 专注模式（DR-C8）：临时收起 AI Chat 与 Context Panel，主区独占工作区。

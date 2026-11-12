@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, type VueWrapper } from "@vue/test-utils";
+import { nextTick } from "vue";
 
 import { mountShell } from "@/components/shell/test-utils";
 import { useShellStore } from "@/stores/shell";
@@ -103,6 +104,20 @@ describe("AssistantColumn（AI Chat 常驻列）", () => {
     shell.setProjects([{ id: "p1", name: "Smark Platform" }]);
     shell.setCurrentProject(projectId);
   }
+
+  it("AI 面板一体关闭：点击头部关闭按钮翻转 store 的 aiPanelOpen", async () => {
+    const { wrapper } = mountShell(AssistantColumn);
+    const shell = useShellStore();
+    expect(shell.aiPanelOpen).toBe(true);
+
+    const close = wrapper.find(".workspace-chat__close");
+    expect(close.exists()).toBe(true);
+
+    await close.trigger("click");
+    await nextTick();
+
+    expect(shell.aiPanelOpen).toBe(false);
+  });
 
   it("按当前项目拉会话列表并渲染时间线", async () => {
     listConversations.mockResolvedValue([conversation({})]);

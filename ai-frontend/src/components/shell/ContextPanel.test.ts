@@ -63,21 +63,8 @@ describe("ContextPanel", () => {
     expect(wrapper.find(".shell-context__ai").exists()).toBe(true);
   });
 
-  it("点击关闭按钮收起右上下文栏（翻转 store 的 contextOpen）", async () => {
-    const { wrapper } = mountShell(ContextPanel);
-    const shell = useShellStore();
-    expect(shell.contextOpen).toBe(true);
-
-    const close = wrapper
-      .findAll(".shell-context__icon-button")
-      .find(el => el.attributes("aria-label") === "关闭上下文栏");
-    expect(close).toBeTruthy();
-
-    await close!.trigger("click");
-    await nextTick();
-
-    expect(shell.contextOpen).toBe(false);
-  });
+  // 「关闭上下文栏」按钮已移入 AI Chat 列头部（2026-11-12 一体开关规则），
+  // 其行为用例随迁至 AssistantColumn.test.ts / WorkspaceShell.test.ts。
 
   // ───────────────────────────────── 单一真源（整合计划 Batch 1）
 

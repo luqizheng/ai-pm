@@ -7,6 +7,7 @@ import SearchPalette from "@/components/global/search/SearchPalette.vue";
 import type { SearchCommand, SearchFn } from "@/components/global/search/types";
 import { listProjects } from "@/api/projects";
 import { retrievalQuery } from "@/api/knowledge";
+import { isManagementPath } from "@/router/navigation";
 import { useShellStore } from "@/stores/shell";
 import AssistantColumn from "./AssistantColumn.vue";
 import ProjectSwitchGuardDialog from "./ProjectSwitchGuardDialog.vue";
@@ -42,6 +43,9 @@ function urlProjectId(): string | null {
 /** 完整会话页路由——该页本身即会话面，AI Chat 列收起避免同屏重复。 */
 const ASSISTANT_PATH = "/project/assistant";
 const isAssistantRoute = computed(() => route.path === ASSISTANT_PATH);
+
+/** 管理页（导航「管理」组）：租户运营面，AI 助手不出现。 */
+const isManagementRoute = computed(() => isManagementPath(route.path));
 
 /** 全局搜索面板开关（⌘K / 顶栏搜索入口） */
 const searchOpen = ref(false);
@@ -229,15 +233,25 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       </div>
     </main>
 
-    <!-- AI Chat 常驻独立列（DR-C8）：专注模式下收起，主区独占工作区；
-         完整会话页（/project/assistant）本身即会话面，此时列收起避免同屏重复。 -->
+    <!-- AI Chat 常驻独立列（DR-C8）+ 右上下文栏 = AI 面板一体开关
+         （aiPanelOpen，默认全开；顶栏「助手」按钮与列头部关闭按钮都作用于整体）：
+         专注模式下收起，主区独占工作区；
+         完整会话页（/project/assistant）本身即会话面，此时列收起避免同屏重复；
+         管理页（导航「管理」组）为租户运营面，AI 面板不出现。 -->
     <AssistantColumn
-      v-if="!shell.focusMode && !isAssistantRoute"
+      v-if="
+        shell.aiPanelOpen &&
+        !shell.focusMode &&
+        !isAssistantRoute &&
+        !isManagementRoute
+      "
       class="workspace-chat"
     />
 
+    <!-- 右上下文栏与 AI Chat 一体（含会话 History）：专注模式 / 管理页 / 面板
+         关闭时同步收起；完整会话页仍保留上下文。 -->
     <ContextPanel
-      v-if="shell.contextOpen && !shell.focusMode"
+      v-if="shell.aiPanelOpen && !shell.focusMode && !isManagementRoute"
       class="workspace-context"
     />
 

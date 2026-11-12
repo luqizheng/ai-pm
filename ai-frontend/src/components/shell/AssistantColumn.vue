@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Plus } from "lucide-vue-next";
+import { PanelRightClose, Plus } from "lucide-vue-next";
 
 import Button from "@/components/ui/button/Button.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
@@ -10,6 +10,7 @@ import { AiConversationPanel } from "@/components/ui/ai-interaction/conversation
 import { useAssistantConversation } from "@/composables/useAssistantConversation";
 import { useShellStore } from "@/stores/shell";
 import CommandBar from "./CommandBar.vue";
+import IconTooltip from "./IconTooltip.vue";
 
 /**
  * AI Chat 常驻独立列（AI Collaboration V1.0 / DR-C8 第 ② 步）。
@@ -99,6 +100,19 @@ function onSubmit(text: string) {
       <span v-if="messagesLoading" class="workspace-chat__status" role="status">
         {{ t("assistant.messagesLoading") }}
       </span>
+      <!-- AI 面板一体关闭（2026-11-12 规则）：原「关闭上下文栏」按钮从上下文栏
+           头部移入此处——助手列与上下文栏是一体面板，点击两列同时收起，
+           再开经顶栏「助手」按钮。 -->
+      <IconTooltip :content="t('shell.app.context.close')" side="bottom">
+        <button
+          type="button"
+          class="workspace-chat__close"
+          :aria-label="t('shell.app.context.close')"
+          @click="shell.toggleAiPanel()"
+        >
+          <PanelRightClose :size="16" aria-hidden="true" />
+        </button>
+      </IconTooltip>
     </header>
 
     <!-- 会话区 -->
@@ -176,6 +190,27 @@ function onSubmit(text: string) {
   flex: none;
   color: var(--ws-text-secondary);
   font-size: var(--ws-font-size-caption);
+}
+
+/* AI 面板一体关闭按钮（自上下文栏头部移入）：外观与上下文栏图标钮同款 */
+.workspace-chat__close {
+  flex: none;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-control-sm);
+  height: var(--size-control-sm);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ws-text-secondary);
+  cursor: pointer;
+}
+
+.workspace-chat__close:hover {
+  background: var(--ws-hover-veil);
+  color: var(--ws-text-primary);
 }
 
 .workspace-chat__body {

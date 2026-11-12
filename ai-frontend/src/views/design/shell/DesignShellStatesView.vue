@@ -26,7 +26,10 @@ const controls = [
     name: "Sidebar collapse",
     state: shell.sidebarCollapsed ? "collapsed" : "expanded"
   },
-  { name: "Context panel", state: shell.contextOpen ? "open" : "closed" },
+  {
+    name: "AI panel (chat + context)",
+    state: shell.aiPanelOpen ? "open" : "closed"
+  },
   {
     name: "Command bar",
     state: shell.commandbarExpanded ? "expanded" : "collapsed"
@@ -72,8 +75,8 @@ const controls = [
                   @click="
                     c.name === 'Sidebar collapse'
                       ? shell.toggleSidebar()
-                      : c.name === 'Context panel'
-                        ? shell.toggleContext()
+                      : c.name === 'AI panel (chat + context)'
+                        ? shell.toggleAiPanel()
                         : shell.toggleCommandbar()
                   "
                 >
