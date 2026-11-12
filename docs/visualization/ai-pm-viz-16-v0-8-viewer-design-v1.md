@@ -1,7 +1,7 @@
 # AI-PM Visualization V0-8 技术设计（Viewer 前端）V1.0
 
 > 状态：设计稿（证据齐备，待 Frontend/Security Owner 签收） · 日期：2026-11-12
-> 上游：[ADR V1.0.1 + V1.0.2 待签收修订](ai-pm-viz-09-architecture-decision-record-v1.md)（附录 A 的 M-1/M-4/M-7）· [15 号安全审查](ai-pm-viz-15-v0-6-security-review-v1.md)（产物静态化）· [13 号 V0-2 数据模型](ai-pm-viz-13-v0-2-data-model-design-v1.md)· [14 号 V0-3 投影](ai-pm-viz-14-v0-3-projection-consistency-design-v1.md)· [D6 UI/UX 方案](ai-pm-viz-06-viewer-uiux-v1.md)
+> 上游：[ADR V1.0.1 + V1.0.2 待签收修订](ai-pm-viz-09-architecture-decision-record-v1.md)（附录 A 的 M-1/M-4/M-7）· [15 号安全审查](ai-pm-viz-15-v0-6-security-review-v1.md)（产物静态化）· [18 号 UX 规格 V1.1](ai-pm-viz-18-v0-8-ux-spec-v1-1.md)（**交互规格权威**：本文只讲前端落点）· [13 号 V0-2 数据模型](ai-pm-viz-13-v0-2-data-model-design-v1.md)· [14 号 V0-3 投影](ai-pm-viz-14-v0-3-projection-consistency-design-v1.md)
 > 落地约定：本文所有"仓库事实"均来自 2026-11-12 对 `ai-frontend/` 的实证（路径:行号随附）。
 
 ## 1. 范围与形态（按 15 号修订后的最终形态）
@@ -215,6 +215,9 @@ src/lib/viz/
 | V0-8.9 | 路由与主视图 | `/project/:projectId/visualizations` + PageFrame + `?project_id=` 钥匙模式 |
 | V0-8.10 | 令牌与 i18n | `tokens.css` 新增 `viz` 子集（深浅双主题）+ `tokens.test.ts` 绿 + `locales/{zh-CN,en}/viz.yaml` |
 | V0-8.11 | 测试 | §9 全部用例；`pnpm test:unit` + `check:prism-tokens` + `check:i18n` 全绿 |
+| V0-8.12 | **AI 解释面板** | `VizAiExplanation.vue`：Direct / Indirect 分区、关键发现、潜在风险、待确认事项；数据来自信封 payload（非模型自由文本直出，须经白名单字段过滤）——依据 [18 号 UX 规格](ai-pm-viz-18-v0-8-ux-spec-v1-1.md) §4.1 D |
+| V0-8.13 | **反馈区** | `VizFeedbackArea.vue`：自然语言反馈 → 触发新一轮 AI 生成（走 V0-5 链路）；**不得直接修改业务对象**；反馈不得携带用户未授权对象 ID（服务端校验）——依据 18 号 §4.1 E |
+| V0-8.14 | **P0 缺口明示** | 产物卡与 Viewer 页脚标注「交互探索在 P1 上线，当前提供表格视图」（UX-D11 / UX-P0-11） |
 
 ## 11. 待签收与偏差
 

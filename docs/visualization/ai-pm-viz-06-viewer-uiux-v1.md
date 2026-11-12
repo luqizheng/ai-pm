@@ -30,7 +30,7 @@
 ```
 
 - 画布与侧栏宽度沿用协作工作台既有栅格节奏（188/518/446/288 体系的就近比例），不新造布局语言。
-- ArtifactFrame（对话卡内）：固定高度卡内预览 + "展开全屏"按钮；iframe sandbox 无 same-origin + **独立产物 Origin**，卡内不提供操作按钮（操作在宿主卡面上）；iframe **不携带凭证、不调用 AI-PM API**，仅经白名单 postMessage（`node_selected`/`route_selected`，source+随机会话标识校验）回传选中结果，宿主收到后自行查权限再查业务（DV-12 安全增强）。
+- ArtifactFrame（对话卡内）：固定高度卡内预览 + "展开全屏"按钮；**以 `<img>` 引用服务端导出的静态 SVG**（Blob objectURL，禁 `<object>`/`<iframe>`——`<object>` 可执行 SVG 内脚本）；产物零脚本执行，卡内不提供操作按钮（操作在宿主卡面上）。**注：本行原为 iframe sandbox + 独立 Origin + postMessage 方案，已由 [15 号安全审查](ai-pm-viz-15-v0-6-security-review-v1.md)（M-1）废止并替换为产物静态化方案。**
 
 ## 3. 关键交互规范
 
@@ -65,7 +65,7 @@
 ```
 src/components/viz/
   VizViewer.vue            // 编排：加载 spec/artifact → 选 renderer → 挂载
-  ArtifactFrame.vue        // sandbox iframe 封装（唯一允许 iframe 的组件）
+  ArtifactFrame.vue        // 静态 SVG 引用封装（<img> + Blob objectURL；产物零脚本执行）
   LiveGraphView.vue        // Adapter A（G6，P1）
   DegradedTableView.vue    // 降级表格（永远可用）
   TracePanel.vue / VersionBar.vue / ApprovalCard.vue / StaleBar.vue / LegendBar.vue
@@ -74,7 +74,7 @@ src/lib/viz/
   useVizArtifact.ts / useLiveGraph.ts   // pinia/axios 数据流
   renderers/               // adapter 注册表（接口见 D4 §7）
 ```
-- `ArtifactFrame` 之外禁止出现指向 artifact HTML 的 iframe（lint 规则）。
+- **禁止**出现指向 artifact 的 `<iframe>`/`<object>`（lint 规则）；产物一律 `<img>` 引用（AC-7′/AC-18′）。
 - 所有文案走 `viz.*`，过 `check:i18n`；测试禁 findComponent 内部断言按既有坑位惯例（Teleport/emit 先例）。
 
 ## 6. 可用性与无障碍
