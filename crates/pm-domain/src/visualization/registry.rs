@@ -78,12 +78,24 @@ pub struct RelationDefinition {
     /// 引入版本。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub introduced_in: Option<String>,
-    /// 会签日期（正式会签后填写）。
+    /// 会签人（角色 + 姓名；G-1 审计要求）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signoff_date: Option<String>,
-    /// 会签记录引用。
+    pub signoff_by: Option<String>,
+    /// 会签时间（G-1 审计要求；旧名 signoff_date 保留兼容）。
+    #[serde(default, alias = "signoff_date", skip_serializing_if = "Option::is_none")]
+    pub signoff_at: Option<String>,
+    /// 会签依据 / 记录引用（会议纪要号、链接等）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signoff_record: Option<String>,
+    /// 激活时的 Registry 版本（G-1 审计要求）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry_version: Option<String>,
+    /// 语义定义版本（语义变更须升版，不得覆写旧定义——G-1）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic_version: Option<String>,
+    /// 激活写入时间（G-1 审计要求）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activated_at: Option<String>,
     /// 是否为反向视图别名（不新增业务事实）。
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub view_alias: bool,
@@ -123,6 +135,41 @@ impl RelationDefinition {
     /// 别名（`view_alias`）不作为独立业务关系参与投影——它只是查询视角。
     pub fn is_projectable(&self) -> bool {
         self.status.is_projectable() && !self.view_alias
+    }
+
+    /// G-1 会签审计字段缺失项（空 = 齐备，可用于激活）。
+    ///
+    /// 专家裁决 G-1：每条 Relation 从 draft → active 必须留下七项记录——
+    /// key / registry_version / signoff_by / signoff_at / signoff_record /
+    /// semantic_version / activated_at。key 即 `self.key`，其余六项在此校验。
+    pub fn missing_audit_fields(&self) -> Vec<&'static str> {
+        let mut missing = Vec::new();
+        if self.registry_version.as_deref().unwrap_or("").trim().is_empty() {
+            missing.push("registry_version");
+        }
+        if self.signoff_by.as_deref().unwrap_or("").trim().is_empty() {
+            missing.push("signoff_by");
+        }
+        if self.signoff_at.as_deref().unwrap_or("").trim().is_empty() {
+            missing.push("signoff_at");
+        }
+        if self.signoff_record.as_deref().unwrap_or("").trim().is_empty() {
+            missing.push("signoff_record");
+        }
+        if self.semantic_version.as_deref().unwrap_or("").trim().is_empty() {
+            missing.push("semantic_version");
+        }
+        if self.activated_at.as_deref().unwrap_or("").trim().is_empty() {
+            missing.push("activated_at");
+        }
+        missing
+    }
+
+    /// 是否**具备激活条件**（仍是 draft，但 G-1 七项已齐备——只差签名落地）。
+    ///
+    /// 用于「会签执行版」的就绪检查：区分「还没会签」与「已会签待激活」。
+    pub fn is_ready_to_activate(&self) -> bool {
+        self.status == RelationStatus::Draft && self.missing_audit_fields().is_empty()
     }
 }
 
@@ -282,7 +329,11 @@ mod tests {
             semantics: "测试用".to_string(),
             governance_level: Some("L2".to_string()),
             introduced_in: Some("1.0".to_string()),
-            signoff_date: None,
+            signoff_by: None,
+            signoff_at: None,
+            registry_version: None,
+            semantic_version: None,
+            activated_at: None,
             signoff_record: None,
             view_alias: false,
             reverse_view_of: None,

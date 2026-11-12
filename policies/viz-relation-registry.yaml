@@ -14,6 +14,24 @@
 #   计数；同一底层事实不得同时产出两条边。
 # - 合成关系（synthetic）必须 `business_fact: false`。
 #
+# G-1 激活审计（专家裁决 2026-11-12）：draft → active 必须齐备七项——
+#   key / registry_version / signoff_by / signoff_at / signoff_record /
+#   semantic_version / activated_at（缺任一即 lint 拒绝 Active）。
+#   语义变更不得覆写已 Active 的 semantics，须升 semantic_version 并重新会签。
+#
+# 分批激活（专家裁决）：第一批 = design.covers_requirement /
+#   task.implements_requirement / task.depends_on_task——**每条独立会签、独立
+#   Active**，不因同批其他条目已签而自动激活。详见 21 号会签执行版。
+#
+# G-1 激活审计（专家裁决 2026-11-12）：draft → active 必须齐备七项——
+#   key / registry_version / signoff_by / signoff_at / signoff_record /
+#   semantic_version / activated_at（缺任一即 lint 拒绝 Active）。
+#   语义变更不得覆写已 Active 的 semantics，须升 semantic_version 并重新会签。
+#
+# 分批激活（专家裁决）：第一批 = design.covers_requirement /
+#   task.implements_requirement / task.depends_on_task——**每条独立会签、独立
+#   Active**，不因同批其他条目已签而自动激活。详见 21 号会签执行版。
+#
 # ⚠️ 状态说明：首批词表已通过架构预审（17 号 V1.2），但**领域 Owner 会签尚未完成**。
 #    因此本文件中所有关系当前均为 `status: draft` —— 会签完成前不可投影
 #    （校验器对 draft 关系产出 E_SPEC_RELATION_NOT_APPROVED 阻断）。

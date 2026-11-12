@@ -104,10 +104,38 @@ function checkRegistry(registry) {
     if (!relation.owner_role || typeof relation.owner_role !== "string") {
       report(file, `关系 ${key} 缺少 owner_role`);
     }
+    // G-1（专家裁决）：draft → active 必须留下七项审计记录。
+    // key 即本条；其余六项缺一不可——「已 Active 但无会签依据」是不可审计的。
     if (PROJECTABLE_STATUSES.has(relation.status)) {
-      if (!relation.signoff_date && !relation.signoff_record) {
-        report(file, `已启用的关系 ${key} 必须带会签记录（signoff_date / signoff_record）`);
+      const REQUIRED_AUDIT = [
+        "registry_version",
+        "signoff_by",
+        "signoff_at",
+        "signoff_record",
+        "semantic_version",
+        "activated_at"
+      ];
+      const missing = REQUIRED_AUDIT.filter(
+        (field) =>
+          typeof relation[field] !== "string" || relation[field].trim() === ""
+      );
+      if (missing.length > 0) {
+        report(
+          file,
+          `已启用的关系 ${key} 缺少 G-1 审计字段：${missing.join(", ")}（不得在无会签依据的情况下 Active）`
+        );
       }
+    }
+    // 兼容旧字段名：signoff_date 是 signoff_at 的 alias，两者取其一即可
+    if (
+      PROJECTABLE_STATUSES.has(relation.status) &&
+      !relation.signoff_at &&
+      relation.signoff_date
+    ) {
+      report(
+        file,
+        `关系 ${key} 使用了旧字段 signoff_date——请改用 signoff_at（G-1 统一命名）`
+      );
     }
 
     // 规则 2：状态必须合法
@@ -191,8 +219,50 @@ function checkRegistry(registry) {
   }
 }
 
+/** 就绪报告：区分「还没会签」与「已会签待激活」。 */
+function printReadiness(registry) {
+  const relations = Array.isArray(registry.relations) ? registry.relations : [];
+  const AUDIT = [
+    "registry_version",
+    "signoff_by",
+    "signoff_at",
+    "signoff_record",
+    "semantic_version",
+    "activated_at"
+  ];
+  console.log(`[viz-registry] 就绪报告（Registry 版本 ${registry.version}）`);
+  let active = 0;
+  let ready = 0;
+  let draft = 0;
+  for (const relation of relations) {
+    const missing = AUDIT.filter(
+      (field) =>
+        typeof relation[field] !== "string" || relation[field].trim() === ""
+    );
+    if (relation.status === "active") {
+      active += 1;
+      console.log(`  [active] ${relation.key}`);
+    } else if (relation.status === "draft" && missing.length === 0) {
+      ready += 1;
+      console.log(`  [就绪待激活] ${relation.key} — 审计字段齐备，可直接改 active`);
+    } else {
+      draft += 1;
+      console.log(
+        `  [draft] ${relation.key} — 缺 ${missing.length} 项审计（等会签）`
+      );
+    }
+  }
+  console.log(
+    `[viz-registry] 汇总：active ${active} / 就绪待激活 ${ready} / 纯 draft ${draft}`
+  );
+}
+
 function main() {
   const registry = loadRegistry();
+  if (process.argv.includes("--readiness")) {
+    printReadiness(registry);
+    process.exit(0);
+  }
   checkRegistry(registry);
 
   const file = path.relative(ROOT, REGISTRY_FILE);

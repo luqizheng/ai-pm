@@ -94,10 +94,13 @@ fn signoff_state_is_explicit() {
     // 会签完成后由 Owner 逐条改为 active 并在此处同步放行。
     for relation in &registry.relations {
         if relation.status.is_projectable() {
+            // G-1（专家裁决）：active 必须齐备六项审计字段，缺一即拒绝
+            let missing = relation.missing_audit_fields();
             assert!(
-                relation.signoff_date.is_some() || relation.signoff_record.is_some(),
-                "已启用的关系 {} 必须带会签记录",
-                relation.key
+                missing.is_empty(),
+                "已启用的关系 {} 缺少 G-1 审计字段：{:?}",
+                relation.key,
+                missing
             );
         }
     }
