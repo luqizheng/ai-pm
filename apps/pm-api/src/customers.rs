@@ -24,7 +24,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{paging, ApiResult};
+use crate::support::{paging, repos::customer_repo, ApiResult};
+use pm_application::repo::customer::{CustomerRepo, Page};
 use pm_application::rows::CustomerRow;
 
 /// 可写状态集合。`placeholder` 只能由迁移产生，不接受手工写入。
@@ -42,40 +43,13 @@ pub(crate) fn router() -> Router<AppState> {
         )
 }
 
-/// 列表/详情共用的列投影；`project_count` 由子查询算，避免 GROUP BY 与 LIMIT
-/// 交互出错（客户数量小，子查询代价可忽略）。
-const CUSTOMER_COLUMNS: &str = "c.id, c.code, c.name, c.short_name, c.industry, c.notes, \
-     c.parent_id, c.status, c.created_at, c.updated_at, \
-     (SELECT count(*) FROM core.project p WHERE p.customer_id = c.id)::bigint AS project_count";
-
-/// T-022 可见性谓词（列表/详情共用）：
-///
-/// - 调用者是该客户**任一项目**的成员；或
-/// - 该客户**尚无项目**（待归类池，同租户活跃成员可见，避免「建完客户就消失」）。
-///
-/// 跨租户一律不可见。
-const CUSTOMER_VISIBLE: &str = "c.tenant_id = $2 AND ( \
-       NOT EXISTS (SELECT 1 FROM core.project p WHERE p.customer_id = c.id) \
-    OR EXISTS (SELECT 1 FROM core.project p \
-                 JOIN core.project_member m ON m.project_id = p.id \
-                WHERE p.customer_id = c.id AND m.principal_id = $3))";
-
 async fn fetch_customer(
     pool: &sqlx::PgPool,
     tenant_id: Uuid,
     customer_id: Uuid,
     principal_id: Uuid,
 ) -> Result<Option<CustomerRow>, sqlx::Error> {
-    let sql = format!(
-        "SELECT {CUSTOMER_COLUMNS} FROM core.customer c \
-          WHERE c.id = $1 AND {CUSTOMER_VISIBLE}"
-    );
-    sqlx::query_as::<_, CustomerRow>(&sql)
-        .bind(customer_id)
-        .bind(tenant_id)
-        .bind(principal_id)
-        .fetch_optional(pool)
-        .await
+    customer_repo(pool).find_visible_row(tenant_id, customer_id, principal_id).await
 }
 
 pub(crate) async fn customer_visible_to(
@@ -84,15 +58,7 @@ pub(crate) async fn customer_visible_to(
     customer_id: Uuid,
     principal_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
-    let sql = format!(
-        "SELECT EXISTS (SELECT 1 FROM core.customer c WHERE c.id = $1 AND {CUSTOMER_VISIBLE})"
-    );
-    sqlx::query_scalar(&sql)
-        .bind(customer_id)
-        .bind(tenant_id)
-        .bind(principal_id)
-        .fetch_one(pool)
-        .await
+    customer_repo(pool).visible_to(tenant_id, customer_id, principal_id).await
 }
 
 async fn list_customers(
@@ -112,43 +78,14 @@ async fn list_customers(
         .filter(|v| !v.is_empty())
         .map(|v| v.to_string());
 
-    // 可见性谓词与详情同构，只是占位符不同（$5=principal, $6=tenant）。
-    let sql = format!(
-        "SELECT {CUSTOMER_COLUMNS} FROM core.customer c \
-         WHERE c.tenant_id = $6 \
-           AND ( NOT EXISTS (SELECT 1 FROM core.project p WHERE p.customer_id = c.id) \
-              OR EXISTS (SELECT 1 FROM core.project p \
-                           JOIN core.project_member m ON m.project_id = p.id \
-                          WHERE p.customer_id = c.id AND m.principal_id = $5)) \
-           AND ($1::text IS NULL OR c.name ILIKE $1 OR c.code ILIKE $1 OR c.short_name ILIKE $1) \
-           AND ($2::text IS NULL OR c.status = $2) \
-         ORDER BY c.created_at DESC LIMIT $3 OFFSET $4"
-    );
-    let items: Vec<CustomerRow> = sqlx::query_as(&sql)
-        .bind(query.as_deref())
-        .bind(status.as_deref())
-        .bind(page.size)
-        .bind(page.offset)
-        .bind(caller.principal_id)
-        .bind(caller.tenant_id)
-        .fetch_all(&state.pool)
-        .await?;
-
-    let total_sql = "SELECT count(*) FROM core.customer c \
-         WHERE c.tenant_id = $4 \
-           AND ( NOT EXISTS (SELECT 1 FROM core.project p WHERE p.customer_id = c.id) \
-              OR EXISTS (SELECT 1 FROM core.project p \
-                           JOIN core.project_member m ON m.project_id = p.id \
-                          WHERE p.customer_id = c.id AND m.principal_id = $3)) \
-           AND ($1::text IS NULL OR c.name ILIKE $1 OR c.code ILIKE $1 OR c.short_name ILIKE $1) \
-           AND ($2::text IS NULL OR c.status = $2)"
-        .to_string();
-    let total: i64 = sqlx::query_scalar(&total_sql)
-        .bind(query.as_deref())
-        .bind(status.as_deref())
-        .bind(caller.principal_id)
-        .bind(caller.tenant_id)
-        .fetch_one(&state.pool)
+    let (items, total) = customer_repo(&state.pool)
+        .list_visible(
+            caller.tenant_id,
+            caller.principal_id,
+            query.as_deref(),
+            status.as_deref(),
+            Page { size: page.size, offset: page.offset },
+        )
         .await?;
 
     Ok(Json(page.to_response(items, total)))
@@ -238,20 +175,17 @@ async fn create_customer(
         }
     }
 
-    let inserted: Result<Uuid, sqlx::Error> = sqlx::query_scalar(
-        "INSERT INTO core.customer \
-         (code, name, short_name, industry, notes, parent_id, status, tenant_id) \
-         VALUES ($1, $2, $3, $4, $5, $6, 'active', $7) RETURNING id",
-    )
-    .bind(&code)
-    .bind(&name)
-    .bind(trimmed_opt(body.short_name.as_deref()))
-    .bind(trimmed_opt(body.industry.as_deref()))
-    .bind(trimmed_opt(body.notes.as_deref()))
-    .bind(body.parent_id)
-    .bind(caller.tenant_id)
-    .fetch_one(&state.pool)
-    .await;
+    let inserted: Result<Uuid, sqlx::Error> = customer_repo(&state.pool)
+        .insert_customer(
+            caller.tenant_id,
+            &code,
+            &name,
+            trimmed_opt(body.short_name.as_deref()).as_deref(),
+            trimmed_opt(body.industry.as_deref()).as_deref(),
+            trimmed_opt(body.notes.as_deref()).as_deref(),
+            body.parent_id,
+        )
+        .await;
 
     let customer_id = match inserted {
         Ok(id) => id,
@@ -359,25 +293,20 @@ async fn update_customer(
         }
     };
 
-    let updated = sqlx::query(
-        "UPDATE core.customer SET code = $2, name = $3, short_name = $4, industry = $5, \
-                notes = $6, status = $7, parent_id = $8, updated_at = now() \
-         WHERE id = $1 AND tenant_id = $9",
-    )
-    .bind(customer_id)
-    .bind(&code)
-    .bind(&name)
-    .bind(trimmed_opt_or(
-        body.short_name.as_deref(),
-        current.short_name,
-    ))
-    .bind(trimmed_opt_or(body.industry.as_deref(), current.industry))
-    .bind(trimmed_opt_or(body.notes.as_deref(), current.notes))
-    .bind(&status)
-    .bind(parent_id)
-    .bind(caller.tenant_id)
-    .execute(&state.pool)
-    .await;
+    let updated = customer_repo(&state.pool)
+        .update_customer(
+            caller.tenant_id,
+            customer_id,
+            code.as_deref(),
+            &name,
+            trimmed_opt_or(body.short_name.as_deref(), current.short_name).as_deref(),
+            trimmed_opt_or(body.industry.as_deref(), current.industry).as_deref(),
+            trimmed_opt_or(body.notes.as_deref(), current.notes).as_deref(),
+            &status,
+            parent_id,
+        )
+        .await
+        .map(|_| ());
 
     if let Err(err) = updated {
         return match err {
