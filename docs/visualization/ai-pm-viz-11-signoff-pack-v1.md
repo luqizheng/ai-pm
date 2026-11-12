@@ -19,7 +19,7 @@
 | # | 角色 | 签收对象 | 判定标准 | 证据 | 阻断等级 |
 |---|---|---|---|---|---|
 | S-1 | Migration Owner | R-01 取号 | 真实 master 上 `ls migrations/` 与 ledger 复核后签收编号 | 复核输出 + ledger 登记行 | **P0 阻断** |
-| S-2 | Domain Owners | Relation Registry 词表 | 每个 relation 的 key/语义/source type/target type/方向/领域/owner/状态版本齐备 | 词表会签记录 | **P0 阻断** |
+| S-2 | Domain Owners | Relation Registry 词表 | 每个 relation 的 key/语义/source type/target type/方向/领域/owner/状态版本齐备 | **会签表见 [17 号](ai-pm-viz-17-relation-registry-signoff-v1.md)**（8+1 条逐条 + 三个共答问题） | **P0 阻断** |
 | S-3 | QA Owner | R-02 验收矩阵 | AC-1~21 归属、场景 T-01~T-34、证据与阻断等级无缺漏且可执行 | 本包 + 矩阵全文 | **P0 阻断** |
 | S-4 | Security Owner | R-08 + V-3′ | **产物静态化**三层设计（静态化/零外网/自绘交互）闭合且可测；M-1~M-8 修订签收 | ADR-008/010 + 15 号审查 | **P0 阻断**（发布亦阻断） |
 | S-5 | Architecture Owner | R-04/R-05/R-06/R-07/R-09 设计闭合 | 状态机分离/容量规则/nature 粒度/consistency 语义/Registry 治理五项各有结论 | 设计件归档 | **P0 阻断** |
