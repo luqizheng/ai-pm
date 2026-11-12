@@ -16,8 +16,13 @@ import type { ContextItem, InteractionEntry } from "@/api/contextItems";
  * 没有注入数据时如实显示未注入，**不冒充**注入面（G2 断点的正解）。
  */
 
-/** 右栏四个一级 Tab（DR-C3）。 */
-export type AssistantTab = "context" | "sources" | "results" | "actions";
+/** 右栏一级 Tab（DR-C3；V0-8 增 Graph 页签）。 */
+export type AssistantTab =
+  | "context"
+  | "sources"
+  | "results"
+  | "actions"
+  | "graph";
 
 /** History Drawer 的五类记录（DR-C3）。 */
 export type AssistantHistoryCategory =

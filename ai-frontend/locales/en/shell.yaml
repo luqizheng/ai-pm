@@ -273,6 +273,7 @@ shell:
         sources: Sources
         results: Results
         actions: Actions
+        graph: Graphs
       attached: Attached objects
       available: Available objects
       notAnchored: Not anchored

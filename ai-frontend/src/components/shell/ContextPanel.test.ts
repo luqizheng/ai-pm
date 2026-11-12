@@ -167,8 +167,8 @@ describe("ContextPanel", () => {
 
 // ───────────────────────────────── 四一级 Tab + History Drawer（DR-C3）
 
-describe("ContextPanel（四 Tab + History Drawer）", () => {
-  it("四个一级 Tab 齐备，切换不重排壳", async () => {
+describe("ContextPanel（一级 Tab + History Drawer）", () => {
+  it("一级 Tab 齐备（含 V0-8 新增的 Graph 页签），切换不重排壳", async () => {
     const { wrapper } = mountShell(ContextPanel);
     await nextTick();
 
@@ -177,7 +177,8 @@ describe("ContextPanel（四 Tab + History Drawer）", () => {
       "上下文",
       "来源",
       "结果",
-      "操作"
+      "操作",
+      "图形"
     ]);
     // 默认在 Context Tab
     expect(wrapper.attributes("aria-label")).toBe("上下文");
@@ -211,7 +212,7 @@ describe("ContextPanel（四 Tab + History Drawer）", () => {
     await nextTick();
 
     // History 不是第五个主 Tab —— 走二级入口
-    expect(wrapper.findAll(".shell-context__tab").length).toBe(4);
+    expect(wrapper.findAll(".shell-context__tab").length).toBe(5);
 
     const history = wrapper
       .findAll(".shell-context__icon-button")

@@ -13,6 +13,7 @@ import {
 } from "lucide-vue-next";
 
 import Badge from "@/components/ui/badge/Badge.vue";
+import VizGraphTab from "@/components/viz/VizGraphTab.vue";
 import IconTooltip from "./IconTooltip.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useShellStore } from "@/stores/shell";
@@ -121,12 +122,13 @@ const commandScope = computed(() => {
   return branch ? `${name} / Repository / ${branch}` : name;
 });
 
-/** 四个一级 Tab（DR-C3）。 */
+/** 一级 Tab（DR-C3；V0-8 增 Graph 页签——图形产物槽位）。 */
 const TABS: Array<{ id: AssistantTab; labelKey: string }> = [
   { id: "context", labelKey: "shell.app.context.tabs.context" },
   { id: "sources", labelKey: "shell.app.context.tabs.sources" },
   { id: "results", labelKey: "shell.app.context.tabs.results" },
-  { id: "actions", labelKey: "shell.app.context.tabs.actions" }
+  { id: "actions", labelKey: "shell.app.context.tabs.actions" },
+  { id: "graph", labelKey: "shell.app.context.tabs.graph" }
 ];
 
 const activeTab = computed(() => assistant.activeTab);
@@ -509,6 +511,11 @@ const historyEvents = computed(() =>
       </template>
 
       <!-- ── Actions：交互记录（**权威读面** GET interactions，B5）── -->
+      <!-- ── Graph：图形产物槽位（V0-8）── -->
+      <template v-else-if="activeTab === 'graph'">
+        <VizGraphTab />
+      </template>
+
       <template v-else>
         <p v-if="actions.length === 0" class="shell-context__empty">
           {{ t("shell.app.context.noActions") }}

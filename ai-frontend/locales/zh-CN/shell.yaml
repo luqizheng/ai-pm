@@ -273,6 +273,7 @@ shell:
         sources: 来源
         results: 结果
         actions: 操作
+        graph: 图形
       attached: 已附加对象
       available: 可用对象
       notAnchored: 未锚定

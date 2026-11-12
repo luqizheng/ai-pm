@@ -61,6 +61,31 @@ consistency:
   stale: "来源已变化"
 
 tab:
+  title: "图形"
   graph: "图形"
+  loading: "加载中…"
+  loadFailed: "图形列表加载失败"
   empty: "暂无图形"
   emptyHint: "当前项目还没有可用的图形产物。可在对话中要求生成。"
+
+version:
+  label: "版本"
+  item: "v{version}"
+  compare: "版本对比"
+  exportSvg: "导出 SVG"
+  exportHtml: "导出 HTML"
+
+explanation:
+  keyFindings: "关键发现"
+  relationships: "主要关系"
+  direct: "直接关系"
+  indirect: "间接推导"
+  risks: "潜在风险"
+  pending: "待确认事项"
+  none: "（无）"
+
+feedback:
+  label: "告诉 AI 如何调整这张图"
+  placeholder: "例如：只显示已确认的需求 / 突出显示阻塞任务 / 把间接关系单独显示"
+  submit: "重新生成"
+  submitting: "生成中…"

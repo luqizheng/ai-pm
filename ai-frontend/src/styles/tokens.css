@@ -361,6 +361,22 @@
    * 取值全部指向 --ws-*（或按设计规则降级为 none）。
    * ---------------------------------------------------------------- */
 
+  /* ------------------------------------------------------------------
+   * Visualization 色板（V0-8）—— 节点类型 / 边性质 / 画布。
+   * 取值全部指向 --ws-* 语义色：浅色主题自动跟随，不另造裸色值。
+   * 节点 kind 配色沿用既有语义色（禁紫色，V2 深色 + 雾蓝青基线）。
+   * ---------------------------------------------------------------- */
+  --viz-canvas: var(--ws-canvas);
+  --viz-surface: var(--ws-surface);
+  --viz-border: var(--ws-border);
+  --viz-node-requirement: var(--ws-color-info);
+  --viz-node-design: var(--ws-color-success);
+  --viz-node-adr: var(--ws-color-warning);
+  --viz-node-task: var(--ws-accent);
+  --viz-node-knowledge: var(--ws-text-secondary);
+  --viz-edge-direct: var(--ws-border);
+  --viz-edge-derived: var(--ws-color-warning);
+
   --surface-sunken: var(--ws-canvas);
   --surface-base: var(--ws-surface);
   --surface-raised: var(--ws-elevated);
@@ -483,6 +499,22 @@
    * 层次归正为「页面底灰 < 卡片白 < 卡内嵌套灰」；
    * elevated 灰只留给卡内嵌套面（badge / subtle / hover / 骨架 / 禁用）。
    * 深色模式维持「越抬升越亮」，不受影响。 */
+  /* ------------------------------------------------------------------
+   * Visualization 色板（V0-8）—— 节点类型 / 边性质 / 画布。
+   * 取值全部指向 --ws-* 语义色：浅色主题自动跟随，不另造裸色值。
+   * 节点 kind 配色沿用既有语义色（禁紫色，V2 深色 + 雾蓝青基线）。
+   * ---------------------------------------------------------------- */
+  --viz-canvas: var(--ws-canvas);
+  --viz-surface: var(--ws-surface);
+  --viz-border: var(--ws-border);
+  --viz-node-requirement: var(--ws-color-info);
+  --viz-node-design: var(--ws-color-success);
+  --viz-node-adr: var(--ws-color-warning);
+  --viz-node-task: var(--ws-accent);
+  --viz-node-knowledge: var(--ws-text-secondary);
+  --viz-edge-direct: var(--ws-border);
+  --viz-edge-derived: var(--ws-color-warning);
+
   --surface-raised: var(--ws-surface);
   --surface-overlay: var(--ws-surface);
 

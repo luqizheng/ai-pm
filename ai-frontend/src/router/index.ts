@@ -408,6 +408,15 @@ export function buildRoutes(): RouteRecordRaw[] {
     meta: { title: "pm.requirementImpact.pageTitle" }
   });
 
+  // 图形产物工作区（V0-8）：槽位列表 + 产物查看 + 表格视图 + 溯源。
+  // 不占主导航——入口 = 右栏 Graph 页签与对话卡。
+  routes.push({
+    path: "/project/visualizations",
+    component: () =>
+      import("@/views/project/visualizations/VisualizationsView.vue"),
+    meta: { title: "viz.tab.title" }
+  });
+
   // 需求详情与追溯（S02-UI-02）：单条需求检查页，不占主导航——
   // 入口 = Requirements Workspace 详情面板「打开详情页」与追溯链关联需求导航。
   routes.push({

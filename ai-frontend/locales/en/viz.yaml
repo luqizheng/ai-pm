@@ -59,6 +59,31 @@ consistency:
   stale: "Source changed"
 
 tab:
+  title: "Graphs"
   graph: "Graphs"
+  loading: "Loading…"
+  loadFailed: "Failed to load the graph list"
   empty: "No graphs yet"
   emptyHint: "This project has no graph artifacts yet. Ask in the conversation to generate one."
+
+version:
+  label: "Version"
+  item: "v{version}"
+  compare: "Compare versions"
+  exportSvg: "Export SVG"
+  exportHtml: "Export HTML"
+
+explanation:
+  keyFindings: "Key findings"
+  relationships: "Main relations"
+  direct: "Direct"
+  indirect: "Derived"
+  risks: "Potential risks"
+  pending: "Pending confirmation"
+  none: "(none)"
+
+feedback:
+  label: "Tell the AI how to adjust this diagram"
+  placeholder: "e.g. show only confirmed requirements / highlight blocked tasks / show derived relations separately"
+  submit: "Regenerate"
+  submitting: "Generating…"
