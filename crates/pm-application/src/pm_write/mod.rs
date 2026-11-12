@@ -36,7 +36,7 @@ pub const TASK_PRIORITIES: [&str; 4] = ["low", "normal", "high", "urgent"];
 /// 验收项的验证方式（D2 `0015` 的 CHECK 取值）。
 pub const VERIFICATION_KINDS: [&str; 4] = ["manual", "automated_test", "artifact_exists", "review"];
 
-mod audit;
+pub(crate) mod audit;
 mod revision;
 mod support;
 mod task;

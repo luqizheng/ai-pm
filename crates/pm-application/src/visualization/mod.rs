@@ -9,6 +9,7 @@
 
 pub mod adapter_contract;
 pub mod artifact_safety;
+pub mod artifact_service;
 pub mod projection;
 pub mod registry_loader;
 pub mod resolver;
@@ -18,6 +19,10 @@ pub use adapter_contract::{
     contract, verify, ContractCheck, OutputFormat, RenderAdapter, RenderError, RenderOutput,
 };
 pub use artifact_safety::{inspect_svg, SafetyViolation, SvgSafetyReport};
+pub use artifact_service::{
+    create_draft, decide_approval, get_artifact, mark_stale, request_approval, ArtifactRecord,
+    VizError,
+};
 pub use resolver::{
     probe_visible_objects, CallerScope, InMemoryObjectResolver, SourceKey,
 };
