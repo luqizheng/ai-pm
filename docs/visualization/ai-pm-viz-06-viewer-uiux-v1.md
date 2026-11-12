@@ -1,6 +1,6 @@
 # Visualization Viewer UI/UX 设计方案 V1.0
 
-> 状态：草案 · 日期：2026-11-12 · 视觉基线：V2 深色 + 雾蓝青（s05 锁定），PRISM 令牌，禁止紫色与硬编码色值；i18n 走 `viz.*` 命名空间。
+> 状态：V1.1 已修订（并入 2026-11-12 专家评审；决策基线见 ADR V1.0） · 日期：2026-11-12 · 视觉基线：V2 深色 + 雾蓝青（s05 锁定），PRISM 令牌，禁止紫色与硬编码色值；i18n 走 `viz.*` 命名空间。
 
 ## 1. 宿主与入口（三个一级入口）
 
@@ -30,7 +30,7 @@
 ```
 
 - 画布与侧栏宽度沿用协作工作台既有栅格节奏（188/518/446/288 体系的就近比例），不新造布局语言。
-- ArtifactFrame（对话卡内）：固定高度卡内预览 + "展开全屏"按钮；iframe sandbox 无 same-origin，卡内不提供操作按钮（操作在宿主卡面上）。
+- ArtifactFrame（对话卡内）：固定高度卡内预览 + "展开全屏"按钮；iframe sandbox 无 same-origin + **独立产物 Origin**，卡内不提供操作按钮（操作在宿主卡面上）；iframe **不携带凭证、不调用 AI-PM API**，仅经白名单 postMessage（`node_selected`/`route_selected`，source+随机会话标识校验）回传选中结果，宿主收到后自行查权限再查业务（DV-12 安全增强）。
 
 ## 3. 关键交互规范
 
@@ -42,6 +42,8 @@
 | Lens | 按 edge_type/kind 过滤高亮（词表驱动） | 纯视觉 |
 | Route | 起点终点间路径动画（dag/trace 专用） | 纯视觉 |
 | 版本切换/对比 | 版本下拉 + 两版本 spec diff 面板（节点/边增删改三色） | 读权限 |
+| Direct/Indirect 边区分 | 直接关系实线；`derived_trace` 虚线 + 「经 R-xxx 推导」提示；影响分析面板分 Direct/Indirect 两组 | 路径结构完整 ≠ 业务语义确定（DV-8） |
+| 解释图标识 | `nature=explanatory` 恒显「AI 生成 · 非正式认知」徽标；无发布入口、导出加水印 | DV-13 |
 | Accept/Reject | 仅对话卡与审批面板出现；Reject 必填 reason | 复用 interaction 审批语义，落库终态 |
 | Stale 提示 | 黄条 + 版本徽标变色；"重新生成"开启新 draft（不覆盖旧版本） | 无静默覆盖 |
 | 导出 | SVG/PNG/GIF/MP4/HTML 菜单；文件名含 slot+版本+时间；内嵌来源水印 | 内网部署禁页面内位图导出（D2 §6.3） |

@@ -1,6 +1,6 @@
 # SeeCode 技术调研与集成可行性报告 V1.0
 
-> 状态：草案 · 日期：2026-11-12 · 调研对象：https://github.com/Aryanutkarsh/SeeCode（main 分支，2026-11 实测读取 README / SKILL.md / spec.md / package.json）
+> 状态：V1.1 已修订（并入 2026-11-12 专家评审；决策基线见 ADR V1.0） · 日期：2026-11-12 · 调研对象：https://github.com/Aryanutkarsh/SeeCode（main 分支，2026-11 实测读取 README / SKILL.md / spec.md / package.json）
 > 结论先行：**SeeCode 适合作为「AI 生成图形产物」的渲染 Adapter（推荐采用），不适合作为在线交互图的渲染引擎（不采用）**。详见 §5。
 
 ## 1. 项目事实档案（均经原始文件核实）

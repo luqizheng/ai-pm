@@ -1,6 +1,6 @@
 # AI-PM Visualization Engine 产品需求说明书 V1.0
 
-> 状态：草案（待产品评审） · 日期：2026-11-12 · 配套文档见 [00 索引](ai-pm-viz-00-index-v1.md)
+> 状态：V1.1 已修订（并入 2026-11-12 专家评审；决策基线见 [ADR V1.0](ai-pm-viz-09-architecture-decision-record-v1.md)） · 日期：2026-11-12 · 配套文档见 [00 索引](ai-pm-viz-00-index-v1.md)
 
 ## 1. 立项价值：从「信息展示系统」到「认知交互系统」
 

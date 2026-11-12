@@ -1,6 +1,6 @@
 # Visualization Engine 系统架构设计 V1.0
 
-> 状态：草案 · 日期：2026-11-12 · 前置：[D3 Spec 设计](ai-pm-viz-03-visualization-spec-v1.md)、[D2 SeeCode 调研](ai-pm-viz-02-seecode-research-v1.md)
+> 状态：V1.1 已修订（并入 2026-11-12 专家评审；决策基线见 ADR V1.0） · 日期：2026-11-12 · 前置：[D3 Spec 设计](ai-pm-viz-03-visualization-spec-v1.md)、[D2 SeeCode 调研](ai-pm-viz-02-seecode-research-v1.md)
 
 ## 1. 总体拓扑
 
