@@ -30,8 +30,8 @@
 - **AC-5**：对话内生成→修补→Accept→发布 全链路 E2E；Reject 必带 reason；Reject 后图不可见。
 
 ### 安全
-- **AC-6**：渲染产物零外网请求（网络层断言：无 Google Fonts/jsDelivr 连接）；**SVG/PNG 导出链路实测零外网**（不以格式名称推断）；待验证：CLI 用本地 Chrome/Edge 出 GIF/MP4 是否依赖 jsDelivr 页面内编码器（仅作 V2 决策输入，DV-10）。
-- **AC-7**：sandbox iframe 不携带 allow-same-origin；产物 JS 访问 parent/localStorage/cookie 全部失败（自动化断言）。
+- **AC-6′**（V1.0.1 后修订，见 [15 号安全审查](ai-pm-viz-15-v0-6-security-review-v1.md)）：**服务端 SVG 导出链零外网**——实测导出过程与产物均无外部请求（字体 base64 内嵌已验证；CLI 用本地 vendor 编码器）；删除对"浏览器内页面 Export 菜单"的依赖声明。
+- **AC-7′**（修订）：**产物静态化断言**——入库 SVG 中 `<script>` / `foreignObject` / 可执行 `on*` 属性 / 外部引用（`http(s)://`、`//host`、`url(http`）/ `<use>`·`<image>` 外链计数均为 0；`<img>` 引用时浏览器不执行任何脚本。
 - **AC-8**：权限矩阵用例：跨项目/越权对象/api_key 三类请求均得到预期 404 同形或 403。
 - **AC-9**：注入用例覆盖**节点名/边标签/tooltip/focus 面板/导出 SVG 全部输出位置**；向量：`<script>alert(1)</script>`、`<img src=x onerror=…>`、`"><svg onload=…>`、`javascript:`、`& < > " '`、模板注入、**Unicode/RTL/零宽字符** → 渲染安全或 E 级拒绝；含**双重转义**正确性用例（`A & B` 不得显示为 `&amp;amp;`）。
 
@@ -46,7 +46,7 @@
 - **AC-15**：任意节点点击可见 source_ref 且可跳转原文档；无溯源对象必有 `unlinked` 灰标（UI 断言）。
 - **AC-16**：接受图形后，数据库中无任何业务对象被修改（审计断言）——P1/P3 原则的最终测试。
 - **AC-17**（Q11）：权限泄露矩阵：无权对象的节点、Tooltip、**边存在性/关系计数**均不可见——服务端查询+投影双层裁剪，断言响应中不含无权对象任何标识。
-- **AC-18**（Q7）：postMessage 白名单协议：非白名单类型/伪造 source/缺失随机会话标识的消息全部丢弃并审计；iframe 内零凭证、零 AI-PM API 调用（网络断言）。
+- **AC-18′**（修订）：**无第三方产物代码参与前端交互**——交互通道前端执行路径不加载任何 SeeCode 产物脚本（构建产物 + 源码双重断言）；产物 SVG 以 `<img>` 引用。
 - **AC-19**（Q12）：一致性快照：`mixed-revision` 场景响应带 `consistency` 标记与各对象 revision refs，UI 提示可见。
 - **AC-20**（Q13）：解释图（nature=explanatory）服务端拒绝发布至业务槽位、UI 恒显「AI 生成 · 非正式认知」（双重断言）。
 - **AC-21**（Q10）：Spec Golden Tests（与 SeeCode 无关）入 CI；SeeCode Adapter Contract Tests 八项断言全过（合法 HTML/SVG、无意外外网请求、无脚本注入、溯源保留、节点/边身份保留、失败可处理）。

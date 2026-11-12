@@ -8,7 +8,7 @@
 ┌─ ai-frontend (Vue 3.5 + Pinia + reka-ui + PRISM) ──────────────────────────┐
 │  VizViewer（lazy chunk）                                                    │
 │   ├─ LiveGraphView    ← Adapter A：AntV G6 5（P1 引入）                     │
-│   ├─ ArtifactFrame    ← sandbox iframe（SeeCode HTML，P0）                  │
+│   ├─ ArtifactFrame    ← 静态 SVG 引用 <img>（SeeCode 服务端出图，P0）      │
 │   ├─ DegradedTableView（永远可用）                                          │
 │   └─ TracePanel / VersionBar / ApprovalCard / StaleBar                      │
 │  集成点：AI Chat Message 卡（envelope viz_artifact）· 右栏 Context Tab ·      │

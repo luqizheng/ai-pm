@@ -16,8 +16,8 @@
 
 | 任务 | 内容 | 验收锚点 |
 |---|---|---|
-| V0-6 安全基座 | 独立产物 Origin + sandbox iframe（无 same-origin/top-navigation）+ CSP Header 全套（connect/form/object/base-uri/frame-ancestors）+ postMessage 白名单协议（source+会话标识）+ iframe 零凭证零 API | AC-7/8/18 |
-| V0-7 注入与转义 | 输入层纯文本约束 + SeeCode 安全渲染实测（textContent/innerHTML）+ **禁盲目预转义**（双重转义用例）+ 注入向量全覆盖（节点/边/tooltip/focus/导出 SVG + Unicode/RTL/零宽） | AC-9 |
+| V0-6 安全基座 | **产物静态化**：服务端 SVG 出图 + 静态化断言（无 script/foreignObject/on*/外链）+ 零外网实测 + 交互通道不引入产物脚本（见 15 号修订 M-1） | AC-6′/7′/8/18′ |
+| V0-7 注入与转义 | 输入层纯文本约束 + SeeCode 转义实测（**已实测通过**：esc 转义 & < > "，SVG 产物 0 脚本）+ **禁盲目预转义** + 注入向量全覆盖（补单引号与上下文用例） | AC-9 |
 | V0-8 Viewer 基础组件 | VizViewer/ArtifactFrame/DegradedTableView/TracePanel/VersionBar/ApprovalCard/StaleBar + PRISM 令牌扩展 + i18n（`viz.*`）+ 降级表格 | AC-12/14 |
 
 ## P0 First Renderer（SeeCode，实验接入）

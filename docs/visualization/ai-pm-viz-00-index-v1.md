@@ -1,6 +1,6 @@
 # AI-PM Visualization Engine 立项文档包 · 索引与裁决摘要 V1.1
 
-> 状态：**实施前架构复审附条件通过（ADR V1.0.1）**，进入 P0 实施准备；阻断项 R-01 已提交核查证据（暂定取号 0055，待 Migration Owner 签收）、R-02 已由 [P0 验收矩阵](ai-pm-viz-10-p0-acceptance-matrix-v1.md) 关闭、R-03（PNG）开放按 B2 处理。未进入完整实施。
+> 状态：**实施前架构复审附条件通过（ADR V1.0.1）**；[V1.0.2 安全修订](ai-pm-viz-15-v0-6-security-review-v1.md)（放弃 iframe → 产物静态化）待 Architecture/Security Owner 签收。R-01 取号结论 0061（待签收）、R-02 已关闭、R-03（PNG）开放按 B2 处理。未进入完整实施。
 
 ## 1. 文档导航
 
@@ -20,6 +20,7 @@
 | 12 | [**V0-1 技术设计**](ai-pm-viz-12-v0-1-spec-validation-design-v1.md) | **可直接进入实现**：仓库落点、Rust 类型草案、校验器（22 个问题码 + 纯函数形态）、Relation Registry 治理、source_hash 规范、Golden 手写比对方案、9 项实施任务、6 项偏差更正 |
 | 13 | [**V0-2 数据模型设计**](ai-pm-viz-13-v0-2-data-model-design-v1.md) | **取号结论 0061**（0020/0055~0060 曾存在，sqlx 版本单调性）+ `viz` schema 四表 DDL + Artifact/Approval 状态机分离（R-04）+ 容量清理规则（R-05）+ API 端点 + 10 项实施任务 |
 | 14 | [**V0-3 权限投影与一致性设计**](ai-pm-viz-14-v0-3-projection-consistency-design-v1.md) | **双层过滤**（查询层端点 project 校验 + 投影层整边丢弃/计数重算）、11 项泄露面清单、`consistency=current` 严格定义（R-07）、nature 粒度（R-06）、Resolver 落点、泄露矩阵测试 |
+| 15 | [**V0-6 安全方向审查**](ai-pm-viz-15-v0-6-security-review-v1.md) | **放弃 iframe → 产物静态化 + 零脚本呈现**（实测 SeeCode v0.6.3：SVG 纯 Node 出图、0 脚本/0 外链/字体内嵌、转义有效）；三层新防线、交互归 G6、AC-6′/7′/18′ 重写、M-1~M-8 修订清单 |
 
 ## 2. 立项核心判断（一段话版）
 

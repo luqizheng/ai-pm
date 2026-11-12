@@ -1202,3 +1202,22 @@ AC-21 全部通过后冻结。
 ---
 
 **文档状态：V1.0.1 修订稿，附条件通过。**
+
+---
+
+## 附录 A：V1.0.2 待签收修订（2026-11-12 产品经理安全审查）
+
+依据 [15 号 V0-6 安全方向审查](ai-pm-viz-15-v0-6-security-review-v1.md)（**放弃 iframe → 产物静态化 + 零脚本呈现**），以下修订待 Architecture/Security Owner 签收后并入 V1.0.2：
+
+| 编号 | 修订对象 | 修订要点 |
+|---|---|---|
+| M-1 | **ADR-VIZ-008** | 标题与结论改为「产物静态化与零脚本呈现」：删除五层 iframe 隔离（独立 Origin / sandbox / CSP / 零凭证 / postMessage），改为三层（静态化 / 零外网 / 自绘交互）；删除 postMessage 协议章节；新增「重新引入 HTML 产物须重走 ADR-008 全套」条款 |
+| M-2 | **ADR-VIZ-002** | SeeCode 定位：浏览器内产物渲染器 → **服务端出图器（SVG，纯 Node）**；删除"SeeCode 独立服务器 + iframe"选项；Fallback Adapter 保留 |
+| M-3 | **ADR-VIZ-007** | SVG = 服务端纯 Node 出图（V1 承诺）；HTML 不向浏览器投递（仅可选下载且须静态化检查）；PNG/GIF/MP4 维持 Deferred |
+| M-4 | **ADR-VIZ-009 / D6** | 交互归属：产物通道静态；交互通道（G6）承担 hover/focus/route/lens |
+| M-5 | **AC-6/7/18** | 重写为 AC-6′ / AC-7′ / AC-18′（见 15 号 §6）；AC-8 不变 |
+| M-6 | **V-2 / V-3** | V-2（沙箱 CSP 实测）**取消**；V-3 转为 SVG 静态化断言 + 注入向量用例；V-4 扩展为"SVG 出图链可复现 + 离线" |
+| M-7 | **AC-11** | 产物通道不再有 iframe 开销；新增 SVG 体积与前端渲染耗时指标 |
+| M-8 | **D2 / D4 / D6 / D7** | 同步删除 iframe / 独立 Origin / postMessage 描述 |
+
+**实测依据（2026-11-12 本地实跑 SeeCode v0.6.3）**：SVG 导出纯 Node 无浏览器；产物 `<script>`=0、`foreignObject`=0、真实外链=0、字体 base64 内嵌；注入 payload 全部正确转义（`esc()` 转义 `& < > "`，未转义单引号 → 补测试用例）。→ **ADR-VIZ-010 硬门槛实测通过，可解除**。

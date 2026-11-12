@@ -21,7 +21,7 @@
 | S-1 | Migration Owner | R-01 取号 | 真实 master 上 `ls migrations/` 与 ledger 复核后签收编号 | 复核输出 + ledger 登记行 | **P0 阻断** |
 | S-2 | Domain Owners | Relation Registry 词表 | 每个 relation 的 key/语义/source type/target type/方向/领域/owner/状态版本齐备 | 词表会签记录 | **P0 阻断** |
 | S-3 | QA Owner | R-02 验收矩阵 | AC-1~21 归属、场景 T-01~T-34、证据与阻断等级无缺漏且可执行 | 本包 + 矩阵全文 | **P0 阻断** |
-| S-4 | Security Owner | R-08 + V-2 | Origin/Cookie/CSP/postMessage/注入五层设计闭合且可测 | ADR-008/010 + 设计件 | **P0 阻断**（发布亦阻断） |
+| S-4 | Security Owner | R-08 + V-3′ | **产物静态化**三层设计（静态化/零外网/自绘交互）闭合且可测；M-1~M-8 修订签收 | ADR-008/010 + 15 号审查 | **P0 阻断**（发布亦阻断） |
 | S-5 | Architecture Owner | R-04/R-05/R-06/R-07/R-09 设计闭合 | 状态机分离/容量规则/nature 粒度/consistency 语义/Registry 治理五项各有结论 | 设计件归档 | **P0 阻断** |
 | S-6 | Backend Owner | R-10 + 后端可拔 | 关闭态七项隔离（ADR-001）实现路径明确 | 实现计划 | P0 条件 |
 | S-7 | Frontend Owner | 前端可拔与视觉 | 入口隐藏/lazy chunk/PRISM/i18n 路径明确 | 实现计划 | P0 条件 |
@@ -54,11 +54,12 @@
 - **签收结论**：☐ 确认　☐ 有条件（条件：______）　☐ 有异议：________________
 - **签署 / 日期**：__________________
 
-### S-4 Security Owner 签收表（ADR-008/010 + V-2）
+### S-4 Security Owner 签收表（ADR-008/010 + V-3′，按 15 号审查修订）
 
-- **待签收**：产物安全五层设计（独立 Origin、sandbox、CSP Header、零凭证零 API、postMessage 白名单）+ 输入转义三层防线。
-- **必须覆盖的设计要点**：① 主应用 Cookie host-only，产物 Origin 不共享认证状态，不通过子域共享 Cookie 破坏隔离；② CSP 仅 Header 生效（meta 不可替代，frame-ancestors 仅 Header 生效）；③ 默认禁 Worker/顶层导航/弹窗/外部资源/表单提交；④ postMessage 七项校验（source、随机 session ID、type 白名单、payload schema、节点 ID 合法性、长度、频率）；⑤ 转义禁盲目预转义 + 注入向量覆盖全部输出位。
-- **需明确（复审要求）**：独立 Origin 必须通过**实际部署环境**验证，不能只凭域名不同认定已隔离。
+- **待签收**：产物安全**三层**设计——静态化（无 script/foreignObject/on*/外链）、零外网（字体内嵌 + 本地 vendor 编码器）、自绘交互（交互通道不引入产物脚本）+ 输入转义三层防线。
+- **必须覆盖的设计要点**：① 产物静态化断言清单（无 `<script>`/`foreignObject`/可执行 `on*`/外部引用/`<use>`·`<image>` 外链）；② 零外网（SVG 字体 base64 内嵌、CLI 用本地 vendor 编码器）；③ 交互通道不得引入任何产物脚本；④ 转义禁盲目预转义 + 注入向量覆盖全部输出位（**补单引号与上下文用例**）。
+- **实测已过**：2026-11-12 本地实跑 SeeCode v0.6.3 —— SVG 导出纯 Node、`<script>`=0、真实外链=0、字体内嵌、注入 payload 全部正确转义 → **ADR-VIZ-010 硬门槛解除**。
+- **需明确**：重新引入 HTML 产物（浏览器内投递）默认禁止；若将来必须引入，须重走 ADR-008 全套（独立 Origin + sandbox + CSP + postMessage）。
 - **签收结论**：☐ 确认　☐ 有条件（条件：______）　☐ 有异议：________________
 - **签署 / 日期**：__________________
 
