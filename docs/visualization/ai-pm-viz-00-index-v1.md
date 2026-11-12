@@ -23,6 +23,7 @@
 | 15 | [**V0-6 安全方向审查**](ai-pm-viz-15-v0-6-security-review-v1.md) | **放弃 iframe → 产物静态化 + 零脚本呈现**（实测 SeeCode v0.6.3：SVG 纯 Node 出图、0 脚本/0 外链/字体内嵌、转义有效）；三层新防线、交互归 G6、AC-6′/7′/18′ 重写、M-1~M-8 修订清单 |
 | 16 | [**V0-8 Viewer 设计**](ai-pm-viz-16-v0-8-viewer-design-v1.md) | 产物通道（`<img>`+Blob，零图形依赖）+ 降级表格（P0 兼作节点导航）+ G6 交互通道（P1）；**第 9 类信封六处必改**、右栏 Graph Tab 三处、令牌/i18n 规则、11 项实施任务 |
 | 17 | [**Registry 词表会签表 V1.2**](ai-pm-viz-17-relation-registry-signoff-v1.md) | **V0-1 唯一硬人工依赖**：架构预审修订（V-01~V-12）+ 三裁决（**R-05 方向分离 / R-06 PC 唯一权威 / R-08 反向视图≠新事实**）+ **R-07 定版 `kb.memory_supported_by_source`**（memory→source，一对多实证）+ 三层方向表述（DAG 无需翻转）+ 15 条 Lint + 会签记录表 |
+| 23 | [**第一批会签单（打印版 HTML）**](ai-pm-viz-23-batch1-signoff-form.html) | 一页 A4 打印单：三张独立签名块（R-01/R-04/R-05，各含语义/源表/方向 + 三点确认 + Confirm-Modify-Reject 勾选 + 签署日期）+ 共同须知（架构裁决≠领域授权、逐条独立生效）+ 回收与激活步骤；自包含无外网资源，可直接打印分发 |
 | 21 | [**Registry V1.2 第一批会签执行版**](ai-pm-viz-21-registry-batch1-signoff-v1.md) | 专家裁决「分批激活」的落地文件：R-01/R-04/R-05 逐条独立签名表 + 未进批条目及前置条件 + **G-1 七项审计字段** + G-2 三层区分 + G-3 单一 Registry + 激活执行清单 + 解锁范围 |
 | 22 | [**ADR-VIZ-002 M-2 修订签收稿**](ai-pm-viz-22-adr-viz-002-m2-signoff-v1.md) | **vendor 前置门槛**：定位变更（浏览器内→服务端 SVG 出图器）+ 落仓约束（版本/许可/隔离/移除路径）+ 升级策略 + Node 20 边界 + 双测试门禁责任划分 + **服务端执行隔离六项**（输入不可信/零凭据/零外网/资源限额/独立静态化/检查失败拒绝入库）+ 12 项双签表 |
 | 20 | [**两项待决策项审阅包 V1.0**](ai-pm-viz-20-pending-decisions-v1.md) | **定向提问（可直接发专家）**：① SeeCode 落仓形态 5 问（vendor/构建期依赖/独立服务/不用 + M-2 签收顺序 + 升级策略 + Node 运行时 + 安全回归责任）；② 词表 9 条 active 化 3 问（Owner 责任表 + **分批 active 化提议** + Q-1~Q-3）；含两决策的依赖关系与不决策后果 |

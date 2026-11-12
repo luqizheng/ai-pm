@@ -29,6 +29,9 @@
 
 ## 3. 第一批会签条目（逐条独立签名）
 
+> **打印分发**：一页 A4 版本见 [23 号会签单](ai-pm-viz-23-batch1-signoff-form.html)（浏览器打开后 Ctrl+P，自包含无外网依赖）。
+
+
 ### R-01 `design.covers_requirement`
 
 | 字段 | 值 |

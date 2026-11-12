@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Visualization Relation Registry 第一批会签单</title>
+<style>
+  @page { size: A4 portrait; margin: 13mm 12mm; }
+
+  :root {
+    --ink: #16202b;
+    --muted: #5d6b7a;
+    --line: #c8d2dc;
+    --line-strong: #8a99a8;
+    --tint: #f2f5f8;
+    --warn: #8a5a00;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    font-size: 10pt;
+    line-height: 1.5;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .sheet {
+    width: 186mm;
+    margin: 0 auto;
+    padding: 0;
+  }
+
+  /* ── 抬头 ───────────────────────────────────────────── */
+  .masthead {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 10mm;
+    padding-bottom: 2.2mm;
+    border-bottom: 1.6pt solid var(--ink);
+  }
+  .masthead h1 {
+    margin: 0;
+    font-size: 14.4pt;
+    font-weight: 600;
+    letter-spacing: 0.2pt;
+  }
+  .masthead .sub {
+    margin: 1mm 0 0;
+    font-size: 8.8pt;
+    color: var(--muted);
+  }
+  .meta-box {
+    flex: 0 0 auto;
+    font-size: 8.6pt;
+    color: var(--muted);
+    text-align: right;
+    line-height: 1.6;
+  }
+  .meta-box b { color: var(--ink); font-weight: 600; }
+
+  /* ── 共同须知 ───────────────────────────────────────── */
+  .notice {
+    margin: 2.4mm 0 0;
+    padding: 2mm 2.6mm;
+    background: var(--tint);
+    border-left: 2.4pt solid var(--line-strong);
+    font-size: 8.9pt;
+    color: var(--ink);
+  }
+  .notice ul { margin: 0.8mm 0 0; padding-left: 4.6mm; }
+  .notice li { margin: 0.5mm 0; }
+  .notice .warn { color: var(--warn); font-weight: 600; }
+
+  /* ── 条目块 ─────────────────────────────────────────── */
+  .item {
+    margin: 2.6mm 0 0;
+    border: 0.9pt solid var(--line);
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .item-head {
+    display: flex;
+    align-items: baseline;
+    gap: 2.4mm;
+    padding: 1.5mm 2.6mm;
+    background: var(--tint);
+    border-bottom: 0.9pt solid var(--line);
+  }
+  .item-id {
+    font-weight: 600;
+    font-size: 10.4pt;
+  }
+  .item-key {
+    font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+    font-size: 9.4pt;
+  }
+  .item-owner {
+    margin-left: auto;
+    font-size: 8.9pt;
+    color: var(--muted);
+  }
+  .item-owner b { color: var(--ink); }
+
+  .item-body { padding: 1.8mm 2.6mm 2.2mm; }
+
+  .facts {
+    display: grid;
+    grid-template-columns: 15mm 1fr 15mm 1fr;
+    gap: 0.6mm 1.6mm;
+    font-size: 8.9pt;
+    margin-bottom: 1.4mm;
+  }
+  .facts dt { color: var(--muted); }
+  .facts dd { margin: 0; }
+  .facts code, .semantics code {
+    font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+    font-size: 8.9pt;
+  }
+
+  .semantics {
+    font-size: 9.4pt;
+    margin: 0 0 1.4mm;
+  }
+  .semantics .label { color: var(--muted); }
+
+  .confirm-title {
+    font-size: 8.7pt;
+    color: var(--muted);
+    margin-bottom: 0.6mm;
+  }
+  .confirm {
+    margin: 0 0 1.8mm;
+    padding-left: 4.4mm;
+    font-size: 9.1pt;
+  }
+  .confirm li { margin: 0.45mm 0; }
+
+  /* ── 判定与签名 ─────────────────────────────────────── */
+  .verdict {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0 3.4mm;
+    padding-top: 1.4mm;
+    border-top: 0.7pt dashed var(--line);
+    font-size: 9.3pt;
+  }
+  .verdict .box { font-family: "Segoe UI Symbol", sans-serif; font-size: 10pt; }
+  .verdict label { white-space: nowrap; }
+  .blank {
+    display: inline-block;
+    min-width: 30mm;
+    border-bottom: 0.7pt solid var(--line-strong);
+    height: 3.4mm;
+  }
+  .blank.short { min-width: 20mm; }
+  .sig-line { margin-left: auto; white-space: nowrap; }
+
+  /* ── 页脚 ───────────────────────────────────────────── */
+  .footer {
+    margin-top: 2.8mm;
+    padding-top: 1.6mm;
+    border-top: 1.2pt solid var(--ink);
+    font-size: 8.6pt;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    gap: 8mm;
+  }
+  .footer ol { margin: 0.6mm 0 0; padding-left: 4.2mm; }
+  .footer li { margin: 0.35mm 0; }
+  .footer .col-right { text-align: right; flex: 0 0 auto; }
+
+  /* 屏幕预览时给点留白；打印时移除 */
+  @media screen {
+    body { background: #eef1f4; padding: 8mm 0; }
+    .sheet {
+      background: #fff;
+      padding: 13mm 12mm;
+      box-shadow: 0 1pt 6pt rgba(0,0,0,0.14);
+    }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="masthead">
+    <div>
+      <h1>Visualization Relation Registry 第一批会签单</h1>
+      <p class="sub">AI-PM Visualization Engine · 关系语义授权（领域 Owner 签署）</p>
+    </div>
+    <div class="meta-box">
+      Registry 版本 <b>1</b>　·　词表 <b>V1.2</b><br>
+      批次　<b>第一批（3 条）</b><br>
+      依据 <b>ADR-VIZ-004</b>　·　专家裁决 2026-11-12
+    </div>
+  </header>
+
+  <section class="notice">
+    <span class="warn">本单是领域语义授权，不是架构选型确认。</span>
+    专家已裁决「允许分批激活」，但架构裁决<b>不代替</b>领域 Owner 对具体关系的签名。
+    <ul>
+      <li>Registry 是<b>映射与校验机制</b>，不是业务关系权威——本单不定义新业务事实，只确认既有库内关系的语义是否被准确表达。</li>
+      <li><b>每条关系独立会签、独立 Active、独立生效</b>：同批其他条目已签，不会自动激活本条。</li>
+      <li>签署 <b>Confirm</b> 后即写入 <code>status: active</code>（含七项审计字段），该关系开始参与图查询投影。</li>
+      <li>否决不是失败——错误的词条比没有词条更危险（会让影响分析、覆盖检查失真）。</li>
+    </ul>
+  </section>
+
+  <!-- ══════════════ R-01 ══════════════ -->
+  <article class="item">
+    <div class="item-head">
+      <span class="item-id">R-01</span>
+      <span class="item-key">design.covers_requirement</span>
+      <span class="item-owner">责任 Owner：<b>design-owner</b></span>
+    </div>
+    <div class="item-body">
+      <dl class="facts">
+        <dt>源表</dt><dd><code>design.design_requirement</code></dd>
+        <dt>方向</dt><dd>directed（design → requirement）</dd>
+        <dt>端点</dt><dd><code>design_revision</code> → <code>requirement_revision</code></dd>
+        <dt>治理级别</dt><dd>L2</dd>
+      </dl>
+      <p class="semantics"><span class="label">语义：</span>Design Revision 覆盖、实现或约束某一特定 Requirement Revision。</p>
+      <div class="confirm-title">请确认以下三点：</div>
+      <ol class="confirm">
+        <li>语义确实是「覆盖 / 实现 / 约束」，而非仅「提及」或「弱关联」。</li>
+        <li>图边读取<b>绑定修订</b>（<code>requirement_revision_id</code>），不回退到 Requirement 当前版本。</li>
+        <li>两端版本归属一致（由源数据保证或读取时校验）。</li>
+      </ol>
+      <div class="verdict">
+        <label><span class="box">☐</span> Confirm</label>
+        <label><span class="box">☐</span> Modify：<span class="blank"></span></label>
+        <label><span class="box">☐</span> Reject：<span class="blank short"></span></label>
+        <span class="sig-line">签署 <span class="blank short"></span>　日期 <span class="blank short"></span></span>
+      </div>
+    </div>
+  </article>
+
+  <!-- ══════════════ R-04 ══════════════ -->
+  <article class="item">
+    <div class="item-head">
+      <span class="item-id">R-04</span>
+      <span class="item-key">task.implements_requirement</span>
+      <span class="item-owner">责任 Owner：<b>delivery-owner</b></span>
+    </div>
+    <div class="item-body">
+      <dl class="facts">
+        <dt>源表</dt><dd><code>delivery.task_requirement</code></dd>
+        <dt>方向</dt><dd>directed（task → requirement）</dd>
+        <dt>端点</dt><dd><code>task</code> → <code>requirement_revision</code></dd>
+        <dt>治理级别</dt><dd>L2</dd>
+      </dl>
+      <p class="semantics"><span class="label">语义：</span>Task 被正式关联为实现某一特定 Requirement Revision 的交付任务。</p>
+      <div class="confirm-title">请确认以下三点：</div>
+      <ol class="confirm">
+        <li>这是「实现范围绑定」，不是普通任务参考或弱关联。</li>
+        <li>历史绑定不得自动改写为 Requirement 当前 Revision。</li>
+        <li><b>不得仅凭该关系推断 Task 已完成或 Requirement 已验收</b>（交付关联 ≠ 完成事实）。</li>
+      </ol>
+      <div class="verdict">
+        <label><span class="box">☐</span> Confirm</label>
+        <label><span class="box">☐</span> Modify：<span class="blank"></span></label>
+        <label><span class="box">☐</span> Reject：<span class="blank short"></span></label>
+        <span class="sig-line">签署 <span class="blank short"></span>　日期 <span class="blank short"></span></span>
+      </div>
+    </div>
+  </article>
+
+  <!-- ══════════════ R-05 ══════════════ -->
+  <article class="item">
+    <div class="item-head">
+      <span class="item-id">R-05</span>
+      <span class="item-key">task.depends_on_task</span>
+      <span class="item-owner">责任 Owner：<b>delivery-owner</b></span>
+    </div>
+    <div class="item-body">
+      <dl class="facts">
+        <dt>源表</dt><dd><code>delivery.task_dependency</code></dd>
+        <dt>方向</dt><dd>directed（dependent → prerequisite）</dd>
+        <dt>端点</dt><dd><code>task</code> → <code>task</code>（CHECK 防自依赖）</dd>
+        <dt>治理级别</dt><dd>L2</dd>
+      </dl>
+      <p class="semantics"><span class="label">语义：</span>Task A 依赖 Task B，表示 B 是 A 的前置任务。<b>Registry 方向 = <code>task_id</code>（依赖方）→ <code>depends_on_task_id</code>（前置方）</b>。</p>
+      <div class="confirm-title">请确认以下三点：</div>
+      <ol class="confirm">
+        <li><code>task_id</code> = 依赖方，<code>depends_on_task_id</code> = 前置方（沿用库内定义）。</li>
+        <li><b>Registry 语义方向与 DAG 展示方向是两个约定</b>——DAG 显示 <code>prerequisite → dependent</code>，不得为统一图形方向而改 Registry 语义。</li>
+        <li>影响分析与依赖闭包<b>遍历方向相反</b>（闭包沿 Registry 方向；影响分析沿反向），两处代码各自显式声明。</li>
+      </ol>
+      <div class="verdict">
+        <label><span class="box">☐</span> Confirm</label>
+        <label><span class="box">☐</span> Modify：<span class="blank"></span></label>
+        <label><span class="box">☐</span> Reject：<span class="blank short"></span></label>
+        <span class="sig-line">签署 <span class="blank short"></span>　日期 <span class="blank short"></span></span>
+      </div>
+    </div>
+  </article>
+
+  <footer class="footer">
+    <div>
+      <b>回收与激活</b>
+      <ol>
+        <li>签署后交 Visualization 技术 Owner；由实施者逐条改 YAML 为 <code>active</code> 并补齐七项审计字段（registry_version / signoff_by / signoff_at / signoff_record / semantic_version / activated_at）。</li>
+        <li>门禁：<code>node scripts/viz-registry-lint.js</code> 必须通过（active 缺任一审计字段即拒绝）。</li>
+        <li>激活后需做一次<b>存量数据符合性抽样</b>——Registry Active 不等于历史数据自动合法。</li>
+      </ol>
+    </div>
+    <div class="col-right">
+      未签署条目保持 <b>draft</b><br>
+      （校验器阻断投影，不默认放行）<br><br>
+      第二批 R-02 / R-03 / R-08<br>
+      第三批 R-06 / R-07 / R-09
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>
