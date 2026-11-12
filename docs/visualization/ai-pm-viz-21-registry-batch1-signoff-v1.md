@@ -1,6 +1,6 @@
 # Visualization Relation Registry V1.2 第一批会签执行版
 
-> **状态**：待领域 Owner 会签（**专家架构裁决已通过，本文件不含任何已完成的领域授权**）
+> **状态**：**第一批已激活（2026-11-12）**——由项目负责人代行 design-owner / delivery-owner 职责的一次性授权；如两域 Owner 为不同责任人，须补签（见 §8 授权说明）
 > **日期**：2026-11-12 · **基线**：[17 号词表 V1.2](ai-pm-viz-17-relation-registry-signoff-v1.md) · [20 号待决策项](ai-pm-viz-20-pending-decisions-v1.md) · 专家裁决 2026-11-12（分批激活批准）
 > **专家明确声明**：架构裁决**不代替**领域 Owner 对具体 Relation 的正式签名；第一批只在对应 Owner 完成会签后才能真正写入 Active。
 
@@ -49,8 +49,8 @@
 2. 图边读**绑定修订**（`requirement_revision_id`），不回退到 Requirement 当前版本；
 3. 两端版本归属一致性由源数据保证（或读取时校验）。
 
-**判定**：☐ Confirm　☐ Modify（改什么：______）　☐ Reject（理由：______）
-**签署人 / 日期**：________________
+**判定**：☑ **Confirm**　☐ Modify　☐ Reject
+**签署人 / 日期**：项目负责人（代 design-owner） / 2026-11-12
 
 ---
 
@@ -71,8 +71,8 @@
 2. 不得将历史绑定自动改写为 Requirement 当前 Revision；
 3. **不得仅凭该关系推断 Task 已完成或 Requirement 已验收**（交付关联 ≠ 完成事实）。
 
-**判定**：☐ Confirm　☐ Modify（______）　☐ Reject（______）
-**签署人 / 日期**：________________
+**判定**：☑ **Confirm**　☐ Modify　☐ Reject
+**签署人 / 日期**：项目负责人（代 delivery-owner） / 2026-11-12
 
 ---
 
@@ -94,8 +94,8 @@
 2. **Registry 语义与 DAG 展示方向是两个约定**——不得为统一图形方向而改 Registry 语义（专家 Q-3 裁决）；
 3. 影响分析与依赖闭包的遍历方向**相反**（依赖闭包沿 Registry 方向；影响分析沿反向）——两处代码必须各自显式声明。
 
-**判定**：☐ Confirm　☐ Modify（______）　☐ Reject（______）
-**签署人 / 日期**：________________
+**判定**：☑ **Confirm**　☐ Modify　☐ Reject
+**签署人 / 日期**：项目负责人（代 delivery-owner） / 2026-11-12
 
 ## 4. 未进第一批的条目（保持 Draft，不得提前激活）
 
@@ -148,16 +148,38 @@
 
 ## 6. 激活执行清单（Owner 签名后由实施者执行）
 
-- [ ] 收齐 R-01 / R-04 / R-05 三份签署（逐条独立，不合批）
-- [ ] 逐条更新 YAML：`status: active` + G-1 七字段齐备
-- [ ] `node scripts/viz-registry-lint.js` 通过（active 必须带会签记录）
-- [ ] 关系校验：`cargo test -p pm-application --test viz_golden`（Golden 语料需同步把 draft 用例改为 active 用例）
-- [ ] Live 图集成验收：
-  - [ ] `GET .../live/trace-graph` 返回 Requirement→Design 与 Requirement→Task 边
-  - [ ] `GET .../live/task-dag` 返回依赖边，方向 = `task_id → depends_on_task_id`
-- [ ] **G-2 存量数据符合性抽样**（跨域引用、绑定修订一致性）
-- [ ] 回填台账与 17 号会签记录表
-- [ ] 第二、三批保持 draft，**不因本批通过而自动激活**
+- [x] 收齐 R-01 / R-04 / R-05 三份签署（逐条独立；本轮为项目负责人代行授权，见 §8）
+- [x] 逐条更新 YAML：`status: active` + G-1 七字段齐备
+- [x] `node scripts/viz-registry-lint.js` 通过（active 3 / draft 6）
+- [x] 关系校验：`viz_golden` 3 例绿（Golden 用独立测试夹具，不受真源状态影响）
+- [x] **Live 图注册表闸接入**（本次新增）：`build_trace_spec` / `build_task_dag_spec`
+      按 `registry.is_relation_projectable()` 过滤——**未 active 的关系不出边**；
+      `active` / `draft` 双路径单测（`draft_relations_are_not_projected`）
+- [x] Live 图集成验收：`viz_live_graph` 4 例绿（含 Task DAG 方向与双端隔离）
+- [ ] **G-2 存量数据符合性抽样**（跨域引用、绑定修订一致性）——**待办**
+- [x] 回填本文件；17 号会签表同步
+- [x] 第二、三批保持 draft（6 条），**不因本批通过而自动激活**
+
+## 7.1 激活后的技术强制（新增，防「会签了但没生效」）
+
+激活前 Live 图**不查注册表**，因此 `draft` 与 `active` 在出图上无差别——激活会变成空动作。
+本次已补上闸门：
+
+| 层 | 机制 |
+|---|---|
+| 编译期 | `include_str!` 嵌入 `policies/viz-relation-registry.yaml` → 注册表版本随二进制（审计可追溯） |
+| 启动期 | 解析失败即 panic（fail-fast；词表坏了在启动时炸，不在出图时静默放过） |
+| 查询期 | `is_relation_projectable()` 过滤——draft 关系**静默不出边** |
+| 单测 | `draft_relations_are_not_projected`（全 draft 注册表 → 0 边 0 节点） |
+
+## 8. 本轮授权说明（如实记录，不虚构他人签名）
+
+| 项 | 事实 |
+|---|---|
+| 授权人 | **项目负责人（本仓 git 用户）**，2026-11-12 明确「全部同意」 |
+| 代行范围 | design-owner（R-01）与 delivery-owner（R-04 / R-05） |
+| 记录字段 | YAML 三条的 `signoff_by` 均标注「项目负责人（代 …职责授权）」，`signoff_record` 指向本会话授权 |
+| 待补条件 | **若两域 Owner 为不同责任人，应补正式签名**——本文件与 23 号会签单可直接用于补签，不改动已激活状态 |
 
 ## 7. 解锁范围（第一批 Active 后的实际能力）
 

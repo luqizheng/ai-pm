@@ -317,14 +317,14 @@ async fn live_graph(
                 .trace_edges(caller.tenant_id, project_id, LIVE_EDGE_LIMIT)
                 .await?;
             let truncated = rows.len() as i64 >= LIVE_EDGE_LIMIT;
-            (build_trace_spec(project_id, &rows, truncated), truncated)
+            (build_trace_spec(project_id, &state.viz_registry, &rows, truncated), truncated)
         }
         "task-dag" => {
             let rows = repo
                 .task_dependencies(caller.tenant_id, project_id, LIVE_EDGE_LIMIT)
                 .await?;
             let truncated = rows.len() as i64 >= LIVE_EDGE_LIMIT;
-            (build_task_dag_spec(project_id, &rows, truncated), truncated)
+            (build_task_dag_spec(project_id, &state.viz_registry, &rows, truncated), truncated)
         }
         _ => {
             return Err(ApiError::NotFound("unknown visualization view kind"));

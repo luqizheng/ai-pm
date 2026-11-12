@@ -42,7 +42,13 @@ version: "1"
 relations:
   # ── Design 域 ───────────────────────────────────────────────────────────
   - key: design.covers_requirement
-    status: draft
+    status: active
+    registry_version: "1"
+    signoff_by: "项目负责人（代 design-owner / delivery-owner 职责授权）"
+    signoff_at: "2026-11-12"
+    signoff_record: "23 号会签单「全部同意」（2026-11-12 会话授权，单方代行两域职责）"
+    semantic_version: "1.0"
+    activated_at: "2026-11-12"
     domain: design
     owner_role: design-owner
     source: design.design_requirement
@@ -79,7 +85,13 @@ relations:
 
   # ── Delivery 域 ────────────────────────────────────────────────────────
   - key: task.implements_requirement
-    status: draft
+    status: active
+    registry_version: "1"
+    signoff_by: "项目负责人（代 design-owner / delivery-owner 职责授权）"
+    signoff_at: "2026-11-12"
+    signoff_record: "23 号会签单「全部同意」（2026-11-12 会话授权，单方代行两域职责）"
+    semantic_version: "1.0"
+    activated_at: "2026-11-12"
     domain: delivery
     owner_role: delivery-owner
     source: delivery.task_requirement
@@ -91,7 +103,13 @@ relations:
     introduced_in: "1.0"
 
   - key: task.depends_on_task
-    status: draft
+    status: active
+    registry_version: "1"
+    signoff_by: "项目负责人（代 design-owner / delivery-owner 职责授权）"
+    signoff_at: "2026-11-12"
+    signoff_record: "23 号会签单「全部同意」（2026-11-12 会话授权，单方代行两域职责）"
+    semantic_version: "1.0"
+    activated_at: "2026-11-12"
     domain: delivery
     owner_role: delivery-owner
     source: delivery.task_dependency

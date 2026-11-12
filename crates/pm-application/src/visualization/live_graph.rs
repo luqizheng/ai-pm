@@ -13,7 +13,8 @@
 use uuid::Uuid;
 
 use pm_domain::visualization::{
-    Budget, Nature, SourceRef, VizEdge, VizMeta, VizNode, VizSpec, VizView, SPEC_VERSION,
+    Budget, Nature, RelationRegistry, SourceRef, VizEdge, VizMeta, VizNode, VizSpec, VizView,
+    SPEC_VERSION,
 };
 
 use crate::repo::viz_read::{TaskDependencyRow, TraceEdgeRow};
@@ -27,6 +28,7 @@ pub const LIVE_EDGE_LIMIT: i64 = 500;
 /// `source_ref` 用端点类型 + 绑定修订——溯源可达。
 pub fn build_trace_spec(
     project_id: Uuid,
+    registry: &RelationRegistry,
     rows: &[TraceEdgeRow],
     truncated: bool,
 ) -> VizSpec {
@@ -60,6 +62,12 @@ pub fn build_trace_spec(
     };
 
     for row in rows {
+        // **注册表闸**：关系未 active 即不可投影（专家裁决：未会签 ≠ 默认允许）。
+        // 跳过而不是报错——Live 图是读投影，未启用的关系静默不出边，
+        // 由 `viz-registry-lint --readiness` 报告待会签条目。
+        if !registry.is_relation_projectable(&row.relation) {
+            continue;
+        }
         // 关系键决定两端域/类型
         let (from_domain, from_kind, to_domain, to_kind) = match row.relation.as_str() {
             "design.covers_requirement" => (
@@ -132,6 +140,7 @@ pub fn build_trace_spec(
 /// 不在此层反转（17 号 R-05 / V-11）。
 pub fn build_task_dag_spec(
     project_id: Uuid,
+    registry: &RelationRegistry,
     rows: &[TaskDependencyRow],
     truncated: bool,
 ) -> VizSpec {
@@ -168,6 +177,10 @@ pub fn build_task_dag_spec(
     };
 
     for row in rows {
+        // 注册表闸（同上）：`task.depends_on_task` 未 active 则不出边
+        if !registry.is_relation_projectable("task.depends_on_task") {
+            continue;
+        }
         push_node(
             &mut nodes,
             &mut seen,
@@ -222,6 +235,55 @@ pub fn build_task_dag_spec(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pm_domain::visualization::{RelationDefinition, RelationStatus};
+
+    /// 测试注册表：三条关系全 active（含 G-1 审计字段）。
+    fn active_registry() -> RelationRegistry {
+        let active = |key: &str, st: &str, tt: &str| RelationDefinition {
+            key: key.to_string(),
+            status: RelationStatus::Active,
+            signoff_by: Some("test-owner".to_string()),
+            signoff_at: Some("2026-11-12".to_string()),
+            signoff_record: Some("test".to_string()),
+            registry_version: Some("1".to_string()),
+            semantic_version: Some("1.0".to_string()),
+            activated_at: Some("2026-11-12".to_string()),
+            domain: "test".to_string(),
+            owner_role: "test-owner".to_string(),
+            source: "test.table".to_string(),
+            source_type: st.to_string(),
+            target_type: tt.to_string(),
+            direction: "directed".to_string(),
+            semantics: "test".to_string(),
+            governance_level: Some("L2".to_string()),
+            introduced_in: Some("1.0".to_string()),
+            view_alias: false,
+            reverse_view_of: None,
+            synthetic: false,
+            business_fact: true,
+            type_key_source: None,
+            ref_role_filter: None,
+            cardinality: None,
+        };
+        RelationRegistry {
+            version: "1".to_string(),
+            relations: vec![
+                active("design.covers_requirement", "design_revision", "requirement_revision"),
+                active("task.implements_requirement", "task", "requirement_revision"),
+                active("task.depends_on_task", "task", "task"),
+            ],
+            node_kinds: vec![],
+        }
+    }
+
+    /// 全 draft 注册表（用于验证注册表闸）。
+    fn draft_registry() -> RelationRegistry {
+        let mut registry = active_registry();
+        for relation in &mut registry.relations {
+            relation.status = RelationStatus::Draft;
+        }
+        registry
+    }
 
     fn trace_row() -> TraceEdgeRow {
         TraceEdgeRow {
@@ -248,7 +310,7 @@ mod tests {
 
     #[test]
     fn trace_spec_nodes_are_deduped_and_sourced() {
-        let spec = build_trace_spec(Uuid::nil(), &[trace_row(), trace_row()], false);
+        let spec = build_trace_spec(Uuid::nil(), &active_registry(), &[trace_row(), trace_row()], false);
         assert_eq!(spec.nodes.len(), 2, "重复边不应产生重复节点");
         assert_eq!(spec.edges.len(), 2);
         for node in &spec.nodes {
@@ -262,7 +324,7 @@ mod tests {
 
     #[test]
     fn task_dag_keeps_library_direction() {
-        let spec = build_task_dag_spec(Uuid::nil(), &[dep_row()], false);
+        let spec = build_task_dag_spec(Uuid::nil(), &active_registry(), &[dep_row()], false);
         assert_eq!(spec.edges.len(), 1);
         // 库内语义：task_id（依赖方）→ depends_on_task_id（前置方）
         assert_eq!(spec.edges[0].from, dep_row().task_id.to_string());
@@ -272,7 +334,7 @@ mod tests {
     #[test]
     fn task_nodes_do_not_fake_content_revision() {
         // task 无内容版本 → 不得伪造 revision_id（0019 纪律的同类）
-        let spec = build_task_dag_spec(Uuid::nil(), &[dep_row()], false);
+        let spec = build_task_dag_spec(Uuid::nil(), &active_registry(), &[dep_row()], false);
         for node in &spec.nodes {
             assert!(
                 node.source_ref.as_ref().unwrap().revision_id.is_none(),
@@ -283,9 +345,30 @@ mod tests {
 
     #[test]
     fn truncated_flag_lowers_budget() {
-        let full = build_task_dag_spec(Uuid::nil(), &[dep_row()], false);
-        let cut = build_task_dag_spec(Uuid::nil(), &[dep_row()], true);
+        let full = build_task_dag_spec(Uuid::nil(), &active_registry(), &[dep_row()], false);
+        let cut = build_task_dag_spec(Uuid::nil(), &active_registry(), &[dep_row()], true);
         assert_eq!(full.meta.budget, Budget::Faithful);
         assert_eq!(cut.meta.budget, Budget::Balanced);
+    }
+
+    #[test]
+    fn draft_relations_are_not_projected() {
+        // 专家裁决的落地：未 active 的关系不得出边（未会签 ≠ 默认允许）
+        let trace = build_trace_spec(
+            Uuid::nil(),
+            &draft_registry(),
+            &[trace_row()],
+            false,
+        );
+        assert_eq!(trace.edges.len(), 0, "draft 关系不得投影出边");
+        assert_eq!(trace.nodes.len(), 0, "无边即无节点");
+
+        let dag = build_task_dag_spec(
+            Uuid::nil(),
+            &draft_registry(),
+            &[dep_row()],
+            false,
+        );
+        assert_eq!(dag.edges.len(), 0, "draft 的 task.depends_on_task 不得投影");
     }
 }

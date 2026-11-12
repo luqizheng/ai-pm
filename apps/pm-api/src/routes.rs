@@ -70,6 +70,10 @@ pub(crate) struct AppState {
         Option<std::sync::Arc<dyn pm_application::docproc_service::ArtifactStore>>,
     /// DK-A：对话载体判定（`AI_PM_CONVERSATION_ROUTER` + 意图分类端口）。
     pub(crate) conversation_routing: ConversationRouting,
+    /// Visualization Relation Registry（编译期嵌入，版本随二进制——审计可追溯）。
+    ///
+    /// 关系未 active 即**不可投影**（专家裁决：未会签 ≠ 默认允许）。
+    pub(crate) viz_registry: Arc<pm_domain::visualization::RelationRegistry>,
 }
 
 /// DK-A 对话载体判定装配：开关 + 意图分类器。生产 = [`ConversationRouting::from_env`]
@@ -174,6 +178,14 @@ fn build_router(
     let executor = Arc::new(PgCommandExecutor::new(pool.clone(), policy));
     let conversation_routing =
         conversation_routing.unwrap_or_else(|| ConversationRouting::from_env(&pool));
+    // 与 policy 同款：编译期嵌入 + 启动期解析失败即 panic（fail-fast，
+    // 词表坏了要在启动时炸，而不是在出图时静默放过）。
+    let viz_registry = Arc::new(
+        pm_application::visualization::registry_loader::parse_registry(include_str!(
+            "../../../policies/viz-relation-registry.yaml"
+        ))
+        .expect("viz relation registry yaml must parse"),
+    );
     let state = AppState {
         pool,
         executor,
@@ -183,6 +195,7 @@ fn build_router(
         docproc_store: pm_infrastructure::docproc_store::FileServiceStore::from_env("pm-api")
             .map(|s| s as std::sync::Arc<dyn pm_application::docproc_service::ArtifactStore>),
         conversation_routing,
+        viz_registry,
     };
     // The MCP service clones the pool inside its own state factory; it cannot
     // share `state` (different service type), hence a separate handle.

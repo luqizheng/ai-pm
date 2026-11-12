@@ -496,15 +496,20 @@ requirement.refines_design → reverse_view_of: design.covers_requirement
 
 | Key | 决定 | 修改内容 / 否决理由 | Owner | 日期 |
 |---|---|---|---|---|
-| R-01 | 待会签 | | design-owner | |
-| R-02 | 待会签 | | design-owner | |
-| R-03 | 待会签 | | design-owner | |
-| R-04 | 待会签 | | delivery-owner | |
-| R-05 | 待会签 | | delivery-owner | |
-| R-06 | 待会签 | | pc-owner | |
-| R-07 | 待会签 | | kb-owner | |
-| R-08 | 待会签 | | design-owner | |
-| R-09 | 待会签 | | architecture-owner | |
+| R-01 | **✅ Confirm（已激活）** | 项目负责人代行 design-owner 授权 | design-owner | 2026-11-12 |
+| R-02 | 待会签 | — | design-owner | — |
+| R-03 | 待会签 | — | design-owner | — |
+| R-04 | **✅ Confirm（已激活）** | 项目负责人代行 delivery-owner 授权 | delivery-owner | 2026-11-12 |
+| R-05 | **✅ Confirm（已激活）** | 项目负责人代行 delivery-owner 授权 | delivery-owner | 2026-11-12 |
+| R-06 | 待会签 | — | pc-owner | — |
+| R-07 | 待会签 | — | kb-owner | — |
+| R-08 | 待会签 | — | design-owner | — |
+| R-09 | 待会签 | — | architecture-owner | — |
+
+> 第一批三条已于 2026-11-12 激活（`status: active` + G-1 七项审计字段齐备）。
+> 授权为**项目负责人代行两域职责**；若两域 Owner 为不同责任人应补正式签名
+> （执行版见 [21 号](ai-pm-viz-21-registry-batch1-signoff-v1.md) §8，可打印单见
+> [23 号](ai-pm-viz-23-batch1-signoff-form.html)）。第二、三批保持 draft。
 
 ### 7.3 Q-1 / Q-2 / Q-3 会签记录
 
