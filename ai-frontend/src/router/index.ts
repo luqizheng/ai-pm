@@ -38,8 +38,6 @@ import OnboardingCreateTeamView from "@/views/onboarding/OnboardingCreateTeamVie
 import OnboardingInviteMembersView from "@/views/onboarding/OnboardingInviteMembersView.vue";
 import OnboardingInvitationLinkView from "@/views/onboarding/OnboardingInvitationLinkView.vue";
 import TeamInvitationAcceptView from "@/views/team/TeamInvitationAcceptView.vue";
-import SettingsTeamMembersView from "@/views/settings/team/SettingsTeamMembersView.vue";
-import SettingsTeamInvitationsView from "@/views/settings/team/SettingsTeamInvitationsView.vue";
 import SettingsTeamGeneralView from "@/views/settings/team/SettingsTeamGeneralView.vue";
 
 /**
@@ -515,24 +513,12 @@ export function buildRoutes(): RouteRecordRaw[] {
     meta: { layout: "auth", title: "team.accept.title" }
   });
 
-  // 团队设置三页（P1：成员 / 邀请管理 / 基本信息与 Owner 转移）。
-  routes.push(
-    {
-      path: "/settings/team/members",
-      component: SettingsTeamMembersView,
-      meta: { title: "team.members.title" }
-    },
-    {
-      path: "/settings/team/invitations",
-      component: SettingsTeamInvitationsView,
-      meta: { title: "team.invitations.title" }
-    },
-    {
-      path: "/settings/team/general",
-      component: SettingsTeamGeneralView,
-      meta: { title: "team.settings.title" }
-    }
-  );
+  // 团队设置一页（P1：基本信息与 Owner 转移；成员 & 邀请已迁 /admin/members）。
+  routes.push({
+    path: "/settings/team/general",
+    component: SettingsTeamGeneralView,
+    meta: { title: "team.settings.title" }
+  });
 
   routes.push({
     path: "/:pathMatch(.*)*",

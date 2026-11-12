@@ -147,9 +147,10 @@ workspace:
         timeout: Timeout (s)
       providerTypes:
         openai: OpenAI
-        anthropic: Anthropic
         gemini: Google Gemini
         deepseek: DeepSeek
+        glm: Zhipu GLM
+        minimax: MiniMax
         openai_compatible: OpenAI-compatible (local/self-hosted)
       status:
         not_configured: Not configured

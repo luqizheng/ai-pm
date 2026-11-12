@@ -8,9 +8,10 @@ import type { ListResponse } from "./types";
  */
 export type LlmProviderType =
   | "openai"
-  | "anthropic"
   | "gemini"
   | "deepseek"
+  | "glm"
+  | "minimax"
   | "openai_compatible";
 
 export type LlmProviderStatus =

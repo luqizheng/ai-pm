@@ -12,7 +12,7 @@
 //! Team Owner 也不能回读完整密钥）。
 //!
 //! 故障处理（DEC-LLM-004）：不自动切换 Provider/Model——连通性探测显式返回
-//! ok/失败；`anthropic` 适配器未实现时显式报错，绝不用 OpenAI 兼容面硬调。
+//! ok/失败；anthropic 供应商已永久移除（规则），不在本服务覆盖范围内。
 //! 生命周期（§6.3）：`not_configured → configured → connected|failed → enabled ⇄
 //! disabled → archived`；测试成功≠自动启用，enable 必须显式动作且要求已有凭证。
 
@@ -34,19 +34,21 @@ const NONCE_LEN: usize = 12;
 
 /// 初始 Provider 类型（设计稿 §6.1）。类型清单校验在服务层——扩展类型不再需要
 /// DB CHECK / 常量 / 前端联合类型三处同步（核验报告 R-LLM-08）。
-pub const PROVIDER_TYPES: [&str; 5] = [
+/// 2026-11-12 规则：永久移除 anthropic 直连；其用户改用 openai_compatible。
+/// 同日扩展：glm / minimax 加入，两者均走 OpenAI 兼容面。
+pub const PROVIDER_TYPES: [&str; 6] = [
     "openai",
-    "anthropic",
     "gemini",
     "deepseek",
+    "glm",
+    "minimax",
     "openai_compatible",
 ];
 
-/// V1 适配器覆盖面：OpenAI 兼容 `/chat/completions` 面覆盖 openai / deepseek /
-/// gemini（其 OpenAI 兼容端点）/ openai_compatible；`anthropic` 的 `/v1/messages`
-/// 面未实现——显式报错（DEC-LLM-004），不静默换面硬调。
-fn adapter_available(provider_type: &str) -> bool {
-    !matches!(provider_type, "anthropic")
+/// V1 适配器覆盖面：OpenAI 兼容 `/chat/completions` 面覆盖所有类型。
+/// anthropic 供应商已永久移除（2026-11-12 规则）。
+fn adapter_available(_provider_type: &str) -> bool {
+    true
 }
 
 /// 连接测试用途的调用记录 purpose 值（`ai.llm_call_record.purpose`）。
@@ -664,7 +666,7 @@ pub async fn replace_team_credential(
 /// 不回显任何密钥信息。结果落 `ai.llm_call_record`（purpose=connection_test）并
 /// 更新 `last_tested_at`；pre-enable 状态下同步推进 `connected|failed`——
 /// **不自动启用**（§6.3）。archived 拒测；无凭证/无模型显式报错（§11
-/// Configuration Error），anthropic 显式 AdapterUnavailable。
+/// Configuration Error）。
 pub async fn test_team_provider(
     pool: &PgPool,
     actor: &AuditActor,
@@ -1242,17 +1244,19 @@ mod tests {
             PROVIDER_TYPES,
             [
                 "openai",
-                "anthropic",
                 "gemini",
                 "deepseek",
+                "glm",
+                "minimax",
                 "openai_compatible"
             ]
         );
-        // anthropic 适配器未实现必须显式暴露（DEC-LLM-004）。
-        assert!(!adapter_available("anthropic"));
+        // 所有已支持类型的适配器都可用（anthropic 已永久移除，2026-11-12 规则）。
         assert!(adapter_available("openai"));
         assert!(adapter_available("gemini"));
         assert!(adapter_available("deepseek"));
+        assert!(adapter_available("glm"));
+        assert!(adapter_available("minimax"));
         assert!(adapter_available("openai_compatible"));
     }
 

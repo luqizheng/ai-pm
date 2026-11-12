@@ -77,6 +77,13 @@ async function mountAt(path = "/settings/team/ai-providers") {
   return wrapper;
 }
 
+/** reka-ui Select 浮层经 portal 挂到 body，需要额外宏任务才能渲染完成 */
+async function flushPortal() {
+  await flushPromises();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  await flushPromises();
+}
+
 afterEach(() => {
   for (const wrapper of mountedWrappers.splice(0)) {
     wrapper.unmount();
@@ -184,6 +191,47 @@ describe("SettingsTeamAiView（团队 AI 配置）", () => {
         endpoint: "https://api.example.com/v1",
         configuration: { model: "test-model" },
         api_key: "sk-secret-9999abcd"
+      })
+    );
+  });
+
+  it("选择内置类型自动预填端点；名称留空时按类型+模型自动命名", async () => {
+    createLlmProvider.mockResolvedValue(
+      row({ id: "id-3", name: "DeepSeek-deepseek-chat" })
+    );
+    const w = await mountAt();
+    await flushPromises();
+    await w.find("[data-test='add-provider']").trigger("click");
+
+    // 打开类型下拉（reka-ui Select 触发器）并选择 DeepSeek
+    await w.find("[role='combobox']").trigger("pointerdown");
+    await flushPortal();
+    const option = Array.from(
+      document.body.querySelectorAll("[role='option']")
+    ).find(el => el.textContent?.includes("DeepSeek"));
+    expect(option, "DeepSeek 选项应出现在下拉浮层").toBeTruthy();
+    option!.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    await flushPortal();
+
+    // 内置类型预填默认端点
+    const endpointInput = w.find("[data-test='create-endpoint'] input")
+      .element as HTMLInputElement;
+    expect(endpointInput.value).toBe("https://api.deepseek.com");
+
+    // 名称留空 + 填模型 → 提交时自动命名「类型-模型」
+    await w.find("[data-test='create-model'] input").setValue("deepseek-chat");
+    await flushPromises();
+    expect(
+      (w.find("[data-test='create-name'] input").element as HTMLInputElement)
+        .placeholder
+    ).toBe("DeepSeek-deepseek-chat");
+    await w.find("[data-test='create-submit']").trigger("click");
+    await flushPromises();
+    expect(createLlmProvider).toHaveBeenCalledWith(
+      TENANT_ID,
+      expect.objectContaining({
+        name: "DeepSeek-deepseek-chat",
+        endpoint: "https://api.deepseek.com"
       })
     );
   });

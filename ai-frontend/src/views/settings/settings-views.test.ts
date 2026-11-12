@@ -170,24 +170,16 @@ describe("落地页", () => {
     );
   });
 
-  it("团队设置主页：四类目卡指向 /settings/team/*，各卡描述独立", async () => {
+  it("团队设置主页：一个 General 类目卡（成员/邀请/AI 配置已迁走）", async () => {
     const { wrapper } = await mountAt(
       SettingsTeamLandingView,
       "/settings/team"
     );
     const cards = wrapper.findAll(".team-landing__card");
-    expect(cards).toHaveLength(4);
+    expect(cards).toHaveLength(1);
     expect(cards.map(card => card.attributes("href"))).toEqual([
-      "/settings/team/members",
-      "/settings/team/invitations",
-      "/settings/team/general",
-      "/settings/team/ai-providers"
+      "/settings/team/general"
     ]);
-    // 回归：此前四卡共用 AI 描述文案（aiDesc 错挂）
-    expect(wrapper.text()).toContain("团队成员、角色与访问管理。");
-    expect(wrapper.text()).toContain(
-      "管理团队的大模型 Provider、凭证与连接（仅团队管理员）"
-    );
   });
 });
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -7,16 +7,22 @@ import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { translateError } from "@/api/base";
-import SettingsAppFrame from "./SettingsAppFrame.vue";
 import TeamProviderCard from "./TeamProviderCard.vue";
 import {
   cardFormOf,
   configurationOf,
+  defaultEndpointOf,
+  findProvider,
   invalidTimeout,
+  PROVIDER_CATALOG,
+  providerTypeDropdown,
   timeoutOf,
-  type LlmProvider
+  type LlmProvider,
+  type LlmProviderType
 } from "./team-llm-types";
-import { TEAM_APP_NAV, TEAM_ICONS } from "./nav";
+import { useModelSource } from "./model-source";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import PageFrame from "@/components/shell/PageFrame.vue";
 import {
   createLlmProvider,
   deleteLlmProvider,
@@ -63,16 +69,87 @@ const draft = reactive({
   timeout: "120"
 });
 
-const providerTypeOptions = (
-  ["openai", "anthropic", "gemini", "deepseek", "openai_compatible"] as const
-).map(type => ({
-  value: type,
-  label: t(`settings.team.ai.providerTypes.${type}`)
-}));
+const providerTypeOptions = providerTypeDropdown({ t });
 
-const draftInvalid = computed(
-  () =>
-    !draft.name.trim() || invalidTimeout({ ...draft, model: "", endpoint: "" })
+// ── 默认值预填：切换类型自动填端点；名称为空时按「类型+模型」自动生成 ──
+// 仅当端点为空或仍是上一次预填值时覆盖，用户手填的自定义端点不回改。
+const autoEndpoint = ref("");
+
+watch(
+  () => draft.provider_type,
+  type => {
+    if (!draft.endpoint.trim() || draft.endpoint === autoEndpoint.value) {
+      autoEndpoint.value = defaultEndpointOf(type);
+      draft.endpoint = autoEndpoint.value;
+    }
+    // 切换 provider 时清空 model（避免旧类型的残留值）
+    draft.model = "";
+  }
+);
+
+// ── Model 字段状态机：只在新建 Provider 表单启用 ──
+const providerCatalog = computed(() => findProvider(draft.provider_type));
+const {
+  options: modelGroups,
+  status: modelStatus,
+  hint: modelHint,
+  refresh: refreshModels,
+  canLoad: canLoadModels
+} = useModelSource(
+  providerCatalog,
+  computed(() => draft.endpoint),
+  computed(() => draft.api_key)
+);
+
+const modelInputPlaceholder = computed(() => {
+  switch (modelStatus.value) {
+    case "unsupported":
+      return "该 Provider 不支持自动获取模型，请输入 model id（如 llama3:8b）";
+    case "idle":
+      return canLoadModels.value
+        ? "正在准备…"
+        : "填写 API 地址和 Key 后自动加载模型";
+    case "loading":
+      return "加载中…";
+    case "fallback":
+      return "无法获取，已切换内置列表，可手动输入";
+    case "empty":
+      return "请手动输入 model id";
+    case "success":
+      return "选择或输入 model id";
+    default:
+      return "";
+  }
+});
+
+/** 把 Combobox 的 CombinedModel 分组转成 options（骨架态也能渲染）。 */
+const modelComboboxOptions = computed<ComboboxOption[]>(() => {
+  const out: ComboboxOption[] = [];
+  for (const g of modelGroups.value) {
+    for (const item of g.items) {
+      if (item.id.startsWith("__skeleton_")) {
+        out.push({ value: item.id, label: "", group: g.group, skeleton: true });
+      } else {
+        out.push({
+          value: item.id,
+          label: item.name || item.id,
+          hint: item.desc,
+          group: g.group
+        });
+      }
+    }
+  }
+  return out;
+});
+
+const defaultName = computed(() => {
+  const label = t(`settings.team.ai.providerTypes.${draft.provider_type}`);
+  const model = draft.model.trim();
+  return model ? `${label}-${model}` : label;
+});
+
+const draftInvalid = computed(() =>
+  invalidTimeout({ ...draft, model: "", endpoint: "" })
 );
 
 function statusLabel(status: LlmProvider["status"]): string {
@@ -114,7 +191,7 @@ async function create() {
   creating.value = true;
   try {
     const row = await createLlmProvider(tenantId.value, {
-      name: draft.name.trim(),
+      name: draft.name.trim() || defaultName.value,
       provider_type: draft.provider_type,
       endpoint: draft.endpoint.trim(),
       configuration: draft.model.trim() ? { model: draft.model.trim() } : {},
@@ -260,126 +337,148 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="settings-shell-pad">
-    <SettingsAppFrame
-      :breadcrumb="breadcrumb"
-      :title="t('settings.nav.aiProviders')"
-      :description="t('settings.team.ai.desc')"
-      :scope-label="t('settings.team.landing.title')"
-      :entries="TEAM_APP_NAV"
-      :icons="TEAM_ICONS"
-    >
-      <p class="tp-note">{{ t("settings.team.ai.securityNote") }}</p>
+  <PageFrame
+    :breadcrumbs="breadcrumb"
+    :title="t('settings.nav.aiProviders')"
+    :description="t('settings.team.ai.desc')"
+  >
+    <p class="tp-note">{{ t("settings.team.ai.securityNote") }}</p>
 
-      <div class="tp-toolbar">
-        <Button
-          data-test="add-provider"
-          size="sm"
-          @click="showCreate = !showCreate"
+    <div class="tp-toolbar">
+      <Button
+        data-test="add-provider"
+        size="sm"
+        @click="showCreate = !showCreate"
+      >
+        {{ t("settings.team.ai.addProvider") }}
+      </Button>
+    </div>
+
+    <section v-if="showCreate" class="tp-create" data-test="create-form">
+      <div class="tp-create__grid">
+        <FormField
+          :label="t('settings.team.ai.fields.name')"
+          :description="t('settings.team.ai.nameAutoHint')"
         >
-          {{ t("settings.team.ai.addProvider") }}
+          <Input
+            v-model="draft.name"
+            :placeholder="defaultName"
+            data-test="create-name"
+          />
+        </FormField>
+        <FormField :label="t('settings.team.ai.fields.type')">
+          <Select
+            v-model="draft.provider_type"
+            :options="providerTypeOptions"
+            data-test="create-type"
+          />
+        </FormField>
+        <FormField :label="t('settings.team.ai.fields.endpoint')">
+          <Input
+            v-model="draft.endpoint"
+            placeholder="https://"
+            data-test="create-endpoint"
+          />
+        </FormField>
+        <FormField :label="t('settings.team.ai.fields.model')">
+          <div class="tp-model-field">
+            <Combobox
+              autocomplete="off"
+              v-model="draft.model"
+              :options="modelComboboxOptions"
+              :input-placeholder="modelInputPlaceholder"
+              :placeholder="modelInputPlaceholder"
+              data-test="create-model"
+            />
+            <Button
+              v-if="providerCatalog?.modelSource === 'api'"
+              size="sm"
+              variant="ghost"
+              :disabled="!canLoadModels || modelStatus === 'loading'"
+              :title="t('settings.team.ai.refreshModels')"
+              data-test="refresh-models"
+              @click="refreshModels"
+            >
+              ↻
+            </Button>
+          </div>
+          <p v-if="modelHint" class="tp-model-hint" :data-test="'model-hint'">
+            {{ modelHint }}
+          </p>
+        </FormField>
+        <FormField
+          :label="t('settings.team.ai.fields.apiKey')"
+          :description="t('settings.team.ai.keyMissing')"
+        >
+          <Input
+            v-model="draft.api_key"
+            type="password"
+            data-test="create-key"
+            autocomplete="off"
+          />
+        </FormField>
+        <FormField
+          :label="t('settings.team.ai.fields.timeout')"
+          :description="t('settings.team.ai.fields.timeoutHint')"
+        >
+          <Input
+            v-model="draft.timeout"
+            type="number"
+            data-test="create-timeout"
+          />
+        </FormField>
+      </div>
+      <footer class="tp-create__actions">
+        <Button
+          data-test="create-submit"
+          size="sm"
+          :loading="creating"
+          :disabled="draftInvalid"
+          @click="create"
+        >
+          {{ t("settings.team.ai.create") }}
         </Button>
-      </div>
+        <Button size="sm" variant="ghost" @click="showCreate = false">
+          {{ t("settings.team.ai.cancel") }}
+        </Button>
+      </footer>
+    </section>
 
-      <section v-if="showCreate" class="tp-create" data-test="create-form">
-        <div class="tp-create__grid">
-          <FormField :label="t('settings.team.ai.fields.name')">
-            <Input v-model="draft.name" data-test="create-name" />
-          </FormField>
-          <FormField :label="t('settings.team.ai.fields.type')">
-            <Select
-              v-model="draft.provider_type"
-              :options="providerTypeOptions"
-              data-test="create-type"
-            />
-          </FormField>
-          <FormField :label="t('settings.team.ai.fields.endpoint')">
-            <Input
-              v-model="draft.endpoint"
-              placeholder="https://"
-              data-test="create-endpoint"
-            />
-          </FormField>
-          <FormField :label="t('settings.team.ai.fields.model')">
-            <Input v-model="draft.model" data-test="create-model" />
-          </FormField>
-          <FormField
-            :label="t('settings.team.ai.fields.apiKey')"
-            :description="t('settings.team.ai.keyMissing')"
-          >
-            <Input
-              v-model="draft.api_key"
-              type="password"
-              data-test="create-key"
-            />
-          </FormField>
-          <FormField
-            :label="t('settings.team.ai.fields.timeout')"
-            :description="t('settings.team.ai.fields.timeoutHint')"
-          >
-            <Input
-              v-model="draft.timeout"
-              type="number"
-              data-test="create-timeout"
-            />
-          </FormField>
-        </div>
-        <footer class="tp-create__actions">
-          <Button
-            data-test="create-submit"
-            size="sm"
-            :loading="creating"
-            :disabled="draftInvalid"
-            @click="create"
-          >
-            {{ t("settings.team.ai.create") }}
-          </Button>
-          <Button size="sm" variant="ghost" @click="showCreate = false">
-            {{ t("settings.team.ai.cancel") }}
-          </Button>
-        </footer>
-      </section>
+    <p v-if="loading" class="tp-empty">{{ t("settings.team.ai.loading") }}</p>
+    <p v-else-if="providers.length === 0" class="tp-empty">
+      {{ t("settings.team.ai.empty") }}
+    </p>
 
-      <p v-if="loading" class="tp-empty">{{ t("settings.team.ai.loading") }}</p>
-      <p v-else-if="providers.length === 0" class="tp-empty">
-        {{ t("settings.team.ai.empty") }}
-      </p>
-
-      <div v-else class="tp-grid" data-test="provider-grid">
-        <TeamProviderCard
-          v-for="row in providers"
-          :key="row.id"
-          :provider-id="row.id"
-          :label="row.name"
-          :provider-type="row.provider_type"
-          :status="row.status"
-          :status-label="statusLabel(row.status)"
-          :has-credential="row.has_credential"
-          :credential-hint="row.credential_hint"
-          :last-tested-at="row.last_tested_at"
-          :form="cardFormOf(row)"
-          :saving="saving === row.id"
-          :testing="testing === row.id"
-          :test-message="testMessages[row.id]?.text ?? null"
-          :test-ok="testMessages[row.id]?.ok ?? false"
-          @save="form => save(row.id, form)"
-          @replace-key="key => replaceKey(row.id, key)"
-          @test="test(row.id)"
-          @enable="changeStatus(row.id, 'enable')"
-          @disable="changeStatus(row.id, 'disable')"
-          @archive="changeStatus(row.id, 'archive')"
-          @remove="remove(row.id)"
-        />
-      </div>
-    </SettingsAppFrame>
-  </div>
+    <div v-else class="tp-grid" data-test="provider-grid">
+      <TeamProviderCard
+        v-for="row in providers"
+        :key="row.id"
+        :provider-id="row.id"
+        :label="row.name"
+        :provider-type="row.provider_type"
+        :status="row.status"
+        :status-label="statusLabel(row.status)"
+        :has-credential="row.has_credential"
+        :credential-hint="row.credential_hint"
+        :last-tested-at="row.last_tested_at"
+        :form="cardFormOf(row)"
+        :saving="saving === row.id"
+        :testing="testing === row.id"
+        :test-message="testMessages[row.id]?.text ?? null"
+        :test-ok="testMessages[row.id]?.ok ?? false"
+        @save="form => save(row.id, form)"
+        @replace-key="key => replaceKey(row.id, key)"
+        @test="test(row.id)"
+        @enable="changeStatus(row.id, 'enable')"
+        @disable="changeStatus(row.id, 'disable')"
+        @archive="changeStatus(row.id, 'archive')"
+        @remove="remove(row.id)"
+      />
+    </div>
+  </PageFrame>
 </template>
 
 <style scoped>
-.settings-shell-pad {
-  padding: var(--space-5) var(--space-8);
-}
-
 .tp-note {
   margin: 0 0 var(--space-4);
   font-size: var(--ws-font-size-caption);
@@ -418,6 +517,22 @@ onMounted(load);
   margin: 0;
   font-size: var(--ws-font-size-body);
   color: var(--ws-text-secondary);
+}
+
+.tp-model-field {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.tp-model-field :deep(.ui-combobox__trigger) {
+  flex: 1 1 auto;
+}
+
+.tp-model-hint {
+  margin: var(--space-1) 0 0;
+  font-size: var(--ws-font-size-caption);
+  color: var(--ws-text-secondary);
+  line-height: 1.4;
 }
 
 .tp-grid {

@@ -1,9 +1,7 @@
 import type { Component } from "vue";
 import {
   Bell,
-  Cpu,
   GitBranch,
-  Mail,
   Monitor,
   Settings2,
   ShieldCheck,
@@ -45,21 +43,15 @@ export const PERSONAL_ICONS: Record<string, Component> = {
   notifications: Bell
 };
 
-/** 团队域应用侧栏条目（/settings/team/*）。设计目录 tenant 四类中仅
- *  AI 配置（Provider 管理，0041）先落地应用，其余条目随后端能力逐个迁入。 */
+/** 团队域应用侧栏条目（/settings/team/*）。成员、邀请、AI 配置均已迁走；
+ *  仅 General 保留（Owner 转移 / 基本信息 / 解散）。 */
 export const TEAM_APP_NAV: SettingsNavEntry[] = [
-  { id: "members", to: "/settings/team/members" },
-  { id: "invitations", to: "/settings/team/invitations" },
-  { id: "general", to: "/settings/team/general" },
-  { id: "aiProviders", to: "/settings/team/ai-providers" }
+  { id: "general", to: "/settings/team/general" }
 ];
 
 /** 团队域侧栏图标 */
 export const TEAM_ICONS: Record<string, Component> = {
-  members: Users,
-  invitations: Mail,
-  general: Settings2,
-  aiProviders: Cpu
+  general: Settings2
 };
 
 /** 项目域应用侧栏条目（/project/settings/*，V1.0 稿五节，2026-11-07）。

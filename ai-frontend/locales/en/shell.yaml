@@ -218,7 +218,7 @@ shell:
         devenv: Development Environment
         environments: Execution Environments
         adminSettings: Settings
-        aiProviders: AI Configuration (Models)
+        aiProviders: AI Models
         adminMembers: Members
         adminAnnouncements: Announcements
       sub:
@@ -341,6 +341,13 @@ shell:
       attach: Attach file
       attachPending: Attachments coming soon
       send: Send
+    chat:
+      title: AI Chat
+      focus: Focus
+      focusEnter: Enter focus mode — hide chat and context panel
+      focusExit: Exit focus mode — show chat and context panel
+      emptyTitle: No conversation yet
+      emptyHint: Start by asking a question or describing a task above.
     page:
       placeholderTitle: This page is under construction
       placeholderHint: The application shell is ready; business modules follow.

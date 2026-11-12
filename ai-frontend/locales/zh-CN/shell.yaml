@@ -218,7 +218,7 @@ shell:
         devenv: 开发环境
         environments: 执行环境
         adminSettings: 设置
-        aiProviders: AI 配置（模型服务）
+        aiProviders: AI模型
         adminMembers: 成员
         adminAnnouncements: 公告管理
       sub:
@@ -341,6 +341,13 @@ shell:
       attach: 附加文件
       attachPending: 附件能力建设中
       send: 发送
+    chat:
+      title: AI 对话
+      focus: 专注
+      focusEnter: 进入专注模式——隐藏对话与上下文栏
+      focusExit: 退出专注模式——显示对话与上下文栏
+      emptyTitle: 还没有会话
+      emptyHint: 在上方提问或描述任务开始。
     page:
       placeholderTitle: 该页面正在建设中
       placeholderHint: 应用壳已就绪，业务模块内容待接入。

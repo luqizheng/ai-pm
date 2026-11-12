@@ -46,7 +46,7 @@ function member(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function mountAt(path = "/settings/team/members") {
+async function mountAt(path = "/admin/members") {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: buildRoutes()

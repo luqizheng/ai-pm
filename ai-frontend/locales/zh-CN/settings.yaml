@@ -40,7 +40,7 @@ settings:
     runners: Runners
     development: 开发配置
     projectAi: AI 配置
-    aiProviders: AI 配置（模型服务）
+    aiProviders: AI模型
     invitations: 邀请
     general: 团队信息
   demo:
@@ -407,6 +407,8 @@ settings:
       created: Provider 已创建
       keyReplaced: Key 已替换
       addProvider: 新增 Provider
+      nameAutoHint: 留空时按「类型-模型」自动命名；内置类型自动预填 API 地址
+      refreshModels: 刷新模型列表
       create: 创建
       cancel: 取消
       save: 保存
@@ -438,9 +440,10 @@ settings:
         timeoutHint: 1–600
       providerTypes:
         openai: OpenAI
-        anthropic: Anthropic
         gemini: Google Gemini
         deepseek: DeepSeek
+        glm: 智谱 GLM
+        minimax: MiniMax
         openai_compatible: OpenAI 兼容（本地/自建）
       status:
         not_configured: 未配置

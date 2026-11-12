@@ -7,18 +7,13 @@ import { TEAM_APP_NAV, TEAM_ICONS } from "./nav";
 /**
  * 团队设置落地页（团队域独立页面，2026-11-11 用户裁决）。
  *
- * 四个类目卡（成员/邀请/基本信息/AI 配置）；入口 = 顶栏账户菜单
- * 「团队设置」。AI 配置（模型服务）为团队域独立页面，不属于
- * 个人账号设置——个人域「AI 偏好」已随同一裁决移除（应用侧；
- * 设计目录 /design/settings 保留五节展示）。
+ * 成员、邀请、AI 配置已迁走；仅 General 保留。入口 = 顶栏账户菜单
+ * 「团队设置」。
  */
 const { t } = useI18n();
 
 const categoryDescKeys: Record<string, string> = {
-  members: "settings.team.landing.membersDesc",
-  invitations: "settings.team.landing.invitationsDesc",
-  general: "settings.team.landing.generalDesc",
-  aiProviders: "settings.team.landing.aiDesc"
+  general: "settings.team.landing.generalDesc"
 };
 
 const breadcrumb = [{ label: t("settings.team.landing.title") }];

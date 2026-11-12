@@ -40,7 +40,7 @@ settings:
     runners: Runners
     development: Development
     projectAi: AI Configuration
-    aiProviders: AI Configuration (Models)
+    aiProviders: AI Models
     invitations: Invitations
     general: Team Info
   demo:
@@ -407,6 +407,8 @@ settings:
       created: Provider created
       keyReplaced: Key replaced
       addProvider: Add provider
+      nameAutoHint: Left empty, auto-named as "type-model"; built-in types prefill the API endpoint
+      refreshModels: Refresh model list
       create: Create
       cancel: Cancel
       save: Save
@@ -438,9 +440,10 @@ settings:
         timeoutHint: 1–600
       providerTypes:
         openai: OpenAI
-        anthropic: Anthropic
         gemini: Google Gemini
         deepseek: DeepSeek
+        glm: Zhipu GLM
+        minimax: MiniMax
         openai_compatible: OpenAI-compatible (local/self-hosted)
       status:
         not_configured: Not configured

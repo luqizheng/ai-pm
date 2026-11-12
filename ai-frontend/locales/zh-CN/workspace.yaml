@@ -147,9 +147,10 @@ workspace:
         timeout: 超时（秒）
       providerTypes:
         openai: OpenAI
-        anthropic: Anthropic
         gemini: Google Gemini
         deepseek: DeepSeek
+        glm: 智谱 GLM
+        minimax: MiniMax
         openai_compatible: OpenAI 兼容（本地/自建）
       status:
         not_configured: 未配置

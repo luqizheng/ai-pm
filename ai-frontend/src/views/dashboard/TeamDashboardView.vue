@@ -97,11 +97,11 @@ function createProject(): void {
 }
 
 function openMembers(): void {
-  void router.push("/settings/team/members");
+  void router.push("/admin/members");
 }
 
 function openInvitations(): void {
-  void router.push("/settings/team/invitations");
+  void router.push("/admin/members");
 }
 
 function openAiProviders(): void {
