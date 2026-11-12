@@ -33,6 +33,7 @@
   ],
   "license": "UNLICENSED",
   "dependencies": {
+    "@antv/g6": "^5.1.1",
     "@digua/contracts": "workspace:*",
     "@digua/http": "workspace:*",
     "audit-services": "1.10.1",

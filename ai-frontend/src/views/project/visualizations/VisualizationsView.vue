@@ -11,7 +11,7 @@
  * - 权限裁剪在服务端完成，前端只渲染返回内容；
  * - P0 产物为静态图，节点级交互经表格视图与溯源面板访问。
  */
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { PageFrame } from "@/components/shell";
@@ -22,7 +22,7 @@ import {
   listSlots,
   type VizSlotSummary
 } from "@/api/visualizations";
-import type { VizArtifact, VizNode } from "@/lib/viz/types";
+import type { VizArtifact, VizNode, VizSpec } from "@/lib/viz/types";
 import VizArtifactFrame from "@/components/viz/VizArtifactFrame.vue";
 import VizAiExplanation from "@/components/viz/VizAiExplanation.vue";
 import VizEmptyState from "@/components/viz/VizEmptyState.vue";
@@ -30,6 +30,21 @@ import VizFeedbackArea from "@/components/viz/VizFeedbackArea.vue";
 import VizSpecTable from "@/components/viz/VizSpecTable.vue";
 import VizTracePanel from "@/components/viz/VizTracePanel.vue";
 import VizVersionBar from "@/components/viz/VizVersionBar.vue";
+
+/**
+ * Live 交互图（P1）：defineAsyncComponent 惰性加载——LiveGraphView 内部
+ * 再动态 import G6 adapter，保证 @antv/g6 全量落在 lazy chunk（V-1）。
+ */
+const VizLiveGraphView = defineAsyncComponent(
+  () => import("@/components/viz/LiveGraphView.vue")
+);
+
+/** Live 视图清单（view_kind 与后端 `GET .../live/{view_kind}` 对齐）。 */
+const liveViewKinds = [
+  { kind: "trace-graph", labelKey: "viz.live.viewTrace" },
+  { kind: "task-dag", labelKey: "viz.live.viewDag" },
+  { kind: "architecture-graph", labelKey: "viz.live.viewArchitecture" }
+] as const;
 
 const { t } = useI18n();
 const route = useRoute();
@@ -41,6 +56,10 @@ const loading = ref(false);
 const failed = ref(false);
 const traceOpen = ref(false);
 const traceNode = ref<VizNode | null>(null);
+/** trace panel 上下文 spec（artifact 表格与 Live 图共用一个面板）。 */
+const traceSpec = ref<VizSpec | null>(null);
+/** Live 交互图当前 view_kind。 */
+const activeViewKind = ref<string>("trace-graph");
 const history = ref<VizArtifact[]>([]);
 const compareHint = ref<string | null>(null);
 const feedbackText = ref<string | null>(null);
@@ -130,9 +149,20 @@ function onFeedback(text: string): void {
   feedbackText.value = text;
 }
 
-function openTrace(node: VizNode): void {
+function openTrace(node: VizNode, spec: VizSpec): void {
   traceNode.value = node;
+  traceSpec.value = spec;
   traceOpen.value = true;
+}
+
+/** 产物表格（VizSpecTable 只发 node）→ 带上 artifact spec 开面板。 */
+function openArtifactTrace(node: VizNode): void {
+  if (artifact.value) openTrace(node, artifact.value.spec);
+}
+
+/** Live 交互图选中节点 → 带上 Live spec 开面板。 */
+function openLiveTrace(node: VizNode, spec: VizSpec): void {
+  openTrace(node, spec);
 }
 
 watch(projectId, () => {
@@ -167,6 +197,28 @@ onMounted(() => {
       </aside>
 
       <section class="viz-view__main">
+        <nav
+          class="viz-view__live-tabs"
+          data-testid="viz-live-tabs"
+          :aria-label="t('viz.live.title')"
+        >
+          <button
+            v-for="entry in liveViewKinds"
+            :key="entry.kind"
+            type="button"
+            class="viz-view__live-tab"
+            :class="{ 'viz-view__live-tab--on': activeViewKind === entry.kind }"
+            data-testid="viz-live-tab"
+            @click="activeViewKind = entry.kind"
+          >
+            {{ t(entry.labelKey) }}
+          </button>
+        </nav>
+        <VizLiveGraphView
+          :project-id="projectId"
+          :view-kind="activeViewKind"
+          @select-node="openLiveTrace"
+        />
         <template v-if="artifact">
           <VizVersionBar
             :artifact="artifact"
@@ -189,7 +241,10 @@ onMounted(() => {
             @reject="onFeedback(t('viz.artifact.rejected'))"
             @regenerate="onFeedback(t('viz.stale.regenerate'))"
           />
-          <VizSpecTable :spec="artifact.spec" @select-node="openTrace" />
+          <VizSpecTable
+            :spec="artifact.spec"
+            @select-node="openArtifactTrace"
+          />
           <VizFeedbackArea @feedback="onFeedback" />
           <p
             v-if="feedbackText"
@@ -204,9 +259,9 @@ onMounted(() => {
     </div>
 
     <VizTracePanel
-      v-if="artifact"
+      v-if="traceSpec"
       :open="traceOpen"
-      :spec="artifact.spec"
+      :spec="traceSpec"
       :node="traceNode"
       @update:open="traceOpen = $event"
     />
@@ -254,6 +309,29 @@ onMounted(() => {
   flex-direction: column;
   gap: var(--space-4);
   min-width: 0;
+}
+
+.viz-view__live-tabs {
+  display: inline-flex;
+  gap: var(--space-1);
+  border: var(--border-1) solid var(--border-default);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  width: fit-content;
+}
+
+.viz-view__live-tab {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-micro);
+  color: var(--text-secondary);
+  background: var(--surface-base);
+  border: none;
+  cursor: pointer;
+}
+
+.viz-view__live-tab--on {
+  color: var(--accent-contrast-text);
+  background: var(--accent);
 }
 
 .viz-view__muted {
