@@ -1,0 +1,27 @@
+[
+  {
+    "at": "nodes[1].id",
+    "code": "E_SPEC_DUPLICATE_NODE_ID",
+    "severity": "blocker"
+  },
+  {
+    "at": "nodes[1].label",
+    "code": "W_SPEC_DUPLICATE_LABEL",
+    "severity": "warning"
+  },
+  {
+    "at": "nodes[0].id",
+    "code": "W_SPEC_NODE_WITHOUT_EDGE",
+    "severity": "warning"
+  },
+  {
+    "at": "nodes[1].id",
+    "code": "W_SPEC_NODE_WITHOUT_EDGE",
+    "severity": "warning"
+  },
+  {
+    "at": "view.lenses",
+    "code": "W_SPEC_LENS_UNMATCHED",
+    "severity": "warning"
+  }
+]

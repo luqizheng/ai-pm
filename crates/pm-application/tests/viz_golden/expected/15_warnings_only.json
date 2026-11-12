@@ -1,0 +1,22 @@
+[
+  {
+    "at": "nodes[0].id",
+    "code": "W_SPEC_NODE_WITHOUT_EDGE",
+    "severity": "warning"
+  },
+  {
+    "at": "view.focus[0]",
+    "code": "W_SPEC_FOCUS_UNMATCHED",
+    "severity": "warning"
+  },
+  {
+    "at": "view.lenses",
+    "code": "W_SPEC_LENS_UNMATCHED",
+    "severity": "warning"
+  },
+  {
+    "at": "view.layout_hint",
+    "code": "W_SPEC_LAYOUT_HINT_CONFLICT",
+    "severity": "warning"
+  }
+]

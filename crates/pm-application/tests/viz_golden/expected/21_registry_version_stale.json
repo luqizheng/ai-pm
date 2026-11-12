@@ -1,0 +1,17 @@
+[
+  {
+    "at": "meta.registry_version",
+    "code": "I_SPEC_REGISTRY_VERSION_STALE",
+    "severity": "info"
+  },
+  {
+    "at": "nodes[0].id",
+    "code": "W_SPEC_NODE_WITHOUT_EDGE",
+    "severity": "warning"
+  },
+  {
+    "at": "view.lenses",
+    "code": "W_SPEC_LENS_UNMATCHED",
+    "severity": "warning"
+  }
+]

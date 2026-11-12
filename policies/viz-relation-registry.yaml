@@ -1,0 +1,199 @@
+# Visualization Relation Registry —— 首批关系词表
+#
+# 定位（ADR-VIZ-004）：**受控映射与校验机制**，不是新的业务关系权威。
+# 本文件声明「Visualization 可以识别和投影哪些关系」，并指向来源领域的正式定义
+# （业务表或领域注册表）。它不新建、不修改、不替代任何业务关系。
+#
+# 治理规则：
+# - 关系键为命名空间受控字符串 `domain.relation`。
+# - 状态：draft（未会签，**不可投影**）/ active（已会签启用）/ deprecated（曾启用后
+#   被替代，保留历史解释）/ rejected（会签否决，从未启用）。**未会签 ≠ 默认允许。**
+# - source 用稳定的 `schema.table.column` 标识；迁移文件行号仅作审查依据，
+#   不作为运行时来源标识。
+# - 反向视图别名（view_alias + reverse_view_of）不新增业务事实、不参与底层关系
+#   计数；同一底层事实不得同时产出两条边。
+# - 合成关系（synthetic）必须 `business_fact: false`。
+#
+# ⚠️ 状态说明：首批词表已通过架构预审（17 号 V1.2），但**领域 Owner 会签尚未完成**。
+#    因此本文件中所有关系当前均为 `status: draft` —— 会签完成前不可投影
+#    （校验器对 draft 关系产出 E_SPEC_RELATION_NOT_APPROVED 阻断）。
+#    会签完成后由 Owner 将对应条目改为 `active` 并补 `signoff_date` / `signoff_record`。
+
+version: "1"
+
+relations:
+  # ── Design 域 ───────────────────────────────────────────────────────────
+  - key: design.covers_requirement
+    status: draft
+    domain: design
+    owner_role: design-owner
+    source: design.design_requirement
+    source_type: design_revision
+    target_type: requirement_revision
+    direction: directed
+    semantics: "Design Revision 覆盖、实现或约束某一特定 Requirement Revision。"
+    governance_level: L2
+    introduced_in: "1.0"
+
+  - key: design.decided_by_adr
+    status: draft
+    domain: design
+    owner_role: design-owner
+    source: design.adr_design_revision
+    source_type: design_revision
+    target_type: adr_revision
+    direction: directed
+    semantics: "某个 Design Revision 受到特定 ADR Revision 的决策约束。"
+    governance_level: L2
+    introduced_in: "1.0"
+
+  - key: adr.covers_requirement
+    status: draft
+    domain: design
+    owner_role: design-owner
+    source: design.adr_requirement
+    source_type: adr_revision
+    target_type: requirement_revision
+    direction: directed
+    semantics: "某个 ADR Revision 覆盖、约束或影响特定 Requirement Revision。"
+    governance_level: L2
+    introduced_in: "1.0"
+
+  # ── Delivery 域 ────────────────────────────────────────────────────────
+  - key: task.implements_requirement
+    status: draft
+    domain: delivery
+    owner_role: delivery-owner
+    source: delivery.task_requirement
+    source_type: task
+    target_type: requirement_revision
+    direction: directed
+    semantics: "Task 被正式关联为实现某一特定 Requirement Revision 的交付任务。"
+    governance_level: L2
+    introduced_in: "1.0"
+
+  - key: task.depends_on_task
+    status: draft
+    domain: delivery
+    owner_role: delivery-owner
+    source: delivery.task_dependency
+    source_type: task
+    target_type: task
+    direction: directed
+    semantics: >-
+      Task A 依赖 Task B，表示 B 是 A 的前置任务。
+      Registry 语义方向为 dependent → prerequisite（即 task_id → depends_on_task_id）；
+      Task DAG 的执行流向（prerequisite → dependent）由既有协作图边方向承载，
+      属 presentation transform，不改变本语义方向。
+    governance_level: L2
+    introduced_in: "1.0"
+
+  # ── PC 域（投影入口，词汇表由 PC 域唯一维护）────────────────────────────
+  - key: pc.related
+    status: draft
+    domain: pc
+    owner_role: pc-owner
+    source: pc.relationship
+    source_type: pc_object
+    target_type: pc_object
+    direction: directed
+    semantics: >-
+      PC 对象之间存在由 PC 领域关系类型注册表定义的关系。
+      Visualization 只登记投影入口，不复制 PC 的关系词汇表。
+    governance_level: L2
+    introduced_in: "1.0"
+    type_key_source: pc.relationship_type
+
+  # ── KB 域 ──────────────────────────────────────────────────────────────
+  - key: kb.memory_supported_by_source
+    status: draft
+    domain: kb
+    owner_role: kb-owner
+    source: kb.memory_ref
+    source_type: memory
+    target_type: source
+    direction: directed
+    semantics: >-
+      某条 Memory 以某条原始资料（kb.source）为来源依据。
+      只投影 ref_role='evidence' 的引用；subject 角色（按 Task/Requirement 检索的锚）
+      方向相反，不作为独立边重复展示。
+    governance_level: L2
+    introduced_in: "1.0"
+    ref_role_filter: evidence
+    cardinality: one_to_many
+
+  # ── Visualization 域（合成关系）─────────────────────────────────────────
+  - key: derived_trace
+    status: draft
+    domain: visualization
+    owner_role: architecture-owner
+    source: vizspec
+    source_type: "*"
+    target_type: "*"
+    direction: directed
+    semantics: >-
+      Visualization 根据已存在的直接关系推导出的间接追踪关系。
+      不是业务领域持久化的直接关系，不代表两端之间存在直接业务绑定。
+    governance_level: L2
+    introduced_in: "1.0"
+    synthetic: true
+    business_fact: false
+
+  - key: requirement.refines_design
+    status: draft
+    domain: design
+    owner_role: design-owner
+    source: design.design_requirement
+    source_type: requirement_revision
+    target_type: design_revision
+    direction: directed
+    semantics: >-
+      requirement.refines_design 是 design.covers_requirement 的反向查询视图，
+      不新增独立业务关系事实；同一底层事实不得同时产出两条边。
+    governance_level: L2
+    introduced_in: "1.0"
+    view_alias: true
+    reverse_view_of: design.covers_requirement
+
+node_kinds:
+  - key: requirement_revision
+    semantics: "需求修订"
+    domain: delivery
+    owner_role: delivery-owner
+    status: draft
+
+  - key: design_revision
+    semantics: "设计修订"
+    domain: design
+    owner_role: design-owner
+    status: draft
+
+  - key: adr_revision
+    semantics: "ADR 修订"
+    domain: design
+    owner_role: design-owner
+    status: draft
+
+  - key: task
+    semantics: "任务"
+    domain: delivery
+    owner_role: delivery-owner
+    status: draft
+
+  - key: pc_object
+    semantics: "产品认知对象"
+    domain: pc
+    owner_role: pc-owner
+    status: draft
+
+  - key: memory
+    semantics: "知识记忆"
+    domain: kb
+    owner_role: kb-owner
+    status: draft
+
+  - key: source
+    semantics: "原始资料（kb.source）"
+    domain: kb
+    owner_role: kb-owner
+    status: draft

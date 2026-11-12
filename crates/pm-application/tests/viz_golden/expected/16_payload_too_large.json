@@ -1,0 +1,17 @@
+[
+  {
+    "at": "meta.budget",
+    "code": "E_SPEC_BUDGET_EXCEEDED",
+    "severity": "blocker"
+  },
+  {
+    "at": "meta",
+    "code": "E_SPEC_PAYLOAD_TOO_LARGE",
+    "severity": "blocker"
+  },
+  {
+    "at": "view.lenses",
+    "code": "W_SPEC_LENS_UNMATCHED",
+    "severity": "warning"
+  }
+]

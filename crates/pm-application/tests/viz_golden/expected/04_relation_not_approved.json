@@ -1,0 +1,12 @@
+[
+  {
+    "at": "edges[0].relation",
+    "code": "E_SPEC_RELATION_NOT_APPROVED",
+    "severity": "blocker"
+  },
+  {
+    "at": "view.lenses",
+    "code": "W_SPEC_LENS_UNMATCHED",
+    "severity": "warning"
+  }
+]

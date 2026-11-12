@@ -1,0 +1,12 @@
+[
+  {
+    "at": "edges[0].to",
+    "code": "E_SPEC_NATURE_MISMATCH",
+    "severity": "blocker"
+  },
+  {
+    "at": "view.lenses",
+    "code": "W_SPEC_LENS_UNMATCHED",
+    "severity": "warning"
+  }
+]

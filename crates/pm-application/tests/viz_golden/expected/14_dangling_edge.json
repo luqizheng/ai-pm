@@ -1,0 +1,12 @@
+[
+  {
+    "at": "edges[0].to",
+    "code": "W_SPEC_DANGLING_EDGE",
+    "severity": "warning"
+  },
+  {
+    "at": "view.lenses",
+    "code": "W_SPEC_LENS_UNMATCHED",
+    "severity": "warning"
+  }
+]

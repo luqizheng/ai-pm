@@ -1,0 +1,651 @@
+{
+  "spec_version": "1.0",
+  "slot_key": "golden",
+  "view": {
+    "kind": "trace-graph",
+    "focus": [],
+    "lenses": []
+  },
+  "nodes": [
+    {
+      "id": "n0",
+      "label": "节点 n0",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n0"
+      }
+    },
+    {
+      "id": "n1",
+      "label": "节点 n1",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n1"
+      }
+    },
+    {
+      "id": "n2",
+      "label": "节点 n2",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n2"
+      }
+    },
+    {
+      "id": "n3",
+      "label": "节点 n3",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n3"
+      }
+    },
+    {
+      "id": "n4",
+      "label": "节点 n4",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n4"
+      }
+    },
+    {
+      "id": "n5",
+      "label": "节点 n5",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n5"
+      }
+    },
+    {
+      "id": "n6",
+      "label": "节点 n6",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n6"
+      }
+    },
+    {
+      "id": "n7",
+      "label": "节点 n7",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n7"
+      }
+    },
+    {
+      "id": "n8",
+      "label": "节点 n8",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n8"
+      }
+    },
+    {
+      "id": "n9",
+      "label": "节点 n9",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n9"
+      }
+    },
+    {
+      "id": "n10",
+      "label": "节点 n10",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n10"
+      }
+    },
+    {
+      "id": "n11",
+      "label": "节点 n11",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n11"
+      }
+    },
+    {
+      "id": "n12",
+      "label": "节点 n12",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n12"
+      }
+    },
+    {
+      "id": "n13",
+      "label": "节点 n13",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n13"
+      }
+    },
+    {
+      "id": "n14",
+      "label": "节点 n14",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n14"
+      }
+    },
+    {
+      "id": "n15",
+      "label": "节点 n15",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n15"
+      }
+    },
+    {
+      "id": "n16",
+      "label": "节点 n16",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n16"
+      }
+    },
+    {
+      "id": "n17",
+      "label": "节点 n17",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n17"
+      }
+    },
+    {
+      "id": "n18",
+      "label": "节点 n18",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n18"
+      }
+    },
+    {
+      "id": "n19",
+      "label": "节点 n19",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n19"
+      }
+    },
+    {
+      "id": "n20",
+      "label": "节点 n20",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n20"
+      }
+    },
+    {
+      "id": "n21",
+      "label": "节点 n21",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n21"
+      }
+    },
+    {
+      "id": "n22",
+      "label": "节点 n22",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n22"
+      }
+    },
+    {
+      "id": "n23",
+      "label": "节点 n23",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n23"
+      }
+    },
+    {
+      "id": "n24",
+      "label": "节点 n24",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n24"
+      }
+    },
+    {
+      "id": "n25",
+      "label": "节点 n25",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n25"
+      }
+    },
+    {
+      "id": "n26",
+      "label": "节点 n26",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n26"
+      }
+    },
+    {
+      "id": "n27",
+      "label": "节点 n27",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n27"
+      }
+    },
+    {
+      "id": "n28",
+      "label": "节点 n28",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n28"
+      }
+    },
+    {
+      "id": "n29",
+      "label": "节点 n29",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n29"
+      }
+    },
+    {
+      "id": "n30",
+      "label": "节点 n30",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n30"
+      }
+    },
+    {
+      "id": "n31",
+      "label": "节点 n31",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n31"
+      }
+    },
+    {
+      "id": "n32",
+      "label": "节点 n32",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n32"
+      }
+    },
+    {
+      "id": "n33",
+      "label": "节点 n33",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n33"
+      }
+    },
+    {
+      "id": "n34",
+      "label": "节点 n34",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n34"
+      }
+    },
+    {
+      "id": "n35",
+      "label": "节点 n35",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n35"
+      }
+    },
+    {
+      "id": "n36",
+      "label": "节点 n36",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n36"
+      }
+    },
+    {
+      "id": "n37",
+      "label": "节点 n37",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n37"
+      }
+    },
+    {
+      "id": "n38",
+      "label": "节点 n38",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n38"
+      }
+    },
+    {
+      "id": "n39",
+      "label": "节点 n39",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n39"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "from": "n0",
+      "to": "n1",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e1",
+      "from": "n1",
+      "to": "n2",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e2",
+      "from": "n2",
+      "to": "n3",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e3",
+      "from": "n3",
+      "to": "n4",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e4",
+      "from": "n4",
+      "to": "n5",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e5",
+      "from": "n5",
+      "to": "n6",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e6",
+      "from": "n6",
+      "to": "n7",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e7",
+      "from": "n7",
+      "to": "n8",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e8",
+      "from": "n8",
+      "to": "n9",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e9",
+      "from": "n9",
+      "to": "n10",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e10",
+      "from": "n10",
+      "to": "n11",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e11",
+      "from": "n11",
+      "to": "n12",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e12",
+      "from": "n12",
+      "to": "n13",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e13",
+      "from": "n13",
+      "to": "n14",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e14",
+      "from": "n14",
+      "to": "n15",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e15",
+      "from": "n15",
+      "to": "n16",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e16",
+      "from": "n16",
+      "to": "n17",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e17",
+      "from": "n17",
+      "to": "n18",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e18",
+      "from": "n18",
+      "to": "n19",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e19",
+      "from": "n19",
+      "to": "n20",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e20",
+      "from": "n20",
+      "to": "n21",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e21",
+      "from": "n21",
+      "to": "n22",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e22",
+      "from": "n22",
+      "to": "n23",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e23",
+      "from": "n23",
+      "to": "n24",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e24",
+      "from": "n24",
+      "to": "n25",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e25",
+      "from": "n25",
+      "to": "n26",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e26",
+      "from": "n26",
+      "to": "n27",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e27",
+      "from": "n27",
+      "to": "n28",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e28",
+      "from": "n28",
+      "to": "n29",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e29",
+      "from": "n29",
+      "to": "n30",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e30",
+      "from": "n30",
+      "to": "n31",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e31",
+      "from": "n31",
+      "to": "n32",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e32",
+      "from": "n32",
+      "to": "n33",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e33",
+      "from": "n33",
+      "to": "n34",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e34",
+      "from": "n34",
+      "to": "n35",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e35",
+      "from": "n35",
+      "to": "n36",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e36",
+      "from": "n36",
+      "to": "n37",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e37",
+      "from": "n37",
+      "to": "n38",
+      "relation": "test.peer"
+    },
+    {
+      "id": "e38",
+      "from": "n38",
+      "to": "n39",
+      "relation": "test.peer"
+    }
+  ],
+  "meta": {
+    "budget": "strict",
+    "registry_version": "1"
+  }
+}

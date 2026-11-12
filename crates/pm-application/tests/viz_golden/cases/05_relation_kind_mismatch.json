@@ -1,0 +1,43 @@
+{
+  "spec_version": "1.0",
+  "slot_key": "golden",
+  "view": {
+    "kind": "trace-graph",
+    "focus": [],
+    "lenses": []
+  },
+  "nodes": [
+    {
+      "id": "n1",
+      "label": "节点 n1",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n1"
+      }
+    },
+    {
+      "id": "n2",
+      "label": "节点 n2",
+      "kind": "design_revision",
+      "source_ref": {
+        "domain": "design",
+        "type": "design_revision",
+        "id": "n2"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "n1",
+      "to": "n2",
+      "relation": "design.covers_requirement"
+    }
+  ],
+  "meta": {
+    "budget": "balanced",
+    "registry_version": "1"
+  }
+}

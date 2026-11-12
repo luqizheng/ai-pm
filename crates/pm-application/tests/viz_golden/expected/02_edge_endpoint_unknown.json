@@ -1,0 +1,12 @@
+[
+  {
+    "at": "edges[0].to",
+    "code": "E_SPEC_EDGE_ENDPOINT_UNKNOWN",
+    "severity": "blocker"
+  },
+  {
+    "at": "view.lenses",
+    "code": "W_SPEC_LENS_UNMATCHED",
+    "severity": "warning"
+  }
+]

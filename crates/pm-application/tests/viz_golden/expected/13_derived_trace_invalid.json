@@ -1,0 +1,12 @@
+[
+  {
+    "at": "edges[0].derived",
+    "code": "E_SPEC_DERIVED_TRACE_INVALID",
+    "severity": "blocker"
+  },
+  {
+    "at": "view.lenses",
+    "code": "W_SPEC_LENS_UNMATCHED",
+    "severity": "warning"
+  }
+]

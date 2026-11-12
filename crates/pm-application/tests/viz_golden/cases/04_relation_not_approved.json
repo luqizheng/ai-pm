@@ -1,0 +1,43 @@
+{
+  "spec_version": "1.0",
+  "slot_key": "golden",
+  "view": {
+    "kind": "trace-graph",
+    "focus": [],
+    "lenses": []
+  },
+  "nodes": [
+    {
+      "id": "t1",
+      "label": "节点 t1",
+      "kind": "task",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "task",
+        "id": "t1"
+      }
+    },
+    {
+      "id": "t2",
+      "label": "节点 t2",
+      "kind": "task",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "task",
+        "id": "t2"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "t1",
+      "to": "t2",
+      "relation": "task.depends_on_task"
+    }
+  ],
+  "meta": {
+    "budget": "balanced",
+    "registry_version": "1"
+  }
+}

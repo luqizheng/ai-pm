@@ -1,0 +1,21 @@
+{
+  "spec_version": "1.0",
+  "slot_key": "golden",
+  "view": {
+    "kind": "trace-graph",
+    "focus": [],
+    "lenses": []
+  },
+  "nodes": [
+    {
+      "id": "n1",
+      "label": "节点 n1",
+      "kind": "requirement_revision"
+    }
+  ],
+  "edges": [],
+  "meta": {
+    "budget": "balanced",
+    "registry_version": "1"
+  }
+}

@@ -1,0 +1,17 @@
+[
+  {
+    "at": "edges[0].from",
+    "code": "E_SPEC_RELATION_KIND_MISMATCH",
+    "severity": "blocker"
+  },
+  {
+    "at": "edges[0].to",
+    "code": "E_SPEC_RELATION_KIND_MISMATCH",
+    "severity": "blocker"
+  },
+  {
+    "at": "view.lenses",
+    "code": "W_SPEC_LENS_UNMATCHED",
+    "severity": "warning"
+  }
+]

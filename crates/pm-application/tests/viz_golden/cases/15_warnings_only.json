@@ -1,0 +1,29 @@
+{
+  "spec_version": "1.0",
+  "slot_key": "golden",
+  "view": {
+    "kind": "trace-graph",
+    "focus": [
+      "ghost"
+    ],
+    "lenses": [],
+    "layout_hint": "weird-hint"
+  },
+  "nodes": [
+    {
+      "id": "n1",
+      "label": "节点 n1",
+      "kind": "requirement_revision",
+      "source_ref": {
+        "domain": "delivery",
+        "type": "requirement",
+        "id": "n1"
+      }
+    }
+  ],
+  "edges": [],
+  "meta": {
+    "budget": "balanced",
+    "registry_version": "1"
+  }
+}

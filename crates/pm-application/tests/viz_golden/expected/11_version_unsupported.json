@@ -1,0 +1,17 @@
+[
+  {
+    "at": "spec_version",
+    "code": "E_SPEC_VERSION_UNSUPPORTED",
+    "severity": "blocker"
+  },
+  {
+    "at": "nodes[0].id",
+    "code": "W_SPEC_NODE_WITHOUT_EDGE",
+    "severity": "warning"
+  },
+  {
+    "at": "view.lenses",
+    "code": "W_SPEC_LENS_UNMATCHED",
+    "severity": "warning"
+  }
+]

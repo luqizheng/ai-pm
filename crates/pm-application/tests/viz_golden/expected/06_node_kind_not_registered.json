@@ -1,0 +1,17 @@
+[
+  {
+    "at": "nodes[0].kind",
+    "code": "E_SPEC_NODE_KIND_NOT_REGISTERED",
+    "severity": "blocker"
+  },
+  {
+    "at": "nodes[0].id",
+    "code": "W_SPEC_NODE_WITHOUT_EDGE",
+    "severity": "warning"
+  },
+  {
+    "at": "view.lenses",
+    "code": "W_SPEC_LENS_UNMATCHED",
+    "severity": "warning"
+  }
+]

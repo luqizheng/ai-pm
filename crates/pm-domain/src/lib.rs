@@ -16,6 +16,7 @@ pub mod task;
 pub mod task_run;
 pub mod task_transition;
 pub mod tenant;
+pub mod visualization;
 pub mod waiting;
 
 pub use ai_role::{AiRoleCategory, AI_ROLE_TEMPLATE_SEED_KEYS, AI_ROLE_UNDISABLEABLE_KEYS};
@@ -36,4 +37,8 @@ pub use task_transition::{
     allowed_edges, validate_transition, SupersedeIntent, TransitionError, TransitionInput,
 };
 pub use tenant::{TenantRole, SYSTEM_TENANT};
+pub use visualization::{
+    validate, DerivedTrace, Nature, RelationRegistry, RelationStatus, Severity, SourceRef, VizSpec,
+    VizProblem, ValidationReport,
+};
 pub use waiting::{WaitingContext, WaitingReason};

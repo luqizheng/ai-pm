@@ -86,6 +86,7 @@ pub mod task_repository_binding;
 pub mod team_llm;
 pub mod team_llm_catalog;
 pub mod team_onboarding;
+pub mod visualization;
 pub mod worker_command;
 
 pub use acceptance_overview::{
