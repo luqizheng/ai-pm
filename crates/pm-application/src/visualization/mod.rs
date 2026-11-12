@@ -11,6 +11,7 @@ pub mod adapter_contract;
 pub mod artifact_safety;
 pub mod artifact_service;
 pub mod projection;
+pub mod queries;
 pub mod registry_loader;
 pub mod resolver;
 pub mod source_hash;
@@ -22,6 +23,10 @@ pub use artifact_safety::{inspect_svg, SafetyViolation, SvgSafetyReport};
 pub use artifact_service::{
     create_draft, decide_approval, get_artifact, mark_stale, request_approval, ArtifactRecord,
     VizError,
+};
+pub use queries::{
+    approval_project, count_artifacts, list_artifacts_page, list_slot_summaries,
+    ArtifactFilter, ArtifactListRow, SlotSummaryRow,
 };
 pub use resolver::{
     probe_visible_objects, CallerScope, InMemoryObjectResolver, SourceKey,

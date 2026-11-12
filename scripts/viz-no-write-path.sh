@@ -47,7 +47,11 @@ for dir in "${VIZ_DIRS[@]}"; do
   fi
   while IFS= read -r file; do
     hits=$(grep -nE "^[[:space:]]*(pub )?use .*(${FORBIDDEN_PATTERN})" "$file" 2>/dev/null || true)
+    # 排除注释行
     hits=$(printf '%s\n' "$hits" | grep -vE "^\s*[0-9]+:\s*//" || true)
+    # 豁免：pm_write::audit 是横切基础设施（governance.audit_log 写入助手，
+    # 全仓统一可观测性要求），不是业务领域写路径——否则可视化无法落审计。
+    hits=$(printf '%s\n' "$hits" | grep -v "pm_write::audit" || true)
     if [ -n "$hits" ]; then
       while IFS= read -r line; do
         [ -z "$line" ] && continue
@@ -59,17 +63,18 @@ for dir in "${VIZ_DIRS[@]}"; do
   done < <(find "$dir" -type f -name '*.rs' | sort)
 done
 
-# 附加检查：可视化模块不得出现 SQL 写语句（INSERT/UPDATE/DELETE）——
-# 它是只读投影层，写业务表一律越界。
+# 附加检查：SQL 写语句只允许落在 viz.*（自身基础设施数据，ADR V1.0.1 §2.1），
+# 触及任何**业务 schema**（delivery/design/pc/kb/ai/plan/core/governance）即越界。
+# 注意：仅禁"写"（INSERT/UPDATE/DELETE），SELECT 不受限——投影层天然只读业务表。
 for dir in "${VIZ_DIRS[@]}"; do
   [ -d "$dir" ] || continue
   while IFS= read -r file; do
-    hits=$(grep -nEi '\b(INSERT[[:space:]]+INTO|UPDATE[[:space:]]+[a-z_]+\.|DELETE[[:space:]]+FROM)\b' "$file" 2>/dev/null || true)
+    hits=$(grep -nEi '\b(INSERT[[:space:]]+INTO[[:space:]]+(delivery|design|pc|kb|ai|plan|core|governance)\.|UPDATE[[:space:]]+(delivery|design|pc|kb|ai|plan|core|governance)\.|DELETE[[:space:]]+FROM[[:space:]]+(delivery|design|pc|kb|ai|plan|core|governance)\.)' "$file" 2>/dev/null || true)
     if [ -n "$hits" ]; then
       while IFS= read -r line; do
         [ -z "$line" ] && continue
         echo "[viz-no-write-path] $file:$line"
-        echo "    ↳ 可视化模块内出现 SQL 写语句——可视化是只读投影层"
+        echo "    ↳ 可视化模块写业务 schema——零业务领域写路径（AC-16）"
         VIOLATIONS=$((VIOLATIONS + 1))
       done <<< "$hits"
     fi

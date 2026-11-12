@@ -29,6 +29,9 @@ use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::{ensure_trusted_context, paging, require_project_visible, ApiError, ApiResult};
 use pm_application::actor::AuditActor;
+use pm_application::visualization::queries::{
+    approval_project, count_artifacts, list_artifacts_page, list_slot_summaries, ArtifactFilter,
+};
 use pm_application::visualization::artifact_service::{
     create_draft, decide_approval, get_artifact as svc_get_artifact, mark_stale, request_approval,
     CreateDraftInput, VizError,
@@ -107,19 +110,7 @@ async fn slots(
 ) -> ApiResult<Json<serde_json::Value>> {
     require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await?;
 
-    // 每槽位取最新一条（按 created_at DESC 取 top-1）；view_kind 从 spec 读。
-    let rows: Vec<SlotSummaryRow> = sqlx::query_as(
-        "SELECT DISTINCT ON (a.slot_key) a.slot_key, \
-                COALESCE(a.spec->'view'->>'kind', 'unknown') AS view_kind, \
-                a.state, a.nature, a.version_no, a.id AS artifact_id, a.updated_at \
-           FROM viz.artifact a \
-          WHERE a.project_id = $1 AND a.tenant_id = $2 \
-          ORDER BY a.slot_key, a.created_at DESC",
-    )
-    .bind(project_id)
-    .bind(caller.tenant_id)
-    .fetch_all(&state.pool)
-    .await?;
+    let rows = list_slot_summaries(&state.pool, project_id, caller.tenant_id).await?;
 
     Ok(Json(serde_json::json!({ "items": rows })))
 }
@@ -158,55 +149,14 @@ async fn list_artifacts(
     let slot_key = params.get("slot_key").filter(|s| !s.trim().is_empty());
     let artifact_state = params.get("state").filter(|s| !s.trim().is_empty());
 
-    // 计数 + 页数据（同一组过滤）
-    let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM viz.artifact \
-          WHERE project_id = $1 AND tenant_id = $2 \
-            AND ($3::text IS NULL OR slot_key = $3) \
-            AND ($4::text IS NULL OR state = $4)",
-    )
-    .bind(project_id)
-    .bind(caller.tenant_id)
-    .bind(slot_key)
-    .bind(artifact_state)
-    .fetch_one(&state.pool)
-    .await?;
-
-    #[derive(Debug, sqlx::FromRow, serde::Serialize)]
-    struct ArtifactRow {
-        id: Uuid,
-        tenant_id: Uuid,
-        project_id: Uuid,
-        slot_key: String,
-        version_no: i32,
-        state: String,
-        nature: String,
-        spec: serde_json::Value,
-        spec_hash: String,
-        source_hash: String,
-        renderer_id: Option<String>,
-        renderer_version: Option<String>,
-        created_by: Uuid,
-        created_at: chrono::DateTime<chrono::Utc>,
-    }
-    let items: Vec<ArtifactRow> = sqlx::query_as(
-        "SELECT id, tenant_id, project_id, slot_key, version_no, state, nature, \
-                spec, spec_hash, source_hash, renderer_id, renderer_version, \
-                created_by, created_at \
-           FROM viz.artifact \
-          WHERE project_id = $1 AND tenant_id = $2 \
-            AND ($3::text IS NULL OR slot_key = $3) \
-            AND ($4::text IS NULL OR state = $4) \
-          ORDER BY created_at DESC LIMIT $5 OFFSET $6",
-    )
-    .bind(project_id)
-    .bind(caller.tenant_id)
-    .bind(slot_key)
-    .bind(artifact_state)
-    .bind(page.size)
-    .bind(page.offset)
-    .fetch_all(&state.pool)
-    .await?;
+    let filter = ArtifactFilter {
+        slot_key: slot_key.map(|s| s.as_str()),
+        state: artifact_state.map(|s| s.as_str()),
+        limit: page.size,
+        offset: page.offset,
+    };
+    let total = count_artifacts(&state.pool, project_id, caller.tenant_id, &filter).await?;
+    let items = list_artifacts_page(&state.pool, project_id, caller.tenant_id, &filter).await?;
 
     Ok(Json(serde_json::json!({
         "items": items,
@@ -303,13 +253,9 @@ async fn approval_decision(
     Json(body): Json<DecisionBody>,
 ) -> ApiResult<StatusCode> {
     // approval → project → 成员可见性
-    let project_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT project_id FROM viz.approval WHERE id = $1",
-    )
-    .bind(approval_id)
-    .fetch_optional(&state.pool)
-    .await?;
-    let project_id = project_id.ok_or(ApiError::NotFound("visualization approval not found"))?;
+    let project_id = approval_project(&state.pool, approval_id)
+        .await?
+        .ok_or(ApiError::NotFound("visualization approval not found"))?;
     require_project_visible(&state.pool, project_id, caller.tenant_id, caller.principal_id).await?;
     ensure_trusted_context(&caller)?;
 
