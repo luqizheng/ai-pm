@@ -157,6 +157,12 @@ PmListRepo / BaselineRepo / CognitionRepo / IdentityRepo / MemberRepo / RunRepo 
 
 **守卫战果（批 B 累计）**：审计守卫 ×2（intake 路径、tenant_members 路径——均为拆迁后清单随迁）、ADR-06a 容器守卫 ×1（documents → repo_guard_query）。
 
+**✅ 批 D 完成收窄版（2026-11-12，d9b37e22）**：体检报告的「6 处手写 HTTP」实测仅 2 处残留（writeback/router/retrieval 此前已复用 conversation_model::complete）。抽 complete_raw（单次无重试，temperature 参数化）为全 crate HTTP 单源，repo/snapshot 两处迁移（temperature=0 保持原确定性值；各自 ModelError 别名 match 翻译）；complete 在其外包 retry 循环。TOTAL_PROMPT_CHARS 数值单源化；两份 DROP_ORDER 语义对齐由新测试锁定。pm-ai 171 用例全绿。
+
+**✅ 批 G 完成（e0e4f596）**：compose 两服务 build 段（引用不存在的 Dockerfile）移除，services/README.md 澄清定位。compose config 语法验证通过。
+
+**批 E（错误收敛）与 pm-application 侧 1325 处 SQL 迁移**：移交后续会话——样板已齐（repo port/impl/handler 改接/错误分层/守卫清单同步五件套），按任务书纪律逐域推进。
+
 **✅ 批 B pm-api 全清（2026-11-12，收尾批 03688633）**：37 文件 179 处 → **1 处判定保留**（support.rs 的 project_visible EXISTS——全站 require_project_visible 底层，豁免上限 1）。收尾批新增 AcceptanceReadRepo（验收读 6 处，4 行类型上移）与 PlatformOpsRepo（admin/docproc/杂项守卫/审计 INSERT 共 14 处）；三处审计 INSERT 迁仓储时 C174/C180 守卫清单同步合并。门禁固化：**scripts/guard-pm-api-sql.sh**（grep 计数 + support.rs 豁免上限 1，违规非零退出；纳入验收门禁）。仓储体系终态：pm-application/src/repo/ 14 个 port ↔ pm-infrastructure/repo_* 14 个实现，构造器统一 support::repos。验证：workspace 零警告 + clippy PASS + 全量 1507 passed + 守卫 10/10。
 
 **操作事故记录**：收尾盘点时误执行 `git checkout master -- .` 污染工作区（master 的 viz 前端文件混入 index），已 `git checkout HEAD -- . && git reset --hard HEAD` 完整恢复并重跑全量验证。教训：**统计类操作禁止用 checkout 检出对比**，用 `git show branch:path` 或 `git diff branch --stat`。
