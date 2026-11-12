@@ -129,6 +129,20 @@
 3. **纪律**：每域迁移 = trait + impl + 调用方改接 + 该域测试全绿 + commit；迁移完成的模块立即删原 SQL（无兼容层，AGENTS.md #1）。
 4. **完成门禁**：`grep -r "sqlx::query" apps/pm-api/src crates/pm-application/src` 计数为 0，固化进 CI/release-guard。
 
+### 批 B 执行记录（骨架 + 首域 ✅ 2026-11-12，commit 92858396）
+
+**骨架落地**（与原计划的偏差）：
+- port 放 `pm-application/src/repo/`（trait + 复用 `crate::rows` 行类型；pm-domain 不掺和——行 DTO 全在 application，动 pm-domain 只会多一层搬运）；impl 放 `pm-infrastructure/src/repo_lists.rs`（PgPmListRepo，`#[derive(Clone)]` 持 PgPool——PgPool 内部是 Arc，无生命周期体操）。
+- **错误首版直接 `sqlx::Error`**：不预设 RepoError——ApiError 已有 From 映射，语义按方法名表达（find_*_row vs list_*）；需要 NotFound/Conflict 的域迁移时逐步引入。
+- 分页：仓储侧 `ListPage { size, offset }`，HTTP 层 Paging 到 ListPage 的转换留在 handler（一层解耦）。
+- async-trait（仓库既有依赖），非 AFIT——保持 dyn 兼容余地。
+
+**首域 pm_lists**：`PmListRepo` trait（8 列表 + revisions + set_project_description + find_project_row）+ PgPmListRepo 实现；pm-api handler 改接仓储，**22 处 SQL 归零**，SQL 文本原样迁移。`principals` 端点的平台级语义（无租户过滤）原样保留。
+
+**守卫战果 ×3**：C-2 ADR-06a 容器守卫、批 A C174/C180 审计守卫、C-3 后审计守卫（intake 路径，拆目录时只跑了针对性测试漏网、全量时被守卫抓住）——源码级守卫体系持续有效，教训：**拆文件类改动必须过全量**（守卫按路径扫描）。
+
+**进度**：pm-api 37 文件 SQL 收口 1/37；其余按序 pm_baseline(18) → pm_cognition(15) → auth(14) → tenant_members(13) → 其余 32 文件。每域一个 commit + 全量绿。
+
 ## 5. 验收门禁（每批必过）
 
 ```bash
