@@ -9,5 +9,6 @@ pub mod kb_pc_handlers;
 pub mod outbox;
 pub mod outbox_handlers;
 pub mod outbox_worker;
+pub mod repo_baseline;
 pub mod repo_lists;
 

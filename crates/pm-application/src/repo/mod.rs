@@ -9,6 +9,8 @@
 //! 需要 NotFound/Conflict 语义的域在迁移时逐步引入 `RepoError`，不在骨架期
 //! 预设抽象。
 
+pub mod baseline;
 pub mod lists;
 
+pub use baseline::{BaselineRepo, BaselineRepoError};
 pub use lists::{ListPage, PmListRepo};
