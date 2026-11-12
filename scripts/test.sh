@@ -45,6 +45,9 @@ if [ "$TIMING" = "1" ]; then
   exec bash "$REPO_ROOT/scripts/test-timing.sh" "${ARGS[@]+"${ARGS[@]}"}"
 fi
 
+# 3. 源码级门禁（快、零编译；违规即失败，详情见各自脚本头注释）
+bash "$REPO_ROOT/scripts/guard-pm-api-sql.sh" || exit 1
+
 LOG="$(mktemp)"
 echo "==> nextest --profile $PROFILE  (DATABASE_URL=$DATABASE_URL)"
 cargo nextest run --no-fail-fast --profile "$PROFILE" "${ARGS[@]+"${ARGS[@]}"}" 2>&1 | tee "$LOG"
