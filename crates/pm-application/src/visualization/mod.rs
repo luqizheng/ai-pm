@@ -14,6 +14,7 @@ pub mod data_conformance;
 pub mod live_graph;
 pub mod projection;
 pub mod render_job;
+pub mod seecode_compiler;
 pub mod queries;
 pub mod registry_loader;
 pub mod resolver;
@@ -30,6 +31,7 @@ pub use artifact_service::{
     create_draft, decide_approval, get_artifact, mark_stale, request_approval, ArtifactRecord,
     VizError,
 };
+pub use seecode_compiler::{compile as compile_for_seecode, CompileError, CompiledSpec};
 pub use render_job::{render_artifact, RenderOutcome};
 pub use live_graph::{build_task_dag_spec, build_trace_spec, LIVE_EDGE_LIMIT};
 pub use queries::{

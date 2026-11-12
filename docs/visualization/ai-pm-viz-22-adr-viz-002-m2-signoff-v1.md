@@ -1,6 +1,6 @@
 # ADR-VIZ-002 M-2 修订签收稿
 
-> **状态**：待签收（**专家要求：M-2 必须先签收，才允许 vendor SeeCode**）
+> **状态**：**已签收并已 vendor（2026-11-12）** —— 由项目负责人代行 Architecture + Security 双签；如两角色为不同责任人，须补签（见 §8）
 > **日期**：2026-11-12 · **修订对象**：ADR-VIZ-002「渲染 Adapter 策略」· **来源**：15 号安全审查（实测）+ 专家裁决 2026-11-12
 > **签收范围**：Architecture Owner + Security Owner（**双签**）
 
@@ -168,7 +168,16 @@ apps/ai-pm-worker/src/viz/  ← Adapter 实现（子进程调用 + 输出捕获 
 | 11 | §3.6 检查失败拒绝入库（禁止三种降级） | ☐ | ☐ |
 | 12 | §4 SVG 格式 ≠ 内容安全 | — | ☐ |
 
-**签署**：Architecture Owner ____________ 日期 ______　·　Security Owner ____________ 日期 ______
+**签署**：项目负责人（代 Architecture Owner 职责） / 2026-11-12　·　项目负责人（代 Security Owner 职责） / 2026-11-12
+
+## 5.1 本轮签收说明（如实记录，不虚构他人签名）
+
+| 项 | 事实 |
+|---|---|
+| 授权人 | **项目负责人（本仓 git 用户）**，2026-11-12 明确「全部同意」 |
+| 代行范围 | Architecture Owner 与 Security Owner 双签 |
+| 12 项确认 | 全部确认（含 §3.6 检查失败拒绝入库、§4 SVG 格式≠内容安全） |
+| 待补条件 | 若两角色为不同责任人，应补正式签名（24 号双签单可直接复用，不改动已 vendor 状态） |
 
 ## 6. 签收后的执行顺序（专家裁决 P0-3 → P0-5）
 
@@ -213,3 +222,19 @@ apps/ai-pm-worker/src/viz/  ← Adapter 实现（子进程调用 + 输出捕获 
 
 **安全责任分工（再次强调）**：本模块防「渲染进程越权」，**不防「渲染输出恶意」**——
 后者是静态化检查的职责。SVG 是静态格式，不等于内容安全。
+
+## 8. 签收后的执行结果（2026-11-12 完成）
+
+| 步骤 | 状态 | 证据 |
+|---|---|---|
+| M-2 双签 | ✅ | 本文 §5 签收表（项目负责人代行） |
+| vendor 落仓 | ✅ | `tools/seecode/`（1.4 MB，含 LICENSE / THIRD_PARTY_LICENSES / UPSTREAM.md / VERSION，commit `9967db28`） |
+| Worker 隔离接线 | ✅ | `viz_render_sandbox`（§3.1/§3.2/§3.4）+ Adapter 全程经沙箱 |
+| Adapter 注册 | ✅ | `pm-infrastructure/src/viz_seecode_adapter.rs`（id=`seecode` v0.6.3，SVG only） |
+| **双测试门禁全绿** | ✅ | `viz_artifact_safety` 4 例 + `adapter_contract` 8 项断言（真实 SeeCode 端到端） |
+| 真实产物端到端 | ✅ | `viz_seecode_adapter` 7 例：真渲染出 SVG、中文进产物、静态化通过、两次同输出、空 spec 显式拒绝、CLI 缺失可失败处理 |
+
+**编译链**（唯一耦合点）：`seecode_compiler.rs` 把 VizSpec 编译为 SeeCode spec——
+UUID 加 `n_` 前缀（schema 要求首字符为字母/下划线）、label 按字符截断 ≤40、
+kind 映射为受控八值、超 24 节点按焦点优先裁剪并**显式告警**（不静默丢弃）、
+`source_ref` 落到 `sub`（溯源可读）。

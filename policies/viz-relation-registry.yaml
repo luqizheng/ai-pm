@@ -60,7 +60,13 @@ relations:
     introduced_in: "1.0"
 
   - key: design.decided_by_adr
-    status: draft
+    status: active
+    registry_version: "1"
+    signoff_by: "项目负责人（代 design-owner 职责授权）"
+    signoff_at: "2026-11-12"
+    signoff_record: "25 号会签单「全部同意」（2026-11-12 会话授权，单方代行）"
+    semantic_version: "1.0"
+    activated_at: "2026-11-12"
     domain: design
     owner_role: design-owner
     source: design.adr_design_revision
@@ -72,7 +78,13 @@ relations:
     introduced_in: "1.0"
 
   - key: adr.covers_requirement
-    status: draft
+    status: active
+    registry_version: "1"
+    signoff_by: "项目负责人（代 design-owner 职责授权）"
+    signoff_at: "2026-11-12"
+    signoff_record: "25 号会签单「全部同意」（2026-11-12 会话授权，单方代行）"
+    semantic_version: "1.0"
+    activated_at: "2026-11-12"
     domain: design
     owner_role: design-owner
     source: design.adr_requirement
@@ -126,7 +138,13 @@ relations:
 
   # ── PC 域（投影入口，词汇表由 PC 域唯一维护）────────────────────────────
   - key: pc.related
-    status: draft
+    status: active
+    registry_version: "1"
+    signoff_by: "项目负责人（代 pc-owner 职责授权）"
+    signoff_at: "2026-11-12"
+    signoff_record: "25 号会签单「全部同意」（2026-11-12 会话授权，单方代行）"
+    semantic_version: "1.0"
+    activated_at: "2026-11-12"
     domain: pc
     owner_role: pc-owner
     source: pc.relationship
@@ -142,7 +160,13 @@ relations:
 
   # ── KB 域 ──────────────────────────────────────────────────────────────
   - key: kb.memory_supported_by_source
-    status: draft
+    status: active
+    registry_version: "1"
+    signoff_by: "项目负责人（代 kb-owner 职责授权）"
+    signoff_at: "2026-11-12"
+    signoff_record: "25 号会签单「全部同意」（2026-11-12 会话授权；R-07 以代码实证修正后的 kb.source 为会签对象）"
+    semantic_version: "1.0"
+    activated_at: "2026-11-12"
     domain: kb
     owner_role: kb-owner
     source: kb.memory_ref
@@ -160,7 +184,13 @@ relations:
 
   # ── Visualization 域（合成关系）─────────────────────────────────────────
   - key: derived_trace
-    status: draft
+    status: active
+    registry_version: "1"
+    signoff_by: "项目负责人（代 architecture-owner 职责授权）"
+    signoff_at: "2026-11-12"
+    signoff_record: "25 号会签单「全部同意」（2026-11-12 会话授权；含「不得成为任意用户/AI 可自由写入」硬约束）"
+    semantic_version: "1.0"
+    activated_at: "2026-11-12"
     domain: visualization
     owner_role: architecture-owner
     source: vizspec
@@ -176,7 +206,13 @@ relations:
     business_fact: false
 
   - key: requirement.refines_design
-    status: draft
+    status: active
+    registry_version: "1"
+    signoff_by: "项目负责人（代 design-owner 职责授权）"
+    signoff_at: "2026-11-12"
+    signoff_record: "25 号会签单「全部同意」（2026-11-12 会话授权，单方代行）"
+    semantic_version: "1.0"
+    activated_at: "2026-11-12"
     domain: design
     owner_role: design-owner
     source: design.design_requirement

@@ -36,6 +36,14 @@ pub struct SandboxConfig {
     pub max_output_bytes: usize,
     /// 额外允许的环境变量（如渲染器必需的 `NODE_PATH`）。
     pub extra_env: Vec<(String, String)>,
+    /// 复用调用方指定的工作目录（多步渲染需要在同目录内传递中间产物）。
+    ///
+    /// `Some` 时本模块**不创建也不清理**该目录——生命周期由调用方负责。
+    pub workdir: Option<PathBuf>,
+    /// 把 `stdin_payload` 写入工作目录下的该文件名（CLI 需要文件路径入参时用）。
+    ///
+    /// 设此项时不再通过 stdin 管道传输（数据仍不进命令行，只是换载体为文件）。
+    pub payload_file: Option<String>,
 }
 
 /// 沙箱错误。
@@ -65,18 +73,38 @@ pub async fn run_sandboxed(
     config: &SandboxConfig,
     stdin_payload: &[u8],
 ) -> Result<Vec<u8>, SandboxError> {
-    let temp = TempWorkdir::create()?;
+    // 工作目录：调用方指定则复用（多步渲染），否则自建并在退出时清理
+    let owned_temp;
+    let workdir: &std::path::Path = match &config.workdir {
+        Some(path) => path.as_path(),
+        None => {
+            owned_temp = TempWorkdir::create()?;
+            owned_temp.path()
+        }
+    };
+
+    // payload 落文件（CLI 以文件路径入参时使用；数据仍不进命令行）
+    if let Some(filename) = &config.payload_file {
+        let target = workdir.join(filename);
+        std::fs::write(&target, stdin_payload).map_err(|e| {
+            SandboxError::Internal(format!("write payload {} failed: {e}", target.display()))
+        })?;
+    }
 
     let mut cmd = tokio::process::Command::new(&config.program);
     cmd.args(&config.args)
-        .current_dir(temp.path())
+        .current_dir(workdir)
         // 子进程随 future 一起被 drop 时强杀（超时路径依赖此设置）
         .kill_on_drop(true)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
-    apply_env_whitelist(&mut cmd, temp.path(), &config.extra_env);
+    if config.payload_file.is_some() {
+        cmd.stdin(std::process::Stdio::null());
+    }
+
+    apply_env_whitelist(&mut cmd, workdir, &config.extra_env);
 
     let mut child = cmd.spawn().map_err(|e| {
         SandboxError::Internal(format!("spawn {} failed: {e}", config.program))
@@ -225,6 +253,8 @@ mod tests {
             timeout: Duration::from_secs(10),
             max_output_bytes: 1024 * 1024,
             extra_env: vec![],
+            workdir: None,
+            payload_file: None,
         }
     }
 
