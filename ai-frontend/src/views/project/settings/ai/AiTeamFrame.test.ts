@@ -117,9 +117,7 @@ describe("Project Setting · AI Team 骨架", () => {
     expect(
       wrapper.find('[data-testid="ai-exec-pol-composition"]').exists()
     ).toBe(true);
-    expect(wrapper.find('[data-testid="ai-coming-soon"]').exists()).toBe(
-      false
-    );
+    expect(wrapper.find('[data-testid="ai-coming-soon"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="ai-tabs"]').exists()).toBe(true);
   });
 

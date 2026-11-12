@@ -72,7 +72,6 @@ const breadcrumb = [{ label: t("settings.personal.landing.title") }];
           }}</span>
         </RouterLink>
       </section>
-
     </SettingsPageLayout>
   </div>
 </template>
@@ -81,7 +80,6 @@ const breadcrumb = [{ label: t("settings.personal.landing.title") }];
 .settings-shell-pad {
   padding: var(--space-5) var(--space-8);
 }
-
 
 .personal-landing__hint {
   margin: 0 0 var(--space-4);

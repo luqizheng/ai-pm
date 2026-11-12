@@ -30,8 +30,7 @@ export function releaseMockGuard(): Plugin {
       const hits: string[] = [];
       for (const output of Object.values(bundle)) {
         if (output.type !== "chunk") continue;
-        const moduleIds =
-          output.moduleIds ?? Object.keys(output.modules ?? {});
+        const moduleIds = output.moduleIds ?? Object.keys(output.modules ?? {});
         for (const id of moduleIds) {
           const normalized = id.replace(/\\/g, "/");
           if (MOCK_MODULE_PATTERN.test(normalized)) {

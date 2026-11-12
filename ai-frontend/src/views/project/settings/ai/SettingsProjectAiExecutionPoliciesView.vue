@@ -243,10 +243,7 @@ onMounted(load);
           <p class="ai-exec-pol__hint">
             {{ t("aiTeam.executionPolicies.orgManagedHint") }}
           </p>
-          <p
-            v-if="policies?.organization"
-            class="ai-exec-pol__meta"
-          >
+          <p v-if="policies?.organization" class="ai-exec-pol__meta">
             {{ t("aiTeam.executionPolicies.taskTypeColumn.updatedAt") }}:
             {{ formatTime(policies.organization.updated_at) }}
           </p>
@@ -295,10 +292,7 @@ onMounted(load);
           <p class="ai-exec-pol__hint">
             {{ t("aiTeam.executionPolicies.projectHint") }}
           </p>
-          <p
-            v-if="policies?.project"
-            class="ai-exec-pol__meta"
-          >
+          <p v-if="policies?.project" class="ai-exec-pol__meta">
             {{ t("aiTeam.executionPolicies.taskTypeColumn.updatedAt") }}:
             {{ formatTime(policies.project.updated_at) }}
           </p>
@@ -321,9 +315,13 @@ onMounted(load);
           </p>
           <template v-else>
             <span class="ai-exec-pol__head" aria-hidden="true">
-              <span>{{ t("aiTeam.executionPolicies.taskTypeColumn.type") }}</span>
               <span>{{
-                t("aiTeam.executionPolicies.taskTypeColumn.requireHumanApproval")
+                t("aiTeam.executionPolicies.taskTypeColumn.type")
+              }}</span>
+              <span>{{
+                t(
+                  "aiTeam.executionPolicies.taskTypeColumn.requireHumanApproval"
+                )
               }}</span>
               <span>{{
                 t("aiTeam.executionPolicies.taskTypeColumn.updatedAt")
@@ -367,14 +365,35 @@ onMounted(load);
             {{ t("aiTeam.executionPolicies.overridesEmpty") }}
           </p>
           <template v-else>
-            <span class="ai-exec-pol__head ai-exec-pol__head--wide" aria-hidden="true">
-              <span>{{ t("aiTeam.executionPolicies.overrideColumn.task") }}</span>
-              <span>{{ t("aiTeam.executionPolicies.overrideColumn.autoAccept") }}</span>
-              <span>{{ t("aiTeam.executionPolicies.overrideColumn.autoMerge") }}</span>
-              <span>{{ t("aiTeam.executionPolicies.overrideColumn.autoPublishKnowledge") }}</span>
-              <span>{{ t("aiTeam.executionPolicies.overrideColumn.requireHumanApproval") }}</span>
-              <span>{{ t("aiTeam.executionPolicies.overrideColumn.updatedAt") }}</span>
-              <span>{{ t("aiTeam.executionPolicies.overrideColumn.actions") }}</span>
+            <span
+              class="ai-exec-pol__head ai-exec-pol__head--wide"
+              aria-hidden="true"
+            >
+              <span>{{
+                t("aiTeam.executionPolicies.overrideColumn.task")
+              }}</span>
+              <span>{{
+                t("aiTeam.executionPolicies.overrideColumn.autoAccept")
+              }}</span>
+              <span>{{
+                t("aiTeam.executionPolicies.overrideColumn.autoMerge")
+              }}</span>
+              <span>{{
+                t(
+                  "aiTeam.executionPolicies.overrideColumn.autoPublishKnowledge"
+                )
+              }}</span>
+              <span>{{
+                t(
+                  "aiTeam.executionPolicies.overrideColumn.requireHumanApproval"
+                )
+              }}</span>
+              <span>{{
+                t("aiTeam.executionPolicies.overrideColumn.updatedAt")
+              }}</span>
+              <span>{{
+                t("aiTeam.executionPolicies.overrideColumn.actions")
+              }}</span>
             </span>
             <div
               v-for="row in policies.taskOverrides"
@@ -438,9 +457,7 @@ onMounted(load);
           </p>
           <p class="ai-exec-pol__hint">
             {{ t("aiTeam.executionPolicies.compositionLayersLabel") }}:
-            <span class="ai-exec-pol__mono">{{
-              compositionLayers
-            }}</span>
+            <span class="ai-exec-pol__mono">{{ compositionLayers }}</span>
           </p>
           <p class="ai-exec-pol__subheading">
             {{ t("aiTeam.executionPolicies.compositionDefaultsHeading") }}
@@ -586,7 +603,8 @@ onMounted(load);
 .ai-exec-pol__head--wide,
 .ai-exec-pol__row--wide {
   grid-template-columns:
-    minmax(180px, 1.4fr) repeat(4, minmax(88px, 0.7fr)) 170px 140px;
+    minmax(180px, 1.4fr) repeat(4, minmax(88px, 0.7fr))
+    170px 140px;
   min-width: 960px;
   border-bottom: var(--border-1) solid var(--ws-border);
 }

@@ -52,9 +52,12 @@ describe("workspace 布局契约", () => {
     expect(width("ws-chat-width")).toBe(446);
     expect(width("ws-context-width")).toBe(288);
     // 1440px 桌面基准：232 + 446 + 288 = 966，主区 1fr 恰好补足 474
-    expect(1440 - width("ws-sidebar-width") - width("ws-chat-width") - width("ws-context-width")).toBe(
-      width("ws-main-width")
-    );
+    expect(
+      1440 -
+        width("ws-sidebar-width") -
+        width("ws-chat-width") -
+        width("ws-context-width")
+    ).toBe(width("ws-main-width"));
   });
 
   it("顶栏横跨全部列（首行）", () => {

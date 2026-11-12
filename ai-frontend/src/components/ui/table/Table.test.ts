@@ -61,7 +61,9 @@ describe("Table", () => {
       mount(TableHead, { props: { sort: "ascending" } }).attributes("aria-sort")
     ).toBe("ascending");
     expect(
-      mount(TableHead, { props: { sort: "descending" } }).attributes("aria-sort")
+      mount(TableHead, { props: { sort: "descending" } }).attributes(
+        "aria-sort"
+      )
     ).toBe("descending");
     expect(mount(TableHead).attributes("aria-sort")).toBeUndefined();
   });

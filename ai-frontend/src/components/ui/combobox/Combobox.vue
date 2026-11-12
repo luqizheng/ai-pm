@@ -117,8 +117,7 @@ function onSelect(value: string) {
           :value="modelValue"
           :placeholder="inputPlaceholder || placeholder"
           :disabled="disabled"
-          v-bind="inputAttrs" 
-         
+          v-bind="inputAttrs"
           @update:model-value="onInput"
         />
         <span v-if="clearable && modelValue" class="ui-combobox__clear">

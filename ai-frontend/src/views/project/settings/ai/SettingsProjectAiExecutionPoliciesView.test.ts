@@ -78,13 +78,19 @@ async function mountView(
   });
   router.push(path);
   await router.isReady();
-  const mounted = mountShell(SettingsProjectAiExecutionPoliciesView, {}, router);
+  const mounted = mountShell(
+    SettingsProjectAiExecutionPoliciesView,
+    {},
+    router
+  );
   await flushPromises();
   return mounted;
 }
 
 function projectSwitch(wrapper: ReturnType<typeof mountShell>["wrapper"]) {
-  return wrapper.find('[data-testid="ai-exec-pol-project-switch"] [role="switch"]');
+  return wrapper.find(
+    '[data-testid="ai-exec-pol-project-switch"] [role="switch"]'
+  );
 }
 
 describe("SettingsProjectAiExecutionPoliciesView", () => {
@@ -94,7 +100,9 @@ describe("SettingsProjectAiExecutionPoliciesView", () => {
   });
 
   it("无项目上下文时不发请求（scope 哨兵不得当作项目 id）", async () => {
-    const { wrapper } = await mountView("/project/settings/ai/execution-policies");
+    const { wrapper } = await mountView(
+      "/project/settings/ai/execution-policies"
+    );
     expect(getProjectAiExecutionPolicies).not.toHaveBeenCalled();
     expect(
       wrapper.find('[data-testid="ai-exec-pol-no-project"]').exists()
@@ -200,7 +208,9 @@ describe("SettingsProjectAiExecutionPoliciesView", () => {
   it("清除任务覆盖：DELETE 契约 + 成功后整页回读", async () => {
     // 首次 GET 带覆盖行；清除后的回读（第二次 GET）返回空表
     getProjectAiExecutionPolicies
-      .mockResolvedValueOnce(policiesFixture({ taskOverrides: [overrideRow()] }))
+      .mockResolvedValueOnce(
+        policiesFixture({ taskOverrides: [overrideRow()] })
+      )
       .mockResolvedValueOnce(policiesFixture());
     clearTaskPolicyOverride.mockResolvedValue(undefined);
     const { wrapper } = await mountView();

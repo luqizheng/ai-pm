@@ -166,8 +166,6 @@ describe("ProjectListView", () => {
     expect(mounted.router.currentRoute.value.path).toBe(
       "/project/command-center"
     );
-    expect(mounted.router.currentRoute.value.query.project_id).toBe(
-      "proj-001"
-    );
+    expect(mounted.router.currentRoute.value.query.project_id).toBe("proj-001");
   });
 });

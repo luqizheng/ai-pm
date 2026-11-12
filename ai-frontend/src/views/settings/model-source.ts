@@ -12,12 +12,12 @@ import type {
 } from "./team-llm-types";
 
 export type ModelLoadStatus =
-  | "idle"        // api 类型但 endpoint/key 未填好 → 占位
-  | "loading"     // 正在请求
-  | "success"     // API 成功（可能带 staticModels 合并）
-  | "fallback"    // API 失败 → 降级到 staticModels
-  | "empty"       // API 成功但空 + 无 staticModels
-  | "unsupported" // manual / static 类型，不请求
+  | "idle" // api 类型但 endpoint/key 未填好 → 占位
+  | "loading" // 正在请求
+  | "success" // API 成功（可能带 staticModels 合并）
+  | "fallback" // API 失败 → 降级到 staticModels
+  | "empty" // API 成功但空 + 无 staticModels
+  | "unsupported"; // manual / static 类型，不请求
 
 export interface CombinedModel extends StaticModel {
   /** true = 来自 Provider /models；false = 内置 staticModels 推荐项 */
@@ -35,9 +35,7 @@ function cacheKey(
   endpoint: string,
   apiKey: string
 ): string {
-  const keyHash = apiKey
-    ? simpleHash(apiKey)
-    : "";
+  const keyHash = apiKey ? simpleHash(apiKey) : "";
   return `${type}|${endpoint}|${keyHash}`;
 }
 
@@ -163,20 +161,35 @@ export function useModelSource(
       if (staticModels.length === 0) {
         return [];
       }
-      return [{ group: STATIC_GROUP, items: staticModels.map(m => ({ ...m, fromApi: false as const })) }];
+      return [
+        {
+          group: STATIC_GROUP,
+          items: staticModels.map(m => ({ ...m, fromApi: false as const }))
+        }
+      ];
     }
     // fallback / empty / idle（无 API 数据时用 staticModels）
-    if (status.value === "fallback" || status.value === "empty" || status.value === "idle") {
+    if (
+      status.value === "fallback" ||
+      status.value === "empty" ||
+      status.value === "idle"
+    ) {
       const staticModels = provider.value?.staticModels ?? [];
       if (staticModels.length === 0) return [];
-      return [{ group: STATIC_GROUP, items: staticModels.map(m => ({ ...m, fromApi: false as const })) }];
+      return [
+        {
+          group: STATIC_GROUP,
+          items: staticModels.map(m => ({ ...m, fromApi: false as const }))
+        }
+      ];
     }
     // success → 分两组
     const api = models.value.filter(m => m.fromApi);
     const staticList = models.value.filter(m => !m.fromApi);
     const groups: Array<{ group?: string; items: CombinedModel[] }> = [];
     if (api.length) groups.push({ group: STATUS_GROUP, items: api });
-    if (staticList.length) groups.push({ group: STATIC_GROUP, items: staticList });
+    if (staticList.length)
+      groups.push({ group: STATIC_GROUP, items: staticList });
     return groups;
   });
 
@@ -260,17 +273,19 @@ export function useModelSource(
         status.value = "success";
         hint.value = null;
       }
-    } catch (e) {
+    } catch {
       if (ctrl.signal.aborted) return; // 正常取消，不降级
       if (seq !== refreshSeq) return;
 
       // 静默降级 → fallback
-      const staticOnly = p.staticModels.map(m => ({ ...m, fromApi: false as const }));
+      const staticOnly = p.staticModels.map(m => ({
+        ...m,
+        fromApi: false as const
+      }));
       models.value = staticOnly;
       if (staticOnly.length === 0) {
         status.value = "empty";
-        hint.value =
-          "无法从 Provider 获取模型列表，请手动输入 model id";
+        hint.value = "无法从 Provider 获取模型列表，请手动输入 model id";
       } else {
         status.value = "fallback";
         hint.value =
@@ -301,7 +316,7 @@ export function useModelSource(
   let lastType: string | undefined;
   watch(
     () => provider.value?.type,
-    (t) => {
+    t => {
       if (t !== lastType) {
         abort();
         lastType = t;

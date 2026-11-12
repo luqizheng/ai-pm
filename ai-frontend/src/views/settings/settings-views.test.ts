@@ -285,5 +285,4 @@ describe("个人域五节（共享节组件）", () => {
       expect(firstInactive.attributes("aria-checked")).toBe("true");
     }
   });
-
 });
