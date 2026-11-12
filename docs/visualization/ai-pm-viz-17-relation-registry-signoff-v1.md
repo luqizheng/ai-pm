@@ -1,8 +1,8 @@
-# AI-PM Visualization Relation Registry 首批词表会签表 V1.1（架构预审修订稿）
+# AI-PM Visualization Relation Registry 首批词表会签表 V1.2（架构预审修订稿）
 
 > **状态**：架构与语义预审完成，**待领域 Owner 会签**（V0-1 唯一硬人工依赖） · 日期：2026-11-12
 > **上游依据**：[ADR-VIZ-004](ai-pm-viz-09-architecture-decision-record-v1.md)（受控字符串、命名空间、Owner 会签）· [12 号 V0-1 设计](ai-pm-viz-12-v0-1-spec-validation-design-v1.md) §5 · [14 号 V0-3 投影](ai-pm-viz-14-v0-3-projection-consistency-design-v1.md)
-> **修订来源**：V1.0 首批词表会签表 → 架构预审（专家）→ **V1.1（本文）**，含产品经理两处代码实证修正
+> **修订来源**：V1.0 → 架构预审 → V1.1（代码实证修正）→ **V1.2（本文：R-07 命名审定 + 三层方向表述统一 + 发送前审校）**
 > **本稿性质**：架构预审建议稿，**不代表任何领域 Owner 已完成正式会签**。未会签条目必须保持 `draft` 且不可投影。
 
 ## 0. V1.1 修订摘要
@@ -17,7 +17,7 @@
 | V-06 | YAML 字段结构定版（13 字段）；来源标识用 `schema.table.column` 稳定标识，迁移文件行号仅作审查依据 | 架构预审 | 补全 |
 | V-07 | Lint 检查项扩至 15 条 | 架构预审 | 补全 |
 | V-08 | Q-1/Q-2/Q-3 正式答复（分层保留 / `pc.related`+交叉校验 / 方向分离） | 架构预审 | 裁决 |
-| **V-09** | **R-07 方向与端点修正**：`ref_role='evidence'` 指向 **kb.source（L2 原文/原始资料）**，不是任意业务对象；语义为 `memory → evidence_source`，关系名改为 `kb.evidence_supported_by` | **产品经理代码实证** | **纠错** |
+| **V-09** | **R-07 方向与端点修正**：`ref_role='evidence'` 指向 **kb.source（L2 原文/原始资料）**，不是任意业务对象；语义为 `memory → evidence_source`，关系名改为 `kb.memory_supported_by_source` | **产品经理代码实证** | **纠错** |
 | **V-10** | R-05 方向裁决的**算法层落地约束**：依赖闭包（沿 Registry 方向）与影响分析（反向）方向相反，必须各自显式声明，禁止各层各自约定 | 产品经理 | 补全 |
 | **V-11** | **与仓库既有方向/术语约定对齐**：既有图边方向 = `prerequisite → dependent`（`execution_read.rs:568-570`）、`upstream` = 前置任务（`:548-550`）；Registry 语义方向不随之改，但投影层须提供显式方向映射 | 产品经理（代码实证） | 补全 |
 
@@ -34,7 +34,9 @@
 
 **结论**：专家 V1.1 稿 R-07 写的「`memory → business_object`，目标对象类型由 memory_ref 的实际引用结构确定」**不成立**——evidence 的 target 是 **kb.source（原始资料）**，语义是「该记忆以这条原始资料为依据」，而非「记忆支撑某业务对象」。若按专家稿实现，图上会出现「记忆 → 任意业务对象」的假边。
 
-**修正后定义**：`kb.evidence_supported_by`，source=`memory`（具体为 kb.memory_ref.revision_id 所指的记忆修订），target=`kb_source`，方向 `memory → evidence_source`，过滤 `ref_role='evidence'`。
+**命名审定（V1.2）**：中间名 `kb.evidence_supported_by` 被审校否决——英文语序易误读为「Evidence 被某对象支持」。定名 **`kb.memory_supported_by_source`**：主语是 Memory，谓语是"被 Source 支持/依据"，语义即「该记忆以这条原始资料为依据」。
+
+**一对多（已实证）**：`kb.memory_ref` 表无 `UNIQUE(revision_id)` 约束（`migrations/0001_baseline.sql:2914-2929`），且插入侧为 refs 循环逐条插入（`kb_service/memory.rs:325-335`）→ **一条记忆修订可关联多条 Source**。图上应允许一对多证据边，不假定唯一来源。
 
 > ⚠️ **仍需 KB Owner 会签确认**：此修正依据代码注释与查询实证得出，KB Owner 是该语义的权威 Owner。若 KB Owner 确认语义为其他形态，应修改关系名/端点/方向，而非只改 UI 文案。
 
@@ -69,7 +71,7 @@ Task A depends_on Task B   →  Registry 语义边 A → B（dependent → prere
 | R-04 `task.implements_requirement` | **确认** | 保留 Task 对特定 Requirement Revision 的实现关系 |
 | R-05 `task.depends_on_task` | **需修改** | 统一语义方向为 dependent → prerequisite；视觉流向独立声明 |
 | R-06 `pc.related` | **确认，附条件** | 不复制 PC 的 20+ 类型；必须引用并校验 PC 关系类型注册表 |
-| R-07 `kb.evidence_supported_by` | **确认，需修正方向与端点**（V1.1 修正） | 只投影 `ref_role='evidence'`；target 为 kb.source（L2 原文） |
+| R-07 `kb.memory_supported_by_source` | **确认，需修正方向与端点**（V1.1 修正） | 只投影 `ref_role='evidence'`；target 为 kb.source（L2 原文） |
 | R-08 `requirement.refines_design` | **需修改** | 不作为独立业务事实关系，改为 R-01 的反向视图别名 |
 | R-09 `derived_trace` | **确认** | 保留为 Visualization 专属合成关系，必须显式标记间接推导 |
 
@@ -233,12 +235,17 @@ dependent_task → prerequisite_task        即  task_id → depends_on_task_id
 
 **必须修正的原文矛盾**：V1.0 总表写"前置任务 → 后置任务"，详细定义写"依赖任务 → 前置任务"，两者不能同时成立。**本稿选择后者为 Registry 规范语义方向。**
 
-**视觉展示规则**：Task DAG 通常更容易按执行顺序展示为 `prerequisite → dependent`，这可作为 UI 的**布局或 presentation transform**，但不能改变 Registry 语义方向。
+**三个层次（V1.2 统一表述，避免开发误读）**：
+
+| 层次 | 方向 |
+|---|---|
+| ① 关系存储语义（Registry） | `dependent → prerequisite`（A depends on B 记为 A → B） |
+| ② 图查询计算方向 | 依赖闭包 = ①方向；影响分析与 CPM = **反向**（`prerequisite → dependent`） |
+| ③ DAG 视觉方向 | **沿用既有图边方向 `prerequisite → dependent` 直接展示，无需额外翻转**——既有协作图方向已与执行流向和影响传播方向一致；①③ 的差异仅在 Registry 投影与图查询适配层显式处理 |
 
 - 关系事实仍是 `A depends_on B`；
-- DAG 可将 B 置于 A 上游，视觉显示 `B → A`；
-- **变换必须显式声明**，不得让查询层、影响分析层和布局层各自采用不同方向；
-- 关键路径与依赖闭包计算必须明确使用哪一种方向约定。
+- **不需要新增一层 DAG 反转**（既有图边已是目标视觉方向）；
+- 关键路径与依赖闭包计算必须明确使用哪一种方向约定（见下方方向矩阵）。
 
 **⚠️ 算法层落地约束（V1.1 新增，V-10）**：
 
@@ -290,16 +297,17 @@ dependent_task → prerequisite_task        即  task_id → depends_on_task_id
 
 ---
 
-### R-07 `kb.evidence_supported_by`（V1.1 修正名与方向）
+### R-07 `kb.memory_supported_by_source`（V1.2 命名与方向定版）
 
-**预审建议：确认，方向与端点按 V1.1 修正。**
+**预审建议：确认，命名/方向/端点按 V1.1+V1.2 修正。**
 
 - 来源领域：KB · 来源：`kb.memory_ref`
 - 过滤条件：`ref_role='evidence'`
-- 语义方向：`memory → evidence_source`（**V1.1 修正**）
+- 语义方向：`memory → source`
+- Source Type：`memory` · Target Type：`source`（KB 域的原始资料，非普通业务对象）
 - Owner：kb-owner · 建议状态：`active`（待会签）
 
-**语义定义（V1.1 修正）**：某条 Memory 以某条**原始资料（kb.source）**为来源依据。
+**语义定义**：某条 Memory 以某条**原始资料（kb.source）**为来源依据。
 
 **为什么修正（代码实证）**：`RefRole::Evidence` 的权威注释为「**来源依据：指向 L2 原文（会话消息 / 任务交互 / 原始资料）**」（`kb_service/memory.rs:44`）；实际查询中 evidence 的 target 恒为 `target_domain='knowledge_base' AND target_type='source'`（`kb_service/source.rs:297`，`TYPE_SOURCE="source"` 于 `kb_service/mod.rs:36`）。因此**不存在"记忆支撑任意业务对象"的语义**——若按 V1.0 稿实现会产生假边。
 
@@ -339,7 +347,7 @@ requirement.refines_design → reverse_view_of: design.covers_requirement
 4. **同一图中，R-01 与 R-08 不得对同一条底层事实同时生成两条边。**
 5. 若未来 Owner 证明"Requirement refines Design"是独立于"Design covers Requirement"的另一种业务语义，必须提供独立来源或明确业务定义，再重新申请注册。
 
-**Owner 会签重点**：确认 R-08 是纯粹反向视图，还是存在独立业务语义。若为纯反向视图，接受别名方案即可。
+**Owner 会签重点**：确认 `requirement.refines_design` 是否**仅作为** `design.covers_requirement` 的反向查询视图。若是：**不生成独立 Active 关系键、不新增业务关系事实、不参与底层关系计数**——R-08 不是一条"等待激活的独立关系"，避免 Owner 误以为需要在 YAML 中单独激活。
 
 ---
 
@@ -398,7 +406,7 @@ requirement.refines_design → reverse_view_of: design.covers_requirement
 
 **答复：Registry 语义方向采用"依赖任务 → 前置任务"**（`A → B`，A 依赖 B），因为 `task.depends_on_task` 描述的是 A 对 B 的依赖语义，且来源字段本身即 `task_id=A, depends_on_task_id=B`。DAG 视觉布局可用 `B → A` 表达执行顺序，作为显式 presentation transform。
 
-**结论：关系语义方向与 DAG 视觉流向分开定义；Registry 不反转，UI 如需执行流向使用显式 presentation transform。** 详见 R-05 的算法层落地约束（V-10）。待 Delivery Owner 会签。
+**结论：Registry 规范语义方向为 dependent → prerequisite；既有协作图方向为 prerequisite → dependent，已与执行流向和影响传播方向一致 → Task DAG 沿用既有图边方向直接展示，不需要额外翻转**；方向差异仅在 Registry 投影与图查询适配层显式处理。详见 R-05 三层表述与方向矩阵（V-10/V-11）。待 Delivery Owner 会签。
 
 ---
 
@@ -412,7 +420,7 @@ requirement.refines_design → reverse_view_of: design.covers_requirement
 | `task.implements_requirement` | `task` | `requirement_revision` | `delivery.task_requirement` | Task → Requirement |
 | `task.depends_on_task` | `task` | `task` | `delivery.task_dependency` | **Dependent → Prerequisite** |
 | `pc.related` | PC object | PC object | PC relationship registry（`pc.relationship_type`） | 由 PC type_key 决定 |
-| `kb.evidence_supported_by` | `memory` | `kb_source` | `kb.memory_ref`（`ref_role='evidence'`） | **Memory → Evidence Source** |
+| `kb.memory_supported_by_source` | `memory` | `source` | `kb.memory_ref`（`ref_role='evidence'`；一对多） | **Memory → Source** |
 | `derived_trace` | `*` | `*` | VizSpec synthetic | Derived direction |
 
 **R-08 反向视图定义**：`requirement.refines_design` → `reverse_view_of: design.covers_requirement`（不新增独立业务关系事实，不参与底层关系计数）。
@@ -432,7 +440,7 @@ requirement.refines_design → reverse_view_of: design.covers_requirement
 - **R-06**：`type_key_source: pc.relationship_type` + 必须执行跨 Registry 校验。
 - **R-08**：`view_alias: true` + `reverse_view_of: design.covers_requirement`；不得作为独立业务事实关系进入 Active Registry。
 - **R-09**：`synthetic: true` + `source: vizspec` + `business_fact: false` + 必须校验 `derived` 元数据。
-- **R-07（V1.1）**：`ref_role_filter: evidence` + `target_type: kb_source`。
+- **R-07（V1.2）**：`ref_role_filter: evidence` + `target_type: source` + `cardinality: one_to_many`（一条记忆修订可引用多条 Source）。
 
 ### 6.3 Lint 必须覆盖的检查（15 条）
 
@@ -445,7 +453,7 @@ requirement.refines_design → reverse_view_of: design.covers_requirement
 7. Requirement Revision 必须按绑定版本读取，不得替换为 Current Revision。
 8. R-05 必须使用统一的语义方向。
 9. R-06 必须与 PC 关系注册表交叉校验。
-10. R-07 必须校验 `ref_role='evidence'` 且 target 为 kb_source。
+10. R-07 必须校验 `ref_role='evidence'` 且 target 为 kb.source；允许一对多，不假定唯一来源。
 11. R-08 不得重复生成 R-01 的同一底层事实。
 12. R-09 必须携带完整推导元数据。
 13. 关系语义发生变化时必须升级 Registry 版本。
@@ -474,7 +482,7 @@ requirement.refines_design → reverse_view_of: design.covers_requirement
 | R-04 | delivery-owner | Task 与指定 Requirement Revision 的实现关系 | 确认 |
 | R-05 | delivery-owner | 依赖字段语义及箭头方向 | 修改后确认 |
 | R-06 | pc-owner | 统一投影入口与 PC Registry 的交叉校验 | 附条件确认 |
-| R-07 | kb-owner | **Evidence 引用方向与目标对象类型（V1.1 修正：指向 kb.source）** | 附条件确认 |
+| R-07 | kb-owner | **命名 `kb.memory_supported_by_source`、方向 memory → source、一对多证据边（V1.2 定版）** | 附条件确认 |
 | R-08 | design-owner | 是否接受 R-01 的反向视图方案 | 修改 |
 | R-09 | architecture-owner | 合成关系、推导元数据及安全约束 | 确认 |
 
@@ -524,9 +532,9 @@ requirement.refines_design → reverse_view_of: design.covers_requirement
 
 ---
 
-## 9. 术语澄清（关于「I-PM」）
+## 9. 术语澄清（关于「I-PM」，正式版本记录）
 
-专家稿注明"原文标题使用了 I-PM，本稿统一写作 AI-PM"。**核实结论：AI-PM 仓库与本套文档中不存在名为「I-PM」的独立产品或模块**（`AGENTS.md`、`README.md` 与 `docs/visualization/` 全量检索均无此名称，产品名统一为 **AI-PM**）。因此统一写作 AI-PM 正确，无需恢复原名。
+历史稿件曾出现「I-PM」写法（误写）。**核实结论：AI-PM 仓库与本套文档中不存在名为「I-PM」的独立产品或模块**（`AGENTS.md`、`README.md` 与 `docs/visualization/` 全量检索均无此名称）。自 V1.2 起全文统一为 **AI-PM**，后续稿件不得再出现 I-PM。
 
 ## 10. 最终架构预审意见
 

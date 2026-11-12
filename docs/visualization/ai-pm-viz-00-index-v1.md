@@ -22,8 +22,8 @@
 | 14 | [**V0-3 权限投影与一致性设计**](ai-pm-viz-14-v0-3-projection-consistency-design-v1.md) | **双层过滤**（查询层端点 project 校验 + 投影层整边丢弃/计数重算）、11 项泄露面清单、`consistency=current` 严格定义（R-07）、nature 粒度（R-06）、Resolver 落点、泄露矩阵测试 |
 | 15 | [**V0-6 安全方向审查**](ai-pm-viz-15-v0-6-security-review-v1.md) | **放弃 iframe → 产物静态化 + 零脚本呈现**（实测 SeeCode v0.6.3：SVG 纯 Node 出图、0 脚本/0 外链/字体内嵌、转义有效）；三层新防线、交互归 G6、AC-6′/7′/18′ 重写、M-1~M-8 修订清单 |
 | 16 | [**V0-8 Viewer 设计**](ai-pm-viz-16-v0-8-viewer-design-v1.md) | 产物通道（`<img>`+Blob，零图形依赖）+ 降级表格（P0 兼作节点导航）+ G6 交互通道（P1）；**第 9 类信封六处必改**、右栏 Graph Tab 三处、令牌/i18n 规则、11 项实施任务 |
-| 17 | [**Registry 词表会签表 V1.1**](ai-pm-viz-17-relation-registry-signoff-v1.md) | **V0-1 唯一硬人工依赖**：架构预审 V1.1（V-01~V-10 修订）+ 三个架构裁决（**R-05 方向分离 / R-06 PC 唯一词汇权威 / R-08 反向视图≠新事实**）+ **R-07 代码实证修正**（evidence → kb.source）+ 15 条 Lint + 会签记录表 |
-| 19 | [**会签材料包（发送稿）**](ai-pm-viz-19-owner-signoff-letters-v1.md) | 两封可直接复制的定向材料：① 致评审专家的增量说明（V-09 R-07 方向修正 + V-10/V-11 方向矩阵修正与既有约定对齐）② 致领域 Owner 的词表会签材料（分工表 + Q-1~Q-3 共答问题）+ 5 项发送清单 |
+| 17 | [**Registry 词表会签表 V1.2**](ai-pm-viz-17-relation-registry-signoff-v1.md) | **V0-1 唯一硬人工依赖**：架构预审修订（V-01~V-12）+ 三裁决（**R-05 方向分离 / R-06 PC 唯一权威 / R-08 反向视图≠新事实**）+ **R-07 定版 `kb.memory_supported_by_source`**（memory→source，一对多实证）+ 三层方向表述（DAG 无需翻转）+ 15 条 Lint + 会签记录表 |
+| 19 | [**会签材料包（发送稿 V1.1）**](ai-pm-viz-19-owner-signoff-letters-v1.md) | 两封定向材料（经评审专家审校修订后定稿）：① 致专家增量说明（R-07 修正+命名、R-05 三层方向、复审定位收敛）② 致 Owner 会签材料（R-08 非独立关系措辞 + Q-1~Q-3）+ **发送前九项检查清单** |
 | 18 | [**UX 规格 V1.1**](ai-pm-viz-18-v0-8-ux-spec-v1-1.md) | **交互规格权威**（专家 V1.0 + 安全修订 UX-R01~R12）：六原则、角色场景、P0/P1 交互规格、五流程、生命周期、AI 联动、权限一致性、UX 验收 UX-P0-01~11 / UX-P1-01~08、**12 项产品裁决（UX-D01~D12）** |
 
 ## 2. 立项核心判断（一段话版）
