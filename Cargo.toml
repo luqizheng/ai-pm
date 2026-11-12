@@ -6,7 +6,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 
 # dev 档位：工作区 debug = 1（行表，panic 仍有「文件:行号」），依赖不带
