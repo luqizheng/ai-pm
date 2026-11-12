@@ -25,3 +25,5 @@ public/vditor/
 .tmp-vitest/
 # Playwright 临时产物（证据 HTML 报告输出到 ../test-case/evidence/s02-ui/，入库）
 test-results/
+setup-admin.marker
+data/
