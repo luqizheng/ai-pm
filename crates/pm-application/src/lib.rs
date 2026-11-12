@@ -60,6 +60,7 @@ pub mod recovery;
 pub mod repo_access;
 pub mod repo_facts;
 pub mod repository;
+pub mod repo;
 pub mod requirement;
 pub mod requirement_acceptance;
 pub mod requirement_projection;

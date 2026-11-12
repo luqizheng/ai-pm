@@ -44,8 +44,9 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     // 写入已归并到 pm_write::insert_tenant_audit 单点（批 A2，原四条清单项撤销；
     // 转发壳只带 target_type，不再含 INSERT 文本）。
     ("crates/pm-application/src/pm_write/support.rs", 1),
-    // KB-PC 服务化（0048 Intake）：信号路由留痕（系统面 dispatch principal，四列显式 NULL）
-    ("crates/pm-application/src/intake.rs", 1),
+    // KB-PC 服务化（0048 Intake）：信号路由留痕（系统面 dispatch principal，四列显式 NULL；
+    // 批 C-3 拆目录后落点 intake/signal.rs）
+    ("crates/pm-application/src/intake/signal.rs", 1),
     // KB-PC 服务化：intake_task 人工重试（REST 面，写全四身份列）
     ("apps/pm-api/src/intakes.rs", 1),
     // Checkpoint-1：KB 仓库快照分析 + PC 认知派生（worker 系统面 dispatch principal，四列显式 NULL）
