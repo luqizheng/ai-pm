@@ -63,3 +63,4 @@ pub mod team_llm_catalog;
 pub mod team_llm_guard;
 pub mod team_onboarding;
 pub mod tenant_members;
+pub mod viz_handlers;

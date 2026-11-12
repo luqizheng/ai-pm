@@ -253,6 +253,7 @@ fn build_router(
         .merge(crate::pm_acceptance::router())
         // 产物（需求修订）列表——AI 产物验收中心数据源。
         .merge(crate::pm_artifacts::router())
+        .merge(crate::viz_handlers::router())
         // Team LLM Provider 管理面（0041；owner/admin 守卫，取代旧全局 /v1/pm/llm/*）。
         .merge(crate::team_llm::router())
         // Team 模型目录/授权/Role 策略（Phase 3A；owner/admin 守卫）。
