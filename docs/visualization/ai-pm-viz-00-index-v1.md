@@ -23,6 +23,7 @@
 | 15 | [**V0-6 安全方向审查**](ai-pm-viz-15-v0-6-security-review-v1.md) | **放弃 iframe → 产物静态化 + 零脚本呈现**（实测 SeeCode v0.6.3：SVG 纯 Node 出图、0 脚本/0 外链/字体内嵌、转义有效）；三层新防线、交互归 G6、AC-6′/7′/18′ 重写、M-1~M-8 修订清单 |
 | 16 | [**V0-8 Viewer 设计**](ai-pm-viz-16-v0-8-viewer-design-v1.md) | 产物通道（`<img>`+Blob，零图形依赖）+ 降级表格（P0 兼作节点导航）+ G6 交互通道（P1）；**第 9 类信封六处必改**、右栏 Graph Tab 三处、令牌/i18n 规则、11 项实施任务 |
 | 17 | [**Registry 词表会签表 V1.2**](ai-pm-viz-17-relation-registry-signoff-v1.md) | **V0-1 唯一硬人工依赖**：架构预审修订（V-01~V-12）+ 三裁决（**R-05 方向分离 / R-06 PC 唯一权威 / R-08 反向视图≠新事实**）+ **R-07 定版 `kb.memory_supported_by_source`**（memory→source，一对多实证）+ 三层方向表述（DAG 无需翻转）+ 15 条 Lint + 会签记录表 |
+| 26 | [**P1 执行提示词**](ai-pm-viz-26-p1-execution-prompt-v1.md) | **给新 session 的自包含任务书**：P1 三项交付（G6 引入+V-1 阈值 / 交互通道四项 / 三张图接线）+ 已就绪资产清单 + 7 条验收标准 + 硬约束与门禁 + **实测踩过的坑（core 表结构/字符串陷阱/并发测试/psql 需 -h）** + 执行顺序 + 边界 |
 | 24 | [**M-2 双签单（打印版 HTML）**](ai-pm-viz-24-m2-signoff-form.html) | 一页 A4：定位变更对照（6 维）+ **12 项逐条双签表**（Architecture/Security 分列勾选）+ 双签栏 + 签收前已就绪技术前提清单 |
 | 25 | [**第二/三批会签单（打印版 HTML）**](ai-pm-viz-25-batch23-signoff-form.html) | 一页 A4：6 条待签关系的语义/源表/端点 + 各自**前置条件与专家硬约束**（Q-1 分层保留 / R-06 不得绕过 PC 注册表 / R-07 代码实证修正 / R-09 不得自由写入）+ 逐条独立签名 |
 | 23 | [**第一批会签单（打印版 HTML）**](ai-pm-viz-23-batch1-signoff-form.html) | 一页 A4 打印单：三张独立签名块（R-01/R-04/R-05，各含语义/源表/方向 + 三点确认 + Confirm-Modify-Reject 勾选 + 签署日期）+ 共同须知（架构裁决≠领域授权、逐条独立生效）+ 回收与激活步骤；自包含无外网资源，可直接打印分发 |
