@@ -2,6 +2,9 @@
 import { onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import PageFrame from "@/components/shell/PageFrame.vue";
+import Button from "@/components/ui/button/Button.vue";
+import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
+import Input from "@/components/ui/input/Input.vue";
 import { translateError } from "@/api/base";
 import {
   getEmbeddingConfig,
@@ -118,7 +121,7 @@ onMounted(load);
           <label for="embed-endpoint">{{
             t("shell.adminSettings.embedding.endpoint")
           }}</label>
-          <input
+          <Input
             id="embed-endpoint"
             v-model="endpoint"
             class="settings-input"
@@ -130,7 +133,7 @@ onMounted(load);
           <label for="embed-model">{{
             t("shell.adminSettings.embedding.model")
           }}</label>
-          <input
+          <Input
             id="embed-model"
             v-model="model"
             class="settings-input"
@@ -139,25 +142,35 @@ onMounted(load);
           />
         </div>
         <label class="settings-check">
-          <input v-model="enabled" type="checkbox" />
+          <Checkbox v-model="enabled" />
           <span>{{ t("shell.adminSettings.embedding.enabled") }}</span>
         </label>
 
         <div class="admin-actions">
-          <button class="admin-save" :disabled="saving" @click="save">
+          <Button
+            variant="primary"
+            class="admin-save"
+            :disabled="saving"
+            @click="save"
+          >
             {{
               saving
                 ? t("shell.adminSettings.action.saving")
                 : t("shell.adminSettings.action.save")
             }}
-          </button>
-          <button class="admin-test" :disabled="testing" @click="runTest">
+          </Button>
+          <Button
+            variant="secondary"
+            class="admin-test"
+            :disabled="testing"
+            @click="runTest"
+          >
             {{
               testing
                 ? t("shell.adminSettings.action.testing")
                 : t("shell.adminSettings.action.test")
             }}
-          </button>
+          </Button>
         </div>
         <p v-if="savedNotice" class="settings-ok" role="status">
           {{ savedNotice }}
@@ -202,9 +215,9 @@ onMounted(load);
 
 .settings-card {
   border: 1px solid var(--border-subtle, var(--ws-border, #d0d0d0));
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--surface-card, var(--ws-surface, #fff));
-  padding: 16px;
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-3, 12px);
@@ -212,7 +225,7 @@ onMounted(load);
 
 .settings-heading {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--font-size-body-strong);
   font-weight: 600;
   color: var(--text-primary, var(--ws-text, #111));
 }
@@ -220,47 +233,38 @@ onMounted(load);
 .settings-desc,
 .settings-hint {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   color: var(--text-secondary, var(--ws-text, #555));
 }
 
 .settings-error {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   color: var(--text-danger, #b42318);
 }
 
 .settings-ok {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   color: var(--text-success, #1b7a43);
 }
 
 .settings-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .settings-field label {
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   color: var(--text-secondary, var(--ws-text, #555));
-}
-
-.settings-input {
-  border: 1px solid var(--border-subtle, var(--ws-border, #d0d0d0));
-  border-radius: 8px;
-  padding: 7px 10px;
-  font-size: 13px;
-  background: var(--surface-card, var(--ws-surface, #fff));
-  color: var(--text-primary, var(--ws-text, #111));
 }
 
 .settings-check {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: var(--space-2);
+  font-size: var(--font-size-body);
   color: var(--text-secondary, var(--ws-text, #555));
 }
 
@@ -269,34 +273,10 @@ onMounted(load);
   gap: var(--space-2, 8px);
 }
 
-.admin-actions button {
-  border: 0;
-  border-radius: 8px;
-  padding: 6px 14px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.admin-save {
-  background: var(--accent-subtle, var(--ws-accent, #2563eb));
-  color: var(--text-on-accent, #fff);
-}
-
-.admin-test {
-  background: transparent;
-  border: 1px solid var(--border-subtle, var(--ws-border, #d0d0d0));
-  color: var(--text-secondary, var(--ws-text, #555));
-}
-
-.admin-actions button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
 .test-result {
-  font-size: 12px;
-  padding: 8px 10px;
-  border-radius: 8px;
+  font-size: var(--font-size-caption);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
   background: var(--surface-success-subtle, #e7f5ec);
   color: var(--text-success, #1b7a43);
 }

@@ -135,6 +135,12 @@ const { t } = useI18n();
   opacity: 1;
 }
 
+@media (max-width: 1100px) {
+  .proj-card__actions {
+    opacity: 1;
+  }
+}
+
 .proj-card__desc {
   margin: 0;
   font-size: var(--font-size-caption);
