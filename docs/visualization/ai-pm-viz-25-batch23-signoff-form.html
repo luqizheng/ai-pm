@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Visualization Relation Registry 第二/三批会签单</title>
+<style>
+  @page { size: A4 portrait; margin: 13mm 12mm; }
+
+  :root {
+    --ink: #16202b;
+    --muted: #5d6b7a;
+    --line: #c8d2dc;
+    --line-strong: #8a99a8;
+    --tint: #f2f5f8;
+    --warn: #8a5a00;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    font-size: 9.3pt;
+    line-height: 1.45;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .sheet { width: 186mm; margin: 0 auto; }
+
+  .masthead {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 8mm;
+    padding-bottom: 2mm;
+    border-bottom: 1.6pt solid var(--ink);
+  }
+  .masthead h1 { margin: 0; font-size: 13.4pt; font-weight: 600; }
+  .masthead .sub { margin: 1mm 0 0; font-size: 8.5pt; color: var(--muted); }
+  .meta-box {
+    flex: 0 0 auto;
+    font-size: 8.3pt;
+    color: var(--muted);
+    text-align: right;
+    line-height: 1.6;
+  }
+  .meta-box b { color: var(--ink); font-weight: 600; }
+
+  .notice {
+    margin: 2.2mm 0 0;
+    padding: 2mm 2.6mm;
+    background: var(--tint);
+    border-left: 2.4pt solid var(--line-strong);
+    font-size: 8.5pt;
+  }
+  .notice ul { margin: 0.8mm 0 0; padding-left: 4.6mm; }
+  .notice li { margin: 0.5mm 0; }
+  .notice .warn { color: var(--warn); font-weight: 600; }
+
+  h2 {
+    margin: 2.8mm 0 1.2mm;
+    font-size: 10pt;
+    font-weight: 600;
+    padding-bottom: 0.8mm;
+    border-bottom: 0.7pt solid var(--line);
+  }
+  h2 .batch { color: var(--muted); font-size: 8.6pt; font-weight: 400; margin-left: 2mm; }
+
+  .item {
+    margin: 1.8mm 0 0;
+    border: 0.9pt solid var(--line);
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .item-head {
+    display: flex;
+    align-items: baseline;
+    gap: 2.2mm;
+    padding: 1.2mm 2.2mm;
+    background: var(--tint);
+    border-bottom: 0.9pt solid var(--line);
+  }
+  .item-id { font-weight: 600; font-size: 9.6pt; }
+  .item-key {
+    font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+    font-size: 8.9pt;
+  }
+  .item-owner { margin-left: auto; font-size: 8.5pt; color: var(--muted); }
+  .item-owner b { color: var(--ink); }
+
+  .item-body { padding: 1.4mm 2.2mm 1.6mm; }
+
+  .facts {
+    display: grid;
+    grid-template-columns: 13mm 1fr 13mm 1fr;
+    gap: 0.5mm 1.4mm;
+    font-size: 8.5pt;
+    margin-bottom: 1mm;
+  }
+  .facts dt { color: var(--muted); }
+  .facts dd { margin: 0; }
+
+  .semantics { font-size: 8.9pt; margin: 0 0 1mm; }
+  .semantics .label { color: var(--muted); }
+
+  .pre {
+    font-size: 8.5pt;
+    color: var(--warn);
+    margin: 0 0 1.2mm;
+  }
+  .pre .label { color: var(--muted); }
+
+  code {
+    font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+    font-size: 8.3pt;
+  }
+
+  .verdict {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0 3mm;
+    padding-top: 1.1mm;
+    border-top: 0.7pt dashed var(--line);
+    font-size: 8.7pt;
+  }
+  .verdict .box { font-family: "Segoe UI Symbol", sans-serif; font-size: 9.6pt; }
+  .verdict label { white-space: nowrap; }
+  .blank {
+    display: inline-block;
+    min-width: 24mm;
+    border-bottom: 0.7pt solid var(--line-strong);
+    height: 3.2mm;
+  }
+  .blank.short { min-width: 18mm; }
+  .sig-line { margin-left: auto; white-space: nowrap; }
+
+  .footer {
+    margin-top: 2.4mm;
+    padding-top: 1.4mm;
+    border-top: 1.2pt solid var(--ink);
+    font-size: 7.9pt;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    gap: 6mm;
+  }
+  .footer b { color: var(--ink); }
+  .footer .col-right { text-align: right; flex: 0 0 auto; }
+
+  @media screen {
+    body { background: #eef1f4; padding: 8mm 0; }
+    .sheet { background: #fff; padding: 13mm 12mm; box-shadow: 0 1pt 6pt rgba(0,0,0,0.14); }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="masthead">
+    <div>
+      <h1>Relation Registry 第二 / 三批会签单</h1>
+      <p class="sub">AI-PM Visualization Engine · 6 条待签关系（第一批 R-01/R-04/R-05 已激活）</p>
+    </div>
+    <div class="meta-box">
+      Registry 版本 <b>1</b>　·　词表 <b>V1.2</b><br>
+      批次　<b>第二批 3 条 / 第三批 3 条</b><br>
+      依据 <b>ADR-VIZ-004</b>　·　专家裁决 2026-11-12
+    </div>
+  </header>
+
+  <section class="notice">
+    <span class="warn">专家裁决：这两批不应为了尽快展示完整图谱而提前激活。</span>
+    <ul>
+      <li>每条关系<b>独立会签、独立 Active、独立生效</b>——同批其他条目已签不会自动激活本条。</li>
+      <li>未签条目保持 <code>draft</code>，校验器阻断投影（<b>未会签 ≠ 默认放行</b>）。</li>
+      <li>否决不是失败：错误词条比没有词条更危险（会让影响分析、覆盖检查失真）。</li>
+      <li>第二批的前置是<b>语义裁决</b>（Q-1 / Q-3）；第三批的前置是<b>跨域治理</b>（PC 权威注册表 / KB 代码实证 / 合成边规则）。</li>
+    </ul>
+  </section>
+
+  <!-- ═══════════ 第二批 ═══════════ -->
+  <h2>第二批 · ADR 与反向视图 <span class="batch">前置：Q-1 分层保留 / Q-3 方向约定</span></h2>
+
+  <article class="item">
+    <div class="item-head">
+      <span class="item-id">R-02</span>
+      <span class="item-key">design.decided_by_adr</span>
+      <span class="item-owner">Owner：<b>design-owner</b></span>
+    </div>
+    <div class="item-body">
+      <dl class="facts">
+        <dt>源表</dt><dd><code>design.adr_design_revision</code></dd>
+        <dt>方向</dt><dd>design → adr</dd>
+        <dt>端点</dt><dd><code>design_revision</code> → <code>adr_revision</code></dd>
+        <dt>级别</dt><dd>L2</dd>
+      </dl>
+      <p class="semantics"><span class="label">语义：</span>某个 Design Revision 受特定 ADR Revision 的决策约束。</p>
+      <p class="pre"><span class="label">前置（Q-1 裁决已定「分层保留」）：</span>与 PC 域 <code>design-constrained-by-adr</code>（<code>owner_domain='kb'</code>）指向同一对象对时，<b>不合并权威定义</b>；同图可视觉合并但必须保留双来源与版本证据，且权限过滤先于合并。</p>
+      <div class="verdict">
+        <label><span class="box">☐</span> Confirm</label>
+        <label><span class="box">☐</span> Modify：<span class="blank"></span></label>
+        <label><span class="box">☐</span> Reject：<span class="blank short"></span></label>
+        <span class="sig-line">签署 <span class="blank short"></span> 日期 <span class="blank short"></span></span>
+      </div>
+    </div>
+  </article>
+
+  <article class="item">
+    <div class="item-head">
+      <span class="item-id">R-03</span>
+      <span class="item-key">adr.covers_requirement</span>
+      <span class="item-owner">Owner：<b>design-owner</b></span>
+    </div>
+    <div class="item-body">
+      <dl class="facts">
+        <dt>源表</dt><dd><code>design.adr_requirement</code></dd>
+        <dt>方向</dt><dd>adr → requirement</dd>
+        <dt>端点</dt><dd><code>adr_revision</code> → <code>requirement_revision</code></dd>
+        <dt>级别</dt><dd>L2</dd>
+      </dl>
+      <p class="semantics"><span class="label">语义：</span>某个 ADR Revision 覆盖、约束或影响特定 Requirement Revision。</p>
+      <p class="pre"><span class="label">待确认：</span>语义强度——是「覆盖 / 约束」，还是仅用于说明决策背景？若实际较弱，应调整关系名称而非放宽定义。绑定不明确时<b>不得创建推断边</b>。</p>
+      <div class="verdict">
+        <label><span class="box">☐</span> Confirm</label>
+        <label><span class="box">☐</span> Modify：<span class="blank"></span></label>
+        <label><span class="box">☐</span> Reject：<span class="blank short"></span></label>
+        <span class="sig-line">签署 <span class="blank short"></span> 日期 <span class="blank short"></span></span>
+      </div>
+    </div>
+  </article>
+
+  <article class="item">
+    <div class="item-head">
+      <span class="item-id">R-08</span>
+      <span class="item-key">requirement.refines_design</span>
+      <span class="item-owner">Owner：<b>design-owner</b></span>
+    </div>
+    <div class="item-body">
+      <dl class="facts">
+        <dt>源表</dt><dd>同 R-01（<code>design.design_requirement</code>）</dd>
+        <dt>方向</dt><dd>requirement → design（反向视图）</dd>
+        <dt>端点</dt><dd><code>requirement_revision</code> → <code>design_revision</code></dd>
+        <dt>级别</dt><dd>L2</dd>
+      </dl>
+      <p class="semantics"><span class="label">语义：</span>R-01 的<b>反向查询视图</b>（<code>reverse_view_of: design.covers_requirement</code>），<b>不是独立业务事实</b>。</p>
+      <p class="pre"><span class="label">专家裁决：</span>不得实现为第二条独立事实关系——不产生第二份业务关系数据、不产生重复写入、不产生独立身份、不进入底层关系计数；同一图中 R-01 与 R-08 不得对同一底层事实同时出两条边。反向查询须保留原始关系的来源身份。</p>
+      <div class="verdict">
+        <label><span class="box">☐</span> Confirm（确认仅为反向视图）</label>
+        <label><span class="box">☐</span> 存在独立语义：<span class="blank"></span></label>
+        <span class="sig-line">签署 <span class="blank short"></span> 日期 <span class="blank short"></span></span>
+      </div>
+    </div>
+  </article>
+
+  <!-- ═══════════ 第三批 ═══════════ -->
+  <h2>第三批 · 跨领域与系统合成关系 <span class="batch">前置：跨域治理各自确认</span></h2>
+
+  <article class="item">
+    <div class="item-head">
+      <span class="item-id">R-06</span>
+      <span class="item-key">pc.related</span>
+      <span class="item-owner">Owner：<b>pc-owner</b></span>
+    </div>
+    <div class="item-body">
+      <dl class="facts">
+        <dt>源表</dt><dd><code>pc.relationship</code> + <code>pc.relationship_type</code></dd>
+        <dt>方向</dt><dd>由 PC 关系类型定义决定</dd>
+        <dt>端点</dt><dd>PC 对象 → PC 对象（<code>type_key</code> 引用 PC 权威注册表）</dd>
+        <dt>级别</dt><dd>L2 + <code>type_key_source</code> 交叉校验</dd>
+      </dl>
+      <p class="semantics"><span class="label">语义：</span>Visualization 侧的统一<b>投影入口</b>；实际关系类型、方向、端点类型、治理级别与 owner_domain 均由 PC 域权威注册表唯一维护。</p>
+      <p class="pre"><span class="label">专家硬约束：</span><b>不得成为绕过 PC 权威关系注册表的通用入口</b>；不复制 PC 的 20+ 关系类型；PC 侧停用/废弃的关系不得继续投影；<code>type_key</code> 不得为空或使用未注册值；不能用通配符端点绕过 PC 自身类型校验。</p>
+      <div class="verdict">
+        <label><span class="box">☐</span> Confirm</label>
+        <label><span class="box">☐</span> Modify：<span class="blank"></span></label>
+        <label><span class="box">☐</span> Reject：<span class="blank short"></span></label>
+        <span class="sig-line">签署 <span class="blank short"></span> 日期 <span class="blank short"></span></span>
+      </div>
+    </div>
+  </article>
+
+  <article class="item">
+    <div class="item-head">
+      <span class="item-id">R-07</span>
+      <span class="item-key">kb.memory_supported_by_source</span>
+      <span class="item-owner">Owner：<b>kb-owner</b></span>
+    </div>
+    <div class="item-body">
+      <dl class="facts">
+        <dt>源表</dt><dd><code>kb.memory_ref</code>（<code>ref_role='evidence'</code>）</dd>
+        <dt>方向</dt><dd>memory → source</dd>
+        <dt>端点</dt><dd><code>memory</code> → <code>source</code>（<b>kb.source 原始资料，非普通业务对象</b>）</dd>
+        <dt>基数</dt><dd><code>one_to_many</code>（一条记忆修订可引用多条 Source）</dd>
+      </dl>
+      <p class="semantics"><span class="label">语义：</span>某条 Memory 以某条原始资料（<code>kb.source</code>）为来源依据。</p>
+      <p class="pre"><span class="label">代码实证（已推翻原稿）：</span><code>RefRole::Evidence</code> 注释为「来源依据：指向 L2 原文」（<code>kb_service/memory.rs:44</code>）；实际查询恒为 <code>target_domain='knowledge_base' AND target_type='source'</code>（<code>source.rs:297</code>）。<b>「Memory 支撑任意业务对象」的语义不成立</b>。请以修正后的目标实体为会签对象；若真实语义不同，应改关系名/端点/方向，而非只改 UI 文案。</p>
+      <div class="verdict">
+        <label><span class="box">☐</span> Confirm</label>
+        <label><span class="box">☐</span> Modify：<span class="blank"></span></label>
+        <label><span class="box">☐</span> Reject：<span class="blank short"></span></label>
+        <span class="sig-line">签署 <span class="blank short"></span> 日期 <span class="blank short"></span></span>
+      </div>
+    </div>
+  </article>
+
+  <article class="item">
+    <div class="item-head">
+      <span class="item-id">R-09</span>
+      <span class="item-key">derived_trace</span>
+      <span class="item-owner">Owner：<b>architecture-owner</b></span>
+    </div>
+    <div class="item-body">
+      <dl class="facts">
+        <dt>来源</dt><dd>VizSpec 合成（<b>不对应任何业务关系表</b>）</dd>
+        <dt>端点</dt><dd>由实际推导路径中的对象决定</dd>
+        <dt>标记</dt><dd><code>synthetic: true</code> · <code>business_fact: false</code></dd>
+        <dt>级别</dt><dd>L2</dd>
+      </dl>
+      <p class="semantics"><span class="label">语义：</span>Visualization 根据已存在的直接关系推导出的<b>间接</b>追踪关系（如 <code>Task → Requirement ← Design</code>）；不代表两端存在直接业务绑定。</p>
+      <p class="pre"><span class="label">专家硬约束：</span><b>不得成为任意用户或 AI 可自由写入的关系</b>——必须有明确来源、推导规则与安全约束。必须携带 <code>direct=false</code> + <code>via</code> + <code>semantic_confidence</code>；图中虚线并标「经 X 推导」；影响分析归 Indirect；路径上每条直接关系都要过 Registry 校验与权限过滤；中间路径存在无权对象时不得通过合成边暴露其存在；不得写回业务表或用于审批与状态变更。</p>
+      <div class="verdict">
+        <label><span class="box">☐</span> Confirm</label>
+        <label><span class="box">☐</span> Modify：<span class="blank"></span></label>
+        <label><span class="box">☐</span> Reject：<span class="blank short"></span></label>
+        <span class="sig-line">签署 <span class="blank short"></span> 日期 <span class="blank short"></span></span>
+      </div>
+    </div>
+  </article>
+
+  <footer class="footer">
+    <div>
+      <b>回收与激活</b>
+      <ol style="margin:0.6mm 0 0;padding-left:4mm">
+        <li>签署后交 Visualization 技术 Owner，逐条改 YAML 为 <code>active</code> 并补七项审计字段。</li>
+        <li>门禁：<code>node scripts/viz-registry-lint.js</code>（active 缺任一审计字段即拒绝）。</li>
+        <li>激活后跑一次数据符合性核查（<code>data_conformance</code>：C-1 跨项目 / C-2 修订错位 / C-3 悬空 / C-4 依赖跨项目）。</li>
+      </ol>
+    </div>
+    <div class="col-right">
+      第二批 3 条 · 第三批 3 条<br>
+      <b>未签即 draft</b>（阻断投影）<br>
+      第一批 R-01/R-04/R-05 已激活
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>

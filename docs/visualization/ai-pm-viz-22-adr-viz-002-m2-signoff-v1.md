@@ -150,6 +150,9 @@ apps/ai-pm-worker/src/viz/  ← Adapter 实现（子进程调用 + 输出捕获 
 
 ## 5. 签收表
 
+> **打印分发**：一页 A4 双签版见 [24 号双签单](ai-pm-viz-24-m2-signoff-form.html)（浏览器打开 Ctrl+P，自包含无外网依赖）。
+
+
 | # | 确认项 | Architecture Owner | Security Owner |
 |---|---|---|---|
 | 1 | Adapter B 定位变更为服务端 SVG 出图器 | ☐ | ☐ |

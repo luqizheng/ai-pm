@@ -99,6 +99,9 @@
 
 ## 4. 未进第一批的条目（保持 Draft，不得提前激活）
 
+> **打印分发**：第二/三批合并会签单见 [25 号](ai-pm-viz-25-batch23-signoff-form.html)（含各条前置条件与专家硬约束）。
+
+
 | 条目 | Owner | 前置条件 |
 |---|---|---|
 | R-02 `design.decided_by_adr` | design-owner | Q-1 分层保留的落地确认（与 PC 关系并存规则） |

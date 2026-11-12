@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>ADR-VIZ-002 M-2 修订签收单</title>
+<style>
+  @page { size: A4 portrait; margin: 12mm 12mm; }
+
+  :root {
+    --ink: #16202b;
+    --muted: #5d6b7a;
+    --line: #c8d2dc;
+    --line-strong: #8a99a8;
+    --tint: #f2f5f8;
+    --warn: #8a5a00;
+    --ok: #1f6b4a;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    font-size: 9.6pt;
+    line-height: 1.45;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .sheet { width: 186mm; margin: 0 auto; }
+
+  .masthead {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 8mm;
+    padding-bottom: 2mm;
+    border-bottom: 1.6pt solid var(--ink);
+  }
+  .masthead h1 { margin: 0; font-size: 13.6pt; font-weight: 600; }
+  .masthead .sub { margin: 1mm 0 0; font-size: 8.6pt; color: var(--muted); }
+  .meta-box {
+    flex: 0 0 auto;
+    font-size: 8.4pt;
+    color: var(--muted);
+    text-align: right;
+    line-height: 1.6;
+  }
+  .meta-box b { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    margin: 3mm 0 1.2mm;
+    font-size: 10.4pt;
+    font-weight: 600;
+  }
+
+  .notice {
+    margin: 2.2mm 0 0;
+    padding: 2mm 2.6mm;
+    background: var(--tint);
+    border-left: 2.4pt solid var(--line-strong);
+    font-size: 8.7pt;
+  }
+  .notice ul { margin: 0.8mm 0 0; padding-left: 4.6mm; }
+  .notice li { margin: 0.5mm 0; }
+  .notice .warn { color: var(--warn); font-weight: 600; }
+
+  /* 定位变更对照 */
+  table.diff {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.8pt;
+    margin-top: 1mm;
+  }
+  table.diff th, table.diff td {
+    border: 0.7pt solid var(--line);
+    padding: 1.1mm 2mm;
+    text-align: left;
+    vertical-align: top;
+  }
+  table.diff th {
+    background: var(--tint);
+    font-weight: 600;
+    color: var(--muted);
+  }
+  table.diff td.old { color: var(--muted); }
+  table.diff td.new { font-weight: 500; }
+
+  /* 确认表 */
+  table.confirm {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.7pt;
+    margin-top: 1mm;
+  }
+  table.confirm th, table.confirm td {
+    border: 0.7pt solid var(--line);
+    padding: 1mm 1.8mm;
+    vertical-align: top;
+  }
+  table.confirm th {
+    background: var(--tint);
+    font-weight: 600;
+    text-align: left;
+  }
+  table.confirm td.id { width: 9mm; text-align: center; color: var(--muted); }
+  table.confirm td.owner { width: 30mm; color: var(--muted); font-size: 8.2pt; }
+  table.confirm td.arch, table.confirm td.sec {
+    width: 13mm;
+    text-align: center;
+    font-family: "Segoe UI Symbol", sans-serif;
+    font-size: 10pt;
+  }
+  table.confirm .none { color: var(--muted); text-align: center; }
+
+  .detail {
+    display: block;
+    margin-top: 0.4mm;
+    color: var(--muted);
+    font-size: 8.1pt;
+  }
+
+  code {
+    font-family: "Cascadia Mono", Consolas, "Courier New", monospace;
+    font-size: 8.4pt;
+  }
+
+  /* 签收栏 */
+  .signblocks {
+    display: flex;
+    gap: 4mm;
+    margin-top: 3mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .signblock {
+    flex: 1;
+    border: 0.9pt solid var(--line-strong);
+    padding: 2.2mm 2.6mm;
+  }
+  .signblock h3 {
+    margin: 0 0 1.4mm;
+    font-size: 9.4pt;
+    font-weight: 600;
+  }
+  .signblock .rows { font-size: 8.6pt; line-height: 2.3; }
+  .blank {
+    display: inline-block;
+    min-width: 34mm;
+    border-bottom: 0.7pt solid var(--line-strong);
+    height: 3.4mm;
+  }
+  .blank.short { min-width: 22mm; }
+  .verdict-line { margin-bottom: 1mm; font-family: "Segoe UI Symbol", sans-serif; }
+
+  .footer {
+    margin-top: 2.6mm;
+    padding-top: 1.4mm;
+    border-top: 1.2pt solid var(--ink);
+    font-size: 8.2pt;
+    color: var(--muted);
+  }
+  .footer b { color: var(--ink); }
+  .gate {
+    margin-top: 1.6mm;
+    padding: 1.8mm 2.4mm;
+    background: var(--tint);
+    border-left: 2.4pt solid var(--ok);
+    font-size: 8.5pt;
+  }
+  .gate .title { color: var(--ok); font-weight: 600; }
+
+  @media screen {
+    body { background: #eef1f4; padding: 8mm 0; }
+    .sheet { background: #fff; padding: 12mm; box-shadow: 0 1pt 6pt rgba(0,0,0,0.14); }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="masthead">
+    <div>
+      <h1>ADR-VIZ-002 M-2 修订签收单</h1>
+      <p class="sub">渲染 Adapter 定位变更：浏览器内产物渲染器 → 服务端 SVG 出图器</p>
+    </div>
+    <div class="meta-box">
+      修订编号 <b>M-2</b>　·　ADR <b>VIZ-002</b><br>
+      签收方 <b>Architecture + Security（双签）</b><br>
+      依据 15 号安全审查（实测）+ 专家裁决 2026-11-12
+    </div>
+  </header>
+
+  <section class="notice">
+    <span class="warn">本修订未完成双签前，不得 vendor SeeCode。</span>
+    <ul>
+      <li>这是<b>架构定位变更</b>，不是实现细节——信任边界、执行环境、部署责任、安全验证全部发生变化。</li>
+      <li><b>不能将原 ADR 对浏览器内 SeeCode 的安全假设，直接继承为服务端执行的安全结论。</b>两者解决的问题不同：前者是「不可信 HTML 在浏览器沙箱中运行」，后者是「不可信输入在服务端 Node 中执行」。</li>
+      <li><span class="warn">SVG 是静态文件格式，不代表 SVG 内容天然安全。</span>安全证明只能来自静态化检查结果，不能来自扩展名或 MIME 类型。</li>
+    </ul>
+  </section>
+
+  <h2>定位变更对照</h2>
+  <table class="diff">
+    <tr>
+      <th>维度</th>
+      <th>原定位（修订前）</th>
+      <th>新定位（本修订）</th>
+    </tr>
+    <tr>
+      <td>执行位置</td>
+      <td class="old">用户浏览器内（iframe）</td>
+      <td class="new">服务端渲染 Worker</td>
+    </tr>
+    <tr>
+      <td>执行环境</td>
+      <td class="old">浏览器沙箱 + 独立 Origin + CSP</td>
+      <td class="new">进程隔离 + 资源限额（§3）</td>
+    </tr>
+    <tr>
+      <td>产物形态</td>
+      <td class="old">交互式 HTML（内含 JS）</td>
+      <td class="new">SVG only（静态，无脚本）</td>
+    </tr>
+    <tr>
+      <td>信任边界</td>
+      <td class="old">产物作为不可信主动内容隔离</td>
+      <td class="new">输入不可信 + 执行环境需另建隔离</td>
+    </tr>
+    <tr>
+      <td>依赖注入</td>
+      <td class="old">仅浏览器运行时</td>
+      <td class="new">Node 20 运行时（仅渲染 Worker 镜像）</td>
+    </tr>
+    <tr>
+      <td>部署责任</td>
+      <td class="old">静态产物域</td>
+      <td class="new">Worker 镜像维护 + Node 运行时安全更新</td>
+    </tr>
+  </table>
+
+  <h2>请逐项确认（12 项）</h2>
+  <table class="confirm">
+    <tr>
+      <th style="width:9mm">#</th>
+      <th>确认项</th>
+      <th style="width:26mm">Architecture</th>
+      <th style="width:26mm">Security</th>
+    </tr>
+    <tr>
+      <td class="id">1</td>
+      <td>Adapter B 定位变更为<b>服务端 SVG 出图器</b>（非核心依赖，失败降级不影响 Live 图）</td>
+      <td class="arch">☐</td>
+      <td class="sec">☐</td>
+    </tr>
+    <tr>
+      <td class="id">2</td>
+      <td>落仓约束：锁定上游版本与 commit；保留 LICENSE / NOTICE / UPSTREAM；<b>业务领域不得直接依赖</b> <code>tools/seecode/</code>；有明确移除路径（删目录 + 注销 Adapter 即回退 Fallback）</td>
+      <td class="arch">☐</td>
+      <td class="sec none">—</td>
+    </tr>
+    <tr>
+      <td class="id">3</td>
+      <td>升级策略：<b>锁版本 + 每季度评估</b>；每次升级必须形成五项记录（版本与 commit / 文件差异 / 依赖与许可变化 / 安全回归 / 契约回归）</td>
+      <td class="arch">☐</td>
+      <td class="sec">☐</td>
+    </tr>
+    <tr>
+      <td class="id">4</td>
+      <td>运行时边界：Node 20 <b>仅渲染 Worker 镜像</b>；API 服务与普通任务 Worker 不引入；不需要 Chrome / Headless Browser</td>
+      <td class="arch">☐</td>
+      <td class="sec">☐</td>
+    </tr>
+    <tr>
+      <td class="id">5</td>
+      <td>双测试门禁：Adapter 变更必须通过 <code>viz_artifact_safety</code> + <code>adapter_contract</code>；责任三方划分（开发者改与测 / 技术 Owner 把合并门禁 / Security Owner 维护安全规则与高风险用例）</td>
+      <td class="arch">☐</td>
+      <td class="sec">☐</td>
+    </tr>
+    <tr>
+      <td class="id">6</td>
+      <td><b>§3.1</b> 输入属于不可信主动内容；<b>传参一律经 stdin，绝不拼进命令行</b>（防命令注入）</td>
+      <td class="arch none">—</td>
+      <td class="sec">☐</td>
+    </tr>
+    <tr>
+      <td class="id">7</td>
+      <td><b>§3.2</b> 服务端执行不继承任何凭据：API 凭据 / 数据库 DSN / 文件服务 token / 业务权限上下文一律不注入子进程</td>
+      <td class="arch">☐</td>
+      <td class="sec">☐</td>
+    </tr>
+    <tr>
+      <td class="id">8</td>
+      <td><b>§3.3</b> 渲染过程不得访问外网（由部署侧网络策略阻断出口）</td>
+      <td class="arch none">—</td>
+      <td class="sec">☐</td>
+    </tr>
+    <tr>
+      <td class="id">9</td>
+      <td><b>§3.4</b> 资源限额：执行时间硬超时、内存上限、CPU 并发限制、仅临时目录可写且渲染后清理</td>
+      <td class="arch">☐</td>
+      <td class="sec">☐</td>
+    </tr>
+    <tr>
+      <td class="id">10</td>
+      <td><b>§3.5</b> SVG 输出必须经<b>独立安全静态化检查</b>（脚本 / 事件处理器 / foreignObject / 外部资源 / 危险 CSS），不以扩展名或 MIME 判定安全</td>
+      <td class="arch none">—</td>
+      <td class="sec">☐</td>
+    </tr>
+    <tr>
+      <td class="id">11</td>
+      <td><b>§3.6</b> 检查失败<b>必须拒绝产物</b>，不得以未检查的 SVG 降级入库；禁止「跳过检查」「改写后再入库」「未检查 SVG 降级」三种做法</td>
+      <td class="arch">☐</td>
+      <td class="sec">☐</td>
+    </tr>
+    <tr>
+      <td class="id">12</td>
+      <td>明确「<b>SVG 格式 ≠ 内容安全</b>」：安全证明只来自静态化检查结果</td>
+      <td class="arch none">—</td>
+      <td class="sec">☐</td>
+    </tr>
+  </table>
+
+  <h2>签收</h2>
+  <div class="signblocks">
+    <div class="signblock">
+      <h3>Architecture Owner</h3>
+      <div class="verdict-line">☐ 确认　☐ 有条件确认　☐ 有异议</div>
+      <div class="rows">
+        条件 / 异议：<span class="blank"></span><br>
+        签署：<span class="blank"></span><br>
+        日期：<span class="blank short"></span>
+      </div>
+    </div>
+    <div class="signblock">
+      <h3>Security Owner</h3>
+      <div class="verdict-line">☐ 确认　☐ 有条件确认　☐ 有异议</div>
+      <div class="rows">
+        条件 / 异议：<span class="blank"></span><br>
+        签署：<span class="blank"></span><br>
+        日期：<span class="blank short"></span>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="gate">
+      <span class="title">签收前已就绪的技术前提</span>（不必重做，可在评审时直接核对）<br>
+      · <code>viz_render_sandbox.rs</code>：§3.1 / §3.2 / §3.4 已实现并有 8 项单测（stdin 传参、凭据不继承、secret 键名过滤、超时强杀、超大输出拒绝）<br>
+      · <code>artifact_safety.rs</code>：§3.5 静态化检查（真实 SeeCode 产物夹具已验证通过 + 篡改版被拦截）<br>
+      · <code>render_job.rs</code>：§3.6 检查失败不落库 + 渲染失败降级不阻断<br>
+      · 迁移 0061 已含 <code>viz.render_output</code>（HTML/SVG 分列存储，失败产物不落表）
+    </div>
+    <div style="margin-top:1.6mm">
+      <b>签收后执行顺序</b>：M-2 双签完成 → vendor 落仓（<code>tools/seecode/</code> + VERSION/UPSTREAM/NOTICE）→ Worker 隔离接线 + Adapter 注册 → 双测试门禁全绿 → 真实产物端到端。<b>双签未完成前不得执行第 2 步。</b>
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>
