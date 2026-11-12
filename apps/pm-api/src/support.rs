@@ -216,13 +216,10 @@ pub async fn require_task_project(
     task_id: Uuid,
     principal: &crate::auth::AuthedPrincipal,
 ) -> ApiResult<Uuid> {
-    let project_id: Option<Uuid> =
-        sqlx::query_scalar("SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2")
-            .bind(task_id)
-            .bind(principal.tenant_id)
-            .fetch_optional(pool)
-            .await?;
-    let project_id = project_id.ok_or(ApiError::NotFound("task_not_found"))?;
+    let project_id = repos::guard_query_repo(pool)
+        .task_project_id(principal.tenant_id, task_id)
+        .await?
+        .ok_or(ApiError::NotFound("task_not_found"))?;
     require_project_visible(
         pool,
         project_id,
@@ -237,6 +234,8 @@ pub async fn require_task_project(
 
 /// 各 handler/middleware 统一从这儿拿仓储实现（PgPool clone 廉价；
 /// 换实现只动此处，调用方只依赖 pm_application 的 trait）。
+use pm_application::repo::GuardQueryRepo;
+
 pub mod repos {
     /// pm-api 各模块的仓储集合：按域惰性构造，无全局状态。
     pub fn identity_repo(
@@ -265,6 +264,18 @@ pub mod repos {
 
     pub fn run_repo(pool: &sqlx::PgPool) -> pm_infrastructure::repo_runs::PgRunRepo {
         pm_infrastructure::repo_runs::PgRunRepo::new(pool.clone())
+    }
+
+    pub fn acceptance_read_repo(
+        pool: &sqlx::PgPool,
+    ) -> pm_infrastructure::repo_acceptance_read::PgAcceptanceReadRepo {
+        pm_infrastructure::repo_acceptance_read::PgAcceptanceReadRepo::new(pool.clone())
+    }
+
+    pub fn platform_ops_repo(
+        pool: &sqlx::PgPool,
+    ) -> pm_infrastructure::repo_platform_ops::PgPlatformOpsRepo {
+        pm_infrastructure::repo_platform_ops::PgPlatformOpsRepo::new(pool.clone())
     }
 
     pub fn guard_query_repo(

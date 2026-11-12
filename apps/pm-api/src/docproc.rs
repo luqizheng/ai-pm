@@ -19,6 +19,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::platform_ops_repo;
+use pm_application::repo::platform_ops::PlatformOpsRepo;
 use pm_application::docproc_service as svc;
 use pm_application::docproc_service::{DocprocError, StoreError};
 
@@ -213,15 +215,9 @@ async fn lookup_document_id(
     caller: &AuthedPrincipal,
     v: &svc::DocumentVersion,
 ) -> Uuid {
-    sqlx::query_scalar(
-        "SELECT d.id FROM docproc.document d \
-         JOIN docproc.document_version ver ON ver.document_id = d.id \
-         WHERE ver.id = $1 AND d.tenant_id = $2",
-    )
-    .bind(v.version_id)
-    .bind(caller.tenant_id)
-    .fetch_one(&state.pool)
-    .await
+    platform_ops_repo(&state.pool)
+        .document_id_of_version(caller.tenant_id, v.version_id)
+        .await
     .unwrap_or_else(|_| Uuid::nil())
 }
 
@@ -285,11 +281,9 @@ async fn job_for_artifact(
     let view = svc::artifact_view(&state.pool, caller.tenant_id, artifact_id)
         .await
         .map_err(|e| err_resp(&e))?;
-    let version_id: Uuid =
-        sqlx::query_scalar("SELECT document_version_id FROM docproc.processing_job WHERE id = $1")
-            .bind(view.processing_job_id)
-            .fetch_one(&state.pool)
-            .await
+    let version_id: Uuid = platform_ops_repo(&state.pool)
+        .version_id_of_job(view.processing_job_id)
+        .await
             .map_err(|_| {
                 (
             StatusCode::NOT_FOUND,
@@ -297,12 +291,10 @@ async fn job_for_artifact(
         )
             .into_response()
             })?;
-    let document_id: Uuid =
-        sqlx::query_scalar("SELECT document_id FROM docproc.document_version WHERE id = $1")
-            .bind(version_id)
-            .fetch_one(&state.pool)
-            .await
-            .map_err(|_| not_found())?;
+    let document_id: Uuid = platform_ops_repo(&state.pool)
+        .document_id_of_version_row(version_id)
+        .await
+        .map_err(|_| not_found())?;
     Ok(document_id)
 }
 

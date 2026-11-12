@@ -12,6 +12,8 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
+use crate::support::repos::platform_ops_repo;
+use pm_application::repo::platform_ops::PlatformOpsRepo;
 
 pub(crate) fn guard_tenant(caller: &AuthedPrincipal, tenant_id: Uuid) -> Result<(), Response> {
     // 跨租户一律 404：不泄露目标租户是否存在。
@@ -31,26 +33,21 @@ pub(crate) async fn verify_active_member(
     tenant_id: Uuid,
 ) -> Result<(), Response> {
     guard_tenant(caller, tenant_id)?;
-    let active: Option<Uuid> = sqlx::query_scalar(
-        "SELECT tm.tenant_id \
-           FROM core.tenant_member tm \
-           JOIN core.principal p ON p.id = tm.principal_id \
-           JOIN core.tenant t ON t.id = tm.tenant_id AND t.is_active \
-          WHERE tm.tenant_id = $1 AND tm.principal_id = $2 AND p.is_active",
-    )
-    .bind(tenant_id)
-    .bind(caller.principal_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| {
-        tracing::error!(error = %e, "active membership check failed");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "message": "internal error" })),
-        )
-            .into_response()
-    })?;
-    if active.is_none() {
+    let active = match platform_ops_repo(pool)
+        .active_tenant_membership(tenant_id, caller.principal_id)
+        .await
+    {
+        Ok(active) => active,
+        Err(e) => {
+            tracing::error!(error = %e, "active membership check failed");
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "message": "internal error" })),
+            )
+                .into_response());
+        }
+    };
+    if !active {
         return Err(err_forbidden("not an active member"));
     }
     Ok(())

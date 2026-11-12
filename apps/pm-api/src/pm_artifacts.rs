@@ -10,27 +10,15 @@ use axum::{
     Json, Router,
 };
 use std::collections::HashMap;
-use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use pm_application::repo::acceptance_read::{AcceptanceReadRepo, Page};
+use crate::support::repos::acceptance_read_repo;
 use crate::support::{paging, project_filter, require_project_visible, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new().route("/v1/pm/artifacts", get(artifacts))
-}
-
-#[derive(Debug, serde::Serialize, sqlx::FromRow)]
-pub(crate) struct ArtifactRow {
-    pub id: Uuid,
-    pub requirement_id: Uuid,
-    pub requirement_code: String,
-    pub requirement_title: String,
-    pub version: i32,
-    pub state: String,
-    pub content_hash: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub approved_by: Option<Uuid>,
 }
 
 async fn artifacts(
@@ -49,36 +37,13 @@ async fn artifacts(
         )
         .await?;
     }
-    let items: Vec<ArtifactRow> = sqlx::query_as(
-        "SELECT rv.id, rv.requirement_id, r.code AS requirement_code, \
-                r.title AS requirement_title, rv.version, rv.state, rv.content_hash, \
-                rv.created_at, rv.approved_by \
-         FROM delivery.requirement_revision rv \
-         JOIN delivery.requirement r ON r.id = rv.requirement_id \
-         WHERE rv.tenant_id = $5 \
-           AND EXISTS (SELECT 1 FROM core.project_member m \
-                        WHERE m.project_id = rv.project_id AND m.principal_id = $4) \
-           AND ($1::uuid IS NULL OR rv.project_id = $1) \
-         ORDER BY rv.created_at DESC, rv.version DESC LIMIT $2 OFFSET $3",
-    )
-    .bind(project_id)
-    .bind(page.size)
-    .bind(page.offset)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_all(&state.pool)
-    .await?;
-    let total: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM delivery.requirement_revision rv \
-         WHERE rv.tenant_id = $3 \
-           AND EXISTS (SELECT 1 FROM core.project_member m \
-                        WHERE m.project_id = rv.project_id AND m.principal_id = $2) \
-           AND ($1::uuid IS NULL OR rv.project_id = $1)",
-    )
-    .bind(project_id)
-    .bind(caller.principal_id)
-    .bind(caller.tenant_id)
-    .fetch_one(&state.pool)
-    .await?;
+    let (items, total) = acceptance_read_repo(&state.pool)
+        .list_artifacts(
+            caller.tenant_id,
+            caller.principal_id,
+            project_id,
+            Page { size: page.size, offset: page.offset },
+        )
+        .await?;
     Ok(Json(page.to_response(items, total)))
 }

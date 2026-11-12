@@ -18,6 +18,8 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
+use crate::support::repos::platform_ops_repo;
+use pm_application::repo::platform_ops::PlatformOpsRepo;
 use pm_application::caller::{DeviceClaim, DeviceClaimIgnoredReason};
 
 /// 设备声明头（客户端自报，不可信）。
@@ -129,9 +131,8 @@ pub(crate) async fn attach_device_claim(
 
 /// 一次设备查询：返回 `(tenant_id, owner, status)`；不存在 → None。
 async fn device_status(state: &AppState, device_id: Uuid) -> Option<(Uuid, Uuid, String)> {
-    sqlx::query_as("SELECT tenant_id, owner_principal_id, status FROM devenv.device WHERE id = $1")
-        .bind(device_id)
-        .fetch_optional(&state.pool)
+    platform_ops_repo(&state.pool)
+        .device_status(device_id)
         .await
         .ok()?
 }
@@ -142,19 +143,11 @@ async fn record_ignored(
     caller: &AuthedPrincipal,
     reason: DeviceClaimIgnoredReason,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "INSERT INTO governance.tenant_audit_log \
-         (tenant_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
-          action, target_principal_id, before_data, after_data) \
-         VALUES ($1, $2, $3, $4, $5, NULL, 'device_attribution_ignored', $2, NULL, $6)",
-    )
-    .bind(caller.tenant_id)
-    .bind(caller.principal_id)
-    .bind(caller.identity_id)
-    .bind(&caller.client)
-    .bind(&caller.auth_mode)
-    .bind(json!({ "reason": reason.as_str() }))
-    .execute(&state.pool)
-    .await
-    .map(|_| ())
+    platform_ops_repo(&state.pool)
+        .audit_device_claim_ignored(
+            caller.tenant_id,
+            &caller.audit_actor(),
+            json!({ "reason": reason.as_str() }),
+        )
+        .await
 }
