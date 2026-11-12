@@ -92,7 +92,9 @@ pub const RECENT_TURNS_K: usize = 6;
 /// 单条轮次正文的截断上限（防止一条巨消息挤掉整段结构化记忆）。
 pub const MAX_TURN_CHARS: usize = 2_000;
 /// 提示词总预算（字符；§5.3 六节 + 骨架的定值，D-DK-7）。
-pub const TOTAL_PROMPT_CHARS: usize = 36_000;
+/// 数值单一真源 = discovery_context::TOTAL_BUDGET_CHARS（批 D-2：
+/// 两处 36k 字面量收敛，调参只动 context 侧）。
+pub const TOTAL_PROMPT_CHARS: usize = crate::discovery_context::TOTAL_BUDGET_CHARS;
 /// 同一槽位连续失败多少轮 → 升级为人工介入（§4.3）。
 pub const MAX_SLOT_STREAK: u8 = 3;
 /// 连续多少轮契约不合规 → 升级为人工介入（§4.5）。
@@ -189,6 +191,8 @@ impl SectionId {
 }
 
 /// 超预算时的整节裁剪顺序（§5.3 / D-DK-7：先砍低优先级的 S5，最后 S3）。
+/// 与 discovery_context::DROP_ORDER（字符串键版）语义必须一致
+/// ——由 discovery_drop_orders_are_semantically_aligned 测试锁定。
 pub const DROP_ORDER: [SectionId; 4] = [
     SectionId::S5Tasks,
     SectionId::S4Requirements,

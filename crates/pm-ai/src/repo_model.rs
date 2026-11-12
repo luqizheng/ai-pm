@@ -5,6 +5,8 @@
 //! 保证演示环境四步向导能走通。
 
 use async_trait::async_trait;
+use crate::conversation_model::{complete_raw, ConversationTurn};
+use crate::model::ModelError;
 use pm_application::repo_facts::pm_ai_port::ModelError as RepoModelError;
 use pm_application::team_llm_catalog::ModelResolutionError;
 pub use pm_application::repo_facts::{RepoAnalysisModel, RepoMaterial};
@@ -173,24 +175,21 @@ impl RepoAnalysisModel for FakeRepoAnalysisModel {
 }
 
 /// OpenAI 兼容的仓库分析模型；非 JSON 输出重试一次后判 `BadOutput`。
+/// HTTP 端点单源：`conversation_model::complete_raw`（批 D）。
 pub struct OpenAiRepoAnalysisModel {
-    client: reqwest::Client,
     base_url: String,
     model: String,
     api_key: String,
+    timeout: chrono::Duration,
 }
 
 impl OpenAiRepoAnalysisModel {
     pub fn new(base_url: &str, model: &str, api_key: &str, timeout: chrono::Duration) -> Self {
         Self {
-            client: reqwest::Client::builder()
-                .no_proxy()
-                .timeout(timeout.to_std().expect("timeout must be positive"))
-                .build()
-                .expect("reqwest client must build"),
             base_url: base_url.trim_end_matches('/').to_string(),
             model: model.to_string(),
             api_key: api_key.to_string(),
+            timeout,
         }
     }
 
@@ -208,45 +207,29 @@ impl OpenAiRepoAnalysisModel {
         let user = format!(
             "<repo_material>\n{material_json}\n</repo_material>\n\n<org_chart>\n{org_json}\n</org_chart>"
         );
-        let body = serde_json::json!({
-            "model": self.model,
-            "temperature": 0,
-            "messages": [
-                {"role": "system", "content": REPO_SYSTEM_PROMPT},
-                {"role": "user", "content": user},
-            ],
-        });
-        let response = self
-            .client
-            .post(format!("{}/chat/completions", self.base_url))
-            .bearer_auth(&self.api_key)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|err| {
-                if err.is_timeout() {
-                    RepoModelError::Timeout
-                } else if err.is_connect() {
-                    RepoModelError::Unavailable(format!("cannot reach repo model: {err}"))
-                } else {
-                    RepoModelError::Unavailable(format!("repo model request failed: {err}"))
-                }
-            })?;
-        if !response.status().is_success() {
-            return Err(RepoModelError::BadOutput(format!(
-                "repo model returned HTTP {}",
-                response.status()
-            )));
-        }
-        let value: serde_json::Value = response.json().await.map_err(|e| {
-            RepoModelError::BadOutput(format!("repo model response is not json: {e}"))
+        let messages = [
+            ConversationTurn::new("system", REPO_SYSTEM_PROMPT),
+            ConversationTurn::new("user", user),
+        ];
+        // 仓库分析是确定性任务：temperature=0（单源前原值）。
+        let completion = complete_raw(
+            &self.base_url,
+            &self.api_key,
+            &self.model,
+            self.timeout,
+            &messages,
+            0.0,
+        )
+        .await
+        .map_err(|e| match e {
+            ModelError::Timeout => RepoModelError::Timeout,
+            ModelError::Unavailable(reason) => RepoModelError::Unavailable(reason),
+            ModelError::BadOutput(reason) => RepoModelError::BadOutput(reason),
+            ModelError::Configuration(detail) => {
+                RepoModelError::Unavailable(format!("model configuration: {detail}"))
+            }
         })?;
-        value["choices"][0]["message"]["content"]
-            .as_str()
-            .map(str::to_string)
-            .ok_or_else(|| {
-                RepoModelError::BadOutput("missing choices[0].message.content".to_string())
-            })
+        Ok(completion.content)
     }
 }
 
