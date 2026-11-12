@@ -41,6 +41,8 @@ settings:
     development: 开发配置
     projectAi: AI 配置
     aiProviders: AI 配置（模型服务）
+    invitations: 邀请
+    general: 团队信息
   demo:
     personaLabel: 演示角色
     persona:

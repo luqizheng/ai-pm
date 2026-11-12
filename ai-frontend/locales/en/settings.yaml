@@ -41,6 +41,8 @@ settings:
     development: Development
     projectAi: AI Configuration
     aiProviders: AI Configuration (Models)
+    invitations: Invitations
+    general: Team Info
   demo:
     personaLabel: Demo role
     persona:
