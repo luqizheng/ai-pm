@@ -10,7 +10,11 @@
 //! 预设抽象。
 
 pub mod baseline;
+pub mod cognition;
+pub mod identity;
 pub mod lists;
 
 pub use baseline::{BaselineRepo, BaselineRepoError};
+pub use cognition::{CognitionRepo, CognitionRepoError};
+pub use identity::{IdentityRepo, IdentityRepoError};
 pub use lists::{ListPage, PmListRepo};

@@ -10,20 +10,37 @@
 //! 授权：读写都要求 `core.project_member` 成员（DEF-01 教训：写侧不得只查租户）。
 //! 逐项确认（Q3-B）：每条独立决策，不绑定 Run 完成态；确认即落项目知识并留
 //! decided_by/at（§6.3），拒绝/暂缓/调查保留历史（§6.4），AI 无确认入口。
+//!
+//! 数据访问已收口到仓储（任务书批 B）：SQL 在
+//! `pm_infrastructure::repo_cognition::PgCognitionRepo`，本模块零 SQL；
+//! 派生条目的文案组装（项目身份/仓库元数据）是产品文案，留在本层。
 
 use axum::{
     extract::{Extension, Path, State},
     routing::{get, post},
     Json, Router,
 };
-use chrono::{DateTime, Utc};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::{require_project_visible, ApiError, ApiResult};
+use pm_application::repo::{CognitionRepo, CognitionRepoError};
+use pm_infrastructure::repo_cognition::PgCognitionRepo;
+
+fn repo(state: &AppState) -> PgCognitionRepo {
+    PgCognitionRepo::new(state.pool.clone())
+}
+
+fn repo_err(e: CognitionRepoError) -> ApiError {
+    match e {
+        CognitionRepoError::Db(err) => ApiError::Internal(err),
+        CognitionRepoError::Conflict(m) => ApiError::Conflict(m),
+        CognitionRepoError::NotFound(m) => ApiError::NotFound(m),
+    }
+}
 
 /// GET 认知概览：runs（近序）+ 最新 run 的 items + knowledge 统计。
 async fn overview(
@@ -39,51 +56,26 @@ async fn overview(
     )
     .await?;
 
-    let runs: Vec<RunRow> = sqlx::query_as(
-        "SELECT id, scope, item_count, confirmed_count, status, created_at \
-         FROM ai.cognition_run WHERE tenant_id = $1 AND project_id = $2 \
-         ORDER BY created_at DESC LIMIT 20",
-    )
-    .bind(caller.tenant_id)
-    .bind(project_id)
-    .fetch_all(&state.pool)
-    .await?;
-
-    let knowledge_active: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.project_knowledge \
-         WHERE tenant_id = $1 AND project_id = $2 AND status = 'active'",
-    )
-    .bind(caller.tenant_id)
-    .bind(project_id)
-    .fetch_one(&state.pool)
-    .await?;
-
-    let proposed: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.cognition_item ci \
-         JOIN ai.cognition_run cr ON cr.id = ci.run_id \
-         WHERE ci.tenant_id = $1 AND ci.project_id = $2 AND ci.state = 'proposed' \
-           AND cr.status <> 'cancelled'",
-    )
-    .bind(caller.tenant_id)
-    .bind(project_id)
-    .fetch_one(&state.pool)
-    .await?;
+    let runs = repo(&state)
+        .recent_runs(caller.tenant_id, project_id, 20)
+        .await
+        .map_err(repo_err)?;
+    let knowledge_active = repo(&state)
+        .active_knowledge_count(caller.tenant_id, project_id)
+        .await
+        .map_err(repo_err)?;
+    let proposed = repo(&state)
+        .proposed_item_count(caller.tenant_id, project_id)
+        .await
+        .map_err(repo_err)?;
 
     // 最新 run 的全部条目（逐项审核区数据源）。
     let latest_run_id = runs.first().map(|r| r.id);
-    let items: Vec<CognitionItemRow> = match latest_run_id {
-        Some(run_id) => {
-            sqlx::query_as(
-                "SELECT id, domain, content, evidence, confidence, has_conflict, \
-                    state, decided_by, decided_at, decision_note \
-             FROM ai.cognition_item WHERE tenant_id = $1 AND run_id = $2 \
-             ORDER BY created_at",
-            )
-            .bind(caller.tenant_id)
-            .bind(run_id)
-            .fetch_all(&state.pool)
-            .await?
-        }
+    let items = match latest_run_id {
+        Some(run_id) => repo(&state)
+            .run_items(caller.tenant_id, run_id)
+            .await
+            .map_err(repo_err)?,
         None => Vec::new(),
     };
 
@@ -96,28 +88,70 @@ async fn overview(
     })))
 }
 
-#[derive(sqlx::FromRow, serde::Serialize)]
-struct RunRow {
-    id: Uuid,
-    scope: serde_json::Value,
-    item_count: i32,
-    confirmed_count: i32,
-    status: String,
-    created_at: DateTime<Utc>,
-}
+/// 派生条目文案：项目身份 + 每仓库一条元数据认知。
+/// 输入行经仓储 `derivation_input` 读取；文案是产品文案，留在本层组装。
+async fn derive_items(
+    state: &AppState,
+    tenant_id: Uuid,
+    project_id: Uuid,
+) -> ApiResult<(Vec<Value>, Vec<pm_application::repo::cognition::DerivedItem<'static>>)> {
+    let input = repo(state)
+        .derivation_input(tenant_id, project_id)
+        .await
+        .map_err(|e| match e {
+            pm_application::repo::cognition::DerivationError::Db(err) => ApiError::Internal(err),
+            pm_application::repo::cognition::DerivationError::NotFound => {
+                ApiError::NotFound("project not found")
+            }
+        })?;
 
-#[derive(sqlx::FromRow, serde::Serialize)]
-struct CognitionItemRow {
-    id: Uuid,
-    domain: String,
-    content: String,
-    evidence: serde_json::Value,
-    confidence: String,
-    has_conflict: bool,
-    state: String,
-    decided_by: Option<Uuid>,
-    decided_at: Option<DateTime<Utc>>,
-    decision_note: Option<String>,
+    let mut items: Vec<pm_application::repo::cognition::DerivedItem<'static>> = Vec::new();
+    let mut repo_versions = Vec::new();
+
+    // 派生条目①：项目身份（无描述也是有效认知；§12 无仓库/缺资料不阻断）。
+    let identity_content: String = match input.project_description.as_deref() {
+        Some(desc) if !desc.trim().is_empty() => {
+            format!("Project '{}' — {}", input.project_name, desc.trim())
+        }
+        _ => format!(
+            "Project '{}' has no description yet; identity rests on the project record.",
+            input.project_name
+        ),
+    };
+    items.push(pm_application::repo::cognition::DerivedItem {
+        domain: "identity",
+        content: Box::leak(identity_content.into_boxed_str()),
+        evidence: Box::leak(Box::new(
+            json!({"type": "project_record", "source": "core.project"}),
+        )),
+        confidence: "high",
+    });
+
+    // 派生条目②：每仓库一条元数据认知（§9.1 独立认知；不推断仓库间关系）。
+    for (id, name, url, branch, role) in &input.repositories {
+        let branch_text = branch
+            .as_deref()
+            .filter(|b| !b.trim().is_empty())
+            .unwrap_or("unknown");
+        let content: String = format!(
+            "Repository '{}' ({}): {} · default branch {}",
+            name, role, url, branch_text
+        );
+        let evidence = json!({
+            "type": "repository_metadata",
+            "repository_id": id,
+            "source": "integration.project_repository"
+        });
+        items.push(pm_application::repo::cognition::DerivedItem {
+            domain: "repository",
+            content: Box::leak(content.into_boxed_str()),
+            evidence: Box::leak(Box::new(evidence)),
+            confidence: "high",
+        });
+        repo_versions.push(json!({"repository_id": id, "revision_snapshot": "current"}));
+    }
+
+    Ok((repo_versions, items))
 }
 
 /// POST 启动认知 Run（Q2-C：人类启动）。V1 同步派生结构化事实条目。
@@ -134,158 +168,30 @@ async fn start_run(
     )
     .await?;
 
-    let mut tx = state.pool.begin().await.map_err(ApiError::Internal)?;
-
-    let project: (String, Option<String>) = sqlx::query_as(
-        "SELECT name, description FROM core.project \
-         WHERE id = $1 AND tenant_id = $2",
-    )
-    .bind(project_id)
-    .bind(caller.tenant_id)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(|_| ApiError::NotFound("project not found"))?;
-
-    let repos: Vec<(Uuid, String, String, Option<String>, String)> = sqlx::query_as(
-        "SELECT id, name, url, default_branch, role \
-         FROM integration.project_repository \
-         WHERE tenant_id = $1 AND project_id = $2 ORDER BY created_at",
-    )
-    .bind(caller.tenant_id)
-    .bind(project_id)
-    .fetch_all(&mut *tx)
-    .await
-    .map_err(ApiError::Internal)?;
-
+    let (repo_versions, items) = derive_items(&state, caller.tenant_id, project_id).await?;
     let scope = json!({
         "sources": ["project_record", "repository_metadata"],
-        "repository_count": repos.len(),
+        "repository_count": repo_versions.len(),
         "mode": "structured_facts_v1",
     });
-    let run_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO ai.cognition_run (tenant_id, project_id, status, scope, started_by) \
-         VALUES ($1, $2, 'pending', $3, $4) RETURNING id",
-    )
-    .bind(caller.tenant_id)
-    .bind(project_id)
-    .bind(&scope)
-    .bind(caller.principal_id)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(ApiError::Internal)?;
 
-    // 派生条目①：项目身份（无描述也是有效认知；§12 无仓库/缺资料不阻断）。
-    let identity_content = match project.1.as_deref() {
-        Some(desc) if !desc.trim().is_empty() => {
-            format!("Project '{}' — {}", project.0, desc.trim())
-        }
-        _ => format!(
-            "Project '{}' has no description yet; identity rests on the project record.",
-            project.0
-        ),
-    };
-    insert_item(
-        &mut tx,
-        caller.tenant_id,
-        project_id,
-        run_id,
-        "identity",
-        &identity_content,
-        &json!({"type": "project_record", "source": "core.project"}),
-        "high",
-    )
-    .await?;
-
-    // 派生条目②：每仓库一条元数据认知（§9.1 独立认知；不推断仓库间关系）。
-    let mut repo_versions = Vec::new();
-    for (id, name, url, branch, role) in &repos {
-        let branch_text = branch
-            .as_deref()
-            .filter(|b| !b.trim().is_empty())
-            .unwrap_or("unknown");
-        let content = format!(
-            "Repository '{}' ({}): {} · default branch {}",
-            name, role, url, branch_text
-        );
-        insert_item(
-            &mut tx,
+    let started = repo(&state)
+        .start_run(
             caller.tenant_id,
             project_id,
-            run_id,
-            "repository",
-            &content,
-            &json!({
-                "type": "repository_metadata",
-                "repository_id": id,
-                "source": "integration.project_repository"
-            }),
-            "high",
+            caller.principal_id,
+            &scope,
+            &items,
+            &Value::Array(repo_versions),
         )
-        .await?;
-        repo_versions.push(json!({"repository_id": id, "revision_snapshot": "current"}));
-    }
-    let repo_versions = serde_json::Value::Array(repo_versions);
-
-    let item_count: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM ai.cognition_item WHERE tenant_id = $1 AND run_id = $2",
-    )
-    .bind(caller.tenant_id)
-    .bind(run_id)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(ApiError::Internal)?;
-    let item_count = item_count as i32;
-
-    // V1 派生是确定性的：全部条目成立 → completed（编排切片引入部分失败语义）。
-    sqlx::query(
-        "UPDATE ai.cognition_run SET status = 'completed', item_count = $2, \
-                repo_versions = $3, finished_at = now() \
-         WHERE tenant_id = $1 AND id = $4",
-    )
-    .bind(caller.tenant_id)
-    .bind(item_count)
-    .bind(&repo_versions)
-    .bind(run_id)
-    .execute(&mut *tx)
-    .await
-    .map_err(ApiError::Internal)?;
-
-    tx.commit().await.map_err(ApiError::Internal)?;
+        .await
+        .map_err(repo_err)?;
 
     Ok(Json(json!({
-        "run_id": run_id,
+        "run_id": started.run_id,
         "status": "completed",
-        "item_count": item_count,
+        "item_count": started.item_count,
     })))
-}
-
-#[allow(clippy::too_many_arguments)] // 认知对象落库行写入面，列清单与 pc 表对应
-async fn insert_item(
-    tx: &mut sqlx::Transaction<'static, sqlx::Postgres>,
-    tenant_id: Uuid,
-    project_id: Uuid,
-    run_id: Uuid,
-    domain: &str,
-    content: &str,
-    evidence: &serde_json::Value,
-    confidence: &str,
-) -> ApiResult<()> {
-    sqlx::query(
-        "INSERT INTO ai.cognition_item \
-         (tenant_id, project_id, run_id, domain, content, evidence, confidence) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
-    )
-    .bind(tenant_id)
-    .bind(project_id)
-    .bind(run_id)
-    .bind(domain)
-    .bind(content)
-    .bind(evidence)
-    .bind(confidence)
-    .execute(&mut **tx)
-    .await
-    .map_err(ApiError::Internal)?;
-    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -320,93 +226,22 @@ async fn decide_item(
         _ => return Err(ApiError::BadRequest("invalid action")),
     };
 
-    let mut tx = state.pool.begin().await.map_err(ApiError::Internal)?;
-
-    let item: (String, String, Option<Uuid>) = sqlx::query_as(
-        "SELECT state, content, knowledge_id FROM ai.cognition_item \
-         WHERE tenant_id = $1 AND project_id = $2 AND id = $3 FOR UPDATE",
-    )
-    .bind(caller.tenant_id)
-    .bind(project_id)
-    .bind(item_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(ApiError::Internal)?
-    .ok_or_else(|| ApiError::NotFound("cognition item not found"))?;
-
-    if item.0 != "proposed" {
-        return Err(ApiError::Conflict("cognition item is already decided"));
-    }
-
-    // Confirm：落项目知识（Edit & Confirm 的修订正文优先；重复确认 409）。
-    let mut knowledge_id = item.2;
-    let mut final_content: Option<String> = None;
-    if next_state == "confirmed" {
-        if knowledge_id.is_some() {
-            return Err(ApiError::Conflict(
-                "cognition item already produced knowledge",
-            ));
-        }
-        let content = match body.content.as_deref() {
-            Some(edited) if !edited.trim().is_empty() && edited.trim() != item.1 => {
-                final_content = Some(edited.trim().to_string());
-                edited.trim().to_string()
-            }
-            _ => item.1.clone(),
-        };
-        knowledge_id = Some(
-            sqlx::query_scalar(
-                "INSERT INTO ai.project_knowledge \
-                 (tenant_id, project_id, domain, content, source_item_id, confirmed_by) \
-                 SELECT tenant_id, project_id, domain, $3, id, $4 FROM ai.cognition_item \
-                 WHERE tenant_id = $1 AND id = $2 RETURNING id",
-            )
-            .bind(caller.tenant_id)
-            .bind(item_id)
-            .bind(&content)
-            .bind(caller.principal_id)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(ApiError::Internal)?,
-        );
-    }
-
-    sqlx::query(
-        "UPDATE ai.cognition_item SET state = $3, decided_by = $4, decided_at = now(), \
-                decision_note = $5, knowledge_id = COALESCE($6, knowledge_id), \
-                content = COALESCE($7, content) \
-         WHERE tenant_id = $1 AND id = $2",
-    )
-    .bind(caller.tenant_id)
-    .bind(item_id)
-    .bind(next_state)
-    .bind(caller.principal_id)
-    .bind(body.note.as_deref().filter(|n| !n.trim().is_empty()))
-    .bind(knowledge_id)
-    .bind(&final_content)
-    .execute(&mut *tx)
-    .await
-    .map_err(ApiError::Internal)?;
-
-    if next_state == "confirmed" {
-        sqlx::query(
-            "UPDATE ai.cognition_run SET confirmed_count = confirmed_count + 1 \
-             WHERE tenant_id = $1 AND id = \
-               (SELECT run_id FROM ai.cognition_item WHERE tenant_id = $1 AND id = $2)",
+    let decision = repo(&state)
+        .decide_item(
+            caller.tenant_id,
+            item_id,
+            next_state,
+            caller.principal_id,
+            body.note.as_deref(),
+            body.content.as_deref(),
         )
-        .bind(caller.tenant_id)
-        .bind(item_id)
-        .execute(&mut *tx)
         .await
-        .map_err(ApiError::Internal)?;
-    }
-
-    tx.commit().await.map_err(ApiError::Internal)?;
+        .map_err(repo_err)?;
 
     Ok(Json(json!({
         "id": item_id,
         "state": next_state,
-        "knowledge_id": knowledge_id,
+        "knowledge_id": decision.knowledge_id,
     })))
 }
 
@@ -424,29 +259,12 @@ async fn knowledge(
     )
     .await?;
 
-    let rows: Vec<KnowledgeRow> = sqlx::query_as(
-        "SELECT id, domain, content, version, source_item_id, confirmed_by, confirmed_at \
-         FROM ai.project_knowledge \
-         WHERE tenant_id = $1 AND project_id = $2 AND status = 'active' \
-         ORDER BY confirmed_at DESC",
-    )
-    .bind(caller.tenant_id)
-    .bind(project_id)
-    .fetch_all(&state.pool)
-    .await?;
+    let items = repo(&state)
+        .active_knowledge(caller.tenant_id, project_id)
+        .await
+        .map_err(repo_err)?;
 
-    Ok(Json(json!({ "items": rows })))
-}
-
-#[derive(sqlx::FromRow, serde::Serialize)]
-struct KnowledgeRow {
-    id: Uuid,
-    domain: String,
-    content: String,
-    version: i32,
-    source_item_id: Option<Uuid>,
-    confirmed_by: Uuid,
-    confirmed_at: DateTime<Utc>,
+    Ok(Json(json!({ "items": items })))
 }
 
 pub(crate) fn router() -> Router<AppState> {

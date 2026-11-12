@@ -10,5 +10,7 @@ pub mod outbox;
 pub mod outbox_handlers;
 pub mod outbox_worker;
 pub mod repo_baseline;
+pub mod repo_cognition;
+pub mod repo_identity;
 pub mod repo_lists;
 
