@@ -76,6 +76,20 @@
 
 ## 3. 批次提案
 
+### 批 C 执行记录（✅ C-1~C-3 已完成 2026-11-12，commit a3995ac2 + f163e4fd + 628a8b12）
+
+| 刀 | 文件 | 结果 |
+|---|---|---|
+| C-1 | design.rs 3207 行 | design/{mod,readiness,technical,finding,approval,adr,baseline} 7 文件（最大 734）；对外路径不变 |
+| C-2 | command_center.rs 1594 行 | {mod,project,work,action,risk,activity} 6 文件；8 个 load_* 按 §4.x 归 5 子模块 |
+| C-3 | intake.rs 1177 行 | {mod,task,signal,read} 4 文件（P3-3 状态机/RT 路由/P3-4 聚合读分离） |
+
+- **守卫真实拦截 ×2**：C-2 拆分触发 ADR-06a 容器守卫（白名单单文件条目失效），按守卫语义收敛为 `command_center/project.rs`（两表引用唯一落点）；C174/C180 审计守卫在批 A 同样拦截并按单点归并收敛清单。守卫机制工作正常。
+- **挂账**：V1.1 §4.7 使用方清单回填（守卫注释指向的文档条目未能定位，未擅自改契约文档）。
+- **team_llm.rs（1277 行）判定不拆**：混杂是叶子助手级（加密 44/校验 93/探活 90 行，被 CRUD 调用），拆出后主文件仍 ~1000 行且 CRUD 本身职责单一——收益不抵 churn。留待批 B 触及时随域处理。
+- 其余 1000+ 行文件（pc/proposal 1580、kb_service/memory 1196、run_executor 1116、requirement 1110、task_read 1046、run_dispatch/claim 1043、delivery/mod 1017、project_import/lifecycle 1013）：转为持续纪律——批 B 逐域迁移时随触随拆，不设独立批次。
+- 批 C 每刀验证：workspace 零警告 + clippy --all PASS + 针对性/全量测试绿。
+
 | 批 | 内容 | 风险 | 预估规模 |
 |---|---|---|---|
 | **F0** | 修绿 clippy --all（type_complexity ≥6 处，建 type 别名/拆结构体） | 低 | 小 |
