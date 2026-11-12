@@ -23,4 +23,5 @@ pub mod repo_runs;
 pub mod repo_tenant_members;
 pub mod repo_lists;
 pub mod repo_viz_read;
+pub mod viz_render_sandbox;
 

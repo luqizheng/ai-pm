@@ -188,4 +188,25 @@ apps/ai-pm-worker/src/viz/  ← Adapter 实现（子进程调用 + 输出捕获 
 | 渲染编排 + 失败不落库 + 幂等落库 | ✅ `render_job.rs` |
 | 产物落库表（format 分列 text/bytea） | ✅ 迁移 0061 |
 | 前端 `<img>` 静态呈现 + 表格降级 | ✅ V0-8 |
-| **本修订的 §3 执行隔离** | ❌ 待实现（随 vendor） |
+| **本修订的 §3 执行隔离（四项）** | ✅ **已实现**：`pm-infrastructure/src/viz_render_sandbox.rs`（见 §7.1） |
+| §3.3 零外网 / §3.5 静态化 / §3.6 拒绝入库 | ✅ 已有（部署网络策略 + `artifact_safety` + `render_job`） |
+
+## 7.1 §3 执行隔离的实现状态（2026-11-12）
+
+`crates/pm-infrastructure/src/viz_render_sandbox.rs` 已落地 §3 的**四项可代码化条款**，
+使 M-2 签收时技术前提真实存在（不是纸面承诺）：
+
+| 条款 | 实现 | 单测 |
+|---|---|---|
+| §3.1 输入不可信 + 传参不经命令行 | spec 一律经 **stdin** 传入；`args` 仅放渲染器固定参数 | `stdin_payload_is_passed_to_child` |
+| §3.2 零凭据继承 | `env_clear()` + 白名单（PATH / SystemRoot 等基础项 + TMPDIR/HOME 指向沙箱目录）；**凭据类键名二次过滤**（token/secret/password/database_url/api_key） | `credentials_are_not_inherited`、`secret_looking_extra_env_is_rejected` |
+| §3.4 资源限额 | 执行超时（`kill_on_drop` 强杀）、stdout 字节上限、独立临时目录且 **Drop 即清理** | `timeout_kills_child`、`oversized_output_is_rejected`、`workdir_is_cleaned_up_on_drop`、`nonzero_exit_is_reported` |
+| §3.1 输入经 stdin 的完整性 | 非零退出带截断 stderr 上报（UTF-8 边界安全） | `truncate_respects_utf8_boundary` |
+
+**明确不覆盖**（写清边界，避免误以为"签了就等于全防住"）：
+- **§3.3 零外网**：由部署侧网络策略保证（本模块不做网络命名空间隔离）——渲染 Worker 须在网络层阻断出口。
+- **§3.5/§3.6**：由 `artifact_safety::inspect_svg` 与 `render_job` 保证（渲染后、入库前的独立闸）。
+- **CPU/内存硬限额**：由容器资源限制（cgroup）承担；本模块只做时间与输出量限制。
+
+**安全责任分工（再次强调）**：本模块防「渲染进程越权」，**不防「渲染输出恶意」**——
+后者是静态化检查的职责。SVG 是静态格式，不等于内容安全。
