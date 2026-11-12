@@ -7,8 +7,10 @@
 //! - [`registry_loader`]：Relation Registry 加载与结构校验（fail-fast）。
 //! - [`source_hash`]：图形输入指纹（stale 判定依据）。
 
+pub mod artifact_safety;
 pub mod registry_loader;
 pub mod source_hash;
 
+pub use artifact_safety::{inspect_svg, SafetyViolation, SvgSafetyReport};
 pub use registry_loader::{load_registry, load_registry_from_path, parse_registry, REGISTRY_FILE};
 pub use source_hash::source_hash;
