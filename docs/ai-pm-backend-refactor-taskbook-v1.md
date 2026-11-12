@@ -141,7 +141,7 @@
 
 **守卫战果 ×3**：C-2 ADR-06a 容器守卫、批 A C174/C180 审计守卫、C-3 后审计守卫（intake 路径，拆目录时只跑了针对性测试漏网、全量时被守卫抓住）——源码级守卫体系持续有效，教训：**拆文件类改动必须过全量**（守卫按路径扫描）。
 
-**进度**：pm-api 37 文件 SQL 收口 1/37；其余按序 pm_baseline(18) → pm_cognition(15) → auth(14) → tenant_members(13) → 其余 32 文件。每域一个 commit + 全量绿。
+**进度**：pm-api 37 文件 SQL 收口 2/37（pm_lists 22 处 + pm_baseline 18 处归零）。首域样板（读模型 trait，错误=sqlx::Error）；第二域升级出**写事务域样板**：`BaselineRepoError { Db, Conflict, NotFound }` 域语义错误在仓储事务内翻译，HTTP 层只映射状态码（`repo_err()` 三行映射）+ 保留授权门。后续域照此二分：纯读域用 sqlx::Error，有唯一性/状态语义的写域用域错误枚举。剩余：pm_cognition(15) → auth(14) → tenant_members(13) → 其余 32 文件。
 
 ## 5. 验收门禁（每批必过）
 
