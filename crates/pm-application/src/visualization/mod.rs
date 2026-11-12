@@ -10,6 +10,7 @@
 pub mod adapter_contract;
 pub mod artifact_safety;
 pub mod artifact_service;
+pub mod data_conformance;
 pub mod live_graph;
 pub mod projection;
 pub mod render_job;
@@ -22,6 +23,9 @@ pub use adapter_contract::{
     contract, verify, ContractCheck, OutputFormat, RenderAdapter, RenderError, RenderOutput,
 };
 pub use artifact_safety::{inspect_svg, SafetyViolation, SvgSafetyReport};
+pub use data_conformance::{
+    check_relation_data, is_conformant, summary as conformance_summary, ConformanceViolation,
+};
 pub use artifact_service::{
     create_draft, decide_approval, get_artifact, mark_stale, request_approval, ArtifactRecord,
     VizError,

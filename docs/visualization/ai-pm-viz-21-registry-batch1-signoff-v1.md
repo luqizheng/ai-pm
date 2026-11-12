@@ -156,7 +156,13 @@
       按 `registry.is_relation_projectable()` 过滤——**未 active 的关系不出边**；
       `active` / `draft` 双路径单测（`draft_relations_are_not_projected`）
 - [x] Live 图集成验收：`viz_live_graph` 4 例绿（含 Task DAG 方向与双端隔离）
-- [ ] **G-2 存量数据符合性抽样**（跨域引用、绑定修订一致性）——**待办**
+- [x] **G-2 存量数据符合性核查**——**已实现为可复跑门禁**（`data_conformance.rs`）
+      - 四类检查：C-1 跨项目 · C-2 绑定修订错位 · C-3 悬空引用 · C-4 依赖跨项目
+      - **本库基线：0 违规**（新系统无存量数据 → 结论由核查给出，而非口头断言）
+      - 核查逻辑经注入验证：C-1/C-2 注入脏行均被抓到
+      - **C-4 发现**：`delivery.task_dependency` 有复合外键
+        `(project_id, depends_on_task_id) → task(project_id, id)`，跨项目依赖在
+        **schema 层就插不进去** → C-4 属纵深复核（防未来放宽约束或直连改库绕过 FK）
 - [x] 回填本文件；17 号会签表同步
 - [x] 第二、三批保持 draft（6 条），**不因本批通过而自动激活**
 
