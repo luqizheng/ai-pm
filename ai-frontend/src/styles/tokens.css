@@ -490,7 +490,7 @@
   /* V2 浅色主题：冷白画布、浅蓝灰侧栏、纯白内容表面；
      以更高亮度和更低视觉噪声体现日间清爽感。 */
   --ws-sidebar: #edf2f5;
-  --ws-surface: #ffffff;
+  --ws-surface: #fbfcfd;
   --ws-elevated: #eaf0f3;
   --ws-border: #dce4e9;
 
