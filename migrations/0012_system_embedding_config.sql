@@ -23,8 +23,9 @@ CREATE TABLE platform.embedding_config (
     updated_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     -- 单行约束由 id CHECK 保证；endpoint 形态校验在应用层（http/https 前缀）。
+    -- 应用层放行 http 与 https，本 CHECK 同口径（否则 https 端点保存 500）。
     CONSTRAINT embedding_config_endpoint_check
-        CHECK (endpoint = '' OR endpoint LIKE 'http://%'),
+        CHECK (endpoint = '' OR endpoint LIKE 'http://%' OR endpoint LIKE 'https://%'),
     CONSTRAINT embedding_config_model_check
         CHECK (model = '' OR length(btrim(model)) > 0)
 );

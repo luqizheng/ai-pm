@@ -84,7 +84,7 @@ impl PlatformOpsRepo for PgPlatformOpsRepo {
     ) -> Result<(String, String, bool, DateTime<Utc>), sqlx::Error> {
         let row: (String, String, bool, DateTime<Utc>) = sqlx::query_as(
             "UPDATE platform.embedding_config \
-                SET endpoint = $2, model = $3, enabled = $4, updated_by = $5, updated_at = now() \
+                SET endpoint = $1, model = $2, enabled = $3, updated_by = $4, updated_at = now() \
               WHERE id = 1 \
               RETURNING endpoint, model, enabled, updated_at",
         )
