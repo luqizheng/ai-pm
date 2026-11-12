@@ -234,6 +234,213 @@ async fn live_graph_cross_project_edges_do_not_leak(pool: PgPool) {
     );
 }
 
+/// 造认知 run + confirmed 认知条目 + 提案确认的基线条目（FK 链：item→run→proposal→item）。
+/// 返回 (cognition_id, baseline_id)。`extra_item_state` 可造一条非 confirmed 的干扰条目。
+async fn seed_architecture_chain(
+    pool: &PgPool,
+    tenant: Uuid,
+    project: Uuid,
+    principal: Uuid,
+    extra_item_state: Option<&str>,
+) -> (Uuid, Uuid) {
+    let run: Uuid = sqlx::query_scalar(
+        "INSERT INTO ai.cognition_run (tenant_id, project_id, status, started_by) \
+         VALUES ($1, $2, 'completed', $3) RETURNING id",
+    )
+    .bind(tenant)
+    .bind(project)
+    .bind(principal)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let cognition: Uuid = sqlx::query_scalar(
+        "INSERT INTO ai.cognition_item (tenant_id, project_id, run_id, domain, content, state) \
+         VALUES ($1, $2, $3, 'architecture', $4, 'confirmed') RETURNING id",
+    )
+    .bind(tenant)
+    .bind(project)
+    .bind(run)
+    .bind("系统采用 Rust 多租户后端，模块按领域划分")
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    if let Some(state) = extra_item_state {
+        sqlx::query(
+            "INSERT INTO ai.cognition_item (tenant_id, project_id, run_id, domain, content, state) \
+             VALUES ($1, $2, $3, 'convention', '干扰条目：未确认', $4)",
+        )
+        .bind(tenant)
+        .bind(project)
+        .bind(run)
+        .bind(state)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+    let proposal: Uuid = sqlx::query_scalar(
+        "INSERT INTO ai.baseline_proposal (tenant_id, project_id, status, source_run_id, created_by) \
+         VALUES ($1, $2, 'confirmed', $3, $4) RETURNING id",
+    )
+    .bind(tenant)
+    .bind(project)
+    .bind(run)
+    .bind(principal)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let baseline: Uuid = sqlx::query_scalar(
+        "INSERT INTO ai.baseline_item (tenant_id, project_id, proposal_id, category, content, state) \
+         VALUES ($1, $2, $3, 'architecture', $4, 'confirmed') RETURNING id",
+    )
+    .bind(tenant)
+    .bind(project)
+    .bind(proposal)
+    .bind("技术基线：PostgreSQL + Git 双存储架构")
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    (cognition, baseline)
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn live_architecture_graph_returns_derived_edges(pool: PgPool) {
+    let (tenant, project, principal) = seed_scene(&pool, 9205).await;
+    let (cognition, baseline) =
+        seed_architecture_chain(&pool, tenant, project, principal, Some("proposed")).await;
+
+    let token = token_for("owner-9205", 9205);
+    let app = router_with_auth_config(pool, test_jwks(), AuthConfig::default());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/v1/pm/visualizations/projects/{project}/live/architecture-graph"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let (status, body) = body_json(response).await;
+    assert_eq!(status, StatusCode::OK, "Live 查询应成功: {body}");
+    assert_eq!(body["meta"]["consistency"], "current");
+    assert_eq!(body["data"]["diagram_type"], "architecture-graph");
+
+    // 只有 confirmed 两端成边；proposed 干扰条目不出边
+    let edges = body["data"]["edges"].as_array().unwrap();
+    assert_eq!(edges.len(), 1, "非 confirmed 条目不得投影出边");
+    assert_eq!(edges[0]["from"], cognition.to_string());
+    assert_eq!(edges[0]["to"], baseline.to_string());
+    assert_eq!(edges[0]["relation"], "derived_trace");
+    assert_eq!(edges[0]["derived"]["direct"], false);
+    assert_eq!(edges[0]["derived"]["semantic_confidence"], "structurally_supported");
+
+    let nodes = body["data"]["nodes"].as_array().unwrap();
+    assert_eq!(nodes.len(), 2, "两个端点节点");
+    let kinds: Vec<&str> = nodes
+
+        .iter()
+        .map(|n| n["kind"].as_str().unwrap())
+        .collect();
+    assert!(kinds.contains(&"architecture"));
+    assert!(kinds.contains(&"baseline"));
+    // 节点必须带溯源（domain=ai），不得伪造 revision
+    for node in nodes {
+        assert_eq!(node["source_ref"]["domain"], "ai");
+        assert!(node["source_ref"]["revision_id"].is_null());
+    }
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn live_architecture_graph_cross_project_baseline_does_not_leak(pool: PgPool) {
+    let (tenant, project1, principal) = seed_scene(&pool, 9206).await;
+    let customer: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.customer (tenant_id, code, name, status) VALUES ($1, 'C2-9206', 'C2', 'active') RETURNING id",
+    )
+    .bind(tenant)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let project2: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.project (tenant_id, customer_id, code, name, status) VALUES ($1, $2, 'P2-9206', 'P2', 'active') RETURNING id",
+    )
+    .bind(tenant)
+    .bind(customer)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO core.project_member (tenant_id, project_id, principal_id, role) VALUES ($1, $2, $3, 'owner')")
+        .bind(tenant)
+        .bind(project2)
+        .bind(principal)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // 认知条目挂 project1，基线条目挂 project2（跨项目脏数据手工构造）
+    let run: Uuid = sqlx::query_scalar(
+        "INSERT INTO ai.cognition_run (tenant_id, project_id, status, started_by) \
+         VALUES ($1, $2, 'completed', $3) RETURNING id",
+    )
+    .bind(tenant)
+    .bind(project1)
+    .bind(principal)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO ai.cognition_item (tenant_id, project_id, run_id, domain, content, state) \
+         VALUES ($1, $2, $3, 'architecture', '跨项目认知', 'confirmed')",
+    )
+    .bind(tenant)
+    .bind(project1)
+    .bind(run)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let proposal: Uuid = sqlx::query_scalar(
+        "INSERT INTO ai.baseline_proposal (tenant_id, project_id, status, source_run_id, created_by) \
+         VALUES ($1, $2, 'confirmed', $3, $4) RETURNING id",
+    )
+    .bind(tenant)
+    .bind(project2)
+    .bind(run)
+    .bind(principal)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO ai.baseline_item (tenant_id, project_id, proposal_id, category, content, state) \
+         VALUES ($1, $2, $3, 'architecture', '跨项目基线', 'confirmed')",
+    )
+    .bind(tenant)
+    .bind(project2)
+    .bind(proposal)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let token = token_for("owner-9206", 9206);
+    let app = router_with_auth_config(pool, test_jwks(), AuthConfig::default());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/v1/pm/visualizations/projects/{project1}/live/architecture-graph"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let (_status, body) = body_json(response).await;
+    assert_eq!(
+        body["data"]["edges"].as_array().unwrap().len(),
+        0,
+        "跨项目端点不得渗入（双端隔离）"
+    );
+}
+
 #[sqlx::test(migrations = "../../migrations")]
 async fn unknown_view_kind_is_404(pool: PgPool) {
     let (_tenant, project, _principal) = seed_scene(&pool, 9204).await;

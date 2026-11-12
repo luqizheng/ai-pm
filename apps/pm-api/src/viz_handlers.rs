@@ -30,7 +30,7 @@ use crate::routes::AppState;
 use crate::support::{ensure_trusted_context, paging, require_project_visible, ApiError, ApiResult};
 use pm_application::actor::AuditActor;
 use pm_application::visualization::live_graph::{
-    build_task_dag_spec, build_trace_spec, LIVE_EDGE_LIMIT,
+    build_architecture_spec, build_task_dag_spec, build_trace_spec, LIVE_EDGE_LIMIT,
 };
 use pm_application::visualization::projection::{
     project_spec, ReadStrategy,
@@ -325,6 +325,16 @@ async fn live_graph(
                 .await?;
             let truncated = rows.len() as i64 >= LIVE_EDGE_LIMIT;
             (build_task_dag_spec(project_id, &state.viz_registry, &rows, truncated), truncated)
+        }
+        "architecture-graph" => {
+            let rows = repo
+                .cognition_edges(caller.tenant_id, project_id, LIVE_EDGE_LIMIT)
+                .await?;
+            let truncated = rows.len() as i64 >= LIVE_EDGE_LIMIT;
+            (
+                build_architecture_spec(project_id, &state.viz_registry, &rows, truncated),
+                truncated,
+            )
         }
         _ => {
             return Err(ApiError::NotFound("unknown visualization view kind"));

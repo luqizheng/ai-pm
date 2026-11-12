@@ -9,7 +9,9 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use pm_application::repo::viz_read::{TaskDependencyRow, TraceEdgeRow, VizReadRepo};
+use pm_application::repo::viz_read::{
+    CognitionEdgeRow, TaskDependencyRow, TraceEdgeRow, VizReadRepo,
+};
 
 /// PostgreSQL 实现。
 pub struct PgVizReadRepo {
@@ -79,6 +81,36 @@ impl VizReadRepo for PgVizReadRepo {
               WHERE d.tenant_id = $1 AND d.project_id = $2 \
                 AND t.project_id = $2 AND p.project_id = $2 \
               ORDER BY d.created_at DESC \
+              LIMIT $3",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    async fn cognition_edges(
+        &self,
+        tenant_id: Uuid,
+        project_id: Uuid,
+        limit: i64,
+    ) -> Result<Vec<CognitionEdgeRow>, sqlx::Error> {
+        // 单条 SQL：认知条目 → 基线条目的 FK 链推导边。
+        // 链：cognition_item.run_id = cognition_run.id
+        //     ← baseline_proposal.source_run_id ← baseline_item.proposal_id
+        // 两端 confirmed + 同 project（端点双端隔离）；单语句快照 → consistency=current。
+        sqlx::query_as(
+            "SELECT ci.id AS from_id, bi.id AS to_id, \
+                    ci.content AS from_content, bi.content AS to_content, \
+                    ci.domain AS from_kind \
+               FROM ai.cognition_item ci \
+               JOIN ai.cognition_run cr ON cr.id = ci.run_id \
+               JOIN ai.baseline_proposal bp ON bp.source_run_id = cr.id \
+               JOIN ai.baseline_item bi ON bi.proposal_id = bp.id \
+              WHERE ci.tenant_id = $1 AND ci.project_id = $2 AND ci.state = 'confirmed' \
+                AND bi.tenant_id = $1 AND bi.project_id = $2 AND bi.state = 'confirmed' \
+                AND bp.tenant_id = $1 AND bp.project_id = $2 \
               LIMIT $3",
         )
         .bind(tenant_id)

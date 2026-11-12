@@ -35,6 +35,24 @@ pub struct TaskDependencyRow {
     pub depends_on_status: String,
 }
 
+/// 架构认知边行（cognition_item → baseline_item 的 derived_trace 推导）。
+///
+/// pc schema（`pc.relationship` / `pc.related`）尚未实施，ai 域也无对象间
+/// 关系表——架构图边由结构化 FK 链推导：
+/// `baseline_item.proposal_id → baseline_proposal.source_run_id ← cognition_item.run_id`
+/// （同一个 cognition_run 产出的认知条目支撑该提案确认出的基线条目）。
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+pub struct CognitionEdgeRow {
+    pub from_id: Uuid,
+    pub to_id: Uuid,
+    /// cognition_item.content（全文，label 截断在组装层做）。
+    pub from_content: String,
+    /// baseline_item.content。
+    pub to_content: String,
+    /// cognition_item.domain（identity/repository/domain/architecture/…）。
+    pub from_kind: String,
+}
+
 #[async_trait]
 pub trait VizReadRepo: Send + Sync {
     /// 追踪边（需求 ← 设计 ← 任务），**单条 SQL**：`design.covers_requirement`
@@ -57,4 +75,16 @@ pub trait VizReadRepo: Send + Sync {
         project_id: Uuid,
         limit: i64,
     ) -> Result<Vec<TaskDependencyRow>, sqlx::Error>;
+
+    /// 架构认知边（`ai.cognition_item` → `ai.baseline_item`），**单条 SQL**。
+    ///
+    /// 只取 confirmed 态两端（proposed/rejected 不是业务事实，不得投影）；
+    /// 三表 FK 链（item→run→proposal→item）保证推导边有结构化依据——
+    /// `derived_trace` 是合成关系（Registry active），不要求持久化边表。
+    async fn cognition_edges(
+        &self,
+        tenant_id: Uuid,
+        project_id: Uuid,
+        limit: i64,
+    ) -> Result<Vec<CognitionEdgeRow>, sqlx::Error>;
 }
