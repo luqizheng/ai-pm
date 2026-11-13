@@ -97,7 +97,6 @@ onMounted(load);
 
 <template>
   <PageFrame
-    narrow
     :title="t('shell.adminSettings.title')"
     :description="t('shell.adminSettings.description')"
   >

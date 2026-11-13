@@ -343,7 +343,6 @@ onMounted(async () => {
 
 <template>
   <PageFrame
-    narrow
     :title="$t('team.members.title')"
     :description="$t('team.members.description')"
   >

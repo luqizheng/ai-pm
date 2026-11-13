@@ -132,7 +132,6 @@ onMounted(load);
 
 <template>
   <PageFrame
-    narrow
     :title="t('shell.adminAnnouncements.title')"
     :description="t('shell.adminAnnouncements.description')"
   >
