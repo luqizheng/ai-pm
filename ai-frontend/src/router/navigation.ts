@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   ListChecks,
   Megaphone,
-  MessagesSquare,
   ScanSearch,
   Settings2,
   Sparkles,
@@ -186,18 +185,8 @@ export const navGroups: NavGroup[] = [
             module => module.default
           )
       },
-      // 项目 AI 会话（V2 D-4 会话 REST 接线批，2026-11-08）：/project/execution
-      // 的「AI 执行中心」语义是执行编排（槽位保留），会话页不劫持该标签，
-      // 故新增 assistant 导航项（TopBar「助手」按钮同路由）。
-      {
-        path: "/project/assistant",
-        labelKey: "shell.app.side.item.assistant",
-        icon: MessagesSquare,
-        component: () =>
-          import("@/views/project/assistant/AssistantView.vue").then(
-            module => module.default
-          )
-      },
+      // AI 会话入口已合并进 TopBar「助手」按钮（AI Chat 常驻列），
+      // 主导航不再单列「AI 助手」；/project/assistant 路由保留供深链。
       {
         path: "/project/knowledge",
         labelKey: "shell.app.side.item.knowledge",
