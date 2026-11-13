@@ -186,6 +186,18 @@ The objective is to create the visual and interaction foundation that every subs
 - 共享 `ui/tooltip` 的触发器固定是 `<button>`；壳内图标按钮/链接用
   `components/shell/IconTooltip.vue`（`asChild`，触发器即真实元素），避免嵌套交互元素。
 - 右上下文栏**可选且可独立关闭**，不是每页常驻。
+- **禁止 AI 助手的页面（快速修正入口）**：唯一落点是
+  `src/router/navigation.ts` 的 `ASSISTANT_HIDDEN_PREFIXES`（路径前缀，命中即整页生效），
+  消费方单源是 `components/shell/use-shell-chrome.ts` 的 `isAssistantHiddenRoute`
+  ——**禁止**在业务页内写 `v-if` 隐藏助手。已禁用：管理组 `/admin/*`（由
+  `isManagementPath()` 覆盖）、项目设置 `/project/settings`。新增页面步骤：
+  1. 在 `ASSISTANT_HIDDEN_PREFIXES` 追加前缀（如 `/project/environments`）；
+  2. 确认四处同步收列：`TopBar` 助手按钮、`WorkspaceShell` 的 AI Chat 列与右上下文栏、
+     壳根 `data-ai-panel` / `data-context`（均由 `useShellChrome()` 派生，无需逐处改）；
+  3. 在 `components/shell/WorkspaceShell.test.ts` 的参数化用例追加该路径；
+  4. 跑 `pnpm vitest run src/components/shell/WorkspaceShell.test.ts` + `pnpm typecheck`。
+  语义说明：进入禁用页后助手**不可见**（不是收起态），专注开关一并隐藏；离开后按
+  `aiPanelOpen` 原状态恢复。
 
 ## 三、硬性约束（沿用并适配新结构）
 

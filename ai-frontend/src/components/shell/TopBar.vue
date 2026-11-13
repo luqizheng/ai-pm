@@ -53,9 +53,9 @@ const teamStore = useTeamStore();
 
 const emit = defineEmits<{ search: [] }>();
 
-/** 壳层 chrome 可见性（单源）：管理页不出现 AI 助手入口与专注开关
+/** 壳层 chrome 可见性（单源）：助手隐藏页（管理组 + 项目设置）不出现 AI 助手入口与专注开关
  *  （判定与壳层列渲染同一处派生）。 */
-const { isManagementRoute, focusAvailable } = useShellChrome();
+const { isAssistantHiddenRoute, focusAvailable } = useShellChrome();
 
 const shortcutsOpen = ref(false);
 const signOutOpen = ref(false);
@@ -266,7 +266,7 @@ async function onSignOutConfirm() {
 
       <!-- 专注模式开关（DR-C8）：临时收起 AI Chat 与右栏，主区独占工作区。
            置于顶栏——专注模式下 AI Chat 列已收起，此处是唯一的退出入口。
-           管理页本无 AI 面板可收，专注对其无意义，入口隐藏。 -->
+           AI 助手不出现的页面本无面板可收，专注对其无意义，入口隐藏。 -->
       <button
         v-if="focusAvailable"
         type="button"
@@ -291,9 +291,9 @@ async function onSignOutConfirm() {
       <!-- AI 面板总开关（2026-11-12 规则）：作用于「AI 助手列 + 上下文栏」整体——
            全开 ⇄ 全关；上下文栏被单独关闭时点击先一键补开（回归全开）。
            不再跳转会话页（会话页仍由左导航「助手」项进入）；
-           管理页（导航「管理」组）不出现该入口。 -->
+           管理组与项目设置等助手隐藏页不出现该入口。 -->
       <button
-        v-if="!isManagementRoute"
+        v-if="!isAssistantHiddenRoute"
         type="button"
         class="shell-topbar__assistant"
         :class="{ 'is-active': shell.aiPanelOpen }"

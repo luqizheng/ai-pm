@@ -1,6 +1,6 @@
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import { isManagementPath } from "@/router/navigation";
+import { isAssistantHiddenPath } from "@/router/navigation";
 import { useShellStore } from "@/stores/shell";
 
 /** 完整会话页路由——该页本身即会话面。 */
@@ -21,19 +21,21 @@ export function useShellChrome() {
   const route = useRoute();
   const shell = useShellStore();
 
-  /** 管理页（导航「管理」组）：租户运营面，AI 助手不出现。 */
-  const isManagementRoute = computed(() => isManagementPath(route.path));
+  /** 不出现 AI 助手的页面（管理组 + 项目设置）：顶栏入口与 AI 面板齐收。 */
+  const isAssistantHiddenRoute = computed(() =>
+    isAssistantHiddenPath(route.path)
+  );
 
   /** 完整会话页：该页本身即会话面，助手列收起避免同屏重复。 */
   const isAssistantRoute = computed(() => route.path === ASSISTANT_PATH);
 
-  /** AI Chat 列生效可见性（面板总开关 × 专注 × 会话页 × 管理页）。 */
+  /** AI Chat 列生效可见性（面板总开关 × 专注 × 会话页 × 助手隐藏页）。 */
   const assistantVisible = computed(
     () =>
       shell.aiPanelOpen &&
       !shell.focusMode &&
       !isAssistantRoute.value &&
-      !isManagementRoute.value
+      !isAssistantHiddenRoute.value
   );
 
   /**
@@ -46,14 +48,14 @@ export function useShellChrome() {
       shell.aiPanelOpen &&
       shell.contextOpen &&
       !shell.focusMode &&
-      !isManagementRoute.value
+      !isAssistantHiddenRoute.value
   );
 
-  /** 专注模式可用性：管理页本无 AI 面板可收，专注对其无意义（按钮隐藏）。 */
-  const focusAvailable = computed(() => !isManagementRoute.value);
+  /** 专注模式可用性：助手不可用的页面本无 AI 面板可收，专注对其无意义。 */
+  const focusAvailable = computed(() => !isAssistantHiddenRoute.value);
 
   return {
-    isManagementRoute,
+    isAssistantHiddenRoute,
     isAssistantRoute,
     assistantVisible,
     contextVisible,

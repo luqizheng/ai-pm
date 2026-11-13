@@ -54,6 +54,30 @@ describe("WorkspaceShell", () => {
     expect(wrapper.find(".shell-topbar__focus").exists()).toBe(false);
   });
 
+  it.each(["/project/settings", "/project/settings/repositories"])(
+    "项目设置页（%s）：AI 助手相关 chrome 都不出现",
+    async path => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: buildRoutes()
+      });
+      await router.push(path);
+      await router.isReady();
+      const { wrapper } = mountShell(WorkspaceShell, {}, router);
+      await nextTick();
+
+      // 与 /admin/settings 同口径：顶栏入口、AI 列、上下文栏、专注开关齐收
+      expect(wrapper.find(".workspace-chat").exists()).toBe(false);
+      expect(wrapper.find(".workspace-context").exists()).toBe(false);
+      expect(wrapper.find(".shell-topbar__assistant").exists()).toBe(false);
+      expect(wrapper.find(".shell-topbar__focus").exists()).toBe(false);
+      expect(wrapper.find(".workspace-main").exists()).toBe(true);
+      // 生效态 data-*：网格同步收列，避免右侧留 AI 列宽空带
+      expect(wrapper.attributes("data-ai-panel")).toBe("closed");
+      expect(wrapper.attributes("data-context")).toBe("closed");
+    }
+  );
+
   it("专注模式：data-focus=on 时收起 AI Chat 与右栏，退出恢复", async () => {
     const { wrapper } = mountShell(WorkspaceShell);
     await nextTick();

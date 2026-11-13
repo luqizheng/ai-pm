@@ -298,3 +298,20 @@ export function isManagementPath(currentPath: string): boolean {
     );
   });
 }
+/**
+ * 不出现 AI 助手的路径前缀（壳层 chrome 可见性的单源输入）。
+ *
+ * 项目设置（/project/settings/*）是配置面，与租户级管理页同类，不承载
+ * 项目 AI 会话上下文：顶栏「助手」入口、AI Chat 列与右上下文栏均不出现。
+ */
+const ASSISTANT_HIDDEN_PREFIXES = ["/project/settings"];
+
+/**
+ * 判定某路径是否不出现 AI 助手：管理组页面 + 配置面路径前缀。
+ */
+export function isAssistantHiddenPath(currentPath: string): boolean {
+  if (isManagementPath(currentPath)) return true;
+  return ASSISTANT_HIDDEN_PREFIXES.some(
+    path => currentPath === path || currentPath.startsWith(`${path}/`)
+  );
+}
