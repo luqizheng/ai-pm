@@ -32,3 +32,17 @@ service    = "pm-api"
 upstream   = "/v1/admin/{rest}"
 downstream = "/v1/admin/{rest}"
 service    = "pm-api"
+
+# 4) /v1/kb/* 与 /v1/pc/*：KB-PC 服务化 API（apps/pm-api/src/knowledge_services.rs
+#    + kb_memory_api.rs，均 merge 进 pm-api 主路由）。此前缺路由，网关报
+#    unknown service，知识库页「影响分析」整块报「加载失败」（2026-11-13
+#    UI 冒烟实测：pm-api 直连 200、经网关 404）。
+[[route]]
+upstream   = "/v1/kb/{rest}"
+downstream = "/v1/kb/{rest}"
+service    = "pm-api"
+
+[[route]]
+upstream   = "/v1/pc/{rest}"
+downstream = "/v1/pc/{rest}"
+service    = "pm-api"
