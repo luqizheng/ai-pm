@@ -1,4 +1,4 @@
-//! S02-I3 Source & Traceability 集成测试（迁移 0044 / docs/s02-i3-source-traceability-implementation-v1.md）：
+//! S02-I3 Source & Traceability 集成测试（迁移 0044 / docs/scenarios/s02/s02-i3-source-traceability-implementation-v1.md）：
 //! 来源登记/关联/解除全链 + Finding 支撑关联 + 跨项目 finding 404（negative_4 同语义）+
 //! 重复关联 409 + AI 主体 403（§7.4 职责表）+ 非成员 404 + archived 需求拒绝关联 + 审计断言。
 

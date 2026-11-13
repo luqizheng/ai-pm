@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 把 `ai-pm-task-state-machine-v1.md`（V12，§十 Q1–Q11 全部裁决）落成 `pm-domain` 纯域层核心：**13 值 TaskStatus + WaitingReason/WaitingContext + 迁移规则引擎（task_transition）+ Run 失败模型与重试计数**，全部带单元测试，不触 DB / API / MCP（后续 Slice B/C 另立计划）。
+**Goal:** 把 `docs/tasks/ai-pm-task-state-machine-v1.md`（V12，§十 Q1–Q11 全部裁决）落成 `pm-domain` 纯域层核心：**13 值 TaskStatus + WaitingReason/WaitingContext + 迁移规则引擎（task_transition）+ Run 失败模型与重试计数**，全部带单元测试，不触 DB / API / MCP（后续 Slice B/C 另立计划）。
 
 **Architecture:** 扩展既有 `crates/pm-domain/src/task.rs` 的 `TaskStatus`（5→13 值，保持 `as_str/from_str` + serde snake_case 既有模式）；新增 `waiting.rs`（等待上下文）、`task_transition.rs`（迁移规则引擎：全边矩阵 + Supersede 守卫 + 等待守卫）、`task_run.rs`（Run 四值结局 + 结构化失败记录 + 重试计数器）。域层零 I/O：守卫所需的外部事实（Run 是否停止、替代任务是否存在、等待是否解除）以输入字段传入。
 
 **Tech Stack:** Rust（serde / serde_json / chrono / thiserror / uuid，均为既有依赖，零新增）。
 
-**Spec:** [../../ai-pm-task-state-machine-v1.md](../../ai-pm-task-state-machine-v1.md)（V12）——§1.3 规范迁移边、§十一 Q1（Superseded）、§十二 Q2（WaitingContext）、§十九 Q9（失败模型与重试计数）、§二十一 Q11（枚举/存储口径）；5→13 迁移映射见 §九 M1–M4。
+**Spec:** [docs/tasks/ai-pm-task-state-machine-v1.md](docs/tasks/ai-pm-task-state-machine-v1.md)（V12）——§1.3 规范迁移边、§十一 Q1（Superseded）、§十二 Q2（WaitingContext）、§十九 Q9（失败模型与重试计数）、§二十一 Q11（枚举/存储口径）；5→13 迁移映射见 §九 M1–M4。
 
 ## Global Constraints
 

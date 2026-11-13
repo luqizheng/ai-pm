@@ -22,7 +22,7 @@
 --   `ct=true`（跨租户令牌）—— 见 services/iam-service/src/service/auth_svc.rs
 --   `let cross_tenant = roles.iter().any(|r| r == "platform_admin");`
 --   而 ai-pm 的 V1 边界是「只接受租户内令牌」：ct=true → 403 IAM_PERM_3004
---   （docs/ai-pm-principal-identity-v1.md §鉴权矩阵）。
+--   （docs/governance/ai-pm-principal-identity-v1.md §鉴权矩阵）。
 --   两者直接冲突：绑 platform_admin = 令牌必然被 ai-pm 业务端点拒绝。
 --   因此「全平台管理员」在 ai-pm 侧的正确表达是：
 --     · lmms 角色 = tenant_admin（ct=false）

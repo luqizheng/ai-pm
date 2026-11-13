@@ -1,5 +1,5 @@
-//! Document Processing 域类型（规格 docs/ai-pm-document-processing-v1.md §5/§6；
-//! 数据模型真源 docs/ai-pm-document-processing-td01-data-model-v1.md）。
+//! Document Processing 域类型（规格 docs/architecture/knowledge-services/ai-pm-document-processing-v1.md §5/§6；
+//! 数据模型真源 docs/architecture/knowledge-services/ai-pm-document-processing-td01-data-model-v1.md）。
 //!
 //! 枚举值与迁移 0016 的 CHECK 约束一一对应；任何一侧改动必须同步另一侧。
 

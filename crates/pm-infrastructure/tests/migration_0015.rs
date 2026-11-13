@@ -1,8 +1,8 @@
-//! 0015_task_contract 迁移验证（D2 契约，`docs/ai-pm-slice-d2-mcp-context-v1.md` §五）：
+//! 0015_task_contract 迁移验证（D2 契约，`docs/slice-d/ai-pm-slice-d2-mcp-context-v1.md` §五）：
 //! 契约四列、两张关联表、run 级凭据三列、service principal 种子；约束/外键
 //! 与列默认值断言。真实数据库，不 Mock。
 //! （迁移重入断言已随 2026-11-09 基线合并退役——0001_baseline.sql 吸收
-//! 0001~0065，无迁移链即无重跑场景，见 docs/ai-pm-migration-ledger.md。）
+//! 0001~0065，无迁移链即无重跑场景，见 docs/reference/ai-pm-migration-ledger.md。）
 
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;

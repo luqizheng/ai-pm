@@ -4,7 +4,7 @@
 |---|---|
 | 文档性质 | 联合实施基线（专家终审裁决整理产物；**架构裁决=通过，工程完成=以迁移/事务/测试/E2E 验收证据为准**——两态不得混标） |
 | 来源 | 专家「WP-B / WP-D 联合架构裁决」（2026-11-07，用户转发；原文逐字见附录） |
-| 上位文档 | Client Registry 实施设计 V1.0（`ai-pm-v05-client-registry-design-v1.md`，裁决收编）· ACP-04/05 联合数据契约 V1.0（`docs/ui/s03-acp/smark-pm-s03-acp-slice-design-acp04-05-joint-v1.md`，裁决收编）· roadmap · ACP V1.2 |
+| 上位文档 | Client Registry 实施设计 V1.0（`ai-pm-v05-client-registry-design-v1.md`，裁决收编）· ACP-04/05 联合数据契约 V1.0（`docs/scenarios/s03/ui/acp/smark-pm-s03-acp-slice-design-acp04-05-joint-v1.md`，裁决收编）· roadmap · ACP V1.2 |
 | 代码基线 | ai-pm master @ b71b5c1（2026-11-07） |
 
 ---

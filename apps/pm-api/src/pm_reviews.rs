@@ -1,4 +1,4 @@
-//! `/v1/pm/review-approvals/*`：D5 审批裁决端点（T-043 / `docs/ai-pm-slice-d5-review-v1.md` §5.2）。
+//! `/v1/pm/review-approvals/*`：D5 审批裁决端点（T-043 / `docs/slice-d/ai-pm-slice-d5-review-v1.md` §5.2）。
 //!
 //! 审批裁决是**单事务**：行锁 pending 行 → 锚定回读校验 → E2 前置复核 →
 //! UPDATE 审批行 → 任务状态迁移 → `task_waiting` 结行 → 审计 + 事件。

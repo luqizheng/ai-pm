@@ -83,4 +83,4 @@
 
 ## 7. 交付边界
 
-当前提供的文件是全局 CSS Token 文件。原始 `ai-pm/docs/ai-pm-ui-design-system-v1.md` 与 `tokens.test.ts` 未包含在本次附件中，因此本稿是 V2 视觉基线及 CSS Token 更新稿，不代表已修改仓库中的原始 Markdown 文档或测试文件。
+当前提供的文件是全局 CSS Token 文件。原始 `ai-pm/docs/ui/ai-pm-ui-design-system-v1.md` 与 `tokens.test.ts` 未包含在本次附件中，因此本稿是 V2 视觉基线及 CSS Token 更新稿，不代表已修改仓库中的原始 Markdown 文档或测试文件。

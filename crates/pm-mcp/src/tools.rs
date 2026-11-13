@@ -1463,7 +1463,7 @@ pub async fn discovery_complete(
 }
 
 // ---------------------------------------------------------------------------
-// ACP 通信面（0046 / 设计稿 docs/ui/s03-acp/smark-pm-s03-acp-slice-design-
+// ACP 通信面（0046 / 设计稿 docs/scenarios/s03/ui/acp/smark-pm-s03-acp-slice-design-
 // acp01-02-08-v1.md V1.1）：interaction.required 上报 / 命令查询面 / 消费回执。
 // 四工具为**新增**，现有四工具契约不动（工程纪律红线）。权限码见 pm-api
 // auth.rs：PM_MCP_AGENT_REPORT / PM_MCP_COMMAND（P1-5，不再挂 PM_MCP_READ

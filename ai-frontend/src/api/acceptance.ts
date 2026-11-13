@@ -1,7 +1,7 @@
 import { http } from "@/api/base";
 
 /**
- * 交付验收工作台读模型（T-070 / `docs/ai-pm-delivery-acceptance-workbench-v1.md` §5.1）。
+ * 交付验收工作台读模型（T-070 / `docs/tasks/ai-pm-delivery-acceptance-workbench-v1.md` §5.1）。
  *
  * 四概念分离：任务生命周期 / 执行 Run / 仓库交付事实 / 人工验收决定——
  * 徽标（badge）与动作区状态（review_status）由后端统一计算，前端**禁止**

@@ -2,7 +2,7 @@
 
 > **性质**：P0-05 套件的**可执行**自动化规格（扩编后 7 条案例：P0-015 ~ P0-021）。
 > **上位文件**：`docs/e2e-spec/10-p0-test-specification-v1.md`（P0 总规格；本套件扩编使总数 24→28，见 D22）。
-> **设计权威**：`docs/ai-pm-slice-d-execution-pipeline-v1.md`（D1 调度）、`docs/ai-pm-task-state-machine-v1.md`（13 态）、`docs/ai-pm-taskready-idempotency-v1.md`（幂等，已实施验证）。
+> **设计权威**：`docs/slice-d/ai-pm-slice-d-execution-pipeline-v1.md`（D1 调度）、`docs/tasks/ai-pm-task-state-machine-v1.md`（13 态）、`docs/tasks/ai-pm-taskready-idempotency-v1.md`（幂等，已实施验证）。
 > **边界**：ACP Continuation 遵守 **S03 冻结基线（D-01~D-07）**，本套件只验实现符合规范，不重定义规则。
 > **基线**：master @ `2b3f509e`；迁移基线 `0001_baseline.sql` + `0011/0012`（Run 唯一性 + 事件幂等）+ `0026`（review 并发触发器）。
 
@@ -15,7 +15,7 @@
 | # | 级别 | 规格假设 | 本仓事实 | 处置 |
 |---|---|---|---|---|
 | **R33** | ✅改判（2026-11-11 修订） | 「创建 Task」（直接 POST） | **直接建 Task REST 存在**：`POST /v1/pm/tasks`（`pm_lists.rs:46` → `pm_writes::create_task_handler` → `pm_write::create_task`，**`require_human_conn`** 于 `pm_write/task.rs:180`，AI 403）。Task 人类创建路径两条：① **直接 REST**（human 闸，Slice A）② 计划物化 `materialize_plan`（`pm_plans.rs:235`）。初稿「无直接建 Task REST」定性错误 —— 更正（波及 10 号同步）。**R33 安全含义反转**：负向断言 ai_pm 令牌建任务 → **403**（可测，归入 DEF-P0-01 的 REST 实证面） | P0-015 两条链均可走；负向 403 断言加入 |
-| **R34** | ✅ | 防重复触发 | **三重真实机制**：mark-ready → TaskReady 事件 → `queued` Run，单事务内「任务行锁 + 活跃 Run 部分唯一索引 `uq_task_run_active` + 事件级幂等（迁移 0012，已实施验证）」；锁序 `run(FOR UPDATE SKIP LOCKED) → task(FOR UPDATE)`，INSERT 在 task 锁后（`run_dispatch/mod.rs:6-10`）；TaskReady 幂等 = 任务级 + **事件级**两项独立要求（`ai-pm-taskready-idempotency-v1.md` 〇） | P0-016 重复触发/重放断言有硬锚点 |
+| **R34** | ✅ | 防重复触发 | **三重真实机制**：mark-ready → TaskReady 事件 → `queued` Run，单事务内「任务行锁 + 活跃 Run 部分唯一索引 `uq_task_run_active` + 事件级幂等（迁移 0012，已实施验证）」；锁序 `run(FOR UPDATE SKIP LOCKED) → task(FOR UPDATE)`，INSERT 在 task 锁后（`run_dispatch/mod.rs:6-10`）；TaskReady 幂等 = 任务级 + **事件级**两项独立要求（`docs/tasks/ai-pm-taskready-idempotency-v1.md` 〇） | P0-016 重复触发/重放断言有硬锚点 |
 | **R35** | ✅ | Run 与 Task 的 claimed 是一回事 | **两个不同常量**（S4 裁决）：Run `claimed` = 已领取未启动（+`stage` ∈ `dispatch/started`）；Task `claimed` 是 13 态之一（`run_dispatch/mod.rs:25-31`）；活跃 Run 集合 = `queued/claimed/running`（B1，与唯一索引谓词一致） | 断言按双枚举分别取值 |
 | **R36** | ✅ | 「创建 Delivery」 | **无独立创建 Delivery API**。交付是读面：`GET /v1/pm/tasks/{task_id}/delivery`（`pm_delivery.rs:27`）+ 项目级卷起 `delivery_state ∈ delivered/partial/missing/no_contract`（FLOW-07）——**部分交付（partial）是真实状态值** | P0-018 断言 = 读面 + DB，不虚构创建端点 |
 | **R37** | 🟡 | Review 有独立审核接口与审核人字段 | 读面 = `GET /v1/pm/review-approvals`（`pm_reviews.rs:35`）；裁决路径三重防护（行锁 + 状态重读 + 0026 触发器）→ 输家 `AlreadyDecided`（`review/decide.rs:178,536`）。**R8 缺口在此兑现**：`auto_completable()` + 「无层表态 = 放行」（`policy_composition.rs:82-86`）默认允许 `reviewing→completed` 无人工 | P0-019 拆 C1（身份越权 → 拒，可断言）+ C2（auto_accept 默认放行 → **登记缺陷 DEF-P0-01**，不作 PASS 用例，D24） |
@@ -378,8 +378,8 @@ P0-021：取消失败超时正确终止 ／ 迟到事件不复活终态 Run ／ 
 |---|---|
 | `docs/e2e-spec/10-p0-test-specification-v1.md` | P0 总规格（编号扩编 D22 落点） |
 | `docs/e2e-spec/13-p0-03-playwright-spec-v1.md` | 人工确认三道闸方法论（P0-019C1 复用） |
-| `docs/ai-pm-slice-d-execution-pipeline-v1.md` / `ai-pm-task-state-machine-v1.md` | D1 调度与 13 态设计权威 |
-| `docs/ai-pm-taskready-idempotency-v1.md` | Run 创建幂等（任务级 + 事件级，已实施验证） |
+| `docs/slice-d/ai-pm-slice-d-execution-pipeline-v1.md` / `docs/tasks/ai-pm-task-state-machine-v1.md` | D1 调度与 13 态设计权威 |
+| `docs/tasks/ai-pm-taskready-idempotency-v1.md` | Run 创建幂等（任务级 + 事件级，已实施验证） |
 | `crates/pm-application/src/run_dispatch/mod.rs` | Run 调度（锁序 / 唯一索引 / stage） |
 | `crates/pm-application/src/review/decide.rs` | Review 裁决（AlreadyDecided / 三重防护 / auto_completable 缺口） |
 | `apps/pm-api/src/pm_plans.rs` / `pm_lists.rs` / `project_lifecycle.rs` | 物化 / mark-ready / cancel 入口 |

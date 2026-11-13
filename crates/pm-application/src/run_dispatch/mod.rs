@@ -1,4 +1,4 @@
-//! Slice D1：Run 调度与领取（`docs/ai-pm-slice-d-execution-pipeline-v1.md` §五 / §十一）。
+//! Slice D1：Run 调度与领取（`docs/slice-d/ai-pm-slice-d-execution-pipeline-v1.md` §五 / §十一）。
 //!
 //! 本模块是 D1 的唯一调度落点：复用 `delivery.task_run` 作队列，在**单事务**内
 //! 完成「选候选 Run → 锁任务行 → 可领取性判定 → 状态推进 → 多仓基线快照 → 审计」。

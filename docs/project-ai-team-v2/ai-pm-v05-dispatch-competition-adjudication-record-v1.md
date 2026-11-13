@@ -1,6 +1,6 @@
 # 派发器 ↔ Runner 竞争缓解裁决记录 V1.0
 
-> 归档 2026-11-08。本记录是 R4 验收记录（`docs/checkpoint2-r4-acceptance-record-v1.md`）
+> 归档 2026-11-08。本记录是 R4 验收记录（`docs/acceptance/checkpoint2-r4-acceptance-record-v1.md`）
 > §六-1 遗留项的**独立裁决落档**：裁决包当时未在库，本批代行补档 + 事实核查 + 勘误。
 > 仓库 pin：master@5b212c6。
 
@@ -76,7 +76,7 @@
 
 ## 三、R4 记录 §六-1 勘误
 
-原文（`docs/checkpoint2-r4-acceptance-record-v1.md:83-88`）三处失实，勘误如下：
+原文（`docs/acceptance/checkpoint2-r4-acceptance-record-v1.md:83-88`）三处失实，勘误如下：
 
 1. **「`AI_PM_RUN_DISPATCH` 默认 On」** → 代码 `from_env()` 默认 **Off**；compose 确未
    透传。运行时持续派发的真因是 `run_executor.rs:49` 硬编码 `On` + env 只读不打。

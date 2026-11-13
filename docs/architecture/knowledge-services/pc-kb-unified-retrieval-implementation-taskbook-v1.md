@@ -198,12 +198,12 @@ Reject 命令 / Reject API / Reject 事件 / 索引撤销与清零 / 已发布�
 | relationship_type | 端点 | owner_domain | 备注 |
 | --- | --- | --- | --- |
 | ~~rule-enforced-by-requirement~~ | — | — | **弃**（`constrains` 反向遍历覆盖——同一条正式关系的两个查询方向，不重复注册） |
-| `capability-realized-by-requirement` | pc:business_capability → s02:requirement.requirement_revision | pc | **保留**（直接能力关联有独立语义，链式可达≠语义等价） |
-| `object-referenced-by-requirement` | pc:domain_object → s02:requirement.requirement_revision | pc | **保留**（需求直接引用对象，不经规则中转） |
+| `capability-realized-by-requirement` | pc:business_capability → docs/scenarios/s02:requirement.requirement_revision | pc | **保留**（直接能力关联有独立语义，链式可达≠语义等价） |
+| `object-referenced-by-requirement` | pc:domain_object → docs/scenarios/s02:requirement.requirement_revision | pc | **保留**（需求直接引用对象，不经规则中转） |
 | `process-implemented-by-design` | pc:business_process → kb:document_revision(architecture) | pc | |
 | `module-covered-by-design` | pc:feature_module → kb:document_revision(architecture) | pc | |
-| `requirement-implemented-by-design` | s02:requirement.requirement_revision → kb:document_revision(architecture) | **kb**（终裁改判） | 两端均非 PC 对象；**owner=kb，V1 生产恒 draft**（KB 独立确认面 Phase 7 交付后才可 active；**禁止经 PC Proposal 发布为 active**）；RT-005 用 fixture Active 行验收引擎能力 |
-| `scenario-verified-by-acceptance` | pc:scenario → s02:delivery.requirement_acceptance_criterion | pc | |
+| `requirement-implemented-by-design` | docs/scenarios/s02:requirement.requirement_revision → kb:document_revision(architecture) | **kb**（终裁改判） | 两端均非 PC 对象；**owner=kb，V1 生产恒 draft**（KB 独立确认面 Phase 7 交付后才可 active；**禁止经 PC Proposal 发布为 active**）；RT-005 用 fixture Active 行验收引擎能力 |
+| `scenario-verified-by-acceptance` | pc:scenario → docs/scenarios/s02:delivery.requirement_acceptance_criterion | pc | |
 | `design-constrained-by-adr` | kb ↔ kb:document_revision(architecture/decision) | **kb** | KB 域内边；**V1 期确认面不存在**（见 3.2），实例恒 draft 不可遍历 |
 | `adr-documented-in` | kb:decision → kb:knowledge | **kb** | 同上 |
 

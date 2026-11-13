@@ -6,7 +6,7 @@
 | 日期 | 2026-11-10 |
 | 领域 | S05 · AI Agent Execution & Collaboration（批 3 · 执行上下文注入） |
 | 用户裁决 | 2026-11-10：知识来源 = **显式锚点 + 人工确认**（不做自由检索） |
-| 关联 | `docs/ai-pm-slice-d2-mcp-context-v1.md` §4.2（字段→来源映射）· `docs/s05/S05-00-code-facts-and-gap-analysis-v1.md` 缺口 S05-02 · 迁移 0014 |
+| 关联 | `docs/slice-d/ai-pm-slice-d2-mcp-context-v1.md` §4.2（字段→来源映射）· `docs/scenarios/s05/S05-00-code-facts-and-gap-analysis-v1.md` 缺口 S05-02 · 迁移 0014 |
 
 ---
 

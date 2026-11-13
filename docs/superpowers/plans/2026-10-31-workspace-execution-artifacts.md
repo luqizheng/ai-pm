@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust axum + sqlx · PostgreSQL · Vue 3 + vitest · i18n 双语。
 
-**Spec:** `docs/ai-pm-ui-pages-v1-2.md`（§2 AI 执行中心、§5 产物验收）；执行语义见 `docs/ai-pm-task-state-machine-v1.md` §19.5。
+**Spec:** `docs/ui/ai-pm-ui-pages-v1-2.md`（§2 AI 执行中心、§5 产物验收）；执行语义见 `docs/tasks/ai-pm-task-state-machine-v1.md` §19.5。
 
 ## Global Constraints
 - **不造假**：工具调用 / 日志 / 文件 Diff / 测试报告在后端无数据源时显示**空态文案**，绝不填充虚构数据。

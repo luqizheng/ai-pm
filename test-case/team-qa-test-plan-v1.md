@@ -80,6 +80,6 @@
 
 | ID | 事实 | 证据 | 影响 |
 |---|---|---|---|
-| DEF-01 | master 上 `0044_s02_i3_source_traceability.sql`（5936105，17:19）与 `0044_team_onboarding.sql`（c2b6199，18:20）同版本号；台账只登记后者 | `git ls-files migrations`；`docs/ai-pm-migration-ledger.md` L13-14 | 干净库迁移撞 `_sqlx_migrations_pkey`(44)；L1 默认模式全红，故采用 `--shim` 取团队逻辑证据 |
+| DEF-01 | master 上 `0044_s02_i3_source_traceability.sql`（5936105，17:19）与 `0044_team_onboarding.sql`（c2b6199，18:20）同版本号；台账只登记后者 | `git ls-files migrations`；`docs/reference/ai-pm-migration-ledger.md` L13-14 | 干净库迁移撞 `_sqlx_migrations_pkey`(44)；L1 默认模式全红，故采用 `--shim` 取团队逻辑证据 |
 | ENV-1 | 共享 PG `infrastructure-aipm-pg-1` 的 `template1` 被预灌 42 条迁移，其中 0025 校验和与本仓文件不同（行尾 CRLF/LF 差） | `_sqlx_migrations` 校验和比对 | 任何指向 `:16433` 的 `sqlx::test` 报 `VersionMismatch(25)`——环境污染，非代码缺陷；本 QA 改用独立容器规避 |
 | ENV-2 | `infrastructure-pm-api-1` 循环重启 `VersionMissing(40)` | `docker logs`；镜像构建于 2026-11-05，库已应用到 42 | 本地栈 pm-api 镜像过旧；与团队功能无关，本 QA 不使用该容器 |

@@ -1,4 +1,4 @@
-//! D5 · Review / 失败判定 / 知识回写验收（`docs/ai-pm-slice-d5-review-v1.md` §10。
+//! D5 · Review / 失败判定 / 知识回写验收（`docs/slice-d/ai-pm-slice-d5-review-v1.md` §10。
 //!
 //! 用真实 git 工作区 + 真实 PostgreSQL：先经 D4 提交管线把任务推进到 `submitted`，
 //! 再驱动 D5 的两拍编排（`enqueue_review` → `review_step`），断言 §5.1 矩阵出口。

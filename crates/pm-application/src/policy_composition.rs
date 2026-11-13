@@ -1,4 +1,4 @@
-//! D2.1 完整策略合成（`docs/ai-pm-task-state-machine-v1.md` §15.4–§15.6）。
+//! D2.1 完整策略合成（`docs/tasks/ai-pm-task-state-machine-v1.md` §15.4–§15.6）。
 //!
 //! 两分运算，**不能用同一个 AND 处理所有字段**：
 //! - 能力类（`auto_accept` / `auto_merge` / `auto_publish_knowledge`）：

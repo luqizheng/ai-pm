@@ -1,4 +1,4 @@
-//! 租户成员角色管理验收（T-021b / `docs/ai-pm-tenant-infrastructure-v1.md` §6.2 §6.3）。
+//! 租户成员角色管理验收（T-021b / `docs/governance/ai-pm-tenant-infrastructure-v1.md` §6.2 §6.3）。
 //!
 //! 覆盖 RV-1..RV-10（用户补充要求 §5 的九条 + ADR-0001 RV-2）与 TN-4/TN-5。
 //! 关键不变量：`core.tenant_member.role` 是唯一事实源——每次请求都查库，

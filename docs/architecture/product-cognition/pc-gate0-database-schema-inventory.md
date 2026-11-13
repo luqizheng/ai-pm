@@ -20,7 +20,7 @@
 
 **核查范围**：`migrations/*.sql` 全量静态阅读；CREATE TABLE / ALTER TABLE / CREATE INDEX / ADD CONSTRAINT / DROP / RENAME / 视图 / 触发器 / 种子数据。
 
-**排除范围**：业务实现代码（Rust crates）、设计文档中的示例 DDL（如 `docs/ai-pm-project-discovery-v1.md` 附录 A——其引用表清单已证实与 0019 实际迁移不一致，见 0025:109-112 注释）、运行数据库实况。
+**排除范围**：业务实现代码（Rust crates）、设计文档中的示例 DDL（如 `docs/reference/ai-pm-project-discovery-v1.md` 附录 A——其引用表清单已证实与 0019 实际迁移不一致，见 0025:109-112 注释）、运行数据库实况。
 
 ---
 
@@ -77,7 +77,7 @@
 
 ### B.2 迁移编号异常（已确认事实）
 
-1. **缺 0029**：目录无 `0029_*.sql`，无占位说明文件；`docs/ai-pm-migration-ledger.md` 存在（未逐条核对账本与目录一致性——待核实 H-14）。
+1. **缺 0029**：目录无 `0029_*.sql`，无占位说明文件；`docs/reference/ai-pm-migration-ledger.md` 存在（未逐条核对账本与目录一致性——待核实 H-14）。
 2. **0044 同号双文件**：`0044_s02_i3_source_traceability.sql`（commit 5936105，S02-I3 线）与 `0044_team_onboarding.sql`（commit 813cc97 合并，Team Onboarding 线）。两者文件名不同、版本号相同（44）。sqlx 按字典序执行：`0044_s02_i3` 先于 `0044_team_onboarding`（'s' < 't'）。两个文件互不引用对方对象，字典序任意颠倒均不破坏依赖。**风险**：sqlx 对同版本号双文件的 `_sqlx_migrations` 记账/校验行为未在本次范围内验证（见 H-13）。后续新迁移应取 **0045** 起号，禁止再用重复号。
 
 ### B.3 结构变更中无法静态确定的部分
@@ -940,7 +940,7 @@ CREATE UNIQUE INDEX uq_review_approval_pending ON governance.review_approval (ta
 | H-11 | 审批/提案链是否使用 SELECT ... FOR UPDATE 事务并发控制 | pm-application 事务代码 | C.3.5 |
 | H-12 | cognition/baseline 单列 FK 是否计划按 0019 模式组合化（涉及 PC 模型设计基线） | PC 设计裁决 | F.3-1 |
 | H-13 | sqlx 对 0044 同号双文件的 `_sqlx_migrations` 记账与 validate 实际行为 | 运行库 `_sqlx_migrations` 表实况 | B.2 |
-| H-14 | 0029 缺号原因；`docs/ai-pm-migration-ledger.md` 账本与目录的一致性 | 迁移账本文档核对 | B.2 |
+| H-14 | 0029 缺号原因；`docs/reference/ai-pm-migration-ledger.md` 账本与目录的一致性 | 迁移账本文档核对 | B.2 |
 
 ---
 

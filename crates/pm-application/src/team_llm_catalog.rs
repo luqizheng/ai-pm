@@ -1,6 +1,6 @@
 //! Team LLM Model Catalog / Authorization / Policy（Phase 3A）。
 //!
-//! 设计基线：docs/smark-pm-team-llm-provider-management-phase3-design-v1.md
+//! 设计基线：docs/ui/smark-pm-team-llm-provider-management-phase3-design-v1.md
 //! §4（数据库）/§5（API 语义）/§6.1（写路径与解析同款严格校验）。
 //!
 //! 职责边界：

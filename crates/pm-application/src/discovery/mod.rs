@@ -2,7 +2,7 @@
 //! question / answer / proposal）的读写与状态机。
 //!
 //! Discovery 是独立于 Repository Import 的业务域：Import 负责把仓库接入系统，
-//! Discovery 负责理解项目（设计稿 `docs/ai-pm-project-discovery-v1.md` §一/§四）。
+//! Discovery 负责理解项目（设计稿 `docs/reference/ai-pm-project-discovery-v1.md` §一/§四）。
 //! 本模块只做采集层写入；正式知识入库仍走既有 `propose_document` 提案链
 //! （§4.2 知识污染红线），`discovery_proposal` 仅记录提案事实与 `base_revision_id`。
 

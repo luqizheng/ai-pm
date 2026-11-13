@@ -17,7 +17,7 @@
 | 数据库 | aipm-pg `5435`（`postgres://aipm:aipm@127.0.0.1:5435/aipm`） |
 
 > 账号由 `POST :3000/v1/iam/auth/register` 注册（首次部署，runbook 见
-> `docs/runbook-login-chain.md` §三）。**仅限本地/内网演示环境**，生产必须换强口令并
+> `docs/runbooks/runbook-login-chain.md` §三）。**仅限本地/内网演示环境**，生产必须换强口令并
 > 走 secret manager。
 >
 > pm-api 侧该主体还需 `AI_PM_FIRST_ADMIN_TENANT=1` +

@@ -3,7 +3,7 @@ import { http } from "@/api/base";
 /**
  * S04 任务计划与执行规划读模型（pm-api `pm_plans.rs` / `pm_tasks.rs`）。
  *
- * 领域语义（docs/ui/s04 + S04 设计提案）：
+ * 领域语义（docs/scenarios/s04/ui + S04 设计提案）：
  * - **Task Plan 是计划聚合层**，正式任务全部复用 `delivery.task`（13 态状态机
  *   / 依赖 / 仓库绑定 / 验收标准原样使用）——不新建第二套任务体系。
  * - **计划四态**：draft / in_review / approved / superseded；只有 approved

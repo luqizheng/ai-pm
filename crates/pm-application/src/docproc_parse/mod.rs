@@ -1,6 +1,6 @@
 //! Document Processing 解析层（TD-03：纯 Rust zip+quick-xml，零外部进程）。
 //!
-//! 模块真源：docs/ai-pm-document-processing-td03-parser-adapters-v1.md。
+//! 模块真源：docs/architecture/knowledge-services/ai-pm-document-processing-td03-parser-adapters-v1.md。
 //! 与 knowledge_parse.rs 的关系：KB 导入通道保持原 API 不动；本模块是
 //! Document Processing 的完整解析面（结构化产物 + 图片 + 追溯映射 + 报告）。
 //!

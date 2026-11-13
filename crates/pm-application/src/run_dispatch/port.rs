@@ -7,7 +7,7 @@ use super::*;
 /// 前置条件（B2）：调用者必须已在**同一事务**内对 `delivery.task` 对应行加
 /// `FOR UPDATE`。新 Run 的 INSERT 必须在取得 task 行锁之后执行。
 ///
-/// `source_event_id`（L1 事件级幂等，`docs/ai-pm-taskready-idempotency-v1.md` §五）：
+/// `source_event_id`（L1 事件级幂等，`docs/tasks/ai-pm-taskready-idempotency-v1.md` §五）：
 /// 由 outbox 事件触发时传入事件行 id，使「一个事件至多创建一条 Run」由
 /// `uq_task_run_source_event` 兜底；租约恢复路径（非事件触发）传 `None`。
 pub async fn insert_task_run(

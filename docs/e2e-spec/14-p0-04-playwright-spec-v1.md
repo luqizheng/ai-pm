@@ -2,7 +2,7 @@
 
 > **性质**：P0-04 套件的**可执行**自动化规格（4 条案例：P0-011 ~ P0-014 + 综合一致性）。
 > **上位文件**：`docs/e2e-spec/10-p0-test-specification-v1.md`（P0 总规格）、`docs/e2e-spec/13-p0-03-playwright-spec-v1.md`（AI 人工确认闸，本套件复用其口径）。
-> **设计权威**：`docs/ai-pm-markdown-knowledge-space.md`（§四 one authority per fact、§八 Git/DB sync）、T-060（知识索引）。
+> **设计权威**：`docs/architecture/knowledge-services/ai-pm-markdown-knowledge-space.md`（§四 one authority per fact、§八 Git/DB sync）、T-060（知识索引）。
 > **基线**：master @ `2b3f509e`；迁移基线 `migrations/0001_baseline.sql` + 0006（doc_type CHECK）。
 > **判定纪律**：三存储独立验证（Git 文件 / Git 命令 / SQL 直查），API 返回不作为唯一证据。
 
@@ -159,7 +159,7 @@ expect(meta.state).toBe("approved");
 
 **并发保护断言（规格 §四附加 → 本仓 DEF-03 回归）**
 
-> **DEF-03 历史与现状**（`docs/s02-02-requirement-runtime-verification-v1.md:171`）：旧 `pm_write/revision.rs` REST 路径并发定稿双双 200、静默丢失更新（无 `FOR UPDATE`、无 `expected_revision`）。**现行统一入口已带三重防护**：`lock_requirement` = `SELECT ... FOR UPDATE`（`requirement.rs:270-278`）+ `row_revision` CAS 双令牌 + `expected_content_hash` 哈希门（FLOW-05 已证：不符 → 409 且终态不变）。**回归必须打统一入口**（DEF-04 教训：双入口语义分叉是缺陷本体，D19）。
+> **DEF-03 历史与现状**（`docs/scenarios/s02/s02-02-requirement-runtime-verification-v1.md:171`）：旧 `pm_write/revision.rs` REST 路径并发定稿双双 200、静默丢失更新（无 `FOR UPDATE`、无 `expected_revision`）。**现行统一入口已带三重防护**：`lock_requirement` = `SELECT ... FOR UPDATE`（`requirement.rs:270-278`）+ `row_revision` CAS 双令牌 + `expected_content_hash` 哈希门（FLOW-05 已证：不符 → 409 且终态不变）。**回归必须打统一入口**（DEF-04 教训：双入口语义分叉是缺陷本体，D19）。
 
 | 操作 | 预期 | 锚点 |
 |---|---|---|
@@ -343,7 +343,7 @@ test("P0-012 并发陈旧版本更新被拒（DEF-03 回归 · 统一入口）",
 | **D17** | KnowledgeRoot fixture | ① 测试内建临时 Git 仓库 + env 注入 root ② 复用全局固定目录 | **①**（每套件独立 root，`git init` + 首提交；`TEAM_QA_KEEP_DB=1` 同口径保留排查） |
 | **D18** | 「正式创建」定义 | 创建即断言 / 全链（submit+confirm）后断言 | **全链**（权威在 submit 绑定、生效在 confirm；draft 无 Markdown 是设计而非缺陷） |
 | **D19** | 并发用例入口 | 统一入口（`requirement.rs confirm_revision`）/ 旧 `pm_write` 路径 | **统一入口**；旧路径 DEF-03/DEF-04 若仍暴露端点，另立缺陷复核（不在 P0 正向用例里喂旧入口） |
-| **D20** | 检索通道范围 | FTS（CJK，离线）/ +embedding（BGE-M3） | **P0 必过 = FTS 通道**；embedding 通道依赖外部 Ollama，归 P1/专项（`docs/runbook-ollama-bge-m3.md`） |
+| **D20** | 检索通道范围 | FTS（CJK，离线）/ +embedding（BGE-M3） | **P0 必过 = FTS 通道**；embedding 通道依赖外部 Ollama，归 P1/专项（`docs/runbooks/runbook-ollama-bge-m3.md`） |
 | **D21** | fixture 直删派生索引表 | psql DELETE（仅 `*_section_index` / `*_index_state`）/ 提供“危险”测试端点 | **psql DELETE**（一次性库内允许；正式内容表 `ai.project_document` / `ai.document_revision` / Git 目录禁碰） |
 
 ---
@@ -354,9 +354,9 @@ test("P0-012 并发陈旧版本更新被拒（DEF-03 回归 · 统一入口）",
 |---|---|
 | `docs/e2e-spec/13-p0-03-playwright-spec-v1.md` | AI 人工确认三道闸（§5 与本套件 P0-013 同构，REST 侧断言复用） |
 | `docs/e2e-spec/12-p0-02-playwright-spec-v1.md` | 项目创建 / 隔离口径（本套件前置） |
-| `docs/ai-pm-markdown-knowledge-space.md` | 知识空间设计权威（§四/§八） |
+| `docs/architecture/knowledge-services/ai-pm-markdown-knowledge-space.md` | 知识空间设计权威（§四/§八） |
 | `crates/pm-application/src/knowledge.rs` | Markdown+Git 权威实现（create_document：一文件一 commit 两行） |
 | `crates/pm-application/src/requirement_projection.rs` | 需求投影协议（绑定 / 幂等 / 反向投影 / Git 先行） |
 | `crates/pm-application/src/knowledge_indexer.rs` | 索引器（`rebuild_document` / `index_states`） |
 | `apps/pm-api/src/documents.rs` + `routes.rs:305-345` | 知识空间 V2 REST（search / proposals / veto / reindex） |
-| `docs/s02-02-requirement-runtime-verification-v1.md` | DEF-01~04 运行时缺陷档案（P0-012 并发回归背景） |
+| `docs/scenarios/s02/s02-02-requirement-runtime-verification-v1.md` | DEF-01~04 运行时缺陷档案（P0-012 并发回归背景） |

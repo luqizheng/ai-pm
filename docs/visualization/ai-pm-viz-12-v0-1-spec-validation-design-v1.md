@@ -366,7 +366,7 @@ budget 档位与边数上限：strict ≤30 节点 / ≤45 边；balanced ≤150
 - **纯函数用例不需要 DB**：`crates/pm-domain` 无 `tests/` 目录 → 单测内联 `#[cfg(test)] mod tests` 放源文件末尾（先例 `crates/pm-domain/src/design.rs:178+`）。
 - 需要 DB 的用例用 `#[sqlx::test(migrations = "../../migrations")]`（`apps/pm-api/tests/pm_lists.rs:53,77,128`），`DATABASE_URL` **必须 `127.0.0.1`**（AGENTS.md 规则 3）。
 - **禁 `query!` 宏**：全仓零宏零 `.sqlx/`，一律运行时 `sqlx::query*` + `.bind()`（根 `Cargo.toml:47-54` 注释明文）。
-- 迁移后必须 `cargo build --workspace --tests`（`docs/parallel-development-discipline.md` §1.3）——**V0-1 无迁移，但新 crate 模块仍需该步**。
+- 迁移后必须 `cargo build --workspace --tests`（`docs/reference/parallel-development-discipline.md` §1.3）——**V0-1 无迁移，但新 crate 模块仍需该步**。
 
 ## 9. API 错误映射（与仓库约定对齐）
 

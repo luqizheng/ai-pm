@@ -1,6 +1,6 @@
 //! `/v1/pm/tenants/{tenant_id}/llm-models*` + `/llm-model-policies` +
 //! `/llm-model-authorizations`：Team 模型目录/授权/Role 策略管理面
-//! （Phase 3A；设计基线 docs/smark-pm-team-llm-provider-management-phase3-design-v1.md
+//! （Phase 3A；设计基线 docs/ui/smark-pm-team-llm-provider-management-phase3-design-v1.md
 //! §5；权限矩阵 = Team Owner/Admin，同 team_llm::router 口径）。
 //!
 //! `/projects/{project_id}/ai-model-policies`（语义扩展：Provider 约束 +

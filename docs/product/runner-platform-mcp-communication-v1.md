@@ -132,7 +132,7 @@ deny 后：worker 通道 → `requeue_with_backoff(release_reason=deny)`；Runne
 
 ## 8. 权威源与勘误
 
-1. **验收终态**：`docs/checkpoint2-r4-acceptance-record-v1.md`（R4 十项对照）。
+1. **验收终态**：`docs/acceptance/checkpoint2-r4-acceptance-record-v1.md`（R4 十项对照）。
 2. **竞争裁决**：`docs/project-ai-team-v2/ai-pm-v05-dispatch-competition-adjudication-record-v1.md`——其中 D-1=b 接线已由 a1bd7f4 实施取代「硬编码 On 死开关」旧况。
 3. **协议设计权威**：`ai-pm-v05-runner-implementation-design-v1.md` §3.1~3.3/§5（含内嵌「V1.0a 实施勘误」：401 fail-fast、远端验证仅 `client:` 前缀）。
 4. **失实勘误**（勿再引用）：R4 §六-1 的「派发默认 On」「readiness 无 check-in」「no_client_available」三处已被勘误取代。

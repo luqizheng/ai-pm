@@ -1,6 +1,6 @@
 //! Document Processing 服务层（TD-02 §3 契约的实施核心）。
 //!
-//! 模块真源：docs/ai-pm-document-processing-td02-service-api-v1.md +
+//! 模块真源：docs/architecture/knowledge-services/ai-pm-document-processing-td02-service-api-v1.md +
 //! TD-01 数据模型。SQL 直书（仓内 kb_service 同惯例）；对象存储经
 //! [`ArtifactStore`] 端口抽象（file-service 适配在 pm-infrastructure，
 //! 测试用 [`MemoryStore`]）。

@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-**Goal:** 把设计稿 `docs/ai-pm-markdown-knowledge-space.md` 的第一步落成可运行的竖切：**Git 知识仓库 + 文档登记表 + 只读 REST + 前端知识页真数据**。正文只存在 Markdown 文件，PostgreSQL 只存身份/路径/版本/哈希/Commit，不存正文。
+**Goal:** 把设计稿 `docs/architecture/knowledge-services/ai-pm-markdown-knowledge-space.md` 的第一步落成可运行的竖切：**Git 知识仓库 + 文档登记表 + 只读 REST + 前端知识页真数据**。正文只存在 Markdown 文件，PostgreSQL 只存身份/路径/版本/哈希/Commit，不存正文。
 
 **Architecture:** 新增 `crates/pm-application/src/knowledge.rs`（文件系统 + Git 提交 + 两表写入）与 `apps/pm-api/src/documents.rs`（REST）。知识根目录由 `AI_PM_KNOWLEDGE_ROOT` 指定（默认与 ai-pm 平级的 `ai-pm-knowledge/`，**独立 Git 仓库**，首次使用自动 `git init` + 铺模板）。PostgreSQL 落 `ai.project_document` / `ai.document_revision` 两表；REVISION 只存 `git_commit_sha` + `content_hash`，不存正文。
 
 **Tech Stack:** Rust（sqlx / tokio / git CLI，不引入 git 库）、PostgreSQL、Vue 3 + 现有 workspace 知识页。
 
-**Spec:** [../ai-pm-markdown-knowledge-space.md](../../ai-pm-markdown-knowledge-space.md) §四（权威划分）、§七.2（表结构）、§八（保存与状态机）、§十二（实施顺序第 1 步）。
+**Spec:** [docs/architecture/knowledge-services/ai-pm-markdown-knowledge-space.md](docs/architecture/knowledge-services/ai-pm-markdown-knowledge-space.md) §四（权威划分）、§七.2（表结构）、§八（保存与状态机）、§十二（实施顺序第 1 步）。
 
 ## Global Constraints
 
@@ -40,7 +40,7 @@ ai-pm/apps/pm-api/src/lib.rs                     # pub mod documents
 ai-pm/apps/pm-api/tests/documents.rs             # 集成测试（新增）
 ai-pm/frontend/src/api/documents.ts              # 真数据客户端（新增）
 ai-pm/frontend/src/workspace/pages/KnowledgePage.vue  # 改为真数据（V1.2 三栏保留）
-ai-pm/docs/runbook-login-chain.md                # 新增「知识空间」小节（环境变量/初始化/验收）
+ai-pm/docs/runbooks/runbook-login-chain.md                # 新增「知识空间」小节（环境变量/初始化/验收）
 ```
 
 ## Tasks

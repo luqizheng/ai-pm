@@ -1,4 +1,4 @@
-//! Waiting context for `AwaitingDecision` (`ai-pm-task-state-machine-v1.md` §十二).
+//! Waiting context for `AwaitingDecision` (`docs/tasks/ai-pm-task-state-machine-v1.md` §十二).
 
 use serde::{Deserialize, Serialize};
 

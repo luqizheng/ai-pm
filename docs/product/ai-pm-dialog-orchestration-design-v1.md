@@ -95,7 +95,7 @@ V0.5 已把「采集」与「治理」两端都做出来了，缺的是中间那
 | F23 | 0053 已落地 KB/PC 最小面：`kb.document`（`doc_type` 四值 requirement/decision/architecture/knowledge）+ `kb.document_revision`（append-only、`content_hash`、status draft/published/rejected）；`pc.object_type` 4 类种子（repository/module/tech_stack/delivery_activity）+ `pc.cognition_object/cognition_revision/source/evidence` | `migrations/0053_checkpoint1_kb_pc_minimal.sql:15-120` |
 | F24 | **KP-1 / KP-3 分支 tip 均为 `350f748`（无新增提交），仓库内无 KP 命名设计稿落盘**；PC 的目标 17 表与 KB 三层目标 DDL 仍是设计稿（PC-01B V1.2 / `kb-document-target-ddl-draft-v1.md` 草案） | `git branch -v`、`docs/architecture/product-cognition/pc-01b/`、`docs/architecture/knowledge-services/` |
 | F25 | discovery REST 八端点已全落地（session 建/列/详情/状态、finding 建/裁决、question 建/答/延后） | `apps/pm-api/src/pm_discovery.rs:25-58` |
-| F26 | 迁移上限 0062；按台账纪律下个空号为 **0063** | `migrations/0062_snapshot_analysis_mode.sql`、`docs/ai-pm-migration-ledger.md` |
+| F26 | 迁移上限 0062；按台账纪律下个空号为 **0063** | `migrations/0062_snapshot_analysis_mode.sql`、`docs/reference/ai-pm-migration-ledger.md` |
 
 ---
 

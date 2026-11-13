@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust (stable-x86_64-pc-windows-msvc)、axum 0.8、sqlx 0.8（postgres, 无 TLS feature）、rmcp 3.8（MCP）、reqwest 0.12（native-tls/schannel）、Docker PostgreSQL 16。
 
-**Spec:** `docs/ai-pm-architecture-principles.md`（V2 · AI 主导，下称「主稿」）。本计划从主稿取值；`docs/ai-pm-markdown-knowledge-space.md`（知识空间）M1 不实施。
+**Spec:** `docs/architecture/ai-pm-architecture-principles.md`（V2 · AI 主导，下称「主稿」）。本计划从主稿取值；`docs/architecture/knowledge-services/ai-pm-markdown-knowledge-space.md`（知识空间）M1 不实施。
 
 **环境已验证（2026-10-29 冒烟）：** Windows 原生 MSVC 编译全部依赖通过（冷构建约 11 分钟）；`#[sqlx::test(migrations=…)]` 对 Docker PG 跑通。开发库容器 `aipm-pg-dev` 已在运行（postgres:16, localhost:5433）。
 

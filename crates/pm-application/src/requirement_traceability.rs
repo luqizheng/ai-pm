@@ -1,4 +1,4 @@
-//! S02-I3 · Source & Traceability（docs/s02-i3-source-traceability-implementation-v1.md）。
+//! S02-I3 · Source & Traceability（docs/scenarios/s02/s02-i3-source-traceability-implementation-v1.md）。
 //!
 //! 契约（S02-04 V1.2 §9/§10/§5.4/§7.4；Q-4/Q-18/Q-20/S02D-15/19 已裁可冻结）：
 //! - `requirement_finding`（R5）：Finding↔Requirement 多对多，relation 单值域

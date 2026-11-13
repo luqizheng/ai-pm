@@ -1,5 +1,5 @@
 //! `GET /v1/pm/acceptance-overview` 与任务级验收证据端点的集成测试
-//! （T-070 / `docs/ai-pm-delivery-acceptance-workbench-v1.md` §四 / §5.1 / §5.3）。
+//! （T-070 / `docs/tasks/ai-pm-delivery-acceptance-workbench-v1.md` §四 / §5.1 / §5.3）。
 //!
 //! 判定规则、Q1「待补充不被过滤」、徽标互斥、动作区状态与 404 边界全部钉在
 //! 真实数据库上；判定逻辑本身在后端（前端无资格推导）。

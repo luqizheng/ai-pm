@@ -1,5 +1,5 @@
 //! T-061 · Outbox 事件目录与 `RunCompleted` 生产者验收
-//! （`docs/ai-pm-t061-outbox-events-v1.md` §5 / §6）。
+//! （`docs/tasks/ai-pm-t061-outbox-events-v1.md` §5 / §6）。
 //!
 //! 覆盖映射：
 //!

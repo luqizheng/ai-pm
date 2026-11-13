@@ -1,6 +1,6 @@
 //! `/health` + `/install` + `/install/{tool}`：执行端接入引导（T-080）。
 //!
-//! 覆盖设计稿 `docs/ai-pm-t080-executor-onboarding-url-v1.md` §六.1 的
+//! 覆盖设计稿 `docs/executor/ai-pm-t080-executor-onboarding-url-v1.md` §六.1 的
 //! O-01~O-14。要点：
 //!
 //! - 公开路径免鉴权（agent 在拿到 key 之前就要拉指引）；

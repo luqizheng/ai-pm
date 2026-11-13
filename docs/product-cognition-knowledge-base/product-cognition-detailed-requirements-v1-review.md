@@ -42,7 +42,7 @@ PRD 的目标、边界原则（AI 提议、人类确认、计划与现实分离�
 
 - 两份 V1.0 文档（PRD、上位稿）。
 - 代码事实：迁移 0003 / 0006 / 0014 / 0025 / 0036 / 0037 / 0039 / 0040 / 0044；`policy_engine.rs`、`command_center.rs`、`project_goal.rs`。
-- 现行基线：[V0.5 MVP 范围基线 V1.2](../project-ai-team-v2/ai-pm-v05-mvp-scope-baseline-v1.md)、[S01-04 认知设计修订 V1.2](../ui/s01/s01-04-ai-pm-cognition-design-revision-v1-2.md)、[S03-00 权限与审批清单 V1.1](../s03/S03-00-permission-and-approval-inventory.md)。
+- 现行基线：[V0.5 MVP 范围基线 V1.2](../project-ai-team-v2/ai-pm-v05-mvp-scope-baseline-v1.md)、[S01-04 认知设计修订 V1.2](../ui/s01/s01-04-ai-pm-cognition-design-revision-v1-2.md)、[S03-00 权限与审批清单 V1.1](.docs/scenarios/s03/S03-00-permission-and-approval-inventory.md)。
 - **关于 PC-G17**：全仓 docs 和两份 V1.0 中都没有这个编号。重点二暂以 PRD PC-FR-023 和上位稿 §8.3 的四级风险（低 / 普通 / 高 / 重大冲突）为对齐基准；PC-G17 原文到达后，以原文为准复核 §3.5 的审批矩阵。
 
 ---
@@ -344,4 +344,4 @@ P0 共 16 项 FR，覆盖模型、关系、来源、确认、提议、版本、�
 | 原始来源输入 | `migrations/0044_s02_i3_source_traceability.sql` |
 | S01-04 六域定义 | `docs/s01-全局主菜单与信息架构设计基线/ui/s01-04-ai-pm-cognition-design-revision-v1-2.md:107-131` |
 | V-05-6 / V-05-7、零新机制、非目标、故事线 | `docs/project-ai-team-v2/ai-pm-v05-mvp-scope-baseline-v1.md:79,84,161-162,170,188` |
-| 四张审批实体、R6 边界、设计 / ADR 审批不存在 | `docs/s03/S03-00-permission-and-approval-inventory.md` §3 |
+| 四张审批实体、R6 边界、设计 / ADR 审批不存在 | `docs/scenarios/s03/S03-00-permission-and-approval-inventory.md` §3 |

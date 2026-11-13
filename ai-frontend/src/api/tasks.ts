@@ -1,7 +1,7 @@
 import { http } from "@/api/base";
 
 /**
- * S04 任务域端点（pm-api 契约，docs/ui/s04）。
+ * S04 任务域端点（pm-api 契约，docs/scenarios/s04/ui）。
  *
  * 任务 CRUD 复用 pm.ts（listTasks / createTask / updateTask，revision 乐观锁），
  * 此处一并 re-export，让 S04 页面只依赖单一入口；本文件其余部分补

@@ -6,7 +6,7 @@
 > **V1.1a 勘误**（2026-11-09 代码现实评审后，见 `pc-kb-retrieval-expert-review-code-reality-v1.md`）：①Requirement 锚 S02 需求域（delivery.requirement_revision）非 KB doc_type，跨域范围=**PC↔KB↔S02 三域**；②S2/S8 补内容管线前置依赖（KB published 通道未建+六格式解析层缺失）；③RT-002 标注 D-1 门控与降级验收路径；④种子增量澄清（PC 对象类型 18 条种子已覆盖零新增；真实增量=指向 KB 端点的新 relationship_type 种子）。
 > **定位**：PM-AI 的**统一认知检索基础设施**，不是单纯的 RAG 功能。同时解决三件事：① LLM 如何知道该检索哪些知识（意图路由）；② 如何发现 PC/KB 跨领域知识关系（多跳遍历）；③ 如何确保回答遵循正式知识、版本与权威性约束（Authority-aware 组装 + 证据引用）。
 > **权威边界（不变式）**：检索索引是**派生数据**，不取代正式知识正文（`kb.document_revision.content` / `pc.document_revision.content`）与结构化状态（PC 对象生命周期、KB 修订状态）的权威地位。
-> **关联**：`kb-pc-knowledge-layer-model-selection-v1.md`（知识层选型）· `ai-pm-t060-knowledge-index-v1.md`（db-section/provider 端口）· `kb-pc-independent-services-architecture-v1.1.md`（ADR-01/ADR-10）· `pc-01b-00-overview-and-decisions-v1.1.md`（PC 正式模型）
+> **关联**：`kb-pc-knowledge-layer-model-selection-v1.md`（知识层选型）· `docs/architecture/knowledge-services/ai-pm-t060-knowledge-index-v1.md`（db-section/provider 端口）· `kb-pc-independent-services-architecture-v1.1.md`（ADR-01/ADR-10）· `pc-01b-00-overview-and-decisions-v1.1.md`（PC 正式模型）
 
 ---
 

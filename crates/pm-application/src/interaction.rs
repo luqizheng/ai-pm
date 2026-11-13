@@ -1,6 +1,6 @@
 //! ACP 通信面 · Interaction 领域服务（ACP-01）与 N-1 调度保护（V1.1 §4/§5）。
 //!
-//! 设计稿：`docs/ui/s03-acp/smark-pm-slice-design-acp01-02-08-v1.md`（V1.1，
+//! 设计稿：`docs/scenarios/s03/ui/acp/smark-pm-slice-design-acp01-02-08-v1.md`（V1.1，
 //! R-ACP-1~9 已裁 2026-11-07）；基线 = S03-ACP V1.3.1（已冻结）。
 //!
 //! 纪律（V-6 / §12.10）：创建 Interaction、Task 转 awaiting_decision、

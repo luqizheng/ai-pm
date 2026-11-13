@@ -19,7 +19,7 @@
     剩下的是「按成员过滤列表」本身，属 `todo.md` 的 **T-022**（与客户 G3 同一件事）。
   - G4 客户级 AI 上下文（术语表/验收偏好/红线）→ v2
 - **重启条件**：需要「按客户聚合跨项目视图」或「客户维度权限隔离」的真实需求时再启动；
-  重启前回到 `docs/ai-pm-customer-master-data-v1.md` §2 重新确认 5 条裁定是否仍成立。
+  重启前回到 `docs/governance/ai-pm-customer-master-data-v1.md` §2 重新确认 5 条裁定是否仍成立。
 
 ## 项目 tag（标签）归纳轴 — 放弃
 
@@ -46,7 +46,7 @@
 ## 多租户 / Agent / Executor 身份边界 — ADR-0001（Accepted 2026-11-01）
 
 - **裁定**：V1 建 `core.tenant` + `core.tenant_member`，租户业务数据加 `tenant_id`（用户选方案①）；
-  架构边界见 `docs/ai-pm-adr-0001-tenant-agent-executor-identity.md`（D1–D6）。
+  架构边界见 `docs/adr/ai-pm-adr-0001-tenant-agent-executor-identity.md`（D1–D6）。
 - **六条实施边界（不得推翻）**：①不机械扩散 `tenant_id`（全局定义/字典/系统配置不加）；
   ②`agent_definition` 全局可复用、`tenant_agent` 租户实例、项目授权复用 `project_member`；
   ③Agent 用 attribution-only principal，**不发独立凭据**，不改真人 API Key 与 MCP 认证协议；
@@ -75,7 +75,7 @@
    P9/P11 维持不做。
 5. **M8 执行端接入（§10.5，2026-11-01 用户新增）**：T-080 URL 引导式接入（粘贴 URL +「帮我安装」，
    须走 §0.1 brainstorming）→ T-081 `/mcp` 跨机暴露（G1 loopback 现状）/ T-082 `pm_list_tasks`；
-   依据 `docs/ai-pm-executor-onboarding-runbook-v1.md`；候选执行端 trae/codex/workbuddy/z-code/dsh 均支持 MCP。
+   依据 `docs/executor/ai-pm-executor-onboarding-runbook-v1.md`；候选执行端 trae/codex/workbuddy/z-code/dsh 均支持 MCP。
    与 D3 的关系待排：T-081 跨机是 T-080 跨机场景前置，档位机制仍归 T-051。
 
 ---

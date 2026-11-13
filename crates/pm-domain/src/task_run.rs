@@ -1,4 +1,4 @@
-//! Run-level outcome and structured failure records (`ai-pm-task-state-machine-v1.md` §十九).
+//! Run-level outcome and structured failure records (`docs/tasks/ai-pm-task-state-machine-v1.md` §十九).
 //!
 //! Run 是只追加的执行记录：失败信息不可变，重试产生新 Run，不覆盖旧 Run
 //! （§19.5、详情页稿原则一）。本模块先落 §19.5 的数据结构；重试计数与

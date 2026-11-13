@@ -1,7 +1,7 @@
 import { http } from "@/api/base";
 
 /**
- * 开发环境目录域读模型（T-091 / `docs/ai-pm-codex-bootstrap-v1.md` V1.3 §九）。
+ * 开发环境目录域读模型（T-091 / `docs/executor/ai-pm-codex-bootstrap-v1.md` V1.3 §九）。
  *
  * 后端契约：pm-api `/v1/pm/devices*`（T-088 `33fc743`）——
  * - Device 是目录实体（V1 无凭据、无心跳）：`status`（active/revoked）与

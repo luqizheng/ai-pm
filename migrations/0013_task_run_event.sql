@@ -4,7 +4,7 @@
 -- 设计依据：docs/project-ai-team-v2/ai-pm-v05-execution-roadmap-v1.md §9（执行事件
 -- 持久化「V2 正式运行前必须；先做最小方案：event_id/tenant/project/task/run/
 -- client/event_type/generation/occurred_at/received_at，幂等写入+审计查询——
--- 不做大型事件溯源」）+ 现状对照 docs/s05/S05-00-code-facts-and-gap-analysis-v1.md
+-- 不做大型事件溯源」）+ 现状对照 docs/scenarios/s05/S05-00-code-facts-and-gap-analysis-v1.md
 -- 缺口 S05-05。
 --
 -- 核心立场：

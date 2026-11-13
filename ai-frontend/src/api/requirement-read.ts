@@ -3,7 +3,7 @@ import { http } from "@/api/base";
 /**
  * S02 需求域页面级读模型（pm-api `pm_requirement_read.rs`）。
  *
- * 领域语义（docs/ui/s02 UI-01 + S02 领域裁决）：
+ * 领域语义（docs/scenarios/s02/ui UI-01 + S02 领域裁决）：
  * - **修订五态**：draft / pending_confirmation / approved / rejected /
  *   superseded；只有 approved 是正式依据。
  * - **需求 = 稳定身份；评审的是它的一版正文**（revision）。评审队列列的是

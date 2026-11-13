@@ -1,4 +1,4 @@
-//! ACP-03：人工回复入口（设计稿 docs/ui/s03-acp/smark-pm-s03-acp-slice-design-acp03-v1.md）。
+//! ACP-03：人工回复入口（设计稿 docs/scenarios/s03/ui/acp/smark-pm-s03-acp-slice-design-acp03-v1.md）。
 //!
 //! 薄适配层：① 可见性门（interaction → project → 成员，404 不泄露）+
 //! auth_mode 门（api_key 403，`ensure_trusted_context` 先例）；§8.3 全部六项

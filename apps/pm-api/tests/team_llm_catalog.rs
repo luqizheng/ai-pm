@@ -1,6 +1,6 @@
 //! Team LLM Model Catalog / Authorization / Policy 验收（Phase 3A）。
 //!
-//! 设计基线：docs/smark-pm-team-llm-provider-management-phase3-design-v1.md
+//! 设计基线：docs/ui/smark-pm-team-llm-provider-management-phase3-design-v1.md
 //! §5/§10/§11（AC-04/05/06/07/08 的 API 面）。覆盖：
 //! - 权限矩阵（member 403 / admin 可管 / 跨租户 404）；
 //! - 手动登记 + 重名拒绝 + 能力词表校验（AC-04）；

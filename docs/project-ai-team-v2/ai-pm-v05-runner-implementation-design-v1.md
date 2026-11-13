@@ -4,7 +4,7 @@
 |---|---|
 | 文档性质 | 实施设计稿（检查点 2 立项交付物；**落盘后等用户裁决，裁决前不进代码**） |
 | 检查点目标 | 在 `.59` 上以 **Runner 真二进制进程**完成 claim→执行→人工介入→回报→平台只读验证全链，随后 **ACP-09 正式关闭**（当前仅剩 ACP-09 报告 §4 三条真机边界） |
-| 上位裁决 | V-05-1（device 升级 Client Registry）/ V-05-2（Client 自管 push）/ V-05-5（Adapter 优先级 ZCode→Codex→DSH + Runner 走 MCP 自领）/ ACP V1.3.1 冻结 / 联合基线三约束 A/B/C / 身份三件冻结 / R-ACP-16 方案 a（已实施）/ checkpoint-1 全链 PASS（`docs/checkpoint1-verification-record-v1.md`） |
+| 上位裁决 | V-05-1（device 升级 Client Registry）/ V-05-2（Client 自管 push）/ V-05-5（Adapter 优先级 ZCode→Codex→DSH + Runner 走 MCP 自领）/ ACP V1.3.1 冻结 / 联合基线三约束 A/B/C / 身份三件冻结 / R-ACP-16 方案 a（已实施）/ checkpoint-1 全链 PASS（`docs/acceptance/checkpoint1-verification-record-v1.md`） |
 | 设计基线 | ai-pm master @ **6efbef7**（2026-11-08，fmt 清偿后）；迁移 **0049~0055 全部已应用**（台账 §一） |
 | 迁移纪律 | **本检查点零迁移取号**——0049~0055 已覆盖全部数据面（§11.1 逐项核对）；实施中若发现确需迁移，按台账纪律 max+1 取号并回填，不得复用/重解释既有号 |
 | 覆盖 | ① Runner 形态与配置面 · ② claim 循环客户端化定稿 · ③ Adapter 层 · ④ Git 域严格分域 · ⑤ 离线恢复真进程落位 · ⑥ `.10` 共享栈升级窗口 · ⑦ `.59` 部署形态与验收清单 |

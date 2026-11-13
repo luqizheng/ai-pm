@@ -1,5 +1,5 @@
 //! Slice D2：Run 级执行契约、租约凭据与进度上报
-//! （`docs/ai-pm-slice-d2-mcp-context-v1.md` §四 §六）。
+//! （`docs/slice-d/ai-pm-slice-d2-mcp-context-v1.md` §四 §六）。
 //!
 //! 三方分工不变：本模块只做**读取/凭证校验/续租**，不启动进程（D3）、不写
 //! 交付清单（D4）、不裁决任务状态（D5）。契约里的每个字段都能回到一张库表

@@ -165,7 +165,7 @@ bash test-case/evidence/e2e-flow/run-e2e-flow.sh
 bash test-case/evidence/e2e-flow/run-e2e-flow-ui.sh
 ```
 
-载体：`ai-frontend/playwright.flow.config.ts`（vite `:8860`，`VITE_USE_MOCK=0`，`reuseExistingServer: false`）+ `e2e/flow/global-setup.ts`（一次性库 `aipm_e2e_flow_ui` + 本地 JWKS `:18496` + 真 pm-api `:18495`）。与 team-qa（:8850/:18490 系）、s02（:8848）端口互斥。
+载体：`ai-frontend/playwright.flow.config.ts`（vite `:8860`，`VITE_USE_MOCK=0`，`reuseExistingServer: false`）+ `e2e/flow/global-setup.ts`（一次性库 `aipm_e2e_flow_ui` + 本地 JWKS `:18496` + 真 pm-api `:18495`）。与 team-qa（:8850/:18490 系）、docs/scenarios/s02（:8848）端口互斥。
 
 实测：UIFLOW-01~08 全部 PASS，34.7s。UIFLOW-06 接入**真实远端**——私钥经 `cargo run -p pm-application --example seal_ssh_key`（薄封装平台 `seal_text`）装进平台密钥库，不在 TS 侧重实现加密。
 

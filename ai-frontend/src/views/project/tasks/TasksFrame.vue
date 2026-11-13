@@ -4,7 +4,7 @@ import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 
 /**
- * S04 任务管理模块的页内页签条（docs/ui/s04）。
+ * S04 任务管理模块的页内页签条（docs/scenarios/s04/ui）。
  *
  * 组织方式同 Project Setting · AI Team（AiTeamFrame）：五个子页是**独立
  * 路由**而非同页切换，页签条是 RouterLink——保留浏览器前进/后退与深链

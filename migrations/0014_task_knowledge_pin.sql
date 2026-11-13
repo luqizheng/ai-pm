@@ -1,7 +1,7 @@
 -- 0014_task_knowledge_pin.sql
 --
 -- S05 · 执行上下文注入闭环（批 3 · S05-02 执行上下文注入）。
--- 现状对照 `docs/s05/S05-00-code-facts-and-gap-analysis-v1.md` 缺口 S05-02；
+-- 现状对照 `docs/scenarios/s05/S05-00-code-facts-and-gap-analysis-v1.md` 缺口 S05-02；
 -- 裁决记录 `docs/architecture/knowledge-services/kp-s05-knowledge-injection-contract-deviations-v1.md`
 -- （用户裁决 2026-11-10：知识来源 = **显式锚点 + 人工确认**）。
 --

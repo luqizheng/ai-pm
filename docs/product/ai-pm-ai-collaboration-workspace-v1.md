@@ -8,7 +8,7 @@
 | 范围 | 四区工作区布局 · AI Chat Assistance 交互 · Right Context Panel 组织 · 六类核心场景 · 交互对象模型 · Figma 页面规划 |
 | 裁决真源 | `docs/ui/ai-collab/smark-pm-aic-95-decision-record-v1.md`（DR-C1~C6）· 提示词包 `docs/ui/ai-collab/`（v1-1） |
 | 不覆盖 | 后端接口契约 · 数据库迁移 · 注入分节预算 · 权限模型的实现选型（只定交互语义） |
-| 上位依据 | AI Interaction Component Library V1.0（8 类响应卡 + 11 态生命周期）· `docs/ai-pm-hybrid-workspace-design.md`（壳结构）· AI-PM 权威边界（Markdown + Git 管正式内容 / PostgreSQL 管状态、版本引用、审批与审计） |
+| 上位依据 | AI Interaction Component Library V1.0（8 类响应卡 + 11 态生命周期）· `docs/architecture/ai-pm-hybrid-workspace-design.md`（壳结构）· AI-PM 权威边界（Markdown + Git 管正式内容 / PostgreSQL 管状态、版本引用、审批与审计） |
 | 关联文档 | `docs/product/ai-pm-assistant-context-integration-plan-v1.md`（既有对话 × 上下文整合计划，Batch 1~4 已落地）· `docs/product/ai-pm-dialog-orchestration-design-v1.md`（DK-0 对话编排底座） |
 
 ---

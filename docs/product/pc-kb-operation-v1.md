@@ -123,7 +123,7 @@ sequenceDiagram
 ## 8. 权威源
 
 1. **裁决终态**：`project-ai-team-v2/ai-pm-p2-13-pc-i6-llm-analysis-adjudication-pack-v1.md`（§〇 D-1~D-4，2026-11-08）。
-2. **验收终态**：`checkpoint1-verification-record-v1.md`。
+2. **验收终态**：`docs/acceptance/checkpoint1-verification-record-v1.md`。
 3. **架构权威**：`architecture/knowledge-services/kb-pc-independent-services-architecture-v1.1.md`（13 项 ADR 2026-11-07 全批；**取代同目录 v1.0**）。
 4. **需求权威**：`product-cognition-detailed-requirements-v1.1/`（**取代 v1**；v1-review.md 为过程稿）。
 5. 表结构：迁移 0048（intake）/ 0053（KB/PC 最小表）/ 0062（analysis_mode）。

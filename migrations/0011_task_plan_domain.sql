@@ -1,8 +1,8 @@
 -- 0011_task_plan_domain.sql
 --
 -- S04 · AI 任务拆解与研发组织（Development Planning & Task Orchestration）。
--- 设计依据：docs/s04/ai-pm-s04-backend-design-proposal-v1.md（Q1/Q2/Q3/Q5/Q6
--- 裁决）+ 总体设计 docs/ai-pm-five-stage-business-architecture-v1.md S04 定义。
+-- 设计依据：docs/scenarios/s04/ai-pm-s04-backend-design-proposal-v1.md（Q1/Q2/Q3/Q5/Q6
+-- 裁决）+ 总体设计 docs/architecture/ai-pm-five-stage-business-architecture-v1.md S04 定义。
 --
 -- 核心立场：**不新建任务体系**。Task Plan 是新增的「计划」聚合层，正式任务
 -- 全部复用 delivery.task（13 态状态机/依赖/仓库绑定/验收标准原样使用）。

@@ -1,5 +1,5 @@
 //! `/v1/pm/acceptance-overview` 与 `/v1/pm/tasks/{task_id}/{review-findings,criterion-verdicts,review-approvals}`：
-//! 项目交付验收工作台的只读端点（T-070 / `docs/ai-pm-delivery-acceptance-workbench-v1.md` §5.1 / §5.3）。
+//! 项目交付验收工作台的只读端点（T-070 / `docs/tasks/ai-pm-delivery-acceptance-workbench-v1.md` §5.1 / §5.3）。
 //!
 //! - 第一屏：项目级聚合读模型——Q1 状态过滤 + Q2 后端统一判定徽标 + 动作区状态。
 //! - 第二层：验收证据（findings / 逐条裁决 / 审批历史）。多仓交付清单复用

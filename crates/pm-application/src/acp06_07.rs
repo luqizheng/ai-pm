@@ -1,6 +1,6 @@
 //! ACP-06/07 · Checkpoint 登记 + Deadline 重新授权（0054）。
 //!
-//! 联合实施设计：`docs/ui/s03-acp/smark-pm-s03-acp-slice-design-acp06-07-joint-v1.md`
+//! 联合实施设计：`docs/scenarios/s03/ui/acp/smark-pm-s03-acp-slice-design-acp06-07-joint-v1.md`
 //! V1.0。经 `continuation::get_open_by_run` 明确接口接入 ACP-05，不吸收其职责。
 //!
 //! **ACP-06**：Checkpoint 正文永远在 Workspace（基线 §6，四不清理）；Platform

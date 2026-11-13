@@ -11,7 +11,7 @@
 | 用户裁决（第三批） | 目标 2 正式命名 = **Product Cognition & Knowledge Base — Product Definition V1.0**：Product Cognition（独立产品能力：建立/维护/验证产品整体认知）· Product Big View（其核心全貌视图）· Product View（观察视角：业务能力/功能模块/业务流程/页面交互等）· Knowledge Base（并列独立能力：资料管理/知识提取/Discussion Memory/知识检索） |
 | 用户裁决（第四批，2026-11-08） | **V0.5 增列「PC/KB 应用完善」**：KP-1（PC-01B 正式模型实施）/ KP-2（PC-01C 确认闭环）/ KP-3（KB 三层最小面）；PC-I6 全验收面剩余等显式切出 V0.6（§3.3/§八.8）。同日 V-05-6/7 实质关闭（Q-PC-01~13 已裁） |
 | 用户裁决（第五批，2026-11-09，按推荐） | **收纳对话化入口三件**：A1 DK-0 对话编排全链（DK-A~F，独立节 §五之二 横切目标 2/3/4）+ A2 对话上下文整合批（Batch1~4，作为 A1 伴生批一并入册）+ A3 前端 DK-F Stage 2；**B1** 两 Demo 场景写入 §九 故事线 11/12（验收=DK-F §8.3 30/30 本机栈）；**B2** Stage 3（.10 部署批）**属 V0.5 收官内**挂账单批（三开关 off 时 .10 上对话编排不可见）；**B3** 三开关**代码默认 off 维持**，.10 部署 env 配 on |
-| 目标 1 状态 | ✅ **2026-11-08 闭环**：检查点 1（注册→建团→建项目→关联仓库→PC/KB draft 全链 PASS，8d81fbd）+ 检查点 2 R4（.59 Runner 真二进制 cpk 全链→平台远端只读验证 accepted，三边界全关，**ACP-09 正式关闭**，`docs/checkpoint2-r4-acceptance-record-v1.md`） |
+| 目标 1 状态 | ✅ **2026-11-08 闭环**：检查点 1（注册→建团→建项目→关联仓库→PC/KB draft 全链 PASS，8d81fbd）+ 检查点 2 R4（.59 Runner 真二进制 cpk 全链→平台远端只读验证 accepted，三边界全关，**ACP-09 正式关闭**，`docs/acceptance/checkpoint2-r4-acceptance-record-v1.md`） |
 | 前置资产 | V2 架构基线 V1.0（Q1=A/Q2=B/Q3=A）· V2 代码对照核验报告 V1.0 · S03-ACP V1.3.1（独立评审通过）· S01-08 知识库与 Git 备份设计稿 V1.0（四裁决已定，待实施） |
 | 优先级裁决 | S01 后续切片降级为非迫切；S03-00 V1.2 审计并行推进、不阻塞 V0.5 |
 
@@ -245,7 +245,7 @@ S01-08 四裁决（KB-3）：知识库仓库独立配置（R-01）·自动同步
 
 ## 十、工程纪律
 
-1. **迁移号按台账纪律对账取号**：先读 `docs/ai-pm-migration-ledger.md` 再 `ls migrations/`（**2026-11-09 迁移基线合并后**：0001~0065 已 squash 进 `0001_baseline.sql`，新链自 **0002** 起，已用至 **0005**）；单一负责人分配，后实施者撞号无条件顺移并回填台账。
+1. **迁移号按台账纪律对账取号**：先读 `docs/reference/ai-pm-migration-ledger.md` 再 `ls migrations/`（**2026-11-09 迁移基线合并后**：0001~0065 已 squash 进 `0001_baseline.sql`，新链自 **0002** 起，已用至 **0005**）；单一负责人分配，后实施者撞号无条件顺移并回填台账。
 2. ai-pm 主 checkout 存在并行会话在途未提交物（team_llm 修改、0043 迁移、team-onboarding 三稿）：**禁 sweep、禁 git add -A**，只提交本批文件。
 3. 禁重建区（核验报告 §四）继续有效：不建 task_execution/execution_result 新表、不改 13 态状态机、不动 MCP 四工具契约、WAITING_FOR_* 不做成状态。
 4. Runner 凭据面遵循 ADR-0002 凭据分离与 team_llm_credential 先例（AES-256-GCM 替换制）。

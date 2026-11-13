@@ -1,4 +1,4 @@
-//! Task transition rules (`ai-pm-task-state-machine-v1.md` §1.3 / §十一 / §十二 / §十九).
+//! Task transition rules (`docs/tasks/ai-pm-task-state-machine-v1.md` §1.3 / §十一 / §十二 / §十九).
 //!
 //! All state changes go through this rule set (§7.4 硬约束的域层载体)：
 //! the edge matrix is the §1.3 规范版 plus the §11.2 Superseded `allowed_from`

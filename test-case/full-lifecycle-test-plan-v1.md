@@ -30,7 +30,7 @@
 
 ## 2. 业务全流程与测试覆盖映射
 
-产品主链路（`docs/ai-pm-five-stage-business-architecture-v1.md`）与各层落点：
+产品主链路（`docs/architecture/ai-pm-five-stage-business-architecture-v1.md`）与各层落点：
 
 | 阶段 | 业务动作 | 后端落点 | 数据落点 | 前端落点 | 主要测试层 |
 |---|---|---|---|---|---|
@@ -69,8 +69,8 @@ E2E 每条流转断言必须同时校验 **HTTP 码 + 响应字段 + DB 终态**
 | 环境 | 用途 | 组成 | 关键地址 |
 |---|---|---|---|
 | **DEV（本机）** | 开发自测 | vite :8848 / mock 模式 | 仅本地 |
-| **QA（本机）** | L1–L3 自动化 | PG 容器 `aipm-pg-gate`（宿主 `127.0.0.1:16433`）+ 独立 pm-api/worker 进程 + 独立 vite | 见 `docs/test-environments.md` |
-| **TEST-SERVER（内网）** | L4 部署验收 | `192.168.2.10` Docker 栈（pm-api 8090 / gateway 3000 / aipm-pg 5435） | 见 `docs/test-environments.md` |
+| **QA（本机）** | L1–L3 自动化 | PG 容器 `aipm-pg-gate`（宿主 `127.0.0.1:16433`）+ 独立 pm-api/worker 进程 + 独立 vite | 见 `docs/reference/test-environments.md` |
+| **TEST-SERVER（内网）** | L4 部署验收 | `192.168.2.10` Docker 栈（pm-api 8090 / gateway 3000 / aipm-pg 5435） | 见 `docs/reference/test-environments.md` |
 | **WINDOWS-PC（内网）** | L4 真实执行端 | `192.168.2.43:60209` 远程桌面 | 同上 |
 
 **硬约束**（AGENTS.md 第 3 条）
@@ -127,7 +127,7 @@ E2E 每条流转断言必须同时校验 **HTTP 码 + 响应字段 + DB 终态**
 | `test-case/team-qa-test-plan-v1.md` | Team Onboarding 专项 QA 计划 + 88 条用例 + 执行报告 |
 | `test-case/s02-qa-test-plan-v1.md` | S02 发布验收测试计划 |
 | `test-case/t090-two-machine-test-cases-v1.md` | L4 两机实测用例（T-090 / T-091） |
-| `docs/test-environments.md` | 环境清单与端点 |
+| `docs/reference/test-environments.md` | 环境清单与端点 |
 | `test-case/README.md` | 用例目录约定 |
 
 ---

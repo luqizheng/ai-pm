@@ -1,6 +1,6 @@
 //! ACP-04 · Response Delivery 持久化（0050）。
 //!
-//! 联合数据契约：`docs/ui/s03-acp/smark-pm-s03-acp-slice-design-acp04-05-joint-v1.md`
+//! 联合数据契约：`docs/scenarios/s03/ui/acp/smark-pm-s03-acp-slice-design-acp04-05-joint-v1.md`
 //! V1.0 §2（I-1 接口）+ 联合架构裁决 2026-11-07（五问通过）。
 //!
 //! 语义锚点：

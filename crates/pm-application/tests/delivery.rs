@@ -1,4 +1,4 @@
-//! Slice D4 交付与验收的数据库集成测试（`docs/ai-pm-slice-d4-delivery-v1.md` §6
+//! Slice D4 交付与验收的数据库集成测试（`docs/slice-d/ai-pm-slice-d4-delivery-v1.md` §6
 //! 验收矩阵 C71–C97）。
 //!
 //! 用真实 git 工作区驱动：每个用例在临时目录里 `git init` 出仓，按 D3 的派生

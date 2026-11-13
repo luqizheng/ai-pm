@@ -12,7 +12,7 @@
 #   3. 有失败时打印失败用例清单
 #
 # 不用 `cargo test`：libtest 的 --report-time 是 nightly-only，且 cargo test 按
-# 二进制串行（本仓 173 个测试二进制）。详见 docs/ai-pm-test-performance-v1.md。
+# 二进制串行（本仓 173 个测试二进制）。详见 docs/reference/ai-pm-test-performance-v1.md。
 
 set -uo pipefail
 

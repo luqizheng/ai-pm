@@ -2,7 +2,7 @@
 
 > **性质**：P1 执行批的总规格（体系总纲 §5 的 P1 批判据）。定义 7 组测试、案例框架、执行矩阵与验收清单。
 > **上位文件**：`docs/e2e-spec/00-e2e-testing-framework-v1.md`（分级词汇：案例优先级 Must/Should/Could，本批构成 P1 执行批）、`docs/e2e-spec/10-p0-test-specification-v1.md`（P0 门禁 38/38；P1 不得替代门禁）。
-> **需求真源**：S01 QA 追溯矩阵 `docs/s01-项目初始化/qa/01-requirement-traceability-matrix-v2.1.md`（DATA-020 :70 / UX-052 :117 / SEC-054 :119 / FR-085 :165 / BR-011 :54 / ADR-041 :101 / ADR-023 :73）。
+> **需求真源**：S01 QA 追溯矩阵 `docs/scenarios/s01/qa/01-requirement-traceability-matrix-v2.1.md`（DATA-020 :70 / UX-052 :117 / SEC-054 :119 / FR-085 :165 / BR-011 :54 / ADR-041 :101 / ADR-023 :73）。
 > **V1.1 修订**（2026-11-11）：按代码事实全面复核，修正 R59/R63/D37/D38/D40 四处定性问题，新增 **R69/R70** 两条实现缺口（R65–R68 已被 12 号 P0-02 落地实测发现占用，本规格避让）。基线 master @ `2b3f509e`。
 
 ---
@@ -257,7 +257,7 @@ test("P1-04 install guides + skills package e2e", async () => {
 | `docs/e2e-spec/14-p0-04-playwright-spec-v1.md` | P1-07 复用（哈希门/Revision 断言口径） |
 | `docs/e2e-spec/15-p0-05-playwright-spec-v1.md` | DEF-P0-01 挂靠点；R69 修订波及（已同步回改） |
 | `docs/e2e-spec/16-p0-06-playwright-spec-v1.md` | P1-04 复用（Bootstrap/MCP/设备锚点） |
-| `docs/s01-项目初始化/qa/01-requirement-traceability-matrix-v2.1.md` | 七组需求真源（DATA-020 :70 / UX-052 :117 / SEC-054 :119 / FR-085 :165 / ADR-023 :73） |
-| `docs/s03-00-technical-design-adr-domain-asset-inventory-v1.md` | DEF-03/04 档案（:383 静态重验；本规格以路由面实证闭环 D38） |
+| `docs/scenarios/s01/qa/01-requirement-traceability-matrix-v2.1.md` | 七组需求真源（DATA-020 :70 / UX-052 :117 / SEC-054 :119 / FR-085 :165 / ADR-023 :73） |
+| `docs/scenarios/s03/s03-00-technical-design-adr-domain-asset-inventory-v1.md` | DEF-03/04 档案（:383 静态重验；本规格以路由面实证闭环 D38） |
 | `apps/pm-api/src/pm_writes.rs` + `pm_lists.rs:30-64` | 任务域 REST 入口（require_human）与挂载面 |
 | `apps/pm-api/src/pm_baseline.rs` + `migrations/0001_baseline.sql:699-734,1068-1076` | Baseline 4 端点 + 5 态枚举 + 版本化快照 |

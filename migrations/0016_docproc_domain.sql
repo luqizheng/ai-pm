@@ -1,9 +1,9 @@
 -- 0016_docproc_domain.sql
 --
 -- Document Processing V1（平台级文档处理域）数据模型落地。
--- 设计真源：docs/ai-pm-document-processing-td01-data-model-v1.md（含七项
+-- 设计真源：docs/architecture/knowledge-services/ai-pm-document-processing-td01-data-model-v1.md（含七项
 -- 裁决 D-01~D-07 与仓库惯例审计基线）；规格真源：
--- docs/ai-pm-document-processing-v1.md。
+-- docs/architecture/knowledge-services/ai-pm-document-processing-v1.md。
 --
 -- 新建 `docproc` schema，五张表：
 --   ① docproc.document           Document 稳定身份（Team 级 = tenant，可选

@@ -2,7 +2,7 @@
 
 > **性质**：P0-06 套件的**可执行**自动化规格（9 条案例：P0-040 ~ P0-048）。
 > **上位文件**：`docs/e2e-spec/10-p0-test-specification-v1.md`（编号裁决 D27 + D32：本套件 040~048；P0-07 最终 = 知识学习与采纳 049~056；总数 **38**）。
-> **定位权威**：`docs/ai-pm-mcp-executor-positioning-v1.md`（V1.1：平台 = AI 执行端**任务控制中心**；MCP = 连接协议；执行端 = 一切 MCP-capable AI 开发工具）。
+> **定位权威**：`docs/architecture/ai-pm-mcp-executor-positioning-v1.md`（V1.1：平台 = AI 执行端**任务控制中心**；MCP = 连接协议；执行端 = 一切 MCP-capable AI 开发工具）。
 > **关联基线**：T-081（跨机 MCP）、T-088（Bootstrap Server）、T-089（Skills 包）、T-090（两机实测）、Slice D1/D2/D3（执行管线）、**D4（`pm_submit_result` 回传，未落地）**。
 > **原 P0-06（ACP 3 例）撤销独立套件** —— 内容已由 P0-05 P0-021 场景 C 承接（D27）。
 
@@ -19,7 +19,7 @@
 | **R43** | ✅ | Device 与 Project Binding | **真实**：`devenv.device`（`status` 列）+ `devenv.device_project_binding`（`migrations/0001_baseline.sql:2269,2316`）+ `device_layer` 挂载 | P0-041 全部可落地 |
 | **R44** | ✅ | Bootstrap + 四个 Skills | **真实且完全对齐**：`GET /install`（目录）+ `/install/{tool}`（指南）+ `GET /install/packages/pm-ai-skills-<version>.zip`（T-089 构建期内嵌）+ `release-manifest.json`（SHA-256 覆盖整个 zip，`integrity_only` 信任边界）；包内 = **pm-ai-bootstrap / pm-task-execution / pm-knowledge / pm-learn** 四个 SKILL.md + verify-install.ps1/.sh（`apps/pm-api/src/skills_package.rs:40-53`） | 与规格 §六 Skills 清单**一字不差** |
 | **R45** | ⚠️ | MCP 工具面 | 固定 **5 工具**：`pm_submit_technical_design` / `pm_get_submission_status` / `pm_get_task_context` / `pm_list_tasks` / `pm_submit_document`（`server.rs:73-157`）；模块头「three pinned」已过时；**知识读取不在固定集**（P0-044 经 task context 引用 / documents REST） | P0-044 通道部分缺 → 标注；9 工具规划见定位基线（待评审，不作 V1 前置） |
-| **R46** | 🔴 | 「Agent 通过 MCP 回传执行结果」（P0-045） | **V1 通道未开通**：D1 裁定 worker 不签发 `lease_token` 明文 → spawn 的执行端**无 MCP 凭据**；`pm_submit_result` 与 token 下发一起裁（**D4**，`docs/ai-pm-slice-d3-executor-adapter-v1.md` Q-D3-4/竞态节）；当前结果路径 = 内部编排链（codex_executor → Run 终态**条件 UPDATE** `WHERE status IN ('claimed','running')` 先到先得 + fencing `accept_executor_result`） | P0-045 拆 **a（内部编排链，可测）** + **b（MCP 回传，NOT_IMPLEMENTED，不计 PASS，D29）** |
+| **R46** | 🔴 | 「Agent 通过 MCP 回传执行结果」（P0-045） | **V1 通道未开通**：D1 裁定 worker 不签发 `lease_token` 明文 → spawn 的执行端**无 MCP 凭据**；`pm_submit_result` 与 token 下发一起裁（**D4**，`docs/slice-d/ai-pm-slice-d3-executor-adapter-v1.md` Q-D3-4/竞态节）；当前结果路径 = 内部编排链（codex_executor → Run 终态**条件 UPDATE** `WHERE status IN ('claimed','running')` 先到先得 + fencing `accept_executor_result`） | P0-045 拆 **a（内部编排链，可测）** + **b（MCP 回传，NOT_IMPLEMENTED，不计 PASS，D29）** |
 | **R47** | 🟡 | 外部人工 Commit 采纳管道（图2：检测→分析→澄清/免澄清→采纳） | 初步 grep **无专用实现**（「澄清」命中均为通用交互模块） | 初判 **NOT_IMPLEMENTED**；落地前复核（D30）；「发现/分析/采纳三动作分离」红线保留 |
 | **R48** | ✅ | 迟到回调 / 竞态 | **硬锚点**：Run 终态回写条件 UPDATE 先到先得 + fencing `accept_executor_result`（D3 竞态节 C59 闭环）；TaskReady 0012 幂等（P0-05 已证） | P0-048 断言有真实机制 |
 | **R49** | ⚠️ | 「已确定的 V1 技术方案」 | 定位基线 V1.1 状态 = **讨论记录·待评审**；9 工具规划未实现；测试**不得**把未来能力（设备凭证签发、Runner 本地二进制）当 V1 前置 —— 与规格原则一致 | 边界红线沿用 |
@@ -259,8 +259,8 @@ D1 裁定 worker 不签发 `lease_token` 明文 → spawn 执行端无 MCP 凭�
 |---|---|
 | `docs/e2e-spec/15-p0-05-playwright-spec-v1.md` | Task/Run/Delivery/Review 内部链（本套件复用其 fixture 与口径） |
 | `docs/e2e-spec/14-p0-04-playwright-spec-v1.md` | 三层知识权威（P0-044 沿用） |
-| `docs/ai-pm-mcp-executor-positioning-v1.md` | 定位与范围基线（V1.1，平台=任务控制中心） |
-| `docs/ai-pm-slice-d3-executor-adapter-v1.md` | 执行适配（Q-D3-4 租约 / submit_result=D4 / fencing） |
+| `docs/architecture/ai-pm-mcp-executor-positioning-v1.md` | 定位与范围基线（V1.1，平台=任务控制中心） |
+| `docs/slice-d/ai-pm-slice-d3-executor-adapter-v1.md` | 执行适配（Q-D3-4 租约 / submit_result=D4 / fencing） |
 | `apps/pm-api/src/routes.rs:205-209` | MCP 挂载（fallback_service + device_layer） |
 | `crates/pm-mcp/src/server.rs` | rmcp shell + 5 固定工具 |
 | `apps/pm-api/src/skills_package.rs` | T-089 Skills 包（四 SKILL.md + SHA-256 manifest） |

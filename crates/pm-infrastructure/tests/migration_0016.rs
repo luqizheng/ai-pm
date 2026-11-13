@@ -1,6 +1,6 @@
 //! 0016_policy_composition 迁移验证：能力类三列与 `additional_checks` 存在、
 //! 缺省语义正确、CHECK 拒绝非数组。真实数据库，不 Mock。
-//! （迁移重入断言已随 2026-11-09 基线合并退役，见 docs/ai-pm-migration-ledger.md。）
+//! （迁移重入断言已随 2026-11-09 基线合并退役，见 docs/reference/ai-pm-migration-ledger.md。）
 
 use pm_domain::SYSTEM_TENANT;
 use sqlx::PgPool;

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Vue 3 + TypeScript + Vite；vue-router 5、pinia 3、Tailwind + shadcn-vue（PRISM 壳既有）；**新增依赖仅 zod**（spec/props 校验）；vitest（测试）。
 
-**Spec:** `docs/ai-pm-hybrid-workspace-design.md`（V1.0 定稿；重点 §一.3 路由、§1.4 与 B-3 归属表、§5.1/5.5 Registry 与生命周期、§5.6 布局模板、§6.5 WorkspaceSpec 与安全边界、附录 C /focus 规格、附录 D Session 语义）
+**Spec:** `docs/architecture/ai-pm-hybrid-workspace-design.md`（V1.0 定稿；重点 §一.3 路由、§1.4 与 B-3 归属表、§5.1/5.5 Registry 与生命周期、§5.6 布局模板、§6.5 WorkspaceSpec 与安全边界、附录 C /focus 规格、附录 D Session 语义）
 
 ## Global Constraints
 

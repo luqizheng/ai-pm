@@ -5,7 +5,7 @@
 | 日期 | 2026-11-08 |
 | 批次 | KP-3（V0.5 范围基线 V1.3 §3.3/§五，目标 4 主交付物） |
 | 分支 | `feat/kp3-kb-minimal-surface` |
-| 上位契约 | `kb-pc-independent-services-architecture-v1.1.md` §12（API 契约，错误码表沿 V1.0 §12.1）/ §13.3（事件目录）；`crates/kb-pc-contracts`（端口与事件的类型化承载）；`docs/ai-pm-slice-d2-mcp-context-v1.md` §4.2（`pm_get_run_context` 字段→来源映射） |
+| 上位契约 | `kb-pc-independent-services-architecture-v1.1.md` §12（API 契约，错误码表沿 V1.0 §12.1）/ §13.3（事件目录）；`crates/kb-pc-contracts`（端口与事件的类型化承载）；`docs/slice-d/ai-pm-slice-d2-mcp-context-v1.md` §4.2（`pm_get_run_context` 字段→来源映射） |
 | 纪律 | 任务书「不改契约形状；确需改签名先落差异说明再动」——本文先于端口改动落库；凡涉 MCP 四工具契约者已逐项上报裁决 |
 
 本批**未改动任何端口方法签名**（`KbServicePort` / `PcServicePort` 全部方法的参数与返回类型原样保留），未新增/修改事件目录条目，未新增 MCP 工具、未改任何工具入参。下列差异逐项登记：性质、依据、影响面、后续归宿。

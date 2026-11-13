@@ -1,6 +1,6 @@
 //! Knowledge space: Markdown + Git is the authoritative body; PostgreSQL only
 //! carries document identity, canonical path, revision number, commit sha and
-//! content hash. Design of record: `docs/ai-pm-markdown-knowledge-space.md`
+//! content hash. Design of record: `docs/architecture/knowledge-services/ai-pm-markdown-knowledge-space.md`
 //! §四 (one authority per fact) and §八 (Git/DB sync).
 //!
 //! V1 scope: create a document (one file + one commit + two rows), list

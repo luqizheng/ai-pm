@@ -466,7 +466,7 @@ Visualization Migration 使用当前 migration ledger 的下一个可用编号�
 V0-1 启动前必须：
 
 1. 检查仓库中现有 migration 文件。
-2. 检查 docs/ai-pm-migration-ledger.md。
+2. 检查 docs/reference/ai-pm-migration-ledger.md。
 3. 确认当前最高已使用编号。
 4. 分配下一个可用编号。
 5. 指定 Migration Owner。

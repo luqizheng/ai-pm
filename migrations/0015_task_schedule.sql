@@ -1,6 +1,6 @@
 -- 0015_task_schedule.sql
 --
--- S04 · 任务排期与执行规划时间线（docs/ui/s04 S04-UI-06 Execution Timeline）。
+-- S04 · 任务排期与执行规划时间线（docs/scenarios/s04/ui S04-UI-06 Execution Timeline）。
 --
 -- 现状对照：`delivery.task`（0001 基线）无任何排期列——计划起止、工期与
 -- 依赖类型均无承载，S04-UI-05/06 的甘特与校验面板只能靠前端假数据。

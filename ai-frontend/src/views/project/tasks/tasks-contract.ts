@@ -1,7 +1,7 @@
 import type { Task } from "@/api/types";
 
 /**
- * S04 任务域视图契约（docs/ui/s04，2026-11-10）。
+ * S04 任务域视图契约（docs/scenarios/s04/ui，2026-11-10）。
  *
  * 契约裁决：状态/优先级词汇 = 后端真实枚举（delivery.task 13 态、
  * priority 四级，crates/pm-domain task_transition），设计稿草案里的

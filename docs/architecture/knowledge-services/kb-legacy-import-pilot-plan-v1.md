@@ -3,7 +3,7 @@
 > **状态**：草案（2026-11-09 搁置：存量文件导入专项暂不推进，优先裁决知识层模式选型，见 `kb-pc-knowledge-layer-model-selection-v1.md`；本稿保留作未来参考）。
 > **背景**：首发目标场景 = 公司存量项目（约 2GB、数千份 Word 文档）。这不是"未来某天"的规模——**发布后第一批使用者就是存量项目**。
 > **定位**：本稿不是终态设计。是用 **100~200 份真实文档**换**四个数字**的试点执行方案；四个数字反过来裁决 D1（导入模型）/ D3（检索对象）/ D5（解析器）。
-> **关联**：KP-3 验收记录（知识检索未建）· `kb-pc-independent-services-architecture-v1.1.md` · `ai-pm-markdown-knowledge-space.md` · llm_wiki 参考研究（2026-11-09 会话）
+> **关联**：KP-3 验收记录（知识检索未建）· `kb-pc-independent-services-architecture-v1.1.md` · `docs/architecture/knowledge-services/ai-pm-markdown-knowledge-space.md` · llm_wiki 参考研究（2026-11-09 会话）
 
 ---
 

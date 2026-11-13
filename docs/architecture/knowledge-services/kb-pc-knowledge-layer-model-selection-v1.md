@@ -3,7 +3,7 @@
 > **状态**：裁决稿，待用户确认后进实施设计。
 > **输入面（用户定版 2026-11-09）**：只考虑 `txt / pdf / image / xlsx / docx / markdown` 六格式；**旧版 Office（.doc/.xls）不支持**。
 > **内容面貌（用户核过真实文档）**：最多的是**版本链修改文档**（同一份制度的 v1.2、v1.3…系列文件）；其次客户收集的**制度**、**流程图**、**财务套表 / 打印版式的 xlsx 套表**。
-> **关联**：`ai-pm-markdown-knowledge-space.md`（PageIndex 定位）· `ai-pm-t060-knowledge-index-v1.md`（db-section/provider 端口）· llm_wiki 参考研究（2026-11-09）· `kb-legacy-import-pilot-plan-v1.md`（搁置，本稿接管其 D3/D5 裁决职能）
+> **关联**：`docs/architecture/knowledge-services/ai-pm-markdown-knowledge-space.md`（PageIndex 定位）· `docs/architecture/knowledge-services/ai-pm-t060-knowledge-index-v1.md`（db-section/provider 端口）· llm_wiki 参考研究（2026-11-09）· `kb-legacy-import-pilot-plan-v1.md`（搁置，本稿接管其 D3/D5 裁决职能）
 
 ---
 

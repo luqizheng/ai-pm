@@ -1,7 +1,7 @@
 -- 0010_design_domain.sql
 --
 -- S03 · 分析、设计与技术决策域（总体设计 V1.0 五项裁决 Q1~Q5 落地；核验基线
--- docs/s03/S03-00-code-facts-report.md 七项核心缺口 + docs/ui/
+-- docs/scenarios/s03/S03-00-code-facts-report.md 七项核心缺口 + docs/ui/
 -- smark-pm-s03-01-analysis-design-technical-decisions-v1.md §3/§4/§6）。
 --
 -- 新建 `design` schema，九张表 + 一列：

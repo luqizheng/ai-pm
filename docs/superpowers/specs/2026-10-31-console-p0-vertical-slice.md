@@ -3,7 +3,7 @@
 - 日期：2026-10-31
 - 状态：范围与三项关键裁决已由用户裁定（睡前），其余裁决项按分析稿建议自动采纳（标注「可否决」）；用户已明示 spec→plan→自动执行
 - 仓库：ai-pm（本仓，前后端同仓落地）＋ ai-pm-web（../ai-pm-web，迁出源，只读）
-- 输入文档：[ai-pm-ui-console-v1-1.md](../../ai-pm-ui-console-v1-1.md)（总控台深入稿，最新）· [ai-pm-ui-design-system-v1.md](../../ai-pm-ui-design-system-v1.md)（设计系统 V1.0 基线，含 §九 设计基线与总控台首版结构）· [ai-pm-ui-design-system-v1-analysis.md](../../ai-pm-ui-design-system-v1-analysis.md)（分析稿，裁决建议来源）
+- 输入文档：[docs/ui/ai-pm-ui-console-v1-1.md](docs/ui/ai-pm-ui-console-v1-1.md)（总控台深入稿，最新）· [docs/ui/ai-pm-ui-design-system-v1.md](docs/ui/ai-pm-ui-design-system-v1.md)（设计系统 V1.0 基线，含 §九 设计基线与总控台首版结构）· [docs/ui/ai-pm-ui-design-system-v1-analysis.md](docs/ui/ai-pm-ui-design-system-v1-analysis.md)（分析稿，裁决建议来源）
 - 关联计划：本文档的配套计划见 [../plans/2026-10-31-console-p0-vertical-slice.md](../plans/2026-10-31-console-p0-vertical-slice.md)；旧计划 [2026-10-30-ai-workspace-p0.md](../plans/2026-10-30-ai-workspace-p0.md) 部分任务被本计划取代（见 §八）
 
 ## 一、意图与背景

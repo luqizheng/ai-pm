@@ -6,7 +6,7 @@ use crate::waiting::WaitingReason;
 
 /// Lifecycle status of a `delivery.task` row. Stored as lowercase snake-case TEXT.
 ///
-/// 13-state machine per `ai-pm-task-state-machine-v1.md` (V12, §十二 供稿数据模型).
+/// 13-state machine per `docs/tasks/ai-pm-task-state-machine-v1.md` (V12, §十二 供稿数据模型).
 /// The four [`TaskStatus::TERMINAL`] states have no outgoing edges; `Superseded`
 /// accepts a fixed `allowed_from` set (§11.2). Transition legality is enforced by
 /// [`crate::task_transition`], not by this enum.
@@ -79,7 +79,7 @@ impl TaskStatus {
         }
     }
 
-    /// Maps the legacy 5-value status (`ai-pm-task-state-machine-v1.md` §九 M1–M4
+    /// Maps the legacy 5-value status (`docs/tasks/ai-pm-task-state-machine-v1.md` §九 M1–M4
     /// 与 V3 L1 追加记录). Returns `None` for values outside the legacy set —
     /// the strict [`TaskStatus::from_str`] owns the 13-value set.
     ///

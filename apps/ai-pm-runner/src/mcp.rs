@@ -1,4 +1,4 @@
-//! Runner ↔ Platform MCP 通道（V0.5 WP-3 · 设计稿 docs/ui/s03-acp/
+//! Runner ↔ Platform MCP 通道（V0.5 WP-3 · 设计稿 docs/scenarios/s03/ui/acp/
 //! smark-pm-s03-acp-slice-design-acp01-02-08-v1.md V1.1 §3.3 命令面 / §1 通道面）。
 //!
 //! 薄 JSON-RPC 客户端：Platform `/mcp`（Streamable HTTP，`json_response`

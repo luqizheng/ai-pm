@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 文档性质 | 实施排期与依赖裁决记录（专家复审第 3 块收编产物，待用户确认启动） |
-| 来源 | 专家复审 `docs/ui/s03-acp/smark-pm-s03-acp-slice-design-acp01-02-08-v1-2-expert-review-3.md`（2026-11-07，第 3 块=排期依赖） |
-| 关联 | V0.5 范围基线（`ai-pm-v05-mvp-scope-baseline-v1.md`）· V2 架构基线 + 代码核验（本目录）· ACP 通信面 V1.2（`docs/ui/s03-acp/`，三轮专家复审已收编） |
+| 来源 | 专家复审 `docs/scenarios/s03/ui/acp/smark-pm-s03-acp-slice-design-acp01-02-08-v1-2-expert-review-3.md`（2026-11-07，第 3 块=排期依赖） |
+| 关联 | V0.5 范围基线（`ai-pm-v05-mvp-scope-baseline-v1.md`）· V2 架构基线 + 代码核验（本目录）· ACP 通信面 V1.2（`docs/scenarios/s03/ui/acp/`，三轮专家复审已收编） |
 | 代码基线 | ai-pm master @ 220173f |
 
 ---

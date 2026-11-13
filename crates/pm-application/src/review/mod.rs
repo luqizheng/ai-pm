@@ -1,4 +1,4 @@
-//! Slice D5：Review 编排、失败判定与知识回写（`docs/ai-pm-slice-d5-review-v1.md`）。
+//! Slice D5：Review 编排、失败判定与知识回写（`docs/slice-d/ai-pm-slice-d5-review-v1.md`）。
 //!
 //! D5 是**治理闭环**，不是更复杂的执行引擎：
 //!

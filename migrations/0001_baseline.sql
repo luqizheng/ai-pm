@@ -5,7 +5,7 @@
 -- 生成方式：完整旧链建库终态 → pg_dump --schema-only + --data-only --inserts
 --   提取，剥除 psql 元命令（\restrict）；对象名全限定，函数体运行时语义与
 --   旧链一致。等价性验证：schema/data pg_dump 逐行 diff 为零。
--- 台账：docs/ai-pm-migration-ledger.md；后续新迁移自 0002 起编号。
+-- 台账：docs/reference/ai-pm-migration-ledger.md；后续新迁移自 0002 起编号。
 -- ============================================================================
 -- 序头：pg_dump 原生序头的 session 级 SET（pg_dump 依赖序不含 PL/pgSQL 函数
 -- 体内引用，必须关掉建函数时的语法层校验，否则体内引用先于表创建即 42P01）。

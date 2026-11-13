@@ -1,4 +1,4 @@
-//! Slice D3：执行器编排（`docs/ai-pm-slice-d3-executor-adapter-v1.md` §3）。
+//! Slice D3：执行器编排（`docs/slice-d/ai-pm-slice-d3-executor-adapter-v1.md` §3）。
 //!
 //! 职责边界：本模块只做「领取 → 启动 → 监控 → 终止 → 收尾」的**编排与落库**，
 //! 不实现进程管理（真实执行器在 `pm-infrastructure`，测试用 `FakeExecutor`）。
@@ -266,7 +266,7 @@ pub async fn poll_active_runs(
             -- 超时未处置的 Run 对四信号（①deadline ④fallback ②心跳 ③进展）
             -- 一律不可见——ACP-427：等待窗口内 deadline 到期不得触发回收/重领，
             -- Interaction 生命周期不受 poll 信号干扰。设计稿
-            -- docs/ui/s03-acp/smark-pm-s03-acp-slice-design-acp01-02-08-v1.md §4.2。
+            -- docs/scenarios/s03/ui/acp/smark-pm-s03-acp-slice-design-acp01-02-08-v1.md §4.2。
             AND r.scheduling_shield = 'none' \
           ORDER BY r.id",
     )

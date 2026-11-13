@@ -112,7 +112,7 @@ flowchart TD
 
 ## 5. 确认门与身份边界（谁确认什么，走哪里）
 
-1. **S02 需求确认：MCP 无工具**。I6-A A* fail-closed 裁决，确认入口只开 REST/UI（证据：`docs/s02-i6a-auth-isolation-verification-v1.md`）。
+1. **S02 需求确认：MCP 无工具**。I6-A A* fail-closed 裁决，确认入口只开 REST/UI（证据：`docs/scenarios/s02/s02-i6a-auth-isolation-verification-v1.md`）。
 2. **KB 红线文档确认：工具在 MCP 上但属人工动作**。`pm_confirm_document_proposal` 须持 `PM_MCP_DOCUMENT_WRITE` 权限凭据执行，记 redline_confirmed_by——「MCP 不暴露绕过人工确认的工具」指 PC 认知产物无 MCP 确认工具（pc-kb 章 §6），并非 KB 红线确认工具不存在。
 3. **PC 认知产物：恒 PROPOSED**，正式确认入口待 PC-01C 批（proposal/审批端点），当前人工经 K2/P3 读端点查看（pc-kb 章 §6）。
 4. **干预不是审批**：`pm_report_interaction` 是 Agent 侧上报，人工回复走 REST（responded），MCP 只回执消费（`pm_report_consumption` 双证据防伪造）。
@@ -138,6 +138,6 @@ flowchart TD
 
 1. **代码**：`crates/pm-mcp/src/server.rs`（26 工具声明 + description 原义；本目录所有工具语义以此为准）。
 2. **挂载**：pm-api `/mcp`（rmcp Streamable HTTP，`apps/pm-api/src/mcp_hosts.rs` 管跨机 Host 白名单）。
-3. **边界裁决**：`docs/ai-pm-five-stage-business-architecture-v1.md`（「MCP 非运行时」；S04 不混执行）；`docs/s02-i6a-auth-isolation-verification-v1.md`（A* 确认 fail-closed）。
+3. **边界裁决**：`docs/architecture/ai-pm-five-stage-business-architecture-v1.md`（「MCP 非运行时」；S04 不混执行）；`docs/scenarios/s02/s02-i6a-auth-isolation-verification-v1.md`（A* 确认 fail-closed）。
 4. **运行时与验收**：[runner-platform-mcp-communication-v1.md](runner-platform-mcp-communication-v1.md)（ACP-09 关闭；D-1=b 双通道）。
 5. **观察链**：[pc-kb-operation-v1.md](pc-kb-operation-v1.md)（intake 触发链与产物治理）。

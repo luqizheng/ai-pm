@@ -31,7 +31,7 @@ pub struct ClaimOutcome {
 /// 租约持有者（A 裁决）：Model B 是 worker 标识，Model A 是 MCP 客户端。
 ///
 /// **`lease_owner` 不是凭证**：它只用于展示与 fencing 的辅助归因，真正的凭证
-/// 是 `lease_token`（见 `docs/ai-pm-slice-d2-mcp-context-v1.md` §三 A 的关键推论）。
+/// 是 `lease_token`（见 `docs/slice-d/ai-pm-slice-d2-mcp-context-v1.md` §三 A 的关键推论）。
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum LeaseOwner<'a> {
     Worker(&'a str),

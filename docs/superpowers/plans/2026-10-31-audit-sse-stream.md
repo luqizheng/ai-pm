@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust（axum 0.8 `response::sse`、sqlx 0.8 `PgListener`、tokio broadcast / tokio-stream）+ Vue 3 EventSource（前端契约已存在，不改）。
 
-**Spec/契约来源:** `frontend/src/api/events.ts`（`event: audit` + `AuditLog` JSON + `?access_token=`）、`frontend/src/api/types.ts::AuditLog`、`docs/runbook-login-chain.md §七.4`（当前明确标注未实现）。
+**Spec/契约来源:** `frontend/src/api/events.ts`（`event: audit` + `AuditLog` JSON + `?access_token=`）、`frontend/src/api/types.ts::AuditLog`、`docs/runbooks/runbook-login-chain.md §七.4`（当前明确标注未实现）。
 
 ## Global Constraints
 
@@ -38,7 +38,7 @@ ai-pm/apps/pm-api/src/main.rs                # 启动 listener 任务，注入 f
 ai-pm/apps/pm-api/Cargo.toml                 # + tokio-stream
 ai-pm/Cargo.toml                             # workspace + tokio-stream
 ai-pm/apps/pm-api/tests/audit_stream.rs      # SSE 集成测试（新增）
-ai-pm/docs/runbook-login-chain.md            # §七.4 边界改为已实现 + 验收命令
+ai-pm/docs/runbooks/runbook-login-chain.md            # §七.4 边界改为已实现 + 验收命令
 ```
 
 ## Tasks
@@ -90,7 +90,7 @@ ai-pm/docs/runbook-login-chain.md            # §七.4 边界改为已实现 + �
 
 ### Task 7 — 文档收尾
 
-- [x] 更新 `docs/runbook-login-chain.md §七.4`：删除「未实现」，补 SSE 验收命令与 curl 示例。
+- [x] 更新 `docs/runbooks/runbook-login-chain.md §七.4`：删除「未实现」，补 SSE 验收命令与 curl 示例。
 - [x] 记录边界：V1 全租户全推（audit_log 无 tenant 列，单租户前提）；多实例各自 LISTEN；慢客户端可丢事件。
 - [x] Commit：`docs(runbook): audit stream usage`
 

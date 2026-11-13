@@ -1,4 +1,4 @@
-//! T-031 编排层测试（`docs/ai-pm-slice-d3-executor-adapter-v1.md` §5 第一层）：
+//! T-031 编排层测试（`docs/slice-d/ai-pm-slice-d3-executor-adapter-v1.md` §5 第一层）：
 //! FakeExecutor 驱动 claim_and_start / poll_active_runs / cancel_run /
 //! reconcile_orphans 的编排语义，验收 C59–C66。真实进程管理见
 //! `pm-infrastructure/tests/codex_executor.rs`。

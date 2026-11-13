@@ -1,4 +1,4 @@
-//! Task 前置依赖与解锁（T-024 / `docs/ai-pm-task-dependency-v1.md`）。
+//! Task 前置依赖与解锁（T-024 / `docs/tasks/ai-pm-task-dependency-v1.md`）。
 //!
 //! 载体是独立边表 `delivery.task_dependency`：`task_id` 是下游（依赖方），
 //! `depends_on_task_id` 是上游（被依赖方）。四项已裁定事项（D1–D4）与三项本稿

@@ -3,7 +3,7 @@
 //! 2026-11-09 迁移基线合并（0001_baseline.sql 吸收 0001~0065）不再是独立
 //! 文件，head 钉点断言与「收敛路径」用例（手工建链 0001..0063 → 灌 0053
 //! 形态存量 → 应用 0064）一并退役——无迁移链即无升级收敛场景，见
-//! docs/ai-pm-migration-ledger.md 基线合并记录。
+//! docs/reference/ai-pm-migration-ledger.md 基线合并记录。
 
 use sqlx::PgPool;
 use uuid::Uuid;

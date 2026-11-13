@@ -1,4 +1,4 @@
-//! Slice D4：交付事实与提交管线（`docs/ai-pm-slice-d4-delivery-v1.md` §3）。
+//! Slice D4：交付事实与提交管线（`docs/slice-d/ai-pm-slice-d4-delivery-v1.md` §3）。
 //!
 //! 三层边界不可越：D3 证明 AI 执行过什么；**D4 证明它实际交付了什么**；D5 才能
 //! 判断这些交付是否满足任务要求。D4 不裁决任务最终状态，也不改被审对象。

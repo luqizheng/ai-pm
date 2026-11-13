@@ -1,5 +1,5 @@
 //! T-025 Task Dependency 并发正确性（P0 修复验证）：真实 PostgreSQL、双独立
-//! 连接、定向屏障。覆盖任务书 `docs/ai-pm-t025-task-dependency-hardening-v1.md`
+//! 连接、定向屏障。覆盖任务书 `docs/tasks/ai-pm-t025-task-dependency-hardening-v1.md`
 //! §九 的 C59 / C60 / C64 / C65 与项目级图锁机制本身。
 //!
 //! 方法论（任务书 §七 硬要求）：并发场景要么用两个独立连接 + 显式步骤屏障构造

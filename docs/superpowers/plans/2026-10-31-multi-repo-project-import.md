@@ -65,7 +65,7 @@ ai-pm/frontend/src/shell/views/projects/repositories/ProjectRepositoriesView.vue
 ai-pm/frontend/src/shell/views/pm/approvals/ImportBatchCard.vue      # 审批页批次卡（新增）
 ai-pm/frontend/src/shell/router/routes.ts                            # 两条静态路由（修改）
 ai-pm/frontend/locales/{zh-CN,en}/pm/import.yaml / repositories.yaml # 新增
-ai-pm/docs/runbook-login-chain.md                                    # 新增小节（修改）
+ai-pm/docs/runbooks/runbook-login-chain.md                                    # 新增小节（修改）
 ```
 
 ---
@@ -301,7 +301,7 @@ ai-pm/docs/runbook-login-chain.md                                    # 新增小
 
 **Files:**
 - Create: `ai-pm/apps/pm-api/tests/imports_e2e.rs`
-- Modify: `ai-pm/docs/runbook-login-chain.md`
+- Modify: `ai-pm/docs/runbooks/runbook-login-chain.md`
 
 - [x] **Step 1** 端到端：HTTP 建项目（断言 5 人编制）→ 建 key → 绑本地 `file://` 仓库 → verify → start_import → 直接跑 `run_import_job`（Fake）→ apply（断言 4 提案、delivery 零行）→ 4 次 decide → 断言项目 `planning`、需求 draft、任务 assignee 正确、知识文档 + commit、审计行。
 - [x] **Step 2** 运营闭环：导入完成后用同一套命令再 `CreateRequirements` / `CreateMilestones` / `WriteDocuments` 各一次，断言成功（证明 AI PM 能继续运营）。

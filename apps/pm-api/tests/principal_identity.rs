@@ -1,4 +1,4 @@
-//! 主体身份验收（T-021a / `docs/ai-pm-principal-identity-v1.md` §11 C29–C42）。
+//! 主体身份验收（T-021a / `docs/governance/ai-pm-principal-identity-v1.md` §11 C29–C42）。
 //!
 //! 驱动 `router_with_auth_config`（显式首管理员配置，避免改进程环境变量）；
 //! 签名沿用 `tests/keys/` 的测试密钥对。

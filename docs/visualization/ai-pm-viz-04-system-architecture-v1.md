@@ -87,7 +87,7 @@ GET artifact 时携带 X-Viz-Source-Hash 校验请求，或后台周期任务
 → Viewer 顶部黄条 + "重新生成"入口（回到 3.1 流程）
 ```
 
-## 4. 数据模型（迁移 0020 取号，登记 docs/ai-pm-migration-ledger.md）
+## 4. 数据模型（迁移 0020 取号，登记 docs/reference/ai-pm-migration-ledger.md）
 
 | 表 | 关键列 | 说明 |
 |---|---|---|

@@ -22,7 +22,7 @@
 | 证据 | 结果 |
 |---|---|
 | `git ls-tree -r --name-only master -- migrations/` | 树内仅 **0001–0019**（19 个文件）；`0015_task_schedule` ~ `0019_conversation_context_item` 均在 |
-| 台账 `docs/ai-pm-migration-ledger.md` §一「已应用（历史审计——文件已并入 0001_baseline.sql）」 | 登记 0022–0026、0044–0054 等**基线前**编号 |
+| 台账 `docs/reference/ai-pm-migration-ledger.md` §一「已应用（历史审计——文件已并入 0001_baseline.sql）」 | 登记 0022–0026、0044–0054 等**基线前**编号 |
 | 台账 §〇·二「基线后在途迁移（权威 = migrations/ 目录，编号自 0002 起）」 | **只登记到 0014** → 0015~0019 五条迁移**未登记**（台账缺口，需补登） |
 | 历史文件存在性（`git log --all --diff-filter=A`） | `0020_agent_run_identity.sql`、`0021_task_dependency.sql`、0055~0060（`0055_device_name_active_unique.sql` 等）**均曾以文件形式存在**，基线 squash（2026-11-09）后从 master 树移除，内容并入 `0001_baseline.sql` |
 | master 树中是否存在其他迁移目录 | **不存在**（`git ls-tree` 全仓只有一个 `migrations/`） |

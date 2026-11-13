@@ -1,5 +1,5 @@
-//! Slice D3：Codex CLI 执行器适配器（`docs/ai-pm-slice-d3-executor-adapter-v1.md` §2
-//! + `docs/ai-pm-slice-d3-executor-hardening-v1.md` §2/§5/§6/§7）。
+//! Slice D3：Codex CLI 执行器适配器（`docs/slice-d/ai-pm-slice-d3-executor-adapter-v1.md` §2
+//! + `docs/slice-d/ai-pm-slice-d3-executor-hardening-v1.md` §2/§5/§6/§7）。
 //!
 //! 职责边界：本适配器只管**进程与工作区**——建目录、镜像仓 + worktree checkout、
 //! spawn/收割/终止、pid 文件与日志文件；编排与落库在 `pm-application::run_executor`。

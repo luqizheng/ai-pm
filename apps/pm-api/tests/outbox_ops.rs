@@ -1,4 +1,4 @@
-//! T-061 · Outbox 运维端点验收（`docs/ai-pm-t061-outbox-events-v1.md` §4）。
+//! T-061 · Outbox 运维端点验收（`docs/tasks/ai-pm-t061-outbox-events-v1.md` §4）。
 //!
 //! 覆盖映射：
 //!

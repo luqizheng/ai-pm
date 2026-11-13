@@ -1,5 +1,5 @@
 //! T-061 · Worker 装配一致性 + `RunCompletedHandler` 并发幂等验收
-//! （`docs/ai-pm-t061-outbox-events-v1.md` §5.6.1 / §6.2 / §6.2.1）。
+//! （`docs/tasks/ai-pm-t061-outbox-events-v1.md` §5.6.1 / §6.2 / §6.2.1）。
 //!
 //! 覆盖映射：
 //!

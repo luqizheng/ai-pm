@@ -119,7 +119,7 @@
 | 证据 | 结果 |
 |---|---|
 | `ls migrations/`（本 checkout） | 最大号 **0019**（`0019_conversation_context_item.sql`） |
-| `docs/ai-pm-migration-ledger.md` | 最大**已应用 = 0054**（`0054_acp06_07.sql`，2026-11-08）；台账纪律 §三.1 明示"新取号以 `ls migrations/` 实况为准" |
+| `docs/reference/ai-pm-migration-ledger.md` | 最大**已应用 = 0054**（`0054_acp06_07.sql`，2026-11-08）；台账纪律 §三.1 明示"新取号以 `ls migrations/` 实况为准" |
 | 结论 | **台账与 checkout 存在漂移**（0044~0054 为并行工作流在他处应用）；原 ADR 假设"0020"作废 |
 | 暂定取号 | **0055** = max(实况 0019, 台账 0054) + 1 |
 | 待办 | Migration Owner 于 V0-1 启动日在**真实 master** 上复核 `ls migrations/` 与台账后签收确认；若复核结果 >0054 则顺延；确认前任何 viz 迁移不得建文件 |

@@ -4,7 +4,7 @@
 - 状态：方向已由用户裁定；其余裁决按本文建议自动采纳（标注「可否决」）
 - 仓库：ai-pm（Rust workspace + Vue 前端，前后端同仓落地）
 - 关联计划：[../plans/2026-10-31-multi-repo-project-import.md](../plans/2026-10-31-multi-repo-project-import.md)
-- 关联设计：[../../ai-pm-markdown-knowledge-space.md](../../ai-pm-markdown-knowledge-space.md)（正文只存 Markdown + Git）· [../../ai-pm-hybrid-workspace-design.md](../../ai-pm-hybrid-workspace-design.md)（§「不建议第一阶段就做完整的多 Agent 自主研发系统」，`:666`）· [../../ai-pm-architecture-principles.md](../../ai-pm-architecture-principles.md)
+- 关联设计：[docs/architecture/knowledge-services/ai-pm-markdown-knowledge-space.md](docs/architecture/knowledge-services/ai-pm-markdown-knowledge-space.md)（正文只存 Markdown + Git）· [docs/architecture/ai-pm-hybrid-workspace-design.md](docs/architecture/ai-pm-hybrid-workspace-design.md)（§「不建议第一阶段就做完整的多 Agent 自主研发系统」，`:666`）· [docs/architecture/ai-pm-architecture-principles.md](docs/architecture/ai-pm-architecture-principles.md)
 
 ## 一、意图与背景
 

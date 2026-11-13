@@ -1,4 +1,4 @@
-//! T-070 项目级交付验收聚合读模型（`docs/ai-pm-delivery-acceptance-workbench-v1.md` §四 / §5.1）。
+//! T-070 项目级交付验收聚合读模型（`docs/tasks/ai-pm-delivery-acceptance-workbench-v1.md` §四 / §5.1）。
 //!
 //! 四概念分离：任务生命周期（`delivery.task.status`）、执行 Run（`delivery.task_run`）、
 //! 仓库交付事实（`v_task_delivery_manifest`）、人工验收决定（`governance.review_approval`）。

@@ -362,5 +362,5 @@ PM-AI 是多项目、多仓库、多 Agent 的系统，通用套件之外必须�
 | `test-case/e2e-test-plan-v1.md` | L2/L3 落地计划、SSH 三层通路、用例矩阵、执行方式 |
 | `test-case/e2e-flow-execution-report-v1.md` | E2E 执行报告（7/7 PASS + DEF-E2E-01/02） |
 | `test-case/team-qa-test-plan-v1.md` | Team Onboarding 专项（专属套件范例） |
-| `docs/test-environments.md` | 环境清单与端点 |
+| `docs/reference/test-environments.md` | 环境清单与端点 |
 | `test-case/README.md` | 用例目录约定 |

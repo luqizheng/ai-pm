@@ -1,9 +1,9 @@
 # T-090 两机实测 · 测试用例集 V1
 
 > 任务：T-090 Bootstrap Skill + 自检闭环（两机实测部分）
-> 依据：`docs/ai-pm-codex-bootstrap-v1.md` §十三 T-090 行 + §十五验收 C139/C143/C146/C147/C157/C168/C169/C172；
+> 依据：`docs/executor/ai-pm-codex-bootstrap-v1.md` §十三 T-090 行 + §十五验收 C139/C143/C146/C147/C157/C168/C169/C172；
 > `todo.md` §10.7 T-090 条目；`skills/pm-ai-bootstrap/SKILL.md`（七步生命周期）
-> 环境：`docs/test-environments.md`（服务器 .10 / Windows 执行机 .43）
+> 环境：`docs/reference/test-environments.md`（服务器 .10 / Windows 执行机 .43）
 > 状态：**用例已写定，逐条确认后执行**（每条用例执行后回填「实际结果」列，全部通过才算 T-090 收口）
 > 编写：2026-11-04
 

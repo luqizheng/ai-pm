@@ -1,5 +1,5 @@
 //! Slice D2 契约与租约的真实 PostgreSQL 集成测试
-//! （`docs/ai-pm-slice-d2-mcp-context-v1.md` §七：C1–C28 中属 pm-application 层的部分）。
+//! （`docs/slice-d/ai-pm-slice-d2-mcp-context-v1.md` §七：C1–C28 中属 pm-application 层的部分）。
 //!
 //! 断言的是 **pm-application 层 `LeaseError` / `RunDispatchError` 变体**，不是
 //! pm-mcp 的 `ToolError`（R-G3：依赖方向 pm-mcp → pm-application）。

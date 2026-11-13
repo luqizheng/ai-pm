@@ -1,5 +1,5 @@
 -- 0018: Team LLM Model Catalog / Authorization / Policy（Phase 3A）。
--- 设计基线：docs/smark-pm-team-llm-provider-management-phase3-design-v1.md §4/§11；
+-- 设计基线：docs/ui/smark-pm-team-llm-provider-management-phase3-design-v1.md §4/§11；
 -- 上游产品裁决：docs/ui/smark-pm-team-llm-provider-management-v1.md §8/§9/§10（V1.0 Approved）。
 --
 -- 模型粒度取代 provider.configuration->>'model' 单值自由文本；授权两态

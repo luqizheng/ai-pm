@@ -396,7 +396,7 @@ V1.2 增补（差异复核 C-4 配套）：**T-30** kb_document 通道四元组�
 
 1. **0045 起号结论成立**（源码级证据充分，Gate 0 的「验证前不得确认」条件已满足验证部分）：PC 新迁移从 0045 开始，禁止再产生重复号。
 2. **0044 修复（01C 前置项，本阶段不执行；〔V1.1〕2026-11-07 用户已授权修复方案）**：连库查 `_sqlx_migrations WHERE version=44` 的 checksum → 与两个文件的实际 checksum 比对 → 保留记账所属文件为 44，另一文件重命名顺移为 0045+（内容不变，version 随文件名变化）；若目标环境为全新库则直接重命名其一即可。同步回填迁移账本（0044_s02_i3 漏记项）。
-3. **账本勘误（01C 一并处理）**：`docs/ai-pm-migration-ledger.md:14` 仅登记 `0044_team_onboarding`，未登记 `0044_s02_i3_source_traceability.sql`（commit 5936105 先合入）——账本与目录不一致，按账本规则 2「不得改已应用迁移」原则修复时需同时回填账本。
+3. **账本勘误（01C 一并处理）**：`docs/reference/ai-pm-migration-ledger.md:14` 仅登记 `0044_team_onboarding`，未登记 `0044_s02_i3_source_traceability.sql`（commit 5936105 先合入）——账本与目录不一致，按账本规则 2「不得改已应用迁移」原则修复时需同时回填账本。
 
 ## 21.2 H-11：现有审批链 FOR UPDATE 使用完整性
 

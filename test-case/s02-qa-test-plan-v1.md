@@ -14,7 +14,7 @@
 | S02 修复线 | S02-I1（需求核心统一服务）/ I2（Markdown+Git 投影）/ I6-A（Approver 显式授权，迁移 0040）/ I6-B（执行器 `ApproveRequirementRevision` 退役）——实现代码在 HEAD 工作区已核验存在 | `crates/pm-application/src/requirement.rs`、`apps/pm-api/src/pm_requirements.rs`、`crates/pm-application/src/command_executor/executor.rs:805` |
 | 数据库迁移 | 0001–0042 全部应用（本地栈实测 `_sqlx_migrations` 顶部 42） | docker exec psql |
 | 本地运行栈 | `aipm/pm-api:0.1.0`（镜像创建 2026-11-06T05:29Z），`AI_PM_AUTH_MODE=jwks`，DB=容器内 `aipm-pg:5432/aipm` | docker inspect |
-| 历史核验基线 | S02-02 运行时核验报告 V1.0（2026-11-04）：DEF-01 FAIL / DEF-02 P0 FAIL / DEF-03 FAIL——本次全部强制重测 | `docs/s02-02-requirement-runtime-verification-v1.md` |
+| 历史核验基线 | S02-02 运行时核验报告 V1.0（2026-11-04）：DEF-01 FAIL / DEF-02 P0 FAIL / DEF-03 FAIL——本次全部强制重测 | `docs/scenarios/s02/s02-02-requirement-runtime-verification-v1.md` |
 
 ## 2. 测试环境
 

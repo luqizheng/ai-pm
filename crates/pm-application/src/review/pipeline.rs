@@ -1,4 +1,4 @@
-//! 确定性校验管线 L1–L4（`docs/ai-pm-slice-d5-review-v1.md` §4）。
+//! 确定性校验管线 L1–L4（`docs/slice-d/ai-pm-slice-d5-review-v1.md` §4）。
 //!
 //! 管线是**纯函数**：输入 = 已采集的事实（交付对账状态、集成事实、验收条目、
 //! 测试证据、产物存在性探测），输出 = findings + 逐条裁决 + 总体 verdict。

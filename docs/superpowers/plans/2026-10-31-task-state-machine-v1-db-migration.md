@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust 1.99 / sqlx 0.8（`runtime-tokio` + `postgres` + `migrate`，无 `query!` 离线模式）/ PostgreSQL 16（`aipm-pg-dev`，`localhost:5433`）/ async-trait（workspace 既有依赖，零新增 crate）。
 
-**Spec:** [../../ai-pm-task-state-machine-v1.md](../../ai-pm-task-state-machine-v1.md)（V12）——§九 M4（状态存 lowercase snake_case）、§11.5（取代关系模型）、§12.4（等待上下文分离存储 + 历史保留）、§19.4/§19.5（Run 失败记录与重试计数）、§20.2–§20.6（Outbox 首版范围、结构与验收标准）、§21.1（DB 存 lowercase snake_case TEXT）；关联 [../../ai-pm-multi-repo-model-v1.md](../../ai-pm-multi-repo-model-v1.md) V1.1（§7.4 聚合口径已统一到状态机稿 §十三）。**§九 M1–M3（legacy 回填口径）不适用**：无存量数据可迁。
+**Spec:** [docs/tasks/ai-pm-task-state-machine-v1.md](docs/tasks/ai-pm-task-state-machine-v1.md)（V12）——§九 M4（状态存 lowercase snake_case）、§11.5（取代关系模型）、§12.4（等待上下文分离存储 + 历史保留）、§19.4/§19.5（Run 失败记录与重试计数）、§20.2–§20.6（Outbox 首版范围、结构与验收标准）、§21.1（DB 存 lowercase snake_case TEXT）；关联 [docs/architecture/ai-pm-multi-repo-model-v1.md](docs/architecture/ai-pm-multi-repo-model-v1.md) V1.1（§7.4 聚合口径已统一到状态机稿 §十三）。**§九 M1–M3（legacy 回填口径）不适用**：无存量数据可迁。
 
 ## Global Constraints
 
@@ -273,7 +273,7 @@ Expected: FAIL —— `relation "delivery.task_run" does not exist`；且 `statu
 ```sql
 -- 0010_task_state_machine: Run / 等待 / 取代关系 / 任务级策略覆盖 / Outbox
 --                          + 13 值 status 约束与默认值（新系统，无回填）
--- 规格：ai-pm-task-state-machine-v1.md §11.5 §12.4 §19.5 §20.4 §21.1
+-- 规格：docs/tasks/ai-pm-task-state-machine-v1.md §11.5 §12.4 §19.5 §20.4 §21.1
 
 ALTER TABLE delivery.task
     ADD COLUMN superseded_by_task_id UUID,

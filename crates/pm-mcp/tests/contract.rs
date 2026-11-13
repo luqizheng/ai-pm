@@ -1,5 +1,5 @@
 //! Slice D2 MCP 层契约测试
-//! （`docs/ai-pm-slice-d2-mcp-context-v1.md` §七：C3/C4/C5/C6/C11/C18/C24/C25）。
+//! （`docs/slice-d/ai-pm-slice-d2-mcp-context-v1.md` §七：C3/C4/C5/C6/C11/C18/C24/C25）。
 //!
 //! 这一层只验证**工具形状与错误契约**：字段值来自真实库，`ToolError` 映射到
 //! `isError` 文本；DTO 正确性由 pm-application 的 `run_context.rs` 覆盖。

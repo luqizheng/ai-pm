@@ -5,7 +5,7 @@
 //! verifies signatures locally against the token-service JWKS via
 //! `digua_common_jwt::JWKSCache` — no per-request round-trip.
 //!
-//! Three layers, outermost first (`docs/ai-pm-principal-identity-v1.md` §6):
+//! Three layers, outermost first (`docs/governance/ai-pm-principal-identity-v1.md` §6):
 //!
 //! 1. [`require_bearer`] — verify the signature and the mandatory `tid` claim,
 //!    then turn the raw claims into a typed [`AuthenticatedIdentity`].
@@ -549,7 +549,7 @@ const MCP_BODY_LIMIT: usize = 256 * 1024;
 /// `PM_MCP_READ`). `PM_MCP_TASK_UPDATE` stays unassigned until a task-update
 /// tool exists.
 ///
-/// ACP 通信面（设计稿 docs/ui/s03-acp/smark-pm-s03-acp-slice-design-
+/// ACP 通信面（设计稿 docs/scenarios/s03/ui/acp/smark-pm-s03-acp-slice-design-
 /// acp01-02-08-v1.md V1.1 §1.6，R-ACP-8 已裁）：新增工具不再挂
 /// `PM_MCP_READ` 语义——`PM_MCP_AGENT_REPORT` = 执行端运行事件上报（Agent
 /// 侧事实，永无人类确认语义）；`PM_MCP_COMMAND` = 命令通道收发。人类正式

@@ -3,7 +3,7 @@ import { http } from "@/api/base";
 /**
  * S05 · 执行与协作读模型（pm-api `pm_runs.rs` / `pm_execution.rs`）。
  *
- * 领域语义（docs/ui/s05 页面结构 + 总体设计 §3/§5/§6）：
+ * 领域语义（docs/scenarios/s05/ui 页面结构 + 总体设计 §3/§5/§6）：
  * - **Task ≠ Run ≠ Agent ≠ Delivery ≠ Review**：五层分列，不可混排。
  * - **Run 七态**：queued / claimed / running / succeeded / failed / timed_out /
  *   cancelled；attempt_no 按 kind（delivery / review）分轨编号。

@@ -1,7 +1,7 @@
 use super::*;
 
 /// 测试夹具：解析项目的操作者（三级回退）。生产路径不再调用——actor 必须由
-/// 调用方显式传入（T-021a / `docs/ai-pm-principal-identity-v1.md` Q3）。
+/// 调用方显式传入（T-021a / `docs/governance/ai-pm-principal-identity-v1.md` Q3）。
 #[cfg(test)]
 pub async fn owner_actor(pool: &PgPool, project_id: Uuid) -> Result<Uuid, PmWriteError> {
     let owner: Option<Uuid> = sqlx::query_scalar(

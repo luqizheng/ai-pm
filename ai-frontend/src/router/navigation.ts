@@ -163,7 +163,7 @@ export const navGroups: NavGroup[] = [
             module => module.default
           )
       },
-      // 任务管理（S04，docs/ui/s04，2026-11-10）：任务拆解 / 任务池 / 执行
+      // 任务管理（S04，docs/scenarios/s04/ui，2026-11-10）：任务拆解 / 任务池 / 执行
       // 规划 / 执行准备的工作区。总览与任务池接真（/v1/pm/tasks 系），
       // 其余子页在对应接口落地前走 mock-preview 或占位页（router/index.ts）。
       {
@@ -175,7 +175,7 @@ export const navGroups: NavGroup[] = [
             module => module.default
           )
       },
-      // 执行中心（S05，docs/ui/s05，2026-11-10）：七页接真后端。
+      // 执行中心（S05，docs/scenarios/s05/ui，2026-11-10）：七页接真后端。
       {
         path: "/project/execution",
         labelKey: "shell.app.side.item.execution",

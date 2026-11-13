@@ -1,4 +1,4 @@
-//! D4 的 git 事实校验（`docs/ai-pm-slice-d4-delivery-v1.md` §3.3 §3.4 §3.6）。
+//! D4 的 git 事实校验（`docs/slice-d/ai-pm-slice-d4-delivery-v1.md` §3.3 §3.4 §3.6）。
 //!
 //! 校验目标是**当前 Run 的实际 Git 工作区**（`{workspace_base}/{run_id}/
 //! {workspace_path}`），不是镜像仓——执行器在 Worktree 中新产生的 Commit 不假定

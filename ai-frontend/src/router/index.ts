@@ -129,7 +129,7 @@ export function buildRoutes(): RouteRecordRaw[] {
     meta: { title: "s01.command-center.pageTitle" }
   });
 
-  // ─── 执行与协作（S05 · docs/ui/s05，2026-11-10）───
+  // ─── 执行与协作（S05 · docs/scenarios/s05/ui，2026-11-10）───
   // 七页全部接真后端（task-runs / waiting / execution-overview / run-events /
   // collaboration / 各 Run 附属事实），无 mock 分支。
   //
@@ -211,7 +211,7 @@ export function buildRoutes(): RouteRecordRaw[] {
     }
   );
 
-  // ─── 任务管理（S04 · docs/ui/s04，2026-11-10）───
+  // ─── 任务管理（S04 · docs/scenarios/s04/ui，2026-11-10）───
   // 子页为独立路由 + 页内页签条（TasksFrame，同 AiTeamFrame 组织）。
   // 总览/任务池接真（/v1/pm/tasks 系）；拆解与详情在任务读/AI 拆解接口
   // 落地前仅 mock 预览（VITE_USE_MOCK=1 注册真实页，发布构建走占位页，

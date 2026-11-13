@@ -1,4 +1,4 @@
-//! D4 的交付清单读模型（`docs/ai-pm-slice-d4-delivery-v1.md` §2.3）。
+//! D4 的交付清单读模型（`docs/slice-d/ai-pm-slice-d4-delivery-v1.md` §2.3）。
 //!
 //! 清单只陈述事实：**不改状态机**。`delivery_state` 是视图列，永不成为任务状态
 //! 字段；`delivered` 仅表示仓库交付契约完备，**不代表任务已验收或已完成**——
