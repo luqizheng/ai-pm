@@ -66,3 +66,19 @@ repositories:
   headChange:
     notice: 分支已前移，你的确认基准未被改动。确认后采用新 HEAD 作为基准。
     confirm: 确认更新
+  ssh:
+    title: SSH 私钥
+    statusNone: 未配置
+    statusConfigured: 已配置
+    sourceImported: 导入
+    sourceGenerated: 平台生成
+    copyPublicKey: 复制公钥
+    copied: 已复制
+    revoke: 吊销密钥
+    revokeArmed: 确认吊销？
+    inputLabel: 粘贴私钥
+    fingerprint: 指纹
+    publicKey: 公钥
+    submit: 保存
+    hint: 粘贴可读取你 Git 仓库的私钥（OpenSSH 格式，支持 ed25519 / RSA / ECDSA）。私钥加密存储且不再显示；保存即替换现有密钥。仅对 SSH 地址（ssh:// 或 scp 形式）生效，Git 服务端无需额外配置。
+    hintConfigured: 私钥已加密保存，不再显示。再次保存将替换现有密钥。

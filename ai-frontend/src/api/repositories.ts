@@ -98,3 +98,14 @@ export function revokeSshKey(projectId: string) {
     `/v1/pm/projects/${projectId}/ssh-keys`
   );
 }
+
+/**
+ * 粘贴导入外部私钥（一项目一把，保存即替换）。
+ * 后端经 ssh-keygen 校验并推导公钥/指纹；私钥信封加密落库、不再回显。
+ * 无效私钥（格式错误 / 带口令）→ 400，错误体 {message}。
+ */
+export function importSshKey(projectId: string, privateKey: string) {
+  return http.post<SshKey>(`/v1/pm/projects/${projectId}/ssh-keys/import`, {
+    private_key: privateKey
+  });
+}

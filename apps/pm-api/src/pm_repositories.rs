@@ -22,9 +22,9 @@ use crate::support::repos::guard_query_repo;
 use pm_application::repo::GuardQueryRepo;
 use pm_application::repository::{
     archive_repository, confirm_repository_version, create_repository, delete_repository,
-    delete_ssh_key, ensure_ssh_key, generate_ssh_key, get_ssh_key, list_repositories,
-    list_ssh_keys, revoke_ssh_key, update_repository, verify_repository, ConfirmVersionRequest,
-    CreateRepositoryRequest, RepositoryError, UpdateRepositoryRequest,
+    delete_ssh_key, ensure_ssh_key, generate_ssh_key, get_ssh_key, import_ssh_key,
+    list_repositories, list_ssh_keys, revoke_ssh_key, update_repository, verify_repository,
+    ConfirmVersionRequest, CreateRepositoryRequest, RepositoryError, UpdateRepositoryRequest,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -63,6 +63,11 @@ pub(crate) fn router() -> Router<AppState> {
             get(list_keys_handler)
                 .post(create_key_handler)
                 .delete(revoke_key_handler),
+        )
+        // 导入外部私钥（仓库设置页粘贴通道；私钥经 ssh-keygen 校验后信封加密落库）。
+        .route(
+            "/v1/pm/projects/{project_id}/ssh-keys/import",
+            post(import_key_handler),
         )
 }
 
@@ -415,6 +420,36 @@ async fn revoke_key_handler(
     let actor = principal.audit_actor();
     match revoke_ssh_key(&state.pool, project_id, &actor).await {
         Ok(()) => (StatusCode::OK, Json(json!({ "project_id": project_id }))).into_response(),
+        Err(err) => repository_error(err),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ImportKeyRequest {
+    private_key: String,
+}
+
+/// 粘贴导入外部私钥：私钥只进不出，响应仅含推导出的公钥与指纹。
+/// 无效私钥（格式错误 / 带口令）→ 400 Validation。
+async fn import_key_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(project_id): Path<Uuid>,
+    Json(req): Json<ImportKeyRequest>,
+) -> Response {
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
+        return resp;
+    }
+    let actor = principal.audit_actor();
+    match import_ssh_key(&state.pool, project_id, &actor, &req.private_key).await {
+        Ok(view) => (StatusCode::OK, Json(view)).into_response(),
         Err(err) => repository_error(err),
     }
 }

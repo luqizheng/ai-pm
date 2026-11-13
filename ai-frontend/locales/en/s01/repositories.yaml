@@ -66,3 +66,19 @@ repositories:
   headChange:
     notice: The branch has advanced. Your confirmed baseline has not been changed.
     confirm: Confirm Update
+  ssh:
+    title: SSH Private Key
+    statusNone: Not configured
+    statusConfigured: Configured
+    sourceImported: Imported
+    sourceGenerated: Platform-generated
+    copyPublicKey: Copy public key
+    copied: Copied
+    revoke: Revoke key
+    revokeArmed: Confirm revoke?
+    inputLabel: Paste private key
+    fingerprint: Fingerprint
+    publicKey: Public key
+    submit: Save
+    hint: Paste the private key that grants read access to your Git repositories (OpenSSH format, ed25519 / RSA / ECDSA). It is stored encrypted and never shown again; saving replaces the existing key. Only applies to SSH URLs (ssh:// or scp-style) — no further setup needed on the Git server.
+    hintConfigured: The private key is encrypted at rest and never displayed again. Saving a new key replaces the current one.

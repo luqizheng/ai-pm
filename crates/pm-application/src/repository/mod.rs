@@ -88,6 +88,10 @@ impl From<SecretError> for RepositoryError {
             SecretError::KeyMissing => RepositoryError::SecretKeyMissing,
             SecretError::Crypto => RepositoryError::Crypto,
             SecretError::SshKeygen(detail) => RepositoryError::SshKeygen(detail),
+            // 导入的私钥无效是用户输入错误 → 400，与「ssh-keygen 不可用」(500) 区分。
+            SecretError::InvalidKey(_) => {
+                RepositoryError::Validation("private key is invalid or passphrase-protected")
+            }
             SecretError::Fingerprint => {
                 RepositoryError::SshKeygen("ssh-keygen produced no fingerprint".to_string())
             }

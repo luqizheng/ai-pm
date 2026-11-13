@@ -27,6 +27,13 @@ import {
   verifyRepositoryV2,
   type RepositoryV2
 } from "@/api/initialization";
+import { HttpError } from "@digua/http";
+import {
+  getSshKey,
+  importSshKey,
+  revokeSshKey as revokeSshKeyApi
+} from "@/api/repositories";
+import type { SshKey } from "@/api/types";
 import { useProjectSettingsFrame } from "./shared";
 
 /**
@@ -143,6 +150,58 @@ watch(selectedId, () => {
   confirmingArchiveId.value = "";
 });
 
+/* ── SSH 私钥（项目级一项目一把；粘贴导入 = 自有 Git 服务器的接入凭据，私钥只进不出） ── */
+const sshKey = ref<SshKey | null>(null);
+const sshKeyInput = ref("");
+const confirmingRevoke = ref(false);
+const copied = ref(false);
+
+async function loadSshKey() {
+  if (!projectId.value) return;
+  try {
+    sshKey.value = await getSshKey(projectId.value);
+  } catch (error) {
+    // 未配置 → 404 视为无密钥；其余错误不打断页面（状态按未配置显示）。
+    if (error instanceof HttpError && error.status === 404) {
+      sshKey.value = null;
+    }
+  }
+}
+
+function submitSshKey() {
+  const value = sshKeyInput.value.trim();
+  if (!projectId.value || !value) return;
+  void run("ssh-import", async () => {
+    sshKey.value = await importSshKey(projectId.value, value);
+    sshKeyInput.value = "";
+    confirmingRevoke.value = false;
+  });
+}
+
+/** 两段式吊销（同软解绑：第一击武装、第二击执行；409 key_in_use 原样展示）。 */
+function onRevokeKey() {
+  if (!confirmingRevoke.value) {
+    confirmingRevoke.value = true;
+    return;
+  }
+  confirmingRevoke.value = false;
+  if (!projectId.value) return;
+  void run("ssh-revoke", async () => {
+    await revokeSshKeyApi(projectId.value);
+    sshKey.value = null;
+  });
+}
+
+function copyPublicKey() {
+  if (!sshKey.value) return;
+  void navigator.clipboard.writeText(sshKey.value.public_key).then(() => {
+    copied.value = true;
+    window.setTimeout(() => {
+      copied.value = false;
+    }, 2000);
+  });
+}
+
 async function load() {
   loading.value = true;
   errorMessage.value = "";
@@ -150,6 +209,7 @@ async function load() {
     if (!projectId.value) return;
     const page = await listRepositoriesV2(projectId.value);
     repositories.value = page.items;
+    void loadSshKey();
   } catch (error) {
     errorMessage.value =
       error instanceof Error ? error.message : String(error ?? "");
@@ -285,6 +345,115 @@ onMounted(load);
       <Alert v-if="errorMessage" variant="danger">
         {{ errorMessage }}
       </Alert>
+
+      <!-- SSH 私钥（项目级一项目一把）：粘贴自有私钥后平台即可读取该 Git 服务器的
+           仓库（§3.2.2 裁决：接入走 URL + 项目 SSH Key；OAuth 不可用 G-04 挂账）。
+           私钥只进不出——响应与回显只含公钥与指纹；保存即覆盖替换。 -->
+      <section class="rm-panel" data-testid="ssh-key-panel">
+        <header class="rm-ssh__head">
+          <h3 class="rm-panel__title">
+            {{ t("s01.repositories.ssh.title") }}
+          </h3>
+          <Badge
+            :variant="sshKey ? 'success' : 'warning'"
+            size="sm"
+            data-testid="ssh-key-status"
+          >
+            {{
+              sshKey
+                ? t("s01.repositories.ssh.statusConfigured")
+                : t("s01.repositories.ssh.statusNone")
+            }}
+          </Badge>
+          <Badge v-if="sshKey" variant="neutral" size="sm">
+            {{
+              sshKey.label === "imported"
+                ? t("s01.repositories.ssh.sourceImported")
+                : t("s01.repositories.ssh.sourceGenerated")
+            }}
+          </Badge>
+        </header>
+
+        <div
+          v-if="sshKey"
+          class="rm-ssh__material"
+          data-testid="ssh-key-material"
+        >
+          <div class="rm-ssh__line">
+            <span class="rm-ssh__label">
+              {{ t("s01.repositories.ssh.fingerprint") }}
+            </span>
+            <code class="rm-mono" data-testid="ssh-key-fingerprint">
+              {{ sshKey.fingerprint }}
+            </code>
+          </div>
+          <div class="rm-ssh__line">
+            <span class="rm-ssh__label">
+              {{ t("s01.repositories.ssh.publicKey") }}
+            </span>
+            <code class="rm-mono rm-ssh__pub" :title="sshKey.public_key">
+              {{ sshKey.public_key }}
+            </code>
+            <Button
+              variant="ghost"
+              size="sm"
+              data-testid="ssh-key-copy"
+              @click="copyPublicKey"
+            >
+              {{
+                copied
+                  ? t("s01.repositories.ssh.copied")
+                  : t("s01.repositories.ssh.copyPublicKey")
+              }}
+            </Button>
+          </div>
+          <p class="rm-hint">
+            {{ t("s01.repositories.ssh.hintConfigured") }}
+          </p>
+        </div>
+
+        <label class="rm-field">
+          {{ t("s01.repositories.ssh.inputLabel") }}
+          <textarea
+            v-model="sshKeyInput"
+            data-testid="ssh-key-input"
+            class="rm-input rm-textarea"
+            rows="6"
+            placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+            spellcheck="false"
+            autocomplete="off"
+          />
+        </label>
+        <p class="rm-hint">
+          {{ t("s01.repositories.ssh.hint") }}
+        </p>
+        <div class="rm-actions">
+          <Button
+            variant="primary"
+            size="sm"
+            :disabled="busy === 'ssh-import' || !sshKeyInput.trim()"
+            data-testid="ssh-key-submit"
+            @click="submitSshKey"
+          >
+            {{ t("s01.repositories.ssh.submit") }}
+          </Button>
+          <Button
+            v-if="sshKey"
+            variant="ghost"
+            size="sm"
+            :class="{ 'is-confirming': confirmingRevoke }"
+            :disabled="busy === 'ssh-revoke'"
+            data-testid="ssh-key-revoke"
+            @click="onRevokeKey"
+          >
+            {{
+              confirmingRevoke
+                ? t("s01.repositories.ssh.revokeArmed")
+                : t("s01.repositories.ssh.revoke")
+            }}
+          </Button>
+        </div>
+      </section>
 
       <!-- 接入表单（可折叠；V1 无 OAuth 步骤，G-04 落地后再引入） -->
       <section v-if="showConnect" class="rm-panel" data-testid="connect-form">
@@ -993,5 +1162,54 @@ onMounted(load);
 .rm-input--compact {
   height: var(--space-5);
   padding: 0 var(--space-1);
+}
+/* SSH 私钥面板 */
+.rm-ssh__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.rm-ssh__material {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-sm);
+}
+
+.rm-ssh__line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.rm-ssh__label {
+  flex: none;
+  min-width: 72px;
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+}
+
+.rm-ssh__pub {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 多行粘贴区：复用 .rm-input 的 token 外观，放开高度 */
+.rm-textarea {
+  height: auto;
+  padding: var(--space-2);
+  font-family: var(--font-mono);
+  resize: vertical;
 }
 </style>

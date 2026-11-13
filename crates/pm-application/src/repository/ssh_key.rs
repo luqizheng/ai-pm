@@ -126,6 +126,67 @@ pub async fn generate_ssh_key(
     ensure_ssh_key(pool, project_id, actor, true).await
 }
 
+/// 导入外部私钥（仓库设置页粘贴通道）：`ssh-keygen -y` 推导公钥/指纹/key_type，
+/// 推导失败（格式错误 / 带口令）→ 400 Validation。覆盖式 upsert——一项目一把，
+/// 与 rotate 语义一致；label = 'imported' 区分于生成密钥。
+pub async fn import_ssh_key(
+    pool: &PgPool,
+    project_id: Uuid,
+    actor: &AuditActor,
+    private_key: &str,
+) -> Result<SshKeyView, RepositoryError> {
+    let normalized = secret::normalize_private_key(private_key);
+    let derived = secret::derive_public_key(&normalized)?;
+    let ciphertext = secret::seal_text(project_id, normalized.as_bytes())?;
+
+    let mut tx = pool.begin().await?;
+    let (created_at,): (DateTime<Utc>,) = sqlx::query_as(
+        "INSERT INTO integration.project_ssh_key \
+         (project_id, label, key_type, public_key, private_key_ciphertext, fingerprint, \
+          status, created_by, tenant_id) \
+         VALUES ($1, 'imported', $2, $3, $4, $5, 'active', $6, \
+                 (SELECT tenant_id FROM core.project WHERE id = $1)) \
+         ON CONFLICT (project_id) DO UPDATE SET \
+             label = EXCLUDED.label, \
+             key_type = EXCLUDED.key_type, \
+             public_key = EXCLUDED.public_key, \
+             private_key_ciphertext = EXCLUDED.private_key_ciphertext, \
+             fingerprint = EXCLUDED.fingerprint, \
+             status = 'active', \
+             revoked_at = NULL, \
+             created_by = EXCLUDED.created_by, \
+             updated_at = now() \
+         RETURNING created_at",
+    )
+    .bind(project_id)
+    .bind(&derived.key_type)
+    .bind(&derived.public_key)
+    .bind(&ciphertext)
+    .bind(&derived.fingerprint)
+    .bind(actor.principal_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "ssh_key.imported",
+        "project_ssh_key",
+        Some(project_id),
+    )
+    .await?;
+    tx.commit().await?;
+
+    Ok(SshKeyView {
+        project_id,
+        label: "imported".to_string(),
+        public_key: derived.public_key,
+        fingerprint: derived.fingerprint,
+        status: "active".to_string(),
+        created_at,
+    })
+}
+
 /// 吊销密钥；仍被 verified 仓库引用时拒绝。
 pub async fn revoke_ssh_key(
     pool: &PgPool,

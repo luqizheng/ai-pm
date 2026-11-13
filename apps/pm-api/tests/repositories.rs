@@ -507,3 +507,164 @@ async fn ssh_key_create_is_idempotent_and_revoke_blocks_verified_reference(pool:
     assert_eq!(listed["total"], 1);
     assert_eq!(listed["items"][0]["status"], "active");
 }
+
+fn ssh_keygen_available() -> bool {
+    std::process::Command::new("ssh-keygen")
+        .arg("-V")
+        .output()
+        .is_ok()
+}
+
+/// 粘贴导入：合法 ed25519 → 200，公钥/指纹为推导值，私钥不回显、库里只有密文；
+/// CRLF/空白粘贴形态也能导入；每次导入写审计 ssh_key.imported。
+#[sqlx::test(migrations = "../../migrations")]
+async fn ssh_key_import_derives_public_material_and_never_echoes_private(pool: PgPool) {
+    if !ssh_keygen_available() {
+        eprintln!("ssh-keygen unavailable; skipping");
+        return;
+    }
+    with_secret();
+    let app = router(pool.clone());
+    let project_id = seed_project(&pool, "REPO-IMPORT-1").await;
+    let uri = format!("/v1/pm/projects/{project_id}/ssh-keys/import");
+
+    let generated = pm_application::secret::generate_ed25519("ai-pm:IMPORT-TEST").unwrap();
+
+    let (status, imported) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &uri,
+                json!({ "private_key": generated.private_key }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {imported}");
+    assert_eq!(imported["public_key"], generated.public_key);
+    assert_eq!(imported["fingerprint"], generated.fingerprint);
+    assert_eq!(imported["label"], "imported");
+    let serialized = imported.to_string();
+    assert!(!serialized.contains("PRIVATE KEY"), "{serialized}");
+    assert!(!serialized.contains("private_key"), "{serialized}");
+
+    // 粘贴形态（首尾空白 + CRLF）同样可导入；覆盖式替换后指纹一致
+    let crlf = format!("  {}\r\n", generated.private_key.replace('\n', "\r\n"));
+    let (status, replaced) = body_json(
+        app.clone()
+            .oneshot(json_request("POST", &uri, json!({ "private_key": crlf })))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {replaced}");
+    assert_eq!(replaced["fingerprint"], generated.fingerprint);
+    let (count,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM integration.project_ssh_key WHERE project_id = $1")
+            .bind(project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 1, "一项目一把，覆盖不新增");
+
+    // 库里只有密文
+    let (ciphertext,): (Vec<u8>,) = sqlx::query_as(
+        "SELECT private_key_ciphertext FROM integration.project_ssh_key WHERE project_id = $1",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let as_text = String::from_utf8_lossy(&ciphertext);
+    assert!(!as_text.contains("BEGIN OPENSSH PRIVATE KEY"));
+
+    let (audits,): (i64,) = sqlx::query_as(
+        "SELECT count(*) FROM governance.audit_log \
+         WHERE project_id = $1 AND action = 'ssh_key.imported'",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audits, 2, "每次导入写审计");
+}
+
+/// 无效私钥（垃圾文本 / 带口令）→ 400 Validation，且不落库；越权项目 → 404。
+#[sqlx::test(migrations = "../../migrations")]
+async fn ssh_key_import_rejects_invalid_private_key(pool: PgPool) {
+    if !ssh_keygen_available() {
+        eprintln!("ssh-keygen unavailable; skipping");
+        return;
+    }
+    with_secret();
+    let app = router(pool.clone());
+    let project_id = seed_project(&pool, "REPO-IMPORT-2").await;
+    let uri = format!("/v1/pm/projects/{project_id}/ssh-keys/import");
+
+    let (status, body) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &uri,
+                json!({ "private_key": "definitely not a key" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
+    assert_eq!(
+        body["message"],
+        "private key is invalid or passphrase-protected"
+    );
+
+    // 带口令的私钥：ssh-keygen -y 无法推导（不接受交互）→ 400
+    let dir = std::env::temp_dir().join(format!("ai-pm-api-pp-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let key_path = dir.join("id_encrypted");
+    let gen = std::process::Command::new("ssh-keygen")
+        .args(["-q", "-t", "ed25519", "-N", "secret-pass", "-C", "pp", "-f"])
+        .arg(&key_path)
+        .output()
+        .unwrap();
+    assert!(gen.status.success());
+    let pem = std::fs::read_to_string(&key_path).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let (status, body) = body_json(
+        app.clone()
+            .oneshot(json_request("POST", &uri, json!({ "private_key": pem })))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
+    assert_eq!(
+        body["message"],
+        "private key is invalid or passphrase-protected"
+    );
+
+    let (count,): (i64,) =
+        sqlx::query_as("SELECT count(*) FROM integration.project_ssh_key WHERE project_id = $1")
+            .bind(project_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 0, "失败导入不落库");
+
+    // 越权（不存在项目）→ 404 project not found
+    let unknown = Uuid::new_v4();
+    let (status, body) = body_json(
+        app.oneshot(json_request(
+            "POST",
+            &format!("/v1/pm/projects/{unknown}/ssh-keys/import"),
+            json!({ "private_key": "x" }),
+        ))
+        .await
+        .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "body: {body}");
+    assert_eq!(body["message"], "project not found");
+}

@@ -4,9 +4,11 @@ import { flushPromises } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 
 import SettingsProjectRepositoriesView from "./SettingsProjectRepositoriesView.vue";
+import { HttpError } from "@digua/http";
 import { mountShell } from "@/components/shell/test-utils";
 import { buildRoutes } from "@/router";
 import type { RepositoryV2 } from "@/api/initialization";
+import type { SshKey } from "@/api/types";
 
 const listRepositoriesV2 = vi.fn();
 const createRepositoryV2 = vi.fn();
@@ -14,6 +16,9 @@ const confirmRepositoryVersion = vi.fn();
 const disconnectRepository = vi.fn();
 const updateRepositoryV2 = vi.fn();
 const verifyRepositoryV2 = vi.fn();
+const getSshKey = vi.fn();
+const importSshKey = vi.fn();
+const revokeSshKey = vi.fn();
 
 vi.mock("@/api/initialization", () => ({
   listRepositoriesV2: (...args: unknown[]) => listRepositoriesV2(...args),
@@ -23,6 +28,12 @@ vi.mock("@/api/initialization", () => ({
   disconnectRepository: (...args: unknown[]) => disconnectRepository(...args),
   updateRepositoryV2: (...args: unknown[]) => updateRepositoryV2(...args),
   verifyRepositoryV2: (...args: unknown[]) => verifyRepositoryV2(...args)
+}));
+
+vi.mock("@/api/repositories", () => ({
+  getSshKey: (...args: unknown[]) => getSshKey(...args),
+  importSshKey: (...args: unknown[]) => importSshKey(...args),
+  revokeSshKey: (...args: unknown[]) => revokeSshKey(...args)
 }));
 
 /** 后端真实行形状（RepositoryRow 契约）的最小夹具。 */
@@ -48,6 +59,19 @@ function repo(overrides: Partial<RepositoryV2>): RepositoryV2 {
     revision: 3,
     created_at: "2026-11-01T00:00:00Z",
     updated_at: "2026-11-05T00:00:00Z",
+    ...overrides
+  };
+}
+
+/** SshKey 契约（公钥 + 指纹，无私钥字段）的最小夹具。 */
+function sshKey(overrides: Partial<SshKey>): SshKey {
+  return {
+    project_id: "prj-1",
+    label: "imported",
+    public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... ai-pm:demo",
+    fingerprint: "SHA256:AbCdEf123456",
+    status: "active",
+    created_at: "2026-11-13T00:00:00Z",
     ...overrides
   };
 }
@@ -78,6 +102,10 @@ describe("SettingsProjectRepositoriesView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listRepositoriesV2.mockResolvedValue({ items: [], total: 0 });
+    // 默认未配置密钥（后端 404），按「无密钥」处理
+    getSshKey.mockRejectedValue(
+      new HttpError("ssh key not found", { status: 404 })
+    );
   });
 
   it("零仓库时空态明确传达项目仍可工作（V1.2 §6.3）", async () => {
@@ -204,5 +232,57 @@ describe("SettingsProjectRepositoriesView", () => {
       selected_commit: null,
       description: null
     });
+  });
+
+  it("SSH 私钥未配置态：404 视为无密钥，粘贴保存走导入契约（trim 后提交）", async () => {
+    importSshKey.mockResolvedValue(sshKey({}));
+    const { wrapper } = await mountView();
+    const panel = wrapper.find('[data-testid="ssh-key-panel"]');
+    expect(panel.exists()).toBe(true);
+    expect(panel.find('[data-testid="ssh-key-status"]').text()).toContain(
+      "未配置"
+    );
+    expect(panel.find('[data-testid="ssh-key-material"]').exists()).toBe(false);
+
+    await wrapper
+      .find('[data-testid="ssh-key-input"]')
+      .setValue(
+        "  -----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\n  "
+      );
+    await wrapper.find('[data-testid="ssh-key-submit"]').trigger("click");
+    await flushPromises();
+
+    expect(importSshKey).toHaveBeenCalledWith(
+      "prj-1",
+      "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----"
+    );
+    // 空输入不得提交
+    await wrapper.find('[data-testid="ssh-key-input"]').setValue("   ");
+    await wrapper.find('[data-testid="ssh-key-submit"]').trigger("click");
+    await flushPromises();
+    expect(importSshKey).toHaveBeenCalledTimes(1);
+  });
+
+  it("SSH 私钥已配置态：展示指纹与来源，吊销两段式确认", async () => {
+    getSshKey.mockResolvedValue(sshKey({}));
+    revokeSshKey.mockResolvedValue({ project_id: "prj-1" });
+    const { wrapper } = await mountView();
+    const panel = wrapper.find('[data-testid="ssh-key-panel"]');
+    expect(panel.find('[data-testid="ssh-key-status"]').text()).toContain(
+      "已配置"
+    );
+    expect(panel.find('[data-testid="ssh-key-fingerprint"]').text()).toContain(
+      "SHA256:"
+    );
+    expect(panel.text()).toContain("导入");
+
+    // 两段式：第一击武装（文案变为确认），第二击执行
+    await panel.find('[data-testid="ssh-key-revoke"]').trigger("click");
+    expect(panel.find('[data-testid="ssh-key-revoke"]').text()).toContain(
+      "确认吊销"
+    );
+    await panel.find('[data-testid="ssh-key-revoke"]').trigger("click");
+    await flushPromises();
+    expect(revokeSshKey).toHaveBeenCalledWith("prj-1");
   });
 });

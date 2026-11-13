@@ -5,7 +5,7 @@
 //! 私钥明文只在生成进程内短暂存在，临时目录用后即删。
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
@@ -22,6 +22,10 @@ pub enum SecretError {
     Crypto,
     #[error("ssh-keygen is not available: {0}")]
     SshKeygen(String),
+    /// 导入的外部私钥无效（格式错误 / 带口令）——用户可修正的输入错误，
+    /// 与「ssh-keygen 二进制不可用」（SshKeygen）区分开。
+    #[error("private key is invalid or passphrase-protected: {0}")]
+    InvalidKey(String),
     #[error("ssh-keygen produced no fingerprint")]
     Fingerprint,
 }
@@ -31,6 +35,15 @@ pub struct GeneratedKey {
     pub public_key: String,
     pub private_key: String,
     pub fingerprint: String,
+}
+
+/// 从导入的外部私钥推导出的公钥材料。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DerivedKey {
+    pub public_key: String,
+    pub fingerprint: String,
+    /// 推导公钥的首 token，如 `ssh-ed25519` / `ssh-rsa` / `ecdsa-sha2-nistp256`。
+    pub key_type: String,
 }
 
 fn cipher() -> Result<Aes256Gcm, SecretError> {
@@ -117,6 +130,63 @@ pub fn generate_ed25519(comment: &str) -> Result<GeneratedKey, SecretError> {
         public_key,
         private_key,
         fingerprint,
+    })
+}
+
+/// 规范粘贴内容：CRLF → LF、去首尾空白、补尾换行（ssh-keygen 逐行解析）。
+pub fn normalize_private_key(private_key: &str) -> String {
+    let trimmed = private_key.replace("\r\n", "\n").trim().to_string();
+    format!("{trimmed}\n")
+}
+
+/// 从外部私钥推导公钥材料（导入粘贴私钥的校验通道）：`ssh-keygen -y`。
+/// 带口令的私钥在 stdin 关闭时推导失败（不接受交互），视同无效。
+/// 返回后临时目录（含私钥明文文件）已删除。
+pub fn derive_public_key(private_key: &str) -> Result<DerivedKey, SecretError> {
+    let normalized = normalize_private_key(private_key);
+    if !normalized.contains("PRIVATE KEY") {
+        return Err(SecretError::InvalidKey("not a private key".to_string()));
+    }
+    let dir = TempDir(std::env::temp_dir().join(format!("ai-pm-ssh-{}", Uuid::new_v4())));
+    std::fs::create_dir_all(&dir.0).map_err(|e| SecretError::SshKeygen(e.to_string()))?;
+    let key_path = dir.0.join("id_imported");
+    std::fs::write(&key_path, normalized.as_bytes())
+        .map_err(|e| SecretError::SshKeygen(e.to_string()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| SecretError::SshKeygen(e.to_string()))?;
+    }
+
+    let output = Command::new("ssh-keygen")
+        .arg("-y")
+        .arg("-f")
+        .arg(&key_path)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| SecretError::SshKeygen(e.to_string()))?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(SecretError::InvalidKey(detail));
+    }
+    let public_key = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let key_type = public_key
+        .split_whitespace()
+        .next()
+        .filter(|t| !t.is_empty())
+        .ok_or_else(|| SecretError::InvalidKey("ssh-keygen -y produced no key".to_string()))?
+        .to_string();
+
+    let pub_path = dir.0.join("id_imported.pub");
+    std::fs::write(&pub_path, format!("{public_key}\n"))
+        .map_err(|e| SecretError::SshKeygen(e.to_string()))?;
+    let fingerprint = fingerprint_of(&pub_path)?;
+
+    Ok(DerivedKey {
+        public_key,
+        fingerprint,
+        key_type,
     })
 }
 
@@ -220,5 +290,59 @@ mod tests {
         assert!(key.fingerprint.starts_with("SHA256:"));
         assert!(key.private_key.contains("PRIVATE KEY"));
         assert!(key.public_key.contains("ai-pm:TEST-001"));
+    }
+
+    #[test]
+    fn derive_public_key_matches_generated_fingerprint() {
+        if Command::new("ssh-keygen").arg("-V").output().is_err() {
+            eprintln!("ssh-keygen unavailable; skipping");
+            return;
+        }
+        let generated = generate_ed25519("ai-pm:IMPORT-001").unwrap();
+        let derived = derive_public_key(&generated.private_key).unwrap();
+        assert_eq!(derived.key_type, "ssh-ed25519");
+        assert_eq!(derived.public_key, generated.public_key);
+        assert_eq!(derived.fingerprint, generated.fingerprint);
+    }
+
+    #[test]
+    fn derive_public_key_normalizes_crlf() {
+        if Command::new("ssh-keygen").arg("-V").output().is_err() {
+            eprintln!("ssh-keygen unavailable; skipping");
+            return;
+        }
+        let generated = generate_ed25519("ai-pm:CRLF-001").unwrap();
+        let crlf = format!("  {}\r\n", generated.private_key.replace('\n', "\r\n"));
+        assert!(derive_public_key(&crlf).is_ok());
+    }
+
+    #[test]
+    fn derive_public_key_rejects_garbage() {
+        assert!(matches!(
+            derive_public_key("definitely not a key"),
+            Err(SecretError::InvalidKey(_))
+        ));
+    }
+
+    #[test]
+    fn derive_public_key_rejects_passphrase_key() {
+        if Command::new("ssh-keygen").arg("-V").output().is_err() {
+            eprintln!("ssh-keygen unavailable; skipping");
+            return;
+        }
+        let dir = TempDir(std::env::temp_dir().join(format!("ai-pm-ssh-pp-{}", Uuid::new_v4())));
+        std::fs::create_dir_all(&dir.0).unwrap();
+        let key_path = dir.0.join("id_encrypted");
+        let output = Command::new("ssh-keygen")
+            .args(["-q", "-t", "ed25519", "-N", "secret-pass", "-C", "pp", "-f"])
+            .arg(&key_path)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let pem = std::fs::read_to_string(&key_path).unwrap();
+        assert!(matches!(
+            derive_public_key(&pem),
+            Err(SecretError::InvalidKey(_))
+        ));
     }
 }
