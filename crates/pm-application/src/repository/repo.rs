@@ -445,6 +445,8 @@ pub async fn confirm_repository_version(
         url: &url,
         head_commit_sha: &commit,
         key_prefix: "repo_confirm",
+        // 联动受理保持既有幂等键语义（无触发时刻段）。
+        trigger_token: None,
     };
     match submit_repository_snapshot_intake(pool, cmd, actor).await {
         Ok(receipt) => tracing::info!(
@@ -627,6 +629,8 @@ pub async fn verify_repository(
                     url: &url,
                     head_commit_sha: head,
                     key_prefix: "repo_verify",
+                    // verify 联动保持既有幂等键语义（无触发时刻段）。
+                    trigger_token: None,
                 };
                 match submit_repository_snapshot_intake(pool, cmd, actor).await {
                     Ok(receipt) => tracing::info!(
@@ -659,20 +663,37 @@ struct SnapshotIntakeCmd<'a> {
     url: &'a str,
     head_commit_sha: &'a str,
     /// 幂等键族（`{prefix}:{repository}:{commit}`）：verify=repo_verify、
-    /// 确认联动=repo_confirm。族内同 commit 跨触发仍可能各一条——键锚
-    /// commit，KB/PC 内容寻址去重保证同 commit 二次分析零新增修订。
+    /// 确认联动=repo_confirm、手动分析=repo_analyze。族内同 commit 跨触发
+    /// 仍可能各一条——键锚 commit，KB/PC 内容寻址去重保证同 commit
+    /// 二次分析零新增修订。
     key_prefix: &'a str,
+    /// 手动分析的「触发时刻」段（S1）：`Some` 时键追加该段，使 HEAD 未前进
+    /// 也能重触发；`None` 保持 verify / confirm 既有键格式与语义不变。
+    trigger_token: Option<&'a str>,
 }
 
 /// 仓库快照 intake 受理（checkpoint-1 触发链；intake.rs 管道由此接续：
 /// kb_analyze → 认知信号 → RT 路由 pc_analyze，全链经 outbox 消费端推进）。
-/// 幂等键 `{repository}:{commit}`：同 commit 重复受理重放，新 commit 新 intake。
+///
+/// 幂等键：`{prefix}:{repository}:{commit}`（联动），或手动分析的
+/// `{prefix}:{repository}:{commit}:{trigger_token}`。同键重复受理重放，
+/// 新键新 intake；`trigger_token = None` 时既有键语义完全不变。
 async fn submit_repository_snapshot_intake(
     pool: &PgPool,
     cmd: SnapshotIntakeCmd<'_>,
     actor: &AuditActor,
 ) -> Result<crate::intake::IntakeReceipt, crate::intake::IntakeError> {
     let short: String = cmd.head_commit_sha.chars().take(8).collect();
+    let idempotency_key = match cmd.trigger_token {
+        Some(token) => format!(
+            "{}:{}:{}:{}",
+            cmd.key_prefix, cmd.repository_id, cmd.head_commit_sha, token
+        ),
+        None => format!(
+            "{}:{}:{}",
+            cmd.key_prefix, cmd.repository_id, cmd.head_commit_sha
+        ),
+    };
     crate::intake::submit_intake(
         pool,
         crate::intake::SubmitIntake {
@@ -691,14 +712,128 @@ async fn submit_repository_snapshot_intake(
             // commit sha 本身即树内容哈希——直接作为 intake 对账锚。
             content_hash: Some(cmd.head_commit_sha.to_string()),
             title: Some(format!("仓库快照 {} @ {short}", cmd.name)),
-            idempotency_key: Some(format!(
-                "{}:{}:{}",
-                cmd.key_prefix, cmd.repository_id, cmd.head_commit_sha
-            )),
+            idempotency_key: Some(idempotency_key),
             tasks: None,
         },
     )
     .await
+}
+
+/// S1（2026-11-13）：单仓库**手动增量分析** —— 人工触发仓库快照 intake。
+///
+/// 与 verify / confirm 联动的区别：
+/// - 幂等键族 `repo_analyze:{repo}:{commit}:{trigger}`（**不与** `repo_verify:`
+///   / `repo_confirm:` 共用），`trigger` 锚触发时刻，故 **HEAD 未前进也允许
+///   重触发**；调用方显式传 `idempotency_key` 时该键即 `trigger`，重复提交
+///   命中幂等重放（零副作用，防双击双发）。
+/// - 进行中/限流对齐 `intake::retry_task`：活跃任务
+///   （PENDING / DISPATCHED / PROCESSING）不可并发重触发 → 409；
+///   FAILED / NEEDS_HUMAN_REVIEW 等终态**释放名额**，允许重触发。
+///   检查时排除本次幂等键自身的 intake，保证重放不被自己的活跃任务挡住。
+/// - 锚点 = `selected_commit ?? head_commit_sha`（与 kb_pc_analysis 一致）；
+///   未核验或无锚点 → 422；已归档 → 409。
+pub async fn analyze_repository(
+    pool: &PgPool,
+    repository_id: Uuid,
+    actor: &AuditActor,
+    req: AnalyzeRepositoryRequest,
+) -> Result<AnalyzeRepositoryOutcome, RepositoryError> {
+    type AnalyzeRow = (
+        Uuid,           // project_id
+        Uuid,           // tenant_id
+        String,         // name
+        String,         // url
+        String,         // status
+        Option<String>, // selected_commit（Confirmed）
+        Option<String>, // head_commit_sha（Observed）
+    );
+    let row: Option<AnalyzeRow> = sqlx::query_as(
+        "SELECT r.project_id, r.tenant_id, r.name, r.url, r.status, \
+                r.selected_commit, r.head_commit_sha \
+         FROM integration.project_repository r WHERE r.id = $1",
+    )
+    .bind(repository_id)
+    .fetch_optional(pool)
+    .await?;
+    let (project_id, tenant_id, name, url, status, selected_commit, head_commit_sha) =
+        row.ok_or(RepositoryError::NotFound)?;
+    if status == "archived" {
+        return Err(RepositoryError::Archived);
+    }
+    // 未核验或没有可用锚点，一律 422（前端无 requirement count 端点，不臆测）。
+    let commit = selected_commit
+        .or(head_commit_sha)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or(RepositoryError::AnalyzeNoAnchor)?;
+    if status != "verified" {
+        return Err(RepositoryError::AnalyzeNoAnchor);
+    }
+
+    // 「触发时刻」：显式幂等键优先（可重放），否则由服务端生成且每次唯一。
+    let trigger_token: String = req
+        .idempotency_key
+        .filter(|key| !key.trim().is_empty())
+        .unwrap_or_else(|| format!("{}-{}", Utc::now().timestamp_millis(), Uuid::new_v4()));
+    let analysis_key = format!("repo_analyze:{repository_id}:{commit}:{trigger_token}");
+
+    // 活跃任务检查：排除本次幂等键自身，使重放直达 submit_intake 的 ON CONFLICT。
+    // 状态口径与 retry_task 的「非 FAILED / NEEDS_HUMAN_REVIEW 不可重试」同族：
+    // 只有活跃态占名额；终态（含失败 / 待人工复核 / 已完成）释放名额。
+    let active: Option<String> = sqlx::query_scalar(
+        "SELECT t.task_status \
+           FROM integration.intake_task t \
+           JOIN integration.intake_record r ON r.id = t.intake_id \
+          WHERE r.project_id = $1 \
+            AND r.idempotency_key LIKE 'repo_analyze:' || $2 || ':%' \
+            AND r.idempotency_key <> $3 \
+            AND t.task_status IN ('PENDING','DISPATCHED','PROCESSING') \
+          LIMIT 1",
+    )
+    .bind(project_id)
+    .bind(repository_id.to_string())
+    .bind(&analysis_key)
+    .fetch_optional(pool)
+    .await?;
+    if active.is_some() {
+        return Err(RepositoryError::AnalyzeInProgress);
+    }
+
+    // 人工动作留审计（与 verify / confirm 同口径；独立于 intake 受理事务）。
+    let mut audit_tx = pool.begin().await?;
+    append_audit(
+        &mut audit_tx,
+        project_id,
+        actor,
+        "repository.analysis_requested",
+        "project_repository",
+        Some(repository_id),
+    )
+    .await?;
+    audit_tx.commit().await?;
+
+    let cmd = SnapshotIntakeCmd {
+        tenant_id,
+        project_id,
+        repository_id,
+        name: &name,
+        url: &url,
+        head_commit_sha: &commit,
+        key_prefix: "repo_analyze",
+        trigger_token: Some(&trigger_token),
+    };
+    let receipt = match submit_repository_snapshot_intake(pool, cmd, actor).await {
+        Ok(receipt) => receipt,
+        Err(crate::intake::IntakeError::Db(err)) => return Err(RepositoryError::Db(err)),
+        Err(other) => return Err(RepositoryError::AnalyzeIntake(other.to_string())),
+    };
+    Ok(AnalyzeRepositoryOutcome {
+        repository_id,
+        project_id,
+        commit,
+        intake_id: receipt.intake_id,
+        status: receipt.status,
+        replayed: receipt.replayed,
+    })
 }
 
 // ------------------------------------------------------------------- internals

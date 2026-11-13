@@ -964,3 +964,104 @@ async fn repository_bind_key_validates_project_and_existence(pool: PgPool) {
     assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
     assert_eq!(body["message"], "ssh key belongs to another project");
 }
+
+/// S1（2026-11-13）：POST /v1/pm/repositories/{id}/analyze 的 HTTP 契约。
+/// 未核验 → 422；202 受理 + 同键幂等重放；已有活跃分析 → 409。
+#[sqlx::test(migrations = "../../migrations")]
+async fn manual_analyze_http_contract(pool: PgPool) {
+    with_secret();
+    let app = router(pool.clone());
+    let project_id = seed_project(&pool, "REPO-AN").await;
+
+    let (status, created) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &format!("/v1/pm/projects/{project_id}/repositories"),
+                json!({
+                    "name": "svc",
+                    "url": "git@gitlab.local:team/svc.git",
+                    "role": "main",
+                    "default_branch": "main"
+                }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "body: {created}");
+    let repo_id = created["id"].as_str().unwrap().to_string();
+    let analyze_uri = format!("/v1/pm/repositories/{repo_id}/analyze");
+
+    // 未核验 / 无锚点 → 422。
+    let (status, body) = body_json(
+        app.clone()
+            .oneshot(json_request("POST", &analyze_uri, json!({})))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "body: {body}");
+    assert_eq!(body["error"], "analysis_no_anchor");
+
+    sqlx::query(
+        "UPDATE integration.project_repository \
+            SET status = 'verified', head_commit_sha = 'abc1234', selected_commit = 'abc1234' \
+          WHERE id = $1",
+    )
+    .bind(Uuid::parse_str(&repo_id).unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let (status, first) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &analyze_uri,
+                json!({ "idempotency_key": "fixed-key" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "body: {first}");
+    assert_eq!(first["replayed"], false);
+    assert_eq!(first["commit"], "abc1234");
+
+    // 同键重放：202 + replayed=true（不被自己的活跃任务挡住）。
+    let (status, replay) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &analyze_uri,
+                json!({ "idempotency_key": "fixed-key" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "body: {replay}");
+    assert_eq!(replay["replayed"], true);
+    assert_eq!(replay["intake_id"], first["intake_id"]);
+
+    // 不同触发时刻但已有活跃任务 → 409（进行中 / 限流）。
+    let (status, conflict) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &analyze_uri,
+                json!({ "idempotency_key": "other-key" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "body: {conflict}");
+    assert_eq!(
+        conflict["message"],
+        "repository analysis is already in progress"
+    );
+    // 稳定错误码供前端本地化兜底（S4 详情面板）。
+    assert_eq!(conflict["error"], "analysis_in_progress");
+}

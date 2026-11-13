@@ -21,10 +21,11 @@ use crate::routes::AppState;
 use crate::support::repos::guard_query_repo;
 use pm_application::repo::GuardQueryRepo;
 use pm_application::repository::{
-    archive_repository, bind_repository_ssh_key, confirm_repository_version, create_repository,
-    delete_repository, ensure_ssh_key, import_ssh_key, list_repositories, list_ssh_keys,
-    revoke_ssh_key, ssh_key_project_id, update_repository, verify_repository,
-    ConfirmVersionRequest, CreateRepositoryRequest, RepositoryError, UpdateRepositoryRequest,
+    analyze_repository, archive_repository, bind_repository_ssh_key, confirm_repository_version,
+    create_repository, delete_repository, ensure_ssh_key, import_ssh_key, list_repositories,
+    list_ssh_keys, revoke_ssh_key, ssh_key_project_id, update_repository, verify_repository,
+    AnalyzeRepositoryRequest, ConfirmVersionRequest, CreateRepositoryRequest, RepositoryError,
+    UpdateRepositoryRequest,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -40,6 +41,12 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/pm/repositories/{repository_id}/verify",
             post(verify_handler),
+        )
+        // S1（2026-11-13）：单仓库手动增量分析 → 快照 intake（幂等键锚 commit
+        // + 触发时刻；HEAD 未前进也允许重触发，区别于 verify 联动）。
+        .route(
+            "/v1/pm/repositories/{repository_id}/analyze",
+            post(analyze_handler),
         )
         // S01-03 §6.2（G-05）：人类确认更新采用基准——不自动更新，不触碰正式基线。
         .route(
@@ -91,6 +98,38 @@ fn repository_error(err: RepositoryError) -> Response {
             StatusCode::CONFLICT,
             "ssh key is still referenced by a verified repository",
         ),
+        // S1 手动增量分析：进行中 → 409（与 intake task retry 的 NotRetryable 同族）。
+        // 额外带稳定 `error` 码，供前端 S4 详情面板做本地化兜底；`message` 仍是
+        // 唯一被 @digua/http 透传的字段（`code` 才参与翻译，故不影响既有约定）。
+        RepositoryError::AnalyzeInProgress => {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "message": "repository analysis is already in progress",
+                    "error": "analysis_in_progress",
+                })),
+            )
+                .into_response();
+        }
+        // S1 手动增量分析：未核验 / 无分析锚点 → 422。
+        RepositoryError::AnalyzeNoAnchor => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({
+                    "message": "repository has no verified analysis anchor",
+                    "error": "analysis_no_anchor",
+                })),
+            )
+                .into_response();
+        }
+        // intake 受理校验拒绝（String 错误体，独立早退以避开 &'static str 生命周期）。
+        RepositoryError::AnalyzeIntake(detail) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({ "message": detail })),
+            )
+                .into_response();
+        }
         RepositoryError::Git(detail) => {
             tracing::error!(detail = %detail, "git access failed");
             (StatusCode::BAD_GATEWAY, "git access failed")
@@ -257,6 +296,36 @@ async fn verify_handler(
     let actor = principal.audit_actor();
     match verify_repository(&state.pool, repository_id, &actor).await {
         Ok(outcome) => (StatusCode::OK, Json(outcome)).into_response(),
+        Err(err) => repository_error(err),
+    }
+}
+
+/// S1（2026-11-13）：单仓库手动增量分析。
+///
+/// 请求体可省略；`idempotency_key` 由调用方持有防双击（同键重放零副作用），
+/// 缺省时服务端按触发时刻生成新键 —— HEAD 未前进也允许重触发。
+/// 202 = 快照 intake 已受理；409 = 已有活跃分析；422 = 未核验 / 无分析锚点。
+#[derive(Debug, Default, Deserialize)]
+struct AnalyzeBody {
+    #[serde(default)]
+    idempotency_key: Option<String>,
+}
+
+async fn analyze_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(repository_id): Path<Uuid>,
+    body: Option<Json<AnalyzeBody>>,
+) -> Response {
+    if let Err(resp) = repository_in_tenant(&state.pool, repository_id, principal.tenant_id).await {
+        return resp;
+    }
+    let actor = principal.audit_actor();
+    let req = AnalyzeRepositoryRequest {
+        idempotency_key: body.and_then(|Json(body)| body.idempotency_key),
+    };
+    match analyze_repository(&state.pool, repository_id, &actor, req).await {
+        Ok(outcome) => (StatusCode::ACCEPTED, Json(outcome)).into_response(),
         Err(err) => repository_error(err),
     }
 }

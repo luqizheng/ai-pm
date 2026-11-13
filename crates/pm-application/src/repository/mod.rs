@@ -64,6 +64,17 @@ pub enum RepositoryError {
     /// 已归档（软解绑）的仓库不得再做版本确认（S01-03 §5：确认基准是活仓库的治理动作）。
     #[error("repository is archived")]
     Archived,
+    /// S1 手动增量分析：同仓库已有活跃快照分析（PENDING/DISPATCHED/PROCESSING）。
+    /// 与 `intake::retry_task` 的「非 FAILED / NEEDS_HUMAN_REVIEW 不可重试」同族，
+    /// 映射 409；终态（含 FAILED / NEEDS_HUMAN_REVIEW）释放名额允许重触发。
+    #[error("repository analysis is already in progress")]
+    AnalyzeInProgress,
+    /// S1 手动增量分析：仓库未核验或没有可用分析锚点（Confirmed Commit / Observed HEAD）。
+    #[error("repository has no verified analysis anchor")]
+    AnalyzeNoAnchor,
+    /// S1 手动增量分析：快照 intake 受理被校验拒绝（映射 422）。
+    #[error("repository analysis intake rejected: {0}")]
+    AnalyzeIntake(String),
     #[error("git access failed: {0}")]
     Git(String),
     #[error("{0}")]
@@ -215,6 +226,30 @@ pub struct ConfirmVersionRequest {
     pub selected_commit: String,
     #[serde(default)]
     pub reason: Option<String>,
+}
+
+/// POST /v1/pm/repositories/{id}/analyze：手动增量分析（S1，2026-11-13）。
+///
+/// `idempotency_key` 由调用方持有以防双击双发；服务端把它作为幂等键的
+/// 「触发时刻」段，重复提交同一键命中同一次 intake（零副作用重放）。
+/// 缺省时服务端按触发时刻生成新段 —— **HEAD 未前进也允许重触发**。
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct AnalyzeRepositoryRequest {
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
+}
+
+/// 手动增量分析的受理回执（202 纯受理语义，与 `start_import` 一致）。
+#[derive(Debug, Clone, Serialize)]
+pub struct AnalyzeRepositoryOutcome {
+    pub repository_id: Uuid,
+    pub project_id: Uuid,
+    /// 本次分析锚定的 commit（Confirmed Commit 优先，回退 Observed HEAD）。
+    pub commit: String,
+    pub intake_id: Uuid,
+    pub status: &'static str,
+    /// true = 命中既有 intake 的幂等重放，未新增任何行。
+    pub replayed: bool,
 }
 
 // -------------------------------------------------------------------- ssh key

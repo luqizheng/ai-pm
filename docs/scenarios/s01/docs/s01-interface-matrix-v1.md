@@ -30,7 +30,7 @@
 
 ---
 
-## 2. REST 端点全清单（97 个）
+## 2. REST 端点全清单（98 个）
 
 ### 2.1 平台 / 摄取 / 监管（7）
 
@@ -99,7 +99,7 @@
 | POST | `/v1/pm/review-approvals/{id}/decision` | `decision_handler` | pm_reviews.rs:99 |
 | GET | `/v1/pm/artifacts` | `artifacts` | pm_artifacts.rs:36 |
 
-### 2.5 Repository / SSH Key / Repo Import（15）
+### 2.5 Repository / SSH Key / Repo Import（16）
 
 | 方法 | 路径 | handler | 位置 |
 |---|---|---|---|
@@ -108,6 +108,7 @@
 | PATCH | `/v1/pm/repositories/{repository_id}` | `update_handler` | pm_repositories.rs:170 |
 | DELETE | `/v1/pm/repositories/{repository_id}` | `delete_handler` | pm_repositories.rs:186 |
 | POST | `/v1/pm/repositories/{repository_id}/verify` | `verify_handler` | pm_repositories.rs:201 |
+| POST | `/v1/pm/repositories/{repository_id}/analyze` | `analyze_handler` | pm_repositories.rs | **新增（2026-11-13 S1 手动增量分析）**：可选 `idempotency_key`；202 受理 / 409 进行中 / 422 无锚点；幂等键 `repo_analyze:{rid}:{commit}:{trigger}` |
 | POST | `/v1/pm/repositories/{repository_id}/archive` | `archive_handler` | pm_repositories.rs:216 |
 | GET | `/v1/pm/projects/{project_id}/ssh-key` | `get_key_handler` | pm_repositories.rs:231 |
 | POST | `/v1/pm/projects/{project_id}/ssh-key` | `generate_key_handler` | pm_repositories.rs:246 |

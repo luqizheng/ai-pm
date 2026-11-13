@@ -24,6 +24,7 @@
 | 项目创建（基础） | `POST /v1/pm/projects` | `pm_lists.rs:138` |
 | 仓库 CRUD | `GET/POST /v1/pm/projects/{pid}/repositories`、`PATCH/DELETE /v1/pm/repositories/{rid}` | `pm_repositories.rs:29` |
 | 仓库核验 | `POST /v1/pm/repositories/{rid}/verify` | `pm_repositories.rs:45` |
+| 手动增量分析（S1，2026-11-13） | `POST /v1/pm/repositories/{rid}/analyze` | `pm_repositories.rs`（请求体可选 `idempotency_key`；202 受理 / 409 进行中 / 422 无锚点） |
 | 仓库归档 | `POST /v1/pm/repositories/{rid}/archive` | `pm_repositories.rs:50` |
 | 项目 SSH 密钥 | `GET/POST/DELETE /v1/pm/projects/{pid}/ssh-key(s)` | `pm_repositories.rs:52,57` |
 | 项目成员授权 | `GET/POST /v1/pm/projects/{pid}/members`、`DELETE .../members/{principal_id}` | `project_members.rs:35` |
