@@ -208,6 +208,7 @@ function openSettings() {
         }"
         :required-label="t('s01.command-center.initRequired')"
         :data="data.initialization"
+        :project-id="currentProjectId()"
       />
 
       <ProjectHealthSection

@@ -15,10 +15,13 @@ import {
 import Alert from "@/components/ui/alert/Alert.vue";
 import Badge from "@/components/ui/badge/Badge.vue";
 import Button from "@/components/ui/button/Button.vue";
+import Checkbox from "@/components/ui/checkbox/Checkbox.vue";
+import ConfirmationDialog from "@/components/ui/confirmation-dialog/ConfirmationDialog.vue";
 import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
 import { StatCard } from "@/components/ui/stat-card";
 import SettingsAppFrame from "@/views/settings/SettingsAppFrame.vue";
 import {
+  analyzeRepository,
   confirmRepositoryVersion,
   createRepositoryV2,
   disconnectRepository,
@@ -33,7 +36,14 @@ import {
   listSshKeys,
   revokeSshKey as revokeSshKeyApi
 } from "@/api/repositories";
-import type { SshKey } from "@/api/types";
+import { listImports, startImport } from "@/api/imports";
+import type { ImportListItem, SshKey } from "@/api/types";
+import {
+  describeImportError,
+  findActiveImport,
+  hasRetryableImport,
+  makeIdempotencyKey
+} from "@/lib/import-analysis";
 import { useProjectSettingsFrame } from "./shared";
 
 /**
@@ -219,6 +229,7 @@ async function load() {
     const page = await listRepositoriesV2(projectId.value);
     repositories.value = page.items;
     void loadSshKeys();
+    void loadImports();
   } catch (error) {
     errorMessage.value =
       error instanceof Error ? error.message : String(error ?? "");
@@ -325,6 +336,117 @@ function rowBranch(row: RepositoryV2): string {
   return row.selected_branch ?? row.default_branch ?? "—";
 }
 
+/* ── 仓库分析（S2 冷启动多选 / S4 单仓库手动增量，2026-11-13） ── */
+const imports = ref<ImportListItem[]>([]);
+/** 多选不预选：仅 verified 行可勾，初始为空。 */
+const analysisSelection = ref<string[]>([]);
+const analysisConfirmOpen = ref(false);
+const analysisBusy = ref(false);
+/** 防双击双发：同一轮确认只发一次；成功/失败后清除以便下次重发。 */
+const analysisIdempotencyKey = ref("");
+const singleAnalyzeKey = ref("");
+
+const analysisTranslate = (
+  key: string,
+  params?: Record<string, unknown>
+): string => t(key, params ?? {}) as string;
+
+const activeImport = computed(() => findActiveImport(imports.value));
+const retryableImport = computed(
+  () => hasRetryableImport(imports.value) && !activeImport.value
+);
+/** 勾选集合过滤掉已不再 verified 的行（列表刷新后自愈）。 */
+const selectedAnalysisIds = computed(() =>
+  analysisSelection.value.filter(id =>
+    repositories.value.some(row => row.id === id && row.status === "verified")
+  )
+);
+const analysisButtonLabel = computed(() =>
+  retryableImport.value
+    ? t("s01.repositories.analysis.reanalyze", {
+        count: selectedAnalysisIds.value.length
+      })
+    : t("s01.repositories.analysis.start", {
+        count: selectedAnalysisIds.value.length
+      })
+);
+const analysisDisabled = computed(
+  () =>
+    !projectId.value ||
+    selectedAnalysisIds.value.length === 0 ||
+    !!activeImport.value ||
+    analysisBusy.value
+);
+
+async function loadImports() {
+  if (!projectId.value) return;
+  try {
+    const page = await listImports(projectId.value);
+    imports.value = page.items;
+  } catch {
+    // 导入状态读失败不打断仓库列表；按钮保持可发起，由后端错误码兜底。
+    imports.value = [];
+  }
+}
+
+function isAnalysisSelectable(row: RepositoryV2): boolean {
+  return (
+    row.status === "verified" && !activeImport.value && !analysisBusy.value
+  );
+}
+
+function toggleAnalysisSelection(row: RepositoryV2, checked: boolean) {
+  if (!isAnalysisSelectable(row)) return;
+  const next = new Set(analysisSelection.value);
+  if (checked) next.add(row.id);
+  else next.delete(row.id);
+  analysisSelection.value = [...next];
+}
+
+function openAnalysisConfirm() {
+  if (analysisDisabled.value) return;
+  errorMessage.value = "";
+  analysisConfirmOpen.value = true;
+}
+
+async function confirmAnalysis() {
+  if (analysisDisabled.value || analysisIdempotencyKey.value) return;
+  const ids = [...selectedAnalysisIds.value];
+  const key = makeIdempotencyKey();
+  analysisIdempotencyKey.value = key;
+  analysisBusy.value = true;
+  errorMessage.value = "";
+  try {
+    await startImport(projectId.value, ids, key);
+    analysisConfirmOpen.value = false;
+    analysisSelection.value = [];
+    await loadImports();
+  } catch (error) {
+    analysisConfirmOpen.value = false;
+    // 已 apply / 项目非空：前端无 requirement count 端点，靠后端错误码兜底文案。
+    errorMessage.value = describeImportError(analysisTranslate, error);
+  } finally {
+    analysisIdempotencyKey.value = "";
+    analysisBusy.value = false;
+  }
+}
+
+/** S4：单仓库手动增量分析（调 S1 新端点；与 verify / confirm-update 并列）。 */
+async function reanalyzeSelected(row: RepositoryV2) {
+  if (singleAnalyzeKey.value || row.status !== "verified") return;
+  const key = makeIdempotencyKey();
+  singleAnalyzeKey.value = key;
+  errorMessage.value = "";
+  try {
+    await analyzeRepository(row.id, { idempotency_key: key });
+    await loadImports();
+  } catch (error) {
+    errorMessage.value = describeImportError(analysisTranslate, error);
+  } finally {
+    singleAnalyzeKey.value = "";
+  }
+}
+
 onMounted(load);
 </script>
 
@@ -354,6 +476,53 @@ onMounted(load);
       <Alert v-if="errorMessage" variant="danger">
         {{ errorMessage }}
       </Alert>
+
+      <!-- S2 仓库分析（2026-11-13）：scope=__all__（无项目）整段隐藏。
+           多选不预选；listImports 有进行中批次则禁用并展示行内进度；
+           failed/cancelled 复用主按钮文案「再次分析」，不设单独 retry 按钮。 -->
+      <section v-if="projectId" class="rm-panel" data-testid="analysis-bar">
+        <div class="rm-analysis__head">
+          <h3 class="rm-panel__title">
+            {{ t("s01.repositories.analysis.title") }}
+          </h3>
+          <Button
+            variant="primary"
+            size="sm"
+            :disabled="analysisDisabled"
+            data-testid="analysis-start"
+            @click="openAnalysisConfirm"
+          >
+            {{ analysisButtonLabel }}
+          </Button>
+        </div>
+        <p v-if="activeImport" class="rm-hint" data-testid="analysis-progress">
+          {{
+            t("s01.repositories.analysis.progress", {
+              status: activeImport.status,
+              percent: activeImport.progress
+            })
+          }}
+        </p>
+        <p v-else class="rm-hint">
+          {{ t("s01.repositories.analysis.hint") }}
+        </p>
+      </section>
+
+      <ConfirmationDialog
+        :open="analysisConfirmOpen"
+        :title="t('s01.repositories.analysis.confirmTitle')"
+        :description="
+          t('s01.repositories.analysis.confirmDescription', {
+            count: selectedAnalysisIds.length
+          })
+        "
+        :confirm-label="t('s01.repositories.analysis.confirm')"
+        :cancel-label="t('s01.repositories.action.cancel')"
+        :disabled="analysisBusy"
+        @update:open="analysisConfirmOpen = $event"
+        @confirm="confirmAnalysis"
+        @cancel="analysisConfirmOpen = false"
+      />
 
       <!-- SSH 私钥（迁移 0022 多把）：按名称管理，仓库在详情面板各绑一把；
            未绑定的仓库回退项目默认把。私钥只进不出——只含公钥与指纹回显。 -->
@@ -670,6 +839,19 @@ onMounted(load);
             >
               <span class="rm-table__repo">
                 <span class="rm-table__name-line">
+                  <!-- 勾选不冒泡到行选中；仅 verified 且无进行中分析时可勾。 -->
+                  <span class="rm-table__check" @click.stop @keydown.stop>
+                    <Checkbox
+                      :model-value="analysisSelection.includes(row.id)"
+                      :disabled="!isAnalysisSelectable(row)"
+                      :aria-label="t('s01.repositories.analysis.selectLabel')"
+                      :data-testid="`analysis-check-${row.id}`"
+                      @update:model-value="
+                        checked =>
+                          toggleAnalysisSelection(row, checked === true)
+                      "
+                    />
+                  </span>
                   <span class="rm-table__name">{{ row.name }}</span>
                   <Badge
                     v-if="primaryRepositoryId === row.id"
@@ -835,6 +1017,18 @@ onMounted(load);
               @click="verify(selected)"
             >
               {{ t("s01.repositories.action.verify") }}
+            </Button>
+            <!-- S4：单仓库手动增量分析（与 verify / confirm-update 并列；
+                 人工确认动作走次文字色，不用 accent 建议色）。 -->
+            <Button
+              variant="ghost"
+              size="sm"
+              class="rm-reanalyze"
+              :disabled="selected.status !== 'verified' || !!singleAnalyzeKey"
+              data-testid="reanalyze-btn"
+              @click="reanalyzeSelected(selected)"
+            >
+              {{ t("s01.repositories.analysis.reanalyzeOne") }}
             </Button>
             <Button
               variant="ghost"
@@ -1204,6 +1398,26 @@ onMounted(load);
 .rm-actions .is-confirming {
   color: var(--ws-accent);
   border-color: var(--ws-accent);
+}
+
+/* 分析工具条：标题与动作同行，窄列自动换行（不新增表格列）。 */
+.rm-analysis__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* 行内勾选只占名称行首，复用列表既有列宽。 */
+.rm-table__check {
+  display: inline-flex;
+  flex: none;
+}
+
+/* 人工确认动作（S4 重新分析）：次文字色，不用 accent 建议色。 */
+.rm-actions .rm-reanalyze {
+  color: var(--ws-text-secondary);
 }
 
 /* 页面级表单控件（接入表单/筛选/角色切换；跟随 token，不引全局样式） */

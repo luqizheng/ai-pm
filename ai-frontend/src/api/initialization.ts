@@ -181,6 +181,33 @@ export function verifyRepositoryV2(repositoryId: string) {
   );
 }
 
+/** S1（2026-11-13）：单仓库手动增量分析的受理回执。 */
+export interface AnalyzeRepositoryResponse {
+  repository_id: string;
+  project_id: string;
+  commit: string;
+  intake_id: string;
+  status: string;
+  replayed: boolean;
+}
+
+/**
+ * S1（2026-11-13）：单仓库手动增量分析 → 快照 intake。
+ *
+ * `idempotency_key` 由调用方用 ref 持有防双击双发；同键重放零副作用，
+ * 缺省时服务端按触发时刻生成新键（HEAD 未前进也允许重触发）。
+ * 202 受理 / 409 已有活跃分析 / 422 未核验或无分析锚点。
+ */
+export function analyzeRepository(
+  repositoryId: string,
+  body: { idempotency_key?: string } = {}
+) {
+  return http.post<AnalyzeRepositoryResponse>(
+    `/v1/pm/repositories/${repositoryId}/analyze`,
+    body
+  );
+}
+
 /* Provider OAuth 授权（G-04）**后端不存在**（无表无路由，统一核验清单 U-R04）——
  * S01-01 总览稿 §3.2.2 裁决：不得渲染永远点不动的按钮。早期草稿的三个悬空调用
  * 已移除；OAuth 路线落地（G-04）后按 S01-03 V1.2 §2.3 重新引入。

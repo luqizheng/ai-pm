@@ -15,10 +15,13 @@ const confirmRepositoryVersion = vi.fn();
 const disconnectRepository = vi.fn();
 const updateRepositoryV2 = vi.fn();
 const verifyRepositoryV2 = vi.fn();
+const analyzeRepository = vi.fn();
 const listSshKeys = vi.fn();
 const importSshKey = vi.fn();
 const revokeSshKey = vi.fn();
 const bindRepositoryKey = vi.fn();
+const listImports = vi.fn();
+const startImport = vi.fn();
 
 vi.mock("@/api/initialization", () => ({
   listRepositoriesV2: (...args: unknown[]) => listRepositoriesV2(...args),
@@ -27,7 +30,8 @@ vi.mock("@/api/initialization", () => ({
     confirmRepositoryVersion(...args),
   disconnectRepository: (...args: unknown[]) => disconnectRepository(...args),
   updateRepositoryV2: (...args: unknown[]) => updateRepositoryV2(...args),
-  verifyRepositoryV2: (...args: unknown[]) => verifyRepositoryV2(...args)
+  verifyRepositoryV2: (...args: unknown[]) => verifyRepositoryV2(...args),
+  analyzeRepository: (...args: unknown[]) => analyzeRepository(...args)
 }));
 
 vi.mock("@/api/repositories", () => ({
@@ -35,6 +39,11 @@ vi.mock("@/api/repositories", () => ({
   importSshKey: (...args: unknown[]) => importSshKey(...args),
   revokeSshKey: (...args: unknown[]) => revokeSshKey(...args),
   bindRepositoryKey: (...args: unknown[]) => bindRepositoryKey(...args)
+}));
+
+vi.mock("@/api/imports", () => ({
+  listImports: (...args: unknown[]) => listImports(...args),
+  startImport: (...args: unknown[]) => startImport(...args)
 }));
 
 /** 后端真实行形状（RepositoryRow 契约）的最小夹具。 */
@@ -107,6 +116,20 @@ describe("SettingsProjectRepositoriesView", () => {
     listRepositoriesV2.mockResolvedValue({ items: [], total: 0 });
     // 默认未配置密钥（空列表）
     listSshKeys.mockResolvedValue({ items: [], total: 0 });
+    listImports.mockResolvedValue({ items: [], total: 0 });
+    startImport.mockResolvedValue({
+      import_id: "imp-1",
+      status: "queued",
+      replayed: false
+    });
+    analyzeRepository.mockResolvedValue({
+      repository_id: "repo-1",
+      project_id: "prj-1",
+      commit: "abc1234",
+      intake_id: "intake-1",
+      status: "ROUTED",
+      replayed: false
+    });
   });
 
   it("零仓库时空态明确传达项目仍可工作（V1.2 §6.3）", async () => {
@@ -333,5 +356,285 @@ describe("SettingsProjectRepositoriesView", () => {
     await wrapper.find('[data-testid="bind-key-select"]').setValue("");
     await flushPromises();
     expect(bindRepositoryKey).toHaveBeenCalledWith("r-bind", null);
+  });
+
+  /** ConfirmationDialog Teleport 到 body：按文案找确认按钮并触发。 */
+  async function confirmDialogAction(label: string) {
+    const button = [...document.body.querySelectorAll("button")].find(item =>
+      item.textContent?.includes(label)
+    );
+    expect(button, `dialog button "${label}" should exist`).toBeTruthy();
+    button!.click();
+    await flushPromises();
+  }
+
+  function importRow(status: string, progress = 0) {
+    return {
+      id: "imp-1",
+      status,
+      progress,
+      model_name: "",
+      draft_revision: 0,
+      analysis_run_id: null,
+      created_at: "2026-11-13T00:00:00Z",
+      proposed_at: null,
+      applied_at: null
+    };
+  }
+
+  it("S2 多选不预选：仅 verified 可勾，确认后 startImport 带幂等键", async () => {
+    document.body.innerHTML = "";
+    listRepositoriesV2.mockResolvedValue({
+      items: [
+        repo({ id: "r1" }),
+        repo({ id: "r2", name: "docs", status: "pending" })
+      ],
+      total: 2
+    });
+    const { wrapper } = await mountView();
+
+    expect(wrapper.find('[data-testid="analysis-bar"]').exists()).toBe(true);
+    const start = wrapper.find('[data-testid="analysis-start"]');
+    // 不预选：初始禁用
+    expect(start.attributes("disabled")).toBeDefined();
+
+    const checks = wrapper.findAll('[data-testid^="analysis-check-"]');
+    expect(checks).toHaveLength(2);
+    // pending 行不可勾：点击后按钮仍禁用（行为断言，不依赖禁用属性实现）
+    await checks[1]!.find("button").trigger("click");
+    expect(
+      wrapper.find('[data-testid="analysis-start"]').attributes("disabled")
+    ).toBeDefined();
+
+    await checks[0]!.find("button").trigger("click");
+    expect(
+      wrapper.find('[data-testid="analysis-start"]').attributes("disabled")
+    ).toBeUndefined();
+    expect(wrapper.find('[data-testid="analysis-start"]').text()).toContain(
+      "(1)"
+    );
+
+    await wrapper.find('[data-testid="analysis-start"]').trigger("click");
+    await flushPromises();
+    await confirmDialogAction("开始分析");
+
+    expect(startImport).toHaveBeenCalledTimes(1);
+    const call = startImport.mock.calls[0]!;
+    expect(call[0]).toBe("prj-1");
+    expect(call[1]).toEqual(["r1"]);
+    expect(typeof call[2]).toBe("string");
+    expect(call[2]).toBeTruthy();
+  });
+
+  it("S2 有进行中导入时按钮禁用并展示行内进度", async () => {
+    document.body.innerHTML = "";
+    listRepositoriesV2.mockResolvedValue({
+      items: [repo({ id: "r1" })],
+      total: 1
+    });
+    listImports.mockResolvedValue({
+      items: [importRow("analyzing", 42)],
+      total: 1
+    });
+    const { wrapper } = await mountView();
+
+    expect(wrapper.find('[data-testid="analysis-progress"]').text()).toContain(
+      "42"
+    );
+    expect(
+      wrapper.find('[data-testid="analysis-start"]').attributes("disabled")
+    ).toBeDefined();
+  });
+
+  it("S2 已 apply 项目 409 → 展示后端错误码兜底文案", async () => {
+    document.body.innerHTML = "";
+    listRepositoriesV2.mockResolvedValue({
+      items: [repo({ id: "r1" })],
+      total: 1
+    });
+    startImport.mockRejectedValue({
+      data: { error: "already_applied" },
+      message: "Request failed with status code 409"
+    });
+    const { wrapper } = await mountView();
+    const checks = wrapper.findAll('[data-testid^="analysis-check-"]');
+    await checks[0]!.find("button").trigger("click");
+    await wrapper.find('[data-testid="analysis-start"]').trigger("click");
+    await flushPromises();
+    await confirmDialogAction("开始分析");
+
+    expect(wrapper.text()).toContain("该项目的分析结果已应用");
+  });
+
+  it("S4 仓库详情「重新分析」走单仓库手动增量端点（带幂等键）", async () => {
+    document.body.innerHTML = "";
+    listRepositoriesV2.mockResolvedValue({
+      items: [repo({ id: "r1" })],
+      total: 1
+    });
+    const { wrapper } = await mountView();
+    await wrapper.find('[data-testid="repo-list"] > div').trigger("click");
+
+    const reanalyze = wrapper.find('[data-testid="reanalyze-btn"]');
+    expect(reanalyze.exists()).toBe(true);
+    await reanalyze.trigger("click");
+    await flushPromises();
+
+    expect(analyzeRepository).toHaveBeenCalledWith("r1", {
+      idempotency_key: expect.any(String)
+    });
+  });
+
+  it("S4 重新分析遇 409（analysis_in_progress）→ 本地化兜底文案", async () => {
+    document.body.innerHTML = "";
+    listRepositoriesV2.mockResolvedValue({
+      items: [repo({ id: "r1" })],
+      total: 1
+    });
+    analyzeRepository.mockRejectedValue({
+      data: { error: "analysis_in_progress" },
+      message: "repository analysis is already in progress"
+    });
+    const { wrapper } = await mountView();
+    await wrapper.find('[data-testid="repo-list"] > div').trigger("click");
+
+    await wrapper.find('[data-testid="reanalyze-btn"]').trigger("click");
+    await flushPromises();
+
+    expect(analyzeRepository).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain("已有进行中的分析");
+  });
+
+  it("scope=__all__（无项目）整段隐藏分析按钮且不拉取导入状态", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: buildRoutes()
+    });
+    router.push("/project/settings/repositories");
+    await router.isReady();
+    const { wrapper } = mountShell(SettingsProjectRepositoriesView, {}, router);
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="analysis-bar"]').exists()).toBe(false);
+    expect(listImports).not.toHaveBeenCalled();
+  });
+
+  /** 直接点弹层主按钮（按 role 定位，避免与工具条同名文案混淆）。 */
+  async function clickDialogConfirm() {
+    const button = document.body.querySelector<HTMLButtonElement>(
+      '[role="alertdialog"] .ui-confirm__btn--primary'
+    );
+    expect(button, "confirm dialog primary button should exist").toBeTruthy();
+    button!.click();
+    await flushPromises();
+  }
+
+  async function selectFirstRow(
+    wrapper: Awaited<ReturnType<typeof mountView>>["wrapper"]
+  ) {
+    const checks = wrapper.findAll('[data-testid^="analysis-check-"]');
+    await checks[0]!.find("button").trigger("click");
+  }
+
+  it("S2 failed 批次复用主按钮文案「再次分析」，点击即重发（无额外 retry 按钮）", async () => {
+    document.body.innerHTML = "";
+    listRepositoriesV2.mockResolvedValue({
+      items: [repo({ id: "r1" })],
+      total: 1
+    });
+    listImports.mockResolvedValue({
+      items: [importRow("failed", 100)],
+      total: 1
+    });
+    const { wrapper } = await mountView();
+
+    const bar = wrapper.find('[data-testid="analysis-bar"]');
+    // 主按钮即「再次分析」入口：工具条内只有这一个重发按钮。
+    const retryButtons = bar
+      .findAll("button")
+      .filter(button => button.text().includes("再次分析"));
+    expect(retryButtons).toHaveLength(1);
+
+    await selectFirstRow(wrapper);
+    const start = wrapper.find('[data-testid="analysis-start"]');
+    expect(start.text()).toContain("再次分析");
+    expect(start.attributes("disabled")).toBeUndefined();
+
+    await start.trigger("click");
+    await flushPromises();
+    await clickDialogConfirm();
+
+    expect(startImport).toHaveBeenCalledTimes(1);
+    expect(startImport.mock.calls[0]![1]).toEqual(["r1"]);
+  });
+
+  it("S2 连点确认不双发（幂等键守卫），成功后清除键与选择以便下次重发", async () => {
+    document.body.innerHTML = "";
+    let release: (value: unknown) => void = () => undefined;
+    startImport.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          release = resolve;
+        })
+    );
+    listRepositoriesV2.mockResolvedValue({
+      items: [repo({ id: "r1" })],
+      total: 1
+    });
+    const { wrapper } = await mountView();
+
+    await selectFirstRow(wrapper);
+    await wrapper.find('[data-testid="analysis-start"]').trigger("click");
+    await flushPromises();
+
+    const dialogConfirm = document.body.querySelector<HTMLButtonElement>(
+      '[role="alertdialog"] .ui-confirm__btn--primary'
+    );
+    expect(dialogConfirm).toBeTruthy();
+    // 同一轮连点两次：ref 守卫只放行一次请求。
+    dialogConfirm!.click();
+    dialogConfirm!.click();
+    await flushPromises();
+    expect(startImport).toHaveBeenCalledTimes(1);
+    const firstKey = startImport.mock.calls[0]![2];
+    expect(typeof firstKey).toBe("string");
+    expect(firstKey).toBeTruthy();
+
+    release({ import_id: "imp-1", status: "queued", replayed: false });
+    await flushPromises();
+    // 成功：选择清空（按钮回到禁用态）。
+    expect(
+      wrapper.find('[data-testid="analysis-start"]').attributes("disabled")
+    ).toBeDefined();
+
+    // 键已清除 → 再选再发能发出第二次，且换用新键（不复用上一轮的键）。
+    await selectFirstRow(wrapper);
+    await wrapper.find('[data-testid="analysis-start"]').trigger("click");
+    await flushPromises();
+    await clickDialogConfirm();
+    expect(startImport).toHaveBeenCalledTimes(2);
+    expect(startImport.mock.calls[1]![2]).not.toBe(firstKey);
+  });
+
+  it("S2 无稳定错误码时不展示「（-）」占位码，透出后端 message", async () => {
+    document.body.innerHTML = "";
+    listRepositoriesV2.mockResolvedValue({
+      items: [repo({ id: "r1" })],
+      total: 1
+    });
+    startImport.mockRejectedValue(
+      new Error("Request failed with status code 500")
+    );
+    const { wrapper } = await mountView();
+
+    await selectFirstRow(wrapper);
+    await wrapper.find('[data-testid="analysis-start"]').trigger("click");
+    await flushPromises();
+    await clickDialogConfirm();
+
+    const text = wrapper.text();
+    expect(text).toContain("分析请求失败");
+    expect(text).toContain("Request failed with status code 500");
+    expect(text).not.toContain("（-）");
   });
 });

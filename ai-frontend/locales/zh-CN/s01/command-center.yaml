@@ -33,6 +33,12 @@ command-center:
       blocked: 阻塞
       not_applicable: 不适用
       undetermined: 无法判定
+    analysis:
+      start: 开始分析
+      retry: 再次分析
+      running: 分析中
+      link: 前往仓库设置
+      noVerified: 当前项目没有已验证的仓库，请先在仓库设置中接入并核验。
   healthMeta: 更新于 {time}
   healthAction: 查看指标定义
   attentionTitle: 需关注事项

@@ -1,6 +1,8 @@
 /target
 # clippy 专用 target 目录（scripts/clippy.sh 使用，与 dev 产物隔离）
 /.target-clippy/
+# 本地验收/测试临时目录（TEMP/TMP 指向、日志、独立 CARGO_TARGET_DIR）
+/.target/
 .env
 /node_modules
 /.superpowers/

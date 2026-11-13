@@ -89,3 +89,21 @@ repositories:
     followDefault: 跟随项目默认
     hint: 粘贴可读取你 Git 仓库的私钥（OpenSSH 格式，支持 ed25519 / RSA / ECDSA）。密钥加密存储且不再显示；名称即身份——同名保存替换该把，第一把自动成为项目默认。仓库可各绑一把，未绑定的用默认。
     hintConfigured: 密钥已加密保存，不再显示。同名保存将替换该把密钥。
+  analysis:
+    title: 代码分析
+    hint: 勾选已验证的仓库发起分析；分析进行中不可重复发起，失败或取消后可再次分析。
+    start: "开始分析 ({count})"
+    reanalyze: "再次分析 ({count})"
+    progress: "分析进行中：{status} · {percent}%"
+    selectLabel: 选择该仓库进行分析
+    confirmTitle: 开始代码分析
+    confirmDescription: "将对选中的 {count} 个仓库发起分析，确定继续？"
+    confirm: 开始分析
+    reanalyzeOne: 重新分析
+    error:
+      projectNotEmpty: 项目已存在需求或基线数据，无法重新发起冷启动分析。
+      alreadyApplied: 该项目的分析结果已应用，无法重新发起冷启动分析。
+      inProgress: 已有进行中的分析，请等待完成后再试。
+      noAnchor: 该仓库尚未核验或没有可用的分析锚点，请先完成核验并确认基准。
+      generic: "分析请求被拒绝（{code}）：{message}"
+      failed: "分析请求失败：{message}"

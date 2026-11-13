@@ -89,3 +89,21 @@ repositories:
     followDefault: Follow project default
     hint: Paste a private key that grants read access to your Git repositories (OpenSSH format, ed25519 / RSA / ECDSA). Keys are stored encrypted and never shown again. A key name identifies it — saving with the same name replaces that key; the first key becomes the project default. Repositories can bind a specific key, otherwise they use the default.
     hintConfigured: Keys are encrypted at rest and never displayed again. Saving with an existing name replaces that key.
+  analysis:
+    title: Code Analysis
+    hint: Select verified repositories to start analysis. A running analysis blocks new requests; failed or cancelled runs can be re-analyzed.
+    start: "Start analysis ({count})"
+    reanalyze: "Re-analyze ({count})"
+    progress: "Analysis in progress: {status} · {percent}%"
+    selectLabel: Select this repository for analysis
+    confirmTitle: Start Code Analysis
+    confirmDescription: "Start analysis for {count} selected repositories?"
+    confirm: Start Analysis
+    reanalyzeOne: Re-analyze
+    error:
+      projectNotEmpty: The project already has requirements or baselines; cold-start analysis cannot be restarted.
+      alreadyApplied: Analysis for this project has already been applied; cold-start analysis cannot be restarted.
+      inProgress: An analysis is already in progress. Please wait until it completes.
+      noAnchor: This repository is not verified or has no analysis anchor. Verify it and confirm a baseline first.
+      generic: "Analysis request rejected ({code}): {message}"
+      failed: "Analysis request failed: {message}"

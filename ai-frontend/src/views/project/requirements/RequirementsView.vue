@@ -453,30 +453,30 @@ watch(projectId, () => {
         />
 
         <div class="req-workspace-frame">
-        <div class="req-workspace">
-          <div class="req-workspace__main">
-            <RequirementsList
-              :entries="requirements"
-              :selected-id="selectedId"
-              :status-filter="statusFilter"
-              @select="onSelect"
-              @update:status-filter="onStatusFilter"
-            />
-            <RequirementDetail
-              v-if="selectedEntry"
+          <div class="req-workspace">
+            <div class="req-workspace__main">
+              <RequirementsList
+                :entries="requirements"
+                :selected-id="selectedId"
+                :status-filter="statusFilter"
+                @select="onSelect"
+                @update:status-filter="onStatusFilter"
+              />
+              <RequirementDetail
+                v-if="selectedEntry"
+                :entry="selectedEntry"
+                :editing="editing"
+                @action="onDetailAction"
+                @save="onDetailSave"
+                @cancel="editing = false"
+              />
+            </div>
+            <ContextSidePanel
               :entry="selectedEntry"
-              :editing="editing"
-              @action="onDetailAction"
-              @save="onDetailSave"
-              @cancel="editing = false"
+              :active-tab="contextTab"
+              @update:active-tab="contextTab = $event"
             />
           </div>
-          <ContextSidePanel
-            :entry="selectedEntry"
-            :active-tab="contextTab"
-            @update:active-tab="contextTab = $event"
-          />
-        </div>
         </div>
 
         <RevisionSheet v-model:open="revisionOpen" :entry="selectedEntry" />

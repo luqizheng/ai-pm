@@ -33,6 +33,12 @@ command-center:
       blocked: Blocked
       not_applicable: Not applicable
       undetermined: Undetermined
+    analysis:
+      start: Start Analysis
+      retry: Re-analyze
+      running: Analyzing
+      link: Go to Repository Settings
+      noVerified: This project has no verified repositories. Connect and verify one in repository settings first.
   healthMeta: Updated {time}
   healthAction: Metric Definitions
   attentionTitle: Needs Attention
