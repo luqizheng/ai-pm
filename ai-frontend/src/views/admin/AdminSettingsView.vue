@@ -209,43 +209,43 @@ onMounted(load);
 .admin-settings {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4, 16px);
+  gap: var(--space-4);
 }
 
 .settings-card {
-  border: 1px solid var(--border-subtle, var(--ws-border, #d0d0d0));
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  background: var(--surface-card, var(--ws-surface, #fff));
+  background: var(--surface-card);
   padding: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3, 12px);
+  gap: var(--space-3);
 }
 
 .settings-heading {
   margin: 0;
   font-size: var(--font-size-body-strong);
   font-weight: 600;
-  color: var(--text-primary, var(--ws-text, #111));
+  color: var(--text-primary);
 }
 
 .settings-desc,
 .settings-hint {
   margin: 0;
   font-size: var(--font-size-caption);
-  color: var(--text-secondary, var(--ws-text, #555));
+  color: var(--text-secondary);
 }
 
 .settings-error {
   margin: 0;
   font-size: var(--font-size-body);
-  color: var(--text-danger, #b42318);
+  color: var(--text-danger);
 }
 
 .settings-ok {
   margin: 0;
   font-size: var(--font-size-caption);
-  color: var(--text-success, #1b7a43);
+  color: var(--text-success);
 }
 
 .settings-field {
@@ -256,7 +256,7 @@ onMounted(load);
 
 .settings-field label {
   font-size: var(--font-size-caption);
-  color: var(--text-secondary, var(--ws-text, #555));
+  color: var(--text-secondary);
 }
 
 .settings-check {
@@ -264,24 +264,24 @@ onMounted(load);
   align-items: center;
   gap: var(--space-2);
   font-size: var(--font-size-body);
-  color: var(--text-secondary, var(--ws-text, #555));
+  color: var(--text-secondary);
 }
 
 .admin-actions {
   display: flex;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
 }
 
 .test-result {
   font-size: var(--font-size-caption);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  background: var(--surface-success-subtle, #e7f5ec);
-  color: var(--text-success, #1b7a43);
+  background: var(--surface-success-subtle);
+  color: var(--text-success);
 }
 
 .test-result.is-bad {
-  background: var(--surface-danger-subtle, #fdeceb);
-  color: var(--text-danger, #b42318);
+  background: var(--surface-danger-subtle);
+  color: var(--text-danger);
 }
 </style>

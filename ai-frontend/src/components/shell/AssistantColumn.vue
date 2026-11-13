@@ -232,7 +232,7 @@ const contextToggleLabel = computed(() =>
 }
 
 .workspace-chat__error {
-  color: var(--ws-danger, #f07e88);
-  font-size: var(--ws-font-size-caption);
+  color: var(--danger);
+  font-size: var(--font-size-caption);
 }
 </style>

@@ -294,7 +294,7 @@ async function onSelectProject(id: string) {
   align-items: center;
   justify-content: space-between;
   height: var(--size-control-sm);
-  padding: 0 0 0 10px;
+  padding: 0 0 0 var(--space-3);
 }
 
 .shell-sidenav__control-label {
@@ -466,10 +466,10 @@ async function onSelectProject(id: string) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 18px;
+  height: var(--size-badge-sm);
   min-width: 18px;
   margin-left: auto;
-  padding: 0 5px;
+  padding: 0 var(--space-1);
   color: var(--ws-text-secondary);
   font-family: var(--font-mono);
   font-size: var(--font-size-nano);

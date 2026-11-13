@@ -483,6 +483,22 @@
   /* 会话时间线最大宽度与消息间距 */
   --size-ai-conversation-max-width: 860px;
   --size-ai-message-gap: var(--space-4);
+
+  /* ------------------------------------------------------------------
+   * 业务视图扩展语义 token（KnowledgeView / AdminSettingsView 消费；
+   * 2026-11-13 补齐：原视图以 var(--x, #兜底) 形式引用，但当时未定义）。
+   * 全部落到已定义 --ws-* 或现有别名，保持双主题跟随，禁止裸色值。
+   * ------------------------------------------------------------------ */
+  --surface-card: var(--ws-elevated);
+  --text-danger: var(--ws-color-danger-text);
+  --text-success: var(--ws-color-success-text);
+  --text-warning: var(--ws-color-warning-text);
+  --text-on-accent: var(--accent-contrast-text);
+  /* 语义反馈浅底（深色用低饱和色调；浅色覆盖见 [data-theme="light"]） */
+  --surface-success-subtle: #18332a;
+  --surface-warning-subtle: #332b1c;
+  --surface-danger-subtle: #34222a;
+  --surface-muted: var(--ws-elevated);
 }
 
 [data-theme="light"] {
@@ -556,6 +572,13 @@
 
   /* accent 着色面（浅青灰 #E5F1EF） */
   --ws-color-accent-surface: #e5f1ef;
+
+  /* 业务视图扩展语义 token —— 浅色覆盖（反馈浅底用浅色调，卡片用纯白） */
+  --surface-card: #ffffff;
+  --surface-success-subtle: #e7f5ec;
+  --surface-warning-subtle: #fdf3e0;
+  --surface-danger-subtle: #fdeceb;
+  --surface-muted: #f2f2f2;
 
   --ws-focus-ring: 0 0 0 2px var(--ws-canvas), 0 0 0 4px var(--ws-accent);
 

@@ -692,24 +692,24 @@ watch(
 .knowledge-page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4, 16px);
+  gap: var(--space-4);
   max-width: 860px;
 }
 
 .knowledge-tabs {
   display: flex;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
 }
 
 .knowledge-tab {
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
-  color: var(--text-secondary, var(--ws-text, #333));
+  color: var(--text-secondary);
   border-radius: 0;
-  padding: 6px 14px;
+  padding: var(--space-2) var(--space-4);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 
 .knowledge-tab:hover {
@@ -717,18 +717,18 @@ watch(
 }
 
 .knowledge-tab.is-active {
-  color: var(--text-primary, var(--ws-text, #111));
+  color: var(--text-primary);
   border-bottom-color: var(--accent);
 }
 
 .knowledge-hint,
 .knowledge-error {
-  font-size: 13px;
-  color: var(--text-secondary, var(--ws-text, #333));
+  font-size: var(--font-size-body);
+  color: var(--text-secondary);
 }
 
 .knowledge-error {
-  color: var(--text-danger, #b42318);
+  color: var(--text-danger);
 }
 
 .kb-list,
@@ -738,14 +738,14 @@ watch(
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
 }
 
 .kb-row,
 .pc-row {
-  border: 1px solid var(--border-subtle, var(--ws-border, #d0d0d0));
-  border-radius: 10px;
-  background: var(--surface-card, var(--ws-surface, #fff));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
 }
 
 .kb-row.is-open {
@@ -755,9 +755,9 @@ watch(
 .kb-row-head {
   display: flex;
   align-items: center;
-  gap: var(--space-3, 12px);
+  gap: var(--space-3);
   width: 100%;
-  padding: 10px 14px;
+  padding: var(--space-3) var(--space-4);
   background: transparent;
   border: 0;
   cursor: pointer;
@@ -770,63 +770,63 @@ watch(
 
 .kb-doc-key {
   font-weight: 600;
-  font-size: 13px;
-  color: var(--text-primary, var(--ws-text, #111));
+  font-size: var(--font-size-body);
+  color: var(--text-primary);
 }
 
 .kb-meta {
   margin-left: auto;
-  font-size: 11px;
-  color: var(--text-tertiary, var(--ws-text, #777));
+  font-size: var(--font-size-micro);
+  color: var(--text-tertiary);
 }
 
 .kb-badge {
-  font-size: 11px;
+  font-size: var(--font-size-micro);
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 2px var(--space-2);
   border: 1px solid transparent;
 }
 
 .tone-ok {
-  background: var(--surface-success-subtle, #e7f5ec);
-  color: var(--text-success, #1b7a43);
+  background: var(--surface-success-subtle);
+  color: var(--text-success);
 }
 
 .tone-warn {
-  background: var(--surface-warning-subtle, #fdf3e0);
-  color: var(--text-warning, #8a5a00);
+  background: var(--surface-warning-subtle);
+  color: var(--text-warning);
 }
 
 .tone-bad {
-  background: var(--surface-danger-subtle, #fdeceb);
-  color: var(--text-danger, #b42318);
+  background: var(--surface-danger-subtle);
+  color: var(--text-danger);
 }
 
 .tone-muted {
-  background: var(--surface-muted, #f2f2f2);
-  color: var(--text-secondary, #555);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
 }
 
 .kb-detail {
-  border-top: 1px solid var(--border-subtle, var(--ws-border, #e5e5e5));
-  padding: 12px 14px;
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--space-3) var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3, 12px);
+  gap: var(--space-3);
 }
 
 .kb-detail-actions {
   display: flex;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
 }
 
 .kb-confirm {
-  background: var(--accent-subtle, var(--ws-accent, #2563eb));
-  color: var(--text-on-accent, #fff);
+  background: var(--accent-subtle);
+  color: var(--text-on-accent);
   border: 0;
-  border-radius: 8px;
-  padding: 6px 14px;
-  font-size: 13px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-body);
   cursor: pointer;
 }
 
@@ -837,69 +837,69 @@ watch(
 
 .kb-close {
   background: transparent;
-  border: 1px solid var(--border-subtle, var(--ws-border, #d0d0d0));
-  border-radius: 8px;
-  padding: 6px 14px;
-  font-size: 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-body);
   cursor: pointer;
-  color: var(--text-secondary, var(--ws-text, #333));
+  color: var(--text-secondary);
 }
 
 .kb-notice {
-  font-size: 12px;
-  color: var(--text-success, #1b7a43);
+  font-size: var(--font-size-caption);
+  color: var(--text-success);
 }
 
 .kb-revisions ul {
   list-style: none;
-  margin: 6px 0 0;
+  margin: var(--space-2) 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--text-secondary, var(--ws-text, #555));
+  gap: var(--space-1);
+  font-size: var(--font-size-caption);
+  color: var(--text-secondary);
 }
 
 .kb-revisions summary,
 .kb-content summary {
   cursor: pointer;
-  font-size: 12px;
-  color: var(--text-secondary, var(--ws-text, #555));
+  font-size: var(--font-size-caption);
+  color: var(--text-secondary);
 }
 
 .pc-row {
-  padding: 12px 14px;
+  padding: var(--space-3) var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .pc-head {
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
 }
 
 .pc-name {
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 
 .pc-type {
-  font-size: 11px;
-  color: var(--text-tertiary, #777);
+  font-size: var(--font-size-micro);
+  color: var(--text-tertiary);
 }
 
 .pc-summary,
 .pc-excerpt {
   margin: 0;
-  font-size: 12px;
-  color: var(--text-secondary, var(--ws-text, #555));
+  font-size: var(--font-size-caption);
+  color: var(--text-secondary);
 }
 
 .pc-excerpt {
-  color: var(--text-tertiary, #777);
+  color: var(--text-tertiary);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -907,37 +907,37 @@ watch(
 }
 
 .impact-panel {
-  border: 1px solid var(--border-subtle, var(--ws-border, #d0d0d0));
-  border-radius: 10px;
-  padding: 10px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
 }
 
 .impact-panel summary {
   cursor: pointer;
-  font-size: 13px;
-  color: var(--text-secondary, var(--ws-text, #555));
+  font-size: var(--font-size-body);
+  color: var(--text-secondary);
 }
 
 .impact-body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3, 12px);
-  padding-top: var(--space-3, 12px);
+  gap: var(--space-3);
+  padding-top: var(--space-3);
 }
 
 .impact-form {
   display: flex;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
 }
 
 .impact-input {
   flex: 1;
-  border: 1px solid var(--border-subtle, var(--ws-border, #d0d0d0));
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 13px;
-  background: var(--surface-card, var(--ws-surface, #fff));
-  color: var(--text-primary, var(--ws-text, #111));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-body);
+  background: var(--surface-card);
+  color: var(--text-primary);
 }
 
 .impact-path {
@@ -946,44 +946,44 @@ watch(
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 12px;
+  gap: var(--space-2);
+  font-size: var(--font-size-caption);
 }
 
 .impact-node {
   font-weight: 600;
-  color: var(--text-primary, var(--ws-text, #111));
+  color: var(--text-primary);
 }
 
 .impact-edge {
   color: var(--accent);
-  margin: 0 6px;
+  margin: 0 var(--space-2);
 }
 
 .impact-gaps {
   list-style: none;
   margin: 0;
   padding: 0;
-  font-size: 11px;
-  color: var(--text-warning, #8a5a00);
+  font-size: var(--font-size-micro);
+  color: var(--text-warning);
 }
 
 .ingest-row {
   display: flex;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
   align-items: center;
 }
 
 .ingest-file {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  border: 1px dashed var(--border-subtle, var(--ws-border, #d0d0d0));
-  border-radius: 8px;
-  padding: 6px 12px;
-  font-size: 13px;
+  gap: var(--space-2);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-body);
   cursor: pointer;
-  color: var(--text-secondary, var(--ws-text, #555));
+  color: var(--text-secondary);
 }
 
 .ingest-file input[type="file"] {

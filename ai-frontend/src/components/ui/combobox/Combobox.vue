@@ -423,12 +423,12 @@ function onSelect(value: string) {
   border-radius: var(--radius-sm);
   background: linear-gradient(
     90deg,
-    var(--surface-hover-veil, rgba(255, 255, 255, 0.04)) 0%,
+    var(--surface-hover-veil) 0%,
     var(--surface-raised) 50%,
     var(--surface-hover-veil) 100%
   );
   background-size: 200% 100%;
-  animation: ui-combobox-shimmer 1.4s ease-in-out infinite;
+  animation: ui-combobox-shimmer var(--duration-shimmer) ease-in-out infinite;
 }
 
 @keyframes ui-combobox-enter {
