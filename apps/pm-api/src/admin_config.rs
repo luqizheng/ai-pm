@@ -155,10 +155,13 @@ async fn test_embedding_config(
         )
     })?;
     let started = std::time::Instant::now();
+    // 探针超时必须短于网关转发超时（3s）：超过就会先吃网关 504，
+    // 前端拿不到结构化失败（2026-11-13 UI 冒烟：2.10 无 GPU 冷启动
+    // 触发 3s 边界）。2.5s 内出不来即按失败返回，body 仍是 200 JSON。
     let result = client
         .post(format!("{}/embeddings", endpoint.trim_end_matches('/')))
         .json(&json!({ "model": model, "input": "embedding-config-test" }))
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_millis(2500))
         .send()
         .await;
 
