@@ -1,0 +1,118 @@
+[check-prism-tokens] 违规 117 条：
+  ai-frontend/src/components/shell/AssistantColumn.vue:235 裸色值 #f07e88 —— 请改用 tokens.css 变量
+  ai-frontend/src/components/shell/SideNav.vue:297 裸 px "10px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/components/shell/SideNav.vue:469 裸 px "18px"（height）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/components/shell/SideNav.vue:472 裸 px "5px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/components/ui/combobox/Combobox.vue:426 裸色值 rgba( —— 请改用 tokens.css 变量
+  ai-frontend/src/components/ui/combobox/Combobox.vue:431 裸时长 1.4s（animation）—— 请改用 tokens.css --duration-* token
+  ai-frontend/src/views/admin/AdminSettingsView.vue:216 裸色值 #d0d0d0 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/admin/AdminSettingsView.vue:218 引用了未定义变量 --surface-card
+  ai-frontend/src/views/admin/AdminSettingsView.vue:218 裸色值 #fff —— 请改用 tokens.css 变量
+  ai-frontend/src/views/admin/AdminSettingsView.vue:229 裸色值 #111 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/admin/AdminSettingsView.vue:236 裸色值 #555 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/admin/AdminSettingsView.vue:242 引用了未定义变量 --text-danger
+  ai-frontend/src/views/admin/AdminSettingsView.vue:242 裸色值 #b42318 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/admin/AdminSettingsView.vue:248 引用了未定义变量 --text-success
+  ai-frontend/src/views/admin/AdminSettingsView.vue:248 裸色值 #1b7a43 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/admin/AdminSettingsView.vue:259 裸色值 #555 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/admin/AdminSettingsView.vue:267 裸色值 #555 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/admin/AdminSettingsView.vue:279 引用了未定义变量 --surface-success-subtle
+  ai-frontend/src/views/admin/AdminSettingsView.vue:279 裸色值 #e7f5ec —— 请改用 tokens.css 变量
+  ai-frontend/src/views/admin/AdminSettingsView.vue:280 引用了未定义变量 --text-success
+  ai-frontend/src/views/admin/AdminSettingsView.vue:280 裸色值 #1b7a43 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/admin/AdminSettingsView.vue:284 引用了未定义变量 --surface-danger-subtle
+  ai-frontend/src/views/admin/AdminSettingsView.vue:284 裸色值 #fdeceb —— 请改用 tokens.css 变量
+  ai-frontend/src/views/admin/AdminSettingsView.vue:285 引用了未定义变量 --text-danger
+  ai-frontend/src/views/admin/AdminSettingsView.vue:285 裸色值 #b42318 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:708 裸色值 #333 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:710 裸 px "6px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:710 裸 px "14px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:712 裸 px "13px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:720 裸色值 #111 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:726 裸 px "13px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:727 裸色值 #333 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:731 引用了未定义变量 --text-danger
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:731 裸色值 #b42318 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:746 裸色值 #d0d0d0 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:748 引用了未定义变量 --surface-card
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:748 裸色值 #fff —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:760 裸 px "10px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:760 裸 px "14px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:773 裸 px "13px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:774 裸色值 #111 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:779 裸 px "11px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:780 裸色值 #777 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:784 裸 px "11px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:786 裸 px "8px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:791 引用了未定义变量 --surface-success-subtle
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:791 裸色值 #e7f5ec —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:792 引用了未定义变量 --text-success
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:792 裸色值 #1b7a43 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:796 引用了未定义变量 --surface-warning-subtle
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:796 裸色值 #fdf3e0 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:797 引用了未定义变量 --text-warning
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:797 裸色值 #8a5a00 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:801 引用了未定义变量 --surface-danger-subtle
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:801 裸色值 #fdeceb —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:802 引用了未定义变量 --text-danger
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:802 裸色值 #b42318 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:806 引用了未定义变量 --surface-muted
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:806 裸色值 #f2f2f2 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:807 裸色值 #555 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:811 裸色值 #e5e5e5 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:812 裸 px "12px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:812 裸 px "14px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:824 裸色值 #2563eb —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:825 引用了未定义变量 --text-on-accent
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:825 裸色值 #fff —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:828 裸 px "6px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:828 裸 px "14px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:829 裸 px "13px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:840 裸色值 #d0d0d0 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:842 裸 px "6px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:842 裸 px "14px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:843 裸 px "13px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:845 裸色值 #333 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:849 裸 px "12px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:850 引用了未定义变量 --text-success
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:850 裸色值 #1b7a43 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:855 裸 px "6px"（margin）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:859 裸 px "4px"（gap）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:860 裸 px "12px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:861 裸色值 #555 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:867 裸 px "12px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:868 裸色值 #555 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:872 裸 px "12px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:872 裸 px "14px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:875 裸 px "6px"（gap）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:886 裸 px "13px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:890 裸 px "11px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:891 裸色值 #777 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:897 裸 px "12px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:898 裸色值 #555 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:902 裸色值 #777 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:910 裸色值 #d0d0d0 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:912 裸 px "10px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:912 裸 px "14px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:917 裸 px "13px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:918 裸色值 #555 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:935 裸色值 #d0d0d0 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:937 裸 px "6px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:937 裸 px "10px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:938 裸 px "13px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:939 引用了未定义变量 --surface-card
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:939 裸色值 #fff —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:940 裸色值 #111 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:949 裸 px "6px"（gap）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:950 裸 px "12px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:955 裸色值 #111 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:960 裸 px "6px"（margin）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:967 裸 px "11px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:968 引用了未定义变量 --text-warning
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:968 裸色值 #8a5a00 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:980 裸 px "8px"（gap）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:981 裸色值 #d0d0d0 —— 请改用 tokens.css 变量
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:983 裸 px "6px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:983 裸 px "12px"（padding）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:984 裸 px "13px"（font-size）—— 请改用 tokens.css 尺寸 token
+  ai-frontend/src/views/project/knowledge/KnowledgeView.vue:986 裸色值 #555 —— 请改用 tokens.css 变量
