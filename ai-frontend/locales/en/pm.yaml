@@ -351,6 +351,7 @@ requirementDetail:
   notFoundDesc: This requirement does not exist or has been removed.
   backToList: Back to requirements
 requirementReview:
+  entryLabel: Requirement Review
   refresh: Refresh
   errorTitle: Failed to load
   noProjectTitle: Select a project first

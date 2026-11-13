@@ -351,6 +351,7 @@ requirementDetail:
   notFoundDesc: 该需求不存在或已被移除。
   backToList: 返回需求列表
 requirementReview:
+  entryLabel: 需求评审
   refresh: 刷新
   errorTitle: 加载失败
   noProjectTitle: 请先选择项目

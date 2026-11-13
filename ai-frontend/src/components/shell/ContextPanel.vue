@@ -300,10 +300,10 @@ const historyEvents = computed(() =>
               </span>
             </span>
           </div>
+          <!-- 描述为空是合法状态（项目可以不填简介），不得回落成
+               「正在切换项目…」——那会把静态空数据误报成切换中。 -->
           <p class="shell-context__description">
-            {{
-              currentProject?.description ?? t("shell.app.project.switching")
-            }}
+            {{ currentProject?.description || "—" }}
           </p>
         </section>
 

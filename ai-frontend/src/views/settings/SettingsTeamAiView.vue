@@ -456,31 +456,33 @@ onMounted(load);
       {{ t("settings.team.ai.empty") }}
     </p>
 
-    <div v-else class="tp-grid" data-test="provider-grid">
-      <TeamProviderCard
-        v-for="row in providers"
-        :key="row.id"
-        :provider-id="row.id"
-        :label="row.name"
-        :provider-type="row.provider_type"
-        :status="row.status"
-        :status-label="statusLabel(row.status)"
-        :has-credential="row.has_credential"
-        :credential-hint="row.credential_hint"
-        :last-tested-at="row.last_tested_at"
-        :form="cardFormOf(row)"
-        :saving="saving === row.id"
-        :testing="testing === row.id"
-        :test-message="testMessages[row.id]?.text ?? null"
-        :test-ok="testMessages[row.id]?.ok ?? false"
-        @save="form => save(row.id, form)"
-        @replace-key="key => replaceKey(row.id, key)"
-        @test="test(row.id)"
-        @enable="changeStatus(row.id, 'enable')"
-        @disable="changeStatus(row.id, 'disable')"
-        @archive="changeStatus(row.id, 'archive')"
-        @remove="remove(row.id)"
-      />
+    <div v-else class="tp-grid-frame">
+      <div class="tp-grid" data-test="provider-grid">
+        <TeamProviderCard
+          v-for="row in providers"
+          :key="row.id"
+          :provider-id="row.id"
+          :label="row.name"
+          :provider-type="row.provider_type"
+          :status="row.status"
+          :status-label="statusLabel(row.status)"
+          :has-credential="row.has_credential"
+          :credential-hint="row.credential_hint"
+          :last-tested-at="row.last_tested_at"
+          :form="cardFormOf(row)"
+          :saving="saving === row.id"
+          :testing="testing === row.id"
+          :test-message="testMessages[row.id]?.text ?? null"
+          :test-ok="testMessages[row.id]?.ok ?? false"
+          @save="form => save(row.id, form)"
+          @replace-key="key => replaceKey(row.id, key)"
+          @test="test(row.id)"
+          @enable="changeStatus(row.id, 'enable')"
+          @disable="changeStatus(row.id, 'disable')"
+          @archive="changeStatus(row.id, 'archive')"
+          @remove="remove(row.id)"
+        />
+      </div>
     </div>
   </PageFrame>
 </template>
@@ -548,8 +550,22 @@ onMounted(load);
   gap: var(--space-4);
 }
 
-@media (max-width: 880px) {
-  .tp-create__grid,
+/* 断点按容器宽而非 viewport：workspace 主区列（1280 视口下仅 ~314px）
+   永远到不了 880px 的 viewport 断点，三列表单被压破（2026-11-13 冒烟：
+   模型选择器被 API Key 列遮挡）。容器查询查不到自身，故声明在父级。 */
+.tp-create,
+.tp-grid-frame {
+  container-type: inline-size;
+  min-width: 0;
+}
+
+@container (max-width: 880px) {
+  .tp-create__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@container (max-width: 640px) {
   .tp-grid {
     grid-template-columns: 1fr;
   }
