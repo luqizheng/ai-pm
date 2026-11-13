@@ -108,6 +108,10 @@ services:
     depends_on:
       rustfs:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
     networks:
       - superpowers
 
@@ -143,6 +147,12 @@ services:
     depends_on:
       token-service:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
     networks:
       - superpowers
 
@@ -165,6 +175,9 @@ services:
       SERVICE_NAME: "token-service"
       OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
       TOKEN_DATABASE_URL: "${DATABASE_URL}"
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - superpowers
 
@@ -194,6 +207,13 @@ services:
       CONFIG_PATH: "/etc/iam-service/config.yaml"
       OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
       SERVICE_NAME: "iam-service"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
     networks:
       - superpowers
 
@@ -228,6 +248,13 @@ services:
       timeout: 3s
       retries: 5
       start_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
     networks:
       - superpowers
 
@@ -249,6 +276,9 @@ services:
       RUST_LOG: "info"
       SERVICE_NAME: "prue_backend"
       SERVER_PORT: "8087"
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - superpowers
 
@@ -279,6 +309,15 @@ services:
       REDIS_URL: "redis://${REDIS_HOST:-redis}:${REDIS_PORT:-6379}"
       OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}"
       SERVICE_NAME: "notification-service"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
     networks:
       - superpowers
 
@@ -312,6 +351,13 @@ services:
       timeout: 3s
       retries: 5
       start_period: 20s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
     networks:
       - superpowers
 
@@ -335,6 +381,15 @@ services:
       RUST_LOG: "info"
       SERVICE_NAME: "audit-service"
       SERVER_PORT: "8084"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
     networks:
       - superpowers
 

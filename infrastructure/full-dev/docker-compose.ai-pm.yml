@@ -90,6 +90,8 @@ services:
         condition: service_healthy
       token-service:
         condition: service_healthy
+      consul:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - superpowers
@@ -155,6 +157,9 @@ services:
     ports:
       - "8092:80"
     restart: unless-stopped
+    depends_on:
+      api-gateway:
+        condition: service_started
     networks:
       - superpowers
 
