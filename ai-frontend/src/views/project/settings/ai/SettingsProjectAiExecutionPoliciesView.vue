@@ -158,7 +158,7 @@ function capabilityLabel(value: boolean): string {
 }
 
 function defaultsLabel(
-  key: "auto_accept" | "auto_merge" | "auto_publish_knowledge"
+  key: "autoAccept" | "autoMerge" | "autoPublishKnowledge"
 ): string {
   return t(`aiTeam.executionPolicies.defaultsLabel.${key}`);
 }
@@ -167,9 +167,9 @@ const capabilityDefaults = computed(() => {
   const defaults = policies.value?.composition.defaults;
   if (!defaults) return [];
   return [
-    { key: "auto_accept", value: defaults.auto_accept },
-    { key: "auto_merge", value: defaults.auto_merge },
-    { key: "auto_publish_knowledge", value: defaults.auto_publish_knowledge }
+    { key: "autoAccept", value: defaults.auto_accept },
+    { key: "autoMerge", value: defaults.auto_merge },
+    { key: "autoPublishKnowledge", value: defaults.auto_publish_knowledge }
   ] as const;
 });
 
