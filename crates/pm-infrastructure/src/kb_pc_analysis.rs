@@ -186,18 +186,21 @@ async fn project_ssh_key_path(
     pool: &PgPool,
     repository_id: Uuid,
 ) -> Result<Option<git_access::KeyMaterial>, AnalysisError> {
-    let project_id: Uuid =
-        sqlx::query_scalar("SELECT project_id FROM integration.project_repository WHERE id = $1")
-            .bind(repository_id)
-            .fetch_one(pool)
-            .await?;
-    let ciphertext: Option<Vec<u8>> = sqlx::query_scalar(
-        "SELECT private_key_ciphertext FROM integration.project_ssh_key \
-         WHERE project_id = $1 AND status = 'active'",
+    let (project_id, bound_key): (Uuid, Option<Uuid>) = sqlx::query_as(
+        "SELECT project_id, ssh_key_id FROM integration.project_repository WHERE id = $1",
     )
-    .bind(project_id)
-    .fetch_optional(pool)
+    .bind(repository_id)
+    .fetch_one(pool)
     .await?;
+    // 迁移 0022：绑定把优先，未绑定回退项目默认/最新 active。
+    let ciphertext = match bound_key {
+        Some(key_id) => pm_application::repository::key_ciphertext_by_id(pool, project_id, key_id)
+            .await
+            .map_err(|e| AnalysisError::Secret(e.to_string()))?,
+        None => pm_application::repository::fallback_key_ciphertext(pool, project_id)
+            .await
+            .map_err(|e| AnalysisError::Secret(e.to_string()))?,
+    };
     let Some(bytes) = ciphertext else {
         return Ok(None);
     };

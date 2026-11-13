@@ -128,13 +128,14 @@ async fn install_ssh_key(pool: &PgPool, project_id: Uuid) -> Result<(), String> 
     sqlx::query(
         "INSERT INTO integration.project_ssh_key \
          (project_id, label, key_type, public_key, private_key_ciphertext, fingerprint, \
-          cipher_suite, status, created_by, tenant_id) \
-         VALUES ($1, 'e2e-local', 'ed25519', $2, $3, $4, 'aes256gcm-v1', 'active', \
+          cipher_suite, is_default, status, created_by, tenant_id) \
+         VALUES ($1, 'e2e-local', 'ed25519', $2, $3, $4, 'aes256gcm-v1', true, 'active', \
                  (SELECT principal_id FROM core.project_member \
                    WHERE project_id = $1 AND role = 'owner' LIMIT 1), \
                  (SELECT tenant_id FROM core.project WHERE id = $1)) \
-         ON CONFLICT (project_id) DO UPDATE SET \
+         ON CONFLICT (project_id, label) DO UPDATE SET \
              private_key_ciphertext = EXCLUDED.private_key_ciphertext, \
+             is_default = true, \
              status = 'active', revoked_at = NULL",
     )
     .bind(project_id)
@@ -146,7 +147,8 @@ async fn install_ssh_key(pool: &PgPool, project_id: Uuid) -> Result<(), String> 
     .map_err(|e| format!("insert ssh key failed: {e}"))?;
     // 立即验证信封可解——证明注入的密文确实是平台能读的格式。
     let stored: Vec<u8> = sqlx::query_scalar(
-        "SELECT private_key_ciphertext FROM integration.project_ssh_key WHERE project_id = $1",
+        "SELECT private_key_ciphertext FROM integration.project_ssh_key \
+         WHERE project_id = $1 ORDER BY is_default DESC, created_at DESC LIMIT 1",
     )
     .bind(project_id)
     .fetch_one(pool)

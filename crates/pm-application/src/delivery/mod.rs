@@ -539,14 +539,19 @@ pub async fn submit_delivery_with(
                 continue;
             }
             let submitted = submitted.expect("writable repository reported above");
+            // 迁移 0022：绑定把优先，未绑定（或绑定已失效）回退项目默认/最新 active。
             let row: Option<(String, Option<Vec<u8>>)> = sqlx::query_as(
-                "SELECT pr.url, k.private_key_ciphertext \
+                "SELECT pr.url, COALESCE(bound.private_key_ciphertext, fb.private_key_ciphertext) \
                    FROM integration.project_repository pr \
-                   LEFT JOIN integration.project_ssh_key k \
-                     ON k.project_id = pr.project_id AND k.revoked_at IS NULL \
-                  WHERE pr.id = $1 AND pr.project_id = $2 \
-                  ORDER BY k.created_at DESC NULLS LAST \
-                  LIMIT 1",
+                   LEFT JOIN integration.project_ssh_key bound \
+                     ON bound.id = pr.ssh_key_id AND bound.status = 'active' \
+                   LEFT JOIN LATERAL (\
+                     SELECT k.private_key_ciphertext \
+                       FROM integration.project_ssh_key k \
+                      WHERE k.project_id = pr.project_id AND k.status = 'active' \
+                      ORDER BY k.is_default DESC, k.created_at DESC LIMIT 1\
+                   ) fb ON pr.ssh_key_id IS NULL \
+                  WHERE pr.id = $1 AND pr.project_id = $2",
             )
             .bind(repo.repository_id)
             .bind(request.project_id)

@@ -74,11 +74,18 @@ repositories:
     sourceGenerated: 平台生成
     copyPublicKey: 复制公钥
     copied: 已复制
-    revoke: 吊销密钥
+    revoke: 吊销
     revokeArmed: 确认吊销？
+    nameLabel: 密钥名称
+    namePlaceholder: 如 github-main
+    badgeDefault: 默认
+    badgeRevoked: 已吊销
+    listEmpty: 项目还没有密钥，在下方粘贴导入。
     inputLabel: 粘贴私钥
     fingerprint: 指纹
     publicKey: 公钥
-    submit: 保存
-    hint: 粘贴可读取你 Git 仓库的私钥（OpenSSH 格式，支持 ed25519 / RSA / ECDSA）。私钥加密存储且不再显示；保存即替换现有密钥。仅对 SSH 地址（ssh:// 或 scp 形式）生效，Git 服务端无需额外配置。
-    hintConfigured: 私钥已加密保存，不再显示。再次保存将替换现有密钥。
+    submit: 保存密钥
+    bindLabel: SSH 密钥
+    followDefault: 跟随项目默认
+    hint: 粘贴可读取你 Git 仓库的私钥（OpenSSH 格式，支持 ed25519 / RSA / ECDSA）。密钥加密存储且不再显示；名称即身份——同名保存替换该把，第一把自动成为项目默认。仓库可各绑一把，未绑定的用默认。
+    hintConfigured: 密钥已加密保存，不再显示。同名保存将替换该把密钥。

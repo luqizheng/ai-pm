@@ -27,10 +27,10 @@ import {
   verifyRepositoryV2,
   type RepositoryV2
 } from "@/api/initialization";
-import { HttpError } from "@digua/http";
 import {
-  getSshKey,
+  bindRepositoryKey,
   importSshKey,
+  listSshKeys,
   revokeSshKey as revokeSshKeyApi
 } from "@/api/repositories";
 import type { SshKey } from "@/api/types";
@@ -150,56 +150,65 @@ watch(selectedId, () => {
   confirmingArchiveId.value = "";
 });
 
-/* ── SSH 私钥（项目级一项目一把；粘贴导入 = 自有 Git 服务器的接入凭据，私钥只进不出） ── */
-const sshKey = ref<SshKey | null>(null);
+/* ── SSH 私钥（迁移 0022 多把：按名称管理，仓库可各绑一把；未绑定回退默认把） ── */
+const sshKeys = ref<SshKey[]>([]);
+const sshKeyLabel = ref("");
 const sshKeyInput = ref("");
-const confirmingRevoke = ref(false);
-const copied = ref(false);
+const confirmingRevokeKeyId = ref("");
+const copiedKeyId = ref("");
 
-async function loadSshKey() {
+const activeSshKeys = computed(() =>
+  sshKeys.value.filter(key => key.status === "active")
+);
+
+async function loadSshKeys() {
   if (!projectId.value) return;
   try {
-    sshKey.value = await getSshKey(projectId.value);
-  } catch (error) {
-    // 未配置 → 404 视为无密钥；其余错误不打断页面（状态按未配置显示）。
-    if (error instanceof HttpError && error.status === 404) {
-      sshKey.value = null;
-    }
+    const page = await listSshKeys(projectId.value);
+    sshKeys.value = page.items;
+  } catch {
+    sshKeys.value = [];
   }
 }
 
 function submitSshKey() {
   const value = sshKeyInput.value.trim();
-  if (!projectId.value || !value) return;
+  const label = sshKeyLabel.value.trim();
+  if (!projectId.value || !value || !label) return;
   void run("ssh-import", async () => {
-    sshKey.value = await importSshKey(projectId.value, value);
+    await importSshKey(projectId.value, value, label);
     sshKeyInput.value = "";
-    confirmingRevoke.value = false;
+    sshKeyLabel.value = "";
+    confirmingRevokeKeyId.value = "";
   });
 }
 
-/** 两段式吊销（同软解绑：第一击武装、第二击执行；409 key_in_use 原样展示）。 */
-function onRevokeKey() {
-  if (!confirmingRevoke.value) {
-    confirmingRevoke.value = true;
+/** 两段式吊销（按 key；409 key_in_use 错误原样展示）。 */
+function onRevokeKey(key: SshKey) {
+  if (confirmingRevokeKeyId.value !== key.id) {
+    confirmingRevokeKeyId.value = key.id;
     return;
   }
-  confirmingRevoke.value = false;
-  if (!projectId.value) return;
-  void run("ssh-revoke", async () => {
-    await revokeSshKeyApi(projectId.value);
-    sshKey.value = null;
+  confirmingRevokeKeyId.value = "";
+  void run(`ssh-revoke-${key.id}`, async () => {
+    await revokeSshKeyApi(key.id);
   });
 }
 
-function copyPublicKey() {
-  if (!sshKey.value) return;
-  void navigator.clipboard.writeText(sshKey.value.public_key).then(() => {
-    copied.value = true;
+function copyPublicKey(key: SshKey) {
+  void navigator.clipboard.writeText(key.public_key).then(() => {
+    copiedKeyId.value = key.id;
     window.setTimeout(() => {
-      copied.value = false;
+      if (copiedKeyId.value === key.id) copiedKeyId.value = "";
     }, 2000);
   });
+}
+
+/** 仓库绑定/解绑 key（详情面板下拉；空串 = 跟随项目默认）。 */
+function changeKeyBinding(row: RepositoryV2, value: string) {
+  void run(`bind-${row.id}`, () =>
+    bindRepositoryKey(row.id, value === "" ? null : value)
+  );
 }
 
 async function load() {
@@ -209,7 +218,7 @@ async function load() {
     if (!projectId.value) return;
     const page = await listRepositoriesV2(projectId.value);
     repositories.value = page.items;
-    void loadSshKey();
+    void loadSshKeys();
   } catch (error) {
     errorMessage.value =
       error instanceof Error ? error.message : String(error ?? "");
@@ -346,72 +355,111 @@ onMounted(load);
         {{ errorMessage }}
       </Alert>
 
-      <!-- SSH 私钥（项目级一项目一把）：粘贴自有私钥后平台即可读取该 Git 服务器的
-           仓库（§3.2.2 裁决：接入走 URL + 项目 SSH Key；OAuth 不可用 G-04 挂账）。
-           私钥只进不出——响应与回显只含公钥与指纹；保存即覆盖替换。 -->
+      <!-- SSH 私钥（迁移 0022 多把）：按名称管理，仓库在详情面板各绑一把；
+           未绑定的仓库回退项目默认把。私钥只进不出——只含公钥与指纹回显。 -->
       <section class="rm-panel" data-testid="ssh-key-panel">
         <header class="rm-ssh__head">
           <h3 class="rm-panel__title">
             {{ t("s01.repositories.ssh.title") }}
           </h3>
           <Badge
-            :variant="sshKey ? 'success' : 'warning'"
+            :variant="activeSshKeys.length > 0 ? 'success' : 'warning'"
             size="sm"
             data-testid="ssh-key-status"
           >
             {{
-              sshKey
+              activeSshKeys.length > 0
                 ? t("s01.repositories.ssh.statusConfigured")
                 : t("s01.repositories.ssh.statusNone")
             }}
           </Badge>
-          <Badge v-if="sshKey" variant="neutral" size="sm">
-            {{
-              sshKey.label === "imported"
-                ? t("s01.repositories.ssh.sourceImported")
-                : t("s01.repositories.ssh.sourceGenerated")
-            }}
-          </Badge>
         </header>
 
-        <div
-          v-if="sshKey"
-          class="rm-ssh__material"
-          data-testid="ssh-key-material"
+        <p
+          v-if="sshKeys.length === 0"
+          class="rm-hint"
+          data-testid="ssh-key-empty"
         >
-          <div class="rm-ssh__line">
-            <span class="rm-ssh__label">
-              {{ t("s01.repositories.ssh.fingerprint") }}
-            </span>
-            <code class="rm-mono" data-testid="ssh-key-fingerprint">
-              {{ sshKey.fingerprint }}
-            </code>
+          {{ t("s01.repositories.ssh.listEmpty") }}
+        </p>
+        <div v-else class="rm-ssh__list" data-testid="ssh-key-list">
+          <div
+            v-for="key in sshKeys"
+            :key="key.id"
+            class="rm-ssh__item"
+            :class="{ 'is-revoked': key.status === 'revoked' }"
+            data-testid="ssh-key-item"
+          >
+            <div class="rm-ssh__line">
+              <span class="rm-ssh__name">
+                {{ key.label }}
+                <Badge v-if="key.is_default" variant="accent" size="sm">
+                  {{ t("s01.repositories.ssh.badgeDefault") }}
+                </Badge>
+                <Badge
+                  v-if="key.status === 'revoked'"
+                  variant="neutral"
+                  size="sm"
+                >
+                  {{ t("s01.repositories.ssh.badgeRevoked") }}
+                </Badge>
+              </span>
+            </div>
+            <div class="rm-ssh__line">
+              <span class="rm-ssh__label">
+                {{ t("s01.repositories.ssh.fingerprint") }}
+              </span>
+              <code class="rm-mono">
+                {{ key.fingerprint }}
+              </code>
+            </div>
+            <div class="rm-ssh__line">
+              <span class="rm-ssh__label">
+                {{ t("s01.repositories.ssh.publicKey") }}
+              </span>
+              <code class="rm-mono rm-ssh__pub" :title="key.public_key">
+                {{ key.public_key }}
+              </code>
+              <Button
+                v-if="key.status === 'active'"
+                variant="ghost"
+                size="sm"
+                @click="copyPublicKey(key)"
+              >
+                {{
+                  copiedKeyId === key.id
+                    ? t("s01.repositories.ssh.copied")
+                    : t("s01.repositories.ssh.copyPublicKey")
+                }}
+              </Button>
+              <Button
+                v-if="key.status === 'active'"
+                variant="ghost"
+                size="sm"
+                :class="{ 'is-confirming': confirmingRevokeKeyId === key.id }"
+                :disabled="busy === `ssh-revoke-${key.id}`"
+                @click="onRevokeKey(key)"
+              >
+                {{
+                  confirmingRevokeKeyId === key.id
+                    ? t("s01.repositories.ssh.revokeArmed")
+                    : t("s01.repositories.ssh.revoke")
+                }}
+              </Button>
+            </div>
           </div>
-          <div class="rm-ssh__line">
-            <span class="rm-ssh__label">
-              {{ t("s01.repositories.ssh.publicKey") }}
-            </span>
-            <code class="rm-mono rm-ssh__pub" :title="sshKey.public_key">
-              {{ sshKey.public_key }}
-            </code>
-            <Button
-              variant="ghost"
-              size="sm"
-              data-testid="ssh-key-copy"
-              @click="copyPublicKey"
-            >
-              {{
-                copied
-                  ? t("s01.repositories.ssh.copied")
-                  : t("s01.repositories.ssh.copyPublicKey")
-              }}
-            </Button>
-          </div>
-          <p class="rm-hint">
-            {{ t("s01.repositories.ssh.hintConfigured") }}
-          </p>
         </div>
 
+        <label class="rm-field">
+          {{ t("s01.repositories.ssh.nameLabel") }}
+          <input
+            v-model="sshKeyLabel"
+            data-testid="ssh-key-name"
+            class="rm-input"
+            type="text"
+            :placeholder="t('s01.repositories.ssh.namePlaceholder')"
+          />
+        </label>
         <label class="rm-field">
           {{ t("s01.repositories.ssh.inputLabel") }}
           <textarea
@@ -431,26 +479,15 @@ onMounted(load);
           <Button
             variant="primary"
             size="sm"
-            :disabled="busy === 'ssh-import' || !sshKeyInput.trim()"
+            :disabled="
+              busy === 'ssh-import' ||
+              !sshKeyInput.trim() ||
+              !sshKeyLabel.trim()
+            "
             data-testid="ssh-key-submit"
             @click="submitSshKey"
           >
             {{ t("s01.repositories.ssh.submit") }}
-          </Button>
-          <Button
-            v-if="sshKey"
-            variant="ghost"
-            size="sm"
-            :class="{ 'is-confirming': confirmingRevoke }"
-            :disabled="busy === 'ssh-revoke'"
-            data-testid="ssh-key-revoke"
-            @click="onRevokeKey"
-          >
-            {{
-              confirmingRevoke
-                ? t("s01.repositories.ssh.revokeArmed")
-                : t("s01.repositories.ssh.revoke")
-            }}
           </Button>
         </div>
       </section>
@@ -705,6 +742,38 @@ onMounted(load);
                 >
                   <option v-for="role in roleOptions" :key="role" :value="role">
                     {{ t(`s01.repositories.role.${role}`) }}
+                  </option>
+                </select>
+              </dd>
+            </div>
+            <div class="rm-kv__row">
+              <dt>{{ t("s01.repositories.ssh.bindLabel") }}</dt>
+              <dd>
+                <select
+                  :value="selected.ssh_key_id ?? ''"
+                  data-testid="bind-key-select"
+                  class="rm-input rm-input--compact"
+                  :disabled="busy === `bind-${selected.id}`"
+                  @change="
+                    changeKeyBinding(
+                      selected!,
+                      ($event.target as HTMLSelectElement).value
+                    )
+                  "
+                >
+                  <option value="">
+                    {{ t("s01.repositories.ssh.followDefault") }}
+                  </option>
+                  <option
+                    v-for="key in activeSshKeys"
+                    :key="key.id"
+                    :value="key.id"
+                  >
+                    {{
+                      key.is_default
+                        ? `${key.label} · ${t("s01.repositories.ssh.badgeDefault")}`
+                        : key.label
+                    }}
                   </option>
                 </select>
               </dd>
@@ -1171,14 +1240,34 @@ onMounted(load);
   flex-wrap: wrap;
 }
 
-.rm-ssh__material {
+.rm-ssh__list {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+.rm-ssh__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
   padding: var(--space-3);
   background: var(--surface-sunken);
   border: 1px solid var(--ws-border);
   border-radius: var(--radius-sm);
+}
+
+.rm-ssh__item.is-revoked {
+  opacity: 0.6;
+}
+
+.rm-ssh__name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ws-text-primary);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  font-weight: var(--weight-semibold);
 }
 
 .rm-ssh__line {

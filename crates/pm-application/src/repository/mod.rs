@@ -27,6 +27,8 @@ const MAX_NAME_LEN: usize = 120;
 const MAX_BRANCH_LEN: usize = 200;
 const MAX_COMMIT_SHA_LEN: usize = 64;
 const MAX_DESCRIPTION_LEN: usize = 1000;
+/// SSH key 名称（label 即身份：同名导入 = 替换该把）。
+const MAX_KEY_LABEL_LEN: usize = 64;
 
 mod repo;
 mod ssh_key;
@@ -149,14 +151,17 @@ pub struct RepositoryRow {
     pub updated_at: DateTime<Utc>,
 }
 
-/// 对外只暴露公钥与指纹；私钥密文不出库。
+/// 对外只暴露公钥与指纹；私钥密文不出库。多把 key（迁移 0022）：
+/// `id` 供仓库绑定引用，`is_default` = 未绑定仓库的回退目标。
 #[derive(Debug, Clone, Serialize)]
 pub struct SshKeyView {
+    pub id: Uuid,
     pub project_id: Uuid,
     pub label: String,
     pub public_key: String,
     pub fingerprint: String,
     pub status: String,
+    pub is_default: bool,
     pub created_at: DateTime<Utc>,
 }
 

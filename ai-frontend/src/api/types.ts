@@ -152,13 +152,16 @@ export interface Repository {
   updated_at: string;
 }
 
-/** integration.project_ssh_key（0008/0009）：只回公钥与指纹，私钥永不回显 */
+/** integration.project_ssh_key（迁移 0022 多把模型）：只回公钥与指纹，私钥永不回显。
+ * `id` 供仓库绑定引用；`is_default` = 未绑定仓库的回退目标（每项目至多一把）。 */
 export interface SshKey {
+  id: string;
   project_id: string;
   label: string;
   public_key: string;
   fingerprint: string;
   status: "active" | "revoked";
+  is_default: boolean;
   created_at: string;
 }
 

@@ -176,9 +176,10 @@ pub use repo_access::{
     snapshot_allows, RepoAccessError, RepoAccessSnapshot,
 };
 pub use repository::{
-    archive_repository, create_repository, delete_repository, delete_ssh_key, ensure_ssh_key,
-    generate_ssh_key, get_ssh_key, list_repositories, list_ssh_keys, open_ssh_private_key,
-    revoke_ssh_key, update_repository, validate_git_url, verify_repository,
+    archive_repository, bind_repository_ssh_key, create_repository, delete_repository,
+    delete_ssh_key, ensure_ssh_key, fallback_key_ciphertext, generate_ssh_key, import_ssh_key,
+    key_ciphertext_by_id, list_repositories, list_ssh_keys, open_ssh_private_key, revoke_ssh_key,
+    ssh_key_project_id, update_repository, validate_git_url, verify_repository,
     CreateRepositoryRequest, GitUrl, RepositoryError, RepositoryRow, SshKeyView,
     UpdateRepositoryRequest, VerifyOutcome, REPOSITORY_ROLES,
 };

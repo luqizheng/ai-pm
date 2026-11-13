@@ -326,20 +326,24 @@ async fn ssh_key_never_leaks_private_material(pool: PgPool) {
     with_secret();
     let app = router(pool.clone());
     let project_id = seed_project(&pool, "REPO-3").await;
-    let uri = format!("/v1/pm/projects/{project_id}/ssh-key");
+    let keys_uri = format!("/v1/pm/projects/{project_id}/ssh-keys");
 
-    // 未生成时 404
-    let (status, _) = body_json(app.clone().oneshot(get(&uri)).await.unwrap()).await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
+    // 未生成时列表为空
+    let (status, listed) = body_json(app.clone().oneshot(get(&keys_uri)).await.unwrap()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(listed["total"], 0);
 
     let (status, key) = body_json(
         app.clone()
-            .oneshot(json_request("POST", &uri, json!({})))
+            .oneshot(json_request("POST", &keys_uri, json!({})))
             .await
             .unwrap(),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "body: {key}");
+    assert_eq!(key["label"], "default");
+    assert_eq!(key["is_default"], true);
+    let key_id = key["id"].as_str().unwrap().to_string();
     let public_key = key["public_key"].as_str().unwrap();
     assert!(public_key.starts_with("ssh-ed25519 "), "{public_key}");
     assert!(key["fingerprint"].as_str().unwrap().starts_with("SHA256:"));
@@ -349,9 +353,9 @@ async fn ssh_key_never_leaks_private_material(pool: PgPool) {
 
     // 库里只有密文，且不等于明文私钥
     let (ciphertext,): (Vec<u8>,) = sqlx::query_as(
-        "SELECT private_key_ciphertext FROM integration.project_ssh_key WHERE project_id = $1",
+        "SELECT private_key_ciphertext FROM integration.project_ssh_key WHERE id = $1",
     )
-    .bind(project_id)
+    .bind(Uuid::parse_str(&key_id).unwrap())
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -359,15 +363,24 @@ async fn ssh_key_never_leaks_private_material(pool: PgPool) {
     let as_text = String::from_utf8_lossy(&ciphertext);
     assert!(!as_text.contains("BEGIN OPENSSH PRIVATE KEY"));
 
-    let (status, fetched) = body_json(app.clone().oneshot(get(&uri)).await.unwrap()).await;
+    let (status, listed) = body_json(app.clone().oneshot(get(&keys_uri)).await.unwrap()).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(fetched["public_key"], public_key);
-    assert!(!fetched.to_string().contains("private"));
+    assert_eq!(listed["total"], 1);
+    assert_eq!(listed["items"][0]["public_key"], public_key);
+    assert!(!listed.to_string().contains("private"));
 
-    let (status, _) = body_json(app.clone().oneshot(delete(&uri)).await.unwrap()).await;
+    let (status, _) = body_json(
+        app.clone()
+            .oneshot(delete(&format!("/v1/pm/ssh-keys/{key_id}")))
+            .await
+            .unwrap(),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
-    let (status, _) = body_json(app.clone().oneshot(get(&uri)).await.unwrap()).await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
+    // 删除 = 吊销（保留行，永不回显私钥材料）
+    let (_, listed) = body_json(app.clone().oneshot(get(&keys_uri)).await.unwrap()).await;
+    assert_eq!(listed["total"], 1);
+    assert_eq!(listed["items"][0]["status"], "revoked");
 }
 
 #[sqlx::test(migrations = "../../migrations")]
@@ -389,7 +402,7 @@ async fn unknown_project_is_404(pool: PgPool) {
         app.clone()
             .oneshot(json_request(
                 "POST",
-                &format!("/v1/pm/projects/{unknown}/ssh-key"),
+                &format!("/v1/pm/projects/{unknown}/ssh-keys"),
                 json!({}),
             ))
             .await
@@ -398,6 +411,15 @@ async fn unknown_project_is_404(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["message"], "project not found");
+
+    let (status, body) = body_json(
+        app.oneshot(delete(&format!("/v1/pm/ssh-keys/{}", Uuid::new_v4())))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["message"], "ssh key not found");
 }
 fn init_local_repo() -> (std::path::PathBuf, String) {
     let root = std::env::temp_dir().join(format!("ai-pm-api-repo-{}", Uuid::new_v4()));
@@ -489,12 +511,58 @@ async fn ssh_key_create_is_idempotent_and_revoke_blocks_verified_reference(pool:
     assert_eq!(verified["default_branch"], "main");
     assert_eq!(verified["head_commit_sha"].as_str().unwrap().len(), 40);
 
-    let (status, body) = body_json(app.clone().oneshot(delete(&keys_uri)).await.unwrap()).await;
+    // 迁移 0022：绑定默认把到 verified 仓库 → 吊销被拒；解绑后放行。
+    let key_id = first["id"].as_str().unwrap().to_string();
+    let bind_uri = format!("/v1/pm/repositories/{repo_id}/ssh-key");
+    let (status, bound) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "PUT",
+                &bind_uri,
+                json!({ "ssh_key_id": key_id }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {bound}");
+    assert_eq!(bound["ssh_key_id"], key_id);
+
+    let (status, body) = body_json(
+        app.clone()
+            .oneshot(delete(&format!("/v1/pm/ssh-keys/{key_id}")))
+            .await
+            .unwrap(),
+    )
+    .await;
     assert_eq!(status, StatusCode::CONFLICT, "body: {body}");
     assert_eq!(
         body["message"],
         "ssh key is still referenced by a verified repository"
     );
+
+    let (status, unbound) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "PUT",
+                &bind_uri,
+                json!({ "ssh_key_id": null }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {unbound}");
+    assert_eq!(unbound["ssh_key_id"], serde_json::Value::Null);
+
+    let (status, _) = body_json(
+        app.clone()
+            .oneshot(delete(&format!("/v1/pm/ssh-keys/{key_id}")))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
 
     let (status, listed) = body_json(
         app.clone()
@@ -505,7 +573,7 @@ async fn ssh_key_create_is_idempotent_and_revoke_blocks_verified_reference(pool:
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(listed["total"], 1);
-    assert_eq!(listed["items"][0]["status"], "active");
+    assert_eq!(listed["items"][0]["status"], "revoked");
 }
 
 fn ssh_keygen_available() -> bool {
@@ -545,11 +613,12 @@ async fn ssh_key_import_derives_public_material_and_never_echoes_private(pool: P
     assert_eq!(imported["public_key"], generated.public_key);
     assert_eq!(imported["fingerprint"], generated.fingerprint);
     assert_eq!(imported["label"], "imported");
+    assert_eq!(imported["is_default"], true, "项目第一把自动成为默认");
     let serialized = imported.to_string();
     assert!(!serialized.contains("PRIVATE KEY"), "{serialized}");
     assert!(!serialized.contains("private_key"), "{serialized}");
 
-    // 粘贴形态（首尾空白 + CRLF）同样可导入；覆盖式替换后指纹一致
+    // 粘贴形态（首尾空白 + CRLF）同样可导入；同名 = 替换该把（is_default 保持）
     let crlf = format!("  {}\r\n", generated.private_key.replace('\n', "\r\n"));
     let (status, replaced) = body_json(
         app.clone()
@@ -560,6 +629,7 @@ async fn ssh_key_import_derives_public_material_and_never_echoes_private(pool: P
     .await;
     assert_eq!(status, StatusCode::OK, "body: {replaced}");
     assert_eq!(replaced["fingerprint"], generated.fingerprint);
+    assert_eq!(replaced["is_default"], true);
     let (count,): (i64,) =
         sqlx::query_as("SELECT count(*) FROM integration.project_ssh_key WHERE project_id = $1")
             .bind(project_id)
@@ -667,4 +737,230 @@ async fn ssh_key_import_rejects_invalid_private_key(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "body: {body}");
     assert_eq!(body["message"], "project not found");
+}
+
+/// 多把共存（迁移 0022）：不同 label 各成一把，首把默认；同名替换不动其它把。
+#[sqlx::test(migrations = "../../migrations")]
+async fn ssh_key_multi_labels_coexist_and_replace(pool: PgPool) {
+    if !ssh_keygen_available() {
+        eprintln!("ssh-keygen unavailable; skipping");
+        return;
+    }
+    with_secret();
+    let app = router(pool.clone());
+    let project_id = seed_project(&pool, "REPO-MULTI-KEY").await;
+    let uri = format!("/v1/pm/projects/{project_id}/ssh-keys/import");
+
+    let key_a = pm_application::secret::generate_ed25519("ai-pm:A").unwrap();
+    let key_b = pm_application::secret::generate_ed25519("ai-pm:B").unwrap();
+
+    let (status, a) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &uri,
+                json!({ "private_key": key_a.private_key, "label": "github" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {a}");
+    assert_eq!(a["label"], "github");
+    assert_eq!(a["is_default"], true);
+
+    let (status, b) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &uri,
+                json!({ "private_key": key_b.private_key, "label": "gitlab" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {b}");
+    assert_eq!(b["is_default"], false, "第二把不夺默认");
+
+    // 同名替换：github 换钥，gitlab 不受影响，is_default 保持 false
+    let key_a2 = pm_application::secret::generate_ed25519("ai-pm:A2").unwrap();
+    let (status, replaced) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &uri,
+                json!({ "private_key": key_a2.private_key, "label": "github" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {replaced}");
+    assert_eq!(replaced["fingerprint"], key_a2.fingerprint);
+    assert_eq!(replaced["is_default"], true, "同名替换保持默认地位");
+
+    let (status, listed) = body_json(
+        app.clone()
+            .oneshot(get(&format!("/v1/pm/projects/{project_id}/ssh-keys")))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(listed["total"], 2, "同名替换不新增行");
+    // 默认把排最前（github 保持首把的默认地位）
+    assert_eq!(listed["items"][0]["label"], "github");
+    assert_eq!(listed["items"][0]["is_default"], true);
+    assert_eq!(listed["items"][1]["label"], "gitlab");
+    assert_eq!(listed["items"][1]["is_default"], false);
+}
+
+/// 仓库绑定校验：绑定/切换/解绑；越权 key 400、未知 key 404。
+#[sqlx::test(migrations = "../../migrations")]
+async fn repository_bind_key_validates_project_and_existence(pool: PgPool) {
+    if !ssh_keygen_available() {
+        eprintln!("ssh-keygen unavailable; skipping");
+        return;
+    }
+    with_secret();
+    let app = router(pool.clone());
+    let project_id = seed_project(&pool, "REPO-BIND-1").await;
+    let other_project = seed_project(&pool, "REPO-BIND-2").await;
+
+    let (status, created) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &format!("/v1/pm/projects/{project_id}/repositories"),
+                json!({ "name": "主仓库", "url": "git@gitlab.local:team/bind.git", "role": "main" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "body: {created}");
+    let repo_id = created["id"].as_str().unwrap().to_string();
+    let bind_uri = format!("/v1/pm/repositories/{repo_id}/ssh-key");
+
+    // 两把 key：默认（ensure）+ 导入
+    let (status, default_key) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &format!("/v1/pm/projects/{project_id}/ssh-keys"),
+                json!({}),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {default_key}");
+    let (status, imported_key) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &format!("/v1/pm/projects/{project_id}/ssh-keys/import"),
+                json!({
+                    "private_key":
+                        pm_application::secret::generate_ed25519("ai-pm:BIND").unwrap().private_key,
+                    "label": "github"
+                }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {imported_key}");
+    let default_key_id = default_key["id"].as_str().unwrap().to_string();
+    let imported_key_id = imported_key["id"].as_str().unwrap().to_string();
+
+    // 绑定导入把 → 回读
+    let (status, bound) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "PUT",
+                &bind_uri,
+                json!({ "ssh_key_id": imported_key_id }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {bound}");
+    assert_eq!(bound["ssh_key_id"], imported_key_id);
+
+    // 切换到默认把 → 解绑（null = 跟随项目默认）
+    let (status, switched) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "PUT",
+                &bind_uri,
+                json!({ "ssh_key_id": default_key_id }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {switched}");
+    assert_eq!(switched["ssh_key_id"], default_key_id);
+    let (status, unbound) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "PUT",
+                &bind_uri,
+                json!({ "ssh_key_id": null }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {unbound}");
+    assert_eq!(unbound["ssh_key_id"], serde_json::Value::Null);
+
+    // 未知 key → 404
+    let (status, body) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "PUT",
+                &bind_uri,
+                json!({ "ssh_key_id": Uuid::new_v4().to_string() }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "body: {body}");
+
+    // 他项目 key → 400 越权
+    let (status, foreign) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &format!("/v1/pm/projects/{other_project}/ssh-keys/import"),
+                json!({
+                    "private_key":
+                        pm_application::secret::generate_ed25519("ai-pm:FOREIGN").unwrap().private_key,
+                    "label": "github"
+                }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {foreign}");
+    let foreign_key_id = foreign["id"].as_str().unwrap().to_string();
+    let (status, body) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "PUT",
+                &bind_uri,
+                json!({ "ssh_key_id": foreign_key_id }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
+    assert_eq!(body["message"], "ssh key belongs to another project");
 }

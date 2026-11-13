@@ -618,9 +618,9 @@ pub async fn run_import_job(
     set_stage(pool, import_id, "cloning", "克隆仓库", 10).await?;
 
     // 只处理导入创建时固化的仓库集合（I6-B-03）。
-    let repos: Vec<(Uuid, String, Option<String>, i32)> = sqlx::query_as(
+    let repos: Vec<(Uuid, String, Option<String>, i32, Option<Uuid>)> = sqlx::query_as(
         "SELECT s.repository_id, r.url, r.default_branch, \
-                COALESCE(s.current_attempt_no, 1) \
+                COALESCE(s.current_attempt_no, 1), r.ssh_key_id \
          FROM integration.repo_import_source s \
          JOIN integration.project_repository r ON r.id = s.repository_id \
          WHERE s.import_id = $1 ORDER BY r.name",
@@ -644,29 +644,32 @@ pub async fn run_import_job(
             .fetch_one(pool)
             .await?;
 
-    let key_ciphertext: Option<Vec<u8>> = sqlx::query_scalar(
-        "SELECT private_key_ciphertext FROM integration.project_ssh_key \
-         WHERE project_id = $1 AND status = 'active'",
-    )
-    .bind(project_id)
-    .fetch_optional(pool)
-    .await?;
-    let key_material = match key_ciphertext {
-        Some(bytes) => {
-            let private = crate::repository::open_ssh_private_key(project_id, &bytes)
-                .map_err(|e| ImportError::Git(e.to_string()))?;
-            Some(
-                git_access::write_temp_key(&private)
-                    .map_err(|e| ImportError::Git(e.to_string()))?,
-            )
-        }
-        None => None,
-    };
-    let key_path = key_material.as_ref().map(|m| m.key_path());
-
     let limits = repo_facts::Limits::from_env();
     let mut materials: Vec<RepoMaterial> = Vec::new();
-    for (repository_id, url, default_branch, attempt_no) in repos {
+    for (repository_id, url, default_branch, attempt_no, bound_key) in repos {
+        // 迁移 0022：逐仓解析 key（绑定把 → 项目默认/最新 active），不再整个
+        // import 共用一把——不同仓库可来自不同 Git 服务器。
+        let key_ciphertext = match bound_key {
+            Some(key_id) => crate::repository::key_ciphertext_by_id(pool, project_id, key_id)
+                .await
+                .map_err(|e| ImportError::Git(e.to_string()))?,
+            None => crate::repository::fallback_key_ciphertext(pool, project_id)
+                .await
+                .map_err(|e| ImportError::Git(e.to_string()))?,
+        };
+        let key_material = match key_ciphertext {
+            Some(bytes) => {
+                let private = crate::repository::open_ssh_private_key(project_id, &bytes)
+                    .map_err(|e| ImportError::Git(e.to_string()))?;
+                Some(
+                    git_access::write_temp_key(&private)
+                        .map_err(|e| ImportError::Git(e.to_string()))?,
+                )
+            }
+            None => None,
+        };
+        let key_path = key_material.as_ref().map(|m| m.key_path());
+
         let dest = repo_facts::repo_cache_dir(repository_id);
         let _ = std::fs::remove_dir_all(&dest);
         if let Some(parent) = dest.parent() {

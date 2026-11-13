@@ -4,7 +4,6 @@ import { flushPromises } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 
 import SettingsProjectRepositoriesView from "./SettingsProjectRepositoriesView.vue";
-import { HttpError } from "@digua/http";
 import { mountShell } from "@/components/shell/test-utils";
 import { buildRoutes } from "@/router";
 import type { RepositoryV2 } from "@/api/initialization";
@@ -16,9 +15,10 @@ const confirmRepositoryVersion = vi.fn();
 const disconnectRepository = vi.fn();
 const updateRepositoryV2 = vi.fn();
 const verifyRepositoryV2 = vi.fn();
-const getSshKey = vi.fn();
+const listSshKeys = vi.fn();
 const importSshKey = vi.fn();
 const revokeSshKey = vi.fn();
+const bindRepositoryKey = vi.fn();
 
 vi.mock("@/api/initialization", () => ({
   listRepositoriesV2: (...args: unknown[]) => listRepositoriesV2(...args),
@@ -31,9 +31,10 @@ vi.mock("@/api/initialization", () => ({
 }));
 
 vi.mock("@/api/repositories", () => ({
-  getSshKey: (...args: unknown[]) => getSshKey(...args),
+  listSshKeys: (...args: unknown[]) => listSshKeys(...args),
   importSshKey: (...args: unknown[]) => importSshKey(...args),
-  revokeSshKey: (...args: unknown[]) => revokeSshKey(...args)
+  revokeSshKey: (...args: unknown[]) => revokeSshKey(...args),
+  bindRepositoryKey: (...args: unknown[]) => bindRepositoryKey(...args)
 }));
 
 /** 后端真实行形状（RepositoryRow 契约）的最小夹具。 */
@@ -63,14 +64,16 @@ function repo(overrides: Partial<RepositoryV2>): RepositoryV2 {
   };
 }
 
-/** SshKey 契约（公钥 + 指纹，无私钥字段）的最小夹具。 */
+/** SshKey 契约（迁移 0022 多把：公钥 + 指纹 + is_default，无私钥字段）的最小夹具。 */
 function sshKey(overrides: Partial<SshKey>): SshKey {
   return {
+    id: "key-1",
     project_id: "prj-1",
-    label: "imported",
+    label: "github",
     public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... ai-pm:demo",
     fingerprint: "SHA256:AbCdEf123456",
     status: "active",
+    is_default: true,
     created_at: "2026-11-13T00:00:00Z",
     ...overrides
   };
@@ -102,10 +105,8 @@ describe("SettingsProjectRepositoriesView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listRepositoriesV2.mockResolvedValue({ items: [], total: 0 });
-    // 默认未配置密钥（后端 404），按「无密钥」处理
-    getSshKey.mockRejectedValue(
-      new HttpError("ssh key not found", { status: 404 })
-    );
+    // 默认未配置密钥（空列表）
+    listSshKeys.mockResolvedValue({ items: [], total: 0 });
   });
 
   it("零仓库时空态明确传达项目仍可工作（V1.2 §6.3）", async () => {
@@ -234,7 +235,7 @@ describe("SettingsProjectRepositoriesView", () => {
     });
   });
 
-  it("SSH 私钥未配置态：404 视为无密钥，粘贴保存走导入契约（trim 后提交）", async () => {
+  it("SSH 密钥未配置态：空列表提示，名称+粘贴保存走导入契约（trim 后提交）", async () => {
     importSshKey.mockResolvedValue(sshKey({}));
     const { wrapper } = await mountView();
     const panel = wrapper.find('[data-testid="ssh-key-panel"]');
@@ -242,8 +243,13 @@ describe("SettingsProjectRepositoriesView", () => {
     expect(panel.find('[data-testid="ssh-key-status"]').text()).toContain(
       "未配置"
     );
-    expect(panel.find('[data-testid="ssh-key-material"]').exists()).toBe(false);
+    expect(panel.find('[data-testid="ssh-key-empty"]').text()).toContain(
+      "还没有密钥"
+    );
 
+    await wrapper
+      .find('[data-testid="ssh-key-name"]')
+      .setValue(" github-main ");
     await wrapper
       .find('[data-testid="ssh-key-input"]')
       .setValue(
@@ -254,35 +260,78 @@ describe("SettingsProjectRepositoriesView", () => {
 
     expect(importSshKey).toHaveBeenCalledWith(
       "prj-1",
-      "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----"
+      "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----",
+      "github-main"
     );
-    // 空输入不得提交
-    await wrapper.find('[data-testid="ssh-key-input"]').setValue("   ");
+    // 空名称 / 空输入不得提交
+    await wrapper.find('[data-testid="ssh-key-name"]').setValue("  ");
+    await wrapper
+      .find('[data-testid="ssh-key-input"]')
+      .setValue("-----BEGIN OPENSSH PRIVATE KEY-----");
     await wrapper.find('[data-testid="ssh-key-submit"]').trigger("click");
     await flushPromises();
     expect(importSshKey).toHaveBeenCalledTimes(1);
   });
 
-  it("SSH 私钥已配置态：展示指纹与来源，吊销两段式确认", async () => {
-    getSshKey.mockResolvedValue(sshKey({}));
-    revokeSshKey.mockResolvedValue({ project_id: "prj-1" });
+  it("SSH 密钥列表：展示名称/指纹/默认标记，吊销两段式按 key 执行", async () => {
+    listSshKeys.mockResolvedValue({
+      items: [
+        sshKey({}),
+        sshKey({ id: "key-2", label: "gitlab", is_default: false })
+      ],
+      total: 2
+    });
+    revokeSshKey.mockResolvedValue({ id: "key-2" });
     const { wrapper } = await mountView();
     const panel = wrapper.find('[data-testid="ssh-key-panel"]');
     expect(panel.find('[data-testid="ssh-key-status"]').text()).toContain(
       "已配置"
     );
-    expect(panel.find('[data-testid="ssh-key-fingerprint"]').text()).toContain(
-      "SHA256:"
-    );
-    expect(panel.text()).toContain("导入");
+    expect(panel.findAll('[data-testid="ssh-key-item"]')).toHaveLength(2);
+    expect(panel.text()).toContain("github");
+    expect(panel.text()).toContain("gitlab");
+    expect(panel.text()).toContain("SHA256:");
+    expect(panel.text()).toContain("默认");
 
-    // 两段式：第一击武装（文案变为确认），第二击执行
-    await panel.find('[data-testid="ssh-key-revoke"]').trigger("click");
-    expect(panel.find('[data-testid="ssh-key-revoke"]').text()).toContain(
-      "确认吊销"
-    );
-    await panel.find('[data-testid="ssh-key-revoke"]').trigger("click");
+    // 两段式吊销：第一击武装（文案变为确认），第二击按 key id 执行
+    const items = wrapper.findAll('[data-testid="ssh-key-item"]');
+    const gitlabRevoke = items[1]!
+      .findAll("button")
+      .find(b => b.text().includes("吊销"))!;
+    await gitlabRevoke.trigger("click");
+    expect(gitlabRevoke.text()).toContain("确认吊销");
+    await gitlabRevoke.trigger("click");
     await flushPromises();
-    expect(revokeSshKey).toHaveBeenCalledWith("prj-1");
+    expect(revokeSshKey).toHaveBeenCalledWith("key-2");
+  });
+
+  it("仓库详情可绑定/解绑 SSH 密钥（迁移 0022；空串 = 跟随项目默认）", async () => {
+    listSshKeys.mockResolvedValue({
+      items: [
+        sshKey({}),
+        sshKey({ id: "key-2", label: "gitlab", is_default: false })
+      ],
+      total: 2
+    });
+    listRepositoriesV2.mockResolvedValue({
+      items: [repo({ id: "r-bind" })],
+      total: 1
+    });
+    bindRepositoryKey.mockResolvedValue(
+      repo({ id: "r-bind", ssh_key_id: "key-2" })
+    );
+    const { wrapper } = await mountView();
+
+    await wrapper.find('[data-testid="repo-list"] > div').trigger("click");
+    const select = wrapper.find('[data-testid="bind-key-select"]');
+    expect(select.exists()).toBe(true);
+
+    await select.setValue("key-2");
+    await flushPromises();
+    expect(bindRepositoryKey).toHaveBeenCalledWith("r-bind", "key-2");
+
+    await wrapper.find('[data-testid="bind-key-select"]').setValue("");
+    await flushPromises();
+    expect(bindRepositoryKey).toHaveBeenCalledWith("r-bind", null);
   });
 });

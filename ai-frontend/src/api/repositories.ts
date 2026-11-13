@@ -45,21 +45,20 @@ export function deleteRepository(id: string) {
   return http.delete<{ id: string }>(`/v1/pm/repositories/${id}`);
 }
 
-/** 未生成密钥时后端 404；调用方按「无密钥」处理。 */
-export function getSshKey(projectId: string) {
-  return http.get<SshKey>(`/v1/pm/projects/${projectId}/ssh-key`);
-}
-
-/** 生成或重新生成（一项目一把，重复调用即替换）。 */
-export function generateSshKey(projectId: string) {
-  return http.post<SshKey>(`/v1/pm/projects/${projectId}/ssh-key`, {});
-}
-
-export function deleteSshKey(projectId: string) {
-  return http.delete<{ project_id: string }>(
-    `/v1/pm/projects/${projectId}/ssh-key`
+/** 列出项目全部密钥（含已吊销；默认把排最前）。 */
+export function listSshKeys(projectId: string) {
+  return http.get<ListResponse<SshKey>>(
+    `/v1/pm/projects/${projectId}/ssh-keys`
   );
 }
+
+/** 幂等：已有 active 默认把返回现有；`rotate=true` 才重新生成默认把。 */
+export function createSshKey(projectId: string, rotate = false) {
+  return http.post<SshKey>(`/v1/pm/projects/${projectId}/ssh-keys`, {
+    rotate
+  });
+}
+
 export interface VerifyOutcome {
   repository_id: string;
   status: RepositoryStatus;
@@ -79,33 +78,34 @@ export function archiveRepository(id: string) {
   return http.post<Repository>(`/v1/pm/repositories/${id}/archive`, {});
 }
 
-export function listSshKeys(projectId: string) {
-  return http.get<ListResponse<SshKey>>(
-    `/v1/pm/projects/${projectId}/ssh-keys`
-  );
-}
-
-/** 幂等：已有 active 返回现有；`rotate=true` 才重新生成。 */
-export function createSshKey(projectId: string, rotate = false) {
-  return http.post<SshKey>(`/v1/pm/projects/${projectId}/ssh-keys`, {
-    rotate
-  });
-}
-
-/** 吊销；仍被 verified 仓库引用时返回 409 key_in_use。 */
-export function revokeSshKey(projectId: string) {
-  return http.delete<{ project_id: string }>(
-    `/v1/pm/projects/${projectId}/ssh-keys`
-  );
+/** 吊销指定 key；仍被 verified 仓库绑定引用时返回 409 key_in_use。 */
+export function revokeSshKey(keyId: string) {
+  return http.delete<{ id: string }>(`/v1/pm/ssh-keys/${keyId}`);
 }
 
 /**
- * 粘贴导入外部私钥（一项目一把，保存即替换）。
+ * 粘贴导入外部私钥（迁移 0022 多把模型）。
+ * `label` 即身份：同名 = 替换该把，新名 = 新增一把；项目第一把自动成为默认。
  * 后端经 ssh-keygen 校验并推导公钥/指纹；私钥信封加密落库、不再回显。
  * 无效私钥（格式错误 / 带口令）→ 400，错误体 {message}。
  */
-export function importSshKey(projectId: string, privateKey: string) {
+export function importSshKey(
+  projectId: string,
+  privateKey: string,
+  label: string
+) {
   return http.post<SshKey>(`/v1/pm/projects/${projectId}/ssh-keys/import`, {
-    private_key: privateKey
+    private_key: privateKey,
+    label
+  });
+}
+
+/** 仓库绑定/解绑一把 key（null = 跟随项目默认）。 */
+export function bindRepositoryKey(
+  repositoryId: string,
+  sshKeyId: string | null
+) {
+  return http.put<Repository>(`/v1/pm/repositories/${repositoryId}/ssh-key`, {
+    ssh_key_id: sshKeyId
   });
 }

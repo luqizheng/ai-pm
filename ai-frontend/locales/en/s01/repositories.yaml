@@ -67,18 +67,25 @@ repositories:
     notice: The branch has advanced. Your confirmed baseline has not been changed.
     confirm: Confirm Update
   ssh:
-    title: SSH Private Key
+    title: SSH Private Keys
     statusNone: Not configured
     statusConfigured: Configured
     sourceImported: Imported
     sourceGenerated: Platform-generated
     copyPublicKey: Copy public key
     copied: Copied
-    revoke: Revoke key
+    revoke: Revoke
     revokeArmed: Confirm revoke?
+    nameLabel: Key name
+    namePlaceholder: e.g. github-main
+    badgeDefault: Default
+    badgeRevoked: Revoked
+    listEmpty: No keys configured yet. Paste one below.
     inputLabel: Paste private key
     fingerprint: Fingerprint
     publicKey: Public key
-    submit: Save
-    hint: Paste the private key that grants read access to your Git repositories (OpenSSH format, ed25519 / RSA / ECDSA). It is stored encrypted and never shown again; saving replaces the existing key. Only applies to SSH URLs (ssh:// or scp-style) — no further setup needed on the Git server.
-    hintConfigured: The private key is encrypted at rest and never displayed again. Saving a new key replaces the current one.
+    submit: Save key
+    bindLabel: SSH Key
+    followDefault: Follow project default
+    hint: Paste a private key that grants read access to your Git repositories (OpenSSH format, ed25519 / RSA / ECDSA). Keys are stored encrypted and never shown again. A key name identifies it — saving with the same name replaces that key; the first key becomes the project default. Repositories can bind a specific key, otherwise they use the default.
+    hintConfigured: Keys are encrypted at rest and never displayed again. Saving with an existing name replaces that key.

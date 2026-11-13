@@ -25,8 +25,7 @@ export const PM_API = process.env.FLOW_E2E_PM_API ?? "http://127.0.0.1:18495";
 export const JWKS_PORT = Number(process.env.FLOW_E2E_JWKS_PORT ?? 18496);
 
 /** QA PG 容器（与 L2 的 run-e2e-flow.sh 共用，宿主 127.0.0.1:16433）。 */
-export const PG_CONTAINER =
-  process.env.FLOW_E2E_PG_CONTAINER ?? "aipm-pg-gate";
+export const PG_CONTAINER = process.env.FLOW_E2E_PG_CONTAINER ?? "aipm-pg-gate";
 export const PG_PORT = process.env.FLOW_E2E_PG_PORT ?? "16433";
 export const DB_NAME = process.env.FLOW_E2E_DB ?? "aipm_e2e_flow_ui";
 
@@ -37,7 +36,11 @@ export const SECRET_KEY = process.env.AI_PM_SECRET_KEY ?? "e2e-flow-ui-secret";
 export function sshKeyPath(): string {
   return (
     process.env.AI_PM_E2E_SSH_KEY ??
-    resolve(process.env.USERPROFILE ?? process.env.HOME ?? ".", ".ssh", "id_rsa")
+    resolve(
+      process.env.USERPROFILE ?? process.env.HOME ?? ".",
+      ".ssh",
+      "id_rsa"
+    )
   );
 }
 
@@ -45,13 +48,18 @@ export function sshKeyPath(): string {
 export const GITLAB_REPO =
   process.env.AI_PM_E2E_REPO_GITLAB ?? "git@192.168.2.16:tooling/ai-pm.git";
 export const GITHUB_REPO =
-  process.env.AI_PM_E2E_REPO_GITHUB ?? "git@github.com:luqizheng/world-view-rs.git";
+  process.env.AI_PM_E2E_REPO_GITHUB ??
+  "git@github.com:luqizheng/world-view-rs.git";
 
-const privateKey = createPrivateKey(readFileSync(resolve(KEYS, "private.pem"), "utf8"));
+const privateKey = createPrivateKey(
+  readFileSync(resolve(KEYS, "private.pem"), "utf8")
+);
 
 /** 由测试私钥导出的 JWKS 文档（kid=default，与 digua_common_jwt::sign_token 一致）。 */
 export function jwksDocument(): string {
-  const jwk = createPublicKey(readFileSync(resolve(KEYS, "public.pem"), "utf8")).export({
+  const jwk = createPublicKey(
+    readFileSync(resolve(KEYS, "public.pem"), "utf8")
+  ).export({
     format: "jwk"
   });
   return JSON.stringify({
@@ -64,7 +72,9 @@ const b64url = (input: Buffer | string): string =>
 
 export function signToken(sub: string, tid: number): string {
   const now = Math.floor(Date.now() / 1000);
-  const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT", kid: "default" }));
+  const header = b64url(
+    JSON.stringify({ alg: "RS256", typ: "JWT", kid: "default" })
+  );
   const payload = b64url(
     JSON.stringify({
       sub,
@@ -77,7 +87,11 @@ export function signToken(sub: string, tid: number): string {
       exp: now + 3600
     })
   );
-  const signature = sign("RSA-SHA256", Buffer.from(`${header}.${payload}`), privateKey);
+  const signature = sign(
+    "RSA-SHA256",
+    Buffer.from(`${header}.${payload}`),
+    privateKey
+  );
   return `${header}.${payload}.${b64url(signature)}`;
 }
 
@@ -112,7 +126,11 @@ export async function api<T = any>(
 }
 
 /** 浏览器端登录态（与 team-onboarding.spec 同一套 localStorage 键）。 */
-export function browserSession(sub: string, tid: number, email: string | null = null) {
+export function browserSession(
+  sub: string,
+  tid: number,
+  email: string | null = null
+) {
   return {
     prism_access_token: signToken(sub, tid),
     prism_refresh_token: `flow-e2e-refresh-${sub}`,
@@ -192,29 +210,32 @@ export function sealPrivateKey(
   );
   const hex = out.trim().split(/\r?\n/).filter(Boolean).pop() ?? "";
   if (!/^[0-9a-f]{64,}$/i.test(hex)) {
-    throw new Error(`seal_ssh_key produced no hex ciphertext: ${out.slice(-200)}`);
+    throw new Error(
+      `seal_ssh_key produced no hex ciphertext: ${out.slice(-200)}`
+    );
   }
   return hex;
 }
 
-/** 把本机私钥装进平台密钥库（`integration.project_ssh_key`）。 */
+/** 把本机私钥装进平台密钥库（`integration.project_ssh_key`，迁移 0022 多把模型）。 */
 export function installSshKey(projectId: string): SshKeyFacts {
   const facts = sshKeyFacts();
   const hex = sealPrivateKey(projectId);
   psql(`
     INSERT INTO integration.project_ssh_key
       (project_id, label, key_type, public_key, private_key_ciphertext,
-       fingerprint, cipher_suite, status, created_by, tenant_id)
+       fingerprint, cipher_suite, is_default, status, created_by, tenant_id)
     VALUES
       ('${projectId}', 'e2e-ui', 'ed25519', '${facts.publicKey}',
-       decode('${hex}', 'hex'), '${facts.fingerprint}', 'aes256gcm-v1', 'active',
+       decode('${hex}', 'hex'), '${facts.fingerprint}', 'aes256gcm-v1', true, 'active',
        (SELECT principal_id FROM core.project_member
          WHERE project_id = '${projectId}' AND role = 'owner' LIMIT 1),
        (SELECT tenant_id FROM core.project WHERE id = '${projectId}'))
-    ON CONFLICT (project_id) DO UPDATE SET
+    ON CONFLICT (project_id, label) DO UPDATE SET
       public_key = EXCLUDED.public_key,
       private_key_ciphertext = EXCLUDED.private_key_ciphertext,
       fingerprint = EXCLUDED.fingerprint,
+      is_default = true,
       status = 'active',
       revoked_at = NULL
   `);
@@ -240,7 +261,13 @@ export async function createProject(
     description: description ?? ""
   });
   if (res.status !== 201) {
-    throw new Error(`create project ${code} failed: ${res.status} ${JSON.stringify(res.body)}`);
+    throw new Error(
+      `create project ${code} failed: ${res.status} ${JSON.stringify(res.body)}`
+    );
   }
-  return { id: res.body.id as string, code: res.body.code as string, name: res.body.name as string };
+  return {
+    id: res.body.id as string,
+    code: res.body.code as string,
+    name: res.body.name as string
+  };
 }

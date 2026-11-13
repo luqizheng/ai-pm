@@ -255,6 +255,76 @@ pub async fn archive_repository(
     Ok(row)
 }
 
+/// 仓库绑定/解绑 SSH key（迁移 0022，PUT /repositories/{id}/ssh-key）。
+/// `Some(key_id)` = 绑定该项目下的 active key；`None` = 解绑（回退项目默认）。
+/// 不走 PATCH revision（同 verify：治理动作不经乐观并发），已归档仓库拒绝。
+pub async fn bind_repository_ssh_key(
+    pool: &PgPool,
+    repository_id: Uuid,
+    actor: &AuditActor,
+    ssh_key_id: Option<Uuid>,
+) -> Result<RepositoryRow, RepositoryError> {
+    let mut tx = pool.begin().await?;
+    let repo: Option<(Uuid, String)> = sqlx::query_as(
+        "SELECT project_id, status FROM integration.project_repository WHERE id = $1",
+    )
+    .bind(repository_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let (project_id, status) = repo.ok_or(RepositoryError::NotFound)?;
+    if status == "archived" {
+        return Err(RepositoryError::Archived);
+    }
+    if let Some(key_id) = ssh_key_id {
+        let key: Option<(Uuid, String)> = sqlx::query_as(
+            "SELECT project_id, status FROM integration.project_ssh_key WHERE id = $1",
+        )
+        .bind(key_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some((key_project, key_status)) = key else {
+            return Err(RepositoryError::SshKeyNotFound);
+        };
+        if key_project != project_id {
+            return Err(RepositoryError::Validation(
+                "ssh key belongs to another project",
+            ));
+        }
+        if key_status != "active" {
+            return Err(RepositoryError::Validation("ssh key is revoked"));
+        }
+    }
+
+    let row = sqlx::query_as::<_, RepositoryRow>(
+        "UPDATE integration.project_repository SET ssh_key_id = $2, updated_at = now() \
+         WHERE id = $1 \
+         RETURNING id, project_id, name, url, role, default_branch, description, \
+                   ssh_key_id, status, head_commit_sha, selected_branch, selected_commit, \
+                   selected_confirmed_at, selected_confirmed_by, last_verified_at, \
+                   last_error_code, last_error_detail, revision, created_at, updated_at",
+    )
+    .bind(repository_id)
+    .bind(ssh_key_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        if ssh_key_id.is_some() {
+            "repository.ssh_key_bound"
+        } else {
+            "repository.ssh_key_unbound"
+        },
+        "project_repository",
+        Some(repository_id),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(row)
+}
+
 /// 人类确认更新项目采用基准（G-05 承载，POST /update-version）。
 ///
 /// S01-03 §5.2：Observed HEAD（`head_commit_sha`）只属 verify 自动回写；
@@ -413,6 +483,7 @@ type VerifyRepoRow = (
     String,         // url
     Option<String>, // default_branch
     Option<String>, // head_commit_sha（Observed，verify 前值）
+    Option<Uuid>,   // ssh_key_id（仓库级绑定；None = 跟随项目默认）
 );
 
 pub async fn verify_repository(
@@ -421,22 +492,21 @@ pub async fn verify_repository(
     actor: &AuditActor,
 ) -> Result<VerifyOutcome, RepositoryError> {
     let row: Option<VerifyRepoRow> = sqlx::query_as(
-        "SELECT project_id, tenant_id, name, url, default_branch, head_commit_sha \
+        "SELECT project_id, tenant_id, name, url, default_branch, head_commit_sha, ssh_key_id \
          FROM integration.project_repository WHERE id = $1",
     )
     .bind(repository_id)
     .fetch_optional(pool)
     .await?;
-    let (project_id, tenant_id, name, url, current_branch, previous_head) =
+    let (project_id, tenant_id, name, url, current_branch, previous_head, bound_key) =
         row.ok_or(RepositoryError::NotFound)?;
 
-    let key_ciphertext: Option<Vec<u8>> = sqlx::query_scalar(
-        "SELECT private_key_ciphertext FROM integration.project_ssh_key \
-         WHERE project_id = $1 AND status = 'active'",
-    )
-    .bind(project_id)
-    .fetch_optional(pool)
-    .await?;
+    // 迁移 0022：仓库绑定了 key 用绑定把（失效 → 按 missing 处理，不 500）；
+    // 未绑定回退「项目默认 key → 最新 active」。
+    let key_ciphertext: Option<Vec<u8>> = match bound_key {
+        Some(key_id) => key_ciphertext_by_id(pool, project_id, key_id).await?,
+        None => fallback_key_ciphertext(pool, project_id).await?,
+    };
 
     let is_ssh = url.starts_with("ssh://") || url.starts_with("git@");
     let outcome = if is_ssh && key_ciphertext.is_none() {
@@ -446,7 +516,7 @@ pub async fn verify_repository(
             default_branch: current_branch,
             head_commit_sha: None,
             error_code: Some("ssh_key_missing".to_string()),
-            error_detail: Some("project has no active ssh key".to_string()),
+            error_detail: Some("no active ssh key bound to this repository".to_string()),
         }
     } else {
         let material = match key_ciphertext {

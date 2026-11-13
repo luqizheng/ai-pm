@@ -108,13 +108,21 @@ impl CodexExecutor {
     }
 
     /// 一次性把私钥写成临时 key 文件，返回 `GIT_SSH_COMMAND`（非 ssh url 返回 None）。
-    fn ssh_command_for(&self, url: &str, project_id: Uuid, ciphertext: &[u8]) -> Option<String> {
+    /// 文件按 repository 维度命名（迁移 0022）：同一 Run 多仓库各绑不同 key 时
+    /// `{project_id}.pem` 会互相覆盖，故落 `keys/{repository_id}.pem`。
+    fn ssh_command_for(
+        &self,
+        url: &str,
+        project_id: Uuid,
+        repository_id: Uuid,
+        ciphertext: &[u8],
+    ) -> Option<String> {
         if !(url.starts_with("git@") || url.starts_with("ssh://")) {
             return None;
         }
         let plain =
             pm_application::repository::open_ssh_private_key(project_id, ciphertext).ok()?;
-        let key_path = self.root.join("keys").join(format!("{project_id}.pem"));
+        let key_path = self.root.join("keys").join(format!("{repository_id}.pem"));
         std::fs::create_dir_all(key_path.parent()?).ok()?;
         std::fs::write(&key_path, plain).ok()?;
         Some(format!(
@@ -183,14 +191,19 @@ impl CodexExecutor {
         let mirror = mirror_dir.join(repository_id.to_string());
         let _lock = self.lock_mirror(repository_id)?;
         let is_bare = mirror.join("HEAD").exists();
+        // 迁移 0022：绑定把优先，未绑定（或绑定已失效）回退项目默认/最新 active。
         let key_row: Option<(String, Option<Vec<u8>>)> = sqlx::query_as(
-            "SELECT pr.url, k.private_key_ciphertext \
+            "SELECT pr.url, COALESCE(bound.private_key_ciphertext, fb.private_key_ciphertext) \
                FROM integration.project_repository pr \
-               LEFT JOIN integration.project_ssh_key k \
-                 ON k.project_id = pr.project_id AND k.revoked_at IS NULL \
-              WHERE pr.id = $1 AND pr.project_id = $2 \
-              ORDER BY k.created_at DESC NULLS LAST \
-              LIMIT 1",
+               LEFT JOIN integration.project_ssh_key bound \
+                 ON bound.id = pr.ssh_key_id AND bound.status = 'active' \
+               LEFT JOIN LATERAL (\
+                 SELECT k.private_key_ciphertext \
+                   FROM integration.project_ssh_key k \
+                  WHERE k.project_id = pr.project_id AND k.status = 'active' \
+                  ORDER BY k.is_default DESC, k.created_at DESC LIMIT 1\
+               ) fb ON pr.ssh_key_id IS NULL \
+              WHERE pr.id = $1 AND pr.project_id = $2",
         )
         .bind(repository_id)
         .bind(project_id)
@@ -204,7 +217,7 @@ impl CodexExecutor {
         };
         let ssh_command = key_ciphertext
             .as_deref()
-            .and_then(|cipher| self.ssh_command_for(&url, project_id, cipher));
+            .and_then(|cipher| self.ssh_command_for(&url, project_id, repository_id, cipher));
 
         let git = |args: &[&str]| {
             let mut cmd = tokio::process::Command::new("git");

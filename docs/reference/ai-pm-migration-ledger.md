@@ -33,6 +33,7 @@
 | 0019 | `0019_conversation_context_item.sql` | 会话级对象上下文条目（CX1，AI-02） | 已实施（2026-11-10；补登同上） |
 | 0020 | `0020_visualization_artifact.sql` | Visualization Engine 基础表：新建 `viz` schema 四表（artifact 状态机+发布不可变守卫触发器 / approval 与 artifact 状态机分离+每槽位 pending 部分唯一索引+裁决锚点不可变守卫 / render_output 按 format 分列 text&#124;bytea / slot_config 保留期与版本上限）+ `viz_artifact_nature_publish_check`（explanatory 不得 published）——设计 `docs/visualization/ai-pm-viz-13-v0-2-data-model-design-v1.md`（并入 ADR V1.0.1 附录 A）。**取号史**：初稿按"必须 > 历史最大 0060"取 0061；**2026-11-12 实测复核推翻该假设**——台账 §〇 明文新链自 0002 起不受旧链约束，且真实环境 `_sqlx_migrations` = max 18 / 18 条**无旧链残留** → 按「当前目录最大 0019 + 1」改为 **0020**（纠错记录留存，便于审计） | 已建档（2026-11-12，V0-2 批；迁移链经 sqlx::test 全量重放验证 7 例绿） |
 | 0021 | `0021_ssh_key_key_type.sql` | 放宽 `integration.project_ssh_key.key_type` CHECK：'ed25519'（生成路径 DEFAULT）+ ssh-keygen 推导公钥首 token（ssh-ed25519/ssh-rsa/ecdsa-sha2-nistp256/384/521）——支撑仓库设置页「粘贴自有私钥」导入端点（POST /v1/pm/projects/{id}/ssh-keys/import） | 已实施（2026-11-13，仓库 SSH 私钥导入批；取号 = 目录最大 0020 + 1） |
+| 0022 | `0022_ssh_key_multi.sql` | `project_ssh_key` 多行化：加 `id` 改 PK(id)、`is_default`（每项目至多一把，部分唯一索引）、UNIQUE(project_id,label)（同名导入=替换该把）、`project_repository.ssh_key_id` 加 FK RESTRICT——升级为「多把 key + 仓库级绑定」，未绑定仓库回退默认 key（应用层回退解析单一实现） | 已实施（2026-11-13，SSH key 仓库级绑定批；取号 = 目录最大 0021 + 1） |
 
 ## 一、已应用（历史审计——文件已并入 0001_baseline.sql）
 
