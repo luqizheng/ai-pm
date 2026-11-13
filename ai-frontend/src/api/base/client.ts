@@ -1,13 +1,7 @@
 import { createHttp, type HttpClient } from "@digua/http";
 import { ErrorMessages, ErrorMessagesZhCN } from "@digua/contracts";
-import {
-  clearSession,
-  getAccessToken,
-  getRefreshToken,
-  saveSession,
-  type StoredUser
-} from "./token-storage";
-import { iam } from "./iam";
+import { getAccessToken, type StoredUser } from "./token-storage";
+import { notifyUnauthorized, refreshSessionToken } from "./session";
 
 export interface LoginResult {
   access_token: string;
@@ -25,43 +19,21 @@ export function translateError(code: string): string {
   return en ?? code;
 }
 
-/** token 彻底失效时的钩子 —— 由 store 在启动时注入（避免与 store 循环依赖） */
-let unauthorizedHandler: (() => void) | undefined;
-
-export function onUnauthorized(handler: () => void) {
-  unauthorizedHandler = handler;
-}
+/** 会话失效回调的注册入口（与 sessionFetch 共用同一份订阅） */
+export { onUnauthorized } from "./session";
 
 /**
  * 壳的 HTTP 客户端。
  *
  * @digua/http 是框架无关的：token 存取、刷新、文案翻译都在这里注入。
+ * 刷新与失效通知统一走 ./session.ts，与各 lmms SDK 的 sessionFetch 共用同一个
+ * 单飞刷新，避免同一时刻向 iam 发多次 refresh。
  */
 export const http: HttpClient = createHttp({
   baseURL: import.meta.env.VITE_API_BASE ?? "/api",
   getToken: () => getAccessToken(),
-  refreshToken: async () => {
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) return undefined;
-    try {
-      // 刷新走 iam-services SDK（iam 链路不轮换：响应中的 refresh_token 与
-      // 传入值相同，saveSession 原样回存无副作用）
-      const result = await iam.auth.refresh(refreshToken);
-      saveSession({
-        accessToken: result.access_token,
-        refreshToken: result.refresh_token,
-        expiresIn: result.expires_in,
-        user: result.user
-      });
-      return result.access_token;
-    } catch {
-      return undefined;
-    }
-  },
-  onUnauthorized: () => {
-    clearSession();
-    unauthorizedHandler?.();
-  },
+  refreshToken: () => refreshSessionToken(),
+  onUnauthorized: () => notifyUnauthorized(),
   translateError,
   authWhiteList: [
     "/v1/iam/auth/login",

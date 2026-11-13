@@ -253,6 +253,46 @@ describe("createHttp", () => {
     expect(calls.length).toBeGreaterThan(0);
   });
 
+  it("刷新重放后仍 401 时通知会话失效", async () => {
+    const onUnauthorized = vi.fn();
+    const refreshToken = vi.fn().mockResolvedValue("new-token");
+    const { client } = makeClient(
+      [
+        { status: 401, data: { code: "IAM_AUTH_1001", message: "expired" } },
+        { status: 401, data: { code: "IAM_AUTH_1001", message: "expired" } }
+      ],
+      { getToken: () => "old-token", refreshToken, onUnauthorized }
+    );
+
+    await expect(client.get("/v1/iam/users")).rejects.toBeInstanceOf(HttpError);
+    expect(refreshToken).toHaveBeenCalledTimes(1);
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+  });
+
+  it("没有 refreshToken 的 401 直接通知会话失效", async () => {
+    const onUnauthorized = vi.fn();
+    const { client } = makeClient(
+      [{ status: 401, data: { code: "IAM_AUTH_1001", message: "expired" } }],
+      { getToken: () => "old-token", onUnauthorized }
+    );
+
+    await expect(client.get("/v1/iam/users")).rejects.toBeInstanceOf(HttpError);
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+  });
+
+  it("匿名请求的 401 不通知会话失效", async () => {
+    const onUnauthorized = vi.fn();
+    const refreshToken = vi.fn().mockResolvedValue("new-token");
+    const { client } = makeClient(
+      [{ status: 401, data: { code: "IAM_AUTH_1001", message: "expired" } }],
+      { refreshToken, onUnauthorized }
+    );
+
+    await expect(client.get("/v1/iam/users")).rejects.toBeInstanceOf(HttpError);
+    expect(refreshToken).not.toHaveBeenCalled();
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
   it("403 不触发 token 刷新", async () => {
     const refreshToken = vi.fn().mockResolvedValue("new-token");
     const { client } = makeClient(

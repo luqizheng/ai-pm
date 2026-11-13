@@ -7,6 +7,7 @@ import {
   saveSession,
   type StoredUser
 } from "./base/token-storage";
+import { sessionFetch } from "./base/session";
 
 /**
  * 认证网关 —— 认证页与服务端之间的**唯一接口**。
@@ -80,7 +81,7 @@ const WORKSPACE_NAME = "AI R&D Workspace";
 const selfService = new HttpCore({
   baseUrl: import.meta.env.VITE_IAM_BASE_URL ?? "/gw",
   getToken: () => getAccessToken(),
-  fetch: fetch.bind(globalThis)
+  fetch: sessionFetch
 });
 
 function toAuthError(error: unknown): AuthError {

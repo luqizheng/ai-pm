@@ -5,6 +5,9 @@ import App from "./App.vue";
 import { i18n } from "./lib/i18n";
 import { installVirtualScrollbars } from "./lib/virtual-scrollbar";
 import { designRoutesReady, router } from "./router";
+import { installSessionExpiryRedirect } from "./router/session-guard";
+import { onUnauthorized } from "./api/base/session";
+import { useAuthStore } from "./stores/auth";
 
 /**
  * ai-frontend 入口。
@@ -24,6 +27,11 @@ app.use(createPinia()).use(i18n);
  * 设计目录仅开发期存在，生产构建里该 promise 立即兑现，不产生额外等待。
  */
 void designRoutesReady.then(() => {
+  // 会话彻底失效（401 + 刷新失败）时：先清本地登录态，再统一跳登录页。
+  // 两条请求通道（@digua/http 与 lmms SDK 的 sessionFetch）共用这一份订阅。
+  onUnauthorized(() => useAuthStore().resetSession());
+  installSessionExpiryRedirect(router);
+
   app.use(router);
   app.mount("#app");
 

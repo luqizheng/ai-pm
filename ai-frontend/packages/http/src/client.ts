@@ -1,7 +1,6 @@
 import axios, {
   type AxiosError,
   type AxiosInstance,
-  type AxiosRequestConfig,
   type InternalAxiosRequestConfig
 } from "axios";
 import {
@@ -136,15 +135,25 @@ export function createHttp(options: HttpClientOptions = {}): HttpClient {
 
       // 只有 401（未认证）才刷新 token；403 是权限不足，刷新没有意义。
       // 白名单与 skipAuth 的请求（登录、刷新）绝不参与刷新链路，否则会自锁。
-      const canRefresh =
+      // 匿名请求（没带 Authorization）的 401 不是会话过期，不刷新也不登出。
+      const hasAuthHeader = !!original?.headers.get("Authorization");
+      const isAuthFailure =
         status === 401 &&
         !!original &&
         !original.skipAuth &&
-        !original._prismRetried &&
         !isWhiteListed(original.url ?? "") &&
-        !!refreshToken;
+        hasAuthHeader;
 
-      if (canRefresh) {
+      /* 刷新条件：可刷新且本请求还没重放过 */
+      const canRefresh =
+        isAuthFailure && !original?._prismRetried && !!refreshToken;
+
+      if (isAuthFailure && !canRefresh) {
+        // 没有 refresh token / 刷新后仍 401：会话已彻底失效，直接通知消费方登出
+        onUnauthorized?.();
+      }
+
+      if (canRefresh && original) {
         // 一个请求最多刷新重放一次，避免持续 401 时无限刷新直到 OOM
         original._prismRetried = true;
 

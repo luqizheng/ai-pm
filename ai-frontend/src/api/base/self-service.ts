@@ -2,6 +2,7 @@ import { HttpCore, IamServicesError } from "iam-services";
 
 import { file } from "./file";
 import { getAccessToken } from "./token-storage";
+import { sessionFetch } from "./session";
 
 /**
  * 自助资料与会话（iam-service 本轮新增端点）。
@@ -44,7 +45,7 @@ export { IamServicesError };
 const http = new HttpCore({
   baseUrl: import.meta.env.VITE_IAM_BASE_URL ?? "/gw",
   getToken: () => getAccessToken(),
-  fetch: fetch.bind(globalThis)
+  fetch: sessionFetch
 });
 
 export function getMe(): Promise<SelfProfile> {

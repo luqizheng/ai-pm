@@ -72,15 +72,24 @@ export function saveStoredUser(user: StoredUser) {
   safeSet(KEYS.user, JSON.stringify(user));
 }
 
+/** 只更新凭据（刷新 token 时保留已有用户资料） */
+export function saveTokens(params: {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}) {
+  safeSet(KEYS.access, params.accessToken);
+  safeSet(KEYS.refresh, params.refreshToken);
+  safeSet(KEYS.expiresAt, String(Date.now() + params.expiresIn * 1000));
+}
+
 export function saveSession(params: {
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
   user: StoredUser;
 }) {
-  safeSet(KEYS.access, params.accessToken);
-  safeSet(KEYS.refresh, params.refreshToken);
-  safeSet(KEYS.expiresAt, String(Date.now() + params.expiresIn * 1000));
+  saveTokens(params);
   saveStoredUser(params.user);
 }
 

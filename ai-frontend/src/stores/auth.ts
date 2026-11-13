@@ -191,15 +191,20 @@ export const useAuthStore = defineStore("auth", () => {
     }
   }
 
-  /** 结束会话（调用服务端登出并清理本地凭据） */
-  async function signOut(): Promise<void> {
-    await authGateway.signOut();
+  /** 只清本地会话状态（凭据失效时由 HTTP 层触发，不再调用服务端登出） */
+  function resetSession() {
     status.value = "signed_out";
     account.value = null;
     organization.value = null;
     user.value = null;
     profileFresh.value = false;
     errorCode.value = null;
+  }
+
+  /** 结束会话（调用服务端登出并清理本地凭据） */
+  async function signOut(): Promise<void> {
+    await authGateway.signOut();
+    resetSession();
   }
 
   return {
@@ -213,6 +218,7 @@ export const useAuthStore = defineStore("auth", () => {
     signingIn,
     signIn,
     signOut,
+    resetSession,
     applyProfile,
     refreshProfile,
     requestPasswordReset,

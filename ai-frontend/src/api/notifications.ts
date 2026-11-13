@@ -6,6 +6,7 @@ import {
 
 import { notification } from "./base/notification";
 import { getAccessToken } from "./base/token-storage";
+import { sessionFetch } from "./base/session";
 import type {
   NotificationCategory,
   NotificationRecord
@@ -23,7 +24,7 @@ export type AnnouncementWithRead = Announcement & { read?: boolean };
 const http = new HttpCore({
   baseUrl: import.meta.env.VITE_IAM_BASE_URL ?? "/gw",
   getToken: () => getAccessToken(),
-  fetch: fetch.bind(globalThis)
+  fetch: sessionFetch
 });
 
 /** 公告不区分 PM 六类，统一落到系统提醒 */

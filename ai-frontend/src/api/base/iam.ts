@@ -1,5 +1,6 @@
 import { createIamServices, type IamServices } from "iam-services";
 import { getAccessToken } from "./token-storage";
+import { sessionFetch } from "./session";
 
 /**
  * lmms IAM SDK（iam-services）—— 上游 lmms 仓提供的官方客户端，
@@ -12,5 +13,6 @@ import { getAccessToken } from "./token-storage";
  */
 export const iam: IamServices = createIamServices({
   baseUrl: import.meta.env.VITE_IAM_BASE_URL ?? "/gw",
-  getToken: () => getAccessToken()
+  getToken: () => getAccessToken(),
+  fetch: sessionFetch
 });
