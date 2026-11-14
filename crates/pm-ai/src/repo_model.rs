@@ -27,9 +27,10 @@ pub const REPO_SYSTEM_PROMPT: &str = r#"你是 AI 项目经理。你会收到若
  "tasks":[{"key":"T1","title":"...","description":"...","priority":"normal","milestone_key":"M1","requirement_key":"R1","assignee_role":"developer","confidence":"high","evidence":[{"kind":"commit","repo_id":"...","ref":"<sha>","detail":"..."}]}],
  "risks":[{"description":"...","severity":"medium","evidence":[]}],
  "unknowns":[{"question":"...","why_blocking":"..."}],
- "coverage":{"repos":[]}}
+ "coverage":{"repos":[{"repository_id":"<逐字复制输入的 repository_id>","head_commit_sha":"<该仓库 head sha>","commits_analyzed":0,"docs_analyzed":0,"truncated":false}]}}
 
-证据只能是输入里真实出现过的 doc 路径或 commit sha；编造的条目会被服务端丢弃。assignee_role 只能取 ai_pm / architect / developer / tester。"#;
+证据只能是输入里真实出现过的 doc 路径或 commit sha；编造的条目会被服务端丢弃。assignee_role 只能取 ai_pm / architect / developer / tester。
+coverage.repos 必须是对象数组，输入的每个仓库各一项：repository_id 逐字复制输入里的 repository_id 字符串；数字字段填真实统计值。所有字段严格按 schema 的类型，禁止用字符串代替对象或数组。"#;
 
 fn heading(markdown: &str, fallback: &str) -> String {
     markdown
