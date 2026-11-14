@@ -439,6 +439,15 @@ async fn handle_repo_job(pool: &PgPool, job: &ClaimedJob) {
                     error = %err,
                     "repo import model resolution failed (explicit configuration error)"
                 );
+                // 导入行必须同步落 failed——否则它永远停在 analyzing，
+                // 客户端只能看到「分析中」而无从得知配置坏了（2026-11-14）。
+                pm_application::project_import::fail_import(
+                    pool,
+                    import_id,
+                    "model_configuration",
+                    &format!("model resolution failed: {err}"),
+                )
+                .await;
                 let _ = job_queue::fail(
                     pool,
                     job.job_id,
@@ -466,16 +475,30 @@ async fn handle_repo_job(pool: &PgPool, job: &ClaimedJob) {
         }
         Err(e) => {
             tracing::warn!(job_id = %job.job_id, error = %e, "repo import job failed, backing off");
+            let reason = e.to_string();
             if let Err(e) = job_queue::fail(
                 pool,
                 job.job_id,
-                &e.to_string(),
+                &reason,
                 MAX_JOB_ATTEMPTS,
                 JOB_BACKOFF_BASE_SECS,
             )
             .await
             {
                 tracing::error!(job_id = %job.job_id, error = %e, "job fail failed");
+            }
+            // 重试耗尽（job 落 failed）→ 导入行同步落终态；否则它永远停在
+            // queued/analyzing，客户端只能看到「分析中」（2026-11-14）。
+            let job_status: Option<String> =
+                sqlx::query_scalar("SELECT status FROM integration.job WHERE id = $1")
+                    .bind(job.job_id)
+                    .fetch_optional(pool)
+                    .await
+                    .ok()
+                    .flatten();
+            if job_status.as_deref() == Some("failed") {
+                pm_application::project_import::fail_import(pool, import_id, "job_failed", &reason)
+                    .await;
             }
         }
     }

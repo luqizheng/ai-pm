@@ -5,9 +5,7 @@ pub async fn list_imports(
     project_id: Uuid,
 ) -> Result<Vec<ImportListItem>, ImportError> {
     let rows: Vec<ImportListRow> = sqlx::query_as(
-        "SELECT id, status, progress, model_name, draft_revision, analysis_run_id, \
-                created_at, proposed_at, applied_at \
-         FROM integration.repo_import WHERE project_id = $1 ORDER BY created_at DESC",
+        "SELECT id, status, progress, stage_detail, model_name, draft_revision,                 analysis_run_id, created_at, updated_at, proposed_at, applied_at,                 error_code, error_detail          FROM integration.repo_import WHERE project_id = $1 ORDER BY created_at DESC",
     )
     .bind(project_id)
     .fetch_all(pool)
@@ -19,23 +17,31 @@ pub async fn list_imports(
                 id,
                 status,
                 progress,
+                stage_detail,
                 model_name,
                 draft_revision,
                 analysis_run_id,
                 created_at,
+                updated_at,
                 proposed_at,
                 applied_at,
+                error_code,
+                error_detail,
             )| {
                 ImportListItem {
                     id,
                     status,
                     progress,
+                    stage_detail,
                     model_name,
                     draft_revision,
                     analysis_run_id,
                     created_at,
+                    updated_at,
                     proposed_at,
                     applied_at,
+                    error_code,
+                    error_detail,
                 }
             },
         )
@@ -544,7 +550,9 @@ pub(crate) async fn set_stage(
     Ok(())
 }
 
-pub(crate) async fn fail_import(pool: &PgPool, import_id: Uuid, code: &str, detail: &str) {
+/// 把导入落为 failed（带错误码）并释放初始化名额。已终态的导入不被覆盖
+/// （与 `set_stage` 同一守卫——取消后迟到的失败不得把 cancelled 改写成 failed）。
+pub async fn fail_import(pool: &PgPool, import_id: Uuid, code: &str, detail: &str) {
     let detail: String = detail.chars().take(500).collect();
     let Ok(mut tx) = pool.begin().await else {
         return;
@@ -558,7 +566,8 @@ pub(crate) async fn fail_import(pool: &PgPool, import_id: Uuid, code: &str, deta
             .flatten();
     let _ = sqlx::query(
         "UPDATE integration.repo_import SET status = 'failed', error_code = $2, error_detail = $3, \
-         updated_at = now() WHERE id = $1",
+         updated_at = now() \
+         WHERE id = $1 AND status NOT IN ('cancelled','failed','rejected','applied','proposed')",
     )
     .bind(import_id)
     .bind(code)
@@ -597,6 +606,8 @@ pub(crate) async fn fail_import(pool: &PgPool, import_id: Uuid, code: &str, deta
 }
 
 /// 执行一次导入 job。Fake 模型也能跑通 `queued → draft_ready`。
+/// 注意：模型**解析**失败由 worker 在调本函数前标 `failed(model_configuration)`，
+/// 否则导入会永远停在 analyzing（2026-11-14 缺陷修复）。
 pub async fn run_import_job(
     pool: &PgPool,
     model: &dyn RepoAnalysisModel,
@@ -1007,10 +1018,15 @@ pub async fn import_id_for_event(
     pool: &PgPool,
     event_id: Uuid,
 ) -> Result<Option<Uuid>, ImportError> {
-    let key: Option<String> =
-        sqlx::query_scalar("SELECT idempotency_key FROM integration.inbound_event WHERE id = $1")
-            .bind(event_id)
-            .fetch_optional(pool)
-            .await?;
-    Ok(key.and_then(|key| key.parse::<Uuid>().ok()))
+    // 权威来源 = 事件 payload 的 `import_id`（`start_import` 恒写入）。
+    // 不能解析 `idempotency_key`：N-4 起它可能是**客户端幂等键**（前端发的是
+    // 随机 UUID，恰好能 parse 成功）——当 import id 用会永远 "import not found"，
+    // 导入卡死 queued（2026-11-14 实测缺陷，UI 触发的分析 100% 命中）。
+    let import_id: Option<Option<Uuid>> = sqlx::query_scalar(
+        "SELECT (payload->>'import_id')::uuid FROM integration.inbound_event WHERE id = $1",
+    )
+    .bind(event_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(import_id.flatten())
 }

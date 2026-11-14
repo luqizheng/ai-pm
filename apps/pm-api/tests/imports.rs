@@ -10,8 +10,8 @@ use pm_ai::repo_model::FakeRepoAnalysisModel;
 use pm_application::bootstrap::{bootstrap_project_with_status, BootstrapRequest};
 use pm_application::command_executor::PgCommandExecutor;
 use pm_application::project_import::{
-    ground_draft, propose_import, run_import_job, start_import, ApplyProject, ApplyRequest,
-    StartImportRequest,
+    ground_draft, list_imports, propose_import, run_import_job, start_import, ApplyProject,
+    ApplyRequest, StartImportRequest,
 };
 use pm_application::repo_facts::{CommitFact, DocContent, HotFile, LanguageStat, RepoFacts};
 use pm_application::supervision::{decide_approval, DecideRequest, Decision};
@@ -827,6 +827,55 @@ async fn cancelled_import_is_not_resurrected_by_the_worker(pool: PgPool) {
     );
 }
 
+/// 2026-11-14 回归：客户端幂等键（前端发随机 UUID）不得被当成 import id。
+/// `import_id_for_event` 必须读事件 payload 的权威字段，否则 worker 永远
+/// "import not found" → 导入卡死 queued（UI 触发的分析 100% 命中）。
+#[sqlx::test(migrations = "../../migrations")]
+async fn worker_resolves_import_id_with_client_uuid_idempotency_key(pool: PgPool) {
+    let (project_id, repo_id, _repo) = seed_project_with_repo(&pool, "UUIDKEY").await;
+    let client_key = uuid::Uuid::new_v4().to_string();
+    let started = start_import(
+        &pool,
+        project_id,
+        &pm_application::actor::AuditActor::dispatch(),
+        &StartImportRequest {
+            repository_ids: vec![repo_id],
+            idempotency_key: Some(client_key.clone()),
+        },
+    )
+    .await
+    .unwrap();
+    let event_id: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM integration.inbound_event WHERE source = 'repo_import' AND idempotency_key = $1",
+    )
+    .bind(&client_key)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let resolved = pm_application::project_import::import_id_for_event(&pool, event_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        resolved,
+        Some(started.import_id),
+        "must resolve via payload, not the client key"
+    );
+    // 同键重放返回同一个导入（N-4 幂等）。
+    let replay = start_import(
+        &pool,
+        project_id,
+        &pm_application::actor::AuditActor::dispatch(),
+        &StartImportRequest {
+            repository_ids: vec![repo_id],
+            idempotency_key: Some(client_key),
+        },
+    )
+    .await
+    .unwrap();
+    assert!(replay.replayed);
+    assert_eq!(replay.import_id, started.import_id);
+}
+
 /// 导入失败必须释放初始化名额（否则该 Project 再也发不起导入）。
 #[sqlx::test(migrations = "../../migrations")]
 async fn failed_import_releases_the_initialization_slot(pool: PgPool) {
@@ -855,6 +904,26 @@ async fn failed_import_releases_the_initialization_slot(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(status, "failed");
+
+    // 2026-11-14：list 必须透出阶段与失败原因——否则客户端永远只能看到
+    // 「分析中」，无法得知 git/模型哪里坏了。
+    let listed = list_imports(&pool, project_id).await.unwrap();
+    let failed = listed
+        .iter()
+        .find(|item| item.id == started.import_id)
+        .expect("failed import must be listed");
+    assert_eq!(failed.status, "failed");
+    let code = failed
+        .error_code
+        .as_deref()
+        .expect("error_code must be set");
+    // 全部仓库克隆失败 → 导入级错误码；逐仓 git 错误在 sources 里。
+    assert_eq!(
+        code, "all_repositories_failed",
+        "clone failure must surface a stable import-level code"
+    );
+    assert!(failed.error_detail.is_some());
+    assert!(failed.stage_detail.is_some());
 
     let active: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM core.project_initialization_operation \

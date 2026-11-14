@@ -18,17 +18,21 @@ pub(crate) use crate::pm_write::PmWriteError;
 pub(crate) use crate::repo_facts::{self, pm_ai_port::ModelError, RepoAnalysisModel, RepoMaterial};
 pub(crate) use pm_domain::import::{Evidence, EvidenceKind, ProjectDraft};
 
-/// `list_imports` 的结果行（14 列）。
+/// `list_imports` 的结果行（13 列，含阶段/失败原因/推进时间）。
 pub(crate) type ImportListRow = (
     Uuid,
     String,
     i32,
+    Option<String>,
     String,
     i64,
     Option<Uuid>,
     DateTime<Utc>,
+    DateTime<Utc>,
     Option<DateTime<Utc>>,
     Option<DateTime<Utc>>,
+    Option<String>,
+    Option<String>,
 );
 /// `get_import` 的结果行（14 列，含草案与阶段详情）。
 pub(crate) type ImportDetailRow = (
@@ -200,10 +204,17 @@ pub struct ImportListItem {
     pub id: Uuid,
     pub status: String,
     pub progress: i32,
+    /// 当前阶段说明（set_stage 的 detail）；终态后保留最后一次值。
+    pub stage_detail: Option<String>,
     pub model_name: String,
     pub draft_revision: i64,
     pub analysis_run_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
+    /// 最近一次推进时间——前端据此判断「是否卡住」。
+    pub updated_at: DateTime<Utc>,
     pub proposed_at: Option<DateTime<Utc>>,
     pub applied_at: Option<DateTime<Utc>>,
+    /// 失败原因（2026-11-14：list 之前不透出，失败在前端不可见）。
+    pub error_code: Option<String>,
+    pub error_detail: Option<String>,
 }
