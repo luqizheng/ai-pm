@@ -233,7 +233,7 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
         // 锚链次选：observed_head 来自 intake source_ref（verify 的 Observed
         // HEAD）；selected_commit 在 collect_repository_facts 内部优先。
         let observed_head = source_ref.get("head_commit_sha").and_then(|v| v.as_str());
-        let (facts, _) = match kb_pc_analysis::collect_repository_facts(
+        let (facts, repo_name) = match kb_pc_analysis::collect_repository_facts(
             &self.pool,
             repository_id,
             observed_head,
@@ -281,13 +281,28 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
                     pm_application::pc::AnalysisProposalInput {
                         source_id,
                         task_id,
+                        // 标题用仓库名（锚定 commit 分析时 facts.default_branch 是
+                        // sha，对人无意义）。
                         title: format!(
-                            "仓库快照认知更新 @ {}",
+                            "仓库认知更新：{} @ {}",
+                            repo_name,
                             facts.head_commit_sha.chars().take(12).collect::<String>()
                         ),
+                        // 提案文案用采集事实说话（intake id 对人无意义；具体变更项
+                        // 见成员变更列表，不在此预 enumeration）。
                         rationale: format!(
-                            "仓库快照分析（intake {intake_id}）产出未确认的认知修订；\
-                             AI 起草，待 Lead 或授权审批人确认后发布正式版本。"
+                            "本次分析基于 {} @ {}：{} 个文件、{} 条 commit{}。\
+                             识别到的认知修订由 AI 起草为草稿——批准后发布为正式版本并进入检索，\
+                             驳回则丢弃；具体变更项见成员变更列表。",
+                            repo_name,
+                            facts.head_commit_sha.chars().take(12).collect::<String>(),
+                            facts.file_count,
+                            facts.commits.len(),
+                            if facts.truncated {
+                                "（采集触顶截断）"
+                            } else {
+                                ""
+                            },
                         ),
                     },
                 )
