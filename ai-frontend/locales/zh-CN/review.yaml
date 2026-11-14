@@ -1,0 +1,137 @@
+review:
+  nav:
+    title: 人工审核中心
+  time:
+    justNow: 刚刚
+    minutes: "{n} 分钟前"
+    hours: "{n} 小时前"
+    days: "{n} 天前"
+  page:
+    title: 人工审核中心
+    subtitle: 处理系统中等待人工确认、决策和验收的事项
+    meta: "{total} 项待处理 · 更新于 {asOf}"
+  tabs:
+    all: 全部
+    finding: 发现
+    proposal: 知识提案
+    delivery: 交付验收
+  filter:
+    searchPlaceholder: 搜索事项…
+    domainAll: 全部领域
+    sortUpdatedDesc: 最近更新优先
+    sortUpdatedAsc: 最早更新优先
+  kind:
+    finding_pending: 发现待确认
+    finding_revision_requested: 发现修订后待重新确认
+    proposal_pending: 知识提案待确认
+    delivery_pending: 交付待验收
+  domain:
+    project: 项目
+    repository: 仓库
+    import: 导入
+    task: 任务
+    run: 执行
+    delivery: 交付
+    knowledge: 知识
+    discovery: 发现
+    other: 其他
+  sourceState:
+    PENDING: 待处理
+    REVISION_REQUESTED: 待补充
+    CONFIRMED: 已确认
+    REJECTED: 已拒绝
+    CONFLICT: 冲突
+    draft: 草稿
+    submitted: 已提交
+    reviewing: 审阅中
+    approved: 已批准
+    rejected: 已否决
+  empty:
+    allDone:
+      title: 全部处理完成
+      hint: 目前没有等待人工处理的事项
+    noMatch:
+      title: 没有匹配结果
+      hint: 调整筛选条件后重新查看
+    loading:
+      title: 正在加载
+      hint: 正在获取待处理事项
+    loadFailed:
+      title: 加载失败
+      hint: 无法获取待处理事项
+      retry: 重试
+  queue:
+    stateLabel: 待处理
+  detail:
+    close: 关闭
+    typeLabel: 类型
+    stateLabel: 状态
+    updatedLabel: 更新时间
+    hintLabel: 处理提示
+    descriptionLabel: 事项说明
+    contextLabel: 业务上下文
+    decisionLabel: 人工决策
+    viewObject: 查看业务对象
+    contextLoading: 正在加载上下文…
+    contextFailed: 上下文加载失败，可重试或直接前往业务对象
+    noPermission: 当前账号无权处理此事项，你仍然可以查看相关内容
+    stateChanged: 该事项状态已变化，请刷新后重新确认
+    submitFailed: 提交失败
+    doneConfirmed: 已确认该发现
+    doneRejected: 已拒绝该发现
+    doneApproved: 已确认提案
+    doneRejectedProposal: 已否决提案
+  reason:
+    findingLabel: 决策说明
+    findingPlaceholder: 请说明确认或拒绝该发现的依据……
+    proposalLabel: 审核备注
+    proposalPlaceholder: 可补充确认或否决的原因……
+    requiredBadge: 必填
+    optionalBadge: 选填
+    requiredHint: 未填写不可提交
+    maxLength: 最多 {max} 字
+  finding:
+    confirm: 确认
+    reject: 拒绝
+    contextTitle: 发现内容
+    confidenceLabel: 置信度
+    kindLabel: 发现类型
+    evidenceLabel: 证据
+    noEvidence: 无附加证据
+  proposal:
+    approve: 确认提案
+    reject: 否决提案
+    confirmArmed: 再次点击确认
+    rejectArmed: 再次点击否决
+    cancel: 取消
+    contextTitle: 提案内容
+    rationaleLabel: 变更说明
+    riskLabel: 风险等级
+    confidenceLabel: 置信度
+    governanceLabel: 治理等级
+    memberCountLabel: 涉及成员数
+    versionLabel: 提案版本
+    staleNotice: 该提案在你打开后发生了更新。为避免基于旧版本作出决定，请重新查看最新内容。
+    staleReload: 已加载最新版本，请重新审阅后再决策
+  delivery:
+    readOnlyNotice: 交付证据可查看，验收操作暂未开放
+    viewTask: 查看交付任务
+    contextTitle: 交付证据
+    repositoryLabel: 仓库
+    deliveryStateLabel: 交付状态
+    commitLabel: 提交
+    changedFilesLabel: 变更文件数
+    noEvidence: 暂无交付证据
+    verdictsLabel: 验收标准核验
+    verdictNotEvaluated: 从未被审阅覆盖
+    pendingNotice: 存在待处理验收审批，可执行验收
+    noPendingNotice: 当前无待处理验收审批（证据仅供查看）
+    approveAction: 通过验收
+    rejectAction: 退回修改
+    reasonLabel: 验收理由
+    reasonPlaceholder: 可补充通过或退回的原因……
+    outcomeChangesRequested: 已退回修改
+    alreadyDecided: 该审批已被处理
+    anchorDrift: 交付锚点已变化，请刷新后重试
+    gateRefused: 完成门未放行，暂不可验收
+    reviewNotSucceeded: 审阅未成功完成，暂不可验收

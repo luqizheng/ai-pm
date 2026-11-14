@@ -177,6 +177,34 @@ export function listPcProposals(projectId: string, status?: string) {
   });
 }
 
+/** P4 详查响应（`GET /v1/pc/proposals/{id}?project_id=`；members/approvals 原样透传）。 */
+export interface PcProposalDetail {
+  proposal_id: string;
+  status: string;
+  governance_level: string;
+  members: unknown[];
+  content_hash: string;
+  title: string;
+  rationale: string | null;
+  origin_kind: string;
+  risk_level: string;
+  confidence: string;
+  /** 提案锚定版本号（回传 P5 做 CAS；失配 409）。 */
+  expected_version_no: number;
+  submitted_at: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  approvals: unknown[];
+}
+
+/** P4 提案详查（人工审核中心提案详情用；P5 决策前取 expected_version_no）。 */
+export function getPcProposal(proposalId: string, projectId: string) {
+  return http.get<PcProposalDetail>(`/v1/pc/proposals/${proposalId}`, {
+    project_id: projectId
+  });
+}
+
 /**
  * 提案决策（approve=批准并发布 / reject=驳回）。
  *
