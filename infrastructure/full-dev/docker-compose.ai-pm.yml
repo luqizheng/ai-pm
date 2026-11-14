@@ -123,6 +123,9 @@ services:
       target: runtime-ai-pm-worker
     environment:
       DATABASE_URL: "${DATABASE_URL}"
+      # SSH 私钥信封解密（克隆绑定 key 的仓库时必须；与 pm-api / pm-worker 同值，
+      # 2026-11-14：缺失导致所有 git 克隆失败 "AI_PM_SECRET_KEY is not set"）。
+      AI_PM_SECRET_KEY: "${AI_PM_SECRET_KEY:-}"
       AI_PM_POLICY_FILE: /app/policies/ai-pm-ai-lead-v2.yaml
       # D-1=b：无人值守派发开关（缺省 off）与项目级排除列表（逗号分隔 project code，
       # 缺省空）。透传后可由 .env.prod 开关而无需重建镜像；仅 ai-pm-worker 消费
