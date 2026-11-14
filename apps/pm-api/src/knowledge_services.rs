@@ -78,8 +78,9 @@ pub(crate) fn router() -> Router<AppState> {
         )
         .route("/v1/pc/conflicts/{conflict_id}", get(p6_conflict))
         .route("/v1/pc/versions/{version_id}", get(p7_version))
-        // PC 对象浏览（前端 KnowledgeView PC 页签；只读管理面）
+        // PC 对象浏览（前端 KnowledgeView PC 页签；只读管理面；按 id 详情=全文）
         .route("/v1/pc/objects", get(list_pc_objects))
+        .route("/v1/pc/objects/{object_id}", get(pc_object_detail))
         // PC 提案列表（前端审批页签；P4 按 id 详查 / P5 决策走既有端点）
         .route("/v1/pc/proposals", get(list_pc_proposals))
 }
@@ -638,6 +639,38 @@ async fn p7_version(
     guard(&state, &caller, project_id).await?;
     let _ = version_id;
     skeleton_501(()).await
+}
+
+/// `GET /v1/pc/objects/{object_id}?project_id=`：PC 对象详情（最新修订全文 +
+/// analysis_mode/versioned）。前端 PC 页签行内展开消费；复用 `pc_object_legacy`
+/// 查询与 P3 的 `pc_object_json` 投影（形状一致）。项目边界：非成员/其他项目
+/// 404（不泄露跨项目存在性）；坏 uuid 404（同 p4_proposal 口径）。
+async fn pc_object_detail(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(object_id): Path<String>,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let project_id = query
+        .get("project_id")
+        .and_then(|v| uuid::Uuid::parse_str(v).ok())
+        .ok_or(ApiError::BadRequest("project_id is required"))?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await?;
+    let object_id =
+        Uuid::parse_str(&object_id).map_err(|_| ApiError::NotFound("pc object not found"))?;
+    let mut rows = kb_pc_query_repo(&state.pool)
+        .pc_object_legacy(project_id, object_id)
+        .await?;
+    if rows.len() != 1 {
+        return Err(ApiError::NotFound("pc object not found"));
+    }
+    Ok(Json(pc_object_json(rows.pop().expect("len checked"))))
 }
 
 /// `GET /v1/pc/objects?project_id=`：项目 PC 认知对象列表（最新修订投影 + 正文

@@ -21,10 +21,14 @@ knowledge:
     revision: 修订
     revisions: 修订历史
     content: 正文
+  detail:
+    noRevision: 暂无修订——对象为 identity 占位，提案应用后在此可见全文
+    analysisMode: 分析模式
+    versioned: 已入正式版本
+    unversioned: 未入正式版本
   action:
     confirm: 确认发布
     confirming: 确认中…
-    close: 收起
   notice:
     ingested: 已摄入为草稿（修订 {no}）——请在详情中确认发布
     confirmed: 已确认发布（同人重复确认不会改原确认记录）
@@ -48,10 +52,22 @@ knowledge:
     expired: 已过期
     applied: 已应用
     failed: 失败
+  approvalStatus:
+    pending: 待决策
+    approved: 已批准
+    rejected: 已驳回
   proposal:
     members: 个成员对象
     approve: 批准并发布
     reject: 驳回
+    rationale: 理由
+    membersList: 成员变更
+    approvals: 审批历史
+    risk: 风险
+    confidence: 置信度
+    governance: 治理级别
+    origin: 来源
+    noApprovals: 暂无审批记录
   impact:
     title: 影响分析（跨域关系遍历）
     placeholder: 例如：修改订单状态会影响哪些需求与设计？

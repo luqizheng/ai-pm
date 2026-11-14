@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { ChevronRight } from "lucide-vue-next";
 import PageFrame from "@/components/shell/PageFrame.vue";
 import {
   confirmKbRevision,
   decidePcProposal,
   getKbDocument,
+  getPcObject,
+  getPcProposal,
   ingestKbDocument,
   listKbDocuments,
   listPcObjects,
@@ -14,13 +17,24 @@ import {
   type IngestKind,
   type KbDocumentDetail,
   type KbDocumentRow,
+  type PcObjectDetail,
   type PcObjectRow,
+  type PcProposalDetail,
+  type PcProposalMemberView,
   type PcProposalRow,
   type RetrievalQueryResponse
 } from "@/api/knowledge";
 import { useShellStore } from "@/stores/shell";
 import { useRoute } from "vue-router";
 import MarkdownViewer from "@/components/ui/markdown-editor/MarkdownViewer.vue";
+import Button from "@/components/ui/button/Button.vue";
+import Alert from "@/components/ui/alert/Alert.vue";
+import Badge from "@/components/ui/badge/Badge.vue";
+import EmptyState from "@/components/ui/empty-state/EmptyState.vue";
+import Input from "@/components/ui/input/Input.vue";
+import Select from "@/components/ui/select/Select.vue";
+import Tabs from "@/components/ui/tabs/Tabs.vue";
+import Textarea from "@/components/ui/textarea/Textarea.vue";
 
 /**
  * 知识库（KB 文档 + PC 认知对象）——/project/knowledge 落地页。
@@ -141,12 +155,118 @@ async function decide(row: PcProposalRow, action: "approve" | "reject") {
   }
 }
 
-function proposalTone(status: string): string {
-  if (status === "approved" || status === "applied") return "tone-ok";
-  if (status === "submitted") return "tone-warn";
-  if (status === "rejected" || status === "failed") return "tone-bad";
-  return "tone-muted";
+/* ── PC 对象/提案详情（行内展开；按 id 缓存，收起保留缓存）──────────────── */
+
+/** PC 行展开态 + 详情缓存（收起只切展开态；缓存保留——再展不重拉）。 */
+const pcOpen = ref<Record<string, boolean>>({});
+const pcDetail = ref<Record<string, PcObjectDetail>>({});
+const pcDetailLoading = ref<string | null>(null);
+
+/** 提案行展开态 + 详情缓存（同上）。 */
+const proposalOpen = ref<Record<string, boolean>>({});
+const proposalDetail = ref<Record<string, PcProposalDetail>>({});
+const proposalDetailLoading = ref<string | null>(null);
+
+async function openPcDetail(obj: PcObjectRow) {
+  if (!canLoad.value || pcDetail.value[obj.object_id]) return;
+  pcDetailLoading.value = obj.object_id;
+  try {
+    pcDetail.value[obj.object_id] = await getPcObject(
+      obj.object_id,
+      currentProjectId.value as string
+    );
+  } catch {
+    errorText.value = t("s01.knowledge.error.load");
+  } finally {
+    pcDetailLoading.value = null;
+  }
 }
+
+/** 行头即开关（与 KB 行一致）：已展开则收起，否则展开并按需拉详情。 */
+function togglePcRow(obj: PcObjectRow) {
+  pcOpen.value[obj.object_id] = !pcOpen.value[obj.object_id];
+  if (pcOpen.value[obj.object_id]) openPcDetail(obj);
+}
+
+/** 展开态取最新修订（identity 对象无修订 → null）。 */
+function pcRev(obj: PcObjectRow) {
+  return pcDetail.value[obj.object_id]?.latest_revision ?? null;
+}
+
+async function openProposalDetail(p: PcProposalRow) {
+  if (!canLoad.value || proposalDetail.value[p.proposal_id]) return;
+  proposalDetailLoading.value = p.proposal_id;
+  try {
+    proposalDetail.value[p.proposal_id] = await getPcProposal(
+      p.proposal_id,
+      currentProjectId.value as string
+    );
+  } catch {
+    errorText.value = t("s01.knowledge.error.load");
+  } finally {
+    proposalDetailLoading.value = null;
+  }
+}
+
+function toggleProposalRow(p: PcProposalRow) {
+  proposalOpen.value[p.proposal_id] = !proposalOpen.value[p.proposal_id];
+  if (proposalOpen.value[p.proposal_id]) openProposalDetail(p);
+}
+
+/** 成员变更行文本：对象变更带类型/名/修订；关系变更带类型与修订。 */
+function memberLabel(m: PcProposalMemberView): string {
+  const parts: string[] = [m.change_kind];
+  if (m.object_id) {
+    parts.push(m.object_type ?? "", m.display_name ?? m.object_key ?? "");
+    if (m.object_revision_no != null) parts.push(`v${m.object_revision_no}`);
+  } else if (m.relationship_id) {
+    parts.push(m.relationship_type ?? "");
+    if (m.relationship_revision_no != null)
+      parts.push(`v${m.relationship_revision_no}`);
+  }
+  return parts.filter(Boolean).join(" · ");
+}
+
+/** 审批状态文案（pending/approved/rejected；未知原样回显）。 */
+function approvalLabel(status: string): string {
+  const known = ["pending", "approved", "rejected"];
+  return known.includes(status)
+    ? t(`s01.knowledge.approvalStatus.${status}`)
+    : status;
+}
+
+type BadgeTone = "success" | "warning" | "danger" | "neutral";
+
+function proposalVariant(status: string): BadgeTone {
+  if (status === "approved" || status === "applied") return "success";
+  if (status === "submitted") return "warning";
+  if (status === "rejected" || status === "failed") return "danger";
+  return "neutral";
+}
+
+/** 页签项（Tabs 组件契约；计数随列表刷新）。 */
+const tabItems = computed(() => [
+  {
+    value: "kb",
+    label: `${t("s01.knowledge.tab.kb")} (${kbRows.value.length})`
+  },
+  {
+    value: "pc",
+    label: `${t("s01.knowledge.tab.pc")} (${pcRows.value.length})`
+  },
+  {
+    value: "proposals",
+    label: `${t("s01.knowledge.tab.proposals")} (${proposalRows.value.length})`
+  }
+]);
+
+/** 摄入文档类型（Select 组件契约）。 */
+const docTypeOptions = computed(() => [
+  { value: "knowledge", label: t("s01.knowledge.ingest.typeKnowledge") },
+  { value: "architecture", label: t("s01.knowledge.ingest.typeArchitecture") },
+  { value: "decision", label: t("s01.knowledge.ingest.typeDecision") },
+  { value: "requirement", label: t("s01.knowledge.ingest.typeRequirement") }
+]);
 
 /* ── 深链（搜索结果 → 自动展开 / 切页签）────────────────────────────── */
 
@@ -165,6 +285,11 @@ async function applyDeepLink() {
   }
   if (typeof objectId === "string" && objectId) {
     activeTab.value = "pc";
+    const row = pcRows.value.find(o => o.object_id === objectId);
+    if (row) {
+      pcOpen.value[objectId] = true;
+      await openPcDetail(row);
+    }
   }
 }
 
@@ -208,20 +333,28 @@ function closeDetail() {
   confirmedNotice.value = "";
 }
 
-/** 状态徽章语义色（token 语义面；rejected 也可见——生命周期语义保留）。 */
-function statusTone(status: string): string {
-  if (status === "published") return "tone-ok";
-  if (status === "draft") return "tone-warn";
-  if (status === "rejected") return "tone-bad";
-  return "tone-muted";
+/** 行头即开关：已展开则收起，否则展开（箭头随态旋转）。 */
+function toggleRow(row: KbDocumentRow) {
+  if (detail.value?.document.document_id === row.document_id) {
+    closeDetail();
+  } else {
+    openDetail(row);
+  }
+}
+
+/** 状态徽章语义（rejected 也可见——生命周期语义保留）。 */
+function statusVariant(status: string): BadgeTone {
+  if (status === "published") return "success";
+  if (status === "draft") return "warning";
+  if (status === "rejected") return "danger";
+  return "neutral";
 }
 
 /** 生命周期徽章（PC）。 */
-function lifecycleTone(status: string): string {
-  if (status === "active") return "tone-ok";
-  if (status === "draft" || status === "identity") return "tone-warn";
-  if (status === "deprecated" || status === "superseded") return "tone-muted";
-  return "tone-muted";
+function lifecycleVariant(status: string): BadgeTone {
+  if (status === "active") return "success";
+  if (status === "draft" || status === "identity") return "warning";
+  return "neutral";
 }
 
 function formatTime(value: string | null): string {
@@ -331,6 +464,10 @@ onMounted(async () => {
 });
 watch(currentProjectId, async () => {
   closeDetail();
+  pcOpen.value = {};
+  pcDetail.value = {};
+  proposalOpen.value = {};
+  proposalDetail.value = {};
   impactResult.value = null;
   await loadLists();
   // 项目就绪后再放深链（搜索点击先于项目注入到达时，此处兜底）。
@@ -351,57 +488,30 @@ watch(
     :description="t('s01.knowledge.page.description')"
   >
     <div class="knowledge-page">
-      <div class="knowledge-tabs" role="tablist">
-        <button
-          role="tab"
-          :aria-selected="activeTab === 'kb'"
-          class="knowledge-tab"
-          :class="{ 'is-active': activeTab === 'kb' }"
-          @click="activeTab = 'kb'"
-        >
-          {{ t("s01.knowledge.tab.kb") }} ({{ kbRows.length }})
-        </button>
-        <button
-          role="tab"
-          :aria-selected="activeTab === 'pc'"
-          class="knowledge-tab"
-          :class="{ 'is-active': activeTab === 'pc' }"
-          @click="activeTab = 'pc'"
-        >
-          {{ t("s01.knowledge.tab.pc") }} ({{ pcRows.length }})
-        </button>
-        <button
-          role="tab"
-          :aria-selected="activeTab === 'proposals'"
-          class="knowledge-tab"
-          :class="{ 'is-active': activeTab === 'proposals' }"
-          @click="activeTab = 'proposals'"
-        >
-          {{ t("s01.knowledge.tab.proposals") }} ({{ proposalRows.length }})
-        </button>
-      </div>
+      <!-- Tabs 仅作页签触发行；内容块跨页签共享（影响分析等），按 activeTab 条件渲染。 -->
+      <Tabs v-model="activeTab" class="knowledge-tabs" :tabs="tabItems" />
 
       <!-- 影响分析（遍历可视化；正式关系多跳） -->
       <details class="impact-panel">
         <summary>{{ t("s01.knowledge.impact.title") }}</summary>
         <div class="impact-body">
           <form class="impact-form" @submit.prevent="runImpact">
-            <input
+            <Input
               v-model="impactQuery"
               class="impact-input"
               :placeholder="t('s01.knowledge.impact.placeholder')"
             />
-            <button class="kb-confirm" :disabled="impactRunning" type="submit">
+            <Button type="submit" :loading="impactRunning">
               {{
                 impactRunning
                   ? t("s01.knowledge.impact.running")
                   : t("s01.knowledge.impact.run")
               }}
-            </button>
+            </Button>
           </form>
-          <p v-if="impactError" class="knowledge-error" role="alert">
+          <Alert v-if="impactError" variant="danger" size="sm" role="alert">
             {{ impactError }}
-          </p>
+          </Alert>
           <template v-if="impactResult">
             <p v-if="impactResult.degraded" class="knowledge-hint">
               {{
@@ -452,24 +562,22 @@ watch(
         </div>
       </details>
 
-      <p v-if="errorText" class="knowledge-error" role="alert">
+      <Alert v-if="errorText" variant="danger" size="sm" role="alert">
         {{ errorText }}
-      </p>
+      </Alert>
       <p v-if="loading" class="knowledge-hint">
         {{ t("s01.knowledge.hint.loading") }}
       </p>
-      <p
+      <EmptyState
         v-else-if="!loading && !kbRows.length && activeTab === 'kb'"
-        class="knowledge-hint"
-      >
-        {{ t("s01.knowledge.hint.emptyKb") }}
-      </p>
-      <p
+        size="sm"
+        :title="t('s01.knowledge.hint.emptyKb')"
+      />
+      <EmptyState
         v-else-if="!loading && !pcRows.length && activeTab === 'pc'"
-        class="knowledge-hint"
-      >
-        {{ t("s01.knowledge.hint.emptyPc") }}
-      </p>
+        size="sm"
+        :title="t('s01.knowledge.hint.emptyPc')"
+      />
 
       <!-- 摄入面板（KB 页签）：上传/粘贴 → 解析 → draft（确认在详情里） -->
       <details
@@ -492,46 +600,36 @@ watch(
                 ingestFileName || t("s01.knowledge.ingest.pickFile")
               }}</span>
             </label>
-            <button
+            <Button
               v-if="ingestFileName"
-              class="kb-close"
+              variant="secondary"
+              size="sm"
               @click="switchToPaste"
             >
               {{ t("s01.knowledge.ingest.switchPaste") }}
-            </button>
+            </Button>
           </div>
           <div class="ingest-row">
-            <input
+            <Input
               v-model="ingestDocKey"
               class="impact-input"
               :placeholder="t('s01.knowledge.ingest.docKey')"
             />
-            <select v-model="ingestDocType" class="impact-input ingest-select">
-              <option value="knowledge">
-                {{ t("s01.knowledge.ingest.typeKnowledge") }}
-              </option>
-              <option value="architecture">
-                {{ t("s01.knowledge.ingest.typeArchitecture") }}
-              </option>
-              <option value="decision">
-                {{ t("s01.knowledge.ingest.typeDecision") }}
-              </option>
-              <option value="requirement">
-                {{ t("s01.knowledge.ingest.typeRequirement") }}
-              </option>
-            </select>
+            <!-- SelectRoot 无 DOM：max-width 落在包裹层。 -->
+            <div class="ingest-select">
+              <Select v-model="ingestDocType" :options="docTypeOptions" />
+            </div>
           </div>
-          <textarea
+          <Textarea
             v-if="!ingestFileName"
             v-model="ingestText"
-            class="impact-input ingest-textarea"
             :placeholder="t('s01.knowledge.ingest.pastePlaceholder')"
-            rows="6"
+            :rows="6"
           />
           <div class="ingest-actions">
-            <button
-              class="kb-confirm ingest-run"
-              :disabled="ingestRunning"
+            <Button
+              class="ingest-run"
+              :loading="ingestRunning"
               @click="runIngest"
             >
               {{
@@ -539,14 +637,14 @@ watch(
                   ? t("s01.knowledge.ingest.running")
                   : t("s01.knowledge.ingest.run")
               }}
-            </button>
+            </Button>
           </div>
-          <p v-if="ingestNotice" class="kb-notice" role="status">
+          <Alert v-if="ingestNotice" variant="success" size="sm" role="status">
             {{ ingestNotice }}
-          </p>
-          <p v-if="ingestError" class="knowledge-error" role="alert">
+          </Alert>
+          <Alert v-if="ingestError" variant="danger" size="sm" role="alert">
             {{ ingestError }}
-          </p>
+          </Alert>
           <p class="knowledge-hint">{{ t("s01.knowledge.ingest.hint") }}</p>
         </div>
       </details>
@@ -561,15 +659,26 @@ watch(
             'is-open': detail?.document.document_id === row.document_id
           }"
         >
-          <button class="kb-row-head" @click="openDetail(row)">
+          <button
+            class="kb-row-head"
+            :aria-expanded="detail?.document.document_id === row.document_id"
+            @click="toggleRow(row)"
+          >
             <span class="kb-doc-key">{{ row.doc_key }}</span>
-            <span class="kb-badge" :class="statusTone(row.status)">{{
+            <Badge :variant="statusVariant(row.status)">{{
               t(`s01.knowledge.status.${row.status}`)
-            }}</span>
+            }}</Badge>
             <span class="kb-meta">
               {{ t("s01.knowledge.field.revision") }} {{ row.revision_no }} ·
               {{ formatTime(row.published_at ?? row.updated_at) }}
             </span>
+            <ChevronRight
+              class="kb-row-chevron"
+              :class="{
+                'is-open': detail?.document.document_id === row.document_id
+              }"
+              aria-hidden="true"
+            />
           </button>
 
           <div
@@ -580,14 +689,19 @@ watch(
               {{ t("s01.knowledge.hint.loading") }}
             </p>
             <template v-else>
-              <p v-if="confirmedNotice" class="kb-notice" role="status">
+              <Alert
+                v-if="confirmedNotice"
+                variant="success"
+                size="sm"
+                role="status"
+              >
                 {{ confirmedNotice }}
-              </p>
+              </Alert>
               <div class="kb-detail-actions">
-                <button
+                <Button
                   v-if="latestDraft"
                   class="kb-confirm"
-                  :disabled="confirming"
+                  :loading="confirming"
                   @click="confirmPublish(row)"
                 >
                   {{
@@ -595,10 +709,7 @@ watch(
                       ? t("s01.knowledge.action.confirming")
                       : t("s01.knowledge.action.confirm")
                   }}
-                </button>
-                <button class="kb-close" @click="closeDetail">
-                  {{ t("s01.knowledge.action.close") }}
-                </button>
+                </Button>
               </div>
 
               <details class="kb-revisions" open>
@@ -609,9 +720,9 @@ watch(
                 </summary>
                 <ul>
                   <li v-for="rev in detail.revisions" :key="rev.revision_id">
-                    <span class="kb-badge" :class="statusTone(rev.status)">{{
+                    <Badge :variant="statusVariant(rev.status)">{{
                       t(`s01.knowledge.status.${rev.status}`)
-                    }}</span>
+                    }}</Badge>
                     {{ t("s01.knowledge.field.revision") }}
                     {{ rev.revision_no }} ·
                     {{ formatTime(rev.published_at ?? rev.created_at) }}
@@ -628,60 +739,219 @@ watch(
         </li>
       </ul>
 
-      <!-- PC 提案审批 -->
+      <!-- PC 提案审批（行内展开详情：理由/成员变更/审批历史） -->
       <ul
         v-if="activeTab === 'proposals' && proposalRows.length"
         class="pc-list"
       >
-        <li v-for="p in proposalRows" :key="p.proposal_id" class="pc-row">
-          <div class="pc-head">
+        <li
+          v-for="p in proposalRows"
+          :key="p.proposal_id"
+          class="pc-row"
+          :class="{ 'is-open': Boolean(proposalOpen[p.proposal_id]) }"
+        >
+          <button
+            class="pc-row-head"
+            :aria-expanded="Boolean(proposalOpen[p.proposal_id])"
+            @click="toggleProposalRow(p)"
+          >
             <span class="pc-name">{{ p.title }}</span>
-            <span class="kb-badge" :class="proposalTone(p.status)">{{
+            <Badge :variant="proposalVariant(p.status)">{{
               t(`s01.knowledge.proposalStatus.${p.status}`)
-            }}</span>
+            }}</Badge>
             <span class="pc-type"
               >v{{ p.expected_version_no }} · {{ p.member_count }}
               {{ t("s01.knowledge.proposal.members") }}</span
             >
-          </div>
-          <p v-if="decisionNotice" class="kb-notice" role="status">
+            <ChevronRight
+              class="kb-row-chevron"
+              :class="{ 'is-open': Boolean(proposalOpen[p.proposal_id]) }"
+              aria-hidden="true"
+            />
+          </button>
+          <Alert
+            v-if="decisionNotice"
+            variant="success"
+            size="sm"
+            role="status"
+          >
             {{ decisionNotice }}
-          </p>
+          </Alert>
+          <div v-if="proposalOpen[p.proposal_id]" class="kb-detail">
+            <p
+              v-if="
+                proposalDetailLoading === p.proposal_id &&
+                !proposalDetail[p.proposal_id]
+              "
+              class="knowledge-hint"
+            >
+              {{ t("s01.knowledge.hint.loading") }}
+            </p>
+            <template v-else-if="proposalDetail[p.proposal_id]">
+              <p
+                v-if="proposalDetail[p.proposal_id]?.rationale"
+                class="pc-summary"
+              >
+                {{ proposalDetail[p.proposal_id]?.rationale }}
+              </p>
+              <div class="pc-detail-meta">
+                <span class="pc-type">
+                  {{ t("s01.knowledge.proposal.governance") }}:
+                  {{ proposalDetail[p.proposal_id]?.governance_level }}
+                </span>
+                <span class="pc-type">
+                  {{ t("s01.knowledge.proposal.risk") }}:
+                  {{ proposalDetail[p.proposal_id]?.risk_level }}
+                </span>
+                <span class="pc-type">
+                  {{ t("s01.knowledge.proposal.confidence") }}:
+                  {{ proposalDetail[p.proposal_id]?.confidence }}
+                </span>
+                <span class="pc-type">
+                  {{ t("s01.knowledge.proposal.origin") }}:
+                  {{ proposalDetail[p.proposal_id]?.origin_kind }}
+                </span>
+              </div>
+              <details class="kb-revisions" open>
+                <summary>
+                  {{ t("s01.knowledge.proposal.membersList") }} ({{
+                    proposalDetail[p.proposal_id]?.members.length ?? 0
+                  }})
+                </summary>
+                <ul>
+                  <li
+                    v-for="m in proposalDetail[p.proposal_id]?.members ?? []"
+                    :key="m.object_id ?? m.relationship_id ?? m.change_kind"
+                  >
+                    {{ memberLabel(m) }}
+                  </li>
+                </ul>
+              </details>
+              <details class="kb-revisions" open>
+                <summary>
+                  {{ t("s01.knowledge.proposal.approvals") }} ({{
+                    proposalDetail[p.proposal_id]?.approvals.length ?? 0
+                  }})
+                </summary>
+                <p
+                  v-if="
+                    !(proposalDetail[p.proposal_id]?.approvals ?? []).length
+                  "
+                  class="knowledge-hint"
+                >
+                  {{ t("s01.knowledge.proposal.noApprovals") }}
+                </p>
+                <ul v-else>
+                  <li
+                    v-for="a in proposalDetail[p.proposal_id]?.approvals ?? []"
+                    :key="a.approval_id"
+                  >
+                    <Badge :variant="proposalVariant(a.status)">{{
+                      approvalLabel(a.status)
+                    }}</Badge>
+                    <span v-if="a.decided_by_name">
+                      · {{ a.decided_by_name }}</span
+                    >
+                    <span v-if="a.decision_reason">
+                      · {{ a.decision_reason }}</span
+                    >
+                    <span v-if="a.decided_at">
+                      · {{ formatTime(a.decided_at) }}</span
+                    >
+                  </li>
+                </ul>
+              </details>
+            </template>
+          </div>
           <div v-if="p.status === 'submitted'" class="kb-detail-actions">
-            <button
+            <Button
               class="kb-confirm"
-              :disabled="decidingId === p.proposal_id"
+              :loading="decidingId === p.proposal_id"
               @click="decide(p, 'approve')"
             >
               {{ t("s01.knowledge.proposal.approve") }}
-            </button>
-            <button
-              class="kb-close"
+            </Button>
+            <Button
+              variant="secondary"
               :disabled="decidingId === p.proposal_id"
               @click="decide(p, 'reject')"
             >
               {{ t("s01.knowledge.proposal.reject") }}
-            </button>
+            </Button>
           </div>
         </li>
       </ul>
 
-      <!-- PC 对象列表 -->
+      <!-- PC 对象列表（行内展开详情：最新修订全文） -->
       <ul v-if="activeTab === 'pc' && pcRows.length" class="pc-list">
-        <li v-for="obj in pcRows" :key="obj.object_id" class="pc-row">
-          <div class="pc-head">
+        <li
+          v-for="obj in pcRows"
+          :key="obj.object_id"
+          class="pc-row"
+          :class="{ 'is-open': Boolean(pcOpen[obj.object_id]) }"
+        >
+          <button
+            class="pc-row-head"
+            :aria-expanded="Boolean(pcOpen[obj.object_id])"
+            @click="togglePcRow(obj)"
+          >
             <span class="pc-name">{{ obj.display_name }}</span>
             <span class="pc-type">{{ obj.object_type }}</span>
-            <span
-              class="kb-badge"
-              :class="lifecycleTone(obj.lifecycle_status)"
-              >{{ t(`s01.knowledge.lifecycle.${obj.lifecycle_status}`) }}</span
-            >
+            <Badge :variant="lifecycleVariant(obj.lifecycle_status)">{{
+              t(`s01.knowledge.lifecycle.${obj.lifecycle_status}`)
+            }}</Badge>
+            <ChevronRight
+              class="kb-row-chevron"
+              :class="{ 'is-open': Boolean(pcOpen[obj.object_id]) }"
+              aria-hidden="true"
+            />
+          </button>
+          <div v-if="!pcOpen[obj.object_id]" class="pc-row-body">
+            <p v-if="obj.change_summary" class="pc-summary">
+              {{ obj.change_summary }}
+            </p>
+            <p v-if="obj.excerpt" class="pc-excerpt">{{ obj.excerpt }}</p>
           </div>
-          <p v-if="obj.change_summary" class="pc-summary">
-            {{ obj.change_summary }}
-          </p>
-          <p v-if="obj.excerpt" class="pc-excerpt">{{ obj.excerpt }}</p>
+          <div v-else class="kb-detail">
+            <p
+              v-if="
+                pcDetailLoading === obj.object_id && !pcDetail[obj.object_id]
+              "
+              class="knowledge-hint"
+            >
+              {{ t("s01.knowledge.hint.loading") }}
+            </p>
+            <template v-else-if="pcDetail[obj.object_id]">
+              <p v-if="!pcRev(obj)" class="knowledge-hint">
+                {{ t("s01.knowledge.detail.noRevision") }}
+              </p>
+              <template v-else>
+                <div class="pc-detail-meta">
+                  <span class="pc-type">
+                    {{ t("s01.knowledge.field.revision") }}
+                    v{{ pcRev(obj)?.revision_no }}
+                  </span>
+                  <Badge
+                    :variant="pcRev(obj)?.versioned ? 'success' : 'neutral'"
+                  >
+                    {{
+                      pcRev(obj)?.versioned
+                        ? t("s01.knowledge.detail.versioned")
+                        : t("s01.knowledge.detail.unversioned")
+                    }}
+                  </Badge>
+                  <span v-if="pcRev(obj)?.analysis_mode" class="pc-type">
+                    {{ t("s01.knowledge.detail.analysisMode") }}:
+                    {{ pcRev(obj)?.analysis_mode }}
+                  </span>
+                </div>
+                <p v-if="pcRev(obj)?.summary" class="pc-summary">
+                  {{ pcRev(obj)?.summary }}
+                </p>
+                <MarkdownViewer :model-value="pcRev(obj)?.content ?? ''" />
+              </template>
+            </template>
+          </div>
         </li>
       </ul>
     </div>
@@ -696,39 +966,14 @@ watch(
   max-width: 860px;
 }
 
-.knowledge-tabs {
-  display: flex;
-  gap: var(--space-2);
+/* Tabs 仅作触发行；面板 slot 留空（内容跨页签共享），去掉面板内边距。 */
+.knowledge-tabs :deep(.ui-tabs__panel) {
+  padding-top: 0;
 }
 
-.knowledge-tab {
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--text-secondary);
-  border-radius: 0;
-  padding: var(--space-2) var(--space-4);
-  cursor: pointer;
-  font-size: var(--font-size-body);
-}
-
-.knowledge-tab:hover {
-  background: var(--ws-hover-veil);
-}
-
-.knowledge-tab.is-active {
-  color: var(--text-primary);
-  border-bottom-color: var(--accent);
-}
-
-.knowledge-hint,
-.knowledge-error {
+.knowledge-hint {
   font-size: var(--font-size-body);
   color: var(--text-secondary);
-}
-
-.knowledge-error {
-  color: var(--text-danger);
 }
 
 .kb-list,
@@ -768,6 +1013,22 @@ watch(
   background: var(--ws-hover-veil);
 }
 
+.kb-row-chevron {
+  flex: none;
+  width: var(--size-icon-xs);
+  height: var(--size-icon-xs);
+  color: var(--text-tertiary);
+  transition: transform var(--duration-fast) var(--ease-decelerate);
+}
+
+.kb-row-head:hover .kb-row-chevron {
+  color: var(--text-secondary);
+}
+
+.kb-row-chevron.is-open {
+  transform: rotate(90deg);
+}
+
 .kb-doc-key {
   font-weight: 600;
   font-size: var(--font-size-body);
@@ -778,33 +1039,6 @@ watch(
   margin-left: auto;
   font-size: var(--font-size-micro);
   color: var(--text-tertiary);
-}
-
-.kb-badge {
-  font-size: var(--font-size-micro);
-  border-radius: 999px;
-  padding: 2px var(--space-2);
-  border: 1px solid transparent;
-}
-
-.tone-ok {
-  background: var(--surface-success-subtle);
-  color: var(--text-success);
-}
-
-.tone-warn {
-  background: var(--surface-warning-subtle);
-  color: var(--text-warning);
-}
-
-.tone-bad {
-  background: var(--surface-danger-subtle);
-  color: var(--text-danger);
-}
-
-.tone-muted {
-  background: var(--surface-muted);
-  color: var(--text-secondary);
 }
 
 .kb-detail {
@@ -818,36 +1052,6 @@ watch(
 .kb-detail-actions {
   display: flex;
   gap: var(--space-2);
-}
-
-.kb-confirm {
-  background: var(--accent-subtle);
-  color: var(--text-on-accent);
-  border: 0;
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--font-size-body);
-  cursor: pointer;
-}
-
-.kb-confirm:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.kb-close {
-  background: transparent;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--font-size-body);
-  cursor: pointer;
-  color: var(--text-secondary);
-}
-
-.kb-notice {
-  font-size: var(--font-size-caption);
-  color: var(--text-success);
 }
 
 .kb-revisions ul {
@@ -869,16 +1073,41 @@ watch(
 }
 
 .pc-row {
-  padding: var(--space-3) var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
 }
 
-.pc-head {
+.pc-row-head {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.pc-row-head:hover {
+  background: var(--ws-hover-veil);
+}
+
+.pc-row-head .pc-type {
+  margin-left: auto;
+}
+
+.pc-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-4) var(--space-3);
+}
+
+.pc-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
 }
 
 .pc-name {
@@ -932,12 +1161,6 @@ watch(
 
 .impact-input {
   flex: 1;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--font-size-body);
-  background: var(--surface-card);
-  color: var(--text-primary);
 }
 
 .impact-path {
@@ -992,11 +1215,5 @@ watch(
 
 .ingest-select {
   max-width: 160px;
-}
-
-.ingest-textarea {
-  resize: vertical;
-  font-family: inherit;
-  min-height: 120px;
 }
 </style>

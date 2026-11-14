@@ -697,3 +697,75 @@ async fn p3_expands_proposal_and_no_change_conclusions(pool: PgPool) {
         "{body}"
     );
 }
+
+// ── 用例 6：PC 对象详情（全文 + 项目作用域）──────────────────────────────────
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn pc_object_detail_returns_full_content_and_is_scoped(pool: PgPool) {
+    let project = seed_project(&pool, SYSTEM_TENANT, "PCR-F").await;
+    let other_member_project = seed_project(&pool, SYSTEM_TENANT, "PCR-F2").await;
+    let stranger = seed_project(&pool, SYSTEM_TENANT, "PCR-F3").await;
+    common::join_dev(&pool, project).await;
+    common::join_dev(&pool, other_member_project).await;
+
+    // 列表 excerpt 只有 240 字截断——详情必须给全文（超长正文回归面）。
+    let long_content = "# 交付动态\n\n共采集 300 条 commit，最近交付：\n\
+        - `e105e9b9` style: 替换裸值为设计系统语义 token\n\
+        - `.rs`：553 个文件\n\
+        - `.md`：543 个文件\n\
+        - `.ts`：488 个文件\n\
+        - `.vue`：359 个文件\n\
+        - `.json`：219 个文件\n";
+    let receipt = upsert_object_draft(
+        &pool,
+        project,
+        &dev(),
+        UpsertObjectDraft {
+            object_type: "delivery_activity".into(),
+            object_key: Some("delivery".into()),
+            display_name: "交付动态（最近 10 条）".into(),
+            content_markdown: long_content.into(),
+            change_summary: Some("首次采集".into()),
+            source_context: None,
+            analysis_mode: Some("derived".into()),
+        },
+    )
+    .await
+    .unwrap();
+
+    let (status, body) = send(
+        &pool,
+        get(&format!(
+            "/v1/pc/objects/{}?project_id={project}",
+            receipt.object_id
+        )),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["object_id"], receipt.object_id.to_string());
+    assert_eq!(body["object_type"], "delivery_activity");
+    assert_eq!(body["object_key"], "delivery");
+    assert_eq!(body["name"], "交付动态（最近 10 条）");
+    assert_eq!(body["lifecycle_status"], "draft");
+    assert_eq!(body["latest_revision"]["revision_no"], 1);
+    assert_eq!(body["latest_revision"]["summary"], "首次采集");
+    assert_eq!(body["latest_revision"]["analysis_mode"], "derived");
+    assert_eq!(body["latest_revision"]["versioned"], false);
+    assert_eq!(body["latest_revision"]["content"], long_content);
+
+    // 项目作用域：非成员项目 / 他项目（可见）下查 / 非法 ID / 不存在对象 → 404
+    for uri in [
+        format!("/v1/pc/objects/{}?project_id={stranger}", receipt.object_id),
+        format!(
+            "/v1/pc/objects/{}?project_id={other_member_project}",
+            receipt.object_id
+        ),
+        format!("/v1/pc/objects/not-a-uuid?project_id={project}"),
+        format!("/v1/pc/objects/{}?project_id={project}", Uuid::new_v4()),
+    ] {
+        let (status, _) = send(&pool, get(&uri)).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{uri}");
+    }
+    let (status, _) = send(&pool, get(&format!("/v1/pc/objects/{}", receipt.object_id))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

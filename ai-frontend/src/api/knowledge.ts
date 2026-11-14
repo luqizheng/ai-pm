@@ -94,6 +94,32 @@ export function listPcObjects(projectId: string) {
   });
 }
 
+/** PC 对象最新修订（详情形状，与后端 P3 展开投影一致）。 */
+export interface PcRevisionDetail {
+  revision_no: number;
+  summary: string | null;
+  content: string | null;
+  analysis_mode: string | null;
+  versioned: boolean;
+}
+
+/** PC 对象详情（latest_revision 含全文——列表 excerpt 只有 240 字截断）。 */
+export interface PcObjectDetail {
+  object_id: string;
+  object_type: string;
+  object_key: string | null;
+  name: string;
+  lifecycle_status: string;
+  latest_revision: PcRevisionDetail | null;
+}
+
+/** PC 对象详情（前端行内展开；无修订的 identity 对象 latest_revision=null）。 */
+export function getPcObject(objectId: string, projectId: string) {
+  return http.get<PcObjectDetail>(`/v1/pc/objects/${objectId}`, {
+    project_id: projectId
+  });
+}
+
 /* ── 统一检索 ─────────────────────────────────────────────────────────── */
 
 export interface RetrievalEvidenceItem {
@@ -174,6 +200,64 @@ export function listPcProposals(projectId: string, status?: string) {
   return http.get<{ items: PcProposalRow[] }>("/v1/pc/proposals", {
     project_id: projectId,
     ...(status ? { status } : {})
+  });
+}
+
+/* ── PC 提案详情（既有 P4 端点；审批页签行内展开消费）──────────────────── */
+
+/** 提案成员钉扎（对象/关系变更展示投影）。 */
+export interface PcProposalMemberView {
+  change_kind: string;
+  object_id: string | null;
+  object_revision_id: string | null;
+  object_type: string | null;
+  object_key: string | null;
+  display_name: string | null;
+  object_revision_no: number | null;
+  change_summary: string | null;
+  relationship_id: string | null;
+  relationship_revision_id: string | null;
+  relationship_type: string | null;
+  relationship_revision_no: number | null;
+}
+
+/** 提案审批历史项。 */
+export interface PcApprovalView {
+  approval_id: string;
+  status: string;
+  proposal_content_hash: string;
+  expected_version_no: number;
+  decided_by: string | null;
+  decided_by_name: string | null;
+  decision_reason: string | null;
+  decided_at: string | null;
+  created_at: string;
+}
+
+/** 提案详情（P4；成员 + 审批历史 + 已发布版本引用）。 */
+export interface PcProposalDetail {
+  proposal_id: string;
+  title: string;
+  rationale: string;
+  status: PcProposalRow["status"];
+  origin_kind: string;
+  governance_level: string;
+  risk_level: string;
+  confidence: string;
+  expected_version_no: number;
+  submitted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  members: PcProposalMemberView[];
+  approvals: PcApprovalView[];
+  content_hash: string;
+  published_version_no: number | null;
+}
+
+/** 提案详情（P4 读面；项目作用域 404）。 */
+export function getPcProposal(proposalId: string, projectId: string) {
+  return http.get<PcProposalDetail>(`/v1/pc/proposals/${proposalId}`, {
+    project_id: projectId
   });
 }
 

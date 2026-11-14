@@ -10,14 +10,19 @@ import { useShellStore } from "@/stores/shell";
 import type {
   KbDocumentDetail,
   KbDocumentRow,
-  PcObjectRow
+  PcObjectDetail,
+  PcObjectRow,
+  PcProposalDetail,
+  PcProposalRow
 } from "@/api/knowledge";
 
 const listKbDocuments = vi.fn();
 const getKbDocument = vi.fn();
 const confirmKbRevision = vi.fn();
 const listPcObjects = vi.fn();
+const getPcObject = vi.fn();
 const listPcProposals = vi.fn();
+const getPcProposal = vi.fn();
 const decidePcProposal = vi.fn();
 const retrievalQuery = vi.fn();
 const ingestKbDocument = vi.fn();
@@ -27,7 +32,9 @@ vi.mock("@/api/knowledge", () => ({
   getKbDocument: (...args: unknown[]) => getKbDocument(...args),
   confirmKbRevision: (...args: unknown[]) => confirmKbRevision(...args),
   listPcObjects: (...args: unknown[]) => listPcObjects(...args),
+  getPcObject: (...args: unknown[]) => getPcObject(...args),
   listPcProposals: (...args: unknown[]) => listPcProposals(...args),
+  getPcProposal: (...args: unknown[]) => getPcProposal(...args),
   decidePcProposal: (...args: unknown[]) => decidePcProposal(...args),
   retrievalQuery: (...args: unknown[]) => retrievalQuery(...args),
   ingestKbDocument: (...args: unknown[]) => ingestKbDocument(...args)
@@ -126,6 +133,71 @@ function proposalRow(overrides: Partial<PcProposalRow>): PcProposalRow {
   };
 }
 
+function pcDetailOf(row: PcObjectRow): PcObjectDetail {
+  return {
+    object_id: row.object_id,
+    object_type: row.object_type,
+    object_key: row.object_key,
+    name: row.display_name,
+    lifecycle_status: row.lifecycle_status,
+    latest_revision: {
+      revision_no: 3,
+      summary: "补充状态机",
+      content: "# 订单状态\n\n完整状态机正文：待付款 → 已付款 → 已发货。",
+      analysis_mode: "derived",
+      versioned: false
+    }
+  };
+}
+
+function proposalDetailOf(row: PcProposalRow): PcProposalDetail {
+  return {
+    proposal_id: row.proposal_id,
+    title: row.title,
+    rationale: "状态机口径需与支付域对齐。",
+    status: row.status,
+    origin_kind: row.origin_kind,
+    governance_level: "L1",
+    risk_level: row.risk_level,
+    confidence: row.confidence,
+    expected_version_no: row.expected_version_no,
+    submitted_at: row.submitted_at,
+    created_at: row.created_at,
+    updated_at: row.created_at,
+    members: [
+      {
+        change_kind: "update_object",
+        object_id: "obj-1",
+        object_revision_id: "rev-3",
+        object_type: "domain_object",
+        object_key: "order-status",
+        display_name: "订单状态",
+        object_revision_no: 3,
+        change_summary: "补充状态机",
+        relationship_id: null,
+        relationship_revision_id: null,
+        relationship_type: null,
+        relationship_revision_no: null
+      }
+    ],
+    approvals: [
+      {
+        approval_id: "apr-1",
+        status: "pending",
+        proposal_content_hash: "hash",
+        expected_version_no: row.expected_version_no,
+        decided_by: null,
+        decided_by_name: null,
+        decision_reason: null,
+        decided_at: null,
+        created_at: row.created_at
+      }
+    ],
+    content_hash: "hash",
+    published_version_no: null
+  };
+}
+
 const listKbBase: KbDocumentRow[] = [
   kbRow({}),
   kbRow({
@@ -155,6 +227,12 @@ beforeEach(() => {
   });
   getKbDocument.mockImplementation((_id: string, _pid: string) =>
     Promise.resolve(detailOf(kbRow({})))
+  );
+  getPcObject.mockImplementation((id: string) =>
+    Promise.resolve(pcDetailOf(pcRow({ object_id: id })))
+  );
+  getPcProposal.mockImplementation((id: string) =>
+    Promise.resolve(proposalDetailOf(proposalRow({ proposal_id: id })))
   );
   confirmKbRevision.mockResolvedValue({});
   decidePcProposal.mockResolvedValue({});
@@ -253,16 +331,17 @@ describe("KnowledgeView", () => {
     const wrapper = await mountView();
     expect(wrapper.text()).toContain("暂无 KB 文档");
     // 切 PC 页签。
-    const tabs = wrapper.findAll(".knowledge-tab");
-    await tabs[1].trigger("click");
+    const tabs = wrapper.findAll('[role="tab"]');
+    // reka TabsTrigger 激活事件是 mousedown（非 click）。
+    await tabs[1].trigger("mousedown");
     await flushPromises();
     expect(wrapper.text()).toContain("暂无 PC 认知对象");
   });
 
   it("switches to PC tab and shows lifecycle badge", async () => {
     const wrapper = await mountView();
-    const tabs = wrapper.findAll(".knowledge-tab");
-    await tabs[1].trigger("click");
+    const tabs = wrapper.findAll('[role="tab"]');
+    await tabs[1].trigger("mousedown");
     await flushPromises();
     expect(wrapper.text()).toContain("现行");
     expect(wrapper.text()).toContain("补充状态机");
@@ -270,8 +349,8 @@ describe("KnowledgeView", () => {
 
   it("lists proposals with status badges and decides with CAS", async () => {
     const wrapper = await mountView();
-    const tabs = wrapper.findAll(".knowledge-tab");
-    await tabs[2].trigger("click");
+    const tabs = wrapper.findAll('[role="tab"]');
+    await tabs[2].trigger("mousedown");
     await flushPromises();
 
     expect(listPcProposals).toHaveBeenCalledWith("proj-1");
@@ -318,7 +397,7 @@ describe("KnowledgeView", () => {
     // 摄入面板是 KB 页签下第二个 details。
     const panels = wrapper.findAll("details.impact-panel");
     await panels[1].find("summary").trigger("click");
-    await panels[1].find(".impact-input").setValue("fresh-doc");
+    await panels[1].find(".impact-input input").setValue("fresh-doc");
     await panels[1].find("textarea").setValue("# 新文档\n\n粘贴正文。");
     await panels[1].find(".ingest-run").trigger("click");
     await flushPromises();
@@ -352,7 +431,9 @@ describe("KnowledgeView", () => {
     const wrapper = await mountView();
     // 展开影响分析面板并提交查询。
     await wrapper.find(".impact-panel summary").trigger("click");
-    await wrapper.find(".impact-input").setValue("修改订单状态会影响什么");
+    await wrapper
+      .find(".impact-input input")
+      .setValue("修改订单状态会影响什么");
     await wrapper.find(".impact-form").trigger("submit");
     await flushPromises();
 
@@ -367,5 +448,104 @@ describe("KnowledgeView", () => {
     expect(path.text()).toContain("module-covered-by-design");
     // 降级提示（planner off）。
     expect(wrapper.text()).toContain("规划器未介入");
+  });
+
+  it("expands PC object detail with full content and version badge", async () => {
+    const wrapper = await mountView();
+    const tabs = wrapper.findAll('[role="tab"]');
+    await tabs[1].trigger("mousedown");
+    await flushPromises();
+    // 收起态仍显示摘要与 excerpt（240 字截断）。
+    expect(wrapper.text()).toContain("补充状态机");
+
+    await wrapper.find(".pc-row-head").trigger("click");
+    await flushPromises();
+
+    expect(getPcObject).toHaveBeenCalledWith("obj-1", "proj-1");
+    // 详情形状：修订号 + versioned 徽章 + 分析模式 + 全文（非 excerpt 截断）。
+    expect(wrapper.text()).toContain("未入正式版本");
+    expect(wrapper.text()).toContain("分析模式: derived");
+    const viewer = wrapper.findComponent(MarkdownViewer);
+    expect(viewer.exists()).toBe(true);
+    expect(viewer.props("modelValue")).toContain("完整状态机正文");
+
+    // 收起保留缓存：再展开不重拉。
+    await wrapper.find(".pc-row-head").trigger("click");
+    await flushPromises();
+    await wrapper.find(".pc-row-head").trigger("click");
+    await flushPromises();
+    expect(getPcObject).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows no-revision hint for identity PC objects", async () => {
+    listPcObjects.mockResolvedValue({
+      items: [
+        pcRow({
+          object_id: "obj-id",
+          object_type: "product_profile",
+          object_key: null,
+          display_name: "ai-pm",
+          lifecycle_status: "identity",
+          revision_no: null,
+          change_summary: null,
+          excerpt: null
+        })
+      ]
+    });
+    getPcObject.mockImplementation((id: string) =>
+      Promise.resolve({
+        ...pcDetailOf(pcRow({ object_id: id })),
+        latest_revision: null
+      })
+    );
+    const wrapper = await mountView();
+    const tabs = wrapper.findAll('[role="tab"]');
+    await tabs[1].trigger("mousedown");
+    await flushPromises();
+    await wrapper.find(".pc-row-head").trigger("click");
+    await flushPromises();
+
+    expect(getPcObject).toHaveBeenCalledWith("obj-id", "proj-1");
+    expect(wrapper.text()).toContain("暂无修订");
+  });
+
+  it("expands proposal detail with rationale, members and approvals", async () => {
+    const wrapper = await mountView();
+    const tabs = wrapper.findAll('[role="tab"]');
+    await tabs[2].trigger("mousedown");
+    await flushPromises();
+    await wrapper.find(".pc-row-head").trigger("click");
+    await flushPromises();
+
+    expect(getPcProposal).toHaveBeenCalledWith("prop-1", "proj-1");
+    expect(wrapper.text()).toContain("状态机口径需与支付域对齐");
+    expect(wrapper.text()).toContain("治理级别: L1");
+    expect(wrapper.text()).toContain("成员变更 (1)");
+    expect(wrapper.text()).toContain(
+      "update_object · domain_object · 订单状态 · v3"
+    );
+    expect(wrapper.text()).toContain("审批历史 (1)");
+    expect(wrapper.text()).toContain("待决策");
+  });
+
+  it("opens PC object detail via ?object= deep link", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/project/knowledge", component: KnowledgeView }]
+    });
+    await router.push("/project/knowledge?object=obj-1");
+    await router.isReady();
+    const { wrapper } = mountShell(
+      KnowledgeView,
+      { attachTo: document.body },
+      router
+    );
+    const shell = useShellStore();
+    shell.setProjects([{ id: "proj-1", name: "评测项目" }]);
+    shell.setCurrentProject("proj-1");
+    await flushPromises();
+
+    expect(getPcObject).toHaveBeenCalledWith("obj-1", "proj-1");
+    expect(wrapper.find(".kb-detail").exists()).toBe(true);
   });
 });

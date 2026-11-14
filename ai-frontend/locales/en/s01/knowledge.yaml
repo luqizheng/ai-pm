@@ -21,10 +21,14 @@ knowledge:
     revision: Rev
     revisions: Revisions
     content: Content
+  detail:
+    noRevision: No revision yet — the object is an identity placeholder; full content appears after a proposal is applied
+    analysisMode: Analysis mode
+    versioned: In published version
+    unversioned: Not in a published version
   action:
     confirm: Confirm & Publish
     confirming: Confirming…
-    close: Close
   notice:
     ingested: Ingested as draft (rev {no}) — confirm in the detail view
     confirmed: Published (repeat confirmation by the same user keeps the original record)
@@ -48,10 +52,22 @@ knowledge:
     expired: Expired
     applied: Applied
     failed: Failed
+  approvalStatus:
+    pending: Pending
+    approved: Approved
+    rejected: Rejected
   proposal:
     members: member object(s)
     approve: Approve & Publish
     reject: Reject
+    rationale: Rationale
+    membersList: Member changes
+    approvals: Approval history
+    risk: Risk
+    confidence: Confidence
+    governance: Governance level
+    origin: Origin
+    noApprovals: No approval records yet
   impact:
     title: Impact analysis (cross-domain traversal)
     placeholder: e.g. what requirements and designs does changing order status affect?
