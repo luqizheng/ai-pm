@@ -12,6 +12,10 @@ services:
   consul:
     image: "${IMAGE_CONSUL:?IMAGE_CONSUL 未定义——请加载 .image.env}"
     hostname: consul
+    # Docker daemon 重启后 infra 必须自愈（restart=no 会让 gateway 的 unless-stopped
+    # 重试循环永远等不到依赖——2026-11-14 实测）。daemon 级无启动顺序保证，收敛
+    # 靠各业务服务自身的重启循环，up 路径的顺序仍由 depends_on+healthy 保证。
+    restart: unless-stopped
     ports:
       - "8500:8500"
       - "8502:8502"
@@ -30,6 +34,7 @@ services:
   redis:
     image: "${IMAGE_REDIS:?IMAGE_REDIS 未定义——请加载 .image.env}"
     hostname: redis
+    restart: unless-stopped
     environment:
       REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
       REDIS_PORT: "${REDIS_PORT:-6379}"
@@ -47,6 +52,7 @@ services:
   rabbitmq:
     image: "${IMAGE_RABBITMQ:?IMAGE_RABBITMQ 未定义——请加载 .image.env}"
     hostname: rabbitmq
+    restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: "${RABBITMQ_DEFAULT_USER:-guest}"
       RABBITMQ_DEFAULT_PASS: "${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS 未定义——请加载 .env}"
@@ -65,6 +71,7 @@ services:
   postgres:
     image: "${IMAGE_POSTGRES:?IMAGE_POSTGRES 未定义——请加载 .image.env}"
     hostname: postgres
+    restart: unless-stopped
     # 库名真源 = .env 的 POSTGRES_DB（DATABASE_URL 由它拼出）：
     # initdb 建 POSTGRES_DB 指定的库（缺省 postgres），连接串指向同一个库。
     environment:
