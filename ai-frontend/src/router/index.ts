@@ -24,6 +24,7 @@ import CommandCenterView from "@/views/project/command-center/CommandCenterView.
 import TasksBacklogView from "@/views/project/tasks/backlog/TasksBacklogView.vue";
 import SettingsProjectPlaceholderView from "@/views/project/settings/SettingsProjectPlaceholderView.vue";
 import SettingsProjectRepositoriesView from "@/views/project/settings/SettingsProjectRepositoriesView.vue";
+import SettingsProjectSshKeysView from "@/views/project/settings/SettingsProjectSshKeysView.vue";
 import SettingsProjectRunnersView from "@/views/project/settings/SettingsProjectRunnersView.vue";
 import SettingsProjectRunnerDetailView from "@/views/project/settings/SettingsProjectRunnerDetailView.vue";
 import SettingsProjectAiRolesView from "@/views/project/settings/ai/SettingsProjectAiRolesView.vue";
@@ -291,6 +292,11 @@ export function buildRoutes(): RouteRecordRaw[] {
       path: "/project/settings/repositories",
       component: SettingsProjectRepositoriesView,
       meta: { title: "s01.repositories.page.title" }
+    },
+    {
+      path: "/project/settings/ssh-keys",
+      component: SettingsProjectSshKeysView,
+      meta: { title: "s01.ssh-keys.page.title" }
     },
     {
       path: "/project/settings/runners",

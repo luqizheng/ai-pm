@@ -267,6 +267,71 @@ pub async fn revoke_ssh_key(
     Ok(())
 }
 
+/// 重命名一把 key（label 即显示名；UNIQUE (project_id, label) 冲突 → 409 LabelTaken）。
+/// 允许重命名默认把：is_default 跟行走，`ensure_ssh_key(rotate=false)` 按
+/// is_default 定位不受影响；rotate=true 会重建 label='default' 行并接管默认位。
+pub async fn rename_ssh_key(
+    pool: &PgPool,
+    project_id: Uuid,
+    actor: &AuditActor,
+    key_id: Uuid,
+    label: &str,
+) -> Result<SshKeyView, RepositoryError> {
+    let label = require_text(
+        Some(label.to_string()),
+        "ssh key label is required",
+        MAX_KEY_LABEL_LEN,
+    )?;
+    let mut tx = pool.begin().await?;
+    let row: Option<(Uuid, String, String, String, bool, String, DateTime<Utc>)> = sqlx::query_as(
+        "UPDATE integration.project_ssh_key SET label = $3, updated_at = now() \
+             WHERE id = $1 AND project_id = $2 \
+             RETURNING id, label, public_key, fingerprint, is_default, status, created_at",
+    )
+    .bind(key_id)
+    .bind(project_id)
+    .bind(&label)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| {
+        if e.as_database_error()
+            .map(|db| {
+                db.constraint()
+                    .is_some_and(|c| c == "uq_project_ssh_key_project_label")
+            })
+            .unwrap_or(false)
+        {
+            RepositoryError::LabelTaken
+        } else {
+            RepositoryError::Db(e)
+        }
+    })?;
+    let Some(row) = row else {
+        return Err(RepositoryError::SshKeyNotFound);
+    };
+    append_audit(
+        &mut tx,
+        project_id,
+        actor,
+        "ssh_key.renamed",
+        "project_ssh_key",
+        Some(key_id),
+    )
+    .await?;
+    tx.commit().await?;
+
+    Ok(SshKeyView {
+        id: row.0,
+        project_id,
+        label: row.1,
+        public_key: row.2,
+        fingerprint: row.3,
+        status: row.5,
+        is_default: row.4,
+        created_at: row.6,
+    })
+}
+
 /// 物理删除一把 key；被任何仓库绑定引用（FK RESTRICT）→ 409 KeyInUse。
 pub async fn delete_ssh_key(
     pool: &PgPool,

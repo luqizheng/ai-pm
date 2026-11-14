@@ -576,6 +576,98 @@ async fn ssh_key_create_is_idempotent_and_revoke_blocks_verified_reference(pool:
     assert_eq!(listed["items"][0]["status"], "revoked");
 }
 
+/// S2（2026-11-14）独立 SSH 私钥设置页：重命名契约。
+/// label 即名称；重命名后列表可见；与既有 label 冲突 → 409 label_taken；
+/// 未知 key → 404；每次成功写审计 ssh_key.renamed。
+/// （删除被引用拒绝已有用例：ssh_key_create_is_idempotent_and_revoke_blocks_verified_reference。）
+#[sqlx::test(migrations = "../../migrations")]
+async fn ssh_key_rename_updates_label_and_rejects_conflict(pool: PgPool) {
+    with_secret();
+    let app = router(pool.clone());
+    let project_id = seed_project(&pool, "REPO-5").await;
+    let keys_uri = format!("/v1/pm/projects/{project_id}/ssh-keys");
+
+    let (status, key) = body_json(
+        app.clone()
+            .oneshot(json_request("POST", &keys_uri, json!({})))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {key}");
+    let key_id = key["id"].as_str().unwrap().to_string();
+
+    // 重命名成功：响应带新 label，列表可见。
+    let rename_uri = format!("/v1/pm/ssh-keys/{key_id}");
+    let (status, renamed) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "PATCH",
+                &rename_uri,
+                json!({ "label": "github-main" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "body: {renamed}");
+    assert_eq!(renamed["label"], "github-main");
+    let (status, listed) = body_json(app.clone().oneshot(get(&keys_uri)).await.unwrap()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(listed["items"][0]["label"], "github-main");
+
+    // 同项目内撞既有 label → 409 label_taken（稳定 error 码供前端兜底）。
+    sqlx::query(
+        "INSERT INTO integration.project_ssh_key \
+         (project_id, label, public_key, private_key_ciphertext, fingerprint, tenant_id) \
+         VALUES ($1, 'gitlab', 'ssh-ed25519 AAAA test', '\\x00', 'SHA256:test', $2)",
+    )
+    .bind(project_id)
+    .bind(SYSTEM_TENANT)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (status, conflict) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "PATCH",
+                &rename_uri,
+                json!({ "label": "gitlab" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "body: {conflict}");
+    assert_eq!(conflict["error"], "label_taken");
+    assert_eq!(conflict["message"], "ssh key label already in use");
+
+    // 未知 key → 404。
+    let (status, missing) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "PATCH",
+                &format!("/v1/pm/ssh-keys/{}", Uuid::new_v4()),
+                json!({ "label": "whatever" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "body: {missing}");
+
+    // 仅首次成功写审计。
+    let audits: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log \
+         WHERE project_id = $1 AND action = 'ssh_key.renamed'",
+    )
+    .bind(project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(audits, 1);
+}
+
 fn ssh_keygen_available() -> bool {
     std::process::Command::new("ssh-keygen")
         .arg("-V")

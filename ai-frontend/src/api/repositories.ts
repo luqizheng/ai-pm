@@ -84,6 +84,14 @@ export function revokeSshKey(keyId: string) {
 }
 
 /**
+ * 重命名一把 key（label 即名称；独立设置页改名通道）。
+ * 同项目内撞既有 label → 409，错误体 {message, error: "label_taken"}。
+ */
+export function renameSshKey(keyId: string, label: string) {
+  return http.patch<SshKey>(`/v1/pm/ssh-keys/${keyId}`, { label });
+}
+
+/**
  * 粘贴导入外部私钥（迁移 0022 多把模型）。
  * `label` 即身份：同名 = 替换该把，新名 = 新增一把；项目第一把自动成为默认。
  * 后端经 ssh-keygen 校验并推导公钥/指纹；私钥信封加密落库、不再回显。

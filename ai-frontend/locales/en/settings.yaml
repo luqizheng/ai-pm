@@ -37,6 +37,7 @@ settings:
     projectGeneral: General
     projectMembers: Project Members
     repositories: Repositories
+    sshKeys: SSH Keys
     runners: Runners
     development: Development
     projectAi: AI Configuration

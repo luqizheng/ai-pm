@@ -9,7 +9,7 @@ use axum::{
     extract::{Extension, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{delete, get, post, put},
+    routing::{get, patch, post, put},
     Json, Router,
 };
 use serde::Deserialize;
@@ -23,9 +23,9 @@ use pm_application::repo::GuardQueryRepo;
 use pm_application::repository::{
     analyze_repository, archive_repository, bind_repository_ssh_key, confirm_repository_version,
     create_repository, delete_repository, ensure_ssh_key, import_ssh_key, list_repositories,
-    list_ssh_keys, revoke_ssh_key, ssh_key_project_id, update_repository, verify_repository,
-    AnalyzeRepositoryRequest, ConfirmVersionRequest, CreateRepositoryRequest, RepositoryError,
-    UpdateRepositoryRequest,
+    list_ssh_keys, rename_ssh_key, revoke_ssh_key, ssh_key_project_id, update_repository,
+    verify_repository, AnalyzeRepositoryRequest, ConfirmVersionRequest, CreateRepositoryRequest,
+    RepositoryError, UpdateRepositoryRequest,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -72,8 +72,12 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/pm/projects/{project_id}/ssh-keys/import",
             post(import_key_handler),
         )
-        // 吊销指定 key（迁移 0022 多把模型；被 verified 仓库绑定 → 409 key_in_use）。
-        .route("/v1/pm/ssh-keys/{key_id}", delete(revoke_one_key_handler))
+        // 吊销指定 key（迁移 0022 多把模型；被 verified 仓库绑定 → 409 key_in_use）；
+        // 重命名（label 即名称；冲突 → 409 label_taken）供独立设置页改名。
+        .route(
+            "/v1/pm/ssh-keys/{key_id}",
+            patch(rename_key_handler).delete(revoke_one_key_handler),
+        )
 }
 
 /// `RepositoryError` → `{message}` 响应；映射与前端错误文案一一对应。
@@ -94,10 +98,27 @@ fn repository_error(err: RepositoryError) -> Response {
             StatusCode::CONFLICT,
             "repository has history and cannot be deleted",
         ),
-        RepositoryError::KeyInUse => (
-            StatusCode::CONFLICT,
-            "ssh key is still referenced by a verified repository",
-        ),
+        // 稳定 `error` 码供前端独立设置页本地化兜底（同 AnalyzeInProgress 约定）。
+        RepositoryError::KeyInUse => {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "message": "ssh key is still referenced by a verified repository",
+                    "error": "key_in_use",
+                })),
+            )
+                .into_response();
+        }
+        RepositoryError::LabelTaken => {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "message": "ssh key label already in use",
+                    "error": "label_taken",
+                })),
+            )
+                .into_response();
+        }
         // S1 手动增量分析：进行中 → 409（与 intake task retry 的 NotRetryable 同族）。
         // 额外带稳定 `error` 码，供前端 S4 详情面板做本地化兜底；`message` 仍是
         // 唯一被 @digua/http 透传的字段（`code` 才参与翻译，故不影响既有约定）。
@@ -470,6 +491,43 @@ async fn bind_key_handler(
 }
 
 /// DELETE /ssh-keys/{key_id}：吊销指定 key（被 verified 仓库绑定 → 409 key_in_use）。
+#[derive(Deserialize)]
+struct RenameKeyBody {
+    label: String,
+}
+
+/// S2（2026-11-14）：重命名一把 key（label 即名称；独立设置页改名通道）。
+async fn rename_key_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(key_id): Path<Uuid>,
+    Json(body): Json<RenameKeyBody>,
+) -> Response {
+    // key 不存在或越权一律按不存在处理（key → project_id → 租户/成员边界）。
+    let key_project = match ssh_key_project_id(&state.pool, key_id).await {
+        Ok(project_id) => project_id,
+        Err(err) => return repository_error(err),
+    };
+    let Some(project_id) = key_project else {
+        return repository_error(RepositoryError::SshKeyNotFound);
+    };
+    if let Err(resp) = project_in_tenant(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await
+    {
+        return resp;
+    }
+    let actor = principal.audit_actor();
+    match rename_ssh_key(&state.pool, project_id, &actor, key_id, &body.label).await {
+        Ok(view) => (StatusCode::OK, Json(view)).into_response(),
+        Err(err) => repository_error(err),
+    }
+}
+
 async fn revoke_one_key_handler(
     State(state): State<AppState>,
     Extension(principal): Extension<AuthedPrincipal>,

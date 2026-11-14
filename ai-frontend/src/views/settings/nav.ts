@@ -2,6 +2,7 @@ import type { Component } from "vue";
 import {
   Bell,
   GitBranch,
+  KeyRound,
   Monitor,
   Settings2,
   ShieldCheck,
@@ -54,7 +55,7 @@ export const TEAM_ICONS: Record<string, Component> = {
   general: Settings2
 };
 
-/** 项目域应用侧栏条目（/project/settings/*，V1.0 稿五节，2026-11-07）。
+/** 项目域应用侧栏条目（/project/settings/*；仓库 / SSH 私钥 / Runners 为真数据节）。
  *
  * Git Repositories / Runners 两节由原独立页面迁入（真数据）；General、
  * Members、AI Configuration 三节规划中（proposed 徽标 + 占位页），随后端
@@ -65,6 +66,7 @@ export const PROJECT_APP_NAV: SettingsNavEntry[] = [
   { id: "projectGeneral", to: "/project/settings/general", proposed: true },
   { id: "projectMembers", to: "/project/settings/members", proposed: true },
   { id: "repositories", to: "/project/settings/repositories" },
+  { id: "sshKeys", to: "/project/settings/ssh-keys" },
   { id: "runners", to: "/project/settings/runners" },
   { id: "projectAi", to: "/project/settings/ai", proposed: true }
 ];
@@ -74,6 +76,7 @@ export const PROJECT_ICONS: Record<string, Component> = {
   projectGeneral: Settings2,
   projectMembers: Users,
   repositories: GitBranch,
+  sshKeys: KeyRound,
   runners: Monitor,
   projectAi: Sparkles
 };

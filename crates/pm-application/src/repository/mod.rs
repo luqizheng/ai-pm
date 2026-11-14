@@ -58,6 +58,9 @@ pub enum RepositoryError {
     InvalidRole,
     #[error("ssh key is still referenced by a verified repository")]
     KeyInUse,
+    /// 重命名目标 label 与项目内既有 key 冲突（UNIQUE (project_id, label)）。
+    #[error("ssh key label already in use")]
+    LabelTaken,
     /// 仓库被历史执行记录引用，不可物理删除（C-4 / 基线 §5.1）。
     #[error("repository has history and cannot be deleted")]
     HasHistory,

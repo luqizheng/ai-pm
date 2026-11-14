@@ -37,6 +37,7 @@ settings:
     projectGeneral: 基本信息
     projectMembers: 项目成员
     repositories: 仓库
+    sshKeys: SSH 私钥
     runners: Runners
     development: 开发配置
     projectAi: AI 配置

@@ -1,0 +1,31 @@
+ssh-keys:
+  page:
+    title: SSH Private Keys
+    description: "Manage project-level Git keys: paste to import, rename, delete. Pick which key a repository uses in Repository settings."
+  list:
+    title: Keys ({active} active / {total} total)
+    statusConfigured: Configured
+    statusNone: Not configured
+    empty: No keys yet. Paste a private key below to get started.
+    default: Default
+    revoked: Revoked
+  action:
+    refresh: Refresh
+    rename: Rename
+    renameSave: Save
+    renameCancel: Cancel
+    delete: Delete
+    deleteArmed: Confirm delete?
+    copyPublicKey: Copy public key
+    copied: Copied
+  form:
+    title: Add a key
+    nameLabel: Key name
+    namePlaceholder: e.g. github-main
+    inputLabel: Paste private key
+    submit: Save key
+    hint: Paste an OpenSSH private key that grants read access to your Git repositories (ed25519 / RSA / ECDSA). Keys are stored encrypted and never shown again. Saving with an existing name replaces that key; the first key becomes the project default.
+  error:
+    labelTaken: That name is already used by another key in this project.
+    referenced: This key is still bound to a repository. Unbind it in Repository settings first.
+    failed: "Operation failed: {message}"
