@@ -168,4 +168,32 @@
 
 **R2.1 禁止事项遵守确认**：未新增未经批准的产品需求（92 条不变）／未修改 A1/A2/A3 正式裁决／未将 A4 设计建议提升为正式需求（UX-012 L2 维持 A4 待冻结）／未把代码存在视为需求验收通过（DATA-020 只升 EV 不改「未验证」定性、FR-085 维持 DOCUMENT_MISSING）／未提前编写 Phase 2 测试用例／未将 Phase 3 验收结果提前填入 Phase 1（全部 E5=0）。
 
+## 6. 增补登记（2026-11-15，来源：用户场景讨论 + full-dev 实测；只登记，裁决待用户批准）
+
+> 候选裁决稿见 `docs/s01-reanalysis-and-product-cognition-closure-v1.md`（D-1~D-4），批准后按其收编。以下编号接续 §1 冲突登记（C-01~C-11 之后从 C-13 起，避开 §4 复审表已用的 C-12 行号）。
+
+### C-13 · REQUIREMENT_CONFLICT — 「再分析」三份权威互斥且未调和
+
+| 项 | 内容 |
+|---|---|
+| 涉及 | S01-04 §10.1（Cognition 六种触发可重复）、S01-03 §8.1-8.2（Re-scan 长期操作）、I6-B C-1（冷启动 Import 一次性 bootstrap，`applied` 后 409 `project_not_empty`，「重新分析=未来能力」）、final-baseline V1.2 Q2（分析作业历史 + 最近一次结果） |
+| 现状 | 实现已走第四条路：`POST /v1/pm/repositories/{rid}/analyze`（2026-11-13，commit 74e0640e）可反复受理（2026-11-15 实测多轮 202），S01 需求稿对该端点仅两行登记（backend-api-requirements L27 / interface-matrix L111），无流程定义；与 I6-B「一次性」语义的边界无人裁决 |
+| 处理 | 待 D-2 裁决：冷启动与再分析分立为两个流程（I6-B 不动，再分析归 Re-scan/analyze 端点） |
+
+### C-14 · GAP — 「最后一次分析的 commit」概念缺失（增量分析前置）
+
+| 项 | 内容 |
+|---|---|
+| 涉及 | s01-i5-code-facts L55（`head_commit_sha` 明确「不是分析时间」）、S01-03 §5.1 三概念（Default Branch / Observed HEAD / Confirmed Commit） |
+| 现状 | 手动增量分析端点锚点 = `selected_commit` 优先 / `head_commit_sha`（repo.rs:763-770，本次分析基准），非「上次分析点」；采集层永远全量 300-commit 窗口重跑，无真增量；「上次分析到哪」无处记录 |
+| 处理 | 待 D-1（锚点列）+ D-2（增量划界）裁决 |
+
+### C-15 · GAP — 业务身份认知无 producer（初始化闭环缺口）
+
+| 项 | 内容 |
+|---|---|
+| 涉及 | bootstrap 的 `product_profile`/`product_vision` 单例骨架、I4 Project Goal（`doc_key='project-goal'`）、discovery-v1 §阶段表（「项目背景→project-overview.md」）、auto_onboarding（DK-E：开关默认 off、本批 PC/KB 零写入） |
+| 现状 | full-dev 实测：多轮仓库分析后 product 域两对象仍 lifecycle=identity 空置、Goal 全「待补充」——「项目是什么（图书管理 vs OA）、用户群体、背景、目标」既非仓库分析产物，也无访谈→提案→转正链路填充 |
+| 处理 | 待 D-4（身份综合轮）裁决 |
+
 **RTM 权威文件变更**：本轮起 `01-requirement-traceability-matrix-v2.1.md` 为现行版；`01-requirement-traceability-matrix.md`（R2）保留作修订留痕。
