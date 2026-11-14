@@ -1,0 +1,137 @@
+review:
+  nav:
+    title: Review Center
+  time:
+    justNow: just now
+    minutes: "{n} min ago"
+    hours: "{n} h ago"
+    days: "{n} d ago"
+  page:
+    title: Review Center
+    subtitle: Handle items waiting for human confirmation, decision and acceptance
+    meta: "{total} pending · updated {asOf}"
+  tabs:
+    all: All
+    finding: Findings
+    proposal: Proposals
+    delivery: Deliveries
+  filter:
+    searchPlaceholder: Search items…
+    domainAll: All domains
+    sortUpdatedDesc: Recently updated first
+    sortUpdatedAsc: Oldest updates first
+  kind:
+    finding_pending: Finding to confirm
+    finding_revision_requested: Finding revision to re-confirm
+    proposal_pending: Document proposal to confirm
+    delivery_pending: Delivery to accept
+  domain:
+    project: Project
+    repository: Repository
+    import: Import
+    task: Task
+    run: Run
+    delivery: Delivery
+    knowledge: Knowledge
+    discovery: Discovery
+    other: Other
+  sourceState:
+    PENDING: Pending
+    REVISION_REQUESTED: Revision requested
+    CONFIRMED: Confirmed
+    REJECTED: Rejected
+    CONFLICT: Conflict
+    draft: Draft
+    submitted: Submitted
+    reviewing: Reviewing
+    approved: Approved
+    rejected: Rejected
+  empty:
+    allDone:
+      title: All caught up
+      hint: No items are waiting for human action
+    noMatch:
+      title: No matching items
+      hint: Adjust the filters and try again
+    loading:
+      title: Loading
+      hint: Fetching pending items
+    loadFailed:
+      title: Failed to load
+      hint: Cannot fetch pending items
+      retry: Retry
+  queue:
+    stateLabel: Pending
+  detail:
+    close: Close
+    typeLabel: Type
+    stateLabel: Status
+    updatedLabel: Updated
+    hintLabel: Hint
+    descriptionLabel: Description
+    contextLabel: Context
+    decisionLabel: Decision
+    viewObject: View object
+    contextLoading: Loading context…
+    contextFailed: Failed to load context — retry or open the object directly
+    noPermission: Your account cannot process this item; you may still view its content
+    stateChanged: This item has changed; refresh and review again
+    submitFailed: Submit failed
+    doneConfirmed: Finding confirmed
+    doneRejected: Finding rejected
+    doneApproved: Proposal approved
+    doneRejectedProposal: Proposal rejected
+  reason:
+    findingLabel: Decision note
+    findingPlaceholder: Explain the basis for confirming or rejecting this finding…
+    proposalLabel: Review note
+    proposalPlaceholder: Optionally explain why you approve or reject…
+    requiredBadge: Required
+    optionalBadge: Optional
+    requiredHint: Cannot submit when empty
+    maxLength: Up to {max} characters
+  finding:
+    confirm: Confirm
+    reject: Reject
+    contextTitle: Finding content
+    confidenceLabel: Confidence
+    kindLabel: Finding kind
+    evidenceLabel: Evidence
+    noEvidence: No extra evidence
+  proposal:
+    approve: Approve proposal
+    reject: Reject proposal
+    confirmArmed: Click again to approve
+    rejectArmed: Click again to reject
+    cancel: Cancel
+    contextTitle: Proposal content
+    rationaleLabel: Rationale
+    riskLabel: Risk level
+    confidenceLabel: Confidence
+    governanceLabel: Governance level
+    memberCountLabel: Members involved
+    versionLabel: Proposal version
+    staleNotice: This proposal changed after you opened it. Review the latest content before deciding.
+    staleReload: Latest version loaded — review again before deciding
+  delivery:
+    readOnlyNotice: Delivery evidence is viewable; acceptance is not open yet
+    viewTask: View delivery task
+    contextTitle: Delivery evidence
+    repositoryLabel: Repository
+    deliveryStateLabel: Delivery state
+    commitLabel: Commit
+    changedFilesLabel: Changed files
+    noEvidence: No delivery evidence yet
+    verdictsLabel: Acceptance criteria
+    verdictNotEvaluated: Never covered by a review run
+    pendingNotice: A pending acceptance approval exists; you may decide now
+    noPendingNotice: No pending acceptance approval (evidence is read-only)
+    approveAction: Approve acceptance
+    rejectAction: Send back
+    reasonLabel: Acceptance reason
+    reasonPlaceholder: Optionally explain the approval or send-back…
+    outcomeChangesRequested: Changes requested
+    alreadyDecided: This approval was already decided
+    anchorDrift: Delivery anchor drifted; refresh and retry
+    gateRefused: Completion gate refused; acceptance not available yet
+    reviewNotSucceeded: Review did not succeed; acceptance not available yet

@@ -225,6 +225,25 @@ async fn pending_findings_appear_as_human_actions_without_cross_project_leak(poo
     for item in items {
         assert_eq!(item["project_id"], json!(project_id.to_string()));
     }
+    // R06（人工审核中心基线）：Finding 事项 link 必须携带 session_id——
+    // 决策端点 verification 是 (session_id, finding_id) 两段主键，
+    // 前端不得反查或猜测 session_id。
+    for item in items
+        .iter()
+        .filter(|item| item["link"]["kind"] == json!("discovery_finding"))
+    {
+        assert!(
+            !item["link"]["params"]["session_id"]
+                .as_str()
+                .unwrap_or_default()
+                .is_empty(),
+            "Finding 事项 link.params 必须携带 session_id"
+        );
+        assert_eq!(
+            item["link"]["params"]["finding_id"], item["id"],
+            "link.params.finding_id 必须与条目 id 一致"
+        );
+    }
 }
 
 /// S01-01 · G-01 七态：待确认发现使 project_cognition 判为 waiting_for_human

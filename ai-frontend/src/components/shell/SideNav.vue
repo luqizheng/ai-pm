@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   ChevronDown,
@@ -21,6 +21,10 @@ import {
 } from "@/router/navigation";
 import { useShellStore } from "@/stores/shell";
 import { useAssistantStore } from "@/stores/assistant";
+import {
+  useReviewCenterStore,
+  REVIEW_CENTER_PATH
+} from "@/stores/reviewCenter";
 
 /**
  * 左导航（AI R&D Workspace Application Shell §2B + Figma「04 — Global Navigation」）。
@@ -39,6 +43,16 @@ const { t } = useI18n();
 const route = useRoute();
 const shell = useShellStore();
 const assistant = useAssistantStore();
+const reviewCenter = useReviewCenterStore();
+
+// 徽标数据：随当前项目拉聚合（R09；静默进行，不阻塞导航渲染）
+watch(
+  () => shell.currentProjectId,
+  pid => {
+    if (pid) void reviewCenter.ensureLoaded(pid);
+  },
+  { immediate: true }
+);
 
 /** 展开态下各分组的折叠状态（key = 分组 id，默认全部展开） */
 const collapsedGroups = ref<Record<string, boolean>>({});
@@ -69,9 +83,22 @@ function isActive(item: NavItem) {
   return isNavItemActive(item, currentPath.value);
 }
 
+/**
+ * 动态徽标数：人工审核中心 = 项目级聚合待处理数（R09，与指挥中心面板同源）。
+ * 聚合不可用或为 0 时不显示——不伪造数字（V1.1 §6.3）。
+ */
+function itemBadge(item: NavItem): number | undefined {
+  if (item.path === REVIEW_CENTER_PATH) {
+    const total = reviewCenter.totalCount;
+    return total !== null && total > 0 ? total : undefined;
+  }
+  return item.badge;
+}
+
 /** 该项是否带未读圆点（Figma：收件箱未读、AI 执行中心未读） */
 function hasUnreadDot(item: NavItem) {
-  return item.badge !== undefined && item.badge > 0;
+  const badge = itemBadge(item);
+  return badge !== undefined && badge > 0;
 }
 
 /** 折叠态下 Tooltip 的文案（图标按钮的可访问名称） */
@@ -210,7 +237,7 @@ async function onSelectProject(id: string) {
                   t(item.labelKey)
                 }}</span>
                 <span v-if="hasUnreadDot(item)" class="shell-sidenav__badge">
-                  {{ item.badge }}
+                  {{ itemBadge(item) }}
                 </span>
                 <ChevronDown
                   v-if="item.expandable && item.children"

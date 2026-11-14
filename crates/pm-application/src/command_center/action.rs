@@ -46,9 +46,12 @@ pub(super) async fn load_human_action_summary(
 ) -> Result<HumanActionSummary, sqlx::Error> {
     let mut items: Vec<ActionItem> = Vec::new();
 
-    // 待确认 / 待补充 Finding（I2 权威推导：display_state）
-    let finding_rows: Vec<(Uuid, String, String, String, DateTime<Utc>)> = sqlx::query_as(
-        "SELECT id, kind, content, verification_status, created_at \
+    // 待确认 / 待补充 Finding（I2 权威推导：display_state）。
+    // link 同时携带 session_id（R06）：决策端点
+    // POST .../sessions/{session_id}/findings/{finding_id}/verification 是
+    // 两段主键，前端不得反查或猜测 session_id。
+    let finding_rows: Vec<(Uuid, Uuid, String, String, String, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT id, session_id, kind, content, verification_status, created_at \
          FROM discovery.discovery_finding \
          WHERE project_id = $1 AND tenant_id = $2 AND verification_status = 'PENDING' \
          ORDER BY created_at DESC, id DESC LIMIT 50",
@@ -60,7 +63,7 @@ pub(super) async fn load_human_action_summary(
     let finding_ids: Vec<Uuid> = finding_rows.iter().map(|r| r.0).collect();
     let decisions =
         crate::discovery::latest_decision_actions(pool, project_id, &finding_ids).await?;
-    for (id, kind, content, status, created_at) in finding_rows {
+    for (id, session_id, kind, content, status, created_at) in finding_rows {
         let display_state =
             crate::discovery::derive_display_state(&status, decisions.get(&id).map(|s| s.as_str()));
         let (action_kind, hint) = if display_state == "REVISION_REQUESTED" {
@@ -80,7 +83,10 @@ pub(super) async fn load_human_action_summary(
             action_hint: hint.to_string(),
             link: ActionLink {
                 kind: "discovery_finding".to_string(),
-                params: BTreeMap::from([("finding_id".to_string(), id.to_string())]),
+                params: BTreeMap::from([
+                    ("finding_id".to_string(), id.to_string()),
+                    ("session_id".to_string(), session_id.to_string()),
+                ]),
             },
         });
     }

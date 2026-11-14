@@ -64,3 +64,11 @@ CAS 强度补充：application 层 `DecisionInput.expected_version_no: i64` 非�
 ## 五、挂账（不变）
 
 H1 全局跨项目徽标/收件箱（需跨项目聚合端点）· H2 AI Chat 绑定当前审核事项上下文（V1.1）· H3 已处理历史视图 · H4 available_actions 契约 · 专注模式双栏（R04）· T-070 验收工作台 · 导入提案二期。
+
+---
+
+## 六、实施期裁决（2026-11-15，用户）
+
+**Delivery 从「只读预留」升级为「接 D5 验收闭环」。** 触发：实施时发现 V1.1 的只读前提（无验收端点）已被推翻——`POST /v1/pm/review-approvals/{approval_id}/decision`（pm_reviews.rs，anchor_drift / completion_gate_refused / already_decided / review_not_succeeded 四类 409）+ T-070 读模型（`api/review.ts`）+ 前端 API client 全部已落地，只是零 UI 消费方（此前复核只查了 pm_delivery.rs，漏了 pm_acceptance.rs / pm_reviews.rs）。
+
+实现形态：聚合 Delivery 条目 → `listTaskReviewApprovals(task_id)` 取 pending 审批 → `decideReviewApproval`（reason 选填）→ outcome（completed / changes_requested）分别反馈；无 pending 审批时维持证据只读 + 任务详情 CTA。基线其余 R01–R12 不变。

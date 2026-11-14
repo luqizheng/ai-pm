@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  ClipboardCheck,
   Cpu,
   ListTree,
   Folders,
@@ -204,9 +205,21 @@ export const navGroups: NavGroup[] = [
           import("@/views/project/devenv/BootstrapView.vue").then(
             module => module.default
           )
-      }
+      },
       // 执行环境（Runners）已迁入 Project Setting（/project/settings/runners，
       // 与仓库同批统一入口）：旧路径 /project/environments* 重定向。
+      // 人工审核中心（R01–R12，docs/ui/review-center）：统一人工决策收件箱。
+      // 聚合 = human_action_summary（项目级，与指挥中心面板同源）；决策走
+      // 各领域既有 API。徽标数经 reviewCenter store 动态注入（SideNav）。
+      {
+        path: "/project/review-center",
+        labelKey: "review.nav.title",
+        icon: ClipboardCheck,
+        component: () =>
+          import("@/views/project/review-center/ReviewCenterPage.vue").then(
+            module => module.default
+          )
+      }
     ]
   },
   {
