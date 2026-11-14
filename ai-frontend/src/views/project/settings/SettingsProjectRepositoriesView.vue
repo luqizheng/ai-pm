@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   BadgeCheck,
@@ -30,18 +30,15 @@ import {
   verifyRepositoryV2,
   type RepositoryV2
 } from "@/api/initialization";
-import {
-  bindRepositoryKey,
-  importSshKey,
-  listSshKeys,
-  revokeSshKey as revokeSshKeyApi
-} from "@/api/repositories";
-import { listImports, startImport } from "@/api/imports";
+import { bindRepositoryKey, listSshKeys } from "@/api/repositories";
+import { cancelImport, listImports, startImport } from "@/api/imports";
 import type { ImportListItem, SshKey } from "@/api/types";
 import {
   describeImportError,
+  describeImportFailure,
   findActiveImport,
   hasRetryableImport,
+  importErrorCode,
   makeIdempotencyKey
 } from "@/lib/import-analysis";
 import { useProjectSettingsFrame } from "./shared";
@@ -158,14 +155,11 @@ const confirmingArchiveId = ref("");
 
 watch(selectedId, () => {
   confirmingArchiveId.value = "";
+  panelNotice.value = null;
 });
 
-/* ── SSH 私钥（迁移 0022 多把：按名称管理，仓库可各绑一把；未绑定回退默认把） ── */
+/* ── SSH key 选择器数据源（独立私钥页管增删改名，本页只绑定；2026-11-14 移出） ── */
 const sshKeys = ref<SshKey[]>([]);
-const sshKeyLabel = ref("");
-const sshKeyInput = ref("");
-const confirmingRevokeKeyId = ref("");
-const copiedKeyId = ref("");
 
 const activeSshKeys = computed(() =>
   sshKeys.value.filter(key => key.status === "active")
@@ -181,44 +175,11 @@ async function loadSshKeys() {
   }
 }
 
-function submitSshKey() {
-  const value = sshKeyInput.value.trim();
-  const label = sshKeyLabel.value.trim();
-  if (!projectId.value || !value || !label) return;
-  void run("ssh-import", async () => {
-    await importSshKey(projectId.value, value, label);
-    sshKeyInput.value = "";
-    sshKeyLabel.value = "";
-    confirmingRevokeKeyId.value = "";
-  });
-}
-
-/** 两段式吊销（按 key；409 key_in_use 错误原样展示）。 */
-function onRevokeKey(key: SshKey) {
-  if (confirmingRevokeKeyId.value !== key.id) {
-    confirmingRevokeKeyId.value = key.id;
-    return;
-  }
-  confirmingRevokeKeyId.value = "";
-  void run(`ssh-revoke-${key.id}`, async () => {
-    await revokeSshKeyApi(key.id);
-  });
-}
-
-function copyPublicKey(key: SshKey) {
-  void navigator.clipboard.writeText(key.public_key).then(() => {
-    copiedKeyId.value = key.id;
-    window.setTimeout(() => {
-      if (copiedKeyId.value === key.id) copiedKeyId.value = "";
-    }, 2000);
-  });
-}
-
 /** 仓库绑定/解绑 key（详情面板下拉；空串 = 跟随项目默认）。 */
 function changeKeyBinding(row: RepositoryV2, value: string) {
-  void run(`bind-${row.id}`, () =>
-    bindRepositoryKey(row.id, value === "" ? null : value)
-  );
+  void runInPanel(`bind-${row.id}`, async () => {
+    await bindRepositoryKey(row.id, value === "" ? null : value);
+  });
 }
 
 async function load() {
@@ -235,6 +196,33 @@ async function load() {
       error instanceof Error ? error.message : String(error ?? "");
   } finally {
     loading.value = false;
+  }
+}
+
+type PanelNotice = {
+  variant: "success" | "info" | "warning" | "danger";
+  text: string;
+};
+
+/** 详情面板就地反馈：结果/失败显示在动作按钮旁（页顶 Alert 在右栏视口外不可见）。 */
+async function runInPanel(
+  action: string,
+  fn: () => Promise<PanelNotice | void>,
+  successNotice?: PanelNotice
+) {
+  busy.value = action;
+  panelNotice.value = null;
+  try {
+    const notice = (await fn()) || successNotice;
+    if (notice) panelNotice.value = notice;
+    await load();
+  } catch (error) {
+    panelNotice.value = {
+      variant: "danger",
+      text: error instanceof Error ? error.message : String(error ?? "")
+    };
+  } finally {
+    busy.value = "";
   }
 }
 
@@ -283,17 +271,44 @@ function submitConnect() {
 /** R-03-04：确认更新采用基准 —— 采用 Observed HEAD 为新 Confirmed Commit。 */
 function confirmHead(row: RepositoryV2) {
   const branch = row.selected_branch ?? row.default_branch ?? "main";
-  void run(`confirm-${row.id}`, () =>
-    confirmRepositoryVersion(row.id, {
+  void runInPanel(`confirm-${row.id}`, async () => {
+    await confirmRepositoryVersion(row.id, {
       selected_branch: branch,
       selected_commit: row.head_commit_sha!,
       reason: "confirm observed head"
-    })
-  );
+    });
+    const sha = (row.head_commit_sha ?? "").slice(0, 8);
+    return {
+      variant: "success" as const,
+      text: t("s01.repositories.detail.confirmedOk", {
+        branch,
+        sha: sha || "—"
+      }) as string
+    };
+  });
 }
 
-function verify(row: RepositoryV2) {
-  void run(`verify-${row.id}`, () => verifyRepositoryV2(row.id));
+async function verify(row: RepositoryV2) {
+  await runInPanel(`verify-${row.id}`, async () => {
+    const outcome = await verifyRepositoryV2(row.id);
+    const branch = outcome.default_branch ?? row.default_branch ?? "";
+    const sha = (outcome.head_commit_sha ?? "").slice(0, 8);
+    if (outcome.status === "verified") {
+      return {
+        variant: "success" as const,
+        text: t("s01.repositories.detail.verifiedOk", {
+          branch,
+          sha: sha || "—"
+        }) as string
+      };
+    }
+    return {
+      variant: "warning" as const,
+      text: t("s01.repositories.detail.verifyUnreachable", {
+        detail: outcome.error_detail ?? outcome.error_code ?? ""
+      }) as string
+    };
+  });
 }
 
 function changeRole(row: RepositoryV2, role: string) {
@@ -316,7 +331,16 @@ function onArchive(row: RepositoryV2) {
     return;
   }
   confirmingArchiveId.value = "";
-  void run(`archive-${row.id}`, () => disconnectRepository(row.id));
+  void runInPanel(
+    `archive-${row.id}`,
+    async () => {
+      await disconnectRepository(row.id);
+    },
+    {
+      variant: "info",
+      text: t("s01.repositories.detail.archivedOk") as string
+    }
+  );
 }
 
 function statusBadgeVariant(
@@ -345,6 +369,8 @@ const analysisBusy = ref(false);
 /** 防双击双发：同一轮确认只发一次；成功/失败后清除以便下次重发。 */
 const analysisIdempotencyKey = ref("");
 const singleAnalyzeKey = ref("");
+/** S4 就地反馈：详情面板在右栏，页顶 Alert 常滚出视口，结果须提示在按钮旁。 */
+const panelNotice = ref<PanelNotice | null>(null);
 
 const analysisTranslate = (
   key: string,
@@ -355,6 +381,77 @@ const activeImport = computed(() => findActiveImport(imports.value));
 const retryableImport = computed(
   () => hasRetryableImport(imports.value) && !activeImport.value
 );
+/** 列表按创建时间倒序——首批即「最近一次分析」，终态就地展示结果。 */
+const latestImport = computed(() => imports.value[0] ?? null);
+const latestFailed = computed(() =>
+  latestImport.value?.status === "failed" ? latestImport.value : null
+);
+const latestCancelled = computed(
+  () => latestImport.value?.status === "cancelled"
+);
+const importStage = computed(() =>
+  activeImport.value
+    ? (t(
+        `s01.repositories.analysis.stage.${activeImport.value.status}`
+      ) as string)
+    : ""
+);
+const importDoneLabel = computed(() => {
+  const item = latestImport.value;
+  if (
+    !item ||
+    activeImport.value ||
+    latestFailed.value ||
+    latestCancelled.value
+  )
+    return "";
+  if (item.status === "draft_ready" || item.status === "proposed")
+    return t("s01.repositories.analysis.done.ready") as string;
+  if (item.status === "applied")
+    return t("s01.repositories.analysis.done.applied") as string;
+  if (item.status === "rejected")
+    return t("s01.repositories.analysis.done.rejected") as string;
+  return "";
+});
+
+/* ── 进行中轮询（2026-11-14）：此前只在手动刷新时拉一次，进行中/失败
+   在客户端永远看不到——有活跃批次时每 3s 拉一次列表。 ── */
+/** 两段式取消进行中的分析（卡死/配错的批次靠它解锁，取消后可重发）。 */
+const confirmingCancelImportId = ref("");
+
+function onCancelImport() {
+  const item = activeImport.value;
+  if (!item) return;
+  if (confirmingCancelImportId.value !== item.id) {
+    confirmingCancelImportId.value = item.id;
+    return;
+  }
+  confirmingCancelImportId.value = "";
+  void run("import-cancel", async () => {
+    await cancelImport(projectId.value, item.id);
+    await loadImports();
+  });
+}
+
+const IMPORT_POLL_MS = 3000;
+let importPollTimer: ReturnType<typeof setInterval> | null = null;
+function syncImportPolling() {
+  if (activeImport.value && importPollTimer === null) {
+    importPollTimer = setInterval(() => {
+      void loadImports();
+    }, IMPORT_POLL_MS);
+  } else if (!activeImport.value && importPollTimer !== null) {
+    clearInterval(importPollTimer);
+    importPollTimer = null;
+  }
+}
+watch(activeImport, syncImportPolling);
+onBeforeUnmount(() => {
+  if (importPollTimer !== null) {
+    clearInterval(importPollTimer);
+    importPollTimer = null;
+  }
+});
 /** 勾选集合过滤掉已不再 verified 的行（列表刷新后自愈）。 */
 const selectedAnalysisIds = computed(() =>
   analysisSelection.value.filter(id =>
@@ -436,18 +533,30 @@ async function reanalyzeSelected(row: RepositoryV2) {
   if (singleAnalyzeKey.value || row.status !== "verified") return;
   const key = makeIdempotencyKey();
   singleAnalyzeKey.value = key;
-  errorMessage.value = "";
+  panelNotice.value = null;
   try {
     await analyzeRepository(row.id, { idempotency_key: key });
+    panelNotice.value = {
+      variant: "success",
+      text: t("s01.repositories.analysis.reanalyzeAccepted") as string
+    };
     await loadImports();
   } catch (error) {
-    errorMessage.value = describeImportError(analysisTranslate, error);
+    // 409 已有活跃分析是提示不是失败，用 warning；其余按错误处理。
+    const inProgress = importErrorCode(error) === "analysis_in_progress";
+    panelNotice.value = {
+      variant: inProgress ? "warning" : "danger",
+      text: describeImportError(analysisTranslate, error)
+    };
   } finally {
     singleAnalyzeKey.value = "";
   }
 }
 
-onMounted(load);
+onMounted(() => {
+  void load();
+  syncImportPolling();
+});
 </script>
 
 <template>
@@ -495,13 +604,68 @@ onMounted(load);
             {{ analysisButtonLabel }}
           </Button>
         </div>
-        <p v-if="activeImport" class="rm-hint" data-testid="analysis-progress">
-          {{
-            t("s01.repositories.analysis.progress", {
-              status: activeImport.status,
-              percent: activeImport.progress
-            })
-          }}
+        <template v-if="activeImport">
+          <p class="rm-hint" data-testid="analysis-progress">
+            {{
+              t("s01.repositories.analysis.progress", {
+                stage: importStage,
+                percent: activeImport.progress
+              })
+            }}
+          </p>
+          <div
+            class="rm-progress"
+            data-testid="analysis-progress-bar"
+            role="progressbar"
+            :aria-valuenow="activeImport.progress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <div
+              class="rm-progress__fill"
+              :style="{ width: `${activeImport.progress}%` }"
+            />
+          </div>
+          <div class="rm-actions">
+            <Button
+              variant="ghost"
+              size="sm"
+              :disabled="busy === 'import-cancel'"
+              data-testid="analysis-cancel"
+              @click="onCancelImport"
+            >
+              {{
+                confirmingCancelImportId === activeImport.id
+                  ? t("s01.repositories.analysis.cancelArmed")
+                  : t("s01.repositories.analysis.cancel")
+              }}
+            </Button>
+          </div>
+        </template>
+        <!-- 失败原因就地展示（list 现在透出 error_code/detail；此前客户端
+             只能永远看到「分析中」）。 -->
+        <Alert
+          v-else-if="latestFailed"
+          variant="danger"
+          size="sm"
+          data-testid="analysis-failure"
+        >
+          {{ describeImportFailure(analysisTranslate, latestFailed) }}
+        </Alert>
+        <Alert
+          v-else-if="latestCancelled"
+          variant="info"
+          size="sm"
+          data-testid="analysis-cancelled"
+        >
+          {{ t("s01.repositories.analysis.done.cancelled") }}
+        </Alert>
+        <p
+          v-else-if="importDoneLabel"
+          class="rm-hint rm-hint--done"
+          data-testid="analysis-done"
+        >
+          {{ importDoneLabel }}
         </p>
         <p v-else class="rm-hint">
           {{ t("s01.repositories.analysis.hint") }}
@@ -523,143 +687,6 @@ onMounted(load);
         @confirm="confirmAnalysis"
         @cancel="analysisConfirmOpen = false"
       />
-
-      <!-- SSH 私钥（迁移 0022 多把）：按名称管理，仓库在详情面板各绑一把；
-           未绑定的仓库回退项目默认把。私钥只进不出——只含公钥与指纹回显。 -->
-      <section class="rm-panel" data-testid="ssh-key-panel">
-        <header class="rm-ssh__head">
-          <h3 class="rm-panel__title">
-            {{ t("s01.repositories.ssh.title") }}
-          </h3>
-          <Badge
-            :variant="activeSshKeys.length > 0 ? 'success' : 'warning'"
-            size="sm"
-            data-testid="ssh-key-status"
-          >
-            {{
-              activeSshKeys.length > 0
-                ? t("s01.repositories.ssh.statusConfigured")
-                : t("s01.repositories.ssh.statusNone")
-            }}
-          </Badge>
-        </header>
-
-        <p
-          v-if="sshKeys.length === 0"
-          class="rm-hint"
-          data-testid="ssh-key-empty"
-        >
-          {{ t("s01.repositories.ssh.listEmpty") }}
-        </p>
-        <div v-else class="rm-ssh__list" data-testid="ssh-key-list">
-          <div
-            v-for="key in sshKeys"
-            :key="key.id"
-            class="rm-ssh__item"
-            :class="{ 'is-revoked': key.status === 'revoked' }"
-            data-testid="ssh-key-item"
-          >
-            <div class="rm-ssh__line">
-              <span class="rm-ssh__name">
-                {{ key.label }}
-                <Badge v-if="key.is_default" variant="accent" size="sm">
-                  {{ t("s01.repositories.ssh.badgeDefault") }}
-                </Badge>
-                <Badge
-                  v-if="key.status === 'revoked'"
-                  variant="neutral"
-                  size="sm"
-                >
-                  {{ t("s01.repositories.ssh.badgeRevoked") }}
-                </Badge>
-              </span>
-            </div>
-            <div class="rm-ssh__line">
-              <span class="rm-ssh__label">
-                {{ t("s01.repositories.ssh.fingerprint") }}
-              </span>
-              <code class="rm-mono">
-                {{ key.fingerprint }}
-              </code>
-            </div>
-            <div class="rm-ssh__line">
-              <span class="rm-ssh__label">
-                {{ t("s01.repositories.ssh.publicKey") }}
-              </span>
-              <code class="rm-mono rm-ssh__pub" :title="key.public_key">
-                {{ key.public_key }}
-              </code>
-              <Button
-                v-if="key.status === 'active'"
-                variant="ghost"
-                size="sm"
-                @click="copyPublicKey(key)"
-              >
-                {{
-                  copiedKeyId === key.id
-                    ? t("s01.repositories.ssh.copied")
-                    : t("s01.repositories.ssh.copyPublicKey")
-                }}
-              </Button>
-              <Button
-                v-if="key.status === 'active'"
-                variant="ghost"
-                size="sm"
-                :class="{ 'is-confirming': confirmingRevokeKeyId === key.id }"
-                :disabled="busy === `ssh-revoke-${key.id}`"
-                @click="onRevokeKey(key)"
-              >
-                {{
-                  confirmingRevokeKeyId === key.id
-                    ? t("s01.repositories.ssh.revokeArmed")
-                    : t("s01.repositories.ssh.revoke")
-                }}
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        <label class="rm-field">
-          {{ t("s01.repositories.ssh.nameLabel") }}
-          <input
-            v-model="sshKeyLabel"
-            data-testid="ssh-key-name"
-            class="rm-input"
-            type="text"
-            :placeholder="t('s01.repositories.ssh.namePlaceholder')"
-          />
-        </label>
-        <label class="rm-field">
-          {{ t("s01.repositories.ssh.inputLabel") }}
-          <textarea
-            v-model="sshKeyInput"
-            data-testid="ssh-key-input"
-            class="rm-input rm-textarea"
-            rows="6"
-            placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
-            spellcheck="false"
-            autocomplete="off"
-          />
-        </label>
-        <p class="rm-hint">
-          {{ t("s01.repositories.ssh.hint") }}
-        </p>
-        <div class="rm-actions">
-          <Button
-            variant="primary"
-            size="sm"
-            :disabled="
-              busy === 'ssh-import' ||
-              !sshKeyInput.trim() ||
-              !sshKeyLabel.trim()
-            "
-            data-testid="ssh-key-submit"
-            @click="submitSshKey"
-          >
-            {{ t("s01.repositories.ssh.submit") }}
-          </Button>
-        </div>
-      </section>
 
       <!-- 接入表单（可折叠；V1 无 OAuth 步骤，G-04 落地后再引入） -->
       <section v-if="showConnect" class="rm-panel" data-testid="connect-form">
@@ -1008,6 +1035,16 @@ onMounted(load);
             {{ selected.last_error_code }}: {{ selected.last_error_detail }}
           </Alert>
 
+          <!-- 详情面板动作的统一就地反馈（核验/确认基准/解绑/重新分析/绑定）。 -->
+          <Alert
+            v-if="panelNotice"
+            :variant="panelNotice.variant"
+            size="sm"
+            data-testid="panel-notice"
+          >
+            {{ panelNotice.text }}
+          </Alert>
+
           <div class="rm-actions">
             <Button
               variant="secondary"
@@ -1095,6 +1132,24 @@ onMounted(load);
   color: var(--ws-text-secondary);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-caption);
+}
+
+.rm-hint--done {
+  color: var(--ws-color-success-text);
+}
+
+.rm-progress {
+  height: var(--space-1);
+  overflow: hidden;
+  background: var(--ws-canvas);
+  border: 1px solid var(--ws-border);
+  border-radius: var(--radius-sm);
+}
+
+.rm-progress__fill {
+  height: 100%;
+  background: var(--ws-color-success);
+  transition: width var(--duration-medium) ease;
 }
 
 /* 查询容器（同时承担原设置主列的纵向节奏 gap） */
@@ -1446,68 +1501,6 @@ onMounted(load);
   height: var(--space-5);
   padding: 0 var(--space-1);
 }
-/* SSH 私钥面板 */
-.rm-ssh__head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.rm-ssh__list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.rm-ssh__item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-3);
-  background: var(--surface-sunken);
-  border: 1px solid var(--ws-border);
-  border-radius: var(--radius-sm);
-}
-
-.rm-ssh__item.is-revoked {
-  opacity: 0.6;
-}
-
-.rm-ssh__name {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--ws-text-primary);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-caption);
-  font-weight: var(--weight-semibold);
-}
-
-.rm-ssh__line {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.rm-ssh__label {
-  flex: none;
-  min-width: 72px;
-  color: var(--ws-text-secondary);
-  font-size: var(--font-size-caption);
-  line-height: var(--line-height-caption);
-}
-
-.rm-ssh__pub {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* 多行粘贴区：复用 .rm-input 的 token 外观，放开高度 */
 .rm-textarea {
   height: auto;

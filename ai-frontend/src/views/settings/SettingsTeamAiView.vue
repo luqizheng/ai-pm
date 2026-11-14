@@ -247,6 +247,8 @@ async function save(
       variant: "success",
       title: t("settings.team.ai.saved")
     });
+    // 保存后立即实测连通性——配置错误（端点/模型名写错）当场暴露。
+    void test(id);
   } catch (error) {
     fail("settings.team.ai.saveFailed", error);
   } finally {
@@ -315,6 +317,8 @@ async function changeStatus(
       variant: "success",
       title: t(`settings.team.ai.${action}Done`)
     });
+    // 启用即实测：坏端点当场暴露，不等业务调用失败才发现。
+    if (action === "enable") void test(id);
   } catch (error) {
     fail("settings.team.ai.saveFailed", error);
   } finally {

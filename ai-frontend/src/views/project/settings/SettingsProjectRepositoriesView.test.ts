@@ -17,11 +17,10 @@ const updateRepositoryV2 = vi.fn();
 const verifyRepositoryV2 = vi.fn();
 const analyzeRepository = vi.fn();
 const listSshKeys = vi.fn();
-const importSshKey = vi.fn();
-const revokeSshKey = vi.fn();
 const bindRepositoryKey = vi.fn();
 const listImports = vi.fn();
 const startImport = vi.fn();
+const cancelImport = vi.fn();
 
 vi.mock("@/api/initialization", () => ({
   listRepositoriesV2: (...args: unknown[]) => listRepositoriesV2(...args),
@@ -36,14 +35,13 @@ vi.mock("@/api/initialization", () => ({
 
 vi.mock("@/api/repositories", () => ({
   listSshKeys: (...args: unknown[]) => listSshKeys(...args),
-  importSshKey: (...args: unknown[]) => importSshKey(...args),
-  revokeSshKey: (...args: unknown[]) => revokeSshKey(...args),
   bindRepositoryKey: (...args: unknown[]) => bindRepositoryKey(...args)
 }));
 
 vi.mock("@/api/imports", () => ({
   listImports: (...args: unknown[]) => listImports(...args),
-  startImport: (...args: unknown[]) => startImport(...args)
+  startImport: (...args: unknown[]) => startImport(...args),
+  cancelImport: (...args: unknown[]) => cancelImport(...args)
 }));
 
 /** 后端真实行形状（RepositoryRow 契约）的最小夹具。 */
@@ -258,76 +256,6 @@ describe("SettingsProjectRepositoriesView", () => {
     });
   });
 
-  it("SSH 密钥未配置态：空列表提示，名称+粘贴保存走导入契约（trim 后提交）", async () => {
-    importSshKey.mockResolvedValue(sshKey({}));
-    const { wrapper } = await mountView();
-    const panel = wrapper.find('[data-testid="ssh-key-panel"]');
-    expect(panel.exists()).toBe(true);
-    expect(panel.find('[data-testid="ssh-key-status"]').text()).toContain(
-      "未配置"
-    );
-    expect(panel.find('[data-testid="ssh-key-empty"]').text()).toContain(
-      "还没有密钥"
-    );
-
-    await wrapper
-      .find('[data-testid="ssh-key-name"]')
-      .setValue(" github-main ");
-    await wrapper
-      .find('[data-testid="ssh-key-input"]')
-      .setValue(
-        "  -----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\n  "
-      );
-    await wrapper.find('[data-testid="ssh-key-submit"]').trigger("click");
-    await flushPromises();
-
-    expect(importSshKey).toHaveBeenCalledWith(
-      "prj-1",
-      "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----",
-      "github-main"
-    );
-    // 空名称 / 空输入不得提交
-    await wrapper.find('[data-testid="ssh-key-name"]').setValue("  ");
-    await wrapper
-      .find('[data-testid="ssh-key-input"]')
-      .setValue("-----BEGIN OPENSSH PRIVATE KEY-----");
-    await wrapper.find('[data-testid="ssh-key-submit"]').trigger("click");
-    await flushPromises();
-    expect(importSshKey).toHaveBeenCalledTimes(1);
-  });
-
-  it("SSH 密钥列表：展示名称/指纹/默认标记，吊销两段式按 key 执行", async () => {
-    listSshKeys.mockResolvedValue({
-      items: [
-        sshKey({}),
-        sshKey({ id: "key-2", label: "gitlab", is_default: false })
-      ],
-      total: 2
-    });
-    revokeSshKey.mockResolvedValue({ id: "key-2" });
-    const { wrapper } = await mountView();
-    const panel = wrapper.find('[data-testid="ssh-key-panel"]');
-    expect(panel.find('[data-testid="ssh-key-status"]').text()).toContain(
-      "已配置"
-    );
-    expect(panel.findAll('[data-testid="ssh-key-item"]')).toHaveLength(2);
-    expect(panel.text()).toContain("github");
-    expect(panel.text()).toContain("gitlab");
-    expect(panel.text()).toContain("SHA256:");
-    expect(panel.text()).toContain("默认");
-
-    // 两段式吊销：第一击武装（文案变为确认），第二击按 key id 执行
-    const items = wrapper.findAll('[data-testid="ssh-key-item"]');
-    const gitlabRevoke = items[1]!
-      .findAll("button")
-      .find(b => b.text().includes("吊销"))!;
-    await gitlabRevoke.trigger("click");
-    expect(gitlabRevoke.text()).toContain("确认吊销");
-    await gitlabRevoke.trigger("click");
-    await flushPromises();
-    expect(revokeSshKey).toHaveBeenCalledWith("key-2");
-  });
-
   it("仓库详情可绑定/解绑 SSH 密钥（迁移 0022；空串 = 跟随项目默认）", async () => {
     listSshKeys.mockResolvedValue({
       items: [
@@ -368,17 +296,26 @@ describe("SettingsProjectRepositoriesView", () => {
     await flushPromises();
   }
 
-  function importRow(status: string, progress = 0) {
+  function importRow(
+    status: string,
+    progress = 0,
+    overrides: Record<string, unknown> = {}
+  ) {
     return {
       id: "imp-1",
       status,
       progress,
+      stage_detail: null,
       model_name: "",
       draft_revision: 0,
       analysis_run_id: null,
       created_at: "2026-11-13T00:00:00Z",
+      updated_at: "2026-11-13T00:00:00Z",
       proposed_at: null,
-      applied_at: null
+      applied_at: null,
+      error_code: null,
+      error_detail: null,
+      ...overrides
     };
   }
 
@@ -441,9 +378,110 @@ describe("SettingsProjectRepositoriesView", () => {
     expect(wrapper.find('[data-testid="analysis-progress"]').text()).toContain(
       "42"
     );
+    expect(wrapper.find('[data-testid="analysis-progress-bar"]').exists()).toBe(
+      true
+    );
     expect(
       wrapper.find('[data-testid="analysis-start"]').attributes("disabled")
     ).toBeDefined();
+  });
+
+  it("S2 进行中的分析可两段式取消（卡死批次解锁），取消后状态刷新", async () => {
+    document.body.innerHTML = "";
+    listRepositoriesV2.mockResolvedValue({
+      items: [repo({ id: "r1" })],
+      total: 1
+    });
+    listImports.mockResolvedValue({
+      items: [importRow("analyzing", 70)],
+      total: 1
+    });
+    cancelImport.mockResolvedValue({ id: "imp-1" });
+    const { wrapper } = await mountView();
+
+    const cancelBtn = wrapper.find('[data-testid="analysis-cancel"]');
+    expect(cancelBtn.text()).toContain("取消分析");
+    await cancelBtn.trigger("click");
+    expect(cancelBtn.text()).toContain("确认取消");
+    await cancelBtn.trigger("click");
+    await flushPromises();
+
+    expect(cancelImport).toHaveBeenCalledWith("prj-1", "imp-1");
+  });
+
+  it("S2 分析失败：就地展示本地化失败原因（error_code 透传自 list）", async () => {
+    document.body.innerHTML = "";
+    listRepositoriesV2.mockResolvedValue({
+      items: [repo({ id: "r1" })],
+      total: 1
+    });
+    listImports.mockResolvedValue({
+      items: [
+        importRow("failed", 70, {
+          error_code: "model_configuration",
+          error_detail: "provider 192.168.11.5 unreachable"
+        })
+      ],
+      total: 1
+    });
+    const { wrapper } = await mountView();
+
+    const alert = wrapper.find('[data-testid="analysis-failure"]');
+    expect(alert.exists()).toBe(true);
+    expect(alert.text()).toContain("模型配置不可用");
+    expect(alert.text()).toContain("192.168.11.5");
+  });
+
+  it("S2 分析完成：draft_ready 展示就绪提示（不再停留「分析中」）", async () => {
+    document.body.innerHTML = "";
+    listRepositoriesV2.mockResolvedValue({
+      items: [repo({ id: "r1" })],
+      total: 1
+    });
+    listImports.mockResolvedValue({
+      items: [importRow("draft_ready", 100)],
+      total: 1
+    });
+    const { wrapper } = await mountView();
+
+    expect(wrapper.find('[data-testid="analysis-done"]').text()).toContain(
+      "草案已就绪"
+    );
+  });
+
+  it("S2 进行中每 3s 轮询导入状态，到达终态后停止（2026-11-14）", async () => {
+    document.body.innerHTML = "";
+    vi.useFakeTimers();
+    try {
+      listRepositoriesV2.mockResolvedValue({
+        items: [repo({ id: "r1" })],
+        total: 1
+      });
+      listImports.mockResolvedValue({
+        items: [importRow("analyzing", 70)],
+        total: 1
+      });
+      const { wrapper } = await mountView();
+      const afterMount = listImports.mock.calls.length;
+      expect(afterMount).toBeGreaterThan(0);
+
+      await vi.advanceTimersByTimeAsync(3100);
+      expect(listImports.mock.calls.length).toBeGreaterThan(afterMount);
+
+      // 终态 → 轮询停止
+      listImports.mockResolvedValue({
+        items: [importRow("draft_ready", 100)],
+        total: 1
+      });
+      await vi.advanceTimersByTimeAsync(3100);
+      await flushPromises();
+      expect(wrapper.find('[data-testid="analysis-done"]').exists()).toBe(true);
+      const stable = listImports.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(7000);
+      expect(listImports.mock.calls.length).toBe(stable);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("S2 已 apply 项目 409 → 展示后端错误码兜底文案", async () => {
@@ -502,7 +540,59 @@ describe("SettingsProjectRepositoriesView", () => {
     await flushPromises();
 
     expect(analyzeRepository).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain("已有进行中的分析");
+    // 提示必须落在详情面板按钮旁（页顶 Alert 在右栏视口外不可见）。
+    const notice = wrapper.find(
+      '[data-testid="repo-detail"] [data-testid="panel-notice"]'
+    );
+    expect(notice.exists()).toBe(true);
+    expect(notice.text()).toContain("已有进行中的分析");
+  });
+
+  it("S4 核验可达性：成功/不可达都在详情面板按钮旁就地反馈", async () => {
+    document.body.innerHTML = "";
+    listRepositoriesV2.mockResolvedValue({
+      items: [repo({ id: "r-verify" })],
+      total: 1
+    });
+    verifyRepositoryV2.mockResolvedValue({
+      repository_id: "r-verify",
+      status: "verified",
+      default_branch: "main",
+      head_commit_sha: "abcdef1234567890",
+      error_code: null,
+      error_detail: null
+    });
+    let { wrapper } = await mountView();
+    await wrapper.find('[data-testid="repo-list"] > div').trigger("click");
+    await wrapper.find('[data-testid="verify-btn"]').trigger("click");
+    await flushPromises();
+
+    let notice = wrapper.find(
+      '[data-testid="repo-detail"] [data-testid="panel-notice"]'
+    );
+    expect(notice.exists()).toBe(true);
+    expect(notice.text()).toContain("核验成功");
+    expect(notice.text()).toContain("abcdef12");
+
+    // unreachable 也是 200：就地 warning，不伪装成功
+    document.body.innerHTML = "";
+    verifyRepositoryV2.mockResolvedValue({
+      repository_id: "r-verify",
+      status: "unreachable",
+      default_branch: null,
+      head_commit_sha: null,
+      error_code: "auth",
+      error_detail: "permission denied (publickey)"
+    });
+    ({ wrapper } = await mountView());
+    await wrapper.find('[data-testid="repo-list"] > div').trigger("click");
+    await wrapper.find('[data-testid="verify-btn"]').trigger("click");
+    await flushPromises();
+    notice = wrapper.find(
+      '[data-testid="repo-detail"] [data-testid="panel-notice"]'
+    );
+    expect(notice.text()).toContain("仓库不可达");
+    expect(notice.text()).toContain("permission denied");
   });
 
   it("scope=__all__（无项目）整段隐藏分析按钮且不拉取导入状态", async () => {

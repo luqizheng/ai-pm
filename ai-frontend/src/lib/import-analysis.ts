@@ -43,6 +43,45 @@ export function makeIdempotencyKey(): string {
   return `imp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+/**
+ * 导入失败 error_code → i18n key（`s01.repositories.analysis.fail.<key>`）。
+ * 未知码走 generic 兜底，把码与 detail 一起透出。
+ */
+const IMPORT_FAILURE_KEYS: Record<string, string> = {
+  model_configuration: "modelConfiguration",
+  model_timeout: "modelTimeout",
+  model_unavailable: "modelUnavailable",
+  bad_output: "badOutput",
+  no_grounded_output: "noGroundedOutput",
+  no_verified_repository: "noVerifiedRepository",
+  all_repositories_failed: "allRepositoriesFailed",
+  git_timeout: "gitTimeout",
+  git_auth_failed: "gitAuthFailed",
+  git_not_found: "gitNotFound",
+  repo_too_large: "repoTooLarge",
+  git_failed: "gitFailed",
+  partial: "partial",
+  job_failed: "jobFailed"
+};
+
+/** 导入失败原因 → 本地化文案；无 error_code（未失败）返回空串。 */
+export function describeImportFailure(
+  t: Translate,
+  item: { error_code?: string | null; error_detail?: string | null }
+): string {
+  const code = item.error_code ?? "";
+  if (!code) return "";
+  const key = IMPORT_FAILURE_KEYS[code];
+  if (key) {
+    const base = t(`s01.repositories.analysis.fail.${key}`) as string;
+    return item.error_detail ? `${base}（${item.error_detail}）` : base;
+  }
+  return t("s01.repositories.analysis.fail.generic", {
+    code,
+    detail: item.error_detail ?? ""
+  }) as string;
+}
+
 /** 后端错误体 `{error}` → 错误码；取不到返回空串。 */
 export function importErrorCode(error: unknown): string {
   const data = (error as { data?: unknown } | null)?.data;

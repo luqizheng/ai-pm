@@ -56,6 +56,10 @@ repositories:
     unreachable: Unreachable
     archived: Removed
   detail:
+    verifiedOk: "Verified: {branch} {'@'} {sha}"
+    verifyUnreachable: "Repository unreachable: {detail}"
+    confirmedOk: "Baseline confirmed: {branch} {'@'} {sha}"
+    archivedOk: Repository disconnected (history kept; you can reconnect later).
     role: Role
     defaultBranch: Default Branch
     observedHead: Observed HEAD
@@ -67,39 +71,49 @@ repositories:
     notice: The branch has advanced. Your confirmed baseline has not been changed.
     confirm: Confirm Update
   ssh:
-    title: SSH Private Keys
-    statusNone: Not configured
-    statusConfigured: Configured
-    sourceImported: Imported
-    sourceGenerated: Platform-generated
-    copyPublicKey: Copy public key
-    copied: Copied
-    revoke: Revoke
-    revokeArmed: Confirm revoke?
-    nameLabel: Key name
-    namePlaceholder: e.g. github-main
     badgeDefault: Default
-    badgeRevoked: Revoked
-    listEmpty: No keys configured yet. Paste one below.
-    inputLabel: Paste private key
-    fingerprint: Fingerprint
-    publicKey: Public key
-    submit: Save key
     bindLabel: SSH Key
     followDefault: Follow project default
-    hint: Paste a private key that grants read access to your Git repositories (OpenSSH format, ed25519 / RSA / ECDSA). Keys are stored encrypted and never shown again. A key name identifies it — saving with the same name replaces that key; the first key becomes the project default. Repositories can bind a specific key, otherwise they use the default.
-    hintConfigured: Keys are encrypted at rest and never displayed again. Saving with an existing name replaces that key.
   analysis:
     title: Code Analysis
     hint: Select verified repositories to start analysis. A running analysis blocks new requests; failed or cancelled runs can be re-analyzed.
     start: "Start analysis ({count})"
     reanalyze: "Re-analyze ({count})"
-    progress: "Analysis in progress: {status} · {percent}%"
+    progress: "Analysis in progress: {stage} · {percent}%"
+    stage:
+      queued: Queued
+      cloning: Cloning repositories
+      reading: Reading code and docs
+      analyzing: AI analysis
+    done:
+      ready: Analysis finished — the draft is ready. Review and apply it in the project command center.
+      applied: The latest analysis result has been applied.
+      rejected: The latest analysis draft was rejected.
+      cancelled: Analysis was cancelled. You can start it again.
+    fail:
+      modelConfiguration: Model configuration is unavailable — check the provider setup in admin AI model settings
+      modelTimeout: The model response timed out
+      modelUnavailable: The model service is unavailable
+      badOutput: The model output could not be parsed
+      noGroundedOutput: The model result lacked verifiable evidence; everything was dropped
+      noVerifiedRepository: No verified repository available to analyze
+      allRepositoriesFailed: Cloning/reading failed for every repository
+      gitTimeout: Repository clone timed out
+      gitAuthFailed: Repository authentication failed — check the SSH key settings
+      gitNotFound: Repository or branch not found
+      repoTooLarge: Repository exceeds the analysis size limit
+      gitFailed: Failed to read the repository
+      partial: Some import proposals failed to execute
+      jobFailed: The analysis job failed after repeated retries
+      generic: "Analysis failed ({code}): {detail}"
+    cancel: "Cancel analysis"
+    cancelArmed: "Confirm cancel?"
     selectLabel: Select this repository for analysis
     confirmTitle: Start Code Analysis
     confirmDescription: "Start analysis for {count} selected repositories?"
     confirm: Start Analysis
     reanalyzeOne: Re-analyze
+    reanalyzeAccepted: Incremental analysis accepted. Track progress in the analysis section above.
     error:
       projectNotEmpty: The project already has requirements or baselines; cold-start analysis cannot be restarted.
       alreadyApplied: Analysis for this project has already been applied; cold-start analysis cannot be restarted.

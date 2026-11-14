@@ -64,6 +64,8 @@ async function save() {
     model.value = cfg.model;
     enabled.value = cfg.enabled;
     savedNotice.value = t("shell.adminSettings.notice.saved");
+    // 保存后立即实测连通性——配置错误当场暴露，不留到分析失败时才发现。
+    void runTest();
   } catch (error) {
     errorText.value = t("shell.adminSettings.error.save", {
       reason: translateError(String(error))

@@ -283,12 +283,19 @@ export interface ImportListItem {
   id: string;
   status: ImportStatus;
   progress: number;
+  /** 当前阶段说明（后端 set_stage 写入；终态保留最后一次值）。 */
+  stage_detail: string | null;
   model_name: string;
   draft_revision: number;
   analysis_run_id: string | null;
   created_at: string;
+  /** 最近一次推进时间——前端据此判断是否长时间无进展。 */
+  updated_at: string;
   proposed_at: string | null;
   applied_at: string | null;
+  /** 失败原因（2026-11-14 起列表接口透出）。 */
+  error_code: string | null;
+  error_detail: string | null;
 }
 
 export interface ProposalRef {

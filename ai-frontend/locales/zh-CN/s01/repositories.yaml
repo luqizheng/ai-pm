@@ -56,6 +56,10 @@ repositories:
     unreachable: 不可达
     archived: 已移出
   detail:
+    verifiedOk: "核验成功：{branch} {'@'} {sha}"
+    verifyUnreachable: "仓库不可达：{detail}"
+    confirmedOk: "已确认基准：{branch} {'@'} {sha}"
+    archivedOk: 已解绑仓库（保留历史记录，可重新接入）。
     role: 用途
     defaultBranch: 默认分支
     observedHead: 观测 HEAD
@@ -67,39 +71,49 @@ repositories:
     notice: 分支已前移，你的确认基准未被改动。确认后采用新 HEAD 作为基准。
     confirm: 确认更新
   ssh:
-    title: SSH 私钥
-    statusNone: 未配置
-    statusConfigured: 已配置
-    sourceImported: 导入
-    sourceGenerated: 平台生成
-    copyPublicKey: 复制公钥
-    copied: 已复制
-    revoke: 吊销
-    revokeArmed: 确认吊销？
-    nameLabel: 密钥名称
-    namePlaceholder: 如 github-main
     badgeDefault: 默认
-    badgeRevoked: 已吊销
-    listEmpty: 项目还没有密钥，在下方粘贴导入。
-    inputLabel: 粘贴私钥
-    fingerprint: 指纹
-    publicKey: 公钥
-    submit: 保存密钥
     bindLabel: SSH 密钥
     followDefault: 跟随项目默认
-    hint: 粘贴可读取你 Git 仓库的私钥（OpenSSH 格式，支持 ed25519 / RSA / ECDSA）。密钥加密存储且不再显示；名称即身份——同名保存替换该把，第一把自动成为项目默认。仓库可各绑一把，未绑定的用默认。
-    hintConfigured: 密钥已加密保存，不再显示。同名保存将替换该把密钥。
   analysis:
     title: 代码分析
     hint: 勾选已验证的仓库发起分析；分析进行中不可重复发起，失败或取消后可再次分析。
     start: "开始分析 ({count})"
     reanalyze: "再次分析 ({count})"
-    progress: "分析进行中：{status} · {percent}%"
+    progress: "分析进行中：{stage} · {percent}%"
+    stage:
+      queued: 排队中
+      cloning: 克隆仓库
+      reading: 读取代码与文档
+      analyzing: AI 分析中
+    done:
+      ready: 分析完成，草案已就绪——在项目总控台查看并应用。
+      applied: 最近一次分析结果已应用。
+      rejected: 最近一次分析草案被驳回。
+      cancelled: 分析已取消，可重新发起。
+    fail:
+      modelConfiguration: 模型配置不可用——请在管理设置的 AI 模型里检查 Provider 配置
+      modelTimeout: 模型响应超时
+      modelUnavailable: 模型服务不可用
+      badOutput: 模型输出无法解析
+      noGroundedOutput: 模型结果缺少可验证证据，全部被丢弃
+      noVerifiedRepository: 没有已核验的仓库可分析
+      allRepositoriesFailed: 所有仓库的克隆/读取都失败
+      gitTimeout: 仓库克隆超时
+      gitAuthFailed: 仓库认证失败——请在 SSH 私钥设置里检查密钥配置
+      gitNotFound: 仓库或分支不存在
+      repoTooLarge: 仓库过大，超出分析上限
+      gitFailed: 仓库读取失败
+      partial: 部分导入提案执行失败
+      jobFailed: 分析任务多次重试后仍失败
+      generic: "分析失败（{code}）：{detail}"
+    cancel: 取消分析
+    cancelArmed: "确认取消？"
     selectLabel: 选择该仓库进行分析
     confirmTitle: 开始代码分析
     confirmDescription: "将对选中的 {count} 个仓库发起分析，确定继续？"
     confirm: 开始分析
     reanalyzeOne: 重新分析
+    reanalyzeAccepted: 已受理增量分析，进度见上方「仓库分析」。
     error:
       projectNotEmpty: 项目已存在需求或基线数据，无法重新发起冷启动分析。
       alreadyApplied: 该项目的分析结果已应用，无法重新发起冷启动分析。
