@@ -100,6 +100,13 @@ pub trait IdentityRepo: Send + Sync {
         principal_id: Uuid,
     ) -> Result<Option<String>, IdentityRepoError>;
 
+    /// 主体类型（`core.principal.kind`；不存在 = None）。
+    /// SEC-P1-1：正式逐项确认的 Human 门查库验 `kind='human'`，不信任 token 声明。
+    async fn principal_kind(
+        &self,
+        principal_id: Uuid,
+    ) -> Result<Option<String>, IdentityRepoError>;
+
     /// dev-off 物化（`AI_PM_AUTH_MODE=off`）：principal + tenant_member 落
     /// 系统租户（幂等 ON CONFLICT DO NOTHING；只随写请求调用）。
     async fn ensure_dev_off(&self, principal_id: Uuid, tenant_id: Uuid) -> Result<(), IdentityRepoError>;

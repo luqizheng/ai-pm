@@ -26,7 +26,10 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
+use crate::support::{
+    ensure_trusted_context, require_human_decision_context, require_project_visible, ApiError,
+    ApiResult,
+};
 use pm_ai::identity_synthesis::LlmIdentitySynthesis;
 use pm_application::identity::{apply_identity_drafts, assemble_identity_input, IdentityError};
 use pm_application::knowledge::KnowledgeRoot;
@@ -289,6 +292,8 @@ async fn decide_item(
         caller.principal_id,
     )
     .await?;
+    // SEC-P1-1：正式决策 = 交互式真人主体（查库 kind='human'）；Agent/Service 可提案不可确认。
+    require_human_decision_context(&state.pool, &caller).await?;
 
     let next_state = match body.action.as_str() {
         "confirm" => "confirmed",

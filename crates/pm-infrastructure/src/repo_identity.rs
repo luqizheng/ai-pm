@@ -198,6 +198,15 @@ impl IdentityRepo for PgIdentityRepo {
         Ok(role)
     }
 
+    async fn principal_kind(&self, principal_id: Uuid) -> RepoResult<Option<String>> {
+        let kind: Option<String> =
+            sqlx::query_scalar("SELECT kind FROM core.principal WHERE id = $1")
+                .bind(principal_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(kind)
+    }
+
     async fn ensure_dev_off(&self, principal_id: Uuid, tenant_id: Uuid) -> RepoResult<()> {
         // principal 与 tenant_member 一起物化到系统租户（Q6）；只随写请求落库，
         // 保证空库下 `GET` 仍返回零总数。

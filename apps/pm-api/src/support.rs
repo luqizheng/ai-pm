@@ -97,6 +97,46 @@ pub(crate) fn ensure_trusted_context(principal: &crate::auth::AuthedPrincipal) -
     Ok(())
 }
 
+/// 正式逐项确认的 Human 主体门（SEC-P1-1 · ProjCognition）。
+///
+/// 适用于 `ai.cognition_item` 与 `ai.baseline_item` 的逐项决策入口，契约：
+/// ① 需**交互式真人会话**（`interactive` / `off`）——`api_key`、`unknown`、
+///    `client_credential`（cpk）一律 403：携带真人 JWT 的机器凭据不等于真人操作；
+/// ② 需 `core.principal.kind='human'`（**查库**，不信任 token 声明）——
+///    Agent（dev_agent / ai_pm）与服务主体可以提案、不得确认。
+///
+/// 不复制 PC `ensure_formal_authorized` 的治理角色部分（PC 发布事务专属）；
+/// 项目可见性仍由 handler 的 [`require_project_visible`] 承担（404 不泄露存在性）。
+/// 决策记录追加写（append-only）不在本门范围（legacy ai 表无触发器，另行登记）。
+pub(crate) async fn require_human_decision_context(
+    pool: &sqlx::PgPool,
+    principal: &crate::auth::AuthedPrincipal,
+) -> ApiResult<()> {
+    match principal.auth_mode.as_str() {
+        "interactive" | "off" => {}
+        _ => {
+            return Err(ApiError::Forbidden(
+                "confirmation requires an interactive human session",
+            ))
+        }
+    }
+    let kind = repos::identity_repo(pool)
+        .principal_kind(principal.principal_id)
+        .await
+        .map_err(|err| {
+            ApiError::Text(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("identity lookup failed: {err}"),
+            )
+        })?;
+    if kind.as_deref() != Some("human") {
+        return Err(ApiError::Forbidden(
+            "confirmation requires a human principal",
+        ));
+    }
+    Ok(())
+}
+
 impl From<pm_application::outbox_ops::ReplayError> for ApiError {
     fn from(e: pm_application::outbox_ops::ReplayError) -> Self {
         match e {
@@ -234,13 +274,11 @@ pub async fn require_task_project(
 
 /// 各 handler/middleware 统一从这儿拿仓储实现（PgPool clone 廉价；
 /// 换实现只动此处，调用方只依赖 pm_application 的 trait）。
-use pm_application::repo::GuardQueryRepo;
+use pm_application::repo::{GuardQueryRepo, IdentityRepo};
 
 pub mod repos {
     /// pm-api 各模块的仓储集合：按域惰性构造，无全局状态。
-    pub fn identity_repo(
-        pool: &sqlx::PgPool,
-    ) -> pm_infrastructure::repo_identity::PgIdentityRepo {
+    pub fn identity_repo(pool: &sqlx::PgPool) -> pm_infrastructure::repo_identity::PgIdentityRepo {
         pm_infrastructure::repo_identity::PgIdentityRepo::new(pool.clone())
     }
 
@@ -252,7 +290,9 @@ pub mod repos {
         pm_infrastructure::repo_baseline::PgBaselineRepo::new(pool.clone())
     }
 
-    pub fn cognition_repo(pool: &sqlx::PgPool) -> pm_infrastructure::repo_cognition::PgCognitionRepo {
+    pub fn cognition_repo(
+        pool: &sqlx::PgPool,
+    ) -> pm_infrastructure::repo_cognition::PgCognitionRepo {
         pm_infrastructure::repo_cognition::PgCognitionRepo::new(pool.clone())
     }
 
@@ -288,9 +328,7 @@ pub mod repos {
         pm_infrastructure::repo_guard_query::PgGuardQueryRepo::new(pool.clone())
     }
 
-    pub fn customer_repo(
-        pool: &sqlx::PgPool,
-    ) -> pm_infrastructure::repo_customer::PgCustomerRepo {
+    pub fn customer_repo(pool: &sqlx::PgPool) -> pm_infrastructure::repo_customer::PgCustomerRepo {
         pm_infrastructure::repo_customer::PgCustomerRepo::new(pool.clone())
     }
 

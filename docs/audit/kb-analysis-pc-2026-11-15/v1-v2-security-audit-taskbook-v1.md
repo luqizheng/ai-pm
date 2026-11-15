@@ -397,3 +397,52 @@ V-1/V-2 可并行，但须同一代码快照、同一证据格式与风险标准
 - **存量失败登记（非本修复引入，干净 master 已复现）**：pc_proposals p3_expands/p5_approve 两用例环境敏感 flaky（首次全量曾绿），另行排查。
 
 **全量 pm-api 套件**：除上述存量 flaky 外全绿。**阶段 A 完成，G1 通过 → 解锁 B~E**（B 测试基础设施、C 负向测试、D 业务链、E 签收）。
+
+## 附五：阶段 B+C 执行记录（2026-11-16）· D04 证据包
+
+> 代码快照 master `8b25177f`（含 ee4cd046）。只新增/重构测试代码，零业务代码、零 Schema、零 Migration。
+> 完整证据（环境/主体/逐用例预期实际/DB 前后状态/失败与 UNKNOWN）：
+> [`v1-v2-d04-security-test-evidence.md`](v1-v2-d04-security-test-evidence.md)。
+
+**B1 测试基础设施**（`apps/pm-api/tests/l2_security/mod.rs`）：
+- 双租户夹具：A=`SYSTEM_TENANT`（lmms:1 identity 映射）、B=独立 tenant（lmms:2，bootstrap）；
+- 凭据签发器：Human interactive JWT / Service JWT / Agent(dev_agent) JWT / cpk（devenv.device + device_credential 三码）/ 未认证；
+- 断言库：`expect_cross_tenant_denied`（HTTP 4xx + 12 表项目快照逐字不变）与
+  `expect_cross_tenant_read_denied`（HTTP 拒 + 响应逐标记不含目标租户数据）；
+- FakeModel Fixture：`fake_model::FIXTURE_VERSION = "fake-model-v1"` 接口预留（阶段 D 用）。
+
+**B2 夹具复用**：`security_p0_regression.rs` 重构为共享模块；P0 复跑 **5/5 绿**。
+
+**C 负向测试结果**（`cargo nextest`，auth-on 真 JWT，sqlx::test 每用例独立库）：
+| 套件 | 结果 |
+|---|---|
+| P0 回归组 | 5/5 PASS |
+| V1-T01~T12 + V1-EXT-01 + R3 | 14/14 PASS |
+| V2-T01~T10 | 9/9 PASS |
+| 合计 | **28/28 PASS** |
+
+要点：
+- **P0×5 关闭**：攻击路径 404 + DB 零副作用 + 合法路径双向成功；
+- **V1**：T01 真人确认落 decided_by/confirmed_by；T03/T04/T06 拒绝；T09~T12 + R3 路径门/四项链/撤销即时全部拒绝；
+  **T02/T05 为 Characterization（缺陷现状）**：Agent(dev_agent) 可确认 cognition item；
+  **V1-EXT-01 新增发现**：Baseline 逐项决策入口（`pm_baseline.rs:135-172`）同样无 Human 门——并入 SEC-P1-1；
+  T07-A 登记 UNKNOWN（无独立决策应用服务层）；T07-B 登记 Repository 调用边界；T08 以 `tools/list` 证明无 cognition 决策工具；
+- **V2**：T01~T05/T07/T09/T10 全拒绝且零副作用/零泄漏；**T06 UNKNOWN**（无 DELETE 端点）；
+  **T08-C Characterization**：`pc.source` 与 `kb.memory_ref` 接受跨租户目标（SEC-P2-1/2 基线），T08-R 待修复；
+- 存量 flaky（pc_proposals p3/p5）本轮未复现，不在本任务范围。
+
+**结论流转（含 SEC-P1-1 修复）**：
+- SEC-P1-2（拒绝测试缺失）**关闭**；
+- **SEC-P1-1 已按报批方案修复**（`support.rs::require_human_decision_context` 接入
+  cognition + baseline 两个逐项决策入口；零 Schema）；T02/T05/EXT-01 由
+  Characterization 转为 Regression，另增 API-Key 拒绝用例；
+- 复测：L2 三套件 **29/29 PASS**；`pm_cognition` + `pm_baseline` 既有 happy-path 4/4 PASS；
+- V-1 = **MATCH**；V-2 = **PARTIAL**（仅 SEC-P2 引用链，非 P0/P1）；
+- **G2 门条件全部满足** → 允许进入 G3（P1 真实业务链）。
+
+**交付物**：
+- [`v1-v2-d04-security-test-evidence.md`](v1-v2-d04-security-test-evidence.md)（含 §9 修复复测记录）
+- [`v1-v2-d05-d06.md`](v1-v2-d05-d06.md)（D05 状态流转 + D06 G2 核对表）
+- [`proj-cognition-human-gate-fix-taskbook-v1.md`](proj-cognition-human-gate-fix-taskbook-v1.md)（已执行）
+
+

@@ -23,7 +23,9 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{require_project_visible, ApiError, ApiResult};
+use crate::support::{
+    require_human_decision_context, require_project_visible, ApiError, ApiResult,
+};
 use pm_application::repo::{BaselineRepo, BaselineRepoError};
 use pm_infrastructure::repo_baseline::PgBaselineRepo;
 
@@ -145,6 +147,9 @@ async fn decide_item(
         caller.principal_id,
     )
     .await?;
+    // SEC-P1-1：逐项决策与 cognition 同门（交互式真人 + 查库 kind='human'）；
+    // `confirm_baseline` 的三重门继续独立生效（版本正式化）。
+    require_human_decision_context(&state.pool, &caller).await?;
 
     // 动作词汇 → 状态词汇（HTTP 契约；非法动作 400）。
     let next_state = match body.action.as_str() {

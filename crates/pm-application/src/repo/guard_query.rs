@@ -39,8 +39,7 @@ pub trait GuardQueryRepo: Send + Sync {
     ) -> Result<Option<Uuid>, sqlx::Error>;
 
     /// 项目存在性（pm_write 任务创建的归属前置）。
-    async fn project_exists(&self, tenant_id: Uuid, project_id: Uuid)
-        -> Result<bool, sqlx::Error>;
+    async fn project_exists(&self, tenant_id: Uuid, project_id: Uuid) -> Result<bool, sqlx::Error>;
 
     /// 任务存在性（pm_write 编辑/决策的归属前置）。
     async fn task_exists(&self, tenant_id: Uuid, task_id: Uuid) -> Result<bool, sqlx::Error>;
@@ -62,12 +61,18 @@ pub trait GuardQueryRepo: Send + Sync {
     async fn project_tenant(&self, project_id: Uuid) -> Result<Option<Uuid>, sqlx::Error>;
 
     /// 仓库存在性（租户边界）。
-    async fn repository_exists(&self, tenant_id: Uuid, repository_id: Uuid)
-        -> Result<bool, sqlx::Error>;
+    async fn repository_exists(
+        &self,
+        tenant_id: Uuid,
+        repository_id: Uuid,
+    ) -> Result<bool, sqlx::Error>;
 
     /// 设备属主（租户边界；凭据管理权判定输入）。
-    async fn device_owner(&self, tenant_id: Uuid, device_id: Uuid)
-        -> Result<Option<Uuid>, sqlx::Error>;
+    async fn device_owner(
+        &self,
+        tenant_id: Uuid,
+        device_id: Uuid,
+    ) -> Result<Option<Uuid>, sqlx::Error>;
 
     /// 发现问题存在性（租户 + 会话边界）。
     async fn discovery_question_exists(
