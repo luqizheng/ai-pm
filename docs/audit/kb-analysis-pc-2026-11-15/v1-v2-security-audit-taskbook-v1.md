@@ -445,4 +445,33 @@ V-1/V-2 可并行，但须同一代码快照、同一证据格式与风险标准
 - [`v1-v2-d05-d06.md`](v1-v2-d05-d06.md)（D05 状态流转 + D06 G2 核对表）
 - [`proj-cognition-human-gate-fix-taskbook-v1.md`](proj-cognition-human-gate-fix-taskbook-v1.md)（已执行）
 
+## 附六：G2 复判 + 阶段 D（G3/G4）执行记录（2026-11-16）
+
+> 代码快照 master `e16e228d`；完整证据 [`phase-d-g3-g4-verdict.md`](phase-d-g3-g4-verdict.md)、
+> [`chain-e2e-test-cases-v1.md`](../../../test-case/chain-e2e-test-cases-v1.md)。
+
+**G2 复判（任务书 §13 模板）**：
+- V-1 = **MATCH**（两个逐项决策入口统一 Human 门；Agent/Service/未认证/伪造/API Key/cpk 全拒绝；
+  残留 SEC-P2-4 append-only 为 P2）。
+- V-2 = **PARTIAL**（P0×5 已修复回归；残留 SEC-P2-1/2/3 跨域引用校验；P0/P1 = 0）。
+- P0/P1 数量：0 / 0；关键 UNKNOWN：T07-A 架构事实关闭、T06 无删除面、T08-C 特征化基线。
+- **G2 = 通过** → 允许关闭 V-1、允许进入 P1 业务链（G3）；V-2 待 SEC-P2 或专家记录 P2 例外。
+
+**G3（阶段 D 主链 S1~S6）**：`playwright.chain.config.ts` + `e2e/chain/*.spec.ts`
+（复用 p0 栈：一次性库 + JWKS + 真 pm-api + 真 worker + FakeModel v1）。
+执行 **10/10 PASS**：
+- S1 报告门 409 + commit 锚 + analyzed；
+- S2 KB draft、确认前不可检索；
+- S3 ai_agent 提案 + pending approval + draft lifecycle + source/evidence 钉 KB Revision；
+- S4 AI/api_key 403；真人 confirm_revision + approve；发布后章节索引 FTS 命中；
+- S5 close 批量发布：applied=1、version+snapshot_hash+members、lifecycle→active、锚点固化；
+- S6 重复 close 实际 409、版本数不增（E2-3 候选契约，仅记录）。
+分支：B1 close 残留（withdrawn + rejected_kb）、B2 增量链（锚点）、B3 无锚点退 full、
+B4 失败恢复（failed + error_code/error_detail + 任务 FAILED）全部有结果；
+两段式取消 = NOT_APPLICABLE（无端点）。
+
+**G4**：可复现命令、pm-api/worker 日志、DB 终态、E1 关联表、分支快照齐备
+（`test-case/evidence/chain/`）。**允许进入 P2 Analysis 详细设计；Migration 任务书可编制、不可执行。**
+
+
 

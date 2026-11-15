@@ -1,6 +1,6 @@
 # D04 安全测试证据包（V-1 / V-2 专项 · 阶段 B+C）
 
-> 2026-11-16 · 代码快照 **master 8b25177f**（含 SEC-P0 修复 ee4cd046） + 本任务新增测试代码 + **SEC-P1-1 修复（工作树，追认见下）**
+> 2026-11-16 · 代码快照 **master e16e228d**（含 SEC-P0 ee4cd046 + SEC-P1-1 追认提交）+ 阶段 D 测试代码
 > 上游：V-1/V-2 专项任务书 §5.3/§6.3/§7；交付物 05 V1.1 §2/§3/§5/§6
 >
 > **两条时间线，勿混读**：
@@ -10,8 +10,10 @@
 >   decided_by=human → V-1 可复判 **MATCH**、SEC-P1-1 转关闭，G2 条件满足。
 >   该终态以【用户追认批准 DEC-SEC-P1-1-01 + SQL 门禁整改 + 本包随修复一并提交】为生效前提。
 > 结论摘要：**L2 基础设施落地；修复前 29 用例（含 Characterization）与修复后回归均复现全绿；
-> P0×5 关闭；SEC-P1-2 关闭；SEC-P1-1 修复已实现待追认提交；V-1 修复前 PARTIAL → 修复后 MATCH；
+> P0×5 关闭；SEC-P1-2 关闭；SEC-P1-1 修复已追认提交（e16e228d）；V-1 修复前 PARTIAL → 修复后 MATCH；
 > V-2 = PARTIAL（仅 SEC-P2 引用链）。**
+> 阶段 D 追加（2026-11-16）：P1 真实业务链 **10/10 PASS**（G3 通过；证据见 §10 与
+> [`phase-d-g3-g4-verdict.md`](phase-d-g3-g4-verdict.md)）。
 
 ---
 
@@ -19,7 +21,7 @@
 
 | 项 | 值 |
 |---|---|
-| 代码快照 | master `8b25177f`；本任务只新增/重构 `apps/pm-api/tests/`，零业务代码、零 Schema、零 Migration |
+| 代码快照 | master `e16e228d`；本任务新增/重构 `apps/pm-api/tests/` + 阶段 D `e2e/chain/`，零业务改动、零 Schema、零 Migration |
 | 数据库 | `postgres://aipm:aipm@127.0.0.1:16433/aipm`（`aipm-pg-gate` 容器） |
 | 隔离方式 | `#[sqlx::test(migrations = "../../migrations")]`：每用例独立数据库，用例结束销毁 |
 | 鉴权模式 | `router_with_auth`（jwks 生产同构）：测试 RSA 密钥对签发真 JWT；`/mcp` Host 固定 loopback |
@@ -198,4 +200,16 @@ cargo nextest run -p pm-api \
 
 **G2 门**：负向 Regression 全通过；P0/P1 = 0；关键 UNKNOWN 关闭 → **G2 条件满足**。
 V-2 仍 PARTIAL（仅 SEC-P2-1/2/3 引用链，非 P0/P1）。
+
+---
+
+## 10. 阶段 D（G3/G4）证据索引
+
+阶段 D 的 P1 真实业务链执行证据独立成包，不与安全 L2 结论混计：
+
+- 判定与终局：[`phase-d-g3-g4-verdict.md`](phase-d-g3-g4-verdict.md)（G2 复判 / G3 判定表 / E1 关联表 / G4 签收包 / DEF-CHAIN-01）；
+- 11 字段用例记录：[`chain-e2e-test-cases-v1.md`](../../../test-case/chain-e2e-test-cases-v1.md)；
+- 机器证据：`test-case/evidence/chain/`（playwright-results.json、pm-api/worker 日志、e1-object-identity.json、branch-*.json）；
+- 执行结果：**10/10 PASS**（S1~S6 主链 + B1~B4 分支）；`e2e/chain/*.spec.ts` + `playwright.chain.config.ts`。
+
 

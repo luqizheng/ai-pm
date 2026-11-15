@@ -1,0 +1,25 @@
+{
+  "first": {
+    "id": "c8ccd41d-2f09-4ef1-8a04-9441360fd7b8",
+    "status": "analyzed",
+    "commit_sha": "94d5810f4271878aa463544d2961d507ca59cbd4",
+    "run_mode": "full",
+    "since_commit": "",
+    "error_code": "",
+    "stage_detail": "",
+    "kb_revision_id": "340dadf5-efde-4d26-b45b-859fee816ca3",
+    "error_detail": ""
+  },
+  "anchor": "94d5810f4271878aa463544d2961d507ca59cbd4",
+  "second": {
+    "id": "ca7a6ef4-6f05-4dad-b4cc-52d57d7d2a3e",
+    "status": "analyzed",
+    "commit_sha": "da2f910d83b88ac081f2f97f829b184334066a54",
+    "run_mode": "incremental",
+    "since_commit": "94d5810f4271878aa463544d2961d507ca59cbd4",
+    "error_code": "",
+    "stage_detail": "",
+    "kb_revision_id": "0ca0b7f3-1750-4956-8033-19673d03ed16",
+    "error_detail": ""
+  }
+}

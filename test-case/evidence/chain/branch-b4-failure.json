@@ -1,0 +1,15 @@
+{
+  "failed": {
+    "id": "b47b0dbd-8fe2-4231-b685-b6ad80cda843",
+    "status": "failed",
+    "commit_sha": "517291163a5f4fbe070ef1d46fc493340373be99",
+    "run_mode": "full",
+    "since_commit": "",
+    "error_code": "kb_analysis_failed",
+    "stage_detail": "",
+    "kb_revision_id": "",
+    "error_detail": "git: git authentication failed"
+  },
+  "intake_task_states": "FAILED",
+  "retry_status": 202
+}

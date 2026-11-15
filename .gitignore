@@ -36,4 +36,6 @@ test-case/evidence/p0/*.log
 test-case/evidence/p0/playwright-artifacts/
 test-case/evidence/p1/*.log
 test-case/evidence/p1/playwright-artifacts/
+test-case/evidence/chain/*.log
+test-case/evidence/chain/playwright-artifacts/
 test-case/evidence/e2e-flow/playwright-ui-artifacts/

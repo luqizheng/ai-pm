@@ -1,0 +1,24 @@
+{
+  "fixture_version": "fake-model-v1",
+  "tenant_id": "e95e4c5a-55f1-44e4-af8a-855c2cac3331",
+  "project_id": "0baa0f93-e64d-4470-ada0-0550669521b2",
+  "report": {
+    "report_id": "f617c31f-68f6-42f8-b675-b4601bb2eeab",
+    "intake_id": "1d2e901f-9c75-40cc-8a04-f951159c8aca",
+    "commit_sha": "c2aee36e28cbc0ec527769c39f9d263c14062fbb"
+  },
+  "kb": {
+    "document_id": "c948e71d-8226-4f9e-ab92-d5b8f018ae94",
+    "revision_id": "89cedecb-24e1-4e4e-8769-e0b66a1f91d5"
+  },
+  "proposal": {
+    "proposal_id": "c4e4e9e9-6f99-4101-adfe-4a05f4de0998",
+    "origin_kind": "ai_agent"
+  },
+  "version": {
+    "version_id": "5167eefa-1712-4cbe-be60-8a5db4038994"
+  },
+  "compatibility_ref": {
+    "note": "Report 身份=repo_analysis_report；正文由 kb.document_revision 持有；kb_revision_id 为兼容引用（非独立 Report Revision 对象，P2 落地前）"
+  }
+}

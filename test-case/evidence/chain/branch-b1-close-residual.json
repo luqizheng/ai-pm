@@ -1,0 +1,22 @@
+{
+  "report": {
+    "id": "982e672a-933b-4ea3-a15a-d5830e1bc7a6",
+    "status": "analyzed",
+    "commit_sha": "934f8e61a6128395dc8e33e69ad5909421225fd8",
+    "run_mode": "full",
+    "since_commit": "",
+    "error_code": "",
+    "stage_detail": "",
+    "kb_revision_id": "379b7335-3114-4ea9-9e14-a9f7c67f0bf7",
+    "error_detail": ""
+  },
+  "close": {
+    "report_id": "982e672a-933b-4ea3-a15a-d5830e1bc7a6",
+    "status": "closed",
+    "applied_proposals": 0,
+    "publish_failed_proposals": 0,
+    "withdrawn_proposals": 1,
+    "rejected_kb": true,
+    "last_analyzed_commit": "934f8e61a6128395dc8e33e69ad5909421225fd8"
+  }
+}

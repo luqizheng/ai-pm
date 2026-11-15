@@ -1,0 +1,687 @@
+{
+  "config": {
+    "argv": [
+      "C:\\nvm4w\\nodejs\\node.exe",
+      "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\node_modules\\@playwright\\test\\cli.js",
+      "test",
+      "-c",
+      "playwright.chain.config.ts"
+    ],
+    "configFile": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\playwright.chain.config.ts",
+    "rootDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p0\\global-setup.ts",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "D:/kudi-project/templates/ai-pm/test-case/evidence/chain/playwright-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "chain/*.spec.ts"
+        ],
+        "timeout": 300000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\chain\\playwright-artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "name": "",
+        "testDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
+        "snapshotDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
+        "testIgnore": [],
+        "testMatch": "chain/*.spec.ts",
+        "timeout": 300000,
+        "use": {
+          "baseURL": "http://127.0.0.1:18490"
+        },
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": ""
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "../test-case/evidence/chain/playwright-results.json"
+        }
+      ],
+      [
+        "html",
+        {
+          "outputFolder": "../test-case/evidence/chain/playwright-report",
+          "open": "never"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "default",
+    "updateSourceMethod": "patch",
+    "version": "1.65.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "chain\\chain-01-full-loop.spec.ts",
+      "file": "chain/chain-01-full-loop.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "S1 仓库 analyze：报告门生效、commit_sha 锚定、报告 analyzed",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2371,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [
+                    {
+                      "text": ""
+                    },
+                    {
+                      "text": "warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/app.ts', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/tasks.ts', LF will be replaced by CRLF the next time Git touches it\n"
+                    }
+                  ],
+                  "retry": 0,
+                  "startTime": "2026-11-15T23:50:59.160Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "940ed833aed6a7f6044e-e24084f5767ad46cf7f6",
+          "file": "chain/chain-01-full-loop.spec.ts",
+          "line": 99,
+          "column": 1
+        },
+        {
+          "title": "S2 KB：kb.document_revision draft + 确认前检索不命中",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 331,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T23:51:02.207Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "940ed833aed6a7f6044e-77e2ae73aedf86985b95",
+          "file": "chain/chain-01-full-loop.spec.ts",
+          "line": 143,
+          "column": 1
+        },
+        {
+          "title": "S3 PC：draft lifecycle + ai_agent 提案 + pending approval + 钉扎 KB Revision",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 905,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T23:51:02.553Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "940ed833aed6a7f6044e-fa0448de9724eaf5a37e",
+          "file": "chain/chain-01-full-loop.spec.ts",
+          "line": 182,
+          "column": 1
+        },
+        {
+          "title": "S4 人工：AI/api_key 决策 403；真人 confirm + approve；发布后索引/检索可见",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1175,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T23:51:03.474Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "940ed833aed6a7f6044e-6131012830c5647d4515",
+          "file": "chain/chain-01-full-loop.spec.ts",
+          "line": 263,
+          "column": 1
+        },
+        {
+          "title": "S5 close：approved 提案批量发布、lifecycle→active、version+snapshot_hash、锚点固化",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1053,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T23:51:04.674Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "940ed833aed6a7f6044e-0467b264f8b0ce3624f6",
+          "file": "chain/chain-01-full-loop.spec.ts",
+          "line": 381,
+          "column": 1
+        },
+        {
+          "title": "S6 幂等：重复 close 不重执行（实际行为登记；版本数不增）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 434,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T23:51:05.746Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-01-full-loop.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "940ed833aed6a7f6044e-886893f425eee704c436",
+          "file": "chain/chain-01-full-loop.spec.ts",
+          "line": 462,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "chain\\chain-02-branches.spec.ts",
+      "file": "chain/chain-02-branches.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "B1 close 残留：withdrawn + rejected_kb=true，不产生正式版本",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3393,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [
+                    {
+                      "text": ""
+                    },
+                    {
+                      "text": "warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it\n"
+                    }
+                  ],
+                  "retry": 0,
+                  "startTime": "2026-11-15T23:51:06.238Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "458049366f74312147e5-a65d76c670a1e8304333",
+          "file": "chain/chain-02-branches.spec.ts",
+          "line": 122,
+          "column": 1
+        },
+        {
+          "title": "B2 增量链：run_mode=incremental，since_commit=上一关闭报告锚点",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5609,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [
+                    {
+                      "text": ""
+                    },
+                    {
+                      "text": "warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it\n"
+                    },
+                    {
+                      "text": "warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'src/extra.ts', LF will be replaced by CRLF the next time Git touches it\n"
+                    },
+                    {
+                      "text": ""
+                    }
+                  ],
+                  "retry": 0,
+                  "startTime": "2026-11-15T23:51:09.775Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "458049366f74312147e5-e020e163033ff577e35e",
+          "file": "chain/chain-02-branches.spec.ts",
+          "line": 171,
+          "column": 1
+        },
+        {
+          "title": "B3 无锚点增量：降级为 full（since_commit 为空）",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2816,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [
+                    {
+                      "text": ""
+                    },
+                    {
+                      "text": "warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it\n"
+                    }
+                  ],
+                  "retry": 0,
+                  "startTime": "2026-11-15T23:51:15.404Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "458049366f74312147e5-fc9ddb8967c2f1372ba6",
+          "file": "chain/chain-02-branches.spec.ts",
+          "line": 214,
+          "column": 1
+        },
+        {
+          "title": "B4 失败恢复：报告 failed + error_code/stage_detail；intake 任务 FAILED",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [
+                {
+                  "type": "serial",
+                  "location": {
+                    "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                    "line": 0,
+                    "column": 0
+                  }
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3444,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [
+                    {
+                      "text": ""
+                    },
+                    {
+                      "text": "warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it\n"
+                    }
+                  ],
+                  "retry": 0,
+                  "startTime": "2026-11-15T23:51:18.236Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\chain\\chain-02-branches.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "458049366f74312147e5-fc72162e5c6e9f3e377c",
+          "file": "chain/chain-02-branches.spec.ts",
+          "line": 234,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-11-15T23:50:50.489Z",
+    "duration": 32325.677,
+    "expected": 10,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}
