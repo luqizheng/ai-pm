@@ -4,6 +4,8 @@ import { useI18n } from "vue-i18n";
 import { useRoute, useRouter } from "vue-router";
 
 import Button from "@/components/ui/button/Button.vue";
+import Alert from "@/components/ui/alert/Alert.vue";
+import { PageFrame } from "@/components/shell";
 import type { ActionItem } from "@/api/command-center";
 import { reviewItemKey, reviewTabOf } from "@/api/reviewCenter";
 import {
@@ -103,16 +105,12 @@ const tabs = computed(() => {
   ];
 });
 
-const domainOptions = computed(() => {
-  const values = new Set(store.items.map(item => item.domain));
-  return [
-    { value: "", label: t("review.filter.domainAll") },
-    ...[...values].map(value => ({
-      value,
-      label: t(`review.domain.${value}`)
-    }))
-  ];
-});
+const domainOptions = computed(() =>
+  [...new Set(store.items.map(item => item.domain))].map(value => ({
+    value,
+    label: t(`review.domain.${value}`)
+  }))
+);
 
 const sortOptions = computed(() => [
   { value: "updated_desc", label: t("review.filter.sortUpdatedDesc") },
@@ -403,23 +401,24 @@ function retryLoad(): void {
 </script>
 
 <template>
-  <div class="review-page" :data-path="REVIEW_CENTER_PATH">
-    <header class="review-page__head">
-      <h1 class="review-page__title">{{ t("review.page.title") }}</h1>
-      <p class="review-page__subtitle">{{ t("review.page.subtitle") }}</p>
-      <p
-        v-if="store.totalCount !== null"
-        class="review-page__meta"
-        data-testid="review-meta"
-      >
-        {{
-          t("review.page.meta", {
-            total: store.totalCount,
-            asOf: clockLabel(store.block?.asOf)
-          })
-        }}
-      </p>
-    </header>
+  <PageFrame
+    :data-path="REVIEW_CENTER_PATH"
+    :breadcrumbs="[{ label: t('review.nav.title') }]"
+    :title="t('review.page.title')"
+    :description="t('review.page.subtitle')"
+  >
+    <p
+      v-if="store.totalCount !== null"
+      class="review-page__meta"
+      data-testid="review-meta"
+    >
+      {{
+        t("review.page.meta", {
+          total: store.totalCount,
+          asOf: clockLabel(store.block?.asOf)
+        })
+      }}
+    </p>
 
     <ReviewTypeTabs
       :tabs="tabs"
@@ -431,9 +430,12 @@ function retryLoad(): void {
       :model-search="store.search"
       :search-placeholder="t('review.filter.searchPlaceholder')"
       :domains="domainOptions"
-      :model-domain="store.domainFilter ?? ''"
+      :model-domain="store.domainFilter ?? undefined"
+      :domain-all-label="t('review.filter.domainAll')"
       :sort-options="sortOptions"
       :model-sort="store.sortBy"
+      :domain-aria-label="t('review.filter.domainFilter')"
+      :sort-aria-label="t('review.filter.sortFilter')"
       @update:model-search="store.search = $event"
       @update:model-domain="store.domainFilter = $event || null"
       @update:model-sort="store.sortBy = $event as ReviewSort"
@@ -555,16 +557,17 @@ function retryLoad(): void {
             {{ t("review.detail.decisionLabel") }}
           </h3>
 
-          <p
+          <Alert
             v-if="store.lastFeedback"
-            class="review-decision__feedback"
+            variant="success"
+            size="sm"
             role="status"
           >
             {{ t(store.lastFeedback) }}
-          </p>
-          <p v-if="decisionError" class="review-decision__error" role="alert">
+          </Alert>
+          <Alert v-if="decisionError" variant="danger" size="sm" role="alert">
             {{ decisionError }}
-          </p>
+          </Alert>
 
           <ReviewDecisionReasonInput
             v-if="isFinding"
@@ -670,87 +673,46 @@ function retryLoad(): void {
         </section>
       </template>
     </ReviewDetailDrawer>
-  </div>
+  </PageFrame>
 </template>
 
 <style scoped>
-.review-page {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  height: 100%;
-  min-height: 0;
-  padding: 16px;
-  overflow-y: auto;
-}
-
-.review-page__head {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.review-page__title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.review-page__subtitle {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
+/* 待办计数行：PageHeader 之下的紧凑补充信息（总数 + 截至时刻） */
 .review-page__meta {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  font-variant-numeric: tabular-nums;
 }
 
 .review-page__queue {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .review-decision {
   border-top: 1px solid var(--border-subtle);
-  padding-top: 16px;
+  padding-top: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .review-decision__title {
   margin: 0;
   color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.review-decision__feedback {
-  margin: 0;
-  padding: 8px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  color: var(--text-primary);
-  font-size: 13px;
-}
-
-.review-decision__error {
-  margin: 0;
-  padding: 8px 12px;
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  color: var(--text-primary);
-  font-size: 13px;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  font-weight: var(--weight-semibold);
 }
 
 .review-decision__actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
 }
 </style>

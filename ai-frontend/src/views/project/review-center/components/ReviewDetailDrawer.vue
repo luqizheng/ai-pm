@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Badge from "@/components/ui/badge/Badge.vue";
+import IconButton from "@/components/ui/icon-button/IconButton.vue";
 import { X } from "lucide-vue-next";
 import { onBeforeUnmount, onMounted } from "vue";
 
@@ -55,15 +56,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
             <span class="review-drawer__time">{{ timeLabel }}</span>
           </div>
         </div>
-        <button
-          type="button"
+        <IconButton
           class="review-drawer__close"
-          :aria-label="closeLabel"
+          variant="secondary"
+          size="sm"
+          :label="closeLabel"
           :disabled="busy"
           @click="emit('close')"
         >
           <X :size="16" aria-hidden="true" />
-        </button>
+        </IconButton>
       </header>
 
       <p v-if="hint" class="review-drawer__hint">{{ hint }}</p>
@@ -120,24 +122,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 .review-drawer__time {
   color: var(--text-secondary);
   font-size: 12px;
-}
-
-.review-drawer__close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.review-drawer__close:hover {
-  background: var(--surface-hover-veil);
-  color: var(--text-primary);
 }
 
 .review-drawer__hint {

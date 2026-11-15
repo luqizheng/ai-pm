@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import Badge from "@/components/ui/badge/Badge.vue";
+import Descriptions from "@/components/ui/descriptions/Descriptions.vue";
 import type { DiscoveryFinding } from "@/api/discovery";
 
 /**
  * Finding 业务上下文（V1.0 §5.1）：发现内容 / 类型 / 置信度 / 证据。
  *
+ * 键值区 = DS 组件 Descriptions。
  * 纯展示件：数据来自 discovery session 读端点（store 预载），
  * 文案由调用方翻译后经 props 传入（D8）。原始来源仅展示实际存在字段。
  */
@@ -39,16 +41,13 @@ function confidenceText(confidence: number | null): string {
 
     <template v-else>
       <p class="finding-ctx__content">{{ finding.content }}</p>
-      <dl class="finding-ctx__facts">
-        <div class="finding-ctx__fact">
-          <dt>{{ kindLabel }}</dt>
-          <dd>{{ finding.kind }}</dd>
-        </div>
-        <div class="finding-ctx__fact">
-          <dt>{{ confidenceLabel }}</dt>
-          <dd>{{ confidenceText(finding.confidence) }}</dd>
-        </div>
-      </dl>
+      <Descriptions
+        class="finding-ctx__facts"
+        :items="[
+          { label: kindLabel, value: finding.kind },
+          { label: confidenceLabel, value: confidenceText(finding.confidence) }
+        ]"
+      />
       <div v-if="finding.evidence.length" class="finding-ctx__evidence">
         <p class="finding-ctx__evidence-title">{{ evidenceLabel }}</p>
         <ul>
@@ -67,41 +66,33 @@ function confidenceText(confidence: number | null): string {
 
 <style scoped>
 .finding-ctx__title {
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-2);
   color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  font-weight: var(--weight-semibold);
 }
 
 .finding-ctx__content {
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-3);
   color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1.6;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
   white-space: pre-wrap;
 }
 
 .finding-ctx__facts {
-  display: flex;
-  gap: 24px;
-  margin: 0 0 12px;
-}
-
-.finding-ctx__fact dt {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.finding-ctx__fact dd {
-  margin: 2px 0 0;
-  color: var(--text-primary);
-  font-size: 13px;
+  margin: 0 0 var(--space-3);
 }
 
 .finding-ctx__evidence-title {
-  margin: 0 0 6px;
+  margin: 0 0 var(--space-1);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
 }
 
 .finding-ctx__evidence ul {
@@ -110,20 +101,24 @@ function confidenceText(confidence: number | null): string {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .finding-ctx__evidence li {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
 }
 
 .finding-ctx__note {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 </style>

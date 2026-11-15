@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import Alert from "@/components/ui/alert/Alert.vue";
+import Descriptions from "@/components/ui/descriptions/Descriptions.vue";
 import type { PcProposalDetail } from "@/api/knowledge";
 
 /**
  * Proposal 业务上下文（V1.0 §5.2）：提案正文 / 变更说明 / 风险 / 版本。
  *
+ * stale 提示 = DS 组件 Alert（warning）；键值区 = DS 组件 Descriptions。
  * 纯展示件：数据来自 P4 详查（store 预载），文案由调用方翻译后经 props
  * 传入（D8）。只展示接口实际返回的字段——不伪造 diff（D9/V1.0 §5.2）。
  * stale 提示（R07：CAS 失配后必须重看最新内容）由调用方传入。
@@ -38,92 +41,65 @@ defineProps<Props>();
     </p>
 
     <template v-else>
-      <div
+      <Alert
         v-if="stale"
         class="proposal-ctx__stale"
+        variant="warning"
+        size="sm"
         role="alert"
         data-testid="proposal-stale"
       >
         {{ staleNotice }}
-      </div>
+      </Alert>
 
       <p v-if="proposal.rationale" class="proposal-ctx__rationale">
         {{ proposal.rationale }}
       </p>
 
-      <dl class="proposal-ctx__facts">
-        <div class="proposal-ctx__fact">
-          <dt>{{ riskLabel }}</dt>
-          <dd>{{ proposal.risk_level }}</dd>
-        </div>
-        <div class="proposal-ctx__fact">
-          <dt>{{ confidenceLabel }}</dt>
-          <dd>{{ proposal.confidence }}</dd>
-        </div>
-        <div class="proposal-ctx__fact">
-          <dt>{{ governanceLabel }}</dt>
-          <dd>{{ proposal.governance_level }}</dd>
-        </div>
-        <div class="proposal-ctx__fact">
-          <dt>{{ memberCountLabel }}</dt>
-          <dd>{{ proposal.members.length }}</dd>
-        </div>
-        <div class="proposal-ctx__fact">
-          <dt>{{ versionLabel }}</dt>
-          <dd>v{{ proposal.expected_version_no }}</dd>
-        </div>
-      </dl>
+      <Descriptions
+        :items="[
+          { label: riskLabel, value: proposal.risk_level },
+          { label: confidenceLabel, value: proposal.confidence },
+          { label: governanceLabel, value: proposal.governance_level },
+          { label: memberCountLabel, value: proposal.members.length },
+          {
+            label: versionLabel,
+            value: `v${proposal.expected_version_no}`
+          }
+        ]"
+      />
     </template>
   </section>
 </template>
 
 <style scoped>
 .proposal-ctx__title {
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-2);
   color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  font-weight: var(--weight-semibold);
 }
 
 .proposal-ctx__stale {
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.5;
+  margin-bottom: var(--space-3);
 }
 
 .proposal-ctx__rationale {
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-3);
   color: var(--text-primary);
-  font-size: 14px;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
   line-height: 1.6;
   white-space: pre-wrap;
-}
-
-.proposal-ctx__facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px 24px;
-  margin: 0;
-}
-
-.proposal-ctx__fact dt {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.proposal-ctx__fact dd {
-  margin: 2px 0 0;
-  color: var(--text-primary);
-  font-size: 13px;
 }
 
 .proposal-ctx__note {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 </style>

@@ -19,6 +19,8 @@ review:
   filter:
     searchPlaceholder: 搜索事项…
     domainAll: 全部领域
+    domainFilter: 领域筛选
+    sortFilter: 排序
     sortUpdatedDesc: 最近更新优先
     sortUpdatedAsc: 最早更新优先
   kind:

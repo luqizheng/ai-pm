@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import Tabs from "@/components/ui/tabs/Tabs.vue";
+
 /**
  * 类型页签（R03）：全部 / 发现 / 知识提案 / 交付验收。
  *
+ * 视觉与交互 = DS 组件 Tabs（Figma DS/Navigation/Tab，13:33477 下划线口径）。
  * 纯展示件：文案与计数由调用方翻译后经 props 传入（D8）。
  */
 export interface ReviewTabOption {
@@ -15,65 +18,44 @@ interface Props {
   modelValue: string;
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 defineEmits<{ "update:modelValue": [value: string] }>();
+
+const tabItems = () =>
+  props.tabs.map(tab => ({ value: tab.key, label: tab.label }));
+
+const countOf = (value: string): number =>
+  props.tabs.find(tab => tab.key === value)?.count ?? 0;
 </script>
 
 <template>
-  <div class="review-tabs" role="tablist">
-    <button
-      v-for="tab in tabs"
-      :key="tab.key"
-      type="button"
-      class="review-tabs__item"
-      :class="{ 'is-active': tab.key === modelValue }"
-      role="tab"
-      :aria-selected="tab.key === modelValue"
-      @click="$emit('update:modelValue', tab.key)"
+  <div class="review-tabs">
+    <Tabs
+      :model-value="modelValue"
+      :tabs="tabItems()"
+      @update:model-value="$emit('update:modelValue', $event)"
     >
-      {{ tab.label }}
-      <span class="review-tabs__count">{{ tab.count }}</span>
-    </button>
+      <template #tab="{ tab }">
+        {{ tab.label }}
+        <span class="review-tabs__count">{{ countOf(tab.value) }}</span>
+      </template>
+    </Tabs>
   </div>
 </template>
 
 <style scoped>
-.review-tabs {
-  display: flex;
-  gap: var(--space-2, 8px);
+/* 队列列较窄（V1.1 §2.1 474px，AI Chat 开启时更窄）：页签行允许换行，
+ * 避免DS TabsList 的 nowrap 在窄容器里被裁切 */
+.review-tabs :deep(.ui-tabs__list) {
   flex-wrap: wrap;
 }
 
-.review-tabs__item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  transition:
-    background var(--duration-fast, 120ms) var(--ease-out, ease-out),
-    color var(--duration-fast, 120ms) var(--ease-out, ease-out),
-    border-color var(--duration-fast, 120ms) var(--ease-out, ease-out);
-}
-
-.review-tabs__item:hover {
-  background: var(--surface-hover-veil);
-  color: var(--text-primary);
-}
-
-.review-tabs__item.is-active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--text-primary);
-}
-
+/* 计数徽数：DS Tab 内 trailing 小字，tabular-nums 对齐 */
 .review-tabs__count {
-  font-size: 12px;
-  opacity: 0.85;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-micro);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
 }
 </style>

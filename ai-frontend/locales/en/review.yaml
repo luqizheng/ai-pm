@@ -19,6 +19,8 @@ review:
   filter:
     searchPlaceholder: Search items…
     domainAll: All domains
+    domainFilter: Domain filter
+    sortFilter: Sort
     sortUpdatedDesc: Recently updated first
     sortUpdatedAsc: Oldest updates first
   kind:
