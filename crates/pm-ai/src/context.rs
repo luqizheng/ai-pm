@@ -8,9 +8,10 @@
 //!   no run, or latest run `status='failed'` → insert a new
 //!   `status='analyzing'` row whose `attempt_count` is the old row's
 //!   `attempt_count + 1` (0 when there is no old row), with
-//!   `started_at = now()` and `model_name` / `policy_version` /
-//!   `config_snapshot` copied from `ai.project_ai_config`
-//!   (`config_snapshot` ← `model_config`); `project_id` comes from the
+//!   `started_at = now()`; `model_name` / `config_snapshot` come from the
+//!   Phase 3A role chain (`ai_pm_lead`; fake mode records `'fake'`,
+//!   unresolved records `'unresolved'`), `policy_version` still from
+//!   `ai.project_ai_config`; `project_id` comes from the
 //!   inbound event. A missing config row surfaces as
 //!   [`ContextError::Db`] — the orchestrator never reaches it because
 //!   the job-claim layer already filters on `enabled`.
@@ -31,6 +32,9 @@
 //! * `fail_run` is terminal for its row: retries happen as fresh rows
 //!   from `start_run` (ruling above), decoupled from job-level backoff.
 
+use crate::analysis_model::{
+    select_model_for_role, AnalysisModelMode, ModelSelection, ANALYSIS_ROLE_AI_PM_LEAD,
+};
 use crate::model::AnalysisContext;
 use pm_domain::{EventId, ProjectId, RunId};
 
@@ -106,14 +110,43 @@ pub async fn start_run(pool: &sqlx::PgPool, event_id: EventId) -> Result<RunId, 
     // fetch_one: a missing config row becomes Db(RowNotFound). The claim
     // layer already filtered on `enabled`, so the orchestrator cannot
     // legitimately get here.
-    let (model_name, config_snapshot, policy_version): (String, serde_json::Value, i32) =
-        sqlx::query_as(
-            "SELECT model_name, model_config, policy_version \
-             FROM ai.project_ai_config WHERE project_id = $1",
-        )
-        .bind(project_id)
-        .fetch_one(pool)
-        .await?;
+    let (legacy_model_config, policy_version): (serde_json::Value, i32) = sqlx::query_as(
+        "SELECT model_config, policy_version \
+         FROM ai.project_ai_config WHERE project_id = $1",
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await?;
+
+    // 模型记账与执行侧（RoutedAnalysisModel）同链同角色：Phase 3A 四级链
+    // （ai_pm_lead）。原实现照抄 bootstrap 的 ai.project_ai_config.model_name
+    // ——该行恒 'fake'，导致 analysis_run.model_name 与实际执行模型脱钩
+    // （P1-05 TC-02 首跑实测：走已注册 provider 完成却记 'fake'）。
+    // Fake 模式（显式钉夹具，仅开发/测试）如实记 'fake'；解析失败记
+    // 'unresolved'——执行期会显式 Configuration 失败（DEC-LLM-004 不降级）。
+    let (model_name, config_snapshot): (String, serde_json::Value) =
+        if matches!(AnalysisModelMode::from_env(), AnalysisModelMode::Fake) {
+            ("fake".to_string(), legacy_model_config)
+        } else {
+            match select_model_for_role(pool, project_id, ANALYSIS_ROLE_AI_PM_LEAD).await {
+                ModelSelection::Provider(cfg) => (
+                    cfg.model.clone(),
+                    serde_json::json!({
+                        "provider_id": cfg.provider_id,
+                        "model": cfg.model,
+                        "model_ref": cfg.model_ref,
+                    }),
+                ),
+                selection => {
+                    tracing::warn!(
+                        %project_id,
+                        ?selection,
+                        "analysis model unresolved at start_run; recording 'unresolved'"
+                    );
+                    ("unresolved".to_string(), legacy_model_config)
+                }
+            }
+        };
 
     let run_id = RunId::new_v4();
     sqlx::query(
