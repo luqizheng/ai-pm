@@ -290,19 +290,21 @@ pub async fn report_detail(
         None => Vec::new(),
     };
 
-    let pc_revisions: Vec<ReportPcRevisionRow> = match header.kb_revision_id {
-        Some(rev) => {
+    // 本次分析产出的 PC 对象修订：经证据钉扎反查（evidence.object_revision_id，
+    // 认知修订锚各自对象的 pc.document_revision，与 KB 报告修订不同表）。
+    let pc_revisions: Vec<ReportPcRevisionRow> = match header.pc_source_id {
+        Some(source_id) => {
             sqlx::query_as(
                 "SELECT o.id AS object_id, o.object_type, o.display_name, r.revision_no, \
                     r.change_summary, dr.content \
-               FROM pc.cognition_revision r \
+               FROM pc.evidence e \
+               JOIN pc.cognition_revision r ON r.id = e.object_revision_id \
                JOIN pc.cognition_object o ON o.id = r.object_id \
                JOIN pc.document_revision dr ON dr.id = r.document_revision_id \
-              WHERE r.tenant_id = o.tenant_id AND r.project_id = o.project_id \
-                AND r.document_revision_id = $1 \
+              WHERE e.source_id = $1 \
               ORDER BY o.display_name ASC",
             )
-            .bind(rev)
+            .bind(source_id)
             .fetch_all(pool)
             .await?
         }
