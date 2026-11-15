@@ -12,6 +12,7 @@ review:
     meta: "{total} 项待处理 · 更新于 {asOf}"
   tabs:
     all: 全部
+    report: 分析报告
     finding: 发现
     proposal: 知识提案
     delivery: 交付验收
@@ -21,6 +22,7 @@ review:
     sortUpdatedDesc: 最近更新优先
     sortUpdatedAsc: 最早更新优先
   kind:
+    report_pending: 分析报告待审阅
     finding_pending: 发现待确认
     finding_revision_requested: 发现修订后待重新确认
     proposal_pending: 知识提案待确认
@@ -70,6 +72,8 @@ review:
     hintLabel: 处理提示
     descriptionLabel: 事项说明
     contextLabel: 业务上下文
+    report:
+      goReview: 前往知识审阅处理
     decisionLabel: 人工决策
     viewObject: 查看业务对象
     contextLoading: 正在加载上下文…

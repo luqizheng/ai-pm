@@ -76,7 +76,7 @@ function clockLabel(iso?: string | null): string {
 // ── 页签与筛选 ───────────────────────────────────────────────────────
 
 const tabs = computed(() => {
-  const countBy = (tab: "finding" | "proposal" | "delivery") =>
+  const countBy = (tab: "finding" | "report" | "proposal" | "delivery") =>
     store.items.filter(item => reviewTabOf(item) === tab).length;
   return [
     { key: "all", label: t("review.tabs.all"), count: store.items.length },
@@ -84,6 +84,11 @@ const tabs = computed(() => {
       key: "finding",
       label: t("review.tabs.finding"),
       count: countBy("finding")
+    },
+    {
+      key: "report",
+      label: t("review.tabs.report"),
+      count: countBy("report")
     },
     {
       key: "proposal",
@@ -132,10 +137,12 @@ const emptyKind = computed<ReviewEmptyKind>(() => {
 const KIND_PARAM_TO_TAB: Record<string, ReviewTab> = {
   all: "all",
   finding: "finding",
+  report: "report",
   proposal: "proposal",
   delivery: "delivery",
   finding_pending: "finding",
   finding_revision_requested: "finding",
+  report_pending: "report",
   proposal_pending: "proposal",
   delivery_pending: "delivery"
 };
@@ -194,6 +201,7 @@ const selectedTab = computed(() =>
   selectedItem.value ? reviewTabOf(selectedItem.value) : null
 );
 const isFinding = computed(() => selectedTab.value === "finding");
+const isReport = computed(() => selectedTab.value === "report");
 const isProposal = computed(() => selectedTab.value === "proposal");
 const isDelivery = computed(() => selectedTab.value === "delivery");
 const busy = computed(
@@ -529,7 +537,21 @@ function retryLoad(): void {
           :data-busy="busy"
           aria-label="decision"
         >
-          <h3 class="review-decision__title">
+          <!-- D-6 kind 4：报告条目不在审核中心决策（单一决策源=知识审阅报告页）。 -->
+          <div v-if="isReport" class="review-decision__actions">
+            <Button
+              variant="primary"
+              @click="
+                selectedItem &&
+                router.push(
+                  `/project/knowledge?project_id=${selectedItem.project_id}&report=${selectedItem.link.params.report_id ?? selectedItem.id}`
+                )
+              "
+            >
+              {{ t("review.detail.report.goReview") }}
+            </Button>
+          </div>
+          <h3 v-else class="review-decision__title">
             {{ t("review.detail.decisionLabel") }}
           </h3>
 

@@ -17,13 +17,14 @@ export function reviewItemKey(item: ActionItem): string {
 /** 条目 → 队列页签（finding 两 kind 同属「发现」页签）。 */
 export function reviewTabOf(
   item: ActionItem
-): "finding" | "proposal" | "delivery" | "other" {
+): "finding" | "report" | "proposal" | "delivery" | "other" {
   if (
     item.kind === "finding_pending" ||
     item.kind === "finding_revision_requested"
   ) {
     return "finding";
   }
+  if (item.kind === "report_pending") return "report";
   if (item.kind === "proposal_pending") return "proposal";
   if (item.kind === "delivery_pending") return "delivery";
   return "other";

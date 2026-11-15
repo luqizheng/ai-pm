@@ -42,7 +42,7 @@ import {
 
 export const REVIEW_CENTER_PATH = "/project/review-center";
 
-export type ReviewTab = "all" | "finding" | "proposal" | "delivery";
+export type ReviewTab = "all" | "finding" | "report" | "proposal" | "delivery";
 export type ReviewSort = "updated_desc" | "updated_asc";
 
 export type FindingDecisionStatus = "CONFIRMED" | "REJECTED";

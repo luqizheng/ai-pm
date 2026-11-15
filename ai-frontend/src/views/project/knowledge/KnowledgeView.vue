@@ -26,6 +26,7 @@ import {
 } from "@/api/knowledge";
 import { useShellStore } from "@/stores/shell";
 import { useRoute } from "vue-router";
+import AnalysisReportsPanel from "./AnalysisReportsPanel.vue";
 import MarkdownViewer from "@/components/ui/markdown-editor/MarkdownViewer.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Alert from "@/components/ui/alert/Alert.vue";
@@ -47,8 +48,8 @@ const { t } = useI18n();
 const shell = useShellStore();
 const currentProjectId = computed(() => shell.currentProjectId);
 
-type TabKey = "kb" | "pc" | "proposals";
-const activeTab = ref<TabKey>("kb");
+type TabKey = "reports" | "kb" | "pc" | "proposals";
+const activeTab = ref<TabKey>("reports");
 const loading = ref(false);
 const errorText = ref("");
 
@@ -247,6 +248,11 @@ function proposalVariant(status: string): BadgeTone {
 /** 页签项（Tabs 组件契约；计数随列表刷新）。 */
 const tabItems = computed(() => [
   {
+    // D-5：报告优先——先报告，后报告内容。
+    value: "reports",
+    label: t("s01.knowledge.tab.reports")
+  },
+  {
     value: "kb",
     label: `${t("s01.knowledge.tab.kb")} (${kbRows.value.length})`
   },
@@ -273,6 +279,11 @@ const docTypeOptions = computed(() => [
 const route = useRoute();
 
 async function applyDeepLink() {
+  const reportId = route.query.report;
+  if (typeof reportId === "string" && reportId) {
+    activeTab.value = "reports";
+    return;
+  }
   const docId = route.query.doc;
   const objectId = route.query.object;
   if (typeof docId === "string" && docId) {
@@ -490,6 +501,12 @@ watch(
     <div class="knowledge-page">
       <!-- Tabs 仅作页签触发行；内容块跨页签共享（影响分析等），按 activeTab 条件渲染。 -->
       <Tabs v-model="activeTab" class="knowledge-tabs" :tabs="tabItems" />
+
+      <!-- D-5 · 分析报告（首位置页签；面板自带轮询/详情/关闭/深链） -->
+      <AnalysisReportsPanel
+        v-if="activeTab === 'reports'"
+        :project-id="currentProjectId"
+      />
 
       <!-- 影响分析（遍历可视化；正式关系多跳） -->
       <details class="impact-panel">

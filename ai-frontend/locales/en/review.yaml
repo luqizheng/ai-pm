@@ -12,6 +12,7 @@ review:
     meta: "{total} pending · updated {asOf}"
   tabs:
     all: All
+    report: Analysis Reports
     finding: Findings
     proposal: Proposals
     delivery: Deliveries
@@ -21,6 +22,7 @@ review:
     sortUpdatedDesc: Recently updated first
     sortUpdatedAsc: Oldest updates first
   kind:
+    report_pending: Analysis report awaiting review
     finding_pending: Finding to confirm
     finding_revision_requested: Finding revision to re-confirm
     proposal_pending: Document proposal to confirm
@@ -70,6 +72,8 @@ review:
     hintLabel: Hint
     descriptionLabel: Description
     contextLabel: Context
+    report:
+      goReview: Open in Knowledge Review
     decisionLabel: Decision
     viewObject: View object
     contextLoading: Loading context…

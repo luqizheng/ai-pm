@@ -3,9 +3,36 @@ knowledge:
     title: Knowledge Base
     description: Unified browsing for KB documents (with publish confirmation) and PC cognition objects.
   tab:
+    reports: Analysis Reports
     kb: KB Documents
     pc: PC Objects
     proposals: PC Proposals
+  report:
+    status:
+      analyzing: Analyzing
+      analyzed: Awaiting review
+      closed: Closed
+      failed: Failed
+      cancelled: Cancelled
+    empty: No analysis reports yet — they appear here after a repository analysis
+    analyzingHint: Collecting…
+    pendingItems: "{n} item(s) to dispose"
+    allDisposed: All disposed — ready to close
+    closedAt: Closed at {time}
+    failedReason: Analysis failed
+    loading: Loading report…
+    kbSec: Analysis report (KB revision v{no} · {status})
+    kbMissing: No KB report revision produced by this analysis
+    proposalSec: PC Proposals ({n})
+    noProposals: No proposals drafted by this analysis
+    pcSec: PC Object Revisions ({n})
+    noPcRevisions: No object revisions produced by this analysis
+    close: Close Report
+    closeHint: Closing auto-disposes pending items and fixes the analysis anchor; the repository becomes analyzable again
+    closeConfirmTitle: Close analysis report
+    closeConfirmDescription: This will withdraw {proposals} pending proposal(s) and reject {kb} KB draft(s) for {repo}, and fix the analysis anchor; the repository becomes analyzable again.
+    closeNotice: Report closed — analysis anchor fixed ({commit}); the repository is analyzable again
+    closeError: Failed to close
   status:
     draft: Draft
     published: Published
@@ -29,6 +56,7 @@ knowledge:
   action:
     confirm: Confirm & Publish
     confirming: Confirming…
+    cancel: Cancel
   notice:
     ingested: Ingested as draft (rev {no}) — confirm in the detail view
     confirmed: Published (repeat confirmation by the same user keeps the original record)

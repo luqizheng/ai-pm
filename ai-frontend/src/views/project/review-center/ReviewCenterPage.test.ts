@@ -179,4 +179,52 @@ describe("ReviewCenterPage", () => {
     expect(router.currentRoute.value.query.kind).toBe("finding");
     expect(router.currentRoute.value.query.item).toBeUndefined();
   });
+
+  it("report_pending：独立页签计数 + Drawer 决策区为深链按钮（单一决策源）", async () => {
+    reviewApi.loadHumanActionBlock.mockResolvedValue(
+      aggregate([
+        item({
+          kind: "report_pending",
+          domain: "knowledge",
+          id: "rpt-1",
+          project_id: "p-1",
+          title: "分析报告待审阅（ai-pm主仓库 @ e105e9b97ca8）",
+          action_hint: "审阅报告内容并逐条处置后关闭",
+          link: {
+            kind: "knowledge_report",
+            params: { report_id: "rpt-1", project_id: "p-1" }
+          }
+        })
+      ])
+    );
+    const { wrapper, router } = await openPage(
+      "/project/review-center?project_id=p-1&item=report_pending%3Arpt-1"
+    );
+    await flushPromises();
+
+    // 页签出现「分析报告」且计数 1
+    const tabTexts = wrapper
+      .findAll('[role="tab"]')
+      .map(tab => tab.text())
+      .join("\n");
+    expect(tabTexts).toContain("分析报告");
+    // Drawer 打开，决策区是深链按钮而非决策输入
+    expect(wrapper.find(".review-drawer").exists()).toBe(true);
+    const decisionText = wrapper.find(".review-decision").text();
+    expect(decisionText).toContain("前往知识审阅处理");
+
+    // 点击深链 → 知识审阅报告页
+    const linkBtn = wrapper
+      .findAll("button")
+      .find(button => button.text().includes("前往知识审阅处理"));
+    expect(linkBtn).toBeDefined();
+    const pushSpy = vi
+      .spyOn(router, "push")
+      .mockResolvedValue(undefined as never);
+    await linkBtn?.trigger("click");
+    await flushPromises();
+    expect(pushSpy).toHaveBeenCalledWith(
+      "/project/knowledge?project_id=p-1&report=rpt-1"
+    );
+  });
 });
