@@ -20,6 +20,7 @@ repositories:
     repository: Repository
     branch: Branch
     access: Status
+    viewReports: Reports
     lastVerified: Last Verified
     noMatch: No repositories match the current filters.
     footnote: Each repository has its own Branch and Commit context. Execution records preserve the actual Commit used.

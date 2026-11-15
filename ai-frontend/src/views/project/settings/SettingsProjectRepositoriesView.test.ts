@@ -139,6 +139,28 @@ describe("SettingsProjectRepositoriesView", () => {
     expect(empty.text()).toContain("项目已可以开展工作");
   });
 
+  it("待验证/已验证行状态旁给分析报告跳转，unreachable 不给", async () => {
+    listRepositoriesV2.mockResolvedValue({
+      items: [
+        repo({ id: "r1", name: "main-repo", status: "verified" }),
+        repo({ id: "r2", name: "pending-repo", status: "pending" }),
+        repo({ id: "r3", name: "dead-repo", status: "unreachable" })
+      ],
+      total: 3
+    });
+    const { wrapper, router } = await mountView();
+    expect(wrapper.find('[data-testid="report-link-r1"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="report-link-r2"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="report-link-r3"]').exists()).toBe(false);
+    // spy 而非真跳：知识库视图会挂载并自行拉数据，与本文件 mock 面不符
+    const pushSpy = vi.spyOn(router, "push").mockResolvedValue(undefined);
+    await wrapper.find('[data-testid="report-link-r1"]').trigger("click");
+    expect(pushSpy).toHaveBeenCalledWith({
+      path: "/project/knowledge",
+      query: { project_id: "prj-1" }
+    });
+  });
+
   it("统计卡渲染标签（compact + icon；迁入前 stacked 无 icon 只剩裸数字）", async () => {
     const { wrapper } = await mountView();
     const text = wrapper.text();

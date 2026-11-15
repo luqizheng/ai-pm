@@ -20,6 +20,7 @@ repositories:
     repository: 仓库
     branch: 分支
     access: 状态
+    viewReports: 分析报告
     lastVerified: 最近验证
     noMatch: 没有匹配的仓库，请调整筛选条件。
     footnote: 每个仓库有独立的分支与 Commit 上下文；执行记录保留实际使用的 Commit。

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 import {
   BadgeCheck,
   ChevronRight,
@@ -62,6 +63,7 @@ import { useProjectSettingsFrame } from "./shared";
  *   挂账），列表以 Last Verified 代替 Discovery 列，不渲染假状态。
  */
 const { t } = useI18n();
+const router = useRouter();
 const settingsFrame = useProjectSettingsFrame();
 
 const repositories = ref<RepositoryV2[]>([]);
@@ -341,6 +343,19 @@ function onArchive(row: RepositoryV2) {
       text: t("s01.repositories.detail.archivedOk") as string
     }
   );
+}
+
+/* 分析报告跳转（2026-11-15）：待验证/已验证行的状态旁给入口，落到项目知识库
+   「分析报告」页签（该页默认页签即 reports）；unreachable/archived 不给。 */
+function canOpenReports(row: RepositoryV2): boolean {
+  return row.status === "pending" || row.status === "verified";
+}
+
+function goToAnalysisReports() {
+  void router.push({
+    path: "/project/knowledge",
+    query: projectId.value ? { project_id: projectId.value } : {}
+  });
 }
 
 function statusBadgeVariant(
@@ -923,10 +938,19 @@ onMounted(() => {
                 t(`s01.repositories.role.${row.role}`)
               }}</span>
               <span class="rm-table__cell">{{ rowBranch(row) }}</span>
-              <span class="rm-table__cell">
+              <span class="rm-table__cell rm-table__status">
                 <Badge :variant="statusBadgeVariant(row.status)" size="sm">
                   {{ t(`s01.repositories.status.${row.status}`) }}
                 </Badge>
+                <button
+                  v-if="canOpenReports(row)"
+                  type="button"
+                  class="rm-table__reportlink"
+                  :data-testid="`report-link-${row.id}`"
+                  @click.stop="goToAnalysisReports"
+                >
+                  {{ t("s01.repositories.list.viewReports") }}
+                </button>
               </span>
               <span class="rm-table__cell">{{
                 formatTime(row.last_verified_at)
@@ -1358,6 +1382,30 @@ onMounted(() => {
   color: var(--ws-text-secondary);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-caption);
+}
+
+/* 状态列：徽标与报告入口纵排（待验证/已验证行可跳分析报告）。 */
+.rm-table__status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.rm-table__reportlink {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--ws-accent);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rm-table__reportlink:hover {
+  text-decoration: underline;
 }
 
 /* 详情面板（V1.2 §6.5：低频信息收进侧栏） */
