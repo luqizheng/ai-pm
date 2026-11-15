@@ -14,6 +14,14 @@ downstream = "/health"
 service    = "pm-api"
 public     = true
 
+# 5) D-4 业务身份综合：同步 LLM 长调用——路由级超时覆盖
+#    （ADR-003；全局 3000ms 不足以覆盖 DeepSeek 三草案生成）。
+[[route]]
+upstream   = "/v1/pm/projects/{rest}/cognition/identity-synthesis"
+downstream = "/v1/pm/projects/{rest}/cognition/identity-synthesis"
+service    = "pm-api"
+timeout_ms = 180000
+
 [[route]]
 upstream   = "/v1/pm/{rest}"
 downstream = "/v1/pm/{rest}"
