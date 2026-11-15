@@ -1,0 +1,1941 @@
+ai.agent_definition|code|text|NO|-
+ai.agent_definition|created_at|timestamp with time zone|NO|now()
+ai.agent_definition|description|text|YES|-
+ai.agent_definition|display_name|text|NO|-
+ai.agent_definition|id|uuid|NO|gen_random_uuid()
+ai.agent_definition|role_kind|text|NO|-
+ai.agent_feedback|content|jsonb|NO|-
+ai.agent_feedback|created_at|timestamp with time zone|NO|now()
+ai.agent_feedback|feedback_type|text|NO|-
+ai.agent_feedback|id|uuid|NO|gen_random_uuid()
+ai.agent_feedback|project_id|uuid|NO|-
+ai.agent_feedback|recipient_id|uuid|NO|-
+ai.agent_feedback|related_event_id|uuid|NO|-
+ai.agent_feedback|status|text|NO|'available'::text
+ai.agent_feedback|tenant_id|uuid|NO|-
+ai.ai_executor_capability|capability|text|NO|-
+ai.ai_executor_capability|created_at|timestamp with time zone|NO|now()
+ai.ai_executor_capability|granted_at|timestamp with time zone|NO|now()
+ai.ai_executor_capability|id|uuid|NO|gen_random_uuid()
+ai.ai_executor_capability|principal_id|uuid|NO|-
+ai.ai_executor_capability|revoked_at|timestamp with time zone|YES|-
+ai.ai_executor_capability|source|text|NO|'agent_definition'::text
+ai.ai_executor_capability|tenant_id|uuid|NO|-
+ai.ai_executor_capability|updated_at|timestamp with time zone|NO|now()
+ai.ai_role_template|category|text|NO|-
+ai.ai_role_template|created_at|timestamp with time zone|NO|now()
+ai.ai_role_template|default_definition|jsonb|NO|-
+ai.ai_role_template|id|uuid|NO|gen_random_uuid()
+ai.ai_role_template|is_system|boolean|NO|true
+ai.ai_role_template|name|text|NO|-
+ai.ai_role_template|role_key|text|NO|-
+ai.ai_role_template|updated_at|timestamp with time zone|NO|now()
+ai.ai_role_version|created_at|timestamp with time zone|NO|now()
+ai.ai_role_version|created_by|uuid|YES|-
+ai.ai_role_version|definition|jsonb|NO|-
+ai.ai_role_version|id|uuid|NO|gen_random_uuid()
+ai.ai_role_version|project_role_id|uuid|NO|-
+ai.ai_role_version|version|text|NO|-
+ai.analysis_run|attempt_count|integer|NO|0
+ai.analysis_run|config_snapshot|jsonb|NO|-
+ai.analysis_run|context_snapshot|jsonb|YES|-
+ai.analysis_run|created_at|timestamp with time zone|NO|now()
+ai.analysis_run|event_id|uuid|NO|-
+ai.analysis_run|failure_code|text|YES|-
+ai.analysis_run|finished_at|timestamp with time zone|YES|-
+ai.analysis_run|id|uuid|NO|gen_random_uuid()
+ai.analysis_run|model_name|text|NO|-
+ai.analysis_run|policy_version|integer|NO|-
+ai.analysis_run|project_id|uuid|NO|-
+ai.analysis_run|result|jsonb|YES|-
+ai.analysis_run|self_review|jsonb|YES|-
+ai.analysis_run|started_at|timestamp with time zone|YES|-
+ai.analysis_run|status|text|NO|'queued'::text
+ai.analysis_run|tenant_id|uuid|NO|-
+ai.baseline_item|category|text|NO|-
+ai.baseline_item|confidence|text|NO|'medium'::text
+ai.baseline_item|content|text|NO|-
+ai.baseline_item|created_at|timestamp with time zone|NO|now()
+ai.baseline_item|decided_at|timestamp with time zone|YES|-
+ai.baseline_item|decided_by|uuid|YES|-
+ai.baseline_item|decision_note|text|YES|-
+ai.baseline_item|evidence|jsonb|NO|'{}'::jsonb
+ai.baseline_item|id|uuid|NO|gen_random_uuid()
+ai.baseline_item|project_id|uuid|NO|-
+ai.baseline_item|proposal_id|uuid|NO|-
+ai.baseline_item|state|text|NO|'proposed'::text
+ai.baseline_item|tenant_id|uuid|NO|-
+ai.baseline_proposal|confirmed_at|timestamp with time zone|YES|-
+ai.baseline_proposal|confirmed_by|uuid|YES|-
+ai.baseline_proposal|created_at|timestamp with time zone|NO|now()
+ai.baseline_proposal|created_by|uuid|NO|-
+ai.baseline_proposal|id|uuid|NO|gen_random_uuid()
+ai.baseline_proposal|project_id|uuid|NO|-
+ai.baseline_proposal|source_run_id|uuid|YES|-
+ai.baseline_proposal|status|text|NO|'pending'::text
+ai.baseline_proposal|tenant_id|uuid|NO|-
+ai.baseline_proposal|version|integer|NO|1
+ai.change_proposal|analysis_run_id|uuid|NO|-
+ai.change_proposal|command_type|text|NO|-
+ai.change_proposal|confidence|text|NO|'medium'::text
+ai.change_proposal|created_at|timestamp with time zone|NO|now()
+ai.change_proposal|evidence|jsonb|NO|'[]'::jsonb
+ai.change_proposal|executed_at|timestamp with time zone|YES|-
+ai.change_proposal|executed_audit_id|uuid|YES|-
+ai.change_proposal|expected_revision|bigint|YES|-
+ai.change_proposal|id|uuid|NO|gen_random_uuid()
+ai.change_proposal|project_id|uuid|NO|-
+ai.change_proposal|proposal_seq|integer|NO|-
+ai.change_proposal|proposed_data|jsonb|NO|-
+ai.change_proposal|rationale|text|NO|-
+ai.change_proposal|risk_level|text|NO|-
+ai.change_proposal|status|text|NO|'proposed'::text
+ai.change_proposal|target_id|uuid|YES|-
+ai.change_proposal|target_type|text|NO|-
+ai.change_proposal|tenant_id|uuid|NO|-
+ai.cognition_item|confidence|text|NO|'medium'::text
+ai.cognition_item|content|text|NO|-
+ai.cognition_item|created_at|timestamp with time zone|NO|now()
+ai.cognition_item|decided_at|timestamp with time zone|YES|-
+ai.cognition_item|decided_by|uuid|YES|-
+ai.cognition_item|decision_note|text|YES|-
+ai.cognition_item|domain|text|NO|-
+ai.cognition_item|evidence|jsonb|NO|'{}'::jsonb
+ai.cognition_item|has_conflict|boolean|NO|false
+ai.cognition_item|id|uuid|NO|gen_random_uuid()
+ai.cognition_item|knowledge_id|uuid|YES|-
+ai.cognition_item|project_id|uuid|NO|-
+ai.cognition_item|run_id|uuid|NO|-
+ai.cognition_item|state|text|NO|'proposed'::text
+ai.cognition_item|tenant_id|uuid|NO|-
+ai.cognition_run|confirmed_count|integer|NO|0
+ai.cognition_run|created_at|timestamp with time zone|NO|now()
+ai.cognition_run|finished_at|timestamp with time zone|YES|-
+ai.cognition_run|id|uuid|NO|gen_random_uuid()
+ai.cognition_run|item_count|integer|NO|0
+ai.cognition_run|project_id|uuid|NO|-
+ai.cognition_run|repo_versions|jsonb|NO|'[]'::jsonb
+ai.cognition_run|scope|jsonb|NO|'{}'::jsonb
+ai.cognition_run|started_by|uuid|NO|-
+ai.cognition_run|status|text|NO|'pending'::text
+ai.cognition_run|tenant_id|uuid|NO|-
+ai.conversation_context_item|added_at|timestamp with time zone|NO|now()
+ai.conversation_context_item|added_by|uuid|NO|-
+ai.conversation_context_item|attachment|text|NO|'attached'::text
+ai.conversation_context_item|content_hash|text|YES|-
+ai.conversation_context_item|conversation_id|uuid|NO|-
+ai.conversation_context_item|id|uuid|NO|gen_random_uuid()
+ai.conversation_context_item|lifecycle|text|NO|'active'::text
+ai.conversation_context_item|object_code|text|YES|-
+ai.conversation_context_item|object_id|text|NO|-
+ai.conversation_context_item|object_type|text|NO|-
+ai.conversation_context_item|project_id|uuid|NO|-
+ai.conversation_context_item|read_only|boolean|NO|false
+ai.conversation_context_item|revision_id|uuid|YES|-
+ai.conversation_context_item|row_version|bigint|YES|-
+ai.conversation_context_item|source|text|NO|-
+ai.conversation_context_item|tenant_id|uuid|NO|-
+ai.conversation_context_item|unavailable_reason|text|YES|-
+ai.conversation_context_item|updated_at|timestamp with time zone|NO|now()
+ai.conversation_context_item|version|integer|YES|-
+ai.conversation_interaction|action|text|NO|-
+ai.conversation_interaction|answer|jsonb|YES|-
+ai.conversation_interaction|conversation_id|uuid|NO|-
+ai.conversation_interaction|created_at|timestamp with time zone|NO|now()
+ai.conversation_interaction|decided_by|uuid|NO|-
+ai.conversation_interaction|id|uuid|NO|gen_random_uuid()
+ai.conversation_interaction|message_id|uuid|NO|-
+ai.conversation_interaction|option_id|text|YES|-
+ai.conversation_interaction|project_id|uuid|NO|-
+ai.conversation_interaction|reason|text|YES|-
+ai.conversation_interaction|reference|text|NO|-
+ai.conversation_interaction|status|text|NO|-
+ai.conversation_interaction|tenant_id|uuid|NO|-
+ai.conversation_message|content_type|text|NO|'markdown'::text
+ai.conversation_message|content|text|NO|-
+ai.conversation_message|conversation_id|uuid|NO|-
+ai.conversation_message|created_at|timestamp with time zone|NO|now()
+ai.conversation_message|id|uuid|NO|gen_random_uuid()
+ai.conversation_message|metadata|jsonb|NO|'{}'::jsonb
+ai.conversation_message|role|text|NO|-
+ai.conversation|context_anchor|jsonb|YES|-
+ai.conversation|created_at|timestamp with time zone|NO|now()
+ai.conversation|discovery_session_id|uuid|YES|-
+ai.conversation|id|uuid|NO|gen_random_uuid()
+ai.conversation|last_message_at|timestamp with time zone|YES|-
+ai.conversation|principal_id|uuid|NO|-
+ai.conversation|project_id|uuid|NO|-
+ai.conversation|status|text|NO|'active'::text
+ai.conversation|tenant_id|uuid|NO|-
+ai.conversation|title|text|NO|''::text
+ai.conversation|updated_at|timestamp with time zone|NO|now()
+ai.document_index_state|created_at|timestamp with time zone|NO|now()
+ai.document_index_state|document_revision_id|uuid|NO|-
+ai.document_index_state|external_document_id|text|YES|-
+ai.document_index_state|id|uuid|NO|gen_random_uuid()
+ai.document_index_state|index_version|text|YES|-
+ai.document_index_state|indexed_at|timestamp with time zone|YES|-
+ai.document_index_state|indexed_content_hash|text|YES|-
+ai.document_index_state|last_error|text|YES|-
+ai.document_index_state|project_id|uuid|NO|-
+ai.document_index_state|provider|text|NO|-
+ai.document_index_state|status|text|NO|'pending'::text
+ai.document_index_state|tenant_id|uuid|NO|-
+ai.document_index_state|updated_at|timestamp with time zone|NO|now()
+ai.document_proposal|analysis_run_id|uuid|YES|-
+ai.document_proposal|base_content_hash|text|YES|-
+ai.document_proposal|base_revision_id|uuid|YES|-
+ai.document_proposal|canonical_path|text|NO|-
+ai.document_proposal|change_summary|text|YES|-
+ai.document_proposal|created_at|timestamp with time zone|NO|now()
+ai.document_proposal|created_by|uuid|NO|-
+ai.document_proposal|doc_key|text|NO|-
+ai.document_proposal|doc_type|text|NO|-
+ai.document_proposal|document_id|uuid|YES|-
+ai.document_proposal|id|uuid|NO|gen_random_uuid()
+ai.document_proposal|project_id|uuid|NO|-
+ai.document_proposal|proposed_content_hash|text|NO|-
+ai.document_proposal|proposed_markdown|text|NO|-
+ai.document_proposal|quality_gate_result|jsonb|NO|'{}'::jsonb
+ai.document_proposal|redline_confirmed_at|timestamp with time zone|YES|-
+ai.document_proposal|redline_confirmed_by|uuid|YES|-
+ai.document_proposal|redline_kind|text|YES|-
+ai.document_proposal|rejection_reason|text|YES|-
+ai.document_proposal|resulting_revision_id|uuid|YES|-
+ai.document_proposal|source_event_id|uuid|YES|-
+ai.document_proposal|status|text|NO|'draft'::text
+ai.document_proposal|tenant_id|uuid|NO|-
+ai.document_proposal|updated_at|timestamp with time zone|NO|now()
+ai.document_revision|analysis_run_id|uuid|YES|-
+ai.document_revision|change_summary|text|YES|-
+ai.document_revision|content_hash|text|NO|-
+ai.document_revision|created_at|timestamp with time zone|NO|now()
+ai.document_revision|created_by|uuid|NO|-
+ai.document_revision|document_id|uuid|NO|-
+ai.document_revision|git_commit_sha|text|NO|-
+ai.document_revision|id|uuid|NO|gen_random_uuid()
+ai.document_revision|project_id|uuid|NO|-
+ai.document_revision|published_at|timestamp with time zone|YES|-
+ai.document_revision|redline_confirmed_by|uuid|YES|-
+ai.document_revision|revision_no|integer|NO|-
+ai.document_revision|source_event_id|uuid|YES|-
+ai.document_revision|status|text|NO|'draft'::text
+ai.document_revision|tenant_id|uuid|NO|-
+ai.document_section_index|anchor|text|NO|-
+ai.document_section_index|content|text|NO|-
+ai.document_section_index|created_at|timestamp with time zone|NO|now()
+ai.document_section_index|document_revision_id|uuid|NO|-
+ai.document_section_index|id|uuid|NO|gen_random_uuid()
+ai.document_section_index|level|smallint|NO|-
+ai.document_section_index|project_id|uuid|NO|-
+ai.document_section_index|provider|text|NO|-
+ai.document_section_index|section_no|integer|NO|-
+ai.document_section_index|start_line|integer|NO|-
+ai.document_section_index|tenant_id|uuid|NO|-
+ai.document_section_index|title|text|NO|-
+ai.document_section_index|updated_at|timestamp with time zone|NO|now()
+ai.knowledge_reference|created_at|timestamp with time zone|NO|now()
+ai.knowledge_reference|created_by|uuid|NO|-
+ai.knowledge_reference|document_id|uuid|NO|-
+ai.knowledge_reference|document_revision_id|uuid|NO|-
+ai.knowledge_reference|id|uuid|NO|gen_random_uuid()
+ai.knowledge_reference|project_id|uuid|NO|-
+ai.knowledge_reference|reference_kind|text|NO|'evidence'::text
+ai.knowledge_reference|section_anchor|text|YES|-
+ai.knowledge_reference|section_title|text|YES|-
+ai.knowledge_reference|source_id|uuid|YES|-
+ai.knowledge_reference|source_kind|text|NO|-
+ai.knowledge_reference|start_line|integer|YES|-
+ai.knowledge_reference|tenant_id|uuid|NO|-
+ai.knowledge_write_operation|command|text|NO|-
+ai.knowledge_write_operation|created_at|timestamp with time zone|NO|now()
+ai.knowledge_write_operation|id|uuid|NO|gen_random_uuid()
+ai.knowledge_write_operation|operation_id|text|NO|-
+ai.knowledge_write_operation|project_id|uuid|NO|-
+ai.knowledge_write_operation|proposal_id|uuid|YES|-
+ai.knowledge_write_operation|revision_id|uuid|YES|-
+ai.knowledge_write_operation|tenant_id|uuid|NO|-
+ai.llm_call_record|analysis_run_id|uuid|YES|-
+ai.llm_call_record|completion_tokens|bigint|YES|-
+ai.llm_call_record|created_at|timestamp with time zone|NO|now()
+ai.llm_call_record|error_kind|text|YES|-
+ai.llm_call_record|error_message|text|YES|-
+ai.llm_call_record|id|uuid|NO|gen_random_uuid()
+ai.llm_call_record|latency_ms|bigint|YES|-
+ai.llm_call_record|metadata|jsonb|YES|-
+ai.llm_call_record|model_ref|uuid|YES|-
+ai.llm_call_record|model|text|NO|-
+ai.llm_call_record|project_id|uuid|YES|-
+ai.llm_call_record|prompt_tokens|bigint|YES|-
+ai.llm_call_record|provider_id|uuid|NO|-
+ai.llm_call_record|purpose|text|YES|-
+ai.llm_call_record|status|text|NO|-
+ai.llm_call_record|tenant_id|uuid|NO|-
+ai.project_ai_config|ai_principal_id|uuid|NO|-
+ai.project_ai_config|automation_mode|text|NO|'ai_lead'::text
+ai.project_ai_config|config_revision|bigint|NO|1
+ai.project_ai_config|enabled|boolean|NO|true
+ai.project_ai_config|model_config|jsonb|NO|'{}'::jsonb
+ai.project_ai_config|model_name|text|NO|-
+ai.project_ai_config|model_provider|text|NO|-
+ai.project_ai_config|policy_version|integer|NO|1
+ai.project_ai_config|project_id|uuid|NO|-
+ai.project_ai_config|strategy|text|NO|'single_strong_model'::text
+ai.project_ai_config|tenant_id|uuid|NO|-
+ai.project_ai_config|updated_at|timestamp with time zone|NO|now()
+ai.project_ai_model_override|model_id|uuid|NO|-
+ai.project_ai_model_override|project_id|uuid|NO|-
+ai.project_ai_model_override|revision|bigint|NO|1
+ai.project_ai_model_override|role_key|text|NO|-
+ai.project_ai_model_override|tenant_id|uuid|NO|-
+ai.project_ai_model_override|updated_at|timestamp with time zone|NO|now()
+ai.project_ai_model_override|updated_by|uuid|NO|-
+ai.project_ai_model_policy|project_id|uuid|NO|-
+ai.project_ai_model_policy|provider_id|uuid|NO|-
+ai.project_ai_model_policy|revision|bigint|NO|1
+ai.project_ai_model_policy|tenant_id|uuid|NO|-
+ai.project_ai_model_policy|updated_at|timestamp with time zone|NO|now()
+ai.project_ai_model_policy|updated_by|uuid|NO|-
+ai.project_ai_role|created_at|timestamp with time zone|NO|now()
+ai.project_ai_role|current_version_id|uuid|YES|-
+ai.project_ai_role|enabled|boolean|NO|true
+ai.project_ai_role|id|uuid|NO|gen_random_uuid()
+ai.project_ai_role|project_id|uuid|NO|-
+ai.project_ai_role|role_id|uuid|NO|-
+ai.project_ai_role|tenant_id|uuid|NO|-
+ai.project_ai_role|updated_at|timestamp with time zone|NO|now()
+ai.project_baseline|confirmed_at|timestamp with time zone|NO|now()
+ai.project_baseline|confirmed_by|uuid|NO|-
+ai.project_baseline|id|uuid|NO|gen_random_uuid()
+ai.project_baseline|project_id|uuid|NO|-
+ai.project_baseline|proposal_id|uuid|NO|-
+ai.project_baseline|tenant_id|uuid|NO|-
+ai.project_baseline|version|integer|NO|-
+ai.project_document|canonical_path|text|NO|-
+ai.project_document|created_at|timestamp with time zone|NO|now()
+ai.project_document|doc_key|text|NO|-
+ai.project_document|doc_type|text|NO|-
+ai.project_document|id|uuid|NO|gen_random_uuid()
+ai.project_document|project_id|uuid|NO|-
+ai.project_document|tenant_id|uuid|NO|-
+ai.project_document|updated_at|timestamp with time zone|NO|now()
+ai.project_knowledge|confirmed_at|timestamp with time zone|NO|now()
+ai.project_knowledge|confirmed_by|uuid|NO|-
+ai.project_knowledge|content|text|NO|-
+ai.project_knowledge|domain|text|NO|-
+ai.project_knowledge|id|uuid|NO|gen_random_uuid()
+ai.project_knowledge|project_id|uuid|NO|-
+ai.project_knowledge|source_item_id|uuid|YES|-
+ai.project_knowledge|status|text|NO|'active'::text
+ai.project_knowledge|supersedes_id|uuid|YES|-
+ai.project_knowledge|tenant_id|uuid|NO|-
+ai.project_knowledge|version|integer|NO|1
+ai.project_skill_binding|enabled|boolean|NO|true
+ai.project_skill_binding|project_id|uuid|NO|-
+ai.project_skill_binding|settings|jsonb|NO|'{}'::jsonb
+ai.project_skill_binding|skill_id|text|NO|-
+ai.project_skill_binding|skill_version|text|NO|-
+ai.project_skill_binding|tenant_id|uuid|NO|-
+ai.skill_definition|current_version|text|NO|-
+ai.skill_definition|description|text|YES|-
+ai.skill_definition|id|text|NO|-
+ai.skill_definition|name|text|NO|-
+ai.team_llm_credential|api_key_ciphertext|bytea|NO|-
+ai.team_llm_credential|api_key_hint|text|NO|-
+ai.team_llm_credential|created_at|timestamp with time zone|NO|now()
+ai.team_llm_credential|created_by|uuid|NO|-
+ai.team_llm_credential|id|uuid|NO|gen_random_uuid()
+ai.team_llm_credential|provider_id|uuid|NO|-
+ai.team_llm_credential|tenant_id|uuid|NO|-
+ai.team_llm_model_authorization|granted_at|timestamp with time zone|NO|now()
+ai.team_llm_model_authorization|granted_by|uuid|NO|-
+ai.team_llm_model_authorization|id|uuid|NO|gen_random_uuid()
+ai.team_llm_model_authorization|model_id|uuid|NO|-
+ai.team_llm_model_authorization|revision|bigint|NO|1
+ai.team_llm_model_authorization|state|text|NO|'team_wide'::text
+ai.team_llm_model_authorization|tenant_id|uuid|NO|-
+ai.team_llm_model_authorization|updated_at|timestamp with time zone|NO|now()
+ai.team_llm_model_policy|model_id|uuid|NO|-
+ai.team_llm_model_policy|revision|bigint|NO|1
+ai.team_llm_model_policy|role_key|text|NO|-
+ai.team_llm_model_policy|tenant_id|uuid|NO|-
+ai.team_llm_model_policy|updated_at|timestamp with time zone|NO|now()
+ai.team_llm_model_policy|updated_by|uuid|NO|-
+ai.team_llm_model|capabilities|ARRAY|NO|'{}'::text[]
+ai.team_llm_model|context_window|integer|YES|-
+ai.team_llm_model|created_at|timestamp with time zone|NO|now()
+ai.team_llm_model|created_by|uuid|NO|-
+ai.team_llm_model|display_name|text|NO|-
+ai.team_llm_model|enabled|boolean|NO|false
+ai.team_llm_model|id|uuid|NO|gen_random_uuid()
+ai.team_llm_model|last_verified_at|timestamp with time zone|YES|-
+ai.team_llm_model|model_id|text|NO|-
+ai.team_llm_model|provider_id|uuid|NO|-
+ai.team_llm_model|revision|bigint|NO|1
+ai.team_llm_model|source|text|NO|'manual'::text
+ai.team_llm_model|tenant_id|uuid|NO|-
+ai.team_llm_model|updated_at|timestamp with time zone|NO|now()
+ai.team_llm_provider|configuration|jsonb|NO|'{}'::jsonb
+ai.team_llm_provider|created_at|timestamp with time zone|NO|now()
+ai.team_llm_provider|created_by|uuid|NO|-
+ai.team_llm_provider|credential_id|uuid|YES|-
+ai.team_llm_provider|endpoint|text|NO|-
+ai.team_llm_provider|id|uuid|NO|gen_random_uuid()
+ai.team_llm_provider|last_tested_at|timestamp with time zone|YES|-
+ai.team_llm_provider|name|text|NO|-
+ai.team_llm_provider|provider_type|text|NO|-
+ai.team_llm_provider|revision|bigint|NO|1
+ai.team_llm_provider|status|text|NO|'not_configured'::text
+ai.team_llm_provider|tenant_id|uuid|NO|-
+ai.team_llm_provider|timeout_secs|integer|NO|120
+ai.team_llm_provider|updated_at|timestamp with time zone|NO|now()
+core.approver_grant|granted_at|timestamp with time zone|NO|now()
+core.approver_grant|granted_by|uuid|NO|-
+core.approver_grant|id|uuid|NO|gen_random_uuid()
+core.approver_grant|principal_id|uuid|NO|-
+core.approver_grant|project_id|uuid|NO|-
+core.approver_grant|revoked_at|timestamp with time zone|YES|-
+core.approver_grant|revoked_by|uuid|YES|-
+core.approver_grant|tenant_id|uuid|NO|-
+core.customer|code|text|YES|-
+core.customer|created_at|timestamp with time zone|NO|now()
+core.customer|id|uuid|NO|gen_random_uuid()
+core.customer|industry|text|YES|-
+core.customer|name|text|NO|-
+core.customer|notes|text|YES|-
+core.customer|parent_id|uuid|YES|-
+core.customer|short_name|text|YES|-
+core.customer|status|text|NO|'active'::text
+core.customer|tenant_id|uuid|NO|-
+core.customer|updated_at|timestamp with time zone|NO|now()
+core.principal_identity|created_at|timestamp with time zone|NO|now()
+core.principal_identity|id|uuid|NO|gen_random_uuid()
+core.principal_identity|last_seen_at|timestamp with time zone|NO|now()
+core.principal_identity|principal_id|uuid|NO|-
+core.principal_identity|provider|text|NO|-
+core.principal_identity|subject|text|NO|-
+core.principal_identity|tenant_id|uuid|NO|-
+core.principal|created_at|timestamp with time zone|NO|now()
+core.principal|display_name|text|NO|-
+core.principal|id|uuid|NO|gen_random_uuid()
+core.principal|is_active|boolean|NO|true
+core.principal|kind|text|NO|-
+core.project_initialization_operation|created_at|timestamp with time zone|NO|now()
+core.project_initialization_operation|created_by|uuid|YES|-
+core.project_initialization_operation|generation|bigint|NO|-
+core.project_initialization_operation|id|uuid|NO|gen_random_uuid()
+core.project_initialization_operation|import_id|uuid|YES|-
+core.project_initialization_operation|project_id|uuid|NO|-
+core.project_initialization_operation|released_at|timestamp with time zone|YES|-
+core.project_initialization_operation|status|text|NO|-
+core.project_initialization_operation|tenant_id|uuid|NO|-
+core.project_member|principal_id|uuid|NO|-
+core.project_member|project_id|uuid|NO|-
+core.project_member|role|text|NO|-
+core.project_member|tenant_id|uuid|NO|-
+core.project|code|text|NO|-
+core.project|created_at|timestamp with time zone|NO|now()
+core.project|customer_id|uuid|NO|-
+core.project|description|text|YES|-
+core.project|id|uuid|NO|gen_random_uuid()
+core.project|name|text|NO|-
+core.project|revision|bigint|NO|1
+core.project|status|text|NO|'planning'::text
+core.project|tenant_id|uuid|NO|-
+core.project|updated_at|timestamp with time zone|NO|now()
+core.tenant_agent|agent_definition_id|uuid|NO|-
+core.tenant_agent|created_at|timestamp with time zone|NO|now()
+core.tenant_agent|is_enabled|boolean|NO|true
+core.tenant_agent|principal_id|uuid|NO|-
+core.tenant_agent|tenant_id|uuid|NO|-
+core.tenant_invitation_link_redemption|id|uuid|NO|gen_random_uuid()
+core.tenant_invitation_link_redemption|link_id|uuid|NO|-
+core.tenant_invitation_link_redemption|principal_id|uuid|NO|-
+core.tenant_invitation_link_redemption|redeemed_at|timestamp with time zone|NO|now()
+core.tenant_invitation_link_redemption|tenant_id|uuid|NO|-
+core.tenant_invitation_link|created_at|timestamp with time zone|NO|now()
+core.tenant_invitation_link|created_by|uuid|NO|-
+core.tenant_invitation_link|default_role|text|NO|-
+core.tenant_invitation_link|expires_at|timestamp with time zone|NO|-
+core.tenant_invitation_link|id|uuid|NO|gen_random_uuid()
+core.tenant_invitation_link|max_uses|integer|YES|-
+core.tenant_invitation_link|revoked_at|timestamp with time zone|YES|-
+core.tenant_invitation_link|status|text|NO|'ACTIVE'::text
+core.tenant_invitation_link|tenant_id|uuid|NO|-
+core.tenant_invitation_link|token_hash|text|NO|-
+core.tenant_invitation_link|used_count|integer|NO|0
+core.tenant_invitation|accepted_at|timestamp with time zone|YES|-
+core.tenant_invitation|accepted_principal_id|uuid|YES|-
+core.tenant_invitation|created_at|timestamp with time zone|NO|now()
+core.tenant_invitation|email_normalized|text|NO|-
+core.tenant_invitation|email|text|NO|-
+core.tenant_invitation|expires_at|timestamp with time zone|NO|-
+core.tenant_invitation|id|uuid|NO|gen_random_uuid()
+core.tenant_invitation|invited_by|uuid|NO|-
+core.tenant_invitation|revoked_at|timestamp with time zone|YES|-
+core.tenant_invitation|role|text|NO|-
+core.tenant_invitation|status|text|NO|'PENDING'::text
+core.tenant_invitation|tenant_id|uuid|NO|-
+core.tenant_invitation|token_hash|text|NO|-
+core.tenant_member|created_at|timestamp with time zone|NO|now()
+core.tenant_member|granted_by|uuid|YES|-
+core.tenant_member|principal_id|uuid|NO|-
+core.tenant_member|role|text|NO|-
+core.tenant_member|tenant_id|uuid|NO|-
+core.tenant_member|updated_at|timestamp with time zone|NO|now()
+core.tenant|created_at|timestamp with time zone|NO|now()
+core.tenant|description|text|YES|-
+core.tenant|display_name|text|NO|-
+core.tenant|external_key|text|NO|-
+core.tenant|id|uuid|NO|gen_random_uuid()
+core.tenant|is_active|boolean|NO|true
+core.tenant|provider|text|NO|-
+core.tenant|slug|text|YES|-
+core.tenant|updated_at|timestamp with time zone|NO|now()
+delivery.acceptance_criterion_verdict|created_at|timestamp with time zone|NO|now()
+delivery.acceptance_criterion_verdict|criterion_id|uuid|NO|-
+delivery.acceptance_criterion_verdict|decided_at|timestamp with time zone|YES|-
+delivery.acceptance_criterion_verdict|decided_by|uuid|YES|-
+delivery.acceptance_criterion_verdict|evidence|jsonb|NO|'{}'::jsonb
+delivery.acceptance_criterion_verdict|id|uuid|NO|gen_random_uuid()
+delivery.acceptance_criterion_verdict|project_id|uuid|NO|-
+delivery.acceptance_criterion_verdict|review_run_id|uuid|NO|-
+delivery.acceptance_criterion_verdict|tenant_id|uuid|NO|-
+delivery.acceptance_criterion_verdict|verdict|text|NO|-
+delivery.continuation|closed_at|timestamp with time zone|YES|-
+delivery.continuation|created_at|timestamp with time zone|NO|now()
+delivery.continuation|frozen_at|timestamp with time zone|YES|-
+delivery.continuation|generation|integer|NO|-
+delivery.continuation|id|uuid|NO|gen_random_uuid()
+delivery.continuation|origin_interaction_id|uuid|NO|-
+delivery.continuation|project_id|uuid|NO|-
+delivery.continuation|run_id|uuid|NO|-
+delivery.continuation|started_at|timestamp with time zone|YES|-
+delivery.continuation|status|text|NO|'open'::text
+delivery.continuation|task_id|uuid|NO|-
+delivery.continuation|tenant_id|uuid|NO|-
+delivery.interaction_response_delivery|attempt_count|integer|NO|0
+delivery.interaction_response_delivery|consumed_at|timestamp with time zone|YES|-
+delivery.interaction_response_delivery|continuation_generation|integer|NO|1
+delivery.interaction_response_delivery|continuation_id|uuid|YES|-
+delivery.interaction_response_delivery|continue_command_id|uuid|YES|-
+delivery.interaction_response_delivery|created_at|timestamp with time zone|NO|now()
+delivery.interaction_response_delivery|delivered_at|timestamp with time zone|YES|-
+delivery.interaction_response_delivery|id|uuid|NO|gen_random_uuid()
+delivery.interaction_response_delivery|interaction_id|uuid|NO|-
+delivery.interaction_response_delivery|last_attempt_at|timestamp with time zone|YES|-
+delivery.interaction_response_delivery|last_error|text|YES|-
+delivery.interaction_response_delivery|project_id|uuid|NO|-
+delivery.interaction_response_delivery|response_id|uuid|NO|-
+delivery.interaction_response_delivery|run_id|uuid|NO|-
+delivery.interaction_response_delivery|status|text|NO|'pending'::text
+delivery.interaction_response_delivery|tenant_id|uuid|NO|-
+delivery.interaction_response_delivery|updated_at|timestamp with time zone|NO|now()
+delivery.interaction_response|authorization_context|jsonb|NO|-
+delivery.interaction_response|continue_command_id|uuid|YES|-
+delivery.interaction_response|created_at|timestamp with time zone|NO|now()
+delivery.interaction_response|idempotency_key|text|NO|-
+delivery.interaction_response|id|uuid|NO|gen_random_uuid()
+delivery.interaction_response|interaction_id|uuid|NO|-
+delivery.interaction_response|project_id|uuid|NO|-
+delivery.interaction_response|responded_by|uuid|NO|-
+delivery.interaction_response|response_payload|jsonb|NO|-
+delivery.interaction_response|run_id|uuid|NO|-
+delivery.interaction_response|task_id|uuid|NO|-
+delivery.interaction_response|tenant_id|uuid|NO|-
+delivery.milestone|id|uuid|NO|gen_random_uuid()
+delivery.milestone|name|text|NO|-
+delivery.milestone|planned_at|timestamp with time zone|YES|-
+delivery.milestone|project_id|uuid|NO|-
+delivery.milestone|revision|bigint|NO|1
+delivery.milestone|status|text|NO|'planned'::text
+delivery.milestone|tenant_id|uuid|NO|-
+delivery.policy_scope|additional_checks|jsonb|NO|'[]'::jsonb
+delivery.policy_scope|auto_accept|boolean|YES|-
+delivery.policy_scope|auto_merge|boolean|YES|-
+delivery.policy_scope|auto_publish_knowledge|boolean|YES|-
+delivery.policy_scope|require_human_approval|boolean|NO|-
+delivery.policy_scope|scope_key|text|NO|-
+delivery.policy_scope|scope|text|NO|-
+delivery.policy_scope|tenant_id|uuid|NO|-
+delivery.policy_scope|updated_at|timestamp with time zone|NO|now()
+delivery.policy_scope|updated_by|uuid|NO|-
+delivery.requirement_acceptance_criterion|created_at|timestamp with time zone|NO|now()
+delivery.requirement_acceptance_criterion|created_by|uuid|NO|-
+delivery.requirement_acceptance_criterion|established_in_revision_id|uuid|YES|-
+delivery.requirement_acceptance_criterion|id|uuid|NO|gen_random_uuid()
+delivery.requirement_acceptance_criterion|params|jsonb|NO|'{}'::jsonb
+delivery.requirement_acceptance_criterion|position|integer|NO|0
+delivery.requirement_acceptance_criterion|project_id|uuid|NO|-
+delivery.requirement_acceptance_criterion|requirement_id|uuid|NO|-
+delivery.requirement_acceptance_criterion|statement|text|NO|-
+delivery.requirement_acceptance_criterion|tenant_id|uuid|NO|-
+delivery.requirement_acceptance_criterion|updated_at|timestamp with time zone|NO|now()
+delivery.requirement_acceptance_criterion|verdict_at|timestamp with time zone|YES|-
+delivery.requirement_acceptance_criterion|verdict_by|uuid|YES|-
+delivery.requirement_acceptance_criterion|verdict_note|text|YES|-
+delivery.requirement_acceptance_criterion|verdict|text|NO|'pending'::text
+delivery.requirement_acceptance_criterion|verification_kind|text|NO|'manual'::text
+delivery.requirement_confirmation|action|text|NO|-
+delivery.requirement_confirmation|audit_event_id|uuid|YES|-
+delivery.requirement_confirmation|confirmed_at|timestamp with time zone|NO|now()
+delivery.requirement_confirmation|content_hash|text|YES|-
+delivery.requirement_confirmation|human_principal_id|uuid|NO|-
+delivery.requirement_confirmation|identity_id|uuid|YES|-
+delivery.requirement_confirmation|id|uuid|NO|gen_random_uuid()
+delivery.requirement_confirmation|markdown_version_ref|text|YES|-
+delivery.requirement_confirmation|project_id|uuid|NO|-
+delivery.requirement_confirmation|reason|text|YES|-
+delivery.requirement_confirmation|requirement_id|uuid|NO|-
+delivery.requirement_confirmation|revision_id|uuid|NO|-
+delivery.requirement_confirmation|source|text|NO|'rest'::text
+delivery.requirement_confirmation|tenant_id|uuid|NO|-
+delivery.requirement_finding|created_at|timestamp with time zone|NO|now()
+delivery.requirement_finding|created_by|uuid|NO|-
+delivery.requirement_finding|finding_id|uuid|NO|-
+delivery.requirement_finding|project_id|uuid|NO|-
+delivery.requirement_finding|relation|text|NO|'supports'::text
+delivery.requirement_finding|requirement_id|uuid|NO|-
+delivery.requirement_finding|tenant_id|uuid|NO|-
+delivery.requirement_revision|approved_by|uuid|YES|-
+delivery.requirement_revision|base_current_revision_id|uuid|YES|-
+delivery.requirement_revision|base_row_revision|bigint|YES|-
+delivery.requirement_revision|content_hash|text|NO|-
+delivery.requirement_revision|content|jsonb|NO|-
+delivery.requirement_revision|created_at|timestamp with time zone|NO|now()
+delivery.requirement_revision|created_by|uuid|NO|-
+delivery.requirement_revision|id|uuid|NO|gen_random_uuid()
+delivery.requirement_revision|markdown_version_ref|text|YES|-
+delivery.requirement_revision|project_id|uuid|NO|-
+delivery.requirement_revision|requirement_id|uuid|NO|-
+delivery.requirement_revision|state|text|NO|-
+delivery.requirement_revision|submitted_at|timestamp with time zone|YES|-
+delivery.requirement_revision|tenant_id|uuid|NO|-
+delivery.requirement_revision|version|integer|NO|-
+delivery.requirement_source_input|created_at|timestamp with time zone|NO|now()
+delivery.requirement_source_input|created_by|uuid|NO|-
+delivery.requirement_source_input|input_id|uuid|NO|-
+delivery.requirement_source_input|project_id|uuid|NO|-
+delivery.requirement_source_input|relation|text|NO|'source'::text
+delivery.requirement_source_input|requirement_id|uuid|NO|-
+delivery.requirement_source_input|tenant_id|uuid|NO|-
+delivery.requirement|code|text|NO|-
+delivery.requirement|created_at|timestamp with time zone|NO|now()
+delivery.requirement|created_by|uuid|YES|-
+delivery.requirement|current_revision_id|uuid|YES|-
+delivery.requirement|id|uuid|NO|gen_random_uuid()
+delivery.requirement|lifecycle_status|text|NO|'active'::text
+delivery.requirement|priority|text|NO|'normal'::text
+delivery.requirement|project_id|uuid|NO|-
+delivery.requirement|requirement_type|text|NO|'functional'::text
+delivery.requirement|row_revision|bigint|NO|1
+delivery.requirement|tenant_id|uuid|NO|-
+delivery.requirement|title|text|NO|-
+delivery.requirement|updated_at|timestamp with time zone|NO|now()
+delivery.requirement|updated_by|uuid|YES|-
+delivery.review_finding|code_location|text|YES|-
+delivery.review_finding|created_at|timestamp with time zone|NO|now()
+delivery.review_finding|criterion_id|uuid|YES|-
+delivery.review_finding|evidence_ref|text|YES|-
+delivery.review_finding|finding_kind|text|NO|-
+delivery.review_finding|id|uuid|NO|gen_random_uuid()
+delivery.review_finding|message|text|NO|-
+delivery.review_finding|project_id|uuid|NO|-
+delivery.review_finding|review_run_id|uuid|NO|-
+delivery.review_finding|severity|text|NO|-
+delivery.review_finding|tenant_id|uuid|NO|-
+delivery.task_acceptance_criterion|created_at|timestamp with time zone|NO|now()
+delivery.task_acceptance_criterion|id|uuid|NO|gen_random_uuid()
+delivery.task_acceptance_criterion|ordinal|integer|NO|-
+delivery.task_acceptance_criterion|project_id|uuid|NO|-
+delivery.task_acceptance_criterion|task_id|uuid|NO|-
+delivery.task_acceptance_criterion|tenant_id|uuid|NO|-
+delivery.task_acceptance_criterion|text|text|NO|-
+delivery.task_acceptance_criterion|updated_at|timestamp with time zone|NO|now()
+delivery.task_acceptance_criterion|verification_kind|text|NO|'manual'::text
+delivery.task_checkpoint|content_hash|text|NO|-
+delivery.task_checkpoint|created_at|timestamp with time zone|NO|now()
+delivery.task_checkpoint|file_path|text|NO|-
+delivery.task_checkpoint|file_size|bigint|NO|-
+delivery.task_checkpoint|id|uuid|NO|gen_random_uuid()
+delivery.task_checkpoint|interaction_id|uuid|YES|-
+delivery.task_checkpoint|project_id|uuid|NO|-
+delivery.task_checkpoint|registered_via|text|NO|'executor_report'::text
+delivery.task_checkpoint|run_id|uuid|NO|-
+delivery.task_checkpoint|session_id|text|YES|-
+delivery.task_checkpoint|task_id|uuid|NO|-
+delivery.task_checkpoint|tenant_id|uuid|NO|-
+delivery.task_dependency|created_at|timestamp with time zone|NO|now()
+delivery.task_dependency|created_by|uuid|NO|-
+delivery.task_dependency|depends_on_task_id|uuid|NO|-
+delivery.task_dependency|id|uuid|NO|gen_random_uuid()
+delivery.task_dependency|project_id|uuid|NO|-
+delivery.task_dependency|task_id|uuid|NO|-
+delivery.task_dependency|tenant_id|uuid|NO|-
+delivery.task_interaction|cancelled_at|timestamp with time zone|YES|-
+delivery.task_interaction|chain_open|boolean|NO|true
+delivery.task_interaction|checkpoint_path|text|YES|-
+delivery.task_interaction|consumed_at|timestamp with time zone|YES|-
+delivery.task_interaction|continuation_generation|integer|NO|0
+delivery.task_interaction|continuation_start_frozen_at|timestamp with time zone|YES|-
+delivery.task_interaction|created_at|timestamp with time zone|NO|now()
+delivery.task_interaction|deadline_at|timestamp with time zone|NO|-
+delivery.task_interaction|event_id|text|NO|-
+delivery.task_interaction|id|uuid|NO|gen_random_uuid()
+delivery.task_interaction|options|jsonb|YES|-
+delivery.task_interaction|previous_chain_id|uuid|YES|-
+delivery.task_interaction|project_id|uuid|NO|-
+delivery.task_interaction|question|text|NO|-
+delivery.task_interaction|reason|text|NO|-
+delivery.task_interaction|required_response|boolean|NO|true
+delivery.task_interaction|responded_at|timestamp with time zone|YES|-
+delivery.task_interaction|retry_of|uuid|YES|-
+delivery.task_interaction|run_id|uuid|NO|-
+delivery.task_interaction|session_id|text|YES|-
+delivery.task_interaction|status|text|NO|'pending'::text
+delivery.task_interaction|task_id|uuid|NO|-
+delivery.task_interaction|tenant_id|uuid|NO|-
+delivery.task_interaction|timed_out_at|timestamp with time zone|YES|-
+delivery.task_interaction|title|text|NO|-
+delivery.task_knowledge_ref|created_at|timestamp with time zone|NO|now()
+delivery.task_knowledge_ref|document_id|uuid|NO|-
+delivery.task_knowledge_ref|is_required|boolean|NO|true
+delivery.task_knowledge_ref|pinned_revision_no|integer|YES|-
+delivery.task_knowledge_ref|project_id|uuid|NO|-
+delivery.task_knowledge_ref|task_id|uuid|NO|-
+delivery.task_knowledge_ref|tenant_id|uuid|NO|-
+delivery.task_policy_override|additional_checks|jsonb|NO|'[]'::jsonb
+delivery.task_policy_override|auto_accept|boolean|YES|-
+delivery.task_policy_override|auto_merge|boolean|YES|-
+delivery.task_policy_override|auto_publish_knowledge|boolean|YES|-
+delivery.task_policy_override|project_id|uuid|NO|-
+delivery.task_policy_override|require_human_approval|boolean|YES|-
+delivery.task_policy_override|task_id|uuid|NO|-
+delivery.task_policy_override|tenant_id|uuid|NO|-
+delivery.task_policy_override|updated_at|timestamp with time zone|NO|now()
+delivery.task_policy_override|updated_by|uuid|NO|-
+delivery.task_repository_commit|branch|text|YES|-
+delivery.task_repository_commit|changed_files|integer|NO|0
+delivery.task_repository_commit|commit_authored_at|timestamp with time zone|YES|-
+delivery.task_repository_commit|commit_author|text|YES|-
+delivery.task_repository_commit|commit_sha|text|NO|-
+delivery.task_repository_commit|created_at|timestamp with time zone|NO|now()
+delivery.task_repository_commit|id|uuid|NO|gen_random_uuid()
+delivery.task_repository_commit|project_id|uuid|NO|-
+delivery.task_repository_commit|repository_id|uuid|NO|-
+delivery.task_repository_commit|task_run_id|uuid|NO|-
+delivery.task_repository_commit|tenant_id|uuid|NO|-
+delivery.task_repository_commit|test_evidence|jsonb|NO|'{}'::jsonb
+delivery.task_repository|base_commit|text|YES|-
+delivery.task_repository|base_ref|text|NO|'main'::text
+delivery.task_repository|created_at|timestamp with time zone|NO|now()
+delivery.task_repository|path_scope|ARRAY|YES|-
+delivery.task_repository|project_id|uuid|NO|-
+delivery.task_repository|repository_id|uuid|NO|-
+delivery.task_repository|role|text|NO|'primary'::text
+delivery.task_repository|task_id|uuid|NO|-
+delivery.task_repository|tenant_id|uuid|NO|-
+delivery.task_repository|write_access|boolean|NO|true
+delivery.task_requirement|project_id|uuid|NO|-
+delivery.task_requirement|requirement_id|uuid|NO|-
+delivery.task_requirement|revision_id|uuid|NO|-
+delivery.task_requirement|task_id|uuid|NO|-
+delivery.task_requirement|tenant_id|uuid|NO|-
+delivery.task_run_cleanup|attempts|integer|NO|0
+delivery.task_run_cleanup|completed_at|timestamp with time zone|YES|-
+delivery.task_run_cleanup|created_at|timestamp with time zone|NO|now()
+delivery.task_run_cleanup|executor_kind|text|YES|-
+delivery.task_run_cleanup|identity_hint|text|YES|-
+delivery.task_run_cleanup|last_error|text|YES|-
+delivery.task_run_cleanup|max_attempts|integer|NO|8
+delivery.task_run_cleanup|next_retry_at|timestamp with time zone|NO|now()
+delivery.task_run_cleanup|run_id|uuid|NO|-
+delivery.task_run_cleanup|session|text|NO|-
+delivery.task_run_cleanup|status|text|NO|'pending'::text
+delivery.task_run_cleanup|updated_at|timestamp with time zone|NO|now()
+delivery.task_run_event|client_id|uuid|YES|-
+delivery.task_run_event|created_at|timestamp with time zone|NO|now()
+delivery.task_run_event|dedupe_tag|text|NO|''::text
+delivery.task_run_event|detail|jsonb|YES|-
+delivery.task_run_event|event_type|text|NO|''::text
+delivery.task_run_event|id|uuid|NO|gen_random_uuid()
+delivery.task_run_event|lease_generation|integer|NO|0
+delivery.task_run_event|occurred_at|timestamp with time zone|NO|now()
+delivery.task_run_event|project_id|uuid|NO|-
+delivery.task_run_event|received_at|timestamp with time zone|NO|now()
+delivery.task_run_event|run_id|uuid|NO|-
+delivery.task_run_event|task_id|uuid|NO|-
+delivery.task_run_event|tenant_id|uuid|NO|-
+delivery.task_run_execution_authorization|authorized_by|uuid|NO|-
+delivery.task_run_execution_authorization|created_at|timestamp with time zone|NO|now()
+delivery.task_run_execution_authorization|expires_at|timestamp with time zone|NO|-
+delivery.task_run_execution_authorization|granted_at|timestamp with time zone|NO|now()
+delivery.task_run_execution_authorization|id|uuid|NO|gen_random_uuid()
+delivery.task_run_execution_authorization|interaction_id|uuid|YES|-
+delivery.task_run_execution_authorization|new_deadline_at|timestamp with time zone|NO|-
+delivery.task_run_execution_authorization|project_id|uuid|NO|-
+delivery.task_run_execution_authorization|reason|text|NO|-
+delivery.task_run_execution_authorization|revoked_at|timestamp with time zone|YES|-
+delivery.task_run_execution_authorization|run_id|uuid|NO|-
+delivery.task_run_execution_authorization|tenant_id|uuid|NO|-
+delivery.task_run_failure|category|text|NO|-
+delivery.task_run_failure|evidence_ref|text|YES|-
+delivery.task_run_failure|exit_code|integer|YES|-
+delivery.task_run_failure|project_id|uuid|NO|-
+delivery.task_run_failure|reason_code|text|NO|-
+delivery.task_run_failure|recorded_at|timestamp with time zone|NO|now()
+delivery.task_run_failure|retryable|boolean|NO|-
+delivery.task_run_failure|run_id|uuid|NO|-
+delivery.task_run_failure|tenant_id|uuid|NO|-
+delivery.task_run_failure|timeout_seconds|integer|YES|-
+delivery.task_run_repository|base_commit|text|NO|-
+delivery.task_run_repository|base_ref|text|NO|-
+delivery.task_run_repository|created_at|timestamp with time zone|NO|now()
+delivery.task_run_repository|path_scope|ARRAY|YES|-
+delivery.task_run_repository|project_id|uuid|NO|-
+delivery.task_run_repository|repository_id|uuid|NO|-
+delivery.task_run_repository|run_id|uuid|NO|-
+delivery.task_run_repository|tenant_id|uuid|NO|-
+delivery.task_run_repository|workspace_path|text|NO|-
+delivery.task_run_repository|write_access|boolean|NO|-
+delivery.task_run|agent_id|uuid|YES|-
+delivery.task_run|attempt_no|integer|NO|-
+delivery.task_run|claimed_at|timestamp with time zone|YES|-
+delivery.task_run|client_name|text|YES|-
+delivery.task_run|client_version|text|YES|-
+delivery.task_run|created_at|timestamp with time zone|NO|now()
+delivery.task_run|deadline_at|timestamp with time zone|YES|-
+delivery.task_run|dispatch_attempts|integer|NO|0
+delivery.task_run|evaluated_at|timestamp with time zone|YES|-
+delivery.task_run|execution_mode|text|YES|-
+delivery.task_run|executor_id|uuid|YES|-
+delivery.task_run|executor_kind|text|YES|-
+delivery.task_run|executor_session|text|YES|-
+delivery.task_run|finished_at|timestamp with time zone|YES|-
+delivery.task_run|heartbeat_at|timestamp with time zone|YES|-
+delivery.task_run|id|uuid|NO|gen_random_uuid()
+delivery.task_run|infrastructure_retry_count|integer|NO|0
+delivery.task_run|input_manifest_hash|text|YES|-
+delivery.task_run|integration_status|text|NO|'not_run'::text
+delivery.task_run|last_agent_heartbeat_at|timestamp with time zone|YES|-
+delivery.task_run|last_progress_at|timestamp with time zone|YES|-
+delivery.task_run|lease_client_id|uuid|YES|-
+delivery.task_run|lease_expires_at|timestamp with time zone|YES|-
+delivery.task_run|lease_generation|integer|NO|0
+delivery.task_run|lease_owner|text|YES|-
+delivery.task_run|lease_token_hash|text|YES|-
+delivery.task_run|next_dispatch_at|timestamp with time zone|NO|now()
+delivery.task_run|outcome|text|YES|-
+delivery.task_run|override_version|bigint|YES|-
+delivery.task_run|policy_hash|text|YES|-
+delivery.task_run|policy_snapshot_hash|text|YES|-
+delivery.task_run|policy_snapshot|jsonb|YES|-
+delivery.task_run|policy_version|integer|YES|-
+delivery.task_run|project_id|uuid|NO|-
+delivery.task_run|release_reason|text|YES|-
+delivery.task_run|repository_policy_snapshots|jsonb|YES|-
+delivery.task_run|request_fingerprint|text|YES|-
+delivery.task_run|review_policy_version|text|YES|-
+delivery.task_run|review_verdict|text|YES|-
+delivery.task_run|reviewed_manifest_hash|text|YES|-
+delivery.task_run|role_id|text|YES|-
+delivery.task_run|run_kind|text|NO|'delivery'::text
+delivery.task_run|scheduling_shield|text|NO|'none'::text
+delivery.task_run|source_event_id|uuid|YES|-
+delivery.task_run|stage|text|YES|-
+delivery.task_run|started_at|timestamp with time zone|YES|-
+delivery.task_run|status|text|NO|'queued'::text
+delivery.task_run|supersedes_run_id|uuid|YES|-
+delivery.task_run|task_id|uuid|NO|-
+delivery.task_run|tenant_id|uuid|NO|-
+delivery.task_run|terminated_at|timestamp with time zone|YES|-
+delivery.task_run|termination_reason|text|YES|-
+delivery.task_run|timeout_seconds|integer|YES|-
+delivery.task_run|triggered_by_user_id|uuid|YES|-
+delivery.task_supersession|approval_request_id|uuid|YES|-
+delivery.task_supersession|created_at|timestamp with time zone|NO|now()
+delivery.task_supersession|created_by|uuid|NO|-
+delivery.task_supersession|id|uuid|NO|gen_random_uuid()
+delivery.task_supersession|new_task_id|uuid|NO|-
+delivery.task_supersession|old_task_id|uuid|NO|-
+delivery.task_supersession|project_id|uuid|NO|-
+delivery.task_supersession|reason|text|NO|-
+delivery.task_supersession|tenant_id|uuid|NO|-
+delivery.task_waiting|deadline|timestamp with time zone|YES|-
+delivery.task_waiting|ended_at|timestamp with time zone|YES|-
+delivery.task_waiting|ended_by|uuid|YES|-
+delivery.task_waiting|id|uuid|NO|gen_random_uuid()
+delivery.task_waiting|project_id|uuid|NO|-
+delivery.task_waiting|questions|jsonb|NO|'[]'::jsonb
+delivery.task_waiting|reason|text|NO|-
+delivery.task_waiting|requested_from|uuid|YES|-
+delivery.task_waiting|resolution_note|text|YES|-
+delivery.task_waiting|since|timestamp with time zone|NO|now()
+delivery.task_waiting|task_id|uuid|NO|-
+delivery.task_waiting|tenant_id|uuid|NO|-
+delivery.task|ai_role_version_id|uuid|YES|-
+delivery.task|assignee_id|uuid|YES|-
+delivery.task|attempt_count|integer|NO|0
+delivery.task|consecutive_failure_count|integer|NO|0
+delivery.task|constraints|jsonb|NO|'{}'::jsonb
+delivery.task|created_at|timestamp with time zone|NO|now()
+delivery.task|deliverables|jsonb|NO|'[]'::jsonb
+delivery.task|description|text|YES|-
+delivery.task|estimate_hours|double precision|YES|-
+delivery.task|git_branch|text|YES|-
+delivery.task|goal|text|YES|-
+delivery.task|id|uuid|NO|gen_random_uuid()
+delivery.task|implementation_baseline_id|uuid|YES|-
+delivery.task|last_failure_category|text|YES|-
+delivery.task|milestone_id|uuid|YES|-
+delivery.task|plan_revision_id|uuid|YES|-
+delivery.task|plan_task_key|text|YES|-
+delivery.task|planned_end_at|timestamp with time zone|YES|-
+delivery.task|planned_start_at|timestamp with time zone|YES|-
+delivery.task|priority|text|NO|'normal'::text
+delivery.task|project_id|uuid|NO|-
+delivery.task|retry_exhausted|boolean|NO|false
+delivery.task|revision|bigint|NO|1
+delivery.task|status|text|NO|'draft'::text
+delivery.task|superseded_by_task_id|uuid|YES|-
+delivery.task|task_type|text|YES|-
+delivery.task|tenant_id|uuid|NO|-
+delivery.task|title|text|NO|-
+delivery.task|updated_at|timestamp with time zone|NO|now()
+delivery.v_task_delivery_manifest|actual_delivery_count|integer|YES|-
+delivery.v_task_delivery_manifest|base_commit|text|YES|-
+delivery.v_task_delivery_manifest|branch|text|YES|-
+delivery.v_task_delivery_manifest|changed_files|integer|YES|-
+delivery.v_task_delivery_manifest|commit_authored_at|timestamp with time zone|YES|-
+delivery.v_task_delivery_manifest|commit_author|text|YES|-
+delivery.v_task_delivery_manifest|commit_sha|text|YES|-
+delivery.v_task_delivery_manifest|delivery_required|boolean|YES|-
+delivery.v_task_delivery_manifest|delivery_state|text|YES|-
+delivery.v_task_delivery_manifest|expected_delivery_count|integer|YES|-
+delivery.v_task_delivery_manifest|integration_status|text|YES|-
+delivery.v_task_delivery_manifest|latest_attempt_no|integer|YES|-
+delivery.v_task_delivery_manifest|latest_run_id|uuid|YES|-
+delivery.v_task_delivery_manifest|latest_submitted_run_id|uuid|YES|-
+delivery.v_task_delivery_manifest|project_id|uuid|YES|-
+delivery.v_task_delivery_manifest|repository_id|uuid|YES|-
+delivery.v_task_delivery_manifest|repository_name|text|YES|-
+delivery.v_task_delivery_manifest|task_id|uuid|YES|-
+delivery.v_task_delivery_manifest|test_evidence|jsonb|YES|-
+delivery.v_task_delivery_manifest|write_access|boolean|YES|-
+delivery.worker_command|acked_at|timestamp with time zone|YES|-
+delivery.worker_command|claim_count|integer|NO|0
+delivery.worker_command|claim_expires_at|timestamp with time zone|YES|-
+delivery.worker_command|claimed_at|timestamp with time zone|YES|-
+delivery.worker_command|claimed_by|text|YES|-
+delivery.worker_command|command_type|text|NO|-
+delivery.worker_command|continuation_id|uuid|YES|-
+delivery.worker_command|delivered_at|timestamp with time zone|YES|-
+delivery.worker_command|failed_at|timestamp with time zone|YES|-
+delivery.worker_command|id|uuid|NO|gen_random_uuid()
+delivery.worker_command|interaction_id|uuid|YES|-
+delivery.worker_command|issued_at|timestamp with time zone|NO|now()
+delivery.worker_command|last_error|text|YES|-
+delivery.worker_command|lease_generation|integer|NO|0
+delivery.worker_command|payload|jsonb|NO|-
+delivery.worker_command|project_id|uuid|NO|-
+delivery.worker_command|reacquired_generation|integer|YES|-
+delivery.worker_command|run_id|uuid|NO|-
+delivery.worker_command|status|text|NO|'issued'::text
+delivery.worker_command|task_id|uuid|NO|-
+delivery.worker_command|tenant_id|uuid|NO|-
+delivery.worker_command|worker_id|text|NO|-
+design.adr_design_revision|adr_id|uuid|NO|-
+design.adr_design_revision|adr_revision_id|uuid|NO|-
+design.adr_design_revision|created_at|timestamp with time zone|NO|now()
+design.adr_design_revision|created_by|uuid|NO|-
+design.adr_design_revision|design_id|uuid|NO|-
+design.adr_design_revision|design_revision_id|uuid|NO|-
+design.adr_design_revision|project_id|uuid|NO|-
+design.adr_design_revision|tenant_id|uuid|NO|-
+design.adr_requirement|adr_id|uuid|NO|-
+design.adr_requirement|adr_revision_id|uuid|NO|-
+design.adr_requirement|created_at|timestamp with time zone|NO|now()
+design.adr_requirement|created_by|uuid|NO|-
+design.adr_requirement|project_id|uuid|NO|-
+design.adr_requirement|requirement_id|uuid|NO|-
+design.adr_requirement|requirement_revision_id|uuid|NO|-
+design.adr_requirement|tenant_id|uuid|NO|-
+design.adr_revision|adr_id|uuid|NO|-
+design.adr_revision|content_hash|text|NO|-
+design.adr_revision|content|jsonb|NO|-
+design.adr_revision|created_at|timestamp with time zone|NO|now()
+design.adr_revision|created_by|uuid|NO|-
+design.adr_revision|id|uuid|NO|gen_random_uuid()
+design.adr_revision|project_id|uuid|NO|-
+design.adr_revision|state|text|NO|'draft'::text
+design.adr_revision|tenant_id|uuid|NO|-
+design.adr_revision|version|integer|NO|-
+design.adr|blockers_implementation|boolean|NO|false
+design.adr|code|text|NO|-
+design.adr|created_at|timestamp with time zone|NO|now()
+design.adr|created_by|uuid|NO|-
+design.adr|current_revision_id|uuid|YES|-
+design.adr|id|uuid|NO|gen_random_uuid()
+design.adr|project_id|uuid|NO|-
+design.adr|row_revision|bigint|NO|1
+design.adr|status|text|NO|'proposed'::text
+design.adr|superseded_by_adr_id|uuid|YES|-
+design.adr|tenant_id|uuid|NO|-
+design.adr|title|text|NO|-
+design.adr|updated_at|timestamp with time zone|NO|now()
+design.design_approval|adr_id|uuid|YES|-
+design.design_approval|baseline_id|uuid|YES|-
+design.design_approval|created_at|timestamp with time zone|NO|now()
+design.design_approval|decided_at|timestamp with time zone|YES|-
+design.design_approval|decided_by|uuid|YES|-
+design.design_approval|decision_reason|text|YES|-
+design.design_approval|design_id|uuid|YES|-
+design.design_approval|id|uuid|NO|gen_random_uuid()
+design.design_approval|kind|text|NO|-
+design.design_approval|plan_id|uuid|YES|-
+design.design_approval|project_id|uuid|NO|-
+design.design_approval|requested_by|uuid|NO|-
+design.design_approval|status|text|NO|'pending'::text
+design.design_approval|target_hash|text|NO|-
+design.design_approval|target_id|uuid|NO|-
+design.design_approval|tenant_id|uuid|NO|-
+design.design_requirement|created_at|timestamp with time zone|NO|now()
+design.design_requirement|created_by|uuid|NO|-
+design.design_requirement|design_id|uuid|NO|-
+design.design_requirement|design_revision_id|uuid|NO|-
+design.design_requirement|project_id|uuid|NO|-
+design.design_requirement|requirement_id|uuid|NO|-
+design.design_requirement|requirement_revision_id|uuid|NO|-
+design.design_requirement|tenant_id|uuid|NO|-
+design.design_revision|analysis_run_id|uuid|YES|-
+design.design_revision|approved_at|timestamp with time zone|YES|-
+design.design_revision|approved_by|uuid|YES|-
+design.design_revision|base_current_revision_id|uuid|YES|-
+design.design_revision|content_hash|text|NO|-
+design.design_revision|content|jsonb|NO|-
+design.design_revision|created_at|timestamp with time zone|NO|now()
+design.design_revision|created_by|uuid|NO|-
+design.design_revision|design_id|uuid|NO|-
+design.design_revision|id|uuid|NO|gen_random_uuid()
+design.design_revision|project_id|uuid|NO|-
+design.design_revision|source|text|NO|'human'::text
+design.design_revision|state|text|NO|-
+design.design_revision|submitted_at|timestamp with time zone|YES|-
+design.design_revision|tenant_id|uuid|NO|-
+design.design_revision|version|integer|NO|-
+design.design|code|text|NO|-
+design.design|created_at|timestamp with time zone|NO|now()
+design.design|created_by|uuid|NO|-
+design.design|current_revision_id|uuid|YES|-
+design.design|id|uuid|NO|gen_random_uuid()
+design.design|lifecycle_status|text|NO|'active'::text
+design.design|project_id|uuid|NO|-
+design.design|row_revision|bigint|NO|1
+design.design|tenant_id|uuid|NO|-
+design.design|title|text|NO|-
+design.design|updated_at|timestamp with time zone|NO|now()
+design.implementation_baseline|code|text|NO|-
+design.implementation_baseline|content_hash|text|NO|-
+design.implementation_baseline|content|jsonb|NO|-
+design.implementation_baseline|created_at|timestamp with time zone|NO|now()
+design.implementation_baseline|frozen_at|timestamp with time zone|NO|now()
+design.implementation_baseline|frozen_by|uuid|NO|-
+design.implementation_baseline|id|uuid|NO|gen_random_uuid()
+design.implementation_baseline|project_id|uuid|NO|-
+design.implementation_baseline|readiness|jsonb|NO|-
+design.implementation_baseline|status|text|NO|'frozen'::text
+design.implementation_baseline|superseded_by_baseline_id|uuid|YES|-
+design.implementation_baseline|tenant_id|uuid|NO|-
+design.review_finding|body|text|NO|-
+design.review_finding|created_at|timestamp with time zone|NO|now()
+design.review_finding|design_id|uuid|NO|-
+design.review_finding|design_revision_id|uuid|NO|-
+design.review_finding|finding_kind|text|NO|'issue'::text
+design.review_finding|id|uuid|NO|gen_random_uuid()
+design.review_finding|project_id|uuid|NO|-
+design.review_finding|raised_by|uuid|NO|-
+design.review_finding|resolution_note|text|YES|-
+design.review_finding|resolved_at|timestamp with time zone|YES|-
+design.review_finding|resolved_by|uuid|YES|-
+design.review_finding|severity|text|NO|'warning'::text
+design.review_finding|status|text|NO|'open'::text
+design.review_finding|tenant_id|uuid|NO|-
+devenv.device_project_binding|bound_at|timestamp with time zone|NO|now()
+devenv.device_project_binding|bound_by|uuid|NO|-
+devenv.device_project_binding|declared_repository_ids|jsonb|NO|'[]'::jsonb
+devenv.device_project_binding|device_id|uuid|NO|-
+devenv.device_project_binding|id|uuid|NO|gen_random_uuid()
+devenv.device_project_binding|project_id|uuid|NO|-
+devenv.device_project_binding|tenant_id|uuid|NO|-
+devenv.device_project_binding|unbound_at|timestamp with time zone|YES|-
+devenv.device_project_binding|verified_repositories|jsonb|NO|'[]'::jsonb
+devenv.device|created_at|timestamp with time zone|NO|now()
+devenv.device|credential_issued_at|timestamp with time zone|YES|-
+devenv.device|credential_key_hash|text|YES|-
+devenv.device|credential_revoked_at|timestamp with time zone|YES|-
+devenv.device|executor_kind|text|NO|'codex'::text
+devenv.device|executor_version|text|YES|-
+devenv.device|granted_permissions|ARRAY|NO|ARRAY['PM_MCP_READ'::text, 'PM_MCP_AGENT_REPORT'::text, 'PM_MCP_COMMAND'::text]
+devenv.device|id|uuid|NO|-
+devenv.device|is_runner|boolean|NO|false
+devenv.device|last_check_at|timestamp with time zone|YES|-
+devenv.device|last_check|jsonb|YES|-
+devenv.device|last_heartbeat_at|timestamp with time zone|YES|-
+devenv.device|name|text|NO|-
+devenv.device|os_version|text|YES|-
+devenv.device|owner_principal_id|uuid|NO|-
+devenv.device|platform|text|NO|-
+devenv.device|readiness|text|YES|-
+devenv.device|revoked_at|timestamp with time zone|YES|-
+devenv.device|status|text|NO|'active'::text
+devenv.device|tenant_id|uuid|NO|-
+devenv.device|updated_at|timestamp with time zone|NO|now()
+discovery.discovery_answer|answered_by|uuid|NO|-
+discovery.discovery_answer|answer|text|NO|-
+discovery.discovery_answer|created_at|timestamp with time zone|NO|now()
+discovery.discovery_answer|id|uuid|NO|gen_random_uuid()
+discovery.discovery_answer|question_id|uuid|NO|-
+discovery.discovery_answer|tenant_id|uuid|NO|-
+discovery.discovery_finding_evidence|attempt_no|integer|YES|-
+discovery.discovery_finding_evidence|code_range|text|YES|-
+discovery.discovery_finding_evidence|commit_sha|text|YES|-
+discovery.discovery_finding_evidence|created_at|timestamp with time zone|NO|now()
+discovery.discovery_finding_evidence|created_by|uuid|YES|-
+discovery.discovery_finding_evidence|description|text|YES|-
+discovery.discovery_finding_evidence|evidence_type|text|NO|-
+discovery.discovery_finding_evidence|file_path|text|YES|-
+discovery.discovery_finding_evidence|finding_id|uuid|NO|-
+discovery.discovery_finding_evidence|id|uuid|NO|gen_random_uuid()
+discovery.discovery_finding_evidence|import_id|uuid|YES|-
+discovery.discovery_finding_evidence|project_id|uuid|NO|-
+discovery.discovery_finding_evidence|repository_id|uuid|YES|-
+discovery.discovery_finding_evidence|symbol|text|YES|-
+discovery.discovery_finding_evidence|tenant_id|uuid|NO|-
+discovery.discovery_finding_repository|finding_id|uuid|NO|-
+discovery.discovery_finding_repository|project_id|uuid|NO|-
+discovery.discovery_finding_repository|repository_id|uuid|NO|-
+discovery.discovery_finding_repository|tenant_id|uuid|NO|-
+discovery.discovery_finding|actor_role|text|YES|-
+discovery.discovery_finding|confidence|double precision|YES|-
+discovery.discovery_finding|content|text|NO|-
+discovery.discovery_finding|created_at|timestamp with time zone|NO|now()
+discovery.discovery_finding|id|uuid|NO|gen_random_uuid()
+discovery.discovery_finding|kind|text|NO|-
+discovery.discovery_finding|project_id|uuid|NO|-
+discovery.discovery_finding|session_id|uuid|NO|-
+discovery.discovery_finding|tenant_id|uuid|NO|-
+discovery.discovery_finding|verification_status|text|NO|'PENDING'::text
+discovery.discovery_message|content|text|NO|-
+discovery.discovery_message|created_at|timestamp with time zone|NO|now()
+discovery.discovery_message|id|uuid|NO|gen_random_uuid()
+discovery.discovery_message|seq|bigint|NO|-
+discovery.discovery_message|session_id|uuid|NO|-
+discovery.discovery_message|source|text|NO|-
+discovery.discovery_message|speaker|text|NO|-
+discovery.discovery_message|tenant_id|uuid|NO|-
+discovery.discovery_proposal|action|text|NO|-
+discovery.discovery_proposal|base_revision_id|uuid|YES|-
+discovery.discovery_proposal|created_at|timestamp with time zone|NO|now()
+discovery.discovery_proposal|document_id|uuid|YES|-
+discovery.discovery_proposal|document_proposal_id|uuid|YES|-
+discovery.discovery_proposal|evidence|jsonb|NO|'[]'::jsonb
+discovery.discovery_proposal|id|uuid|NO|gen_random_uuid()
+discovery.discovery_proposal|project_id|uuid|NO|-
+discovery.discovery_proposal|proposed_content|text|NO|-
+discovery.discovery_proposal|session_id|uuid|NO|-
+discovery.discovery_proposal|status|text|NO|'pending'::text
+discovery.discovery_proposal|target_document|text|NO|-
+discovery.discovery_proposal|tenant_id|uuid|NO|-
+discovery.discovery_proposal|updated_at|timestamp with time zone|NO|now()
+discovery.discovery_question|created_at|timestamp with time zone|NO|now()
+discovery.discovery_question|finding_id|uuid|YES|-
+discovery.discovery_question|id|uuid|NO|gen_random_uuid()
+discovery.discovery_question|project_id|uuid|NO|-
+discovery.discovery_question|question|text|NO|-
+discovery.discovery_question|session_id|uuid|NO|-
+discovery.discovery_question|status|text|NO|'open'::text
+discovery.discovery_question|tenant_id|uuid|NO|-
+discovery.discovery_question|why_blocking|text|YES|-
+discovery.discovery_session|created_at|timestamp with time zone|NO|now()
+discovery.discovery_session|created_by|uuid|NO|-
+discovery.discovery_session|id|uuid|NO|gen_random_uuid()
+discovery.discovery_session|kind|text|NO|-
+discovery.discovery_session|project_id|uuid|NO|-
+discovery.discovery_session|source|text|NO|-
+discovery.discovery_session|status|text|NO|'IN_PROGRESS'::text
+discovery.discovery_session|tenant_id|uuid|NO|-
+discovery.discovery_session|updated_at|timestamp with time zone|NO|now()
+docproc.artifact|artifact_type|text|NO|-
+docproc.artifact|checksum|text|NO|-
+docproc.artifact|created_at|timestamp with time zone|NO|now()
+docproc.artifact|id|uuid|NO|gen_random_uuid()
+docproc.artifact|metadata|jsonb|NO|'{}'::jsonb
+docproc.artifact|mime_type|text|NO|-
+docproc.artifact|processing_job_id|uuid|NO|-
+docproc.artifact|storage_key|text|NO|-
+docproc.artifact|tenant_id|uuid|NO|-
+docproc.document_version|checksum|text|NO|-
+docproc.document_version|created_at|timestamp with time zone|NO|now()
+docproc.document_version|document_id|uuid|NO|-
+docproc.document_version|file_size|bigint|NO|-
+docproc.document_version|id|uuid|NO|gen_random_uuid()
+docproc.document_version|source_metadata|jsonb|NO|'{}'::jsonb
+docproc.document_version|storage_key|text|NO|-
+docproc.document_version|tenant_id|uuid|NO|-
+docproc.document_version|uploaded_by|uuid|NO|-
+docproc.document_version|version_number|integer|NO|-
+docproc.document|created_at|timestamp with time zone|NO|now()
+docproc.document|created_by|uuid|NO|-
+docproc.document|current_version_id|uuid|YES|-
+docproc.document|file_extension|text|NO|-
+docproc.document|filename|text|NO|-
+docproc.document|id|uuid|NO|gen_random_uuid()
+docproc.document|mime_type|text|NO|-
+docproc.document|project_id|uuid|YES|-
+docproc.document|row_revision|bigint|NO|1
+docproc.document|tenant_id|uuid|NO|-
+docproc.document|updated_at|timestamp with time zone|NO|now()
+docproc.document|upstream_tenant_key|text|NO|'-'::text
+docproc.processing_job|attempts|integer|NO|0
+docproc.processing_job|completed_at|timestamp with time zone|YES|-
+docproc.processing_job|config_fingerprint|text|NO|-
+docproc.processing_job|config_version|text|NO|-
+docproc.processing_job|config|jsonb|NO|'{}'::jsonb
+docproc.processing_job|created_at|timestamp with time zone|NO|now()
+docproc.processing_job|created_by|uuid|NO|-
+docproc.processing_job|document_version_id|uuid|NO|-
+docproc.processing_job|error_code|text|YES|-
+docproc.processing_job|error_detail|jsonb|YES|-
+docproc.processing_job|id|uuid|NO|gen_random_uuid()
+docproc.processing_job|lease_owner|text|YES|-
+docproc.processing_job|locked_until|timestamp with time zone|YES|-
+docproc.processing_job|parser_name|text|YES|-
+docproc.processing_job|parser_version|text|YES|-
+docproc.processing_job|processing_type|text|NO|-
+docproc.processing_job|progress|integer|NO|0
+docproc.processing_job|row_revision|bigint|NO|1
+docproc.processing_job|started_at|timestamp with time zone|YES|-
+docproc.processing_job|status|text|NO|'pending'::text
+docproc.processing_job|tenant_id|uuid|NO|-
+docproc.processing_job|updated_at|timestamp with time zone|NO|now()
+docproc.source_mapping|artifact_id|uuid|NO|-
+docproc.source_mapping|created_at|timestamp with time zone|NO|now()
+docproc.source_mapping|id|uuid|NO|gen_random_uuid()
+docproc.source_mapping|mapping_type|text|NO|-
+docproc.source_mapping|metadata|jsonb|NO|'{}'::jsonb
+docproc.source_mapping|source_location|jsonb|NO|-
+docproc.source_mapping|target_location|jsonb|NO|-
+docproc.source_mapping|tenant_id|uuid|NO|-
+governance.approval_request|created_at|timestamp with time zone|NO|now()
+governance.approval_request|decided_at|timestamp with time zone|YES|-
+governance.approval_request|decided_by|uuid|YES|-
+governance.approval_request|decision_reason|text|YES|-
+governance.approval_request|id|uuid|NO|gen_random_uuid()
+governance.approval_request|project_id|uuid|NO|-
+governance.approval_request|proposal_id|uuid|NO|-
+governance.approval_request|required_role|text|NO|-
+governance.approval_request|status|text|NO|'pending'::text
+governance.approval_request|tenant_id|uuid|NO|-
+governance.audit_log|action|text|NO|-
+governance.audit_log|actor_auth_mode|text|YES|-
+governance.audit_log|actor_client|text|YES|-
+governance.audit_log|actor_identity_id|uuid|YES|-
+governance.audit_log|actor_id|uuid|NO|-
+governance.audit_log|after_data|jsonb|YES|-
+governance.audit_log|analysis_run_id|uuid|YES|-
+governance.audit_log|before_data|jsonb|YES|-
+governance.audit_log|claimed_device_id|uuid|YES|-
+governance.audit_log|compensated_command_id|uuid|YES|-
+governance.audit_log|compensation_command|jsonb|YES|-
+governance.audit_log|created_at|timestamp with time zone|NO|now()
+governance.audit_log|id|uuid|NO|gen_random_uuid()
+governance.audit_log|project_id|uuid|NO|-
+governance.audit_log|source_event_id|uuid|YES|-
+governance.audit_log|source_kind|text|YES|-
+governance.audit_log|source_ref|uuid|YES|-
+governance.audit_log|target_id|uuid|YES|-
+governance.audit_log|target_type|text|NO|-
+governance.audit_log|tenant_id|uuid|NO|-
+governance.human_intervention|actor_id|uuid|NO|-
+governance.human_intervention|created_at|timestamp with time zone|NO|now()
+governance.human_intervention|executed_at|timestamp with time zone|YES|-
+governance.human_intervention|id|uuid|NO|gen_random_uuid()
+governance.human_intervention|intervention_type|text|NO|-
+governance.human_intervention|project_id|uuid|NO|-
+governance.human_intervention|reason|text|NO|-
+governance.human_intervention|target_command_id|uuid|YES|-
+governance.human_intervention|target_proposal_id|uuid|YES|-
+governance.human_intervention|tenant_id|uuid|NO|-
+governance.review_approval|created_at|timestamp with time zone|NO|now()
+governance.review_approval|decided_at|timestamp with time zone|YES|-
+governance.review_approval|decided_by|uuid|YES|-
+governance.review_approval|decision_reason|text|YES|-
+governance.review_approval|delivery_manifest_hash|text|NO|-
+governance.review_approval|delivery_run_id|uuid|NO|-
+governance.review_approval|id|uuid|NO|gen_random_uuid()
+governance.review_approval|kind|text|NO|-
+governance.review_approval|project_id|uuid|NO|-
+governance.review_approval|required_role|text|YES|-
+governance.review_approval|review_run_id|uuid|NO|-
+governance.review_approval|status|text|NO|'pending'::text
+governance.review_approval|task_id|uuid|NO|-
+governance.review_approval|tenant_id|uuid|NO|-
+governance.tenant_audit_log|action|text|NO|-
+governance.tenant_audit_log|actor_auth_mode|text|YES|-
+governance.tenant_audit_log|actor_client|text|YES|-
+governance.tenant_audit_log|actor_identity_id|uuid|YES|-
+governance.tenant_audit_log|actor_id|uuid|NO|-
+governance.tenant_audit_log|after_data|jsonb|YES|-
+governance.tenant_audit_log|before_data|jsonb|YES|-
+governance.tenant_audit_log|claimed_device_id|uuid|YES|-
+governance.tenant_audit_log|created_at|timestamp with time zone|NO|now()
+governance.tenant_audit_log|id|uuid|NO|gen_random_uuid()
+governance.tenant_audit_log|target_id|uuid|YES|-
+governance.tenant_audit_log|target_principal_id|uuid|YES|-
+governance.tenant_audit_log|target_type|text|YES|-
+governance.tenant_audit_log|tenant_id|uuid|NO|-
+integration.inbound_event|actor_id|uuid|NO|-
+integration.inbound_event|event_type|text|NO|-
+integration.inbound_event|idempotency_key|text|NO|-
+integration.inbound_event|id|uuid|NO|gen_random_uuid()
+integration.inbound_event|payload_hash|text|NO|-
+integration.inbound_event|payload|jsonb|NO|-
+integration.inbound_event|project_id|uuid|NO|-
+integration.inbound_event|received_at|timestamp with time zone|NO|now()
+integration.inbound_event|source|text|NO|-
+integration.inbound_event|status|text|NO|'received'::text
+integration.inbound_event|tenant_id|uuid|NO|-
+integration.intake_record|channel|text|NO|-
+integration.intake_record|content_hash|text|YES|-
+integration.intake_record|created_at|timestamp with time zone|NO|now()
+integration.intake_record|idempotency_key|text|NO|-
+integration.intake_record|id|uuid|NO|gen_random_uuid()
+integration.intake_record|intake_status|text|NO|'RECEIVED'::text
+integration.intake_record|intake_type|text|NO|-
+integration.intake_record|project_id|uuid|NO|-
+integration.intake_record|source_ref|jsonb|NO|-
+integration.intake_record|submitted_by|uuid|NO|-
+integration.intake_record|tenant_id|uuid|NO|-
+integration.intake_record|title|text|YES|-
+integration.intake_record|updated_at|timestamp with time zone|NO|now()
+integration.intake_task|attempt|integer|NO|0
+integration.intake_task|created_at|timestamp with time zone|NO|now()
+integration.intake_task|idempotency_key|text|NO|-
+integration.intake_task|id|uuid|NO|gen_random_uuid()
+integration.intake_task|intake_id|uuid|NO|-
+integration.intake_task|last_error|text|YES|-
+integration.intake_task|phase|text|NO|'required'::text
+integration.intake_task|project_id|uuid|NO|-
+integration.intake_task|result_ref|jsonb|YES|-
+integration.intake_task|signal_ref|jsonb|YES|-
+integration.intake_task|target_service|text|NO|-
+integration.intake_task|task_status|text|NO|'PENDING'::text
+integration.intake_task|task_type|text|NO|-
+integration.intake_task|tenant_id|uuid|NO|-
+integration.intake_task|updated_at|timestamp with time zone|NO|now()
+integration.job|attempts|integer|NO|0
+integration.job|available_at|timestamp with time zone|NO|now()
+integration.job|created_at|timestamp with time zone|NO|now()
+integration.job|event_id|uuid|NO|-
+integration.job|id|uuid|NO|gen_random_uuid()
+integration.job|job_type|text|NO|-
+integration.job|last_error|text|YES|-
+integration.job|lease_owner|text|YES|-
+integration.job|lease_until|timestamp with time zone|YES|-
+integration.job|max_attempts|integer|NO|5
+integration.job|project_id|uuid|NO|-
+integration.job|status|text|NO|'queued'::text
+integration.job|tenant_id|uuid|NO|-
+integration.notification|created_at|timestamp with time zone|NO|now()
+integration.notification|id|uuid|NO|gen_random_uuid()
+integration.notification|kind|text|NO|-
+integration.notification|payload|jsonb|NO|-
+integration.notification|project_id|uuid|NO|-
+integration.notification|read_at|timestamp with time zone|YES|-
+integration.notification|source_proposal_id|uuid|YES|-
+integration.notification|tenant_id|uuid|NO|-
+integration.notification|veto_window_until|timestamp with time zone|YES|-
+integration.outbox_event|aggregate_id|text|NO|-
+integration.outbox_event|aggregate_type|text|NO|-
+integration.outbox_event|attempts|integer|NO|0
+integration.outbox_event|created_at|timestamp with time zone|NO|now()
+integration.outbox_event|delivered_at|timestamp with time zone|YES|-
+integration.outbox_event|event_type|text|NO|-
+integration.outbox_event|idempotency_key|text|NO|-
+integration.outbox_event|id|uuid|NO|gen_random_uuid()
+integration.outbox_event|last_error|text|YES|-
+integration.outbox_event|lease_owner|text|YES|-
+integration.outbox_event|locked_until|timestamp with time zone|YES|-
+integration.outbox_event|max_attempts|integer|NO|5
+integration.outbox_event|next_attempt_at|timestamp with time zone|NO|now()
+integration.outbox_event|payload|jsonb|NO|-
+integration.outbox_event|project_id|uuid|YES|-
+integration.outbox_event|schema_version|integer|NO|1
+integration.outbox_event|status|text|NO|'pending'::text
+integration.outbox_event|tenant_id|uuid|NO|-
+integration.project_repository|created_at|timestamp with time zone|NO|now()
+integration.project_repository|default_branch|text|YES|-
+integration.project_repository|description|text|YES|-
+integration.project_repository|head_commit_sha|text|YES|-
+integration.project_repository|id|uuid|NO|gen_random_uuid()
+integration.project_repository|last_analyzed_at|timestamp with time zone|YES|-
+integration.project_repository|last_analyzed_commit_sha|text|YES|-
+integration.project_repository|last_error_code|text|YES|-
+integration.project_repository|last_error_detail|text|YES|-
+integration.project_repository|last_verified_at|timestamp with time zone|YES|-
+integration.project_repository|name|text|NO|-
+integration.project_repository|project_id|uuid|NO|-
+integration.project_repository|revision|bigint|NO|1
+integration.project_repository|role|text|NO|'main'::text
+integration.project_repository|selected_branch|text|YES|-
+integration.project_repository|selected_commit|text|YES|-
+integration.project_repository|selected_confirmed_at|timestamp with time zone|YES|-
+integration.project_repository|selected_confirmed_by|uuid|YES|-
+integration.project_repository|ssh_key_id|uuid|YES|-
+integration.project_repository|status|text|NO|'pending'::text
+integration.project_repository|tenant_id|uuid|NO|-
+integration.project_repository|updated_at|timestamp with time zone|NO|now()
+integration.project_repository|url|text|NO|-
+integration.project_ssh_key|cipher_suite|text|NO|'aes256gcm-v1'::text
+integration.project_ssh_key|created_at|timestamp with time zone|NO|now()
+integration.project_ssh_key|created_by|uuid|YES|-
+integration.project_ssh_key|fingerprint|text|NO|-
+integration.project_ssh_key|id|uuid|NO|gen_random_uuid()
+integration.project_ssh_key|is_default|boolean|NO|false
+integration.project_ssh_key|key_type|text|NO|'ed25519'::text
+integration.project_ssh_key|label|text|NO|'default'::text
+integration.project_ssh_key|private_key_ciphertext|bytea|NO|-
+integration.project_ssh_key|project_id|uuid|NO|-
+integration.project_ssh_key|public_key|text|NO|-
+integration.project_ssh_key|revoked_at|timestamp with time zone|YES|-
+integration.project_ssh_key|status|text|NO|'active'::text
+integration.project_ssh_key|tenant_id|uuid|NO|-
+integration.project_ssh_key|updated_at|timestamp with time zone|NO|now()
+integration.repo_analysis_report|closed_at|timestamp with time zone|YES|-
+integration.repo_analysis_report|closed_by|uuid|YES|-
+integration.repo_analysis_report|commit_sha|text|NO|-
+integration.repo_analysis_report|created_at|timestamp with time zone|NO|now()
+integration.repo_analysis_report|error_code|text|YES|-
+integration.repo_analysis_report|error_detail|text|YES|-
+integration.repo_analysis_report|id|uuid|NO|gen_random_uuid()
+integration.repo_analysis_report|intake_id|uuid|NO|-
+integration.repo_analysis_report|kb_revision_id|uuid|YES|-
+integration.repo_analysis_report|pc_source_id|uuid|YES|-
+integration.repo_analysis_report|project_id|uuid|NO|-
+integration.repo_analysis_report|repository_id|uuid|NO|-
+integration.repo_analysis_report|run_mode|text|NO|'full'::text
+integration.repo_analysis_report|since_commit|text|YES|-
+integration.repo_analysis_report|stage_detail|text|YES|-
+integration.repo_analysis_report|status|text|NO|'analyzing'::text
+integration.repo_analysis_report|tenant_id|uuid|NO|-
+integration.repo_analysis_report|updated_at|timestamp with time zone|NO|now()
+integration.repo_import_draft_version|created_at|timestamp with time zone|NO|now()
+integration.repo_import_draft_version|draft|jsonb|NO|-
+integration.repo_import_draft_version|dropped_items|integer|NO|0
+integration.repo_import_draft_version|generated_at|timestamp with time zone|YES|-
+integration.repo_import_draft_version|generation_status|text|NO|-
+integration.repo_import_draft_version|import_id|uuid|NO|-
+integration.repo_import_draft_version|revision|bigint|NO|-
+integration.repo_import_draft_version|source_attempts|jsonb|NO|'[]'::jsonb
+integration.repo_import_draft_version|tenant_id|uuid|NO|-
+integration.repo_import_source_attempt|attempt_no|integer|NO|-
+integration.repo_import_source_attempt|commit_count|integer|YES|-
+integration.repo_import_source_attempt|commit_sha|text|YES|-
+integration.repo_import_source_attempt|doc_count|integer|YES|-
+integration.repo_import_source_attempt|error_code|text|YES|-
+integration.repo_import_source_attempt|error_detail|text|YES|-
+integration.repo_import_source_attempt|facts|jsonb|YES|-
+integration.repo_import_source_attempt|finished_at|timestamp with time zone|YES|-
+integration.repo_import_source_attempt|import_id|uuid|NO|-
+integration.repo_import_source_attempt|job_id|uuid|YES|-
+integration.repo_import_source_attempt|project_id|uuid|NO|-
+integration.repo_import_source_attempt|repository_id|uuid|NO|-
+integration.repo_import_source_attempt|size_bytes|bigint|YES|-
+integration.repo_import_source_attempt|started_at|timestamp with time zone|NO|now()
+integration.repo_import_source_attempt|status|text|NO|-
+integration.repo_import_source_attempt|tenant_id|uuid|NO|-
+integration.repo_import_source_attempt|truncated|boolean|YES|-
+integration.repo_import_source|created_at|timestamp with time zone|NO|now()
+integration.repo_import_source|current_attempt_no|integer|YES|-
+integration.repo_import_source|head_commit_sha|text|YES|-
+integration.repo_import_source|import_id|uuid|NO|-
+integration.repo_import_source|project_id|uuid|NO|-
+integration.repo_import_source|repository_id|uuid|NO|-
+integration.repo_import_source|tenant_id|uuid|NO|-
+integration.repo_import|analysis_run_id|uuid|YES|-
+integration.repo_import|applied_at|timestamp with time zone|YES|-
+integration.repo_import|created_at|timestamp with time zone|NO|now()
+integration.repo_import|discovery_session_id|uuid|YES|-
+integration.repo_import|draft_revision|bigint|NO|0
+integration.repo_import|dropped_items|integer|NO|0
+integration.repo_import|error_code|text|YES|-
+integration.repo_import|error_detail|text|YES|-
+integration.repo_import|id|uuid|NO|gen_random_uuid()
+integration.repo_import|model_name|text|NO|'fake'::text
+integration.repo_import|progress|integer|NO|0
+integration.repo_import|project_id|uuid|NO|-
+integration.repo_import|proposed_at|timestamp with time zone|YES|-
+integration.repo_import|requested_by|uuid|NO|-
+integration.repo_import|stage_detail|text|YES|-
+integration.repo_import|status|text|NO|'queued'::text
+integration.repo_import|tenant_id|uuid|NO|-
+integration.repo_import|updated_at|timestamp with time zone|NO|now()
+integration.repository_version_confirmation|confirmed_at|timestamp with time zone|NO|now()
+integration.repository_version_confirmation|confirmed_by|uuid|NO|-
+integration.repository_version_confirmation|id|uuid|NO|gen_random_uuid()
+integration.repository_version_confirmation|previous_branch|text|YES|-
+integration.repository_version_confirmation|previous_commit|text|YES|-
+integration.repository_version_confirmation|reason|text|YES|-
+integration.repository_version_confirmation|repository_id|uuid|NO|-
+integration.repository_version_confirmation|selected_branch|text|NO|-
+integration.repository_version_confirmation|selected_commit|text|NO|-
+integration.repository_version_confirmation|tenant_id|uuid|NO|-
+kb.document_index_state|created_at|timestamp with time zone|NO|now()
+kb.document_index_state|document_id|uuid|NO|-
+kb.document_index_state|document_revision_id|uuid|NO|-
+kb.document_index_state|id|uuid|NO|gen_random_uuid()
+kb.document_index_state|index_version|text|YES|-
+kb.document_index_state|indexed_at|timestamp with time zone|YES|-
+kb.document_index_state|indexed_content_hash|text|YES|-
+kb.document_index_state|last_error|text|YES|-
+kb.document_index_state|project_id|uuid|NO|-
+kb.document_index_state|provider|text|NO|'kb-section'::text
+kb.document_index_state|status|text|NO|'pending'::text
+kb.document_index_state|tenant_id|uuid|NO|-
+kb.document_index_state|updated_at|timestamp with time zone|NO|now()
+kb.document_revision|analysis_mode|text|NO|'derived'::text
+kb.document_revision|change_summary|text|YES|-
+kb.document_revision|confirmed_by|uuid|YES|-
+kb.document_revision|content_hash|text|NO|-
+kb.document_revision|content|text|NO|-
+kb.document_revision|created_at|timestamp with time zone|NO|now()
+kb.document_revision|created_by|uuid|YES|-
+kb.document_revision|document_id|uuid|NO|-
+kb.document_revision|id|uuid|NO|gen_random_uuid()
+kb.document_revision|published_at|timestamp with time zone|YES|-
+kb.document_revision|revision_no|integer|NO|-
+kb.document_revision|source_checksum|text|YES|-
+kb.document_revision|source_commit_sha|text|YES|-
+kb.document_revision|source_ref|text|YES|-
+kb.document_revision|status|text|NO|'draft'::text
+kb.document_revision|tenant_id|uuid|NO|-
+kb.document_section_index|anchor|text|NO|-
+kb.document_section_index|content|text|NO|-
+kb.document_section_index|created_at|timestamp with time zone|NO|now()
+kb.document_section_index|document_id|uuid|NO|-
+kb.document_section_index|document_revision_id|uuid|NO|-
+kb.document_section_index|id|uuid|NO|gen_random_uuid()
+kb.document_section_index|level|smallint|NO|-
+kb.document_section_index|project_id|uuid|NO|-
+kb.document_section_index|provider|text|NO|'kb-section'::text
+kb.document_section_index|search_tsv|tsvector|YES|-
+kb.document_section_index|section_no|integer|NO|-
+kb.document_section_index|start_line|integer|NO|-
+kb.document_section_index|tenant_id|uuid|NO|-
+kb.document_section_index|title|text|NO|-
+kb.document_section_index|updated_at|timestamp with time zone|NO|now()
+kb.document|canonical_path|text|NO|-
+kb.document|created_at|timestamp with time zone|NO|now()
+kb.document|doc_key|text|NO|-
+kb.document|doc_type|text|NO|-
+kb.document|id|uuid|NO|gen_random_uuid()
+kb.document|project_id|uuid|NO|-
+kb.document|tenant_id|uuid|NO|-
+kb.document|updated_at|timestamp with time zone|NO|now()
+kb.memory_ref|created_at|timestamp with time zone|NO|now()
+kb.memory_ref|id|uuid|NO|gen_random_uuid()
+kb.memory_ref|locator|jsonb|YES|-
+kb.memory_ref|project_id|uuid|NO|-
+kb.memory_ref|ref_role|text|NO|-
+kb.memory_ref|revision_id|uuid|NO|-
+kb.memory_ref|revision_missing_reason|text|YES|-
+kb.memory_ref|target_domain|text|NO|-
+kb.memory_ref|target_id|text|NO|-
+kb.memory_ref|target_revision_id|text|YES|-
+kb.memory_ref|target_type|text|NO|-
+kb.memory_ref|tenant_id|uuid|NO|-
+kb.memory_revision|base_revision_id|uuid|YES|-
+kb.memory_revision|body|text|YES|-
+kb.memory_revision|change_action|text|NO|-
+kb.memory_revision|change_reason|text|NO|-
+kb.memory_revision|content_hash|text|NO|-
+kb.memory_revision|created_at|timestamp with time zone|NO|now()
+kb.memory_revision|id|uuid|NO|gen_random_uuid()
+kb.memory_revision|memory_id|uuid|NO|-
+kb.memory_revision|memory_type|text|NO|-
+kb.memory_revision|proposed_by|uuid|NO|-
+kb.memory_revision|review_note|text|YES|-
+kb.memory_revision|review_status|text|NO|'PENDING_REVIEW'::text
+kb.memory_revision|reviewed_at|timestamp with time zone|YES|-
+kb.memory_revision|reviewed_by|uuid|YES|-
+kb.memory_revision|revision_no|integer|NO|-
+kb.memory_revision|summary|text|NO|-
+kb.memory_revision|tenant_id|uuid|NO|-
+kb.memory_revision|title|text|NO|-
+kb.memory_revision|version_no|integer|YES|-
+kb.memory_revision|version_status|text|YES|-
+kb.memory|created_at|timestamp with time zone|NO|now()
+kb.memory|created_by|uuid|NO|-
+kb.memory|id|uuid|NO|gen_random_uuid()
+kb.memory|project_id|uuid|NO|-
+kb.memory|tenant_id|uuid|NO|-
+kb.source_project|linked_at|timestamp with time zone|NO|now()
+kb.source_project|linked_by|uuid|NO|-
+kb.source_project|project_id|uuid|NO|-
+kb.source_project|source_id|uuid|NO|-
+kb.source_project|tenant_id|uuid|NO|-
+kb.source|content_hash|text|NO|-
+kb.source|created_at|timestamp with time zone|NO|now()
+kb.source|id|uuid|NO|gen_random_uuid()
+kb.source|inline_content|text|YES|-
+kb.source|mime|text|YES|-
+kb.source|registered_by|uuid|NO|-
+kb.source|size_bytes|bigint|YES|-
+kb.source|source_kind|text|NO|-
+kb.source|tenant_id|uuid|NO|-
+kb.source|title|text|NO|-
+kb.source|uri|text|YES|-
+pc.approval|created_at|timestamp with time zone|NO|now()
+pc.approval|decided_at|timestamp with time zone|YES|-
+pc.approval|decided_by|uuid|YES|-
+pc.approval|decision_reason|text|YES|-
+pc.approval|expected_version_no|bigint|NO|-
+pc.approval|id|uuid|NO|gen_random_uuid()
+pc.approval|project_id|uuid|NO|-
+pc.approval|proposal_content_hash|text|NO|-
+pc.approval|proposal_id|uuid|NO|-
+pc.approval|status|text|NO|'pending'::text
+pc.approval|tenant_id|uuid|NO|-
+pc.cognition_object|created_at|timestamp with time zone|NO|now()
+pc.cognition_object|created_by|uuid|NO|-
+pc.cognition_object|current_revision_id|uuid|YES|-
+pc.cognition_object|deprecated_at|timestamp with time zone|YES|-
+pc.cognition_object|display_name|text|NO|-
+pc.cognition_object|id|uuid|NO|gen_random_uuid()
+pc.cognition_object|lifecycle_status|text|NO|'draft'::text
+pc.cognition_object|object_key|text|YES|-
+pc.cognition_object|object_type|text|NO|-
+pc.cognition_object|project_id|uuid|NO|-
+pc.cognition_object|superseded_by_id|uuid|YES|-
+pc.cognition_object|tenant_id|uuid|NO|-
+pc.cognition_object|updated_at|timestamp with time zone|NO|now()
+pc.cognition_object|updated_by|uuid|YES|-
+pc.cognition_revision|analysis_mode|text|YES|'derived'::text
+pc.cognition_revision|change_summary|text|YES|-
+pc.cognition_revision|content_hash|text|NO|-
+pc.cognition_revision|created_at|timestamp with time zone|NO|now()
+pc.cognition_revision|created_by|uuid|NO|-
+pc.cognition_revision|document_id|uuid|NO|-
+pc.cognition_revision|document_revision_id|uuid|NO|-
+pc.cognition_revision|id|uuid|NO|gen_random_uuid()
+pc.cognition_revision|object_id|uuid|NO|-
+pc.cognition_revision|project_id|uuid|NO|-
+pc.cognition_revision|revision_no|integer|NO|-
+pc.cognition_revision|source_context|text|YES|-
+pc.cognition_revision|tenant_id|uuid|NO|-
+pc.cognition_version|confirmed_at|timestamp with time zone|NO|now()
+pc.cognition_version|confirmed_by|uuid|NO|-
+pc.cognition_version|created_at|timestamp with time zone|NO|now()
+pc.cognition_version|id|uuid|NO|gen_random_uuid()
+pc.cognition_version|predecessor_version_id|uuid|YES|-
+pc.cognition_version|project_id|uuid|NO|-
+pc.cognition_version|snapshot_hash|text|NO|-
+pc.cognition_version|source_proposal_id|uuid|NO|-
+pc.cognition_version|status|text|NO|'published'::text
+pc.cognition_version|tenant_id|uuid|NO|-
+pc.cognition_version|version_no|bigint|NO|-
+pc.conflict_object|conflict_id|uuid|NO|-
+pc.conflict_object|id|uuid|NO|gen_random_uuid()
+pc.conflict_object|object_id|uuid|YES|-
+pc.conflict_object|project_id|uuid|NO|-
+pc.conflict_object|relationship_id|uuid|YES|-
+pc.conflict_object|tenant_id|uuid|NO|-
+pc.conflict|conflict_type|text|NO|-
+pc.conflict|created_at|timestamp with time zone|NO|now()
+pc.conflict|created_by|uuid|NO|-
+pc.conflict|description|text|NO|-
+pc.conflict|detection_source|text|YES|-
+pc.conflict|id|uuid|NO|gen_random_uuid()
+pc.conflict|project_id|uuid|NO|-
+pc.conflict|resolution_note|text|YES|-
+pc.conflict|resolved_at|timestamp with time zone|YES|-
+pc.conflict|resolved_by|uuid|YES|-
+pc.conflict|severity|text|NO|-
+pc.conflict|status|text|NO|'detected'::text
+pc.conflict|tenant_id|uuid|NO|-
+pc.conflict|updated_at|timestamp with time zone|NO|now()
+pc.document_revision|content_hash|text|NO|-
+pc.document_revision|content|text|NO|-
+pc.document_revision|created_at|timestamp with time zone|NO|now()
+pc.document_revision|created_by|uuid|NO|-
+pc.document_revision|document_id|uuid|NO|-
+pc.document_revision|git_commit_sha|text|YES|-
+pc.document_revision|id|uuid|NO|gen_random_uuid()
+pc.document_revision|project_id|uuid|NO|-
+pc.document_revision|revision_no|integer|NO|-
+pc.document_revision|search_tsv|tsvector|YES|-
+pc.document_revision|tenant_id|uuid|NO|-
+pc.document|canonical_path|text|NO|-
+pc.document|created_at|timestamp with time zone|NO|now()
+pc.document|doc_key|text|NO|-
+pc.document|id|uuid|NO|gen_random_uuid()
+pc.document|project_id|uuid|NO|-
+pc.document|tenant_id|uuid|NO|-
+pc.evidence|code_range|text|YES|-
+pc.evidence|commit_sha|text|YES|-
+pc.evidence|confidence|text|NO|'medium'::text
+pc.evidence|created_at|timestamp with time zone|NO|now()
+pc.evidence|created_by|uuid|NO|-
+pc.evidence|description|text|YES|-
+pc.evidence|end_line|integer|YES|-
+pc.evidence|evidence_hash|text|NO|-
+pc.evidence|evidence_type|text|NO|-
+pc.evidence|excerpt|text|YES|-
+pc.evidence|file_path|text|YES|-
+pc.evidence|id|uuid|NO|gen_random_uuid()
+pc.evidence|object_revision_id|uuid|NO|-
+pc.evidence|project_id|uuid|NO|-
+pc.evidence|relationship_revision_id|uuid|YES|-
+pc.evidence|section_anchor|text|YES|-
+pc.evidence|source_id|uuid|YES|-
+pc.evidence|start_line|integer|YES|-
+pc.evidence|symbol|text|YES|-
+pc.evidence|target_domain|text|YES|-
+pc.evidence|target_id|text|YES|-
+pc.evidence|target_revision_id|text|YES|-
+pc.evidence|target_type|text|YES|-
+pc.evidence|tenant_id|uuid|NO|-
+pc.evidence|verification_status|text|NO|'unverified'::text
+pc.object_type|created_at|timestamp with time zone|NO|now()
+pc.object_type|description|text|YES|-
+pc.object_type|doc_template_key|text|YES|-
+pc.object_type|governance_level|text|NO|'L1'::text
+pc.object_type|label|text|NO|-
+pc.object_type|layer|text|NO|'snapshot'::text
+pc.object_type|singleton|boolean|NO|false
+pc.object_type|status|text|NO|'active'::text
+pc.object_type|type_key|text|NO|-
+pc.proposal_member|change_kind|text|NO|-
+pc.proposal_member|created_at|timestamp with time zone|NO|now()
+pc.proposal_member|id|uuid|NO|gen_random_uuid()
+pc.proposal_member|object_id|uuid|YES|-
+pc.proposal_member|object_revision_id|uuid|YES|-
+pc.proposal_member|project_id|uuid|NO|-
+pc.proposal_member|proposal_id|uuid|NO|-
+pc.proposal_member|relationship_id|uuid|YES|-
+pc.proposal_member|relationship_revision_id|uuid|YES|-
+pc.proposal_member|tenant_id|uuid|NO|-
+pc.proposal|confidence|text|NO|'medium'::text
+pc.proposal|created_at|timestamp with time zone|NO|now()
+pc.proposal|created_by|uuid|NO|-
+pc.proposal|expected_version_no|bigint|NO|-
+pc.proposal|governance_level|text|NO|-
+pc.proposal|id|uuid|NO|gen_random_uuid()
+pc.proposal|origin_kind|text|NO|-
+pc.proposal|project_id|uuid|NO|-
+pc.proposal|proposal_content_hash|text|NO|-
+pc.proposal|rationale|text|NO|-
+pc.proposal|risk_level|text|NO|'medium'::text
+pc.proposal|source_id|uuid|YES|-
+pc.proposal|status|text|NO|'draft'::text
+pc.proposal|submitted_at|timestamp with time zone|YES|-
+pc.proposal|tenant_id|uuid|NO|-
+pc.proposal|title|text|NO|-
+pc.proposal|updated_at|timestamp with time zone|NO|now()
+pc.relationship_revision|change_summary|text|YES|-
+pc.relationship_revision|content_hash|text|NO|-
+pc.relationship_revision|created_at|timestamp with time zone|NO|now()
+pc.relationship_revision|created_by|uuid|NO|-
+pc.relationship_revision|directionality|text|NO|-
+pc.relationship_revision|document_id|uuid|YES|-
+pc.relationship_revision|document_revision_id|uuid|YES|-
+pc.relationship_revision|id|uuid|NO|gen_random_uuid()
+pc.relationship_revision|project_id|uuid|NO|-
+pc.relationship_revision|properties|jsonb|NO|'{}'::jsonb
+pc.relationship_revision|relationship_id|uuid|NO|-
+pc.relationship_revision|relationship_type_key|text|NO|-
+pc.relationship_revision|revision_no|integer|NO|-
+pc.relationship_revision|source_ext_domain|text|YES|-
+pc.relationship_revision|source_ext_id|text|YES|-
+pc.relationship_revision|source_ext_revision_id|text|YES|-
+pc.relationship_revision|source_ext_type|text|YES|-
+pc.relationship_revision|source_object_id|uuid|YES|-
+pc.relationship_revision|source_object_revision_id|uuid|YES|-
+pc.relationship_revision|target_ext_domain|text|YES|-
+pc.relationship_revision|target_ext_id|text|YES|-
+pc.relationship_revision|target_ext_revision_id|text|YES|-
+pc.relationship_revision|target_ext_type|text|YES|-
+pc.relationship_revision|target_object_id|uuid|YES|-
+pc.relationship_revision|target_object_revision_id|uuid|YES|-
+pc.relationship_revision|tenant_id|uuid|NO|-
+pc.relationship_type|allow_duplicate|boolean|NO|false
+pc.relationship_type|allow_self_reference|boolean|NO|false
+pc.relationship_type|created_at|timestamp with time zone|NO|now()
+pc.relationship_type|description|text|YES|-
+pc.relationship_type|directionality|text|NO|-
+pc.relationship_type|governance_level|text|NO|-
+pc.relationship_type|label|text|NO|-
+pc.relationship_type|owner_domain|text|NO|'pc'::text
+pc.relationship_type|source_object_types|ARRAY|NO|-
+pc.relationship_type|status|text|NO|'active'::text
+pc.relationship_type|target_object_types|ARRAY|NO|-
+pc.relationship_type|type_key|text|NO|-
+pc.relationship|created_at|timestamp with time zone|NO|now()
+pc.relationship|created_by|uuid|NO|-
+pc.relationship|current_revision_id|uuid|YES|-
+pc.relationship|id|uuid|NO|gen_random_uuid()
+pc.relationship|lifecycle_status|text|NO|'identity'::text
+pc.relationship|project_id|uuid|NO|-
+pc.relationship|relationship_type_key|text|NO|-
+pc.relationship|source_ext_domain|text|YES|-
+pc.relationship|source_ext_id|text|YES|-
+pc.relationship|source_ext_revision_id|text|YES|-
+pc.relationship|source_ext_type|text|YES|-
+pc.relationship|source_object_id|uuid|YES|-
+pc.relationship|superseded_by_id|uuid|YES|-
+pc.relationship|target_ext_domain|text|YES|-
+pc.relationship|target_ext_id|text|YES|-
+pc.relationship|target_ext_revision_id|text|YES|-
+pc.relationship|target_ext_type|text|YES|-
+pc.relationship|target_object_id|uuid|YES|-
+pc.relationship|tenant_id|uuid|NO|-
+pc.relationship|updated_at|timestamp with time zone|NO|now()
+pc.source|collected_by|uuid|NO|-
+pc.source|created_at|timestamp with time zone|NO|now()
+pc.source|description|text|YES|-
+pc.source|id|uuid|NO|gen_random_uuid()
+pc.source|locator|text|YES|-
+pc.source|project_id|uuid|NO|-
+pc.source|revision_missing_reason|text|YES|-
+pc.source|section_anchor|text|YES|-
+pc.source|source_content_hash|text|YES|-
+pc.source|source_kind|text|NO|-
+pc.source|start_line|integer|YES|-
+pc.source|target_domain|text|NO|-
+pc.source|target_id|text|NO|-
+pc.source|target_revision_id|text|YES|-
+pc.source|target_type|text|NO|-
+pc.source|tenant_id|uuid|NO|-
+pc.v_revision_versioned|in_published_version|boolean|YES|-
+pc.v_revision_versioned|object_id|uuid|YES|-
+pc.v_revision_versioned|object_revision_id|uuid|YES|-
+pc.v_revision_versioned|project_id|uuid|YES|-
+pc.v_revision_versioned|tenant_id|uuid|YES|-
+pc.version_member|created_at|timestamp with time zone|NO|now()
+pc.version_member|id|uuid|NO|gen_random_uuid()
+pc.version_member|object_id|uuid|YES|-
+pc.version_member|object_revision_id|uuid|YES|-
+pc.version_member|project_id|uuid|NO|-
+pc.version_member|relationship_id|uuid|YES|-
+pc.version_member|relationship_revision_id|uuid|YES|-
+pc.version_member|tenant_id|uuid|NO|-
+pc.version_member|version_id|uuid|NO|-
+pc.write_operation|command|text|NO|-
+pc.write_operation|created_at|timestamp with time zone|NO|now()
+pc.write_operation|created_by|uuid|NO|-
+pc.write_operation|expected_content_hash|text|NO|-
+pc.write_operation|git_commit_sha|text|YES|-
+pc.write_operation|id|uuid|NO|gen_random_uuid()
+pc.write_operation|last_error|text|YES|-
+pc.write_operation|object_revision_id|uuid|YES|-
+pc.write_operation|operation_id|text|NO|-
+pc.write_operation|project_id|uuid|NO|-
+pc.write_operation|relationship_revision_id|uuid|YES|-
+pc.write_operation|retry_count|integer|NO|0
+pc.write_operation|status|text|NO|'pending'::text
+pc.write_operation|tenant_id|uuid|NO|-
+pc.write_operation|updated_at|timestamp with time zone|NO|now()
+pc.write_operation|version_id|uuid|YES|-
+plan.task_plan_revision|approved_at|timestamp with time zone|YES|-
+plan.task_plan_revision|approved_by|uuid|YES|-
+plan.task_plan_revision|content_hash|text|NO|-
+plan.task_plan_revision|content|jsonb|NO|-
+plan.task_plan_revision|created_at|timestamp with time zone|NO|now()
+plan.task_plan_revision|created_by|uuid|NO|-
+plan.task_plan_revision|id|uuid|NO|gen_random_uuid()
+plan.task_plan_revision|instructions|text|YES|-
+plan.task_plan_revision|plan_id|uuid|NO|-
+plan.task_plan_revision|project_id|uuid|NO|-
+plan.task_plan_revision|source|text|NO|'human'::text
+plan.task_plan_revision|state|text|NO|'draft'::text
+plan.task_plan_revision|submitted_at|timestamp with time zone|YES|-
+plan.task_plan_revision|tenant_id|uuid|NO|-
+plan.task_plan_revision|version|integer|NO|-
+plan.task_plan|code|text|NO|-
+plan.task_plan|created_at|timestamp with time zone|NO|now()
+plan.task_plan|created_by|uuid|NO|-
+plan.task_plan|current_revision_id|uuid|YES|-
+plan.task_plan|id|uuid|NO|gen_random_uuid()
+plan.task_plan|project_id|uuid|NO|-
+plan.task_plan|row_revision|bigint|NO|1
+plan.task_plan|source_baseline_id|uuid|YES|-
+plan.task_plan|status|text|NO|'draft'::text
+plan.task_plan|tenant_id|uuid|NO|-
+plan.task_plan|title|text|NO|-
+plan.task_plan|updated_at|timestamp with time zone|NO|now()
+source.source_input|content|text|YES|-
+source.source_input|created_at|timestamp with time zone|NO|now()
+source.source_input|created_by|uuid|NO|-
+source.source_input|id|uuid|NO|gen_random_uuid()
+source.source_input|input_kind|text|NO|-
+source.source_input|project_id|uuid|NO|-
+source.source_input|source_ref|text|YES|-
+source.source_input|tenant_id|uuid|NO|-
+source.source_input|title|text|NO|-
+viz.approval|artifact_id|uuid|NO|-
+viz.approval|created_at|timestamp with time zone|NO|now()
+viz.approval|decided_at|timestamp with time zone|YES|-
+viz.approval|decided_by|uuid|YES|-
+viz.approval|decision_reason|text|YES|-
+viz.approval|expected_version_no|integer|NO|-
+viz.approval|id|uuid|NO|gen_random_uuid()
+viz.approval|project_id|uuid|NO|-
+viz.approval|requested_by|uuid|NO|-
+viz.approval|slot_key|text|NO|-
+viz.approval|status|text|NO|'pending'::text
+viz.approval|target_hash|text|NO|-
+viz.approval|tenant_id|uuid|NO|-
+viz.artifact|created_at|timestamp with time zone|NO|now()
+viz.artifact|created_by|uuid|NO|-
+viz.artifact|id|uuid|NO|gen_random_uuid()
+viz.artifact|nature|text|NO|'business'::text
+viz.artifact|project_id|uuid|NO|-
+viz.artifact|provenance|jsonb|NO|-
+viz.artifact|published_at|timestamp with time zone|YES|-
+viz.artifact|published_by|uuid|YES|-
+viz.artifact|renderer_id|text|YES|-
+viz.artifact|renderer_version|text|YES|-
+viz.artifact|row_revision|bigint|NO|1
+viz.artifact|slot_key|text|NO|-
+viz.artifact|source_hash|text|NO|-
+viz.artifact|spec_hash|text|NO|-
+viz.artifact|spec|jsonb|NO|-
+viz.artifact|state|text|NO|'draft'::text
+viz.artifact|tenant_id|uuid|NO|-
+viz.artifact|updated_at|timestamp with time zone|NO|now()
+viz.artifact|version_no|integer|NO|-
+viz.render_output|artifact_id|uuid|NO|-
+viz.render_output|byte_size|integer|NO|-
+viz.render_output|content_bytes|bytea|YES|-
+viz.render_output|content_hash|text|NO|-
+viz.render_output|content|text|YES|-
+viz.render_output|created_at|timestamp with time zone|NO|now()
+viz.render_output|format|text|NO|-
+viz.render_output|id|uuid|NO|gen_random_uuid()
+viz.render_output|project_id|uuid|NO|-
+viz.render_output|renderer_id|text|NO|-
+viz.render_output|renderer_version|text|NO|-
+viz.render_output|tenant_id|uuid|NO|-
+viz.slot_config|allowed_nature|text|NO|'business'::text
+viz.slot_config|auto_stale|boolean|NO|true
+viz.slot_config|created_at|timestamp with time zone|NO|now()
+viz.slot_config|id|uuid|NO|gen_random_uuid()
+viz.slot_config|max_versions|integer|NO|20
+viz.slot_config|project_id|uuid|NO|-
+viz.slot_config|require_approval|boolean|NO|true
+viz.slot_config|retention_days|integer|NO|180
+viz.slot_config|row_revision|bigint|NO|1
+viz.slot_config|slot_key|text|NO|-
+viz.slot_config|tenant_id|uuid|NO|-
+viz.slot_config|updated_at|timestamp with time zone|NO|now()
+viz.slot_config|view_kind|text|NO|-
