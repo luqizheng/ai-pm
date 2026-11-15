@@ -3,13 +3,14 @@
 pub mod acceptance_overview;
 pub mod acp06_07;
 pub mod actor;
-pub mod ai_conversations;
 pub mod ai_context_items;
-pub mod analysis_report;
+pub mod ai_conversations;
 pub mod ai_interaction_envelope;
 pub mod ai_interactions;
 pub mod ai_roles;
+pub mod identity;
 pub mod ai_team_policies;
+pub mod analysis_report;
 pub mod approver;
 pub mod archive;
 pub mod authz;
@@ -26,6 +27,10 @@ pub mod devenv;
 pub mod device_credential;
 pub mod discovery;
 pub mod discussion_memory;
+pub mod docproc_ocr;
+pub mod docproc_ops;
+pub mod docproc_parse;
+pub mod docproc_service;
 pub mod execution_read;
 pub mod git_access;
 pub mod ingestion;
@@ -36,10 +41,6 @@ pub mod knowledge;
 pub mod knowledge_index;
 pub mod knowledge_indexer;
 pub mod knowledge_migrate;
-pub mod docproc_ocr;
-pub mod docproc_ops;
-pub mod docproc_parse;
-pub mod docproc_service;
 pub mod knowledge_parse;
 pub mod knowledge_proposal;
 pub mod knowledge_quality;
@@ -59,10 +60,10 @@ pub mod project_import;
 pub mod project_member;
 pub mod read;
 pub mod recovery;
+pub mod repo;
 pub mod repo_access;
 pub mod repo_facts;
 pub mod repository;
-pub mod repo;
 pub mod requirement;
 pub mod requirement_acceptance;
 pub mod requirement_projection;
@@ -179,9 +180,8 @@ pub use repo_access::{
 pub use repository::{
     archive_repository, bind_repository_ssh_key, create_repository, delete_repository,
     delete_ssh_key, ensure_ssh_key, fallback_key_ciphertext, generate_ssh_key, import_ssh_key,
-    key_ciphertext_by_id, list_repositories, list_ssh_keys, open_ssh_private_key,
-    rename_ssh_key, revoke_ssh_key,
-    ssh_key_project_id, update_repository, validate_git_url, verify_repository,
+    key_ciphertext_by_id, list_repositories, list_ssh_keys, open_ssh_private_key, rename_ssh_key,
+    revoke_ssh_key, ssh_key_project_id, update_repository, validate_git_url, verify_repository,
     CreateRepositoryRequest, GitUrl, RepositoryError, RepositoryRow, SshKeyView,
     UpdateRepositoryRequest, VerifyOutcome, REPOSITORY_ROLES,
 };

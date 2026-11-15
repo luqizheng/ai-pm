@@ -9,6 +9,10 @@ knowledge:
     proposals: PC Proposals
   report:
     incrementalBadge: Incremental
+    synthesis: Synthesize identity (AI)
+    synthesisHint: Combine interview answers and repo artifacts to draft profile / vision / goal proposals
+    synthesisDone: Three proposals drafted — PC ones in the "PC Proposals" tab, goal status {goal}; dispose them one by one
+    synthesisFailed: Identity synthesis failed (insufficient interview/report or model unavailable)
     status:
       analyzing: Analyzing
       analyzed: Awaiting review

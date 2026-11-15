@@ -784,7 +784,7 @@ pub async fn analyze_repository(
     let run_mode = match req.mode.as_deref() {
         None | Some("incremental") => "incremental",
         Some("full") => "full",
-        Some(other) => {
+        Some(_other) => {
             return Err(RepositoryError::Validation(
                 "mode must be incremental or full",
             ))

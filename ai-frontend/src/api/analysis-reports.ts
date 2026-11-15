@@ -111,3 +111,18 @@ export function closeAnalysisReport(reportId: string, projectId: string) {
     { params: { project_id: projectId } }
   );
 }
+
+/** D-4 · 业务身份综合（人工触发；LLM 汇聚访谈答案+仓库产物 → 三提案）。 */
+export function synthesizeIdentity(projectId: string) {
+  return http.post<{
+    profile_proposal_id: string | null;
+    vision_proposal_id: string | null;
+    goal_proposal_id: string | null;
+    goal_proposal_status: string | null;
+    uncertainty_notes: string[];
+  }>(
+    `/v1/pm/projects/${projectId}/cognition/identity-synthesis`,
+    {},
+    { params: { project_id: projectId } }
+  );
+}

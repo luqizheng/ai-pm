@@ -616,3 +616,103 @@ async fn list_and_detail_are_project_scoped(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+// ── 用例 7：D-4 身份综合门禁（interactive / api_key / 非成员）────────────────
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn identity_synthesis_gates(pool: PgPool) {
+    let tenant_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.tenant (provider, external_key, display_name)          VALUES ('lmms', '1', 'lmms:1')          ON CONFLICT (provider, external_key) DO UPDATE SET display_name = core.tenant.display_name          RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let project = seed_project(&pool, tenant_id, "D5-G").await;
+    let stranger = seed_project(&pool, tenant_id, "D5-G2").await;
+    let app = router_with_auth_config(
+        pool.clone(),
+        Arc::new(JWKSCache::from_pem(PUBLIC_PEM).unwrap()),
+        AuthConfig {
+            first_admin_tenant: Some("1".to_string()),
+            first_admin_subject: Some("usr-lead".to_string()),
+        },
+    );
+    let claims = |aud: &str| {
+        sign(json!({
+            "sub": "usr-lead", "tid": 1, "username": "usr-lead",
+            "roles": ["tenant_admin"], "permissions": [], "aud": aud,
+        }))
+    };
+    let browser = claims("coder-micro-services");
+    let api_key = sign(json!({
+        "sub": "usr-lead", "tid": 1, "username": "usr-lead",
+        "roles": ["tenant_admin"], "permissions": [], "client_id": "key-abc",
+    }));
+    let call = |token: &str, method: &str, uri: &str, body: Option<Value>| {
+        let mut builder = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("authorization", format!("Bearer {token}"));
+        let body = match body {
+            Some(value) => {
+                builder = builder.header("content-type", "application/json");
+                Body::from(value.to_string())
+            }
+            None => Body::empty(),
+        };
+        builder.body(body).unwrap()
+    };
+
+    // 首管理员激活 → Lead 成员
+    let me = app
+        .clone()
+        .oneshot(call(&browser, "GET", "/v1/pm/me", None))
+        .await
+        .unwrap();
+    assert_eq!(me.status(), StatusCode::OK);
+    let me: Value =
+        serde_json::from_slice(&to_bytes(me.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let lead = Uuid::parse_str(me["principal_id"].as_str().unwrap()).unwrap();
+    sqlx::query(
+        "INSERT INTO core.project_member (tenant_id, project_id, principal_id, role)          VALUES ($1, $2, $3, 'owner') ON CONFLICT DO NOTHING",
+    )
+    .bind(tenant_id)
+    .bind(project)
+    .bind(lead)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let uri = format!("/v1/pm/projects/{project}/cognition/identity-synthesis");
+
+    // API Key（同一主体）→ 403：综合动作须 interactive 真人
+    let response = app
+        .clone()
+        .oneshot(call(&api_key, "POST", &uri, Some(json!({}))))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    // interactive + 测试库无 LLM provider → 501（NotImplemented：综合不可用）
+    let response = app
+        .clone()
+        .oneshot(call(&browser, "POST", &uri, Some(json!({}))))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED, "{}", {
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        String::from_utf8_lossy(&bytes).to_string()
+    });
+
+    // 非成员项目 → 404（不泄露存在性）
+    let response = app
+        .oneshot(call(
+            &browser,
+            "POST",
+            &format!("/v1/pm/projects/{stranger}/cognition/identity-synthesis"),
+            Some(json!({})),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}

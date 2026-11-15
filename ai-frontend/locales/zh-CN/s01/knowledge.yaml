@@ -9,6 +9,10 @@ knowledge:
     proposals: PC 提案
   report:
     incrementalBadge: 增量
+    synthesis: 综合业务身份（AI）
+    synthesisHint: 汇聚访谈答案与仓库产物，起草产品画像/产品愿景/项目目标三份提案
+    synthesisDone: 三份提案已起草——PC 两条见「PC 提案」页签，项目目标一条状态 {goal}，请逐条处置
+    synthesisFailed: 身份综合失败（访谈/报告不足或模型不可用）
     status:
       analyzing: 分析中
       analyzed: 待审理

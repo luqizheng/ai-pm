@@ -13,6 +13,7 @@ import {
   closeAnalysisReport,
   getAnalysisReport,
   listAnalysisReports,
+  synthesizeIdentity,
   type AnalysisReportDetail,
   type AnalysisReportRow,
   type AnalysisReportStatus,
@@ -41,6 +42,7 @@ const detailLoading = ref<string | null>(null);
 const closeConfirm = ref<AnalysisReportRow | null>(null);
 const closing = ref(false);
 const acting = ref(false);
+const synthesizing = ref(false);
 
 /** analyzing 行存在时 3s 轮询（分析中 → 待审理自动浮现）。 */
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -214,6 +216,23 @@ async function decideProposal(
   }
 }
 
+/** D-4：业务身份综合（人工触发）→ 三提案。 */
+async function runSynthesis(): Promise<void> {
+  if (!props.projectId || synthesizing.value) return;
+  synthesizing.value = true;
+  notice.value = "";
+  try {
+    const outcome = await synthesizeIdentity(props.projectId);
+    notice.value = t("s01.knowledge.report.synthesisDone", {
+      goal: outcome.goal_proposal_status ?? ""
+    });
+  } catch {
+    notice.value = t("s01.knowledge.report.synthesisFailed");
+  } finally {
+    synthesizing.value = false;
+  }
+}
+
 async function doClose(): Promise<void> {
   const row = closeConfirm.value;
   if (!row || !props.projectId || closing.value) return;
@@ -247,6 +266,14 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="report-panel">
+    <div class="rp-toolbar">
+      <Button size="sm" :loading="synthesizing" @click="runSynthesis">
+        {{ t("s01.knowledge.report.synthesis") }}
+      </Button>
+      <span class="rp-hint">
+        {{ t("s01.knowledge.report.synthesisHint") }}
+      </span>
+    </div>
     <Alert v-if="errorText" variant="danger" size="sm" role="alert">
       {{ errorText }}
     </Alert>
@@ -515,6 +542,12 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: var(--space-4);
   max-width: 860px;
+}
+
+.rp-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .rp-group-title {

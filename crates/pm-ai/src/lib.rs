@@ -12,6 +12,7 @@ pub mod discovery_context;
 pub mod discovery_orchestrator;
 pub mod discovery_writeback;
 pub mod fake_model;
+pub mod identity_synthesis;
 pub mod model;
 pub mod openai_adapter;
 pub mod orchestrator;

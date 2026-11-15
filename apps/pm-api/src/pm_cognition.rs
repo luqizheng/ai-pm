@@ -26,7 +26,10 @@ use uuid::Uuid;
 
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
-use crate::support::{require_project_visible, ApiError, ApiResult};
+use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
+use pm_ai::identity_synthesis::LlmIdentitySynthesis;
+use pm_application::identity::{apply_identity_drafts, assemble_identity_input, IdentityError};
+use pm_application::knowledge::KnowledgeRoot;
 use pm_application::repo::{CognitionRepo, CognitionRepoError};
 use pm_infrastructure::repo_cognition::PgCognitionRepo;
 
@@ -94,7 +97,10 @@ async fn derive_items(
     state: &AppState,
     tenant_id: Uuid,
     project_id: Uuid,
-) -> ApiResult<(Vec<Value>, Vec<pm_application::repo::cognition::DerivedItem<'static>>)> {
+) -> ApiResult<(
+    Vec<Value>,
+    Vec<pm_application::repo::cognition::DerivedItem<'static>>,
+)> {
     let input = repo(state)
         .derivation_input(tenant_id, project_id)
         .await
@@ -155,6 +161,72 @@ async fn derive_items(
 }
 
 /// POST 启动认知 Run（Q2-C：人类启动）。V1 同步派生结构化事实条目。
+/// D-4 · `POST .../cognition/identity-synthesis`：业务身份综合（人工按钮触发，
+/// interactive 真人门）。LLM 汇聚访谈答案 + 仓库产物 → 三份草案 → 三提案
+/// （PC×2 走 P4/P5，project-goal 走知识 8 态并自动强制红线）。开关
+/// `AI_PM_IDENTITY_SYNTHESIS`（缺省 on，off → 501）。
+async fn identity_synthesis(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(project_id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    ensure_trusted_context(&caller)?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        caller.tenant_id,
+        caller.principal_id,
+    )
+    .await?;
+    let actor = caller.audit_actor();
+
+    let input = assemble_identity_input(&state.pool, project_id)
+        .await
+        .map_err(|err| {
+            ApiError::Text(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("assemble failed: {err}"),
+            )
+        })?;
+    let drafts = match LlmIdentitySynthesis::new(state.pool.clone())
+        .synthesize(project_id, &input)
+        .await
+    {
+        Ok(drafts) => drafts,
+        Err(pm_ai::model::ModelError::Configuration(detail)) => {
+            return Err(ApiError::NotImplemented(Box::leak(
+                detail.clone().into_boxed_str(),
+            )));
+        }
+        Err(err) => {
+            return Err(ApiError::Text(
+                axum::http::StatusCode::BAD_GATEWAY,
+                format!("identity synthesis failed: {err}"),
+            ));
+        }
+    };
+
+    // Goal 提案需要知识根（agent 无直接 Git 写权，提案管线自持锁与红线）。
+    let root = KnowledgeRoot::from_env();
+    let outcome = apply_identity_drafts(&state.pool, Some(&root), project_id, &actor, &drafts)
+        .await
+        .map_err(|e| match e {
+            IdentityError::Conflict(m) | IdentityError::Failed(m) => {
+                ApiError::Text(axum::http::StatusCode::CONFLICT, m)
+            }
+            IdentityError::Forbidden(m) => ApiError::Text(axum::http::StatusCode::FORBIDDEN, m),
+            IdentityError::Db(err) => ApiError::Internal(err),
+        })?;
+
+    Ok(Json(json!({
+        "profile_proposal_id": outcome.profile_proposal_id,
+        "vision_proposal_id": outcome.vision_proposal_id,
+        "goal_proposal_id": outcome.goal_proposal_id,
+        "goal_proposal_status": outcome.goal_proposal_status,
+        "uncertainty_notes": drafts.uncertainty_notes,
+    })))
+}
+
 async fn start_run(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
@@ -270,6 +342,10 @@ async fn knowledge(
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route("/v1/pm/projects/{project_id}/cognition", get(overview))
+        .route(
+            "/v1/pm/projects/{project_id}/cognition/identity-synthesis",
+            post(identity_synthesis),
+        )
         .route(
             "/v1/pm/projects/{project_id}/cognition/runs",
             post(start_run),
