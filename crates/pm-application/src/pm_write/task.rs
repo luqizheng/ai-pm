@@ -17,6 +17,11 @@ pub async fn create_task(
         .fetch_optional(pool)
         .await?
         .ok_or(PmWriteError::NotFound("unknown project"))?;
+    // E2 / R69（规格 19 号 P1-07-TC-04 实测缺口，2026-11-15）：建任务是**人类动作**
+    // ——AI 产任务走 plan materialize / 命令通道（有人工门），REST 直创对
+    // ai_pm 主体一律 403。此前本函数无身份闸（R69 文档评审误把 update_task
+    // 的 draft→ready 闸当作 create 的），P1 首次真实跑批抓到 201 越权。
+    crate::requirement::require_human(pool, actor).await?;
     let title = req.title.as_deref().map(str::trim).unwrap_or_default();
     if title.is_empty() {
         return Err(PmWriteError::Validation("title is required"));

@@ -61,7 +61,9 @@ async fn draft_task(pool: &PgPool, fx: &Fx, title: &str) -> Uuid {
                 verification_kind: Some("manual".to_string()),
             }]),
         },
-        &AuditActor::principal(fx.ai_principal),
+        // 播种走真人主体（REST create 有 E2 真人门，AI 主体 403——P1-07 TC-04）；
+        // 本文件的断言点是 ready 迁移的身份闸，与草稿创建者无关。
+        &AuditActor::principal(fx.human_id),
     )
     .await
     .unwrap()
