@@ -72,6 +72,10 @@ pub enum RepositoryError {
     /// 映射 409；终态（含 FAILED / NEEDS_HUMAN_REVIEW）释放名额允许重触发。
     #[error("repository analysis is already in progress")]
     AnalyzeInProgress,
+    /// D-5 门：同仓库存在未关闭的分析报告（analyzing/analyzed）——报告关闭后才
+    /// 允许再次分析（409，body 带 report_id 供前端深链）。
+    #[error("repository has an open analysis report")]
+    ReportOpen { report_id: Uuid },
     /// S1 手动增量分析：仓库未核验或没有可用分析锚点（Confirmed Commit / Observed HEAD）。
     #[error("repository has no verified analysis anchor")]
     AnalyzeNoAnchor,
@@ -250,6 +254,8 @@ pub struct AnalyzeRepositoryOutcome {
     /// 本次分析锚定的 commit（Confirmed Commit 优先，回退 Observed HEAD）。
     pub commit: String,
     pub intake_id: Uuid,
+    /// D-5：本次分析对应的报告（受理即建，analyzing）。
+    pub report_id: Uuid,
     pub status: &'static str,
     /// true = 命中既有 intake 的幂等重放，未新增任何行。
     pub replayed: bool,

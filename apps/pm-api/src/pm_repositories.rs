@@ -132,6 +132,19 @@ fn repository_error(err: RepositoryError) -> Response {
             )
                 .into_response();
         }
+        // D-5 门：同仓库存在未关闭分析报告 → 409 + report_id 深链（前端跳
+        // /project/knowledge?report={id} 处置后重试）。
+        RepositoryError::ReportOpen { report_id } => {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({
+                    "message": "repository has an open analysis report",
+                    "error": "report_open",
+                    "report_id": report_id.to_string(),
+                })),
+            )
+                .into_response();
+        }
         // S1 手动增量分析：未核验 / 无分析锚点 → 422。
         RepositoryError::AnalyzeNoAnchor => {
             return (

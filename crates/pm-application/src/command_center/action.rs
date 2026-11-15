@@ -36,7 +36,17 @@ pub(super) async fn pending_action_total(
     .bind(tenant_id)
     .fetch_one(pool)
     .await?;
-    Ok(findings + proposals + deliveries)
+    // D-5：未关闭的分析报告（analyzed 待审理）也是人工决策项（报告粒度，
+    // 点击直达知识审阅对应报告；条目级决策仍在知识审阅，单一决策源）。
+    let reports: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM integration.repo_analysis_report \
+         WHERE project_id = $1 AND tenant_id = $2 AND status = 'analyzed'",
+    )
+    .bind(project_id)
+    .bind(tenant_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(findings + proposals + deliveries + reports)
 }
 
 pub(super) async fn load_human_action_summary(
@@ -150,6 +160,40 @@ pub(super) async fn load_human_action_summary(
         });
     }
 
+    // D-5：未关闭的分析报告（粒度=报告；逐条审阅在知识审阅页处理）。
+    let report_rows: Vec<(Uuid, String, String, Option<String>, DateTime<Utc>)> = sqlx::query_as(
+        "SELECT r.id, p.name, r.commit_sha, r.stage_detail, r.updated_at \
+           FROM integration.repo_analysis_report r \
+           JOIN integration.project_repository p ON p.id = r.repository_id \
+          WHERE r.project_id = $1 AND r.tenant_id = $2 AND r.status = 'analyzed' \
+          ORDER BY r.updated_at DESC, r.id DESC LIMIT 50",
+    )
+    .bind(project_id)
+    .bind(tenant_id)
+    .fetch_all(pool)
+    .await?;
+    for (id, repository_name, commit_sha, stage_detail, updated_at) in report_rows {
+        let short: String = commit_sha.chars().take(12).collect();
+        items.push(ActionItem {
+            kind: "report_pending".to_string(),
+            domain: "knowledge".to_string(),
+            id,
+            project_id,
+            title: format!("分析报告待审阅（{repository_name} @ {short}）"),
+            detail: stage_detail.map(|s| truncate(&s, 160)),
+            source_state: "analyzed".to_string(),
+            updated_at: Some(updated_at),
+            action_hint: "审阅报告内容并逐条处置后关闭".to_string(),
+            link: ActionLink {
+                kind: "knowledge_report".to_string(),
+                params: BTreeMap::from([
+                    ("report_id".to_string(), id.to_string()),
+                    ("project_id".to_string(), project_id.to_string()),
+                ]),
+            },
+        });
+    }
+
     // 排序：kind 优先级 → 更新时间 → id（唯一 tiebreaker，保证稳定）。
     items.sort_by(|a, b| {
         action_kind_rank(&a.kind)
@@ -165,8 +209,9 @@ fn action_kind_rank(kind: &str) -> u8 {
     match kind {
         "finding_pending" => 0,
         "finding_revision_requested" => 1,
-        "proposal_pending" => 2,
-        "delivery_pending" => 3,
+        "report_pending" => 2,
+        "proposal_pending" => 3,
+        "delivery_pending" => 4,
         _ => 9,
     }
 }

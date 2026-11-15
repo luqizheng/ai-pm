@@ -769,6 +769,20 @@ pub async fn analyze_repository(
         return Err(RepositoryError::AnalyzeNoAnchor);
     }
 
+    // D-5 门：同仓库存在未关闭报告（analyzing/analyzed）→ 409 报告门
+    // （报告关闭才放行；failed/cancelled/closed 不占门）。
+    let open_report: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM integration.repo_analysis_report \
+          WHERE repository_id = $1 AND status IN ('analyzing','analyzed') \
+          ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(repository_id)
+    .fetch_optional(pool)
+    .await?;
+    if let Some(report_id) = open_report {
+        return Err(RepositoryError::ReportOpen { report_id });
+    }
+
     // 「触发时刻」：显式幂等键优先（可重放），否则由服务端生成且每次唯一。
     let trigger_token: String = req
         .idempotency_key
@@ -826,11 +840,27 @@ pub async fn analyze_repository(
         Err(crate::intake::IntakeError::Db(err)) => return Err(RepositoryError::Db(err)),
         Err(other) => return Err(RepositoryError::AnalyzeIntake(other.to_string())),
     };
+    // D-5：受理即建报告（analyzing）；幂等重放落到既有行。报告行缺失不阻塞
+    // 受理（存量/异常路径下钩子全为静默跳过）。
+    let report_id = match crate::analysis_report::ensure_for_intake(
+        pool,
+        tenant_id,
+        project_id,
+        repository_id,
+        &commit,
+        receipt.intake_id,
+    )
+    .await
+    {
+        Ok(id) => id,
+        Err(err) => return Err(RepositoryError::Db(err)),
+    };
     Ok(AnalyzeRepositoryOutcome {
         repository_id,
         project_id,
         commit,
         intake_id: receipt.intake_id,
+        report_id,
         status: receipt.status,
         replayed: receipt.replayed,
     })

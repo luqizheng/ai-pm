@@ -413,7 +413,8 @@ pub struct HumanActionSummary {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ActionItem {
-    /// `finding_pending` | `finding_revision_requested` | `proposal_pending` | `delivery_pending`
+    /// `finding_pending` | `finding_revision_requested` | `report_pending` |
+    /// `proposal_pending` | `delivery_pending`
     pub kind: String,
     /// 来源领域：`discovery` | `knowledge` | `delivery`
     pub domain: String,

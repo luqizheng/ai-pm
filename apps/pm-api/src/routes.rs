@@ -275,6 +275,8 @@ fn build_router(
         .merge(crate::team_onboarding::router())
         // 项目 ↔ 代码仓库关系 + 项目级 SSH 凭据（P0 CRUD）。
         .merge(crate::pm_repositories::router())
+        // D-5 · 仓库分析报告：列表 / 详情 / 关闭（知识审阅报告页签 + review-center 卡片）。
+        .merge(crate::analysis_reports::router())
         // 冷启动导入：启动 / 轮询 / 取消 / apply（提案链）。
         .merge(crate::pm_imports::router())
         // 项目认知访谈（T-084）：DiscoverySession 读写 + 发现卡片确认（source=WEB）。

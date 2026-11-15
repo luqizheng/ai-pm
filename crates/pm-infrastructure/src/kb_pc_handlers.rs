@@ -540,6 +540,12 @@ impl OutboxHandler for KbAnalysisCompletedHandler {
         intake::complete_task(&self.pool, task_id, result_ref)
             .await
             .map_err(|e| e.to_string())?;
+        // D-5：报告行存在时仅刷新阶段（analyzing 不变）。
+        if let Err(err) =
+            pm_application::analysis_report::mark_kb_stage(&self.pool, task_id).await
+        {
+            tracing::warn!(%task_id, %err, "analysis report kb stage update skipped");
+        }
         tracing::info!(%task_id, "platform: kb analysis completed → task COMPLETED");
         self.start_onboarding(event).await;
         Ok(())
@@ -813,6 +819,12 @@ impl OutboxHandler for PcAnalysisCompletedHandler {
         intake::complete_task(&self.pool, task_id, result_ref)
             .await
             .map_err(|e| e.to_string())?;
+        // D-5：NO_CHANGE 也是完整分析结论 → 报告 analyzed（open 待审）。
+        if let Err(err) =
+            pm_application::analysis_report::mark_analyzed(&self.pool, task_id).await
+        {
+            tracing::warn!(%task_id, %err, "analysis report mark_analyzed skipped");
+        }
         Ok(())
     }
 }
@@ -841,6 +853,12 @@ impl OutboxHandler for PcChangeProposedHandler {
         intake::complete_task(&self.pool, task_id, result_ref)
             .await
             .map_err(|e| e.to_string())?;
+        // D-5：提案起草 = 分析产出齐备 → 报告 analyzed（open 待审）。
+        if let Err(err) =
+            pm_application::analysis_report::mark_analyzed(&self.pool, task_id).await
+        {
+            tracing::warn!(%task_id, %err, "analysis report mark_analyzed skipped");
+        }
         notify_once(
             &self.pool,
             event.project_id,
@@ -874,6 +892,12 @@ impl OutboxHandler for PcConflictDetectedHandler {
         intake::complete_task(&self.pool, task_id, result_ref)
             .await
             .map_err(|e| e.to_string())?;
+        // D-5：冲突登记也是完整分析结论 → 报告 analyzed（open 待审）。
+        if let Err(err) =
+            pm_application::analysis_report::mark_analyzed(&self.pool, task_id).await
+        {
+            tracing::warn!(%task_id, %err, "analysis report mark_analyzed skipped");
+        }
         Ok(())
     }
 }
@@ -996,6 +1020,21 @@ impl OutboxHandler for ProcessingFailedHandler {
         intake::fail_task(&self.pool, failed_id, &error_code)
             .await
             .map_err(|e| e.to_string())?;
+        // D-5：任务失败 → 报告 failed（终态，不占门；error_detail 透传）。
+        if let Err(err) = pm_application::analysis_report::mark_failed(
+            &self.pool,
+            failed_id,
+            &error_code,
+            event
+                .payload
+                .get("error_detail")
+                .and_then(|v| v.as_str())
+                .unwrap_or(""),
+        )
+        .await
+        {
+            tracing::warn!(%failed_id, %err, "analysis report mark_failed skipped");
+        }
         notify_once(
             &self.pool,
             event.project_id,
