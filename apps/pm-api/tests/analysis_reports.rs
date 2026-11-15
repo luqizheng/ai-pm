@@ -288,7 +288,7 @@ async fn mark_analyzed_derives_links_and_failed_is_terminal(pool: PgPool) {
     let (doc, kb_rev) = seed_kb_draft(&pool, project).await;
     let source = seed_pc_source(&pool, project, kb_rev).await;
 
-    // intake + kb_analyze 任务（result_ref=document_ref 形状，mark_analyzed 派生输入）
+    // intake + kb_analyze 任务（result_ref=扁平 ref 值，mark_analyzed 派生输入）
     let tenant: Uuid = sqlx::query_scalar("SELECT tenant_id FROM core.project WHERE id = $1")
         .bind(project)
         .fetch_one(&pool)
@@ -319,12 +319,10 @@ async fn mark_analyzed_derives_links_and_failed_is_terminal(pool: PgPool) {
     .bind(intake)
     .bind("fixture-kb")
     .bind(json!({
-        "document_ref": {
-            "target_domain": "knowledge_base",
-            "target_type": "document",
-            "target_id": doc.to_string(),
-            "target_revision_id": kb_rev.to_string()
-        }
+        "target_domain": "knowledge_base",
+        "target_type": "document",
+        "target_id": doc.to_string(),
+        "target_revision_id": kb_rev.to_string()
     }))
     .fetch_one(&pool)
     .await

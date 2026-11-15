@@ -155,7 +155,9 @@ pub async fn mark_kb_stage(pool: &PgPool, task_id: Uuid) -> Result<(), sqlx::Err
 }
 
 /// PC 任务完成（提案起草 / NO_CHANGE / 冲突登记）→ 报告 analyzed（open 待审）。
-/// kb_revision_id 取同 intake 的 kb_analyze result_ref；pc_source_id 经
+/// kb_revision_id 取同 intake 的 kb_analyze result_ref（**扁平四元组**：
+/// `target_revision_id` 或 `target_id`——Platform complete_task 存的是
+/// result_ref_of 抽出的 ref 值本身）；pc_source_id 经
 /// `pc.source.target_revision_id = kb_revision` 反查（derive_pc_cognition 每次
 /// 分析恰好登记一条来源）。
 pub async fn mark_analyzed(pool: &PgPool, task_id: Uuid) -> Result<(), sqlx::Error> {
@@ -164,8 +166,8 @@ pub async fn mark_analyzed(pool: &PgPool, task_id: Uuid) -> Result<(), sqlx::Err
               SELECT intake_id FROM integration.intake_task WHERE id = $1 \
            ), kb AS ( \
               SELECT COALESCE( \
-                  (result_ref -> 'document_ref' ->> 'target_revision_id'), \
-                  (result_ref -> 'kb_analysis_ref' ->> 'target_id'))::uuid AS rev \
+                  result_ref ->> 'target_revision_id', \
+                  result_ref ->> 'target_id')::uuid AS rev \
                 FROM integration.intake_task \
                WHERE intake_id = (SELECT intake_id FROM t) \
                  AND task_type = 'kb_analyze' AND result_ref IS NOT NULL \
