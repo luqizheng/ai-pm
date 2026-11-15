@@ -104,7 +104,7 @@ const proposalDetail = (): PcProposalDetail => ({
   proposal_id: "pr-1",
   status: "submitted",
   governance_level: "L2",
-  members: [{}, {}],
+  members: [],
   content_hash: "abc",
   title: "目标修订提案",
   rationale: "调整目标表述",
@@ -113,10 +113,10 @@ const proposalDetail = (): PcProposalDetail => ({
   confidence: "high",
   expected_version_no: 3,
   submitted_at: "2026-11-15T09:00:00Z",
-  created_by: "u-1",
   created_at: "2026-11-15T08:30:00Z",
   updated_at: "2026-11-15T09:00:00Z",
-  approvals: []
+  approvals: [],
+  published_version_no: null
 });
 
 const findingDetail = (): DiscoveryFinding => ({
