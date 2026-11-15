@@ -186,8 +186,9 @@ export const navGroups: NavGroup[] = [
             module => module.default
           )
       },
-      // AI 会话入口已合并进 TopBar「助手」按钮（AI Chat 常驻列），
-      // 主导航不再单列「AI 助手」；/project/assistant 路由保留供深链。
+      // AI 会话入口已合并进 TopBar「助手」按钮（AI Chat 常驻列），主导航不再
+      // 单列「AI 助手」；/project/assistant 深链路由不占导航项，注册在
+      // router/index.ts buildRoutes()（不占导航路由的既有惯例）。
       {
         path: "/project/knowledge",
         labelKey: "shell.app.side.item.knowledge",

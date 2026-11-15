@@ -122,6 +122,15 @@ export function buildRoutes(): RouteRecordRaw[] {
     meta: { title: "s01.project-create.pageTitle" }
   });
 
+  // AI 会话完整页：入口已合并进顶栏「助手」按钮（AI Chat 常驻列），主导航
+  // 不再单列；路由保留供深链——use-shell-chrome 以本路径判定「助手列收起、
+  // 上下文栏保留」的三列特例（ASSISTANT_PATH），P0-008a 亦依赖该深链。
+  routes.push({
+    path: "/project/assistant",
+    component: () => import("@/views/project/assistant/AssistantView.vue"),
+    meta: { title: "shell.app.side.item.assistant" }
+  });
+
   // 项目总控台（Project Command Center）：项目域工作入口（mock 数据先行），
   // 不占主导航——入口 = 项目切换后的落地页（S01-00 §7.1，该分支合并前先注册直达路由）。
   routes.push({
