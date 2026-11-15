@@ -368,3 +368,32 @@ V-1/V-2 可并行，但须同一代码快照、同一证据格式与风险标准
 - R2/R3 维持原判（显式 kind 校验缺失、拒绝测试缺失），R2 按专家意见先比身份契约再定方案，不照抄 PC。
 
 **V-2 状态更正**：专家审阅基于 V-2 完成前的版本。**V-2 已完成并升 P0×5**（见附二，关键证据已人工二次验证：events/approvals/veto/freeze|unfreeze/notifications 五个 legacy 端点仅验 JWT 不验归属）。专家 V-2 优先级清单已被代理覆盖（第 1~4 优先级均扫过）。执行序更新：S4 负向测试（含 T09~T12）→ P0 修复（单独任务）→ 复测 → D01~D06 签收。
+
+## 附四：阶段 A1~A3 执行记录（2026-11-16，DEC-SEC-P0-01）
+
+**裁决**：DEC-SEC-P0-01——批准 SEC-P0-1~5 统一修复（require_project_visible + AuthedPrincipal 主体来源 + 对象归属校验），不授权 Schema Migration，不代表 V-1/V-2 专项通过。
+
+**A1 修复**（commit `ee4cd046`，新代码快照基线）：
+- routes.rs 新增 `require_legacy_project_access`（统一守卫：off 模式豁免，jwks 生产走 require_project_visible 不可见即 404）；五 handler 全部接 `Extension<AuthedPrincipal>`；
+- decision（P0-2）：`approval_head(tenant, approval_id)` 从审批对象反查 project（guard_query 仓储，tenant 锚定）→ 404 不泄露存在性 → 再验成员可见性；
+- veto（P0-3）：caller 对 req.project_id 守卫 + 服务层 `WHERE id AND project_id` 配对 ⇒ 合取"caller 是 proposal 所属 project 成员"（A-03 链式成立）；
+- actor：全部改取 caller（`audit_actor()` 完整身份 / `principal_id`），body actor_id 仅保留反序列化兼容不再采信（A-02）；
+- 零 Schema 变更；SQL 门禁 PASS（support.rs 豁免内=1）。
+
+**A2 人工复核（对照 D03 C7~C11）**：
+- C7 events：guard→ingestion，拒绝时无 event/job 写入 ✓
+- C8 decision：approval_head→404→guard→decide_approval，命令执行仅在双重校验后 ✓
+- C9 veto：guard 先于 veto()，补偿不会在授权失败后触发 ✓
+- C10 freeze/unfreeze：guard 先于 set_automation_mode ✓
+- C11 notifications：guard 先于 feed 查询（拒绝路径零读取）✓
+
+**A3 G1 复测**（`security_p0_regression.rs`，5/5 绿，auth-on 真 JWT）：
+- 每缺陷：攻击路径 404 + DB 零副作用（approval 仍 pending/proposal 不变/无补偿/automation_mode 不变/payload 不泄露，A-04/A-06）；
+- 合法路径双向断言：userA 对 projectA1 仍 202/200/rejected/rolled_back/frozen（A-05）；decided_by=认证主体落库（A-02）。
+
+**连带测试对齐（守卫语义暴露的既有夹具错位）**：
+- auth.rs `valid_token_reaches_the_real_route`：tid=1 identity 原映射到随机新租户（守卫前无成员校验故绿），改标 SYSTEM_TENANT 后恢复绿；
+- mcp_permission `non_mcp_routes_ignore_the_permission_claim`：无成员主体按可见性口径改断 404（仍证明业务路由无权限码门控）；
+- **存量失败登记（非本修复引入，干净 master 已复现）**：pc_proposals p3_expands/p5_approve 两用例环境敏感 flaky（首次全量曾绿），另行排查。
+
+**全量 pm-api 套件**：除上述存量 flaky 外全绿。**阶段 A 完成，G1 通过 → 解锁 B~E**（B 测试基础设施、C 负向测试、D 业务链、E 签收）。
