@@ -94,6 +94,10 @@ pub struct ReportDetail {
 pub struct CloseOutcome {
     pub report_id: Uuid,
     pub status: &'static str,
+    /// 已批准提案在关闭时批量发布的数量。
+    pub applied_proposals: u64,
+    /// 批量发布失败（CAS 失配已内置 failed 等）的数量。
+    pub publish_failed_proposals: u64,
     pub withdrawn_proposals: u64,
     pub rejected_kb: bool,
     /// 固化的分析锚点（D-1）。
@@ -375,10 +379,11 @@ pub async fn report_detail(
     })
 }
 
-/// 关闭报告（人工显式动作；单事务）：仅 `analyzed` 可关。未决项自动处置——
-/// 本报告起草的 PC 提案（draft/submitted）→ withdrawn（逐条留审计），KB 草稿
-/// 修订 → rejected；随后固化 D-1 锚点（last_analyzed_commit_sha = 报告 commit）。
-/// 关闭后门释放，仓库可再次分析（D-2）。
+/// 关闭报告（人工显式动作）：仅 `analyzed` 可关。收尾处置——本报告已批准
+/// （approved）提案逐个发布为正式版本（`pc-decision:{id}` 幂等键；CAS 失配由
+/// 发布事务内置 failed，§18.1②；失败计数不阻断关闭），未决提案（draft/submitted）
+/// → withdrawn（逐条留审计），KB 草稿修订 → rejected；随后固化 D-1 锚点
+/// （last_analyzed_commit_sha = 报告 commit）。关闭后门释放，仓库可再次分析（D-2）。
 pub async fn close_report(
     pool: &PgPool,
     project_id: Uuid,
@@ -406,6 +411,36 @@ pub async fn close_report(
         return Err(AnalysisReportError::Conflict(format!(
             "report is `{status}`; only an analyzed report can be closed"
         )));
+    }
+
+    // 已批准提案 → 批量发布（审阅流 v2：决定暂记，close 才写 PC）。publish_version
+    // 自带事务、advisory 锁与幂等键；CAS 失配由发布事务内置 failed（§18.1②），
+    // 其余失败计数不阻断——报告照常关闭。
+    let mut applied_proposals: u64 = 0;
+    let mut publish_failed_proposals: u64 = 0;
+    if let Some(source_id) = pc_source_id {
+        let approved_ids: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM pc.proposal WHERE source_id = $1 AND status = 'approved'",
+        )
+        .bind(source_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        for proposal_id in approved_ids {
+            match crate::pc::publish_version(
+                pool,
+                project_id,
+                actor,
+                crate::pc::PublishVersionInput {
+                    proposal_id,
+                    operation_id: format!("pc-decision:{proposal_id}"),
+                },
+            )
+            .await
+            {
+                Ok(_) => applied_proposals += 1,
+                Err(_) => publish_failed_proposals += 1,
+            }
+        }
     }
 
     // 未决 PC 提案 → withdrawn（逐条审计；决策事实留痕同 withdraw_proposal 口径）。
@@ -485,6 +520,8 @@ pub async fn close_report(
         serde_json::json!({
             "status": "closed",
             "commit_sha": commit_sha,
+            "applied_proposals": applied_proposals,
+            "publish_failed_proposals": publish_failed_proposals,
             "withdrawn_proposals": withdrawn,
             "rejected_kb": rejected_kb,
         }),
@@ -505,6 +542,8 @@ pub async fn close_report(
     Ok(CloseOutcome {
         report_id,
         status: "closed",
+        applied_proposals,
+        publish_failed_proposals,
         withdrawn_proposals: withdrawn,
         rejected_kb,
         last_analyzed_commit: commit_sha,

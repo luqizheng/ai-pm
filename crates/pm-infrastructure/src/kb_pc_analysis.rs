@@ -1107,6 +1107,7 @@ mod tests {
             &f,
             Some("这是一个 Rust 仓库的叙述摘要。"),
             Some("test-model"),
+            None,
         );
         assert!(composed.contains("# 仓库快照：ai-pm"));
         assert!(composed.contains("## 摘要（LLM 分析）"));

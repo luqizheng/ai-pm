@@ -42,10 +42,10 @@ use kb_pc_contracts::DomainRef;
 use crate::actor::AuditActor;
 use crate::outbox::{OutboxAppend, OutboxEvent, PgOutboxAppend};
 
-use super::publish::{canonical_proposal_hash_from_rows, publish_inner, InlineApproval};
+use super::publish::canonical_proposal_hash_from_rows;
 use super::{
-    canonical_proposal_hash, ensure_formal_authorized, frozen_by_conflict, publish_version,
-    PcError, ProposalMemberPin, PublishReceipt, PublishVersionInput, VersionMemberPin,
+    canonical_proposal_hash, ensure_formal_authorized, frozen_by_conflict, PcError,
+    ProposalMemberPin, PublishReceipt, VersionMemberPin,
 };
 
 /// 提案来源（01B §10.1 `origin_kind` CHECK 同集）。
@@ -142,7 +142,7 @@ pub struct ApprovalReceipt {
     pub status: String,
 }
 
-/// P5 决策入参（approve = 审批 + 发布；reject = 驳回）。
+/// P5 决策入参（approve/reject 均为暂记决定；正式版本在报告 close 批量发布）。
 pub struct ProposalDecisionInput {
     pub action: DecisionAction,
     pub reason: Option<String>,
@@ -915,6 +915,25 @@ async fn record_decision(
     // 真人 + A3（事务外只读判定，与发布④同口径；H-11 已知窗口，§23 R-3）
     ensure_formal_authorized(pool, project_id, actor).await?;
 
+    // 审阅流 v2：决定在关联报告关闭前可反复修改（approved/rejected 互转）；报告
+    // closed 即冻结。无报告关联的提案（如身份综合）不受报告门约束。
+    let report_status: Option<String> = sqlx::query_scalar(
+        "SELECT r.status FROM integration.repo_analysis_report r \
+          JOIN pc.proposal p ON p.source_id = r.pc_source_id \
+          WHERE p.tenant_id = $1 AND p.project_id = $2 AND p.id = $3 \
+          ORDER BY r.created_at DESC LIMIT 1",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(proposal_id)
+    .fetch_optional(pool)
+    .await?;
+    if report_status.as_deref() == Some("closed") {
+        return Err(PcError::Conflict(
+            "analysis report is closed; proposal decisions are frozen".into(),
+        ));
+    }
+
     let mut tx = pool.begin().await?;
     let row: Option<(String, i64, String)> = sqlx::query_as(
         "SELECT status, expected_version_no, proposal_content_hash FROM pc.proposal \
@@ -927,9 +946,32 @@ async fn record_decision(
     .await?;
     let (status, baseline, content_hash) =
         row.ok_or_else(|| PcError::NotFound("proposal not found".into()))?;
-    if status != "submitted" {
+    let new_status = action.status();
+    if status == new_status {
+        // 幂等：同态重放（approved→approve / rejected→reject）→ 返回既有审批事实。
+        let approval_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM pc.approval \
+              WHERE tenant_id = $1 AND project_id = $2 AND proposal_id = $3 AND status = $4 \
+              ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(proposal_id)
+        .bind(new_status)
+        .fetch_optional(&mut *tx)
+        .await?;
+        tx.rollback().await?;
+        return Ok(ApprovalReceipt {
+            proposal_id,
+            approval_id: approval_id.ok_or_else(|| {
+                PcError::Conflict("proposal has no matching approval fact".into())
+            })?,
+            status: new_status.to_string(),
+        });
+    }
+    if status != "submitted" && status != "approved" && status != "rejected" {
         return Err(PcError::Conflict(format!(
-            "proposal is `{status}`; only submitted proposals can be decided"
+            "proposal is `{status}`; only submitted/approved/rejected proposals can be decided"
         )));
     }
     if input.expected_version_no != baseline {
@@ -938,7 +980,9 @@ async fn record_decision(
             input.expected_version_no
         )));
     }
-    // 待决审批行 FOR UPDATE（§17.2 场景 4：并发裁决者串行，后到者读到非 pending → 409）
+    // 待决审批行 FOR UPDATE（§17.2 场景 4：并发裁决者串行，后到者读到非 pending → 409）。
+    // 重决（approved/rejected 间切换）：旧行已终态且不可变（forbid_approval_mutation），
+    // 新插 pending 行（uq_pc_approval_pending 部分唯一索引放行），旧行保留审计轨迹。
     let approval: Option<(Uuid, String, i64)> = sqlx::query_as(
         "SELECT id, proposal_content_hash, expected_version_no FROM pc.approval \
           WHERE tenant_id = $1 AND project_id = $2 AND proposal_id = $3 AND status = 'pending' \
@@ -949,8 +993,23 @@ async fn record_decision(
     .bind(proposal_id)
     .fetch_optional(&mut *tx)
     .await?;
-    let Some((approval_id, approval_hash, approval_baseline)) = approval else {
-        return Err(PcError::Conflict("no pending approval for proposal".into()));
+    let (approval_id, approval_hash, approval_baseline) = match approval {
+        Some(row) => row,
+        None => {
+            let id: Uuid = sqlx::query_scalar(
+                "INSERT INTO pc.approval \
+                 (tenant_id, project_id, proposal_id, proposal_content_hash, expected_version_no) \
+                 VALUES ($1, $2, $3, $4, $5) RETURNING id",
+            )
+            .bind(tenant_id)
+            .bind(project_id)
+            .bind(proposal_id)
+            .bind(&content_hash)
+            .bind(baseline)
+            .fetch_one(&mut *tx)
+            .await?;
+            (id, content_hash.clone(), baseline)
+        }
     };
     // 锚点三方比对：库内成员集重算 vs 提案行 vs 审批行（不信任任何单一可变列）
     let members = load_members(&mut *tx, tenant_id, project_id, proposal_id).await?;
@@ -979,7 +1038,6 @@ async fn record_decision(
         }
     }
 
-    let new_status = action.status();
     let reason = input
         .reason
         .as_deref()
@@ -1004,7 +1062,8 @@ async fn record_decision(
     }
     let moved = sqlx::query(
         "UPDATE pc.proposal SET status = $4, updated_at = now() \
-          WHERE tenant_id = $1 AND project_id = $2 AND id = $3 AND status = 'submitted'",
+          WHERE tenant_id = $1 AND project_id = $2 AND id = $3 \
+            AND status IN ('submitted','approved','rejected')",
     )
     .bind(tenant_id)
     .bind(project_id)
@@ -1024,7 +1083,7 @@ async fn record_decision(
         actor,
         action.audit_action(),
         proposal_id,
-        Some(json!({ "status": "submitted" })),
+        Some(json!({ "status": status })),
         json!({
             "status": new_status,
             "approval_id": approval_id,
@@ -1044,35 +1103,10 @@ async fn record_decision(
 
 // ── decide（P5 编排：approve = 审批 + 发布，原子）──────────────────────────
 
-/// 提案已落定的 approved 审批事实 ID。
-async fn approved_approval_id(
-    pool: &PgPool,
-    tenant_id: Uuid,
-    project_id: Uuid,
-    proposal_id: Uuid,
-) -> Result<Uuid, PcError> {
-    sqlx::query_scalar(
-        "SELECT id FROM pc.approval \
-          WHERE tenant_id = $1 AND project_id = $2 AND proposal_id = $3 \
-            AND status = 'approved' LIMIT 1",
-    )
-    .bind(tenant_id)
-    .bind(project_id)
-    .bind(proposal_id)
-    .fetch_optional(pool)
-    .await?
-    .ok_or_else(|| PcError::Conflict("proposal has no approved approval fact".into()))
-}
-
-/// P5 决策（契约 `{action, note?, expected_version_no}` → `{status, published_version_ref?}`）：
-/// * reject = [`reject_proposal`]；
-/// * approve（submitted）= **原子确认**：审批事实在发布事务内落定（publish.rs
-///   `InlineApproval`），审批与正式版本同事务提交——任何失败不留「已确认但未产生正式
-///   版本」（需求 §19.3）；版本基线已移动 → 提案转 failed（§18.1 ②，修订回到未覆盖池
-///   待重新分析提案），审批行保持 pending；
-/// * approve（approved，两步法遗留）= 仅补发布；applied → 幂等返回既有版本。
-///
-/// 发布幂等键 = `pc-decision:{proposal_id}`。
+/// P5 决策（审阅流 v2）：决定只是**暂记**——approve → approved、reject → rejected，
+/// 在关联报告关闭前可反复互改（每次重决新落一条审批行，旧行留痕）；正式版本由
+/// 报告 close 批量发布（`analysis_report::close_report`，幂等键 `pc-decision:{id}`）。
+/// 同态重放幂等返回既有审批事实；applied/failed/expired/withdrawn/draft 一律 409。
 pub async fn decide_proposal(
     pool: &PgPool,
     project_id: Uuid,
@@ -1084,92 +1118,19 @@ pub async fn decide_proposal(
         reason: input.reason,
         expected_version_no: input.expected_version_no,
     };
-    if input.action == DecisionAction::Reject {
-        let receipt = reject_proposal(pool, project_id, actor, proposal_id, decision).await?;
-        return Ok(DecisionOutcome {
-            proposal_id,
-            status: receipt.status,
-            approval_id: Some(receipt.approval_id),
-            published_version: None,
-        });
-    }
-
-    let tenant_id = project_tenant(pool, project_id).await?;
-    ensure_formal_authorized(pool, project_id, actor).await?;
-    let row: Option<(String, i64)> = sqlx::query_as(
-        "SELECT status, expected_version_no FROM pc.proposal \
-          WHERE tenant_id = $1 AND project_id = $2 AND id = $3",
-    )
-    .bind(tenant_id)
-    .bind(project_id)
-    .bind(proposal_id)
-    .fetch_optional(pool)
-    .await?;
-    let (status, baseline) = row.ok_or_else(|| PcError::NotFound("proposal not found".into()))?;
-    if decision.expected_version_no != baseline {
-        return Err(PcError::Conflict(format!(
-            "expected_version_no {} does not match the proposal baseline {baseline}",
-            decision.expected_version_no
-        )));
-    }
-    let publish_input = PublishVersionInput {
-        proposal_id,
-        operation_id: format!("pc-decision:{proposal_id}"),
-    };
-    let receipt = match status.as_str() {
-        "submitted" => {
-            publish_inner(
-                pool,
-                project_id,
-                actor,
-                publish_input,
-                Some(InlineApproval {
-                    reason: decision.reason,
-                    expected_version_no: decision.expected_version_no,
-                }),
-            )
-            .await?
+    let receipt = match input.action {
+        DecisionAction::Reject => {
+            reject_proposal(pool, project_id, actor, proposal_id, decision).await?
         }
-        "approved" => publish_version(pool, project_id, actor, publish_input).await?,
-        "applied" => {
-            // 幂等：已发布 → 回既有版本
-            let version: Option<(Uuid, i64, String)> = sqlx::query_as(
-                "SELECT id, version_no, snapshot_hash FROM pc.cognition_version \
-                  WHERE tenant_id = $1 AND project_id = $2 AND source_proposal_id = $3",
-            )
-            .bind(tenant_id)
-            .bind(project_id)
-            .bind(proposal_id)
-            .fetch_optional(pool)
-            .await?;
-            let (version_id, version_no, snapshot_hash) = version.ok_or_else(|| {
-                PcError::Conflict("applied proposal has no published version".into())
-            })?;
-            let member_count: i64 =
-                sqlx::query_scalar("SELECT count(*) FROM pc.version_member WHERE version_id = $1")
-                    .bind(version_id)
-                    .fetch_one(pool)
-                    .await?;
-            PublishReceipt {
-                version_id,
-                version_no,
-                snapshot_hash,
-                member_count: usize::try_from(member_count).unwrap_or_default(),
-                replayed: true,
-            }
-        }
-        other => {
-            return Err(PcError::Conflict(format!(
-                "proposal is `{other}`; only submitted proposals can be approved"
-            )));
+        DecisionAction::Approve => {
+            approve_proposal(pool, project_id, actor, proposal_id, decision).await?
         }
     };
-    let approval_id = approved_approval_id(pool, tenant_id, project_id, proposal_id).await?;
     Ok(DecisionOutcome {
         proposal_id,
-        status: "applied".into(),
-        approval_id: Some(approval_id),
-        published_version: Some(receipt),
+        status: receipt.status,
+        approval_id: Some(receipt.approval_id),
+        published_version: None,
     })
 }
 

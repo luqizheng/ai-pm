@@ -76,6 +76,10 @@ export interface AnalysisReportDetail extends AnalysisReportRow {
 export interface CloseReportOutcome {
   report_id: string;
   status: "closed";
+  /** 关闭时批量发布的已批准提案数。 */
+  applied_proposals: number;
+  /** 批量发布失败（CAS 失配等）数。 */
+  publish_failed_proposals: number;
   withdrawn_proposals: number;
   rejected_kb: boolean;
   last_analyzed_commit: string;
@@ -101,8 +105,9 @@ export function getAnalysisReport(reportId: string, projectId: string) {
 }
 
 /**
- * 关闭报告（D-5 门释放动作；interactive 真人门）：自动驳回未决提案、拒绝 KB
- * 草稿，并固化分析锚点（last_analyzed_commit）。关闭后该仓库可再次分析。
+ * 关闭报告（D-5 门释放动作；interactive 真人门）：批量发布已批准提案（审阅流
+ * v2：决定暂记，close 才写 PC）、撤回未决提案、拒绝 KB 草稿，并固化分析锚点
+ * （last_analyzed_commit）。关闭后决定冻结，该仓库可再次分析。
  */
 export function closeAnalysisReport(reportId: string, projectId: string) {
   return http.post<CloseReportOutcome>(

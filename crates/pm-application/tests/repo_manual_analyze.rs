@@ -82,7 +82,24 @@ async fn manual_intake_count(pool: &PgPool, project_id: Uuid) -> i64 {
 fn req(key: Option<&str>) -> AnalyzeRepositoryRequest {
     AnalyzeRepositoryRequest {
         idempotency_key: key.map(str::to_string),
+        mode: None,
     }
+}
+
+/// D-5：把项目最新报告置为指定状态（模拟 close / mark_failed 终态——
+/// 真实链路由钩子驱动，单测直改行以聚焦 analyze 门本身）。
+async fn set_latest_report_status(pool: &PgPool, project_id: Uuid, status: &str) {
+    sqlx::query(
+        "UPDATE integration.repo_analysis_report \
+          SET status = $2, updated_at = now() \
+         WHERE id = (SELECT id FROM integration.repo_analysis_report \
+                      WHERE project_id = $1 ORDER BY created_at DESC LIMIT 1)",
+    )
+    .bind(project_id)
+    .bind(status)
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 async fn set_all_task_status(pool: &PgPool, project_id: Uuid, status: &str) {
@@ -111,7 +128,18 @@ async fn manual_analyze_replays_same_idempotency_key(pool: PgPool) {
     assert_eq!(first.commit, "abc1234");
     assert_eq!(manual_intake_count(&pool, project_id).await, 1);
 
-    // 同键重放：命中自身 intake，不被自己的活跃任务挡住，零新增行。
+    // D-5：报告开着（analyzing）时重放被报告门遮蔽 → 409 ReportOpen。
+    let replay_err = analyze_repository(&pool, repo_id, &actor(who), req(Some("fixed-key")))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(replay_err, RepositoryError::ReportOpen { .. }),
+        "replay while report open: {replay_err:?}"
+    );
+    assert_eq!(manual_intake_count(&pool, project_id).await, 1);
+
+    // 报告关闭后：同键重放命中自身 intake，零新增行。
+    set_latest_report_status(&pool, project_id, "closed").await;
     let replay = analyze_repository(&pool, repo_id, &actor(who), req(Some("fixed-key")))
         .await
         .unwrap();
@@ -142,12 +170,11 @@ async fn manual_analyze_conflicts_while_task_active(pool: PgPool) {
         .unwrap();
     assert_eq!(manual_intake_count(&pool, project_id).await, 1);
 
-    // 首个 intake 的 kb_analyze 任务仍为 PENDING → 非 FAILED/NEEDS_HUMAN_REVIEW
-    // 同族 409（与 intake::retry_task 的 NotRetryable 对齐）。
+    // D-5：首个 intake 的报告仍 analyzing → 409 ReportOpen（报告门优先于任务门）。
     let err = analyze_repository(&pool, repo_id, &actor(who), req(Some("key-b")))
         .await
         .unwrap_err();
-    assert!(matches!(err, RepositoryError::AnalyzeInProgress));
+    assert!(matches!(err, RepositoryError::ReportOpen { .. }), "{err:?}");
     assert_eq!(manual_intake_count(&pool, project_id).await, 1);
 }
 
@@ -182,8 +209,9 @@ async fn manual_analyze_releases_slot_after_failure(pool: PgPool) {
         .await
         .unwrap();
     set_all_task_status(&pool, project_id, "FAILED").await;
+    set_latest_report_status(&pool, project_id, "failed").await;
 
-    // FAILED 释放名额 → 新触发时刻允许重发（同 commit 也放行）。
+    // 任务 FAILED + 报告 failed 终态（不占门）→ 新触发时刻允许重发（同 commit 也放行）。
     let second = analyze_repository(&pool, repo_id, &actor(who), req(Some("key-b")))
         .await
         .unwrap();
@@ -202,8 +230,9 @@ async fn manual_analyze_allows_retrigger_without_head_advance(pool: PgPool) {
         .await
         .unwrap();
     set_all_task_status(&pool, project_id, "COMPLETED").await;
+    set_latest_report_status(&pool, project_id, "closed").await;
 
-    // HEAD 未前进（commit 不变）、前次已完成 → 仍可人工重触发（区别于 verify 联动）。
+    // HEAD 未前进（commit 不变）、前次已完成、报告已关闭 → 仍可人工重触发。
     let second = analyze_repository(&pool, repo_id, &actor(who), req(None))
         .await
         .unwrap();
@@ -222,6 +251,7 @@ async fn blank_idempotency_key_generates_new_trigger(pool: PgPool) {
         .await
         .unwrap();
     set_all_task_status(&pool, project_id, "COMPLETED").await;
+    set_latest_report_status(&pool, project_id, "closed").await;
     let second = analyze_repository(&pool, repo_id, &actor(who), req(Some("   ")))
         .await
         .unwrap();

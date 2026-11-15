@@ -458,11 +458,29 @@ async fn confirmation_loop_full_chain(pool: PgPool) {
     submit_proposal(&pool, project, &lead, p2.proposal_id, Some(1))
         .await
         .unwrap();
+    // ⑤' 决定暂记：approve → approved（无版本）；正式版本经发布入口产出
     let outcome = decide_proposal(&pool, project, &lead, p2.proposal_id, approve(1))
         .await
         .unwrap();
-    assert_eq!(outcome.status, "applied");
-    let v2 = outcome.published_version.expect("published version");
+    assert_eq!(outcome.status, "approved");
+    assert!(outcome.published_version.is_none());
+    // 同态重放幂等（发布前）：不产生新版本、不重复审计
+    let again = decide_proposal(&pool, project, &lead, p2.proposal_id, approve(1))
+        .await
+        .unwrap();
+    assert_eq!(again.status, "approved");
+    assert!(again.published_version.is_none());
+    let v2 = publish_version(
+        &pool,
+        project,
+        &lead,
+        PublishVersionInput {
+            proposal_id: p2.proposal_id,
+            operation_id: format!("pc-decision:{}", p2.proposal_id),
+        },
+    )
+    .await
+    .unwrap();
     assert_eq!(v2.version_no, 2);
     assert!(!v2.replayed);
     let (objects, relationships) = version_members(&pool, v2.version_id).await;
@@ -471,14 +489,6 @@ async fn confirmation_loop_full_chain(pool: PgPool) {
     assert!(!objects.contains(&(c.object_id, c.revision_id)));
     assert_eq!(relationships, vec![(rel, rr)], "relationship carried");
 
-    // 决策幂等：已 applied → 回既有版本，不产生新版本
-    let again = decide_proposal(&pool, project, &lead, p2.proposal_id, approve(1))
-        .await
-        .unwrap();
-    assert_eq!(again.status, "applied");
-    let replay = again.published_version.unwrap();
-    assert_eq!(replay.version_id, v2.version_id);
-    assert!(replay.replayed);
     let versions: i64 =
         sqlx::query_scalar("SELECT count(*) FROM pc.cognition_version WHERE project_id = $1")
             .bind(project)
@@ -616,11 +626,15 @@ async fn decision_gates_fail_closed(pool: PgPool) {
     .unwrap();
     assert_eq!(approved.status, "approved");
 
-    // 已裁决 → 再裁决 409（§17.2 场景 4 的后到者）
+    // 审阅流 v2：同态重放幂等；反向重决互改（报告 close 前决定可反复修改）
     let r = approve_proposal(&pool, project, &lead, p.proposal_id, decision(0, None)).await;
-    assert!(matches!(r, Err(PcError::Conflict(_))));
+    assert!(r.is_ok(), "idempotent re-approve: {r:?}");
     let r = reject_proposal(&pool, project, &lead, p.proposal_id, decision(0, None)).await;
-    assert!(matches!(r, Err(PcError::Conflict(_))));
+    assert!(r.is_ok(), "re-decide approve→reject: {r:?}");
+    assert_eq!(proposal_status(&pool, p.proposal_id).await, "rejected");
+    let r = approve_proposal(&pool, project, &lead, p.proposal_id, decision(0, None)).await;
+    assert!(r.is_ok(), "re-decide reject→approve: {r:?}");
+    assert_eq!(proposal_status(&pool, p.proposal_id).await, "approved");
 
     // 锚定篡改：库层触发器拒绝（P0001）
     let err = sqlx::query("UPDATE pc.proposal SET title = 'tampered' WHERE id = $1")
@@ -862,11 +876,20 @@ async fn endpoint_merge_conflict_and_projected_closure(pool: PgPool) {
     submit_proposal(&pool, project, &lead, p1.proposal_id, Some(0))
         .await
         .unwrap();
-    let v1 = decide_proposal(&pool, project, &lead, p1.proposal_id, approve(0))
+    decide_proposal(&pool, project, &lead, p1.proposal_id, approve(0))
         .await
-        .unwrap()
-        .published_version
         .unwrap();
+    let v1 = publish_version(
+        &pool,
+        project,
+        &lead,
+        PublishVersionInput {
+            proposal_id: p1.proposal_id,
+            operation_id: format!("pc-decision:{}", p1.proposal_id),
+        },
+    )
+    .await
+    .unwrap();
     assert_eq!(v1.member_count, 3);
 
     // 闭合预检：携带关系 R 钉 A@1，单独改钉 A@2 → 拒绝（否则发布闭合断言必败）
@@ -906,11 +929,20 @@ async fn endpoint_merge_conflict_and_projected_closure(pool: PgPool) {
     submit_proposal(&pool, project, &lead, p2.proposal_id, Some(1))
         .await
         .unwrap();
-    let v2 = decide_proposal(&pool, project, &lead, p2.proposal_id, approve(1))
+    decide_proposal(&pool, project, &lead, p2.proposal_id, approve(1))
         .await
-        .unwrap()
-        .published_version
         .unwrap();
+    let v2 = publish_version(
+        &pool,
+        project,
+        &lead,
+        PublishVersionInput {
+            proposal_id: p2.proposal_id,
+            operation_id: format!("pc-decision:{}", p2.proposal_id),
+        },
+    )
+    .await
+    .unwrap();
     let (objects, relationships) = version_members(&pool, v2.version_id).await;
     assert_eq!(objects.len(), 2, "{objects:?}");
     assert!(objects.contains(&(a2.object_id, a2.revision_id)));
@@ -976,14 +1008,14 @@ async fn reject_and_withdraw_paths(pool: PgPool) {
     assert_eq!(status, "rejected");
     assert_eq!(reason.as_deref(), Some("不符合产品定位"));
     assert_eq!(proposal_status(&pool, p1.proposal_id).await, "rejected");
-    assert!(matches!(
-        reject_proposal(&pool, project, &lead, p1.proposal_id, decision(0, None)).await,
-        Err(PcError::Conflict(_))
-    ));
-    assert!(matches!(
-        decide_proposal(&pool, project, &lead, p1.proposal_id, approve(0)).await,
-        Err(PcError::Conflict(_))
-    ));
+    // 审阅流 v2：rejected 仍可互改（同态重放幂等；approve 反转回 approved）
+    let r = reject_proposal(&pool, project, &lead, p1.proposal_id, decision(0, None)).await;
+    assert!(r.is_ok(), "idempotent re-reject: {r:?}");
+    let reapproved = decide_proposal(&pool, project, &lead, p1.proposal_id, approve(0))
+        .await
+        .unwrap();
+    assert_eq!(reapproved.status, "approved");
+    assert_eq!(proposal_status(&pool, p1.proposal_id).await, "approved");
 
     // 撤回：本人撤回 draft
     let p2 = create_proposal(
@@ -1393,11 +1425,11 @@ async fn project_bootstrap_seeds_product_singletons(pool: PgPool) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// 8. P5 原子确认（需求 §19.3：失败不留「已确认但未产生正式版本」）
+// 8. 决定暂记与发布解耦（审阅流 v2：close 前可改；发布独立幂等，CAS 失配 → failed）
 // ══════════════════════════════════════════════════════════════════════════
 
 #[sqlx::test(migrations = "../../migrations")]
-async fn decide_approve_is_atomic_with_publish(pool: PgPool) {
+async fn decide_is_provisional_and_publish_is_idempotent(pool: PgPool) {
     let (tenant, project) = seed_project_with_team(&pool, "kp2-atomic").await;
     let lead = AuditActor::principal(LEAD);
     let a = upsert(&pool, project, &lead, draft("feature", "ta", "A", "# A1")).await;
@@ -1425,8 +1457,20 @@ async fn decide_approve_is_atomic_with_publish(pool: PgPool) {
         .await
         .unwrap();
 
-    // 注入发布尾段失败：同幂等键的账本行已处终态（完成回写被状态机触发器拒绝）——
-    // 失败发生在审批事实写入之后，必须整事务回滚
+    // 决定暂记：approve → approved（无版本）；同态重放幂等不重复审计
+    let outcome = decide_proposal(&pool, project, &lead, p.proposal_id, approve(0))
+        .await
+        .unwrap();
+    assert_eq!(outcome.status, "approved");
+    assert!(outcome.published_version.is_none());
+    assert_eq!(audit_count(&pool, project, "pc_proposal.approve").await, 1);
+    let again = decide_proposal(&pool, project, &lead, p.proposal_id, approve(0))
+        .await
+        .unwrap();
+    assert_eq!(again.status, "approved");
+    assert_eq!(audit_count(&pool, project, "pc_proposal.approve").await, 1);
+
+    // 发布独立：注入发布尾段失败（同幂等键账本行已终态）→ 发布失败，决定事实保留
     sqlx::query(
         "INSERT INTO pc.write_operation \
          (tenant_id, project_id, operation_id, command, status, expected_content_hash, created_by) \
@@ -1439,20 +1483,18 @@ async fn decide_approve_is_atomic_with_publish(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
-    let r = decide_proposal(&pool, project, &lead, p.proposal_id, approve(0)).await;
+    let r = publish_version(
+        &pool,
+        project,
+        &lead,
+        PublishVersionInput {
+            proposal_id: p.proposal_id,
+            operation_id: format!("pc-decision:{}", p.proposal_id),
+        },
+    )
+    .await;
     assert!(matches!(r, Err(PcError::Db(_))), "{r:?}");
-    assert_eq!(proposal_status(&pool, p.proposal_id).await, "submitted");
-    let (approval_status, decided_by): (String, Option<Uuid>) =
-        sqlx::query_as("SELECT status, decided_by FROM pc.approval WHERE proposal_id = $1")
-            .bind(p.proposal_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(
-        (approval_status.as_str(), decided_by),
-        ("pending", None),
-        "no approval fact survives a failed publish"
-    );
+    assert_eq!(proposal_status(&pool, p.proposal_id).await, "approved");
     let versions: i64 =
         sqlx::query_scalar("SELECT count(*) FROM pc.cognition_version WHERE project_id = $1")
             .bind(project)
@@ -1460,40 +1502,44 @@ async fn decide_approve_is_atomic_with_publish(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(versions, 0);
-    assert_eq!(audit_count(&pool, project, "pc_proposal.approve").await, 0);
 
-    // 故障消除后重试：审批 + 发布同事务落定
+    // 故障消除后重试：发布幂等键复用 → applied v1
     sqlx::query("DELETE FROM pc.write_operation WHERE project_id = $1")
         .bind(project)
         .execute(&pool)
         .await
         .unwrap();
-    let outcome = decide_proposal(&pool, project, &lead, p.proposal_id, approve(0))
-        .await
-        .unwrap();
-    assert_eq!(outcome.status, "applied");
-    assert_eq!(outcome.published_version.unwrap().version_no, 1);
-    assert_eq!(audit_count(&pool, project, "pc_proposal.approve").await, 1);
-    let approved_by: Option<Uuid> = sqlx::query_scalar(
-        "SELECT decided_by FROM pc.approval WHERE proposal_id = $1 AND status = 'approved'",
+    let receipt = publish_version(
+        &pool,
+        project,
+        &lead,
+        PublishVersionInput {
+            proposal_id: p.proposal_id,
+            operation_id: format!("pc-decision:{}", p.proposal_id),
+        },
     )
-    .bind(p.proposal_id)
-    .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!(approved_by, Some(LEAD));
+    assert_eq!(receipt.version_no, 1);
+    assert_eq!(proposal_status(&pool, p.proposal_id).await, "applied");
 
-    // 基线已移动的提案：确认入口 409 + 提案转 failed（释放覆盖待重新分析），审批保持 pending
-    let r = decide_proposal(&pool, project, &lead, stale.proposal_id, approve(0)).await;
+    // 基线已移动的提案：决定仍可暂记（CAS 只对提案基线），发布入口 CAS 失配 → failed
+    let outcome2 = decide_proposal(&pool, project, &lead, stale.proposal_id, approve(0))
+        .await
+        .unwrap();
+    assert_eq!(outcome2.status, "approved");
+    let r = publish_version(
+        &pool,
+        project,
+        &lead,
+        PublishVersionInput {
+            proposal_id: stale.proposal_id,
+            operation_id: format!("pc-decision:{}", stale.proposal_id),
+        },
+    )
+    .await;
     assert!(matches!(r, Err(PcError::Conflict(_))), "{r:?}");
     assert_eq!(proposal_status(&pool, stale.proposal_id).await, "failed");
-    let pending: String =
-        sqlx::query_scalar("SELECT status FROM pc.approval WHERE proposal_id = $1")
-            .bind(stale.proposal_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(pending, "pending");
     assert_eq!(
         audit_count(&pool, project, "pc_version.publish_failed").await,
         1

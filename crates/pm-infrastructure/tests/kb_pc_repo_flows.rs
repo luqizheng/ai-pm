@@ -1008,8 +1008,18 @@ async fn confirmation_loop_publishes_versions_across_commits(pool: PgPool) {
     )
     .await
     .unwrap();
-    assert_eq!(outcome.status, "applied");
-    let v1 = outcome.published_version.unwrap();
+    assert_eq!(outcome.status, "approved");
+    let v1 = pm_application::pc::publish_version(
+        &pool,
+        project,
+        &lead,
+        pm_application::pc::PublishVersionInput {
+            proposal_id: p1,
+            operation_id: format!("pc-decision:{p1}"),
+        },
+    )
+    .await
+    .unwrap();
     assert_eq!(v1.version_no, 1);
     assert_eq!(v1.member_count, 5);
     drain(&worker(&pool)).await; // version_published → Platform 留痕
@@ -1059,7 +1069,7 @@ async fn confirmation_loop_publishes_versions_across_commits(pool: PgPool) {
         "unchanged revision is not re-proposed: {changed:?}"
     );
 
-    let v2 = pm_application::pc::decide_proposal(
+    pm_application::pc::decide_proposal(
         &pool,
         project,
         &lead,
@@ -1071,8 +1081,17 @@ async fn confirmation_loop_publishes_versions_across_commits(pool: PgPool) {
         },
     )
     .await
-    .unwrap()
-    .published_version
+    .unwrap();
+    let v2 = pm_application::pc::publish_version(
+        &pool,
+        project,
+        &lead,
+        pm_application::pc::PublishVersionInput {
+            proposal_id: p2,
+            operation_id: format!("pc-decision:{p2}"),
+        },
+    )
+    .await
     .unwrap();
     assert_eq!(v2.version_no, 2);
     // 每身份恰一个 Revision：5 行成员 = 5 个不同对象身份（携带修订被同身份替换）

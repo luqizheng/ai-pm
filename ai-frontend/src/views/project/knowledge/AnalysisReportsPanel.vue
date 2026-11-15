@@ -23,8 +23,9 @@ import { confirmKbRevision, decidePcProposal } from "@/api/knowledge";
 
 /**
  * D-5 · 「分析报告」页签面板：先报告、后报告内容——按状态分区（分析中 /
- * 待审理 / 已关闭 / 失败），行展开逐条审阅（KB 确认发布 / PC 提案批准驳回，
- * 复用既有端点），全部处置后「关闭报告」释放再分析门。
+ * 待审理默认展示；已关闭/失败收进「显示历史」），行展开逐条审阅（KB 确认发布 /
+ * PC 提案批准驳回——决定在报告关闭前可互改），全部处置后「关闭报告」批量
+ * 发布已批准提案并释放再分析门。
  */
 
 const { t } = useI18n();
@@ -43,6 +44,27 @@ const closeConfirm = ref<AnalysisReportRow | null>(null);
 const closing = ref(false);
 const acting = ref(false);
 const synthesizing = ref(false);
+
+/** 已关闭/失败历史默认隐藏（审阅流 v2：默认只看待办）。 */
+const showHistory = ref(false);
+
+/** 报告详情提案过滤：待决（默认）/ 已决 / 全部。 */
+const proposalFilter = ref<"pending" | "decided" | "all">("pending");
+
+const PROPOSAL_FILTERS = [
+  { value: "pending", label: "s01.knowledge.report.filter.pending" },
+  { value: "decided", label: "s01.knowledge.report.filter.decided" },
+  { value: "all", label: "s01.knowledge.report.filter.all" }
+] as const;
+
+const DECIDED_STATUSES = new Set([
+  "approved",
+  "rejected",
+  "failed",
+  "applied",
+  "withdrawn",
+  "expired"
+]);
 
 /** analyzing 行存在时 3s 轮询（分析中 → 待审理自动浮现）。 */
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -73,14 +95,35 @@ function formatTime(value: string | null): string {
 }
 
 const grouped = computed(() =>
-  GROUPS.map(status => ({
-    status,
-    items: rows.value.filter(row => row.status === status)
-  })).filter(group => group.items.length > 0)
+  GROUPS.filter(
+    status =>
+      showHistory.value || status === "analyzing" || status === "analyzed"
+  )
+    .map(status => ({
+      status,
+      items: rows.value.filter(row => row.status === status)
+    }))
+    .filter(group => group.items.length > 0)
+);
+
+/** 默认视图下的可见行数（历史隐藏时用于空态判定）。 */
+const visibleRowCount = computed(
+  () =>
+    rows.value.filter(
+      row =>
+        showHistory.value ||
+        row.status === "analyzing" ||
+        row.status === "analyzed"
+    ).length
 );
 
 const hasAnalyzing = computed(() =>
   rows.value.some(row => row.status === "analyzing")
+);
+
+// 审阅流 v2：综合提案挂当前 analyzed 报告——无 open 报告时综合不可用（后端 409 兜底）。
+const hasAnalyzedReport = computed(() =>
+  rows.value.some(row => row.status === "analyzed")
 );
 
 function pendingTotal(row: AnalysisReportRow): number {
@@ -151,7 +194,8 @@ async function toggleRow(row: AnalysisReportRow): Promise<void> {
 }
 
 async function openDetail(row: AnalysisReportRow): Promise<void> {
-  if (!props.projectId || detailCache.value[row.id]) return;
+  if (!props.projectId) return;
+  // 每次展开都重新拉取：提案状态会被审批/发布链翻转（submitted→failed），缓存会陈旧。
   detailLoading.value = row.id;
   try {
     detailCache.value[row.id] = await getAnalysisReport(
@@ -240,6 +284,8 @@ async function doClose(): Promise<void> {
   try {
     const outcome = await closeAnalysisReport(row.id, props.projectId);
     notice.value = t("s01.knowledge.report.closeNotice", {
+      applied: outcome.applied_proposals,
+      withdrawn: outcome.withdrawn_proposals,
       commit: outcome.last_analyzed_commit.slice(0, 12)
     });
     closeConfirm.value = null;
@@ -259,6 +305,31 @@ function proposalStatusVariant(status: string) {
   return "neutral";
 }
 
+/** approved 在 close 前语义 =「已批准·待发布」，其余原样走词典。 */
+function proposalStatusLabel(status: string): string {
+  if (status === "approved")
+    return t("s01.knowledge.proposalStatus.approvedPending");
+  return t(`s01.knowledge.proposalStatus.${status}`);
+}
+
+/** 按当前过滤条件筛提案（待决/已决/全部）。 */
+function filteredProposals(detail: AnalysisReportDetail) {
+  if (proposalFilter.value === "all") return detail.proposals;
+  if (proposalFilter.value === "decided")
+    return detail.proposals.filter(p => DECIDED_STATUSES.has(p.status));
+  return detail.proposals.filter(
+    p => p.status === "submitted" || p.status === "draft"
+  );
+}
+
+/** 关闭确认框用：详情中已批准（将发布）提案数。 */
+function approvedCount(row: AnalysisReportRow): number {
+  return (
+    detailCache.value[row.id]?.proposals.filter(p => p.status === "approved")
+      .length ?? 0
+  );
+}
+
 onBeforeUnmount(() => {
   if (pollTimer !== null) clearInterval(pollTimer);
 });
@@ -267,12 +338,29 @@ onBeforeUnmount(() => {
 <template>
   <div class="report-panel">
     <div class="rp-toolbar">
-      <Button size="sm" :loading="synthesizing" @click="runSynthesis">
+      <Button
+        size="sm"
+        :loading="synthesizing"
+        :disabled="!hasAnalyzedReport"
+        @click="runSynthesis"
+      >
         {{ t("s01.knowledge.report.synthesis") }}
       </Button>
       <span class="rp-hint">
         {{ t("s01.knowledge.report.synthesisHint") }}
       </span>
+      <Button
+        size="sm"
+        variant="secondary"
+        class="rp-history-toggle"
+        @click="showHistory = !showHistory"
+      >
+        {{
+          showHistory
+            ? t("s01.knowledge.report.hideHistory")
+            : t("s01.knowledge.report.showHistory")
+        }}
+      </Button>
     </div>
     <Alert v-if="errorText" variant="danger" size="sm" role="alert">
       {{ errorText }}
@@ -284,7 +372,7 @@ onBeforeUnmount(() => {
       {{ t("s01.knowledge.hint.loading") }}
     </p>
     <EmptyState
-      v-else-if="!rows.length"
+      v-else-if="!visibleRowCount"
       size="sm"
       :title="t('s01.knowledge.report.empty')"
     />
@@ -406,15 +494,37 @@ onBeforeUnmount(() => {
                       })
                     }}
                   </summary>
+                  <div
+                    v-if="detailCache[row.id].proposals.length"
+                    class="rp-filter"
+                    role="group"
+                  >
+                    <button
+                      v-for="f in PROPOSAL_FILTERS"
+                      :key="f.value"
+                      class="rp-filter-chip"
+                      :class="{ 'is-active': proposalFilter === f.value }"
+                      type="button"
+                      @click="proposalFilter = f.value"
+                    >
+                      {{ t(f.label) }}
+                    </button>
+                  </div>
                   <p
                     v-if="!detailCache[row.id].proposals.length"
                     class="rp-hint"
                   >
                     {{ t("s01.knowledge.report.noProposals") }}
                   </p>
+                  <p
+                    v-else-if="!filteredProposals(detailCache[row.id]).length"
+                    class="rp-hint"
+                  >
+                    {{ t("s01.knowledge.report.noMatchingProposals") }}
+                  </p>
                   <ul v-else class="rp-proposals">
                     <li
-                      v-for="proposal in detailCache[row.id].proposals"
+                      v-for="proposal in filteredProposals(detailCache[row.id])"
                       :key="proposal.proposal_id"
                       class="rp-proposal"
                     >
@@ -425,7 +535,7 @@ onBeforeUnmount(() => {
                         <Badge
                           :variant="proposalStatusVariant(proposal.status)"
                         >
-                          {{ proposal.status }}
+                          {{ proposalStatusLabel(proposal.status) }}
                         </Badge>
                         <span class="rp-meta">
                           v{{ proposal.expected_version_no }} ·
@@ -433,29 +543,35 @@ onBeforeUnmount(() => {
                           {{ t("s01.knowledge.proposal.members") }}
                         </span>
                       </div>
+                      <!-- 按钮显隐与后端门一致：报告 analyzed 且决定未冻结 -->
                       <div
                         v-if="
+                          row.status === 'analyzed' &&
                           (proposal.status === 'submitted' ||
-                            proposal.status === 'draft') &&
-                          row.status === 'analyzed'
+                            proposal.status === 'approved' ||
+                            proposal.status === 'rejected')
                         "
                         class="rp-actions"
                       >
-                        <Button
-                          size="sm"
-                          :loading="acting"
-                          @click="decideProposal(row, proposal, 'approve')"
-                        >
-                          {{ t("s01.knowledge.proposal.approve") }}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          :disabled="acting"
-                          @click="decideProposal(row, proposal, 'reject')"
-                        >
-                          {{ t("s01.knowledge.proposal.reject") }}
-                        </Button>
+                        <template v-if="proposal.status !== 'approved'">
+                          <Button
+                            size="sm"
+                            :loading="acting"
+                            @click="decideProposal(row, proposal, 'approve')"
+                          >
+                            {{ t("s01.knowledge.proposal.approve") }}
+                          </Button>
+                        </template>
+                        <template v-if="proposal.status !== 'rejected'">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            :disabled="acting"
+                            @click="decideProposal(row, proposal, 'reject')"
+                          >
+                            {{ t("s01.knowledge.proposal.reject") }}
+                          </Button>
+                        </template>
                       </div>
                     </li>
                   </ul>
@@ -520,6 +636,7 @@ onBeforeUnmount(() => {
         closeConfirm
           ? t('s01.knowledge.report.closeConfirmDescription', {
               repo: closeConfirm.repository_name,
+              publish: approvedCount(closeConfirm),
               proposals: closeConfirm.pending_proposals,
               kb: closeConfirm.has_pending_kb ? 1 : 0
             })
@@ -548,6 +665,32 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+.rp-history-toggle {
+  margin-left: auto;
+}
+
+.rp-filter {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.rp-filter-chip {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full, 999px);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-caption);
+  padding: 2px var(--space-3);
+  cursor: pointer;
+}
+
+.rp-filter-chip.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .rp-group-title {

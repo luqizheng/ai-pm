@@ -21,8 +21,8 @@
 //! （§12.2 未列的 V0.5 管理面，见 `kb_memory_api.rs`，D-KP3-5）。K1/K3/K6 与 P 系
 //! 受理/治理面维持 501。
 //!
-//! **KP-2 落真**：P4（提案详情）与 P5（审批转达：approve = 审批事实 + 同请求发布，
-//! reject = 驳回）经 `pm_application::pc` 提案命令服务（V-6 唯一写入面）；P5 为治理
+//! **KP-2（审阅流 v2）**：P4（提案详情）与 P5（审批转达：决定暂记 approved/rejected，
+//! 报告关闭前可互改；正式版本由报告 close 批量发布）经 `pm_application::pc` 提案命令服务（V-6 唯一写入面）；P5 为治理
 //! 动作，另挂可信交互上下文（A*：API Key 403），真人 + A3 门在服务层（AI/服务主体
 //! 恒 403）；MCP 不暴露任何确认工具。P3 增提案分支（分析起草提案后 result_ref 锚
 //! proposal）。P1/P2/P6/P7 维持 501。
@@ -45,9 +45,9 @@ use uuid::Uuid;
 use crate::auth::AuthedPrincipal;
 use crate::routes::AppState;
 use crate::support::repos::kb_pc_query_repo;
+use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
 use pm_application::repo::kb_pc_query::AnalysisTaskRow;
 use pm_application::repo::kb_pc_query::KbPcQueryRepo;
-use crate::support::{ensure_trusted_context, require_project_visible, ApiError, ApiResult};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -567,9 +567,9 @@ struct DecisionBody {
     expected_version_no: Option<i64>,
 }
 
-/// P5（KP-2 落真）：审批转达（CAS：`expected_version_no` = 调用方确认的提案基线）。
-/// approve = 审批事实落定后同请求发布（`published_version_ref`；发布 CAS 失配时提案转
-/// failed 并 409）；reject = 驳回。治理动作：可信交互上下文（A*：API Key 403）+ 服务层
+/// P5（审阅流 v2）：审批转达（CAS：`expected_version_no` = 调用方确认的提案基线）。
+/// approve/reject 只是暂记决定（报告关闭前可互改），`published_version_ref` 恒 null；
+/// 正式版本在报告 close 批量发布。治理动作：可信交互上下文（A*：API Key 403）+ 服务层
 /// 真人 + A3（AI/服务主体恒 403）；MCP 不暴露此入口。
 async fn p5_decide_proposal(
     State(state): State<AppState>,
@@ -692,7 +692,9 @@ async fn list_pc_objects(
     )
     .await?;
     let rows: Vec<pm_application::repo::kb_pc_query::PcObjectListRow> =
-        kb_pc_query_repo(&state.pool).list_pc_objects(project_id).await?;
+        kb_pc_query_repo(&state.pool)
+            .list_pc_objects(project_id)
+            .await?;
     let rows: Vec<serde_json::Value> = rows
         .into_iter()
         .map(|r| {

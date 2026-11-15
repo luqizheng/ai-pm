@@ -4,7 +4,7 @@
 //! |---|---|
 //! | 1 | analyze 受理 → 报告 analyzing；重复 analyze → 409 `report_open`（带 report_id）；锚点列状态 |
 //! | 2 | mark_analyzed 派生（kb_revision_id/pc_source_id）与 mark_failed 终态 |
-//! | 3 | close（interactive）：API Key 403 / 提案 withdrawn / KB 草稿 rejected / 锚点固化 / 门释放再 analyze 202 / 重复 close 409 |
+//! | 3 | close（interactive）：API Key 403 / approved 批量发布 + 未决 withdrawn / KB 草稿 rejected / 锚点固化 / 门释放再 analyze 202 / 重复 close 409 / closed 后决定冻结 409 |
 //! | 4 | 列表/详情形状 + 项目边界（非成员 404 / 他项目 404 / 缺参 400） |
 
 mod common;
@@ -15,10 +15,11 @@ use digua_common_jwt::{sign_token, JWKSCache};
 use pm_api::auth::AuthConfig;
 use pm_api::routes::{router, router_with_auth_config};
 use pm_application::actor::AuditActor;
+use pm_application::actor::AuditActor as _AuditActor;
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::pc::{
-    create_proposal, submit_proposal, upsert_object_draft, CreateProposalInput, ProposalMemberPin,
-    UpsertObjectDraft,
+    create_proposal, decide_proposal, submit_proposal, upsert_object_draft, CreateProposalInput,
+    DecisionAction, PcError, ProposalDecisionInput, ProposalMemberPin, UpsertObjectDraft,
 };
 use pm_domain::SYSTEM_TENANT;
 use serde_json::{json, Value};
@@ -451,6 +452,8 @@ async fn close_disposes_pending_items_and_releases_gate(pool: PgPool) {
     let (_doc, kb_rev) = seed_kb_draft(&pool, project).await;
     let source = seed_pc_source(&pool, project, kb_rev).await;
     let proposal = submitted_proposal_on(&pool, project, source, "d5-close").await;
+    // 第二条提案：批准（暂记）→ close 时批量发布；第一条保持未决（close 将撤回）
+    let proposal2 = submitted_proposal_on(&pool, project, source, "d5-close-2").await;
     let report = seed_analyzed_report(&pool, project, repo, kb_rev, source).await;
 
     // API Key 上下文（同一主体 Lead）→ 403：关闭须 interactive 真人（三重门之一）
@@ -470,7 +473,25 @@ async fn close_disposes_pending_items_and_releases_gate(pool: PgPool) {
         .unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
-    // interactive 关闭 → 自动处置 + 锚点固化
+    // 审阅流 v2：批准第二条提案（暂记，decide 不发布）
+    let lead_actor = _AuditActor::principal(lead);
+    let outcome = decide_proposal(
+        &pool,
+        project,
+        &lead_actor,
+        proposal2,
+        ProposalDecisionInput {
+            action: DecisionAction::Approve,
+            reason: None,
+            expected_version_no: 0,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(outcome.status, "approved");
+    assert!(outcome.published_version.is_none());
+
+    // interactive 关闭 → 自动处置（approved 批量发布 + 未决撤回）+ 锚点固化
     let response = app
         .clone()
         .oneshot(call(
@@ -485,6 +506,8 @@ async fn close_disposes_pending_items_and_releases_gate(pool: PgPool) {
     let out: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(out["withdrawn_proposals"], 1);
+    assert_eq!(out["applied_proposals"], 1);
+    assert_eq!(out["publish_failed_proposals"], 0);
     assert_eq!(out["rejected_kb"], true);
     assert_eq!(out["last_analyzed_commit"], COMMIT);
 
@@ -495,6 +518,12 @@ async fn close_disposes_pending_items_and_releases_gate(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(p_status, "withdrawn");
+    let (p2_status,): (String,) = sqlx::query_as("SELECT status FROM pc.proposal WHERE id = $1")
+        .bind(proposal2)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(p2_status, "applied", "approved proposal published at close");
     let (k_status,): (String,) =
         sqlx::query_as("SELECT status FROM kb.document_revision WHERE id = $1")
             .bind(kb_rev)
@@ -536,6 +565,21 @@ async fn close_disposes_pending_items_and_releases_gate(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::CONFLICT);
+
+    // 审阅流 v2：报告 closed 后决定冻结 → 409
+    let frozen = decide_proposal(
+        &pool,
+        project,
+        &lead_actor,
+        proposal2,
+        ProposalDecisionInput {
+            action: DecisionAction::Reject,
+            reason: None,
+            expected_version_no: 0,
+        },
+    )
+    .await;
+    assert!(matches!(frozen, Err(PcError::Conflict(_))), "{frozen:?}");
 }
 
 // ── 用例 4：列表 / 详情形状 + 项目边界 ──────────────────────────────────────

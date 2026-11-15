@@ -6,7 +6,6 @@ knowledge:
     reports: Analysis Reports
     kb: KB Documents
     pc: PC Objects
-    proposals: PC Proposals
   report:
     incrementalBadge: Incremental
     synthesis: Synthesize identity (AI)
@@ -33,10 +32,17 @@ knowledge:
     pcSec: PC Object Revisions ({n})
     noPcRevisions: No object revisions produced by this analysis
     close: Close Report
-    closeHint: Closing auto-disposes pending items and fixes the analysis anchor; the repository becomes analyzable again
+    showHistory: Show history
+    hideHistory: Hide history
+    filter:
+      pending: Pending
+      decided: Decided
+      all: All
+    noMatchingProposals: No proposals match this filter
+    closeHint: Closing publishes approved proposals, auto-disposes pending items and fixes the analysis anchor; decisions freeze afterwards and the repository becomes analyzable again
     closeConfirmTitle: Close analysis report
-    closeConfirmDescription: This will withdraw {proposals} pending proposal(s) and reject {kb} KB draft(s) for {repo}, and fix the analysis anchor; the repository becomes analyzable again.
-    closeNotice: Report closed — analysis anchor fixed ({commit}); the repository is analyzable again
+    closeConfirmDescription: This will publish {publish} approved proposal(s), withdraw {proposals} pending proposal(s) and reject {kb} KB draft(s) for {repo}, and fix the analysis anchor; decisions freeze afterwards and the repository becomes analyzable again.
+    closeNotice: Report closed — published {applied} proposal(s), withdrew {withdrawn} pending proposal(s), anchor fixed ({commit}); the repository is analyzable again
     closeError: Failed to close
   status:
     draft: Draft
@@ -79,7 +85,8 @@ knowledge:
   proposalStatus:
     draft: Draft
     submitted: Awaiting review
-    approved: Approved
+    approved: Approved·pending publish
+    approvedApplied: Published
     rejected: Rejected
     withdrawn: Withdrawn
     expired: Expired
@@ -91,7 +98,7 @@ knowledge:
     rejected: Rejected
   proposal:
     members: member object(s)
-    approve: Approve & Publish
+    approve: Approve
     reject: Reject
     rationale: Rationale
     membersList: Member changes

@@ -141,6 +141,7 @@ async fn propose_pc_object(
     pool: &PgPool,
     project_id: Uuid,
     actor: &AuditActor,
+    source_id: Uuid,
     object_key: &str,
     object_type: &str,
     title: &str,
@@ -182,7 +183,9 @@ async fn propose_pc_object(
             title: title.to_string(),
             rationale: "D-4 业务身份综合轮：LLM 汇聚访谈答案与仓库产物起草".into(),
             origin_kind: "ai_agent".into(),
-            source_id: None,
+            // 审阅流 v2：综合提案挂当前 open 报告——报告详情提案区审阅，
+            // close 批量发布（批准后对象才转 active）。
+            source_id: Some(source_id),
             governance_level: None,
             risk_level: None,
             confidence: None,
@@ -212,10 +215,25 @@ pub async fn apply_identity_drafts(
     actor: &AuditActor,
     drafts: &IdentityDrafts,
 ) -> Result<IdentityApplyOutcome, IdentityError> {
+    // 审阅流 v2：综合提案须挂当前 analyzed 报告（唯一审阅单元）；无 open 报告 → 拒绝。
+    let report_source_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT pc_source_id FROM integration.repo_analysis_report           WHERE project_id = $1 AND status = 'analyzed' AND pc_source_id IS NOT NULL           ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
+    let report_source_id = report_source_id.ok_or_else(|| {
+        IdentityError::Conflict(
+            "no open analysis report; run a repository analysis and keep its report open before identity synthesis".into(),
+        )
+    })?;
+
     let profile_proposal_id = propose_pc_object(
         pool,
         project_id,
         actor,
+        report_source_id,
         "product-profile",
         "product_profile",
         "业务身份提案（产品画像）",
@@ -226,6 +244,7 @@ pub async fn apply_identity_drafts(
         pool,
         project_id,
         actor,
+        report_source_id,
         "product-vision",
         "product_vision",
         "业务身份提案（产品愿景）",
@@ -275,7 +294,10 @@ pub async fn apply_identity_drafts(
                 ProposalOutcome::Duplicate { revision_id, .. } => {
                     (Some(revision_id), Some("duplicate".to_string()))
                 }
-                ProposalOutcome::Rejected { proposal_id, failures } => {
+                ProposalOutcome::Rejected {
+                    proposal_id,
+                    failures,
+                } => {
                     return Err(IdentityError::Failed(format!(
                         "goal proposal rejected by quality gates: {failures:?} (proposal {proposal_id})"
                     )));

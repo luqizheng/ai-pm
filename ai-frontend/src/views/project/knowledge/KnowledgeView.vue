@@ -5,23 +5,17 @@ import { ChevronRight } from "lucide-vue-next";
 import PageFrame from "@/components/shell/PageFrame.vue";
 import {
   confirmKbRevision,
-  decidePcProposal,
   getKbDocument,
   getPcObject,
-  getPcProposal,
   ingestKbDocument,
   listKbDocuments,
   listPcObjects,
-  listPcProposals,
   retrievalQuery,
   type IngestKind,
   type KbDocumentDetail,
   type KbDocumentRow,
   type PcObjectDetail,
   type PcObjectRow,
-  type PcProposalDetail,
-  type PcProposalMemberView,
-  type PcProposalRow,
   type RetrievalQueryResponse
 } from "@/api/knowledge";
 import { useShellStore } from "@/stores/shell";
@@ -48,14 +42,13 @@ const { t } = useI18n();
 const shell = useShellStore();
 const currentProjectId = computed(() => shell.currentProjectId);
 
-type TabKey = "reports" | "kb" | "pc" | "proposals";
+type TabKey = "reports" | "kb" | "pc";
 const activeTab = ref<TabKey>("reports");
 const loading = ref(false);
 const errorText = ref("");
 
 const kbRows = ref<KbDocumentRow[]>([]);
 const pcRows = ref<PcObjectRow[]>([]);
-const proposalRows = ref<PcProposalRow[]>([]);
 
 /** 展开的文档详情（按 document_id 缓存，避免来回切换重复拉取）。 */
 const detail = ref<KbDocumentDetail | null>(null);
@@ -71,14 +64,12 @@ async function loadLists() {
   errorText.value = "";
   try {
     const projectId = currentProjectId.value as string;
-    const [kb, pc, proposals] = await Promise.all([
+    const [kb, pc] = await Promise.all([
       listKbDocuments(projectId),
-      listPcObjects(projectId),
-      listPcProposals(projectId)
+      listPcObjects(projectId)
     ]);
     kbRows.value = kb.items;
     pcRows.value = pc.items;
-    proposalRows.value = proposals.items;
   } catch {
     errorText.value = t("s01.knowledge.error.load");
   } finally {
@@ -131,42 +122,12 @@ async function confirmPublish(row: KbDocumentRow) {
   }
 }
 
-/* ── PC 提案审批（P5；CAS + 治理授权门在后端）────────────────────────── */
-
-const decidingId = ref<string | null>(null);
-const decisionNotice = ref("");
-
-async function decide(row: PcProposalRow, action: "approve" | "reject") {
-  if (!canLoad.value || decidingId.value) return;
-  decidingId.value = row.proposal_id;
-  decisionNotice.value = "";
-  try {
-    await decidePcProposal(row.proposal_id, currentProjectId.value as string, {
-      action,
-      expected_version_no: row.expected_version_no
-    });
-    decisionNotice.value = t(
-      `s01.knowledge.notice.${action === "approve" ? "approved" : "rejected"}`
-    );
-    await loadLists();
-  } catch {
-    decisionNotice.value = t("s01.knowledge.error.decide");
-  } finally {
-    decidingId.value = null;
-  }
-}
-
-/* ── PC 对象/提案详情（行内展开；按 id 缓存，收起保留缓存）──────────────── */
+/* ── PC 对象详情（行内展开；按 id 缓存，收起保留缓存）──────────────────── */
 
 /** PC 行展开态 + 详情缓存（收起只切展开态；缓存保留——再展不重拉）。 */
 const pcOpen = ref<Record<string, boolean>>({});
 const pcDetail = ref<Record<string, PcObjectDetail>>({});
 const pcDetailLoading = ref<string | null>(null);
-
-/** 提案行展开态 + 详情缓存（同上）。 */
-const proposalOpen = ref<Record<string, boolean>>({});
-const proposalDetail = ref<Record<string, PcProposalDetail>>({});
-const proposalDetailLoading = ref<string | null>(null);
 
 async function openPcDetail(obj: PcObjectRow) {
   if (!canLoad.value || pcDetail.value[obj.object_id]) return;
@@ -194,56 +155,7 @@ function pcRev(obj: PcObjectRow) {
   return pcDetail.value[obj.object_id]?.latest_revision ?? null;
 }
 
-async function openProposalDetail(p: PcProposalRow) {
-  if (!canLoad.value || proposalDetail.value[p.proposal_id]) return;
-  proposalDetailLoading.value = p.proposal_id;
-  try {
-    proposalDetail.value[p.proposal_id] = await getPcProposal(
-      p.proposal_id,
-      currentProjectId.value as string
-    );
-  } catch {
-    errorText.value = t("s01.knowledge.error.load");
-  } finally {
-    proposalDetailLoading.value = null;
-  }
-}
-
-function toggleProposalRow(p: PcProposalRow) {
-  proposalOpen.value[p.proposal_id] = !proposalOpen.value[p.proposal_id];
-  if (proposalOpen.value[p.proposal_id]) openProposalDetail(p);
-}
-
-/** 成员变更行文本：对象变更带类型/名/修订；关系变更带类型与修订。 */
-function memberLabel(m: PcProposalMemberView): string {
-  const parts: string[] = [m.change_kind];
-  if (m.object_id) {
-    parts.push(m.object_type ?? "", m.display_name ?? m.object_key ?? "");
-    if (m.object_revision_no != null) parts.push(`v${m.object_revision_no}`);
-  } else if (m.relationship_id) {
-    parts.push(m.relationship_type ?? "");
-    if (m.relationship_revision_no != null)
-      parts.push(`v${m.relationship_revision_no}`);
-  }
-  return parts.filter(Boolean).join(" · ");
-}
-
-/** 审批状态文案（pending/approved/rejected；未知原样回显）。 */
-function approvalLabel(status: string): string {
-  const known = ["pending", "approved", "rejected"];
-  return known.includes(status)
-    ? t(`s01.knowledge.approvalStatus.${status}`)
-    : status;
-}
-
 type BadgeTone = "success" | "warning" | "danger" | "neutral";
-
-function proposalVariant(status: string): BadgeTone {
-  if (status === "approved" || status === "applied") return "success";
-  if (status === "submitted") return "warning";
-  if (status === "rejected" || status === "failed") return "danger";
-  return "neutral";
-}
 
 /** 页签项（Tabs 组件契约；计数随列表刷新）。 */
 const tabItems = computed(() => [
@@ -259,10 +171,6 @@ const tabItems = computed(() => [
   {
     value: "pc",
     label: `${t("s01.knowledge.tab.pc")} (${pcRows.value.length})`
-  },
-  {
-    value: "proposals",
-    label: `${t("s01.knowledge.tab.proposals")} (${proposalRows.value.length})`
   }
 ]);
 
@@ -477,8 +385,6 @@ watch(currentProjectId, async () => {
   closeDetail();
   pcOpen.value = {};
   pcDetail.value = {};
-  proposalOpen.value = {};
-  proposalDetail.value = {};
   impactResult.value = null;
   await loadLists();
   // 项目就绪后再放深链（搜索点击先于项目注入到达时，此处兜底）。
@@ -752,149 +658,6 @@ watch(
                 <MarkdownViewer :model-value="detail.content ?? ''" />
               </details>
             </template>
-          </div>
-        </li>
-      </ul>
-
-      <!-- PC 提案审批（行内展开详情：理由/成员变更/审批历史） -->
-      <ul
-        v-if="activeTab === 'proposals' && proposalRows.length"
-        class="pc-list"
-      >
-        <li
-          v-for="p in proposalRows"
-          :key="p.proposal_id"
-          class="pc-row"
-          :class="{ 'is-open': Boolean(proposalOpen[p.proposal_id]) }"
-        >
-          <button
-            class="pc-row-head"
-            :aria-expanded="Boolean(proposalOpen[p.proposal_id])"
-            @click="toggleProposalRow(p)"
-          >
-            <span class="pc-name">{{ p.title }}</span>
-            <Badge :variant="proposalVariant(p.status)">{{
-              t(`s01.knowledge.proposalStatus.${p.status}`)
-            }}</Badge>
-            <span class="pc-type"
-              >v{{ p.expected_version_no }} · {{ p.member_count }}
-              {{ t("s01.knowledge.proposal.members") }}</span
-            >
-            <ChevronRight
-              class="kb-row-chevron"
-              :class="{ 'is-open': Boolean(proposalOpen[p.proposal_id]) }"
-              aria-hidden="true"
-            />
-          </button>
-          <Alert
-            v-if="decisionNotice"
-            variant="success"
-            size="sm"
-            role="status"
-          >
-            {{ decisionNotice }}
-          </Alert>
-          <div v-if="proposalOpen[p.proposal_id]" class="kb-detail">
-            <p
-              v-if="
-                proposalDetailLoading === p.proposal_id &&
-                !proposalDetail[p.proposal_id]
-              "
-              class="knowledge-hint"
-            >
-              {{ t("s01.knowledge.hint.loading") }}
-            </p>
-            <template v-else-if="proposalDetail[p.proposal_id]">
-              <p
-                v-if="proposalDetail[p.proposal_id]?.rationale"
-                class="pc-summary"
-              >
-                {{ proposalDetail[p.proposal_id]?.rationale }}
-              </p>
-              <div class="pc-detail-meta">
-                <span class="pc-type">
-                  {{ t("s01.knowledge.proposal.governance") }}:
-                  {{ proposalDetail[p.proposal_id]?.governance_level }}
-                </span>
-                <span class="pc-type">
-                  {{ t("s01.knowledge.proposal.risk") }}:
-                  {{ proposalDetail[p.proposal_id]?.risk_level }}
-                </span>
-                <span class="pc-type">
-                  {{ t("s01.knowledge.proposal.confidence") }}:
-                  {{ proposalDetail[p.proposal_id]?.confidence }}
-                </span>
-                <span class="pc-type">
-                  {{ t("s01.knowledge.proposal.origin") }}:
-                  {{ proposalDetail[p.proposal_id]?.origin_kind }}
-                </span>
-              </div>
-              <details class="kb-revisions" open>
-                <summary>
-                  {{ t("s01.knowledge.proposal.membersList") }} ({{
-                    proposalDetail[p.proposal_id]?.members.length ?? 0
-                  }})
-                </summary>
-                <ul>
-                  <li
-                    v-for="m in proposalDetail[p.proposal_id]?.members ?? []"
-                    :key="m.object_id ?? m.relationship_id ?? m.change_kind"
-                  >
-                    {{ memberLabel(m) }}
-                  </li>
-                </ul>
-              </details>
-              <details class="kb-revisions" open>
-                <summary>
-                  {{ t("s01.knowledge.proposal.approvals") }} ({{
-                    proposalDetail[p.proposal_id]?.approvals.length ?? 0
-                  }})
-                </summary>
-                <p
-                  v-if="
-                    !(proposalDetail[p.proposal_id]?.approvals ?? []).length
-                  "
-                  class="knowledge-hint"
-                >
-                  {{ t("s01.knowledge.proposal.noApprovals") }}
-                </p>
-                <ul v-else>
-                  <li
-                    v-for="a in proposalDetail[p.proposal_id]?.approvals ?? []"
-                    :key="a.approval_id"
-                  >
-                    <Badge :variant="proposalVariant(a.status)">{{
-                      approvalLabel(a.status)
-                    }}</Badge>
-                    <span v-if="a.decided_by_name">
-                      · {{ a.decided_by_name }}</span
-                    >
-                    <span v-if="a.decision_reason">
-                      · {{ a.decision_reason }}</span
-                    >
-                    <span v-if="a.decided_at">
-                      · {{ formatTime(a.decided_at) }}</span
-                    >
-                  </li>
-                </ul>
-              </details>
-            </template>
-          </div>
-          <div v-if="p.status === 'submitted'" class="kb-detail-actions">
-            <Button
-              class="kb-confirm"
-              :loading="decidingId === p.proposal_id"
-              @click="decide(p, 'approve')"
-            >
-              {{ t("s01.knowledge.proposal.approve") }}
-            </Button>
-            <Button
-              variant="secondary"
-              :disabled="decidingId === p.proposal_id"
-              @click="decide(p, 'reject')"
-            >
-              {{ t("s01.knowledge.proposal.reject") }}
-            </Button>
           </div>
         </li>
       </ul>

@@ -361,29 +361,6 @@ describe("KnowledgeView", () => {
     expect(wrapper.text()).toContain("补充状态机");
   });
 
-  it("lists proposals with status badges and decides with CAS", async () => {
-    const wrapper = await mountView();
-    const tabs = wrapper.findAll('[role="tab"]');
-    await tabs[3].trigger("mousedown");
-    await flushPromises();
-
-    expect(listPcProposals).toHaveBeenCalledWith("proj-1");
-    expect(wrapper.text()).toContain("订单状态机重定义");
-    expect(wrapper.text()).toContain("待审批");
-    expect(wrapper.text()).toContain("已批准");
-
-    // 批准：CAS expected_version_no 取自行数据。
-    const approveBtn = wrapper.find(".kb-detail-actions .kb-confirm");
-    await approveBtn.trigger("click");
-    await flushPromises();
-    expect(decidePcProposal).toHaveBeenCalledWith("prop-1", "proj-1", {
-      action: "approve",
-      expected_version_no: 4
-    });
-    // 决策后刷新列表。
-    expect(listPcProposals).toHaveBeenCalledTimes(2);
-  });
-
   it("opens detail via ?doc= deep link", async () => {
     const router = createRouter({
       history: createMemoryHistory(),
@@ -521,25 +498,6 @@ describe("KnowledgeView", () => {
 
     expect(getPcObject).toHaveBeenCalledWith("obj-id", "proj-1");
     expect(wrapper.text()).toContain("暂无修订");
-  });
-
-  it("expands proposal detail with rationale, members and approvals", async () => {
-    const wrapper = await mountView();
-    const tabs = wrapper.findAll('[role="tab"]');
-    await tabs[3].trigger("mousedown");
-    await flushPromises();
-    await wrapper.find(".pc-row-head").trigger("click");
-    await flushPromises();
-
-    expect(getPcProposal).toHaveBeenCalledWith("prop-1", "proj-1");
-    expect(wrapper.text()).toContain("状态机口径需与支付域对齐");
-    expect(wrapper.text()).toContain("治理级别: L1");
-    expect(wrapper.text()).toContain("成员变更 (1)");
-    expect(wrapper.text()).toContain(
-      "update_object · domain_object · 订单状态 · v3"
-    );
-    expect(wrapper.text()).toContain("审批历史 (1)");
-    expect(wrapper.text()).toContain("待决策");
   });
 
   it("shows reports tab as default with empty state", async () => {
