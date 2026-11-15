@@ -29,6 +29,10 @@ export interface AnalysisReportRow {
   closed_at: string | null;
   kb_revision_id: string | null;
   pc_source_id: string | null;
+  /** D-2 运行口径：incremental（默认）/ full。 */
+  run_mode: "incremental" | "full";
+  /** 增量起点（全量/首次为 null）。 */
+  since_commit: string | null;
   /** 未决 PC 提案数（draft/submitted）。 */
   pending_proposals: number;
   /** KB 报告草稿是否待确认。 */

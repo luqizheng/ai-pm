@@ -8,6 +8,7 @@ knowledge:
     pc: PC Objects
     proposals: PC Proposals
   report:
+    incrementalBadge: Incremental
     status:
       analyzing: Analyzing
       analyzed: Awaiting review

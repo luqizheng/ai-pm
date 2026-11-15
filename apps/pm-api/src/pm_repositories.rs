@@ -343,6 +343,8 @@ async fn verify_handler(
 struct AnalyzeBody {
     #[serde(default)]
     idempotency_key: Option<String>,
+    #[serde(default)]
+    mode: Option<String>,
 }
 
 async fn analyze_handler(
@@ -355,8 +357,12 @@ async fn analyze_handler(
         return resp;
     }
     let actor = principal.audit_actor();
+    let parsed = body.map(|Json(body)| body);
     let req = AnalyzeRepositoryRequest {
-        idempotency_key: body.and_then(|Json(body)| body.idempotency_key),
+        idempotency_key: parsed
+            .as_ref()
+            .and_then(|body| body.idempotency_key.clone()),
+        mode: parsed.as_ref().and_then(|body| body.mode.clone()),
     };
     match analyze_repository(&state.pool, repository_id, &actor, req).await {
         Ok(outcome) => (StatusCode::ACCEPTED, Json(outcome)).into_response(),

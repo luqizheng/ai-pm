@@ -578,6 +578,8 @@ describe("KnowledgeView", () => {
           closed_at: null,
           kb_revision_id: null,
           pc_source_id: null,
+          run_mode: "incremental",
+          since_commit: null,
           pending_proposals: 2,
           has_pending_kb: true
         }

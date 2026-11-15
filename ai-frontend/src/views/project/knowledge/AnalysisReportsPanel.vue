@@ -285,6 +285,9 @@ onBeforeUnmount(() => {
               <Badge :variant="statusVariant(row.status)">
                 {{ t(`s01.knowledge.report.status.${row.status}`) }}
               </Badge>
+              <Badge v-if="row.run_mode === 'incremental'" variant="neutral">
+                {{ t("s01.knowledge.report.incrementalBadge") }}
+              </Badge>
               <span class="rp-meta">
                 <template v-if="row.status === 'analyzing'">
                   {{

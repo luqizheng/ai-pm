@@ -218,6 +218,18 @@ async fn collect_fresh(
     repository_id: Uuid,
     observed_head: Option<&str>,
 ) -> Result<(RepoAccess, RepoFacts), AnalysisError> {
+    let (access, facts, _) = collect_fresh_run(pool, repository_id, observed_head, None).await?;
+    Ok((access, facts))
+}
+
+/// D-2：采集运行口径——`incremental_since = Some` 且非空时走
+/// `repo_facts::collect_incremental`（非祖先自动回退全量，used=false）。
+async fn collect_fresh_run(
+    pool: &PgPool,
+    repository_id: Uuid,
+    observed_head: Option<&str>,
+    incremental_since: Option<&str>,
+) -> Result<(RepoAccess, RepoFacts, bool), AnalysisError> {
     let access = load_repo_access(pool, repository_id).await?;
     let key = project_ssh_key_path(pool, repository_id).await?;
     let key_path = key.as_ref().map(|m| m.key_path());
@@ -233,15 +245,21 @@ async fn collect_fresh(
             other => AnalysisError::Git(other.to_string()),
         })?;
     let anchor = analysis_anchor(&access, observed_head);
-    let facts = match &anchor {
-        Some(commit) => repo_facts::collect(&dest, commit, repo_facts::Limits::from_env())
-            .await
-            .map_err(|e| AnalysisError::Git(e.to_string()))?,
-        None => repo_facts::collect(&dest, &access.branch, repo_facts::Limits::from_env())
-            .await
-            .map_err(|e| AnalysisError::Git(e.to_string()))?,
+    let (facts, used) = match (&anchor, incremental_since) {
+        (Some(commit), Some(since)) => {
+            repo_facts::collect_incremental(&dest, commit, since, repo_facts::Limits::from_env())
+                .await
+                .map_err(|e| AnalysisError::Git(e.to_string()))?
+        }
+        _ => {
+            let rev = anchor.as_deref().unwrap_or_else(|| access.branch.as_str());
+            let facts = repo_facts::collect(&dest, rev, repo_facts::Limits::from_env())
+                .await
+                .map_err(|e| AnalysisError::Git(e.to_string()))?;
+            (facts, false)
+        }
     };
-    Ok((access, facts))
+    Ok((access, facts, used))
 }
 
 /// PC 派生入口：优先复用 KB 分析留下的缓存 clone（collect 便宜且确定性）；
@@ -251,20 +269,34 @@ pub async fn collect_repository_facts(
     pool: &PgPool,
     repository_id: Uuid,
     observed_head: Option<&str>,
-) -> Result<(RepoFacts, String), AnalysisError> {
+    incremental_since: Option<&str>,
+) -> Result<(RepoFacts, String, bool), AnalysisError> {
     let access = load_repo_access(pool, repository_id).await?;
     let anchor = analysis_anchor(&access, observed_head);
     let dest = repo_facts::repo_cache_dir(repository_id);
     if dest.is_dir() {
         let anchor_ref = anchor.as_deref().unwrap_or(access.branch.as_str());
-        if let Ok(facts) =
-            repo_facts::collect(&dest, anchor_ref, repo_facts::Limits::from_env()).await
-        {
-            return Ok((facts, access.name));
+        let collected = match incremental_since {
+            Some(since) => {
+                repo_facts::collect_incremental(
+                    &dest,
+                    anchor_ref,
+                    since,
+                    repo_facts::Limits::from_env(),
+                )
+                .await
+            }
+            None => repo_facts::collect(&dest, anchor_ref, repo_facts::Limits::from_env())
+                .await
+                .map(|facts| (facts, false)),
+        };
+        if let Ok((facts, used)) = collected {
+            return Ok((facts, access.name, used));
         }
     }
-    let (_, facts) = collect_fresh(pool, repository_id, observed_head).await?;
-    Ok((facts, access.name))
+    let (_, facts, used) =
+        collect_fresh_run(pool, repository_id, observed_head, incremental_since).await?;
+    Ok((facts, access.name, used))
 }
 
 // ── KB：仓库快照 digest 与落库 ─────────────────────────────────────────────
@@ -272,7 +304,7 @@ pub async fn collect_repository_facts(
 /// 仓库快照 Markdown digest（纯函数，可单测）——结构化事实摘要，正文有界
 /// （commits 最多列 30、hot files 10、docs 只列清单），总量由 commit 截断保底。
 pub fn build_repo_digest(name: &str, url: &str, facts: &RepoFacts) -> String {
-    compose_repo_digest(name, url, facts, None, None)
+    compose_repo_digest(name, url, facts, None, None, None)
 }
 
 /// digest 拼装：结构化统计小节（恒有）+ 可选 LLM 叙述摘要（D-1=A 增强，
@@ -285,6 +317,7 @@ pub fn compose_repo_digest(
     facts: &RepoFacts,
     llm_markdown: Option<&str>,
     model_name: Option<&str>,
+    increment_note: Option<&str>,
 ) -> String {
     let mut out = String::with_capacity(16 * 1024);
     out.push_str(&format!("# 仓库快照：{name}\n\n"));
@@ -293,6 +326,9 @@ pub fn compose_repo_digest(
         "- HEAD：`{}`（分支 `{}`）\n",
         facts.head_commit_sha, facts.default_branch
     ));
+    if let Some(note) = increment_note {
+        out.push_str(&format!("- 分析口径：{note}\n"));
+    }
     out.push_str(&format!(
         "- 文件数：{}｜体积：{}KB｜采集触顶：{}\n\n",
         facts.file_count,
@@ -375,7 +411,30 @@ pub async fn analyze_repository_snapshot(
     // 锚链次选：verify 的 Observed HEAD（source_ref 携带）——verify 与分析
     // 两时点之间 HEAD 若前进，产物仍锚定受理时的版本（D-A/A-2 裁决）。
     let observed_head = source_ref.get("head_commit_sha").and_then(|v| v.as_str());
-    let (access, facts) = collect_fresh(pool, repository_id, observed_head).await?;
+    // D-2：运行口径（source_ref 携带；verify/confirm 链无 run_mode → 全量）。
+    let incremental_since =
+        if source_ref.get("run_mode").and_then(|v| v.as_str()) == Some("incremental") {
+            source_ref
+                .get("since_commit")
+                .and_then(|v| v.as_str())
+                .filter(|value| !value.trim().is_empty())
+        } else {
+            None
+        };
+    let (access, facts, incremental_used) =
+        collect_fresh_run(pool, repository_id, observed_head, incremental_since).await?;
+    let increment_note = incremental_used.then(|| {
+        format!(
+            "增量分析：自 {} 起，{} 条 commit、{} 篇变更文档",
+            incremental_since
+                .unwrap_or_default()
+                .chars()
+                .take(12)
+                .collect::<String>(),
+            facts.commits.len(),
+            facts.docs.len()
+        )
+    });
     // D-3=A 降级：Ok(None)=无 provider → derived；Err=解析/调用失败 →
     // derived_fallback。产物永远是真实派生事实，绝不回退 fixtures 假数据。
     let (digest, analysis_mode) = match snapshot_model {
@@ -390,11 +449,19 @@ pub async fn analyze_repository_snapshot(
                     &facts,
                     Some(&enriched.markdown),
                     Some(&enriched.model_name),
+                    increment_note.as_deref(),
                 ),
                 "llm",
             ),
             Ok(None) => (
-                build_repo_digest(&access.name, &access.url, &facts),
+                compose_repo_digest(
+                    &access.name,
+                    &access.url,
+                    &facts,
+                    None,
+                    None,
+                    increment_note.as_deref(),
+                ),
                 "derived",
             ),
             Err(err) => {
@@ -403,7 +470,14 @@ pub async fn analyze_repository_snapshot(
                     "kb: snapshot digest LLM enrichment failed; falling back to derived facts"
                 );
                 (
-                    build_repo_digest(&access.name, &access.url, &facts),
+                    compose_repo_digest(
+                        &access.name,
+                        &access.url,
+                        &facts,
+                        None,
+                        None,
+                        increment_note.as_deref(),
+                    ),
                     "derived_fallback",
                 )
             }
@@ -749,6 +823,8 @@ pub async fn derive_pc_cognition(
     kb_content_hash: &str,
     facts: &RepoFacts,
     snapshot_model: Option<&dyn SnapshotAnalysisModel>,
+    incremental_used: bool,
+    prior_cognition: Option<&str>,
 ) -> Result<(Uuid, Uuid), AnalysisError> {
     let drafts = plan_cognition_objects(facts, repository_id, 5);
     let mut enrichments: HashMap<String, SnapshotObjectEnrichment> = HashMap::new();
@@ -764,7 +840,21 @@ pub async fn derive_pc_cognition(
                     content: d.content.clone(),
                 })
                 .collect();
-            match model.enrich_objects(project_id, facts, &skeletons).await {
+            // D-2：增量运行且已有既有认知 → merge 增强（实现不支持则默认
+            // 回退 enrich_objects，语义同全量）。
+            let outcome = if incremental_used && prior_cognition.is_some() {
+                model
+                    .enrich_objects_merge(
+                        project_id,
+                        facts,
+                        &skeletons,
+                        prior_cognition.unwrap_or_default(),
+                    )
+                    .await
+            } else {
+                model.enrich_objects(project_id, facts, &skeletons).await
+            };
+            match outcome {
                 Ok(Some(enriched)) => {
                     for object in enriched.objects {
                         enrichments.insert(object.object_key.clone(), object);

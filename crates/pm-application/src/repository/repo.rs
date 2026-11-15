@@ -447,6 +447,8 @@ pub async fn confirm_repository_version(
         key_prefix: "repo_confirm",
         // 联动受理保持既有幂等键语义（无触发时刻段）。
         trigger_token: None,
+        run_mode: "full",
+        since_commit: None,
     };
     match submit_repository_snapshot_intake(pool, cmd, actor).await {
         Ok(receipt) => tracing::info!(
@@ -631,6 +633,8 @@ pub async fn verify_repository(
                     key_prefix: "repo_verify",
                     // verify 联动保持既有幂等键语义（无触发时刻段）。
                     trigger_token: None,
+                    run_mode: "full",
+                    since_commit: None,
                 };
                 match submit_repository_snapshot_intake(pool, cmd, actor).await {
                     Ok(receipt) => tracing::info!(
@@ -670,6 +674,11 @@ struct SnapshotIntakeCmd<'a> {
     /// 手动分析的「触发时刻」段（S1）：`Some` 时键追加该段，使 HEAD 未前进
     /// 也能重触发；`None` 保持 verify / confirm 既有键格式与语义不变。
     trigger_token: Option<&'a str>,
+    /// D-2 运行口径（仅手动分析链携带；verify/confirm 恒 full）：
+    /// incremental = 自 since_commit 起区间采集 + 既有认知 merge 重析。
+    run_mode: &'a str,
+    /// 增量起点（= 上一份关闭报告固化的 last_analyzed_commit_sha）。
+    since_commit: Option<&'a str>,
 }
 
 /// 仓库快照 intake 受理（checkpoint-1 触发链；intake.rs 管道由此接续：
@@ -708,6 +717,8 @@ async fn submit_repository_snapshot_intake(
                 "repository_id": cmd.repository_id.to_string(),
                 "head_commit_sha": cmd.head_commit_sha,
                 "content_hash": cmd.head_commit_sha,
+                "run_mode": cmd.run_mode,
+                "since_commit": cmd.since_commit,
             }),
             // commit sha 本身即树内容哈希——直接作为 intake 对账锚。
             content_hash: Some(cmd.head_commit_sha.to_string()),
@@ -746,20 +757,50 @@ pub async fn analyze_repository(
         String,         // status
         Option<String>, // selected_commit（Confirmed）
         Option<String>, // head_commit_sha（Observed）
+        Option<String>, // last_analyzed_commit_sha（D-1 锚点）
     );
     let row: Option<AnalyzeRow> = sqlx::query_as(
         "SELECT r.project_id, r.tenant_id, r.name, r.url, r.status, \
-                r.selected_commit, r.head_commit_sha \
+                r.selected_commit, r.head_commit_sha, r.last_analyzed_commit_sha \
          FROM integration.project_repository r WHERE r.id = $1",
     )
     .bind(repository_id)
     .fetch_optional(pool)
     .await?;
-    let (project_id, tenant_id, name, url, status, selected_commit, head_commit_sha) =
-        row.ok_or(RepositoryError::NotFound)?;
+    let (
+        project_id,
+        tenant_id,
+        name,
+        url,
+        status,
+        selected_commit,
+        head_commit_sha,
+        last_analyzed_commit_sha,
+    ) = row.ok_or(RepositoryError::NotFound)?;
     if status == "archived" {
         return Err(RepositoryError::Archived);
     }
+    // D-2 运行口径：incremental（默认）/ full；请求 mode 非法 → 400。
+    let run_mode = match req.mode.as_deref() {
+        None | Some("incremental") => "incremental",
+        Some("full") => "full",
+        Some(other) => {
+            return Err(RepositoryError::Validation(
+                "mode must be incremental or full",
+            ))
+        }
+    };
+    // 增量起点 = D-1 锚点（上一份关闭报告固化）；缺失（首次分析）自动退全量。
+    let since_commit = if run_mode == "incremental" {
+        last_analyzed_commit_sha.filter(|value| !value.trim().is_empty())
+    } else {
+        None
+    };
+    let run_mode = if since_commit.is_some() {
+        run_mode
+    } else {
+        "full"
+    };
     // 未核验或没有可用锚点，一律 422（前端无 requirement count 端点，不臆测）。
     let commit = selected_commit
         .or(head_commit_sha)
@@ -834,6 +875,8 @@ pub async fn analyze_repository(
         head_commit_sha: &commit,
         key_prefix: "repo_analyze",
         trigger_token: Some(&trigger_token),
+        run_mode,
+        since_commit: since_commit.as_deref(),
     };
     let receipt = match submit_repository_snapshot_intake(pool, cmd, actor).await {
         Ok(receipt) => receipt,
@@ -849,6 +892,8 @@ pub async fn analyze_repository(
         repository_id,
         &commit,
         receipt.intake_id,
+        run_mode,
+        since_commit.as_deref(),
     )
     .await
     {

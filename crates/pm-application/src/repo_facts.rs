@@ -119,10 +119,13 @@ fn is_doc_candidate(path: &str) -> bool {
         return false;
     }
     let name = lower.rsplit('/').next().unwrap_or(&lower);
+    // D-3：范围扩至 docx/pdf（docproc_parse 进程内解析为纯文本）。
     let doc_ext = name.ends_with(".md")
         || name.ends_with(".mdx")
         || name.ends_with(".rst")
-        || name.ends_with(".txt");
+        || name.ends_with(".txt")
+        || name.ends_with(".docx")
+        || name.ends_with(".pdf");
     if name.starts_with("readme") {
         return true;
     }
@@ -131,6 +134,25 @@ fn is_doc_candidate(path: &str) -> bool {
     }
     // 根级文档：路径里没有 `/`。
     !lower.contains('/') && doc_ext
+}
+
+/// 文档字节 → 纯文本（D-3 分叉）：docx/pdf 走 docproc_parse（进程内解析，
+/// 失败/不支持 → None=跳过计 truncated）；文本类直读 UTF-8。
+fn decode_doc_text(path: &str, bytes: &[u8]) -> Option<String> {
+    let lower = path.to_ascii_lowercase();
+    let kind = if lower.ends_with(".docx") {
+        "docx"
+    } else if lower.ends_with(".pdf") {
+        "pdf"
+    } else {
+        return String::from_utf8(bytes.to_vec()).ok();
+    };
+    let head: Vec<u8> = bytes.iter().take(16).copied().collect();
+    let adapter = crate::docproc_parse::adapter_for(kind, &head)?;
+    let outcome = adapter
+        .parse(crate::docproc_parse::ParseCtx { bytes })
+        .ok()?;
+    Some(outcome.markdown)
 }
 
 fn extension_of(path: &str) -> Option<String> {
@@ -260,7 +282,9 @@ pub async fn collect(root: &Path, branch: &str, limits: Limits) -> Result<RepoFa
             truncated = true;
             break;
         }
-        let Ok(markdown) = String::from_utf8(bytes.clone()) else {
+        let Some(markdown) = decode_doc_text(path, &bytes) else {
+            // docx/pdf 解析失败或二进制不可读：跳过并计触顶（D-3 裁决）。
+            truncated = true;
             continue;
         };
         docs_total += bytes.len();
@@ -287,6 +311,197 @@ pub async fn collect(root: &Path, branch: &str, limits: Limits) -> Result<RepoFa
         truncated,
         size_bytes,
     })
+}
+
+/// D-2 · 增量采集：自 `since_commit` 到 `anchor` 的区间（commits / 变更文档 /
+/// 区间热点），文件树/语言/体积取当前态。`since_commit` 非锚祖先（force push
+/// 等历史重写）→ 回退全量 `collect`（返回 false）。空区间合法（HEAD 未前进的
+/// 重分析=重析既有认知，报告照出）。
+pub async fn collect_incremental(
+    root: &Path,
+    anchor: &str,
+    since_commit: &str,
+    limits: Limits,
+) -> Result<(RepoFacts, bool), GitError> {
+    if !branch_is_safe(anchor) || !branch_is_safe(since_commit) {
+        return Err(GitError::Other("unsafe ref name".to_string()));
+    }
+    // 祖先校验：since_commit 不在 anchor 历史里 → 区间无意义，回退全量。
+    let ancestor = git_access::git_run(
+        root,
+        &["merge-base", "--is-ancestor", since_commit, anchor],
+        GIT_TIMEOUT,
+    )
+    .await;
+    let incremental = matches!(&ancestor, Ok(out) if out.code == 0);
+    if !incremental {
+        let facts = collect(root, anchor, limits).await?;
+        return Ok((facts, false));
+    }
+
+    let head_commit_sha = String::from_utf8_lossy(
+        &git_access::git_stdout(root, &["rev-parse", anchor], GIT_TIMEOUT).await?,
+    )
+    .trim()
+    .to_string();
+
+    let mut truncated = false;
+
+    // 区间 commits（since_commit..anchor，不含 since_commit 自身）。
+    let limit = (limits.max_commits + 1).to_string();
+    let raw_log = git_access::git_stdout(
+        root,
+        &[
+            "log",
+            anchor,
+            &format!("^{since_commit}"),
+            "--format=%H%x1f%an%x1f%aI%x1f%s",
+            "-n",
+            limit.as_str(),
+        ],
+        GIT_TIMEOUT,
+    )
+    .await?;
+    let mut commits = Vec::new();
+    for line in String::from_utf8_lossy(&raw_log).lines() {
+        let mut parts = line.split('\x1f');
+        let (Some(sha), Some(author), Some(authored_at), Some(subject)) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+        else {
+            continue;
+        };
+        commits.push(CommitFact {
+            sha: sha.to_string(),
+            author: author.to_string(),
+            authored_at: authored_at.to_string(),
+            subject: truncate_chars(subject, 200),
+        });
+    }
+    if commits.len() > limits.max_commits {
+        truncated = true;
+        commits.truncate(limits.max_commits);
+    }
+
+    // 文件树/语言/体积：当前态（与全量同口径）。
+    let raw_tree =
+        git_access::git_stdout(root, &["ls-tree", "-r", "--name-only", anchor], GIT_TIMEOUT)
+            .await?;
+    let mut files: Vec<String> = String::from_utf8_lossy(&raw_tree)
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(str::to_string)
+        .collect();
+    if files.len() > limits.max_files {
+        truncated = true;
+        files.truncate(limits.max_files);
+    }
+    let file_count = files.len();
+    let mut lang_counter: HashMap<String, usize> = HashMap::new();
+    for file in &files {
+        if let Some(ext) = extension_of(file) {
+            *lang_counter.entry(ext).or_insert(0) += 1;
+        }
+    }
+    let mut languages: Vec<LanguageStat> = lang_counter
+        .into_iter()
+        .map(|(extension, files)| LanguageStat { extension, files })
+        .collect();
+    languages.sort_by(|a, b| b.files.cmp(&a.files).then(a.extension.cmp(&b.extension)));
+    languages.truncate(8);
+
+    // 区间热点。
+    let raw_names = git_access::git_stdout(
+        root,
+        &[
+            "log",
+            anchor,
+            &format!("^{since_commit}"),
+            "--name-only",
+            "--format=",
+            "-n",
+            "300",
+        ],
+        GIT_TIMEOUT,
+    )
+    .await?;
+    let mut touch_counter: HashMap<String, usize> = HashMap::new();
+    for line in String::from_utf8_lossy(&raw_names).lines() {
+        let path = line.trim();
+        if !path.is_empty() {
+            *touch_counter.entry(path.to_string()).or_insert(0) += 1;
+        }
+    }
+    let mut hot_files: Vec<HotFile> = touch_counter
+        .into_iter()
+        .map(|(path, touches)| HotFile { path, touches })
+        .collect();
+    hot_files.sort_by(|a, b| b.touches.cmp(&a.touches).then(a.path.cmp(&b.path)));
+    hot_files.truncate(20);
+
+    // 区间内变更的文档（ACMR）+ 内容（D-3 范围与预算纪律同全量）。
+    let raw_changed = git_access::git_stdout(
+        root,
+        &[
+            "diff",
+            "--name-only",
+            "--diff-filter=ACMR",
+            since_commit,
+            anchor,
+        ],
+        GIT_TIMEOUT,
+    )
+    .await?;
+    let mut docs = Vec::new();
+    let mut docs_total = 0usize;
+    for line in String::from_utf8_lossy(&raw_changed).lines() {
+        let path = line.trim();
+        if path.is_empty() || !is_doc_candidate(path) {
+            continue;
+        }
+        let spec = format!("{anchor}:{path}");
+        let bytes = match git_access::git_stdout(root, &["show", &spec], GIT_TIMEOUT).await {
+            Ok(bytes) => bytes,
+            Err(_) => continue,
+        };
+        if bytes.len() > limits.max_doc_bytes {
+            truncated = true;
+            continue;
+        }
+        if docs_total + bytes.len() > limits.max_docs_total {
+            truncated = true;
+            break;
+        }
+        let Some(markdown) = decode_doc_text(path, &bytes) else {
+            truncated = true;
+            continue;
+        };
+        docs_total += bytes.len();
+        docs.push(DocContent {
+            path: path.to_string(),
+            bytes: bytes.len(),
+            markdown,
+        });
+    }
+
+    let size_bytes = git_access::directory_size(root);
+    if size_bytes > limits.max_repo_mb.saturating_mul(1024 * 1024) {
+        return Err(GitError::TooLarge);
+    }
+
+    Ok((
+        RepoFacts {
+            head_commit_sha,
+            default_branch: anchor.to_string(),
+            commits,
+            hot_files,
+            languages,
+            file_count,
+            docs,
+            truncated,
+            size_bytes,
+        },
+        true,
+    ))
 }
 /// 一个仓库及其事实，`repository_id` 用于证据回指。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

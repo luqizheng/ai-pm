@@ -114,6 +114,11 @@ repositories:
     confirm: 开始分析
     reanalyzeOne: 重新分析
     reanalyzeAccepted: 已受理增量分析，进度见上方「仓库分析」。
+    fullMode: 整库重析（全量）
+    fullConfirmTitle: 整库重析
+    fullConfirmDescription: "将对 {repo} 重新采集全部 300 条 commit 与文档并整体重析（非增量），确定继续？"
+    fullConfirm: 整库重析
+    fullAccepted: 已受理整库重析，进度见上方「仓库分析」。
     error:
       projectNotEmpty: 项目已存在需求或基线数据，无法重新发起冷启动分析。
       alreadyApplied: 该项目的分析结果已应用，无法重新发起冷启动分析。

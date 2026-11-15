@@ -37,6 +37,10 @@ pub struct ReportListRow {
     /// 本次报告的 KB 修订与 PC 来源（关联键；analyzed 后写入）。
     pub kb_revision_id: Option<Uuid>,
     pub pc_source_id: Option<Uuid>,
+    /// D-2 运行口径：incremental（默认）/ full。
+    pub run_mode: String,
+    /// 增量起点（= 上一份关闭报告固化的锚点；全量/首次为 NULL）。
+    pub since_commit: Option<String>,
     pub pending_proposals: i64,
     pub has_pending_kb: bool,
 }
@@ -117,11 +121,14 @@ pub async fn ensure_for_intake(
     repository_id: Uuid,
     commit_sha: &str,
     intake_id: Uuid,
+    run_mode: &str,
+    since_commit: Option<&str>,
 ) -> Result<Uuid, sqlx::Error> {
     let created: Option<Uuid> = sqlx::query_scalar(
         "INSERT INTO integration.repo_analysis_report \
-         (tenant_id, project_id, repository_id, commit_sha, intake_id, status) \
-         VALUES ($1, $2, $3, $4, $5, 'analyzing') \
+         (tenant_id, project_id, repository_id, commit_sha, intake_id, status, \
+          run_mode, since_commit) \
+         VALUES ($1, $2, $3, $4, $5, 'analyzing', $6, $7) \
          ON CONFLICT (intake_id) DO NOTHING RETURNING id",
     )
     .bind(tenant_id)
@@ -129,6 +136,8 @@ pub async fn ensure_for_intake(
     .bind(repository_id)
     .bind(commit_sha)
     .bind(intake_id)
+    .bind(run_mode)
+    .bind(since_commit)
     .fetch_optional(pool)
     .await?;
     if let Some(id) = created {
@@ -138,6 +147,52 @@ pub async fn ensure_for_intake(
         .bind(intake_id)
         .fetch_one(pool)
         .await
+}
+
+/// D-2 · 既有 PC 认知摘要（merge 重析输入）：取该仓库最近一份有产物的报告
+/// （analyzed/closed），经证据钉扎反查对象修订，拼装为有界 Markdown 文本
+/// （最多 12 个对象、单对象正文截 4000 字）。无报告/无产物 → None。
+pub async fn prior_cognition_digest(
+    pool: &PgPool,
+    project_id: Uuid,
+    repository_id: Uuid,
+) -> Result<Option<String>, sqlx::Error> {
+    let source_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT pc_source_id FROM integration.repo_analysis_report \
+          WHERE project_id = $1 AND repository_id = $2 \
+            AND status IN ('analyzed', 'closed') AND pc_source_id IS NOT NULL \
+          ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(project_id)
+    .bind(repository_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some(source_id) = source_id else {
+        return Ok(None);
+    };
+    let rows: Vec<(String, String, i32, Option<String>)> = sqlx::query_as(
+        "SELECT o.display_name, o.object_type, r.revision_no, \
+                left(dr.content, 4000) \
+           FROM pc.evidence e \
+           JOIN pc.cognition_revision r ON r.id = e.object_revision_id \
+           JOIN pc.cognition_object o ON o.id = r.object_id \
+           JOIN pc.document_revision dr ON dr.id = r.document_revision_id \
+          WHERE e.source_id = $1 \
+          ORDER BY o.display_name ASC LIMIT 12",
+    )
+    .bind(source_id)
+    .fetch_all(pool)
+    .await?;
+    if rows.is_empty() {
+        return Ok(None);
+    }
+    let mut out = String::from("# 既有项目认知（上一份报告的对象修订）\n");
+    for (name, kind, no, content) in rows {
+        out.push_str(&format!("\n## {name}（{kind} · v{no}）\n"));
+        out.push_str(content.as_deref().unwrap_or(""));
+        out.push('\n');
+    }
+    Ok(Some(out))
 }
 
 /// KB 分析完成（PC 派生进行中）——仅刷新阶段描述，不动状态。
@@ -222,6 +277,7 @@ pub async fn list_reports(
         "SELECT r.id, r.repository_id, p.name AS repository_name, r.commit_sha, r.status, \
                 r.stage_detail, r.error_code, r.error_detail, r.created_at, r.updated_at, \
                 r.closed_at, r.kb_revision_id, r.pc_source_id, \
+                r.run_mode, r.since_commit, \
                 (SELECT count(*) FROM pc.proposal pp \
                   WHERE pp.source_id = r.pc_source_id \
                     AND pp.status IN ('draft','submitted')) AS pending_proposals, \

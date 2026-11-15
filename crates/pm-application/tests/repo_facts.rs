@@ -5,7 +5,7 @@ use std::process::Command;
 use std::time::Duration;
 
 use pm_application::git_access::{self, GitError};
-use pm_application::repo_facts::{collect, Limits, RepoFacts};
+use pm_application::repo_facts::{collect, collect_incremental, Limits, RepoFacts};
 use uuid::Uuid;
 
 struct Fixture {
@@ -235,4 +235,127 @@ async fn collect_rejects_unsafe_branch_and_missing_repo() {
         collect(&fx.root.join("missing"), "main", Limits::default()).await,
         Err(GitError::Other(_) | GitError::Io(_))
     ));
+}
+
+// ── D-2/D-3 · 增量采集 + 文档范围 ────────────────────────────────────────────
+
+/// 最小 docx（与 docproc_pipeline.rs 同款构造，zip+document.xml）。
+fn build_docx_bytes(body: &str) -> Vec<u8> {
+    let mut buf = std::io::Cursor::new(Vec::new());
+    {
+        let mut zip = zip::ZipWriter::new(&mut buf);
+        let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default();
+        let document_xml = format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body><w:p><w:r><w:t>{body}</w:t></w:r></w:p></w:body></w:document>"#
+        );
+        zip.start_file("word/document.xml", opts).unwrap();
+        std::io::Write::write_all(&mut zip, document_xml.as_bytes()).unwrap();
+        zip.finish().unwrap();
+    }
+    buf.into_inner()
+}
+
+async fn clone_to(fx: &Fixture) -> PathBuf {
+    let dest = fx.root.join(format!("cache-{}", Uuid::new_v4()));
+    git_access::clone_bare(&fx.url(), None, &dest, Duration::from_secs(60))
+        .await
+        .unwrap();
+    dest
+}
+
+#[tokio::test]
+async fn collect_incremental_reads_range_and_changed_docs() {
+    let fx = Fixture::new();
+    fx.write("README.md", b"# demo");
+    fx.write("docs/guide.md", b"# guide v1");
+    fx.write("docs/stable.md", b"# stable");
+    fx.commit_all("init");
+    let since = fx.git_stdout(&["rev-parse", "HEAD"]);
+
+    // 区间内：guide 变更 + new 新增 + 非文档代码变更；stable/README 未变更。
+    fx.write("docs/guide.md", "# guide v2（变更）".as_bytes());
+    fx.write("docs/new.md", b"# new doc");
+    fx.write("src/lib.rs", b"fn main() {}");
+    fx.commit_all("update docs");
+
+    let dest = clone_to(&fx).await;
+    let (facts, incremental) = collect_incremental(&dest, "main", &since, Limits::default())
+        .await
+        .unwrap();
+    assert!(incremental);
+    assert_eq!(facts.commits.len(), 1);
+    assert_eq!(facts.commits[0].subject, "update docs");
+
+    // 文档 = 区间变更集（ACMR）：未变更的 stable/README 不在。
+    let paths: Vec<String> = facts.docs.iter().map(|d| d.path.clone()).collect();
+    assert_docs(&paths, &["docs/guide.md", "docs/new.md"]);
+    assert!(!paths.iter().any(|p| p == "docs/stable.md"));
+    assert!(!paths.iter().any(|p| p == "README.md"));
+    // 内容取 anchor 侧（v2）
+    assert!(facts
+        .docs
+        .iter()
+        .find(|d| d.path == "docs/guide.md")
+        .unwrap()
+        .markdown
+        .contains("v2"));
+    // 文件树/语言统计仍是当前态全量
+    assert!(facts.file_count >= 4);
+    assert!(!facts.truncated);
+}
+
+#[tokio::test]
+async fn collect_incremental_falls_back_when_since_not_ancestor() {
+    let fx = Fixture::new();
+    fx.write("README.md", b"# demo");
+    fx.commit_all("init");
+    let bogus = "0000000000000000000000000000000000000000";
+    let dest = clone_to(&fx).await;
+    let (facts, incremental) = collect_incremental(&dest, "main", bogus, Limits::default())
+        .await
+        .unwrap();
+    assert!(!incremental, "非祖先 since 必须回退全量");
+    assert_eq!(facts.commits.len(), 1);
+}
+
+#[tokio::test]
+async fn collect_incremental_reads_docx_from_changed_docs() {
+    let fx = Fixture::new();
+    fx.write("docs/manual.docx", &build_docx_bytes("v1"));
+    fx.commit_all("init docx");
+    let since = fx.git_stdout(&["rev-parse", "HEAD"]);
+    fx.write("docs/manual.docx", &build_docx_bytes("v2 \u{6b63}\u{6587}"));
+    fx.commit_all("update docx");
+    let dest = clone_to(&fx).await;
+    let (facts, incremental) = collect_incremental(&dest, "main", &since, Limits::default())
+        .await
+        .unwrap();
+    assert!(incremental);
+    let doc = facts
+        .docs
+        .iter()
+        .find(|d| d.path == "docs/manual.docx")
+        .expect("changed docx must be collected");
+    assert!(doc.markdown.contains("v2 \u{6b63}\u{6587}"));
+}
+
+#[tokio::test]
+async fn collect_full_now_includes_docx_candidates() {
+    // D-3：全量采集的候选范围同样含 docx。
+    let fx = Fixture::new();
+    fx.write(
+        "docs/manual.docx",
+        &build_docx_bytes("\u{624b}\u{518c}\u{6b63}\u{6587}"),
+    );
+    fx.commit_all("init");
+    let dest = clone_to(&fx).await;
+    let facts = collect(&dest, "main", Limits::default()).await.unwrap();
+    let doc = facts
+        .docs
+        .iter()
+        .find(|d| d.path == "docs/manual.docx")
+        .expect("docx must be a doc candidate");
+    assert!(doc.markdown.contains("\u{624b}\u{518c}\u{6b63}\u{6587}"));
 }

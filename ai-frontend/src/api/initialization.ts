@@ -200,7 +200,7 @@ export interface AnalyzeRepositoryResponse {
  */
 export function analyzeRepository(
   repositoryId: string,
-  body: { idempotency_key?: string } = {}
+  body: { idempotency_key?: string; mode?: "incremental" | "full" } = {}
 ) {
   return http.post<AnalyzeRepositoryResponse>(
     `/v1/pm/repositories/${repositoryId}/analyze`,

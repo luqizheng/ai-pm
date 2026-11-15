@@ -8,6 +8,7 @@ knowledge:
     pc: PC 对象
     proposals: PC 提案
   report:
+    incrementalBadge: 增量
     status:
       analyzing: 分析中
       analyzed: 待审理

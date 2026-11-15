@@ -77,4 +77,18 @@ pub trait SnapshotAnalysisModel: Send + Sync {
         facts: &RepoFacts,
         skeletons: &[SnapshotObjectSkeleton],
     ) -> Result<Option<SnapshotObjectsEnrichment>, ModelError>;
+
+    /// D-2 增量 merge 增强：`prior_cognition` = 既有对象修订摘要（Markdown），
+    /// 实现应「以既有为基线、仅更新有变化的对象」。默认实现 = 不支持 merge
+    /// 的实现回退全量 `enrich_objects`（语义与全量一致）。
+    async fn enrich_objects_merge(
+        &self,
+        project_id: Uuid,
+        facts: &RepoFacts,
+        skeletons: &[SnapshotObjectSkeleton],
+        prior_cognition: &str,
+    ) -> Result<Option<SnapshotObjectsEnrichment>, ModelError> {
+        let _ = prior_cognition;
+        self.enrich_objects(project_id, facts, skeletons).await
+    }
 }

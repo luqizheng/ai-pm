@@ -244,6 +244,10 @@ pub struct ConfirmVersionRequest {
 pub struct AnalyzeRepositoryRequest {
     #[serde(default)]
     pub idempotency_key: Option<String>,
+    /// D-2 运行口径：incremental（缺省，自上一份关闭报告锚点起区间采集）| full
+    /// （显式整库重析）。非法值 → 400。
+    #[serde(default)]
+    pub mode: Option<String>,
 }
 
 /// 手动增量分析的受理回执（202 纯受理语义，与 `start_import` 一致）。

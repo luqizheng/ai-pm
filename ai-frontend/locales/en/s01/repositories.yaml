@@ -114,6 +114,11 @@ repositories:
     confirm: Start Analysis
     reanalyzeOne: Re-analyze
     reanalyzeAccepted: Incremental analysis accepted. Track progress in the analysis section above.
+    fullMode: Full re-analysis
+    fullConfirmTitle: Full re-analysis
+    fullConfirmDescription: "This will re-collect all 300 commits and documents for {repo} and re-analyze everything (not incremental). Continue?"
+    fullConfirm: Re-analyze everything
+    fullAccepted: Full re-analysis accepted — see "Repository Analysis" above for progress.
     error:
       projectNotEmpty: The project already has requirements or baselines; cold-start analysis cannot be restarted.
       alreadyApplied: Analysis for this project has already been applied; cold-start analysis cannot be restarted.

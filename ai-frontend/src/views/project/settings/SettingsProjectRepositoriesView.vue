@@ -529,13 +529,38 @@ async function confirmAnalysis() {
 }
 
 /** S4：单仓库手动增量分析（调 S1 新端点；与 verify / confirm-update 并列）。 */
+/** D-2：单仓库分析口径（默认增量；全量需二次确认，确认框文案随之变化）。 */
+const reanalyzeMode = ref<"incremental" | "full">("incremental");
+const reanalyzeFull = computed({
+  get: () => reanalyzeMode.value === "full",
+  set: value => {
+    reanalyzeMode.value = value ? "full" : "incremental";
+  }
+});
+
+/** 全量重析走确认弹层；增量直接受理。 */
+function onReanalyze(row: RepositoryV2): void {
+  if (reanalyzeMode.value === "full") {
+    fullReanalyzeTarget.value = row;
+    fullReanalyzeConfirmOpen.value = true;
+    return;
+  }
+  void reanalyzeSelected(row);
+}
+
+const fullReanalyzeTarget = ref<RepositoryV2 | null>(null);
+const fullReanalyzeConfirmOpen = ref(false);
+
 async function reanalyzeSelected(row: RepositoryV2) {
   if (singleAnalyzeKey.value || row.status !== "verified") return;
   const key = makeIdempotencyKey();
   singleAnalyzeKey.value = key;
   panelNotice.value = null;
   try {
-    await analyzeRepository(row.id, { idempotency_key: key });
+    await analyzeRepository(row.id, {
+      idempotency_key: key,
+      mode: reanalyzeMode.value
+    });
     panelNotice.value = {
       variant: "success",
       text: t("s01.repositories.analysis.reanalyzeAccepted") as string
@@ -1057,13 +1082,22 @@ onMounted(() => {
             </Button>
             <!-- S4：单仓库手动增量分析（与 verify / confirm-update 并列；
                  人工确认动作走次文字色，不用 accent 建议色）。 -->
+            <!-- D-2：口径切换（默认增量；整库重析在确认后执行）。 -->
+            <label class="rm-mode-toggle">
+              <input
+                v-model="reanalyzeFull"
+                type="checkbox"
+                data-testid="reanalyze-full-toggle"
+              />
+              {{ t("s01.repositories.analysis.fullMode") }}
+            </label>
             <Button
               variant="ghost"
               size="sm"
               class="rm-reanalyze"
               :disabled="selected.status !== 'verified' || !!singleAnalyzeKey"
               data-testid="reanalyze-btn"
-              @click="reanalyzeSelected(selected)"
+              @click="onReanalyze(selected)"
             >
               {{ t("s01.repositories.analysis.reanalyzeOne") }}
             </Button>

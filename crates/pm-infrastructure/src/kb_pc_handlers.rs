@@ -233,10 +233,21 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
         // 锚链次选：observed_head 来自 intake source_ref（verify 的 Observed
         // HEAD）；selected_commit 在 collect_repository_facts 内部优先。
         let observed_head = source_ref.get("head_commit_sha").and_then(|v| v.as_str());
-        let (facts, repo_name) = match kb_pc_analysis::collect_repository_facts(
+        // D-2：运行口径与增量起点（source_ref 携带）；既有认知摘要作 merge 输入。
+        let incremental_since =
+            if source_ref.get("run_mode").and_then(|v| v.as_str()) == Some("incremental") {
+                source_ref
+                    .get("since_commit")
+                    .and_then(|v| v.as_str())
+                    .filter(|value| !value.trim().is_empty())
+            } else {
+                None
+            };
+        let (facts, repo_name, incremental_used) = match kb_pc_analysis::collect_repository_facts(
             &self.pool,
             repository_id,
             observed_head,
+            incremental_since,
         )
         .await
         {
@@ -252,6 +263,17 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
                 .await
             }
         };
+        let prior_cognition = if incremental_used {
+            pm_application::analysis_report::prior_cognition_digest(
+                &self.pool,
+                project_id,
+                repository_id,
+            )
+            .await
+            .unwrap_or(None)
+        } else {
+            None
+        };
 
         match kb_pc_analysis::derive_pc_cognition(
             &self.pool,
@@ -264,6 +286,8 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
             &kb_content_hash,
             &facts,
             self.snapshot_model.as_deref(),
+            incremental_used,
+            prior_cognition.as_deref(),
         )
         .await
         {
@@ -541,8 +565,7 @@ impl OutboxHandler for KbAnalysisCompletedHandler {
             .await
             .map_err(|e| e.to_string())?;
         // D-5：报告行存在时仅刷新阶段（analyzing 不变）。
-        if let Err(err) =
-            pm_application::analysis_report::mark_kb_stage(&self.pool, task_id).await
+        if let Err(err) = pm_application::analysis_report::mark_kb_stage(&self.pool, task_id).await
         {
             tracing::warn!(%task_id, %err, "analysis report kb stage update skipped");
         }
@@ -820,8 +843,7 @@ impl OutboxHandler for PcAnalysisCompletedHandler {
             .await
             .map_err(|e| e.to_string())?;
         // D-5：NO_CHANGE 也是完整分析结论 → 报告 analyzed（open 待审）。
-        if let Err(err) =
-            pm_application::analysis_report::mark_analyzed(&self.pool, task_id).await
+        if let Err(err) = pm_application::analysis_report::mark_analyzed(&self.pool, task_id).await
         {
             tracing::warn!(%task_id, %err, "analysis report mark_analyzed skipped");
         }
@@ -854,8 +876,7 @@ impl OutboxHandler for PcChangeProposedHandler {
             .await
             .map_err(|e| e.to_string())?;
         // D-5：提案起草 = 分析产出齐备 → 报告 analyzed（open 待审）。
-        if let Err(err) =
-            pm_application::analysis_report::mark_analyzed(&self.pool, task_id).await
+        if let Err(err) = pm_application::analysis_report::mark_analyzed(&self.pool, task_id).await
         {
             tracing::warn!(%task_id, %err, "analysis report mark_analyzed skipped");
         }
@@ -893,8 +914,7 @@ impl OutboxHandler for PcConflictDetectedHandler {
             .await
             .map_err(|e| e.to_string())?;
         // D-5：冲突登记也是完整分析结论 → 报告 analyzed（open 待审）。
-        if let Err(err) =
-            pm_application::analysis_report::mark_analyzed(&self.pool, task_id).await
+        if let Err(err) = pm_application::analysis_report::mark_analyzed(&self.pool, task_id).await
         {
             tracing::warn!(%task_id, %err, "analysis report mark_analyzed skipped");
         }

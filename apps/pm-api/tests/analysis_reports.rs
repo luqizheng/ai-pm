@@ -249,18 +249,23 @@ async fn analyze_acceptance_creates_report_and_gate_blocks(pool: PgPool) {
     assert!(!report_id.is_empty());
 
     // 报告行：analyzing + intake 关联
-    let (db_status, intake): (String, Uuid) = sqlx::query_as(
-        "SELECT status, intake_id FROM integration.repo_analysis_report WHERE id = $1",
-    )
-    .bind(Uuid::parse_str(&report_id).unwrap())
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    // 报告行：analyzing + intake 关联 + D-2 口径（首次无锚点 → 自动退全量）
+    let (db_status, intake, run_mode, since): (String, Uuid, String, Option<String>) =
+        sqlx::query_as(
+            "SELECT status, intake_id, run_mode, since_commit \
+             FROM integration.repo_analysis_report WHERE id = $1",
+        )
+        .bind(Uuid::parse_str(&report_id).unwrap())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(db_status, "analyzing");
     assert_eq!(
         intake,
         Uuid::parse_str(body["intake_id"].as_str().unwrap()).unwrap()
     );
+    assert_eq!(run_mode, "full");
+    assert!(since.is_none(), "首次分析无锚点 → 自动退全量");
 
     // 门：报告 open 期间重复 analyze → 409 report_open（带同一 report_id）
     let (status, body) = send(

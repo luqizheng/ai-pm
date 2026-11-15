@@ -519,7 +519,8 @@ describe("SettingsProjectRepositoriesView", () => {
     await flushPromises();
 
     expect(analyzeRepository).toHaveBeenCalledWith("r1", {
-      idempotency_key: expect.any(String)
+      idempotency_key: expect.any(String),
+      mode: "incremental"
     });
   });
 
