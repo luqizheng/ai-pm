@@ -32,8 +32,9 @@
 
 use std::sync::Arc;
 
+use crate::support::require_project_visible;
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -48,6 +49,10 @@ use serde::Deserialize;
 use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
+
+use crate::auth::AuthedPrincipal;
+use crate::support::repos;
+use pm_application::repo::GuardQueryRepo;
 
 /// Shared handler state: the pool and the process-wide command executor. The
 /// executor's red-line set comes from the one canonical policy file — the
@@ -517,6 +522,29 @@ fn authed_router(
     ))
 }
 
+/// SEC-P0（DEC-SEC-P0-01）：legacy 监督/接入端点的统一项目守卫。
+///
+/// `off` 模式（`inject_dev_principal`）是本地开发/测试信任域，保持直通；
+/// 生产（`AI_PM_AUTH_MODE=jwks`，默认 fail-closed）一律走
+/// [`require_project_visible`]（租户 + 项目成员，不可见即 404 不泄露存在性）。
+async fn require_legacy_project_access(
+    pool: &PgPool,
+    project_id: Uuid,
+    caller: &AuthedPrincipal,
+) -> Result<(), Response> {
+    if caller.auth_mode == "off" {
+        return Ok(());
+    }
+    match require_project_visible(pool, project_id, caller.tenant_id, caller.principal_id).await {
+        Ok(()) => Ok(()),
+        Err(_) => Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "project_not_found" })),
+        )
+            .into_response()),
+    }
+}
+
 // ---------------------------------------------------------------- ingestion
 
 use pm_application::ingestion::{submit_event, IngestionError, SubmitEventRequest, SubmitOutcome};
@@ -531,8 +559,17 @@ async fn health_handler() -> Json<serde_json::Value> {
 
 async fn submit_event_handler(
     State(state): State<AppState>,
-    Json(req): Json<SubmitEventRequest>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Json(mut req): Json<SubmitEventRequest>,
 ) -> Response {
+    // SEC-P0-1（DEC-SEC-P0-01）：project 归属校验 + actor 只来自认证主体
+    // （不再信任 body 声明）。
+    if let Err(resp) =
+        require_legacy_project_access(&state.pool, req.project_id.into(), &caller).await
+    {
+        return resp;
+    }
+    req.actor_id = caller.principal_id.into();
     match submit_event(&state.pool, req).await {
         Ok(SubmitOutcome::Accepted { event_id }) => (
             StatusCode::ACCEPTED,
@@ -571,7 +608,21 @@ async fn submit_event_handler(
 
 // --------------------------------------------------------------- supervision
 
-async fn veto_handler(State(state): State<AppState>, Json(req): Json<VetoRequest>) -> Response {
+async fn veto_handler(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Json(mut req): Json<VetoRequest>,
+) -> Response {
+    // SEC-P0-3（DEC-SEC-P0-01）：caller 必须是该 project 成员；服务层的
+    // `WHERE id AND project_id` 配对保证 proposal 确属该 project，二者合取
+    // 即"caller 是 proposal 所属 project 的成员"（A-03）。actor 只来自认证主体。
+    if let Err(resp) =
+        require_legacy_project_access(&state.pool, req.project_id.into(), &caller).await
+    {
+        return resp;
+    }
+    req.actor_id = caller.principal_id.into();
+    req.actor = Some(caller.audit_actor());
     match veto(&state.pool, &state.executor, req).await {
         Ok(VetoOutcome::RolledBack { new_audit_id }) => (
             StatusCode::OK,
@@ -621,11 +672,36 @@ async fn veto_handler(State(state): State<AppState>, Json(req): Json<VetoRequest
 
 async fn decide_handler(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Path(approval_id): Path<Uuid>,
     Json(req): Json<DecideRequest>,
 ) -> Response {
     // The path names the approval; the body's field (if any) is ignored.
-    let req = DecideRequest { approval_id, ..req };
+    let mut req = DecideRequest { approval_id, ..req };
+    // SEC-P0-2（DEC-SEC-P0-01）：project 从 approval 对象反查（tenant 锚定，
+    // A-03 不信任客户端 id），再验 caller 成员可见性；否则 404 不泄露存在性。
+    let project_id = match repos::guard_query_repo(&state.pool)
+        .approval_head(caller.tenant_id, approval_id)
+        .await
+    {
+        Ok(Some((project_id, _))) => project_id,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "approval_not_found" })),
+            )
+                .into_response()
+        }
+        Err(err) => {
+            tracing::error!(error = %err, "approval lookup failed");
+            return internal_error();
+        }
+    };
+    if let Err(resp) = require_legacy_project_access(&state.pool, project_id, &caller).await {
+        return resp;
+    }
+    req.actor_id = caller.principal_id.into();
+    req.actor = Some(caller.audit_actor());
     match decide_approval(&state.pool, &state.executor, req).await {
         Ok(DecisionOutcome::Executed { receipt }) => (
             StatusCode::OK,
@@ -663,14 +739,34 @@ async fn decide_handler(
 #[derive(Debug, Deserialize)]
 struct FreezeRequest {
     project_id: Uuid,
+    // SEC-P0-4：actor_id 不再从 body 采信（actor = AuthedPrincipal）。
+    // 字段保留以兼容旧客户端 payload（serde 默认忽略未知字段也可，这里显式
+    // 接收后丢弃，避免 deny_unknown_fields 类破坏）。
+    #[allow(dead_code)]
     actor_id: Uuid,
     reason: String,
 }
 
-async fn freeze_handler(State(state): State<AppState>, Json(req): Json<FreezeRequest>) -> Response {
+async fn freeze_handler(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Json(req): Json<FreezeRequest>,
+) -> Response {
     // The brake flips the automation mode, records the intervention and the
     // notification, and answers 200 (404 when the project has no AI config).
-    match freeze(&state.pool, req.project_id, req.actor_id, &req.reason).await {
+    // SEC-P0-4（DEC-SEC-P0-01）：归属校验 + actor 只来自认证主体（body 的
+    // actor_id 仅保留反序列化兼容，不再采信）。
+    if let Err(resp) = require_legacy_project_access(&state.pool, req.project_id, &caller).await {
+        return resp;
+    }
+    match freeze(
+        &state.pool,
+        req.project_id,
+        caller.principal_id,
+        &req.reason,
+    )
+    .await
+    {
         Ok(()) => (StatusCode::OK, Json(json!({ "outcome": "frozen" }))).into_response(),
         Err(SupervisionError::NotFound(detail)) => (
             StatusCode::NOT_FOUND,
@@ -686,9 +782,21 @@ async fn freeze_handler(State(state): State<AppState>, Json(req): Json<FreezeReq
 
 async fn unfreeze_handler(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Json(req): Json<FreezeRequest>,
 ) -> Response {
-    match unfreeze(&state.pool, req.project_id, req.actor_id, &req.reason).await {
+    // SEC-P0-4（同 freeze）：归属校验 + actor 只来自认证主体。
+    if let Err(resp) = require_legacy_project_access(&state.pool, req.project_id, &caller).await {
+        return resp;
+    }
+    match unfreeze(
+        &state.pool,
+        req.project_id,
+        caller.principal_id,
+        &req.reason,
+    )
+    .await
+    {
         Ok(()) => (StatusCode::OK, Json(json!({ "outcome": "unfrozen" }))).into_response(),
         Err(SupervisionError::NotFound(detail)) => (
             StatusCode::NOT_FOUND,
@@ -711,9 +819,14 @@ struct FeedQuery {
 
 async fn notifications_handler(
     State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
     Query(query): Query<FeedQuery>,
 ) -> Response {
+    // SEC-P0-5（DEC-SEC-P0-01）：跨租户读修复——先验归属再查 feed。
+    if let Err(resp) = require_legacy_project_access(&state.pool, project_id, &caller).await {
+        return resp;
+    }
     let since = match query.since {
         Some(text) => match chrono::DateTime::parse_from_rfc3339(&text) {
             Ok(t) => Some(t.with_timezone(&chrono::Utc)),

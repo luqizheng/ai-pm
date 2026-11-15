@@ -131,7 +131,9 @@ async fn non_mcp_routes_ignore_the_permission_claim(pool: PgPool) {
     )
     .await
     .unwrap();
-    // Permissionless token: the gate must only touch /mcp.
+    // Permissionless token: the gate must only touch /mcp. SEC-P0-5 修复后，
+    // 无项目成员关系的主体按可见性口径 404（不是 403 权限拒绝）——本断言仍证明
+    // 业务路由不受权限码门控（仅 /mcp 有 permission gate）。
     let token = sign(&[]);
     let response = app(pool)
         .oneshot(
@@ -147,7 +149,7 @@ async fn non_mcp_routes_ignore_the_permission_claim(pool: PgPool) {
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 fn submit_arguments() -> Value {
     json!({

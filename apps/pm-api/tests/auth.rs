@@ -105,20 +105,19 @@ async fn valid_token_reaches_the_real_route(pool: PgPool) {
     .unwrap();
     // T-021a：token 的 (provider, tid, sub) 必须先映射到一个已激活 principal，
     // 否则按方案 C 首次见到会 provision 为未激活并 403（该行为由 C33 覆盖）。
-    sqlx::query(
-        "INSERT INTO core.tenant (provider, external_key, display_name) \
-         VALUES ('lmms', '1', 'lmms:1') ON CONFLICT (provider, external_key) DO NOTHING",
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
+    // SEC-P0 守卫后：tid=1 必须映射到项目租户（SYSTEM_TENANT），否则
+    // require_project_visible 的 tenant 锚定会 404。
+    sqlx::query("UPDATE core.tenant SET provider = 'lmms', external_key = '1' WHERE id = $1")
+        .bind(SYSTEM_TENANT)
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query(
         "INSERT INTO core.principal_identity \
              (provider, tenant_id, subject, principal_id) \
-         VALUES ('lmms', \
-                 (SELECT id FROM core.tenant WHERE provider = 'lmms' AND external_key = '1'), \
-                 $1, $2)",
+         VALUES ('lmms', $1, $2, $3)",
     )
+    .bind(SYSTEM_TENANT)
     .bind(boot.human_id.to_string())
     .bind(boot.human_id)
     .execute(&pool)
