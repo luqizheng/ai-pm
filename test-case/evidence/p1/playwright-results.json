@@ -4,8 +4,8 @@
       "C:\\nvm4w\\nodejs\\node.exe",
       "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\node_modules\\@playwright\\test\\cli.js",
       "test",
-      "--config=playwright.p1.config.ts",
-      "--list"
+      "-c",
+      "playwright.p1.config.ts"
     ],
     "configFile": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\playwright.p1.config.ts",
     "rootDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
@@ -18,14 +18,18 @@
     "grep": {},
     "grepInvert": null,
     "maxFailures": 0,
-    "metadata": {},
+    "metadata": {
+      "actualWorkers": 1
+    },
     "preserveOutput": "always",
     "projects": [
       {
         "outputDir": "D:/kudi-project/templates/ai-pm/test-case/evidence/p1/playwright-artifacts",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {},
+        "metadata": {
+          "actualWorkers": 1
+        },
         "id": "",
         "name": "",
         "testDir": "D:/kudi-project/templates/ai-pm/ai-frontend/e2e",
@@ -43,7 +47,9 @@
         "outputDir": "D:\\kudi-project\\templates\\ai-pm\\test-case\\evidence\\p1\\playwright-artifacts",
         "repeatEach": 1,
         "retries": 0,
-        "metadata": {},
+        "metadata": {
+          "actualWorkers": 1
+        },
         "name": "",
         "testDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
         "snapshotDir": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e",
@@ -137,13 +143,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 88,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:12:32.506Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-01-init-persistence.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "b3e03e0904bd2f8092b2-838d7a5729544649bd3c",
           "file": "p1-01-init-persistence.spec.ts",
-          "line": 70,
+          "line": 76,
           "column": 1
         },
         {
@@ -166,13 +195,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3857,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:12:33.222Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-01-init-persistence.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "b3e03e0904bd2f8092b2-9ce3ab9ddc0d24a8ef0f",
           "file": "p1-01-init-persistence.spec.ts",
-          "line": 100,
+          "line": 110,
           "column": 1
         },
         {
@@ -195,13 +247,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5044,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:12:37.093Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-01-init-persistence.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "b3e03e0904bd2f8092b2-ccdca76fa0fcdbb67bba",
           "file": "p1-01-init-persistence.spec.ts",
-          "line": 112,
+          "line": 122,
           "column": 1
         },
         {
@@ -224,13 +299,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 6094,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:12:42.151Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-01-init-persistence.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "b3e03e0904bd2f8092b2-c28719dd1337f87a297f",
           "file": "p1-01-init-persistence.spec.ts",
-          "line": 125,
+          "line": 135,
           "column": 1
         },
         {
@@ -253,13 +351,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 78,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:12:48.259Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-01-init-persistence.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "b3e03e0904bd2f8092b2-3512f74db7363d3c046f",
           "file": "p1-01-init-persistence.spec.ts",
-          "line": 140,
+          "line": 154,
           "column": 1
         },
         {
@@ -282,13 +403,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 548,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:12:48.348Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-01-init-persistence.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "b3e03e0904bd2f8092b2-56e4b1fd0ef8e00d93f0",
           "file": "p1-01-init-persistence.spec.ts",
-          "line": 154,
+          "line": 177,
           "column": 1
         }
       ]
@@ -319,13 +463,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 11389,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:12:48.919Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "071dc7d5e54bcedb879d-6175202901ed04a8f21b",
           "file": "p1-02-login-landing.spec.ts",
-          "line": 44,
+          "line": 53,
           "column": 1
         },
         {
@@ -348,13 +515,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2869,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:00.655Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "071dc7d5e54bcedb879d-fe6a4dab99a44ff58c8e",
           "file": "p1-02-login-landing.spec.ts",
-          "line": 64,
+          "line": 73,
           "column": 1
         },
         {
@@ -377,13 +567,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 7305,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:03.541Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "071dc7d5e54bcedb879d-8a8ba83e48c2152122b9",
           "file": "p1-02-login-landing.spec.ts",
-          "line": 78,
+          "line": 87,
           "column": 1
         },
         {
@@ -406,13 +619,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 7093,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:10.861Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "071dc7d5e54bcedb879d-5eb27059fc53528fcc0d",
           "file": "p1-02-login-landing.spec.ts",
-          "line": 92,
+          "line": 103,
           "column": 1
         },
         {
@@ -435,13 +671,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2897,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:17.975Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "071dc7d5e54bcedb879d-3384a9f9e237011486f4",
           "file": "p1-02-login-landing.spec.ts",
-          "line": 106,
+          "line": 117,
           "column": 1
         },
         {
@@ -464,13 +723,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 8894,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:20.889Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "071dc7d5e54bcedb879d-4b7eb9a696f4439ebe81",
           "file": "p1-02-login-landing.spec.ts",
-          "line": 117,
+          "line": 130,
           "column": 1
         },
         {
@@ -493,13 +775,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 9543,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:29.799Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "071dc7d5e54bcedb879d-5d260a2e3b2da35271e0",
           "file": "p1-02-login-landing.spec.ts",
-          "line": 135,
+          "line": 148,
           "column": 1
         },
         {
@@ -522,13 +827,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 9579,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:39.356Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-02-login-landing.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "071dc7d5e54bcedb879d-e98f43fc6327c195bcb9",
           "file": "p1-02-login-landing.spec.ts",
-          "line": 161,
+          "line": 176,
           "column": 1
         }
       ]
@@ -559,8 +887,31 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 25,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:48.954Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-03-personal-list-permissions.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "50c30c87a88f7088f372-ccb723faf00cba6cc276",
@@ -588,8 +939,31 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 25,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:49.209Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-03-personal-list-permissions.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "50c30c87a88f7088f372-5dbd1805e9f2fbeed2b2",
@@ -617,8 +991,31 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 313,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:49.240Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-03-personal-list-permissions.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "50c30c87a88f7088f372-6a9190f68f2e95a0f032",
@@ -646,8 +1043,31 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 167,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:49.558Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-03-personal-list-permissions.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "50c30c87a88f7088f372-f3f35a16d1a6cabe268c",
@@ -675,8 +1095,31 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 10,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:49.730Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-03-personal-list-permissions.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "50c30c87a88f7088f372-55bd7d14f68233c40db0",
@@ -712,8 +1155,31 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 24,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:49.753Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-04-bootstrap-install.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "8aa789605c7123eceb1a-89f3bf3d204f0ae36da1",
@@ -741,8 +1207,31 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 13,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:49.834Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-04-bootstrap-install.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "8aa789605c7123eceb1a-9d796f23ec2e4d28977c",
@@ -770,8 +1259,31 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 12,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:49.856Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-04-bootstrap-install.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "8aa789605c7123eceb1a-ae81e8fe59dc5b5072b1",
@@ -799,8 +1311,31 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 9,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:49.874Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-04-bootstrap-install.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "8aa789605c7123eceb1a-55b6fa2a9dd309fe0545",
@@ -836,8 +1371,31 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 207,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:49.906Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-05-zero-deps.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "c6528978d9ff774e5557-fbef292fb5e48afcecc8",
@@ -865,13 +1423,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 251,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:50.421Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-05-zero-deps.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "c6528978d9ff774e5557-e15b785bd71a7ee9058e",
           "file": "p1-05-zero-deps.spec.ts",
-          "line": 50,
+          "line": 54,
           "column": 1
         },
         {
@@ -894,13 +1475,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3096,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:50.680Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-05-zero-deps.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "c6528978d9ff774e5557-3d59454c462bd58c1f8b",
           "file": "p1-05-zero-deps.spec.ts",
-          "line": 78,
+          "line": 89,
           "column": 1
         },
         {
@@ -923,13 +1527,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 703,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:53.784Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-05-zero-deps.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "c6528978d9ff774e5557-956ff7cf406709987111",
           "file": "p1-05-zero-deps.spec.ts",
-          "line": 106,
+          "line": 129,
           "column": 1
         },
         {
@@ -952,7 +1579,7 @@
                   "type": "fixme",
                   "location": {
                     "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-05-zero-deps.spec.ts",
-                    "line": 146,
+                    "line": 174,
                     "column": 6
                   }
                 }
@@ -960,13 +1587,44 @@
               "expectedStatus": "skipped",
               "projectId": "",
               "projectName": "",
-              "results": [],
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:54.498Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-05-zero-deps.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    },
+                    {
+                      "type": "fixme",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-05-zero-deps.spec.ts",
+                        "line": 174,
+                        "column": 6
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
               "status": "skipped"
             }
           ],
           "id": "c6528978d9ff774e5557-44c873b5f34bfc420012",
           "file": "p1-05-zero-deps.spec.ts",
-          "line": 146,
+          "line": 174,
           "column": 6
         }
       ]
@@ -997,13 +1655,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 515,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:54.508Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "237bddaae54989e7ae21-992e634c5337e0ae4dea",
           "file": "p1-06-baseline-confirm.spec.ts",
-          "line": 72,
+          "line": 80,
           "column": 1
         },
         {
@@ -1026,13 +1707,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 306,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:55.841Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "237bddaae54989e7ae21-5b264aa121634af33852",
           "file": "p1-06-baseline-confirm.spec.ts",
-          "line": 99,
+          "line": 122,
           "column": 1
         },
         {
@@ -1055,13 +1759,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 465,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:56.157Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "237bddaae54989e7ae21-0ae08e458ff0ad27e046",
           "file": "p1-06-baseline-confirm.spec.ts",
-          "line": 125,
+          "line": 160,
           "column": 1
         },
         {
@@ -1084,13 +1811,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 316,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:56.631Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "237bddaae54989e7ae21-3623d27a688baae5ee46",
           "file": "p1-06-baseline-confirm.spec.ts",
-          "line": 169,
+          "line": 204,
           "column": 1
         },
         {
@@ -1113,13 +1863,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1028,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:56.961Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "237bddaae54989e7ae21-3a87c80f9fe56d11dea0",
           "file": "p1-06-baseline-confirm.spec.ts",
-          "line": 201,
+          "line": 236,
           "column": 1
         },
         {
@@ -1142,13 +1915,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 421,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:58.008Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "237bddaae54989e7ae21-1707014040769a1e30b4",
           "file": "p1-06-baseline-confirm.spec.ts",
-          "line": 237,
+          "line": 272,
           "column": 1
         },
         {
@@ -1171,7 +1967,7 @@
                   "type": "fixme",
                   "location": {
                     "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
-                    "line": 261,
+                    "line": 296,
                     "column": 6
                   }
                 }
@@ -1179,13 +1975,44 @@
               "expectedStatus": "skipped",
               "projectId": "",
               "projectName": "",
-              "results": [],
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:58.444Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    },
+                    {
+                      "type": "fixme",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-06-baseline-confirm.spec.ts",
+                        "line": 296,
+                        "column": 6
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
               "status": "skipped"
             }
           ],
           "id": "237bddaae54989e7ae21-802fef70cddd57c16089",
           "file": "p1-06-baseline-confirm.spec.ts",
-          "line": 261,
+          "line": 296,
           "column": 6
         }
       ]
@@ -1216,8 +2043,31 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1297,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:58.451Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "bbe58b0b04a04cee2a5d-275dfd1a50c46be06024",
@@ -1245,13 +2095,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1300,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:13:59.912Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "bbe58b0b04a04cee2a5d-4bec52aa7697ab8ec2f6",
           "file": "p1-07-def0304-regression.spec.ts",
-          "line": 77,
+          "line": 87,
           "column": 1
         },
         {
@@ -1274,13 +2147,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 212,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:14:01.227Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "bbe58b0b04a04cee2a5d-98d9f0ff1800e622451e",
           "file": "p1-07-def0304-regression.spec.ts",
-          "line": 106,
+          "line": 126,
           "column": 1
         },
         {
@@ -1303,13 +2199,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 336,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:14:01.452Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "bbe58b0b04a04cee2a5d-dee864310b59a1e47714",
           "file": "p1-07-def0304-regression.spec.ts",
-          "line": 122,
+          "line": 142,
           "column": 1
         },
         {
@@ -1332,7 +2251,7 @@
                   "type": "fixme",
                   "location": {
                     "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
-                    "line": 147,
+                    "line": 160,
                     "column": 6
                   }
                 }
@@ -1340,13 +2259,44 @@
               "expectedStatus": "skipped",
               "projectId": "",
               "projectName": "",
-              "results": [],
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "skipped",
+                  "duration": 0,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:14:01.800Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    },
+                    {
+                      "type": "fixme",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
+                        "line": 160,
+                        "column": 6
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
               "status": "skipped"
             }
           ],
           "id": "bbe58b0b04a04cee2a5d-c0d888a988b8c2cc15d9",
           "file": "p1-07-def0304-regression.spec.ts",
-          "line": 147,
+          "line": 160,
           "column": 6
         },
         {
@@ -1369,13 +2319,36 @@
               "expectedStatus": "passed",
               "projectId": "",
               "projectName": "",
-              "results": [],
-              "status": "skipped"
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 35,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-11-15T10:14:01.800Z",
+                  "annotations": [
+                    {
+                      "type": "serial",
+                      "location": {
+                        "file": "D:\\kudi-project\\templates\\ai-pm\\ai-frontend\\e2e\\p1-07-def0304-regression.spec.ts",
+                        "line": 0,
+                        "column": 0
+                      }
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
             }
           ],
           "id": "bbe58b0b04a04cee2a5d-a66dfca97e58206988b6",
           "file": "p1-07-def0304-regression.spec.ts",
-          "line": 154,
+          "line": 167,
           "column": 1
         }
       ]
@@ -1383,10 +2356,10 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-11-10T23:53:04.182Z",
-    "duration": 7619.359,
-    "expected": 0,
-    "skipped": 41,
+    "startTime": "2026-11-15T10:12:20.359Z",
+    "duration": 104222.598,
+    "expected": 38,
+    "skipped": 3,
     "unexpected": 0,
     "flaky": 0
   }

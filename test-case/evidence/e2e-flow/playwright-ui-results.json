@@ -148,12 +148,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 6027,
+                  "duration": 6129,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-10T14:40:47.770Z",
+                  "startTime": "2026-11-15T10:11:29.553Z",
                   "annotations": [
                     {
                       "type": "serial",
@@ -200,12 +200,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2411,
+                  "duration": 2423,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-10T14:40:54.227Z",
+                  "startTime": "2026-11-15T10:11:36.062Z",
                   "annotations": [
                     {
                       "type": "serial",
@@ -252,12 +252,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3439,
+                  "duration": 4213,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-10T14:40:56.647Z",
+                  "startTime": "2026-11-15T10:11:38.500Z",
                   "annotations": [
                     {
                       "type": "serial",
@@ -304,12 +304,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2194,
+                  "duration": 2457,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-10T14:41:00.097Z",
+                  "startTime": "2026-11-15T10:11:42.731Z",
                   "annotations": [
                     {
                       "type": "serial",
@@ -356,12 +356,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 3079,
+                  "duration": 3732,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-10T14:41:02.311Z",
+                  "startTime": "2026-11-15T10:11:45.204Z",
                   "annotations": [
                     {
                       "type": "serial",
@@ -408,12 +408,16 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 7893,
+                  "duration": 8807,
                   "errors": [],
                   "stdout": [],
-                  "stderr": [],
+                  "stderr": [
+                    {
+                      "text": "warning: function `collect_fresh` is never used\n   --> crates\\pm-infrastructure\\src\\kb_pc_analysis.rs:216:10\n    |\n216 | async fn collect_fresh(\n    |          ^^^^^^^^^^^^^\n    |\n    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\n"
+                    }
+                  ],
                   "retry": 0,
-                  "startTime": "2026-11-10T14:41:05.405Z",
+                  "startTime": "2026-11-15T10:11:48.951Z",
                   "annotations": [
                     {
                       "type": "serial",
@@ -460,12 +464,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1963,
+                  "duration": 2366,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-10T14:41:13.308Z",
+                  "startTime": "2026-11-15T10:11:57.773Z",
                   "annotations": [
                     {
                       "type": "serial",
@@ -512,12 +516,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 2110,
+                  "duration": 2384,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-11-10T14:41:15.279Z",
+                  "startTime": "2026-11-15T10:12:00.154Z",
                   "annotations": [
                     {
                       "type": "serial",
@@ -544,8 +548,8 @@
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-11-10T14:40:43.679Z",
-    "duration": 35675.834,
+    "startTime": "2026-11-15T10:11:25.228Z",
+    "duration": 39235.381,
     "expected": 8,
     "skipped": 0,
     "unexpected": 0,
