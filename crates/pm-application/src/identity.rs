@@ -244,11 +244,21 @@ pub async fn apply_identity_drafts(
                     project_id,
                     doc_key: GOAL_DOC_KEY.to_string(),
                     doc_type: "knowledge".to_string(),
-                    markdown: drafts.project_goal_markdown.clone(),
+                    // 质量门：source（source_ref）与 reference（正文含 projects/
+                    // 文档路径引用）——溯源是系统职责，附加可核查脚注。
+                    markdown: format!(
+                        "{}
+
+---
+来源：D-4 业务身份综合轮（初始化访谈答案 + 仓库分析报告）。
+引用：projects/{}/cognition/identity-synthesis
+",
+                        drafts.project_goal_markdown, project_id
+                    ),
                     change_summary: Some("业务身份综合（D-4 身份综合轮）".into()),
                     source_event_id: None,
                     analysis_run_id: None,
-                    source_ref: None,
+                    source_ref: Some(format!("identity_synthesis:{project_id}")),
                     redline_kind: None, // project-goal 自动强制红线
                     base_revision_id: base,
                     operation_id: format!("identity-synthesis:{}:{}", project_id, Uuid::new_v4()),
