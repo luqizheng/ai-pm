@@ -79,7 +79,7 @@ async fn proposal_decision_and_confirm_flow(pool: PgPool) {
             .unwrap(),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "body: {body}");
+    assert_eq!(status, StatusCode::CREATED, "body: {body}");
     assert_eq!(body["item_count"], 1);
 
     // pending 期间重复生成 → 409。
@@ -180,6 +180,6 @@ async fn proposal_decision_and_confirm_flow(pool: PgPool) {
             .unwrap(),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "body: {body}");
+    assert_eq!(status, StatusCode::CREATED, "body: {body}");
     assert_eq!(body["version"], 2);
 }

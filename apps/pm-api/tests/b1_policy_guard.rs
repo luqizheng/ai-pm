@@ -152,7 +152,7 @@ async fn prepare_proposal(app: &axum::Router, project_id: Uuid) {
         ))
         .await
         .unwrap();
-    assert_eq!(derived.status(), StatusCode::OK, "proposal derivation");
+    assert_eq!(derived.status(), StatusCode::CREATED, "proposal derivation");
     // 条目 id 取自基线总览（提案响应只给 item_count）。
     let overview = app
         .clone()

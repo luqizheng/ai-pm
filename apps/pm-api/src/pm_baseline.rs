@@ -12,6 +12,8 @@
 
 use axum::{
     extract::{Extension, Path, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -86,29 +88,40 @@ async fn overview(
 
 /// POST 生成提案（人类动作）：从已确认知识 + 仓库快照派生条目。
 /// 已有 pending 提案 → 409（变更走新提案，须先处理当前提案）。
+/// 创建语义 → 201（规格 19 号 R86/TC-P1-06-01 定版；与本仓 create→201 惯例对齐）。
 async fn create_proposal(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
-) -> ApiResult<Json<serde_json::Value>> {
-    require_project_visible(
+) -> Response {
+    if let Err(err) = require_project_visible(
         &state.pool,
         project_id,
         caller.tenant_id,
         caller.principal_id,
     )
-    .await?;
+    .await
+    {
+        return err.into_response();
+    }
 
-    let created = repo(&state)
+    let created = match repo(&state)
         .create_proposal(caller.tenant_id, project_id, caller.principal_id)
         .await
-        .map_err(repo_err)?;
+    {
+        Ok(created) => created,
+        Err(err) => return repo_err(err).into_response(),
+    };
 
-    Ok(Json(json!({
-        "proposal_id": created.proposal_id,
-        "version": created.version,
-        "item_count": created.item_count,
-    })))
+    (
+        StatusCode::CREATED,
+        Json(json!({
+            "proposal_id": created.proposal_id,
+            "version": created.version,
+            "item_count": created.item_count,
+        })),
+    )
+        .into_response()
 }
 
 #[derive(Deserialize)]
