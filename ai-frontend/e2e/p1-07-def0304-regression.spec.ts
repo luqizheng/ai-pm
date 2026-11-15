@@ -42,14 +42,24 @@ test("TC-01 陈旧哈希定稿 409，新哈希 200（统一入口）", async () 
     "# 并发基线\n版本一正文。"
   );
 
-  const draft = await api("POST", `/v1/pm/requirements/${rev1.id}/revisions`, owner.token, {
-    markdown: "# 并发基线\n版本二正文。"
-  });
+  const draft = await api(
+    "POST",
+    `/v1/pm/requirements/${rev1.id}/revisions`,
+    owner.token,
+    {
+      markdown: "# 并发基线\n版本二正文。"
+    }
+  );
   expect(draft.status).toBe(201);
   const rev2Id = draft.body.revision.id as string;
   const hash2 = draft.body.revision.content_hash as string;
 
-  await api("POST", `/v1/pm/requirements/${rev1.id}/revisions/${rev2Id}/submit`, owner.token, {});
+  await api(
+    "POST",
+    `/v1/pm/requirements/${rev1.id}/revisions/${rev2Id}/submit`,
+    owner.token,
+    {}
+  );
 
   const stale = await api(
     "POST",
@@ -74,7 +84,7 @@ test("TC-01 陈旧哈希定稿 409，新哈希 200（统一入口）", async () 
 });
 
 /** TC-P1-07-02 · 真并发双 confirm（同好哈希 / 新旧混合）：恰一 200 一 409 */
-test("TC-02 真并发双 confirm 无静默双 200", async ({ }) => {
+test("TC-02 真并发双 confirm 无静默双 200", async ({}) => {
   const rev1 = await createAndConfirmRequirement(
     owner,
     project.id,
@@ -82,12 +92,22 @@ test("TC-02 真并发双 confirm 无静默双 200", async ({ }) => {
     "真并发基线",
     "# 真并发基线\n版本一。"
   );
-  const draft = await api("POST", `/v1/pm/requirements/${rev1.id}/revisions`, owner.token, {
-    markdown: "# 真并发基线\n版本二。"
-  });
+  const draft = await api(
+    "POST",
+    `/v1/pm/requirements/${rev1.id}/revisions`,
+    owner.token,
+    {
+      markdown: "# 真并发基线\n版本二。"
+    }
+  );
   const rev2Id = draft.body.revision.id as string;
   const hash2 = draft.body.revision.content_hash as string;
-  await api("POST", `/v1/pm/requirements/${rev1.id}/revisions/${rev2Id}/submit`, owner.token, {});
+  await api(
+    "POST",
+    `/v1/pm/requirements/${rev1.id}/revisions/${rev2Id}/submit`,
+    owner.token,
+    {}
+  );
 
   const confirmUrl = `/v1/pm/requirements/${rev1.id}/revisions/${rev2Id}/confirm`;
   const [first, second] = await Promise.all([
@@ -120,18 +140,11 @@ test("TC-03 历史 Revision 保留且状态正确", async () => {
 
 /** TC-P1-07-04 · REST 身份闸：ai_pm 令牌建任务 → 403（require_human） */
 test("TC-04 REST 建任务拒绝 AI 身份（403）", async () => {
-  const aiToken = await asAiPrincipal("p1-def03-ai", TID);
-  // ai_pm 主体需为项目成员才走得到 require_human（bootstrap 的 ai_pm 是另一
-  // 主体；此主体由 asAiPrincipal 新建 → fixture 补成员行，仅作身份面构造）
-  const me = await api("GET", "/v1/pm/me", aiToken);
-  const aiPrincipalId = me.body.principal_id as string;
-  psql(
-    `INSERT INTO core.project_member (project_id, principal_id, role, tenant_id)
-     VALUES ('${project.id}', '${aiPrincipalId}', 'ai_pm', '${owner.team.id}')
-     ON CONFLICT DO NOTHING`
-  );
+  // 形参序 =（owner, sub, projectId?）：owner 锚 tid 并以真人令牌授予成员资格，
+  // sub 是新建 AI 主体标识；helper 返回 { token, principalId }。
+  const ai = await asAiPrincipal(owner, "p1-def03-ai", project.id);
 
-  const res = await api("POST", "/v1/pm/tasks", aiToken, {
+  const res = await api("POST", "/v1/pm/tasks", ai.token, {
     project_id: project.id,
     title: "AI 越权建任务"
   });

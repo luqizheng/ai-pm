@@ -58,13 +58,21 @@ test.beforeAll(async () => {
   project = await createProjectFor(owner, "E2EP1BL", "e2e-baseline");
   const me = await api("GET", "/v1/pm/me", owner.token);
   ownerId = me.body.principal_id as string;
-  // 提案派生源（R87）：confirmed requirement 的投影文档
+  // 提案派生源（R87）= ai.project_knowledge active 行。确认需求**不会**自动
+  // 投影知识行（D55 待定；P1 首跑实测 0 条目）——夹具与 b1_policy_guard
+  // 同口径：末尾直接播种 active 知识行，验证派生与来源引用契约本身。
   await createAndConfirmRequirement(
     owner,
     project.id,
     "REQ-P1BL-001",
     "基线派生源需求",
     "# 基线派生源需求\n系统支持任务管理。"
+  );
+  psql(
+    `INSERT INTO ai.project_knowledge
+       (tenant_id, project_id, domain, content, confirmed_by)
+     VALUES ('${owner.team.id}', '${project.id}', 'identity',
+             'e2e 派生源：系统支持任务管理', '${ownerId}')`
   );
 });
 
@@ -93,6 +101,21 @@ test("TC-01 提案派生条目带来源引用", async () => {
     // 来源引用：evidence 指向 knowledge_id（不是把权威正文复制进条目）
     expect(knowledgeId || evidenceType).toBeTruthy();
   }
+
+  // 清场（每用例自清场，同 TC-04 约定）：全 confirm + 确认基线，不留
+  // pending 提案挡后续用例的 create（pending → 409）。
+  const ids = await pendingItemIds(proposalId);
+  expect((await decide(ids, "confirm")).every(st => st === 200)).toBe(true);
+  expect(
+    (
+      await api(
+        "POST",
+        `/v1/pm/projects/${project.id}/baseline/confirm`,
+        owner.token,
+        {}
+      )
+    ).status
+  ).toBe(200);
 });
 
 /** TC-P1-06-02 · 逐项决策 + 已决策 409 */
@@ -119,6 +142,18 @@ test("TC-02 逐项决策；重复决策 409", async () => {
     { action: "confirm" }
   );
   expect([404, 409]).toContain(again.status);
+
+  // 清场：条目已全 confirm，确认基线交出干净状态（pending 挡 TC-03 的 create）。
+  expect(
+    (
+      await api(
+        "POST",
+        `/v1/pm/projects/${project.id}/baseline/confirm`,
+        owner.token,
+        {}
+      )
+    ).status
+  ).toBe(200);
 });
 
 /** TC-P1-06-03/05 · investigation 不阻断（R-BL-02）→ confirm → 版本化快照 */

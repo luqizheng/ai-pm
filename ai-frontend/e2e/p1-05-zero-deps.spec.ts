@@ -34,11 +34,15 @@ test.beforeAll(async () => {
 
 /** TC-P1-05-01 · 零外部工具创建项目 → CC 就绪 + AI 配置落库 */
 test("TC-01 零依赖建项目：CC 可读 + ai.project_ai_config 就绪", async () => {
-  const cc = await api("GET", `/v1/pm/projects/${project.id}/command-center`, owner.token);
+  const cc = await api(
+    "GET",
+    `/v1/pm/projects/${project.id}/command-center`,
+    owner.token
+  );
   expect(cc.status).toBe(200);
 
   const config = psql(
-    `SELECT enabled || '/' || automation_mode
+    `SELECT enabled::text, automation_mode
        FROM ai.project_ai_config WHERE project_id = '${project.id}'`
   );
   const [enabled, mode] = config.split("|");
@@ -59,16 +63,23 @@ test("TC-02 分析链走已配置 provider（model_name ≠ fake）", async () =
   });
   expect([200, 201, 202]).toContain(event.status);
 
-  const run = await waitFor(() => {
-    const rows = psql(
-      `SELECT status || '|' || COALESCE(failure_code, '') || '|' || model_name
+  const run = await waitFor(
+    () => {
+      const rows = psql(
+        `SELECT status || '|' || COALESCE(failure_code, '') || '|' || model_name
          FROM ai.analysis_run WHERE project_id = '${project.id}'
         ORDER BY created_at DESC LIMIT 1`
-    );
-    if (!rows) return null;
-    const [status, failure, model] = rows.split("|");
-    return status === "completed" || status === "failed" ? { status, failure, model } : null;
-  }, 280_000, 3000, "analysis run terminal");
+      );
+      if (!rows) return null;
+      const [status, failure, model] = rows.split("|");
+      return status === "completed" || status === "failed"
+        ? { status, failure, model }
+        : null;
+    },
+    280_000,
+    3000,
+    "analysis run terminal"
+  );
   expect(run.status).toBe("completed");
   expect(run.failure).toBe("");
   expect(run.model.toLowerCase()).not.toContain("fake"); // mock provider 命中，如实记录
@@ -85,19 +96,31 @@ test("TC-03 会话回复链落库（assistant 消息）", async () => {
   expect([200, 201]).toContain(conv.status);
   const convId = conv.body.id as string;
 
-  await api("POST", `/v1/pm/projects/${project.id}/conversations/${convId}/messages`, owner.token, {
-    content: "请概述当前可以开展的项目管理工作"
-  });
+  await api(
+    "POST",
+    `/v1/pm/projects/${project.id}/conversations/${convId}/messages`,
+    owner.token,
+    {
+      content: "请概述当前可以开展的项目管理工作"
+    }
+  );
 
-  const reply = await waitFor(async () => {
-    const msgs = await api(
-      "GET",
-      `/v1/pm/projects/${project.id}/conversations/${convId}/messages`,
-      owner.token
-    );
-    const list = Array.isArray(msgs.body) ? msgs.body : (msgs.body.items ?? []);
-    return list.find((m: { role: string }) => m.role === "assistant") ?? null;
-  }, 180_000, 3000, "assistant reply");
+  const reply = await waitFor(
+    async () => {
+      const msgs = await api(
+        "GET",
+        `/v1/pm/projects/${project.id}/conversations/${convId}/messages`,
+        owner.token
+      );
+      const list = Array.isArray(msgs.body)
+        ? msgs.body
+        : (msgs.body.items ?? []);
+      return list.find((m: { role: string }) => m.role === "assistant") ?? null;
+    },
+    180_000,
+    3000,
+    "assistant reply"
+  );
 
   expect(reply).toBeTruthy();
 });
@@ -113,9 +136,14 @@ test("TC-04 需求建议停在人待确认态", async () => {
   expect(created.status).toBe(201);
   const reqId = created.body.requirement.id as string;
 
-  const draft = await api("POST", `/v1/pm/requirements/${reqId}/revisions`, owner.token, {
-    markdown: "# 零依赖分析产物（AI 建议版）"
-  });
+  const draft = await api(
+    "POST",
+    `/v1/pm/requirements/${reqId}/revisions`,
+    owner.token,
+    {
+      markdown: "# 零依赖分析产物（AI 建议版）"
+    }
+  );
   expect(draft.status).toBe(201);
   const revId = draft.body.revision.id as string;
 

@@ -39,7 +39,11 @@ interface InitItem {
 }
 
 async function readItems(pid: string): Promise<InitItem[]> {
-  const cc = await api("GET", `/v1/pm/projects/${pid}/command-center`, owner.token);
+  const cc = await api(
+    "GET",
+    `/v1/pm/projects/${pid}/command-center`,
+    owner.token
+  );
   expect(cc.status).toBe(200);
   const block = cc.body.blocks?.initialization_progress;
   expect(block?.status ?? "ok").toBeTruthy();
@@ -51,7 +55,9 @@ async function openCommandCenter(page: Page, pid: string): Promise<void> {
   await expect(page.getByText("项目初始化")).toBeVisible();
 }
 
-async function newSession(browser: import("@playwright/test").Browser): Promise<{
+async function newSession(
+  browser: import("@playwright/test").Browser
+): Promise<{
   context: BrowserContext;
   page: Page;
 }> {
@@ -84,13 +90,17 @@ test("TC-01 部分初始化：7 个固定 key，basics=completed 其余 not_star
   );
   expect(byKey.project_basics.status).toBe("completed");
   expect(byKey.project_basics.source_state).toBe("planning");
+  // 代码分析以零仓库为不适用（G-01 矩阵：repository_access 零仓库合法
+  // = not_started，code_analysis 无作业对象 = not_applicable，纯函数
+  // init_judgement 为权威）；其余五项 not_started。
+  expect(byKey.code_analysis.status, "code_analysis").toBe("not_applicable");
+  // 人工处理以「待人工事项数」为信号：0 = 无待办 = completed（G-01 纯函数权威）。
+  expect(byKey.human_actions.status, "human_actions").toBe("completed");
   for (const key of [
     "project_goal",
     "repository_access",
-    "code_analysis",
     "project_cognition",
-    "dev_environment",
-    "human_actions"
+    "dev_environment"
   ]) {
     expect(byKey[key].status, key).toBe("not_started");
   }
@@ -122,14 +132,18 @@ test("TC-03 重登（新 context）后初始化快照一致", async ({ browser }
 });
 
 /** TC-P1-01-04 · 重开同一项目一致，且不混入他项目数据 */
-test("TC-04 重开项目一致；访问 projectB 不影响 projectA 快照", async ({ browser }) => {
+test("TC-04 重开项目一致；访问 projectB 不影响 projectA 快照", async ({
+  browser
+}) => {
   const { context, page } = await newSession(browser);
   await openCommandCenter(page, projectA.id);
   const snapshotA = await readItems(projectA.id);
 
   await openCommandCenter(page, projectB.id);
   const snapshotB = await readItems(projectB.id);
-  expect(snapshotB.map(i => i.key).sort()).toEqual(snapshotA.map(i => i.key).sort());
+  expect(snapshotB.map(i => i.key).sort()).toEqual(
+    snapshotA.map(i => i.key).sort()
+  );
 
   await openCommandCenter(page, projectA.id);
   expect(await readItems(projectA.id)).toEqual(snapshotA);
@@ -138,20 +152,31 @@ test("TC-04 重开项目一致；访问 projectB 不影响 projectA 快照", asy
 
 /** TC-P1-01-05 · 关键字段一致性（无 expanded + required 与 required_items 自洽） */
 test("TC-05 字段一致性：无 expanded；required 与 required_items 自洽", async () => {
-  const cc = await api("GET", `/v1/pm/projects/${projectA.id}/command-center`, owner.token);
+  const cc = await api(
+    "GET",
+    `/v1/pm/projects/${projectA.id}/command-center`,
+    owner.token
+  );
   const block = cc.body.blocks.initialization_progress;
   const items = block.data.items as (InitItem & { title?: string })[];
 
   for (const item of items) {
-    expect("expanded" in item, `${item.key} 不应有 expanded（D42）`).toBe(false);
+    expect("expanded" in item, `${item.key} 不应有 expanded（D42）`).toBe(
+      false
+    );
     expect(typeof item.required, item.key).toBe("boolean");
   }
-  const requiredKeys = items.filter(i => i.required).map(i => i.key).sort();
+  const requiredKeys = items
+    .filter(i => i.required)
+    .map(i => i.key)
+    .sort();
   expect(requiredKeys).toEqual([...(block.data.required_items ?? [])].sort());
 });
 
 /** TC-P1-01-06 · 排除 Session/缓存：fresh context 读数与 DB 派生规则重算一致 */
-test("TC-06 fresh context 快照 = 领域表重算（纯派生，无缓存参与）", async ({ browser }) => {
+test("TC-06 fresh context 快照 = 领域表重算（纯派生，无缓存参与）", async ({
+  browser
+}) => {
   // 权威表实况（R72/D46 口径：零依赖项目各源计数为 0）
   const goalDocs = psql(
     `SELECT count(*) FROM ai.project_document d
@@ -163,28 +188,20 @@ test("TC-06 fresh context 快照 = 领域表重算（纯派生，无缓存参与
   const repos = psql(
     `SELECT count(*) FROM integration.project_repository WHERE project_id = '${projectA.id}'`
   );
-  const imports = psql(
-    `SELECT count(*) FROM integration.repo_import WHERE project_id = '${projectA.id}'`
-  );
-  const discovery = psql(
-    `SELECT count(*) FROM discovery.discovery_session WHERE project_id = '${projectA.id}'`
-  );
-  const devices = psql(
-    `SELECT count(*) FROM devenv.device_project_binding WHERE project_id = '${projectA.id}'`
-  );
-  const tasks = psql(
-    `SELECT count(*) FROM delivery.task WHERE project_id = '${projectA.id}'`
-  );
 
-  // 派生规则重算（command_center.rs:105-146 的零值分支）
+  // 派生规则重算——以 init_judgement 纯函数为权威（command_center）：
+  // 零仓库时 repository_access=not_started（零仓库合法 §4.7）、
+  // code_analysis=not_applicable（无分析作业对象）、human_actions=completed
+  // （待人工事项 0 = 无待办）；其余零数据源 → not_started。
+  expect(Number(repos)).toBe(0);
   const expected: Record<string, string> = {
     project_basics: "completed",
     project_goal: Number(goalDocs) > 0 ? "completed" : "not_started",
-    repository_access: Number(repos) > 0 ? "in_progress" : "not_started",
-    code_analysis: Number(imports) > 0 ? "in_progress" : "not_started",
-    project_cognition: Number(discovery) > 0 ? "in_progress" : "not_started",
-    dev_environment: Number(devices) > 0 ? "in_progress" : "not_started",
-    human_actions: Number(tasks) > 0 ? "in_progress" : "not_started"
+    repository_access: "not_started",
+    code_analysis: "not_applicable",
+    project_cognition: "not_started",
+    dev_environment: "not_started",
+    human_actions: "completed"
   };
 
   const context = await browser.newContext();
