@@ -60,6 +60,7 @@ pub mod project_import;
 pub mod project_member;
 pub mod read;
 pub mod recovery;
+pub mod reference_targets;
 pub mod repo;
 pub mod repo_access;
 pub mod repo_facts;

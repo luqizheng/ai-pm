@@ -11,12 +11,13 @@ pub(crate) fn model_error_code(err: &ModelError) -> (&'static str, String) {
 
 pub(crate) fn git_error_code(err: &git_access::GitError) -> (&'static str, String) {
     use git_access::GitError;
-    match err {
-        GitError::Timeout => ("git_timeout", err.to_string()),
-        GitError::AuthFailed => ("git_auth_failed", err.to_string()),
-        GitError::NotFound => ("git_not_found", err.to_string()),
-        GitError::TooLarge => ("repo_too_large", err.to_string()),
-        GitError::Other(message) => ("git_failed", message.clone()),
-        GitError::Io(message) => ("git_failed", message.clone()),
-    }
+    // DEF-CHAIN-02：稳定错误码单源 = `GitError::stable_code`（含 network 类）；
+    // detail 保持既有语义——Other/Io/Network 只回原文，不带 error 前缀。
+    let detail = match err {
+        GitError::Other(message) | GitError::Io(message) | GitError::Network(message) => {
+            message.clone()
+        }
+        _ => err.to_string(),
+    };
+    (err.stable_code(), detail)
 }

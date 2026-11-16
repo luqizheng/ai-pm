@@ -1,8 +1,10 @@
 //! 阶段 C · V-2 旧 ai 栈租户隔离负向测试（V2-T01~T10）。
 //!
 //! 口径（交付物 05 V1.1 §3.2 + 任务书 §6.3）：
-//! - `regression_*` = Security Regression，计入 G2；
-//! - `char_*` = Characterization（SEC-P2 现状基线），**不计入通过**。
+//! - `regression_*` = Security Regression，计入 G2（T08-C 已随 SEC-P2-1/2
+//!   修复转为 T08-R Regression）；
+//! - `char_*` = Characterization（SEC-P2 现状基线），**不计入通过**——本文件
+//!   已无 char_* 用例，命名约定保留供其他阶段沿用。
 //!
 //! V2-T06（删除）登记为 UNKNOWN：旧 ai 栈 `ai.project_knowledge` /
 //! `ai.cognition_item` 无 DELETE 端点（insert-only + 状态机），没有可执行的
@@ -281,22 +283,41 @@ async fn regression_t07_mixed_batch_is_rejected_atomically(pool: PgPool) {
     assert_eq!(task_a_status, "ready");
 }
 
-// ───────────────────────────────────────────────────────────── V2-T08-C
+// ───────────────────────────────────────────────────────────── V2-T08-R
 
-/// V2-T08-C（**Characterization**，不计入通过）：跨租户引用目标当前被接受。
+/// V2-T08-R（**Regression**，SEC-P2-1 / SEC-P2-2 修复启用；取代 T08-C
+/// Characterization）：跨租户引用目标必须被拒绝且零写入，同租户自有目标必须放行。
 ///
-/// SEC-P2-1：`kb.memory_ref` 非 KB 目标仅结构校验（不验存在性/归属）；
-/// SEC-P2-2：`pc.source.target_*` 同样不做存在性/同租户校验。
-/// 本用例以 Tenant A 的 project 引用 Tenant B 的 cognition item，固化现状基线；
-/// SEC-P2 修复落地后应改为拒绝断言（V2-T08-R）。
+/// - SEC-P2-1：`kb.memory_ref` 非 KB 目标落库前做存在性 + 同租户校验；
+/// - SEC-P2-2：`pc.source.target_*` 落库前做存在性 + 同 project / 同租户校验。
 #[sqlx::test(migrations = "../../migrations")]
-async fn char_t08c_cross_tenant_reference_targets_are_accepted(pool: PgPool) {
+async fn regression_t08r_cross_tenant_reference_targets_are_rejected(pool: PgPool) {
     let (a, b) = dual_tenants(&pool).await;
     let (b_item, _b_knowledge, _b_content) = seed_confirmed_b_knowledge(&pool, &b).await;
+    // A 自己项目内的 cognition item（与 B 的条目同表，仅租户/项目不同）。
+    let a_items = start_cognition_items(&a.app, &a.token, a.project_id).await;
+    let a_item = a_items[0];
     let actor = AuditActor::principal(a.human_id);
 
-    // ① pc.source：A 的来源登记指向 B 的认知条目 → 当前成功。
-    let source_id = register_source(
+    let sources_before: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pc.source WHERE tenant_id = $1 AND project_id = $2",
+    )
+    .bind(a.tenant_id)
+    .bind(a.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let memories_before: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM kb.memory WHERE tenant_id = $1 AND project_id = $2",
+    )
+    .bind(a.tenant_id)
+    .bind(a.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    // ① pc.source：A 的来源登记指向 B 的认知条目 → 拒绝。
+    let cross_source = register_source(
         &pool,
         a.project_id,
         &actor,
@@ -306,39 +327,33 @@ async fn char_t08c_cross_tenant_reference_targets_are_accepted(pool: PgPool) {
             target_type: "cognition_item".to_string(),
             target_id: b_item.to_string(),
             target_revision_id: None,
-            revision_missing_reason: Some("l2-char".to_string()),
+            revision_missing_reason: Some("l2-t08r".to_string()),
             section_anchor: None,
             start_line: None,
             locator: None,
-            description: Some("characterization: cross-tenant target".to_string()),
+            description: Some("T08-R: cross-tenant target".to_string()),
             source_content_hash: None,
         },
     )
-    .await
-    .expect("Characterization baseline：pc.source 不校验目标租户");
-    let (stored_tenant, stored_target, stored_domain): (Uuid, String, String) =
-        sqlx::query_as("SELECT tenant_id, target_id, target_domain FROM pc.source WHERE id = $1")
-            .bind(source_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(stored_tenant, a.tenant_id);
-    assert_eq!(stored_target, b_item.to_string());
-    assert_eq!(stored_domain, "project_cognition");
+    .await;
+    assert!(
+        cross_source.is_err(),
+        "SEC-P2-2: cross-tenant pc.source target must be rejected"
+    );
 
-    // ② kb.memory_ref：A 的记忆提案引用 B 的认知条目 → 当前成功。
-    let receipt = propose_create(
+    // ② kb.memory_ref：A 的记忆提案引用 B 的认知条目 → 拒绝。
+    let cross_memory = propose_create(
         &pool,
         a.tenant_id,
         a.project_id,
         &actor,
         MemoryContent {
             memory_type: "discussion".to_string(),
-            title: "l2 char T08-C".to_string(),
-            summary: "cross-tenant reference baseline".to_string(),
+            title: "l2 T08-R".to_string(),
+            summary: "cross-tenant reference must fail".to_string(),
             body: None,
         },
-        "characterization baseline (SEC-P2-1)",
+        "T08-R regression (SEC-P2-1)",
         vec![
             ResolvedRef {
                 role: RefRole::Subject,
@@ -346,7 +361,7 @@ async fn char_t08c_cross_tenant_reference_targets_are_accepted(pool: PgPool) {
                 target_type: "cognition_item".to_string(),
                 target_id: b_item.to_string(),
                 target_revision_id: None,
-                revision_missing_reason: Some("l2-char".to_string()),
+                revision_missing_reason: Some("l2-t08r".to_string()),
                 locator: None,
             },
             ResolvedRef {
@@ -355,24 +370,119 @@ async fn char_t08c_cross_tenant_reference_targets_are_accepted(pool: PgPool) {
                 target_type: "cognition_item".to_string(),
                 target_id: b_item.to_string(),
                 target_revision_id: None,
-                revision_missing_reason: Some("l2-char".to_string()),
+                revision_missing_reason: Some("l2-t08r".to_string()),
+                locator: None,
+            },
+        ],
+    )
+    .await;
+    assert!(
+        cross_memory.is_err(),
+        "SEC-P2-1: cross-tenant kb.memory_ref target must be rejected"
+    );
+
+    // ③ 零写入：两条链的请求被拒后不得留下任何行。
+    let sources_after: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pc.source WHERE tenant_id = $1 AND project_id = $2",
+    )
+    .bind(a.tenant_id)
+    .bind(a.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(sources_after, sources_before, "no pc.source row may leak");
+    let memories_after: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM kb.memory WHERE tenant_id = $1 AND project_id = $2",
+    )
+    .bind(a.tenant_id)
+    .bind(a.project_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(memories_after, memories_before, "no kb.memory row may leak");
+    let leaked_refs: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM kb.memory_ref WHERE target_id = $1")
+            .bind(b_item.to_string())
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(leaked_refs, 0, "no cross-tenant memory_ref may leak");
+
+    // ④ 正向：A 引用自己项目内目标 → 两条链均成功（修复不得误伤合法引用）。
+    let own_source = register_source(
+        &pool,
+        a.project_id,
+        &actor,
+        SourceInput {
+            source_kind: "project_cognition".to_string(),
+            target_domain: "project_cognition".to_string(),
+            target_type: "cognition_item".to_string(),
+            target_id: a_item.to_string(),
+            target_revision_id: None,
+            revision_missing_reason: Some("l2-t08r".to_string()),
+            section_anchor: None,
+            start_line: None,
+            locator: None,
+            description: Some("T08-R: own-tenant target".to_string()),
+            source_content_hash: None,
+        },
+    )
+    .await
+    .expect("SEC-P2-2: own-tenant pc.source target must pass");
+    let (stored_tenant, stored_target): (Uuid, String) =
+        sqlx::query_as("SELECT tenant_id, target_id FROM pc.source WHERE id = $1")
+            .bind(own_source)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stored_tenant, a.tenant_id);
+    assert_eq!(stored_target, a_item.to_string());
+
+    let own_receipt = propose_create(
+        &pool,
+        a.tenant_id,
+        a.project_id,
+        &actor,
+        MemoryContent {
+            memory_type: "discussion".to_string(),
+            title: "l2 T08-R own".to_string(),
+            summary: "own-tenant reference must pass".to_string(),
+            body: None,
+        },
+        "T08-R regression: own target",
+        vec![
+            ResolvedRef {
+                role: RefRole::Subject,
+                target_domain: "project_cognition".to_string(),
+                target_type: "cognition_item".to_string(),
+                target_id: a_item.to_string(),
+                target_revision_id: None,
+                revision_missing_reason: Some("l2-t08r".to_string()),
+                locator: None,
+            },
+            ResolvedRef {
+                role: RefRole::Evidence,
+                target_domain: "project_cognition".to_string(),
+                target_type: "cognition_item".to_string(),
+                target_id: a_item.to_string(),
+                target_revision_id: None,
+                revision_missing_reason: Some("l2-t08r".to_string()),
                 locator: None,
             },
         ],
     )
     .await
-    .expect("Characterization baseline：kb.memory_ref 不校验目标归属");
-
+    .expect("SEC-P2-1: own-tenant kb.memory_ref target must pass");
     let refs: Vec<(String, String)> = sqlx::query_as(
         "SELECT target_domain, target_id FROM kb.memory_ref WHERE revision_id = $1 \
           ORDER BY ref_role",
     )
-    .bind(receipt.revision_id)
+    .bind(own_receipt.revision_id)
     .fetch_all(&pool)
     .await
     .unwrap();
     assert_eq!(refs.len(), 2);
-    assert!(refs.iter().all(|(_, target)| target == &b_item.to_string()));
+    assert!(refs.iter().all(|(_, target)| target == &a_item.to_string()));
 }
 
 // ───────────────────────────────────────────────────────────── V2-T09

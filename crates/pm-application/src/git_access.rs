@@ -17,12 +17,30 @@ pub enum GitError {
     AuthFailed,
     #[error("git remote not found")]
     NotFound,
+    #[error("git network error: {0}")]
+    Network(String),
     #[error("repository is too large")]
     TooLarge,
     #[error("git command failed: {0}")]
     Other(String),
     #[error("git io error: {0}")]
     Io(String),
+}
+
+impl GitError {
+    /// 稳定错误码（DEF-CHAIN-02）：not-found / auth / network 三类可区分，
+    /// 供 `project_import::git_error_code` 与 KB/PC 分析链共同复用，避免
+    /// 「路径不存在」被归到认证失败。
+    pub fn stable_code(&self) -> &'static str {
+        match self {
+            GitError::NotFound => "git_not_found",
+            GitError::AuthFailed => "git_auth_failed",
+            GitError::Network(_) => "git_network_error",
+            GitError::Timeout => "git_timeout",
+            GitError::TooLarge => "repo_too_large",
+            GitError::Other(_) | GitError::Io(_) => "git_failed",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -102,20 +120,63 @@ fn prepare_command(key: Option<&Path>, known_hosts: Option<&Path>) -> Command {
 
 fn classify(stderr: &str) -> GitError {
     let lower = stderr.to_ascii_lowercase();
-    if lower.contains("permission denied")
-        || lower.contains("authentication failed")
-        || lower.contains("could not read from remote repository")
+    // ① 目标不存在：路径/仓库缺失优先判定。git 对 file:// 不存在的路径只回
+    //    "could not read from remote repository" 的通用尾句（见 ④）。
+    if lower.contains("does not appear to be a git repository")
+        || lower.contains("does not exist")
+        || lower.contains("not a git repository")
+        || lower.contains("no such file or directory")
         || lower.contains("repository not found")
     {
+        return GitError::NotFound;
+    }
+    // ② 明确的认证失败。
+    if lower.contains("permission denied")
+        || lower.contains("authentication failed")
+        || lower.contains("publickey")
+        || lower.contains("invalid username or password")
+        || lower.contains("could not read username")
+    {
         return GitError::AuthFailed;
+    }
+    // ③ 网络类（DNS / 连接 / TLS）。
+    if lower.contains("could not resolve host")
+        || lower.contains("unable to resolve host")
+        || lower.contains("connection timed out")
+        || lower.contains("connection refused")
+        || lower.contains("network is unreachable")
+        || lower.contains("couldn't connect")
+        || lower.contains("ssl_connect")
+        || lower.contains("unable to access")
+    {
+        return GitError::Network(stderr.trim().to_string());
     }
     if lower.contains("too large") || lower.contains("exceeds") {
         return GitError::TooLarge;
     }
-    if lower.contains("does not exist") || lower.contains("not found") {
+    // ④ DEF-CHAIN-02：`could not read from remote repository` 是 git 在多种
+    //    失败下都会打印的通用尾句，单独出现时不得推断为认证失败。
+    if lower.contains("could not read from remote repository") {
+        return GitError::NotFound;
+    }
+    if lower.contains("not found") {
         return GitError::NotFound;
     }
     GitError::Other(stderr.trim().to_string())
+}
+
+/// `file://` URL → 本地路径（Windows `file://D:/…` 与 `file:///D:/…` 均支持）。
+/// 仅在 clone 前置存在性探测使用，不做 percent-decoding（超出本修复范围）。
+fn file_url_local_path(url: &str) -> Option<&Path> {
+    let raw = url.strip_prefix("file://")?;
+    // `/D:/…` 去掉前导斜杠才是 Windows 合法盘符路径；POSIX `/home/…` 保留。
+    let bytes = raw.as_bytes();
+    let candidate = if bytes.first() == Some(&b'/') && bytes.get(2) == Some(&b':') {
+        &raw[1..]
+    } else {
+        raw
+    };
+    Some(Path::new(candidate))
 }
 
 /// `git ls-remote --heads <url>`；返回分支名（去掉 `refs/heads/`）与 sha。
@@ -169,6 +230,14 @@ pub async fn clone_bare(
     dest: &Path,
     timeout: Duration,
 ) -> Result<(), GitError> {
+    // DEF-CHAIN-02：file:// 本地路径不存在时直接判 NotFound，不再依赖 git
+    // 的通用 stderr 尾句（历史上被 classify 误判为 git_auth_failed）。
+    if let Some(local) = file_url_local_path(url) {
+        if !local.exists() {
+            let _ = std::fs::remove_dir_all(dest);
+            return Err(GitError::NotFound);
+        }
+    }
     let known_hosts = std::env::temp_dir().join(format!("ai-pm-known-hosts-{}", Uuid::new_v4()));
     let mut cmd = prepare_command(key, Some(&known_hosts));
     cmd.arg("-c")
@@ -319,5 +388,47 @@ mod tests {
         assert_eq!(heads.len(), 1);
         assert_eq!(heads[0].branch, "main");
         assert_eq!(heads[0].sha.len(), 40);
+    }
+
+    /// DEF-CHAIN-02：三类 clone 失败必须有互不混淆的稳定错误码。
+    #[test]
+    fn classify_distinguishes_not_found_auth_and_network() {
+        // branch-b4 的原始 stderr：git 的通用尾句，过去被判成认证失败。
+        let generic = classify(
+            "fatal: could not read from remote repository\n\n\
+             Please make sure you have the correct access rights",
+        );
+        assert!(matches!(generic, GitError::NotFound), "{generic:?}");
+        assert_eq!(generic.stable_code(), "git_not_found");
+
+        let auth = classify("Permission denied (publickey).");
+        assert!(matches!(auth, GitError::AuthFailed), "{auth:?}");
+        assert_eq!(auth.stable_code(), "git_auth_failed");
+
+        let network = classify(
+            "fatal: unable to access 'https://x/r/': Could not resolve host: x",
+        );
+        assert!(matches!(network, GitError::Network(_)), "{network:?}");
+        assert_eq!(network.stable_code(), "git_network_error");
+
+        let not_found = classify("fatal: repository 'https://x/r' not found");
+        assert!(matches!(not_found, GitError::NotFound), "{not_found:?}");
+    }
+
+    /// DEF-CHAIN-02（branch-b4 场景）：file:// 路径不存在不得再报 authentication failed。
+    #[tokio::test]
+    async fn missing_file_url_clone_is_not_authentication_failure() {
+        let missing = std::env::temp_dir()
+            .join(format!("ai-pm-no-such-repo-{}", Uuid::new_v4()));
+        let url = format!("file://{}", missing.to_string_lossy().replace('\\', "/"));
+        let dest = std::env::temp_dir()
+            .join(format!("ai-pm-clone-dest-{}", Uuid::new_v4()));
+        let err = clone_bare(&url, None, &dest, Duration::from_secs(30))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, GitError::NotFound), "{err:?}");
+        assert_eq!(err.stable_code(), "git_not_found");
+        assert!(!err.to_string().contains("authentication"));
+        let _ = std::fs::remove_dir_all(&dest);
     }
 }

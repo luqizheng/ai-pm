@@ -360,12 +360,32 @@ async fn mark_analyzed_derives_links_and_failed_is_terminal(pool: PgPool) {
     assert_eq!(kb_link, Some(kb_rev));
     assert_eq!(src, Some(source));
 
-    // failed：终态不占门
-    mark_failed(&pool, kb_task, "kb_analysis_failed", "boom")
+    // DEF-CHAIN-02（branch-b4 场景）：file:// 路径不存在 → `git_not_found`，
+    // 不得再落到历史证据里的 "git authentication failed"。
+    use pm_application::git_access::{clone_bare, GitError};
+    let missing = std::env::temp_dir().join(format!("ai-pm-b4-missing-{}", Uuid::new_v4()));
+    let file_url = format!("file://{}", missing.to_string_lossy().replace('\\', "/"));
+    let dest = std::env::temp_dir().join(format!("ai-pm-b4-dest-{}", Uuid::new_v4()));
+    let git_err = clone_bare(&file_url, None, &dest, Duration::from_secs(30))
+        .await
+        .unwrap_err();
+    assert!(matches!(git_err, GitError::NotFound), "{git_err:?}");
+    // 与 kb_pc_analysis 的 AnalysisError::Git 展示口径一致（"git: <code>: <msg>"）。
+    let detail = format!("git: {}: {}", git_err.stable_code(), git_err);
+    assert!(!detail.to_ascii_lowercase().contains("authentication"));
+
+    // failed：终态不占门 + DEF-CHAIN-01（stage_detail 必须随失败一并写入）
+    mark_failed(&pool, kb_task, "kb_analysis_failed", &detail)
         .await
         .unwrap();
-    let (status, code): (String, Option<String>) = sqlx::query_as(
-        "SELECT status, error_code FROM integration.repo_analysis_report WHERE id = $1",
+    let (status, code, stage, err_detail): (
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) = sqlx::query_as(
+        "SELECT status, error_code, stage_detail, error_detail \
+         FROM integration.repo_analysis_report WHERE id = $1",
     )
     .bind(report_id)
     .fetch_one(&pool)
@@ -373,6 +393,19 @@ async fn mark_analyzed_derives_links_and_failed_is_terminal(pool: PgPool) {
     .unwrap();
     assert_eq!(status, "failed");
     assert_eq!(code.as_deref(), Some("kb_analysis_failed"));
+    assert_eq!(
+        stage.as_deref(),
+        Some("KB 分析失败"),
+        "DEF-CHAIN-01: failed report must carry stage_detail"
+    );
+    assert_eq!(err_detail.as_deref(), Some(detail.as_str()));
+    assert!(
+        !err_detail
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .contains("authentication"),
+        "DEF-CHAIN-02: missing file:// path must not be reported as auth failure"
+    );
     // source 夹具未被后续用例误用
     let _ = source;
 }

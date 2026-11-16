@@ -240,9 +240,14 @@ async fn collect_fresh_run(
     }
     git_access::clone_bare(&access.url, key_path.as_deref(), &dest, CLONE_TIMEOUT)
         .await
-        .map_err(|e| match e {
-            GitError::Timeout => AnalysisError::Git("clone timed out".into()),
-            other => AnalysisError::Git(other.to_string()),
+        .map_err(|e| {
+            // DEF-CHAIN-02：把 clone 的稳定分类码带进 error_detail，避免
+            // file:// 路径不存在被报成 "git authentication failed"。
+            let code = e.stable_code();
+            match e {
+                GitError::Timeout => AnalysisError::Git(format!("{code}: clone timed out")),
+                other => AnalysisError::Git(format!("{code}: {other}")),
+            }
         })?;
     let anchor = analysis_anchor(&access, observed_head);
     let (facts, used) = match (&anchor, incremental_since) {

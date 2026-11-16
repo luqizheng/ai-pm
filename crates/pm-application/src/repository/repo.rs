@@ -575,6 +575,7 @@ pub async fn verify_repository(
                     GitError::Timeout => ("timeout", "git ls-remote timed out".to_string()),
                     GitError::AuthFailed => ("auth_failed", err.to_string()),
                     GitError::NotFound => ("not_found", err.to_string()),
+                    GitError::Network(msg) => ("network_error", msg.clone()),
                     GitError::TooLarge => ("too_large", err.to_string()),
                     GitError::Other(msg) => ("git_failed", msg.clone()),
                     GitError::Io(msg) => ("git_failed", msg.clone()),

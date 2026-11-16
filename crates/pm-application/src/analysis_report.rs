@@ -237,9 +237,10 @@ pub async fn mark_analyzed(pool: &PgPool, task_id: Uuid) -> Result<(), sqlx::Err
                 kb_revision_id = (SELECT rev FROM kb), \
                 pc_source_id = ( \
                      SELECT s.id FROM pc.source s \
-                      WHERE s.target_domain = 'knowledge_base' \
+                      WHERE s.tenant_id = r.tenant_id AND s.project_id = r.project_id \
+                        AND s.target_domain = 'knowledge_base' \
                         AND s.target_revision_id = (SELECT rev FROM kb)::text \
-                      LIMIT 1), \
+                      ORDER BY s.created_at DESC LIMIT 1), \
                 stage_detail = NULL, updated_at = now() \
           WHERE r.intake_id = (SELECT intake_id FROM t) AND r.status = 'analyzing'",
     )
@@ -250,21 +251,33 @@ pub async fn mark_analyzed(pool: &PgPool, task_id: Uuid) -> Result<(), sqlx::Err
 }
 
 /// 任务失败 → 报告 failed（终态，不占门）。
+///
+/// DEF-CHAIN-01：失败时同时写 `stage_detail`（branch-b4 证据里该列为空，
+/// 前端需兼容空值）；阶段描述按失败来源区分 KB 分析 / PC 派生 / 其他。
 pub async fn mark_failed(
     pool: &PgPool,
     task_id: Uuid,
     error_code: &str,
     error_detail: &str,
 ) -> Result<(), sqlx::Error> {
+    let stage_detail = if error_code.starts_with("kb_") {
+        "KB 分析失败"
+    } else if error_code.starts_with("pc_") {
+        "PC 认知派生失败"
+    } else {
+        "分析失败"
+    };
     sqlx::query(
         "UPDATE integration.repo_analysis_report \
-          SET status = 'failed', error_code = $2, error_detail = $3, updated_at = now() \
+          SET status = 'failed', error_code = $2, error_detail = $3, \
+              stage_detail = $4, updated_at = now() \
          WHERE intake_id = (SELECT intake_id FROM integration.intake_task WHERE id = $1) \
            AND status IN ('analyzing', 'analyzed')",
     )
     .bind(task_id)
     .bind(error_code)
     .bind(error_detail)
+    .bind(stage_detail)
     .execute(pool)
     .await?;
     Ok(())

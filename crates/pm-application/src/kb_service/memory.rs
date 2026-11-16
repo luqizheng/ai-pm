@@ -244,6 +244,45 @@ async fn check_kb_refs_tx(
     Ok(())
 }
 
+/// 非 KB 域引用校验（SEC-P2-1）：按 registry 域映射到物理表，落库前做
+/// 存在性 + 同租户校验。`knowledge_base` 仍由 [`check_kb_refs_tx`] 的既有
+/// `source → source_project` 通道语义裁决，不在此重复判定。
+///
+/// 与 `validate_refs` 的分工：后者只做形状/通道校验（不查库），本函数在写事务
+/// 内兜底，覆盖直接调用本服务（不经 Platform `resolve_refs`）的入口。
+async fn check_non_kb_refs_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: Uuid,
+    refs: &[ResolvedRef],
+) -> Result<(), KbServiceError> {
+    for r in refs
+        .iter()
+        .filter(|r| r.target_domain != TargetDomain::KnowledgeBase.as_str())
+    {
+        let domain = parse_domain(&r.target_domain)
+            .map_err(|e| KbServiceError::Invalid(format!("reference domain: {e}")))?;
+        let Some(target) = crate::reference_targets::domain_target(domain, &r.target_type) else {
+            continue;
+        };
+        let id = Uuid::parse_str(&r.target_id).map_err(|_| {
+            KbServiceError::Invalid(format!(
+                "reference target_id must be a uuid for `{}` domain",
+                r.target_domain
+            ))
+        })?;
+        // SEC-P2-1 口径是「同租户」；逻辑检索锚允许同租户跨项目（V1 §5.1）。
+        let probe = crate::reference_targets::probe(&mut **tx, target.table, id, tenant_id, None)
+            .await?;
+        if !target.allows(probe) {
+            return Err(KbServiceError::Invalid(format!(
+                "reference target {}:{}/{} is missing or out of tenant scope (SEC-P2-1)",
+                r.target_domain, r.target_type, r.target_id
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// 版本内容锚：规范化（类型/标题/摘要/详述 + 排序后的引用四元组）的 sha256。
 fn content_hash(content: &MemoryContent, refs: &[ResolvedRef]) -> String {
     let mut keys: Vec<String> = refs
@@ -361,6 +400,7 @@ pub async fn propose_create(
     let mut tx = pool.begin().await?;
     ensure_project_writable(&mut tx, project_id).await?;
     check_kb_refs_tx(&mut tx, project_id, &refs).await?;
+    check_non_kb_refs_tx(&mut tx, tenant_id, &refs).await?;
     let memory_id: Uuid = sqlx::query_scalar(
         "INSERT INTO kb.memory (tenant_id, project_id, created_by) VALUES ($1, $2, $3) RETURNING id",
     )
@@ -536,6 +576,7 @@ pub async fn propose_change(
     let (content, refs) = match action {
         ChangeAction::Update => {
             check_kb_refs_tx(&mut tx, project_id, &refs).await?;
+            check_non_kb_refs_tx(&mut tx, tenant_id, &refs).await?;
             (content.expect("checked above"), refs)
         }
         ChangeAction::Withdraw => {

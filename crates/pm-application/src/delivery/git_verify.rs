@@ -303,6 +303,7 @@ fn map_git_error(error: GitError) -> String {
         GitError::Timeout => "git command timed out".to_string(),
         GitError::AuthFailed => "git authentication failed".to_string(),
         GitError::NotFound => "git object not found".to_string(),
+        GitError::Network(message) => message,
         GitError::TooLarge => "repository is too large".to_string(),
         GitError::Other(message) => message,
         GitError::Io(message) => message,
