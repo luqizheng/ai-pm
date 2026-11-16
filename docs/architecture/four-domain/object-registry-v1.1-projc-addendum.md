@@ -2,12 +2,12 @@
 
 - 日期：2026-11-17（V1.3）· 基准：master `9a38935`（阶段一/二 + 三份核查报告）· 性质：V1.0 注册表（审计产物，基准 05ce33d8）的**增量附录**，不改动 V1.0 原文
 - 依据：《Phase3-P3-11下一阶段实施方案-T1T2T3-v1.0.md》（V1.1）+ 《Phase3-裁决稿-…-v1.1.md》（R-01~R-10）+ 专家评审意见 + **《P3-11 验收前文档级裁决意见 V1.0》（2026-11-17 专家裁决 D-3）**
-- 状态：**开发落实产物，待验收**；验收后随 P3-11 正式冻结一并生效
+- 状态：**已通过工程交付验收**（2026-11-17 用户裁决，台账 §10.6；范围=工程交付验收）；正式冻结待 R-01~R-10 正式裁决（D-1=后置待办）与用户冻结令，验收不产生冻结效力
 - 版本记录：V1.1（Stage 1 数据面，0025）→ V1.2（T-1/T-2/T-3 正式链：0026/0027 + 提案/发布/关系/冲突服务 + worker 重挂 + close 双域分流 + 字典废弃）→ **V1.3（专家裁决 D-3：SOURCE/RELATION/CONFLICT 状态降级 + 实现状态判定口径与晋级规则冻结，见 §5）**
 
 ## 1. Project Cognition 域（owner_domain=PROJECT_COGNITION）注册条目更新
 
-| Object Code | 对象 | 当前实现 | 写入权（正式） | 审批权 | 正文权威 | 版本权威 | 证据模型 | 实现状态（V1.2） |
+| Object Code | 对象 | 当前实现 | 写入权（正式） | 审批权 | 正文权威 | 版本权威 | 证据模型 | 实现状态（V1.3） |
 |---|---|---|---|---|---|---|---|---|
 | PROJ-COG-OBJECT | 正式认知对象 | **projc.cognition_object**（0025） | 草稿面=projc::upsert_object_draft（AI/服务可写，产物恒 draft）；正式推进=ProjC 发布事务（真人主体+A3 门） | 提案无门、发布有门（pc 同口径） | PG content（经 projc.document_revision；Git=目标态偏差，同 pc/kb 已认账项） | current_revision_id 钉扎 + revision_no | projc.evidence | **COMPLETE**（仓库分析链 W4 起真实写入者：repository/tech_stack/repository_module 三类） |
 | PROJ-COG-REVISION | Cognition Revision | **projc.cognition_revision**（0025，行推号 + content_hash） | 随对象 upsert 唯一写点 | — | 经 projc.document_revision（不可变触发器） | revision_no 单层 | 经 evidence.object_revision_id | **COMPLETE** |
