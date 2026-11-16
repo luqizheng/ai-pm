@@ -4,7 +4,25 @@ analysis:
     description: Independent home for repository analysis reports — browse the report list and details, review KB report revisions and PC proposals, and close reports.
   state:
     noProject: Select a project first — analysis reports are project-scoped and never cross projects.
-    framework: Page frame ready — the report list moves in with an upcoming task.
     detailFramework: Page frame ready — the report detail is fleshed out by an upcoming task.
+  status:
+    analyzing: Analyzing
+    analyzed: Pending review
+    closed: Closed
+    failed: Failed
+  list:
+    empty: No analysis reports yet — they appear here once a repository analysis completes.
+    loading: Loading reports…
+    showHistory: Show history
+    hideHistory: Hide history
+    incrementalBadge: Incremental
+    analyzingHint: Collecting…
+    pendingItems: "{n} items pending"
+    allDisposed: All disposed — ready to close
+    closedAt: Closed at {time}
+    failedReason: Analysis failed
+  error:
+    load: Load failed, please retry later
+    notFound: Report not found or no access
   detail:
     title: Report Detail

@@ -4,7 +4,25 @@ analysis:
     description: 仓库分析报告的独立承载页——查看报告列表与详情，审阅 KB 报告修订与 PC 提案，并关闭报告。
   state:
     noProject: 请先选择项目——分析报告按项目隔离，不跨项目展示。
-    framework: 页面框架已就绪——报告列表由后续任务迁移至本页。
     detailFramework: 页面框架已就绪——报告详情由后续任务充实。
+  status:
+    analyzing: 分析中
+    analyzed: 待审理
+    closed: 已关闭
+    failed: 失败
+  list:
+    empty: 暂无分析报告——仓库分析完成后在此可见
+    loading: 报告加载中…
+    showHistory: 显示历史
+    hideHistory: 隐藏历史
+    incrementalBadge: 增量
+    analyzingHint: 采集中…
+    pendingItems: "{n} 项待处置"
+    allDisposed: 已全部处置，可关闭
+    closedAt: 关闭于 {time}
+    failedReason: 分析失败
+  error:
+    load: 加载失败，请稍后重试
+    notFound: 报告不存在或无权访问
   detail:
     title: 报告详情
