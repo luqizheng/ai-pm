@@ -205,7 +205,7 @@ shell:
         personalWorkspace: 个人工作区
         personalHome: 我的主页
         inbox: 收件箱
-        dashboard: 项目总览
+        dashboard: 团队总览
         projects: 项目
         repository: 代码仓库
         discovery: 代码检索

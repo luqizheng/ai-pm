@@ -71,13 +71,24 @@ describe("SideNav", () => {
     expect(badges.map(el => el.text())).toEqual(["3"]);
   });
 
-  it("展开态显示条目文案，分隔线只在集群边界", async () => {
+  it("展开态显示条目文案，分隔线在区域边界（Personal│Team│项目区│遗留管理）", async () => {
     const { wrapper } = mountShell(SideNav);
     await nextTick();
 
     expect(wrapper.find(".shell-sidenav__item-label").exists()).toBe(true);
-    // 分隔线仅在集群边界各一条（全局上下文│项目模块│管理）
-    expect(wrapper.findAll(".shell-sidenav__divider").length).toBe(2);
+    // V1.2 §6.1：区域边界各一条（个人│工作区│项目模块│管理 → 3 条）
+    expect(wrapper.findAll(".shell-sidenav__divider").length).toBe(3);
+  });
+
+  it("项目总览已更名为团队总览（Q-08：只改文案不改路径）", async () => {
+    const { wrapper } = mountShell(SideNav);
+    await nextTick();
+
+    const item = wrapper
+      .findAll(".shell-sidenav__item")
+      .find(el => (el.attributes("href") ?? "").includes("/dashboard"));
+    expect(item).toBeTruthy();
+    expect(item!.find(".shell-sidenav__item-label").text()).toBe("团队总览");
   });
 
   it("折叠态隐藏条目文案，改用图标与未读圆点", async () => {

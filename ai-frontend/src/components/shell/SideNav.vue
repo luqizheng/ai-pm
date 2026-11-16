@@ -17,7 +17,8 @@ import {
   isNavItemActive,
   navGroups,
   type NavGroup,
-  type NavItem
+  type NavItem,
+  type NavRegionId
 } from "@/router/navigation";
 import { useShellStore } from "@/stores/shell";
 import { useAssistantStore } from "@/stores/assistant";
@@ -70,13 +71,23 @@ function toggleGroup(group: NavGroup) {
   };
 }
 
+/** 组 → 导航区域映射（R2-D1 区域排序规则，见 navigation.ts NAV_REGION_ORDER）。 */
+const REGION_BY_GROUP_ID: Record<string, NavRegionId> = {
+  personal: "personal",
+  workspace: "team",
+  modules: "project",
+  admin: "adminLegacy"
+};
+
 /**
- * 分组分隔线可见性（Figma 展开态：集群边界各一条——全局上下文│项目模块│
- * 管理；折叠态：除首组外组间全加）。
+ * 分组分隔线可见性（V1.2 §6.1：展开态区域边界各一条——Personal│Team│
+ * Current Project│遗留管理；折叠态：除首组外组间全加）。
  */
-function showDivider(group: NavGroup) {
-  if (shell.sidebarCollapsed) return group.id !== navGroups[0].id;
-  return group.id === "modules" || group.id === "admin";
+function showDivider(group: NavGroup, index: number) {
+  if (shell.sidebarCollapsed) return index > 0;
+  const prev = navGroups[index - 1];
+  if (!prev) return false;
+  return REGION_BY_GROUP_ID[prev.id] !== REGION_BY_GROUP_ID[group.id];
 }
 
 function isActive(item: NavItem) {
@@ -148,10 +159,10 @@ async function onSelectProject(id: string) {
     </div>
 
     <div class="shell-sidenav__groups">
-      <template v-for="group in navGroups" :key="group.id">
-        <!-- 分组分隔线（展开态：集群边界；折叠态：组间） -->
+      <template v-for="(group, index) in navGroups" :key="group.id">
+        <!-- 分组分隔线（V1.2 §6.1：区域边界；折叠态：除首组外组间） -->
         <div
-          v-if="showDivider(group)"
+          v-if="showDivider(group, index)"
           class="shell-sidenav__divider"
           aria-hidden="true"
         />

@@ -205,7 +205,7 @@ shell:
         personalWorkspace: Personal Workspace
         personalHome: My Home
         inbox: Inbox
-        dashboard: Project Dashboard
+        dashboard: Team Overview
         projects: Projects
         repository: Repository
         discovery: Code Discovery
