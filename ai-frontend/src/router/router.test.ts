@@ -5,6 +5,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import { flatNavItems } from "./navigation";
 import { AUTH_PATHS } from "./auth";
 import { buildRoutes } from "./index";
+import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 
 /**
  * 路由表契约：**由导航树派生**，不允许二者漂移。
@@ -72,6 +73,53 @@ describe("router", () => {
     ]) {
       expect(paths.has(path), `${path} 未注册`).toBe(true);
     }
+  });
+
+  it("C3：Analysis / Product Cognition 占位路由渲染占位组件", () => {
+    const routes = buildRoutes();
+    for (const path of ["/project/analysis", "/project/product-cognition"]) {
+      const route = routes.find(r => r.path === path);
+      expect(route, `${path} 未注册`).toBeTruthy();
+      // 占位路由 = 无业务组件，落 PlaceholderView（能力不得伪装已上线）
+      expect(route!.component).toBe(PlaceholderView);
+    }
+  });
+
+  it("C3：项目认知与项目总控台由导航派生为真组件路由", () => {
+    const routes = buildRoutes();
+    for (const path of ["/project/cognition", "/project/command-center"]) {
+      const route = routes.find(r => r.path === path);
+      expect(route, `${path} 未注册`).toBeTruthy();
+      expect(route!.component).not.toBe(PlaceholderView);
+    }
+  });
+
+  it("C3：开发环境父子路由（父 redirect / Devices 真页 / Executors 占位 / 旧路径兼容）", () => {
+    const routes = buildRoutes();
+    const paths = new Set(routes.map(r => r.path));
+
+    // 父路由重定向到首个子项 Devices
+    const parent = routes.find(r => r.path === "/project/settings/devenv");
+    expect(parent?.redirect).toBe("/project/settings/devenv/devices");
+
+    // Devices 仍由 BootstrapView 承载；Executors 为 PLANNED 占位
+    const devices = routes.find(
+      r => r.path === "/project/settings/devenv/devices"
+    );
+    expect(devices).toBeTruthy();
+    expect(devices!.component).not.toBe(PlaceholderView);
+    const executors = routes.find(
+      r => r.path === "/project/settings/devenv/executors"
+    );
+    expect(executors!.component).toBe(PlaceholderView);
+
+    // 旧路径 /project/devenv 兼容：函数式重定向（保留 query）
+    const legacy = routes.find(r => r.path === "/project/devenv");
+    expect(typeof legacy?.redirect).toBe("function");
+
+    // Runners 与详情深链保持注册
+    expect(paths.has("/project/settings/runners")).toBe(true);
+    expect(paths.has("/project/settings/runners/:deviceId")).toBe(true);
   });
 
   it("存在兜底路由（404）", () => {

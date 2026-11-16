@@ -240,6 +240,7 @@ settings:
       connect: 连接
       disconnect: 断开
   project:
+    scopeLabel: 项目设置
     proposedTitle: 该设置节规划中
     proposedHint: 能力经产品确认后在此落地；当前请从项目总控台继续日常工作。
     landing:

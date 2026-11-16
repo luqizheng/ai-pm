@@ -11,11 +11,14 @@ import {
 import { useRoute } from "vue-router";
 
 import IconTooltip from "./IconTooltip.vue";
+import ProjectSwitcher from "./ProjectSwitcher.vue";
 
 import {
+  globalNavConfig,
   isNavChildActive,
   isNavItemActive,
-  navGroups,
+  projectNavConfig,
+  settingsNavConfig,
   type NavGroup,
   type NavItem,
   type NavRegionId
@@ -75,23 +78,52 @@ function toggleGroup(group: NavGroup) {
 const REGION_BY_GROUP_ID: Record<string, NavRegionId> = {
   personal: "personal",
   workspace: "team",
+  projectHome: "project",
   modules: "project",
+  projectSettings: "project",
   admin: "adminLegacy"
 };
 
 /**
- * 分组分隔线可见性（V1.2 §6.1：展开态区域边界各一条——Personal│Team│
- * Current Project│遗留管理；折叠态：除首组外组间全加）。
+ * 渲染队列（V1.2 §6.1，区域顺序 = NAV_REGION_ORDER）：
+ * Personal → Team → Current Project（有当前项目时：总控台/业务模块/项目设置，
+ * R2-D4 条件渲染）→ 遗留管理入口。无当前项目时整个项目区不渲染，
+ * 不出现灰色禁用的空项目菜单、不伪造默认项目上下文。
+ */
+const renderedGroups = computed<NavGroup[]>(() => {
+  const groups: NavGroup[] = [
+    ...globalNavConfig.filter(
+      group => group.id === "personal" || group.id === "workspace"
+    )
+  ];
+  if (shell.currentProjectId) {
+    groups.push(...projectNavConfig, settingsNavConfig);
+  }
+  groups.push(...globalNavConfig.filter(group => group.id === "admin"));
+  return groups;
+});
+
+/**
+ * 分组分隔线可见性（V1.2 §6.1：展开态区域边界各一条；折叠态：除首组外组间全加）。
  */
 function showDivider(group: NavGroup, index: number) {
   if (shell.sidebarCollapsed) return index > 0;
-  const prev = navGroups[index - 1];
+  const prev = renderedGroups.value[index - 1];
   if (!prev) return false;
   return REGION_BY_GROUP_ID[prev.id] !== REGION_BY_GROUP_ID[group.id];
 }
 
 function isActive(item: NavItem) {
-  return isNavItemActive(item, currentPath.value);
+  if (isNavItemActive(item, currentPath.value)) return true;
+  // 子路由前缀兜底：跨父前缀的子项（如 devenv 下的 Runners
+  // /project/settings/runners）命中时父项同样激活，保证子菜单可见。
+  return (
+    item.children?.some(
+      child =>
+        currentPath.value === child.path ||
+        currentPath.value.startsWith(`${child.path}/`)
+    ) ?? false
+  );
 }
 
 /**
@@ -159,7 +191,7 @@ async function onSelectProject(id: string) {
     </div>
 
     <div class="shell-sidenav__groups">
-      <template v-for="(group, index) in navGroups" :key="group.id">
+      <template v-for="(group, index) in renderedGroups" :key="group.id">
         <!-- 分组分隔线（V1.2 §6.1：区域边界；折叠态：除首组外组间） -->
         <div
           v-if="showDivider(group, index)"
@@ -168,9 +200,9 @@ async function onSelectProject(id: string) {
         />
 
         <section class="shell-sidenav__group">
-          <!-- 分组标题（折叠态隐藏，仅保留图标与分隔线） -->
+          <!-- 分组标题（折叠态隐藏，仅保留图标与分隔线；headerless 组无标题行） -->
           <button
-            v-if="!shell.sidebarCollapsed"
+            v-if="!shell.sidebarCollapsed && !group.headerless"
             type="button"
             class="shell-sidenav__group-toggle"
             :aria-expanded="!isGroupCollapsed(group)"
@@ -197,21 +229,22 @@ async function onSelectProject(id: string) {
             v-if="shell.sidebarCollapsed || !isGroupCollapsed(group)"
             class="shell-sidenav__items"
           >
-            <!-- 项目上下文头（Figma Project Context Header / Selected|Open|Empty）
-                 仅展开态 + 项目上下文分组；承担「切换项目」入口。 -->
-            <!-- 不再展示，因为设计原因，多团队，多项目之后，这里展开之后太大了 -->
-            <!-- <div
-              v-if="!shell.sidebarCollapsed && group.projectScoped"
+            <!-- 紧凑 Project Switcher（R2-D3：复用现有切换守卫链
+                 requestProjectSwitch；折叠态收紧为图标入口，项目名识别由
+                 顶栏项目芯片承载。旧版大尺寸项目头不恢复——展开过大已裁撤） -->
+            <div
+              v-if="group.id === 'projectHome'"
               class="shell-sidenav__project"
             >
               <ProjectSwitcher
                 variant="header"
+                searchable
                 :projects="shell.projects"
                 :current-id="shell.currentProjectId"
                 :switching-to-id="shell.switchingProjectId"
                 @select="onSelectProject"
               />
-            </div> -->
+            </div>
 
             <template v-for="item in group.items" :key="item.path">
               <IconTooltip
@@ -246,6 +279,9 @@ async function onSelectProject(id: string) {
                 <component :is="item.icon" :size="16" aria-hidden="true" />
                 <span class="shell-sidenav__item-label">{{
                   t(item.labelKey)
+                }}</span>
+                <span v-if="item.planned" class="shell-sidenav__planned">{{
+                  t("shell.app.side.plannedBadge")
                 }}</span>
                 <span v-if="hasUnreadDot(item)" class="shell-sidenav__badge">
                   {{ itemBadge(item) }}
@@ -283,6 +319,9 @@ async function onSelectProject(id: string) {
                   :to="child.path"
                 >
                   {{ t(child.labelKey) }}
+                  <span v-if="child.planned" class="shell-sidenav__planned">{{
+                    t("shell.app.side.plannedBadge")
+                  }}</span>
                 </RouterLink>
               </div>
             </template>
@@ -616,5 +655,29 @@ async function onSelectProject(id: string) {
   .shell-sidenav__control-button {
     transition: none;
   }
+}
+
+/* 规划项标识（V1.2 §11.12：占位能力不得伪装已上线） */
+.shell-sidenav__planned {
+  padding: 0 var(--space-1);
+  color: var(--ws-text-secondary);
+  font-size: var(--font-size-micro);
+  border: var(--border-1) solid var(--ws-border);
+  border-radius: var(--radius-xs);
+}
+
+/* 折叠态：项目头收紧为图标入口 */
+.shell-sidenav.is-collapsed .shell-sidenav__project {
+  justify-content: center;
+  padding: 0;
+}
+
+.shell-sidenav.is-collapsed
+  .shell-sidenav__project
+  :deep(.shell-project-switcher__name),
+.shell-sidenav.is-collapsed
+  .shell-sidenav__project
+  :deep(.shell-project-switcher__chevron) {
+  display: none;
 }
 </style>

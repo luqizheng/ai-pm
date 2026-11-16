@@ -14,18 +14,42 @@ import {
  * 导航树契约（壳与路由的单源）。
  */
 describe("navigation", () => {
-  it("四个导航分组按个人 / 工作区 / 项目模块 / 管理排列", () => {
+  it("导航分组按 Personal/Team/Current Project/遗留管理排列", () => {
     expect(navGroups.map(g => g.id)).toEqual([
       "personal",
       "workspace",
+      "projectHome",
       "modules",
       "admin"
     ]);
   });
 
-  it("只有项目模块分组标记为项目作用域", () => {
+  it("Current Project 区域分组标记为项目作用域", () => {
     expect(navGroups.filter(g => g.projectScoped).map(g => g.id)).toEqual([
+      "projectHome",
       "modules"
+    ]);
+  });
+
+  it("V1.2 业务模块顺序：总控台外十项，四域独立入口齐备", () => {
+    const modules = navGroups.find(g => g.id === "modules")!;
+    expect(modules.items.map(i => i.path)).toEqual([
+      "/project/requirements",
+      "/project/design",
+      "/project/tasks",
+      "/project/execution",
+      "/project/discovery",
+      "/project/analysis",
+      "/project/knowledge",
+      "/project/product-cognition",
+      "/project/cognition",
+      "/project/review-center"
+    ]);
+    // PLANNED 占位项必须显式标记（渲染层据此给出规划标识）
+    const planned = modules.items.filter(i => i.planned).map(i => i.path);
+    expect(planned).toEqual([
+      "/project/analysis",
+      "/project/product-cognition"
     ]);
   });
 

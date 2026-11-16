@@ -18,9 +18,7 @@ import SettingsNotificationsView from "@/views/settings/SettingsNotificationsVie
 import SettingsTeamLandingView from "@/views/settings/SettingsTeamLandingView.vue";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 import ProjectCreateView from "@/views/project/create/ProjectCreateView.vue";
-import CognitionPage from "@/views/project/cognition/CognitionPage.vue";
 import BaselinePage from "@/views/project/baseline/BaselinePage.vue";
-import CommandCenterView from "@/views/project/command-center/CommandCenterView.vue";
 import TasksBacklogView from "@/views/project/tasks/backlog/TasksBacklogView.vue";
 import SettingsProjectPlaceholderView from "@/views/project/settings/SettingsProjectPlaceholderView.vue";
 import SettingsProjectRepositoriesView from "@/views/project/settings/SettingsProjectRepositoriesView.vue";
@@ -104,14 +102,9 @@ export function buildRoutes(): RouteRecordRaw[] {
   // 与顶栏 Project Switcher 的 Create New Project（canCreate）。
   // 创建成功即工作：携带 project_id 直接进入项目总控台（2026-11-05 用户裁决，
   // 原「跳初始化总览」页已删除）。
-  // 项目认知（S01-04）：六阶段之 cognition 的下钻页（人工启动 Run + 逐项确认）。
-  routes.push({
-    path: "/project/cognition",
-    component: CognitionPage,
-    meta: { title: "s01.cognition.page.title" }
-  });
-
-  // 项目基线（S01-05）：提案派生（知识+仓库快照）→ 逐项确认 → 版本不可变。
+  // 项目认知（/project/cognition）已迁入导航树（projectNavConfig，C3），
+  // 路由由导航配置派生；项目基线（/project/baseline）保持手工注册——
+  // 入口 = 总控台 Baseline 卡片（NAV-0202，Phase 2 接线）。
   routes.push({
     path: "/project/baseline",
     component: BaselinePage,
@@ -133,13 +126,9 @@ export function buildRoutes(): RouteRecordRaw[] {
     meta: { title: "shell.app.side.item.assistant" }
   });
 
-  // 项目总控台（Project Command Center）：项目域工作入口（mock 数据先行），
-  // 不占主导航——入口 = 项目切换后的落地页（S01-00 §7.1，该分支合并前先注册直达路由）。
-  routes.push({
-    path: "/project/command-center",
-    component: CommandCenterView,
-    meta: { title: "s01.command-center.pageTitle" }
-  });
+  // 项目总控台（/project/command-center）已迁入导航树（projectHomeGroup，
+  // Current Project 区域置顶单条，C3）；其 mock-preview 分支仍受
+  // release-guard 约束（AGENTS 规则 4），不得视作已完成业务能力。
 
   // ─── 执行与协作（S05 · docs/scenarios/s05/ui，2026-11-10）───
   // 七页全部接真后端（task-runs / waiting / execution-overview / run-events /
@@ -357,7 +346,31 @@ export function buildRoutes(): RouteRecordRaw[] {
     }
   );
 
-  // 旧独立入口重定向（Git 仓库 / Runners 迁入 Project Setting 统一入口）。
+  // 开发环境（R-1/P-01：Devices / Executors / Runners 三分，挂项目设置 → 开发环境）。
+  // Devices 沿用 BootstrapView（真设备 API 六端点）；Executors 为 PLANNED
+  // 占位（不得用 Devices 页伪装 Executor 管理，NAV-0303）。旧路径
+  // /project/devenv 带 query 重定向到 Devices 新路径——兼容清单 C-7 的
+  // redirect 部分提前落地（受导航 children 前缀契约驱动），BootstrapView
+  // 页面自身的迁移仍属 Phase 3。
+  routes.push(
+    {
+      path: "/project/settings/devenv",
+      redirect: "/project/settings/devenv/devices",
+      meta: { title: "shell.app.side.item.devenv" }
+    },
+    {
+      path: "/project/settings/devenv/devices",
+      component: () => import("@/views/project/devenv/BootstrapView.vue"),
+      meta: { title: "shell.app.side.item.devenvDevices" }
+    },
+    {
+      path: "/project/settings/devenv/executors",
+      component: PlaceholderView,
+      meta: { title: "shell.app.side.item.devenvExecutors" }
+    }
+  );
+
+  // 旧独立入口重定向（Git 仓库 / Runners / 开发环境迁入 Project Setting 统一入口）。
   routes.push(
     {
       path: "/project/repository",
@@ -379,6 +392,13 @@ export function buildRoutes(): RouteRecordRaw[] {
       path: "/project/environments/:deviceId",
       redirect: to => ({
         path: `/project/settings/runners/${String(to.params.deviceId)}`
+      })
+    },
+    {
+      path: "/project/devenv",
+      redirect: to => ({
+        path: "/project/settings/devenv/devices",
+        query: to.query
       })
     }
   );

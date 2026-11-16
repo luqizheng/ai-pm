@@ -196,6 +196,7 @@ shell:
       label: Main navigation
       collapse: Collapse navigation
       expand: Expand navigation
+      plannedBadge: Planned
       group:
         personal: Personal
         workspace: Workspace
@@ -214,8 +215,15 @@ shell:
         technicalDesign: Technical Design
         execution: AI Execution Center
         assistant: AI Assistant
-        knowledge: Knowledge Review
+        knowledge: Knowledge Base
         devenv: Development Environment
+        devenvDevices: Devices
+        devenvExecutors: Executors
+        devenvRunners: Runners
+        commandCenter: Command Center
+        analysis: Analysis
+        productCognition: Product Cognition
+        projectCognition: Project Cognition
         environments: Execution Environments
         adminSettings: Settings
         aiProviders: AI Models

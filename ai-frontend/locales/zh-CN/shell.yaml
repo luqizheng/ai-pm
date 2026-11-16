@@ -196,6 +196,7 @@ shell:
       label: 主导航
       collapse: 收起导航
       expand: 展开导航
+      plannedBadge: 规划
       group:
         personal: 个人
         workspace: 工作区
@@ -208,14 +209,21 @@ shell:
         dashboard: 团队总览
         projects: 项目
         repository: 代码仓库
-        discovery: 代码检索
+        discovery: 代码发现
         requirements: 需求
         taskManagement: 任务管理
         technicalDesign: 技术设计
         execution: AI 执行中心
         assistant: AI 助手
-        knowledge: 知识审阅
+        knowledge: 知识库
         devenv: 开发环境
+        devenvDevices: 设备
+        devenvExecutors: 执行器
+        devenvRunners: Runners
+        commandCenter: 项目总控台
+        analysis: 分析
+        productCognition: 产品认知
+        projectCognition: 项目认知
         environments: 执行环境
         adminSettings: 设置
         aiProviders: AI模型

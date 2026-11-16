@@ -240,6 +240,7 @@ settings:
       connect: Connect
       disconnect: Disconnect
   project:
+    scopeLabel: Project Settings
     proposedTitle: This section is planned
     proposedHint: It will land here once the capability is confirmed; continue daily work from the Project Command Center.
     landing:
