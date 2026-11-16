@@ -1,4 +1,4 @@
-# D04 安全测试证据包（V-1 / V-2 专项 · 阶段 B+C）
+﻿# D04 安全测试证据包（V-1 / V-2 专项 · 阶段 B+C）
 
 > 2026-11-16 · 代码快照 **master e16e228d**（含 SEC-P0 ee4cd046 + SEC-P1-1 追认提交）+ 阶段 D 测试代码
 > 上游：V-1/V-2 专项任务书 §5.3/§6.3/§7；交付物 05 V1.1 §2/§3/§5/§6
@@ -7,7 +7,7 @@
 > - **修复前（Characterization 基线，§3 表 T02/T05/EXT-01 所记）**：Agent 可确认 cognition/baseline
 >   逐项决策 → 据此 V-1 判 **PARTIAL**、SEC-P1-1 立，与 D05/D06 一致；
 > - **修复后（SEC-P1-1 落地 + 29 用例回归，§2 表）**：Agent/Service/cpk 全拒、T01 真人确认落
->   decided_by=human → V-1 可复判 **MATCH**、SEC-P1-1 转关闭，G2 条件满足。
+>   decided_by=human → V-1 可复判 **MATCH**、SEC-P1-1 转关闭，G2 已通过（2026-11-16 复判）。
 >   该终态以【用户追认批准 DEC-SEC-P1-1-01 + SQL 门禁整改 + 本包随修复一并提交】为生效前提。
 > 结论摘要：**L2 基础设施落地；修复前 29 用例（含 Characterization）与修复后回归均复现全绿；
 > P0×5 关闭；SEC-P1-2 关闭；SEC-P1-1 修复已追认提交（e16e228d）；V-1 修复前 PARTIAL → 修复后 MATCH；
@@ -198,7 +198,7 @@ cargo nextest run -p pm-api \
 - 新增 `regression_decision_rejects_api_key_human`（403）
 - 复测：L2 三套件 **29/29 PASS** + `pm_cognition`/`pm_baseline` 既有 happy-path **4/4 PASS**（合计 33/33）；`guard-pm-api-sql.sh` PASS。
 
-**G2 门**：负向 Regression 全通过；P0/P1 = 0；关键 UNKNOWN 关闭 → **G2 条件满足**。
+**G2 门**：负向 Regression 全通过；P0/P1 = 0；关键 UNKNOWN 关闭 → **G2 通过**。
 V-2 仍 PARTIAL（仅 SEC-P2-1/2/3 引用链，非 P0/P1）。
 
 ---

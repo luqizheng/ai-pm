@@ -5,6 +5,10 @@
 > 定位：§16.1 交付物 01。产出物供 02（Analysis 详细设计）与 06（Migration 任务书）使用。**执行纪律：禁改 Schema；本任务书本身亦不定义 DDL。**
 >
 > **版本记录**：V1.0 专家审查=**有条件通过，待四项补充后冻结**；V1.1 纳入 A-01~A-04（§7）；**V1.1 已冻结为正式审计执行基线**（专家终审：建议通过；三个执行期补充检查要求见 §8，不必推迟冻结）。
+> **2026-11-16 追记**：交付物 02《Analysis 对象模型详细设计 V1.0》已产出
+> （[deliverable-02](deliverable-02-analysis-object-model-design-v1.md)），本文 §4 的
+> Migration 候选 1~3 已有设计落点（A-01 registry / Report Revision / result_item）；
+> 开放项 O-01~O-03 仍待裁决，06 不得在裁决前转 DDL。
 
 ## 1. 审计方法与纪律（承接对象模型 §12）
 
@@ -92,9 +96,9 @@
 > 统计口径=**A-04 差异四分**：Schema Gap 才进 Migration 候选；Contract/Implementation Gap 走契约与实现补齐；Verification Gap 走验证。**不得为了让四域整齐而统一表结构。**
 
 **Migration 候选（全部排在 P2 之后，P0/P1 零迁移；均为 Schema Gap）**：
-1. Analysis Run 统一（Run Contract + Adapter + **A-01 映射注册表**；是否加 analysis_run_id 列：**禁止**，维持 Q1=B）— P2
-2. Report Revision 新实体（Schema Gap，P2 核心设计对象）+ 报告正文迁 Git + 历史 kb_revision_id 降级为兼容引用 — P2
-3. Analysis Finding/Conclusion/Recommendation 独立载体（随 Finding Contract）— P2
+1. Analysis Run 统一（Run Contract + Adapter + **A-01 映射注册表**；是否加 analysis_run_id 列：**禁止**，维持 Q1=B）— P2 · **设计已落位**：交付物 02 §3
+2. Report Revision 新实体（Schema Gap，P2 核心设计对象）+ 报告正文迁 Git + 历史 kb_revision_id 降级为兼容引用 — P2 · **设计已落位**：交付物 02 §4/§6
+3. Analysis Finding/Conclusion/Recommendation 独立载体（随 Finding Contract）— P2 · **设计已落位**：交付物 02 §5
 4. KB Git 化（kb.document_revision/memory 正文权威迁移 + 一致性/恢复机制 O-09）— P3
 5. PC 正文迁 Git（PCGIT 兑现）+ Conflict 五要件 — P4
 6. 字典归属修订（owner_domain='kb'，Q10）— 小改，P2

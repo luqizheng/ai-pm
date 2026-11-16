@@ -20,6 +20,9 @@
 **V-2 = PARTIAL**（仅 SEC-P2-1/2/3 跨域引用校验；P0/P1 = 0）。
 允许关闭 V-1；V-2 待 SEC-P2 修复或专家记录 P2 例外。允许进入 G3：**是**。
 
+**快照有效性**：G2 复判基线 = `e16e228d`（SEC-P1-1 修复）。此后到 `dfc7b7f4`
+仅有阶段 D 测试/文档变更（零业务代码、零 Schema），因此 G2 结论在当前快照继续有效。
+
 ---
 
 ## 2. 执行环境（可复现快照）
@@ -164,7 +167,8 @@ retrieval planner 默认关闭、intake_task 列名）均为测试实现修正�
 | G2 V-1/V-2 专项 | ✅ 通过（V-1 MATCH / V-2 PARTIAL 仅 P2） | 进入 G3 |
 | G3 P1 业务链 | ✅ 通过（S1~S6 全链成功 + 人工门负向成立 + 分支有结果） | 进入 P2 Analysis 详细设计 |
 | G4 证据签收 | ✅ 就绪（可复现命令/日志/DB 终态/环境快照） | 专家签收 |
+| P2 设计（交付物 02） | ✅ 已产出（Run/Report/Revision/Finding + A-01/A-02 落点；O-01~O-03 待裁决） | 评审后交 06 编制 Migration 任务书 |
 
-**允许进入 P2 Analysis 详细设计：是。**
-**允许编制后续 Migration 任务书：是（仅编制；执行须另批）。**
+**允许进入 P2 Analysis 详细设计：是（[交付物 02](deliverable-02-analysis-object-model-design-v1.md) 已产出）。**
+**允许编制后续 Migration 任务书：是（仅编制；O-01~O-03 裁决后；执行须另批）。**
 **不允许：** 启动 Schema Migration、提前实现 KB Git 化/PCGIT/Conflict 完整生命周期、修复 SEC-P2/DEF-CHAIN-01（均须单独报批）。
