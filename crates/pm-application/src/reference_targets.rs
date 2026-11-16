@@ -92,6 +92,11 @@ pub fn source_kind_target(kind: &str, target_type: &str) -> Option<&'static str>
             "cognition_item" => "ai.cognition_item",
             _ => "pc.cognition_object",
         }),
+        // P3-11：projc.source 来源登记的两类新 kind——product_cognition 指向
+        // pc.cognition_object（PC 对象可作为 ProjC 认知的来源被探测）；repo_analysis
+        // 的 target_id 是仓库分析自述标识，不做对象探测（external 同口径）。
+        "product_cognition" => Some("pc.cognition_object"),
+        "repo_analysis" => None,
         "manual_input" | "external_reference" => None,
         _ => None,
     }

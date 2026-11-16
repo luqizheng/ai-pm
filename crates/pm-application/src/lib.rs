@@ -54,6 +54,7 @@ pub mod pc;
 pub mod pm_write;
 pub mod policy_composition;
 pub mod policy_engine;
+pub mod projc;
 pub mod project_gate;
 pub mod project_goal;
 pub mod project_import;

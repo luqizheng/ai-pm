@@ -40,7 +40,9 @@ pub enum TargetDomain {
     ProjectGoal,
     /// `knowledge_base`：KB 文档/记忆（目标态 kb.document*；过渡期 ai.document*）。
     KnowledgeBase,
-    /// `project_cognition`：S01-04 技术项目认知（ai.cognition_*，V1 只读）。
+    /// `project_cognition`：Project Cognition 技术项目认知。目标态实体族 =
+    /// projc.*（P3-11 R-01 独立 schema，0025 起建）；迁移期实体族 = ai.cognition_*，
+    /// 通道 V1 只读（开放评估随 T-2 发布链就绪——裁决稿 §5.3 就绪判据 ④⑤）。
     ProjectCognition,
     /// `pc`：PC-Service 自身领域对象（proposal/conflict/version/…）。
     ProductCognition,
