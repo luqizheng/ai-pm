@@ -1,4 +1,5 @@
-//! 14 项跨服务事件目录（V1.1 §13.3；**目录=单一真源，新增/变更走评审**）。
+//! 跨服务事件目录（V1.1 §13.3 14 项 + P3-11 ProjC 独立域 2 项；**目录=单一真源，
+//! 新增/变更走评审**）。
 //!
 //! 本清单是 wire 层权威：事件类型常量、event_version、payload schema（字段
 //! 级声明）。`pm-application::outbox::CATALOG` 是生产登记面（enabled_by_default
@@ -31,6 +32,8 @@ pub struct EventContract {
 pub const PRODUCER_PLATFORM: &str = "platform";
 pub const PRODUCER_KB: &str = "kb-service";
 pub const PRODUCER_PC: &str = "pc-service";
+/// ProjC 独立域（P3-11 R-01：projc.* 独立 schema 的提案/发布事件生产方）。
+pub const PRODUCER_PROJ: &str = "projc-service";
 pub const PRODUCER_ANY: &str = "any";
 
 // ── 事件类型常量（单一真源；pm-application CATALOG 引用此处） ──────────────
@@ -49,11 +52,16 @@ pub const PC_CHANGE_PROPOSED: &str = "pc.change_proposed";
 pub const PC_CONFLICT_DETECTED: &str = "pc.conflict.detected";
 pub const PC_COGNITION_VERSION_PUBLISHED: &str = "pc.cognition.version_published";
 pub const PC_EVIDENCE_REQUESTED: &str = "pc.evidence_requested";
+/// ProjC 独立域事件族（P3-11 T-1/T-2/T-3 阶段一；additive-only，ADR-11）。
+/// 生产者 = projc 提案/发布链（pm_application::projc）；消费方 = Platform 留痕
+/// （任务终态推进 / 通知，kb_pc_handlers 同款消费面）。
+pub const PROJ_CHANGE_PROPOSED: &str = "projc.change_proposed";
+pub const PROJ_COGNITION_VERSION_PUBLISHED: &str = "projc.cognition.version_published";
 pub const PROCESSING_FAILED: &str = "processing.failed";
 
 pub const EVENT_VERSION: u32 = 1;
 
-/// 14 项跨服务事件契约（V1.1 §13.3 目录全量）。
+/// 跨服务事件契约（V1.1 §13.3 目录全量 + P3-11 ProjC 独立域；additive-only）。
 pub const CATALOG: &[EventContract] = &[
     EventContract {
         event_type: INTAKE_RECEIVED,
@@ -216,6 +224,32 @@ pub const CATALOG: &[EventContract] = &[
         ],
     },
     EventContract {
+        event_type: PROJ_CHANGE_PROPOSED,
+        event_version: EVENT_VERSION,
+        producer: PRODUCER_PROJ,
+        consumers: &["platform"],
+        idempotency_key_hint: "proposal_id",
+        payload_fields: &[
+            ("proposal_ref", "DomainRef"),
+            ("governance_level", "enum(L1|L2)"),
+            ("members", "jsonb(摘要)"),
+            ("content_hash", "string"),
+        ],
+    },
+    EventContract {
+        event_type: PROJ_COGNITION_VERSION_PUBLISHED,
+        event_version: EVENT_VERSION,
+        producer: PRODUCER_PROJ,
+        consumers: &["platform"],
+        idempotency_key_hint: "version_id",
+        payload_fields: &[
+            ("version_ref", "DomainRef"),
+            ("version_no", "int"),
+            ("snapshot_hash", "string"),
+            ("proposal_ref", "DomainRef"),
+        ],
+    },
+    EventContract {
         event_type: PROCESSING_FAILED,
         event_version: EVENT_VERSION,
         producer: PRODUCER_ANY,
@@ -325,8 +359,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn catalog_has_exactly_fourteen_events() {
-        assert_eq!(CATALOG.len(), 14);
+    fn catalog_has_exactly_sixteen_events() {
+        assert_eq!(CATALOG.len(), 16);
         for c in CATALOG {
             assert_eq!(c.event_version, 1, "{} must be v1", c.event_type);
             assert!(c.event_type.chars().all(|ch| ch == '.'

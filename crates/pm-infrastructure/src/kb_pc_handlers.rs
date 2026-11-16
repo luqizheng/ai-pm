@@ -922,6 +922,80 @@ impl OutboxHandler for PcConflictDetectedHandler {
     }
 }
 
+/// projc.change_proposed → 任务 COMPLETED + result_ref=proposal 四元组
+/// （ProjC 独立域；PcChangeProposedHandler 同款消费面——决定暂记在 ProjC 提案，
+/// 正式版本由报告 close 双域分流发布）。生产者 = 分析起草
+/// （`projc::propose_from_analysis`，真提案 UUID）。
+pub struct ProjChangeProposedHandler {
+    pool: PgPool,
+}
+
+impl ProjChangeProposedHandler {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait::async_trait]
+impl OutboxHandler for ProjChangeProposedHandler {
+    async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
+        let task_id = task_id_of(event)?;
+        let result_ref = result_ref_of(event, &["proposal_ref"])
+            .ok_or_else(|| "projc.change_proposed missing proposal_ref".to_string())?;
+        intake::complete_task(&self.pool, task_id, result_ref)
+            .await
+            .map_err(|e| e.to_string())?;
+        // D-5：提案起草 = 分析产出齐备 → 报告 analyzed（open 待审）。
+        if let Err(err) = pm_application::analysis_report::mark_analyzed(&self.pool, task_id).await
+        {
+            tracing::warn!(%task_id, %err, "analysis report mark_analyzed skipped");
+        }
+        notify_once(
+            &self.pool,
+            event.project_id,
+            "projc_proposal_pending",
+            &format!("projc-proposal-{task_id}"),
+            serde_json::json!({ "dedup_key": format!("projc-proposal-{task_id}"), "payload": event.payload }),
+        )
+        .await?;
+        Ok(())
+    }
+}
+
+/// projc.cognition.version_published → 状态感知留痕（ProjC 独立域；生产者 =
+/// projc 发布事务 projc/publish.rs ⑫b）。ProjC FTS 归 P3-10 检索适配层，
+/// 本 handler 仅通知留痕（通知面与 pc 同口径，去重键 = version_id）。
+pub struct ProjcVersionPublishedHandler {
+    pool: PgPool,
+}
+
+impl ProjcVersionPublishedHandler {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait::async_trait]
+impl OutboxHandler for ProjcVersionPublishedHandler {
+    async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
+        let version_id = event
+            .payload
+            .get("version_ref")
+            .and_then(|r| r.get("target_id"))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "version_published missing version_ref.target_id".to_string())?
+            .to_string();
+        notify_once(
+            &self.pool,
+            event.project_id,
+            "projc_version_published",
+            &version_id,
+            serde_json::json!({ "dedup_key": version_id, "payload": event.payload }),
+        )
+        .await
+    }
+}
+
 /// pc.evidence_requested → RT 路由创建 kb_supply 任务（optional）+ 同事务
 /// 派发 kb.analysis.requested（资料补充执行转达；K6 fulfil 与 Memory 体系归
 /// Phase 4——实施偏差登记）。
@@ -1277,6 +1351,14 @@ pub fn register_kb_pc_handlers(
         .with_handler(
             ev::PC_COGNITION_VERSION_PUBLISHED,
             Arc::new(PcVersionPublishedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::PROJ_CHANGE_PROPOSED,
+            Arc::new(ProjChangeProposedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::PROJ_COGNITION_VERSION_PUBLISHED,
+            Arc::new(ProjcVersionPublishedHandler::new(pool.clone())),
         )
         .with_handler(
             ev::KB_DOCUMENT_REVISION_PUBLISHED,

@@ -344,6 +344,23 @@ pub const CATALOG: &[EventSpec] = &[
         enabled_by_default: true,
         producer: "pc 桩（outbox_handlers.rs）",
     },
+    // ── P3-11 ProjC 独立域事件族（T-1/T-2/T-3 阶段一；wire 权威=
+    // kb-pc-contracts::events::CATALOG）。提案/发布链生产 + Platform 留痕消费
+    // （ProjChangeProposedHandler / ProjcVersionPublishedHandler）。
+    EventSpec {
+        event_type: kb_pc_contracts::events::PROJ_CHANGE_PROPOSED,
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "projc 分析起草（projc/proposal.rs）",
+    },
+    EventSpec {
+        event_type: kb_pc_contracts::events::PROJ_COGNITION_VERSION_PUBLISHED,
+        event_version: 1,
+        has_handler: true,
+        enabled_by_default: true,
+        producer: "projc 发布事务（projc/publish.rs）",
+    },
     EventSpec {
         event_type: kb_pc_contracts::events::PROCESSING_FAILED,
         event_version: 1,

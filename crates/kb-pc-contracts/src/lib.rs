@@ -11,8 +11,8 @@
 //! - [`registry`]：domain 注册表（PC-01B §13.1 逐域通道表的操作化）：wire
 //!   字符串 ↔ 枚举、归属服务、通道开放状态；解析失败返回告警错误类型。
 //! - [`envelope`]：事件信封（V1.1 §13.1 十一字段）。
-//! - [`events`]：14 项跨服务事件目录（V1.1 §13.3，目录=单一真源；与
-//!   `pm-application::outbox::CATALOG` 的登记面共用本清单常量）。
+//! - [`events`]：跨服务事件目录（V1.1 §13.3 14 项 + P3-11 ProjC 独立域 2 项，
+//!   目录=单一真源；与 `pm-application::outbox::CATALOG` 的登记面共用本清单常量）。
 //! - [`retrieval`]：PC/KB 统一检索契约（检索架构 V1.0 WP-1）——**计划校验是纯
 //!   函数**，产出字段私有的 `ValidatedPlan`：未经校验的计划在类型上无法进入执行层。
 //! - [`ports`]：KbServicePort / PcServicePort 端口 trait（V1.1 §12 契约），
