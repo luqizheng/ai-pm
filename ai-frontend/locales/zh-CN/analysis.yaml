@@ -1,0 +1,10 @@
+analysis:
+  page:
+    title: 分析报告
+    description: 仓库分析报告的独立承载页——查看报告列表与详情，审阅 KB 报告修订与 PC 提案，并关闭报告。
+  state:
+    noProject: 请先选择项目——分析报告按项目隔离，不跨项目展示。
+    framework: 页面框架已就绪——报告列表由后续任务迁移至本页。
+    detailFramework: 页面框架已就绪——报告详情由后续任务充实。
+  detail:
+    title: 报告详情

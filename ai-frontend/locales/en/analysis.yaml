@@ -1,0 +1,10 @@
+analysis:
+  page:
+    title: Analysis Reports
+    description: Independent home for repository analysis reports — browse the report list and details, review KB report revisions and PC proposals, and close reports.
+  state:
+    noProject: Select a project first — analysis reports are project-scoped and never cross projects.
+    framework: Page frame ready — the report list moves in with an upcoming task.
+    detailFramework: Page frame ready — the report detail is fleshed out by an upcoming task.
+  detail:
+    title: Report Detail

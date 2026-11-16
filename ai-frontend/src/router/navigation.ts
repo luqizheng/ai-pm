@@ -291,12 +291,16 @@ const modulesGroup: NavGroup = {
           module => module.default
         )
     },
-    // Analysis（四域独立入口）：页面 Phase 4 落地，本卡为 PLANNED 占位路由
+    // Analysis（四域独立入口）：Phase 2 P2-01 起为真实页面——报告列表与详情
+    // 独立承载于 views/project/analysis；报告页签随后续卡迁出 Knowledge（P2-06）。
     {
       path: "/project/analysis",
       labelKey: "shell.app.side.item.analysis",
       icon: Activity,
-      planned: true
+      component: () =>
+        import("@/views/project/analysis/AnalysisHomeView.vue").then(
+          module => module.default
+        )
     },
     // KB（四域独立入口）：/project/knowledge 为 KB 最终定位（C-1），
     // 迁移期该页仍承载 KB+PC+报告三合一内容，不得伪装已拆分

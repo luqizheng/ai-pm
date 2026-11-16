@@ -109,13 +109,13 @@ describe("SideNav", () => {
     expect(active[0].attributes("aria-current")).toBe("page");
   });
 
-  it("PLANNED 占位项渲染规划标识（Analysis / Product Cognition / AI 配置）", async () => {
+  it("PLANNED 占位项渲染规划标识（Product Cognition / AI 配置）", async () => {
     const { wrapper } = await mountWithProject();
 
     const planned = wrapper.findAll(".ui-sidebar-item__badge.is-status");
-    // 业务模块 2 项（Analysis / Product Cognition）+ 项目设置 3 项
-    // （基础设置 / 成员 / AI 配置；开发环境标识在其子项）
-    expect(planned.length).toBe(5);
+    // 业务模块 1 项（Product Cognition；Analysis 已随 Phase 2 P2-01 落地真页）
+    // + 项目设置 3 项（基础设置 / 成员 / AI 配置；开发环境标识在其子项）
+    expect(planned.length).toBe(4);
     expect(planned[0].text()).toBe(
       i18n.global.t("shell.app.side.plannedBadge")
     );
