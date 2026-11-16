@@ -233,7 +233,8 @@ async fn collect_rejects_unsafe_branch_and_missing_repo() {
     ));
     assert!(matches!(
         collect(&fx.root.join("missing"), "main", Limits::default()).await,
-        Err(GitError::Other(_) | GitError::Io(_))
+        // DEF-CHAIN-02：缺失路径/远端 → NotFound（稳定分类码 git_not_found）。
+        Err(GitError::NotFound | GitError::Other(_) | GitError::Io(_))
     ));
 }
 
