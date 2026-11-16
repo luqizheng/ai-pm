@@ -36,9 +36,12 @@ function reportRow(overrides: Partial<AnalysisReportRow>): AnalysisReportRow {
     closed_at: null,
     kb_revision_id: "kbr-1",
     pc_source_id: null,
+    projc_source_id: null,
     run_mode: "full",
     since_commit: null,
     pending_proposals: 2,
+    projc_pending_proposals: 0,
+    total_pending_proposals: 2,
     has_pending_kb: true,
     ...overrides
   };

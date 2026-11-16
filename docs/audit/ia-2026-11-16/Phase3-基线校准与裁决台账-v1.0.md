@@ -219,3 +219,13 @@ P3-11 先于 P3-D03/D04：仓库分析正式认知归属未定，PC 与 Project 
 - **未落（既定后置）**：R-08 统一检索、R-09 分流发布编码（T-1/T-2）。
 - 证据：projc_model 3/3 + pc 回归 6/6+8/8 绿（真实 DB 16433）；registry 附录 `object-registry-v1.1-projc-addendum.md`；close/审阅/worker/pc/前端零 diff。
 - 待裁决：R 项冻结确认、T-1/T-2 排期、projc REST 批次、存量弃置/重跑。
+
+### 10.3 P3-11 T-1/T-2/T-3 落实状态（2026-11-17，待验收）
+
+放行意见四项闭合已编码落地（两道门槛 G-1/G-2 测试断言先于实现编写；分阶段结构=方案 §8.5）：
+
+- **阶段一（纯增量，master `ea9aafb`）**：迁移 0026（projc.relationship(_type/_revision)/conflict(+object)/端点闭合触发器/`repo_analysis_report.projc_source_id`）+ projc 服务层镜像五文件（proposal/publish/relationship/conflict/mod 补齐）+ 事件目录 16 项（projc.change_proposed / projc.cognition.version_published）+ Platform 留痕 handlers + `projc_formal_chain` 6/6。含 0025 两处缺陷修正（proposal_member 锚定触发器 BEFORE→AFTER 约束触发器、write_operation 账本幂等唯一约束——0001 真源同款）。
+- **阶段二（切换批，本批提交）**：W4 worker 全链重挂 projc（delivery_activity 停派、module→repository_module、LLM 归因 derived/llm/derived_fallback 不变）+ G-1 双源登记（mark_analyzed 同事务 pc_source_id+projc_source_id；projc 源缺失硬失败+审计留痕）+ G-2 close 双域分流（pc 分支逐行不动；`projc-decision:{id}`；独立计数；Legacy 显式留痕）+ W6 并行决策端点 `POST /v1/pm/projc/proposals/{id}/decide` + 前端最小渲染（技术认知徽标+ProjC 提案/修订列表）+ W7 迁移 0027（pc.object_type snapshot 四类 deprecated，identity 链 product_* 不受影响）。
+- **T-3 证据**：`projc_derive_switch` 2/2（派生域归属+字典守卫）+ `kb_pc_repo_flows` 7/7（worker 全链双域口径改写）+ `analysis_reports` 11/11（含 G-1 双源/G-2 分流/close_compat_old_consumers）+ pc_model 6/6 + pc_proposal 8/8 + projc_model 3/3 + projc_formal_chain 6/6 + pm-application 全量 800 passed 0 failed（阶段一基线）。完整矩阵见《P3-11 T-1/T-2/T-3 交付报告》。
+- 登记事项：① 契约核查 C-9/C-10 写「加法 2 键」，G-2 闭合项四要求发布失败独立计数 → 实落 3 键（projc_applied/projc_withdrawn/projc_publish_failed_proposals），向后兼容性不变；② `prior_cognition_digest`/NO_CHANGE result_ref 随全链切换改读 projc（P3 `/v1/pc/analyses/{id}` source 分支对 projc ref 返回任务面无对象展开，ProjC 展示走报告详情 projc_* 字段）；③ 存量测试对齐三处（0023 守卫白名单、DEF-CHAIN-02 NotFound、审阅流 v2 暂记语义 pc_proposals 两用例——均系先前批次变更未同步断言，非本批裁决改动）。
+- 待裁决：R 项冻结确认、存量 snapshot 弃置/重跑、P0 E2E 真实跑批（确认点③，不在本批硬门）。

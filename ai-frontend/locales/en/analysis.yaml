@@ -48,7 +48,12 @@ analysis:
     secBasic: Basic Info
     secKb: Analysis Report Body
     secProposals: "PC Proposals ({n})"
+    sectProjcProposals: "ProjC Technical Proposals ({n})"
+    techBadge: Tech Cognition
+    noProjcProposals: This analysis drafted no technical cognition proposals
     secPcRevisions: "PC Object Revisions ({n})"
+    sectProjcRevisions: "ProjC Object Revisions ({n})"
+    noProjcRevisions: This analysis produced no technical cognition object revisions
     secSynthesis: D-4 Identity Synthesis (AI)
     secClose: Close & Disposition
     fieldRepository: Repository
@@ -80,6 +85,7 @@ analysis:
     closeConfirmTitle: Close analysis report
     closeConfirmDescription: "This will publish {publish} approved proposals, withdraw {proposals} pending proposals and reject {kb} KB drafts for this {repo} report, then fix the analysis anchor; decisions are frozen and the repository can be analyzed again."
     closeReceipt: Report closed — published {applied} proposals, withdrew {withdrawn} pending proposals, rejected {rejected} KB drafts; anchor fixed ({commit}); the repository can be analyzed again
+    closeReceiptProjc: "Technical cognition (ProjC): published {projcApplied}, withdrew {projcWithdrawn}, {projcFailed} publish failure(s)"
     closeNotAvailable: Report is not pending review — only pending-review reports can be closed
     closeError: Close failed
   action:

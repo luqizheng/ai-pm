@@ -18,9 +18,10 @@ use pm_api::routes::{router, router_with_auth_config};
 use pm_application::actor::AuditActor;
 use pm_application::bootstrap::{bootstrap_project, BootstrapRequest};
 use pm_application::pc::{
-    create_proposal, propose_from_analysis, register_evidence, register_source, submit_proposal,
-    upsert_object_draft, AnalysisProposalInput, AnalysisProposalOutcome, CreateProposalInput,
-    EvidenceInput, EvidenceSubject, ProposalMemberPin, SourceInput, UpsertObjectDraft,
+    create_proposal, propose_from_analysis, publish_version, register_evidence, register_source,
+    submit_proposal, upsert_object_draft, AnalysisProposalInput, AnalysisProposalOutcome,
+    CreateProposalInput, EvidenceInput, EvidenceSubject, ProposalMemberPin, PublishVersionInput,
+    SourceInput, UpsertObjectDraft,
 };
 use pm_domain::SYSTEM_TENANT;
 use serde_json::{json, Value};
@@ -213,7 +214,8 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
 
-    // approve = 审批 + 发布
+    // approve = 决定暂记（审阅流 v2：approved/rejected 可互转，正式版本在报告
+    // close 批量发布——91003f6 语义；本用例的正式版本走服务层显式发布）。
     let (status, body) = send(
         &pool,
         post_json(
@@ -223,17 +225,13 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["status"], "applied");
-    assert_eq!(body["published_version_no"], 1);
-    assert_eq!(
-        body["published_version_ref"]["target_type"],
-        "cognition_version"
-    );
+    assert_eq!(body["status"], "approved");
+    assert!(body["published_version_ref"].is_null());
+    assert!(body["published_version_no"].is_null());
+    assert!(body["snapshot_hash"].is_null());
     assert_eq!(body["approval_ref"]["target_type"], "approval");
-    let version_ref = body["published_version_ref"]["target_id"].clone();
-    assert!(body["snapshot_hash"].as_str().unwrap().len() == 64);
 
-    // 幂等重放：同请求 → 同一版本，不产生新版本
+    // 幂等重放：同态重放 → 同一审批事实，不产生新版本
     let (status, replay) = send(
         &pool,
         post_json(
@@ -243,25 +241,50 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{replay}");
-    assert_eq!(replay["published_version_ref"]["target_id"], version_ref);
+    assert_eq!(replay["status"], "approved");
     let versions: i64 =
         sqlx::query_scalar("SELECT count(*) FROM pc.cognition_version WHERE project_id = $1")
             .bind(project)
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(versions, 1);
+    assert_eq!(versions, 0, "decide does not publish (P5 暂记)");
 
-    // P4 回读：applied + 审批事实（决策人 = 调用方）+ 已发布版本引用
+    // P4 回读：approved + 审批事实（决策人 = 调用方）；published_version_ref 恒 null
+    let (_, view) = send(
+        &pool,
+        get(&format!("/v1/pc/proposals/{p1}?project_id={project}")),
+    )
+    .await;
+    assert_eq!(view["status"], "approved");
+    assert_eq!(view["approvals"][0]["status"], "approved");
+    assert_eq!(view["approvals"][0]["decided_by_name"], "dev-off");
+    assert_eq!(view["approvals"][0]["decision_reason"], "认知确认");
+    assert!(view["published_version_ref"].is_null());
+
+    // 正式发布（服务层显式补发布 = close 双域分流的同款入口；pc-decision 幂等键）
+    let published = pm_application::pc::publish_version(
+        &pool,
+        project,
+        &dev(),
+        pm_application::pc::PublishVersionInput {
+            proposal_id: p1,
+            operation_id: format!("pc-decision:{p1}"),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(published.version_no, 1);
+    let version_ref = published.version_id.to_string();
+
+    // P4 回读：applied + 已发布版本引用
     let (_, view) = send(
         &pool,
         get(&format!("/v1/pc/proposals/{p1}?project_id={project}")),
     )
     .await;
     assert_eq!(view["status"], "applied");
-    assert_eq!(view["approvals"][0]["status"], "approved");
-    assert_eq!(view["approvals"][0]["decided_by_name"], "dev-off");
-    assert_eq!(view["approvals"][0]["decision_reason"], "认知确认");
+    assert_eq!(view["published_version_ref"]["target_type"], "cognition_version");
     assert_eq!(view["published_version_ref"]["target_id"], version_ref);
 
     // reject：基于版本 1 的新提案被驳回（reason 为 note 别名）
@@ -277,8 +300,8 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["status"], "rejected");
     assert!(body["published_version_ref"].is_null());
-    // 终态后再裁决 → 409
-    let (status, _) = send(
+    // 审阅流 v2：approved/rejected 可互转（非终态）——reject 后再 approve → 200
+    let (status, flipped) = send(
         &pool,
         post_json(
             &decision_uri(p2),
@@ -286,7 +309,8 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
         ),
     )
     .await;
-    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(status, StatusCode::OK, "{flipped}");
+    assert_eq!(flipped["status"], "approved");
 
     let audits: Vec<(String, Option<String>)> = sqlx::query_as(
         "SELECT action, actor_auth_mode FROM governance.audit_log \
@@ -302,6 +326,7 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
         vec![
             ("pc_proposal.approve".to_string(), Some("off".to_string())),
             ("pc_proposal.reject".to_string(), Some("off".to_string())),
+            ("pc_proposal.approve".to_string(), Some("off".to_string())),
         ]
     );
 }
@@ -580,14 +605,21 @@ async fn p3_expands_proposal_and_no_change_conclusions(pool: PgPool) {
     let project = seed_project(&pool, SYSTEM_TENANT, "PCR-E").await;
     common::join_dev(&pool, project).await;
     let dispatch = AuditActor::dispatch();
-    let x = upsert_object_draft(&pool, project, &dispatch, draft("module", "p3.x", "# X"))
-        .await
-        .unwrap();
+    // P3-11 W7：pc snapshot 字典四类（repository/tech_stack/delivery_activity/
+    // module）已废弃——PC 通道夹具改用活跃类型（业务能力/功能点）。
+    let x = upsert_object_draft(
+        &pool,
+        project,
+        &dispatch,
+        draft("business_capability", "p3.x", "# X"),
+    )
+    .await
+    .unwrap();
     let y = upsert_object_draft(
         &pool,
         project,
         &dispatch,
-        draft("tech_stack", "p3.y", "# Y"),
+        draft("feature", "p3.y", "# Y"),
     )
     .await
     .unwrap();
@@ -674,7 +706,9 @@ async fn p3_expands_proposal_and_no_change_conclusions(pool: PgPool) {
         .iter()
         .all(|o| o["latest_revision"]["versioned"] == false));
 
-    // 人工确认发布后：versioned 翻真（正式版本成员派生，§5.3 不冗余状态列）
+    // 人工确认（P5 暂记）+ 服务层补发布：versioned 翻真（正式版本成员派生，
+    // §5.3 不冗余状态列）。审阅流 v2：决定不发布，发布走 close 双域分流/
+    // 显式 publish_version（本用例取后者）。
     let (status, _) = send(
         &pool,
         post_json(
@@ -687,6 +721,17 @@ async fn p3_expands_proposal_and_no_change_conclusions(pool: PgPool) {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+    pm_application::pc::publish_version(
+        &pool,
+        project,
+        &dev(),
+        pm_application::pc::PublishVersionInput {
+            proposal_id: receipt.proposal_id,
+            operation_id: format!("pc-decision:{}", receipt.proposal_id),
+        },
+    )
+    .await
+    .unwrap();
     let (_, body) = send(&pool, get(&uri2)).await;
     let objects = body["objects"].as_array().unwrap();
     assert!(
@@ -709,6 +754,7 @@ async fn pc_object_detail_returns_full_content_and_is_scoped(pool: PgPool) {
     common::join_dev(&pool, other_member_project).await;
 
     // 列表 excerpt 只有 240 字截断——详情必须给全文（超长正文回归面）。
+    // P3-11 W7：pc snapshot 类型已废弃，夹具改用活跃类型（feature）。
     let long_content = "# 交付动态\n\n共采集 300 条 commit，最近交付：\n\
         - `e105e9b9` style: 替换裸值为设计系统语义 token\n\
         - `.rs`：553 个文件\n\
@@ -721,7 +767,7 @@ async fn pc_object_detail_returns_full_content_and_is_scoped(pool: PgPool) {
         project,
         &dev(),
         UpsertObjectDraft {
-            object_type: "delivery_activity".into(),
+            object_type: "feature".into(),
             object_key: Some("delivery".into()),
             display_name: "交付动态（最近 10 条）".into(),
             content_markdown: long_content.into(),
@@ -743,7 +789,7 @@ async fn pc_object_detail_returns_full_content_and_is_scoped(pool: PgPool) {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["object_id"], receipt.object_id.to_string());
-    assert_eq!(body["object_type"], "delivery_activity");
+    assert_eq!(body["object_type"], "feature");
     assert_eq!(body["object_key"], "delivery");
     assert_eq!(body["name"], "交付动态（最近 10 条）");
     assert_eq!(body["lifecycle_status"], "draft");

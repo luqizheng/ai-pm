@@ -38,6 +38,7 @@ use kb_pc_contracts::registry::TargetDomain;
 use kb_pc_contracts::DomainRef;
 use pm_application::kb_service::{KbCaller, KbServiceLive};
 use pm_application::pc::{self, DecisionAction, PcError, ProposalDecisionInput};
+use pm_application::projc::{self, ProjcError};
 use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -83,6 +84,12 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/v1/pc/objects/{object_id}", get(pc_object_detail))
         // PC 提案列表（前端审批页签；P4 按 id 详查 / P5 决策走既有端点）
         .route("/v1/pc/proposals", get(list_pc_proposals))
+        // P3-11 并行端点（T-1/T-2/T-3 W6）：ProjC 提案 P5 决策（p5 同构；
+        // 审阅流 v2 形态=范围确认点②，路由到 ProjC 独立域）
+        .route(
+            "/v1/pm/projc/proposals/{proposal_id}/decide",
+            post(projc_p5_decide_proposal),
+        )
 }
 
 impl From<PortError> for ApiError {
@@ -119,10 +126,33 @@ impl From<PcError> for ApiError {
     }
 }
 
+/// P3-11：ProjC 服务层错误 → HTTP（pc 同款映射口径）。
+impl From<ProjcError> for ApiError {
+    fn from(e: ProjcError) -> Self {
+        match e {
+            ProjcError::NotFound(m) => ApiError::Text(StatusCode::NOT_FOUND, m),
+            ProjcError::Forbidden(m) => ApiError::Text(StatusCode::FORBIDDEN, m),
+            ProjcError::Invalid(m) => ApiError::Text(StatusCode::BAD_REQUEST, m),
+            ProjcError::Conflict(m) => ApiError::Text(StatusCode::CONFLICT, m),
+            ProjcError::Db(err) => ApiError::Internal(err),
+        }
+    }
+}
+
 /// PC 域四元组引用（`pc/<type>/<id>`）。
 fn pc_ref(target_type: &str, id: Uuid) -> DomainRef {
     DomainRef::for_domain(
         TargetDomain::ProductCognition,
+        target_type,
+        id.to_string(),
+        None,
+    )
+}
+
+/// ProjC 域四元组引用（`project_cognition/<type>/<id>`）。
+fn projc_ref(target_type: &str, id: Uuid) -> DomainRef {
+    DomainRef::for_domain(
+        TargetDomain::ProjectCognition,
         target_type,
         id.to_string(),
         None,
@@ -614,6 +644,58 @@ async fn p5_decide_proposal(
         "published_version_ref": version.map(|v| pc_ref("cognition_version", v.version_id)),
         "published_version_no": version.map(|v| v.version_no),
         "snapshot_hash": version.map(|v| v.snapshot_hash.clone()),
+    })))
+}
+
+/// P3-11 W6 并行端点（P5 同构；范围确认点②）：ProjC 提案决策转达——决定
+/// 暂记 approved/rejected（报告关闭前可互改），正式版本在报告 close 双域分流
+/// 批量发布（`projc-decision:{id}`）。门禁与 pc P5 一致：可信交互上下文
+/// （A*：API Key 403）+ 服务层真人 + A3；MCP 不暴露此入口。
+async fn projc_p5_decide_proposal(
+    State(state): State<AppState>,
+    Extension(caller): Extension<AuthedPrincipal>,
+    Path(proposal_id): Path<String>,
+    Query(query): Query<HashMap<String, String>>,
+    Json(body): Json<serde_json::Value>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let project_id = require_project_param(&query)?;
+    guard(&state, &caller, project_id).await?;
+    ensure_trusted_context(&caller)?;
+    let proposal_id =
+        Uuid::parse_str(&proposal_id).map_err(|_| ApiError::NotFound("proposal not found"))?;
+    let body: DecisionBody = serde_json::from_value(body).map_err(|e| {
+        ApiError::Text(
+            StatusCode::BAD_REQUEST,
+            format!("invalid decision body: {e}"),
+        )
+    })?;
+    let action = DecisionAction::parse(body.action.trim())
+        .ok_or(ApiError::BadRequest("action must be `approve` or `reject`"))?;
+    let expected_version_no = body.expected_version_no.ok_or(ApiError::BadRequest(
+        "expected_version_no is required (CAS)",
+    ))?;
+    let outcome = projc::decide_proposal(
+        &state.pool,
+        project_id,
+        &caller.audit_actor(),
+        proposal_id,
+        pm_application::projc::ProposalDecisionInput {
+            action: match action {
+                DecisionAction::Approve => pm_application::projc::DecisionAction::Approve,
+                DecisionAction::Reject => pm_application::projc::DecisionAction::Reject,
+            },
+            reason: body.note,
+            expected_version_no,
+        },
+    )
+    .await?;
+    Ok(Json(json!({
+        "proposal_id": outcome.proposal_id,
+        "status": outcome.status,
+        "approval_ref": outcome.approval_id.map(|id| projc_ref("approval", id)),
+        "published_version_ref": null,
+        "published_version_no": null,
+        "snapshot_hash": null,
     })))
 }
 

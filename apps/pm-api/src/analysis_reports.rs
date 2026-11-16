@@ -40,6 +40,11 @@ impl From<AnalysisReportError> for ApiError {
             AnalysisReportError::Forbidden(m) => {
                 ApiError::Text(axum::http::StatusCode::FORBIDDEN, m)
             }
+            // G-1 硬失败：projc 源未登记（状态机不一致 = 服务端故障）
+            AnalysisReportError::ProjcSourceMissing(_) => ApiError::Text(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                e.to_string(),
+            ),
             AnalysisReportError::Db(err) => ApiError::Internal(err),
         }
     }

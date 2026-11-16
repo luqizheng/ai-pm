@@ -1,5 +1,11 @@
 //! Checkpoint-1 · 仓库快照全链路集成测试（verify 触发链 → KB 分析 → 认知信号 →
-//! RT 路由 → PC 结构化派生 → 父 Intake 收口 + 幂等矩阵）。
+//! RT 路由 → ProjC 结构化派生 → 父 Intake 收口 + 幂等矩阵）。
+//!
+//! P3-11 T-1/T-2/T-3 切换批（W4）：认知派生全链挂 projc.*（R-03 技术认知分流；
+//! delivery_activity 停派，module → repository_module）；G-1 双源登记
+//! （pc.source identity 通道 + projc.source 快照通道）；提案/发布断言走
+//! projc.* 与 projc-decision:{id}。断言口径 = T-3 验收矩阵（projc 3 类有行、
+//! pc snapshot 类恒 0 行）。
 //!
 //! 驱动方式与 intake_flows.rs 同款：服务层直调（`verify_repository` /
 //! `pm_application::intake`）+ `register_all_handlers` 装配的 OutboxWorker
@@ -8,13 +14,13 @@
 //!
 //! | 用例 | 断言焦点 |
 //! |---|---|
-//! | 1 | verify（HEAD 前进）自动受理 intake → kb 修订落库 → 信号 → pc 5 对象 draft → AI 起草提案（submitted）→ 父 COMPLETED |
+//! | 1 | verify（HEAD 前进）自动受理 intake → kb 修订落库 → 信号 → projc 4 对象 draft（pc snapshot 恒 0 行）→ G-1 双源 → AI 起草提案（submitted）→ 父 COMPLETED |
 //! | 2 | 同 HEAD 重复 verify：intake 重放零增量（repo_snapshot 幂等键族）；提案不重复 |
-//! | 3 | 新 commit 再 verify：kb revision_no=2；pc 对象身份稳定、内容寻址去重（tech_stack 不追加修订）；evidence 追加 |
-//! | 4 | LLM 增强（P2-13/D-1=A，wiremock provider）：digest 尾注翻转为 LLM、pc 三区正文、analysis_mode=llm、白名单证据、ok 记账×2 |
+//! | 3 | 新 commit 再 verify：kb revision_no=2；projc 对象身份稳定、内容寻址去重（tech_stack 不追加修订）；evidence 追加 |
+//! | 4 | LLM 增强（P2-13/D-1=A，wiremock provider）：digest 尾注翻转为 LLM、projc 三区正文、analysis_mode=llm、白名单证据、ok 记账×2 |
 //! | 5 | LLM 失败（D-3=A，wiremock 500）：全链仍 COMPLETED，产物回退纯派生，analysis_mode=derived_fallback，failed 记账×2 |
 //! | 6 | 确认基准锚定（D-A/A-1，2026-11-08 裁决）：confirm 回锚首 commit → repo_confirm intake → KB 修订锚 selected_commit（tip 更晚不漂移） |
-//! | 7 | KP-2 确认闭环：commit → 分析起草 → 人工确认（P5 编排：审批 + 发布）→ 版本 1；再 commit → 仅变化修订入链 → 版本 2 替换携带修订；同 HEAD → NO_CHANGE；AI 无确认权 |
+//! | 7 | 确认闭环（P5 暂记语义）：commit → 分析起草 → 人工批准（暂记）→ 发布（projc-decision）→ 版本 1；再 commit → 仅变化修订入链 → 版本 2 替换携带修订；同 HEAD → NO_CHANGE；AI 无确认权 |
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -317,21 +323,22 @@ async fn verify_triggers_full_kb_pc_chain(pool: PgPool) {
     assert!(content.contains("# 仓库快照"));
     assert!(content.contains("近期交付"));
 
-    // PC：RT 路由建任务 → 结构化派生 → AI 起草提案（KP-2）→ 任务 COMPLETED，
-    // result_ref 锚 proposal（pc.change_proposed 回写；审批待办在 PC，L4 分离）。
+    // ProjC：RT 路由建任务 → 结构化派生（projc.*）→ AI 起草提案（repo_analysis）
+    // → 任务 COMPLETED，result_ref 锚 proposal（projc.change_proposed 回写；
+    // 审批待办在 ProjC，L4 分离）。
     let (_, pc_status, pc_result) = task_of_type(&pool, intake_id, "pc_analyze").await;
     assert_eq!(pc_status, "COMPLETED");
     let pc_result = pc_result.expect("analysis drafts a proposal");
-    assert_eq!(pc_result["target_domain"], "pc");
+    assert_eq!(pc_result["target_domain"], "project_cognition");
     assert_eq!(
         pc_result["target_type"], "proposal",
-        "KP-2: first analysis drafts a proposal"
+        "analysis drafts a ProjC proposal"
     );
     let proposal_id = Uuid::parse_str(pc_result["target_id"].as_str().unwrap()).unwrap();
     let (proposal_status, origin_kind, members): (String, String, i64) = sqlx::query_as(
         "SELECT p.status, p.origin_kind, \
-                (SELECT count(*) FROM pc.proposal_member m WHERE m.proposal_id = p.id) \
-           FROM pc.proposal p WHERE p.id = $1 AND p.project_id = $2",
+                (SELECT count(*) FROM projc.proposal_member m WHERE m.proposal_id = p.id) \
+           FROM projc.proposal p WHERE p.id = $1 AND p.project_id = $2",
     )
     .bind(proposal_id)
     .bind(project)
@@ -339,8 +346,8 @@ async fn verify_triggers_full_kb_pc_chain(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(proposal_status, "submitted", "pending human confirmation");
-    assert_eq!(origin_kind, "ai_agent");
-    assert_eq!(members, 5, "all five drafted revisions proposed");
+    assert_eq!(origin_kind, "repo_analysis");
+    assert_eq!(members, 4, "snapshot+tech_stack+2 modules proposed");
     assert_eq!(derived_status(&pool, intake_id).await, "Completed");
 
     // 信号面：pc_analyze.signal_ref 记录真实信号（四元组引用，无 service 字段）。
@@ -364,37 +371,50 @@ async fn verify_triggers_full_kb_pc_chain(pool: PgPool) {
         "ADR-07: no service field"
     );
 
-    // pc.cognition_object：snapshot + tech_stack + activity + 2 modules = 5（全 draft）。
+    // projc.cognition_object：repository + tech_stack + 2 repository_module = 4
+    // （全 draft；T-3 矩阵：pc snapshot 类恒 0 行——错误域草稿源头不可达）。
     let objects: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT object_type, object_key, lifecycle_status FROM pc.cognition_object \
+        "SELECT object_type, object_key, lifecycle_status FROM projc.cognition_object \
           WHERE project_id = $1 ORDER BY created_at, object_key",
     )
     .bind(project)
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert_eq!(objects.len(), 5, "snapshot+tech_stack+activity+2 modules");
+    assert_eq!(objects.len(), 4, "repository+tech_stack+2 repository_module");
     assert!(objects.iter().all(|(_, _, s)| s == "draft"));
     assert!(objects.iter().any(|(t, _, _)| t == "repository"));
     assert!(objects.iter().any(|(t, _, _)| t == "tech_stack"));
-    assert!(objects.iter().any(|(t, _, _)| t == "delivery_activity"));
     assert_eq!(
-        objects.iter().filter(|(t, _, _)| *t == "module").count(),
+        objects
+            .iter()
+            .filter(|(t, _, _)| *t == "repository_module")
+            .count(),
         2,
         "README.md + docs/design.md hot files"
     );
+    let pc_snapshot_rows: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pc.cognition_object \
+          WHERE project_id = $1 \
+            AND object_type IN ('repository','tech_stack','delivery_activity','module')",
+    )
+    .bind(project)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(pc_snapshot_rows, 0, "T-3: technical cognition never in pc");
 
     // evidence：unverified/medium，document_section 判别器（槽位 = section_anchor，
     // 归因 JSON 归档 description——01B §9.3 C-4 形态）。
     let evidence: Vec<(String, String, Option<String>, Option<String>)> = sqlx::query_as(
         "SELECT verification_status, confidence, section_anchor, description \
-           FROM pc.evidence WHERE project_id = $1",
+           FROM projc.evidence WHERE project_id = $1",
     )
     .bind(project)
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert_eq!(evidence.len(), 5);
+    assert_eq!(evidence.len(), 4);
     assert!(evidence
         .iter()
         .all(|(v, c, _, _)| v == "unverified" && c == "medium"));
@@ -404,7 +424,8 @@ async fn verify_triggers_full_kb_pc_chain(pool: PgPool) {
             .unwrap_or_default()
             .contains(&intake_id.to_string())));
 
-    // source：kb_document 通道（C-4 收窄 CHECK）+ 四元组钉 KB 文档修订。
+    // source（G-1 双源）：pc.source（identity 通道）+ projc.source（快照通道），
+    // 各一条 kb_document 钉扎同一 KB 修订。
     let source: (String, String, String, Option<String>) = sqlx::query_as(
         "SELECT target_domain, target_type, target_id, target_revision_id \
           FROM pc.source WHERE project_id = $1 LIMIT 1",
@@ -425,6 +446,23 @@ async fn verify_triggers_full_kb_pc_chain(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(source_kind, "kb_document");
+    let projc_source: (String, String, Option<String>) = sqlx::query_as(
+        "SELECT target_domain, target_type, target_revision_id \
+          FROM projc.source WHERE project_id = $1 LIMIT 1",
+    )
+    .bind(project)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        (projc_source.0.as_str(), projc_source.1.as_str()),
+        ("knowledge_base", "document")
+    );
+    assert_eq!(
+        projc_source.2.as_deref(),
+        Some(revision_id.to_string().as_str()),
+        "G-1: projc snapshot channel registered in the same analysis"
+    );
 
     // 审计：kb_pc_analysis 两处（KB 完成 + PC 派生）。
     let audits: i64 = sqlx::query_scalar(
@@ -472,19 +510,19 @@ async fn reverify_same_head_is_idempotent(pool: PgPool) {
     .unwrap();
     assert_eq!(revision_n, 1, "content-addressed revision dedup");
     let object_n: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM pc.cognition_object WHERE project_id = $1")
+        sqlx::query_scalar("SELECT count(*) FROM projc.cognition_object WHERE project_id = $1")
             .bind(project)
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(object_n, 5, "object_key idempotent upsert");
+    assert_eq!(object_n, 4, "object_key idempotent upsert");
     let proposal_n: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM pc.proposal WHERE project_id = $1")
+        sqlx::query_scalar("SELECT count(*) FROM projc.proposal WHERE project_id = $1")
             .bind(project)
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(proposal_n, 1, "same revision set is proposed once (KP-2)");
+    assert_eq!(proposal_n, 1, "same revision set is proposed once");
 }
 
 // ── 用例 3：新 commit 再 verify → revision_no=2 + 内容寻址去重 ─────────────
@@ -527,11 +565,12 @@ async fn new_commit_advances_revision_with_content_dedup(pool: PgPool) {
     assert_eq!(revisions[1].0, 2);
     assert_eq!(revisions[1].1.as_deref(), Some(head2.as_str()));
 
-    // PC：对象身份稳定（object_key 不变）——snapshot/activity 随 HEAD 变化追加
-    // 修订；tech_stack 内容未变 → 内容寻址去重不追加；evidence 每轮追加。
+    // ProjC：对象身份稳定（object_key 不变）——snapshot/module 随 HEAD 或文件
+    // 内容变化追加修订；tech_stack 内容未变 → 内容寻址去重不追加；evidence 每轮
+    // 追加（4 对象 × 2 轮）。
     let snapshot_revisions: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM pc.cognition_revision cr \
-           JOIN pc.cognition_object o ON o.id = cr.object_id \
+        "SELECT count(*) FROM projc.cognition_revision cr \
+           JOIN projc.cognition_object o ON o.id = cr.object_id \
           WHERE o.project_id = $1 AND o.object_key LIKE '%:snapshot'",
     )
     .bind(project)
@@ -543,8 +582,8 @@ async fn new_commit_advances_revision_with_content_dedup(pool: PgPool) {
         "snapshot content changed → new revision"
     );
     let tech_revisions: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM pc.cognition_revision cr \
-           JOIN pc.cognition_object o ON o.id = cr.object_id \
+        "SELECT count(*) FROM projc.cognition_revision cr \
+           JOIN projc.cognition_object o ON o.id = cr.object_id \
           WHERE o.project_id = $1 AND o.object_key LIKE '%:tech_stack'",
     )
     .bind(project)
@@ -556,12 +595,12 @@ async fn new_commit_advances_revision_with_content_dedup(pool: PgPool) {
         "unchanged content must not append revision"
     );
     let evidence_n: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM pc.evidence WHERE project_id = $1")
+        sqlx::query_scalar("SELECT count(*) FROM projc.evidence WHERE project_id = $1")
             .bind(project)
             .fetch_one(&pool)
             .await
             .unwrap();
-    assert_eq!(evidence_n, 10, "5 objects × 2 analysis runs");
+    assert_eq!(evidence_n, 8, "4 objects × 2 analysis runs");
     assert_eq!(derived_status(&pool, intake2).await, "Completed");
 }
 
@@ -635,7 +674,7 @@ async fn seed_enabled_provider(pool: &PgPool, project_id: Uuid, endpoint: &str) 
     provider_id
 }
 
-/// 五骨架的 LLM 响应体（object_key 与 `plan_cognition_objects` 的派生键一致；
+/// 四骨架的 LLM 响应体（object_key 与 `plan_cognition_objects` 的派生键一致；
 /// 含一个编造引用 made-up-ref，断言实现侧白名单过滤）。
 fn llm_objects_body(repository_id: Uuid) -> serde_json::Value {
     let zone = |slot: &str| {
@@ -647,8 +686,6 @@ fn llm_objects_body(repository_id: Uuid) -> serde_json::Value {
              "content": zone("snapshot"), "evidence_refs": ["README.md", "made-up-ref"]},
             {"object_key": format!("repo:{repository_id}:tech_stack"), "summary": "LLM 摘要：Markdown",
              "content": zone("tech_stack")},
-            {"object_key": format!("repo:{repository_id}:activity"), "summary": "LLM 摘要：交付",
-             "content": zone("activity")},
             {"object_key": format!("repo:{repository_id}:module:README.md"), "summary": "LLM 摘要：入口",
              "content": zone("module")},
             {"object_key": format!("repo:{repository_id}:module:docs/design.md"), "summary": "LLM 摘要：设计",
@@ -737,22 +774,25 @@ async fn llm_enrichment_marks_llm_mode_across_kb_and_pc(pool: PgPool) {
     assert!(!content.contains("无 LLM 参与"));
     assert!(change_summary.contains("LLM 增强"));
 
-    // PC：五对象全部 LLM 三区正文（骨架形态不变），analysis_mode=llm；
-    // 正文权威 = pc.document_revision（KP-1 收敛，偏差 a 暂存 PG）。
+    // ProjC：四对象全部 LLM 三区正文（骨架形态不变），analysis_mode=llm；
+    // 正文权威 = projc.document_revision（域内暂存 PG，pc 同款偏差）。
     let (_, pc_status, pc_result) = task_of_type(&pool, intake_id, "pc_analyze").await;
     assert_eq!(pc_status, "COMPLETED");
-    assert_eq!(pc_result.expect("real derivation")["target_domain"], "pc");
+    assert_eq!(
+        pc_result.expect("real derivation")["target_domain"],
+        "project_cognition"
+    );
     let revisions: Vec<(String, String)> = sqlx::query_as(
-        "SELECT cr.analysis_mode, dr.content FROM pc.cognition_revision cr \
-           JOIN pc.cognition_object o ON o.id = cr.object_id \
-           JOIN pc.document_revision dr ON dr.id = cr.document_revision_id \
+        "SELECT cr.analysis_mode, dr.content FROM projc.cognition_revision cr \
+           JOIN projc.cognition_object o ON o.id = cr.object_id \
+           JOIN projc.document_revision dr ON dr.id = cr.document_revision_id \
           WHERE o.project_id = $1",
     )
     .bind(project)
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert_eq!(revisions.len(), 5);
+    assert_eq!(revisions.len(), 4);
     assert!(revisions.iter().all(|(m, _)| m == "llm"));
     assert!(revisions.iter().all(|(_, c)| {
         c.contains("### 事实") && c.contains("### 推断") && c.contains("### 不确定")
@@ -761,7 +801,7 @@ async fn llm_enrichment_marks_llm_mode_across_kb_and_pc(pool: PgPool) {
     // evidence：description 归档 JSON 记 mode 与白名单过滤后的 llm_evidence_refs
     // （made-up-ref 必须被实现侧丢弃；01B §9.3：无 JSONB locator，TEXT 归档）。
     let description: String = sqlx::query_scalar(
-        "SELECT description FROM pc.evidence \
+        "SELECT description FROM projc.evidence \
           WHERE project_id = $1 AND section_anchor = 'snapshot'",
     )
     .bind(project)
@@ -831,17 +871,17 @@ async fn llm_failure_falls_back_to_derived_and_records_failed(pool: PgPool) {
     assert!(content.contains("无 LLM 参与"));
     assert!(!content.contains("## 摘要（LLM 分析）"));
 
-    // PC：五对象回退派生正文，mode=derived_fallback。
+    // ProjC：四对象回退派生正文，mode=derived_fallback。
     let modes: Vec<(String,)> = sqlx::query_as(
-        "SELECT cr.analysis_mode FROM pc.cognition_revision cr \
-           JOIN pc.cognition_object o ON o.id = cr.object_id \
+        "SELECT cr.analysis_mode FROM projc.cognition_revision cr \
+           JOIN projc.cognition_object o ON o.id = cr.object_id \
           WHERE o.project_id = $1",
     )
     .bind(project)
     .fetch_all(&pool)
     .await
     .unwrap();
-    assert_eq!(modes.len(), 5);
+    assert_eq!(modes.len(), 4);
     assert!(modes.iter().all(|(m,)| m == "derived_fallback"));
 
     // 记账：kb/pc 各一条 failed（DEC-LLM-004.7：失败也记账）。
@@ -927,7 +967,7 @@ async fn confirm_pins_analysis_anchor_to_selected_commit(pool: PgPool) {
 
 // ── 用例 7：KP-2 确认闭环（commit → 分析起草 → 人工确认 → 发布 → 再 commit）──
 
-/// pc_analyze 任务 result_ref 锚定的提案 ID（KP-2：有未覆盖修订时）。
+/// pc_analyze 任务 result_ref 锚定的提案 ID（分析起草：有未覆盖修订时）。
 fn proposal_of(result_ref: Option<serde_json::Value>) -> Uuid {
     let result_ref = result_ref.expect("pc analysis result_ref");
     assert_eq!(result_ref["target_type"], "proposal", "{result_ref}");
@@ -951,24 +991,24 @@ async fn confirmation_loop_publishes_versions_across_commits(pool: PgPool) {
     let repo = init_repo("feat: initial");
     let repository_id = seed_repository(&pool, project, &repo.url).await;
 
-    // ① 首次分析：AI 起草 5 成员提案（submitted，待人工确认）
+    // ① 首次分析：AI 起草 4 成员提案（submitted，待人工确认）
     verify(&pool, repository_id).await;
     drain(&worker(&pool)).await;
     let intake1 = latest_snapshot_intake(&pool, repository_id).await;
     let (_, _, result1) = task_of_type(&pool, intake1, "pc_analyze").await;
     let p1 = proposal_of(result1);
-    let view1 = pm_application::pc::load_proposal(&pool, project, p1)
+    let view1 = pm_application::projc::load_proposal(&pool, project, p1)
         .await
         .unwrap();
     assert_eq!(view1.head.status, "submitted");
-    assert_eq!(view1.head.origin_kind, "ai_agent");
-    assert_eq!(view1.members.len(), 5);
+    assert_eq!(view1.head.origin_kind, "repo_analysis");
+    assert_eq!(view1.members.len(), 4);
     assert_eq!(view1.approvals.len(), 1);
     assert_eq!(view1.approvals[0].status, "pending");
-    // Platform 待办留痕（pc.change_proposed 消费者）
+    // Platform 待办留痕（projc.change_proposed 消费者）
     let pending_n: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM integration.notification \
-          WHERE project_id = $1 AND kind = 'pc_proposal_pending'",
+          WHERE project_id = $1 AND kind = 'projc_proposal_pending'",
     )
     .bind(project)
     .fetch_one(&pool)
@@ -976,14 +1016,14 @@ async fn confirmation_loop_publishes_versions_across_commits(pool: PgPool) {
     .unwrap();
     assert_eq!(pending_n, 1);
 
-    // AI/服务主体无确认权（Q2-C）
-    let denied = pm_application::pc::decide_proposal(
+    // AI/服务主体无确认权（Q2-C 同口径）
+    let denied = pm_application::projc::decide_proposal(
         &pool,
         project,
         &AuditActor::dispatch(),
         p1,
-        pm_application::pc::ProposalDecisionInput {
-            action: pm_application::pc::DecisionAction::Approve,
+        pm_application::projc::ProposalDecisionInput {
+            action: pm_application::projc::DecisionAction::Approve,
             reason: None,
             expected_version_no: 0,
         },
@@ -991,17 +1031,17 @@ async fn confirmation_loop_publishes_versions_across_commits(pool: PgPool) {
     .await;
     assert!(matches!(
         denied,
-        Err(pm_application::pc::PcError::Forbidden(_))
+        Err(pm_application::projc::ProjcError::Forbidden(_))
     ));
 
-    // ② 人工确认（P5 编排：审批 + 发布）→ 版本 1
-    let outcome = pm_application::pc::decide_proposal(
+    // ② 人工批准（P5 暂记）→ 发布（projc-decision:{id}）→ 版本 1
+    let outcome = pm_application::projc::decide_proposal(
         &pool,
         project,
         &lead,
         p1,
-        pm_application::pc::ProposalDecisionInput {
-            action: pm_application::pc::DecisionAction::Approve,
+        pm_application::projc::ProposalDecisionInput {
+            action: pm_application::projc::DecisionAction::Approve,
             reason: Some("首版认知确认".into()),
             expected_version_no: 0,
         },
@@ -1009,23 +1049,24 @@ async fn confirmation_loop_publishes_versions_across_commits(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(outcome.status, "approved");
-    let v1 = pm_application::pc::publish_version(
+    assert!(outcome.published_version.is_none(), "决定暂记，不发布");
+    let v1 = pm_application::projc::publish_version(
         &pool,
         project,
         &lead,
-        pm_application::pc::PublishVersionInput {
+        pm_application::projc::PublishVersionInput {
             proposal_id: p1,
-            operation_id: format!("pc-decision:{p1}"),
+            operation_id: format!("projc-decision:{p1}"),
         },
     )
     .await
     .unwrap();
     assert_eq!(v1.version_no, 1);
-    assert_eq!(v1.member_count, 5);
+    assert_eq!(v1.member_count, 4);
     drain(&worker(&pool)).await; // version_published → Platform 留痕
     let published_n: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM integration.notification \
-          WHERE project_id = $1 AND kind = 'pc_version_published'",
+          WHERE project_id = $1 AND kind = 'projc_version_published'",
     )
     .bind(project)
     .fetch_one(&pool)
@@ -1033,14 +1074,15 @@ async fn confirmation_loop_publishes_versions_across_commits(pool: PgPool) {
     .unwrap();
     assert_eq!(published_n, 1);
 
-    // ③ 新 commit：仅变化的修订入链（snapshot/activity 变；tech_stack/modules 内容寻址不变）
+    // ③ 新 commit：仅变化的修订入链（snapshot/module 随内容变化；tech_stack
+    // 内容寻址不变；delivery_activity 已停派）
     append_commit(&repo, "feat: second change");
     verify(&pool, repository_id).await;
     drain(&worker(&pool)).await;
     let intake2 = latest_snapshot_intake(&pool, repository_id).await;
     let (_, _, result2) = task_of_type(&pool, intake2, "pc_analyze").await;
     let p2 = proposal_of(result2);
-    let view2 = pm_application::pc::load_proposal(&pool, project, p2)
+    let view2 = pm_application::projc::load_proposal(&pool, project, p2)
         .await
         .unwrap();
     assert_eq!(view2.head.expected_version_no, 1);
@@ -1061,61 +1103,62 @@ async fn confirmation_loop_publishes_versions_across_commits(pool: PgPool) {
         "{changed:?}"
     );
     assert!(
-        changed.iter().any(|k| k.ends_with(":activity")),
-        "{changed:?}"
+        !changed.iter().any(|k| k.ends_with(":activity")),
+        "delivery_activity is no longer derived (R-05): {changed:?}"
     );
     assert!(
         !changed.iter().any(|k| k.ends_with(":tech_stack")),
         "unchanged revision is not re-proposed: {changed:?}"
     );
 
-    pm_application::pc::decide_proposal(
+    pm_application::projc::decide_proposal(
         &pool,
         project,
         &lead,
         p2,
-        pm_application::pc::ProposalDecisionInput {
-            action: pm_application::pc::DecisionAction::Approve,
+        pm_application::projc::ProposalDecisionInput {
+            action: pm_application::projc::DecisionAction::Approve,
             reason: None,
             expected_version_no: 1,
         },
     )
     .await
     .unwrap();
-    let v2 = pm_application::pc::publish_version(
+    let v2 = pm_application::projc::publish_version(
         &pool,
         project,
         &lead,
-        pm_application::pc::PublishVersionInput {
+        pm_application::projc::PublishVersionInput {
             proposal_id: p2,
-            operation_id: format!("pc-decision:{p2}"),
+            operation_id: format!("projc-decision:{p2}"),
         },
     )
     .await
     .unwrap();
     assert_eq!(v2.version_no, 2);
-    // 每身份恰一个 Revision：5 行成员 = 5 个不同对象身份（携带修订被同身份替换）
+    // 每身份恰一个 Revision：4 行成员 = 4 个不同对象身份（携带修订被同身份替换）
     let (members, identities): (i64, i64) = sqlx::query_as(
-        "SELECT count(*), count(DISTINCT object_id) FROM pc.version_member WHERE version_id = $1",
+        "SELECT count(*), count(DISTINCT object_id) FROM projc.version_member \
+          WHERE version_id = $1",
     )
     .bind(v2.version_id)
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert_eq!((members, identities), (5, 5), "one revision per identity");
+    assert_eq!((members, identities), (4, 4), "one revision per identity");
 
     // ④ 同 HEAD 再 verify：intake 重放、零新提案
     verify(&pool, repository_id).await;
     drain(&worker(&pool)).await;
     let proposals: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM pc.proposal WHERE project_id = $1")
+        sqlx::query_scalar("SELECT count(*) FROM projc.proposal WHERE project_id = $1")
             .bind(project)
             .fetch_one(&pool)
             .await
             .unwrap();
     assert_eq!(proposals, 2);
     let versions: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM pc.cognition_version WHERE project_id = $1")
+        sqlx::query_scalar("SELECT count(*) FROM projc.cognition_version WHERE project_id = $1")
             .bind(project)
             .fetch_one(&pool)
             .await

@@ -29,12 +29,18 @@ export interface AnalysisReportRow {
   closed_at: string | null;
   kb_revision_id: string | null;
   pc_source_id: string | null;
+  /** P3-11：ProjC 快照通道来源（null = 历史行 Legacy）。 */
+  projc_source_id: string | null;
   /** D-2 运行口径：incremental（默认）/ full。 */
   run_mode: "incremental" | "full";
   /** 增量起点（全量/首次为 null）。 */
   since_commit: string | null;
   /** 未决 PC 提案数（draft/submitted）。 */
   pending_proposals: number;
+  /** P3-11：未决 ProjC 提案数（draft/submitted）。 */
+  projc_pending_proposals: number;
+  /** P3-11：双域未决合计（展示用）。 */
+  total_pending_proposals: number;
   /** KB 报告草稿是否待确认。 */
   has_pending_kb: boolean;
 }
@@ -71,6 +77,10 @@ export interface AnalysisReportDetail extends AnalysisReportRow {
   kb_revision: ReportKbRevision | null;
   proposals: ReportProposalRow[];
   pc_revisions: ReportPcRevisionRow[];
+  /** P3-11：ProjC 提案集（加法字段，恒数组）。 */
+  projc_proposals: ReportProposalRow[];
+  /** P3-11：ProjC 对象修订集（加法字段，恒数组）。 */
+  projc_revisions: ReportPcRevisionRow[];
 }
 
 export interface CloseReportOutcome {
@@ -83,6 +93,12 @@ export interface CloseReportOutcome {
   withdrawn_proposals: number;
   rejected_kb: boolean;
   last_analyzed_commit: string;
+  /** P3-11：ProjC 批准提案发布数（projc-decision:{id}）。 */
+  projc_applied: number;
+  /** P3-11：ProjC 发布失败数（独立计数）。 */
+  projc_publish_failed_proposals: number;
+  /** P3-11：ProjC 未决提案撤回数。 */
+  projc_withdrawn: number;
 }
 
 /** 项目分析报告列表（状态分区；repository_id/status 可选过滤）。 */

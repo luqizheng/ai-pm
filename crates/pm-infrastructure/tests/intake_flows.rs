@@ -769,6 +769,9 @@ fn handler_assembly_covers_catalog() {
             ev::PC_CONFLICT_DETECTED,
             ev::PC_EVIDENCE_REQUESTED,
             ev::PC_COGNITION_VERSION_PUBLISHED,
+            // P3-11 ProjC 独立域事件（阶段一加法；Platform 留痕消费者）。
+            ev::PROJ_CHANGE_PROPOSED,
+            ev::PROJ_COGNITION_VERSION_PUBLISHED,
             // WP-0 内容管线接缝：KB 修订发布（留痕型 handler，WP-3 接真索引）。
             ev::KB_DOCUMENT_REVISION_PUBLISHED,
             ev::PROCESSING_FAILED,

@@ -58,6 +58,24 @@ pub enum AnalysisError {
     Db(#[from] sqlx::Error),
 }
 
+impl AnalysisError {
+    /// pc 服务层错误 → AnalysisError（identity 通道来源登记等）。
+    fn from_pc(e: pm_application::pc::PcError) -> Self {
+        match e {
+            pm_application::pc::PcError::Db(err) => Self::Db(err),
+            other => Self::Db(sqlx::Error::Configuration(other.to_string().into())),
+        }
+    }
+
+    /// projc 服务层错误 → AnalysisError（ProjC 快照通道派生链）。
+    fn from_projc(e: pm_application::projc::ProjcError) -> Self {
+        match e {
+            pm_application::projc::ProjcError::Db(err) => Self::Db(err),
+            other => Self::Db(sqlx::Error::Configuration(other.to_string().into())),
+        }
+    }
+}
+
 fn ref_json(domain: &str, ty: &str, id: &str, revision: Option<String>) -> serde_json::Value {
     serde_json::json!({
         "target_domain": domain,
@@ -721,8 +739,10 @@ pub struct CognitionDraft {
     pub content: String,
 }
 
-/// 结构化派生计划（纯函数，可单测）：仓库快照 → 4 类认知对象草稿。
-/// 内容全部来自 RepoFacts 既有事实，不虚构（S01-04 派生骨架同款边界）。
+/// 结构化派生计划（纯函数，可单测）：仓库快照 → 3 类 ProjC 认知对象草稿
+/// （P3-11 R-03/R-05：delivery_activity 停止派生——动态指标不入正式认知字典；
+/// module → repository_module，R-03 模块消歧）。内容全部来自 RepoFacts 既有
+/// 事实，不虚构（S01-04 派生骨架同款边界）。
 pub fn plan_cognition_objects(
     facts: &RepoFacts,
     repository_id: Uuid,
@@ -772,29 +792,10 @@ pub fn plan_cognition_objects(
         });
     }
 
-    if !facts.commits.is_empty() {
-        let mut content = format!("共采集 {} 条 commit，最近交付：\n", facts.commits.len());
-        for c in facts.commits.iter().take(10) {
-            let cshort: String = c.sha.chars().take(8).collect();
-            content.push_str(&format!("- `{cshort}` {} {}\n", c.author, c.subject));
-        }
-        drafts.push(CognitionDraft {
-            object_key: format!("repo:{repo}:activity"),
-            object_type: "delivery_activity",
-            name: format!("交付动态（最近 {} 条）", facts.commits.len().min(10)),
-            summary: facts
-                .commits
-                .first()
-                .map(|c| c.subject.clone())
-                .unwrap_or_default(),
-            content,
-        });
-    }
-
     for h in facts.hot_files.iter().take(max_modules) {
         drafts.push(CognitionDraft {
             object_key: format!("repo:{repo}:module:{}", h.path),
-            object_type: "module",
+            object_type: "repository_module",
             name: h.path.clone(),
             summary: format!("近期 commit 触达 {} 次", h.touches),
             content: format!(
@@ -809,15 +810,18 @@ pub fn plan_cognition_objects(
     drafts
 }
 
-/// PC 认知派生落库（KP-1 起**一律经 pm-application::pc 服务层**，V-6 唯一写入面）：
-/// 来源（kb_document 四元组）→ 对象草稿 upsert（object_key 幂等 + 内容寻址去重）
-/// → 证据（document_section 钉 KB 修订，槽位 = section_anchor，旧 locator JSON
-/// 摘要归档进 description）。可选注入 `SnapshotAnalysisModel`（D-1=A）：骨架
-/// 形态归结构化派生，LLM 只回填 summary/content（三区小节）与白名单证据
-/// （D-2=A 受约束增强）；失败/无 provider 回退派生并标 derived_fallback/derived
-/// （D-3=A）。返回 (analysis_source_id, 主对象 revision_id)。
+/// ProjC 认知派生落库（P3-11 T-1/T-2/T-3 起全链挂 `pm_application::projc`，
+/// V-6 唯一写入面；原 `derive_pc_cognition` 改名同义）：G-1 双源登记——
+/// pc.source（identity 综合通道，不变）+ projc.source（快照通道，本域对象/
+/// 证据/提案的真源锚）；对象草稿 upsert（object_key 幂等 + 内容寻址去重）→
+/// 证据（document_section 钉 KB 修订，槽位 = section_anchor）。可选注入
+/// `SnapshotAnalysisModel`（D-1=A）：骨架形态归结构化派生，LLM 只回填
+/// summary/content（三区小节）与白名单证据（D-2=A 受约束增强）；失败/无
+/// provider 回退派生并标 derived_fallback/derived（D-3=A，归因语义不变）。
+/// 返回 (analysis_source_id, 主对象 revision_id)——analysis_source_id = ProjC
+/// 快照通道来源。
 #[allow(clippy::too_many_arguments)]
-pub async fn derive_pc_cognition(
+pub async fn derive_projc_cognition(
     pool: &PgPool,
     project_id: Uuid,
     intake_id: Uuid,
@@ -870,7 +874,7 @@ pub async fn derive_pc_cognition(
                 Err(err) => {
                     tracing::warn!(
                         %task_id, %intake_id, error = %err,
-                        "pc: LLM enrichment failed; falling back to derived facts"
+                        "projc: LLM enrichment failed; falling back to derived facts"
                     );
                     "derived_fallback"
                 }
@@ -881,8 +885,9 @@ pub async fn derive_pc_cognition(
 
     let actor = AuditActor::dispatch();
 
-    // 来源：本次分析的 KB 文档修订（kb_document 通道，四元组钉 Revision）。
-    let source_id = pm_application::pc::register_source(
+    // G-1 双源之一：PC identity 通道来源（kb_document 钉 Revision；identity.rs
+    // 经报告.pc_source_id 锚定综合提案，语义不变）。
+    pm_application::pc::register_source(
         pool,
         project_id,
         &actor,
@@ -901,7 +906,31 @@ pub async fn derive_pc_cognition(
         },
     )
     .await
-    .map_err(|e| AnalysisError::Db(sqlx_error_of(e)))?;
+    .map_err(AnalysisError::from_pc)?;
+
+    // G-1 双源之二：ProjC 快照通道来源（本域对象/证据/提案的真源锚；R-01 V1.1
+    // 附注：projc.source 只作本域证据来源登记，正式来源资产引用一律 DomainRef
+    // → kb.source，不形成第二 Source 权威）。
+    let source_id = pm_application::projc::register_source(
+        pool,
+        project_id,
+        &actor,
+        pm_application::projc::SourceInput {
+            source_kind: "kb_document".into(),
+            target_domain: "knowledge_base".into(),
+            target_type: "document".into(),
+            target_id: kb_document_id.to_string(),
+            target_revision_id: Some(kb_revision_id.to_string()),
+            revision_missing_reason: None,
+            section_anchor: None,
+            start_line: None,
+            locator: None,
+            description: Some(format!("repository snapshot analysis intake {intake_id}")),
+            source_content_hash: Some(kb_content_hash.to_string()),
+        },
+    )
+    .await
+    .map_err(AnalysisError::from_projc)?;
 
     let mut primary_object: Option<Uuid> = None;
     let mut primary_revision: Option<Uuid> = None;
@@ -915,11 +944,11 @@ pub async fn derive_pc_cognition(
             None => (draft.summary.as_str(), draft.content.as_str(), None),
         };
         // 对象草稿（object_key 幂等 + 内容寻址去重在服务层内）。
-        let receipt = pm_application::pc::upsert_object_draft(
+        let receipt = pm_application::projc::upsert_object_draft(
             pool,
             project_id,
             &actor,
-            pm_application::pc::UpsertObjectDraft {
+            pm_application::projc::UpsertObjectDraft {
                 object_type: draft.object_type.to_string(),
                 object_key: Some(draft.object_key.clone()),
                 display_name: draft.name.clone(),
@@ -933,18 +962,18 @@ pub async fn derive_pc_cognition(
             },
         )
         .await
-        .map_err(|e| AnalysisError::Db(sqlx_error_of(e)))?;
+        .map_err(AnalysisError::from_projc)?;
 
         // 证据：一次分析一条（evidence_hash = KB 修订内容指纹，可对账）；
         // document_section 判别器：四元组钉 KB 修订 + 槽位锚。LLM 增强的白名单
         // 证据引用与归因 JSON 归档进 description（TEXT，不违 JSONB 纪律）。
-        let _ = pm_application::pc::register_evidence(
+        let _ = pm_application::projc::register_evidence(
             pool,
             project_id,
             &actor,
-            pm_application::pc::EvidenceInput {
+            pm_application::projc::EvidenceInput {
                 source_id,
-                subject: pm_application::pc::EvidenceSubject::ObjectRevision(receipt.revision_id),
+                subject: pm_application::projc::EvidenceSubject::ObjectRevision(receipt.revision_id),
                 evidence_type: "document_section".into(),
                 target_domain: Some("knowledge_base".into()),
                 target_type: Some("document".into()),
@@ -984,7 +1013,7 @@ pub async fn derive_pc_cognition(
             },
         )
         .await
-        .map_err(|e| AnalysisError::Db(sqlx_error_of(e)))?;
+        .map_err(AnalysisError::from_projc)?;
 
         if primary_revision.is_none() {
             primary_object = Some(receipt.object_id);
@@ -996,13 +1025,13 @@ pub async fn derive_pc_cognition(
     let primary_object =
         primary_object.ok_or_else(|| AnalysisError::Git("no cognition drafts derived".into()))?;
 
-    // 审计（系统面；PRODUCTION_SITES 登记 #2）。
+    // 审计（系统面；PRODUCTION_SITES 登记 #2；ProjC 侧 action/target_type projc_ 前缀）。
     sqlx::query(
         "INSERT INTO governance.audit_log \
          (project_id, actor_id, actor_identity_id, actor_client, actor_auth_mode, claimed_device_id, \
           action, target_type, target_id, after_data, source_kind, tenant_id) \
          VALUES ($1, $2, NULL, NULL, NULL, NULL, \
-                 'pc_cognition_drafted', 'pc_cognition_object', $3, $4, 'kb_pc_analysis', \
+                 'projc_cognition_drafted', 'projc_cognition_object', $3, $4, 'kb_pc_analysis', \
                  (SELECT tenant_id FROM core.project WHERE id = $1))",
     )
     .bind(project_id)
@@ -1024,13 +1053,14 @@ pub async fn derive_pc_cognition(
     tracing::info!(
         %task_id, %intake_id, %repository_id,
         objects = drafts.len(),
-        "pc: cognition drafted from repository snapshot"
+        "projc: cognition drafted from repository snapshot"
     );
     Ok((source_id, primary_revision))
 }
 
-/// 服务层 PcError → 基础设施侧 AnalysisError（所有服务层拒绝都按分析失败上报，
-/// 走 processing.failed → 人工重试链）。
+/// 服务层 PcError → 基础设施侧 sqlx::Error（历史形态保留：identity 通道来源
+/// 登记失败等场景沿用；projc 侧经 [`AnalysisError::from_projc`]）。
+#[allow(dead_code)]
 fn sqlx_error_of(e: pm_application::pc::PcError) -> sqlx::Error {
     match e {
         pm_application::pc::PcError::Db(err) => err,
@@ -1131,15 +1161,19 @@ mod tests {
         let a = plan_cognition_objects(&f, rid, 5);
         let b = plan_cognition_objects(&f, rid, 5);
         assert_eq!(a, b, "derivation must be deterministic");
-        // snapshot + tech_stack + activity + 2 modules（hot_files 全量 ≤ max）。
-        assert_eq!(a.len(), 5);
+        // snapshot + tech_stack + 2 modules（R-05：delivery_activity 停派；
+        // R-03：module → repository_module）。
+        assert_eq!(a.len(), 4);
         assert_eq!(a[0].object_type, "repository");
         assert_eq!(a[1].object_type, "tech_stack");
-        assert_eq!(a[2].object_type, "delivery_activity");
-        assert_eq!(a[3].object_type, "module");
+        assert_eq!(a[2].object_type, "repository_module");
         assert!(a
             .iter()
             .all(|d| d.object_key.starts_with(&format!("repo:{rid}:"))));
+        assert!(
+            !a.iter().any(|d| d.object_type == "delivery_activity"),
+            "delivery_activity must not be derived (R-05)"
+        );
         // 无语言/无 commit 时对应槽位不虚构。
         let mut empty = facts();
         empty.languages.clear();
