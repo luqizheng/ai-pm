@@ -4,7 +4,6 @@ analysis:
     description: Independent home for repository analysis reports — browse the report list and details, review KB report revisions and PC proposals, and close reports.
   state:
     noProject: Select a project first — analysis reports are project-scoped and never cross projects.
-    detailFramework: Page frame ready — the report detail is fleshed out by an upcoming task.
   status:
     analyzing: Analyzing
     analyzed: Pending review
@@ -21,8 +20,68 @@ analysis:
     allDisposed: All disposed — ready to close
     closedAt: Closed at {time}
     failedReason: Analysis failed
+  filter:
+    pending: Pending
+    decided: Decided
+    all: All
+  kbStatus:
+    draft: Draft
+    published: Published
+    rejected: Rejected
+  proposalStatus:
+    draft: Draft
+    submitted: Pending approval
+    approvedPending: Approved · awaiting publish
+    approvedApplied: Published
+    rejected: Rejected
+    withdrawn: Withdrawn
+    expired: Expired
+    applied: Applied
+    failed: Failed
+  proposal:
+    members: member object(s)
+  detail:
+    title: Report Detail
+    loading: Loading report…
+    secBasic: Basic Info
+    secKb: Analysis Report Body
+    secProposals: "PC Proposals ({n})"
+    secPcRevisions: "PC Object Revisions ({n})"
+    secSynthesis: D-4 Identity Synthesis (AI)
+    secClose: Close & Disposition
+    fieldRepository: Repository
+    fieldStatus: Status
+    fieldRunMode: Run mode
+    runModeFull: Full
+    runModeIncremental: Incremental
+    fieldSinceCommit: Since commit
+    fieldCreatedAt: Created
+    fieldUpdatedAt: Updated
+    fieldClosedAt: Closed
+    fieldError: Failure
+    kbMissing: This analysis produced no KB report revision
+    kbSecMeta: "KB revision v{no}"
+    noProposals: This analysis drafted no proposals
+    noMatchingProposals: No proposals under this filter
+    noPcRevisions: This analysis produced no object revisions
+    synthesisRun: Synthesize business identity (AI)
+    synthesisHint: Aggregates interview answers and repository artifacts to draft three proposals — profile / vision / goal
+    synthesisDone: Three proposals drafted — dispose of profile / vision / goal in this report (goal status {goal})
+    synthesisFailed: Identity synthesis failed (insufficient interviews/reports or model unavailable)
+    synthesisProfile: Profile
+    synthesisVision: Vision
+    synthesisGoal: Goal
+    synthesisProduced: Drafted
+    synthesisMissing: Not produced
+    close: Close Report
+    closeHint: Closing publishes approved proposals, auto-disposes pending items and fixes the analysis anchor; decisions are frozen and the repository can be analyzed again
+    closeConfirmTitle: Close analysis report
+    closeConfirmDescription: "This will publish {publish} approved proposals, withdraw {proposals} pending proposals and reject {kb} KB drafts for this {repo} report, then fix the analysis anchor; decisions are frozen and the repository can be analyzed again."
+    closeReceipt: Report closed — published {applied} proposals, withdrew {withdrawn} pending proposals, rejected {rejected} KB drafts; anchor fixed ({commit}); the repository can be analyzed again
+    closeNotAvailable: Report is not pending review — only pending-review reports can be closed
+    closeError: Close failed
+  action:
+    cancel: Cancel
   error:
     load: Load failed, please retry later
     notFound: Report not found or no access
-  detail:
-    title: Report Detail

@@ -4,7 +4,6 @@ analysis:
     description: 仓库分析报告的独立承载页——查看报告列表与详情，审阅 KB 报告修订与 PC 提案，并关闭报告。
   state:
     noProject: 请先选择项目——分析报告按项目隔离，不跨项目展示。
-    detailFramework: 页面框架已就绪——报告详情由后续任务充实。
   status:
     analyzing: 分析中
     analyzed: 待审理
@@ -21,8 +20,68 @@ analysis:
     allDisposed: 已全部处置，可关闭
     closedAt: 关闭于 {time}
     failedReason: 分析失败
+  filter:
+    pending: 待决
+    decided: 已决
+    all: 全部
+  kbStatus:
+    draft: 草稿
+    published: 已发布
+    rejected: 已拒绝
+  proposalStatus:
+    draft: 草稿
+    submitted: 待审批
+    approvedPending: 已批准·待发布
+    approvedApplied: 已发布
+    rejected: 已驳回
+    withdrawn: 已撤回
+    expired: 已过期
+    applied: 已应用
+    failed: 失败
+  proposal:
+    members: 个成员对象
+  detail:
+    title: 报告详情
+    loading: 报告加载中…
+    secBasic: 基本信息
+    secKb: 分析报告正文
+    secProposals: "PC 提案（{n}）"
+    secPcRevisions: "PC 对象修订（{n}）"
+    secSynthesis: D-4 身份综合（AI）
+    secClose: 关闭与处置
+    fieldRepository: 仓库
+    fieldStatus: 状态
+    fieldRunMode: 运行方式
+    runModeFull: 全量
+    runModeIncremental: 增量
+    fieldSinceCommit: 增量起点
+    fieldCreatedAt: 创建时间
+    fieldUpdatedAt: 更新时间
+    fieldClosedAt: 关闭时间
+    fieldError: 失败信息
+    kbMissing: 本次分析未产出 KB 报告修订
+    kbSecMeta: "KB 修订 v{no}"
+    noProposals: 本次分析未起草提案
+    noMatchingProposals: 该过滤条件下无提案
+    noPcRevisions: 本次分析未产出对象修订
+    synthesisRun: 综合业务身份（AI）
+    synthesisHint: 汇聚访谈答案与仓库产物，起草产品画像/产品愿景/项目目标三份提案
+    synthesisDone: 三份提案已起草——产品画像/愿景与项目目标请在本报告逐条处置（项目目标状态 {goal}）
+    synthesisFailed: 身份综合失败（访谈/报告不足或模型不可用）
+    synthesisProfile: 产品画像
+    synthesisVision: 产品愿景
+    synthesisGoal: 项目目标
+    synthesisProduced: 已起草
+    synthesisMissing: 未产出
+    close: 关闭报告
+    closeHint: 关闭后发布已批准提案、自动处置未决项并固化分析锚点；决定冻结，该仓库可再次分析
+    closeConfirmTitle: 关闭分析报告
+    closeConfirmDescription: 将对 {repo} 的这份报告发布 {publish} 个已批准提案、撤回 {proposals} 个未决提案、拒绝 {kb} 份 KB 草稿，并固化分析锚点；关闭后决定冻结，该仓库可再次分析。
+    closeReceipt: 报告已关闭——发布 {applied} 个提案、撤回 {withdrawn} 个未决提案、拒绝 {rejected} 份 KB 草稿，锚点已固化（{commit}），该仓库可再次分析
+    closeNotAvailable: 报告不在待审理状态——仅待审理报告可关闭
+    closeError: 关闭失败
+  action:
+    cancel: 取消
   error:
     load: 加载失败，请稍后重试
     notFound: 报告不存在或无权访问
-  detail:
-    title: 报告详情
