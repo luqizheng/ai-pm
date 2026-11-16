@@ -45,12 +45,10 @@ describe("navigation", () => {
       "/project/cognition",
       "/project/review-center"
     ]);
-    // PLANNED 占位项必须显式标记（渲染层据此给出规划标识）
+    // PLANNED 占位项必须显式标记（渲染层据此给出规划标识）；
+    // Analysis 已随 Phase 2 P2-01 落地真页，不再是占位项。
     const planned = modules.items.filter(i => i.planned).map(i => i.path);
-    expect(planned).toEqual([
-      "/project/analysis",
-      "/project/product-cognition"
-    ]);
+    expect(planned).toEqual(["/project/product-cognition"]);
   });
 
   it("所有导航项的 path 唯一且以 / 开头", () => {

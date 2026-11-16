@@ -345,15 +345,16 @@ function onArchive(row: RepositoryV2) {
   );
 }
 
-/* 分析报告跳转（2026-11-15）：待验证/已验证行的状态旁给入口，落到项目知识库
-   「分析报告」页签（该页默认页签即 reports）；unreachable/archived 不给。 */
+/* 分析报告跳转（2026-11-15）：待验证/已验证行的状态旁给入口；unreachable/archived
+   不给。Phase 2 P2-05 改导向：落到独立 Analysis 报告列表（终审兼容表定版，
+   /project/knowledge 旧落点由 P2-06 的深链兼容承接）。 */
 function canOpenReports(row: RepositoryV2): boolean {
   return row.status === "pending" || row.status === "verified";
 }
 
 function goToAnalysisReports() {
   void router.push({
-    path: "/project/knowledge",
+    path: "/project/analysis",
     query: projectId.value ? { project_id: projectId.value } : {}
   });
 }

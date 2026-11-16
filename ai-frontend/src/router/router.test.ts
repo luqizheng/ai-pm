@@ -75,14 +75,25 @@ describe("router", () => {
     }
   });
 
-  it("C3：Analysis / Product Cognition 占位路由渲染占位组件", () => {
+  it("C3：Product Cognition 占位路由渲染占位组件", () => {
     const routes = buildRoutes();
-    for (const path of ["/project/analysis", "/project/product-cognition"]) {
-      const route = routes.find(r => r.path === path);
-      expect(route, `${path} 未注册`).toBeTruthy();
-      // 占位路由 = 无业务组件，落 PlaceholderView（能力不得伪装已上线）
-      expect(route!.component).toBe(PlaceholderView);
-    }
+    const route = routes.find(r => r.path === "/project/product-cognition");
+    expect(route, "/project/product-cognition 未注册").toBeTruthy();
+    // 占位路由 = 无业务组件，落 PlaceholderView（能力不得伪装已上线）
+    expect(route!.component).toBe(PlaceholderView);
+  });
+
+  it("P2-01：Analysis 独立路由——列表页为真组件，详情页已注册", () => {
+    const routes = buildRoutes();
+    const home = routes.find(r => r.path === "/project/analysis");
+    expect(home, "/project/analysis 未注册").toBeTruthy();
+    // P2-01 起不再是占位：列表页挂真组件
+    expect(home!.component).not.toBe(PlaceholderView);
+    const detail = routes.find(
+      r => r.path === "/project/analysis/reports/:reportId"
+    );
+    expect(detail, "报告详情路由未注册").toBeTruthy();
+    expect(detail!.component).not.toBe(PlaceholderView);
   });
 
   it("C3：项目认知与项目总控台由导航派生为真组件路由", () => {

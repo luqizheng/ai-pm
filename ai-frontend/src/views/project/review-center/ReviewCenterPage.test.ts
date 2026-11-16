@@ -213,7 +213,7 @@ describe("ReviewCenterPage", () => {
     const decisionText = wrapper.find(".review-decision").text();
     expect(decisionText).toContain("前往知识审阅处理");
 
-    // 点击深链 → 知识审阅报告页
+    // 点击深链 → Analysis 报告详情页（P2-05 改导向；project_id 随行）
     const linkBtn = wrapper
       .findAll("button")
       .find(button => button.text().includes("前往知识审阅处理"));
@@ -224,7 +224,7 @@ describe("ReviewCenterPage", () => {
     await linkBtn?.trigger("click");
     await flushPromises();
     expect(pushSpy).toHaveBeenCalledWith(
-      "/project/knowledge?project_id=p-1&report=rpt-1"
+      "/project/analysis/reports/rpt-1?project_id=p-1"
     );
   });
 });

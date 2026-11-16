@@ -264,6 +264,16 @@ export function buildRoutes(): RouteRecordRaw[] {
     }
   );
 
+  // ─── Analysis 报告详情（Phase 2 P2-01）───
+  // 列表页 /project/analysis 由导航树派生（navigation.ts 单源）；详情页不占
+  // 导航，手工注册。组件随 P2-03 充实为六节结构（裁决 D-2）。
+  routes.push({
+    path: "/project/analysis/reports/:reportId",
+    component: () =>
+      import("@/views/project/analysis/AnalysisReportDetailView.vue"),
+    meta: { title: "analysis.detail.title" }
+  });
+
   // Project Setting（V1.0 稿，2026-11-07）：项目配置中心，不占主导航——
   // 入口 = 项目总控台页头「项目设置」（CommandCenterHeader settings 事件）。
   // Git Repositories / Runners 两节由原独立页面迁入（真数据）；General /

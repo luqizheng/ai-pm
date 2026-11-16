@@ -152,11 +152,11 @@ describe("SettingsProjectRepositoriesView", () => {
     expect(wrapper.find('[data-testid="report-link-r1"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="report-link-r2"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="report-link-r3"]').exists()).toBe(false);
-    // spy 而非真跳：知识库视图会挂载并自行拉数据，与本文件 mock 面不符
+    // spy 而非真跳：Analysis 列表视图会挂载并自行拉数据，与本文件 mock 面不符
     const pushSpy = vi.spyOn(router, "push").mockResolvedValue(undefined);
     await wrapper.find('[data-testid="report-link-r1"]').trigger("click");
     expect(pushSpy).toHaveBeenCalledWith({
-      path: "/project/knowledge",
+      path: "/project/analysis",
       query: { project_id: "prj-1" }
     });
   });

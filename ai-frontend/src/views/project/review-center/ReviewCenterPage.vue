@@ -539,14 +539,15 @@ function retryLoad(): void {
           :data-busy="busy"
           aria-label="decision"
         >
-          <!-- D-6 kind 4：报告条目不在审核中心决策（单一决策源=知识审阅报告页）。 -->
+          <!-- D-6 kind 4：报告条目不在审核中心决策（单一决策源=Analysis 报告详情页，
+               Phase 2 P2-05 改导向；link.params 结构不变，仅目标路径变）。 -->
           <div v-if="isReport" class="review-decision__actions">
             <Button
               variant="primary"
               @click="
                 selectedItem &&
                 router.push(
-                  `/project/knowledge?project_id=${selectedItem.project_id}&report=${selectedItem.link.params.report_id ?? selectedItem.id}`
+                  `/project/analysis/reports/${selectedItem.link.params.report_id ?? selectedItem.id}?project_id=${selectedItem.project_id}`
                 )
               "
             >

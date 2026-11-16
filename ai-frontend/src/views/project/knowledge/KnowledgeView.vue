@@ -19,8 +19,7 @@ import {
   type RetrievalQueryResponse
 } from "@/api/knowledge";
 import { useShellStore } from "@/stores/shell";
-import { useRoute } from "vue-router";
-import AnalysisReportsPanel from "./AnalysisReportsPanel.vue";
+import { useRoute, useRouter } from "vue-router";
 import MarkdownViewer from "@/components/ui/markdown-editor/MarkdownViewer.vue";
 import Button from "@/components/ui/button/Button.vue";
 import Alert from "@/components/ui/alert/Alert.vue";
@@ -34,16 +33,19 @@ import Textarea from "@/components/ui/textarea/Textarea.vue";
 /**
  * 知识库（KB 文档 + PC 认知对象）——/project/knowledge 落地页。
  *
+ * - Phase 2 P2-06：reports 页签退役（Analysis 独立承载报告，/project/analysis）；
+ *   页签构成 = kb | pc，默认 kb（裁决 D-1）。
  * - KB 页签：文档列表（最新修订投影）+ 详情（正文 / 修订历史 / 草稿确认发布）。
  *   确认门在后端（真人 interactive 会话；AI/API Key 403）——按钮仅是入口。
  * - PC 页签：认知对象列表（生命周期徽章 + 最新修订摘要）。
+ * - 深链：?doc=/?object= 行为不变；?report= 兼容跳转 Analysis 报告详情（§6 定版表）。
  */
 const { t } = useI18n();
 const shell = useShellStore();
 const currentProjectId = computed(() => shell.currentProjectId);
 
-type TabKey = "reports" | "kb" | "pc";
-const activeTab = ref<TabKey>("reports");
+type TabKey = "kb" | "pc";
+const activeTab = ref<TabKey>("kb");
 const loading = ref(false);
 const errorText = ref("");
 
@@ -160,11 +162,6 @@ type BadgeTone = "success" | "warning" | "danger" | "neutral";
 /** 页签项（Tabs 组件契约；计数随列表刷新）。 */
 const tabItems = computed(() => [
   {
-    // D-5：报告优先——先报告，后报告内容。
-    value: "reports",
-    label: t("s01.knowledge.tab.reports")
-  },
-  {
     value: "kb",
     label: `${t("s01.knowledge.tab.kb")} (${kbRows.value.length})`
   },
@@ -182,14 +179,29 @@ const docTypeOptions = computed(() => [
   { value: "requirement", label: t("s01.knowledge.ingest.typeRequirement") }
 ]);
 
-/* ── 深链（搜索结果 → 自动展开 / 切页签）────────────────────────────── */
+/* ── 深链（搜索结果 → 自动展开 / 切页签；?report= 兼容跳转）────────────── */
 
 const route = useRoute();
+const router = useRouter();
+
+/** 兼容跳转幂等守卫：同一 report 在本组件生命周期内只跳一次
+ * （挂载与「项目就绪重放」各调一次 applyDeepLink，重复 replace 无意义）。 */
+let jumpedReport: string | null = null;
 
 async function applyDeepLink() {
   const reportId = route.query.report;
   if (typeof reportId === "string" && reportId) {
-    activeTab.value = "reports";
+    if (reportId === jumpedReport) return;
+    // Phase 2 P2-06 兼容跳转（方案 §6 定版表）：报告已迁 Analysis 详情页。
+    // 保留 project_id 等其余 query，report 自身升级为路径参数——不退化为丢参
+    // redirect。跳转失败（非法/跨项目 ID）由详情页 GAP-6 显式错误态呈现。
+    // report 与 doc/object 同现时本分支先行跳离（组合自然消解，测试固化）。
+    jumpedReport = reportId;
+    const { report: _report, ...rest } = route.query;
+    await router.replace({
+      path: `/project/analysis/reports/${reportId}`,
+      query: rest
+    });
     return;
   }
   const docId = route.query.doc;
@@ -407,12 +419,6 @@ watch(
     <div class="knowledge-page">
       <!-- Tabs 仅作页签触发行；内容块跨页签共享（影响分析等），按 activeTab 条件渲染。 -->
       <Tabs v-model="activeTab" class="knowledge-tabs" :tabs="tabItems" />
-
-      <!-- D-5 · 分析报告（首位置页签；面板自带轮询/详情/关闭/深链） -->
-      <AnalysisReportsPanel
-        v-if="activeTab === 'reports'"
-        :project-id="currentProjectId"
-      />
 
       <!-- 影响分析（遍历可视化；正式关系多跳） -->
       <details class="impact-panel">
