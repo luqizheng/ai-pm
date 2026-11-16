@@ -6,7 +6,7 @@ import {
   type RouterHistory
 } from "vue-router";
 
-import { navGroups, type NavItem } from "./navigation";
+import { globalNavConfig, projectNavConfig, type NavItem } from "./navigation";
 import { AUTH_PATHS, authRoutes } from "./auth";
 import { getAccessToken, getRefreshToken } from "@/api/base/token-storage";
 import NotificationsView from "@/views/notifications/NotificationsView.vue";
@@ -85,11 +85,13 @@ function navItemRoutes(item: NavItem): RouteRecordRaw[] {
   return routes;
 }
 
-/** 全部路由记录（导航树 → 路由） */
+/** 全部路由记录（导航树 → 路由；多配置源派生，见 navigation.ts 三源说明） */
 export function buildRoutes(): RouteRecordRaw[] {
   const routes: RouteRecordRaw[] = [];
 
-  for (const group of navGroups) {
+  // 导航派生路由：全局 + 项目两源。settingsNavConfig 仅供侧栏渲染（C3 接线），
+  // 其路由由下方手工段注册，不在此派生——避免重复注册触发重复路径守卫。
+  for (const group of [...globalNavConfig, ...projectNavConfig]) {
     for (const item of group.items) {
       routes.push(...navItemRoutes(item));
     }

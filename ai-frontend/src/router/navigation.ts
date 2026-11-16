@@ -54,6 +54,11 @@ export interface NavItem {
   children?: NavChild[];
   /** 是否需要展开才显示子菜单（无 chevron 的纯链接项为 false） */
   expandable?: boolean;
+  /**
+   * 遗留管理入口标记（NAV-0103 待核验归属；C1 起为数据标识，渲染层暂不消费）。
+   * 带标记的项在归属裁决前维持现「管理」组原样呈现，不得包装为平台管理分区。
+   */
+  legacyPending?: boolean;
 }
 
 /** 二级子菜单项 */
@@ -80,7 +85,10 @@ export interface NavGroup {
   projectScoped?: boolean;
 }
 
-/** 导航分组顺序 = Figma 视觉顺序 */
+/**
+ * 兼容视图：现有侧栏与契约测试消费的四组树（个人/工作区/项目模块/管理）。
+ * 组合顺序 = 现行视觉顺序；区域排序规则见 NAV_REGION_ORDER——存储顺序不决定视觉顺序。
+ */
 export const navGroups: NavGroup[] = [
   {
     id: "personal",
@@ -232,6 +240,8 @@ export const navGroups: NavGroup[] = [
         path: "/admin/settings",
         labelKey: "shell.app.side.item.adminSettings",
         icon: Settings2,
+        // 遗留管理入口：NAV-0103 待核验归属，裁决前原样保留（C4 不迁移）
+        legacyPending: true,
         component: () =>
           import("@/views/admin/AdminSettingsView.vue").then(
             module => module.default
@@ -250,6 +260,8 @@ export const navGroups: NavGroup[] = [
         path: "/admin/announcements",
         labelKey: "shell.app.side.item.adminAnnouncements",
         icon: Megaphone,
+        // 遗留管理入口：NAV-0103 待核验归属（含迁团队后仍禁用助手的语义），裁决前原样保留
+        legacyPending: true,
         component: () =>
           import("@/views/admin/AdminAnnouncementsView.vue").then(
             module => module.default
@@ -272,6 +284,101 @@ export const navGroups: NavGroup[] = [
 
 /** 扁平化后的全部导航项（命令面板用） */
 export const flatNavItems: NavItem[] = navGroups.flatMap(group => group.items);
+
+/**
+ * 导航区域排序规则（R2-D1 / V1.2 §6.1）：
+ * Personal → Team → Current Project（条件显示）→ 遗留管理入口（尾部）。
+ *
+ * **存储顺序不决定视觉顺序**：三个配置源的数组顺序仅是存储约定；区域渲染
+ * 顺序以本规则为准（C2/C3 在 SideNav 按此接线）。legacy 区两项带
+ * NavItem.legacyPending 标记（NAV-0103 待核验），归属裁决前维持现
+ * 「管理」组原样呈现，不得包装为平台管理分区。
+ */
+export const NAV_REGION_ORDER = [
+  "personal",
+  "team",
+  "project",
+  "adminLegacy"
+] as const;
+
+export type NavRegionId = (typeof NAV_REGION_ORDER)[number];
+
+/**
+ * 全局导航配置源（Personal / Team / 遗留管理入口）。
+ *
+ * C2 区域渲染与 C4 Team 迁移的接线面：消费方按 NAV_REGION_ORDER 取区域，
+ * 不依赖本数组顺序。
+ */
+export const globalNavConfig: NavGroup[] = navGroups.filter(
+  group =>
+    group.id === "personal" || group.id === "workspace" || group.id === "admin"
+);
+
+/**
+ * 项目导航配置源（Current Project 区域）。
+ *
+ * C3 单侧栏分层的接线面：项目总控台 / 业务模块组 / 项目设置组的区域归属
+ * 在 C3 落位；本卡仅以命名源固化现状（modules 组）。
+ */
+export const projectNavConfig: NavGroup[] = navGroups.filter(
+  group => group.id === "modules"
+);
+
+/** 项目设置导航条目（侧栏渲染专用形态，见 settingsNavConfig 注释） */
+export interface ProjectSettingsNavItem {
+  /** 稳定标识（与 settings.nav.<id> i18n key 尾段一致） */
+  id: string;
+  labelKey: string;
+  path: string;
+  /** 规划项：目标页面未落地（渲染层须给出可见的规划标识） */
+  planned?: boolean;
+  /** 二级条目（如开发环境的 Devices / Executors / Runners，C3 增补） */
+  children?: Array<{
+    id: string;
+    labelKey: string;
+    path: string;
+    planned?: boolean;
+  }>;
+}
+
+/**
+ * 项目设置导航配置源（V1.2 §5 Current Project → 项目设置）。
+ *
+ * **仅供侧栏渲染接线（C3 起消费），buildRoutes 不消费本源**——项目设置
+ * 路由由 router/index.ts 手工注册（避免重复注册）。
+ * R-1 口径：不含独立 ssh-keys 条目（现有页面保留至后续迁入仓库分区）。
+ * C3 增补：开发环境子树（Devices/Executors/Runners，含新 i18n key 与
+ * /project/settings/devenv 父路由）。
+ */
+export const settingsNavConfig: ProjectSettingsNavItem[] = [
+  {
+    id: "projectGeneral",
+    labelKey: "settings.nav.projectGeneral",
+    path: "/project/settings/general",
+    planned: true
+  },
+  {
+    id: "projectMembers",
+    labelKey: "settings.nav.projectMembers",
+    path: "/project/settings/members",
+    planned: true
+  },
+  {
+    id: "repositories",
+    labelKey: "settings.nav.repositories",
+    path: "/project/settings/repositories"
+  },
+  {
+    id: "runners",
+    labelKey: "settings.nav.runners",
+    path: "/project/settings/runners"
+  },
+  {
+    id: "projectAi",
+    labelKey: "settings.nav.projectAi",
+    path: "/project/settings/ai"
+  }
+];
 
 /**
  * 判定某路径是否为导航项的激活态。
