@@ -1,6 +1,7 @@
-# P3-11 下一阶段实施方案 — ProjC 正式链路接入与旧路径收敛（T-1/T-2/T-3）V1.0
+# P3-11 下一阶段实施方案 — ProjC 正式链路接入与旧路径收敛（T-1/T-2/T-3）V1.1
 
-- 日期：2026-11-16 · 基准：master `ac8eb298`（Stage 1 已入库）· 状态：**方案待范围确认，确认后才实施**
+- 日期：2026-11-16 · 基准：master `97d329f7`（close 契约核查通过）· 状态：**放行实施**（V1.0 + 放行意见四项闭合，见 §8）
+- 版本记录：V1.0（任务拆分）→ **V1.1（放行意见四项闭合 + 分阶段开发验证结构）**
 - 定调（产品指令，2026-11-16 重申）：**T-1 与 T-2 同批原子切换**——一次落地后旧发布路径关闭、新链已接通；不存在「先关旧、久等新」的窗口期；不建数据迁移/回填/双写/历史兼容。
 
 ## 0. 目标终态
@@ -106,5 +107,42 @@ flowchart TD
 
 1. **close 事务改动**（本批唯一触碰 Phase 2 契约点）：限定为「新增 projc 分流分支」，pc 分支逐行不动；以 `apps/pm-api/tests/analysis_reports.rs` 全绿为回归门。
 2. **worker 改动波及分析链回归**：`repo_manual_analyze.rs`（幂等/409/422）不触认知派生段，风险低；`identity_synthesis.rs` 依赖报告打开门——close 语义不变，预期绿。
-3. **pc snapshot 字典废弃**（若确认点①=A）：`load_object_type` 拒绝后，任何残留 pc 路径调用会显式报错而非静默——这是想要的 fail-closed；identity 链用 product_* 类型不受影响。
+3. **pc snapshot 字典废弃**（确认点①=A）：`load_object_type` 拒绝后，任何残留 pc 路径调用会显式报错而非静默——这是想要的 fail-closed；identity 链用 product_* 类型不受影响。
 4. **批量规模**：W2 mirror 量大（pc proposal.rs+publish.rs ≈ 2100 行语义）；采用 pc 同构+域内改名策略，测试先行锁定行为等价。
+
+## 8. 放行意见四项闭合（V1.1 新增；2026-11-16 放行意见逐条落实）
+
+### 8.1 projc_source_id 完整性（闭合项一）
+
+- **写入点唯一**：`mark_analyzed`（报告转 analyzed）与 `ensure_for_intake` 同一事务内登记 **双源**——`pc_source_id`（identity 综合通道，不变）+ **`projc_source_id`（新增，ProjC 快照通道）**；projc 源登记失败 = 报告**不得**进入 analyzed（硬失败，不静默）。
+- **close 分流不以 NULL 分支新数据**：`projc_source_id IS NOT NULL` 即分流；NULL 仅可能出现在 0026 之前的历史报告行 = **显式 Legacy 标记**，close 时跳过 ProjC 分支并**写审计事件**（`analysis_report.closed` payload 带 `projc_branch: "legacy_no_source"`），绝不静默。
+- 无历史迁移、无回填、无双写——与 AGENTS.md 规则 1 一致。
+
+### 8.2 待处理数量语义（闭合项二）
+
+- `pending_proposals` 语义**不变**（=pc draft/submitted 计数）。
+- 列表行/详情新增 `projc_pending_proposals`（projc draft/submitted 计数）与 `total_pending_proposals`（双域合计，展示用）；既有字段统计口径零改动。
+
+### 8.3 响应兼容性（闭合项三）
+
+- C-9/C-10/C-11 新增字段全部为**加法**；新增数组字段**恒返回数组**（空集返回 `[]` 而非 null，序列化层保证）。
+- 兼容测试入 T-3 矩阵：`close_compat_old_consumers`——断言 CloseOutcome 旧 7 字段逐一存在且类型不变、审计 payload 旧 6 键逐一存在、详情旧 4 字段存在且 `proposals/pc_revisions` 在无 pc 数据时为空数组；列表行旧字段逐一存在。
+
+### 8.4 close 发布失败与事务语义（闭合项四）
+
+| 情形 | PC 分支（不变） | ProjC 分支（同构新域） |
+|---|---|---|
+| 发布成功 | `pc-decision:{id}` → pc.cognition_version，计数 applied | `projc-decision:{id}` → projc.cognition_version，独立计数 |
+| 发布失败（CAS 失配等） | 发布事务内置提案 failed，计数 publish_failed，**不阻断关闭** | 同构；**独立计数**，不阻断 |
+| 重试 | 提案终态 failed；报告已 closed 不可再关；修复走新提案 | 同构 |
+| 重复 close | 状态门 409（analyzed 才可关） | 同一状态门，双域共用 |
+| 幂等重放 | 同 operation_id 重放返回既有 receipt，不产生重复版本 | 同构（账本唯一约束 + 重放路径） |
+| 事务边界 | 单事务：双域发布+撤回+KB 处置+closed+锚点；任一**结构失败**整体回滚；**发布失败**仅计数（发布事务自带独立事务，锁定在账本中可审计） | 双域发布结果均可由账本+审计追溯，不存在不可恢复的部分状态 |
+
+### 8.5 分阶段开发与验证（放行意见结构调整）
+
+| 阶段 | 内容 | 验证门 | 行为影响 |
+|---|---|---|---|
+| **阶段一** | W1 迁移 0026（关系三表+冲突两表+端点闭合触发器+`projc_source_id` 列；**不含**字典废弃）+ W2/W3 projc 提案/审批/发布/关系/冲突服务 + `projc_formal_chain` 测试 | 服务层全绿 + 既有回归全绿 | **纯增量，现网零变化**（新表零生产写入者） |
+| **阶段二（切换批）** | W4 worker 重挂 + W5 close 双域分流 + W6 审阅路由/API/前端最小渲染 + W7 pc snapshot 字典废弃 + 双源登记 | T-3 全矩阵 + §3 回归门全绿 | 旧路径关闭、新链接通（原子切换点） |
+| **统一验收** | T-3 矩阵 + Phase 2 close 回归 + 兼容测试 + 注册表 V1.2/台账/交付报告 | 逐条对照完成标准 | — |
