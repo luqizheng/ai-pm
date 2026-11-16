@@ -3,9 +3,18 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
-import { nextTick } from "vue";
-import { Toast, ToastHost } from "./index";
+import { defineComponent, nextTick } from "vue";
+import { Toast, ToastHost, useToast } from "./index";
 import { i18n } from "@/lib/i18n";
+
+/** 模拟业务页面：与 ToastHost 无祖先关系的兄弟组件里调 useToast()。 */
+const SiblingPage = defineComponent({
+  setup() {
+    const { toast, dismiss } = useToast();
+    return { toast, dismiss };
+  },
+  template: "<div />"
+});
 
 const toastSource = readFileSync(resolve(__dirname, "Toast.vue"), "utf8");
 const hostSource = readFileSync(resolve(__dirname, "ToastHost.vue"), "utf8");
@@ -157,37 +166,44 @@ describe("Toast", () => {
     expect(toastSource).not.toMatch(/\b240ms\b/);
   });
 
-  it("ToastHost 同屏最多 1 条，新 toast 替换旧 toast", async () => {
-    const host = mount(ToastHost, {
-      global: { plugins: [i18n] },
-      attachTo: document.body
-    });
-    wrappers.push(host);
+  /** 按根组件形态挂载：ToastHost 与业务页面互为兄弟（App.vue 同构）。 */
+  function mountHostWithSibling() {
+    const wrapper = mount(
+      {
+        components: { ToastHost, SiblingPage },
+        template: "<div><ToastHost /><SiblingPage /></div>"
+      },
+      { global: { plugins: [i18n] }, attachTo: document.body }
+    );
+    wrappers.push(wrapper);
+    return wrapper;
+  }
 
-    host.vm.toast({ variant: "success", title: "第一条" });
+  it("ToastHost 同屏最多 1 条，新 toast 替换旧 toast", async () => {
+    mountHostWithSibling();
+    const { toast } = useToast();
+
+    toast({ variant: "success", title: "第一条" });
     await flush();
     expect(document.querySelectorAll(".ui-toast")).toHaveLength(1);
     expect(toastEl()?.textContent).toContain("第一条");
 
-    host.vm.toast({ variant: "danger", title: "第二条" });
+    toast({ variant: "danger", title: "第二条" });
     await flush();
     expect(document.querySelectorAll(".ui-toast")).toHaveLength(1);
     expect(toastEl()?.textContent).toContain("第二条");
     expect(toastEl()?.textContent).not.toContain("第一条");
   });
 
-  it("ToastHost 暴露 toast / dismiss 接口", async () => {
-    const host = mount(ToastHost, {
-      global: { plugins: [i18n] },
-      attachTo: document.body
-    });
-    wrappers.push(host);
+  it("兄弟组件 useToast() 可触发渲染（G-UI-1：不再静默 no-op）", async () => {
+    mountHostWithSibling();
+    const { toast, dismiss } = useToast();
 
-    host.vm.toast({ variant: "info", title: "占位提示" });
+    toast({ variant: "info", title: "占位提示" });
     await flush();
     expect(toastEl()?.getAttribute("role")).toBe("status");
 
-    host.vm.dismiss();
+    dismiss();
     await flush();
     expect(document.querySelectorAll(".ui-toast")).toHaveLength(0);
   });

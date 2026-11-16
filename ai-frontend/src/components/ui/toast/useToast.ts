@@ -1,4 +1,4 @@
-import { inject } from "vue";
+import { ref } from "vue";
 
 export interface ToastOptions {
   variant?: "success" | "info" | "warning" | "danger";
@@ -10,20 +10,41 @@ export interface ToastOptions {
 }
 
 /**
- * Toast 调用入口。
+ * Toast 应用级单例状态（G-UI-1）。
  *
- * 页面通过 `const { toast } = useToast()` 触发提示；
- * ToastHost 尚未挂载时降级为 no-op（不抛错，便于单测与 SSR）。
+ * 状态放模块级而非 provide/inject：ToastHost 挂在根组件，与页面是兄弟
+ * 而非祖先，provide 覆盖不到页面子树（此前因此静默 no-op）。
+ * 同屏最多 1 条，新 toast 替换旧 toast（Phase 2 §6.3）。
  */
 export interface ToastApi {
   toast(options: ToastOptions): void;
   dismiss(): void;
 }
 
-export const TOAST_HOST_KEY = Symbol("prism.toast.host");
+const current = ref<ToastOptions | null>(null);
+const seq = ref(0);
 
-const NOOP: ToastApi = { toast: () => {}, dismiss: () => {} };
+/** ToastHost 渲染用的状态（应用内单例，勿在业务代码直接赋值）。 */
+export function useToastState() {
+  return { current, seq };
+}
 
+export const toastApi: ToastApi = {
+  toast(options: ToastOptions) {
+    current.value = { ...options };
+    seq.value += 1;
+  },
+  dismiss() {
+    current.value = null;
+  }
+};
+
+/**
+ * Toast 调用入口。
+ *
+ * 页面通过 `const { toast } = useToast()` 触发提示；
+ * 状态为应用级单例，与 ToastHost 挂载位置、挂载与否无关。
+ */
 export function useToast(): ToastApi {
-  return inject<ToastApi | undefined>(TOAST_HOST_KEY) ?? NOOP;
+  return toastApi;
 }

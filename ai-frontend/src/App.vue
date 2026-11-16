@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 
+import { ToastHost } from "@/components/ui/toast";
 import { WorkspaceShell } from "@/components/shell";
 
 /**
@@ -26,4 +27,7 @@ const isBareLayout = computed(() => Boolean(route.meta.layout));
        两支互斥渲染，避免根级 RouterView 套壳内 RouterView 造成 depth+1 空渲染。 -->
   <RouterView v-if="isBareLayout" />
   <WorkspaceShell v-else />
+  <!-- 全局 Toast 出口（G-UI-1）：viewport 为 fixed 定位，
+       挂在根上同时覆盖 bare 页与壳页；状态是应用级单例，见 useToast.ts -->
+  <ToastHost />
 </template>
