@@ -33,7 +33,7 @@ export class VizContractError extends Error {
 
 function requireString(value: unknown, field: string): string {
   if (typeof value !== "string") {
-    throw new VizContractError(`字段 ${field} 缺失或类型不符`, field);
+    throw new VizContractError(`field ${field} missing or not a string`, field);
   }
   return value;
 }
@@ -41,14 +41,14 @@ function requireString(value: unknown, field: string): string {
 function optionalString(value: unknown, field: string): string | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value !== "string") {
-    throw new VizContractError(`字段 ${field} 类型不符`, field);
+    throw new VizContractError(`field ${field} is not a string`, field);
   }
   return value;
 }
 
 function requireArray(value: unknown, field: string): unknown[] {
   if (!Array.isArray(value)) {
-    throw new VizContractError(`字段 ${field} 缺失或不是数组`, field);
+    throw new VizContractError(`field ${field} missing or not an array`, field);
   }
   return value;
 }
@@ -57,7 +57,7 @@ function optionalNature(value: unknown, field: string): VizNature | undefined {
   if (value === undefined || value === null) return undefined;
   if (value !== "business" && value !== "explanatory") {
     throw new VizContractError(
-      `字段 ${field} 的取值非法：${String(value)}`,
+      `field ${field} has invalid value: ${String(value)}`,
       field
     );
   }
@@ -68,7 +68,7 @@ function optionalBudget(value: unknown, field: string): VizBudget | undefined {
   if (value === undefined || value === null) return undefined;
   if (value !== "strict" && value !== "balanced" && value !== "faithful") {
     throw new VizContractError(
-      `字段 ${field} 的取值非法：${String(value)}`,
+      `field ${field} has invalid value: ${String(value)}`,
       field
     );
   }
@@ -198,7 +198,7 @@ export function toVizArtifact(dto: unknown, path = "artifact"): VizArtifact {
     state !== "rejected"
   ) {
     throw new VizContractError(
-      `字段 ${path}.state 的取值非法：${String(state)}`,
+      `field ${path}.state has invalid value: ${String(state)}`,
       `${path}.state`
     );
   }
@@ -221,7 +221,7 @@ export function toVizArtifact(dto: unknown, path = "artifact"): VizArtifact {
 export function toLiveSpec(response: VizLiveResponse, path = "live"): VizSpec {
   const data = response?.data;
   if (!data) {
-    throw new VizContractError("Live 响应缺少 data", `${path}.data`);
+    throw new VizContractError("live response missing data", `${path}.data`);
   }
   return {
     spec_version: requireString(data.spec_version, `${path}.data.spec_version`),

@@ -615,7 +615,10 @@ export const designRoutesReady: Promise<void> = import.meta.env.DEV
       })
       .catch((error: unknown) => {
         // 设计目录是开发期附属品：加载失败不得阻断应用启动
-        console.error("[router] 设计目录路由注册失败", error);
+        console.error(
+          "[router] design catalog route registration failed",
+          error
+        );
       })
   : Promise.resolve();
 

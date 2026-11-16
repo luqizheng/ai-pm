@@ -108,19 +108,19 @@ const {
 const modelInputPlaceholder = computed(() => {
   switch (modelStatus.value) {
     case "unsupported":
-      return "该 Provider 不支持自动获取模型，请输入 model id（如 llama3:8b）";
+      return t("settings.team.ai.modelInputPlaceholder.unsupported");
     case "idle":
       return canLoadModels.value
-        ? "正在准备…"
-        : "填写 API 地址和 Key 后自动加载模型";
+        ? t("settings.team.ai.modelInputPlaceholder.ready")
+        : t("settings.team.ai.modelInputPlaceholder.fillEndpointAndKey");
     case "loading":
-      return "加载中…";
+      return t("settings.team.ai.modelInputPlaceholder.loading");
     case "fallback":
-      return "无法获取，已切换内置列表，可手动输入";
+      return t("settings.team.ai.modelInputPlaceholder.fallback");
     case "empty":
-      return "请手动输入 model id";
+      return t("settings.team.ai.modelInputPlaceholder.empty");
     case "success":
-      return "选择或输入 model id";
+      return t("settings.team.ai.modelInputPlaceholder.success");
     default:
       return "";
   }
@@ -137,7 +137,7 @@ const modelComboboxOptions = computed<ComboboxOption[]>(() => {
         out.push({
           value: item.id,
           label: item.name || item.id,
-          hint: item.desc,
+          hint: item.descKey ? t(item.descKey) : undefined,
           group: g.group
         });
       }

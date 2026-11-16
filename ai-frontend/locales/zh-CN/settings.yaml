@@ -449,6 +449,41 @@ settings:
         minimax: MiniMax
         ollama: Ollama（本地）
         openai_compatible: OpenAI 兼容（本地/自建）
+      modelGroups:
+        fromProvider: 来自 Provider
+        builtIn: 内置推荐
+      modelSourceHints:
+        fillEndpoint: 填写 API 地址后自动加载模型
+        fillApiKey: 填写 API Key 后自动加载模型
+        emptyFromProvider: Provider 返回为空，请手动输入 model id
+        providerEmpty: 该 Provider 未返回模型，请手动输入 model id
+        fetchFailedManual: 无法从 Provider 获取模型列表，请手动输入 model id
+        fetchFailedFallback: 无法从 Provider 获取模型列表，已切换为内置列表，可手动输入
+      modelInputPlaceholder:
+        unsupported: 该 Provider 不支持自动获取模型，请输入 model id（如 llama3:8b）
+        ready: 正在准备…
+        fillEndpointAndKey: 填写 API 地址和 Key 后自动加载模型
+        loading: 加载中…
+        fallback: 无法获取，已切换内置列表，可手动输入
+        empty: 请手动输入 model id
+        success: 选择或输入 model id
+      models:
+        deepseek_chat: 低延迟通用
+        deepseek_reasoner: 深度推理
+        gpt_4o: 实时多模态
+        gpt_4o_mini: 轻量快速
+        o3: 高级推理
+        gpt_5: 最新主力
+        glm_4_5: 主力
+        glm_4_5_flash: 低延迟
+        glm_4: 稳定
+        glm_4_air: 超长上下文
+        abab7_5_chat: 主力
+        abab6_5s_chat: 轻量
+        text_01: 文本生成
+        gemini_2_0_flash: 低延迟
+        gemini_2_0_pro: 主力
+        gemini_1_5_pro: 稳定
       status:
         not_configured: 未配置
         configured: 已配置

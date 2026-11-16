@@ -10,7 +10,8 @@ export type { LlmProvider, LlmProviderStatus, LlmProviderType };
 export interface StaticModel {
   id: string;
   name: string;
-  desc?: string;
+  /** 一句话说明的 i18n key（settings.team.ai.models.<id 非字母数字转 _>）。 */
+  descKey?: string;
 }
 
 /** Provider 的模型来源能力。
@@ -46,8 +47,16 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     listModelsEndpoint: "/v1/models",
     requireApiKeyForModels: true,
     staticModels: [
-      { id: "deepseek-chat", name: "deepseek-chat", desc: "低延迟通用" },
-      { id: "deepseek-reasoner", name: "deepseek-reasoner", desc: "深度推理" }
+      {
+        id: "deepseek-chat",
+        name: "deepseek-chat",
+        descKey: "settings.team.ai.models.deepseek_chat"
+      },
+      {
+        id: "deepseek-reasoner",
+        name: "deepseek-reasoner",
+        descKey: "settings.team.ai.models.deepseek_reasoner"
+      }
     ]
   },
   {
@@ -58,10 +67,18 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     listModelsEndpoint: "/models",
     requireApiKeyForModels: true,
     staticModels: [
-      { id: "gpt-4o", name: "gpt-4o", desc: "实时多模态" },
-      { id: "gpt-4o-mini", name: "gpt-4o-mini", desc: "轻量快速" },
-      { id: "o3", name: "o3", desc: "高级推理" },
-      { id: "gpt-5", name: "gpt-5", desc: "最新主力" }
+      {
+        id: "gpt-4o",
+        name: "gpt-4o",
+        descKey: "settings.team.ai.models.gpt_4o"
+      },
+      {
+        id: "gpt-4o-mini",
+        name: "gpt-4o-mini",
+        descKey: "settings.team.ai.models.gpt_4o_mini"
+      },
+      { id: "o3", name: "o3", descKey: "settings.team.ai.models.o3" },
+      { id: "gpt-5", name: "gpt-5", descKey: "settings.team.ai.models.gpt_5" }
     ]
   },
   {
@@ -72,10 +89,22 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     listModelsEndpoint: "/models",
     requireApiKeyForModels: true,
     staticModels: [
-      { id: "glm-4.5", name: "glm-4.5", desc: "主力" },
-      { id: "glm-4.5-flash", name: "glm-4.5-flash", desc: "低延迟" },
-      { id: "glm-4", name: "glm-4", desc: "稳定" },
-      { id: "glm-4-air", name: "glm-4-air", desc: "超长上下文" }
+      {
+        id: "glm-4.5",
+        name: "glm-4.5",
+        descKey: "settings.team.ai.models.glm_4_5"
+      },
+      {
+        id: "glm-4.5-flash",
+        name: "glm-4.5-flash",
+        descKey: "settings.team.ai.models.glm_4_5_flash"
+      },
+      { id: "glm-4", name: "glm-4", descKey: "settings.team.ai.models.glm_4" },
+      {
+        id: "glm-4-air",
+        name: "glm-4-air",
+        descKey: "settings.team.ai.models.glm_4_air"
+      }
     ]
   },
   {
@@ -86,9 +115,21 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     listModelsEndpoint: "/models",
     requireApiKeyForModels: true,
     staticModels: [
-      { id: "abab7.5-chat", name: "abab7.5-chat", desc: "主力" },
-      { id: "abab6.5s-chat", name: "abab6.5s-chat", desc: "轻量" },
-      { id: "text-01", name: "text-01", desc: "文本生成" }
+      {
+        id: "abab7.5-chat",
+        name: "abab7.5-chat",
+        descKey: "settings.team.ai.models.abab7_5_chat"
+      },
+      {
+        id: "abab6.5s-chat",
+        name: "abab6.5s-chat",
+        descKey: "settings.team.ai.models.abab6_5s_chat"
+      },
+      {
+        id: "text-01",
+        name: "text-01",
+        descKey: "settings.team.ai.models.text_01"
+      }
     ]
   },
   {
@@ -97,9 +138,21 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     defaultEndpoint: "https://generativelanguage.googleapis.com",
     modelSource: "static",
     staticModels: [
-      { id: "gemini-2.0-flash", name: "gemini-2.0-flash", desc: "低延迟" },
-      { id: "gemini-2.0-pro", name: "gemini-2.0-pro", desc: "主力" },
-      { id: "gemini-1.5-pro", name: "gemini-1.5-pro", desc: "稳定" }
+      {
+        id: "gemini-2.0-flash",
+        name: "gemini-2.0-flash",
+        descKey: "settings.team.ai.models.gemini_2_0_flash"
+      },
+      {
+        id: "gemini-2.0-pro",
+        name: "gemini-2.0-pro",
+        descKey: "settings.team.ai.models.gemini_2_0_pro"
+      },
+      {
+        id: "gemini-1.5-pro",
+        name: "gemini-1.5-pro",
+        descKey: "settings.team.ai.models.gemini_1_5_pro"
+      }
     ]
   },
   {

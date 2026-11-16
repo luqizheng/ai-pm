@@ -5,6 +5,7 @@
  * 供应商 /models 端点的鉴权、路径、返回结构全收敛在这里。
  */
 import { ref, watch, computed } from "vue";
+import { i18n } from "@/lib/i18n";
 import type {
   LlmProviderType,
   ProviderCatalogEntry,
@@ -24,8 +25,10 @@ export interface CombinedModel extends StaticModel {
   fromApi: boolean;
 }
 
-const STATUS_GROUP = "来自 Provider";
-const STATIC_GROUP = "内置推荐";
+/** 分组名在 computed 内即时翻译，随 locale 切换响应式更新。 */
+const statusGroup = () =>
+  i18n.global.t("settings.team.ai.modelGroups.fromProvider");
+const staticGroup = () => i18n.global.t("settings.team.ai.modelGroups.builtIn");
 
 // ── 内存缓存：key = `${type}|${endpoint}|${api_key_hash}` ──────────────
 const cache = new Map<string, CombinedModel[]>();
@@ -122,7 +125,7 @@ export interface UseModelSourceReturn {
     Array<{ group?: string; items: CombinedModel[] }>
   >;
   status: import("vue").Ref<ModelLoadStatus>;
-  /** 失败或降级时的提示文案（i18n key 或硬编码）。 */
+  /** 失败或降级时的提示文案（已按当前 locale 翻译）。 */
   hint: import("vue").Ref<string | null>;
   /** 手动触发刷新（忽略缓存）。 */
   refresh: () => void;
@@ -153,7 +156,7 @@ export function useModelSource(
   const options = computed(() => {
     // 骨架态 → 返回 skeleton 占位项
     if (status.value === "loading") {
-      return [{ group: STATUS_GROUP, items: skeletonModels(6) }];
+      return [{ group: statusGroup(), items: skeletonModels(6) }];
     }
     // unsupported / static → 只展示 staticModels（或手动输入提示）
     if (status.value === "unsupported") {
@@ -163,7 +166,7 @@ export function useModelSource(
       }
       return [
         {
-          group: STATIC_GROUP,
+          group: staticGroup(),
           items: staticModels.map(m => ({ ...m, fromApi: false as const }))
         }
       ];
@@ -178,7 +181,7 @@ export function useModelSource(
       if (staticModels.length === 0) return [];
       return [
         {
-          group: STATIC_GROUP,
+          group: staticGroup(),
           items: staticModels.map(m => ({ ...m, fromApi: false as const }))
         }
       ];
@@ -187,9 +190,9 @@ export function useModelSource(
     const api = models.value.filter(m => m.fromApi);
     const staticList = models.value.filter(m => !m.fromApi);
     const groups: Array<{ group?: string; items: CombinedModel[] }> = [];
-    if (api.length) groups.push({ group: STATUS_GROUP, items: api });
+    if (api.length) groups.push({ group: statusGroup(), items: api });
     if (staticList.length)
-      groups.push({ group: STATIC_GROUP, items: staticList });
+      groups.push({ group: staticGroup(), items: staticList });
     return groups;
   });
 
@@ -221,13 +224,17 @@ export function useModelSource(
     // api 类型但未填 endpoint/key → idle
     if (!endpoint.value.trim()) {
       status.value = "idle";
-      hint.value = "填写 API 地址后自动加载模型";
+      hint.value = i18n.global.t(
+        "settings.team.ai.modelSourceHints.fillEndpoint"
+      );
       models.value = p.staticModels.map(m => ({ ...m, fromApi: false }));
       return;
     }
     if (p.requireApiKeyForModels && !apiKey.value.trim()) {
       status.value = "idle";
-      hint.value = "填写 API Key 后自动加载模型";
+      hint.value = i18n.global.t(
+        "settings.team.ai.modelSourceHints.fillApiKey"
+      );
       models.value = p.staticModels.map(m => ({ ...m, fromApi: false }));
       return;
     }
@@ -237,7 +244,9 @@ export function useModelSource(
       models.value = cache.get(ckey)!;
       if (models.value.length === 0) {
         status.value = "empty";
-        hint.value = `${STATUS_GROUP} 返回为空，请手动输入 model id`;
+        hint.value = i18n.global.t(
+          "settings.team.ai.modelSourceHints.emptyFromProvider"
+        );
       } else {
         status.value = "success";
         hint.value = null;
@@ -268,7 +277,9 @@ export function useModelSource(
 
       if (apiIds.length === 0 && combined.length === 0) {
         status.value = "empty";
-        hint.value = "该 Provider 未返回模型，请手动输入 model id";
+        hint.value = i18n.global.t(
+          "settings.team.ai.modelSourceHints.providerEmpty"
+        );
       } else {
         status.value = "success";
         hint.value = null;
@@ -285,11 +296,14 @@ export function useModelSource(
       models.value = staticOnly;
       if (staticOnly.length === 0) {
         status.value = "empty";
-        hint.value = "无法从 Provider 获取模型列表，请手动输入 model id";
+        hint.value = i18n.global.t(
+          "settings.team.ai.modelSourceHints.fetchFailedManual"
+        );
       } else {
         status.value = "fallback";
-        hint.value =
-          "无法从 Provider 获取模型列表，已切换为内置列表，可手动输入";
+        hint.value = i18n.global.t(
+          "settings.team.ai.modelSourceHints.fetchFailedFallback"
+        );
       }
     }
   }

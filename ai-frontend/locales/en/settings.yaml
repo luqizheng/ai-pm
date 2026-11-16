@@ -449,6 +449,41 @@ settings:
         minimax: MiniMax
         ollama: Ollama (local)
         openai_compatible: OpenAI-compatible (local/self-hosted)
+      modelGroups:
+        fromProvider: From provider
+        builtIn: Built-in
+      modelSourceHints:
+        fillEndpoint: Enter the API endpoint to load models automatically
+        fillApiKey: Enter the API key to load models automatically
+        emptyFromProvider: Provider returned an empty list; enter a model id manually
+        providerEmpty: This provider returned no models; enter a model id manually
+        fetchFailedManual: Failed to load models from the provider; enter a model id manually
+        fetchFailedFallback: Failed to load models from the provider; switched to the built-in list; you can enter a model id manually
+      modelInputPlaceholder:
+        unsupported: This provider does not support loading models automatically; enter a model id (e.g. llama3:8b)
+        ready: Preparing…
+        fillEndpointAndKey: Enter the API endpoint and key to load models automatically
+        loading: Loading…
+        fallback: Unavailable; switched to the built-in list; you can enter a model id manually
+        empty: Enter a model id manually
+        success: Select or enter a model id
+      models:
+        deepseek_chat: Low-latency general
+        deepseek_reasoner: Deep reasoning
+        gpt_4o: Realtime multimodal
+        gpt_4o_mini: Lightweight and fast
+        o3: Advanced reasoning
+        gpt_5: Latest flagship
+        glm_4_5: Flagship
+        glm_4_5_flash: Low latency
+        glm_4: Stable
+        glm_4_air: Extra-long context
+        abab7_5_chat: Flagship
+        abab6_5s_chat: Lightweight
+        text_01: Text generation
+        gemini_2_0_flash: Low latency
+        gemini_2_0_pro: Flagship
+        gemini_1_5_pro: Stable
       status:
         not_configured: Not configured
         configured: Configured
