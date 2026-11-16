@@ -87,7 +87,7 @@ test result: ok. 11 passed; 0 failed
 | 工作树无未交付改动 | **PASS** | `git status`：仅 `ai-frontend/…design.yaml/design.ts/design.test.ts/DesignLayout.vue/DesignNavV2View.vue/nav-v2/`（用户在途改动，本次未触碰）；无其他未交付文件 |
 | 迁移/测试/文档齐备 | **PASS** | 阶段一 12 文件（0026+服务层五文件+事件+handlers+测试）；阶段二 23 文件（0027+W4~W8+前端+addendum V1.2+台账 §10.3+交付报告）；均入提交 |
 | 不含本机环境配置与敏感凭证 | **PASS** | `git diff 391c57e~1..e9f66ec` 扫描私钥块/AKIA/ghp_/password= 模式 → 0 命中；仅 1 处 `aipm:aipm@127.0.0.1:16433` = AGENTS.md 规则 3 已声明的本地开发库约定（非泄漏）。测试夹具 `apps/pm-api/tests/keys/*.pem` 为既有仓库内 JWT 测试键（本批未新增） |
-| 约束遵守 | **PASS** | 未 push（origin/master 仍止于 65ef3af）；未自行宣布验收/冻结；未改裁决；未删改任何测试断言（本报告所有测试均原样通过） |
+| 约束遵守 | **PASS** | 未 push（登记时点 origin/master 基线 = b0d8973，i18n 修复，已在阶段一前合入本地；勘误：原稿误记 65ef3af）；未自行宣布验收/冻结；未改裁决；未删改任何测试断言（本报告所有测试均原样通过） |
 
 ## 5. 汇总
 
