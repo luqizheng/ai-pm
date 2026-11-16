@@ -5,6 +5,7 @@ import { nextTick } from "vue";
 import ProjectSwitcher from "./ProjectSwitcher.vue";
 import SideNav from "./SideNav.vue";
 import { useShellStore } from "@/stores/shell";
+import { i18n } from "@/lib/i18n";
 import { mountShell } from "./test-utils";
 
 /**
@@ -24,8 +25,8 @@ describe("SideNav", () => {
     const { wrapper, router } = mountShell(SideNav);
     const shell = useShellStore();
     shell.setProjects([
-      { id: "p1", name: "项目 A" },
-      { id: "p2", name: "项目 B" }
+      { id: "p1", name: "Project A" },
+      { id: "p2", name: "Project B" }
     ]);
     shell.setCurrentProject("p1");
     await nextTick();
@@ -44,6 +45,19 @@ describe("SideNav", () => {
       .findAll(".shell-sidenav__item")
       .map(el => el.attributes("href"));
     expect(hrefs.some(href => href?.startsWith("/project/"))).toBe(false);
+  });
+
+  it("项目总览已更名为团队总览（Q-08：只改文案不改路径）", async () => {
+    const { wrapper } = mountShell(SideNav);
+    await nextTick();
+
+    const item = wrapper
+      .findAll(".shell-sidenav__item")
+      .find(el => (el.attributes("href") ?? "").includes("/dashboard"));
+    expect(item).toBeTruthy();
+    expect(item!.find(".shell-sidenav__item-label").text()).toBe(
+      i18n.global.t("shell.app.side.item.dashboard")
+    );
   });
 
   it("有当前项目：渲染紧凑项目头与五组结构（含项目设置置底）", async () => {
@@ -101,7 +115,9 @@ describe("SideNav", () => {
     // 业务模块 2 项（Analysis / Product Cognition）+ 项目设置 3 项
     // （基础设置 / 成员 / AI 配置；开发环境标识在其子项）
     expect(planned.length).toBe(5);
-    expect(planned[0].text()).toBe("规划");
+    expect(planned[0].text()).toBe(
+      i18n.global.t("shell.app.side.plannedBadge")
+    );
   });
 
   it("开发环境父子路由：父项 redirect 至 Devices 且激活态覆盖子项", async () => {
@@ -155,7 +171,8 @@ describe("SideNav", () => {
         .findAll(".shell-sidenav__item")
         .filter(el => (el.attributes("href") ?? "").includes("/admin/"));
     // 默认展开：管理组与其他分组同级呈现，不收成一行小标题
-    expect(adminItems().length).toBe(3);
+    // （C4 后遗留管理组仅剩平台设置/公告两项；成员与 AI Provider 已迁团队设置）
+    expect(adminItems().length).toBe(2);
 
     const toggles = wrapper.findAll(".shell-sidenav__group-toggle");
     await toggles[2].trigger("click");

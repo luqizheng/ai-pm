@@ -226,9 +226,11 @@ shell:
         projectCognition: Project Cognition
         environments: Execution Environments
         adminSettings: Settings
-        aiProviders: AI Models
+        aiProviders: AI Provider
         adminMembers: Members
         adminAnnouncements: Announcements
+        teamSettings: Team Settings
+        gitCredentials: Git Credentials (SSH Keys)
       sub:
         overview: Overview
         branches: Branches

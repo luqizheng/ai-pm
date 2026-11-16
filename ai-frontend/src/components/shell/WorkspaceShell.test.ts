@@ -78,6 +78,47 @@ describe("WorkspaceShell", () => {
     }
   );
 
+  it.each(["/settings/team/members", "/settings/team/ai-providers"])(
+    "team settings admin page (%s): assistant chrome hidden (C4)",
+    async path => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: buildRoutes()
+      });
+      await router.push(path);
+      await router.isReady();
+      const { wrapper } = mountShell(WorkspaceShell, {}, router);
+      await nextTick();
+
+      expect(wrapper.find(".workspace-chat").exists()).toBe(false);
+      expect(wrapper.find(".shell-topbar__assistant").exists()).toBe(false);
+      expect(wrapper.attributes("data-ai-panel")).toBe("closed");
+      expect(wrapper.attributes("data-context")).toBe("closed");
+    }
+  );
+
+  it.each([
+    "/settings/team/general",
+    "/settings/team",
+    "/settings/team/credentials"
+  ])(
+    "team settings non-admin page (%s): assistant chrome visible (4a lock)",
+    async path => {
+      const router = createRouter({
+        history: createMemoryHistory(),
+        routes: buildRoutes()
+      });
+      await router.push(path);
+      await router.isReady();
+      const { wrapper } = mountShell(WorkspaceShell, {}, router);
+      await nextTick();
+
+      expect(wrapper.find(".workspace-chat").exists()).toBe(true);
+      expect(wrapper.find(".shell-topbar__assistant").exists()).toBe(true);
+      expect(wrapper.attributes("data-ai-panel")).toBe("open");
+    }
+  );
+
   it("专注模式：data-focus=on 时收起 AI Chat 与右栏，退出恢复", async () => {
     const { wrapper } = mountShell(WorkspaceShell);
     await nextTick();

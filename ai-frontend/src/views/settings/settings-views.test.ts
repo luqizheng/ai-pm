@@ -80,7 +80,6 @@ import SettingsNotificationsView from "./SettingsNotificationsView.vue";
 import SettingsPreferencesView from "./SettingsPreferencesView.vue";
 import SettingsProfileView from "./SettingsProfileView.vue";
 import SettingsSecurityView from "./SettingsSecurityView.vue";
-import SettingsTeamLandingView from "./SettingsTeamLandingView.vue";
 
 /**
  * 应用设置视图契约（Settings Framework，/settings/* 应用壳内）：
@@ -168,18 +167,6 @@ describe("落地页", () => {
     expect(links.every(href => href?.startsWith("/settings/personal/"))).toBe(
       true
     );
-  });
-
-  it("团队设置主页：一个 General 类目卡（成员/邀请/AI 配置已迁走）", async () => {
-    const { wrapper } = await mountAt(
-      SettingsTeamLandingView,
-      "/settings/team"
-    );
-    const cards = wrapper.findAll(".team-landing__card");
-    expect(cards).toHaveLength(1);
-    expect(cards.map(card => card.attributes("href"))).toEqual([
-      "/settings/team/general"
-    ]);
   });
 });
 

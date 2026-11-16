@@ -15,7 +15,6 @@ import SettingsProfileView from "@/views/settings/SettingsProfileView.vue";
 import SettingsSecurityView from "@/views/settings/SettingsSecurityView.vue";
 import SettingsPreferencesView from "@/views/settings/SettingsPreferencesView.vue";
 import SettingsNotificationsView from "@/views/settings/SettingsNotificationsView.vue";
-import SettingsTeamLandingView from "@/views/settings/SettingsTeamLandingView.vue";
 import PlaceholderView from "@/views/placeholder/PlaceholderView.vue";
 import ProjectCreateView from "@/views/project/create/ProjectCreateView.vue";
 import BaselinePage from "@/views/project/baseline/BaselinePage.vue";
@@ -37,7 +36,6 @@ import OnboardingCreateTeamView from "@/views/onboarding/OnboardingCreateTeamVie
 import OnboardingInviteMembersView from "@/views/onboarding/OnboardingInviteMembersView.vue";
 import OnboardingInvitationLinkView from "@/views/onboarding/OnboardingInvitationLinkView.vue";
 import TeamInvitationAcceptView from "@/views/team/TeamInvitationAcceptView.vue";
-import SettingsTeamGeneralView from "@/views/settings/team/SettingsTeamGeneralView.vue";
 
 /**
  * 应用壳路由表 —— **由导航树派生**（src/router/navigation.ts 是单源）。
@@ -403,6 +401,12 @@ export function buildRoutes(): RouteRecordRaw[] {
     }
   );
 
+  // 团队成员管理迁移重定向（C4：/admin/members → 团队设置子树成员与邀请）。
+  routes.push({
+    path: "/admin/members",
+    redirect: "/settings/team/members"
+  });
+
   // 需求评审与确认（S02-UI-03）：人工评审提案并作出正式决策，不占主导航——
   // 入口 = Requirements Workspace 页头「需求评审」。静态段优先于下方动态段匹配。
   // 需求评审（S02-UI-03）：接真后端 requirement-review-queue（待确认修订）。
@@ -504,12 +508,10 @@ export function buildRoutes(): RouteRecordRaw[] {
     }
   );
 
-  // 团队设置独立主页（2026-11-11 用户裁决：团队域从个人账号设置落地页剥离）
-  routes.push({
-    path: "/settings/team",
-    component: SettingsTeamLandingView,
-    meta: { title: "settings.team.landing.title" }
-  });
+  // 团队设置（V1.2 Team 子树父项）：/settings/team 由导航子树派生为
+  // redirect 首子项「团队常规」（navItemRoutes children 规则）。旧落地页
+  // SettingsTeamLandingView 随子树化退役；账户菜单 team-settings 去向不变，
+  // 经重定向可达。
 
   // 个人域「AI 偏好」（/settings/personal/ai）已随同一裁决移除；
   // AI 配置（模型服务）= 团队域独立页面 /settings/team/ai-providers。
@@ -550,12 +552,10 @@ export function buildRoutes(): RouteRecordRaw[] {
     meta: { layout: "auth", title: "team.accept.title" }
   });
 
-  // 团队设置一页（P1：基本信息与 Owner 转移；成员 & 邀请已迁 /admin/members）。
-  routes.push({
-    path: "/settings/team/general",
-    component: SettingsTeamGeneralView,
-    meta: { title: "team.settings.title" }
-  });
+  // 团队常规（/settings/team/general）、成员与邀请（/settings/team/members）、
+  // AI Provider（/settings/team/ai-providers）、Git 凭证占位
+  // （/settings/team/credentials）均由导航子树派生（workspaceGroup Team
+  // 设置子项，C4）——不再手工注册，避免重复路径。
 
   routes.push({
     path: "/:pathMatch(.*)*",

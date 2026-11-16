@@ -3,7 +3,6 @@ import {
   BookOpen,
   Brain,
   ClipboardCheck,
-  Cpu,
   Folders,
   Gauge,
   GitBranch,
@@ -19,8 +18,7 @@ import {
   Sparkles,
   SquareKanban,
   Terminal,
-  Users,
-  UsersRound
+  Users
 } from "lucide-vue-next";
 import type { Component } from "vue";
 
@@ -164,6 +162,46 @@ const workspaceGroup: NavGroup = {
         import("@/views/project/list/ProjectListView.vue").then(
           module => module.default
         )
+    },
+    // 团队设置（V1.2 Team 子树）：父项 redirect 首子项「团队常规」，
+    // 旧落地页随子树化退役。Git 凭证为 PLANNED 占位（R-1：Team-owned
+    // Credential，管理 UI 后续设计）；团队公告待 NAV-0103 核验，不进子树。
+    {
+      path: "/settings/team",
+      labelKey: "shell.app.side.item.teamSettings",
+      icon: Settings2,
+      expandable: true,
+      children: [
+        {
+          path: "/settings/team/general",
+          labelKey: "settings.nav.general",
+          component: () =>
+            import("@/views/settings/team/SettingsTeamGeneralView.vue").then(
+              module => module.default
+            )
+        },
+        {
+          path: "/settings/team/members",
+          labelKey: "settings.nav.teamMembers",
+          component: () =>
+            import("@/views/settings/team/SettingsTeamMembersView.vue").then(
+              module => module.default
+            )
+        },
+        {
+          path: "/settings/team/ai-providers",
+          labelKey: "shell.app.side.item.aiProviders",
+          component: () =>
+            import("@/views/settings/SettingsTeamAiView.vue").then(
+              module => module.default
+            )
+        },
+        {
+          path: "/settings/team/credentials",
+          labelKey: "shell.app.side.item.gitCredentials",
+          planned: true
+        }
+      ]
     }
   ]
 };
@@ -303,7 +341,7 @@ const modulesGroup: NavGroup = {
   ]
 };
 
-/** 遗留管理入口组（NAV-0103 待核验，C4 收窄为两项；渲染保持原样） */
+/** 遗留管理入口组（NAV-0103 待核验；C4 后仅剩两项，成员/AI Provider 已迁团队设置） */
 const adminGroup: NavGroup = {
   id: "admin",
   labelKey: "shell.app.side.group.admin",
@@ -313,19 +351,10 @@ const adminGroup: NavGroup = {
       path: "/admin/settings",
       labelKey: "shell.app.side.item.adminSettings",
       icon: Settings2,
-      // 遗留管理入口：NAV-0103 待核验归属，裁决前原样保留（C4 不迁移）
+      // 遗留管理入口：NAV-0103 待核验归属，裁决前原样保留（不迁移）
       legacyPending: true,
       component: () =>
         import("@/views/admin/AdminSettingsView.vue").then(
-          module => module.default
-        )
-    },
-    {
-      path: "/admin/members",
-      labelKey: "shell.app.side.item.adminMembers",
-      icon: UsersRound,
-      component: () =>
-        import("@/views/settings/team/SettingsTeamMembersView.vue").then(
           module => module.default
         )
     },
@@ -337,18 +366,6 @@ const adminGroup: NavGroup = {
       legacyPending: true,
       component: () =>
         import("@/views/admin/AdminAnnouncementsView.vue").then(
-          module => module.default
-        )
-    },
-    // 团队级 LLM Provider 管理（0041 Team LLM Provider）：路由随导航树派生
-    // （原 router/index.ts 手工注册已迁入，保持「导航树 = 菜单与路由的单源」）。
-    // C4 迁入团队设置子树（本卡仍在 admin 组）。
-    {
-      path: "/settings/team/ai-providers",
-      labelKey: "shell.app.side.item.aiProviders",
-      icon: Cpu,
-      component: () =>
-        import("@/views/settings/SettingsTeamAiView.vue").then(
           module => module.default
         )
     }
@@ -475,36 +492,42 @@ export function isNavChildActive(
 }
 
 /**
- * 判定某路径是否为「管理」分组下的页面（admin 组全部导航项 + 子路径）。
+ * 助手禁用路径规则（页面清单驱动；C4 4a 行为等价迁移）。
  *
- * 管理页（平台设置 / 成员 / 公告 / AI Provider）是租户级运营面，没有项目
- * 上下文，AI 助手（壳层 AI Chat 列、顶栏助手入口）在这些页面不出现。
- * 判定从导航树派生，保持「导航树 = 菜单与路由的单源」。
+ * 每条规则 = 精确命中或 `path + "/"` 前缀（覆盖子路由）。行为等价实证：
+ * 迁移前快照与迁移后参数化断言双跑（见 C4 commit message）。
+ * **禁止使用裸 `/settings/team` 前缀**——团队常规/落地页/凭证占位页对助手
+ * 可见（4b 整域禁用待产品确认，确认前不得收紧）。
  */
-export function isManagementPath(currentPath: string): boolean {
-  const admin = navGroups.find(group => group.id === "admin");
-  if (!admin) return false;
-  return admin.items.some(item => {
-    const roots = [item.path, ...(item.children?.map(c => c.path) ?? [])];
-    return roots.some(
-      path => currentPath === path || currentPath.startsWith(`${path}/`)
-    );
-  });
-}
-/**
- * 不出现 AI 助手的路径前缀（壳层 chrome 可见性的单源输入）。
- *
- * 项目设置（/project/settings/*）是配置面，与租户级管理页同类，不承载
- * 项目 AI 会话上下文：顶栏「助手」入口、AI Chat 列与右上下文栏均不出现。
- */
-const ASSISTANT_HIDDEN_PREFIXES = ["/project/settings"];
+const ASSISTANT_HIDDEN_RULES: Array<{ path: string }> = [
+  // 平台设置：租户运营面（现状禁用）
+  { path: "/admin/settings" },
+  // 公告管理：现状禁用；迁团队后仍禁用
+  { path: "/admin/announcements" },
+  // 项目设置：配置面，完整前缀（含全部子路由与 PLANNED 占位）
+  { path: "/project/settings" },
+  // 团队成员：原 /admin/members 迁入，行为等价禁用
+  { path: "/settings/team/members" },
+  // 团队 AI Provider：原 admin 组项迁出导航 admin 组，行为等价禁用
+  { path: "/settings/team/ai-providers" }
+];
 
 /**
- * 判定某路径是否不出现 AI 助手：管理组页面 + 配置面路径前缀。
+ * 判定某路径是否为「管理」面（助手禁用判定，页面清单驱动）。
+ *
+ * C4 前实现从 admin 导航组动态派生；C4 起 admin 组仅剩两项遗留入口且
+ * Team 页面已迁出 admin 组，改为显式规则清单。语义不变：这是 UX 可见性
+ * 判定，**不是权限控制**（菜单隐藏不替代后端授权）。
+ */
+export function isManagementPath(currentPath: string): boolean {
+  return ASSISTANT_HIDDEN_RULES.some(
+    rule => currentPath === rule.path || currentPath.startsWith(`${rule.path}/`)
+  );
+}
+
+/**
+ * 判定某路径是否不出现 AI 助手：管理/配置面规则清单命中。
  */
 export function isAssistantHiddenPath(currentPath: string): boolean {
-  if (isManagementPath(currentPath)) return true;
-  return ASSISTANT_HIDDEN_PREFIXES.some(
-    path => currentPath === path || currentPath.startsWith(`${path}/`)
-  );
+  return isManagementPath(currentPath);
 }

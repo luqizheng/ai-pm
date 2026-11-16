@@ -28,7 +28,9 @@
 5. **禁止 AI 助手的页面，只改一处路径前缀清单。**
    助手可见性单源 = `ai-frontend/src/components/shell/use-shell-chrome.ts`；
    路径判定 = `ai-frontend/src/router/navigation.ts` 的 `isAssistantHiddenPath()`
-   （`ASSISTANT_HIDDEN_PREFIXES` 已含 `/project/settings`，管理组由 `isManagementPath()` 覆盖）。
+   （页面清单 `ASSISTANT_HIDDEN_RULES` 驱动：含 `/project/settings` 前缀、admin 遗留两项
+   `/admin/settings` 与 `/admin/announcements`、团队管理页 members/ai-providers；
+   C4 起显式清单替代 admin 组动态派生，禁止凭页面名推断禁用范围）。
    新增禁用页只追加路径前缀，**禁止**在业务页里 `v-if` 打补丁；四处必须同步收列：
    顶栏「助手」按钮、AI Chat 列、右上下文栏、壳根 `data-ai-panel` / `data-context`。
    详细步骤与验收见 `ai-frontend/AGENTS.md` §壳的约定。

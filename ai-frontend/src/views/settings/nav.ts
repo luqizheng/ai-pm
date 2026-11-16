@@ -1,6 +1,7 @@
 import type { Component } from "vue";
 import {
   Bell,
+  Cpu,
   GitBranch,
   KeyRound,
   Monitor,
@@ -9,7 +10,8 @@ import {
   SlidersHorizontal,
   Sparkles,
   Users,
-  UserRound
+  UserRound,
+  UsersRound
 } from "lucide-vue-next";
 
 import { PERSONAL_NAV, type SettingsNavEntry } from "@/components/settings";
@@ -44,15 +46,22 @@ export const PERSONAL_ICONS: Record<string, Component> = {
   notifications: Bell
 };
 
-/** 团队域应用侧栏条目（/settings/team/*）。成员、邀请、AI 配置均已迁走；
- *  仅 General 保留（Owner 转移 / 基本信息 / 解散）。 */
+/** 团队域应用侧栏条目（/settings/team/*）。
+ *  C4：成员与邀请、AI Provider 归位团队设置侧栏（原 /admin/members、
+ *  admin 组 AI Provider）；Git 凭证为 R-1 PLANNED 占位（管理 UI 后续设计）。 */
 export const TEAM_APP_NAV: SettingsNavEntry[] = [
-  { id: "general", to: "/settings/team/general" }
+  { id: "general", to: "/settings/team/general" },
+  { id: "teamMembers", to: "/settings/team/members" },
+  { id: "aiProviders", to: "/settings/team/ai-providers" },
+  { id: "gitCredentials", to: "/settings/team/credentials", proposed: true }
 ];
 
 /** 团队域侧栏图标 */
 export const TEAM_ICONS: Record<string, Component> = {
-  general: Settings2
+  general: Settings2,
+  teamMembers: UsersRound,
+  aiProviders: Cpu,
+  gitCredentials: KeyRound
 };
 
 /** 项目域应用侧栏条目（/project/settings/*；仓库 / SSH 私钥 / Runners 为真数据节）。
