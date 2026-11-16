@@ -254,14 +254,15 @@ onBeforeUnmount(() => {
                   <Badge :variant="statusVariant(row.status)">
                     {{ t(`analysis.status.${row.status}`) }}
                   </Badge>
-                  <Badge v-if="row.run_mode === 'incremental'" variant="neutral">
+                  <Badge
+                    v-if="row.run_mode === 'incremental'"
+                    variant="neutral"
+                  >
                     {{ t("analysis.list.incrementalBadge") }}
                   </Badge>
                   <span class="an-meta">
                     <template v-if="row.status === 'analyzing'">
-                      {{
-                        row.stage_detail || t("analysis.list.analyzingHint")
-                      }}
+                      {{ row.stage_detail || t("analysis.list.analyzingHint") }}
                     </template>
                     <template v-else-if="row.status === 'analyzed'">
                       {{

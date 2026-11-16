@@ -26,15 +26,6 @@ const getPcProposal = vi.fn();
 const decidePcProposal = vi.fn();
 const retrievalQuery = vi.fn();
 const ingestKbDocument = vi.fn();
-const listAnalysisReports = vi.fn();
-const getAnalysisReport = vi.fn();
-const closeAnalysisReport = vi.fn();
-
-vi.mock("@/api/analysis-reports", () => ({
-  listAnalysisReports: (...args: unknown[]) => listAnalysisReports(...args),
-  getAnalysisReport: (...args: unknown[]) => getAnalysisReport(...args),
-  closeAnalysisReport: (...args: unknown[]) => closeAnalysisReport(...args)
-}));
 
 vi.mock("@/api/knowledge", () => ({
   listKbDocuments: (...args: unknown[]) => listKbDocuments(...args),
@@ -123,10 +114,7 @@ async function mountView() {
   shell.setProjects([{ id: "proj-1", name: "评测项目" }]);
   shell.setCurrentProject("proj-1");
   await flushPromises();
-  // D-5 起默认页签为「分析报告」；存量断言以 KB 视野为前提，切过去。
-  const kbTabs = wrapper.findAll('[role="tab"]');
-  await kbTabs[1].trigger("mousedown");
-  await flushPromises();
+  // P2-06（裁决 D-1）起默认页签即 KB，存量断言直接以 KB 视野成立。
   return wrapper;
 }
 
@@ -226,7 +214,6 @@ const listKbBase: KbDocumentRow[] = [
 beforeEach(() => {
   vi.clearAllMocks();
   listKbDocuments.mockResolvedValue({ items: listKbBase });
-  listAnalysisReports.mockResolvedValue({ items: [] });
   listPcObjects.mockResolvedValue({ items: [pcRow({})] });
   listPcProposals.mockResolvedValue({
     items: [
@@ -347,7 +334,7 @@ describe("KnowledgeView", () => {
     // 切 PC 页签。
     const tabs = wrapper.findAll('[role="tab"]');
     // reka TabsTrigger 激活事件是 mousedown（非 click）。
-    await tabs[2].trigger("mousedown");
+    await tabs[1].trigger("mousedown");
     await flushPromises();
     expect(wrapper.text()).toContain("暂无 PC 认知对象");
   });
@@ -355,7 +342,7 @@ describe("KnowledgeView", () => {
   it("switches to PC tab and shows lifecycle badge", async () => {
     const wrapper = await mountView();
     const tabs = wrapper.findAll('[role="tab"]');
-    await tabs[2].trigger("mousedown");
+    await tabs[1].trigger("mousedown");
     await flushPromises();
     expect(wrapper.text()).toContain("现行");
     expect(wrapper.text()).toContain("补充状态机");
@@ -444,7 +431,7 @@ describe("KnowledgeView", () => {
   it("expands PC object detail with full content and version badge", async () => {
     const wrapper = await mountView();
     const tabs = wrapper.findAll('[role="tab"]');
-    await tabs[2].trigger("mousedown");
+    await tabs[1].trigger("mousedown");
     await flushPromises();
     // 收起态仍显示摘要与 excerpt（240 字截断）。
     expect(wrapper.text()).toContain("补充状态机");
@@ -491,7 +478,7 @@ describe("KnowledgeView", () => {
     );
     const wrapper = await mountView();
     const tabs = wrapper.findAll('[role="tab"]');
-    await tabs[2].trigger("mousedown");
+    await tabs[1].trigger("mousedown");
     await flushPromises();
     await wrapper.find(".pc-row-head").trigger("click");
     await flushPromises();
@@ -500,57 +487,25 @@ describe("KnowledgeView", () => {
     expect(wrapper.text()).toContain("暂无修订");
   });
 
-  it("shows reports tab as default with empty state", async () => {
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [{ path: "/project/knowledge", component: KnowledgeView }]
-    });
-    await router.push("/project/knowledge");
-    await router.isReady();
-    const { wrapper } = mountShell(
-      KnowledgeView,
-      { attachTo: document.body },
-      router
-    );
-    const shell = useShellStore();
-    shell.setProjects([{ id: "proj-1", name: "评测项目" }]);
-    shell.setCurrentProject("proj-1");
-    await flushPromises();
-    // D-5：报告优先——默认页签为分析报告。
-    expect(wrapper.text()).toContain("暂无分析报告");
-    expect(listAnalysisReports).toHaveBeenCalledWith("proj-1");
-    // 分析中报告出现：分区标题 + 阶段文本
-    listAnalysisReports.mockResolvedValue({
-      items: [
-        {
-          id: "rpt-1",
-          repository_id: "repo-1",
-          repository_name: "ai-pm主仓库",
-          commit_sha: "e105e9b97ca8de118a847aec97de7abdc676662a",
-          status: "analyzed",
-          stage_detail: null,
-          error_code: null,
-          error_detail: null,
-          created_at: "2026-11-15T00:00:00Z",
-          updated_at: "2026-11-15T00:01:00Z",
-          closed_at: null,
-          kb_revision_id: null,
-          pc_source_id: null,
-          run_mode: "incremental",
-          since_commit: null,
-          pending_proposals: 2,
-          has_pending_kb: true
-        }
-      ]
-    });
+  it("默认页签 = KB，reports 页签不存在（裁决 D-1，P2-06）", async () => {
+    const wrapper = await mountView();
+    const tabTexts = wrapper.findAll('[role="tab"]').map(tab => tab.text());
+    // 页签构成 = kb | pc；reports 迁出（E2E-05 单测级：默认页签=kb）。
+    expect(tabTexts.length).toBe(2);
+    expect(tabTexts[0]).toContain("KB 文档");
+    expect(tabTexts[1]).toContain("PC 对象");
+    const joined = tabTexts.join("|");
+    expect(joined).not.toContain("分析报告");
+    // 默认渲染 KB 内容。
+    expect(wrapper.text()).toContain("auth-design");
   });
 
-  it("opens report tab via ?report= deep link", async () => {
+  it("?report= 兼容跳转 Analysis 详情页（保留 project_id，不丢参）", async () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [{ path: "/project/knowledge", component: KnowledgeView }]
     });
-    await router.push("/project/knowledge?report=rpt-9");
+    await router.push("/project/knowledge?project_id=proj-1&report=rpt-9");
     await router.isReady();
     const { wrapper } = mountShell(
       KnowledgeView,
@@ -560,10 +515,52 @@ describe("KnowledgeView", () => {
     const shell = useShellStore();
     shell.setProjects([{ id: "proj-1", name: "评测项目" }]);
     shell.setCurrentProject("proj-1");
+    const replaceSpy = vi
+      .spyOn(router, "replace")
+      .mockResolvedValue(undefined as never);
     await flushPromises();
-    // 深链切到报告页签（面板自身负责按 report id 展开）。
-    expect(wrapper.text()).toContain("分析报告");
-    expect(listAnalysisReports).toHaveBeenCalledWith("proj-1");
+
+    // §6 定版表：report 升级为路径参数，其余 query（project_id）保留——
+    // 不是丢参 redirect（E2E-04 单测级）。非法/跨项目 ID 的显式错误态
+    // 由详情页 GAP-6 呈现，本页不校验不静默拦截。
+    expect(replaceSpy).toHaveBeenCalledTimes(1);
+    expect(replaceSpy).toHaveBeenCalledWith({
+      path: "/project/analysis/reports/rpt-9",
+      query: { project_id: "proj-1" }
+    });
+    wrapper.unmount();
+  });
+
+  it("?report= 与 ?doc= 同现：report 分支先行跳离，KB 详情不被应用", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/project/knowledge", component: KnowledgeView }]
+    });
+    await router.push(
+      "/project/knowledge?project_id=proj-1&report=rpt-9&doc=doc-1"
+    );
+    await router.isReady();
+    const { wrapper } = mountShell(
+      KnowledgeView,
+      { attachTo: document.body },
+      router
+    );
+    const shell = useShellStore();
+    shell.setProjects([{ id: "proj-1", name: "评测项目" }]);
+    shell.setCurrentProject("proj-1");
+    const replaceSpy = vi
+      .spyOn(router, "replace")
+      .mockResolvedValue(undefined as never);
+    await flushPromises();
+
+    // report 分支先行跳离（组合自然消解，方案 §6；不自行猜测优先级排序语义）
+    expect(replaceSpy).toHaveBeenCalledWith({
+      path: "/project/analysis/reports/rpt-9",
+      query: { project_id: "proj-1", doc: "doc-1" }
+    });
+    // KB 文档详情分支未执行（report 分支 return）
+    expect(getKbDocument).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
 
   it("opens PC object detail via ?object= deep link", async () => {

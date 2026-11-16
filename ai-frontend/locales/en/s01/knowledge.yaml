@@ -3,47 +3,8 @@ knowledge:
     title: Knowledge Base
     description: Unified browsing for KB documents (with publish confirmation) and PC cognition objects.
   tab:
-    reports: Analysis Reports
     kb: KB Documents
     pc: PC Objects
-  report:
-    incrementalBadge: Incremental
-    synthesis: Synthesize identity (AI)
-    synthesisHint: Combine interview answers and repo artifacts to draft profile / vision / goal proposals
-    synthesisDone: Three proposals drafted — PC ones in the "PC Proposals" tab, goal status {goal}; dispose them one by one
-    synthesisFailed: Identity synthesis failed (insufficient interview/report or model unavailable)
-    status:
-      analyzing: Analyzing
-      analyzed: Awaiting review
-      closed: Closed
-      failed: Failed
-      cancelled: Cancelled
-    empty: No analysis reports yet — they appear here after a repository analysis
-    analyzingHint: Collecting…
-    pendingItems: "{n} item(s) to dispose"
-    allDisposed: All disposed — ready to close
-    closedAt: Closed at {time}
-    failedReason: Analysis failed
-    loading: Loading report…
-    kbSec: Analysis report (KB revision v{no} · {status})
-    kbMissing: No KB report revision produced by this analysis
-    proposalSec: PC Proposals ({n})
-    noProposals: No proposals drafted by this analysis
-    pcSec: PC Object Revisions ({n})
-    noPcRevisions: No object revisions produced by this analysis
-    close: Close Report
-    showHistory: Show history
-    hideHistory: Hide history
-    filter:
-      pending: Pending
-      decided: Decided
-      all: All
-    noMatchingProposals: No proposals match this filter
-    closeHint: Closing publishes approved proposals, auto-disposes pending items and fixes the analysis anchor; decisions freeze afterwards and the repository becomes analyzable again
-    closeConfirmTitle: Close analysis report
-    closeConfirmDescription: This will publish {publish} approved proposal(s), withdraw {proposals} pending proposal(s) and reject {kb} KB draft(s) for {repo}, and fix the analysis anchor; decisions freeze afterwards and the repository becomes analyzable again.
-    closeNotice: Report closed — published {applied} proposal(s), withdrew {withdrawn} pending proposal(s), anchor fixed ({commit}); the repository is analyzable again
-    closeError: Failed to close
   status:
     draft: Draft
     published: Published
@@ -67,7 +28,6 @@ knowledge:
   action:
     confirm: Confirm & Publish
     confirming: Confirming…
-    cancel: Cancel
   notice:
     ingested: Ingested as draft (rev {no}) — confirm in the detail view
     confirmed: Published (repeat confirmation by the same user keeps the original record)
@@ -82,32 +42,6 @@ knowledge:
     emptyKb: No KB documents yet — analysis drafts appear here after confirmation
     emptyPc: No PC cognition objects yet — they appear here after version publication
     emptyProposals: No proposals yet — AI drafts or manual creations appear here
-  proposalStatus:
-    draft: Draft
-    submitted: Awaiting review
-    approved: Approved·pending publish
-    approvedApplied: Published
-    rejected: Rejected
-    withdrawn: Withdrawn
-    expired: Expired
-    applied: Applied
-    failed: Failed
-  approvalStatus:
-    pending: Pending
-    approved: Approved
-    rejected: Rejected
-  proposal:
-    members: member object(s)
-    approve: Approve
-    reject: Reject
-    rationale: Rationale
-    membersList: Member changes
-    approvals: Approval history
-    risk: Risk
-    confidence: Confidence
-    governance: Governance level
-    origin: Origin
-    noApprovals: No approval records yet
   impact:
     title: Impact analysis (cross-domain traversal)
     placeholder: e.g. what requirements and designs does changing order status affect?

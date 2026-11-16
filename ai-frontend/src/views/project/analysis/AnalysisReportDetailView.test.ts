@@ -381,7 +381,9 @@ describe("AnalysisReportDetailView 六节结构（P2-03）", () => {
 
 describe("审阅交互与关闭语义七条（P2-04）", () => {
   /** 复用：第 3 节中取指定提案的操作按钮集合。 */
-  function buttonsOf(wrapper: Awaited<ReturnType<typeof mountDetail>>["wrapper"]) {
+  function buttonsOf(
+    wrapper: Awaited<ReturnType<typeof mountDetail>>["wrapper"]
+  ) {
     return wrapper.findAll(".an-proposal").map(card => ({
       card,
       buttons: card.findAll("button").map(b => b.text())
@@ -491,11 +493,7 @@ describe("审阅交互与关闭语义七条（P2-04）", () => {
     await flushPromises();
 
     expect(confirmKbRevision).toHaveBeenCalledTimes(1);
-    expect(confirmKbRevision).toHaveBeenCalledWith(
-      "doc-1",
-      "kbr-1",
-      "proj-1"
-    );
+    expect(confirmKbRevision).toHaveBeenCalledWith("doc-1", "kbr-1", "proj-1");
     expect(wrapper.text()).toContain("已确认发布");
     expect(getAnalysisReport).toHaveBeenCalledTimes(2);
     wrapper.unmount();
@@ -513,11 +511,10 @@ describe("审阅交互与关闭语义七条（P2-04）", () => {
     await flushPromises();
 
     expect(decidePcProposal).toHaveBeenCalledTimes(1);
-    expect(decidePcProposal).toHaveBeenCalledWith(
-      "prop-1",
-      "proj-1",
-      { action: "approve", expected_version_no: 4 }
-    );
+    expect(decidePcProposal).toHaveBeenCalledWith("prop-1", "proj-1", {
+      action: "approve",
+      expected_version_no: 4
+    });
     expect(wrapper.text()).toContain("已批准（暂记");
     expect(getAnalysisReport).toHaveBeenCalledTimes(2);
     wrapper.unmount();

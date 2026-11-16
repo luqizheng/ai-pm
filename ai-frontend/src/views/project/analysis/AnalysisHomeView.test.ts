@@ -84,8 +84,16 @@ describe("AnalysisHomeView 列表（P2-02）", () => {
       items: [
         reportRow({ id: "r-a", status: "analyzing" }),
         reportRow({ id: "r-b", status: "analyzed" }),
-        reportRow({ id: "r-c", status: "closed", closed_at: "2026-11-15T10:00:00Z" }),
-        reportRow({ id: "r-d", status: "failed", error_detail: "worker crashed" })
+        reportRow({
+          id: "r-c",
+          status: "closed",
+          closed_at: "2026-11-15T10:00:00Z"
+        }),
+        reportRow({
+          id: "r-d",
+          status: "failed",
+          error_detail: "worker crashed"
+        })
       ]
     });
     const { wrapper } = await mountView();
@@ -107,8 +115,16 @@ describe("AnalysisHomeView 列表（P2-02）", () => {
     listAnalysisReports.mockResolvedValue({
       items: [
         reportRow({ id: "r-b", status: "analyzed" }),
-        reportRow({ id: "r-c", status: "closed", closed_at: "2026-11-15T10:00:00Z" }),
-        reportRow({ id: "r-d", status: "failed", error_detail: "worker crashed" })
+        reportRow({
+          id: "r-c",
+          status: "closed",
+          closed_at: "2026-11-15T10:00:00Z"
+        }),
+        reportRow({
+          id: "r-d",
+          status: "failed",
+          error_detail: "worker crashed"
+        })
       ]
     });
     const { wrapper } = await mountView();
@@ -144,7 +160,13 @@ describe("AnalysisHomeView 列表（P2-02）", () => {
 
   it("空态：默认视图无可见行时展示空态文案", async () => {
     listAnalysisReports.mockResolvedValue({
-      items: [reportRow({ id: "r-c", status: "closed", closed_at: "2026-11-15T10:00:00Z" })]
+      items: [
+        reportRow({
+          id: "r-c",
+          status: "closed",
+          closed_at: "2026-11-15T10:00:00Z"
+        })
+      ]
     });
     const { wrapper } = await mountView();
     expect(wrapper.text()).toContain("暂无分析报告");

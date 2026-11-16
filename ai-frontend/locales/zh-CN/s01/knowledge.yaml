@@ -3,47 +3,8 @@ knowledge:
     title: 知识库
     description: KB 文档（含发布确认）与 PC 认知对象的统一浏览面。
   tab:
-    reports: 分析报告
     kb: KB 文档
     pc: PC 对象
-  report:
-    incrementalBadge: 增量
-    synthesis: 综合业务身份（AI）
-    synthesisHint: 汇聚访谈答案与仓库产物，起草产品画像/产品愿景/项目目标三份提案
-    synthesisDone: 三份提案已起草——产品画像/愿景与项目目标请在本报告面板逐条处置（项目目标状态 {goal}）
-    synthesisFailed: 身份综合失败（访谈/报告不足或模型不可用）
-    status:
-      analyzing: 分析中
-      analyzed: 待审理
-      closed: 已关闭
-      failed: 失败
-      cancelled: 已取消
-    empty: 暂无分析报告——仓库分析完成后在此可见
-    analyzingHint: 采集中…
-    pendingItems: "{n} 项待处置"
-    allDisposed: 已全部处置，可关闭
-    closedAt: 关闭于 {time}
-    failedReason: 分析失败
-    loading: 报告加载中…
-    kbSec: 分析报告（KB 修订 v{no} · {status}）
-    kbMissing: 本次分析未产出 KB 报告修订
-    proposalSec: PC 提案（{n}）
-    noProposals: 本次分析未起草提案
-    pcSec: PC 对象修订（{n}）
-    noPcRevisions: 本次分析未产出对象修订
-    close: 关闭报告
-    showHistory: 显示历史
-    hideHistory: 隐藏历史
-    filter:
-      pending: 待决
-      decided: 已决
-      all: 全部
-    noMatchingProposals: 该过滤条件下无提案
-    closeHint: 关闭后发布已批准提案、自动处置未决项并固化分析锚点；决定冻结，该仓库可再次分析
-    closeConfirmTitle: 关闭分析报告
-    closeConfirmDescription: 将对 {repo} 的这份报告发布 {publish} 个已批准提案、撤回 {proposals} 个未决提案、拒绝 {kb} 份 KB 草稿，并固化分析锚点；关闭后决定冻结，该仓库可再次分析。
-    closeNotice: 报告已关闭——发布 {applied} 个提案、撤回 {withdrawn} 个未决提案，锚点已固化（{commit}），该仓库可再次分析
-    closeError: 关闭失败
   status:
     draft: 草稿
     published: 已发布
@@ -67,7 +28,6 @@ knowledge:
   action:
     confirm: 确认发布
     confirming: 确认中…
-    cancel: 取消
   notice:
     ingested: 已摄入为草稿（修订 {no}）——请在详情中确认发布
     confirmed: 已确认发布（同人重复确认不会改原确认记录）
@@ -82,32 +42,6 @@ knowledge:
     emptyKb: 暂无 KB 文档——分析产物经确认后在此可见
     emptyPc: 暂无 PC 认知对象——提案发布后在此可见
     emptyProposals: 暂无提案——AI 分析起草或人工创建后在此可见
-  proposalStatus:
-    draft: 草稿
-    submitted: 待审批
-    approved: 已批准·待发布
-    approvedApplied: 已发布
-    rejected: 已驳回
-    withdrawn: 已撤回
-    expired: 已过期
-    applied: 已应用
-    failed: 失败
-  approvalStatus:
-    pending: 待决策
-    approved: 已批准
-    rejected: 已驳回
-  proposal:
-    members: 个成员对象
-    approve: 批准
-    reject: 驳回
-    rationale: 理由
-    membersList: 成员变更
-    approvals: 审批历史
-    risk: 风险
-    confidence: 置信度
-    governance: 治理级别
-    origin: 来源
-    noApprovals: 暂无审批记录
   impact:
     title: 影响分析（跨域关系遍历）
     placeholder: 例如：修改订单状态会影响哪些需求与设计？

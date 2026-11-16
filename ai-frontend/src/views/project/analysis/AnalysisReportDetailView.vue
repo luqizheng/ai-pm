@@ -84,7 +84,9 @@ function filteredProposals(proposals: ReportProposalRow[]) {
   if (proposalFilter.value === "all") return proposals;
   if (proposalFilter.value === "decided")
     return proposals.filter(p => DECIDED_STATUSES.has(p.status));
-  return proposals.filter(p => p.status === "submitted" || p.status === "draft");
+  return proposals.filter(
+    p => p.status === "submitted" || p.status === "draft"
+  );
 }
 
 function proposalStatusVariant(status: string) {
@@ -96,7 +98,8 @@ function proposalStatusVariant(status: string) {
 
 /** approved 在 close 前语义 =「已批准·待发布」（暂记，非正式发布），其余走词典。 */
 function proposalStatusLabel(status: string): string {
-  if (status === "approved") return t("analysis.proposalStatus.approvedPending");
+  if (status === "approved")
+    return t("analysis.proposalStatus.approvedPending");
   return t(`analysis.proposalStatus.${status}`);
 }
 
@@ -162,16 +165,14 @@ async function decideProposal(
   successNotice.value = "";
   actionError.value = "";
   try {
-    await decidePcProposal(
-      proposal.proposal_id,
-      currentProjectId.value,
-      {
-        action,
-        expected_version_no: proposal.expected_version_no
-      }
-    );
+    await decidePcProposal(proposal.proposal_id, currentProjectId.value, {
+      action,
+      expected_version_no: proposal.expected_version_no
+    });
     successNotice.value = t(
-      action === "approve" ? "analysis.notice.approved" : "analysis.notice.rejected"
+      action === "approve"
+        ? "analysis.notice.approved"
+        : "analysis.notice.rejected"
     );
     await loadDetail();
   } catch (error) {
@@ -330,7 +331,9 @@ const pageTitle = computed(() =>
 
 <template>
   <PageFrame
-    :breadcrumbs="[{ label: t('analysis.page.title'), to: '/project/analysis' }]"
+    :breadcrumbs="[
+      { label: t('analysis.page.title'), to: '/project/analysis' }
+    ]"
     :title="pageTitle"
   >
     <div class="an-detail">
@@ -408,7 +411,10 @@ const pageTitle = computed(() =>
                   <dd>{{ formatTime(detail.closed_at) }}</dd>
                 </div>
                 <div
-                  v-if="detail.status === 'failed' && (detail.error_code || detail.error_detail)"
+                  v-if="
+                    detail.status === 'failed' &&
+                    (detail.error_code || detail.error_detail)
+                  "
                   class="an-fact"
                 >
                   <dt>{{ t("analysis.detail.fieldError") }}</dt>
@@ -550,8 +556,9 @@ const pageTitle = computed(() =>
                 class="an-pc-item"
               >
                 <summary>
-                  {{ revision.display_name }} · {{ revision.object_type }} ·
-                  v{{ revision.revision_no }}
+                  {{ revision.display_name }} · {{ revision.object_type }} · v{{
+                    revision.revision_no
+                  }}
                 </summary>
                 <p v-if="revision.change_summary" class="an-hint">
                   {{ revision.change_summary }}
