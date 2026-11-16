@@ -173,7 +173,6 @@ shell:
     governance: Governance
     approvals: Approvals
     settings: Settings
-    inbox: Announcements
 
   # ── Application shell (Figma "03 — Application Shell" + Shell V1.1) ─────────
   app:
@@ -205,7 +204,6 @@ shell:
       item:
         personalWorkspace: Personal Workspace
         personalHome: My Home
-        inbox: Inbox
         dashboard: Team Overview
         projects: Projects
         repository: Repository
@@ -229,6 +227,7 @@ shell:
         aiProviders: AI Provider
         adminMembers: Members
         adminAnnouncements: Announcements
+        notifications: Notifications
         teamSettings: Team Settings
         gitCredentials: Git Credentials (SSH Keys)
       sub:

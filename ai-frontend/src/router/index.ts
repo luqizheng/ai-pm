@@ -9,7 +9,6 @@ import {
 import { globalNavConfig, projectNavConfig, type NavItem } from "./navigation";
 import { AUTH_PATHS, authRoutes } from "./auth";
 import { getAccessToken, getRefreshToken } from "@/api/base/token-storage";
-import NotificationsView from "@/views/notifications/NotificationsView.vue";
 import SettingsLandingView from "@/views/settings/SettingsLandingView.vue";
 import SettingsProfileView from "@/views/settings/SettingsProfileView.vue";
 import SettingsSecurityView from "@/views/settings/SettingsSecurityView.vue";
@@ -212,11 +211,10 @@ export function buildRoutes(): RouteRecordRaw[] {
 
   // ─── 任务管理（S04 · docs/scenarios/s04/ui，2026-11-10）───
   // 子页为独立路由 + 页内页签条（TasksFrame，同 AiTeamFrame 组织）。
-  // 总览/任务池接真（/v1/pm/tasks 系）；拆解与详情在任务读/AI 拆解接口
-  // 落地前仅 mock 预览（VITE_USE_MOCK=1 注册真实页，发布构建走占位页，
-  // 避免 fixtures 演示数据进入 dist，见 build/release-guard.ts）；
-  // 执行规划（依赖图/时间线）与执行准备接口均未落地，第二批一并走
-  // mock 预览注册（S04-UI-05/06/07）。
+  // 全部子页接真后端：总览/任务池（/v1/pm/tasks 系）、拆解（task-plans）、
+  // 执行规划依赖图/时间线（dependency-graph）、执行准备（execution-readiness）、
+  // 任务详情（GET /v1/pm/tasks/{task_id}）。（C5 注释订正：原「mock 预览」
+  // 描述为过期口径。）
   routes.push(
     {
       // 执行规划含依赖图/时间线两个子视图，/planning 重定向到依赖图
@@ -407,6 +405,12 @@ export function buildRoutes(): RouteRecordRaw[] {
     redirect: "/settings/team/members"
   });
 
+  // 收件箱占位退役（Q-10/C5）：旧 /inbox 统一跳通知中心。
+  routes.push({
+    path: "/inbox",
+    redirect: "/notifications"
+  });
+
   // 需求评审与确认（S02-UI-03）：人工评审提案并作出正式决策，不占主导航——
   // 入口 = Requirements Workspace 页头「需求评审」。静态段优先于下方动态段匹配。
   // 需求评审（S02-UI-03）：接真后端 requirement-review-queue（待确认修订）。
@@ -462,14 +466,6 @@ export function buildRoutes(): RouteRecordRaw[] {
     path: "/project/requirements/:requirementId",
     component: RequirementDetailView,
     meta: { title: "pm.requirementDetail.pageTitle" }
-  });
-
-  // 通知中心（Global/Notification 族完整事件面；不在左导航树内，
-  // 入口 = 顶栏通知下拉的「查看全部通知」）
-  routes.push({
-    path: "/notifications",
-    component: NotificationsView,
-    meta: { title: "global.notification.label" }
   });
 
   // 设置域（Settings Framework 个人域；不在左导航树内，

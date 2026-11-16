@@ -6,8 +6,8 @@ import {
   Folders,
   Gauge,
   GitBranch,
+  Bell,
   Home,
-  Inbox,
   LayoutDashboard,
   ListChecks,
   ListTree,
@@ -130,10 +130,9 @@ const personalGroup: NavGroup = {
         )
     },
     {
-      path: "/inbox",
-      labelKey: "shell.app.side.item.inbox",
-      icon: Inbox,
-      badge: 3
+      path: "/notifications",
+      labelKey: "shell.app.side.item.notifications",
+      icon: Bell
     }
   ]
 };

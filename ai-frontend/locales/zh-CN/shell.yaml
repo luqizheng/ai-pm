@@ -173,7 +173,6 @@ shell:
     governance: 治理
     approvals: 审批确认
     settings: 设置
-    inbox: 公告中心
 
   # ── 应用壳（Figma「03 — Application Shell」+ Shell V1.1）────────────────
   app:
@@ -205,7 +204,6 @@ shell:
       item:
         personalWorkspace: 个人工作区
         personalHome: 我的主页
-        inbox: 收件箱
         dashboard: 团队总览
         projects: 项目
         repository: 代码仓库
@@ -229,6 +227,7 @@ shell:
         aiProviders: AI Provider
         adminMembers: 成员
         adminAnnouncements: 公告管理
+        notifications: 通知中心
         teamSettings: 团队设置
         gitCredentials: Git 凭证（SSH Keys）
       sub:

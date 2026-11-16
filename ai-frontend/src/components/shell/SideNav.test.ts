@@ -186,11 +186,11 @@ describe("SideNav", () => {
     const { wrapper } = mountShell(SideNav);
     await nextTick();
 
-    // 徽标数字来自导航树静态配置（非实时计数）。AI 执行中心原先的
-    // 「2」是演示期硬编码占位，S05 接真后由 execution-overview 实时聚合
-    // 承载，导航上不再放假的固定数字。
+    // 导航树静态徽标已清零（C5：收件箱占位项删除；原「3」为演示期硬编码）。
+    // 动态徽标仅人工审核中心一项，由 reviewCenter store 随当前项目注入，
+    // 聚合不可用或为 0 时不显示——不伪造数字。
     const badges = wrapper.findAll(".shell-sidenav__badge");
-    expect(badges.map(el => el.text())).toEqual(["3"]);
+    expect(badges.length).toBe(0);
   });
 
   it("展开态显示条目文案，分隔线在区域边界（无项目：三区两条）", async () => {
@@ -211,7 +211,9 @@ describe("SideNav", () => {
     expect(wrapper.find(".shell-sidenav__item-label").exists()).toBe(false);
     // 折叠态：除首组外组间全加（3 组 → 2 条）
     expect(wrapper.findAll(".shell-sidenav__divider").length).toBe(2);
-    expect(wrapper.find(".shell-sidenav__dot").exists()).toBe(true);
+    // 未读圆点现仅人工审核中心动态徽标驱动（C5：收件箱静态徽标随占位项
+    // 删除；无项目/无聚合时不得伪造圆点）
+    expect(wrapper.find(".shell-sidenav__dot").exists()).toBe(false);
   });
 
   it("点击折叠开关切换导航折叠态", async () => {

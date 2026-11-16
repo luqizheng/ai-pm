@@ -6,7 +6,7 @@ import { listRepositories } from "@/api/repositories";
  * 应用壳状态（AI R&D Workspace Application Shell）。
  *
  * 壳自身的开关：
- *   - sidebarCollapsed：左导航折叠（展开 188px / 折叠 60px）
+ *   - sidebarCollapsed：左导航折叠（展开 232px / 折叠 60px）
  *   - aiPanelOpen：AI 面板总开关（AI Chat 446px + 右上下文 288px 整体；
  *     顶栏「助手」按钮，默认全开）
  *   - contextOpen：右上下文栏子开关（面板开着时可由 AI 列头部的

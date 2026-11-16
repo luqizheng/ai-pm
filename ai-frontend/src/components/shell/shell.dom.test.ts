@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { nextTick } from "vue";
 
 import WorkspaceShell from "./WorkspaceShell.vue";
+import { i18n } from "@/lib/i18n";
 import { mountShell } from "./test-utils";
 
 /**
@@ -44,8 +45,10 @@ describe("shell 无障碍不变量", () => {
 
     const link = wrapper
       .findAll("a")
-      .find(el => el.attributes("href") === "/inbox");
+      .find(el => el.attributes("href") === "/notifications");
     expect(link).toBeTruthy();
-    expect(link!.text()).toContain("收件箱");
+    expect(link!.text()).toContain(
+      i18n.global.t("shell.app.side.item.notifications")
+    );
   });
 });

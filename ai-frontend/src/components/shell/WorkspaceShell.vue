@@ -179,13 +179,6 @@ const searchCommands = computed<SearchCommand[]>(() => {
       group: "action",
       icon: "user",
       target: "/personal"
-    },
-    {
-      id: "cmd-open-inbox",
-      label: t("global.search.commands.openInbox"),
-      group: "action",
-      icon: "inbox",
-      target: "/inbox"
     }
   ];
 });
