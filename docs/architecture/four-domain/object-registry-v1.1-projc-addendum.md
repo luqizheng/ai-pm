@@ -2,7 +2,7 @@
 
 - 日期：2026-11-17（V1.3）· 基准：master `9a38935`（阶段一/二 + 三份核查报告）· 性质：V1.0 注册表（审计产物，基准 05ce33d8）的**增量附录**，不改动 V1.0 原文
 - 依据：《Phase3-P3-11下一阶段实施方案-T1T2T3-v1.0.md》（V1.1）+ 《Phase3-裁决稿-…-v1.1.md》（R-01~R-10）+ 专家评审意见 + **《P3-11 验收前文档级裁决意见 V1.0》（2026-11-17 专家裁决 D-3）**
-- 状态：**已通过工程交付验收**（2026-11-17 用户裁决，台账 §10.6；范围=工程交付验收）；正式冻结待 R-01~R-10 正式裁决（D-1=后置待办）与用户冻结令，验收不产生冻结效力
+- 状态：**已通过工程交付验收**（2026-11-17 用户裁决，台账 §10.6）；**R-01~R-10 正式裁决已完成**（2026-11-17 独立专家意见 V1.0，台账 §10.7：7 项批准、3 项修改后批准）；正式冻结令待用户下达（专家支持有边界条件冻结，建议表述已录台账 §10.7）
 - 版本记录：V1.1（Stage 1 数据面，0025）→ V1.2（T-1/T-2/T-3 正式链：0026/0027 + 提案/发布/关系/冲突服务 + worker 重挂 + close 双域分流 + 字典废弃）→ **V1.3（专家裁决 D-3：SOURCE/RELATION/CONFLICT 状态降级 + 实现状态判定口径与晋级规则冻结，见 §5）**
 
 ## 1. Project Cognition 域（owner_domain=PROJECT_COGNITION）注册条目更新
@@ -40,6 +40,7 @@ NULL 仅出现在 0026 之前的历史行 = 显式 Legacy（close 跳过 ProjC �
 ## 3. DomainRef 契约字段（R-07 V1.1，全域统一口径）
 
 - target 侧四字段：`target_domain / target_type / target_id / target_revision_id`（+`revision_missing_reason`），先例=kb.memory_ref、pc.source、projc.source/projc.evidence（0025）。
+- **字段名称映射（O-09，R-07 修改条件，2026-11-17 独立专家裁决）**：抽象契约层 `revision_context` ↔ 存储层 `target_revision_id`（+`revision_missing_reason` 标记不可达原因）——同一语义的契约名与存储名，不得当作两个不同能力实现；P3-D04 统一契约命名。
 - 关系确认权威=`*_relationship_type.owner_domain`（0007 冻结语义不变；**projc.relationship_type 已随 0026 落地，owner_domain CHECK IN ('project_cognition')**——独立字典，非 pc 枚举扩展）。
 - **禁止把关系所有权与目标对象所有权合并为单一 Domain 字段。**
 - 通道注册真源=kb-pc-contracts::registry（TargetDomain::ProjectCognition 目标态 projc.*，通道仍 ReadOnly——DomainRef 引用与事件 payload 均已使用该域）。
@@ -75,3 +76,19 @@ NULL 仅出现在 0026 之前的历史行 = 显式 Legacy（close 跳过 ProjC �
 - INTEGRATED → COMPLETE：需适用的生命周期、门禁、幂等、并发、审计及恢复验证证据。
 
 与台账的关联（双台账约定，台账 §9.1）：本列仅承载 Implementation 维度；Architecture Decision 维度（R-01~R-10 正式裁决状态）以台账 §9 勾选记录为准，二者不互相替代。「没有生产调用方」不是实现失败——RELATION/CONFLICT 属于已实现、等待领域模型与产品入口设计（P3-D04）的对象。
+
+## 6. Decision 维度（2026-11-17 独立专家裁决 V1.0，台账 §10.7；双台账关联）
+
+Architecture Decision 与 Implementation/Acceptance（§5）为两个独立维度，不得互相替代。
+
+| 对象 | Decision（架构裁决） | Implementation（§5 口径） | Acceptance |
+|---|---|---|---|
+| OBJECT / REVISION | 已批准（R-01/R-02/R-03） | COMPLETE | 工程交付验收已通过（2026-11-17，台账 §10.6）；未冻结 |
+| VERSION / PROPOSAL | 已批准（R-01/R-02/R-09） | COMPLETE | 同上 |
+| SOURCE | 已批准（R-01，含 source 语义约束） | INTEGRATED | 同上 |
+| EVIDENCE | 已批准（R-01） | COMPLETE | 同上 |
+| RELATION | **修改后批准**（R-07：引用完整性细则 O-02 归 P3-D04；字段映射 O-09） | IMPLEMENTED（生产起草入口待接） | 同上 |
+| CONFLICT | **修改后批准**（R-06：生产登记入口 O-06 归 P3-D04） | IMPLEMENTED（L3 消费面已集成） | 同上 |
+| 统一检索（R-08） | 已批准（架构原则） | 未实现（P3-10 承接 O-07） | 不适用 |
+
+裁决条件跟踪：R-04④=**Partial**（完整跨 schema resolver 归 P3-10，O-01；七项停止条件部分满足，不得登记为全部满足）。开放项 O-01~O-09 全量清单与责任分配见台账 §10.7，不因裁决通过而从台账消失。
