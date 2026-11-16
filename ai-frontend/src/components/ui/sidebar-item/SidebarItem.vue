@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed, type Component } from "vue";
 import { LoaderCircle } from "lucide-vue-next";
+import { RouterLink } from "vue-router";
 import { cn } from "@/lib/cn";
 
 /**
@@ -27,6 +28,8 @@ interface Props {
   size?: SidebarItemSize;
   state?: SidebarItemState;
   collapsed?: boolean;
+  /** 传路由路径时渲染为 RouterLink（保留真实链接语义），否则渲染为 button */
+  to?: string;
   /** 徽标内容（数字计数或短状态文字） */
   badge?: string | number;
   /** 徽标类型：count = 计数样式；status = 状态文字样式 */
@@ -39,6 +42,7 @@ const props = withDefaults(defineProps<Props>(), {
   size: "md",
   state: "default",
   collapsed: false,
+  to: undefined,
   badge: undefined,
   badgeType: "count",
   disabled: false
@@ -50,11 +54,19 @@ const isActive = computed(() => props.state === "active");
 const isRestricted = computed(() => props.state === "restricted");
 const isLoading = computed(() => props.state === "loading");
 const isDisabled = computed(() => props.disabled || isRestricted.value);
+
+function onClick(event: MouseEvent) {
+  if (isDisabled.value) {
+    event.preventDefault();
+    return;
+  }
+  emit("click", event);
+}
 </script>
 
 <template>
-  <button
-    type="button"
+  <component
+    :is="to ? RouterLink : 'button'"
     :class="
       cn('ui-sidebar-item', `ui-sidebar-item--${size}`, {
         'is-active': isActive,
@@ -63,10 +75,13 @@ const isDisabled = computed(() => props.disabled || isRestricted.value);
         'is-disabled': disabled
       })
     "
+    :to="to"
+    :type="to ? undefined : 'button'"
     :aria-current="isActive ? 'page' : undefined"
     :aria-busy="isLoading ? 'true' : undefined"
-    :disabled="isDisabled"
-    @click="emit('click', $event)"
+    :aria-disabled="isDisabled ? 'true' : undefined"
+    :disabled="to ? undefined : isDisabled"
+    @click="onClick"
   >
     <span
       v-if="isActive"
@@ -91,7 +106,8 @@ const isDisabled = computed(() => props.disabled || isRestricted.value);
     >
       {{ badge }}
     </span>
-  </button>
+    <slot v-if="!collapsed" name="trailing" />
+  </component>
 </template>
 
 <style scoped>
@@ -105,7 +121,9 @@ const isDisabled = computed(() => props.disabled || isRestricted.value);
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
+  color: var(--text-primary);
   font-family: var(--font-ui);
+  text-decoration: none;
   cursor: pointer;
   transition:
     background-color var(--duration-fast) var(--ease-decelerate),

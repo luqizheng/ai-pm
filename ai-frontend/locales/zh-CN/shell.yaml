@@ -199,6 +199,7 @@ shell:
       group:
         personal: 个人
         workspace: 工作区
+        project: 当前项目
         modules: 项目模块
         admin: 管理
       item:

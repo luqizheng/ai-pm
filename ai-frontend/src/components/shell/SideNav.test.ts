@@ -37,12 +37,12 @@ describe("SideNav", () => {
     const { wrapper } = mountShell(SideNav);
     await nextTick();
 
-    const labels = wrapper.findAll(".shell-sidenav__group-label");
+    const labels = wrapper.findAll(".ui-nav-group__title");
     expect(labels.map(el => el.text())).toEqual(["个人", "工作区", "管理"]);
     // R2-D4/C06：不渲染空项目菜单（紧凑项目头与项目模块条目都不出现）
     expect(wrapper.find(".shell-project-switcher").exists()).toBe(false);
     const hrefs = wrapper
-      .findAll(".shell-sidenav__item")
+      .findAll(".ui-sidebar-item")
       .map(el => el.attributes("href"));
     expect(hrefs.some(href => href?.startsWith("/project/"))).toBe(false);
   });
@@ -52,15 +52,15 @@ describe("SideNav", () => {
     await nextTick();
 
     const item = wrapper
-      .findAll(".shell-sidenav__item")
+      .findAll(".ui-sidebar-item")
       .find(el => (el.attributes("href") ?? "").includes("/dashboard"));
     expect(item).toBeTruthy();
-    expect(item!.find(".shell-sidenav__item-label").text()).toBe(
+    expect(item!.find(".ui-sidebar-item__label").text()).toBe(
       i18n.global.t("shell.app.side.item.dashboard")
     );
   });
 
-  it("有当前项目：渲染紧凑项目头与五组结构（含项目设置置底）", async () => {
+  it("有当前项目：渲染紧凑项目头与两级分组结构（含项目设置置底）", async () => {
     const { wrapper } = await mountWithProject();
 
     // 紧凑 Project Switcher（R2-D3：header 变体复用）
@@ -68,10 +68,11 @@ describe("SideNav", () => {
       true
     );
 
-    const labels = wrapper.findAll(".shell-sidenav__group-label");
+    const labels = wrapper.findAll(".ui-nav-group__title");
     expect(labels.map(el => el.text())).toEqual([
       "个人",
       "工作区",
+      "当前项目",
       "项目模块",
       "项目设置",
       "管理"
@@ -82,7 +83,7 @@ describe("SideNav", () => {
     const { wrapper } = await mountWithProject();
 
     const hrefs = wrapper
-      .findAll(".shell-sidenav__item")
+      .findAll(".ui-sidebar-item")
       .map(el => el.attributes("href"));
     // 项目区首条 = 项目总控台（全局区 Personal/Team 在前）
     const firstProjectItem = hrefs.find(href => href?.startsWith("/project/"));
@@ -102,7 +103,7 @@ describe("SideNav", () => {
     await router.push("/project/requirements");
     await nextTick();
 
-    const active = wrapper.findAll(".shell-sidenav__item.is-active");
+    const active = wrapper.findAll(".ui-sidebar-item.is-active");
     expect(active.length).toBe(1);
     expect(active[0].attributes("href")).toBe("/project/requirements");
     expect(active[0].attributes("aria-current")).toBe("page");
@@ -111,7 +112,7 @@ describe("SideNav", () => {
   it("PLANNED 占位项渲染规划标识（Analysis / Product Cognition / AI 配置）", async () => {
     const { wrapper } = await mountWithProject();
 
-    const planned = wrapper.findAll(".shell-sidenav__planned");
+    const planned = wrapper.findAll(".ui-sidebar-item__badge.is-status");
     // 业务模块 2 项（Analysis / Product Cognition）+ 项目设置 3 项
     // （基础设置 / 成员 / AI 配置；开发环境标识在其子项）
     expect(planned.length).toBe(5);
@@ -132,7 +133,7 @@ describe("SideNav", () => {
 
     // 父项激活 → 子菜单（Devices/Executors/Runners）可见
     const devenv = wrapper
-      .findAll(".shell-sidenav__item")
+      .findAll(".ui-sidebar-item")
       .find(el =>
         (el.attributes("href") ?? "").includes("/project/settings/devenv")
       );
@@ -168,13 +169,13 @@ describe("SideNav", () => {
 
     const adminItems = () =>
       wrapper
-        .findAll(".shell-sidenav__item")
+        .findAll(".ui-sidebar-item")
         .filter(el => (el.attributes("href") ?? "").includes("/admin/"));
     // 默认展开：管理组与其他分组同级呈现，不收成一行小标题
     // （C4 后遗留管理组仅剩平台设置/公告两项；成员与 AI Provider 已迁团队设置）
     expect(adminItems().length).toBe(2);
 
-    const toggles = wrapper.findAll(".shell-sidenav__group-toggle");
+    const toggles = wrapper.findAll(".ui-nav-group__toggle");
     await toggles[2].trigger("click");
     await nextTick();
 
@@ -189,7 +190,7 @@ describe("SideNav", () => {
     // 导航树静态徽标已清零（C5：收件箱占位项删除；原「3」为演示期硬编码）。
     // 动态徽标仅人工审核中心一项，由 reviewCenter store 随当前项目注入，
     // 聚合不可用或为 0 时不显示——不伪造数字。
-    const badges = wrapper.findAll(".shell-sidenav__badge");
+    const badges = wrapper.findAll(".ui-sidebar-item__badge");
     expect(badges.length).toBe(0);
   });
 
@@ -197,7 +198,7 @@ describe("SideNav", () => {
     const { wrapper } = mountShell(SideNav);
     await nextTick();
 
-    expect(wrapper.find(".shell-sidenav__item-label").exists()).toBe(true);
+    expect(wrapper.find(".ui-sidebar-item__label").exists()).toBe(true);
     // V1.2 §6.1：区域边界各一条（个人│工作区│遗留管理 → 无项目区时 2 条）
     expect(wrapper.findAll(".shell-sidenav__divider").length).toBe(2);
   });
@@ -208,7 +209,7 @@ describe("SideNav", () => {
     shell.setSidebarCollapsed(true);
     await nextTick();
 
-    expect(wrapper.find(".shell-sidenav__item-label").exists()).toBe(false);
+    expect(wrapper.find(".ui-sidebar-item__label").exists()).toBe(false);
     // 折叠态：除首组外组间全加（3 组 → 2 条）
     expect(wrapper.findAll(".shell-sidenav__divider").length).toBe(2);
     // 未读圆点现仅人工审核中心动态徽标驱动（C5：收件箱静态徽标随占位项
@@ -227,6 +228,6 @@ describe("SideNav", () => {
     await nextTick();
 
     expect(toggle.attributes("aria-expanded")).toBe("false");
-    expect(wrapper.find(".shell-sidenav__item-label").exists()).toBe(false);
+    expect(wrapper.find(".ui-sidebar-item__label").exists()).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, type Component } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   ChevronDown,
@@ -13,6 +13,8 @@ import { useRoute } from "vue-router";
 import IconTooltip from "./IconTooltip.vue";
 import ProjectSwitcher from "./ProjectSwitcher.vue";
 
+import { NavigationGroup } from "@/components/ui/navigation-group";
+import { SidebarItem } from "@/components/ui/sidebar-item";
 import {
   globalNavConfig,
   isNavChildActive,
@@ -31,16 +33,21 @@ import {
 } from "@/stores/reviewCenter";
 
 /**
- * 左导航（AI R&D Workspace Application Shell §2B + Figma「04 — Global Navigation」）。
+ * 左导航（AI R&D Workspace Application Shell §2B + Figma「03/04/05」）。
  *
- * 三种导航上下文分列四组，不混成一张扁平菜单：
- *   personal / workspace —— 全局与个人上下文
- *   modules —— 当前项目下的业务模块（带项目上下文头）
- *   admin —— 管理
+ * 一级 = 三个导航上下文（不混成一张扁平菜单）：
+ *   personal —— 个人
+ *   team     —— 工作区
+ *   project  —— 当前项目（有当前项目时渲染）
+ * 遗留管理入口（NAV-0103 待核验）作为末尾一级组原样保留。
+ *
+ * 层级统一由 DS 组件组合（NavigationGroup 13:33391 + SidebarItem 13:33329）：
+ *   一级 NavigationGroup = 上下文；二级 NavigationGroup = 上下文内分区
+ *   （项目总控台 / 项目业务模块 / 项目设置）。
  *
  * 两态（Figma 7-3454 展开 232px / 7:3724 折叠 60px）：
- *   - 展开：分组可折叠、条目带文案、Repository 带二级上下文子菜单、底部键盘提示
- *   - 折叠：纯图标、组间加分隔线、未读项带圆点，悬停出 Tooltip
+ *   - 展开：一级/二级分组可折叠、条目带文案、Repository 带上下文子菜单
+ *   - 折叠：所有分组行隐藏为纯图标、组间加分隔线、未读项带圆点，悬停出 Tooltip
  */
 
 const { t } = useI18n();
@@ -58,60 +65,91 @@ watch(
   { immediate: true }
 );
 
-/** 展开态下各分组的折叠状态（key = 分组 id，默认全部展开） */
+/** 各分组（一级上下文与二级分区共用）的折叠状态，默认全部展开 */
 const collapsedGroups = ref<Record<string, boolean>>({});
 
 const currentPath = computed(() => route.path);
 
-function isGroupCollapsed(group: NavGroup) {
+function isGroupCollapsed(group: { id: string }) {
   return collapsedGroups.value[group.id] === true;
 }
 
-function toggleGroup(group: NavGroup) {
+/**
+ * 侧栏折叠态下强制展开分组（此时分组标题行隐藏，条目全部以图标呈现，
+ * 与折叠态视觉规格一致）。
+ */
+function groupCollapsed(group: { id: string }) {
+  return shell.sidebarCollapsed ? false : isGroupCollapsed(group);
+}
+
+function onGroupToggle(group: { id: string }, collapsed: boolean) {
   collapsedGroups.value = {
     ...collapsedGroups.value,
-    [group.id]: !isGroupCollapsed(group)
+    [group.id]: collapsed
   };
 }
 
-/** 组 → 导航区域映射（R2-D1 区域排序规则，见 navigation.ts NAV_REGION_ORDER）。 */
-const REGION_BY_GROUP_ID: Record<string, NavRegionId> = {
-  personal: "personal",
-  workspace: "team",
-  projectHome: "project",
-  modules: "project",
-  projectSettings: "project",
-  admin: "adminLegacy"
-};
-
-/**
- * 渲染队列（V1.2 §6.1，区域顺序 = NAV_REGION_ORDER）：
- * Personal → Team → Current Project（有当前项目时：总控台/业务模块/项目设置，
- * R2-D4 条件渲染）→ 遗留管理入口。无当前项目时整个项目区不渲染，
- * 不出现灰色禁用的空项目菜单、不伪造默认项目上下文。
- */
-const renderedGroups = computed<NavGroup[]>(() => {
-  const groups: NavGroup[] = [
-    ...globalNavConfig.filter(
-      group => group.id === "personal" || group.id === "workspace"
-    )
-  ];
-  if (shell.currentProjectId) {
-    groups.push(...projectNavConfig, settingsNavConfig);
-  }
-  groups.push(...globalNavConfig.filter(group => group.id === "admin"));
-  return groups;
-});
-
-/**
- * 分组分隔线可见性（V1.2 §6.1：展开态区域边界各一条；折叠态：除首组外组间全加）。
- */
-function showDivider(group: NavGroup, index: number) {
-  if (shell.sidebarCollapsed) return index > 0;
-  const prev = renderedGroups.value[index - 1];
-  if (!prev) return false;
-  return REGION_BY_GROUP_ID[prev.id] !== REGION_BY_GROUP_ID[group.id];
+/** 一级导航上下文（对应 NAV_REGION_ORDER，渲染顺序即视觉顺序） */
+interface NavContextView {
+  id: NavRegionId;
+  labelKey: string;
+  badge?: number;
+  sections: NavGroup[];
 }
+
+/**
+ * 渲染树：Personal → Team → Current Project（有当前项目时）→ 遗留管理入口。
+ *
+ * 每个上下文内部按分区拆列（二级 NavigationGroup）；无独立分区的上下文
+ * （个人/工作区/管理）用 headerless 分区承载条目，避免出现重复的组标题。
+ */
+const renderedContexts = computed<NavContextView[]>(() => {
+  const contexts: NavContextView[] = [];
+
+  const personal = globalNavConfig.find(group => group.id === "personal");
+  if (personal) {
+    contexts.push({
+      id: "personal",
+      labelKey: "shell.app.side.group.personal",
+      sections: [{ ...personal, id: "personalItems", headerless: true }]
+    });
+  }
+
+  const workspace = globalNavConfig.find(group => group.id === "workspace");
+  if (workspace) {
+    contexts.push({
+      id: "team",
+      labelKey: "shell.app.side.group.workspace",
+      sections: [{ ...workspace, id: "workspaceItems", headerless: true }]
+    });
+  }
+
+  // 无当前项目时整个项目区不渲染：不出现灰色禁用的空项目菜单、
+  // 不伪造默认项目上下文（R2-D4）。
+  if (shell.currentProjectId) {
+    const sections = projectNavConfig.map(group =>
+      group.id === "projectHome" ? { ...group, headerless: true } : group
+    );
+    sections.push(settingsNavConfig);
+    contexts.push({
+      id: "project",
+      labelKey: "shell.app.side.group.project",
+      sections
+    });
+  }
+
+  const admin = globalNavConfig.find(group => group.id === "admin");
+  if (admin) {
+    contexts.push({
+      id: "adminLegacy",
+      labelKey: admin.labelKey,
+      badge: admin.badge,
+      sections: [{ ...admin, id: "adminItems", headerless: true }]
+    });
+  }
+
+  return contexts;
+});
 
 function isActive(item: NavItem) {
   if (isNavItemActive(item, currentPath.value)) return true;
@@ -147,6 +185,30 @@ function hasUnreadDot(item: NavItem) {
 /** 折叠态下 Tooltip 的文案（图标按钮的可访问名称） */
 function itemLabel(item: NavItem) {
   return t(item.labelKey);
+}
+
+/** SidebarItem 的接线参数（两态共用一个数据源，避免分支漂移） */
+function itemBindings(item: NavItem): {
+  label: string;
+  icon: Component;
+  to: string;
+  collapsed: boolean;
+  state: "active" | "default";
+  badge: string | number | undefined;
+  badgeType: "count" | "status";
+} {
+  const badge = itemBadge(item);
+  const planned = item.planned === true;
+  return {
+    label: itemLabel(item),
+    icon: item.icon,
+    to: item.path,
+    collapsed: shell.sidebarCollapsed,
+    state: isActive(item) ? "active" : "default",
+    // PLANNED 占位项用状态徽标呈现规划标识（不伪装已上线）
+    badge: badge ?? (planned ? t("shell.app.side.plannedBadge") : undefined),
+    badgeType: badge === undefined && planned ? "status" : "count"
+  };
 }
 
 /**
@@ -191,114 +253,77 @@ async function onSelectProject(id: string) {
     </div>
 
     <div class="shell-sidenav__groups">
-      <template v-for="(group, index) in renderedGroups" :key="group.id">
-        <!-- 分组分隔线（V1.2 §6.1：区域边界；折叠态：除首组外组间） -->
+      <template v-for="(context, index) in renderedContexts" :key="context.id">
+        <!-- 上下文分隔线（V1.2 §6.1：区域边界） -->
         <div
-          v-if="showDivider(group, index)"
+          v-if="index > 0"
           class="shell-sidenav__divider"
           aria-hidden="true"
         />
 
-        <section class="shell-sidenav__group">
-          <!-- 分组标题（折叠态隐藏，仅保留图标与分隔线；headerless 组无标题行） -->
-          <button
-            v-if="!shell.sidebarCollapsed && !group.headerless"
-            type="button"
-            class="shell-sidenav__group-toggle"
-            :aria-expanded="!isGroupCollapsed(group)"
-            @click="toggleGroup(group)"
-          >
-            <ChevronDown
-              v-if="!isGroupCollapsed(group)"
-              :size="10"
-              class="shell-sidenav__chevron"
+        <!-- 一级：导航上下文（个人 / 工作区 / 当前项目 / 管理） -->
+        <NavigationGroup
+          :title="t(context.labelKey)"
+          :badge="context.badge"
+          :headerless="shell.sidebarCollapsed"
+          :collapsed="groupCollapsed(context)"
+          @update:collapsed="value => onGroupToggle(context, value)"
+        >
+          <!-- 紧凑 Project Switcher（R2-D3：复用现有切换守卫链
+               requestProjectSwitch；折叠态收紧为图标入口，项目名识别由
+               顶栏项目芯片承载。旧版大尺寸项目头不恢复——展开过大已裁撤） -->
+          <div v-if="context.id === 'project'" class="shell-sidenav__project">
+            <ProjectSwitcher
+              variant="header"
+              searchable
+              :projects="shell.projects"
+              :current-id="shell.currentProjectId"
+              :switching-to-id="shell.switchingProjectId"
+              @select="onSelectProject"
             />
-            <ChevronRight v-else :size="10" class="shell-sidenav__chevron" />
-            <span class="shell-sidenav__group-label">{{
-              t(group.labelKey)
-            }}</span>
-            <span v-if="group.badge" class="shell-sidenav__group-badge">{{
-              group.badge
-            }}</span>
-          </button>
+          </div>
 
-          <!-- 分组内容（折叠态下标题隐藏，条目仍全部展示为图标）
-               用 v-if 而非 v-show：收起的分组必须真正离开 DOM，
-               否则其链接仍留在键盘 Tab 顺序与无障碍树中。 -->
-          <div
-            v-if="shell.sidebarCollapsed || !isGroupCollapsed(group)"
-            class="shell-sidenav__items"
+          <!-- 二级：上下文内分区（项目总控台 / 项目业务模块 / 项目设置） -->
+          <NavigationGroup
+            v-for="section in context.sections"
+            :key="section.id"
+            :title="t(section.labelKey)"
+            :headerless="shell.sidebarCollapsed || section.headerless"
+            :collapsed="groupCollapsed(section)"
+            @update:collapsed="value => onGroupToggle(section, value)"
           >
-            <!-- 紧凑 Project Switcher（R2-D3：复用现有切换守卫链
-                 requestProjectSwitch；折叠态收紧为图标入口，项目名识别由
-                 顶栏项目芯片承载。旧版大尺寸项目头不恢复——展开过大已裁撤） -->
-            <div
-              v-if="group.id === 'projectHome'"
-              class="shell-sidenav__project"
-            >
-              <ProjectSwitcher
-                variant="header"
-                searchable
-                :projects="shell.projects"
-                :current-id="shell.currentProjectId"
-                :switching-to-id="shell.switchingProjectId"
-                @select="onSelectProject"
-              />
-            </div>
-
-            <template v-for="item in group.items" :key="item.path">
+            <template v-for="item in section.items" :key="item.path">
               <IconTooltip
                 v-if="shell.sidebarCollapsed"
                 :content="itemLabel(item)"
                 side="right"
               >
-                <RouterLink
-                  class="shell-sidenav__item is-collapsed"
-                  :class="{ 'is-active': isActive(item) }"
-                  :to="item.path"
+                <SidebarItem
+                  v-bind="itemBindings(item)"
                   :aria-label="itemLabel(item)"
-                  :aria-current="isActive(item) ? 'page' : undefined"
                 >
-                  <component :is="item.icon" :size="16" aria-hidden="true" />
-                  <span
-                    v-if="hasUnreadDot(item)"
-                    class="shell-sidenav__dot"
-                    aria-hidden="true"
-                  />
-                </RouterLink>
+                  <template v-if="hasUnreadDot(item)" #trailing>
+                    <span class="shell-sidenav__dot" aria-hidden="true" />
+                  </template>
+                </SidebarItem>
               </IconTooltip>
 
-              <RouterLink
-                v-else
-                class="shell-sidenav__item"
-                :class="{ 'is-active': isActive(item) }"
-                :to="item.path"
-                :aria-current="isActive(item) ? 'page' : undefined"
-              >
-                <span class="shell-sidenav__active-bar" aria-hidden="true" />
-                <component :is="item.icon" :size="16" aria-hidden="true" />
-                <span class="shell-sidenav__item-label">{{
-                  t(item.labelKey)
-                }}</span>
-                <span v-if="item.planned" class="shell-sidenav__planned">{{
-                  t("shell.app.side.plannedBadge")
-                }}</span>
-                <span v-if="hasUnreadDot(item)" class="shell-sidenav__badge">
-                  {{ itemBadge(item) }}
-                </span>
-                <ChevronDown
-                  v-if="item.expandable && item.children"
-                  :size="12"
-                  class="shell-sidenav__chevron shell-sidenav__chevron--end"
-                  aria-hidden="true"
-                />
-                <ChevronRight
-                  v-else-if="item.expandable"
-                  :size="12"
-                  class="shell-sidenav__chevron shell-sidenav__chevron--end"
-                  aria-hidden="true"
-                />
-              </RouterLink>
+              <SidebarItem v-else v-bind="itemBindings(item)">
+                <template v-if="item.expandable" #trailing>
+                  <ChevronDown
+                    v-if="item.children"
+                    :size="12"
+                    class="shell-sidenav__chevron"
+                    aria-hidden="true"
+                  />
+                  <ChevronRight
+                    v-else
+                    :size="12"
+                    class="shell-sidenav__chevron"
+                    aria-hidden="true"
+                  />
+                </template>
+              </SidebarItem>
 
               <!-- 上下文子菜单（Figma：Repository 下的 Overview / Branches） -->
               <div
@@ -325,8 +350,8 @@ async function onSelectProject(id: string) {
                 </RouterLink>
               </div>
             </template>
-          </div>
-        </section>
+          </NavigationGroup>
+        </NavigationGroup>
       </template>
     </div>
 
@@ -412,53 +437,9 @@ async function onSelectProject(id: string) {
   gap: var(--space-1);
 }
 
-.shell-sidenav__group {
-  display: flex;
-  flex-direction: column;
-}
-
-.shell-sidenav__group-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  height: var(--size-control-xs);
-  padding: 0 var(--space-3);
-  color: var(--ws-text-secondary);
-  font-size: var(--font-size-nano);
-  font-weight: var(--weight-medium);
-  text-align: left;
-  cursor: pointer;
-  background: transparent;
-  border: none;
-}
-
-.shell-sidenav__group-toggle:focus-visible {
-  outline: none;
-  box-shadow: var(--ws-focus-ring);
-}
-
-.shell-sidenav__group-label {
-  letter-spacing: var(--tracking-caption);
-}
-
-.shell-sidenav__group-badge {
-  margin-left: auto;
-  color: var(--ws-text-secondary);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-micro);
-}
-
-.shell-sidenav__chevron {
-  flex: none;
-}
-
-.shell-sidenav__chevron--end {
-  margin-left: auto;
-}
-
-.shell-sidenav__items {
-  display: flex;
-  flex-direction: column;
+/* 折叠态：分组条目占满整行（DS 分组默认左缩进在图标态下不适用） */
+.shell-sidenav.is-collapsed :deep(.ui-nav-group__items) {
+  padding-left: 0;
 }
 
 /* 项目标记行 */
@@ -470,103 +451,12 @@ async function onSelectProject(id: string) {
   padding: 0 var(--space-3);
 }
 
-.shell-sidenav__project-dot {
+.shell-sidenav__chevron {
   flex: none;
-  width: var(--space-1);
-  height: var(--space-1);
-  background: var(--ws-accent);
-  border-radius: var(--radius-xs);
-}
-
-.shell-sidenav__project-name {
-  overflow: hidden;
   color: var(--ws-text-secondary);
-  font-size: var(--font-size-caption);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-/* 导航条目 */
-.shell-sidenav__item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: var(--ws-row-height);
-  padding: 0 var(--space-3);
-  color: var(--ws-text-secondary);
-  font-size: var(--font-size-body);
-  text-decoration: none;
-  border-radius: var(--radius-sm);
-}
-
-.shell-sidenav__item:hover {
-  color: var(--ws-text-primary);
-  background: var(--ws-hover-veil);
-}
-
-.shell-sidenav__item:focus-visible {
-  outline: none;
-  box-shadow: var(--ws-focus-ring);
-}
-
-.shell-sidenav__item.is-active {
-  color: var(--ws-text-primary);
-  font-weight: var(--weight-medium);
-  background: var(--ws-color-accent-surface);
-}
-
-/* 激活指示条：2×16 accent（Figma 展开态左侧竖条） */
-.shell-sidenav__active-bar {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: var(--size-indicator);
-  height: var(--space-4);
-  background: var(--ws-accent);
-  border-radius: var(--radius-xs);
-  transform: translateY(-50%);
-  opacity: 0;
-}
-
-.shell-sidenav__item.is-active .shell-sidenav__active-bar {
-  opacity: 1;
-}
-
-.shell-sidenav__item-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.shell-sidenav__badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: var(--size-badge-sm);
-  min-width: 18px;
-  margin-left: auto;
-  padding: 0 var(--space-1);
-  color: var(--ws-text-secondary);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-nano);
-  background: var(--ws-elevated);
-  border-radius: var(--radius-xs);
-}
-
-/* 折叠态：纯图标方钮 */
-.shell-sidenav__item.is-collapsed {
-  justify-content: center;
-  height: var(--ws-row-height);
-  padding: 0;
-}
-
-.shell-sidenav__item.is-collapsed .shell-sidenav__active-bar {
-  top: var(--space-2);
-  height: var(--space-4);
-  transform: none;
-}
-
+/* 折叠态未读圆点（侧栏折叠时徽标隐藏，仅保留圆点） */
 .shell-sidenav__dot {
   position: absolute;
   top: var(--space-2);
@@ -577,7 +467,7 @@ async function onSelectProject(id: string) {
   border-radius: var(--radius-full);
 }
 
-/* 组分隔线（折叠态） */
+/* 组分隔线（上下文边界） */
 .shell-sidenav__divider {
   height: var(--border-1);
   margin: 0 var(--space-3);
@@ -651,7 +541,7 @@ async function onSelectProject(id: string) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .shell-sidenav__item,
+  :deep(.ui-sidebar-item),
   .shell-sidenav__control-button {
     transition: none;
   }

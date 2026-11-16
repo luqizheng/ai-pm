@@ -199,6 +199,7 @@ shell:
       group:
         personal: Personal
         workspace: Workspace
+        project: Current Project
         modules: Project modules
         admin: Administration
       item:

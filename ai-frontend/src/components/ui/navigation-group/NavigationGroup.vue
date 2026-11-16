@@ -17,12 +17,15 @@ interface Props {
   defaultCollapsed?: boolean;
   /** 标题右侧计数徽标 */
   badge?: number;
+  /** 无标题行：仅渲染子项（区域顶部的单条目组 / 侧栏折叠态） */
+  headerless?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   collapsed: undefined,
   defaultCollapsed: false,
-  badge: undefined
+  badge: undefined,
+  headerless: false
 });
 
 const emit = defineEmits<{
@@ -46,8 +49,16 @@ function onToggle() {
 </script>
 
 <template>
-  <section :class="cn('ui-nav-group', { 'is-collapsed': isCollapsed })">
+  <section
+    :class="
+      cn('ui-nav-group', {
+        'is-collapsed': !headerless && isCollapsed,
+        'is-headerless': headerless
+      })
+    "
+  >
     <button
+      v-if="!headerless"
       type="button"
       class="ui-nav-group__toggle"
       :aria-expanded="isCollapsed ? 'false' : 'true'"
@@ -65,7 +76,7 @@ function onToggle() {
       <ChevronRight v-else class="ui-nav-group__chevron" aria-hidden="true" />
     </button>
 
-    <div v-if="!isCollapsed" class="ui-nav-group__items">
+    <div v-if="headerless || !isCollapsed" class="ui-nav-group__items">
       <slot />
     </div>
   </section>
