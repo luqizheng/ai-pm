@@ -11,19 +11,28 @@ import { HttpError } from "@digua/http";
 import type { AnalysisReportDetail } from "@/api/analysis-reports";
 
 /**
- * P2-03 详情页测试（裁决 D-2 六节结构）：
- * 六节渲染 / 404 显式错误态（GAP-6 关闭）/ D-4 综合门 / 关闭按钮显隐与回执。
- * 审阅交互（KB 确认 / PC 决策）语义测试在 P2-04。
+ * 详情页测试：
+ * - P2-03：六节渲染（裁决 D-2）/ 404 显式错误态（GAP-6 关闭）/ D-4 综合门 /
+ *   关闭按钮显隐与回执。
+ * - P2-04：审阅交互（KB 确认 / PC 决策 / 关闭）与关闭语义七条状态驱动显隐、
+ *   409/403 错误路径。端点 = 三组既有端点，契约零改动。
  */
 
 const getAnalysisReport = vi.fn();
 const closeAnalysisReport = vi.fn();
 const synthesizeIdentity = vi.fn();
+const confirmKbRevision = vi.fn();
+const decidePcProposal = vi.fn();
 
 vi.mock("@/api/analysis-reports", () => ({
   getAnalysisReport: (...args: unknown[]) => getAnalysisReport(...args),
   closeAnalysisReport: (...args: unknown[]) => closeAnalysisReport(...args),
   synthesizeIdentity: (...args: unknown[]) => synthesizeIdentity(...args)
+}));
+
+vi.mock("@/api/knowledge", () => ({
+  confirmKbRevision: (...args: unknown[]) => confirmKbRevision(...args),
+  decidePcProposal: (...args: unknown[]) => decidePcProposal(...args)
 }));
 
 function detailOf(
@@ -117,6 +126,8 @@ beforeEach(() => {
   getAnalysisReport.mockReset();
   closeAnalysisReport.mockReset();
   synthesizeIdentity.mockReset();
+  confirmKbRevision.mockReset();
+  decidePcProposal.mockReset();
   getAnalysisReport.mockResolvedValue(detailOf());
 });
 
@@ -364,6 +375,215 @@ describe("AnalysisReportDetailView 六节结构（P2-03）", () => {
     await flushPromises();
     expect(getAnalysisReport).toHaveBeenCalledTimes(2);
     expect(getAnalysisReport).toHaveBeenLastCalledWith("rep-2", "proj-1");
+    wrapper.unmount();
+  });
+});
+
+describe("审阅交互与关闭语义七条（P2-04）", () => {
+  /** 复用：第 3 节中取指定提案的操作按钮集合。 */
+  function buttonsOf(wrapper: Awaited<ReturnType<typeof mountDetail>>["wrapper"]) {
+    return wrapper.findAll(".an-proposal").map(card => ({
+      card,
+      buttons: card.findAll("button").map(b => b.text())
+    }));
+  }
+
+  it("七条#1：approved 显示「已批准·待发布」暂记语义（批准≠正式发布）", async () => {
+    const { wrapper } = await mountDetail();
+    // approved 属「已决」，默认待决视图不显示——切到全部
+    await wrapper
+      .findAll(".an-filter-chip")
+      .find(c => c.text() === "全部")!
+      .trigger("click");
+    expect(wrapper.text()).toContain("已批准·待发布");
+    wrapper.unmount();
+  });
+
+  it("七条#2：开放期批准/驳回可互转——按钮显隐按现条件原样保留", async () => {
+    const { wrapper } = await mountDetail();
+    // 切到全部，覆盖 submitted 与 approved 两种状态
+    await wrapper
+      .findAll(".an-filter-chip")
+      .find(c => c.text() === "全部")!
+      .trigger("click");
+    const cards = buttonsOf(wrapper);
+    // submitted：批准 + 驳回
+    expect(cards[0].buttons).toContain("批准");
+    expect(cards[0].buttons).toContain("驳回");
+    // approved：只剩驳回（可再驳回 = 互转开放）
+    expect(cards[1].buttons).not.toContain("批准");
+    expect(cards[1].buttons).toContain("驳回");
+
+    // rejected：只剩批准（可再批准 = 互转开放）
+    getAnalysisReport.mockResolvedValue(
+      detailOf({
+        proposals: [
+          {
+            proposal_id: "prop-3",
+            title: "已驳回提案",
+            status: "rejected",
+            expected_version_no: 5,
+            member_count: 1,
+            created_at: "2026-11-15T08:50:00Z"
+          }
+        ]
+      })
+    );
+    const rejected = await mountDetail();
+    await rejected.wrapper
+      .findAll(".an-filter-chip")
+      .find(c => c.text() === "全部")!
+      .trigger("click");
+    const rejectedCards = buttonsOf(rejected.wrapper);
+    expect(rejectedCards[0].buttons).toContain("批准");
+    expect(rejectedCards[0].buttons).not.toContain("驳回");
+  });
+
+  it("七条#3：报告 closed 后决策按钮冻结不渲染（后端 409 frozen 的前端面）", async () => {
+    getAnalysisReport.mockResolvedValue(detailOf({ status: "closed" }));
+    const { wrapper } = await mountDetail();
+    for (const card of buttonsOf(wrapper)) {
+      expect(card.buttons).not.toContain("批准");
+      expect(card.buttons).not.toContain("驳回");
+    }
+    wrapper.unmount();
+  });
+
+  it("KB 确认：draft + analyzed 渲染按钮；published 或 closed 不渲染", async () => {
+    const { wrapper } = await mountDetail();
+    expect(
+      wrapper.findAll("button").some(b => b.text().includes("确认发布"))
+    ).toBe(true);
+    wrapper.unmount();
+
+    getAnalysisReport.mockResolvedValue(
+      detailOf({
+        kb_revision: detailOf().kb_revision && {
+          ...detailOf().kb_revision!,
+          status: "published"
+        }
+      })
+    );
+    const published = await mountDetail();
+    expect(
+      published.wrapper
+        .findAll("button")
+        .some(b => b.text().includes("确认发布"))
+    ).toBe(false);
+    published.wrapper.unmount();
+
+    getAnalysisReport.mockResolvedValue(detailOf({ status: "closed" }));
+    const closed = await mountDetail();
+    expect(
+      closed.wrapper.findAll("button").some(b => b.text().includes("确认发布"))
+    ).toBe(false);
+    closed.wrapper.unmount();
+  });
+
+  it("KB 确认动作：调用既有 confirm 端点 → 回执 → 详情重拉", async () => {
+    confirmKbRevision.mockResolvedValue({});
+    const { wrapper } = await mountDetail();
+
+    await wrapper
+      .findAll("button")
+      .find(b => b.text().includes("确认发布"))!
+      .trigger("click");
+    await flushPromises();
+
+    expect(confirmKbRevision).toHaveBeenCalledTimes(1);
+    expect(confirmKbRevision).toHaveBeenCalledWith(
+      "doc-1",
+      "kbr-1",
+      "proj-1"
+    );
+    expect(wrapper.text()).toContain("已确认发布");
+    expect(getAnalysisReport).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
+  });
+
+  it("PC 批准动作：CAS expected_version_no 随请求 → 暂记回执 → 详情重拉", async () => {
+    decidePcProposal.mockResolvedValue({});
+    const { wrapper } = await mountDetail();
+
+    const approveButton = wrapper
+      .findAll(".an-proposal")[0]
+      .findAll("button")
+      .find(b => b.text() === "批准")!;
+    await approveButton.trigger("click");
+    await flushPromises();
+
+    expect(decidePcProposal).toHaveBeenCalledTimes(1);
+    expect(decidePcProposal).toHaveBeenCalledWith(
+      "prop-1",
+      "proj-1",
+      { action: "approve", expected_version_no: 4 }
+    );
+    expect(wrapper.text()).toContain("已批准（暂记");
+    expect(getAnalysisReport).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
+  });
+
+  it("权限负向（AC-11/E2E-11）：403 显式呈现、不重试不吞错（KB 确认与 PC 决策）", async () => {
+    confirmKbRevision.mockRejectedValue(
+      new HttpError("forbidden", { status: 403 })
+    );
+    const { wrapper } = await mountDetail();
+    await wrapper
+      .findAll("button")
+      .find(b => b.text().includes("确认发布"))!
+      .trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).toContain("无权限");
+    expect(confirmKbRevision).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+
+    decidePcProposal.mockRejectedValue(
+      new HttpError("forbidden", { status: 403 })
+    );
+    const second = await mountDetail();
+    await second.wrapper
+      .findAll(".an-proposal")[0]
+      .findAll("button")
+      .find(b => b.text() === "批准")!
+      .trigger("click");
+    await flushPromises();
+    expect(second.wrapper.text()).toContain("无权限");
+    expect(decidePcProposal).toHaveBeenCalledTimes(1);
+    second.wrapper.unmount();
+  });
+
+  it("CAS 409（E2E-08 单测级）：过期决定被拒，错误文案可见", async () => {
+    decidePcProposal.mockRejectedValue(
+      new HttpError("version_conflict", { status: 409 })
+    );
+    const { wrapper } = await mountDetail();
+    await wrapper
+      .findAll(".an-proposal")[0]
+      .findAll("button")
+      .find(b => b.text() === "批准")!
+      .trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).toContain("决定失败");
+    expect(wrapper.text()).toContain("并发冲突");
+    wrapper.unmount();
+  });
+
+  it("七条#7：close 409 错误路径 UI 可见（仅 analyzed 渲染关闭入口）", async () => {
+    closeAnalysisReport.mockRejectedValue(
+      new HttpError("conflict", { status: 409 })
+    );
+    const { wrapper } = await mountDetail();
+    await wrapper
+      .findAll("button")
+      .find(b => b.text().includes("关闭报告"))!
+      .trigger("click");
+    await flushPromises();
+    const dialog = wrapper.findComponent({ name: "ConfirmationDialog" });
+    await dialog.vm.$emit("confirm");
+    await flushPromises();
+
+    expect(closeAnalysisReport).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain("关闭失败");
     wrapper.unmount();
   });
 });

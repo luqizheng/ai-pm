@@ -40,6 +40,8 @@ analysis:
     failed: 失败
   proposal:
     members: 个成员对象
+    approve: 批准
+    reject: 驳回
   detail:
     title: 报告详情
     loading: 报告加载中…
@@ -82,6 +84,14 @@ analysis:
     closeError: 关闭失败
   action:
     cancel: 取消
+    confirm: 确认发布
+  notice:
+    kbConfirmed: 已确认发布（同人重复确认不会改原确认记录）
+    approved: 已批准（暂记——报告关闭时统一发布，开放期内可再驳回）
+    rejected: 已驳回（开放期内可再批准）
   error:
     load: 加载失败，请稍后重试
     notFound: 报告不存在或无权访问
+    kbConfirm: 确认失败（需要真人交互登录态；AI / API Key 无确认权）
+    decide: 决定失败（需真人与治理授权；并发冲突或报告已冻结时被拒）
+    forbidden: 无权限——此操作需要真人交互会话（AI / API Key 无权执行）

@@ -40,6 +40,8 @@ analysis:
     failed: Failed
   proposal:
     members: member object(s)
+    approve: Approve
+    reject: Reject
   detail:
     title: Report Detail
     loading: Loading report…
@@ -82,6 +84,14 @@ analysis:
     closeError: Close failed
   action:
     cancel: Cancel
+    confirm: Confirm & Publish
+  notice:
+    kbConfirmed: Confirmed and published (re-confirm by the same person keeps the original record)
+    approved: Approved (held — published together when the report closes; can be rejected again while open)
+    rejected: Rejected (can be approved again while the report is open)
   error:
     load: Load failed, please retry later
     notFound: Report not found or no access
+    kbConfirm: Confirm failed (requires an interactive human session; AI / API keys cannot confirm)
+    decide: Decision failed (requires a human with governance authorization; rejected on concurrency conflict or frozen report)
+    forbidden: No permission — this action requires an interactive human session (AI / API keys cannot perform it)

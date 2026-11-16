@@ -18,10 +18,11 @@ import {
   type CloseReportOutcome,
   type ReportProposalRow
 } from "@/api/analysis-reports";
+import { confirmKbRevision, decidePcProposal } from "@/api/knowledge";
 import { useShellStore } from "@/stores/shell";
 
 /**
- * Analysis 报告详情页（/project/analysis/reports/:reportId，P2-03）。
+ * Analysis 报告详情页（/project/analysis/reports/:reportId，P2-03/P2-04）。
  *
  * 按裁决 D-2 六节呈现（正文与版本以详情 API 单通道回填，每次进入重新拉取——
  * 缓存会陈旧原则）：
@@ -29,13 +30,21 @@ import { useShellStore } from "@/stores/shell";
  *   4. PC 修订内容   5. D-4 身份综合（裁决 D-2，端点语义不变）
  *   6. 关闭与处置（仅 analyzed 可关；回执含 applied/withdrawn/rejected/锚点）
  *
+ * 审阅交互（P2-04，复用三组既有端点，零后端改动）：
+ *   - KB 确认（第 2 节）：confirmKbRevision——按钮条件 = kb_revision draft
+ *     且报告 analyzed；三重门在后端（interactive+真人+成员），前端不重写。
+ *   - PC 提案批准/驳回（第 3 节）：decidePcProposal（CAS expected_version_no）——
+ *     按钮显隐原样保留「报告 analyzed 且 status ∈ {submitted,approved,rejected}」；
+ *     批准=暂记（approvedPending 文案），开放期可互转，closed 冻结不渲染。
+ *   - 报告关闭（第 6 节）：closeAnalysisReport——仅 analyzed 可关；409 显式呈现。
+ *   - 关闭语义七条 = 本页核心验收（自查表见 Phase 2 验收报告）；单飞守卫
+ *     acting/closing 等价迁移；确认范式随迁旧面板单击式，不引入新范式。
+ *
  * - 无 Findings/Conclusions/Recommendations、无 Report Revision 身份——不虚构
  *   （核验 §3.3/§3.4）；正文权威 = DB KB 修订直读（GAP-5 维持登记），本页只经
  *   详情 API 读取，不复制进前端持久 store（● 红线 13）。
  * - 非法/跨项目 Report ID → 显式 404 语义错误态，不静默（GAP-6 随本卡关闭）。
  * - 项目上下文单源 = shell.currentProjectId；项目切换重拉，跨项目 ID 落 404 态。
- * - 审阅交互（KB 确认 / PC 决策）由 P2-04 挂载到第 2/3 节；本卡先交付六节
- *   展示 + D-4 综合动作 + 关闭动作（结构内含，语义验收在 P2-04 测试化）。
  */
 const { t } = useI18n();
 const route = useRoute();
@@ -89,6 +98,87 @@ function proposalStatusVariant(status: string) {
 function proposalStatusLabel(status: string): string {
   if (status === "approved") return t("analysis.proposalStatus.approvedPending");
   return t(`analysis.proposalStatus.${status}`);
+}
+
+/* ── 审阅交互（P2-04：KB 确认 / PC 提案决定；三重门与 CAS 均在后端）──────── */
+
+/** 单飞守卫（KB 确认与 PC 决策共用；等价迁移旧面板 acting）。 */
+const acting = ref(false);
+
+/** KB 确认按钮条件（原样保留）：KB 修订 draft 且报告 analyzed。 */
+const canConfirmKb = computed(
+  () =>
+    detail.value?.status === "analyzed" &&
+    detail.value?.kb_revision?.status === "draft"
+);
+
+/** PC 决策按钮显隐（原样保留）：报告 analyzed 且决定未冻结可互转。 */
+function canDecide(proposal: ReportProposalRow): boolean {
+  return (
+    detail.value?.status === "analyzed" &&
+    (proposal.status === "submitted" ||
+      proposal.status === "approved" ||
+      proposal.status === "rejected")
+  );
+}
+
+function actionErrorText(error: unknown, fallbackKey: string): string {
+  // 权限负向：无权限/非真人 403 显式呈现，不重试不吞错
+  if (error instanceof HttpError && error.status === 403) {
+    return t("analysis.error.forbidden");
+  }
+  return t(fallbackKey);
+}
+
+async function confirmKb(): Promise<void> {
+  if (!currentProjectId.value || acting.value) return;
+  const revision = detail.value?.kb_revision;
+  if (!revision || revision.status !== "draft") return;
+  acting.value = true;
+  successNotice.value = "";
+  actionError.value = "";
+  try {
+    await confirmKbRevision(
+      revision.document_id,
+      revision.revision_id,
+      currentProjectId.value
+    );
+    successNotice.value = t("analysis.notice.kbConfirmed");
+    // 动作后刷新（refreshAfterAction 等价）：draft → published 即时可见
+    await loadDetail();
+  } catch (error) {
+    actionError.value = actionErrorText(error, "analysis.error.kbConfirm");
+  } finally {
+    acting.value = false;
+  }
+}
+
+async function decideProposal(
+  proposal: ReportProposalRow,
+  action: "approve" | "reject"
+): Promise<void> {
+  if (!currentProjectId.value || acting.value) return;
+  acting.value = true;
+  successNotice.value = "";
+  actionError.value = "";
+  try {
+    await decidePcProposal(
+      proposal.proposal_id,
+      currentProjectId.value,
+      {
+        action,
+        expected_version_no: proposal.expected_version_no
+      }
+    );
+    successNotice.value = t(
+      action === "approve" ? "analysis.notice.approved" : "analysis.notice.rejected"
+    );
+    await loadDetail();
+  } catch (error) {
+    actionError.value = actionErrorText(error, "analysis.error.decide");
+  } finally {
+    acting.value = false;
+  }
 }
 
 /* ── 详情加载（每次进入重拉；动作后刷新同通道）────────────────────────── */
@@ -356,6 +446,12 @@ const pageTitle = computed(() =>
                 <MarkdownViewer
                   :model-value="detail.kb_revision.content ?? ''"
                 />
+                <!-- KB 确认（P2-04）：draft + analyzed 才渲染；三重门在后端 -->
+                <div v-if="canConfirmKb" class="an-actions">
+                  <Button size="sm" :loading="acting" @click="confirmKb">
+                    {{ t("analysis.action.confirm") }}
+                  </Button>
+                </div>
               </template>
             </section>
 
@@ -409,6 +505,28 @@ const pageTitle = computed(() =>
                       {{ proposal.member_count }}
                       {{ t("analysis.proposal.members") }}
                     </span>
+                  </div>
+                  <!-- 批准/驳回（P2-04）：显隐与后端门一致——报告 analyzed 且
+                       决定未冻结（submitted/approved/rejected 可互转，原样保留）；
+                       approved=暂记（非正式发布），closed 冻结后不渲染 -->
+                  <div v-if="canDecide(proposal)" class="an-actions">
+                    <Button
+                      v-if="proposal.status !== 'approved'"
+                      size="sm"
+                      :loading="acting"
+                      @click="decideProposal(proposal, 'approve')"
+                    >
+                      {{ t("analysis.proposal.approve") }}
+                    </Button>
+                    <Button
+                      v-if="proposal.status !== 'rejected'"
+                      size="sm"
+                      variant="secondary"
+                      :disabled="acting"
+                      @click="decideProposal(proposal, 'reject')"
+                    >
+                      {{ t("analysis.proposal.reject") }}
+                    </Button>
                   </div>
                 </li>
               </ul>
@@ -648,6 +766,12 @@ const pageTitle = computed(() =>
 }
 
 .an-proposal-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.an-actions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
