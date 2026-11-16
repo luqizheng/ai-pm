@@ -583,4 +583,105 @@ describe("审阅交互与关闭语义七条（P2-04）", () => {
     expect(wrapper.text()).toContain("关闭失败");
     wrapper.unmount();
   });
+
+  it("E2E-11（P2-08）：close 403（无权限）→ forbidden 文案呈现，不吞错", async () => {
+    closeAnalysisReport.mockRejectedValue(
+      new HttpError("forbidden", { status: 403 })
+    );
+    const { wrapper } = await mountDetail();
+    await wrapper
+      .findAll("button")
+      .find(b => b.text().includes("关闭报告"))!
+      .trigger("click");
+    await flushPromises();
+    const dialog = wrapper.findComponent({ name: "ConfirmationDialog" });
+    await dialog.vm.$emit("confirm");
+    await flushPromises();
+
+    expect(closeAnalysisReport).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain("无权限");
+    wrapper.unmount();
+  });
+});
+
+describe("E2E-02 全链（P2-08 单测级）：暂记 → close 批发 → 冻结", () => {
+  it("submitted 批准=暂记 → 关闭时统一发布 → closed 冻结（决策与关闭入口消失）", async () => {
+    // 第 1 拉取：submitted 提案待决
+    const { wrapper } = await mountDetail();
+
+    // 批准 → 暂记（approvedPending），重拉返回 approved
+    decidePcProposal.mockResolvedValue({});
+    getAnalysisReport.mockResolvedValue(
+      detailOf({
+        proposals: [
+          {
+            proposal_id: "prop-1",
+            title: "订单状态机重定义",
+            status: "approved",
+            expected_version_no: 5,
+            member_count: 3,
+            created_at: "2026-11-15T08:30:00Z"
+          }
+        ]
+      })
+    );
+    await wrapper
+      .findAll(".an-proposal")[0]
+      .findAll("button")
+      .find(b => b.text() === "批准")!
+      .trigger("click");
+    await flushPromises();
+    expect(decidePcProposal).toHaveBeenCalledWith("prop-1", "proj-1", {
+      action: "approve",
+      expected_version_no: 4
+    });
+    // 切到「全部」确认暂记态文案
+    await wrapper
+      .findAll(".an-filter-chip")
+      .find(c => c.text() === "全部")!
+      .trigger("click");
+    expect(wrapper.text()).toContain("已批准·待发布");
+
+    // 关闭 → 批发发布（applied=1）→ 回执 → closed 回填
+    closeAnalysisReport.mockResolvedValue({
+      report_id: "rep-1",
+      status: "closed",
+      applied_proposals: 1,
+      publish_failed_proposals: 0,
+      withdrawn_proposals: 0,
+      rejected_kb: false,
+      last_analyzed_commit: "abc123def4567890abcdef"
+    });
+    getAnalysisReport.mockResolvedValue(
+      detailOf({
+        status: "closed",
+        closed_at: "2026-11-15T10:00:00Z",
+        pending_proposals: 0,
+        has_pending_kb: false
+      })
+    );
+    await wrapper
+      .findAll("button")
+      .find(b => b.text().includes("关闭报告"))!
+      .trigger("click");
+    await flushPromises();
+    const dialog = wrapper.findComponent({ name: "ConfirmationDialog" });
+    await dialog.vm.$emit("confirm");
+    await flushPromises();
+
+    expect(closeAnalysisReport).toHaveBeenCalledWith("rep-1", "proj-1");
+    // 回执：批发 applied=1 + 锚点
+    expect(wrapper.text()).toContain("发布 1 个提案");
+    expect(wrapper.text()).toContain("abc123def456");
+    // 冻结：决策按钮与关闭入口消失（七条#3/#7）
+    for (const card of wrapper.findAll(".an-proposal")) {
+      const buttons = card.findAll("button").map(b => b.text());
+      expect(buttons).not.toContain("批准");
+      expect(buttons).not.toContain("驳回");
+    }
+    expect(
+      wrapper.findAll("button").some(b => b.text().includes("关闭报告"))
+    ).toBe(false);
+    wrapper.unmount();
+  });
 });

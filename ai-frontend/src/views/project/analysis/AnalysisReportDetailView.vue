@@ -268,9 +268,9 @@ async function doClose(): Promise<void> {
     closeConfirmOpen.value = false;
     // 关闭后回填 closed 态（决策按钮消失等语义，P2-04 测试化）
     await loadDetail();
-  } catch {
-    // 后端 409（非 analyzed 等）显式呈现，不静默
-    actionError.value = t("analysis.detail.closeError");
+  } catch (error) {
+    // 后端 409（非 analyzed 等）与 403（无权限/非真人）显式呈现，不静默不重试
+    actionError.value = actionErrorText(error, "analysis.detail.closeError");
   } finally {
     closing.value = false;
   }
