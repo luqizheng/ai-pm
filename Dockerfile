@@ -7,7 +7,10 @@
 
 FROM rust:1-slim AS build
 WORKDIR /build
-RUN apt-get update \
+# deb.debian.org / dl-cdn.alpinelinux.org 在本机网络黑洞（连接被拒，同 runbook rsproxy
+# CDN DNS 黑洞同款坑）→ apt 源换 tuna 镜像；用 http：trixie-slim 基镜像不带 ca-certificates。
+RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends pkg-config libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 # crates.io 代理（可选；空值不影响直连）
@@ -37,7 +40,9 @@ RUN cargo build --release --bins --config 'build.rustc-wrapper=""'
 #    （GLIBC 2.41），而 bookworm 只有 GLIBC 2.36 → 容器启动即报
 #    "weak version `GLIBC_2.39' not found"。
 FROM debian:trixie-slim AS runtime-base
-RUN apt-get update \
+# apt 源换 tuna（http，装 ca-certificates 本身前不能走 https）
+RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
@@ -48,7 +53,8 @@ FROM runtime-base AS runtime-pm-api
 # git → 知识写入全部失败（本机 e2e 跑宿主二进制没暴露）。
 # openssh-client：deploy key 生成（ssh-keygen）与 git-over-ssh（ssh -i）必需——
 # `apt-get install --no-install-recommends git` 不会带 ssh-client 推荐（checkpoint-1 实测）。
-RUN apt-get update \
+RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends git openssh-client \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /build/target/release/pm-api /app/pm-api
@@ -60,14 +66,16 @@ FROM runtime-base AS runtime-pm-worker
 # checkpoint-1：KB 仓库快照分析本体在 worker 消费端 shell 出 `git`
 # （clone --bare / rev-parse / log / ls-tree / show）+ git-over-ssh 需 openssh-client。
 # 镜像缺 git 时全部仓库输入的 intake 分析失败（processing.failed）。
-RUN apt-get update \
+RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends git openssh-client \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /build/target/release/pm-worker /app/pm-worker
 ENTRYPOINT ["/app/pm-worker"]
 
 FROM runtime-base AS runtime-ai-pm-worker
-RUN apt-get update \
+RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends git openssh-client \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /build/target/release/ai-pm-worker /app/ai-pm-worker
@@ -81,7 +89,9 @@ ENTRYPOINT ["/app/ai-pm-worker"]
 #   前置：ai-frontend/dist 已在宿主产出；vite 产物含 hash，重建即刷新。
 # API 面由 nginx 代理：/api → pm-api:8090，/gw → api-gateway:3000（同 compose 网络）。
 FROM alpine:3.21 AS runtime-web
-RUN apk add --no-cache nginx
+# dl-cdn.alpinelinux.org 本机黑洞 → 换 tuna 镜像（alpine 基镜像自带 CA bundle，https 可用）
+RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apk/repositories \
+    && apk add --no-cache nginx
 COPY ai-frontend/dist /usr/share/nginx/html
 COPY ai-frontend/docker/nginx.conf /etc/nginx/http.d/default.conf
 EXPOSE 80
