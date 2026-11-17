@@ -45,7 +45,7 @@ pub use object::{
 };
 pub use proposal::{
     analysis_outcome_key, approve_proposal, create_proposal, decide_proposal, expire_proposal,
-    load_proposal,
+    load_proposal, update_proposal_draft,
     propose_from_analysis, reject_proposal, submit_proposal, withdraw_proposal,
     AnalysisProposalInput, AnalysisProposalOutcome, ApprovalReceipt, ApprovalView,
     CreateProposalInput, DecisionAction, DecisionInput, DecisionOutcome, ProposalDecisionInput,

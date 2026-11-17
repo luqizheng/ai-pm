@@ -446,6 +446,137 @@ pub async fn create_proposal(
     Ok(receipt)
 }
 
+/// 提案成员管线 ①规范化 ②目标解析 ③F-05 端点并入 ④R7/F-07 等级下限
+/// （create/update 共用；GAP-10 重锚复用同管线保证锚定语义一致）。
+async fn normalize_proposal_members(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: Uuid,
+    project_id: Uuid,
+    members: Vec<ProposalMemberPin>,
+    governance_input: Option<&str>,
+) -> Result<(Vec<ProposalMemberPin>, String, usize), PcError> {
+    let mut normalized: Vec<ProposalMemberPin> = Vec::with_capacity(members.len());
+    for m in members.into_iter() {
+        let object_kind = OBJECT_CHANGE_KINDS.contains(&m.change_kind.as_str());
+        if !object_kind && !RELATIONSHIP_CHANGE_KINDS.contains(&m.change_kind.as_str()) {
+            return Err(PcError::Invalid(format!(
+                "unknown change_kind `{}`",
+                m.change_kind
+            )));
+        }
+        let pinned = if object_kind {
+            m.object_id.is_some()
+                && m.object_revision_id.is_some()
+                && m.relationship_id.is_none()
+                && m.relationship_revision_id.is_none()
+        } else {
+            m.relationship_id.is_some()
+                && m.relationship_revision_id.is_some()
+                && m.object_id.is_none()
+                && m.object_revision_id.is_none()
+        };
+        if !pinned {
+            return Err(PcError::Invalid(format!(
+                "member `{}` must pin exactly one identity + revision of its dimension",
+                m.change_kind
+            )));
+        }
+        if normalized.iter().any(|x| same_identity(x, &m)) {
+            return Err(PcError::Invalid(format!(
+                "proposal pins {} more than once (one revision per identity)",
+                m.object_id.or(m.relationship_id).unwrap_or_default()
+            )));
+        }
+        normalized.push(m);
+    }
+
+    // ② 目标解析：存在性/归属 + 生命周期 + 类型治理等级；留存关系成员收集域内端点
+    let mut levels: Vec<String> = Vec::new();
+    let mut endpoints: Vec<(Uuid, Uuid, Uuid)> = Vec::new();
+    for m in &normalized {
+        if let (Some(object_id), Some(revision_id)) = (m.object_id, m.object_revision_id) {
+            let (lifecycle, level) =
+                resolve_object_member(tx, tenant_id, project_id, object_id, revision_id).await?;
+            check_lifecycle("object", &m.change_kind, object_id, &lifecycle)?;
+            levels.push(level);
+        } else if let (Some(relationship_id), Some(revision_id)) =
+            (m.relationship_id, m.relationship_revision_id)
+        {
+            let (lifecycle, level, so, sr, to, tr) = resolve_relationship_member(
+                tx,
+                tenant_id,
+                project_id,
+                relationship_id,
+                revision_id,
+            )
+            .await?;
+            check_lifecycle("relationship", &m.change_kind, relationship_id, &lifecycle)?;
+            levels.push(level);
+            if !m.change_kind.starts_with("deprecate_") {
+                for (o, r) in [(so, sr), (to, tr)] {
+                    if let (Some(o), Some(r)) = (o, r) {
+                        endpoints.push((relationship_id, o, r));
+                    }
+                }
+            }
+        }
+    }
+
+    // ③ F-05 端点自动并入（§10.1-3）：缺失端点补 update_object 行；与既有成员冲突拒绝
+    let mut merged = 0usize;
+    for (relationship_id, object_id, revision_id) in endpoints {
+        let existing = normalized.iter().position(|m| m.object_id == Some(object_id));
+        match existing {
+            Some(i) if normalized[i].change_kind == "deprecate_object" => {
+                return Err(PcError::Invalid(format!(
+                    "relationship {relationship_id} keeps object {object_id} as an endpoint \
+                     while the proposal deprecates it"
+                )));
+            }
+            Some(i) if normalized[i].object_revision_id == Some(revision_id) => {}
+            Some(i) => {
+                return Err(PcError::Invalid(format!(
+                    "relationship {relationship_id} pins endpoint object {object_id} at revision \
+                     {revision_id}, but the proposal pins revision {}",
+                    normalized[i].object_revision_id.unwrap_or_default()
+                )));
+            }
+            None => {
+                let (lifecycle, level) =
+                    resolve_object_member(tx, tenant_id, project_id, object_id, revision_id).await?;
+                check_lifecycle("object", "update_object", object_id, &lifecycle)?;
+                levels.push(level);
+                normalized.push(ProposalMemberPin {
+                    change_kind: "update_object".into(),
+                    object_id: Some(object_id),
+                    object_revision_id: Some(revision_id),
+                    relationship_id: None,
+                    relationship_revision_id: None,
+                });
+                merged += 1;
+            }
+        }
+    }
+
+    // ④ R7/F-07 治理等级下限（类型固定等级不可下调）
+    let floor = if levels.iter().any(|l| l == "L2") {
+        "L2"
+    } else {
+        "L1"
+    };
+    let governance_level = match governance_input {
+        None => floor.to_string(),
+        Some("L1") if floor == "L2" => {
+            return Err(PcError::Invalid(
+                "governance level L1 is below the L2 floor fixed by the target types (R7/F-07)"
+                    .into(),
+            ));
+        }
+        Some(level) => level.to_string(),
+    };
+    Ok((normalized, governance_level, merged))
+}
+
 async fn create_proposal_in(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: Uuid,
@@ -502,128 +633,15 @@ async fn create_proposal_in(
         }
     }
 
-    // ① 成员规范化：维度一致 + 每身份恰一个 Revision
-    let mut members: Vec<ProposalMemberPin> = Vec::with_capacity(input.members.len());
-    for m in input.members {
-        let object_kind = OBJECT_CHANGE_KINDS.contains(&m.change_kind.as_str());
-        if !object_kind && !RELATIONSHIP_CHANGE_KINDS.contains(&m.change_kind.as_str()) {
-            return Err(PcError::Invalid(format!(
-                "unknown change_kind `{}`",
-                m.change_kind
-            )));
-        }
-        let pinned = if object_kind {
-            m.object_id.is_some()
-                && m.object_revision_id.is_some()
-                && m.relationship_id.is_none()
-                && m.relationship_revision_id.is_none()
-        } else {
-            m.relationship_id.is_some()
-                && m.relationship_revision_id.is_some()
-                && m.object_id.is_none()
-                && m.object_revision_id.is_none()
-        };
-        if !pinned {
-            return Err(PcError::Invalid(format!(
-                "member `{}` must pin exactly one identity + revision of its dimension",
-                m.change_kind
-            )));
-        }
-        if members.iter().any(|x| same_identity(x, &m)) {
-            return Err(PcError::Invalid(format!(
-                "proposal pins {} more than once (one revision per identity)",
-                m.object_id.or(m.relationship_id).unwrap_or_default()
-            )));
-        }
-        members.push(m);
-    }
-
-    // ② 目标解析：存在性/归属 + 生命周期 + 类型治理等级；留存关系成员收集 PC 内端点
-    let mut levels: Vec<String> = Vec::new();
-    let mut endpoints: Vec<(Uuid, Uuid, Uuid)> = Vec::new();
-    for m in &members {
-        if let (Some(object_id), Some(revision_id)) = (m.object_id, m.object_revision_id) {
-            let (lifecycle, level) =
-                resolve_object_member(tx, tenant_id, project_id, object_id, revision_id).await?;
-            check_lifecycle("object", &m.change_kind, object_id, &lifecycle)?;
-            levels.push(level);
-        } else if let (Some(relationship_id), Some(revision_id)) =
-            (m.relationship_id, m.relationship_revision_id)
-        {
-            let (lifecycle, level, so, sr, to, tr) = resolve_relationship_member(
-                tx,
-                tenant_id,
-                project_id,
-                relationship_id,
-                revision_id,
-            )
-            .await?;
-            check_lifecycle("relationship", &m.change_kind, relationship_id, &lifecycle)?;
-            levels.push(level);
-            if !m.change_kind.starts_with("deprecate_") {
-                for (o, r) in [(so, sr), (to, tr)] {
-                    if let (Some(o), Some(r)) = (o, r) {
-                        endpoints.push((relationship_id, o, r));
-                    }
-                }
-            }
-        }
-    }
-
-    // ③ F-05 端点自动并入（§10.1-3）：缺失端点补 update_object 行；与既有成员冲突拒绝
-    let mut merged = 0usize;
-    for (relationship_id, object_id, revision_id) in endpoints {
-        let existing = members.iter().position(|m| m.object_id == Some(object_id));
-        match existing {
-            Some(i) if members[i].change_kind == "deprecate_object" => {
-                return Err(PcError::Invalid(format!(
-                    "relationship {relationship_id} keeps object {object_id} as an endpoint \
-                     while the proposal deprecates it"
-                )));
-            }
-            Some(i) if members[i].object_revision_id == Some(revision_id) => {}
-            Some(i) => {
-                return Err(PcError::Invalid(format!(
-                    "relationship {relationship_id} pins endpoint object {object_id} at revision \
-                     {revision_id}, but the proposal pins revision {}",
-                    members[i].object_revision_id.unwrap_or_default()
-                )));
-            }
-            None => {
-                let (lifecycle, level) =
-                    resolve_object_member(tx, tenant_id, project_id, object_id, revision_id)
-                        .await?;
-                check_lifecycle("object", "update_object", object_id, &lifecycle)?;
-                levels.push(level);
-                members.push(ProposalMemberPin {
-                    change_kind: "update_object".into(),
-                    object_id: Some(object_id),
-                    object_revision_id: Some(revision_id),
-                    relationship_id: None,
-                    relationship_revision_id: None,
-                });
-                merged += 1;
-            }
-        }
-    }
-
-    // ④ R7/F-07 治理等级下限（类型固定等级不可下调）
-    let floor = if levels.iter().any(|l| l == "L2") {
-        "L2"
-    } else {
-        "L1"
-    };
-    let governance_level = match input.governance_level.as_deref() {
-        None => floor.to_string(),
-        Some("L1") if floor == "L2" => {
-            return Err(PcError::Invalid(
-                "governance level L1 is below the L2 floor fixed by the target types (R7/F-07)"
-                    .into(),
-            ));
-        }
-        Some(level) => level.to_string(),
-    };
-
+    // ①~④ 共享成员管线（GAP-10 重锚复用同管线；抽取自 create 原内联段）。
+    let (members, governance_level, merged) = normalize_proposal_members(
+        tx,
+        tenant_id,
+        project_id,
+        input.members,
+        input.governance_level.as_deref(),
+    )
+    .await?;
     // ⑤ 基线 + 闭合预检
     let current = current_version(&mut **tx, tenant_id, project_id).await?;
     let expected_version_no = current.map(|(_, no)| no).unwrap_or(0);
@@ -1292,6 +1310,140 @@ pub async fn expire_proposal(
         expected_version_no: baseline,
         proposal_content_hash: content_hash,
         member_count: usize::try_from(member_count).unwrap_or_default(),
+    })
+}
+
+// ── draft 修改入口+重锚（GAP-10）────────────────────────────────────────────
+
+/// draft 期修改（GAP-10）：成员增删 → 重锚（共享管线规范化/解析/端点并入/等级
+/// 下限复检 → 重算 content_hash 落列）→ 同事务审计。仅 draft 可修改（其余状态
+/// 409）；基线 expected_version_no 不变（基线移动仍由 submit CAS fail-safe 承
+/// 载=重新起草）；title/rationale/origin 维持原值（锚定面=成员集+元组）。
+pub async fn update_proposal_draft(
+    pool: &PgPool,
+    project_id: Uuid,
+    actor: &AuditActor,
+    proposal_id: Uuid,
+    members: Vec<ProposalMemberPin>,
+) -> Result<ProposalReceipt, PcError> {
+    if members.is_empty() {
+        return Err(PcError::Invalid("a proposal needs at least one member".into()));
+    }
+    let tenant_id = project_tenant(pool, project_id).await?;
+    let mut tx = pool.begin().await?;
+    let (status, title, rationale, origin_kind, governance_level, baseline, source_id): (
+        String,
+        String,
+        String,
+        String,
+        String,
+        i64,
+        Option<Uuid>,
+    ) = sqlx::query_as(
+        "SELECT status, title, rationale, origin_kind, governance_level, expected_version_no, \
+            source_id FROM pc.proposal \
+          WHERE tenant_id = $1 AND project_id = $2 AND id = $3 FOR UPDATE",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(proposal_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or_else(|| PcError::NotFound("proposal not found".into()))?;
+    if status != "draft" {
+        return Err(PcError::Conflict(format!(
+            "proposal is `{status}`; only draft proposals can be edited"
+        )));
+    }
+    if let Some(source_id) = source_id {
+        let found: Option<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM pc.source WHERE tenant_id = $1 AND project_id = $2 AND id = $3",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(source_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if found.is_none() {
+            return Err(PcError::NotFound("source not found in project".into()));
+        }
+    }
+
+    let (members, _governance, _merged) =
+        normalize_proposal_members(&mut tx, tenant_id, project_id, members, Some(&governance_level))
+            .await?;
+
+    // 重锚：内容锚定哈希重算（同 create 管线规范化）+ 落列；成员集整组替换
+    let pins: Vec<VersionMemberPin> = members.iter().filter_map(|m| m.pin()).collect();
+    let content_hash = canonical_proposal_hash(
+        &title,
+        &rationale,
+        &origin_kind,
+        &governance_level,
+        baseline,
+        &pins,
+    );
+    let updated = sqlx::query(
+        "UPDATE pc.proposal SET proposal_content_hash = $4, updated_at = now() \
+          WHERE tenant_id = $1 AND project_id = $2 AND id = $3 AND status = 'draft'",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(proposal_id)
+    .bind(&content_hash)
+    .execute(&mut *tx)
+    .await?;
+    if updated.rows_affected() != 1 {
+        return Err(PcError::Conflict(
+            "proposal status moved during draft edit".into(),
+        ));
+    }
+    sqlx::query("DELETE FROM pc.proposal_member WHERE proposal_id = $1")
+        .bind(proposal_id)
+        .execute(&mut *tx)
+        .await?;
+    for m in &members {
+        sqlx::query(
+            "INSERT INTO pc.proposal_member \
+             (tenant_id, project_id, proposal_id, change_kind, object_id, object_revision_id, \
+              relationship_id, relationship_revision_id) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(proposal_id)
+        .bind(&m.change_kind)
+        .bind(m.object_id)
+        .bind(m.object_revision_id)
+        .bind(m.relationship_id)
+        .bind(m.relationship_revision_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    audit(
+        &mut tx,
+        tenant_id,
+        project_id,
+        actor,
+        "pc_proposal.draft_update",
+        proposal_id,
+        None,
+        json!({
+            "status": "draft",
+            "proposal_content_hash": content_hash,
+            "expected_version_no": baseline,
+            "member_count": members.len(),
+        }),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(ProposalReceipt {
+        proposal_id,
+        status: "draft".into(),
+        governance_level,
+        expected_version_no: baseline,
+        proposal_content_hash: content_hash,
+        member_count: members.len(),
     })
 }
 
