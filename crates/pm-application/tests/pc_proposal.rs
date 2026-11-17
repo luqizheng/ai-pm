@@ -1289,7 +1289,14 @@ async fn analysis_drafts_uncovered_revisions_once(pool: PgPool) {
     .unwrap();
     assert_eq!(pinned, x2.revision_id);
 
-    // failed（如发布 CAS 失配）释放覆盖：修订回到候选池待重新提案
+    // failed（如发布 CAS 失配）释放覆盖：修订回到候选池待重新提案。
+    // 0034 转换守卫（GAP-06）下夹具走合法链：submitted→approved（T-03）→failed（T-07
+    // CAS 失配路径的终态；直写 submitted→failed 已被 DB 兜底正确拒绝）。
+    sqlx::query("UPDATE pc.proposal SET status = 'approved' WHERE id = $1")
+        .bind(second.proposal_id)
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query("UPDATE pc.proposal SET status = 'failed' WHERE id = $1")
         .bind(second.proposal_id)
         .execute(&pool)

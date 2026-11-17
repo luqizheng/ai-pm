@@ -216,7 +216,14 @@ async fn seed_approved_proposal(
         .await
         .unwrap();
     }
-    sqlx::query("UPDATE pc.proposal SET status = 'approved', submitted_at = now() WHERE id = $1")
+    // 0034 转换守卫（GAP-06）下夹具走合法转换链：draft→submitted→approved（直写
+    // 跳态已被 DB 兜底正确拒绝）
+    sqlx::query("UPDATE pc.proposal SET status = 'submitted', submitted_at = now() WHERE id = $1")
+        .bind(proposal_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE pc.proposal SET status = 'approved' WHERE id = $1")
         .bind(proposal_id)
         .execute(pool)
         .await

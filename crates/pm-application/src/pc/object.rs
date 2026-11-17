@@ -120,6 +120,24 @@ pub async fn upsert_object_draft(
                     .bind(actor.principal_id)
                     .execute(&mut *tx)
                     .await?;
+    // GAP-11：草稿物化同事务审计（每次 upsert 落库均有审计行）。
+    crate::pm_write::append_audit_with_after(
+        &mut tx,
+        project_id,
+        actor,
+        "pc_object.draft_upsert",
+        "pc_object",
+        Some(object_id),
+        serde_json::json!({
+            "object_key": input.object_key,
+            "object_type": input.object_type,
+            "display_name": input.display_name,
+            "content_hash": content_hash,
+            "revision_no": no,
+            "revision_created": false,
+        }),
+    )
+    .await?;
                     tx.commit().await?;
                     return Ok(ObjectUpsertReceipt {
                         object_id,
@@ -161,6 +179,24 @@ pub async fn upsert_object_draft(
                 .bind(locked.0)
                 .execute(&mut *tx)
                 .await?;
+    // GAP-11：草稿物化同事务审计（每次 upsert 落库均有审计行）。
+    crate::pm_write::append_audit_with_after(
+        &mut tx,
+        project_id,
+        actor,
+        "pc_object.draft_upsert",
+        "pc_object",
+        Some(object_id),
+        serde_json::json!({
+            "object_key": input.object_key,
+            "object_type": input.object_type,
+            "display_name": input.display_name,
+            "content_hash": content_hash,
+            "revision_no": no + 1,
+            "revision_created": true,
+        }),
+    )
+    .await?;
                 tx.commit().await?;
                 return Ok(ObjectUpsertReceipt {
                     object_id,
