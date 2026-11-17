@@ -519,7 +519,7 @@ async fn close_disposes_pending_items_and_releases_gate(pool: PgPool) {
         proposal2,
         ProposalDecisionInput {
             action: DecisionAction::Approve,
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -611,7 +611,7 @@ async fn close_disposes_pending_items_and_releases_gate(pool: PgPool) {
         proposal2,
         ProposalDecisionInput {
             action: DecisionAction::Reject,
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -890,7 +890,7 @@ async fn projc_submitted_proposal_on(
             &actor,
             drafted.proposal_id,
             pm_application::projc::DecisionInput {
-                reason: None,
+                reason: Some("决定理由".into()),
                 expected_version_no: drafted.expected_version_no,
             },
         )
@@ -1105,7 +1105,7 @@ async fn close_disposes_both_domains_with_independent_counts(pool: PgPool) {
         pc_approved,
         ProposalDecisionInput {
             action: DecisionAction::Approve,
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -1220,7 +1220,7 @@ async fn close_projc_publish_failure_is_independent_and_non_blocking(pool: PgPoo
         &dev(),
         projc_ok,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -1240,7 +1240,7 @@ async fn close_projc_publish_failure_is_independent_and_non_blocking(pool: PgPoo
         &dev(),
         projc_stale,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -1255,7 +1255,7 @@ async fn close_projc_publish_failure_is_independent_and_non_blocking(pool: PgPoo
         pc_approved,
         ProposalDecisionInput {
             action: DecisionAction::Approve,
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )

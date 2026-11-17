@@ -208,7 +208,7 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
         &pool,
         post_json(
             &decision_uri(p1),
-            json!({ "action": "approve", "expected_version_no": 3 }),
+            json!({ "action": "approve", "reason": "测试理由", "expected_version_no": 3 }),
         ),
     )
     .await;
@@ -236,7 +236,7 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
         &pool,
         post_json(
             &decision_uri(p1),
-            json!({ "action": "approve", "expected_version_no": 0 }),
+            json!({ "action": "approve", "reason": "测试理由", "expected_version_no": 0 }),
         ),
     )
     .await;
@@ -304,7 +304,7 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
         &pool,
         post_json(
             &decision_uri(p2),
-            json!({ "action": "approve", "expected_version_no": 1 }),
+            json!({ "action": "approve", "reason": "测试理由", "expected_version_no": 1 }),
         ),
     )
     .await;
@@ -343,7 +343,7 @@ async fn p5_forbids_plain_members_and_ai_principals(pool: PgPool) {
     common::join_dev(&pool, project).await;
     let proposal = submitted_proposal(&pool, project, &dev(), &["gate-a"], 0).await;
     let uri = format!("/v1/pc/proposals/{proposal}/decision?project_id={project}");
-    let approve = json!({ "action": "approve", "expected_version_no": 0 });
+    let approve = json!({ "action": "approve", "reason": "测试理由", "expected_version_no": 0 });
 
     // 普通成员：可读（P4 200）不可确认（P5 403，A3 闸）
     sqlx::query(
@@ -383,7 +383,7 @@ async fn p5_forbids_plain_members_and_ai_principals(pool: PgPool) {
         &pool,
         post_json(
             &uri,
-            json!({ "action": "reject", "expected_version_no": 0 }),
+            json!({ "action": "reject", "reason": "测试理由", "expected_version_no": 0 }),
         ),
     )
     .await;
@@ -478,7 +478,7 @@ async fn p5_rejects_api_key_context(pool: PgPool) {
     )
     .await;
     let uri = format!("/v1/pc/proposals/{proposal}/decision?project_id={project}");
-    let approve = json!({ "action": "approve", "expected_version_no": 0 });
+    let approve = json!({ "action": "approve", "reason": "测试理由", "expected_version_no": 0 });
 
     // API Key：同一主体（Lead）也 403——确认须可信交互上下文
     let response = app
@@ -720,7 +720,7 @@ async fn p3_expands_proposal_and_no_change_conclusions(pool: PgPool) {
                 "/v1/pc/proposals/{}/decision?project_id={project}",
                 receipt.proposal_id
             ),
-            json!({ "action": "approve", "expected_version_no": 0 }),
+            json!({ "action": "approve", "reason": "测试理由", "expected_version_no": 0 }),
         ),
     )
     .await;

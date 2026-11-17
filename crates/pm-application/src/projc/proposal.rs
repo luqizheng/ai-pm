@@ -40,6 +40,7 @@ use crate::actor::AuditActor;
 use crate::outbox::{OutboxAppend, OutboxEvent, PgOutboxAppend};
 
 use super::publish::canonical_proposal_hash_from_rows;
+use super::sha256_hex;
 use super::{
     canonical_proposal_hash, ensure_formal_authorized, frozen_by_conflict, ProjcError,
     ProposalMemberPin, PublishReceipt, VersionMemberPin,
@@ -913,6 +914,13 @@ async fn record_decision(
     // 真人 + A3（事务外只读判定，与发布④同口径；H-11 已知窗口）
     ensure_formal_authorized(pool, project_id, actor).await?;
 
+    // 决策理由必填（GAP-05，D1.3 决策理由约束）：null/空/纯空白拒绝（Invalid）；
+    // 存规范化值（trim）。与 expired_reason（GAP-36/§D2.2）平行不同字段。
+    let reason = match input.reason.as_deref().map(str::trim) {
+        Some(r) if !r.is_empty() => r.to_string(),
+        _ => return Err(ProjcError::Invalid("decision_reason is required".into())),
+    };
+
     // 审阅流 v2：决定在关联报告关闭前可反复修改（approved/rejected 互转）；报告
     // closed 即冻结。无报告关联的提案不受报告门约束。
     let report_status: Option<String> = sqlx::query_scalar(
@@ -1022,12 +1030,7 @@ async fn record_decision(
         }
     }
 
-    let reason = input
-        .reason
-        .as_deref()
-        .map(str::trim)
-        .filter(|r| !r.is_empty())
-        .map(str::to_string);
+    // reason 已在入口校验并规范化（GAP-05）。
     let decided = sqlx::query(
         "UPDATE projc.approval \
             SET status = $2, decided_by = $3, decided_at = now(), decision_reason = $4 \
@@ -1203,6 +1206,93 @@ pub async fn withdraw_proposal(
     })
 }
 
+// ── expire（T-10，Q-12 模式 A，GAP-36）──────────────────────────────────────
+
+/// 过期（submitted → expired）：**人工触发终态**（Q-12 模式 A）。主体=作用域授权
+/// A3 授权人（真人，fail-closed，与 decide/发布④同口径；AI 主体在主体类型层即拒）；
+/// expired_reason 必填（§D2.2：null/空/纯空白拒绝，trim 存规范化值）；V1 无自动
+/// 到期/无巡检。并发契约=§D4.10 八保证（FOR UPDATE+获锁重检仅 submitted+
+/// rows_affected 双保险+同事务四写 status/expired_at/expired_reason/审计）；
+/// pending 审批行保留原状（withdraw 先例：审批表只承载裁决事实，无裁决人不落
+/// 终态）。expired_at=决策事实时间（R38/GAP-33，事务时刻，≠流程元数据 updated_at）；
+/// 无 Outbox 事件（V1 目录无对应项）。expired 终态不可再决/再 expire（Q-03 终态性）。
+pub async fn expire_proposal(
+    pool: &PgPool,
+    project_id: Uuid,
+    actor: &AuditActor,
+    proposal_id: Uuid,
+    reason: Option<String>,
+) -> Result<ProposalReceipt, ProjcError> {
+    let tenant_id = project_tenant(pool, project_id).await?;
+    // 真人 + A3（事务外只读判定，与 decide/发布④同口径；Q-12 模式 A）
+    ensure_formal_authorized(pool, project_id, actor).await?;
+    // expired_reason 输入契约（§D2.2）：必填；trim；空/纯空白拒绝；存规范化值
+    let reason = match reason.as_deref().map(str::trim) {
+        Some(r) if !r.is_empty() => r.to_string(),
+        _ => return Err(ProjcError::Invalid("expired_reason is required".into())),
+    };
+
+    let mut tx = pool.begin().await?;
+    let (status, governance_level, baseline, content_hash): (String, String, i64, String) =
+        sqlx::query_as(
+            "SELECT status, governance_level, expected_version_no, proposal_content_hash \
+               FROM projc.proposal WHERE tenant_id = $1 AND project_id = $2 AND id = $3 \
+               FOR UPDATE",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(proposal_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| ProjcError::NotFound("proposal not found".into()))?;
+    if status != "submitted" {
+        return Err(ProjcError::Conflict(format!(
+            "proposal is `{status}`; only submitted proposals can expire"
+        )));
+    }
+    let updated = sqlx::query(
+        "UPDATE projc.proposal \
+          SET status = 'expired', expired_at = now(), expired_reason = $4, updated_at = now() \
+          WHERE tenant_id = $1 AND project_id = $2 AND id = $3 AND status = 'submitted'",
+    )
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(proposal_id)
+    .bind(&reason)
+    .execute(&mut *tx)
+    .await?;
+    if updated.rows_affected() != 1 {
+        return Err(ProjcError::Conflict(
+            "proposal status moved concurrently".into(),
+        ));
+    }
+    let member_count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM projc.proposal_member WHERE proposal_id = $1")
+            .bind(proposal_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    audit(
+        &mut tx,
+        tenant_id,
+        project_id,
+        actor,
+        "projc_proposal.expire",
+        proposal_id,
+        Some(json!({ "status": status })),
+        json!({ "status": "expired", "expired_reason": reason }),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(ProposalReceipt {
+        proposal_id,
+        status: "expired".into(),
+        governance_level,
+        expected_version_no: baseline,
+        proposal_content_hash: content_hash,
+        member_count: usize::try_from(member_count).unwrap_or_default(),
+    })
+}
+
 // ── P4 视图 ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
@@ -1355,6 +1445,7 @@ pub fn analysis_outcome_key(task_id: Uuid) -> String {
     format!("projc_analysis:{task_id}")
 }
 
+#[derive(Clone)]
 pub struct AnalysisProposalInput {
     /// 本次分析登记的 projc.source（证据钉扎的修订集 = 候选集）。
     pub source_id: Uuid,
@@ -1381,6 +1472,21 @@ pub enum AnalysisProposalOutcome {
 /// 自愈与存量草稿首轮入链，且同一修订集不会重复提案。
 ///
 /// 项目级 advisory lock 串行化「覆盖判定 → 起草」，并发分析不会重复提同一修订。
+/// 请求意图指纹（D6.6 §2 九要素规范化投影；分析链请求面=source+文本，执行
+/// 可知维度为空值原样入规范化串）。E-43 同族规范化：title/rationale trim 原文、
+/// origin_kind 枚举原文、成员 pins 字典序 `kind:identity:revision`（分析链请求
+/// 不携带成员→空段）。op_id 携带任务锚（`projc-analyze:{task_id}`），
+/// 不进指纹（D6.6 §2 行 3/6 同口径）。
+fn analysis_request_fingerprint(source_id: Uuid, title: &str, rationale: &str) -> String {
+    let body = format!(
+        "request|{}|{}|repo_analysis|||{}|\n",
+        title.trim(),
+        rationale.trim(),
+        source_id
+    );
+    sha256_hex(&body)
+}
+
 pub async fn propose_from_analysis(
     pool: &PgPool,
     project_id: Uuid,
@@ -1395,6 +1501,75 @@ pub async fn propose_from_analysis(
     .bind(project_id.to_string())
     .execute(&mut *tx)
     .await?;
+
+    // ── 起草段账本（GAP-01/27，Q-01 方案 A：账本与业务同事务；D6.6 §4 分析链
+    // op_id=`{{}}-analyze:{task_id}`；§5 唯一键等待互斥；场景 1/2/9）────
+    let operation_id = format!("projc-analyze:{}", input.task_id);
+    let fingerprint =
+        analysis_request_fingerprint(input.source_id, &input.title, &input.rationale);
+    // 短路先查（候选重推导之前）：completed → 严格指纹判定 → 幂等返回原提案
+    if let Some((op_status, stored_fp)) = sqlx::query_as::<
+        _,
+        (String, Option<String>),
+    >(
+        "SELECT status, request_fingerprint FROM projc.write_operation \
+          WHERE tenant_id = $1 AND project_id = $2 AND operation_id = $3",
+    )
+    .bind(&tenant_id)
+    .bind(project_id)
+    .bind(&operation_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    {
+        if op_status == "completed" {
+            if stored_fp.as_deref() != Some(fingerprint.as_str()) {
+                tx.rollback().await?;
+                return Err(ProjcError::Conflict(format!(
+                    "operation `{operation_id}` request fingerprint mismatch (same op_id, different intent)"
+                )));
+            }
+            // 幂等重放（场景 1/9）：source_id 锚定原提案；同事务模型无孤儿
+            let row: Option<(Uuid, String, String, i64, String)> = sqlx::query_as(
+                "SELECT p.id, p.status, p.governance_level, p.expected_version_no, \
+                       p.proposal_content_hash \
+                   FROM projc.proposal p \
+                  WHERE p.tenant_id = $1 AND p.project_id = $2 AND p.source_id = $3 \
+                    AND p.origin_kind = 'repo_analysis' \
+                    AND p.status NOT IN ('failed','expired') \
+                  ORDER BY p.created_at DESC LIMIT 1",
+            )
+            .bind(&tenant_id)
+            .bind(project_id)
+            .bind(input.source_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+            let (pid, p_status, gov, baseline, content_hash) = row.ok_or_else(|| {
+                ProjcError::Conflict(format!(
+                    "operation `{operation_id}` is completed but no live proposal found"
+                ))
+            })?;
+            let member_count: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM projc.proposal_member WHERE proposal_id = $1",
+            )
+            .bind(pid)
+            .fetch_one(&mut *tx)
+            .await?;
+            tx.commit().await?;
+            return Ok(AnalysisProposalOutcome::Proposed(ProposalReceipt {
+                proposal_id: pid,
+                status: p_status,
+                governance_level: gov,
+                expected_version_no: baseline,
+                proposal_content_hash: content_hash,
+                member_count: usize::try_from(member_count).unwrap_or_default(),
+            }));
+        }
+        // pending 行仅可能来自同事务未提交写入（advisory 串行下不可见）——防御拒绝
+        tx.rollback().await?;
+        return Err(ProjcError::Conflict(format!(
+            "operation `{operation_id}` is `{op_status}`; concurrent draft segment"
+        )));
+    }
 
     let candidates: Vec<(Uuid, Uuid, String)> = sqlx::query_as(
         "SELECT DISTINCT o.id, e.object_revision_id, o.lifecycle_status \
@@ -1431,6 +1606,23 @@ pub async fn propose_from_analysis(
         return Ok(AnalysisProposalOutcome::NoChange);
     }
 
+
+    // 认领账本行（唯一键等待互斥；request_fingerprint=请求意图九要素投影，
+    // 认领即锚定、完成前不可变——D6.6 §1）。
+    sqlx::query(
+        "INSERT INTO projc.write_operation \
+         (tenant_id, project_id, operation_id, command, status, expected_content_hash, \
+          request_fingerprint, created_by) \
+         VALUES ($1, $2, $3, 'projc_propose_from_analysis', 'pending', 'pending', $4, $5) \
+         ON CONFLICT (tenant_id, project_id, operation_id) DO NOTHING",
+    )
+    .bind(&tenant_id)
+    .bind(project_id)
+    .bind(&operation_id)
+    .bind(&fingerprint)
+    .bind(actor.principal_id)
+    .execute(&mut *tx)
+    .await?;
     // 已正式化（active）→ update_object；尚未入版本 → create_object
     let members: Vec<ProposalMemberPin> = candidates
         .into_iter()
@@ -1519,6 +1711,17 @@ pub async fn propose_from_analysis(
             },
         )
         .await?;
+
+    // 起草段账本完成锚定（同事务；无部分状态——D6.7）。
+    sqlx::query(
+        "UPDATE projc.write_operation SET status = 'completed', updated_at = now() \
+          WHERE tenant_id = $1 AND project_id = $2 AND operation_id = $3",
+    )
+    .bind(&tenant_id)
+    .bind(project_id)
+    .bind(&operation_id)
+    .execute(&mut *tx)
+    .await?;
     tx.commit().await?;
     Ok(AnalysisProposalOutcome::Proposed(receipt))
 }

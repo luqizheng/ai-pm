@@ -19,7 +19,7 @@ use uuid::Uuid;
 use pm_application::actor::AuditActor;
 use pm_application::projc::{
     approve_proposal, create_conflict, create_proposal, create_relationship_draft,
-    propose_from_analysis, publish_version, register_evidence, register_source,
+    expire_proposal, propose_from_analysis, publish_version, register_evidence, register_source,
     resolve_conflict, reject_proposal, submit_proposal, upsert_object_draft, withdraw_proposal,
     AnalysisProposalInput, AnalysisProposalOutcome, ConflictInput, CreateProposalInput,
     EvidenceInput, EvidenceSubject, ProjcEndpoint, ProjcError, PublishVersionInput,
@@ -251,7 +251,7 @@ async fn proposal_full_lifecycle_reject_and_withdraw(pool: PgPool) {
         &lead,
         p3.proposal_id,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -355,7 +355,7 @@ async fn formal_writes_fail_closed_for_ai_and_unauthorized(pool: PgPool) {
         &ai,
         proposal.proposal_id,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -369,7 +369,7 @@ async fn formal_writes_fail_closed_for_ai_and_unauthorized(pool: PgPool) {
         &AuditActor::principal(MEMBER),
         proposal.proposal_id,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -386,7 +386,7 @@ async fn formal_writes_fail_closed_for_ai_and_unauthorized(pool: PgPool) {
         &lead,
         proposal.proposal_id,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -426,7 +426,7 @@ async fn formal_writes_fail_closed_for_ai_and_unauthorized(pool: PgPool) {
         &AuditActor::principal(MEMBER),
         proposal.proposal_id,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -492,7 +492,7 @@ async fn publish_replays_receipt_and_cas_mismatch_fails_proposal(pool: PgPool) {
         &lead,
         p1.proposal_id,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -553,7 +553,7 @@ async fn publish_replays_receipt_and_cas_mismatch_fails_proposal(pool: PgPool) {
         &lead,
         p2.proposal_id,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -677,7 +677,7 @@ async fn conflict_freezes_and_resolves(pool: PgPool) {
         &lead,
         proposal.proposal_id,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -924,7 +924,7 @@ async fn relationship_endpoints_types_ext_keys_and_closure(pool: PgPool) {
         &lead,
         proposal.proposal_id,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -1104,7 +1104,7 @@ async fn propose_from_analysis_candidate_exclusion(pool: PgPool) {
         &lead,
         receipt.proposal_id,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -1249,7 +1249,7 @@ async fn decide_is_terminal_cross_state_rejected(pool: PgPool) {
         &lead,
         proposal.proposal_id,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -1262,7 +1262,7 @@ async fn decide_is_terminal_cross_state_rejected(pool: PgPool) {
         &lead,
         proposal.proposal_id,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -1328,7 +1328,7 @@ async fn decide_is_terminal_cross_state_rejected(pool: PgPool) {
         &lead,
         proposal2.proposal_id,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -1341,7 +1341,7 @@ async fn decide_is_terminal_cross_state_rejected(pool: PgPool) {
         &lead,
         proposal2.proposal_id,
         pm_application::projc::DecisionInput {
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 0,
         },
     )
@@ -1368,4 +1368,95 @@ async fn decide_is_terminal_cross_state_rejected(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(reject_audit, 1);
+}
+
+// ── 1c. expire 人工终态（GAP-36/09②，Q-12 模式 A；T-10/§D4.10/§D2.1/§D2.2）──
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn expire_proposal_manual_terminal(pool: PgPool) {
+    seed_principals(&pool).await;
+    let project = seed_project_with_lead(&pool, "pj-exp").await;
+    let lead = AuditActor::principal(LEAD);
+
+    let obj = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("repository", Some("e1"), "仓库", "c1"),
+    )
+    .await
+    .unwrap();
+    let proposal = create_proposal(
+        &pool,
+        project,
+        &lead,
+        one_object_proposal("过期验证", None, obj.object_id, obj.revision_id),
+    )
+    .await
+    .unwrap();
+    submit_proposal(&pool, project, &lead, proposal.proposal_id, None)
+        .await
+        .unwrap();
+
+    // reason 契约：None/空 → Invalid
+    for bad in [None, Some("   ".to_string())].into_iter() {
+        let r = expire_proposal(&pool, project, &lead, proposal.proposal_id, bad).await;
+        assert!(matches!(r, Err(ProjcError::Invalid(_))), "bad reason → Invalid: {r:?}");
+    }
+
+    // 正常路径：submitted → expired；列值+审计落库
+    let receipt = expire_proposal(
+        &pool,
+        project,
+        &lead,
+        proposal.proposal_id,
+        Some("长期未决".into()),
+    )
+    .await
+    .unwrap();
+    assert_eq!(receipt.status, "expired");
+    let (status, expired_at, expired_reason): (String, Option<sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>>, Option<String>) =
+        sqlx::query_as(
+            "SELECT status, expired_at, expired_reason FROM projc.proposal WHERE id = $1",
+        )
+        .bind(proposal.proposal_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(status, "expired");
+    assert!(expired_at.is_some());
+    assert_eq!(expired_reason.as_deref(), Some("长期未决"));
+    let expire_audit: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log \
+          WHERE project_id = $1 AND action = 'projc_proposal.expire'",
+    )
+    .bind(project)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(expire_audit, 1);
+
+    // pending 审批行保留原状
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM projc.approval WHERE proposal_id = $1 AND status = 'pending'",
+    )
+    .bind(proposal.proposal_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(pending, 1, "pending 审批行保留原状");
+
+    // 终态收敛：decide 一律 409（§D4.10 保证 5）
+    let decide_after = approve_proposal(
+        &pool,
+        project,
+        &lead,
+        proposal.proposal_id,
+        pm_application::projc::DecisionInput {
+            reason: Some("决定理由".into()),
+            expected_version_no: 0,
+        },
+    )
+    .await;
+    assert!(matches!(decide_after, Err(ProjcError::Conflict(_))), "{decide_after:?}");
 }

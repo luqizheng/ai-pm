@@ -102,6 +102,13 @@ pub(super) async fn publish_inner(
     // 与 close 链同款；调用方不得给定任意键）。
     let operation_id = format!("projc-decision:{}", input.proposal_id);
 
+    // R38/GAP-33 字段级分离：confirmed_at=发布确认决策时刻（授权通过后捕获，
+    // 与锁等待无关）；created_at 维持插入默认承载发布生效时间——两语义不再
+    // 共用同一默认值（D7.1；列已有不可变触发器保护，零 DDL 变更）。
+    let confirmed_at: (chrono::DateTime<chrono::Utc>,) =
+        sqlx::query_as("SELECT now()").fetch_one(pool).await?;
+    let confirmed_at = confirmed_at.0;
+
     // ④ 前置门禁（事务外只读判定；事务内不再重判——与 H-11 已知窗口一致）
     ensure_formal_authorized(pool, project_id, actor).await?;
 
@@ -141,8 +148,8 @@ pub(super) async fn publish_inner(
             (row.0, id)
         }
         None => {
-            let row: (String, Option<Uuid>) = sqlx::query_as(
-                "SELECT status, version_id FROM projc.write_operation \
+            let row: (String, Option<Uuid>, Option<String>) = sqlx::query_as(
+                "SELECT status, version_id, request_fingerprint FROM projc.write_operation \
                   WHERE tenant_id = $1 AND project_id = $2 AND operation_id = $3",
             )
             .bind(tenant_id)
@@ -152,6 +159,25 @@ pub(super) async fn publish_inner(
             .await?;
             if row.0 == "completed" {
                 if let Some(version_id) = row.1 {
+                    // 严格指纹判定（GAP-27/§五 T4）：账本指纹=发布确认时的内容锚，
+                    // 与当前提案内容锚比对——同 op 异 fp 一律 409（不得误判重放）。
+                    let (src_proposal,): (Uuid,) = sqlx::query_as(
+                        "SELECT source_proposal_id FROM projc.cognition_version WHERE id = $1",
+                    )
+                    .bind(version_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+                    let (content_hash,): (String,) = sqlx::query_as(
+                        "SELECT proposal_content_hash FROM projc.proposal WHERE id = $1",
+                    )
+                    .bind(src_proposal)
+                    .fetch_one(&mut *tx)
+                    .await?;
+                    if row.2.as_deref() != Some(content_hash.as_str()) {
+                        return Err(ProjcError::Conflict(format!(
+                            "publish ledger fingerprint mismatch for `{operation_id}`"
+                        )));
+                    }
                     let (version_no, snapshot_hash): (i64, String) = sqlx::query_as(
                         "SELECT version_no, snapshot_hash FROM projc.cognition_version WHERE id = $1",
                     )
@@ -458,14 +484,15 @@ pub(super) async fn publish_inner(
     // ⑧⑨ 版本 + 成员（发布即原子）
     let version_id: Uuid = sqlx::query_scalar(
         "INSERT INTO projc.cognition_version \
-         (tenant_id, project_id, version_no, confirmed_by, source_proposal_id, snapshot_hash, \
-          predecessor_version_id) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+         (tenant_id, project_id, version_no, confirmed_by, confirmed_at, source_proposal_id, \
+          snapshot_hash, predecessor_version_id) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
     )
     .bind(tenant_id)
     .bind(project_id)
     .bind(current_no + 1)
     .bind(actor.principal_id)
+    .bind(confirmed_at)
     .bind(input.proposal_id)
     .bind(&snapshot_hash)
     .bind(current_version.map(|(_, id)| id))
@@ -614,11 +641,13 @@ pub(super) async fn publish_inner(
         ));
     }
     sqlx::query(
-        "UPDATE projc.write_operation SET status = 'completed', version_id = $2, updated_at = now() \
+        "UPDATE projc.write_operation SET status = 'completed', version_id = $2, \
+          request_fingerprint = $3, updated_at = now() \
           WHERE id = $1",
     )
     .bind(op_id)
     .bind(version_id)
+    .bind(&proposal_hash)
     .execute(&mut *tx)
     .await?;
 

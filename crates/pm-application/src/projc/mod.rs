@@ -44,7 +44,8 @@ pub use evidence::{
 };
 pub use object::{upsert_object_draft, ObjectUpsertReceipt, UpsertObjectDraft};
 pub use proposal::{
-    analysis_outcome_key, approve_proposal, create_proposal, decide_proposal, load_proposal,
+    analysis_outcome_key, approve_proposal, create_proposal, decide_proposal, expire_proposal,
+    load_proposal,
     propose_from_analysis, reject_proposal, submit_proposal, withdraw_proposal,
     AnalysisProposalInput, AnalysisProposalOutcome, ApprovalReceipt, ApprovalView,
     CreateProposalInput, DecisionAction, DecisionInput, DecisionOutcome, ProposalDecisionInput,

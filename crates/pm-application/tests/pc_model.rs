@@ -1050,6 +1050,21 @@ async fn publish_happy_path_idempotent_and_lifecycle(pool: PgPool) {
     .unwrap();
     assert_eq!(opstatus, "completed");
 
+    // R38/GAP-33 字段级分离：confirmed_at=发布确认决策时刻（发布入口显式捕获，
+    // 不再与 created_at 共用插入默认值）；created_at=发布生效时间承载
+    let (confirmed_at, created_at): (f64, f64) = sqlx::query_as(
+        "SELECT extract(epoch from confirmed_at)::float8, extract(epoch from created_at)::float8 \
+          FROM pc.cognition_version WHERE project_id = $1 AND version_no = 1",
+    )
+    .bind(project)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(
+        confirmed_at <= created_at,
+        "confirmed_at（决策时刻）不得晚于 created_at（生效承载）: {confirmed_at} vs {created_at}"
+    );
+
     // 生命周期推进：A/B/R 全 active
     let active_n: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM pc.cognition_object \
