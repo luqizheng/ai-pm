@@ -48,7 +48,12 @@ analysis:
     secBasic: 基本信息
     secKb: 分析报告正文
     secProposals: "PC 提案（{n}）"
+    sectProjcProposals: "ProjC 技术认知提案（{n}）"
+    techBadge: 技术认知
+    noProjcProposals: 本次分析未起草技术认知提案
     secPcRevisions: "PC 对象修订（{n}）"
+    sectProjcRevisions: "ProjC 对象修订（{n}）"
+    noProjcRevisions: 本次分析未产出技术认知对象修订
     secSynthesis: D-4 身份综合（AI）
     secClose: 关闭与处置
     fieldRepository: 仓库
@@ -80,6 +85,7 @@ analysis:
     closeConfirmTitle: 关闭分析报告
     closeConfirmDescription: 将对 {repo} 的这份报告发布 {publish} 个已批准提案、撤回 {proposals} 个未决提案、拒绝 {kb} 份 KB 草稿，并固化分析锚点；关闭后决定冻结，该仓库可再次分析。
     closeReceipt: 报告已关闭——发布 {applied} 个提案、撤回 {withdrawn} 个未决提案、拒绝 {rejected} 份 KB 草稿，锚点已固化（{commit}），该仓库可再次分析
+    closeReceiptProjc: 技术认知（ProjC）：发布 {projcApplied}、撤回 {projcWithdrawn}、发布失败 {projcFailed}
     closeNotAvailable: 报告不在待审理状态——仅待审理报告可关闭
     closeError: 关闭失败
   action:

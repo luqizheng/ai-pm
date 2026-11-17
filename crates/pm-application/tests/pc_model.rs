@@ -349,12 +349,12 @@ async fn object_draft_upsert_idempotent_and_content_addressed(pool: PgPool) {
         "analysis attribution on analysis revisions"
     );
 
-    // 匿名草稿恒新建
+    // 匿名草稿恒新建（P3-11 W7：pc snapshot 字典已废弃，夹具改用活跃类型）
     let a1 = upsert_object_draft(
         &pool,
         project,
         &lead,
-        draft("module", None, "m", "# m", None),
+        draft("feature", None, "m", "# m", None),
     )
     .await
     .unwrap();
@@ -362,7 +362,7 @@ async fn object_draft_upsert_idempotent_and_content_addressed(pool: PgPool) {
         &pool,
         project,
         &lead,
-        draft("module", None, "m", "# m", None),
+        draft("feature", None, "m", "# m", None),
     )
     .await
     .unwrap();

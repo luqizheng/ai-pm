@@ -204,24 +204,26 @@ pc.conflict 处置：留表留迁移记录；不解冻 L3 守卫；不手工插�
 
 逐项确认 R-01~R-10（可改判，改判须记录理由与影响）：
 
-- [ ] R-01 独立 projc.* schema（含 projc.source 语义约束）
-- [ ] R-02 双域权威边界五条
-- [ ] R-03 分流判据表 + 模块消歧 + D-4 限定
-- [ ] R-04 有界过渡（七条就绪判据 + 过渡行为）
-- [ ] R-05 delivery_activity 移除
-- [ ] R-06 ProjC 自建 conflict + 归属原则 + pc.conflict Legacy
-- [ ] R-07 DomainRef target_domain 四字段契约
-- [ ] R-08 统一检索三层 + 结果元数据要求
-- [ ] R-09 close→publish 分流落点 + 过渡行为
-- [ ] R-10 存量=Legacy Transitional
-- [ ] §7 两条架构红线纳入四域通用治理规范（P3-D05 承接）
+裁决记录（2026-11-17 独立专家意见 V1.0，详情见台账 §10.7）：R-01~R-10 + 红线共 11 项——**7 项批准（R-01/02/03/05/08/09/10）、3 项修改后批准（R-04/06/07）、0 项不批准**；无不批准项。批准架构条款 ≠ 该条款涉及的全部工程能力已完成，R-04/06/07 附加条件保留于台账。
+
+- [x] R-01 独立 projc.* schema（含 projc.source 语义约束）——批准
+- [x] R-02 双域权威边界五条——批准（P3-D04 设计前提）
+- [x] R-03 分流判据表 + 模块消歧 + D-4 限定——批准
+- [x] R-04 有界过渡（七条就绪判据 + 过渡行为）——**修改后批准**：④DomainRef 完整 resolver=Partial 归 P3-10（O-01）；七项不得登记为全部满足
+- [x] R-05 delivery_activity 移除——批准
+- [x] R-06 ProjC 自建 conflict + 归属原则 + pc.conflict Legacy——**修改后批准**：IMPLEMENTED 保留，生产登记入口 O-06 归 P3-D04
+- [x] R-07 DomainRef target_domain 四字段契约——**修改后批准**：引用完整性细则 O-02 归 P3-D04；字段名称映射 O-09（revision_context ↔ target_revision_id/revision_missing_reason）
+- [x] R-08 统一检索三层 + 结果元数据要求——批准（架构原则；实现归 P3-10）
+- [x] R-09 close→publish 分流落点 + 过渡行为——批准
+- [x] R-10 存量=Legacy Transitional——批准
+- [x] §7 两条架构红线纳入四域通用治理规范（P3-D05 承接）——批准（另采纳跨域权限闭环原则：跨域操作须同时满足调用方授权+目标领域授权+目标对象当前状态约束）
 
 三个衔接检查点（正式裁决前核验）：
 
 | 检查点 | 状态 |
 |---|---|
-| 四域注册表：projc.* 纳入注册表、pc.conflict 标 Legacy | ⬜ 随正式裁决执行（registry 文档更新条目） |
-| 0007：owner_domain 保持原语义 ✅（本稿 §2.3 已按原语义表述）；枚举扩展 `project_cognition` 的迁移方案 | ⬜ 随实施任务包（数据迁移：字典行 UPDATE + 关系类型种子） |
+| 四域注册表：projc.* 纳入注册表、pc.conflict 标 Legacy | ☑ 已执行（注册表 V1.1 附录 V1.3：projc 七对象纳入、pc.conflict=Legacy、Decision 维度 2026-11-17） |
+| 0007：owner_domain 保持原语义 ✅（本稿 §2.3 已按原语义表述）；枚举扩展 `project_cognition` 的迁移方案 | ☑ 已按 0026 独立字典实现（projc.relationship_type owner_domain NOT NULL DEFAULT 'project_cognition' + CHECK 收敛；未扩展 pc 枚举——与 R-01 独立 schema 一致） |
 | Phase 2 在途任务核对 | ✅ 已完成，结论见 §5.4（T-1 独立任务项 + E2E-02 漂移登记） |
 
 确认后动作：台账 §9 状态列更新 → P0 解除 → P3-D03/D04 开工 → 实施任务包（schema/服务层/过渡守卫 T-1/停用开关）另编。

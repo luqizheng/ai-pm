@@ -55,6 +55,9 @@ function detailOf(
     run_mode: "incremental",
     since_commit: "dead0000beef0000cafe",
     pending_proposals: 2,
+    projc_source_id: null,
+    projc_pending_proposals: 0,
+    total_pending_proposals: 2,
     has_pending_kb: true,
     kb_revision: {
       revision_id: "kbr-1",
@@ -93,6 +96,8 @@ function detailOf(
         content: "# 订单状态\n\n待付款 → 已付款。"
       }
     ],
+    projc_proposals: [],
+    projc_revisions: [],
     ...overrides
   };
 }
@@ -136,17 +141,61 @@ afterEach(() => {
 });
 
 describe("AnalysisReportDetailView 六节结构（P2-03）", () => {
-  it("六节标题齐备", async () => {
+  it("六节标题齐备（P3-11 追加 ProjC 两节）", async () => {
     const { wrapper } = await mountDetail();
     const titles = wrapper.findAll(".an-sec-title").map(n => n.text());
     expect(titles).toEqual([
       "基本信息",
       "分析报告正文",
       "PC 提案（2）",
+      "ProjC 技术认知提案（0）",
       "PC 对象修订（1）",
+      "ProjC 对象修订（0）",
       "D-4 身份综合（AI）",
       "关闭与处置"
     ]);
+  });
+
+  it("P3-11：ProjC 提案/修订列表渲染（技术认知徽标 + 只读，无决策按钮）", async () => {
+    getAnalysisReport.mockResolvedValue(
+      detailOf({
+        projc_proposals: [
+          {
+            proposal_id: "pjc-prop-1",
+            title: "仓库认知更新：payment-service @ abc123def456",
+            status: "submitted",
+            expected_version_no: 0,
+            member_count: 4,
+            created_at: "2026-11-15T08:45:00Z"
+          }
+        ],
+        projc_revisions: [
+          {
+            object_id: "pjc-obj-1",
+            object_type: "tech_stack",
+            display_name: "技术栈（rust）",
+            revision_no: 1,
+            change_summary: "rust 为主",
+            content: "# 技术栈\n\nrust"
+          }
+        ]
+      })
+    );
+    const { wrapper } = await mountDetail();
+    expect(wrapper.text()).toContain("ProjC 技术认知提案（1）");
+    expect(wrapper.text()).toContain("技术认知");
+    expect(wrapper.text()).toContain("仓库认知更新：payment-service");
+    expect(wrapper.text()).toContain("ProjC 对象修订（1）");
+    expect(wrapper.text()).toContain("技术栈（rust）");
+    // ProjC 提案不挂决策按钮（最小渲染；决策走并行端点，另行接入）
+    const projcSection = wrapper
+      .findAll("section")
+      .find(s => s.text().includes("ProjC 技术认知提案"));
+    expect(projcSection).toBeTruthy();
+    expect(
+      projcSection!.findAll("button").filter(b => b.text().includes("批准"))
+        .length
+    ).toBe(0);
   });
 
   it("第 1 节：身份头、状态徽标、run_mode/since_commit、时间组", async () => {

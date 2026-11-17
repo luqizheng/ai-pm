@@ -460,12 +460,22 @@ async fn only_draft_to_published_transition_is_allowed(pool: PgPool) {
     let (document_id, revision_id) =
         seed_revision(&pool, fx.tenant_id, fx.project_id, "doc-k", "draft").await;
 
-    // draft → rejected 不在白名单（reject 通道后置，本批不实现）。
-    let err = sqlx::query("UPDATE kb.document_revision SET status = 'rejected' WHERE id = $1")
-        .bind(revision_id)
+    // draft → rejected 在白名单内（D-5/0023 放宽守卫：报告关闭时对未确认 KB 草稿
+    // 自动处置；独立修订验证，不影响下方发布主链）。
+    let (document_id2, rejected_revision) =
+        seed_revision(&pool, fx.tenant_id, fx.project_id, "doc-reject", "draft").await;
+    let _ = document_id2;
+    sqlx::query("UPDATE kb.document_revision SET status = 'rejected' WHERE id = $1")
+        .bind(rejected_revision)
         .execute(&pool)
         .await
-        .expect_err("draft -> rejected must be rejected by the guard");
+        .expect("draft -> rejected is whitelisted by the 0023 guard");
+    // rejected 为终态：不得回 draft / published。
+    let err = sqlx::query("UPDATE kb.document_revision SET status = 'published' WHERE id = $1")
+        .bind(rejected_revision)
+        .execute(&pool)
+        .await
+        .expect_err("rejected -> published must be rejected by the guard");
     assert!(err.to_string().contains("illegal status transition"));
 
     // 正常发布一次。

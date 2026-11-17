@@ -62,6 +62,13 @@ const PRODUCTION_SITES: &[(&str, usize)] = &[
     // KP-2 / PC-01C 确认闭环（pc/proposal.rs）：pc_proposal.create/submit/withdraw/approve/reject
     // 共用本 helper（审批=真人四列；分析起草=系统面 dispatch principal，三身份列 NULL 显式写）
     ("crates/pm-application/src/pc/proposal.rs", 1),
+    // P3-11 ProjC 发布事务（projc/publish.rs）：projc_version.publish（发布者四列）
+    // + CAS 失配补偿 projc_version.publish_failed（系统面 dispatch principal，四列显式 NULL）
+    // ——pc/publish.rs 同款镜像，T-1/T-2/T-3 阶段一
+    ("crates/pm-application/src/projc/publish.rs", 2),
+    // P3-11 ProjC 确认闭环（projc/proposal.rs）：projc_proposal.create/submit/withdraw/
+    // approve/reject 共用本 helper（pc/proposal.rs 同款镜像）
+    ("crates/pm-application/src/projc/proposal.rs", 1),
 ];
 
 fn workspace_root() -> PathBuf {

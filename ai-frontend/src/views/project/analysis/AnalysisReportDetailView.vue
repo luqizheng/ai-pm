@@ -30,6 +30,11 @@ import { useShellStore } from "@/stores/shell";
  *   4. PC 修订内容   5. D-4 身份综合（裁决 D-2，端点语义不变）
  *   6. 关闭与处置（仅 analyzed 可关；回执含 applied/withdrawn/rejected/锚点）
  *
+ * P3-11（T-1/T-2/T-3 W6 最小渲染，不扩 Phase 2 UI 范围）：第 3 节后追加
+ * 「ProjC 技术认知提案」、第 4 节后追加「ProjC 对象修订」——技术认知徽标 +
+ * 只读列表（决策动作走 /v1/pm/projc/proposals/{id}/decide 并行端点，本页不
+ * 挂按钮）；关闭回执追加 ProjC 双域计数。
+ *
  * 审阅交互（P2-04，复用三组既有端点，零后端改动）：
  *   - KB 确认（第 2 节）：confirmKbRevision——按钮条件 = kb_revision draft
  *     且报告 analyzed；三重门在后端（interactive+真人+成员），前端不重写。
@@ -265,6 +270,18 @@ async function doClose(): Promise<void> {
       rejected: outcome.rejected_kb ? 1 : 0,
       commit: outcome.last_analyzed_commit.slice(0, 12)
     });
+    // P3-11：ProjC 双域计数追加（任一非零才追加句）
+    if (
+      outcome.projc_applied > 0 ||
+      outcome.projc_withdrawn > 0 ||
+      outcome.projc_publish_failed_proposals > 0
+    ) {
+      successNotice.value += " " + t("analysis.detail.closeReceiptProjc", {
+        projcApplied: outcome.projc_applied,
+        projcWithdrawn: outcome.projc_withdrawn,
+        projcFailed: outcome.projc_publish_failed_proposals
+      });
+    }
     closeConfirmOpen.value = false;
     // 关闭后回填 closed 态（决策按钮消失等语义，P2-04 测试化）
     await loadDetail();
@@ -538,6 +555,43 @@ const pageTitle = computed(() =>
               </ul>
             </section>
 
+            <!-- 第 3b 节 · ProjC 技术认知提案（P3-11 最小渲染：徽标 + 只读列表；
+                 决策动作走 /v1/pm/projc 并行端点，本页不挂按钮） -->
+            <section class="an-sec" aria-labelledby="an-sec-projc">
+              <h3 id="an-sec-projc" class="an-sec-title">
+                {{
+                  t("analysis.detail.sectProjcProposals", {
+                    n: detail.projc_proposals.length
+                  })
+                }}
+              </h3>
+              <p v-if="!detail.projc_proposals.length" class="an-hint">
+                {{ t("analysis.detail.noProjcProposals") }}
+              </p>
+              <ul v-else class="an-proposals">
+                <li
+                  v-for="proposal in detail.projc_proposals"
+                  :key="proposal.proposal_id"
+                  class="an-proposal"
+                >
+                  <div class="an-proposal-head">
+                    <Badge variant="neutral">
+                      {{ t("analysis.detail.techBadge") }}
+                    </Badge>
+                    <span class="an-proposal-title">{{ proposal.title }}</span>
+                    <Badge :variant="proposalStatusVariant(proposal.status)">
+                      {{ proposalStatusLabel(proposal.status) }}
+                    </Badge>
+                    <span class="an-meta">
+                      v{{ proposal.expected_version_no }} ·
+                      {{ proposal.member_count }}
+                      {{ t("analysis.proposal.members") }}
+                    </span>
+                  </div>
+                </li>
+              </ul>
+            </section>
+
             <!-- 第 4 节 · PC 修订内容 -->
             <section class="an-sec" aria-labelledby="an-sec-pc">
               <h3 id="an-sec-pc" class="an-sec-title">
@@ -556,6 +610,38 @@ const pageTitle = computed(() =>
                 class="an-pc-item"
               >
                 <summary>
+                  {{ revision.display_name }} · {{ revision.object_type }} · v{{
+                    revision.revision_no
+                  }}
+                </summary>
+                <p v-if="revision.change_summary" class="an-hint">
+                  {{ revision.change_summary }}
+                </p>
+                <MarkdownViewer :model-value="revision.content ?? ''" />
+              </details>
+            </section>
+
+            <!-- 第 4b 节 · ProjC 对象修订（P3-11 最小渲染：只读列表） -->
+            <section class="an-sec" aria-labelledby="an-sec-projc-rev">
+              <h3 id="an-sec-projc-rev" class="an-sec-title">
+                {{
+                  t("analysis.detail.sectProjcRevisions", {
+                    n: detail.projc_revisions.length
+                  })
+                }}
+              </h3>
+              <p v-if="!detail.projc_revisions.length" class="an-hint">
+                {{ t("analysis.detail.noProjcRevisions") }}
+              </p>
+              <details
+                v-for="revision in detail.projc_revisions"
+                :key="revision.object_id + ':' + revision.revision_no"
+                class="an-pc-item"
+              >
+                <summary>
+                  <Badge variant="neutral" class="an-projc-badge">
+                    {{ t("analysis.detail.techBadge") }}
+                  </Badge>
                   {{ revision.display_name }} · {{ revision.object_type }} · v{{
                     revision.revision_no
                   }}
@@ -793,6 +879,10 @@ const pageTitle = computed(() =>
   margin-left: auto;
   font-size: var(--font-size-micro);
   color: var(--text-tertiary);
+}
+
+.an-projc-badge {
+  margin-right: var(--space-1);
 }
 
 .an-pc-item {

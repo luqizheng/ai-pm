@@ -1121,7 +1121,34 @@ async fn manual_analyze_http_contract(pool: PgPool) {
     assert_eq!(first["replayed"], false);
     assert_eq!(first["commit"], "abc1234");
 
-    // 同键重放：202 + replayed=true（不被自己的活跃任务挡住）。
+    // D-5 报告门先于幂等重放（c50bc1c 起）：首次 analyze 已建 analyzing 报告，
+    // 报告 open 期间任何 analyze（含同键重放）→ 409 report_open（带 report_id）。
+    let (status, gated) = body_json(
+        app.clone()
+            .oneshot(json_request(
+                "POST",
+                &analyze_uri,
+                json!({ "idempotency_key": "fixed-key" }),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "body: {gated}");
+    assert_eq!(gated["error"], "report_open");
+    assert_eq!(gated["report_id"], first["report_id"]);
+
+    // 报告 failed（终态不占门）释放门 → 同键重放：202 + replayed=true
+    // （活跃任务检查排除本次幂等键自身）。
+    sqlx::query(
+        "UPDATE integration.repo_analysis_report \
+            SET status = 'failed', error_code = 'fixture', error_detail = 'fixture' \
+          WHERE id = $1",
+    )
+    .bind(Uuid::parse_str(gated["report_id"].as_str().unwrap()).unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
     let (status, replay) = body_json(
         app.clone()
             .oneshot(json_request(

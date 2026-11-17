@@ -149,10 +149,11 @@ impl OutboxHandler for KbAnalyzeRequestedHandler {
 // ── PC 分析本体（消费 pc.analyze.requested；checkpoint-1 结构化派生真实化）──
 
 /// PC 分析 handler：信号携带 KB 文档引用时走真实结构化派生
-/// （`kb_pc_analysis::derive_pc_cognition`：pc.\* draft + source/evidence，
-/// conclusion=PROPOSED，M3 前不产正式认知写入；可注入
-/// `SnapshotAnalysisModel` 做受约束增强，失败回退派生）；无文档引用
-/// 的信号保持桩语义（NO_CHANGE，占位 ref）。派生失败 → processing.failed。
+/// （P3-11 起 `kb_pc_analysis::derive_projc_cognition`：G-1 双源登记
+/// pc.source + projc.source；对象草稿/证据落 projc.\*（R-03 技术认知分流），
+/// conclusion=PROPOSED，M3 前不产正式认知写入；可注入 `SnapshotAnalysisModel`
+/// 做受约束增强，失败回退派生）；无文档引用的信号保持桩语义（NO_CHANGE，
+/// 占位 ref）。派生失败 → processing.failed。
 pub struct PcAnalyzeRequestedHandler {
     pool: PgPool,
     snapshot_model: Option<Arc<dyn SnapshotAnalysisModel>>,
@@ -275,7 +276,7 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
             None
         };
 
-        match kb_pc_analysis::derive_pc_cognition(
+        match kb_pc_analysis::derive_projc_cognition(
             &self.pool,
             project_id,
             intake_id,
@@ -291,18 +292,19 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
         )
         .await
         {
-            // KP-1 起 pc_analysis_ref 锚分析运行的 pc.source 行（一次分析一条
-            // 来源），P3 经 source → evidence → revision → object 展开；
-            // target_revision_id 携带 KB 修订（来源钉扎）。
-            // KP-2 起分析 → 提案：本次来源钉扎的未覆盖修订 → AI 起草并提交提案
-            // （pending 人工确认；同事务 pc.change_proposed → Platform 置任务
-            // COMPLETED + result_ref=proposal）；无未覆盖修订 → NO_CHANGE
-            // （pc.analysis.completed 锚来源）。两种结论共用幂等键——一任务一结论。
+            // P3-11 起分析双源登记（G-1）：analysis result_ref 锚 ProjC 快照通道
+            // projc.source（一次分析一条来源），经 source → evidence → revision →
+            // object 展开；target_revision_id 携带 KB 修订（来源钉扎）。
+            // 分析 → 提案：本次来源钉扎的未覆盖修订 → AI 起草并提交 ProjC 提案
+            // （origin_kind=repo_analysis；pending 人工确认；同事务
+            // projc.change_proposed → Platform 置任务 COMPLETED +
+            // result_ref=proposal）；无未覆盖修订 → NO_CHANGE。两种结论共用
+            // 幂等键——一任务一结论。
             Ok((source_id, _primary_revision)) => {
-                let outcome = pm_application::pc::propose_from_analysis(
+                let outcome = pm_application::projc::propose_from_analysis(
                     &self.pool,
                     project_id,
-                    pm_application::pc::AnalysisProposalInput {
+                    pm_application::projc::AnalysisProposalInput {
                         source_id,
                         task_id,
                         // 标题用仓库名（锚定 commit 分析时 facts.default_branch 是
@@ -316,8 +318,8 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
                         // 见成员变更列表，不在此预 enumeration）。
                         rationale: format!(
                             "本次分析基于 {} @ {}：{} 个文件、{} 条 commit{}。\
-                             识别到的认知修订由 AI 起草为草稿——批准后发布为正式版本并进入检索，\
-                             驳回则丢弃；具体变更项见成员变更列表。",
+                             识别到的技术认知修订由 AI 起草为草稿——批准后经报告关闭发布为 \
+                             ProjC 正式版本，驳回则丢弃；具体变更项见成员变更列表。",
                             repo_name,
                             facts.head_commit_sha.chars().take(12).collect::<String>(),
                             facts.file_count,
@@ -332,28 +334,28 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
                 )
                 .await;
                 match outcome {
-                    Ok(pm_application::pc::AnalysisProposalOutcome::Proposed(receipt)) => {
+                    Ok(pm_application::projc::AnalysisProposalOutcome::Proposed(receipt)) => {
                         tracing::info!(
                             %task_id, %intake_id, proposal_id = %receipt.proposal_id,
                             members = receipt.member_count,
-                            "pc: analysis drafted a proposal (pending human confirmation)"
+                            "projc: analysis drafted a proposal (pending human confirmation)"
                         );
                         return Ok(());
                     }
-                    Ok(pm_application::pc::AnalysisProposalOutcome::NoChange) => {}
+                    Ok(pm_application::projc::AnalysisProposalOutcome::NoChange) => {}
                     Err(err) => {
                         return report_processing_failed(
                             &self.pool,
                             project_id,
                             task_id,
-                            "pc_proposal_failed",
+                            "projc_proposal_failed",
                             &err.to_string(),
                         )
                         .await;
                     }
                 }
                 let result_ref = serde_json::json!({
-                    "target_domain": "pc",
+                    "target_domain": "project_cognition",
                     "target_type": "source",
                     "target_id": source_id.to_string(),
                     "target_revision_id": kb_revision_id.to_string(),
@@ -373,13 +375,13 @@ impl OutboxHandler for PcAnalyzeRequestedHandler {
                                 "refs": [result_ref],
                                 "task_ref": task_ref_json(task_id),
                             }),
-                            idempotency_key: &pm_application::pc::analysis_outcome_key(task_id),
+                            idempotency_key: &pm_application::projc::analysis_outcome_key(task_id),
                         },
                     )
                     .await
                     .map_err(|e| e.to_string())?;
                 tx.commit().await.map_err(|e| e.to_string())?;
-                tracing::info!(%task_id, %intake_id, "pc: analysis completed (NO_CHANGE)");
+                tracing::info!(%task_id, %intake_id, "projc: analysis completed (NO_CHANGE)");
                 Ok(())
             }
             Err(err) => {
@@ -922,6 +924,80 @@ impl OutboxHandler for PcConflictDetectedHandler {
     }
 }
 
+/// projc.change_proposed → 任务 COMPLETED + result_ref=proposal 四元组
+/// （ProjC 独立域；PcChangeProposedHandler 同款消费面——决定暂记在 ProjC 提案，
+/// 正式版本由报告 close 双域分流发布）。生产者 = 分析起草
+/// （`projc::propose_from_analysis`，真提案 UUID）。
+pub struct ProjChangeProposedHandler {
+    pool: PgPool,
+}
+
+impl ProjChangeProposedHandler {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait::async_trait]
+impl OutboxHandler for ProjChangeProposedHandler {
+    async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
+        let task_id = task_id_of(event)?;
+        let result_ref = result_ref_of(event, &["proposal_ref"])
+            .ok_or_else(|| "projc.change_proposed missing proposal_ref".to_string())?;
+        intake::complete_task(&self.pool, task_id, result_ref)
+            .await
+            .map_err(|e| e.to_string())?;
+        // D-5：提案起草 = 分析产出齐备 → 报告 analyzed（open 待审）。
+        if let Err(err) = pm_application::analysis_report::mark_analyzed(&self.pool, task_id).await
+        {
+            tracing::warn!(%task_id, %err, "analysis report mark_analyzed skipped");
+        }
+        notify_once(
+            &self.pool,
+            event.project_id,
+            "projc_proposal_pending",
+            &format!("projc-proposal-{task_id}"),
+            serde_json::json!({ "dedup_key": format!("projc-proposal-{task_id}"), "payload": event.payload }),
+        )
+        .await?;
+        Ok(())
+    }
+}
+
+/// projc.cognition.version_published → 状态感知留痕（ProjC 独立域；生产者 =
+/// projc 发布事务 projc/publish.rs ⑫b）。ProjC FTS 归 P3-10 检索适配层，
+/// 本 handler 仅通知留痕（通知面与 pc 同口径，去重键 = version_id）。
+pub struct ProjcVersionPublishedHandler {
+    pool: PgPool,
+}
+
+impl ProjcVersionPublishedHandler {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait::async_trait]
+impl OutboxHandler for ProjcVersionPublishedHandler {
+    async fn handle(&self, event: &ClaimedOutboxEvent) -> Result<(), String> {
+        let version_id = event
+            .payload
+            .get("version_ref")
+            .and_then(|r| r.get("target_id"))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "version_published missing version_ref.target_id".to_string())?
+            .to_string();
+        notify_once(
+            &self.pool,
+            event.project_id,
+            "projc_version_published",
+            &version_id,
+            serde_json::json!({ "dedup_key": version_id, "payload": event.payload }),
+        )
+        .await
+    }
+}
+
 /// pc.evidence_requested → RT 路由创建 kb_supply 任务（optional）+ 同事务
 /// 派发 kb.analysis.requested（资料补充执行转达；K6 fulfil 与 Memory 体系归
 /// Phase 4——实施偏差登记）。
@@ -1277,6 +1353,14 @@ pub fn register_kb_pc_handlers(
         .with_handler(
             ev::PC_COGNITION_VERSION_PUBLISHED,
             Arc::new(PcVersionPublishedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::PROJ_CHANGE_PROPOSED,
+            Arc::new(ProjChangeProposedHandler::new(pool.clone())),
+        )
+        .with_handler(
+            ev::PROJ_COGNITION_VERSION_PUBLISHED,
+            Arc::new(ProjcVersionPublishedHandler::new(pool.clone())),
         )
         .with_handler(
             ev::KB_DOCUMENT_REVISION_PUBLISHED,

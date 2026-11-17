@@ -1167,14 +1167,14 @@ async fn analysis_drafts_uncovered_revisions_once(pool: PgPool) {
         &pool,
         project,
         &dispatch,
-        draft("module", "an.x", "X", "# X1"),
+        draft("feature", "an.x", "X", "# X1"),
     )
     .await;
     let y = upsert(
         &pool,
         project,
         &dispatch,
-        draft("tech_stack", "an.y", "Y", "# Y1"),
+        draft("business_capability", "an.y", "Y", "# Y1"),
     )
     .await;
 
@@ -1234,7 +1234,7 @@ async fn analysis_drafts_uncovered_revisions_once(pool: PgPool) {
         &pool,
         project,
         &dispatch,
-        draft("module", "an.x", "X", "# X1"),
+        draft("feature", "an.x", "X", "# X1"),
     )
     .await;
     assert!(!same.revision_created);
@@ -1273,7 +1273,7 @@ async fn analysis_drafts_uncovered_revisions_once(pool: PgPool) {
         &pool,
         project,
         &dispatch,
-        draft("module", "an.x", "X", "# X2"),
+        draft("feature", "an.x", "X", "# X2"),
     )
     .await;
     assert!(x2.revision_created);

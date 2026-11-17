@@ -6,10 +6,13 @@
 //! `failed` / `cancelled` 为终态，不占门。
 //!
 //! 门：analyzing/analyzed 期间该仓库禁止再分析（`repository::analyze_repository`
-//! 查 open 报告 → 409 `ReportOpen`）。产物关联链：
+//! 查 open 报告 → 409 `ReportOpen`）。产物关联链（P3-11 起双源，G-1）：
 //! - 报告.intake_id → integration.intake_task（kb_analyze / pc_analyze 的 result_ref）；
 //! - 报告.kb_revision_id → kb.document_revision（本次报告正文修订）；
-//! - 报告.pc_source_id → pc.source（本次分析来源）→ pc.proposal（本次起草的提案）；
+//! - 报告.pc_source_id → pc.source（identity 综合通道）→ pc.proposal（产品身份提案）；
+//! - 报告.projc_source_id → projc.source（ProjC 快照通道）→ projc.proposal（技术认知
+//!   提案）；**双源登记写入点唯一 = mark_analyzed**（同一事务，projc 源缺失 = 硬失败，
+//!   报告不得进入 analyzed）；NULL 仅出现在 0026 之前的历史行 = 显式 Legacy；
 //! - PC 本轮对象修订 = pc.cognition_revision WHERE document_revision_id = kb_revision_id。
 //!
 //! 全部状态推进对「报告行不存在」（存量运行/桩语义）静默跳过——钩子永不反向
@@ -34,14 +37,20 @@ pub struct ReportListRow {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub closed_at: Option<chrono::DateTime<chrono::Utc>>,
-    /// 本次报告的 KB 修订与 PC 来源（关联键；analyzed 后写入）。
+    /// 本次报告的 KB 修订与双域来源（关联键；analyzed 后写入）。
     pub kb_revision_id: Option<Uuid>,
     pub pc_source_id: Option<Uuid>,
+    /// ProjC 快照通道来源（G-1；NULL = 0026 前历史行 Legacy）。
+    pub projc_source_id: Option<Uuid>,
     /// D-2 运行口径：incremental（默认）/ full。
     pub run_mode: String,
     /// 增量起点（= 上一份关闭报告固化的锚点；全量/首次为 NULL）。
     pub since_commit: Option<String>,
     pub pending_proposals: i64,
+    /// ProjC 未决提案数（draft/submitted；§8.2 加法计数）。
+    pub projc_pending_proposals: i64,
+    /// 双域未决合计（展示用；既有 pending_proposals 口径零改动）。
+    pub total_pending_proposals: i64,
     pub has_pending_kb: bool,
 }
 
@@ -79,7 +88,7 @@ pub struct ReportPcRevisionRow {
     pub content: Option<String>,
 }
 
-/// 详情聚合（报告头 + 三类产物）。
+/// 详情聚合（报告头 + 产物集；projc_* 为 P3-11 加法数组，恒返回数组）。
 #[derive(Debug, serde::Serialize)]
 pub struct ReportDetail {
     #[serde(flatten)]
@@ -87,9 +96,13 @@ pub struct ReportDetail {
     pub kb_revision: Option<ReportKbRevision>,
     pub proposals: Vec<ReportProposalRow>,
     pub pc_revisions: Vec<ReportPcRevisionRow>,
+    /// ProjC 提案集（by projc_source_id；§8.3 加法，空集返回 []）。
+    pub projc_proposals: Vec<ReportProposalRow>,
+    /// ProjC 对象修订集（by projc_source_id；空集返回 []）。
+    pub projc_revisions: Vec<ReportPcRevisionRow>,
 }
 
-/// 关闭回执：自动处置计数。
+/// 关闭回执：自动处置计数（projc_* 为 P3-11 加法字段，G-2 独立计数）。
 #[derive(Debug, serde::Serialize)]
 pub struct CloseOutcome {
     pub report_id: Uuid,
@@ -102,6 +115,12 @@ pub struct CloseOutcome {
     pub rejected_kb: bool,
     /// 固化的分析锚点（D-1）。
     pub last_analyzed_commit: String,
+    /// ProjC 批准提案在关闭时批量发布的数量（projc-decision:{id}）。
+    pub projc_applied: u64,
+    /// ProjC 批量发布失败（CAS 失配已内置 failed 等）的数量（独立计数）。
+    pub projc_publish_failed_proposals: u64,
+    /// ProjC 未决提案在关闭时撤回的数量。
+    pub projc_withdrawn: u64,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -112,6 +131,10 @@ pub enum AnalysisReportError {
     Conflict(String),
     #[error("{0}")]
     Forbidden(String),
+    /// G-1 硬失败：projc 源未登记（derive 链未注册 projc.source）→ 报告不得进入
+    /// analyzed；审计事件 `analysis_report.analyze_gate_failed` 同时落库留痕。
+    #[error("projc source not registered for report {0}; analyze gate refuses analyzed (G-1)")]
+    ProjcSourceMissing(Uuid),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -153,18 +176,19 @@ pub async fn ensure_for_intake(
         .await
 }
 
-/// D-2 · 既有 PC 认知摘要（merge 重析输入）：取该仓库最近一份有产物的报告
-/// （analyzed/closed），经证据钉扎反查对象修订，拼装为有界 Markdown 文本
-/// （最多 12 个对象、单对象正文截 4000 字）。无报告/无产物 → None。
+/// D-2 · 既有认知摘要（merge 重析输入；P3-11 起读 ProjC 快照通道）：取该仓库
+/// 最近一份有产物的报告（analyzed/closed），经 projc 证据钉扎反查对象修订，
+/// 拼装为有界 Markdown 文本（最多 12 个对象、单对象正文截 4000 字）。
+/// 无报告/无产物 → None。
 pub async fn prior_cognition_digest(
     pool: &PgPool,
     project_id: Uuid,
     repository_id: Uuid,
 ) -> Result<Option<String>, sqlx::Error> {
     let source_id: Option<Uuid> = sqlx::query_scalar(
-        "SELECT pc_source_id FROM integration.repo_analysis_report \
+        "SELECT projc_source_id FROM integration.repo_analysis_report \
           WHERE project_id = $1 AND repository_id = $2 \
-            AND status IN ('analyzed', 'closed') AND pc_source_id IS NOT NULL \
+            AND status IN ('analyzed', 'closed') AND projc_source_id IS NOT NULL \
           ORDER BY created_at DESC LIMIT 1",
     )
     .bind(project_id)
@@ -177,10 +201,10 @@ pub async fn prior_cognition_digest(
     let rows: Vec<(String, String, i32, Option<String>)> = sqlx::query_as(
         "SELECT o.display_name, o.object_type, r.revision_no, \
                 left(dr.content, 4000) \
-           FROM pc.evidence e \
-           JOIN pc.cognition_revision r ON r.id = e.object_revision_id \
-           JOIN pc.cognition_object o ON o.id = r.object_id \
-           JOIN pc.document_revision dr ON dr.id = r.document_revision_id \
+           FROM projc.evidence e \
+           JOIN projc.cognition_revision r ON r.id = e.object_revision_id \
+           JOIN projc.cognition_object o ON o.id = r.object_id \
+           JOIN projc.document_revision dr ON dr.id = r.document_revision_id \
           WHERE e.source_id = $1 \
           ORDER BY o.display_name ASC LIMIT 12",
     )
@@ -214,39 +238,113 @@ pub async fn mark_kb_stage(pool: &PgPool, task_id: Uuid) -> Result<(), sqlx::Err
 }
 
 /// PC 任务完成（提案起草 / NO_CHANGE / 冲突登记）→ 报告 analyzed（open 待审）。
-/// kb_revision_id 取同 intake 的 kb_analyze result_ref（**扁平四元组**：
-/// `target_revision_id` 或 `target_id`——Platform complete_task 存的是
-/// result_ref_of 抽出的 ref 值本身）；pc_source_id 经
-/// `pc.source.target_revision_id = kb_revision` 反查（derive_pc_cognition 每次
-/// 分析恰好登记一条来源）。
-pub async fn mark_analyzed(pool: &PgPool, task_id: Uuid) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "WITH t AS ( \
-              SELECT intake_id FROM integration.intake_task WHERE id = $1 \
-           ), kb AS ( \
-              SELECT COALESCE( \
-                  result_ref ->> 'target_revision_id', \
-                  result_ref ->> 'target_id')::uuid AS rev \
-                FROM integration.intake_task \
-               WHERE intake_id = (SELECT intake_id FROM t) \
-                 AND task_type = 'kb_analyze' AND result_ref IS NOT NULL \
-               LIMIT 1 \
-           ) \
-         UPDATE integration.repo_analysis_report r \
-            SET status = 'analyzed', \
-                kb_revision_id = (SELECT rev FROM kb), \
-                pc_source_id = ( \
-                     SELECT s.id FROM pc.source s \
-                      WHERE s.tenant_id = r.tenant_id AND s.project_id = r.project_id \
-                        AND s.target_domain = 'knowledge_base' \
-                        AND s.target_revision_id = (SELECT rev FROM kb)::text \
-                      ORDER BY s.created_at DESC LIMIT 1), \
-                stage_detail = NULL, updated_at = now() \
-          WHERE r.intake_id = (SELECT intake_id FROM t) AND r.status = 'analyzing'",
+///
+/// G-1 双源登记（写入点唯一，同一事务）：kb_revision_id 取同 intake 的
+/// kb_analyze result_ref（**扁平四元组**：`target_revision_id` 或 `target_id`）；
+/// `pc_source_id`（identity 综合通道，口径不变）与 `projc_source_id`（ProjC 快照
+/// 通道）均经 `*.source.target_revision_id = kb_revision` 反查（derive 链每次
+/// 分析各登记一条）。**projc 源缺失 = 硬失败**：报告不得进入 analyzed，审计事件
+/// `analysis_report.analyze_gate_failed` 落库留痕（不静默）。报告行不存在
+/// （存量运行/桩语义）仍静默跳过——钩子永不反向阻塞分析链。
+pub async fn mark_analyzed(pool: &PgPool, task_id: Uuid) -> Result<(), AnalysisReportError> {
+    let mut tx = pool.begin().await?;
+    // 报告行（行锁；不存在 = 存量/桩语义，静默跳过）
+    let report: Option<(Uuid, Uuid, Uuid)> = sqlx::query_as(
+        "SELECT id, tenant_id, project_id FROM integration.repo_analysis_report \
+          WHERE intake_id = (SELECT intake_id FROM integration.intake_task WHERE id = $1) \
+            AND status = 'analyzing' \
+          FOR UPDATE",
     )
     .bind(task_id)
-    .execute(pool)
+    .fetch_optional(&mut *tx)
     .await?;
+    let Some((report_id, tenant_id, project_id)) = report else {
+        tx.commit().await?;
+        return Ok(());
+    };
+
+    // kb_analyze 结果修订（原 CTE 语义平移）
+    let kb_revision: Option<Uuid> = sqlx::query_scalar(
+        "SELECT COALESCE( \
+              result_ref ->> 'target_revision_id', \
+              result_ref ->> 'target_id')::uuid \
+           FROM integration.intake_task \
+          WHERE intake_id = (SELECT intake_id FROM integration.intake_task WHERE id = $1) \
+            AND task_type = 'kb_analyze' AND result_ref IS NOT NULL \
+          LIMIT 1",
+    )
+    .bind(task_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .flatten();
+
+    // G-1：projc 源（快照通道）必达，缺失即硬失败
+    let projc_source: Option<Uuid> = match kb_revision {
+        Some(rev) => sqlx::query_scalar(
+            "SELECT s.id FROM projc.source s \
+              WHERE s.tenant_id = $1 AND s.project_id = $2 \
+                AND s.target_domain = 'knowledge_base' \
+                AND s.target_revision_id = $3 \
+              ORDER BY s.created_at DESC LIMIT 1",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(rev.to_string())
+        .fetch_optional(&mut *tx)
+        .await?,
+        None => None,
+    };
+    let Some(projc_source_id) = projc_source else {
+        crate::pm_write::append_audit_with_after(
+            &mut tx,
+            project_id,
+            &AuditActor::dispatch(),
+            "analysis_report.analyze_gate_failed",
+            "repo_analysis_report",
+            Some(report_id),
+            serde_json::json!({
+                "reason": "projc source not registered (G-1 hard gate)",
+                "task_id": task_id,
+            }),
+        )
+        .await?;
+        tx.commit().await?;
+        return Err(AnalysisReportError::ProjcSourceMissing(report_id));
+    };
+
+    // pc 源（identity 综合通道；口径不变，反查可得）
+    let pc_source: Option<Uuid> = match kb_revision {
+        Some(rev) => sqlx::query_scalar(
+            "SELECT s.id FROM pc.source s \
+              WHERE s.tenant_id = $1 AND s.project_id = $2 \
+                AND s.target_domain = 'knowledge_base' \
+                AND s.target_revision_id = $3 \
+              ORDER BY s.created_at DESC LIMIT 1",
+        )
+        .bind(tenant_id)
+        .bind(project_id)
+        .bind(rev.to_string())
+        .fetch_optional(&mut *tx)
+        .await?,
+        None => None,
+    };
+
+    sqlx::query(
+        "UPDATE integration.repo_analysis_report \
+            SET status = 'analyzed', \
+                kb_revision_id = $2, \
+                pc_source_id = $3, \
+                projc_source_id = $4, \
+                stage_detail = NULL, updated_at = now() \
+          WHERE id = $1 AND status = 'analyzing'",
+    )
+    .bind(report_id)
+    .bind(kb_revision)
+    .bind(pc_source)
+    .bind(projc_source_id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -293,11 +391,20 @@ pub async fn list_reports(
     sqlx::query_as(
         "SELECT r.id, r.repository_id, p.name AS repository_name, r.commit_sha, r.status, \
                 r.stage_detail, r.error_code, r.error_detail, r.created_at, r.updated_at, \
-                r.closed_at, r.kb_revision_id, r.pc_source_id, \
+                r.closed_at, r.kb_revision_id, r.pc_source_id, r.projc_source_id, \
                 r.run_mode, r.since_commit, \
                 (SELECT count(*) FROM pc.proposal pp \
                   WHERE pp.source_id = r.pc_source_id \
                     AND pp.status IN ('draft','submitted')) AS pending_proposals, \
+                (SELECT count(*) FROM projc.proposal jp \
+                  WHERE jp.source_id = r.projc_source_id \
+                    AND jp.status IN ('draft','submitted')) AS projc_pending_proposals, \
+                ((SELECT count(*) FROM pc.proposal pp \
+                   WHERE pp.source_id = r.pc_source_id \
+                     AND pp.status IN ('draft','submitted')) \
+                 + (SELECT count(*) FROM projc.proposal jp \
+                     WHERE jp.source_id = r.projc_source_id \
+                       AND jp.status IN ('draft','submitted'))) AS total_pending_proposals, \
                 (r.kb_revision_id IS NOT NULL AND EXISTS ( \
                      SELECT 1 FROM kb.document_revision kv \
                       WHERE kv.id = r.kb_revision_id AND kv.status = 'draft')) AS has_pending_kb \
@@ -384,19 +491,60 @@ pub async fn report_detail(
         None => Vec::new(),
     };
 
+    // P3-11 加法（§8.3）：ProjC 提案集 / 对象修订集（by projc_source_id；空集 []）
+    let projc_proposals: Vec<ReportProposalRow> = match header.projc_source_id {
+        Some(source_id) => {
+            sqlx::query_as(
+                "SELECT jp.id AS proposal_id, jp.title, jp.status, jp.expected_version_no, \
+                    (SELECT count(*) FROM projc.proposal_member m \
+                      WHERE m.tenant_id = jp.tenant_id AND m.project_id = jp.project_id \
+                        AND m.proposal_id = jp.id) AS member_count, \
+                    jp.created_at \
+               FROM projc.proposal jp \
+              WHERE jp.source_id = $1 \
+              ORDER BY jp.created_at DESC",
+            )
+            .bind(source_id)
+            .fetch_all(pool)
+            .await?
+        }
+        None => Vec::new(),
+    };
+    let projc_revisions: Vec<ReportPcRevisionRow> = match header.projc_source_id {
+        Some(source_id) => {
+            sqlx::query_as(
+                "SELECT o.id AS object_id, o.object_type, o.display_name, r.revision_no, \
+                    r.change_summary, dr.content \
+               FROM projc.evidence e \
+               JOIN projc.cognition_revision r ON r.id = e.object_revision_id \
+               JOIN projc.cognition_object o ON o.id = r.object_id \
+               JOIN projc.document_revision dr ON dr.id = r.document_revision_id \
+              WHERE e.source_id = $1 \
+              ORDER BY o.display_name ASC",
+            )
+            .bind(source_id)
+            .fetch_all(pool)
+            .await?
+        }
+        None => Vec::new(),
+    };
+
     Ok(ReportDetail {
         header,
         kb_revision,
         proposals,
         pc_revisions,
+        projc_proposals,
+        projc_revisions,
     })
 }
 
-/// 关闭报告（人工显式动作）：仅 `analyzed` 可关。收尾处置——本报告已批准
-/// （approved）提案逐个发布为正式版本（`pc-decision:{id}` 幂等键；CAS 失配由
-/// 发布事务内置 failed，§18.1②；失败计数不阻断关闭），未决提案（draft/submitted）
-/// → withdrawn（逐条留审计），KB 草稿修订 → rejected；随后固化 D-1 锚点
-/// （last_analyzed_commit_sha = 报告 commit）。关闭后门释放，仓库可再次分析（D-2）。
+/// 关闭报告（人工显式动作）：仅 `analyzed` 可关。收尾处置——双域分流（P3-11
+/// G-2）：pc 块逐行不动（C-4~C-6 契约），新增 ProjC 追加块——approved projc 提案
+/// 逐个发布（`projc-decision:{id}` 幂等键；CAS 失配内置 failed；失败独立计数不
+/// 阻断关闭）、未决 → withdrawn（逐条留审计）；NULL projc_source_id = 显式
+/// Legacy（跳过 ProjC 分支，审计 payload 带 `projc_branch:"legacy_no_source"`，
+/// 绝不静默）。KB 草稿修订 → rejected；随后固化 D-1 锚点。关闭后门释放。
 pub async fn close_report(
     pool: &PgPool,
     project_id: Uuid,
@@ -406,18 +554,21 @@ pub async fn close_report(
     let mut tx = pool.begin().await?;
 
     // 项目边界 + 行锁（tenant/project 双重校验；项目不匹配一律 NotFound）。
-    let row: Option<(Uuid, String, Option<Uuid>, Option<Uuid>, String)> = sqlx::query_as(
-        "SELECT repository_id, commit_sha, pc_source_id, kb_revision_id, status \
-           FROM integration.repo_analysis_report \
-          WHERE id = $1 AND project_id = $2 \
-            AND tenant_id = (SELECT tenant_id FROM core.project WHERE id = $2) \
-          FOR UPDATE",
-    )
-    .bind(report_id)
-    .bind(project_id)
-    .fetch_optional(&mut *tx)
-    .await?;
-    let Some((repository_id, commit_sha, pc_source_id, kb_revision_id, status)) = row else {
+    let row: Option<(Uuid, String, Option<Uuid>, Option<Uuid>, Option<Uuid>, String)> =
+        sqlx::query_as(
+            "SELECT repository_id, commit_sha, pc_source_id, kb_revision_id, projc_source_id, status \
+               FROM integration.repo_analysis_report \
+              WHERE id = $1 AND project_id = $2 \
+                AND tenant_id = (SELECT tenant_id FROM core.project WHERE id = $2) \
+              FOR UPDATE",
+        )
+        .bind(report_id)
+        .bind(project_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+    let Some((repository_id, commit_sha, pc_source_id, kb_revision_id, projc_source_id, status)) =
+        row
+    else {
         return Err(AnalysisReportError::NotFound);
     };
     if status != "analyzed" {
@@ -487,6 +638,73 @@ pub async fn close_report(
         }
     }
 
+    // ── P3-11 新增：ProjC 分流（纯追加块；G-2 与 pc 同构、独立计数）──────────
+    let mut projc_applied: u64 = 0;
+    let mut projc_publish_failed: u64 = 0;
+    let mut projc_withdrawn: u64 = 0;
+    let mut projc_legacy_no_source = false;
+    match projc_source_id {
+        Some(projc_source) => {
+            // 已批准 ProjC 提案 → 批量发布（projc-decision:{id}；CAS 失配内置
+            // failed；失败独立计数不阻断——pc 块同口径）。
+            let projc_approved_ids: Vec<Uuid> = sqlx::query_scalar(
+                "SELECT id FROM projc.proposal WHERE source_id = $1 AND status = 'approved'",
+            )
+            .bind(projc_source)
+            .fetch_all(&mut *tx)
+            .await?;
+            for proposal_id in projc_approved_ids {
+                match crate::projc::publish_version(
+                    pool,
+                    project_id,
+                    actor,
+                    crate::projc::PublishVersionInput {
+                        proposal_id,
+                        operation_id: format!("projc-decision:{proposal_id}"),
+                    },
+                )
+                .await
+                {
+                    Ok(_) => projc_applied += 1,
+                    Err(_) => projc_publish_failed += 1,
+                }
+            }
+            // 未决 ProjC 提案 → withdrawn（逐条审计，projc_ 前缀口径）。
+            let projc_pending: Vec<(Uuid, String)> = sqlx::query_as(
+                "SELECT id, status FROM projc.proposal \
+                  WHERE source_id = $1 AND status IN ('draft','submitted') FOR UPDATE",
+            )
+            .bind(projc_source)
+            .fetch_all(&mut *tx)
+            .await?;
+            for (proposal_id, prev) in projc_pending {
+                sqlx::query(
+                    "UPDATE projc.proposal SET status = 'withdrawn', updated_at = now() \
+                      WHERE id = $1",
+                )
+                .bind(proposal_id)
+                .execute(&mut *tx)
+                .await?;
+                crate::pm_write::append_audit_with_after(
+                    &mut tx,
+                    project_id,
+                    actor,
+                    "projc_proposal.withdraw",
+                    "projc_proposal",
+                    Some(proposal_id),
+                    serde_json::json!({ "status": prev, "reason": "analysis report closed" }),
+                )
+                .await?;
+                projc_withdrawn += 1;
+            }
+        }
+        None => {
+            // NULL projc_source_id 仅可能出现在 0026 之前的历史报告行 = 显式
+            // Legacy：跳过 ProjC 分支，审计留痕（绝不静默）。
+            projc_legacy_no_source = true;
+        }
+    }
+
     // 未确认 KB 草稿修订 → rejected（0023 已放宽守卫白名单）。
     let mut rejected_kb = false;
     if let Some(rev) = kb_revision_id {
@@ -523,6 +741,20 @@ pub async fn close_report(
     .bind(actor.principal_id)
     .execute(&mut *tx)
     .await?;
+    let mut audit_payload = serde_json::json!({
+        "status": "closed",
+        "commit_sha": commit_sha,
+        "applied_proposals": applied_proposals,
+        "publish_failed_proposals": publish_failed_proposals,
+        "withdrawn_proposals": withdrawn,
+        "rejected_kb": rejected_kb,
+        "projc_applied": projc_applied,
+        "projc_publish_failed_proposals": projc_publish_failed,
+        "projc_withdrawn": projc_withdrawn,
+    });
+    if projc_legacy_no_source {
+        audit_payload["projc_branch"] = serde_json::json!("legacy_no_source");
+    }
     crate::pm_write::append_audit_with_after(
         &mut tx,
         project_id,
@@ -530,14 +762,7 @@ pub async fn close_report(
         "analysis_report.closed",
         "repo_analysis_report",
         Some(report_id),
-        serde_json::json!({
-            "status": "closed",
-            "commit_sha": commit_sha,
-            "applied_proposals": applied_proposals,
-            "publish_failed_proposals": publish_failed_proposals,
-            "withdrawn_proposals": withdrawn,
-            "rejected_kb": rejected_kb,
-        }),
+        audit_payload,
     )
     .await?;
     sqlx::query(
@@ -560,6 +785,9 @@ pub async fn close_report(
         withdrawn_proposals: withdrawn,
         rejected_kb,
         last_analyzed_commit: commit_sha,
+        projc_applied,
+        projc_publish_failed_proposals: projc_publish_failed,
+        projc_withdrawn,
     })
 }
 
