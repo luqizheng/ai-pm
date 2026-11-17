@@ -108,6 +108,9 @@ design:
     library:
       title: Navigation component library
       subtitle: Board 08 — 9 families, 24 specimens
+    v2:
+      title: Main Navigation V2.0 — three-level prototype
+      subtitle: L1 business domain → L2 module → L3 page — default / project context / collapsed rail / role visibility / component library (interactive)
   shell:
     states:
       title: Application shell states

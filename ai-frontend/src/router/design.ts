@@ -30,7 +30,8 @@ export const DESIGN_PATHS = {
     switcher: "/design/navigation/switcher",
     states: "/design/navigation/states",
     switching: "/design/navigation/switching",
-    library: "/design/navigation/library"
+    library: "/design/navigation/library",
+    v2: "/design/navigation/v2"
   },
   shell: {
     states: "/design/shell/states"
@@ -175,6 +176,12 @@ export const designRoutes: RouteRecordRaw[] = [
     component: () =>
       import("@/views/design/navigation/DesignNavLibraryView.vue"),
     meta: { layout: "design", title: "design.navigation.library.title" }
+  },
+  {
+    path: DESIGN_PATHS.navigation.v2,
+    name: "design-navigation-v2",
+    component: () => import("@/views/design/navigation/DesignNavV2View.vue"),
+    meta: { layout: "design", title: "design.navigation.v2.title" }
   },
   {
     path: DESIGN_PATHS.shell.states,

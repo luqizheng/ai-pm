@@ -99,6 +99,10 @@ const navSections = computed(() => [
       {
         label: t("design.navigation.library.title"),
         to: DESIGN_PATHS.navigation.library
+      },
+      {
+        label: t("design.navigation.v2.title"),
+        to: DESIGN_PATHS.navigation.v2
       }
     ]
   },

@@ -108,6 +108,9 @@ design:
     library:
       title: 导航组件库
       subtitle: Figma 板 08 — 9 族 24 specimen
+    v2:
+      title: 主导航 V2.0 — 三级导航原型
+      subtitle: L1 业务域 → L2 功能模块 → L3 功能页 — 默认态 / 项目上下文 / 折叠栏 / 角色可见性 / 组件库（可交互）
   shell:
     states:
       title: 应用壳状态
