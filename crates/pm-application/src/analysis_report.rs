@@ -594,10 +594,7 @@ pub async fn close_report(
                 pool,
                 project_id,
                 actor,
-                crate::pc::PublishVersionInput {
-                    proposal_id,
-                    operation_id: format!("pc-decision:{proposal_id}"),
-                },
+                crate::pc::PublishVersionInput { proposal_id },
             )
             .await
             {
@@ -658,10 +655,7 @@ pub async fn close_report(
                     pool,
                     project_id,
                     actor,
-                    crate::projc::PublishVersionInput {
-                        proposal_id,
-                        operation_id: format!("projc-decision:{proposal_id}"),
-                    },
+                    crate::projc::PublishVersionInput { proposal_id },
                 )
                 .await
                 {

@@ -19,10 +19,11 @@ use super::{
     ProjcError, VersionMemberPin,
 };
 
-/// 发布入参（成员集从提案行构建；operation_id = 发布幂等键）。
+/// 发布入参（成员集从提案行构建；发布幂等键=服务端确定性派生
+/// `projc-decision:{proposal_id}`——GAP-31-A 键来源裁决：与 close 链同款，
+/// 调用方不得给定任意键；内化后非规范键无输入面=fail-closed 结构性满足）。
 pub struct PublishVersionInput {
     pub proposal_id: Uuid,
-    pub operation_id: String,
 }
 
 #[derive(Debug)]
@@ -97,6 +98,10 @@ pub(super) async fn publish_inner(
         .await
         .map_err(|_| ProjcError::NotFound("project not found".into()))?;
 
+    // 发布幂等键=服务端确定性派生（GAP-31-A 键来源裁决：全发布入口统一，
+    // 与 close 链同款；调用方不得给定任意键）。
+    let operation_id = format!("projc-decision:{}", input.proposal_id);
+
     // ④ 前置门禁（事务外只读判定；事务内不再重判——与 H-11 已知窗口一致）
     ensure_formal_authorized(pool, project_id, actor).await?;
 
@@ -118,7 +123,7 @@ pub(super) async fn publish_inner(
     )
     .bind(tenant_id)
     .bind(project_id)
-    .bind(&input.operation_id)
+    .bind(&operation_id)
     .bind(actor.principal_id)
     .fetch_optional(&mut *tx)
     .await?;
@@ -130,7 +135,7 @@ pub(super) async fn publish_inner(
             )
             .bind(tenant_id)
             .bind(project_id)
-            .bind(&input.operation_id)
+            .bind(&operation_id)
             .fetch_one(&mut *tx)
             .await?;
             (row.0, id)
@@ -142,7 +147,7 @@ pub(super) async fn publish_inner(
             )
             .bind(tenant_id)
             .bind(project_id)
-            .bind(&input.operation_id)
+            .bind(&operation_id)
             .fetch_one(&mut *tx)
             .await?;
             if row.0 == "completed" {
@@ -169,7 +174,7 @@ pub(super) async fn publish_inner(
             )
             .bind(tenant_id)
             .bind(project_id)
-            .bind(&input.operation_id)
+            .bind(&operation_id)
             .fetch_one(&mut *tx)
             .await?;
             (row.0, id)
@@ -306,7 +311,7 @@ pub(super) async fn publish_inner(
         .bind(json!({
             "reason": "version baseline moved; re-propose against the new version",
             "phase": "cas_mismatch",
-            "operation_id": input.operation_id,
+            "operation_id": operation_id.clone(),
         }))
         .bind(tenant_id)
         .execute(&mut *tx)
@@ -554,7 +559,7 @@ pub(super) async fn publish_inner(
         "snapshot_hash": snapshot_hash,
         "member_count": members.len(),
         "proposal_id": input.proposal_id,
-        "operation_id": input.operation_id,
+        "operation_id": operation_id.clone(),
     }))
     .bind(input.proposal_id)
     .bind(tenant_id)

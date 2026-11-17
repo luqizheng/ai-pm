@@ -264,7 +264,6 @@ async fn proposal_full_lifecycle_reject_and_withdraw(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: p3.proposal_id,
-            operation_id: format!("test-decision:{}", p3.proposal_id),
         },
     )
     .await
@@ -290,18 +289,21 @@ async fn proposal_full_lifecycle_reject_and_withdraw(pool: PgPool) {
     .unwrap();
     assert_eq!(lifecycle, "active", "首次入正式版本 = active");
 
-    // applied 后再发布 409（提案终态）
+    // applied 后同提案再发布 = 同键幂等重放（Q-04/GAP-15：发布键按提案派生，
+    // 同 proposal 派生同键 → completed 短路返回既有版本，非 409）
     let republish = publish_version(
         &pool,
         project,
         &lead,
         PublishVersionInput {
             proposal_id: p3.proposal_id,
-            operation_id: "test-decision:again".into(),
         },
     )
-    .await;
-    assert!(matches!(republish, Err(ProjcError::Conflict(_))), "{republish:?}");
+    .await
+    .unwrap();
+    assert!(republish.replayed);
+    assert_eq!(republish.version_id, receipt.version_id);
+    assert_eq!(republish.version_no, receipt.version_no);
 
     // 审计口径：projc_ 前缀（create/submit/approve/publish）
     let actions: Vec<(String,)> = sqlx::query_as(
@@ -396,7 +398,6 @@ async fn formal_writes_fail_closed_for_ai_and_unauthorized(pool: PgPool) {
         &ai,
         PublishVersionInput {
             proposal_id: proposal.proposal_id,
-            operation_id: "gate-test".into(),
         },
     )
     .await;
@@ -439,7 +440,6 @@ async fn formal_writes_fail_closed_for_ai_and_unauthorized(pool: PgPool) {
         &AuditActor::principal(MEMBER),
         PublishVersionInput {
             proposal_id: proposal.proposal_id,
-            operation_id: "gate-test-2".into(),
         },
     )
     .await
@@ -499,15 +499,14 @@ async fn publish_replays_receipt_and_cas_mismatch_fails_proposal(pool: PgPool) {
     .await
     .unwrap();
 
-    // 幂等重放：同 operation_id 第二次 → replayed=true，同 version
-    let op_id = "projc-decision:fixture-1";
+    // 幂等重放：同一提案二次发布（发布键=服务端派生，同键）→ replayed=true，同 version
+    let op_id = format!("projc-decision:{}", p1.proposal_id);
     let first = publish_version(
         &pool,
         project,
         &lead,
         PublishVersionInput {
             proposal_id: p1.proposal_id,
-            operation_id: op_id.into(),
         },
     )
     .await
@@ -518,7 +517,6 @@ async fn publish_replays_receipt_and_cas_mismatch_fails_proposal(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: p1.proposal_id,
-            operation_id: op_id.into(),
         },
     )
     .await
@@ -567,7 +565,6 @@ async fn publish_replays_receipt_and_cas_mismatch_fails_proposal(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: p2.proposal_id,
-            operation_id: "projc-decision:fixture-2".into(),
         },
     )
     .await;
@@ -581,11 +578,10 @@ async fn publish_replays_receipt_and_cas_mismatch_fails_proposal(pool: PgPool) {
     .unwrap();
     assert_eq!(p2_status, "failed", "CAS 失配提案内置 failed");
     let (op_status,): (String,) = sqlx::query_as(
-        "SELECT status FROM projc.write_operation \
-          WHERE tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
-            AND project_id = $1 AND operation_id = 'projc-decision:fixture-2'",
+        "SELECT status FROM projc.write_operation           WHERE tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1)             AND project_id = $1 AND operation_id = $2",
     )
     .bind(project)
+    .bind(format!("projc-decision:{}", p2.proposal_id))
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -693,7 +689,6 @@ async fn conflict_freezes_and_resolves(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: proposal.proposal_id,
-            operation_id: "frozen-test".into(),
         },
     )
     .await
@@ -941,7 +936,6 @@ async fn relationship_endpoints_types_ext_keys_and_closure(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: proposal.proposal_id,
-            operation_id: "closure-test".into(),
         },
     )
     .await
@@ -1122,7 +1116,6 @@ async fn propose_from_analysis_candidate_exclusion(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: receipt.proposal_id,
-            operation_id: "candidate-test".into(),
         },
     )
     .await
@@ -1218,4 +1211,161 @@ async fn propose_from_analysis_candidate_exclusion(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(event_rows, 1);
+}
+
+// ── 1b. 决定终局（GAP-35，Q-02b/Q-11）：跨态重决一律 409；同态重放幂等保持；──
+// ──     跨态拒绝零残留（不新增审批事实/审计事件）────────────────────────────
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn decide_is_terminal_cross_state_rejected(pool: PgPool) {
+    seed_principals(&pool).await;
+    let project = seed_project_with_lead(&pool, "pj-term").await;
+    let lead = AuditActor::principal(LEAD);
+
+    let obj = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("repository", Some("t1"), "仓库", "c1"),
+    )
+    .await
+    .unwrap();
+    let proposal = create_proposal(
+        &pool,
+        project,
+        &lead,
+        one_object_proposal("终局验证", None, obj.object_id, obj.revision_id),
+    )
+    .await
+    .unwrap();
+    submit_proposal(&pool, project, &lead, proposal.proposal_id, None)
+        .await
+        .unwrap();
+
+    // approve → approved（终态）；同态重放幂等且不重复审计
+    let approved = approve_proposal(
+        &pool,
+        project,
+        &lead,
+        proposal.proposal_id,
+        pm_application::projc::DecisionInput {
+            reason: None,
+            expected_version_no: 0,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(approved.status, "approved");
+    let again = approve_proposal(
+        &pool,
+        project,
+        &lead,
+        proposal.proposal_id,
+        pm_application::projc::DecisionInput {
+            reason: None,
+            expected_version_no: 0,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(again.status, "approved");
+    let approve_audit: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log \
+          WHERE project_id = $1 AND action = 'projc_proposal.approve'",
+    )
+    .bind(project)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(approve_audit, 1, "同态重放不得重复审计");
+
+    // 跨态重决：approved → reject 一律 409
+    let flip = reject_proposal(
+        &pool,
+        project,
+        &lead,
+        proposal.proposal_id,
+        pm_application::projc::DecisionInput {
+            reason: Some("flip".into()),
+            expected_version_no: 0,
+        },
+    )
+    .await;
+    assert!(
+        matches!(flip, Err(ProjcError::Conflict(_))),
+        "approved→reject 必须 409: {flip:?}"
+    );
+    let status: String = sqlx::query_scalar("SELECT status FROM projc.proposal WHERE id = $1")
+        .bind(proposal.proposal_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(status, "approved");
+
+    // rejected → approve 一律 409
+    let obj2 = upsert_object_draft(
+        &pool,
+        project,
+        &lead,
+        draft("repository", Some("t2"), "仓库2", "c2"),
+    )
+    .await
+    .unwrap();
+    let proposal2 = create_proposal(
+        &pool,
+        project,
+        &lead,
+        one_object_proposal("终局验证2", None, obj2.object_id, obj2.revision_id),
+    )
+    .await
+    .unwrap();
+    submit_proposal(&pool, project, &lead, proposal2.proposal_id, None)
+        .await
+        .unwrap();
+    let rejected = reject_proposal(
+        &pool,
+        project,
+        &lead,
+        proposal2.proposal_id,
+        pm_application::projc::DecisionInput {
+            reason: None,
+            expected_version_no: 0,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(rejected.status, "rejected");
+    let flip2 = approve_proposal(
+        &pool,
+        project,
+        &lead,
+        proposal2.proposal_id,
+        pm_application::projc::DecisionInput {
+            reason: None,
+            expected_version_no: 0,
+        },
+    )
+    .await;
+    assert!(
+        matches!(flip2, Err(ProjcError::Conflict(_))),
+        "rejected→approve 必须 409: {flip2:?}"
+    );
+
+    // 零残留：审批事实各 1 条终态行；审计 approve=1/reject=1（跨态拒绝未写任何行）
+    let approvals: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM projc.approval WHERE project_id = $1")
+            .bind(project)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(approvals, 2, "跨态拒绝不得新增审批行");
+    let reject_audit: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM governance.audit_log \
+          WHERE project_id = $1 AND action = 'projc_proposal.reject'",
+    )
+    .bind(project)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(reject_audit, 1);
 }

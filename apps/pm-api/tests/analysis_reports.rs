@@ -1230,10 +1230,7 @@ async fn close_projc_publish_failure_is_independent_and_non_blocking(pool: PgPoo
         &pool,
         project,
         &dev(),
-        ProjcPublishInput {
-            proposal_id: projc_ok,
-            operation_id: "d5-projc-manual".into(),
-        },
+        ProjcPublishInput { proposal_id: projc_ok },
     )
     .await
     .unwrap();

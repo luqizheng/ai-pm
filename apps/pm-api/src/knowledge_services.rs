@@ -648,9 +648,9 @@ async fn p5_decide_proposal(
 }
 
 /// P3-11 W6 并行端点（P5 同构；范围确认点②）：ProjC 提案决策转达——决定
-/// 暂记 approved/rejected（报告关闭前可互改），正式版本在报告 close 双域分流
-/// 批量发布（`projc-decision:{id}`）。门禁与 pc P5 一致：可信交互上下文
-/// （A*：API Key 403）+ 服务层真人 + A3；MCP 不暴露此入口。
+/// 终局（Q-02b/Q-11，GAP-35：终态不可跨态重决），正式版本在报告 close 双域分流
+/// 批量发布（`projc-decision:{id}`，GAP-31-A 服务端派生）。门禁与 pc P5 一致：
+/// 可信交互上下文（A*：API Key 403）+ 服务层真人 + A3；MCP 不暴露此入口。
 async fn projc_p5_decide_proposal(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,

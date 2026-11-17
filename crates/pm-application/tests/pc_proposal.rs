@@ -406,7 +406,6 @@ async fn confirmation_loop_full_chain(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: drafted.proposal_id,
-            operation_id: "kp2-chain-1".into(),
         },
     )
     .await
@@ -458,7 +457,7 @@ async fn confirmation_loop_full_chain(pool: PgPool) {
     submit_proposal(&pool, project, &lead, p2.proposal_id, Some(1))
         .await
         .unwrap();
-    // ⑤' 决定暂记：approve → approved（无版本）；正式版本经发布入口产出
+    // ⑤' 决定终局：approve → approved（无版本）；正式版本经发布入口产出
     let outcome = decide_proposal(&pool, project, &lead, p2.proposal_id, approve(1))
         .await
         .unwrap();
@@ -476,7 +475,6 @@ async fn confirmation_loop_full_chain(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: p2.proposal_id,
-            operation_id: format!("pc-decision:{}", p2.proposal_id),
         },
     )
     .await
@@ -626,14 +624,14 @@ async fn decision_gates_fail_closed(pool: PgPool) {
     .unwrap();
     assert_eq!(approved.status, "approved");
 
-    // 审阅流 v2：同态重放幂等；反向重决互改（报告 close 前决定可反复修改）
+    // 决定终局（Q-02b/Q-11，GAP-35）：同态重放幂等；跨态重决一律 409，提案保持终态
     let r = approve_proposal(&pool, project, &lead, p.proposal_id, decision(0, None)).await;
     assert!(r.is_ok(), "idempotent re-approve: {r:?}");
     let r = reject_proposal(&pool, project, &lead, p.proposal_id, decision(0, None)).await;
-    assert!(r.is_ok(), "re-decide approve→reject: {r:?}");
-    assert_eq!(proposal_status(&pool, p.proposal_id).await, "rejected");
-    let r = approve_proposal(&pool, project, &lead, p.proposal_id, decision(0, None)).await;
-    assert!(r.is_ok(), "re-decide reject→approve: {r:?}");
+    assert!(
+        matches!(r, Err(PcError::Conflict(_))),
+        "approved→reject 必须 409: {r:?}"
+    );
     assert_eq!(proposal_status(&pool, p.proposal_id).await, "approved");
 
     // 锚定篡改：库层触发器拒绝（P0001）
@@ -885,7 +883,6 @@ async fn endpoint_merge_conflict_and_projected_closure(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: p1.proposal_id,
-            operation_id: format!("pc-decision:{}", p1.proposal_id),
         },
     )
     .await
@@ -938,7 +935,6 @@ async fn endpoint_merge_conflict_and_projected_closure(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: p2.proposal_id,
-            operation_id: format!("pc-decision:{}", p2.proposal_id),
         },
     )
     .await
@@ -1008,14 +1004,15 @@ async fn reject_and_withdraw_paths(pool: PgPool) {
     assert_eq!(status, "rejected");
     assert_eq!(reason.as_deref(), Some("不符合产品定位"));
     assert_eq!(proposal_status(&pool, p1.proposal_id).await, "rejected");
-    // 审阅流 v2：rejected 仍可互改（同态重放幂等；approve 反转回 approved）
+    // 决定终局（Q-02b/Q-11，GAP-35）：rejected 同态重放幂等；跨态重决 409，提案保持 rejected
     let r = reject_proposal(&pool, project, &lead, p1.proposal_id, decision(0, None)).await;
     assert!(r.is_ok(), "idempotent re-reject: {r:?}");
-    let reapproved = decide_proposal(&pool, project, &lead, p1.proposal_id, approve(0))
-        .await
-        .unwrap();
-    assert_eq!(reapproved.status, "approved");
-    assert_eq!(proposal_status(&pool, p1.proposal_id).await, "approved");
+    let reapproved = decide_proposal(&pool, project, &lead, p1.proposal_id, approve(0)).await;
+    assert!(
+        matches!(reapproved, Err(PcError::Conflict(_))),
+        "跨态重决（rejected→approve）必须 409: {reapproved:?}"
+    );
+    assert_eq!(proposal_status(&pool, p1.proposal_id).await, "rejected");
 
     // 撤回：本人撤回 draft
     let p2 = create_proposal(
@@ -1425,11 +1422,11 @@ async fn project_bootstrap_seeds_product_singletons(pool: PgPool) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// 8. 决定暂记与发布解耦（审阅流 v2：close 前可改；发布独立幂等，CAS 失配 → failed）
+// 8. 决定终局与发布解耦（审阅流 v2：终态不可再决；发布独立幂等，CAS 失配 → failed）
 // ══════════════════════════════════════════════════════════════════════════
 
 #[sqlx::test(migrations = "../../migrations")]
-async fn decide_is_provisional_and_publish_is_idempotent(pool: PgPool) {
+async fn decide_is_terminal_and_publish_is_idempotent(pool: PgPool) {
     let (tenant, project) = seed_project_with_team(&pool, "kp2-atomic").await;
     let lead = AuditActor::principal(LEAD);
     let a = upsert(&pool, project, &lead, draft("feature", "ta", "A", "# A1")).await;
@@ -1457,7 +1454,7 @@ async fn decide_is_provisional_and_publish_is_idempotent(pool: PgPool) {
         .await
         .unwrap();
 
-    // 决定暂记：approve → approved（无版本）；同态重放幂等不重复审计
+    // 决定终局：approve → approved（无版本）；同态重放幂等不重复审计
     let outcome = decide_proposal(&pool, project, &lead, p.proposal_id, approve(0))
         .await
         .unwrap();
@@ -1489,7 +1486,6 @@ async fn decide_is_provisional_and_publish_is_idempotent(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: p.proposal_id,
-            operation_id: format!("pc-decision:{}", p.proposal_id),
         },
     )
     .await;
@@ -1515,7 +1511,6 @@ async fn decide_is_provisional_and_publish_is_idempotent(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: p.proposal_id,
-            operation_id: format!("pc-decision:{}", p.proposal_id),
         },
     )
     .await
@@ -1523,7 +1518,7 @@ async fn decide_is_provisional_and_publish_is_idempotent(pool: PgPool) {
     assert_eq!(receipt.version_no, 1);
     assert_eq!(proposal_status(&pool, p.proposal_id).await, "applied");
 
-    // 基线已移动的提案：决定仍可暂记（CAS 只对提案基线），发布入口 CAS 失配 → failed
+    // 基线已移动的提案：submitted 仍可决（CAS 只对提案基线），发布入口 CAS 失配 → failed
     let outcome2 = decide_proposal(&pool, project, &lead, stale.proposal_id, approve(0))
         .await
         .unwrap();
@@ -1534,7 +1529,6 @@ async fn decide_is_provisional_and_publish_is_idempotent(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: stale.proposal_id,
-            operation_id: format!("pc-decision:{}", stale.proposal_id),
         },
     )
     .await;
@@ -1544,4 +1538,101 @@ async fn decide_is_provisional_and_publish_is_idempotent(pool: PgPool) {
         audit_count(&pool, project, "pc_version.publish_failed").await,
         1
     );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 8b. 决定终局（GAP-35，Q-02b/Q-11）：跨态重决一律 409；同态重放幂等保持；
+//     跨态拒绝零残留（不新增审批事实/审计事件）
+// ══════════════════════════════════════════════════════════════════════════
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn decide_is_terminal_cross_state_rejected(pool: PgPool) {
+    let (tenant, project) = seed_project_with_team(&pool, "terminal").await;
+    let lead = AuditActor::principal(LEAD);
+    let a = upsert(&pool, project, &lead, draft("feature", "ta", "A", "# A1")).await;
+    let p = create_proposal(
+        &pool,
+        project,
+        &lead,
+        proposal_input("terminal-a", vec![obj_member("create_object", &a)]),
+    )
+    .await
+    .unwrap();
+    submit_proposal(&pool, project, &lead, p.proposal_id, Some(0))
+        .await
+        .unwrap();
+
+    // approve → approved（终态）；同态重放幂等且不重复审计
+    let approved = decide_proposal(&pool, project, &lead, p.proposal_id, approve(0))
+        .await
+        .unwrap();
+    assert_eq!(approved.status, "approved");
+    let again = decide_proposal(&pool, project, &lead, p.proposal_id, approve(0))
+        .await
+        .unwrap();
+    assert_eq!(again.status, "approved");
+    assert_eq!(audit_count(&pool, project, "pc_proposal.approve").await, 1);
+
+    // 跨态重决：approved → reject 一律 409
+    let flip = decide_proposal(
+        &pool,
+        project,
+        &lead,
+        p.proposal_id,
+        ProposalDecisionInput {
+            action: DecisionAction::Reject,
+            reason: Some("flip".into()),
+            expected_version_no: 0,
+        },
+    )
+    .await;
+    assert!(
+        matches!(flip, Err(PcError::Conflict(_))),
+        "approved→reject 必须 409: {flip:?}"
+    );
+    assert_eq!(proposal_status(&pool, p.proposal_id).await, "approved");
+
+    // rejected → approve 一律 409
+    let b = upsert(&pool, project, &lead, draft("feature", "tb", "B", "# B1")).await;
+    let q = create_proposal(
+        &pool,
+        project,
+        &lead,
+        proposal_input("terminal-b", vec![obj_member("create_object", &b)]),
+    )
+    .await
+    .unwrap();
+    submit_proposal(&pool, project, &lead, q.proposal_id, Some(0))
+        .await
+        .unwrap();
+    let rejected = decide_proposal(
+        &pool,
+        project,
+        &lead,
+        q.proposal_id,
+        ProposalDecisionInput {
+            action: DecisionAction::Reject,
+            reason: None,
+            expected_version_no: 0,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(rejected.status, "rejected");
+    let flip2 = decide_proposal(&pool, project, &lead, q.proposal_id, approve(0)).await;
+    assert!(
+        matches!(flip2, Err(PcError::Conflict(_))),
+        "rejected→approve 必须 409: {flip2:?}"
+    );
+    assert_eq!(proposal_status(&pool, q.proposal_id).await, "rejected");
+
+    // 零残留：审批事实各 1 条终态行；审计 approve=1/reject=1（跨态拒绝未写任何行）
+    let approvals: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM pc.approval WHERE project_id = $1")
+            .bind(project)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(approvals, 2, "跨态拒绝不得新增审批行");
+    assert_eq!(audit_count(&pool, project, "pc_proposal.reject").await, 1);
 }

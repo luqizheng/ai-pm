@@ -996,7 +996,6 @@ async fn publish_happy_path_idempotent_and_lifecycle(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: proposal,
-            operation_id: "op-publish-1".into(),
         },
     )
     .await
@@ -1042,10 +1041,10 @@ async fn publish_happy_path_idempotent_and_lifecycle(pool: PgPool) {
         .unwrap();
     assert_eq!(pstatus, "applied");
     let opstatus: String = sqlx::query_scalar(
-        "SELECT status FROM pc.write_operation \
-          WHERE project_id = $1 AND operation_id = 'op-publish-1'",
+        "SELECT status FROM pc.write_operation           WHERE project_id = $1 AND operation_id = $2",
     )
     .bind(project)
+    .bind(format!("pc-decision:{}", proposal))
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -1100,7 +1099,6 @@ async fn publish_happy_path_idempotent_and_lifecycle(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: proposal,
-            operation_id: "op-publish-1".into(),
         },
     )
     .await
@@ -1169,7 +1167,6 @@ async fn publish_next_version_replaces_carried_revision(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: p1,
-            operation_id: "op-round-1".into(),
         },
     )
     .await
@@ -1206,7 +1203,6 @@ async fn publish_next_version_replaces_carried_revision(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: p2,
-            operation_id: "op-round-2".into(),
         },
     )
     .await
@@ -1300,7 +1296,6 @@ async fn publish_gates_fail_closed(pool: PgPool) {
         &ai,
         PublishVersionInput {
             proposal_id: proposal,
-            operation_id: "op-ai".into(),
         },
     )
     .await;
@@ -1316,7 +1311,6 @@ async fn publish_gates_fail_closed(pool: PgPool) {
         &outsider,
         PublishVersionInput {
             proposal_id: proposal,
-            operation_id: "op-out".into(),
         },
     )
     .await;
@@ -1356,7 +1350,6 @@ async fn publish_gates_fail_closed(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: proposal,
-            operation_id: "op-frozen".into(),
         },
     )
     .await;
@@ -1401,7 +1394,6 @@ async fn publish_gates_fail_closed(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: proposal2,
-            operation_id: "op-base".into(),
         },
     )
     .await
@@ -1413,7 +1405,6 @@ async fn publish_gates_fail_closed(pool: PgPool) {
         &lead,
         PublishVersionInput {
             proposal_id: proposal,
-            operation_id: "op-cas".into(),
         },
     )
     .await;
@@ -1428,10 +1419,10 @@ async fn publish_gates_fail_closed(pool: PgPool) {
         .unwrap();
     assert_eq!(pstatus, "failed", "CAS mismatch moves proposal to failed");
     let opstatus: String = sqlx::query_scalar(
-        "SELECT status FROM pc.write_operation \
-          WHERE project_id = $1 AND operation_id = 'op-cas'",
+        "SELECT status FROM pc.write_operation           WHERE project_id = $1 AND operation_id = $2",
     )
     .bind(project)
+    .bind(format!("pc-decision:{}", proposal))
     .fetch_one(&pool)
     .await
     .unwrap();

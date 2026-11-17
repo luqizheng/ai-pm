@@ -269,7 +269,6 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
         &dev(),
         pm_application::pc::PublishVersionInput {
             proposal_id: p1,
-            operation_id: format!("pc-decision:{p1}"),
         },
     )
     .await
@@ -300,7 +299,7 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["status"], "rejected");
     assert!(body["published_version_ref"].is_null());
-    // 审阅流 v2：approved/rejected 可互转（非终态）——reject 后再 approve → 200
+    // 决定终局（Q-02b/Q-11，GAP-35）：rejected 终态——跨态重决一律 409
     let (status, flipped) = send(
         &pool,
         post_json(
@@ -309,8 +308,14 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
         ),
     )
     .await;
-    assert_eq!(status, StatusCode::OK, "{flipped}");
-    assert_eq!(flipped["status"], "approved");
+    assert_eq!(status, StatusCode::CONFLICT, "{flipped}");
+    assert!(
+        flipped["message"]
+            .as_str()
+            .unwrap()
+            .contains("decisions are terminal"),
+        "{flipped}"
+    );
 
     let audits: Vec<(String, Option<String>)> = sqlx::query_as(
         "SELECT action, actor_auth_mode FROM governance.audit_log \
@@ -326,7 +331,6 @@ async fn p5_approve_publishes_and_reject_closes(pool: PgPool) {
         vec![
             ("pc_proposal.approve".to_string(), Some("off".to_string())),
             ("pc_proposal.reject".to_string(), Some("off".to_string())),
-            ("pc_proposal.approve".to_string(), Some("off".to_string())),
         ]
     );
 }
@@ -727,7 +731,6 @@ async fn p3_expands_proposal_and_no_change_conclusions(pool: PgPool) {
         &dev(),
         pm_application::pc::PublishVersionInput {
             proposal_id: receipt.proposal_id,
-            operation_id: format!("pc-decision:{}", receipt.proposal_id),
         },
     )
     .await

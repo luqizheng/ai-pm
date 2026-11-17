@@ -142,7 +142,7 @@ pub struct ApprovalReceipt {
     pub status: String,
 }
 
-/// P5 决策入参（approve/reject 均为暂记决定；正式版本在报告 close 批量发布）。
+/// P5 决策入参（approve/reject 均为终局决定，Q-02b/Q-11；正式版本在报告 close 批量发布）。
 pub struct ProposalDecisionInput {
     pub action: DecisionAction,
     pub reason: Option<String>,
@@ -969,9 +969,11 @@ async fn record_decision(
             status: new_status.to_string(),
         });
     }
-    if status != "submitted" && status != "approved" && status != "rejected" {
+    if status != "submitted" {
+        // 决定终局（Q-02b/Q-11，GAP-35）：approved/rejected 为终态——同态重放已在
+        // 上方幂等分支返回，跨态重决一律 409。
         return Err(PcError::Conflict(format!(
-            "proposal is `{status}`; only submitted/approved/rejected proposals can be decided"
+            "proposal is `{status}`; only submitted proposals can be decided (decisions are terminal)"
         )));
     }
     if input.expected_version_no != baseline {
@@ -981,8 +983,8 @@ async fn record_decision(
         )));
     }
     // 待决审批行 FOR UPDATE（§17.2 场景 4：并发裁决者串行，后到者读到非 pending → 409）。
-    // 重决（approved/rejected 间切换）：旧行已终态且不可变（forbid_approval_mutation），
-    // 新插 pending 行（uq_pc_approval_pending 部分唯一索引放行），旧行保留审计轨迹。
+    // 决定终局（Q-02b/Q-11，GAP-35）：submitted 提案的 pending 行由 submit 创建，
+    // 裁决后转终态且提案终态不可再决——重决补插 pending 行路径随跨态翻转废止。
     let approval: Option<(Uuid, String, i64)> = sqlx::query_as(
         "SELECT id, proposal_content_hash, expected_version_no FROM pc.approval \
           WHERE tenant_id = $1 AND project_id = $2 AND proposal_id = $3 AND status = 'pending' \
@@ -993,24 +995,8 @@ async fn record_decision(
     .bind(proposal_id)
     .fetch_optional(&mut *tx)
     .await?;
-    let (approval_id, approval_hash, approval_baseline) = match approval {
-        Some(row) => row,
-        None => {
-            let id: Uuid = sqlx::query_scalar(
-                "INSERT INTO pc.approval \
-                 (tenant_id, project_id, proposal_id, proposal_content_hash, expected_version_no) \
-                 VALUES ($1, $2, $3, $4, $5) RETURNING id",
-            )
-            .bind(tenant_id)
-            .bind(project_id)
-            .bind(proposal_id)
-            .bind(&content_hash)
-            .bind(baseline)
-            .fetch_one(&mut *tx)
-            .await?;
-            (id, content_hash.clone(), baseline)
-        }
-    };
+    let (approval_id, approval_hash, approval_baseline) = approval
+        .ok_or_else(|| PcError::Conflict("proposal has no pending approval fact".into()))?;
     // 锚点三方比对：库内成员集重算 vs 提案行 vs 审批行（不信任任何单一可变列）
     let members = load_members(&mut *tx, tenant_id, project_id, proposal_id).await?;
     let recomputed =
@@ -1063,7 +1049,7 @@ async fn record_decision(
     let moved = sqlx::query(
         "UPDATE pc.proposal SET status = $4, updated_at = now() \
           WHERE tenant_id = $1 AND project_id = $2 AND id = $3 \
-            AND status IN ('submitted','approved','rejected')",
+            AND status = 'submitted'",
     )
     .bind(tenant_id)
     .bind(project_id)
@@ -1101,12 +1087,12 @@ async fn record_decision(
     })
 }
 
-// ── decide（P5 编排：approve = 审批 + 发布，原子）──────────────────────────
+// ── decide（P5 编排：approve/reject 终局决定（Q-02b/Q-11）；正式版本经 close 批量发布）───
 
-/// P5 决策（审阅流 v2）：决定只是**暂记**——approve → approved、reject → rejected，
-/// 在关联报告关闭前可反复互改（每次重决新落一条审批行，旧行留痕）；正式版本由
-/// 报告 close 批量发布（`analysis_report::close_report`，幂等键 `pc-decision:{id}`）。
-/// 同态重放幂等返回既有审批事实；applied/failed/expired/withdrawn/draft 一律 409。
+/// P5 决策（审阅流 v2）：决定为**终局**（Q-02b/Q-11，GAP-35）——approve → approved、
+/// reject → rejected 即终态，不可跨态重决（409）；同态重放幂等返回既有审批事实；
+/// 正式版本由报告 close 批量发布（`analysis_report::close_report`，发布键 `pc-decision:{id}`）。
+/// applied/failed/expired/withdrawn/draft 一律 409。
 pub async fn decide_proposal(
     pool: &PgPool,
     project_id: Uuid,
