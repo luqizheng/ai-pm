@@ -128,9 +128,16 @@ fn drafts() -> IdentityDrafts {
 #[sqlx::test(migrations = "../../migrations")]
 async fn apply_requires_open_report(pool: PgPool) {
     let (_, project, who) = seed_project(&pool, "ident-n1").await;
-    let err = apply_identity_drafts(&pool, None, project, &AuditActor::principal(who), &drafts())
-        .await
-        .unwrap_err();
+    let err = apply_identity_drafts(
+        &pool,
+        None,
+        project,
+        &AuditActor::principal(who),
+        &drafts(),
+        Uuid::new_v4(),
+    )
+    .await
+    .unwrap_err();
     assert!(
         matches!(err, IdentityError::Conflict(ref m) if m.contains("no open analysis report")),
         "{err:?}"
@@ -142,10 +149,16 @@ async fn apply_attaches_proposals_to_open_report(pool: PgPool) {
     let (tenant, project, who) = seed_project(&pool, "ident-a1").await;
     let (_report_id, report_source) = seed_analyzed_report(&pool, project, tenant, who).await;
 
-    let outcome =
-        apply_identity_drafts(&pool, None, project, &AuditActor::principal(who), &drafts())
-            .await
-            .unwrap();
+    let outcome = apply_identity_drafts(
+        &pool,
+        None,
+        project,
+        &AuditActor::principal(who),
+        &drafts(),
+        Uuid::new_v4(),
+    )
+    .await
+    .unwrap();
     let profile = outcome.profile_proposal_id.expect("profile proposal");
     let vision = outcome.vision_proposal_id.expect("vision proposal");
 
@@ -161,4 +174,95 @@ async fn apply_attaches_proposals_to_open_report(pool: PgPool) {
     .unwrap();
     assert_eq!(n, 2, "both proposals attached to the report source");
     assert!(statuses.iter().all(|s| s == "submitted"), "{statuses:?}");
+}
+
+
+// ── GAP-02（Batch4a 统一授权实施）：同轮重跑零重复提案 + 异意图 409 ──────────
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn same_round_replay_is_idempotent(pool: PgPool) {
+    let (tenant, project, who) = seed_project(&pool, "ident-r1").await;
+    let (_report_id, _report_source) = seed_analyzed_report(&pool, project, tenant, who).await;
+    let round = Uuid::new_v4();
+
+    let first = apply_identity_drafts(
+        &pool,
+        None,
+        project,
+        &AuditActor::principal(who),
+        &drafts(),
+        round,
+    )
+    .await
+    .unwrap();
+    let second = apply_identity_drafts(
+        &pool,
+        None,
+        project,
+        &AuditActor::principal(who),
+        &drafts(),
+        round,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        first.profile_proposal_id, second.profile_proposal_id,
+        "同轮重跑 profile 幂等返回原提案"
+    );
+    assert_eq!(first.vision_proposal_id, second.vision_proposal_id);
+
+    // 零重复：同源提案仍 2 条；账本两行（profile/vision）completed
+    let n: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pc.proposal WHERE project_id = $1",
+    )
+    .bind(project)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(n, 2, "同轮重跑零重复提案");
+    let ops: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pc.write_operation \
+          WHERE project_id = $1 AND command = 'pc_propose_identity' AND status = 'completed'",
+    )
+    .bind(project)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(ops, 2, "slot 异键各自成立（profile/vision 两行）");
+}
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn same_round_different_drafts_rejected(pool: PgPool) {
+    let (tenant, project, who) = seed_project(&pool, "ident-r2").await;
+    let (_report_id, _report_source) = seed_analyzed_report(&pool, project, tenant, who).await;
+    let round = Uuid::new_v4();
+
+    apply_identity_drafts(
+        &pool,
+        None,
+        project,
+        &AuditActor::principal(who),
+        &drafts(),
+        round,
+    )
+    .await
+    .unwrap();
+    let tampered = IdentityDrafts {
+        product_profile_markdown: "# 产品画像\n\n被篡改的正文".into(),
+        ..drafts()
+    };
+    let err = apply_identity_drafts(
+        &pool,
+        None,
+        project,
+        &AuditActor::principal(who),
+        &tampered,
+        round,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, IdentityError::Conflict(ref m) if m.contains("fingerprint mismatch")),
+        "同轮异草案必须指纹失配 409: {err:?}"
+    );
 }

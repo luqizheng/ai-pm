@@ -142,11 +142,81 @@ async fn propose_pc_object(
     project_id: Uuid,
     actor: &AuditActor,
     source_id: Uuid,
+    round_id: Uuid,
+    slot: &str,
     object_key: &str,
     object_type: &str,
     title: &str,
     content_markdown: &str,
 ) -> Result<Uuid, IdentityError> {
+    // 槽位枚举守卫（D6.6 §3 规则 2 结构校验）：slot∈{profile,vision}，其余
+    // fail-closed（Invalid）——服务端派生键，调用方不得跨槽位构造键（规则 1）。
+    if slot != "profile" && slot != "vision" {
+        return Err(IdentityError::Failed(format!(
+            "invalid identity slot `{slot}` (expected profile|vision)"
+        )));
+    }
+    // 起草段账本（GAP-02，Q-01 方案 A；op_id=D6.6 §4 身份链形态）。fp=请求意图
+    // （LLM 草案正文即意图内容；object_key 承载成员对象维度）。认领先于一切
+    // 副作用（upsert 每次产生新修订，重放路径零副作用）。
+    let operation_id = format!("pc-identity:{round_id}:{slot}");
+    let fingerprint = {
+        let body = format!(
+            "request|{title}|D-4 业务身份综合轮：LLM 汇聚访谈答案与仓库产物起草|ai_agent|{source_id}|{object_key}|{content_markdown}",
+        );
+        crate::pc::sha256_hex(&body)
+    };
+    let existing: Option<(String, Option<String>)> = sqlx::query_as(
+        "SELECT status, request_fingerprint FROM pc.write_operation \
+          WHERE tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
+            AND project_id = $1 AND operation_id = $2",
+    )
+    .bind(project_id)
+    .bind(&operation_id)
+    .fetch_optional(pool)
+    .await?;
+    if let Some((op_status, stored_fp)) = existing {
+        if stored_fp.as_deref() != Some(fingerprint.as_str()) {
+            return Err(IdentityError::Conflict(format!(
+                "operation `{operation_id}` request fingerprint mismatch (same round, different drafts)"
+            )));
+        }
+        // 中途失败留痕可续（GAP-01 矩阵行）：pending 行若已有活提案=崩溃后恢复，
+        // 补完成锚定并返回；completed=同轮重跑幂等返回（场景 1/9）。
+        if op_status == "completed" || op_status == "pending" {
+            let resumed: Option<Uuid> = sqlx::query_scalar(
+                "SELECT p.id FROM pc.proposal p \
+                   JOIN pc.proposal_member pm ON pm.tenant_id = p.tenant_id \
+                     AND pm.project_id = p.project_id AND pm.proposal_id = p.id \
+                   JOIN pc.cognition_object o ON o.tenant_id = p.tenant_id \
+                     AND o.project_id = p.project_id AND o.id = pm.object_id \
+                  WHERE p.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
+                    AND p.project_id = $1 AND p.source_id = $2 \
+                    AND p.origin_kind = 'ai_agent' \
+                    AND p.status NOT IN ('failed','expired') \
+                    AND o.object_key = $3 \
+                  ORDER BY p.created_at DESC LIMIT 1",
+            )
+            .bind(project_id)
+            .bind(source_id)
+            .bind(object_key)
+            .fetch_optional(pool)
+            .await?;
+            if let Some(proposal_id) = resumed {
+                if op_status == "pending" {
+                    sqlx::query(
+                        "UPDATE pc.write_operation SET status = 'completed', updated_at = now() \
+                          WHERE project_id = $1 AND operation_id = $2",
+                    )
+                    .bind(project_id)
+                    .bind(&operation_id)
+                    .execute(pool)
+                    .await?;
+                }
+                return Ok(proposal_id);
+            }
+        }
+    }
     let display_name: String = sqlx::query_scalar(
         "SELECT display_name FROM pc.cognition_object \
           WHERE project_id = $1 AND object_key = $2 \
@@ -174,6 +244,22 @@ async fn propose_pc_object(
     )
     .await
     .map_err(|e| IdentityError::Failed(format!("pc upsert failed: {e}")))?;
+
+    // 认领账本行（有行则上面已短路/续行；此处处理首跑认领）。
+    sqlx::query(
+        "INSERT INTO pc.write_operation \
+         (tenant_id, project_id, operation_id, command, status, expected_content_hash, \
+          request_fingerprint, created_by) \
+         VALUES ((SELECT tenant_id FROM core.project WHERE id = $1), $1, $2, \
+                 'pc_propose_identity', 'pending', 'pending', $3, $4) \
+         ON CONFLICT (tenant_id, project_id, operation_id) DO NOTHING",
+    )
+    .bind(project_id)
+    .bind(&operation_id)
+    .bind(&fingerprint)
+    .bind(actor.principal_id)
+    .execute(pool)
+    .await?;
 
     let drafted = create_proposal(
         pool,
@@ -203,6 +289,15 @@ async fn propose_pc_object(
     submit_proposal(pool, project_id, actor, drafted.proposal_id, None)
         .await
         .map_err(|e| IdentityError::Failed(format!("pc submit failed: {e}")))?;
+    // 起草段账本完成锚定（GAP-01：fp 认领即锚定，完成翻转状态）。
+    sqlx::query(
+        "UPDATE pc.write_operation SET status = 'completed', updated_at = now() \
+          WHERE project_id = $1 AND operation_id = $2",
+    )
+    .bind(project_id)
+    .bind(&operation_id)
+    .execute(pool)
+    .await?;
     Ok(drafted.proposal_id)
 }
 
@@ -214,6 +309,7 @@ pub async fn apply_identity_drafts(
     project_id: Uuid,
     actor: &AuditActor,
     drafts: &IdentityDrafts,
+    round_id: Uuid,
 ) -> Result<IdentityApplyOutcome, IdentityError> {
     // 审阅流 v2：综合提案须挂当前 analyzed 报告（唯一审阅单元）；无 open 报告 → 拒绝。
     let report_source_id: Option<Uuid> = sqlx::query_scalar(
@@ -234,6 +330,8 @@ pub async fn apply_identity_drafts(
         project_id,
         actor,
         report_source_id,
+        round_id,
+        "profile",
         "product-profile",
         "product_profile",
         "业务身份提案（产品画像）",
@@ -245,6 +343,8 @@ pub async fn apply_identity_drafts(
         project_id,
         actor,
         report_source_id,
+        round_id,
+        "vision",
         "product-vision",
         "product_vision",
         "业务身份提案（产品愿景）",
@@ -280,7 +380,8 @@ pub async fn apply_identity_drafts(
                     source_ref: Some(format!("identity_synthesis:{project_id}")),
                     redline_kind: None, // project-goal 自动强制红线
                     base_revision_id: base,
-                    operation_id: format!("identity-synthesis:{}:{}", project_id, Uuid::new_v4()),
+                    // round_id 透传（GAP-02）：同轮重试经知识链 operation_id 幂等去重。
+                    operation_id: format!("identity-synthesis:{}", round_id),
                     created_by: actor.principal_id,
                 },
             )

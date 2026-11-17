@@ -16,11 +16,12 @@
 //! 派生条目的文案组装（项目身份/仓库元数据）是产品文案，留在本层。
 
 use axum::{
-    extract::{Extension, Path, State},
+    extract::{Extension, Path, Query, State},
     routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
+use std::collections::HashMap;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -172,8 +173,16 @@ async fn identity_synthesis(
     State(state): State<AppState>,
     Extension(caller): Extension<AuthedPrincipal>,
     Path(project_id): Path<Uuid>,
+    Query(query): Query<HashMap<String, String>>,
 ) -> ApiResult<Json<serde_json::Value>> {
     ensure_trusted_context(&caller)?;
+    // round_id 调用方生成透传（GAP-02/D6.6 §4）：同一轮重试携带同 round_id →
+    // 槽位键幂等；缺省=服务端生成（新轮）。
+    let round_id = match query.get("round_id") {
+        Some(raw) => Uuid::parse_str(raw)
+            .map_err(|_| ApiError::BadRequest("round_id must be a uuid"))?,
+        None => Uuid::new_v4(),
+    };
     require_project_visible(
         &state.pool,
         project_id,
@@ -211,8 +220,9 @@ async fn identity_synthesis(
 
     // Goal 提案需要知识根（agent 无直接 Git 写权，提案管线自持锁与红线）。
     let root = KnowledgeRoot::from_env();
-    let outcome = apply_identity_drafts(&state.pool, Some(&root), project_id, &actor, &drafts)
-        .await
+    let outcome =
+        apply_identity_drafts(&state.pool, Some(&root), project_id, &actor, &drafts, round_id)
+            .await
         .map_err(|e| match e {
             IdentityError::Conflict(m) | IdentityError::Failed(m) => {
                 ApiError::Text(axum::http::StatusCode::CONFLICT, m)
