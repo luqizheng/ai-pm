@@ -3,7 +3,7 @@
 //! 证明对象：R-1 分类查询（修复将采用的单条 JOIN 文本）在「读取与发布提交交错」
 //! 下**永不产生混合观察对**——applied 与 completed 同事务原子提交（R2），单语句
 //! 单快照（READ COMMITTED 语句级）只能看到提交前或提交后的一致二元组：
-//!   合法对：(approved, 无行/pending/failed) 或 (applied, completed)
+//!   合法对（V1.1 精确矩阵）：(approved, 无行) 或 (applied, completed)——仅此两元
 //!   非法混合对（必须为 0）：(approved, completed) / (pending|failed, applied)
 //! 两域各一用例；读取循环与发布事务真并发（tokio::join!）。
 
@@ -195,24 +195,26 @@ async fn pc_single_statement_join_never_observes_mixed_pair(pool: PgPool) {
     pub_r.unwrap();
 
     assert!(!observations.is_empty(), "必须采集到观测");
-    let mut illegal = 0usize;
-    for (p, w) in &observations {
-        let legal = match (p.as_str(), w.as_deref()) {
-            // 提交前族：提案未 applied，账本任意已提交态（含无行）——耦合不成立方向合法
-            ("approved", _) | ("submitted", _) | ("draft", _) | ("withdrawn", _)
-            | ("rejected", _) | ("expired", _) | ("failed", _) => true,
-            // 提交后族：applied 必与 completed 同现（同事务原子性的可观察面）
-            ("applied", Some("completed")) => true,
-            // 非法混合对（专家时间线反例）：
-            //   (approved, completed)=前读提案后读账本跨提交；(pending|failed, applied)=反向
-            ("applied", Some("pending")) | ("applied", Some("failed")) | ("applied", None) => false,
-            _ => false,
-        };
+    // V1.1 精确矩阵（废弃 V1.0 的 (approved, _) 通配——该通配会放过 (approved, completed)
+    // 混合快照，属测试缺陷）。合法域按账本行全生命周期路径逐项定义（见核查 V1.1）：
+    //   提交前：(approved, 无行)——账本行仅在发布事务内诞生，中途态不可见
+    //   提交后：(applied, completed)——同事务原子提交的可观察面
+    // 其余一切组合均非法（含显式反例：(approved, completed)/(applied, pending)/
+    // (applied, failed)/(applied, 无行)）。
+    let mut illegal: Vec<(String, Option<String>)> = Vec::new();
+    for pair in &observations {
+        let legal = matches!(
+            (pair.0.as_str(), pair.1.as_deref()),
+            ("approved", None) | ("applied", Some("completed"))
+        );
         if !legal {
-            illegal += 1;
+            illegal.push(pair.clone());
         }
     }
-    assert_eq!(illegal, 0, "单条 JOIN 不得出现混合观察对（快照一致性破坏）");
+    assert!(
+        illegal.is_empty(),
+        "单条 JOIN 出现非法观察对（快照一致性破坏）: {illegal:?}——合法域仅          (approved, 无行) 与 (applied, completed) 两元"
+    );
     // 终态断言：最后一次观测必为提交后一致对
     let (last_p, last_w) = observations.last().unwrap();
     assert_eq!(
@@ -335,18 +337,19 @@ async fn projc_single_statement_join_never_observes_mixed_pair(pool: PgPool) {
     );
     pub_r.unwrap();
 
-    let illegal = observations
+    let illegal: Vec<&(String, Option<String>)> = observations
         .iter()
         .filter(|(p, w)| {
             !matches!(
                 (p.as_str(), w.as_deref()),
-                ("approved", _) | ("submitted", _) | ("draft", _) | ("withdrawn", _)
-                    | ("rejected", _) | ("expired", _) | ("failed", _)
-                    | ("applied", Some("completed"))
+                ("approved", None) | ("applied", Some("completed"))
             )
         })
-        .count();
-    assert_eq!(illegal, 0, "ProjC 单条 JOIN 同样不得出现混合观察对");
+        .collect();
+    assert!(
+        illegal.is_empty(),
+        "ProjC 单条 JOIN 出现非法观察对: {illegal:?}（合法域同 pc：精确两元）"
+    );
     let (last_p, last_w) = observations.last().unwrap();
     assert_eq!((last_p.as_str(), last_w.as_deref()), ("applied", Some("completed")));
 }
