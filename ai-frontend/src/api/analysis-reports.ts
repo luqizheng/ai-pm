@@ -86,8 +86,10 @@ export interface AnalysisReportDetail extends AnalysisReportRow {
 export interface CloseReportOutcome {
   report_id: string;
   status: "closed";
-  /** 关闭时批量发布的已批准提案数。 */
+  /** 关闭时批量发布的已批准提案数（本次 close 自身首发；II-A）。 */
   applied_proposals: number;
+  /** II-A：分类时点已确认先行发布完成数（短路确认 / Err 后锁内分类 JOIN）。 */
+  replayed_proposals: number;
   /** 批量发布失败（CAS 失配等）数。 */
   publish_failed_proposals: number;
   withdrawn_proposals: number;
@@ -95,6 +97,8 @@ export interface CloseReportOutcome {
   last_analyzed_commit: string;
   /** P3-11：ProjC 批准提案发布数（projc-decision:{id}）。 */
   projc_applied: number;
+  /** P3-11：ProjC 已确认先行发布完成数（同 replayed 双来源口径）。 */
+  projc_replayed: number;
   /** P3-11：ProjC 发布失败数（独立计数）。 */
   projc_publish_failed_proposals: number;
   /** P3-11：ProjC 未决提案撤回数。 */

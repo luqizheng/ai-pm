@@ -103,13 +103,30 @@ pub struct ReportDetail {
 }
 
 /// 关闭回执：自动处置计数（projc_* 为 P3-11 加法字段，G-2 独立计数）。
+///
+/// II-A 分类时点一致性契约（Q10-R1-FIX V1.2；负责任确认 2026-11-18；V1.2.1 R4.3
+/// 归类规则 + V1.2.2 §四 failed 口径定稿；契约源=该三文档）：
+/// - applied：本次 close 自身完成首发；
+/// - replayed：已确认先行发布完成——有且仅有两个来源：
+///   ①`Ok(replayed=true)`（publish 短路确认）②Err 后锁内分类 JOIN 确认
+///   `applied ∧ completed`；
+/// - failed：本次未计为成功发布——包括①业务失败（分类时点确认无先行完成且
+///   本次尝试失败）与②分类事务技术故障（无法确认是否存在先行完成；≠已观察
+///   到未发布）。技术故障经结构化 warn 日志（kind/error/cleanup_error）区分，
+///   不改变计数口径。
+///
+/// 显式声明：不保证报告最终 COMMIT 时数据库终态与计数永久一致
+/// （II-B 不可实现性证明=FIX-02 Q2；授权外变体不采用）。
 #[derive(Debug, serde::Serialize)]
 pub struct CloseOutcome {
     pub report_id: Uuid,
     pub status: &'static str,
-    /// 已批准提案在关闭时批量发布的数量。
+    /// 本次 close 自身完成首发发布的数量（II-A；不含先行 replay）。
     pub applied_proposals: u64,
-    /// 批量发布失败（CAS 失配已内置 failed 等）的数量。
+    /// 分类时点已确认先行发布完成的数量（II-A 双来源：短路确认 / Err 后锁内 JOIN）。
+    pub replayed_proposals: u64,
+    /// 批量发布失败（CAS 失配已内置 failed 等；II-A failed①）与分类事务技术故障
+    /// （II-A failed②，warn 日志可辨）的数量。
     pub publish_failed_proposals: u64,
     pub withdrawn_proposals: u64,
     pub rejected_kb: bool,
@@ -117,7 +134,9 @@ pub struct CloseOutcome {
     pub last_analyzed_commit: String,
     /// ProjC 批准提案在关闭时批量发布的数量（projc-decision:{id}）。
     pub projc_applied: u64,
-    /// ProjC 批量发布失败（CAS 失配已内置 failed 等）的数量（独立计数）。
+    /// ProjC 分类时点已确认先行发布完成的数量（同 replayed 双来源口径）。
+    pub projc_replayed: u64,
+    /// ProjC 批量发布失败数量（口径同 publish_failed_proposals；独立计数）。
     pub projc_publish_failed_proposals: u64,
     /// ProjC 未决提案在关闭时撤回的数量。
     pub projc_withdrawn: u64,
@@ -539,6 +558,141 @@ pub async fn report_detail(
     })
 }
 
+// ── R-1 分类事务（Q10-R1-FIX V1.2/V1.2.1 R1/V1.2.2 §一；II-A 契约）─────────
+
+/// R-1 分类结果。不变式（V1.2.1 R1.2）：I-1 `Replay` 唯一来源=持锁 JOIN 确认
+/// `applied ∧ completed`——技术故障绝不产生 Replay；I-2 技术故障必为
+/// `FailedTech` + `tracing::warn` 结构化日志（不伪装 Replay、不静默）；
+/// I-3 F3 必显式回滚（勿依赖 drop 时序）。
+#[derive(Debug)]
+pub enum ClassifyOutcome {
+    /// 分类时点已确认先行发布完成（`applied ∧ completed`）。
+    Replay,
+    /// 业务失败：分类时点未确认先行发布完成（含未找到提案 / 条件不满足）。
+    Failed,
+    /// 分类事务自身技术故障（F1-F5；计数口径 II-A 仍 failed，warn 日志可辨）。
+    FailedTech {
+        kind: &'static str,
+        error: sqlx::Error,
+        /// 双故障并列保留（V1.2.2 §1.1）：回滚自身失败的错误（原始故障在
+        /// `error` 不丢失）；此时 kind=`join_and_rollback`。
+        cleanup_error: Option<sqlx::Error>,
+    },
+}
+
+/// pc 发布 advisory 获取语句（**逐字同** pc/publish.rs:117——键文本与括号形态零差）。
+const PC_PUBLISH_ADVISORY_SQL: &str =
+    "SELECT pg_advisory_xact_lock(hashtext('pc_publish:' || $1::text)::bigint)";
+/// projc 发布 advisory 获取语句（**逐字同** projc/publish.rs:118）。
+const PROJC_PUBLISH_ADVISORY_SQL: &str =
+    "SELECT pg_advisory_xact_lock(hashtext('projc_publish:' || $1::text)::bigint)";
+
+/// R-1 分类读单条 JOIN（单语句单快照；V1.2 §2.1 形态，与
+/// q10_r3_snapshot_check.rs 的契约文本同构）。
+const PC_CLASSIFY_JOIN_SQL: &str = "SELECT p.status, wo.status \
+     FROM pc.proposal p \
+     LEFT JOIN pc.write_operation wo \
+       ON wo.tenant_id = p.tenant_id AND wo.project_id = p.project_id \
+      AND wo.operation_id = 'pc-decision:' || p.id::text \
+    WHERE p.id = $1";
+const PROJC_CLASSIFY_JOIN_SQL: &str = "SELECT p.status, wo.status \
+     FROM projc.proposal p \
+     LEFT JOIN projc.write_operation wo \
+       ON wo.tenant_id = p.tenant_id AND wo.project_id = p.project_id \
+      AND wo.operation_id = 'projc-decision:' || p.id::text \
+    WHERE p.id = $1";
+
+/// R-1 分类事务核心（V1.2.1 R1.2 五失败点 + V1.2.2 §1.1 双错误保留）：
+/// BEGIN → 既有 publish advisory（逐字同 publish.rs:117/:118）→ 单条 JOIN →
+/// COMMIT 的独立短命只读事务。READ COMMITTED 语句快照 + advisory 串行化下
+/// JOIN 读到 P 序列化下的分类时点终局（V1.2.2 §2.2 四步证明）；事务内仅
+/// SELECT（advisory 无数据效应），零状态机/Schema 触碰。
+async fn classify_after_publish_err(
+    pool: &PgPool,
+    advisory_sql: &str,
+    join_sql: &str,
+    project_id: Uuid,
+    proposal_id: Uuid,
+) -> ClassifyOutcome {
+    // F1：begin 失败——无事务、未获任何锁
+    let mut cls = match pool.begin().await {
+        Ok(t) => t,
+        Err(e) => {
+            return ClassifyOutcome::FailedTech { kind: "begin", error: e, cleanup_error: None };
+        }
+    };
+    // F2：advisory 失败——开启未提交、未持有锁；drop 清理（回滚成败不可观测
+    // =接受限制，审批附件补充 A；锁释放由服务端会话中断兜底）
+    if let Err(e) = sqlx::query(advisory_sql)
+        .bind(project_id.to_string())
+        .execute(&mut *cls)
+        .await
+    {
+        return ClassifyOutcome::FailedTech { kind: "advisory", error: e, cleanup_error: None };
+    }
+    // 单条 JOIN（表级 ACCESS SHARE、不取行锁——V1.2.2 §2.1；唯一阻塞点=上方 advisory）
+    let row: Result<Option<(String, Option<String>)>, sqlx::Error> =
+        sqlx::query_as(join_sql).bind(proposal_id).fetch_optional(&mut *cls).await;
+    let row = match row {
+        Ok(r) => r,
+        Err(e) => {
+            // F3：持 advisory 中——显式回滚释放（I-3）；双故障并列保留原始错误
+            return match cls.rollback().await {
+                Ok(()) => {
+                    ClassifyOutcome::FailedTech { kind: "join", error: e, cleanup_error: None }
+                }
+                Err(rbe) => ClassifyOutcome::FailedTech {
+                    kind: "join_and_rollback",
+                    error: e,
+                    cleanup_error: Some(rbe),
+                },
+            };
+        }
+    };
+    // F4：COMMIT 失败——行未采信（中止态，服务端已回滚；drop 无操作）
+    match cls.commit().await {
+        Ok(()) => match row {
+            Some((p, w)) if p == "applied" && w.as_deref() == Some("completed") => {
+                ClassifyOutcome::Replay
+            }
+            _ => ClassifyOutcome::Failed,
+        },
+        Err(e) => ClassifyOutcome::FailedTech { kind: "commit", error: e, cleanup_error: None },
+    }
+}
+
+/// pc 域 publish Err 后分类（`pub` 供 T8 L2 层测试直调封装边界）。
+pub async fn classify_pc_after_publish_err(
+    pool: &PgPool,
+    project_id: Uuid,
+    proposal_id: Uuid,
+) -> ClassifyOutcome {
+    classify_after_publish_err(
+        pool,
+        PC_PUBLISH_ADVISORY_SQL,
+        PC_CLASSIFY_JOIN_SQL,
+        project_id,
+        proposal_id,
+    )
+    .await
+}
+
+/// projc 域 publish Err 后分类（两域同构；advisory 逐字同 projc/publish.rs:118）。
+pub async fn classify_projc_after_publish_err(
+    pool: &PgPool,
+    project_id: Uuid,
+    proposal_id: Uuid,
+) -> ClassifyOutcome {
+    classify_after_publish_err(
+        pool,
+        PROJC_PUBLISH_ADVISORY_SQL,
+        PROJC_CLASSIFY_JOIN_SQL,
+        project_id,
+        proposal_id,
+    )
+    .await
+}
+
 /// 关闭报告（人工显式动作）：仅 `analyzed` 可关。收尾处置——双域分流（P3-11
 /// G-2）：pc 块逐行不动（C-4~C-6 契约），新增 ProjC 追加块——approved projc 提案
 /// 逐个发布（`projc-decision:{id}` 幂等键；CAS 失配内置 failed；失败独立计数不
@@ -581,6 +735,7 @@ pub async fn close_report(
     // 自带事务、advisory 锁与幂等键；CAS 失配由发布事务内置 failed（§18.1②），
     // 其余失败计数不阻断——报告照常关闭。
     let mut applied_proposals: u64 = 0;
+    let mut replayed_proposals: u64 = 0;
     let mut publish_failed_proposals: u64 = 0;
     if let Some(source_id) = pc_source_id {
         let approved_ids: Vec<Uuid> = sqlx::query_scalar(
@@ -598,8 +753,34 @@ pub async fn close_report(
             )
             .await
             {
-                Ok(_) => applied_proposals += 1,
-                Err(_) => publish_failed_proposals += 1,
+                Ok(receipt) => {
+                    if receipt.replayed {
+                        // 短路确认先行完成（II-A replayed 来源①；V1.2.1 R4.2）
+                        replayed_proposals += 1;
+                    } else {
+                        applied_proposals += 1;
+                    }
+                }
+                Err(publish_err) => {
+                    // R-1 分类（II-A）：BEGIN → 既有 advisory（逐字同
+                    // pc/publish.rs:117）→ 单条 JOIN → COMMIT 独立只读事务；
+                    // 技术故障绝不产生 Replay（不变式 I-1）
+                    match classify_pc_after_publish_err(pool, project_id, proposal_id).await {
+                        ClassifyOutcome::Replay => replayed_proposals += 1,
+                        ClassifyOutcome::Failed => publish_failed_proposals += 1,
+                        ClassifyOutcome::FailedTech { kind, error, cleanup_error } => {
+                            tracing::warn!(
+                                kind,
+                                proposal_id = %proposal_id,
+                                source_publish_error = %publish_err,
+                                error = %error,
+                                cleanup_error = ?cleanup_error,
+                                "R-1 classify tx technical failure"
+                            );
+                            publish_failed_proposals += 1;
+                        }
+                    }
+                }
             }
         }
     }
@@ -637,6 +818,7 @@ pub async fn close_report(
 
     // ── P3-11 新增：ProjC 分流（纯追加块；G-2 与 pc 同构、独立计数）──────────
     let mut projc_applied: u64 = 0;
+    let mut projc_replayed: u64 = 0;
     let mut projc_publish_failed: u64 = 0;
     let mut projc_withdrawn: u64 = 0;
     let mut projc_legacy_no_source = false;
@@ -659,8 +841,34 @@ pub async fn close_report(
                 )
                 .await
                 {
-                    Ok(_) => projc_applied += 1,
-                    Err(_) => projc_publish_failed += 1,
+                    Ok(receipt) => {
+                        if receipt.replayed {
+                            // 短路确认先行完成（II-A replayed 来源①；V1.2.1 R4.2）
+                            projc_replayed += 1;
+                        } else {
+                            projc_applied += 1;
+                        }
+                    }
+                    Err(publish_err) => {
+                        // R-1 分类（II-A）：advisory 逐字同 projc/publish.rs:118
+                        match classify_projc_after_publish_err(pool, project_id, proposal_id)
+                            .await
+                        {
+                            ClassifyOutcome::Replay => projc_replayed += 1,
+                            ClassifyOutcome::Failed => projc_publish_failed += 1,
+                            ClassifyOutcome::FailedTech { kind, error, cleanup_error } => {
+                                tracing::warn!(
+                                    kind,
+                                    proposal_id = %proposal_id,
+                                    source_publish_error = %publish_err,
+                                    error = %error,
+                                    cleanup_error = ?cleanup_error,
+                                    "R-1 classify tx technical failure"
+                                );
+                                projc_publish_failed += 1;
+                            }
+                        }
+                    }
                 }
             }
             // 未决 ProjC 提案 → withdrawn（逐条审计，projc_ 前缀口径）。
@@ -775,11 +983,13 @@ pub async fn close_report(
         report_id,
         status: "closed",
         applied_proposals,
+        replayed_proposals,
         publish_failed_proposals,
         withdrawn_proposals: withdrawn,
         rejected_kb,
         last_analyzed_commit: commit_sha,
         projc_applied,
+        projc_replayed,
         projc_publish_failed_proposals: projc_publish_failed,
         projc_withdrawn,
     })

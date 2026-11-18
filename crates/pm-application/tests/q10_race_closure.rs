@@ -268,7 +268,8 @@ async fn close_vs_explicit_publish_same_proposal(pool: PgPool) {
 
     let outcome = close_r.unwrap();
     // 两入口同键（pc-decision:{proposal_id}）+ 同项目 advisory：串行+completed 短路
-    // → 恰一版本；先到者 applied，后到者 replayed（close 计数为发布成功数）
+    // → 恰一版本；先到者首发，后到者 replayed（Q10-R1-FIX R4/II-A 语义：短路确认
+    // 计入 replayed_proposals，applied 仅本次 close 自身首发）
     publish_r.unwrap();
     let versions: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM pc.cognition_version WHERE project_id = $1",
@@ -284,7 +285,14 @@ async fn close_vs_explicit_publish_same_proposal(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(status, "applied");
-    // 顺序无关：close 先读清单→applied(1)+failed(0)；显式发布先完成→清单空(0+0)。
-    // 两种交错均合法；不变量=恰一版本+applied（同键幂等兜底）。
-    assert!(outcome.applied_proposals + outcome.publish_failed_proposals <= 1);
+    // 顺序无关（II-A 计数）：close 先完成发布→applied(1)；显式发布先完成→
+    // close 短路确认→replayed(1)；显式发布先完成且 close 清单已读空→全 0。
+    // 不变量=恰一版本 + 单提案至多一个计数事件（applied/replayed/failed）。
+    assert!(
+        outcome.applied_proposals
+            + outcome.replayed_proposals
+            + outcome.publish_failed_proposals
+            <= 1,
+        "单提案至多一个计数事件: {outcome:?}"
+    );
 }
