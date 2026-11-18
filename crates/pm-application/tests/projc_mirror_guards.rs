@@ -9,8 +9,8 @@
 //! 2. T-2 镜像保护清单测试：pc/projc 两域全部非内部触发器六维断言
 //!    （pg_get_triggerdef 规范串逐字比对，含触发器名/目标表/事件/时机+约束
 //!    属性/行级/执行函数）＋完备性反向枚举（任一侧出现清单外触发器=失败）。
-//!    基准表=任务书 §4.5（**V1.3 定向修订**：A 组补 cognition_version UPDATE
-//!    守卫镜像对——两侧既有，2026-11-17 活库 17/10 三重证实，负责人批准）。
+//!    基准表=任务书 §4.5 V1.3 定向修订 + Batch6 前置批（GAP-37-C：version_delete
+//!    由 D 组例外行升级为 A 组两域一致行，0035）+ GAP-06 两域转换守卫行（0034）。
 //!    **V1.2 R-5 边界**：清单核对=结构一致性；不同函数≠语义等价，本批语义
 //!    验证重点=新增保护面（T-1 探针＋projc_formal_chain 回归承载）；其余既有
 //!    保护面不因清单测试扩大为业务语义重新审计；B 组函数有意分歧按注记断言
@@ -22,7 +22,7 @@
 //!    revision_no)」的直接证据；pc 侧 (tenant_id, project_id, object_id) 有
 //!    复合外键（0001），跨域构造不可行，同域重复探针＋目录断言承载。
 
-use sqlx::{Executor, PgPool, Postgres};
+use sqlx::{Executor, PgPool, Postgres, Row};
 use uuid::Uuid;
 
 async fn seed_tenant_project(pool: &PgPool, tag: &str) -> (Uuid, Uuid) {
@@ -260,6 +260,16 @@ const PC_TRIGGERS: &[(&str, &str)] = &[
         "trg_pc_pm_anchored_ins",
         "CREATE CONSTRAINT TRIGGER trg_pc_pm_anchored_ins AFTER INSERT ON pc.proposal_member DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION pc.enforce_proposal_member_anchored()",
     ),
+    // ── [A] version_delete（GAP-37-C：Batch6 前置批升级为 A 组两域一致）──
+    (
+        "trg_pc_version_delete",
+        "CREATE TRIGGER trg_pc_version_delete BEFORE DELETE ON pc.cognition_version FOR EACH ROW EXECUTE FUNCTION pc.forbid_row_update()",
+    ),
+    // ── [A][GAP-06] proposal 状态转换 DB 守卫（0034，两域一致）──
+    (
+        "trg_pc_proposal_transition",
+        "CREATE TRIGGER trg_pc_proposal_transition BEFORE UPDATE ON pc.proposal FOR EACH ROW EXECUTE FUNCTION pc.guard_proposal_transition()",
+    ),
     // ── [D] pc 独有例外登记行（projc 断言不存在，由完备性反向枚举承载）──
     // D-3 已裁：暂不补齐；未来开放关系修订/修改/删除路径前强制前置。
     (
@@ -277,11 +287,6 @@ const PC_TRIGGERS: &[(&str, &str)] = &[
     (
         "trg_pc_relationship_delete",
         "CREATE TRIGGER trg_pc_relationship_delete BEFORE DELETE ON pc.relationship FOR EACH ROW EXECUTE FUNCTION pc.forbid_identity_delete()",
-    ),
-    // §4.4 待裁决（总账维护者核对→负责人决定 GAP-37-C 与否）。
-    (
-        "trg_pc_version_delete",
-        "CREATE TRIGGER trg_pc_version_delete BEFORE DELETE ON pc.cognition_version FOR EACH ROW EXECUTE FUNCTION pc.forbid_row_update()",
     ),
     // ── [A][V1.3] cognition_version UPDATE 守卫镜像对（两侧既有；V1.2 漏列，
     //        2026-11-17 负责人批准定向修订补入）──
@@ -345,6 +350,16 @@ const PROJC_TRIGGERS: &[(&str, &str)] = &[
     (
         "trg_projc_cognition_version_immutable",
         "CREATE TRIGGER trg_projc_cognition_version_immutable BEFORE UPDATE ON projc.cognition_version FOR EACH ROW EXECUTE FUNCTION projc.forbid_version_mutation()",
+    ),
+    // ── [A] version_delete（GAP-37-C：Batch6 前置批 0035 新增）──
+    (
+        "trg_projc_version_delete",
+        "CREATE TRIGGER trg_projc_version_delete BEFORE DELETE ON projc.cognition_version FOR EACH ROW EXECUTE FUNCTION projc.forbid_row_update()",
+    ),
+    // ── [A][GAP-06] proposal 状态转换 DB 守卫（0034，两域一致）──
+    (
+        "trg_projc_proposal_transition",
+        "CREATE TRIGGER trg_projc_proposal_transition BEFORE UPDATE ON projc.proposal FOR EACH ROW EXECUTE FUNCTION projc.guard_proposal_transition()",
     ),
 ];
 
@@ -554,4 +569,102 @@ async fn t3_gap04_revision_no_unique_probe(pool: PgPool) {
             "跨域重复只能命中新约束，got: {db}"
         );
     }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Batch6 前置批：GAP-37-C DELETE 探针 + GAP-38-A 主键/业务身份目录断言
+// ══════════════════════════════════════════════════════════════════════════
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn t4_gap37c_delete_probe_and_gap38a_catalog(pool: PgPool) {
+    // ── GAP-37-C：DELETE projc.cognition_version 必须被拒（INSERT 不受影响）──
+    let (tenant, project) = seed_tenant_project(&pool, "g37c").await;
+    {
+        let mut tx = pool.begin().await.unwrap();
+        sqlx::query(
+            "INSERT INTO projc.cognition_version \
+             (tenant_id, project_id, version_no, confirmed_by, source_proposal_id, snapshot_hash) \
+             VALUES ($1, $2, 1, $3, $4, 'sha256:probe')",
+        )
+        .bind(tenant)
+        .bind(project)
+        .bind(Uuid::new_v4())
+        .bind(Uuid::new_v4())
+        .execute(&mut *tx)
+        .await
+        .expect("INSERT 不受 0035 影响");
+        let err = sqlx::query("DELETE FROM projc.cognition_version WHERE project_id = $1")
+            .bind(project)
+            .execute(&mut *tx)
+            .await
+            .unwrap_err();
+        let db = err.as_database_error().unwrap();
+        assert!(
+            db.message().contains("in projc.cognition_version is immutable"),
+            "DELETE 必须被 trg_projc_version_delete 拒绝，got: {db}"
+        );
+        tx.rollback().await.unwrap();
+    }
+
+    // ── GAP-38-A：18 PK + 4 业务身份 UNIQUE 目录断言（名逐字）──
+    let pks: Vec<String> = sqlx::query(
+        "SELECT c.relname || '.' || con.conname FROM pg_constraint con \
+           JOIN pg_class c ON c.oid = con.conrelid \
+           JOIN pg_namespace n ON n.oid = c.relnamespace \
+          WHERE n.nspname = 'projc' AND con.contype = 'p' ORDER BY 1",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|r| r.get::<String, _>(0))
+    .collect();
+    assert_eq!(pks.len(), 18, "projc 18 表全 PK");
+    for expected in [
+        "approval.approval_pkey",
+        "cognition_object.cognition_object_pkey",
+        "cognition_revision.cognition_revision_pkey",
+        "cognition_version.cognition_version_pkey",
+        "conflict.conflict_pkey",
+        "conflict_object.conflict_object_pkey",
+        "document.document_pkey",
+        "document_revision.document_revision_pkey",
+        "evidence.evidence_pkey",
+        "object_type.object_type_pkey",
+        "proposal.proposal_pkey",
+        "proposal_member.proposal_member_pkey",
+        "relationship.relationship_pkey",
+        "relationship_revision.relationship_revision_pkey",
+        "relationship_type.relationship_type_pkey",
+        "source.source_pkey",
+        "version_member.version_member_pkey",
+        "write_operation.write_operation_pkey",
+    ] {
+        assert!(pks.contains(&expected.to_string()), "缺主键 {expected}");
+    }
+
+    let uqs: Vec<String> = sqlx::query(
+        "SELECT con.conname FROM pg_constraint con \
+           JOIN pg_class c ON c.oid = con.conrelid \
+           JOIN pg_namespace n ON n.oid = c.relnamespace \
+          WHERE n.nspname = 'projc' AND con.contype = 'u' ORDER BY 1",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|r| r.get::<String, _>(0))
+    .collect();
+    for expected in [
+        "cognition_version_tenant_id_project_id_version_no_key",
+        "document_tenant_id_project_id_doc_key_key",
+        "document_revision_tenant_id_project_id_document_id_revision_key",
+        "relationship_revision_tenant_id_project_id_relationship_id__key",
+        "cognition_object_tenant_id_project_id_object_key_key",
+        "cognition_revision_object_id_revision_no_key",
+        "write_operation_tenant_id_project_id_operation_id_key",
+    ] {
+        assert!(uqs.contains(&expected.to_string()), "缺业务身份唯一约束 {expected}");
+    }
+    assert_eq!(uqs.len(), 7, "projc UNIQUE 总数=3 既有+4 本批");
 }

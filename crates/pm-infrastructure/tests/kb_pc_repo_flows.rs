@@ -1054,10 +1054,7 @@ async fn confirmation_loop_publishes_versions_across_commits(pool: PgPool) {
         &pool,
         project,
         &lead,
-        pm_application::projc::PublishVersionInput {
-            proposal_id: p1,
-            operation_id: format!("projc-decision:{p1}"),
-        },
+        pm_application::projc::PublishVersionInput { proposal_id: p1 },
     )
     .await
     .unwrap();
@@ -1118,7 +1115,7 @@ async fn confirmation_loop_publishes_versions_across_commits(pool: PgPool) {
         p2,
         pm_application::projc::ProposalDecisionInput {
             action: pm_application::projc::DecisionAction::Approve,
-            reason: None,
+            reason: Some("决定理由".into()),
             expected_version_no: 1,
         },
     )
@@ -1128,10 +1125,7 @@ async fn confirmation_loop_publishes_versions_across_commits(pool: PgPool) {
         &pool,
         project,
         &lead,
-        pm_application::projc::PublishVersionInput {
-            proposal_id: p2,
-            operation_id: format!("projc-decision:{p2}"),
-        },
+        pm_application::projc::PublishVersionInput { proposal_id: p2 },
     )
     .await
     .unwrap();
