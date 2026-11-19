@@ -136,6 +136,14 @@
 | 4 | **Task Contract** | **Platform（delivery 域）** | `migrations/0015_task_contract.sql:50`：`FOREIGN KEY (project_id, document_id) REFERENCES ai.project_document(project_id, id)` | FK 引用（任务契约钉文档） |
 | 5 | **Requirement Projection / Command Center / Run Context / pm_write.task** | Platform（S02/delivery） | `crates/pm-application/src/requirement_projection.rs`（7 处）、`command_center.rs`（4）、`run_context.rs`（2）、`pm_write/task.rs`（1）、`command_executor/executor.rs`（1） | 读取/引用投影 |
 
+> **回填（2026-11-19，历史漏登记非新增接入）**：上表核实于 2026-11-07，其后 SEC-P2
+> 修复包（bb33ea6，2026-11-16）新增跨域引用链目标校验层 `crates/pm-application/src/
+> reference_targets.rs`——`ProjectGoal => ("ai.project_document", true)`（:61）+ `probe()`
+> 对容器的 `SELECT EXISTS` 存在性/同租户同项目读。该文件是 #2 Project Goal 使用方的
+> 安全校验机械（不引入新业务域读写），属守卫白名单登记遗漏：文件晚于白名单末次更新
+> （d62710b，2026-11-12）落地而未同步登记，2026-11-19 由存量测试断裂修复微批补登
+> `guard_ai_container_users` 白名单并在此回填。非新增使用方，ADR-06a 红线不受影响。
+
 ### 4.7.2 迁移层 FK 依赖
 
 | 迁移 | 位置 | 依赖 |

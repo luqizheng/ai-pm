@@ -9,6 +9,9 @@ use pm_domain::SYSTEM_TENANT;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+/// project_ai_config.model_name 播种值。a9c727f（2026-11-15）后
+/// analysis_run.model_name 不再回抄此列（执行侧四级链记账），它只作为
+/// legacy config 行的非默认内容存在。
 const MODEL_NAME: &str = "ctx-fake-model";
 /// Non-default value so copies into ai.analysis_run are observable, not
 /// column defaults.
@@ -217,7 +220,14 @@ async fn start_run_creates_analyzing_row_from_config(pool: sqlx::PgPool) {
         project_id, seed.project_id,
         "project_id comes from the event"
     );
-    assert_eq!(model_name, MODEL_NAME);
+    // a9c727f（2026-11-15）起模型记账接 Phase 3A 四级链，不再回抄
+    // ai.project_ai_config.model_name：本夹具未播种任何 provider，Auto
+    // （默认）解析失败如实记 'unresolved'（DEC-LLM-004 不降级）；Fake
+    // 钉定（仅开发/测试显式 AI_PM_ANALYSIS_MODEL=fake）则如实记 'fake'。
+    assert!(
+        model_name == "unresolved" || model_name == "fake",
+        "model_name=执行侧记账（未播种 provider：auto→'unresolved' / fake→'fake'），got: {model_name}"
+    );
     assert_eq!(policy_version, POLICY_VERSION);
     assert_eq!(
         config_snapshot,

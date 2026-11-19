@@ -1,5 +1,6 @@
 //! P3-D04-02 Step5 Batch1 · GAP-04 / GAP-37-A/B 库层保护测试（T-1/T-2/T-3；
-//! 真实 DB，sqlx::test 全新临时库 0001~0030 全序应用）。
+//! 真实 DB，sqlx::test 全新临时库 0001~0037 全序应用；0037 GAP-38-B 起 projc
+//! 具备完整外键面，夹具播种合法引用链——见 ProjcSeed）。
 //!
 //! 断言面（对应《Batch1 实施任务书 V1.2》§3.3）：
 //! 1. T-1 GAP-37 探针：projc.cognition_revision / projc.version_member 的
@@ -17,10 +18,12 @@
 //!    差异本身，不作语义裁断。
 //! 3. T-3 GAP-04 探针：同 (object_id, revision_no) 二次 INSERT 被拒（两域各
 //!    一）＋新约束目录断言（pg_get_constraintdef 逐字）。projc 侧另做跨
-//!    tenant/project 重复——该重复不命中任何既有约束（projc.cognition_revision
-//!    0025 建表零唯一约束、零外键），是「新约束作用域=精确 (object_id,
-//!    revision_no)」的直接证据；pc 侧 (tenant_id, project_id, object_id) 有
-//!    复合外键（0001），跨域构造不可行，同域重复探针＋目录断言承载。
+//!    tenant/project 重复——0037 后 (tenant_id, project_id, object_id) 复合外键
+//!    （cognition_revision_object_composite_fkey）对该组合另有覆盖，但外键拒绝
+//!    走 AFTER ROW 触发器、唯一索引内联检查先于此触发，surfaced 拒绝者=新约束；
+//!    新约束作用域=精确 (object_id, revision_no)（无 tenant/project 列）由目录
+//!    断言逐字承载；pc 侧 (tenant_id, project_id, object_id) 有复合外键（0001），
+//!    跨域构造不可行，同域重复探针＋目录断言承载。
 
 use sqlx::{Executor, PgPool, Postgres, Row};
 use uuid::Uuid;
@@ -55,17 +58,110 @@ async fn seed_tenant_project(pool: &PgPool, tag: &str) -> (Uuid, Uuid) {
     (tenant, project)
 }
 
-/// projc.cognition_revision 最小合法行（projc 零外键：document 侧引用可为
-/// 任意 uuid；CHECK revision_no>=1 由值满足）。接受连接/池/事务执行器，
-/// 便于探针在事务内 seed。
-async fn insert_projc_revision<'e, E>(
-    executor: E,
+/// projc 探针全链播种（0037 GAP-38-B 起 projc 有 79 条 FK：cognition_revision
+/// 的 document/document_revision/object 侧引用、document_revision.created_by、
+/// cognition_version 的 confirmed_by/source_proposal_id、version_member 的
+/// version/object 端点都必须指向真实行）。一次播种全链，探针复用其 id。
+/// 播种行不含 cognition_revision / version_member（零残留断言面），二者由
+/// 探针在各自事务内插入后 ROLLBACK。
+struct ProjcSeed {
     tenant: Uuid,
     project: Uuid,
+    principal: Uuid,
+    document_id: Uuid,
+    document_revision_id: Uuid,
     object_id: Uuid,
-    revision_no: i32,
-    created_by: Uuid,
-) -> Uuid
+    proposal_id: Uuid,
+    version_id: Uuid,
+}
+
+async fn seed_projc_chain(pool: &PgPool, tag: &str) -> ProjcSeed {
+    let (tenant, project) = seed_tenant_project(pool, tag).await;
+    let principal: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.principal (kind, display_name, is_active) \
+         VALUES ('human', $1, true) RETURNING id",
+    )
+    .bind(format!("b1-p-{tag}"))
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let document_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO projc.document (tenant_id, project_id, doc_key, canonical_path) \
+         VALUES ($1, $2, $3, $4) RETURNING id",
+    )
+    .bind(tenant)
+    .bind(project)
+    .bind(format!("{tag}-doc-{}", Uuid::new_v4().simple()))
+    .bind(format!("{tag}/doc/{}.md", Uuid::new_v4().simple()))
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let document_revision_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO projc.document_revision \
+         (tenant_id, project_id, document_id, revision_no, content_hash, content, created_by) \
+         VALUES ($1, $2, $3, 1, 'sha256:x', '# x', $4) RETURNING id",
+    )
+    .bind(tenant)
+    .bind(project)
+    .bind(document_id)
+    .bind(principal)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let object_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO projc.cognition_object \
+         (tenant_id, project_id, object_type, object_key, display_name, created_by) \
+         VALUES ($1, $2, 'tech_stack', $3, $3, $4) RETURNING id",
+    )
+    .bind(tenant)
+    .bind(project)
+    .bind(format!("{tag}-obj-{}", Uuid::new_v4().simple()))
+    .bind(principal)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let proposal_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO projc.proposal \
+         (tenant_id, project_id, title, rationale, origin_kind, governance_level, \
+          expected_version_no, proposal_content_hash, created_by) \
+         VALUES ($1, $2, $3, 'seed', 'manual_input', 'L1', 1, 'sha256:p', $4) RETURNING id",
+    )
+    .bind(tenant)
+    .bind(project)
+    .bind(format!("b1-proposal-{tag}"))
+    .bind(principal)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    let version_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO projc.cognition_version \
+         (tenant_id, project_id, version_no, confirmed_by, source_proposal_id, snapshot_hash) \
+         VALUES ($1, $2, 1, $3, $4, 'sha256:v') RETURNING id",
+    )
+    .bind(tenant)
+    .bind(project)
+    .bind(principal)
+    .bind(proposal_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    ProjcSeed {
+        tenant,
+        project,
+        principal,
+        document_id,
+        document_revision_id,
+        object_id,
+        proposal_id,
+        version_id,
+    }
+}
+
+/// projc.cognition_revision 最小合法行（0037 后 FK 引用面必须真实：
+/// document/document_revision/object 侧与 created_by 全部复用全链播种 id；
+/// CHECK revision_no>=1 由值满足）。接受连接/池/事务执行器，便于探针在
+/// 事务内 seed。
+async fn insert_projc_revision<'e, E>(executor: E, seed: &ProjcSeed, revision_no: i32) -> Uuid
 where
     E: Executor<'e, Database = Postgres>,
 {
@@ -75,13 +171,13 @@ where
           content_hash, change_summary, created_by) \
          VALUES ($1, $2, $3, $4, $5, $6, 'sha256:x', 'r', $7) RETURNING id",
     )
-    .bind(tenant)
-    .bind(project)
-    .bind(object_id)
+    .bind(seed.tenant)
+    .bind(seed.project)
+    .bind(seed.object_id)
     .bind(revision_no)
-    .bind(Uuid::new_v4())
-    .bind(Uuid::new_v4())
-    .bind(created_by)
+    .bind(seed.document_id)
+    .bind(seed.document_revision_id)
+    .bind(seed.principal)
     .fetch_one(executor)
     .await
     .unwrap()
@@ -89,22 +185,23 @@ where
 
 /// projc.version_member 最小合法行（对象对满足 version_member_check；端点
 /// 闭合 CONSTRAINT 触发器 DEFERRABLE INITIALLY DEFERRED——探针事务
-/// ROLLBACK，永不触发）。
+/// ROLLBACK，永不触发。0037 后 version 端点=全链播种行、object 端点=同
+/// 事务内已插入的 cognition_revision 行）。
 async fn insert_projc_member<'e, E>(
     executor: E,
-    tenant: Uuid,
-    project: Uuid,
+    seed: &ProjcSeed,
+    object_revision_id: Uuid,
 ) where E: Executor<'e, Database = Postgres> {
     sqlx::query(
         "INSERT INTO projc.version_member \
          (tenant_id, project_id, version_id, object_id, object_revision_id) \
          VALUES ($1, $2, $3, $4, $5)",
     )
-    .bind(tenant)
-    .bind(project)
-    .bind(Uuid::new_v4())
-    .bind(Uuid::new_v4())
-    .bind(Uuid::new_v4())
+    .bind(seed.tenant)
+    .bind(seed.project)
+    .bind(seed.version_id)
+    .bind(seed.object_id)
+    .bind(object_revision_id)
     .execute(executor)
     .await
     .unwrap();
@@ -116,14 +213,12 @@ async fn insert_projc_member<'e, E>(
 
 #[sqlx::test(migrations = "../../migrations")]
 async fn t1_gap37_update_delete_probes(pool: PgPool) {
-    let (tenant, project) = seed_tenant_project(&pool, "probe").await;
-    let author = Uuid::new_v4();
-    let object_id = Uuid::new_v4();
+    let seed = seed_projc_chain(&pool, "probe").await;
 
     // ── A1：UPDATE 普通字段（含 INSERT 成功断言=T-5）──
     {
         let mut tx = pool.begin().await.unwrap();
-        let rev = insert_projc_revision(&mut *tx, tenant, project, object_id, 1, author).await;
+        let rev = insert_projc_revision(&mut *tx, &seed, 1).await;
         let err = sqlx::query(
             "UPDATE projc.cognition_revision SET change_summary = 'x' WHERE id = $1",
         )
@@ -141,7 +236,7 @@ async fn t1_gap37_update_delete_probes(pool: PgPool) {
     // ── A2：DELETE（独立事务）──
     {
         let mut tx = pool.begin().await.unwrap();
-        let rev = insert_projc_revision(&mut *tx, tenant, project, object_id, 2, author).await;
+        let rev = insert_projc_revision(&mut *tx, &seed, 2).await;
         let err = sqlx::query("DELETE FROM projc.cognition_revision WHERE id = $1")
             .bind(rev)
             .execute(&mut *tx)
@@ -158,7 +253,8 @@ async fn t1_gap37_update_delete_probes(pool: PgPool) {
     // ── B1：version_member UPDATE（含 INSERT 成功断言=T-5）──
     {
         let mut tx = pool.begin().await.unwrap();
-        insert_projc_member(&mut *tx, tenant, project).await;
+        let rev = insert_projc_revision(&mut *tx, &seed, 1).await;
+        insert_projc_member(&mut *tx, &seed, rev).await;
         let err = sqlx::query(
             "UPDATE projc.version_member SET object_revision_id = object_revision_id",
         )
@@ -175,9 +271,10 @@ async fn t1_gap37_update_delete_probes(pool: PgPool) {
     // ── B2：version_member DELETE（独立事务）──
     {
         let mut tx = pool.begin().await.unwrap();
-        insert_projc_member(&mut *tx, tenant, project).await;
+        let rev = insert_projc_revision(&mut *tx, &seed, 2).await;
+        insert_projc_member(&mut *tx, &seed, rev).await;
         let err = sqlx::query("DELETE FROM projc.version_member WHERE project_id = $1")
-            .bind(project)
+            .bind(seed.project)
             .execute(&mut *tx)
             .await
             .unwrap_err();
@@ -513,22 +610,22 @@ async fn t3_gap04_revision_no_unique_probe(pool: PgPool) {
     }
 
     // ── projc 探针一：同域同 (object_id, revision_no) 重复 → 仅新约束可拒 ──
+    //    dup 复用全链播种 id（0037 后外键面必须真实），唯一违规者=新约束本身 ──
     {
-        let (tenant, project) = seed_tenant_project(&pool, "pj").await;
-        let object_id = Uuid::new_v4();
-        insert_projc_revision(&pool, tenant, project, object_id, 1, Uuid::new_v4()).await;
+        let seed = seed_projc_chain(&pool, "pj").await;
+        insert_projc_revision(&pool, &seed, 1).await;
         let dup = sqlx::query(
             "INSERT INTO projc.cognition_revision \
              (tenant_id, project_id, object_id, revision_no, document_id, document_revision_id, \
               content_hash, change_summary, created_by) \
              VALUES ($1, $2, $3, 1, $4, $5, 'sha256:y', 'dup', $6)",
         )
-        .bind(tenant)
-        .bind(project)
-        .bind(object_id)
-        .bind(Uuid::new_v4())
-        .bind(Uuid::new_v4())
-        .bind(Uuid::new_v4())
+        .bind(seed.tenant)
+        .bind(seed.project)
+        .bind(seed.object_id)
+        .bind(seed.document_id)
+        .bind(seed.document_revision_id)
+        .bind(seed.principal)
         .execute(&pool)
         .await
         .unwrap_err();
@@ -536,29 +633,32 @@ async fn t3_gap04_revision_no_unique_probe(pool: PgPool) {
         assert_eq!(
             db.constraint(),
             Some("cognition_revision_object_id_revision_no_key"),
-            "projc 0025 建表零唯一约束——拒绝者必为本批新约束，got: {db}"
+            "dup 引用行全合法——拒绝者必为 (object_id, revision_no) 新唯一约束，got: {db}"
         );
     }
 
-    // ── projc 探针二：跨 tenant/project 重复——任何既有约束都不覆盖
-    //    (object_id, revision_no) 跨域组合，拒绝者必为新约束（作用域直接证据）──
+    // ── projc 探针二：跨 tenant/project 重复——新约束作用域不含 tenant/project
+    //    列，跨域组合同样被拒。0037 后 (tenant_id, project_id, object_id) 复合
+    //    外键对该组合另有覆盖（cognition_object PK=id 全局唯一，跨域同 id 行
+    //    不可构造），但外键拒绝走 AFTER ROW 触发器、唯一索引内联检查先于此
+    //    触发——surfaced 拒绝者=新约束。b 域播种合法 document/document_revision/
+    //    principal 复用，排除其余外键噪声 ──
     {
-        let (tenant_a, project_a) = seed_tenant_project(&pool, "pja").await;
-        let (tenant_b, project_b) = seed_tenant_project(&pool, "pjb").await;
-        let object_id = Uuid::new_v4();
-        insert_projc_revision(&pool, tenant_a, project_a, object_id, 1, Uuid::new_v4()).await;
+        let seed_a = seed_projc_chain(&pool, "pja").await;
+        let seed_b = seed_projc_chain(&pool, "pjb").await;
+        insert_projc_revision(&pool, &seed_a, 1).await;
         let dup = sqlx::query(
             "INSERT INTO projc.cognition_revision \
              (tenant_id, project_id, object_id, revision_no, document_id, document_revision_id, \
               content_hash, change_summary, created_by) \
              VALUES ($1, $2, $3, 1, $4, $5, 'sha256:z', 'cross', $6)",
         )
-        .bind(tenant_b)
-        .bind(project_b)
-        .bind(object_id)
-        .bind(Uuid::new_v4())
-        .bind(Uuid::new_v4())
-        .bind(Uuid::new_v4())
+        .bind(seed_b.tenant)
+        .bind(seed_b.project)
+        .bind(seed_a.object_id)
+        .bind(seed_b.document_id)
+        .bind(seed_b.document_revision_id)
+        .bind(seed_b.principal)
         .execute(&pool)
         .await
         .unwrap_err();
@@ -566,7 +666,7 @@ async fn t3_gap04_revision_no_unique_probe(pool: PgPool) {
         assert_eq!(
             db.constraint(),
             Some("cognition_revision_object_id_revision_no_key"),
-            "跨域重复只能命中新约束，got: {db}"
+            "跨域重复 surfaced 拒绝者=新唯一约束（唯一索引内联检查先于 AFTER ROW 外键触发），got: {db}"
         );
     }
 }
@@ -578,23 +678,26 @@ async fn t3_gap04_revision_no_unique_probe(pool: PgPool) {
 #[sqlx::test(migrations = "../../migrations")]
 async fn t4_gap37c_delete_probe_and_gap38a_catalog(pool: PgPool) {
     // ── GAP-37-C：DELETE projc.cognition_version 必须被拒（INSERT 不受影响）──
-    let (tenant, project) = seed_tenant_project(&pool, "g37c").await;
+    //    0037 后 confirmed_by→principal、source_proposal_id→proposal 必须真实，
+    //    复用全链播种 id；version_no=2 避开播种行 (tenant,project,version_no)
+    //    唯一约束 ──
+    let seed = seed_projc_chain(&pool, "g37c").await;
     {
         let mut tx = pool.begin().await.unwrap();
         sqlx::query(
             "INSERT INTO projc.cognition_version \
              (tenant_id, project_id, version_no, confirmed_by, source_proposal_id, snapshot_hash) \
-             VALUES ($1, $2, 1, $3, $4, 'sha256:probe')",
+             VALUES ($1, $2, 2, $3, $4, 'sha256:probe')",
         )
-        .bind(tenant)
-        .bind(project)
-        .bind(Uuid::new_v4())
-        .bind(Uuid::new_v4())
+        .bind(seed.tenant)
+        .bind(seed.project)
+        .bind(seed.principal)
+        .bind(seed.proposal_id)
         .execute(&mut *tx)
         .await
         .expect("INSERT 不受 0035 影响");
         let err = sqlx::query("DELETE FROM projc.cognition_version WHERE project_id = $1")
-            .bind(project)
+            .bind(seed.project)
             .execute(&mut *tx)
             .await
             .unwrap_err();
@@ -606,7 +709,7 @@ async fn t4_gap37c_delete_probe_and_gap38a_catalog(pool: PgPool) {
         tx.rollback().await.unwrap();
     }
 
-    // ── GAP-38-A：18 PK + 4 业务身份 UNIQUE 目录断言（名逐字）──
+    // ── GAP-38-A：18 PK + 7 业务身份 UNIQUE 目录断言（名逐字）──
     let pks: Vec<String> = sqlx::query(
         "SELECT c.relname || '.' || con.conname FROM pg_constraint con \
            JOIN pg_class c ON c.oid = con.conrelid \
@@ -666,5 +769,9 @@ async fn t4_gap37c_delete_probe_and_gap38a_catalog(pool: PgPool) {
     ] {
         assert!(uqs.contains(&expected.to_string()), "缺业务身份唯一约束 {expected}");
     }
-    assert_eq!(uqs.len(), 7, "projc UNIQUE 总数=3 既有+4 本批");
+    assert_eq!(
+        uqs.len(),
+        19,
+        "projc UNIQUE 总数=7 业务身份（0001/0025/0036）+12 FK 引用面（0037 GAP-38-B）"
+    );
 }

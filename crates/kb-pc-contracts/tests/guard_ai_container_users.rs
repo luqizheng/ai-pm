@@ -33,6 +33,10 @@ const CODE_WHITELIST: &[&str] = &[
     "crates/pm-application/src/knowledge_migrate.rs",
     // Project Goal（Platform）
     "crates/pm-application/src/project_goal.rs",
+    // SEC-P2 引用链目标校验层（bb33ea6，2026-11-16）：ProjectGoal 域目标的
+    // 存在性/作用域探测读容器（历史漏登记非新增接入，2026-11-19 补登；
+    // 回填见 V1.1 §4.7.1 尾注）
+    "crates/pm-application/src/reference_targets.rs",
     // Discovery 提案红线（Platform/S01）
     "crates/pm-application/src/discovery/proposal.rs",
     "crates/pm-mcp/src/tools.rs",
