@@ -9,6 +9,7 @@ pub mod ai_conversations;
 pub mod ai_interaction_envelope;
 pub mod ai_interactions;
 pub mod ai_roles;
+pub mod human_consultation;
 pub mod identity;
 pub mod ai_team_policies;
 pub mod analysis_report;
