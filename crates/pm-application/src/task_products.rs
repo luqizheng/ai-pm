@@ -322,3 +322,184 @@ pub(crate) async fn write_run_gate_snapshots(
     .await?;
     Ok(())
 }
+
+// ─────────────────────────────── Product 级验收（PA07-IMP-005，PA-07 §13）
+
+/// Product 级验收记录输入（追加式历史，不覆盖）。
+#[derive(Debug)]
+pub struct ProductAcceptanceInput {
+    pub product_id: Uuid,
+    pub task_revision_id: Option<Uuid>,
+    pub result: String,
+    pub condition_scope: String,
+    pub evidence_ref: Option<String>,
+    pub source: String,
+    pub note: Option<String>,
+}
+
+/// 录入一条 Product 级验收（同事务审计）。Task 必须有效关联该 Product
+/// （撤回后录入无意义，拒绝）。
+pub async fn record_product_acceptance(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    task_id: Uuid,
+    input: ProductAcceptanceInput,
+    accepted_by: Option<Uuid>,
+    actor: &AuditActor,
+) -> Result<Uuid, TaskProductError> {
+    if !["approved", "rejected"].contains(&input.result.as_str()) {
+        return Err(TaskProductError::ProductNotActive("invalid_result"));
+    }
+    if !["common", "product_specific"].contains(&input.condition_scope.as_str()) {
+        return Err(TaskProductError::ProductNotActive("invalid_condition_scope"));
+    }
+    let source = if input.source.is_empty() {
+        "human".to_string()
+    } else {
+        input.source
+    };
+    if !["human", "platform_flow"].contains(&source.as_str()) {
+        return Err(TaskProductError::ProductNotActive("invalid_source"));
+    }
+
+    let mut tx = pool.begin().await?;
+    let (project_id,): (Uuid,) = sqlx::query_as(
+        "SELECT project_id FROM delivery.task WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(task_id)
+    .bind(tenant_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(TaskProductError::TaskNotFound)?;
+
+    let linked: Option<i32> = sqlx::query_scalar(
+        "SELECT 1 FROM delivery.task_product \
+          WHERE task_id = $1 AND product_id = $2 AND withdrawn_at IS NULL",
+    )
+    .bind(task_id)
+    .bind(input.product_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if linked.is_none() {
+        return Err(TaskProductError::LinkNotFound);
+    }
+
+    let acceptance_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO delivery.task_product_acceptance \
+         (id, tenant_id, project_id, task_id, task_revision_id, product_id, result, \
+          condition_scope, evidence_ref, accepted_by, source, note) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+    )
+    .bind(acceptance_id)
+    .bind(tenant_id)
+    .bind(project_id)
+    .bind(task_id)
+    .bind(input.task_revision_id)
+    .bind(input.product_id)
+    .bind(&input.result)
+    .bind(&input.condition_scope)
+    .bind(&input.evidence_ref)
+    .bind(accepted_by)
+    .bind(&source)
+    .bind(&input.note)
+    .execute(&mut *tx)
+    .await?;
+
+    crate::pm_write::append_audit_with_after(
+        &mut tx,
+        project_id,
+        actor,
+        "task.product_acceptance_recorded",
+        "task",
+        Some(task_id),
+        serde_json::json!({
+            "product_id": input.product_id,
+            "result": input.result,
+            "condition_scope": input.condition_scope,
+            "acceptance_id": acceptance_id,
+        }),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(acceptance_id)
+}
+
+/// Product 验收完成门禁（PA07-IMP-005；PA-07 §13「整体 Completed 条件」）：
+/// 每个仍有效关联的 Product 的**最新**验收记录必须是 approved。无关联 →
+/// 放行（与无 Product 维度任务的既有行为一致）；已撤回 Product 不阻塞。
+/// 返回 `Err(缺失/未过 Product 列表)` 供迁移入口转 Validation 拒绝。
+pub(crate) async fn acceptance_gate(
+    tx: &mut sqlx::PgConnection,
+    task_id: Uuid,
+) -> Result<Result<(), Vec<(Uuid, Option<String>)>>, sqlx::Error> {
+    let rows: Vec<(Uuid, Option<String>)> = sqlx::query_as(
+        "WITH active AS ( \
+             SELECT product_id FROM delivery.task_product \
+              WHERE task_id = $1 AND withdrawn_at IS NULL \
+         ), latest AS ( \
+             SELECT DISTINCT ON (product_id) product_id, result \
+               FROM delivery.task_product_acceptance \
+              WHERE task_id = $1 \
+              ORDER BY product_id, created_at DESC, id DESC \
+         ) \
+         SELECT a.product_id, l.result \
+           FROM active a LEFT JOIN latest l ON l.product_id = a.product_id \
+          ORDER BY a.product_id",
+    )
+    .bind(task_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    let unsatisfied: Vec<(Uuid, Option<String>)> = rows
+        .into_iter()
+        .filter(|(_, result)| result.as_deref() != Some("approved"))
+        .collect();
+    if unsatisfied.is_empty() {
+        Ok(Ok(()))
+    } else {
+        Ok(Err(unsatisfied))
+    }
+}
+
+/// 某任务的 Product 验收历史（追加式，按时间升序）。
+#[derive(Debug, sqlx::FromRow, Serialize)]
+pub struct ProductAcceptanceRow {
+    pub id: Uuid,
+    pub product_id: Uuid,
+    pub task_revision_id: Option<Uuid>,
+    pub result: String,
+    pub condition_scope: String,
+    pub evidence_ref: Option<String>,
+    pub accepted_by: Option<Uuid>,
+    pub source: String,
+    pub note: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn list_product_acceptances(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    task_id: Uuid,
+) -> Result<Vec<ProductAcceptanceRow>, TaskProductError> {
+    let exists: Option<i32> = sqlx::query_scalar(
+        "SELECT 1 FROM delivery.task WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(task_id)
+    .bind(tenant_id)
+    .fetch_optional(pool)
+    .await?;
+    if exists.is_none() {
+        return Err(TaskProductError::TaskNotFound);
+    }
+    Ok(sqlx::query_as(
+        "SELECT id, product_id, task_revision_id, result, condition_scope, evidence_ref, \
+                accepted_by, source, note, created_at \
+           FROM delivery.task_product_acceptance \
+          WHERE task_id = $1 AND tenant_id = $2 \
+          ORDER BY created_at, id",
+    )
+    .bind(task_id)
+    .bind(tenant_id)
+    .fetch_all(pool)
+    .await?)
+}

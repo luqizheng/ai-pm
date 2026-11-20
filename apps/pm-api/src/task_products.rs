@@ -62,6 +62,10 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/pm/tasks/{task_id}/products/{product_id}",
             delete(withdraw_handler),
         )
+        .route(
+            "/v1/pm/tasks/{task_id}/product-acceptances",
+            get(list_acceptances_handler).post(record_acceptance_handler),
+        )
 }
 
 /// 任务的项目边界：不存在 / 跨租户 / 非成员 → 404。
@@ -141,4 +145,74 @@ async fn withdraw_handler(
     )
     .await?;
     Ok(StatusCode::NO_CONTENT.into_response())
+}
+
+// ───────────────────── Product 级验收（PA07-IMP-005，PA-07 §13）
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RecordAcceptanceBody {
+    pub product_id: Uuid,
+    #[serde(default)]
+    pub task_revision_id: Option<Uuid>,
+    /// `approved` / `rejected`。
+    pub result: String,
+    /// `common` / `product_specific`，缺省 product_specific。
+    #[serde(default)]
+    pub condition_scope: Option<String>,
+    #[serde(default)]
+    pub evidence_ref: Option<String>,
+    /// `human` / `platform_flow`，缺省 human。
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+async fn list_acceptances_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(task_id): Path<Uuid>,
+) -> ApiResult<Json<Vec<task_products::ProductAcceptanceRow>>> {
+    require_task_project(&state, task_id, &principal).await?;
+    let rows = task_products::list_product_acceptances(
+        &state.pool,
+        principal.tenant_id,
+        task_id,
+    )
+    .await?;
+    Ok(Json(rows))
+}
+
+async fn record_acceptance_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(task_id): Path<Uuid>,
+    Json(body): Json<RecordAcceptanceBody>,
+) -> ApiResult<Response> {
+    require_task_project(&state, task_id, &principal).await?;
+    let actor = principal.audit_actor();
+    let acceptance_id = task_products::record_product_acceptance(
+        &state.pool,
+        principal.tenant_id,
+        task_id,
+        task_products::ProductAcceptanceInput {
+            product_id: body.product_id,
+            task_revision_id: body.task_revision_id,
+            result: body.result,
+            condition_scope: body
+                .condition_scope
+                .unwrap_or_else(|| "product_specific".to_string()),
+            evidence_ref: body.evidence_ref,
+            source: body.source.unwrap_or_else(|| "human".to_string()),
+            note: body.note,
+        },
+        Some(principal.principal_id),
+        &actor,
+    )
+    .await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(serde_json::json!({ "id": acceptance_id })),
+    )
+        .into_response())
 }

@@ -101,6 +101,21 @@ pub(crate) async fn apply_task_transition(
             to.as_str()
         ))
     })?;
+    // PA07-IMP-005（PA-07 §13，审查89-90）：迁入 Completed 前检查 Product 级
+    // 验收完整性——每个仍有效关联 Product 的最新验收必须是 approved；撤回
+    // Product 不阻塞（历史保留）。这是单点执法：review complete_task / D2
+    // 命令通道 / MCP 全部 completed 迁移都经过本入口。
+    if to == TaskStatus::Completed {
+        crate::task_products::acceptance_gate(&mut **tx, task_id)
+            .await
+            .map_err(db_err)?
+            .map_err(|unsatisfied| {
+                CommandError::Validation(format!(
+                    "product acceptance incomplete: {:?}",
+                    unsatisfied
+                ))
+            })?;
+    }
     sqlx::query(
         "UPDATE delivery.task SET status = $1, revision = revision + 1, updated_at = now() WHERE id = $2",
     )
