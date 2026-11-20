@@ -1049,6 +1049,15 @@ pub async fn materialize_plan(
                 .map_err(PmWriteError::Db)?;
             }
         }
+        // PA07-IMP-002：正式化任务同事务冻结初始 Revision（含验收口径快照）。
+        crate::pm_write::task_revision::snapshot_and_insert(
+            &mut tx,
+            task_id,
+            Some("plan materialize"),
+            Some(actor.principal_id),
+        )
+        .await
+        .map_err(PmWriteError::Db)?;
         key_to_task.insert(key.clone(), task_id);
         created.push(json!({ "key": key, "task_id": task_id }));
     }

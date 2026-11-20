@@ -46,7 +46,7 @@ async fn seed_project(pool: &PgPool, code: &str) -> Fx {
 }
 
 async fn seed_task(pool: &PgPool, project_id: Uuid, status: &str) -> Uuid {
-    sqlx::query_scalar(
+    let task_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.task (project_id, title, status, revision, tenant_id) \
          VALUES ($1, 't', $2, 1, (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
     )
@@ -54,7 +54,24 @@ async fn seed_task(pool: &PgPool, project_id: Uuid, status: &str) -> Uuid {
     .bind(status.to_string())
     .fetch_one(pool)
     .await
-    .unwrap()
+    .unwrap();
+    // PA07-IMP-002：直种任务也要落初始 Revision——TaskReadyHandler 建 Run 走
+    // insert_task_run，对无指针任务 fail-closed。
+    let revision_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.task_revision (tenant_id, project_id, task_id, revision_no) \
+         SELECT tenant_id, project_id, $1, 1 FROM delivery.task WHERE id = $1 RETURNING id",
+    )
+    .bind(task_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE delivery.task SET current_task_revision_id = $2 WHERE id = $1")
+        .bind(task_id)
+        .bind(revision_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    task_id
 }
 
 /// 种子一条活跃等待（`delivery.task_waiting`）。仓库当前没有业务写入口，

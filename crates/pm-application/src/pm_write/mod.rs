@@ -40,6 +40,7 @@ pub(crate) mod audit;
 mod revision;
 mod support;
 mod task;
+pub(crate) mod task_revision;
 
 pub use audit::*;
 pub use revision::*;

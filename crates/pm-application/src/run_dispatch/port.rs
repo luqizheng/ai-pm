@@ -26,17 +26,29 @@ pub async fn insert_task_run(
     .fetch_one(&mut **tx)
     .await?;
 
+    // PA07-IMP-002（审查81）：Run 创建即固定当前生效的 Task Revision——之后
+    // 任务的实质变更只产生新快照，不追溯改写本 Run 的执行依据。调用方已按
+    // 前置条件持有 task 行 FOR UPDATE，此处读到的是锁定行上的指针。
+    // 指针为 NULL = 建任务路径漏接 Revision（接线缺口），fail-closed 拒建 Run。
+    let task_revision_id: Uuid = sqlx::query_scalar(
+        "SELECT current_task_revision_id FROM delivery.task WHERE id = $1",
+    )
+    .bind(task_id)
+    .fetch_one(&mut **tx)
+    .await?;
+
     let run_id: Uuid = sqlx::query_scalar(
         "INSERT INTO delivery.task_run \
          (project_id, task_id, attempt_no, status, stage, next_dispatch_at, source_event_id, \
-          run_kind, tenant_id) \
+          run_kind, tenant_id, task_revision_id) \
          VALUES ($1, $2, $3, 'queued', 'dispatch', now(), $4, 'delivery', \
-                 (SELECT tenant_id FROM core.project WHERE id = $1)) RETURNING id",
+                 (SELECT tenant_id FROM core.project WHERE id = $1), $5) RETURNING id",
     )
     .bind(project_id)
     .bind(task_id)
     .bind(attempt_no)
     .bind(source_event_id)
+    .bind(task_revision_id)
     .fetch_one(&mut **tx)
     .await?;
 

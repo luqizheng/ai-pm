@@ -161,6 +161,22 @@ async fn seed(pool: &PgPool, code: &str) -> Fx {
     .fetch_one(pool)
     .await
     .unwrap();
+    // PA07-IMP-002：直种任务也要落初始 Revision——B3 失联回收重建 Run 走
+    // insert_task_run，对无指针任务 fail-closed。
+    let revision_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.task_revision (tenant_id, project_id, task_id, revision_no) \
+         SELECT tenant_id, project_id, $1, 1 FROM delivery.task WHERE id = $1 RETURNING id",
+    )
+    .bind(task_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE delivery.task SET current_task_revision_id = $2 WHERE id = $1")
+        .bind(task_id)
+        .bind(revision_id)
+        .execute(pool)
+        .await
+        .unwrap();
     let repo_id: Uuid = sqlx::query_scalar(
         "INSERT INTO integration.project_repository \
          (project_id, name, url, status, head_commit_sha, tenant_id) \

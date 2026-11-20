@@ -97,6 +97,14 @@ pub async fn create_task(
     if let Some(criteria) = req.acceptance_criteria {
         replace_acceptance_criteria(&mut tx, project_id, task_id, criteria).await?;
     }
+    // PA07-IMP-002：创建即冻结初始 Revision（revision_no=1），指针同事务落位。
+    super::task_revision::snapshot_and_insert(
+        &mut tx,
+        task_id,
+        Some("initial"),
+        Some(actor.principal_id),
+    )
+    .await?;
     append_audit(
         &mut tx,
         project_id,
@@ -223,6 +231,9 @@ pub async fn update_task(
     .await?;
 
     let mut contract_audit = serde_json::Map::new();
+    // PA07-IMP-002：实质变更字段（goal / constraints / deliverables / 验收口径）
+    // 才触发新 Revision；title/description/knowledge_refs 不属于执行契约。
+    let mut substantive: Vec<&str> = Vec::new();
     if let Some(goal) = req.goal {
         sqlx::query("UPDATE delivery.task SET goal = $2, updated_at = now() WHERE id = $1")
             .bind(task_id)
@@ -230,6 +241,7 @@ pub async fn update_task(
             .execute(&mut *tx)
             .await?;
         contract_audit.insert("goal".into(), json!(goal));
+        substantive.push("goal");
     }
     if let Some(constraints) = req.constraints {
         sqlx::query("UPDATE delivery.task SET constraints = $2, updated_at = now() WHERE id = $1")
@@ -238,6 +250,7 @@ pub async fn update_task(
             .execute(&mut *tx)
             .await?;
         contract_audit.insert("constraints".into(), constraints);
+        substantive.push("constraints");
     }
     if let Some(deliverables) = req.deliverables {
         let normalized = normalize_deliverables(deliverables)?;
@@ -247,10 +260,24 @@ pub async fn update_task(
             .execute(&mut *tx)
             .await?;
         contract_audit.insert("deliverables".into(), json!(normalized));
+        substantive.push("deliverables");
     }
     if let Some(criteria) = req.acceptance_criteria {
         let count = replace_acceptance_criteria(&mut tx, project_id, task_id, criteria).await?;
         contract_audit.insert("acceptance_criteria".into(), json!(count));
+        substantive.push("acceptance_criteria");
+    }
+    // PA07-IMP-002：实质变更在主 UPDATE（revision+1）之后冻结新快照，
+    // revision_no = 推进后的 CAS 纪元；指针与快照同事务。
+    if !substantive.is_empty() {
+        let reason = substantive.join(",");
+        super::task_revision::snapshot_and_insert(
+            &mut tx,
+            task_id,
+            Some(&reason),
+            Some(actor.principal_id),
+        )
+        .await?;
     }
     if let Some(refs) = req.knowledge_refs {
         let count = replace_knowledge_refs(&mut tx, project_id, task_id, refs).await?;

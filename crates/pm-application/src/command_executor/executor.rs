@@ -643,6 +643,15 @@ impl PgCommandExecutor {
                     .fetch_one(&mut *tx)
                     .await
                     .map_err(db_err)?;
+                    // PA07-IMP-002：命令通道建任务同样冻结初始 Revision。
+                    crate::pm_write::task_revision::snapshot_and_insert(
+                        &mut tx,
+                        id,
+                        Some("command create_task"),
+                        Some(ctx.actor.principal_id),
+                    )
+                    .await
+                    .map_err(db_err)?;
                     (id, true)
                 }
             };
@@ -812,6 +821,16 @@ impl PgCommandExecutor {
         .bind(&description)
         .bind(assignee_id)
         .fetch_one(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        // PA07-IMP-002：命令通道建任务同样冻结初始 Revision（补偿 Delete 随
+        // task 行级联清除快照，无悬挂）。
+        crate::pm_write::task_revision::snapshot_and_insert(
+            &mut tx,
+            task_id,
+            Some("command create_task"),
+            Some(ctx.actor.principal_id),
+        )
         .await
         .map_err(db_err)?;
         let after = json!({

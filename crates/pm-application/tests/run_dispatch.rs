@@ -60,6 +60,22 @@ async fn seed(pool: &PgPool, code: &str, assigned: bool) -> Fx {
     .fetch_one(pool)
     .await
     .unwrap();
+    // PA07-IMP-002：直种任务也要落初始 Revision——insert_task_run 已对无指针
+    // 任务 fail-closed（租约恢复路径会再建 Run）。
+    let revision_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO delivery.task_revision (tenant_id, project_id, task_id, revision_no) \
+         SELECT tenant_id, project_id, $1, 1 FROM delivery.task WHERE id = $1 RETURNING id",
+    )
+    .bind(task_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE delivery.task SET current_task_revision_id = $2 WHERE id = $1")
+        .bind(task_id)
+        .bind(revision_id)
+        .execute(pool)
+        .await
+        .unwrap();
     let repo_id = add_repo(pool, outcome.project_id, code, "web", "verified").await;
     sqlx::query(
         "INSERT INTO delivery.task_repository (task_id, project_id, repository_id, write_access, base_ref, tenant_id) \
