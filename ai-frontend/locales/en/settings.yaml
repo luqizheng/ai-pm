@@ -44,6 +44,7 @@ settings:
     aiProviders: AI Models
     invitations: Invitations
     general: Team Info
+    products: Products
     teamMembers: Members & Invites
   demo:
     personaLabel: Demo role

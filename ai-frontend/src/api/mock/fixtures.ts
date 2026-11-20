@@ -1858,7 +1858,7 @@ export function resolveMock(
         display_name: "admin",
         tenant_id: TENANT_ID,
         is_active: true,
-        tenant_role: "owner",
+        team_role: "owner",
         is_admin: true,
         team: teamProfileMock,
         onboarding_required: false,

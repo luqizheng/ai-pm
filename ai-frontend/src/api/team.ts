@@ -3,8 +3,10 @@ import { http } from "@/api/base";
 /**
  * Team Onboarding & Team Management —— 前端适配层。
  *
- * 后端契约（apps/pm-api/src/team_onboarding.rs，0044_team_onboarding.sql）：
- * Team ≡ tenant（DEC-LLM-001 口径），本模块是团队域的唯一服务入口。
+ * 后端契约（apps/pm-api/src/team_onboarding.rs + team_members.rs，P4-ORG Phase 2）：
+ * Team = core.team（锚 team_id），成员关系 = core.team_member（owner|member 两值，
+ * 多 Owner 任命制；admin 角色已取消）。Team 面管理操作（成员增删改、邀请、档案）
+ * 仅 Team Owner 可调。
  *
  * 稳定错误 message（`{message}` 单字段契约，前端据其渲染结果态）：
  *   team_already_exists / slug_already_taken / pending_invitation_exists /
@@ -12,9 +14,8 @@ import { http } from "@/api/base";
  *   invitation_link_exhausted / invitation_not_found / email_mismatch /
  *   invitation_tenant_mismatch / team_suspended / invalid email 等。
  *
- * V1 边界（2026-11-06 裁决）：无邮件投递——创建邀请/链接只返回 accept_path
- * 供复制分享；同一用户多团队待上游 lmms 支持，memberships 契约已按多团队
- * shape 设计。
+ * V1 边界（2026-11-06 裁决 + P4-ORG）：无邮件投递——创建邀请/链接只返回
+ * accept_path 供复制分享；memberships 契约按多团队 shape 设计（1:N 支持）。
  */
 
 /* ------------------------------- /v1/pm/me 团队扩展 ----------------------- */
@@ -26,11 +27,11 @@ export interface TeamProfile {
   description: string | null;
 }
 
-/** GET /v1/pm/me 的团队成员关系（V1 单团队现实下为 0/1 行） */
+/** GET /v1/pm/me 的团队成员关系（V1 单团队现实下为 0/1 行；team_id = core.team.id） */
 export interface TeamMembership {
   team_id: string;
   team_name: string;
-  role: "owner" | "admin" | "member";
+  role: "owner" | "member";
   status: string;
 }
 
@@ -40,7 +41,7 @@ export interface TeamContext {
   is_active: boolean;
   is_admin: boolean;
   tenant_id: string;
-  tenant_role: string;
+  team_role: string;
   team: TeamProfile | null;
   onboarding_required: boolean;
   memberships: TeamMembership[];
@@ -59,14 +60,14 @@ export interface CreateTeamBody {
   description?: string;
 }
 
-/** POST /v1/pm/teams —— 认领当前 token 租户（零 ACTIVE 成员前提） */
+/** POST /v1/pm/teams —— 认领当前 token 租户（无 Team 行前提）；创建者=首位 Owner */
 export async function createTeam(body: CreateTeamBody): Promise<TeamProfile> {
   return http.post<TeamProfile>("/v1/pm/teams", body);
 }
 
-/** GET /v1/pm/tenants/{id} —— 团队档案（成员可读） */
-export async function fetchTeamProfile(tenantId: string): Promise<TeamProfile> {
-  return http.get<TeamProfile>(`/v1/pm/tenants/${tenantId}`);
+/** GET /v1/pm/teams/{id} —— 团队档案（成员可读；id = team_id） */
+export async function fetchTeamProfile(teamId: string): Promise<TeamProfile> {
+  return http.get<TeamProfile>(`/v1/pm/teams/${teamId}`);
 }
 
 export interface UpdateTeamBody {
@@ -75,69 +76,62 @@ export interface UpdateTeamBody {
   description?: string | null;
 }
 
-/** PATCH /v1/pm/tenants/{id} —— 修改团队资料（owner/admin） */
+/** PATCH /v1/pm/teams/{id} —— 修改团队资料（Team Owner） */
 export async function updateTeamProfile(
-  tenantId: string,
+  teamId: string,
   body: UpdateTeamBody
 ): Promise<TeamProfile> {
-  return http.patch<TeamProfile>(`/v1/pm/tenants/${tenantId}`, body);
-}
-
-export interface DissolveOutcome {
-  projects_deleted: number;
-  members_removed: number;
-}
-
-/** POST /v1/pm/tenants/{id}/dissolve —— 解散团队（Owner 独占；projects 终态软删） */
-export async function dissolveTeam(tenantId: string): Promise<DissolveOutcome> {
-  return http.post<DissolveOutcome>(`/v1/pm/tenants/${tenantId}/dissolve`, {});
+  return http.patch<TeamProfile>(`/v1/pm/teams/${teamId}`, body);
 }
 
 /* ------------------------------------ 成员 -------------------------------- */
 
-/** GET /v1/pm/tenants/{id}/members 行（既有端点，Members 页数据源） */
+/** GET /v1/pm/teams/{id}/members 行（Members 页数据源；role 仅 owner|member） */
 export interface TeamMember {
   principal_id: string;
   display_name: string;
-  role: "owner" | "admin" | "member";
+  role: "owner" | "member";
   is_active: boolean;
   created_at: string;
 }
 
-export async function listTeamMembers(tenantId: string): Promise<TeamMember[]> {
+export async function listTeamMembers(teamId: string): Promise<TeamMember[]> {
   const res = await http.get<{ items: TeamMember[] }>(
-    `/v1/pm/tenants/${tenantId}/members`
+    `/v1/pm/teams/${teamId}/members`
   );
   return res.items ?? [];
 }
 
-/** PATCH /v1/pm/tenants/{id}/members/{pid}/role（owner/admin；admin 不可动 owner） */
-export async function setTeamMemberRole(
-  tenantId: string,
-  principalId: string,
-  role: "admin" | "member"
+/** POST /v1/pm/teams/{id}/members —— 直接添加成员（Team Owner；role 仅 member） */
+export async function addTeamMember(
+  teamId: string,
+  body: { principal_id: string; role: "member" }
 ): Promise<void> {
-  await http.patch(`/v1/pm/tenants/${tenantId}/members/${principalId}/role`, {
+  await http.post(`/v1/pm/teams/${teamId}/members`, body);
+}
+
+/** PATCH /v1/pm/teams/{id}/members/{pid}/role（Team Owner；任命=owner / 降级=member） */
+export async function setTeamMemberRole(
+  teamId: string,
+  principalId: string,
+  role: "owner" | "member"
+): Promise<void> {
+  await http.patch(`/v1/pm/teams/${teamId}/members/${principalId}/role`, {
     role
   });
 }
 
-/** DELETE /v1/pm/tenants/{id}/members/{pid}（末位 Owner 由服务端拒绝） */
+/** DELETE /v1/pm/teams/{id}/members/{pid}（Team Owner；末位 Owner 服务端拒绝） */
 export async function removeTeamMember(
-  tenantId: string,
+  teamId: string,
   principalId: string
 ): Promise<void> {
-  await http.delete(`/v1/pm/tenants/${tenantId}/members/${principalId}`);
+  await http.delete(`/v1/pm/teams/${teamId}/members/${principalId}`);
 }
 
-/** POST /v1/pm/tenants/{id}/owner-transfer */
-export async function transferTeamOwnership(
-  tenantId: string,
-  newOwnerPrincipalId: string
-): Promise<unknown> {
-  return http.post(`/v1/pm/tenants/${tenantId}/owner-transfer`, {
-    new_owner_principal_id: newOwnerPrincipalId
-  });
+/** POST /v1/pm/teams/{id}/leave —— 自助退出（末位 Owner 服务端拒绝） */
+export async function leaveTeam(teamId: string): Promise<void> {
+  await http.post(`/v1/pm/teams/${teamId}/leave`, {});
 }
 
 /* ---------------------------------- 邮箱邀请 ------------------------------ */
@@ -147,7 +141,7 @@ export type InvitationStatus = "PENDING" | "ACCEPTED" | "EXPIRED" | "REVOKED";
 export interface TeamInvitation {
   id: string;
   email: string;
-  role: "admin" | "member";
+  role: "member";
   status: InvitationStatus;
   invited_by: string;
   invited_by_name: string;
@@ -157,9 +151,9 @@ export interface TeamInvitation {
 }
 
 export async function listTeamInvitations(
-  tenantId: string
+  teamId: string
 ): Promise<TeamInvitation[]> {
-  return http.get<TeamInvitation[]>(`/v1/pm/tenants/${tenantId}/invitations`);
+  return http.get<TeamInvitation[]>(`/v1/pm/teams/${teamId}/invitations`);
 }
 
 /** 创建邀请的一次性返回：明文 token/接受路径只在此刻出现 */
@@ -171,21 +165,21 @@ export interface InvitationCreated {
 }
 
 export async function createTeamInvitation(
-  tenantId: string,
-  body: { email: string; role: "admin" | "member" }
+  teamId: string,
+  body: { email: string; role: "member" }
 ): Promise<InvitationCreated> {
   return http.post<InvitationCreated>(
-    `/v1/pm/tenants/${tenantId}/invitations`,
+    `/v1/pm/teams/${teamId}/invitations`,
     body
   );
 }
 
 export async function revokeTeamInvitation(
-  tenantId: string,
+  teamId: string,
   invitationId: string
 ): Promise<void> {
   await http.post(
-    `/v1/pm/tenants/${tenantId}/invitations/${invitationId}/revoke`,
+    `/v1/pm/teams/${teamId}/invitations/${invitationId}/revoke`,
     {}
   );
 }
@@ -203,10 +197,10 @@ export interface InvitationLink {
 }
 
 export async function listInvitationLinks(
-  tenantId: string
+  teamId: string
 ): Promise<InvitationLink[]> {
   return http.get<InvitationLink[]>(
-    `/v1/pm/tenants/${tenantId}/invitation-links`
+    `/v1/pm/teams/${teamId}/invitation-links`
   );
 }
 
@@ -218,21 +212,21 @@ export interface LinkCreated {
 }
 
 export async function createInvitationLink(
-  tenantId: string,
+  teamId: string,
   body: { expires_at?: string; max_uses?: number | null }
 ): Promise<LinkCreated> {
   return http.post<LinkCreated>(
-    `/v1/pm/tenants/${tenantId}/invitation-links`,
+    `/v1/pm/teams/${teamId}/invitation-links`,
     body
   );
 }
 
 export async function revokeInvitationLink(
-  tenantId: string,
+  teamId: string,
   linkId: string
 ): Promise<void> {
   await http.post(
-    `/v1/pm/tenants/${tenantId}/invitation-links/${linkId}/revoke`,
+    `/v1/pm/teams/${teamId}/invitation-links/${linkId}/revoke`,
     {}
   );
 }

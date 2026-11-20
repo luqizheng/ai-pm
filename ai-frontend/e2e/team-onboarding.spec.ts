@@ -10,7 +10,6 @@ import {
   api,
   browserSession,
   claimTeam,
-  joinAs,
   signToken
 } from "./team/stack";
 
@@ -55,6 +54,47 @@ async function me(sub: string, tid: number) {
   return res.body;
 }
 
+/**
+ * P4-ORG Phase 2：Team 锚 = core.team.id（team_id，不再是 tenant_id）。
+ * 建团后从 /me memberships[0].team_id 取（owner 恰好一条 active membership）。
+ */
+function teamIdOf(meBody: any): string {
+  const teamId = meBody?.memberships?.[0]?.team_id;
+  if (!teamId) throw new Error("no team membership in /v1/pm/me");
+  return teamId as string;
+}
+
+/**
+ * 加成员并激活（新契约 helper，P4-ORG Phase 2）：GET /me 触发 provision →
+ * Team Owner POST members（role 仅 member）→ Team Owner PATCH principals 激活。
+ * 返回 principal_id。
+ */
+async function addActiveMember(
+  ownerToken: string,
+  teamId: string,
+  sub: string,
+  tid: number
+) {
+  const self = await api("GET", "/v1/pm/me", signToken(sub, tid));
+  expect(self.status).toBe(200);
+  const principalId = self.body.principal_id as string;
+  const added = await api(
+    "POST",
+    `/v1/pm/teams/${teamId}/members`,
+    ownerToken,
+    { principal_id: principalId, role: "member" }
+  );
+  expect([200, 201]).toContain(added.status);
+  const activated = await api(
+    "PATCH",
+    `/v1/pm/principals/${principalId}`,
+    ownerToken,
+    { is_active: true }
+  );
+  expect(activated.status).toBe(200);
+  return principalId;
+}
+
 // ─────────────────────────────────────────────── 首登与建团（Screen 01-05）
 
 test.describe("Team QA · Onboarding 流程", () => {
@@ -92,7 +132,7 @@ test.describe("Team QA · Onboarding 流程", () => {
 
     const body = await me("ui-founder", 102);
     expect(body.onboarding_required).toBe(false);
-    expect(body.tenant_role).toBe("owner");
+    expect(body.team_role).toBe("owner");
     expect(body.team).toMatchObject({
       name: "QA 团队 102",
       slug: "qa-team-102"
@@ -136,10 +176,10 @@ test.describe("Team QA · Onboarding 流程", () => {
     await expect(issued).toContainText("/invitation/accept?token=");
 
     const token = signToken("ui-inviter", 105);
-    const tenantId = (await me("ui-inviter", 105)).tenant_id;
+    const teamId = teamIdOf(await me("ui-inviter", 105));
     const list = await api(
       "GET",
-      `/v1/pm/tenants/${tenantId}/invitations`,
+      `/v1/pm/teams/${teamId}/invitations`,
       token
     );
     expect(list.body).toEqual(
@@ -170,10 +210,10 @@ test.describe("Team QA · Onboarding 流程", () => {
     );
 
     const token = signToken("ui-linker", 106);
-    const tenantId = (await me("ui-linker", 106)).tenant_id;
+    const teamId = teamIdOf(await me("ui-linker", 106));
     const links = await api(
       "GET",
-      `/v1/pm/tenants/${tenantId}/invitation-links`,
+      `/v1/pm/teams/${teamId}/invitation-links`,
       token
     );
     expect(links.body).toHaveLength(1);
@@ -202,11 +242,8 @@ test.describe("Team QA · Onboarding 流程", () => {
     context,
     page
   }) => {
-    const { tenantId, token } = await claimTeam(
-      "ui-reload",
-      108,
-      "Reload Team"
-    );
+    const { token } = await claimTeam("ui-reload", 108, "Reload Team");
+    const teamId = teamIdOf(await me("ui-reload", 108));
     await signIn(context, "ui-reload", 108);
     await page.goto("/onboarding/invite");
     await expect(page.getByTestId("onboarding-created-banner")).toContainText(
@@ -223,7 +260,7 @@ test.describe("Team QA · Onboarding 流程", () => {
     );
     const list = await api(
       "GET",
-      `/v1/pm/tenants/${tenantId}/invitations`,
+      `/v1/pm/teams/${teamId}/invitations`,
       token
     );
     expect(list.body).toHaveLength(1);
@@ -237,10 +274,11 @@ test.describe("Team QA · 接受邀请", () => {
     context,
     page
   }) => {
-    const { tenantId, token } = await claimTeam("ui-host", 110, "Host Team");
+    const { token } = await claimTeam("ui-host", 110, "Host Team");
+    const teamId = teamIdOf(await me("ui-host", 110));
     const inv = await api(
       "POST",
-      `/v1/pm/tenants/${tenantId}/invitations`,
+      `/v1/pm/teams/${teamId}/invitations`,
       token,
       {
         email: "guest@team-qa.test",
@@ -271,14 +309,11 @@ test.describe("Team QA · 接受邀请", () => {
     context,
     page
   }) => {
-    const { tenantId, token } = await claimTeam(
-      "ui-host2",
-      111,
-      "Revoker Team"
-    );
+    const { token } = await claimTeam("ui-host2", 111, "Revoker Team");
+    const teamId = teamIdOf(await me("ui-host2", 111));
     const inv = await api(
       "POST",
-      `/v1/pm/tenants/${tenantId}/invitations`,
+      `/v1/pm/teams/${teamId}/invitations`,
       token,
       {
         email: "late@team-qa.test",
@@ -287,7 +322,7 @@ test.describe("Team QA · 接受邀请", () => {
     );
     await api(
       "POST",
-      `/v1/pm/tenants/${tenantId}/invitations/${inv.body.id}/revoke`,
+      `/v1/pm/teams/${teamId}/invitations/${inv.body.id}/revoke`,
       token
     );
     await signIn(context, "ui-late2", 111);
@@ -300,10 +335,11 @@ test.describe("Team QA · 接受邀请", () => {
     context,
     page
   }) => {
-    const { tenantId, token } = await claimTeam("ui-host3", 112, "Mail Team");
+    const { token } = await claimTeam("ui-host3", 112, "Mail Team");
+    const teamId = teamIdOf(await me("ui-host3", 112));
     const inv = await api(
       "POST",
-      `/v1/pm/tenants/${tenantId}/invitations`,
+      `/v1/pm/teams/${teamId}/invitations`,
       token,
       {
         email: "right@team-qa.test",
@@ -324,10 +360,11 @@ test.describe("Team QA · 接受邀请", () => {
     context,
     page
   }) => {
-    const { tenantId, token } = await claimTeam("ui-host4", 113, "Quota Team");
+    const { token } = await claimTeam("ui-host4", 113, "Quota Team");
+    const teamId = teamIdOf(await me("ui-host4", 113));
     const link = await api(
       "POST",
-      `/v1/pm/tenants/${tenantId}/invitation-links`,
+      `/v1/pm/teams/${teamId}/invitation-links`,
       token,
       { max_uses: 1 }
     );
@@ -345,14 +382,11 @@ test.describe("Team QA · 接受邀请", () => {
   });
 
   test("B09-10 跨租户接受 → tenantMismatch", async ({ context, page }) => {
-    const { tenantId, token } = await claimTeam(
-      "ui-host5",
-      114,
-      "Foreign Team"
-    );
+    const { token } = await claimTeam("ui-host5", 114, "Foreign Team");
+    const teamId = teamIdOf(await me("ui-host5", 114));
     const link = await api(
       "POST",
-      `/v1/pm/tenants/${tenantId}/invitation-links`,
+      `/v1/pm/teams/${teamId}/invitation-links`,
       token,
       {}
     );
@@ -387,29 +421,24 @@ test.describe("Team QA · 团队设置与角色", () => {
     );
   });
 
-  test("B09-13 admin 改团队资料成功；看不到 Danger Zone", async ({
+  test("B09-13 Team Owner 改团队资料成功；看不到 Danger Zone（解散已删）", async ({
     context,
     page
   }) => {
-    const { tenantId, token } = await claimTeam(
-      "ui-own",
-      121,
-      "Admin Edit Team"
-    );
-    await joinAs(token, tenantId, "ui-admin", 121, "admin");
-    await signIn(context, "ui-admin", 121);
+    const { token } = await claimTeam("ui-own", 121, "Owner Edit Team");
+    const teamId = teamIdOf(await me("ui-own", 121));
+    await signIn(context, "ui-own", 121);
     await page.goto("/settings/team/general");
     await field(dataTest(page, "team-general-description")).fill(
-      "edited by admin"
+      "edited by owner"
     );
     await dataTest(page, "team-general-save").click();
     await expect
       .poll(
         async () =>
-          (await api("GET", `/v1/pm/tenants/${tenantId}`, token)).body
-            .description
+          (await api("GET", `/v1/pm/teams/${teamId}`, token)).body.description
       )
-      .toBe("edited by admin");
+      .toBe("edited by owner");
     await expect(dataTest(page, "team-dissolve-open")).toHaveCount(0);
   });
 
@@ -417,12 +446,9 @@ test.describe("Team QA · 团队设置与角色", () => {
     context,
     page
   }) => {
-    const { tenantId, token } = await claimTeam(
-      "ui-own2",
-      122,
-      "Readonly Team"
-    );
-    await joinAs(token, tenantId, "ui-member", 122, "member");
+    const { token } = await claimTeam("ui-own2", 122, "Readonly Team");
+    const teamId = teamIdOf(await me("ui-own2", 122));
+    await addActiveMember(token, teamId, "ui-member", 122);
     await signIn(context, "ui-member", 122);
 
     await page.goto("/settings/team/general");
@@ -438,7 +464,8 @@ test.describe("Team QA · 团队设置与角色", () => {
   });
 
   test("B09-15 owner 在邀请管理页创建并撤销邀请", async ({ context, page }) => {
-    const { tenantId, token } = await claimTeam("ui-own3", 123, "Invites Team");
+    const { token } = await claimTeam("ui-own3", 123, "Invites Team");
+    const teamId = teamIdOf(await me("ui-own3", 123));
     await signIn(context, "ui-own3", 123);
     await page.goto("/settings/team/invitations");
     await field(dataTest(page, "invitations-email")).fill(
@@ -455,7 +482,7 @@ test.describe("Team QA · 团队设置与角色", () => {
 
     const list = await api(
       "GET",
-      `/v1/pm/tenants/${tenantId}/invitations`,
+      `/v1/pm/teams/${teamId}/invitations`,
       token
     );
     expect(list.body).toEqual(
@@ -472,9 +499,9 @@ test.describe("Team QA · 团队设置与角色", () => {
     context,
     page
   }) => {
-    const { tenantId, token } = await claimTeam("ui-own4", 124, "Remove Team");
-    await joinAs(token, tenantId, "ui-leaver", 124, "member");
-    const leaverId = (await me("ui-leaver", 124)).principal_id;
+    const { token } = await claimTeam("ui-own4", 124, "Remove Team");
+    const teamId = teamIdOf(await me("ui-own4", 124));
+    const leaverId = await addActiveMember(token, teamId, "ui-leaver", 124);
     await signIn(context, "ui-own4", 124);
     await page.goto("/settings/team/members");
     await dataTest(page, `team-member-remove-${leaverId}`).click();
@@ -485,7 +512,7 @@ test.describe("Team QA · 团队设置与角色", () => {
 
     const roster = await api(
       "GET",
-      `/v1/pm/tenants/${tenantId}/members`,
+      `/v1/pm/teams/${teamId}/members`,
       token
     );
     const ids = (roster.body.items ?? roster.body).map(
@@ -494,32 +521,23 @@ test.describe("Team QA · 团队设置与角色", () => {
     expect(ids).not.toContain(leaverId);
   });
 
-  test("B09-17 owner 解散：名称不符不解锁；确认后登出并回到 onboarding 门", async ({
-    context,
-    page
-  }) => {
-    const { tenantId } = await claimTeam("ui-own5", 125, "Doomed Team");
-    await signIn(context, "ui-own5", 125);
-    await page.goto("/settings/team/general");
-
-    const open = dataTest(page, "team-dissolve-open");
-    await field(dataTest(page, "team-dissolve-confirm")).fill("Wrong Name");
-    await expect(open).toBeDisabled();
-    await field(dataTest(page, "team-dissolve-confirm")).fill("Doomed Team");
-    await expect(open).toBeEnabled();
-    await open.click();
-    await dataTest(page, "team-dissolve-confirm-button").click();
-
-    await expect(page).toHaveURL(/\/auth\/login/, { timeout: 20_000 });
+  test("B09-17 解散 API 已删除（P4-ORG Phase 2）→ 旧端点 404，团队档案不受影响", async () => {
+    const { token } = await claimTeam("ui-own5", 125, "Doomed Team");
     const body = await me("ui-own5", 125);
-    expect(body.team).toBeNull();
-    expect(body.onboarding_required).toBe(true);
-    const profile = await api(
-      "GET",
-      `/v1/pm/tenants/${tenantId}`,
-      signToken("ui-own5", 125)
+    const teamId = teamIdOf(body);
+
+    // 旧解散端点已随 P4-ORG Phase 2 删除：任何调用一律 404
+    const dissolved = await api(
+      "POST",
+      `/v1/pm/tenants/${body.tenant_id}/dissolve`,
+      token
     );
-    expect(profile.status).not.toBe(500);
+    expect(dissolved.status).toBe(404);
+
+    // 团队未被解散：档案仍可读，membership 仍在
+    const profile = await api("GET", `/v1/pm/teams/${teamId}`, token);
+    expect(profile.status).toBe(200);
+    expect(body.memberships).toHaveLength(1);
   });
 });
 

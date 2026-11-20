@@ -111,7 +111,7 @@ test("UIFLOW-02 UI 建团 → 邀请页横幅；后端创建者 = owner", async 
   const me = await api("GET", "/v1/pm/me", token);
   expect(me.status).toBe(200);
   expect(me.body.onboarding_required).toBe(false);
-  expect(me.body.tenant_role).toBe("owner");
+  expect(me.body.team_role).toBe("owner");
   expect(me.body.team?.name).toContain(TEAM_NAME);
 });
 

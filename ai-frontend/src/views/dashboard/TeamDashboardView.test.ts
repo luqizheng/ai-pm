@@ -38,7 +38,7 @@ const ownerContext = {
   is_active: true,
   is_admin: true,
   tenant_id: TENANT_ID,
-  tenant_role: "owner",
+  team_role: "owner",
   team: { id: TENANT_ID, name: "Acme R&D", slug: "acme-rd", description: null },
   onboarding_required: false,
   memberships: [
@@ -147,7 +147,7 @@ describe("TeamDashboardView", () => {
     fetchTeamContext.mockResolvedValue({
       ...ownerContext,
       is_admin: false,
-      tenant_role: "member",
+      team_role: "member",
       memberships: [
         {
           team_id: TENANT_ID,

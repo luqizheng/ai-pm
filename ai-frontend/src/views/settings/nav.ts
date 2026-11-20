@@ -2,6 +2,7 @@ import type { Component } from "vue";
 import {
   Bell,
   Cpu,
+  Package,
   GitBranch,
   KeyRound,
   Monitor,
@@ -52,6 +53,7 @@ export const PERSONAL_ICONS: Record<string, Component> = {
 export const TEAM_APP_NAV: SettingsNavEntry[] = [
   { id: "general", to: "/settings/team/general" },
   { id: "teamMembers", to: "/settings/team/members" },
+  { id: "products", to: "/settings/team/products" },
   { id: "aiProviders", to: "/settings/team/ai-providers" },
   { id: "gitCredentials", to: "/settings/team/credentials", proposed: true }
 ];
@@ -60,6 +62,7 @@ export const TEAM_APP_NAV: SettingsNavEntry[] = [
 export const TEAM_ICONS: Record<string, Component> = {
   general: Settings2,
   teamMembers: UsersRound,
+  products: Package,
   aiProviders: Cpu,
   gitCredentials: KeyRound
 };

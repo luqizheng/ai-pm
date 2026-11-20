@@ -31,12 +31,13 @@ export const useTeamStore = defineStore("app-team", () => {
   const memberships = computed<TeamMembership[]>(
     () => context.value?.memberships ?? []
   );
-  /** 团队内角色（角色即权限：页面据此渲染操作入口，服务端同矩阵强制） */
-  const teamRole = computed<"owner" | "admin" | "member">(() => {
-    const role = context.value?.tenant_role;
-    return role === "owner" || role === "admin" ? role : "member";
-  });
-  const isTeamAdmin = computed(() => teamRole.value !== "member");
+  /** 团队内角色（角色即权限：页面据此渲染操作入口，服务端同矩阵强制）。
+   * P4-ORG：Team 角色仅 owner|member（admin 已取消），事实源 = core.team_member。 */
+  const teamRole = computed<"owner" | "member">(() =>
+    context.value?.team_role === "owner" ? "owner" : "member"
+  );
+  /** Team Owner（Team 面管理操作的唯一角色；旧 isTeamAdmin 语义收敛于此） */
+  const isTeamOwner = computed(() => teamRole.value === "owner");
   const onboardingRequired = computed(
     () => context.value?.onboarding_required ?? false
   );
@@ -77,7 +78,7 @@ export const useTeamStore = defineStore("app-team", () => {
     currentTeam,
     memberships,
     teamRole,
-    isTeamAdmin,
+    isTeamOwner,
     onboardingRequired,
     load,
     refresh,

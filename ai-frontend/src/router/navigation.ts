@@ -188,6 +188,14 @@ const workspaceGroup: NavGroup = {
             )
         },
         {
+          path: "/settings/team/products",
+          labelKey: "settings.nav.products",
+          component: () =>
+            import(
+              "@/views/settings/team/SettingsTeamProductsView.vue"
+            ).then(module => module.default)
+        },
+        {
           path: "/settings/team/ai-providers",
           labelKey: "shell.app.side.item.aiProviders",
           component: () =>

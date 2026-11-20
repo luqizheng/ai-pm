@@ -37,7 +37,7 @@ const invitations = ref<TeamInvitation[]>([]);
 const projects = ref<Project[]>([]);
 
 const team = computed(() => teamStore.currentTeam);
-const isAdmin = computed(() => teamStore.isTeamAdmin);
+const isOwner = computed(() => teamStore.isTeamOwner);
 
 const roleCounts = computed(() => {
   const counts = { owner: 0, admin: 0, member: 0, inactive: 0 };
@@ -57,21 +57,21 @@ onMounted(async () => {
   error.value = null;
   try {
     await teamStore.load();
-    const tenantId = teamStore.context?.tenant_id;
+    const teamId = teamStore.context?.team?.id;
     const jobs: Array<Promise<unknown>> = [
       listProjects({ page: 1, size: 100 }).then(res => {
         projects.value = res.items ?? [];
       })
     ];
-    if (tenantId) {
+    if (teamId) {
       jobs.push(
-        listTeamMembers(tenantId).then(rows => {
+        listTeamMembers(teamId).then(rows => {
           members.value = rows;
         })
       );
-      if (isAdmin.value) {
+      if (isOwner.value) {
         jobs.push(
-          listTeamInvitations(tenantId).then(rows => {
+          listTeamInvitations(teamId).then(rows => {
             invitations.value = rows;
           })
         );
@@ -214,10 +214,10 @@ function openAiProviders(): void {
       </ul>
     </section>
 
-    <!-- 邀请摘要（admin only）+ AI 配置入口 -->
+    <!-- 邀请摘要（Team Owner only）+ AI 配置入口 -->
     <section class="section cards">
       <button
-        v-if="isAdmin"
+        v-if="isOwner"
         type="button"
         class="card"
         data-testid="team-dashboard-invitations"

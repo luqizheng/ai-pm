@@ -13,7 +13,7 @@ import { psql, signInVia } from "./p0/fixtures";
  *  - R57（本轮实测新增，回写规格 11 §0）: `accept_invitation` 在
  *    `team_onboarding.rs:759-760` 硬性绑定 tid（「接受只可能发生在 token
  *    所在租户」）——规格原文「User B 独立 tid」不成立，改为同 tid 不同 sub
- *    （与 B09-06 的 team/stack joinAs 同一被证绿路径）。
+ *    （与 B09-06 的 UI 接受路径同一被证绿路径）。
  *
  * 判定纪律：UI 状态 + API/DB 终态双证据；HTTP 200 不作唯一证据。
  */
@@ -154,17 +154,17 @@ test("P0-003 UI 建团 → API 邀请 → 受邀者 UI 接受 → owner/member �
   await expect(page).toHaveURL(/\/onboarding\/invite/, { timeout: 20_000 });
   await expect(page.getByTestId("onboarding-created-banner")).toContainText("P0-003 团队");
 
-  // ② Owner 身份（API 双证据）
+  // ② Owner 身份（API 双证据；P4-ORG Phase 2：Team 锚 = team_id）
   const ownerMe = await api("GET", "/v1/pm/me", ownerToken);
   expect(ownerMe.status).toBe(200);
   expect(ownerMe.body.onboarding_required).toBe(false);
-  expect(ownerMe.body.tenant_role).toBe("owner");
-  const tenantId = ownerMe.body.tenant_id as string;
+  expect(ownerMe.body.team_role).toBe("owner");
+  const teamId = ownerMe.body.memberships[0].team_id as string;
 
   // ③ 发邀请（真实链路 → 201）
   const inv = await api(
     "POST",
-    `/v1/pm/tenants/${tenantId}/invitations`,
+    `/v1/pm/teams/${teamId}/invitations`,
     ownerToken,
     { email: `${memberSub}@p0.test`, role: "member" }
   );
@@ -183,13 +183,14 @@ test("P0-003 UI 建团 → API 邀请 → 受邀者 UI 接受 → owner/member �
   const memberMe = await api("GET", "/v1/pm/me", memberToken);
   expect(memberMe.status).toBe(200);
   expect(memberMe.body.onboarding_required).toBe(false);
-  expect(memberMe.body.team?.id ?? memberMe.body.team?.team_id).toBe(tenantId);
+  expect(memberMe.body.team?.id).toBe(teamId);
 
   // ⑥ DB 双证据：恰好 2 个 ACTIVE 成员（owner + member），角色正确
+  //    （P4-ORG Phase 2：成员关系事实源 = core.team_member）
   const roles = psql(
-    `SELECT string_agg(tm.role, ',' ORDER BY tm.role) FROM core.tenant_member tm
+    `SELECT string_agg(tm.role, ',' ORDER BY tm.role) FROM core.team_member tm
        JOIN core.principal p ON p.id = tm.principal_id
-      WHERE tm.tenant_id = '${tenantId}' AND p.is_active`
+      WHERE tm.team_id = '${teamId}' AND p.is_active`
   );
   expect(roles).toBe("member,owner");
 });

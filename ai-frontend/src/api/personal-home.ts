@@ -45,7 +45,7 @@ export interface CurrentPrincipal {
   is_active: boolean;
   is_admin: boolean;
   tenant_id: string;
-  tenant_role: string;
+  team_role: string;
   provider: string;
   claims_tenant_key: string | null;
   subject: string;
@@ -483,7 +483,7 @@ export async function getPersonalHome(): Promise<{
     principal: {
       id: ctx.me.principal_id,
       displayName: ctx.me.display_name,
-      tenantRole: ctx.me.tenant_role,
+      tenantRole: ctx.me.team_role,
       isAdmin: ctx.me.is_admin
     },
     inbox,

@@ -1,0 +1,34 @@
+products:
+  members: 产品成员
+  title: 产品
+  description: Product Membership 内部管理——Team Member 不自动成为 Product 成员（PA 基线 §2）。
+  create: 新建产品
+  createTitle: 新建产品
+  createDesc: 由团队 Owner 创建并指定首位 Product Owner；创建者与团队 Owner 不因组织身份自动成为 Product Owner。
+  createdToast: 产品已创建
+  listTitle: 产品列表
+  empty: 暂无参与中的产品
+  membersTitle: 产品成员
+  addMember: 添加成员
+  addMemberPlaceholder: 选择团队成员
+  memberAddedToast: 成员已添加
+  memberRemovedToast: 成员已移除
+  appointedToast: 已任命为 Product Owner
+  demotedToast: 已降级为 Product Member
+  appointOwner: 任命 Owner
+  demoteOwner: 降级
+  firstOwnerLabel: 首位 Product Owner
+  firstOwnerPlaceholder: 选择首位 Product Owner
+  lifecycleTitle: 生命周期
+  abandon: 放弃产品
+  restart: 重启产品
+  abandonToast: 产品已放弃（只读，可重启）
+  restartToast: 产品已重启
+  lifecycleNote: 放弃后不再接收新需求、不再产生业务决策任务、AI 不再主动开展业务工作；历史资料与读取保留；不影响关联项目。
+  linksTitle: 关联项目
+  linkProject: 关联项目
+  linkCreate: 关联
+  linkCreatedToast: 项目已关联
+  linkEnd: 解除
+  linkEndedToast: 关联已解除
+  linkPlaceholder: 输入项目 ID

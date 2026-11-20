@@ -45,6 +45,7 @@ settings:
     invitations: 邀请
     general: 团队信息
     teamMembers: 成员与邀请
+    products: 产品
   demo:
     personaLabel: 演示角色
     persona:

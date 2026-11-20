@@ -22,7 +22,7 @@ vi.mock("@/api/team", async importOriginal => ({
     is_active: false,
     is_admin: false,
     tenant_id: "t-1",
-    tenant_role: "member",
+    team_role: "member",
     team: null,
     onboarding_required: true,
     memberships: []

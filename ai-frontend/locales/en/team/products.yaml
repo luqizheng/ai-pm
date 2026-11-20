@@ -1,0 +1,34 @@
+products:
+  members: Product members
+  title: Products
+  description: Product Membership is managed inside each product; team members do not automatically become product members (PA baseline §2).
+  create: New product
+  createTitle: New product
+  createDesc: Created by the team owner with an explicit first Product Owner; neither creator nor team owner becomes Product Owner automatically.
+  createdToast: Product created
+  listTitle: Products
+  empty: No products yet
+  membersTitle: Product members
+  addMember: Add member
+  addMemberPlaceholder: Select a team member
+  memberAddedToast: Member added
+  memberRemovedToast: Member removed
+  appointedToast: Appointed as Product Owner
+  demotedToast: Demoted to Product Member
+  appointOwner: Appoint owner
+  demoteOwner: Demote
+  firstOwnerLabel: First Product Owner
+  firstOwnerPlaceholder: Select the first Product Owner
+  lifecycleTitle: Lifecycle
+  abandon: Abandon
+  restart: Restart
+  abandonToast: Product abandoned (read-only, restartable)
+  restartToast: Product restarted
+  lifecycleNote: Abandoned products stop receiving new requirements and business decision tasks; AI stops proactive work. History stays readable; linked projects are untouched.
+  linksTitle: Linked projects
+  linkProject: Project
+  linkCreate: Link
+  linkCreatedToast: Project linked
+  linkEnd: Unlink
+  linkEndedToast: Link removed
+  linkPlaceholder: Project ID

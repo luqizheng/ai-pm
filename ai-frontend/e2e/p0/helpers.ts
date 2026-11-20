@@ -122,6 +122,18 @@ export async function asAiPrincipal(
   return { token, principalId };
 }
 
+/**
+ * P4-ORG Phase 2：Team 锚 = core.team.id（team_id，不再是 tenant_id）。
+ * 建团后从 /v1/pm/me memberships[0].team_id 取（owner 恰好一条 active
+ * membership；不读 owner.team.id——那是旧 tenant 锚）。
+ */
+async function teamIdOfOwner(owner: TestOwner): Promise<string> {
+  const me = await api("GET", "/v1/pm/me", owner.token);
+  const teamId = me.body?.memberships?.[0]?.team_id as string | undefined;
+  if (!teamId) throw new Error(`no team membership for ${owner.sub}`);
+  return teamId;
+}
+
 /** 注册 mock LLM provider 并绑定为项目策略。
  * provider_type 用 ollama：mock LLM 落在 127.0.0.1（回环），§17 SSRF 防护
  * （2026-11-11 D-3）只放行公网端点，ollama 类型按 2026-11-12 产品裁决豁免
@@ -131,11 +143,12 @@ export async function registerMockProvider(
   owner: TestOwner,
   projectId: string
 ): Promise<{ providerId: string }> {
+  const teamId = await teamIdOfOwner(owner);
   const endpoint = process.env.P0_MOCK_LLM_URL;
   if (!endpoint) throw new Error("P0_MOCK_LLM_URL missing (global-setup must run)");
   // 真 LLM 模式（P0_REAL_LLM_URL）下模型名来自 P0_LLM_MODEL（如 qwen2.5:3b）
   const modelName = process.env.P0_LLM_MODEL ?? "mock-e2e";
-  const created = await api("POST", `/v1/pm/tenants/${owner.team.id}/llm-providers`, owner.token, {
+  const created = await api("POST", `/v1/pm/tenants/${owner.tenant_id}/llm-providers`, owner.token, {
     name: "mock-e2e",
     provider_type: "ollama", // 回环端点豁免（见函数注释）
     endpoint,
@@ -150,7 +163,7 @@ export async function registerMockProvider(
   // 状态门：启用 provider（status API；乐观锁 expected_revision，409 重试一次）
   let enabled = false;
   for (let attempt = 0; attempt < 3 && !enabled; attempt += 1) {
-    const list = await api("GET", `/v1/pm/tenants/${owner.team.id}/llm-providers`, owner.token);
+    const list = await api("GET", `/v1/pm/tenants/${owner.tenant_id}/llm-providers`, owner.token);
     const row = (list.body.items ?? list.body ?? []).find(
       (item: { id: string }) => item.id === providerId
     );
@@ -160,7 +173,7 @@ export async function registerMockProvider(
     }
     const status = await api(
       "POST",
-      `/v1/pm/tenants/${owner.team.id}/llm-providers/${providerId}/status`,
+      `/v1/pm/tenants/${owner.tenant_id}/llm-providers/${providerId}/status`,
       owner.token,
       { action: "enable", expected_revision: row?.revision ?? 0 }
     );
@@ -187,7 +200,7 @@ export async function registerMockProvider(
   // 角色指向它（会话回复解析走 general，分析链走 ai_pm_lead）。
   const modelCreated = await api(
     "POST",
-    `/v1/pm/tenants/${owner.team.id}/llm-models`,
+    `/v1/pm/tenants/${owner.tenant_id}/llm-models`,
     owner.token,
     {
       provider_id: providerId,
@@ -207,7 +220,7 @@ export async function registerMockProvider(
   for (let attempt = 0; attempt < 3 && !modelEnabled; attempt += 1) {
     const models = await api(
       "GET",
-      `/v1/pm/tenants/${owner.team.id}/llm-models`,
+      `/v1/pm/tenants/${owner.tenant_id}/llm-models`,
       owner.token
     );
     const row = (models.body.items ?? models.body ?? []).find(
@@ -219,7 +232,7 @@ export async function registerMockProvider(
     }
     const patched = await api(
       "PATCH",
-      `/v1/pm/tenants/${owner.team.id}/llm-models/${modelRowId}`,
+      `/v1/pm/tenants/${owner.tenant_id}/llm-models/${modelRowId}`,
       owner.token,
       { expected_revision: row?.revision ?? 0, enabled: true }
     );
@@ -234,7 +247,7 @@ export async function registerMockProvider(
   // 授权模型给项目使用（grant；未授权模型配策略被 400 拒绝）
   const granted = await api(
     "PUT",
-    `/v1/pm/tenants/${owner.team.id}/llm-model-authorizations`,
+    `/v1/pm/tenants/${owner.tenant_id}/llm-model-authorizations`,
     owner.token,
     { items: [{ model_id: modelRowId, action: "grant" }] }
   );
@@ -244,7 +257,7 @@ export async function registerMockProvider(
     );
   const policies = await api(
     "PUT",
-    `/v1/pm/tenants/${owner.team.id}/llm-model-policies`,
+    `/v1/pm/tenants/${owner.tenant_id}/llm-model-policies`,
     owner.token,
     {
       items: [
@@ -332,9 +345,9 @@ export async function createLocalRepoFixture(
  */
 export function resolveExecutorPrincipal(projectId: string): string {
   const principalId = psql(
-    `SELECT p.id FROM core.project_member pm
-       JOIN core.principal p ON p.id = pm.principal_id
-      WHERE pm.project_id = '${projectId}' AND pm.role = 'developer'
+    `SELECT am.principal_id FROM ai.project_agent_member am
+       JOIN core.principal p ON p.id = am.principal_id
+      WHERE am.project_id = '${projectId}' AND am.role_kind = 'developer'
         AND p.kind = 'dev_agent' AND p.is_active
       LIMIT 1`
   );

@@ -47,7 +47,7 @@ const TEAM_CONTEXT = {
   is_active: true,
   is_admin: true,
   tenant_id: "t-1",
-  tenant_role: "owner",
+  team_role: "owner",
   team: { id: "t-1", name: "Acme R&D", slug: "acme-rd", description: null },
   onboarding_required: false,
   memberships: [

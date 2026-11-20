@@ -35,7 +35,7 @@ const teamName = computed(
 
 interface DraftRow {
   email: string;
-  role: "member" | "admin";
+  role: "member";
 }
 
 const drafts = reactive<DraftRow[]>([{ email: "", role: "member" }]);

@@ -37,7 +37,6 @@ import {
   revokeInvitationLink,
   revokeTeamInvitation,
   setTeamMemberRole,
-  transferTeamOwnership,
   type InvitationCreated,
   type InvitationLink,
   type TeamInvitation,
@@ -66,64 +65,46 @@ const error = ref<string | null>(null);
 const members = ref<TeamMember[]>([]);
 const busyId = ref<string | null>(null);
 
-const isAdmin = computed(() => teamStore.isTeamAdmin);
 const isOwner = computed(() => teamStore.teamRole === "owner");
-const tenantId = computed(() => teamStore.context?.tenant_id ?? "");
+const teamId = computed(() => teamStore.context?.team?.id ?? "");
 const selfId = computed(() => teamStore.context?.principal_id ?? "");
 
-/** 可转移所有权的目标（必须已是 ACTIVE 成员；owner 行之外） */
-const transferTargets = computed(() =>
-  members.value.filter(
-    member =>
-      member.role !== "owner" &&
-      member.is_active &&
-      member.principal_id !== selfId.value
-  )
-);
-
+/** 角色选项（P4-ORG：仅 owner|member；owner=任命 / member=降级，末位保护服务端强制） */
 const roleOptions = [
   { value: "member", label: "MEMBER" },
-  { value: "admin", label: "ADMIN" }
+  { value: "owner", label: "OWNER" }
 ];
 
-/** 角色徽标语义色：owner=accent / admin=info / member=neutral */
-function roleVariant(role: string): "accent" | "info" | "neutral" {
-  if (role === "owner") return "accent";
-  if (role === "admin") return "info";
-  return "neutral";
+/** 角色徽标语义色：owner=accent / member=neutral */
+function roleVariant(role: string): "accent" | "neutral" {
+  return role === "owner" ? "accent" : "neutral";
 }
 
-/** 行内角色下拉是否可用：仅 owner 可改他人（owner 行不可自改） */
+/** 行内角色下拉是否可用：仅 Team Owner 可改他人（含降级 owner 行；末位保护服务端强制） */
 function canEditRole(member: TeamMember): boolean {
   if (!isOwner.value) return false;
-  return member.role !== "owner";
+  return member.principal_id !== selfId.value;
 }
 
-/** 移除按钮可用：owner 全员（除自己）；admin 仅 member 行 */
+/** 移除按钮可用：Team Owner 移除他人（末位 Owner 保护服务端强制） */
 function canRemove(member: TeamMember): boolean {
-  if (member.principal_id === selfId.value) return false;
-  if (isOwner.value) return true;
-  return isAdmin.value && member.role === "member";
+  return isOwner.value && member.principal_id !== selfId.value;
 }
 
 function denyReason(member: TeamMember): string | null {
-  if (!isAdmin.value) return t("team.members.deny.memberReadonly");
-  if (member.role === "owner") return t("team.members.deny.ownerRow");
+  if (!isOwner.value) return t("team.members.deny.memberReadonly");
   return null;
 }
 
 // ── 移除确认 ────────────────────────────────────────────────
 const removeTarget = ref<TeamMember | null>(null);
 
-// ── 转移所有权确认 ───────────────────────────────────────────
-const transferTarget = ref<TeamMember | null>(null);
-
 async function reload(): Promise<void> {
-  if (!tenantId.value) return;
+  if (!teamId.value) return;
   loading.value = true;
   error.value = null;
   try {
-    members.value = await listTeamMembers(tenantId.value);
+    members.value = await listTeamMembers(teamId.value);
   } catch (err) {
     error.value = translateError(err);
   } finally {
@@ -135,9 +116,9 @@ async function changeRole(member: TeamMember, role: string): Promise<void> {
   busyId.value = member.principal_id;
   try {
     await setTeamMemberRole(
-      tenantId.value,
+      teamId.value,
       member.principal_id,
-      role === "admin" ? "admin" : "member"
+      role === "owner" ? "owner" : "member"
     );
     toast.toast({
       title: t("team.members.roleChangedToast", { name: member.display_name })
@@ -155,30 +136,12 @@ async function confirmRemove(): Promise<void> {
   if (!target) return;
   busyId.value = target.principal_id;
   try {
-    await removeTeamMember(tenantId.value, target.principal_id);
+    await removeTeamMember(teamId.value, target.principal_id);
     toast.toast({
       title: t("team.members.removedToast", { name: target.display_name })
     });
     removeTarget.value = null;
     await reload();
-  } catch (err) {
-    toast.toast({ title: translateError(err), variant: "danger" });
-  } finally {
-    busyId.value = null;
-  }
-}
-
-async function confirmTransfer(): Promise<void> {
-  const target = transferTarget.value;
-  if (!target) return;
-  busyId.value = target.principal_id;
-  try {
-    await transferTeamOwnership(tenantId.value, target.principal_id);
-    toast.toast({
-      title: t("team.members.transferredToast", { name: target.display_name })
-    });
-    transferTarget.value = null;
-    await Promise.all([reload(), teamStore.refresh()]);
   } catch (err) {
     toast.toast({ title: translateError(err), variant: "danger" });
   } finally {
@@ -200,13 +163,10 @@ const history = computed(() =>
   invitations.value.filter(item => item.status !== "PENDING")
 );
 
-const roleOptionsForInvite = [
-  { value: "member", label: "MEMBER" },
-  { value: "admin", label: "ADMIN" }
-];
+const roleOptionsForInvite = [{ value: "member", label: "MEMBER" }];
 
 const draftEmail = ref("");
-const draftRole = ref<"member" | "admin">("member");
+const draftRole = ref<"member">("member");
 const creatingInvite = ref(false);
 
 const linkExpiryDays = ref(7);
@@ -220,13 +180,13 @@ async function openInvite(): Promise<void> {
 }
 
 async function reloadInviteData(): Promise<void> {
-  if (!tenantId.value) return;
+  if (!teamId.value) return;
   inviteLoading.value = true;
   inviteError.value = null;
   try {
     const [invitationRows, linkRows] = await Promise.all([
-      listTeamInvitations(tenantId.value),
-      listInvitationLinks(tenantId.value)
+      listTeamInvitations(teamId.value),
+      listInvitationLinks(teamId.value)
     ]);
     invitations.value = invitationRows;
     links.value = linkRows;
@@ -262,7 +222,7 @@ async function submitInvitation(): Promise<void> {
   inviteError.value = null;
   try {
     const created: InvitationCreated = await createTeamInvitation(
-      tenantId.value,
+      teamId.value,
       { email, role: draftRole.value }
     );
     draftEmail.value = "";
@@ -282,7 +242,7 @@ async function submitInvitation(): Promise<void> {
 
 async function revokeInvite(item: TeamInvitation): Promise<void> {
   try {
-    await revokeTeamInvitation(tenantId.value, item.id);
+    await revokeTeamInvitation(teamId.value, item.id);
     toast.toast({ title: t("team.invitations.revokedToast") });
     await reloadInviteData();
   } catch (err) {
@@ -295,7 +255,7 @@ async function submitLink(): Promise<void> {
   creatingLink.value = true;
   inviteError.value = null;
   try {
-    const created = await createInvitationLink(tenantId.value, {
+    const created = await createInvitationLink(teamId.value, {
       expires_at: new Date(
         Date.now() + linkExpiryDays.value * 24 * 3600 * 1000
       ).toISOString(),
@@ -317,7 +277,7 @@ async function submitLink(): Promise<void> {
 
 async function revokeLink(link: InvitationLink): Promise<void> {
   try {
-    await revokeInvitationLink(tenantId.value, link.id);
+    await revokeInvitationLink(teamId.value, link.id);
     toast.toast({ title: t("team.invitations.linkRevokedToast") });
     await reloadInviteData();
   } catch (err) {
@@ -348,7 +308,7 @@ onMounted(async () => {
   >
     <template #actions>
       <Button
-        v-if="isAdmin"
+        v-if="isOwner"
         variant="primary"
         size="sm"
         :data-test="'admin-members-invite'"
@@ -363,7 +323,7 @@ onMounted(async () => {
 
     <!-- MEMBER 视角：整页只读的显式说明（不是隐形禁用） -->
     <p
-      v-if="!isAdmin"
+      v-if="!isOwner"
       class="tm-readonly"
       data-testid="team-members-readonly-note"
     >
@@ -380,7 +340,7 @@ onMounted(async () => {
           <TableHead>{{ $t("team.members.colJoined") }}</TableHead>
           <TableHead class="tm-col-actions">
             {{
-              isAdmin
+              isOwner
                 ? $t("team.members.colActions")
                 : $t("team.members.colActionsLocked")
             }}
@@ -411,7 +371,7 @@ onMounted(async () => {
           </TableCell>
           <TableCell>{{ member.created_at?.slice(0, 10) }}</TableCell>
           <TableCell class="tm-col-actions">
-            <div v-if="isAdmin" class="tm-actions">
+            <div v-if="isOwner" class="tm-actions">
               <template v-if="canEditRole(member)">
                 <Select
                   class="tm-role-select"
@@ -448,17 +408,12 @@ onMounted(async () => {
                 {{ $t("team.members.remove") }}
               </Button>
               <Button
-                v-if="
-                  isOwner &&
-                  member.role !== 'owner' &&
-                  member.is_active &&
-                  member.principal_id !== selfId
-                "
+                v-if="canEditRole(member) && member.role !== 'owner' && member.is_active"
                 variant="secondary"
                 size="sm"
                 :disabled="busyId === member.principal_id"
-                :data-test="`team-member-transfer-${member.principal_id}`"
-                @click="transferTarget = member"
+                :data-test="`team-member-make-owner-${member.principal_id}`"
+                @click="changeRole(member, 'owner')"
               >
                 {{ $t("team.members.makeOwner") }}
               </Button>
@@ -502,40 +457,6 @@ onMounted(async () => {
           @click="confirmRemove"
         >
           {{ $t("team.members.remove") }}
-        </Button>
-      </template>
-    </Dialog>
-
-    <!-- 转移所有权确认 -->
-    <Dialog
-      :open="transferTarget !== null"
-      :title="
-        $t('team.members.transferTitle', {
-          name: transferTarget?.display_name
-        })
-      "
-      :description="$t('team.members.transferDesc')"
-      size="sm"
-      @update:open="
-        value => {
-          if (!value) transferTarget = null;
-        }
-      "
-    >
-      <template #footer>
-        <Button variant="secondary" size="sm" @click="transferTarget = null">
-          {{ $t("team.members.cancel") }}
-        </Button>
-        <Button
-          variant="primary"
-          size="sm"
-          :loading="
-            transferTarget !== null && busyId === transferTarget.principal_id
-          "
-          data-test="team-member-transfer-confirm"
-          @click="confirmTransfer"
-        >
-          {{ $t("team.members.transferConfirm") }}
         </Button>
       </template>
     </Dialog>

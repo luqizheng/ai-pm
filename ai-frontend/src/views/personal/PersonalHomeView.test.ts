@@ -27,7 +27,7 @@ const context = {
     is_active: true,
     is_admin: false,
     tenant_id: "cus-xinghe",
-    tenant_role: "member",
+    team_role: "member",
     provider: "lmms",
     claims_tenant_key: null,
     subject: "usr-zhang",
