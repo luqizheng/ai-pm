@@ -21,6 +21,8 @@ const getKbDocument = vi.fn();
 const confirmKbRevision = vi.fn();
 const listPcObjects = vi.fn();
 const getPcObject = vi.fn();
+const listProjcObjects = vi.fn();
+const getProjcObject = vi.fn();
 const listPcProposals = vi.fn();
 const getPcProposal = vi.fn();
 const decidePcProposal = vi.fn();
@@ -33,6 +35,8 @@ vi.mock("@/api/knowledge", () => ({
   confirmKbRevision: (...args: unknown[]) => confirmKbRevision(...args),
   listPcObjects: (...args: unknown[]) => listPcObjects(...args),
   getPcObject: (...args: unknown[]) => getPcObject(...args),
+  listProjcObjects: (...args: unknown[]) => listProjcObjects(...args),
+  getProjcObject: (...args: unknown[]) => getProjcObject(...args),
   listPcProposals: (...args: unknown[]) => listPcProposals(...args),
   getPcProposal: (...args: unknown[]) => getPcProposal(...args),
   decidePcProposal: (...args: unknown[]) => decidePcProposal(...args),
@@ -147,7 +151,8 @@ function pcDetailOf(row: PcObjectRow): PcObjectDetail {
       content: "# 订单状态\n\n完整状态机正文：待付款 → 已付款 → 已发货。",
       analysis_mode: "derived",
       versioned: false
-    }
+    },
+    analysis_sources: []
   };
 }
 
@@ -215,6 +220,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   listKbDocuments.mockResolvedValue({ items: listKbBase });
   listPcObjects.mockResolvedValue({ items: [pcRow({})] });
+  listProjcObjects.mockResolvedValue({ items: [] });
+  getProjcObject.mockImplementation((id: string) =>
+    Promise.resolve(pcDetailOf(pcRow({ object_id: id })))
+  );
   listPcProposals.mockResolvedValue({
     items: [
       proposalRow({}),
@@ -487,17 +496,122 @@ describe("KnowledgeView", () => {
     expect(wrapper.text()).toContain("暂无修订");
   });
 
-  it("默认页签 = KB，reports 页签不存在（裁决 D-1，P2-06）", async () => {
+  it("默认页签 = KB，reports 页签不存在（裁决 D-1，P2-06）；ProjC 页签并列", async () => {
     const wrapper = await mountView();
     const tabTexts = wrapper.findAll('[role="tab"]').map(tab => tab.text());
-    // 页签构成 = kb | pc；reports 迁出（E2E-05 单测级：默认页签=kb）。
-    expect(tabTexts.length).toBe(2);
+    // 页签构成 = kb | pc | projc；reports 迁出（E2E-05 单测级：默认页签=kb）。
+    expect(tabTexts.length).toBe(3);
     expect(tabTexts[0]).toContain("KB 文档");
     expect(tabTexts[1]).toContain("PC 对象");
+    expect(tabTexts[2]).toContain("ProjC 对象");
     const joined = tabTexts.join("|");
     expect(joined).not.toContain("分析报告");
     // 默认渲染 KB 内容。
     expect(wrapper.text()).toContain("auth-design");
+  });
+
+  it("ProjC 页签：对象列表 + 行内展开全文 + 来源分析追溯跳报告", async () => {
+    const projcObj = pcRow({
+      object_id: "pjc-obj-1",
+      object_type: "tech_stack",
+      object_key: "stack",
+      display_name: "技术栈（rust）",
+      change_summary: "rust 为主"
+    });
+    listProjcObjects.mockResolvedValue({ items: [projcObj] });
+    getProjcObject.mockImplementation(() =>
+      Promise.resolve({
+        ...pcDetailOf(projcObj),
+        latest_revision: {
+          ...pcDetailOf(projcObj).latest_revision!,
+          versioned: true
+        },
+        analysis_sources: [
+          {
+            report_id: "rep-9",
+            repository_name: "payment-service",
+            commit_sha: "abc123def4567890",
+            version_no: 2,
+            confirmed_at: "2026-11-15T10:00:00Z"
+          }
+        ]
+      })
+    );
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/project/knowledge", component: KnowledgeView },
+        {
+          path: "/project/analysis/reports/:reportId",
+          component: { template: "<div />" }
+        }
+      ]
+    });
+    await router.push("/project/knowledge?tab=projc");
+    await router.isReady();
+    const { wrapper } = mountShell(
+      KnowledgeView,
+      { attachTo: document.body },
+      router
+    );
+    const shell = useShellStore();
+    shell.setProjects([{ id: "proj-1", name: "评测项目" }]);
+    shell.setCurrentProject("proj-1");
+    await flushPromises();
+
+    // ?tab=projc 深链已切页签；列表与展开详情可得
+    expect(wrapper.text()).toContain("技术栈（rust）");
+    await wrapper.find(".pc-row-head").trigger("click");
+    await flushPromises();
+    expect(getProjcObject).toHaveBeenCalledWith("pjc-obj-1", "proj-1");
+    expect(wrapper.text()).toContain("已入正式版本");
+    // 来源分析：版本号 + 仓库@短 sha 链接 → 报告详情
+    expect(wrapper.text()).toContain("来源分析");
+    expect(wrapper.text()).toContain("payment-service");
+    expect(wrapper.text()).toContain("abc123def456");
+    await wrapper.find(".pc-source-link").trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe(
+      "/project/analysis/reports/rep-9"
+    );
+    wrapper.unmount();
+  });
+
+  it("PC 展开详情含来源分析追溯（analysis_sources 渲染）", async () => {
+    getPcObject.mockImplementation((id: string) =>
+      Promise.resolve({
+        ...pcDetailOf(pcRow({ object_id: id })),
+        analysis_sources: [
+          {
+            report_id: "rep-3",
+            repository_name: "core-api",
+            commit_sha: "feed0000face1111aaaa",
+            version_no: 1,
+            confirmed_at: "2026-11-10T10:00:00Z"
+          }
+        ]
+      })
+    );
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/project/knowledge", component: KnowledgeView }]
+    });
+    await router.push("/project/knowledge?tab=pc");
+    await router.isReady();
+    const { wrapper } = mountShell(
+      KnowledgeView,
+      { attachTo: document.body },
+      router
+    );
+    const shell = useShellStore();
+    shell.setProjects([{ id: "proj-1", name: "评测项目" }]);
+    shell.setCurrentProject("proj-1");
+    await flushPromises();
+    await wrapper.find(".pc-row-head").trigger("click");
+    await flushPromises();
+    expect(wrapper.text()).toContain("来源分析");
+    expect(wrapper.text()).toContain("core-api");
+    wrapper.unmount();
   });
 
   it("?report= 兼容跳转 Analysis 详情页（保留 project_id，不丢参）", async () => {

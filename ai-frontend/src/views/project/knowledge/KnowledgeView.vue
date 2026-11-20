@@ -7,13 +7,16 @@ import {
   confirmKbRevision,
   getKbDocument,
   getPcObject,
+  getProjcObject,
   ingestKbDocument,
   listKbDocuments,
   listPcObjects,
+  listProjcObjects,
   retrievalQuery,
   type IngestKind,
   type KbDocumentDetail,
   type KbDocumentRow,
+  type ObjectAnalysisSource,
   type PcObjectDetail,
   type PcObjectRow,
   type RetrievalQueryResponse
@@ -31,26 +34,30 @@ import Tabs from "@/components/ui/tabs/Tabs.vue";
 import Textarea from "@/components/ui/textarea/Textarea.vue";
 
 /**
- * 知识库（KB 文档 + PC 认知对象）——/project/knowledge 落地页。
+ * 知识库（KB 文档 + PC 认知对象 + ProjC 对象）——/project/knowledge 落地页。
  *
  * - Phase 2 P2-06：reports 页签退役（Analysis 独立承载报告，/project/analysis）；
- *   页签构成 = kb | pc，默认 kb（裁决 D-1）。
+ *   页签构成 = kb | pc | projc，默认 kb（裁决 D-1；projc 为闭环补齐加法页签——
+ *   正式项目技术认知的查看面，与 PC 面同构只读）。
  * - KB 页签：文档列表（最新修订投影）+ 详情（正文 / 修订历史 / 草稿确认发布）。
  *   确认门在后端（真人 interactive 会话；AI/API Key 403）——按钮仅是入口。
- * - PC 页签：认知对象列表（生命周期徽章 + 最新修订摘要）。
- * - 深链：?doc=/?object= 行为不变；?report= 兼容跳转 Analysis 报告详情（§6 定版表）。
+ * - PC / ProjC 页签：认知对象列表（生命周期徽章 + 最新修订摘要 + 来源分析追溯
+ *   analysis_sources——版本→提案→分析报告反查）。
+ * - 深链：?doc=/?object= 行为不变；?tab= 切页签；?report= 兼容跳转 Analysis
+ *   报告详情（§6 定版表）。
  */
 const { t } = useI18n();
 const shell = useShellStore();
 const currentProjectId = computed(() => shell.currentProjectId);
 
-type TabKey = "kb" | "pc";
+type TabKey = "kb" | "pc" | "projc";
 const activeTab = ref<TabKey>("kb");
 const loading = ref(false);
 const errorText = ref("");
 
 const kbRows = ref<KbDocumentRow[]>([]);
 const pcRows = ref<PcObjectRow[]>([]);
+const projcRows = ref<PcObjectRow[]>([]);
 
 /** 展开的文档详情（按 document_id 缓存，避免来回切换重复拉取）。 */
 const detail = ref<KbDocumentDetail | null>(null);
@@ -66,12 +73,14 @@ async function loadLists() {
   errorText.value = "";
   try {
     const projectId = currentProjectId.value as string;
-    const [kb, pc] = await Promise.all([
+    const [kb, pc, projc] = await Promise.all([
       listKbDocuments(projectId),
-      listPcObjects(projectId)
+      listPcObjects(projectId),
+      listProjcObjects(projectId)
     ]);
     kbRows.value = kb.items;
     pcRows.value = pc.items;
+    projcRows.value = projc.items;
   } catch {
     errorText.value = t("s01.knowledge.error.load");
   } finally {
@@ -157,6 +166,53 @@ function pcRev(obj: PcObjectRow) {
   return pcDetail.value[obj.object_id]?.latest_revision ?? null;
 }
 
+/* ── ProjC 对象（与 PC 面同构；第二套独立缓存）────────────────────────── */
+
+const projcOpen = ref<Record<string, boolean>>({});
+const projcDetail = ref<Record<string, PcObjectDetail>>({});
+const projcDetailLoading = ref<string | null>(null);
+
+async function openProjcDetail(obj: PcObjectRow) {
+  if (!canLoad.value || projcDetail.value[obj.object_id]) return;
+  projcDetailLoading.value = obj.object_id;
+  try {
+    projcDetail.value[obj.object_id] = await getProjcObject(
+      obj.object_id,
+      currentProjectId.value as string
+    );
+  } catch {
+    errorText.value = t("s01.knowledge.error.load");
+  } finally {
+    projcDetailLoading.value = null;
+  }
+}
+
+function toggleProjcRow(obj: PcObjectRow) {
+  projcOpen.value[obj.object_id] = !projcOpen.value[obj.object_id];
+  if (projcOpen.value[obj.object_id]) openProjcDetail(obj);
+}
+
+function projcRev(obj: PcObjectRow) {
+  return projcDetail.value[obj.object_id]?.latest_revision ?? null;
+}
+
+/** 来源分析追溯（展开详情的 analysis_sources；未发布 → 空数组）。 */
+function objSources(obj: PcObjectRow): ObjectAnalysisSource[] {
+  return (
+    pcDetail.value[obj.object_id]?.analysis_sources ??
+    projcDetail.value[obj.object_id]?.analysis_sources ??
+    []
+  );
+}
+
+function openSourceReport(reportId: string): void {
+  void router.push(`/project/analysis/reports/${reportId}`);
+}
+
+function shortSha(sha: string): string {
+  return sha.slice(0, 12);
+}
+
 type BadgeTone = "success" | "warning" | "danger" | "neutral";
 
 /** 页签项（Tabs 组件契约；计数随列表刷新）。 */
@@ -168,6 +224,10 @@ const tabItems = computed(() => [
   {
     value: "pc",
     label: `${t("s01.knowledge.tab.pc")} (${pcRows.value.length})`
+  },
+  {
+    value: "projc",
+    label: `${t("s01.knowledge.tab.projc")} (${projcRows.value.length})`
   }
 ]);
 
@@ -206,6 +266,7 @@ async function applyDeepLink() {
   }
   const docId = route.query.doc;
   const objectId = route.query.object;
+  const tabQuery = route.query.tab;
   if (typeof docId === "string" && docId) {
     activeTab.value = "kb";
     if (!detail.value || detail.value.document.document_id !== docId) {
@@ -221,6 +282,11 @@ async function applyDeepLink() {
       pcOpen.value[objectId] = true;
       await openPcDetail(row);
     }
+    return;
+  }
+  // 报告关闭回执跳转（?tab=pc|projc）：定位到对应正式知识页签。
+  if (tabQuery === "pc" || tabQuery === "projc") {
+    activeTab.value = tabQuery;
   }
 }
 
@@ -397,6 +463,8 @@ watch(currentProjectId, async () => {
   closeDetail();
   pcOpen.value = {};
   pcDetail.value = {};
+  projcOpen.value = {};
+  projcDetail.value = {};
   impactResult.value = null;
   await loadLists();
   // 项目就绪后再放深链（搜索点击先于项目注入到达时，此处兜底）。
@@ -506,6 +574,11 @@ watch(
         v-else-if="!loading && !pcRows.length && activeTab === 'pc'"
         size="sm"
         :title="t('s01.knowledge.hint.emptyPc')"
+      />
+      <EmptyState
+        v-else-if="!loading && !projcRows.length && activeTab === 'projc'"
+        size="sm"
+        :title="t('s01.knowledge.hint.emptyProjc')"
       />
 
       <!-- 摄入面板（KB 页签）：上传/粘贴 → 解析 → draft（确认在详情里） -->
@@ -735,6 +808,135 @@ watch(
                   {{ pcRev(obj)?.summary }}
                 </p>
                 <MarkdownViewer :model-value="pcRev(obj)?.content ?? ''" />
+                <!-- 来源分析追溯（版本→提案→分析报告反查；闭环溯源） -->
+                <div v-if="objSources(obj).length" class="pc-sources">
+                  <span class="pc-type">{{
+                    t("s01.knowledge.detail.sourceAnalysis")
+                  }}</span>
+                  <ul class="pc-source-list">
+                    <li
+                      v-for="source in objSources(obj)"
+                      :key="source.version_no + ':' + (source.report_id ?? '')"
+                      class="pc-source-item"
+                    >
+                      <span>v{{ source.version_no }}</span>
+                      <template v-if="source.report_id">
+                        <button
+                          class="pc-source-link"
+                          type="button"
+                          @click="openSourceReport(source.report_id)"
+                        >
+                          {{ source.repository_name }}
+                          @{{ shortSha(source.commit_sha ?? "") }}
+                        </button>
+                      </template>
+                      <span v-else class="pc-type">{{
+                        t("s01.knowledge.detail.sourceAnalysisNone")
+                      }}</span>
+                    </li>
+                  </ul>
+                </div>
+              </template>
+            </template>
+          </div>
+        </li>
+      </ul>
+
+      <!-- ProjC 对象列表（项目技术认知；与 PC 面同构只读 + 来源追溯） -->
+      <ul v-if="activeTab === 'projc' && projcRows.length" class="pc-list">
+        <li
+          v-for="obj in projcRows"
+          :key="obj.object_id"
+          class="pc-row"
+          :class="{ 'is-open': Boolean(projcOpen[obj.object_id]) }"
+        >
+          <button
+            class="pc-row-head"
+            :aria-expanded="Boolean(projcOpen[obj.object_id])"
+            @click="toggleProjcRow(obj)"
+          >
+            <span class="pc-name">{{ obj.display_name }}</span>
+            <span class="pc-type">{{ obj.object_type }}</span>
+            <Badge :variant="lifecycleVariant(obj.lifecycle_status)">{{
+              t(`s01.knowledge.lifecycle.${obj.lifecycle_status}`)
+            }}</Badge>
+            <ChevronRight
+              class="kb-row-chevron"
+              :class="{ 'is-open': Boolean(projcOpen[obj.object_id]) }"
+              aria-hidden="true"
+            />
+          </button>
+          <div v-if="!projcOpen[obj.object_id]" class="pc-row-body">
+            <p v-if="obj.change_summary" class="pc-summary">
+              {{ obj.change_summary }}
+            </p>
+            <p v-if="obj.excerpt" class="pc-excerpt">{{ obj.excerpt }}</p>
+          </div>
+          <div v-else class="kb-detail">
+            <p
+              v-if="
+                projcDetailLoading === obj.object_id &&
+                !projcDetail[obj.object_id]
+              "
+              class="knowledge-hint"
+            >
+              {{ t("s01.knowledge.hint.loading") }}
+            </p>
+            <template v-else-if="projcDetail[obj.object_id]">
+              <p v-if="!projcRev(obj)" class="knowledge-hint">
+                {{ t("s01.knowledge.detail.noRevision") }}
+              </p>
+              <template v-else>
+                <div class="pc-detail-meta">
+                  <span class="pc-type">
+                    {{ t("s01.knowledge.field.revision") }}
+                    v{{ projcRev(obj)?.revision_no }}
+                  </span>
+                  <Badge
+                    :variant="projcRev(obj)?.versioned ? 'success' : 'neutral'"
+                  >
+                    {{
+                      projcRev(obj)?.versioned
+                        ? t("s01.knowledge.detail.versioned")
+                        : t("s01.knowledge.detail.unversioned")
+                    }}
+                  </Badge>
+                  <span v-if="projcRev(obj)?.analysis_mode" class="pc-type">
+                    {{ t("s01.knowledge.detail.analysisMode") }}:
+                    {{ projcRev(obj)?.analysis_mode }}
+                  </span>
+                </div>
+                <p v-if="projcRev(obj)?.summary" class="pc-summary">
+                  {{ projcRev(obj)?.summary }}
+                </p>
+                <MarkdownViewer :model-value="projcRev(obj)?.content ?? ''" />
+                <div v-if="objSources(obj).length" class="pc-sources">
+                  <span class="pc-type">{{
+                    t("s01.knowledge.detail.sourceAnalysis")
+                  }}</span>
+                  <ul class="pc-source-list">
+                    <li
+                      v-for="source in objSources(obj)"
+                      :key="source.version_no + ':' + (source.report_id ?? '')"
+                      class="pc-source-item"
+                    >
+                      <span>v{{ source.version_no }}</span>
+                      <template v-if="source.report_id">
+                        <button
+                          class="pc-source-link"
+                          type="button"
+                          @click="openSourceReport(source.report_id)"
+                        >
+                          {{ source.repository_name }}
+                          @{{ shortSha(source.commit_sha ?? "") }}
+                        </button>
+                      </template>
+                      <span v-else class="pc-type">{{
+                        t("s01.knowledge.detail.sourceAnalysisNone")
+                      }}</span>
+                    </li>
+                  </ul>
+                </div>
               </template>
             </template>
           </div>
@@ -919,6 +1121,42 @@ watch(
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.pc-sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  border-top: 1px dashed var(--border-subtle);
+  padding-top: var(--space-2);
+}
+
+.pc-source-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--font-size-caption);
+  color: var(--text-secondary);
+}
+
+.pc-source-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pc-source-link {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-size: var(--font-size-caption);
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .impact-panel {

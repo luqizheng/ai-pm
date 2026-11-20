@@ -5,6 +5,7 @@ knowledge:
   tab:
     kb: KB 文档
     pc: PC 对象
+    projc: ProjC 对象
   status:
     draft: 草稿
     published: 已发布
@@ -25,6 +26,9 @@ knowledge:
     analysisMode: 分析模式
     versioned: 已入正式版本
     unversioned: 未入正式版本
+    sourceAnalysis: 来源分析
+    sourceAnalysisNone: 非报告通道发布
+    openReport: 查看报告
   action:
     confirm: 确认发布
     confirming: 确认中…
@@ -41,6 +45,7 @@ knowledge:
     loading: 加载中…
     emptyKb: 暂无 KB 文档——分析产物经确认后在此可见
     emptyPc: 暂无 PC 认知对象——提案发布后在此可见
+    emptyProjc: 暂无项目技术认知对象——ProjC 提案发布（报告关闭）后在此可见
     emptyProposals: 暂无提案——AI 分析起草或人工创建后在此可见
   impact:
     title: 影响分析（跨域关系遍历）

@@ -91,6 +91,18 @@ pub struct PcProposalListRow {
     pub created_at: DateTime<Utc>,
 }
 
+/// 对象 → 来源分析报告追溯行（version_member → cognition_version → proposal →
+/// repo_analysis_report 反查；report 侧 LEFT JOIN——非报告通道发布的版本
+/// report 字段为 NULL）。pc/projc 两域共用形状。
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+pub struct ObjectLineageRow {
+    pub report_id: Option<Uuid>,
+    pub repository_name: Option<String>,
+    pub commit_sha: Option<String>,
+    pub version_no: i64,
+    pub confirmed_at: DateTime<Utc>,
+}
+
 #[async_trait]
 pub trait KbPcQueryRepo: Send + Sync {
     /// KB/PC 分析任务行（`target_service`/`task_type` 区分 kb_analyze / pc_analyze）。
@@ -146,4 +158,33 @@ pub trait KbPcQueryRepo: Send + Sync {
         project_id: Uuid,
         status_filter: Option<&str>,
     ) -> Result<Vec<PcProposalListRow>, sqlx::Error>;
+
+    /// ProjC 对象列表（管理面列表投影；形状与 [`Self::list_pc_objects`] 一致）。
+    async fn list_projc_objects(
+        &self,
+        project_id: Uuid,
+    ) -> Result<Vec<PcObjectListRow>, sqlx::Error>;
+
+    /// ProjC 对象详情（最新修订投影；形状与 [`Self::pc_object_legacy`] 一致；
+    /// versioned 经 version_member→published version 内联判定——projc 域无
+    /// v_revision_versioned 视图，0025 移交 P3-10）。
+    async fn projc_object_legacy(
+        &self,
+        project_id: Uuid,
+        object_id: Uuid,
+    ) -> Result<Vec<PcObjectRow>, sqlx::Error>;
+
+    /// PC 对象 → 来源分析报告追溯（最近 3 条已发布版本）。
+    async fn pc_object_lineage(
+        &self,
+        project_id: Uuid,
+        object_id: Uuid,
+    ) -> Result<Vec<ObjectLineageRow>, sqlx::Error>;
+
+    /// ProjC 对象 → 来源分析报告追溯（最近 3 条已发布版本）。
+    async fn projc_object_lineage(
+        &self,
+        project_id: Uuid,
+        object_id: Uuid,
+    ) -> Result<Vec<ObjectLineageRow>, sqlx::Error>;
 }

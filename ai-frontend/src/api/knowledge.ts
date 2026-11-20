@@ -103,6 +103,18 @@ export interface PcRevisionDetail {
   versioned: boolean;
 }
 
+/**
+ * 对象 → 来源分析报告追溯（analysis_sources；正式版本经 proposal→报告反查）。
+ * report 为 null = 非报告通道发布。
+ */
+export interface ObjectAnalysisSource {
+  report_id: string | null;
+  repository_name: string | null;
+  commit_sha: string | null;
+  version_no: number;
+  confirmed_at: string;
+}
+
 /** PC 对象详情（latest_revision 含全文——列表 excerpt 只有 240 字截断）。 */
 export interface PcObjectDetail {
   object_id: string;
@@ -111,11 +123,29 @@ export interface PcObjectDetail {
   name: string;
   lifecycle_status: string;
   latest_revision: PcRevisionDetail | null;
+  /** 加法字段：来源分析报告追溯（最近 3 条已发布版本）。 */
+  analysis_sources: ObjectAnalysisSource[];
 }
 
 /** PC 对象详情（前端行内展开；无修订的 identity 对象 latest_revision=null）。 */
 export function getPcObject(objectId: string, projectId: string) {
   return http.get<PcObjectDetail>(`/v1/pc/objects/${objectId}`, {
+    project_id: projectId
+  });
+}
+
+/* ── ProjC 对象（项目技术认知浏览面；与 PC 面同构只读）────────────────── */
+
+/** 项目 ProjC 认知对象列表。 */
+export function listProjcObjects(projectId: string) {
+  return http.get<{ items: PcObjectRow[] }>("/v1/projc/objects", {
+    project_id: projectId
+  });
+}
+
+/** ProjC 对象详情（与 PC 详情同形状；versioned 经版本成员内联判定）。 */
+export function getProjcObject(objectId: string, projectId: string) {
+  return http.get<PcObjectDetail>(`/v1/projc/objects/${objectId}`, {
     project_id: projectId
   });
 }
@@ -278,6 +308,32 @@ export function decidePcProposal(
 ) {
   return http.post(
     `/v1/pc/proposals/${proposalId}/decision`,
+    {
+      action: decision.action,
+      ...(decision.note ? { note: decision.note } : {}),
+      expected_version_no: decision.expected_version_no
+    },
+    { params: { project_id: projectId } }
+  );
+}
+
+/**
+ * ProjC 提案决策（P3-11 并行端点；与 PC P5 同契约：approve/reject + CAS）。
+ *
+ * 语义同 PC：approve=暂记终局决定（报告 close 时批量发布为正式项目技术认知）；
+ * 正式发布反馈走关闭回执（published_versions）。权限门在后端（真人+A3+interactive）。
+ */
+export function decideProjcProposal(
+  proposalId: string,
+  projectId: string,
+  decision: {
+    action: "approve" | "reject";
+    note?: string;
+    expected_version_no: number;
+  }
+) {
+  return http.post(
+    `/v1/pm/projc/proposals/${proposalId}/decide`,
     {
       action: decision.action,
       ...(decision.note ? { note: decision.note } : {}),

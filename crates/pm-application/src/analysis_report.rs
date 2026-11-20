@@ -64,9 +64,11 @@ pub struct ReportKbRevision {
     pub status: String,
     pub analysis_mode: Option<String>,
     pub content: Option<String>,
+    /// 报告正文的 commit 锚（分析时点 HEAD；追溯用，加法字段）。
+    pub source_commit_sha: Option<String>,
 }
 
-/// 详情：本报告起草的 PC 提案。
+/// 详情：本报告起草的提案（PC 与 ProjC 共用形状；审阅所需头字段为加法投影）。
 #[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
 pub struct ReportProposalRow {
     pub proposal_id: Uuid,
@@ -75,6 +77,31 @@ pub struct ReportProposalRow {
     pub expected_version_no: i64,
     pub member_count: i64,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    /// AI 分析理由（提案起草时给出；审阅判断依据）。
+    pub rationale: Option<String>,
+    pub risk_level: Option<String>,
+    pub confidence: Option<String>,
+    /// 提案来源（pc: ai_agent/kb_memory/manual_input/…；projc 另有 repo_analysis）。
+    pub origin_kind: String,
+}
+
+/// 详情：本报告的证据行（evidence 钉扎投影；支撑对象名经 revision→object 反查）。
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+pub struct ReportEvidenceRow {
+    pub evidence_type: String,
+    pub object_name: String,
+    pub object_type: String,
+    pub section_anchor: Option<String>,
+    /// code 类证据定位（document_section 证据按 schema 约束恒 NULL）。
+    pub file_path: Option<String>,
+    pub commit_sha: Option<String>,
+    pub start_line: Option<i32>,
+    pub end_line: Option<i32>,
+    pub excerpt: Option<String>,
+    /// TEXT 自由描述（快照通道存 JSON：head_commit_sha/llm_evidence_refs/统计）。
+    pub description: Option<String>,
+    pub confidence: Option<String>,
+    pub verification_status: Option<String>,
 }
 
 /// 详情：本次分析产出的 PC 对象修订（全文）。
@@ -100,6 +127,9 @@ pub struct ReportDetail {
     pub projc_proposals: Vec<ReportProposalRow>,
     /// ProjC 对象修订集（by projc_source_id；空集返回 []）。
     pub projc_revisions: Vec<ReportPcRevisionRow>,
+    /// 双域证据投影（加法，空集 []；审阅判断依据展示）。
+    pub pc_evidence: Vec<ReportEvidenceRow>,
+    pub projc_evidence: Vec<ReportEvidenceRow>,
 }
 
 /// 关闭回执：自动处置计数（projc_* 为 P3-11 加法字段，G-2 独立计数）。
@@ -140,6 +170,18 @@ pub struct CloseOutcome {
     pub projc_publish_failed_proposals: u64,
     /// ProjC 未决提案在关闭时撤回的数量。
     pub projc_withdrawn: u64,
+    /// 本次关闭实际发布成功的版本清单（applied 与 replayed 均计入——两者都产生
+    /// 了正式版本；前端用于「确认后看到正式对象 ID/版本」反馈）。发布失败不记入。
+    pub published_versions: Vec<PublishedVersionEntry>,
+}
+
+/// 关闭回执 · 单条发布记录（前端映射提案标题展示）。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PublishedVersionEntry {
+    /// `"pc" | "projc"`。
+    pub domain: &'static str,
+    pub proposal_id: Uuid,
+    pub version_no: i64,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -458,7 +500,7 @@ pub async fn report_detail(
         Some(rev) => {
             sqlx::query_as(
                 "SELECT kv.id AS revision_id, kv.document_id, d.doc_key, kv.revision_no, \
-                    kv.status, kv.analysis_mode, kv.content \
+                    kv.status, kv.analysis_mode, kv.content, kv.source_commit_sha \
                FROM kb.document_revision kv \
                JOIN kb.document d ON d.id = kv.document_id \
               WHERE kv.id = $1",
@@ -477,7 +519,7 @@ pub async fn report_detail(
                     (SELECT count(*) FROM pc.proposal_member m \
                       WHERE m.tenant_id = pp.tenant_id AND m.project_id = pp.project_id \
                         AND m.proposal_id = pp.id) AS member_count, \
-                    pp.created_at \
+                    pp.created_at, pp.rationale, pp.risk_level, pp.confidence, pp.origin_kind \
                FROM pc.proposal pp \
               WHERE pp.source_id = $1 \
               ORDER BY pp.created_at DESC",
@@ -518,7 +560,7 @@ pub async fn report_detail(
                     (SELECT count(*) FROM projc.proposal_member m \
                       WHERE m.tenant_id = jp.tenant_id AND m.project_id = jp.project_id \
                         AND m.proposal_id = jp.id) AS member_count, \
-                    jp.created_at \
+                    jp.created_at, jp.rationale, jp.risk_level, jp.confidence, jp.origin_kind \
                FROM projc.proposal jp \
               WHERE jp.source_id = $1 \
               ORDER BY jp.created_at DESC",
@@ -548,6 +590,40 @@ pub async fn report_detail(
         None => Vec::new(),
     };
 
+    // 证据投影（加法）：审阅判断依据——支撑对象名经 revision→object 反查。
+    let pc_evidence: Vec<ReportEvidenceRow> = match header.pc_source_id {
+        Some(source_id) => sqlx::query_as(
+            "SELECT e.evidence_type, o.display_name AS object_name, o.object_type, \
+                    e.section_anchor, e.file_path, e.commit_sha, e.start_line, e.end_line, \
+                    e.excerpt, e.description, e.confidence, e.verification_status \
+               FROM pc.evidence e \
+               JOIN pc.cognition_revision r ON r.id = e.object_revision_id \
+               JOIN pc.cognition_object o ON o.id = r.object_id \
+              WHERE e.source_id = $1 \
+              ORDER BY o.display_name ASC, e.created_at ASC",
+        )
+        .bind(source_id)
+        .fetch_all(pool)
+        .await?,
+        None => Vec::new(),
+    };
+    let projc_evidence: Vec<ReportEvidenceRow> = match header.projc_source_id {
+        Some(source_id) => sqlx::query_as(
+            "SELECT e.evidence_type, o.display_name AS object_name, o.object_type, \
+                    e.section_anchor, e.file_path, e.commit_sha, e.start_line, e.end_line, \
+                    e.excerpt, e.description, e.confidence, e.verification_status \
+               FROM projc.evidence e \
+               JOIN projc.cognition_revision r ON r.id = e.object_revision_id \
+               JOIN projc.cognition_object o ON o.id = r.object_id \
+              WHERE e.source_id = $1 \
+              ORDER BY o.display_name ASC, e.created_at ASC",
+        )
+        .bind(source_id)
+        .fetch_all(pool)
+        .await?,
+        None => Vec::new(),
+    };
+
     Ok(ReportDetail {
         header,
         kb_revision,
@@ -555,6 +631,8 @@ pub async fn report_detail(
         pc_revisions,
         projc_proposals,
         projc_revisions,
+        pc_evidence,
+        projc_evidence,
     })
 }
 
@@ -737,6 +815,7 @@ pub async fn close_report(
     let mut applied_proposals: u64 = 0;
     let mut replayed_proposals: u64 = 0;
     let mut publish_failed_proposals: u64 = 0;
+    let mut published_versions: Vec<PublishedVersionEntry> = Vec::new();
     if let Some(source_id) = pc_source_id {
         let approved_ids: Vec<Uuid> = sqlx::query_scalar(
             "SELECT id FROM pc.proposal WHERE source_id = $1 AND status = 'approved'",
@@ -760,6 +839,12 @@ pub async fn close_report(
                     } else {
                         applied_proposals += 1;
                     }
+                    // applied 与 replayed 都产生了正式版本——均记入发布清单。
+                    published_versions.push(PublishedVersionEntry {
+                        domain: "pc",
+                        proposal_id,
+                        version_no: receipt.version_no,
+                    });
                 }
                 Err(publish_err) => {
                     // R-1 分类（II-A）：BEGIN → 既有 advisory（逐字同
@@ -848,6 +933,11 @@ pub async fn close_report(
                         } else {
                             projc_applied += 1;
                         }
+                        published_versions.push(PublishedVersionEntry {
+                            domain: "projc",
+                            proposal_id,
+                            version_no: receipt.version_no,
+                        });
                     }
                     Err(publish_err) => {
                         // R-1 分类（II-A）：advisory 逐字同 projc/publish.rs:118
@@ -992,6 +1082,7 @@ pub async fn close_report(
         projc_replayed,
         projc_publish_failed_proposals: projc_publish_failed,
         projc_withdrawn,
+        published_versions,
     })
 }
 

@@ -818,3 +818,101 @@ async fn pc_object_detail_returns_full_content_and_is_scoped(pool: PgPool) {
     let (status, _) = send(&pool, get(&format!("/v1/pc/objects/{}", receipt.object_id))).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+// ── 用例 8：ProjC 对象浏览面（/v1/projc/objects；与 pc 同构只读管理面）───────
+
+#[sqlx::test(migrations = "../../migrations")]
+async fn projc_objects_browse_list_detail_and_scoped(pool: PgPool) {
+    use pm_application::projc::{
+        upsert_object_draft as projc_upsert_object_draft,
+        UpsertObjectDraft as ProjcUpsertObjectDraft,
+    };
+
+    let project = seed_project(&pool, SYSTEM_TENANT, "PCR-G").await;
+    let stranger = seed_project(&pool, SYSTEM_TENANT, "PCR-G2").await;
+    common::join_dev(&pool, project).await;
+
+    let receipt = projc_upsert_object_draft(
+        &pool,
+        project,
+        &dev(),
+        ProjcUpsertObjectDraft {
+            object_type: "tech_stack".into(),
+            object_key: Some("stack".into()),
+            display_name: "技术栈（rust）".into(),
+            content_markdown: "# 技术栈\n\nrust 为主。".into(),
+            change_summary: Some("快照派生".into()),
+            source_context: None,
+            analysis_mode: Some("derived".into()),
+        },
+    )
+    .await
+    .unwrap();
+
+    // 列表
+    let (status, body) = send(
+        &pool,
+        get(&format!("/v1/projc/objects?project_id={project}")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let items = body["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["object_id"], receipt.object_id.to_string());
+    assert_eq!(items[0]["object_type"], "tech_stack");
+
+    // 详情：全文 + analysis_sources（未发布版本 → 空数组）
+    let (status, body) = send(
+        &pool,
+        get(&format!(
+            "/v1/projc/objects/{}?project_id={project}",
+            receipt.object_id
+        )),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["name"], "技术栈（rust）");
+    assert_eq!(body["latest_revision"]["analysis_mode"], "derived");
+    assert_eq!(body["latest_revision"]["versioned"], false);
+    assert_eq!(body["analysis_sources"].as_array().unwrap().len(), 0);
+
+    // PC 对象详情加法字段：analysis_sources 同形状（未发布 → 空数组）
+    let pc_receipt = upsert_object_draft(
+        &pool,
+        project,
+        &dev(),
+        UpsertObjectDraft {
+            object_type: "feature".into(),
+            object_key: Some("pc-feature".into()),
+            display_name: "特性A".into(),
+            content_markdown: "# 特性A".into(),
+            change_summary: None,
+            source_context: None,
+            analysis_mode: None,
+        },
+    )
+    .await
+    .unwrap();
+    let (status, body) = send(
+        &pool,
+        get(&format!(
+            "/v1/pc/objects/{}?project_id={project}",
+            pc_receipt.object_id
+        )),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["analysis_sources"].as_array().unwrap().len(), 0);
+
+    // 项目作用域：非成员 / 非法 ID / 不存在 → 404；缺 project_id → 400
+    for uri in [
+        format!("/v1/projc/objects/{}?project_id={stranger}", receipt.object_id),
+        format!("/v1/projc/objects/not-a-uuid?project_id={project}"),
+        format!("/v1/projc/objects/{}?project_id={project}", Uuid::new_v4()),
+    ] {
+        let (status, _) = send(&pool, get(&uri)).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{uri}");
+    }
+    let (status, _) = send(&pool, get(&format!("/v1/projc/objects/{}", receipt.object_id))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

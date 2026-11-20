@@ -23,6 +23,7 @@ const closeAnalysisReport = vi.fn();
 const synthesizeIdentity = vi.fn();
 const confirmKbRevision = vi.fn();
 const decidePcProposal = vi.fn();
+const decideProjcProposal = vi.fn();
 
 vi.mock("@/api/analysis-reports", () => ({
   getAnalysisReport: (...args: unknown[]) => getAnalysisReport(...args),
@@ -32,7 +33,8 @@ vi.mock("@/api/analysis-reports", () => ({
 
 vi.mock("@/api/knowledge", () => ({
   confirmKbRevision: (...args: unknown[]) => confirmKbRevision(...args),
-  decidePcProposal: (...args: unknown[]) => decidePcProposal(...args)
+  decidePcProposal: (...args: unknown[]) => decidePcProposal(...args),
+  decideProjcProposal: (...args: unknown[]) => decideProjcProposal(...args)
 }));
 
 function detailOf(
@@ -66,7 +68,8 @@ function detailOf(
       revision_no: 3,
       status: "draft",
       analysis_mode: null,
-      content: "# 分析报告\n\n正文内容。"
+      content: "# 分析报告\n\n正文内容。",
+      source_commit_sha: "abc123def4567890abcdef"
     },
     proposals: [
       {
@@ -75,7 +78,11 @@ function detailOf(
         status: "submitted",
         expected_version_no: 4,
         member_count: 3,
-        created_at: "2026-11-15T08:30:00Z"
+        created_at: "2026-11-15T08:30:00Z",
+        rationale: "快照分析发现状态机口径与代码实现不一致",
+        risk_level: "medium",
+        confidence: "high",
+        origin_kind: "ai_agent"
       },
       {
         proposal_id: "prop-2",
@@ -83,7 +90,11 @@ function detailOf(
         status: "approved",
         expected_version_no: 2,
         member_count: 2,
-        created_at: "2026-11-15T08:40:00Z"
+        created_at: "2026-11-15T08:40:00Z",
+        rationale: null,
+        risk_level: null,
+        confidence: null,
+        origin_kind: "manual_input"
       }
     ],
     pc_revisions: [
@@ -98,6 +109,8 @@ function detailOf(
     ],
     projc_proposals: [],
     projc_revisions: [],
+    pc_evidence: [],
+    projc_evidence: [],
     ...overrides
   };
 }
@@ -133,6 +146,7 @@ beforeEach(() => {
   synthesizeIdentity.mockReset();
   confirmKbRevision.mockReset();
   decidePcProposal.mockReset();
+  decideProjcProposal.mockReset();
   getAnalysisReport.mockResolvedValue(detailOf());
 });
 
@@ -141,7 +155,7 @@ afterEach(() => {
 });
 
 describe("AnalysisReportDetailView 六节结构（P2-03）", () => {
-  it("六节标题齐备（P3-11 追加 ProjC 两节）", async () => {
+  it("六节标题齐备（P3-11 追加 ProjC 两节 + 本轮闭环补齐证据节）", async () => {
     const { wrapper } = await mountDetail();
     const titles = wrapper.findAll(".an-sec-title").map(n => n.text());
     expect(titles).toEqual([
@@ -151,12 +165,13 @@ describe("AnalysisReportDetailView 六节结构（P2-03）", () => {
       "ProjC 技术认知提案（0）",
       "PC 对象修订（1）",
       "ProjC 对象修订（0）",
+      "分析证据与来源（0）",
       "D-4 身份综合（AI）",
       "关闭与处置"
     ]);
   });
 
-  it("P3-11：ProjC 提案/修订列表渲染（技术认知徽标 + 只读，无决策按钮）", async () => {
+  it("P3-11：ProjC 提案/修订列表渲染（技术认知徽标 + 决策按钮接线）", async () => {
     getAnalysisReport.mockResolvedValue(
       detailOf({
         projc_proposals: [
@@ -166,7 +181,11 @@ describe("AnalysisReportDetailView 六节结构（P2-03）", () => {
             status: "submitted",
             expected_version_no: 0,
             member_count: 4,
-            created_at: "2026-11-15T08:45:00Z"
+            created_at: "2026-11-15T08:45:00Z",
+            rationale: "依赖结构变化，技术栈骨架需更新",
+            risk_level: "low",
+            confidence: "medium",
+            origin_kind: "repo_analysis"
           }
         ],
         projc_revisions: [
@@ -187,15 +206,28 @@ describe("AnalysisReportDetailView 六节结构（P2-03）", () => {
     expect(wrapper.text()).toContain("仓库认知更新：payment-service");
     expect(wrapper.text()).toContain("ProjC 对象修订（1）");
     expect(wrapper.text()).toContain("技术栈（rust）");
-    // ProjC 提案不挂决策按钮（最小渲染；决策走并行端点，另行接入）
+    // ProjC 决策已接线：批准/驳回按钮与 PC 提案同显隐规则
     const projcSection = wrapper
       .findAll("section")
       .find(s => s.text().includes("ProjC 技术认知提案"));
     expect(projcSection).toBeTruthy();
-    expect(
-      projcSection!.findAll("button").filter(b => b.text().includes("批准"))
-        .length
-    ).toBe(0);
+    const approve = projcSection!
+      .findAll("button")
+      .find(b => b.text().includes("批准"));
+    expect(approve).toBeTruthy();
+    // 来源徽标：仓库分析起草
+    expect(wrapper.text()).toContain("仓库分析");
+    expect(wrapper.text()).toContain("AI 分析理由");
+    // 决策动作走 ProjC 并行端点（与 PC P5 同契约 CAS）
+    decideProjcProposal.mockResolvedValue({});
+    await approve!.trigger("click");
+    await flushPromises();
+    expect(decideProjcProposal).toHaveBeenCalledWith(
+      "pjc-prop-1",
+      "proj-1",
+      { action: "approve", expected_version_no: 0 }
+    );
+    expect(getAnalysisReport).toHaveBeenCalledTimes(2);
   });
 
   it("第 1 节：身份头、状态徽标、run_mode/since_commit、时间组", async () => {
@@ -270,6 +302,66 @@ describe("AnalysisReportDetailView 六节结构（P2-03）", () => {
     expect(viewers[1].props("modelValue")).toContain("待付款");
   });
 
+  it("第 2 节：KB 修订正文展示 commit 锚点（source_commit_sha）", async () => {
+    const { wrapper } = await mountDetail();
+    expect(wrapper.text()).toContain("正文锚点 abc123def456");
+  });
+
+  it("第 4c 节：分析证据投影渲染（域徽标/对象/引用文件/采集 commit）", async () => {
+    getAnalysisReport.mockResolvedValue(
+      detailOf({
+        pc_evidence: [
+          {
+            evidence_type: "document_section",
+            object_name: "订单状态",
+            object_type: "domain_object",
+            section_anchor: "order-status",
+            file_path: null,
+            commit_sha: null,
+            start_line: null,
+            end_line: null,
+            excerpt: null,
+            description: JSON.stringify({
+              intake_id: "it-1",
+              head_commit_sha: "abc123def4567890abcdef",
+              commit_count: 42,
+              file_count: 7,
+              llm_evidence_refs: ["src/order.ts", "aaaaaaaa"]
+            }),
+            confidence: "medium",
+            verification_status: "unverified"
+          }
+        ],
+        projc_evidence: [
+          {
+            evidence_type: "code",
+            object_name: "技术栈（rust）",
+            object_type: "tech_stack",
+            section_anchor: null,
+            file_path: "crates/order/src/lib.rs",
+            commit_sha: "dead0000beef0000cafe",
+            start_line: 10,
+            end_line: 24,
+            excerpt: "fn settle()",
+            description: null,
+            confidence: "high",
+            verification_status: "unverified"
+          }
+        ]
+      })
+    );
+    const { wrapper } = await mountDetail();
+    expect(wrapper.text()).toContain("分析证据与来源（2）");
+    expect(wrapper.text()).toContain("产品认知");
+    expect(wrapper.text()).toContain("技术认知");
+    // AI 引用清单（快照通道 description JSON 解析）
+    expect(wrapper.text()).toContain("src/order.ts");
+    expect(wrapper.text()).toContain("采集自 abc123def456 · 42 条提交 / 7 个文件");
+    // code 类证据定位（文件:行 + commit）
+    expect(wrapper.text()).toContain("crates/order/src/lib.rs:10-24");
+    expect(wrapper.text()).toContain("dead0000beef");
+  });
+
   it("第 5 节 D-4 门：analyzed 可综合；非 analyzed 禁用（端点语义不变）", async () => {
     const { wrapper } = await mountDetail();
     const button = wrapper
@@ -335,7 +427,8 @@ describe("AnalysisReportDetailView 六节结构（P2-03）", () => {
       publish_failed_proposals: 0,
       withdrawn_proposals: 2,
       rejected_kb: true,
-      last_analyzed_commit: "abc123def4567890abcdef"
+      last_analyzed_commit: "abc123def4567890abcdef",
+      published_versions: []
     });
     const { wrapper } = await mountDetail();
 
@@ -348,7 +441,7 @@ describe("AnalysisReportDetailView 六节结构（P2-03）", () => {
     // 计数预览：发布=approved 数（1）、撤回=pending_proposals（2）、拒绝 KB=1
     const dialog = wrapper.findComponent({ name: "ConfirmationDialog" });
     expect(dialog.exists()).toBe(true);
-    expect(dialog.props("description")).toContain("发布 1 个已批准提案");
+    expect(dialog.props("description")).toContain("发布 1 个已批准产品提案");
     expect(dialog.props("description")).toContain("撤回 2 个未决提案");
     expect(dialog.props("description")).toContain("拒绝 1 份 KB 草稿");
 
@@ -374,6 +467,117 @@ describe("AnalysisReportDetailView 六节结构（P2-03）", () => {
     expect(
       wrapper.findAll("button").some(b => b.text().includes("关闭报告"))
     ).toBe(false);
+  });
+
+  it("关闭回执：published_versions 列出正式对象（域徽标+标题+版本）→ 知识库入口按域定位页签", async () => {
+    closeAnalysisReport.mockResolvedValue({
+      report_id: "rep-1",
+      status: "closed",
+      applied_proposals: 1,
+      replayed_proposals: 0,
+      publish_failed_proposals: 0,
+      withdrawn_proposals: 0,
+      rejected_kb: false,
+      last_analyzed_commit: "abc123def4567890abcdef",
+      projc_applied: 1,
+      projc_replayed: 0,
+      projc_publish_failed_proposals: 0,
+      projc_withdrawn: 0,
+      published_versions: [
+        { domain: "pc", proposal_id: "prop-1", version_no: 3 },
+        { domain: "projc", proposal_id: "pjc-prop-1", version_no: 2 }
+      ]
+    });
+    getAnalysisReport.mockResolvedValue(
+      detailOf({
+        projc_proposals: [
+          {
+            proposal_id: "pjc-prop-1",
+            title: "仓库认知更新",
+            status: "submitted",
+            expected_version_no: 1,
+            member_count: 1,
+            created_at: "2026-11-15T08:45:00Z",
+            rationale: null,
+            risk_level: null,
+            confidence: null,
+            origin_kind: "repo_analysis"
+          }
+        ]
+      })
+    );
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: "/project/analysis", component: { template: "<div />" } },
+        {
+          path: "/project/analysis/reports/:reportId",
+          component: AnalysisReportDetailView
+        },
+        { path: "/project/knowledge", component: { template: "<div />" } }
+      ]
+    });
+    await router.push("/project/analysis/reports/rep-1");
+    await router.isReady();
+    const { wrapper } = mountShell(
+      AnalysisReportDetailView,
+      { attachTo: document.body },
+      router
+    );
+    const shell = useShellStore();
+    shell.setProjects([{ id: "proj-1", name: "评测项目" }]);
+    shell.setCurrentProject("proj-1");
+    await flushPromises();
+
+    await wrapper
+      .findAll("button")
+      .find(b => b.text().includes("关闭报告"))!
+      .trigger("click");
+    await flushPromises();
+    const dialog = wrapper.findComponent({ name: "ConfirmationDialog" });
+    // 关闭成功后详情重拉返回 closed 态（含已 applied 的双域提案）
+    getAnalysisReport.mockResolvedValue(
+      detailOf({
+        status: "closed",
+        closed_at: "2026-11-15T10:00:00Z",
+        pending_proposals: 0,
+        has_pending_kb: false,
+        projc_proposals: [
+          {
+            proposal_id: "pjc-prop-1",
+            title: "仓库认知更新",
+            status: "applied",
+            expected_version_no: 1,
+            member_count: 1,
+            created_at: "2026-11-15T08:45:00Z",
+            rationale: null,
+            risk_level: null,
+            confidence: null,
+            origin_kind: "repo_analysis"
+          }
+        ]
+      })
+    );
+    await dialog.vm.$emit("confirm");
+    await flushPromises();
+
+    // 正式对象清单：域徽标 + 提案标题映射 + 版本号
+    expect(wrapper.text()).toContain("本次发布的正式知识对象");
+    expect(wrapper.text()).toContain("产品认知");
+    expect(wrapper.text()).toContain("订单状态机重定义");
+    expect(wrapper.text()).toContain("技术认知");
+    expect(wrapper.text()).toContain("仓库认知更新");
+    expect(wrapper.text()).toContain("v3");
+    expect(wrapper.text()).toContain("v2");
+    // 知识库入口按首条发布域定位页签（首条 = pc）
+    await wrapper
+      .findAll("button")
+      .find(b => b.text().includes("前往知识库查看"))!
+      .trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe("/project/knowledge");
+    expect(router.currentRoute.value.query.tab).toBe("pc");
+    wrapper.unmount();
   });
 
   it("404/跨项目 Report ID → 显式错误态（GAP-6 关闭）；其余错误走通用错误态", async () => {
@@ -475,7 +679,11 @@ describe("审阅交互与关闭语义七条（P2-04）", () => {
             status: "rejected",
             expected_version_no: 5,
             member_count: 1,
-            created_at: "2026-11-15T08:50:00Z"
+            created_at: "2026-11-15T08:50:00Z",
+            rationale: null,
+            risk_level: null,
+            confidence: null,
+            origin_kind: "manual_input"
           }
         ]
       })
@@ -669,7 +877,11 @@ describe("E2E-02 全链（P2-08 单测级）：暂记 → close 批发 → 冻�
             status: "approved",
             expected_version_no: 5,
             member_count: 3,
-            created_at: "2026-11-15T08:30:00Z"
+            created_at: "2026-11-15T08:30:00Z",
+            rationale: null,
+            risk_level: null,
+            confidence: null,
+            origin_kind: "manual_input"
           }
         ]
       })
@@ -699,7 +911,8 @@ describe("E2E-02 全链（P2-08 单测级）：暂记 → close 批发 → 冻�
       publish_failed_proposals: 0,
       withdrawn_proposals: 0,
       rejected_kb: false,
-      last_analyzed_commit: "abc123def4567890abcdef"
+      last_analyzed_commit: "abc123def4567890abcdef",
+      published_versions: []
     });
     getAnalysisReport.mockResolvedValue(
       detailOf({

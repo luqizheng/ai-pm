@@ -672,7 +672,14 @@ async fn list_and_detail_are_project_scoped(pool: PgPool) {
         .as_str()
         .unwrap()
         .contains("报告正文"));
-    assert_eq!(body["proposals"].as_array().unwrap().len(), 1);
+    // 提案行加法投影：审阅头字段（rationale/risk/confidence/origin）
+    let proposals = body["proposals"].as_array().unwrap();
+    assert_eq!(proposals.len(), 1);
+    assert_eq!(proposals[0]["rationale"], "fixture");
+    assert_eq!(proposals[0]["origin_kind"], "manual_input");
+    // 证据投影（加法，恒数组）
+    assert!(body["pc_evidence"].as_array().unwrap().is_empty());
+    assert!(body["projc_evidence"].as_array().unwrap().is_empty());
     assert_eq!(body["pc_revisions"].as_array().unwrap().len(), 0);
 
     // 项目边界：非成员项目 / 他项目下查 / 缺参
@@ -1132,6 +1139,16 @@ async fn close_disposes_both_domains_with_independent_counts(pool: PgPool) {
     assert_eq!(outcome.projc_withdrawn, 1, "G-2: projc 独立计数 withdrawn");
     assert_eq!(outcome.projc_publish_failed_proposals, 0);
     assert_eq!(outcome.rejected_kb, true);
+    // 发布清单：applied 与 replayed 均产生正式版本——双域各一条
+    assert_eq!(outcome.published_versions.len(), 2, "pc+projc 各一条");
+    assert!(outcome
+        .published_versions
+        .iter()
+        .any(|v| v.domain == "pc" && v.proposal_id == pc_approved));
+    assert!(outcome
+        .published_versions
+        .iter()
+        .any(|v| v.domain == "projc" && v.proposal_id == projc_approved));
 
     // 双域正式版本各一（无重复正式版本）
     let (pc_versions, projc_versions): (i64, i64) = sqlx::query_as(
@@ -1158,6 +1175,28 @@ async fn close_disposes_both_domains_with_independent_counts(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(projc_status, "applied");
+
+    // 对象 → 来源分析报告追溯（lineage）：双域各取一个已入版本的对象，反查
+    // version→proposal→报告。来源报告即本测试的 report。
+    use pm_application::repo::kb_pc_query::KbPcQueryRepo;
+    let query_repo =
+        pm_infrastructure::repo_kb_pc_query::PgKbPcQueryRepo::new(pool.clone());
+    for (schema_domain, repo_col) in [("pc", "pc_source_id"), ("projc", "projc_source_id")] {
+        let (obj_id,): (Uuid,) = sqlx::query_as(&format!(
+            "SELECT vm.object_id FROM {schema_domain}.version_member vm               JOIN {schema_domain}.cognition_version cv ON cv.id = vm.version_id              WHERE cv.project_id = $1 AND vm.object_id IS NOT NULL LIMIT 1"
+        ))
+        .bind(project)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let lineage = match schema_domain {
+            "pc" => query_repo.pc_object_lineage(project, obj_id).await.unwrap(),
+            _ => query_repo.projc_object_lineage(project, obj_id).await.unwrap(),
+        };
+        assert_eq!(lineage.len(), 1, "{schema_domain} lineage");
+        assert_eq!(lineage[0].report_id, Some(report));
+        assert_eq!(lineage[0].commit_sha.is_some(), true);
+    }
     for (pending_id, table) in [(pc_pending, "pc"), (projc_pending, "projc")] {
         let (status,): (String,) = sqlx::query_as(&format!(
             "SELECT status FROM {table}.proposal WHERE id = $1"

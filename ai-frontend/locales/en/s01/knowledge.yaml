@@ -5,6 +5,7 @@ knowledge:
   tab:
     kb: KB Documents
     pc: PC Objects
+    projc: ProjC Objects
   status:
     draft: Draft
     published: Published
@@ -25,6 +26,9 @@ knowledge:
     analysisMode: Analysis mode
     versioned: In published version
     unversioned: Not in a published version
+    sourceAnalysis: Source analysis
+    sourceAnalysisNone: Published outside the report channel
+    openReport: Open report
   action:
     confirm: Confirm & Publish
     confirming: Confirming…
@@ -41,6 +45,7 @@ knowledge:
     loading: Loading…
     emptyKb: No KB documents yet — analysis drafts appear here after confirmation
     emptyPc: No PC cognition objects yet — they appear here after version publication
+    emptyProjc: No project technical cognition objects yet — they appear here after ProjC proposals are published (report closed)
     emptyProposals: No proposals yet — AI drafts or manual creations appear here
   impact:
     title: Impact analysis (cross-domain traversal)

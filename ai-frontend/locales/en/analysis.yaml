@@ -42,6 +42,37 @@ analysis:
     members: member object(s)
     approve: Approve
     reject: Reject
+    rationaleLabel: AI rationale
+    risk: Risk
+    confidence: Confidence
+    riskLevel:
+      low: low
+      medium: medium
+      high: high
+    confidenceLevel:
+      high: high
+      medium: medium
+      low: low
+  proposalOrigin:
+    ai_agent: Drafted by AI analysis
+    repo_analysis: Repository analysis
+    manual_input: Manually drafted
+    kb_memory: KB memory
+    requirement_change: Requirement change
+    conflict_resolution: Conflict resolution
+  evidenceType:
+    code: Code
+    test_result: Test result
+    commit: Commit
+    document_section: Report section
+    meeting: Meeting
+    user_statement: User statement
+    system_observation: System observation
+  evidence:
+    commit: commit
+    section: section
+    citedRefs: AI cited
+    headCommit: "Collected at {commit} · {commits} commits / {files} files"
   detail:
     title: Report Detail
     loading: Loading report…
@@ -50,10 +81,13 @@ analysis:
     secProposals: "PC Proposals ({n})"
     sectProjcProposals: "ProjC Technical Proposals ({n})"
     techBadge: Tech Cognition
+    pcBadge: Product Cognition
     noProjcProposals: This analysis drafted no technical cognition proposals
     secPcRevisions: "PC Object Revisions ({n})"
     sectProjcRevisions: "ProjC Object Revisions ({n})"
     noProjcRevisions: This analysis produced no technical cognition object revisions
+    secEvidence: "Analysis Evidence & Sources ({n})"
+    noEvidence: No evidence registered for this analysis
     secSynthesis: D-4 Identity Synthesis (AI)
     secClose: Close & Disposition
     fieldRepository: Repository
@@ -68,6 +102,7 @@ analysis:
     fieldError: Failure
     kbMissing: This analysis produced no KB report revision
     kbSecMeta: "KB revision v{no}"
+    kbCommitAnchor: "Body anchor {commit}"
     noProposals: This analysis drafted no proposals
     noMatchingProposals: No proposals under this filter
     noPcRevisions: This analysis produced no object revisions
@@ -81,13 +116,16 @@ analysis:
     synthesisProduced: Drafted
     synthesisMissing: Not produced
     close: Close Report
-    closeHint: Closing publishes approved proposals, auto-disposes pending items and fixes the analysis anchor; decisions are frozen and the repository can be analyzed again
+    closeHint: Closing publishes approved proposals (PC and ProjC), auto-disposes pending items and fixes the analysis anchor; undecided proposals are withdrawn and the repository can be analyzed again so unsunk content can be re-proposed; decisions are frozen
     closeConfirmTitle: Close analysis report
-    closeConfirmDescription: "This will publish {publish} approved proposals, withdraw {proposals} pending proposals and reject {kb} KB drafts for this {repo} report, then fix the analysis anchor; decisions are frozen and the repository can be analyzed again."
+    closeConfirmDescription: "This will publish {publish} approved product proposals and {projcPublish} approved technical cognition proposals, withdraw {proposals} pending proposals and reject {kb} KB drafts for this {repo} report, then fix the analysis anchor; decisions are frozen and the repository can be analyzed again."
     closeReceipt: Report closed — published {applied} proposals, withdrew {withdrawn} pending proposals, rejected {rejected} KB drafts; anchor fixed ({commit}); the repository can be analyzed again
     closeReceiptProjc: "Technical cognition (ProjC): published {projcApplied}, withdrew {projcWithdrawn}, {projcFailed} publish failure(s)"
     closeNotAvailable: Report is not pending review — only pending-review reports can be closed
     closeError: Close failed
+    publishedTitle: Formal knowledge objects published
+    publishedHint: Written into the formal cognition domains (object details are viewable on the Knowledge page, with source-report traceability)
+    openKnowledge: Open Knowledge
   action:
     cancel: Cancel
     confirm: Confirm & Publish

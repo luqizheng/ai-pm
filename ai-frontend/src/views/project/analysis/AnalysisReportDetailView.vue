@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { HttpError } from "@digua/http";
 import PageFrame from "@/components/shell/PageFrame.vue";
 import Alert from "@/components/ui/alert/Alert.vue";
@@ -16,9 +16,14 @@ import {
   synthesizeIdentity,
   type AnalysisReportDetail,
   type CloseReportOutcome,
+  type ReportEvidenceRow,
   type ReportProposalRow
 } from "@/api/analysis-reports";
-import { confirmKbRevision, decidePcProposal } from "@/api/knowledge";
+import {
+  confirmKbRevision,
+  decidePcProposal,
+  decideProjcProposal
+} from "@/api/knowledge";
 import { useShellStore } from "@/stores/shell";
 
 /**
@@ -27,32 +32,41 @@ import { useShellStore } from "@/stores/shell";
  * 按裁决 D-2 六节呈现（正文与版本以详情 API 单通道回填，每次进入重新拉取——
  * 缓存会陈旧原则）：
  *   1. 基本信息   2. 分析报告正文（当前 KB 修订）   3. PC 提案
- *   4. PC 修订内容   5. D-4 身份综合（裁决 D-2，端点语义不变）
- *   6. 关闭与处置（仅 analyzed 可关；回执含 applied/withdrawn/rejected/锚点）
+ *   3b. ProjC 技术认知提案   4. PC 修订内容   4b. ProjC 对象修订
+ *   4c. 分析证据与来源（双域 evidence 投影）
+ *   5. D-4 身份综合（裁决 D-2，端点语义不变）
+ *   6. 关闭与处置（仅 analyzed 可关；回执含 applied/withdrawn/rejected/锚点
+ *      + published_versions 正式对象清单与知识库入口）
  *
- * P3-11（T-1/T-2/T-3 W6 最小渲染，不扩 Phase 2 UI 范围）：第 3 节后追加
- * 「ProjC 技术认知提案」、第 4 节后追加「ProjC 对象修订」——技术认知徽标 +
- * 只读列表（决策动作走 /v1/pm/projc/proposals/{id}/decide 并行端点，本页不
- * 挂按钮）；关闭回执追加 ProjC 双域计数。
+ * P3-11 决策接线（本轮闭环补齐）：第 3b 节挂批准/驳回——与 PC 提案同 CAS/
+ * 错误处理，走 /v1/pm/projc/proposals/{id}/decide 并行端点；双域提案卡展示
+ * AI 分析理由（rationale）与风险/置信/来源元数据；关闭回执列正式发布对象。
  *
- * 审阅交互（P2-04，复用三组既有端点，零后端改动）：
+ * 审阅交互（P2-04，复用既有端点）：
  *   - KB 确认（第 2 节）：confirmKbRevision——按钮条件 = kb_revision draft
  *     且报告 analyzed；三重门在后端（interactive+真人+成员），前端不重写。
- *   - PC 提案批准/驳回（第 3 节）：decidePcProposal（CAS expected_version_no）——
- *     按钮显隐原样保留「报告 analyzed 且 status ∈ {submitted,approved,rejected}」；
- *     批准=暂记（approvedPending 文案），开放期可互转，closed 冻结不渲染。
+ *   - PC / ProjC 提案批准/驳回（第 3/3b 节）：decidePcProposal /
+ *     decideProjcProposal（CAS expected_version_no）——按钮显隐「报告 analyzed
+ *     且 status ∈ {submitted,approved,rejected}」；批准=暂记（approvedPending
+ *     文案），开放期可互转，closed 冻结不渲染。
  *   - 报告关闭（第 6 节）：closeAnalysisReport——仅 analyzed 可关；409 显式呈现。
  *   - 关闭语义七条 = 本页核心验收（自查表见 Phase 2 验收报告）；单飞守卫
  *     acting/closing 等价迁移；确认范式随迁旧面板单击式，不引入新范式。
+ *   - 暂缓语义（不改状态机）：未决提案在关闭时被撤回（逐条审计），关闭后
+ *     该仓库可再次分析、未沉淀内容由后续分析重新提案——按现有语义呈现，
+ *     不引入新状态。
  *
  * - 无 Findings/Conclusions/Recommendations、无 Report Revision 身份——不虚构
- *   （核验 §3.3/§3.4）；正文权威 = DB KB 修订直读（GAP-5 维持登记），本页只经
- *   详情 API 读取，不复制进前端持久 store（● 红线 13）。
+ *   （核验 §3.3/§3.4）；「分析发现」以双域提案 + 修订 + evidence 投影呈现
+ *   （分析链产物边界，见 analysis_report.rs 投影注释）。正文权威 = DB KB
+ *   修订直读（GAP-5 维持登记），本页只经详情 API 读取，不复制进前端持久
+ *   store（● 红线 13）。
  * - 非法/跨项目 Report ID → 显式 404 语义错误态，不静默（GAP-6 随本卡关闭）。
  * - 项目上下文单源 = shell.currentProjectId；项目切换重拉，跨项目 ID 落 404 态。
  */
 const { t } = useI18n();
 const route = useRoute();
+const router = useRouter();
 const shell = useShellStore();
 const currentProjectId = computed(() => shell.currentProjectId);
 const reportId = computed(() => String(route.params.reportId ?? ""));
@@ -108,6 +122,56 @@ function proposalStatusLabel(status: string): string {
   return t(`analysis.proposalStatus.${status}`);
 }
 
+/** 提案来源词典（AI 推荐 vs 人工/其他通道的显式区分）。 */
+function originLabel(origin: string): string {
+  return t(`analysis.proposalOrigin.${origin}`, origin);
+}
+
+/** 双域证据合并视图（带域标记；pc 在前）。 */
+type DomainEvidence = ReportEvidenceRow & { domain: "pc" | "projc" };
+const allEvidence = computed<DomainEvidence[]>(() => {
+  if (!detail.value) return [];
+  return [
+    ...detail.value.pc_evidence.map(e => ({ ...e, domain: "pc" as const })),
+    ...detail.value.projc_evidence.map(e => ({ ...e, domain: "projc" as const }))
+  ];
+});
+
+/** 证据 description JSON 防御性解析：快照通道存
+ * {head_commit_sha, llm_evidence_refs[], commit_count…}；解析失败原样回显。 */
+interface ParsedEvidence {
+  headCommitSha: string | null;
+  refs: string[];
+  commitCount: number | null;
+  fileCount: number | null;
+}
+function parseEvidenceDescription(
+  row: DomainEvidence
+): ParsedEvidence | null {
+  if (!row.description) return null;
+  try {
+    const raw = JSON.parse(row.description) as Record<string, unknown>;
+    if (typeof raw !== "object" || raw === null) return null;
+    const refs = Array.isArray(raw.llm_evidence_refs)
+      ? (raw.llm_evidence_refs.filter(v => typeof v === "string") as string[])
+      : [];
+    return {
+      headCommitSha:
+        typeof raw.head_commit_sha === "string" ? raw.head_commit_sha : null,
+      refs,
+      commitCount: typeof raw.commit_count === "number" ? raw.commit_count : null,
+      fileCount: typeof raw.file_count === "number" ? raw.file_count : null
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** 证据类型词典（未知值原样回退）。 */
+function evidenceTypeLabel(type: string): string {
+  return t(`analysis.evidenceType.${type}`, type);
+}
+
 /* ── 审阅交互（P2-04：KB 确认 / PC 提案决定；三重门与 CAS 均在后端）──────── */
 
 /** 单飞守卫（KB 确认与 PC 决策共用；等价迁移旧面板 acting）。 */
@@ -161,19 +225,34 @@ async function confirmKb(): Promise<void> {
   }
 }
 
+/** 提案决策（PC 与 ProjC 双域同构；CAS expected_version_no，门在后端）。 */
 async function decideProposal(
   proposal: ReportProposalRow,
-  action: "approve" | "reject"
+  action: "approve" | "reject",
+  domain: "pc" | "projc" = "pc"
 ): Promise<void> {
   if (!currentProjectId.value || acting.value) return;
   acting.value = true;
   successNotice.value = "";
   actionError.value = "";
   try {
-    await decidePcProposal(proposal.proposal_id, currentProjectId.value, {
+    const payload = {
       action,
       expected_version_no: proposal.expected_version_no
-    });
+    };
+    if (domain === "projc") {
+      await decideProjcProposal(
+        proposal.proposal_id,
+        currentProjectId.value,
+        payload
+      );
+    } else {
+      await decidePcProposal(
+        proposal.proposal_id,
+        currentProjectId.value,
+        payload
+      );
+    }
     successNotice.value = t(
       action === "approve"
         ? "analysis.notice.approved"
@@ -254,6 +333,17 @@ const closing = ref(false);
 const approvedCount = computed(
   () => detail.value?.proposals.filter(p => p.status === "approved").length ?? 0
 );
+/** 关闭确认框预览：ProjC 已批准提案数（双域分流同语义）。 */
+const approvedProjcCount = computed(
+  () =>
+    detail.value?.projc_proposals.filter(p => p.status === "approved").length ??
+    0
+);
+
+/** 关闭回执：本次发布的正式对象清单（映射提案标题 + 领域徽标 + 版本号）。 */
+const publishedEntries = ref<
+  { domain: "pc" | "projc"; proposal_id: string; version_no: number; title: string }[]
+>([]);
 
 async function doClose(): Promise<void> {
   if (!currentProjectId.value || !detail.value || closing.value) return;
@@ -282,6 +372,15 @@ async function doClose(): Promise<void> {
         projcFailed: outcome.projc_publish_failed_proposals
       });
     }
+    // 正式对象清单（确认后反馈：领域 + 版本号 + 提案标题映射）。
+    const titleOf = (id: string): string =>
+      [...(detail.value?.proposals ?? []), ...(detail.value?.projc_proposals ?? [])].find(
+        p => p.proposal_id === id
+      )?.title ?? id;
+    publishedEntries.value = outcome.published_versions.map(v => ({
+      ...v,
+      title: titleOf(v.proposal_id)
+    }));
     closeConfirmOpen.value = false;
     // 关闭后回填 closed 态（决策按钮消失等语义，P2-04 测试化）
     await loadDetail();
@@ -305,6 +404,7 @@ watch(
     synthesisOutcome.value = null;
     proposalFilter.value = "pending";
     closeConfirmOpen.value = false;
+    publishedEntries.value = [];
     void loadDetail();
   },
   { immediate: true }
@@ -344,6 +444,12 @@ const pageTitle = computed(() =>
     ? `${detail.value.repository_name} @ ${shortSha(detail.value.commit_sha)}`
     : t("analysis.detail.title")
 );
+
+/** 正式知识查看入口：知识库页按本次发布域定位页签（KB 文档 | PC 对象 | ProjC 对象）。 */
+function navigateToKnowledge(): void {
+  const domain = publishedEntries.value[0]?.domain ?? "pc";
+  void router.push(`/project/knowledge?tab=${domain}`);
+}
 </script>
 
 <template>
@@ -464,6 +570,14 @@ const pageTitle = computed(() =>
                         no: detail.kb_revision.revision_no
                       })
                     }}
+                    <template v-if="detail.kb_revision.source_commit_sha">
+                      ·
+                      {{
+                        t("analysis.detail.kbCommitAnchor", {
+                          commit: shortSha(detail.kb_revision.source_commit_sha)
+                        })
+                      }}
+                    </template>
                   </span>
                 </div>
                 <MarkdownViewer
@@ -519,6 +633,9 @@ const pageTitle = computed(() =>
                   class="an-proposal"
                 >
                   <div class="an-proposal-head">
+                    <Badge variant="neutral">
+                      {{ originLabel(proposal.origin_kind) }}
+                    </Badge>
                     <span class="an-proposal-title">{{ proposal.title }}</span>
                     <Badge :variant="proposalStatusVariant(proposal.status)">
                       {{ proposalStatusLabel(proposal.status) }}
@@ -529,6 +646,28 @@ const pageTitle = computed(() =>
                       {{ t("analysis.proposal.members") }}
                     </span>
                   </div>
+                  <!-- AI 分析理由 + 风险/置信（审阅判断依据；加法投影） -->
+                  <div
+                    v-if="proposal.rationale || proposal.risk_level || proposal.confidence"
+                    class="an-proposal-basis"
+                  >
+                    <p v-if="proposal.rationale" class="an-proposal-rationale">
+                      <span class="an-basis-label">{{
+                        t("analysis.proposal.rationaleLabel")
+                      }}</span>
+                      {{ proposal.rationale }}
+                    </p>
+                    <p class="an-basis-meta">
+                      <template v-if="proposal.risk_level">
+                        {{ t("analysis.proposal.risk") }}
+                        {{ t(`analysis.proposal.riskLevel.${proposal.risk_level}`, proposal.risk_level) }}
+                      </template>
+                      <template v-if="proposal.confidence">
+                        · {{ t("analysis.proposal.confidence") }}
+                        {{ t(`analysis.proposal.confidenceLevel.${proposal.confidence}`, proposal.confidence) }}
+                      </template>
+                    </p>
+                  </div>
                   <!-- 批准/驳回（P2-04）：显隐与后端门一致——报告 analyzed 且
                        决定未冻结（submitted/approved/rejected 可互转，原样保留）；
                        approved=暂记（非正式发布），closed 冻结后不渲染 -->
@@ -537,7 +676,7 @@ const pageTitle = computed(() =>
                       v-if="proposal.status !== 'approved'"
                       size="sm"
                       :loading="acting"
-                      @click="decideProposal(proposal, 'approve')"
+                      @click="decideProposal(proposal, 'approve', 'pc')"
                     >
                       {{ t("analysis.proposal.approve") }}
                     </Button>
@@ -546,7 +685,7 @@ const pageTitle = computed(() =>
                       size="sm"
                       variant="secondary"
                       :disabled="acting"
-                      @click="decideProposal(proposal, 'reject')"
+                      @click="decideProposal(proposal, 'reject', 'pc')"
                     >
                       {{ t("analysis.proposal.reject") }}
                     </Button>
@@ -555,8 +694,8 @@ const pageTitle = computed(() =>
               </ul>
             </section>
 
-            <!-- 第 3b 节 · ProjC 技术认知提案（P3-11 最小渲染：徽标 + 只读列表；
-                 决策动作走 /v1/pm/projc 并行端点，本页不挂按钮） -->
+            <!-- 第 3b 节 · ProjC 技术认知提案（P3-11 域；决策已接线：
+                 /v1/pm/projc/proposals/{id}/decide 与 PC P5 同构同门） -->
             <section class="an-sec" aria-labelledby="an-sec-projc">
               <h3 id="an-sec-projc" class="an-sec-title">
                 {{
@@ -578,6 +717,9 @@ const pageTitle = computed(() =>
                     <Badge variant="neutral">
                       {{ t("analysis.detail.techBadge") }}
                     </Badge>
+                    <Badge variant="neutral">
+                      {{ originLabel(proposal.origin_kind) }}
+                    </Badge>
                     <span class="an-proposal-title">{{ proposal.title }}</span>
                     <Badge :variant="proposalStatusVariant(proposal.status)">
                       {{ proposalStatusLabel(proposal.status) }}
@@ -587,6 +729,47 @@ const pageTitle = computed(() =>
                       {{ proposal.member_count }}
                       {{ t("analysis.proposal.members") }}
                     </span>
+                  </div>
+                  <div
+                    v-if="proposal.rationale || proposal.risk_level || proposal.confidence"
+                    class="an-proposal-basis"
+                  >
+                    <p v-if="proposal.rationale" class="an-proposal-rationale">
+                      <span class="an-basis-label">{{
+                        t("analysis.proposal.rationaleLabel")
+                      }}</span>
+                      {{ proposal.rationale }}
+                    </p>
+                    <p class="an-basis-meta">
+                      <template v-if="proposal.risk_level">
+                        {{ t("analysis.proposal.risk") }}
+                        {{ t(`analysis.proposal.riskLevel.${proposal.risk_level}`, proposal.risk_level) }}
+                      </template>
+                      <template v-if="proposal.confidence">
+                        · {{ t("analysis.proposal.confidence") }}
+                        {{ t(`analysis.proposal.confidenceLevel.${proposal.confidence}`, proposal.confidence) }}
+                      </template>
+                    </p>
+                  </div>
+                  <!-- 决策动作与 PC 提案同显隐规则：报告 analyzed 且未冻结 -->
+                  <div v-if="canDecide(proposal)" class="an-actions">
+                    <Button
+                      v-if="proposal.status !== 'approved'"
+                      size="sm"
+                      :loading="acting"
+                      @click="decideProposal(proposal, 'approve', 'projc')"
+                    >
+                      {{ t("analysis.proposal.approve") }}
+                    </Button>
+                    <Button
+                      v-if="proposal.status !== 'rejected'"
+                      size="sm"
+                      variant="secondary"
+                      :disabled="acting"
+                      @click="decideProposal(proposal, 'reject', 'projc')"
+                    >
+                      {{ t("analysis.proposal.reject") }}
+                    </Button>
                   </div>
                 </li>
               </ul>
@@ -651,6 +834,86 @@ const pageTitle = computed(() =>
                 </p>
                 <MarkdownViewer :model-value="revision.content ?? ''" />
               </details>
+            </section>
+
+            <!-- 第 4c 节 · 分析证据与来源（双域 evidence 投影；审阅判断依据） -->
+            <section class="an-sec" aria-labelledby="an-sec-evidence">
+              <h3 id="an-sec-evidence" class="an-sec-title">
+                {{ t("analysis.detail.secEvidence", { n: allEvidence.length }) }}
+              </h3>
+              <p v-if="!allEvidence.length" class="an-hint">
+                {{ t("analysis.detail.noEvidence") }}
+              </p>
+              <ul v-else class="an-evidence">
+                <li
+                  v-for="(evidence, index) in allEvidence"
+                  :key="evidence.domain + ':' + index"
+                  class="an-evidence-item"
+                >
+                  <div class="an-proposal-head">
+                    <Badge :variant="evidence.domain === 'projc' ? 'neutral' : 'info'">
+                      {{
+                        evidence.domain === "projc"
+                          ? t("analysis.detail.techBadge")
+                          : t("analysis.detail.pcBadge")
+                      }}
+                    </Badge>
+                    <span class="an-evidence-object">{{ evidence.object_name }}</span>
+                    <Badge variant="neutral">
+                      {{ evidenceTypeLabel(evidence.evidence_type) }}
+                    </Badge>
+                    <span class="an-meta">
+                      <template v-if="evidence.confidence">
+                        {{ t("analysis.proposal.confidence") }}
+                        {{ t(`analysis.proposal.confidenceLevel.${evidence.confidence}`, evidence.confidence) }}
+                      </template>
+                    </span>
+                  </div>
+                  <p class="an-evidence-locator">
+                    <template v-if="evidence.file_path">
+                      {{ evidence.file_path }}<template v-if="evidence.start_line">:{{ evidence.start_line }}<template v-if="evidence.end_line">-{{ evidence.end_line }}</template></template>
+                    </template>
+                    <template v-if="evidence.commit_sha">
+                      · {{ t("analysis.evidence.commit") }} {{ shortSha(evidence.commit_sha) }}
+                    </template>
+                    <template v-if="evidence.section_anchor">
+                      · {{ t("analysis.evidence.section") }} {{ evidence.section_anchor }}
+                    </template>
+                  </p>
+                  <template
+                    v-if="parseEvidenceDescription(evidence)"
+                  >
+                    <p
+                      v-if="parseEvidenceDescription(evidence)!.refs.length"
+                      class="an-evidence-refs"
+                    >
+                      <span class="an-basis-label">{{
+                        t("analysis.evidence.citedRefs")
+                      }}</span>
+                      <code
+                        v-for="ref in parseEvidenceDescription(evidence)!.refs"
+                        :key="ref"
+                        class="an-evidence-ref"
+                      >{{ ref }}</code>
+                    </p>
+                    <p
+                      v-if="parseEvidenceDescription(evidence)!.headCommitSha"
+                      class="an-hint"
+                    >
+                      {{
+                        t("analysis.evidence.headCommit", {
+                          commit: parseEvidenceDescription(evidence)!.headCommitSha!.slice(0, 12),
+                          commits: parseEvidenceDescription(evidence)!.commitCount ?? "—",
+                          files: parseEvidenceDescription(evidence)!.fileCount ?? "—"
+                        })
+                      }}
+                    </p>
+                  </template>
+                  <p v-if="evidence.excerpt" class="an-evidence-excerpt">
+                    {{ evidence.excerpt }}
+                  </p>
+                </li>
+              </ul>
             </section>
 
             <!-- 第 5 节 · D-4 身份综合（裁决 D-2；端点语义不变） -->
@@ -729,6 +992,41 @@ const pageTitle = computed(() =>
               <p v-else class="an-hint">
                 {{ t("analysis.detail.closeNotAvailable") }}
               </p>
+              <!-- 确认后反馈：本次发布的正式知识对象（领域 + 版本）+ 查看入口 -->
+              <template v-if="detail.status === 'closed' && publishedEntries.length">
+                <div class="an-published">
+                  <p class="an-basis-label">
+                    {{ t("analysis.detail.publishedTitle") }}
+                  </p>
+                  <ul class="an-published-list">
+                    <li
+                      v-for="entry in publishedEntries"
+                      :key="entry.domain + entry.proposal_id"
+                      class="an-published-item"
+                    >
+                      <Badge :variant="entry.domain === 'projc' ? 'neutral' : 'info'">
+                        {{
+                          entry.domain === "projc"
+                            ? t("analysis.detail.techBadge")
+                            : t("analysis.detail.pcBadge")
+                        }}
+                      </Badge>
+                      <span>{{ entry.title }}</span>
+                      <span class="an-meta">
+                        v{{ entry.version_no }}
+                      </span>
+                    </li>
+                  </ul>
+                  <p class="an-hint">{{ t("analysis.detail.publishedHint") }}</p>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    @click="navigateToKnowledge"
+                  >
+                    {{ t("analysis.detail.openKnowledge") }}
+                  </Button>
+                </div>
+              </template>
             </section>
           </template>
         </template>
@@ -742,6 +1040,7 @@ const pageTitle = computed(() =>
             ? t('analysis.detail.closeConfirmDescription', {
                 repo: detail.repository_name,
                 publish: approvedCount,
+                projcPublish: approvedProjcCount,
                 proposals: detail.pending_proposals,
                 kb: detail.has_pending_kb ? 1 : 0
               })
@@ -883,6 +1182,111 @@ const pageTitle = computed(() =>
 
 .an-projc-badge {
   margin-right: var(--space-1);
+}
+
+.an-proposal-basis {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.an-proposal-rationale {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.an-basis-label {
+  display: inline-block;
+  margin-right: var(--space-2);
+  font-size: var(--font-size-micro);
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.an-basis-meta {
+  margin: 0;
+  font-size: var(--font-size-micro);
+  color: var(--text-tertiary);
+}
+
+.an-evidence {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.an-evidence-item {
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.an-evidence-object {
+  font-weight: 600;
+  font-size: var(--font-size-caption);
+}
+
+.an-evidence-locator {
+  margin: 0;
+  font-size: var(--font-size-micro);
+  color: var(--text-secondary);
+  font-family: var(--font-family-mono, monospace);
+}
+
+.an-evidence-refs {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.an-evidence-ref {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+  font-size: var(--font-size-micro);
+  color: var(--text-secondary);
+}
+
+.an-evidence-excerpt {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+.an-published {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-top: 1px dashed var(--border-subtle);
+  padding-top: var(--space-2);
+}
+
+.an-published-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.an-published-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-caption);
+  color: var(--text-secondary);
 }
 
 .an-pc-item {

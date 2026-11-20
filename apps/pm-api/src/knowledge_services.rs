@@ -84,6 +84,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route("/v1/pc/objects/{object_id}", get(pc_object_detail))
         // PC 提案列表（前端审批页签；P4 按 id 详查 / P5 决策走既有端点）
         .route("/v1/pc/proposals", get(list_pc_proposals))
+        // ProjC 对象浏览（与 pc 对象面同构的只读管理面；P3-11 域）——正式项目
+        // 技术认知的查看入口（报告 close 发布后可在此浏览）。
+        .route("/v1/projc/objects", get(list_projc_objects))
+        .route("/v1/projc/objects/{object_id}", get(projc_object_detail))
         // P3-11 并行端点（T-1/T-2/T-3 W6）：ProjC 提案 P5 决策（p5 同构；
         // 审阅流 v2 形态=范围确认点②，路由到 ProjC 独立域）
         .route(
@@ -723,10 +727,38 @@ async fn p7_version(
     skeleton_501(()).await
 }
 
+/// 对象 → 来源分析报告追溯 JSON（`analysis_sources`；report 为 NULL 的行 = 非
+/// 报告通道发布，仅回版本号与时间）。
+async fn object_analysis_sources(
+    state: &AppState,
+    project_id: Uuid,
+    object_id: Uuid,
+    domain: &str,
+) -> ApiResult<Vec<serde_json::Value>> {
+    let repo = kb_pc_query_repo(&state.pool);
+    let rows = match domain {
+        "pc" => repo.pc_object_lineage(project_id, object_id).await?,
+        _ => repo.projc_object_lineage(project_id, object_id).await?,
+    };
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            json!({
+                "report_id": r.report_id,
+                "repository_name": r.repository_name,
+                "commit_sha": r.commit_sha,
+                "version_no": r.version_no,
+                "confirmed_at": r.confirmed_at,
+            })
+        })
+        .collect())
+}
+
 /// `GET /v1/pc/objects/{object_id}?project_id=`：PC 对象详情（最新修订全文 +
-/// analysis_mode/versioned）。前端 PC 页签行内展开消费；复用 `pc_object_legacy`
-/// 查询与 P3 的 `pc_object_json` 投影（形状一致）。项目边界：非成员/其他项目
-/// 404（不泄露跨项目存在性）；坏 uuid 404（同 p4_proposal 口径）。
+/// analysis_mode/versioned + analysis_sources 追溯）。前端 PC 页签行内展开消费；
+/// 复用 `pc_object_legacy` 查询与 P3 的 `pc_object_json` 投影（形状一致）。项目
+/// 边界：非成员/其他项目 404（不泄露跨项目存在性）；坏 uuid 404（同 p4_proposal
+/// 口径）。
 async fn pc_object_detail(
     State(state): State<AppState>,
     Extension(principal): Extension<AuthedPrincipal>,
@@ -752,7 +784,86 @@ async fn pc_object_detail(
     if rows.len() != 1 {
         return Err(ApiError::NotFound("pc object not found"));
     }
-    Ok(Json(pc_object_json(rows.pop().expect("len checked"))))
+    let mut body = pc_object_json(rows.pop().expect("len checked"));
+    body["analysis_sources"] = json!(
+        object_analysis_sources(&state, project_id, object_id, "pc").await?
+    );
+    Ok(Json(body))
+}
+
+/// `GET /v1/projc/objects/{object_id}?project_id=`：ProjC 对象详情（与 pc 详情
+/// 同构：最新修订全文 + versioned 内联判定 + analysis_sources 追溯）。
+async fn projc_object_detail(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(object_id): Path<String>,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let project_id = query
+        .get("project_id")
+        .and_then(|v| uuid::Uuid::parse_str(v).ok())
+        .ok_or(ApiError::BadRequest("project_id is required"))?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await?;
+    let object_id =
+        Uuid::parse_str(&object_id).map_err(|_| ApiError::NotFound("projc object not found"))?;
+    let mut rows = kb_pc_query_repo(&state.pool)
+        .projc_object_legacy(project_id, object_id)
+        .await?;
+    if rows.len() != 1 {
+        return Err(ApiError::NotFound("projc object not found"));
+    }
+    let mut body = pc_object_json(rows.pop().expect("len checked"));
+    body["analysis_sources"] = json!(
+        object_analysis_sources(&state, project_id, object_id, "projc").await?
+    );
+    Ok(Json(body))
+}
+
+/// `GET /v1/projc/objects?project_id=`：项目 ProjC 认知对象列表（与
+/// `list_pc_objects` 同构的只读管理面）。
+async fn list_projc_objects(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let project_id = query
+        .get("project_id")
+        .and_then(|v| uuid::Uuid::parse_str(v).ok())
+        .ok_or(ApiError::BadRequest("project_id is required"))?;
+    require_project_visible(
+        &state.pool,
+        project_id,
+        principal.tenant_id,
+        principal.principal_id,
+    )
+    .await?;
+    let rows: Vec<pm_application::repo::kb_pc_query::PcObjectListRow> =
+        kb_pc_query_repo(&state.pool)
+            .list_projc_objects(project_id)
+            .await?;
+    let rows: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|r| {
+            json!({
+                "object_id": r.id,
+                "object_type": r.object_type,
+                "object_key": r.object_key,
+                "display_name": r.display_name,
+                "lifecycle_status": r.lifecycle_status,
+                "revision_no": r.revision_no,
+                "change_summary": r.change_summary,
+                "excerpt": r.excerpt,
+                "updated_at": r.updated_at,
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "items": rows })))
 }
 
 /// `GET /v1/pc/objects?project_id=`：项目 PC 认知对象列表（最新修订投影 + 正文

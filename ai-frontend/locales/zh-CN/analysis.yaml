@@ -42,6 +42,37 @@ analysis:
     members: 个成员对象
     approve: 批准
     reject: 驳回
+    rationaleLabel: AI 分析理由
+    risk: 风险
+    confidence: 置信
+    riskLevel:
+      low: 低
+      medium: 中
+      high: 高
+    confidenceLevel:
+      high: 高
+      medium: 中
+      low: 低
+  proposalOrigin:
+    ai_agent: AI 分析起草
+    repo_analysis: 仓库分析
+    manual_input: 人工起草
+    kb_memory: 知识库记忆
+    requirement_change: 需求变更
+    conflict_resolution: 冲突消解
+  evidenceType:
+    code: 代码
+    test_result: 测试结果
+    commit: 提交
+    document_section: 报告章节
+    meeting: 会议
+    user_statement: 用户陈述
+    system_observation: 系统观察
+  evidence:
+    commit: 提交
+    section: 章节
+    citedRefs: AI 引用
+    headCommit: "采集自 {commit} · {commits} 条提交 / {files} 个文件"
   detail:
     title: 报告详情
     loading: 报告加载中…
@@ -50,10 +81,13 @@ analysis:
     secProposals: "PC 提案（{n}）"
     sectProjcProposals: "ProjC 技术认知提案（{n}）"
     techBadge: 技术认知
+    pcBadge: 产品认知
     noProjcProposals: 本次分析未起草技术认知提案
     secPcRevisions: "PC 对象修订（{n}）"
     sectProjcRevisions: "ProjC 对象修订（{n}）"
     noProjcRevisions: 本次分析未产出技术认知对象修订
+    secEvidence: "分析证据与来源（{n}）"
+    noEvidence: 本次分析未登记证据
     secSynthesis: D-4 身份综合（AI）
     secClose: 关闭与处置
     fieldRepository: 仓库
@@ -68,6 +102,7 @@ analysis:
     fieldError: 失败信息
     kbMissing: 本次分析未产出 KB 报告修订
     kbSecMeta: "KB 修订 v{no}"
+    kbCommitAnchor: "正文锚点 {commit}"
     noProposals: 本次分析未起草提案
     noMatchingProposals: 该过滤条件下无提案
     noPcRevisions: 本次分析未产出对象修订
@@ -81,13 +116,16 @@ analysis:
     synthesisProduced: 已起草
     synthesisMissing: 未产出
     close: 关闭报告
-    closeHint: 关闭后发布已批准提案、自动处置未决项并固化分析锚点；决定冻结，该仓库可再次分析
+    closeHint: 关闭后发布已批准提案（PC 与 ProjC）、自动处置未决项并固化分析锚点；未决提案将被撤回，之后该仓库可再次分析、未沉淀内容由后续分析重新提案；关闭后决定冻结
     closeConfirmTitle: 关闭分析报告
-    closeConfirmDescription: 将对 {repo} 的这份报告发布 {publish} 个已批准提案、撤回 {proposals} 个未决提案、拒绝 {kb} 份 KB 草稿，并固化分析锚点；关闭后决定冻结，该仓库可再次分析。
+    closeConfirmDescription: 将对 {repo} 的这份报告发布 {publish} 个已批准产品提案、{projcPublish} 个已批准技术认知提案、撤回 {proposals} 个未决提案、拒绝 {kb} 份 KB 草稿，并固化分析锚点；关闭后决定冻结，该仓库可再次分析。
     closeReceipt: 报告已关闭——发布 {applied} 个提案、撤回 {withdrawn} 个未决提案、拒绝 {rejected} 份 KB 草稿，锚点已固化（{commit}），该仓库可再次分析
     closeReceiptProjc: 技术认知（ProjC）：发布 {projcApplied}、撤回 {projcWithdrawn}、发布失败 {projcFailed}
     closeNotAvailable: 报告不在待审理状态——仅待审理报告可关闭
     closeError: 关闭失败
+    publishedTitle: 本次发布的正式知识对象
+    publishedHint: 已按领域写入正式认知（对象详情可在知识库页查看，含来源分析追溯）
+    openKnowledge: 前往知识库查看
   action:
     cancel: 取消
     confirm: 确认发布

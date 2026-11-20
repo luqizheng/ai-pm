@@ -53,6 +53,8 @@ export interface ReportKbRevision {
   status: "draft" | "published" | "rejected";
   analysis_mode: string | null;
   content: string | null;
+  /** 报告正文的 commit 锚（分析时点 HEAD；加法字段）。 */
+  source_commit_sha: string | null;
 }
 
 export interface ReportProposalRow {
@@ -62,6 +64,31 @@ export interface ReportProposalRow {
   expected_version_no: number;
   member_count: number;
   created_at: string;
+  /** AI 分析理由（审阅判断依据；加法投影）。 */
+  rationale: string | null;
+  risk_level: string | null;
+  confidence: string | null;
+  /** 提案来源（ai_agent / repo_analysis / manual_input …）。 */
+  origin_kind: string;
+}
+
+/** 报告证据行（evidence 钉扎投影；pc_evidence / projc_evidence 共用形状）。 */
+export interface ReportEvidenceRow {
+  evidence_type: string;
+  /** 证据支撑的对象名（revision→object 反查）。 */
+  object_name: string;
+  object_type: string;
+  section_anchor: string | null;
+  /** code 类证据定位（快照通道 document_section 证据恒 null）。 */
+  file_path: string | null;
+  commit_sha: string | null;
+  start_line: number | null;
+  end_line: number | null;
+  excerpt: string | null;
+  /** TEXT 自由描述：快照通道存 JSON（head_commit_sha/llm_evidence_refs/统计）。 */
+  description: string | null;
+  confidence: string | null;
+  verification_status: string | null;
 }
 
 export interface ReportPcRevisionRow {
@@ -81,6 +108,9 @@ export interface AnalysisReportDetail extends AnalysisReportRow {
   projc_proposals: ReportProposalRow[];
   /** P3-11：ProjC 对象修订集（加法字段，恒数组）。 */
   projc_revisions: ReportPcRevisionRow[];
+  /** 双域证据投影（加法字段，恒数组）。 */
+  pc_evidence: ReportEvidenceRow[];
+  projc_evidence: ReportEvidenceRow[];
 }
 
 export interface CloseReportOutcome {
@@ -103,6 +133,16 @@ export interface CloseReportOutcome {
   projc_publish_failed_proposals: number;
   /** P3-11：ProjC 未决提案撤回数。 */
   projc_withdrawn: number;
+  /** 本次关闭实际发布成功的版本清单（前端映射提案标题展示正式对象反馈）。 */
+  published_versions: PublishedVersionEntry[];
+}
+
+/** 关闭回执 · 单条发布记录。 */
+export interface PublishedVersionEntry {
+  /** `"pc" | "projc"`。 */
+  domain: "pc" | "projc";
+  proposal_id: string;
+  version_no: number;
 }
 
 /** 项目分析报告列表（状态分区；repository_id/status 可选过滤）。 */

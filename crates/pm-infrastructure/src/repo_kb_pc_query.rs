@@ -7,8 +7,8 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use pm_application::repo::kb_pc_query::{
-    AnalysisTaskRow, KbPcQueryRepo, KbRevisionRow, PcObjectListRow, PcObjectRow, PcProposalHead,
-    PcProposalListRow,
+    AnalysisTaskRow, KbPcQueryRepo, KbRevisionRow, ObjectLineageRow, PcObjectListRow, PcObjectRow,
+    PcProposalHead, PcProposalListRow,
 };
 
 /// 无状态连接句柄（`PgPool` 内部是 Arc，clone 廉价）。
@@ -240,6 +240,139 @@ impl KbPcQueryRepo for PgKbPcQueryRepo {
         .bind(status_filter)
         .fetch_all(&self.pool)
         .await?;
+        Ok(rows)
+    }
+
+    async fn list_projc_objects(
+        &self,
+        project_id: Uuid,
+    ) -> Result<Vec<PcObjectListRow>, sqlx::Error> {
+        let rows: Vec<PcObjectListRow> = sqlx::query_as(
+            "SELECT o.id, o.object_type, o.object_key, o.display_name, o.lifecycle_status, \
+                    o.updated_at, rev.revision_no, rev.change_summary, \
+                    left(dr.content, 240) AS excerpt \
+               FROM projc.cognition_object o \
+               LEFT JOIN LATERAL ( \
+                    SELECT r2.revision_no, r2.change_summary, r2.document_revision_id \
+                      FROM projc.cognition_revision r2 \
+                     WHERE r2.tenant_id = o.tenant_id AND r2.project_id = o.project_id \
+                       AND r2.object_id = o.id \
+                     ORDER BY r2.revision_no DESC LIMIT 1 \
+               ) rev ON true \
+               LEFT JOIN projc.document_revision dr ON dr.id = rev.document_revision_id \
+              WHERE o.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
+                AND o.project_id = $1 \
+              ORDER BY o.updated_at DESC, o.display_name ASC",
+        )
+        .bind(project_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    async fn projc_object_legacy(
+        &self,
+        project_id: Uuid,
+        object_id: Uuid,
+    ) -> Result<Vec<PcObjectRow>, sqlx::Error> {
+        let rows: Vec<PcObjectRow> = sqlx::query_as(
+            "SELECT o.id, o.object_type, o.object_key, o.display_name, o.lifecycle_status, \
+                    rev.revision_no, rev.change_summary, dr.content, rev.analysis_mode, \
+                    versioned.versioned \
+               FROM projc.cognition_object o \
+               LEFT JOIN LATERAL ( \
+                    SELECT r2.revision_no, r2.change_summary, r2.analysis_mode, \
+                           r2.document_revision_id, r2.id AS rid \
+                      FROM projc.cognition_revision r2 \
+                     WHERE r2.tenant_id = o.tenant_id AND r2.project_id = o.project_id \
+                       AND r2.object_id = o.id \
+                     ORDER BY r2.revision_no DESC LIMIT 1 \
+               ) rev ON true \
+               LEFT JOIN projc.document_revision dr ON dr.id = rev.document_revision_id \
+               LEFT JOIN LATERAL ( \
+                    SELECT EXISTS ( \
+                        SELECT 1 FROM projc.version_member vm \
+                          JOIN projc.cognition_version cv \
+                            ON cv.tenant_id = vm.tenant_id \
+                           AND cv.project_id = vm.project_id \
+                           AND cv.id = vm.version_id \
+                         WHERE vm.object_revision_id = rev.rid AND cv.status = 'published' \
+                    ) AS versioned \
+               ) versioned ON true \
+              WHERE o.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
+                AND o.project_id = $1 AND o.id = $2 \
+              ORDER BY o.created_at ASC, o.id ASC",
+        )
+        .bind(project_id)
+        .bind(object_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    async fn pc_object_lineage(
+        &self,
+        project_id: Uuid,
+        object_id: Uuid,
+    ) -> Result<Vec<ObjectLineageRow>, sqlx::Error> {
+        self.object_lineage(
+            project_id,
+            object_id,
+            "pc",
+            "pc_source_id",
+        )
+        .await
+    }
+
+    async fn projc_object_lineage(
+        &self,
+        project_id: Uuid,
+        object_id: Uuid,
+    ) -> Result<Vec<ObjectLineageRow>, sqlx::Error> {
+        self.object_lineage(
+            project_id,
+            object_id,
+            "projc",
+            "projc_source_id",
+        )
+        .await
+    }
+}
+
+impl PgKbPcQueryRepo {
+    /// 双域共用的对象 → 来源报告追溯（最近 3 条已发布版本；report 侧 LEFT JOIN，
+    /// 非报告通道发布的版本 report 字段为 NULL）。`schema` ∈ {pc, projc}，
+    /// `report_source_col` = 报告表上的来源列名（pc_source_id / projc_source_id）。
+    ///
+    /// 列名/表名由调用方字面量传入（两域枚举，非用户输入，无注入面）。
+    async fn object_lineage(
+        &self,
+        project_id: Uuid,
+        object_id: Uuid,
+        schema: &str,
+        report_source_col: &str,
+    ) -> Result<Vec<ObjectLineageRow>, sqlx::Error> {
+        let sql = format!(
+            "SELECT r.id AS report_id, pr.name AS repository_name, r.commit_sha, \
+                    cv.version_no, cv.confirmed_at \
+               FROM {schema}.version_member vm \
+               JOIN {schema}.cognition_version cv \
+                 ON cv.tenant_id = vm.tenant_id AND cv.project_id = vm.project_id \
+                AND cv.id = vm.version_id \
+               JOIN {schema}.proposal pp \
+                 ON pp.tenant_id = cv.tenant_id AND pp.project_id = cv.project_id \
+                AND pp.id = cv.source_proposal_id \
+               LEFT JOIN integration.repo_analysis_report r ON r.{report_source_col} = pp.source_id \
+               LEFT JOIN integration.project_repository pr ON pr.id = r.repository_id \
+              WHERE vm.tenant_id = (SELECT tenant_id FROM core.project WHERE id = $1) \
+                AND vm.project_id = $1 AND vm.object_id = $2 AND cv.status = 'published' \
+              ORDER BY cv.version_no DESC LIMIT 3"
+        );
+        let rows: Vec<ObjectLineageRow> = sqlx::query_as(&sql)
+            .bind(project_id)
+            .bind(object_id)
+            .fetch_all(&self.pool)
+            .await?;
         Ok(rows)
     }
 }
