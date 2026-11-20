@@ -257,9 +257,10 @@ async fn product_project_link_is_many_to_many_unique_pair(pool: PgPool) {
         .bind(tenant)
         .execute(&pool)
         .await
-        .expect_err("duplicate pair must violate ck_product_project_link_pair"),
+        .expect_err("duplicate active pair must violate uq_product_project_link_active"),
     );
-    assert!(err.contains("ck_product_project_link_pair"), "{err}");
+    // PA07-IMP-007（0047）：唯一约束改为 partial（仅约束有效行，撤回后可重建）。
+    assert!(err.contains("uq_product_project_link_active"), "{err}");
 }
 
 /// FK：link 必须指向存在的 product 与 project；产品删除级联清 link（卫生级联）。

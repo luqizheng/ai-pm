@@ -867,7 +867,7 @@ pub async fn create_product_link(
     let link_id: Uuid = sqlx::query_scalar(
         "INSERT INTO core.product_project_link (product_id, project_id, tenant_id, created_by) \
          VALUES ($1, $2, $3, $4) \
-         ON CONFLICT (product_id, project_id) DO NOTHING RETURNING id",
+         ON CONFLICT (product_id, project_id) WHERE withdrawn_at IS NULL          DO NOTHING RETURNING id",
     )
     .bind(product_id)
     .bind(project_id)
@@ -931,10 +931,18 @@ pub async fn end_product_link(
     if !team_owner && !product_owner {
         return Err(ProductError::Forbidden("product_owner_required"));
     }
-    sqlx::query("DELETE FROM core.product_project_link WHERE id = $1")
-        .bind(link_id)
-        .execute(&mut *tx)
-        .await?;
+    // PA07-IMP-007：解除 Link 改软删（历史可追溯，与 task_product 同模式）；
+    // 已撤回的行再 end → NotFound（读面不再展示）。
+    let withdrawn = sqlx::query(
+        "UPDATE core.product_project_link             SET withdrawn_at = now(), withdrawn_by = $2           WHERE id = $1 AND withdrawn_at IS NULL",
+    )
+    .bind(link_id)
+    .bind(actor_principal_id)
+    .execute(&mut *tx)
+    .await?;
+    if withdrawn.rows_affected() == 0 {
+        return Err(ProductError::NotFound);
+    }
     audit(
         &mut tx,
         tenant_id,
@@ -969,7 +977,8 @@ pub async fn list_product_links(
     }
     let rows: Vec<ProductLinkRow> = sqlx::query_as(
         "SELECT id, product_id, project_id, created_at \
-           FROM core.product_project_link WHERE product_id = $1 ORDER BY created_at",
+           FROM core.product_project_link \
+          WHERE product_id = $1 AND withdrawn_at IS NULL ORDER BY created_at",
     )
     .bind(product_id)
     .fetch_all(pool)

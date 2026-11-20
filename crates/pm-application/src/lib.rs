@@ -88,6 +88,7 @@ pub mod supervision;
 pub mod task_dependency;
 pub mod task_knowledge;
 pub mod task_products;
+pub mod task_traceability;
 pub mod task_plan;
 pub mod task_read;
 pub mod task_repository_binding;

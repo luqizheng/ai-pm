@@ -66,6 +66,7 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/pm/tasks/{task_id}/product-acceptances",
             get(list_acceptances_handler).post(record_acceptance_handler),
         )
+        .route("/v1/pm/tasks/{task_id}/traceability", get(traceability_handler))
 }
 
 /// 任务的项目边界：不存在 / 跨租户 / 非成员 → 404。
@@ -215,4 +216,23 @@ async fn record_acceptance_handler(
         Json(serde_json::json!({ "id": acceptance_id })),
     )
         .into_response())
+}
+
+
+// ───────────────────── 全链追溯（PA07-IMP-007）
+
+async fn traceability_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<AuthedPrincipal>,
+    Path(task_id): Path<Uuid>,
+) -> ApiResult<Json<pm_application::task_traceability::TaskTraceability>> {
+    require_task_project(&state, task_id, &principal).await?;
+    let trace = pm_application::task_traceability::task_traceability(
+        &state.pool,
+        principal.tenant_id,
+        task_id,
+    )
+    .await
+    .map_err(ApiError::Internal)?;
+    Ok(Json(trace))
 }
